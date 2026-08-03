@@ -234,6 +234,11 @@ git commit -m "Add allnoconfig baseline for kernel .config"
 
 - [ ] **Step 1: 빈 initrd 생성 스크립트**
 
+**BF-M1 실행 중 정정(design doc 참고):** 완전히 빈 cpio는 커널이
+initramfs 자체를 포기하고 `VFS: Unable to mount root fs`로 panic해버려
+목표(`No working init found`)에 도달하지 못한다. 실행 권한만 있고
+내용은 빈 `/init` 파일 하나를 담아야 한다.
+
 `kernel/make_initrd.sh`:
 ```bash
 #!/usr/bin/env bash
@@ -241,7 +246,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo | cpio -o -H newc > initrd.cpio
+WORKDIR="$(mktemp -d)"
+touch "$WORKDIR/init"
+chmod 0755 "$WORKDIR/init"
+(cd "$WORKDIR" && echo init | cpio -o -H newc) > initrd.cpio
+rm -rf "$WORKDIR"
 ```
 
 ```bash
