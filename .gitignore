@@ -1,2 +1,5 @@
 *.o
 devcontainer/sanity/sanity.elf
+
+kernel/src/
+kernel/build/
