@@ -7,6 +7,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         qemu-system-x86 \
         git \
         ca-certificates \
+        flex \
+        bison \
+        bc \
+        libssl-dev \
+        libelf-dev \
+        curl \
+        cpio \
+        rsync \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
