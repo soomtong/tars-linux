@@ -1,6 +1,6 @@
 # TARS Boot Foundation — BF-M1 Minimal Kernel Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** BF-M1을 완료한다 — kernel.org의 최신 LTS(6.18.42) 소스를 devcontainer
 안에서 받아 `allnoconfig`에서 시작한 x86_64 `.config`로 최소 kernel을
@@ -41,7 +41,7 @@
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile에 패키지 추가**
+- [x] **Step 1: Dockerfile에 패키지 추가**
 
 `devcontainer/Dockerfile`의 `apt-get install` 목록에 다음을 추가한다
 (기존 `build-essential`, `gcc-multilib`, `binutils`, `qemu-system-x86`,
@@ -76,7 +76,7 @@ WORKDIR /workspace
 `curl`은 소스 다운로드용, `cpio`는 initrd 생성용, `rsync`는
 `make headers_install` 등 일부 커널 빌드 타깃이 사용한다.
 
-- [ ] **Step 2: 이미지 재빌드**
+- [x] **Step 2: 이미지 재빌드**
 
 Run:
 ```bash
@@ -86,7 +86,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [ ] **Step 3: 의존성 확인**
+- [x] **Step 3: 의존성 확인**
 
 Run:
 ```bash
@@ -96,7 +96,7 @@ docker run --rm --platform linux/amd64 tars-devcontainer \
 
 Expected: 다섯 명령 모두 버전 문자열을 출력하고 `command not found` 없음.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
@@ -111,7 +111,7 @@ git commit -m "Add kernel build dependencies to devcontainer"
 - Create: `kernel/build.sh`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: `.gitignore`에 소스 디렉터리 추가**
+- [x] **Step 1: `.gitignore`에 소스 디렉터리 추가**
 
 `.gitignore`에 다음 줄을 추가한다:
 
@@ -124,7 +124,7 @@ kernel/build/
 빌드 산출물(`bzImage` 등)이 위치할 디렉터리다. 둘 다 재현 가능한
 산출물이므로 git에는 스크립트와 `.config`만 남긴다.
 
-- [ ] **Step 2: `build.sh` 작성**
+- [x] **Step 2: `build.sh` 작성**
 
 `kernel/build.sh`:
 ```bash
@@ -168,7 +168,7 @@ make "${MAKE_ARGS[@]}" -j"$(nproc)" bzImage
 chmod +x kernel/build.sh
 ```
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add .gitignore kernel/build.sh
@@ -182,7 +182,7 @@ git commit -m "Add kernel source download and build script"
 **Files:**
 - Create: `kernel/.config`
 
-- [ ] **Step 1: 소스를 받고 allnoconfig 생성**
+- [x] **Step 1: 소스를 받고 allnoconfig 생성**
 
 `build.sh`는 `.config`가 이미 있다고 가정하므로, 아직 없는 지금은
 컨테이너 안에서 소스만 받고 `allnoconfig`를 직접 실행한다.
@@ -208,7 +208,7 @@ Expected: 종료 코드 0. `kernel/.config`가 생성되고, 첫 줄 근처에
 기본값으로 나타난다(x86_64 아키텍처 자체는 `ARCH=x86_64`로 고정되므로
 64bit 빌드가 됨 — 이 옵션은 Task 4에서 확인·조정한다).
 
-- [ ] **Step 2: `.config`에 64BIT 명시적으로 켜기**
+- [x] **Step 2: `.config`에 64BIT 명시적으로 켜기**
 
 `kernel/.config`를 열어 `CONFIG_64BIT` 관련 줄을 찾아 다음으로
 바꾼다(없으면 파일 끝에 추가):
@@ -217,7 +217,7 @@ Expected: 종료 코드 0. `kernel/.config`가 생성되고, 첫 줄 근처에
 CONFIG_64BIT=y
 ```
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add kernel/.config
@@ -232,7 +232,7 @@ git commit -m "Add allnoconfig baseline for kernel .config"
 - Create: `kernel/make_initrd.sh`
 - Create: `kernel/check.sh`
 
-- [ ] **Step 1: 빈 initrd 생성 스크립트**
+- [x] **Step 1: 빈 initrd 생성 스크립트**
 
 **BF-M1 실행 중 정정(design doc 참고):** 완전히 빈 cpio는 커널이
 initramfs 자체를 포기하고 `VFS: Unable to mount root fs`로 panic해버려
@@ -257,7 +257,7 @@ rm -rf "$WORKDIR"
 chmod +x kernel/make_initrd.sh
 ```
 
-- [ ] **Step 2: check.sh 작성 (아직 실패하는 상태로)**
+- [x] **Step 2: check.sh 작성 (아직 실패하는 상태로)**
 
 `kernel/check.sh`:
 ```bash
@@ -294,7 +294,7 @@ exit 1
 chmod +x kernel/check.sh
 ```
 
-- [ ] **Step 3: 실행해서 실패 지점 확인**
+- [x] **Step 3: 실행해서 실패 지점 확인**
 
 Run:
 ```bash
@@ -308,7 +308,7 @@ Expected: FAIL. 이 시점에서는 `allnoconfig`가 콘솔/initrd 관련 옵션
 판단한다(예: 로그가 완전히 비어있으면 `CONFIG_SERIAL_8250_CONSOLE`이
 꺼져 있을 가능성이 높음).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add kernel/make_initrd.sh kernel/check.sh
@@ -322,7 +322,7 @@ git commit -m "Add initrd generation and boot check scripts"
 **Files:**
 - Modify: `kernel/.config`
 
-- [ ] **Step 1: 콘솔 관련 옵션 켜기**
+- [x] **Step 1: 콘솔 관련 옵션 켜기**
 
 `kernel/.config`에 다음 줄을 추가한다(기존에 `# CONFIG_X is not set`
 형태로 있으면 그 줄을 지우고 아래로 교체):
@@ -334,7 +334,7 @@ CONFIG_SERIAL_8250=y
 CONFIG_SERIAL_8250_CONSOLE=y
 ```
 
-- [ ] **Step 2: 재실행**
+- [x] **Step 2: 재실행**
 
 Run:
 ```bash
@@ -349,7 +349,7 @@ kernel boot 메시지(`Linux version 6.18.42 ...`로 시작하는 줄들)가
 확인 단계(Step 3)로, 이미 root는 mount됐는데 다른 이유로 멈추면 그 로그를
 근거로 원인 옵션을 추가로 조사한다.
 
-- [ ] **Step 3: initrd/devtmpfs/binfmt 옵션 켜기**
+- [x] **Step 3: initrd/devtmpfs/binfmt 옵션 켜기**
 
 `kernel/.config`에 추가:
 
@@ -361,7 +361,7 @@ CONFIG_BINFMT_ELF=y
 CONFIG_BINFMT_SCRIPT=y
 ```
 
-- [ ] **Step 4: 재실행**
+- [x] **Step 4: 재실행**
 
 Run:
 ```bash
@@ -378,7 +378,7 @@ Expected: PASS. serial 로그에 kernel boot 메시지와
 Step 4를 반복한다. 이 반복 자체가 design doc이 의도한 학습 사이클이므로,
 몇 차례 반복이 필요할 수 있다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add kernel/.config
