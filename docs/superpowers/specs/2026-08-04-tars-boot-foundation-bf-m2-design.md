@@ -15,7 +15,7 @@ init(PID 1)**을 다룬다. 전체 milestone 구조와 배경은
 ## 목표
 
 Rust로 작성한 init 바이너리가 PID 1로 실행되어 `/proc`, `/sys`, `/dev`
-(devtmpfs)를 mount한 뒤 bash를 실행해 shell prompt에 도달한다. BF-M1과
+(devtmpfs)를 mount한 뒤 fish를 실행해 shell prompt에 도달한다. BF-M1과
 동일하게 QEMU `-kernel`/`-initrd` direct boot를 유지한다 (bootloader는
 아직 도입하지 않음).
 
@@ -44,7 +44,7 @@ Rust로 작성한 init 바이너리가 PID 1로 실행되어 `/proc`, `/sys`, `/
   읽어 `/lib64/ld-linux-x86-64.so.2`를 먼저 실행한다는 사실을 init
   바이너리 자체로 확인하게 된다 — "커널이 어디까지 하고 그다음부터는
   내 코드"라는 이번 서브프로젝트의 핵심 목표와 자연스럽게 이어진다
-- bash를 그대로 재사용하기로 했으므로(핵심 설계 결정 3), initramfs에
+- fish를 그대로 재사용하기로 했으므로(핵심 설계 결정 3), initramfs에
   동적 링커/공유 라이브러리를 담는 작업이 어차피 필요하다 — init까지
   같은 방식으로 통일하면 배울 대상이 늘지 않고 오히려 하나로 줄어든다
 
@@ -61,43 +61,78 @@ Rust로 작성한 init 바이너리가 PID 1로 실행되어 `/proc`, `/sys`, `/
 1. mount("proc",  "/proc", "proc",     0, NULL)
 2. mount("sysfs", "/sys",  "sysfs",    0, NULL)
 3. mount("devtmpfs", "/dev", "devtmpfs", 0, NULL)
-4. execve("/bin/bash", ["/bin/bash"], envp)
+4. execve("/usr/bin/fish", ["/usr/bin/fish"], envp)
 ```
 
 각 `mount()` 호출은 반환값을 확인해 실패 시 `errno`를 serial(표준
 출력)로 로그만 남기고 계속 진행한다 — 하나의 mount 실패로 나머지
 단계까지 막지 않는다. 마지막 `execve()`는 **fork 없이 자기 자신을
-대체**한다: init 프로세스(PID 1)가 그대로 bash가 된다. bash가 종료되면
+대체**한다: init 프로세스(PID 1)가 그대로 fish가 된다. fish가 종료되면
 PID 1이 사라지므로 커널이 panic하는데, 이는 이번 milestone에서 의도적으로
 막지 않는다 — "PID 1은 죽으면 안 된다"는 경계를 보여주는 결과이며,
 exit gate(프롬프트 확인) 이후 QEMU를 강제 종료하므로 실제로 이 경로를
 밟을 필요도 없다.
 
-### 4. initramfs 구성: bash + 의존 라이브러리 복사
+### 4. Shell: bash 대신 fish, 의존 라이브러리 + terminfo 데이터 복사
+
+**결정 배경(2026-08-04, plan 작성 전 재검토):** 당초 bash를 채택했으나,
+devcontainer 안에서 실측한 결과 fish로도 무리 없이 전환 가능하다고
+판단해 fish로 변경한다. devcontainer(Debian bookworm) 안에서 `ldd
+/usr/bin/fish`와 `ldd /bin/bash`를 비교한 결과:
+
+| | bash | fish |
+|---|---|---|
+| 의존 `.so` | `libtinfo.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2` (3개) | 위 3개 + `libpcre2-32.so.0`, `libstdc++.so.6`, `libm.so.6`, `libgcc_s.so.1` (7개) |
+
+fish-common 패키지의 `.fish` completion 스크립트(수백 개)와
+`/etc/fish/config.fish`는 없어도 fish 실행 자체는 정상 동작함을
+`env -i HOME=/nonexistent fish -i` 실험으로 확인했다 — initramfs에
+담지 않는다.
+
+**terminfo 데이터 파일이라는 새 의존성 카테고리:** `ldd`는 동적
+라이브러리 링크만 추적하고, 런타임에 파일 경로로 조회하는 데이터는
+잡지 못한다. `/usr/lib/terminfo` 디렉터리를 치운 상태에서 재실행한
+결과, fish는 `Could not set up terminal` 경고를 여러 줄 출력했다(치명적
+에러는 아니고 명령 실행은 계속됨). bash는 terminfo가 없어도 조용히
+정상 동작한다. 이는 fish의 라인 에디터가 자체적으로 terminfo lookup을
+하기 때문이며, "링킹 의존성(ldd로 보이는 것)"과 "런타임 데이터 파일
+의존성(ldd로 안 보이는 것)"이 서로 다른 카테고리라는 것을 보여주는
+지점이다. 이 프로젝트는 경고 로그 없이 깨끗하게 동작하는 쪽을 택해
+`/usr/lib/terminfo/l/linux` 파일 하나만 initramfs에 포함한다(전체
+terminfo 데이터베이스가 아니라 `TERM=linux`용 엔트리 하나로 충분).
 
 ```text
 /init                          # Rust init 바이너리, 커널이 PID 1로 실행
-/bin/bash                      # devcontainer의 bash 바이너리 그대로 복사
+/usr/bin/fish                  # devcontainer의 fish 바이너리 그대로 복사
 /lib64/ld-linux-x86-64.so.2    # 동적 링커
-/lib/x86_64-linux-gnu/*.so*    # ldd init && ldd bash 결과의 합집합
+/lib/x86_64-linux-gnu/*.so*    # ldd init && ldd fish 결과의 합집합
+/usr/lib/terminfo/l/linux      # fish의 라인 에디터가 조회하는 terminfo 엔트리
 ```
 
-`kernel/make_initrd.sh`를 확장해 `ldd`로 `/init`과 `/bin/bash` 각각의
+`kernel/make_initrd.sh`를 확장해 `ldd`로 `/init`과 `/usr/bin/fish` 각각의
 의존 라이브러리를 추적하고, devcontainer 안의 실제 파일을 그대로
-cpio에 담는다. coreutils는 포함하지 않는다(비목표 참고).
+cpio에 담는다. `/usr/lib/terminfo/l/linux`도 함께 복사한다. coreutils는
+포함하지 않는다(비목표 참고).
 
 ### 5. devcontainer에 Rust 툴체인 추가: rustup
 
 `devcontainer/Dockerfile`에 rustup 설치 스텝을 추가해 stable
 `x86_64-unknown-linux-gnu` 타깃을 설치한다. Debian bookworm의 apt
 `rustc`/`cargo`(1.63 계열, 구버전)는 최신 crate와 호환성 문제가 생길
-수 있어 배제한다.
+수 있어 배제한다. 같은 Dockerfile에 `fish` apt 패키지도 추가한다 —
+`--no-install-recommends`로 설치해도 fish-common이 python3/man-db 등을
+끌어오지만, 이는 initramfs에 담을 대상이 아니라 devcontainer 안에서
+`/usr/bin/fish`와 그 라이브러리를 추출해 오기 위한 소스일 뿐이다.
 
-### 6. 검증: timeout 강제 종료 + 프롬프트 grep
+### 6. 검증: timeout 강제 종료 + 배너 grep
 
-bash는 interactive 입력을 기다리므로 자연 종료되지 않는다. BF-M0/BF-M1과
-동일하게 `timeout N초`로 QEMU를 강제 종료한 뒤, 로그에서 bash 프롬프트
-문자열(`bash-5.x#` 또는 유사 패턴)을 grep해 PASS/FAIL을 판정한다.
+fish는 interactive 입력을 기다리므로 자연 종료되지 않는다. BF-M0/BF-M1과
+동일하게 `timeout N초`로 QEMU를 강제 종료한 뒤, 로그에서 판정 문자열을
+grep해 PASS/FAIL을 판정한다. fish의 기본 프롬프트는 ANSI color escape
+sequence가 섞여 있어(`env -i` 실험으로 확인) 프롬프트 자체보다는 fish가
+시작될 때 항상 출력하는 배너 문구 `Welcome to fish, the friendly
+interactive shell`을 grep 대상으로 삼는다 — 색상 코드에 의존하지 않는
+안정적인 판정 기준이다.
 
 ## 저장소 구조 변경
 
@@ -107,11 +142,12 @@ init/
 └── src/
     └── main.rs       # PID 1 진입점: mount 3회 + execve
 kernel/
-├── make_initrd.sh    # bash + ldd 의존 라이브러리까지 담도록 확장
-└── check.sh           # exit gate 메시지를 프롬프트 문자열로 변경
+├── make_initrd.sh    # fish + ldd 의존 라이브러리 + terminfo까지 담도록 확장
+└── check.sh           # exit gate 메시지를 fish 배너 문자열로 변경
 ```
 
-`devcontainer/Dockerfile`에 rustup 설치 스텝을 추가한다.
+`devcontainer/Dockerfile`에 rustup 설치 스텝과 `fish` apt 패키지를
+추가한다.
 
 ## QEMU 부팅 검증
 
@@ -126,8 +162,9 @@ qemu-system-x86_64 \
   -serial stdio -display none -no-reboot
 ```
 
-Exit gate는 serial 로그에서 mount 결과 로그 이후 bash 프롬프트
-문자열이 나타나는 것을 확인하는 것이다.
+Exit gate는 serial 로그에서 mount 결과 로그 이후 fish 배너 문자열
+(`Welcome to fish, the friendly interactive shell`)이 나타나는 것을
+확인하는 것이다.
 
 ## 협업 방식
 
@@ -137,5 +174,5 @@ Claude Code가 대신 수행.
 
 ## 검증 방법
 
-QEMU serial 출력에서 mount 로그 뒤 bash 프롬프트 문자열 확인. BF-M0/BF-M1의
+QEMU serial 출력에서 mount 로그 뒤 fish 배너 문자열 확인. BF-M0/BF-M1의
 `check.sh`와 동일한 검증 스타일을 유지한다.
