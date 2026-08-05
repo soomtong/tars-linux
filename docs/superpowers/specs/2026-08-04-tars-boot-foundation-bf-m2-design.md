@@ -92,9 +92,17 @@ terminfo 결론은 bookworm/fish 3.6.0 기준 실측 결과이며, trixie/fish
 확인한다** — fish 공식 블로그의 "terminfo fallback 내장" 서술만으로
 `/usr/lib/terminfo/l/linux` 포함 여부를 결정하지 않는다.
 
-| | bash | fish |
+| | bash | fish 3.6.0 (bookworm) |
 |---|---|---|
 | 의존 `.so` | `libtinfo.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2` (3개) | 위 3개 + `libpcre2-32.so.0`, `libstdc++.so.6`, `libm.so.6`, `libgcc_s.so.1` (7개) |
+
+**fish 4.0.2(trixie) 재실측 결과:** `kernel/make_initrd.sh` Step 3
+실행으로 실제 initramfs에 담긴 `ldd usr/bin/fish` 결과를 확인했다 —
+`libgcc_s.so.1`, `libc.so.6`, `libpcre2-8.so.0`, `libpcre2-32.so.0`,
+`libm.so.6`, `/lib64/ld-linux-x86-64.so.2` (6개). fish 3.6.0과 비교하면
+**`libstdc++.so.6`가 사라지고**(C++→Rust 재작성이 실제 링크 의존성에
+반영됨) `libpcre2-8.so.0`이 새로 추가됐다(PCRE2의 8-bit 변형, 32-bit
+변형과 별개로 필요해짐).
 
 fish-common 패키지의 `.fish` completion 스크립트(수백 개)와
 `/etc/fish/config.fish`는 없어도 fish 실행 자체는 정상 동작함을
@@ -109,22 +117,35 @@ fish-common 패키지의 `.fish` completion 스크립트(수백 개)와
 정상 동작한다. 이는 fish의 라인 에디터가 자체적으로 terminfo lookup을
 하기 때문이며, "링킹 의존성(ldd로 보이는 것)"과 "런타임 데이터 파일
 의존성(ldd로 안 보이는 것)"이 서로 다른 카테고리라는 것을 보여주는
-지점이다. 이 프로젝트는 경고 로그 없이 깨끗하게 동작하는 쪽을 택해
-`/usr/lib/terminfo/l/linux` 파일 하나만 initramfs에 포함한다(전체
-terminfo 데이터베이스가 아니라 `TERM=linux`용 엔트리 하나로 충분).
+지점이다(bookworm/fish 3.6.0 기준). 이 프로젝트는 경고 로그 없이
+깨끗하게 동작하는 쪽을 택해 `/usr/lib/terminfo/l/linux` 파일 하나만
+initramfs에 포함하기로 했었다(전체 terminfo 데이터베이스가 아니라
+`TERM=linux`용 엔트리 하나로 충분).
+
+**재실측 결과(2026-08-05, trixie/fish 4.0.2, Task 4 진행 중):** 위에서
+예고한 대로 다시 실측했다. trixie 이미지에는 terminfo 데이터가
+`/usr/lib/terminfo/l/linux`가 아니라 `/usr/share/terminfo/l/linux`에
+있다(ncurses-base 6.5, 경로 자체가 bookworm과 다름). 하지만 더 중요한
+결과는 따로 있다 — `env -i HOME=/nonexistent fish -c 'exit'`를 terminfo
+파일이 전혀 없는 상태(trixie-slim 이미지에는 애초에 `/usr/lib/terminfo`
+경로가 존재하지 않음)에서 실행해도 **경고 없이 exit code 0으로 조용히
+종료**됐다. fish 공식 블로그가 서술한 "Rust crate로 terminfo를 자체
+처리하고 xterm-256color를 내장 fallback으로 쓴다"는 내용이 실측으로
+확인된 것이다. 따라서 **terminfo 파일을 initramfs에 포함하지 않기로
+결론을 바꾼다** — fish 3.6.0(C++/ncurses)에서만 있던 의존성이며 fish
+4.0(Rust)에는 해당하지 않는다.
 
 ```text
 /init                          # Rust init 바이너리, 커널이 PID 1로 실행
 /usr/bin/fish                  # devcontainer의 fish 바이너리 그대로 복사
 /lib64/ld-linux-x86-64.so.2    # 동적 링커
 /lib/x86_64-linux-gnu/*.so*    # ldd init && ldd fish 결과의 합집합
-/usr/lib/terminfo/l/linux      # fish의 라인 에디터가 조회하는 terminfo 엔트리
 ```
 
 `kernel/make_initrd.sh`를 확장해 `ldd`로 `/init`과 `/usr/bin/fish` 각각의
 의존 라이브러리를 추적하고, devcontainer 안의 실제 파일을 그대로
-cpio에 담는다. `/usr/lib/terminfo/l/linux`도 함께 복사한다. coreutils는
-포함하지 않는다(비목표 참고).
+cpio에 담는다. terminfo는 포함하지 않는다(위 재실측 결과 참고).
+coreutils는 포함하지 않는다(비목표 참고).
 
 ### 5. devcontainer에 Rust 툴체인 추가: rustup, 베이스 이미지를 trixie로 변경
 
@@ -161,7 +182,7 @@ init/
 └── src/
     └── main.rs       # PID 1 진입점: mount 3회 + execve
 kernel/
-├── make_initrd.sh    # fish + ldd 의존 라이브러리 + terminfo까지 담도록 확장
+├── make_initrd.sh    # fish + ldd 의존 라이브러리까지 담도록 확장(terminfo는 불필요)
 └── check.sh           # exit gate 메시지를 fish 배너 문자열로 변경
 ```
 

@@ -11,13 +11,13 @@ shell`)가 출력되는 지점까지 검증한다.
 `x86_64-unknown-linux-gnu` 타깃(std, glibc 동적 링크)으로 빌드하고, `libc`
 crate로 `mount(2)`/`execve(2)`를 raw FFI로 직접 호출한다. `kernel/
 make_initrd.sh`를 확장해 init 바이너리, fish 바이너리, 둘의 `ldd` 의존
-라이브러리, fish가 필요로 하는 terminfo 엔트리(`/usr/lib/terminfo/l/
-linux`)를 하나의 cpio(newc) initramfs로 묶는다. `kernel/check.sh`는
-BF-M1과 동일한 빌드→부팅→grep→PASS/FAIL 패턴을 유지하되 판정 문자열만
-바꾼다.
+라이브러리를 하나의 cpio(newc) initramfs로 묶는다(fish 4.0.2는 terminfo
+없이도 깨끗이 동작함을 실측했으므로 포함하지 않는다 — Task 4 참고).
+`kernel/check.sh`는 BF-M1과 동일한 빌드→부팅→grep→PASS/FAIL 패턴을
+유지하되 판정 문자열만 바꾼다.
 
 **Tech Stack:** Rust stable(rustup, `x86_64-unknown-linux-gnu`), `libc`
-crate, fish 3.6.0(Debian bookworm apt), Linux 6.18.42(BF-M1에서 빌드됨),
+crate, fish 4.0.2(Debian trixie apt), Linux 6.18.42(BF-M1에서 빌드됨),
 QEMU system x86_64(TCG), cpio, bash
 
 ---
@@ -301,22 +301,22 @@ git commit -m "Implement mount and execve in Rust init"
 
 ---
 
-### Task 4: initramfs에 init/fish/라이브러리/terminfo 담기
+### Task 4: initramfs에 init/fish/라이브러리 담기
 
 **Files:**
 - Modify: `kernel/make_initrd.sh`
 
-**재검증 필요(2026-08-05):** 아래 스크립트의 `ldd` 라이브러리 목록과
-`/usr/lib/terminfo/l/linux` 포함 여부는 design doc 핵심 설계 결정 4에
-기록된 bookworm/fish 3.6.0 실측을 그대로 옮긴 것이다. fish 4.0.2(Rust
-재작성, curses 의존 제거)로 바뀌었으므로 Step 3에서 `cpio -itv`로 실제
-담긴 라이브러리 목록을 확인하고, `/usr/lib/terminfo`를 지운 상태에서
-`env -i fish -i`를 실행해 terminfo 경고가 여전히 나오는지 다시
-실측한다 — 경고가 없으면 `mkdir -p "$WORKDIR/usr/lib/terminfo/l"`와
-`cp .../l/linux` 두 줄을 스크립트에서 제거하고 design doc도 그 결과로
-갱신한다.
+**재검증 완료(2026-08-05):** Step 3을 처음 실행했을 때
+`/usr/lib/terminfo/l/linux`가 trixie 이미지에 없어(`cp: cannot stat`)
+실패했다. 재실측 결과 trixie의 terminfo 데이터는 `/usr/share/terminfo/
+l/linux`에 있지만(경로 자체가 bookworm과 다름), 더 중요하게는 `env -i
+HOME=/nonexistent fish -c 'exit'`를 terminfo 없이 실행해도 경고 없이
+exit code 0으로 조용히 종료됨을 확인했다(design doc 핵심 설계 결정 4
+재실측 결과 참고) — fish 4.0(Rust)은 curses/terminfo 의존을 제거했다는
+공식 블로그 서술이 실측으로 확인됐다. 따라서 **terminfo 복사를
+아예 제거**한다. 아래 스크립트는 이미 이 결론을 반영한 최종판이다.
 
-- [ ] **Step 1: `make_initrd.sh`를 실제 바이너리 패키징 스크립트로 교체**
+- [x] **Step 1: `make_initrd.sh`를 실제 바이너리 패키징 스크립트로 교체**
 
 BF-M1의 `make_initrd.sh`는 실행 권한만 있는 빈 `/init` 파일 하나만
 담았다(커널의 "init 존재 확인 vs 실행 성공" 판단 로직을 통과시키기 위한
@@ -353,9 +353,6 @@ chmod 0755 "$WORKDIR/usr/bin/fish"
 copy_lib_deps "$WORKDIR/init"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
 
-mkdir -p "$WORKDIR/usr/lib/terminfo/l"
-cp /usr/lib/terminfo/l/linux "$WORKDIR/usr/lib/terminfo/l/linux"
-
 (cd "$WORKDIR" && find . | cpio -o -H newc) > initrd.cpio
 ```
 
@@ -370,13 +367,13 @@ x86-64.so.2 (주소)`. `grep -oE '/[^ ]+\.so[0-9.]*'`는 두 형태 모두에서
 는 target 디렉터리가 이미 존재해야 성공하며, initramfs cpio 안에 없으면
 커널이 자동으로 만들어주지 않는다.
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 ```bash
 chmod +x kernel/make_initrd.sh
 ```
 
-- [ ] **Step 3: 단독 실행으로 cpio 생성 확인**
+- [x] **Step 3: 단독 실행으로 cpio 생성 확인**
 
 Run:
 ```bash
@@ -385,15 +382,15 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 ```
 
 Expected: 종료 코드 0. `cpio -itv` 목록에 `init`, `usr/bin/fish`,
-`usr/lib/terminfo/l/linux`, 그리고 `lib/x86_64-linux-gnu/libc.so.6`
-등 여러 `.so` 파일과 `lib64/ld-linux-x86-64.so.2`가 보인다.
+그리고 `lib/x86_64-linux-gnu/libc.so.6` 등 여러 `.so` 파일과
+`lib64/ld-linux-x86-64.so.2`가 보인다(terminfo는 포함하지 않는다).
 
 **만약 `ldd` 파싱이 실패하거나 파일이 빠지면:** `ldd` 원본 출력을 그대로
 확인해(`docker run ... ldd usr/bin/fish`) 정규식이 실제 경로 형식과
 맞는지 점검한다 — devcontainer의 glibc 버전에 따라 라이브러리 경로가
 `/lib/x86_64-linux-gnu/`가 아닌 다른 경로일 수 있다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add kernel/make_initrd.sh
