@@ -42,7 +42,7 @@ fish(bash 아님) + terminfo 파일 포함, timeout 강제 종료 + 배너 grep.
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가 (trixie 베이스)**
+- [x] **Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가 (trixie 베이스)**
 
 **갱신(2026-08-05):** 당초 `debian:bookworm-slim` 기준으로 작성했고
 `rustc`/`cargo`/`fish 3.6.0` 설치까지 실제로 확인했으나, fish 4.0(Rust
@@ -90,7 +90,7 @@ WORKDIR /workspace
 참고). rustup은 `--profile minimal`로 `rustc`/`cargo`/`rust-std`만
 설치해 이미지 크기를 줄인다.
 
-- [ ] **Step 2: 이미지 재빌드**
+- [x] **Step 2: 이미지 재빌드**
 
 Run:
 ```bash
@@ -100,7 +100,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [ ] **Step 3: 툴체인 확인**
+- [x] **Step 3: 툴체인 확인**
 
 Run:
 ```bash
@@ -112,7 +112,7 @@ Expected: 세 명령 모두 버전 문자열을 출력하고 `command not found`
 (예: `rustc 1.8x.x`, `cargo 1.8x.x`, `fish, version 4.0.2` 또는 trixie가
 제공하는 그 이상 버전).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
