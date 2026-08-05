@@ -1,7 +1,8 @@
 # TARS Boot Foundation — BF-M2 Design
 
 **Date:** 2026-08-04
-**Status:** Approved (design phase), plan not yet written
+**Status:** Completed (2026-08-05) — QEMU serial 로그에서 fish 배너 확인,
+`kernel/check.sh` PASS
 
 ## 배경
 
@@ -61,7 +62,8 @@ Rust로 작성한 init 바이너리가 PID 1로 실행되어 `/proc`, `/sys`, `/
 1. mount("proc",  "/proc", "proc",     0, NULL)
 2. mount("sysfs", "/sys",  "sysfs",    0, NULL)
 3. mount("devtmpfs", "/dev", "devtmpfs", 0, NULL)
-4. execve("/usr/bin/fish", ["/usr/bin/fish"], envp)
+4. open("/dev/console"), setsid(), ioctl(fd, TIOCSCTTY, 0), dup2(fd, 0/1/2)
+5. execve("/usr/bin/fish", ["/usr/bin/fish"], envp)
 ```
 
 각 `mount()` 호출은 반환값을 확인해 실패 시 `errno`를 serial(표준
@@ -72,6 +74,22 @@ PID 1이 사라지므로 커널이 panic하는데, 이는 이번 milestone에서
 막지 않는다 — "PID 1은 죽으면 안 된다"는 경계를 보여주는 결과이며,
 exit gate(프롬프트 확인) 이후 QEMU를 강제 종료하므로 실제로 이 경로를
 밟을 필요도 없다.
+
+**추가된 단계 4(2026-08-05, Task 5 실측 후 추가):** 처음엔 mount 이후
+바로 execve했더니 fish가 `tcgetpgrp failed` 경고 후 `setpgid:
+Inappropriate ioctl for device`(ENOTTY)로 job control 설정에 실패해
+치명적 신호로 스스로 종료했고, 커널이 `Attempted to kill init!`으로
+panic했다. fish 4.0은 내부적으로 멀티스레드를 쓰므로(자동완성/문법
+강조용) panic 로그의 `PID`는 개별 스레드 TID였지만, 커널의
+`is_global_init()` 판정은 스레드 그룹 ID(PID 1)를 보기 때문에
+"init을 죽였다"는 panic으로 이어졌다. 원인은 controlling terminal이
+없어서였다 — 일반적인 터미널에서는 로그인 셸/터미널 에뮬레이터가
+이를 대신 설정해주지만, PID 1로 직접 실행되는 init은 아무도 대신 해주지
+않는다. `/dev/console`을 열어 `TIOCSCTTY` ioctl로 현재 세션의
+controlling terminal로 지정하고 표준입출력을 그리로 연결해야 fish의
+job control이 정상 동작한다. `setsid()`는 PID 1이 이미 자기 세션의
+리더라 실패(`EPERM`)할 수 있지만 무시한다(이미 원하는 상태이므로) —
+mount 실패 처리와 동일한 "실패해도 계속 진행" 철학이다.
 
 ### 4. Shell: bash 대신 fish, 의존 라이브러리 + terminfo 데이터 복사
 
@@ -135,17 +153,39 @@ initramfs에 포함하기로 했었다(전체 terminfo 데이터베이스가 아
 결론을 바꾼다** — fish 3.6.0(C++/ncurses)에서만 있던 의존성이며 fish
 4.0(Rust)에는 해당하지 않는다.
 
+**세 번째 의존성 카테고리: `/usr/share/fish`(fish 자신의 런타임
+에셋)(2026-08-05, Task 5 실측):** initramfs에 init/fish/라이브러리만
+담아 부팅했더니 `Fish cannot find its asset files in '/usr/share/fish'`
+에러로 fish가 즉시 종료됐다. `ldd`(링킹)나 terminfo(외부 데이터 조회)와
+또 다른 카테고리다 — fish의 내장 함수 상당수가 컴파일된 코드가 아니라
+`/usr/share/fish/functions/*.fish` 형태의 fish 스크립트로 구현돼 있어서
+시작 시점에 필수로 읽어야 한다. `fish-common`의 completion 스크립트가
+불필요하다는 기존 결론과는 별개의 대상이다(그 실험은 devcontainer
+안에서 `/usr/share/fish` 자체는 그대로 있는 상태로 진행됐다). 전체
+`/usr/share/fish`는 11M/1439개 파일로 커서, 셸 프롬프트 도달에 필요한
+최소 집합만 추렸다: `functions/`(내장 함수 스크립트), `config.fish`
+(기본 설정), `__fish_build_paths.fish`(fish 자신의 함수 검색 경로
+부트스트랩). `completions/`, `vendor_completions.d/`, `groff/`, `man/`,
+`tools/`, `vendor_conf.d/`, `vendor_functions.d/`는 제외했다 — 이
+최소 집합만으로 asset 에러 없이 부팅에 성공했다.
+
 ```text
 /init                          # Rust init 바이너리, 커널이 PID 1로 실행
 /usr/bin/fish                  # devcontainer의 fish 바이너리 그대로 복사
 /lib64/ld-linux-x86-64.so.2    # 동적 링커
 /lib/x86_64-linux-gnu/*.so*    # ldd init && ldd fish 결과의 합집합
+/usr/share/fish/functions/     # fish 내장 함수(스크립트로 구현됨)
+/usr/share/fish/config.fish    # 기본 설정
+/usr/share/fish/__fish_build_paths.fish  # 함수 검색 경로 부트스트랩
 ```
 
 `kernel/make_initrd.sh`를 확장해 `ldd`로 `/init`과 `/usr/bin/fish` 각각의
 의존 라이브러리를 추적하고, devcontainer 안의 실제 파일을 그대로
 cpio에 담는다. terminfo는 포함하지 않는다(위 재실측 결과 참고).
-coreutils는 포함하지 않는다(비목표 참고).
+`/usr/share/fish`는 위 최소 집합만 포함한다. coreutils는 포함하지
+않는다(비목표 참고) — 실제로 fish 초기화 과정에서 `mkdir`/`uname`
+호출이 실패하는 게 로그로 확인됐지만, fish가 이를 치명적으로 보지
+않고 프롬프트까지 도달하므로 exit gate에는 영향이 없다.
 
 ### 5. devcontainer에 Rust 툴체인 추가: rustup, 베이스 이미지를 trixie로 변경
 

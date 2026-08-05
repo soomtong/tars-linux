@@ -294,6 +294,14 @@ Expected: 종료 코드 0, `Finished release [optimized] target(s)`.
 
 - [x] **Step 3: 커밋**
 
+**추가 커밋(2026-08-05, Task 5 실측 중 발견):** mount 이후 바로
+execve하면 fish가 controlling terminal이 없어 job control 설정에
+실패해(`setpgid: Inappropriate ioctl for device`) 커널이 `Attempted to
+kill init!`으로 panic했다. `open("/dev/console")` → `setsid()` →
+`ioctl(fd, TIOCSCTTY, 0)` → `dup2(fd, 0/1/2)`를 mount와 execve 사이에
+추가하는 `setup_controlling_terminal()` 함수로 해결했다(design doc
+핵심 결정 3의 "추가된 단계 4" 참고, 커밋 `b7b5bf7`).
+
 ```bash
 git add init/src/main.rs
 git commit -m "Implement mount and execve in Rust init"
@@ -401,6 +409,13 @@ git commit -m "Package init, fish, and dependencies into initramfs"
 저장소에 커밋해 왔으므로(작고 재현 목적) 이 관례를 유지한다 — Step 3에서
 생성된 최신 `initrd.cpio`도 함께 커밋 대상에 포함된다.
 
+**추가 커밋(2026-08-05, Task 5 실측 중 발견):** init/fish/라이브러리만
+담아 부팅했더니 `Fish cannot find its asset files in '/usr/share/fish'`
+로 fish가 즉시 종료됐다. `functions/`, `config.fish`,
+`__fish_build_paths.fish`만 최소로 추려 `/usr/share/fish`에 추가하는
+것으로 해결했다(design doc 핵심 결정 4의 "세 번째 의존성 카테고리"
+참고, 커밋 `a286c96`).
+
 ---
 
 ### Task 5: check.sh 배너 판정으로 변경 + 전체 부팅 검증
@@ -408,7 +423,7 @@ git commit -m "Package init, fish, and dependencies into initramfs"
 **Files:**
 - Modify: `kernel/check.sh`
 
-- [ ] **Step 1: exit gate 문자열을 fish 배너로 변경**
+- [x] **Step 1: exit gate 문자열을 fish 배너로 변경**
 
 `kernel/check.sh`의 판정 부분을 다음으로 교체한다(빌드/실행 부분은
 BF-M1과 동일하게 유지):
@@ -447,7 +462,7 @@ exit 1
 `(cd ../init && cargo build --release)`를 추가해 `check.sh` 한 번 실행으로
 kernel, init, initramfs가 모두 최신 상태로 재생성되게 한다.
 
-- [ ] **Step 2: 실행해서 결과 확인**
+- [x] **Step 2: 실행해서 결과 확인**
 
 Run:
 ```bash
@@ -478,10 +493,21 @@ Expected: serial 로그에 `tars-init: starting as PID 1`, 3개의 mount 로그
   멈추면 init 바이너리 자체가 실행되지 않은 것 — `file init/target/
   release/tars-init`로 ELF 아키텍처(x86-64)를 재확인한다.
 
+**실제로 발생했던 두 가지 실패 유형(2026-08-05, 기록용):**
+- `Fish cannot find its asset files in '/usr/share/fish'` — fish의
+  내장 함수가 `/usr/share/fish/functions/*.fish` 스크립트로 구현돼
+  있어 initramfs에 없으면 즉시 종료된다. Task 4로 돌아가
+  `functions/`, `config.fish`, `__fish_build_paths.fish`를 추가한다.
+- `setpgid: Inappropriate ioctl for device` 후 `Attempted to kill
+  init!` panic — controlling terminal이 없어 fish의 job control
+  설정이 실패한 것. Task 3의 `setup_controlling_terminal()`
+  (`/dev/console` open → `setsid()` → `TIOCSCTTY` ioctl → `dup2`)로
+  해결한다.
+
 이 반복 자체가 BF-M1과 동일한 학습 사이클이므로, 몇 차례 반복이 필요할
 수 있다. 원인을 고치면 Step 2를 다시 실행한다.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add kernel/check.sh kernel/initrd.cpio
