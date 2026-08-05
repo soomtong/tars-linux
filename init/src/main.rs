@@ -31,12 +31,37 @@ fn mount_fs(source: &str, target: &str, fstype: &str) {
     }
 }
 
+fn setup_controlling_terminal() {
+    let console = CString::new("/dev/console").expect("CString::new failed");
+    let fd = unsafe { libc::open(console.as_ptr(), libc::O_RDWR) };
+    if fd < 0 {
+        let errno = unsafe { *libc::__errno_location() };
+        println!("tars-init: failed to open /dev/console (errno {})", errno);
+        return;
+    }
+
+    unsafe {
+        libc::setsid();
+        libc::ioctl(fd, libc::TIOCSCTTY, 0);
+        libc::dup2(fd, 0);
+        libc::dup2(fd, 1);
+        libc::dup2(fd, 2);
+        if fd > 2 {
+            libc::close(fd);
+        }
+    }
+
+    println!("tars-init: set up /dev/console as controlling terminal");
+}
+
 fn main() {
     println!("tars-init: starting as PID 1");
 
     mount_fs("proc", "/proc", "proc");
     mount_fs("sysfs", "/sys", "sysfs");
     mount_fs("devtmpfs", "/dev", "devtmpfs");
+
+    setup_controlling_terminal();
 
     let shell = CString::new("/usr/bin/fish").expect("CString::new failed");
     let argv: [*const libc::c_char; 2] = [shell.as_ptr(), ptr::null()];
