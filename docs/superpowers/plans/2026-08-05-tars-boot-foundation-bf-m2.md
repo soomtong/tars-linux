@@ -209,13 +209,24 @@ crate였다면 커밋하지 않는 것이 관례지만, init은 최종 실행 �
 **Files:**
 - Modify: `init/src/main.rs`
 
-- [ ] **Step 1: mount와 execve 로직 작성**
+- [x] **Step 1: mount와 execve 로직 작성**
+
+**갱신(2026-08-05):** 원안은 `libc::environ`을 그대로 썼으나 빌드 시
+`error[E0425]: cannot find value \`environ\` in crate \`libc\`` 발생
+(libc crate 0.2.189 기준). `libc` crate의 재노출에 의존하는 대신
+glibc가 항상 제공하는 POSIX 심볼 `environ`을 `extern "C"`로 직접
+선언해 사용하도록 바꾼다 — design doc 핵심 결정 2("raw FFI, `nix` 같은
+추상화를 걷어내고 직접 다룬다")의 취지에 더 맞는 방식이다.
 
 `init/src/main.rs` 전체를 다음으로 교체한다:
 
 ```rust
 use std::ffi::CString;
 use std::ptr;
+
+extern "C" {
+    static environ: *const *const libc::c_char;
+}
 
 fn mount_fs(source: &str, target: &str, fstype: &str) {
     let source_c = CString::new(source).expect("CString::new failed");
@@ -254,11 +265,7 @@ fn main() {
     let argv: [*const libc::c_char; 2] = [shell.as_ptr(), ptr::null()];
 
     unsafe {
-        libc::execve(
-            shell.as_ptr(),
-            argv.as_ptr(),
-            libc::environ as *const *const libc::c_char,
-        );
+        libc::execve(shell.as_ptr(), argv.as_ptr(), environ);
     }
 
     // execve가 성공하면 이 아래 코드는 실행되지 않는다(프로세스 이미지 자체가
@@ -270,11 +277,12 @@ fn main() {
 
 `mount(2)`는 성공 시 `0`, 실패 시 `-1`을 반환하고 `errno`에 원인을 남긴다
 (design doc 핵심 결정 3: 실패해도 나머지 mount는 계속 진행). `execve(2)`는
-성공하면 반환하지 않는다 — 반환했다는 것 자체가 실패 신호다.
-`libc::environ`은 `libc` crate가 이미 선언해 둔 전역 `char **environ`
-포인터로, 현재 프로세스의 환경변수를 그대로 fish에 넘기기 위해 사용한다.
+성공하면 반환하지 않는다 — 반환했다는 것 자체가 실패 신호다. `environ`은
+glibc가 프로세스에 항상 제공하는 전역 `char **environ` 심볼을 우리가
+직접 `extern "C"`로 선언한 것으로, 현재 프로세스의 환경변수를 그대로
+fish에 넘기기 위해 사용한다.
 
-- [ ] **Step 2: 빌드 확인**
+- [x] **Step 2: 빌드 확인**
 
 Run:
 ```bash
@@ -284,7 +292,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/init \
 
 Expected: 종료 코드 0, `Finished release [optimized] target(s)`.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add init/src/main.rs
