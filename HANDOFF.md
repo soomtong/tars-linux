@@ -1,4 +1,4 @@
-# HANDOFF: TARS Boot Foundation — BF-M1 완료, BF-M2 착수 전
+# HANDOFF: TARS Boot Foundation — BF-M2 design/plan 완료, 구현 착수 전
 
 ## 목표
 
@@ -10,9 +10,14 @@ hybrid ISO로 QEMU에서 shell prompt까지 부팅하는 것. 최종 비전(macO
 키바인딩, ghostty 터미널, Linux homebrew, AI 도구 통합, 자체 CJK IME)은
 이후 별도 서브프로젝트이며 이번 범위 밖.
 
-**협업 방식(고정):** 설명 먼저 → 파일 작성/명령 실행은 사용자가 직접 →
-결과 상세 설명. 승인된 내용의 git commit은 Claude Code가 대신 수행
-(사용자 명시적 위임, 2026-08-02).
+**협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
+명령 실행(빌드, 조사용 명령 포함)은 **사용자가 직접** → 결과를 사용자가
+전달하면 Claude가 상세 해석. Claude는 design/plan 문서·`HANDOFF.md`
+작성과 승인된 내용의 git commit만 대신 수행한다 (`~/.claude/projects/
+-Users-dp-Repository-tars-linux/memory/feedback_execution_scope.md`,
+`feedback_commit_delegation.md` 참고). **실행 방식(subagent-driven/
+inline/pairing)을 milestone마다 다시 묻지 말 것** — 이미 여러 차례
+확정됨, pairing 고정.
 
 ## 현재 브랜치
 
@@ -21,89 +26,101 @@ history는 이어받지 않음 (완전 물리적 재시작).
 
 ## 완료된 작업
 
-- [x] BF-M0 완료 (devcontainer + multiboot sanity check) — 이전 handoff에서
-      이미 기록됨
-- [x] BF-M1 design doc 작성:
-      `docs/superpowers/specs/2026-08-03-tars-boot-foundation-bf-m1-design.md`
-- [x] BF-M1 plan 작성:
-      `docs/superpowers/plans/2026-08-03-tars-boot-foundation-bf-m1.md`
-      (체크박스는 이번 세션에서 실제 완료 상태에 맞춰 전부 `- [x]`로 정정함)
-- [x] **BF-M1 완료** — kernel.org 6.18.42 LTS 소스를 `kernel/build.sh`로
-      받아 `allnoconfig`에서 시작한 x86_64 `.config`(`kernel/.config`)를
-      콘솔/initrd/devtmpfs 옵션까지 반복 확장하며 빌드. 빈 `/init` 파일만
-      담은 initrd(`kernel/make_initrd.sh` → `kernel/initrd.cpio`)로 QEMU
-      `-kernel`/`-initrd` 부팅 시 `Kernel panic - not syncing: No working
-      init found`가 재현됨을 이번 세션에서 `kernel/check.sh` 직접 실행으로
-      재검증(PASS)함 — design doc의 BF-M1 exit gate 충족
-- [x] devcontainer에 kernel 빌드 의존성 추가 (`flex`, `bison`, `bc`,
-      `libssl-dev`, `libelf-dev`, `curl`, `cpio`, `rsync`)
-- [x] `docs/study/note.md` — 사용자 개인 학습 노트 (study skill 결과물로
-      추정, 별도 검토 안 함)
+- [x] BF-M0, BF-M1 완료 (이전 handoff에서 기록됨, 이번 세션 시작 시
+      `kernel/check.sh` 실행으로 BF-M1 exit gate 재확인함)
+- [x] BF-M2 design doc 작성·커밋:
+      `docs/superpowers/specs/2026-08-04-tars-boot-foundation-bf-m2-design.md`
+      — Rust std+glibc 동적 링크, `libc` crate raw FFI로 mount/execve,
+      shell은 **fish**(bash 아님, 아래 참고), rustup으로 devcontainer에
+      Rust 툴체인 추가
+- [x] BF-M2 implementation plan 작성·커밋:
+      `docs/superpowers/plans/2026-08-05-tars-boot-foundation-bf-m2.md`
+      — Task 1~5, self-review 완료(mount point 디렉터리 누락 문제를
+      Task 4에 미리 반영함)
 
-## 시도했으나 실패한 접근
+## 시도했으나 실패한 접근 / 중요한 정정
 
-- 완전히 빈 cpio(newc) initrd → 커널이 initramfs 자체를 포기하고 `VFS:
-  Unable to mount root fs`로 panic. 목표(`No working init found`)에
-  도달 못함. **해결:** 실행 권한만 있는 빈 `/init` 파일 하나를 담은
-  cpio로 교체 (`kernel/make_initrd.sh` 참고, plan Task 4 Step 1에 기록됨).
-- (BF-M0 단계) 사용자가 "done"이라 답했지만 실제로는
-  `devcontainer/sanity/Makefile`이 생성 안 됐던 적 있음 → 이후 매번
-  `find`/`Read`로 파일 존재를 직접 확인하는 습관으로 정착.
-- **이번 세션에서 발견한 새로운 교훈:** 이전 세션에서 BF-M1을 design →
-  plan → 전체 5개 Task까지 실제로 완료했는데, `HANDOFF.md`를 갱신하지
-  않고 세션이 끝남 (마지막 handoff는 BF-M0 완료 시점 것 그대로 남아있었음).
-  plan 파일의 체크박스도 `- [ ]`인 채로 방치됨. 이번 세션 시작 시
-  `git log`를 먼저 확인하지 않았다면 이미 끝난 BF-M1을 처음부터 다시
-  물어볼 뻔함. **교훈:** 세션 시작 시 HANDOFF.md만 믿지 말고 `git log
-  --oneline -20`으로 실제 최근 커밋과 대조할 것. 한 milestone이 실제로
-  끝나면(마지막 Task 커밋 완료 시점) 그 자리에서 바로 HANDOFF.md와 plan
-  체크박스를 갱신할 것 — 다음 세션 시작까지 미루지 말 것.
+- **bash → fish 전환:** 당초 design은 bash를 shell로 채택했으나, 사용자
+  요청으로 devcontainer 안에서 `ldd`/terminfo 실측 조사 후 fish로
+  변경함. 실측 결과: fish는 bash 대비 `.so` 4개(`libpcre2-32`,
+  `libstdc++`, `libm`, `libgcc_s`) 추가 필요, fish-common의 completion
+  스크립트/config는 불필요, **terminfo 데이터 파일**(`/usr/lib/terminfo/
+  l/linux`)은 `ldd`로 안 잡히는 별도 카테고리 의존성이라 명시적으로
+  initramfs에 포함하기로 결정. exit gate 판정 문자열도 fish 배너
+  (`Welcome to fish, the friendly interactive shell`)로 변경. 상세는
+  design doc 핵심 설계 결정 4 참고.
+- **HANDOFF.md가 BF-M1 전체만큼 stale했던 문제(이전 세션):** 이번 세션
+  시작 시 `HANDOFF.md`는 "BF-M0 완료, BF-M1 착수 전"이라고 돼 있었지만
+  실제 `git log`를 보니 BF-M1이 design→plan→구현 5개 Task까지 전부
+  끝나 있었다. **교훈:** 세션 시작 시 `HANDOFF.md`만 믿지 말고 반드시
+  `git log --oneline -20`으로 실제 최근 커밋과 대조할 것.
+- **이번 세션에서 CLAUDE.md 협업 원칙을 벗어났던 지점(중요, 재발 방지
+  필요):**
+  1. BF-M1 완료 여부를 "검증"한다며 `docker run ... kernel/check.sh`
+     (빌드+QEMU 부팅 전체)를 Claude가 직접 실행함. CLAUDE.md의 "진행
+     전 검증은 Claude Code 책임" 조항은 `find`/`Read`로 파일 존재·
+     내용만 확인하라는 것이지 빌드/부팅 재실행을 허용하는 게 아님.
+  2. fish feasibility 조사를 위해 devcontainer 안에서 `apt-get install
+     fish`, `ldd`, terminfo 실험 등을 Claude가 직접 실행함.
+  3. `writing-plans` skill의 기본 흐름을 따라가다 기존 메모리
+     (`feedback_commit_delegation.md`: "실행 방식을 milestone마다
+     다시 묻지 말 것")를 놓치고 Subagent-driven/Inline Execution
+     옵션을 다시 제시함.
+
+  사용자가 지적해 바로잡음 — 이미 커밋된 문서/검증은 예외로 두되,
+  **BF-M2 구현부터는 원칙을 엄격히 지키기로 확정**. 상세 내용과 적용
+  범위는 `~/.claude/projects/-Users-dp-Repository-tars-linux/memory/
+  feedback_execution_scope.md`에 기록됨 — 다음 세션은 반드시 이 메모리를
+  먼저 확인할 것.
 
 ## 남은 작업
 
-- [ ] BF-M2 브레인스토밍 및 plan 작성·실행: Rust로 직접 구현한 init
-      (PID 1)이 `/proc`, `/sys`, `devtmpfs`를 mount하고 shell을 실행.
-      여전히 QEMU `-kernel`/`-initrd` direct boot (bootloader 아직 없음).
-      initramfs(cpio) 패키징 방식, Rust 빌드 타깃(x86_64-unknown-linux-musl
-      등 static 빌드 전략), shell 선택(busybox sh vs 다른 것) 등은 아직
-      미정 — 브레인스토밍 단계에서 결정.
-- [ ] BF-M3: Limine 설정 + `xorriso`로 hybrid ISO 생성, `-cdrom`으로 부팅
-      (devcontainer Dockerfile에 `xorriso`, `limine` 패키지 추가 필요)
+- [ ] BF-M2 plan(`docs/superpowers/plans/2026-08-05-tars-boot-
+      foundation-bf-m2.md`)의 **Task 1부터** 순서대로 pairing 방식으로
+      실행:
+  - Task 1: devcontainer에 rustup + fish 추가 (아직 파일 수정 전 —
+    이번 세션 마지막에 Task 1 Step 1~3을 사용자에게 설명만 하고 실행은
+    안 함)
+  - Task 2: Rust init 프로젝트 뼈대 (`init/Cargo.toml`, `init/src/main.rs`
+    최소 버전)
+  - Task 3: mount 3회 + execve로 fish 실행 로직 완성
+  - Task 4: `kernel/make_initrd.sh` 확장 (init+fish+라이브러리+terminfo
+    패키징)
+  - Task 5: `kernel/check.sh`를 fish 배너 grep으로 변경 + 전체 QEMU
+    부팅 검증까지 exit gate 통과
+- [ ] BF-M2 완료 후 BF-M3(Limine + xorriso hybrid ISO) design/plan 작성
 - [ ] BF-M4: 전체 스크립트화 + 3회 연속 성공 검증
 
 ## 핵심 파일
 
-- `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md` —
-  전체 설계, milestone 정의, 비목표, 저장소 구조 계획
-- `docs/superpowers/specs/2026-08-03-tars-boot-foundation-bf-m1-design.md` —
-  BF-M1 design (kernel 6.18.42, x86_64, allnoconfig 확장 전략, 빈 initrd로
-  panic 재현)
-- `docs/superpowers/plans/2026-08-03-tars-boot-foundation-bf-m1.md` —
-  BF-M1 plan (완료됨, BF-M2 plan 작성 시 이 문서의 구조/톤을 그대로 따를 것)
-- `kernel/.config:1-1560+` — allnoconfig에서 시작해 콘솔/initrd/devtmpfs
-  옵션까지 켠 최소 `.config`. BF-M2에서 init이 필요로 하는 추가 옵션
-  (예: pipe, signal, exec 관련은 이미 켜져 있을 가능성 높음)이 있으면
-  같은 방식(반복 확장)으로 이어감
-- `kernel/build.sh`, `kernel/make_initrd.sh`, `kernel/check.sh` — BF-M1
-  빌드/initrd 생성/검증 스크립트. BF-M2에서 `make_initrd.sh`를 실제 Rust
-  init 바이너리를 담도록 확장할 가능성 높음
-- `kernel/src/`, `kernel/build/` — `.gitignore`됨 (재현 가능한 산출물).
-  로컬에는 이미 존재하므로 재다운로드/재빌드 불필요, `kernel/build.sh`
-  재실행 시 캐시 활용됨
+- `docs/superpowers/specs/2026-08-04-tars-boot-foundation-bf-m2-design.md`
+  — BF-M2 design (fish로 정정된 최종본)
+- `docs/superpowers/plans/2026-08-05-tars-boot-foundation-bf-m2.md` —
+  BF-M2 plan, Task 1부터 시작. Task 4에 mount point 디렉터리 생성 로직
+  이미 반영돼 있음(self-review에서 발견한 버그 사전 수정)
+- `devcontainer/Dockerfile` — 아직 Rust/fish 미추가 상태. Task 1에서
+  수정 대상
+- `kernel/.config`, `kernel/build.sh`, `kernel/check.sh`,
+  `kernel/make_initrd.sh` — BF-M1 산출물, BF-M2에서 `make_initrd.sh`/
+  `check.sh`를 확장함(아직 미착수)
+- `~/.claude/projects/-Users-dp-Repository-tars-linux/memory/
+  feedback_execution_scope.md` — 이번 세션에서 새로 기록한 협업 원칙
+  준수 가이드. **다음 세션 시작 시 반드시 먼저 읽을 것**
 
 ## 다음 에이전트에게
 
-1. 이 파일을 먼저 읽되, **반드시 `git log --oneline -20`으로 실제 최근
-   커밋과 대조할 것** — 이번 세션에서 HANDOFF.md가 한 milestone(BF-M1)
-   전체만큼 stale했던 전례가 있음.
-2. BF-M2 브레인스토밍을 시작할 것 (`superpowers:brainstorming` skill).
-   design doc(`2026-08-01-...-design.md`)의 BF-M2 절이 큰 틀(Rust init,
-   `/proc`/`/sys`/devtmpfs mount, shell 실행, initramfs 패키징, `-kernel`/
-   `-initrd` direct boot 유지)을 정해뒀지만, Rust 빌드 타깃과 static
-   linking 전략, shell 바이너리 선택은 미정.
-3. Plan 작성 시 `superpowers:writing-plans` skill을 사용하고, BF-M0/BF-M1
-   plan과 동일한 bite-sized task 구조, 협업 방식(설명 → 사용자 실행 →
-   설명), commit은 Claude가 수행하는 패턴을 유지할 것.
-4. **한 milestone(모든 Task 커밋)이 끝나는 즉시 그 세션 안에서
-   HANDOFF.md와 plan 체크박스를 갱신할 것** — 이번 세션에서 겪은 stale
-   HANDOFF 문제를 반복하지 않기 위함.
+1. `git log --oneline -20`으로 실제 최근 커밋과 이 파일이 일치하는지
+   먼저 대조할 것.
+2. `~/.claude/projects/-Users-dp-Repository-tars-linux/memory/
+   feedback_execution_scope.md`와 `feedback_commit_delegation.md`를
+   먼저 읽을 것 — 이번 세션에서 겪은 원칙 위반을 반복하지 않기 위함.
+   핵심: **Claude는 빌드/QEMU 부팅/조사성 명령을 직접 실행하지 않고,
+   구현 파일(Dockerfile, init 소스, 스크립트)도 직접 쓰지 않는다.**
+   design/plan 문서와 `HANDOFF.md` 작성, 승인된 git commit만 예외.
+3. BF-M2 plan(`docs/superpowers/plans/2026-08-05-tars-boot-foundation-
+   bf-m2.md`)의 Task 1 Step 1부터 시작 — Dockerfile에 rustup 설치
+   스텝과 `fish` apt 패키지를 추가하는 이유를 설명하고, 사용자가 직접
+   파일을 수정하고 `docker build`/버전 확인 명령을 실행하도록 안내한다.
+   결과를 받으면 해석하고, 확인되면 Claude가 커밋한다.
+4. Task를 실행 방식(subagent-driven/inline)으로 처리할지 다시 묻지
+   말 것 — pairing 방식으로 고정됨.
