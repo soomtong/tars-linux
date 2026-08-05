@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ./build.sh
+(cd ../init && cargo build --release)
 ./make_initrd.sh
 
 LOG="$(mktemp)"
@@ -18,10 +19,10 @@ timeout 15 qemu-system-x86_64 \
 
 cat "$LOG"
 
-if grep -q "Kernel panic - not syncing: No working init found" "$LOG"; then
+if grep -q "Welcome to fish, the friendly interactive shell" "$LOG"; then
   echo "PASS"
   exit 0
 fi
 
-echo "FAIL: expected panic message not found"
+echo "FAIL: expected fish banner not found"
 exit 1
