@@ -80,6 +80,18 @@ devcontainer 안에서 실측한 결과 fish로도 무리 없이 전환 가능�
 판단해 fish로 변경한다. devcontainer(Debian bookworm) 안에서 `ldd
 /usr/bin/fish`와 `ldd /bin/bash`를 비교한 결과:
 
+**버전 갱신(2026-08-05, Task 1 진행 중 재검토):** fish 4.0(2025-02
+릴리스)이 C++에서 Rust로 완전히 재작성되면서 curses/terminfo 의존
+방식이 바뀌었고(Rust crate로 자체 구현 + xterm-256color fallback 내장),
+musl 정적 링크 빌드도 배포된다는 사실을 확인해 devcontainer 베이스를
+`debian:bookworm-slim`에서 `debian:trixie-slim`으로 바꾸고 apt로 fish
+4.0.2를 설치하기로 했다(핵심 설계 결정 5 참고). **아래 `ldd` 비교표와
+terminfo 결론은 bookworm/fish 3.6.0 기준 실측 결과이며, trixie/fish
+4.0.2로 전환한 뒤에는 그대로 믿지 않고 Task 4에서 동일한 실험(`ldd`
+비교, `/usr/lib/terminfo` 제거 후 `env -i fish -i` 실행)을 다시 수행해
+확인한다** — fish 공식 블로그의 "terminfo fallback 내장" 서술만으로
+`/usr/lib/terminfo/l/linux` 포함 여부를 결정하지 않는다.
+
 | | bash | fish |
 |---|---|---|
 | 의존 `.so` | `libtinfo.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2` (3개) | 위 3개 + `libpcre2-32.so.0`, `libstdc++.so.6`, `libm.so.6`, `libgcc_s.so.1` (7개) |
@@ -114,7 +126,7 @@ terminfo 데이터베이스가 아니라 `TERM=linux`용 엔트리 하나로 충
 cpio에 담는다. `/usr/lib/terminfo/l/linux`도 함께 복사한다. coreutils는
 포함하지 않는다(비목표 참고).
 
-### 5. devcontainer에 Rust 툴체인 추가: rustup
+### 5. devcontainer에 Rust 툴체인 추가: rustup, 베이스 이미지를 trixie로 변경
 
 `devcontainer/Dockerfile`에 rustup 설치 스텝을 추가해 stable
 `x86_64-unknown-linux-gnu` 타깃을 설치한다. Debian bookworm의 apt
@@ -123,6 +135,13 @@ cpio에 담는다. `/usr/lib/terminfo/l/linux`도 함께 복사한다. coreutils
 `--no-install-recommends`로 설치해도 fish-common이 python3/man-db 등을
 끌어오지만, 이는 initramfs에 담을 대상이 아니라 devcontainer 안에서
 `/usr/bin/fish`와 그 라이브러리를 추출해 오기 위한 소스일 뿐이다.
+
+**베이스 이미지 변경(2026-08-05):** bookworm의 apt는 fish 3.6.0까지만
+제공한다. fish 4.0(Rust 재작성) 이상을 쓰기 위해 devcontainer 베이스를
+`debian:bookworm-slim`에서 `debian:trixie-slim`(Debian 13, 2025-08
+릴리스, apt로 fish 4.0.2 제공)으로 바꾼다. 커널 빌드 도구 체인
+(`build-essential`, `gcc-multilib` 등)은 trixie에서도 동일한 패키지명으로
+제공되므로 나머지 apt 목록은 그대로 유지한다.
 
 ### 6. 검증: timeout 강제 종료 + 배너 grep
 

@@ -42,12 +42,18 @@ fish(bash 아님) + terminfo 파일 포함, timeout 강제 종료 + 배너 grep.
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가**
+- [ ] **Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가 (trixie 베이스)**
+
+**갱신(2026-08-05):** 당초 `debian:bookworm-slim` 기준으로 작성했고
+`rustc`/`cargo`/`fish 3.6.0` 설치까지 실제로 확인했으나, fish 4.0(Rust
+재작성, curses 의존 제거, musl 정적 빌드 지원) 이상을 쓰기 위해 베이스
+이미지를 `debian:trixie-slim`(Debian 13, apt로 fish 4.0.2 제공)으로
+바꾸기로 결정했다(design doc 핵심 설계 결정 5 참고). 아래는 그 갱신판이다.
 
 `devcontainer/Dockerfile` 전체를 다음으로 교체한다:
 
 ```dockerfile
-FROM --platform=linux/amd64 debian:bookworm-slim
+FROM --platform=linux/amd64 debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -103,7 +109,8 @@ docker run --rm --platform linux/amd64 tars-devcontainer \
 ```
 
 Expected: 세 명령 모두 버전 문자열을 출력하고 `command not found` 없음
-(예: `rustc 1.8x.x`, `cargo 1.8x.x`, `fish, version 3.6.0`).
+(예: `rustc 1.8x.x`, `cargo 1.8x.x`, `fish, version 4.0.2` 또는 trixie가
+제공하는 그 이상 버전).
 
 - [ ] **Step 4: 커밋**
 
@@ -286,6 +293,16 @@ git commit -m "Implement mount and execve in Rust init"
 
 **Files:**
 - Modify: `kernel/make_initrd.sh`
+
+**재검증 필요(2026-08-05):** 아래 스크립트의 `ldd` 라이브러리 목록과
+`/usr/lib/terminfo/l/linux` 포함 여부는 design doc 핵심 설계 결정 4에
+기록된 bookworm/fish 3.6.0 실측을 그대로 옮긴 것이다. fish 4.0.2(Rust
+재작성, curses 의존 제거)로 바뀌었으므로 Step 3에서 `cpio -itv`로 실제
+담긴 라이브러리 목록을 확인하고, `/usr/lib/terminfo`를 지운 상태에서
+`env -i fish -i`를 실행해 terminfo 경고가 여전히 나오는지 다시
+실측한다 — 경고가 없으면 `mkdir -p "$WORKDIR/usr/lib/terminfo/l"`와
+`cp .../l/linux` 두 줄을 스크립트에서 제거하고 design doc도 그 결과로
+갱신한다.
 
 - [ ] **Step 1: `make_initrd.sh`를 실제 바이너리 패키징 스크립트로 교체**
 
