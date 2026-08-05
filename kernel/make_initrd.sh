@@ -26,4 +26,9 @@ chmod 0755 "$WORKDIR/usr/bin/fish"
 copy_lib_deps "$WORKDIR/init"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
 
+mkdir -p "$WORKDIR/usr/share/fish"
+cp -r /usr/share/fish/functions "$WORKDIR/usr/share/fish/"
+cp /usr/share/fish/config.fish "$WORKDIR/usr/share/fish/"
+cp /usr/share/fish/__fish_build_paths.fish "$WORKDIR/usr/share/fish/"
+
 (cd "$WORKDIR" && find . | cpio -o -H newc) > initrd.cpio
