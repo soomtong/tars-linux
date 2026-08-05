@@ -128,7 +128,7 @@ git commit -m "Add Rust toolchain and fish shell to devcontainer"
 - Create: `init/src/main.rs`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: `.gitignore`에 Rust 빌드 산출물 추가**
+- [x] **Step 1: `.gitignore`에 Rust 빌드 산출물 추가**
 
 `.gitignore`에 다음 줄을 추가한다:
 
@@ -136,7 +136,7 @@ git commit -m "Add Rust toolchain and fish shell to devcontainer"
 init/target/
 ```
 
-- [ ] **Step 2: `Cargo.toml` 작성**
+- [x] **Step 2: `Cargo.toml` 작성**
 
 `init/Cargo.toml`:
 ```toml
@@ -149,7 +149,7 @@ edition = "2021"
 libc = "0.2"
 ```
 
-- [ ] **Step 3: 최소 `main.rs` 작성**
+- [x] **Step 3: 최소 `main.rs` 작성**
 
 `init/src/main.rs`:
 ```rust
@@ -162,7 +162,7 @@ fn main() {
 먼저 "Rust 프로젝트가 devcontainer에서 빌드되고, 동적 링크된 ELF가
 나온다"는 것부터 확인한다.
 
-- [ ] **Step 4: 빌드 확인**
+- [x] **Step 4: 빌드 확인**
 
 Run:
 ```bash
@@ -174,20 +174,24 @@ Expected: 종료 코드 0. `Compiling tars-init v0.1.0 ...`, `Finished
 release [optimized] target(s) in ...`. `init/target/release/tars-init`
 파일이 생성된다.
 
-- [ ] **Step 5: 동적 링크 확인**
+- [x] **Step 5: 동적 링크 확인**
+
+**갱신(2026-08-05):** `file` 패키지가 devcontainer 이미지에 없어
+(`command not found`) `binutils`(이미 설치돼 있음)의 `readelf -h`로
+대체한다.
 
 Run:
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/init \
-  tars-devcontainer bash -c "file target/release/tars-init && ldd target/release/tars-init"
+  tars-devcontainer bash -c "readelf -h target/release/tars-init | grep -E 'Class|Machine' && ldd target/release/tars-init"
 ```
 
-Expected: `file` 출력에 `ELF 64-bit LSB pie executable, x86-64 ...
-dynamically linked`가 포함됨. `ldd` 출력에 `libc.so.6`과
+Expected: `readelf -h` 출력에 `Class: ELF64`, `Machine: Advanced Micro
+Devices X86-64`가 보임. `ldd` 출력에 `libc.so.6`과
 `/lib64/ld-linux-x86-64.so.2`가 보임 — design doc 핵심 결정 1이 의도한
 대로 init 자신도 glibc 동적 링크임을 확인하는 지점이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add .gitignore init/Cargo.toml init/Cargo.lock init/src/main.rs
