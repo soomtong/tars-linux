@@ -261,7 +261,7 @@ git commit -m "Add Limine binary release download script"
 **Files:**
 - Create: `boot/make_iso.sh`
 
-- [ ] **Step 1: `make_iso.sh` 작성**
+- [x] **Step 1: `make_iso.sh` 작성**
 
 `boot/make_iso.sh`:
 
@@ -298,13 +298,13 @@ UEFI 관련 xorriso 플래그(`--efi-boot`, `-efi-boot-part`, `-hfsplus`)는
 한다 — 이 단계 없이는 El Torito boot catalog만으로 실제 부팅이 되지
 않는다(design doc에 기록된 실측 정정 사항).
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 ```bash
 chmod +x boot/make_iso.sh
 ```
 
-- [ ] **Step 3: kernel/init 산출물이 없으면 먼저 준비**
+- [x] **Step 3: kernel/init 산출물이 없으면 먼저 준비**
 
 Run:
 ```bash
@@ -316,7 +316,7 @@ Expected: 종료 코드 0. `kernel/build/arch/x86/boot/bzImage`와
 `kernel/initrd.cpio`가 존재한다(이미 BF-M2에서 만들어져 있다면 이
 Step은 최신 상태로 재생성만 한다).
 
-- [ ] **Step 4: ISO 생성 실행**
+- [x] **Step 4: ISO 생성 실행**
 
 Run:
 ```bash
@@ -327,7 +327,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 종료 코드 0. `xorriso` 로그에 경고 정도는 나올 수 있으나
 에러로 중단되지 않는다.
 
-- [ ] **Step 5: ISO 파일 확인**
+- [x] **Step 5: ISO 파일 확인**
 
 Run:
 ```bash
@@ -349,7 +349,7 @@ Expected: `out/tars.iso` 파일이 존재하고 크기가 0보다 크다.
 가졌는지(`chmod +x`) 확인한다 — `make`가 만든 산출물은 보통 이미
 실행 권한이 있지만, 볼륨 마운트 방식에 따라 권한이 달라질 수 있다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add boot/make_iso.sh
