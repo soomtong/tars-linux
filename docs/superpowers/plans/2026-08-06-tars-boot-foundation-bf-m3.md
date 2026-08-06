@@ -62,7 +62,7 @@ devcontainer 패키지 목록은 이 재검토를 반영한다(`xorriso`만 추�
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile apt 목록에 xorriso 추가**
+- [x] **Step 1: Dockerfile apt 목록에 xorriso 추가**
 
 `devcontainer/Dockerfile`의 `apt-get install` 목록에 `xorriso` 하나만
 추가한다(기존 목록 순서 유지, 끝에 삽입):
@@ -105,7 +105,7 @@ WORKDIR /workspace
 `autoconf`/`automake`는 필요 없다 — 이미 있는 `build-essential`의 `cc`
 만으로 host 도구(`limine`)를 빌드할 수 있다.
 
-- [ ] **Step 2: 이미지 재빌드**
+- [x] **Step 2: 이미지 재빌드**
 
 Run:
 ```bash
@@ -115,7 +115,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [ ] **Step 3: 새 도구 확인**
+- [x] **Step 3: 새 도구 확인**
 
 Run:
 ```bash
@@ -125,7 +125,7 @@ docker run --rm --platform linux/amd64 tars-devcontainer \
 
 Expected: 버전 문자열 출력, `command not found` 없음.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
