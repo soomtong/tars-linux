@@ -1,7 +1,8 @@
 # TARS Boot Foundation — BF-M3 Design
 
 **Date:** 2026-08-06
-**Status:** Approved (design phase), plan not yet written
+**Status:** Completed (2026-08-06) — `-cdrom out/tars.iso` 단독으로 QEMU
+serial 로그에서 fish 배너 확인, `boot/check.sh` PASS
 
 ## 배경
 

@@ -369,7 +369,7 @@ bzImage/`build/`와 동일하게 재생성 가능한 큰 바이너리이기 때�
 **Files:**
 - Create: `boot/check.sh`
 
-- [ ] **Step 1: `check.sh` 작성**
+- [x] **Step 1: `check.sh` 작성**
 
 `boot/check.sh`:
 ```bash
@@ -407,13 +407,13 @@ BF-M2의 `kernel/check.sh`와 동일한 패턴(전체 체인 재실행 → QEMU 
 종료 → grep → PASS/FAIL)이되, `-kernel`/`-initrd` 없이 `-cdrom`만
 쓴다는 점이 design doc이 강조하는 핵심 차이다.
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 ```bash
 chmod +x boot/check.sh
 ```
 
-- [ ] **Step 3: 실행해서 결과 확인**
+- [x] **Step 3: 실행해서 결과 확인**
 
 Run:
 ```bash
@@ -448,7 +448,7 @@ Expected: BF-M2 때와 동일한 mount 로그와 fish 배너
 이 반복도 BF-M1/BF-M2와 같은 학습 사이클이므로 몇 차례 반복이 필요할
 수 있다. 원인을 고치면 Step 3을 다시 실행한다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add boot/check.sh
