@@ -5,3 +5,7 @@ kernel/src/
 kernel/build/
 
 init/target/
+
+boot/limine-binary/
+
+out/
