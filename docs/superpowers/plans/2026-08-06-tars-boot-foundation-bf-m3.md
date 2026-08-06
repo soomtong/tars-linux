@@ -183,7 +183,7 @@ git commit -m "Add boot directory skeleton and limine.conf"
 **Files:**
 - Create: `boot/build.sh`
 
-- [ ] **Step 1: `build.sh` 작성**
+- [x] **Step 1: `build.sh` 작성**
 
 `boot/build.sh`:
 ```bash
@@ -217,13 +217,13 @@ tarball의 최상위 디렉터리 이름이 `limine-binary/`임을 2026-08-06에
 은 tarball 안에 이미 컴파일되어 들어있어 이 스크립트가 따로 만들
 필요가 없다.
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 ```bash
 chmod +x boot/build.sh
 ```
 
-- [ ] **Step 3: 실행해서 다운로드/빌드 확인**
+- [x] **Step 3: 실행해서 다운로드/빌드 확인**
 
 Run:
 ```bash
@@ -234,7 +234,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 종료 코드 0. 다운로드 로그 뒤 `cc -std=c99 ... -o limine`
 컴파일 명령이 출력되고 에러 없이 끝난다.
 
-- [ ] **Step 4: 산출물 확인**
+- [x] **Step 4: 산출물 확인**
 
 Run:
 ```bash
@@ -245,7 +245,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 세 파일 모두 존재하고 크기가 0보다 크다. `limine`은 실행
 권한(`-rwxr-xr-x` 등)을 가진다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add boot/build.sh
