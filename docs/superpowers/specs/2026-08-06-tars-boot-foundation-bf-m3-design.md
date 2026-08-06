@@ -43,17 +43,28 @@ xorriso ISO (BIOS El Torito)
 
 ## 핵심 설계 결정
 
-### 1. Limine 조달: GitHub `v12.5.2` 태그를 clone 후 직접 make
+### 1. Limine 조달: `v12.5.2` binary release 다운로드, host 도구만 직접 make
 
 Debian trixie apt 저장소에는 Limine 패키지가 없다(공식 확인, 2026-08-06
 WebSearch로 실측 — Debian bug tracker에 RFP(Request For Packaging)만
-존재). 따라서 GitHub 소스를 직접 받아야 한다. prebuilt release tarball을
-받는 대신 `boot/build.sh`가 `git clone --branch v12.5.2`로 소스를 받고
-`make`를 실행하는 방식을 택한다 — kernel(`kernel/build.sh`)과 init을
-자체 빌드하는 이 프로젝트의 일관된 원칙과 맞추고, 태그 고정으로
-재현성을 확보한다. 정확한 make 타겟명(부트로더 바이너리와 `limine`
-CLI 도구가 하나의 `make`로 함께 만들어지는지, 별도 타겟이 필요한지)은
-design 단계에서 추측하지 않고 plan 실행 시 실제 clone 후 확인한다.
+존재). 따라서 GitHub에서 직접 받아야 한다.
+
+**정정(2026-08-06, 구현 시작 직전 재검토):** 처음에는 git 소스를 태그로
+clone해 `./bootstrap`(autotools) → `./configure --enable-bios-cd` →
+`make`로 전체를 빌드하기로 했다. 그러나 실제로 GitHub Releases의
+`limine-binary.tar.gz` 자산을 받아 내용을 확인한 결과, 이 안에 이미
+컴파일된 `limine-bios.sys`/`limine-bios-cd.bin`과 host 도구(`limine`
+CLI, `bios-install`에 쓰는 그 도구) 소스 `limine.c` + 최소 `Makefile`
+(`cc -std=c99 limine.c -o limine`, 그 이상 의존성 없음)만 들어있음을
+확인했다. Limine은 kernel/init과 달리 이 프로젝트가 내부 동작을
+배우거나 수정하려는 대상이 아니라 "설정이 단순해서" 고른 외부 도구다
+(전체 design doc 핵심 설계 결정 표 참고) — 부트섹터 어셈블리까지
+직접 조립할 학습 이득이 없는데 `nasm`/`autoconf`/`automake` 세 패키지를
+devcontainer에 추가로 들이는 비용만 크다. 그래서 **binary release를
+받아 부트로더 바이너리는 그대로 쓰고, host 도구(`limine`)만 이미 있는
+`gcc`로 직접 빌드하는 방식**으로 바꾼다. `boot/build.sh`가 release
+tarball URL(버전이 URL에 고정됨 — 재현성 유지)을 다운로드해 없으면
+풀고, `make -C limine-binary`로 host 도구를 빌드한다.
 
 ### 2. Config 포맷: `limine.conf`(v12.x), `protocol: linux`로 무수정 kernel 부팅
 
@@ -132,17 +143,16 @@ devcontainer에 추가로 준비해야 하는데, 이번 milestone 범위(비목
 tars-linux/
 ├── boot/                      # 신설
 │   ├── limine.conf            # 커밋 대상 (kernel의 .config와 같은 위상)
-│   ├── build.sh                # Limine 소스 clone(없으면) + make
+│   ├── build.sh                # limine-binary release 다운로드(없으면) + host 도구 make
 │   ├── make_iso.sh             # 스테이징 + xorriso + limine bios-install → out/tars.iso
 │   ├── check.sh                # make_iso.sh 실행 후 QEMU -cdrom 부팅 검증
-│   ├── src/                    # gitignore 대상 — limine-12.5.2/ (clone 결과물)
-│   └── build/                  # gitignore 대상 — limine-bios.sys 등 make 산출물
+│   └── limine-binary/          # gitignore 대상 — 다운로드/압축 해제된 release + make 산출물(limine)
 ├── kernel/                     # 기존, 변경 없음
 ├── init/                       # 기존, 변경 없음
 └── out/                        # 신설, gitignore 대상 — tars.iso
 ```
 
-`.gitignore`에 `boot/src/`, `boot/build/`, `out/`을 추가한다.
+`.gitignore`에 `boot/limine-binary/`, `out/`을 추가한다.
 
 `boot/check.sh`는 BF-M2의 `kernel/check.sh`가 `build.sh`와 init cargo
 build를 자체 호출하는 것과 동일하게, 전체 체인(kernel build → init

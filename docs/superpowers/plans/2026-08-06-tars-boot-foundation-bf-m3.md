@@ -7,18 +7,20 @@ BIOS El Torito ISO(`out/tars.iso`)를 QEMU `-cdrom` 하나만으로 부팅해
 BF-M2와 동일한 fish shell 배너(`Welcome to fish, the friendly interactive
 shell`)가 QEMU serial에 출력되는 지점까지 검증한다.
 
-**Architecture:** 새 최상위 디렉터리 `boot/`에 Limine 소스를 clone+빌드하는
-`build.sh`, ISO를 만드는 `make_iso.sh`, 전체 체인을 실행하고 QEMU로
-검증하는 `check.sh`를 만든다. Limine은 apt에 없으므로 GitHub `v12.5.2`
-태그를 clone해 `./bootstrap` → `./configure --enable-bios-cd` → `make`로
-직접 빌드한다(out-of-tree, `boot/build/`). `limine.conf`는
-`protocol: linux`로 `kernel/build.sh`가 만든 bzImage를 무수정으로
-부팅하고 `module_path`로 initramfs를 지정한다. ISO는 BIOS El Torito만
-포함하며(UEFI 제외, design doc 비목표 참고), `xorriso -as mkisofs` 뒤
-반드시 `limine bios-install`을 실행해야 부팅 가능한 이미지가 된다.
+**Architecture:** 새 최상위 디렉터리 `boot/`에 Limine binary release를
+다운로드하는 `build.sh`, ISO를 만드는 `make_iso.sh`, 전체 체인을
+실행하고 QEMU로 검증하는 `check.sh`를 만든다. Limine은 apt에 없으므로
+GitHub Releases의 `limine-binary.tar.gz`(v12.5.2)를 받는다 — 안에 이미
+컴파일된 부트로더 바이너리(`limine-bios.sys`, `limine-bios-cd.bin`)가
+들어있고, host 도구(`limine` CLI)만 `cc`로 직접 빌드한다(`make -C
+limine-binary`). `limine.conf`는 `protocol: linux`로 `kernel/build.sh`가
+만든 bzImage를 무수정으로 부팅하고 `module_path`로 initramfs를 지정한다.
+ISO는 BIOS El Torito만 포함하며(UEFI 제외, design doc 비목표 참고),
+`xorriso -as mkisofs` 뒤 반드시 `limine bios-install`을 실행해야 부팅
+가능한 이미지가 된다.
 
-**Tech Stack:** Limine v12.5.2(GitHub 소스 빌드, nasm+autotools),
-`xorriso`, Linux 6.18.42(BF-M1 산출물), Rust init + fish
+**Tech Stack:** Limine v12.5.2(GitHub binary release + host 도구
+`cc` 빌드), `xorriso`, Linux 6.18.42(BF-M1 산출물), Rust init + fish
 4.0.2(BF-M2 산출물), QEMU system x86_64(TCG, SeaBIOS), bash
 
 ---
@@ -33,30 +35,37 @@ shell`)가 QEMU serial에 출력되는 지점까지 검증한다.
 
 **Design doc과의 관계:**
 [2026-08-06-tars-boot-foundation-bf-m3-design.md](../specs/2026-08-06-tars-boot-foundation-bf-m3-design.md)
-의 결정을 그대로 따른다 — Limine v12.5.2 소스 빌드, `protocol: linux` +
-`limine.conf`, BIOS El Torito ISO + `limine bios-install`, `boot/`
-디렉터리 신설, BIOS 전용 검증(SeaBIOS, UEFI 제외).
+의 결정을 그대로 따른다 — Limine v12.5.2 binary release 다운로드 +
+host 도구 make, `protocol: linux` + `limine.conf`, BIOS El Torito ISO +
+`limine bios-install`, `boot/` 디렉터리 신설, BIOS 전용 검증(SeaBIOS,
+UEFI 제외).
 
-**Limine 빌드 절차의 실측 근거(2026-08-06, plan 작성 중 조사):** Limine
-공식 `INSTALL.md`와 `configure.ac`를 직접 확인해 다음을 확인했다 — (1)
-git checkout(release tarball 아님)에서 빌드하려면 `GNU autoconf`가 있어야
-`./bootstrap`이 동작한다, (2) BIOS CD 이미지는 `./configure
---enable-bios-cd`로 활성화하며 이 옵션이 `--enable-bios`도 자동으로
-켠다, (3) BIOS 포트 빌드에는 `nasm`이 필수다(`configure.ac`의
-`NEED_NASM` 로직), (4) UEFI용 `mtools`는 BIOS 전용 빌드에서는 필요 없다.
-아래 Task 1의 devcontainer 패키지 목록은 이 조사 결과를 반영한다.
+**Limine 조달 방식의 실측 근거(2026-08-06, plan 작성 중 재검토):**
+처음에는 git 소스를 태그로 clone해 `./bootstrap`(autotools) →
+`./configure --enable-bios-cd` → `make`로 전체를 빌드하기로 하고
+`configure.ac`까지 읽어 필요한 패키지(`nasm`, `autoconf`, `automake`)를
+확인했었다. 그러나 GitHub Releases의 `limine-binary.tar.gz` 자산을
+실제로 받아 내용을 확인한 결과, 이미 컴파일된
+`limine-bios.sys`/`limine-bios-cd.bin`과 host 도구 소스 `limine.c` +
+최소 `Makefile`(`cc -std=c99 limine.c -o limine`, 그 이상 의존성 없음)
+만 들어있음을 확인했다(design doc 핵심 설계 결정 1의 정정 사항 참고).
+Limine은 이 프로젝트가 내부 동작을 배우려는 대상이 아니라 "설정이
+단순해서" 고른 외부 도구이므로, 부트섹터 어셈블리까지 직접 조립할
+학습 이득 없이 `nasm`/`autoconf`/`automake`를 devcontainer에 들이는
+비용만 드는 첫 접근을 버리고 binary release로 바꿨다. 아래 Task 1의
+devcontainer 패키지 목록은 이 재검토를 반영한다(`xorriso`만 추가).
 
 ---
 
-### Task 1: devcontainer에 Limine/ISO 빌드 도구 추가
+### Task 1: devcontainer에 ISO 빌드 도구 추가
 
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile apt 목록에 xorriso, nasm, autoconf, automake 추가**
+- [ ] **Step 1: Dockerfile apt 목록에 xorriso 추가**
 
-`devcontainer/Dockerfile`의 `apt-get install` 목록에 다음 네 패키지를
-추가한다(기존 목록 순서 유지, 알파벳 순으로 끝에 삽입):
+`devcontainer/Dockerfile`의 `apt-get install` 목록에 `xorriso` 하나만
+추가한다(기존 목록 순서 유지, 끝에 삽입):
 
 ```dockerfile
 FROM --platform=linux/amd64 debian:trixie-slim
@@ -77,9 +86,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cpio \
         rsync \
         fish \
-        autoconf \
-        automake \
-        nasm \
         xorriso \
     && rm -rf /var/lib/apt/lists/*
 
@@ -94,11 +100,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
 WORKDIR /workspace
 ```
 
-`autoconf`/`automake`는 Limine을 release tarball이 아닌 git 소스에서
-빌드하기 위한 `./bootstrap` 단계에 필요하다(핵심 설계 결정 1). `nasm`은
-BIOS stage1 부트섹터 어셈블리를 조립하는 데 필수다. `xorriso`는 El
-Torito ISO 생성에 쓴다. `mtools`는 UEFI CD 빌드에만 필요하므로(비목표)
-추가하지 않는다.
+`xorriso`는 El Torito ISO 생성에 쓴다. Limine 자체는 binary release로
+받으므로(design doc 핵심 설계 결정 1, 2026-08-06 정정) `nasm`/
+`autoconf`/`automake`는 필요 없다 — 이미 있는 `build-essential`의 `cc`
+만으로 host 도구(`limine`)를 빌드할 수 있다.
 
 - [ ] **Step 2: 이미지 재빌드**
 
@@ -115,16 +120,16 @@ Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 Run:
 ```bash
 docker run --rm --platform linux/amd64 tars-devcontainer \
-  bash -c "xorriso --version && nasm -v && autoconf --version | head -1 && automake --version | head -1"
+  bash -c "xorriso --version"
 ```
 
-Expected: 네 명령 모두 버전 문자열 출력, `command not found` 없음.
+Expected: 버전 문자열 출력, `command not found` 없음.
 
 - [ ] **Step 4: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
-git commit -m "Add Limine and ISO build tools to devcontainer"
+git commit -m "Add xorriso to devcontainer"
 ```
 
 ---
@@ -135,13 +140,12 @@ git commit -m "Add Limine and ISO build tools to devcontainer"
 - Create: `boot/limine.conf`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: `.gitignore`에 boot/init 빌드 산출물 추가**
+- [ ] **Step 1: `.gitignore`에 boot 빌드 산출물 추가**
 
 `.gitignore`에 다음 줄을 추가한다:
 
 ```
-boot/src/
-boot/build/
+boot/limine-binary/
 out/
 ```
 
@@ -174,7 +178,7 @@ git commit -m "Add boot directory skeleton and limine.conf"
 
 ---
 
-### Task 3: Limine 소스 clone + 빌드
+### Task 3: Limine binary release 다운로드 + host 도구 빌드
 
 **Files:**
 - Create: `boot/build.sh`
@@ -189,29 +193,29 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 LIMINE_TAG="v12.5.2"
-SRC_DIR="src/limine-12.5.2"
+DIR="limine-binary"
+URL="https://github.com/limine-bootloader/limine/releases/download/${LIMINE_TAG}/limine-binary.tar.gz"
 
-if [ ! -d "$SRC_DIR" ]; then
-  echo "Cloning Limine ${LIMINE_TAG}..."
-  mkdir -p src
-  git clone --branch "$LIMINE_TAG" --depth 1 \
-    https://github.com/limine-bootloader/limine.git "$SRC_DIR"
-  (cd "$SRC_DIR" && ./bootstrap)
+if [ ! -d "$DIR" ]; then
+  echo "Downloading ${URL}..."
+  curl -sSL -o limine-binary.tar.gz "$URL"
+  tar xzf limine-binary.tar.gz
+  rm limine-binary.tar.gz
 fi
 
-mkdir -p build
-(cd build && "../${SRC_DIR}/configure" --enable-bios-cd && make)
+make -C "$DIR"
 ```
 
-`SRC_DIR`가 없을 때만 clone + `./bootstrap`을 실행해 반복 실행 시
-매번 다시 받지 않는다(`kernel/build.sh`의 `if [ ! -d "$SRC_DIR" ]` 패턴과
-동일). `./bootstrap`은 git 소스 체크아웃에서만 필요한 단계로,
-`autoreconf`를 호출해 `configure` 스크립트를 생성하고 3RDPARTY.md에
-명시된 의존 서브모듈을 내려받는다(release tarball을 쓴다면 생략
-가능하지만, 이 프로젝트는 태그 고정 git clone을 택했으므로 항상
-실행한다 — 핵심 설계 결정 1). `--enable-bios-cd`는 BIOS El Torito CD
-이미지(`limine-bios-cd.bin`)와 BIOS 포트 전체를 빌드하도록 켠다(UEFI는
-기본값 미포함이므로 별도 옵션 없이 제외됨).
+`DIR`가 없을 때만 다운로드해 반복 실행 시 매번 다시 받지 않는다
+(`kernel/build.sh`의 `if [ ! -d "$SRC_DIR" ]` 패턴과 동일). 릴리스 URL에
+버전 태그가 그대로 박혀있으므로 이것만으로 재현성이 확보된다(release
+tarball의 최상위 디렉터리 이름이 `limine-binary/`임을 2026-08-06에 직접
+다운로드해 확인했다). `make -C "$DIR"`는 `limine-binary/Makefile`(`cc
+-std=c99 limine.c -o limine`)을 실행해 host 도구 `limine`을 만든다 —
+이미 다운로드되어 있어도 `make`는 산출물이 최신이면 다시 컴파일하지
+않으므로 매번 실행해도 안전하다. `limine-bios.sys`, `limine-bios-cd.bin`
+은 tarball 안에 이미 컴파일되어 들어있어 이 스크립트가 따로 만들
+필요가 없다.
 
 - [ ] **Step 2: 실행 권한 확인**
 
@@ -219,7 +223,7 @@ mkdir -p build
 chmod +x boot/build.sh
 ```
 
-- [ ] **Step 3: 실행해서 빌드 확인**
+- [ ] **Step 3: 실행해서 다운로드/빌드 확인**
 
 Run:
 ```bash
@@ -227,33 +231,28 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
   tars-devcontainer ./build.sh
 ```
 
-Expected: 종료 코드 0. clone/bootstrap/configure/make 로그가 순서대로
-출력되고 마지막에 `make`가 에러 없이 끝난다.
+Expected: 종료 코드 0. 다운로드 로그 뒤 `cc -std=c99 ... -o limine`
+컴파일 명령이 출력되고 에러 없이 끝난다.
 
-- [ ] **Step 4: 산출물 위치 확인**
+- [ ] **Step 4: 산출물 확인**
 
 Run:
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
-  tars-devcontainer bash -c "find build -maxdepth 3 -iname 'limine-bios*' -o -iname 'limine'"
+  tars-devcontainer bash -c "ls -la limine-binary/limine-bios.sys limine-binary/limine-bios-cd.bin limine-binary/limine"
 ```
 
-Expected: `limine-bios.sys`, `limine-bios-cd.bin`, 그리고 `limine`(host
-CLI 도구) 세 파일의 경로가 출력된다.
-
-**만약 경로가 예상(`build/bin/`)과 다르면:** Limine의 `GNUmakefile.in`이
-정의하는 `BINDIR`은 버전에 따라 바뀔 수 있다 — 여기서 출력된 실제
-경로를 그대로 Task 4의 `make_iso.sh`에 반영하고, 이 Step의 결과를
-아래에 "갱신" 메모로 남긴다.
+Expected: 세 파일 모두 존재하고 크기가 0보다 크다. `limine`은 실행
+권한(`-rwxr-xr-x` 등)을 가진다.
 
 - [ ] **Step 5: 커밋**
 
 ```bash
 git add boot/build.sh
-git commit -m "Add Limine build script"
+git commit -m "Add Limine binary release download script"
 ```
 
-`boot/src/`, `boot/build/`는 `.gitignore` 대상이라 커밋되지 않는다.
+`boot/limine-binary/`는 `.gitignore` 대상이라 커밋되지 않는다.
 
 ---
 
@@ -264,8 +263,7 @@ git commit -m "Add Limine build script"
 
 - [ ] **Step 1: `make_iso.sh` 작성**
 
-`boot/make_iso.sh`(Task 3 Step 4에서 확인한 실제 산출물 경로가
-`build/bin/`과 다르면 `LIMINE_BIN` 값을 그 경로로 바꾼다):
+`boot/make_iso.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -273,7 +271,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-LIMINE_BIN="build/bin"
+LIMINE_BIN="limine-binary"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
