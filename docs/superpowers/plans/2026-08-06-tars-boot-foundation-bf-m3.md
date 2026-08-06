@@ -140,7 +140,7 @@ git commit -m "Add xorriso to devcontainer"
 - Create: `boot/limine.conf`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: `.gitignore`에 boot 빌드 산출물 추가**
+- [x] **Step 1: `.gitignore`에 boot 빌드 산출물 추가**
 
 `.gitignore`에 다음 줄을 추가한다:
 
@@ -149,7 +149,7 @@ boot/limine-binary/
 out/
 ```
 
-- [ ] **Step 2: `limine.conf` 작성**
+- [x] **Step 2: `limine.conf` 작성**
 
 `boot/limine.conf`:
 ```
@@ -169,7 +169,7 @@ kernel.org bzImage를 무수정 부팅, initramfs는 `module_path`로 지정,
 뜻이다(BF-M2까지 QEMU direct boot에 메뉴가 없던 것과 동일한 무인 부팅
 경험을 유지).
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add .gitignore boot/limine.conf
