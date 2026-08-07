@@ -31,6 +31,14 @@ fn mount_fs(source: &str, target: &str, fstype: &str) {
     }
 }
 
+fn log_drm_device_presence() {
+    if std::path::Path::new("/dev/dri/card0").exists() {
+        println!("tars-init: /dev/dri/card0 exists");
+    } else {
+        println!("tars-init: /dev/dri/card0 not found");
+    }
+}
+
 fn setup_controlling_terminal() {
     let console = CString::new("/dev/console").expect("CString::new failed");
     let fd = unsafe { libc::open(console.as_ptr(), libc::O_RDWR) };
@@ -60,6 +68,8 @@ fn main() {
     mount_fs("proc", "/proc", "proc");
     mount_fs("sysfs", "/sys", "sysfs");
     mount_fs("devtmpfs", "/dev", "devtmpfs");
+
+    log_drm_device_presence();
 
     setup_controlling_terminal();
 
