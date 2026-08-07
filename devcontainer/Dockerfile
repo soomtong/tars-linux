@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         rsync \
         fish \
         xorriso \
+        imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_HOME=/usr/local/rustup \
