@@ -74,10 +74,28 @@ DIMENSIONS=$("${IDENTIFY[@]}" -format "%wx%h" "$SCREENSHOT" 2>&1) || {
 
 echo "Captured screendump: ${SCREENSHOT} (${DIMENSIONS})"
 
-if [[ "$DIMENSIONS" =~ ^[0-9]+x[0-9]+$ ]]; then
+if [[ ! "$DIMENSIONS" =~ ^[0-9]+x[0-9]+$ ]]; then
+  echo "FAIL: unexpected ImageMagick output: ${DIMENSIONS}"
+  exit 1
+fi
+
+if command -v magick >/dev/null 2>&1; then
+  CONVERT=(magick)
+else
+  CONVERT=(convert)
+fi
+
+PIXEL=$("${CONVERT[@]}" "${SCREENSHOT}" -crop 1x1+10+10 +repage txt:- 2>&1) || {
+  echo "FAIL: ImageMagick could not extract pixel at (10,10): ${PIXEL}"
+  exit 1
+}
+
+echo "Pixel at (10,10): ${PIXEL}"
+
+if echo "$PIXEL" | grep -qi '#FF0000'; then
   echo "PASS"
   exit 0
 fi
 
-echo "FAIL: unexpected ImageMagick output: ${DIMENSIONS}"
+echo "FAIL: expected red (#FF0000) at (10,10), got: ${PIXEL}"
 exit 1
