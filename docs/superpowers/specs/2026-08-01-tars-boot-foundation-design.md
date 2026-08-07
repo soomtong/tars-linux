@@ -1,7 +1,7 @@
 # TARS Boot Foundation — Design
 
 **Date:** 2026-08-01
-**Status:** Approved (design phase), plan not yet written
+**Status:** Completed (BF-M0~M4 전부 완료, 2026-08-07)
 
 ## 배경
 

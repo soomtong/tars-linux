@@ -54,7 +54,7 @@ initrd 생성 → Limine 빌드 → hybrid ISO 생성 → QEMU `-cdrom` 부팅 �
 **Files:**
 - Create: `check.sh` (저장소 루트)
 
-- [ ] **Step 1: `check.sh` 작성**
+- [x] **Step 1: `check.sh` 작성**
 
 `check.sh`(저장소 루트):
 ```bash
@@ -89,13 +89,13 @@ gitignore 대상 디렉터리만 지운다 — `kernel/build/`, `init/target/`, 
 않는다. `kernel/src/`(kernel 소스)와 `boot/limine-binary/`(Limine binary
 release)는 다운로드 캐시이므로 그대로 둔다.
 
-- [ ] **Step 2: 실행 권한 부여**
+- [x] **Step 2: 실행 권한 부여**
 
 ```bash
 chmod +x check.sh
 ```
 
-- [ ] **Step 3: `.gitignore` 대상 재확인**
+- [x] **Step 3: `.gitignore` 대상 재확인**
 
 Run:
 ```bash
@@ -107,7 +107,7 @@ Expected: 세 경로 모두 `.gitignore`의 어느 줄에 걸리는지 출력된
 git-ignore 대상이 아니면) `clean()`이 추적 파일을 지울 위험이 있으므로 Step 1로
 돌아가 대상 목록을 다시 확인한다.
 
-- [ ] **Step 4: 실행해서 3회 연속 PASS 확인**
+- [x] **Step 4: 실행해서 3회 연속 PASS 확인**
 
 Run:
 ```bash
@@ -130,7 +130,7 @@ friendly interactive shell`) + `PASS`가 출력되고, 마지막 줄에 `BF-M4 P
 `kernel/build.sh`, `init`(cargo), `kernel/make_initrd.sh`, `boot/make_iso.sh`
 단계별로 나눠 어느 단계에서 clean 빌드가 실패하는지 좁혀간다.
 
-- [ ] **Step 5: `git status`로 초기화 재현성 확인**
+- [x] **Step 5: `git status`로 초기화 재현성 확인**
 
 Run:
 ```bash
@@ -141,7 +141,7 @@ Expected: `kernel/initrd.cpio`가 수정된 것으로 나타날 수 있다(빌�
 산출물이지만 관례상 git에 커밋돼 있음 — BF-M3 때도 `fe4ac19` 커밋으로 동일하게
 갱신한 전례가 있다). 그 외 추적 파일에 의도치 않은 변경이 없는지 확인한다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 `kernel/initrd.cpio`가 변경되지 않았다면:
 ```bash
