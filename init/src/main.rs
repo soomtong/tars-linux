@@ -39,6 +39,27 @@ fn log_drm_device_presence() {
     }
 }
 
+fn run_kms() {
+    let pid = unsafe { libc::fork() };
+    if pid == 0 {
+        let kms = CString::new("/kms").expect("CString::new failed");
+        let argv: [*const libc::c_char; 2] = [kms.as_ptr(), ptr::null()];
+        unsafe {
+            libc::execve(kms.as_ptr(), argv.as_ptr(), environ);
+        }
+        let errno = unsafe { *libc::__errno_location() };
+        eprintln!("tars-init: execve /kms failed (errno {})", errno);
+        unsafe { libc::_exit(1) };
+    } else if pid > 0 {
+        let mut status: libc::c_int = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        println!("tars-init: kms exited with status {}", status);
+    } else {
+        let errno = unsafe { *libc::__errno_location() };
+        println!("tars-init: fork for kms failed (errno {})", errno);
+    }
+}
+
 fn setup_controlling_terminal() {
     let console = CString::new("/dev/console").expect("CString::new failed");
     let fd = unsafe { libc::open(console.as_ptr(), libc::O_RDWR) };
@@ -70,6 +91,8 @@ fn main() {
     mount_fs("devtmpfs", "/dev", "devtmpfs");
 
     log_drm_device_presence();
+
+    run_kms();
 
     setup_controlling_terminal();
 

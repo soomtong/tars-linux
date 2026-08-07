@@ -933,18 +933,25 @@ Expected: 종료 코드 0, `N blocks` 출력, `kernel/initrd.cpio` 갱신됨(Tas
 
 - [ ] **Step 5: 정식 부팅 경로로 확인**
 
-`kernel/check.sh`(fish 배너 확인)로 fish까지 정상적으로 이어지는지
-확인한다 — `kms` 실행이 끼어들어도 fish 부팅이 깨지지 않는지가 핵심이다.
+`kernel/check-virtio-gpu.sh`(DF-M1에서 만든, `-device virtio-gpu-pci`를
+붙이는 스크립트)로 확인한다 — **`kernel/check.sh`(Boot Foundation부터
+있던 기본 스크립트)는 쓰지 않는다.** `kernel/check.sh`는 애초에
+virtio-gpu 장치를 QEMU에 붙이지 않으므로, 그걸로 확인하면 `/dev/dri/card0`
+자체가 없어서 `kms`가 정상적으로 실패하는 모습만 보게 된다(이건 버그가
+아니라 장치가 없다는 당연한 결과다). `kernel/check-virtio-gpu.sh`가
+virtio-gpu-pci를 붙이므로 `kms`가 실제로 성공할 조건을 준다.
 
 Run:
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
-  tars-devcontainer bash kernel/check.sh
+  tars-devcontainer bash kernel/check-virtio-gpu.sh
 ```
 
 Expected: 로그에 `tars-init: /dev/dri/card0 exists` → `kms: ...` 로그들 →
 `tars-init: kms exited with status 0` → `Welcome to fish, the friendly
-interactive shell`이 순서대로 나오고 `PASS`.
+interactive shell`이 순서대로 나오고 `PASS`(이 스크립트의 PASS 조건은
+`/dev/dri/card0 exists` grep이지만, `-serial stdio`로 전체 로그가 출력되므로
+fish 배너까지 눈으로 함께 확인할 수 있다).
 
 **만약 `kms exited with status`가 0이 아니면:** `waitpid`가 돌려준
 `status`는 raw wait status(하위 8비트가 exit code, 다른 비트는 시그널

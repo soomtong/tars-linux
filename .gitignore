@@ -5,6 +5,7 @@ kernel/src/
 kernel/build/
 
 init/target/
+kms/target/
 
 boot/limine-binary/
 
