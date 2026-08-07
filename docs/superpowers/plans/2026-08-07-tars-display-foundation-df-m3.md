@@ -291,7 +291,41 @@ Expected: 네 경로 모두 `.gitignore`의 어느 줄에 걸리는지 출력된
 `.gitignore:9:kms/target\tkms/target`). 하나라도 출력이 없으면 `clean()`이
 추적 파일을 지울 위험이 있으므로 Step 1로 돌아가 대상 목록을 다시 확인한다.
 
-- [ ] **Step 3: 실행해서 BF+DF 모두 3회 연속 PASS 확인**
+- [ ] **Step 3(정정): `boot/check.sh`에 `kms` 빌드 단계 추가**
+
+Task 2 Step 3을 처음 실행했을 때 `BF-M4 run 1/3`에서
+`cp: cannot stat '../kms/target/release/kms': No such file or directory`로
+실패했다. 원인: DF-M2에서 `kernel/make_initrd.sh`가 무조건
+`../kms/target/release/kms`를 initrd에 복사하도록 바뀌었는데,
+`boot/check.sh`는 `kernel`과 `init`만 빌드하고 `kms`는 빌드하지 않는다.
+DF-M2 이후 `boot/check.sh`가 `kms`가 추가된 상태로 재실행된 적이 없어서
+지금까지 드러나지 않았던 회귀다 — 루트 `check.sh`가 BF 체인을 함께
+검증하도록 확장하면서 처음 발견됐다.
+
+`boot/check.sh`의 빌드 단계 세 줄을 아래처럼 네 줄로 바꾼다(`display/check.sh`에
+Task 1에서 추가한 것과 동일한 `kms` 빌드 단계를 끼워 넣는다):
+
+```bash
+(cd ../kernel && ./build.sh)
+(cd ../init && cargo build --release)
+(cd ../kms && cargo build --release)
+(cd ../kernel && ./make_initrd.sh)
+./build.sh
+./make_iso.sh
+```
+
+`boot/check.sh`는 `set -euo pipefail`(`-e` 포함)이므로 `display/check.sh`와
+달리 `if ! (...); then ... fi`로 감쌀 필요가 없다 — 빌드 명령이 실패하면
+`-e`가 스크립트를 바로 종료시킨다(기존 세 줄과 동일한 스타일 유지).
+
+- [ ] **Step 4: 커밋**
+
+```bash
+git add boot/check.sh
+git commit -m "Build kms crate in boot/check.sh before generating initrd"
+```
+
+- [ ] **Step 5: 실행해서 BF+DF 모두 3회 연속 PASS 확인**
 
 Run:
 ```bash
@@ -317,7 +351,7 @@ Expected: `=== BF-M4 run 1/3 ===`부터 `=== BF-M4 run 3/3 PASSED ===`까지 세
   플레이키니스, screendump 전 `sleep 5`)이 재현된 것일 가능성이 크다 —
   `display/check.sh`의 `sleep 5`를 더 늘려본다.
 
-- [ ] **Step 4: `git status`로 초기화 재현성 확인**
+- [ ] **Step 6: `git status`로 초기화 재현성 확인**
 
 Run:
 ```bash
@@ -328,7 +362,7 @@ Expected: `kernel/initrd.cpio`가 수정된 것으로 나타날 수 있다(BF-M4
 동일한 이유 — 빌드 산출물이지만 관례상 git에 커밋돼 있음). 그 외 추적
 파일에 의도치 않은 변경이 없는지 확인한다.
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 7: 커밋**
 
 `kernel/initrd.cpio`가 변경되지 않았다면:
 ```bash
