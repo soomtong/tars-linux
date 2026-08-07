@@ -21,9 +21,8 @@ git commit만 대신 수행한다(`~/.claude/projects/
 
 ## 현재 브랜치
 
-`main` — 로컬이 origin/main보다 6커밋 앞서 있음(push는 사용자 판단, 이번
-세션에서 요청받지 않음). Working tree 완전히 깨끗함(커밋 안 된 변경
-없음). 최신 커밋 `fbaf390`.
+`main` — origin/main과 완전히 동기화됨(push 완료). Working tree 완전히
+깨끗함(커밋 안 된 변경 없음). 최신 커밋 `de01a51`.
 
 ## 완료된 작업
 
@@ -84,8 +83,6 @@ plan 문서의 "정정" 노트와 함께 기록돼 있다.
       도구 통합 등). Display Foundation이 KMS/DRM 기반을 만들었으니,
       다음 후보로는 그 위에서 동작할 compositor가 자연스러운 선택지일 수
       있지만 확정된 건 없다.
-- [ ] (선택) 로컬 6커밋(이번 세션 DF-M3 작업분 포함 총 누적분)을
-      origin/main에 push할지 사용자에게 확인.
 
 ## 핵심 파일
 
@@ -112,8 +109,8 @@ plan 문서의 "정정" 노트와 함께 기록돼 있다.
 ## 다음 에이전트에게
 
 1. `git log --oneline -10` && `git status`로 이 파일과 실제 상태가
-   일치하는지 먼저 확인 — 최신 커밋 `fbaf390`, working tree 깨끗해야
-   한다.
+   일치하는지 먼저 확인 — 최신 커밋 `de01a51`, origin/main과 동기화됨,
+   working tree 깨끗해야 한다.
 2. `feedback_execution_scope.md`, `feedback_commit_delegation.md`를
    먼저 읽을 것.
 3. Display Foundation은 완전히 끝났으므로, 이번 세션 시작 시 사용자에게
