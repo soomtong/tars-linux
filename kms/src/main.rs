@@ -99,6 +99,32 @@ struct DrmModeMapDumb {
     offset: u64,
 }
 
+#[repr(C)]
+#[derive(Debug, Default)]
+struct DrmModeCrtc {
+    set_connectors_ptr: u64,
+    count_connectors: u32,
+    crtc_id: u32,
+    fb_id: u32,
+    x: u32,
+    y: u32,
+    gamma_size: u32,
+    mode_valid: u32,
+    mode: DrmModeModeinfo,
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+struct DrmModeFbCmd {
+    fb_id: u32,
+    width: u32,
+    height: u32,
+    pitch: u32,
+    bpp: u32,
+    depth: u32,
+    handle: u32,
+}
+
 unsafe fn drm_ioctl<T>(fd: i32, request: libc::c_ulong, arg: &mut T) -> io::Result<()> {
     let ret = libc::ioctl(fd, request, arg as *mut T as *mut libc::c_void);
     if ret < 0 {
@@ -267,6 +293,31 @@ fn main() -> io::Result<()> {
         }
     }
     println!("kms: filled framebuffer with solid red");
+
+    let mut fb = DrmModeFbCmd {
+        width: dumb.width,
+        height: dumb.height,
+        pitch: dumb.pitch,
+        bpp: 32,
+        depth: 24,
+        handle: dumb.handle,
+        ..Default::default()
+    };
+    unsafe { drm_ioctl(fd, drm_iowr(0xAE, size_of::<DrmModeFbCmd>()), &mut fb)? };
+    println!("kms: created framebuffer fb_id={}", fb.fb_id);
+
+    let mut connector_id_arr = [connector.connector_id];
+    let mut crtc = DrmModeCrtc {
+        set_connectors_ptr: connector_id_arr.as_mut_ptr() as u64,
+        count_connectors: 1,
+        crtc_id,
+        fb_id: fb.fb_id,
+        mode_valid: 1,
+        mode,
+        ..Default::default()
+    };
+    unsafe { drm_ioctl(fd, drm_iowr(0xA2, size_of::<DrmModeCrtc>()), &mut crtc)? };
+    println!("kms: set crtc {} to fb {}", crtc_id, fb.fb_id);
 
     Ok(())
 }
