@@ -29,9 +29,7 @@ doc 없이 plan만으로 완료).
 
 `main` — 새 저장소의 root부터 시작. 이전 저장소(`tars.git`)의 commit
 history는 이어받지 않음. Working tree는 깨끗함(커밋 안 된 변경 없음).
-로컬이 origin/main보다 커밋이 앞서 있음(push 여부는 아직 사용자와
-확인 안 함 — 필요 시 다음 세션에서 물어볼 것). 최신 커밋
-`c8ee1e2`.
+`origin/main`으로 push 완료, tracking 설정됨. 최신 커밋 `d0cffff`.
 
 ## 완료된 작업
 
@@ -69,8 +67,8 @@ git log의 BF-M3 관련 커밋 및 `2026-08-06-tars-boot-foundation-bf-m3-design
       policy, IME, 패키지 관리자(homebrew 스타일), AI 코딩 도구 통합
       (Claude Code/Codex). 어느 것을 먼저 할지 이번 세션에서 결정하지
       않았다 — 다음 세션 시작 시 사용자와 논의할 것.
-- [ ] (선택) 로컬 커밋을 origin/main에 push할지 사용자에게 확인 —
-      이번 세션에서 push는 하지 않았다(요청받지 않음).
+- [x] 로컬 커밋을 origin/main에 push 완료(사용자가 직접 실행, `main`이
+      이제 `origin/main`을 tracking, `d0cffff`까지 동기화됨).
 
 ## 핵심 파일
 
