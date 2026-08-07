@@ -51,9 +51,7 @@ fn run_kms() {
         eprintln!("tars-init: execve /kms failed (errno {})", errno);
         unsafe { libc::_exit(1) };
     } else if pid > 0 {
-        let mut status: libc::c_int = 0;
-        unsafe { libc::waitpid(pid, &mut status, 0) };
-        println!("tars-init: kms exited with status {}", status);
+        println!("tars-init: forked kms (pid {})", pid);
     } else {
         let errno = unsafe { *libc::__errno_location() };
         println!("tars-init: fork for kms failed (errno {})", errno);

@@ -964,6 +964,30 @@ git add init/src/main.rs kernel/make_initrd.sh kernel/initrd.cpio
 git commit -m "Run kms from init during boot"
 ```
 
+**정정(2026-08-07 Task 6 진행 중 발견):** Task 5의 `run_kms`는 애초
+`waitpid`로 `kms`가 끝날 때까지 기다렸는데, `display/check.sh`로 실제
+exit gate를 검증해보니 해상도(`1280x800`)는 맞지만 픽셀 색이 빨강이 아닌
+검정(`#000000`)으로 나왔다. 커널 소스(`drm_file.c`, `drm_framebuffer.c`,
+`virtio/virtgpu_drv.c`)를 직접 확인해 원인을 찾았다 — `kms` 프로세스가
+정상 종료하면 커널이 그 프로세스가 열었던 `/dev/dri/card0` fd를
+`exit_files()`에서 자동으로 닫는데, DRM 코어는 "이 fd로 `ADDFB`한
+framebuffer는 fd가 완전히 닫히면 반드시 회수한다"는 ABI 규칙을 갖고
+있다(`drm_fb_release()` → `drm_framebuffer_remove()`). virtio-gpu는
+`DRIVER_ATOMIC`이라서 이 회수가 CRTC에서 framebuffer를 실제로 떼어내고
+그 변경을 하드웨어에 커밋한다 — 화면이 꺼지는 게 아니라 명시적으로
+지워지는 것이다. Task 4에서 성공했던 건 `kms`가 그때 PID 1이어서, 종료
+시 커널이 `exit_files()`(fd를 실제로 닫는 단계)에 도달하기 전에 곧바로
+panic했기 때문이다(`do_exit()`의 `is_global_init()` 체크가 `exit_files()`
+호출보다 먼저 실행됨) — fd가 한 번도 안 닫혀서 framebuffer가 그대로
+남아있었다.
+
+**수정:** `kms`가 `SETCRTC` 성공 후 `Ok(())`로 반환하는 대신
+`loop { unsafe { libc::pause() }; }`로 fd를 계속 붙든 채 영원히
+대기하도록 바꿨다. `tars-init`의 `run_kms`는 더 이상 `waitpid`로
+기다리지 않고 `fork` 직후 바로 다음(콘솔 설정 → fish exec)으로
+넘어가도록 바꿨다 — `kms`가 정상 경로에서는 절대 스스로 끝나지 않기
+때문이다(위 코드에는 이미 반영돼 있음).
+
 ---
 
 ### Task 6: `display/check.sh` 확장 — 픽셀 색 검사로 공식 exit gate 검증

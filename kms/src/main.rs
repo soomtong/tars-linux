@@ -319,5 +319,7 @@ fn main() -> io::Result<()> {
     unsafe { drm_ioctl(fd, drm_iowr(0xA2, size_of::<DrmModeCrtc>()), &mut crtc)? };
     println!("kms: set crtc {} to fb {}", crtc_id, fb.fb_id);
 
-    Ok(())
+    loop {
+        unsafe { libc::pause() };
+    }
 }
