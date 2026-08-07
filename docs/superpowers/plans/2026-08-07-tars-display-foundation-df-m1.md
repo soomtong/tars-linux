@@ -61,7 +61,7 @@ doc의 "검증 방법" 절은 "DF-M1까지는 색상 대신 serial dmesg 로그 
 **Files:**
 - Modify: `kernel/.config`
 
-- [ ] **Step 1: `scripts/config`로 옵션 활성화**
+- [x] **Step 1: `scripts/config`로 옵션 활성화**
 
 `scripts/config`는 다운로드된 kernel source tree(`kernel/src/linux-6.18.42/`)
 안에 포함된 표준 스크립트로, `.config` 파일의 특정 옵션 값을 직접
@@ -84,7 +84,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 
 Expected: 출력 없이 종료 코드 0(`scripts/config`는 조용히 파일을 수정한다).
 
-- [ ] **Step 2: 재빌드(olddefconfig + bzImage)**
+- [x] **Step 2: 재빌드(olddefconfig + bzImage)**
 
 `kernel/build.sh`는 `.config`를 `build/.config`로 복사한 뒤
 `make olddefconfig`를 실행한다 — 이 과정에서 우리가 방금 켠 다섯 옵션이
@@ -102,7 +102,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 Expected: 종료 코드 0, 마지막 근처에 `Kernel: arch/x86/boot/bzImage is
 ready`가 출력된다.
 
-- [ ] **Step 3: 옵션이 실제로 `y`로 반영됐는지 확인**
+- [x] **Step 3: 옵션이 실제로 `y`로 반영됐는지 확인**
 
 Run:
 ```bash
@@ -124,7 +124,7 @@ CONFIG_VIRTIO_PCI=y
 `kernel/build/.config`에서 해당 옵션 주변 의존성 줄(`depends on` 계열)을
 확인해서 알려달라 — 어떤 옵션이 더 필요한지 함께 판단한다.
 
-- [ ] **Step 4: 정규화된 config를 `kernel/.config`로 복사**
+- [x] **Step 4: 정규화된 config를 `kernel/.config`로 복사**
 
 `build.sh`가 실행한 `olddefconfig`는 `build/.config`만 갱신하고 원본
 `kernel/.config`는 건드리지 않는다. 우리가 git에 커밋할 대상은
@@ -136,7 +136,7 @@ Run:
 cp kernel/build/.config kernel/.config
 ```
 
-- [ ] **Step 5: 변경 규모 확인**
+- [x] **Step 5: 변경 규모 확인**
 
 Run:
 ```bash
@@ -147,7 +147,7 @@ Expected: `kernel/.config | N ++++----` 형태로 변경된 줄 수가 나온다
 Step 1에서 지정한 다섯 옵션 외에도 `olddefconfig`가 함께 켠 하위 의존
 옵션들이 있어서 몇십 줄 단위로 바뀌는 것이 정상이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add kernel/.config
@@ -161,7 +161,7 @@ git commit -m "Enable PCI, DRM, and virtio-gpu kernel config for DF-M1"
 **Files:**
 - Modify: `init/src/main.rs`
 
-- [ ] **Step 1: 존재 확인 함수 추가 및 호출**
+- [x] **Step 1: 존재 확인 함수 추가 및 호출**
 
 지금 `init`은 `proc`/`sysfs`/`devtmpfs`를 mount하고 바로 fish로 exec한다
 — 화면이나 DRM에 대해 아무것도 확인하지 않는다. DF-M1의 exit gate("
@@ -203,7 +203,7 @@ fn main() {
     // ... (이하 기존 코드 그대로)
 ```
 
-- [ ] **Step 2: 컴파일 확인**
+- [x] **Step 2: 컴파일 확인**
 
 Run:
 ```bash
@@ -215,7 +215,7 @@ Expected: 종료 코드 0, `Finished \`release\` profile [optimized] target(s)`�
 출력된다. 에러 없이 컴파일되면 `std::path::Path::exists()` 호출이
 문제없다는 뜻이다(별도 crate 의존성 추가 불필요 — `std`에 포함됨).
 
-- [ ] **Step 3: initrd 재생성**
+- [x] **Step 3: initrd 재생성**
 
 새로 빌드한 `tars-init` 바이너리를 initrd에 반영한다.
 
@@ -228,7 +228,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 Expected: 종료 코드 0, `N blocks` 형태의 줄이 출력되고
 `kernel/initrd.cpio`의 수정 시각이 갱신된다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add init/src/main.rs kernel/initrd.cpio
@@ -242,7 +242,7 @@ git commit -m "Log /dev/dri/card0 presence from init for DF-M1 verification"
 **Files:**
 - Create: `kernel/check-virtio-gpu.sh`
 
-- [ ] **Step 1: 검증 스크립트 작성**
+- [x] **Step 1: 검증 스크립트 작성**
 
 기존 `kernel/check.sh`(fish 배너 grep)와 같은 구조이되, `-device
 virtio-gpu-pci`를 붙이고 `/dev/dri/card0 exists` 로그를 grep한다. `-vga
@@ -286,13 +286,13 @@ exit 1
 자동 PASS/FAIL 판정 자체는 우리가 제어하는 `/dev/dri/card0 exists` 문구로
 한다.
 
-- [ ] **Step 2: 실행 권한 부여**
+- [x] **Step 2: 실행 권한 부여**
 
 ```bash
 chmod +x kernel/check-virtio-gpu.sh
 ```
 
-- [ ] **Step 3: 실행**
+- [x] **Step 3: 실행**
 
 Run:
 ```bash
@@ -314,7 +314,7 @@ Expected: 커널 부팅 로그(dmesg)와 `tars-init: ...` 줄들이 출력되고
    `kernel/.config`에서 `CONFIG_ACPI` 상태를 확인하고 필요하면 Task 1과
    같은 방식(`scripts/config --enable ACPI` + 재빌드)으로 추가한다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add kernel/check-virtio-gpu.sh
