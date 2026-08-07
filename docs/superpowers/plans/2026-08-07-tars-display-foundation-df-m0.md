@@ -53,7 +53,7 @@ design doc의 "저장소 구조" 절은 `kms/`, `kernel/`, `init/`, `devcontaine
 **Files:**
 - Modify: `devcontainer/Dockerfile`
 
-- [ ] **Step 1: Dockerfile apt 목록에 imagemagick 추가**
+- [x] **Step 1: Dockerfile apt 목록에 imagemagick 추가**
 
 `devcontainer/Dockerfile`의 `apt-get install` 목록 끝에 `imagemagick`을
 추가한다(기존 목록 순서 유지):
@@ -92,7 +92,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
 WORKDIR /workspace
 ```
 
-- [ ] **Step 2: 이미지 재빌드**
+- [x] **Step 2: 이미지 재빌드**
 
 Run:
 ```bash
@@ -102,7 +102,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [ ] **Step 3: ImageMagick 명령 확인(버전 확인 겸 어느 명령이 있는지 확인)**
+- [x] **Step 3: ImageMagick 명령 확인(버전 확인 겸 어느 명령이 있는지 확인)**
 
 Run:
 ```bash
@@ -116,7 +116,7 @@ trixie의 `imagemagick` 패키지가 통합 명령 `magick`을 제공하는지, 
 Task 2의 `display/check.sh`는 두 경우 모두 동작하도록 작성하므로 이 Step의
 결과를 특별히 다른 곳에 반영할 필요는 없다(참고용 확인).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
@@ -130,7 +130,7 @@ git commit -m "Add imagemagick to devcontainer"
 **Files:**
 - Create: `display/check.sh`
 
-- [ ] **Step 1: `display/check.sh` 작성**
+- [x] **Step 1: `display/check.sh` 작성**
 
 `display/check.sh`:
 ```bash
@@ -227,13 +227,13 @@ exit 1
 Task 1 Step 3에서 확인한 대로 ImageMagick 7의 통합 명령(`magick identify`)과
 6의 개별 명령(`identify`)을 모두 지원하기 위한 것이다.
 
-- [ ] **Step 2: 실행 권한 부여**
+- [x] **Step 2: 실행 권한 부여**
 
 ```bash
 chmod +x display/check.sh
 ```
 
-- [ ] **Step 3: kernel/init 산출물이 없으면 먼저 준비**
+- [x] **Step 3: kernel/init 산출물이 없으면 먼저 준비**
 
 Run:
 ```bash
@@ -245,7 +245,7 @@ Expected: 종료 코드 0. `kernel/build/arch/x86/boot/bzImage`와
 `kernel/initrd.cpio`가 존재한다(BF-M4에서 이미 만들어져 있다면 이 Step은
 최신 상태로 재생성만 한다).
 
-- [ ] **Step 4: 실행해서 파이프라인 검증**
+- [x] **Step 4: 실행해서 파이프라인 검증**
 
 Run:
 ```bash
@@ -274,7 +274,7 @@ Expected: `Captured screendump: /tmp/df-m0-XXXXXX.ppm (WxH)` 형태의 줄
 **만약 `FAIL: unexpected ImageMagick output`이 나오면:** `sleep 3` 값을
 늘려 virtio-gpu 디바이스 초기화 시간을 더 준 뒤 다시 실행한다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add display/check.sh

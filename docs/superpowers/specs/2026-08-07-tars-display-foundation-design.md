@@ -1,7 +1,7 @@
 # TARS Display Foundation — Design
 
 **Date:** 2026-08-07
-**Status:** Approved (design phase), plan not yet written
+**Status:** DF-M0 complete (2026-08-07); DF-M1 plan not yet written
 
 ## 배경
 
