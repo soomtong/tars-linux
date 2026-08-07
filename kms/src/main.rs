@@ -28,6 +28,57 @@ struct DrmModeCardRes {
     max_height: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+struct DrmModeModeinfo {
+    clock: u32,
+    hdisplay: u16,
+    hsync_start: u16,
+    hsync_end: u16,
+    htotal: u16,
+    hskew: u16,
+    vdisplay: u16,
+    vsync_start: u16,
+    vsync_end: u16,
+    vtotal: u16,
+    vscan: u16,
+    vrefresh: u32,
+    flags: u32,
+    mode_type: u32,
+    name: [u8; 32],
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+struct DrmModeGetConnector {
+    encoders_ptr: u64,
+    modes_ptr: u64,
+    props_ptr: u64,
+    prop_values_ptr: u64,
+    count_modes: u32,
+    count_props: u32,
+    count_encoders: u32,
+    encoder_id: u32,
+    connector_id: u32,
+    connector_type: u32,
+    connector_type_id: u32,
+    connection: u32,
+    mm_width: u32,
+    mm_height: u32,
+    subpixel: u32,
+    pad: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+struct DrmModeGetEncoder {
+    encoder_id: u32,
+    encoder_type: u32,
+    crtc_id: u32,
+    possible_crtcs: u32,
+    possible_clones: u32,
+}
+
 unsafe fn drm_ioctl<T>(fd: i32, request: libc::c_ulong, arg: &mut T) -> io::Result<()> {
     let ret = libc::ioctl(fd, request, arg as *mut T as *mut libc::c_void);
     if ret < 0 {
@@ -46,6 +97,90 @@ fn ensure_devtmpfs_mounted() {
     }
 }
 
+fn get_resources(fd: i32) -> io::Result<(Vec<u32>, Vec<u32>, Vec<u32>)> {
+    let mut res = DrmModeCardRes::default();
+    unsafe { drm_ioctl(fd, drm_iowr(0xA0, size_of::<DrmModeCardRes>()), &mut res)? };
+
+    let mut crtc_ids = vec![0u32; res.count_crtcs as usize];
+    let mut connector_ids = vec![0u32; res.count_connectors as usize];
+    let mut encoder_ids = vec![0u32; res.count_encoders as usize];
+
+    res.crtc_id_ptr = crtc_ids.as_mut_ptr() as u64;
+    res.connector_id_ptr = connector_ids.as_mut_ptr() as u64;
+    res.encoder_id_ptr = encoder_ids.as_mut_ptr() as u64;
+    res.fb_id_ptr = 0;
+
+    unsafe { drm_ioctl(fd, drm_iowr(0xA0, size_of::<DrmModeCardRes>()), &mut res)? };
+
+    println!(
+        "kms: {} crtcs, {} connectors, {} encoders",
+        res.count_crtcs, res.count_connectors, res.count_encoders
+    );
+
+    Ok((crtc_ids, connector_ids, encoder_ids))
+}
+
+fn find_connected_connector(
+    fd: i32,
+    connector_ids: &[u32],
+) -> io::Result<(DrmModeGetConnector, DrmModeModeinfo, Vec<u32>)> {
+    for &id in connector_ids {
+        let mut conn = DrmModeGetConnector {
+            connector_id: id,
+            ..Default::default()
+        };
+        unsafe { drm_ioctl(fd, drm_iowr(0xA7, size_of::<DrmModeGetConnector>()), &mut conn)? };
+
+        if conn.connection != 1 || conn.count_modes == 0 {
+            continue;
+        }
+
+        let mut modes = vec![DrmModeModeinfo::default(); conn.count_modes as usize];
+        let mut encoders = vec![0u32; conn.count_encoders as usize];
+        conn.modes_ptr = modes.as_mut_ptr() as u64;
+        conn.encoders_ptr = encoders.as_mut_ptr() as u64;
+        conn.props_ptr = 0;
+        conn.prop_values_ptr = 0;
+        conn.count_props = 0;
+        unsafe { drm_ioctl(fd, drm_iowr(0xA7, size_of::<DrmModeGetConnector>()), &mut conn)? };
+
+        let mode = modes[0];
+        println!(
+            "kms: connector {} connected, mode {}x{}",
+            id, mode.hdisplay, mode.vdisplay
+        );
+        return Ok((conn, mode, encoders));
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "no connected connector with modes found",
+    ))
+}
+
+fn find_crtc(fd: i32, encoder_id: u32, crtc_ids: &[u32]) -> io::Result<u32> {
+    let mut enc = DrmModeGetEncoder {
+        encoder_id,
+        ..Default::default()
+    };
+    unsafe { drm_ioctl(fd, drm_iowr(0xA6, size_of::<DrmModeGetEncoder>()), &mut enc)? };
+
+    if enc.crtc_id != 0 {
+        return Ok(enc.crtc_id);
+    }
+
+    for (i, &crtc_id) in crtc_ids.iter().enumerate() {
+        if enc.possible_crtcs & (1 << i) != 0 {
+            return Ok(crtc_id);
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "no usable crtc for encoder",
+    ))
+}
+
 fn main() -> io::Result<()> {
     ensure_devtmpfs_mounted();
 
@@ -55,13 +190,18 @@ fn main() -> io::Result<()> {
         .open("/dev/dri/card0")?;
     let fd = file.as_raw_fd();
 
-    let mut res = DrmModeCardRes::default();
-    unsafe { drm_ioctl(fd, drm_iowr(0xA0, size_of::<DrmModeCardRes>()), &mut res)? };
+    let (crtc_ids, connector_ids, _encoder_ids) = get_resources(fd)?;
+    let (connector, _mode, encoders) = find_connected_connector(fd, &connector_ids)?;
+    let encoder_id = if connector.encoder_id != 0 {
+        connector.encoder_id
+    } else {
+        *encoders
+            .first()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "connector has no encoders"))?
+    };
+    let crtc_id = find_crtc(fd, encoder_id, &crtc_ids)?;
 
-    println!(
-        "kms: {} crtcs, {} connectors, {} encoders",
-        res.count_crtcs, res.count_connectors, res.count_encoders
-    );
+    println!("kms: selected crtc {}", crtc_id);
 
     Ok(())
 }

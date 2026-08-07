@@ -345,7 +345,7 @@ fn get_resources(fd: i32) -> io::Result<(Vec<u32>, Vec<u32>, Vec<u32>)> {
 fn find_connected_connector(
     fd: i32,
     connector_ids: &[u32],
-) -> io::Result<(DrmModeGetConnector, DrmModeModeinfo)> {
+) -> io::Result<(DrmModeGetConnector, DrmModeModeinfo, Vec<u32>)> {
     for &id in connector_ids {
         let mut conn = DrmModeGetConnector {
             connector_id: id,
@@ -358,10 +358,12 @@ fn find_connected_connector(
         }
 
         let mut modes = vec![DrmModeModeinfo::default(); conn.count_modes as usize];
+        let mut encoders = vec![0u32; conn.count_encoders as usize];
         conn.modes_ptr = modes.as_mut_ptr() as u64;
-        conn.encoders_ptr = 0;
+        conn.encoders_ptr = encoders.as_mut_ptr() as u64;
         conn.props_ptr = 0;
         conn.prop_values_ptr = 0;
+        conn.count_props = 0;
         unsafe { drm_ioctl(fd, drm_iowr(0xA7, size_of::<DrmModeGetConnector>()), &mut conn)? };
 
         let mode = modes[0];
@@ -369,7 +371,7 @@ fn find_connected_connector(
             "kms: connector {} connected, mode {}x{}",
             id, mode.hdisplay, mode.vdisplay
         );
-        return Ok((conn, mode));
+        return Ok((conn, mode, encoders));
     }
 
     Err(io::Error::new(
@@ -377,7 +379,28 @@ fn find_connected_connector(
         "no connected connector with modes found",
     ))
 }
+```
 
+**정정 1(2026-08-07 Task 2 진행 중 발견):** 애초 두 번째 `GETCONNECTOR` 호출
+전에 `encoders_ptr`/`props_ptr`/`prop_values_ptr`만 0으로 되돌리고
+`count_encoders`/`count_props`는 그대로 뒀는데, 실제로 부팅해보니
+`EFAULT`(errno 14, "Bad address")가 났다 — 커널은 "호출자가 넘긴 count가
+실제 개수 이상이면 그 포인터로 배열을 복사한다"는 규칙을 쓰므로, count는
+그대로 두고 포인터만 null로 만들면 null 주소에 복사를 시도해 실패한다.
+포인터를 비울 때는 그에 대응하는 count도 함께 0으로 만들어야 한다.
+
+**정정 2(2026-08-07 Task 2 진행 중 발견):** 정정 1을 반영해 다시
+부팅하니 `kms: connector 38 connected, mode 1280x800`까지는 성공했지만
+이어서 `ENOENT`(errno 2)가 났다 — `find_crtc`에 넘긴 `connector.encoder_id`
+값이 `0`이었기 때문이다. 이 필드는 "지금 이 connector에 실제로 붙어 있는"
+encoder를 가리키는데, 아직 아무도 모드 설정을 한 적 없는 갓 부팅한
+커널에서는 `0`(할당된 게 없음)일 수 있다. 그래서 `encoders_ptr`도 함께
+조회해(`count_props`만 0으로 비우고 `count_encoders`는 그대로 둔 채
+`encoders` 배열을 할당) connector가 사용 가능하다고 알려주는 encoder
+목록을 반환값에 추가했다 — `main()`에서 `connector.encoder_id`가 0이면
+이 목록의 첫 번째 값을 대신 쓴다(아래 `main()` 코드에 반영).
+
+```rust
 fn find_crtc(fd: i32, encoder_id: u32, crtc_ids: &[u32]) -> io::Result<u32> {
     let mut enc = DrmModeGetEncoder {
         encoder_id,
@@ -413,6 +436,8 @@ fn find_crtc(fd: i32, encoder_id: u32, crtc_ids: &[u32]) -> io::Result<u32> {
 
 ```rust
 fn main() -> io::Result<()> {
+    ensure_devtmpfs_mounted();
+
     let file = File::options()
         .read(true)
         .write(true)
@@ -420,8 +445,15 @@ fn main() -> io::Result<()> {
     let fd = file.as_raw_fd();
 
     let (crtc_ids, connector_ids, _encoder_ids) = get_resources(fd)?;
-    let (connector, _mode) = find_connected_connector(fd, &connector_ids)?;
-    let crtc_id = find_crtc(fd, connector.encoder_id, &crtc_ids)?;
+    let (connector, _mode, encoders) = find_connected_connector(fd, &connector_ids)?;
+    let encoder_id = if connector.encoder_id != 0 {
+        connector.encoder_id
+    } else {
+        *encoders
+            .first()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "connector has no encoders"))?
+    };
+    let crtc_id = find_crtc(fd, encoder_id, &crtc_ids)?;
 
     println!("kms: selected crtc {}", crtc_id);
 
