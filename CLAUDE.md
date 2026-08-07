@@ -60,6 +60,10 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 
 ## 참고
 
-- 전체 배경과 최종 비전: `docs/superpowers/specs/2026-08-01-tars-boot-
-  foundation-design.md`
+- 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지, 후보 목록):
+  `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
+  "배경" 절
+- 완료된 서브프로젝트: Boot Foundation(BF-M0~M4, 2026-08-07 완료)
+- 진행 중인 서브프로젝트: Display Foundation
+  (`docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`)
 - 현재 진행 상황: `HANDOFF.md`
