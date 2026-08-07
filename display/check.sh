@@ -45,7 +45,7 @@ fi
 
 # virtio-gpu가 기본 scanout을 초기화할 시간을 준다(경험적으로 선택한 값 —
 # Step 3에서 FAIL이면 가장 먼저 늘려볼 값).
-sleep 3
+sleep 5
 echo "screendump ${SCREENSHOT}" >&3
 sleep 1
 exec 3<&-
