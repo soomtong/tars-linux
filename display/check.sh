@@ -3,6 +3,26 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
+if ! (cd ../kernel && ./build.sh); then
+  echo "FAIL: kernel build failed"
+  exit 1
+fi
+
+if ! (cd ../init && cargo build --release); then
+  echo "FAIL: init build failed"
+  exit 1
+fi
+
+if ! (cd ../kms && cargo build --release); then
+  echo "FAIL: kms build failed"
+  exit 1
+fi
+
+if ! (cd ../kernel && ./make_initrd.sh); then
+  echo "FAIL: initrd build failed"
+  exit 1
+fi
+
 MONITOR_PORT=45454
 SCREENSHOT="$(mktemp /tmp/df-m0-XXXXXX.ppm)"
 LOG="$(mktemp)"
