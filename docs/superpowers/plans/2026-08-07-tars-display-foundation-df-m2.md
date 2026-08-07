@@ -110,10 +110,12 @@ libc = "0.2"
 것이다.
 
 ```rust
+use std::ffi::CString;
 use std::fs::File;
 use std::io;
 use std::mem::size_of;
 use std::os::unix::io::AsRawFd;
+use std::ptr;
 
 const DRM_IOCTL_BASE: u32 = 'd' as u32;
 
@@ -147,7 +149,18 @@ unsafe fn drm_ioctl<T>(fd: i32, request: libc::c_ulong, arg: &mut T) -> io::Resu
     }
 }
 
+fn ensure_devtmpfs_mounted() {
+    let source = CString::new("devtmpfs").expect("CString::new failed");
+    let target = CString::new("/dev").expect("CString::new failed");
+    let fstype = CString::new("devtmpfs").expect("CString::new failed");
+    unsafe {
+        libc::mount(source.as_ptr(), target.as_ptr(), fstype.as_ptr(), 0, ptr::null());
+    }
+}
+
 fn main() -> io::Result<()> {
+    ensure_devtmpfs_mounted();
+
     let file = File::options()
         .read(true)
         .write(true)
@@ -165,6 +178,14 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 ```
+
+**정정(2026-08-07 Task 1 진행 중 발견):** 애초 이 Step은 `ensure_devtmpfs_mounted`
+없이 작성됐으나, 실제로 임시 initrd로 부팅해보니 `/dev/dri/card0` open이
+`ENOENT`로 실패했다 — 이 throwaway initrd의 `/init`(=`kms`)이 `tars-init`과
+달리 devtmpfs를 `/dev`에 mount하는 단계가 아예 없었기 때문이다(initramfs만
+쓰는 부팅에서는 devtmpfs가 자동으로 mount되지 않는다). `kms`가 시작할 때
+방어적으로 mount를 한 번 시도하고 실패(예: Task 5 이후 `tars-init`이 이미
+mount해둔 상태에서 나는 `EBUSY`)는 무시하도록 고쳐서 반영했다.
 
 - [ ] **Step 3: 컴파일 확인**
 
