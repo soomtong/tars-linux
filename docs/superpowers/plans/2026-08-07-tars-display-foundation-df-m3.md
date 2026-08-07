@@ -64,7 +64,7 @@ kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screen
 **Files:**
 - Modify: `display/check.sh`
 
-- [ ] **Step 1: `display/check.sh`에 빌드 단계 추가**
+- [x] **Step 1: `display/check.sh`에 빌드 단계 추가**
 
 `display/check.sh` 전체를 아래 내용으로 교체한다(기존 `MONITOR_PORT=45454`
 이후 로직은 그대로 유지하고, `cd "$(dirname "$0")"` 바로 다음에 빌드 단계
@@ -201,7 +201,7 @@ DF-M0 때부터의 기존 설계). `set -e` 없이는 `./build.sh`가 실패해�
 계속 진행해 버리므로, 나머지 코드와 동일하게 각 명령의 성공 여부를 명시적으로
 검사하는 패턴을 그대로 따른다.
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 ```bash
 ls -la display/check.sh
@@ -210,7 +210,7 @@ ls -la display/check.sh
 Expected: 이미 `rwxr-xr-x` (DF-M0 때 부여됨) — 실행 권한이 없다면
 `chmod +x display/check.sh`.
 
-- [ ] **Step 3: 단독 실행해서 여전히 PASS하는지 확인**
+- [x] **Step 3: 단독 실행해서 여전히 PASS하는지 확인**
 
 Run:
 ```bash
@@ -225,7 +225,7 @@ Expected: kernel/init/kms 빌드 로그가 먼저 출력되고, 이어서 DF-M2 
 Step은 clean 빌드가 아니어도 된다 — "스크립트가 자기 완결적으로 동작하는가"만
 확인한다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add display/check.sh
@@ -239,7 +239,7 @@ git commit -m "Make display/check.sh self-contained with kernel/init/kms build s
 **Files:**
 - Modify: `check.sh` (저장소 루트)
 
-- [ ] **Step 1: `check.sh` 전체 교체**
+- [x] **Step 1: `check.sh` 전체 교체**
 
 `check.sh`(저장소 루트):
 ```bash
@@ -280,7 +280,7 @@ echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
 DF 순서로 두 번 호출하므로 BF 체인이 먼저 3회, 그다음 DF 체인이 3회
 실행된다(교차 실행이 아니다 — 한 체인이 끝나야 다음 체인이 시작).
 
-- [ ] **Step 2: `.gitignore` 대상에 `kms/target` 포함 확인**
+- [x] **Step 2: `.gitignore` 대상에 `kms/target` 포함 확인**
 
 Run:
 ```bash
@@ -291,7 +291,7 @@ Expected: 네 경로 모두 `.gitignore`의 어느 줄에 걸리는지 출력된
 `.gitignore:9:kms/target\tkms/target`). 하나라도 출력이 없으면 `clean()`이
 추적 파일을 지울 위험이 있으므로 Step 1로 돌아가 대상 목록을 다시 확인한다.
 
-- [ ] **Step 3(정정): `boot/check.sh`에 `kms` 빌드 단계 추가**
+- [x] **Step 3(정정): `boot/check.sh`에 `kms` 빌드 단계 추가**
 
 Task 2 Step 3을 처음 실행했을 때 `BF-M4 run 1/3`에서
 `cp: cannot stat '../kms/target/release/kms': No such file or directory`로
@@ -318,14 +318,14 @@ Task 1에서 추가한 것과 동일한 `kms` 빌드 단계를 끼워 넣는다)
 달리 `if ! (...); then ... fi`로 감쌀 필요가 없다 — 빌드 명령이 실패하면
 `-e`가 스크립트를 바로 종료시킨다(기존 세 줄과 동일한 스타일 유지).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add boot/check.sh
 git commit -m "Build kms crate in boot/check.sh before generating initrd"
 ```
 
-- [ ] **Step 5: 실행해서 BF+DF 모두 3회 연속 PASS 확인**
+- [x] **Step 5: 실행해서 BF+DF 모두 3회 연속 PASS 확인**
 
 Run:
 ```bash
@@ -351,7 +351,7 @@ Expected: `=== BF-M4 run 1/3 ===`부터 `=== BF-M4 run 3/3 PASSED ===`까지 세
   플레이키니스, screendump 전 `sleep 5`)이 재현된 것일 가능성이 크다 —
   `display/check.sh`의 `sleep 5`를 더 늘려본다.
 
-- [ ] **Step 6: `git status`로 초기화 재현성 확인**
+- [x] **Step 6: `git status`로 초기화 재현성 확인**
 
 Run:
 ```bash
@@ -362,7 +362,7 @@ Expected: `kernel/initrd.cpio`가 수정된 것으로 나타날 수 있다(BF-M4
 동일한 이유 — 빌드 산출물이지만 관례상 git에 커밋돼 있음). 그 외 추적
 파일에 의도치 않은 변경이 없는지 확인한다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 `kernel/initrd.cpio`가 변경되지 않았다면:
 ```bash
@@ -386,7 +386,7 @@ git commit -m "Refresh initrd.cpio from DF-M3 check.sh run"
 - Modify: `docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`
 - Modify: `HANDOFF.md`
 
-- [ ] **Step 1: design doc Status 갱신**
+- [x] **Step 1: design doc Status 갱신**
 
 `docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`의
 2번째 줄:
@@ -395,14 +395,14 @@ git commit -m "Refresh initrd.cpio from DF-M3 check.sh run"
 **Status:** DF-M3 complete (2026-08-07); Display Foundation complete
 ```
 
-- [ ] **Step 2: 커밋**
+- [x] **Step 2: 커밋**
 
 ```bash
 git add docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md
 git commit -m "Mark Display Foundation complete after DF-M3"
 ```
 
-- [ ] **Step 3: HANDOFF.md를 다음 서브프로젝트 착수 전 상태로 갱신**
+- [x] **Step 3: HANDOFF.md를 다음 서브프로젝트 착수 전 상태로 갱신**
 
 `superpowers:handoff` 스킬로 현재 상태(Display Foundation 전체 완료, 다음
 서브프로젝트 미정)를 반영해 새로 작성한다. 다음 서브프로젝트 후보는
@@ -410,7 +410,7 @@ git commit -m "Mark Display Foundation complete after DF-M3"
 절 최종 비전 목록(compositor, PTY/terminal, input policy, IME, 패키지
 관리자, AI 도구 통합)을 참고해 사용자와 논의할 것을 남긴다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add HANDOFF.md
