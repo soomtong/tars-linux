@@ -97,13 +97,42 @@ FFI)으로 필요한 글리프를 한 번만 고정 픽셀 크기로 래스터�
 glyph cache(비트맵 배열)를 만들고, 실제 렌더링은 이 캐시에서 단순
 blit만 한다.
 
-### 5. PTY/입력: raw syscall, evdev 직접 파싱
+### 5. PTY: libc `openpty()`/`forkpty()`
 
-PTY 생성·관리와 키보드/마우스 입력(evdev 원시 이벤트)은 외부
-crate/라이브러리로 감싸지 않고 직접 구현한다. `kms/src/main.rs`가
-`drm` crate 대신 raw ioctl 구조체를 직접 정의해 쓴 것과 같은 원칙 —
-X11/Wayland 입력 스택이 없는 환경이므로 evdev를 직접 읽는 것이 가장
-낮은 계층에서의 이해로 이어진다.
+PTY 생성은 `/dev/ptmx` open → `grantpt`/`unlockpt` ioctl → fork →
+`TIOCSCTTY` 순서를 손으로 재현하는 대신, 이미 링크되어 있는 libc의
+`openpty()`/`forkpty()`를 쓴다(`kms`가 이미 `libc::mmap`/`libc::ioctl`을
+쓰는 것과 같은 수준의 libc 호출이라 새 외부 의존성은 아니다). 이
+순서는 DRM 모드셋팅처럼 이 서브프로젝트가 배우려는 대상 자체가
+아니라, 텍스트 렌더링 + 터미널 코어라는 목적을 위한 보일러플레이트에
+가깝다고 판단했다.
+
+### 6. 입력: `libevdev` + 직접 짠 modifier/조합 dispatch
+
+evdev 프로토콜 파싱(장치 capability bitmask, `EV_SYN` 동기화 등
+실수하기 쉬운 부분)은 작은 C 헬퍼 `libevdev`(FFI)에 맡긴다. 반면 키맵
+번역, modifier 상태 추적, 조합 인식·라우팅 같은 **정책**은 직접
+구현한다 — `libinput`처럼 X11/Wayland 표준 키맵 정책을 통째로 가져오면
+최종 비전에 있는 "macOS 키바인딩 의미론" 같은 커스텀 정책을 넣기
+어려워지기 때문이다.
+
+macOS 스타일 조합(cmd+1~9 탭 전환 등)을 인식하려면 세 조각이 필요하다:
+
+1. **Modifier 상태 추적** — `KEY_LEFTMETA`/`KEY_RIGHTMETA`(Cmd에 대응)
+   등 modifier 키의 up/down을 bitmask로 유지하는 작은 구조체.
+2. **키코드 → 문자 매핑** — `KEY_1`~`KEY_9` 등 evdev 코드를 실제
+   문자로 바꾸는 테이블(지금은 US QWERTY 레이아웃 하나만 하드코딩).
+   이건 macOS 의미론과 무관하게 일반 타이핑 자체에 필요한 부분이다.
+3. **조합 → 액션 dispatch** — `(modifier bitmask, keycode)` 조합을 보고
+   "탭 N 전환" 같은 액션을 찾는 테이블. 매치되면 액션을 실행하고 PTY로
+   보내지 않고, 매치되지 않으면 평소처럼 문자를 PTY로 전달한다.
+
+Cmd(Meta)를 조합 키로 쓰는 것은 실용적으로도 유리하다 — `Ctrl+C`/
+`Ctrl+D`/`Ctrl+Z` 같은 기존 쉘 제어 문자와 충돌하지 않아 "가로채기 vs
+PTY로 통과"를 구분하기 쉽다. 단, 이 dispatch 테이블은 Terminal
+Foundation 자체 기능(탭 전환 등)을 위한 하드코딩된 작은 테이블이지,
+사용자가 임의로 키를 재배치하는 범용 키바인딩 엔진이 아니다 — 그건
+최종 비전의 별도 "input policy" 서브프로젝트 몫으로 남는다.
 
 ## Milestones (초안)
 
