@@ -1,14 +1,18 @@
-# HANDOFF: TF-M0 완료, TF-M1 plan 작성 대기
+# HANDOFF: TF-M1 plan 작성 완료, Task 1 Step 1부터 실행 대기
 
 ## 목표
 
-Terminal Foundation 세 번째 서브프로젝트의 첫 milestone **TF-M0(검증
-파이프라인 확장)**을 이번 세션에서 Task 1~5 전부 실행·검증·커밋했다.
-목표는 devcontainer에 Zig 툴체인을 추가하고, `libghostty-vt`(ANSI/VT
-파싱 코어), `8x4x4-fonts`(한글 조합형 지원 비트맵 폰트),
-`stb_truetype`(TTF 래스터라이저) 세 가지를 각각 가져와 빌드/링크/FFI가
-실제로 동작함을 sanity check 프로그램으로 확인하는 것이었다 — **모두
-성공**.
+Terminal Foundation 세 번째 서브프로젝트의 두 번째 milestone **TF-M1(프레임버퍼
+텍스트 렌더링)**을 진행 중이다. TF-M0(검증 파이프라인 확장, 2026-08-08
+완료)에서 확보한 `libghostty-vt`, `8x4x4-fonts`, `stb_truetype`을 조합해,
+Terminal Foundation 앱(Zig)이 KMS/DRM 프레임버퍼에 실제로 읽을 수 있는
+텍스트("TARS 하이" — ASCII + 한글 음절)를 렌더링하고 QEMU screendump로
+자동 검증하는 것이 목표다. `libghostty-vt`(ANSI 파싱)는 아직 쓰지 않는다 —
+PTY가 들어오는 TF-M2부터 필요하다.
+
+이번 세션에서는 **brainstorming → writing-plans** 스킬로 TF-M1의 설계
+결정을 확정하고 상세 실행 plan을 작성·커밋했다. 아직 실제 구현(Task 1~4)은
+시작하지 않았다.
 
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
@@ -19,96 +23,113 @@ git commit만 대신 수행한다(`~/.claude/projects/
 
 ## 현재 브랜치
 
-`main` — origin/main과 완전히 동기화됨(이번 세션에서 5개 커밋 push
-완료). Working tree 깨끗함. 최신 커밋 `9727a3e`.
+`main` — origin/main보다 2개 커밋 앞서 있음(`9e45aed`, `70b2ca4`, 아직
+push 안 함). Working tree 깨끗함. 최신 커밋 `70b2ca4`.
 
-## 완료된 작업 (TF-M0 전체, Task 1~5)
+## 완료된 작업
 
-- [x] **Task 1** — devcontainer에 Zig 0.16.0 + `xz-utils`/`unzip` 추가
-      (커밋 `387353b`). `docker run ... zig version` → `0.16.0` 확인.
-- [x] **Task 2** — `terminal/vendor_libghostty_vt.sh` 작성, ghostty-org
-      /ghostty 커밋 `2602886144c7e95099c9e2ba07f181c69e7276f3`을
-      `-Demit-lib-vt`로 빌드(커밋 `0889db3`). `terminal/vendor/
-      libghostty-vt/{include/ghostty/vt.h, lib/libghostty-vt.a,.so*}`
-      생성 확인.
-- [x] **Task 3** — `libghostty_vt_main.c` sanity check(OSC 0 "change
-      window title" 시퀀스 파싱, 커밋 `bd0f3af`). 실행 결과
-      `Extracted title: hello` 정확히 확인.
-- [x] **Task 4** — `terminal/vendor_fonts.sh`로 `8x4x4-fonts` v0.0.7
-      릴리스에서 `Hanme_8x4x4.ttf`만 추출(커밋 `49dfc7d`). devcontainer에
-      `file` 명령이 없어서(`debian:trixie-slim` 최소 설치) `od -An -tx1
-      -N4`로 매직 넘버 `00 01 00 00`(TrueType) 확인, 크기 451512
-      bytes(~441KB) 확인 — plan의 `file` 검증을 대체.
-- [x] **Task 5** — `stb_truetype_main.c` sanity check(글리프 'A' 실제
-      래스터라이징, 커밋 `9727a3e`). 실행 결과 `glyph 'A': 7x10 pixels,
-      39 non-zero` 확인.
-- [x] **origin/main push** — 5개 커밋(`387353b`~`9727a3e`) 전부 push
-      완료.
+- [x] **TF-M0 전체(Task 1~5)** — 이전 세션에서 완료·커밋·push까지 끝남
+      (커밋 `387353b`~`9727a3e`, 자세한 내용은 git log 참고).
+- [x] **TF-M1 브레인스토밍** — `superpowers:brainstorming` 스킬로 다음
+      핵심 결정을 확정:
+  - **KMS 접근 방식**: `kms` crate(Rust)를 FFI로 링크하지 않고, Zig로
+    raw DRM ioctl을 새로 포팅한다. `terminal/src/drm.zig`가
+    `kms/src/main.rs`의 1:1 이식이 된다. `kms` crate 자체는 Display
+    Foundation 산출물로 저장소에 남지만 boot chain에서는 빠진다(`init`이
+    `/kms` 대신 `/terminal`을 exec).
+  - **고정 문자열**: ASCII + 한글 음절 하나(`"TARS 하이"`). 확인 결과
+    `Hanme_8x4x4.ttf`는 완성형 한글 음절 11,172자를 표준 유니코드
+    코드포인트로 직접 매핑하고 있어(cmap에 U+D558 "하" 존재 확인),
+    초성/중성/종성을 앱이 직접 조합할 필요가 없다 — ASCII와 동일하게
+    코드포인트 하나당 `stbtt_GetCodepointBitmap` 한 번이면 된다.
+  - **glyph cache 범위**: 테스트 문자열에 등장하는 코드포인트만
+    래스터라이징(전체 ASCII+한글 타일 세트는 범위 밖).
+  - **검증 방법**: screendump에서 (a) 배경색 단일 픽셀 검사 +
+    (b) 글리프가 그려질 좌표 영역을 crop해 ImageMagick unique color
+    개수(`-format "%k"`)로 "뭔가 그려졌다"만 자동 확인. 정확한 글자
+    모양까지는 육안 확인으로 남겨둠.
+  - mmap/ioctl 동작 원리(프레임버퍼를 프로세스 주소공간에 매핑하는
+    이유, `MAP_SHARED`, `volatile` 쓰기, `pitch` vs `width`)를 사용자
+    학습 목적으로 상세 설명함(이 대화 히스토리 참고, 별도 문서화는
+    안 함).
+  - 이 프로젝트 관례(서브프로젝트당 design doc 하나, milestone별로는
+    바로 plan)에 따라 TF-M1은 별도 spec 문서 없이 기존
+    `2026-08-08-tars-terminal-foundation-design.md`를 기준으로 바로
+    plan을 작성했다.
+- [x] **TF-M1 plan 작성 + 커밋** —
+      `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m1.md`
+      (커밋 `9e45aed`, Task 1~4, 전부 코드 포함해서 상세 작성, 자체 검토
+      완료). 아직 실행은 시작 안 함(체크박스 전부 미완료).
+- [x] **`docs/study/note.md`에 KMS 개념 정리 커밋** (커밋 `70b2ca4`,
+      사용자가 직접 작성한 학습 노트).
 
 ## 시도했으나 실패한 접근
 
-- **Task 5 Step 1/2 파일 분리 실수**: 사용자가 `terminal/
-  vendor_stb_truetype.sh` 파일 안에 Step 1(쉘 스크립트)과 Step 2(C
-  sanity check 프로그램) 내용을 이어 붙여서 저장 → `line 16: Step:
-  command not found` 에러. 원인은 안내 문구("Step 2: ... 새로 작성")가
-  파일 안에 그대로 붙여넣기 된 것. Claude가 `Read`로 실제 파일 내용을
-  확인해서 발견, 두 파일(`vendor_stb_truetype.sh` 14줄 + `sanity/
-  stb_truetype_main.c` 별도 파일)로 다시 분리하도록 안내해서 해결. **교훈:**
-  매 Step 실행 후 Claude가 `Read`로 실제 파일 내용을 검증하는 습관이
-  이번에도 문제를 잡아냄 — 계속 유지할 것.
-- **Task 4 Step 4 `file` 명령 부재**: devcontainer 이미지에 `file`
-  패키지가 없음(`command not found`). 이미지 재빌드 대신 `od`로 매직
-  넘버를 직접 확인하는 대체 검증으로 처리 — plan을 수정하지 않고
-  그때그때 대체 명령을 제시했다. TF-M1 이후 `file`이 자주 필요하면
-  Dockerfile에 추가 고려.
+없음 — 이번 세션은 설계/계획 단계만 진행했고 아직 코드를 실행하지 않았다.
 
 ## 남은 작업
 
-- [ ] **TF-M1(프레임버퍼 텍스트 렌더링) plan 작성.** design doc
-      (`docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md`)의
-      milestone 초안(TF-M0~M4)에 따라, TF-M0에서 검증한 세 가지
-      (`libghostty-vt`, `8x4x4-fonts`+`stb_truetype`)를 조합해 실제 KMS
-      프레임버퍼에 텍스트를 그리는 milestone. brainstorming →
-      writing-plans 스킬로 새로 시작한다(TF-M0 plan처럼 pairing 방식
-      override 문구를 plan 상단에 명시).
-- [ ] TF-M1 plan 작성 후 Task 1 Step 1부터 pairing 방식으로 실행.
+- [ ] **TF-M1 plan Task 1**부터 pairing 방식으로 실행 시작. Task 1은
+      `terminal/src/main.zig` 최소 스캐폴드 작성 + `.gitignore`에
+      `terminal/zig-out/`, `terminal/.zig-cache/` 추가 + `zig build-exe`
+      컴파일/실행 확인.
+- [ ] Task 2: `terminal/src/drm.zig`(DRM/KMS Zig 포팅) + `main.zig` 배경
+      채우기 + `init/src/main.rs`(`/kms`→`/terminal`) + `kernel/
+      make_initrd.sh` 수정 + `terminal/check.sh` 작성 + QEMU 배경색
+      검증.
+- [ ] Task 3: `terminal/src/font.zig`(stb_truetype 기반 glyph cache) +
+      `terminal/src/font_test.zig`(네이티브 테스트, QEMU 불필요) + 호스트
+      실행 검증.
+- [ ] Task 4: `main.zig`에 렌더러 통합(glyph cache → 프레임버퍼 blit) +
+      `terminal/check.sh`에 글리프 영역 unique-color 검사 추가 + 전체
+      QEMU 파이프라인 검증 + screendump 육안 확인.
+- [ ] TF-M1 완료 후 TF-M2(PTY + `libghostty-vt` 연동) plan을 새로
+      브레인스토밍부터 작성.
+- [ ] (선택) origin/main에 현재 2개 커밋(`9e45aed`, `70b2ca4`) push —
+      사용자에게 먼저 확인 후 진행.
 
 ## 핵심 파일
 
+- `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m1.md` —
+  TF-M1 전체 실행 plan(Task 1~4, 완전한 Zig 코드 포함). 다음 세션은 이
+  파일의 Task 1 Step 1부터 그대로 진행하면 된다.
 - `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md` —
-  Terminal Foundation design doc(배경, MVP 목표/비목표, 핵심 설계 결정
-  6개, milestone 초안 TF-M0~M4). TF-M1 plan 작성 시 이 문서의 milestone
-  초안을 기준으로 삼는다.
-- `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m0.md` —
-  TF-M0 plan, Task 1~5 전부 완료·체크됨(체크박스 자체는 갱신 안 했지만
-  실제로는 전부 완료).
-- `terminal/vendor_libghostty_vt.sh`, `terminal/vendor_fonts.sh`,
-  `terminal/vendor_stb_truetype.sh` — 외부 소스 벤더링 스크립트 3개,
-  각각 버전/커밋 SHA 고정. `terminal/ghostty-src/`, `terminal/vendor/`는
-  `.gitignore`에 등록되어 커밋되지 않음 — 새 세션에서는 다시
-  다운로드/빌드해야 한다(스크립트가 이미 있으면 재실행만 하면 됨).
-- `terminal/sanity/{libghostty_vt,stb_truetype}_main.c` — 두 sanity
-  check 프로그램, 둘 다 통과 확인됨. TF-M1에서 실제 렌더링 코드 작성 시
-  참고 예제로 재사용 가능.
+  Terminal Foundation design doc. milestone 초안(TF-M0~M4) 및 핵심 설계
+  결정 6개.
+- `kms/src/main.rs` — TF-M1 Task 2에서 Zig로 포팅할 원본 Rust raw DRM
+  ioctl 구현(이미 DF-M0에서 검증됨). `terminal/src/drm.zig` 작성 시
+  구조체 필드 순서/타입을 여기와 1:1로 맞춰야 한다.
+- `display/check.sh` — `terminal/check.sh`가 그대로 참고하는 QEMU
+  screendump 검증 스크립트 패턴(monitor 포트, screendump, ImageMagick
+  pixel 검사).
+- `init/src/main.rs`, `kernel/make_initrd.sh` — TF-M1 Task 2에서 `/kms`
+  대신 `/terminal`을 boot chain에 넣도록 수정 대상.
+- `terminal/vendor/fonts/Hanme_8x4x4.ttf`, `terminal/vendor/
+  stb_truetype.h` — TF-M0에서 이미 벤더링됨(gitignore 대상, 새 세션에서
+  `terminal/vendor_fonts.sh`, `terminal/vendor_stb_truetype.sh` 재실행
+  필요할 수 있음).
 
 ## 다음 에이전트에게
 
-1. `git log --oneline -8` && `git status`로 이 파일과 실제 상태가
-   일치하는지 먼저 확인 — 최신 커밋 `9727a3e`, origin/main과 동기화됨,
-   working tree 깨끗해야 한다.
+1. `git log --oneline -6` && `git status`로 이 파일과 실제 상태가
+   일치하는지 먼저 확인 — 최신 커밋 `70b2ca4`, origin/main보다 2개
+   커밋 앞섬(미push), working tree 깨끗해야 한다.
 2. `feedback_execution_scope.md`, `feedback_commit_delegation.md`를
    먼저 읽을 것(경로: `~/.claude/projects/
    -Users-dp-Repository-tars-linux/memory/`).
-3. `superpowers:brainstorming` → `superpowers:writing-plans` 스킬로
-   TF-M1 plan을 새로 작성하는 것부터 시작한다. design doc의 TF-M1
-   milestone 초안(프레임버퍼 텍스트 렌더링)을 기준으로 하되, 이해가
-   쌓이면서 구체적 결정이 달라질 수 있으므로 TF-M0 plan을 그대로
-   베끼지 말고 다시 브레인스토밍한다.
-4. Plan 작성 후 실행 단계에서는 각 Step 실행 결과(로그, 에러)를
-   사용자가 붙여주면 Claude가 해석하고 다음 Step으로 안내한다. Claude가
-   직접 build/docker run/QEMU 명령을 실행하지 않는다(웹 리서치·`git`/
-   `find`/`Read` 같은 읽기 전용 확인은 허용). **매 Step 완료 후 파일
-   내용을 `Read`로 직접 검증** — 이번 세션에서 사용자가 두 파일 내용을
-   합쳐서 저장한 실수를 이 방식으로 잡아냈다.
-5. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지
+3. `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m1.md`의
+   **Task 1 Step 1**부터 그대로 안내 시작 — 이미 완전한 plan이 작성되어
+   있으므로 새로 브레인스토밍하지 않는다.
+4. 실행 단계에서는 각 Step 실행 결과(로그, 에러)를 사용자가 붙여주면
+   Claude가 해석하고 다음 Step으로 안내한다. Claude가 직접 build/docker
+   run/QEMU 명령을 실행하지 않는다(웹 리서치·`git`/`find`/`Read` 같은
+   읽기 전용 확인은 허용). **매 Step 완료 후 파일 내용을 `Read`로 직접
+   검증** — TF-M0에서 사용자가 두 파일 내용을 합쳐서 저장한 실수를 이
+   방식으로 잡아낸 적이 있다.
+5. `terminal/src/drm.zig`는 사람이 손으로 옮겨 적은 Zig 코드라 컴파일
+   에러(타입 캐스트, `@cImport` 관련 등)가 날 가능성이 plan 문서 자체에
+   이미 troubleshooting 노트로 언급돼 있다 — 에러가 나면 당황하지 말고
+   plan의 "만약 ~ 에러가 나면" 안내를 먼저 참고하고, 없으면 정상적인
+   디버깅 루프(에러 메시지 → 원인 설명 → 수정)로 처리한다.
+6. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지
    말 것 — 이미 여러 서브프로젝트에 걸쳐 확정됨.
