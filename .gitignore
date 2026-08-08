@@ -10,3 +10,8 @@ kms/target/
 boot/limine-binary/
 
 out/
+
+terminal/ghostty-src/
+terminal/vendor/
+terminal/sanity/libghostty_vt_check
+terminal/sanity/stb_truetype_check
