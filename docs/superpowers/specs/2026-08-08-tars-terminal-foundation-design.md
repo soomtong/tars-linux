@@ -107,12 +107,20 @@ PTY 생성은 `/dev/ptmx` open → `grantpt`/`unlockpt` ioctl → fork →
 아니라, 텍스트 렌더링 + 터미널 코어라는 목적을 위한 보일러플레이트에
 가깝다고 판단했다.
 
-### 6. 입력: `libevdev` + 직접 짠 modifier/조합 dispatch
+### 6. 입력: raw evdev 직접 파싱 + 직접 짠 modifier/조합 dispatch
 
-evdev 프로토콜 파싱(장치 capability bitmask, `EV_SYN` 동기화 등
-실수하기 쉬운 부분)은 작은 C 헬퍼 `libevdev`(FFI)에 맡긴다. 반면 키맵
-번역, modifier 상태 추적, 조합 인식·라우팅 같은 **정책**은 직접
-구현한다 — `libinput`처럼 X11/Wayland 표준 키맵 정책을 통째로 가져오면
+evdev 프로토콜 파싱(장치 capability 열거용 `EVIOCGBIT` ioctl,
+`EV_SYN`/`SYN_DROPPED` 재동기화 포함)과 키맵 번역·modifier 상태
+추적·조합 인식·라우팅 같은 정책 모두 직접 구현한다. `libevdev`(작은
+C 헬퍼) 도입을 검토했으나, 아껴주는 코드량(capability 열거·
+`SYN_DROPPED` 처리 합쳐 ~50~100줄)이 `stb_truetype`(글리프
+래스터라이징)이나 `libghostty-vt`(xterm 호환성)가 아껴주는 양에 비해
+훨씬 작고, 저빈도 키보드/마우스 입력에서는 `SYN_DROPPED`가 실제로
+발생할 가능성도 낮다. 게다가 modifier/조합 dispatch를 위해 raw
+`input_event`의 `type`/`code`/`value`를 어차피 직접 들여다봐야
+하므로, 새 FFI 의존성을 하나 더 늘릴 실익이 적다고 판단해 `kms`와
+같은 수준의 raw ioctl 직접 구현으로 되돌렸다. `libinput`처럼
+X11/Wayland 표준 키맵 정책을 통째로 가져오는 것도 여전히 피한다 —
 최종 비전에 있는 "macOS 키바인딩 의미론" 같은 커스텀 정책을 넣기
 어려워지기 때문이다.
 
