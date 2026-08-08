@@ -20,14 +20,14 @@ mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev"
 cp ../init/target/release/tars-init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
-cp ../kms/target/release/kms "$WORKDIR/kms"
-chmod 0755 "$WORKDIR/kms"
+cp ../terminal/zig-out/terminal "$WORKDIR/terminal"
+chmod 0755 "$WORKDIR/terminal"
 
 cp /usr/bin/fish "$WORKDIR/usr/bin/fish"
 chmod 0755 "$WORKDIR/usr/bin/fish"
 
 copy_lib_deps "$WORKDIR/init"
-copy_lib_deps "$WORKDIR/kms"
+copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
 
 mkdir -p "$WORKDIR/usr/share/fish"

@@ -39,22 +39,22 @@ fn log_drm_device_presence() {
     }
 }
 
-fn run_kms() {
+fn run_terminal() {
     let pid = unsafe { libc::fork() };
     if pid == 0 {
-        let kms = CString::new("/kms").expect("CString::new failed");
-        let argv: [*const libc::c_char; 2] = [kms.as_ptr(), ptr::null()];
+        let terminal = CString::new("/terminal").expect("CString::new failed");
+        let argv: [*const libc::c_char; 2] = [terminal.as_ptr(), ptr::null()];
         unsafe {
-            libc::execve(kms.as_ptr(), argv.as_ptr(), environ);
+            libc::execve(terminal.as_ptr(), argv.as_ptr(), environ);
         }
         let errno = unsafe { *libc::__errno_location() };
-        eprintln!("tars-init: execve /kms failed (errno {})", errno);
+        eprintln!("tars-init: execve /terminal failed (errno {})", errno);
         unsafe { libc::_exit(1) };
     } else if pid > 0 {
-        println!("tars-init: forked kms (pid {})", pid);
+        println!("tars-init: forked terminal (pid {})", pid);
     } else {
         let errno = unsafe { *libc::__errno_location() };
-        println!("tars-init: fork for kms failed (errno {})", errno);
+        println!("tars-init: fork for terminal failed (errno {})", errno);
     }
 }
 
@@ -90,7 +90,7 @@ fn main() {
 
     log_drm_device_presence();
 
-    run_kms();
+    run_terminal();
 
     setup_controlling_terminal();
 
