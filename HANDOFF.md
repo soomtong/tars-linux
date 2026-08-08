@@ -1,125 +1,120 @@
-# HANDOFF: Display Foundation 전체 완료(DF-M0~M3) — 다음 서브프로젝트 미정
+# HANDOFF: Terminal Foundation design + TF-M0 plan 완료, 실행 대기
 
 ## 목표
 
-Boot Foundation(BF-M0~M4, 2026-08-07 완료) 이후 두 번째 서브프로젝트인
-**Display Foundation**(KMS/DRM으로 화면에 픽셀을 띄우는 것까지, 4단계
-milestone DF-M0~M3)을 진행해 왔다. **이번 세션에서 DF-M3(종료 게이트)를
-완료해 Display Foundation 서브프로젝트 전체(DF-M0~M3)가 끝났다.** 다음
-서브프로젝트 착수 여부/대상은 아직 논의 전이다.
+Display Foundation(DF-M0~M3, 2026-08-08 완료) 이후 세 번째 서브프로젝트로
+**Terminal Foundation**을 brainstorming → writing-plans 스킬로 진행했다.
+이번 세션에서 design doc과 TF-M0(검증 파이프라인 확장) plan을 모두
+작성·커밋했고, **아직 TF-M0의 실제 실행(Task 1 Step 1)은 시작 전**이다.
 
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
 해석. Claude는 design/plan 문서·`HANDOFF.md` 작성과 **승인된** 내용의
 git commit만 대신 수행한다(`~/.claude/projects/
 -Users-dp-Repository-tars-linux/memory/feedback_execution_scope.md`,
-`feedback_commit_delegation.md` 참고). 실행 방식을 milestone마다 다시
-묻지 말 것 — 고정됨. 새 milestone/서브프로젝트 착수 전 "design doc이
-필요한가"는 brainstorming 스킬로 짧게 확인하되, 새 아키텍처 결정이 없다고
-판단되면 생략하고 바로 writing-plans로 넘어가도 된다(BF-M4, DF-M1~M3
-선례).
+`feedback_commit_delegation.md` 참고). 이 plan은 `writing-plans` 스킬의
+기본 handoff(subagent-driven/inline execution 선택)를 명시적으로
+따르지 않고 pairing 방식으로 작성됐다 — plan 파일 상단에 이 저장소는
+pairing 고정이라는 override 문구가 이미 들어 있다.
 
 ## 현재 브랜치
 
-`main` — origin/main과 완전히 동기화됨(push 완료). Working tree 완전히
-깨끗함(커밋 안 된 변경 없음). 최신 커밋 `de01a51`.
+`main` — **origin/main보다 4커밋 앞서 있고 아직 push 안 함**
+(`git push` 실행 전, 사용자 확인 필요). Working tree 깨끗함(커밋 안 된
+변경 없음). 최신 커밋 `33999eb`.
 
 ## 완료된 작업
 
-- [x] DF-M0~M2(검증 파이프라인, PCI+DRM 드라이버, 픽셀 그리기) — 이전
-      세션에 완료(자세한 내용은 git log 참고, `40aade5` 이전 커밋들).
-- [x] **DF-M3(종료 게이트) 완료·커밋** —
-      `docs/superpowers/plans/2026-08-07-tars-display-foundation-df-m3.md`
-      전체 실행:
-  - `display/check.sh`에 kernel/init/kms 빌드 단계를 추가해 자기 완결적
-    스크립트로 만듦(이전엔 사용자가 수동으로 미리 빌드해둔 뒤에만 실행
-    가능했음) — 커밋 `44ed869`.
-  - **정정(중요, 아래 절 참고):** `boot/check.sh`에도 `kms` crate 빌드
-    단계를 추가 — 커밋 `e69ea47`.
-  - 루트 `check.sh`를 `run_chain()` 함수로 일반화해 BF 체인
-    (`boot/check.sh`)과 DF 체인(`display/check.sh`)을 각각 3회씩 연속
-    검증하도록 확장(`clean()`에 `kms/target`도 추가) — 커밋 `f29f63e`.
-  - 3회 연속 실행(BF 3회 + DF 3회, kernel 총 6회 재빌드)에서
-    `TARS check PASS: all chains 3/3 consecutive runs succeeded`로
-    **최종 PASS 확인함** — 커밋 `1e86227`(initrd.cpio 갱신).
-  - design doc Status를 `DF-M3 complete (2026-08-08); Display Foundation
-    complete`로 갱신 — 커밋 `fbaf390`.
+- [x] **다음 서브프로젝트 결정: Compositor → Terminal Foundation.**
+      brainstorming 스킬로 진행하며 "compositor"라는 이름이 실제로는
+      불필요하다는 것을 발견함(터미널 앱 하나만 화면을 독점, 다른 독립
+      앱 구동 계획 없음 → 여러 프로세스 화면 중재가 필요 없음).
+- [x] **Design doc 작성·커밋** —
+      `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md`
+      (커밋 `1d905cb`, 이후 `81f2972`/`99a4546`로 두 차례 수정):
+  - 아키텍처: 단일 프로세스가 KMS/DRM 디스플레이 독점(compositor
+    프로토콜 없음)
+  - 터미널 코어: `libghostty-vt`(Ghostty의 ANSI/VT 파싱 하위 컴포넌트,
+    "extremely stable" 기능 + 유동적 API — 조사 후 확정)
+  - 구현 언어: **Zig**(이 서브프로젝트부터 도입, `kernel`/`init`/`kms`는
+    기존대로 Rust 유지)
+  - 폰트: `8x4x4-fonts`(iolo, 한글 조합형 지원 비트맵 원본 → TTF 배포)를
+    `stb_truetype`으로 시작 시 1회 래스터라이징 → glyph cache → blit
+  - PTY: `libc openpty()/forkpty()` (raw syscall 대신 — 새 의존성
+    아니고, 이 프로젝트의 학습 목적과 거리가 먼 보일러플레이트라 판단)
+  - 입력: **raw evdev 직접 파싱**(`libevdev` 도입을 검토했다가 재검토
+    끝에 철회 — 아래 "시도했으나 철회한 접근" 참고) + macOS 스타일
+    modifier/조합 dispatch(cmd+1~9 탭 전환 등)를 직접 구현
+- [x] **TF-M0 plan 작성·커밋** —
+      `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m0.md`
+      (커밋 `33999eb`). 웹 조사로 모든 버전/URL을 실제로 고정함:
+  - Zig 0.16.0 (`https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz`)
+  - `libghostty-vt`: ghostty-org/ghostty 커밋
+    `2602886144c7e95099c9e2ba07f181c69e7276f3` 고정, `zig build
+    -Demit-lib-vt`로 빌드
+  - `8x4x4-fonts`: 릴리스 태그 `v0.0.7`, zip에서 `Hanme_8x4x4.ttf`만 추출
+  - `stb_truetype.h`: nothings/stb 커밋
+    `2c980bb59875b0d32144a71867fbdebb2f77cd20` 고정
+  - Task 1(Zig+xz-utils+unzip devcontainer 추가) → Task 2(`libghostty-vt`
+    벤더링+빌드) → Task 3(링크 sanity check, 공식 예제 기반 OSC 파싱
+    프로그램) → Task 4(`8x4x4-fonts` 확보) → Task 5(`stb_truetype`로
+    실제 글리프 래스터라이징 확인)
 
-## 시도했으나 실패한 접근 / 중요한 정정
+## 시도했으나 철회한 접근
 
-DF-M3 Task 2 Step 3(루트 `check.sh` 3회 실행)을 처음 돌렸을 때 **BF-M4
-체인이 1회차부터 실패**했다:
+**입력 처리에 `libevdev` 도입 → 재검토 후 raw evdev로 되돌림.** 처음엔
+"capability 열거·`SYN_DROPPED` 재동기화를 작은 C 헬퍼에 맡기자"고
+design doc에 넣었다(커밋 `81f2972`). 그런데 사용자가 다시 검토를
+요청해서 짚어보니:
+- `libevdev`가 아껴주는 코드량(~50~100줄)이 `stb_truetype`/
+  `libghostty-vt`가 아껴주는 양(수천 줄, 수십 년치 호환성)에 비해
+  훨씬 작음
+- 저빈도 키보드/마우스 입력에서 `SYN_DROPPED`가 실제로 발생할
+  가능성이 낮음
+- macOS 스타일 modifier/조합 dispatch를 위해 raw `input_event`를
+  어차피 직접 들여다봐야 해서 `libevdev`의 이점이 희석됨
+- 새 FFI 의존성을 하나 더 늘릴 실익이 없다고 판단
 
-```
-cp: cannot stat '../kms/target/release/kms': No such file or directory
-BF-M4 FAIL: run 1/3 failed
-```
-
-**원인:** DF-M2에서 `kernel/make_initrd.sh`가 무조건
-`../kms/target/release/kms`를 initrd에 복사하도록 바뀌었는데,
-`boot/check.sh`(Boot Foundation 산출물)는 `kernel`과 `init`만 빌드하고
-`kms`는 빌드하지 않았다. DF-M2 이후 `boot/check.sh`가 재실행된 적이 없어서
-지금까지 드러나지 않았던 **회귀**였다 — 이번에 루트 `check.sh`를 BF+DF
-둘 다 검증하도록 확장하면서 처음 발견됐다(DF-M3 plan의 Architecture 절이
-예상했던 "회귀 안전망" 효과가 실제로 작동한 사례).
-
-**수정:** `boot/check.sh`의 빌드 단계에 `(cd ../kms && cargo build
---release)`를 추가(`display/check.sh`와 동일한 패턴). 커밋 `e69ea47`에
-plan 문서의 "정정" 노트와 함께 기록돼 있다.
-
-**교훈(다음에 새 crate를 추가할 때 참고):** `kernel/make_initrd.sh`처럼
-여러 진입점(`boot/check.sh`, `display/check.sh`, `kernel/check.sh` 등)이
-공유하는 스크립트를 수정할 때는, 그 스크립트를 호출하는 **모든** 진입점이
-새로운 전제조건(여기선 "kms가 미리 빌드돼 있어야 함")을 만족하는지 확인해야
-한다 — 한 진입점(`display/check.sh`)만 테스트하고 넘어가면 다른 진입점이
-조용히 깨질 수 있다.
+결국 `kms`와 같은 수준의 raw ioctl 직접 구현으로 되돌렸다(커밋
+`99a4546`). **교훈:** 외부 라이브러리 도입 결정은 "얼마나 위험한/복잡한
+부분을 대신해주는가"를 구체적 코드량으로 따져야 한다 — "작은 헬퍼
+같으니 괜찮겠지"라는 느낌만으로 판단하면 나중에 뒤집힐 수 있다.
 
 ## 남은 작업
 
-- [ ] **다음 서브프로젝트 착수 여부/대상을 사용자와 논의.** 최종 비전
-      후보 목록은 `docs/superpowers/specs/
-      2026-08-01-tars-boot-foundation-design.md`의 "배경" 절 참고
-      (compositor, PTY/terminal, input policy, IME, 패키지 관리자, AI
-      도구 통합 등). Display Foundation이 KMS/DRM 기반을 만들었으니,
-      다음 후보로는 그 위에서 동작할 compositor가 자연스러운 선택지일 수
-      있지만 확정된 건 없다.
+- [ ] **TF-M0 Task 1부터 실행 시작.** plan의 Task 1 Step 1(devcontainer
+      Dockerfile에 Zig 0.16.0 + `xz-utils`/`unzip` 추가)부터 사용자가
+      직접 파일을 수정하고 명령을 실행한다.
+- [ ] (TF-M0 완료 후) TF-M1(프레임버퍼 텍스트 렌더링) plan을 새로
+      작성 — design doc의 milestone 초안(TF-M0~M4)에 따라 한 번에 하나씩.
+- [ ] **origin/main에 push 여부 확인.** 현재 로컬이 4커밋 앞서 있고
+      아직 push하지 않았다 — 사용자에게 물어보고 진행한다.
 
 ## 핵심 파일
 
-- `docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md` —
-  Display Foundation 전체 design doc. Status가 `DF-M3 complete
-  (2026-08-08); Display Foundation complete`로 갱신됨 — 이 서브프로젝트는
-  이제 완전히 끝났다.
-- `docs/superpowers/plans/2026-08-07-tars-display-foundation-df-m3.md` —
-  DF-M3 plan, 모든 Step 체크 완료. 위에서 언급한 `boot/check.sh` 회귀의
-  "정정" 노트가 Task 2 Step 3에 기록돼 있음.
-- `check.sh`(저장소 루트) — 이제 BF-M4 체인(`boot/check.sh`)과 DF-M3 체인
-  (`display/check.sh`)을 각각 3회씩 연속 검증하는 `run_chain()` 기반
-  스크립트. `clean()`이 `kernel/build`, `init/target`, `kms/target`,
-  `out`을 지운다.
-- `boot/check.sh` — 이제 `kernel`→`init`→`kms`→`make_initrd.sh`→ISO 빌드
-  순서로 자기 완결적. `kms` 빌드 단계가 이번 세션에 추가됨.
-- `display/check.sh` — 이제 `kernel`→`init`→`kms`→`make_initrd.sh`→QEMU
-  screendump 검증까지 자기 완결적(이전엔 빌드 단계가 없어 사용자의 수동
-  사전 빌드에 의존했음).
+- `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md` —
+  Terminal Foundation design doc 전체(배경, MVP 목표/비목표, 핵심 설계
+  결정 6개 항목, milestone 초안 TF-M0~M4).
+- `docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m0.md` —
+  TF-M0 plan, Task 1~5, 아직 체크된 Step 없음(실행 전).
 - `~/.claude/projects/-Users-dp-Repository-tars-linux/memory/
   feedback_execution_scope.md`, `feedback_commit_delegation.md` —
   협업 원칙(변경 없음).
 
 ## 다음 에이전트에게
 
-1. `git log --oneline -10` && `git status`로 이 파일과 실제 상태가
-   일치하는지 먼저 확인 — 최신 커밋 `de01a51`, origin/main과 동기화됨,
-   working tree 깨끗해야 한다.
+1. `git log --oneline -8` && `git status`로 이 파일과 실제 상태가
+   일치하는지 먼저 확인 — 최신 커밋 `33999eb`, origin/main보다 4커밋
+   앞섬(미push), working tree 깨끗해야 한다.
 2. `feedback_execution_scope.md`, `feedback_commit_delegation.md`를
    먼저 읽을 것.
-3. Display Foundation은 완전히 끝났으므로, 이번 세션 시작 시 사용자에게
-   **다음 서브프로젝트를 무엇으로 할지**부터 물어볼 것 — design doc의
-   최종 비전 후보 목록(위 "남은 작업" 절 참고)을 근거로 제시하되, 확정은
-   사용자가 한다.
-4. 새 서브프로젝트가 정해지면, 새 아키텍처 결정이 있는지 brainstorming
-   스킬로 짧게 확인 후 design doc이 필요하면 작성하고, 이후
-   writing-plans로 첫 milestone(M0) plan을 작성하는 순서로 진행한다
-   (BF/DF 선례).
+3. TF-M0 plan(`docs/superpowers/plans/2026-08-08-tars-terminal-foundation-tf-m0.md`)의
+   Task 1 Step 1부터 시작 — 사용자에게 Dockerfile 수정 내용을 설명하고
+   직접 편집/빌드하도록 안내한다. Task/Step을 건너뛰거나 순서를 바꾸지
+   말 것.
+4. 각 Step 실행 결과(로그, 에러)를 사용자가 붙여주면 Claude가 해석하고
+   다음 Step으로 안내한다. Claude가 직접 build/docker run/QEMU 명령을
+   실행하지 않는다(웹 리서치·`git`/`find`/`Read` 같은 읽기 전용 확인은
+   허용).
 5. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지
    말 것 — 이미 여러 서브프로젝트에 걸쳐 확정됨.
