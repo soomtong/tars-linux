@@ -18,3 +18,16 @@ Linux 커널은 이 계열 전체(8250, 16450, 16550, 16650, 16750 등)를 하�
 - BF-M1에서 커널이 이 포트로 부팅 로그(console=ttyS0)를 내보내려면, 그 하드웨어를 다루는 커널 드라이버인 CONFIG_SERIAL_8250(+ 콘솔로 등록하는 CONFIG_SERIAL_8250_CONSOLE)이 켜져 있어야 합니다.
 
 정리하면: "16550"은 우리가 다루는 물리(가상) 칩, "SERIAL_8250"은 그 칩을 다루는 커널 쪽 드라이버/설정 이름입니다.
+
+## KMS
+
+KMS는 Kernel Mode Setting의 약자입니다.
+
+리눅스 커널이 디스플레이 해상도, 색상 깊이, 리프레시 레이트 같은 화면 출력 모드를 부팅 초기부터 커널 레벨에서 직접 설정하는 기능입니다. GPU 드라이버가 `/dev/dri/card0` 같은 DRM(Direct Rendering Manager) 디바이스 노드를 통해 이 기능을 노출하며, 사용자 공간 프로그램은 ioctl 호출로 이 디바이스와 통신해서 다음과 같은 작업을 합니다:
+
+- 사용 가능한 커넥터(모니터 등), CRTC, 인코더 같은 디스플레이 리소스 조회
+- 해상도/모드 설정
+- 프레임버퍼(실제 픽셀이 저장되는 메모리 버퍼) 생성 및 mmap
+- 그 프레임버퍼를 특정 CRTC에 연결해서 화면에 출력
+
+현재 진행 중인 tars-linux 프로젝트 맥락에서는, `kms/src/main.rs`(Rust)가 이 raw DRM ioctl들을 직접 구현해서 QEMU의 virtio-gpu 가상 GPU 위에 단색 프레임버퍼를 띄우는 것까지 Display Foundation 서브프로젝트에서 이미 검증했습니다. 지금 진행 중인 Terminal Foundation의 TF-M1 milestone에서는 이 KMS 프레임버퍼 위에 실제 텍스트(폰트 글리프)를 렌더링하는 것이 목표이며, 이번 대화에서는 그 KMS 접근 방식을 Zig로 재구현할지, 아니면 Rust로 만든 kms crate를 FFI로 링크할지를 논의해 Zig 재구현 쪽으로 결정한 상태입니다.
