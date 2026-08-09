@@ -26,7 +26,7 @@ if ! (cd ../kernel && ./make_initrd.sh); then
 fi
 
 MONITOR_PORT=45455
-SCREENSHOT="$(mktemp /tmp/tf-m1-XXXXXX.ppm)"
+SCREENSHOT="$(mktemp /workspace/tf-m1-XXXXXX.ppm)"
 LOG="$(mktemp)"
 QEMU_PID=""
 
