@@ -23,6 +23,9 @@ chmod 0755 "$WORKDIR/init"
 cp ../terminal/zig-out/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
+mkdir -p "$WORKDIR/vendor/fonts"
+cp ../terminal/vendor/fonts/Hanme_8x4x4.ttf "$WORKDIR/vendor/fonts/Hanme_8x4x4.ttf"
+
 cp /usr/bin/fish "$WORKDIR/usr/bin/fish"
 chmod 0755 "$WORKDIR/usr/bin/fish"
 

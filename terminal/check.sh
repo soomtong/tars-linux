@@ -14,7 +14,8 @@ if ! (cd ../init && cargo build --release); then
 fi
 
 mkdir -p zig-out
-if ! (cd . && zig build-exe src/main.zig -lc -mcpu=baseline -femit-bin=zig-out/terminal); then
+
+if ! (cd . && zig build-exe src/main.zig src/stb_truetype_impl.c -I vendor -lc -lm -mcpu=baseline -femit-bin=zig-out/terminal); then
   echo "FAIL: terminal build failed"
   exit 1
 fi
@@ -102,6 +103,19 @@ echo "Pixel at (5,5): ${PIXEL}"
 
 if ! echo "$PIXEL" | grep -qi '#102030'; then
   echo "FAIL: expected background (#102030) at (5,5), got: ${PIXEL}"
+  tail -n 60 "$LOG"
+  exit 1
+fi
+
+UNIQUE_COLORS=$("${CONVERT[@]}" "${SCREENSHOT}" -crop 72x16+20+20 +repage \
+  -format "%k" info: 2>&1) || {
+  echo "FAIL: ImageMagick could not count colors in glyph region: ${UNIQUE_COLORS}"
+  exit 1
+}
+echo "Unique colors in glyph region (20,20)-(92,36): ${UNIQUE_COLORS}"
+
+if [ "$UNIQUE_COLORS" -lt 2 ]; then
+  echo "FAIL: glyph region has only ${UNIQUE_COLORS} unique color(s), expected >= 2 (background + text)"
   tail -n 60 "$LOG"
   exit 1
 fi
