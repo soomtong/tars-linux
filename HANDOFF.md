@@ -84,6 +84,13 @@ Working tree 깨끗함.
       (`/dev/input/event*` 읽기 → PTY master에 write → 출력 갱신)을 다룬다.
       커널 config에 evdev/i8042 관련 설정이 켜져 있는지부터 확인할 것
       (`kernel/.config`).
+- [ ] **(미래 서브프로젝트) Rust 컴포넌트를 전부 Zig로 재작성** —
+      2026-08-10 사용자 결정. 현재 `init/`(PID 1 `tars-init`)과 `kms/`가
+      Rust, `terminal/`이 Zig인 혼용 상태인데 이건 과도기일 뿐 의도된
+      아키텍처가 아니다. 동기는 성능이 아니라 **Zig를 제대로 써보는 학습**
+      이다. TF-M3 이후 별도 서브프로젝트로 brainstorming부터 시작한다.
+      그 전까지 `init/`·`kms/`의 Rust 코드를 크게 늘리는 작업이 생기면
+      "지금 Zig로 옮기는 게 낫지 않은지" 먼저 짚을 것.
 - [x] **`kernel/initrd.cpio` 추적 중단 (2026-08-10 결정, `git rm --cached`)**
       — `terminal` 바이너리가 Debug 빌드 + `ghostty-vt` 링크로 44MB가 되면서
       initrd가 51.7MB가 되어 push 시 GitHub `GH001 Large files detected`
