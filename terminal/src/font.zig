@@ -61,3 +61,10 @@ pub fn build(allocator: std.mem.Allocator, font_data: []const u8, codepoints: []
 
     return GlyphCache{ .glyphs = glyphs };
 }
+
+pub fn find(cache: GlyphCache, codepoint: u32) ?Glyph {
+    for (cache.glyphs) |glyph| {
+        if (glyph.codepoint == codepoint) return glyph;
+    }
+    return null;
+}
