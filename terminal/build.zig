@@ -45,4 +45,16 @@ pub fn build(b: *std.Build) void {
         .root_module = pty_test_mod,
     });
     b.installArtifact(pty_test);
+
+    const vt_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/vt_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vt_test_mod.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
+    const vt_test = b.addExecutable(.{
+        .name = "vt_test",
+        .root_module = vt_test_mod,
+    });
+    b.installArtifact(vt_test);
 }
