@@ -1,6 +1,6 @@
 # TF-M2 (PTY + libghostty-vt 연동) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 >
 > **이 저장소(tars-linux)는 예외:** `CLAUDE.md`에 명시된 대로 파일 작성과 명령
 > 실행은 **사용자가 직접** 하고, Claude는 설명 + 승인된 내용의 git commit만
@@ -36,7 +36,7 @@ libc `forkpty()`(`<pty.h>`), 기존 `stb_truetype`/DRM ioctl 코드.
 각 Task의 "만약 ~ 에러가 나면" 절을 먼저 참고하고, 없으면 정상적인 디버깅
 루프(에러 메시지 → 원인 설명 → 수정)로 처리한다.
 
-- [ ] **Step 1: 현재 상태 확인**
+- [x] **Step 1: 현재 상태 확인**
 
 ```bash
 git log --oneline -3
@@ -60,7 +60,7 @@ Expected: 최신 커밋이 TF-M1 완료 커밋들이고 working tree가 깨끗�
 - Create: `terminal/build.zig.zon`
 - Modify: `terminal/check.sh`
 
-- [ ] **Step 1: `terminal/build.zig` 작성**
+- [x] **Step 1: `terminal/build.zig` 작성**
 
 ```zig
 const std = @import("std");
@@ -103,7 +103,7 @@ pub fn build(b: *std.Build) void {
 `.cpu_model = .baseline`로 하드코딩했다 — 매번 `zig build` 호출에 플래그를
 안 넘겨도 항상 적용된다.
 
-- [ ] **Step 2: `terminal/build.zig.zon` 작성**
+- [x] **Step 2: `terminal/build.zig.zon` 작성**
 
 ```zig
 .{
@@ -129,7 +129,7 @@ Zig 패키지 매니저가 이 파일의 고유 식별자로 쓰는 값인데, �
 알려주는 에러 메시지를 낼 수 있다 — 에러 메시지가 제시하는 정확한 값으로
 바꿔서 다시 실행한다.
 
-- [ ] **Step 3: `terminal/check.sh`의 빌드 줄 교체**
+- [x] **Step 3: `terminal/check.sh`의 빌드 줄 교체**
 
 `terminal/check.sh:18`의 아래 블록을:
 
@@ -155,7 +155,7 @@ fi
 make_initrd.sh`가 `../terminal/zig-out/terminal`을 복사하는 부분)은 수정할
 필요 없다.
 
-- [ ] **Step 4: 로컬에서 `zig build` 확인 (devcontainer 안, QEMU 없이)**
+- [x] **Step 4: 로컬에서 `zig build` 확인 (devcontainer 안, QEMU 없이)**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -174,7 +174,7 @@ ghostty-src`가 실제로 존재하는지(`find terminal/ghostty-src/build.zig`)
 (`terminal/ghostty-src/`가 gitignore에 있음, 즉 커밋되지 않고 로컬에만
 있음) 새 clone/컨테이너에서는 다시 받아야 할 수 있다.
 
-- [ ] **Step 5: 전체 파이프라인(QEMU 포함) 회귀 확인**
+- [x] **Step 5: 전체 파이프라인(QEMU 포함) 회귀 확인**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
@@ -184,7 +184,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 Expected: `PASS`(TF-M1과 동일한 배경색 + 글리프 영역 unique-color 검사).
 이 Step은 "빌드 시스템만 바꿨고 기능은 그대로다"를 증명하는 회귀 테스트다.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 승인 후 Claude가 커밋한다.
 
@@ -207,7 +207,7 @@ git commit -m "Migrate terminal build to zig build for ghostty-vt dependency"
 - Create: `terminal/src/pty_test.zig`
 - Modify: `terminal/build.zig`
 
-- [ ] **Step 1: `terminal/src/pty.zig` 작성**
+- [x] **Step 1: `terminal/src/pty.zig` 작성**
 
 ```zig
 const std = @import("std");
@@ -270,7 +270,7 @@ pub fn readAll(fd: c_int, buf: []u8) []const u8 {
 `exe_mod.linkSystemLibrary("m", .{})` 아래 줄에
 `exe_mod.linkSystemLibrary("util", .{});`를 추가한다.
 
-- [ ] **Step 2: `terminal/src/pty_test.zig` 작성 (네이티브 테스트)**
+- [x] **Step 2: `terminal/src/pty_test.zig` 작성 (네이티브 테스트)**
 
 ```zig
 const std = @import("std");
@@ -292,7 +292,7 @@ pub fn main() !void {
 }
 ```
 
-- [ ] **Step 3: `terminal/build.zig`에 `pty_test` 실행 파일 추가**
+- [x] **Step 3: `terminal/build.zig`에 `pty_test` 실행 파일 추가**
 
 `b.installArtifact(exe);` 다음 줄에 추가:
 
@@ -314,7 +314,7 @@ pub fn main() !void {
 위에서 정의한 x86_64-linux baseline과 동일하게 써도 무방 — devcontainer 자체가
 amd64 컨테이너이므로.)
 
-- [ ] **Step 4: devcontainer에서 native 실행으로 검증 (QEMU 불필요)**
+- [x] **Step 4: devcontainer에서 native 실행으로 검증 (QEMU 불필요)**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -329,7 +329,7 @@ Expected: `PASS` 출력, `pty output` 줄에 `TARS 하이`가 포함됨.
 그럴 수 있으니, 이 경우 `pty.zig`에 `c.waitpid(session.child_pid, null, 0)`
 호출을 `readAll` 이후에 추가한다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add terminal/src/pty.zig terminal/src/pty_test.zig terminal/build.zig
@@ -350,7 +350,7 @@ QEMU 없이 네이티브 테스트로 먼저 검증한다 — PTY/fish 없이 �
 - Create: `terminal/src/vt_test.zig`
 - Modify: `terminal/build.zig`
 
-- [ ] **Step 1: `terminal/src/vt.zig` 작성**
+- [x] **Step 1: `terminal/src/vt.zig` 작성**
 
 ```zig
 const std = @import("std");
@@ -411,7 +411,7 @@ ANSI/VT 이스케이프 시퀀스를 파싱하기 때문이다 — `fish`가 색
 커서 이동 등 다른 이스케이프를 보낼 수 있으므로, PTY에서 온 진짜 바이트는
 항상 `vtStream`으로 먹인다(`printString`은 리터럴 텍스트 전용).
 
-- [ ] **Step 2: `terminal/src/vt_test.zig` 작성 (네이티브 테스트)**
+- [x] **Step 2: `terminal/src/vt_test.zig` 작성 (네이티브 테스트)**
 
 ```zig
 const std = @import("std");
@@ -445,7 +445,7 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
-- [ ] **Step 3: `terminal/build.zig`에 `vt_test` 실행 파일 추가**
+- [x] **Step 3: `terminal/build.zig`에 `vt_test` 실행 파일 추가**
 
 `pty_test` 블록 다음에 추가(이번엔 `ghostty-vt` import가 필요함):
 
@@ -463,7 +463,7 @@ pub fn main(init: std.process.Init) !void {
     b.installArtifact(vt_test);
 ```
 
-- [ ] **Step 4: devcontainer에서 native 실행으로 검증 (QEMU 불필요)**
+- [x] **Step 4: devcontainer에서 native 실행으로 검증 (QEMU 불필요)**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -479,7 +479,7 @@ codepoint=U+54`("T")부터 시작해 "TARS 하이"에 해당하는 셀들이 순
 plan의 코드는 그 테스트와 `src/renderer/generic.zig`의 `rebuildCells`
 (약 2320번째 줄)를 근거로 작성했다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add terminal/src/vt.zig terminal/src/vt_test.zig terminal/build.zig
@@ -499,7 +499,7 @@ git commit -m "Add libghostty-vt integration parsing PTY bytes into cell list"
 - Modify: `terminal/src/main.zig`
 - Modify: `terminal/check.sh`
 
-- [ ] **Step 1: `font.zig`에 `find` 헬퍼 추가**
+- [x] **Step 1: `font.zig`에 `find` 헬퍼 추가**
 
 `terminal/src/font.zig`의 `pub fn build(...)` 함수 뒤에 추가:
 
@@ -515,7 +515,7 @@ pub fn find(cache: GlyphCache, codepoint: u32) ?Glyph {
 (glyph 개수가 몇 개 안 되는 고정 목록이라 선형 탐색으로 충분 — 해시맵은
 과함, YAGNI.)
 
-- [ ] **Step 2: `terminal/src/main.zig`를 PTY+libghostty-vt 파이프라인으로 교체**
+- [x] **Step 2: `terminal/src/main.zig`를 PTY+libghostty-vt 파이프라인으로 교체**
 
 ```zig
 const std = @import("std");
@@ -605,7 +605,7 @@ pub fn main(init: std.process.Init) !void {
 이스케이프 잔여물)가 섞여도 화면이 깨지지 않고 조용히 무시되도록 하는
 방어적 처리다.
 
-- [ ] **Step 3: `terminal/build.zig`의 메인 `exe_mod`에 `pty.zig`/`vt.zig` 접근
+- [x] **Step 3: `terminal/build.zig`의 메인 `exe_mod`에 `pty.zig`/`vt.zig` 접근
       가능하게 하기**
 
 `main.zig`가 `@import("pty.zig")`/`@import("vt.zig")`를 상대 경로로 바로
@@ -620,7 +620,7 @@ rg -n "ghostty-vt" terminal/build.zig
 Expected: `exe_mod.addImport("ghostty-vt", ...)` 줄이 보임(Task 1 Step 1에서
 이미 추가됨).
 
-- [ ] **Step 4: `terminal/check.sh`의 crop 좌표를 새 렌더링 위치에 맞게 조정**
+- [x] **Step 4: `terminal/check.sh`의 crop 좌표를 새 렌더링 위치에 맞게 조정**
 
 기존 `terminal/check.sh`의 글리프 영역 검사(약 110번째 줄 근처)는:
 
@@ -633,7 +633,7 @@ UNIQUE_COLORS=$("${CONVERT[@]}" "${SCREENSHOT}" -crop 72x16+20+20 +repage \
 좌표는 그대로 유지해도 된다 — "TARS 하이"가 여전히 `(20,20)`부터 첫 줄
 (`row=0`)에 그려지기 때문이다. **수정 불필요**, 그대로 둔다.
 
-- [ ] **Step 5: 로컬 `zig build`로 컴파일만 우선 확인**
+- [x] **Step 5: 로컬 `zig build`로 컴파일만 우선 확인**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -642,7 +642,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/termin
 
 Expected: 에러 없이 `zig-out/bin/terminal` 생성.
 
-- [ ] **Step 6: 전체 QEMU 파이프라인 검증**
+- [x] **Step 6: 전체 QEMU 파이프라인 검증**
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
@@ -653,7 +653,7 @@ Expected: `PASS`. 이전 세션의 교훈대로 `sleep 30`으로도 fish 기동 
 왕복이 다 안 끝났다면(로그에서 `terminal: rendered N cells` print가 serial
 log에 아예 안 보이는 등) `terminal/check.sh`의 `sleep 30`을 더 늘린다.
 
-- [ ] **Step 7: screendump 육안 확인**
+- [x] **Step 7: screendump 육안 확인**
 
 TF-M1 때처럼 `terminal/check.sh`는 이미 screendump를 `/workspace`(저장소
 루트)에 남기도록 되어 있다(TF-M1 세션에서 이미 이렇게 바꿔둠). `PASS` 후
@@ -666,7 +666,7 @@ sips -s format png tf-m1-XXXXXX.ppm --out tf-m2-screenshot.png
 open tf-m2-screenshot.png
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add terminal/src/font.zig terminal/src/main.zig terminal/check.sh
@@ -677,11 +677,53 @@ git commit -m "Render fish output parsed via libghostty-vt to framebuffer"
 
 ## TF-M2 완료 확인 체크리스트
 
-- [ ] `zig build`(Task 1)로 TF-M1과 동일한 결과가 나오는 회귀 테스트 통과
-- [ ] `pty_test`(Task 2)가 네이티브로 `fish -c "echo ..."` 출력을 PTY로
+- [x] `zig build`(Task 1)로 TF-M1과 동일한 결과가 나오는 회귀 테스트 통과
+- [x] `pty_test`(Task 2)가 네이티브로 `fish -c "echo ..."` 출력을 PTY로
       받아옴을 확인
-- [ ] `vt_test`(Task 3)가 네이티브로 바이트 스트림 → 셀 목록 변환이 맞음을
+- [x] `vt_test`(Task 3)가 네이티브로 바이트 스트림 → 셀 목록 변환이 맞음을
       확인
-- [ ] `terminal/check.sh` 전체 QEMU 파이프라인이 `PASS`
-- [ ] screendump 육안 확인 완료
-- [ ] HANDOFF.md 갱신 + TF-M3(키보드 입력) 브레인스토밍으로 이어갈 준비
+- [x] `terminal/check.sh` 전체 QEMU 파이프라인이 `PASS`
+- [x] screendump 육안 확인 완료
+- [x] HANDOFF.md 갱신 + TF-M3(키보드 입력) 브레인스토밍으로 이어갈 준비
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-10 완료 시점 기록)
+
+plan 대비 네 가지가 달랐다. 다음 milestone에서 같은 함정을 반복하지 않기
+위해 이유까지 남긴다.
+
+1. **`b.dependency("ghostty", .{})`에 target/optimize를 넘겨야 했다**
+   (Task 1 Step 1). ghostty는 `src/build/Config.zig:75,86`에서
+   `b.standardTargetOptions()`로 자기 타겟을 정하므로, 옵션을 안 넘기면
+   `ghostty-vt` 모듈이 호스트 native 타겟으로 만들어져 우리 exe의
+   `cpu_model = .baseline`과 어긋난다.
+
+2. **`zig build`의 설치 경로는 `zig-out/bin/`이다** (Task 1 Step 3).
+   plan은 "경로가 그대로라 `make_initrd.sh` 수정 불필요"라고 적었지만
+   틀렸다 — `zig build-exe -femit-bin=zig-out/terminal`과 달리
+   `b.installArtifact`는 `bin/` 하위에 넣는다. `kernel/make_initrd.sh:23`을
+   `../terminal/zig-out/bin/terminal`로 고쳤다. 겸사겸사 TF-M1이 남긴
+   낡은 `zig-out/terminal`을 지웠다 — 안 지우면 빌드 실패 시에도 낡은
+   바이너리로 initrd가 조용히 만들어져 유령 버그가 된다.
+
+3. **`c.execv` 대신 `execv`를 직접 extern 선언했다** (Task 2 Step 1).
+   glibc의 `char *const argv[]`를 translate-c가 `[*c]const [*c]u8`
+   (비-const `u8` 포인터의 배열)로 옮기기 때문에 Zig의
+   `?[*:0]const u8` 배열을 그대로 넘길 수 없다. `@constCast`로 벗기느니
+   const가 맞는 시그니처로 선언하는 쪽을 택했다.
+
+4. **init이 devpts를 마운트해야 했다** (plan에 아예 없던 단계).
+   `forkpty()`는 `/dev/ptmx`를 연 뒤 `/dev/pts/N`을 열어야 하는데,
+   devtmpfs는 드라이버가 등록한 장치 노드만 담으므로 `/dev/pts`를
+   만들어주지 않는다. `init/src/main.rs`에 `mount_devpts()`를 추가해
+   devtmpfs 마운트 **뒤**·`run_terminal()` **앞**에서
+   `mkdir /dev/pts` + `mount devpts`를 하도록 했다. 커널 쪽은
+   `kernel/.config:997 CONFIG_UNIX98_PTYS=y`라 이미 준비돼 있었다.
+
+   **이 항목이 이번 milestone의 가장 큰 교훈이다.** Task 2의 네이티브
+   테스트가 통과한 건 Docker가 컨테이너에 devpts를 이미 마운트해줬기
+   때문이고, QEMU에서는 그 일을 우리 init이 직접 해야 했다. "devcontainer
+   에서 되니까 QEMU에서도 된다"는 추론은 **호스트 환경이 대신 해주던 설정**
+   에서 깨진다 — 새 시스템 콜/장치를 쓸 때마다 "이게 동작하려면 누가 무엇을
+   마운트·생성해줘야 하는가"를 먼저 확인할 것.
