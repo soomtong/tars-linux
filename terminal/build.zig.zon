@@ -1,0 +1,15 @@
+.{
+    .name = .tars_terminal,
+    .version = "0.0.0",
+    .fingerprint = 0x3a4ce1d146c5abb9,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .ghostty = .{ .path = "ghostty-src" },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "vendor",
+    },
+}

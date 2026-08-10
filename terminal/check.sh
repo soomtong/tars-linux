@@ -13,9 +13,7 @@ if ! (cd ../init && cargo build --release); then
   exit 1
 fi
 
-mkdir -p zig-out
-
-if ! (cd . && zig build-exe src/main.zig src/stb_truetype_impl.c -I vendor -lc -lm -mcpu=baseline -femit-bin=zig-out/terminal); then
+if ! (cd . && zig build); then
   echo "FAIL: terminal build failed"
   exit 1
 fi

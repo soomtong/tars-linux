@@ -20,7 +20,7 @@ mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev"
 cp ../init/target/release/tars-init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
-cp ../terminal/zig-out/terminal "$WORKDIR/terminal"
+cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
 mkdir -p "$WORKDIR/vendor/fonts"
