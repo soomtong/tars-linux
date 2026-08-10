@@ -31,6 +31,17 @@ fn mount_fs(source: &str, target: &str, fstype: &str) {
     }
 }
 
+fn mount_devpts() {
+    // devtmpfs는 드라이버가 등록한 장치 노드만 담기 때문에 /dev/pts 디렉터리를
+    // 만들어주지 않는다. forkpty()는 /dev/ptmx를 연 뒤 커널이 지정한
+    // /dev/pts/N을 열어야 하므로, 마운트 지점을 먼저 만들고 devpts를 붙인다.
+    if let Err(err) = std::fs::create_dir_all("/dev/pts") {
+        println!("tars-init: failed to create /dev/pts ({})", err);
+        return;
+    }
+    mount_fs("devpts", "/dev/pts", "devpts");
+}
+
 fn log_drm_device_presence() {
     if std::path::Path::new("/dev/dri/card0").exists() {
         println!("tars-init: /dev/dri/card0 exists");
@@ -87,6 +98,7 @@ fn main() {
     mount_fs("proc", "/proc", "proc");
     mount_fs("sysfs", "/sys", "sysfs");
     mount_fs("devtmpfs", "/dev", "devtmpfs");
+    mount_devpts();
 
     log_drm_device_presence();
 
