@@ -3,6 +3,7 @@ devcontainer/sanity/sanity.elf
 
 kernel/src/
 kernel/build/
+kernel/initrd.cpio
 
 init/target/
 kms/target/

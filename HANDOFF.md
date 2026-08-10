@@ -84,13 +84,14 @@ Working tree 깨끗함.
       (`/dev/input/event*` 읽기 → PTY master에 write → 출력 갱신)을 다룬다.
       커널 config에 evdev/i8042 관련 설정이 켜져 있는지부터 확인할 것
       (`kernel/.config`).
-- [ ] **`kernel/initrd.cpio`가 51.7MB가 되어 GitHub 권장 한도(50MB)를
-      넘었다** (push 시 `GH001 Large files detected` 경고). 원인은
-      `terminal` 바이너리가 Debug 빌드 + `ghostty-vt` 링크로 44MB가 된 것.
-      tracked 파일이라 갱신할 때마다 50MB blob이 저장소에 쌓인다.
-      선택지: (a) `build.zig`/`check.sh`에서 `-Doptimize=ReleaseSmall`로
-      바이너리 축소, (b) `initrd.cpio`를 `.gitignore`로 옮기고 빌드
-      산출물로만 취급. **사용자 결정 사항** — TF-M3 시작 전에 물어볼 것.
+- [x] **`kernel/initrd.cpio` 추적 중단 (2026-08-10 결정, `git rm --cached`)**
+      — `terminal` 바이너리가 Debug 빌드 + `ghostty-vt` 링크로 44MB가 되면서
+      initrd가 51.7MB가 되어 push 시 GitHub `GH001 Large files detected`
+      경고가 났다. 사용자 결정으로 **빌드 산출물로만 취급**하고 `.gitignore`
+      에 넣었다(`check.sh`가 매번 `make_initrd.sh`로 재생성하므로 빌드에
+      영향 없음). 주의: 이미 커밋된 과거 blob은 히스토리에 남아 있다 —
+      저장소 크기를 실제로 줄이려면 히스토리 재작성이 필요하지만 이미
+      push된 커밋이라 하지 않기로 했다.
 
 ## 핵심 파일
 
