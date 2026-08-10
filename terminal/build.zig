@@ -33,4 +33,16 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     b.installArtifact(exe);
+
+    const pty_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/pty_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pty_test_mod.link_libc = true;
+    const pty_test = b.addExecutable(.{
+        .name = "pty_test",
+        .root_module = pty_test_mod,
+    });
+    b.installArtifact(pty_test);
 }
