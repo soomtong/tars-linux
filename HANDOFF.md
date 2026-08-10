@@ -21,8 +21,8 @@ git commit만 대신 수행한다(`~/.claude/projects/
 
 ## 현재 브랜치
 
-`main` — origin/main보다 **7개 커밋 앞서 있음(아직 push 안 함)**.
-Working tree 깨끗함(문서 커밋 전 기준). 최신 커밋 `909bfd0`.
+`main` — **origin/main과 동기화됨(2026-08-10 push 완료, `a069ea3`까지)**.
+Working tree 깨끗함.
 
 ## 완료된 작업
 
@@ -84,7 +84,13 @@ Working tree 깨끗함(문서 커밋 전 기준). 최신 커밋 `909bfd0`.
       (`/dev/input/event*` 읽기 → PTY master에 write → 출력 갱신)을 다룬다.
       커널 config에 evdev/i8042 관련 설정이 켜져 있는지부터 확인할 것
       (`kernel/.config`).
-- [ ] (선택) origin/main에 7개 커밋 push — 사용자에게 먼저 확인 후 진행.
+- [ ] **`kernel/initrd.cpio`가 51.7MB가 되어 GitHub 권장 한도(50MB)를
+      넘었다** (push 시 `GH001 Large files detected` 경고). 원인은
+      `terminal` 바이너리가 Debug 빌드 + `ghostty-vt` 링크로 44MB가 된 것.
+      tracked 파일이라 갱신할 때마다 50MB blob이 저장소에 쌓인다.
+      선택지: (a) `build.zig`/`check.sh`에서 `-Doptimize=ReleaseSmall`로
+      바이너리 축소, (b) `initrd.cpio`를 `.gitignore`로 옮기고 빌드
+      산출물로만 취급. **사용자 결정 사항** — TF-M3 시작 전에 물어볼 것.
 
 ## 핵심 파일
 
