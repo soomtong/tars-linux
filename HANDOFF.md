@@ -84,6 +84,16 @@ Working tree 깨끗함.
       (`/dev/input/event*` 읽기 → PTY master에 write → 출력 갱신)을 다룬다.
       커널 config에 evdev/i8042 관련 설정이 켜져 있는지부터 확인할 것
       (`kernel/.config`).
+      **TF-M3에서 함께 검증할 것 (Zig 재작성 판단 근거):**
+      `linux/input.h`의 `struct input_event`를 `@cImport`(또는 0.16 권장
+      방식인 `b.addTranslateC`)로 제대로 가져올 수 있는가? translate-c는
+      **비트필드가 있는 구조체를 opaque 타입으로 강등**시키는 알려진 한계가
+      있고(ziglang/zig#1499, #4001), 리눅스 커널 헤더에서 실제로 보고된
+      사례다. 참고로 `terminal/src/drm.zig`는 DRM UAPI 구조체를 `@cImport`
+      하지 않고 **전부 손으로 `extern struct`로 옮겼고 `_IOWR` 매크로까지
+      비트 연산으로 재구현**했다(`drm.zig:108-110`). evdev도 같은 길을
+      가야 한다면, "Zig는 C 프로젝트를 그냥 가져다 쓴다"는 기대가 **커널
+      UAPI 영역에서는 성립하지 않는다**는 걸 알고 재작성에 들어가는 셈이다.
 - [ ] **(미래 서브프로젝트) Rust 컴포넌트를 전부 Zig로 재작성** —
       2026-08-10 사용자 결정. 현재 `init/`(PID 1 `tars-init`)과 `kms/`가
       Rust, `terminal/`이 Zig인 혼용 상태인데 이건 과도기일 뿐 의도된
@@ -91,6 +101,25 @@ Working tree 깨끗함.
       이다. TF-M3 이후 별도 서브프로젝트로 brainstorming부터 시작한다.
       그 전까지 `init/`·`kms/`의 Rust 코드를 크게 늘리는 작업이 생기면
       "지금 Zig로 옮기는 게 낫지 않은지" 먼저 짚을 것.
+
+      **2026-08-10 조사 결과(재작성 착수 전 반드시 참고):**
+      - `init/`은 `libc::mount`/`fork`/`execve`/`ioctl`을 감싼 얇은 래퍼라
+        사실상 `unsafe` 덩어리다 — **Rust의 강점이 발휘될 자리가 아니다.**
+        Zig로 옮기면 오히려 짧아질 가능성이 높다. 빌드 시스템도 cargo +
+        zig build 이중 유지에서 하나로 준다.
+      - Zig의 진짜 강점은 `@cImport`보다 **툴체인**이다. 배포판 하나에
+        Clang + 97개 libc 헤더(~50MB)가 들어 있어 `x86_64-linux-gnu.2.28`
+        처럼 **glibc 버전까지 지정해 크로스 컴파일**할 수 있다. 지금은
+        amd64 컨테이너 안에서 빌드하지만, 원리상 macOS 호스트에서 직접
+        x86_64-linux 타겟 빌드가 가능하다 — Docker 왕복 제거 여지.
+      - **주의 1:** `@cImport`는 0.16에서 **deprecated** 됐다. 공식 권장은
+        `c.h` + `b.addTranslateC(...)`로 모듈화하는 방식(번역 결과는 동일).
+        우리 `font.zig`/`pty.zig`/`drm.zig`/`main.zig` 넷 다 구식 경로 위에
+        있어 언젠가 마이그레이션이 필요하다. ghostty도 `build.zig.zon:12-17`
+        에서 `translate_c`를 외부 의존성으로 끌어다 쓰며 과도기를 넘기는 중.
+      - **주의 2:** pre-1.0이라 반년마다 파괴적 변경이 온다(0.16의 `std.Io`
+        도입 + `std.posix` 대부분 제거, `zig-pkg/` 로컬 캐시 전환 등).
+        학습이 목적이면 감수할 만하지만 일정 예측에는 넣어둘 것.
 - [x] **`kernel/initrd.cpio` 추적 중단 (2026-08-10 결정, `git rm --cached`)**
       — `terminal` 바이너리가 Debug 빌드 + `ghostty-vt` 링크로 44MB가 되면서
       initrd가 51.7MB가 되어 push 시 GitHub `GH001 Large files detected`
