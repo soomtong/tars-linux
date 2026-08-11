@@ -57,4 +57,16 @@ pub fn build(b: *std.Build) void {
         .root_module = vt_test_mod,
     });
     b.installArtifact(vt_test);
+
+    const input_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/input_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    input_test_mod.link_libc = true;
+    const input_test = b.addExecutable(.{
+        .name = "input_test",
+        .root_module = input_test_mod,
+    });
+    b.installArtifact(input_test);
 }
