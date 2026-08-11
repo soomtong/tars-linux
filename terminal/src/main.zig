@@ -101,8 +101,11 @@ pub fn main(init: std.process.Init) !void {
     };
     std.debug.print("terminal: opened {s}\n", .{INPUT_DEVICE});
 
-    const argv = [_:null]?[*:0]const u8{"cat"};
-    const session = try pty.spawn("/usr/bin/cat", &argv, cols, rows);
+    // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
+    // `--no-config`는 유지한다(사용자 설정 파일이 initrd에 없기도 하고,
+    // 프롬프트가 예측 가능해야 검증이 쉽다).
+    const argv = [_:null]?[*:0]const u8{ "fish", "--no-config" };
+    const session = try pty.spawn("/usr/bin/fish", &argv, cols, rows);
     std.debug.print("terminal: spawned child pid {d}\n", .{session.child_pid});
 
     const screen = try vt.Screen.init(init.io, allocator, cols, rows);

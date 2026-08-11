@@ -24,7 +24,6 @@ if ! (cd ../kernel && ./make_initrd.sh); then
 fi
 
 MONITOR_PORT=45455
-SCREENSHOT="$(mktemp /workspace/tf-m1-XXXXXX.ppm)"
 LOG="$(mktemp)"
 QEMU_PID=""
 
@@ -64,8 +63,27 @@ if [ "$MONITOR_READY" != "1" ]; then
 fi
 
 sleep 30
-echo "screendump ${SCREENSHOT}" >&3
+
+BEFORE="$(mktemp /workspace/tf-m3-before-XXXXXX.ppm)"
+AFTER="$(mktemp /workspace/tf-m3-after-XXXXXX.ppm)"
+
+# 1) 키를 넣기 전 화면
+echo "screendump ${BEFORE}" >&3
 sleep 1
+
+# 2) "math 6 x 7" + Enter 를 한 글자씩 주입.
+#    fish 내장 math가 42를 출력하므로, 화면에 42가 나타나면 셸이 실제로
+#    명령을 "실행"한 것이다 — 단순 에코와 구분된다.
+for k in m a t h spc 6 spc x spc 7 ret; do
+  echo "sendkey $k" >&3
+  sleep 0.3
+done
+sleep 3
+
+# 3) 키를 넣은 뒤 화면
+echo "screendump ${AFTER}" >&3
+sleep 1
+
 exec 3<&-
 exec 3>&-
 
@@ -73,50 +91,44 @@ kill "$QEMU_PID" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
 
-if [ ! -s "$SCREENSHOT" ]; then
-  echo "FAIL: screendump did not produce a file at ${SCREENSHOT}"
-  cat "$LOG"
+if [ ! -s "$BEFORE" ] || [ ! -s "$AFTER" ]; then
+  echo "FAIL: screendump did not produce both files"
+  tail -n 60 "$LOG"
   exit 1
 fi
 
 if command -v magick >/dev/null 2>&1; then
   IDENTIFY=(magick identify)
-  CONVERT=(magick)
+  COMPARE=(magick compare)
 else
   IDENTIFY=(identify)
-  CONVERT=(convert)
+  COMPARE=(compare)
 fi
 
-DIMENSIONS=$("${IDENTIFY[@]}" -format "%wx%h" "$SCREENSHOT" 2>&1) || {
-  echo "FAIL: ImageMagick could not read ${SCREENSHOT}: ${DIMENSIONS}"
+DIMENSIONS=$("${IDENTIFY[@]}" -format "%wx%h" "$AFTER" 2>&1) || {
+  echo "FAIL: ImageMagick could not read ${AFTER}: ${DIMENSIONS}"
   exit 1
 }
-echo "Captured screendump: ${SCREENSHOT} (${DIMENSIONS})"
+echo "Captured screendumps: ${BEFORE} / ${AFTER} (${DIMENSIONS})"
 
-PIXEL=$("${CONVERT[@]}" "${SCREENSHOT}" -crop 1x1+5+5 +repage txt:- 2>&1) || {
-  echo "FAIL: ImageMagick could not extract pixel at (5,5): ${PIXEL}"
-  exit 1
-}
-echo "Pixel at (5,5): ${PIXEL}"
+# 렌더링 경로 검증: 키 주입 전후로 화면이 실제로 달라졌는가.
+DIFF_PIXELS=$("${COMPARE[@]}" -metric AE "$BEFORE" "$AFTER" null: 2>&1) || true
+DIFF_PIXELS="${DIFF_PIXELS%%[!0-9]*}"
+echo "Pixels changed after typing: ${DIFF_PIXELS:-0}"
 
-if ! echo "$PIXEL" | grep -qi '#102030'; then
-  echo "FAIL: expected background (#102030) at (5,5), got: ${PIXEL}"
+if [ -z "$DIFF_PIXELS" ] || [ "$DIFF_PIXELS" -lt 100 ]; then
+  echo "FAIL: screen did not change after key injection (${DIFF_PIXELS:-0} pixels)"
   tail -n 60 "$LOG"
   exit 1
 fi
 
-UNIQUE_COLORS=$("${CONVERT[@]}" "${SCREENSHOT}" -crop 72x16+20+20 +repage \
-  -format "%k" info: 2>&1) || {
-  echo "FAIL: ImageMagick could not count colors in glyph region: ${UNIQUE_COLORS}"
-  exit 1
-}
-echo "Unique colors in glyph region (20,20)-(92,36): ${UNIQUE_COLORS}"
-
-if [ "$UNIQUE_COLORS" -lt 2 ]; then
-  echo "FAIL: glyph region has only ${UNIQUE_COLORS} unique color(s), expected >= 2 (background + text)"
+# 파싱 경로 검증: 셸이 명령을 실행해 42를 내놓았는가.
+if ! grep -q "terminal: screen>.*42" "$LOG"; then
+  echo "FAIL: expected '42' in the parsed screen dump (shell did not run the command)"
   tail -n 60 "$LOG"
   exit 1
 fi
+echo "Found '42' in parsed screen dump"
 
 echo "PASS"
 exit 0
