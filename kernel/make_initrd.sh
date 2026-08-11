@@ -29,9 +29,13 @@ cp ../terminal/vendor/fonts/Hanme_8x4x4.ttf "$WORKDIR/vendor/fonts/Hanme_8x4x4.t
 cp /usr/bin/fish "$WORKDIR/usr/bin/fish"
 chmod 0755 "$WORKDIR/usr/bin/fish"
 
+cp /usr/bin/cat "$WORKDIR/usr/bin/cat"
+chmod 0755 "$WORKDIR/usr/bin/cat"
+
 copy_lib_deps "$WORKDIR/init"
 copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
+copy_lib_deps "$WORKDIR/usr/bin/cat"
 
 mkdir -p "$WORKDIR/usr/share/fish"
 cp -r /usr/share/fish/functions "$WORKDIR/usr/share/fish/"
