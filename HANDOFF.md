@@ -3,23 +3,52 @@
 ## 목표
 
 Terminal Foundation 네 번째 milestone **TF-M3(evdev 키보드 입력)**을
-진행 중이다. 2026-08-11에 brainstorming을 마치고 plan 문서를 작성했다
-(`docs/superpowers/plans/2026-08-11-tars-terminal-foundation-tf-m3.md`).
-**아직 코드는 한 줄도 안 썼다** — 다음 세션은 그 plan의 Task 1부터 실행한다.
+진행 중이다. `/dev/input/event0`에서 키 이벤트를 읽어 PTY master에 write하고,
+돌아온 출력을 다시 파싱해 화면을 갱신하는 **이벤트 루프**를 만든다.
+TF-M2가 일부러 미뤄둔 입력 경로이며 Terminal Foundation MVP 종료점이다.
 
-TF-M3는 TF-M2가 일부러 미뤄둔 입력 경로를 만든다: `/dev/input/event0`에서
-키 이벤트를 읽어 PTY master에 write하고, 돌아온 출력을 다시 파싱해 화면을
-갱신하는 **이벤트 루프**. Terminal Foundation MVP 종료점이다.
+2026-08-11 세션에서 brainstorming과 plan 작성을 마쳤다. **아직 코드는 한 줄도
+안 썼다** — 다음 세션은 plan의 Task 1부터 실행한다.
 
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
-해석. Claude는 design/plan 문서·`HANDOFF.md` 작성과 **승인된** 내용의
-git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
-`docs/decisions/feedback_commit_delegation.md` 참고 — 색인은 `MEMORY.md`).
+해석. Claude는 design/plan 문서·`HANDOFF.md`·기억 파일 작성과 **승인된**
+내용의 git commit만 대신 수행한다(`docs/decisions/
+feedback_execution_scope.md`, `feedback_commit_delegation.md` 참고 —
+색인은 `MEMORY.md`).
 
 ## 현재 브랜치
 
-`main` — origin/main과 동기화됨. Working tree 깨끗함.
+`main` — **origin/main보다 커밋 2개 앞서 있다(미push).** Working tree 깨끗함.
+최신 커밋 `d25b8c7`.
+
+## 완료된 작업 (2026-08-11 세션)
+
+- [x] **TF-M3 brainstorming** — `superpowers:brainstorming`으로 설계 결정 4가지
+      확정(아래 절 참고). 이 저장소 관례상 milestone별 spec 문서는 쓰지 않고
+      바로 plan으로 갔다(TF-M1/M2와 동일).
+- [x] **TF-M3 plan 작성** — `9917443`.
+      `docs/superpowers/plans/2026-08-11-tars-terminal-foundation-tf-m3.md`.
+      Task 5개, 각 Step에 실제 코드와 실행 명령이 전부 들어 있다.
+- [x] **기억을 저장소 안으로 이동** — `d25b8c7`. 전역 규칙(`~/.claude/
+      CLAUDE.md`)대로 `~/.claude/projects/.../memory/` → 저장소의
+      `MEMORY.md`(색인) + `docs/decisions/`(본문 6개)로 옮겼다. 파일 안의
+      `[[wikilink]]`가 깨지지 않도록 파일명은 그대로 뒀고, 옛 경로를 참조하던
+      3곳(`HANDOFF.md` 2곳, TF-M2/TF-M3 plan 머리말)을 고쳤다. 지우기 전
+      `diff`로 6개 전부 동일함을 확인했다.
+      **글로벌 memory 폴더는 비어 있으므로 세션 시작 시 자동 주입되던 내용이
+      더 이상 없다** — 대신 `CLAUDE.md:70-73`이 `MEMORY.md`를 가리킨다.
+- [x] **새 기억 2개 추가** — `docs/decisions/project_boot_shell_selection.md`,
+      `docs/decisions/feedback_design_question_load.md`.
+
+## 시도했으나 실패한 접근
+
+없음. 다만 **진행 방식에서 한 가지 교정**이 있었다: 설계 선택지를 하나씩
+물어보는 방식으로 4개 질문을 진행한 뒤, 사용자가 "Ok I dont care for now
+I not good at this domain"이라고 답했다. 저수준 영역은 사용자가 배우는
+대상이라 트레이드오프 판단을 넘기면 안 된다 — **설명은 유지하되 결정은
+Claude가 한다.** 자세한 내용과 적용 방법은
+`docs/decisions/feedback_design_question_load.md`.
 
 ## TF-M3 브레인스토밍에서 확정된 결정 4가지
 
@@ -42,29 +71,33 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 ## 브레인스토밍 중 소스 대조로 확인한 사실 (실행 전 반드시 알고 있을 것)
 
 - **커널에 입력 경로가 아예 없다.** `kernel/.config`에서
-  `CONFIG_INPUT_EVDEV` / `CONFIG_INPUT_KEYBOARD` / `CONFIG_SERIO` 전부
-  `is not set`이다. `CONFIG_INPUT=y`(코어)만 켜져 있다. Task 1이 커널
-  재빌드인 이유.
+  `CONFIG_INPUT_EVDEV`(967) / `CONFIG_INPUT_KEYBOARD`(972) /
+  `CONFIG_SERIO`(983) 전부 `is not set`이다. `CONFIG_INPUT=y`(957, 코어)만
+  켜져 있다. Task 1이 커널 재빌드인 이유.
 - **init 수정은 필요 없다.** devtmpfs가 이미 `/dev`에 마운트돼 있어
   (`init/src/main.rs:100`) evdev를 켜면 `/dev/input/event0`이 자동 생성된다.
   TF-M2의 devpts와 다른 점.
 - **`vt.parseToCells()`는 호출마다 Terminal을 새로 만들고 버린다**
-  (`vt.zig:20-21`). 조각 단위로 도착하는 출력에는 못 쓴다 → 상태를 유지하는
-  `Screen` 구조체로 승격해야 한다.
+  (`terminal/src/vt.zig:20-21`). 조각 단위로 도착하는 출력에는 못 쓴다 →
+  상태를 유지하는 `Screen` 구조체로 승격해야 한다.
 - **`Terminal.vtStream()`은 `.handler = .init(self)`로 자기 주소를 담아
-  돌려준다**(`ghostty-src/src/terminal/Terminal.zig:374-377`). 따라서
-  Terminal과 Stream을 한 구조체에 담으려면 **힙에 두고 주소를 고정**해야
-  한다(`Screen.init`이 `*Screen`을 돌려주는 이유).
+  돌려준다**(`terminal/ghostty-src/src/terminal/Terminal.zig:374-377`).
+  따라서 Terminal과 Stream을 한 구조체에 담으려면 **힙에 두고 주소를 고정**
+  해야 한다(`Screen.init`이 `*Screen`을 돌려주는 이유).
 - **`RenderState.update`는 반복 호출 전제로 설계됐다**
-  (`render.zig:354-355`, "resets the terminal dirty state since it is
-  consumed"). 상태 유지 방식이 API 의도와 맞는다.
+  (`terminal/ghostty-src/src/terminal/render.zig:354-355`, "resets the
+  terminal dirty state since it is consumed"). 상태 유지 방식이 API 의도와
+  맞는다.
 - **`ghostty_vt.Stream`은 `lib_vt.zig:81`에서 재수출된다** — `Screen`의
   필드 타입으로 바로 쓸 수 있다.
-- **글리프 캐시가 7자로 하드코딩돼 있다**(`main.zig:49`). 아무 키나 칠 수
-  있게 되므로 출력 가능한 ASCII 전체(0x20~0x7E, 95자)로 넓혀야 한다.
-- **`forkpty`의 winsize가 `null`이다**(`pty.zig:25`) — PTY가 0열×0행이라
-  대화형 셸이 화면 폭을 모른다. cols/rows를 프레임버퍼 크기에서 한 번
-  계산해 렌더러·`Terminal.init`·`forkpty` 세 곳에 같은 값을 넘겨야 한다.
+- **글리프 캐시가 7자로 하드코딩돼 있다**(`terminal/src/main.zig:49`).
+  아무 키나 칠 수 있게 되므로 출력 가능한 ASCII 전체(0x20~0x7E, 95자)로
+  넓혀야 한다.
+- **`forkpty`의 winsize가 `null`이다**(`terminal/src/pty.zig:25`) — PTY가
+  0열×0행이라 대화형 셸이 화면 폭을 모른다. cols/rows를 프레임버퍼 크기에서
+  한 번 계산해 렌더러·`Terminal.init`·`forkpty` 세 곳에 같은 값을 넘겨야 한다.
+- **`terminal/check.sh`는 QEMU monitor를 TCP 45455로 열어둔다** — `screendump`
+  뿐 아니라 `sendkey`도 같은 통로로 보낼 수 있다. 자동 검증이 가능한 이유.
 
 ## Zig ↔ C 상호운용 가설 (plan에 적어둔 것, 실행으로 확인)
 
@@ -78,52 +111,33 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 
 ## 남은 작업
 
-- [ ] **TF-M3 Task 1~5 실행** — plan 문서의 체크박스를 따라간다.
-      Task 1(커널 config) → Task 2(`input.zig` + 네이티브 테스트) →
-      Task 3(`pty.zig`/`vt.zig` 개조) → Task 4(`main.zig` poll 루프 + `cat`)
-      → Task 5(대화형 fish + `check.sh` 게이트).
+- [ ] **TF-M3 Task 1 — 커널 config (다음에 바로 할 일).**
+      `kernel/.config`에서 세 줄을 아래처럼 바꾼다.
+      `# CONFIG_INPUT_EVDEV is not set` → `CONFIG_INPUT_EVDEV=y` /
+      `# CONFIG_INPUT_KEYBOARD is not set` → `CONFIG_INPUT_KEYBOARD=y` +
+      `CONFIG_KEYBOARD_ATKBD=y` /
+      `# CONFIG_SERIO is not set` → `CONFIG_SERIO=y` +
+      `CONFIG_SERIO_I8042=y` + `CONFIG_SERIO_LIBPS2=y`.
+      **사용자가 파일을 고치면 Claude가 `Read`로 확인한 뒤** plan Task 1
+      Step 2의 재빌드 + 부팅 로그 확인 명령을 안내한다.
+- [ ] **TF-M3 Task 2~5** — plan 문서의 체크박스를 따라간다.
       **Task 3과 Task 4는 연달아 진행할 것** — Task 3에서 `vt.parseToCells`를
       없애면 Task 4에서 `main.zig`를 고칠 때까지 `zig build`가 깨진다
       (plan Task 3 Step 4에 명시).
+- [ ] **`git push`** — 현재 origin/main보다 2 커밋 앞서 있다.
 - [ ] **TF-M4(종료 게이트)** — 전체 체인을 3회 연속 검증(BF-M4/DF-M3와
       동일한 패턴). TF-M3 완료 후 plan 작성.
-- [ ] **(미래 서브프로젝트) 설정 영속화 + 부팅 셸 선택** — 2026-08-11
-      사용자 요청. bash/zsh/fish/nushell 중 부팅 셸을 고르고 **마지막 사용한
-      셸을 다음 부팅 기본값**으로 쓴다(실시간 전환 불필요, 재부팅 반영으로
-      충분). **선행 조건:** 지금 루트 파일시스템은 initramfs(tmpfs)라
-      재부팅을 넘어 살아남는 저장소가 없다 — 선택을 저장할 곳 자체가 없다.
-      따라서 단독 기능이 아니라 "설정 영속화"(virtio-blk 디스크 이미지 +
-      파일시스템 + `init`이 읽는 경로) 서브프로젝트로 묶어 brainstorming
-      한다. 폰트 크기·색상·키바인딩 등 이후 설정도 같은 저장소를 쓴다.
-      구현 측 준비는 일부 돼 있다 — TF-M3에서 `pty.spawn(path, argv, cols,
-      rows)`가 임의 프로그램을 받도록 일반화되므로 셸을 바꿔 끼우는 것
-      자체는 가능해진다. 각 셸 바이너리를 `kernel/make_initrd.sh`가 initrd에
-      복사해야 한다는 점도 잊지 말 것(현재는 `fish`만 복사).
-- [ ] **(미래 서브프로젝트) Rust 컴포넌트를 전부 Zig로 재작성** —
-      2026-08-10 사용자 결정. 현재 `init/`(PID 1 `tars-init`)과 `kms/`가
-      Rust, `terminal/`이 Zig인 혼용 상태인데 이건 과도기일 뿐 의도된
-      아키텍처가 아니다. 동기는 성능이 아니라 **Zig를 제대로 써보는 학습**
-      이다. TF-M3 이후 별도 서브프로젝트로 brainstorming부터 시작한다.
-
-      **2026-08-10 조사 결과(재작성 착수 전 반드시 참고):**
-      - `init/`은 `libc::mount`/`fork`/`execve`/`ioctl`을 감싼 얇은 래퍼라
-        사실상 `unsafe` 덩어리다 — **Rust의 강점이 발휘될 자리가 아니다.**
-        Zig로 옮기면 오히려 짧아질 가능성이 높다. 빌드 시스템도 cargo +
-        zig build 이중 유지에서 하나로 준다.
-      - Zig의 진짜 강점은 `@cImport`보다 **툴체인**이다. 배포판 하나에
-        Clang + 97개 libc 헤더(~50MB)가 들어 있어 `x86_64-linux-gnu.2.28`
-        처럼 **glibc 버전까지 지정해 크로스 컴파일**할 수 있다. 지금은
-        amd64 컨테이너 안에서 빌드하지만, 원리상 macOS 호스트에서 직접
-        x86_64-linux 타겟 빌드가 가능하다 — Docker 왕복 제거 여지.
-      - **주의 1:** `@cImport`는 0.16에서 **deprecated** 됐다. 공식 권장은
-        `c.h` + `b.addTranslateC(...)`로 모듈화하는 방식(번역 결과는 동일).
-        우리 `font.zig`/`pty.zig`/`drm.zig`/`main.zig`(+TF-M3의 `input.zig`)
-        가 전부 구식 경로 위에 있어 언젠가 마이그레이션이 필요하다.
-        ghostty도 `build.zig.zon:12-17`에서 `translate_c`를 외부 의존성으로
-        끌어다 쓰며 과도기를 넘기는 중.
-      - **주의 2:** pre-1.0이라 반년마다 파괴적 변경이 온다(0.16의 `std.Io`
-        도입 + `std.posix` 대부분 제거, `zig-pkg/` 로컬 캐시 전환 등).
-        학습이 목적이면 감수할 만하지만 일정 예측에는 넣어둘 것.
+- [ ] **(미래 서브프로젝트) 설정 영속화 + 부팅 셸 선택** — 상세는
+      `docs/decisions/project_boot_shell_selection.md`. 요약: bash/zsh/fish/
+      nushell 중 부팅 셸을 고르고 마지막 사용한 것을 다음 부팅 기본값으로
+      쓴다(재부팅 반영으로 충분). **선행 조건은 영속 저장소** — 지금 루트
+      파일시스템은 initramfs(tmpfs)라 선택을 저장할 곳 자체가 없다.
+- [ ] **(미래 서브프로젝트) Rust 컴포넌트를 전부 Zig로 재작성** — 상세는
+      `docs/decisions/project_zig_rewrite_intent.md`. 요약: `init/`·`kms/`가
+      Rust, `terminal/`이 Zig인 혼용은 과도기일 뿐이다. `init/`은 libc 래퍼
+      덩어리라 Rust의 강점이 없고 Zig로 옮기면 짧아질 가능성이 높다.
+      주의: `@cImport`는 0.16에서 deprecated(권장은 `b.addTranslateC`)이고,
+      pre-1.0이라 반년마다 파괴적 변경이 온다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
@@ -135,33 +149,33 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 ## 핵심 파일
 
 - `docs/superpowers/plans/2026-08-11-tars-terminal-foundation-tf-m3.md` —
-  **TF-M3 plan(진행 중).** 모든 코드가 여기 들어 있다.
-- `kernel/.config` — Task 1에서 evdev/i8042 옵션을 켤 대상.
+  **TF-M3 plan(진행 중). 모든 코드가 여기 들어 있다.**
+- `MEMORY.md` + `docs/decisions/` — 세션을 넘어 유지되는 기억(색인 + 본문).
+- `kernel/.config:957,967,972,983` — Task 1에서 켤 옵션들.
 - `terminal/src/main.zig` — Task 4에서 poll 이벤트 루프로 전면 교체.
-- `terminal/src/pty.zig` / `vt.zig` — Task 3에서 개조.
-- `terminal/check.sh` — Task 5에서 게이트 교체. QEMU monitor를 TCP 45455로
-  열어두므로 `screendump`뿐 아니라 `sendkey`도 같은 통로로 보낼 수 있다.
-- `kernel/make_initrd.sh` — Task 4에서 `/usr/bin/cat` 추가.
+- `terminal/src/pty.zig:23-41` / `vt.zig:13-51` — Task 3에서 개조.
+- `terminal/check.sh` — Task 5에서 게이트 교체.
+- `kernel/make_initrd.sh:31` 근처 — Task 4에서 `/usr/bin/cat` 추가.
 - `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md` —
   Terminal Foundation design doc. 6번 결정(입력)이 TF-M3의 근거.
-- `docs/superpowers/plans/2026-08-10-tars-terminal-foundation-tf-m2.md` —
-  TF-M2 plan + 말미에 "plan과 달랐던 점" 기록(특히 devpts 교훈).
+- `docs/superpowers/plans/2026-08-10-tars-terminal-foundation-tf-m2.md:691-729`
+  — TF-M2의 "plan과 달랐던 점"(특히 devpts 교훈).
 - `terminal/ghostty-src/` — vendor된 ghostty 전체 소스(gitignore됨, 로컬만).
 
 ## 다음 에이전트에게
 
 1. `git log --oneline -5` && `git status`로 상태 확인.
-2. `MEMORY.md`(색인)와 거기서 가리키는 `docs/decisions/
-   feedback_execution_scope.md`, `docs/decisions/
-   feedback_commit_delegation.md`를 먼저 읽을 것.
-3. **TF-M3는 plan이 이미 있다** — brainstorming 다시 하지 말고 plan의
-   Task 1부터 바로 안내한다.
+2. `MEMORY.md`와 `docs/decisions/`의 feedback 3개
+   (`feedback_execution_scope`, `feedback_commit_delegation`,
+   `feedback_design_question_load`)를 먼저 읽을 것.
+3. **TF-M3는 plan이 이미 있다** — brainstorming을 다시 하지 말고 plan의
+   Task 1부터 바로 안내한다. 설계 트레이드오프를 사용자에게 되묻지 말 것.
 4. Claude가 직접 build/docker run/QEMU 명령을 실행하지 않는다
    (`git`/`find`/`Read`/`rg` 같은 읽기 전용 확인과 웹 리서치는 허용).
    **매 Step 완료 후 파일 내용을 `Read`로 직접 검증.**
-5. TF-M2에서 효과가 컸던 습관: **코드를 사용자에게 넘기기 전에 vendor된
+5. TF-M2·TF-M3에서 효과가 컸던 습관: **코드를 사용자에게 넘기기 전에 vendor된
    실제 소스(ghostty, glibc 헤더, 커널 `.config`, `make_initrd.sh`,
    `init/src/main.rs`)와 대조**해서 시그니처·경로·전제 조건을 확인한 것.
-   덕분에 컴파일 에러 0회, QEMU 실패 0회로 끝났다. 계속 유지할 것.
+   TF-M2는 이 덕분에 컴파일 에러 0회, QEMU 실패 0회로 끝났다. 계속 유지할 것.
 6. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지 말 것 —
    이미 여러 서브프로젝트에 걸쳐 확정됨.
