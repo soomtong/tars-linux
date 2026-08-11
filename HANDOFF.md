@@ -19,8 +19,8 @@ feedback_execution_scope.md`, `feedback_commit_delegation.md`,
 
 ## 현재 브랜치
 
-`main` — **origin/main보다 커밋 5개 앞서 있다(미push).** Working tree 깨끗함.
-최신 커밋 `0cf6bef`.
+`main` — **origin/main과 동기화됨(push 완료).** Working tree 깨끗함.
+TF-M3 커밋 5개(`77d58d1` … `0cf6bef`) + 문서/기억 커밋이 올라가 있다.
 
 ## 완료된 작업 (2026-08-11 세션, TF-M3 전체)
 
@@ -92,7 +92,6 @@ Task 1~5를 전부 실행했다. 각 Task의 체크박스와 말미의 "실제 �
       기존 게이트 스크립트는 `terminal/check.sh`(이미 TF-M3에서 입력 검증까지
       포함하도록 교체됨). 참고할 선례: `kernel/check.sh`, `docs/superpowers/
       plans/`의 BF-M4·DF-M3 plan.
-- [ ] **`git push`** — 현재 origin/main보다 5 커밋 앞서 있다.
 - [ ] **(미래 서브프로젝트) 설정 영속화 + 부팅 셸 선택** — 상세는
       `docs/decisions/project_boot_shell_selection.md`. 요약: bash/zsh/fish/
       nushell 중 부팅 셸을 고르고 마지막 사용한 것을 다음 부팅 기본값으로
