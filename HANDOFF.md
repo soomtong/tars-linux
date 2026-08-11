@@ -14,9 +14,8 @@ TF-M3는 TF-M2가 일부러 미뤄둔 입력 경로를 만든다: `/dev/input/ev
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
 해석. Claude는 design/plan 문서·`HANDOFF.md` 작성과 **승인된** 내용의
-git commit만 대신 수행한다(`~/.claude/projects/
--Users-dp-Repository-tars-linux/memory/feedback_execution_scope.md`,
-`feedback_commit_delegation.md` 참고).
+git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
+`docs/decisions/feedback_commit_delegation.md` 참고 — 색인은 `MEMORY.md`).
 
 ## 현재 브랜치
 
@@ -152,9 +151,9 @@ git commit만 대신 수행한다(`~/.claude/projects/
 ## 다음 에이전트에게
 
 1. `git log --oneline -5` && `git status`로 상태 확인.
-2. `feedback_execution_scope.md`, `feedback_commit_delegation.md`를 먼저
-   읽을 것(경로: `~/.claude/projects/-Users-dp-Repository-tars-linux/
-   memory/`).
+2. `MEMORY.md`(색인)와 거기서 가리키는 `docs/decisions/
+   feedback_execution_scope.md`, `docs/decisions/
+   feedback_commit_delegation.md`를 먼저 읽을 것.
 3. **TF-M3는 plan이 이미 있다** — brainstorming 다시 하지 말고 plan의
    Task 1부터 바로 안내한다.
 4. Claude가 직접 build/docker run/QEMU 명령을 실행하지 않는다

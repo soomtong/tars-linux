@@ -6,8 +6,8 @@
 > 실행은 **사용자가 직접** 하고, Claude는 설명 + 승인된 내용의 git commit만
 > 수행하는 pairing 방식을 쓴다. 위 서브스킬들이 기본으로 제안하는
 > subagent-driven/inline 자동 실행은 이 저장소에 적용하지 않는다
-> (`~/.claude/projects/-Users-dp-Repository-tars-linux/memory/
-> feedback_commit_delegation.md`, `feedback_execution_scope.md` 참고).
+> (`docs/decisions/feedback_commit_delegation.md`,
+> `docs/decisions/feedback_execution_scope.md` 참고 — 색인은 `MEMORY.md`).
 
 **Goal:** 커널에 evdev + i8042(PS/2) 키보드 경로를 켜고, Terminal Foundation
 앱이 `/dev/input/event0`에서 키 이벤트를 읽어 PTY master로 써 넣고, 그

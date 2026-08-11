@@ -67,3 +67,7 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 - 진행 중인 서브프로젝트: Display Foundation
   (`docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`)
 - 현재 진행 상황: `HANDOFF.md`
+- 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
+  한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로
+  옮겼다 — 저장소 밖이 아니라 저장소 안에 두어 히스토리에 남기기 위함이다.
+  새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
