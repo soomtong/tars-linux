@@ -24,3 +24,4 @@
 - [Boot Foundation restart](docs/decisions/project_boot_foundation_restart.md) — TARS를 새 저장소에서 재시작한 이유와 첫 서브프로젝트 범위
 - [Zig rewrite intent](docs/decisions/project_zig_rewrite_intent.md) — `init`/`kms`의 Rust 코드는 결국 Zig로 재작성 예정; 현재 혼용은 과도기, 동기는 Zig 학습
 - [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸을 bash/zsh/fish/nushell 중 선택하고 마지막 것을 기억하는 미래 기능; 영속 저장소가 선행 조건(현재 initrd는 tmpfs)
+- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 커널 UAPI 구조체는 `@cImport`로 그대로, ioctl 매크로·가변 인자 함수만 손으로 선언

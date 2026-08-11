@@ -1266,19 +1266,130 @@ git commit -m "Run interactive fish and verify typed input reaches the shell"
 
 ## TF-M3 완료 확인 체크리스트
 
-- [ ] 커널 부팅 로그에 `input: AT Translated Set 2 keyboard as ...`가 보임
-- [ ] `input_test`가 네이티브로 통과하고 `input_event size = 24`를 출력
+- [x] 커널 부팅 로그에 `input: AT Translated Set 2 keyboard as ...`가 보임
+- [x] `input_test`가 네이티브로 통과하고 `input_event size = 24`를 출력
       (= 가설 1 확인)
-- [ ] `vt_test`가 두 번째 feed 후에도 첫 내용이 남아 있음을 확인
+- [x] `vt_test`가 두 번째 feed 후에도 첫 내용이 남아 있음을 확인
       (= 상태 유지 성공)
-- [ ] `cat` 자식으로 `key>` ↔ `screen>` 왕복이 로그에 보임
-- [ ] `terminal/check.sh`가 `PASS` — 전후 픽셀 차이 + 로그의 `42`
-- [ ] screendump 육안 확인 완료
-- [ ] `HANDOFF.md` 갱신 + TF-M4(종료 게이트: 3회 연속 검증)로 이어갈 준비
+- [x] `cat` 자식으로 `key>` ↔ `screen>` 왕복이 로그에 보임
+- [x] `terminal/check.sh`가 `PASS` — 전후 픽셀 차이 + 로그의 `42`
+- [x] screendump 육안 확인 완료
+- [x] `HANDOFF.md` 갱신 + TF-M4(종료 게이트: 3회 연속 검증)로 이어갈 준비
+
+**완료: 2026-08-11.** 커밋 5개 — `77d58d1`(커널 config), `01f1356`(input.zig),
+`ba2be66`(pty/vt), `f0c4b1f`(이벤트 루프), `0cf6bef`(대화형 fish + 게이트).
 
 ---
 
 ## 실제 실행에서 plan과 달라진 점
 
-(완료 시점에 채운다 — TF-M2 plan 말미와 같은 형식으로, 다음 milestone이
-같은 함정을 반복하지 않도록 이유까지 기록한다.)
+### 1. `ghostty_vt.Stream`은 필드 타입으로 쓸 수 없다 (유일한 컴파일 에러)
+
+plan Task 3 Step 2의 `stream: ghostty_vt.Stream` 이 컴파일 에러를 냈다.
+
+```
+src/vt.zig:25:23: error: expected type 'type', found 'fn (comptime type) type'
+```
+
+`lib_vt.zig:81`이 재수출하는 `Stream`은 **핸들러 타입을 받는 제네릭 함수**
+(`stream.Stream(Handler)`)이지 타입이 아니다. `HANDOFF.md`에 "`lib_vt.zig:81`
+에서 재수출되므로 필드 타입으로 바로 쓸 수 있다"고 적어둔 관찰은 재수출
+사실만 맞고 사용 가능성 판단이 틀렸다.
+
+필요한 것은 **Terminal용으로 이미 인스턴스화된** `ghostty_vt.TerminalStream`
+이다(`stream_terminal.zig:26` → `terminal/main.zig:59` → `lib_vt.zig:80`).
+`Terminal.zig:30`도 정확히 이것을 `const Stream = ...`으로 가져다 쓰므로,
+`vtStream()`의 반환 타입이 곧 `TerminalStream`이다.
+
+**교훈:** 제네릭이 흔한 Zig 라이브러리에서는 "이름이 재수출된다"와 "필드
+타입으로 쓸 수 있다"가 다른 문제다. 다음에 vendor된 Zig 라이브러리의 타입을
+구조체 필드로 쓸 때는 **재수출 줄이 아니라 그 타입을 실제로 필드/변수로
+선언한 사용처**를 찾아 대조할 것. 여기서는 `Terminal.zig:30`이 그 사용처였고,
+그것만 봤으면 에러 없이 지나갔다.
+
+부수 소득: `stream_terminal.zig:35-37`에서 `Handler`가 `terminal: *Terminal`
+필드를 갖는 것이 확인됐다 — `Screen`을 힙에 고정해야 하는 근거가 한 번 더
+직접적으로 확인된 셈이다.
+
+### 2. `i8042: PNP:` 로그 줄은 나오지 않는다 (정상)
+
+Task 1 Step 2의 Expected에 적어둔 세 줄 중 첫 줄이 안 나왔다.
+
+```
+serio: i8042 KBD port at 0x60,0x64 irq 1       ← 나옴
+serio: i8042 AUX port at 0x60,0x64 irq 12      ← 나옴 (plan에 없던 줄)
+input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input0
+```
+
+`i8042: PNP: PS/2 Controller [...]`는 i8042가 **ACPI PNP 테이블에서 컨트롤러를
+발견**했을 때 찍는 로그인데, 이 커널은 `CONFIG_PNP`/ACPI가 꺼져 있어 그 경로를
+안 탄다. 대신 x86 레거시 고정 포트(0x60/0x64, IRQ 1/12)를 하드코딩해서 붙는다.
+**게이트로 삼을 줄은 `serio: i8042 KBD port`와 `input: AT Translated ...` 둘**
+이며, 첫 줄의 부재는 실패 신호가 아니다.
+
+`AUX port`(마우스)도 등록되지만 `CONFIG_INPUT_MOUSE`를 껐으므로 붙을 드라이버가
+없어 `input1`은 생기지 않는다. → **input 장치가 키보드 하나뿐**이라는 것이
+실측으로 확인됐고, `/dev/input/event0` 하드코딩(장치 열거 생략)의 근거가 됐다.
+
+### 3. initrd에 `uname`/`mkdir`을 추가해야 했다 (plan에 없던 작업)
+
+Task 4의 QEMU 로그에서 serial 콘솔 fish가 이런 에러를 쏟는 것이 보였다.
+
+```
+fish: Unknown command: uname
+  ... fish_git_prompt.fish → fish_vcs_prompt → fish_prompt
+```
+
+initrd에 `fish`와 `cat`밖에 없어서다. 이건 BF milestone부터 있던 문제라
+`cat` 단계에서는 무해했지만, **Task 5에서 자식을 대화형 fish로 바꾸면 같은
+에러가 우리 PTY로 쏟아져 화면을 뒤덮는다.** `--no-config`는 `config.fish`
+소싱만 막고 `/usr/share/fish/functions/`의 **함수 오토로드는 못 막기**
+때문이다.
+
+그래서 Task 5에서 `make_initrd.sh`에 `uname`과 `mkdir`을 추가했다. 결과적으로
+before 스크린샷이 `@(none) ~#` 프롬프트 한 줄로 깨끗하게 나왔다.
+
+**교훈:** initrd에 셸을 넣는다는 것은 **그 셸이 프롬프트를 그리며 호출하는
+외부 명령까지** 넣는다는 뜻이다. 비대화형(`-c`)에서는 안 드러나고 대화형으로
+바꾸는 순간 드러난다.
+
+### 4. 키 이벤트는 배치로 도착한다 — `readKeys`의 루프가 값을 했다
+
+Task 4 로그에서 `sendkey`를 0.3초 간격으로 보냈는데도 이렇게 나왔다.
+
+```
+terminal: key> 1 byte(s)     ← 't'
+terminal: key> 4 byte(s)     ← 'a','r','s',CR 이 한 번의 read()에
+```
+
+앞선 키의 렌더링(전체 화면 fill + DRM present)이 0.3초보다 오래 걸려 그동안
+evdev 커널 버퍼에 이벤트가 쌓인 것이다. `readKeys`가 한 번의 `read()`에서
+**여러 `input_event`를 순회하도록** 만든 설계(plan Task 2 Step 1)가 아니었다면
+`ars`가 통째로 유실됐다. evdev를 쓸 때 "한 번 read = 한 이벤트"로 가정하면
+안 된다는 것이 실측으로 확인됐다.
+
+### 5. Zig ↔ C 상호운용 가설 결론
+
+- **가설 1 (`struct input_event`가 translate-c로 넘어온다) — 확인.**
+  `@sizeOf(c.struct_input_event) == 24`. opaque였다면 `@sizeOf` 자체가
+  컴파일 에러였을 것이므로, 필드까지 온전히 넘어왔다는 뜻이다.
+  24 = `struct timeval` 16 + `type` 2 + `code` 2 + `value` 4로 C ABI와 일치.
+- **가설 2 (ioctl 매크로는 못 가져온다) — 이번엔 확인할 필요조차 없었다.**
+  장치가 하나뿐이라 `/dev/input/event0`을 하드코딩하고 `EVIOCGBIT` 열거를
+  아예 안 했다.
+
+정리된 규칙: **커널 UAPI의 평범한(비트필드 없는) 구조체는 `@cImport`로
+그대로 쓰고, `_IOR`/`_IOWR` 계열 매크로만 손으로 재구현한다.**
+`drm.zig:108-110`이 `_IOWR`을 비트 연산으로 직접 쓴 것과 대비되는 지점이다.
+(→ `docs/decisions/project_zig_c_uapi_rule.md`)
+
+### 6. 통과한 게이트의 실제 수치
+
+- `vt_test`: 1차 feed 7 cells → 2차 feed 9 cells (상태 유지). `\x1b[`와 `2J`를
+  별도 호출로 먹여도 화면 지우기로 해석돼 0 cells (파서 상태 유지).
+  '하'가 col 5, spacer가 col 6(codepoint 0으로 걸러짐), '이'가 col 7 —
+  `col * CELL_W` 렌더링 결정의 실측 근거.
+- `check.sh`: 프레임버퍼 1280x800 → grid 155x47. 전후 픽셀 차이 **533**
+  (임계값 100). serial 로그에서 `42` 발견.
+- 최종 화면: `@(none) ~# math 6 x 7` / `42` / `@(none) ~#` 세 줄.
+  세 번째 줄의 새 프롬프트가 대화형 루프 한 사이클 완주의 증거다.

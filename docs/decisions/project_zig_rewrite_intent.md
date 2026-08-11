@@ -24,9 +24,15 @@ metadata:
 `@cImport`는 Zig 0.16에서 deprecated(→ `b.addTranslateC`)됐고, translate-c는
 비트필드 구조체를 opaque로 강등시켜 **커널 UAPI 헤더에서 자주 막힌다** —
 이 저장소의 `terminal/src/drm.zig`가 이미 DRM 구조체를 손으로 `extern
-struct`로 옮긴 이유다. TF-M3(evdev)에서 `linux/input.h`의 `struct
-input_event`가 자동 번역되는지가 이 가설의 검증대이며, 그 결과를 재작성
-착수 판단에 쓴다. 상세는 프로젝트의 `HANDOFF.md` "남은 작업" 절 참고.
+struct`로 옮긴 이유다.
+
+**2026-08-11 TF-M3에서 이 검증대의 답이 나왔다: 생각보다 덜 막힌다.**
+`linux/input.h`의 `struct input_event`는 `@cImport`로 그대로 넘어왔고
+(`@sizeOf == 24`), opaque 강등은 **비트필드가 있을 때만** 발동한다는 것이
+확인됐다. 즉 "커널 UAPI 헤더에서 자주 막힌다"는 위 문장은 과했다 —
+막히는 것은 구조체가 아니라 `_IOR`/`_IOWR` 계열 **매크로**다. 재작성
+착수를 이 이유로 미룰 근거는 약해졌다. 상세 규칙은
+[[project_zig_c_uapi_rule]].
 
 **How to apply:** 새 컴포넌트를 만들 때 언어 선택을 물어야 한다면 Zig를
 기본값으로 제안한다. `init/`이나 `kms/`에 Rust 코드를 크게 늘리는 작업이
