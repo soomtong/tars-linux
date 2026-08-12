@@ -3,6 +3,29 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
+REPO_ROOT="$(cd .. && pwd)"
+
+# --- (변경 1) vendor 사전 준비 ----------------------------------------
+# 세 스크립트는 모두 "산출물이 이미 있으면 아무것도 안 한다"라서 반복 실행에
+# 안전하다. ghostty-src는 다운로드에 더해 lib-vt 빌드까지 하므로 트리가 없을
+# 때만 부른다(있으면 건너뛴다 — 매 회차 다시 빌드하지 않기 위해).
+if [ ! -d ghostty-src ]; then
+  if ! ./vendor_libghostty_vt.sh; then
+    echo "FAIL: vendoring ghostty source failed"
+    exit 1
+  fi
+fi
+
+if ! ./vendor_stb_truetype.sh; then
+  echo "FAIL: vendoring stb_truetype.h failed"
+  exit 1
+fi
+
+if ! ./vendor_fonts.sh; then
+  echo "FAIL: vendoring the 8x4x4 font failed"
+  exit 1
+fi
+
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
   exit 1
@@ -13,7 +36,7 @@ if ! (cd ../init && cargo build --release); then
   exit 1
 fi
 
-if ! (cd . && zig build); then
+if ! zig build; then
   echo "FAIL: terminal build failed"
   exit 1
 fi
@@ -26,6 +49,17 @@ fi
 MONITOR_PORT=45455
 LOG="$(mktemp)"
 QEMU_PID=""
+
+# --- (변경 2) 스크린샷을 out/tf/ 아래 고정 이름으로 ---------------------
+# 예전에는 /workspace 아래 mktemp로 만들고 지우지 않아서 저장소 루트에
+# 3MB짜리 파일이 계속 쌓였다. out/은 .gitignore 대상이고 루트 check.sh의
+# clean()이 매 회차 지운다. QEMU monitor의 screendump는 QEMU 프로세스의
+# 작업 디렉터리를 기준으로 삼으므로 절대 경로로 넘긴다.
+SCREENS_DIR="${REPO_ROOT}/out/tf"
+mkdir -p "$SCREENS_DIR"
+BEFORE="${SCREENS_DIR}/before.ppm"
+AFTER="${SCREENS_DIR}/after.ppm"
+rm -f "$BEFORE" "$AFTER"
 
 cleanup() {
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -62,10 +96,41 @@ if [ "$MONITOR_READY" != "1" ]; then
   exit 1
 fi
 
-sleep 30
+# --- (변경 3) 고정 sleep 30 대신 로그 폴링 ------------------------------
+# main.zig:56의 dumpScreen()은 PTY 출력을 렌더링할 때마다
+# "terminal: screen> ..." 한 줄을 serial에 찍는다. 그 줄이 처음 나타났다는
+# 것은 (a) DRM 열기, (b) 폰트 래스터라이즈, (c) evdev 열기, (d) fish spawn,
+# (e) 첫 프롬프트 렌더링까지 전부 끝났다는 뜻이다 — 키를 넣어도 되는 시점의
+# 정확한 신호다. 고정 대기는 빠른 머신에서 낭비이고 느린 머신에서 깨진다.
+READY=0
+for _ in $(seq 1 120); do
+  if grep -q "terminal: screen>" "$LOG"; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
 
-BEFORE="$(mktemp /workspace/tf-m3-before-XXXXXX.ppm)"
-AFTER="$(mktemp /workspace/tf-m3-after-XXXXXX.ppm)"
+if [ "$READY" != "1" ]; then
+  echo "FAIL: terminal did not render a prompt within 120s"
+  echo "--- startup markers ---"
+  for marker in \
+    "terminal: grid " \
+    "terminal: rasterized " \
+    "terminal: opened /dev/input/event0" \
+    "terminal: spawned child pid "; do
+    if grep -q "$marker" "$LOG"; then
+      echo "  ok      ${marker}"
+    else
+      echo "  MISSING ${marker}"
+    fi
+  done
+  tail -n 60 "$LOG"
+  exit 1
+fi
+
+# 첫 렌더링 직후 present가 끝나도록 한 박자 준다.
+sleep 1
 
 # 1) 키를 넣기 전 화면
 echo "screendump ${BEFORE}" >&3
@@ -78,7 +143,17 @@ for k in m a t h spc 6 spc x spc 7 ret; do
   echo "sendkey $k" >&3
   sleep 0.3
 done
-sleep 3
+
+# --- (변경 4) 결과도 고정 sleep 3 대신 폴링 -----------------------------
+# 42가 로그에 찍힌 뒤에 after 스크린샷을 뜨면, 픽셀 차이 검사와 로그 검사가
+# 같은 화면 상태를 본다.
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*42" "$LOG"; then
+    break
+  fi
+  sleep 1
+done
+sleep 1
 
 # 3) 키를 넣은 뒤 화면
 echo "screendump ${AFTER}" >&3
@@ -92,7 +167,7 @@ wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
 
 if [ ! -s "$BEFORE" ] || [ ! -s "$AFTER" ]; then
-  echo "FAIL: screendump did not produce both files"
+  echo "FAIL: screendump did not produce both files (kept in ${SCREENS_DIR})"
   tail -n 60 "$LOG"
   exit 1
 fi
@@ -118,6 +193,7 @@ echo "Pixels changed after typing: ${DIFF_PIXELS:-0}"
 
 if [ -z "$DIFF_PIXELS" ] || [ "$DIFF_PIXELS" -lt 100 ]; then
   echo "FAIL: screen did not change after key injection (${DIFF_PIXELS:-0} pixels)"
+  echo "      screenshots kept in ${SCREENS_DIR}"
   tail -n 60 "$LOG"
   exit 1
 fi
@@ -125,10 +201,14 @@ fi
 # 파싱 경로 검증: 셸이 명령을 실행해 42를 내놓았는가.
 if ! grep -q "terminal: screen>.*42" "$LOG"; then
   echo "FAIL: expected '42' in the parsed screen dump (shell did not run the command)"
+  echo "      screenshots kept in ${SCREENS_DIR}"
   tail -n 60 "$LOG"
   exit 1
 fi
 echo "Found '42' in parsed screen dump"
+
+# 성공했으면 스크린샷은 필요 없다. 실패했을 때만 남겨서 눈으로 볼 수 있게 한다.
+rm -f "$BEFORE" "$AFTER"
 
 echo "PASS"
 exit 0
