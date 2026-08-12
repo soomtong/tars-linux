@@ -5,7 +5,6 @@ cd "$(dirname "$0")"
 
 (cd ../kernel && ./build.sh)
 (cd ../init && cargo build --release)
-(cd ../kms && cargo build --release)
 (cd ../kernel && ./make_initrd.sh)
 ./build.sh
 ./make_iso.sh
