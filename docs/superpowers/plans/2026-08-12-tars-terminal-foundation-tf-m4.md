@@ -521,7 +521,106 @@ git commit -m "Rebuild the root gate around the boot and terminal chains"
 
 ### Task 4: 전체 게이트 3회 연속 실행
 
-**Files:** 없음(실행과 결과 해석만)
+**Files:**
+- Create: `terminal/prepare.sh` (Step 0 정정에서 추가)
+- Modify: `boot/check.sh:8`, `terminal/check.sh:8-30` (같은 정정)
+
+- [x] **Step 0(정정): `boot/check.sh`가 terminal을 빌드하도록 공용 준비
+      스크립트 분리**
+
+Step 1을 처음 실행했을 때 `BF-M4 run 1/3`에서 이렇게 실패했다.
+
+```
+cp: cannot stat '../terminal/zig-out/bin/terminal': No such file or directory
+BF-M4 FAIL: run 1/3 failed
+```
+
+원인: `kernel/make_initrd.sh:23`이 `../terminal/zig-out/bin/terminal`을 무조건
+복사하는데 `boot/check.sh`는 kernel과 init만 빌드한다. 게다가 Task 3에서
+`clean()`에 `terminal/zig-out`을 넣었으므로 TF-M3 때 남아 있던 바이너리조차
+없다. **DF-M3 Task 2 Step 3(정정)과 완전히 같은 종류의 회귀다** — 그때는
+`make_initrd.sh`가 kms를 복사하기 시작했는데 `boot/check.sh`가 kms를 안
+빌드해서 깨졌다. `make_initrd.sh`의 복사 목록이 바뀔 때마다
+`boot/check.sh`가 뒤처지는 패턴이며, 루트 게이트가 BF 체인을 매번 돌리기
+때문에 이번에도 즉시 잡혔다.
+
+`zig build` 한 줄을 `boot/check.sh`에 넣는 것으로는 부족하다 — terminal
+빌드는 vendor 트리를 전제하고 `make_initrd.sh:27`은 폰트 파일까지 복사한다.
+그 준비 로직이 이미 `terminal/check.sh`에 있으므로, 복붙 대신 공용 스크립트로
+뽑아 두 체인이 같이 부르게 했다.
+
+Create `terminal/prepare.sh` (`chmod +x` 필요):
+
+```bash
+#!/usr/bin/env bash
+#
+# initrd에 들어갈 terminal 바이너리와 그 vendor 입력을 준비한다.
+# kernel/make_initrd.sh가 ../terminal/zig-out/bin/terminal 과
+# ../terminal/vendor/fonts/Hanme_8x4x4.ttf 를 무조건 복사하므로, initrd를
+# 만드는 체인은 어느 것이든 이 준비를 먼저 거쳐야 한다 — boot/check.sh와
+# terminal/check.sh 둘 다 이 스크립트를 부른다.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+# 세 vendor 스크립트는 산출물이 이미 있으면 아무것도 하지 않는다.
+# ghostty-src는 다운로드에 더해 lib-vt 빌드까지 하므로 트리가 없을 때만 부른다.
+if [ ! -d ghostty-src ]; then
+  ./vendor_libghostty_vt.sh
+fi
+./vendor_stb_truetype.sh
+./vendor_fonts.sh
+
+zig build
+```
+
+`boot/check.sh`의 6~11행(Task 1에서 kms 줄을 뺀 자리에 대응하는 terminal 줄이
+들어간다):
+
+```bash
+(cd ../kernel && ./build.sh)
+(cd ../init && cargo build --release)
+(cd ../terminal && ./prepare.sh)
+(cd ../kernel && ./make_initrd.sh)
+./build.sh
+./make_iso.sh
+```
+
+`terminal/check.sh`는 Task 2에서 넣은 vendor 블록 세 개와 `zig build` 블록을
+지우고 한 블록으로 대체한다(주석도 함께 갱신).
+
+```bash
+# vendor 준비 + terminal 빌드는 prepare.sh가 맡는다(boot/check.sh와 공유).
+if ! (cd ../kernel && ./build.sh); then
+  echo "FAIL: kernel build failed"
+  exit 1
+fi
+
+if ! (cd ../init && cargo build --release); then
+  echo "FAIL: init build failed"
+  exit 1
+fi
+
+if ! ./prepare.sh; then
+  echo "FAIL: terminal build failed"
+  exit 1
+fi
+
+if ! (cd ../kernel && ./make_initrd.sh); then
+  echo "FAIL: initrd build failed"
+  exit 1
+fi
+```
+
+**`make_initrd.sh`가 직접 `prepare.sh`를 부르게 하지 않은 이유:** 그러면 어떤
+체인도 다시는 뒤처지지 않지만, `make_initrd.sh`는 init·fish·폰트 중 아무것도
+빌드하지 않는 순수 조립 스크립트다. terminal만 예외로 빌드하게 만들면 "init은
+호출자가 빌드, terminal은 자기가 빌드"라는 비대칭이 생긴다. 재발 방지는 루트
+게이트가 BF 체인을 매 회 돌리는 것과 `docs/decisions/
+project_gate_chain_composition.md`로 처리한다.
+
+커밋: `4c33a47` "Share terminal build preparation between the boot and
+terminal gates"
 
 - [ ] **Step 1: 루트 `check.sh` 실행**
 
