@@ -20,8 +20,9 @@ feedback_execution_scope.md`, `feedback_commit_delegation.md`,
 
 ## 현재 브랜치
 
-`main` — 로컬 커밋이 origin보다 앞서 있다(**push 안 됨**). Working tree
-깨끗함. TF-M4 커밋 8개(`488db5b` … `136129c`) + 문서/기억 커밋.
+`main` — **origin/main과 동기화됨(push 완료).** Working tree 깨끗함.
+TF-M4 커밋 8개(`488db5b` … `136129c`) + 문서/기억 커밋 2개(`672e9e0`,
+`c07ba56`)가 올라가 있다.
 
 ## 완료된 작업 (2026-08-12~13 세션, TF-M4 전체)
 
@@ -91,8 +92,8 @@ Task 1~5를 전부 실행했다. **말미의 "실제 실행에서 plan과 달라
 
 ## 남은 작업
 
-- [ ] **`git push` (다음에 바로 할 일).** 로컬 커밋 8개가 origin에 없다.
-- [ ] **다음 서브프로젝트 선정 — 사용자와 논의.** 후보 두 개:
+- [ ] **다음 서브프로젝트 선정 — 사용자와 논의 (다음에 바로 할 일).**
+      후보 두 개:
       - **설정 영속화 + 부팅 셸 선택** (`docs/decisions/
         project_boot_shell_selection.md`). bash/zsh/fish/nushell 중 부팅 셸을
         고르고 마지막 것을 기본값으로. **선행 조건은 영속 저장소** — 현재
@@ -136,7 +137,7 @@ Task 1~5를 전부 실행했다. **말미의 "실제 실행에서 plan과 달라
 
 ## 다음 에이전트에게
 
-1. `git log --oneline -8` && `git status`로 상태 확인 후 **`git push`**.
+1. `git log --oneline -8` && `git status`로 상태 확인.
 2. `MEMORY.md`와 `docs/decisions/`의 feedback 3개
    (`feedback_execution_scope`, `feedback_commit_delegation`,
    `feedback_design_question_load`)를 먼저 읽을 것.
