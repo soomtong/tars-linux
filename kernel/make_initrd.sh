@@ -20,7 +20,12 @@ mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev"
 cp ../init/target/release/tars-init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
+# Debug 빌드의 terminal은 42MB인데 대부분이 디버그 심볼이다. initrd가 커지면
+# BF 체인(limine이 BIOS INT13h로 ISO에서 읽는 경로)이 부팅조차 못 한다.
+# initrd에 들어가는 복사본만 strip한다 — 컴파일 결과는 그대로고, 로컬
+# zig-out/bin/terminal은 디버깅용으로 심볼을 유지한다.
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
+strip "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
 mkdir -p "$WORKDIR/vendor/fonts"
@@ -48,4 +53,8 @@ cp -r /usr/share/fish/functions "$WORKDIR/usr/share/fish/"
 cp /usr/share/fish/config.fish "$WORKDIR/usr/share/fish/"
 cp /usr/share/fish/__fish_build_paths.fish "$WORKDIR/usr/share/fish/"
 
-(cd "$WORKDIR" && find . | cpio -o -H newc) > initrd.cpio
+# gzip으로 압축해 둔다. 커널은 initramfs의 magic을 보고 알아서 푼다
+# (CONFIG_RD_GZIP=y). 파일명은 initrd.cpio 그대로 유지한다 — limine.conf와
+# 세 check 스크립트가 이 이름을 참조하기 때문이다. 53MB → strip 19.8MB →
+# gzip 6.5MB.
+(cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -9 > initrd.cpio
