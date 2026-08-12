@@ -5,27 +5,7 @@ cd "$(dirname "$0")"
 
 REPO_ROOT="$(cd .. && pwd)"
 
-# --- (변경 1) vendor 사전 준비 ----------------------------------------
-# 세 스크립트는 모두 "산출물이 이미 있으면 아무것도 안 한다"라서 반복 실행에
-# 안전하다. ghostty-src는 다운로드에 더해 lib-vt 빌드까지 하므로 트리가 없을
-# 때만 부른다(있으면 건너뛴다 — 매 회차 다시 빌드하지 않기 위해).
-if [ ! -d ghostty-src ]; then
-  if ! ./vendor_libghostty_vt.sh; then
-    echo "FAIL: vendoring ghostty source failed"
-    exit 1
-  fi
-fi
-
-if ! ./vendor_stb_truetype.sh; then
-  echo "FAIL: vendoring stb_truetype.h failed"
-  exit 1
-fi
-
-if ! ./vendor_fonts.sh; then
-  echo "FAIL: vendoring the 8x4x4 font failed"
-  exit 1
-fi
-
+# vendor 준비 + terminal 빌드는 prepare.sh가 맡는다(boot/check.sh와 공유).
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
   exit 1
@@ -36,7 +16,7 @@ if ! (cd ../init && cargo build --release); then
   exit 1
 fi
 
-if ! zig build; then
+if ! ./prepare.sh; then
   echo "FAIL: terminal build failed"
   exit 1
 fi
