@@ -1,7 +1,7 @@
 # TARS Terminal Foundation — Design
 
 **Date:** 2026-08-08
-**Status:** Design approved, awaiting TF-M0 plan
+**Status:** TF-M4 complete (2026-08-13); Terminal Foundation complete
 
 ## 배경
 

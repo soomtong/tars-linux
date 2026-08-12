@@ -28,6 +28,28 @@ QEMU에 하나뿐이라 `/dev/input/event0`을 하드코딩하고 `EVIOCGBIT` �
 `execv`의 `char *const argv[]`가 `[*c]const [*c]u8`로 번역돼 Zig의
 `?[*:0]const u8` 배열을 못 넘기는 것도 같은 이유다.
 
+**최적화 모드를 바꾸면 `@cImport`가 깨진다(2026-08-12 TF-M4에서 확인).**
+initrd를 줄이려고 `zig build -Doptimize=ReleaseSafe`로 바꿨더니
+`drm.zig:3`의 `@cImport` 전체가 `error: C import failed`로 실패했다. 원인은
+우리 코드가 아니라 glibc의 fortify 헤더다 — Debug가 아닌 모드에서 Zig가
+`-D_FORTIFY_SOURCE`를 붙이면 `bits/fcntl2.h`가 활성화되고, 그 안의
+`__open_too_many_args()`처럼 `__attribute__((error))`가 달린 선언을
+translate-c가 번역하지 못한다.
+
+```
+/usr/local/zig/lib/libc/include/generic-glibc/bits/fcntl2.h:46:5:
+  error: call to '__error__' declared with attribute error:
+  open can be called either with 2 or 3 arguments, not more
+```
+
+즉 **`@cImport`로 `fcntl.h`를 끌어다 쓰는 코드는 Debug 모드에 묶인다.**
+우회는 `@cImport` 블록 안에서 `@cDefine("_FORTIFY_SOURCE", "0")`을 먼저
+선언하는 것이지만, TF-M4에서는 종료 게이트 도중에 검증 대상 바이너리의
+컴파일 모드를 바꾸는 위험을 피해 Debug를 유지하고 크기 문제는
+[[project_gate_chain_composition]]에 적은 initrd gzip 압축으로 해결했다.
+`@cImport`를 `b.addTranslateC`로 옮기게 되면(0.16 권장 경로) 이 제약도 함께
+재검토할 것.
+
 **Zig 라이브러리 타입을 구조체 필드로 쓸 때 주의:** 이건 C 상호운용이
 아니라 Zig 쪽 함정인데 같은 세션에서 겪었다. 재수출된 이름이 **제네릭
 함수**(`fn (comptime type) type`)일 수 있다 — `ghostty_vt.Stream`이
