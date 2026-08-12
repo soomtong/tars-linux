@@ -1,14 +1,15 @@
-# HANDOFF: TF-M3 완료, 다음은 TF-M4(종료 게이트) plan 작성
+# HANDOFF: Terminal Foundation 완료, 다음 서브프로젝트 미정
 
 ## 목표
 
-Terminal Foundation 네 번째 milestone **TF-M3(evdev 키보드 입력)**을
-2026-08-11에 **완료**했다. `/dev/input/event0`에서 키 이벤트를 읽어 PTY
-master에 write하고, 돌아온 출력을 다시 파싱해 화면을 갱신하는 이벤트 루프가
-동작한다. **Terminal Foundation MVP의 기능 목표는 여기서 달성됐다.**
+Terminal Foundation 마지막 milestone **TF-M4(종료 게이트)**를 2026-08-13에
+**완료**했다. 루트 `check.sh`가 BF·TF 두 체인을 각각 3회 연속 clean 재빌드로
+검증하고 `TARS check PASS`로 끝난다. 이로써 **Terminal Foundation
+(TF-M0~M4) 전체가 끝났고**, Boot Foundation·Display Foundation에 이어 세 번째
+서브프로젝트가 마무리됐다.
 
-다음은 **TF-M4(종료 게이트)** — BF-M4/DF-M3와 같은 패턴으로 전체 체인을
-3회 연속 검증한다. plan은 아직 없다(이 시점에 새로 작성).
+다음 서브프로젝트는 **아직 정하지 않았다** — 아래 "남은 작업"의 후보 두 개를
+사용자와 논의하는 것이 다음 세션의 첫 일이다.
 
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
@@ -19,93 +20,95 @@ feedback_execution_scope.md`, `feedback_commit_delegation.md`,
 
 ## 현재 브랜치
 
-`main` — **origin/main과 동기화됨(push 완료).** Working tree 깨끗함.
-TF-M3 커밋 5개(`77d58d1` … `0cf6bef`) + 문서/기억 커밋이 올라가 있다.
+`main` — 로컬 커밋이 origin보다 앞서 있다(**push 안 됨**). Working tree
+깨끗함. TF-M4 커밋 8개(`488db5b` … `136129c`) + 문서/기억 커밋.
 
-## 완료된 작업 (2026-08-11 세션, TF-M3 전체)
+## 완료된 작업 (2026-08-12~13 세션, TF-M4 전체)
 
-plan `docs/superpowers/plans/2026-08-11-tars-terminal-foundation-tf-m3.md`의
-Task 1~5를 전부 실행했다. 각 Task의 체크박스와 말미의 "실제 실행에서 plan과
-달라진 점" 절이 채워져 있다 — **다음 세션은 그 절을 먼저 읽을 것.**
+plan `docs/superpowers/plans/2026-08-12-tars-terminal-foundation-tf-m4.md`의
+Task 1~5를 전부 실행했다. **말미의 "실제 실행에서 plan과 달라진 점" 5개
+항목이 이번 세션에서 가장 밀도 높은 내용이다 — 다음 세션은 그것부터 읽을 것.**
 
-- [x] **Task 1 — 커널 config** `77d58d1`. `CONFIG_INPUT_EVDEV`,
-      `CONFIG_INPUT_KEYBOARD` + `CONFIG_KEYBOARD_ATKBD`, `CONFIG_SERIO` +
-      `CONFIG_SERIO_I8042` + `CONFIG_SERIO_LIBPS2` 활성화.
-      부팅 로그에 `input: AT Translated Set 2 keyboard as ...` 확인.
-- [x] **Task 2 — `input.zig`** `01f1356`. evdev 파싱 + US QWERTY 키맵(0~57)
-      + Shift 상태 머신. 네이티브 `input_test`가 `input_event size = 24` 출력
-      후 PASS.
-- [x] **Task 3 — `pty.zig`/`vt.zig`** `ba2be66`. `spawn()`이 임의 프로그램 +
-      winsize를 받도록 일반화, `parseToCells` → 상태 유지형 `Screen`으로 승격.
-      `vt_test`가 7 → 9 cells(상태 유지)와 조각난 이스케이프 시퀀스 처리 확인.
-- [x] **Task 4 — 이벤트 루프** `f0c4b1f`. `poll(2)`로 evdev/PTY 두 fd 대기.
-      자식 `cat`으로 `key>` ↔ `screen>` 왕복 확인, 화면에 `tars` 두 줄.
-- [x] **Task 5 — 대화형 fish + 게이트** `0cf6bef`. `check.sh`가 전/후
-      screendump 픽셀 차이(533 > 100)와 로그의 `42`를 검사해 `PASS`.
-      화면: `@(none) ~# math 6 x 7` / `42` / `@(none) ~#`.
-- [x] **기억 추가** — `docs/decisions/project_zig_c_uapi_rule.md` 신규,
-      `project_zig_rewrite_intent.md`에 검증 결과 반영, `MEMORY.md` 색인 갱신.
+- [x] **Task 1 — kms 잔재 정리 + DF 체인 은퇴** `53d3146`. `boot/check.sh`의
+      kms 빌드 줄 제거, `display/check.sh`에 은퇴 주석. DF 게이트는 TF-M2에서
+      initrd가 kms→terminal로 바뀐 순간 통과 불가능해졌다.
+- [x] **Task 2 — `terminal/check.sh` 견고화** `017ced5`. 고정 `sleep 30` →
+      serial 로그 폴링(`terminal: screen>`), 스크린샷을 `out/tf/`로 옮기고
+      PASS 시 삭제, 타임아웃 시 startup 마커 4개로 실패 지점 진단.
+- [x] **Task 3 — 루트 `check.sh` 재구성** `ac870a1`. BF + TF 두 체인 각 3회.
+      `clean()`은 빌드 산출물만(`terminal/zig-pkg`·`vendor`·`ghostty-src`는
+      네트워크로만 복구되므로 **절대 지우지 않는다**).
+- [x] **정정 1 — `terminal/prepare.sh` 신설** `4c33a47`. vendor 준비 +
+      `zig build`를 뽑아 `boot/check.sh`와 `terminal/check.sh`가 공유.
+- [x] **정정 2 — BF 부팅 대기를 폴링으로** `04c5c8d`. `timeout 15` 제거,
+      배너까지 최대 120초 대기 + 실제 소요 시간 출력.
+- [x] **정정 3 — initrd 축소** `4504a7f` → `136129c`. gzip 압축 채택
+      (53MB → 11.8MB), strip은 측정 후 **거부**(6.5MB지만 게스트 안에서
+      에러 트레이스를 영구히 포기하게 됨).
+- [x] **게이트 통과** — BF 3/3(부팅 ~34초), TF 3/3(`Pixels changed` 533~785),
+      `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
+- [x] **문서/기억** — design doc Status 갱신, `docs/decisions/
+      project_gate_chain_composition.md` 신규, `project_zig_c_uapi_rule.md`에
+      fortify 제약 추가, `MEMORY.md` 색인 갱신.
 
 ## 시도했으나 실패한 접근
 
-컴파일 에러 **1회**뿐이었다(TF-M2는 0회).
+- **`zig build -Doptimize=ReleaseSafe`** — `drm.zig:3`의 `@cImport`가
+  `error: C import failed`로 깨진다. Debug가 아닌 모드에서 Zig가 붙이는
+  `-D_FORTIFY_SOURCE` 때문에 glibc `bits/fcntl2.h`가 활성화되고, 그 안의
+  `__attribute__((error))` 선언을 translate-c가 번역하지 못한다. 우회는
+  `@cDefine("_FORTIFY_SOURCE", "0")`이지만 종료 게이트 도중 검증 대상
+  바이너리를 바꾸는 위험이 있어 쓰지 않았다.
+  → `docs/decisions/project_zig_c_uapi_rule.md`
+- **initrd를 그대로 두고 BF 타임아웃만 늘리기** — 53MB에서는 120초로도
+  부팅이 안 됐다(serial 출력 0바이트). limine이 BIOS INT13h로 ISO9660에서
+  읽는 경로가 에뮬레이션에서 극단적으로 느린 것이 원인이라 대기 시간으로
+  풀 문제가 아니었다.
+- **initrd 복사본 strip** — 동작은 했고 가장 작았지만(6.5MB, 부팅 25초)
+  채택하지 않았다. 이유는 위 "완료된 작업" 정정 3 참고.
 
-`vt.zig`의 필드 타입으로 쓴 `ghostty_vt.Stream`이
-`expected type 'type', found 'fn (comptime type) type'` 에러를 냈다.
-`lib_vt.zig:81`의 `Stream`은 **제네릭 함수**이고, 필요한 것은 인스턴스화된
-`ghostty_vt.TerminalStream`(`stream_terminal.zig:26` →
-`terminal/main.zig:59` → `lib_vt.zig:80`)이었다. 이전 HANDOFF에 "재수출되므로
-필드 타입으로 바로 쓸 수 있다"고 적어둔 관찰이 절반만 맞았다.
+## 실행 중 알게 된 사실 (다음 서브프로젝트에서 유효)
 
-**교훈(다음에 반복하지 말 것):** vendor된 Zig 라이브러리의 타입을 구조체
-필드로 쓸 때는 **재수출 줄이 아니라, 그 타입을 실제로 필드/변수로 선언한
-사용처**를 찾아 대조한다. 여기서는 `Terminal.zig:30`이 그 사용처였고 그것만
-봤으면 에러 없이 지나갔다. 상세는 `docs/decisions/project_zig_c_uapi_rule.md`.
-
-## 실행 중 알게 된 사실 (다음 milestone에서 유효)
-
-- **evdev는 한 번의 `read()`에 여러 이벤트를 담아 준다.** 0.3초 간격으로
-  키를 넣었는데 `key> 4 byte(s)`가 나왔다 — 렌더링(전체 화면 fill + DRM
-  present)이 그보다 느려 커널 버퍼에 쌓였기 때문이다. "한 번 read = 한
-  이벤트"로 가정하면 입력이 유실된다.
-- **`i8042: PNP:` 로그 줄은 안 나온다(정상).** `CONFIG_PNP`/ACPI가 꺼져
-  있어 레거시 고정 포트(0x60/0x64)로 붙는다. 게이트로 삼을 줄은
-  `serio: i8042 KBD port`와 `input: AT Translated ...` 둘이다.
-- **input 장치는 키보드 하나뿐이다.** AUX(마우스) 포트도 serio에 잡히지만
-  `CONFIG_INPUT_MOUSE`가 꺼져 있어 `input1`이 안 생긴다 →
-  `/dev/input/event0` 하드코딩이 안전하다.
-- **initrd에 셸을 넣으면 그 셸이 프롬프트를 그리며 부르는 외부 명령까지
-  넣어야 한다.** 대화형 fish가 `fish_prompt` → `fish_vcs_prompt` →
-  `fish_git_prompt` 오토로드로 `uname`을 부르는데 없어서 에러를 쏟았다.
-  `--no-config`는 `config.fish` 소싱만 막고 **함수 오토로드는 못 막는다.**
-  `make_initrd.sh`에 `uname`/`mkdir`을 추가해 해결했다.
-- **프레임버퍼 1280x800 → grid 155x47** (`(1280-40)/8`, `(800-40)/16`).
-  이 값이 렌더러·`Terminal.init`·`forkpty` winsize 세 곳에 같이 들어간다.
-- **libghostty-vt는 폭 2칸 문자 뒤에 codepoint 0인 spacer 셀을 넣는다.**
-  '하'가 col 5, spacer가 col 6, '이'가 col 7. 그래서 렌더링은 글리프 폭을
-  누적하지 않고 `col * CELL_W`로 계산한다.
+- **BF와 TF는 initrd 로딩 경로가 다르다.** TF는 QEMU가 `-initrd`로 메모리에
+  직접 올리고, BF는 limine이 ISO9660에서 BIOS INT13h로 읽는다. **initrd
+  크기 문제는 BF에서만 터진다** — TF가 멀쩡하다고 안심하면 안 된다.
+- **`make_initrd.sh`의 복사 목록이 바뀌면 다른 체인이 조용히 깨진다.**
+  DF-M3(kms)와 TF-M4(terminal)에서 같은 사고가 두 번 났다. 둘 다 그 체인을
+  한동안 아무도 돌리지 않아 몇 milestone 동안 드러나지 않았다.
+- **`.zig-cache`(컴파일 캐시, 지워도 됨)와 `zig-pkg`(패키지 캐시, 지우면
+  안 됨)는 이름이 비슷하고 성격이 반대다.** `.zig-cache`를 지운 clean
+  빌드가 네트워크 없이 완주하는 것은 실측으로 확인했다.
+- **BF 로그의 `error: OpenFailed`는 정상이다.** `drm.zig:231`에서 나온다 —
+  BF는 `-device virtio-gpu-pci` 없이 부팅해 `/dev/dri/card0`이 없고, fork된
+  `/terminal` 자식만 죽는다. PID 1인 `init`은 그대로 fish를 exec한다.
+- **`Pixels changed after typing:`은 533~785로 회차마다 다르다.** before
+  스크린샷을 첫 `terminal: screen>` 직후에 뜨는데 fish가 프롬프트를 여러
+  조각으로 그리기 때문으로 보인다. 임계값 100 대비 5배 이상이라 판정에는
+  영향 없다.
+- **심볼을 남겨도 Zig 에러 트레이스가 안 찍혔다(원인 미규명).** strip
+  버전은 `???` 주소 두 줄, 심볼 버전은 트레이스 자체가 없었다. 실제 버그를
+  쫓게 될 때 파고들 숙제.
 
 ## 남은 작업
 
-- [ ] **TF-M4(종료 게이트) plan 작성 후 실행 (다음에 바로 할 일).**
-      BF-M4/DF-M3와 동일한 패턴 — 전체 체인을 **3회 연속** 검증한다.
-      기존 게이트 스크립트는 `terminal/check.sh`(이미 TF-M3에서 입력 검증까지
-      포함하도록 교체됨). 참고할 선례: `kernel/check.sh`, `docs/superpowers/
-      plans/`의 BF-M4·DF-M3 plan.
-- [ ] **(미래 서브프로젝트) 설정 영속화 + 부팅 셸 선택** — 상세는
-      `docs/decisions/project_boot_shell_selection.md`. 요약: bash/zsh/fish/
-      nushell 중 부팅 셸을 고르고 마지막 사용한 것을 다음 부팅 기본값으로
-      쓴다(재부팅 반영으로 충분). **선행 조건은 영속 저장소** — 지금 루트
-      파일시스템은 initramfs(tmpfs)라 선택을 저장할 곳 자체가 없다.
-- [ ] **(미래 서브프로젝트) Rust 컴포넌트를 전부 Zig로 재작성** — 상세는
-      `docs/decisions/project_zig_rewrite_intent.md`. TF-M3에서 "커널 UAPI가
-      `@cImport`로 잘 넘어온다"가 확인돼 **미룰 근거가 약해졌다.**
-      주의: `@cImport`는 0.16에서 deprecated(권장은 `b.addTranslateC`)이고,
-      pre-1.0이라 반년마다 파괴적 변경이 온다.
+- [ ] **`git push` (다음에 바로 할 일).** 로컬 커밋 8개가 origin에 없다.
+- [ ] **다음 서브프로젝트 선정 — 사용자와 논의.** 후보 두 개:
+      - **설정 영속화 + 부팅 셸 선택** (`docs/decisions/
+        project_boot_shell_selection.md`). bash/zsh/fish/nushell 중 부팅 셸을
+        고르고 마지막 것을 기본값으로. **선행 조건은 영속 저장소** — 현재
+        루트는 initramfs(tmpfs)라 저장할 곳이 없다.
+      - **Rust 컴포넌트를 전부 Zig로 재작성** (`docs/decisions/
+        project_zig_rewrite_intent.md`). TF-M3에서 커널 UAPI가 `@cImport`로
+        잘 넘어옴이 확인돼 미룰 근거가 약해졌다. 단 `@cImport`는 0.16에서
+        deprecated이고(권장은 `b.addTranslateC`), 이번에 fortify 제약도
+        추가로 드러났다.
+      - 그 외 최종 비전 후보는 `docs/superpowers/specs/
+        2026-08-01-tars-boot-foundation-design.md`의 "배경" 절 참고.
+- [ ] **(숙제) 게스트 안에서 Zig 에러 트레이스 읽기.** 위 "실행 중 알게 된
+      사실" 마지막 항목.
 - [ ] **(범위 밖으로 남겨둔 것들, 필요해지면)** 커서 그리기, 장치 열거
       (`EVIOCGBIT`), `EVIOCGRAB`, Ctrl/Meta 조합 dispatch, 탭 전환, 마우스,
-      부분 갱신(dirty rect). 전부 TF-M3 plan의 "이번 범위에서 뺀 것(YAGNI)"
-      절에 이유가 적혀 있다.
+      부분 갱신(dirty rect). 이유는 TF-M3 plan의 "이번 범위에서 뺀 것"에 있다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
@@ -116,38 +119,34 @@ Task 1~5를 전부 실행했다. 각 Task의 체크박스와 말미의 "실제 �
 
 ## 핵심 파일
 
-- `docs/superpowers/plans/2026-08-11-tars-terminal-foundation-tf-m3.md` —
-  **TF-M3 plan(완료). 말미의 "실제 실행에서 plan과 달라진 점" 6개 항목이
-  가장 밀도 높은 인수인계 내용이다.**
+- `docs/superpowers/plans/2026-08-12-tars-terminal-foundation-tf-m4.md` —
+  **TF-M4 plan(완료). 말미 "실제 실행에서 plan과 달라진 점" 5개 항목.**
 - `MEMORY.md` + `docs/decisions/` — 세션을 넘어 유지되는 기억(색인 + 본문).
-- `terminal/src/main.zig` — `poll(2)` 이벤트 루프. 자식은 대화형 fish.
-- `terminal/src/input.zig` — evdev 파싱 + 키맵 + Shift 상태.
-- `terminal/src/vt.zig` — 상태 유지형 `Screen`(힙 고정 필수).
-- `terminal/src/pty.zig` — `spawn()`(임의 프로그램 + winsize) / `readSome` /
-  `write`.
-- `terminal/check.sh` — TF-M3 게이트(전후 screendump 픽셀 차이 + 로그 `42`).
-- `kernel/.config:967,972-973,984-986` — evdev/atkbd/i8042 옵션.
-- `kernel/make_initrd.sh` — `cat`/`uname`/`mkdir` 추가됨.
+  이번에 추가: `project_gate_chain_composition.md`.
+- `check.sh:17-19` — `clean()`. 지워도 되는 것과 안 되는 것의 경계.
+- `check.sh:41-42` — 체인 목록(BF, TF).
+- `boot/check.sh:35-47` — 배너 폴링(최대 120초) + 실제 소요 시간 출력.
+- `terminal/check.sh:105-131` — 준비 완료 폴링과 startup 마커 진단.
+- `terminal/prepare.sh` — vendor 준비 + `zig build`. 두 체인이 공유.
+- `kernel/make_initrd.sh:23-30,57-62` — 심볼 유지 결정과 gzip 압축.
+- `display/check.sh:1-17` — 은퇴 주석(왜 죽었는지).
+- `terminal/src/main.zig:55-68` — `dumpScreen()`. 게이트가 grep하는 로그 줄.
 - `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md` —
-  Terminal Foundation design doc.
-- `terminal/ghostty-src/` — vendor된 ghostty 전체 소스(gitignore됨, 로컬만).
+  Terminal Foundation design doc(Status: complete).
 
 ## 다음 에이전트에게
 
-1. `git log --oneline -6` && `git status`로 상태 확인.
+1. `git log --oneline -8` && `git status`로 상태 확인 후 **`git push`**.
 2. `MEMORY.md`와 `docs/decisions/`의 feedback 3개
    (`feedback_execution_scope`, `feedback_commit_delegation`,
    `feedback_design_question_load`)를 먼저 읽을 것.
-3. **TF-M3는 끝났다.** 다음은 TF-M4 plan 작성이다. 이 저장소 관례상
-   milestone별 spec 문서는 쓰지 않고 바로 plan으로 간다.
-   설계 트레이드오프를 사용자에게 되묻지 말 것 — 근거를 대고 Claude가 정한다.
+3. **Terminal Foundation은 끝났다.** 다음은 서브프로젝트 선정이다 — 이건
+   기술적 트레이드오프가 아니라 목적·범위 질문이므로 **사용자에게 물어야
+   하는 몇 안 되는 것**이다(`feedback_design_question_load` 참고). 정해지면
+   design doc부터 쓰고, milestone plan은 그 시점에 하나씩 쓴다.
 4. Claude가 직접 build/docker run/QEMU 명령을 실행하지 않는다
    (`git`/`find`/`Read`/`rg` 같은 읽기 전용 확인과 웹 리서치는 허용).
-   **매 Step 완료 후 파일 내용을 `Read`로 직접 검증.**
-5. TF-M2·TF-M3에서 효과가 컸던 습관: **코드를 사용자에게 넘기기 전에 vendor된
-   실제 소스(ghostty, glibc 헤더, 커널 `.config`, `make_initrd.sh`,
-   `init/src/main.rs`)와 대조**해서 시그니처·경로·전제 조건을 확인한 것.
-   TF-M3는 컴파일 에러 1회, QEMU 실패 0회로 끝났다. 계속 유지할 것.
-   단, "재수출된 이름"은 대조 대상이 아니다 — **실제 사용처**를 봐야 한다.
-6. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지 말 것 —
+   **매 Step 완료 후 파일 내용을 `Read`로 직접 검증** — 이번 세션에도
+   사용자가 "edited"라고 답했는데 체인 목록 한 줄이 안 바뀐 적이 있었다.
+5. 실행 방식(pairing)과 design doc 필요 여부 판단 기준을 다시 묻지 말 것 —
    이미 여러 서브프로젝트에 걸쳐 확정됨.

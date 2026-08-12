@@ -62,7 +62,7 @@ Foundation 서브프로젝트의 종료 게이트를 통과한다.
 - Modify: `boot/check.sh:8`
 - Modify: `display/check.sh:1-4`
 
-- [ ] **Step 1: `boot/check.sh`에서 kms 빌드 줄 제거**
+- [x] **Step 1: `boot/check.sh`에서 kms 빌드 줄 제거**
 
 `boot/check.sh`의 6~11행이 지금 이렇다.
 
@@ -91,7 +91,7 @@ Foundation 서브프로젝트의 종료 게이트를 통과한다.
 Rust로 컴파일**하고 있을 뿐이다. `boot/check.sh`는 `set -euo pipefail`이라
 빌드 실패 시 `-e`가 알아서 중단시킨다 — 나머지 줄의 스타일은 그대로 둔다.
 
-- [ ] **Step 2: `display/check.sh` 맨 위에 은퇴 주석 추가**
+- [x] **Step 2: `display/check.sh` 맨 위에 은퇴 주석 추가**
 
 `display/check.sh`의 1~4행을 아래로 교체한다(`cd "$(dirname "$0")"` 다음 줄부터
 기존 내용은 손대지 않는다).
@@ -119,7 +119,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 ```
 
-- [ ] **Step 3: 변경 내용 확인**
+- [x] **Step 3: 변경 내용 확인**
 
 Run:
 ```bash
@@ -131,14 +131,14 @@ Expected: `boot/check.sh`와 `display/check.sh` 두 파일만 변경됨.
 `display/check.sh`에는 은퇴 주석 안의 언급만 나오며, `check.sh`(루트)에는
 `clean()`의 `kms/target` 한 줄이 아직 남아 있다(Task 3에서 정리한다).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add boot/check.sh display/check.sh
 git commit -m "Retire the display gate and stop building the unused kms crate"
 ```
 
-- [ ] **Step 5: TF-M3가 남긴 스크린샷 정리**
+- [x] **Step 5: TF-M3가 남긴 스크린샷 정리**
 
 Run:
 ```bash
@@ -158,7 +158,7 @@ Task 2에서 스크린샷 출력 위치를 `out/tf/`로 옮기므로 앞으로�
 **Files:**
 - Modify: `terminal/check.sh` (전체 교체)
 
-- [ ] **Step 1: `terminal/check.sh` 전체 교체**
+- [x] **Step 1: `terminal/check.sh` 전체 교체**
 
 아래 내용으로 파일 전체를 바꾼다. 기존 대비 달라지는 곳은 네 군데이며,
 각각 주석으로 표시해 뒀다.
@@ -380,7 +380,7 @@ echo "PASS"
 exit 0
 ```
 
-- [ ] **Step 2: 실행 권한 확인**
+- [x] **Step 2: 실행 권한 확인**
 
 Run:
 ```bash
@@ -389,7 +389,7 @@ ls -la terminal/check.sh
 
 Expected: `-rwxr-xr-x` (TF-M2에서 이미 부여됨). 아니면 `chmod +x terminal/check.sh`.
 
-- [ ] **Step 3: 단독 실행해서 여전히 PASS인지 확인**
+- [x] **Step 3: 단독 실행해서 여전히 PASS인지 확인**
 
 Run:
 ```bash
@@ -423,7 +423,7 @@ Expected 출력 순서:
   것. `tail -n 60`에서 `fish: Unknown command:` 를 찾는다(TF-M3에서
   `uname`/`mkdir`을 initrd에 넣어 해결한 것과 같은 종류의 문제).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add terminal/check.sh
@@ -437,7 +437,7 @@ git commit -m "Make the terminal gate poll for readiness and vendor its inputs"
 **Files:**
 - Modify: `check.sh` (저장소 루트, 전체 교체)
 
-- [ ] **Step 1: `check.sh` 전체 교체**
+- [x] **Step 1: `check.sh` 전체 교체**
 
 ```bash
 #!/usr/bin/env bash
@@ -486,7 +486,7 @@ run_chain "TF-M4" ./terminal/check.sh
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
 ```
 
-- [ ] **Step 2: `clean()` 대상이 전부 gitignore되는지 확인**
+- [x] **Step 2: `clean()` 대상이 전부 gitignore되는지 확인**
 
 Run:
 ```bash
@@ -498,7 +498,7 @@ Expected: 다섯 경로 모두 `.gitignore`의 몇 번째 줄에 걸리는지 �
 `clean()`이 추적 중인 파일을 지울 위험이 있으므로 Step 1로 돌아가 대상 목록을
 다시 확인한다.
 
-- [ ] **Step 3: 보존 대상이 clean 목록에 없음을 눈으로 재확인**
+- [x] **Step 3: 보존 대상이 clean 목록에 없음을 눈으로 재확인**
 
 Run:
 ```bash
@@ -510,7 +510,7 @@ Expected: 세 이름이 **주석에만** 나타나고 `rm -rf` 줄에는 없다.
 회차에서 vendor 트리가 날아가면 나머지 회차가 네트워크 없이는 복구되지
 않는다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add check.sh
@@ -622,7 +622,7 @@ project_gate_chain_composition.md`로 처리한다.
 커밋: `4c33a47` "Share terminal build preparation between the boot and
 terminal gates"
 
-- [ ] **Step 1: 루트 `check.sh` 실행**
+- [x] **Step 1: 루트 `check.sh` 실행**
 
 Run:
 ```bash
@@ -678,7 +678,7 @@ clean 빌드에서만 생기는 문제다 — `zig build`가 `.zig-cache` 없이
 QEMU monitor 포트 45455가 이전 회차 프로세스에 잡혀 있는지(`FAIL: could not
 connect to QEMU monitor`)를 먼저 의심한다.
 
-- [ ] **Step 2: 실행 후 작업 트리 상태 확인**
+- [x] **Step 2: 실행 후 작업 트리 상태 확인**
 
 Run:
 ```bash
@@ -699,7 +699,7 @@ Expected: 추적 파일에 변경이 없다(`kernel/initrd.cpio`는 이제 `.git
 - Modify: `MEMORY.md`
 - Modify: `HANDOFF.md`
 
-- [ ] **Step 1: design doc Status 갱신**
+- [x] **Step 1: design doc Status 갱신**
 
 `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md`의 4번째
 줄을 아래로 바꾼다(현재 값은 `Design approved, awaiting TF-M0 plan`이라 TF-M0
@@ -709,7 +709,7 @@ Expected: 추적 파일에 변경이 없다(`kernel/initrd.cpio`는 이제 `.git
 **Status:** TF-M4 complete (2026-08-12); Terminal Foundation complete
 ```
 
-- [ ] **Step 2: 게이트 체인 구성 원칙을 기억으로 남기기**
+- [x] **Step 2: 게이트 체인 구성 원칙을 기억으로 남기기**
 
 Create `docs/decisions/project_gate_chain_composition.md`:
 
@@ -750,7 +750,7 @@ kms가 존재하지 않게 됐다 — 되살리려면 커널 cmdline으로 무�
 관련: [[project_zig_c_uapi_rule]], [[project_zig_rewrite_intent]]
 ```
 
-- [ ] **Step 3: `MEMORY.md` 색인에 한 줄 추가**
+- [x] **Step 3: `MEMORY.md` 색인에 한 줄 추가**
 
 `MEMORY.md`의 "## 프로젝트 (project)" 절 맨 끝에 추가한다.
 
@@ -758,7 +758,7 @@ kms가 존재하지 않게 됐다 — 되살리려면 커널 cmdline으로 무�
 - [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 루트 `check.sh`는 BF+TF 두 체인; 부팅 경로가 바뀌어 무의미해진 게이트는 되살리지 않고 은퇴, `clean()`은 vendor 트리를 건드리지 않는다
 ```
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md \
@@ -766,7 +766,7 @@ git add docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md \
 git commit -m "Mark Terminal Foundation complete and record gate chain rules"
 ```
 
-- [ ] **Step 5: 이 plan 파일에 실행 결과 반영**
+- [x] **Step 5: 이 plan 파일에 실행 결과 반영**
 
 각 Task의 체크박스를 채우고, 이 파일 말미에 "실제 실행에서 plan과 달라진 점"
 절을 추가한다(TF-M2·TF-M3와 같은 형식). 특히 아래 세 가지는 예측이므로 실측치
@@ -776,7 +776,7 @@ git commit -m "Mark Terminal Foundation complete and record gate chain rules"
 - `.zig-cache`를 지운 상태의 `zig build`가 네트워크 없이 되는가.
 - TF 체인 3회의 실제 소요 시간과 `Pixels changed` 값의 회차별 편차.
 
-- [ ] **Step 6: `HANDOFF.md`를 다음 서브프로젝트 착수 전 상태로 갱신**
+- [x] **Step 6: `HANDOFF.md`를 다음 서브프로젝트 착수 전 상태로 갱신**
 
 `handoff` 스킬로 현재 상태(Terminal Foundation 전체 완료, 다음 서브프로젝트
 미정)를 반영해 새로 쓴다. 다음 후보로 `HANDOFF.md`의 "남은 작업"에 이미 적힌
@@ -784,7 +784,7 @@ git commit -m "Mark Terminal Foundation complete and record gate chain rules"
 project_boot_shell_selection.md`), Rust → Zig 재작성(`docs/decisions/
 project_zig_rewrite_intent.md`) — 를 남긴다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add HANDOFF.md docs/superpowers/plans/2026-08-12-tars-terminal-foundation-tf-m4.md
@@ -798,6 +798,79 @@ git commit -m "Update handoff after finishing Terminal Foundation"
 Task 4 Step 1이 `TARS check PASS: all chains 3/3 consecutive runs succeeded`로
 끝나면 design doc 기준 TF-M4 exit gate(전체 체인 3회 연속 검증)를 만족하고,
 Terminal Foundation 서브프로젝트(TF-M0~M4) 전체가 완료된다.
+
+## 실제 실행에서 plan과 달라진 점
+
+정정 네 건이 있었다. 전부 "TF-M2~M3 동안 BF/DF 체인을 아무도 돌리지 않아
+쌓여 있던 빚"이 루트 게이트를 처음 돌리는 순간 한꺼번에 드러난 것이다.
+
+### 1. `boot/check.sh`가 terminal을 빌드하지 않았다 (Task 4 Step 0)
+
+`cp: cannot stat '../terminal/zig-out/bin/terminal'`. DF-M3에서 kms로 겪은
+것과 완전히 같은 회귀다. `terminal/prepare.sh`로 vendor 준비 + `zig build`를
+뽑아 두 체인이 공유하게 했다. 상세는 Task 4 Step 0 참고.
+
+### 2. BF의 고정 `timeout 15`가 initrd 성장을 못 따라갔다
+
+Step 0을 고치고 다시 돌리니 `FAIL: expected fish banner not found`가 났는데,
+`cat "$LOG"`가 출력한 serial 내용이 **0바이트**였다 — 커널이 한 줄도 실행되지
+못했다는 뜻이다. `boot/check.sh`를 TF 게이트와 같은 폴링 방식으로 바꿨다
+(최대 120초, 배너가 보이면 즉시 종료, 실제 대기 시간을 `Boot reached the
+fish banner after ~Ns`로 출력). 커밋 `04c5c8d`.
+
+### 3. `-Doptimize=ReleaseSafe`는 `@cImport`를 깨뜨린다 (계획에 없던 발견)
+
+initrd를 줄이려고 최적화 모드를 올렸더니 `drm.zig:3`의 `@cImport`가
+`error: C import failed`로 실패했다. Debug가 아닌 모드에서 Zig가 붙이는
+`-D_FORTIFY_SOURCE` 때문에 glibc의 `bits/fcntl2.h`가 활성화되고, 그 안의
+`__attribute__((error))` 선언(`__open_too_many_args`)을 translate-c가 번역하지
+못한다. **`fcntl.h`를 `@cImport`하는 코드는 Debug에 묶인다**는 새 제약이며,
+우회(`@cDefine("_FORTIFY_SOURCE", "0")`)는 종료 게이트 도중에 검증 대상
+바이너리를 바꾸는 위험이 있어 쓰지 않았다.
+(→ `docs/decisions/project_zig_c_uapi_rule.md`)
+
+### 4. 진짜 원인은 initrd 크기, 해법은 gzip (strip은 거부)
+
+BF가 부팅조차 못 한 이유는 initrd 53MB였다. 42MB짜리 Debug terminal이
+TF-M2에서 들어갔고, BF는 limine이 **BIOS INT13h로 ISO9660에서** 그걸 읽는다
+(TF는 QEMU가 `-initrd`로 메모리에 직접 올려서 무관했다).
+
+측정한 세 조합:
+
+| 구성 | initrd | BF 부팅 |
+|---|---|---|
+| 원본 | 53MB | 실패(120초 초과, serial 0바이트) |
+| strip + gzip | 6.5MB | ~25초 |
+| **gzip만(채택)** | **11.8MB** | **~34초** |
+
+strip을 거부한 이유는 Zig 에러 트레이스가 바이너리 자체의 디버그 정보를
+런타임에 읽어 만들기 때문이다 — strip하면 게스트 안에서 트레이스를 되살릴
+방법이 원리적으로 없어진다. 5MB와 9초는 그 가능성을 영구히 포기할 값이
+아니라고 판단했다. **단, 심볼이 있다고 트레이스가 바로 읽히지는 않았다** —
+같은 크래시에서 strip 버전은 `???:?:?: 0x12716d8 in ???` 두 줄, 심볼 버전은
+트레이스 자체가 없었다(원인 미규명, 남겨둔 숙제).
+
+커밋 `4504a7f`(strip+gzip) → `136129c`(strip 제거). 이 변경으로 initrd가
+바뀌었으므로 6.5MB 구성으로 통과했던 3/3은 근거로 쓰지 않고 **전체 게이트를
+처음부터 다시 돌렸다.**
+
+### 5. 통과한 게이트의 실제 수치
+
+- **BF 체인:** 3/3 통과. `Boot reached the fish banner after ~25s`(strip 구성)
+  / `~34s`(최종 구성). 예측대로 `/terminal` 자식은 `/dev/dri/card0`이 없어
+  `error: OpenFailed`로 죽고, 부모 `init`은 그대로 fish 배너까지 간다 —
+  BF 로그의 이 세 줄이 정상 동작의 증거다.
+- **TF 체인:** 3/3 통과. `Pixels changed after typing:`이 **533~785**로
+  회차마다 달랐다(임계값 100). TF-M3 단독 실행과 strip 구성에서는 533,
+  최종 구성 마지막 회차는 785. initrd 압축과는 무관하고, before 스크린샷을
+  뜨는 시점 문제로 보인다 — 폴링이 **첫** `terminal: screen>` 직후에 화면을
+  뜨는데 fish가 프롬프트를 여러 조각으로 그리면 그때 프롬프트가 덜 그려져
+  있고, 그만큼 after와의 차이가 커진다. 두 값 모두 임계값의 5배 이상이라
+  게이트 판정에는 영향이 없다.
+- **`terminal/check.sh: connect: Connection refused`** 두 줄은 QEMU가 monitor
+  포트를 열기 전 첫 연결 시도다. 재시도 루프(20회 × 0.5초)가 처리한다.
+- `.zig-cache`를 지운 상태의 `zig build`는 **네트워크 없이** 완주했다 —
+  `terminal/zig-pkg`를 clean 대상에서 뺀 판단이 실측으로 확인됐다.
 
 ## 이번 범위에서 뺀 것 (YAGNI)
 
