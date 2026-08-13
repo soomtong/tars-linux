@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 (cd ../kernel && ./build.sh)
-(cd ../init && cargo build --release)
+(cd ../init && zig build)
 (cd ../terminal && ./prepare.sh)
 (cd ../kernel && ./make_initrd.sh)
 ./build.sh
@@ -50,6 +50,17 @@ cat "$LOG"
 
 if [ "$FOUND" = "1" ]; then
   echo "Boot reached the fish banner after ~${WAITED}s"
+  for marker in \
+    "tars-init: mounted proc at /proc" \
+    "tars-init: mounted sysfs at /sys" \
+    "tars-init: mounted devtmpfs at /dev" \
+    "tars-init: mounted devpts at /dev/pts"; do
+    if ! grep -q "$marker" "$LOG"; then
+      echo "FAIL: init did not report '${marker}'"
+      exit 1
+    fi
+  done
+  echo "init mounted all four filesystems"
   echo "PASS"
   exit 0
 fi

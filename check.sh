@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 # kms/target은 목록에서 빠졌다 — TF-M2 이후 kms를 빌드하는 체인이 없다
 # (2026-08-12, TF-M4).
 clean() {
-  rm -rf kernel/build init/target terminal/zig-out terminal/.zig-cache out
+  rm -rf kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache out
 }
 
 run_chain() {

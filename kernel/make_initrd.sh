@@ -17,7 +17,7 @@ copy_lib_deps() {
 
 mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev"
 
-cp ../init/target/release/tars-init "$WORKDIR/init"
+cp ../init/zig-out/bin/init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
 # terminal은 Debug 빌드라 42MB이고 대부분이 디버그 심볼이다. strip하면
@@ -42,7 +42,8 @@ cp /usr/bin/uname "$WORKDIR/usr/bin/uname"
 cp /usr/bin/mkdir "$WORKDIR/usr/bin/mkdir"
 chmod 0755 "$WORKDIR/usr/bin/uname" "$WORKDIR/usr/bin/mkdir"
 
-copy_lib_deps "$WORKDIR/init"
+# init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
+# (ZM-M1). 나머지는 전부 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
 copy_lib_deps "$WORKDIR/usr/bin/cat"

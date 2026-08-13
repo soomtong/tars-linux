@@ -11,7 +11,7 @@ if ! (cd ../kernel && ./build.sh); then
   exit 1
 fi
 
-if ! (cd ../init && cargo build --release); then
+if ! (cd ../init && zig build); then
   echo "FAIL: init build failed"
   exit 1
 fi
@@ -186,6 +186,27 @@ if ! grep -q "terminal: screen>.*42" "$LOG"; then
   exit 1
 fi
 echo "Found '42' in parsed screen dump"
+
+# init 경로 검증: PID 1이 파일시스템 넷을 전부 붙였는가.
+#
+# 이 검사가 없으면 init이 /proc 하나 못 붙여도 부팅만 되면 PASS가 난다 —
+# 위 검사들은 전부 terminal 프로세스의 출력만 보기 때문이다. ZM-M1에서
+# init을 Rust에서 Zig로 다시 쓰면서 이 사각지대가 실제 위험이 됐다.
+echo "--- init log ---"
+grep 'tars-init:' "$LOG" || true
+
+for marker in \
+  "tars-init: mounted proc at /proc" \
+  "tars-init: mounted sysfs at /sys" \
+  "tars-init: mounted devtmpfs at /dev" \
+  "tars-init: mounted devpts at /dev/pts"; do
+  if ! grep -q "$marker" "$LOG"; then
+    echo "FAIL: init did not report '${marker}'"
+    tail -n 60 "$LOG"
+    exit 1
+  fi
+done
+echo "init mounted all four filesystems"
 
 # 성공했으면 스크린샷은 필요 없다. 실패했을 때만 남겨서 눈으로 볼 수 있게 한다.
 rm -f "$BEFORE" "$AFTER"
