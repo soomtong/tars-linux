@@ -19,8 +19,8 @@ feedback_execution_scope.md`, `feedback_commit_delegation.md`,
 
 ## 현재 브랜치
 
-`main`. Working tree 깨끗함. 이번 세션 커밋 5개(사용자가 직접 만든
-`43641be` 포함):
+`main`. Working tree 깨끗함. **origin/main보다 앞서 있다 — push하지 않았다.**
+이번 세션 커밋(사용자가 직접 만든 `43641be` 포함):
 
 - `43641be` `.claude/`를 `.gitignore`에 추가 (사용자)
 - `b9b2b65` Zig Migration design doc
