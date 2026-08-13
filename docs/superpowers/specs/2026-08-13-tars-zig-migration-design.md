@@ -226,15 +226,18 @@ clean 재빌드로 돌리고 `TARS check PASS`로 끝난다.
 
 ## 리스크
 
-- **`environ`** — 현재 Rust 코드는 `extern static environ`을 `execve`에
-  넘긴다(`init/src/main.rs:4-6,59,113`). libc가 없으면 그 심볼이 없다. Zig는
-  libc 없이 시작할 때 커널이 스택에 올려준 envp를 `std.os.environ`으로
-  노출하므로 대체되지만, PID 1이 커널에서 실제로 무엇을 받는지는 M1에서
-  로그로 확인해야 한다. fish가 `TERM` 없이 뜨는지가 여기 걸린다.
-- **ioctl 상수** — `TIOCSCTTY` 등 `_IO` 계열 매크로는 translate-c가 넘기지
-  못한다(`project_zig_c_uapi_rule`). libc를 안 쓰므로 `@cImport` 자체가 없고,
-  필요한 상수는 손으로 선언한다(`TIOCSCTTY = 0x540E`). `terminal/src/drm.zig`가
-  이미 쓰는 방식이다.
+- **~~`environ`~~ (ZM-M1 plan 작성 중 해소)** — Rust 코드는 `extern static
+  environ`을 `execve`에 넘긴다(`init/src/main.rs:4-6,59,113`). libc가 없으면
+  그 심볼이 없다. Zig 0.16의 `main`은 첫 인자로 `std.process.Init.Minimal`을
+  받을 수 있고(`std/start.zig:699`) 그 안의 `environ.block.slice`가 커널이
+  PID 1 스택에 올려준 envp다 — libc 없는 시작 경로(`std/start.zig:508-519`)가
+  스택에서 직접 읽어 채운다. 다만 **fish가 실제로 어떤 환경 변수를 받는지는
+  여전히 M1에서 로그로 확인**해야 한다(`TERM` 유무).
+- **~~ioctl 상수~~ (ZM-M1 plan 작성 중 해소)** — `std.os.linux.T.IOCSCTTY`가
+  이미 존재한다(x86_64에서 `0x540e`, `std/os/linux.zig:5241`). 손으로 선언할
+  필요가 없다. `project_zig_c_uapi_rule`의 "매크로는 손으로 선언" 규칙은
+  `@cImport`를 쓸 때의 이야기이고, `std.os.linux`를 직접 쓰면 std가 이미
+  옮겨둔 상수를 그대로 쓴다.
 - **`terminal/src/drm.zig:3`의 `@cImport`** — Zig 번들 헤더에 DRM UAPI가
   있는지 M3에서 확인해야 한다. 없으면 커널 헤더를 vendor에 넣는다. **M3
   전체가 막힐 수 있는 유일한 지점이다.**
