@@ -8,6 +8,8 @@ kernel/build/
 kernel/initrd.cpio
 
 init/target/
+init/zig-out/
+init/.zig-cache/
 kms/target/
 
 boot/limine-binary/
