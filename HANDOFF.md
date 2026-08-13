@@ -25,8 +25,8 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 
 ## 현재 브랜치
 
-`main`. Working tree 깨끗함. ZM-M3 커밋 7개(`dc7a71a`~`0e65be7`)는 **아직
-push하지 않았다.**
+`main`. Working tree 깨끗함. **ZM-M3 커밋 8개(`dc7a71a`~`cd4e974`)는
+`origin/main`에 push했다.** 이 문장을 고친 커밋 하나만 로컬에 있을 수 있다.
 
 ## ZM-M3에서 얻은 것 (2026-08-13)
 
@@ -66,7 +66,6 @@ ZM이 끝나면서 제약 하나가 풀렸다 — ZM 전체의 비목표였던 *
 
 ## 남은 숙제
 
-- [ ] **`origin/main`으로 push.** ZM-M3 커밋 7개가 로컬에만 있다.
 - [ ] **게스트 안에서 Zig 에러 트레이스 읽기.** TF-M4부터 미해결. strip
       버전은 `???` 주소 두 줄, 심볼 버전은 트레이스 자체가 없었다 — 원인
       미규명([[project_gate_chain_composition]]).
