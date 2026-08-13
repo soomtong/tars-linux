@@ -184,6 +184,19 @@ design doc이 "전환 전후 소요 시간 기록"을 완료 조건에 넣었다
 CPU 수가 다르면 T1 비교가 무의미해진다. 두 이미지 모두 같은 Docker VM에서
 돌므로 같아야 하고, 다르면 그 사실을 기록한다.
 
+### 기준선 실측 (2026-08-13, 옛 amd64 이미지)
+
+| 항목 | 값 |
+|---|---|
+| `nproc` | **10** |
+| **T1** 커널 clean 빌드 | **9분 55초** |
+| **T2** BF 체인 1회(빌드+부팅) | **17분 40초** |
+| `bzImage` | 2.6MB |
+| `initrd.cpio` | 14MB, 파일 264개 |
+
+T2 − T1 ≈ 7분 45초가 Zig 두 컴포넌트 빌드 + initrd + ISO + 부팅(≈34초)이다.
+**커널이 전체의 56%**이므로 크로스 컴파일이 통하면 여기서 가장 크게 줄어든다.
+
 ---
 
 ## 사전 준비
@@ -375,16 +388,9 @@ RUN dpkg --add-architecture amd64 \
         coreutils:amd64 \
         libc6:amd64 \
         libgcc-s1:amd64 \
-        libstdc++6:amd64 \
         libpcre2-8-0:amd64 \
         libpcre2-32-0:amd64 \
-        libacl1:amd64 \
-        libattr1:amd64 \
-        libcap2:amd64 \
-        libgmp10:amd64 \
-        libselinux1:amd64 \
-        libssl3t64:amd64 \
-        libsystemd0:amd64) \
+        libselinux1:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 
@@ -403,7 +409,28 @@ WORKDIR /workspace
 `apt-get download`는 **의존을 따라가지 않는다** — 이름을 댄 `.deb` 하나씩만
 받는다. 그래서 목록이 명시적이고, 빠진 게 있으면 Task 5에서
 `make_initrd.sh`가 소네임을 찍으며 즉시 죽는다(조용히 통과하지 않는다).
-Task 1 Step 5 목록에 여기 없는 패키지가 있으면 지금 줄을 추가할 것.
+
+이 여덟 줄은 **Task 1의 실측에서 나온 최소 집합**이다. 옛 initrd에 실제로
+들어 있던 `.so`는 아홉 개이고 소속은 넷뿐이다.
+
+| initrd 안의 `.so` | 소속 패키지 | 누가 요구했나 |
+|---|---|---|
+| `libc.so.6`, `libm.so.6`, `libpthread.so.0`, `librt.so.1`, `libutil.so.1`, `ld-linux-x86-64.so.2` | `libc6` | 전부 |
+| `libgcc_s.so.1` | `libgcc-s1` | `fish` |
+| `libpcre2-8.so.0`, `libpcre2-32.so.0` | `libpcre2-8-0`, `libpcre2-32-0` | `fish`, `mkdir`(selinux 경유) |
+| `libselinux.so.1` | `libselinux1` | `mkdir` |
+
+`libpthread`·`librt`·`libutil` 셋은 `fish`/`cat`/`uname`/`mkdir`의 `ldd`에
+나오지 않는다 — **`terminal`이 요구하는 것들이다.** Zig가 glibc를 링크하면서
+`DT_NEEDED`에 넣는 스텁들이고(glibc 2.34부터 내용은 `libc.so.6`에 흡수됐지만
+빈 `.so`는 여전히 배포된다), 셋 다 `libc6` 소속이라 목록은 늘지 않는다.
+`libstdc++6`은 필요 없다 — trixie의 fish 4.0.2는 Rust로 작성됐다.
+
+`coreutils`의 Depends에는 `libacl1`·`libattr1`·`libcap2`·`libgmp10`·
+`libssl3t64`·`libsystemd0`가 더 있지만, 우리가 넣는 세 바이너리
+(`cat`/`uname`/`mkdir`)는 그중 아무것도 링크하지 않으므로 받지 않는다.
+나중에 `ls` 같은 것을 추가해서 resolver가 소네임을 찍고 죽으면, 그때 해당
+패키지 줄을 추가하고 이미지를 다시 빌드한다.
 
 - [ ] **Step 2: 새 이미지를 별도 태그로 빌드**
 
@@ -590,13 +617,20 @@ fi
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-# 소네임을 sysroot 안에서 찾아 sysroot 기준 절대 경로로 돌려준다. initrd
-# 안에서도 같은 경로에 놓는다 — 게스트 로더가 기본으로 뒤지는 자리다.
+# "찾는 곳"과 "넣는 곳"을 분리한다.
+#
+# 찾는 곳: sysroot는 .deb를 푼 자리라 usrmerge 규칙대로 /usr/lib/... 이다.
+# 넣는 곳: initrd 안은 /lib/x86_64-linux-gnu로 고정한다 — 옛 방식(ldd)이
+#          알려준 경로가 /lib/... 이었고 지금 부팅되는 initrd가 그 모양이다.
+# 둘을 같게 만들면(=찾은 자리에 그대로 복사) 게스트 로더는 /usr/lib도 뒤지니
+# 부팅은 되겠지만, 파일 경로가 통째로 바뀌어 옛 initrd와 대조가 불가능해진다.
+LIB_DEST=/lib/x86_64-linux-gnu
+
 find_in_sysroot() {
   local soname="$1" dir
   for dir in /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib64 /lib64; do
     if [ -e "${SYSROOT}${dir}/${soname}" ]; then
-      echo "${dir}/${soname}"
+      echo "${SYSROOT}${dir}/${soname}"
       return 0
     fi
   done
@@ -609,28 +643,29 @@ find_in_sysroot() {
 # (1) 인터프리터는 DT_NEEDED가 아니라 PT_INTERP에 있어서 따로 봐야 하고,
 # (2) 의존의 의존은 재귀로 따라가야 한다. ldd는 둘 다 대신 해줬었다.
 copy_lib_deps() {
-  local bin="$1" interp interp_src soname path
+  local bin="$1" interp src soname dest
 
   interp="$(readelf -p .interp "$bin" 2>/dev/null | grep -oE '/[^ ]*ld-linux[^ ]*' || true)"
   if [ -n "$interp" ] && [ ! -e "${WORKDIR}${interp}" ]; then
-    if ! interp_src="$(find_in_sysroot "$(basename "$interp")")"; then
+    if ! src="$(find_in_sysroot "$(basename "$interp")")"; then
       echo "make_initrd: cannot resolve interpreter ${interp} (needed by ${bin})" >&2
       exit 1
     fi
     mkdir -p "${WORKDIR}$(dirname "$interp")"
-    cp "${SYSROOT}${interp_src}" "${WORKDIR}${interp}"
+    cp "$src" "${WORKDIR}${interp}"
   fi
 
   for soname in $(readelf -d "$bin" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
-    if ! path="$(find_in_sysroot "$soname")"; then
-      echo "make_initrd: cannot resolve ${soname} (needed by ${bin}) in ${SYSROOT}" >&2
-      echo "             add the package that provides it to devcontainer/Dockerfile" >&2
-      exit 1
-    fi
-    if [ ! -e "${WORKDIR}${path}" ]; then
-      mkdir -p "${WORKDIR}$(dirname "$path")"
-      cp "${SYSROOT}${path}" "${WORKDIR}${path}"
-      copy_lib_deps "${SYSROOT}${path}"
+    dest="${WORKDIR}${LIB_DEST}/${soname}"
+    if [ ! -e "$dest" ]; then
+      if ! src="$(find_in_sysroot "$soname")"; then
+        echo "make_initrd: cannot resolve ${soname} (needed by ${bin}) in ${SYSROOT}" >&2
+        echo "             add the package that provides it to devcontainer/Dockerfile" >&2
+        exit 1
+      fi
+      mkdir -p "${WORKDIR}${LIB_DEST}"
+      cp "$src" "$dest"
+      copy_lib_deps "$src"
     fi
   done
 }
@@ -712,7 +747,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer:arm64 \
 Expected:
 - 파일 목록에 `./init`, `./terminal`, `./usr/bin/{fish,cat,uname,mkdir}`,
   `./vendor/fonts/Hanme_8x4x4.ttf`, `./usr/share/fish/...`,
-  `./lib64/ld-linux-x86-64.so.2`, `./usr/lib/x86_64-linux-gnu/*.so.*`
+  `./lib64/ld-linux-x86-64.so.2`, 그리고 `./lib/x86_64-linux-gnu/` 아래
+  `.so` 아홉 개(`libc`·`libm`·`libpthread`·`librt`·`libutil`·`libgcc_s`·
+  `libpcre2-8`·`libpcre2-32`·`libselinux`)
 - `file` 결과가 **전부 x86-64**. 하나라도 `ARM aarch64`가 나오면 sysroot가
   아니라 컨테이너에서 복사된 것이다.
 
