@@ -1,7 +1,7 @@
 # TARS Zig Migration — Design
 
 **Date:** 2026-08-13
-**Status:** design approved; ZM-M1 plan 작성 예정
+**Status:** ZM-M1 complete (2026-08-13); ZM-M2 다음
 
 ## 배경
 
@@ -217,27 +217,28 @@ tars-linux/
 기존 게이트를 그대로 쓴다. 루트 `check.sh`가 BF·TF 두 체인을 각 3회 연속
 clean 재빌드로 돌리고 `TARS check PASS`로 끝난다.
 
-**단, 이 게이트에는 이번 작업에 특유한 사각지대가 하나 있다.** 게이트는
-`tars-init:` 로그를 **하나도 grep하지 않는다** — `boot/check.sh:38`은 fish
-배너를, `terminal/check.sh:87,131`은 `terminal: screen>`을 본다. 즉 `init`이
-`/proc` 마운트에 실패해도 부팅만 되면 게이트는 통과할 수 있다. 로그 문구를
-바꿔도 게이트는 모른다는 뜻이기도 하지만, 진단 가치를 위해 문자열은 그대로
-유지한다. ZM-M1의 완료 판정에 육안 확인을 추가한 이유가 이것이다.
+**ZM-M1 시작 시점의 게이트에는 이번 작업에 특유한 사각지대가 있었다.**
+게이트가 `tars-init:` 로그를 **하나도 grep하지 않았다** — `boot/check.sh`는
+fish 배너를, `terminal/check.sh`는 `terminal: screen>`을 본다. 즉 `init`이
+`/proc` 마운트에 실패해도 부팅만 되면 통과할 수 있었다. PID 1을 통째로 다시
+쓰는 작업에서 이건 실제 위험이라, ZM-M1에서 두 체인에 `tars-init: mounted ...`
+네 줄 검사를 넣어 막았다. 이제 `./check.sh` 한 바퀴가 6회 검증한다.
+경위는 [[project_gate_chain_composition]]의 "게이트는 자기가 안 보는 것을
+통과시킨다" 절.
 
 ## 리스크
 
-- **~~`environ`~~ (ZM-M1 plan 작성 중 해소)** — Rust 코드는 `extern static
-  environ`을 `execve`에 넘긴다(`init/src/main.rs:4-6,59,113`). libc가 없으면
-  그 심볼이 없다. Zig 0.16의 `main`은 첫 인자로 `std.process.Init.Minimal`을
-  받을 수 있고(`std/start.zig:699`) 그 안의 `environ.block.slice`가 커널이
-  PID 1 스택에 올려준 envp다 — libc 없는 시작 경로(`std/start.zig:508-519`)가
-  스택에서 직접 읽어 채운다. 다만 **fish가 실제로 어떤 환경 변수를 받는지는
-  여전히 M1에서 로그로 확인**해야 한다(`TERM` 유무).
-- **~~ioctl 상수~~ (ZM-M1 plan 작성 중 해소)** — `std.os.linux.T.IOCSCTTY`가
-  이미 존재한다(x86_64에서 `0x540e`, `std/os/linux.zig:5241`). 손으로 선언할
-  필요가 없다. `project_zig_c_uapi_rule`의 "매크로는 손으로 선언" 규칙은
-  `@cImport`를 쓸 때의 이야기이고, `std.os.linux`를 직접 쓰면 std가 이미
-  옮겨둔 상수를 그대로 쓴다.
+- **~~`environ`~~ (ZM-M1에서 해소)** — `pub fn main(init:
+  std.process.Init.Minimal)`의 `init.environ.block.slice.ptr`이 커널이 PID 1
+  스택에 올려준 envp다. libc 없는 시작 경로(`std/start.zig:508-519`)가
+  스택에서 직접 읽어 채운다. 실행 결과 fish가 정상 기동하고 terminal이
+  프롬프트를 파싱했으므로 환경 변수 문제는 없었다.
+- **~~ioctl 상수~~ (ZM-M1에서 해소)** — `std.os.linux.T.IOCSCTTY`가 이미
+  존재한다(x86_64에서 `0x540e`, `std/os/linux.zig:5241`). 손으로 선언하지
+  않았다. 상세는 [[project_zig_c_uapi_rule]]의 "세 번째 길" 절.
+- **~~게이트의 init 사각지대~~ (ZM-M1에서 해소)** — 아래 "검증 방법"에 적은
+  사각지대를 사람 눈이 아니라 스크립트로 막았다. 두 체인 모두
+  `tars-init: mounted ...` 네 줄을 검사한다.
 - **`terminal/src/drm.zig:3`의 `@cImport`** — Zig 번들 헤더에 DRM UAPI가
   있는지 M3에서 확인해야 한다. 없으면 커널 헤더를 vendor에 넣는다. **M3
   전체가 막힐 수 있는 유일한 지점이다.**

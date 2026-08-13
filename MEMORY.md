@@ -24,5 +24,5 @@
 - [Boot Foundation restart](docs/decisions/project_boot_foundation_restart.md) — TARS를 새 저장소에서 재시작한 이유와 첫 서브프로젝트 범위
 - [Zig rewrite intent](docs/decisions/project_zig_rewrite_intent.md) — `init`/`kms`의 Rust 코드는 결국 Zig로 재작성 예정; 현재 혼용은 과도기, 동기는 Zig 학습
 - [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸을 bash/zsh/fish/nushell 중 선택하고 마지막 것을 기억하는 미래 기능; 영속 저장소가 선행 조건(현재 initrd는 tmpfs)
-- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 커널 UAPI 구조체는 `@cImport`로 그대로, ioctl 매크로·가변 인자 함수만 손으로 선언; Debug 아닌 최적화 모드에서는 glibc fortify 때문에 `@cImport` 자체가 깨진다
-- [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 루트 `check.sh`는 BF+TF 두 체인; 무의미해진 게이트는 되살리지 않고 은퇴, `clean()`은 vendor 트리를 건드리지 않음, initrd 크기는 BF의 ISO 로딩에서만 병목
+- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰는 컴포넌트는 libc를 링크하지 말고 `std.os.linux`로; libc가 필요할 때만 `@cImport`(구조체는 되고 ioctl 매크로는 안 되며 최적화 모드에서 fortify로 깨진다)
+- [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 루트 `check.sh`는 BF+TF 두 체인; 무의미해진 게이트는 은퇴, `clean()`은 vendor 트리를 안 건드림, 게이트는 자기가 안 보는 것을 통과시키므로 재작성 전에 검사부터 추가

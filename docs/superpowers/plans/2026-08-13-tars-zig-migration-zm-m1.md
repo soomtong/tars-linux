@@ -572,3 +572,67 @@ Claude가 수행한다.
   동작을 바꾸지 않는다는 원칙에 따라 Debug 기본값을 유지한다. 최적화는
   필요해질 때 별도로 다룬다.
 - **PID 1 기능 보강(좀비 수거, 셸 종료 처리)** — design doc의 비목표.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-13 완료)
+
+**다음 세션은 이 절부터 읽을 것.** ZM-M1은 `TARS check PASS`로 완료됐다
+(BF 3/3, TF 3/3, 커밋 `57c8373`·`7e4f414`).
+
+### 1. plan의 검증 방법이 틀렸다 — 게이트에 검사를 추가했다
+
+Task 2 Step 7은 `grep 'tars-init:' /tmp/zm-m1-tf.log`로 육안 확인하라고
+썼는데 **아무것도 안 나왔다.** `init`이 조용해서가 아니라
+`terminal/check.sh:30`이 `LOG="$(mktemp)"`로 컨테이너 안 임시 파일에 serial을
+받고 `--rm`과 함께 사라지기 때문이다. PASS일 때는 그 로그를 출력하지도
+않는다(실패 시에만 startup 마커를 찍는다). `boot/check.sh`는 끝에서
+`cat "$LOG"`를 하므로 BF만 우연히 보였던 것이다.
+
+plan을 고쳐 우회하는 대신 **게이트 자체를 고쳤다.** 두 체인에
+`tars-init: mounted ...` 네 줄 검사를 넣었고, TF는 `--- init log ---` 아래
+`tars-init:` 줄을 매 회차 출력한다. 이유는 [[project_gate_chain_composition]]의
+"게이트는 자기가 안 보는 것을 통과시킨다" 절에 적었다 — 요약하면 검증을
+사람 눈에 맡기는 설계는 다음 milestone부터 아무도 안 지킨다.
+
+**마커 문자열이 `init/src/main.zig`와 `boot/check.sh`·`terminal/check.sh`
+세 곳에 중복된다.** init의 출력 문자열을 바꾸면 세 곳을 같이 고쳐야 한다.
+
+### 2. Zig 0.16 API는 전부 첫 시도에 컴파일됐다
+
+plan 작성 전에 호스트의 `/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std`
+(컨테이너와 같은 0.16.0)를 직접 읽어 시그니처를 확인한 것이 통했다.
+`std.process.Init.Minimal`, `init.environ.block.slice.ptr`,
+`linux.T.IOCSCTTY`, `linux.O{.ACCMODE}` 전부 예상대로였다. **문서나 기억이
+아니라 설치된 std 소스를 읽을 것** — 같은 버전이 호스트에 있으면 가장 확실한
+근거다.
+
+### 3. 크기: Rust 449KB → Zig 11.4MB (25배), 그런데 부팅은 안 느려졌다
+
+Debug 빌드라 디버그 정보와 std의 패닉·포매팅 기계가 통째로 들어간다.
+initrd는 11.8MB → **14MB**(gzip 후). plan에 적어둔 "13MB 넘으면 알릴 것"
+선을 넘겨서 `ReleaseSafe` 전환을 검토했다.
+
+**결론은 전환하지 않는 것이다.** 게이트 3회차 부팅 시간이 34/33/33초로
+기존과 같았다. 단독 BF 1회에서 39초가 나와 크기 탓으로 의심했으나 3회
+반복에서 사라진 노이즈였다. libc를 안 쓰게 되면서 `ReleaseSafe`가 가능해진
+것은 사실이므로(fortify 제약 소멸), **나중에 initrd에 셸 바이너리가 추가되어
+크기가 다시 문제가 되면 꺼낼 카드**로 남긴다.
+
+### 4. `file` 명령이 devcontainer에 없다
+
+Task 1 Step 5의 `file` 호출은 `command not found`로 실패했다. `ldd`의
+`not a dynamic executable` 하나로 정적 링크 확인은 충분하다. 필요하면
+Dockerfile에 `file` 패키지를 넣는 것을 ZM-M3에서 함께 고려할 것.
+
+### 5. `forked terminal (pid N)`의 N이 Rust판과 다르다 (정상)
+
+Rust판은 `pid 2`였는데 Zig판은 TF에서 19, BF에서 18이었다. `init`이 fork하는
+시점이 devtmpfs 마운트 뒤라 그 사이에 커널 스레드가 PID를 가져간 것이고,
+이 숫자는 회차마다 흔들린다. 게이트도 숫자를 보지 않는다.
+
+### 6. Task 5의 Step 1이 커밋 두 개로 나뉘지 않았다
+
+`boot/check.sh`와 `terminal/check.sh`가 "배선 변경"과 "검사 추가" 두 가지를
+동시에 담게 되어, 파일 단위로는 커밋을 쪼갤 수 없었다(이 환경에서는
+`git add -p`가 안 된다). `7e4f414` 하나에 둘 다 들어갔다.
