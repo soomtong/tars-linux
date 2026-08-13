@@ -20,7 +20,11 @@ fi
 mkdir -p build
 cp .config build/.config
 
-MAKE_ARGS=(-C "$SRC_DIR" O=../../build ARCH=x86_64)
+# ARCH는 arch/x86 트리를 쓰라는 뜻일 뿐 컴파일러를 고르지 않는다. 컨테이너가
+# arm64가 된 ZM-M3부터는 CROSS_COMPILE 접두사로 x86_64용 gcc를 명시해야 한다.
+# arch/x86/boot의 실모드 코드가 -m32/-m16으로 빌드되므로 크로스 gcc도 32비트
+# 코드 생성이 가능해야 한다(Dockerfile의 gcc-multilib-x86-64-linux-gnu).
+MAKE_ARGS=(-C "$SRC_DIR" O=../../build ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu-)
 
 make "${MAKE_ARGS[@]}" olddefconfig
 make "${MAKE_ARGS[@]}" -j"$(nproc)" bzImage
