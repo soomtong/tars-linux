@@ -11,9 +11,6 @@ cd "$(dirname "$0")"
 #   terminal/zig-pkg      Zig 0.16의 프로젝트 로컬 패키지 캐시
 # 이 셋은 네트워크가 있어야만 복구되므로, clean 대상에 넣으면 매 회차 수백
 # MB를 다시 받고 오프라인에서는 아예 복구가 불가능하다.
-#
-# kms/target은 목록에서 빠졌다 — TF-M2 이후 kms를 빌드하는 체인이 없다
-# (2026-08-12, TF-M4).
 clean() {
   rm -rf kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache out
 }
@@ -36,8 +33,9 @@ run_chain() {
 }
 
 # BF 체인은 limine ISO 부팅 경로를, TF 체인은 부팅 이후의 전체 런타임
-# (DRM 렌더링 + evdev 입력 + PTY 셸)을 검증한다. DF 체인(display/check.sh)은
-# TF-M4에서 은퇴했다 — 이유는 그 파일 머리말 참고.
+# (DRM 렌더링 + evdev 입력 + PTY 셸)을 검증한다. 한때 있던 DF 체인
+# (display/check.sh)과 kernel/check.sh는 ZM-M2에서 파일까지 지웠다 — 은퇴
+# 사유는 docs/decisions/project_gate_chain_composition.md 참고.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 
