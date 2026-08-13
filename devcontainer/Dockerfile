@@ -22,14 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         unzip \
     && rm -rf /var/lib/apt/lists/*
 
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
-        -y --default-toolchain stable --profile minimal \
-        --target x86_64-unknown-linux-gnu
-
 ENV ZIG_VERSION=0.16.0 \
     PATH=/usr/local/zig:$PATH
 
