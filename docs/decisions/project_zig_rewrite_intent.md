@@ -1,6 +1,6 @@
 ---
 name: project_zig_rewrite_intent
-description: "User wants to eventually rewrite TARS's Rust components in Zig to learn Zig properly; current Rust/Zig split is transitional, not a design goal"
+description: "Rust를 Zig로 재작성하려던 의도와 그 결말 — init은 옮겼고 kms는 옮기지 않고 지웠다(ZM, 2026-08-13 완료). 저장소에 Rust는 남아 있지 않다"
 metadata: 
   node_type: memory
   type: project
@@ -34,8 +34,23 @@ struct`로 옮긴 이유다.
 착수를 이 이유로 미룰 근거는 약해졌다. 상세 규칙은
 [[project_zig_c_uapi_rule]].
 
-**How to apply:** 새 컴포넌트를 만들 때 언어 선택을 물어야 한다면 Zig를
-기본값으로 제안한다. `init/`이나 `kms/`에 Rust 코드를 크게 늘리는 작업이
-생기면, 그 시점에 "이걸 지금 Zig로 옮기는 게 나은지" 먼저 짚어준다 —
-버릴 코드에 시간을 쓰지 않기 위해서다. 재작성 자체는 별도 서브프로젝트로
-brainstorming부터 시작하며, 이 저장소 관례대로 milestone 단위로 쪼갠다.
+## 결말 (2026-08-13, Zig Migration ZM-M1·M2)
+
+**의도는 실행됐고, 두 컴포넌트의 운명은 갈렸다.**
+
+- **`init/`은 Zig로 옮겼다**(ZM-M1). libc를 링크하지 않고 `std.os.linux`
+  raw syscall만 쓰는 정적 바이너리다 — 위에서 걱정하던 `@cImport` 문제가
+  아예 발생하지 않는 경로였다. 상세는 [[project_zig_c_uapi_rule]]의
+  "세 번째 길".
+- **`kms/`는 옮기지 않고 지웠다**(ZM-M2). `terminal/src/drm.zig`가 같은
+  일(DRM 모드 설정 → dumb buffer → framebuffer)을 이미 Zig로 하고 있어서
+  옮기면 중복 코드가 된다. "재작성"이 항상 이식을 뜻하지는 않는다.
+- **툴체인도 지웠다**(ZM-M2). `devcontainer/Dockerfile`에서 rustup이 빠져
+  이미지가 1.75GB → 1.11GB가 됐다. 이제 저장소와 빌드 이미지 어디에도
+  Rust는 없다 — 위의 "과도기 상태"는 끝났다.
+
+**How to apply:** 새 컴포넌트는 Zig로 만든다(이제 선택지가 하나다). 옛
+Rust 구현을 참고해야 할 일이 생기면 작업 트리가 아니라 **git 히스토리**를
+본다(`git show 0ec3c13^:kms/src/main.rs`). 어떤 컴포넌트를 다른 언어로
+"옮길" 때는 옮기기 전에 **그 기능이 이미 다른 곳에서 구현돼 있지 않은지**
+먼저 확인한다 — `kms`가 그 경우였다.

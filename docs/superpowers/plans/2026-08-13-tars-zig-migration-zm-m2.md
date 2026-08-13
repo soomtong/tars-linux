@@ -455,3 +455,65 @@ Claude가 수행한다.
 - **`origin/main`으로 push** — ZM-M1 커밋들도 아직 안 올렸다. 사용자가
   지시할 때 한다.
 - **PID 1 기능 보강(좀비 수거, 셸 종료 처리)** — design doc의 비목표.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-13 완료)
+
+**다음 세션은 이 절부터 읽을 것.** ZM-M2는 `TARS check PASS`로 완료됐다
+(BF 3/3, TF 3/3, 커밋 `94f3213`·`0ec3c13`·`ccfbd04`).
+
+### 1. `fd`/`rg`의 기본값이 사전 조사를 두 번 틀리게 했다
+
+`fd`도 `rg`도 **기본적으로 `.gitignore` 대상과 숨김 파일을 건너뛴다.** 이걸
+모르고 확인해서 plan에 두 가지를 잘못 적었다.
+
+- `fd -H -t d 'target' init kms`가 빈 결과를 줘서 "`init/target`은 존재하지
+  않는다"고 썼다. **실제로는 `release/`와 `.rustc_info.json`이 든 채로 남아
+  있었다.** `-H`는 숨김 파일만 켜고 ignore 목록은 `-I`가 켠다.
+- Task 1 Step 1의 예상 결과에 `.gitignore:13`을 넣었는데 안 나왔다.
+  `.gitignore`가 점으로 시작해서 `rg`가 아예 열지 않았다(`-H`가 필요하다).
+
+**빌드 산출물이나 무시된 파일의 존재를 확인할 때는 `fd -I` / `rg -uu`를
+쓸 것.** 특히 이번처럼 `.gitignore`에서 줄을 빼는 작업에서는, 지우기 전에
+그 경로의 실물이 남아 있는지를 반드시 `-I`로 본다 — 순서를 반대로 했으면
+`init/target`이 갑자기 `git status`에 나타났을 것이다.
+
+### 2. `kernel/check-virtio-gpu.sh`를 발견했고, 남겼다
+
+`kernel/check.sh`를 지우고 `ls kernel`을 했더니 나온 파일이다. 이름은
+비슷하지만 성격이 다르다 — 아무것도 빌드하지 않고 이미 만들어진
+`bzImage`/`initrd.cpio`로 virtio-gpu를 붙여 부팅해
+`tars-init: /dev/dri/card0 exists`만 확인한다. Rust와 무관하고 지금도
+동작하므로 건드리지 않았다. **깨진 게이트와 손으로 쓰는 도구를 구분한 것**이
+이번 판단의 핵심이고, 이 구분은 [[project_gate_chain_composition]]에 적었다.
+
+### 3. 이미지 1.75GB → 1.11GB (0.64GB, 37% 감소)
+
+예상보다 컸다. rustup minimal + stable 툴체인 하나가 그만큼이다. 옛 이미지는
+`tars-devcontainer:pre-zm-m2` 태그로 남겨뒀다 — ZM-M3에서 arm64 전환 후
+문제가 생기면 "M2까지는 멀쩡했던 이미지"로 비교할 수 있다. 필요 없어지면
+`docker rmi tars-devcontainer:pre-zm-m2`.
+
+### 4. Task 2 Step 3(재빌드)을 건너뛰고 Step 4를 돌린 사고 — 이미지 ID로 잡았다
+
+Step 4의 확인 결과에 `cargo`가 그대로 나와서 "rustup이 남았나" 싶었지만,
+`docker images`의 IMAGE ID가 재빌드 전과 같은 `f16fda55f51c`인 것으로 바로
+갈렸다. **레이어를 하나 지우면 이미지 ID는 반드시 바뀐다** — 이미지가
+정말 바뀌었는지는 `command -v` 같은 내용물 검사보다 ID 비교가 빠르고
+확실하다. 재빌드 후 ID는 `9ac8857931e1`이었다.
+
+### 5. 걱정했던 패키지 드리프트는 없었다
+
+재빌드가 apt 패키지를 다시 받아 fish나 glibc 버전이 움직일 위험을 Step 1에서
+태그로 대비했는데, 실제로는 `initrd.cpio`가 14MB 그대로였다. initrd에는
+fish와 그 `.so` 의존이 전부 들어가므로, **크기가 1바이트도 안 변했다는 것이
+유저랜드가 그대로라는 실질 증거**다. `FROM`과 apt `RUN` 레이어는 명령도
+부모도 안 바뀌어 캐시가 그대로 맞은 것으로 보인다.
+
+### 6. 커밋이 셋으로 나뉘었다
+
+plan(`94f3213`) → 소스·게이트 삭제(`0ec3c13`) → Dockerfile(`ccfbd04`).
+Dockerfile을 게이트 실행 전에 따로 커밋한 것은 의도적이다. Task 3에서
+게이트가 깨졌다면 `ccfbd04` 하나만 되돌려 원인을 이미지 쪽으로 좁힐 수
+있었다.

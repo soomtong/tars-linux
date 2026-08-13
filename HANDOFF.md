@@ -1,14 +1,14 @@
-# HANDOFF: Zig Migration ZM-M1 완료, 다음은 ZM-M2
+# HANDOFF: Zig Migration ZM-M2 완료, 다음은 ZM-M3
 
 ## 목표
 
-새 서브프로젝트 **Zig Migration(ZM)**을 2026-08-13에 시작해 첫 milestone
-**ZM-M1(`init`을 Zig로)**을 완료했다. PID 1인 `tars-init`이 Rust에서 Zig로
-바뀌었고, **libc를 링크하지 않는 정적 바이너리**다. 루트 `check.sh`가
-`TARS check PASS`(BF 3/3, TF 3/3)로 끝난다.
+서브프로젝트 **Zig Migration(ZM)**의 두 번째 milestone **ZM-M2(Rust 흔적
+제거)**를 2026-08-13에 완료했다. **저장소와 빌드 이미지 어디에도 Rust가
+없다.** 루트 `check.sh`가 Rust 없는 이미지에서 `TARS check PASS`(BF 3/3,
+TF 3/3)로 끝난다.
 
-다음은 **ZM-M2 — Rust 흔적 제거**다. plan은 아직 없다(이 저장소 관례상
-milestone이 끝난 뒤 다음 plan을 쓴다).
+다음은 **ZM-M3 — 빌드 호스트를 arm64 네이티브로**다. design doc에 범위가
+이미 적혀 있으므로 새 design은 필요 없고 plan만 쓰면 된다.
 
 **협업 방식(고정, 매 세션 반드시 지킬 것):** 설명 먼저 → 파일 작성과
 명령 실행은 **사용자가 직접** → 결과를 사용자가 전달하면 Claude가 상세
@@ -19,99 +19,80 @@ feedback_execution_scope.md`, `feedback_commit_delegation.md`,
 
 ## 현재 브랜치
 
-`main`. Working tree 깨끗함. **origin/main보다 앞서 있다 — push하지 않았다.**
-이번 세션 커밋(사용자가 직접 만든 `43641be` 포함):
+`main`. Working tree 깨끗함. **origin/main보다 11 커밋 앞서 있다 — 아직
+push하지 않았다.** 이번 세션 커밋 4개:
 
-- `43641be` `.claude/`를 `.gitignore`에 추가 (사용자)
-- `b9b2b65` Zig Migration design doc
-- `0417edc` ZM-M1 plan + design 리스크 2건 해소
-- `57c8373` Zig `init` 추가 (Rust판과 공존)
-- `7e4f414` 부팅 경로를 Zig `init`으로 전환 + 게이트에 init 마운트 검사
+- `94f3213` ZM-M2 plan
+- `0ec3c13` Rust 소스와 죽은 게이트 삭제
+- `ccfbd04` Dockerfile에서 rustup 제거
+- (문서/기억 갱신 커밋)
 
-## 완료된 작업 (2026-08-13 세션)
+## 완료된 작업 (2026-08-13 ZM-M2)
 
-**서브프로젝트 선정부터 했다.** 후보는 (1) 설정 영속화 + 부팅 셸 선택,
-(2) Rust → Zig 재작성이었고 **2번을 먼저** 하기로 했다. 이유는 순서
-의존성이다 — 1번은 블록 장치 대기·mount·설정 파싱을 전부 `init`에 넣는데,
-`init`은 어차피 Zig로 옮길 코드다. 버릴 Rust 코드를 만들지 않기 위해서다.
+지운 것만 있고 새로 쓴 코드는 없다.
 
-**설계 중에 두 번째 동기가 드러났다.** 사용자가 "Zig로 바꾸면 macOS →
-Docker → QEMU 다중 가상화 문제가 풀리느냐"고 물었고, 확인해 보니 호스트가
-arm64인데 `devcontainer/Dockerfile:1`이 `--platform=linux/amd64`였다. **컴파일러와
-QEMU 자체가 x86_64 에뮬레이션 안에서 돌고 있다** — 에뮬레이터를 에뮬레이션하는
-구조다. 이 발견으로 ZM-M3(빌드 호스트 arm64 네이티브화)이 서브프로젝트에
-추가됐다. 상세는 design doc "배경" 절.
-
-ZM-M1 실행 결과:
-
-- [x] **Task 1 — Zig 프로젝트 골격** `57c8373`. `init/build.zig`,
-      `init/src/main.zig`, `.gitignore` 3줄. 부팅 경로는 안 건드림.
-      `ldd` → `not a dynamic executable` 확인.
-- [x] **Task 2 — 부팅 경로 전환** `7e4f414`. `make_initrd.sh:20`(복사 경로),
-      `:45`(`copy_lib_deps` 제거), `boot/check.sh:7`·`terminal/check.sh:14`
-      (`cargo build` → `zig build`), `check.sh:18`(clean 목록).
-- [x] **정정 — 게이트에 init 마운트 검사 추가** (같은 커밋). plan의 "육안
-      확인" 방식이 성립하지 않아 스크립트로 옮겼다. 아래 "시도했으나 실패한
-      접근" 참고.
-- [x] **Task 3 — BF 체인** PASS. `Run /init as init process` → 마운트 4줄 →
-      `card0 not found`(정상) → `OpenFailed`(정상) → fish 배너.
-- [x] **Task 4 — 종료 게이트** `TARS check PASS`. 6/6 회차에서
-      `starting as PID 1`, `tars-init: failed` 0건.
-- [x] **문서/기억** — design doc Status 갱신, plan 말미에 "실제 실행에서
-      plan과 달라진 점" 6개 항목, `project_zig_c_uapi_rule.md`에 "세 번째 길"
-      절 추가, `project_gate_chain_composition.md`에 게이트 사각지대 절 추가.
-
-## 시도했으나 실패한 접근
-
-- **serial 로그를 사람이 눈으로 확인하는 검증** — plan Task 2 Step 7이
-  `grep 'tars-init:' /tmp/zm-m1-tf.log`를 시켰는데 아무것도 안 나왔다.
-  `terminal/check.sh:30`의 `LOG="$(mktemp)"`가 컨테이너 안 파일이고 `--rm`과
-  함께 사라진다. PASS일 때는 출력도 안 한다. **게이트에 검사를 넣는 것으로
-  대체했다** — 검증을 사람 눈에 맡기면 다음 milestone부터 아무도 안 본다.
-- **initrd 14MB가 BF를 느리게 했다는 추정** — 단독 BF 1회에서 39초가 나와
-  기준선 34초 대비 느려진 줄 알았으나, 게이트 3회차는 34/33/33초로 동일했다.
-  **단발 측정 노이즈였다.** `ReleaseSafe` 전환을 검토했다가 취소한 근거다.
+- [x] **Rust 소스** — `init/Cargo.toml`·`Cargo.lock`·`src/main.rs`·`target/`,
+      `kms/` 전체.
+- [x] **죽은 게이트 2개** — `display/check.sh`(TF-M4에서 은퇴),
+      **`kernel/check.sh`**. 후자는 design doc에 없던 항목이다 — 7번째 줄이
+      `cargo build --release`라 완료 조건을 막았다. 고치지 않고 지운 이유는
+      아래 "실행 중 알게 된 사실" 참고.
+- [x] **`.gitignore`** — `init/target/`·`kms/target/` 두 줄 제거.
+- [x] **루트 `check.sh` 주석 두 곳** — 없어진 kms/display를 가리키던 설명 정리.
+- [x] **`devcontainer/Dockerfile:25-31`의 rustup 제거 + 이미지 재빌드.**
+      1.75GB → **1.11GB**(0.64GB, 37% 감소). 옛 이미지는
+      `tars-devcontainer:pre-zm-m2` 태그로 남겨뒀다.
+- [x] **게이트** — `TARS check PASS`. `tars-init: starting as PID 1` 6건,
+      `init mounted all four filesystems` 6건, `tars-init: failed` 0건,
+      `initrd.cpio` 14MB로 변화 없음.
 
 ## 실행 중 알게 된 사실 (다음 milestone에서 유효)
 
-- **libc 없는 Zig가 통한다.** `init`이 쓰는 `mount`/`fork`/`execve`/`open`/
-  `setsid`/`ioctl`/`dup2`/`access`/`mkdir`/`close`/`exit`이 전부
-  `std.os.linux`에 있고 첫 시도에 컴파일됐다. 얻은 것: fortify 제약 소멸
-  (최적화 모드 자유), `copy_lib_deps` 불필요, `TIOCSCTTY`를 손으로 선언할
-  필요 없음(`linux.T.IOCSCTTY`). 상세는 `docs/decisions/
-  project_zig_c_uapi_rule.md`의 "세 번째 길" 절.
-- **`std.debug.print`가 libc 없이 `/dev/console`로 나간다.** 커널이 PID 1에게
-  준 fd 2가 그대로 시리얼로 이어진다. 이번 재작성에서 가장 미검증이던 지점.
-- **`environ`은 `std.process.Init.Minimal`로 받는다.**
-  `init.environ.block.slice.ptr`이 커널이 스택에 올려준 envp다.
-- **호스트에 컨테이너와 같은 Zig 0.16.0이 있다**
-  (`/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std`). API가 불확실하면 **설치된
-  std 소스를 직접 읽을 것** — 이번에 그렇게 해서 코드가 한 번에 통과했다.
-- **Zig Debug 바이너리는 크다.** `init`이 Rust release 449KB → Zig Debug
-  11.4MB(25배). initrd는 11.8 → 14MB. 부팅 시간에는 영향 없었다.
-- **`forked terminal (pid N)`의 N은 회차마다 다르다** (Rust판 2 → 18~19).
-  devtmpfs 마운트 뒤에 fork하므로 그 사이 커널 스레드가 PID를 가져간다.
+- **`fd`/`rg`는 기본적으로 `.gitignore` 대상과 숨김 파일을 건너뛴다.** 이걸
+  모르고 조사해서 "`init/target`은 없다"고 plan에 잘못 적었다(실제로는
+  남아 있었다). 빌드 산출물의 존재를 확인할 때는 **`fd -I` / `rg -uu`**.
+  `-H`는 숨김 파일만 켜고 ignore 목록은 `-I`가 켠다.
+- **이미지가 정말 바뀌었는지는 IMAGE ID로 본다.** 재빌드를 건너뛰고 확인
+  명령을 먼저 돌린 사고가 있었는데, `docker images`의 ID가 그대로인 것으로
+  즉시 갈렸다. 레이어를 하나 지우면 ID는 반드시 바뀐다.
+- **재빌드해도 유저랜드는 안 흔들렸다.** `initrd.cpio`가 14MB 그대로였고,
+  거기에 fish와 그 `.so` 의존이 전부 들어가므로 이게 실질 증거다. `FROM`과
+  apt `RUN` 레이어의 캐시가 그대로 맞았다는 뜻 — ZM-M3에서 `--platform`을
+  건드리면 **이 캐시가 전부 깨진다**는 점이 다르다.
+- **은퇴한 게이트에 "실행하지 말 것" 주석만 달아두면 오래 못 간다.**
+  `display/check.sh`가 그 상태로 남아 `cargo build`를 품고 있다가 ZM-M2의
+  범위를 다시 넓혔다. 은퇴 사유는 기억과 git 히스토리에 남기고 파일은 지운다
+  ([[project_gate_chain_composition]]).
+- **`kernel/check-virtio-gpu.sh`는 살아 있는 수동 도구다.** 아무것도 빌드하지
+  않고 기존 산출물로 `tars-init: /dev/dri/card0 exists`만 확인한다. 지우지
+  않았다.
 
 ## 남은 작업
 
-- [ ] **ZM-M2 — Rust 흔적 제거 (다음에 바로 할 일).** design doc의 해당 절
-      참고. `init/Cargo.toml`·`Cargo.lock`·`src/main.rs`·`target/`와 `kms/`
-      전체 삭제, `display/`는 `check.sh` 하나뿐이라 디렉터리째 삭제,
-      `.gitignore`에서 `init/target/`·`kms/target/` 제거, `check.sh:15-16`의
-      kms 주석 정리, `devcontainer/Dockerfile:25-31`의 rustup 제거 후 이미지
-      재빌드. 완료 조건은 Rust 없는 이미지에서 BF 3/3 + TF 3/3.
-- [ ] **ZM-M3 — 빌드 호스트 arm64 네이티브화.** design doc 참고. 막힐 수 있는
-      유일한 지점은 `terminal/src/drm.zig:3`의 `@cImport`가 읽는 DRM UAPI
-      헤더가 Zig 번들에 있는지 여부다. `devcontainer`에 `file` 패키지 추가도
-      이때 함께 고려할 것(ZM-M1에서 없어서 확인 하나를 건너뛰었다).
+- [ ] **ZM-M3 — 빌드 호스트 arm64 네이티브화 (다음에 바로 할 일).** design
+      doc의 해당 절에 변경 지점 넷이 이미 적혀 있다: `Dockerfile:1`의
+      `--platform=linux/amd64` 제거, Zig 설치 URL(`Dockerfile:28-29`)을
+      `aarch64`로, 커널 크로스 컴파일(`gcc-x86-64-linux-gnu` +
+      `kernel/build.sh:23`의 `CROSS_COMPILE`), initrd 유저랜드를
+      `apt-get download fish:amd64` → `dpkg -x`로 조달(`copy_lib_deps`의
+      `ldd`도 `readelf -d`로 바꿔야 한다).
+      - **막힐 수 있는 유일한 지점:** `terminal/src/drm.zig:3`의 `@cImport`가
+        읽는 DRM UAPI 헤더가 Zig 번들에 있는지.
+      - `devcontainer`에 **`file` 패키지 추가**를 이때 함께 할 것(ZM-M1에서
+        없어서 확인 하나를 건너뛰었다).
+      - **완료 조건에 시간 측정이 포함된다** — 이 milestone의 목적 자체가
+        속도라서 전환 전후 숫자가 없으면 판정할 수 없다. 기준선은 ZM-M1·M2에서
+        측정한 **BF 부팅 33~34초**다.
 - [ ] **(그 다음 후보) 설정 영속화 + 부팅 셸 선택** — `docs/decisions/
-      project_boot_shell_selection.md`. 이때 initrd에 셸 바이너리가 추가되어
-      크기가 다시 문제가 되면 `init`을 `ReleaseSafe`로 빌드하는 카드가 있다.
+      project_boot_shell_selection.md`. initrd에 셸 바이너리가 추가되어 크기가
+      문제가 되면 `init`을 `ReleaseSafe`로 빌드하는 카드가 있다(libc를 안 쓰게
+      되면서 가능해졌다).
 - [ ] **(숙제) 게스트 안에서 Zig 에러 트레이스 읽기.** TF-M4부터 미해결.
-- [ ] **(범위 밖) PID 1 기능 보강** — 지금 `init`은 fork한 `/terminal`이
-      죽어도 `waitpid`로 거두지 않고(좀비), fish가 종료되면 PID 1이 그냥
-      반환해 커널 패닉이 난다. Rust판과 동일한 동작을 유지한 것이며, 고칠
-      가치는 있으나 "동작을 바꾸지 않는다"는 ZM 원칙 때문에 미뤘다.
+- [ ] **(범위 밖) PID 1 기능 보강** — `init`은 fork한 `/terminal`이 죽어도
+      `waitpid`로 거두지 않고(좀비), fish가 종료되면 PID 1이 그냥 반환해 커널
+      패닉이 난다. Rust판과 동일한 동작을 유지한 것이며, ZM의 "동작을 바꾸지
+      않는다" 원칙 때문에 미뤘다. **ZM이 끝나면 이 제약도 끝난다.**
+- [ ] **(미결) `origin/main`으로 push.** 11 커밋이 로컬에만 있다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
@@ -123,24 +104,33 @@ ZM-M1 실행 결과:
 ## 핵심 파일
 
 - `docs/superpowers/specs/2026-08-13-tars-zig-migration-design.md` — ZM design
-  doc. "배경" 절의 이중 에뮬레이션 설명이 ZM-M3의 근거다.
-- `docs/superpowers/plans/2026-08-13-tars-zig-migration-zm-m1.md` —
-  **ZM-M1 plan(완료). 말미 "실제 실행에서 plan과 달라진 점" 6개 항목부터
-  읽을 것.** 사전 준비 절의 Zig 0.16 API 표도 계속 쓸모 있다.
-- `init/src/main.zig` — libc 없는 PID 1. 113줄.
-- `init/build.zig` — `link_libc`를 **명시하지 않는 것**이 결정이다.
+  doc. **"배경" 절의 이중 에뮬레이션 설명이 ZM-M3의 근거 전체다.** ZM-M3 절에
+  변경 지점 넷과 리스크가 적혀 있다.
+- `docs/superpowers/plans/2026-08-13-tars-zig-migration-zm-m2.md` —
+  **ZM-M2 plan(완료). 말미 "실제 실행에서 plan과 달라진 점" 6개 항목부터
+  읽을 것.**
+- `docs/superpowers/plans/2026-08-13-tars-zig-migration-zm-m1.md` — ZM-M1
+  plan. 사전 준비 절의 Zig 0.16 API 표가 계속 쓸모 있다.
+- `devcontainer/Dockerfile` — 34줄. ZM-M3에서 1·28·29번째 줄과 apt 목록이
+  바뀐다.
+- `kernel/make_initrd.sh` — ZM-M3에서 가장 많이 바뀔 파일(유저랜드 조달 경로
+  전부). 이 파일이 바뀌면 **두 체인을 모두** 돌린다.
+- `init/src/main.zig` — libc 없는 PID 1. 113줄. `init/build.zig`는
+  `link_libc`를 **명시하지 않는 것**이 결정이다.
 - `boot/check.sh` 끝부분, `terminal/check.sh:190-209` — init 마운트 검사.
   마커 문자열이 `init/src/main.zig`와 중복되므로 함께 고칠 것.
 - `MEMORY.md` + `docs/decisions/` — 이번에 갱신:
-  `project_zig_c_uapi_rule.md`(세 번째 길: libc 없이 `std.os.linux`),
-  `project_gate_chain_composition.md`(게이트 사각지대, 크기≠시간).
+  `project_zig_rewrite_intent.md`(재작성의 결말),
+  `project_gate_chain_composition.md`(은퇴한 게이트는 파일째 지운다).
 
 ## 다음 에이전트에게
 
 1. `git log --oneline -6` && `git status`로 상태 확인.
 2. `MEMORY.md`와 `docs/decisions/`의 feedback 3개를 먼저 읽을 것.
-3. **다음은 ZM-M2다.** design doc에 범위가 이미 적혀 있으므로 새 design은
-   필요 없다 — plan만 쓰면 된다.
+3. **다음은 ZM-M3다.** design doc에 범위가 있으므로 plan만 쓰면 된다.
+   ZM-M1·M2와 달리 **실패 모드가 넓은 milestone**이다 — 빌드 환경 전체가
+   바뀌므로 게이트가 깨졌을 때 원인 후보가 많다. plan을 쪼갤 때 "한 번에
+   하나씩 바꾸고 그때마다 확인"을 지킬 것.
 4. Claude가 직접 build/docker run/QEMU 명령을 실행하지 않는다
    (`git`/`find`/`Read`/`rg`, 그리고 **설치된 Zig std 소스 읽기** 같은 읽기
    전용 확인과 웹 리서치는 허용). **매 Step 완료 후 파일 내용을 `Read`로

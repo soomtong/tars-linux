@@ -1,6 +1,6 @@
 ---
 name: project_gate_chain_composition
-description: "루트 check.sh의 체인 구성 원칙 — 낡은 게이트는 되살리지 말고 은퇴; clean()은 빌드 산출물만; initrd 크기는 BF에서만 병목이나 크기가 곧 시간은 아니다; 게이트는 자기가 안 보는 것을 통과시키므로 재작성 전에 검사부터 추가한다"
+description: "루트 check.sh의 체인 구성 원칙 — 낡은 게이트는 되살리지 말고 은퇴시키되 주석만 남기지 말고 파일째 지운다; clean()은 빌드 산출물만; initrd 크기는 BF에서만 병목이나 크기가 곧 시간은 아니다; 게이트는 자기가 안 보는 것을 통과시키므로 재작성 전에 검사부터 추가한다"
 metadata:
   node_type: memory
   type: project
@@ -22,6 +22,19 @@ DF 게이트는 "화면 (10,10)이 kms가 칠한 빨강인가"를 본다. TF-M2�
 남긴 두 체인의 역할 분담: BF는 limine ISO 부팅 경로를, TF는 부팅 이후의
 런타임 전체(DRM 렌더링 + evdev 입력 + PTY 셸)를 본다. TF가 BF를 대신하지
 못하는 유일한 지점이 부트로더다 — TF는 `-kernel`/`-initrd` 직접 부팅이다.
+
+**2026-08-13 ZM-M2: 은퇴한 게이트를 파일까지 지웠다.** `display/check.sh`와
+`kernel/check.sh` 둘 다 삭제했다. 후자는 BF-M2 시절 게이트인데 아무도
+안 돌리는 사이 이미 깨져 있었다 — `terminal/prepare.sh`를 부르지 않아
+`make_initrd.sh`가 terminal 바이너리를 못 찾는다. **은퇴 표시를 주석으로
+남기는 방식(display가 그랬다)은 오래 못 간다**: 그 파일은 "실행하지 말 것"
+머리말을 달고도 `cargo build`를 안에 품은 채 남아 있어서 ZM-M2의 Rust
+제거 범위를 다시 넓혔다. 은퇴 사유는 파일이 아니라 이 기억과 git
+히스토리에 남기고, 파일은 지운다.
+
+지우지 않은 것: `kernel/check-virtio-gpu.sh`. 아무것도 빌드하지 않고 이미
+만들어진 산출물로 `tars-init: /dev/dri/card0 exists`만 확인하는 수동
+도구라 지금도 동작한다. **깨진 게이트와 손으로 쓰는 도구는 구분한다.**
 
 ## `make_initrd.sh`의 복사 목록이 바뀌면 다른 체인이 조용히 깨진다
 

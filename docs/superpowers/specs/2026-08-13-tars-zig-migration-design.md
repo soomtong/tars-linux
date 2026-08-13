@@ -1,7 +1,7 @@
 # TARS Zig Migration — Design
 
 **Date:** 2026-08-13
-**Status:** ZM-M1 complete (2026-08-13); ZM-M2 다음
+**Status:** ZM-M2 complete (2026-08-13); ZM-M3 다음
 
 ## 배경
 
@@ -69,7 +69,16 @@ coreutils, glibc `.so`)의 공급원이다. 그래서 목표는 Docker를 없애
 arm64 네이티브화까지 간다. 완료 상태의 정의는 다음 셋이 동시에 성립하는
 것이다.
 
-1. `rg -l 'cargo|rustup' --glob '!docs/**'`가 아무것도 찾지 못한다.
+1. 아래 검색이 아무것도 찾지 못한다. **ZM-M2에서 실제로 쓴 형태로
+   정정했다** — 원래 적어둔 `--glob '!docs/**'` 하나로는 `HANDOFF.md`와
+   `MEMORY.md`(둘 다 기록이라 Rust 언급이 남아야 한다), vendor된 ghostty
+   소스가 걸린다.
+
+   ```bash
+   rg -n 'cargo|rustup' \
+     --glob '!docs/**' --glob '!terminal/ghostty-src/**' \
+     --glob '!HANDOFF.md' --glob '!MEMORY.md' .
+   ```
 2. `devcontainer/Dockerfile`에 rustup이 없고 `--platform=linux/amd64`도 없다.
 3. 그 상태에서 `./check.sh`가 `TARS check PASS`로 끝난다.
 
@@ -167,7 +176,7 @@ ZM-M1에서 Rust 소스를 **지우지 않는** 것도 같은 이유다. 게이�
 마운트 네 줄(proc/sysfs/devtmpfs/devpts)이 전부 `mounted`인지 육안 확인.
 아래 "검증 방법"에 적은 이유로 게이트 PASS만으로는 부족하다.
 
-### ZM-M2 — Rust 흔적 제거
+### ZM-M2 — Rust 흔적 제거 (완료, 2026-08-13)
 
 `init/Cargo.toml`·`Cargo.lock`·`src/main.rs`·`target/`와 `kms/` 전체를
 삭제한다. `display/`에는 `check.sh` 하나뿐이므로 디렉터리째 사라진다.
@@ -175,7 +184,20 @@ ZM-M1에서 Rust 소스를 **지우지 않는** 것도 같은 이유다. 게이�
 `devcontainer/Dockerfile:25-31`의 rustup 설치를 제거하고 이미지를
 재빌드한다.
 
+**범위에 `kernel/check.sh`가 추가됐다.** 이 design을 쓸 때 놓친 파일인데
+7번째 줄이 `cargo build --release`라 완료 조건 1번이 성립하지 않았다.
+고치는 대신 **지웠다.** 이미 깨져 있었고(`terminal/prepare.sh`를 부르지
+않아 clean 트리에서 `make_initrd.sh`가 terminal 바이너리를 못 찾는다),
+살려도 TF 체인이 더 강하게 검증하는 것을 중복해서 볼 뿐이다.
+[[project_gate_chain_composition]]의 "낡은 게이트는 되살리지 않고 은퇴"를
+적용했다. `kernel/check-virtio-gpu.sh`는 남겼다 — 아무것도 빌드하지 않고
+Rust와 무관한 수동 도구다.
+
 **완료 조건:** Rust 툴체인이 없는 이미지 안에서 BF 3/3 + TF 3/3.
+
+**결과:** `TARS check PASS`. 이미지 1.75GB → 1.11GB(0.64GB 감소).
+initrd는 14MB로 변화 없음. 커밋 `94f3213`(plan), `0ec3c13`(소스·게이트
+삭제), `ccfbd04`(Dockerfile).
 
 ### ZM-M3 — 빌드 호스트를 arm64 네이티브로
 
