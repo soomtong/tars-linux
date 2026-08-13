@@ -1,7 +1,7 @@
 # TARS Zig Migration — Design
 
 **Date:** 2026-08-13
-**Status:** ZM-M2 complete (2026-08-13); ZM-M3 다음
+**Status:** **완료 (2026-08-13). ZM-M1·M2·M3 전부 끝났다.**
 
 ## 배경
 
@@ -199,7 +199,7 @@ Rust와 무관한 수동 도구다.
 initrd는 14MB로 변화 없음. 커밋 `94f3213`(plan), `0ec3c13`(소스·게이트
 삭제), `ccfbd04`(Dockerfile).
 
-### ZM-M3 — 빌드 호스트를 arm64 네이티브로
+### ZM-M3 — 빌드 호스트를 arm64 네이티브로 (완료, 2026-08-13)
 
 `Dockerfile:1`의 `--platform=linux/amd64`를 제거한다. 따라오는 변경이 셋이다.
 
@@ -220,6 +220,43 @@ initrd는 14MB로 변화 없음. 커밋 `94f3213`(plan), `0ec3c13`(소스·게�
 
 **완료 조건:** BF 3/3 + TF 3/3, 그리고 **전환 전후 소요 시간 기록.** 이
 milestone의 목적 자체가 속도라서 숫자가 남지 않으면 완료를 판정할 수 없다.
+
+#### 실행 결과
+
+`TARS check PASS`(BF 3/3, TF 3/3, 전체 8분 52초). `tars-init: starting as
+PID 1` 6건, `init mounted all four filesystems` 6건, `tars-init: failed`
+0건. 상세는 [[project_build_host_arch]].
+
+| 항목 | 전 | 후 | 배수 |
+|---|---|---|---|
+| 커널 clean 빌드 | 9분 55초 | 46.5초 | 12.8× |
+| Zig 두 컴포넌트 | ~6분(추정) | 49.3초 | ~7× |
+| BF 체인 1회 | 17분 40초 | 1분 48초 | 9.8× |
+| QEMU 부팅만 | 33~34초 | ~4초 | 8.5× |
+
+이미지 1.11GB → 1.3GB. `nproc`은 양쪽 10으로 동일.
+
+#### 위 서술에서 틀렸던 것과 예상 못 한 것
+
+- **커널 크로스 컴파일러는 `gcc-x86-64-linux-gnu`로 부족하다.**
+  `CONFIG_X86_16BIT=y`라 `arch/x86/boot`의 실모드 코드가 `-m32`/`-m16`으로
+  빌드되므로 **`gcc-multilib-x86-64-linux-gnu`**를 써야 한다(trixie, arm64
+  설치 가능). 지금 `Dockerfile`에 `gcc-multilib`이 있던 이유가 그것이었다.
+- **유저랜드 조달은 `apt-get download`+`dpkg -x`가 맞았지만 시점이 다르다.**
+  `make_initrd.sh`가 아니라 **`Dockerfile`이** 이미지 빌드 때 한 번
+  `/usr/local/amd64-sysroot`에 구워둔다. 게이트는 clean 재빌드를 6회 하므로
+  initrd 생성이 네트워크에 나가면 안 된다.
+- **`ldd`→`readelf` 전환은 두 가지를 손으로 해야 한다** — 인터프리터는
+  `PT_INTERP`에 따로 있고, 의존의 의존은 재귀로 따라가야 한다. 그리고
+  **Zig 산출물은 로더를 `DT_NEEDED`에도 적는다**(Debian 바이너리는 안
+  그런다). 이걸 그대로 처리하면 initrd에 로더 사본이 둘 생긴다.
+- **`boot/limine-binary/limine`을 예상하지 못했다.** ISO에 부트 섹터를
+  써넣는 **호스트용** 도구인데 옛 amd64 컨테이너의 산출물이 남아 있었고,
+  `make`가 소스보다 새것이라 다시 만들지 않아 BF가 죽었다. 게다가
+  binfmt_misc가 `ENOEXEC` 대신 qemu-user로 넘겨 에러가 위장돼서 왔다.
+  `boot/build.sh`를 `make -C "$DIR" -B`로 고쳤다.
+- **`devcontainer/sanity`가 범위에 추가됐다.** `gcc -m32`를 쓰므로 arm64에서
+  깨진다. 지우지 않고 `CC`/`LD`를 크로스 접두사로 고쳤다.
 
 각 milestone이 끝난 뒤에야 다음 milestone의 상세 plan을 작성한다 — 전체를
 한 번에 미리 설계하지 않는다(Boot/Display/Terminal Foundation과 동일).
@@ -261,9 +298,18 @@ fish 배너를, `terminal/check.sh`는 `terminal: screen>`을 본다. 즉 `init`
 - **~~게이트의 init 사각지대~~ (ZM-M1에서 해소)** — 아래 "검증 방법"에 적은
   사각지대를 사람 눈이 아니라 스크립트로 막았다. 두 체인 모두
   `tars-init: mounted ...` 네 줄을 검사한다.
-- **`terminal/src/drm.zig:3`의 `@cImport`** — Zig 번들 헤더에 DRM UAPI가
-  있는지 M3에서 확인해야 한다. 없으면 커널 헤더를 vendor에 넣는다. **M3
-  전체가 막힐 수 있는 유일한 지점이다.**
+- **~~`terminal/src/drm.zig:3`의 `@cImport`~~ (ZM-M3: 처음부터 오해였다)** —
+  "Zig 번들 헤더에 DRM UAPI가 있는지가 M3 전체를 막을 수 있다"고 적었는데,
+  이 `@cImport`는 **DRM UAPI를 읽지 않는다.** `fcntl.h`·`sys/ioctl.h`·
+  `sys/mman.h` 셋뿐이고 전부 glibc 헤더이며, DRM 구조체는 `drm.zig:9-40`에
+  `extern struct`로 손수 선언돼 있다(ioctl 번호도 직접 계산). 게다가
+  `build.zig`가 `resolveTargetQuery`로 타깃을 명시하는 순간 Zig에게 이건
+  이미 네이티브 빌드가 아니라, 그 헤더는 예전에도 Zig 번들에서 왔다. M3에서
+  `terminal`은 **한 줄도 고치지 않고** 크로스 빌드됐다. 리스크를 적을 때
+  파일을 열어보지 않은 것이 원인이다.
+- **objtool/relocs (ZM-M3에서 해소)** — 실제 위험은 이쪽이었다. arm64로
+  빌드된 호스트 도구가 x86 오브젝트를 읽어야 하고 `CONFIG_UNWINDER_ORC=y`라
+  objtool을 많이 쓰는데, 아무 문제 없이 통과했다.
 - **`make_initrd.sh`의 복사 목록** — DF-M3와 TF-M4에서 이 목록이 바뀌면서
   다른 체인이 조용히 깨진 사고가 두 번 있었다. M1과 M3가 둘 다 이 파일을
   건드리므로, 변경 직후 반드시 두 체인을 모두 돌린다.

@@ -1027,3 +1027,78 @@ Claude가 수행한다.
 | Task 5(initrd) | `git checkout kernel/make_initrd.sh`. 단 옛 버전은 arm64 컨테이너에서 동작하지 않는다 — 확인은 옛 이미지에서. |
 | Task 8(게이트) | 커밋이 Task별로 나뉘어 있으므로 `git revert`로 한 층씩 벗긴다. 이미지는 `latest` 승격 전이라 안전하다. |
 | 커널 크로스 자체가 불가능 | 이 milestone은 여기서 막힌다. 그 경우 `Dockerfile`을 amd64로 되돌리고(=ZM-M2 상태), 무엇이 왜 막혔는지를 design doc에 남긴다. "커널만 amd64 이미지에서 빌드하고 나머지는 arm64" 같은 이중 컨테이너 구성은 게이트를 두 이미지에 걸치게 만들어 더 나쁘다 — 선택지로 적어두되 택하지 않는다. |
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-13 완료)
+
+**다음 세션은 이 절부터 읽을 것.** ZM-M3은 `TARS check PASS`로 완료됐다
+(BF 3/3, TF 3/3, 전체 8분 52초).
+
+### 1. 측정 결과 — 예상보다 크게 빨라졌다
+
+| 항목 | 전 | 후 | 배수 |
+|---|---|---|---|
+| 커널 clean 빌드 | 9분 55초 | 46.5초 | 12.8× |
+| Zig 두 컴포넌트 | ~6분(추정) | 49.3초 | ~7× |
+| BF 체인 1회 | 17분 40초 | 1분 48초 | 9.8× |
+| QEMU 부팅만 | 33~34초 | ~4초 | 8.5× |
+| 루트 게이트 전체 | (BF 3회만 53분) | 8분 52초 | — |
+
+**부팅 8.5배가 이 milestone의 근거를 사후에 증명한다.** design doc의 "배경"
+절이 세운 가설(qemu 바이너리 자체가 Rosetta를 통과한 뒤 그 안에서 게스트를
+TCG로 번역한다)이 맞았다는 뜻이다 — TCG는 JIT이라 에뮬레이션 위에서 특히
+불리하다. 이미지는 1.11GB → 1.3GB.
+
+### 2. Task 1 Step 0(정답지 보관)이 두 번 값을 했다
+
+plan을 쓴 뒤 실행 직전에 추가한 Step인데, 이번 milestone에서 가장 유용했다.
+
+- **`.so` 목록에서 `libpthread`·`librt`·`libutil`을 발견했다.** `fish`/`cat`/
+  `uname`/`mkdir`의 `ldd` 어디에도 없어서 사전 조사만으로는 놓쳤을
+  것들이다. 출처는 `terminal`(Zig 산출물)이었다.
+- **로더가 두 번 들어간 것을 잡았다.** 크기만 봤으면(13.83MB → 13.94MB)
+  "gzip 편차"로 넘겼을 차이다.
+
+**빌드 산출물을 바꾸는 작업에서는 바꾸기 전 산출물의 파일 목록을 저장소
+밖에 떠두는 것이 싸고 강력하다.**
+
+### 3. Zig 산출물은 로더를 `DT_NEEDED`에도 적는다
+
+`terminal`의 `readelf -d`에 `ld-linux-x86-64.so.2`가 들어 있다. Debian이
+만든 `fish`·`mkdir`에는 없다. `ldd`는 소네임을 절대 경로로 해석해 돌려주므로
+이 사실이 가려져 있었고, `PT_INTERP`와 `DT_NEEDED`를 각각 처리하는 새
+resolver에서 사본이 둘 생겼다. `NEEDED` 순회에서 `ld-linux*`를 건너뛰는
+한 줄로 해결했고, 그 뒤 파일 목록이 264줄 완전 일치했다.
+
+### 4. plan이 통째로 놓친 것: `boot/limine-binary/limine`
+
+BF 체인이 ISO 만들기 단계에서 죽었다. 원인은 옛 amd64 컨테이너가 빌드해 둔
+**호스트용** x86_64 유틸리티가 남아 있었고 `make`가 소스보다 새것이라 다시
+만들지 않은 것. 게다가 binfmt_misc가 `ENOEXEC` 대신 qemu-user로 넘겨
+`[qemu]: Could not open '/lib64/ld-linux-x86-64.so.2'`라는 위장된 메시지가
+나왔다.
+
+plan의 사전 조사 5번이 "limine은 손댈 것이 없다 — `make -C limine-binary`는
+호스트용 유틸리티를 빌드한다"고 **정확히 그 파일을 짚고도 결론을 반대로
+냈다.** 빌드된다는 것과 **다시** 빌드된다는 것을 구분하지 않았다.
+`boot/build.sh`를 `make -C "$DIR" -B`로 고쳤다.
+
+**진단이 빨랐던 이유는 Task 순서 덕이다.** BF만 실패하고 TF는 통과했는데,
+TF는 `-kernel`/`-initrd` 직접 부팅이라 limine을 안 거친다. 이 조합 자체가
+범인을 ISO 경로로 좁혔고, initrd·커널·유저랜드는 그 시점에 이미 무죄였다.
+
+### 5. sysroot 패키지 목록은 실측으로 8개까지 줄었다
+
+plan 초안은 `coreutils`의 Depends를 그대로 옮겨 15개를 받으려 했다. Task 1의
+`ldd`와 정답지를 대조하니 실제로 필요한 것은 `fish`·`fish-common`·
+`coreutils` + `libc6`·`libgcc-s1`·`libpcre2-8-0`·`libpcre2-32-0`·
+`libselinux1`뿐이었다. `libstdc++6`도 필요 없다 — trixie의 fish 4.0.2는
+Rust로 작성됐다.
+
+### 6. 커밋 여섯 개
+
+`dc7a71a`(plan) → `4edf95b`(기준선 반영) → `aa474a3`(Dockerfile) →
+`f757be4`(커널 크로스) → `8bd9181`(initrd sysroot) → `7b464b5`(limine) →
+`0e65be7`(sanity). Task마다 끊은 것이 limine 사고 때 실제로 값을 했다 —
+되돌릴 단위가 분명했다.
