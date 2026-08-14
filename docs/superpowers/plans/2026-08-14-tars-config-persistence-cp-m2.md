@@ -1274,3 +1274,98 @@ Task 6 Step 2에서 숫자로 본다. 대응은 `init`을 `ReleaseSafe`로 빌�
   쓰는 자리이므로 나중에 설정 파일이 생기면 읽는 편이 맞다.
 - **`/etc/passwd`·`$HOME`·프롬프트 다듬기.** 셸 셋이 뜨기만 하면 이번 목표는
   끝이다.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-15 완료)
+
+**다음 세션은 이 절부터 읽을 것.** CP-M2는 `TARS check PASS`(BF 3/3, TF 3/3,
+**CP-M2 3/3**)로 완료됐다. 루트 게이트 전체 **14분 35초**(CP-M1 13분 14초),
+부팅 12회.
+
+### 1. 게이트는 첫 시도에 통과했다 — 막힌 곳은 코드가 아니라 편집이었다
+
+`config/check.sh`를 새로 쓰고 처음 돌린 CP 체인이 바로 PASS였다. "대비해 둔
+실패 갈래" A~E 중 **하나도 발동하지 않았다.** CP-M0·M1에 이어 세 번째다.
+
+대신 두 번 막혔는데 둘 다 파일 편집 사고였다.
+
+- **`main.zig`에 `children` 선언이 둘 남았다.** 새 블록을 넣고 옛 다섯 줄을 안
+  지웠다. Zig는 이것을 "unreachable code"가 아니라 **`redeclaration of local
+  variable`**로 막는다 — `supervise`가 `noreturn`이라 옛 블록은 실행될 수 없는
+  코드인데도, 같은 스코프에 이름이 두 번 나온 것부터 잡는다(섀도잉을 아예
+  허용하지 않는 언어).
+- **`config/check.sh` 붙여넣기에서 48줄이 잘렸다.** 긴 줄이 일정 폭에서
+  잘리면서 `if ! kill -0 ...; the`처럼 문법이 깨진 곳과, **`EDIT_KEYS`에서
+  `spc shift-dot spc`가 사라진 곳**이 함께 생겼다. 후자가 특히 위험했다 —
+  문법은 멀쩡한 채 `echo shell=zsh/config/tars.conf`가 타이핑돼서 "왜 파일이
+  안 써지지"로 나타났을 것이다. **100줄이 넘는 파일은 `/tmp`에 원본을 만들어
+  `diff`로 대조한 뒤 복사하는 방식으로 처리했다.** 짧은 편집(Task 1~4)은 직접
+  써도 전부 정확했다.
+
+### 2. Task 1의 실측이 design doc의 예상 둘을 뒤집었다
+
+위 "Task 1 Step 3 실측 결과" 표 참고. 요약하면 **`/usr/share/zsh`가 17MB**라
+넣지 않기로 했고(없어도 zsh는 조용히 시작한다), **모듈 38개 중 둘**
+(`zsh/curses`, `zsh/db/gdbm`)만 sysroot에 없는 라이브러리를 요구해서 그 둘을
+뺐다. 남은 36개는 그대로 들어간다.
+
+### 3. terminfo는 필요 없었다 — 그리고 그 이유가 로그에 있다
+
+design doc과 `HANDOFF.md`가 "CP-M2에서 zsh(zle)나 bash(readline)를 띄우면
+`TERM`이 없어 깨질 가능성이 가장 높다"고 예고했지만 **zsh는 멀쩡히 떴고 5초
+관측 창을 살아남았다**(`giving up on console shell` 0회).
+
+가설은 이렇다: **커널이 PID 1에게 `HOME=/`와 `TERM=linux`를 넘긴다**
+(`init/main.c`의 `envp_init`). `init`은 그 envp를 자식에게 그대로 물려주므로
+`TERM`은 원래부터 설정돼 있었다 — "TERM이 아무 데도 설정되지 않는다"는 숙제는
+정확히는 "우리가 설정하지 않는다"였다. terminfo 데이터베이스가 없어도 zsh는
+줄 편집 기능을 줄일 뿐 죽지 않는다. **터미널 화면에서 zsh를 실제로 써 보기
+전까지는 이 숙제를 완전히 닫지 말 것** — 게이트는 "죽지 않았다"까지만 봤다.
+
+### 4. initrd 크기 주석이 낡아 있었다 (이번 변경과 무관)
+
+`make_initrd.sh`에 "53MB → gzip 11.8MB"라고 적혀 있었는데 이것은 TF-M2 시절
+숫자다. 그 뒤 ZM-M1에서 `init`이 Rust에서 **Zig 디버그 빌드 11.6MB**로 바뀌며
+이미 60MB를 넘어 있었다. CP-M2가 셸 셋을 더한 지금은 **67.6MB → gzip
+15.5MB**이고, 주석을 그 숫자로 갱신했다.
+
+**BF 배너 도달 시간은 ~4초로 변하지 않았다.** limine의 BIOS INT13h 경로가
+15.5MB에서는 아직 여유가 있다는 뜻이라, `init`을 `ReleaseSafe`로 바꾸는 카드는
+계속 숙제로 남긴다.
+
+### 5. 최종 마커 숫자 (루트 게이트 1회, 부팅 12회)
+
+| 마커 | 실측 | 뜻 |
+|---|---|---|
+| `tars-init: starting as PID 1` | 12 | BF 3 + TF 3 + CP 3회차×2 |
+| `tars-init: config shell=fish` | 9 | BF 3 + TF 3 + CP 1차 3 |
+| `tars-init: config shell=zsh` | 3 | CP 2차 3 |
+| `started console shell (pid …, /usr/bin/fish)` | 9 | 파싱 결과와 짝 |
+| `started console shell (pid …, /usr/bin/zsh)` | 3 | 파싱 결과와 짝 |
+| `created /config/tars.conf` | 3 | 회차당 1차에서만 |
+| `loaded /config/tars.conf` | 3 | 회차당 2차에서만 |
+| `shell … is not executable` | 0 | 폴백 미발동 = 셋 다 initrd에 있다 |
+| `giving up on console shell` | 0 | 셸이 죽은 적 없다 |
+| `Attempted to kill init` | 0 | 패닉 없음 |
+
+**9:3 두 쌍이 짝을 이루는 것**이 이 milestone의 증명이다 — 파싱 결과
+(`config shell=`)와 실제로 exec된 바이너리(`started console shell (… , …)`)가
+12번의 부팅 전부에서 일치했다.
+
+### 6. 두 부팅의 로그는 여전히 두 줄만 다르다
+
+```
+boot 1:  created /config/tars.conf   config shell=fish   started console shell (pid 20, /usr/bin/fish)
+boot 2:  loaded  /config/tars.conf   config shell=zsh    started console shell (pid 19, /usr/bin/zsh)
+```
+
+앞의 여섯 줄(PID 1 시작 + 마운트 다섯)은 완전히 같다. 커널도 initrd도 두
+바이너리도 같은 상태에서 시작했는데 **exec한 프로그램이 갈렸고, 그 차이의
+유일한 원인은 사람이 게스트 안에서 타이핑한 10바이트짜리 줄**이다.
+
+그 한 줄이 지나온 사슬은 이렇다. `sendkey shift-dot` → i8042 → evdev
+`KEY_DOT`+shift → `input.zig`의 keymap이 `>`로 변환 → PTY → fish가 리다이렉션
+으로 해석 → ext2 write → `MS_SYNCHRONOUS`라 즉시 디스크 → QEMU kill → 2차
+부팅에서 `config.load`가 파싱 → `Shell.path()` → `execve`. **어느 고리가
+끊어져도 이 게이트가 잡는다.**
