@@ -959,3 +959,81 @@ Claude가 수행한다.
   파서가 복잡해지는 시점(키가 여러 개가 되는 CP-M2 이후)에 따로 꺼낸다.
 - **`TERM` 전달.** `HANDOFF.md`의 숙제 그대로, CP-M2에서 zsh/bash가 실제로
   깨지는 것을 보고 나서 넣는다.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-14 완료)
+
+**다음 세션은 이 절부터 읽을 것.** CP-M1은 `TARS check PASS`(BF 3/3, TF 3/3,
+CP-M1 3/3)로 완료됐다. 루트 게이트 전체 소요는 **13분 14초**.
+
+### 1. 한 번도 안 막혔다 — 컴파일 에러도, 게이트 실패도 없다
+
+Task 2 Step 6(첫 컴파일)에서 `linux.open`의 `O` 구조체 필드 이름이나
+`read`/`write`의 포인터 타입이 걸릴 것으로 봤는데 **한 번에 통과했다.** 설치된
+std 0.16.0 소스에서 시그니처를 미리 읽고 쓴 것이 그대로 맞았다
+(`O`는 `packed struct(u32)`에 `ACCMODE`/`CREAT`/`TRUNC` 필드,
+`read(fd, [*]u8, usize)`, `write(fd, [*]const u8, usize)`).
+
+Task 3 Step 3에 errno별 진단 갈래를 다섯 개 준비했는데 하나도 쓰이지 않았다.
+CP-M0에 이어 두 번째로, **준비한 실패가 안 나는** milestone이다.
+
+### 2. 부팅이 33% 늘었는데 시간은 0.8%만 늘었다
+
+CP-M0 13분 08초 → CP-M1 **13분 14초**(+6초). 부팅은 9회 → 12회다.
+plan은 "13분 30초 안팎"을 예상했으니 그보다도 덜 늘었다.
+
+**이 게이트의 시간은 사실상 전부 clean 재빌드 9회다.** 부팅 1회는 몇 초라서
+회차당 부팅을 더 늘려도 총 시간은 거의 안 변한다 — CP-M2에서 부팅 횟수를
+걱정할 필요가 없다는 실측 근거다.
+
+### 3. plan의 기대치 하나가 틀렸다 (Task 5 Step 1)
+
+`boot/check.sh`를 **직접** 부를 때 `no config storage, using defaults`가 `3`일
+것이라고 적었는데 **`1`이 맞다.** 3회 반복은 루트 `check.sh`의 `run_chain`이
+하는 일이고, 체인 스크립트를 직접 부르면 부팅은 1회다. 전체 게이트에서는
+BF 3 + TF 3 = 6이 되고, 그쪽 숫자는 맞았다.
+
+### 4. 최종 마커 숫자 (루트 게이트 1회, 부팅 12회)
+
+| 마커 | 실측 | 뜻 |
+|---|---|---|
+| `tars-init: starting as PID 1` | 12 | BF 3 + TF 3 + CP 3회차×2 |
+| `tars-init: mounted ext2 at /config` | 6 | CP 3회차의 두 부팅씩 |
+| `tars-init: failed to mount ext2 at /config` | 6 | BF·TF는 디스크가 없다(정상) |
+| `tars-init: no config storage, using defaults` | 6 | 위 실패와 정확히 짝 |
+| `tars-init: created /config/tars.conf` | 3 | 회차당 1차 부팅에서만 |
+| `tars-init: loaded /config/tars.conf` | 3 | 회차당 2차 부팅에서만 |
+| `tars-init: config shell=fish` | 12 | 어느 경로든 매 부팅 한 번 |
+| `Attempted to kill init` | 0 | 패닉 없음 |
+| `unknown config key` / `unknown shell` / `could not seed` | 0 / 0 / 0 | 폴백 경로 미발동 |
+
+마지막 줄이 덤으로 알려주는 것이 있다 — **씨앗 파일이 파서 자신의 규칙을
+정확히 만족한다.** `save`가 쓴 텍스트를 `load`가 경고 하나 없이 되읽었으므로
+쓰기와 읽기가 어긋나지 않았다.
+
+### 5. 두 부팅의 로그는 한 줄만 다르다
+
+```
+boot 1:  tars-init: created /config/tars.conf
+boot 2:  tars-init: loaded /config/tars.conf
+```
+
+앞의 여섯 줄(PID 1 시작 + 마운트 다섯)이 완전히 같다. **커널도 initrd도 init
+바이너리도 같은 상태에서 시작했는데 행동이 갈렸고, 그 차이의 유일한 원인이
+디스크에 남은 30바이트짜리 파일이다.** 이것이 이 milestone이 증명하려던 것
+전부다.
+
+`MS_SYNCHRONOUS`가 실제로 일한 것도 여기서 처음 확인됐다. 게이트는 `created`
+줄을 보자마자 QEMU를 죽이고, init은 `write(2)`가 돌아온 **뒤에** 그 줄을
+찍는다. 동기 마운트가 아니었다면 데이터가 page cache에만 있는 채로 프로세스가
+사라져 2차 부팅이 다시 `created`를 찍었을 것이다.
+
+### 6. ext2의 unclean 경고는 예상대로 나왔다
+
+`note: ext2 reported an unclean superblock on boot 2 (expected: boot 1 was
+killed)`가 세 회차 모두 찍혔다. ext2는 마운트 시 슈퍼블록을 "not clean"으로
+표시하고 언마운트 시 되돌리는데, 1차 부팅이 언마운트 없이 죽으므로 그 표시가
+남는다. 커널은 경고만 하고 마운트해 준다 — 저널 없는 파일시스템의 정직한
+모습이고, 이 경고가 **없다면** 오히려 1차 부팅이 예상과 다르게 끝났다는
+신호다.
