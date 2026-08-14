@@ -776,3 +776,78 @@ Claude가 수행한다.
 - **TF/BF 체인에 디스크를 물리는 것.** 일부러 안 한다 — "디스크가 없어도
   부팅한다"가 검사 대상이기 때문이다.
 - **파티션 테이블, 여러 파일시스템, fsck.** design doc의 비목표 그대로.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-14 완료)
+
+**다음 세션은 이 절부터 읽을 것.** CP-M0는 `TARS check PASS`(BF 3/3, TF 3/3,
+**CP 3/3**)로 완료됐다. 루트 게이트 전체 소요는 **13분 08초** — 두 체인
+8분 52초에서 4분 16초가 늘었고, 그것이 CP 3회분(빌드 + 부팅)이다.
+
+### 1. 예상한 실패가 하나도 안 났다
+
+plan의 Task 6 Step 1은 errno별 진단표를 네 줄이나 준비했는데 **첫 실행에서
+바로 마운트가 됐다.** 특히 걱정했던 경합(virtio-blk probe가 init보다 늦게
+끝나 `/dev/vda`가 아직 없는 상황)이 일어나지 않았다 — 내장 드라이버의 PCI
+probe가 `/init` 실행보다 먼저 끝난다. `mountConfig`에 재시도 루프를 넣지
+않았고, 넣을 필요도 없었다.
+
+`dumpe2fs`로 미리 확인한 것도 그대로였다. mke2fs 1.47.2의 ext2 프로파일은
+`ext_attr resize_inode dir_index filetype sparse_super large_file`만 켜고
+`has_journal`/`metadata_csum`/`64bit`은 켜지 않는다 — 커널 `CONFIG_EXT2_FS`
+드라이버가 거부할 것이 없다. 블록 크기는 1024로 잡혔고(16MB짜리 작은
+파일시스템이라 mke2fs가 그렇게 고른다), 오버헤드가 1159블록(약 7%)인데
+대부분이 고정 개수 inode 4096개의 테이블이다.
+
+### 2. 디스크 없는 체인의 실패 줄이 뜻밖의 증거를 준다
+
+BF/TF 로그에 이 두 줄이 새로 생겼다.
+
+```
+/dev/vda: Can't lookup blockdev          ← 커널이 찍는다
+tars-init: failed to mount ext2 at /config (errno 2)
+```
+
+`mount(2)`는 (1) 파일시스템 타입 찾기 → (2) 블록 장치 열기 → (3) 마운트
+지점에 붙이기 순서로 진행한다. 커널이 (2)에서 실패했다고 말한다는 것은
+**(1)을 통과했다는 뜻**이다. 즉 디스크를 안 물린 체인의 실패 로그가
+`CONFIG_EXT2_FS`가 커널에 들어 있음을 증명한다. 타입이 없었다면 errno 19
+(ENODEV)로 조용히 끝났을 것이다.
+
+### 3. plan에 없던 Step: 성공했을 때도 init 로그를 찍는다
+
+루트 게이트 통합 로그에서 검증 숫자를 셌더니 기대치 `9/3/6/0`이 아니라
+**`6/0/6/0`**이 나왔다. 원인은 게이트 실패가 아니라 `config/check.sh`가
+**성공 경로에서 시리얼 로그를 하나도 출력하지 않았기** 때문이다 —
+`boot/check.sh`는 `cat "$LOG"`, `terminal/check.sh`는 `--- init log ---`를
+찍는데 CP만 요약 세 줄뿐이었다. 그래서 통합 로그에는 부팅 9회 중 6회의
+흔적만 남았다.
+
+`echo "PASS"` 앞에 이 두 줄을 넣어 고쳤다(커밋 `848a3db`).
+
+```bash
+echo "--- init log ---"
+grep 'tars-init:' "$LOG" || true
+```
+
+`|| true`는 `set -uo pipefail` 아래에서 grep이 빈 결과로 1을 반환하는 것을
+막기 위한 것이다. **다음 전체 게이트부터 숫자는 `9 / 3 / 6 / 0`이 된다**
+(부팅 9회, 마운트 성공 3회 = CP, 실패 6회 = BF+TF, 패닉 0). 이 검증은
+CP-M1 종료 시점에 자연스럽게 이뤄진다.
+
+교훈은 이 저장소에서 반복되는 그것이다 — **게이트가 통과시킨 것과 게이트가
+기록에 남긴 것은 다르다.** CP 체인 자체는 마운트를 제대로 검사하고 있었지만,
+사후에 통합 로그만 보는 사람에게는 그 3회가 존재하지 않는 것처럼 보였다.
+
+### 4. 크기와 형태
+
+- `out/config.img` — 16,777,216바이트 sparse 파일. `truncate` + `mkfs.ext2
+  -F -q -m 0 -L tars-config`. 레이블은 `tars-config`, UUID는 회차마다
+  달라진다(경로 `/dev/vda`로 찾으므로 무관).
+- `init` 바이너리는 12MB 그대로, 동적 의존 여전히 0개.
+  `linux.MS.SYNCHRONOUS`도 `linux.mount`도 std의 시스템 콜 래퍼라 libc가
+  딸려오지 않는다.
+- 커널 `.config`는 세 줄만 늘었고 `olddefconfig`이 `CONFIG_VIRTIO_BLK`를
+  지우지 않았다(`CONFIG_BLK_DEV=y`를 먼저 썼기 때문). 확인은
+  `kernel/build/.config`에서 한다.
