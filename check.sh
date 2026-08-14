@@ -36,7 +36,12 @@ run_chain() {
 # (DRM 렌더링 + evdev 입력 + PTY 셸)을 검증한다. 한때 있던 DF 체인
 # (display/check.sh)과 kernel/check.sh는 ZM-M2에서 파일까지 지웠다 — 은퇴
 # 사유는 docs/decisions/project_gate_chain_composition.md 참고.
+#
+# CP 체인은 영속 저장소를 본다. 세 체인 중 유일하게 -drive로 디스크를 물고
+# 부팅하며, 나머지 둘은 디스크 없이 부팅해도 통과해야 한다는 것 자체가
+# 검사 대상이다(설정 저장소가 없다고 부팅이 막히면 안 된다).
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
+run_chain "CP-M0" ./config/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
