@@ -32,9 +32,8 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 
 ## 현재 브랜치
 
-`main`. **커밋 7개(`982835d`~`0d5e8fb`)가 아직 push되지 않았다** —
-`git push`부터 할 것. `MEMORY.md`·`HANDOFF.md`·기억 파일 커밋이 그 뒤에 하나 더
-붙는다.
+`main`. Working tree 깨끗하고 **`origin/main`과 같다**(2026-08-15 push 완료).
+CP-M2의 커밋 8개(`982835d`~`b721693`)가 모두 올라가 있다.
 
 ## CP 서브프로젝트에서 만든 것 (2026-08-14~15)
 
