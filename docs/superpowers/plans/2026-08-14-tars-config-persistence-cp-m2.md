@@ -225,6 +225,30 @@ Task 2에서 `make_initrd.sh`가 그 이름을 찍고 죽는다 — 그때 대�
 (a) 해당 패키지를 Dockerfile 목록에 추가, (b) 그 모듈을 initrd에서 제외.
 설정 파일 하나 읽는 셸에 `zsh/db/gdbm`은 필요 없으므로 (b)가 보통 맞다.
 
+**실측 결과 (2026-08-14) — Task 2는 이 값을 쓴다:**
+
+| 항목 | 값 |
+|---|---|
+| bash / zsh | `/usr/bin/bash` 1.3MB, `/usr/bin/zsh` 0.9MB (`/bin/...`은 없다) |
+| 모듈 디렉터리 | `.../zsh/5.9`, `.so` 38개, 합계 1.5MB |
+| bash NEEDED | `libtinfo.so.6`, `libc.so.6` |
+| zsh NEEDED | `libcap.so.2`, `libtinfo.so.6`, `libm.so.6`, `libc.so.6` |
+| 모듈 NEEDED 합집합 | 위 + `libgdbm.so.6`, `libncursesw.so.6`, `libpcre2-8.so.0` |
+| `/usr/share/zsh` | **17MB** |
+
+두 가지가 plan의 예상과 달랐고, 둘 다 "넣지 않는다"로 정했다.
+
+1. **`libgdbm.so.6`(`zsh/db/gdbm.so`)와 `libncursesw.so.6`(`zsh/curses.so`)가
+   sysroot에 없다.** 38개 중 둘뿐이고 `zmodload`로 이름을 대고 부를 때만 열리는
+   선택적 모듈이다 — 위 (b)를 고른다.
+2. **`/usr/share/zsh`가 17MB다.** design doc은 fish-common과 같은 규모로 보고
+   "함께 필요하다"고 적었지만, 실측은 initrd(gzip 11.8MB)를 흔드는 크기다.
+   내용은 전부 fpath에서 autoload되는 함수이고 `~/.zshrc`가 없는 우리 게스트는
+   `compinit`도 부르지 않으므로 **없어도 zsh는 조용히 시작한다.** 패키지는
+   sysroot에 그대로 둬서(이미 받아 놓았다) 필요해지면 네트워크 없이 한 줄로
+   켤 수 있게 한다. 이 판단은 design doc "미리 알고 들어가는 위험 3"(initrd
+   크기)이 예고한 그 자리다.
+
 - [ ] **Step 4: Commit**
 
 Claude가 수행한다.
@@ -263,8 +287,8 @@ copy_lib_deps "$WORKDIR/usr/bin/zsh"
 - [ ] **Step 2: zsh 모듈 트리 — 유일하게 경로를 보존해야 하는 것**
 
 `/usr/share/fish` 복사 블록(`kernel/make_initrd.sh:112-116`) 아래에 넣는다.
-**`<버전>`은 Task 1 Step 3에서 본 값을 쓰지 않는다** — 와일드카드로 통째로
-복사하므로 버전이 무엇이든 그대로 따라온다.
+**버전 번호(`5.9`)를 적지 않는다** — 와일드카드로 통째로 복사하므로 패키지가
+올라가도 이 스크립트는 그대로다.
 
 ```bash
 # zsh는 바이너리 하나가 아니다. zle(줄 편집), complete, parameter 같은
@@ -275,6 +299,14 @@ copy_lib_deps "$WORKDIR/usr/bin/zsh"
 mkdir -p "$WORKDIR/usr/lib/x86_64-linux-gnu"
 cp -r "$SYSROOT/usr/lib/x86_64-linux-gnu/zsh" "$WORKDIR/usr/lib/x86_64-linux-gnu/"
 
+# 38개 중 둘만 sysroot에 없는 라이브러리를 요구한다(2026-08-14 실측):
+# zsh/curses는 libncursesw.so.6, zsh/db/gdbm은 libgdbm.so.6. 둘 다 zmodload로
+# 이름을 대고 부를 때만 열리는 선택적 모듈이라 우리 셸은 부를 일이 없다.
+# 라이브러리 두 개를 게스트에 들이는 대신 모듈을 뺀다 — 남겨두면 아래
+# copy_lib_deps가 그 소네임을 찍고 즉시 죽는다(그게 정상 동작이다).
+rm -f  "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/curses.so
+rm -rf "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/db
+
 # 모듈도 각자 동적 의존을 갖는다. 바이너리에만 copy_lib_deps를 돌리면 빠진
 # 라이브러리가 **부팅 후 dlopen 시점에야** 드러나고, 그 실패는 로그에서
 # 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 소네임을 찍고 즉시 죽는다.
@@ -282,9 +314,14 @@ while IFS= read -r mod; do
   copy_lib_deps "$mod"
 done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 
-# /usr/share/zsh는 zsh 패키지가 아니라 zsh-common(arch: all)이 준다.
-# fish가 fish-common을 필요로 했던 것과 정확히 같은 구조다.
-cp -r "$SYSROOT/usr/share/zsh" "$WORKDIR/usr/share/"
+# /usr/share/zsh(zsh-common)는 **넣지 않는다.** fish가 fish-common을 필요로
+# 했던 것과 같은 구조이긴 한데 크기가 다르다 — 17MB이고 대부분이 완성
+# 함수(Completion)다. zsh는 이 트리가 없어도 조용히 시작한다: 여기 있는 것은
+# 전부 fpath에서 autoload되는 함수이고, ~/.zshrc가 없는 우리 게스트에서는
+# compinit도 promptinit도 불리지 않는다. 필요해지면 아래 한 줄을 살린다
+# (패키지는 이미 sysroot에 구워져 있으므로 네트워크 없이 켤 수 있다).
+#
+#   cp -r "$SYSROOT/usr/share/zsh" "$WORKDIR/usr/share/"
 ```
 
 - [ ] **Step 3: initrd를 만들어 본다**
@@ -295,7 +332,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
   'cd kernel && ./make_initrd.sh && ls -l initrd.cpio'
 ```
 
-Expected: 에러 없이 끝나고 `initrd.cpio`가 **12~15MB**(CP-M1까지 11.8MB).
+Expected: 에러 없이 끝나고 `initrd.cpio`가 **12.5~14MB**(CP-M1까지 11.8MB).
+더해지는 것은 bash 1.3MB + zsh 0.9MB + 모듈 1.5MB + libtinfo/libcap ~1MB이고,
+gzip 뒤에는 그 절반 이하로 줄어든다.
 
 실패한다면 십중팔구 이 모양이다:
 
@@ -304,20 +343,30 @@ make_initrd: cannot resolve libgdbm.so.6 (needed by .../zsh/5.9/zsh/db/gdbm.so) 
              add the package that provides it to devcontainer/Dockerfile
 ```
 
-**이건 고장이 아니라 설계된 동작이다**(`project_build_host_arch`). 소네임을
-그대로 알릴 것 — 위 Task 1 Step 3의 (a)/(b) 중에서 고른다.
+**이건 고장이 아니라 설계된 동작이다**(`project_build_host_arch`). Step 2의 두
+`rm`이 이미 알려진 두 모듈을 빼므로 이 메시지가 나온다면 **다른 소네임**일
+것이다 — 그대로 알릴 것. 대응은 (a) 패키지를 Dockerfile 목록에 추가,
+(b) 그 모듈을 `rm` 줄에 추가. 선택적 모듈이면 (b)가 맞다.
 
 - [ ] **Step 4: 셋이 실제로 들어갔는지 목록으로 확인**
 
 Run:
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
-  'zcat kernel/initrd.cpio | cpio -t --quiet 2>/dev/null | \
-   grep -E "usr/bin/(bash|zsh|fish)$|lib/x86_64-linux-gnu/zsh/|usr/share/zsh/functions$|libtinfo|libcap"' | head -20
+  'zcat kernel/initrd.cpio | cpio -t --quiet 2>/dev/null > /tmp/list.txt
+   grep -E "usr/bin/(bash|zsh|fish)$|libtinfo|libcap" /tmp/list.txt
+   echo "--- zsh modules ---"
+   grep -c "lib/x86_64-linux-gnu/zsh/.*\.so$" /tmp/list.txt
+   echo "--- must be empty (removed modules) ---"
+   grep -E "zsh/curses\.so|zsh/db/" /tmp/list.txt
+   echo "--- must be empty (share tree not shipped) ---"
+   grep "usr/share/zsh" /tmp/list.txt'
 ```
 
 Expected: `usr/bin/bash`, `usr/bin/zsh`, `usr/bin/fish` 세 줄과
-`lib/x86_64-linux-gnu/libtinfo.so.6`, `libcap.so.2`, 그리고 zsh 모듈 경로들.
+`lib/x86_64-linux-gnu/libtinfo.so.6`, `libcap.so.2`. 모듈 개수는 **36**
+(38에서 `curses.so`와 `db/gdbm.so`를 뺀 값). 마지막 두 블록은 출력이 없어야
+한다.
 
 **`usr/bin/`으로 시작하는지 확인할 것.** `./usr/bin/bash` 앞의 `.`은 cpio가
 붙이는 것이라 정상이다.

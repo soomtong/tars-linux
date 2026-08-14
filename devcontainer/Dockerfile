@@ -40,6 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 셋 다 libc6 소속이다. fish 4.0.2는 Rust로 작성돼 libstdc++가 필요 없다.
 # fish-common은 architecture: all이라 :amd64를 붙이지 않는다 —
 # /usr/share/fish/{functions,config.fish,__fish_build_paths.fish}가 여기 있다.
+#
+# CP-M2가 셋을 더한다. bash는 libtinfo6만 있으면 되고, zsh는 libtinfo6 +
+# libcap2를 요구한다. zsh-common은 fish-common과 같은 구조로 arch: all이라
+# :amd64를 붙이지 않는다 — /usr/share/zsh의 함수들이 거기 있다. apt-get
+# download는 의존을 따라가지 않으므로 이 목록은 언제나 명시적이다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -48,6 +53,11 @@ RUN dpkg --add-architecture amd64 \
     && (cd /tmp/debs && apt-get download \
         fish:amd64 \
         fish-common \
+         bash:amd64 \
+        zsh:amd64 \
+        zsh-common \
+        libtinfo6:amd64 \
+        libcap2:amd64 \
         coreutils:amd64 \
         libc6:amd64 \
         libgcc-s1:amd64 \
