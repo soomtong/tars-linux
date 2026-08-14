@@ -139,6 +139,62 @@ sleep 1
 echo "screendump ${AFTER}" >&3
 sleep 1
 
+# --- 재시작 경로 검증 (IS) ---------------------------------------------
+# 화면 셸에 exit를 쳐서 죽인다. 그러면 이 순서가 일어나야 한다:
+#   fish 종료 → terminal이 PTY EOF로 종료 → PID 1이 수거 → PID 1이 재시작
+#   → 새 terminal이 DRM을 다시 열고 새 프롬프트를 그린다
+# 이 milestone 전에는 terminal이 무한 sleep으로 버텨서 아무 일도 안 났다.
+SPAWNS_BEFORE=$(grep -c "terminal: spawned child pid" "$LOG")
+
+for k in e x i t ret; do
+  echo "sendkey $k" >&3
+  sleep 0.3
+done
+
+RESTARTED=0
+for _ in $(seq 1 60); do
+  if [ "$(grep -c "terminal: spawned child pid" "$LOG")" -gt "$SPAWNS_BEFORE" ]; then
+    RESTARTED=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$RESTARTED" != "1" ]; then
+  echo "FAIL: init did not restart the terminal within 60s after the shell exited"
+  echo "--- restart markers ---"
+  for marker in \
+    "terminal: child exited (pty EOF)" \
+    "tars-init: terminal exited" \
+    "tars-init: restarting terminal" \
+    "tars-init: started terminal"; do
+    if grep -q "$marker" "$LOG"; then
+      echo "  ok      ${marker}"
+    else
+      echo "  MISSING ${marker}"
+    fi
+  done
+  tail -n 60 "$LOG"
+  exit 1
+fi
+echo "init restarted the terminal after the shell exited"
+
+# 좀비 수거 검증: 죽은 fish는 terminal이 거두지 않으므로 PID 1로
+# 재부모화되고, PID 1이 거둔다. 이 줄이 없으면 좀비가 쌓인다는 뜻이다.
+if ! grep -q "tars-init: reaped orphan pid" "$LOG"; then
+  echo "FAIL: init never reaped a re-parented orphan"
+  tail -n 60 "$LOG"
+  exit 1
+fi
+echo "init reaped the re-parented shell"
+
+# 이 milestone의 존재 이유를 직접 지키는 검사.
+if grep -q "Attempted to kill init" "$LOG"; then
+  echo "FAIL: kernel panicked because PID 1 exited"
+  tail -n 60 "$LOG"
+  exit 1
+fi
+
 exec 3<&-
 exec 3>&-
 

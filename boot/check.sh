@@ -61,6 +61,10 @@ if [ "$FOUND" = "1" ]; then
     fi
   done
   echo "init mounted all four filesystems"
+  if grep -q "Attempted to kill init" "$LOG"; then
+    echo "FAIL: kernel panicked because PID 1 exited"
+    exit 1
+  fi
   echo "PASS"
   exit 0
 fi
