@@ -9,8 +9,13 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
-fn mountFs(source: [:0]const u8, target: [:0]const u8, fstype: [:0]const u8) void {
-    const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, 0, 0);
+fn mountFs(
+    source: [:0]const u8,
+    target: [:0]const u8,
+    fstype: [:0]const u8,
+    flags: u32,
+) void {
+    const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, 0);
     if (failed(rc)) |e| {
         std.debug.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
             fstype, target, @intFromEnum(e),
@@ -33,7 +38,23 @@ fn mountDevpts() void {
             return;
         }
     }
-    mountFs("devpts", "/dev/pts", "devpts");
+    mountFs("devpts", "/dev/pts", "devpts", 0);
+}
+
+/// 설정 저장소를 붙인다. initramfs는 tmpfs라 전원이 꺼지면 통째로 사라진다 —
+/// 재부팅을 넘어 살아남는 것은 이 virtio-blk 디스크(/dev/vda) 하나뿐이다.
+/// 파티션 테이블 없이 디스크 전체가 ext2라서 /dev/vda1이 아니라 /dev/vda다.
+///
+/// MS_SYNCHRONOUS로 붙이는 이유가 이 서브프로젝트의 핵심이다. 보통 파일에
+/// 쓴 내용은 page cache에만 올라가고 커널이 알아서 나중에 디스크로 내려보낸다.
+/// 그런데 우리 사용 시나리오는 "설정을 고치고 전원을 끈다"이고, 게이트는 실제로
+/// 쓴 직후 QEMU를 죽인다. 동기 마운트면 write(2)가 돌아온 시점에 이미 디스크에
+/// 있다. 설정 파일은 어쩌다 한 번 쓰는 것이라 성능 대가가 사실상 없다.
+///
+/// 디스크가 없는 부팅도 정상 경로다 — BF 체인은 ISO 부팅이라 -drive가 없다.
+/// 그때는 errno 2(ENOENT)로 실패하고 로그 한 줄만 남으며, 부팅은 계속된다.
+fn mountConfig() void {
+    mountFs("/dev/vda", "/config", "ext2", linux.MS.SYNCHRONOUS);
 }
 
 fn logDrmDevicePresence() void {
@@ -226,10 +247,11 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     std.debug.print("tars-init: starting as PID 1\n", .{});
 
-    mountFs("proc", "/proc", "proc");
-    mountFs("sysfs", "/sys", "sysfs");
-    mountFs("devtmpfs", "/dev", "devtmpfs");
+    mountFs("proc", "/proc", "proc", 0);
+    mountFs("sysfs", "/sys", "sysfs", 0);
+    mountFs("devtmpfs", "/dev", "devtmpfs", 0);
     mountDevpts();
+    mountConfig();
 
     logDrmDevicePresence();
 

@@ -75,7 +75,8 @@ copy_lib_deps() {
   done
 }
 
-mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev"
+mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
+         "$WORKDIR/config"
 
 cp ../init/zig-out/bin/init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
