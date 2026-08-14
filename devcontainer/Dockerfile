@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         imagemagick \
         xz-utils \
         unzip \
+        e2fsprogs \
     && rm -rf /var/lib/apt/lists/*
 
 # initrd에 들어갈 x86_64 유저랜드. 컨테이너가 arm64라서 컨테이너 자신의
