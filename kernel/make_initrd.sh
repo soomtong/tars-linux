@@ -96,6 +96,14 @@ cp ../terminal/vendor/fonts/Hanme_8x4x4.ttf "$WORKDIR/vendor/fonts/Hanme_8x4x4.t
 cp "$SYSROOT/usr/bin/fish" "$WORKDIR/usr/bin/fish"
 chmod 0755 "$WORKDIR/usr/bin/fish"
 
+# CP-M2: 설정으로 고를 수 있는 셸 셋. initrd 안의 자리는 sysroot의 원래
+# 자리와 무관하게 우리가 정한다 — init/src/config.zig의 Shell.path()가
+# 여기와 같은 경로를 돌려줘야 한다. 둘이 어긋나면 부팅 후 "execve failed"로만
+# 나타난다.
+cp "$SYSROOT/usr/bin/bash" "$WORKDIR/usr/bin/bash"
+cp "$SYSROOT/usr/bin/zsh" "$WORKDIR/usr/bin/zsh"
+chmod 0755 "$WORKDIR/usr/bin/bash" "$WORKDIR/usr/bin/zsh"
+
 cp "$SYSROOT/usr/bin/cat" "$WORKDIR/usr/bin/cat"
 cp "$SYSROOT/usr/bin/uname" "$WORKDIR/usr/bin/uname"
 cp "$SYSROOT/usr/bin/mkdir" "$WORKDIR/usr/bin/mkdir"
@@ -105,6 +113,8 @@ chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" "$WORKDIR/usr/bin/mkd
 # (ZM-M1). 나머지는 전부 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/fish"
+copy_lib_deps "$WORKDIR/usr/bin/bash"
+copy_lib_deps "$WORKDIR/usr/bin/zsh"
 copy_lib_deps "$WORKDIR/usr/bin/cat"
 copy_lib_deps "$WORKDIR/usr/bin/uname"
 copy_lib_deps "$WORKDIR/usr/bin/mkdir"
@@ -115,9 +125,44 @@ cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/config.fish" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/__fish_build_paths.fish" "$WORKDIR/usr/share/fish/"
 
+# zsh는 바이너리 하나가 아니다. zle(줄 편집), complete, parameter 같은
+# "내장처럼 보이는" 기능 대부분이 실행 중에 dlopen되는 .so 모듈이고, 그것을
+# 찾을 자리(module_path)는 zsh 안에 컴파일 타임에 박혀 있다. 그래서 이 트리만은
+# initrd 안에서도 **sysroot와 같은 경로**를 유지해야 한다 — 다른 라이브러리처럼
+# /lib/x86_64-linux-gnu로 모으면 zsh가 영영 못 찾는다.
+mkdir -p "$WORKDIR/usr/lib/x86_64-linux-gnu"
+cp -r "$SYSROOT/usr/lib/x86_64-linux-gnu/zsh" "$WORKDIR/usr/lib/x86_64-linux-gnu/"
+
+# 38개 중 둘만 sysroot에 없는 라이브러리를 요구한다(2026-08-14 실측):
+# zsh/curses는 libncursesw.so.6, zsh/db/gdbm은 libgdbm.so.6. 둘 다 zmodload로
+# 이름을 대고 부를 때만 열리는 선택적 모듈이라 우리 셸은 부를 일이 없다.
+# 라이브러리 두 개를 게스트에 들이는 대신 모듈을 뺀다 — 남겨두면 아래
+# copy_lib_deps가 그 소네임을 찍고 즉시 죽는다(그게 정상 동작이다).
+rm -f  "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/curses.so
+rm -rf "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/db
+
+# 모듈도 각자 동적 의존을 갖는다. 바이너리에만 copy_lib_deps를 돌리면 빠진
+# 라이브러리가 **부팅 후 dlopen 시점에야** 드러나고, 그 실패는 로그에서
+# 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 소네임을 찍고 즉시 죽는다.
+while IFS= read -r mod; do
+  copy_lib_deps "$mod"
+done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
+
+# /usr/share/zsh(zsh-common)는 **넣지 않는다.** fish가 fish-common을 필요로
+# 했던 것과 같은 구조이긴 한데 크기가 다르다 — 17MB이고 대부분이 완성
+# 함수(Completion)다. zsh는 이 트리가 없어도 조용히 시작한다: 여기 있는 것은
+# 전부 fpath에서 autoload되는 함수이고, ~/.zshrc가 없는 우리 게스트에서는
+# compinit도 promptinit도 불리지 않는다. 필요해지면 아래 한 줄을 살린다
+# (패키지는 이미 sysroot에 구워져 있으므로 네트워크 없이 켤 수 있다).
+#
+#   cp -r "$SYSROOT/usr/share/zsh" "$WORKDIR/usr/share/"
+
 # gzip으로 압축해 둔다. 커널은 initramfs의 magic을 보고 알아서 푼다
 # (CONFIG_RD_GZIP=y). 파일명은 initrd.cpio 그대로 유지한다 — limine.conf와
 # 두 check 스크립트가 이 이름을 참조하기 때문이다. 압축이 필요한 이유는 BF
 # 체인인데, limine이 BIOS INT13h로 ISO에서 읽는 경로가 에뮬레이션에서
-# 극단적으로 느려 53MB에서는 부팅조차 못 했다. 53MB → gzip 11.8MB.
+# 극단적으로 느려 53MB(TF-M2 시절 측정)에서는 부팅조차 못 했다. 그 뒤 init이
+# Rust에서 Zig 디버그 빌드(11.6MB)로 바뀌고 CP-M2가 셸 셋을 담으면서 지금은
+# 67.6MB → gzip 15.5MB다(2026-08-14 실측). 갱신할 때는 cpio가 찍는 blocks 수
+# (×512B)와 `ls -l initrd.cpio`를 함께 본다.
 (cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -9 > initrd.cpio
