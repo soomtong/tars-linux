@@ -109,5 +109,12 @@ if grep -q "Attempted to kill init" "$LOG"; then
   exit 1
 fi
 
+# 성공해도 시리얼 로그의 init 줄은 남긴다. TF 체인이 "--- init log ---"를
+# 찍는 것과 같은 이유다 — 루트 게이트가 만드는 통합 로그에서 이 체인이 무엇을
+# 봤는지 나중에 확인할 수 있어야 한다. 안 찍으면 통합 로그에는 요약 세 줄만
+# 남고 부팅 9회 중 3회는 흔적이 없다(CP-M0 실측).
+echo "--- init log ---"
+grep 'tars-init:' "$LOG" || true
+
 echo "PASS"
 exit 0
