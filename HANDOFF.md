@@ -26,8 +26,8 @@ git commit만 대신 수행한다(`docs/decisions/feedback_execution_scope.md`,
 
 ## 현재 브랜치
 
-`main`. Working tree 깨끗함. **`origin/main`보다 8커밋 앞서 있다 — push할
-것.** IS 완료 시점(`99e4a1c`) 이후 전부 로컬에만 있다.
+`main`. Working tree 깨끗하고 **`origin/main`과 같다**(2026-08-14
+`99e4a1c..a7906b8` push 완료). CP-M0의 커밋 8개가 모두 올라가 있다.
 
 ## CP-M0에서 얻은 것 (2026-08-14)
 
