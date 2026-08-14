@@ -1,5 +1,6 @@
 const std = @import("std");
 const linux = std.os.linux;
+const config = @import("config.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -9,20 +10,25 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
+/// 성공하면 true. /proc·/sys·/dev는 실패해도 할 수 있는 일이 없어서 결과를
+/// 버리지만, /config는 다르다 — 저장소가 안 붙었는데 설정을 읽으려 들면
+/// initramfs(tmpfs) 위의 빈 디렉터리에 파일을 만들게 되고, 그건 재부팅하면
+/// 사라지는 가짜 영속성이다.
 fn mountFs(
     source: [:0]const u8,
     target: [:0]const u8,
     fstype: [:0]const u8,
     flags: u32,
-) void {
+) bool {
     const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, 0);
     if (failed(rc)) |e| {
         std.debug.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
             fstype, target, @intFromEnum(e),
         });
-    } else {
-        std.debug.print("tars-init: mounted {s} at {s}\n", .{ fstype, target });
+        return false;
     }
+    std.debug.print("tars-init: mounted {s} at {s}\n", .{ fstype, target });
+    return true;
 }
 
 /// devtmpfs는 드라이버가 등록한 장치 노드만 담기 때문에 /dev/pts 디렉터리를
@@ -38,7 +44,7 @@ fn mountDevpts() void {
             return;
         }
     }
-    mountFs("devpts", "/dev/pts", "devpts", 0);
+    _ = mountFs("devpts", "/dev/pts", "devpts", 0);
 }
 
 /// 설정 저장소를 붙인다. initramfs는 tmpfs라 전원이 꺼지면 통째로 사라진다 —
@@ -53,8 +59,39 @@ fn mountDevpts() void {
 ///
 /// 디스크가 없는 부팅도 정상 경로다 — BF 체인은 ISO 부팅이라 -drive가 없다.
 /// 그때는 errno 2(ENOENT)로 실패하고 로그 한 줄만 남으며, 부팅은 계속된다.
-fn mountConfig() void {
-    mountFs("/dev/vda", "/config", "ext2", linux.MS.SYNCHRONOUS);
+fn mountConfig() bool {
+    return mountFs("/dev/vda", "/config", "ext2", linux.MS.SYNCHRONOUS);
+}
+
+/// 설정 파일의 자리. 저장소가 붙은 뒤에만 의미가 있다.
+const CONFIG_PATH: [:0]const u8 = "/config/tars.conf";
+
+/// 설정을 결정한다. 세 경로 전부 **부팅을 계속한다** — 설정 하나 때문에
+/// 부팅이 막히면 그것이 이 설계의 실패다(design doc의 세 장치 중 3번).
+///
+///   저장소 없음  → 내장 기본값. BF·TF 체인이 매번 지나는 정상 경로다.
+///   파일 없음    → first-boot seeding. 기본값을 주석과 함께 써 둔다.
+///   파일 있음    → 읽어서 쓴다.
+fn loadConfig(storage_mounted: bool) config.Config {
+    if (!storage_mounted) {
+        std.debug.print("tars-init: no config storage, using defaults\n", .{});
+        return .{};
+    }
+
+    if (config.load(CONFIG_PATH)) |c| {
+        std.debug.print("tars-init: loaded {s}\n", .{CONFIG_PATH});
+        return c;
+    }
+
+    // load가 null을 준다는 것은 파일이 없다는 뜻뿐이다 = 이 디스크로 처음
+    // 부팅했다. 씨앗을 심는다.
+    const defaults = config.Config{};
+    config.save(CONFIG_PATH, defaults) catch {
+        std.debug.print("tars-init: could not seed {s}, using defaults\n", .{CONFIG_PATH});
+        return defaults;
+    };
+    std.debug.print("tars-init: created {s}\n", .{CONFIG_PATH});
+    return defaults;
 }
 
 fn logDrmDevicePresence() void {
@@ -247,11 +284,14 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     std.debug.print("tars-init: starting as PID 1\n", .{});
 
-    mountFs("proc", "/proc", "proc", 0);
-    mountFs("sysfs", "/sys", "sysfs", 0);
-    mountFs("devtmpfs", "/dev", "devtmpfs", 0);
+    _ = mountFs("proc", "/proc", "proc", 0);
+    _ = mountFs("sysfs", "/sys", "sysfs", 0);
+    _ = mountFs("devtmpfs", "/dev", "devtmpfs", 0);
     mountDevpts();
-    mountConfig();
+
+    const storage_mounted = mountConfig();
+    const cfg = loadConfig(storage_mounted);
+    std.debug.print("tars-init: config shell={s}\n", .{@tagName(cfg.shell)});
 
     logDrmDevicePresence();
 
