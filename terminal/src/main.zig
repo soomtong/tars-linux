@@ -101,12 +101,26 @@ pub fn main(init: std.process.Init) !void {
     };
     std.debug.print("terminal: opened {s}\n", .{INPUT_DEVICE});
 
+    // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
+    // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
+    // 벌이 되면 두 프로세스가 같은 파일에서 서로 다른 답을 얻을 수 있다.
+    // 인자 없이 손으로 실행할 때를 위해 기본값은 남긴다.
+    //
     // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
-    // `--no-config`는 유지한다(사용자 설정 파일이 initrd에 없기도 하고,
-    // 프롬프트가 예측 가능해야 검증이 쉽다).
-    const argv = [_:null]?[*:0]const u8{ "fish", "--no-config" };
-    const session = try pty.spawn("/usr/bin/fish", &argv, cols, rows);
-    std.debug.print("terminal: spawned child pid {d}\n", .{session.child_pid});
+    // no-config 플래그(fish --no-config / bash --norc / zsh -f)를 계속 주는
+    // 이유는 프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있기 때문이다.
+    const args = init.minimal.args.vector;
+    const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
+    const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
+
+    const argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
+    const session = try pty.spawn(shell_path, &argv, cols, rows);
+    // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
+    // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
+    // 개수를 세는 마커라 **그대로 둔다**.
+    std.debug.print("terminal: spawned child pid {d} ({s})\n", .{
+        session.child_pid, shell_path,
+    });
 
     const screen = try vt.Screen.init(init.io, allocator, cols, rows);
     defer screen.deinit();
