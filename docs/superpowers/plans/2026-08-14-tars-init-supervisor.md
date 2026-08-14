@@ -720,3 +720,100 @@ Claude가 수행한다.
   PID 1로 흘려보내야 게이트가 수거를 관측할 수 있다(Task 2 Step 1 참고).
 - **`init`을 `ReleaseSafe`로 바꾸는 것.** initrd 크기가 실제 문제가 될 때
   꺼낼 카드로 계속 남긴다.
+
+---
+
+## 실제 실행에서 plan과 달라진 점 (2026-08-14 완료)
+
+**다음 세션은 이 절부터 읽을 것.** IS는 `TARS check PASS`(BF 3/3, TF 3/3)로
+완료됐다. 검증 숫자는 `starting as PID 1` 6, `Attempted to kill init` 0,
+`init restarted the terminal after the shell exited` 3.
+
+### 1. 진짜 위험은 DRM이 아니라 `POLLHUP`이었다
+
+plan은 "가장 깨지기 쉬운 지점"으로 재시작된 `/terminal`의 DRM master
+재획득을 지목했다. **그건 아무 문제가 없었다** — 프로세스가 죽으면 fd가
+닫히고 커널이 master를 놓는다는 예상이 그대로 맞았다.
+
+대신 첫 TF 실행이 다른 곳에서 실패했다. `terminal/src/main.zig:139`가
+`revents & POLLIN`만 봤는데, **PTY master는 slave가 전부 닫히면 `POLLIN`이
+아니라 `POLLHUP`을 올린다.** 남은 출력이 있는 동안은 `POLLIN|POLLHUP`으로
+함께 오지만 다 읽고 나면 `POLLHUP`만 남고, 그러면 `read`를 영영 호출하지
+못한 채 `poll`이 즉시 반환하는 **바쁜 루프**에 빠진다. 로그에 아무것도 안
+남아서 조용해 보이지만 CPU는 100%다.
+
+고친 뒤:
+
+```zig
+if (fds[1].revents & (c.POLLIN | c.POLLHUP | c.POLLERR) != 0) {
+```
+
+`readSome`이 `read <= 0`에서 빈 슬라이스를 돌려주므로(`pty.zig:76-80`),
+`POLLHUP`에서도 일단 `read`를 시도하는 것만으로 두 경우가 다 처리된다 —
+남은 데이터를 먼저 비우고, 비면 `EIO`가 나서 기존 EOF 분기로 들어간다.
+
+**이건 IS가 만든 버그가 아니라 TF-M3부터 있던 잠복 버그다.**
+`if (out.len == 0)` EOF 처리 코드는 계속 있었지만 **한 번도 실행된 적이
+없었다** — 게이트가 셸을 죽여본 적이 없었기 때문이다. 도달 불가능한 코드를
+"동작한다"고 믿고 있었던 셈이다([[project_gate_chain_composition]]).
+
+진단은 로그 한 곳에서 갈렸다. 마지막 화면 덤프의 행이
+`@(none) ~# math 6 x 7` / `42` / `@(none) ~# exit` 셋인데 **새 프롬프트 행이
+없었다.** fish가 살아서 Enter를 처리했다면 명령을 실행했든 못 찾았든 반드시
+새 프롬프트를 그린다. 즉 fish는 죽었고 `terminal`이 그걸 못 본 것이다.
+
+### 2. `boot/check.sh`에도 패닉 검사를 넣었다 (plan에 없던 Step)
+
+BF는 GPU가 없어 `/terminal`이 매번 죽는 체인이라 재시작 로직이 잘못되면
+**BF에서 먼저 터진다.** 그런데 BF는 fish 배너만 보고 PASS를 냈다.
+`boot/check.sh:64-67`에 `Attempted to kill init` 검사를 추가했다.
+
+### 3. BF 게이트는 재시작·포기 경로를 **관측하지 못한다**
+
+`boot/check.sh:37-47`은 배너가 보이는 즉시 루프를 빠져나오고 그 시점의 로그를
+찍은 뒤 QEMU를 죽인다. 배너가 4초에 나오는데 첫 `/terminal`은 `lived 2s`에
+죽으므로, 게이트가 남기는 로그에는 `terminal exited`조차 안 들어간다.
+
+그래서 이미 만들어진 ISO를 20초 더 태워서 따로 확인했다.
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
+  'timeout 20 qemu-system-x86_64 -cdrom out/tars.iso -serial stdio -display none -no-reboot 2>&1 \
+   | grep -E "tars-init:|OpenFailed|Attempted to kill"'
+```
+
+결과는 설계대로였다 — `started`/`exited (status 1, lived 1~2s)`/`restarting`이
+3회 반복된 뒤 `giving up on terminal after 3 fast exits`, 그리고 침묵.
+
+**이 확인을 게이트에 넣지 않은 것은 의식적인 선택이다.** 넣으려면 BF가 배너
+이후 최소 5초를 더 기다려야 하는데, BF의 존재 이유는 "ISO로 부팅이 되는가"이지
+"재시작 정책이 맞는가"가 아니다. 후자는 TF가 본다. 대신 **`given_up`이
+깨지면 BF에서 무한 재시작이 나는데 게이트는 그걸 못 본다**는 사각지대가
+남았다 — 재시작 정책을 건드리는 다음 사람은 위 명령을 손으로 한 번 돌릴 것.
+
+### 4. `fast_restarts` 리셋 경로가 양쪽 다 확인됐다
+
+- TF: `terminal exited (pid 18, status 0, lived 12s)` → 10초를 넘겨 카운터
+  리셋. 재시작 1회로 끝.
+- BF: `lived 2s` / `1s` / `1s` → 연속 누적되어 3회에서 포기.
+
+BF의 `lived 2s`가 알려주는 것이 하나 더 있다. DRM 열기 실패 자체는 즉시
+일어나는데 종료까지 2초가 걸렸다 — 그 2초는 Zig가 에러 트레이스를 만들려는
+시간이다(HANDOFF의 미해결 숙제 "게스트 안에서 Zig 에러 트레이스 읽기"와 같은
+지점).
+
+### 5. Task 3의 삽입 위치는 초안이 틀렸다
+
+처음 쓴 plan은 "188번째 줄(42 검증) 다음"이라고 했다가 바로 다음 Step에서
+정정하는 자기모순 상태였다. 확정된 위치는 **141번째 줄** — QEMU monitor로
+연결된 fd 3이 아직 열려 있는 마지막 지점이다. 42 검증 구간은 이미 QEMU를
+죽이고 `$LOG` 파일만 보는 구간이라 키를 보낼 수 없다. 커밋 전에 고쳤다.
+
+### 6. 크기와 시간
+
+`init`은 11.4MB → 11.5MB(+100KB). Debug 빌드라 std의 포매팅·패닉 기계가
+대부분이고 우리 코드 증가분은 그 안에서 미미하다. 동적 의존은 여전히 0개
+(`readelf -d ... | grep -c NEEDED` = 0).
+
+BF 부팅은 배너까지 4초로 ZM-M3와 같다 — 재시작 3회가 배너를 늦추지 않는다.
+루트 게이트 전체 소요는 재지 않았다(`check.sh`는 시간을 찍지 않는다).
