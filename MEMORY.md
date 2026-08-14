@@ -28,4 +28,5 @@
 - [Init supervisor](docs/decisions/project_init_supervisor.md) — PID 1은 셸이 되지 않고 자식 둘을 감독한다(`waitpid(-1)`로 고아까지 수거, 1초 backoff + 연속 3회면 포기, `noreturn`); 재시작을 관측하려면 `terminal`이 죽어줘야 한다는 결합과 `POLLHUP` 사각지대
 - [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 루트 `check.sh`는 BF+TF 두 체인; 무의미해진 게이트는 주석만 남기지 말고 파일째 은퇴, `clean()`은 vendor 트리를 안 건드림, 게이트는 자기가 안 보는 것을 통과시키므로 재작성 전에 검사부터 추가
 - [Config persistence](docs/decisions/project_config_persistence.md) — 설정은 `/dev/vda`의 ext2를 `MS_SYNCHRONOUS`로 붙인 `/config/tars.conf` 하나; PID 1이 부팅 시점에 한 번 읽어 argv로 흘려보내고, 깨진 설정으로 부팅이 막히지 않게 하는 장치가 넷, 영속성은 QEMU를 두 번 띄우는 게이트로만 증명된다
+- [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위에서 vim modal 방식 선택 모드(v/V로 영역 선택 → 복사)와 Cmd+V 붙여넣기; 스크롤백·색상 렌더링·클립보드가 선행 조건이라 "터미널 완성도" 뒤에 온다
 - [Build host arch](docs/decisions/project_build_host_arch.md) — 빌드 호스트는 arm64, 게스트 산출물은 전부 x86_64 크로스(2026-08-13 ZM-M3): `--platform` 금지, 의존은 `ldd`가 아니라 `readelf`, initrd 유저랜드는 amd64 sysroot에서, 호스트용 도구는 호스트 아키텍처로 다시 빌드
