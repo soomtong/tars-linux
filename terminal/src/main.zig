@@ -136,7 +136,12 @@ pub fn main(init: std.process.Init) !void {
             }
         }
 
-        if (fds[1].revents & c.POLLIN != 0) {
+        // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
+        // 남은 출력이 있으면 POLLIN과 함께 오지만 다 읽고 나면 POLLHUP만
+        // 남으므로, POLLIN만 보면 read를 영영 호출하지 못하고 poll이 즉시
+        // 반환하는 바쁜 루프에 빠진다. POLLHUP에서도 read를 시도하면 남은
+        // 데이터를 먼저 비우고, 비고 나면 read가 EIO를 내 EOF 경로로 간다.
+        if (fds[1].revents & (c.POLLIN | c.POLLHUP | c.POLLERR) != 0) {
             const out = pty.readSome(session.master_fd, &pty_buf);
             if (out.len == 0) {
                 std.debug.print("terminal: child exited (pty EOF)\n", .{});
