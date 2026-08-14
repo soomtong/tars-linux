@@ -149,9 +149,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    // 자식이 죽어도 패닉하지 않고 화면을 유지한 채 남는다.
-    // nfds=0인 poll은 "아무 fd도 안 보고 timeout만 기다린다" = sleep이다.
-    while (true) {
-        _ = c.poll(&fds, 0, 1000);
-    }
+    // 셸이 끝나면 터미널도 끝난다. PID 1(tars-init)이 우리를 다시 띄우고,
+    // 새 프로세스가 DRM을 다시 열어 새 프롬프트를 그린다. TF 시절의 무한
+    // sleep은 되살려 줄 감독자가 없어서 필요했던 것이라 이제 지운다.
 }
