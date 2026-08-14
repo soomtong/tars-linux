@@ -12,11 +12,37 @@ fn failed(rc: usize) ?linux.E {
 /// 셸 화이트리스트. 설정 파일에 적을 수 있는 것은 **이름**뿐이고 경로가
 /// 아니다 — `shell=/etc/passwd` 같은 입력이 애초에 성립하지 않는다
 /// (design doc "5. 설정 하나로 부팅이 막히지 않게 하는 세 장치"의 1번).
-/// 이름을 실제 경로로 바꿔 셸을 띄우는 것은 CP-M2의 일이다.
 pub const Shell = enum {
     fish,
     bash,
     zsh,
+
+    /// 이름 → initrd 안의 바이너리 경로. 화이트리스트의 나머지 절반이다:
+    /// enum이 "무엇을 적을 수 있는가"를, 이 switch가 "그것이 무엇을
+    /// 실행하는가"를 정한다. 둘을 붙여 두면 Shell에 이름을 하나 더 넣는 순간
+    /// switch가 컴파일 에러를 내서 경로를 빼먹을 수 없다.
+    ///
+    /// 여기 적힌 경로는 kernel/make_initrd.sh가 복사해 넣는 자리와 **같아야
+    /// 한다.** 어긋나면 부팅 후 execve 실패로만 드러난다.
+    pub fn path(self: Shell) [:0]const u8 {
+        return switch (self) {
+            .fish => "/usr/bin/fish",
+            .bash => "/usr/bin/bash",
+            .zsh => "/usr/bin/zsh",
+        };
+    }
+
+    /// "사용자 설정 파일을 읽지 말라"는 플래그. 셋의 철자가 전부 다르다.
+    /// initrd에는 ~/.bashrc도 ~/.zshrc도 없어서 지금은 있으나 없으나 동작이
+    /// 같지만, 프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있다
+    /// (TF-M3이 fish에 --no-config를 준 이유가 그것이다).
+    pub fn noConfigFlag(self: Shell) [:0]const u8 {
+        return switch (self) {
+            .fish => "--no-config",
+            .bash => "--norc",
+            .zsh => "-f",
+        };
+    }
 };
 
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.

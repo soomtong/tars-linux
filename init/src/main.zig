@@ -94,6 +94,25 @@ fn loadConfig(storage_mounted: bool) config.Config {
     return defaults;
 }
 
+/// 설정이 고른 셸의 바이너리가 정말 있는지 확인하고, 없으면 기본값으로
+/// 내려온다. design doc의 "세 장치" 중 2번(모르는 값 → 기본값)의 연장이다 —
+/// 이름은 화이트리스트가 막아주지만 **initrd에 안 들어간 셸**은 이름이
+/// 맞아도 실행되지 않는다.
+///
+/// 이 함수가 없으면 그 상황이 이렇게 나타난다: execve가 127로 죽고, 감독
+/// 루프가 1초 간격으로 세 번 재시작한 뒤 포기하고, **셸이 하나도 없는 부팅**이
+/// 된다. 원인은 로그 깊숙한 곳의 execve 한 줄뿐이다. 미리 확인하면 한 줄로
+/// 드러나고 부팅은 계속된다.
+fn resolveShell(want: config.Shell) config.Shell {
+    if (failed(linux.access(want.path().ptr, linux.X_OK)) == null) return want;
+
+    const fallback = config.Config{};
+    std.debug.print("tars-init: shell {s} is not executable, falling back to {s}\n", .{
+        want.path(), @tagName(fallback.shell),
+    });
+    return fallback.shell;
+}
+
 fn logDrmDevicePresence() void {
     // 열지 않고 존재만 본다. 곧 fork될 /terminal이 이 장치를 독점해서
     // 열 것이므로 여기서는 건드리지 않는 편이 안전하다.
@@ -126,8 +145,9 @@ fn setupControllingTerminal() void {
     if (fd > 2) _ = linux.close(fd);
 }
 
-/// 감독 대상. 지금은 둘뿐이라 배열을 컴파일 타임에 고정한다. 설정 파일에서
-/// 목록을 읽는 것은 다음 서브프로젝트(설정 영속화)의 일이다.
+/// 감독 대상의 종류. **무엇을 실행할지는 여기 없다** — 그것은 Child가
+/// 들고 있고, 설정을 읽은 뒤 main에서 한 번 정해진다. Kind는 "이 자식이
+/// 제어 터미널을 잡아야 하는가"와 로그 이름만 결정한다.
 const Kind = enum {
     terminal,
     console_shell,
@@ -138,14 +158,10 @@ const Kind = enum {
             .console_shell => "console shell",
         };
     }
-
-    fn path(self: Kind) [:0]const u8 {
-        return switch (self) {
-            .terminal => "/terminal",
-            .console_shell => "/usr/bin/fish",
-        };
-    }
 };
+
+/// terminal은 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다.
+const TERMINAL_PATH: [:0]const u8 = "/terminal";
 
 /// 이 초를 못 채우고 죽으면 "빨리 죽었다"로 센다.
 const FAST_EXIT_SECONDS: isize = 10;
@@ -155,6 +171,12 @@ const MAX_FAST_RESTARTS: u32 = 3;
 
 const Child = struct {
     kind: Kind,
+    /// 실행할 바이너리. 로그에 찍는 것도 이 값이다.
+    path: [:0]const u8,
+    /// execve에 그대로 넘길 argv. argv[0]은 path와 같고 남는 자리는 null이다 —
+    /// execve는 첫 null에서 멈추므로 인자가 하나인 자식도 같은 배열 타입을
+    /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
+    argv: [3:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -173,33 +195,35 @@ fn sleepOneSecond() void {
     _ = linux.nanosleep(&req, null);
 }
 
-fn spawn(kind: Kind, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
+fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
     const pid = linux.fork();
     if (failed(pid)) |e| {
         std.debug.print("tars-init: fork for {s} failed (errno {d})\n", .{
-            kind.name(), @intFromEnum(e),
+            c.kind.name(), @intFromEnum(e),
         });
         return -1;
     }
     if (pid == 0) {
         // 여기부터는 자식이다.
-        if (kind == .console_shell) setupControllingTerminal();
-        const p = kind.path();
-        const argv = [_:null]?[*:0]const u8{p.ptr};
-        _ = linux.execve(p.ptr, &argv, envp);
+        if (c.kind == .console_shell) setupControllingTerminal();
+        _ = linux.execve(c.path.ptr, &c.argv, envp);
         // execve가 돌아왔다는 것은 실패했다는 뜻이다.
-        std.debug.print("tars-init: execve {s} failed\n", .{p});
+        std.debug.print("tars-init: execve {s} failed\n", .{c.path});
         linux.exit(127);
     }
     return @intCast(pid);
 }
 
 fn start(c: *Child, envp: [*:null]const ?[*:0]const u8) void {
-    const pid = spawn(c.kind, envp);
+    const pid = spawn(c, envp);
     if (pid < 0) return; // 다음 바퀴에서 다시 시도한다
     c.pid = pid;
     c.started_at = monotonicSeconds();
-    std.debug.print("tars-init: started {s} (pid {d})\n", .{ c.kind.name(), pid });
+    // 경로까지 찍는다. "셸이 바뀌었는가"를 게이트가 확인할 수 있는 유일한
+    // 줄이다 — 프로세스가 무엇을 exec했는지는 밖에서 볼 방법이 없다.
+    std.debug.print("tars-init: started {s} (pid {d}, {s})\n", .{
+        c.kind.name(), pid, c.path,
+    });
 }
 
 fn find(children: []Child, pid: linux.pid_t) ?*Child {
@@ -295,9 +319,29 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     logDrmDevicePresence();
 
+    // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
+    // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
+    // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
+    const shell = resolveShell(cfg.shell);
+    const shell_path = shell.path();
+    const shell_flag = shell.noConfigFlag();
+
     var children = [_]Child{
-        .{ .kind = .terminal },
-        .{ .kind = .console_shell },
+        .{
+            .kind = .terminal,
+            .path = TERMINAL_PATH,
+            // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지를
+            // PID 1이 정해서 인자로 넘긴다 — 파서가 두 벌이 되면 두
+            // 프로세스가 서로 다른 답을 얻을 수 있다.
+            .argv = .{ TERMINAL_PATH.ptr, shell_path.ptr, shell_flag.ptr },
+        },
+        .{
+            .kind = .console_shell,
+            .path = shell_path,
+            // 콘솔 셸에는 플래그를 주지 않는다. 이쪽은 사용자가 직접 쓰는
+            // 자리이므로, 나중에 설정 파일이 생기면 그것을 읽는 편이 맞다.
+            .argv = .{ shell_path.ptr, null, null },
+        },
     };
     supervise(&children, envp);
 }
