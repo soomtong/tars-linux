@@ -40,8 +40,12 @@ run_chain() {
 # CP 체인은 영속 저장소를 본다. 세 체인 중 유일하게 -drive로 디스크를 물고
 # 부팅하며, 나머지 둘은 디스크 없이 부팅해도 통과해야 한다는 것 자체가
 # 검사 대상이다(설정 저장소가 없다고 부팅이 막히면 안 된다).
+#
+# CP-M1부터 이 체인만 회차당 QEMU를 **두 번** 띄운다. 영속성은 한 번의
+# 부팅으로 증명할 수 없기 때문이다 — 1차가 쓴 파일을 2차가 읽는다. 그래서
+# 루트 게이트 한 번의 총 부팅 횟수는 9회가 아니라 12회다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
-run_chain "CP-M0" ./config/check.sh
+run_chain "CP-M1" ./config/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
