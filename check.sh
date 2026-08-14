@@ -44,8 +44,11 @@ run_chain() {
 # CP-M1부터 이 체인만 회차당 QEMU를 **두 번** 띄운다. 영속성은 한 번의
 # 부팅으로 증명할 수 없기 때문이다 — 1차가 쓴 파일을 2차가 읽는다. 그래서
 # 루트 게이트 한 번의 총 부팅 횟수는 9회가 아니라 12회다.
+#
+# CP-M2부터는 그 1차 부팅에서 monitor sendkey로 **게스트 셸에 직접 타이핑**해
+# 설정을 고친다. 그래서 이 체인만 회차당 20초쯤 더 걸린다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
-run_chain "CP-M1" ./config/check.sh
+run_chain "CP-M2" ./config/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
