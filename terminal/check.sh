@@ -21,6 +21,15 @@ if ! ./prepare.sh; then
   exit 1
 fi
 
+# 호스트에서 도는 순수 로직 검사. 부팅보다 먼저 돌린다 — keymap이나 Ctrl
+# 마스크의 오타는 QEMU를 띄우지 않고도 잡히고, 여기서 걸리면 아래 4초
+# 부팅을 아낀다. IP-M0 전에는 이 바이너리가 빌드만 되고 아무도 실행하지
+# 않았다(design doc 결정 10).
+if ! zig build test; then
+  echo "FAIL: input_test failed"
+  exit 1
+fi
+
 if ! (cd ../kernel && ./make_initrd.sh); then
   echo "FAIL: initrd build failed"
   exit 1
