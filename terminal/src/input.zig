@@ -77,37 +77,55 @@ const keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
+/// "보낼 것이 없다"를 뜻하는 빈 슬라이스. IP-M0 전에는 `null`이 이 자리였다.
+const none: []const u8 = &[_]u8{};
+
 /// modifier 상태를 들고 있는 작은 상태 머신.
-/// design doc 6번의 세 조각 중 1번(modifier bitmask)에 해당한다.
+/// design doc 결정 2의 세 단계 중 1번(modifier 갱신)과 3번(기본 번역)에
+/// 해당한다. 2번(조합 dispatch)은 IP-M2에서 들어온다.
 pub const State = struct {
     shift_left: bool = false,
     shift_right: bool = false,
+
+    /// 반환 슬라이스의 저장소. 힙을 쓰지 않는다.
+    ///
+    /// 호출자(readKeys)가 반환값을 즉시 out으로 복사하므로, 같은 read
+    /// 배치의 다음 키가 이 배열을 덮어써도 안전하다. 8바이트인 이유는 이
+    /// 서브프로젝트에서 가장 긴 시퀀스가 6바이트이기 때문이다
+    /// (`ESC [ 1 ; 5 D` 형태, IP-M1).
+    seq: [8]u8 = undefined,
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
     }
 
+    /// 바이트 하나를 seq에 담아 슬라이스로 돌려준다.
+    fn one(self: *State, byte: u8) []const u8 {
+        self.seq[0] = byte;
+        return self.seq[0..1];
+    }
+
     /// EV_KEY 이벤트 하나를 처리한다.
     /// value: 0=뗌, 1=누름, 2=자동 반복.
-    /// 문자를 만들면 그 바이트를, 아니면 null을 반환한다.
-    pub fn handleKey(self: *State, code: u16, value: i32) ?u8 {
+    /// PTY로 보낼 바이트열을 반환한다. 보낼 것이 없으면 빈 슬라이스다.
+    pub fn handleKey(self: *State, code: u16, value: i32) []const u8 {
         switch (code) {
             c.KEY_LEFTSHIFT => {
                 self.shift_left = value != 0;
-                return null;
+                return none;
             },
             c.KEY_RIGHTSHIFT => {
                 self.shift_right = value != 0;
-                return null;
+                return none;
             },
             else => {},
         }
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
-        if (value == 0) return null;
-        if (code >= keymap.len) return null;
+        if (value == 0) return none;
+        if (code >= keymap.len) return none;
 
         const ch = keymap[code][if (self.shifted()) 1 else 0];
-        return if (ch == 0) null else ch;
+        return if (ch == 0) none else self.one(ch);
     }
 };
 
@@ -133,8 +151,13 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8) []const u8 {
         const ev: *align(1) const c.struct_input_event =
             @ptrCast(&raw[i * ev_size]);
         if (ev.@"type" != c.EV_KEY) continue;
-        if (self.handleKey(ev.code, ev.value)) |ch| {
-            out[written] = ch;
+        // 키 하나가 여러 바이트가 될 수 있으므로(IP-M1의 이스케이프 시퀀스)
+        // 슬라이스를 통째로 옮긴다. out이 모자라면 거기서 멈춘다 — 다음
+        // poll에서 이어지지 않고 버려지지만, out은 64바이트이고 한 번의
+        // read에 그만큼의 키가 들어오는 일은 사람 손으로는 일어나지 않는다.
+        for (self.handleKey(ev.code, ev.value)) |byte| {
+            if (written >= out.len) break;
+            out[written] = byte;
             written += 1;
         }
     }
