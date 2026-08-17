@@ -107,7 +107,14 @@ chmod 0755 "$WORKDIR/usr/bin/bash" "$WORKDIR/usr/bin/zsh"
 cp "$SYSROOT/usr/bin/cat" "$WORKDIR/usr/bin/cat"
 cp "$SYSROOT/usr/bin/uname" "$WORKDIR/usr/bin/uname"
 cp "$SYSROOT/usr/bin/mkdir" "$WORKDIR/usr/bin/mkdir"
-chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" "$WORKDIR/usr/bin/mkdir"
+# IP-M0: 게이트가 Ctrl+C로 죽일 자식이 필요하다. 프롬프트에서 줄이
+# 취소되는 것만 보면 "셸이 바이트를 받았다"까지만 증명된다 — 커널이
+# foreground process group에 SIGINT를 보낸다는 것(design doc 결정 3)을
+# 검사하려면 셸이 아닌 프로세스가 하나 떠 있어야 한다. coreutils는 이미
+# sysroot에 있으므로 Dockerfile은 건드리지 않는다.
+cp "$SYSROOT/usr/bin/sleep" "$WORKDIR/usr/bin/sleep"
+chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
+           "$WORKDIR/usr/bin/mkdir" "$WORKDIR/usr/bin/sleep"
 
 # init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
 # (ZM-M1). 나머지는 전부 glibc 동적 링크다.
@@ -118,6 +125,7 @@ copy_lib_deps "$WORKDIR/usr/bin/zsh"
 copy_lib_deps "$WORKDIR/usr/bin/cat"
 copy_lib_deps "$WORKDIR/usr/bin/uname"
 copy_lib_deps "$WORKDIR/usr/bin/mkdir"
+copy_lib_deps "$WORKDIR/usr/bin/sleep"
 
 # /usr/share/fish/*는 fish 패키지가 아니라 fish-common(arch: all)이 준다.
 mkdir -p "$WORKDIR/usr/share/fish"
