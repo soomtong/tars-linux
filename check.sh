@@ -47,8 +47,14 @@ run_chain() {
 #
 # CP-M2부터는 그 1차 부팅에서 monitor sendkey로 **게스트 셸에 직접 타이핑**해
 # 설정을 고친다. 그래서 이 체인만 회차당 20초쯤 더 걸린다.
+#
+# IP 체인은 키보드 입력 정책을 본다. CP처럼 monitor sendkey로 게스트에
+# 타이핑하지만 디스크는 물지 않고 부팅도 한 번뿐이다 — 증명할 것이 한 세션
+# 안에 있기 때문이다. 그래서 루트 게이트의 총 부팅 횟수는 12회에서 15회가
+# 된다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
+run_chain "IP-M0" ./input/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
