@@ -46,7 +46,7 @@ const keymap = [_][2]u8{
     .{ '[', '{' }, // 26
     .{ ']', '}' }, // 27
     .{ '\r', '\r' }, // 28: KEY_ENTER — 실제 터미널은 CR을 보낸다
-    .{ 0, 0 }, // 29: KEY_LEFTCTRL (이번 범위 밖)
+    .{ 0, 0 }, // 29: KEY_LEFTCTRL — modifier로 처리한다(아래 handleKey)
     .{ 'a', 'A' }, // 30
     .{ 's', 'S' }, // 31
     .{ 'd', 'D' }, // 32
@@ -86,6 +86,10 @@ const none: []const u8 = &[_]u8{};
 pub const State = struct {
     shift_left: bool = false,
     shift_right: bool = false,
+    // Ctrl 둘을 좌우로 나눠 두는 이유는 Shift와 같다 — 하나를 누른 채
+    // 다른 하나를 눌렀다 떼도 풀리면 안 된다.
+    ctrl_left: bool = false,
+    ctrl_right: bool = false,
 
     /// 반환 슬라이스의 저장소. 힙을 쓰지 않는다.
     ///
@@ -97,6 +101,25 @@ pub const State = struct {
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
+    }
+
+    fn ctrled(self: State) bool {
+        return self.ctrl_left or self.ctrl_right;
+    }
+
+    /// Ctrl과 조합됐을 때 보낼 제어 문자. 대상이 아니면 null.
+    ///
+    /// 마스크(& 0x1F)는 문자가 0x40~0x7F일 때만 의미가 있다. Ctrl+1에
+    /// 적용하면 0x11(XON)이 나오는데 아무도 그런 뜻으로 쓰지 않으므로,
+    /// 대상을 여기 적힌 것으로 명시적으로 한정한다. xterm이 하는 것과 같다.
+    fn control(ch: u8) ?u8 {
+        return switch (ch) {
+            'a'...'z', 'A'...'Z' => ch & 0x1f,
+            '@', '[', '\\', ']', '^', '_' => ch & 0x1f,
+            ' ' => 0x00,
+            '?' => 0x7f,
+            else => null,
+        };
     }
 
     /// 바이트 하나를 seq에 담아 슬라이스로 돌려준다.
@@ -118,6 +141,14 @@ pub const State = struct {
                 self.shift_right = value != 0;
                 return none;
             },
+            c.KEY_LEFTCTRL => {
+                self.ctrl_left = value != 0;
+                return none;
+            },
+            c.KEY_RIGHTCTRL => {
+                self.ctrl_right = value != 0;
+                return none;
+            },
             else => {},
         }
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
@@ -125,7 +156,14 @@ pub const State = struct {
         if (code >= keymap.len) return none;
 
         const ch = keymap[code][if (self.shifted()) 1 else 0];
-        return if (ch == 0) none else self.one(ch);
+        if (ch == 0) return none;
+
+        // Ctrl이 눌려 있고 이 문자가 마스크 대상이면 제어 문자로 바꾼다.
+        // 대상이 아니면(숫자 등) Ctrl을 무시하고 원래 문자를 보낸다.
+        if (self.ctrled()) {
+            if (control(ch)) |ctl| return self.one(ctl);
+        }
+        return self.one(ch);
     }
 };
 
