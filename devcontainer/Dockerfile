@@ -45,6 +45,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # libcap2를 요구한다. zsh-common은 fish-common과 같은 구조로 arch: all이라
 # :amd64를 붙이지 않는다 — /usr/share/zsh의 함수들이 거기 있다. apt-get
 # download는 의존을 따라가지 않으므로 이 목록은 언제나 명시적이다.
+#
+# IP-M1이 ncurses-base를 더한다. terminal이 PTY 셸의 TERM을 xterm으로
+# 바꾸므로(design doc 결정 7) 그 terminfo가 게스트에 있어야 진실이 된다 —
+# /usr/share/terminfo/x/xterm이 이 패키지에 들어 있다. fish-common/zsh-common과
+# 같이 architecture: all이라 :amd64를 붙이지 않는다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -56,6 +61,7 @@ RUN dpkg --add-architecture amd64 \
          bash:amd64 \
         zsh:amd64 \
         zsh-common \
+        ncurses-base \
         libtinfo6:amd64 \
         libcap2:amd64 \
         coreutils:amd64 \

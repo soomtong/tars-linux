@@ -9,6 +9,11 @@ const c = @cImport({
     @cInclude("poll.h");
 });
 
+/// libc의 setenv를 직접 선언한다. 이 파일의 @cImport는 poll.h 하나뿐이고,
+/// setenv 하나 때문에 stdlib.h를 통째로 끌어오면 이름 충돌 가능성만 는다.
+/// `input.zig`가 open/read를, `pty.zig`가 execv를 이렇게 선언한 것과 같다.
+extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
+
 const BACKGROUND: u32 = 0x00102030;
 const TEXT_COLOR: u32 = 0x00FFFFFF;
 const GRID_X: u32 = 20;
@@ -112,6 +117,24 @@ pub fn main(init: std.process.Init) !void {
     const args = init.minimal.args.vector;
     const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
     const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
+
+    // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
+    // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
+    // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
+    // 리눅스 콘솔이 아니라 libghostty-vt다. 셸과 ncurses 프로그램은 terminfo를
+    // 보고 시퀀스를 고르므로, 이름이 틀리면 우리가 보내는 특수키와 셸이
+    // 기대하는 것이 어긋난다 — Home이 linux에서는 `ESC [ 1 ~`, xterm에서는
+    // `ESC O H`다.
+    //
+    // execv는 환경을 그대로 상속하므로 **fork 전에** 고쳐두면 자식이 받는다.
+    // 이 setenv가 PID 1이 아니라 여기 있는 이유는 시리얼 콘솔 셸 때문이다 —
+    // 그쪽은 정말로 커널 콘솔이라 TERM=linux가 맞다. 같은 기계 안에서 두
+    // 셸의 TERM이 다른 것이 정상이다(design doc 결정 7).
+    //
+    // xterm-256color가 아니라 xterm인 이유는 우리가 아직 색을 하나도 그리지
+    // 않기 때문이다(TEXT_COLOR 상수 하나). 256색을 광고하면 반대 방향의
+    // 거짓말이 된다.
+    _ = setenv("TERM", "xterm", 1);
 
     const argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
     const session = try pty.spawn(shell_path, &argv, cols, rows);
