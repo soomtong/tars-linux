@@ -3,12 +3,26 @@ const input = @import("input.zig");
 
 /// IP-M0부터 handleKey는 바이트 **하나**가 아니라 바이트 **열**을 돌려준다.
 /// "보낼 것 없음"은 null이 아니라 빈 슬라이스다.
+///
+/// IP-M1부터 handleKey는 `Context`도 받는다. 대부분의 검사는 기본값
+/// (`cursor_keys=false`)으로 충분하므로 여기서 채워 넣고, DECCKM 두 형태를
+/// 비교해야 하는 검사만 아래 expectCtx를 직접 부른다.
 fn expect(state: *input.State, code: u16, value: i32, want: []const u8) !void {
-    const got = state.handleKey(code, value);
+    return expectCtx(state, .{}, code, value, want);
+}
+
+fn expectCtx(
+    state: *input.State,
+    ctx: input.Context,
+    code: u16,
+    value: i32,
+    want: []const u8,
+) !void {
+    const got = state.handleKey(code, value, ctx);
     if (std.mem.eql(u8, got, want)) return;
     std.debug.print(
-        "FAIL: code={d} value={d} -> got={any}, want={any}\n",
-        .{ code, value, got, want },
+        "FAIL: code={d} value={d} ckm={} -> got={any}, want={any}\n",
+        .{ code, value, ctx.cursor_keys, got, want },
     );
     return error.UnexpectedBytes;
 }

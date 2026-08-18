@@ -77,6 +77,27 @@ const keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
+/// 키 하나를 어떻게 번역할지 바꾸는, **바깥에서 들어오는** 상태.
+///
+/// design doc 결정 6: `input.zig`는 `vt.zig`를 import하지 않는다. DECCKM
+/// 상태가 VT 안에 있다고 해서 여기서 직접 부르게 하면 (1) 지금 단방향인
+/// 모듈 의존(main만 다섯을 안다)이 깨지고, (2) `ghostty-vt`를 링크하지 않는
+/// `input_test`가 빌드조차 되지 않는다. 그래서 `main.zig`가 매 키마다
+/// **값으로** 채워 넘긴다 — packed struct의 비트 읽기 한 번이라 값이 없다.
+pub const Context = struct {
+    /// DECCKM(DEC Cursor Key Mode, private mode 1). 켜져 있으면 방향키와
+    /// Home/End가 `ESC [` 대신 `ESC O`로 시작한다. 이 모드를 켜는 것은
+    /// 셸이 보내는 `ESC [ ? 1 h`이고, 그 시퀀스는 이미 우리가 파싱해서
+    /// libghostty-vt에 먹이고 있다. main.zig가
+    /// `screen.term.modes.get(.cursor_keys)`로 되읽어 채운다.
+    cursor_keys: bool = false,
+
+    /// PC 키보드 보정(design doc 결정 9). **IP-M2에서 처음 읽힌다** —
+    /// 지금은 자리만 있다. 여기 적어두는 이유는 Context가 생기는 이유가
+    /// DECCKM 하나가 아니라는 것을 남기기 위해서다.
+    swap_alt_meta: bool = false,
+};
+
 /// "보낼 것이 없다"를 뜻하는 빈 슬라이스. IP-M0 전에는 `null`이 이 자리였다.
 const none: []const u8 = &[_]u8{};
 
@@ -131,7 +152,10 @@ pub const State = struct {
     /// EV_KEY 이벤트 하나를 처리한다.
     /// value: 0=뗌, 1=누름, 2=자동 반복.
     /// PTY로 보낼 바이트열을 반환한다. 보낼 것이 없으면 빈 슬라이스다.
-    pub fn handleKey(self: *State, code: u16, value: i32) []const u8 {
+    pub fn handleKey(self: *State, code: u16, value: i32, ctx: Context) []const u8 {
+        // Task 2가 이 줄을 지우고 진짜로 읽는다.
+        _ = ctx;
+
         switch (code) {
             c.KEY_LEFTSHIFT => {
                 self.shift_left = value != 0;
@@ -175,7 +199,7 @@ pub fn openDevice(path: [*:0]const u8) !c_int {
 
 /// fd에서 한 번 read하고(poll이 읽을 게 있다고 알려준 뒤에만 호출한다),
 /// 그 안의 EV_KEY 이벤트들을 문자 바이트로 바꿔 out에 채운다.
-pub fn readKeys(self: *State, fd: c_int, out: []u8) []const u8 {
+pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) []const u8 {
     const ev_size = @sizeOf(c.struct_input_event);
     var raw: [ev_size * 64]u8 = undefined;
 
@@ -193,7 +217,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8) []const u8 {
         // 슬라이스를 통째로 옮긴다. out이 모자라면 거기서 멈춘다 — 다음
         // poll에서 이어지지 않고 버려지지만, out은 64바이트이고 한 번의
         // read에 그만큼의 키가 들어오는 일은 사람 손으로는 일어나지 않는다.
-        for (self.handleKey(ev.code, ev.value)) |byte| {
+        for (self.handleKey(ev.code, ev.value, ctx)) |byte| {
             if (written >= out.len) break;
             out[written] = byte;
             written += 1;

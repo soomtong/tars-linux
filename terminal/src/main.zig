@@ -143,7 +143,9 @@ pub fn main(init: std.process.Init) !void {
         if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
 
         if (fds[0].revents & c.POLLIN != 0) {
-            const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf);
+            // Task 3에서 여기에 실제 DECCKM 값이 들어온다. 지금은 기본값
+            // (cursor_keys=false)이라 M0와 동작이 완전히 같다.
+            const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, .{});
             if (bytes.len > 0) {
                 std.debug.print("terminal: key> {d} byte(s)\n", .{bytes.len});
                 pty.write(session.master_fd, bytes);
