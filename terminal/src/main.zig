@@ -143,11 +143,23 @@ pub fn main(init: std.process.Init) !void {
         if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
 
         if (fds[0].revents & c.POLLIN != 0) {
-            // Task 3에서 여기에 실제 DECCKM 값이 들어온다. 지금은 기본값
-            // (cursor_keys=false)이라 M0와 동작이 완전히 같다.
-            const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, .{});
+            // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
+            // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
+            // 캐시하지 않고 **키를 읽는 순간의 값**을 쓴다. packed struct의
+            // 비트 읽기 한 번이라 비용이 없다 — design doc 결정 6이 "값으로
+            // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
+            const ctx = input.Context{
+                .cursor_keys = screen.term.modes.get(.cursor_keys),
+            };
+            const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
             if (bytes.len > 0) {
-                std.debug.print("terminal: key> {d} byte(s)\n", .{bytes.len});
+                // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
+                // 마커라 **그대로 둔다**. 뒤에 decckm을 덧붙이는 이유는
+                // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
+                // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
+                std.debug.print("terminal: key> {d} byte(s) decckm={}\n", .{
+                    bytes.len, ctx.cursor_keys,
+                });
                 pty.write(session.master_fd, bytes);
             }
         }
