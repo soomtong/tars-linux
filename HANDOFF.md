@@ -46,10 +46,11 @@ git commit/push만 대신 수행한다(`docs/decisions/feedback_execution_scope.
 
 ## 현재 브랜치
 
-`main`. **push가 밀려 있을 수 있다** — IP-M1 커밋 일곱 개를 다음 세션
-첫머리에 확인할 것.
+`main`. Working tree 깨끗. `origin/main`과 동기 상태(IP-M1 커밋 여덟 개 push
+완료, 2026-08-18).
 
 ```
+ad1d8fe Record what IP-M1 settled about TERM and DECCKM
 c20b351 Retarget the aggregate gate at IP-M1
 0ead0a4 Make the gate edit the middle of a line
 1f5007b Tell the shell it is talking to an xterm
@@ -262,7 +263,7 @@ comptime {
 
 ## 다음 에이전트에게
 
-1. `git status`로 상태 확인. **IP-M1 커밋 일곱 개가 push 안 됐을 수 있다.**
+1. `git status`로 상태 확인(push 밀린 것 없어야 정상).
 2. `MEMORY.md`의 feedback 3개 + `project_build_host_arch` +
    `project_guest_environment` + `project_gate_chain_composition`을 먼저 읽는다.
 3. **첫 일은 IP-M2 plan 작성이다.** design doc 결정 4·8·9와 위 "남은 작업" +
