@@ -115,5 +115,68 @@ pub fn main() !void {
     try expect(&state, 29, 0, ""); // LEFTCTRL release
     try expect(&state, 46, 1, "c");
 
+    // ── 특수키 → 이스케이프 시퀀스 (IP-M1) ──────────────────────────────
+    //
+    // 여기서 처음으로 키 하나가 바이트 여러 개가 된다. IP-M0가 반환 타입을
+    // []const u8로 바꾼 이유가 이것이다 — 표를 아무리 늘려도 ?u8로는
+    // `ESC [ D` 세 바이트를 표현할 수 없었다.
+
+    // DECCKM 꺼짐(기본): `ESC [ X`
+    try expect(&state, 103, 1, "\x1b[A"); // KEY_UP
+    try expect(&state, 108, 1, "\x1b[B"); // KEY_DOWN
+    try expect(&state, 106, 1, "\x1b[C"); // KEY_RIGHT
+    try expect(&state, 105, 1, "\x1b[D"); // KEY_LEFT
+    try expect(&state, 102, 1, "\x1b[H"); // KEY_HOME
+    try expect(&state, 107, 1, "\x1b[F"); // KEY_END
+
+    // 틸드 계열은 DECCKM과 무관하게 언제나 같은 모양이다.
+    try expect(&state, 111, 1, "\x1b[3~"); // KEY_DELETE
+    try expect(&state, 104, 1, "\x1b[5~"); // KEY_PAGEUP
+    try expect(&state, 109, 1, "\x1b[6~"); // KEY_PAGEDOWN
+
+    // 뗄 때는 여전히 아무것도 안 보낸다.
+    try expect(&state, 105, 0, "");
+    // 자동 반복은 보낸다 — 방향키를 누르고 있으면 계속 움직여야 한다.
+    try expect(&state, 105, 2, "\x1b[D");
+
+    // ── DECCKM 켜짐: 커서 계열만 `ESC O X`로 바뀐다 ─────────────────────
+    //
+    // 이 모드가 실제로 켜지는지는 셸에 달려 있고(smkx), --no-config로 뜬
+    // 셸이 안 보내면 게이트는 이 경로를 한 번도 밟지 않는다(design doc
+    // 위험 4). 그래서 **여기서** 두 형태를 다 본다.
+    const ckm = input.Context{ .cursor_keys = true };
+    try expectCtx(&state, ckm, 103, 1, "\x1bOA"); // KEY_UP
+    try expectCtx(&state, ckm, 108, 1, "\x1bOB"); // KEY_DOWN
+    try expectCtx(&state, ckm, 106, 1, "\x1bOC"); // KEY_RIGHT
+    try expectCtx(&state, ckm, 105, 1, "\x1bOD"); // KEY_LEFT
+    try expectCtx(&state, ckm, 102, 1, "\x1bOH"); // KEY_HOME
+    try expectCtx(&state, ckm, 107, 1, "\x1bOF"); // KEY_END
+
+    // 틸드 계열은 DECCKM이 켜져도 그대로다. 이 세 줄이 위 여섯 줄만큼
+    // 중요하다 — "모드가 켜지면 전부 O로 바꾼다"는 흔한 오해를 막는다.
+    try expectCtx(&state, ckm, 111, 1, "\x1b[3~");
+    try expectCtx(&state, ckm, 104, 1, "\x1b[5~");
+    try expectCtx(&state, ckm, 109, 1, "\x1b[6~");
+
+    // ── 아직 안 하는 것을 적어둔다 ──────────────────────────────────────
+    //
+    // modifier + 특수키(`Ctrl+←` = `ESC [ 1 ; 5 D`)는 design doc 결정 2의
+    // 2번 단계(조합 dispatch)이고 그 자리는 IP-M2가 연다. 지금은 Ctrl을
+    // 무시하고 맨 방향키를 보낸다 — 의도된 동작이다. M2가 이 줄을 고칠 때
+    // "여기가 바뀌는 자리"임을 알 수 있게 남긴다.
+    try expect(&state, 29, 1, ""); // LEFTCTRL press
+    try expect(&state, 105, 1, "\x1b[D"); // Ctrl+← → 아직은 그냥 ←
+    try expect(&state, 29, 0, ""); // LEFTCTRL release
+
+    // Shift도 마찬가지다. keymap의 [2]u8는 특수키에 아예 닿지 않는다.
+    try expect(&state, 42, 1, ""); // LEFTSHIFT press
+    try expect(&state, 105, 1, "\x1b[D"); // Shift+← → 아직은 그냥 ←
+    try expect(&state, 42, 0, ""); // LEFTSHIFT release
+
+    // 특수키 사이의 빈 코드(F1=59 등)는 여전히 조용히 무시된다. 표에 넣는
+    // 비용은 싸지만 게이트가 볼 수 없는 표를 늘리지 않는다(design doc 비목표).
+    try expect(&state, 59, 1, ""); // KEY_F1
+    try expect(&state, 110, 1, ""); // KEY_INSERT
+
     std.debug.print("PASS\n", .{});
 }

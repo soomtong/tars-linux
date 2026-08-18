@@ -98,6 +98,44 @@ pub const Context = struct {
     swap_alt_meta: bool = false,
 };
 
+/// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
+/// 반대로 **테스트 쪽 `"\x1b[A"`는 이름을 붙이지 않는다** — 거기서는 그것이
+/// 와이어 포맷 자체이고, 쪼개는 순간 무슨 바이트가 나가는지 한눈에 안 보인다.
+const ESC: u8 = 0x1b;
+
+/// 특수키가 만드는 이스케이프 시퀀스는 모양이 **둘뿐**이다.
+///
+/// 이 셋을 keymap 배열에 넣지 않는 이유는 두 가지다. (1) keymap의 칸은
+/// `[2]u8`(Shift 안 누름 / 누름) 문자 한 쌍이라 여러 바이트를 담을 수 없다.
+/// (2) 방향키는 evdev 코드 102~111에 있어서 표를 거기까지 늘리면 58~101
+/// 마흔네 칸이 전부 `.{ 0, 0 }`인 표가 된다.
+const SpecialKey = union(enum) {
+    /// `ESC [ X`. DECCKM이 켜져 있으면 `ESC O X`가 된다(design doc 결정 5).
+    cursor: u8,
+    /// `ESC [ N ~`. **DECCKM의 영향을 받지 않는다** — 흔한 오해라 여기 적어둔다.
+    tilde: u8,
+};
+
+/// evdev 코드 → 특수키. 대상이 아니면 null.
+///
+/// F1~F12(59~88)·키패드·Insert(110)는 일부러 없다. TUI 앱이 하나도 없어서
+/// 누를 이유가 없고, 게이트가 볼 수 없는 표를 늘리는 것은
+/// project_gate_chain_composition이 경고한 부채다(design doc 비목표).
+fn specialKey(code: u16) ?SpecialKey {
+    return switch (code) {
+        c.KEY_UP => .{ .cursor = 'A' },
+        c.KEY_DOWN => .{ .cursor = 'B' },
+        c.KEY_RIGHT => .{ .cursor = 'C' },
+        c.KEY_LEFT => .{ .cursor = 'D' },
+        c.KEY_HOME => .{ .cursor = 'H' },
+        c.KEY_END => .{ .cursor = 'F' },
+        c.KEY_DELETE => .{ .tilde = '3' },
+        c.KEY_PAGEUP => .{ .tilde = '5' },
+        c.KEY_PAGEDOWN => .{ .tilde = '6' },
+        else => null,
+    };
+}
+
 /// "보낼 것이 없다"를 뜻하는 빈 슬라이스. IP-M0 전에는 `null`이 이 자리였다.
 const none: []const u8 = &[_]u8{};
 
@@ -149,13 +187,32 @@ pub const State = struct {
         return self.seq[0..1];
     }
 
+    /// 특수키의 바이트열을 seq에 담아 슬라이스로 돌려준다.
+    /// `one`과 같은 저장소를 쓴다 — 호출자가 즉시 복사하므로 안전하다.
+    fn escape(self: *State, key: SpecialKey, ctx: Context) []const u8 {
+        self.seq[0] = ESC;
+        switch (key) {
+            .cursor => |final| {
+                // 여기가 결정 5다. `ESC [`인지 `ESC O`인지를 **추측하지
+                // 않는다** — 셸이 보낸 `ESC [ ? 1 h`를 libghostty-vt가 이미
+                // 받아뒀고, main.zig가 그 값을 ctx에 담아 넘겨준다.
+                self.seq[1] = if (ctx.cursor_keys) 'O' else '[';
+                self.seq[2] = final;
+                return self.seq[0..3];
+            },
+            .tilde => |num| {
+                self.seq[1] = '[';
+                self.seq[2] = num;
+                self.seq[3] = '~';
+                return self.seq[0..4];
+            },
+        }
+    }
+
     /// EV_KEY 이벤트 하나를 처리한다.
     /// value: 0=뗌, 1=누름, 2=자동 반복.
     /// PTY로 보낼 바이트열을 반환한다. 보낼 것이 없으면 빈 슬라이스다.
     pub fn handleKey(self: *State, code: u16, value: i32, ctx: Context) []const u8 {
-        // Task 2가 이 줄을 지우고 진짜로 읽는다.
-        _ = ctx;
-
         switch (code) {
             c.KEY_LEFTSHIFT => {
                 self.shift_left = value != 0;
@@ -177,6 +234,15 @@ pub const State = struct {
         }
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return none;
+        // 특수키를 keymap 조회보다 **먼저** 본다. 방향키(102~111)는 어차피
+        // keymap 배열 밖이라 순서를 바꿔도 결과는 같지만, design doc 결정 2가
+        // 정한 "가로챌 것을 먼저 가로채고 남은 것만 평소대로"를 코드 순서로
+        // 남겨둔다 — IP-M2의 조합 dispatch가 이 위에 얹힌다.
+        //
+        // modifier와의 조합(`Ctrl+←` = `ESC [ 1 ; 5 D`)은 그 M2의 몫이다.
+        // 지금은 Ctrl/Shift를 무시하고 맨 시퀀스를 보낸다.
+        if (specialKey(code)) |key| return self.escape(key, ctx);
+
         if (code >= keymap.len) return none;
 
         const ch = keymap[code][if (self.shifted()) 1 else 0];
