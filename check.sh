@@ -52,9 +52,13 @@ run_chain() {
 # 타이핑하지만 디스크는 물지 않고 부팅도 한 번뿐이다 — 증명할 것이 한 세션
 # 안에 있기 때문이다. 그래서 루트 게이트의 총 부팅 횟수는 12회에서 15회가
 # 된다.
+#
+# IP-M1부터 이 체인은 같은 부팅 안에서 Ctrl+C · TERM · 방향키 셋을 이어서
+# 검사한다. 부팅을 늘리지 않고 sendkey만 열넷 더한다 — 부팅 자체는 ~4초인데
+# sendkey는 글자당 0.3초라, 이 체인에서 비싼 쪽은 타이핑이다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
-run_chain "IP-M0" ./input/check.sh
+run_chain "IP-M1" ./input/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
