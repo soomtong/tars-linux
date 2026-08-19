@@ -1,7 +1,9 @@
 # TARS Input Policy — Design
 
 **Date:** 2026-08-15
-**Status:** 설계 완료, IP-M0 착수 대기
+**Status:** **완료 (2026-08-19).** IP-M0·M1·M2 전부 끝났고 목표 다섯이 모두
+게이트로 증명된다. 루트 게이트는 4체인(BF-M4 · TF-M4 · CP-M2 · IP-M2)
+3/3으로 통과하며, 회차당 부팅 18회에 22분 20초다.
 
 ## 배경
 
@@ -77,6 +79,22 @@ Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 �
 그리고 이 다섯이 **게이트로 증명된다** — 사람이 화면을 보고 판단하는
 것이 아니라, `check.sh`가 QEMU monitor로 키를 보내고 화면 덤프를 검사해서
 판정한다.
+
+### 무엇이 어디서 증명되는가 (2026-08-19 완료 시점)
+
+| 목표 | 게이트가 보는 것 | 자리 |
+|---|---|---|
+| 1 | `sleep 100` 실행 중 `ctrl-c` → 프롬프트 복귀. 음성 검사로 `echo notdead`가 **안 도는 것**을 함께 본다 | IP-M0 |
+| 2 | `echo abc` → ← ← `X` → 출력 행 `aXbc`. 음성 검사는 `abcX` | IP-M1 |
+| 3 | 게스트에서 `echo $TERM` → 출력 행 `xterm` + initrd cpio 목록에 terminfo | IP-M1 |
+| 4 | bash 프롬프트에서 `alt-left` → `aa Xbb`, `meta_l-left` → `cc dd`. 음성 검사 셋(`aa bbX`·`aa bXb`·`command not found`) + `key> 2 byte(s)` | IP-M2 1차 부팅 |
+| 5 | `keyboard=pc` 디스크로 재부팅 → 같은 물리 키가 **반대로** 동작 | IP-M2 2차 부팅 |
+
+**게이트가 끝내 못 밟은 경로가 하나 남았다.** DECCKM(`ESC O` 형태)이다.
+`fish --no-config`도 `bash --norc`도 `smkx`를 보내지 않아서 게이트 로그는
+매번 `DECCKM stayed off`다. 이 분기는 `input_test`가 `Context.cursor_keys`를
+값으로 주입해 대신 본다 — 그 처방과, `keyboard=pc`에는 왜 같은 처방을 쓰지
+않았는지는 `docs/decisions/project_gate_chain_composition.md`에 적었다.
 
 ## 비목표
 
