@@ -213,7 +213,7 @@ ACPI가 없는 지금은 커널이 알아서 `HALT`로 강등하므로 겉보기
 - `tars-init: starting as PID 1`이 **두 번째로** 나타난다(재부팅이 실제로
   일어났다).
 - 그 뒤에 `tars-init: config shell=zsh`가 있다(바뀐 설정을 읽었다).
-- 그 뒤에 `started console shell (pid N, /bin/zsh)`가 있다(설정이 실제
+- 그 뒤에 `started console shell (pid N, /usr/bin/zsh)`가 있다(설정이 실제
   동작이 됐다).
 
 부팅 하나가 "Ctrl+Alt+Del이 SIGINT로 왔다 → 정리하고 껐다 → 커널이 다시
@@ -259,7 +259,7 @@ ACPI가 없는 지금은 커널이 알아서 `HALT`로 강등하므로 겉보기
 | 1 | `kill -TERM 1` → `Power off not available: System halted instead`. 음성 검사는 `Attempted to kill init` 부재 | PM-M0, 부팅 B |
 | 2 | `sendkey ctrl-alt-delete` → 같은 로그에 `starting as PID 1`이 두 번째로 등장 | PM-M1, 부팅 A |
 | 3 | 종료 순서의 로그 넉 줄(요청 접수, SIGTERM 발송, 자식 수거, sync 완료) | PM-M0, 부팅 B |
-| 4 | 재부팅 뒤 `config shell=zsh` + `started console shell (pid N, /bin/zsh)` | PM-M1, 부팅 A |
+| 4 | 재부팅 뒤 `config shell=zsh` + `started console shell (pid N, /usr/bin/zsh)` | PM-M1, 부팅 A |
 | 5 | `giving up on terminal` + `started terminal` 줄이 정확히 셋 | PM-M1, BF 체인 |
 
 ## Milestone 계획
