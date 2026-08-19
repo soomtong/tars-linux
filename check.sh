@@ -49,16 +49,20 @@ run_chain() {
 # 설정을 고친다. 그래서 이 체인만 회차당 20초쯤 더 걸린다.
 #
 # IP 체인은 키보드 입력 정책을 본다. CP처럼 monitor sendkey로 게스트에
-# 타이핑하지만 디스크는 물지 않고 부팅도 한 번뿐이다 — 증명할 것이 한 세션
-# 안에 있기 때문이다. 그래서 루트 게이트의 총 부팅 횟수는 12회에서 15회가
-# 된다.
+# 타이핑한다.
 #
-# IP-M1부터 이 체인은 같은 부팅 안에서 Ctrl+C · TERM · 방향키 셋을 이어서
-# 검사한다. 부팅을 늘리지 않고 sendkey만 열넷 더한다 — 부팅 자체는 ~4초인데
-# sendkey는 글자당 0.3초라, 이 체인에서 비싼 쪽은 타이핑이다.
+# IP-M2부터 이 체인도 회차당 QEMU를 **두 번** 띄운다. 1차는 디스크 없이
+# 떠서 Ctrl+C · TERM · 방향키 · Option/Cmd를 보고, 2차는 keyboard=pc가 이미
+# 적힌 디스크를 물고 떠서 그 한 줄이 Alt와 Meta를 맞바꾸는 것을 본다.
+# 부팅을 하나 더 붙인 이유는 디스크가 없으면 설정이 영원히 기본값(apple)이라
+# pc 경로를 **구조적으로** 밟을 수 없기 때문이다 — 게이트가 못 보는 것은
+# 게이트가 통과시킨다.
+#
+# 그래서 루트 게이트 한 번의 총 부팅 횟수는 15회에서 18회가 된다.
+# 이 체인에서 비싼 쪽은 부팅(~4초)이 아니라 타이핑(글자당 0.3초)이다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
-run_chain "IP-M1" ./input/check.sh
+run_chain "IP-M2" ./input/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
