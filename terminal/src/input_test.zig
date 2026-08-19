@@ -250,6 +250,49 @@ pub fn main() !void {
     try expectCtx(&state, ckm, K.KEY_LEFTALT, 0, "");
     try expectCtx(&state, ckm, K.KEY_LEFT, 1, "\x1bOD"); // 조합이 없으면 다시 DECCKM
 
+    // ── keyboard=pc: Alt와 Meta를 맞바꾼다 (IP-M2, design doc 결정 9) ────
+    //
+    // 스페이스 옆 두 키의 순서가 Apple과 PC에서 정확히 뒤집혀 있다.
+    //   Apple: [Ctrl] [Option 56] [Cmd 125]
+    //   PC:    [Ctrl] [Win 125]   [Alt 56]
+    // 그래서 하는 일은 modifier를 기록하기 **전에** 코드를 맞바꾸는 것뿐이고,
+    // 그 뒤 로직(chord, keymap, specialKey)은 어느 키보드인지 전혀 모른다.
+    //
+    // 이 검사가 게이트보다 중요한 이유가 하나 있다: 게이트는 QEMU가 보내는
+    // 물리 키 하나만 볼 수 있지만, 여기서는 네 키를 다 볼 수 있다.
+    const pc = input.Context{ .swap_alt_meta = true };
+
+    // 물리 Alt(56)를 누르면 Meta로 기록된다 → Cmd 의미가 나온다.
+    try expectCtx(&state, pc, K.KEY_LEFTALT, 1, "");
+    try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x01"); // ESC b가 아니라 0x01
+    try expectCtx(&state, pc, K.KEY_RIGHT, 1, "\x05");
+    try expectCtx(&state, pc, K.KEY_LEFTALT, 0, "");
+
+    // 물리 Meta(125)를 누르면 Alt로 기록된다 → Option 의미가 나온다.
+    try expectCtx(&state, pc, K.KEY_LEFTMETA, 1, "");
+    try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x1bb"); // 0x01이 아니라 ESC b
+    try expectCtx(&state, pc, K.KEY_BACKSPACE, 1, "\x1b\x7f");
+    try expectCtx(&state, pc, K.KEY_LEFTMETA, 0, "");
+
+    // 오른쪽 짝(100↔126)도 같이 바뀐다. 왼쪽만 고치는 실수를 여기서 잡는다.
+    try expectCtx(&state, pc, K.KEY_RIGHTALT, 1, "");
+    try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x01");
+    try expectCtx(&state, pc, K.KEY_RIGHTALT, 0, "");
+    try expectCtx(&state, pc, K.KEY_RIGHTMETA, 1, "");
+    try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x1bb");
+    try expectCtx(&state, pc, K.KEY_RIGHTMETA, 0, "");
+
+    // 교환은 **modifier 키에만** 일어난다. 글자 키는 그대로다.
+    try expectCtx(&state, pc, K.KEY_A, 1, "a");
+    try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x1b[D");
+
+    // 뗌 이벤트도 같은 ctx로 들어오므로 짝이 맞는다. 부팅 중에 keyboard
+    // 설정이 바뀌는 일은 없다 — PID 1이 부팅 시점에 한 번 정해서 argv로
+    // 넘기고, 그 값은 프로세스가 사는 동안 상수다.
+    try expectCtx(&state, pc, K.KEY_LEFTALT, 1, "");
+    try expectCtx(&state, pc, K.KEY_LEFTALT, 0, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // 아무 modifier도 안 남았다
+
     // ── 여전히 안 하는 것 ───────────────────────────────────────────────
     //
     // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **IP-M2도 하지 않는다.**

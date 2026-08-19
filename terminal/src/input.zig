@@ -119,9 +119,14 @@ pub const Context = struct {
     /// `screen.term.modes.get(.cursor_keys)`로 되읽어 채운다.
     cursor_keys: bool = false,
 
-    /// PC 키보드 보정(design doc 결정 9). **IP-M2에서 처음 읽힌다** —
-    /// 지금은 자리만 있다. 여기 적어두는 이유는 Context가 생기는 이유가
-    /// DECCKM 하나가 아니라는 것을 남기기 위해서다.
+    /// PC 키보드 보정(design doc 결정 9). IP-M1에 자리만 만들어 두고
+    /// IP-M2가 읽기 시작했다. handleKey 맨 앞에서 56↔125, 100↔126을
+    /// 맞바꾸는 데 쓰인다(swapAltMeta).
+    ///
+    /// DECCKM과 달리 이 값은 **부팅 내내 상수다.** PID 1이 설정 파일을
+    /// 읽어 argv로 넘긴 것을 main.zig가 그대로 채우므로, 프로세스가 사는
+    /// 동안 바뀌지 않는다 — 누를 때와 뗄 때 값이 달라져 modifier가 눌린
+    /// 채로 남는 일이 구조적으로 없다는 뜻이다.
     swap_alt_meta: bool = false,
 };
 
@@ -160,6 +165,25 @@ fn specialKey(code: u16) ?SpecialKey {
         c.KEY_PAGEUP => .{ .tilde = '5' },
         c.KEY_PAGEDOWN => .{ .tilde = '6' },
         else => null,
+    };
+}
+
+/// PC 키보드 보정(design doc 결정 9). 스페이스 옆 두 키의 순서가 Apple과
+/// 정확히 뒤집혀 있으므로 코드를 맞바꾼다.
+///
+/// **파이프라인의 맨 앞에서 한 번만 부른다.** 그러면 그 뒤 로직은 어느
+/// 키보드인지 전혀 몰라도 된다 — chord도 keymap도 specialKey도 고칠 것이
+/// 없다는 것이 이 자리를 고른 이유다. 뒤로 갈수록 "여기도 보정해야 하나"를
+/// 물어야 하는 곳이 늘어난다.
+///
+/// 문자 키는 건드리지 않는다. 두 키보드에서 실제로 자리가 다른 것은 이 넷뿐이다.
+fn swapAltMeta(code: u16) u16 {
+    return switch (code) {
+        c.KEY_LEFTALT => c.KEY_LEFTMETA,
+        c.KEY_LEFTMETA => c.KEY_LEFTALT,
+        c.KEY_RIGHTALT => c.KEY_RIGHTMETA,
+        c.KEY_RIGHTMETA => c.KEY_RIGHTALT,
+        else => code,
     };
 }
 
@@ -316,7 +340,13 @@ pub const State = struct {
     /// EV_KEY 이벤트 하나를 처리한다.
     /// value: 0=뗌, 1=누름, 2=자동 반복.
     /// PTY로 보낼 바이트열을 반환한다. 보낼 것이 없으면 빈 슬라이스다.
-    pub fn handleKey(self: *State, code: u16, value: i32, ctx: Context) []const u8 {
+    pub fn handleKey(self: *State, raw_code: u16, value: i32, ctx: Context) []const u8 {
+        // 0번 단계 — 키보드 보정. modifier를 **기록하기 전에** 맞바꾼다.
+        // 인자 이름을 raw_code로 바꾼 것은 실수를 막기 위해서다: 아래에서
+        // 실수로 raw_code를 다시 쓰면 보정이 빠진 코드가 흘러가는데, 이름이
+        // 다르면 그 실수가 눈에 띈다.
+        const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+
         switch (code) {
             c.KEY_LEFTSHIFT => {
                 self.shift_left = value != 0;
