@@ -5,10 +5,18 @@ cd "$(dirname "$0")"
 
 # IP 체인 — 키보드 입력 정책.
 #
-# CP 체인과 달리 부팅은 **한 번**이다. 증명할 것이 전부 한 세션 안에 있다.
-# 디스크도 물리지 않는다: /config mount가 실패하면 init이 fish로 폴백하므로
-# (CP design doc "설정 하나로 부팅이 막히지 않게 하는 네 장치"), 이 체인은
-# 그 폴백 경로를 덤으로 한 번 더 밟는다.
+# IP-M2부터 부팅이 **두 번**이다.
+#
+#   1차 — 디스크 없이. /config mount가 실패하면 init이 기본값(fish, apple)로
+#         폴백하므로 이 체인은 그 폴백 경로를 덤으로 밟는다. Ctrl+C · TERM ·
+#         방향키 · Option/Cmd를 여기서 본다.
+#   2차 — keyboard=pc가 이미 적힌 디스크를 물고. 같은 물리 키가 1차와
+#         **반대로** 동작하는 것을 본다.
+#
+# 2차를 붙인 이유는 디스크가 없으면 설정이 영원히 apple이라 pc 경로를
+# **구조적으로** 밟을 방법이 없기 때문이다 — 게이트가 못 보는 것은 게이트가
+# 통과시킨다(docs/decisions/project_gate_chain_composition.md). DECCKM과
+# 달리 이건 우리가 파일 한 줄로 켤 수 있으므로 켠다.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   sendkey ctrl-c → QEMU 스캔코드 → 커널 atkbd → evdev(KEY_LEFTCTRL, KEY_C)
@@ -75,7 +83,16 @@ esac
 # 체인마다 포트를 나눈다.
 MONITOR_PORT=45457
 
-LOG="$(mktemp)"
+# 2차 부팅이 -drive에 넘길 이미지의 절대 경로를 만들 때 쓴다
+# (config/check.sh와 같은 자리, 같은 이유).
+REPO_ROOT="$(cd .. && pwd)"
+
+LOG1="$(mktemp)"
+LOG2="$(mktemp)"
+# 아래 검사들은 전부 $LOG를 본다. 부팅이 둘이 되면서 이 변수가 "지금 보고
+# 있는 로그"를 가리키게 했다 — 2차 부팅 앞에서 LOG="$LOG2" 한 줄만 놓으면
+# 되고, report_failure는 언제나 현재 부팅의 로그를 보여준다.
+LOG="$LOG1"
 QEMU_PID=""
 
 cleanup() {
@@ -124,39 +141,61 @@ report_failure() {
   exit 1
 }
 
-qemu-system-x86_64 \
-  -kernel ../kernel/build/arch/x86/boot/bzImage \
-  -initrd ../kernel/initrd.cpio \
-  -append "console=ttyS0" \
-  -vga none \
-  -device virtio-gpu-pci \
-  -display none \
-  -serial file:"$LOG" \
-  -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
-  -no-reboot &
-QEMU_PID=$!
-
+# 게스트를 띄우고 프롬프트가 그려질 때까지 기다린 뒤 monitor를 연결한다.
+# $1 = 시리얼 로그, 나머지 = 추가 QEMU 인자(2차 부팅의 -drive).
+#
+# 함수로 뽑은 이유는 두 부팅이 같은 일을 하고 2차만 -drive가 붙기 때문이다.
+#
 # "terminal: screen>" 첫 줄이 곧 DRM 열기 + 폰트 래스터라이즈 + evdev 열기 +
 # 셸 spawn + 첫 렌더가 전부 끝났다는 신호다. TF/CP 체인과 같은 신호를 쓴다.
-READY=0
-for _ in $(seq 1 120); do
-  if grep -q "terminal: screen>" "$LOG"; then READY=1; break; fi
-  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
-  sleep 1
-done
-if [ "$READY" != "1" ]; then
-  report_failure "terminal never rendered a prompt; there was nothing to type into"
-fi
-sleep 1
+start_guest() {
+  local log="$1"; shift
+  qemu-system-x86_64 \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "console=ttyS0" \
+    -vga none \
+    -device virtio-gpu-pci \
+    -display none \
+    -serial file:"$log" \
+    -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
+    -no-reboot "$@" &
+  QEMU_PID=$!
 
-CONNECTED=0
-for _ in $(seq 1 20); do
-  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
-  sleep 0.5
-done
-if [ "$CONNECTED" != "1" ]; then
-  report_failure "could not connect to QEMU monitor on port ${MONITOR_PORT}"
-fi
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -q "terminal: screen>" "$log"; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$ready" != "1" ]; then
+    report_failure "terminal never rendered a prompt; there was nothing to type into"
+  fi
+  sleep 1
+
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  if [ "$connected" != "1" ]; then
+    report_failure "could not connect to QEMU monitor on port ${MONITOR_PORT}"
+  fi
+}
+
+# monitor를 닫고 QEMU를 확실히 끝낸다. 2차 부팅이 같은 monitor 포트를 다시
+# 열기 때문에 wait까지 한다 — 죽다 만 QEMU가 남아 있으면 2차의 sendkey가
+# 어디로 가는지 알 수 없다.
+stop_guest() {
+  exec 3<&-
+  exec 3>&-
+  kill "$QEMU_PID" 2>/dev/null
+  wait "$QEMU_PID" 2>/dev/null
+  QEMU_PID=""
+}
+
+echo "=== boot 1/2: no disk, so the config falls back to its defaults ==="
+start_guest "$LOG"
 
 # ── 1) 죽일 자식을 하나 띄운다 ─────────────────────────────────────────
 # `sleep 100 &`가 아니라 foreground로 띄운다. SIGINT는 **foreground process
@@ -377,12 +416,7 @@ if [ "$CMD_OK" != "1" ]; then
 fi
 echo "cmd+left jumped to the beginning of the line"
 
-exec 3<&-
-exec 3>&-
-
-kill "$QEMU_PID" 2>/dev/null
-wait "$QEMU_PID" 2>/dev/null
-QEMU_PID=""
+stop_guest
 
 # design doc 위험 4의 관측. --no-config로 뜬 셸이 smkx를 보내지 않으면
 # DECCKM은 계속 꺼져 있고 `ESC O` 경로는 게이트가 한 번도 밟지 않는다.
@@ -413,7 +447,110 @@ if grep -q "Attempted to kill init" "$LOG"; then
   report_failure "kernel panicked because PID 1 exited"
 fi
 
-echo "--- init log ---"
+echo "--- init log (boot 1) ---"
+grep 'tars-init:' "$LOG" || true
+
+# ══════════════════════════════════════════════════════ 2차 부팅 (keyboard=pc)
+#
+# 여기서 증명하는 것은 design doc 목표 5다 — /config/tars.conf의 한 줄이
+# Alt와 Meta의 의미를 맞바꾼다. 1차 부팅은 디스크가 없어 설정이 언제나
+# 기본값(apple)이라, 이 경로를 밟을 방법이 구조적으로 없었다
+# (docs/decisions/project_gate_chain_composition.md의 "게이트가 구조적으로
+# 밟을 수 없는 경로"). DECCKM과 달리 이건 **우리가 켤 수 있는 것**이므로
+# 부팅을 하나 더 붙였다.
+#
+# 두 검사는 1차 부팅과 정확히 반대 모양이다.
+#     alt-left     : 1차 = 단어 이동 → 2차 = 줄 처음
+#     meta_l-left  : 1차 = 줄 처음   → 2차 = 단어 이동
+# 둘 다 보는 이유는 "정말 교환인가"를 보기 위해서다. 한쪽만 보면 "Alt를
+# Cmd로 바꿨을 뿐 Meta는 그대로"인 구현도 통과한다.
+echo "=== boot 2/2: same kernel, a disk that says keyboard=pc ==="
+
+if ! ./make_disk.sh; then
+  echo "FAIL: input disk image build failed"
+  exit 1
+fi
+
+LOG="$LOG2"
+start_guest "$LOG" -drive file="${REPO_ROOT}/out/input.img",if=virtio,format=raw
+
+# 설정이 파일 → PID 1 → argv → terminal로 흘렀는지를 로그 네 줄로 본다.
+# 화면 검사가 실패했을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이 틀렸다"를
+# 가르는 것이 이 넷이다.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG"; then
+  report_failure "the second boot did not load /config/tars.conf (did the disk attach?)"
+fi
+if ! grep -q "tars-init: config shell=bash keyboard=pc" "$LOG"; then
+  report_failure "the second boot did not parse both keys out of the config file"
+fi
+if ! grep -q "terminal: keyboard=pc (swap_alt_meta=true)" "$LOG"; then
+  report_failure "the terminal did not receive keyboard=pc on its argv"
+fi
+if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
+  report_failure "the pty shell is not bash on the second boot"
+fi
+echo "boot 2: the config on disk selected bash and a pc keyboard"
+
+# ── 10) pc에서 alt-left는 Cmd 의미(줄 처음)다 ─────────────────────────
+# 1차 부팅에서 이 키는 단어 이동이었다. 같은 물리 키가 반대로 동작하는
+# 것이 곧 교환의 증거다.
+#
+#   swap 동작   → echo gg hh → 출력 행 "gg hh"
+#   swap 안 됨  → gg echo hh → bash: gg: command not found
+echo "=== typing 'gg hh', then alt-left 'echo ' ==="
+type_keys g g spc h h
+type_keys alt-left
+type_keys e c h o spc
+type_keys ret
+
+PC_CMD_OK=0
+PC_CMD_FAILED=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| gg hh" "$LOG"; then PC_CMD_OK=1; break; fi
+  if grep -q "terminal: screen>.*command not found" "$LOG"; then PC_CMD_FAILED=1; break; fi
+  sleep 1
+done
+if [ "$PC_CMD_FAILED" = "1" ]; then
+  report_failure "alt-left still moved by a word on a pc keyboard; the swap did not happen"
+fi
+if [ "$PC_CMD_OK" != "1" ]; then
+  report_failure "'gg hh' never appeared as an output row after alt-left"
+fi
+echo "on a pc keyboard, alt+left means beginning-of-line"
+
+# ── 11) pc에서 meta_l-left는 Option 의미(단어 이동)다 ─────────────────
+#   swap 동작   → echo ii Xjj → 출력 행 "ii Xjj"
+#   swap 안 됨  → Xecho ii jj → bash: Xecho: command not found
+#   맨 ←가 샜다 → echo ii jXj → 출력 행 "ii jXj"
+echo "=== typing 'echo ii jj', then meta_l-left X ==="
+type_keys e c h o spc i i spc j j
+type_keys meta_l-left
+type_keys shift-x
+type_keys ret
+
+PC_OPT_OK=0
+PC_OPT_PLAIN=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| ii Xjj" "$LOG"; then PC_OPT_OK=1; break; fi
+  if grep -q "terminal: screen>.*| ii jXj" "$LOG"; then PC_OPT_PLAIN=1; break; fi
+  sleep 1
+done
+
+stop_guest
+
+if [ "$PC_OPT_PLAIN" = "1" ]; then
+  report_failure "meta_l-left leaked a bare arrow key on the second boot"
+fi
+if [ "$PC_OPT_OK" != "1" ]; then
+  report_failure "meta_l-left did not move by a word on a pc keyboard; the swap is one-way, not a swap"
+fi
+echo "on a pc keyboard, meta+left means backward-word"
+
+if grep -q "Attempted to kill init" "$LOG"; then
+  report_failure "kernel panicked because PID 1 exited on the second boot"
+fi
+
+echo "--- init log (boot 2) ---"
 grep 'tars-init:' "$LOG" || true
 
 echo "PASS"
