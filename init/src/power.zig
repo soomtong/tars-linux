@@ -58,3 +58,98 @@ pub fn take() ?Action {
     if (raw == 0) return null;
     return @enumFromInt(raw);
 }
+
+/// 자식에게 주는 유예. 감독 루프의 재시작 backoff가 1초이고 우리 자식은
+/// 터미널과 셸뿐이라 정리에 이보다 오래 걸릴 일이 없다.
+const GRACE_SECONDS: isize = 3;
+
+fn monotonicSeconds() isize {
+    var ts: linux.timespec = undefined;
+    if (failed(linux.clock_gettime(.MONOTONIC, &ts))) |_| return 0;
+    return ts.sec;
+}
+
+fn sleepMillis(ms: isize) void {
+    const req = linux.timespec{
+        .sec = @divTrunc(ms, 1000),
+        .nsec = @rem(ms, 1000) * 1_000_000,
+    };
+    _ = linux.nanosleep(&req, null);
+}
+
+/// 자식이 전부 사라질 때까지 거둔다. 다 거뒀으면 true, 유예가 끝났으면
+/// false.
+///
+/// WNOHANG이라 살아 있는 자식이 있으면 0을 돌려주고 즉시 반환한다. 그래서
+/// "잠깐 자고 다시 묻는" 모양이 된다 — 그냥 blocking waitpid를 쓰면 죽지
+/// 않는 자식 하나 때문에 영영 못 나온다. 대화형 셸이 정확히 그런
+/// 자식이다(SIGTERM을 무시한다).
+fn reapAll() bool {
+    const deadline = monotonicSeconds() + GRACE_SECONDS;
+    var reaped: usize = 0;
+    while (true) {
+        var status: u32 = 0;
+        const rc = linux.waitpid(-1, &status, linux.W.NOHANG);
+        switch (linux.errno(rc)) {
+            .SUCCESS => {
+                // rc가 0이면 "살아 있지만 아직 안 죽었다"이므로 아래로 간다.
+                if (rc != 0) {
+                    reaped += 1;
+                    continue;
+                }
+            },
+            .CHILD => {
+                std.debug.print("tars-init: every child is gone (reaped {d})\n", .{reaped});
+                return true;
+            },
+            // EINTR 등. 아래에서 기다렸다가 다시 묻는다.
+            else => {},
+        }
+        if (monotonicSeconds() >= deadline) {
+            std.debug.print("tars-init: grace period expired (reaped {d})\n", .{reaped});
+            return false;
+        }
+        sleepMillis(100);
+    }
+}
+
+/// 시스템을 끈다. **절대 반환하지 않는다** — supervise가 noreturn인 것과
+/// 같은 이유이고, 그보다 하나 더 있다. 이 함수가 도는 동안 감독 루프로
+/// 돌아가면 "안 떠 있는 자식을 띄운다"는 규칙이 방금 죽인 셸을 되살린다.
+/// 돌아갈 길 자체를 타입으로 막아둔다.
+pub fn shutdown(action: Action) noreturn {
+    std.debug.print("tars-init: shutdown requested (action {s})\n", .{@tagName(action)});
+
+    // -1은 "자기를 제외한 모든 프로세스"다. 감독 대상 둘뿐 아니라 PTY 안에서
+    // 도는 셸까지 한 번에 닿으므로 자식 목록을 순회할 필요가 없고, 리눅스가
+    // 호출자를 대상에서 빼주므로 PID 1이 자기를 죽이는 일도 없다.
+    _ = linux.kill(-1, .TERM);
+    std.debug.print("tars-init: sent SIGTERM to every process\n", .{});
+
+    // 대화형 셸은 SIGTERM을 무시한다(POSIX). 그래서 여기서 false가 나오는
+    // 것이 정상이고, SIGKILL은 예외 처리가 아니라 정상 경로의 일부다.
+    if (!reapAll()) {
+        _ = linux.kill(-1, .KILL);
+        std.debug.print("tars-init: sent SIGKILL to what was left\n", .{});
+        _ = reapAll();
+    }
+
+    // 커널은 reboot(2)에서 sync를 대신 해주지 않는다. 리눅스 소스의
+    // kernel/reboot.c:726이 "reboot doesn't sync: do that yourself before
+    // calling this"라고 직접 적어 두었다. /config는 MS_SYNCHRONOUS라 그
+    // 파일시스템만 보면 필요 없지만, 시스템 콜 한 번이고 다른 파일시스템에는
+    // 그 보장이 없다.
+    linux.sync();
+    std.debug.print("tars-init: filesystems synced\n", .{});
+
+    const cmd: linux.LINUX_REBOOT.CMD = switch (action) {
+        .power_off => .POWER_OFF,
+    };
+    std.debug.print("tars-init: calling reboot({s})\n", .{@tagName(cmd)});
+    _ = linux.reboot(.MAGIC1, .MAGIC2, cmd, null);
+
+    // 여기에 도달했다는 것은 reboot(2)가 실패했다는 뜻이다. PID 1의 반환은
+    // 곧 커널 패닉이므로 돌아가지 않고 여기서 쉰다.
+    std.debug.print("tars-init: reboot syscall returned; PID 1 stays alive\n", .{});
+    while (true) sleepMillis(1000);
+}

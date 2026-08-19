@@ -1,6 +1,7 @@
 const std = @import("std");
 const linux = std.os.linux;
 const config = @import("config.zig");
+const power = @import("power.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -238,6 +239,12 @@ fn find(children: []Child, pid: linux.pid_t) ?*Child {
 /// PID 1의 본체. **절대 반환하지 않는다** — 반환하면 커널이 패닉한다.
 fn supervise(children: []Child, envp: [*:null]const ?[*:0]const u8) noreturn {
     while (true) {
+        // 자식을 다시 띄우기 **전에** 본다. 순서가 뒤집히면 방금 SIGTERM으로
+        // 죽인 셸을 이 루프가 되살린다. waitpid는 SA_RESTART를 끈 덕분에
+        // EINTR로 깨어나고, 아래의 `if (e == .INTR) continue;`가 그것을 여기로
+        // 돌려보낸다.
+        if (power.take()) |action| power.shutdown(action);
+
         var alive: usize = 0;
         for (children) |*c| {
             if (c.pid < 0 and !c.given_up) start(c, envp);
@@ -309,6 +316,11 @@ pub fn main(init: std.process.Init.Minimal) void {
     const envp = init.environ.block.slice.ptr;
 
     std.debug.print("tars-init: starting as PID 1\n", .{});
+
+    // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
+    // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
+    // 맞다. 이 호출 전까지 커널은 PID 1에게 온 SIGTERM을 조용히 버린다.
+    power.install();
 
     _ = mountFs("proc", "/proc", "proc", 0);
     _ = mountFs("sysfs", "/sys", "sysfs", 0);
