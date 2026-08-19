@@ -16,6 +16,14 @@ if ! (cd ../init && zig build); then
   exit 1
 fi
 
+# 호스트에서 도는 순수 로직 검사(config.zig의 parse). terminal/check.sh가
+# input_test를 부팅 앞에서 돌리는 것과 같은 자리다 — 부팅 20초를 쓰기 전에
+# 0.1초로 잡을 수 있는 실패를 먼저 잡는다.
+if ! (cd ../init && zig build test); then
+  echo "FAIL: config_test failed"
+  exit 1
+fi
+
 if ! (cd ../terminal && ./prepare.sh); then
   echo "FAIL: terminal build failed"
   exit 1

@@ -45,9 +45,37 @@ pub const Shell = enum {
     }
 };
 
+/// 물리 키보드 종류. **재배치가 아니라 하드웨어 선언이다** — 사용자가 키를
+/// 임의로 옮기는 문이 아니라, "스페이스 옆 두 키가 어느 순서인가"라는 사실
+/// 하나를 알려주는 것이다(design doc 비목표: 범용 키바인딩 엔진은 안 만든다).
+///
+/// Shell과 같은 화이트리스트 구조다. enum에 없는 이름은 파싱을 통과할 수
+/// 없으므로 검사 목록을 따로 유지할 필요가 없다.
+pub const Keyboard = enum {
+    apple,
+    pc,
+
+    /// terminal에 argv로 넘길 문자열. @tagName은 sentinel이 없는 슬라이스를
+    /// 주는데 execve의 argv는 널 종료 문자열이 필요하다 — Shell.path()가
+    /// 경로를 [:0]const u8로 돌려주는 것과 같은 이유로 여기서 짝을 맞춘다.
+    ///
+    /// enum에 이름을 하나 더 넣으면 이 switch가 컴파일 에러를 내서
+    /// 빠뜨릴 수 없다.
+    pub fn arg(self: Keyboard) [:0]const u8 {
+        return switch (self) {
+            .apple => "apple",
+            .pc => "pc",
+        };
+    }
+};
+
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
+///
+/// keyboard의 기본값이 apple인 이유는 이 기계를 쓰는 사람이 Apple 키보드를
+/// 먼저 꽂기 때문이다. pc는 보정을 **켜는** 쪽이라 명시적으로 적어야 한다.
 pub const Config = struct {
     shell: Shell = .fish,
+    keyboard: Keyboard = .apple,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -106,7 +134,10 @@ pub fn load(path: [:0]const u8) ?Config {
 /// 나머지는 **첫 번째** `=`에서 키와 값으로 나누고 양쪽 공백을 뗀다.
 /// 모르는 키와 모르는 값은 로그만 남기고 넘어간다 — 설정 파일은 사용자가
 /// 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이다.
-fn parse(text: []const u8) Config {
+/// **pub인 이유는 config_test.zig가 부르기 때문이다.** 이 파일에서 유일하게
+/// 시스템 콜이 없는 함수이고, 그래서 유일하게 게스트를 띄우지 않고 검증할 수
+/// 있는 부분이다 — IP-M2가 그 검사를 실제로 만들었다.
+pub fn parse(text: []const u8) Config {
     var c = Config{};
 
     var lines = std.mem.splitScalar(u8, text, '\n');
@@ -130,6 +161,16 @@ fn parse(text: []const u8) Config {
             c.shell = std.meta.stringToEnum(Shell, value) orelse {
                 std.debug.print("tars-init: unknown shell '{s}', falling back to {s}\n", .{
                     value, @tagName(c.shell),
+                });
+                continue;
+            };
+        } else if (std.mem.eql(u8, key, "keyboard")) {
+            // shell과 완전히 같은 모양이다. 모르는 값은 로그만 남기고
+            // 기본값(apple)에 머문다 — 설정 파일은 사용자가 손으로 고치는
+            // 물건이라 깨진 입력이 예외가 아니라 규칙이다.
+            c.keyboard = std.meta.stringToEnum(Keyboard, value) orelse {
+                std.debug.print("tars-init: unknown keyboard '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.keyboard),
                 });
                 continue;
             };
@@ -161,8 +202,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\# TARS configuration. Edit and reboot to apply.
         \\# shell: fish | bash | zsh
         \\shell={s}
+        \\# keyboard: apple | pc
+        \\#   apple = [Ctrl][Option][Cmd], pc = [Ctrl][Win][Alt]
+        \\keyboard={s}
         \\
-    , .{@tagName(c.shell)}) catch return error.FormatFailed;
+    , .{ @tagName(c.shell), @tagName(c.keyboard) }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의
     // 계약은 "이 내용으로 만든다"이다. O_TRUNC는 나중에 이 함수가 갱신에도

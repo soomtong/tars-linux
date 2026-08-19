@@ -117,6 +117,12 @@ pub fn main(init: std.process.Init) !void {
     const args = init.minimal.args.vector;
     const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
     const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
+    // 넷째 인자가 키보드 종류다(IP-M2, design doc 결정 9). enum을 여기 다시
+    // 정의하지 않고 문자열 하나만 비교하는 것이 요점이다 — CP가 정한
+    // "파서는 한 벌"을 지킨다. init이 enum으로 이미 걸렀으므로 여기 도착하는
+    // 값은 apple 아니면 pc이고, 그 외 무엇이 오더라도 apple로 떨어진다.
+    const keyboard: [*:0]const u8 = if (args.len > 3) args[3] else "apple";
+    const swap_alt_meta = std.mem.eql(u8, std.mem.span(keyboard), "pc");
 
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
     // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
@@ -143,6 +149,13 @@ pub fn main(init: std.process.Init) !void {
     // 개수를 세는 마커라 **그대로 둔다**.
     std.debug.print("terminal: spawned child pid {d} ({s})\n", .{
         session.child_pid, shell_path,
+    });
+    // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
+    // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
+    // 2차 부팅), 그 화면이 틀렸을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이
+    // 틀렸다"를 가르는 것이 이 줄이다.
+    std.debug.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
+        keyboard, swap_alt_meta,
     });
 
     const screen = try vt.Screen.init(init.io, allocator, cols, rows);
@@ -173,6 +186,9 @@ pub fn main(init: std.process.Init) !void {
             // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
             const ctx = input.Context{
                 .cursor_keys = screen.term.modes.get(.cursor_keys),
+                // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
+                // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
+                .swap_alt_meta = swap_alt_meta,
             };
             const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
             if (bytes.len > 0) {

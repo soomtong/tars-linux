@@ -176,7 +176,9 @@ const Child = struct {
     /// execve에 그대로 넘길 argv. argv[0]은 path와 같고 남는 자리는 null이다 —
     /// execve는 첫 null에서 멈추므로 인자가 하나인 자식도 같은 배열 타입을
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
-    argv: [3:null]?[*:0]const u8,
+    /// IP-M2에서 셋에서 넷으로 늘었다. terminal이 받는 넷째 자리가
+    /// keyboard이고, 콘솔 셸은 그 자리를 null로 둔다.
+    argv: [4:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -315,7 +317,9 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     const storage_mounted = mountConfig();
     const cfg = loadConfig(storage_mounted);
-    std.debug.print("tars-init: config shell={s}\n", .{@tagName(cfg.shell)});
+    std.debug.print("tars-init: config shell={s} keyboard={s}\n", .{
+        @tagName(cfg.shell), @tagName(cfg.keyboard),
+    });
 
     logDrmDevicePresence();
 
@@ -325,22 +329,29 @@ pub fn main(init: std.process.Init.Minimal) void {
     const shell = resolveShell(cfg.shell);
     const shell_path = shell.path();
     const shell_flag = shell.noConfigFlag();
+    // 셸과 달리 폴백 검사(resolveShell 같은 것)가 없다. 키보드 종류는
+    // 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미 화이트리스트다.
+    const keyboard_arg = cfg.keyboard.arg();
 
     var children = [_]Child{
         .{
             .kind = .terminal,
             .path = TERMINAL_PATH,
-            // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지를
-            // PID 1이 정해서 인자로 넘긴다 — 파서가 두 벌이 되면 두
-            // 프로세스가 서로 다른 답을 얻을 수 있다.
-            .argv = .{ TERMINAL_PATH.ptr, shell_path.ptr, shell_flag.ptr },
+            // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지와
+            // 어느 키보드인지를 PID 1이 정해서 인자로 넘긴다 — 파서가 두
+            // 벌이 되면 두 프로세스가 서로 다른 답을 얻을 수 있다.
+            //
+            // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
+            // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
+            // 이 인자는 셸로 새지 않는다.
+            .argv = .{ TERMINAL_PATH.ptr, shell_path.ptr, shell_flag.ptr, keyboard_arg.ptr },
         },
         .{
             .kind = .console_shell,
             .path = shell_path,
             // 콘솔 셸에는 플래그를 주지 않는다. 이쪽은 사용자가 직접 쓰는
             // 자리이므로, 나중에 설정 파일이 생기면 그것을 읽는 편이 맞다.
-            .argv = .{ shell_path.ptr, null, null },
+            .argv = .{ shell_path.ptr, null, null, null },
         },
     };
     supervise(&children, envp);
