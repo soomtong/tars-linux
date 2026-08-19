@@ -15,7 +15,7 @@
 `main`. `origin/main`과 동기 상태(이 세션의 커밋 셋 push 완료).
 
 ```
-17afaa3 Hand off with the PM-M0 plan ready to execute
+(HEAD) Hand off with the PM-M0 plan ready to execute
 2702270 Plan PM-M0, the shutdown half of Power Management
 e40bbd0 Design the Power Management subproject
 2f6ef9e Hand off with Power Management chosen as the next subproject
