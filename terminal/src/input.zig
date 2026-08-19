@@ -82,7 +82,7 @@ const keymap = [_][2]u8{
     .{ '/', '?' }, // 53
     .{ 0, 0 }, // 54: KEY_RIGHTSHIFT
     .{ '*', '*' }, // 55: KEY_KPASTERISK
-    .{ 0, 0 }, // 56: KEY_LEFTALT
+    .{ 0, 0 }, // 56: KEY_LEFTALT — modifier로 처리한다(IP-M2)
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
@@ -177,6 +177,20 @@ pub const State = struct {
     ctrl_left: bool = false,
     ctrl_right: bool = false,
 
+    // Alt(Option)와 Meta(Cmd). design doc 결정 4의 여덟 중 나머지 넷이고,
+    // IP-M0가 "관측 가능해지는 시점에 넣는다"며 미뤄둔 것이다. 그 시점이
+    // 아래 chord()가 생기는 지금이다 — 비트만 있으면 반환값이 안 바뀌어서
+    // 검사할 수가 없었다.
+    //
+    // 이름을 alt/meta로 붙이는 것은 **물리 키 이름**을 따른 것이다.
+    // 어느 것이 Option이고 어느 것이 Cmd인지는 키보드 종류가 정하며,
+    // 그 보정은 handleKey 맨 앞에서 코드를 맞바꾸는 것으로 끝난다(결정 9).
+    // 여기까지 내려오면 "왼쪽 Alt 키가 눌려 있다"는 사실만 남는다.
+    alt_left: bool = false,
+    alt_right: bool = false,
+    meta_left: bool = false,
+    meta_right: bool = false,
+
     /// 반환 슬라이스의 저장소. 힙을 쓰지 않는다.
     ///
     /// 호출자(readKeys)가 반환값을 즉시 out으로 복사하므로, 같은 read
@@ -191,6 +205,14 @@ pub const State = struct {
 
     fn ctrled(self: State) bool {
         return self.ctrl_left or self.ctrl_right;
+    }
+
+    fn alted(self: State) bool {
+        return self.alt_left or self.alt_right;
+    }
+
+    fn metaed(self: State) bool {
+        return self.meta_left or self.meta_right;
     }
 
     /// Ctrl과 조합됐을 때 보낼 제어 문자. 대상이 아니면 null.
@@ -236,6 +258,61 @@ pub const State = struct {
         }
     }
 
+    /// `ESC <byte>` 두 바이트. 터미널에서 "Meta+그 글자"를 뜻하는 오래된
+    /// 관례이고, readline·zle·fish가 전부 기본값으로 안다.
+    ///
+    /// 이 ESC는 `Ctrl+[`가 만드는 것과 **완전히 같은 바이트**다. 그래서
+    /// 받는 쪽은 ESC 다음 바이트를 잠깐 기다려서 "Meta 조합"인지 "혼자 온
+    /// ESC"인지 가른다(readline의 keyseq-timeout). 우리 쪽에서 지켜야 할
+    /// 것은 **두 바이트를 한 번의 write로 보내는 것**뿐인데, readKeys가
+    /// out에 모아 main.zig가 한 번 pty.write하는 지금 구조가 이미 그렇다.
+    fn escPrefixed(self: *State, byte: u8) []const u8 {
+        self.seq[0] = ESC;
+        self.seq[1] = byte;
+        return self.seq[0..2];
+    }
+
+    /// design doc 결정 2의 **2번 단계 — 조합 dispatch**. TF design doc이
+    /// "여긴 나중에"라고 비워두고 두 서브프로젝트를 건너온 자리다.
+    ///
+    /// 여기가 3번(기본 번역)보다 **먼저** 불려야 한다. 뒤에 두면 Cmd+←가
+    /// 여기 닿기 전에 특수키 조회에서 그냥 ESC [ D로 번역돼 새어 나간다.
+    /// "가로챌 것을 먼저 가로채고, 남은 것만 평소대로"가 규칙이다.
+    ///
+    /// 표에 없는 조합(Option+b, Cmd+C 등)은 null을 돌려주고 modifier가
+    /// 없었던 것처럼 흘러간다. Ctrl이 마스크 대상이 아닌 문자를 다루는
+    /// 방식(Ctrl+1 → '1')과 같은 규칙이다.
+    ///
+    /// Meta를 먼저 보는 것은 **둘 다 눌렸을 때 Cmd가 이긴다**는 뜻이고,
+    /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
+    fn chord(self: *State, code: u16) ?[]const u8 {
+        if (self.metaed()) {
+            // Cmd 계열은 제어 문자 한 바이트다. 0x01이 beginning-of-line인
+            // 이유는 그것이 readline의 기본 바인딩이기 때문이지 Cmd와 A
+            // 사이에 무슨 관계가 있어서가 아니다.
+            return switch (code) {
+                c.KEY_LEFT => self.one(0x01), // Ctrl+A: beginning-of-line
+                c.KEY_RIGHT => self.one(0x05), // Ctrl+E: end-of-line
+                // 0x15는 bash에서 커서 앞까지, zsh에서는 줄 전체를 지운다.
+                // macOS의 Cmd+Backspace는 bash 쪽이다 — 셸을 바꿔 끼울 수
+                // 있는 시스템에서 이 어긋남은 A안을 고른 대가이고, 감추지
+                // 않고 여기 적어둔다(design doc 결정 8).
+                c.KEY_BACKSPACE => self.one(0x15),
+                else => null,
+            };
+        }
+        if (self.alted()) {
+            return switch (code) {
+                c.KEY_LEFT => self.escPrefixed('b'), // backward-word
+                c.KEY_RIGHT => self.escPrefixed('f'), // forward-word
+                c.KEY_BACKSPACE => self.escPrefixed(0x7f), // backward-kill-word
+                c.KEY_DELETE => self.escPrefixed('d'), // kill-word
+                else => null,
+            };
+        }
+        return null;
+    }
+
     /// EV_KEY 이벤트 하나를 처리한다.
     /// value: 0=뗌, 1=누름, 2=자동 반복.
     /// PTY로 보낼 바이트열을 반환한다. 보낼 것이 없으면 빈 슬라이스다.
@@ -257,17 +334,40 @@ pub const State = struct {
                 self.ctrl_right = value != 0;
                 return none;
             },
+            c.KEY_LEFTALT => {
+                self.alt_left = value != 0;
+                return none;
+            },
+            c.KEY_RIGHTALT => {
+                self.alt_right = value != 0;
+                return none;
+            },
+            c.KEY_LEFTMETA => {
+                self.meta_left = value != 0;
+                return none;
+            },
+            c.KEY_RIGHTMETA => {
+                self.meta_right = value != 0;
+                return none;
+            },
             else => {},
         }
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return none;
+
+        // 2번 단계 — 조합 dispatch. 특수키 조회보다 **먼저**다.
+        // 뒤에 두면 Cmd+←가 여기 닿기 전에 ESC [ D로 번역돼 새어 나간다.
+        if (self.chord(code)) |bytes| return bytes;
+
         // 특수키를 keymap 조회보다 **먼저** 본다. 방향키(102~111)는 어차피
         // keymap 배열 밖이라 순서를 바꿔도 결과는 같지만, design doc 결정 2가
         // 정한 "가로챌 것을 먼저 가로채고 남은 것만 평소대로"를 코드 순서로
-        // 남겨둔다 — IP-M2의 조합 dispatch가 이 위에 얹힌다.
+        // 남겨둔다 — IP-M2의 조합 dispatch가 바로 위에 얹혔다.
         //
-        // modifier와의 조합(`Ctrl+←` = `ESC [ 1 ; 5 D`)은 그 M2의 몫이다.
-        // 지금은 Ctrl/Shift를 무시하고 맨 시퀀스를 보낸다.
+        // `Ctrl+←`(`ESC [ 1 ; 5 D`)는 **IP-M2도 하지 않는다.** 결정 8의
+        // 표에 있는 것은 Option과 Cmd 일곱 줄뿐이고, Ctrl+방향키를 누를
+        // 이유가 있는 앱이 아직 없다. 지금도 Ctrl/Shift를 무시하고 맨
+        // 시퀀스를 보낸다.
         if (specialKey(code)) |key| return self.escape(key, ctx);
 
         if (code >= keymap.len) return none;

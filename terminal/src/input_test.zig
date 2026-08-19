@@ -165,23 +165,110 @@ pub fn main() !void {
     try expectCtx(&state, ckm, K.KEY_PAGEUP, 1, "\x1b[5~");
     try expectCtx(&state, ckm, K.KEY_PAGEDOWN, 1, "\x1b[6~");
 
-    // ── 아직 안 하는 것을 적어둔다 ──────────────────────────────────────
+    // ── modifier가 넷에서 여덟으로 (IP-M2, design doc 결정 4) ────────────
     //
-    // modifier + 특수키(`Ctrl+←` = `ESC [ 1 ; 5 D`)는 design doc 결정 2의
-    // 2번 단계(조합 dispatch)이고 그 자리는 IP-M2가 연다. 지금은 Ctrl을
-    // 무시하고 맨 방향키를 보낸다 — 의도된 동작이다. M2가 이 줄을 고칠 때
-    // "여기가 바뀌는 자리"임을 알 수 있게 남긴다.
+    // Alt 좌우(56/100)와 Meta 좌우(125/126)가 들어온다. IP-M0가 이 넷을
+    // "관측 가능해지는 시점에 넣는다"며 미룬 이유가 아래 두 줄이다 —
+    // modifier 비트만 있으면 반환값이 한 글자도 안 바뀌어서 검사가 성립하지
+    // 않는다. 그 시점이 바로 다음 블록(조합 dispatch)이다.
+    try expect(&state, K.KEY_LEFTALT, 1, ""); // 그 자체는 문자가 없다
+    try expect(&state, K.KEY_LEFTALT, 0, "");
+    try expect(&state, K.KEY_LEFTMETA, 1, ""); // 125는 keymap.len(58) 밖이다
+    try expect(&state, K.KEY_LEFTMETA, 0, "");
+
+    // ── Option 조합 (design doc 결정 8) ─────────────────────────────────
+    //
+    // 셸이 **이미 아는 언어**로 번역한다(A안). ESC 접두사는 터미널에서
+    // "Meta+그 글자"를 뜻하는 오래된 관례이고, readline/zle/fish가 전부
+    // 기본값으로 안다 — 설정 파일 없이 동작한다는 것이 A안을 고른 결정적
+    // 이유였다(그래야 --no-config로 뜬 셸에서 게이트가 증명할 수 있다).
+    try expect(&state, K.KEY_LEFTALT, 1, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x1bb"); // backward-word
+    try expect(&state, K.KEY_RIGHT, 1, "\x1bf"); // forward-word
+    try expect(&state, K.KEY_BACKSPACE, 1, "\x1b\x7f"); // backward-kill-word
+    try expect(&state, K.KEY_DELETE, 1, "\x1bd"); // kill-word
+
+    // 표에 없는 조합은 modifier를 무시하고 원래 키를 보낸다. Ctrl이 마스크
+    // 대상이 아닌 문자(Ctrl+1 → '1')를 다루는 방식과 같은 규칙이다 —
+    // 가로챌 것만 가로채고 나머지는 평소대로.
+    try expect(&state, K.KEY_B, 1, "b"); // Option+b는 이번 범위가 아니다
+    try expect(&state, K.KEY_UP, 1, "\x1b[A"); // Option+↑도 그냥 ↑
+    try expect(&state, K.KEY_LEFTALT, 0, "");
+
+    // 오른쪽 Alt(100)도 같다. 좌우를 따로 추적하는 이유는 Shift/Ctrl과
+    // 같다 — 하나를 누른 채 다른 하나를 눌렀다 떼도 풀리면 안 된다.
+    try expect(&state, K.KEY_RIGHTALT, 1, "");
+    try expect(&state, K.KEY_LEFTALT, 1, "");
+    try expect(&state, K.KEY_RIGHTALT, 0, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x1bb"); // 여전히 Option
+    try expect(&state, K.KEY_LEFTALT, 0, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // 이제 맨 ←
+
+    // ── Cmd 조합 ────────────────────────────────────────────────────────
+    //
+    // 이쪽은 ESC 접두사가 아니라 **제어 문자 한 바이트**다. Cmd+←가 0x01
+    // (Ctrl+A)인 이유는 그것이 readline의 beginning-of-line이기 때문이지
+    // 무슨 대응 관계가 있어서가 아니다 — "셸이 이미 아는 언어"라는 것이
+    // 유일한 기준이다.
+    try expect(&state, K.KEY_LEFTMETA, 1, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x01"); // beginning-of-line
+    try expect(&state, K.KEY_RIGHT, 1, "\x05"); // end-of-line
+    try expect(&state, K.KEY_BACKSPACE, 1, "\x15"); // 줄 앞부분 삭제
+
+    // Cmd+Delete는 표에 없다 → 맨 Delete가 나간다.
+    try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
+    // Cmd+C / Cmd+V는 **일부러 비워둔 자리**다(design doc 비목표).
+    // 복사·붙여넣기는 스크롤백과 클립보드가 선행 조건이라
+    // project_copy_mode의 몫이고, 그때 이 두 줄이 바뀐다.
+    try expect(&state, K.KEY_C, 1, "c");
+    try expect(&state, K.KEY_V, 1, "v");
+    try expect(&state, K.KEY_LEFTMETA, 0, "");
+
+    try expect(&state, K.KEY_RIGHTMETA, 1, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x01"); // 오른쪽 Meta(126)도 같다
+    try expect(&state, K.KEY_RIGHTMETA, 0, "");
+
+    // ── 둘 다 눌리면 Cmd가 이긴다 ───────────────────────────────────────
+    //
+    // 임의의 선택이지만 **결정적**이어야 한다. macOS에서 Cmd가 더 강한
+    // modifier라는 직관과 맞고, 코드에서는 chord가 Meta를 먼저 보는 것으로
+    // 표현된다. 이 줄이 그 순서를 못 박는다.
+    try expect(&state, K.KEY_LEFTALT, 1, "");
+    try expect(&state, K.KEY_LEFTMETA, 1, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x01"); // ESC b가 아니라 0x01
+    try expect(&state, K.KEY_LEFTMETA, 0, "");
+    try expect(&state, K.KEY_LEFT, 1, "\x1bb"); // Meta를 떼면 Option으로
+    try expect(&state, K.KEY_LEFTALT, 0, "");
+
+    // ── 조합은 DECCKM보다 강하다 ────────────────────────────────────────
+    //
+    // dispatch가 특수키 조회보다 **먼저** 오기 때문이다(design doc 결정 2의
+    // "가로챌 것을 먼저"). Option+←는 DECCKM이 켜져 있어도 ESC b이고,
+    // ESC O D로 바뀌지 않는다. 순서가 뒤집히면 이 줄이 먼저 터진다.
+    try expectCtx(&state, ckm, K.KEY_LEFTALT, 1, "");
+    try expectCtx(&state, ckm, K.KEY_LEFT, 1, "\x1bb");
+    try expectCtx(&state, ckm, K.KEY_LEFTALT, 0, "");
+    try expectCtx(&state, ckm, K.KEY_LEFT, 1, "\x1bOD"); // 조합이 없으면 다시 DECCKM
+
+    // ── 여전히 안 하는 것 ───────────────────────────────────────────────
+    //
+    // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **IP-M2도 하지 않는다.**
+    // IP-M1의 주석은 "M2의 조합 dispatch가 이 위에 얹히면서 바뀐다"고 적었지만
+    // 그렇지 않았다 — 결정 8의 표에 있는 것은 Option과 Cmd 일곱 줄뿐이고,
+    // Ctrl+방향키를 누를 이유가 있는 앱이 아직 하나도 없다(design doc 비목표:
+    // "게이트가 볼 수 없는 표를 늘리지 않는다").
+    //
+    // 그래서 State.seq의 8바이트 중 이번에도 4바이트까지만 쓴다. 6바이트를
+    // 쓰는 형태가 바로 이 `ESC [ 1 ; 5 D`다.
     try expect(&state, K.KEY_LEFTCTRL, 1, "");
-    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // Ctrl+← → 아직은 그냥 ←
+    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // Ctrl+← → 아직도 그냥 ←
     try expect(&state, K.KEY_LEFTCTRL, 0, "");
 
-    // Shift도 마찬가지다. keymap의 [2]u8는 특수키에 아예 닿지 않는다.
     try expect(&state, K.KEY_LEFTSHIFT, 1, "");
-    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // Shift+← → 아직은 그냥 ←
+    try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // Shift+← → 아직도 그냥 ←
     try expect(&state, K.KEY_LEFTSHIFT, 0, "");
 
-    // 특수키 사이의 빈 코드(F1=59 등)는 여전히 조용히 무시된다. 표에 넣는
-    // 비용은 싸지만 게이트가 볼 수 없는 표를 늘리지 않는다(design doc 비목표).
+    // 특수키 사이의 빈 코드(F1 등)는 여전히 조용히 무시된다.
     try expect(&state, K.KEY_F1, 1, "");
     try expect(&state, K.KEY_INSERT, 1, "");
 
