@@ -109,7 +109,8 @@ report_failure() {
     "terminal: spawned child pid" \
     "terminal: screen>" \
     "terminal: key>" \
-    "TERM"; do
+    "TERM" \
+    "terminal: keyboard="; do
     if grep -q "$marker" "$LOG"; then
       echo "  found   ${marker}"
     else
@@ -266,13 +267,6 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-exec 3<&-
-exec 3>&-
-
-kill "$QEMU_PID" 2>/dev/null
-wait "$QEMU_PID" 2>/dev/null
-QEMU_PID=""
-
 if [ "$ARROW_IGNORED" = "1" ]; then
   report_failure "the arrow keys did nothing: the line ran as 'echo abcX'"
 fi
@@ -280,6 +274,115 @@ if [ "$ARROW_OK" != "1" ]; then
   report_failure "neither 'aXbc' nor 'abcX' appeared: the cursor went somewhere unexpected, or the escape sequence was wrong for this shell"
 fi
 echo "the arrow keys moved the cursor inside the line"
+
+# ── 7) bash로 들어간다 (IP-M2) ────────────────────────────────────────
+# 결정 8의 표는 readline과 zle의 문서로 확실하지만 fish는 자체 에디터라
+# 기본 바인딩이 어긋날 수 있다(design doc 위험 2). 그래서 macOS 의미론
+# 검사는 readline 지형에서 한다.
+#
+# 절대 경로인 이유는 PATH다. 커널의 envp_init은 HOME과 TERM 둘뿐이다
+# (docs/decisions/project_guest_environment.md).
+#
+# --norc를 주는 이유는 다른 셸에 no-config 플래그를 주는 이유와 같다 —
+# 프롬프트가 예측 가능해야 화면을 검사할 수 있다. initrd에 /.bashrc가
+# 없어서 지금은 있으나 없으나 같지만, 생기는 날 조용히 달라지지 않는다.
+echo "=== typing '/usr/bin/bash --norc' ==="
+type_keys slash u s r slash b i n slash b a s h spc minus minus n o r c ret
+
+# bash가 정말 떴는지. --norc로 뜬 bash의 기본 PS1은 `\s-\v\$`라 화면에
+# `bash-5.2$` 같은 프롬프트가 그려진다. 방금 타이핑한 명령줄 행에는
+# `bash `까지만 있고 `bash-`는 없으므로 이 패턴은 프롬프트만 잡는다.
+#
+# 시리얼 로그에도 bash 프롬프트가 있을 수 있지만(콘솔 셸), 패턴이
+# `terminal: screen>`로 시작하므로 화면 덤프만 본다.
+BASH_OK=0
+for _ in $(seq 1 20); do
+  if grep -q "terminal: screen>.*bash-" "$LOG"; then BASH_OK=1; break; fi
+  sleep 1
+done
+if [ "$BASH_OK" != "1" ]; then
+  report_failure "bash never drew a prompt inside the pty (is /usr/bin/bash in the initrd?)"
+fi
+echo "the pty shell is now bash (readline territory)"
+
+# ── 8) Option+← = 단어 단위 왼쪽 이동 (design doc 결정 8) ──────────────
+# `echo aa bb`를 친 뒤 Option+←로 단어 하나를 건너뛰고 X를 끼운다.
+#
+#   제대로 동작    → echo aa Xbb → 출력 행 "aa Xbb"
+#   아무것도 안 감 → echo aa bbX → 출력 행 "aa bbX"
+#   맨 ←가 샜다    → echo aa bXb → 출력 행 "aa bXb"
+#
+# 세 번째가 이 검사의 핵심이다. **IP-M1까지 Option+←는 실제로 맨 ←를
+# 보내고 있었다** — Alt가 modifier로 추적되지도 않았기 때문이다. 그
+# 상태와 구분되지 않으면 이 게이트는 아무것도 증명하지 않는다
+# (docs/decisions/project_gate_chain_composition.md).
+echo "=== typing 'echo aa bb', then alt-left X ==="
+type_keys e c h o spc a a spc b b
+type_keys alt-left
+type_keys shift-x
+type_keys ret
+
+OPT_OK=0
+OPT_NOTHING=0
+OPT_PLAIN=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| aa Xbb" "$LOG"; then OPT_OK=1; break; fi
+  if grep -q "terminal: screen>.*| aa bbX" "$LOG"; then OPT_NOTHING=1; break; fi
+  if grep -q "terminal: screen>.*| aa bXb" "$LOG"; then OPT_PLAIN=1; break; fi
+  sleep 1
+done
+if [ "$OPT_NOTHING" = "1" ]; then
+  report_failure "alt-left produced nothing: the line ran as 'echo aa bbX'"
+fi
+if [ "$OPT_PLAIN" = "1" ]; then
+  report_failure "alt-left leaked a bare arrow key: the line ran as 'echo aa bXb' (the chord dispatch did not intercept it)"
+fi
+if [ "$OPT_OK" != "1" ]; then
+  report_failure "none of 'aa Xbb' / 'aa bbX' / 'aa bXb' appeared: the cursor went somewhere unexpected"
+fi
+echo "option+left moved the cursor by a word"
+
+# 부수적이지만 결정적인 증거 하나. main.zig가 매 키마다 바이트 수를 찍는데,
+# 이번 범위에서 **2바이트를 만드는 것은 Option 조합뿐**이다(맨 방향키는 3,
+# 평문은 1). 그래서 이 한 줄이 "ESC b 경로를 실제로 밟았다"를 말한다.
+if ! grep -q "terminal: key> 2 byte(s)" "$LOG"; then
+  report_failure "the screen looks right but no 2-byte sequence was ever sent; something else moved the cursor"
+fi
+
+# ── 9) Cmd+← = 줄 처음으로 ────────────────────────────────────────────
+# 방향을 뒤집어서 검사한다. 줄 처음에 `echo `를 끼워 넣어 그것이 명령이
+# 되는 것을 본다 — 출력 행의 첫머리가 "cc dd"가 되려면 echo가 줄 **맨
+# 앞**에 들어가는 수밖에 없으므로 성공 경로가 하나뿐이다.
+#
+#   제대로 동작 → echo cc dd → 출력 행 "cc dd"
+#   실패        → cc ddecho  → bash: cc: command not found
+echo "=== typing 'cc dd', then meta_l-left 'echo ' ==="
+type_keys c c spc d d
+type_keys meta_l-left
+type_keys e c h o spc
+type_keys ret
+
+CMD_OK=0
+CMD_FAILED=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| cc dd" "$LOG"; then CMD_OK=1; break; fi
+  if grep -q "terminal: screen>.*command not found" "$LOG"; then CMD_FAILED=1; break; fi
+  sleep 1
+done
+if [ "$CMD_FAILED" = "1" ]; then
+  report_failure "meta_l-left did not reach the start of the line; bash tried to run 'cc' (does QEMU sendkey meta_l arrive as KEY_LEFTMETA?)"
+fi
+if [ "$CMD_OK" != "1" ]; then
+  report_failure "'cc dd' never appeared as an output row after meta_l-left"
+fi
+echo "cmd+left jumped to the beginning of the line"
+
+exec 3<&-
+exec 3>&-
+
+kill "$QEMU_PID" 2>/dev/null
+wait "$QEMU_PID" 2>/dev/null
+QEMU_PID=""
 
 # design doc 위험 4의 관측. --no-config로 뜬 셸이 smkx를 보내지 않으면
 # DECCKM은 계속 꺼져 있고 `ESC O` 경로는 게이트가 한 번도 밟지 않는다.
@@ -289,6 +392,15 @@ if grep -q "decckm=true" "$LOG"; then
   echo "DECCKM was on: this run exercised the ESC O form"
 else
   echo "DECCKM stayed off: this run only exercised the ESC [ form (input_test covers the other)"
+fi
+
+# 디스크를 안 물었으므로 /config mount가 실패하고 설정은 전부 기본값이다.
+# 이 줄이 그것을 못 박는다 — 2차 부팅의 keyboard=pc와 대조군이 된다.
+if ! grep -q "tars-init: config shell=fish keyboard=apple" "$LOG"; then
+  report_failure "the diskless boot did not fall back to the default config"
+fi
+if ! grep -q "terminal: keyboard=apple (swap_alt_meta=false)" "$LOG"; then
+  report_failure "the terminal did not receive keyboard=apple on its argv"
 fi
 
 # 키가 아예 도달하지 않은 경우와 도달했지만 뜻이 틀린 경우를 구분한다.
