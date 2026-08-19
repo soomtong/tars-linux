@@ -1,6 +1,15 @@
 const std = @import("std");
 
-const c = @cImport({
+/// `pub`인 이유는 `input_test.zig`가 `input.c.KEY_LEFT`처럼 커널이 정한
+/// 이름으로 검사를 쓰기 위해서다. IP-M1까지 테스트는 103/105 같은 숫자
+/// 리터럴을 썼는데, 그건 테스트가 `linux/input.h`에 닿을 방법이 없어서였다 —
+/// 실은 이 파일이 이미 가져와 두고 잠가 뒀을 뿐이었다.
+///
+/// "테스트가 구현과 같은 출처를 쓰면 독립성을 잃는다"는 반론은 여기서
+/// 성립하지 않는다. "103이 정말 ←인가"에 답하는 것은 부팅 게이트이고
+/// (sendkey → 스캔코드 → atkbd → evdev), 단위 검사가 답하는 것은
+/// "KEY_LEFT가 ESC [ D가 되는가"다.
+pub const c = @cImport({
     @cInclude("linux/input.h");
 });
 
@@ -76,6 +85,24 @@ const keymap = [_][2]u8{
     .{ 0, 0 }, // 56: KEY_LEFTALT
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
+
+// 위 표의 규약은 "N번째 칸이 evdev 코드 N"인데, IP-M1까지 그것을 지켜주는
+// 것은 주석뿐이었다. 중간에 한 줄이 끼면 뒤가 전부 한 칸씩 밀리고, 그래도
+// **컴파일은 통과하며**, 주석만 거짓말이 된다. 증상은 "게스트에서 a를 쳤는데
+// s가 나온다"로 나타나므로 원인을 찾는 데 부팅 한 바퀴가 든다.
+//
+// 그래서 표의 양끝과 가운데를 커널의 이름에 못 박는다. 다섯 줄로 표 전체의
+// 정렬을 잡는 이유는, 한 줄이 끼면 그 뒤의 앵커가 **반드시** 하나는 어긋나기
+// 때문이다. IP-M2가 이 표 밖의 코드(KEY_LEFTMETA=125)를 처음 다루므로
+// 지금이 못을 박을 자리다.
+comptime {
+    if (keymap.len != c.KEY_SPACE + 1)
+        @compileError("keymap must end exactly at KEY_SPACE");
+    if (keymap[c.KEY_1][0] != '1') @compileError("keymap drifted at KEY_1");
+    if (keymap[c.KEY_ENTER][0] != '\r') @compileError("keymap drifted at KEY_ENTER");
+    if (keymap[c.KEY_A][0] != 'a') @compileError("keymap drifted at KEY_A");
+    if (keymap[c.KEY_Z][0] != 'z') @compileError("keymap drifted at KEY_Z");
+}
 
 /// 키 하나를 어떻게 번역할지 바꾸는, **바깥에서 들어오는** 상태.
 ///
