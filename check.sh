@@ -60,9 +60,18 @@ run_chain() {
 #
 # 그래서 루트 게이트 한 번의 총 부팅 횟수는 15회에서 18회가 된다.
 # 이 체인에서 비싼 쪽은 부팅(~4초)이 아니라 타이핑(글자당 0.3초)이다.
+#
+# PM 체인은 전원 관리를 본다. 게스트 셸에 `kill -TERM 1`을 타이핑하고,
+# PID 1이 자식을 정리한 뒤 reboot(2)를 부르는 것까지 로그로 확인한다.
+# 이 체인만 shell=bash가 적힌 디스크를 물고 뜬다 — kill이 initrd에
+# 바이너리로 없어서 빌트인이 확실한 셸이 필요하기 때문이다.
+#
+# PM-M0은 부팅 1회다. 그래서 총 부팅 횟수는 18회에서 21회가 된다.
+# PM-M1이 재부팅을 보는 부팅을 하나 더 붙이면 24회가 된다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
 run_chain "IP-M2" ./input/check.sh
+run_chain "PM-M0" ./power/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
