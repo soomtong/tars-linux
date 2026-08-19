@@ -52,10 +52,25 @@ pub fn build(b: *std.Build) void {
         .root_module = config_test_mod,
     });
 
+    // PM-M0: 시그널이 플래그가 되는지 보는 검사. config_test와 같은 자리에
+    // 두는 이유는 같다 — 부팅 20초를 쓰기 전에 0.1초로 잡을 수 있는 실패를
+    // 먼저 잡는다.
+    const power_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/power_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const power_test = b.addExecutable(.{
+        .name = "power_test",
+        .root_module = power_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
     // 없고, 네 체인이 전부 부르는 `zig build`를 무겁게 하지 않는다.
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(config_test).step);
+    test_step.dependOn(&b.addRunArtifact(power_test).step);
 }
