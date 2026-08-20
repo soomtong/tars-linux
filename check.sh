@@ -66,12 +66,19 @@ run_chain() {
 # 이 체인만 shell=bash가 적힌 디스크를 물고 뜬다 — kill이 initrd에
 # 바이너리로 없어서 빌트인이 확실한 셸이 필요하기 때문이다.
 #
-# PM-M0은 부팅 1회다. 그래서 총 부팅 횟수는 18회에서 21회가 된다.
-# PM-M1이 재부팅을 보는 부팅을 하나 더 붙이면 24회가 된다.
+# PM-M1부터 이 체인도 회차당 QEMU를 **두 번** 띄운다. 1차는 -no-reboot을 단
+# 채로 끄는 경로를(kill -TERM 1 → HALT), 2차는 그것을 **뺀** 채로 되살리는
+# 경로를 본다(설정 편집 → ctrl-alt-delete → 재부팅 → 새 설정으로 zsh). 두
+# 부팅의 QEMU 옵션이 이렇게 갈리는 것이 PM을 기존 체인에 얹지 않은 이유다.
+#
+# 그래서 총 부팅 횟수는 18회에서 24회가 된다.
+#
+# BF 체인도 PM-M1부터 몇 초 길어진다. 배너 뒤에 감독 루프가 /terminal을
+# 포기하는 것까지 기다리기 때문이다 — 재시작 backoff가 1초라 3초 남짓이다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
 run_chain "IP-M2" ./input/check.sh
-run_chain "PM-M0" ./power/check.sh
+run_chain "PM-M1" ./power/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
