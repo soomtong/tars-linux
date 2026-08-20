@@ -1,13 +1,14 @@
 ---
 name: project_power_management
-description: "게스트 전원 관리 — 커널에 ACPI가 없어서 reboot(POWER_OFF)이 HALT로 강등되고 QEMU가 스스로 끝나지 않는다; ACPI를 켜면 Power Button이 입력 장치를 하나 더 등록해 /dev/input/event0을 상수로 박은 terminal이 깨지므로 켜기 전에 그 상수부터 고칠 것; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; 대화형 셸은 SIGTERM을 무시하므로 SIGKILL은 정상 경로이고 게이트는 유예 만료가 아니라 every child is gone을 요구한다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다"
+description: "게스트 전원 관리 — 커널에 ACPI가 없어서 reboot(POWER_OFF)이 HALT로 강등되고 QEMU가 스스로 끝나지 않는다(RESTART는 강등되지 않는다); ACPI를 켜면 Power Button이 입력 장치를 하나 더 등록해 /dev/input/event0을 상수로 박은 terminal이 깨지므로 켜기 전에 그 상수부터 고칠 것; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; 대화형 셸은 SIGTERM을 무시하므로 SIGKILL은 정상 경로이고 게이트는 유예 만료가 아니라 every child is gone을 요구한다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다; 커널의 C_A_D 기본값이 1이라 Ctrl+Alt+Del은 구현 없이도 재부팅을 일으키므로 게이트가 '우리를 거쳤는지'를 따로 봐야 하고, 그 CAD_OFF 호출은 호스트 검사가 reboot(2)에 닿지 않도록 install()과 분리한다"
 metadata:
   node_type: memory
   type: project
 ---
 
 2026-08-19 PM-M0에서 게스트 안에서 시스템을 끄는 경로를 만들며 확정한
-것들이다. 코드는 `init/src/power.zig`, 게이트는 `power/check.sh`다.
+것들이고, 2026-08-20 PM-M1에서 되살리는 경로를 만들며 두 절을 더했다. 코드는
+`init/src/power.zig`, 게이트는 `power/check.sh`다.
 
 ## 커널에 ACPI가 없다 — 켜기 전에 `event0` 상수부터 고칠 것
 
@@ -103,10 +104,47 @@ HALT 메시지 하나만 보면 "정리하고 껐다"와 "정리 못 하고 껐�
 `mkfs.ext2 -d`로 `shell=bash`가 이미 적힌 디스크를 굽는다([[project_input_policy]]의
 IP-M2가 연 길). 게스트에 한 글자도 타이핑하지 않고 셸을 고를 수 있다.
 
+## `disableCtrlAltDel()`을 `install()`과 합치지 않는다 (2026-08-20 PM-M1)
+
+`reboot(MAGIC1, MAGIC2, CAD_OFF, NULL)`은 재부팅하지 않고 커널의 `C_A_D`를
+0으로 바꾸고 돌아오는 설정 호출이다. 그것을 부르는 자리는 `main.zig`가
+`power.install()` 바로 다음에 부르는 `power.disableCtrlAltDel()` **하나뿐이고,
+`install()` 안으로 합치지 않는다.**
+
+이유는 코드를 읽어서는 보이지 않는다. `power_test`가 `install()`을 부르고, 그
+검사는 Docker 컨테이너 안에서 돈다. 컨테이너에 `CAP_SYS_BOOT`이 있으면 그
+호출이 **개발 기계의 커널** `C_A_D`를 바꾼다. 저장소의 검사가 호스트 설정을
+건드리는 일이고, 그래서 규칙은 이렇게 적어 둔다 — **`power_test`가 부르는
+함수 중에 `reboot(2)`를 부르는 것이 하나도 없어야 한다.** 두 함수를 합치자는
+리팩터링은 자연스러워 보이므로 언제든 다시 제안될 수 있다.
+
+부르는 순서는 `install()` **다음**이다. 뒤집히면 그 사이의 짧은 창에 눌린
+Ctrl+Alt+Del이 핸들러 없는 `SIGINT`로 도착한다(PID 1이라 커널이 버려 주므로
+사고는 안 나지만, 키를 빼앗기 전에 받을 준비를 끝내는 편이 읽기에 맞다).
+
+## 커널의 `C_A_D` 기본값이 1이라 게이트가 통과할 뻔했다 (2026-08-20 PM-M1)
+
+`kernel/reboot.c:26`의 `static int C_A_D = 1;` 때문에, `CAD_OFF`를 한 줄도
+안 쓴 상태에서도 Ctrl+Alt+Del을 누르면 `ctrl_alt_del()`이 `schedule_work`로
+재부팅을 걸어(`:832`) **PID 1을 건너뛰고** 기계를 리셋한다. 게스트는 다시
+뜨고, 새 설정을 읽고, 셸을 띄운다. 커널이 `Restarting system`까지 찍는다.
+
+그래서 "재부팅했다"를 보는 마커 셋은 구현이 하나도 없는 상태에서 전부
+통과했다(PM-M1 Task 2에서 실제로 관측했다). 그 둘을 가르는 유일한 증거는
+**우리 로그**다 — `ctrl-alt-del now arrives as SIGINT` ·
+`shutdown requested (action restart)` · `calling reboot(RESTART)`. 커널이 찍는
+`Restarting system`은 양쪽 모두에서 나오므로 혼자서는 아무것도 증명하지
+못한다. [[project_gate_chain_composition]]의 "게이트는 자기가 안 보는 것을
+통과시킨다"가 가장 선명하게 드러난 사례다.
+
+`C_A_D`는 커널 변수라 재부팅하면 1로 돌아간다. 새로 뜬 PID 1이 매번 다시
+빼앗으므로 재부팅을 반복해도 성질이 유지된다.
+
 **How to apply:** 전원 관련 코드를 건드릴 때는 (1) 새 시그널을 다루면
 `power_test`에 호스트 검사를 먼저 더해서 부팅 없이 판정되게 하고, (2) 로그
 문구를 바꾸면 `power/check.sh`의 같은 문자열도 함께 고치며(중복은 의도된
-것이다), (3) 게이트가 "왜 멈췄는지"까지 보는지 확인한다. ACPI를 켜자는
+것이다), (3) 게이트가 "왜 멈췄는지"까지 보는지 확인하고, (4) 호스트에서 도는
+검사가 `reboot(2)`에 닿는 경로가 생기지 않았는지 본다. ACPI를 켜자는
 제안이 나오면 `terminal`의 `/dev/input/event0` 상수를 먼저 고쳤는지부터
 묻는다.
 
