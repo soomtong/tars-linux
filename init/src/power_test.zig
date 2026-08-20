@@ -38,4 +38,34 @@ pub fn main() !void {
     }
 
     std.debug.print("power_test: SIGTERM becomes a pending power_off action\n", .{});
+
+    // 4. 같은 핸들러가 SIGINT를 다르게 기록해야 한다. 이것이 PM-M1의 전부다 —
+    //    Ctrl+Alt+Del은 reboot(CAD_OFF) 뒤에 **SIGINT로** 도착하므로
+    //    (kernel/reboot.c:835의 kill_cad_pid(SIGINT, 1)), 키보드 경로와
+    //    `kill -INT 1` 경로가 이 한 분기로 합쳐진다.
+    _ = linux.kill(linux.getpid(), .INT);
+
+    const got_int = power.take() orelse {
+        std.debug.print("FAIL: SIGINT was delivered but no action was recorded\n", .{});
+        return error.SignalNotObserved;
+    };
+    if (got_int != .restart) {
+        std.debug.print("FAIL: SIGINT recorded {s}, want restart\n", .{@tagName(got_int)});
+        return error.WrongAction;
+    }
+
+    // 5. 마지막에 온 시그널이 이긴다. 감독 루프는 take()를 한 번에 하나씩만
+    //    처리하므로, 두 요청이 겹치면 나중 것이 남는 편이 예측 가능하다.
+    _ = linux.kill(linux.getpid(), .TERM);
+    _ = linux.kill(linux.getpid(), .INT);
+    const last = power.take() orelse {
+        std.debug.print("FAIL: nothing was recorded after two signals\n", .{});
+        return error.SignalNotObserved;
+    };
+    if (last != .restart) {
+        std.debug.print("FAIL: TERM then INT recorded {s}, want restart\n", .{@tagName(last)});
+        return error.WrongAction;
+    }
+
+    std.debug.print("power_test: SIGINT becomes a pending restart action\n", .{});
 }

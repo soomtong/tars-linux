@@ -9,10 +9,11 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
-/// PID 1이 시그널을 받고 하기로 한 일. PM-M0은 끄는 것 하나뿐이고,
-/// PM-M1에서 SIGINT가 restart를 더한다.
+/// PID 1이 시그널을 받고 하기로 한 일. 값이 0이 아닌 이유는 pending의 0이
+/// "요청 없음"을 뜻하기 때문이다.
 pub const Action = enum(u8) {
     power_off = 1,
+    restart = 2,
 };
 
 /// 시그널 핸들러가 만질 수 있는 유일한 상태. 0은 "요청 없음"이다.
@@ -24,6 +25,7 @@ var pending: u8 = 0;
 fn onSignal(sig: linux.SIG) callconv(.c) void {
     const action: Action = switch (sig) {
         .TERM => .power_off,
+        .INT => .restart,
         else => return,
     };
     @atomicStore(u8, &pending, @intFromEnum(action), .seq_cst);
@@ -49,7 +51,15 @@ pub fn install() void {
         });
         return;
     }
-    std.debug.print("tars-init: signal handlers installed (TERM)\n", .{});
+    // 같은 act를 그대로 재사용한다. 두 시그널이 하는 일은 "정수 하나를
+    // 남긴다"로 동일하고, 무엇을 남길지는 onSignal 안에서 갈린다.
+    if (failed(linux.sigaction(.INT, &act, null))) |e| {
+        std.debug.print("tars-init: failed to install SIGINT handler (errno {d})\n", .{
+            @intFromEnum(e),
+        });
+        return;
+    }
+    std.debug.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
 }
 
 /// 밀린 요청을 꺼내면서 지운다. 감독 루프가 매 바퀴 부른다.
@@ -142,8 +152,12 @@ pub fn shutdown(action: Action) noreturn {
     linux.sync();
     std.debug.print("tars-init: filesystems synced\n", .{});
 
+    // RESTART는 POWER_OFF와 달리 ACPI 없이도 그대로 동작한다. 커널이
+    // kernel_restart()로 들어가 "Restarting system"을 찍고(reboot.c:294)
+    // 기계를 리셋한다 — QEMU에서는 -no-reboot이 없으면 정말 다시 뜬다.
     const cmd: linux.LINUX_REBOOT.CMD = switch (action) {
         .power_off => .POWER_OFF,
+        .restart => .RESTART,
     };
     std.debug.print("tars-init: calling reboot({s})\n", .{@tagName(cmd)});
     _ = linux.reboot(.MAGIC1, .MAGIC2, cmd, null);

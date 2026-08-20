@@ -176,7 +176,7 @@ exec 3>&-
 # 여기서부터는 "어떻게 멈췄는가"를 따진다. 위의 HALT_MARKER 하나만 보면
 # 시스템이 멈춘 것은 알 수 있지만 **왜** 멈췄는지는 알 수 없다.
 for marker in \
-  "tars-init: signal handlers installed (TERM)" \
+  "tars-init: signal handlers installed (TERM, INT)" \
   "tars-init: shutdown requested (action power_off)" \
   "tars-init: sent SIGTERM to every process" \
   "tars-init: every child is gone" \
