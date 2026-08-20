@@ -69,6 +69,32 @@ pub fn take() ?Action {
     return @enumFromInt(raw);
 }
 
+/// Ctrl+Alt+Del을 커널에게서 빼앗아 우리에게 돌린다.
+///
+/// 커널의 기본값은 C_A_D = 1이고(kernel/reboot.c:26), 그 상태에서 그 조합이
+/// 눌리면 ctrl_alt_del()이 워크큐에 재부팅을 걸어 **PID 1을 완전히 건너뛴다**
+/// (:832). 자식을 정리할 기회도, 디스크를 내려쓸 기회도 없다. CAD_OFF는 그
+/// 분기를 반대쪽으로 돌려서 kill_cad_pid(SIGINT, 1)이 불리게 만든다(:835) —
+/// 그 뒤부터 저 키는 우리 종료 순서를 탄다.
+///
+/// **install()과 한 함수로 합치지 않는 이유는 호스트 검사 때문이다.**
+/// power_test는 install()을 부르고 Docker 컨테이너 안에서 도는데, 컨테이너에
+/// CAP_SYS_BOOT이 있으면 이 호출이 **개발 기계의 커널** 설정을 바꾼다.
+/// power_test가 부르는 함수 중에 reboot(2)를 부르는 것이 하나도 없어야
+/// 한다는 것이 규칙이고, 이 분리가 그 규칙을 지킨다.
+///
+/// 실패해도 부팅은 계속한다. Ctrl+Alt+Del 하나 때문에 시스템이 안 뜨면
+/// 곤란하고, `kill -INT 1` 경로는 이것과 무관하게 살아 있다.
+pub fn disableCtrlAltDel() void {
+    if (failed(linux.reboot(.MAGIC1, .MAGIC2, .CAD_OFF, null))) |e| {
+        std.debug.print("tars-init: could not take over ctrl-alt-del (errno {d})\n", .{
+            @intFromEnum(e),
+        });
+        return;
+    }
+    std.debug.print("tars-init: ctrl-alt-del now arrives as SIGINT\n", .{});
+}
+
 /// 자식에게 주는 유예. 감독 루프의 재시작 backoff가 1초이고 우리 자식은
 /// 터미널과 셸뿐이라 정리에 이보다 오래 걸릴 일이 없다.
 const GRACE_SECONDS: isize = 3;

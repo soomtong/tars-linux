@@ -322,6 +322,12 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 맞다. 이 호출 전까지 커널은 PID 1에게 온 SIGTERM을 조용히 버린다.
     power.install();
 
+    // install()보다 뒤여야 한다. 순서가 뒤집히면 그 사이의 짧은 창에서
+    // 눌린 Ctrl+Alt+Del이 핸들러 없는 SIGINT로 도착한다. PID 1이라 커널이
+    // 버려 주므로 사고는 안 나지만, "키를 빼앗기 전에 받을 준비를 끝낸다"가
+    // 읽기에 맞다.
+    power.disableCtrlAltDel();
+
     _ = mountFs("proc", "/proc", "proc", 0);
     _ = mountFs("sysfs", "/sys", "sysfs", 0);
     _ = mountFs("devtmpfs", "/dev", "devtmpfs", 0);
