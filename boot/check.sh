@@ -46,6 +46,20 @@ for _ in $(seq 1 120); do
   WAITED=$((WAITED + 1))
 done
 
+GAVE_UP=0
+if [ "$FOUND" = "1" ]; then
+  for _ in $(seq 1 30); do
+    if grep -q "tars-init: giving up on terminal" "$LOG"; then
+      GAVE_UP=1
+      break
+    fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+fi
+
 cat "$LOG"
 
 if [ "$FOUND" = "1" ]; then
@@ -61,6 +75,27 @@ if [ "$FOUND" = "1" ]; then
     fi
   done
   echo "init mounted all four filesystems"
+
+  # 감독 루프의 포기 경로. 이 줄이 없으면 init이 아직도 /terminal을 되살리고
+  # 있다는 뜻이다.
+  if [ "$GAVE_UP" != "1" ]; then
+    echo "FAIL: init never gave up on the terminal"
+    exit 1
+  fi
+
+  # "포기했다"는 줄 하나만으로는 그 뒤에도 계속 재시작하는 구현을 못 거른다.
+  # 개수가 정책 그 자체다 — 처음 뜨고, 두 번 재시작하고, 세 번째 빠른 종료에서
+  # 포기한다(main.zig의 MAX_FAST_RESTARTS = 3).
+  #
+  # grep -c는 매치가 0이면 종료 코드 1을 내는데 이 스크립트는 set -e라 그
+  # 자리에서 죽는다. || true로 받아서 "0회였다"가 아래 판정까지 오게 한다.
+  STARTS="$(grep -c "tars-init: started terminal" "$LOG" || true)"
+  if [ "$STARTS" != "3" ]; then
+    echo "FAIL: init started the terminal ${STARTS} times, want exactly 3"
+    exit 1
+  fi
+  echo "init restarted the terminal twice and then gave up (started ${STARTS} times)"
+
   if grep -q "Attempted to kill init" "$LOG"; then
     echo "FAIL: kernel panicked because PID 1 exited"
     exit 1
