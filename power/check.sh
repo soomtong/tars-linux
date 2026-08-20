@@ -211,4 +211,189 @@ kill "$QEMU_PID" 2>/dev/null
 wait "$QEMU_PID" 2>/dev/null
 QEMU_PID=""
 
-echo "PM-M0 PASS: the guest shut itself down from a shell command"
+echo "boot 1/2 PASS: the guest shut itself down from a shell command"
+
+# ============================================================== 부팅 2/2 (A)
+# 재시작 경로. **-no-reboot을 뺀다** — 게스트가 reboot(RESTART)를 부르면 QEMU가
+# 정말로 다시 부팅해야 하기 때문이다. 두 부팅의 QEMU 옵션이 이렇게 갈리는 것이
+# PM을 기존 체인에 얹지 않고 새 체인으로 만든 이유였다(design 결정 8).
+#
+# 디스크는 방금 부팅 1이 쓰던 것을 그대로 재사용한다. 부팅 1은 설정을 고치지
+# 않으므로(친 것은 kill -TERM 1 하나다) 여기 들어올 때 디스크는 여전히
+# shell=bash이고, 그것이 이 부팅의 전제다. make_disk.sh를 다시 부르지 않는다.
+#
+# 이 부팅 하나가 증명하는 것:
+#   Ctrl+Alt+Del → 커널이 PID 1에게 SIGINT를 보낸다(CAD_OFF를 불렀을 때만!)
+#   → 우리 종료 순서가 돈다 → reboot(RESTART) → 커널이 기계를 리셋한다
+#   → 같은 QEMU가 다시 뜬다 → 게스트가 아까 쓴 설정을 읽는다 → zsh가 뜬다
+
+LOG_A="$(mktemp)"
+# 두 번째 부팅 구간만 잘라낸 것. design 결정 8이 "그 뒤에"라고 요구한 순서를
+# grep만으로는 지킬 수 없어서, 파일을 나누어 조건을 파일 자체로 만든다.
+SECOND="$(mktemp)"
+
+# 부팅 2에서 두 번째 부팅 구간을 다시 잘라낸다. 로그가 계속 자라므로 검사할
+# 때마다 새로 자른다.
+slice_second_boot() {
+  awk '/tars-init: starting as PID 1/{n++} n>=2' "$LOG_A" > "$SECOND"
+}
+
+count_boots() {
+  grep -c "tars-init: starting as PID 1" "$LOG_A" 2>/dev/null || true
+}
+
+report_failure_a() {
+  echo "FAIL(boot 2): $1"
+  echo "--- markers ---"
+  local marker
+  for marker in \
+    "tars-init: signal handlers installed (TERM, INT)" \
+    "tars-init: ctrl-alt-del now arrives as SIGINT" \
+    "terminal: screen>" \
+    "tars-init: shutdown requested (action restart)" \
+    "tars-init: every child is gone" \
+    "tars-init: filesystems synced" \
+    "tars-init: calling reboot(RESTART)" \
+    "Restarting system" \
+    "tars-init: config shell=zsh"; do
+    if grep -q "$marker" "$LOG_A"; then
+      echo "  found   ${marker}"
+    else
+      echo "  MISSING ${marker}"
+    fi
+  done
+  echo "--- boots seen: $(count_boots) (want exactly 2) ---"
+  echo "--- last 80 lines ---"
+  tail -n 80 "$LOG_A"
+  exit 1
+}
+
+# echo shell=zsh > /config/tars.conf — CP 체인과 같은 시퀀스다. sendkey가
+# 보내는 것은 문자가 아니라 키이므로 '='는 equal, '>'는 shift-dot이다.
+EDIT_KEYS=(e c h o spc s h e l l equal z s h spc shift-dot spc
+           slash c o n f i g slash t a r s dot c o n f ret)
+
+echo "=== boot 2/2: edit the config in the guest, then ctrl-alt-delete ==="
+
+qemu-system-x86_64 \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -drive file="${REPO_ROOT}/out/power.img",if=virtio,format=raw \
+  -display none \
+  -serial file:"$LOG_A" \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait &
+QEMU_PID=$!
+
+READY=0
+for _ in $(seq 1 120); do
+  if grep -q "terminal: screen>" "$LOG_A"; then READY=1; break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || report_failure_a "terminal never rendered a prompt"
+sleep 1
+
+# 부팅 1과 같은 디스크이므로 여기도 bash여야 한다. 아니라면 부팅 1이 디스크를
+# 건드렸다는 뜻이고, 그건 이 체인의 전제가 무너진 것이다.
+grep -q "tars-init: config shell=bash" "$LOG_A" \
+  || report_failure_a "the first boot left the disk in an unexpected state (not bash)"
+
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure_a "could not connect to the QEMU monitor"
+
+echo "=== typing the config edit into the guest ==="
+type_keys "${EDIT_KEYS[@]}"
+sleep 1
+
+# 여기가 이 체인의 심장이다. sendkey ctrl-alt-delete는 커널의 VT 키보드
+# 핸들러(drivers/tty/vt/keyboard.c:618의 fn_boot_it)까지 가고, 그것이
+# ctrl_alt_del()을 부른다. 그 다음에 무슨 일이 생기는지가 C_A_D 값에 갈린다:
+#   C_A_D = 1 (기본값) → 커널이 우리를 건너뛰고 즉시 재부팅한다
+#   C_A_D = 0 (우리가 CAD_OFF로 바꾼 뒤) → PID 1에게 SIGINT가 온다
+# 겉으로는 둘 다 "재부팅됐다"로 보이기 때문에, 아래 검사가 그 둘을 가른다.
+echo "=== sending ctrl-alt-delete ==="
+echo "sendkey ctrl-alt-delete" >&3
+sleep 0.3
+
+exec 3<&-
+exec 3>&-
+
+# 두 번째 부팅이 시작될 때까지 기다린다.
+BOOTS=0
+for _ in $(seq 1 90); do
+  BOOTS="$(count_boots)"
+  if [ "${BOOTS:-0}" -ge 2 ]; then break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "${BOOTS:-0}" -ge 2 ] \
+  || report_failure_a "the guest never came back up after ctrl-alt-delete"
+
+# ★ 이 여섯 줄이 "재부팅됐다"와 "우리를 거쳐 재부팅됐다"를 가른다. 이것들
+#   없이 위의 BOOTS >= 2만 보면, reboot(CAD_OFF)를 한 줄도 안 쓴 상태에서도
+#   게이트가 통과한다 — 커널이 직접 재부팅해도 게스트는 다시 뜨기 때문이다.
+for marker in \
+  "tars-init: signal handlers installed (TERM, INT)" \
+  "tars-init: ctrl-alt-del now arrives as SIGINT" \
+  "tars-init: shutdown requested (action restart)" \
+  "tars-init: sent SIGTERM to every process" \
+  "tars-init: filesystems synced" \
+  "tars-init: calling reboot(RESTART)"; do
+  grep -q "$marker" "$LOG_A" || report_failure_a "missing restart log line: ${marker}"
+done
+
+# 커널 쪽 증거. 우리가 부른 reboot(2)를 커널이 정말 받았다는 줄이다
+# (kernel/reboot.c:294). POWER_OFF와 달리 RESTART는 강등되지 않는다.
+grep -q "Restarting system" "$LOG_A" \
+  || report_failure_a "the kernel never reported 'Restarting system'"
+
+# 재부팅 뒤의 구간에서만 찾는다. 1차 부팅의 줄과 섞이면 순서를 증명할 수 없다.
+ZSH_OK=0
+for _ in $(seq 1 60); do
+  slice_second_boot
+  if grep -q "tars-init: started console shell (pid .*, /usr/bin/zsh)" "$SECOND"; then
+    ZSH_OK=1
+    break
+  fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+
+slice_second_boot
+grep -q "tars-init: config shell=zsh" "$SECOND" \
+  || report_failure_a "the second boot did not read the config the guest had written"
+
+[ "$ZSH_OK" = "1" ] \
+  || report_failure_a "the second boot parsed zsh but never exec'd /usr/bin/zsh"
+
+# 재부팅 고리 감시. -no-reboot을 뺐으므로 원리적으로 가능한 실패다. 부팅 한
+# 번이 약 4초이므로, 고리에 빠졌다면 이 3초 안에 개수가 한 번 더 는다.
+sleep 3
+FINAL="$(count_boots)"
+if [ "${FINAL:-0}" -gt 2 ]; then
+  report_failure_a "the guest booted ${FINAL} times; it is stuck in a reboot loop"
+fi
+
+# 음성 검사 — 부팅 1과 같은 이유다. PID 1이 죽어서 커널이 패닉해도 시스템은
+# 어차피 멈추고 QEMU는 -no-reboot 없이 다시 뜰 수 있다.
+if grep -q "Attempted to kill init" "$LOG_A"; then
+  report_failure_a "the kernel panicked instead of restarting cleanly"
+fi
+
+kill "$QEMU_PID" 2>/dev/null
+wait "$QEMU_PID" 2>/dev/null
+QEMU_PID=""
+
+echo "boot 2/2 PASS: ctrl-alt-delete went through PID 1 and the new config took effect"
+
+echo "--- init log (boot 2) ---"
+grep 'tars-init:' "$LOG_A" || true
+
+echo "PM-M1 PASS: the guest can shut itself down and bring itself back up"
