@@ -294,6 +294,23 @@ if grep -q "tars-init: no keyboard found" "$LOG"; then
 fi
 echo "init discovered the keyboard by capability"
 
+# HD-M1: ACPI가 입력 장치를 하나 더 등록했는가.
+#
+# 이 검사가 없으면 바로 위의 탐색 검사는 "성질로 찾았다"와 "장치가 하나뿐이라
+# 우연히 맞았다"를 구별하지 못한다. 전원 버튼이 evdev 장치 목록에 끼어든
+# 상태에서 위쪽 화면 검사들이 통과하는 것이 HD-M0의 탐색기가 옳다는 증명이고,
+# 이 줄은 그 전제가 사라지지 않았음을 확인한다. 커널에서 ACPI를 다시 끄면
+# 여기가 먼저 실패하므로, 증명이 조용히 사라지지 않는다.
+#
+# 장치 번호를 요구하지 않는 이유는 탐색기를 만든 이유와 같다 — 번호는
+# 하드웨어 사정에 따라 달라지는 값이다.
+if ! grep -q "ACPI: button: Power Button" "$LOG"; then
+  echo "FAIL: the kernel did not register an ACPI power button"
+  grep -i "acpi" "$LOG" | tail -n 20
+  exit 1
+fi
+echo "the keyboard was found even though ACPI added another input device"
+
 # 성공했으면 스크린샷은 필요 없다. 실패했을 때만 남겨서 눈으로 볼 수 있게 한다.
 rm -f "$BEFORE" "$AFTER"
 
