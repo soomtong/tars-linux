@@ -66,6 +66,21 @@ pub fn build(b: *std.Build) void {
         .root_module = power_test_mod,
     });
 
+    // HD-M0: sysfs 비트맵을 읽는 함수들을 보는 검사. 이것도 게스트가 아니라
+    // 컨테이너가 직접 실행하므로 host_target이다. devices.zig는 진짜 /sys가
+    // 아니라 인자로 받은 뿌리 경로를 읽으므로(design 결정 5), 이 검사가
+    // 개발 기계의 입력 장치를 건드리지 않는다.
+    const devices_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/devices_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const devices_test = b.addExecutable(.{
+        .name = "devices_test",
+        .root_module = devices_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -73,4 +88,5 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(config_test).step);
     test_step.dependOn(&b.addRunArtifact(power_test).step);
+    test_step.dependOn(&b.addRunArtifact(devices_test).step);
 }
