@@ -1,6 +1,6 @@
 ---
 name: project_power_management
-description: "게스트 전원 관리 — 커널에 ACPI가 없어서 reboot(POWER_OFF)이 HALT로 강등되고 QEMU가 스스로 끝나지 않는다(RESTART는 강등되지 않는다); ACPI를 켜면 Power Button이 입력 장치를 하나 더 등록해 /dev/input/event0을 상수로 박은 terminal이 깨지므로 켜기 전에 그 상수부터 고칠 것; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; 대화형 셸은 SIGTERM을 무시하므로 SIGKILL은 정상 경로이고 게이트는 유예 만료가 아니라 every child is gone을 요구한다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다; 커널의 C_A_D 기본값이 1이라 Ctrl+Alt+Del은 구현 없이도 재부팅을 일으키므로 게이트가 '우리를 거쳤는지'를 따로 봐야 하고, 그 CAD_OFF 호출은 호스트 검사가 reboot(2)에 닿지 않도록 install()과 분리한다"
+description: "게스트 전원 관리 — 2026-08-21 HD-M1에서 ACPI를 켜서 reboot(POWER_OFF)의 HALT 강등이 사라졌고 QEMU가 스스로 끝난다(RESTART는 원래부터 강등되지 않았다); 전원 차단은 CONFIG_ACPI_SLEEP이 아니라 ACPI_SYSTEM_POWER_STATES_SUPPORT에 매달려 있어서 SUSPEND를 끈 채로도 산다; ACPI가 Power Button을 event0에 등록해 키보드가 event1로 밀리는데 HD-M0의 탐색기가 그것을 견딘다; power 게이트 부팅 1의 통과 조건이 로그 문자열이 아니라 QEMU 프로세스의 소멸이고 -no-reboot 때문에 Restarting system 음성 검사가 함께 필요하다; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; 대화형 셸은 SIGTERM을 무시하므로 SIGKILL은 정상 경로이고 게이트는 유예 만료가 아니라 every child is gone을 요구한다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다; 커널의 C_A_D 기본값이 1이라 Ctrl+Alt+Del은 구현 없이도 재부팅을 일으키므로 게이트가 '우리를 거쳤는지'를 따로 봐야 하고, 그 CAD_OFF 호출은 호스트 검사가 reboot(2)에 닿지 않도록 install()과 분리한다"
 metadata:
   node_type: memory
   type: project
@@ -10,40 +10,83 @@ metadata:
 것들이고, 2026-08-20 PM-M1에서 되살리는 경로를 만들며 두 절을 더했다. 코드는
 `init/src/power.zig`, 게이트는 `power/check.sh`다.
 
-## 커널에 ACPI가 없다 — 켜기 전에 `event0` 상수부터 고칠 것
+## 커널에 ACPI가 켜져 있다 (2026-08-21 HD-M1)
 
-**이것이 이 문서에서 가장 오래 살아남을 제약이다.**
+PM-M0·PM-M1을 쓸 때 이 자리에는 "ACPI가 없어서 `reboot(POWER_OFF)`이 HALT로
+강등된다"가 적혀 있었고, 그 제약이 이 문서에서 가장 오래 살아남을 것이라고
+적어 두었다. **HD-M1이 그것을 지웠다.** 지금 사실은 이렇다.
 
-우리 커널은 ACPI가 통째로 꺼져 있다(`kernel/.config:377`, `:375`). 결과가
-셋이다.
+1. `reboot(POWER_OFF)`은 **강등되지 않는다.** 커널이 `reboot: Power down`을
+   찍고(`kernel/reboot.c:711`) `acpi_enter_sleep_state(S5)`로 전원을 끊으므로
+   **QEMU가 우리 도움 없이 사라진다.** `Power off not available: System halted
+   instead`(`:321`)는 이제 **나오면 안 되는 줄**이다.
+2. QEMU monitor의 `system_powerdown`이 비로소 의미를 갖는다. 다만 아직
+   **받는 쪽이 없다** — 전원 버튼 evdev를 여는 일은 HD-M2의 몫이다.
+3. `reboot(RESTART)`은 원래부터 강등되지 않았고, ACPI를 켠 뒤에도 그대로다.
+   인터럽트 라우팅이 IOAPIC으로 바뀌고 PCI IRQ가 ACPI 링크를 지나게 됐는데도
+   `Restarting system`과 재부팅 뒤의 설정 반영이 전부 유지된다(PM 체인 부팅 2).
 
-1. `reboot(POWER_OFF)`을 부르면 커널이 스스로 HALT로 강등하고
-   (`kernel/src/linux-6.18.42/kernel/reboot.c:760`)
-   `Power off not available: System halted instead`를 찍는다(`:321`).
-   진짜 전원 차단은 일어나지 않으므로 **QEMU가 스스로 끝나지 않는다** —
-   게이트는 `-no-reboot`을 그대로 두고 그 문자열을 종료 신호로 삼은 뒤
-   호스트에서 QEMU를 죽인다.
-2. QEMU monitor의 `system_powerdown`은 게스트에서 아무 일도 일으키지
-   못한다. ACPI 이벤트를 받을 쪽이 없기 때문이다.
-3. `reboot(RESTART)`은 ACPI 없이도 정상 동작한다. PM-M1의 재시작이 이쪽
-   길을 쓰는 이유다.
+### 전원 차단이 `SUSPEND`와 무관하다는 것이 핵심이다
 
-**그래서 "ACPI를 켜면 되지 않나"가 자연스럽게 떠오르는데, 켜기 전에 반드시
-먼저 할 일이 있다.** ACPI는 "Power Button"을 **입력 장치로 등록한다.**
-`/dev/input/event0`이 그것이 되면 키보드는 `event1`로 밀린다. 그런데
-`terminal/src/main.zig:24`가 `/dev/input/event0`을 상수로 박아 두고 있어서,
-**TF와 IP 두 체인이 키 입력을 영원히 못 받는 상태로 조용히 깨진다.** 컴파일도
-부팅도 성공하고 화면도 그려지므로, 증상은 "타이핑이 안 먹는다" 하나뿐이다.
+우리는 `CONFIG_SUSPEND`를 끈 채로 ACPI를 켰다. 그러면 `ACPI_SLEEP`이 꺼지는데,
+만약 전원 차단 코드가 그 심볼에 매달려 있었다면 **ACPI를 켜고도 강등이 그대로
+남았을 것이다.** 커널은 그 둘을 갈라 두었다.
 
-순서는 이렇다: (1) `terminal`이 evdev 장치를 이름이나 capability로 찾도록
-고치고 게이트로 확인한다 → (2) 그 다음에 ACPI를 켠다. 반대로 하면 원인이
-두 겹으로 겹친다. PM-M0은 ACPI 없이 할 수 있는 일이 전부였으므로 이 순서를
-밟지 않았고, 필요해지면 별도 milestone으로 다룬다.
+```
+drivers/acpi/Makefile:34   acpi-$(CONFIG_ACPI_SYSTEM_POWER_STATES_SUPPORT) += sleep.o
+drivers/acpi/Makefile:36   acpi-$(CONFIG_ACPI_SLEEP)                       += proc.o
+```
 
-**2026-08-21 갱신: (1)이 끝났다.** HD-M0에서 PID 1이 sysfs를 훑어 키보드를
-capability로 찾고 그 경로를 `argv[4]`로 넘기도록 고쳤으며,
-`terminal/src/main.zig`의 상수는 사라졌다([[project_device_discovery]]).
-남은 것은 (2)이고 HD-M1이 그 일을 한다.
+그리고 `sleep.c:1099`의 `acpi_sleep_init()`이 `SYS_OFF_MODE_POWER_OFF`에
+`acpi_power_off`를 등록하는 자리(`:1120`)는 `#ifdef CONFIG_ACPI_SLEEP` 블록
+**바깥**이다. 조건은 런타임의 `acpi_sleep_state_supported(ACPI_STATE_S5)`
+하나이고, 부팅 로그의 **`ACPI: PM: (supports S0 S5)`**가 그것이 참이라는
+증거다. 이 줄에 S3이 없는 것이 `SUSPEND`를 끈 결과이고, 그런데도 S5가 남아
+있는 것이 우리가 원한 결과다.
+
+### 켜기 전에 `event0` 상수를 먼저 고쳐야 했던 이유 (이행 완료)
+
+ACPI는 `Power Button`을 **입력 장치로 등록한다.** 예전에
+`terminal/src/main.zig:24`가 `/dev/input/event0`을 상수로 박고 있었으므로,
+순서를 지키지 않았다면 TF·IP 두 체인이 "컴파일도 부팅도 성공하는데 타이핑만
+안 먹는" 상태로 조용히 깨졌을 것이다.
+
+HD-M0이 그 상수를 없앴고([[project_device_discovery]]), HD-M1에서 실물로
+확인됐다.
+
+```
+input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
+ACPI: button: Power Button [PWRF]
+input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input1
+tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
+```
+
+**번호가 밀렸는데도 TF·IP 체인이 통과하는 것이 탐색기가 옳다는 증명이었다.**
+같은 사건이 순서 하나에 따라 사고가 되느냐 증거가 되느냐로 갈렸다.
+
+덤으로 알게 된 사실 하나: **`Power Button`은 하나뿐이다.** 설계 단계에서는
+FADT의 고정 하드웨어 버튼(`PWRF`)과 DSDT가 선언한 장치(`PWRB`)가 각각 등록될
+수 있다고 보았는데, QEMU는 고정 하드웨어 쪽만 내놓는다. HD-M2가 "후보를 전부
+연다"를 구현할 때 실제로 열릴 것은 하나다.
+
+### 게이트의 통과 조건이 바뀌었다
+
+`power/check.sh` 부팅 1은 이제 **로그의 문자열이 아니라 QEMU 프로세스의
+소멸**을 본다. 우리가 죽여 주던 세 줄(`kill`/`wait`/`QEMU_PID=""`)이 사라진
+것 자체가 완료의 증거다. 다만 그 대가로 검사 셋이 함께 필요하다.
+
+- **`-no-reboot`을 그대로 두었다.** 회차당 세 번 도는 게이트가 리셋 고리에
+  빠지는 것을 막아 주기 때문이다. 그런데 이 옵션은 게스트가 **리셋**을 걸어도
+  QEMU를 끝내므로, "사라졌다"가 두 가지 이유로 성립하게 된다. 그래서
+  `Restarting system`이 **없어야 한다**는 음성 검사로 둘을 가른다.
+- `reboot: Power down`을 **요구한다.** 프로세스가 사라졌다는 사실만으로는
+  커널이 어디까지 갔는지 알 수 없다.
+- 패닉 검사(`Attempted to kill init`)는 역할이 바뀌었다. 예전에는 성공과
+  패닉을 가르는 유일한 장치였는데, 이제는 패닉이 나도 기계가 꺼지지 않아
+  프로세스 소멸 검사가 먼저 실패한다. 남겨 둔 이유는 실패에 이름을 붙여
+  주기 위해서다.
+
+켠 방법과 무엇이 따라 들어왔는지는 [[project_kernel_config]]에 있다.
 
 ## PID 1의 시그널은 핸들러가 없으면 **관측되지 않는다**
 
@@ -149,9 +192,10 @@ Ctrl+Alt+Del이 핸들러 없는 `SIGINT`로 도착한다(PID 1이라 커널이 
 `power_test`에 호스트 검사를 먼저 더해서 부팅 없이 판정되게 하고, (2) 로그
 문구를 바꾸면 `power/check.sh`의 같은 문자열도 함께 고치며(중복은 의도된
 것이다), (3) 게이트가 "왜 멈췄는지"까지 보는지 확인하고, (4) 호스트에서 도는
-검사가 `reboot(2)`에 닿는 경로가 생기지 않았는지 본다. ACPI를 켜자는
-제안이 나오면 `terminal`의 `/dev/input/event0` 상수를 먼저 고쳤는지부터
-묻는다.
+검사가 `reboot(2)`에 닿는 경로가 생기지 않았는지 본다. 커널 설정에서 ACPI를
+줄이자는 제안이 나오면 `ACPI_SYSTEM_POWER_STATES_SUPPORT`가 꺼지지 않는지부터
+확인한다 — 그것이 꺼지면 전원 차단이 조용히 HALT로 돌아간다.
 
 관련: [[project_init_supervisor]], [[project_gate_chain_composition]],
-[[project_config_persistence]], [[project_input_policy]]
+[[project_config_persistence]], [[project_input_policy]],
+[[project_device_discovery]], [[project_kernel_config]]

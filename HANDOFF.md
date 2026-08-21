@@ -1,120 +1,154 @@
-# HANDOFF: HD-M0이 끝났다 — 키보드를 번호가 아니라 성질로 찾는다
+# HANDOFF: HD-M1이 끝났다 — 기계가 스스로 꺼진다
 
 ## 지금 어디인가
 
-**HD-M0이 2026-08-21에 끝났다.** PID 1이 부팅 시점에 sysfs를 훑어 키보드를
-찾고 그 경로를 `argv[4]`로 `terminal`에 넘긴다. `terminal/src/main.zig`의
-`INPUT_DEVICE` 상수는 사라졌다. 루트 게이트 다섯 체인이 전부 3/3으로
-통과했다.
+**HD-M1이 2026-08-21에 끝났다.** 커널에 ACPI를 최소로 켰고,
+`reboot(POWER_OFF)`의 HALT 강등이 사라졌다. `power/check.sh` 부팅 1에서
+**우리가 QEMU를 죽여 주던 세 줄이 사라졌고**, 그 자리에 "QEMU가 스스로
+사라졌는가"가 들어갔다. 다섯 체인 전부 3/3으로 통과했다.
 
-**다음은 HD-M1(ACPI)이다. plan은 아직 없다** — 이 저장소는 milestone이
-끝난 뒤에 다음 plan을 새로 쓴다(`CLAUDE.md`). 다음 세션의 첫 일은 design
-doc의 결정 10과 아래 "HD-M1이 할 일"을 읽고 plan을 쓰는 것이다.
+같은 변경이 HD-M0의 탐색기를 실전에서 증명했다. ACPI 전원 버튼이 `event0`을
+차지해 키보드가 `event1`로 밀렸는데도 TF·IP 체인이 통과한다.
+
+**다음은 HD-M2(전원 버튼)다. plan은 아직 없다** — 이 저장소는 milestone이
+끝난 뒤에 다음 plan을 새로 쓴다(`CLAUDE.md`). 다음 세션의 첫 일은 design doc의
+결정 4·7·8·9와 아래 "HD-M2가 할 일"을 읽고 plan을 쓰는 것이다.
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. **`origin/main`보다 5개 앞서 있다 — push가
-안 되어 있다.**
+`main`, working tree 깨끗함. HD-M1이 만든 커밋은 여덟이다.
 
 ```
-(문서 커밋) Hand off with the keyboard found by capability
-98f35aa Ask the terminal gate to prove discovery ran
-b872caa Let PID 1 hand the keyboard path to the terminal
-39313c7 Pick the keyboard by capability, not by number
-5e0524f Read evdev capability bitmaps from the tail end
+(이 문서 커밋) Hand off with a kernel that can switch itself off
+d1cd990 Retell the discovery comment now that ACPI shifted the numbers
+3e690a4 Ask the power gate to prove the machine really lost power
+7a4e532 Prove discovery survives the extra input device ACPI adds
+9966947 Turn ACPI on with everything we do not need turned off
+8c8188e Record the settings the kernel is actually built with
+0371799 Add the config normalization step the plan was missing
+8a35380 Plan the kernel that can switch itself off
 ```
 
-## HD-M0이 만든 것
+**push 상태는 커밋 뒤에 확인할 것.** HD-M0의 HANDOFF는 "5개 앞서 있다"고
+적어 두었는데 실제로는 이미 push되어 있었다 — 적어 두지 말고 그때
+`git rev-list --count origin/main..main`으로 볼 것.
 
-- `init/src/devices.zig` — `bitSet` · `looksLikeKeyboard` · `findKeyboard` ·
-  `resolveKeyboard` · `Path`. 뿌리 경로를 인자로 받는다.
-- `init/src/devices_test.zig` — 부팅 없이 도는 호스트 검사. `/tmp`에 가짜
-  sysfs 트리(장치 넷)를 만들어 그것만 읽는다. `init/build.zig`의 `test`
-  step에 매달려 있다(`config_test`·`power_test`와 같은 자리).
-- `init/src/main.zig` — `Child.argv`가 `[4:null]`에서 `[5:null]`로. 탐색은
-  `logDrmDevicePresence()` 다음, 자식 배열 조립 전이다.
-- `terminal/src/main.zig` — 상수 대신 `args[4]`. `const args`를 장치 여는
-  자리 위로 올렸다(아래 "plan에서 어긋난 곳" 참고).
-- `terminal/check.sh` — 검사 둘 추가, 진단 문구에서 장치 번호 제거.
+## HD-M1이 만든 것
+
+- `kernel/.config` — `CONFIG_ACPI=y` + `ACPI_BUTTON=y`, 그리고 손으로 끈
+  일곱 줄. 파일 전체가 `olddefconfig`의 **고정점**이 됐다(아래 참고).
+- `terminal/check.sh:297-312` — `ACPI: button: Power Button`을 요구하는 검사.
+- `input/check.sh:125` — 진단 목록에서 장치 번호 제거.
+- `power/check.sh` — 부팅 1의 통과 조건 교체(`:173`의 `GONE` 루프), 음성 검사
+  둘과 양성 검사 하나 추가(`:216-233`), **부팅 1 끝의 `kill`/`wait` 삭제.**
 
 **게스트에서 실제로 찍히는 줄:**
 
 ```
-tars-init: keyboard device /dev/input/event0 (AT Translated Set 2 keyboard)
+input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
+ACPI: button: Power Button [PWRF]
+input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input1
+ACPI: PM: (supports S0 S5)
+tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
+reboot: Power down
 ```
 
-이름이 `AT Translated Set 2 keyboard`로 확인됐다. 설계 단계의 조사(게스트에
-입력 장치가 하나뿐일 것)가 실물로 맞았다.
+## HD-M1이 실측한 것
 
-## HD-M1이 할 일 (ACPI)
+**1. 커널 빌드 시간: `50.355초 → 52.944초`(+2.589초, +5.1%).** 루트 게이트는
+회차마다 커널을 15번 빌드하므로 39초가 붙는다. design 위험 1번이 걱정한
+"15배"가 실제로는 작았다.
+
+**2. 루트 게이트 전체: 28분 16초 → 31분 30초(+3분 14초).** **그중 39초만
+설명된다.** 나머지 약 155초는 가르지 못했다 — 부팅당 비용일 수도 있고 측정
+편차일 수도 있다. 기준선 28분 16초는 2026-08-20에 HD-M0 **이전** 상태로 잰
+값이라 조건도 같지 않다. `CONFIG_PRINTK_TIME`이 꺼져 있어(`.config:1951`)
+커널 로그에 타임스탬프가 없고, 그래서 부팅을 구간으로 나눠 잴 수단이 없다.
+**`clean()` 정책은 바꾸지 않았다** — 31분 30초는 견딜 만하고, 무엇보다
+내역을 모르는 채로 정책을 바꾸는 것이 design 위험 1번이 경계한 바로 그
+일이다.
+
+**3. `Power Button`은 하나뿐이다.** 설계 단계의 조사 5번은 FADT의 고정 하드웨어
+버튼(`PWRF`)과 DSDT가 선언한 장치(`PWRB`)가 각각 등록될 수 있다고 보았는데,
+QEMU는 고정 하드웨어 쪽만 내놓는다. **HD-M2의 "후보를 전부 연다"(결정 4)에서
+실제로 열릴 것은 하나다.**
+
+**4. 재시작 경로가 유지된다.** 인터럽트 라우팅이 IOAPIC으로 바뀌고 PCI IRQ가
+ACPI 링크를 지나게 됐는데도 `Restarting system`과 재부팅 뒤의 설정 반영이
+전부 그대로다(design 위험 2번 해소).
+
+## HD-M2가 할 일 (전원 버튼)
 
 **완료선:** QEMU monitor에서 `system_powerdown`을 보내면 게스트의 PID 1이
-종료 순서를 밟고 `reboot(POWER_OFF)`이 **진짜로** 꺼진다. 지금
-`power/check.sh`가 HALT에 멈춘 QEMU를 죽여 주고 있는데, 그 장치가 사라지는
-것이 완료의 증거다.
+종료 순서를 밟고 기계가 꺼진다. 지금은 ACPI가 이벤트를 만들어 주지만
+**받는 쪽이 없다.**
 
-**실측할 것 셋.**
+design 결정 4·7·8·9가 이 milestone의 몫이다.
 
-1. **커널 빌드 시간 증가분.** `menuconfig ACPI`는 혼자 오지 않는다 —
-   `drivers/acpi/Kconfig:9-16`이 `select PNP`·`NLS`·`CRC32`·
-   `FIRMWARE_TABLE`이다. 루트 게이트의 `clean()`이 매 회차 `kernel/build`를
-   지우므로(`check.sh:15`) **커널을 15번 새로 빌드한다.** 증가분이 그대로
-   15배가 된다. 견디기 어려우면 그때 `clean()`에서 커널을 빼는 것을 별도로
-   논의한다 — 숫자 없이 정책을 바꾸지 않는다.
-2. **등록되는 `Power Button` 장치.** `event0`이 그것이 되고 키보드가
-   `event1`로 밀릴 것으로 본다. **그런데도 TF·IP 체인이 통과하는 것이
-   HD-M0의 탐색기가 옳다는 증명이다.** `keyboard device` 줄의 번호가 바뀌는
-   것으로 눈에도 보인다. 만약 번호가 안 밀리면 그 자체가 새 사실이므로 멈추고
-   해석할 것.
-3. **`Restarting system`이 유지되는가.** `reboot(RESTART)`은 ACPI 없이도
-   되던 경로다. ACPI를 켠 뒤에도 PM 체인이 그대로 통과해야 한다.
+1. **탐색기가 `KEY_POWER`(116) 장치를 찾는다.** `init/src/devices.zig`에
+   더한다. 비트맵 읽기는 이미 있고 `devices_test.zig`가 `"10000000000000 0"`으로
+   그 비트를 이미 시험하고 있다.
+2. **PID 1이 직접 연다**(결정 7). `terminal`이 읽는 안은 물렸다 — 자식이 전부
+   포기 상태여도 버튼은 살아 있어야 하기 때문이다.
+3. **감독 루프를 `poll` 구조로 바꾼다**(결정 8). `init/src/main.zig:264`의
+   `waitpid(-1, &status, 0)`이 `poll(버튼 fd들, 1000ms)` →
+   `waitpid(..., WNOHANG)` 반복으로 바뀐다. 타임아웃 1초가 경합을 덮는다.
+   **가장 민감한 코드다** — PM-M0이 milestone 하나를 통째로 써서 얻은 자리다.
+4. **종료 요청은 `power.zig`의 플래그 자리로 모은다**(결정 9). 버튼을 보고
+   곧바로 `power.shutdown()`을 부르지 않는다.
+5. **새 체인 `device/check.sh`(`HD-M2`), monitor 포트 45459.** 총 부팅이
+   24회에서 **27회**가 된다.
+
+**HD-M2가 다시 만나게 될 함정:** `SA_RESTART`를 켜면 `waitpid`가 안에서
+재시작돼 루프 머리로 못 돌아온다([[project_power_management]]). `poll` 구조로
+바꿔도 같은 성질을 유지해야 한다.
 
 ## HD 설계에서 이미 조사해 확정한 것 (다시 조사하지 말 것)
 
-전부 vendor된 커널 소스(`kernel/src/linux-6.18.42`)와 우리 설정 파일을 읽어
-확인했다. 근거는 design doc "착수 전 조사로 확정한 사실" 절에 있다.
+- **`ACPI_TINY_POWER_BUTTON`은 검토하고 물렸다.** 설정값 `2`가 `SIGINT`인데
+  PM-M1이 `SIGINT`를 재시작에 배정했다 — 그대로 쓰면 전원 버튼이 재부팅이
+  된다. `ACPI_BUTTON`과 배타적이라 lid/sleep 경로도 막힌다. 이유 셋은 design
+  doc의 "고려했으나 채택하지 않은 대안"에 있다.
+- **evdev의 `EVIOCGBIT`은 인자를 받는 C 매크로라 `@cImport`로 넘어오지
+  않는다**(`project_zig_c_uapi_rule`). sysfs 경로가 그 벽을 피해 간다.
 
-**1. `ACPI_BUTTON`은 가만두어도 따라 켜진다.** `drivers/acpi/Kconfig:185-188`
-이 `depends on INPUT`에 `default y`이고 `kernel/.config:958`이
-`CONFIG_INPUT=y`다.
+## HD-M1이 알아낸 것 (기억 파일에 본문이 있다)
 
-**2. `default y`로 따라올 것이 많다.** `ACPI_AC`·`ACPI_BATTERY`·`ACPI_FAN`·
-`ACPI_SLEEP`·`X86_PM_TIMER` 등. 최소 구성을 원하면 `.config`에
-`# CONFIG_X is not set`을 **명시적으로** 적어야 한다.
+`docs/decisions/project_kernel_config.md`가 커널 설정을 다루는 법을,
+`project_power_management.md`가 전원 경로를 담고 있다. 요점만:
 
-**3. `ACPI_TINY_POWER_BUTTON`은 검토하고 물렸다.** `:198-220`. 설정값 `2`가
-`SIGINT`인데 **PM-M1이 `SIGINT`를 재시작에 배정했다** — 그대로 쓰면 전원
-버튼이 재부팅이 된다. `ACPI_BUTTON`과 배타적이라 lid/sleep 경로도 막힌다.
-이유 셋은 design doc의 "고려했으나 채택하지 않은 대안"에 있다.
+- **전원 차단은 `CONFIG_ACPI_SLEEP`이 아니라
+  `ACPI_SYSTEM_POWER_STATES_SUPPORT`에 매달려 있다**(`drivers/acpi/Makefile:34`,
+  `sleep.c:1120`). 그래서 `SUSPEND`를 끈 채로도 산다. 증거는 부팅 로그의
+  `ACPI: PM: (supports S0 S5)`이고, 이 줄에 S3이 없는 것이 `SUSPEND`를 끈
+  결과다. **커널 설정에서 ACPI를 더 줄이자는 제안이 나오면 이 심볼이 꺼지지
+  않는지부터 확인할 것.**
+- **`.config`는 `olddefconfig`의 고정점으로 유지한다.** `build.sh:21`이
+  `.config`를 복사한 뒤 `olddefconfig`를 돌리므로 적어 둔 것과 빌드하는 것이
+  다를 수 있다 — HD-M1 전에 실제로 60줄 넘게 달랐다. 설정을 고쳤으면
+  `cp kernel/build/.config kernel/.config`로 되접고 다시 빌드해 `diff`가
+  비는지 확인한다. **정규화와 의도한 변경은 다른 커밋으로 나눈다.**
+- **`.config`에 설명 주석을 쓰지 않는다.** `olddefconfig`가 지운다.
+- **프롬프트가 있는 항목만 끌 수 있다.** 프롬프트가 없거나(`ACPI_LPIT`,
+  `ACPI_HOTPLUG_IOAPIC`) `if EXPERT`인 것(`X86_PM_TIMER`)은 무엇을 적든
+  되살아난다.
+- **한 항목을 켜면 무관해 보이는 것들이 함께 움직인다.** `SERIAL_8250_PNP`,
+  `i8042`의 PNP 열거, `EFI`·`HPET` 항목의 출현, `DRM_XE` 항목의 소멸.
+  `PCI_MMCONFIG`는 켜졌지만 QEMU `pc` 기계에 MCFG가 없어 발동하지 않는다.
 
-## HD-M0이 알아낸 것 (기억 파일에 본문이 있다)
+## plan에서 어긋난 곳 (HD-M1)
 
-`docs/decisions/project_device_discovery.md`가 전부 담고 있다. 요점만:
+**Task 1.5를 새로 끼웠다.** plan은 되접기를 ACPI를 켠 **뒤에**(Task 2 Step 5)
+하라고 적었는데, Task 1 Step 2의 실측으로 `.config`가 고정점이 아님이
+확인됐고 차이가 60줄이 넘었다. 그대로 하면 `kernel/.config` 커밋 하나에 ACPI
+변경과 정규화가 뒤섞여서 "ACPI가 무엇을 들여왔나"를 히스토리로 답할 수 없게
+된다. plan 파일에 Task 1.5를 정식으로 적고 커밋했다(`0371799`).
 
-- **sysfs 비트맵은 가장 높은 워드가 맨 앞이고 빈 상위 워드는 생략된다.**
-  원하는 워드는 뒤에서부터 센다. 방향을 뒤집어도 그럴듯하게 동작하므로
-  호스트 검사가 `"1 0"` 하나로 이것을 정면으로 겨냥한다.
-- **`EV_KEY`는 1번이다.** 0번은 `EV_SYN`이고 거의 모든 장치가 갖고 있어서
-  0으로 착각하면 `ev` 검사가 사실상 무조건 참이 된다.
-- **판정은 이름이 아니라 `KEY_ESC`(1)~`KEY_D`(32)다.** 전원 버튼도 `EV_KEY`를
-  갖고 있어서 `ev`만으로는 구별되지 않는다.
-- **폴백이 게이트에 사각지대를 만든다.** 탐색이 실패해도 `event0`으로
-  떨어지면서 평소와 똑같은 로그를 찍는다. `no keyboard found`가 없어야 한다는
-  둘째 검사가 그것을 닫는다.
-- **결과 경로는 `main()`의 스택에 살고 `supervise()`가 `noreturn`이라는
-  성질에 수명을 의존한다.** `supervise`를 반환하게 만들면 포인터가 뜬다.
-
-## plan에서 어긋난 곳 (HD-M0)
-
-plan Task 3 Step 6은 `input_device` 선언을 `swap_alt_meta` 뒤에 넣으라고
-적었는데, `terminal`에서 장치를 여는 자리가 `args`를 꺼내는 자리보다 **위에**
-있어서 그대로 하면 선언보다 앞서 쓰게 되어 컴파일이 막힌다. 대신
-`const args = init.minimal.args.vector;`를 장치 여는 자리 위로 올리고 아래의
-중복 선언을 지웠다. 여는 자리를 내리지 않은 이유는 로그 순서를 그대로 두기
-위해서다.
-
-plan Task 2는 검사 파일 편집을 인라인으로 적었지만, 편집량이 130줄이 넘어서
-`/tmp` + `cp` 경로를 썼다(IP-M2의 중복 삽입 사고 때문).
+**편집 F·G를 추가했다.** plan의 편집 C가 `HALT_MARKER` 변수를 지우는데,
+주석 둘(`power/check.sh:190`, `:203`)이 그 이름을 계속 가리키고 있었다. 함께
+고쳤고, 그 과정에서 패닉 검사의 **역할이 바뀌었다**는 것도 적었다 — 예전에는
+성공과 패닉을 가르는 유일한 장치였는데 이제는 패닉이 나도 기계가 꺼지지 않아
+`GONE`이 먼저 실패한다.
 
 ## 게이트 현황
 
@@ -124,13 +158,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`docs/decisions/project_build_host_arch.md`).
 
-**다섯 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1), 3/3, 부팅 24회.
-HD-M0은 부팅 횟수를 늘리지 않았다(직전 실측은 2026-08-20의 28분 16초).
-monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459가
-비어 있다(HD-M2가 쓸 자리다).
+**다섯 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1), 3/3, 부팅 24회,
+**31분 30초**(2026-08-21 실측). monitor 포트는 45455(TF) · 45456(CP) ·
+45457(IP) · 45458(PM)이고 45459가 비어 있다(HD-M2가 쓸 자리다).
 
-`clean()`이 매 회차 `kernel/build`를 지운다(`check.sh:15`) — HD-M1의 시간
-위험이 여기서 온다(위 "실측할 것" 1번).
+`clean()`이 매 회차 `kernel/build`를 지운다(`check.sh:15`) — 커널 빌드 15회의
+근원이다.
 
 ## PM이 알아낸 것 (그대로 유효)
 
@@ -139,9 +172,8 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459�
 - **`disableCtrlAltDel()`은 `install()`과 합치지 않는다.** 규칙: `power_test`가
   부르는 함수 중에 `reboot(2)`를 부르는 것이 하나도 없어야 한다.
 - **대화형 셸은 `SIGTERM`을 무시한다.** `grace period expired`는 정상 경로다.
-- **`reboot(POWER_OFF)`은 HALT로 강등된다**(ACPI 없음). `RESTART`는 된다.
-- **`SA_RESTART`를 끈 것이 결선의 핵심이다.** 켜면 `waitpid`가 안에서
-  재시작돼 루프 머리로 못 돌아온다. HD-M2가 감독 루프를 고칠 때 다시 만난다.
+- **`SA_RESTART`를 끈 것이 결선의 핵심이다.** HD-M2가 감독 루프를 고칠 때
+  다시 만난다.
 - **PID 1에게 보낸 시그널은 핸들러가 없으면 커널이 버린다.**
 - **BF 체인의 감독 루프:** `started terminal` 정확히 3회 →
   `giving up on terminal after 3 fast exits`. 죽는 이유는
@@ -149,7 +181,8 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459�
 
 ## 로그 문구는 두 곳에 중복된다
 
-`init` 코드와 `check.sh` **양쪽에 있다.** 한쪽을 고치면 다른 쪽도 고쳐야 한다.
+`init` 코드(또는 커널)와 `check.sh` **양쪽에 있다.** 한쪽을 고치면 다른 쪽도
+고쳐야 한다.
 
 `signal handlers installed (TERM, INT)` · `ctrl-alt-del now arrives as SIGINT` ·
 `shutdown requested (action power_off)` · `shutdown requested (action restart)` ·
@@ -157,10 +190,18 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459�
 `grace period expired (reaped N)` · `sent SIGKILL to what was left` ·
 `filesystems synced` · `calling reboot(POWER_OFF)` · `calling reboot(RESTART)` ·
 `giving up on terminal` · `started terminal`(개수 3) ·
-**`keyboard device /dev/input/event`** · **`no keyboard found`**(없어야 한다)
+`keyboard device /dev/input/event` · `no keyboard found`(없어야 한다) ·
+**`ACPI: button: Power Button`**(커널) · **`reboot: Power down`**(커널) ·
+**`Power off not available: System halted instead`**(커널, 없어야 한다) ·
+**`Restarting system`**(커널, 부팅 1에는 없어야 하고 부팅 2에는 있어야 한다)
 
 ## 이월 숙제
 
+- [ ] **`CONFIG_PRINTK_TIME`을 켜는 것.** 한 줄이면 앞으로 부팅 시간에 관한
+      질문에 답할 수 있다. HD-M1이 3분 14초의 내역을 가르지 못한 이유다.
+- [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.** 둘 다 기본값으로 따라온
+      것이고 `ACPI Error:`가 하나도 안 났으므로 끌 수 있을 것으로 본다.
+      DSDT를 읽어 보고 결정할 것.
 - [ ] **`init`을 `ReleaseSafe`로.** initrd 67.7MB → gzip 15.5MB.
 - [ ] **게스트 안에서 Zig 에러 트레이스 읽기.** BF 게이트 로그에 파일명·줄
       번호가 이미 찍히고 있다(`drm.zig:231:17 in open`). **무엇이
@@ -186,19 +227,20 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459�
 ## 핵심 파일
 
 - `docs/superpowers/specs/2026-08-20-tars-hardware-discovery-design.md` —
-  HD 설계 전체(결정 11개). **HD-M1은 결정 10이 자기 몫이다.**
-- `docs/superpowers/plans/2026-08-20-tars-hardware-discovery-hd-m0.md` —
-  끝난 plan. HD-M1 plan은 아직 없다.
+  HD 설계 전체(결정 11개). **HD-M2는 결정 4·7·8·9가 자기 몫이다.**
+- `docs/superpowers/plans/2026-08-21-tars-hardware-discovery-hd-m1.md` —
+  끝난 plan. HD-M2 plan은 아직 없다.
 - `init/src/devices.zig` — 탐색기. HD-M2가 전원 버튼 후보를 여기서 찾는다.
 - `init/src/main.zig:264`(`waitpid` 블로킹, HD-M2가 `poll`로 고칠 자리),
-  `:348`(탐색 호출), `:372`(terminal의 argv 다섯 자리).
-- `kernel/.config` — ACPI가 꺼져 있는 자리(`:377`, `:375`).
-- `terminal/check.sh:276-295` — HD-M0이 더한 검사 둘.
+  `:349`(탐색 호출), `:377`(terminal의 argv 다섯째 자리).
+- `kernel/.config:371-379` — ACPI를 켠 자리.
+- `power/check.sh:173`(`GONE` 루프), `:216-233`(음성 검사 둘 + 양성 검사).
+- `terminal/check.sh:276-312` — HD-M0과 HD-M1이 더한 검사 넷.
 - `MEMORY.md` + `docs/decisions/` — 새 세션은 협업 방식 feedback 3개와
   `project_build_host_arch`, `project_guest_environment`,
   `project_gate_chain_composition`, `project_init_supervisor`,
   `project_power_management`, `project_device_discovery`,
-  `project_zig_c_uapi_rule`을 먼저 읽을 것.
+  `project_kernel_config`, `project_zig_c_uapi_rule`을 먼저 읽을 것.
 
 ## 협업 방식 (고정, 매 세션 반드시 지킬 것)
 
@@ -213,7 +255,8 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM)이고 45459�
 먼저 대조한다.
 
 **인라인 제시는 "넣을 것"만 적는다.** IP-M2에서 문맥 줄을 포함한 블록을
-제시했다가 사용자가 통째로 삽입해 기존 줄이 복제된 사고가 있었다.
+제시했다가 사용자가 통째로 삽입해 기존 줄이 복제된 사고가 있었다. 지울 것이
+있는 편집은 `지울 것`과 `넣을 것`을 따로 표시한다(HD-M1에서 쓴 방식이다).
 
 **사용자가 "네가 정해"/"I don't care"라고 하면 되묻지 말고 진행한다.**
 
