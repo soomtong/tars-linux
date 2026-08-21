@@ -14,10 +14,16 @@ REPO_ROOT="$(cd .. && pwd)"
 #   → init/src/power.zig가 자식을 정리하고 reboot(2)를 부른다
 #   → 커널이 시스템을 멈춘다
 #
-# 마지막 칸을 게이트가 어떻게 보는가가 이 체인의 성격을 정한다. 우리 커널은
-# ACPI가 꺼져 있어서(kernel/.config:377) reboot(POWER_OFF)이 HALT로 강등되고,
-# 그때 커널이 찍는 줄이 아래 HALT_MARKER다. QEMU는 이 경우 스스로 끝나지
-# 않으므로 -no-reboot을 그대로 두고 게이트가 죽인다.
+# 마지막 칸을 게이트가 어떻게 보는가가 이 체인의 성격을 정한다. HD-M1이
+# 커널에 ACPI를 켜기 전에는 reboot(POWER_OFF)이 HALT로 강등돼서 QEMU가 스스로
+# 끝나지 않았고, 이 게이트가 대신 죽여 줬다. 이제는 **QEMU가 스스로 사라지는
+# 것**이 통과 조건이다 — 우리가 죽여 주던 그 손길이 없어진 것 자체가 전원이
+# 진짜로 끊겼다는 증거다.
+#
+# -no-reboot은 그대로 둔다. 전원을 끄는 경로에는 영향이 없고, 루트 게이트가
+# 이 체인을 회차당 세 번 돌리는 동안 예기치 못한 리셋 고리에 빠지는 것을
+# 막아 준다. 다만 그 옵션 때문에 "QEMU가 사라졌다"가 리셋으로도 성립할 수
+# 있으므로, 아래 음성 검사 4가 Restarting system이 없음을 요구해서 둘을 가른다.
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -85,7 +91,7 @@ report_failure() {
     "tars-init: every child is gone" \
     "tars-init: filesystems synced" \
     "tars-init: calling reboot" \
-    "Power off not available"; do
+    "reboot: Power down"; do
     if grep -q "$marker" "$LOG"; then
       echo "  found   ${marker}"
     else
@@ -161,20 +167,28 @@ type_keys "${KILL_KEYS[@]}"
 
 # 종료 순서가 도는 데 걸리는 시간은 유예 3초가 지배한다. 대화형 셸은
 # SIGTERM을 무시하므로(POSIX), 셸 둘은 그 3초가 지난 뒤 SIGKILL로 죽는다.
-HALT_MARKER="Power off not available: System halted instead"
-DONE=0
+# 로그의 문자열이 아니라 **프로세스의 존재**를 본다. 이것이 HD-M1이 바꾼
+# 통과 조건이다 — 게스트가 reboot(POWER_OFF)을 불렀고 커널이 그것을 ACPI로
+# 실행했다면, QEMU는 우리가 아무것도 하지 않아도 사라진다.
+GONE=0
 for _ in $(seq 1 30); do
-  if grep -q "$HALT_MARKER" "$LOG"; then DONE=1; break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then GONE=1; break; fi
   sleep 1
 done
 
 exec 3<&-
 exec 3>&-
 
-[ "$DONE" = "1" ] || report_failure "the guest never halted after kill -TERM 1"
+[ "$GONE" = "1" ] \
+  || report_failure "the machine never switched itself off after kill -TERM 1"
 
-# 여기서부터는 "어떻게 멈췄는가"를 따진다. 위의 HALT_MARKER 하나만 보면
-# 시스템이 멈춘 것은 알 수 있지만 **왜** 멈췄는지는 알 수 없다.
+# 여기서 거둬야 좀비가 남지 않고, EXIT trap의 cleanup이 이미 없는 PID를
+# 건드리지 않는다. 아래 검사들은 QEMU가 끝난 뒤의 완성된 로그를 읽는다.
+wait "$QEMU_PID" 2>/dev/null
+QEMU_PID=""
+
+# 여기서부터는 "어떻게 꺼졌는가"를 따진다. 위의 GONE 하나만 보면 기계가
+# 꺼진 것은 알 수 있지만 **왜** 꺼졌는지는 알 수 없다.
 for marker in \
   "tars-init: signal handlers installed (TERM, INT)" \
   "tars-init: shutdown requested (action power_off)" \
@@ -185,9 +199,11 @@ for marker in \
   grep -q "$marker" "$LOG" || report_failure "missing shutdown log line: ${marker}"
 done
 
-# 음성 검사 1 — PID 1이 죽어서 커널이 패닉한 것이 아니어야 한다. 시그널
-# 처리가 잘못되면 시스템은 어차피 멈추므로, 이 검사가 없으면 위의
-# HALT_MARKER는 두 가지 이유로 성립할 수 있다.
+# 음성 검사 1 — PID 1이 죽어서 커널이 패닉한 것이 아니어야 한다. HD-M1 전에는
+# 이 검사가 HALT_MARKER 하나로는 갈라지지 않는 두 경우를 갈라 주는 역할이었다.
+# 이제는 패닉이 나도 기계가 꺼지지는 않으므로 위의 GONE이 먼저 실패한다.
+# 그래도 남겨 두는 이유는 실패의 이유에 이름을 붙여 주는 것이 이 한 줄이기
+# 때문이다.
 if grep -q "Attempted to kill init" "$LOG"; then
   report_failure "the kernel panicked instead of shutting down cleanly"
 fi
@@ -199,6 +215,25 @@ if [ "$STARTED" != "1" ]; then
   report_failure "the supervisor restarted the console shell during shutdown (started ${STARTED} times)"
 fi
 
+# 음성 검사 3 — POWER_OFF가 HALT로 강등되지 않았는가. 커널에서 ACPI가
+# 빠지면 이 줄이 다시 나온다. 그때는 위의 GONE도 함께 실패하지만, 실패의
+# **이유**를 알려 주는 것은 이 한 줄뿐이다.
+if grep -q "Power off not available: System halted instead" "$LOG"; then
+  report_failure "the kernel demoted POWER_OFF to a halt; is CONFIG_ACPI still on?"
+fi
+
+# 음성 검사 4 — 꺼진 것이지 리셋된 것이 아니어야 한다. -no-reboot이 붙어
+# 있어서 게스트가 리셋을 걸어도 QEMU는 사라지고, 그러면 위의 GONE이 엉뚱한
+# 이유로 참이 된다. 그 경로를 여기서 막는다.
+if grep -q "Restarting system" "$LOG"; then
+  report_failure "the guest reset the machine instead of powering it off"
+fi
+
+# 양성 검사 — 커널이 전원 차단 경로를 실제로 밟았다는 줄(kernel/reboot.c:711).
+# QEMU가 사라졌다는 사실만으로는 커널이 어디까지 갔는지 알 수 없다.
+grep -q "reboot: Power down" "$LOG" \
+  || report_failure "the kernel never reported 'Power down'"
+
 # 관측만 하는 줄. 셸이 SIGTERM을 무시하는 것이 정상이므로 이 줄이 나오는
 # 것은 실패가 아니다. 어느 경로였는지 사람이 알 수 있게 남긴다.
 if grep -q "tars-init: grace period expired" "$LOG"; then
@@ -206,10 +241,6 @@ if grep -q "tars-init: grace period expired" "$LOG"; then
 else
   echo "note: every child died from SIGTERM alone"
 fi
-
-kill "$QEMU_PID" 2>/dev/null
-wait "$QEMU_PID" 2>/dev/null
-QEMU_PID=""
 
 echo "boot 1/2 PASS: the guest shut itself down from a shell command"
 
