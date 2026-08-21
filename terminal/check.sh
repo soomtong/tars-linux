@@ -106,7 +106,7 @@ if [ "$READY" != "1" ]; then
   for marker in \
     "terminal: grid " \
     "terminal: rasterized " \
-    "terminal: opened /dev/input/event0" \
+    "terminal: opened /dev/input/event" \
     "terminal: spawned child pid "; do
     if grep -q "$marker" "$LOG"; then
       echo "  ok      ${marker}"
@@ -272,6 +272,27 @@ for marker in \
   fi
 done
 echo "init mounted all four filesystems"
+
+# HD-M0: 키보드를 번호가 아니라 성질로 찾았는가.
+#
+# 지금은 event0이 곧 키보드라 결과가 예전 상수와 같다. 그래서 이 검사가
+# 지금 보는 것은 "탐색이 실제로 돌았다"까지다 — 탐색이 **옳다**는 증명은
+# ACPI를 켜는 HD-M1이 한다. 그때 장치 번호가 밀리는데도 아래 화면 검사들이
+# 통과하는 것이 그 증명이고, 이 줄의 번호가 바뀌는 것으로 눈에도 보인다.
+#
+# 장치 이름은 요구하지 않는다. 실 하드웨어에서 달라지는 것이 정상이고,
+# 판정에도 쓰지 않는 값이다(design 결정 2).
+if ! grep -q "tars-init: keyboard device /dev/input/event" "$LOG"; then
+  echo "FAIL: init did not discover a keyboard device"
+  grep 'tars-init:' "$LOG" | tail -n 20
+  exit 1
+fi
+if grep -q "tars-init: no keyboard found" "$LOG"; then
+  echo "FAIL: init fell back to event0 instead of discovering a keyboard"
+  grep 'tars-init:' "$LOG" | tail -n 20
+  exit 1
+fi
+echo "init discovered the keyboard by capability"
 
 # 성공했으면 스크린샷은 필요 없다. 실패했을 때만 남겨서 눈으로 볼 수 있게 한다.
 rm -f "$BEFORE" "$AFTER"
