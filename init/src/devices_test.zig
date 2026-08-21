@@ -2,6 +2,80 @@ const std = @import("std");
 const linux = std.os.linux;
 const devices = @import("devices.zig");
 
+/// 이 검사가 만드는 가짜 트리의 뿌리. 게스트가 아니라 빌드 컨테이너의
+/// /tmp에 만든다.
+const ROOT = "/tmp/tars-devices-test";
+const FULL = ROOT ++ "/full";
+const BUTTON = ROOT ++ "/button";
+
+fn failed(rc: usize) ?linux.E {
+    const e = linux.errno(rc);
+    return if (e == .SUCCESS) null else e;
+}
+
+/// 경로를 조립하는 버퍼. 돌려준 슬라이스는 **다음 호출에서 덮인다** —
+/// 아래 호출들이 전부 만들자마자 바로 쓰기 때문에 이것으로 충분하다.
+var path_buf: [256]u8 = undefined;
+
+fn join(comptime fmt: []const u8, args: anytype) [:0]const u8 {
+    const text = std.fmt.bufPrint(path_buf[0 .. path_buf.len - 1], fmt, args) catch unreachable;
+    path_buf[text.len] = 0;
+    return path_buf[0..text.len :0];
+}
+
+/// 있으면 그냥 넘어간다. 검사를 두 번 돌려도 같은 결과가 나와야 한다.
+fn mkdirOne(path: [:0]const u8) !void {
+    const rc = linux.mkdir(path.ptr, 0o755);
+    if (failed(rc)) |e| {
+        if (e == .EXIST) return;
+        std.debug.print("FAIL: mkdir {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        return error.MkdirFailed;
+    }
+}
+
+fn writeFile(path: [:0]const u8, text: []const u8) !void {
+    const rc = linux.open(path.ptr, .{
+        .ACCMODE = .WRONLY,
+        .CREAT = true,
+        .TRUNC = true,
+    }, 0o644);
+    if (failed(rc)) |e| {
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        return error.OpenFailed;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+
+    var written: usize = 0;
+    while (written < text.len) {
+        const n = linux.write(fd, text.ptr + written, text.len - written);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+            return error.WriteFailed;
+        }
+        if (n == 0) return error.WriteFailed;
+        written += n;
+    }
+}
+
+/// 진짜 sysfs에서 device는 심볼릭 링크지만 여기서는 그냥 디렉터리로 만든다.
+/// 우리가 하는 일은 그 아래의 파일을 열어 읽는 것뿐이라 결과가 같다.
+fn makeDevice(
+    root: []const u8,
+    n: u8,
+    name: []const u8,
+    ev: []const u8,
+    key: []const u8,
+) !void {
+    try mkdirOne(join("{s}/event{d}", .{ root, n }));
+    try mkdirOne(join("{s}/event{d}/device", .{ root, n }));
+    try mkdirOne(join("{s}/event{d}/device/capabilities", .{ root, n }));
+    try writeFile(join("{s}/event{d}/device/name", .{ root, n }), name);
+    try writeFile(join("{s}/event{d}/device/capabilities/ev", .{ root, n }), ev);
+    try writeFile(join("{s}/event{d}/device/capabilities/key", .{ root, n }), key);
+}
+
 /// config_test·power_test와 같은 모양이다: 호스트 아키텍처 실행 파일이고,
 /// 실패하면 0이 아닌 종료 코드로 끝난다. 체인 스크립트가 셋을 똑같이 다룰
 /// 수 있어야 한다.
@@ -79,4 +153,63 @@ pub fn main() !void {
     }
 
     std.debug.print("devices_test: capability decides, not the name\n", .{});
+
+    // ── 5. 가짜 sysfs 트리 ────────────────────────────────────────────
+    //
+    // 진짜 /sys를 읽지 않는 이유는 design 결정 5다. 이 검사는 빌드
+    // 컨테이너에서 도는데, 그 안의 /sys는 개발 기계의 것이라 무엇이 꽂혀
+    // 있느냐에 따라 결과가 달라진다.
+    try mkdirOne(ROOT);
+    try mkdirOne(FULL);
+    try mkdirOne(BUTTON);
+
+    // 값 셋 다 sysfs가 실제로 주는 모양이다 — 줄 끝의 개행까지 포함한다.
+    // 개행을 빼고 검사하면 tokenize가 그것을 걸러 준다는 사실을 못 보게 된다.
+    try makeDevice(FULL, 0, "Power Button\n", "3\n", "10000000000000 0\n");
+    try makeDevice(FULL, 1, "AT Translated Set 2 keyboard\n", "120013\n",
+        "402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe\n");
+    // BTN_LEFT(0x110 = 272)만 가진 장치. EV_KEY는 있지만 키보드는 아니다.
+    try makeDevice(FULL, 2, "TARS fake mouse\n", "3\n", "10000 0 0 0 0\n");
+
+    const found = devices.findKeyboard(FULL) orelse {
+        std.debug.print("FAIL: no keyboard found in the fake tree\n", .{});
+        return error.KeyboardNotFound;
+    };
+    if (found != 1) {
+        std.debug.print("FAIL: picked event{d}, want event1\n", .{found});
+        return error.WrongDevicePicked;
+    }
+
+    // 순서가 중요하다. event0(전원 버튼)이 먼저 오는데도 event1을 골랐다는
+    // 것은 번호가 아니라 성질로 판단했다는 뜻이다. ACPI를 켜면 실제로 이
+    // 배치가 된다(design 조사 5).
+    std.debug.print("devices_test: picked event1 past a power button at event0\n", .{});
+
+    // ── 6. 키보드가 하나도 없으면 ─────────────────────────────────────
+    try makeDevice(BUTTON, 0, "Power Button\n", "3\n", "10000000000000 0\n");
+    if (devices.findKeyboard(BUTTON) != null) {
+        std.debug.print("FAIL: a lone power button was reported as a keyboard\n", .{});
+        return error.PowerButtonMisread;
+    }
+
+    // ── 7. 폴백은 부팅을 막지 않는다 (design 결정 6) ──────────────────
+    var fallback = devices.Path{};
+    devices.resolveKeyboard(BUTTON, &fallback);
+    if (!std.mem.eql(u8, fallback.slice(), "/dev/input/event0")) {
+        std.debug.print("FAIL: fallback gave '{s}', want /dev/input/event0\n", .{
+            fallback.slice(),
+        });
+        return error.WrongFallback;
+    }
+
+    var resolved = devices.Path{};
+    devices.resolveKeyboard(FULL, &resolved);
+    if (!std.mem.eql(u8, resolved.slice(), "/dev/input/event1")) {
+        std.debug.print("FAIL: resolved '{s}', want /dev/input/event1\n", .{
+            resolved.slice(),
+        });
+        return error.WrongPath;
+    }
+
+    std.debug.print("devices_test: a missing keyboard falls back to event0\n", .{});
 }
