@@ -40,6 +40,11 @@ metadata:
 두 겹으로 겹친다. PM-M0은 ACPI 없이 할 수 있는 일이 전부였으므로 이 순서를
 밟지 않았고, 필요해지면 별도 milestone으로 다룬다.
 
+**2026-08-21 갱신: (1)이 끝났다.** HD-M0에서 PID 1이 sysfs를 훑어 키보드를
+capability로 찾고 그 경로를 `argv[4]`로 넘기도록 고쳤으며,
+`terminal/src/main.zig`의 상수는 사라졌다([[project_device_discovery]]).
+남은 것은 (2)이고 HD-M1이 그 일을 한다.
+
 ## PID 1의 시그널은 핸들러가 없으면 **관측되지 않는다**
 
 커널은 PID 1에 대해 "핸들러 없는 시그널"을 무시한다. 기본 동작(프로세스
