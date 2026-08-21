@@ -21,8 +21,6 @@ const GRID_Y: u32 = 20;
 const CELL_W: u32 = 8; // 8x4x4-fonts의 라틴 글리프 폭(font.zig:19-22 참고)
 const ROW_HEIGHT: u32 = 16;
 
-const INPUT_DEVICE = "/dev/input/event0";
-
 fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32) void {
     const bitmap = glyph.bitmap orelse return;
     var row: u32 = 0;
@@ -100,11 +98,22 @@ pub fn main(init: std.process.Init) !void {
     const cache = try font.build(allocator, font_data, &codepoints);
     std.debug.print("terminal: rasterized {d} glyphs\n", .{codepoints.len});
 
-    const keyboard_fd = input.openDevice(INPUT_DEVICE) catch |err| {
-        std.debug.print("terminal: FATAL cannot open {s}: {any}\n", .{ INPUT_DEVICE, err });
+    // 다섯째 인자가 키보드 장치 경로다(HD-M0). 번호를 여기서 고르지 않는
+    // 이유는 CP가 세운 규칙 그대로다 — 하드웨어를 살펴 고르는 일은 PID 1이
+    // 하고 terminal은 그 결정을 실행만 한다. 손으로 실행할 때를 위한
+    // 기본값은 예전 상수와 같다.
+    //
+    // args를 셸 인자를 꺼내는 자리보다 위에서 선언하는 이유는 장치를 여는
+    // 일이 그보다 먼저 오기 때문이다. 로그 순서를 그대로 두려고 여는 자리를
+    // 내리지 않고 선언을 올렸다.
+    const args = init.minimal.args.vector;
+    const input_device: [*:0]const u8 = if (args.len > 4) args[4] else "/dev/input/event0";
+
+    const keyboard_fd = input.openDevice(input_device) catch |err| {
+        std.debug.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
         return err;
     };
-    std.debug.print("terminal: opened {s}\n", .{INPUT_DEVICE});
+    std.debug.print("terminal: opened {s}\n", .{input_device});
 
     // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
     // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
@@ -114,7 +123,6 @@ pub fn main(init: std.process.Init) !void {
     // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
     // no-config 플래그(fish --no-config / bash --norc / zsh -f)를 계속 주는
     // 이유는 프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있기 때문이다.
-    const args = init.minimal.args.vector;
     const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
     const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
     // 넷째 인자가 키보드 종류다(IP-M2, design doc 결정 9). enum을 여기 다시

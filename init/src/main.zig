@@ -2,6 +2,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const power = @import("power.zig");
+const devices = @import("devices.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -177,9 +178,10 @@ const Child = struct {
     /// execve에 그대로 넘길 argv. argv[0]은 path와 같고 남는 자리는 null이다 —
     /// execve는 첫 null에서 멈추므로 인자가 하나인 자식도 같은 배열 타입을
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
-    /// IP-M2에서 셋에서 넷으로 늘었다. terminal이 받는 넷째 자리가
-    /// keyboard이고, 콘솔 셸은 그 자리를 null로 둔다.
-    argv: [4:null]?[*:0]const u8,
+    /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로 늘었다. terminal이
+    /// 받는 넷째가 keyboard, 다섯째가 키보드 장치 경로이고, 콘솔 셸은 그
+    /// 자리를 전부 null로 둔다.
+    argv: [5:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -341,6 +343,11 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     logDrmDevicePresence();
 
+    // sysfs를 붙인 뒤여야 한다(:332). 이 값은 main()의 스택에 살고,
+    // supervise()가 영영 반환하지 않으므로 argv에 넣은 포인터가 뜨지 않는다.
+    var keyboard_path = devices.Path{};
+    devices.resolveKeyboard(devices.SYS_INPUT, &keyboard_path);
+
     // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
     // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
     // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
@@ -362,14 +369,20 @@ pub fn main(init: std.process.Init.Minimal) void {
             // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
             // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
             // 이 인자는 셸로 새지 않는다.
-            .argv = .{ TERMINAL_PATH.ptr, shell_path.ptr, shell_flag.ptr, keyboard_arg.ptr },
+            .argv = .{
+                TERMINAL_PATH.ptr,
+                shell_path.ptr,
+                shell_flag.ptr,
+                keyboard_arg.ptr,
+                keyboard_path.cstr(),
+            },
         },
         .{
             .kind = .console_shell,
             .path = shell_path,
             // 콘솔 셸에는 플래그를 주지 않는다. 이쪽은 사용자가 직접 쓰는
             // 자리이므로, 나중에 설정 파일이 생기면 그것을 읽는 편이 맞다.
-            .argv = .{ shell_path.ptr, null, null, null },
+            .argv = .{ shell_path.ptr, null, null, null, null },
         },
     };
     supervise(&children, envp);
