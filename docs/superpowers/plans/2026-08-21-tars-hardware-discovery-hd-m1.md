@@ -41,6 +41,8 @@ HD-M2가 가져간다. design은 이미 승인되어 있으므로 다시 논의�
 ```
 Task 1   ACPI 없는 커널 빌드 시간을 잰다            ← 기준선. 되돌릴 수 없다
   ↓      .config가 olddefconfig의 고정점인지도 함께 본다
+Task 1.5 .config를 고정점으로 되접는다              ← ACPI와 섞이기 전에
+  ↓      다음 커밋의 diff가 순수하게 ACPI 몫이 되도록
 Task 2   .config를 고치고 olddefconfig의 결과를 읽는다
   ↓      무엇이 따라 들어왔는지 diff로 확정하고 고정점으로 되접는다
 Task 3   부팅해서 장치가 밀리는 것을 눈으로 본다
@@ -79,6 +81,12 @@ Task 7   문서
 되접는다. 그러고 나서 다시 빌드해 둘이 **같은지** 확인한다. 같아지면 저장소에
 들어 있는 파일이 곧 커널이 빌드하는 설정이고, 다음 사람이 `.config`만 읽어도
 진실을 알 수 있다.
+
+**되접기는 ACPI를 켜기 전에 따로 한다**(Task 1.5). Task 1 Step 2의 실측으로
+`.config`가 고정점이 아님이 확인됐고, 그 차이가 60줄이 넘는다. ACPI를 켠 뒤에
+한꺼번에 되접으면 `kernel/.config`의 커밋 하나에 ACPI 변경과 정규화가 뒤섞여서,
+나중에 "ACPI가 실제로 무엇을 들여왔나"를 git 히스토리로 답할 수 없게 된다.
+정규화를 앞에 떼어 놓으면 다음 커밋의 diff가 순수하게 ACPI 몫이 된다.
 
 **2. `.config`에는 설명 주석을 쓰지 않는다.**
 
@@ -190,16 +198,76 @@ Task 2의 diff를 읽는 방식이 여기서 갈린다.
 
 이 Step은 커밋할 것을 만들지 않는다.
 
+**실측 결과(2026-08-21):** `real 0m50.355s`(`user 4m44s`, `sys 1m28s`). 루트
+게이트 한 번에서 커널 빌드가 차지하는 몫이 15 × 50.4초 ≒ **12분 36초**이고,
+직전 실측 전체가 28분 16초였으므로 게이트 시간의 약 45%다. Step 2의 diff는
+`IDENTICAL`이 아니었다 — 그래서 Task 1.5가 생겼다.
+
+---
+
+## Task 1.5: `.config`를 고정점으로 되접는다
+
+Task 1 Step 2가 찾아낸 차이를 ACPI와 섞이기 전에 정리한다. 차이는 세 갈래였다.
+
+**1. 환경에서 캐내는 값.** 커밋된 `.config`는 `CROSS_COMPILE` 없이 만들어진
+흔적을 갖고 있었다 — `CC_VERSION_TEXT`가 크로스 gcc가 아닌 호스트 gcc이고,
+`RUSTC_VERSION`이 rustc가 있던 기계의 값이며, 크로스 gcc가 지원하지 않는
+`CC_HAS_MARCH_NATIVE`가 남아 있었다. kconfig가 매번 다시 캐내는 값이라 우리가
+정할 수 있는 것이 아니다.
+
+**2. 안 적혔을 뿐 의미가 같은 줄.** `# CONFIG_BLK_DEV_LOOP is not set` 같은
+것 수십 줄이다. 안 적힌 것과 `is not set`은 kconfig에서 같은 뜻이다.
+
+**3. 빌드되는데 기록에 없던 것.** `CONFIG_SERIO_SERPORT=y`,
+`CONFIG_INPUT_VIVALDIFMAP=y`, `CONFIG_BUFFER_HEAD=y`, `CONFIG_SG_POOL=y`,
+`CONFIG_ARCH_MIGHT_HAVE_PC_SERIO=y`. `olddefconfig`가 기본값으로 켠 것들이고,
+**커널에는 들어가 있는데 저장소의 파일을 읽어서는 알 수 없었다.** 하필 둘이
+입력 계층이다 — 입력 장치를 성질로 찾는 서브프로젝트를 하면서 입력 설정이
+기록 밖에 있던 셈이다.
+
+**Files:**
+- Modify: `kernel/.config` (`olddefconfig` 출력으로 통째 교체)
+
+- [ ] **Step 1: 되접는다**
+
+```bash
+cp kernel/build/.config kernel/.config
+```
+
+빌드 결과는 바뀌지 않는다. `kernel/build/.config`가 방금 커널을 만든 바로 그
+설정이기 때문이다.
+
+- [ ] **Step 2: 고정점이 됐는지 확인한다**
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'rm -rf kernel/build && ./kernel/build.sh >/dev/null 2>&1 && diff kernel/.config kernel/build/.config && echo IDENTICAL'
+```
+
+기대: `IDENTICAL` 한 줄. 아무것도 안 찍히면 빌드가 실패했거나 두 번째
+회차에서도 값이 바뀐 것이다 — 후자라면 우리가 모르는 의존 관계가 있다는
+뜻이므로 멈춘다.
+
+**실측 결과(2026-08-21):** `IDENTICAL`.
+
+- [ ] **Step 3: 커밋**
+
+```bash
+git add kernel/.config
+git commit -m "Record the settings the kernel is actually built with"
+```
+
 ---
 
 ## Task 2: ACPI를 켜고 무엇이 따라 들어오는지 확정한다
 
 **Files:**
-- Modify: `kernel/.config:377`
+- Modify: `kernel/.config:371` (Task 1.5의 되접기로 줄 번호가 377에서 371로
+  밀렸다. `CONFIG_ARCH_SUPPORTS_ACPI=y` 바로 **다음** 줄이다.)
 
 - [ ] **Step 1: `.config`를 고친다**
 
-`kernel/.config:377`의 다음 **한 줄을 지운다.**
+`kernel/.config:371`의 다음 **한 줄을 지운다.**
 
 ```
 # CONFIG_ACPI is not set
@@ -251,8 +319,8 @@ CONFIG_ACPI_BUTTON=y
 rg -n "^CONFIG_ACPI|^# CONFIG_ACPI" kernel/.config
 ```
 
-기대: 방금 넣은 아홉 줄이 372~390 구간 안에 나온다. 다른 곳에 중복으로
-들어가지 않았는지도 이 출력으로 함께 본다.
+기대: 방금 넣은 아홉 줄이 366~384 구간(`Power management and ACPI options`
+절) 안에 나온다. 다른 곳에 중복으로 들어가지 않았는지도 이 출력으로 함께 본다.
 
 - [ ] **Step 3: 빌드하며 시간을 다시 잰다**
 
@@ -270,8 +338,11 @@ milestone의 첫째 실측치다.** 루트 게이트에 미치는 영향은 그 
 diff kernel/.config kernel/build/.config
 ```
 
-기대: `>` 쪽에 ACPI 관련 항목이 잔뜩 나온다. **출력을 그대로 알려 줄 것.**
-Claude가 다음 셋을 확인한다.
+기대: `>` 쪽에 ACPI 관련 항목이 잔뜩 나온다. **Task 1.5로 `.config`가
+고정점이 됐으므로 이 diff에는 ACPI 때문에 생긴 차이만 나와야 한다** — 그것이
+정규화를 앞에 떼어 놓은 이유다. ACPI와 무관한 항목이 섞여 나오면 그 자체가
+새로운 사실이므로 멈추고 해석한다. **출력을 그대로 알려 줄 것.** Claude가
+다음 셋을 확인한다.
 
 1. `CONFIG_ACPI_BUTTON=y`가 살아 있는가 (조사 2번의 예측)
 2. `CONFIG_PM`이 함께 켜졌는가 (design 결정 10이 확인하라고 한 자리)
@@ -288,7 +359,8 @@ git diff --stat kernel/.config
 ```
 
 기대: `kernel/.config`가 한 파일 바뀐 것으로 나온다. 줄 수 변화는 Step 4의
-diff 크기와 맞아야 한다.
+diff 크기와 맞아야 한다. Task 1.5를 먼저 했으므로 이 커밋의 diff는 곧
+**ACPI가 커널에 들여온 것의 목록**이 된다.
 
 - [ ] **Step 6: 정말 고정점이 됐는지 확인한다**
 
@@ -799,7 +871,9 @@ Task 3 Step 3에서 `rg "ACPI:"`로 로그를 훑을 때 이런 줄이 보이면
 지우는 것은 **부팅 1의 것 하나뿐**이고, Step 6의 `rg`가 그것을 개수로
 확인한다.
 
-**6. `.config` 되접기가 의도하지 않은 변경을 함께 들여올 수 있다.** Task 1
-Step 2가 되접기 **전에** 차이를 먼저 재는 이유가 이것이다. Task 2 Step 4의
-diff에서 ACPI와 무관한 항목이 보이면 그것은 Step 2에서 이미 본 차이여야
-한다. 처음 보는 항목이 있으면 멈추고 알려 줄 것.
+**6. `.config` 되접기가 의도하지 않은 변경을 함께 들여올 수 있다.** Task 1.5가
+ACPI **전에** 되접기를 끝내는 이유가 이것이다. 그 덕분에 Task 2 Step 4의
+diff에는 ACPI와 무관한 항목이 하나도 없어야 하고, 있다면 그것이 곧 새로운
+사실이다. 되접기 자체가 빌드 결과를 바꾸지 않는다는 근거는 되접는 대상이
+방금 그 커널을 만든 파일이라는 점이고, Task 1.5 Step 2의 `IDENTICAL`이 그것을
+확인한다.
