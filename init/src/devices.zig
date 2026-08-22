@@ -44,6 +44,17 @@ const EV_KEY: u16 = 1;
 const KEY_ESC: u16 = 1;
 const KEY_D: u16 = 32;
 
+/// 전원 버튼의 키 코드. include/uapi/linux/input-event-codes.h의 KEY_POWER다.
+/// 116번이라 1번 워드의 52번 비트에 앉는다 — 비트맵을 뒤에서부터 세는 것이
+/// 이 파일에서 유일하게 미묘한 부분이라고 bitSet에 적어 둔 그 자리다.
+const KEY_POWER: u16 = 116;
+
+/// 열어 둘 전원 버튼의 상한(design 결정 4). ACPI는 FADT의 고정 하드웨어
+/// 버튼과 DSDT가 선언한 장치를 각각 등록할 수 있어서, 하나만 골랐다가 틀리면
+/// 버튼이 **조용히** 죽는다. HD-M1의 실측으로는 QEMU에 하나뿐이지만, 그
+/// 침묵보다는 넉넉한 상한으로 전부 여는 편이 낫다.
+pub const MAX_BUTTONS: usize = 4;
+
 /// sysfs 비트맵 문자열에서 code번 비트가 서 있는지 본다.
 ///
 /// **문자열은 가장 높은 워드가 맨 앞이다.** 커널의 input_print_bitmap이
@@ -82,6 +93,24 @@ pub fn looksLikeKeyboard(ev: []const u8, key: []const u8) bool {
         if (!bitSet(key, code)) return false;
     }
     return true;
+}
+
+/// 이 장치가 "누르면 기계가 꺼지는 물리 버튼"인가.
+///
+/// **키보드를 명시적으로 제외하는 것이 이 함수의 핵심이다.** QEMU의 AT
+/// 키보드도 KEY_POWER를 갖고 있다 — devices_test가 실측해 둔 비트맵의 1번
+/// 워드 0xfeffffdfffefffff의 52번 비트가 그것이고, atkbd가 ACPI 확장 키를
+/// 스캔코드 표에 갖고 있기 때문이다. 제외하지 않으면 PID 1이 키보드 fd까지
+/// 열어서 글자 하나마다 감독 루프가 깨어나고, 같은 키를 terminal과 PID 1이
+/// 서로 다른 뜻으로 읽게 된다.
+///
+/// 키보드에 달린 전원 키를 무엇으로 옮길지는 Input Policy의 몫이다
+/// (docs/decisions/project_input_policy.md). 이 함수는 그 결정을 가져가지
+/// 않는다.
+pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
+    if (!bitSet(ev, EV_KEY)) return false;
+    if (!bitSet(key, KEY_POWER)) return false;
+    return !looksLikeKeyboard(ev, key);
 }
 
 /// 널 종료 경로를 담는 고정 버퍼. init에는 힙이 없으므로 호출자가 이 값을
@@ -152,6 +181,28 @@ pub fn findKeyboard(sys_root: []const u8) ?u8 {
         if (looksLikeKeyboard(ev, key)) return n;
     }
     return null;
+}
+
+/// 전원 버튼처럼 생긴 evdev 번호를 out에 채우고 그 개수를 돌려준다.
+///
+/// 키보드와 달리 첫 번째 것만 쓰지 않고 **전부** 모은다(design 결정 4).
+/// 키보드가 여럿일 이유는 없지만 전원 버튼은 둘일 수 있고, 그중 어느 것이
+/// 실제로 우는지는 밖에서 알 수 없기 때문이다.
+pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
+    var found: usize = 0;
+    var n: u8 = 0;
+    while (n < MAX_EVENT and found < out.len) : (n += 1) {
+        var ev_buf: [MAX_BITMAP]u8 = undefined;
+        const ev = readAttr(sys_root, n, "capabilities/ev", &ev_buf) orelse continue;
+
+        var key_buf: [MAX_BITMAP]u8 = undefined;
+        const key = readAttr(sys_root, n, "capabilities/key", &key_buf) orelse continue;
+
+        if (!looksLikePowerButton(ev, key)) continue;
+        out[found] = n;
+        found += 1;
+    }
+    return found;
 }
 
 /// 키보드 장치 경로를 정하고 로그로 남긴다. 못 찾아도 **부팅을 막지 않는다**

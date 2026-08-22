@@ -212,4 +212,58 @@ pub fn main() !void {
     }
 
     std.debug.print("devices_test: a missing keyboard falls back to event0\n", .{});
+
+    // ── 8. 전원 버튼 판정 (HD-M2) ─────────────────────────────────────
+    //
+    // **이 절의 첫 두 줄이 HD-M2에서 가장 중요한 검사다.** QEMU의 AT
+    // 키보드도 KEY_POWER를 갖고 있다 — 위 keyboard_key의 1번 워드
+    // 0xfeffffdfffefffff의 52번 비트가 그것이다. atkbd가 ACPI 확장 키를
+    // 스캔코드 표에 갖고 있기 때문이고, 실 하드웨어의 USB 키보드도 대개
+    // 같다. 그래서 "KEY_POWER가 서 있는 장치"를 그대로 후보로 삼으면
+    // 키보드가 딸려 들어오고, PID 1이 글자 하나마다 깨어나게 된다.
+    if (!devices.bitSet(keyboard_key, 116)) {
+        std.debug.print("FAIL: the AT keyboard is expected to have KEY_POWER\n", .{});
+        return error.KeyboardLostPowerKey;
+    }
+    if (devices.looksLikePowerButton("120013", keyboard_key)) {
+        std.debug.print("FAIL: a keyboard must not pass as a power button\n", .{});
+        return error.KeyboardMisreadAsButton;
+    }
+    // 진짜 전원 버튼은 통과해야 한다.
+    if (!devices.looksLikePowerButton("3", "10000000000000 0")) {
+        std.debug.print("FAIL: the ACPI power button should look like one\n", .{});
+        return error.PowerButtonNotRecognized;
+    }
+    // BTN_LEFT만 가진 장치는 KEY_POWER가 없으므로 통과하면 안 된다.
+    if (devices.looksLikePowerButton("3", "10000 0 0 0 0")) {
+        std.debug.print("FAIL: a mouse must not pass as a power button\n", .{});
+        return error.MouseMisreadAsButton;
+    }
+
+    std.debug.print("devices_test: a keyboard has KEY_POWER but is not a button\n", .{});
+
+    // ── 9. 가짜 트리에서 후보를 고른다 ────────────────────────────────
+    //
+    // FULL에는 전원 버튼(event0) · 키보드(event1) · 마우스(event2)가 있다.
+    // 골라야 할 것은 event0 하나뿐이다. 키보드가 함께 나오면 위 8번이
+    // 잡지 못한 무언가가 findPowerButtons에 있다는 뜻이다.
+    var buttons: [devices.MAX_BUTTONS]u8 = undefined;
+    const count = devices.findPowerButtons(FULL, &buttons);
+    if (count != 1) {
+        std.debug.print("FAIL: found {d} power buttons in the fake tree, want 1\n", .{count});
+        return error.WrongButtonCount;
+    }
+    if (buttons[0] != 0) {
+        std.debug.print("FAIL: picked event{d} as the power button, want event0\n", .{buttons[0]});
+        return error.WrongButtonPicked;
+    }
+
+    // 전원 버튼만 있는 트리에서도 같은 답이 나와야 한다.
+    const lone = devices.findPowerButtons(BUTTON, &buttons);
+    if (lone != 1 or buttons[0] != 0) {
+        std.debug.print("FAIL: a lone power button was not found (count {d})\n", .{lone});
+        return error.ButtonNotFound;
+    }
+
+    std.debug.print("devices_test: picked the power button and left the keyboard alone\n", .{});
 }
