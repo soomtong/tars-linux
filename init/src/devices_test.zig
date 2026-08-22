@@ -100,9 +100,9 @@ pub fn main() !void {
     //
     // 이 파일에서 가장 중요한 두 줄이다. sysfs는 가장 높은 워드를 맨 앞에
     // 찍으므로(drivers/input/input.c의 input_print_bitmap), "1 0"은 워드가
-    // 둘이고 **뒤엣것이 0번 워드**다. 따라서 64번 비트가 서 있고 0번 비트는
-    // 비어 있다. 방향을 뒤집어 읽으면 정확히 반대로 나오는데, 그래도 아래
-    // 검사들이 대부분 통과해 버리기 때문에 여기서 못 잡으면 못 잡는다.
+    // 둘이고 **뒤엣것이 0번 워드**다. 따라서 64번 비트의 값이 1이고 0번
+    // 비트의 값은 0이다. 방향을 뒤집어 읽으면 정확히 반대로 나오는데, 그래도
+    // 아래 검사들이 대부분 통과해 버리기 때문에 여기서 못 잡으면 못 잡는다.
     if (!devices.bitSet("1 0", 64)) {
         std.debug.print("FAIL: bit 64 of \"1 0\" should be set (words run high to low)\n", .{});
         return error.WordOrderReversed;
@@ -114,8 +114,8 @@ pub fn main() !void {
 
     // ── 2. 워드가 모자란 경우 ─────────────────────────────────────────
     //
-    // 커널은 비어 있는 상위 워드를 아예 안 찍는다. 그래서 물어본 비트가
-    // 찍힌 워드 수를 넘어가면 그 비트는 "서 있지 않다"가 정답이다. 전원
+    // 커널은 값이 0뿐인 상위 워드를 아예 안 찍는다. 그래서 물어본 비트가
+    // 찍힌 워드 수를 넘어가면 그 비트의 값은 0이라고 답하는 것이 맞다. 전원
     // 버튼의 ev가 "3" 한 워드뿐이라 이 경로를 실제로 밟는다.
     if (devices.bitSet("3", 116)) {
         std.debug.print("FAIL: \"3\" has one word, bit 116 cannot be set\n", .{});
@@ -130,8 +130,9 @@ pub fn main() !void {
         std.debug.print("FAIL: \"3\" should have EV_KEY (bit 1)\n", .{});
         return error.BitNotFound;
     }
-    // KEY_POWER는 116번이라 1번 워드의 52번 비트다. 0x10000000000000이
-    // 정확히 1<<52이고, 그것이 QEMU의 전원 버튼이 내놓는 값이다.
+    // KEY_POWER는 116번이고 116 = 64 + 52이므로 1번 워드의 52번 비트다.
+    // 0x10000000000000이 정확히 1<<52이고, 그것이 QEMU의 전원 버튼이 내놓는
+    // 값이다.
     if (!devices.bitSet("10000000000000 0", 116)) {
         std.debug.print("FAIL: KEY_POWER (116) should be set\n", .{});
         return error.BitNotFound;
@@ -148,7 +149,7 @@ pub fn main() !void {
     // ── 4. capability 판정 ────────────────────────────────────────────
     //
     // QEMU의 AT 키보드가 실제로 내놓는 값이다. 마지막 워드
-    // 0xfffffffffffffffe에 1~63번 비트가 전부 서 있어서 KEY_ESC(1)부터
+    // 0xfffffffffffffffe는 1~63번 비트의 값이 전부 1이라서 KEY_ESC(1)부터
     // KEY_D(32)까지의 조건을 채운다.
     const keyboard_key = "402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe";
     if (!devices.looksLikeKeyboard("120013", keyboard_key)) {
@@ -233,9 +234,9 @@ pub fn main() !void {
     //
     // **이 절의 첫 두 줄이 HD-M2에서 가장 중요한 검사다.** QEMU의 AT
     // 키보드도 KEY_POWER를 갖고 있다 — 위 keyboard_key의 1번 워드
-    // 0xfeffffdfffefffff의 52번 비트가 그것이다. atkbd가 ACPI 확장 키를
+    // 0xfeffffdfffefffff에서 52번 비트의 값이 1이다. atkbd가 ACPI 확장 키를
     // 스캔코드 표에 갖고 있기 때문이고, 실 하드웨어의 USB 키보드도 대개
-    // 같다. 그래서 "KEY_POWER가 서 있는 장치"를 그대로 후보로 삼으면
+    // 같다. 그래서 "KEY_POWER의 비트가 1인 장치"를 그대로 후보로 삼으면
     // 키보드가 딸려 들어오고, PID 1이 글자 하나마다 깨어나게 된다.
     if (!devices.bitSet(keyboard_key, 116)) {
         std.debug.print("FAIL: the AT keyboard is expected to have KEY_POWER\n", .{});

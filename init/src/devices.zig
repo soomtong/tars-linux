@@ -45,8 +45,9 @@ const KEY_ESC: u16 = 1;
 const KEY_D: u16 = 32;
 
 /// 전원 버튼의 키 코드. include/uapi/linux/input-event-codes.h의 KEY_POWER다.
-/// 116번이라 1번 워드의 52번 비트에 앉는다 — 비트맵을 뒤에서부터 세는 것이
-/// 이 파일에서 유일하게 미묘한 부분이라고 bitSet에 적어 둔 그 자리다.
+/// 116 = 64 + 52이므로 1번 워드의 52번 비트가 이 키를 나타낸다 — 비트맵을
+/// 뒤에서부터 세는 것이 이 파일에서 유일하게 미묘한 부분이라고 bitSet에 적어
+/// 둔 그 자리다.
 const KEY_POWER: u16 = 116;
 
 /// 열어 둘 전원 버튼의 상한(design 결정 4). ACPI는 FADT의 고정 하드웨어
@@ -80,7 +81,7 @@ pub const Event = extern struct {
 /// 누름과 뗌을 한 쌍으로 보내므로, 안 거르면 한 번이 두 번이 된다.
 const VALUE_PRESS: i32 = 1;
 
-/// sysfs 비트맵 문자열에서 code번 비트가 서 있는지 본다.
+/// sysfs 비트맵 문자열에서 code번 비트의 값이 1인지 본다.
 ///
 /// **문자열은 가장 높은 워드가 맨 앞이다.** 커널의 input_print_bitmap이
 /// 배열을 거꾸로 훑으면서 찍고, 비어 있는 상위 워드는 아예 건너뛴다. 그래서
@@ -94,7 +95,7 @@ pub fn bitSet(bitmap: []const u8, code: u16) bool {
     var count: usize = 0;
     while (counter.next()) |_| count += 1;
 
-    // 상위 워드가 통째로 생략됐다는 뜻이다 = 그 비트는 서 있지 않다.
+    // 상위 워드가 통째로 생략됐다는 뜻이다 = 그 비트의 값은 0이다.
     if (want_word >= count) return false;
 
     const index_from_front = count - 1 - want_word;
@@ -124,7 +125,7 @@ pub fn looksLikeKeyboard(ev: []const u8, key: []const u8) bool {
 ///
 /// **키보드를 명시적으로 제외하는 것이 이 함수의 핵심이다.** QEMU의 AT
 /// 키보드도 KEY_POWER를 갖고 있다 — devices_test가 실측해 둔 비트맵의 1번
-/// 워드 0xfeffffdfffefffff의 52번 비트가 그것이고, atkbd가 ACPI 확장 키를
+/// 워드 0xfeffffdfffefffff에서 52번 비트의 값이 1이고, atkbd가 ACPI 확장 키를
 /// 스캔코드 표에 갖고 있기 때문이다. 제외하지 않으면 PID 1이 키보드 fd까지
 /// 열어서 글자 하나마다 감독 루프가 깨어나고, 같은 키를 terminal과 PID 1이
 /// 서로 다른 뜻으로 읽게 된다.
