@@ -348,6 +348,21 @@ pub fn main(init: std.process.Init.Minimal) void {
     var keyboard_path = devices.Path{};
     devices.resolveKeyboard(devices.SYS_INPUT, &keyboard_path);
 
+    // 전원 버튼은 PID 1이 직접 연다(design 결정 7). terminal이 읽는 안은
+    // 물렸다 — 자식이 전부 포기 상태여도 버튼은 살아 있어야 하고, 하필 다
+    // 망가졌을 때 눌러야 하는 것이 전원 버튼이기 때문이다. BF 체인처럼
+    // /dev/dri/card0이 없어 감독자가 terminal을 포기한 상태가 정확히 그
+    // 경우다.
+    //
+    // keyboard_path와 마찬가지로 이 배열은 main()의 스택에 살고, supervise()가
+    // 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
+    var button_fds: [devices.MAX_BUTTONS]i32 = undefined;
+    const button_count = devices.openPowerButtons(devices.SYS_INPUT, &button_fds);
+    // Task 5가 이 값을 supervise에 넘기면서 이 한 줄을 지운다. 지금은 열어만
+    // 두는 상태이고, 아무도 poll하지 않으므로 무해하다 — 커널의 이벤트 큐가
+    // 차기만 한다.
+    _ = button_count;
+
     // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
     // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
     // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.

@@ -157,6 +157,21 @@ pub const Path = struct {
     }
 };
 
+/// `/dev/input/event{n}`을 out에 적는다.
+///
+/// MAX_PATH가 64인데 가장 긴 결과가 "/dev/input/event31"(18자)이라 이
+/// bufPrint는 실패할 수 없다. 일어날 수 없는 실패를 처리하는 코드는 아무도
+/// 실행하지 않으므로 unreachable로 적는다.
+fn devicePath(n: u8, out: *Path) void {
+    const text = std.fmt.bufPrint(
+        out.buf[0 .. out.buf.len - 1],
+        "/dev/input/event{d}",
+        .{n},
+    ) catch unreachable;
+    out.buf[text.len] = 0;
+    out.len = text.len;
+}
+
 /// 파일 하나를 통째로 buf에 읽는다. config.load와 같은 모양이다 —
 /// read(2)가 요청한 만큼을 다 준다는 보장이 없으므로 "돌아온 만큼 더한다".
 fn readFile(path: [*:0]const u8, buf: []u8) ?[]const u8 {
@@ -241,16 +256,7 @@ pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
         break :blk 0;
     };
 
-    // MAX_PATH가 64인데 가장 긴 결과가 "/dev/input/event31"(18자)이라 이
-    // bufPrint는 실패할 수 없다. 일어날 수 없는 실패를 처리하는 코드는
-    // 아무도 실행하지 않으므로 unreachable로 적는다.
-    const text = std.fmt.bufPrint(
-        out.buf[0 .. out.buf.len - 1],
-        "/dev/input/event{d}",
-        .{n},
-    ) catch unreachable;
-    out.buf[text.len] = 0;
-    out.len = text.len;
+    devicePath(n, out);
 
     // 이름은 판정에 쓰지 않고 로그에만 쓴다. 사람이 로그를 읽을 때 "왜
     // 이것을 골랐나"를 알 수 있어야 하기 때문이다.
@@ -300,4 +306,58 @@ pub fn drainButton(fd: i32) bool {
         // "이번에는 이게 전부"라는 뜻이다.
         if (rc < raw.len) return pressed;
     }
+}
+
+/// 전원 버튼 후보를 전부 열고 fd를 out에 채운 뒤 그 개수를 돌려준다.
+///
+/// **여는 것은 진짜 /dev/input이다.** 탐색(sys_root)만 주입받고 여는 쪽은
+/// 고정인 이유는, 이 함수가 하는 일의 절반이 open(2)이라 호스트 검사에서
+/// 시험할 대상이 아니기 때문이다. 검사가 보는 것은 findPowerButtons까지다.
+///
+/// 하나도 못 찾아도 **부팅을 막지 않는다**(design 결정 6). 그때는 0을
+/// 돌려주고, 감독 루프의 poll은 fd 0개짜리가 되어 그냥 1초 sleep이 된다 —
+/// 폴백이 따로 필요 없는 구조다.
+///
+/// O_NONBLOCK으로 여는 이유는 drainButton에 적었다. 비었을 때의 read가
+/// EAGAIN으로 돌아와야 다 읽었다는 것을 알 수 있다.
+pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
+    var candidates: [MAX_BUTTONS]u8 = undefined;
+    const n = findPowerButtons(sys_root, &candidates);
+    if (n == 0) {
+        // device/check.sh가 이 줄이 **없음**을 요구한다. 탐색기가 조용히
+        // 실패하면 버튼은 안 먹는데 부팅은 멀쩡해 보이기 때문이다.
+        std.debug.print("tars-init: no power button found under {s}\n", .{sys_root});
+        return 0;
+    }
+
+    var opened: usize = 0;
+    var i: usize = 0;
+    while (i < n and opened < out.len) : (i += 1) {
+        var path = Path{};
+        devicePath(candidates[i], &path);
+
+        const rc = linux.open(path.cstr(), .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
+        if (failed(rc)) |e| {
+            std.debug.print("tars-init: could not open {s} (errno {d})\n", .{
+                path.slice(), @intFromEnum(e),
+            });
+            continue;
+        }
+        out[opened] = @intCast(rc);
+        opened += 1;
+
+        // 이름은 판정에 쓰지 않고 로그에만 쓴다. resolveKeyboard와 같은
+        // 이유다 — 사람이 로그를 읽을 때 "왜 이것을 열었나"를 알 수 있어야
+        // 한다.
+        var name_buf: [MAX_NAME]u8 = undefined;
+        const raw = readAttr(sys_root, candidates[i], "name", &name_buf) orelse "";
+        const name = std.mem.trim(u8, raw, " \t\r\n");
+
+        // device/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
+        // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
+        std.debug.print("tars-init: power button {s} ({s})\n", .{ path.slice(), name });
+    }
+
+    std.debug.print("tars-init: watching {d} power button(s)\n", .{opened});
+    return opened;
 }
