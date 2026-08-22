@@ -33,24 +33,23 @@
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. HD-M2가 만든 커밋은 열이다(plan과 이 문서 포함).
+`main`, working tree 깨끗함.
 
-```
-7ca1d94 Hand off with a machine that answers its own power button
-0d16637 Add the power button chain to the root gate
-d16f733 Prove the machine switches off when the power button is pressed
-e740783 Wait on the power button and the children at the same time
-36dbb04 Open every power button PID 1 can find
-374f903 Hand the build commands to Claude and say why the rule flipped
-64b0da9 Let a button ask for shutdown at the same place a signal does
-25de769 Read a power button press out of the evdev byte stream
-a056948 Tell a power button apart from a keyboard that has a power key
-0598d82 Plan the machine that answers its own power button
+**HD-M2의 커밋 전체는 이렇게 본다.** 목록을 여기 손으로 적지 않는 이유는, 이
+문서를 커밋하는 순간 그 커밋이 목록에서 빠져서 매번 어긋나기 때문이다.
+
+```bash
+git log --oneline b0704ce..main     # b0704ce = HD-M1의 마지막 커밋
+git rev-list --count origin/main..main   # push 상태
 ```
 
-`374f903`만 HD-M2의 산출물이 아니라 협업 규칙 변경이다. 나머지 아홉이
-milestone의 몫이고, 앞의 넷(`a056948`~`36dbb04`)은 부팅 없이 호스트 검사만으로
-끝난 것들이다.
+읽을 때 알아 둘 것 둘.
+
+- **`374f903`("Hand the build commands to Claude…")만 milestone의 산출물이
+  아니다.** 작업 도중에 합의된 협업 규칙 변경이다.
+- **`a056948`부터 `36dbb04`까지 넷은 부팅 없이 호스트 검사만으로 끝났다.**
+  전원 버튼 판정 · 이벤트 파싱 · 종료 요청 플래그 · 버튼 열기 순서다. 감독
+  루프에 손대기 전에 그만큼을 `zig build test`로 먼저 굳혔다.
 
 `git rev-list --count origin/main..main`으로 push 상태를 확인할 것. 적어 두지
 말고 그때 셀 것.
