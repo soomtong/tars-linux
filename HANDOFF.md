@@ -33,10 +33,11 @@
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. HD-M2가 만든 커밋은 여덟이다.
+`main`, working tree 깨끗함. HD-M2가 만든 커밋은 열이다(plan과 이 문서 포함).
 
 ```
-(이 문서 커밋) Hand off with a machine that answers its own power button
+7ca1d94 Hand off with a machine that answers its own power button
+0d16637 Add the power button chain to the root gate
 d16f733 Prove the machine switches off when the power button is pressed
 e740783 Wait on the power button and the children at the same time
 36dbb04 Open every power button PID 1 can find
@@ -46,6 +47,10 @@ e740783 Wait on the power button and the children at the same time
 a056948 Tell a power button apart from a keyboard that has a power key
 0598d82 Plan the machine that answers its own power button
 ```
+
+`374f903`만 HD-M2의 산출물이 아니라 협업 규칙 변경이다. 나머지 아홉이
+milestone의 몫이고, 앞의 넷(`a056948`~`36dbb04`)은 부팅 없이 호스트 검사만으로
+끝난 것들이다.
 
 `git rev-list --count origin/main..main`으로 push 상태를 확인할 것. 적어 두지
 말고 그때 셀 것.
