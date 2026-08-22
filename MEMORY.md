@@ -12,7 +12,7 @@
 ## 협업 방식 (feedback)
 
 - [Commit delegation](docs/decisions/feedback_commit_delegation.md) — 파일 작성·명령 실행은 사용자, 승인된 뒤의 git commit은 Claude
-- [Execution scope](docs/decisions/feedback_execution_scope.md) — Claude는 build/QEMU/조사 명령을 직접 실행하지 않고 구현 파일도 쓰지 않는다; 확인은 `find`/`Read`로만
+- [Execution scope](docs/decisions/feedback_execution_scope.md) — 2026-08-22부터 build/QEMU/게이트 명령은 **Claude가 직접 실행한다**(그 전에는 금지였다); 구현 파일 편집은 검토 지점이라 사용자에게 남고, 설명 먼저·결과 해석은 그대로
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 단계에서 기술적 선택지를 계속 묻지 말 것; 추천안으로 정해서 진행하되 설명은 그대로 유지
 
 ## 사용자 (user)
