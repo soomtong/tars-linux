@@ -55,6 +55,31 @@ const KEY_POWER: u16 = 116;
 /// 침묵보다는 넉넉한 상한으로 전부 여는 편이 낫다.
 pub const MAX_BUTTONS: usize = 4;
 
+/// evdev가 내놓는 이벤트 하나. include/uapi/linux/input.h:28의
+/// struct input_event와 같은 모양이어야 한다. 64비트에서는 timeval이
+/// 16바이트라 전체가 24바이트다.
+///
+/// terminal은 같은 구조체를 libc 헤더에서 가져오지만
+/// (terminal/src/input.zig:426), init은 libc를 링크하지 않으므로 여기에 손으로
+/// 적는다(docs/decisions/project_zig_c_uapi_rule.md). 손으로 적은 레이아웃이
+/// 틀리면 조용히 엉뚱한 바이트를 읽게 되므로, devices_test가 @sizeOf를
+/// 직접 확인한다.
+///
+/// 필드 이름 @"type"은 C의 것을 그대로 쓴 것이다. type이 Zig에서 원시 타입의
+/// 이름이라 따옴표가 필요하고, terminal 쪽도 같은 모양으로 읽는다.
+pub const Event = extern struct {
+    sec: i64,
+    usec: i64,
+    @"type": u16,
+    code: u16,
+    value: i32,
+};
+
+/// 키를 누른 것. 뗌은 0이고 자동 반복은 2다. 누름만 받는 이유는 한 번의
+/// 누름이 종료를 한 번만 일으켜야 하기 때문이다 — QEMU의 system_powerdown은
+/// 누름과 뗌을 한 쌍으로 보내므로, 안 거르면 한 번이 두 번이 된다.
+const VALUE_PRESS: i32 = 1;
+
 /// sysfs 비트맵 문자열에서 code번 비트가 서 있는지 본다.
 ///
 /// **문자열은 가장 높은 워드가 맨 앞이다.** 커널의 input_print_bitmap이
@@ -236,4 +261,43 @@ pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
     // terminal/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
     // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
     std.debug.print("tars-init: keyboard device {s} ({s})\n", .{ out.slice(), name });
+}
+
+/// 버튼 fd에 쌓인 것을 **전부** 읽어 비우고, 그 안에 전원 버튼 누름이
+/// 있었는지 돌려준다. poll이 "읽을 것이 있다"고 알려 준 뒤에만 부른다.
+///
+/// **다 읽어 비우는 것이 이 함수의 절반이다.** 남겨 두면 다음 poll이 곧바로
+/// 다시 깨어나서 PID 1이 CPU를 태우는 바쁜 루프가 된다 —
+/// terminal/src/main.zig:216이 PTY master의 POLLHUP에서 똑같은 함정을 적어
+/// 두었다.
+///
+/// fd는 O_NONBLOCK으로 열려 있다. 그래서 마지막 read가 EAGAIN으로 돌아오는
+/// 것이 예외가 아니라 이 루프의 정상 종료 경로다.
+pub fn drainButton(fd: i32) bool {
+    var pressed = false;
+    var raw: [@sizeOf(Event) * 16]u8 = undefined;
+
+    while (true) {
+        const rc = linux.read(fd, &raw, raw.len);
+
+        // EAGAIN이 이 루프의 정상 종료 경로다 — fd가 O_NONBLOCK이므로 "다
+        // 읽었다"가 그 errno로 온다. EINTR도 여기서 끝낸다. 남은 것이
+        // 있었다면 다음 poll이 다시 알려 주므로, 시그널 하나 때문에 여기
+        // 머물 이유가 없다.
+        if (failed(rc)) |_| return pressed;
+
+        if (rc == 0) return pressed; // EOF. 장치가 사라진 경우다.
+
+        var off: usize = 0;
+        while (off + @sizeOf(Event) <= rc) : (off += @sizeOf(Event)) {
+            const ev: *align(1) const Event = @ptrCast(&raw[off]);
+            if (ev.@"type" != EV_KEY) continue;
+            if (ev.code != KEY_POWER) continue;
+            if (ev.value == VALUE_PRESS) pressed = true;
+        }
+
+        // 버퍼를 꽉 채워 왔으면 더 남아 있을 수 있다. 덜 채웠으면 그것이 곧
+        // "이번에는 이게 전부"라는 뜻이다.
+        if (rc < raw.len) return pressed;
+    }
 }

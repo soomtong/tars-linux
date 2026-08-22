@@ -76,6 +76,22 @@ fn makeDevice(
     try writeFile(join("{s}/event{d}/device/capabilities/key", .{ root, n }), key);
 }
 
+/// 이벤트 배열을 fd에 그대로 쓴다. 커널이 evdev에 찍는 것과 같은 바이트다.
+fn writeEvents(fd: i32, events: []const devices.Event) !void {
+    const bytes = std.mem.sliceAsBytes(events);
+    var written: usize = 0;
+    while (written < bytes.len) {
+        const n = linux.write(fd, bytes.ptr + written, bytes.len - written);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            std.debug.print("FAIL: write events (errno {d})\n", .{@intFromEnum(e)});
+            return error.WriteFailed;
+        }
+        if (n == 0) return error.WriteFailed;
+        written += n;
+    }
+}
+
 /// config_test·power_test와 같은 모양이다: 호스트 아키텍처 실행 파일이고,
 /// 실패하면 0이 아닌 종료 코드로 끝난다. 체인 스크립트가 셋을 똑같이 다룰
 /// 수 있어야 한다.
@@ -266,4 +282,80 @@ pub fn main() !void {
     }
 
     std.debug.print("devices_test: picked the power button and left the keyboard alone\n", .{});
+
+    // ── 10. 이벤트 바이트 (HD-M2) ─────────────────────────────────────
+    //
+    // 진짜 evdev를 열 수는 없으므로 pipe로 fd를 만들어 같은 바이트를
+    // 흘려 넣는다. 커널이 주는 것과 다른 점은 "이벤트 경계로 잘라 준다"는
+    // 보장이 없다는 것뿐이고, 우리가 24의 배수로 쓰면 그 차이가 없어진다.
+    //
+    // O_NONBLOCK으로 만드는 것이 요점이다. drainButton은 EAGAIN을 "이제
+    // 비었다"로 읽고 루프를 끝내므로, 블로킹 pipe면 그 자리에서 영영 멈춘다.
+    if (@sizeOf(devices.Event) != 24) {
+        std.debug.print("FAIL: input_event is {d} bytes, want 24\n", .{
+            @sizeOf(devices.Event),
+        });
+        return error.WrongEventSize;
+    }
+
+    var pipe_fds: [2]i32 = undefined;
+    if (failed(linux.pipe2(&pipe_fds, .{ .NONBLOCK = true }))) |e| {
+        std.debug.print("FAIL: pipe2 (errno {d})\n", .{@intFromEnum(e)});
+        return error.PipeFailed;
+    }
+    const rd = pipe_fds[0];
+    const wr = pipe_fds[1];
+
+    // 비어 있는 fd는 "안 눌렸다"다. EAGAIN이 예외가 아니라 정상 경로라는
+    // 것을 이 한 줄이 붙박는다.
+    if (devices.drainButton(rd)) {
+        std.debug.print("FAIL: an empty fd reported a press\n", .{});
+        return error.EmptyFdReportedPress;
+    }
+
+    // QEMU의 system_powerdown이 실제로 보내는 모양: 누름 · 동기화 · 뗌 ·
+    // 동기화. 뗌(0)까지 누름으로 세면 한 번의 누름이 두 번이 된다.
+    const press = [_]devices.Event{
+        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 1 },
+        .{ .sec = 0, .usec = 0, .@"type" = 0, .code = 0, .value = 0 },
+        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 0 },
+        .{ .sec = 0, .usec = 0, .@"type" = 0, .code = 0, .value = 0 },
+    };
+    try writeEvents(wr, &press);
+    if (!devices.drainButton(rd)) {
+        std.debug.print("FAIL: a power press was not reported\n", .{});
+        return error.PressNotSeen;
+    }
+    // 앞의 호출이 비웠어야 한다. 안 비우면 poll이 곧바로 다시 깨어나서
+    // PID 1이 CPU를 태우는 바쁜 루프가 된다.
+    if (devices.drainButton(rd)) {
+        std.debug.print("FAIL: the fd still had events after draining\n", .{});
+        return error.FdNotDrained;
+    }
+
+    // 뗌만 온 경우. 누름이 아니므로 종료가 되면 안 된다.
+    const release_only = [_]devices.Event{
+        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 0 },
+    };
+    try writeEvents(wr, &release_only);
+    if (devices.drainButton(rd)) {
+        std.debug.print("FAIL: a key release was reported as a press\n", .{});
+        return error.ReleaseReportedAsPress;
+    }
+
+    // 다른 키가 눌린 경우. 이 fd에는 전원 버튼만 오게 되어 있지만, 코드를
+    // 실제로 본다는 증거를 남긴다.
+    const other_key = [_]devices.Event{
+        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 30, .value = 1 },
+    };
+    try writeEvents(wr, &other_key);
+    if (devices.drainButton(rd)) {
+        std.debug.print("FAIL: KEY_A was reported as a power press\n", .{});
+        return error.WrongKeyReported;
+    }
+
+    _ = linux.close(wr);
+    _ = linux.close(rd);
+
+    std.debug.print("devices_test: only a KEY_POWER press counts, and the fd is drained\n", .{});
 }
