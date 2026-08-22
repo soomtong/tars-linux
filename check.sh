@@ -75,10 +75,25 @@ run_chain() {
 #
 # BF 체인도 PM-M1부터 몇 초 길어진다. 배너 뒤에 감독 루프가 /terminal을
 # 포기하는 것까지 기다리기 때문이다 — 재시작 backoff가 1초라 3초 남짓이다.
+#
+# HD 체인은 하드웨어 탐색과 전원 버튼을 본다. 여섯 체인 중 유일하게 게스트에
+# 한 글자도 타이핑하지 않는다 — 종료 명령이 QEMU monitor의 system_powerdown
+# 으로 오기 때문이다. 디스크도 물지 않는다(전원 버튼은 설정과 무관하다).
+# 회차당 부팅 1회라 총 부팅 횟수는 24회에서 27회가 된다.
+#
+# PM 체인과 나란히 놓으면 자리가 분명해진다. PM은 셸에서 시작하는 종료를,
+# HD는 바깥에서 눌린 버튼으로 시작하는 종료를 본다. 마지막 절반은 같고 첫
+# 절반이 다르다.
+#
+# HD-M2가 감독 루프를 poll 구조로 바꿨다는 것도 여기 적어 둔다. 그 변경은
+# 이 여섯 체인 **전부**가 딛고 선 코드를 건드린 것이라, 앞으로 그 자리를
+# 고치는 사람은 HD 체인 하나만 보아서는 안 된다 — BF의 "started terminal
+# 정확히 3회"와 PM의 "종료 중 되살리지 않는다"가 그 코드의 진짜 계약이다.
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
 run_chain "IP-M2" ./input/check.sh
 run_chain "PM-M1" ./power/check.sh
+run_chain "HD-M2" ./device/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
