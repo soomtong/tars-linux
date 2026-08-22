@@ -1,6 +1,6 @@
 ---
 name: project_kernel_config
-description: "커널 설정 다루는 법 — build.sh가 .config를 복사한 뒤 olddefconfig를 돌리므로 적어 둔 것과 빌드하는 것이 다를 수 있고(HD-M1 이전에 60줄 넘게 달랐다) 그래서 .config는 olddefconfig 출력으로 되접어 고정점으로 유지한다; 되접기가 주석을 지우므로 설명은 기억 파일과 plan에 적는다; 프롬프트가 있는 항목만 '# CONFIG_X is not set'으로 누를 수 있고 프롬프트가 없거나 'if EXPERT'인 것은 우리가 무엇을 적든 되살아난다; 우리 설정이 이미 THERMAL·SUSPEND·EFI·PCC·NET을 끄고 있어서 ACPI의 default y 상당수가 저절로 막힌다; ACPI를 켜면 SERIAL_8250_PNP와 i8042가 PNP 열거로 바뀌고 PCI_MMCONFIG는 QEMU pc 기계에 MCFG가 없어 발동하지 않는다; ACPI가 커널 빌드에 더한 시간은 2.589초이고 루트 게이트는 그것을 15배로 치른다; CONFIG_PRINTK_TIME이 꺼져 있어 부팅 구간을 나눠 잴 수단이 없다"
+description: "커널 설정 다루는 법 — build.sh가 .config를 복사한 뒤 olddefconfig를 돌리므로 적어 둔 것과 빌드하는 것이 다를 수 있고(HD-M1 이전에 60줄 넘게 달랐다) 그래서 .config는 olddefconfig 출력으로 되접어 고정점으로 유지한다; 되접기가 주석을 지우므로 설명은 기억 파일과 plan에 적는다; 프롬프트가 있는 항목만 '# CONFIG_X is not set'으로 누를 수 있고 프롬프트가 없거나 'if EXPERT'인 것은 우리가 무엇을 적든 되살아난다; 우리 설정이 이미 THERMAL·SUSPEND·EFI·PCC·NET을 끄고 있어서 ACPI의 default y 상당수가 저절로 막힌다; ACPI를 켜면 SERIAL_8250_PNP와 i8042가 PNP 열거로 바뀌고 PCI_MMCONFIG는 QEMU pc 기계에 MCFG가 없어 발동하지 않는다; ACPI가 커널 빌드에 더한 시간은 2.589초이고 루트 게이트는 그것을 15배로 치른다; 2026-08-22에 CONFIG_PRINTK_TIME을 켜서 부팅을 갈랐고 커널이 /init에 넘기는 시각이 1.12초(그중 51%가 initrd 압축 해제)이며 부팅 전체가 1.5초 안에 끝나므로 게이트 36분의 근원은 부팅이 아니라 커널 빌드 18회다"
 metadata:
   node_type: memory
   type: project
@@ -102,9 +102,54 @@ ACPI의 실측치는 `50.355초 → 52.944초`, **+2.589초(+5.1%)**였다. 15�
 부하에서 잰 값이다. 숫자의 내역을 모르는 채로 `clean()` 정책을 건드리지
 않는다는 것이 그 미상을 남겨 둔 이유다.
 
-**`CONFIG_PRINTK_TIME`이 꺼져 있어서**(`.config:1951`) 커널 로그에 타임스탬프가
-없고, 그래서 부팅을 구간으로 나눠 잴 수단이 없다. 한 줄이면 앞으로 부팅 시간에
-관한 질문에 답할 수 있게 되므로 켜는 것이 후보다.
+## 부팅은 게이트 시간의 2%가 안 된다 (2026-08-22 `PRINTK_TIME`으로 실측)
+
+위의 "가르지 못했다"를 2026-08-22에 갈랐다. `CONFIG_PRINTK_TIME=y`를 켜서
+커널 줄마다 타임스탬프를 붙이고 나니 경계가 보인다.
+
+```
+[    0.000000] Linux version 6.18.42
+[    0.068969] printk: legacy console [ttyS0] enabled
+[    0.507200] input: AT Translated Set 2 keyboard      ← 마지막 드라이버
+        0.573초가 비어 있다 = initramfs 압축 해제
+[    1.079865] Freeing initrd memory: 15144K
+[    1.119354] Run /init as init process
+```
+
+**커널이 `/init`에 손을 넘기는 시각이 1.12초이고, 그중 51%(0.573초)가
+initrd를 푸는 시간이다.** gzip 15.1MB를 67.7MB로 펼치는 비용이다 — 이월
+숙제인 "`init`을 `ReleaseSafe`로"가 왜 부팅 시간 항목인지가 여기서 처음
+숫자로 보인다. 루트 게이트 27회 부팅에서 이 값은 1.00~1.03초로 일정하다.
+
+사용자 공간도 경계가 잡힌다. `started console shell` 다음에 찍힌 커널 줄이
+`[ 1.455560] tsc: Refined TSC clocksource calibration`이므로, **PID 1이
+마운트하고 설정을 읽고 장치를 찾고 `terminal`과 셸을 띄우기까지가 부팅 시작
+1.46초 안에 끝난다.**
+
+**그러므로 부팅은 게이트 시간의 근원이 아니다.** 27회를 전부 더해도 40초
+남짓이고, 36분 34초의 2%가 안 된다. HD-M1이 "부팅당 비용일 수도 있다"고
+남겨 둔 미상은 부팅 비용이 아니었다. 시간은 **커널 빌드 18회**(53초 × 18 ≈
+16분)와 각 체인이 게스트를 기다리며 도는 `sleep`·폴링·타이핑 지연에 있다.
+`clean()`에서 커널을 빼는 논의는 이제 근거가 확실해졌다.
+
+**`PRINTK_TIME`은 커널 줄에만 붙는다.** `tars-init:`과 `terminal:`은
+`printk`를 거치지 않고 fd 1로 직접 쓰므로 시각이 없다. 우리 코드 내부를
+구간으로 재려면 별도의 수단이 필요하다.
+
+**게이트는 안 깨졌다.** 여섯 체인의 `grep`이 전부 `^` 없는 부분 문자열
+매치이고, 검사 문구의 대부분이 타임스탬프가 안 붙는 우리 쪽 줄이다. 커널
+문구를 보는 넷(`ACPI: button: Power Button` · `reboot: Power down` ·
+`Restarting system` · `Power off not available`)도 줄 중간을 본다. 켠 뒤
+루트 게이트 6체인 3/3을 통과했다(37분 43초 — 직전 36분 34초와의 차이 1분
+9초는 부하와 측정 편차라 가르지 못한다).
+
+**설정을 안 켜고도 켤 수 있다.** `printk_time`은 `#ifdef` 밖에 선언된
+모듈 파라미터이고 권한이 `0644`다(`printk.c:1345-1346`). 즉 커맨드라인의
+`printk.time=1`이나 게스트의 `/sys/module/printk/parameters/time`으로도
+된다. 그런데도 설정을 고른 이유는, 커맨드라인 경로가 체인 여섯의
+`-append`를 전부 고쳐야 하고 실 하드웨어로 나갈 때 빠뜨릴 자리가 되기
+때문이다. `PRINTK_TIME`은 잎 노드라 `olddefconfig`가 한 줄도 더하지 않았고
+되접기가 필요 없었다.
 
 **How to apply:** `kernel/.config`를 고칠 때는 (1) 프롬프트가 있는 항목인지
 Kconfig에서 먼저 확인하고, (2) 빌드한 뒤 `diff kernel/.config
