@@ -970,6 +970,13 @@ Claude가 다음 셋을 확인한다.
 
 **이 개수가 Task 7의 게이트 검사 문구를 확정한다.**
 
+**실측 결과(2026-08-22):** 예상 그대로였다. `event0`이 `Power Button`,
+`event1`이 AT 키보드, `watching 1 power button(s)`. `terminal: opened
+/dev/input/event1`도 같은 번호다. `could not open`은 없었고, `failed to mount
+ext2 at /config (errno 2)`만 나왔는데 이 부팅에 `-drive`를 안 붙였기 때문이라
+정상 경로다. **키보드가 `KEY_POWER`를 갖고 있는데도 개수가 1인 것이 이번에
+정하는 것 1번의 실물 확인이다.**
+
 - [ ] **Step 7: 커밋**
 
 ```bash
@@ -1647,6 +1654,13 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 **시간이 견딜 만한지의 판단은 이 milestone 안에서 `check.sh`를 고치는 것으로
 이어지지 않는다.** design 위험 1번이 정한 대로 `clean()` 정책 변경은 별도로
 논의할 일이다. 판단 결과는 Task 9에서 `HANDOFF.md`에 적는다.
+
+**실측 결과(2026-08-22):** `real 36m34.135s`(`user 119m23s`, `sys 33m50s`).
+여섯 체인 전부 3/3이고 `FAIL`이 하나도 없었다. 증가분은 **5분 4초**로 예상
+범위(3~5분)의 상단이다. HD 체인 한 회차가 1분 41초이고 다른 체인 평균은 2분
+6초다 — 타이핑도 디스크도 없어서 짧다. 늘어난 시간의 대부분은 **커널 빌드 세
+번**(53초 × 3 ≒ 2분 39초)이고, 부팅 세 번은 그에 비하면 작다. `clean()` 정책은
+바꾸지 않았다.
 
 - [ ] **Step 5: 커밋**
 

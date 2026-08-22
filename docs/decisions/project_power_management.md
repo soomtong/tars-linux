@@ -1,6 +1,6 @@
 ---
 name: project_power_management
-description: "게스트 전원 관리 — 2026-08-21 HD-M1에서 ACPI를 켜서 reboot(POWER_OFF)의 HALT 강등이 사라졌고 QEMU가 스스로 끝난다(RESTART는 원래부터 강등되지 않았다); 전원 차단은 CONFIG_ACPI_SLEEP이 아니라 ACPI_SYSTEM_POWER_STATES_SUPPORT에 매달려 있어서 SUSPEND를 끈 채로도 산다; ACPI가 Power Button을 event0에 등록해 키보드가 event1로 밀리는데 HD-M0의 탐색기가 그것을 견딘다; power 게이트 부팅 1의 통과 조건이 로그 문자열이 아니라 QEMU 프로세스의 소멸이고 -no-reboot 때문에 Restarting system 음성 검사가 함께 필요하다; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; 대화형 셸은 SIGTERM을 무시하므로 SIGKILL은 정상 경로이고 게이트는 유예 만료가 아니라 every child is gone을 요구한다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다; 커널의 C_A_D 기본값이 1이라 Ctrl+Alt+Del은 구현 없이도 재부팅을 일으키므로 게이트가 '우리를 거쳤는지'를 따로 봐야 하고, 그 CAD_OFF 호출은 호스트 검사가 reboot(2)에 닿지 않도록 install()과 분리한다"
+description: "게스트 전원 관리 — 2026-08-21 HD-M1에서 ACPI를 켜서 reboot(POWER_OFF)의 HALT 강등이 사라졌고 QEMU가 스스로 끝난다(RESTART는 원래부터 강등되지 않았다); 전원 차단은 CONFIG_ACPI_SLEEP이 아니라 ACPI_SYSTEM_POWER_STATES_SUPPORT에 매달려 있어서 SUSPEND를 끈 채로도 산다; ACPI가 Power Button을 event0에 등록해 키보드가 event1로 밀리는데 HD-M0의 탐색기가 그것을 견딘다; power 게이트 부팅 1의 통과 조건이 로그 문자열이 아니라 QEMU 프로세스의 소멸이고 -no-reboot 때문에 Restarting system 음성 검사가 함께 필요하다; PID 1에게 온 시그널은 핸들러가 없으면 커널이 조용히 버려서 부재가 관측되지 않는다(호스트에서 같은 코드를 돌리면 프로세스 죽음으로 드러난다); SA_RESTART를 켜면 플래그를 세워도 감독 루프가 깨어나지 못한다; bash·zsh는 SIGTERM을 무시하므로 SIGKILL이 정상 경로이지만 fish는 SIGTERM에 죽는다(2026-08-22 HD-M2 실측, 그전에는 셋 다 무시한다고 잘못 적혀 있었다) — 그래서 게이트는 유예 만료를 요구하지도 금지하지도 말고 every child is gone만 요구해야 한다; 종료를 시작하는 경로가 셋(SIGTERM·SIGINT·전원 버튼)이지만 전부 power.request()의 같은 플래그를 지나고 실제 종료는 감독 루프 머리의 take() 한 곳에서만 시작된다; terminal이 죽으면 PTY 안의 셸이 PID 1로 재부모화된다; 커널의 C_A_D 기본값이 1이라 Ctrl+Alt+Del은 구현 없이도 재부팅을 일으키므로 게이트가 '우리를 거쳤는지'를 따로 봐야 하고, 그 CAD_OFF 호출은 호스트 검사가 reboot(2)에 닿지 않도록 install()과 분리한다"
 metadata:
   node_type: memory
   type: project
@@ -20,8 +20,8 @@ PM-M0·PM-M1을 쓸 때 이 자리에는 "ACPI가 없어서 `reboot(POWER_OFF)`�
    찍고(`kernel/reboot.c:711`) `acpi_enter_sleep_state(S5)`로 전원을 끊으므로
    **QEMU가 우리 도움 없이 사라진다.** `Power off not available: System halted
    instead`(`:321`)는 이제 **나오면 안 되는 줄**이다.
-2. QEMU monitor의 `system_powerdown`이 비로소 의미를 갖는다. 다만 아직
-   **받는 쪽이 없다** — 전원 버튼 evdev를 여는 일은 HD-M2의 몫이다.
+2. QEMU monitor의 `system_powerdown`이 비로소 의미를 갖는다. **HD-M2가 받는
+   쪽을 만들었다** — 아래 "종료를 시작하는 경로는 셋이고 자리는 하나다".
 3. `reboot(RESTART)`은 원래부터 강등되지 않았고, ACPI를 켠 뒤에도 그대로다.
    인터럽트 라우팅이 IOAPIC으로 바뀌고 PCI IRQ가 ACPI 링크를 지나게 됐는데도
    `Restarting system`과 재부팅 뒤의 설정 반영이 전부 유지된다(PM 체인 부팅 2).
@@ -67,7 +67,32 @@ tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
 덤으로 알게 된 사실 하나: **`Power Button`은 하나뿐이다.** 설계 단계에서는
 FADT의 고정 하드웨어 버튼(`PWRF`)과 DSDT가 선언한 장치(`PWRB`)가 각각 등록될
 수 있다고 보았는데, QEMU는 고정 하드웨어 쪽만 내놓는다. HD-M2가 "후보를 전부
-연다"를 구현할 때 실제로 열릴 것은 하나다.
+연다"를 구현했고 실제로 열린 것은 하나였다(`watching 1 power button(s)`).
+
+## 종료를 시작하는 경로는 셋이고 자리는 하나다 (2026-08-22 HD-M2)
+
+```
+kill -TERM 1        → SIGTERM → onSignal  ─┐
+Ctrl+Alt+Del        → SIGINT  → onSignal  ─┼→ power.request(action)
+QEMU system_powerdown → ACPI → evdev      ─┘        ↓
+   → PID 1의 poll이 깨어남 → devices.drainButton    pending 플래그
+                                                    ↓
+                          감독 루프 머리의 power.take() → shutdown(action)
+```
+
+버튼을 보고 곧바로 `shutdown()`을 부르지 않는다(design 결정 9). 부를 수도
+있고 코드가 한 줄 줄지만, **종료가 시작되는 자리가 한 곳이어야 나중에
+읽힌다.** 우회 경로에는 루프 머리의 순서 보장(자식을 띄우기 **전에** 종료를
+본다)이 없어서, 종료 중에 자식이 되살아나는 사고의 여지도 생긴다.
+
+`request()`는 원자적 저장 하나뿐이라 시그널 핸들러 안에서 불러도 안전하다.
+그래서 `onSignal`도 그 함수를 그대로 쓰고, "플래그를 세우는 방법"이 코드에 한
+벌만 남는다.
+
+**게이트도 이 셋을 각각 본다.** PM 체인이 앞의 둘을(부팅 1이 SIGTERM, 부팅 2가
+SIGINT), HD 체인이 셋째를 본다. 마지막 절반(`SIGTERM` 살포 → 수거 → `sync` →
+`reboot(2)`)은 셋이 공유하지만, 첫 절반이 서로 다르기 때문에 어느 하나가
+깨져도 나머지가 통과한다.
 
 ### 게이트의 통과 조건이 바뀌었다
 
@@ -104,29 +129,54 @@ FADT의 고정 하드웨어 버튼(`PWRF`)과 DSDT가 선언한 장치(`PWRB`)�
 ## `SA_RESTART`를 켜면 플래그를 세워도 아무 일이 안 일어난다
 
 `sigaction`의 `.flags = 0`은 취향이 아니라 필수다. 감독 루프는 거의 항상
-`waitpid(-1, &status, 0)` 안에 잠들어 있다([[project_init_supervisor]]).
-`SA_RESTART`를 켜면 커널이 그 시스템 콜을 **안에서 자동 재시작**하므로,
-핸들러가 플래그를 세워도 루프 머리로 영영 돌아오지 못한다. 로그도 에러도
-없이 종료가 일어나지 않는 상태다.
+잠들어 있다([[project_init_supervisor]]). `SA_RESTART`를 켜면 커널이 그
+시스템 콜을 **안에서 자동 재시작**하므로, 핸들러가 플래그를 세워도 루프
+머리로 영영 돌아오지 못한다. 로그도 에러도 없이 종료가 일어나지 않는 상태다.
 
-끄면 `waitpid`가 `EINTR`로 깨어나고, `main.zig`에 원래 있던
-`if (e == .INTR) continue;`가 흐름을 루프 머리로 돌려보낸다. **감독 루프의
-기존 코드를 한 줄도 고치지 않고 결선이 끝난 이유가 이것이다.**
+끄면 `EINTR`로 깨어나고, `main.zig`의 `INTR` 분기가 흐름을 루프 머리로
+돌려보낸다. PM-M0에서 **감독 루프의 기존 코드를 한 줄도 고치지 않고 결선이
+끝난 이유가 이것이다.**
+
+**HD-M2가 잠드는 자리를 `waitpid`에서 `poll`로 바꿨는데 이 성질은 그대로다.**
+`poll`도 `SA_RESTART`가 켜져 있으면 커널이 안에서 재시작하므로 같은 이유로
+같은 설정이 필요하고, `if (e != .INTR)` 분기가 같은 자리를 지킨다. PM 체인이
+HD-M2 이후에도 통과한다는 것이 그 확인이다.
 
 그리고 요청 확인은 **자식을 다시 띄우기 전에** 해야 한다. 순서가 뒤집히면
 "안 떠 있는 자식을 띄운다"는 감독 규칙이 방금 죽인 셸을 되살린다.
 `shutdown()`을 `noreturn`으로 둔 것도 같은 사고를 타입으로 막기 위해서다.
 
-## 대화형 셸은 `SIGTERM`을 무시한다 — `SIGKILL`은 정상 경로다
+## bash·zsh는 `SIGTERM`을 무시한다 — `SIGKILL`은 정상 경로다 (fish는 다르다)
 
-POSIX가 그렇게 정해 두었다. 로그인 셸이 지나가는 `kill`에 죽으면 곤란하기
-때문이다. bash·zsh·fish 전부 해당한다.
+대화형 bash와 zsh는 `SIGTERM`을 무시한다. 로그인 셸이 지나가는 `kill`에
+죽으면 곤란하기 때문이다.
 
-그래서 종료 순서에서 1단계(`SIGTERM`)에 죽는 것은 `/terminal`뿐이고, 셸은
-유예가 끝난 뒤 `SIGKILL`로 죽는다. **`grace period expired`는 버그 신호가
-아니라 매번 나오는 줄이다.** 게이트가 그것을 실패로 보면 안 되고, 대신
-마지막에 `every child is gone`이 나오는 것을 요구해야 한다. 유예 뒤에도
-자식이 남아 있으면 `SIGKILL`이 안 먹었다는 뜻이고 그건 진짜 실패다.
+그래서 PM 체인(디스크에 `shell=bash`가 적혀 있다)의 종료 순서에서
+1단계(`SIGTERM`)에 죽는 것은 `/terminal`뿐이고, 셸은 유예가 끝난 뒤
+`SIGKILL`로 죽는다. **`grace period expired`는 버그 신호가 아니라 그 체인에서
+매번 나오는 줄이다.** 게이트가 그것을 실패로 보면 안 되고, 대신 마지막에
+`every child is gone`이 나오는 것을 요구해야 한다. 유예 뒤에도 자식이 남아
+있으면 `SIGKILL`이 안 먹었다는 뜻이고 그건 진짜 실패다.
+
+**fish는 그렇지 않다는 것이 2026-08-22 HD-M2에서 드러났다.** 이 자리에는
+원래 "bash·zsh·fish 전부 해당한다"고 적혀 있었는데, 그때까지 종료를 시키는
+체인이 PM 하나뿐이었고 그 체인은 bash로만 떴다 — **fish로 종료해 본 적이 한
+번도 없었다.** 디스크를 물지 않는 `device/check.sh`가 처음으로 그것을 밟았고,
+로그가 이렇게 나왔다.
+
+```
+tars-init: sent SIGTERM to every process
+tars-init: every child is gone (reaped 3)
+```
+
+`grace period expired`가 없다. 셋(터미널 + 콘솔 fish + PTY 안의 fish)이 전부
+`SIGTERM`에 죽었다는 뜻이다. **그러므로 `grace period expired`도
+`every child is gone`도 어느 한쪽만 정상인 줄이 아니고, 어느 쪽이 나오는지는
+그 부팅의 셸이 무엇이냐에 달렸다.** 게이트에서 유예 만료를 요구하거나 금지하면
+셸을 바꾸는 순간 깨진다.
+
+이것이 살아남은 방식이 교훈이다. 셋을 묶어 "대화형 셸"이라고 부르면서 실제로
+확인한 것은 둘뿐이었고, 그 일반화가 문서에 사실처럼 앉아 있었다.
 
 이것도 [[project_gate_chain_composition]]의 "성공 경로가 둘이면 아무것도
 증명하지 않는다"와 같은 계열이다. 시스템은 어느 쪽이든 멈추므로, 커널의
