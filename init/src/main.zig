@@ -195,11 +195,6 @@ fn monotonicSeconds() isize {
     return ts.sec;
 }
 
-fn sleepOneSecond() void {
-    const req = linux.timespec{ .sec = 1, .nsec = 0 };
-    _ = linux.nanosleep(&req, null);
-}
-
 fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
     const pid = linux.fork();
     if (failed(pid)) |e| {
@@ -238,78 +233,154 @@ fn find(children: []Child, pid: linux.pid_t) ?*Child {
     return null;
 }
 
+/// 감독 루프가 한 바퀴에 잠드는 시간. 이 값이 세 가지를 동시에 정한다.
+///
+///   1. 전원 버튼을 눌렀을 때 최대 지각 — 사람이 못 느낀다.
+///   2. 자식이 죽고 나서 다시 뜰 때까지의 backoff — 예전 sleepOneSecond()가
+///      하던 일을 이제 이 타임아웃이 한다.
+///   3. SIGCHLD 경합의 창 — waitpid(WNOHANG)이 "없다"를 답한 뒤 poll이 잠들기
+///      전까지의 틈에 자식이 죽으면 그 죽음을 알려 줄 것이 아무것도 없다.
+///      SIGCHLD 핸들러를 새로 달면 그 틈이 닫히지만, 그러면 power.zig의
+///      "signal handlers installed (TERM, INT)" 로그와 그것을 grep하는
+///      게이트까지 함께 흔들린다(design 결정 8).
+const POLL_TIMEOUT_MS: i32 = 1000;
+
 /// PID 1의 본체. **절대 반환하지 않는다** — 반환하면 커널이 패닉한다.
-fn supervise(children: []Child, envp: [*:null]const ?[*:0]const u8) noreturn {
+///
+/// buttons가 비어 있어도 이 구조는 그대로 성립한다. fd 0개에 1초 타임아웃인
+/// poll은 그냥 sleep이고, 그것이 design 결정 6의 폴백을 자연스럽게 받쳐 준다.
+fn supervise(
+    children: []Child,
+    buttons: []const i32,
+    envp: [*:null]const ?[*:0]const u8,
+) noreturn {
+    // poll에 넘길 배열. 버튼 fd는 부팅 때 한 번 정해지고 변하지 않으므로
+    // 루프 밖에서 한 번만 채운다. revents만 커널이 매 호출 덮어쓴다.
+    var fds: [devices.MAX_BUTTONS]linux.pollfd = undefined;
+    for (buttons, 0..) |fd, i| {
+        fds[i] = .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 };
+    }
+    const nfds: linux.nfds_t = buttons.len;
+
     while (true) {
         // 자식을 다시 띄우기 **전에** 본다. 순서가 뒤집히면 방금 SIGTERM으로
-        // 죽인 셸을 이 루프가 되살린다. waitpid는 SA_RESTART를 끈 덕분에
-        // EINTR로 깨어나고, 아래의 `if (e == .INTR) continue;`가 그것을 여기로
-        // 돌려보낸다.
+        // 죽인 셸을 이 루프가 되살린다. 시그널로 왔든 버튼으로 왔든 종료가
+        // 시작되는 자리는 여기 하나다(design 결정 9).
         if (power.take()) |action| power.shutdown(action);
 
-        var alive: usize = 0;
         for (children) |*c| {
             if (c.pid < 0 and !c.given_up) start(c, envp);
-            if (c.pid >= 0) alive += 1;
         }
 
-        // 감독 대상이 전부 포기 상태여도 PID 1은 죽으면 안 되고, 재부모화된
-        // 고아를 거둘 의무도 남는다. 그래서 종료하지 않고 쉬면서 돈다.
-        if (alive == 0) {
-            sleepOneSecond();
-            continue;
+        // ── 거둘 것을 전부 거둔다 ────────────────────────────────────
+        //
+        // 이것이 poll보다 **앞**인 것이 backoff를 만든다. 자식이 죽으면 이
+        // 바퀴에서 거두고 곧바로 아래 poll에서 1초를 자므로, 재시작은 다음
+        // 바퀴 머리에서 일어난다. 예전 코드의 sleepOneSecond()가 하던 일을
+        // 순서 하나가 대신한다.
+        while (true) {
+            var status: u32 = 0;
+            const rc = linux.waitpid(-1, &status, linux.W.NOHANG);
+            if (failed(rc)) |e| {
+                if (e == .INTR) continue;
+                // ECHILD는 자식이 하나도 없다는 뜻이고, 감독 대상이 전부
+                // 포기 상태일 때의 정상 경로다.
+                if (e != .CHILD) {
+                    std.debug.print("tars-init: waitpid failed (errno {d})\n", .{
+                        @intFromEnum(e),
+                    });
+                }
+                break;
+            }
+            // 0은 "살아 있고 아직 안 죽었다"이다. 더 거둘 것이 없다.
+            if (rc == 0) break;
+
+            const pid: linux.pid_t = @intCast(rc);
+
+            // -1은 "아무 자식이나"라서 내 자식뿐 아니라 부모를 잃고 PID 1에
+            // 재부모화된 프로세스까지 함께 거둔다. 그것이 PID 1의 의무다.
+            const c = find(children, pid) orelse {
+                std.debug.print("tars-init: reaped orphan pid {d}\n", .{pid});
+                continue;
+            };
+
+            const lived = monotonicSeconds() - c.started_at;
+            c.pid = -1;
+
+            if (linux.W.IFEXITED(status)) {
+                std.debug.print("tars-init: {s} exited (pid {d}, status {d}, lived {d}s)\n", .{
+                    c.kind.name(), pid, linux.W.EXITSTATUS(status), lived,
+                });
+            } else {
+                std.debug.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
+                    c.kind.name(), pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
+                });
+            }
+
+            if (lived < FAST_EXIT_SECONDS) {
+                c.fast_restarts += 1;
+            } else {
+                c.fast_restarts = 0;
+            }
+
+            if (c.fast_restarts >= MAX_FAST_RESTARTS) {
+                c.given_up = true;
+                std.debug.print("tars-init: giving up on {s} after {d} fast exits\n", .{
+                    c.kind.name(), c.fast_restarts,
+                });
+                continue;
+            }
+
+            // "1s"가 여전히 참인 이유는 아래 poll이 그만큼 자기 때문이다.
+            // terminal/check.sh:178이 이 문구를 진단 목록에 갖고 있다.
+            std.debug.print("tars-init: restarting {s} in 1s\n", .{c.kind.name()});
         }
 
-        var status: u32 = 0;
-        const rc = linux.waitpid(-1, &status, 0);
-        if (failed(rc)) |e| {
-            if (e == .INTR) continue;
-            if (e != .CHILD) {
-                std.debug.print("tars-init: waitpid failed (errno {d})\n", .{
+        // ── 유일하게 잠드는 자리 ─────────────────────────────────────
+        //
+        // EINTR로 깨어나 루프 머리로 돌아가는 것이 시그널 경로의 전부다.
+        // power.zig가 SA_RESTART를 켜지 않는 이유가 이 한 줄이며, 켜면
+        // 커널이 이 poll을 안에서 재시작해버려 플래그를 세워도 영영 머리로
+        // 못 돌아온다(PM-M0이 milestone 하나를 써서 얻은 자리다).
+        const ready = linux.poll(&fds, nfds, POLL_TIMEOUT_MS);
+        if (failed(ready)) |e| {
+            if (e != .INTR) {
+                std.debug.print("tars-init: poll failed (errno {d})\n", .{
                     @intFromEnum(e),
                 });
             }
-            sleepOneSecond();
             continue;
         }
-        const pid: linux.pid_t = @intCast(rc);
+        if (ready == 0) continue; // 타임아웃. 흔한 경로다.
 
-        // -1은 "아무 자식이나"라서 내 자식뿐 아니라 부모를 잃고 PID 1에
-        // 재부모화된 프로세스까지 함께 거둔다. 그것이 PID 1의 의무다.
-        const c = find(children, pid) orelse {
-            std.debug.print("tars-init: reaped orphan pid {d}\n", .{pid});
-            continue;
-        };
+        for (fds[0..buttons.len]) |*p| {
+            if (p.revents == 0) continue;
 
-        const lived = monotonicSeconds() - c.started_at;
-        c.pid = -1;
+            // POLLIN이 아니라 POLLERR/POLLHUP으로 깨어났어도 일단 읽어 본다.
+            // 읽지 않고 넘어가면 그 revents가 매 poll마다 다시 서서 PID 1이
+            // CPU를 태우는 바쁜 루프가 되기 때문이다.
+            if (devices.drainButton(p.fd)) {
+                // device/check.sh가 이 줄을 grep한다.
+                std.debug.print("tars-init: power button pressed\n", .{});
+                power.request(.power_off);
+            }
 
-        if (linux.W.IFEXITED(status)) {
-            std.debug.print("tars-init: {s} exited (pid {d}, status {d}, lived {d}s)\n", .{
-                c.kind.name(), pid, linux.W.EXITSTATUS(status), lived,
-            });
-        } else {
-            std.debug.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
-                c.kind.name(), pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
-            });
+            // 읽어도 해결되지 않는 종류로 깨어났으면 이 fd를 목록에서 뺀다.
+            // fd를 음수로 두면 커널이 그 자리를 통째로 건너뛴다(POSIX). 이것이
+            // 없으면 장치가 사라졌을 때 read가 계속 실패하고 revents가 계속
+            // 서서 바쁜 루프가 된다.
+            //
+            // **핫플러그를 지원하는 것이 아니다**(design 비목표). 장치가
+            // 빠졌을 때 PID 1이 CPU를 태우지 않게 하는 것뿐이고, 그러고 나면
+            // 버튼 없이 도는 상태가 된다 — 결정 6이 이미 허용한 상태다.
+            const broken = linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL;
+            if (p.revents & broken != 0) {
+                std.debug.print("tars-init: power button fd {d} went away (revents {d})\n", .{
+                    p.fd, p.revents,
+                });
+                p.fd = -1;
+            }
         }
-
-        if (lived < FAST_EXIT_SECONDS) {
-            c.fast_restarts += 1;
-        } else {
-            c.fast_restarts = 0;
-        }
-
-        if (c.fast_restarts >= MAX_FAST_RESTARTS) {
-            c.given_up = true;
-            std.debug.print("tars-init: giving up on {s} after {d} fast exits\n", .{
-                c.kind.name(), c.fast_restarts,
-            });
-            continue;
-        }
-
-        std.debug.print("tars-init: restarting {s} in 1s\n", .{c.kind.name()});
-        sleepOneSecond();
     }
 }
 
@@ -358,10 +429,6 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
     var button_fds: [devices.MAX_BUTTONS]i32 = undefined;
     const button_count = devices.openPowerButtons(devices.SYS_INPUT, &button_fds);
-    // Task 5가 이 값을 supervise에 넘기면서 이 한 줄을 지운다. 지금은 열어만
-    // 두는 상태이고, 아무도 poll하지 않으므로 무해하다 — 커널의 이벤트 큐가
-    // 차기만 한다.
-    _ = button_count;
 
     // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
     // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
@@ -400,5 +467,5 @@ pub fn main(init: std.process.Init.Minimal) void {
             .argv = .{ shell_path.ptr, null, null, null, null },
         },
     };
-    supervise(&children, envp);
+    supervise(&children, button_fds[0..button_count], envp);
 }
