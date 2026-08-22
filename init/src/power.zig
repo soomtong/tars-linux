@@ -28,6 +28,19 @@ fn onSignal(sig: linux.SIG) callconv(.c) void {
         .INT => .restart,
         else => return,
     };
+    request(action);
+}
+
+/// 시그널이 아닌 경로에서 온 종료 요청을 **같은 자리에** 세운다
+/// (design 결정 9). 전원 버튼을 본 감독 루프가 이것을 부른다.
+///
+/// 버튼을 보고 곧바로 shutdown()을 부르지 않는 이유는, 종료가 시작되는 자리가
+/// 한 곳이어야 나중에 읽히기 때문이다. 시그널로 오든 버튼으로 오든 실제
+/// 종료는 감독 루프 머리의 take()가 시작한다.
+///
+/// 하는 일이 원자적 저장 하나뿐이라 시그널 핸들러 안에서 불러도 안전하다 —
+/// 그래서 onSignal이 이 함수를 그대로 쓴다.
+pub fn request(action: Action) void {
     @atomicStore(u8, &pending, @intFromEnum(action), .seq_cst);
 }
 

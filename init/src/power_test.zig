@@ -68,4 +68,27 @@ pub fn main() !void {
     }
 
     std.debug.print("power_test: SIGINT becomes a pending restart action\n", .{});
+
+    // 6. 시그널을 거치지 않고도 같은 자리에 요청이 선다.
+    //
+    //    전원 버튼이 쓰는 경로다(design 결정 9). 버튼을 보고 곧바로
+    //    shutdown()을 부르지 않는 이유는 종료가 시작되는 자리가 한 곳이어야
+    //    나중에 읽히기 때문이고, 이 검사가 그 한 곳을 붙박는다. take()의
+    //    소비 규칙도 시그널 경로와 같아야 한다.
+    power.request(.power_off);
+
+    const from_button = power.take() orelse {
+        std.debug.print("FAIL: request() did not leave a pending action\n", .{});
+        return error.RequestNotObserved;
+    };
+    if (from_button != .power_off) {
+        std.debug.print("FAIL: request(power_off) recorded {s}\n", .{@tagName(from_button)});
+        return error.WrongAction;
+    }
+    if (power.take() != null) {
+        std.debug.print("FAIL: the requested action was not consumed by take()\n", .{});
+        return error.ActionNotConsumed;
+    }
+
+    std.debug.print("power_test: a button press takes the same road as a signal\n", .{});
 }
