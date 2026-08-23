@@ -46,18 +46,6 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(pty_test);
 
-    const vt_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/vt_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    vt_test_mod.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
-    const vt_test = b.addExecutable(.{
-        .name = "vt_test",
-        .root_module = vt_test_mod,
-    });
-    b.installArtifact(vt_test);
-
     // ── 여기서부터는 게스트가 아니라 **빌드 호스트**가 실행한다 ──────────
     //
     // project_build_host_arch의 4번 규칙: "이 산출물은 누가 실행하는가"를
@@ -69,6 +57,27 @@ pub fn build(b: *std.Build) void {
     //
     // 빈 쿼리 `.{}`가 네이티브다.
     const host_target = b.resolveTargetQuery(.{});
+
+    // vt_test도 호스트에서 돈다. 2026-08-23에 libghostty-vt를 aarch64로
+    // 빌드해 실행되는 것을 확인했다 — 그전까지 "검증된 적이 없다"는 이유로
+    // x86_64에 남겨 두었고, 그래서 **빌드만 되고 아무도 실행하지 않았다.**
+    // simd는 Google Highway를 쓰고 ghostty 자체가 Apple Silicon에서 도는
+    // 프로그램이라 놀랄 일은 아니었다.
+    const ghostty_host_dep = b.dependency("ghostty", .{
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const vt_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/vt_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    vt_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    const vt_test = b.addExecutable(.{
+        .name = "vt_test",
+        .root_module = vt_test_mod,
+    });
+    b.installArtifact(vt_test);
 
     const input_test_mod = b.createModule(.{
         .root_source_file = b.path("src/input_test.zig"),
@@ -84,15 +93,16 @@ pub fn build(b: *std.Build) void {
 
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
-    // 기본 `zig build`와 분리하는 이유는 속도다. 기본 빌드는 x86_64
-    // terminal 본체까지 만드느라 vendor 트리(stb_truetype, libghostty-vt)가
-    // 준비돼 있어야 하지만, 이 step은 input_test 하나만 필요하다.
+    // 기본 `zig build`와 분리하는 이유는 속도다. 기본 빌드는 x86_64 terminal
+    // 본체까지 만드느라 stb_truetype이 필요하고, 이 step은 그것을 건너뛴다.
+    // 다만 TR-M0에서 vt_test가 들어온 뒤로 **libghostty-vt는 이 step에도
+    // 필요하다** — vendor 트리가 없으면(prepare.sh를 안 돌렸으면) 여기서
+    // 막힌다.
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(input_test).step);
+    test_step.dependOn(&b.addRunArtifact(vt_test).step);
 
-    // pty_test와 vt_test는 x86_64로 남겨둔다. 호스트로 옮길 수 없어서다:
-    //   pty_test  — /usr/bin/fish를 exec한다. 그 fish는 게스트용 x86_64다.
-    //   vt_test   — libghostty-vt를 arm64로 빌드해야 하는데 검증된 적이 없다
-    //               (src/simd/ 아래에 벡터 코드가 있다).
-    // 둘 다 지금은 빌드만 되고 아무도 실행하지 않는다는 사실을 여기 적어둔다.
+    // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
+    // 게스트용 x86_64라 호스트로 옮길 수 없다 — **빌드만 되고 아무도
+    // 실행하지 않는다.** vt_test는 TR-M0에서 호스트로 옮겨 이제 돈다.
 }
