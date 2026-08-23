@@ -84,14 +84,12 @@ if [ "$INK_LEFT" -eq 0 ] || [ "$INK_RIGHT" -eq 0 ]; then
 
 ## 현재 브랜치
 
-`main`. **`origin/main`보다 커밋 열둘 이상 앞서 있다.**
+`main`, working tree 깨끗함. **2026-08-23에 `0c1425e`까지 push했으므로
+`origin/main`과 같다.** TR-M1은 저장소 바깥에도 남았다.
 
 ```bash
-git rev-list --count origin/main..main
-git log --oneline origin/main..main
+git rev-list --count origin/main..main     # 0이 나온다
 ```
-
-**push 시점은 아직 사용자와 안 정했다.**
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -332,7 +330,7 @@ feedback 셋과 `project_terminal_rendering`, `project_font_selection`,
    `~/Library/Fonts`를 못 본다.
 4. TR-M2를 고르면 **plan을 그 시점에 새로 쓴다**(`CLAUDE.md`). design 결정
    10~13이 방향이지 plan이 아니다.
-5. **push 시점을 사용자와 정할 것.** `origin/main`보다 열둘 이상 앞서 있다.
+5. **push는 이미 끝났다.** `origin/main`과 같은 자리에서 시작한다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
