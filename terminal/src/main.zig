@@ -182,6 +182,56 @@ fn dumpStyles(
     }
 }
 
+/// 한 프레임에 찍는 ink 줄의 상한. 한글이 화면을 덮은 상태에서 매 프레임
+/// 수백 줄이 쏟아지는 것을 막는다. 게이트가 보는 것은 한 줄 안의 한두
+/// 글자다.
+const INK_DUMP_LIMIT: usize = 8;
+
+/// 폭 2칸 글자가 **정말 두 칸에 걸쳐 찍혔는지**를 프레임버퍼에서 되읽어
+/// 센다.
+///
+/// `style>`/`pixel>`이 색을 두 겹으로 보는 것과 같은 이유다(design 결정 7).
+/// 한글은 **"파서가 폭 2칸으로 셌는가"와 "렌더러가 두 칸을 칠했는가"가 따로
+/// 틀릴 수 있다.** 셀 하나만 보면 그 차이를 못 잡는다 — 글자가 왼쪽 반쪽만
+/// 그려져도 그 셀에는 잉크가 있기 때문이다. 그래서 왼쪽 8픽셀과 오른쪽
+/// 8픽셀을 따로 센다.
+///
+/// **반드시 render() 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의
+/// 픽셀을 읽는다.
+fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) void {
+    var shown: usize = 0;
+    for (cells) |cell| {
+        if (shown >= INK_DUMP_LIMIT) break;
+        // 폭 2칸인 글자만 본다. cell_width는 폰트의 advance에서 온 값이라
+        // "0x7F를 넘으면 넓다"는 짐작보다 정확하다.
+        const glyph = cache.find(cell.codepoint) catch continue;
+        if (glyph.cell_width <= CELL_W) continue;
+
+        const x = GRID_X + @as(u32, cell.col) * CELL_W;
+        const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        // 마지막 칸에 폭 2칸 글자가 있으면 오른쪽 칸이 프레임버퍼 밖이다.
+        // libghostty-vt가 그런 배치를 만들지 않지만, getPixel도 범위 검사를
+        // 하지 않으므로 여기서 막는다.
+        if (x + 2 * CELL_W > fb.width or y + ROW_HEIGHT > fb.height) continue;
+        shown += 1;
+
+        var left: u32 = 0;
+        var right: u32 = 0;
+        var row: u32 = 0;
+        while (row < ROW_HEIGHT) : (row += 1) {
+            var col: u32 = 0;
+            while (col < 2 * CELL_W) : (col += 1) {
+                if (fb.getPixel(x + col, y + row) & 0x00FFFFFF != cell.bg) {
+                    if (col < CELL_W) left += 1 else right += 1;
+                }
+            }
+        }
+        std.debug.print("terminal: ink> {d},{d} U+{X} left={d} right={d}\n", .{
+            cell.row, cell.col, cell.codepoint, left, right,
+        });
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -289,17 +339,12 @@ pub fn main(init: std.process.Init) !void {
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
 
-    // ── TR-M1 Task 3 임시 확인 ────────────────────────────────────────
-    //
-    // 게이트가 셸에 한글을 타이핑하는 것은 Task 5의 일이다. 그때까지
-    // 기다리면 "폰트는 됐는데 화면에 안 나온다"를 맨 마지막에 발견한다.
-    // 파서에 직접 흘려 넣어 렌더링만 먼저 본다. **Task 4에서 지운다.**
-    // "한글" 뒤의 X가 폭 2칸을 눈으로 볼 수 있게 한다.
-    screen.feed("\xed\x95\x9c\xea\xb8\x80X\r\n");
-
     // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
     // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
     var first_frame_timed = false;
+    // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
+    // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
+    var last_glyph_count: usize = 0;
     var key_state: input.State = .{};
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
@@ -366,6 +411,13 @@ pub fn main(init: std.process.Init) !void {
             // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
             // vt.zig의 defaultFg 주석에 있다.
             dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
+            dumpInk(fb, &cache, cells);
+            if (cache.count() != last_glyph_count) {
+                last_glyph_count = cache.count();
+                std.debug.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
+                    last_glyph_count, cache.bitmap_bytes,
+                });
+            }
         }
     }
 
