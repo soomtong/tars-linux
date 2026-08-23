@@ -60,24 +60,36 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   exit 1
 fi
 
-# TERM=xterm이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc
-# 결정 7). 없어도 부팅은 계속되고 셸은 기능을 덜 쓸 뿐이라 **조용한 실패**다 —
-# 부팅해서 알아내는 것보다 여기서 cpio 목록을 보는 편이 싸고 정확하다.
+# TERM이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc 결정 7).
+# 없어도 부팅은 계속되고 셸은 기능을 덜 쓸 뿐이라 **조용한 실패**다 — 부팅해서
+# 알아내는 것보다 여기서 cpio 목록을 보는 편이 싸고 정확하다.
+#
+# **이름을 정확히 본다(TR-M2).** 그전에는 `*terminfo/x/xterm*` 글로브라
+# xterm-256color가 없어도 통과했고, 실제로 TR-M0이 TERM을 바꾼 뒤로 두
+# milestone 동안 그 상태였다. 조용한 실패를 막으려고 만든 검사가 조용히
+# 실패한 자리라, 접두사가 아니라 줄 하나를 통째로 맞춘다.
 #
 # 파이프라인 대신 변수에 담아 case로 보는 이유는 이 스크립트의 pipefail이다.
 # `... | grep -q`는 grep이 첫 매치에서 빠져나가며 앞단 cpio에 SIGPIPE를
 # 일으키고, pipefail이 그것을 파이프라인 실패로 판정한다 — 파일이 있는데도
 # FAIL이 난다.
 INITRD_LIST="$(zcat ../kernel/initrd.cpio | cpio -t 2>/dev/null)"
-case "$INITRD_LIST" in
-  *usr/share/terminfo/x/xterm*) ;;
-  *)
-    echo "FAIL: xterm terminfo is missing from the initrd"
-    echo "      (devcontainer/Dockerfile needs ncurses-base, and"
-    echo "       kernel/make_initrd.sh needs to copy the file)"
-    exit 1
-    ;;
-esac
+# 목록 앞뒤에 줄바꿈을 덧대고 줄 하나를 통째로 맞춘다. `*.../xterm*`이면
+# xterm-256color 줄에도 걸려서 xterm이 없어도 통과한다 — 지금 고치는 것이 바로
+# 그 느슨함이라, 새 검사가 같은 함정에 빠지지 않게 한다. grep -qx로 쓰지 않는
+# 이유는 위 주석과 같다(SIGPIPE + pipefail).
+PADDED_LIST="$(printf '\n%s\n' "$INITRD_LIST")"
+for want in xterm xterm-256color; do
+  case "$PADDED_LIST" in
+    *$'\n'"usr/share/terminfo/x/${want}"$'\n'*) ;;
+    *)
+      echo "FAIL: ${want} terminfo is missing from the initrd"
+      echo "      (devcontainer/Dockerfile needs ncurses-base, and"
+      echo "       kernel/make_initrd.sh needs to copy the file)"
+      exit 1
+      ;;
+  esac
+done
 
 # BF/TF는 45455, CP는 45456. 죽다 만 QEMU에 엉뚱한 키를 보내지 않으려고
 # 체인마다 포트를 나눈다.

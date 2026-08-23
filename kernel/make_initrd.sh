@@ -133,17 +133,27 @@ cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/config.fish" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/__fish_build_paths.fish" "$WORKDIR/usr/share/fish/"
 
-# IP-M1: terminal이 PTY 셸의 TERM을 xterm으로 바꾸므로(design doc 결정 7)
-# 그 terminfo가 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을
-# 덜 쓸 뿐이다 — **조용한 실패**라서 input/check.sh가 initrd 목록을 직접
-# 확인한다.
+# IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
+# 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —
+# **조용한 실패**라서 input/check.sh가 initrd 목록을 직접 확인한다.
 #
-# 디렉터리를 통째로 복사하지 않고 파일 하나(3977B)만 넣는다. ncurses-base의
-# /usr/share/terminfo에는 수백 개가 들어 있고 우리가 광고하는 이름은
-# 하나뿐이다. 시리얼 콘솔 셸이 쓰는 `linux`는 넣지 않는다 — 그쪽은 terminfo
-# 없이도 지금까지 잘 돌아왔고, 넣는 순간 "무엇이 왜 필요한가"가 흐려진다.
+# **TR-M2에서 xterm-256color가 늘었다.** TR-M0이 TERM을 xterm에서
+# xterm-256color로 바꿨는데(TR design 결정 8) 이 줄은 따라오지 않아서, 게스트가
+# 광고하는 이름의 terminfo가 실제로는 없는 상태로 두 milestone을 건너왔다.
+# input/check.sh의 검사가 `*terminfo/x/xterm*` 글로브라 xterm 하나만으로도
+# 통과했다 — **조용한 실패를 막으려고 만든 검사가 조용히 실패한 자리다.**
+#
+# 옛 이름 xterm도 남긴다. 손으로 띄운 셸이 그 이름을 쓸 수 있고, 두 파일을
+# 합쳐도 8KB다.
+#
+# 디렉터리를 통째로 복사하지 않는 이유는 그대로다. ncurses-base의
+# /usr/share/terminfo에는 수백 개가 들어 있고 우리가 광고하는 이름은 하나다.
+# 시리얼 콘솔 셸이 쓰는 `linux`는 넣지 않는다 — 그쪽은 terminfo 없이도 지금까지
+# 잘 돌아왔고, 넣는 순간 "무엇이 왜 필요한가"가 흐려진다.
 mkdir -p "$WORKDIR/usr/share/terminfo/x"
 cp "$SYSROOT/usr/share/terminfo/x/xterm" "$WORKDIR/usr/share/terminfo/x/xterm"
+cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
+  "$WORKDIR/usr/share/terminfo/x/xterm-256color"
 
 # zsh는 바이너리 하나가 아니다. zle(줄 편집), complete, parameter 같은
 # "내장처럼 보이는" 기능 대부분이 실행 중에 dlopen되는 .so 모듈이고, 그것을
