@@ -86,6 +86,7 @@ report_failure() {
     "terminal: pixel>" \
     "terminal: ink>" \
     "terminal: font>" \
+    "terminal: scroll>" \
     "terminal: key>"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
@@ -271,6 +272,172 @@ if [ "$FONT_BYTES" -gt 1048576 ]; then
 fi
 echo "the glyph cache is ${FONT_BYTES} bytes, well inside the guest's memory"
 
+# ── 스크롤백을 만든다 (TR-M2) ──────────────────────────────────────────
+#
+# `seq 200`. 게스트에 seq 바이너리는 없지만 **fish가 seq를 함수로 갖고 있고**
+# (/usr/share/fish/functions/seq.fish, make_initrd.sh가 디렉터리째 복사한다)
+# PATH가 비어 있어도 동작한다. 8타로 끝나는 것도 이유다.
+#
+# 200줄인 이유는 **history가 한 화면(47줄)보다 넉넉히 커야** .top과 page_up이
+# 서로 다른 자리로 가기 때문이다. 60줄이면 한 번의 page_up이 맨 위에 닿아
+# 버려서 두 키를 구분할 수 없다. 1000줄 한도에는 한참 못 미치므로 게이트에서
+# 가지치기가 일어나지 않는다 — 그래야 아래 검사들이 행 번호에 기대도 된다.
+#
+# 화면 내용은 `| 1 |`이 **한 줄 전체**와 일치한다는 성질로 본다. dumpScreen이
+# 행 사이에 " | "를 넣으므로 숫자 하나뿐인 줄은 이 형태로만 나타나고, 10이나
+# 21에는 걸리지 않는다. 첫 행에는 앞쪽 구분자가 없으므로 `screen> 1 |` 형태도
+# 함께 본다.
+echo "=== typing 'seq 200' ==="
+type_keys s e q spc 2 0 0 ret
+sleep 4
+
+# scroll> 줄에서 값 하나를 뽑는다. 아래에서 여러 번 쓰므로 함수로 둔다.
+# **언제나 마지막 줄을 본다** — 이 로그는 매 프레임 찍히므로 마지막 줄이 곧
+# 지금의 상태다.
+scroll_field() {
+  grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | sed -E "s/.*$1=([0-9]+).*/\1/"
+}
+
+# 지금 화면에 밀려난 첫 줄이 있는지 본다. 있으면 0, 없으면 1을 돌려준다.
+#
+# 파이프라인 끝에 `grep -q`를 두지 않고 변수에 담아 case로 보는 이유는 이
+# 스크립트의 pipefail이다. `... | grep -q`는 grep이 첫 매치에서 빠져나가며
+# 앞단에 SIGPIPE를 일으키고, pipefail이 그것을 파이프라인 실패로 판정한다 —
+# input/check.sh가 initrd 목록에서 이미 한 번 데인 함정이다.
+line_one_on_screen() {
+  local last
+  last="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+  case "$last" in
+    *"screen> 1 |"* | *"| 1 |"* | *"| 1") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ── 검사 8: 스크롤백이 쌓였고 지금은 바닥이다 ──────────────────────────
+SCROLL_LINE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1)"
+if [ -z "$SCROLL_LINE" ]; then
+  report_failure "the terminal never reported a scroll position"
+fi
+echo "scroll line: ${SCROLL_LINE}"
+TOTAL="$(scroll_field total)"
+BOTTOM_OFFSET="$(scroll_field offset)"
+LEN="$(scroll_field len)"
+if [ "$((TOTAL - LEN))" -lt "$LEN" ]; then
+  report_failure "only $((TOTAL - LEN)) rows scrolled off, which is less than one screen (${LEN}) -- the scrollback limit may not be in effect"
+fi
+if [ "$BOTTOM_OFFSET" -ne "$((TOTAL - LEN))" ]; then
+  report_failure "the viewport is not at the bottom after output (offset=${BOTTOM_OFFSET}, expected $((TOTAL - LEN)))"
+fi
+echo "$((TOTAL - LEN)) rows of history exist and the viewport sits at the bottom"
+
+# ── 검사 9: 밀려난 줄은 지금 화면에 없다 ───────────────────────────────
+#
+# **이 음성 검사가 없으면 검사 12가 뜻을 잃는다** — 처음부터 화면에 있었다면
+# "스크롤해서 보였다"를 증명하지 못한다.
+if line_one_on_screen; then
+  echo "FAIL: line '1' is still on screen before scrolling"
+  echo "--- the screen ---"
+  grep -a 'terminal: screen>' "$LOG" | tail -n 1
+  report_failure "200 lines did not push the first line off a ${LEN}-row screen"
+fi
+echo "line '1' has scrolled off the screen"
+
+BOTTOM_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+
+# ── 한 화면 올라간다 ───────────────────────────────────────────────────
+#
+# QEMU monitor의 키 이름은 pgup/pgdn/home/end이고 shift- 접두사를 붙인다.
+echo "=== sendkey shift-pgup ==="
+type_keys shift-pgup
+sleep 2
+
+# ── 검사 10: 뷰포트가 정확히 한 화면 올라갔는가 ────────────────────────
+#
+# 정확한 값을 요구하는 이유는 "움직이기만 하면 통과"가 되지 않게 하려는
+# 것이다. rows 대신 1이나 다른 수를 넘기는 실수가 여기서 드러난다.
+UP_OFFSET="$(scroll_field offset)"
+if [ "$UP_OFFSET" -ne "$((BOTTOM_OFFSET - LEN))" ]; then
+  report_failure "shift-pgup moved the viewport to offset=${UP_OFFSET}, expected $((BOTTOM_OFFSET - LEN)) (one screen of ${LEN} rows)"
+fi
+echo "the viewport moved up exactly one screen (offset ${BOTTOM_OFFSET} -> ${UP_OFFSET})"
+
+# ── 검사 11: 화면도 함께 바뀌었는가 ────────────────────────────────────
+#
+# **위치 숫자만 보면 뷰포트는 움직였는데 화면은 그대로인 상태를 못 잡는다.**
+# 렌더를 키 쪽으로 열지 않았을 때가 정확히 그 상태다(TR-M2의 구조 변경).
+UP_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+if [ "$UP_SCREEN" = "$BOTTOM_SCREEN" ]; then
+  echo "FAIL: the viewport moved but the screen dump is identical"
+  echo "--- the screen ---"
+  echo "$UP_SCREEN"
+  report_failure "the renderer did not follow the viewport, so nothing was redrawn on a key"
+fi
+echo "the rendered frame followed the viewport"
+
+# ── 맨 위로 간다 ───────────────────────────────────────────────────────
+echo "=== sendkey shift-home ==="
+type_keys shift-home
+sleep 2
+
+# ── 검사 12: 맨 위에서 밀려났던 줄이 보이는가 ──────────────────────────
+#
+# **이 체인에서 TR-M2가 더하는 가장 값진 검사다.** 위치와 내용을 한 번에
+# 본다 — offset이 0이고, 검사 9에서 없다고 확인한 바로 그 줄이 화면에 있다.
+TOP_OFFSET="$(scroll_field offset)"
+if [ "$TOP_OFFSET" -ne 0 ]; then
+  report_failure "shift-home left the viewport at offset=${TOP_OFFSET}, expected 0"
+fi
+if ! line_one_on_screen; then
+  echo "FAIL: at the top of the scrollback but line '1' is not on screen"
+  echo "--- the screen ---"
+  grep -a 'terminal: screen>' "$LOG" | tail -n 1
+  report_failure "the viewport reached the top but the scrollback did not hold the first line"
+fi
+echo "at the top of the scrollback, the line that had scrolled off is on screen"
+
+# ── 맨 아래로 돌아온다 ─────────────────────────────────────────────────
+echo "=== sendkey shift-end ==="
+type_keys shift-end
+sleep 2
+
+# ── 검사 13: 바닥으로 돌아왔는가 ───────────────────────────────────────
+END_OFFSET="$(scroll_field offset)"
+if [ "$END_OFFSET" -ne "$((TOTAL - LEN))" ]; then
+  report_failure "shift-end left the viewport at offset=${END_OFFSET}, expected $((TOTAL - LEN))"
+fi
+if line_one_on_screen; then
+  report_failure "back at the bottom but line '1' is still on screen"
+fi
+echo "shift-end brought the viewport back to the bottom"
+
+# ── 출력이 오면 저절로 내려온다 (design 결정 13) ───────────────────────
+#
+# 올라간 상태에서 글자 하나를 친다. 셸이 그것을 되울려 보내므로 PTY 출력이
+# 도착하고, 그때 우리가 scrollToBottom()을 불러야 한다. **라이브러리는 이
+# 일을 해 주지 않는다** — vt_test가 호스트에서 그 사실을 못 박고 있고,
+# 여기서는 우리 코드가 그것을 메웠는지를 본다.
+echo "=== sendkey shift-pgup, then a plain key ==="
+type_keys shift-pgup
+sleep 2
+AWAY_OFFSET="$(scroll_field offset)"
+if [ "$AWAY_OFFSET" -eq "$((TOTAL - LEN))" ]; then
+  report_failure "could not scroll away from the bottom before testing the snap-back"
+fi
+type_keys x
+sleep 2
+
+# ── 검사 14: 새 출력이 뷰포트를 바닥으로 데려왔는가 ────────────────────
+SNAP_OFFSET="$(scroll_field offset)"
+SNAP_TOTAL="$(scroll_field total)"
+if [ "$SNAP_OFFSET" -ne "$((SNAP_TOTAL - LEN))" ]; then
+  report_failure "output arrived while scrolled up (offset=${AWAY_OFFSET}) but the viewport stayed at offset=${SNAP_OFFSET} instead of $((SNAP_TOTAL - LEN))"
+fi
+echo "output snapped the viewport back to the bottom (offset ${AWAY_OFFSET} -> ${SNAP_OFFSET})"
+
+# 친 글자를 지운다. 뒤에 오는 음성 검사들이 깨끗한 화면을 보게 한다.
+type_keys backspace
+sleep 1
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로
@@ -298,4 +465,6 @@ echo "--- style/pixel lines ---"
 grep -aE 'terminal: (style|pixel)>' "$LOG" | tail -n 20
 echo "--- ink lines ---"
 grep -a 'terminal: ink>' "$LOG" | tail -n 10
-echo "TR-M1 PASS: colors reach the framebuffer and Hangul covers both of its cells"
+echo "--- scroll lines ---"
+grep -a 'terminal: scroll>' "$LOG" | tail -n 10
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, and the viewport scrolls and comes back"
