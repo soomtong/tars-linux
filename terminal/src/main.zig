@@ -19,7 +19,8 @@ extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int
 const MARGIN_COLOR: u32 = 0x00102030;
 const GRID_X: u32 = 20;
 const GRID_Y: u32 = 20;
-const CELL_W: u32 = 8; // 8x4x4-fonts의 라틴 글리프 폭(font.zig:19-22 참고)
+const CELL_W: u32 = 8; // 8x4x4-fonts의 라틴 advance. 폰트가 준 값과 같아야
+                       // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
 const ROW_HEIGHT: u32 = 16;
 
 /// 한 셀의 배경을 칠한다. 글리프보다 **먼저** 전부 칠해야 한다
@@ -35,19 +36,40 @@ fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
     }
 }
 
-/// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4). 8x4x4 폰트를
-/// 자기 native 크기인 16px로 굽는 것이라 coverage가 이미 거의 이분값이고,
-/// 무엇보다 **문턱값이어야 게이트의 픽셀 검사가 정확한 상수와 비교할 수
-/// 있다.** 블렌딩하면 기대 픽셀 값이 래스터라이저의 안티앨리어싱에 매달린다.
+/// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4).
+///
+/// TR-M1에서 이 선택의 근거가 짐작에서 실측으로 바뀌었다. 이 폰트의
+/// coverage는 **0 아니면 255뿐이고 그 사이 값이 하나도 없다.** 16px가
+/// 8x4x4의 native 크기라 안티앨리어싱이 아예 일어나지 않는다. 그래서
+/// 게이트의 픽셀 검사가 정확한 상수와 비교할 수 있다.
+///
+/// **글리프의 오프셋을 반영한다.** stb가 주는 비트맵은 글자를 감싸는 최소
+/// 사각형이라, 셀 모서리에 그대로 찍으면 'A'와 'g'의 baseline이 어긋나고
+/// 한글이 라틴보다 위로 솟는다. `Glyph`가 들고 있는 두 오프셋은 굽는
+/// 자리에서 이미 셀 기준으로 바뀌어 있으므로 여기서는 더하기만 한다.
+///
+/// **좌표를 부호 있는 수로 계산하고 범위를 검사한다.** `setPixel`이 검사를
+/// 하지 않기 때문이다(`drm.zig:128`) — 프레임버퍼 밖에 쓰면 mmap 영역을
+/// 넘어 게스트가 죽는다. font_test가 "한글 11172자가 전부 셀 안에 들어간다"를
+/// 단언하지만, 그것은 이 폰트에 대한 사실이지 코드의 성질이 아니다.
 fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32) void {
     const bitmap = glyph.bitmap orelse return;
+    const origin_x = @as(i32, @intCast(x)) + glyph.x_offset;
+    const origin_y = @as(i32, @intCast(y)) + glyph.y_offset;
+    const limit_x = @as(i32, @intCast(fb.width));
+    const limit_y = @as(i32, @intCast(fb.height));
+
     var row: u32 = 0;
     while (row < glyph.height) : (row += 1) {
+        const py = origin_y + @as(i32, @intCast(row));
+        if (py < 0 or py >= limit_y) continue;
         var col: u32 = 0;
         while (col < glyph.width) : (col += 1) {
+            const px = origin_x + @as(i32, @intCast(col));
+            if (px < 0 or px >= limit_x) continue;
             const coverage = bitmap[row * glyph.width + col];
             if (coverage > 127) {
-                fb.setPixel(x + col, y + row, color);
+                fb.setPixel(@intCast(px), @intCast(py), color);
             }
         }
     }
@@ -58,7 +80,10 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
 ///
 /// **두 벌로 나눠 그린다**(design 결정 6). 배경을 전부 칠하고 나서 글리프를
 /// 전부 그린다. 섞으면 다음 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
-fn render(fb: drm.Framebuffer, cache: font.GlyphCache, cells: []const vt.CellGlyph) !void {
+/// `cache`가 `*font.Cache`인 이유는 TR-M1부터 **그리는 도중에 글자를 굽기
+/// 때문이다.** 캐시에 없는 글자가 화면에 나타나면 그 자리에서 래스터라이징이
+/// 일어난다 — 한 자당 밀리초 이하이고 같은 글자는 한 번뿐이다.
+fn render(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) !void {
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
 
@@ -73,11 +98,13 @@ fn render(fb: drm.Framebuffer, cache: font.GlyphCache, cells: []const vt.CellGly
     }
 
     for (cells) |cell| {
+        // 빈 셀은 배경만 칠하고 끝난다. 캐시에 codepoint 0을 넣지 않기
+        // 위해서이기도 하다 — 커서 자리와 색 띠가 전부 이쪽이라 흔하다.
+        if (cell.codepoint == 0) continue;
         const x = GRID_X + @as(u32, cell.col) * CELL_W;
         const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
-        if (font.find(cache, cell.codepoint)) |glyph| {
-            drawGlyph(fb, glyph, x, y, cell.fg);
-        }
+        const glyph = try cache.find(cell.codepoint);
+        drawGlyph(fb, glyph, x, y, cell.fg);
     }
 
     try fb.present();
@@ -176,12 +203,17 @@ pub fn main(init: std.process.Init) !void {
         .unlimited,
     );
 
-    // 사용자가 아무 키나 칠 수 있으므로 출력 가능한 ASCII 전체를 미리
-    // 래스터라이징한다(0x20 ' ' ~ 0x7E '~', 95자).
-    var codepoints: [95]u32 = undefined;
-    for (&codepoints, 0..) |*cp, i| cp.* = @intCast(0x20 + i);
-    const cache = try font.build(allocator, font_data, &codepoints);
-    std.debug.print("terminal: rasterized {d} glyphs\n", .{codepoints.len});
+    // 미리 굽지 않는다. 처음 쓸 때 굽는 캐시가 대신한다(design의 TR-M1 절).
+    //
+    // 이 폰트에 완성형 한글 11172자가 전부 들어 있어서 미리 굽기가 성립하지
+    // 않는다 — 전부 구우면 비트맵만 2.06MB이고, 컨테이너에서도 29밀리초가
+    // 드는 일을 TCG 에뮬레이션 게스트가 부팅 때마다 할 이유가 없다.
+    //
+    // font_data를 free하지 않는다. stb_truetype이 그 바이트를 복사하지 않고
+    // 참조만 하므로 캐시보다 오래 살아야 한다.
+    var cache = try font.Cache.init(allocator, font_data);
+    defer cache.deinit();
+    std.debug.print("terminal: font cache ready (lazy)\n", .{});
 
     // 다섯째 인자가 키보드 장치 경로다(HD-M0). 번호를 여기서 고르지 않는
     // 이유는 CP가 세운 규칙 그대로다 — 하드웨어를 살펴 고르는 일은 PID 1이
@@ -257,6 +289,14 @@ pub fn main(init: std.process.Init) !void {
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
 
+    // ── TR-M1 Task 3 임시 확인 ────────────────────────────────────────
+    //
+    // 게이트가 셸에 한글을 타이핑하는 것은 Task 5의 일이다. 그때까지
+    // 기다리면 "폰트는 됐는데 화면에 안 나온다"를 맨 마지막에 발견한다.
+    // 파서에 직접 흘려 넣어 렌더링만 먼저 본다. **Task 4에서 지운다.**
+    // "한글" 뒤의 X가 폭 2칸을 눈으로 볼 수 있게 한다.
+    screen.feed("\xed\x95\x9c\xea\xb8\x80X\r\n");
+
     // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
     // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
     var first_frame_timed = false;
@@ -313,7 +353,7 @@ pub fn main(init: std.process.Init) !void {
             screen.feed(out);
             const cells = try screen.cells(cell_buf);
             const frame_start = std.Io.Clock.now(.awake, init.io);
-            try render(fb, cache, cells);
+            try render(fb, &cache, cells);
             if (!first_frame_timed) {
                 first_frame_timed = true;
                 std.debug.print("terminal: render> first frame {d}us\n", .{
