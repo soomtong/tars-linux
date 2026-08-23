@@ -64,6 +64,22 @@ pub const Screen = struct {
             .term = try .init(io, alloc, .{
                 .cols = cols,
                 .rows = rows,
+                // 스크롤백 한도(design 결정 10). **두 값을 함께 줘야 한다.**
+                //
+                // 결정 10은 max_scrollback_lines만 말했는데, 그것만 주면
+                // 아무것도 바뀌지 않는다 — 기본 max_scrollback_bytes(10,000)가
+                // 먼저 걸려서 155x47 격자에서 history가 454줄에 멈춘다
+                // (2026-08-23 실측). 효력 있는 한도는 `max(준 값, 활성 영역을
+                // 담을 최소값)`이라(PageList.Limits.max) 10,000바이트는 처음부터
+                // 무시되고 있었다.
+                //
+                // 바이트가 아니라 줄로 세는 이유는 그것이 사람이 생각하는
+                // 단위이고, 게이트가 "N줄 찍고 올라가서 첫 줄을 본다"로
+                // 검사하기 쉽기 때문이다. 실제로 남는 history는 754~1000줄을
+                // 오간다 — 가지치기가 페이지 통째로 일어나기 때문이고,
+                // 1.15MB라 128MB 게스트가 감당한다.
+                .max_scrollback_bytes = null,
+                .max_scrollback_lines = 1000,
                 .colors = .{
                     .background = .init(.{ .r = 0x10, .g = 0x20, .b = 0x30 }),
                     .foreground = .init(.{ .r = 0xFF, .g = 0xFF, .b = 0xFF }),
@@ -185,5 +201,48 @@ pub const Screen = struct {
 
     pub fn defaultBg(self: *const Screen) u32 {
         return packRgb(self.state.colors.background);
+    }
+
+    /// 뷰포트가 스크롤백의 어디에 있는지.
+    ///
+    /// `total`은 스크롤 가능한 전체 행 수, `offset`은 뷰포트 맨 윗줄이 그중
+    /// 몇 번째인가, `len`은 언제나 `rows`다. **"바닥에 있다"는
+    /// `offset == total - len`이다.**
+    ///
+    /// 라이브러리 타입을 그대로 흘려보내지 않고 우리 struct로 옮겨 담는
+    /// 이유는 TR-M0이 색에 대해 한 것과 같다(design 결정 1) — `main.zig`가
+    /// `ghostty-vt`의 타입을 배우지 않게 한다.
+    pub const Scrollbar = struct {
+        total: usize,
+        offset: usize,
+        len: usize,
+    };
+
+    pub fn scrollbar(self: *Screen) Scrollbar {
+        const sb = self.term.screens.active.pages.scrollbar();
+        return .{ .total = sb.total, .offset = sb.offset, .len = sb.len };
+    }
+
+    /// 스크롤백의 맨 위로.
+    pub fn scrollToTop(self: *Screen) void {
+        self.term.scrollViewport(.top);
+    }
+
+    /// 활성 영역의 맨 위로 = 평소 상태로.
+    ///
+    /// **PTY 출력이 도착할 때마다 불러야 한다**(design 결정 13). 라이브러리는
+    /// 그 일을 해 주지 않는다 — 올라간 상태에서 출력을 먹여도 뷰포트가
+    /// 그대로라는 것을 2026-08-23에 실측했고, `vt_test`가 그 사실을 못 박고
+    /// 있다.
+    pub fn scrollToBottom(self: *Screen) void {
+        self.term.scrollViewport(.bottom);
+    }
+
+    /// 상대 이동. **위가 음수다.**
+    ///
+    /// 몇 줄이 한 화면인지는 여기서 정하지 않는다. 격자 크기를 아는 것은
+    /// `main.zig`이고, 그쪽이 `rows`를 넘겨준다.
+    pub fn scrollByRows(self: *Screen, delta: isize) void {
+        self.term.scrollViewport(.{ .delta = delta });
     }
 };

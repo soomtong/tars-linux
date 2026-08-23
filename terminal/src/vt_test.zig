@@ -1,6 +1,22 @@
 const std = @import("std");
 const vt = @import("vt.zig");
 
+/// 한 행의 글자만 이어 붙인다. "화면이 정말 달라졌는가"를 비교하는 데 쓴다.
+///
+/// 위치 숫자(`scrollbar()`)만 보면 **뷰포트는 움직였는데 화면은 그대로인**
+/// 상태를 못 잡는다. 그것이 정확히 `cells()`가 뷰포트를 안 따라갈 때의
+/// 증상이라 여기서 따로 본다.
+fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
+    var n: usize = 0;
+    for (cells) |cell| {
+        if (cell.row != row) continue;
+        if (cell.codepoint == 0) continue;
+        const len = std.unicode.utf8Encode(@intCast(cell.codepoint), buf[n..]) catch continue;
+        n += len;
+    }
+    return buf[0..n];
+}
+
 pub fn main(init: std.process.Init) !void {
     const screen = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer screen.deinit();
@@ -125,6 +141,147 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: 커서 자리(row=0,col=2) 셀이 결과에 없다\n", .{});
         return error.CursorCellMissing;
     }
+
+    // ── TR-M2: 스크롤백 ───────────────────────────────────────────────
+    //
+    // 격자를 155x47로 잡는 이유는 **게이트가 실제로 쓰는 크기**이기 때문이다
+    // (프레임버퍼 1280x800, 여백 20, 셀 8x16). 가지치기가 페이지 통째로
+    // 일어나므로 한 페이지에 몇 줄이 들어가는지가 cols에 달려 있고, 다른
+    // 크기로 재면 아래 단언의 여유폭이 뜻을 잃는다.
+    const big = try vt.Screen.init(init.io, init.gpa, 155, 47);
+    defer big.deinit();
+
+    var line: [32]u8 = undefined;
+    var fed: usize = 1;
+    while (fed <= 2000) : (fed += 1) {
+        big.feed(std.fmt.bufPrint(&line, "L{d}\r\n", .{fed}) catch unreachable);
+    }
+
+    var big_buf: [155 * 47]vt.CellGlyph = undefined;
+    var text_a: [512]u8 = undefined;
+    var text_b: [512]u8 = undefined;
+
+    // ── 1. 한도가 정말 효력을 갖는가 ──────────────────────────────────
+    //
+    // **design 결정 10이 말한 max_scrollback_lines만으로는 아무 일도
+    // 일어나지 않는다.** 기본 max_scrollback_bytes(10,000)가 먼저 걸려서
+    // history가 454줄에서 멈춘다 — 2026-08-23에 실측한 값이다. 아래쪽 경계
+    // 700이 그 옛 동작을 막는 자리다.
+    //
+    // 754가 1000이 아닌 것은 정상이다. 가지치기가 페이지 통째로 일어나고
+    // (155칸에서 한 페이지가 약 286줄), 1000을 넘는 순간 한 페이지가 통째로
+    // 사라져 754로 떨어진다.
+    const filled = big.scrollbar();
+    const history = filled.total - filled.len;
+    std.debug.print("vt_test: history={d} rows (total={d} offset={d} len={d})\n", .{
+        history, filled.total, filled.offset, filled.len,
+    });
+    if (history <= 700 or history > 1000) {
+        std.debug.print("FAIL: history {d} rows is outside 700..1000\n", .{history});
+        return error.ScrollbackLimitWrong;
+    }
+    std.debug.print("vt_test: 스크롤백 한도가 효력을 갖는다 OK\n", .{});
+
+    // ── 2. 새 출력 뒤에는 바닥에 있다 ─────────────────────────────────
+    //
+    // "바닥"의 정의를 여기서 못 박는다. 아래 검사들과 게이트가 전부 이
+    // 식(offset == total - len)을 쓴다.
+    if (filled.offset != filled.total - filled.len) {
+        std.debug.print("FAIL: 먹인 직후인데 바닥이 아니다 (offset={d}, expected {d})\n", .{
+            filled.offset, filled.total - filled.len,
+        });
+        return error.NotAtBottom;
+    }
+    std.debug.print("vt_test: 먹인 직후에는 바닥에 있다 OK\n", .{});
+
+    // ── 3. .top이 뷰포트를 옮기고 cells()가 따라간다 ──────────────────
+    //
+    // 위치와 화면을 **따로** 본다. offset만 보면 뷰포트는 움직였는데
+    // cells()가 옛 자리를 그대로 읽는 상태를 못 잡는다.
+    const at_bottom = try big.cells(&big_buf);
+    const bottom_row0 = rowText(at_bottom, 0, &text_a);
+
+    big.scrollToTop();
+    const at_top_sb = big.scrollbar();
+    if (at_top_sb.offset != 0) {
+        std.debug.print("FAIL: .top 뒤에 offset={d} (expected 0)\n", .{at_top_sb.offset});
+        return error.TopDidNotScroll;
+    }
+    const at_top = try big.cells(&big_buf);
+    const top_row0 = rowText(at_top, 0, &text_b);
+    if (std.mem.eql(u8, top_row0, bottom_row0)) {
+        std.debug.print("FAIL: offset은 0인데 화면 첫 줄이 그대로다 ('{s}')\n", .{top_row0});
+        return error.CellsDidNotFollowViewport;
+    }
+    std.debug.print("vt_test: .top이 뷰포트를 옮기고 cells()가 따라간다 OK ('{s}' -> '{s}')\n", .{
+        bottom_row0, top_row0,
+    });
+
+    // ── 4. .bottom과 delta ────────────────────────────────────────────
+    big.scrollToBottom();
+    const back = big.scrollbar();
+    if (back.offset != back.total - back.len) {
+        std.debug.print("FAIL: .bottom 뒤에 offset={d} (expected {d})\n", .{
+            back.offset, back.total - back.len,
+        });
+        return error.BottomDidNotScroll;
+    }
+    big.scrollByRows(-47);
+    const up = big.scrollbar();
+    if (up.offset != back.offset - 47) {
+        std.debug.print("FAIL: delta -47 뒤에 offset={d} (expected {d})\n", .{
+            up.offset, back.offset - 47,
+        });
+        return error.DeltaDidNotScroll;
+    }
+    std.debug.print("vt_test: .bottom과 delta가 정확히 움직인다 OK\n", .{});
+
+    // ── 5. 새 출력은 뷰포트를 **안** 내린다 (design 결정 13의 근거) ────
+    //
+    // 이 단언이 통과한다는 것은 라이브러리가 그 일을 해 주지 않는다는 뜻이고,
+    // 그래서 main.zig가 feed 직후에 scrollToBottom()을 불러야 한다. 여기가
+    // 뒤집히면(라이브러리가 저절로 내려오면) 결정 13의 코드는 필요 없어지므로,
+    // 그때는 plan을 다시 읽어야 한다.
+    //
+    // 200줄만 먹인 새 화면을 쓰는 이유는 위 big이 이미 한도에 걸려 있어서다.
+    // 한도에 걸린 상태로 더 먹이면 가지치기가 일어나 행 번호 자체가 밀리고,
+    // 그러면 이 검사가 무엇을 보는지 흐려진다.
+    const fresh = try vt.Screen.init(init.io, init.gpa, 155, 47);
+    defer fresh.deinit();
+    var more: usize = 1;
+    while (more <= 200) : (more += 1) {
+        fresh.feed(std.fmt.bufPrint(&line, "M{d}\r\n", .{more}) catch unreachable);
+    }
+    fresh.scrollByRows(-47);
+    const before_feed = fresh.scrollbar();
+    const before_cells = try fresh.cells(&big_buf);
+    const before_row0 = rowText(before_cells, 0, &text_a);
+
+    fresh.feed("NEW\r\nNEW\r\nNEW\r\n");
+    const after_cells = try fresh.cells(&big_buf);
+    const after_row0 = rowText(after_cells, 0, &text_b);
+    if (!std.mem.eql(u8, before_row0, after_row0)) {
+        std.debug.print(
+            "FAIL: 새 출력이 뷰포트를 저절로 내렸다 ('{s}' -> '{s}'). 결정 13을 다시 볼 것\n",
+            .{ before_row0, after_row0 },
+        );
+        return error.ViewportMovedByItself;
+    }
+    std.debug.print(
+        "vt_test: 새 출력은 뷰포트를 안 내린다 OK (offset={d}에서 '{s}' 그대로)\n",
+        .{ before_feed.offset, after_row0 },
+    );
+
+    // 그리고 우리가 부르면 내려온다.
+    fresh.scrollToBottom();
+    const snapped = fresh.scrollbar();
+    if (snapped.offset != snapped.total - snapped.len) {
+        std.debug.print("FAIL: scrollToBottom 뒤에 offset={d} (expected {d})\n", .{
+            snapped.offset, snapped.total - snapped.len,
+        });
+        return error.SnapFailed;
+    }
+    std.debug.print("vt_test: 우리가 부르면 바닥으로 돌아온다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
