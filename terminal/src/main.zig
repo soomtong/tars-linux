@@ -237,6 +237,24 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
     }
 }
 
+/// 뷰포트가 스크롤백의 어디에 있는지를 찍는다.
+///
+/// **게이트가 스크롤 위치를 볼 수 있는 유일한 창구다.** 화면 덤프만으로는
+/// "올라갔다"와 "출력이 달라졌다"를 가를 수 없다 — 같은 글자가 두 번 나오는
+/// 화면이면 둘이 구분되지 않는다. 거꾸로 이 줄만 보면 **뷰포트는 움직였는데
+/// 화면은 그대로인** 상태를 못 잡으므로, 게이트는 둘을 나란히 본다.
+/// `style>`/`pixel>`이 색을 두 겹으로 보는 것과 같은 구조다(design 결정 7).
+///
+/// **매 프레임 찍는다.** `font>`처럼 "바뀌었을 때만"으로 하면 게이트가
+/// `tail -n 1`로 현재 상태를 읽을 수 없어진다 — "바닥에 그대로 있다"도
+/// 검사해야 하는 사실이다(design 결정 13).
+fn dumpScroll(screen: *vt.Screen) void {
+    const sb = screen.scrollbar();
+    std.debug.print("terminal: scroll> total={d} offset={d} len={d}\n", .{
+        sb.total, sb.offset, sb.len,
+    });
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -351,6 +369,9 @@ pub fn main(init: std.process.Init) !void {
     // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     var last_glyph_count: usize = 0;
+    // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 **안에만** 있었다 —
+    // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
+    var needs_redraw = false;
     var key_state: input.State = .{};
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
@@ -377,16 +398,31 @@ pub fn main(init: std.process.Init) !void {
                 // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
                 .swap_alt_meta = swap_alt_meta,
             };
-            const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
-            if (bytes.len > 0) {
+            const keys = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
+            if (keys.bytes.len > 0) {
                 // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
                 // 마커라 **그대로 둔다**. 뒤에 decckm을 덧붙이는 이유는
                 // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
                 // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
                 std.debug.print("terminal: key> {d} byte(s) decckm={}\n", .{
-                    bytes.len, ctx.cursor_keys,
+                    keys.bytes.len, ctx.cursor_keys,
                 });
-                pty.write(session.master_fd, bytes);
+                pty.write(session.master_fd, keys.bytes);
+            }
+            // 스크롤은 PTY로 나가지 않는다(design 결정 11). **한 화면이 몇
+            // 줄인지를 아는 것은 여기뿐이라**, page_up/page_down을 rows 만큼의
+            // delta로 바꾸는 것도 여기서 한다 — input.zig는 격자 크기를 모른다.
+            //
+            // 순서대로 도는 이유는 자동 반복 때문이다. PageUp을 누르고 있으면
+            // 한 번의 read에 여러 개가 실려 오고, 그만큼 올라가야 한다.
+            for (keys.scrolls) |s| {
+                switch (s) {
+                    .top => screen.scrollToTop(),
+                    .bottom => screen.scrollToBottom(),
+                    .page_up => screen.scrollByRows(-@as(isize, rows)),
+                    .page_down => screen.scrollByRows(@as(isize, rows)),
+                }
+                needs_redraw = true;
             }
         }
 
@@ -402,28 +438,50 @@ pub fn main(init: std.process.Init) !void {
                 break;
             }
             screen.feed(out);
-            const cells = try screen.cells(cell_buf);
-            const frame_start = std.Io.Clock.now(.awake, init.io);
-            try render(fb, &cache, cells);
-            if (!first_frame_timed) {
-                first_frame_timed = true;
-                std.debug.print("terminal: render> first frame {d}us\n", .{
-                    @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000),
-                });
-            }
+            // design 결정 13. **라이브러리는 이것을 해 주지 않는다** — 올라간
+            // 상태에서 출력을 먹여도 뷰포트가 그대로라는 것을 2026-08-23에
+            // 실측했고, vt_test가 그 사실을 못 박고 있다. 대부분의 터미널이
+            // 이렇게 동작하며, 그러지 않으면 "화면이 멈춘 것 같다"는 혼란이
+            // 생긴다.
+            //
+            // 부수 효과가 하나 있다: 뷰포트가 history에 머무는 동안 가지치기가
+            // 일어나는 상황이 이 한 줄로 **구조적으로** 안 생긴다. 가지치기는
+            // 그 페이지를 가리키던 pin을 무효로 만드는데, 여기서 창이 닫힌다.
+            screen.scrollToBottom();
+            needs_redraw = true;
+        }
 
-            dumpScreen(cells);
-            // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
-            // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
-            // vt.zig의 defaultFg 주석에 있다.
-            dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
-            dumpInk(fb, &cache, cells);
-            if (cache.count() != last_glyph_count) {
-                last_glyph_count = cache.count();
-                std.debug.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
-                    last_glyph_count, cache.bitmap_bytes,
-                });
-            }
+        // 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
+        // PTY 출력 분기 **안에만** 있었다 — 스크롤은 키로 일어나므로 그대로
+        // 두면 뷰포트만 움직이고 화면은 안 바뀐다.
+        //
+        // 플래그를 두는 이유는 그리는 횟수를 늘리지 않기 위해서다. modifier
+        // 키처럼 아무것도 바꾸지 않는 이벤트에서는 그리지 않는다.
+        if (!needs_redraw) continue;
+        needs_redraw = false;
+
+        const cells = try screen.cells(cell_buf);
+        const frame_start = std.Io.Clock.now(.awake, init.io);
+        try render(fb, &cache, cells);
+        if (!first_frame_timed) {
+            first_frame_timed = true;
+            std.debug.print("terminal: render> first frame {d}us\n", .{
+                @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000),
+            });
+        }
+
+        dumpScreen(cells);
+        // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
+        // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
+        // vt.zig의 defaultFg 주석에 있다.
+        dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
+        dumpInk(fb, &cache, cells);
+        dumpScroll(screen);
+        if (cache.count() != last_glyph_count) {
+            last_glyph_count = cache.count();
+            std.debug.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
+                last_glyph_count, cache.bitmap_bytes,
+            });
         }
     }
 
