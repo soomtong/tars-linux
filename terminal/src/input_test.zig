@@ -17,6 +17,10 @@ fn expect(state: *input.State, code: u16, value: i32, want: []const u8) !void {
     return expectCtx(state, .{}, code, value, want);
 }
 
+/// TR-M2부터 handleKey는 바이트열이 아니라 `Action`을 돌려준다. 이 파일의
+/// 검사 대부분은 여전히 바이트를 보므로, **"바이트가 아닌 것이 왔다"를
+/// 실패로 취급하는 것**이 이 헬퍼의 새 일이다. 그냥 무시하면 스크롤 키가
+/// 실수로 PTY 쪽 표에 들어갔을 때 검사가 조용히 통과한다.
 fn expectCtx(
     state: *input.State,
     ctx: input.Context,
@@ -24,13 +28,51 @@ fn expectCtx(
     value: i32,
     want: []const u8,
 ) !void {
-    const got = state.handleKey(code, value, ctx);
-    if (std.mem.eql(u8, got, want)) return;
-    std.debug.print(
-        "FAIL: code={d} value={d} ckm={} -> got={any}, want={any}\n",
-        .{ code, value, ctx.cursor_keys, got, want },
-    );
-    return error.UnexpectedBytes;
+    switch (state.handleKey(code, value, ctx)) {
+        .bytes => |bytes| {
+            if (std.mem.eql(u8, bytes, want)) return;
+            std.debug.print(
+                "FAIL: code={d} value={d} ckm={} -> got={any}, want={any}\n",
+                .{ code, value, ctx.cursor_keys, bytes, want },
+            );
+            return error.UnexpectedBytes;
+        },
+        .scroll => |s| {
+            std.debug.print(
+                "FAIL: code={d} value={d} -> got scroll .{s}, want bytes {any}\n",
+                .{ code, value, @tagName(s), want },
+            );
+            return error.UnexpectedScroll;
+        },
+    }
+}
+
+/// 스크롤 동작을 기대하는 검사. **바이트가 오면 실패다** — 그것이 곧
+/// "스크롤 키가 PTY로 샜다"는 뜻이고, design 결정 11이 막으려는 바로 그
+/// 상황이다.
+fn expectScroll(
+    state: *input.State,
+    code: u16,
+    value: i32,
+    want: input.Scroll,
+) !void {
+    switch (state.handleKey(code, value, .{})) {
+        .scroll => |s| {
+            if (s == want) return;
+            std.debug.print(
+                "FAIL: code={d} -> got scroll .{s}, want .{s}\n",
+                .{ code, @tagName(s), @tagName(want) },
+            );
+            return error.WrongScroll;
+        },
+        .bytes => |bytes| {
+            std.debug.print(
+                "FAIL: code={d} -> got bytes {any}, want scroll .{s}\n",
+                .{ code, bytes, @tagName(want) },
+            );
+            return error.ExpectedScroll;
+        },
+    }
 }
 
 pub fn main() !void {
@@ -293,9 +335,66 @@ pub fn main() !void {
     try expectCtx(&state, pc, K.KEY_LEFTALT, 0, "");
     try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // 아무 modifier도 안 남았다
 
+    // ── Shift 스크롤 (TR-M2, design 결정 11·12) ─────────────────────────
+    //
+    // 여기서 처음으로 키가 **바이트가 아닌 것**을 돌려준다. IP-M2까지
+    // handleKey의 반환은 []const u8 하나였고, 그래서 "PTY로 보내지 않고
+    // 우리가 처리한다"를 표현할 방법이 아예 없었다.
+    //
+    // 몇 줄이 한 화면인지는 여기 안 나온다. input.zig는 격자 크기를 모르고,
+    // page_up을 rows 만큼의 delta로 바꾸는 것은 main.zig의 일이다.
+    try expect(&state, K.KEY_LEFTSHIFT, 1, "");
+    try expectScroll(&state, K.KEY_PAGEUP, 1, .page_up);
+    try expectScroll(&state, K.KEY_PAGEDOWN, 1, .page_down);
+    try expectScroll(&state, K.KEY_HOME, 1, .top);
+    try expectScroll(&state, K.KEY_END, 1, .bottom);
+
+    // 자동 반복도 스크롤한다 — 누르고 있으면 계속 올라가야 한다.
+    try expectScroll(&state, K.KEY_PAGEUP, 2, .page_up);
+    // 뗄 때는 여전히 아무 일도 없다.
+    try expect(&state, K.KEY_PAGEUP, 0, "");
+
+    // Shift+표에 없는 특수키는 평소대로 PTY로 나간다.
+    try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
+    try expect(&state, K.KEY_LEFTSHIFT, 0, "");
+
+    // **Shift를 떼면 넷 다 원래대로 돌아온다.** 이 줄들이 없으면 "스크롤이
+    // 되는가"만 보고 "안 되어야 할 때 원래대로인가"를 안 보게 된다. Home/End는
+    // 특히 중요하다 — 셸의 줄 편집이 쓰는 키다.
+    try expect(&state, K.KEY_PAGEUP, 1, "\x1b[5~");
+    try expect(&state, K.KEY_PAGEDOWN, 1, "\x1b[6~");
+    try expect(&state, K.KEY_HOME, 1, "\x1b[H");
+    try expect(&state, K.KEY_END, 1, "\x1b[F");
+
+    // 오른쪽 Shift도 같다. 좌우를 따로 추적하는 성질은 그대로다.
+    try expect(&state, K.KEY_RIGHTSHIFT, 1, "");
+    try expectScroll(&state, K.KEY_PAGEUP, 1, .page_up);
+    try expect(&state, K.KEY_RIGHTSHIFT, 0, "");
+
+    // ── Cmd가 Shift를 이긴다 ────────────────────────────────────────────
+    //
+    // chord가 Meta를 먼저 보고, 조합이 표에 없으면 null로 chord 전체를
+    // 끝내기 때문이다. 그래서 Cmd+Shift+PageUp은 스크롤하지 않고 맨 PageUp이
+    // 된다. 임의의 선택이지만 결정적이어야 하고, Cmd는 project_copy_mode가
+    // 예약한 자리라 여기서 뜻을 더하지 않는다.
+    try expect(&state, K.KEY_LEFTMETA, 1, "");
+    try expect(&state, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&state, K.KEY_PAGEUP, 1, "\x1b[5~");
+    try expect(&state, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&state, K.KEY_LEFTMETA, 0, "");
+
+    // Option도 마찬가지다.
+    try expect(&state, K.KEY_LEFTALT, 1, "");
+    try expect(&state, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&state, K.KEY_HOME, 1, "\x1b[H");
+    try expect(&state, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&state, K.KEY_LEFTALT, 0, "");
+
     // ── 여전히 안 하는 것 ───────────────────────────────────────────────
     //
-    // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **IP-M2도 하지 않는다.**
+    // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **TR-M2도 하지 않는다.**
+    // 바로 위에서 Shift에 뜻이 생겼지만 그것은 PageUp/PageDown/Home/End 넷뿐이고,
+    // 방향키 자체는 여전히 맨 시퀀스로 나간다.
     // IP-M1의 주석은 "M2의 조합 dispatch가 이 위에 얹히면서 바뀐다"고 적었지만
     // 그렇지 않았다 — 결정 8의 표에 있는 것은 Option과 Cmd 일곱 줄뿐이고,
     // Ctrl+방향키를 누를 이유가 있는 앱이 아직 하나도 없다(design doc 비목표:
