@@ -84,6 +84,8 @@ report_failure() {
     "terminal: screen>" \
     "terminal: style>" \
     "terminal: pixel>" \
+    "terminal: ink>" \
+    "terminal: font>" \
     "terminal: key>"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
@@ -185,6 +187,90 @@ if ! grep -aq "terminal: style> [0-9]*,[0-9]* fg=102030 bg=FFFFFF" "$LOG"; then
 fi
 echo "the cursor is on screen as an inverted cell"
 
+# ── 한글을 만든다 (TR-M1) ──────────────────────────────────────────────
+#
+# printf '\xed\x95\x9c\033[41m \033[0m\n'
+#
+# \xed\x95\x9c 가 '한'의 UTF-8 세 바이트다. QEMU monitor의 sendkey는 ASCII만
+# 칠 수 있으므로 한글을 직접 못 친다 — 셸의 printf가 바이트를 만들어 주는
+# 것이 유일한 길이다.
+#
+# 한글 **바로 뒤에** 배경색 칠한 공백을 붙이는 이유가 요점이다. 그 공백의
+# style> 줄이 좌표를 주므로, 게이트가 한글 셀의 열 번호에 2를 더한 값과
+# 비교할 수 있다 — 이것이 "다음 글자가 겹치지 않는다"의 **파서 쪽** 증거이고,
+# 아래 ink> 검사가 **렌더러 쪽** 증거다. 둘이 따로 틀릴 수 있다.
+echo "=== typing printf '\\xed\\x95\\x9c\\033[41m \\033[0m\\n' ==="
+type_keys p r i n t f spc apostrophe \
+  backslash x e d backslash x 9 5 backslash x 9 c \
+  backslash 0 3 3 bracket_left 4 1 m \
+  spc \
+  backslash 0 3 3 bracket_left 0 m \
+  backslash n \
+  apostrophe ret
+sleep 3
+
+# ── 검사 4: 파서가 '한'을 조립했는가 ───────────────────────────────────
+#
+# UTF-8 세 바이트가 코드포인트 하나로 합쳐졌다는 뜻이다. 여기서 실패하면
+# 셸의 printf가 \x를 해석하지 않은 것일 수 있다 — 그 경우 8진수
+# (\355\225\234)로 바꾼다.
+if ! grep -aq 'terminal: screen>.*한' "$LOG"; then
+  echo "FAIL: '한' never showed up on screen"
+  echo "--- what the screen actually held ---"
+  grep -a "terminal: screen>" "$LOG" | tail -n 5
+  report_failure "the shell's printf did not produce the UTF-8 bytes for U+D55C"
+fi
+echo "the parser assembled U+D55C from three UTF-8 bytes"
+
+# ── 검사 5: 렌더러가 두 칸에 걸쳐 찍었는가 ─────────────────────────────
+#
+# **이 체인에서 TR-M1이 더하는 가장 값진 검사다.** left만 있고 right가 0이면
+# 글자가 반쪽만 그려진 것인데, 셀 하나만 보는 검사로는 그것을 못 잡는다.
+INK_LINE="$(grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+D55C left=[0-9]+ right=[0-9]+' "$LOG" | tail -n 1)"
+if [ -z "$INK_LINE" ]; then
+  report_failure "no ink line for U+D55C, so the renderer never treated it as a wide glyph"
+fi
+echo "ink line: ${INK_LINE}"
+
+INK_LEFT="$(echo "$INK_LINE" | sed -E 's/.*left=([0-9]+).*/\1/')"
+INK_RIGHT="$(echo "$INK_LINE" | sed -E 's/.*right=([0-9]+).*/\1/')"
+if [ "$INK_LEFT" -eq 0 ] || [ "$INK_RIGHT" -eq 0 ]; then
+  report_failure "U+D55C has ink on only one half (left=${INK_LEFT} right=${INK_RIGHT}), so it was drawn as a narrow glyph"
+fi
+echo "the glyph really covers both cells (left=${INK_LEFT} right=${INK_RIGHT})"
+
+# ── 검사 6: 다음 글자가 두 칸 뒤에 있는가 ──────────────────────────────
+#
+# 한글 셀의 열 번호에 2를 더한 자리에 빨강 공백이 있어야 한다. 1이면
+# 겹친 것이고, 3이면 한 칸을 버린 것이다.
+HAN_ROW="$(echo "$INK_LINE" | sed -E 's/.*ink> ([0-9]+),[0-9]+ .*/\1/')"
+HAN_COL="$(echo "$INK_LINE" | sed -E 's/.*ink> [0-9]+,([0-9]+) .*/\1/')"
+WANT_COL=$((HAN_COL + 2))
+if ! grep -aq "terminal: style> ${HAN_ROW},${WANT_COL} fg=[0-9A-F]* bg=CC6666" "$LOG"; then
+  echo "FAIL: expected the red space at ${HAN_ROW},${WANT_COL} (right after a 2-cell glyph)"
+  echo "--- style lines on that row ---"
+  grep -aE "terminal: style> ${HAN_ROW},[0-9]+ " "$LOG" | tail -n 10
+  report_failure "the character after U+D55C is not two columns away, so the wide cell was mis-counted"
+fi
+echo "the next character sits two columns after U+D55C"
+
+# ── 검사 7: 캐시가 자랐고 크기가 말이 되는가 ───────────────────────────
+#
+# design 위험 3이 "128MB 게스트라 실측한다"고 남긴 자리다. 최악의 경우
+# (한글 전체 = 2.06MB)는 font_test가 호스트에서 이미 재고, 여기서 보는 것은
+# 실사용량이다. 1MB를 넘으면 무언가 예상과 다르다 — 화면에 나오는 글자는
+# 수십 자이고 한 자가 평균 193바이트다.
+FONT_LINE="$(grep -a 'terminal: font>' "$LOG" | tail -n 1)"
+if [ -z "$FONT_LINE" ]; then
+  report_failure "the font cache never reported its size"
+fi
+echo "font cache: ${FONT_LINE}"
+FONT_BYTES="$(echo "$FONT_LINE" | sed -E 's/.*cached, ([0-9]+) bitmap bytes.*/\1/')"
+if [ "$FONT_BYTES" -gt 1048576 ]; then
+  report_failure "the glyph cache grew past 1MB (${FONT_BYTES} bytes) on a 128MB guest"
+fi
+echo "the glyph cache is ${FONT_BYTES} bytes, well inside the guest's memory"
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로
@@ -210,4 +296,6 @@ fi
 
 echo "--- style/pixel lines ---"
 grep -aE 'terminal: (style|pixel)>' "$LOG" | tail -n 20
-echo "TR-M0 PASS: the color the parser resolved is the color in the framebuffer"
+echo "--- ink lines ---"
+grep -a 'terminal: ink>' "$LOG" | tail -n 10
+echo "TR-M1 PASS: colors reach the framebuffer and Hangul covers both of its cells"
