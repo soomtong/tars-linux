@@ -14,14 +14,32 @@ const c = @cImport({
 /// `input.zig`가 open/read를, `pty.zig`가 execv를 이렇게 선언한 것과 같다.
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
-const BACKGROUND: u32 = 0x00102030;
-const TEXT_COLOR: u32 = 0x00FFFFFF;
+// 화면 여백을 칠할 색. 셀의 배경색은 이제 상수가 아니라 vt.zig가 셀마다
+// 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 **바깥**에만 쓴다.
+const MARGIN_COLOR: u32 = 0x00102030;
 const GRID_X: u32 = 20;
 const GRID_Y: u32 = 20;
 const CELL_W: u32 = 8; // 8x4x4-fonts의 라틴 글리프 폭(font.zig:19-22 참고)
 const ROW_HEIGHT: u32 = 16;
 
-fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32) void {
+/// 한 셀의 배경을 칠한다. 글리프보다 **먼저** 전부 칠해야 한다
+/// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
+/// 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
+fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
+    var row: u32 = 0;
+    while (row < ROW_HEIGHT) : (row += 1) {
+        var col: u32 = 0;
+        while (col < CELL_W) : (col += 1) {
+            fb.setPixel(x + col, y + row, color);
+        }
+    }
+}
+
+/// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4). 8x4x4 폰트를
+/// 자기 native 크기인 16px로 굽는 것이라 coverage가 이미 거의 이분값이고,
+/// 무엇보다 **문턱값이어야 게이트의 픽셀 검사가 정확한 상수와 비교할 수
+/// 있다.** 블렌딩하면 기대 픽셀 값이 래스터라이저의 안티앨리어싱에 매달린다.
+fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32) void {
     const bitmap = glyph.bitmap orelse return;
     var row: u32 = 0;
     while (row < glyph.height) : (row += 1) {
@@ -29,27 +47,39 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32) void {
         while (col < glyph.width) : (col += 1) {
             const coverage = bitmap[row * glyph.width + col];
             if (coverage > 127) {
-                fb.setPixel(x + col, y + row, TEXT_COLOR);
+                fb.setPixel(x + col, y + row, color);
             }
         }
     }
 }
 
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
-/// 불필요한 복잡도다(YAGNI).
+/// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
+///
+/// **두 벌로 나눠 그린다**(design 결정 6). 배경을 전부 칠하고 나서 글리프를
+/// 전부 그린다. 섞으면 다음 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
 fn render(fb: drm.Framebuffer, cache: font.GlyphCache, cells: []const vt.CellGlyph) !void {
-    fb.fill(BACKGROUND);
+    // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
+    fb.fill(MARGIN_COLOR);
+
+    // x를 글리프 폭으로 누적하지 않고 col로 계산하는 것이 중요하다.
+    // libghostty-vt는 한글 같은 폭 2칸 문자 뒤에 spacer 셀을 넣어 col을
+    // 이미 맞춰두기 때문에(TF-M2에서 '이'의 col이 6이 아니라 7이었던
+    // 그 성질), col*CELL_W가 곧 정확한 픽셀 위치다.
     for (cells) |cell| {
-        // x를 글리프 폭으로 누적하지 않고 col로 계산하는 것이 중요하다.
-        // libghostty-vt는 한글 같은 폭 2칸 문자 뒤에 spacer 셀을 넣어 col을
-        // 이미 맞춰두기 때문에(TF-M2에서 '이'의 col이 6이 아니라 7이었던
-        // 그 성질), col*CELL_W가 곧 정확한 픽셀 위치다.
+        const x = GRID_X + @as(u32, cell.col) * CELL_W;
+        const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        drawCellBackground(fb, x, y, cell.bg);
+    }
+
+    for (cells) |cell| {
         const x = GRID_X + @as(u32, cell.col) * CELL_W;
         const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
         if (font.find(cache, cell.codepoint)) |glyph| {
-            drawGlyph(fb, glyph, x, y);
+            drawGlyph(fb, glyph, x, y, cell.fg);
         }
     }
+
     try fb.present();
 }
 
@@ -74,12 +104,8 @@ pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
     const fb = try drm.open(allocator, "/dev/dri/card0");
-    fb.fill(BACKGROUND);
+    fb.fill(MARGIN_COLOR);
     try fb.present();
-    // Task 1 임시 확인 — design 위험 4. Task 6에서 진짜 로그로 바뀐다.
-    std.debug.print("terminal: probe> wrote {X:0>6} read {X:0>6}\n", .{
-        BACKGROUND, fb.getPixel(100, 100) & 0x00FFFFFF,
-    });
 
     // 화면 크기를 여기서 **한 번만** 계산해 렌더러·Terminal·PTY winsize
     // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
@@ -176,6 +202,9 @@ pub fn main(init: std.process.Init) !void {
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
 
+    // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
+    // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
+    var first_frame_timed = false;
     var key_state: input.State = .{};
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
@@ -228,7 +257,14 @@ pub fn main(init: std.process.Init) !void {
             }
             screen.feed(out);
             const cells = try screen.cells(cell_buf);
+            const frame_start = std.Io.Clock.now(.awake, init.io);
             try render(fb, cache, cells);
+            if (!first_frame_timed) {
+                first_frame_timed = true;
+                std.debug.print("terminal: render> first frame {d}us\n", .{
+                    @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000),
+                });
+            }
             dumpScreen(cells);
         }
     }
