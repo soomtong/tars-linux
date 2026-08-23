@@ -43,7 +43,8 @@ git rev-list --count origin/main..main
 - `77edeb5` Stop calling ourselves xterm now that we draw the colors
 - `21a9f1d` Prove the framebuffer holds the color the parser resolved
 - `163f112` Add the color chain to the root gate
-- (문서 커밋 하나가 이 파일과 함께 들어간다)
+- `676baab` Hand off with a terminal that shows its colors
+- `4c4a1c6` Record that the color milestone is already pushed
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -181,6 +182,30 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 6. **체인 하나의 비용이 예상의 두 배가 넘었다** — 2분 40초가 아니라 6분 13초.
 7. **첫 프레임이 209밀리초였다** — design 위험 2의 "몇 밀리초"와 두 자릿수
    차이다. 다만 이 숫자로는 아직 아무것도 결정할 수 없다(아래).
+
+## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
+
+**이번 세션에서 새로 막힌 것 둘.**
+
+- **게이트 stdout에서 시리얼 로그의 줄을 `grep`하기** — 그 줄은 stdout에 없고
+  체인이 만든 `mktemp` 파일 안에 있다. 위의 "게이트 로그를 조사하는 법"을
+  쓸 것.
+- **NUL이 든 로그를 `-a` 없이 `grep`하기** — `Binary file ... matches`만
+  나오고 내용을 안 준다. 조사가 여기서 한 번 멎었다.
+
+**앞선 세션에서 확인된 것들. 여전히 유효하다.**
+
+- **`grep -qP '\x00'`으로 NUL 검출** — GNU grep 3.11에서 매치되지 않는다.
+  `[ "$(tr -d '\0' < "$f" | wc -c)" -ne "$(wc -c < "$f")" ]`를 쓴다.
+- **`std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기** — Zig 0.16에
+  둘 다 없다. `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
+  `.monotonic`이 아니라 `.awake`다.
+- **컨테이너에서 `nc`로 QEMU monitor에 명령 보내기** — `nc`가 없다. 체인들은
+  `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
+- **`/tmp`에 만든 파일이 `docker run --rm` 사이에 남기** — 안 남는다. 조사성
+  명령은 한 번의 `docker run` 안에서 끝내야 한다.
+- **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
+  to build root`로 막힌다. 심볼릭 링크로 우회한다.
 
 ## 아직 안 갈라 놓은 것 하나
 
