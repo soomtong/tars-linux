@@ -202,6 +202,10 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
     var shown: usize = 0;
     for (cells) |cell| {
         if (shown >= INK_DUMP_LIMIT) break;
+        // render와 같은 이유로 빈 셀을 거른다. 이것이 없으면 dumpInk가
+        // codepoint 0을 캐시에 집어넣어, render 쪽에서 막아 둔 것이 무효가
+        // 된다.
+        if (cell.codepoint == 0) continue;
         // 폭 2칸인 글자만 본다. cell_width는 폰트의 advance에서 온 값이라
         // "0x7F를 넘으면 넓다"는 짐작보다 정확하다.
         const glyph = cache.find(cell.codepoint) catch continue;
