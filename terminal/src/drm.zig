@@ -131,6 +131,16 @@ pub const Framebuffer = struct {
         ptr.* = color;
     }
 
+    /// 우리가 쓴 픽셀을 그대로 되읽는다. dumb buffer를 MAP_SHARED로 잡았고
+    /// (`:262`) 단일 버퍼라(present가 setcrtc 한 번) 렌더 직후에 읽으면
+    /// 그것이 곧 화면이다. 게이트가 "렌더러가 색을 진짜로 칠했는가"를 보는
+    /// 유일한 창구다(design 결정 7).
+    pub fn getPixel(self: Framebuffer, x: u32, y: u32) u32 {
+        const offset = y * self.pitch + x * 4;
+        const ptr: *volatile u32 = @ptrCast(@alignCast(self.pixels + offset));
+        return ptr.*;
+    }
+
     pub fn fill(self: Framebuffer, color: u32) void {
         var row: u32 = 0;
         while (row < self.height) : (row += 1) {

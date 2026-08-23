@@ -76,6 +76,10 @@ pub fn main(init: std.process.Init) !void {
     const fb = try drm.open(allocator, "/dev/dri/card0");
     fb.fill(BACKGROUND);
     try fb.present();
+    // Task 1 임시 확인 — design 위험 4. Task 6에서 진짜 로그로 바뀐다.
+    std.debug.print("terminal: probe> wrote {X:0>6} read {X:0>6}\n", .{
+        BACKGROUND, fb.getPixel(100, 100) & 0x00FFFFFF,
+    });
 
     // 화면 크기를 여기서 **한 번만** 계산해 렌더러·Terminal·PTY winsize
     // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
