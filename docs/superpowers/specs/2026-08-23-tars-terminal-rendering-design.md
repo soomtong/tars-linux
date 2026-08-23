@@ -1,0 +1,357 @@
+# TARS Terminal Rendering — Design
+
+**Date:** 2026-08-23
+**Status:** 설계 승인됨(2026-08-23). TR-M0 plan을 이어서 작성한다.
+
+## 한 줄 요약
+
+**libghostty-vt가 이미 계산해 둔 색과 이미 쌓아 둔 스크롤백을 우리가 받아
+쓰기 시작한다** — 그리고 그 결과를 픽셀까지 되읽어 증명한다.
+
+## 배경
+
+Hardware Discovery(HD-M0~M2)가 2026-08-22에 끝나면서 진행 중인 서브프로젝트가
+없어졌다. `HANDOFF.md`가 남긴 후보 셋 중 **스크롤백·색상 렌더링**을 골랐다.
+
+고른 이유는 셋이다.
+
+1. **`project_copy_mode`의 선행 조건 셋 중 둘이 바로 이것이다.** 그 기억
+   파일이 "스크롤백"과 "선택 영역을 반전시켜 보여주려면 렌더러가 셀별 속성을
+   그릴 수 있어야 한다"를 선행 조건 1·2로 적어 두었고, "터미널 완성도
+   서브프로젝트 뒤에 온다"고 순서까지 정해 두었다.
+2. **막고 있는 것이 우리 코드뿐이다.** 아래 "착수 전 조사"가 보이듯이
+   라이브러리 쪽은 색도 스크롤백도 이미 준비되어 있다. 우리가 그것을 버리고
+   있을 뿐이다. 즉 이 서브프로젝트는 새 능력을 발명하는 일이 아니라
+   **이미 있는 것을 잇는 일**이고, 그만큼 실패 지점이 좁다.
+3. **커널을 안 건드린다.** 전부 게스트 사용자 공간 안이라 기존 여섯 체인에
+   주는 충격이 가장 작은 후보였다.
+
+### 왜 한글까지 한 서브프로젝트에 묶는가
+
+vendor한 폰트가 한글 폰트인데(`Hanme_8x4x4.ttf`) 캐시에 ASCII 95자만 들어
+있다. `font.zig`의 `cellWidth`는 이미 "0x7F를 넘으면 16픽셀"을 알고 `vt.zig`도
+폭 2칸 문자의 spacer 셀을 다룰 줄 아는데, 정작 글자가 없다 — **배관이
+절반쯤 깔린 채로 두 서브프로젝트를 건너왔다.** 색상 때문에 어차피 렌더러의
+글리프 경로를 손대므로, 그 김에 잇는 것이 자연스럽다. 다만 milestone은
+나눈다(아래 "milestone 구성").
+
+## 출발 시점의 저장소 상태 (2026-08-23 실측)
+
+- **`vt.zig`가 색을 버린다.** `Screen.cells`(`terminal/src/vt.zig:66`)가
+  `RenderState`에서 `codepoint`·`col`·`row` 셋만 꺼내고, `codepoint == 0`인
+  셀은 아예 건너뛴다(`:78`).
+- **렌더러가 두 색만 안다.** `terminal/src/main.zig:17-18`의
+  `BACKGROUND = 0x00102030`, `TEXT_COLOR = 0x00FFFFFF`. `drawGlyph`(`:24`)가
+  `coverage > 127`에서 `TEXT_COLOR`를 찍고, `render`(`:40`)가 매번
+  `fb.fill(BACKGROUND)`로 화면을 지우고 다시 그린다.
+- **커서를 전혀 안 그린다.** `render`가 셀 글리프만 찍는다.
+- **폰트 캐시가 ASCII 95자다.** `main.zig:96-98`이 `0x20`~`0x7E`를 부팅 때
+  전부 굽고, `font.find`(`font.zig:65`)는 그 배열을 선형 탐색한다.
+- **스크롤백 크기를 지정하지 않는다.** `vt.zig:42`가 `Terminal.init`에
+  `.{ .cols, .rows }`만 넘기므로 `max_scrollback_bytes`가 기본값
+  **10,000바이트**로 들어간다. 즉 스크롤백은 이미 쌓이고 있고 크기만 작다.
+- **입력에서 "PTY로 안 보내는 키"의 결과를 받을 자리가 없다.**
+  `handleKey`(`input.zig:441`)의 반환 타입이 `[]const u8` 하나다. 조합
+  dispatch(`:313`의 `chord`)는 있지만 그것도 바이트를 돌려준다.
+- **조합 표에 빈자리가 많다.** Cmd는 `←`·`→`·Backspace 셋, Option은 넷만
+  쓴다. Shift는 특수키에 대해 아무 의미가 없다.
+- **`TERM=xterm`이고 그 이유가 "색을 안 그려서"다**(`main.zig:148-151`의 주석).
+- **프레임버퍼를 되읽을 수 있다.** `drm.zig:261`이 `PROT_READ | PROT_WRITE`로
+  mmap하고, 단일 버퍼라(`present()`가 setcrtc 한 번) 렌더 직후에 읽으면
+  그것이 곧 화면이다. `getPixel`은 아직 없다.
+- **게스트 메모리가 128MB다.** 게이트가 QEMU에 `-m`을 안 준다
+  (`Memory: 99172K/130552K available`). initrd tmpfs가 67.7MB를 차지한다.
+- **monitor 포트는 45455~45459가 쓰이고 45460이 비어 있다.**
+- **커널 빌드가 게이트 시간의 근원이다.** 2026-08-22 실측으로 부팅은 1.5초
+  안에 끝나고 27회를 더해도 40초 남짓이다(`project_kernel_config`). 즉
+  **체인을 더하는 비용은 부팅이 아니라 커널 빌드 3회(약 2분 40초)다.**
+
+## 착수 전 조사로 확정한 사실 (2026-08-23)
+
+게스트를 띄우지 않고 vendor된 ghostty 소스(`terminal/ghostty-src`)를 읽어서
+확인한 것들이다. 다음 세션은 이 절을 다시 조사하지 않는다.
+
+**1. `RenderState`가 색을 전부 들고 있다.**
+`render.zig:86`의 `colors: Colors`가 `{background, foreground, cursor,
+palette}`이고 `background`/`foreground`는 이미 해소된 `color.RGB`다
+(`:156-161`). 셀마다는 `Cell.style: Style`이 있고(`:262`), `Style`은
+`fg_color`·`bg_color`와 `flags`(bold·italic·faint·inverse·underline·
+strikethrough)를 담는다(`style.zig:20-39`).
+
+**2. 셀별 `style`은 `update()` 뒤에 유효하다.**
+`RenderState.update()`가 `beginUpdate()` + `endUpdate()`이고(`render.zig:326`),
+스타일 비정규화는 `endUpdate`에서 일어난다. `vt.zig:67`이 이미 `update()`를
+부르므로 **추가 호출 없이 읽을 수 있다.** 다만 계약이 있다 —
+`Cell.style`은 **`raw`의 `style_id`가 기본값이 아닐 때만** 유효하다
+(`render.zig:260-262`).
+
+**3. bold→밝은 색은 라이브러리가 해 준다.** `Style.fg(opts)`에
+`opts.bold = .bright`를 주면 팔레트 인덱스 0~7이 8~15로 옮겨간다
+(`style.zig:172-181`). 반환은 `color.RGB`이고 **null이 없다** — 색이 없으면
+`opts.default`로 떨어진다.
+
+**4. `Style.bg()`는 `?color.RGB`다.** null이 "기본 배경"이라는 뜻이다
+(`style.zig:109-127`). 인자로 `page.Cell`(우리가 이미 갖고 있는 `raw`)과
+팔레트를 받는다.
+
+**5. `inverse`는 아무도 처리해 주지 않는다.** `fg()`도 `bg()`도 `flags.inverse`를
+보지 않는다. 렌더러 쪽 책임이다.
+
+**6. 스크롤 API가 이미 있다.** `Screen.scroll(behavior)`(`Screen.zig:1576`)이
+`PageList.Scroll` union을 받는다 — `.active`(맨 아래), `.top`, `.row`,
+`.delta_row: isize`, `.delta_prompt`(`PageList.zig:3162-3186`). 위치 표시용
+`PageList.scrollbar()`가 `{total, offset, len}`을 준다(`:3714`).
+
+**7. `Terminal.Options`가 기본 색과 스크롤백 한도를 받는다.**
+`colors: Colors`(`Terminal.zig:149-161`, 네 값이 `DynamicRGB`라 OSC로 바꿀 수
+있다)와 `max_scrollback_lines: ?usize`(`:271`)다.
+
+**8. 선택 영역의 자리가 라이브러리에 이미 있다.** `RenderState.Row`에
+`selection: ?[2]CellCountInt`가 있다(`render.zig:234`). copy mode가 나중에
+쓸 자리다 — 이번에는 안 건드린다.
+
+## 결정
+
+### 결정 1. 색은 `vt.zig`에서 확정하고, 렌더러는 숫자 둘만 받는다
+
+`CellGlyph`에 `fg: u32`·`bg: u32`를 더한다. 프레임버퍼와 같은 `0x00RRGGBB`
+형식으로 **이미 해소된 값**이며, `Style`을 그대로 흘려보내지 않는다.
+
+이유는 경계다. 색을 푸는 데 필요한 것(팔레트, 기본 fg/bg, bold 옵션)이 전부
+`RenderState`에 있고 그것을 들고 있는 것은 `vt.zig`다. **렌더러는 팔레트도
+SGR도 몰라야 한다.** 이 경계를 지키면 `main.zig`의 그리는 코드는 "두 색을
+받아 칠한다"로 끝나고, 색 해석이 틀렸는지 칠하기가 틀렸는지가 파일 단위로
+갈린다 — 게이트의 두 겹 검사(결정 7)가 그 경계를 그대로 되짚는다.
+
+### 결정 2. `inverse`와 커서도 `vt.zig`에서 해소한다
+
+둘 다 "fg와 bg를 맞바꾼다"라는 같은 연산이다. `vt.zig`에서 처리하면
+`main.zig`는 **"반전"이라는 개념 자체를 배우지 않는다.**
+
+커서는 `RenderState.cursor.viewport`가 null이 아닐 때 그 셀의 두 색을
+맞바꾼다. 모양(`bar`/`underline`)과 깜빡임은 이번에 하지 않는다 — 블록만
+그린다. 스크롤백으로 올라가면 커서가 뷰포트 밖으로 나가는데, 그때
+`viewport`가 null이 되므로 TR-M2가 이 자리를 다시 손대지 않아도 된다.
+
+### 결정 3. 빈 셀도 결과에 들어간다
+
+`cells()`가 `codepoint == 0`을 건너뛰는 것을 그만둔다. **글자 없는 셀도 색을
+가질 수 있기 때문이다** — `ls` 출력의 색 띠, 그리고 나중의 선택 영역이 그렇다.
+
+버퍼 크기는 지금도 `cols * rows`라 그대로 충분하다. 다만 기본 배경과 같고
+글자도 없는 셀은 계속 건너뛴다 — 그리지 않아도 결과가 같고, 게이트가 읽는
+`dumpScreen`의 출력이 공백으로 뒤덮이는 것을 막는다.
+
+**`dumpScreen`은 `codepoint == 0`을 건너뛰어야 한다.** 지금은 그런 셀이
+`cells()`에서 이미 걸러져 이 함수에 도착하지 않지만, 이 결정 뒤에는 도착한다.
+그대로 두면 `utf8Encode(0)`이 NUL 바이트를 만들어 로그 줄에 섞인다
+(`main.zig:66-68`).
+
+**`terminal: screen>` 줄의 형식은 그대로 둔다.** 여섯 체인 중 다섯이 이 줄을
+`grep`해서 화면을 판정한다 — TF·CP·IP·PM·HD가 전부 `terminal: screen>.*`
+형태로 본다. 색 정보는 이 줄을 고치는 대신 **별도의 `style>` 줄로 낸다**
+(결정 7). 화면 덤프와 색 덤프를 한 줄에 합치지 않는 이유가 이것이다.
+
+### 결정 4. `drawGlyph`의 문턱값(`coverage > 127`)을 유지한다
+
+알파 블렌딩을 하지 않는다. 이유가 둘이다.
+
+- 8x4x4 폰트를 자기 native 크기인 16px로 굽는 것이라 coverage가 이미 거의
+  이분값이다. 블렌딩해도 눈에 보이는 차이가 거의 없다.
+- **문턱값이어야 게이트의 픽셀 검사가 정확한 상수와 비교할 수 있다.**
+  블렌딩하면 기대 픽셀 값이 래스터라이저의 안티앨리어싱에 매달리고, 폰트나
+  stb_truetype 버전이 바뀔 때 검사가 조용히 흔들린다.
+
+### 결정 5. 우리 색을 터미널의 기본값으로 넘긴다
+
+`BACKGROUND`/`TEXT_COLOR` 상수를 `Terminal.Options.colors`로 옮기고,
+`render()`는 상수 대신 `RenderState.colors.background`를 읽는다. 값 자체는
+지금과 같게 유지한다(`0x00102030` / `0x00FFFFFF`) — 이번 변경이 화면의 색을
+바꾸는 일이 되면 게이트의 회귀와 우리 변경을 가르기 어려워진다.
+
+부수 효과로 셸이 OSC 10/11로 배경·전경을 바꾸는 것이 저절로 동작한다.
+
+### 결정 6. 그리는 순서는 배경 전부 → 글리프 전부
+
+`drawGlyph`가 셀 경계를 넘는 글자가 있을 수 있다. 지금은 배경이 한 색이라
+티가 안 나지만, 셀마다 배경을 칠하면 **다음 셀의 배경이 앞 글자의 삐져나온
+획을 지운다.** 두 벌로 나눠 그려서 막는다.
+
+### 결정 7. 게이트는 파서와 픽셀을 각각 본다
+
+로그 두 줄을 새로 낸다.
+
+```
+terminal: style> r,c fg=RRGGBB bg=RRGGBB      파서가 본 색
+terminal: pixel> r,c = RRGGBB                 프레임버퍼에서 되읽은 픽셀
+```
+
+기본 스타일과 다른 셀에 대해서만 찍고, **한 프레임에 찍는 개수에 상한을
+둔다** — 화면 전체에 색이 깔린 프로그램이 돌면 셀 수천 개가 매 프레임마다
+로그로 쏟아지기 때문이다. 상한 값은 plan에서 정한다(게이트가 검사에 쓰는
+셀은 한 줄 안의 몇 개라 작은 수로 충분하다). **상한에 걸려 잘렸다는 사실도
+같이 찍는다** — 조용히 자르면 "색이 없다"와 "너무 많아서 안 찍었다"를 가를 수
+없다.
+
+이렇게 나누는 이유는 HD-M2가 잡은 "조용한 실패"와 같은 종류의 구멍을 막기
+위해서다. `style>`만 찍으면 **파서가 옳고 렌더러가 틀렸을 때 게이트가
+통과한다.** `pixel>`만 찍으면 실패는 잡히지만 어느 단계에서 틀어졌는지를 따로
+조사해야 한다. 둘을 나란히 두면 `style>`이 맞고 `pixel>`이 틀리면 렌더러,
+`style>`부터 틀리면 파서다.
+
+`drm.zig`에 `getPixel`을 더한다(세 줄). 되읽기가 신뢰할 만한 이유는 dumb
+buffer를 `MAP_SHARED`로 잡았고 단일 버퍼라 렌더 직후가 곧 화면이기 때문이다.
+
+**검사에 쓸 문자는 배경색 칠한 공백이다.** `printf '\033[41m \033[0m'`처럼
+공백이면 셀 전체가 배경색이라 어느 픽셀을 읽어도 같다 — 글리프의 어느 획이
+어디 있는지에 검사가 매달리지 않는다.
+
+### 결정 8. `TERM`을 `xterm-256color`로 바꾼다
+
+`main.zig:148-151`의 주석이 적어 둔 "색을 하나도 안 그려서 xterm"이라는
+이유가 사라진다. 256색을 그리면서 xterm이라고 말하는 것은 반대 방향의
+거짓말이다.
+
+### 결정 9. 새 체인 `render/check.sh`를 만든다 (monitor 45460)
+
+기존 `terminal/check.sh`에 얹지 않는다. 그 파일이 이미 300줄이 넘고 TF의
+주제를 갖고 있으며, TR이 세 milestone에 걸쳐 검사를 더할 것이기 때문이다.
+
+비용을 정직하게 적어 둔다. **루트 게이트에 약 2분 40초가 더해진다** —
+커널 빌드 3회다. 부팅 3회는 4.5초라 무시할 만하다. 이 숫자를 알 수 있게 된
+것이 2026-08-22에 `PRINTK_TIME`을 켠 덕이다(`project_kernel_config`).
+
+### 결정 10. 스크롤백은 1000줄 고정, 설정 파일로 빼지 않는다
+
+`Terminal.Options.max_scrollback_lines = 1000`을 준다. 바이트가 아니라 줄인
+이유는 그것이 사람이 생각하는 단위이고, 게이트가 "N줄 찍고 올라가서 첫 줄을
+본다"로 검사하기 쉽기 때문이다. 155칸 × 1000줄이라도 128MB 안에서 감당된다.
+
+설정 파일(`/config/tars.conf`)로 빼지 않는 이유는 게이트가 봐야 할 것이 늘고
+깨진 값 처리까지 따라오는 데 비해, 지금 그 값을 바꾸고 싶어할 이유가 없기
+때문이다(YAGNI). 필요해지면 CP가 만든 배관에 한 줄 더하면 된다.
+
+### 결정 11. `handleKey`의 반환을 "바이트열 또는 동작"으로 넓힌다
+
+스크롤 키는 바이트가 아니라 **동작**이고 PTY로 새어 나가면 안 된다. 지금
+`handleKey`는 `[]const u8`만 돌려주므로 이 구분을 표현할 수 없다.
+
+`project_copy_mode`가 "IP의 dispatch 단계가 그대로 진입점"이라고 적어 둔
+자리가 이곳이다. 여기서 넓히는 통로를 나중에 copy mode가 그대로 쓴다 —
+이번에 넓히는 것은 통로이고, 모드 상태는 넣지 않는다.
+
+### 결정 12. 스크롤 키는 Shift 계열
+
+| 키 | 동작 |
+|---|---|
+| Shift+PageUp | 한 화면 위 (`.delta_row = -rows`) |
+| Shift+PageDown | 한 화면 아래 (`.delta_row = +rows`) |
+| Shift+Home | 맨 위 (`.top`) |
+| Shift+End | 맨 아래 (`.active`) |
+
+Cmd 계열을 안 쓰는 이유는 `project_copy_mode`가 Cmd+C/Cmd+V를 예약해
+두었기 때문이다. Shift+PageUp은 xterm·리눅스 콘솔·tmux가 전부 쓰는 형태라
+손에 익은 사람이 많고, Mac 노트북의 Fn+↑는 evdev에 `KEY_PAGEUP`으로 도착하므로
+키보드 종류와 무관하게 동작한다.
+
+### 결정 13. 출력이 오면 맨 아래로 돌아간다
+
+스크롤해 올라간 상태에서 PTY 출력이 도착하면 자동으로 `.active`로 내려온다.
+대부분의 터미널이 그렇게 하고, 그러지 않으면 "화면이 멈춘 것 같다"는 혼란이
+생긴다. 게이트가 이것을 볼 수 있어야 한다 — 올라간 뒤 한 글자 치면 내려와야
+한다.
+
+## milestone 구성
+
+### TR-M0 — 색상·inverse·블록 커서
+
+결정 1~9. 건드리는 파일은 `terminal/src/vt.zig`, `terminal/src/main.zig`,
+`terminal/src/drm.zig`(getPixel), `terminal/src/vt_test.zig`, 새
+`render/check.sh`, 루트 `check.sh`.
+
+**끝났다고 말할 수 있는 조건:** 게스트에서 배경색 칠한 공백을 찍으면
+`style>`과 `pixel>`이 같은 색을 말하고, 커서가 화면에 보이며, 루트 게이트
+일곱 체인이 3/3이다.
+
+### TR-M1 — 한글
+
+폰트 캐시를 "부팅 때 95자를 굽는 배열"에서 "처음 쓸 때 구워 넣는 캐시"로
+바꾸고, `font.find`의 선형 탐색을 해시 맵으로 바꾼다. `cellWidth`와 `vt.zig`의
+spacer 셀 처리는 이미 있으므로 손대지 않는다.
+
+**끝났다고 말할 수 있는 조건:** 게스트에서 한글을 찍으면 화면에 나오고,
+폭 2칸이 지켜지며(다음 글자가 겹치지 않는다), 부팅 시간이 눈에 띄게 늘지
+않는다.
+
+### TR-M2 — 스크롤백
+
+결정 10~13.
+
+**끝났다고 말할 수 있는 조건:** 화면보다 많은 줄을 찍고 Shift+PageUp으로
+올라가면 밀려난 줄이 보이고, Shift+End나 새 출력으로 맨 아래로 돌아온다.
+
+**한 milestone이 끝나면 다음 milestone의 plan은 그 시점에 새로 쓴다**
+(`CLAUDE.md`). 이 design doc이 세 milestone을 다 적어 두었지만, 그것은 방향이지
+plan이 아니다.
+
+## 테스트 전략
+
+**호스트 검사가 먼저다.** `vt_test.zig`에 SGR 시퀀스를 먹이고 `cells()`가
+돌려주는 fg/bg를 확인하는 검사를 더한다. 부팅 1.5초를 쓰기 전에 0.1초로 잡을
+수 있는 실패를 먼저 잡는 것은 HD-M2가 세운 방식 그대로다. 최소한 이만큼을
+본다.
+
+- SGR 31(빨강 전경) → fg가 팔레트 1번
+- SGR 41(빨강 배경) → bg가 팔레트 1번
+- SGR 1;31(bold + 빨강) → fg가 팔레트 9번 (bold→bright)
+- SGR 7(inverse) → fg와 bg가 맞바뀐다
+- SGR 38;2;R;G;B (truecolor) → 그 RGB 그대로
+- SGR 0 뒤의 셀 → 기본 fg/bg
+- 스타일 없는 셀 → `style_id`가 기본값이라 `style`을 안 읽는다
+
+**부팅 검사는 사슬 전체를 본다.** `render/check.sh`가 게스트에 색 시퀀스를
+타이핑하고 `style>`·`pixel>` 두 줄을 대조한다.
+
+## 위험
+
+**1. `TERM=xterm-256color`가 기존 다섯 체인을 흔들 수 있다.** 셸과 ncurses
+프로그램이 terminfo를 보고 시퀀스를 고르므로, 프롬프트가 색 시퀀스를 더 쓰기
+시작하면 화면 문자열을 `grep`하는 기존 검사가 어긋날 수 있다. **TR-M0에서
+루트 게이트 전체를 돌려 확인한다** — 이것이 이번 서브프로젝트의 가장 큰
+회귀 위험이다.
+
+**2. 셀마다 배경을 칠하면 쓰기가 늘어난다.** 지금은 `fill` 한 번 + 글리프인데,
+셀 배경이 생기면 픽셀을 더 많이 만진다. 1280×800 = 102만 픽셀이라 최악의
+경우에도 한 프레임에 몇 밀리초겠지만, **재는 것을 TR-M0의 일로 남긴다.**
+부분 갱신(dirty 추적)은 하지 않는다 — `RenderState`가 dirty를 주지만
+키 입력 빈도에서는 불필요한 복잡도다(TF가 이미 내린 판단이다).
+
+**3. 한글 캐시가 메모리를 얼마나 쓸지 모른다.** 16×16 비트맵 하나가 256바이트니
+자주 쓰는 몇백 자면 수십 KB다. 문제가 되지 않을 것으로 보지만, 128MB 게스트라
+TR-M1에서 실측한다.
+
+**4. 픽셀 되읽기가 QEMU virtio-gpu에서 우리가 쓴 값 그대로일 것이라 가정한다.**
+dumb buffer를 `MAP_SHARED`로 잡았으므로 맞을 것으로 보지만, **TR-M0의 첫
+작업으로 이것부터 확인한다** — 틀리면 결정 7이 통째로 무너지므로 다른 것을
+만들기 전에 알아야 한다.
+
+## 비워 두는 자리
+
+- **underline·italic·faint·strikethrough.** 폰트가 하나뿐이라 italic은 합성
+  말고는 길이 없고, underline은 렌더러에 선 긋기가 필요하다. 필요해지면 그때.
+- **커서 모양(bar·underline)과 깜빡임.** DECSCUSR을 셸이 보내지만 무시한다.
+- **선택 영역.** 라이브러리에 자리가 있지만 copy mode의 일이다.
+- **부분 갱신.** 위험 2 참고.
+- **스크롤바 표시.** `PageList.scrollbar()`가 값을 주지만 화면에 그리지
+  않는다. TR-M2에서 로그로만 찍을지도 그때 정한다.
+
+## 참고
+
+- `docs/decisions/project_copy_mode.md` — 이 서브프로젝트가 선행 조건을
+  만들어 주는 상대. dispatch 단계와 Cmd 예약에 관한 약속이 여기 있다.
+- `docs/decisions/project_input_policy.md` — 입력 파이프라인 세 단계.
+- `docs/decisions/project_gate_chain_composition.md` — 체인을 더하고 빼는 규칙.
+- `docs/decisions/project_kernel_config.md` — 체인 하나의 비용이 커널 빌드
+  3회라는 근거.
+- `docs/superpowers/specs/2026-08-08-tars-terminal-foundation-design.md` —
+  렌더러와 폰트의 원래 설계.
