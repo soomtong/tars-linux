@@ -24,7 +24,8 @@ plan을 그 시점에 새로 쓰는 것이 이 저장소의 방식이다
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. **origin보다 15개 앞서 있다**(push 안 됨).
+`main`, working tree 깨끗함. **`origin/main`과 같다** — 2026-08-23에
+`ff60b90..676baab`으로 push했다.
 
 ```bash
 git log --oneline d10fcfd..main     # d10fcfd = 이전 세션의 마지막 커밋
@@ -269,7 +270,7 @@ feedback 셋과 `project_terminal_rendering`(**새로 생겼다**),
 3. TR-M1의 위험으로 design이 이미 지목한 것은 **위험 3(한글 캐시 메모리)**이다
    — 16×16 비트맵 하나가 256바이트라 자주 쓰는 몇백 자면 수십 KB일 것으로
    보지만, 128MB 게스트라 실측하기로 되어 있다.
-4. push는 아직 안 됐다(`origin/main`보다 15개 앞). 사용자가 원하면 그때 한다.
+4. TR-M0은 push까지 끝났다. 새로 쌓는 커밋만 신경 쓰면 된다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
