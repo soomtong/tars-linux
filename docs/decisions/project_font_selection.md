@@ -56,20 +56,52 @@ GNU Unifont 17.0.03(`~/Library/Fonts/unifont-17.0.03.otf`)을 실측했다.
 - 라이선스는 **SIL OFL 1.1과 GNU GPL v2+ (Font Embedding Exception) 이중
   라이선스**라 재배포에 문제가 없다.
 
-값은 크기다. 5197KB이고 gzip으로 1278KB다. Hanme은 441KB에 gzip 95KB다.
-폰트는 `kernel/make_initrd.sh:94`가 initrd에 복사하므로 이 차이가 그대로
-initrd 크기에 얹힌다. 커널이 `/init`에 넘기는 1.12초 중 51%가 initrd 압축
-해제라는 실측이 있어서([[project_kernel_config]]) 부팅 시간에도 영향이 간다.
-필요하면 `fontTools`의 subset으로 한자를 덜어내 줄일 수 있다.
+## 크기 부담은 재 보니 작다
+
+값은 크기 하나뿐인데, 계산하면 반대 근거가 약해진다.
+
+| | 원본 | gzip |
+|---|---|---|
+| **현재 initrd 전체** | 67.6MB | **15.5MB** |
+| Hanme | 441KB | 95KB |
+| unifont | 5197KB | 1278KB |
+
+폰트는 `kernel/make_initrd.sh:94`가 initrd에 복사하고 `:188`이 `gzip -9`로
+압축한다. 교체하면 압축된 initrd가 **15.5MB에서 약 16.7MB로 8% 늘어난다.**
+커널이 `/init`에 넘기는 1.12초 중 51%인 0.57초가 압축 해제이므로
+([[project_kernel_config]]) 늘어나는 시간은 **50밀리초 안팎**이다. initrd를
+지배하는 것은 폰트가 아니라 셸과 유저랜드다.
 
 ## 선택지
 
 | 안 | 내용 | 비용 |
 |---|---|---|
 | A | Hanme 유지 + 호환 자모를 조합용 자모로 대체하는 표 + 빠진 3자를 상수 비트맵으로 | 441KB 유지, Zig 약 80줄 |
-| B | unifont로 교체 | initrd가 약 1.2MB 늘고, 우회 코드가 전부 불필요해짐 |
-| C | unifont를 한자 없이 subset해서 교체 | B보다 작고 subset 단계가 빌드에 추가됨 |
+| **B** | **unifont로 교체** | **gzip 기준 +1.2MB(8%), 부팅 +50ms, 우회 코드가 전부 불필요해짐** |
+| C | unifont를 한자 없이 subset해서 교체 | B보다 1MB쯤 작고, 빌드에 `fontTools` 의존성과 subset 단계가 추가됨 |
 | D | Monoplex Nerd 등 아웃라인 폰트 + 알파 블렌딩 | design 결정 4 반전, 게이트 픽셀 검사 재설계 |
+
+## 추천은 B다 (2026-08-23, 사용자 결정 대기 중)
+
+1. **자모 우회로가 통째로 없어진다.** 대체 표도, 빠진 3자의 상수 비트맵도,
+   낱자 재배치 보정도 안 쓴다. IME를 붙이는 날 폰트 쪽에서 할 일이 0이 된다.
+2. **박스 드로잉이 40/128에서 128/128이 된다.** 지금은 TUI 프로그램의 테두리가
+   군데군데 빈다.
+3. **렌더러 코드를 한 줄도 안 고친다.** 격자와 문턱값 성질이 지금과 같다.
+
+C를 권하지 않는 이유는 빌드에 Python 의존성이 붙는 대가로 얻는 것이 1MB
+남짓이기 때문이다.
+
+B로 갈 때 바뀌는 자리는 넷뿐이다.
+
+- `terminal/vendor_fonts.sh` — 내려받을 폰트
+- `kernel/make_initrd.sh:94` — initrd에 복사하는 파일 이름
+- `terminal/src/main.zig:174`와 `terminal/src/font_test.zig:15` — 경로 문자열
+- `ascent_px`가 16에서 14로 바뀌는데, **이 값은 이미 폰트에서 읽고 있으므로
+  코드 변경이 아니다**(`font.zig`의 `Cache.init`).
+
+`terminal/sanity/stb_truetype_main.c:8`도 경로를 갖고 있지만 sanity 프로그램이라
+게이트가 보지 않는다면 함께 고칠지 확인이 필요하다.
 
 ## 관련
 
