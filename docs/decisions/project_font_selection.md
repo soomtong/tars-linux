@@ -81,7 +81,17 @@ GNU Unifont 17.0.03(`~/Library/Fonts/unifont-17.0.03.otf`)을 실측했다.
 | C | unifont를 한자 없이 subset해서 교체 | B보다 1MB쯤 작고, 빌드에 `fontTools` 의존성과 subset 단계가 추가됨 |
 | D | Monoplex Nerd 등 아웃라인 폰트 + 알파 블렌딩 | design 결정 4 반전, 게이트 픽셀 검사 재설계 |
 
-## 추천은 B다 (2026-08-23, 사용자 결정 대기 중)
+## 추천은 B다 (2026-08-23)
+
+> **사용자 결정(2026-08-23): 교체는 하되 TR-M1 다음이다.** TR-M1은 Hanme로
+> 닫고 게이트까지 통과시킨 뒤, unifont 교체를 별도 작업으로 다룬다. 이 문서의
+> 추천(B)은 그대로 유효하고, 착수 시점만 미뤄졌다.
+>
+> **미루는 비용이 애초 걱정보다 작았다.** 이 문서와 당시 `HANDOFF.md`는
+> "TR-M1 Task 4가 `ink>` 기대값을 게이트에 적는 자리라 폰트를 나중에 바꾸면
+> 그 값을 두 번 쓰게 된다"고 적었는데, **실제로 쓴 게이트는 정확한 값이 아니라
+> 0인지만 본다**(`render/check.sh`의 `INK_LEFT -eq 0`). 나머지 검사도 폰트와
+> 무관하다. **다시 써야 하는 곳은 `font_test.zig`의 기대값 표 다섯 줄뿐이다.**
 
 1. **자모 우회로가 통째로 없어진다.** 대체 표도, 빠진 3자의 상수 비트맵도,
    낱자 재배치 보정도 안 쓴다. IME를 붙이는 날 폰트 쪽에서 할 일이 0이 된다.
@@ -92,16 +102,29 @@ GNU Unifont 17.0.03(`~/Library/Fonts/unifont-17.0.03.otf`)을 실측했다.
 C를 권하지 않는 이유는 빌드에 Python 의존성이 붙는 대가로 얻는 것이 1MB
 남짓이기 때문이다.
 
-B로 갈 때 바뀌는 자리는 넷뿐이다.
+B로 갈 때 바뀌는 자리는 **여섯 곳이다**(2026-08-23에 다시 세었다 — 처음에
+넷이라고 적었는데 `prepare.sh`의 주석과 sanity 프로그램을 빠뜨렸다).
 
-- `terminal/vendor_fonts.sh` — 내려받을 폰트
-- `kernel/make_initrd.sh:94` — initrd에 복사하는 파일 이름
-- `terminal/src/main.zig:174`와 `terminal/src/font_test.zig:15` — 경로 문자열
-- `ascent_px`가 16에서 14로 바뀌는데, **이 값은 이미 폰트에서 읽고 있으므로
-  코드 변경이 아니다**(`font.zig`의 `Cache.init`).
+```
+terminal/vendor_fonts.sh             내려받는 URL과 파일 이름
+kernel/make_initrd.sh:94             initrd에 복사
+terminal/src/main.zig                경로 문자열
+terminal/src/font_test.zig           경로 문자열 + 기대값 표 다섯 줄
+terminal/prepare.sh                  주석
+terminal/sanity/stb_truetype_main.c  경로 문자열
+```
 
-`terminal/sanity/stb_truetype_main.c:8`도 경로를 갖고 있지만 sanity 프로그램이라
-게이트가 보지 않는다면 함께 고칠지 확인이 필요하다.
+- **`ascent_px`는 안 고쳐도 된다.** 16에서 14로 바뀌지만 `font.zig`의
+  `Cache.init`이 `stbtt_GetFontVMetrics`에서 읽는다.
+- **`font_test.zig`의 기대값 표가 유일하게 "다시 재야" 하는 자리다.**
+  `A`가 `7x10 y_offset=2`, `한`이 `15x15 x_offset=1 y_offset=0` 같은 값이
+  전부 Hanme 실측이다. 셀 밖으로 새지 않는지 훑는 단언은 그대로 두면 되고,
+  unifont는 11640자에서 넘침이 0이라는 것을 이미 확인했다.
+
+**선행 작업이 하나 있다: 배포 URL을 확인해야 한다.** `vendor_fonts.sh`는
+GitHub 릴리스에서 zip을 내려받는 구조인데, 위 실측은 사용자의
+`~/Library/Fonts/unifont-17.0.03.otf`로 한 것이다. **게이트가 도는 컨테이너는
+그 파일을 못 본다.** unifoundry.com 또는 GNU ftp의 안정적인 주소를 넣어야 한다.
 
 ## 관련
 

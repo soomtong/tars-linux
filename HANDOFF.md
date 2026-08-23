@@ -1,78 +1,90 @@
-# HANDOFF: TR-M1 Task 3까지 갔고 폰트 결정이 하나 열려 있다
+# HANDOFF: TR-M1이 끝났고 폰트 교체가 다음 차례다
 
 ## 목표
 
-**TR-M1(한글)이 Task 3까지 진행됐다**(2026-08-23). 다음 세션의 첫 일은 아래
-"먼저 받아야 할 결정"을 처리하고 **Task 4(`font>`·`ink>` 로그 두 줄)**로 가는
-것이다.
+**TR-M1(한글)이 완료됐다**(2026-08-23). Task 일곱이 전부 끝났고 루트 게이트
+일곱 체인이 3/3으로 통과했다. 화면에 한글이 나오고, 폭 2칸이 픽셀과 좌표
+두 겹으로 증명된다.
 
-plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m1.md`
+다음 세션의 첫 일은 둘 중 하나를 고르는 것이다.
 
-**`zig build`는 통과한다**(2026-08-23 확인). Task 2가 `font.zig`의
-`build()`·`GlyphCache`를 `Cache`·`find()`로 갈아치우면서 `main.zig`가 잠시
-안 맞았는데, Task 3(`f7bbef5`)이 그 자리를 고쳤다. **아직 QEMU로 띄워서 한글이
-실제로 화면에 나오는지는 보지 않았다** — 그것을 증명하는 것이 Task 4와 5다.
+1. **unifont 교체** — 사용자가 2026-08-23에 "TR-M1을 Hanme로 닫고 교체는
+   다음에"로 결정했다. 조사와 추천은 이미 끝나 있다(아래 절).
+2. **TR-M2(스크롤백) plan 작성** — design 결정 10~13이 그 몫이다. plan이 없다.
 
-## 먼저 받아야 할 결정: 폰트를 바꾸는가 (2026-08-23에 열렸고 아직 안 닫혔다)
+**둘을 섞지 않는 편이 낫다.** 폰트 교체는 `font_test`의 기대값 표를 다시 재는
+일이라 범위가 명확하고, TR-M2는 새 plan을 쓰는 일이다.
 
-**Task 4를 시작하기 전에 이것부터 사용자에게 묻는다.** Task 4가 `ink>` 로그의
-기대값을 게이트에 적는 자리라, 폰트를 나중에 바꾸면 그 값을 두 번 쓰게 된다.
-Task 3까지는 어느 쪽을 골라도 영향이 없었다(격자가 8/16으로 동일하다).
+## TR-M1이 남긴 커밋
 
-계기는 사용자가 데스크톱 터미널에서 쓰는 **Monoplex Nerd**를 TARS에도 쓸 수
-있는지 물은 것이었다. 로컬 폰트 여덟을 전부 쟀고, **후보를 가르는 것은
-커버리지가 아니라 16px에서의 중간값 비율이었다** — 문턱값 렌더링(design 결정 4)
-이라 아웃라인 폰트는 획이 끊긴다.
+```
+5325560  Run the font test instead of leaving it unbuilt
+b91fb03  Bake each glyph the first time it is asked for      ← 빌드 안 되는 커밋
+f7bbef5  Put each glyph where the font metrics say it goes
+2d99328  Count the ink on both halves of a wide cell
+c69bcdd  Skip empty cells when counting ink
+39843a1  Make the gate prove Hangul covers both of its cells
+```
 
-| | Hanme (현재) | **unifont 17.0.03** | MonoplexNerd |
-|---|---|---|---|
-| 16px 중간값 비율 | 0.0% | **0.0%** | **92.8%** |
-| 호환 자모(`ㄱ`) | 0 / 51 | **51 / 51** | 51 / 51 |
-| 조합용 자모 | 18/20/26 | **19/21/27** | 0 |
-| 박스 드로잉 | 40 / 128 | **128 / 128** | 128 / 128 |
-| 한자 | 0 | 20992 | 12710 |
-| A / 한 advance | 8 / 16 | **8 / 16** | 8 / 16 |
-| 파일 (gzip) | 441KB (95KB) | 5197KB (1278KB) | 10039KB |
+**`b91fb03` 하나는 `zig build`(게스트 바이너리)가 안 된다.** Task 2가
+`font.zig`를 갈아치웠는데 `main.zig`가 아직 옛 시그니처를 쓰던 자리이고,
+`f7bbef5`가 그것을 고쳤다. `zig build test`(호스트 검사)는 그 커밋에서도
+통과한다. **`git bisect`를 돌릴 일이 생기면 이 자리를 기억할 것.**
 
-- **MonoplexNerd·D2Coding·PlemolKR·TubakDot은 쓸 수 없다.** 문턱값으로 자르면
-  획이 사라진다. 쓰려면 `drm.zig`에 알파 블렌딩이 필요하고 그것은 design
-  결정 4를 뒤집으며 게이트의 픽셀 검사도 재설계해야 한다.
-- **남는 비트맵 폰트는 Hanme과 unifont 둘뿐이다.** unifont는 `unitsPerEm=64`라
-  16px에서 scale이 정확히 0.25이고, CFF인데도 **vendor된 `stb_truetype.h`가
-  읽는다**(직접 컴파일해서 확인). 11640자를 구워도 셀을 넘치는 글자가 0이다.
-- **크기 부담은 작다.** 압축된 initrd가 15.5MB에서 약 16.7MB로 8% 늘고 부팅은
-  50밀리초쯤 더 걸린다. initrd를 지배하는 것은 폰트가 아니라 셸과 유저랜드다.
+사이에 다른 세션의 커밋 둘(`01eab8e`, `88aeced`)이 끼어 있다. 폰트 조사다.
 
-**Claude의 추천은 unifont 교체(안 B)다.** 자모 우회로가 통째로 없어지고, 박스
-드로잉이 채워지고, 렌더러 코드를 한 줄도 안 고친다. 바뀌는 자리는
-`vendor_fonts.sh` · `make_initrd.sh:94` · `main.zig:174` · `font_test.zig:15`의
-경로뿐이다(`ascent_px`가 16에서 14로 바뀌지만 이미 폰트에서 읽고 있다).
+## 다음 차례 1: unifont 교체 (조사 끝, 결정 남음)
 
-선택지 넷과 근거 전부: `docs/decisions/project_font_selection.md`
-한메 폰트의 자모 실태와 우회 방법: `docs/decisions/project_font_jamo_coverage.md`
+**Claude의 추천은 교체다.** 근거 전부는
+`docs/decisions/project_font_selection.md`에 있고, 요점만 옮긴다.
 
-## 지금 어디인가
+- **후보를 가르는 것은 커버리지가 아니라 16px에서의 중간값 비율이다.** 문턱값
+  렌더링(design 결정 4)이라 아웃라인 폰트는 획이 끊긴다. 사용자가 쓰는
+  MonoplexNerd는 중간값이 92.8%라 못 쓴다.
+- **문턱값에 안전한 비트맵 폰트는 Hanme과 unifont 둘뿐이다.** unifont는
+  `unitsPerEm=64`라 16px에서 scale이 정확히 0.25이고, advance가 8/16으로
+  **지금 격자와 같다.** CFF인데도 vendor된 `stb_truetype.h`가 읽는다.
+- **얻는 것:** 호환 자모 0→51, 박스 드로잉 40/128→128/128, 한자 0→20992.
+  자모 우회로가 통째로 필요 없어진다.
+- **치르는 것:** gzip initrd가 15.5MB→16.7MB(8%), 부팅 +50ms 안팎.
 
-- **Boot Foundation(BF-M0~M4)** 2026-08-07 완료.
-- **Hardware Discovery(HD-M0~M2)** 2026-08-22 완료.
-- **Terminal Rendering(TR)** 진행 중. milestone 셋 중 **TR-M0 완료**,
-  **TR-M1은 Task 일곱 중 셋까지 커밋됐다.** TR-M2(스크롤백)는 plan도 없다.
-    - Task 1 `5325560` — `font_test`를 호스트 아키텍처에서 돌게 만들었다
-    - Task 2 `b91fb03` — `font.zig`가 lazy 해시 맵 캐시가 됐다
-    - Task 3 `f7bbef5` — 렌더러가 새 캐시를 쓰고 글리프 오프셋을 반영한다
-    - **Task 4 앞에 폰트 결정이 하나 끼어 있다**(위 절). 그다음
-      4(`font>`·`ink>` 로그) · 5(`check.sh` 한글 검사) ·
-      6(루트 게이트 3/3) · 7(문서)
-  - design: `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`
-    (결정 13개. 1~9가 TR-M0이었고 10~13이 TR-M2, 한글이 TR-M1)
-  - TR-M0 plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md`
-  - **TR-M1 plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m1.md`**
+### 교체할 때 실제로 바뀌는 자리는 **여섯 곳**이다
+
+`project_font_selection.md`는 넷이라고 적었는데 세어 보니 여섯이다.
+
+```
+terminal/vendor_fonts.sh             내려받는 URL과 파일 이름
+kernel/make_initrd.sh:94             initrd에 복사
+terminal/src/main.zig                경로 문자열
+terminal/src/font_test.zig           경로 문자열 + 기대값 표 다섯 줄
+terminal/prepare.sh                  주석
+terminal/sanity/stb_truetype_main.c  경로 문자열
+```
+
+**결정 문서가 다루지 않은 것이 하나 있다.** `vendor_fonts.sh`는 GitHub
+릴리스에서 zip을 내려받는 구조인데, unifont는 사용자의 `~/Library/Fonts`에 있는
+것을 쟀다. **게이트가 도는 컨테이너는 그 파일을 못 본다** — 안정적인 배포
+URL(unifoundry.com 또는 GNU ftp)을 먼저 확인해야 한다.
+
+**`ascent_px`는 안 고쳐도 된다.** 16에서 14로 바뀌지만 `Cache.init`이
+`stbtt_GetFontVMetrics`에서 읽는다.
+
+### 게이트는 폰트를 안 탄다 (2026-08-23에 확인)
+
+이전 HANDOFF와 `project_font_selection.md`가 **"Task 4가 `ink>` 기대값을
+게이트에 적는 자리라, 폰트를 나중에 바꾸면 그 값을 두 번 쓰게 된다"**고
+적었는데 **그렇지 않았다.** 실제로 쓴 게이트는 정확한 값이 아니라 0인지만 본다.
+
+```bash
+if [ "$INK_LEFT" -eq 0 ] || [ "$INK_RIGHT" -eq 0 ]; then
+```
+
+나머지 검사 셋(`한` 조립, 열 번호 +2, 캐시 1MB 미만)도 폰트와 무관하다.
+**다시 써야 하는 곳은 `font_test.zig`의 기대값 표 다섯 줄뿐이다.**
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. **`origin/main`보다 여러 커밋 앞서 있다.**
-HEAD는 빌드가 통과하지만 **중간의 `b91fb03` 하나는 빌드가 안 되는 커밋이다**
-(Task 2와 Task 3 사이). `git bisect`를 돌릴 일이 생기면 이 자리를 기억할 것.
+`main`. **`origin/main`보다 커밋 열둘 이상 앞서 있다.**
 
 ```bash
 git rev-list --count origin/main..main
@@ -96,103 +108,62 @@ git log --oneline origin/main..main
 
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-`diff`로 대조해 보인 뒤 승인을 받아 제자리에 넣는다.
+`diff`로 대조해 보인 뒤 사용자가 `cp`로 넣는다.
 
-**긴 명령(루트 게이트 등)은 실행 전에 얼마나 걸리는지 알린다.**
+**긴 명령(루트 게이트 등)은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는
+47분이라 Bash 도구의 10분 타임아웃을 넘는다 — **백그라운드로 돌려야 한다.**
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
 **매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.**
 
-## 폰트를 재서 알아낸 것 (다시 조사하지 말 것)
+## TR-M1이 실측한 것 (다시 조사하지 말 것)
 
-**이번 세션이 한 일의 대부분이 이 실측이다.** plan의 "착수 전에 이미 확정된
-사실" 절에 근거와 함께 전부 들어 있다. 여기에는 요약만 둔다.
+전부 `docs/decisions/project_terminal_rendering.md`의 "TR-M1이 알아낸 것"
+절에 근거와 함께 있다. 여기에는 숫자만 둔다.
 
-**1. 폰트가 담고 있는 것.** `vendor/fonts/Hanme_8x4x4.ttf`(452KB)다.
+**1. Hanme(`vendor/fonts/Hanme_8x4x4.ttf`, 441KB)가 담고 있는 것.**
 
 | 범위 | 있는 글자 수 |
 |---|---|
 | ASCII 출력 가능 | 95 / 95 |
-| 라틴 확장(U+00A0~U+024F) | 56 / 432 |
 | **한글 음절(U+AC00~U+D7A3)** | **11172 / 11172** |
 | **호환 자모(`ㄱ`·`ㅏ`, U+3131~U+3163)** | **0 / 51** |
 | **조합용 자모(U+1100~U+11FF)** | **64** (초 18/19 · 중 20/21 · 종 26/27) |
 | 박스 드로잉(U+2500~U+257F) | 40 / 128 |
 | **한자** | **0 / 20992** |
 
-**2026-08-23에 이 표의 결론이 뒤집혔다.** 원래 여기에는 "낱자와 한자는 아예
-없다. 한글 IME를 붙이면 조합 중인 낱자를 이 폰트로 못 그린다"고 적혀 있었다.
-그 단정은 **호환 자모만 재고 조합용 자모를 재지 않아서** 나온 것이다. 낱자를
-그릴 길은 있다. 빠진 것은 각 구간의 마지막 하나씩(`ᄒ` U+1112 · `ᅵ` U+1175 ·
-`ᇂ` U+11C2)이고, 그 셋도 완성형에서 픽셀로 되뽑을 수 있다는 것까지 검산이
-끝났다. 근거와 방법은 `docs/decisions/project_font_jamo_coverage.md`에 있다.
+**호환 자모가 0자라고 해서 낱자를 못 그리는 것이 아니다.** 조합용 자모가
+64자 있어서 51자 중 49자를 대체할 수 있고, 빠진 셋(`ᄒ`·`ᅵ`·`ᇂ`)도 완성형에서
+픽셀로 되뽑을 수 있다. 근거는 `docs/decisions/project_font_jamo_coverage.md`.
 
-**폰트를 바꿀지가 열려 있다.** 사용자의 로컬 폰트를 전부 재 봤더니 문턱값
-렌더링에 안전한(16px에서 중간값이 0인) 폰트는 Hanme과 **unifont 17.0.03**
-둘뿐이었다. unifont는 낱자 문제가 애초에 없고 격자도 8/16으로 같지만 파일이
-5197KB다. 사용자가 쓰는 MonoplexNerd는 중간값이 92.8%라 쓸 수 없다. 후보 표와
-선택지 넷은 `docs/decisions/project_font_selection.md`에 있다.
-
-**2. 글리프의 실제 모양.** `unitsPerEm=1600`, `ascent=1600`, `descent=0`이라
-16px에서 `scale`이 정확히 0.01이다.
+**2. 글리프의 모양.** `unitsPerEm=1600`, `ascent=1600`, `descent=0`이라
+16px에서 `scale`이 정확히 0.01이고 `ascent_px`가 16이다.
 
 ```
-A   7x10  xoff=0 yoff=-14  advance=8.00px   partial=0
-g   7x10  xoff=0 yoff=-11  advance=8.00px   partial=0
-한 15x15  xoff=1 yoff=-16  advance=16.00px  partial=0
-가 13x13  xoff=3 yoff=-15  advance=16.00px  partial=0
-é   7x10  xoff=1 yoff=-14  advance=8.00px   partial=0
+A   7x10  xoff=0 yoff=-14  advance=8.00px   ink=39  partial=0
+g   7x10  xoff=0 yoff=-11  advance=8.00px   ink=40  partial=0
+한 15x15  xoff=1 yoff=-16  advance=16.00px  ink=64  partial=0
+가 13x13  xoff=3 yoff=-15  advance=16.00px  ink=46  partial=0
+é   7x10  xoff=1 yoff=-14  advance=8.00px   ink=33  partial=0
 U+4E00(없는 글자)  glyph_index=0  0x0  advance=0.00px
 ```
 
 **3. `partial=0`이다.** coverage가 0 아니면 255뿐이고 그 사이 값이 **하나도
-없다.** design 결정 4(문턱값 렌더링)의 근거가 짐작에서 실측이 됐다.
+없다.** 그래서 게이트가 정확한 상수와 비교할 수 있다.
 
-**4. 전부 구우면 2.06MB에 29.3밀리초다**(한 자당 193바이트, 0.003ms).
-**design 위험 3이 여기서 닫힌다 — 메모리는 위험이 아니다.** 그런데도 lazy
-캐시가 옳은 이유는 시간이다. 29ms는 컨테이너의 arm64 native 값이고 게스트는
-TCG라 그 몇십 배가 붙는다.
+**4. 캐시 상한 2,157,133바이트(2.06MB) / 실사용 1,784바이트.** 굽는 데는
+컨테이너 arm64 native에서 29.3밀리초. **design 위험 3은 닫혔다 — 메모리는
+위험이 아니었고, lazy의 이유는 시간이다.**
 
-**5. `setPixel`도 `getPixel`도 범위 검사를 하지 않는다**(`terminal/src/drm.zig:128`,
-`:138`). 오프셋을 반영하면 이 자리가 위험해진다.
+**5. 호스트의 잉크와 게스트 프레임버퍼의 잉크가 정확히 일치한다.** `한`이
+호스트에서 64픽셀이고 게이트가 되읽은 것이 `39 + 25 = 64`다. **사슬 전체가
+무손실이다.**
 
-**6. Zig 0.16에 `std.AutoHashMapUnmanaged`가 있고 `.empty`로 초기화한다.**
-`std.AutoHashMap`도 아직 있다. 컨테이너에서 직접 컴파일해 확인했다.
+**6. `setPixel`도 `getPixel`도 범위 검사를 하지 않는다**(`drm.zig:128`, `:138`).
+`drawGlyph`와 `dumpInk`가 호출부에서 막는다. `drm.zig`는 안 고쳤다.
 
-## TR-M1이 고칠 것 셋 (design에 없던 것이 하나 있다)
-
-**1. 폰트 캐시를 lazy 해시 맵으로.** design이 정한 것이다.
-
-**2. 글리프 오프셋 반영 — design에 없다.** design의 TR-M1 절은 "`cellWidth`와
-spacer 셀 처리는 이미 있으므로 손대지 않는다"고만 적었고 baseline을 언급하지
-않았다. 그런데 **지금 `drawGlyph`는 stb가 주는 `yoff`를 통째로 버리고 셀
-모서리부터 그린다** — 그래서 `g`의 디센더가 화면에서 사라지고 있다. 라틴만
-있을 때는 편차가 3픽셀이라 티가 덜 났지만 한글이 들어오면 5픽셀로 벌어진다.
-plan의 "이번에 정하는 것 1"에 근거를 적어 두었다. **design 결정을 뒤집는 것이
-아니라 design이 몰랐던 것을 채우는 것이다.**
-
-**3. `cell_width`를 폰트의 advance에서.** `font.zig:19-22`의 `cellWidth`가
-"0x7F를 넘으면 16"이라고 판정하는데 `é`(advance 8)에서 틀린다. **지금
-`Glyph.cell_width`는 아무도 안 읽는 죽은 필드라 화면에 나타난 적이 없고**,
-TR-M1의 `ink>` 로그가 처음으로 이 값을 읽는다.
-
-## 게이트가 한글을 보는 방식 (plan Task 5)
-
-`sendkey`는 ASCII만 칠 수 있어서 한글을 직접 못 친다. 셸의 `printf`가 바이트를
-만들어 주는 것이 유일한 길이라 `printf '\xed\x95\x9c\033[41m \033[0m\n'`을 친다.
-
-**한글 바로 뒤에 배경색 칠한 공백을 붙이는 것이 요점이다.** 그 공백의 `style>`
-줄이 좌표를 주므로 게이트가 "한글 열 번호 + 2"와 비교할 수 있다. 이렇게 폭
-2칸이 두 겹으로 증명된다.
-
-- `ink>`(새 로그) — 셀의 왼쪽 8픽셀과 오른쪽 8픽셀의 잉크를 **따로** 센다.
-  렌더러 쪽 증거다. **셀 하나만 보면 글자가 반쪽만 그려져도 통과한다.**
-- 좌표 비교 — 파서 쪽 증거다.
-
-**미확정 하나: fish의 `printf`가 `\x`를 해석하는지 모른다.** Task 5 Step 2에서
-실제로 부팅해야 알 수 있다. 안 되면 8진수 `\355\225\234`로 바꾼다(POSIX가
-규정한 것은 8진수 쪽이다).
+**7. Zig 0.16에 `std.AutoHashMapUnmanaged`가 있고 `.empty`로 초기화한다.**
 
 ## 게이트 현황
 
@@ -202,17 +173,22 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`docs/decisions/project_build_host_arch.md`).
 
-**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M0),
-3/3, 부팅 30회. 2026-08-23에 **46분 4초**에 전부 통과했다. TR-M1이 한글 명령
-(약 12초 × 3회)을 더하므로 **약 50분**을 예상한다.
+**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · **TR-M1**),
+3/3, 부팅 30회 이상. 2026-08-23에 **46분 33초**에 전부 통과했다.
 
 | 구성 | 시간 |
 |---|---|
 | 여섯 체인 (2026-08-22 기준선) | 37분 43초 |
-| **일곱 체인 (TR 등록 후)** | **46분 4초** |
+| 일곱 체인 (TR 등록 후) | 46분 4초 |
+| **일곱 체인 (TR-M1 완료 후)** | **46분 33초** |
 
-**체인 하나가 6분 13초를 더했다** — "커널 빌드 3회 = 2분 40초"라는 예상의 두
-배가 넘는다. 체인을 더할 때 커널 빌드만 세면 과소평가한다.
+**TR-M1이 더한 것은 29초뿐이다.** 한글 명령이 `sendkey` 타수를 늘렸는데도
+그랬다 — 미리 굽기(ASCII 95자)를 없앤 것이 되돌려 준 것으로 보이지만 갈리지
+않았다.
+
+**baseline을 2~5픽셀 옮겼는데도 여섯 체인이 안 흔들렸다.** 다섯 체인이 보는
+`screen>`는 문자 내용이고 TR의 `pixel>`은 배경색 칠한 공백이라 글리프 위치와
+무관하기 때문이다.
 
 monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
 45460(TR)이고 **45461이 비어 있다.**
@@ -252,7 +228,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `Power off not available: System halted instead`(커널, 없어야 한다) ·
 `Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다) ·
 `terminal: style>` · `terminal: pixel>` · `terminal: render> first frame` ·
-**TR-M1이 더할 것: `terminal: ink>` · `terminal: font>`**
+`terminal: ink>` · `terminal: font>`
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
 화면을 판정한다.
@@ -274,16 +250,18 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   명령은 한 번의 `docker run` 안에서 끝내야 한다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 47분이라 10분
+  상한을 넘는다. `run_in_background`로 돌린다.
 
 ## 이월 숙제
 
+- [ ] **unifont 교체.** 위 "다음 차례 1" 절. 배포 URL 확인이 선행 작업이다.
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. 게다가
       컨테이너가 arm64인데 `qemu-system-x86_64`를 TCG로 돌리는 값이라 실기
       성능이 아니다. **부분 갱신 논의의 전제다** — 시간이 `fill`에 있다면 부분
-      갱신을 넣어도 별로 안 줄어든다.
-- [ ] **한글 IME를 붙이면 조합 중인 낱자를 이 폰트로 못 그린다.** 호환 자모가
-      0자다. IME를 만들 때 폰트를 하나 더 vendor할지 정해야 한다.
+      갱신을 넣어도 별로 안 줄어든다. TR-M1이 미리 굽기를 없앤 뒤의
+      `render> first frame`을 TR-M0 시절과 비교하는 일도 여기에 묶인다.
 - [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.** 둘 다 기본값으로 따라온
       것이고 `ACPI Error:`가 하나도 안 났으므로 끌 수 있을 것으로 본다.
 - [ ] **`init`을 `ReleaseSafe`로.** initrd 67.7MB → gzip 15.5MB.
@@ -294,11 +272,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`.
 - [ ] **`pty_test`가 유일한 "빌드만 되는 검사"다.** `/usr/bin/fish`를
       exec하는데 그 fish가 게스트용 x86_64라 호스트로 못 옮긴다.
-      (`vt_test`는 TR-M0이, `font_test`는 TR-M1 Task 1이 살린다.)
+      (`vt_test`는 TR-M0이, `font_test`는 TR-M1 Task 1이 살렸다.)
 - [ ] **`clean()`에서 커널을 빼는 논의.** 게이트 시간의 가장 큰 단일 항목이다
       (`project_kernel_config`). 정책 변경이므로 별도로 다룬다.
 - [ ] **체인의 `sendkey` 사이 `sleep 0.3`을 줄일 수 있는지.** TR 체인이 더한
-      6분 13초의 일부가 여기 있고, TR-M1이 한글 명령으로 더 더한다.
+      6분 13초의 일부가 여기 있다.
 
 ## IP-M2가 남긴 것 (그대로 이월)
 
@@ -320,45 +298,41 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **거두기(3)를 `poll`(4)보다 앞에 둔 것이 backoff를 만든다.** 이 코드의 진짜
 계약은 HD 체인이 아니라 BF의 `started terminal` **정확히 3회**와 PM의
-`started console shell` **정확히 1회**에 있다. TR은 이 코드를 안 건드린다.
+`started console shell` **정확히 1회**에 있다. TR은 이 코드를 안 건드렸다.
 
-## 핵심 파일
+## 핵심 파일 (TR-M1 이후 상태)
 
-**TR-M1이 건드릴 것.** 아직 하나도 안 고쳤다.
-
-- ~~`terminal/build.zig:82-103` — `font_test` 등록~~ **Task 1이 끝냈다.**
-- ~~`terminal/src/font.zig` — lazy 캐시로 새로 쓰기~~ **Task 2가 끝냈다.**
-- ~~`terminal/src/font_test.zig` — 단언 추가~~ **Task 2가 끝냈다.**
-- ~~`terminal/src/main.zig` — `drawGlyph` 오프셋 반영, 미리 굽기 제거~~
-  **Task 3이 끝냈다.**
-- `terminal/src/main.zig:126-156` — `dumpStyles`. **Task 4가 그 아래에
-  `dumpInk`를 더한다. 여기가 다음 자리다.**
-- `render/check.sh` — 213줄. Task 5가 검사 넷을 더한다(현재 검사 셋 + 음성 셋).
+- `terminal/src/font.zig` — 143줄. `Cache`(lazy 해시 맵) + `Glyph`.
+  `find()`가 `!Glyph`를 준다(옛 `?Glyph`가 아니다) — 폰트에 없는 글자는
+  null이 아니라 **비트맵이 null인 Glyph**다.
+- `terminal/src/font_test.zig` — 151줄. 단언 여섯. **폰트를 바꾸면 기대값 표
+  다섯 줄을 다시 재야 하는 유일한 자리다.**
+- `terminal/src/main.zig` — `drawGlyph`(오프셋 + 범위 검사), `render`
+  (`*font.Cache`), `dumpInk`(`INK_DUMP_LIMIT` 8).
+- `render/check.sh` — 301줄. 검사 일곱(색 셋 + 한글 넷) + 음성 검사 셋.
+- `check.sh:108` — `run_chain "TR-M1" ./render/check.sh`.
 - `terminal/src/drm.zig:128`·`:138` — `setPixel`·`getPixel`. **범위 검사가
-  없다.** 고치지는 않고 호출부에서 막는다.
+  없다.** 고치지 않고 호출부에서 막는다.
 
 **기억.** `MEMORY.md`(색인) + `docs/decisions/`(본문). 새 세션은 협업 방식
-feedback 셋과 `project_terminal_rendering`, `project_build_host_arch`,
+feedback 셋과 `project_terminal_rendering`, `project_font_selection`,
+`project_font_jamo_coverage`, `project_build_host_arch`,
 `project_guest_environment`, `project_gate_chain_composition`,
 `project_copy_mode`, `project_input_policy`, `project_kernel_config`,
 `project_zig_c_uapi_rule`을 먼저 읽을 것.
 
 ## 다음 에이전트에게
 
-1. `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m1.md`의
-   Task 4부터 읽는다. **폰트 실측값이 전부 그 안에 있으므로 다시 재지 않는다.**
-   단, 그 절에는 **2026-08-23 정정 블록**이 들어 있다. 정정된 쪽이 맞다.
-2. `docs/decisions/project_terminal_rendering.md`를 읽는다. TR-M0이 알아낸
-   것과 `grep`/NUL 함정이 거기 있다.
-3. **폰트 결정을 사용자에게 묻는다**(위 "먼저 받아야 할 결정" 절). 근거는
-   `docs/decisions/project_font_selection.md`에 있고 Claude의 추천은
-   unifont 교체다. **Task 4가 `ink>` 기대값을 게이트에 적는 자리라, 이
-   결정을 미루면 그 값을 두 번 쓰게 된다.**
-4. 결정이 나면 **Task 4**로 간다. `main.zig:126-156` 아래에 `dumpInk`를
-   더하는 일이다.
-5. **아직 QEMU로 한글을 눈으로 본 적이 없다.** Task 3까지는 빌드만 통과했다.
-   화면에 실제로 나오는지는 Task 5의 게이트가 처음 증명한다.
-6. **push 시점을 사용자와 정할 것.** `origin/main`보다 여러 커밋 앞서 있다.
+1. **TR-M1은 끝났다. 되돌아가서 다시 확인할 것이 없다.** 게이트가 초록이고
+   문서·기억이 갱신되어 있다.
+2. **unifont 교체와 TR-M2 중 무엇을 할지 사용자에게 묻는다.** 사용자는
+   2026-08-23에 "TR-M1을 Hanme로 닫고 교체는 다음에"라고만 정했고, 순서는
+   안 정했다.
+3. 교체를 고르면 **배포 URL 확인이 첫 일이다.** 컨테이너가 사용자의
+   `~/Library/Fonts`를 못 본다.
+4. TR-M2를 고르면 **plan을 그 시점에 새로 쓴다**(`CLAUDE.md`). design 결정
+   10~13이 방향이지 plan이 아니다.
+5. **push 시점을 사용자와 정할 것.** `origin/main`보다 열둘 이상 앞서 있다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
