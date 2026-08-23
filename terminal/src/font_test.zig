@@ -4,15 +4,19 @@ const font = @import("font.zig");
 /// 폰트 캐시의 검사. 부팅을 안 쓰고 도는 자리다 — 래스터라이저는 게스트
 /// 하드웨어와 상관이 없다.
 ///
-/// 기대값은 plan을 쓰면서 컨테이너에서 직접 재 둔 것이다. 짐작으로 적으면
-/// 틀리는 자리가 둘이다: **`yoff`가 글자마다 다르고**(A는 -14, 한은 -16),
-/// **폰트에 없는 글자는 에러가 아니라 빈 비트맵으로 온다.**
+/// 기대값은 컨테이너에서 직접 재 둔 것이다. 짐작으로 적으면 틀리는 자리가
+/// 둘이다: **`yoff`가 글자마다 다르고**(A는 -10, 한은 -12), **그릴 것이
+/// 없는 글자는 에러가 아니라 빈 비트맵으로 온다.**
+///
+/// **이 파일의 기대값은 unifont 17.0.03의 실측이다.** vendor_fonts.sh가 그
+/// 버전에 고정하고 sha256으로 확인한다. 폰트를 바꾸면 다시 재야 하는 곳이
+/// 기대값 표만이 아니다 — 아래 4번 검사의 표본도 폰트를 탄다.
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
     const file = try std.Io.Dir.cwd().readFileAlloc(
         init.io,
-        "vendor/fonts/Hanme_8x4x4.ttf",
+        "vendor/fonts/unifont.otf",
         allocator,
         .unlimited,
     );
@@ -28,9 +32,10 @@ pub fn main(init: std.process.Init) !void {
 
     // ── 2. 글자마다 기대하는 모양 ─────────────────────────────────────
     //
-    // y_offset은 stb의 yoff에 ascent(16px)를 더한 값이다. 셀 위쪽 모서리에서
-    // 몇 픽셀 아래에 찍는가를 뜻한다. 'g'가 'A'보다 3픽셀 아래인 것이
-    // 디센더이고, 이 값을 버리면 그 디센더가 사라진다.
+    // y_offset은 stb의 yoff에 ascent(unifont는 14px)를 더한 값이다. 셀 위쪽
+    // 모서리에서 몇 픽셀 아래에 찍는가를 뜻한다. 'g'의 아래끝이 5+11=16이라
+    // baseline인 14보다 2픽셀 더 내려가는데 그것이 디센더이고, 이 값을
+    // 버리면 그 디센더가 사라진다.
     const Want = struct {
         cp: u32,
         w: u32,
@@ -41,12 +46,12 @@ pub fn main(init: std.process.Init) !void {
         what: []const u8,
     };
     const wants = [_]Want{
-        .{ .cp = 'A', .w = 7, .h = 10, .cell_width = 8, .x_offset = 0, .y_offset = 2, .what = "라틴 대문자" },
-        .{ .cp = 'g', .w = 7, .h = 10, .cell_width = 8, .x_offset = 0, .y_offset = 5, .what = "디센더가 아래로 내려간다" },
-        .{ .cp = 0xD55C, .w = 15, .h = 15, .cell_width = 16, .x_offset = 1, .y_offset = 0, .what = "한글 '한'은 폭 2칸" },
-        .{ .cp = 0xAC00, .w = 13, .h = 13, .cell_width = 16, .x_offset = 3, .y_offset = 1, .what = "한글 '가'" },
+        .{ .cp = 'A', .w = 6, .h = 10, .cell_width = 8, .x_offset = 1, .y_offset = 4, .what = "라틴 대문자" },
+        .{ .cp = 'g', .w = 6, .h = 11, .cell_width = 8, .x_offset = 1, .y_offset = 5, .what = "디센더가 아래로 내려간다" },
+        .{ .cp = 0xD55C, .w = 15, .h = 14, .cell_width = 16, .x_offset = 1, .y_offset = 2, .what = "한글 '한'은 폭 2칸" },
+        .{ .cp = 0xAC00, .w = 14, .h = 14, .cell_width = 16, .x_offset = 2, .y_offset = 2, .what = "한글 '가'" },
         // 0x7F를 넘지만 폭이 1칸이다. cellWidth의 옛 규칙이 틀렸던 자리다.
-        .{ .cp = 0x00E9, .w = 7, .h = 10, .cell_width = 8, .x_offset = 1, .y_offset = 2, .what = "é는 0x7F를 넘어도 1칸" },
+        .{ .cp = 0x00E9, .w = 6, .h = 12, .cell_width = 8, .x_offset = 1, .y_offset = 2, .what = "é는 0x7F를 넘어도 1칸" },
     };
 
     for (wants) |want| {
@@ -86,6 +91,11 @@ pub fn main(init: std.process.Init) !void {
     //
     // 오프셋을 반영한 뒤에 이것이 지켜지지 않으면 setPixel이 범위 검사를
     // 하지 않으므로(drm.zig:128) 게스트가 죽는다. 폰트 전체를 훑는다.
+    //
+    // **unifont는 여유가 0이다.** 가장 아래가 정확히 16행이라 셀을 꽉 채운다
+    // (Hanme은 15였다). ascent가 14px이고 descent가 2px이라 16x16 격자에
+    // 정확히 맞아떨어지는 폰트이기 때문이고, 그래서 이 단언이 실패한다면
+    // 그것은 대개 폰트가 바뀌었다는 뜻이다.
     var cp: u32 = 0xAC00;
     var worst_bottom: i32 = 0;
     while (cp <= 0xD7A3) : (cp += 1) {
@@ -108,23 +118,29 @@ pub fn main(init: std.process.Init) !void {
         .{worst_bottom},
     );
 
-    // ── 4. 폰트에 없는 글자는 에러가 아니다 ───────────────────────────
+    // ── 4. 그릴 것이 없는 글자도 에러가 아니다 ────────────────────────
     //
-    // 이 폰트에는 한자도 호환 자모(ㄱ)도 없다. stb는 glyph_index 0에
-    // 0x0 비트맵을 준다 — 공백과 똑같은 모양이라 구분되지 않고, 구분할
-    // 이유도 없다. **캐시에는 들어가야 한다.** 안 넣으면 그 글자가 화면에
-    // 남아 있는 동안 프레임마다 다시 굽는다.
+    // stb는 비어 있는 글자에 0x0 비트맵을 준다. **캐시에는 들어가야 한다.**
+    // 안 넣으면 그 글자가 화면에 남아 있는 동안 프레임마다 다시 굽는다.
+    //
+    // 표본이 공백인 데에는 이유가 있다. Hanme을 쓸 때는 U+4E00(한자)을
+    // 표본으로 삼았는데, **unifont에는 "폰트에 없는 글자"라고 부를 것이
+    // 없다.** 미할당 코드포인트에도 글리프가 있고, 그마저 없는 자리는
+    // .notdef가 빈 글리프가 아니라 모양을 가진다 — U+FFFF·U+E000·U+1F600을
+    // 재 보면 셋 다 6x11 비트맵이 나온다. 공백은 어느 폰트에나 있으면서
+    // 그릴 것이 없어서, font.zig가 "폰트에 없는 글자와 공백은 둘 다 null"
+    // 이라고 적어 둔 계약을 폰트와 무관하게 확인해 준다.
     const before = cache.count();
-    const missing = try cache.find(0x4E00);
-    if (missing.bitmap != null) {
-        std.debug.print("FAIL: 폰트에 없는 U+4E00에 비트맵이 있다\n", .{});
+    const blank = try cache.find(' ');
+    if (blank.bitmap != null) {
+        std.debug.print("FAIL: 공백에 비트맵이 있다\n", .{});
         return error.UnexpectedBitmap;
     }
     if (cache.count() != before + 1) {
-        std.debug.print("FAIL: 폰트에 없는 글자가 캐시에 안 들어갔다\n", .{});
+        std.debug.print("FAIL: 그릴 것이 없는 글자가 캐시에 안 들어갔다\n", .{});
         return error.MissingGlyphNotCached;
     }
-    std.debug.print("font_test: 폰트에 없는 글자도 캐시에 들어간다 OK\n", .{});
+    std.debug.print("font_test: 그릴 것이 없는 글자도 캐시에 들어간다 OK\n", .{});
 
     // ── 5. 두 번째 요청은 캐시에서 나온다 ─────────────────────────────
     const count_before = cache.count();

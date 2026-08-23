@@ -91,7 +91,7 @@ cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
 mkdir -p "$WORKDIR/vendor/fonts"
-cp ../terminal/vendor/fonts/Hanme_8x4x4.ttf "$WORKDIR/vendor/fonts/Hanme_8x4x4.ttf"
+cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
 
 cp "$SYSROOT/usr/bin/fish" "$WORKDIR/usr/bin/fish"
 chmod 0755 "$WORKDIR/usr/bin/fish"
@@ -183,6 +183,7 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 # 체인인데, limine이 BIOS INT13h로 ISO에서 읽는 경로가 에뮬레이션에서
 # 극단적으로 느려 53MB(TF-M2 시절 측정)에서는 부팅조차 못 했다. 그 뒤 init이
 # Rust에서 Zig 디버그 빌드(11.6MB)로 바뀌고 CP-M2가 셸 셋을 담으면서 지금은
-# 67.6MB → gzip 15.5MB다(2026-08-14 실측). 갱신할 때는 cpio가 찍는 blocks 수
-# (×512B)와 `ls -l initrd.cpio`를 함께 본다.
+# 73.0MB → gzip 16.8MB다(2026-08-23 폰트를 unifont로 바꾼 뒤 실측. Hanme일
+# 때는 67.6MB → 15.5MB였고, 늘어난 1.2MB가 폰트 몫이다). 갱신할 때는 cpio가
+# 찍는 blocks 수(×512B)와 `ls -l initrd.cpio`를 함께 본다.
 (cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -9 > initrd.cpio

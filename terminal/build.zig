@@ -99,7 +99,7 @@ pub fn build(b: *std.Build) void {
     // 빌드도 실행도 되지 않는 채로 남아 있었고, 그래서 폰트에 관한 단언이
     // 저장소 어디에도 없었다.
     //
-    // vendor/fonts/*.ttf를 상대 경로로 읽으므로 `zig build test`를
+    // vendor/fonts/unifont.otf를 상대 경로로 읽으므로 `zig build test`를
     // terminal/ 안에서 돌려야 한다. 게이트가 이미 그렇게 하고 있다.
     const font_test_mod = b.createModule(.{
         .root_source_file = b.path("src/font_test.zig"),

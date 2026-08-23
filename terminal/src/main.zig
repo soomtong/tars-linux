@@ -19,7 +19,7 @@ extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int
 const MARGIN_COLOR: u32 = 0x00102030;
 const GRID_X: u32 = 20;
 const GRID_Y: u32 = 20;
-const CELL_W: u32 = 8; // 8x4x4-fonts의 라틴 advance. 폰트가 준 값과 같아야
+const CELL_W: u32 = 8; // unifont의 라틴 advance. 폰트가 준 값과 같아야
                        // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
 const ROW_HEIGHT: u32 = 16;
 
@@ -39,8 +39,9 @@ fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
 /// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4).
 ///
 /// TR-M1에서 이 선택의 근거가 짐작에서 실측으로 바뀌었다. 이 폰트의
-/// coverage는 **0 아니면 255뿐이고 그 사이 값이 하나도 없다.** 16px가
-/// 8x4x4의 native 크기라 안티앨리어싱이 아예 일어나지 않는다. 그래서
+/// coverage는 **0 아니면 255뿐이고 그 사이 값이 하나도 없다.** unifont는
+/// 16x16 격자를 그대로 담은 비트맵 폰트이고 unitsPerEm이 64라 16px에서
+/// scale이 정확히 0.25다 — 안티앨리어싱이 아예 일어나지 않는다. 그래서
 /// 게이트의 픽셀 검사가 정확한 상수와 비교할 수 있다.
 ///
 /// **글리프의 오프셋을 반영한다.** stb가 주는 비트맵은 글자를 감싸는 최소
@@ -252,7 +253,7 @@ pub fn main(init: std.process.Init) !void {
 
     const font_data = try std.Io.Dir.cwd().readFileAlloc(
         init.io,
-        "vendor/fonts/Hanme_8x4x4.ttf",
+        "vendor/fonts/unifont.otf",
         allocator,
         .unlimited,
     );
@@ -260,8 +261,9 @@ pub fn main(init: std.process.Init) !void {
     // 미리 굽지 않는다. 처음 쓸 때 굽는 캐시가 대신한다(design의 TR-M1 절).
     //
     // 이 폰트에 완성형 한글 11172자가 전부 들어 있어서 미리 굽기가 성립하지
-    // 않는다 — 전부 구우면 비트맵만 2.06MB이고, 컨테이너에서도 29밀리초가
-    // 드는 일을 TCG 에뮬레이션 게스트가 부팅 때마다 할 이유가 없다.
+    // 않는다 — 전부 구우면 비트맵만 2.07MB이고, 컨테이너(arm64 native)에서도
+    // Debug 빌드로 396밀리초가 드는 일을 TCG 에뮬레이션 게스트가 부팅마다
+    // 할 이유가 없다.
     //
     // font_data를 free하지 않는다. stb_truetype이 그 바이트를 복사하지 않고
     // 참조만 하므로 캐시보다 오래 살아야 한다.

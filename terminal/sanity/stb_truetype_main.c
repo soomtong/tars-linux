@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 int main(void) {
-  FILE *f = fopen("vendor/fonts/Hanme_8x4x4.ttf", "rb");
+  FILE *f = fopen("vendor/fonts/unifont.otf", "rb");
   if (!f) {
     perror("fopen");
     return 1;
