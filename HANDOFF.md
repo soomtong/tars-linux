@@ -1,21 +1,35 @@
-# HANDOFF: 한글 plan을 다 썼고 폰트는 이미 재 놓았다
+# HANDOFF: TR-M1 Task 2까지 갔고 빌드가 일부러 깨져 있다
 
 ## 목표
 
-**TR-M1(한글)의 plan이 완성되어 있다**(2026-08-23). 구현은 **한 줄도 시작하지
-않았다.** 다음 세션의 첫 일은 plan을 검토하고 Task 1부터 실행하는 것이다.
+**TR-M1(한글)이 Task 2까지 진행됐다**(2026-08-23). 다음 세션의 첫 일은 **Task 3
+(렌더러가 새 캐시를 쓰고 오프셋을 반영한다)**이다.
 
 plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m1.md`
 
-**이 plan은 사용자 승인을 아직 못 받았다.** 세션이 여기서 끊겼다. 다음 세션은
-plan을 제시하고 승인을 받은 뒤에 Task 1을 시작한다.
+**`zig build`가 지금 실패한다. 그것이 정상이다.** Task 2가 `font.zig`의
+`build()`·`GlyphCache`를 `Cache`·`find()`로 갈아치웠는데 `main.zig:183`이 아직
+옛 이름을 부른다. **그 자리를 고치는 것이 Task 3이다.**
+
+```
+src/main.zig:183:27: error: root source file struct 'font' has no member named 'build'
+```
+
+**폰트를 바꿀지가 열려 있다.** 아래 "폰트를 재서 알아낸 것"의 정정과
+`docs/decisions/project_font_selection.md`를 먼저 읽고 결정한다. 결정이 Task 3의
+내용을 바꾸지는 않지만(격자가 8/16으로 같다), 뒤로 미루면 `ink>` 게이트의
+기대값을 두 번 쓰게 된다.
 
 ## 지금 어디인가
 
 - **Boot Foundation(BF-M0~M4)** 2026-08-07 완료.
 - **Hardware Discovery(HD-M0~M2)** 2026-08-22 완료.
 - **Terminal Rendering(TR)** 진행 중. milestone 셋 중 **TR-M0 완료**,
-  **TR-M1은 plan만 있고 구현이 없다.** TR-M2(스크롤백)는 plan도 없다.
+  **TR-M1은 Task 7 중 2까지 커밋됐다.** TR-M2(스크롤백)는 plan도 없다.
+    - Task 1 `5325560` — `font_test`를 호스트 아키텍처에서 돌게 만들었다
+    - Task 2 `b91fb03` — `font.zig`가 lazy 해시 맵 캐시가 됐다
+    - **Task 3부터 남았다.** 3(렌더러) · 4(`font>`·`ink>` 로그) ·
+      5(`check.sh` 한글 검사) · 6(루트 게이트 3/3) · 7(문서)
   - design: `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`
     (결정 13개. 1~9가 TR-M0이었고 10~13이 TR-M2, 한글이 TR-M1)
   - TR-M0 plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md`
@@ -23,12 +37,12 @@ plan을 제시하고 승인을 받은 뒤에 Task 1을 시작한다.
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. **`origin/main`보다 커밋 셋이 앞서 있다.**
-(이전 HANDOFF가 "origin/main과 같다"고 적었는데 그 뒤에 `4c4a1c6`·`3b10068`이
-쌓였고 이번 세션이 하나를 더했다.)
+`main`, working tree 깨끗함. **`origin/main`보다 앞서 있고 그중 하나는 빌드가
+안 되는 커밋이다**(`b91fb03`, 위 "목표" 참고). Task 3이 끝나기 전에는 push하지
+않는 편이 낫다.
 
 ```bash
-git rev-list --count origin/main..main     # 3이 나온다
+git rev-list --count origin/main..main
 git log --oneline origin/main..main
 ```
 
@@ -67,13 +81,25 @@ git log --oneline origin/main..main
 | 범위 | 있는 글자 수 |
 |---|---|
 | ASCII 출력 가능 | 95 / 95 |
-| 라틴 확장(U+00A0~U+024F) | 75 / 432 |
+| 라틴 확장(U+00A0~U+024F) | 56 / 432 |
 | **한글 음절(U+AC00~U+D7A3)** | **11172 / 11172** |
-| **호환 자모(`ㄱ`·`ㅏ`)** | **0 / 94** |
+| **호환 자모(`ㄱ`·`ㅏ`, U+3131~U+3163)** | **0 / 51** |
+| **조합용 자모(U+1100~U+11FF)** | **64** (초 18/19 · 중 20/21 · 종 26/27) |
+| 박스 드로잉(U+2500~U+257F) | 40 / 128 |
 | **한자** | **0 / 20992** |
 
-완성형은 전부 있고 낱자와 한자는 아예 없다. **한글 IME를 붙이면 조합 중인
-낱자를 이 폰트로 못 그린다.**
+**2026-08-23에 이 표의 결론이 뒤집혔다.** 원래 여기에는 "낱자와 한자는 아예
+없다. 한글 IME를 붙이면 조합 중인 낱자를 이 폰트로 못 그린다"고 적혀 있었다.
+그 단정은 **호환 자모만 재고 조합용 자모를 재지 않아서** 나온 것이다. 낱자를
+그릴 길은 있다. 빠진 것은 각 구간의 마지막 하나씩(`ᄒ` U+1112 · `ᅵ` U+1175 ·
+`ᇂ` U+11C2)이고, 그 셋도 완성형에서 픽셀로 되뽑을 수 있다는 것까지 검산이
+끝났다. 근거와 방법은 `docs/decisions/project_font_jamo_coverage.md`에 있다.
+
+**폰트를 바꿀지가 열려 있다.** 사용자의 로컬 폰트를 전부 재 봤더니 문턱값
+렌더링에 안전한(16px에서 중간값이 0인) 폰트는 Hanme과 **unifont 17.0.03**
+둘뿐이었다. unifont는 낱자 문제가 애초에 없고 격자도 8/16으로 같지만 파일이
+5197KB다. 사용자가 쓰는 MonoplexNerd는 중간값이 92.8%라 쓸 수 없다. 후보 표와
+선택지 넷은 `docs/decisions/project_font_selection.md`에 있다.
 
 **2. 글리프의 실제 모양.** `unitsPerEm=1600`, `ascent=1600`, `descent=0`이라
 16px에서 `scale`이 정확히 0.01이다.
