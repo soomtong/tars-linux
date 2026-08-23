@@ -91,16 +91,45 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(input_test);
 
+    // font_test도 호스트에서 돈다. 폰트 래스터라이저는 게스트 하드웨어와
+    // 아무 상관이 없다 — stb_truetype에 바이트를 먹이고 비트맵을 받는 순수
+    // 계산이라, 부팅 1.5초를 쓸 이유가 없다.
+    //
+    // 이 파일은 TR-M1 전까지 **build.zig에 등록조차 되어 있지 않았다.**
+    // 빌드도 실행도 되지 않는 채로 남아 있었고, 그래서 폰트에 관한 단언이
+    // 저장소 어디에도 없었다.
+    //
+    // vendor/fonts/*.ttf를 상대 경로로 읽으므로 `zig build test`를
+    // terminal/ 안에서 돌려야 한다. 게이트가 이미 그렇게 하고 있다.
+    const font_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/font_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    font_test_mod.addIncludePath(b.path("vendor"));
+    font_test_mod.addCSourceFile(.{
+        .file = b.path("src/stb_truetype_impl.c"),
+        .flags = &.{},
+    });
+    font_test_mod.link_libc = true;
+    font_test_mod.linkSystemLibrary("m", .{});
+    const font_test = b.addExecutable(.{
+        .name = "font_test",
+        .root_module = font_test_mod,
+    });
+    b.installArtifact(font_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
-    // 기본 `zig build`와 분리하는 이유는 속도다. 기본 빌드는 x86_64 terminal
-    // 본체까지 만드느라 stb_truetype이 필요하고, 이 step은 그것을 건너뛴다.
-    // 다만 TR-M0에서 vt_test가 들어온 뒤로 **libghostty-vt는 이 step에도
-    // 필요하다** — vendor 트리가 없으면(prepare.sh를 안 돌렸으면) 여기서
-    // 막힌다.
+    // 기본 `zig build`와 분리하는 이유는 속도였는데, **그 이유가 이제 거의
+    // 남지 않았다.** TR-M0에서 vt_test가 들어오면서 libghostty-vt가 필요해졌고,
+    // TR-M1에서 font_test가 들어오면서 stb_truetype까지 필요해졌다. 남은
+    // 차이는 x86_64 terminal 본체와 pty_test를 안 만든다는 것뿐이다.
+    // 두 vendor 트리가 없으면(prepare.sh를 안 돌렸으면) 여기서 막힌다.
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(input_test).step);
     test_step.dependOn(&b.addRunArtifact(vt_test).step);
+    test_step.dependOn(&b.addRunArtifact(font_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — **빌드만 되고 아무도
