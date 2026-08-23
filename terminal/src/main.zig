@@ -230,10 +230,10 @@ pub fn main(init: std.process.Init) !void {
     // 그쪽은 정말로 커널 콘솔이라 TERM=linux가 맞다. 같은 기계 안에서 두
     // 셸의 TERM이 다른 것이 정상이다(design doc 결정 7).
     //
-    // xterm-256color가 아니라 xterm인 이유는 우리가 아직 색을 하나도 그리지
-    // 않기 때문이다(TEXT_COLOR 상수 하나). 256색을 광고하면 반대 방향의
-    // 거짓말이 된다.
-    _ = setenv("TERM", "xterm", 1);
+    // TR-M0부터 xterm-256color다. 그전에는 "우리가 색을 하나도 그리지 않아서"
+    // xterm이었는데, 이제 팔레트 256색과 truecolor를 전부 칠하므로 xterm이라고
+    // 말하는 쪽이 거짓말이 된다(design 결정 8).
+    _ = setenv("TERM", "xterm-256color", 1);
 
     const argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
     const session = try pty.spawn(shell_path, &argv, cols, rows);
