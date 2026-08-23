@@ -86,14 +86,25 @@ run_chain() {
 # 절반이 다르다.
 #
 # HD-M2가 감독 루프를 poll 구조로 바꿨다는 것도 여기 적어 둔다. 그 변경은
-# 이 여섯 체인 **전부**가 딛고 선 코드를 건드린 것이라, 앞으로 그 자리를
+# 이 체인들 **전부**가 딛고 선 코드를 건드린 것이라, 앞으로 그 자리를
 # 고치는 사람은 HD 체인 하나만 보아서는 안 된다 — BF의 "started terminal
 # 정확히 3회"와 PM의 "종료 중 되살리지 않는다"가 그 코드의 진짜 계약이다.
+#
+# TR 체인은 색상 렌더링을 본다. 다른 여섯 체인과 다른 점은 **화면의 픽셀을
+# 직접 되읽는다**는 것이다 — 나머지는 전부 로그 문자열만 본다. 게스트에
+# printf 한 줄을 타이핑하고, 파서가 뽑은 색(style>)과 프레임버퍼에 실제로
+# 들어간 색(pixel>)이 같은지를 대조한다. 회차당 부팅 1회라 총 부팅 횟수는
+# 27회에서 30회가 된다.
+#
+# 이 체인이 더하는 비용의 대부분은 부팅이 아니라 **커널 빌드 3회**(약 2분
+# 40초)다. 2026-08-22에 CONFIG_PRINTK_TIME을 켜서 잰 결과 부팅 하나가
+# 1.5초라는 것이 밝혀졌다(docs/decisions/project_kernel_config.md).
 run_chain "BF-M4" ./boot/check.sh
 run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
 run_chain "IP-M2" ./input/check.sh
 run_chain "PM-M1" ./power/check.sh
 run_chain "HD-M2" ./device/check.sh
+run_chain "TR-M0" ./render/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
