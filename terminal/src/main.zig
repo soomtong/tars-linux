@@ -83,8 +83,17 @@ fn render(fb: drm.Framebuffer, cache: font.GlyphCache, cells: []const vt.CellGly
     try fb.present();
 }
 
+/// 한 프레임에 찍는 style/pixel 줄의 상한. 화면 전체에 색이 깔린 프로그램이
+/// 돌면 셀 수천 개가 매 프레임 로그로 쏟아진다. 게이트가 검사에 쓰는 셀은
+/// 한 줄 안의 몇 개라 이만큼이면 넉넉하다.
+const STYLE_DUMP_LIMIT: usize = 16;
+
 /// 검증용으로 화면 내용을 serial 콘솔에 한 줄로 덤프한다.
 /// check.sh가 이 줄을 grep해서 "입력이 실제로 셸을 움직였는가"를 판단한다.
+///
+/// **이 줄의 형식은 바꾸지 않는다.** 여섯 체인 중 다섯(TF·CP·IP·PM·HD)이
+/// `terminal: screen>.*` 형태로 이 줄을 보고 화면을 판정한다. 색은 여기
+/// 섞지 않고 아래 dumpStyles가 별도의 줄로 낸다(design 결정 7).
 fn dumpScreen(cells: []const vt.CellGlyph) void {
     std.debug.print("terminal: screen> ", .{});
     var last_row: u16 = 0;
@@ -93,11 +102,57 @@ fn dumpScreen(cells: []const vt.CellGlyph) void {
             std.debug.print(" | ", .{});
             last_row = cell.row;
         }
+        // 글자 없는 셀도 이제 여기 도착한다(vt.zig의 design 결정 3).
+        // 걸러내지 않으면 utf8Encode(0)이 NUL 바이트를 만들어 로그 줄에
+        // 섞인다.
+        if (cell.codepoint == 0) continue;
         var utf8: [4]u8 = undefined;
         const len = std.unicode.utf8Encode(@intCast(cell.codepoint), &utf8) catch continue;
         std.debug.print("{s}", .{utf8[0..len]});
     }
     std.debug.print("\n", .{});
+}
+
+/// 기본 색과 다른 셀을 두 줄씩 찍는다 — 파서가 본 색과, 프레임버퍼에서
+/// 되읽은 실제 픽셀이다(design 결정 7).
+///
+/// 두 겹인 이유는 HD-M2가 잡은 "조용한 실패"와 같은 종류의 구멍을 막기
+/// 위해서다. `style>`만 찍으면 파서가 옳고 렌더러가 틀렸을 때 게이트가
+/// 통과한다. `pixel>`만 찍으면 실패는 잡히지만 어느 단계에서 틀어졌는지를
+/// 따로 조사해야 한다.
+///
+/// **반드시 render() 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의
+/// 픽셀을 읽는다.
+fn dumpStyles(
+    fb: drm.Framebuffer,
+    cells: []const vt.CellGlyph,
+    default_fg: u32,
+    default_bg: u32,
+) void {
+    var shown: usize = 0;
+    var skipped: usize = 0;
+    for (cells) |cell| {
+        if (cell.fg == default_fg and cell.bg == default_bg) continue;
+        if (shown >= STYLE_DUMP_LIMIT) {
+            skipped += 1;
+            continue;
+        }
+        shown += 1;
+        std.debug.print("terminal: style> {d},{d} fg={X:0>6} bg={X:0>6}\n", .{
+            cell.row, cell.col, cell.fg, cell.bg,
+        });
+        // 셀의 **중앙**을 읽는다. 모서리는 이웃 셀과의 경계라 off-by-one에
+        // 취약하다.
+        const px = GRID_X + @as(u32, cell.col) * CELL_W + CELL_W / 2;
+        const py = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT + ROW_HEIGHT / 2;
+        std.debug.print("terminal: pixel> {d},{d} = {X:0>6}\n", .{
+            cell.row, cell.col, fb.getPixel(px, py) & 0x00FFFFFF,
+        });
+    }
+    // 조용히 자르면 "색이 없다"와 "너무 많아서 안 찍었다"를 가를 수 없다.
+    if (skipped > 0) {
+        std.debug.print("terminal: style> {d} more cell(s) not shown\n", .{skipped});
+    }
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -265,7 +320,12 @@ pub fn main(init: std.process.Init) !void {
                     @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000),
                 });
             }
+
             dumpScreen(cells);
+            // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
+            // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
+            // vt.zig의 defaultFg 주석에 있다.
+            dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
         }
     }
 
