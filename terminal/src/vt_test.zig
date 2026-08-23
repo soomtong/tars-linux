@@ -96,5 +96,35 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    // ── TR-M0: 커서 ───────────────────────────────────────────────────
+    //
+    // 커서는 inverse와 같은 연산이라 코드가 따로 없다(design 결정 2). 대신
+    // "그 셀이 결과에 들어오는가"를 여기서 못박는다 — 결정 3(빈 셀도
+    // 내보낸다)이 없으면 커서가 빈 자리에 있을 때 조용히 사라진다.
+    screen.feed("\x1b[2J\x1b[H");
+    screen.feed("XY");
+    const with_cursor = try screen.cells(&buf);
+
+    // 커서는 'Y' 다음 칸(col=2, row=0)에 있고 글자가 없다. 기본 색이
+    // 맞바뀌어 fg=#102030 bg=#FFFFFF여야 한다.
+    var cursor_found = false;
+    for (with_cursor) |cell| {
+        if (cell.row != 0 or cell.col != 2) continue;
+        cursor_found = true;
+        if (cell.codepoint != 0 or cell.fg != 0x102030 or cell.bg != 0xFFFFFF) {
+            std.debug.print(
+                "FAIL: 커서 셀이 cp={d} fg=#{X:0>6} bg=#{X:0>6} (expected cp=0 fg=#102030 bg=#FFFFFF)\n",
+                .{ cell.codepoint, cell.fg, cell.bg },
+            );
+            return error.WrongCursorCell;
+        }
+        std.debug.print("vt_test: 커서 셀이 반전되어 결과에 들어온다 OK\n", .{});
+        break;
+    }
+    if (!cursor_found) {
+        std.debug.print("FAIL: 커서 자리(row=0,col=2) 셀이 결과에 없다\n", .{});
+        return error.CursorCellMissing;
+    }
+
     std.debug.print("PASS\n", .{});
 }
