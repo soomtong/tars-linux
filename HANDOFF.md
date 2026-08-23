@@ -1,42 +1,48 @@
-# HANDOFF: TR-M0의 plan이 서 있고 Task 1부터 손대면 된다
+# HANDOFF: 화면이 색을 갖게 됐고 다음은 한글이다
 
 ## 목표
 
-**Terminal Rendering(TR) 서브프로젝트의 첫 milestone인 TR-M0**을 구현한다 —
-화면이 색을 갖게 만들고, 그 색을 **프레임버퍼 픽셀까지 되읽어** 게이트로
-증명한다. 커서도 처음으로 화면에 보이게 된다.
+**TR-M0이 끝났다**(2026-08-23). 화면이 색을 갖고, 커서가 보이고, 게이트가 그
+색을 **프레임버퍼 픽셀까지 되읽어** 증명한다. plan의 Task 10개를 전부 실행했고
+루트 게이트 **일곱 체인이 3/3으로 통과했다.**
 
-**코드는 아직 한 줄도 안 건드렸다.** 이번 세션은 이월 숙제 하나를 끝내고,
-설계와 plan을 세우는 데 썼다.
+**다음은 TR-M1(한글)이다.** plan은 아직 없다 — 한 milestone이 끝나면 다음
+plan을 그 시점에 새로 쓰는 것이 이 저장소의 방식이다
+(`CLAUDE.md`의 "Milestone 단위 작업").
 
 ## 지금 어디인가
 
-- **Hardware Discovery(HD-M0~M2)가 2026-08-22에 끝났다.**
-- **`CONFIG_PRINTK_TIME` 숙제가 2026-08-22에 끝났다**(아래 "이번 세션이
-  알아낸 것").
-- **다음 서브프로젝트를 Terminal Rendering(TR)으로 정했고 설계가 승인됐다.**
-  milestone 셋 — TR-M0(색상·커서) · TR-M1(한글) · TR-M2(스크롤백).
-- **TR-M0의 plan이 완성됐다.** Task 10개, Step 52개.
-  `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md`
+- **Boot Foundation(BF-M0~M4)** 2026-08-07 완료.
+- **Hardware Discovery(HD-M0~M2)** 2026-08-22 완료.
+- **Terminal Rendering(TR)** 진행 중. milestone 셋 중 **TR-M0 완료**,
+  TR-M1(한글)과 TR-M2(스크롤백)가 남았다.
+  - design: `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`
+    (결정 13개. 1~9가 TR-M0이었고 10~13이 TR-M2, 한글이 TR-M1)
+  - TR-M0 plan: `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md`
 
-**다음 세션의 첫 일은 그 plan의 Task 1 Step 1이다** — `terminal/src/drm.zig`에
-`getPixel` 여섯 줄을 넣는 것.
+**다음 세션의 첫 일은 TR-M1의 설계 확인과 plan 작성이다.**
 
 ## 현재 브랜치
 
-`main`, working tree 깨끗함. **origin보다 4개 앞서 있다**(push 안 됨).
+`main`, working tree 깨끗함. **origin보다 15개 앞서 있다**(push 안 됨).
 
 ```bash
-git log --oneline ff60b90..main     # ff60b90 = 이전 세션의 마지막 커밋
+git log --oneline d10fcfd..main     # d10fcfd = 이전 세션의 마지막 커밋
 git rev-list --count origin/main..main
 ```
 
-이번 세션의 커밋 넷은 이렇다.
+이번 세션의 커밋 열이다. Task 번호 순이다.
 
-- `3e4d934` Put a clock on every kernel log line — `kernel/.config` 한 줄
-- `e051c6c` Record that booting is not where the gate spends its time — 기억
-- `8f1723d` Design a terminal that draws the colors it already parses — design
-- `23f6642` Plan the color milestone down to the pixel it checks — plan
+- `4e78021` Read back a pixel to prove the framebuffer answers
+- `23307c7` Run the vt test instead of only building it
+- `df302c9` Resolve every cell to two colors before the renderer sees it
+- `ab1448a` Paint each cell with the colors it asked for
+- `6dbc79e` Pin down that the cursor cell survives into the draw list
+- `ecbe7e6` Log the color we parsed next to the pixel we actually wrote
+- `77edeb5` Stop calling ourselves xterm now that we draw the colors
+- `21a9f1d` Prove the framebuffer holds the color the parser resolved
+- `163f112` Add the color chain to the root gate
+- (문서 커밋 하나가 이 파일과 함께 들어간다)
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -59,117 +65,34 @@ git rev-list --count origin/main..main
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
-**매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.**
+**매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.** 이번에도
+효과가 있었다 — Task 1에서 두 편집 중 하나(`drm.zig`의 `getPixel`)가 안
+들어간 것을 빌드 전에 잡았다.
 
-## 이번 세션이 알아낸 것 — 부팅은 게이트 시간의 근원이 아니다
+## TR-M0이 만든 것
 
-`CONFIG_PRINTK_TIME=y`를 켜서 HD-M1이 못 가른 3분 14초를 갈랐다.
+**색은 `vt.zig` 한 곳에서 해소된다.** `cells()`가 셀마다 `fg`·`bg` 두 숫자를
+프레임버퍼와 같은 `0x00RRGGBB`로 확정해 넘기고, 렌더러는 팔레트도 SGR도
+inverse도 커서도 모른다. **inverse와 커서가 "두 색을 맞바꾼다"는 같은 연산**
+이라 둘 다 여기서 사라진다 — 그래서 커서 구현은 코드가 따로 없다.
+
+**게이트가 두 겹으로 본다**(design 결정 7).
 
 ```
-[    0.000000] Linux version 6.18.42
-[    0.507200] input: AT Translated Set 2 keyboard      ← 마지막 드라이버
-        0.573초가 비어 있다 = initramfs 압축 해제
-[    1.079865] Freeing initrd memory: 15144K
-[    1.119354] Run /init as init process
+terminal: style> 1,0 fg=FFFFFF bg=CC6666   ← 파서가 SGR 41을 팔레트 1번으로 풀었다
+terminal: pixel> 1,0 = CC6666               ← 프레임버퍼가 정말 그 색을 들고 있다
 ```
 
-**커널이 `/init`에 넘기는 시각이 1.12초이고 그중 51%가 initrd 압축 해제다.**
-사용자 공간까지 합쳐도 부팅 전체가 1.5초 안에 끝난다. 27회를 더해도 40초
-남짓이라 **게이트 36분의 2%가 안 된다.** 시간은 커널 빌드 18회(53초 × 18 ≈
-16분)와 각 체인의 `sleep`·폴링·타이핑 지연에 있다.
+`style>`만 보면 파서가 옳고 렌더러가 틀렸을 때 통과한다 — HD-M2가 잡았던
+"조용한 실패"와 같은 구멍이다.
 
-이것이 실용적으로 뜻하는 것 둘.
+**`vt_test`가 처음으로 실제 실행된다.** `build.zig`가 "arm64로 빌드해야 하는데
+검증된 적이 없다"고 적어 둔 채 두 서브프로젝트를 건너왔는데, 호스트 타깃으로
+옮기니 그대로 돌았다. 지금 호스트 검사가 열하나다(기존 셋 + 색 일곱 + 커서
+하나).
 
-- **`clean()`에서 커널을 빼는 논의는 이제 근거가 확실하다.** 게이트 시간의
-  가장 큰 단일 항목이다. 정책 변경이므로 여전히 별도로 다룬다.
-- **체인 하나를 더하는 비용은 커널 빌드 3회(약 2분 40초)다.** TR 체인을 새로
-  만들기로 한 결정(design 결정 9)이 이 숫자 위에 서 있다.
-
-본문은 `docs/decisions/project_kernel_config.md`에 있다.
-
-`PRINTK_TIME`은 **커널 줄에만** 붙는다. `tars-init:`과 `terminal:`은 `printk`를
-안 거치므로 시각이 없다.
-
-## plan을 쓰면서 실측해 확정한 것 다섯 (다시 조사하지 말 것)
-
-컨테이너에서 `/tmp`에 임시 Zig 프로젝트를 만들어 vendor된 `ghostty-src`를 path
-의존으로 걸고 직접 돌려서 얻었다. **짐작으로 적었으면 다섯 다 틀렸을 자리다.**
-
-**1. 팔레트가 xterm 고전값이 아니다.** 빨강이 `#CD0000`이 아니라 **`#CC6666`**,
-밝은 빨강이 `#D54E53`이다. 게이트가 기대할 값이 이것이다.
-
-**2. libghostty-vt는 aarch64에서 빌드되고 돈다.** `terminal/build.zig`의 마지막
-주석이 "검증된 적이 없다"고 적어 둔 채 **`vt_test`를 아무도 실행하지 않는
-상태로** 두 서브프로젝트를 건너왔다. TR-M0 Task 2가 그것을 살린다.
-
-**3. `grep -qP '\x00'`은 NUL을 못 잡는다**(GNU grep 3.11에서 확인). 그대로
-뒀으면 **항상 통과하는 가짜 검사**가 게이트에 들어갈 뻔했다. 쓸 것은
-`[ "$(tr -d '\0' < "$f" | wc -c)" -ne "$(wc -c < "$f")" ]`이다.
-
-**4. Zig 0.16에 `std.time.Timer`가 없다.** `std.posix.clock_gettime`도 없다.
-시간은 `std.Io.Clock.now(.awake, io)`로 얻고, 경과는
-`t0.untilNow(io, .awake).nanoseconds`다. **단조 시계 이름이 `.monotonic`이
-아니라 `.awake`다.**
-
-**5. SGR별로 나오는 값.** `Terminal.Options.colors`에 우리 색(`bg=#102030`,
-`fg=#FFFFFF`)을 `.init()`으로 넣은 상태다.
-
-| 입력 | `style_id` | `fg()` | `bg()` | 플래그 |
-|---|---|---|---|---|
-| `A` 평범 | **0** | — | — | `style`을 읽으면 안 됨 |
-| `\e[31mB` | 1 | `#CC6666` | null | — |
-| `\e[41mC` | 2 | `#FFFFFF` | `#CC6666` | — |
-| `\e[1;31mD` | 3 | `#D54E53` | null | bold |
-| `\e[7mE` | 4 | `#FFFFFF` | null | **inverse** |
-| `\e[38;2;18;52;86mF` | 5 | `#123456` | null | — |
-
-커서는 `state.cursor.viewport`에 `{x, y, wide_tail}`로 오고 실측에서
-`x=6 y=0 visual_style=block`이었다.
-
-## TR 설계의 뼈대
-
-**libghostty-vt가 이미 계산해 둔 색과 이미 쌓아 둔 스크롤백을 우리가 버리고
-있다.** 막고 있는 것은 전부 우리 코드다.
-
-- `terminal/src/vt.zig:66`의 `cells()`가 `codepoint`·`col`·`row`만 꺼내고
-  `RenderState.colors`(256색 팔레트 포함)와 셀별 `Style`을 버린다.
-- `terminal/src/vt.zig:42`가 `Terminal.init`에 크기만 넘기므로
-  `max_scrollback_bytes`가 기본값 10,000바이트다 — **스크롤백은 이미 쌓이고
-  있고 뷰포트를 움직이는 길만 없다.**
-
-**TR-M0에서 지킬 경계 하나:** 색은 `vt.zig`에서 확정해 `CellGlyph.fg`/`.bg`
-두 숫자로 넘기고, **렌더러는 팔레트도 SGR도 inverse도 커서도 모른다.**
-inverse와 커서가 "두 색을 맞바꾼다"는 같은 연산이라 둘 다 `vt.zig`에서
-해소된다.
-
-## 아직 안 밟은 위험 셋 (plan에 Task로 들어 있다)
-
-**1. 프레임버퍼 되읽기가 정말 되는가** — design 위험 4. **Task 1이 이것부터
-친다.** 안 되면 design 결정 7(두 겹 검사)이 통째로 무너지므로 다른 것을
-만들기 전에 알아야 한다. `drm.zig:261`이 `PROT_READ | PROT_WRITE`로 mmap하고
-단일 버퍼라 될 것으로 보지만, 확인 전까지는 가정이다.
-
-**2. `TERM=xterm-256color`가 기존 다섯 체인을 흔들 수 있다** — design 위험 1이자
-이 milestone에서 가장 큰 회귀 위험이다. `terminal: screen>` 줄을
-TF·CP·IP·PM·HD 다섯이 grep한다. **Task 7이 루트 게이트 전체(약 37분)로
-확인한다.**
-
-**3. 게이트가 칠 명령이 셸에 실제로 먹는가** — `printf '\033[41m \033[0m\n'`을
-`sendkey`로 28타 친다. 키 이름이 틀리면 Task 8 Step 3에서 실패하고, 그때는
-`terminal: screen>` 줄에 실제로 무엇이 타이핑됐는지 읽고 고친다.
-
-## 시도했으나 안 된 접근
-
-- **`grep -qP '\x00'`으로 NUL 검출** — GNU grep 3.11에서 매치되지 않는다.
-  바이트 수 비교로 바꿨다.
-- **`std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기** — Zig 0.16에
-  둘 다 없다. `std.Io.Clock`으로 바꿨다.
-- **컨테이너에서 `nc`로 QEMU monitor에 명령 보내기** — `nc`가 없다. 체인들은
-  `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
-- **`/tmp`에 만든 임시 파일이 `docker run --rm` 사이에 남기** — 안 남는다.
-  조사성 명령은 한 번의 `docker run` 안에서 끝내야 한다.
-- **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
-  to build root`로 막힌다. 심볼릭 링크로 우회했다.
+본문은 `docs/decisions/project_terminal_rendering.md`에 있다. **TR-M1을
+시작하기 전에 그 파일을 읽을 것.**
 
 ## 게이트 현황
 
@@ -179,12 +102,39 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`docs/decisions/project_build_host_arch.md`).
 
-**여섯 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2), 3/3, 부팅 27회.
-**2026-08-22에 `PRINTK_TIME`을 켠 채로 37분 43초에 전부 통과했다**(직전
-기준선 36분 34초와의 차이 1분 9초는 부하와 측정 편차라 가르지 못한다).
+**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · **TR-M0**),
+3/3, 부팅 **30회**. 2026-08-23에 **46분 4초**에 전부 통과했다.
 
-monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD)이고
-**45460이 비어 있다** — TR 체인이 그것을 쓴다.
+| 구성 | 시간 |
+|---|---|
+| 여섯 체인 (2026-08-22 기준선) | 37분 43초 |
+| 여섯 체인 (`TERM` 변경 후 회귀 확인) | 39분 51초 |
+| **일곱 체인 (TR 등록 후)** | **46분 4초** |
+
+**체인 하나가 6분 13초를 더했다** — plan의 예상(커널 빌드 3회 = 2분 40초)의
+두 배가 넘는다. 나머지는 TR 체인에만 있는 항목이다: `vt_test`를 위한
+libghostty-vt arm64 빌드, 그리고 회차마다 `sendkey` 28타 × `sleep 0.3` = 8.4초
+뒤에 붙는 `sleep 3`.
+
+monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
+**45460(TR)**이고 **45461이 비어 있다.**
+
+## 게이트 로그를 조사하는 법 (이번에 두 번 막혔다)
+
+**각 체인은 시리얼 로그를 `mktemp` 파일에 담고 실패했을 때만 뿜는다.**
+통과하면 `docker run --rm`과 함께 사라진다. 로그의 특정 줄을 보려면 **한 번의
+`docker run` 안에서** 게이트를 돌리고 `/tmp/tmp.*`를 뒤져야 한다.
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  bash device/check.sh > /tmp/gate.out 2>&1
+  grep -ah "찾을 문구" /tmp/tmp.*
+'
+```
+
+**`grep`에 `-a`를 반드시 붙인다.** 로그에 NUL이 한 바이트라도 있으면 `grep`이
+파일을 binary로 취급해 `Binary file ... matches`만 뱉는다. TR-M0 도중 실제로
+이것 때문에 조사가 멎었다.
 
 ## 로그 문구는 두 곳에 중복된다
 
@@ -203,13 +153,73 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD)�
 `no power button found`(없어야 한다) · `power button pressed` ·
 `ACPI: button: Power Button`(커널) · `reboot: Power down`(커널) ·
 `Power off not available: System halted instead`(커널, 없어야 한다) ·
-`Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다)
-
-**TR-M0이 여기에 셋을 더한다:** `terminal: style>` · `terminal: pixel>` ·
-`terminal: render> first frame`.
+`Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다) ·
+**`terminal: style>`** · **`terminal: pixel>`** · **`terminal: render> first frame`**
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
-화면을 판정한다.
+화면을 판정한다. 색은 그 줄에 섞지 않고 `style>`이 별도의 줄로 낸다.
+
+## plan에서 어긋난 곳 일곱
+
+**다음에 plan을 쓸 때 같은 자리에서 틀리지 않으려고 적어 둔다.**
+
+1. **Task 1·4의 확인 명령이 시리얼 로그를 못 봤다.** `rg 'terminal: probe>'`를
+   게이트 stdout에 걸었는데 그 줄은 `mktemp` 파일 안에 있다. 위의 "게이트
+   로그를 조사하는 법"이 이래서 생겼다.
+2. **Task 2 Step 4의 기대 셀 개수가 틀렸다.** `5`/`7`이라고 적었는데 실제는
+   `7`/`9`였다(공백 셀을 빼고 센 듯하다). 검사 단언은 개수를 안 보므로
+   통과했다.
+3. **Task 3 Step 7도 같은 만큼 어긋났다.** 실제는 `8`/`10`이다(커서 셀 하나가
+   더해진 값).
+4. **`render/check.sh`의 모든 `grep`에 `-a`를 더했다.** plan에 없던 보강이다.
+   NUL 한 바이트에 `STYLE_LINE`이 `"Binary file ... matches"`가 되면 `sed`
+   좌표 파싱이 조용히 엉뚱한 값을 낸다.
+5. **Task 2 Step 3의 편집 범위를 다섯 줄 넓혔다.** `test` step 위의 주석이
+   "이 step은 input_test 하나만 필요하다"고 말하는데 `vt_test`가 들어가면
+   거짓이 된다(libghostty-vt가 필요해진다).
+6. **체인 하나의 비용이 예상의 두 배가 넘었다** — 2분 40초가 아니라 6분 13초.
+7. **첫 프레임이 209밀리초였다** — design 위험 2의 "몇 밀리초"와 두 자릿수
+   차이다. 다만 이 숫자로는 아직 아무것도 결정할 수 없다(아래).
+
+## 아직 안 갈라 놓은 것 하나
+
+**첫 프레임 209밀리초의 출처를 모른다.** 셀 배경 칠하기 때문인지 `fill`의
+102만 번 volatile 쓰기 때문인지 갈리지 않았고, 게다가 컨테이너가 arm64인데
+`qemu-system-x86_64`를 TCG로 돌리는 값이라 실기 성능이 아니다.
+
+**이것이 부분 갱신 논의의 전제다.** 시간이 `fill`에 있다면 부분 갱신을 넣어도
+`fill`이 남으므로 별로 안 줄어든다. 가르려면 `fill` 하나만 따로 재야 한다.
+
+## 이월 숙제
+
+- [ ] **`fill` 하나의 비용을 따로 재기.** 바로 위 항목. 부분 갱신을 논의하기
+      전에 필요하다.
+- [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.** 둘 다 기본값으로 따라온
+      것이고 `ACPI Error:`가 하나도 안 났으므로 끌 수 있을 것으로 본다.
+      DSDT를 읽어 보고 결정할 것.
+- [ ] **`init`을 `ReleaseSafe`로.** initrd 67.7MB → gzip 15.5MB.
+      커널 부팅 1.12초 중 0.573초가 이 압축 해제다.
+- [ ] **게스트 안에서 Zig 에러 트레이스 읽기.** BF 게이트 로그에 파일명·줄
+      번호가 이미 찍히고 있다(`drm.zig:231:17 in open`). **무엇이
+      미해결이었는지 먼저 확인할 것** — 이미 된 일일 수 있다.
+- [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
+      만든다. 필요하면 `zig cc -target x86_64-linux-gnu`.
+- [ ] **`pty_test`가 이제 유일한 "빌드만 되는 검사"다.** `/usr/bin/fish`를
+      exec하는데 그 fish가 게스트용 x86_64라 호스트로 못 옮긴다.
+      **`vt_test`는 TR-M0이 살렸다.**
+- [ ] **`clean()`에서 커널을 빼는 논의.** 게이트 시간의 가장 큰 단일 항목이다
+      (근거는 `project_kernel_config.md`). 정책 변경이므로 별도로 다룬다.
+- [ ] **체인의 `sendkey` 사이 `sleep 0.3`을 줄일 수 있는지.** TR 체인이 더한
+      6분 13초의 일부가 여기 있다. 다른 체인들도 같은 방식이다.
+
+## IP-M2가 남긴 것 (그대로 이월)
+
+- **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** TUI 앱이 생기면 그때.
+- **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** `project_copy_mode`가 그 자리를
+  가져간다 — TR-M2(스크롤백)가 그 마지막 선행 조건이다.
+- **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
+  `Context.cursor_keys`를 주입해 대신 본다.
+- **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
 
 ## 감독 루프의 구조 (HD-M2가 만든 것, 그대로 유효)
 
@@ -222,78 +232,44 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD)�
 
 **거두기(3)를 `poll`(4)보다 앞에 둔 것이 backoff를 만든다.** 이 코드의 진짜
 계약은 HD 체인이 아니라 BF의 `started terminal` **정확히 3회**와 PM의
-`started console shell` **정확히 1회**에 있다. TR-M0은 이 코드를 안 건드린다.
-
-## 이월 숙제
-
-- [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.** 둘 다 기본값으로 따라온
-      것이고 `ACPI Error:`가 하나도 안 났으므로 끌 수 있을 것으로 본다.
-      DSDT를 읽어 보고 결정할 것.
-- [ ] **`init`을 `ReleaseSafe`로.** initrd 67.7MB → gzip 15.5MB.
-      **이제 이것이 부팅 시간 항목이라는 근거가 있다** — 커널 부팅 1.12초 중
-      0.573초가 이 압축 해제다.
-- [ ] **게스트 안에서 Zig 에러 트레이스 읽기.** BF 게이트 로그에 파일명·줄
-      번호가 이미 찍히고 있다(`drm.zig:231:17 in open`). **무엇이
-      미해결이었는지 먼저 확인할 것** — 이미 된 일일 수 있다.
-- [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
-      만든다. 필요하면 `zig cc -target x86_64-linux-gnu`.
-- [ ] **`pty_test`도 아무도 실행하지 않는다.** `/usr/bin/fish`를 exec하는데 그
-      fish가 게스트용 x86_64라 호스트로 못 옮긴다. TR-M0이 `vt_test`를
-      살리고 나면 남는 유일한 "빌드만 되는 검사"다.
-- [ ] **`clean()`에서 커널을 빼는 논의.** 이제 근거가 확실하다(위 "이번 세션이
-      알아낸 것"). 정책 변경이므로 별도로 다룬다.
-
-## IP-M2가 남긴 것 (그대로 이월)
-
-- **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** TUI 앱이 생기면 그때.
-- **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** `project_copy_mode`가 그 자리를
-  가져간다 — **TR이 그 선행 조건을 만드는 중이다.**
-- **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
-  `Context.cursor_keys`를 주입해 대신 본다.
-- **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
+`started console shell` **정확히 1회**에 있다. TR-M0은 이 코드를 안 건드렸다.
 
 ## 핵심 파일
 
-**먼저 읽을 것 둘.**
+**TR-M0이 만들거나 고친 것.**
 
-- `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md` —
-  **다음 세션이 실행할 plan.** Task 10개. "착수 전에 이미 확정된 사실" 절에
-  위의 실측값이 전부 들어 있다.
-- `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md` —
-  TR 설계 전체(결정 13개). 결정 1~9가 TR-M0, 10~13이 TR-M2, 한글이 TR-M1.
-
-**TR-M0이 건드릴 파일.**
-
-- `terminal/src/vt.zig` — `CellGlyph`(`:4`), `init`의 `Terminal.init`
-  호출(`:42`), `cells()`(`:66-88`). 색을 확정하는 자리 전부가 여기다.
-- `terminal/src/main.zig` — 상수(`:17-18`), `drawGlyph`(`:24`),
-  `render`(`:40`), `dumpScreen`(`:56`), `setenv("TERM", ...)`(`:151`),
-  렌더 호출부(`:225-228`).
-- `terminal/src/drm.zig` — `Framebuffer`(`:117`), `setPixel`(`:128`),
-  `mmap`(`:258-266`). `getPixel`이 `setPixel` 아래에 들어간다.
-- `terminal/src/vt_test.zig` — 지금 세 검사가 있고 **아무도 실행하지 않는다.**
-- `terminal/build.zig` — 마지막 절이 `vt_test`를 x86_64에 묶어 둔 자리.
-- `render/check.sh` — 아직 없다. Task 8이 만든다.
-- `check.sh` — 체인 등록(`:92-97`).
+- `terminal/src/vt.zig` — `CellGlyph`에 `fg`·`bg`, `packRgb`, `init`이
+  기본 색을 `Terminal.Options.colors`로 넘김, `cells()`가 색을 확정하고
+  빈 셀도 내보냄, `defaultFg`/`defaultBg`.
+- `terminal/src/main.zig` — `MARGIN_COLOR`(격자 **바깥**에만), `drawCellBackground`,
+  `drawGlyph`가 색을 인자로 받음, `render`가 배경·글리프 두 벌로 나뉨,
+  `dumpScreen`이 `codepoint == 0`을 거름, `dumpStyles`, `TERM=xterm-256color`,
+  첫 프레임 시간 측정.
+- `terminal/src/drm.zig` — `getPixel`(`setPixel` 바로 아래).
+- `terminal/src/vt_test.zig` — 색 검사 일곱 + 커서 하나. 화면 지우기 검사의
+  단언이 `!= 0`에서 `!= 1`로 바뀜(커서 셀이 남는다).
+- `terminal/build.zig` — `vt_test`가 호스트 타깃으로 옮겨져 `test` step에 붙음.
+- `render/check.sh` — **새 체인.** 213줄.
+- `check.sh` — TR-M0 등록(`:108`).
 
 **기억.** `MEMORY.md`(색인) + `docs/decisions/`(본문). 새 세션은 협업 방식
-feedback 셋과 `project_build_host_arch`, `project_guest_environment`,
+feedback 셋과 `project_terminal_rendering`(**새로 생겼다**),
+`project_build_host_arch`, `project_guest_environment`,
 `project_gate_chain_composition`, `project_copy_mode`, `project_input_policy`,
-`project_kernel_config`(**2026-08-22에 크게 늘었다**), `project_zig_c_uapi_rule`을
-먼저 읽을 것.
+`project_kernel_config`, `project_zig_c_uapi_rule`을 먼저 읽을 것.
 
 ## 다음 에이전트에게
 
-1. `docs/superpowers/plans/2026-08-23-tars-terminal-rendering-tr-m0.md`를
-   읽는다. 특히 **"착수 전에 이미 확정된 사실"** 절 — 그 값들을 다시 조사하지
-   않는다.
-2. **Task 1 Step 1**부터 시작한다. `terminal/src/drm.zig`의 `setPixel`
-   (`:128-132`) 바로 아래에 `getPixel` 여섯 줄을 넣는 것이고, plan에 넣을
-   내용이 그대로 적혀 있다. **사용자가 편집하고 Claude가 명령을 돌린다.**
-3. Task 1 Step 4에서 `terminal: probe> wrote 102030 read 102030`이 나오면
-   설계가 성립한다. **두 값이 다르면 거기서 멈추고 design 결정 7을 다시
-   논의한다** — 그 경우 `style>` 한 겹만 남기고 `pixel>`을 접는 것이 대안이다.
-4. push는 아직 안 됐다(`origin/main`보다 4개 앞). 사용자가 원하면 그때 한다.
+1. `docs/decisions/project_terminal_rendering.md`를 읽는다. TR-M0이 알아낸
+   것이 전부 거기 있고, 특히 **팔레트 값과 `grep`/NUL 함정**은 다시 조사하면
+   시간이 든다.
+2. `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`에서
+   **한글(TR-M1)에 해당하는 절**을 확인하고 plan을 새로 쓴다. design은
+   승인되어 있으므로 결정을 다시 논의하지 않는다.
+3. TR-M1의 위험으로 design이 이미 지목한 것은 **위험 3(한글 캐시 메모리)**이다
+   — 16×16 비트맵 하나가 256바이트라 자주 쓰는 몇백 자면 수십 KB일 것으로
+   보지만, 128MB 게스트라 실측하기로 되어 있다.
+4. push는 아직 안 됐다(`origin/main`보다 15개 앞). 사용자가 원하면 그때 한다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
