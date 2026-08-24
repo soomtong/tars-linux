@@ -255,6 +255,23 @@ fn dumpScroll(screen: *vt.Screen) void {
     });
 }
 
+/// copy mode에서 무슨 일이 일어났는지를 찍는다.
+///
+/// **게이트가 모드 안을 볼 수 있는 유일한 창구다.** 화면만 보면 "모드에
+/// 들어갔다"와 "아무 일도 안 일어났다"가 구분되지 않는다 — 모드에 들어가도
+/// 화면에서 달라지는 것은 커서 반전 하나뿐이기 때문이다.
+///
+/// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8). 기존
+/// 체인들과 같은 구조이고, **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
+    if (screen.copyCursor()) |cc| {
+        std.debug.print("terminal: copy> {s} row={d} col={d}\n", .{ what, cc.y, cc.x });
+    } else {
+        // exit에는 좌표가 없다. 커서가 이미 사라졌기 때문이다.
+        std.debug.print("terminal: copy> {s}\n", .{what});
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -424,6 +441,21 @@ pub fn main(init: std.process.Init) !void {
                 }
                 needs_redraw = true;
             }
+            // copy mode 명령도 PTY로 나가지 않는다(design 결정 3). 스크롤과
+            // 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
+            // 개를 실어 온다.
+            for (keys.copies) |cmd| {
+                switch (cmd) {
+                    .enter => screen.copyEnter(),
+                    .exit => screen.copyExit(),
+                    .left => screen.copyMove(-1, 0),
+                    .down => screen.copyMove(0, 1),
+                    .up => screen.copyMove(0, -1),
+                    .right => screen.copyMove(1, 0),
+                }
+                dumpCopy(screen, @tagName(cmd));
+                needs_redraw = true;
+            }
         }
 
         // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
@@ -447,7 +479,16 @@ pub fn main(init: std.process.Init) !void {
             // 부수 효과가 하나 있다: 뷰포트가 history에 머무는 동안 가지치기가
             // 일어나는 상황이 이 한 줄로 **구조적으로** 안 생긴다. 가지치기는
             // 그 페이지를 가리키던 pin을 무효로 만드는데, 여기서 창이 닫힌다.
-            screen.scrollToBottom();
+            // **copy mode 중에는 억제한다**(CM-M0). 백그라운드 출력이 한 줄만
+            // 도착해도 사람이 올라가서 보고 있던 자리가 화면 밖으로 튕기기
+            // 때문이다.
+            //
+            // 그 대가로 위 주석이 말한 창이 열린다 — 뷰포트가 history에
+            // 머무는 동안 가지치기가 일어날 수 있게 된다(design 위험 1).
+            // copy mode 중에 1000줄이 쏟아져야 닿는 자리라 게이트로 만들지
+            // 않았고, CM-M1이 선택이 무효가 됐는지를 매 프레임 보는 방어를
+            // 넣는다.
+            if (!screen.copyActive()) screen.scrollToBottom();
             needs_redraw = true;
         }
 

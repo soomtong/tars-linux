@@ -295,6 +295,8 @@ pub const State = struct {
     /// 여덟을 넘기면 나머지는 버린다. 자동 반복이 그만큼 쌓이려면 poll이
     /// 여덟 프레임을 놓쳐야 하고, 그런 상황에서 한 화면 덜 올라가는 것은
     /// 문제가 아니다 — out이 모자랄 때 바이트를 버리는 것과 같은 판단이다.
+    scrolls: [8]Scroll = undefined,
+
     /// 한 번의 read에서 나온 copy 명령의 저장소. `seq`·`scrolls`와 같은
     /// 이유로 힙을 쓰지 않는다.
     copies: [8]Copy = undefined,
