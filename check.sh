@@ -106,5 +106,6 @@ run_chain "IP-M2" ./input/check.sh
 run_chain "PM-M1" ./power/check.sh
 run_chain "HD-M2" ./device/check.sh
 run_chain "TR-M2" ./render/check.sh
+run_chain "CM-M0" ./copy/check.sh
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
