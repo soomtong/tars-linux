@@ -283,5 +283,70 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 우리가 부르면 바닥으로 돌아온다 OK\n", .{});
 
+    // ── CM-M0: copy 커서 ────────────────────────────────────────────────
+    //
+    // 이 검사들은 앞의 스크롤백 검사가 만들어 둔 화면 위에서 돈다.
+
+    // 검사 1. 들어가면 커서가 생기고, 나가면 사라진다.
+    if (fresh.copyActive()) {
+        std.debug.print("FAIL: copy mode was active before we entered\n", .{});
+        return error.CopyActiveTooEarly;
+    }
+    fresh.copyEnter();
+    const entered = fresh.copyCursor() orelse return error.NoCopyCursor;
+    std.debug.print("copy cursor starts at {d},{d}\n", .{ entered.y, entered.x });
+
+    // 검사 2. 반전. 커서가 앉은 셀은 fg와 bg가 맞바뀌어 나온다.
+    //
+    // **글자가 없는 셀이어도 나와야 한다** — 반전된 배경이 그릴 것이기
+    // 때문이다(TR design 결정 3). 그래서 좌표를 화면 왼쪽 위로 옮겨 놓고 본다.
+    fresh.copyExit();
+    fresh.copyEnter();
+    while (fresh.copyCursor().?.x > 0) fresh.copyMove(-1, 0);
+    while (fresh.copyCursor().?.y > 0) fresh.copyMove(0, -1);
+    var cbuf: [8192]vt.CellGlyph = undefined;
+    const copy_cells = try fresh.cells(&cbuf);
+    var found = false;
+    for (copy_cells) |cell| {
+        if (cell.row != 0 or cell.col != 0) continue;
+        found = true;
+        if (cell.bg != fresh.defaultFg()) {
+            std.debug.print(
+                "FAIL: cell 0,0 bg={X} but the copy cursor should have made it {X}\n",
+                .{ cell.bg, fresh.defaultFg() },
+            );
+            return error.CursorNotInverted;
+        }
+    }
+    if (!found) {
+        std.debug.print("FAIL: cell 0,0 is missing while the copy cursor sits on it\n", .{});
+        return error.CursorCellMissing;
+    }
+
+    // 검사 3. 맨 윗줄에서 위로 더 가면 **뷰포트가 대신 올라간다.**
+    const before = fresh.scrollbar().offset;
+    fresh.copyMove(0, -1);
+    const after = fresh.scrollbar().offset;
+    if (fresh.copyCursor().?.y != 0) {
+        std.debug.print("FAIL: the cursor left row 0 instead of moving the viewport\n", .{});
+        return error.CursorEscapedTop;
+    }
+    if (after >= before) {
+        std.debug.print(
+            "FAIL: viewport did not move up (offset {d} -> {d})\n",
+            .{ before, after },
+        );
+        return error.ViewportDidNotFollow;
+    }
+    std.debug.print("copy cursor pushed the viewport {d} -> {d}\n", .{ before, after });
+
+    // 검사 4. 나가면 커서가 사라지고 셸 커서가 돌아온다.
+    fresh.copyExit();
+    if (fresh.copyActive()) {
+        std.debug.print("FAIL: copy mode stayed active after copyExit\n", .{});
+        return error.CopyStillActive;
+    }
+    std.debug.print("vt_test: copy cursor OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

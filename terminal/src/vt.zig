@@ -43,6 +43,16 @@ pub const Screen = struct {
     /// 정확히 이것이다(`Terminal.zig:30`).
     stream: ghostty_vt.TerminalStream,
     state: ghostty_vt.RenderState,
+    /// copy mode의 커서. null이면 copy mode가 아니다.
+    ///
+    /// **뷰포트 좌표다**(0이 화면 맨 윗줄). 절대 행이 아닌 이유는 이동이
+    /// 화면 위의 일이기 때문이다 — 뷰포트가 한 줄 올라가면 커서는 화면의
+    /// 같은 자리에 남고, 그래서 가리키는 내용이 한 줄 위가 된다. 그것이
+    /// 화면 끝에서 계속 움직였을 때 사람이 기대하는 동작이다.
+    ///
+    /// 앵커(선택의 시작점)는 여기 두지 않는다. CM-M1이 라이브러리의 tracked
+    /// selection에 맡긴다(design 결정 5).
+    copy_cursor: ?Cursor = null,
 
     pub fn init(
         io: std.Io,
@@ -164,7 +174,14 @@ pub const Screen = struct {
                 // 렌더러는 커서라는 것도 배우지 않는다. 뷰포트 밖으로
                 // 나가면 viewport가 null이므로 TR-M2가 이 자리를 다시
                 // 손대지 않아도 된다.
-                if (cursor) |vp| {
+                //
+                // **copy mode 중에는 셸 커서를 그리지 않는다**(CM-M0). 반전된
+                // 셀이 둘이면 게이트가 어느 것이 copy 커서인지 못 가른다.
+                if (self.copy_cursor) |cc| {
+                    if (@as(usize, cc.x) == x and @as(usize, cc.y) == y) {
+                        std.mem.swap(u32, &fg, &bg);
+                    }
+                } else if (cursor) |vp| {
                     if (@as(usize, vp.x) == x and @as(usize, vp.y) == y) {
                         std.mem.swap(u32, &fg, &bg);
                     }
@@ -201,6 +218,65 @@ pub const Screen = struct {
 
     pub fn defaultBg(self: *const Screen) u32 {
         return packRgb(self.state.colors.background);
+    }
+
+    /// 뷰포트 좌표 한 쌍. 로그와 검사가 함께 쓴다.
+    pub const Cursor = struct { x: u16, y: u16 };
+
+    /// copy mode에 들어간다. 커서는 셸 커서 자리에서 시작한다.
+    ///
+    /// 셸 커서가 뷰포트 밖에 있으면(스크롤백을 올려다보는 중이면) 화면 맨
+    /// 왼쪽 위에서 시작한다 — 안 보이는 자리에 커서를 두면 사람이 무엇을
+    /// 움직이는지 알 수 없다.
+    pub fn copyEnter(self: *Screen) void {
+        self.copy_cursor = if (self.state.cursor.viewport) |vp|
+            .{ .x = vp.x, .y = vp.y }
+        else
+            .{ .x = 0, .y = 0 };
+    }
+
+    /// copy mode를 나간다.
+    pub fn copyExit(self: *Screen) void {
+        self.copy_cursor = null;
+    }
+
+    pub fn copyActive(self: *const Screen) bool {
+        return self.copy_cursor != null;
+    }
+
+    pub fn copyCursor(self: *const Screen) ?Cursor {
+        return self.copy_cursor;
+    }
+
+    /// 커서를 옮긴다. **화면 끝을 넘으면 뷰포트가 대신 움직인다.**
+    ///
+    /// 좌우는 화면 안에서 멈춘다(줄을 넘나들지 않는다). 위아래는 화면 끝에서
+    /// 뷰포트를 한 줄 밀고 커서는 그 끝에 남는다 — 스크롤백을 거슬러 올라가며
+    /// 훑는 동작이 이것으로 만들어진다.
+    ///
+    /// `cells()`보다 먼저 불려도 안전하다. `state.rows`·`cols`는 init에서
+    /// 준 격자 크기이고 매 프레임 같은 값이다.
+    pub fn copyMove(self: *Screen, dx: i32, dy: i32) void {
+        const cur = self.copy_cursor orelse return;
+        if (self.state.cols == 0 or self.state.rows == 0) return;
+
+        const max_x: i32 = @as(i32, self.state.cols) - 1;
+        const max_y: i32 = @as(i32, self.state.rows) - 1;
+
+        var x: i32 = @as(i32, cur.x) + dx;
+        if (x < 0) x = 0;
+        if (x > max_x) x = max_x;
+
+        var y: i32 = @as(i32, cur.y) + dy;
+        if (y < 0) {
+            self.scrollByRows(-1);
+            y = 0;
+        } else if (y > max_y) {
+            self.scrollByRows(1);
+            y = max_y;
+        }
+
+        self.copy_cursor = .{ .x = @intCast(x), .y = @intCast(y) };
     }
 
     /// 뷰포트가 스크롤백의 어디에 있는지.
