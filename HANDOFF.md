@@ -2,15 +2,14 @@
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **기록을 믿지 말고 아래로 직접 확인하고 시작할
-것** — 이전에 "push했다"고 적어 둔 커밋이 정작 안 올라가 있던 적이 두 번 있다.
+`main`, working tree 깨끗함.
 
 ```bash
-git rev-list --count origin/main..main     # 0이어야 한다
+git status --short     # 비어 있어야 한다
 ```
 
-**2026-08-24 기준 커밋 셋이 안 올라가 있다**(`da423fe` design, `8b2fb6c` plan,
-`d041f72` 이 파일). push는 사용자의 판단으로 남겨 두었다.
+**push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
+push할지 묻지 않는다 — 필요하면 그냥 한다.
 
 **Copy Mode 서브프로젝트를 시작했다.** design doc과 CM-M0 plan이 커밋되어
 있고, **코드는 아직 한 줄도 안 바뀌었다.** Terminal Rendering(TR-M0~M2)은
@@ -323,13 +322,11 @@ feedback 셋과 `project_copy_mode`, `project_input_policy`,
 
 ## 다음 세션에게
 
-1. 위의 `git rev-list` 확인부터 한다. 커밋 둘이 안 올라가 있으면 push할지
-   사용자에게 묻는다.
-2. `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`를 연다.
+1. `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`를 연다.
    **설계를 다시 하지 않는다** — plan에 "넣을 것"이 줄 단위로 다 있다.
-3. Task 1 Step 1(`input.zig`의 `Action`에 `copy` variant 더하기)부터 사용자에게
+2. Task 1 Step 1(`input.zig`의 `Action`에 `copy` variant 더하기)부터 사용자에게
    제시한다. `지울 것`과 `넣을 것`을 따로 보인다.
-4. Task 1이 끝나면 `zig build test`를 Claude가 돌리고 결과를 줄 단위로 해석한다.
+3. Task 1이 끝나면 `zig build test`를 Claude가 돌리고 결과를 줄 단위로 해석한다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
