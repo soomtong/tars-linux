@@ -1,6 +1,6 @@
 ---
 name: project_copy_mode
-description: 사용자가 원하는 미래 기능 — 스크롤백 위에서 vim modal 방식 선택 모드(커서 이동 → v/V로 영역 선택 → 복사)와 Cmd+V 붙여넣기. iTerm2/WezTerm의 copy mode에 해당. 스크롤백과 클립보드가 선행 조건.
+description: 스크롤백 위에서 vim modal 방식 선택 모드(커서 이동 → v/V로 영역 선택 → 복사)와 Cmd+V 붙여넣기. iTerm2/WezTerm의 copy mode에 해당. CM-M0(2026-08-24)에서 모드·커서·게이트가 들어갔고 남은 선행 조건은 클립보드다.
 metadata:
   node_type: memory
   type: project
@@ -50,6 +50,36 @@ metadata:
 **순서에 대한 판단:** 이 기능은 "터미널 완성도"(스크롤백·색상) 서브프로젝트
 뒤에 온다. 그 서브프로젝트가 선행 조건 1·2를 만들고 나면, copy mode는
 클립보드 버퍼 하나만 더해서 시작할 수 있다.
+
+## 2026-08-24 — CM-M0이 끝났다. 통로가 실제로 뚫렸다
+
+위에서 "갈림길 자체는 이미 있다"고 적어 둔 자리에 **모드가 들어갔다.**
+
+- `input.Action`에 `copy: Copy` variant가 생겼고, `State.mode`가 `.normal`과
+  `.copy`를 가른다. **copy 분기가 `chord()`보다 앞에 있다** — 그래서 모드
+  안에서는 Cmd 조합조차 `chord()`에 닿지 못하고 전부 삼켜진다. CM-M1의
+  `Cmd+C`와 CM-M2의 `Cmd+V`는 `chord()`가 아니라 **copy 표에** 들어와야 한다.
+- `vt.Screen`에 `copy_cursor`(뷰포트 좌표)와 `copyEnter`/`copyExit`/
+  `copyMove`/`copyActive`/`copyCursor`가 생겼다. 화면 끝에서 더 움직이면
+  뷰포트가 대신 움직인다.
+- 게이트 체인 `copy/check.sh`(monitor 포트 45461)가 신설됐고 루트 게이트가
+  여덟 체인 3/3이다. **51분 20초**(직전 45분 41초).
+- **진입키는 `Cmd+Shift+C`로 확정됐다.** QEMU `sendkey meta_l-shift-c`가 세 키
+  조합을 게스트까지 옮긴다는 것이 실측으로 확인됐다.
+
+**남은 선행 조건은 여전히 클립보드 하나다.** CM-M1이 그것을 만든다.
+
+**`scrollToBottom` 억제가 창을 열었다.** `main.zig`가 copy mode 중에는
+`scrollToBottom()`을 부르지 않는다. 그전까지 그 호출이 **부수 효과로** 막고
+있던 것이 있다 — 뷰포트가 history에 머무는 동안 가지치기가 일어나는 상황이다.
+가지치기는 그 페이지를 가리키던 pin을 무효로 만든다. copy mode 중에 1000줄이
+쏟아져야 닿는 자리라 게이트로 만들지 않았고, **CM-M1이 매 프레임
+`selection`이 null이 됐는지 보고 그러면 모드를 나가는 방어를 넣는다.**
+
+**`Action`을 넓힐 때는 `zig build`도 함께 돌린다.** Zig가 참조되지 않는 함수를
+분석하지 않아서, `readKeys`가 쓰는 `State.scrolls` 필드가 사라진 것을
+`zig build test`가 두 번 놓쳤다 — `input_test`는 `handleKey`만 부른다.
+`main.zig`가 `readKeys`를 부르는 `zig build`에서 비로소 드러났다.
 
 관련: [[project_boot_shell_selection]], [[project_config_persistence]],
 [[user_learning_goal]]

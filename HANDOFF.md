@@ -1,4 +1,4 @@
-# HANDOFF: Copy Mode를 시작했다 — 다음 일은 CM-M0 Task 1이다
+# HANDOFF: CM-M0이 끝났다 — 다음 일은 CM-M1의 plan을 쓰는 것이다
 
 ## 지금 어디인가
 
@@ -11,25 +11,66 @@ git status --short     # 비어 있어야 한다
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**Copy Mode 서브프로젝트를 시작했다.** design doc과 CM-M0 plan이 커밋되어
-있고, **코드는 아직 한 줄도 안 바뀌었다.** Terminal Rendering(TR-M0~M2)은
-2026-08-24에 끝났고 루트 게이트 일곱 체인이 3/3이다.
+**Copy Mode의 CM-M0이 2026-08-24에 끝났다.** 루트 게이트 **여덟** 체인이
+3/3이고 **51분 20초**다. copy mode에 들어가고 나오고 커서를 옮기는 것이 실제
+게스트에서 동작하며, **모드 안에서 친 키가 PTY로 안 샌다는 것이 음성 검사로
+증명되어 있다.**
 
 - design: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
-- plan: `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`
+  (CM-M0의 실측 결과가 "milestone 구성" 절 아래 인용 블록에 붙어 있다)
+- 끝난 plan: `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`
 
-**다음 일은 plan의 Task 1 Step 1이다.** plan은 "넣을 것"을 줄 단위로 다 적어
-두었으므로 다시 설계하지 말고 그대로 진행한다. milestone은 셋이다.
+**다음 일은 CM-M1의 plan을 새로 쓰는 것이다** — 저장소 규칙대로 한 milestone이
+끝난 시점에 다음 것을 쓴다. 미리 상세 설계해 둔 것이 없다.
 
 | | 내용 |
 |---|---|
-| **CM-M0** (다음) | 모드 진입·이탈, `hjkl`·방향키 이동, 커서 반전, 뷰포트 추종, `scrollToBottom` 억제, 새 체인 신설 |
-| CM-M1 | `v`/`V` 선택, 선택 렌더, `y` 복사, `Cmd+C` 별칭 |
+| ~~CM-M0~~ | ~~모드 진입·이탈, `hjkl`·방향키 이동, 커서 반전, 뷰포트 추종, `scrollToBottom` 억제, 새 체인 신설~~ **끝났다** |
+| **CM-M1** (다음) | `v`/`V` 선택, 선택 렌더, `y` 복사, `Cmd+C` 별칭 |
 | CM-M2 | `Cmd+V` 붙여넣기, 왕복 증명 |
 
-CM-M1의 plan은 CM-M0이 끝난 시점에 새로 쓴다.
+## CM-M0이 실제로 만든 것
 
-## 착수 전 조사로 확정한 사실 — **다시 조사하지 말 것**
+- **`input.zig`** — `Action`에 `copy: Copy` variant, `Copy` enum 여섯
+  (`enter`·`exit`·`left`·`down`·`up`·`right`), `Keys.copies`,
+  `State.copies`/`State.mode`(`Mode = enum { normal, copy }`).
+  **copy 분기가 `chord()`보다 앞에 있다**(`:514`) — 모드 안에서는 Cmd 조합도
+  `chord()`에 못 닿고 전부 삼켜진다. 진입키만 `chord()`의 Meta 분기 안에
+  있다(`:403`, Shift를 한 번 더 보는 예외 한 줄).
+- **`vt.zig`** — `copy_cursor: ?Cursor`(뷰포트 좌표)와 `copyEnter`/`copyExit`/
+  `copyMove`/`copyActive`/`copyCursor`. `cells()`가 copy 커서를 반전하고,
+  **copy mode 중에는 셸 커서를 안 그린다**(반전된 셀이 둘이면 게이트가 못
+  가른다).
+- **`main.zig`** — `dumpCopy`(`terminal: copy>` 줄), 키 루프의 copy 배선,
+  `if (!screen.copyActive()) screen.scrollToBottom();`.
+- **`copy/check.sh`** — 261줄. monitor 포트 **45461**.
+
+## CM-M0이 실측으로 알아낸 것 — **다시 조사하지 말 것**
+
+**1. copy 커서는 언제나 화면 맨 아랫줄에서 시작한다.** 셸 프롬프트가 거기
+있기 때문이다(`row=46`, 화면은 47줄). **그래서 `j`를 첫 이동 검사로 쓸 수
+없다** — 커서가 이미 `max_y`이고 뷰포트도 바닥이라 아무 데도 못 간다. 게이트는
+`k`로 올라갔다 `j`로 되돌아오는 순서를 쓴다. CM-M1의 선택 검사도 같은 함정을
+밟는다.
+
+**2. `Action`이나 `Keys`를 건드리면 `zig build`도 함께 돌린다.** Zig가
+참조되지 않는 함수를 분석하지 않아서, `readKeys`가 쓰는 `State.scrolls` 필드가
+통째로 사라진 것을 `zig build test`가 **두 번** 놓쳤다 — `input_test`는
+`handleKey`만 부른다. `main.zig`가 `readKeys`를 부르는 `zig build`에서 비로소
+드러났다. **CM-M1이 `Copy`에 variant를 더할 때 그대로 해당된다.**
+
+**3. `sendkey`를 0.05초 간격으로 80번 보내도 하나도 안 떨어진다.** 커서를
+46줄 올리고 뷰포트를 34줄 밀었으니 46 + 34 = 80이 정확히 맞았다. 체인들의
+`sleep 0.3`을 줄일 수 있다는 방증이다(이월 숙제).
+
+**4. `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다.** design
+위험 4가 해소됐다. 진입키를 바꾸지 않았다.
+
+**5. `copyEnter`의 "뷰포트 밖이면 왼쪽 위" 가지는 죽은 코드가 아니다.**
+스크롤백을 올려다보는 중에는 `state.cursor.viewport`가 null이고, `vt_test`가
+실제로 그 경로를 밟았다.
+
+## CM-M0 착수 전 조사로 확정한 사실 — **그대로 유효**
 
 2026-08-24에 컨테이너에서 실제로 돌려 얻은 값이다. `/tmp/probe.zig`를
 `terminal/src/vt_test.zig` 자리에 마운트해 `zig build test`로 돌렸다.
@@ -47,16 +88,22 @@ CM-M1의 plan은 CM-M0이 끝난 시점에 새로 쓴다.
 
 `Selection`·`Pin`·`Point`는 모듈 루트(`lib_vt.zig:68-73`)에서 나온다.
 
-**확인하지 못한 것 하나.** 위가 증명한 것은 "스크롤 뒤에도 pin이 산다"이지
-"**가지치기**(history 1000줄 초과) 뒤에도 산다"가 아니다. 방어는 CM-M1에서
-"매 프레임 `selection`이 null이 됐는지 보고 그러면 모드를 나간다"로 넣는다.
+## CM-M1이 반드시 해야 하는 것 둘
 
-### 음성 검사의 도구는 `terminal: key>` 줄이다
+**1. 가지치기 방어.** CM-M0이 `scrollToBottom` 억제를 실제로 넣었으므로
+**창이 이미 열렸다**(design 위험 1). 그전까지 그 호출이 부수 효과로 막고 있던
+것이 있다 — 뷰포트가 history에 머무는 동안 가지치기가 일어나면 그 페이지를
+가리키던 pin이 무효가 된다. **매 프레임 `selection`이 null이 됐는지 보고
+그러면 모드를 나간다.** copy mode 중에 1000줄이 쏟아져야 닿는 자리라 게이트로
+만들지 않는다.
 
-`main.zig:402`의 `if (keys.bytes.len > 0)` 안에 있어서 **PTY로 바이트가 나갈
-때만 찍힌다.** 그래서 "모드 안에서 키를 쳐도 이 줄이 안 늘어난다"가 곧 "PTY로
-안 샌다"이다. 화면에 글자가 없는 것만 보는 것보다 정확하다. CM-M0 게이트가
-이것을 앞뒤 대조군 둘과 함께 본다.
+**2. `Cmd+C`는 `chord()`가 아니라 copy 표에 들어간다.** copy 분기가 `chord()`
+앞에 있어서, 모드 안에서는 `chord()`에 아예 닿지 않는다. CM-M2의 `Cmd+V`도
+같다.
+
+**`Copy` enum을 여섯 개로 닫아 둔 것이 의도다.** `main.zig`의 switch가
+`else` 없이 닫혀 있으므로, variant를 더하는 순간 컴파일러가 배선할 자리를
+알려준다.
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -73,16 +120,18 @@ CM-M1의 plan은 CM-M0이 끝난 시점에 새로 쓴다.
 
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-`diff`로 대조해 보인 뒤 사용자가 `cp`로 넣는다. TR-M2에서 이 방식으로 파일
-넷을 옮겼고, **`diff`를 먼저 보여서 "지워진 줄이 없다"를 확인시키는 것이 특히
-값졌다.** CM-M0의 `copy/check.sh`(약 260줄)가 이 방식의 대상이다.
+`diff`로 대조해 보인 뒤 사용자가 `cp`로 넣는다. CM-M0의 `copy/check.sh`(261줄)
+가 이 방식이었고, **`render/check.sh`의 뼈대와 `diff`를 떠서 "구조적으로
+지워진 것이 없다"를 먼저 보인 것이 값졌다.**
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 46분이라 Bash
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 51분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **백그라운드로 돌려야 한다.**
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
-**매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.**
+**매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.** CM-M0에서 이것이
+두 번 값을 했다 — `State.scrolls` 필드가 사라진 것과 `main.zig`에 오타
+(`needs_redraw` → `ieeds_redraw`)가 들어간 것을 둘 다 빌드가 잡았다.
 
 ## 게이트 현황
 
@@ -92,11 +141,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
-**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2), 3/3,
-부팅 30회 이상. **직전 기준선은 45분 41초다**(2026-08-24, 한가한 기계).
+**여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M0),
+3/3, 부팅 30회 이상. **직전 기준선은 51분 20초다**(2026-08-24, 한가한 기계).
+그 앞 기준선이 45분 41초였으니 CM 체인이 1회당 약 1분 53초를 쓴다.
 
 monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
-45460(TR)이고 **CM-M0이 45461을 쓴다**(그다음은 45462가 비어 있다).
+45460(TR) · 45461(CM)이고 **그다음은 45462가 비어 있다.**
 
 ### 게이트 시간을 잴 때는 기계를 비운다
 
@@ -116,7 +166,7 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) 
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
-  bash render/check.sh > /tmp/gate.out 2>&1
+  bash copy/check.sh > /tmp/gate.out 2>&1
   grep -ah "찾을 문구" /tmp/tmp.*
 '
 ```
@@ -126,7 +176,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **긴 게이트를 돌릴 때 `| tail -N`을 붙이지 않는다.** `tail`이 파이프가 닫힐
 때까지 아무것도 안 내보내서 진행 상황을 볼 수 없다. 파일로 리다이렉트하고
-따로 들여다본다.
+따로 들여다본다. **에러 본문도 `tail`에 잘리기 쉽다** — Zig 빌드 실패는
+`grep -aE '^src/.*error'`로 뽑는 편이 빠르다.
 
 ### 로그 문구는 두 곳에 중복된다
 
@@ -148,7 +199,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다) ·
 `terminal: style>` · `terminal: pixel>` · `terminal: render> first frame` ·
 `terminal: ink>` · `terminal: font>` · `terminal: scroll>` · `terminal: key>` ·
-**`terminal: copy>`**(CM-M0이 더한다)
+`terminal: copy>`
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
 화면을 판정한다.
@@ -176,8 +227,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   명령은 한 번의 `docker run` 안에서 끝내야 한다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 46분이라 10분
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 51분이라 10분
   상한을 넘는다. `run_in_background`로 돌린다.
+- **`vt_test`의 CM 검사를 `screen`에 붙이기** — `screen`은 파일 앞쪽의 작은
+  화면이고 history가 없다. 스크롤백을 가진 것은 `fresh`다.
 
 ### 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
 
@@ -211,6 +264,10 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
+- [ ] **체인의 `sendkey` 사이 `sleep 0.3`을 줄일 수 있는지.** **CM-M0이
+      0.05초에서 80번이 하나도 안 떨어지는 것을 실측했다** — 근거가 생겼다.
+      여덟 체인 전부에 걸리는 변경이라 별도로 다룬다. 게이트 51분의 상당
+      부분이 이 `sleep`이다.
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다** — 시간이 `fill`에 있다면 부분 갱신을 넣어도 별로 안 준다.
@@ -224,7 +281,6 @@ docker run --rm -v "$PWD":/workspace \
       옮겨 두었지만 **빌드해서 돌려 본 적이 없다.**
 - [ ] **`clean()`에서 커널을 빼는 논의.** 게이트 시간의 가장 큰 단일 항목이다
       (`project_kernel_config`). 정책 변경이므로 별도로 다룬다.
-- [ ] **체인의 `sendkey` 사이 `sleep 0.3`을 줄일 수 있는지.**
 - [ ] **`terminal/vendor/fonts/Hanme_8x4x4.ttf`가 남아 있다.** `vendor/`가
       gitignore라 저장소에는 없다. 지워도 게이트는 안 흔들린다.
 
@@ -236,21 +292,14 @@ docker run --rm -v "$PWD":/workspace \
   (BF는 virtio-gpu 없이 부팅하므로 `drm.open`이 `OpenFailed`로 죽는 것이
   **의도된 경로**이고, PID 1이 세 번 띄운 뒤 포기한다).
 
-## CM-M0에서 부딪칠 것으로 보는 것
+## IP-M2가 남긴 것 (그대로 이월)
 
-- **QEMU `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮기는지 확인된
-  적이 없다**(design 위험 4). IP 체인이 `meta_l-left` 두 키 조합을 쓰고 있으니
-  가능성은 높다. 실패하면 진입키를 두 키 조합으로 바꾸고 design 결정 4를 함께
-  고친다 — plan Task 4 Step 3에 가르는 방법이 적혀 있다.
-- **`chord()`의 Meta 분기에 Shift 조건이 붙는 예외가 생긴다**(design 위험 2).
-  그 예외는 한 줄뿐이어야 한다.
-- **copy mode 중에는 `chord()`에 아예 닿지 않는다.** copy 분기가 앞에 있기
-  때문이다. CM-M1의 `Cmd+C`와 CM-M2의 `Cmd+V`는 `chord()`가 아니라 **copy 표에**
-  들어와야 한다.
-- **`scrollToBottom` 억제는 게이트가 CM-M0에서 볼 수 없다.** 모드 안에서는
-  셸에 아무것도 못 보내서 출력을 만들 방법이 없다. CM-M2에서 본다.
+- **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** TUI 앱이 생기면 그때.
+- **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
+  `Context.cursor_keys`를 주입해 대신 본다.
+- **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
 
-## TR-M2가 남긴 것
+## TR-M2가 남긴 것 (그대로 이월)
 
 - **스크롤백 한도는 값 둘을 함께 줘야 걸린다.** `max_scrollback_lines`만 주면
   기본 `max_scrollback_bytes`(10,000)가 먼저 걸려 아무 일도 안 일어난다.
@@ -258,20 +307,8 @@ docker run --rm -v "$PWD":/workspace \
   페이지 통째로 일어난다).
 - **`Terminal.ScrollViewport`의 이름이 `PageList.Scroll`과 다르다.**
   `.bottom`·`.delta`이지 `.active`·`.delta_row`가 아니다.
-- **"바닥에 있다"는 `offset == total - len`이다.** 게이트와 호스트 검사가 전부
-  이 식을 쓴다.
-- **`handleKey`의 반환이 `Action` union이 됐다.** copy mode가 쓸 통로다.
+- **"바닥에 있다"는 `offset == total - len`이다.**
 - **렌더가 PTY 분기 안에만 있었다.** `needs_redraw`로 루프 끝에 뺐다.
-
-자세한 것은 `docs/decisions/project_terminal_rendering.md`와
-`project_input_policy.md`.
-
-## IP-M2가 남긴 것 (그대로 이월)
-
-- **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** TUI 앱이 생기면 그때.
-- **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
-  `Context.cursor_keys`를 주입해 대신 본다.
-- **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
 
 ## 감독 루프의 구조 (HD-M2가 만든 것, 그대로 유효)
 
@@ -289,27 +326,31 @@ docker run --rm -v "$PWD":/workspace \
 ## 핵심 파일
 
 - `terminal/src/input.zig` — `handleKey`가 `Action`을 돌려주고 `readKeys`가
-  `Keys`를 돌려준다. **`chord()`가 가로채는 지점이고, Shift 분기는 Meta·Alt보다
-  뒤에 있어야 한다.** CM-M0이 `Action.copy`·`State.mode`·copy 분기를 더한다.
-  - `:160` `Action` · `:168` `Keys` · `:278` `scrolls` 필드 · `:367` Meta 분기 ·
-    `:462` `if (value == 0)` · `:508` `readKeys`
+  `Keys`를 돌려준다.
+  - `:160` `Action`(`bytes`·`scroll`·`copy`) · `:175` `Copy` enum ·
+    `:185` `Keys` · `:302` `State.copies` · `:307` `State.mode` ·
+    `:405` 진입키(Meta 분기 안의 Shift 예외) · `:516` **copy 분기**
+    (`chord()`보다 앞) · `:574` `readKeys`
 - `terminal/src/vt.zig` — `Screen`. `cells()`가 색·inverse·커서를 전부 해소해
-  `CellGlyph`로 넘긴다. CM-M0이 `copy_cursor`와 `copyEnter`/`copyExit`/
-  `copyMove`/`copyActive`/`copyCursor`를 더한다.
-  - `:163-171` 커서 반전(여기에 copy 커서가 얹힌다) · `:215` `Scrollbar`
+  `CellGlyph`로 넘긴다.
+  - `:55` `copy_cursor` · `:173` 커서 반전(copy가 셸 커서를 가린다) ·
+    `Cursor`/`copyEnter`/`copyExit`/`copyActive`/`copyCursor`/`copyMove`가
+    `Scrollbar` 앞에 있다
 - `terminal/src/main.zig` — `drawGlyph`·`render`·`dumpScreen`·`dumpStyles`·
-  `dumpInk`·`dumpScroll`, 그리고 `poll` 루프. **렌더는 루프 끝에 있고
-  `needs_redraw`가 문지기다.**
-  - `:402` `key>` 로그(음성 검사의 도구) · `:418` 스크롤 루프(copy 배선이 그
-    뒤에 온다) · `:450` `scrollToBottom()`(억제 대상)
+  `dumpInk`·`dumpScroll`·`dumpCopy`, 그리고 `poll` 루프. **렌더는 루프 끝에
+  있고 `needs_redraw`가 문지기다.**
+  - `:266` `dumpCopy` · `:447` copy 배선 · `:491`
+    `if (!screen.copyActive()) screen.scrollToBottom();`
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다**(`ascent_px`를 폰트에서 읽는다).
-- `terminal/src/input_test.zig` — `expectCtx`의 `switch`가 `Action`을 전부
-  훑으므로 **variant를 더하면 여기서 컴파일이 막힌다.** 의도된 신호다.
+- `terminal/src/input_test.zig` — `expectCtx`·`expectScroll`·`expectCopy`의
+  `switch`가 `Action`을 전부 훑으므로 **variant를 더하면 여기 셋에서
+  컴파일이 막힌다.** 의도된 신호다.
 - `terminal/src/vt_test.zig` — TF-M3의 조각 이어붙이기 + TR-M0의 색 일곱과
-  커서 + TR-M2의 스크롤백 다섯.
-- `render/check.sh` — 470줄. CM-M0의 `copy/check.sh`가 이 뼈대를 그대로 쓴다.
-- `check.sh:108` — `run_chain "TR-M2" ./render/check.sh`. 그 뒤에 CM이 붙는다.
+  커서 + TR-M2의 스크롤백 다섯 + CM-M0의 copy 커서 넷. **CM 검사는 `screen`이
+  아니라 `fresh`를 쓴다.**
+- `copy/check.sh` — 261줄. `render/check.sh`의 뼈대를 그대로 쓴다.
+- `check.sh:109` — `run_chain "CM-M0" ./copy/check.sh`.
 - `terminal/src/drm.zig:128`·`:138` — `setPixel`·`getPixel`. **범위 검사가
   없다.** 고치지 않고 호출부에서 막는다.
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.
@@ -322,11 +363,12 @@ feedback 셋과 `project_copy_mode`, `project_input_policy`,
 
 ## 다음 세션에게
 
-1. `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`를 연다.
-   **설계를 다시 하지 않는다** — plan에 "넣을 것"이 줄 단위로 다 있다.
-2. Task 1 Step 1(`input.zig`의 `Action`에 `copy` variant 더하기)부터 사용자에게
-   제시한다. `지울 것`과 `넣을 것`을 따로 보인다.
-3. Task 1이 끝나면 `zig build test`를 Claude가 돌리고 결과를 줄 단위로 해석한다.
+1. `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`를 연다.
+   결정 5·6(선택과 클립보드)이 CM-M1의 몫이고, **design은 승인되어 있으므로
+   다시 논의하지 않는다.**
+2. **CM-M1의 plan을 쓴다.** 위 "CM-M1이 반드시 해야 하는 것 둘"과 "착수 전
+   조사로 확정한 사실"을 전제로 삼는다 — 라이브러리에 선택 개념이 전부 있다.
+3. plan을 사용자가 승인하면 Task 1 Step 1부터 제시한다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 
