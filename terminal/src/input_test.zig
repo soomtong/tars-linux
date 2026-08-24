@@ -44,6 +44,42 @@ fn expectCtx(
             );
             return error.UnexpectedScroll;
         },
+        .copy => |cmd| {
+            std.debug.print(
+                "FAIL: code={d} value={d} -> got copy .{s}, want bytes {any}\n",
+                .{ code, value, @tagName(cmd), want },
+            );
+            return error.UnexpectedCopy;
+        },
+    }
+}
+
+/// copy 명령이 나오기를 기대한다. **바이트가 오면 실패다** — 그것이 정확히
+/// "모드 안에서 키가 PTY로 샌다"는 사고이기 때문이다.
+fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
+    switch (state.handleKey(code, 1, .{})) {
+        .copy => |cmd| {
+            if (cmd == want) return;
+            std.debug.print(
+                "FAIL: code={d} -> got copy .{s}, want copy .{s}\n",
+                .{ code, @tagName(cmd), @tagName(want) },
+            );
+            return error.UnexpectedCopyCommand;
+        },
+        .bytes => |bytes| {
+            std.debug.print(
+                "FAIL: code={d} -> got {d} byte(s) {any}, want copy .{s}\n",
+                .{ code, bytes.len, bytes, @tagName(want) },
+            );
+            return error.LeakedToPty;
+        },
+        .scroll => |s| {
+            std.debug.print(
+                "FAIL: code={d} -> got scroll .{s}, want copy .{s}\n",
+                .{ code, @tagName(s), @tagName(want) },
+            );
+            return error.UnexpectedScroll;
+        },
     }
 }
 
@@ -71,6 +107,13 @@ fn expectScroll(
                 .{ code, bytes, @tagName(want) },
             );
             return error.ExpectedScroll;
+        },
+        .copy => |cmd| {
+            std.debug.print(
+                "FAIL: code={d} -> got copy .{s}, want scroll .{s}\n",
+                .{ code, @tagName(cmd), @tagName(want) },
+            );
+            return error.UnexpectedCopy;
         },
     }
 }
@@ -413,6 +456,61 @@ pub fn main() !void {
     // 특수키 사이의 빈 코드(F1 등)는 여전히 조용히 무시된다.
     try expect(&state, K.KEY_F1, 1, "");
     try expect(&state, K.KEY_INSERT, 1, "");
+
+    // ── CM-M0: copy mode ────────────────────────────────────────────────
+    //
+    // 검사 1. 대조군. 모드에 들어가기 전의 `h`는 평범한 글자다. 이것이
+    // 없으면 아래 검사 3이 "원래부터 h가 안 나갔다"로도 통과한다.
+    var cm: input.State = .{};
+    try expect(&cm, K.KEY_H, 1, "h");
+
+    // 검사 2. Cmd+Shift+C가 모드를 연다.
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: Cmd+Shift+C did not switch the mode\n", .{});
+        return error.ModeNotEntered;
+    }
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 3. 모드 안에서 hjkl과 방향키가 명령이 된다.
+    try expectCopy(&cm, K.KEY_H, .left);
+    try expectCopy(&cm, K.KEY_J, .down);
+    try expectCopy(&cm, K.KEY_K, .up);
+    try expectCopy(&cm, K.KEY_L, .right);
+    try expectCopy(&cm, K.KEY_LEFT, .left);
+    try expectCopy(&cm, K.KEY_DOWN, .down);
+    try expectCopy(&cm, K.KEY_UP, .up);
+    try expectCopy(&cm, K.KEY_RIGHT, .right);
+
+    // 검사 4. **모르는 키는 삼킨다**(design 결정 3). 게이트의 음성 검사와
+    // 같은 사실을 여기서 먼저 본다.
+    try expect(&cm, K.KEY_Q, 1, "");
+    try expect(&cm, K.KEY_W, 1, "");
+    try expect(&cm, K.KEY_E, 1, "");
+    try expect(&cm, K.KEY_R, 1, "");
+    try expect(&cm, K.KEY_T, 1, "");
+    try expect(&cm, K.KEY_ENTER, 1, "");
+
+    // 검사 5. Cmd 조합도 모드 안에서는 chord()에 닿지 않는다. 모드 밖이라면
+    // Cmd+←가 0x01(beginning-of-line)이 되지만, 안에서는 copy 표가 먼저다.
+    // **CM-M1의 Cmd+C와 CM-M2의 Cmd+V가 chord()가 아니라 copy 표에 들어와야
+    // 하는 이유가 이것이다.**
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expectCopy(&cm, K.KEY_LEFT, .left);
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+
+    // 검사 6. Esc가 모드를 닫고, 닫힌 뒤에는 h가 다시 글자가 된다.
+    // **이 대조군이 없으면 "영영 못 나온다"도 통과한다.**
+    try expectCopy(&cm, K.KEY_ESC, .exit);
+    if (cm.mode != .normal) {
+        std.debug.print("FAIL: Esc did not leave copy mode\n", .{});
+        return error.ModeNotLeft;
+    }
+    try expect(&cm, K.KEY_H, 1, "h");
+    std.debug.print("input_test: copy mode OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

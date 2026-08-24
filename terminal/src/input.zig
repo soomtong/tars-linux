@@ -162,6 +162,23 @@ pub const Action = union(enum) {
     bytes: []const u8,
     /// 우리가 처리할 동작. **PTY로 보내지 않는다.**
     scroll: Scroll,
+    /// copy mode의 명령. 이것도 PTY로 보내지 않는다.
+    copy: Copy,
+};
+
+/// copy mode 안에서 키가 만드는 명령.
+///
+/// design 결정 2의 조각은 `select_char`·`yank`·`paste`까지 적었지만 CM-M0은
+/// 여섯 개만 만든다. **variant를 미리 만들어 두면 `main.zig`의 switch가
+/// `else`로 열려야 하고, 그러면 CM-M1에서 배선을 잊어도 컴파일이 통과한다.**
+/// 지금 닫아 두면 variant를 더하는 순간 컴파일러가 배선할 자리를 알려준다.
+pub const Copy = enum {
+    enter,
+    exit,
+    left,
+    down,
+    up,
+    right,
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -171,6 +188,9 @@ pub const Keys = struct {
     /// 번의 read에 여러 개를 실어 오는데, 마지막 하나만 보면 몇 번을 눌렀든
     /// 한 화면만 올라간다.
     scrolls: []const Scroll,
+    /// copy mode 명령도 같은 이유로 순서대로 모은다. `j`를 누르고 있으면
+    /// 자동 반복이 여러 개를 실어 오고, 그만큼 내려가야 한다.
+    copies: []const Copy,
 };
 
 /// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
@@ -275,7 +295,16 @@ pub const State = struct {
     /// 여덟을 넘기면 나머지는 버린다. 자동 반복이 그만큼 쌓이려면 poll이
     /// 여덟 프레임을 놓쳐야 하고, 그런 상황에서 한 화면 덜 올라가는 것은
     /// 문제가 아니다 — out이 모자랄 때 바이트를 버리는 것과 같은 판단이다.
-    scrolls: [8]Scroll = undefined,
+    /// 한 번의 read에서 나온 copy 명령의 저장소. `seq`·`scrolls`와 같은
+    /// 이유로 힙을 쓰지 않는다.
+    copies: [8]Copy = undefined,
+
+    /// 지금 키를 어떻게 해석하는가. **모드가 `input`에 있는 이유가 design
+    /// 결정 1이다** — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
+    /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
+    mode: Mode = .normal,
+
+    pub const Mode = enum { normal, copy };
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
@@ -365,6 +394,16 @@ pub const State = struct {
     /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
     fn chord(self: *State, code: u16) ?Action {
         if (self.metaed()) {
+            // copy mode 진입(CM-M0). **Meta 분기 안에서 Shift를 한 번 더 보는
+            // 예외가 여기 하나뿐이어야 한다**(design 위험 2). iTerm2의 copy
+            // mode 진입키와 같은 자리를 고른 대가다.
+            //
+            // 모드를 여기서 바로 세우고 나가는 이유는, 이 뒤에 오는 키들이
+            // handleKey 앞쪽의 copy 분기로 빠져야 하기 때문이다.
+            if (self.shifted() and code == c.KEY_C) {
+                self.mode = .copy;
+                return .{ .copy = .enter };
+            }
             // Cmd 계열은 제어 문자 한 바이트다. 0x01이 beginning-of-line인
             // 이유는 그것이 readline의 기본 바인딩이기 때문이지 Cmd와 A
             // 사이에 무슨 관계가 있어서가 아니다.
@@ -461,6 +500,31 @@ pub const State = struct {
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return nothing;
 
+        // 1.5번 단계 — copy mode(design 결정 3). **아는 키만 명령이 되고
+        // 나머지는 전부 삼킨다.** "모르는 키는 흘려보낸다"로 하면 모드 안에서
+        // 친 글자가 셸에 도착하는 사고가 조용히 나고, 그것이 이 milestone의
+        // 음성 검사 대상이다.
+        //
+        // chord()보다 **앞**이라 모드 안에서는 Cmd 조합도 전부 삼켜진다.
+        // CM-M1의 `Cmd+C`와 CM-M2의 `Cmd+V`는 chord()가 아니라 이 표에
+        // 들어와야 한다.
+        //
+        // 방향키를 함께 받는 이유는 project_copy_mode가 기록한 원래 요청이
+        // "커서 키로 이동하고"였기 때문이다.
+        if (self.mode == .copy) {
+            switch (code) {
+                c.KEY_ESC => {
+                    self.mode = .normal;
+                    return .{ .copy = .exit };
+                },
+                c.KEY_H, c.KEY_LEFT => return .{ .copy = .left },
+                c.KEY_J, c.KEY_DOWN => return .{ .copy = .down },
+                c.KEY_K, c.KEY_UP => return .{ .copy = .up },
+                c.KEY_L, c.KEY_RIGHT => return .{ .copy = .right },
+                else => return nothing,
+            }
+        }
+
         // 2번 단계 — 조합 dispatch. 특수키 조회보다 **먼저**다.
         // 뒤에 두면 Cmd+←가 여기 닿기 전에 ESC [ D로 번역돼 새어 나가고,
         // TR-M2부터는 Shift+PageUp이 ESC [ 5 ~ 로 번역돼 새어 나간다.
@@ -510,11 +574,16 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
     var raw: [ev_size * 64]u8 = undefined;
 
     const n = read(fd, &raw, raw.len);
-    if (n <= 0) return .{ .bytes = out[0..0], .scrolls = self.scrolls[0..0] };
+    if (n <= 0) return .{
+        .bytes = out[0..0],
+        .scrolls = self.scrolls[0..0],
+        .copies = self.copies[0..0],
+    };
 
     const count = @as(usize, @intCast(n)) / ev_size;
     var written: usize = 0;
     var scrolled: usize = 0;
+    var copied: usize = 0;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event =
@@ -536,9 +605,18 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
                 self.scrolls[scrolled] = s;
                 scrolled += 1;
             },
+            // 스크롤과 같은 이유로 순서대로 모은다. 넘치면 버리는 것도 같다.
+            .copy => |cmd| if (copied < self.copies.len) {
+                self.copies[copied] = cmd;
+                copied += 1;
+            },
         }
     }
-    return .{ .bytes = out[0..written], .scrolls = self.scrolls[0..scrolled] };
+    return .{
+        .bytes = out[0..written],
+        .scrolls = self.scrolls[0..scrolled],
+        .copies = self.copies[0..copied],
+    };
 }
 
 /// translate-c가 struct input_event를 제대로 가져왔는지 확인하기 위한 헬퍼.
