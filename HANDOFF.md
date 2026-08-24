@@ -1,104 +1,37 @@
-# HANDOFF: 다음 일은 TR-M2(스크롤백) plan이다
+# HANDOFF: 다음 일은 서브프로젝트를 고르는 것이다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함, `origin/main`과 같은 자리. **기록을 믿지 말고
-아래로 직접 확인하고 시작할 것** — 이전에 "push했다"고 적어 둔 커밋이 정작
-안 올라가 있던 적이 있다.
+`main`, working tree 깨끗함. **기록을 믿지 말고 아래로 직접 확인하고 시작할
+것** — 이전에 "push했다"고 적어 둔 커밋이 정작 안 올라가 있던 적이 두 번 있다.
 
 ```bash
 git rev-list --count origin/main..main     # 0이어야 한다
 ```
 
-TR-M0(색·커서)과 TR-M1(한글)이 끝났고 게이트 일곱 체인이 3/3이다. **다음
-일은 TR-M2(스크롤백) plan을 쓰는 것이다.** design 결정 10~13이 방향을 주지만
-plan은 없고, `CLAUDE.md`대로 **그 시점에 새로 쓴다.**
+**Terminal Rendering(TR-M0~M2)이 2026-08-24에 끝났다.** 화면이 색·한글·
+스크롤백을 갖췄고 루트 게이트 일곱 체인이 3/3이다. **진행 중인 서브프로젝트가
+없다 — 다음 일은 무엇을 할지 고르는 것이다.**
 
-TR-M2가 끝나야 `project_copy_mode`(Cmd+C/Cmd+V가 `c`/`v`를 찍는 문제)의
-마지막 선행 조건이 풀린다.
+### 유력 후보: copy mode
 
-## TR-M2를 위해 이미 조사해 둔 것 (2026-08-23, 다시 조사하지 말 것)
+`docs/decisions/project_copy_mode.md`가 적어 둔 **선행 조건 셋 중 둘이
+끝났다.**
 
-vendor된 ghostty 소스를 읽고, 컨테이너에서 호스트 프로브를 돌려서 확인했다.
-프로브는 `/tmp/tr_m2_probe.zig`를 `terminal/src/vt_test.zig` 자리에 마운트해
-`zig build test`로 돌렸다(저장소는 안 건드린다).
+| 선행 조건 | 상태 |
+|---|---|
+| 스크롤백 | **끝남** (TR-M2) |
+| 선택 영역을 그릴 셀별 속성 | **끝남** (TR-M0) |
+| 클립보드 | **남음** — 개념 자체가 아직 없다 |
 
-### 1. **`max_scrollback_lines`만 주면 아무 일도 안 일어난다**
+통로도 이미 넓혀 두었다. `input.Action = union(enum) { bytes, scroll }`에
+variant를 더하면 "PTY로 안 보내고 우리가 처리한다"가 표현된다. 라이브러리에
+`RenderState.Row.selection: ?[2]CellCountInt` 자리도 있다(`render.zig:234`).
+**Cmd+C/Cmd+V는 IP가 일부러 비워 둔 채로 지키고 있다.**
 
-design 결정 10은 `max_scrollback_lines = 1000`만 말하는데, **바이트 한도가
-먼저 걸려서 그 값이 무시된다.** 155×47 격자에 2000줄을 먹여 실측한 값이다.
-
-| 설정 | 남은 history | 메모리 |
-|---|---|---|
-| `bytes=10_000, lines=null` (지금) | 454줄 | 0.77MB |
-| `bytes=10_000, lines=1000` | **454줄 (그대로)** | 0.77MB |
-| **`bytes=null, lines=1000`** | **754줄** | **1.15MB** |
-| `bytes=null, lines=null` | 1954줄 | 2.68MB |
-
-**`max_scrollback_bytes = null`을 함께 줘야 한다.** 효력 있는 한도는
-`max(사용자가 준 값, 활성 영역을 담을 최소값)`이라(`PageList.Limits.max`),
-10,000바이트는 최소값보다 작아서 처음부터 무시되고 있었다.
-
-**history가 1000이 아니라 754인 것은 정상이다.** 가지치기가 **페이지 통째로**
-일어나므로(한 페이지가 155칸에서 약 286줄) 1000을 넘는 순간 한 페이지가
-사라져 754로 떨어진다. 즉 754~1000줄 사이를 오간다.
-
-부수 사실: **지금도 스크롤백은 454줄이 쌓이고 있다.** 없는 것이 아니라
-올라가는 길이 없을 뿐이다.
-
-### 2. 스크롤 API는 `Terminal.scrollViewport(behavior)` 하나면 된다
-
-`.top` · `.bottom` · `.delta: isize` · `.row: usize`를 받는다
-(`Terminal.zig:2541`). `Screen.scroll`이나 `PageList.Scroll`을 직접 부를
-필요가 없다. `term.rows`·`term.cols`가 필드로 있다.
-
-### 3. `RenderState`가 뷰포트를 따라간다 — `cells()`는 손댈 것이 없다
-
-`update()`가 `pages.getTopLeft(.viewport)`에서 시작한다(`render.zig:362`).
-스크롤한 뒤 `cells()`를 부르면 옛 줄이 그대로 나온다. **커서도 자동으로
-사라진다** — 뷰포트 밖이면 `state.cursor.viewport`가 null이다(실측 확인).
-design 결정 2가 예고한 그대로다.
-
-### 4. **새 출력은 뷰포트를 안 내린다 — 결정 13은 우리 코드가 해야 한다**
-
-올라간 상태에서 3줄을 더 먹여도 화면 첫 줄이 그대로였다. PTY 출력이 도착하는
-자리에서 `scrollViewport(.bottom)`을 우리가 불러야 한다.
-
-부수 효과가 하나 있다: 그렇게 하면 **뷰포트가 history에 머무는 동안 가지치기가
-일어나는 상황이 구조적으로 안 생긴다.** 가지치기는 그 페이지를 가리키던 pin을
-`garbage`로 만드는데, 결정 13이 그 창을 닫는다.
-
-### 5. 위치를 로그로 낼 창구는 `pages.scrollbar()`다
-
-`{total, offset, len}`을 준다. 맨 아래에서 `total=501 offset=454 len=47`,
-한 화면 올리면 `offset=407`, `.top`이면 `offset=0`이었다. design의 "비워 두는
-자리"가 "TR-M2에서 로그로만 찍을지 그때 정한다"고 남긴 항목이고, **게이트가
-스크롤 위치를 볼 유일한 창구다.**
-
-### 6. 렌더 경로를 키 쪽으로도 열어야 한다
-
-지금 `main.zig`의 렌더는 **PTY 출력 분기 안에만** 있다. 스크롤은 키로
-일어나므로 그대로 두면 화면이 안 바뀐다. `needs_redraw` 플래그를 두고 렌더
-블록을 루프 끝으로 빼는 편집이 필요하다.
-
-### 7. 게스트에서 47줄 넘게 찍는 방법
-
-게스트에는 `seq` 바이너리가 없지만 **fish가 `seq`를 함수로 갖고 있고**
-(`/usr/share/fish/functions/seq.fish`, `make_initrd.sh:132`가 디렉터리째
-복사한다) `PATH` 없이도 동작한다. `for i in (seq 60); echo L$i; end`.
-
-### 8. `sendkey shift-pgup`
-
-QEMU monitor의 키 이름은 `pgup`·`pgdn`·`home`·`end`이고 `shift-` 접두사를
-붙인다. 지금 `specialKey`가 PageUp/PageDown/Home/End를 이미 알고 있으므로
-(`input.zig:156`), 가로채는 자리는 그보다 앞인 `chord()`다.
-
-### 9. 덤으로 발견한 것: `TERM`이 다시 거짓말을 하고 있다
-
-TR-M0이 `TERM`을 `xterm-256color`로 바꿨는데 **initrd에는 `xterm` terminfo만
-들어 있다.** `input/check.sh:73`의 검사가 글로브라서 통과한다. 자세한 것은
-`docs/decisions/project_guest_environment.md`. TR-M2 범위 밖이지만 같은
-서브프로젝트가 만든 구멍이고 고치는 것은 두 줄이라, plan에 넣을지 정할 것.
+다만 **고르기 전에 brainstorming부터 한다.** 후보가 이것 하나라고 단정하지
+말 것 — 이월 숙제 중에 서브프로젝트가 될 만한 것이 섞여 있다(특히 `init`을
+`ReleaseSafe`로 옮기는 일과 부분 갱신 논의).
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -115,9 +48,11 @@ TR-M0이 `TERM`을 `xterm-256color`로 바꿨는데 **initrd에는 `xterm` termi
 
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-`diff`로 대조해 보인 뒤 사용자가 `cp`로 넣는다.
+`diff`로 대조해 보인 뒤 사용자가 `cp`로 넣는다. TR-M2에서 이 방식으로 파일
+넷(`vt_test`·`input_test`·`input`·`main`·`render/check.sh`)을 옮겼고, **`diff`를
+먼저 보여서 "지워진 줄이 없다"를 확인시키는 것이 특히 값졌다.**
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 47분이라 Bash
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 46분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **백그라운드로 돌려야 한다.**
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
@@ -132,11 +67,21 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
-**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M1), 3/3,
-부팅 30회 이상. 직전 기준선은 **46분 33초**다.
+**일곱 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · **TR-M2**), 3/3,
+부팅 30회 이상. **직전 기준선은 45분 41초다**(2026-08-24, 한가한 기계).
 
 monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
 45460(TR)이고 **45461이 비어 있다.**
+
+### 게이트 시간을 잴 때는 기계를 비운다
+
+**TR-M2를 끝내며 처음 잰 값이 6시간 12분이었다.** 8배다. 판정은 멀쩡히 3/3이라
+회귀가 아니었고, `pmset -g log`를 보니 그동안 Chrome이 영상을 재생하고 있었다.
+비우고 다시 재니 45분 41초였다. 이 게이트는 arm64 위에서
+`qemu-system-x86_64`를 TCG로 돌리므로 **전부 CPU 바운드**다.
+
+**값이 기준선에서 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다.**
+`{ time docker run ... ; } 2> /tmp/gate.time`으로 감싼다.
 
 ### 게이트 로그를 조사하는 법
 
@@ -153,6 +98,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **`grep`에 `-a`를 반드시 붙인다.** 로그에 NUL이 한 바이트라도 있으면 `grep`이
 파일을 binary로 취급해 `Binary file ... matches`만 뱉는다.
+
+**긴 게이트를 돌릴 때 `| tail -N`을 붙이지 않는다.** `tail`이 파이프가 닫힐
+때까지 아무것도 안 내보내서 진행 상황을 볼 수 없다. 파일로 리다이렉트하고
+따로 들여다본다.
 
 ### 로그 문구는 두 곳에 중복된다
 
@@ -173,7 +122,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `Power off not available: System halted instead`(커널, 없어야 한다) ·
 `Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다) ·
 `terminal: style>` · `terminal: pixel>` · `terminal: render> first frame` ·
-`terminal: ink>` · `terminal: font>`
+`terminal: ink>` · `terminal: font>` · `terminal: scroll>`
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
 화면을 판정한다.
@@ -185,11 +134,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 - **NUL이 든 로그를 `-a` 없이 `grep`하기** — `Binary file ... matches`만 나온다.
 - **`grep -qP '\x00'`으로 NUL 검출** — GNU grep 3.11에서 매치되지 않는다.
   `[ "$(tr -d '\0' < "$f" | wc -c)" -ne "$(wc -c < "$f")" ]`를 쓴다.
+- **파이프라인 끝에 `grep -q`를 두기** — 첫 매치에서 빠져나가며 앞단에
+  SIGPIPE를 일으키고 `pipefail`이 그것을 실패로 판정한다. 변수에 담아 `case`로
+  본다. `input/check.sh`와 `render/check.sh` 둘 다 이 방식이다.
 - **`std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기** — Zig 0.16에
   둘 다 없다. `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
-- **`std.posix.getenv`** — Zig 0.16에 없다. 조사용 프로그램에 인자를 넘기려면
-  배열을 코드에 박고 순회하는 편이 빠르다.
+- **`std.posix.getenv`** — Zig 0.16에 없다.
 - **컨테이너에서 `rg` 쓰기** — 없다. `grep -aE`를 쓴다.
 - **컨테이너에서 `nc`로 QEMU monitor에 명령 보내기** — `nc`가 없다. 체인들은
   `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
@@ -197,7 +148,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   명령은 한 번의 `docker run` 안에서 끝내야 한다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 47분이라 10분
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 46분이라 10분
   상한을 넘는다. `run_in_background`로 돌린다.
 
 ### 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
@@ -216,8 +167,7 @@ docker run --rm -v "$PWD":/workspace \
 ```
 
 **`ghostty-vt`를 import해야 하면 이 방법이 안 된다**(모듈 의존을 손으로 줄
-수 없다). 대신 **기존 검사 파일 자리에 마운트해서 `zig build test`로
-돌린다** — 위 TR-M2 프로브가 그렇게 했다.
+수 없다). 대신 **기존 검사 파일 자리에 마운트해서 `zig build test`로 돌린다.**
 
 ```bash
 docker run --rm -v "$PWD":/workspace \
@@ -235,13 +185,11 @@ docker run --rm -v "$PWD":/workspace \
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다** — 시간이 `fill`에 있다면 부분 갱신을 넣어도 별로 안 준다.
-- [ ] **`xterm-256color` terminfo를 initrd에 넣기.** 위 "조사해 둔 것 9번".
 - [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.** 둘 다 기본값으로 따라온
       것이고 `ACPI Error:`가 하나도 안 났으므로 끌 수 있을 것으로 본다.
 - [ ] **`init`을 `ReleaseSafe`로.** initrd 73.0MB → gzip 16.76MB이고 커널 부팅
       1.12초 중 0.573초가 이 압축 해제다. `terminal`도 Debug 42MB다.
-- [ ] **게스트 안에서 Zig 에러 트레이스 읽기.** BF 게이트 로그에 파일명·줄
-      번호가 이미 찍히고 있다. **무엇이 미해결이었는지 먼저 확인할 것.**
+      **서브프로젝트가 될 만한 크기다.**
 - [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. 경로는 unifont로
       옮겨 두었지만 **빌드해서 돌려 본 적이 없다.**
@@ -251,11 +199,36 @@ docker run --rm -v "$PWD":/workspace \
 - [ ] **`terminal/vendor/fonts/Hanme_8x4x4.ttf`가 남아 있다.** `vendor/`가
       gitignore라 저장소에는 없다. 지워도 게이트는 안 흔들린다.
 
+### 끝난 숙제 (지운 것을 다시 줍지 말 것)
+
+- ~~`xterm-256color` terminfo를 initrd에 넣기~~ — TR-M2에서 했다. 검사도
+  줄 단위로 조였다(`project_guest_environment`).
+- ~~게스트 안에서 Zig 에러 트레이스 읽기~~ — **이미 되고 있었다.** BF 게이트
+  로그에 `terminal/src/drm.zig:241:17`처럼 파일명과 줄 번호가 그대로 찍힌다
+  (BF는 virtio-gpu 없이 부팅하므로 `drm.open`이 `OpenFailed`로 죽는 것이
+  **의도된 경로**이고, PID 1이 세 번 띄운 뒤 포기한다).
+
+## TR-M2가 남긴 것
+
+- **스크롤백 한도는 값 둘을 함께 줘야 걸린다.** `max_scrollback_lines`만 주면
+  기본 `max_scrollback_bytes`(10,000)가 먼저 걸려 아무 일도 안 일어난다.
+  `bytes = null`을 함께 준다. 실제 history는 754~1000줄을 오간다(가지치기가
+  페이지 통째로 일어난다).
+- **`Terminal.ScrollViewport`의 이름이 `PageList.Scroll`과 다르다.**
+  `.bottom`·`.delta`이지 `.active`·`.delta_row`가 아니다.
+- **"바닥에 있다"는 `offset == total - len`이다.** 게이트와 호스트 검사가 전부
+  이 식을 쓴다.
+- **`handleKey`의 반환이 `Action` union이 됐다.** copy mode가 쓸 통로다.
+- **렌더가 PTY 분기 안에만 있었다.** `needs_redraw`로 루프 끝에 뺐다.
+
+자세한 것은 `docs/decisions/project_terminal_rendering.md`와
+`project_input_policy.md`.
+
 ## IP-M2가 남긴 것 (그대로 이월)
 
 - **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** TUI 앱이 생기면 그때.
 - **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** `project_copy_mode`가 그 자리를
-  가져간다 — TR-M2가 그 마지막 선행 조건이다.
+  가져간다 — 이제 선행 조건이 클립보드 하나 남았다.
 - **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
   `Context.cursor_keys`를 주입해 대신 본다.
 - **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
@@ -277,18 +250,23 @@ docker run --rm -v "$PWD":/workspace \
 
 - `terminal/src/vt.zig` — `Screen`(Terminal + Stream + RenderState를 계속 들고
   있다). `cells()`가 색·inverse·커서를 전부 해소해 `CellGlyph`로 넘긴다.
-  **스크롤백 한도와 스크롤 API가 붙을 자리다.**
-- `terminal/src/input.zig` — `handleKey`가 `[]const u8` 하나를 돌려준다.
-  **결정 11이 넓히라고 한 자리이고 `chord()`가 가로채는 지점이다.**
+  스크롤백 한도와 `scrollToTop`·`scrollToBottom`·`scrollByRows`·`scrollbar`가
+  여기 있다.
+- `terminal/src/input.zig` — `handleKey`가 `Action`(바이트열 또는 스크롤)을
+  돌려주고 `readKeys`가 `Keys`를 돌려준다. **`chord()`가 가로채는 지점이고,
+  Shift 분기는 Meta·Alt보다 뒤에 있어야 한다.**
 - `terminal/src/main.zig` — `drawGlyph`·`render`·`dumpScreen`·`dumpStyles`·
-  `dumpInk`, 그리고 `poll` 루프. **렌더가 PTY 분기 안에만 있다.**
+  `dumpInk`·`dumpScroll`, 그리고 `poll` 루프. **렌더는 루프 끝에 있고
+  `needs_redraw`가 문지기다.**
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다**(`ascent_px`를 폰트에서 읽는다).
 - `terminal/src/font_test.zig` — 단언 여섯. 폰트를 바꾸면 기대값 표와 4번
   검사의 표본을 다시 봐야 한다.
-- `render/check.sh` — 301줄. 검사 일곱(색 셋 + 한글 넷) + 음성 검사 셋.
-  **`ink>`를 상수와 비교하지 않고 0인지만 본다.**
-- `check.sh:108` — `run_chain "TR-M1" ./render/check.sh`.
+- `terminal/src/vt_test.zig` — TF-M3의 조각 이어붙이기 + TR-M0의 색 일곱과
+  커서 + TR-M2의 스크롤백 다섯.
+- `render/check.sh` — 470줄. 검사 열넷(색 셋 + 한글 넷 + 스크롤 일곱) + 음성
+  검사 셋. **`ink>`를 상수와 비교하지 않고 0인지만 본다.**
+- `check.sh:108` — `run_chain "TR-M2" ./render/check.sh`.
 - `terminal/src/drm.zig:128`·`:138` — `setPixel`·`getPixel`. **범위 검사가
   없다.** 고치지 않고 호출부에서 막는다.
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.

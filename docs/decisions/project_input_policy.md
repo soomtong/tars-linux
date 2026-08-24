@@ -1,6 +1,6 @@
 ---
 name: project_input_policy
-description: "키 입력은 evdev 코드를 셸이 이미 아는 바이트로 번역하는 일이다 — macOS 조합은 ESC 접두사/제어 문자로 옮기고(A안), 물리 키보드 차이는 파이프라인 맨 앞의 코드 교환 한 번으로 흡수하며, 설정 파서는 PID 1 한 벌만 두고 argv로 흘린다; 범용 키바인딩 엔진은 만들지 않았고 Ctrl/Shift+방향키와 Cmd+C/V 자리는 일부러 비어 있다"
+description: "키 입력은 evdev 코드를 셸이 이미 아는 바이트로 번역하는 일이다 — macOS 조합은 ESC 접두사/제어 문자로 옮기고(A안), 물리 키보드 차이는 파이프라인 맨 앞의 코드 교환 한 번으로 흡수하며, 설정 파서는 PID 1 한 벌만 두고 argv로 흘린다; TR-M2에서 반환이 '바이트열 또는 동작'으로 넓어져 Shift+PageUp 계열이 PTY로 안 나간다; 범용 키바인딩 엔진은 만들지 않았고 Ctrl/Shift+방향키와 Cmd+C/V 자리는 일부러 비어 있다"
 metadata:
   node_type: memory
   type: project
@@ -75,6 +75,43 @@ Shift 하나만 아는 상태였고, 끝난 시점에는 Ctrl 제어 문자 · �
 기본값으로 떨어지는 것 — CP가 "설정 하나로 부팅이 막히지 않게 하는 장치"라고
 부른 성질 — 을 0.1초에 확인한다. 처음 돌렸을 때 잠복 버그는 없었다.
 
+## TR-M2에서 반환이 "바이트열 또는 동작"으로 넓어졌다
+
+IP 내내 `handleKey`의 반환은 `[]const u8` 하나였다. 보낼 것이 바이트뿐이었기
+때문인데, **스크롤 키는 바이트가 아니라 동작이고 PTY로 새어 나가면 안 된다.**
+그래서 TR-M2가 그 구분을 표현할 수 있게 넓혔다.
+
+```zig
+pub const Scroll = enum { top, bottom, page_up, page_down };
+pub const Action = union(enum) { bytes: []const u8, scroll: Scroll };
+```
+
+**`Scroll`에 화면 크기가 없는 것이 요점이다.** `page_up`이 몇 줄인지는
+`input.zig`가 모르고, `main.zig`가 `rows` 만큼의 delta로 바꾼다 — design 결정
+6이 "`input.zig`는 `vt.zig`를 import하지 않는다"로 세운 경계를 그대로 지켰다.
+`project_copy_mode`가 나중에 이 union에 자기 variant를 더한다. **이번에 넓힌
+것은 통로이고 모드 상태는 안 들어갔다.**
+
+가로채는 자리는 `chord()`이고 **Meta·Alt 분기보다 뒤**다. 위 두 분기는 조합이
+표에 없어도 `null`로 `chord` 전체를 끝내므로 **Cmd+Shift+PageUp은 스크롤하지
+않고 맨 PageUp이 된다.** 임의의 선택이지만 결정적이고, Cmd는
+[[project_copy_mode]]가 예약한 자리라 여기서 뜻을 더하지 않았다.
+
+`readKeys`도 두 가지가 바뀌었다.
+
+- **스크롤을 배열로 모은다**(`State.scrolls`, 여덟 칸, `seq`와 같은 이유로 힙을
+  안 쓴다). 마지막 하나만 남기면 **자동 반복으로 여러 번 눌러도 한 화면만
+  올라간다.**
+- **루프 조건에서 `written < out.len`이 빠졌다.** 그전에는 바이트 버퍼가 차면
+  이벤트 처리 자체가 멈췄는데, 그러면 뒤따라온 스크롤 키가 통째로 사라진다.
+  바이트는 여전히 버려지지만 그것과 "동작을 못 본다"는 다른 종류의 손실이다.
+
+호스트 검사가 `expectScroll`로 넷을 보고, **`expectCtx`가 `.scroll`이 오면
+실패로 취급한다** — 그냥 무시하면 스크롤 키가 실수로 PTY 쪽 표에 들어갔을 때
+검사가 조용히 통과한다. "Shift를 떼면 PageUp/PageDown/Home/End가 원래대로
+나간다"는 네 줄도 함께 있다. 그것이 없으면 셸의 줄 편집이 Home/End를 영영 못
+받는 회귀를 놓친다.
+
 ## 일부러 비워둔 자리
 
 - **`Ctrl+←`/`Shift+←`는 여전히 맨 `ESC [ D`로 샌다.** `ESC [ 1 ; 5 D`를
@@ -82,9 +119,9 @@ Shift 하나만 아는 상태였고, 끝난 시점에는 Ctrl 제어 문자 · �
   실제로 쓰는 것은 4바이트까지이고, 6바이트 자리가 이 형태의 몫이다.
   **IP-M1의 주석이 "M2가 이 줄을 바꾼다"고 예고했으나 틀렸다** — M2도 안
   했고, 그 주석을 고치는 것이 M2의 Step 하나였다.
-- **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** 복사·붙여넣기는 스크롤백과
-  클립보드가 선행 조건이라 [[project_copy_mode]]의 몫이고, 그때 `chord`의
-  Meta 갈래에 두 줄이 붙는다.
+- **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** 복사·붙여넣기는 [[project_copy_mode]]의
+  몫이고, 그때 `chord`의 Meta 갈래에 두 줄이 붙는다. **선행 조건 셋 중 둘(색별
+  셀 렌더링·스크롤백)이 TR-M0~M2에서 끝났고 남은 것은 클립보드 하나다.**
 - **`Option+글자`는 modifier가 무시된다.** xterm의 `metaSendsEscape`를 켤지
   macOS의 특수문자 입력을 흉내낼지는 비-US 키보드 레이아웃과 함께 볼 문제다.
 - **시리얼 콘솔 셸은 이 정책을 전혀 안 받는다.** 그쪽 입력은 커널 tty 계층이

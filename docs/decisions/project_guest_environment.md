@@ -1,6 +1,6 @@
 ---
 name: project_guest_environment
-description: "게스트의 환경변수는 커널이 준 HOME=/ 와 TERM=linux 둘뿐이다 — PATH가 없으므로 게스트에서 외부 명령을 칠 때는 절대 경로로, TERM은 IP-M1이 terminal 쪽 setenv로 xterm으로 고쳤다(시리얼 셸은 linux 유지)"
+description: "게스트의 환경변수는 커널이 준 HOME=/ 와 TERM=linux 둘뿐이다 — PATH가 없으므로 게스트에서 외부 명령을 칠 때는 절대 경로로, TERM은 terminal 쪽 setenv로 xterm-256color가 되고 그 terminfo는 initrd에 직접 넣는다(시리얼 셸은 linux 유지)"
 metadata:
   node_type: memory
   type: project
@@ -55,12 +55,40 @@ xterm(`khome`)에서는 `ESC O H`다.
 **TR-M0(2026-08-23)이 그 값을 `xterm-256color`로 바꿨다** — 이제 팔레트
 256색과 truecolor를 전부 칠하므로 `xterm`이라고 말하는 쪽이 거짓말이 된다.
 
-> **그런데 initrd에는 아직 `xterm` terminfo만 들어 있다**(2026-08-23 확인).
-> `make_initrd.sh:146`이 `x/xterm` 파일 하나만 복사하고, `input/check.sh:73`의
-> 검사는 `*terminfo/x/xterm*` 글로브라 `xterm-256color`가 없어도 통과한다.
-> 게이트가 초록인 이유는 fish가 조용히 폴백하기 때문이지 맞아서가 아니다 —
-> **IP-M1이 닫았던 "TERM이 거짓말한다"는 구멍이 방향만 바뀌어 다시 열려
-> 있다.** sysroot에는 `x/xterm-256color`가 있으므로 고치는 것은 두 줄이다.
+**그런데 그때 initrd는 따라오지 않았다. TR-M2(2026-08-23)가 닫았다.**
+
+TR-M0이 이름만 바꾸고 `make_initrd.sh`는 `x/xterm` 파일 하나만 계속 복사해서,
+**게스트가 광고하는 이름의 terminfo가 실제로는 없는 상태로 두 milestone을
+건너왔다.** 게이트가 초록이었던 이유는 fish가 조용히 폴백했기 때문이지 맞아서가
+아니다 — IP-M1이 닫았던 "TERM이 거짓말한다"는 구멍이 방향만 바뀌어 다시 열려
+있었다.
+
+**더 중요한 것은 그것을 막았어야 할 검사가 놓쳤다는 사실이다.**
+`input/check.sh`의 initrd 목록 검사가 `*terminfo/x/xterm*` 글로브라
+`xterm-256color`가 없어도 `xterm` 하나로 통과했다 — **조용한 실패를 막으려고
+만든 검사가 조용히 실패한 자리다.** 그래서 TR-M2는 파일을 넣는 두 줄만 고치지
+않고 검사도 조였다. 목록 앞뒤에 줄바꿈을 덧대고 **줄 하나를 통째로** 맞춘다.
+
+```bash
+PADDED_LIST="$(printf '\n%s\n' "$INITRD_LIST")"
+for want in xterm xterm-256color; do
+  case "$PADDED_LIST" in
+    *$'\n'"usr/share/terminfo/x/${want}"$'\n'*) ;;
+    *) echo "FAIL: ${want} terminfo is missing from the initrd"; exit 1 ;;
+  esac
+done
+```
+
+`grep -qx`로 쓰지 않는 이유는 이 파일 위쪽의 `case` 주석과 같다 — `grep -q`가
+첫 매치에서 빠져나가며 앞단 `cpio`에 SIGPIPE를 일으키고 `pipefail`이 그것을
+실패로 판정한다.
+
+**terminfo를 제대로 넣어도 셸은 색 시퀀스를 쓰지 않았다.** TR design 위험 1이
+"TERM을 바꾸면 화면을 grep하는 다섯 체인이 흔들릴 수 있다"고 경고한 자리인데,
+TR-M0에서는 terminfo가 없어서 셸이 능력을 몰랐던 것이라 **진짜 시험이
+아니었다.** TR-M2가 파일을 넣은 뒤 IP 체인(fish + bash 두 번 부팅)과 루트
+게이트 일곱 체인 3/3을 돌려도 `screen>` 줄이 하나도 달라지지 않았다 — **이제
+진짜로 닫힌 위험이다.**
 
 **시리얼 콘솔 셸은 `linux`를 유지한다.** 그쪽은 정말로 커널 콘솔이고,
 `terminal`을 거치지 않으므로 xterm이 아니다. PID 1이 자식 둘을 띄우는데
