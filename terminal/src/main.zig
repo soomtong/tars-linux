@@ -272,6 +272,27 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
     }
 }
 
+/// `y`가 클립보드에 무엇을 담았는지를 찍는다.
+///
+/// **게이트가 클립보드를 볼 수 있는 유일한 창구다.** 화면만 보면 복사가 됐는지
+/// 알 방법이 아예 없다 — 복사는 화면을 안 바꾼다.
+///
+/// `len`을 함께 찍는 이유는 글자가 잘리거나 뒤에 뭐가 더 붙는 경우를 게이트가
+/// 한 줄로 가릴 수 있게 하기 위해서다. `text=`가 맞아도 `len=`이 다르면 그것은
+/// 다른 문자열이다.
+///
+/// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8).
+/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpClip(text: ?[]const u8) void {
+    if (text) |t| {
+        std.debug.print("terminal: clip> len={d} text={s}\n", .{ t.len, t });
+    } else {
+        // 선택이 없는데 y를 눌렀다. 조용히 넘어가면 게이트가 "복사가 안 됐다"와
+        // "y가 아예 안 도착했다"를 못 가른다.
+        std.debug.print("terminal: clip> empty\n", .{});
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -448,10 +469,16 @@ pub fn main(init: std.process.Init) !void {
                 switch (cmd) {
                     .enter => screen.copyEnter(),
                     .exit => screen.copyExit(),
-                    .left => screen.copyMove(-1, 0),
-                    .down => screen.copyMove(0, 1),
-                    .up => screen.copyMove(0, -1),
-                    .right => screen.copyMove(1, 0),
+                    .left => try screen.copyMove(-1, 0),
+                    .down => try screen.copyMove(0, 1),
+                    .up => try screen.copyMove(0, -1),
+                    .right => try screen.copyMove(1, 0),
+                    .select_char => try screen.copySelect(.char),
+                    .select_line => try screen.copySelect(.line),
+                    // yank는 **모드를 나간다.** 그래서 아래 dumpCopy는 좌표
+                    // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
+                    // 때문이다.
+                    .yank => dumpClip(try screen.copyYank()),
                 }
                 dumpCopy(screen, @tagName(cmd));
                 needs_redraw = true;
@@ -489,6 +516,10 @@ pub fn main(init: std.process.Init) !void {
             // 않았고, CM-M1이 선택이 무효가 됐는지를 매 프레임 보는 방어를
             // 넣는다.
             if (!screen.copyActive()) screen.scrollToBottom();
+            // 위 feed가 가지치기를 만났으면 vt.zig가 모드를 이미 닫았다
+            // (design 위험 1). **로그를 안 남기면 사람이 "왜 갑자기 모드가
+            // 풀렸지"를 영영 모른다.**
+            if (screen.copyTakePruned()) dumpCopy(screen, "pruned");
             needs_redraw = true;
         }
 
