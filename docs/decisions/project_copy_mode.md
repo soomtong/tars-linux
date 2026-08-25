@@ -1,6 +1,6 @@
 ---
 name: project_copy_mode
-description: 스크롤백 위에서 vim modal 방식 선택 모드(커서 이동 → v/V로 영역 선택 → 복사)와 Cmd+V 붙여넣기. iTerm2/WezTerm의 copy mode에 해당. CM-M0(2026-08-24)에서 모드·커서·게이트가 들어갔고 남은 선행 조건은 클립보드다.
+description: 스크롤백 위에서 vim modal 방식 선택 모드(커서 이동 → v/V로 영역 선택 → 복사)와 Cmd+V 붙여넣기. iTerm2/WezTerm의 copy mode에 해당. CM-M1(2026-08-25)에서 선택·클립보드까지 끝났고 남은 것은 CM-M2의 붙여넣기다. 가지치기가 pin을 무효로 만들지 않는다는 실측이 여기 있다.
 metadata:
   node_type: memory
   type: project
@@ -72,14 +72,75 @@ metadata:
 **`scrollToBottom` 억제가 창을 열었다.** `main.zig`가 copy mode 중에는
 `scrollToBottom()`을 부르지 않는다. 그전까지 그 호출이 **부수 효과로** 막고
 있던 것이 있다 — 뷰포트가 history에 머무는 동안 가지치기가 일어나는 상황이다.
-가지치기는 그 페이지를 가리키던 pin을 무효로 만든다. copy mode 중에 1000줄이
-쏟아져야 닿는 자리라 게이트로 만들지 않았고, **CM-M1이 매 프레임
-`selection`이 null이 됐는지 보고 그러면 모드를 나가는 방어를 넣는다.**
+copy mode 중에 1000줄이 쏟아져야 닿는 자리라 게이트로 만들지 않았고, 방어는
+CM-M1의 몫으로 남겼다.
+
+> **2026-08-25 정정.** 이 문단은 원래 "가지치기는 그 페이지를 가리키던 pin을
+> 무효로 만든다"고 적고, 방어를 "매 프레임 `selection`이 null이 됐는지 보고
+> 그러면 모드를 나간다"로 계획했다. **둘 다 틀렸다.** 아래 CM-M1 절을 볼 것.
 
 **`Action`을 넓힐 때는 `zig build`도 함께 돌린다.** Zig가 참조되지 않는 함수를
 분석하지 않아서, `readKeys`가 쓰는 `State.scrolls` 필드가 사라진 것을
 `zig build test`가 두 번 놓쳤다 — `input_test`는 `handleKey`만 부른다.
 `main.zig`가 `readKeys`를 부르는 `zig build`에서 비로소 드러났다.
+
+## 2026-08-25 — CM-M1이 끝났다. 마지막 선행 조건이 사라졌다
+
+**클립보드가 생겼다.** `vt.Screen`이 `clip: ?[:0]const u8` 하나를 소유하고,
+`y`가 `selectionString`의 결과를 거기로 옮기면서 옛것을 해제한다. 위에서
+"마지막 선행 조건"이라고 적어 둔 자리가 이것으로 닫혔다. 프로세스 간
+클립보드는 여전히 없고, 필요해지기 전까지 만들지 않는다.
+
+**선택은 우리가 안 든다.** `Screen.select()`에 넘기면 라이브러리가 tracked
+selection으로 가져가고, 뷰포트가 움직여도 따라간다. 우리가 드는 것은 뷰포트
+좌표의 커서 하나와 "지금 문자를 잡는가 줄을 잡는가"뿐이다. **앵커는 지금
+선택의 `start()`가 곧 앵커다.**
+
+**역방향 선택을 우리가 정렬하지 않는다.** `selectionString`도 렌더도
+`sel.topLeft()`/`bottomRight()`를 쓴다. `ordered()`를 부를 자리가 없고,
+`vt_test`가 앵커를 뒤에 두고 끌어도 같은 글자가 나오는 것을 확인한다.
+
+### 가지치기가 pin을 무효로 만들지 않는다 — **다시 조사하지 말 것**
+
+`PageList.erasePage`와 `eraseRows`가 하는 일은 이렇다.
+
+```zig
+// Update any tracked pins to move to the previous or next page.
+for (pin_keys) |p| {
+    if (p.node != node) continue;
+    p.node = node.prev orelse node.next orelse unreachable;
+    p.y = 0;
+    p.x = 0;
+}
+```
+
+**tracked pin을 살아 있는 이웃 페이지의 왼쪽 위로 옮긴다.** `Screen.selection`은
+그대로 남고 pin도 유효하며, 달라지는 것은 그것이 가리키는 **내용**뿐이다.
+그래서 증상은 "선택이 사라진다"가 아니라 **"조용히 엉뚱한 자리를 복사한다"**
+이고, 계획했던 null 검사는 참이 되는 날이 오지 않는 죽은 코드가 된다.
+
+**대신 앵커의 screen 좌표 y를 기억해 두고 `feed` 뒤에 비교한다.** screen
+좌표는 목록 맨 위에서부터 세는 절대 좌표라 아래에 줄이 붙는 것으로는 안
+변한다 — 변하는 경우가 앞에서 줄이 지워졌을 때와 pin이 옮겨졌을 때뿐이고,
+그 둘이 정확히 잡고 싶은 것이다. 대체 화면(vim 등)으로 갈아타 `selection`이
+사라지는 경우도 같은 조건에 걸린다.
+
+**전체 행 수가 줄었는지로 보는 안은 버렸다.** 한 번의 `feed`에 한 페이지(약
+286줄)보다 많이 들어오면 늘어난 것과 지워진 것이 상쇄되어 못 잡는다.
+
+### `copyMove`가 격자 크기를 `state`에서 읽으면 안 된다
+
+CM-M0이 `state.cols`·`state.rows`를 읽으면서 "cells()보다 먼저 불려도
+안전하다"고 적었는데, **크래시가 안 난다는 뜻으로는 맞지만 동작한다는 뜻으로는
+틀렸다.** `RenderState`는 마지막 `cells()`가 찍은 스냅숏이고 `init`은 그것을
+`.empty`(rows=0, cols=0)로 둔다. 한 번도 그리지 않은 화면에서 `copyMove`는
+**조용히 아무 일도 안 한다.** 실전에서 안 드러난 이유는 `main.zig`가 키를 받기
+전에 이미 한 프레임을 그렸기 때문이다. CM-M1에서 `pages.cols`·`pages.rows`로
+바꿨다 — 그쪽은 언제나 살아 있는 값이다.
+
+`copyEnter`가 읽는 `state.cursor.viewport`는 그대로 두었다. "셸 커서가 뷰포트의
+몇 번째 줄에 있는가"는 진짜로 렌더 상태이기 때문이다. 대신 **검사도 화면을
+만든 뒤 `cells()`를 한 번 부르고 시작한다.**
 
 관련: [[project_boot_shell_selection]], [[project_config_persistence]],
 [[user_learning_goal]]

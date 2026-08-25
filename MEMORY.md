@@ -37,4 +37,4 @@
 - [Kernel config](docs/decisions/project_kernel_config.md) — `olddefconfig`가 적어 둔 설정과 빌드하는 설정을 가른다; 게이트 시간의 근원은 부팅이 아니라 커널 빌드다
 - [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 체인을 더하고 빼는 규칙; 게이트는 자기가 안 보는 것을 통과시킨다
 - [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸을 고르고 기억하는 미래 기능(영속 저장소가 선행 조건)
-- [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위의 vim modal 선택 모드와 Cmd+V; CM-M0(모드·커서·게이트)이 끝났고 남은 선행 조건은 클립보드다
+- [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위의 vim modal 선택 모드와 Cmd+V; CM-M1(선택·클립보드)까지 끝났고 남은 것은 붙여넣기다. 가지치기가 pin을 무효로 만들지 않는다는 실측이 여기 있다
