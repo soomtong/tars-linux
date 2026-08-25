@@ -1,7 +1,7 @@
 # TARS Copy Mode — Design
 
 **Date:** 2026-08-24
-**Status:** 설계 확정, CM-M0 착수 전
+**Status:** 설계 확정. **CM-M0 완료(2026-08-24)**, 다음은 CM-M1
 
 ## 한 줄 요약
 

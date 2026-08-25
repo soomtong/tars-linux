@@ -9,7 +9,8 @@ git status --short     # 비어 있어야 한다
 ```
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
-push할지 묻지 않는다 — 필요하면 그냥 한다.
+push할지 묻지 않는다 — 필요하면 그냥 한다. (2026-08-25에 `origin/main`까지
+나가 있다. 이 줄은 상태 보고이지 앞으로 세라는 뜻이 아니다.)
 
 **Copy Mode의 CM-M0이 2026-08-24에 끝났다.** 루트 게이트 **여덟** 체인이
 3/3이고 **51분 20초**다. copy mode에 들어가고 나오고 커서를 옮기는 것이 실제
@@ -133,6 +134,11 @@ push할지 묻지 않는다 — 필요하면 그냥 한다.
 두 번 값을 했다 — `State.scrolls` 필드가 사라진 것과 `main.zig`에 오타
 (`needs_redraw` → `ieeds_redraw`)가 들어간 것을 둘 다 빌드가 잡았다.
 
+**커밋 전에 `git status`의 `M`과 신규를 가른다.** CM-M0에서 `copy/check.sh`가
+이미 커밋되어 있는데 그것을 못 보고 다시 커밋해서, 같은 메시지의 커밋 둘이
+생겼다(뒤엣것은 빈 줄 하나 삭제뿐이었다). 나중에 합쳤지만 처음부터 안 만드는
+편이 낫다. `CLAUDE.md`의 "Commit 전 git status 확인"이 가리키는 자리다.
+
 ## 게이트 현황
 
 ```bash
@@ -229,6 +235,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
 - **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 51분이라 10분
   상한을 넘는다. `run_in_background`로 돌린다.
+- **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다. usage 에러로
+  끝나는데, `set -e`로 감싼 스크립트 안에서도 뒷 명령이 이어져 엉뚱한 충돌을
+  만든다. 히스토리를 만질 때는 **먼저 태그를 찍고 한 명령씩 나눠 돌린 뒤,
+  `git rev-parse HEAD^{tree}`로 전후 트리가 같은지 확인한다.**
 - **`vt_test`의 CM 검사를 `screen`에 붙이기** — `screen`은 파일 앞쪽의 작은
   화면이고 history가 없다. 스크롤백을 가진 것은 `fresh`다.
 
