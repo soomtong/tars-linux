@@ -168,10 +168,10 @@ pub const Action = union(enum) {
 
 /// copy mode 안에서 키가 만드는 명령.
 ///
-/// design 결정 2의 조각은 `select_char`·`yank`·`paste`까지 적었지만 CM-M0은
-/// 여섯 개만 만든다. **variant를 미리 만들어 두면 `main.zig`의 switch가
-/// `else`로 열려야 하고, 그러면 CM-M1에서 배선을 잊어도 컴파일이 통과한다.**
-/// 지금 닫아 두면 variant를 더하는 순간 컴파일러가 배선할 자리를 알려준다.
+/// **`paste`는 아직 없다**(CM-M2의 몫이다). CM-M0이 여섯 개로 닫아 둔 이유가
+/// 그대로 유효하다 — `main.zig`의 switch가 `else` 없이 닫혀 있으므로, variant를
+/// 더하는 순간 컴파일러가 배선할 자리를 알려준다. 미리 만들어 두면 그 신호를
+/// 잃는다.
 pub const Copy = enum {
     enter,
     exit,
@@ -179,6 +179,12 @@ pub const Copy = enum {
     down,
     up,
     right,
+    /// `v` — 문자 단위 선택 시작/해제.
+    select_char,
+    /// `V` — 줄 단위 선택 시작/해제.
+    select_line,
+    /// `y` 또는 `Cmd+C` — 클립보드로 옮기고 **모드를 나간다.**
+    yank,
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -523,6 +529,29 @@ pub const State = struct {
                 c.KEY_J, c.KEY_DOWN => return .{ .copy = .down },
                 c.KEY_K, c.KEY_UP => return .{ .copy = .up },
                 c.KEY_L, c.KEY_RIGHT => return .{ .copy = .right },
+                // Shift를 여기서 보는 것은 chord()의 예외와 성격이 다르다.
+                // 모드 안의 표는 원래 문자 키를 직접 읽으므로, 대문자 V가
+                // 소문자 v와 다른 명령이라는 것을 볼 자리가 여기뿐이다.
+                c.KEY_V => return .{
+                    .copy = if (self.shifted()) .select_line else .select_char,
+                },
+                // yank는 **모드를 닫는다.** 여기서 mode를 되돌리지 않으면
+                // 복사는 했는데 모드에 갇혀서 그다음 키가 전부 삼켜진다 —
+                // 게이트의 검사 9가 정확히 그것을 본다.
+                c.KEY_Y => {
+                    self.mode = .normal;
+                    return .{ .copy = .yank };
+                },
+                // **Cmd+C가 chord()가 아니라 여기 있는 이유**(design 결정 4).
+                // copy 분기가 chord()보다 앞이라 모드 안에서는 Cmd 조합이
+                // chord()에 아예 닿지 않는다. CM-M2의 Cmd+V도 이 자리에 온다.
+                //
+                // Cmd 없이 누른 c는 전과 같이 삼켜진다.
+                c.KEY_C => {
+                    if (!self.metaed()) return nothing;
+                    self.mode = .normal;
+                    return .{ .copy = .yank };
+                },
                 else => return nothing,
             }
         }

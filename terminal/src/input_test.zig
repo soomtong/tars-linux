@@ -510,6 +510,63 @@ pub fn main() !void {
         return error.ModeNotLeft;
     }
     try expect(&cm, K.KEY_H, 1, "h");
+
+    // ── CM-M1: 선택과 복사 ──────────────────────────────────────────────
+    //
+    // 검사 7. v와 V가 갈린다. 같은 키코드가 Shift 하나로 다른 명령이 되므로,
+    // **둘을 나란히 보지 않으면 "언제나 select_char"도 통과한다.**
+    //
+    // 앞의 검사 6이 Esc로 모드를 닫아 두었으므로 먼저 다시 연다. modifier 키
+    // 자체는 언제나 빈 바이트열이라 expect로 본다.
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: could not re-enter copy mode for the CM-M1 checks\n", .{});
+        return error.ModeNotEntered;
+    }
+
+    try expectCopy(&cm, K.KEY_V, .select_char);
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_V, .select_line);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_V, .select_char);
+
+    // 검사 8. Cmd 없는 c는 여전히 삼켜진다. **이것이 없으면 아래 검사 10이
+    // "c는 언제나 yank"로도 통과한다.**
+    try expect(&cm, K.KEY_C, 1, "");
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: a bare 'c' left copy mode\n", .{});
+        return error.ModeLeftByBareC;
+    }
+
+    // 검사 9. y가 yank를 내고 **모드를 닫는다.** 닫혔다는 것을 h가 다시
+    // 글자가 되는 것으로 확인한다.
+    try expectCopy(&cm, K.KEY_Y, .yank);
+    if (cm.mode != .normal) {
+        std.debug.print("FAIL: y did not leave copy mode\n", .{});
+        return error.YankDidNotLeave;
+    }
+    try expect(&cm, K.KEY_H, 1, "h");
+
+    // 검사 10. Cmd+C도 같은 일을 한다. 모드 밖에서는 Cmd+C가 표에 없어
+    // 그냥 'c'가 된다는 것도 함께 본다 — **normal 모드의 Cmd+C를 비워 두는
+    // 것이 design 결정 4다.**
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_C, 1, "c");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_C, .yank);
+    if (cm.mode != .normal) {
+        std.debug.print("FAIL: Cmd+C did not leave copy mode\n", .{});
+        return error.YankDidNotLeave;
+    }
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    try expect(&cm, K.KEY_H, 1, "h");
+
     std.debug.print("input_test: copy mode OK\n", .{});
 
     std.debug.print("PASS\n", .{});
