@@ -83,6 +83,7 @@ report_failure() {
   for marker in \
     "terminal: screen>" \
     "terminal: copy>" \
+    "terminal: clip>" \
     "terminal: scroll>" \
     "terminal: key>"; do
     if grep -aq "$marker" "$LOG"; then
@@ -116,6 +117,25 @@ key_lines() {
 copy_value() {
   grep -a 'terminal: copy>' "$LOG" | tail -n 1 |
     sed -E "s/.*$1=([0-9]+).*/\1/"
+}
+
+# 마지막 프레임만 잘라낸다.
+#
+# **누적으로 세면 안 되는 이유**가 있다. style> 줄은 매 프레임 다시 찍히므로,
+# 로그 전체에서 세면 "지금 화면이 어떻게 생겼는가"가 아니라 "부팅 이후 몇 번
+# 찍혔는가"가 된다. main.zig가 한 프레임을 screen> 로 시작하므로(dumpScreen이
+# render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧 마지막 프레임이다.
+last_frame() {
+  awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$LOG"
+}
+
+# 마지막 프레임에서 그 행의 **반전된 셀**이 몇 개인가.
+#
+# 기본 색은 fg=FFFFFF bg=102030이고(vt.zig의 init), 반전되면 정확히 뒤집힌
+# 값이 된다. 선택도 커서도 "색 둘을 맞바꾼다"는 같은 연산이므로 둘 다 이
+# 모양으로 나타난다 — 그래서 선택 **전후**를 비교해야 뜻이 생긴다.
+inverted_cells() {
+  last_frame | grep -acE "terminal: style> $1,[0-9]+ fg=102030 bg=FFFFFF" || true
 }
 
 qemu-system-x86_64 \
@@ -287,6 +307,94 @@ if [ "$AFTER_AGAIN" -le "$BEFORE_AGAIN" ]; then
 fi
 echo "keys reach the PTY again after leaving copy mode (${BEFORE_AGAIN} -> ${AFTER_AGAIN})"
 
+# ── 검사 7: 복사할 줄을 만든다 ─────────────────────────────────────────
+#
+# 검사 6이 친 z가 입력줄에 남아 있다. 지우고 시작한다.
+type_keys backspace
+sleep 1
+
+# 복사 대상을 `echo echo PASTED`의 **출력 줄**로 만드는 것이 요령이다
+# (design 결정 7). sendkey로 따옴표를 치지 않아도 되고, 화면에 그 글자만
+# 있는 줄이 하나 생긴다. 대문자는 shift-를 붙인다.
+echo "=== typing 'echo echo PASTED' ==="
+type_keys e c h o spc e c h o spc shift-p shift-a shift-s shift-t shift-e shift-d ret
+sleep 3
+
+# screen> 은 행 사이를 ' | '로 구분하므로(main.zig의 dumpScreen), "어떤 줄에
+# 그 글자만 있다"는 '| echo PASTED |'로 쓸 수 있다.
+if ! grep -aqF '| echo PASTED |' "$LOG"; then
+  report_failure "the shell did not produce a line containing only 'echo PASTED'"
+fi
+echo "the output line is on the screen"
+
+# ── 검사 8: 줄을 잡으면 그 줄이 반전되어 보인다 ────────────────────────
+echo "=== entering copy mode again ==="
+type_keys meta_l-shift-c
+sleep 2
+ROW_ENTER="$(copy_value row)"
+
+# 출력 줄은 프롬프트 바로 위다. **커서는 언제나 맨 아랫줄(프롬프트)에서
+# 시작하므로 위로 한 칸이 그 줄이다**(CM-M0 실측).
+type_keys k
+sleep 1
+ROW_TARGET="$(copy_value row)"
+if [ "$ROW_TARGET" -ne "$((ROW_ENTER - 1))" ]; then
+  report_failure "k moved the cursor from row ${ROW_ENTER} to ${ROW_TARGET} (expected $((ROW_ENTER - 1)))"
+fi
+
+# 대조군. **선택하기 전에 그 줄에서 반전된 셀은 copy 커서 하나뿐이다.**
+# 이것이 없으면 아래 검사가 "원래부터 색이 있었다"로도 통과한다.
+BEFORE_SEL="$(inverted_cells "$ROW_TARGET")"
+if [ "$BEFORE_SEL" -ne 1 ]; then
+  report_failure "row ${ROW_TARGET} had ${BEFORE_SEL} inverted cell(s) before selecting (expected exactly 1: the copy cursor)"
+fi
+
+echo "=== selecting the line (V) ==="
+type_keys shift-v
+sleep 2
+if ! grep -aqE "terminal: copy> select_line row=${ROW_TARGET} col=[0-9]+" "$LOG"; then
+  report_failure "V did not produce a 'copy> select_line' line for row ${ROW_TARGET}"
+fi
+
+# `echo PASTED`는 11자다. 거기에 커서 셀이 하나 더 있다 — 커서는 col 11에
+# 있고 선택은 col 0..10이라 겹치지 않기 때문이다. 겹쳤다면 두 번 뒤집혀
+# 상쇄되므로 11이 된다. 그래서 하한을 11로 둔다.
+AFTER_SEL="$(inverted_cells "$ROW_TARGET")"
+if [ "$AFTER_SEL" -lt 11 ]; then
+  report_failure "row ${ROW_TARGET} has ${AFTER_SEL} inverted cell(s) after V (expected at least 11)"
+fi
+echo "the selection reached the renderer (row ${ROW_TARGET}: ${BEFORE_SEL} -> ${AFTER_SEL} inverted cells)"
+
+# ── 검사 9: y가 그 글자를 클립보드에 담고 모드를 닫는다 ────────────────
+echo "=== yanking (y) ==="
+type_keys y
+sleep 2
+
+# len과 text를 **한 줄에서 함께** 본다. text만 보면 뒤에 뭐가 더 붙어도
+# 통과하고, len만 보면 다른 11자여도 통과한다.
+if ! grep -aq 'terminal: clip> len=11 text=echo PASTED' "$LOG"; then
+  report_failure "y did not put 'echo PASTED' on the clipboard"
+fi
+if ! grep -aq 'terminal: copy> yank' "$LOG"; then
+  report_failure "no 'copy> yank' line — the yank command never reached main.zig"
+fi
+echo "the clipboard holds the output line"
+
+# 대조군. **이것이 없으면 "복사는 했는데 모드에 갇혀 있다"가 통과한다.**
+# key> 줄은 PTY로 바이트가 나갈 때만 찍히므로, 그것이 늘어나는 것이 곧
+# "모드가 닫혔다"이다.
+BEFORE_YANK_EXIT="$(key_lines)"
+type_keys z
+sleep 1
+AFTER_YANK_EXIT="$(key_lines)"
+if [ "$AFTER_YANK_EXIT" -le "$BEFORE_YANK_EXIT" ]; then
+  report_failure "keys stopped reaching the PTY after y (key> stayed at ${BEFORE_YANK_EXIT})"
+fi
+echo "keys reach the PTY again after y (${BEFORE_YANK_EXIT} -> ${AFTER_YANK_EXIT})"
+
+type_keys backspace
+sleep 1
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
@@ -294,4 +402,4 @@ if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
   report_failure "the serial log contains NUL bytes"
 fi
 
-echo "CM-M0 check PASS"
+echo "CM-M1 check PASS"
