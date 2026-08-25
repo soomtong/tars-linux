@@ -50,9 +50,37 @@ pub const Screen = struct {
     /// 같은 자리에 남고, 그래서 가리키는 내용이 한 줄 위가 된다. 그것이
     /// 화면 끝에서 계속 움직였을 때 사람이 기대하는 동작이다.
     ///
-    /// 앵커(선택의 시작점)는 여기 두지 않는다. CM-M1이 라이브러리의 tracked
-    /// selection에 맡긴다(design 결정 5).
+    /// 앵커(선택의 시작점)는 여기 두지 않는다. 라이브러리의 tracked
+    /// selection이 든다(design 결정 5) — 뷰포트가 움직여도 저절로 따라간다.
     copy_cursor: ?Cursor = null,
+
+    /// 지금 무엇을 잡고 있는가. null이면 커서만 움직이는 중이다.
+    copy_kind: ?SelectKind = null,
+
+    /// 앵커의 **screen 좌표 y**. 가지치기 감시용이다(CM-M1).
+    ///
+    /// 이 값이 왜 필요한지가 이 milestone에서 가장 미묘한 자리다.
+    /// `main.zig`가 copy mode 중에 `scrollToBottom()`을 억제하므로, 뷰포트가
+    /// history에 머무는 동안 가지치기가 일어날 수 있다(design 위험 1).
+    /// **그때 라이브러리는 선택을 null로 만들지 않는다** — tracked pin을
+    /// 살아 있는 이웃 페이지의 왼쪽 위로 옮긴다
+    /// (`PageList.erasePage`, `PageList.eraseRows`). 선택은 멀쩡히 존재하고
+    /// 가리키는 내용만 달라진다. 그래서 "selection이 null인가"로는 절대 못
+    /// 잡고, 조용히 엉뚱한 자리를 복사하게 된다.
+    ///
+    /// screen 좌표는 목록 맨 위에서부터 세는 절대 좌표라 **아래에 줄이 붙는
+    /// 것으로는 안 변한다.** 변하는 경우가 앞에서 줄이 지워졌을 때와 pin이
+    /// 옮겨졌을 때뿐이고, 그 둘이 정확히 우리가 잡고 싶은 것이다.
+    copy_anchor_y: ?u32 = null,
+
+    /// 가지치기 때문에 모드가 끊겼다는 것을 `main.zig`가 한 번 가져간다.
+    copy_pruned: bool = false,
+
+    /// 클립보드. `y`가 만든 문자열을 **소유한다.**
+    ///
+    /// 프로세스 하나가 디스플레이를 독점하는 구조(TF design 결정 1)에서는
+    /// 버퍼 하나로 충분하다(`project_copy_mode`). 다음 `y`가 옛것을 해제한다.
+    clip: ?[:0]const u8 = null,
 
     pub fn init(
         io: std.Io,
@@ -107,6 +135,7 @@ pub const Screen = struct {
 
     pub fn deinit(self: *Screen) void {
         const alloc = self.alloc;
+        if (self.clip) |text| alloc.free(text);
         self.state.deinit(alloc);
         self.stream.deinit();
         self.term.deinit(alloc);
@@ -114,8 +143,36 @@ pub const Screen = struct {
     }
 
     /// PTY에서 읽은 바이트를 ANSI 파서에 먹인다. 화면 상태가 갱신된다.
+    ///
+    /// **먹인 뒤에 앵커가 제자리에 있는지 본다**(CM-M1, design 위험 1).
+    /// 어긋났으면 모드를 통째로 닫는다 — 조용히 엉뚱한 자리를 복사하는 것보다
+    /// 낫고, 사람은 다시 `Cmd+Shift+C`를 누르면 된다.
+    ///
+    /// 대체 화면(vim 등)으로 갈아타서 `selection`이 사라지는 경우도 같은
+    /// 조건에 걸린다. 그때 나가는 것도 옳다.
+    ///
+    /// 선택 중이 아니면(`copy_anchor_y`가 null이면) 아무 일도 안 한다.
+    /// 커서만 있는 상태에서는 잘못 복사될 것이 없기 때문이다.
     pub fn feed(self: *Screen, bytes: []const u8) void {
         self.stream.nextSlice(bytes);
+
+        const want = self.copy_anchor_y orelse return;
+        const now = anchorY(self.term.screens.active);
+        if (now != null and now.? == want) return;
+
+        self.copyExit();
+        self.copy_pruned = true;
+    }
+
+    /// 지금 선택의 앵커가 screen 좌표로 몇 번째 행에 있는가.
+    ///
+    /// 선택이 없으면 null이다. `pointFromPin`은 라이브러리가 스스로 "느리다"고
+    /// 적어 둔 함수라(`Selection.zig`의 NOTE) 셀마다 부르면 안 되지만, 여기는
+    /// **선택이 있을 때 PTY 출력 한 조각에 한 번**이라 문제가 되지 않는다.
+    fn anchorY(s: *ghostty_vt.Screen) ?u32 {
+        const sel = s.selection orelse return null;
+        const pt = s.pages.pointFromPin(.screen, sel.start()) orelse return null;
+        return pt.screen.y;
     }
 
     /// 그릴 것이 있는 셀을 out에 채워 반환한다. out은 최소 cols*rows
@@ -137,6 +194,10 @@ pub const Screen = struct {
         var n: usize = 0;
         const row_data = self.state.row_data.slice();
         const row_cells = row_data.items(.cells);
+        // 그 행에서 선택된 x 범위. **라이브러리가 채워 준다**
+        // (`render.zig`가 `sel.topLeft()`/`bottomRight()`로 계산한다). 절대 행
+        // 번호를 우리가 세지 않는 이유가 이것이다(design 결정 6).
+        const row_sels = row_data.items(.selection);
         for (0..self.state.rows) |y| {
             const cells_slice = row_cells[y].slice();
             const raws = cells_slice.items(.raw);
@@ -170,6 +231,16 @@ pub const Screen = struct {
                     if (st.flags.inverse) std.mem.swap(u32, &fg, &bg);
                 }
 
+                // 선택 영역도 inverse·커서와 **같은 연산**이다(design 결정 6).
+                // 그래서 렌더러는 "선택"이라는 말을 배우지 않는다. 양 끝을
+                // 포함하는 범위다(`render.zig`가 `start.x <= end.x`를 단언한
+                // 뒤 그대로 담는다).
+                if (row_sels[y]) |range| {
+                    if (x >= @as(usize, range[0]) and x <= @as(usize, range[1])) {
+                        std.mem.swap(u32, &fg, &bg);
+                    }
+                }
+
                 // 커서는 inverse와 **같은 연산**이다(design 결정 2). 그래서
                 // 렌더러는 커서라는 것도 배우지 않는다. 뷰포트 밖으로
                 // 나가면 viewport가 null이므로 TR-M2가 이 자리를 다시
@@ -177,6 +248,11 @@ pub const Screen = struct {
                 //
                 // **copy mode 중에는 셸 커서를 그리지 않는다**(CM-M0). 반전된
                 // 셀이 둘이면 게이트가 어느 것이 copy 커서인지 못 가른다.
+                //
+                // 커서가 선택 안에 있으면 위에서 한 번, 여기서 또 한 번
+                // 맞바뀌어 **원래 색으로 돌아온다**(CM-M1). 예외를 두지 않는다 —
+                // 반전된 띠 가운데 뚫린 구멍이 곧 커서라 오히려 잘 보이고,
+                // 예외를 넣으면 "선택"이 렌더 쪽으로 새어 나간다.
                 if (self.copy_cursor) |cc| {
                     if (@as(usize, cc.x) == x and @as(usize, cc.y) == y) {
                         std.mem.swap(u32, &fg, &bg);
@@ -235,9 +311,20 @@ pub const Screen = struct {
             .{ .x = 0, .y = 0 };
     }
 
-    /// copy mode를 나간다.
+    /// copy mode를 나간다. **선택도 함께 지운다** — 안 지우면 모드를 나간 뒤에도
+    /// 반전된 띠가 화면에 남는다.
     pub fn copyExit(self: *Screen) void {
         self.copy_cursor = null;
+        self.copy_kind = null;
+        self.copy_anchor_y = null;
+        self.term.screens.active.clearSelection();
+    }
+
+    /// 가지치기로 모드가 끊겼다는 사실을 **한 번만** 돌려준다.
+    /// `main.zig`가 로그 한 줄을 찍는 데 쓴다.
+    pub fn copyTakePruned(self: *Screen) bool {
+        defer self.copy_pruned = false;
+        return self.copy_pruned;
     }
 
     pub fn copyActive(self: *const Screen) bool {
@@ -254,14 +341,20 @@ pub const Screen = struct {
     /// 뷰포트를 한 줄 밀고 커서는 그 끝에 남는다 — 스크롤백을 거슬러 올라가며
     /// 훑는 동작이 이것으로 만들어진다.
     ///
-    /// `cells()`보다 먼저 불려도 안전하다. `state.rows`·`cols`는 init에서
-    /// 준 격자 크기이고 매 프레임 같은 값이다.
-    pub fn copyMove(self: *Screen, dx: i32, dy: i32) void {
+    /// **격자 크기를 `state`가 아니라 `pages`에서 읽는다**(CM-M1에서 고쳤다).
+    /// `state`는 마지막 `cells()`가 찍은 스냅숏이라, 한 번도 그리지 않은
+    /// 화면에서는 `cols`·`rows`가 0이고 그러면 이 함수가 **조용히 아무 일도
+    /// 안 한다.** CM-M0의 주석은 "cells()보다 먼저 불려도 안전하다"고 적었는데,
+    /// 크래시가 안 난다는 뜻으로는 맞지만 동작한다는 뜻으로는 틀렸다 —
+    /// 실전에서 안 드러난 이유는 main.zig가 키를 받기 전에 이미 한 프레임을
+    /// 그렸기 때문이다. `pages`는 언제나 살아 있는 값이다.
+    pub fn copyMove(self: *Screen, dx: i32, dy: i32) !void {
         const cur = self.copy_cursor orelse return;
-        if (self.state.cols == 0 or self.state.rows == 0) return;
+        const pages = &self.term.screens.active.pages;
+        if (pages.cols == 0 or pages.rows == 0) return;
 
-        const max_x: i32 = @as(i32, self.state.cols) - 1;
-        const max_y: i32 = @as(i32, self.state.rows) - 1;
+        const max_x: i32 = @as(i32, pages.cols) - 1;
+        const max_y: i32 = @as(i32, pages.rows) - 1;
 
         var x: i32 = @as(i32, cur.x) + dx;
         if (x < 0) x = 0;
@@ -277,6 +370,110 @@ pub const Screen = struct {
         }
 
         self.copy_cursor = .{ .x = @intCast(x), .y = @intCast(y) };
+
+        // 선택 중이면 커서를 따라 넓힌다. 앵커는 우리가 안 들고 있고
+        // **지금 선택의 start가 곧 앵커다**(design 결정 5). 줄 선택일 때 그
+        // start는 앵커 줄 위의 어느 pin이므로, selectLine이 같은 줄을 다시
+        // 돌려준다.
+        if (self.copy_kind == null) return;
+        const sel = self.term.screens.active.selection orelse return;
+        const cursor = self.copyPin() orelse return;
+        try self.copyApply(sel.start(), cursor);
+    }
+
+    /// 선택 방식. `v`가 char, `V`가 line이다.
+    pub const SelectKind = enum { char, line };
+
+    /// 지금 커서 자리를 라이브러리의 pin으로 바꾼다.
+    ///
+    /// 뷰포트 좌표를 그대로 넘길 수 있는 것이 요점이다 — 절대 행 번호를 우리가
+    /// 셀 필요가 없다. 뷰포트 밖이거나 폭이 줄어든 페이지면 null이다.
+    fn copyPin(self: *Screen) ?ghostty_vt.Pin {
+        const cc = self.copy_cursor orelse return null;
+        return self.term.screens.active.pages.pin(.{
+            .viewport = .{ .x = cc.x, .y = cc.y },
+        });
+    }
+
+    /// `v`/`V`. **같은 방식을 다시 누르면 푼다.**
+    ///
+    /// 다른 방식을 누르면 앵커를 지금 커서 자리로 새로 잡는다. vim은 앵커를
+    /// 유지하지만, 그러려면 "문자 앵커를 줄 앵커로 승격하는" 자리가 하나 더
+    /// 생긴다 — 게이트가 볼 수 없는 표를 늘리는 일이라 지금 하지 않는다.
+    pub fn copySelect(self: *Screen, kind: SelectKind) !void {
+        if (self.copy_cursor == null) return;
+        if (self.copy_kind) |cur| {
+            if (cur == kind) {
+                self.copy_kind = null;
+                self.copy_anchor_y = null;
+                self.term.screens.active.clearSelection();
+                return;
+            }
+        }
+        self.copy_kind = kind;
+        const pin = self.copyPin() orelse return;
+        try self.copyApply(pin, pin);
+    }
+
+    /// 앵커와 커서로 선택을 다시 만들어 화면에 넘긴다.
+    ///
+    /// **역방향(앵커보다 커서가 앞)을 우리가 정렬하지 않는다**(design 위험 3의
+    /// 답). `selectionString`은 `sel.topLeft()`/`bottomRight()`를 쓰고
+    /// (`formatter.zig`), 렌더도 같은 둘을 쓴다(`render.zig`). 그래서
+    /// `ordered()`를 부를 자리가 없다.
+    fn copyApply(
+        self: *Screen,
+        anchor: ghostty_vt.Pin,
+        cursor: ghostty_vt.Pin,
+    ) !void {
+        const s = self.term.screens.active;
+        const kind = self.copy_kind orelse return;
+
+        const sel: ghostty_vt.Selection = switch (kind) {
+            .char => .init(anchor, cursor, false),
+            // 줄 선택은 양 끝을 줄 전체로 넓힌다. **줄 끝 공백 트림을 손으로
+            // 짜지 않는다** — selectLine이 이미 한다.
+            .line => copyLineSel(s, anchor, cursor) orelse .init(anchor, cursor, false),
+        };
+        try s.select(sel);
+        self.copy_anchor_y = anchorY(s);
+    }
+
+    /// 앵커 줄과 커서 줄을 합친 선택.
+    ///
+    /// 어느 쪽이 위인지를 **라이브러리에게 묻는다**. 화면 좌표를 우리가 세면
+    /// 스크롤백 위에서 틀린다 — 앵커가 뷰포트 밖에 있을 수 있기 때문이다.
+    fn copyLineSel(
+        s: *ghostty_vt.Screen,
+        anchor: ghostty_vt.Pin,
+        cursor: ghostty_vt.Pin,
+    ) ?ghostty_vt.Selection {
+        const a = s.selectLine(.{ .pin = anchor }) orelse return null;
+        const b = s.selectLine(.{ .pin = cursor }) orelse return null;
+        const probe: ghostty_vt.Selection = .init(a.start(), b.start(), false);
+        return switch (probe.order(s)) {
+            // 앵커 줄이 아래에 있다. 위아래를 뒤집어 담는다.
+            .reverse => .init(a.end(), b.start(), false),
+            else => .init(a.start(), b.end(), false),
+        };
+    }
+
+    /// `y`. 선택을 클립보드로 옮기고 **모드를 나간다.**
+    ///
+    /// 돌려주는 슬라이스는 `self.clip`이 소유한다 — 다음 `y`까지만 유효하다.
+    /// 선택이 없으면 null을 돌려주고 클립보드는 그대로 둔다(모드는 나간다).
+    pub fn copyYank(self: *Screen) !?[]const u8 {
+        const s = self.term.screens.active;
+        const sel = s.selection orelse {
+            self.copyExit();
+            return null;
+        };
+        const text = try s.selectionString(self.alloc, .{ .sel = sel });
+        if (self.clip) |old| self.alloc.free(old);
+        self.clip = text;
+        // copyExit이 선택을 지우므로 **문자열을 먼저 뽑아 둔 뒤에** 부른다.
+        self.copyExit();
+        return text;
     }
 
     /// 뷰포트가 스크롤백의 어디에 있는지.

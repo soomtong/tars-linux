@@ -302,8 +302,8 @@ pub fn main(init: std.process.Init) !void {
     // 때문이다(TR design 결정 3). 그래서 좌표를 화면 왼쪽 위로 옮겨 놓고 본다.
     fresh.copyExit();
     fresh.copyEnter();
-    while (fresh.copyCursor().?.x > 0) fresh.copyMove(-1, 0);
-    while (fresh.copyCursor().?.y > 0) fresh.copyMove(0, -1);
+    while (fresh.copyCursor().?.x > 0) try fresh.copyMove(-1, 0);
+    while (fresh.copyCursor().?.y > 0) try fresh.copyMove(0, -1);
     var cbuf: [8192]vt.CellGlyph = undefined;
     const copy_cells = try fresh.cells(&cbuf);
     var found = false;
@@ -325,7 +325,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 검사 3. 맨 윗줄에서 위로 더 가면 **뷰포트가 대신 올라간다.**
     const before = fresh.scrollbar().offset;
-    fresh.copyMove(0, -1);
+    try fresh.copyMove(0, -1);
     const after = fresh.scrollbar().offset;
     if (fresh.copyCursor().?.y != 0) {
         std.debug.print("FAIL: the cursor left row 0 instead of moving the viewport\n", .{});
@@ -347,6 +347,168 @@ pub fn main(init: std.process.Init) !void {
         return error.CopyStillActive;
     }
     std.debug.print("vt_test: copy cursor OK\n", .{});
+
+    // ── CM-M1: 선택과 클립보드 ──────────────────────────────────────────
+    //
+    // 작은 화면을 새로 만든다. 앞의 화면들은 스크롤백 검사가 지나간 뒤라
+    // 몇 번째 줄에 무엇이 있는지가 검사마다 달라지고, 그러면 아래 단언들이
+    // 무엇을 보는지 흐려진다.
+    const cm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer cm.deinit();
+    cm.feed("hello world\r\nsecond line\r\n");
+    // **한 프레임을 먼저 그린다.** copyEnter는 셸 커서 자리를 RenderState에서
+    // 읽는데(`state.cursor.viewport`), 한 번도 그리지 않은 화면에서는 그 값이
+    // null이라 커서가 셸 커서가 아니라 왼쪽 위에서 시작한다. main.zig는 키를
+    // 받기 전에 이미 그렸으므로, 검사도 같은 조건에서 시작해야 실제 동작을 본다.
+    _ = try cm.cells(&buf);
+
+    // 검사 5. 문자 선택 → 반전 → 복사.
+    //
+    // 커서는 셸 커서 자리(row 2, col 0)에서 시작하므로 두 번 올라가면 row 0이다.
+    cm.copyEnter();
+    try cm.copyMove(0, -1);
+    try cm.copyMove(0, -1);
+    const at = cm.copyCursor() orelse return error.NoCopyCursor;
+    if (at.x != 0 or at.y != 0) {
+        std.debug.print("FAIL: expected the copy cursor at 0,0 but it is {d},{d}\n", .{ at.y, at.x });
+        return error.WrongCopyCursor;
+    }
+    try cm.copySelect(.char);
+    var moved: usize = 0;
+    while (moved < 4) : (moved += 1) try cm.copyMove(1, 0);
+
+    // 색을 먼저 본다. **복사보다 렌더를 먼저 보는 이유**는, y가 선택을
+    // 지우고 나가기 때문이다.
+    //
+    // 이 시점의 선택은 col 0..4 = "hello"이고 커서는 col 4다. col 0은
+    // 반전되어 있어야 하고, **col 4는 선택과 커서가 겹쳐 두 번 뒤집히므로
+    // 기본 색으로 돌아와 있어야 한다.**
+    const painted = try cm.cells(&buf);
+    var saw_start = false;
+    var saw_cursor = false;
+    for (painted) |cell| {
+        if (cell.row != 0) continue;
+        if (cell.col == 0) {
+            saw_start = true;
+            if (cell.fg != cm.defaultBg() or cell.bg != cm.defaultFg()) {
+                std.debug.print(
+                    "FAIL: selected cell 0,0 is fg=#{X:0>6} bg=#{X:0>6} (expected the two swapped)\n",
+                    .{ cell.fg, cell.bg },
+                );
+                return error.SelectionNotInverted;
+            }
+        }
+        if (cell.col == 4) {
+            saw_cursor = true;
+            if (cell.fg != cm.defaultFg() or cell.bg != cm.defaultBg()) {
+                std.debug.print(
+                    "FAIL: cell 0,4 is fg=#{X:0>6} bg=#{X:0>6}; the cursor inside the selection should cancel out\n",
+                    .{ cell.fg, cell.bg },
+                );
+                return error.DoubleSwapWrong;
+            }
+        }
+    }
+    if (!saw_start or !saw_cursor) {
+        std.debug.print("FAIL: row 0 is missing col 0 ({}) or col 4 ({})\n", .{ saw_start, saw_cursor });
+        return error.SelectedCellMissing;
+    }
+    std.debug.print("vt_test: 선택이 셀의 색을 맞바꾼다 OK\n", .{});
+
+    const yanked = (try cm.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, yanked, "hello")) {
+        std.debug.print("FAIL: yanked '{s}' (expected 'hello')\n", .{yanked});
+        return error.WrongClipText;
+    }
+    if (cm.copyActive()) {
+        std.debug.print("FAIL: y did not leave copy mode\n", .{});
+        return error.YankDidNotLeave;
+    }
+    std.debug.print("vt_test: 문자 선택과 y OK ('{s}')\n", .{yanked});
+
+    // 검사 6. **역방향 선택**(design 위험 3). 앵커를 col 4에 두고 왼쪽으로
+    // 끌어도 같은 글자가 나와야 한다. 라이브러리가 topLeft/bottomRight로
+    // 정렬한다는 것을 여기서 실행으로 확인한다.
+    cm.copyEnter();
+    try cm.copyMove(0, -1);
+    try cm.copyMove(0, -1);
+    moved = 0;
+    while (moved < 4) : (moved += 1) try cm.copyMove(1, 0);
+    try cm.copySelect(.char);
+    moved = 0;
+    while (moved < 4) : (moved += 1) try cm.copyMove(-1, 0);
+    const backward = (try cm.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, backward, "hello")) {
+        std.debug.print("FAIL: backward selection yanked '{s}' (expected 'hello')\n", .{backward});
+        return error.BackwardSelectionWrong;
+    }
+    std.debug.print("vt_test: 역방향 선택도 같은 글자를 준다 OK ('{s}')\n", .{backward});
+
+    // 검사 7. 줄 선택. **줄 끝 공백이 트림되어 나오는 것**이 요점이다 —
+    // 화면은 20칸이고 글자는 11자다.
+    cm.copyEnter();
+    try cm.copyMove(0, -1);
+    try cm.copySelect(.line);
+    const whole_line = (try cm.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, whole_line, "second line")) {
+        std.debug.print("FAIL: line selection yanked '{s}' (expected 'second line')\n", .{whole_line});
+        return error.LineSelectionWrong;
+    }
+    std.debug.print("vt_test: 줄 선택이 끝 공백을 트림한다 OK ('{s}')\n", .{whole_line});
+
+    // 검사 8. 같은 방식을 다시 누르면 선택이 풀린다. 풀린 뒤의 y는 아무것도
+    // 안 준다. **이것이 없으면 "v는 언제나 새 선택"도 통과한다.**
+    cm.copyEnter();
+    try cm.copySelect(.char);
+    try cm.copySelect(.char);
+    if ((try cm.copyYank()) != null) {
+        std.debug.print("FAIL: yank found a selection after v toggled it off\n", .{});
+        return error.SelectionNotCleared;
+    }
+    std.debug.print("vt_test: v를 다시 누르면 선택이 풀린다 OK\n", .{});
+
+    // 검사 9. **가지치기 방어**(design 위험 1). 두 겹으로 본다.
+    const pruned = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer pruned.deinit();
+    var pl: usize = 1;
+    while (pl <= 200) : (pl += 1) {
+        pruned.feed(std.fmt.bufPrint(&line, "P{d}\r\n", .{pl}) catch unreachable);
+    }
+    pruned.scrollByRows(-10);
+    pruned.copyEnter();
+    try pruned.copySelect(.char);
+
+    // (1) 대조군 — 평범한 출력으로는 모드가 안 끊긴다. **이것이 없으면
+    //     "언제나 나간다"도 통과한다.**
+    pruned.feed("just a line\r\n");
+    if (!pruned.copyActive()) {
+        std.debug.print("FAIL: an ordinary line of output dropped copy mode\n", .{});
+        return error.PruneGuardTooEager;
+    }
+    if (pruned.copyTakePruned()) {
+        std.debug.print("FAIL: an ordinary line of output was reported as pruning\n", .{});
+        return error.PruneGuardTooEager;
+    }
+
+    // (2) 한도를 넘겨 가지치기를 일으킨다. 한도는 1000줄이다(vt.zig의 init).
+    pl = 1;
+    while (pl <= 3000) : (pl += 1) {
+        pruned.feed(std.fmt.bufPrint(&line, "Q{d}\r\n", .{pl}) catch unreachable);
+    }
+    if (pruned.copyActive()) {
+        std.debug.print("FAIL: pruning did not drop copy mode\n", .{});
+        return error.PruneNotDetected;
+    }
+    if (!pruned.copyTakePruned()) {
+        std.debug.print("FAIL: copy mode ended without reporting the pruning\n", .{});
+        return error.PruneNotReported;
+    }
+    if (pruned.copyTakePruned()) {
+        std.debug.print("FAIL: copyTakePruned reported the same event twice\n", .{});
+        return error.PruneReportedTwice;
+    }
+    std.debug.print("vt_test: 가지치기가 copy mode를 끊는다 OK\n", .{});
+    std.debug.print("vt_test: copy selection OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
