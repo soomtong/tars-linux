@@ -508,6 +508,31 @@ pub fn main(init: std.process.Init) !void {
         return error.PruneReportedTwice;
     }
     std.debug.print("vt_test: 가지치기가 copy mode를 끊는다 OK\n", .{});
+
+    // ── CM-M2: 클립보드를 되읽는다 ──────────────────────────────────────
+    //
+    // 검사 10. `clipboard()`가 마지막 y의 결과를 그대로 들고 있다.
+    //
+    // **검사 8이 아무것도 못 담은 y를 불렀는데도 값이 남아 있어야 한다.**
+    // 빈 yank가 클립보드를 지우면 붙여넣기가 조용히 사라지는데, 그 사고는
+    // 게이트가 못 본다 — 게이트는 y를 한 번만 누른다.
+    const held = cm.clipboard() orelse {
+        std.debug.print("FAIL: the clipboard is empty after four yanks\n", .{});
+        return error.ClipboardEmpty;
+    };
+    if (!std.mem.eql(u8, held, "second line")) {
+        std.debug.print("FAIL: the clipboard holds '{s}' (expected 'second line')\n", .{held});
+        return error.WrongClipboard;
+    }
+
+    // 대조군. y를 한 번도 안 부른 화면의 클립보드는 null이다. **이것이 없으면
+    // "clipboard()가 언제나 무언가를 준다"도 통과한다.**
+    if (pruned.clipboard() != null) {
+        std.debug.print("FAIL: a screen that never yanked already has a clipboard\n", .{});
+        return error.ClipboardNotEmpty;
+    }
+    std.debug.print("vt_test: 클립보드를 되읽는다 OK ('{s}')\n", .{held});
+
     std.debug.print("vt_test: copy selection OK\n", .{});
 
     std.debug.print("PASS\n", .{});

@@ -476,6 +476,25 @@ pub const Screen = struct {
         return text;
     }
 
+    /// 클립보드의 지금 내용. `y`를 한 번도 안 눌렀으면 null이다.
+    ///
+    /// `main.zig`가 `self.clip`을 직접 읽지 않게 하려고 함수로 낸다 —
+    /// `copyCursor`·`scrollbar`와 같은 규율이다(TR design 결정 1).
+    ///
+    /// 반환 타입이 `?[]const u8`인 것에 뜻이 있다. `clip`은 실제로
+    /// `?[:0]const u8`인데, sentinel을 밖으로 내보내면 호출부가 그것을 직접
+    /// free해도 되는 값으로 오해할 여지가 생긴다. **소유권은 `Screen`에 있고
+    /// 다음 `y`가 옛것을 해제한다.**
+    ///
+    /// `return self.clip;` 한 줄로 줄이지 않는다. 그렇게 쓰면 `?[:0]const u8`을
+    /// `?[]const u8`로 바꾸는 일을 **optional 껍질을 쓴 채** 요구하게 된다.
+    /// 먼저 풀고 나서 돌려주면 sentinel을 떼는 평범한 슬라이스 coercion이 되고,
+    /// 그 형태는 바로 위 `copyYank`가 이미 쓰고 있는 것이다.
+    pub fn clipboard(self: *const Screen) ?[]const u8 {
+        const text = self.clip orelse return null;
+        return text;
+    }
+
     /// 뷰포트가 스크롤백의 어디에 있는지.
     ///
     /// `total`은 스크롤 가능한 전체 행 수, `offset`은 뷰포트 맨 윗줄이 그중
