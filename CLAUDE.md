@@ -74,11 +74,11 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   "배경" 절
 - 완료된 서브프로젝트: Boot Foundation(BF-M0~M4) · Display Foundation(DF) ·
   Terminal Foundation(TF) · Zig Migration(ZM) · Input Policy(IP) ·
-  Terminal Rendering(TR) · **Copy Mode(CM-M0~M2, 2026-08-26 완료)**.
+  Terminal Rendering(TR) · Copy Mode(CM-M0~M2) ·
+  **Gate Latency(GL-M0~M1, 2026-08-26 완료 — 게이트 54분 15초 → 18분 08초)**.
   design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **지금 진행 중인 서브프로젝트는 Gate Latency(GL)다.** GL-M0이 2026-08-26에
-  끝나 게이트가 54분 15초에서 24분 09초가 됐고, 다음은 GL-M1이다. 자세한
-  것은 `HANDOFF.md`.
+- **지금 진행 중인 서브프로젝트가 없다.** 다음 후보는 `HANDOFF.md`의 이월
+  숙제가 든다.
 - **주의: design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
   Power Management · Hardware Discovery가 각각 "M0 미착수"로 남아 있는데,
   게이트에는 `CP-M2` · `PM-M1` · `HD-M2` 체인이 3/3으로 돌고 있다.
