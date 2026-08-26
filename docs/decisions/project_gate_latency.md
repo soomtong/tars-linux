@@ -98,11 +98,35 @@ file)"`가 실제 예다), **주석 줄을 걸러낸다**(호출을 지우는 �
 아니다 — 빌드를 부르기만 하면 Zig와 make가 보장하고 셋째 줄이 그것을 확인했다.
 **부르는지만 보면 된다.**
 
-마지막 줄은 GL-M1의 몫을 미리 확인해 주었다. **make는 mtime 기반이라
-`kernel/build.sh`의 `cp .config build/.config`가 매 회차 재빌드를 부른다** —
-증분 회차에 남는 13초가 이것이다. 고칠 방향은 "내용이 다를 때만 복사"이지만,
-`.config`를 `olddefconfig`의 고정점으로 유지하는 규칙([[project_kernel_config]])과
-어긋나지 않는지 먼저 따져야 한다.
+**여기서 인접한 결론으로 새는 것을 조심할 것.** 마지막 줄을 보고 한때
+"`kernel/build.sh`의 `cp .config build/.config`가 매 회차 재빌드를 부르고,
+증분 회차의 13초가 그것이다"라고 적었는데 **틀렸다.** 갈라 보니 `cp`를 하든
+안 하든 같았다(아래). mtime이 make의 판단 근거인 것은 맞지만 `.config` 내용이
+같으면 재빌드로 이어지지 않는다. **한 실측이 답해 주는 범위를 넘어 추론했고,
+진짜 정체는 따로 재고 나서야 나왔다.**
+
+## 증분 회차 29초의 내역 (2026-08-26, GL-M1 착수 전)
+
+| 단계 | 시간 | 정체 |
+|---|---|---|
+| `kernel/build.sh` | 13초 | **make의 트리 스캔**(`olddefconfig` 1.3초 + "할 일 없음" 확인 9.3초). 재빌드가 아니다 |
+| `init`·`terminal`의 `zig build test` | 각 3초 | |
+| `terminal/prepare.sh` | 1초 | |
+| `kernel/make_initrd.sh` | 9초 | **전부 `gzip -9`**(8.7초). cpio로 묶는 것은 154ms다 |
+
+**`gzip -9`는 `-6`보다 224,663바이트(1.3%) 작아지자고 6.7초를 더 쓴다**
+(16,835,576 대 17,060,239, 8,729ms 대 2,020ms). 크기가 부팅에 미치는 영향은
+ZM-M1이 이미 쟀다 — 19% 증가에도 BF 부팅 시간이 변하지 않았으므로
+([[project_gate_chain_composition]]) 1.3%는 영향권 밖이다.
+
+**`init`은 `ReleaseSafe`로 11,745,656 → 3,331,160바이트(72% 감소)가 된다.**
+libc를 링크하지 않아 fortify 제약이 없기 때문이다([[project_zig_c_uapi_rule]]).
+`-6`과 조합하면 **initrd가 지금보다 1.1MB 작으면서 gzip이 6.9초 빠르다** —
+크기와 시간을 맞바꾸는 구도가 아니다.
+
+**`terminal`(42.7MB)은 이 길로 못 간다.** `-Doptimize=ReleaseSafe`가
+`drm.zig:3`의 `@cImport`를 깨뜨린다. TF-M4가 겪은 그대로이고 우회
+(`@cDefine("_FORTIFY_SOURCE", "0")`)도 같은 문서에 있다.
 
 ## 남은 병과 남긴 단서
 
