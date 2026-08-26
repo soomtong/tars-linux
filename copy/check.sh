@@ -11,7 +11,13 @@ cd "$(dirname "$0")"
 #   → input.zig의 chord()가 그것을 .copy = .enter로 바꾸고 모드를 연다
 #   → main.zig가 vt.zig의 copy 커서를 만들고 copy> 줄을 찍는다
 #   → 모드 안에서 친 키가 **PTY로 나가지 않는다**
+#   → V로 잡은 줄이 화면에서 반전되고 y가 그 글자를 클립보드로 옮긴다
+#   → Cmd+V가 그 글자를 셸에 써 넣고, Enter를 치면 셸이 그것을 실행한다
+#   → **복사한 글자가 실행 결과로 화면에 다시 나타난다**
 #   → Esc로 나오면 다시 나간다
+#
+# **마지막 줄이 CM-M2가 더하는 값이다.** 클립보드에 글자가 담겼다는 것까지는
+# CM-M1이 로그로 증명했지만, 그것이 셸에 닿는다는 것은 왕복으로만 증명된다.
 #
 # **음성 검사가 이 체인의 값이다.** "모드에 들어갔다"만 보면 키를 삼키는지
 # 아닌지는 아무것도 증명되지 않는다 — 그리고 키가 새는 것이 이 기능의 가장
@@ -136,6 +142,24 @@ last_frame() {
 # 모양으로 나타난다 — 그래서 선택 **전후**를 비교해야 뜻이 생긴다.
 inverted_cells() {
   last_frame | grep -acE "terminal: style> $1,[0-9]+ fg=102030 bg=FFFFFF" || true
+}
+
+# scroll> 줄에서 값 하나를 뽑는다. copy_value와 같은 모양이고, **언제나 마지막
+# 줄을 본다** — 그 줄이 곧 지금의 뷰포트 위치다.
+scroll_field() {
+  grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
+    sed -E "s/.*$1=([0-9]+).*/\1/"
+}
+
+# 마지막 프레임의 화면 줄에서 그 문자열이 몇 번 나오는가.
+#
+# **누적으로 세면 안 된다.** screen> 줄은 매 프레임 다시 찍히므로 로그 전체에서
+# 세면 "부팅 이후 몇 번 찍혔는가"가 된다. last_frame이 그것을 막는다.
+#
+# grep -o는 겹치는 매치를 세지 않는다. 아래 검사들이 세는 두 문자열은 화면에서
+# 서로 떨어져 나타나므로(사이에 프롬프트 줄이 있다) 문제가 되지 않는다.
+screen_count() {
+  last_frame | grep -a 'terminal: screen>' | grep -oaF "$1" | wc -l
 }
 
 qemu-system-x86_64 \
@@ -269,16 +293,14 @@ echo "l moved the copy cursor ${COL_BEFORE} -> ${COL_AFTER}"
 # 커서를 맨 윗줄까지 올리고(화면이 47줄이라 46번이 필요하다) 한참 더 올린다.
 # 그러면 커서는 row=0에 남고 scroll> offset이 줄어야 한다. 80번을 보내는
 # 것은 0.05초 간격에서 게스트가 몇 개를 놓쳐도 닿게 하기 위한 여유다.
-SCROLL_BEFORE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
-  sed -E 's/.*offset=([0-9]+).*/\1/')"
+SCROLL_BEFORE="$(scroll_field offset)"
 echo "=== pushing the cursor to the top of the viewport ==="
 for _ in $(seq 1 80); do
   echo "sendkey k" >&3
   sleep 0.05
 done
 sleep 2
-SCROLL_AFTER="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
-  sed -E 's/.*offset=([0-9]+).*/\1/')"
+SCROLL_AFTER="$(scroll_field offset)"
 ROW_TOP="$(copy_value row)"
 if [ "$ROW_TOP" -ne 0 ]; then
   report_failure "the cursor stopped at row ${ROW_TOP} instead of reaching row 0"
@@ -395,6 +417,137 @@ echo "keys reach the PTY again after y (${BEFORE_YANK_EXIT} -> ${AFTER_YANK_EXIT
 type_keys backspace
 sleep 1
 
+# ── 검사 10: 대조군 — 붙여넣기 전에는 그 줄이 어디에도 없다 ────────────
+#
+# **이것이 없으면 아래 검사 12가 "원래부터 화면에 있었다"로도 통과한다**
+# (design 결정 7의 시나리오 6). IP-M0이 sleep에서 데인 것과 같은 병이고,
+# project_gate_chain_composition이 "성공 경로가 하나뿐인가"를 물으라고 적어
+# 둔 자리다.
+#
+# screen> 은 행 사이를 ' | '로 구분하므로 '| PASTED |'는 **그 글자만 있는 줄**을
+# 뜻한다. 검사 7이 만든 '| echo PASTED |'와는 겹치지 않는다 — 거기서 PASTED
+# 앞에 오는 것은 '| '가 아니라 'o '다.
+#
+# 마지막 프레임이 아니라 **로그 전체**를 보는 것이 일부러다. "지금 화면에
+# 없다"보다 "지금까지 한 번도 없었다"가 더 강한 대조군이다.
+if grep -aqF '| PASTED |' "$LOG"; then
+  report_failure "a line containing only 'PASTED' was on the screen before any paste"
+fi
+echo "control: nothing has printed 'PASTED' on a line of its own yet"
+
+# ── 검사 11: Cmd+V가 클립보드를 셸의 입력줄에 써 넣는다 ────────────────
+#
+# 붙여넣기는 화면에 **입력줄의 에코**로 나타난다. 그것을 'echo PASTED'의
+# 등장 횟수로 세는데, **절대값을 쓸 수 없다** — 붙여넣기 전에 이미 둘이다.
+# 검사 7이 친 명령줄 'echo echo PASTED'가 부분 문자열로 걸리고, 그 출력줄이
+# 하나 더 있기 때문이다. 그래서 전후 차이를 본다.
+#
+# key> 줄은 여기서 쓸 수 없다. 붙여넣기는 pty.write를 직접 부르지
+# keys.bytes를 거치지 않으므로 그 줄을 만들지 않는다.
+ECHOES_BEFORE="$(screen_count 'echo PASTED')"
+echo "=== pasting (Cmd+V) ==="
+type_keys meta_l-v
+sleep 3
+
+if ! grep -aq 'terminal: clip> paste len=11' "$LOG"; then
+  report_failure "Cmd+V did not write the 11-byte clipboard to the PTY"
+fi
+ECHOES_AFTER="$(screen_count 'echo PASTED')"
+if [ "$ECHOES_AFTER" -le "$ECHOES_BEFORE" ]; then
+  report_failure "the pasted text never showed up on screen ('echo PASTED' stayed at ${ECHOES_BEFORE})"
+fi
+echo "the clipboard reached the shell (echoes ${ECHOES_BEFORE} -> ${ECHOES_AFTER})"
+
+# ── 검사 12: 판정 — 왕복이 닫힌다 ──────────────────────────────────────
+#
+# 붙여넣은 것이 실행되면 'PASTED'만 있는 줄이 새로 생긴다. 검사 10과 짝을
+# 이루는 자리이고, **이 체인 전체가 증명하려는 한 문장이 여기서 참이 된다** —
+# 화면에서 잡은 글자가 클립보드를 거쳐 셸까지 돌아왔다.
+echo "=== running the pasted command (Enter) ==="
+type_keys ret
+sleep 3
+if ! grep -aqF '| PASTED |' "$LOG"; then
+  report_failure "the pasted command did not produce a line containing only 'PASTED'"
+fi
+echo "the round trip closed: a yanked line came back as the shell's output"
+
+# ── 검사 13: copy mode 중에는 뷰포트가 출력을 따라가지 않는다 ──────────
+#
+# **CM-M0이 넣어 두고 아무도 밟은 적 없는 분기다**(main.zig의
+# `if (!screen.copyActive()) screen.scrollToBottom();`). 모드 안에서는 셸에
+# 아무것도 보낼 수 없어 출력을 만들 방법이 없었는데, 붙여넣기가 그 방법이 된다.
+#
+# 억제를 보려면 뷰포트가 **바닥이 아니어야 한다.** 바닥에 있으면
+# scrollToBottom이 원래 아무 일도 안 하므로 억제했는지 안 했는지 구분되지
+# 않는다. 그래서 먼저 위로 올린다.
+echo "=== entering copy mode and scrolling up ==="
+type_keys meta_l-shift-c
+sleep 2
+OFFSET_BOTTOM="$(scroll_field offset)"
+
+# 커서를 맨 윗줄까지 올리고(화면이 47줄이라 46번) 한참 더 올린다. 80번을
+# 0.05초 간격으로 보내도 하나도 안 떨어지는 것은 CM-M0이 실측했다.
+for _ in $(seq 1 80); do
+  echo "sendkey k" >&3
+  sleep 0.05
+done
+sleep 2
+OFFSET_UP="$(scroll_field offset)"
+if [ "$OFFSET_UP" -ge "$OFFSET_BOTTOM" ]; then
+  report_failure "the viewport did not scroll up before the paste (offset ${OFFSET_BOTTOM} -> ${OFFSET_UP})"
+fi
+
+echo "=== pasting inside copy mode ==="
+PASTES_BEFORE="$(grep -ac 'terminal: clip> paste len=11' "$LOG" || true)"
+type_keys meta_l-v
+sleep 3
+PASTES_AFTER="$(grep -ac 'terminal: clip> paste len=11' "$LOG" || true)"
+if [ "$PASTES_AFTER" -le "$PASTES_BEFORE" ]; then
+  report_failure "Cmd+V did nothing inside copy mode (clip> paste count stayed at ${PASTES_BEFORE})"
+fi
+
+# **모드가 안 닫혔다.** 붙여넣기는 y와 달리 모드를 건드리지 않는다. dumpCopy가
+# 좌표를 찍는 것이 곧 copy 커서가 살아 있다는 뜻이다 — 모드 밖이었다면 좌표
+# 없이 'copy> paste'만 찍힌다.
+if ! grep -aqE 'terminal: copy> paste row=[0-9]+ col=[0-9]+' "$LOG"; then
+  report_failure "the paste inside copy mode did not keep the copy cursor alive"
+fi
+
+# **판정.** 셸이 붙여넣은 글자를 되울렸는데도 뷰포트가 그대로다.
+OFFSET_AFTER="$(scroll_field offset)"
+if [ "$OFFSET_AFTER" -ne "$OFFSET_UP" ]; then
+  report_failure "output that arrived during copy mode moved the viewport (offset ${OFFSET_UP} -> ${OFFSET_AFTER})"
+fi
+echo "copy mode held the viewport still while output arrived (offset stayed at ${OFFSET_UP})"
+
+# 대조군. **이것이 없으면 "scrollToBottom이 아예 안 불린다"도 통과한다.**
+# 모드를 나가고 Enter를 치면 셸이 붙여넣은 명령을 실행하고, 그 출력이 도착할
+# 때는 억제가 풀려 있으므로 뷰포트가 바닥으로 돌아와야 한다.
+#
+# "바닥에 있다"는 offset == total - len이다(vt.zig의 scrollbar 주석).
+echo "=== leaving copy mode and running the pasted command ==="
+type_keys esc
+sleep 1
+type_keys ret
+sleep 3
+TOTAL_END="$(scroll_field total)"
+OFFSET_END="$(scroll_field offset)"
+LEN_END="$(scroll_field len)"
+if [ "$OFFSET_END" -ne "$((TOTAL_END - LEN_END))" ]; then
+  report_failure "the viewport did not return to the bottom after leaving copy mode (offset ${OFFSET_END}, expected $((TOTAL_END - LEN_END)))"
+fi
+echo "the viewport followed the output again once copy mode was closed (offset ${OFFSET_END})"
+
+# 붙여넣은 명령이 정말로 셸까지 갔다는 것은, 그것이 **두 번째** 출력줄을
+# 만드는 것으로 증명된다. Enter 하나만으로도 새 프롬프트가 생기며 뷰포트는
+# 바닥으로 돌아오므로, 위 검사만으로는 "붙여넣기는 실패했는데 Enter만 먹었다"가
+# 걸러지지 않는다.
+PASTED_ROWS="$(screen_count '| PASTED |')"
+if [ "$PASTED_ROWS" -lt 2 ]; then
+  report_failure "expected two rows containing only 'PASTED' but found ${PASTED_ROWS}"
+fi
+echo "the paste inside copy mode reached the shell too (${PASTED_ROWS} 'PASTED' rows)"
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
@@ -402,4 +555,4 @@ if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
   report_failure "the serial log contains NUL bytes"
 fi
 
-echo "CM-M1 check PASS"
+echo "CM-M2 check PASS"
