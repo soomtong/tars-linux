@@ -293,6 +293,31 @@ fn dumpClip(text: ?[]const u8) void {
     }
 }
 
+/// `Cmd+V`가 클립보드를 셸에 쓴다.
+///
+/// 쓰는 일과 찍는 일을 한 함수에 둔 이유는 **길이가 두 곳에서 갈리지 않게**
+/// 하기 위해서다. 게이트가 `len=11`을 보고 "11바이트가 나갔다"로 읽는데, 쓰기와
+/// 로그가 떨어져 있으면 그 둘이 다른 슬라이스를 볼 여지가 생긴다.
+///
+/// **bracketed paste로 감싸지 않는다**(design 결정 9). 여러 줄을 붙이면 개행이
+/// 곧 실행이 되는 것을 감수한다 — 셸이 그 모드를 받는지 확인한 적이 없고,
+/// 확인 없이 넣으면 게이트가 못 보는 코드가 느는 것이
+/// `project_gate_chain_composition`이 경고한 부채 그대로다.
+///
+/// 새 접두사를 만들지 않고 `clip>`를 쓰는 것은 design 결정 8이다. 문구가 이
+/// 파일과 `copy/check.sh` 양쪽에 중복된다 — **한쪽을 고치면 다른 쪽도 고쳐야
+/// 한다.**
+fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
+    const text = screen.clipboard() orelse {
+        // 아직 아무것도 복사하지 않았는데 Cmd+V를 눌렀다. 조용히 넘어가면
+        // 게이트가 "클립보드가 비었다"와 "Cmd+V가 아예 안 도착했다"를 못 가른다.
+        std.debug.print("terminal: clip> paste empty\n", .{});
+        return;
+    };
+    pty.write(master_fd, text);
+    std.debug.print("terminal: clip> paste len={d}\n", .{text.len});
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -479,6 +504,14 @@ pub fn main(init: std.process.Init) !void {
                     // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
                     // 때문이다.
                     .yank => dumpClip(try screen.copyYank()),
+                    // 붙여넣기는 **모드를 건드리지 않는다.** 그래서 모드 안에서
+                    // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
+                    // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
+                    // 살아 있는가"를 본다.
+                    //
+                    // 이것이 copies 배열에서 **유일하게 PTY로 나가는 명령**이다.
+                    // 다른 아홉은 전부 우리 안에서 끝난다.
+                    .paste => dumpPaste(screen, session.master_fd),
                 }
                 dumpCopy(screen, @tagName(cmd));
                 needs_redraw = true;
@@ -512,9 +545,14 @@ pub fn main(init: std.process.Init) !void {
             //
             // 그 대가로 위 주석이 말한 창이 열린다 — 뷰포트가 history에
             // 머무는 동안 가지치기가 일어날 수 있게 된다(design 위험 1).
-            // copy mode 중에 1000줄이 쏟아져야 닿는 자리라 게이트로 만들지
-            // 않았고, CM-M1이 선택이 무효가 됐는지를 매 프레임 보는 방어를
-            // 넣는다.
+            // CM-M1이 방어를 넣었는데, **계획했던 모양이 아니다**: 가지치기는
+            // 선택을 null로 만들지 않고 tracked pin을 이웃 페이지의 왼쪽 위로
+            // 옮기므로, vt.zig의 feed가 앵커의 screen 좌표 y를 대신 감시한다.
+            //
+            // **이 억제 분기 자체는 CM-M2의 게이트가 밟는다.** 모드 안에서는
+            // 셸에 아무것도 보낼 수 없어 출력을 만들 방법이 없었는데,
+            // Cmd+V가 그 방법이 됐다 — 붙여넣은 글자를 셸이 되울리는 것이
+            // 곧 "모드 중에 도착한 PTY 출력"이다.
             if (!screen.copyActive()) screen.scrollToBottom();
             // 위 feed가 가지치기를 만났으면 vt.zig가 모드를 이미 닫았다
             // (design 위험 1). **로그를 안 남기면 사람이 "왜 갑자기 모드가
