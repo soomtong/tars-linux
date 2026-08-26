@@ -72,9 +72,16 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 - 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지, 후보 목록):
   `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
   "배경" 절
-- 완료된 서브프로젝트: Boot Foundation(BF-M0~M4, 2026-08-07 완료)
-- 진행 중인 서브프로젝트: Display Foundation
-  (`docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`)
+- 완료된 서브프로젝트: Boot Foundation(BF-M0~M4) · Display Foundation(DF) ·
+  Terminal Foundation(TF) · Zig Migration(ZM) · Input Policy(IP) ·
+  Terminal Rendering(TR) · **Copy Mode(CM-M0~M2, 2026-08-26 완료)**.
+  design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
+- **지금 진행 중인 서브프로젝트가 없다.** 다음 후보는 `HANDOFF.md`의 이월
+  숙제가 든다.
+- **주의: design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
+  Power Management · Hardware Discovery가 각각 "M0 미착수"로 남아 있는데,
+  게이트에는 `CP-M2` · `PM-M1` · `HD-M2` 체인이 3/3으로 돌고 있다.
+  **서브프로젝트의 실제 상태는 `check.sh`의 체인 목록이 가장 정확하다.**
 - 현재 진행 상황: `HANDOFF.md`
 - 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
   한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로
