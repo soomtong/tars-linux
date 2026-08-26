@@ -196,4 +196,13 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 # 73.0MB → gzip 16.8MB다(2026-08-23 폰트를 unifont로 바꾼 뒤 실측. Hanme일
 # 때는 67.6MB → 15.5MB였고, 늘어난 1.2MB가 폰트 몫이다). 갱신할 때는 cpio가
 # 찍는 blocks 수(×512B)와 `ls -l initrd.cpio`를 함께 본다.
-(cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -9 > initrd.cpio
+# GL-M1: -9가 아니라 -6이다. 이 줄이 make_initrd.sh 9초의 거의 전부였고
+# (cpio로 묶는 것은 154ms다), -9는 -6보다 224,663바이트(1.3%) 작아지자고
+# 6.7초를 더 쓴다(16,835,576 대 17,060,239, 8,729ms 대 2,020ms). 루트 게이트는
+# 그 6.7초를 24회 치른다.
+#
+# 크기를 늘려도 되는 근거는 실측이다 — ZM-M1에서 initrd가 11.8MB에서 14MB로
+# 19% 늘었는데 BF 부팅 시간이 34/33/33초로 변하지 않았다
+# (docs/decisions/project_gate_chain_composition.md). 1.3%는 그 영향권 밖이다.
+# 53MB에서 부팅조차 못 했던 것은 선형적인 느려짐이 아니라 다른 종류의 벽이었다.
+(cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -6 > initrd.cpio
