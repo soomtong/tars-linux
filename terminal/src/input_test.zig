@@ -302,11 +302,17 @@ pub fn main() !void {
 
     // Cmd+Delete는 표에 없다 → 맨 Delete가 나간다.
     try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
-    // Cmd+C / Cmd+V는 **일부러 비워둔 자리**다(design doc 비목표).
-    // 복사·붙여넣기는 스크롤백과 클립보드가 선행 조건이라
-    // project_copy_mode의 몫이고, 그때 이 두 줄이 바뀐다.
+    // Cmd+C는 **여전히 일부러 비워둔 자리**다(design doc 비목표, CM design
+    // 결정 4). 모드 밖에서는 무엇을 복사할지가 정해져 있지 않다.
     try expect(&state, K.KEY_C, 1, "c");
-    try expect(&state, K.KEY_V, 1, "v");
+    // **Cmd+V는 CM-M2가 채웠다.** 원래 이 자리에 "복사·붙여넣기는 그때 이 두
+    // 줄이 바뀐다"고 적혀 있었는데, 바뀐 것은 둘 중 하나뿐이다 — 붙여넣기는
+    // 모드 밖에서도 뜻이 있지만 복사는 그렇지 않기 때문이다.
+    //
+    // 바이트가 아니라 copy 명령이 오는 것이 핵심이고, 그것을 여기서 보는 것은
+    // 아래 copy mode 검사들과 다른 일이다. 이 줄은 **모드가 normal일 때**를
+    // 본다 — 즉 chord()의 Meta 분기 쪽이다.
+    try expectCopy(&state, K.KEY_V, .paste);
     try expect(&state, K.KEY_LEFTMETA, 0, "");
 
     try expect(&state, K.KEY_RIGHTMETA, 1, "");
@@ -566,6 +572,50 @@ pub fn main() !void {
     }
     try expect(&cm, K.KEY_LEFTMETA, 0, "");
     try expect(&cm, K.KEY_H, 1, "h");
+
+    // ── CM-M2: 붙여넣기 ─────────────────────────────────────────────────
+    //
+    // 검사 11. **Cmd+V는 모드 밖에서도 붙여넣는다**(design 결정 4). 여기가
+    // Cmd+C와 갈리는 자리다 — Cmd+C는 모드 안에서만 뜻이 있어서 copy 표 한
+    // 곳이면 됐지만, Cmd+V는 chord()의 Meta 분기에도 있어야 한다.
+    //
+    // 대조군으로 Cmd 없는 v가 여전히 평범한 글자라는 것을 먼저 본다.
+    // **이것이 없으면 "v는 언제나 paste"도 통과한다.**
+    try expect(&cm, K.KEY_V, 1, "v");
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expectCopy(&cm, K.KEY_V, .paste);
+    if (cm.mode != .normal) {
+        std.debug.print("FAIL: Cmd+V outside copy mode changed the mode\n", .{});
+        return error.PasteChangedMode;
+    }
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+
+    // 검사 12. 모드 **안에서도** 붙여넣는다. copy 분기가 chord()보다 앞이라
+    // 모드 안에서는 Cmd 조합이 chord()에 아예 닿지 않으므로, 같은 뜻을 표
+    // 양쪽에 적어야 한다. **한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.**
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_V, .paste);
+
+    // **붙여넣기는 모드를 닫지 않는다** — y와 갈리는 자리다. 게이트의 억제
+    // 검사가 이 성질에 기댄다: 모드가 닫히면 에코가 도착할 때
+    // scrollToBottom이 그대로 불려서 볼 것이 없어진다.
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: Cmd+V inside copy mode closed the mode\n", .{});
+        return error.PasteLeftCopyMode;
+    }
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+
+    // 검사 13. Cmd를 뗀 v는 모드 안에서 다시 선택 명령이다. **Meta 분기가 v를
+    // 통째로 가져가지 않았다**는 것을 이 셋이 못 박는다 — Step 3에서 갈라 놓은
+    // 세 갈래를 나란히 보는 자리다.
+    try expectCopy(&cm, K.KEY_V, .select_char);
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_V, .select_line);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_ESC, .exit);
 
     std.debug.print("input_test: copy mode OK\n", .{});
 

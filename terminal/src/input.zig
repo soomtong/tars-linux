@@ -168,10 +168,10 @@ pub const Action = union(enum) {
 
 /// copy mode 안에서 키가 만드는 명령.
 ///
-/// **`paste`는 아직 없다**(CM-M2의 몫이다). CM-M0이 여섯 개로 닫아 둔 이유가
-/// 그대로 유효하다 — `main.zig`의 switch가 `else` 없이 닫혀 있으므로, variant를
-/// 더하는 순간 컴파일러가 배선할 자리를 알려준다. 미리 만들어 두면 그 신호를
-/// 잃는다.
+/// **CM-M2로 표가 닫혔다.** CM-M0부터 지켜 온 규율은 "쓰지 않을 variant를 미리
+/// 만들어 두지 않는다"였다 — `main.zig`의 switch가 `else` 없이 닫혀 있어서,
+/// variant를 더하는 순간 컴파일러가 배선할 자리를 알려주기 때문이다. 미리
+/// 만들어 두면 그 신호를 잃는다. 다음에 표를 늘릴 사람도 같은 순서로 하면 된다.
 pub const Copy = enum {
     enter,
     exit,
@@ -185,6 +185,12 @@ pub const Copy = enum {
     select_line,
     /// `y` 또는 `Cmd+C` — 클립보드로 옮기고 **모드를 나간다.**
     yank,
+    /// `Cmd+V` — 클립보드를 PTY에 쓴다. **모드를 건드리지 않는다.**
+    ///
+    /// 이 variant만 모드 **밖에서도** 만들어진다(design 결정 4). 그래서
+    /// `chord()`의 Meta 분기와 copy 표 **양쪽에** 같은 뜻이 적혀 있다 —
+    /// 한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.
+    paste,
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -423,6 +429,14 @@ pub const State = struct {
                 // 있는 시스템에서 이 어긋남은 A안을 고른 대가이고, 감추지
                 // 않고 여기 적어둔다(design doc 결정 8).
                 c.KEY_BACKSPACE => .{ .bytes = self.one(0x15) },
+                // Cmd+V(CM-M2). **이 줄은 모드 밖의 붙여넣기만 담당한다** —
+                // 모드 안에서는 아래 copy 표가 chord()보다 먼저라 여기까지
+                // 오지 않으므로, 같은 뜻이 그쪽에도 적혀 있다(design 결정 4).
+                //
+                // 바이트가 아니라 copy 명령인 이유는, 무엇을 보낼지가
+                // 클립보드에 달려 있고 클립보드는 vt.zig가 들기 때문이다.
+                // input.zig는 vt.zig를 import하지 않는다(IP design 결정 6).
+                c.KEY_V => .{ .copy = .paste },
                 else => null,
             };
         }
@@ -529,11 +543,24 @@ pub const State = struct {
                 c.KEY_J, c.KEY_DOWN => return .{ .copy = .down },
                 c.KEY_K, c.KEY_UP => return .{ .copy = .up },
                 c.KEY_L, c.KEY_RIGHT => return .{ .copy = .right },
+                // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
+                //
+                //   Cmd+V   → 붙여넣기. **모드를 닫지 않는다.**
+                //   Shift+V → 줄 선택
+                //   v       → 문자 선택
+                //
+                // **Meta를 가장 먼저 보는 것은 chord()의 규칙과 같다** — 둘 다
+                // 눌렸을 때 Cmd가 이긴다. 임의의 선택이지만 결정적이어야 해서
+                // 두 곳이 같은 순서를 쓴다.
+                //
                 // Shift를 여기서 보는 것은 chord()의 예외와 성격이 다르다.
                 // 모드 안의 표는 원래 문자 키를 직접 읽으므로, 대문자 V가
                 // 소문자 v와 다른 명령이라는 것을 볼 자리가 여기뿐이다.
-                c.KEY_V => return .{
-                    .copy = if (self.shifted()) .select_line else .select_char,
+                c.KEY_V => {
+                    if (self.metaed()) return .{ .copy = .paste };
+                    return .{
+                        .copy = if (self.shifted()) .select_line else .select_char,
+                    };
                 },
                 // yank는 **모드를 닫는다.** 여기서 mode를 되돌리지 않으면
                 // 복사는 했는데 모드에 갇혀서 그다음 키가 전부 삼켜진다 —
