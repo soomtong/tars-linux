@@ -12,10 +12,24 @@ pub fn build(b: *std.Build) void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
+    // GL-M1: initrd에 들어가는 것은 이 exe 하나뿐이라 여기만 최적화 모드를
+    // 고정한다. Debug 11,745,656 → ReleaseSafe 3,331,160바이트(72% 감소)이고,
+    // 그만큼 gzip도 부팅 중 압축 해제도 빨라진다.
+    //
+    // init이 이 길로 갈 수 있는 이유는 libc를 링크하지 않기 때문이다 —
+    // terminal을 Debug에 묶어 둔 fortify 제약(@cImport가 최적화 모드에서
+    // 깨진다)이 여기에는 없다(docs/decisions/project_zig_c_uapi_rule.md).
+    //
+    // 게스트 안 에러 트레이스는 살아 있다. ReleaseSafe는 strip이 아니라
+    // 심볼도 안전 검사도 유지한다 — strip을 안 쓰기로 한 이유는
+    // docs/decisions/project_gate_chain_composition.md에 있다.
+    //
+    // 아래 세 test_mod는 위의 `optimize`를 그대로 쓴다. 호스트가 돌리는
+    // 검사라 크기와 무관하고, 여기까지 최적화하면 `zig build test`만 느려진다.
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = .ReleaseSafe,
         // PID 1은 스레드를 만들지 않는다. 끄면 TLS 준비 과정이 빠지고
         // 바이너리도 작아진다.
         .single_threaded = true,
