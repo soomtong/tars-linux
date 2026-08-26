@@ -185,61 +185,107 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 # GL-M1: make가 "할 일 없음"을 확인하는 데만 9.3초가 들고 olddefconfig가 1.3초를
 # 더한다. 증분 회차 29초 중 13초가 그것이었고, 루트 게이트는 24회 치른다.
 #
-# 커널 소스는 tarball을 푼 뒤 불변이므로 이 빌드의 입력은 사실상 .config
-# 하나다. 그래서 make의 판단을 여기서 대신한다 — mtime을 보는 것은 make가
-# 쓰던 기준 그대로다.
+# 커널 소스는 tarball을 푼 뒤 불변이므로 이 빌드의 입력은 .config와 이 파일
+# 둘뿐이다. 그래서 그 둘의 해시를 산출물 옆에 적어 두고 대조한다.
 #
-# build.sh 자신도 비교 대상인 것이 중요하다. KERNEL_VERSION이 이 파일 안에
+# **mtime으로 판정하지 않는다.** 처음에는 bzImage가 .config보다 새것인지 보는
+# 방식이었는데, .config의 mtime만 새것이 되면(git checkout, 편집했다 되돌리기)
+# make가 내용이 같다고 판단해 bzImage를 갱신하지 않으므로 판정이 "빌드 필요"에
+# **고착되어 영영 스킵되지 않는다.** GL-M0이 신선도 검사에서 겪은 것과 같은
+# 병이다(docs/decisions/project_gate_latency.md).
+#
+# build.sh 자신이 해시에 들어가는 것이 중요하다. KERNEL_VERSION이 이 파일 안에
 # 있어서, 커널 버전을 올리면 SRC_DIR이 바뀌고 새 소스를 받는데 build/는 옛
 # 산출물을 그대로 갖고 있다. 이 파일을 함께 보지 않으면 **버전을 올린 뒤에도
 # 낡은 bzImage로 부팅한다.**
 #
-# 틀렸을 때의 증상은 조용하지 않다 — 게이트가 낡은 커널로 부팅하고 판정이
-# 흔들린다. 그것이 이 판정의 검출 수단이다.
+# clean()이 kernel/build를 통째로 지우므로 스탬프도 함께 사라진다 — 게이트
+# 첫 회차는 언제나 진짜로 빌드한다.
 BZIMAGE=build/arch/x86/boot/bzImage
-if [ -f "$BZIMAGE" ] && [ "$BZIMAGE" -nt .config ] && [ "$BZIMAGE" -nt build.sh ]; then
-  echo "kernel: bzImage is newer than .config and build.sh, skipping make"
+STAMP=build/.tars-build-stamp
+BUILD_INPUTS="$(cat .config build.sh | sha256sum | cut -d' ' -f1)"
+if [ -f "$BZIMAGE" ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$BUILD_INPUTS" ]; then
+  echo "kernel: bzImage matches .config and build.sh, skipping make"
   exit 0
 fi
 ```
 
-- [ ] **Step 2: 확인** (Claude가 실행)
+- [ ] **Step 2: 파일 맨 끝에 스탬프를 남긴다**
+
+`make ... bzImage` 줄 **다음**에 붙인다.
+
+**넣을 것:**
+
+```bash
+
+# 빌드가 성공한 뒤에만 적는다. 중간에 죽으면 스탬프가 없어 다음 실행이 다시
+# 빌드한다 — set -e가 그것을 보장한다.
+echo "$BUILD_INPUTS" > "$STAMP"
+```
+
+- [ ] **Step 3: 확인** (Claude가 실행)
 
 ```bash
 bash -n kernel/build.sh && echo "syntax OK"
-grep -n 'BZIMAGE\|skipping make\|mkdir -p build' kernel/build.sh
+grep -n 'BZIMAGE\|STAMP\|BUILD_INPUTS\|mkdir -p build\|bzImage$' kernel/build.sh
+tail -3 kernel/build.sh
 ```
 
-기대: `syntax OK`, 그리고 `BZIMAGE` 판정이 `mkdir -p build`보다 **앞**에 있다.
+기대: `syntax OK`, 판정이 `mkdir -p build`보다 **앞**, 스탬프 기록이
+`make ... bzImage`보다 **뒤**에 있다.
 
 ---
 
-## Task 4: 스킵 판정을 네 가지로 깨뜨려 확인한다
+## Task 4: 스킵 판정을 일곱 가지로 깨뜨려 확인한다
 
-**이 Task를 건너뛰면 "언제나 스킵하는" 코드와 구분되지 않는다.**
+**이 Task를 건너뛰면 "언제나 스킵하는" 코드와 구분되지 않는다.** 그리고
+**mtime과 내용을 가르는 경우가 반드시 들어가야 한다** — 최초 설계(mtime 비교)가
+바로 그 자리에서 실패했다.
 
 **Files:**
 - 없음 (조사성 실행만)
 
-- [ ] **Step 1: 네 경우를 돌린다** (Claude가 실행)
+- [ ] **Step 1: 일곱 경우를 돌린다** (Claude가 실행)
 
-**약 2~3분 걸린다**(재빌드가 두 번 일어난다).
+**약 3분 걸린다**(재빌드가 네 번 일어난다).
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   t() { local s=$(date +%s%N); (cd kernel && ./build.sh) 2>&1 | tail -1; local e=$(date +%s%N); echo "   → $(( (e-s)/1000000 ))ms"; }
-  echo "=== (a) 그냥 한 번 더 (스킵해야 한다) ==="; t
-  echo "=== (b) .config를 touch (다시 빌드해야 한다) ==="; touch kernel/.config; t
-  echo "=== (c) 다시 한 번 (스킵해야 한다) ==="; t
-  echo "=== (d) build.sh를 touch (다시 빌드해야 한다) ==="; touch kernel/build.sh; t
-  echo "=== (e) bzImage를 지움 (다시 빌드해야 한다) ==="; rm -f kernel/build/arch/x86/boot/bzImage; t
+  echo "=== (0) build.sh를 고쳤으므로 빌드 ==="; t
+  echo "=== (a) 그냥 한 번 더 → 스킵 ==="; t
+  echo "=== (b) .config touch (내용 동일) → 스킵해야 한다 ==="; touch kernel/.config; t
+  echo "=== (c) build.sh touch (내용 동일) → 스킵해야 한다 ==="; touch kernel/build.sh; t
+  echo "=== (d) .config 내용 변경 → 빌드 ==="
+  cp kernel/.config /tmp/config.bak
+  printf "# probe\n" >> kernel/.config
+  t
+  echo "=== (e) .config 복원 → 빌드(내용이 또 달라졌다) ==="
+  cp /tmp/config.bak kernel/.config; t
+  echo "=== (f) 한 번 더 → 스킵 ==="; t
+  echo "=== (g) bzImage 삭제 → 빌드 ==="; rm -f kernel/build/arch/x86/boot/bzImage; t
 '
 ```
 
-기대: **(a)와 (c)는 `skipping make`와 함께 100ms 미만**, **(b)·(d)·(e)는
-그 줄이 안 나오고 수 초 이상** 걸린다. (a)가 느리면 판정이 안 듣는 것이고,
-(b)가 빠르면 `.config` 변경을 놓치는 것이며, **(d)가 빠르면 커널 버전을 올린
-뒤 낡은 bzImage로 부팅하게 된다.**
+기대: **(a)·(b)·(c)·(f)는 `skipping make`와 함께 10ms 미만**,
+**(0)·(d)·(e)·(g)는 그 줄이 안 나오고 8초 이상** 걸린다.
+
+- **(b)와 (c)가 이 검사의 핵심이다.** mtime 방식에서는 여기서 빌드가 일어났고,
+  게다가 make가 내용이 같다고 bzImage를 안 갱신하는 바람에 **그 뒤로 영영
+  스킵되지 않았다.** 둘이 스킵되지 않으면 내용 해시가 안 듣는 것이다.
+- **(g)가 빠르면** 스탬프만 보고 산출물을 안 보는 것이다.
+- **(d)가 빠르면** `.config` 변경을 놓치는 것이고, 게이트가 낡은 커널로
+  부팅하게 된다.
+
+- [ ] **Step 2: `.config`가 복원됐는지 확인한다** (Claude가 실행)
+
+```bash
+git status --short
+tail -1 kernel/.config
+```
+
+기대: `kernel/.config`가 **`git status`에 없고**, 마지막 줄이
+`# end of Kernel hacking`이다((d)가 붙인 `# probe`가 남아 있으면 안 된다).
 
 - [ ] **Step 2: 저장소가 안 더러워졌는지 확인한다** (Claude가 실행)
 
