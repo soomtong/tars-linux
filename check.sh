@@ -15,13 +15,55 @@ clean() {
   rm -rf kernel/build init/zig-out init/.zig-cache terminal/zig-out terminal/.zig-cache out
 }
 
+# GL-M0: 체인이 자기가 부팅할 것을 스스로 빌드하는지 확인한다.
+#
+# clean()이 매 회차 지우던 시절에는 이 검사가 필요 없었다 — 빌드 스텝을
+# 빠뜨린 체인은 `cp: cannot stat ...`으로 즉시 죽었다. 실제로 그 죽음이 사고
+# 둘을 잡았다(DF-M3의 kms, TF-M4의 terminal 바이너리). clean을 게이트 시작
+# 1회로 옮기면 그 체인은 대신 **남이 만들어 둔 산출물로 조용히 통과한다.**
+#
+# 그래서 부팅 전에 스크립트를 읽어서 판정한다. 산출물이 신선한지는 보지
+# 않는다 — Zig는 내용 해시로 판단해서 touch를 무시하므로 mtime 비교는 내용이
+# 같고 mtime만 새것인 상황(git checkout, 편집했다 되돌리기)에서 거짓 실패한다.
+# 빌드를 부르기만 하면 반영은 Zig와 make가 보장한다. **부르는지만 본다.**
+#
+# 패턴에 './'가 들어 있는 것은 실행과 언급을 가르기 위함이다
+# (input/check.sh:88의 echo 문자열이 실제 예다). 주석 줄을 걸러내는 것은
+# 호출을 지우는 대신 #으로 막아 두는 손버릇을 잡기 위함이다.
+#
+# **빌드 스텝이 새로 생기면 이 목록도 함께 고쳐야 한다.**
+BUILD_STEPS=(
+  'cd ../kernel && ./build.sh)'
+  'cd ../init && zig build)'
+  './prepare.sh'
+  './make_initrd.sh'
+)
+
+require_build_steps() {
+  local script="$1"
+  local step body missing=0
+
+  body="$(grep -vE '^[[:space:]]*#' "$script")"
+
+  for step in "${BUILD_STEPS[@]}"; do
+    case "$body" in
+      *"$step"*) ;;
+      *)
+        echo "check FAIL: ${script} never calls '${step}'" >&2
+        missing=1
+        ;;
+    esac
+  done
+
+  return "$missing"
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
 
   for i in 1 2 3; do
     echo "=== ${name} run ${i}/3 ==="
-    clean
     if ! "$script"; then
       echo "${name} FAIL: run ${i}/3 failed"
       exit 1
@@ -99,13 +141,42 @@ run_chain() {
 # 이 체인이 더하는 비용의 대부분은 부팅이 아니라 **커널 빌드 3회**(약 2분
 # 40초)다. 2026-08-22에 CONFIG_PRINTK_TIME을 켜서 잰 결과 부팅 하나가
 # 1.5초라는 것이 밝혀졌다(docs/decisions/project_kernel_config.md).
-run_chain "BF-M4" ./boot/check.sh
-run_chain "TF-M4" ./terminal/check.sh
-run_chain "CP-M2" ./config/check.sh
-run_chain "IP-M2" ./input/check.sh
-run_chain "PM-M1" ./power/check.sh
-run_chain "HD-M2" ./device/check.sh
-run_chain "TR-M2" ./render/check.sh
-run_chain "CM-M2" ./copy/check.sh
+# 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
+# 체인을 더하거나 뺄 때 고칠 자리가 하나다.
+CHAINS=(
+  "BF-M4:./boot/check.sh"
+  "TF-M4:./terminal/check.sh"
+  "CP-M2:./config/check.sh"
+  "IP-M2:./input/check.sh"
+  "PM-M1:./power/check.sh"
+  "HD-M2:./device/check.sh"
+  "TR-M2:./render/check.sh"
+  "CM-M2:./copy/check.sh"
+)
+
+# 진입 검사는 **첫 부팅 전에** 여덟 개를 전부 훑는다. 하나라도 빠뜨렸으면
+# 게이트를 시작하지 않는다 — 한 체인에서 멈추지 않고 끝까지 훑는 것은
+# 고칠 자리를 한 번에 다 보여주기 위함이다.
+entry_failed=0
+for entry in "${CHAINS[@]}"; do
+  require_build_steps "${entry#*:}" || entry_failed=1
+done
+if [ "$entry_failed" -ne 0 ]; then
+  echo "TARS check FAIL: a chain would have run without building what it boots" >&2
+  exit 1
+fi
+
+# GL-M0: clean은 여기서 한 번만 부른다. 예전에는 run_chain이 회차마다 불렀고
+# 그것이 게이트 54분 중 약 45분을 만들었다(같은 산출물을 24번 빌드했다).
+#
+# 3회 반복이 잡는 것은 부팅과 게스트 입력의 flakiness이지 빌드 재현성이
+# 아니다 — 같은 소스를 같은 컨테이너에서 다시 빌드하는 것이라 1회차가 통과한
+# 것을 2·3회차가 실패시킬 경로가 사실상 없다. **반복의 목적을 부팅에 돌려주는
+# 변경이지 반복을 줄이는 변경이 아니다.**
+clean
+
+for entry in "${CHAINS[@]}"; do
+  run_chain "${entry%%:*}" "${entry#*:}"
+done
 
 echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
