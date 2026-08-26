@@ -1,4 +1,4 @@
-# HANDOFF: Copy Mode가 끝났다 — 다음 일은 **다음 서브프로젝트를 고르는 것**이다
+# HANDOFF: GL-M0이 끝났다 — 다음 일은 **GL-M1의 plan을 쓰는 것**이다
 
 ## 지금 어디인가
 
@@ -11,33 +11,45 @@ git status --short     # 비어 있어야 한다
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**Copy Mode 서브프로젝트가 2026-08-26에 닫혔다.** CM-M2가 마지막
-milestone이었고 여덟 체인 24회가 전부 통과했다. **진행 중인 서브프로젝트가
-없다** — 다음 세션의 첫 일은 아래 "이월 숙제"에서 다음 것을 고르고 design
-doc을 쓰는 것이다.
+**Gate Latency 서브프로젝트가 2026-08-26에 시작됐고 GL-M0이 끝났다.**
+`clean()`을 매 회차에서 게이트 시작 1회로 옮겨 **게이트가 54분 15초에서
+24분 09초가 됐다**(30분 06초, 55.5% 감소, 여덟 체인 3/3 통과).
 
-- design: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
-  (CM-M0·M1·M2의 실측 결과가 "milestone 구성" 절 아래 인용 블록 셋에 있다)
-- 끝난 plan 셋: `docs/superpowers/plans/2026-08-24-tars-copy-mode-cm-m0.md`,
-  `…-cm-m1.md`, `…-cm-m2.md`
-- 기억: `docs/decisions/project_copy_mode.md`에 서브프로젝트 전체가 정리돼 있다
+- design: `docs/superpowers/specs/2026-08-26-tars-gate-latency-design.md`
+  (GL-M0의 실측 결과가 "Milestone 구성" 절 아래 인용 블록에 있다)
+- 끝난 plan: `docs/superpowers/plans/2026-08-26-tars-gate-latency-gl-m0.md`
+- 기억: `docs/decisions/project_gate_latency.md`
 
 | | 내용 |
 |---|---|
-| ~~CM-M0~~ | ~~모드 진입·이탈, `hjkl`·방향키 이동, 커서 반전, 뷰포트 추종, `scrollToBottom` 억제, 새 체인 신설~~ |
-| ~~CM-M1~~ | ~~`v`/`V` 선택, 선택 렌더, `y` 복사, `Cmd+C` 별칭, 가지치기 방어~~ |
-| ~~CM-M2~~ | ~~`Cmd+V` 붙여넣기, 왕복 증명, 억제 분기 밟기~~ |
+| ~~GL-M0~~ | ~~`clean()`을 게이트 시작 1회로, 빌드 스텝 검사, 54분 → 24분~~ |
+| **GL-M1** | 증분 회차에 남은 비용 — `make_initrd.sh` 9초와 `kernel/build.sh` 13초 |
 
-## 다음 서브프로젝트 후보 — **1순위가 정해져 있다**
+## 다음 일: GL-M1의 plan을 쓴다
 
-**게이트 시간을 줄이는 일 둘을 한 서브프로젝트로 묶는 안을 검토할 것.** 둘 다
-같은 목표를 향하고, 따로 하면 게이트를 두 번 재야 한다.
+**design doc에 GL-M1의 범위가 이미 적혀 있고, 후보 둘의 원인까지 밝혀져 있다.**
+plan은 관례대로 이 시점에 새로 쓴다.
 
-1. **`init`을 `ReleaseSafe`로.** initrd 73.0MB → gzip 16.76MB이고 커널 부팅
-   1.12초 중 **0.573초가 이 압축 해제**다. `terminal`도 Debug 42MB다.
-2. **체인의 `sendkey` 사이 `sleep 0.3`을 줄이기.** CM-M0이 **0.05초 간격으로
-   80번을 보내도 하나도 안 떨어지는 것**을 실측했다. 여덟 체인 전부에 걸리는
-   변경이라 별도로 다뤄야 하고, **게이트 54분의 상당 부분이 이 `sleep`이다.**
+1. **`make_initrd.sh`의 9초.** 매번 73MB를 cpio로 묶고 gzip하는 값이라 증분으로
+   안 줄고 24회차면 3분 36초다. **`init`을 `ReleaseSafe`로 바꾸는 이월 숙제가
+   게이트 시간으로 돌아오는 유일한 자리가 여기다** — initrd가 작아지면 이
+   9초가 준다. 압축을 약하게 하는 방향은 BF 체인의 ISO 로딩과 맞바꾸는
+   것이고 전례가 있다(53MB에서는 아예 못 부팅했다). `strip`은 쓰지 않는다는
+   결정도 그대로 유효하다.
+2. **`kernel/build.sh`의 13초.** **원인이 밝혀졌다** — make는 mtime 기반인데
+   `cp .config build/.config`가 매 회차 타임스탬프를 갱신한다. 고칠 방향은
+   "내용이 다를 때만 복사"이지만, `.config`를 `olddefconfig`의 고정점으로
+   유지하는 규칙(`project_kernel_config`)과 어긋나지 않는지 먼저 따진다.
+
+**GL-M0이 판정한 것 둘 (다시 저울질하지 말 것).**
+
+- **`init`을 `ReleaseSafe`로 바꾸는 것은 그 자체로는 게이트 시간 안건이
+  아니다.** 돌려받는 것은 부팅당 0.573초(30회 = 17초)뿐인데 최적화 빌드는
+  컴파일이 느려 그 증가분이 24회차에 곱해진다. 값이 있는 자리는 위 1번뿐이다.
+- **`sleep 0.3` 줄이기는 side effect 우려로 미뤘다.** 약 5분 50초짜리이고
+  실측 근거도 있지만(아래 실측 3), 그 실측은 copy 체인의 방향키 연타에서
+  나온 것이라 셸이 줄을 편집하며 프롬프트를 다시 그리는 타이핑 구간이 같은
+  여유를 갖는지는 확인되지 않았다. 여덟 체인 전부에 걸린다.
 
 ## 게이트 현황
 
@@ -48,16 +60,35 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 54분 15초다**(2026-08-26).
+3/3, 부팅 30회 이상. **기준선은 24분 09초다**(2026-08-26 GL-M0 이후. 그 전에는
+54분 15초였다).
+
+**체인 목록은 이제 `CHAINS` 배열 하나에 있다**(`check.sh:146`). 진입 검사와
+실행이 같은 목록을 쓰므로 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 
 monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
 45460(TR) · 45461(CM)이고 **그다음은 45462가 비어 있다.**
 
+### 게이트는 첫 회차에만 clean하고 나머지 23회차는 증분이다 (GL-M0)
+
+`clean()`은 `run_chain` 안이 아니라 **게이트 시작에서 한 번만** 불린다
+(`check.sh:176`). 그래서 **회차 시간이 1회차와 2·3회차에서 크게 다른 것이
+정상이다** — `boot` 체인 실측이 131초 → 32초 → 31초였다.
+
+**빌드 스텝을 빠뜨린 체인은 진입 검사가 막는다.** `check.sh`가 첫 부팅 전에
+여덟 스크립트를 훑어 `kernel/build.sh` · `init`의 `zig build` ·
+`terminal/prepare.sh` · `kernel/make_initrd.sh` 넷을 부르는지 본다. **빌드
+스텝이 새로 생기면 `BUILD_STEPS` 목록도 함께 고쳐야 한다**(`check.sh:35`) —
+로그 문구가 두 곳에 중복되는 것과 같은 병이다.
+
 ### 이 게이트의 시간은 ±3분 수준의 잡음을 가진다
 
-세 번의 기준선이 51분 20초(CM-M0) → 54분 40초(CM-M1) → 54분 15초(CM-M2)인데,
+CM 시절 세 기준선이 51분 20초(CM-M0) → 54분 40초(CM-M1) → 54분 15초(CM-M2)인데,
 **증가분을 갈랐다고 말할 수 있었던 적이 없다.** CM-M1은 3분 20초 중 1분만,
 CM-M2는 코드가 분명히 1분 10초를 더했는데도 전체가 25초 **줄었다.**
+
+**GL-M0의 30분 06초는 그 잡음의 열 배라 갈렸다.** 절약을 주장하려면 이 정도
+크기여야 한다는 기준으로 삼는다.
 
 **값이 기준선에서 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다.**
 TR-M2를 끝내며 처음 잰 값이 6시간 12분이었고(8배), 판정은 멀쩡히 3/3이었으며
@@ -71,7 +102,7 @@ TR-M2 때 Chrome을 짚을 수 있었던 것은 **assertion에 앱 이름이 찍
 때문**이다. 그런 이름이 없으면 이 로그로는 부하를 못 가른다.
 
 - **`Amphetamine`과 `caffeinate`는 부하가 아니다.** 둘 다 수면 방지 도구이고,
-  54분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
+  24분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
   **`caffeinate -i -t 300`은 Claude Code가 스스로 띄운다** — 이것을 배경
   부하의 증거로 읽으면 안 된다.
 - **`coreaudiod` assertion**(`com.apple.audio.contextNNN`)은 오디오 세션이
@@ -152,8 +183,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 전부 인라인으로 끝났고**(가장 큰 것이 `copy/check.sh`의 순삽입 130줄),
 편집 뒤 `git diff --stat`과 `지운 줄` 세기로 같은 확인을 했다.
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 54분이라 Bash
-도구의 10분 타임아웃을 넘는다 — **`run_in_background`로 돌려야 한다.**
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 GL-M0 이후
+24분이지만 여전히 Bash 도구의 10분 타임아웃을 넘는다 —
+**`run_in_background`로 돌려야 한다.**
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
@@ -197,6 +229,16 @@ Zig가 참조되지 않는 함수를 분석하지 않아서, `readKeys`가 쓰�
 왼쪽 위로 옮긴다. 그래서 증상은 "선택이 사라진다"가 아니라 **"조용히 엉뚱한
 자리를 복사한다"**이고, `selection == null`로는 감지할 수 없다.
 
+**10. Zig는 `touch`를 무시하고 make는 따른다.** 소스를 touch만 하고 `zig
+build`를 돌리면 산출물 mtime이 갱신되지 않는다(내용 해시로 판단한다). 반대로
+`kernel/.config`를 touch하면 make가 bzImage를 다시 만든다. **그래서 산출물의
+신선도를 mtime으로 판정하려는 시도는 거짓 실패를 피할 수 없다** — 내용이 같고
+mtime만 새것인 상황(`git checkout`, 편집했다 되돌리기)이 흔하기 때문이다.
+GL-M0이 이것 때문에 최초 설계를 버렸다(`project_gate_latency`).
+
+**11. 게이트 시간의 8할은 빌드였다.** 부팅은 2%가 안 되고 `type_keys`의
+`sleep 0.3`은 11%다. 단계별 실측값은 `project_gate_latency`에 표로 있다.
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - **`terminal: key>` 줄로 붙여넣기를 감지하기** — 붙여넣기는 `pty.write`를 직접
@@ -228,8 +270,8 @@ Zig가 참조되지 않는 함수를 분석하지 않아서, `readKeys`가 쓰�
   명령은 한 번의 `docker run` 안에서 끝내야 한다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 54분이라 10분
-  상한을 넘는다. `run_in_background`로 돌린다.
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — GL-M0 이후에도
+  24분이라 10분 상한을 넘는다. `run_in_background`로 돌린다.
 - **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다. 히스토리를 만질
   때는 **먼저 태그를 찍고 한 명령씩 나눠 돌린 뒤,
   `git rev-parse HEAD^{tree}`로 전후 트리가 같은지 확인한다.**
@@ -272,8 +314,12 @@ terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고, 그것�
 
 ## 이월 숙제
 
-**위 "다음 서브프로젝트 후보"의 둘이 1순위다.** 나머지는 순서가 없다.
+**진행 중인 것은 GL-M1이고 위에 따로 적었다.** 아래는 순서가 없다.
 
+- [ ] **`sleep 0.3` 줄이기.** 약 5분 50초짜리이고 실측 3이 근거지만, side
+      effect 우려로 GL 범위에서 뺐다. 다시 집을 때는 **타이핑 구간(셸이 줄을
+      편집하며 프롬프트를 다시 그리는 자리)이 방향키 연타와 같은 여유를
+      갖는지**를 먼저 확인한다.
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다.**
@@ -285,9 +331,6 @@ terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고, 그것�
 - [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. **빌드해서 돌려 본
       적이 없다.**
-- [ ] **`clean()`에서 커널을 빼는 논의.** 게이트 시간의 가장 큰 단일 항목이다
-      (`project_kernel_config`). 정책 변경이므로 별도로 다룬다. **위 1순위와
-      묶일 수 있다.**
 - [ ] **`terminal/vendor/fonts/Hanme_8x4x4.ttf`가 남아 있다.** `vendor/`가
       gitignore라 저장소에는 없다. 지워도 게이트는 안 흔들린다.
 - [ ] **copy mode의 단어 이동(`w`/`b`)과 검색(`/`).** 라이브러리에
@@ -302,6 +345,9 @@ terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고, 그것�
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~`clean()`에서 커널을 빼는 논의~~ — **GL-M0이 했다.** 커널만 빼는 것보다
+  넓게 갔다: `clean()` 자체를 게이트 시작 1회로 옮겨 커널·Zig·initrd를 전부
+  증분으로 만들었다. 54분 15초 → 24분 09초.
 - ~~`xterm-256color` terminfo를 initrd에 넣기~~ — TR-M2에서 했다.
 - ~~게스트 안에서 Zig 에러 트레이스 읽기~~ — **이미 되고 있었다.** BF 게이트
   로그에 `terminal/src/drm.zig:241:17`처럼 파일명과 줄 번호가 그대로 찍힌다.
@@ -338,13 +384,16 @@ terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고, 그것�
   CM-M2의 클립보드 하나. `:471` `pruned` · `:512~` CM-M2.
 - `copy/check.sh` — 558줄. 검사 열셋. `:149` `scroll_field` · `:161`
   `screen_count` · `:420~` 검사 10~13(왕복과 억제).
-- `check.sh:109` — `run_chain "CM-M2" ./copy/check.sh`.
+- `check.sh` — GL-M0이 셋을 더했다. `:35` `BUILD_STEPS`(**빌드 스텝이 새로
+  생기면 여기도 고친다**) · `:42` `require_build_steps` · `:146` `CHAINS`
+  배열(체인을 더하고 빼는 자리) · `:160` 진입 검사 · `:176` **`clean` 호출
+  하나**(되돌리려면 이 한 줄을 `run_chain` 안으로 옮긴다).
 - `terminal/src/drm.zig:128`·`:138` — `setPixel`·`getPixel`. **범위 검사가
   없다.** 고치지 않고 호출부에서 막는다.
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.
 
 **기억.** `MEMORY.md`(색인) + `docs/decisions/`(본문). 새 세션은 협업 방식
-feedback 셋과 `project_copy_mode`, `project_input_policy`,
+feedback 셋과 `project_gate_latency`, `project_copy_mode`, `project_input_policy`,
 `project_terminal_rendering`, `project_guest_environment`,
 `project_gate_chain_composition`, `project_build_host_arch`,
 `project_kernel_config`, `project_zig_c_uapi_rule`을 먼저 읽을 것.
