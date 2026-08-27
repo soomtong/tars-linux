@@ -15,6 +15,7 @@
 - [Execution scope](docs/decisions/feedback_execution_scope.md) — 빌드·QEMU·게이트 명령은 Claude가 직접 실행하고(2026-08-22 변경), 구현 파일 편집만 사용자에게 남긴다
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 중 기술 선택지를 계속 묻지 말고 추천안으로 정해 진행한다
 - [Push policy](docs/decisions/feedback_push_policy.md) — push는 묻지 말고 필요할 때 하고, 미푸시 커밋 수를 보고하지 않는다
+- [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유적 표현을 일반 어휘 자리에 쓰지 않는다. 평범한 한국어가 어색하면 영어를 섞어도 된다. 특히 제목과 첫 문장.
 
 ## 사용자 (user)
 

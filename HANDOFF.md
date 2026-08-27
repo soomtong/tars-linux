@@ -570,7 +570,9 @@ docker run --rm -v "$PWD":/workspace \
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.
 
 **기억.** `MEMORY.md`(색인) + `docs/decisions/`(본문). 새 세션은 협업 방식
-feedback 셋과 **`project_copy_navigation`**, `project_copy_mode`,
+feedback 셋과 **`feedback_plain_korean`(글쓰기 규칙 — 비유적 표현을 일반 어휘
+자리에 쓰지 않는다. 평범한 한국어가 어색하면 영어를 섞는다)**,
+**`project_copy_navigation`**, `project_copy_mode`,
 `project_gate_latency`, `project_input_policy`, `project_terminal_rendering`,
 `project_guest_environment`, `project_gate_chain_composition`,
 `project_build_host_arch`, `project_kernel_config`, `project_zig_c_uapi_rule`을
