@@ -381,6 +381,153 @@ pub const Screen = struct {
         try self.copyApply(sel.start(), cursor);
     }
 
+    /// 단어 경계로 치는 코드포인트.
+    ///
+    /// **값은 ghostty 자신의 검사가 쓰는 기본값과 같다**(`Screen.zig:9800`).
+    /// 라이브러리는 이 목록을 설정에서 받도록 되어 있는데
+    /// (`Surface.zig:1217`의 `selection_word_chars`) 우리에게는 설정이 없으므로
+    /// 상수로 둔다. `/config/tars.conf`로 뺄 수 있는 자리이지만 바꾸고 싶어 한
+    /// 사람이 없다 — 필요해지면 그때 뺀다.
+    const WORD_BOUNDARY = [_]u21{
+        0,   ' ', '\t', '\'', '"',
+        '│',
+        '`', '|', ':',  ';',  ',',
+        '(', ')', '[',  ']',  '{',
+        '}', '<', '>',  '$',
+    };
+
+    /// 단어 이동의 방향. `w`가 next, `b`가 prev다.
+    pub const WordDir = enum { next, prev };
+
+    /// 그 자리에 글자가 쓰였는가. **한 번도 안 쓰인 셀과 공백은 다르다** —
+    /// `"alpha"` 뒤의 공백은 쓰인 셀이고, 줄 끝의 남은 칸은 아니다.
+    /// `selectWord`가 후자에서 null을 주므로(plan 확정 사실 3) 우리도 그
+    /// 경계를 같은 기준으로 본다.
+    fn written(pin: ghostty_vt.Pin) bool {
+        return pin.rowAndCell().cell.hasText();
+    }
+
+    /// 그 자리가 단어 경계인가. **쓰이지 않은 셀도 경계로 친다.**
+    fn boundaryAt(pin: ghostty_vt.Pin) bool {
+        const cell = pin.rowAndCell().cell;
+        if (!cell.hasText()) return true;
+        return std.mem.indexOfScalar(
+            u21,
+            &WORD_BOUNDARY,
+            cell.content.codepoint.data,
+        ) != null;
+    }
+
+    /// 두 pin이 같은 자리인가. `Pin`은 `{ node, y, x }`라 셋을 본다.
+    fn samePin(a: ghostty_vt.Pin, b: ghostty_vt.Pin) bool {
+        return a.node == b.node and a.y == b.y and a.x == b.x;
+    }
+
+    /// `w`/`b`. **커서를 단어 단위로 옮긴다.**
+    ///
+    /// **라이브러리가 세는 "단어"와 vim의 `w`는 다르다**(design 결정 3).
+    /// `selectWord`는 공백 덩어리도 한 단어로 세므로(`"ABC  DEF"`가 셋),
+    /// 공백에 내려앉으면 한 번 더 건너뛰는 일을 우리가 한다. **경계 판정이라는
+    /// 어려운 부분은 끝까지 라이브러리에 남는다** — 우리가 정하는 것은 "어느
+    /// 방향으로 몇 번 부르는가"뿐이다.
+    ///
+    /// 쓰이지 않은 자리에 닿으면 **움직이지 않는다**(CN-M0 plan 결정 1).
+    /// vim은 다음 줄의 첫 단어로 가지만, 줄 사이 이동은 `j`/`k`가 이미 한다.
+    pub fn copyMoveWord(self: *Screen, dir: WordDir) !void {
+        if (self.copy_cursor == null) return;
+        const s = self.term.screens.active;
+        const from = self.copyPin() orelse return;
+
+        const target = switch (dir) {
+            .next => wordNext(s, from),
+            .prev => wordPrev(s, from),
+        } orelse return;
+
+        self.copyPlace(target);
+
+        // 선택 중이면 커서를 따라 넓힌다. **`copyMove`와 같은 문을 통과한다**
+        // (design 결정 11) — 이동 수단마다 선택 갱신을 따로 짜면 그중 하나만
+        // 어긋나도 "어떤 키로 움직였느냐에 따라 복사되는 글자가 다르다"가 된다.
+        if (self.copy_kind == null) return;
+        const sel = s.selection orelse return;
+        const cursor = self.copyPin() orelse return;
+        try self.copyApply(sel.start(), cursor);
+    }
+
+    /// 다음 단어의 첫 글자. 갈 곳이 없으면 null.
+    ///
+    /// **두 번까지만 건너뛴다.** 지금 단어에서 한 번, 그것이 공백 덩어리면 한
+    /// 번 더다. 세 번째는 있을 수 없다 — 경계 문자들이 연달아 오면 라이브러리가
+    /// 그것을 **한 덩어리로** 묶기 때문이다(`expect_boundary` 로직).
+    fn wordNext(s: *ghostty_vt.Screen, from: ghostty_vt.Pin) ?ghostty_vt.Pin {
+        var pin = from;
+        var hop: u8 = 0;
+        while (hop < 2) : (hop += 1) {
+            const word = s.selectWord(pin, &WORD_BOUNDARY) orelse return null;
+            pin = word.end().rightWrap(1) orelse return null;
+            if (!written(pin)) return null;
+            if (!boundaryAt(pin)) return pin;
+        }
+        return pin;
+    }
+
+    /// 이전 단어의 첫 글자. 갈 곳이 없으면 null.
+    ///
+    /// **커서가 단어 중간이면 그 단어의 시작으로 간다**(vim과 같다,
+    /// CN-M0 plan 결정 2). 그러지 않으면 `w`로 간 자리에서 `b`를 눌러도 원래
+    /// 자리로 안 돌아온다.
+    fn wordPrev(s: *ghostty_vt.Screen, from: ghostty_vt.Pin) ?ghostty_vt.Pin {
+        if (s.selectWord(from, &WORD_BOUNDARY)) |word| {
+            const st = word.start();
+            if (!samePin(st, from)) return st;
+        }
+
+        var pin = from.leftWrap(1) orelse return null;
+        var hop: u8 = 0;
+        while (hop < 2) : (hop += 1) {
+            if (!written(pin)) return null;
+            const word = s.selectWord(pin, &WORD_BOUNDARY) orelse return null;
+            if (!boundaryAt(pin)) return word.start();
+            pin = word.start().leftWrap(1) orelse return null;
+        }
+        return pin;
+    }
+
+    /// 목표 pin에 커서를 놓는다. **화면 밖이면 뷰포트를 옮긴다.**
+    ///
+    /// `pointFromPin(.viewport, …)`이 뷰포트 **위쪽** 밖은 null로 알려주지만
+    /// **아래쪽 밖은 알려주지 않는다** — 노드를 계속 따라가며 y를 더해서
+    /// `rows`보다 큰 값을 그냥 돌려준다(`PageList.zig:5614`). 그래서 아래쪽은
+    /// 우리가 가른다. **이것을 빠뜨리면 커서가 화면 밖 좌표를 갖고, 증상은
+    /// 크래시가 아니라 "커서가 안 보인다"가 된다.**
+    ///
+    /// 뷰포트를 미는 두 경로가 모두 `Screen.scroll`을 통과하는 것에 뜻이 있다.
+    /// `pages.scroll`을 직접 부르면 `assertIntegrity`와 kitty dirty 표시를
+    /// 건너뛴다(`Screen.zig:1576`). **`Terminal.ScrollViewport`에는 `.pin`이
+    /// 없어서**(`Terminal.zig:2504`) 기존 `scrollByRows`로는 위쪽을 못 다룬다.
+    fn copyPlace(self: *Screen, pin: ghostty_vt.Pin) void {
+        const s = self.term.screens.active;
+        const rows: u32 = s.pages.rows;
+
+        if (s.pages.pointFromPin(.viewport, pin)) |pt| {
+            const co = pt.coord();
+            if (co.y < rows) {
+                self.copy_cursor = .{ .x = @intCast(co.x), .y = @intCast(co.y) };
+                return;
+            }
+            // 뷰포트 **아래**다. 최소한만 민다 — 목표가 맨 아랫줄이 된다.
+            s.scroll(.{ .delta_row = @intCast(co.y - rows + 1) });
+        } else {
+            // 뷰포트 **위**다. 목표를 화면 맨 윗줄로 올린다.
+            s.scroll(.{ .pin = pin });
+        }
+
+        const pt = s.pages.pointFromPin(.viewport, pin) orelse return;
+        const co = pt.coord();
+        if (co.y >= rows) return;
+        self.copy_cursor = .{ .x = @intCast(co.x), .y = @intCast(co.y) };
+    }
+
     /// 선택 방식. `v`가 char, `V`가 line이다.
     pub const SelectKind = enum { char, line };
 

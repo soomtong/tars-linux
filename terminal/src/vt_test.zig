@@ -535,5 +535,128 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("vt_test: copy selection OK\n", .{});
 
+    // ── CN-M0: 단어 단위 이동 ───────────────────────────────────────────
+    //
+    // 화면을 따로 만든다. 위의 cm·pruned는 검사가 여럿 지나간 자리라 몇 번째
+    // 줄에 무엇이 있는지가 흐려진다(CM-M1이 같은 이유로 cm을 새로 만들었다).
+    //
+    // 20칸 화면에 "alpha beta gamma"(16자)를 넣으면 자리가 이렇게 된다.
+    //
+    //   col:  0....4 5 6...9 10 11...15 16......19
+    //         alpha  _ beta  _  gamma   (쓰인 적 없음)
+    //
+    // **공백 둘(col 5, col 10)이 이 검사의 핵심이다.** 라이브러리는 그것도
+    // 한 단어로 세므로(plan의 확정 사실 2), 우리 w가 한 번 더 건너뛰지
+    // 않으면 아래 첫 단언에서 6이 아니라 5가 나온다.
+    const wm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer wm.deinit();
+    wm.feed("alpha beta gamma\r\n");
+    // 한 프레임을 먼저 그린다 — copyEnter가 셸 커서 자리를 RenderState에서
+    // 읽는다(CM-M1이 배운 것).
+    _ = try wm.cells(&buf);
+    wm.copyEnter();
+    // 셸 커서는 다음 줄(row 1)에 있다. 한 번 올라가면 글자가 있는 줄이다.
+    try wm.copyMove(0, -1);
+
+    // 검사 11. `w`가 **다음 단어의 첫 글자**로 간다.
+    try wm.copyMoveWord(.next);
+    var wc = wm.copyCursor() orelse return error.NoCopyCursor;
+    if (wc.y != 0 or wc.x != 6) {
+        std.debug.print(
+            "FAIL: w landed at row={d} col={d} (expected row=0 col=6, the 'b' of beta)\n",
+            .{ wc.y, wc.x },
+        );
+        return error.WordNextWrong;
+    }
+    try wm.copyMoveWord(.next);
+    wc = wm.copyCursor().?;
+    if (wc.x != 11) {
+        std.debug.print(
+            "FAIL: the second w landed at col {d} (expected 11, the 'g' of gamma)\n",
+            .{wc.x},
+        );
+        return error.WordNextWrong;
+    }
+    std.debug.print("vt_test: w가 공백 덩어리를 건너뛴다 OK (0 -> 6 -> 11)\n", .{});
+
+    // 검사 12. **쓰이지 않은 자리에 닿으면 움직이지 않는다**(plan 결정 1).
+    // gamma가 마지막 단어이고 col 16부터는 한 번도 쓰인 적이 없다.
+    //
+    // **이 검사가 없으면 "빈 셀을 한 칸씩 기어간다"도 통과한다** — 그 구현은
+    // w가 l과 같아지는 구간을 만든다.
+    try wm.copyMoveWord(.next);
+    wc = wm.copyCursor().?;
+    if (wc.x != 11) {
+        std.debug.print(
+            "FAIL: w walked into the unwritten area (col {d}, expected to stay at 11)\n",
+            .{wc.x},
+        );
+        return error.WordNextRanOff;
+    }
+    std.debug.print("vt_test: w가 쓰이지 않은 자리에서 멈춘다 OK\n", .{});
+
+    // 검사 13. `b`가 `w`를 정확히 되돌린다.
+    try wm.copyMoveWord(.prev);
+    wc = wm.copyCursor().?;
+    if (wc.x != 6) {
+        std.debug.print("FAIL: b landed at col {d} (expected 6)\n", .{wc.x});
+        return error.WordPrevWrong;
+    }
+    try wm.copyMoveWord(.prev);
+    wc = wm.copyCursor().?;
+    if (wc.x != 0) {
+        std.debug.print("FAIL: the second b landed at col {d} (expected 0)\n", .{wc.x});
+        return error.WordPrevWrong;
+    }
+    std.debug.print("vt_test: b가 w를 되돌린다 OK (11 -> 6 -> 0)\n", .{});
+
+    // 검사 14. 줄 맨 앞에서 `b`를 더 눌러도 위로 안 샌다. 이 화면의 row 0
+    // 위에는 아무것도 없다.
+    try wm.copyMoveWord(.prev);
+    wc = wm.copyCursor().?;
+    if (wc.y != 0 or wc.x != 0) {
+        std.debug.print(
+            "FAIL: b escaped the top of the screen to row={d} col={d}\n",
+            .{ wc.y, wc.x },
+        );
+        return error.WordPrevRanOff;
+    }
+    std.debug.print("vt_test: b가 화면 위로 안 샌다 OK\n", .{});
+
+    // 검사 15. **단어 중간에서 b는 그 단어의 시작으로 간다**(plan 결정 2).
+    //
+    // col 0에서 오른쪽으로 여덟 칸 = beta의 't'(col 8). 거기서 b는 col 6이다.
+    // **이 검사가 없으면 "언제나 이전 단어로 간다"도 통과하고**, 그러면 w로
+    // 간 자리에서 b를 눌러도 원래 자리로 안 돌아온다.
+    var step: usize = 0;
+    while (step < 8) : (step += 1) try wm.copyMove(1, 0);
+    try wm.copyMoveWord(.prev);
+    wc = wm.copyCursor().?;
+    if (wc.x != 6) {
+        std.debug.print(
+            "FAIL: b from the middle of 'beta' landed at col {d} (expected 6)\n",
+            .{wc.x},
+        );
+        return error.WordPrevMidWrong;
+    }
+    std.debug.print("vt_test: 단어 중간의 b가 그 단어 앞으로 간다 OK\n", .{});
+
+    // 검사 16. **선택 중이면 함께 넓힌다**(design 결정 11).
+    //
+    // col 6('b')에서 v로 잡고 w를 누르면 커서가 col 11로 가고, 선택은
+    // col 6..11이 된다. **끝 셀이 포함되므로 여섯 자다** — "beta g".
+    // 게이트는 이 왕복을 안 본다(plan 결정 3). 여기가 유일한 자리다.
+    try wm.copySelect(.char);
+    try wm.copyMoveWord(.next);
+    const grabbed = (try wm.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, grabbed, "beta g")) {
+        std.debug.print(
+            "FAIL: v then w yanked '{s}' (expected 'beta g')\n",
+            .{grabbed},
+        );
+        return error.WordSelectionWrong;
+    }
+    std.debug.print("vt_test: 선택이 w를 따라 넓어진다 OK ('{s}')\n", .{grabbed});
+
     std.debug.print("PASS\n", .{});
 }
