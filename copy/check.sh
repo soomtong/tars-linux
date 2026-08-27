@@ -635,6 +635,136 @@ echo "word motions moved the cursor 0 -> 6 -> 11 -> 6 without leaking to the PTY
 type_keys esc
 sleep 1
 
+# ── 검사 15: 스크롤백 검색 (CN-M1) ─────────────────────────────────────
+#
+# **design이 정한 완료 조건을 그대로 밟는다**: `/`로 스크롤백 위쪽의 글자를
+# 찾아 커서가 그리로 옮겨진 것을 보고, 그 자리에서 V·y로 잡은 줄이 clip>에
+# 나온다.
+#
+# 표적을 둘 만든다. 하나면 n이 "옮겼다"와 "감겼다"를 못 가른다.
+#
+# **needle이 소문자인 것은 QEMU의 제약이다.** `sendkey`가 받는 이름은 QKeyCode
+# 이고 그것들이 전부 소문자다 — `sendkey F`는 없는 이름이라 QEMU가 조용히
+# 버린다(체인은 monitor의 응답을 안 읽으므로 에러도 안 보인다). 대문자를
+# 치려면 `shift-f`처럼 앞에 붙여야 하고, 그것은 여섯 글자에 여섯 번이다.
+echo "=== planting two search targets ==="
+type_keys e c h o spc f i n d m e ret
+sleep 2
+type_keys s e q spc 1 0 0 ret
+sleep 4
+type_keys e c h o spc f i n d m e ret
+sleep 2
+type_keys s e q spc 1 0 0 ret
+sleep 4
+
+# 표적이 스크롤백으로 밀려 **화면에서 사라졌는지** 확인한다. 화면에 남아
+# 있으면 이 검사는 "검색"이 아니라 "화면 안에서 커서 옮기기"가 된다.
+#
+# **이 검사 하나만으로는 "밀려났다"와 "애초에 안 쳐졌다"를 못 가른다.** 처음
+# 돌렸을 때 대문자가 통째로 버려져 `echo `만 쳐졌는데도 여기를 통과했다.
+# 아래 `needle=` 검사가 그것을 잡는다.
+if [ "$(screen_count 'findme')" -ne 0 ]; then
+  report_failure "findme is still on screen; the search would not exercise scrollback"
+fi
+
+echo "=== searching backwards for findme ==="
+type_keys meta_l-shift-c
+sleep 2
+
+FIND_BEFORE="$(key_lines)"
+
+# `/` 를 열고 needle을 친다. **프롬프트가 화면에 나타나는지는 find> 줄로 본다** —
+# 오버레이는 cells()에 안 섞이므로 screen> 에는 영영 안 나온다(design 결정 7).
+type_keys slash
+sleep 1
+if ! grep -aq 'terminal: find> open' "$LOG"; then
+  report_failure "/ did not open the find prompt"
+fi
+
+type_keys f i n d m e
+sleep 1
+if ! grep -aq 'terminal: find> type needle=findme len=6' "$LOG"; then
+  echo "--- find> lines so far ---"
+  grep -a 'terminal: find>' "$LOG" | tail -n 8
+  report_failure "the prompt did not accumulate 'findme'"
+fi
+
+type_keys ret
+sleep 3
+
+SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+# **넷인 것에 산수가 있다.** `echo findme` 한 번이 스크롤백에 두 줄을 남긴다 —
+# 셸이 되비춘 명령줄 `@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
+# 둘이므로 2 × 2 = 4다. **plan은 이것을 2로 적었고 그것이 틀렸다.**
+#
+# 넷이어도 검사의 뜻은 그대로다: `/`는 가장 최근 매치인 표적 2의 **출력줄**로
+# 가고, 그 줄은 글자가 `findme`뿐이라 아래의 줄 단위 yank가 정확히 여섯 자를
+# 준다. `n`은 그 위의 명령줄로 올라간다.
+case "$SUBMIT" in
+  *"matches=4"*) ;;
+  *) report_failure "expected four matches, got: ${SUBMIT}" ;;
+esac
+case "$SUBMIT" in
+  *"moved=true"*) ;;
+  *) report_failure "the search found matches but did not move the cursor: ${SUBMIT}" ;;
+esac
+# design 결정 5의 실측이다. **판정하지 않고 기록만 한다** — 값을 놓고 무엇을
+# 할지는 사람이 정한다.
+echo "search over the full scrollback: ${SUBMIT}"
+
+# **판정(음성).** 프롬프트에 친 여섯 글자와 `/`·Enter가 PTY로 안 나갔다.
+# 이것이 이 기능의 가장 흔한 실패 방식이다 — 검색어가 셸의 입력줄에 도착한다.
+FIND_AFTER="$(key_lines)"
+if [ "$FIND_AFTER" -ne "$FIND_BEFORE" ]; then
+  report_failure "the find prompt leaked to the PTY (key> ${FIND_BEFORE} -> ${FIND_AFTER})"
+fi
+
+# **판정.** 커서가 선 줄을 줄 단위로 잡아 복사하면 findme가 나온다.
+#
+# 여섯 자가 나오는 것이 곧 "출력줄에 섰다"의 증거다. 명령줄에 섰다면
+# `@(none) ~# echo findme`가 통째로 나와 len이 훨씬 크다.
+type_keys shift-v
+sleep 1
+type_keys y
+sleep 2
+if ! grep -aq 'terminal: clip> len=6 text=findme' "$LOG"; then
+  echo "--- clip> lines ---"
+  grep -a 'terminal: clip>' "$LOG" | tail -n 5
+  report_failure "the yanked line was not 'findme'"
+fi
+echo "the search reached scrollback and the yanked line was findme"
+
+# **판정.** n이 더 위의 매치로 간다. y가 모드를 닫았으므로 다시 들어간다 —
+# 그런데 copyExit이 검색 상태를 버렸으므로(design 결정 10) 검색부터 다시 한다.
+# **그 버림이 곧 이 판정의 대상이다.**
+echo "=== n walks to the older match ==="
+type_keys meta_l-shift-c
+sleep 2
+type_keys slash f i n d m e ret
+sleep 3
+
+# **절대 행으로 센다.** `copy> row=`은 뷰포트 안의 행이고, 매치가 화면 밖이면
+# `copyPlace`가 그 pin을 뷰포트의 맨 위로 올리므로(CN-M0) 언제나 0이다 —
+# 그 값만 찍으면 "0에서 0으로 갔다"가 되어 안 움직인 것처럼 읽힌다.
+# `scroll> offset`을 더하면 스크롤백 전체에서의 자리가 된다.
+ROW_FIRST=$(( $(scroll_field offset) + $(copy_value row) ))
+type_keys n
+sleep 2
+if ! grep -aq 'terminal: find> next moved=true' "$LOG"; then
+  grep -a 'terminal: find> next' "$LOG" | tail -n 3
+  report_failure "n did not move to another match"
+fi
+ROW_SECOND=$(( $(scroll_field offset) + $(copy_value row) ))
+# **판정.** n은 과거 방향으로 간다(design 결정 4). 같거나 커지면 방향이
+# 뒤집혔거나 안 움직인 것이고, moved=true만으로는 그것을 못 가른다.
+if [ "$ROW_SECOND" -ge "$ROW_FIRST" ]; then
+  report_failure "n went down or stayed (row ${ROW_FIRST} -> ${ROW_SECOND}), expected up"
+fi
+echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND})"
+
+type_keys esc
+sleep 1
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.

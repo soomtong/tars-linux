@@ -1,7 +1,7 @@
 # TARS Copy Navigation — Design
 
 **Date:** 2026-08-26
-**Status:** 설계 확정. **CN-M0 완료(2026-08-27)**. CN-M1 미착수
+**Status:** 설계 확정. **CN-M0·CN-M1 완료(2026-08-27)**. Copy Navigation 종료
 
 ## 한 줄 요약
 

@@ -1,155 +1,115 @@
-# HANDOFF: CN-M1 plan을 작성했다 — 다음 일은 **CN-M1 Task 1 Step 1**이다
+# HANDOFF: Copy Navigation이 끝났다 — **진행 중인 서브프로젝트가 없다**
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **CN-M0(단어 이동 `w`/`b`)이 2026-08-27에
-끝났고, 같은 날 CN-M1 plan까지 작성했다.** 코드는 CN-M0에서 멈춰 있다 —
-**CN-M1은 아직 한 줄도 안 썼다.**
+`main`, working tree 깨끗함. **CN-M0(단어 이동 `w`/`b`)과 CN-M1(검색 `/`·`n`·`N`)이
+2026-08-27에 끝나 Copy Navigation이 닫혔다.** 게이트는 여덟 체인 3/3이고
+**21분 38초**다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -7
-#   Record the plain Korean writing rule   ← 글쓰기 규칙(코드 아님)
-#   Plan CN-M1: scrollback search with a prompt overlay
-#   Close out CN-M0
-#   Check word motion in the copy chain
-#   Bind w and b to word motion in copy mode
-#   Move the copy cursor by words
-#   Hand off at the start of Copy Navigation
+git log --oneline -8
+#   Close out CN-M1
+#   Bind n and N to walk the search matches
+#   Run the search and move the copy cursor to a match
+#   Draw the search prompt over the last row
+#   Take search text in a copy mode prompt
+#   Turn the copy command into a tagged union
+#   Hand off at the start of CN-M1
+#   Record the plain Korean writing rule
 ```
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-| | 내용 | 상태 |
-|---|---|---|
-| CN-M0 | 단어 이동 `w`/`b` | **완료(2026-08-27)** |
-| CN-M1 | 검색 `/`·`n`·`N`과 프롬프트 오버레이 | **Task 1 Step 1 대기** |
+**다음 세션이 할 첫 일: 무엇을 할지 사용자와 정한다.** 후보는 아래 "이월 숙제"에
+있고 순서는 없다. **사용자가 "네가 정해"라고 하면 되묻지 말고 고른 뒤 진행한다.**
 
 - design: `docs/superpowers/specs/2026-08-26-tars-copy-navigation-design.md`
-  (결정 열하나 + 위험 셋. **승인됐으므로 다시 논의하지 않는다.** `Status:`
-  줄은 CN-M0 완료로 갱신해 두었다.)
+  (`Status:`를 종료로 갱신해 두었다)
 - CN-M0 plan: `docs/superpowers/plans/2026-08-26-tars-copy-navigation-cn-m0.md`
-- **CN-M1 plan: `docs/superpowers/plans/2026-08-27-tars-copy-navigation-cn-m1.md`**
-  (2026-08-27 작성. Task 여섯이고 각 Step에 넣을 코드가 그대로 들어 있다.)
-- **기억: `docs/decisions/project_copy_navigation.md`** (CN-M0이 만들었다.
-  CM과 다른 사실 셋이 거기 있다.)
+- CN-M1 plan: `docs/superpowers/plans/2026-08-27-tars-copy-navigation-cn-m1.md`
+- **기억: `docs/decisions/project_copy_navigation.md`**(CN-M0·CN-M1이 얻은 사실
+  전부가 거기 있다)
 
-**다음 세션이 할 첫 일:** CN-M1 plan의 Task 1 Step 1을 사용자에게 제시한다
-(`input.zig`의 `Copy`를 `enum`에서 `union(enum)`으로). **Task 1은 동작을 하나도
-안 바꾼다** — variant도 안 더한다. 그 뒤 `zig build && zig build test`를 돌려
-**`input_test.zig`의 `cmd == want` 하나만 깨지는 것**을 본다. union에는 `==`가
-없기 때문이고, 그것이 이 단계에서 기대하는 빨간불이다.
+## copy mode가 지금 할 수 있는 것
 
-**Task 여섯의 순서에 뜻이 있다.** 1이 타입의 형태만 바꾸고, 2가 입력 경로를
-만들어 로그까지 찍고, 3이 그것을 화면에 그리고, 4가 검색을 돌리고, 5가 `n`/`N`을
-키에 잇고, 6이 게이트와 문서다. **각 Task 끝은 커밋 지점이고, 그 시점에
-무언가가 실제로 동작한다.**
-
-| Task | 끝나면 무엇이 되는가 |
+| 키 | 무엇 |
 |---|---|
-| 1 | `Copy`가 `union(enum)`이 된다. **동작은 하나도 안 바뀐다** |
-| 2 | `/abc`를 치면 로그에 `find> type needle=abc`가 찍힌다(화면엔 아직 안 보인다) |
-| 3 | 그 프롬프트가 화면 마지막 줄에 **보인다** |
-| 4 | Enter가 검색을 돌려 커서가 매치로 **간다** |
-| 5 | `n`/`N`이 매치 사이를 왕복한다 |
-| 6 | 게이트가 그것을 게스트에서 보고, 문서가 갱신된다 |
+| `Cmd+Shift+C` | 진입 · `Esc` | 나가기 |
+| `h`·`j`·`k`·`l`, 방향키 | 한 칸 이동 |
+| `w`·`b` | 단어 이동(CN-M0) |
+| `/` → 글자 → `Enter` | 스크롤백 검색(CN-M1) |
+| `n`·`N` | 매치 사이 왕복(CN-M1) |
+| `v`·`V` | 문자·줄 선택 |
+| `y` 또는 `Cmd+C` | 복사하고 **나간다** |
+| `Cmd+V` | 붙여넣기(**모드를 안 닫는다**) |
 
-**2와 3을 가른 이유가 특히 중요하다.** 입력 경로와 렌더 경로는 서로 다른
-이유로 틀린다. 한꺼번에 넣고 화면에 아무것도 안 나오면 "글자를 못 받았다"와
-"받았는데 못 그렸다"를 가르는 데 부팅 한 바퀴가 든다. **로그가 먼저 있으면 그
-갈림이 공짜다.**
+## CN-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. design 위험 1이 해소됐다.** `ScreenSearch`는 `Screen.selection`을 안
+건드린다 — `search/screen.zig` · `search/pagelist.zig` · `search/active.zig`
+셋 전체에 그런 자리가 **없다.** 그래서 "매치의 좌표만 알려주는 것"으로 쓰는
+설계가 그대로 섰고 우리 선택과 다툴 일이 없었다.
+
+**2. `Select.next`의 주석은 "non-wrapping"이라고 하는데 코드는 감긴다**
+(`search/screen.zig:851`). **주석이 아니라 코드를 믿는다.**
+
+**3. 매치에서 pin을 꺼내는 길이 한 줄이다.** `selectedMatch()`가 주는
+`FlattenedHighlight`에 `startPin()`이 있고(`highlight.zig:174`), 그것이
+**CN-M0의 `copyPlace`가 받는 타입과 정확히 같다.** 검색의 커서 이동은 새 코드가
+아니라 CN-M0 함수의 재사용이다.
+
+**4. `searchAll()`은 스크롤백 416줄에 약 60~70밀리초다.** 게이트 세 회차가
+`us=64423` · `us=69360` · `us=63908`을 찍었다(단독 실행은 48.8ms). 사람이 느끼는
+문턱 아래이고 이 게이트는 arm64 위의 TCG 에뮬레이션이라 실제 하드웨어는 더
+빠르다. **증분 검색으로 옮길 이유가 지금은 없다.**
+
+**5. `Copy`가 `union(enum)`이고 variant가 열아홉이다.** payload를 가진 것은
+`find_char: u8` 하나이고 **그것 하나 때문에 union이 됐다.** union에는 `==`가
+없어서 `input_test`의 `expectCopy`가 `std.meta.eql`을 쓴다 — **전환이 깨뜨린
+검사 코드는 그 한 줄뿐이었다.**
+
+**6. 형태 전환과 기능 추가를 다른 커밋으로 가른 것이 값을 했다.** Task 1이
+`union(enum)`으로만 바꾸자 컴파일러가 `input_test.zig:62` **하나만** 짚었고,
+"union이라서 깨진 것"과 "variant가 늘어서 깨진 것"이 섞이지 않았다.
+**표를 늘릴 다음 사람도 같은 순서로 한다.**
+
+**7. `n`의 뜻이 세 층에서 갈리고 그것을 정하는 것은 분기 순서다.**
+`handleKey`에서 **`.find` 분기가 copy 표보다 앞**이라 모드 밖에서는 바이트
+`"n"`, copy mode에서는 `.find_next`, 프롬프트 안에서는 글자 `'n'`이다. 순서를
+뒤집으면 **검색어에 `n`을 못 치게 된다.**
+
+**8. 입력 경로와 렌더 경로를 다른 Task로 가른 것이 값을 했다.** Task 2가
+로그(`find> type needle=…`)를 먼저 세우고 Task 3이 화면을 그렸다. 한꺼번에
+넣었다면 "글자를 못 받았다"와 "받았는데 못 그렸다"를 가르는 데 부팅 한 바퀴가
+들었을 것이다.
 
 ## CN-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
-
-착수 시점에는 vendor된 ghostty 소스를 읽어서 얻은 사실이었고, 지금은 검사가
-전부 밟는다.
 
 **1. 라이브러리의 "단어"에 공백 덩어리가 포함된다.** `Screen.selectWord`가
 "exclusively whitespace or exclusively non-whitespace"로 정의하므로
 **`"ABC  DEF"`가 세 단어**다. vim의 `w`를 만들려면 공백을 한 번 더 건너뛰는
-일을 우리가 한다 — `wordNext`의 `hop < 2`가 그것이고, `vt_test`의 첫 단언이
-col 5가 아니라 **6**을 요구해서 이것을 지킨다.
+일을 우리가 한다 — `wordNext`의 `hop < 2`가 그것이다.
 
 **2. "쓰인 공백"과 "한 번도 안 쓰인 셀"은 다르다.** `written()`이
-`cell.hasText()`로 가른다. `"alpha"` 뒤의 공백은 건너뛸 대상이고 줄 끝의 남은
-칸은 **멈출** 자리다.
+`cell.hasText()`로 가른다.
 
-**3. 선택은 커서 셀을 포함한다.** plan이 "기대 문자열을 미리 정확히 적을 수
-없다"고 표시해 둔 자리였는데, 검사 16이 `"beta g"` **여섯 자**로 확정했다.
-col 6에서 `v`로 잡고 `w`로 col 11에 가면 끝 셀까지 들어온다.
+**3. 선택은 커서 셀을 포함한다.** `vt_test`의 검사 16이 `"beta g"` **여섯 자**로
+확정했다.
 
 **4. `pointFromPin(.viewport, pin)`은 위아래가 비대칭이다**(`:5614`). 뷰포트
-**위쪽** 밖이면 null이지만 **아래쪽 밖은 알려주지 않는다** — 노드를 따라가며
-y를 더해 `rows`보다 큰 값을 그냥 준다. `copyPlace`의 `if (co.y >= rows)
-return;`이 그것을 가른다. 빠뜨리면 증상이 크래시가 아니라 **"커서가 안
-보인다"**이다. **CN-M1의 검색도 같은 함수를 쓴다.**
+**위쪽** 밖이면 null이지만 **아래쪽 밖은 알려주지 않는다.** `copyPlace`의
+`if (co.y >= rows) return;`이 그것을 가른다. 빠뜨리면 증상이 크래시가 아니라
+**"커서가 안 보인다"**이다. **CN-M1의 검색도 같은 함수를 쓴다.**
 
 **5. `Screen.scroll(.{ .pin = p })`가 있다**(`Screen.zig:1565`·`:1576`).
 그 pin을 뷰포트의 top left로 만든다(x 무시). `assertIntegrity`까지 해 주므로
 `pages.scroll`을 직접 부르지 않는다. **`Terminal.ScrollViewport`에는 `.pin`이
-없다**(`Terminal.zig:2504`) — "두 타입의 이름이 다르다"의 또 다른 얼굴이고,
-그래서 기존 `scrollByRows`로는 위쪽을 못 다룬다. **`copyPlace`의 두 갈래가
-모두 `Screen.scroll`을 통과하는 것에 뜻이 있다.**
+없다**(`Terminal.zig:2504`).
 
-**6. `main.zig`의 copy switch에 `else`가 없는 규율은 이번에도 값을 했다.**
-`Copy`에 variant 둘을 더하자 컴파일러가 `unhandled enumeration value:
-'word_next'`로 배선할 자리를 짚었다. **다음에 표를 늘릴 사람도 같은 순서로
-한다: enum 먼저, 그다음 컴파일러가 부르는 자리.**
-
-## CN-M1이 밟을 자리 — **다시 조사하지 말 것**
-
-**plan을 쓰면서 소스로 확인한 것이 아홉이고 plan의 "확정한 것 아홉" 절에 전부
-있다.** 아래는 그중 다시 조사하기 쉬운 것만 추린 것이다.
-
-**design 위험 1이 해소됐다.** `selectNext`/`selectPrev`는 `Screen.selection`을
-안 건드린다 — `search/screen.zig` · `search/pagelist.zig` · `search/active.zig`
-셋 전체에 그런 자리가 **없다.** 그러므로 `ScreenSearch`를 "매치의 좌표를
-알려주는 것"으로만 쓰는 설계가 그대로 서고, 우리 선택과 다툴 일이 없다.
-
-**`Select.next`의 주석은 "non-wrapping"이라고 하는데 코드는 감긴다**
-(`search/screen.zig:851`). **주석이 아니라 코드를 믿는다.**
-
-**`ScreenSearch`가 `screen: *Screen`을 들고 있다**(`:42`). 대체 화면으로
-갈아타면 그 포인터가 낡는다 — `feed`에서 포인터 하나를 비교해 잡는다.
-
-**매치에서 pin을 꺼내는 길이 한 줄이다.** `selectedMatch()`가 주는
-`FlattenedHighlight`에 `startPin()`이 있고(`highlight.zig:174`), 그것이
-**CN-M0의 `copyPlace`가 받는 타입과 정확히 같다.**
-
-**`render()`가 `fb.present()`로 끝난다**(`main.zig:111`). 오버레이는 그 **안에서
-present 앞에** 그려야 한다 — 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
-
-**검색은 `ScreenSearch`가 다 갖고 있다.** `searchAll()`(`search/screen.zig:269`)이
-블로킹으로 전부 훑고, `select(.next/.prev)`(`:799`)와 `selectedMatch()`(`:771`)가
-**`n`/`N`을 공짜로 준다.** `Select`의 주석이 `.next`를 "newest to oldest"로
-정의하므로 **라이브러리도 "다음"을 과거 방향으로 본다.** 후보였던
-`PageListSearch`는 `next()`로 매치를 하나씩 흘릴 뿐이라 왕복을 우리가 들어야
-한다.
-
-**copy 커서는 언제나 화면 맨 아랫줄에서 시작한다**(`row=46`, 화면은 47줄).
-셸 프롬프트가 거기 있기 때문이다. **design 결정 4가 이것에 기댄다** — 아래로
-찾을 것이 구조적으로 없어서 `/`를 위(과거) 방향으로 정했다.
-
-**`Copy`를 `union(enum)`으로 바꾸는 것이 CN-M1의 몫이다**(design 결정 6).
-검색 프롬프트에 친 글자를 실어 나를 payload가 필요하다. **지금 미리 바꾸면
-컴파일러의 신호를 먼저 써 버린다.**
-
-**검색 프롬프트는 오버레이다**(design 결정 7). `terminal: screen>`의 형식을
-절대 바꾸지 않기 위해서다 — 다섯 체인이 그 줄로 화면을 판정한다. 프롬프트는
-`cells()`의 결과에 안 섞이고 렌더 직전 마지막 줄에만 덮이며, 관측은 새 줄
-`terminal: find>`로 한다.
-
-### **CN-M1의 함정** — `input_test`의 `n`이 아직 "모르는 키"다
-
-CN-M0이 `w`에서 겪은 것과 같은 축이다. `input_test.zig:504~509`의 검사 4가
-`q`·`z`·`e`·`r`·`t`·`Enter`를 "모르는 키는 삼킨다"의 대상으로 쓰는데,
-**`n`은 거기 없다.** 대신 그 자리 주석에 **CN-M0이 예고를 남겨 두었다** —
-"`e`와 `n`은 아직 모르는 키이지만 영영 그렇지는 않다". CM-M2가 `Cmd+V`에 대해
-남긴 예고를 CN-M0이 갚았고, CN-M1이 그 예고를 다시 갚을 차례다.
-
-**`Copy`에 variant를 더하는 축과 키의 의미가 바뀌는 축은 다르다.** 전자는
-`input_test`를 안 깨뜨리고 후자는 깨뜨린다. **두 축을 따로 센다.**
+**6. `main.zig`의 copy switch에 `else`가 없는 규율은 매번 값을 한다.**
+variant를 더하면 컴파일러가 배선할 자리를 짚는다.
 
 ## 게이트 현황
 
@@ -160,12 +120,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 19분 01초다**(2026-08-27, CN-M0 이후).
+3/3, 부팅 30회 이상. **기준선은 21분 38초다**(2026-08-27, CN-M1 이후).
 
-**CN-M0이 새 체인을 만들지 않았다**(design 결정 1). `copy/check.sh`를 늘렸다 —
-스크롤백 1000줄을 만드는 준비가 그대로 필요한데 그것을 새 부팅에서 다시 하는
-것은 중복이고, 체인 하나는 부팅 세 번이다. **CN-M1도 같은 자리에 붙인다.
-monitor 포트 45462는 계속 비어 있다.**
+**CN-M0도 CN-M1도 새 체인을 만들지 않았다**(design 결정 1). `copy/check.sh`를
+늘렸다 — 스크롤백 1000줄을 만드는 준비가 그대로 필요한데 그것을 새 부팅에서
+다시 하는 것은 중복이고, 체인 하나는 부팅 세 번이다. **monitor 포트 45462는
+계속 비어 있다.**
 
 **체인 목록은 `CHAINS` 배열 하나에 있다**(`check.sh:146`). 진입 검사와 실행이
 같은 목록을 쓰므로 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -177,7 +137,7 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) 
 
 `clean()`은 `run_chain` 안이 아니라 **게이트 시작에서 한 번만** 불린다
 (`check.sh:176`). 그래서 **회차 시간이 1회차와 2·3회차에서 크게 다른 것이
-정상이다** — `boot` 체인 실측이 131초 → 32초 → 31초였다.
+정상이다**.
 
 **빌드 스텝을 빠뜨린 체인은 진입 검사가 막는다.** `check.sh`가 첫 부팅 전에
 여덟 스크립트를 훑어 `kernel/build.sh` · `init`의 `zig build` ·
@@ -187,24 +147,24 @@ monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) 
 **커널은 입력이 안 바뀌면 아예 빌드하지 않는다 (GL-M1).** `kernel/build.sh`가
 `.config`와 자기 자신의 sha256을 `build/.tars-build-stamp`에 적어 두고
 대조한다. 게이트 로그에 **`skipping make`가 23회** 찍히는 것이 정상이다 —
-24회차 중 첫 회차만 진짜로 빌드한다. **CN-M0의 게이트에서도 정확히 23회였다.**
-**24회가 찍히면 `clean()`이 지운 자리에서도 건너뛴 것이라 잘못이다.**
-`build.sh`가 해시에 들어가는 이유는 `KERNEL_VERSION`이 그 안에 있기
-때문이고, **커널 버전을 올릴 사람은 이것을 알아야 한다.**
+**CN-M1의 게이트에서도 정확히 23회였다.** **24회가 찍히면 `clean()`이 지운
+자리에서도 건너뛴 것이라 잘못이다.** `build.sh`가 해시에 들어가는 이유는
+`KERNEL_VERSION`이 그 안에 있기 때문이고, **커널 버전을 올릴 사람은 이것을
+알아야 한다.**
 
 ### 이 게이트의 시간은 ±3분 수준의 잡음을 가진다
 
-CM 시절 세 기준선이 51분 20초(CM-M0) → 54분 40초(CM-M1) → 54분 15초(CM-M2)인데,
-**증가분을 갈랐다고 말할 수 있었던 적이 없다.** CM-M1은 3분 20초 중 1분만,
-CM-M2는 코드가 분명히 1분 10초를 더했는데도 전체가 25초 **줄었다.**
+CM 시절 세 기준선이 51분 20초 → 54분 40초 → 54분 15초인데, **증가분을 갈랐다고
+말할 수 있었던 적이 없다.** CM-M2는 코드가 분명히 1분 10초를 더했는데도 전체가
+25초 **줄었다.**
 
 **GL-M0의 30분 06초는 그 잡음의 열 배라 갈렸다.** 절약을 주장하려면 이 정도
 크기여야 한다는 기준으로 삼는다.
 
-**CN-M0은 18분 08초 → 19분 01초로 53초 늘었다.** 예상은 회차당 약 20초 ·
-전체 약 1분이었고 실측이 그 안에 들어왔지만, **이것은 잡음보다 작으므로
-"우리 코드가 53초를 더했다"고 주장하지 않는다.** 예상과 실측이 맞은 것은
-확인이지 증명이 아니다.
+**CN-M0은 53초, CN-M1은 2분 38초 늘었다**(18분 08초 → 19분 01초 → 21분 38초).
+CN-M1의 예상은 회차당 약 50초 · 전체 약 2분 30초였고 실측이 그 안에 들어왔지만,
+**이것도 잡음보다 작으므로 "우리 코드가 2분 38초를 더했다"고 주장하지 않는다.**
+**예상과 실측이 맞은 것은 확인이지 증명이 아니다.**
 
 **값이 기준선에서 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다.**
 TR-M2를 끝내며 처음 잰 값이 6시간 12분이었고(8배), 판정은 멀쩡히 3/3이었으며
@@ -218,8 +178,8 @@ TR-M2 때 Chrome을 짚을 수 있었던 것은 **assertion에 앱 이름이 찍
 때문**이다. 그런 이름이 없으면 이 로그로는 부하를 못 가른다.
 
 - **`Amphetamine`과 `caffeinate`는 부하가 아니다.** 둘 다 수면 방지 도구이고,
-  19분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
-  **`caffeinate -i -t 1500`은 Claude Code가 스스로 띄운다** — 이것을 배경
+  22분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
+  **`caffeinate -i -t 1800`은 Claude Code가 스스로 띄운다** — 이것을 배경
   부하의 증거로 읽으면 안 된다.
 - **`coreaudiod` assertion**(`com.apple.audio.contextNNN`)은 오디오 세션이
   열려 있었다는 것만 말한다. 어느 앱인지도, CPU를 얼마나 썼는지도 없다.
@@ -245,7 +205,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **긴 게이트를 돌릴 때 `| tail -N`을 붙이지 않는다.** `tail`이 파이프가 닫힐
 때까지 아무것도 안 내보내서 진행 상황을 볼 수 없다. 파일로 리다이렉트하고
-따로 들여다본다. **에러 본문도 `tail`에 잘리기 쉽다** — Zig 빌드 실패는
+따로 들여다본다. **파이프를 거치면 종료 코드가 `tail`의 것이 되는 것도
+주의한다** — CN-M1에서 `zig build test`의 성공을 그렇게 잃을 뻔했다. 에러 본문은
 `grep -aE '^src/.*error'`로 뽑는 편이 빠르다.
 
 **`style>`·`screen>` 줄을 셀 때는 마지막 프레임만 잘라낸다.** 그 줄들은 매
@@ -273,16 +234,21 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `Restarting system`(커널, 끄는 부팅에는 없어야 하고 재시작 부팅에는 있어야 한다) ·
 `terminal: style>` · `terminal: pixel>` · `terminal: render> first frame` ·
 `terminal: ink>` · `terminal: font>` · `terminal: scroll>` · `terminal: key>` ·
-`terminal: copy>` · **`terminal: copy> word_next` · `terminal: copy> word_prev`**
-(CN-M0) · `terminal: clip>` · `terminal: clip> paste`
+`terminal: copy>` · `terminal: copy> word_next` · `terminal: copy> word_prev`
+(CN-M0) · `terminal: clip>` · `terminal: clip> paste` ·
+**`terminal: find> open` · `terminal: find> type needle=… len=…` ·
+`terminal: find> erase` · `terminal: find> cancel` ·
+`terminal: find> submit matches=… moved=… us=…` ·
+`terminal: find> next moved=…` · `terminal: find> prev moved=…`**(CN-M1) ·
+**`terminal: style> N cell(s) hidden by the find prompt`**(CN-M1)
 
 **새 copy 명령의 로그는 공짜다** — switch 아래의 `dumpCopy(screen,
-@tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다.
+@tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. **`find>`는 그와
+별개로 프롬프트 내용을 찍는 창구다** — 오버레이는 `cells()`에 안 섞여
+`screen>`에 영영 안 나오므로 이 줄이 유일한 관측 수단이다.
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
-화면을 판정한다. **CN-M1의 검색 프롬프트가 오버레이인 이유가 이것이다**
-(design 결정 7): 프롬프트는 `cells()`의 결과에 안 섞이고 렌더 직전 마지막
-줄에만 덮이며, 관측은 새 줄 `terminal: find>`로 한다.
+화면을 판정한다. **CN-M1의 검색 프롬프트가 오버레이인 이유가 이것이다.**
 
 ## 협업 방식 (먼저 읽을 것)
 
@@ -299,18 +265,23 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-사용자가 `cp`로 넣는다. **CN-M0에서 이 방식이 잘 돌았다** — 큰 것 둘
-(`vt_test` 123줄, `vt.zig` 147줄)은 `/tmp` 파일로, 작은 것 넷은 인라인으로
-냈고, 매 편집 뒤 `git diff --stat`으로 **더한 줄과 지운 줄을 따로 세어**
-확인했다. 지운 줄이 예상과 정확히 맞는 것(`input.zig` 4, `input_test.zig` 1)이
-"엉뚱한 것을 안 지웠다"의 증명이다.
+사용자가 `cp`로 넣는다. **CN-M1은 여섯 Task를 전부 인라인으로 냈고 잘 돌았다** —
+가장 큰 편집(`vt.zig`의 함수 넷, 152줄)도 여러 자리로 나뉘어 있어 각각은
+100줄 아래였다. 매 편집 뒤 `git diff --stat`으로 **더한 줄과 지운 줄을 따로
+세어** 확인했고, 지운 줄이 예상과 정확히 맞는 것이 "엉뚱한 것을 안 지웠다"의
+증명이다.
 
-**CN-M0의 plan은 각 Step의 코드를 파일 안에 그대로 담고 있었고 그것이 값졌다.**
-제시할 때 plan의 그 절을 가리키면 됐고 다시 옮겨 적을 필요가 없었다.
-**CN-M1의 plan도 같은 방식으로 쓴다.**
+**plan이 각 Step의 코드를 파일 안에 그대로 담고 있는 것이 값지다.** 제시할 때
+plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다. **CN-M0도 CN-M1도 그
+방식이었다.**
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 19분이라 Bash
+**plan이 틀릴 수 있다.** CN-M1 Task 6에서 두 번 드러났다 — `matches=2`가 실제로는
+4였고(`echo findme`가 스크롤백에 **두 줄**을 남긴다), 대문자 `sendkey F`는 QEMU가
+조용히 버린다. **plan을 그대로 밟되 실측이 다르면 실측이 답이다.**
+
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 22분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **`run_in_background`로 돌려야 한다.**
+`copy` 체인 단독도 8분이라 마찬가지다.
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
@@ -330,91 +301,94 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 **1. `Action`이나 `Keys`나 `Copy`를 건드리면 `zig build`도 함께 돌린다.**
 Zig가 참조되지 않는 함수를 분석하지 않아서, `readKeys`가 쓰는 `State.scrolls`
 필드가 통째로 사라진 것을 `zig build test`가 **두 번** 놓쳤다. `input_test`는
-`handleKey`만 부른다. **CN-M0은 `zig build && zig build test`로 둘을 함께
-돌려 이것을 막았다.**
+`handleKey`만 부른다. **CN-M0도 CN-M1도 `zig build && zig build test`로 둘을
+함께 돌려 이것을 막았다.**
 
-**2. 키의 의미를 바꾸는 것은 enum을 넓히는 것과 다른 축이다.** CM-M2에서
-`Copy`에 variant를 더한 것 자체는 `input_test`를 안 깨뜨렸는데(`expectCopy`·
-`expectCtx`는 `Action`만 훑는다), `Cmd+V`가 **바이트에서 copy 명령으로 의미가
-바뀐 것**을 보던 IP 시절 검사가 깨졌다. **CN-M0이 `w`로 이것을 그대로 다시
-밟았고, CN-M1이 `n`으로 또 밟는다.** **두 축을 따로 센다.**
+**2. 키의 의미를 바꾸는 것은 enum을 넓히는 것과 다른 축이다.** `Copy`에
+variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데(`expectCopy`는 `Action`을
+훑는다), **키의 뜻이 바뀌면** 그것을 보던 검사가 깨진다. CM-M2의 `Cmd+V`,
+CN-M0의 `w`가 그랬다. **CN-M1의 `n`은 "모르는 키" 목록에 없어서 안 깨졌고, 그
+차이 자체가 두 축이 다르다는 증거다.** **두 축을 따로 센다.**
 
-**3. 그 축을 막는 것은 "모드 밖 대조군" 검사다.** `input_test`의 CN-M0 검사
-14가 모드 **밖**에서 `w`·`b`가 여전히 `"w"`·`"b"` 바이트로 나가는 것을 본다.
-이것이 없으면 배선을 잘못해 **셸에 `w`를 영영 못 치게 되어도** 아무 검사도 안
-깨진다.
+**3. 그 축을 막는 것은 "모드 밖 대조군" 검사다.** `input_test`의 검사 14가
+`w`·`b`, 검사 21이 `/`·`?`, 검사 22가 `n`을 **모드 밖에서** 보아 여전히 바이트로
+나가는 것을 확인한다. 이것이 없으면 배선을 잘못해 **셸에 그 글자를 영영 못
+치게 되어도** 아무 검사도 안 깨진다.
 
-**4. `sendkey`를 0.05초 간격으로 80번 보내도 하나도 안 떨어진다.** 커서를 46줄
-올리고 뷰포트를 34줄 밀었으니 46 + 34 = 80이 정확히 맞았다. **CN-M0의 게이트
-검사가 같은 루프를 `h` 40번으로 다시 썼고 col 0에 정확히 도달했다.**
+**4. `sendkey`를 0.05초 간격으로 80번 보내도 하나도 안 떨어진다.**
 
-**5. `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다.** 두 키
-조합(`meta_l-v`)은 그보다 쉬운 경우이고 CM-M2가 확인했다.
+**5. `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다.**
 
-**6. copy 커서는 언제나 화면 맨 아랫줄에서 시작한다**(`row=46`, 화면은 47줄).
+**6. `sendkey`의 키 이름은 전부 소문자다.** `sendkey F`는 없는 이름이라 QEMU가
+**조용히 버린다** — 체인은 monitor의 응답을 안 읽으므로 에러도 안 보인다.
+대문자를 치려면 `shift-f`처럼 앞에 붙인다. **CN-M1에서 `echo FINDME`가
+`echo `로 도착해 한 부팅을 잃었다.**
+
+**7. copy 커서는 언제나 화면 맨 아랫줄에서 시작한다**(`row=46`, 화면은 47줄).
 셸 프롬프트가 거기 있기 때문이다.
 
-**7. `copyMove`의 좌우는 줄을 넘나들지 않고 x를 0과 `cols-1`에서 멈춘다.**
-그래서 `h`를 충분히 많이 누르면 **반드시** col 0에 선다 — 프롬프트 길이(fish가
-정한다)에 기대지 않고 커서를 줄 맨 앞에 놓는 방법이다. **게이트 검사의 col
-값을 미리 적을 수 있는 이유가 이것이다.**
+**8. `copyMove`의 좌우는 줄을 넘나들지 않고 x를 0과 `cols-1`에서 멈춘다.**
+그래서 `h`를 충분히 많이 누르면 **반드시** col 0에 선다.
 
-**8. 게이트에서 col을 세려면 대상 줄을 새로 만든다.** 화면에 이미 있는 줄들은
-프롬프트가 섞여 있어 셀 수 없다. CN-M0은 `echo alpha beta gamma`로
-**글자만 있는 줄**을 만들고 그 위에서 셌다.
+**9. 게이트에서 col을 세려면 대상 줄을 새로 만든다.** 화면에 이미 있는 줄들은
+프롬프트가 섞여 있어 셀 수 없다.
 
-**9. 스크롤백 한도는 값 둘을 함께 줘야 걸린다.** `max_scrollback_lines`만
-주면 기본 `max_scrollback_bytes`(10,000)가 먼저 걸려 아무 일도 안 일어난다.
-`bytes = null`을 함께 준다. 실제 history는 754~1000줄을 오간다.
+**10. 게이트에서 검색 이동을 볼 때는 `scroll> offset`을 더해 절대 행으로 센다.**
+`copy> row=`은 뷰포트 안의 행인데 `copyPlace`가 매치를 뷰포트 **맨 위로**
+올리므로 검색에서는 늘 0이다. 그 값만 찍으면 **"0에서 0으로 갔다"**가 되어 안
+움직인 것처럼 읽힌다. CN-M1의 검사 15가 `312 -> 210`으로 고쳤다.
 
-**10. "바닥에 있다"는 `offset == total - len`이다.**
+**11. 스크롤백 한도는 값 둘을 함께 줘야 걸린다.** `max_scrollback_lines`만
+주면 기본 `max_scrollback_bytes`(10,000)가 먼저 걸린다. `bytes = null`을 함께
+준다.
 
-**11. `RenderState`에서 격자 크기를 읽으면 조용히 no-op이 된다.** `state`는
+**12. "바닥에 있다"는 `offset == total - len`이다.**
+
+**13. `RenderState`에서 격자 크기를 읽으면 조용히 no-op이 된다.** `state`는
 마지막 `cells()`가 찍은 스냅숏이고 `init`은 그것을 `.empty`(rows=0, cols=0)로
 둔다. **새 화면으로 검사를 쓸 때는 `cells()`를 한 번 부르고 시작한다.**
 
-**12. 가지치기는 tracked pin을 무효로 만들지 않는다** — 살아 있는 이웃 페이지의
+**14. 가지치기는 tracked pin을 무효로 만들지 않는다** — 살아 있는 이웃 페이지의
 왼쪽 위로 옮긴다. 그래서 증상은 "선택이 사라진다"가 아니라 **"조용히 엉뚱한
 자리를 복사한다"**이고, `selection == null`로는 감지할 수 없다.
 
-**13. "빌드가 최신인가"를 mtime으로 판정하려는 시도는 두 번 다 실패했다.**
-**Zig는 내용 해시로 판단해 `touch`를 무시하므로** 소스를 touch해도 산출물
-mtime이 안 바뀌고(GL-M0), **make는 mtime을 보지만 내용이 같으면 산출물을 안
-갱신하므로** 판정이 "빌드 필요"에 고착돼 영영 스킵되지 않는다(GL-M1).
+**15. "빌드가 최신인가"를 mtime으로 판정하려는 시도는 두 번 다 실패했다.**
 **처방은 둘 다 내용을 보는 것이다** — 입력의 sha256을 산출물 옆에 적는다.
-넣은 뒤에는 **`touch`(내용 동일)와 실제 편집(내용 변경)을 갈라서** 확인한다.
 
-**14. 게이트 시간의 8할은 빌드였다.** 부팅은 2%가 안 되고 `type_keys`의
+**16. 게이트 시간의 8할은 빌드였다.** 부팅은 2%가 안 되고 `type_keys`의
 `sleep 0.3`은 11%다. 단계별 실측값은 `project_gate_latency`에 표로 있다.
 
-**15. `gzip -9`는 값을 못 하는 압축 레벨이다.** `-6`보다 224,663바이트(1.3%)
-작아지자고 6.7초를 더 쓴다(8,729ms 대 2,020ms). initrd는 `-6`으로 만든다.
+**17. `gzip -9`는 값을 못 하는 압축 레벨이다.** initrd는 `-6`으로 만든다.
 
-**16. `terminal`은 Debug에 묶여 있고 `init`은 아니다.** `-Doptimize=ReleaseSafe`가
-`terminal/src/drm.zig:3`의 `@cImport`를 glibc fortify 때문에 깨뜨린다. `init`은
-libc를 안 링크해서 자유롭고, GL-M1이 그것으로 11,745,656 → 3,331,160바이트를
-얻었다. 우회(`@cDefine("_FORTIFY_SOURCE", "0")`)는 `project_zig_c_uapi_rule`에
-있다.
+**18. `terminal`은 Debug에 묶여 있고 `init`은 아니다.** `-Doptimize=ReleaseSafe`가
+`terminal/src/drm.zig:3`의 `@cImport`를 glibc fortify 때문에 깨뜨린다. 우회
+(`@cDefine("_FORTIFY_SOURCE", "0")`)는 `project_zig_c_uapi_rule`에 있다.
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - **`terminal: key>` 줄로 붙여넣기를 감지하기** — 붙여넣기는 `pty.write`를 직접
-  부르지 `keys.bytes`를 거치지 않으므로 그 줄을 안 만든다. CM-M2의 도구는
-  `clip>`와 `scroll>`였다. **거꾸로, `key>` 줄을 세는 것은 "모드 안의 키가 PTY로
-  안 샜다"의 좋은 도구다** — CN-M0의 게이트 판정 5가 그것이다.
+  부르지 `keys.bytes`를 거치지 않는다. **거꾸로, `key>` 줄을 세는 것은 "모드
+  안의 키가 PTY로 안 샜다"의 좋은 도구다** — CN-M0의 판정 5와 CN-M1의 검사 15가
+  그것이다.
+- **`sendkey`로 대문자 치기** — 키 이름이 전부 소문자다. `shift-f`를 쓴다.
+- **"화면에 표적이 없다"로 "스크롤백으로 밀려났다"를 판정하기** — **"애초에 안
+  쳐졌다"와 안 갈린다.** CN-M1이 그것에 속았다. 실제로 쳐졌는지는 다른 줄로
+  따로 본다(`find> type needle=…`).
 - **`&screen.term.screens.active`** — `active`가 **이미 포인터**라서 `**Screen`이
   되고 `does not support field access`로 막힌다. `&` 없이 쓴다.
 - **`Terminal.scrollViewport`로 특정 pin에 뷰포트 맞추기** — `ScrollViewport`에
-  `.pin`이 없다(`Terminal.zig:2504`). `Screen.Scroll`에는 있으므로
-  `screens.active.scroll(.{ .pin = p })`을 쓴다. **`pages.scroll`을 직접 부르면
-  `assertIntegrity`를 건너뛴다.**
+  `.pin`이 없다. `screens.active.scroll(.{ .pin = p })`을 쓴다. **`pages.scroll`을
+  직접 부르면 `assertIntegrity`를 건너뛴다.**
 - **`pointFromPin(.viewport, …)`의 null만 보고 "화면 안이다"로 판정하기** —
   위쪽 밖만 null이고 아래쪽 밖은 큰 y를 그냥 준다. `y >= rows`를 따로 본다.
 - **`vt.Screen`을 새로 만들고 곧바로 `copyMove`를 부르기** — `copyEnter`가
-  `state.cursor.viewport`를 읽는데 `cells()` 전에는 null이라 커서가 왼쪽 위에서
-  시작한다.
+  `state.cursor.viewport`를 읽는데 `cells()` 전에는 null이다.
 - **선택이 무효가 된 것을 `selection == null`로 감지하기** — 앵커의 screen
   좌표를 비교한다.
+- **tagged union을 `==`로 비교하기** — Zig가 막는다. `std.meta.eql`을 쓴다.
+- **`render` 밖에서 오버레이 그리기** — `render`가 `fb.present()`로 끝나므로
+  **그 안에서 present 앞에** 그려야 한다. 밖에서 그리면 다음 프레임까지 화면에
+  안 나온다.
 - **게이트 stdout에서 시리얼 로그의 줄을 `grep`하기** — 그 줄은 stdout에 없고
   체인이 만든 `mktemp` 파일 안에 있다.
 - **NUL이 든 로그를 `-a` 없이 `grep`하기** — `Binary file ... matches`만 나온다.
@@ -423,17 +397,14 @@ libc를 안 링크해서 자유롭고, GL-M1이 그것으로 11,745,656 → 3,33
 - **파이프라인 끝에 `grep -q`를 두기** — 첫 매치에서 빠져나가며 앞단에
   SIGPIPE를 일으키고 `pipefail`이 그것을 실패로 판정한다. 변수에 담아 `case`로
   본다.
-- **`rg`에 `-r`을 "recursive"로 쓰기** — `-r`은 **replace**다. 매치를 그 문자열로
-  바꿔 출력해서 결과가 통째로 망가진다. 재귀는 기본 동작이라 옵션이 필요 없다.
+- **긴 빌드를 `| tail`로 감싸고 종료 코드 믿기** — 파이프의 종료 코드는 `tail`의
+  것이다. 파일로 리다이렉트하고 `$?`를 따로 본다.
+- **`rg`에 `-r`을 "recursive"로 쓰기** — `-r`은 **replace**다. 재귀는 기본
+  동작이라 옵션이 필요 없다.
 - **`rg`에 `-E`를 "extended regex"로 쓰기** — `-E`는 **`--encoding`**이다.
-  `grep config error: unknown encoding: …`으로 막힌다. `rg`의 패턴은 원래
-  확장 정규식이라 옵션이 필요 없고, **패턴이 `-`나 `\`로 시작해 헷갈릴 때는
-  `-e`로 명시한다**(`rg -e '\b(a|b)\b' 파일`). 2026-08-27에 부딪쳤다.
-- **Bash 도구에서 `cd`로 옮겨 다니기** — **작업 디렉터리가 호출 사이에
-  남는다.** `cd terminal/ghostty-src/src/terminal`로 한 번 들어가면 다음
-  호출의 상대 경로가 전부 거기 기준이 되어 `fd`·`rg`가 "not a directory"로
-  막힌다. 조사성 명령은 **저장소 루트 기준 상대 경로를 그대로 쓰고**, `cd`가
-  꼭 필요하면 같은 명령 안에서 끝낸다. 2026-08-27에 부딪쳤다.
+  패턴이 `-`나 `\`로 시작해 헷갈릴 때는 `-e`로 명시한다.
+- **Bash 도구에서 `cd`로 옮겨 다니기** — **작업 디렉터리가 호출 사이에 남는다.**
+  조사성 명령은 **저장소 루트 기준 상대 경로를 그대로 쓴다.**
 - **`std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기** — Zig 0.16에
   둘 다 없다. `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
@@ -441,28 +412,23 @@ libc를 안 링크해서 자유롭고, GL-M1이 그것으로 11,745,656 → 3,33
 - **컨테이너에서 `rg` 쓰기** — 없다. `grep -aE`를 쓴다.
 - **컨테이너에서 `nc`로 QEMU monitor에 명령 보내기** — `nc`가 없다. 체인들은
   `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
-- **`/tmp`에 만든 파일이 `docker run --rm` 사이에 남기** — 안 남는다. 조사성
-  명령은 한 번의 `docker run` 안에서 끝내야 한다.
+- **`/tmp`에 만든 파일이 `docker run --rm` 사이에 남기** — 안 남는다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 19분이라 10분 상한을
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 22분이라 상한을
   넘는다. `run_in_background`로 돌린다.
-- **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다. 히스토리를 만질
-  때는 **먼저 태그를 찍고 한 명령씩 나눠 돌린 뒤,
-  `git rev-parse HEAD^{tree}`로 전후 트리가 같은지 확인한다.**
-- **`vt_test`의 CM-M0 검사를 `screen`에 붙이기** — `screen`은 파일 앞쪽의 작은
-  화면이고 history가 없다. 스크롤백을 가진 것은 `fresh`이고, CM-M1·M2의 검사는
-  자기 화면 `cm`·`pruned`를 쓴다. **CN-M0도 자기 화면 `wm`을 새로 만들었고
-  그래서 앞 검사들을 하나도 안 흔들었다. CN-M1도 자기 화면 `fm`·`fs`를 만든다.**
+- **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다.
+- **`vt_test`의 검사를 남의 화면에 붙이기** — 화면마다 크기와 history가 다르다.
+  CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, **CN-M1이 `fm`·`fs`를 새로
+  만들었고 그래서 앞 검사들을 하나도 안 흔들었다.**
 - **`vt_test`에서 `before`/`after`를 지역 변수 이름으로 쓰기** — CM-M0의 검사가
-  `:327`·`:329`에서 이미 쓰고 있고, **Zig는 같은 함수 안의 shadowing을 컴파일
-  에러로 막는다.** `main()` 하나가 파일 전체라 이 파일의 모든 지역 변수 이름이
-  서로 부딪친다. **새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다.**
+  이미 쓰고 있고, **Zig는 같은 함수 안의 shadowing을 컴파일 에러로 막는다.**
+  `main()` 하나가 파일 전체라 이 파일의 모든 지역 변수 이름이 서로 부딪친다.
+  **새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다.**
 
 ### 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
 
-`font.zig`를 import하는 프로그램은 `terminal/src/`에 있어야 한다. `build.zig`를
-거치지 않고 이렇게 돌린다.
+`font.zig`를 import하는 프로그램은 `terminal/src/`에 있어야 한다.
 
 ```bash
 docker run --rm -v "$PWD":/workspace \
@@ -474,8 +440,8 @@ docker run --rm -v "$PWD":/workspace \
   '
 ```
 
-**`ghostty-vt`를 import해야 하면 이 방법이 안 된다**(모듈 의존을 손으로 줄
-수 없다). 대신 **기존 검사 파일 자리에 마운트해서 `zig build test`로 돌린다.**
+**`ghostty-vt`를 import해야 하면 이 방법이 안 된다.** 대신 **기존 검사 파일
+자리에 마운트해서 `zig build test`로 돌린다.**
 
 ```bash
 docker run --rm -v "$PWD":/workspace \
@@ -484,119 +450,125 @@ docker run --rm -v "$PWD":/workspace \
 ```
 
 **주의 둘.** (1) `-v`로 **없는 파일**을 마운트하면 Docker가 호스트에 빈 파일을
-만들어 마운트 지점으로 쓰고 컨테이너가 끝나도 그 0바이트 파일이 남는다. 작업
-뒤 `git status`로 확인할 것(기존 파일 자리에 덮는 쪽은 안 남는다).
+만들어 마운트 지점으로 쓰고 컨테이너가 끝나도 그 0바이트 파일이 남는다.
 (2) `cp -r terminal /tmp/t`로 트리를 복사하는 방법은 1.5GB라 느리다.
 
-**CM-M1도 CM-M2도 CN-M0도 프로브를 안 돌렸다.** 대신
+**CM-M1도 CM-M2도 CN-M0도 CN-M1도 프로브를 안 돌렸다.** 대신
 `terminal/ghostty-src/src/terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고,
 그것을 검사로 옮겨 실행으로 다시 증명했다. **소스를 읽어 얻은 사실은 반드시
-검사로 옮긴다.** CN-M0의 여섯 검사가 그렇게 만들어졌고, 그중 하나
-(선택이 커서 셀을 포함하는가)는 **소스로 확정하지 못한 채 plan에 "실측이
-답이다"로 적어 두었다가 실행이 답을 줬다.**
+검사로 옮긴다.** CN-M1의 아홉 사실이 그렇게 검사가 됐고, 그중 하나
+(`Select.next`가 감기는가)는 **주석과 코드가 어긋난 자리**였다.
 
 ## 이월 숙제
 
-**진행 중인 것은 Copy Navigation이고 다음은 CN-M1이다.** 아래는 그것과
-별개이고 순서는 없다.
+**진행 중인 서브프로젝트가 없다.** 아래에서 다음 것을 고른다. 순서는 없다.
 
 - [ ] **`terminal`을 `ReleaseSafe`로.** 42.7MB이고 initrd의 대부분이다.
       `@cImport`가 glibc fortify로 깨지는 것이 유일한 벽이고 우회
       (`@cDefine("_FORTIFY_SOURCE", "0")`)는 `project_zig_c_uapi_rule`에 있다.
       **검증 대상 바이너리의 컴파일 모드를 바꾸는 일이라 GL-M1이 범위 밖으로
-      뒀다.** 게이트가 19분이 된 지금은 되재기가 싸다.
-- [ ] **`sleep 0.3` 줄이기.** 약 5분 50초짜리이고 실측 14가 근거지만, side
-      effect 우려로 GL 범위에서 뺐다. 다시 집을 때는 **타이핑 구간(셸이 줄을
-      편집하며 프롬프트를 다시 그리는 자리)이 방향키 연타와 같은 여유를
-      갖는지**를 먼저 확인한다. **CN-M0이 타이핑 28키를 더했고 CN-M1이 검색어
-      타이핑을 또 더하므로 값이 계속 커지고 있다.**
+      뒀다.** 게이트가 22분인 지금은 되재기가 싸다.
+- [ ] **`sleep 0.3` 줄이기.** 약 6분짜리이고 실측 16이 근거지만, side effect
+      우려로 GL 범위에서 뺐다. 다시 집을 때는 **타이핑 구간(셸이 줄을 편집하며
+      프롬프트를 다시 그리는 자리)이 방향키 연타와 같은 여유를 갖는지**를 먼저
+      확인한다. **CN-M0이 28키, CN-M1이 64키를 더했으므로 값이 계속 커지고
+      있다** — 게이트 증가분 3분 31초의 대부분이 이것이다.
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다.**
 - [ ] **design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
       Power Management · Hardware Discovery가 "M0 미착수"로 남아 있는데
       게이트에는 `CP-M2` · `PM-M1` · `HD-M2`가 3/3으로 돈다. **CN design은 이
-      빚을 새로 만들지 않았다** — CN-M0을 닫으며 `Status:`를 갱신했다.
-      **CN-M1 plan의 Task 6 Step 4가 같은 일을 계획에 명시해 두었다.**
+      빚을 새로 만들지 않았다** — CN-M0과 CN-M1을 닫으며 매번 갱신했다.
 - [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.**
 - [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. **빌드해서 돌려 본
       적이 없다.**
 - [ ] **`terminal/vendor/fonts/Hanme_8x4x4.ttf`가 남아 있다.** `vendor/`가
       gitignore라 저장소에는 없다. 지워도 게이트는 안 흔들린다.
-- [ ] **붙여넣기가 모드를 닫아야 하는가.** CM-M2가 "안 닫는다"로 정했고 대가를
-      적어 두었다. 억제 분기를 백그라운드 출력으로 따로 보게 되면 다시
-      저울질할 수 있다.
+- [ ] **붙여넣기가 모드를 닫아야 하는가.** CM-M2가 "안 닫는다"로 정했다.
 - [ ] **억제 분기를 진짜 상황으로 보기.** CM-M2의 검사 13이 밟는 것은
       붙여넣기 에코이고 **대역이다.** 진짜 이유인 백그라운드 출력으로 보려면
       copy mode 진입 전에 fish 백그라운드 잡을 띄워야 하는데 **타이핑 40여
       개와 회차당 15초**가 든다. 2026-08-26에 값을 저울질하고 안 하기로 골랐다.
 - [ ] **`w`가 줄을 넘어 다음 줄의 첫 단어로 가야 하는가.** CN-M0이 "안 간다"로
-      정했다(plan 결정 1) — 줄 사이 이동은 `j`/`k`가 하고, 다음 줄로 가려면
-      분기가 셋 는다. **CN-M1이 검색을 넣고 나면 줄 사이 이동의 주력이 `/`가
-      되므로 그때 다시 저울질할 값이 생긴다.**
+      정했다 — 줄 사이 이동은 `j`/`k`가 하고, 다음 줄로 가려면 분기가 셋 는다.
+      **CN-M1이 검색을 넣었으므로 줄 사이 이동의 주력이 `/`가 됐다** — 다시
+      저울질할 값이 생겼고, 아마 여전히 "안 간다"가 맞다.
+- [ ] **매치 하이라이트.** 화면의 모든 매치를 표시하는 것. `ViewportSearch`가
+      그 용도로 있지만 `cells()`가 넘기는 색 결정에 손을 대야 한다.
+      **CN-M1이 일부러 안 했다.**
+- [ ] **검색 기록.** `/`를 다시 열었을 때 지난 needle을 되부르는 것. 지금은 빈
+      검색어로 Enter를 눌러도 vim처럼 지난 검색어를 다시 쓰지 않는다.
+- [ ] **`?`(아래로 검색).** design 결정 4가 뺐다 — "방향"이라는 상태가 하나 늘고
+      `n`/`N`의 뜻이 그것에 따라 뒤집힌다.
+- [ ] **매치를 못 찾았을 때 화면에 알리기.** 로그에는 `matches=0`이 남지만
+      사람은 프롬프트가 닫히는 것 말고 아무 신호도 못 받는다. 상태줄이 없기
+      때문이고, 그것을 만드는 것은 design 결정 7이 버린 안이다.
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
 - ~~copy mode의 단어 이동(`w`/`b`)~~ — **CN-M0이 2026-08-27에 끝냈다.**
-- ~~copy mode의 검색(`/`)~~ — **Copy Navigation의 CN-M1이 가져갔다.** 숙제가
-  아니라 진행 중인 서브프로젝트의 다음 milestone이다.
-- ~~`clean()`에서 커널을 빼는 논의~~ — **GL-M0이 했다.** 커널만 빼는 것보다
-  넓게 갔다: `clean()` 자체를 게이트 시작 1회로 옮겨 커널·Zig·initrd를 전부
-  증분으로 만들었다. 이어서 GL-M1이 `gzip -6`·`init`의 `ReleaseSafe`·커널
-  빌드 스킵으로 증분 회차를 더 깎았다. 54분 15초 → 18분 08초.
+- ~~copy mode의 검색(`/`)~~ — **CN-M1이 2026-08-27에 끝냈다.** `n`/`N`과
+  프롬프트 오버레이까지 함께 들어갔다.
+- ~~`clean()`에서 커널을 빼는 논의~~ — **GL-M0이 했다.** 이어서 GL-M1이
+  `gzip -6`·`init`의 `ReleaseSafe`·커널 빌드 스킵으로 증분 회차를 더 깎았다.
 - ~~`xterm-256color` terminfo를 initrd에 넣기~~ — TR-M2에서 했다.
-- ~~게스트 안에서 Zig 에러 트레이스 읽기~~ — **이미 되고 있었다.** BF 게이트
-  로그에 `terminal/src/drm.zig:241:17`처럼 파일명과 줄 번호가 그대로 찍힌다.
+- ~~게스트 안에서 Zig 에러 트레이스 읽기~~ — **이미 되고 있었다.**
+- ~~`searchAll()`의 블로킹이 사람에게 느껴지는가~~ — **CN-M1이 쟀다. 60~70ms라
+  안 느껴진다.** 증분 검색으로 옮길 이유가 지금은 없다.
 
 ## 핵심 파일
 
-**줄 번호는 CN-M0 직후(2026-08-27) 기준이다.**
+**줄 번호는 CN-M1 직후(2026-08-27) 기준이다.**
 
 - `terminal/src/input.zig` — `handleKey`가 `Action`을 돌려주고 `readKeys`가
   `Keys`를 돌려준다.
-  - `:160` `Action`(`bytes`·`scroll`·`copy`) · `:180` `Copy` enum(**열둘이고
-    CN-M1이 검색어 payload를 위해 `union(enum)`으로 바꾼다**) · `:191`
-    `word_next` · `:193` `word_prev` · `:209` `Keys` · `:217` `Keys.copies` ·
-    `:326` `State.copies` · `:331` `State.mode` · `:421` `chord()` ·
-    `:423` 진입키(Meta 분기 안의 Shift 예외, **이 예외는 하나뿐이어야 한다**) ·
-    `:451` Meta 분기의 `KEY_V` · `:548` copy 표 시작(`chord()`보다 **앞**) ·
-    `:554~557` 방향키 넷 · **`:562~563` 단어 이동 `w`/`b`** · `:577` `KEY_V`의
-    세 갈래
+  - `:28` `keymap` · `:160` `Action` · **`:184` `Copy` `union(enum)`(variant
+    열아홉)** · `:195` `word_next` · `:197` `word_prev` · **`:218~231` 검색
+    variant 일곱**(`find_open` · `find_char: u8` · `find_erase` ·
+    `find_cancel` · `find_submit` · `find_next` · `find_prev`) ·
+    `:235` `Keys` · `:243` `Keys.copies` · `:352` `State.copies` ·
+    **`:359` `State.Mode`(`normal`·`copy`·`find`)** · `:458` `chord()` ·
+    `:488` Meta 분기의 `KEY_V` · **`:585` find 분기(copy 표보다 **앞**이다 —
+    이 순서가 `n`을 명령이 아니라 글자로 만든다)** · `:616` copy 표 시작 ·
+    `:622~625` 방향키 넷 · `:630~631` 단어 이동 · **`:636` `/` ·
+    `:648` `n`/`N`** · `:664` `KEY_V`의 세 갈래
 - `terminal/src/vt.zig` — `Screen`. `cells()`가 색·inverse·선택·커서를 전부
   해소해 `CellGlyph`로 넘긴다.
   - `:55` `copy_cursor` · `:58` `copy_kind` · `:74` `copy_anchor_y` ·
-    `:77` `copy_pruned` · `:83` `clip` · `:156` `feed`(가지치기 감시) ·
-    `:172` `anchorY` · `:316` `copyExit`(**CN-M1이 검색 상태 해제를 여기
-    붙인다**) · `:351` `copyMove` · **`:391` `WORD_BOUNDARY`(스무 개) ·
-    `:436` `copyMoveWord` · `:508` `copyPlace`(뷰포트를 미는 두 갈래)** ·
-    `:571` `copyApply`(**모든 이동 수단이 통과하는 문**) · `:612` `copyYank` ·
-    `:640` `clipboard`
-- `terminal/src/main.zig` — `drawGlyph`·`render`·`dumpScreen`·`dumpStyles`·
-  `dumpInk`·`dumpScroll`·`dumpCopy`·`dumpClip`·`dumpPaste`, 그리고 `poll` 루프.
+    `:77` `copy_pruned` · `:83` `clip` · **`:96` `find_open` ·
+    `:104` `find_buf`(128바이트) · `:118` `find`(`?search.Screen`)** ·
+    `:194` `feed`(**가지치기 감시 + 대체 화면 감시**) · `:224` `anchorY` ·
+    `:368` `copyExit`(**검색 상태도 여기서 버린다**) · **`:388` `findOpen` ·
+    `:447` `findSubmit` · `:513` `findStep`(`/`의 첫 이동과 `n`/`N`이 함께
+    쓰는 한 자리)** · `:577` `copyMove` · `:617` `WORD_BOUNDARY` ·
+    `:662` `copyMoveWord` · `:734` `copyPlace`(뷰포트를 미는 두 갈래) ·
+    `:797` `copyApply`(**모든 이동 수단이 통과하는 문**) · `:838` `copyYank` ·
+    `:866` `clipboard`
+- `terminal/src/main.zig` — `drawGlyph`·`render`·`dump*`, 그리고 `poll` 루프.
   **렌더는 루프 끝에 있고 `needs_redraw`가 문지기다.**
-  - `:266` `dumpCopy`(**`@tagName`을 찍으므로 새 명령의 로그는 공짜다**) ·
-    `:286` `dumpClip` · `:310` `dumpPaste` · `:493` copy 배선 switch
-    (**`else`가 없다 — variant를 더하면 컴파일러가 배선을 요구한다**) ·
-    `:503~504` 단어 이동 배선 · `:560` `scrollToBottom` 억제 ·
-    `:564` `if (screen.copyTakePruned())`
+  - **`:91` `drawPrompt`(오버레이) · `:125` `render`(prompt 인자를 받는다) ·
+    `:158` 오버레이를 그리는 자리(**present 바로 앞이다**) · `:165` `Prompt`** ·
+    `:213` `dumpStyles`(**`overlaid_row`를 받아 덮인 줄을 건너뛴다**) ·
+    `:346` `dumpCopy`(`@tagName`을 찍으므로 새 명령의 로그는 공짜다) ·
+    **`:367` `dumpFind`** · `:387` `dumpClip` · `:411` `dumpPaste` ·
+    `:594` copy 배선 switch(**`else`가 없다**) · `:706` `scrollToBottom` 억제 ·
+    `:710` `copyTakePruned`
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다.**
-- `terminal/src/input_test.zig` — `expectCtx`·`expectCopy`의 `switch`가
-  **`Action`을** 전부 훑는다(`Copy`가 아니다). `:16` `expect` ·
-  `:47` `expect`가 `.copy`를 실패로 처리하는 자리 · `:315`가 `Cmd+V`를 보는
-  자리 · **`:504~509` 검사 4의 "모르는 키" 목록(`w`가 `z`로 바뀌었고 `e`·`n`에
-  예고가 붙어 있다)** · `:587~` CM-M2의 검사 11·12·13 ·
-  **`:629~` CN-M0의 검사 14·15·16**
-- `terminal/src/vt_test.zig` — TF-M3의 조각 이어붙이기 + TR-M0의 색 일곱과
-  커서 + TR-M2의 스크롤백 다섯 + CM-M0의 copy 커서 넷 + CM-M1의 선택 다섯 +
-  CM-M2의 클립보드 하나 + **CN-M0의 단어 이동 여섯**. `:356` `cm` ·
-  `:471` `pruned` · **`:551` `wm`(CN-M0의 화면)** · 끝의 `PASS` 직전이
-  **CN-M1 검사가 들어갈 자리**.
-- `copy/check.sh` — 645줄. 검사 열넷. `:108` `type_keys` · `:117` `key_lines` ·
+- `terminal/src/input_test.zig` — `:16` `expect` · `:59` `expectCopy`
+  (**`:65`가 `std.meta.eql`을 쓰는 자리**) · `:497~` 검사 4의 "모르는 키"
+  목록(**`n`이 빠졌고 `e`만 남았다**) · `:593~` CM-M2의 검사 11~13 ·
+  `:637~` CN-M0의 검사 14~16 · **`:673~` CN-M1의 검사 17~23**
+- `terminal/src/vt_test.zig` — `:356` `cm`(CM-M0·M1) · `:471` `pruned`(CM-M2) ·
+  `:551` `wm`(CN-M0) · **`:664` `fm`(CN-M1의 프롬프트 검사 17~21) ·
+  `:741` `fs`(CN-M1의 검색 검사 22~25)** · `:828` `PASS`. **새 검사는 자기
+  화면을 새로 만든다.**
+- `copy/check.sh` — 774줄. 검사 열다섯. `:108` `type_keys` · `:117` `key_lines` ·
   `:123` `copy_value` · `:134` `last_frame` · `:149` `scroll_field` ·
-  `:161` `screen_count` · `:420~` 검사 10~13 · **`:551~` CN-M0의 검사 14** ·
-  `:638` NUL 음성 검사. **CN-M1의 검사 15는 그 음성 검사 바로 앞에 온다.**
+  `:161` `screen_count` · `:551~` CN-M0의 검사 14 ·
+  **`:638~` CN-M1의 검사 15(스크롤백 검색)** · `:768` NUL 음성 검사.
 - `check.sh` — `:35` `BUILD_STEPS` · `:42` `require_build_steps` · `:146`
   `CHAINS` 배열 · `:160` 진입 검사 · `:176` `clean` 호출 하나.
 - `kernel/build.sh:53~58` — GL-M1의 스킵 판정. `:75`가 스탬프를 적는 자리다.
@@ -621,7 +593,7 @@ feedback 셋과 **`feedback_plain_korean`(글쓰기 규칙 — 비유적 표현�
 - **DECCKM(`ESC O` 분기)은 부팅 게이트가 영영 못 밟는다.** `input_test`가
   `Context.cursor_keys`를 주입해 대신 본다.
 - **`keymap`에 comptime 앵커가 박혔다.** 표 중간에 줄을 끼우면 컴파일이 막힌다.
-  `KEY_Z`도 그 앵커 중 하나다(`input.zig:104`).
+  `KEY_Z`도 그 앵커 중 하나다.
 
 ## TR-M2가 남긴 것 (그대로 이월)
 
