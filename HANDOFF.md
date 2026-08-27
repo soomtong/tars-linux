@@ -1,4 +1,4 @@
-# HANDOFF: CN-M0이 끝났다 — 다음 일은 **CN-M1의 plan을 쓰는 것**이다
+# HANDOFF: CN-M1의 계획이 섰다 — 다음 일은 **CN-M1 Task 1 Step 1**이다
 
 ## 지금 어디인가
 
@@ -21,18 +21,27 @@ push할지 묻지 않는다 — 필요하면 그냥 한다.
 | | 내용 | 상태 |
 |---|---|---|
 | CN-M0 | 단어 이동 `w`/`b` | **완료(2026-08-27)** |
-| CN-M1 | 검색 `/`·`n`·`N`과 프롬프트 오버레이 | **계획 미작성 ← 다음 일** |
+| CN-M1 | 검색 `/`·`n`·`N`과 프롬프트 오버레이 | **Task 1 Step 1 대기** |
 
 - design: `docs/superpowers/specs/2026-08-26-tars-copy-navigation-design.md`
   (결정 열하나 + 위험 셋. **승인됐으므로 다시 논의하지 않는다.** `Status:`
   줄은 CN-M0 완료로 갱신해 두었다.)
 - CN-M0 plan: `docs/superpowers/plans/2026-08-26-tars-copy-navigation-cn-m0.md`
+- **CN-M1 plan: `docs/superpowers/plans/2026-08-27-tars-copy-navigation-cn-m1.md`**
+  (2026-08-27 작성. Task 여섯이고 각 Step에 넣을 코드가 그대로 들어 있다.)
 - **기억: `docs/decisions/project_copy_navigation.md`** (CN-M0이 만들었다.
   CM과 다른 사실 셋이 거기 있다.)
 
-**다음 세션이 할 첫 일:** CN-M1의 plan을 쓴다. design 결정 5~10이 그
-milestone의 몫이고, 아래 "CN-M1이 밟을 자리"가 착수 전에 확정된 사실이다.
-**전체를 미리 설계하지 않는다** — CN-M0이 끝난 지금 시점에 새로 쓴다.
+**다음 세션이 할 첫 일:** CN-M1 plan의 Task 1 Step 1을 사용자에게 제시한다
+(`input.zig`의 `Copy`를 `enum`에서 `union(enum)`으로). **Task 1은 동작을 하나도
+안 바꾼다** — variant도 안 더한다. 그 뒤 `zig build && zig build test`를 돌려
+**`input_test.zig`의 `cmd == want` 하나만 깨지는 것**을 본다. union에는 `==`가
+없기 때문이고, 그것이 이 단계에서 기대하는 빨간불이다.
+
+**Task 여섯의 순서에 뜻이 있다.** 1이 형태만 바꾸고, 2가 입력 경로를 로그까지
+세우고, 3이 그것을 화면에 그리고, 4가 검색을 돌리고, 5가 `n`/`N`을 잇고, 6이
+게이트와 문서다. **각 Task 끝은 커밋 지점이고 그 시점에 무언가가 실제로
+동작한다.**
 
 ## CN-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -72,6 +81,27 @@ return;`이 그것을 가른다. 빠뜨리면 증상이 크래시가 아니라 *
 한다: enum 먼저, 그다음 컴파일러가 부르는 자리.**
 
 ## CN-M1이 밟을 자리 — **다시 조사하지 말 것**
+
+**plan을 쓰면서 소스로 확인한 것이 아홉이고 plan의 "확정한 것 아홉" 절에 전부
+있다.** 아래는 그중 다시 조사하기 쉬운 것만 추린 것이다.
+
+**design 위험 1이 해소됐다.** `selectNext`/`selectPrev`는 `Screen.selection`을
+안 건드린다 — `search/screen.zig` · `search/pagelist.zig` · `search/active.zig`
+셋 전체에 그런 자리가 **없다.** 그러므로 `ScreenSearch`를 "매치의 좌표를
+알려주는 것"으로만 쓰는 설계가 그대로 서고, 우리 선택과 다툴 일이 없다.
+
+**`Select.next`의 주석은 "non-wrapping"이라고 하는데 코드는 감긴다**
+(`search/screen.zig:851`). **주석이 아니라 코드를 믿는다.**
+
+**`ScreenSearch`가 `screen: *Screen`을 들고 있다**(`:42`). 대체 화면으로
+갈아타면 그 포인터가 낡는다 — `feed`에서 포인터 하나를 비교해 잡는다.
+
+**매치에서 pin을 꺼내는 길이 한 줄이다.** `selectedMatch()`가 주는
+`FlattenedHighlight`에 `startPin()`이 있고(`highlight.zig:174`), 그것이
+**CN-M0의 `copyPlace`가 받는 타입과 정확히 같다.**
+
+**`render()`가 `fb.present()`로 끝난다**(`main.zig:111`). 오버레이는 그 **안에서
+present 앞에** 그려야 한다 — 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
 
 **검색은 `ScreenSearch`가 다 갖고 있다.** `searchAll()`(`search/screen.zig:269`)이
 블로킹으로 전부 훑고, `select(.next/.prev)`(`:799`)와 `selectedMatch()`(`:771`)가
