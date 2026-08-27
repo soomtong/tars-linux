@@ -225,6 +225,10 @@ pub const Copy = union(enum) {
     find_cancel,
     /// 프롬프트 중의 Enter. 검색을 돌리고 첫 매치로 커서를 옮긴다.
     find_submit,
+    /// `n` — 목록의 다음(과거 방향) 매치로. **끝에서 감긴다**(CN-M1).
+    find_next,
+    /// `N` — 목록의 이전(미래 방향) 매치로.
+    find_prev,
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -633,6 +637,16 @@ pub const State = struct {
                     if (self.shifted()) return nothing;
                     self.mode = .find;
                     return .{ .copy = .find_open };
+                },
+                // `n`/`N`(CN-M1). **Shift 하나로 방향이 갈린다** — `w`/`b`가
+                // Shift를 안 가르는 것과 반대이고, 그것은 vim의 `W`를 안
+                // 만들었기 때문이다(design 결정 2). 여기서는 대문자 자체가
+                // 뜻을 갖는다.
+                //
+                // **프롬프트가 열려 있으면 이 줄에 닿지 않는다.** find 분기가
+                // copy 표보다 앞이라 `n`이 글자가 된다 — 순서가 그것을 정한다.
+                c.KEY_N => return .{
+                    .copy = if (self.shifted()) .find_prev else .find_next,
                 },
                 // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
                 //

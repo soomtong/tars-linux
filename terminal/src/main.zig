@@ -651,6 +651,17 @@ pub fn main(init: std.process.Init) !void {
                             },
                         );
                     },
+                    // **결과를 버리지 않고 찍는다.** 못 옮긴 것과 옮긴 것은
+                    // 사람에게 다른 뜻이고, 아래 dumpCopy의 좌표만으로는
+                    // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
+                    .find_next => std.debug.print(
+                        "terminal: find> next moved={}\n",
+                        .{try screen.findNext()},
+                    ),
+                    .find_prev => std.debug.print(
+                        "terminal: find> prev moved={}\n",
+                        .{try screen.findPrev()},
+                    ),
                 }
                 dumpCopy(screen, @tagName(cmd));
                 needs_redraw = true;

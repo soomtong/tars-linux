@@ -501,9 +501,12 @@ pub fn main() !void {
     // 여기서는 "모르는 키"가 아니다. 자리를 `z`로 메운다 — 게이트가 대조군으로
     // 쓰는 것과 같은 키다.
     //
-    // **`e`와 `n`은 아직 모르는 키이지만 영영 그렇지는 않다.** `e`는 CN이
-    // 일부러 안 만든 단어 이동이고(design 결정 2), `n`은 CN-M1의 검색이
-    // 가져간다. **그때 이 줄들이 바뀐다** — CM-M2가 `Cmd+V`에 대해 남긴
+    // **`n`은 CN-M1의 검색이 가져갔다.** CN-M0이 여기 남긴 예고가 그것이었고,
+    // 이 목록에 `n`이 없었던 덕에 이번에는 아무 줄도 안 깨졌다 — `w`를 배선할
+    // 때와 갈리는 자리다.
+    //
+    // **`e`는 아직 모르는 키다.** CN이 일부러 안 만든 단어 이동이고
+    // (design 결정 2), 누군가 `e`를 더하면 그때 이 줄이 바뀐다.
     // 예고를 여기서 갚는다.
     try expect(&cm, K.KEY_Q, 1, "");
     try expect(&cm, K.KEY_Z, 1, "");
@@ -691,8 +694,9 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_BACKSPACE, .find_erase);
     try expectCopy(&cm, K.KEY_ENTER, .find_submit);
     // Enter가 프롬프트를 닫았으므로 여기서 `n`은 다시 **명령 표의 것**이다.
-    // Task 5 전까지 `n`은 모르는 키라 삼켜진다.
-    try expect(&cm, K.KEY_N, 1, "");
+    // Task 2 시점에는 모르는 키라 삼켜졌고, Task 5가 검색 이동을 붙이면서
+    // `.find_next`가 됐다 — **이 줄이 그 예고를 갚은 자리다.**
+    try expectCopy(&cm, K.KEY_N, .find_next);
 
     // 검사 20. **Esc는 프롬프트만 닫는다**(design 결정 9). 이 검사가 없으면
     // "Esc 한 번에 모드까지 나간다"도 통과하고, 그러면 오타를 고치려던 사람이
@@ -713,6 +717,30 @@ pub fn main() !void {
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
     try expect(&cm, K.KEY_SLASH, 1, "?");
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 22. **`n`/`N`이 모드 안에서 명령이고 밖에서는 글자다.**
+    try expect(&cm, K.KEY_N, 1, "n");
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    try expectCopy(&cm, K.KEY_N, .find_next);
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_N, .find_prev);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 23. **프롬프트 안에서는 `n`이 다시 글자다.** 이것이 이 milestone에서
+    // 순서 하나가 정하는 사실이고, 깨지면 "검색어에 n을 못 친다"가 된다.
+    try expectCopy(&cm, K.KEY_SLASH, .find_open);
+    try expectCopy(&cm, K.KEY_N, .{ .find_char = 'n' });
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_N, .{ .find_char = 'N' });
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_ESC, .find_cancel);
+    // 프롬프트를 닫았으니 `n`은 다시 명령이다.
+    try expectCopy(&cm, K.KEY_N, .find_next);
+    try expectCopy(&cm, K.KEY_ESC, .exit);
 
     std.debug.print("input_test: copy mode OK\n", .{});
 
