@@ -174,10 +174,14 @@ pub const Action = union(enum) {
 /// 때문이다. 미리 만들어 두면 그 신호를 잃는다. **이번에도 같은 순서로 한다:
 /// 여기에 둘을 더하면 `main.zig`가 컴파일 에러로 배선을 요구한다.**
 ///
-/// **CN-M1이 이 타입을 `union(enum)`으로 바꾼다**(design 결정 6). 검색
-/// 프롬프트에 친 글자를 실어 나를 payload가 필요하기 때문이고, payload가 없는
-/// 지금은 바꾸지 않는다.
-pub const Copy = enum {
+/// **CN-M1이 이것을 `union(enum)`으로 바꿨다**(design 결정 6). 검색 프롬프트에
+/// 친 글자를 실어 나를 payload가 필요하기 때문이다. **전환 자체는 아무 동작도
+/// 안 바꿨다** — 그때 variant를 함께 더하지 않은 것에 뜻이 있다. 형태 전환과
+/// 기능 추가를 한 Step에 두면 컴파일 에러 목록에 둘이 섞여 갈리지 않는다.
+///
+/// **union에는 `==`가 없다.** 이 타입을 비교하는 자리는
+/// `input_test.zig`의 `expectCopy` 하나이고 `std.meta.eql`을 쓴다.
+pub const Copy = union(enum) {
     enter,
     exit,
     left,

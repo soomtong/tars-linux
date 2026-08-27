@@ -59,7 +59,10 @@ fn expectCtx(
 fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
     switch (state.handleKey(code, 1, .{})) {
         .copy => |cmd| {
-            if (cmd == want) return;
+            // **union에는 `==`가 없다**(CN-M1 Task 1). `std.meta.eql`이 태그를
+            // 먼저 보고 payload를 그다음에 본다 — `.find_char`가 생기면 글자까지
+            // 비교하게 되고, 그것이 우리가 원하는 것이다.
+            if (std.meta.eql(cmd, want)) return;
             std.debug.print(
                 "FAIL: code={d} -> got copy .{s}, want copy .{s}\n",
                 .{ code, @tagName(cmd), @tagName(want) },
