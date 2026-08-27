@@ -548,6 +548,93 @@ if [ "$PASTED_ROWS" -lt 2 ]; then
 fi
 echo "the paste inside copy mode reached the shell too (${PASTED_ROWS} 'PASTED' rows)"
 
+# ── 검사 14: 단어 단위 이동 (CN-M0) ────────────────────────────────────
+#
+# **게이트가 보는 것은 둘뿐이다**(CN-M0 plan 결정 3): 키가 게스트까지 도달해
+# 커서가 단어 단위로 움직였다는 것과, 그 키가 PTY로 안 샜다는 것이다. 선택이
+# 함께 넓어지는 것은 vt_test가 정확한 문자열로 본다 — 여기서 왕복을 보려면
+# 기대 문자열을 미리 정확히 적어야 하는데 그 값은 호스트 검사로만 확정된다.
+#
+# 대상 줄을 새로 만든다. 화면에 이미 있는 줄들은 프롬프트가 섞여 있어서 col
+# 값을 미리 셀 수 없다.
+#
+#   col:  0....4 5 6...9 10 11...15
+#         alpha  _ beta  _  gamma
+echo "=== typing 'echo alpha beta gamma' ==="
+type_keys e c h o spc a l p h a spc b e t a spc g a m m a ret
+sleep 3
+
+if ! grep -aqF '| alpha beta gamma |' "$LOG"; then
+  report_failure "the shell did not produce a line containing only 'alpha beta gamma'"
+fi
+
+echo "=== entering copy mode for the word motions ==="
+type_keys meta_l-shift-c
+sleep 2
+
+# 출력줄은 프롬프트 바로 위다(CM-M0 실측: 커서는 언제나 맨 아랫줄에서 시작).
+type_keys k
+sleep 1
+
+# **커서를 col 0으로 확실히 보낸다.** copyMove의 좌우는 줄을 넘나들지 않고
+# x를 0에서 멈추므로(vt.zig), h를 충분히 많이 누르면 반드시 col 0이다.
+# 프롬프트 길이에 기대지 않는 것이 요점이다 — 그 길이는 fish가 정한다.
+for _ in $(seq 1 40); do
+  echo "sendkey h" >&3
+  sleep 0.05
+done
+sleep 2
+COL_HOME="$(copy_value col)"
+if [ "$COL_HOME" -ne 0 ]; then
+  report_failure "h did not reach column 0 (col ${COL_HOME})"
+fi
+ROW_WORD="$(copy_value row)"
+
+# 음성 검사의 기준선. w와 b는 PTY로 나가면 안 된다.
+KEYS_BEFORE_WORD="$(key_lines)"
+
+# **판정 1.** w가 공백을 건너뛰어 'beta'의 b(col 6)로 간다. 건너뛰기가 없으면
+# 여기서 5가 나온다.
+type_keys w
+sleep 1
+COL_W1="$(copy_value col)"
+if [ "$COL_W1" -ne 6 ]; then
+  report_failure "w landed at col ${COL_W1} (expected 6, the 'b' of beta)"
+fi
+
+# **판정 2.** 한 번 더 누르면 'gamma'의 g(col 11)다.
+type_keys w
+sleep 1
+COL_W2="$(copy_value col)"
+if [ "$COL_W2" -ne 11 ]; then
+  report_failure "the second w landed at col ${COL_W2} (expected 11)"
+fi
+
+# **판정 3.** b가 그것을 정확히 되돌린다.
+type_keys b
+sleep 1
+COL_B1="$(copy_value col)"
+if [ "$COL_B1" -ne 6 ]; then
+  report_failure "b landed at col ${COL_B1} (expected 6)"
+fi
+
+# **판정 4.** 줄을 안 넘었다. 단어 이동은 줄 안의 일이다.
+ROW_AFTER_WORD="$(copy_value row)"
+if [ "$ROW_AFTER_WORD" -ne "$ROW_WORD" ]; then
+  report_failure "the word motions changed rows (${ROW_WORD} -> ${ROW_AFTER_WORD})"
+fi
+
+# **판정 5(음성).** 셋 다 PTY로 안 나갔다. 모드 안에서 친 w가 셸에 도착하면
+# 입력줄이 더럽혀지고, 그것이 이 기능의 가장 흔한 실패 방식이다.
+KEYS_AFTER_WORD="$(key_lines)"
+if [ "$KEYS_AFTER_WORD" -ne "$KEYS_BEFORE_WORD" ]; then
+  report_failure "the word motions leaked to the PTY (key> ${KEYS_BEFORE_WORD} -> ${KEYS_AFTER_WORD})"
+fi
+echo "word motions moved the cursor 0 -> 6 -> 11 -> 6 without leaking to the PTY"
+
+type_keys esc
+sleep 1
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
