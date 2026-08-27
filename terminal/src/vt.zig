@@ -116,6 +116,23 @@ pub const Screen = struct {
     /// 있다. **증상이 "안 된다"가 아니라 "조용히 다른 자리로 간다"이다** —
     /// CM-M1이 앵커에 대해 배운 것과 같은 병이다.
     find: ?ghostty_vt.search.Screen = null,
+    /// 확정된 검색의 매치 **전부**. `findSubmit`이 만들고 `copyExit`이 버린다.
+    ///
+    /// **`ScreenSearch.matches()`가 주는 것은 얕은 복사다**
+    /// (`search/screen.zig:234`가 `@memcpy`로 구조체만 옮긴다). 각 `Flattened`의
+    /// `chunks`는 ScreenSearch 내부 버퍼를 그대로 가리키므로, **원소를
+    /// `deinit`하면 이중 해제**다. `alloc.free(slice)` 하나만 부른다
+    /// (design 결정 6).
+    ///
+    /// `find`와 **언제나 나란히** 다룬다 — 한쪽만 남은 상태를 만들지 않는다.
+    /// 해제 자리가 셋이고 `find`의 것과 정확히 같다: `findSubmit`의 옛것 정리 ·
+    /// `copyExit` · `deinit`.
+    ///
+    /// 왜 `find`에게 매번 물어보지 않고 슬라이스를 들고 있는가: `matches()`가
+    /// 부를 때마다 할당한다. 매 프레임 부르는 자리(`cells`)가 생기므로 한 번만
+    /// 받아 둔다. **목록은 `searchAll()` 시점의 스냅숏이고 갱신하지 않는다**
+    /// (design 결정 7).
+    find_matches: ?[]ghostty_vt.highlight.Flattened = null,
 
     pub fn init(
         io: std.Io,
@@ -174,6 +191,9 @@ pub const Screen = struct {
         // **term보다 먼저다.** ScreenSearch가 든 tracked pin은 PageList의
         // 풀에서 왔으므로, term을 먼저 버리면 이미 없는 풀을 건드린다.
         if (self.find) |*f| f.deinit();
+        // **바깥 슬라이스만 해제한다**(design 결정 6). 원소의 `chunks`는 위
+        // `f.deinit()`이 이미 해제한 버퍼를 가리키는 얕은 복사다.
+        if (self.find_matches) |m| alloc.free(m);
         self.state.deinit(alloc);
         self.stream.deinit();
         self.term.deinit(alloc);
@@ -376,6 +396,10 @@ pub const Screen = struct {
         // **screen이 살아 있는 동안** 해제해야 한다.
         if (self.find) |*f| f.deinit();
         self.find = null;
+        // 매치 목록도 같은 자리에서 버린다(design 결정 6). **바깥 슬라이스만**
+        // 해제한다 — 원소는 방금 `f.deinit()`이 해제한 버퍼를 가리킨다.
+        if (self.find_matches) |m| self.alloc.free(m);
+        self.find_matches = null;
         self.term.screens.active.clearSelection();
     }
 
@@ -456,6 +480,8 @@ pub const Screen = struct {
         // 목록과 tracked pin이 그대로 샌다.
         if (self.find) |*old| old.deinit();
         self.find = null;
+        if (self.find_matches) |m| self.alloc.free(m);
+        self.find_matches = null;
 
         // **지역 변수에 만들고 나서 옮겨 담는다.** `self.find`가 optional이라
         // `try .init(...)`이 그 껍질을 통과할지가 Zig 버전에 딸린 문제이고,
@@ -473,13 +499,34 @@ pub const Screen = struct {
         );
         errdefer fresh.deinit();
         try fresh.searchAll();
+        // **매치 목록을 지금 한 번만 받는다**(design 결정 2·6). `self.find`에
+        // 옮기기 **전에** 부르는 것에 뜻이 있다 — 여기서 실패하면 위의
+        // `errdefer fresh.deinit()`이 온전한 상태를 정리하고, `self.find`는
+        // 아직 아무것도 안 가리킨다.
+        //
+        // 슬라이스의 원소는 `fresh` 내부 버퍼를 가리키는 얕은 복사인데, 아래에서
+        // `fresh`를 **값으로** 옮겨도 그 버퍼는 힙에 그대로 있으므로 유효하다.
+        const found = try fresh.matches(self.alloc);
+        errdefer self.alloc.free(found);
+
         self.find = fresh;
+        self.find_matches = found;
 
         return .{
             .matches = self.find.?.matchesLen(),
             // **첫 이동만 "커서보다 위"를 요구한다**(CN-M1 plan 결정 3).
             .moved = try self.findStep(.next, true),
         };
+    }
+
+    /// 보관 중인 매치가 몇 개인가. 검색이 없으면 0이다.
+    ///
+    /// **`matchesLen()`과 언제나 같아야 한다.** 다르면 슬라이스가 낡은 것이고,
+    /// 그것은 곧 `find`와 `find_matches`가 따로 놀았다는 뜻이다. 검사 26이 이
+    /// 등식을 본다.
+    pub fn findMatchCount(self: *const Screen) usize {
+        const m = self.find_matches orelse return 0;
+        return m.len;
     }
 
     /// `n`. 목록의 다음(과거 방향) 매치로.

@@ -825,5 +825,66 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 매치가 없으면 커서가 안 움직인다 OK\n", .{});
 
+    // ── CS-M0: 매치 하이라이트 ────────────────────────────────────────────
+    //
+    // **새 화면을 만든다.** 앞의 `fs`는 20x5에 60줄을 먹였고 검사 22~25가 그
+    // 커서 자리에 기대고 있다 — 남의 화면에 붙이면 앞 검사가 흔들린다.
+    // CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`를 새로
+    // 만든 것과 같은 규율이다.
+    //
+    // 표적을 **두 줄**(8번·18번)에 심는다. 5줄짜리 화면이라 한 번에 하나만
+    // 보이고, 그래서 "화면에 보이는 것만 칠한다"를 검사가 가를 수 있다.
+    const hs = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer hs.deinit();
+    var hl_i: usize = 1;
+    while (hl_i <= 20) : (hl_i += 1) {
+        if (hl_i == 8 or hl_i == 18) {
+            hs.feed("xxTARGETxx\r\n");
+        } else {
+            hs.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{hl_i}) catch unreachable);
+        }
+    }
+    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
+    _ = try hs.cells(&buf);
+    hs.copyEnter();
+
+    // 검사 26. 보관한 매치 수가 검색이 찾은 수와 같다.
+    hs.findOpen();
+    for ("TARGET") |ch| hs.findChar(ch);
+    const hhit = try hs.findSubmit();
+    if (hhit.matches == 0) {
+        std.debug.print("FAIL: /TARGET found nothing\n", .{});
+        return error.HighlightSearchFoundNothing;
+    }
+    if (hs.findMatchCount() != hhit.matches) {
+        std.debug.print("FAIL: kept {d} match(es) but the search found {d}\n", .{
+            hs.findMatchCount(), hhit.matches,
+        });
+        return error.FindMatchSliceWrong;
+    }
+    std.debug.print("vt_test: 매치 목록을 그대로 보관한다 OK (matches={d})\n", .{hhit.matches});
+
+    // 검사 27. **다시 검색해도 앞 목록이 이중 해제되지 않는다.**
+    //
+    // `matches()`가 주는 것은 얕은 복사라(design 결정 6), 원소를 `deinit`하면
+    // ScreenSearch가 같은 버퍼를 다시 해제한다. 그 실수는 **두 번째 검색에서**
+    // 터진다 — 첫 검색만 하는 검사로는 영영 안 잡힌다.
+    hs.findOpen();
+    for ("R1") |ch| hs.findChar(ch);
+    const hhit2 = try hs.findSubmit();
+    if (hs.findMatchCount() != hhit2.matches) {
+        std.debug.print("FAIL: after re-searching, kept {d} but found {d}\n", .{
+            hs.findMatchCount(), hhit2.matches,
+        });
+        return error.FindMatchSliceStale;
+    }
+    std.debug.print("vt_test: 다시 검색해도 매치 목록이 온전하다 OK (matches={d})\n", .{hhit2.matches});
+
+    // 아래 검사들이 볼 수 있게 목록을 TARGET으로 되돌린다.
+    hs.findOpen();
+    for ("TARGET") |ch| hs.findChar(ch);
+    _ = try hs.findSubmit();
+
     std.debug.print("PASS\n", .{});
 }
