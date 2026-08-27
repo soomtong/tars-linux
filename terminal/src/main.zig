@@ -76,6 +76,44 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
     }
 }
 
+/// 프롬프트 오버레이(design 결정 7). **격자를 다 그린 뒤 마지막 줄만 덮는다.**
+///
+/// **`render`가 `present()`로 끝나므로 반드시 그 안에서, present 앞에 그려야
+/// 한다.** 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
+///
+/// 줄 전체를 먼저 배경색으로 지운다. 안 지우면 검색어가 짧아졌을 때 지난
+/// 프레임의 꼬리가 오른쪽에 남는다 — Backspace를 눌렀는데 글자가 안 지워지는
+/// 것처럼 보인다.
+///
+/// **반전하지 않는다**(CN-M1 plan 결정 6). 선택도 copy 커서도 "색 둘을
+/// 맞바꾼다"로 나타나므로, 프롬프트까지 반전하면 화면 맨 아래의 흰 띠가
+/// 선택인지 프롬프트인지 갈리지 않는다. 앞의 `/` 한 글자가 그 표시다.
+fn drawPrompt(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    text: []const u8,
+    rows: u16,
+    cols: u16,
+    fg: u32,
+    bg: u32,
+) !void {
+    if (rows == 0) return;
+    const y = GRID_Y + @as(u32, rows - 1) * ROW_HEIGHT;
+
+    var col: u32 = 0;
+    while (col < cols) : (col += 1) {
+        drawCellBackground(fb, GRID_X + col * CELL_W, y, bg);
+    }
+
+    col = 0;
+    for (text) |ch| {
+        if (col >= cols) break;
+        const glyph = try cache.find(ch);
+        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
+        col += 1;
+    }
+}
+
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
 /// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
 ///
@@ -84,7 +122,12 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
 /// `cache`가 `*font.Cache`인 이유는 TR-M1부터 **그리는 도중에 글자를 굽기
 /// 때문이다.** 캐시에 없는 글자가 화면에 나타나면 그 자리에서 래스터라이징이
 /// 일어난다 — 한 자당 밀리초 이하이고 같은 글자는 한 번뿐이다.
-fn render(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) !void {
+fn render(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    cells: []const vt.CellGlyph,
+    prompt: ?Prompt,
+) !void {
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
 
@@ -108,8 +151,24 @@ fn render(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) 
         drawGlyph(fb, glyph, x, y, cell.fg);
     }
 
+    if (prompt) |p| {
+        try drawPrompt(fb, cache, p.text, p.rows, p.cols, p.fg, p.bg);
+    }
+
     try fb.present();
 }
+
+/// 오버레이 한 줄에 필요한 것 전부.
+///
+/// 인자를 일곱 개 늘어놓지 않고 묶는 이유는 **호출부가 하나뿐**이기 때문이다.
+/// 늘어놓으면 `rows`와 `cols`, `fg`와 `bg`를 뒤바꿔 넣어도 컴파일이 통과한다.
+const Prompt = struct {
+    text: []const u8,
+    rows: u16,
+    cols: u16,
+    fg: u32,
+    bg: u32,
+};
 
 /// 한 프레임에 찍는 style/pixel 줄의 상한. 화면 전체에 색이 깔린 프로그램이
 /// 돌면 셀 수천 개가 매 프레임 로그로 쏟아진다. 게이트가 검사에 쓰는 셀은
@@ -156,10 +215,27 @@ fn dumpStyles(
     cells: []const vt.CellGlyph,
     default_fg: u32,
     default_bg: u32,
+    /// 프롬프트가 덮은 행. 없으면 null이다(CN-M1 plan 결정 4).
+    overlaid_row: ?u16,
 ) void {
     var shown: usize = 0;
     var skipped: usize = 0;
+    var hidden: usize = 0;
     for (cells) |cell| {
+        // **덮인 줄은 아예 건너뛴다.** 이 함수가 두 줄을 찍는 것에 뜻이 있다 —
+        // `style>`는 파서가 본 색이고 `pixel>`은 프레임버퍼에서 되읽은 값이며,
+        // 둘이 어긋나면 렌더러가 틀렸다는 뜻이다(TR design 결정 7). 우리가 덮은
+        // 줄에서는 그 전제가 깨진다: pixel>이 셀이 아니라 프롬프트를 말한다.
+        //
+        // 지금 이 줄을 보는 체인은 없지만(pixel>을 쓰는 것은 render 체인
+        // 하나뿐이고 그 체인은 copy mode에 안 들어간다) **게이트가 못 보는
+        // 부채를 새로 만들지 않는다.**
+        if (overlaid_row) |r| {
+            if (cell.row == r) {
+                hidden += 1;
+                continue;
+            }
+        }
         if (cell.fg == default_fg and cell.bg == default_bg) continue;
         if (shown >= STYLE_DUMP_LIMIT) {
             skipped += 1;
@@ -180,6 +256,10 @@ fn dumpStyles(
     // 조용히 자르면 "색이 없다"와 "너무 많아서 안 찍었다"를 가를 수 없다.
     if (skipped > 0) {
         std.debug.print("terminal: style> {d} more cell(s) not shown\n", .{skipped});
+    }
+    // 조용히 건너뛰면 "그 줄에 색이 없다"와 "덮여서 안 봤다"를 가를 수 없다.
+    if (hidden > 0) {
+        std.debug.print("terminal: style> {d} cell(s) hidden by the find prompt\n", .{hidden});
     }
 }
 
@@ -621,8 +701,29 @@ pub fn main(init: std.process.Init) !void {
         needs_redraw = false;
 
         const cells = try screen.cells(cell_buf);
+
+        // 프롬프트 문자열을 여기서 만든다. **`vt.zig`는 앞의 `/`를 모른다** —
+        // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
+        // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
+        //
+        // 버퍼가 needle보다 한 칸 크다. `/` 한 글자 때문이다.
+        var prompt_buf: [129]u8 = undefined;
+        const prompt: ?Prompt = if (screen.findNeedle()) |n| blk: {
+            prompt_buf[0] = '/';
+            @memcpy(prompt_buf[1 .. 1 + n.len], n);
+            break :blk .{
+                .text = prompt_buf[0 .. 1 + n.len],
+                .rows = rows,
+                .cols = cols,
+                // **`cells()` 뒤에 읽어야 한다** — `state.colors`는 update()가
+                // 채운다(vt.zig의 defaultFg 주석).
+                .fg = screen.defaultFg(),
+                .bg = screen.defaultBg(),
+            };
+        } else null;
+
         const frame_start = std.Io.Clock.now(.awake, init.io);
-        try render(fb, &cache, cells);
+        try render(fb, &cache, cells, prompt);
         if (!first_frame_timed) {
             first_frame_timed = true;
             std.debug.print("terminal: render> first frame {d}us\n", .{
@@ -634,8 +735,13 @@ pub fn main(init: std.process.Init) !void {
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
-        dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
-        dumpInk(fb, &cache, cells);
+        dumpStyles(
+            fb,
+            cells,
+            screen.defaultFg(),
+            screen.defaultBg(),
+            if (prompt != null) rows - 1 else null,
+        );        dumpInk(fb, &cache, cells);
         dumpScroll(screen);
         if (cache.count() != last_glyph_count) {
             last_glyph_count = cache.count();
