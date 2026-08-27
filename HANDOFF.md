@@ -1,13 +1,16 @@
-# HANDOFF: CN-M1의 계획이 섰다 — 다음 일은 **CN-M1 Task 1 Step 1**이다
+# HANDOFF: CN-M1 plan을 작성했다 — 다음 일은 **CN-M1 Task 1 Step 1**이다
 
 ## 지금 어디인가
 
 `main`, working tree 깨끗함. **CN-M0(단어 이동 `w`/`b`)이 2026-08-27에
-끝났다.** 커밋 넷이 들어갔다.
+끝났고, 같은 날 CN-M1 plan까지 작성했다.** 코드는 CN-M0에서 멈춰 있다 —
+**CN-M1은 아직 한 줄도 안 썼다.**
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -5
+git log --oneline -7
+#   Record the plain Korean writing rule   ← 글쓰기 규칙(코드 아님)
+#   Plan CN-M1: scrollback search with a prompt overlay
 #   Close out CN-M0
 #   Check word motion in the copy chain
 #   Bind w and b to word motion in copy mode
@@ -38,10 +41,24 @@ push할지 묻지 않는다 — 필요하면 그냥 한다.
 **`input_test.zig`의 `cmd == want` 하나만 깨지는 것**을 본다. union에는 `==`가
 없기 때문이고, 그것이 이 단계에서 기대하는 빨간불이다.
 
-**Task 여섯의 순서에 뜻이 있다.** 1이 형태만 바꾸고, 2가 입력 경로를 로그까지
-세우고, 3이 그것을 화면에 그리고, 4가 검색을 돌리고, 5가 `n`/`N`을 잇고, 6이
-게이트와 문서다. **각 Task 끝은 커밋 지점이고 그 시점에 무언가가 실제로
-동작한다.**
+**Task 여섯의 순서에 뜻이 있다.** 1이 타입의 형태만 바꾸고, 2가 입력 경로를
+만들어 로그까지 찍고, 3이 그것을 화면에 그리고, 4가 검색을 돌리고, 5가 `n`/`N`을
+키에 잇고, 6이 게이트와 문서다. **각 Task 끝은 커밋 지점이고, 그 시점에
+무언가가 실제로 동작한다.**
+
+| Task | 끝나면 무엇이 되는가 |
+|---|---|
+| 1 | `Copy`가 `union(enum)`이 된다. **동작은 하나도 안 바뀐다** |
+| 2 | `/abc`를 치면 로그에 `find> type needle=abc`가 찍힌다(화면엔 아직 안 보인다) |
+| 3 | 그 프롬프트가 화면 마지막 줄에 **보인다** |
+| 4 | Enter가 검색을 돌려 커서가 매치로 **간다** |
+| 5 | `n`/`N`이 매치 사이를 왕복한다 |
+| 6 | 게이트가 그것을 게스트에서 보고, 문서가 갱신된다 |
+
+**2와 3을 가른 이유가 특히 중요하다.** 입력 경로와 렌더 경로는 서로 다른
+이유로 틀린다. 한꺼번에 넣고 화면에 아무것도 안 나오면 "글자를 못 받았다"와
+"받았는데 못 그렸다"를 가르는 데 부팅 한 바퀴가 든다. **로그가 먼저 있으면 그
+갈림이 공짜다.**
 
 ## CN-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -297,6 +314,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **사용자가 "네가 정해"라고 하면 되묻지 말고 진행한다.**
 
+**글쓰기: 비유적 표현을 일반 어휘 자리에 쓰지 않는다**(`feedback_plain_korean`,
+2026-08-27). "계획이 섰다"가 지적받은 실물이다 — "계획을 다 썼다"로 쓴다.
+**평범한 한국어가 어색해지면 영어를 섞어도 된다**(`plan is up`). 판단 기준은
+"이 어휘가 비유인가"가 아니라 **"이 문장을 두 가지로 읽을 수 있는가"**이고,
+**제목과 첫 문장을 특히 본다** — 본문의 흐린 표현은 뒤에서 메워지지만 제목은
+메울 자리가 없다.
+
 **매 Step 완료 후 파일 내용을 `Read`/`rg`로 직접 검증한다.**
 
 **커밋 전에 `git status`의 `M`과 신규를 가른다.**
@@ -401,6 +425,15 @@ libc를 안 링크해서 자유롭고, GL-M1이 그것으로 11,745,656 → 3,33
   본다.
 - **`rg`에 `-r`을 "recursive"로 쓰기** — `-r`은 **replace**다. 매치를 그 문자열로
   바꿔 출력해서 결과가 통째로 망가진다. 재귀는 기본 동작이라 옵션이 필요 없다.
+- **`rg`에 `-E`를 "extended regex"로 쓰기** — `-E`는 **`--encoding`**이다.
+  `grep config error: unknown encoding: …`으로 막힌다. `rg`의 패턴은 원래
+  확장 정규식이라 옵션이 필요 없고, **패턴이 `-`나 `\`로 시작해 헷갈릴 때는
+  `-e`로 명시한다**(`rg -e '\b(a|b)\b' 파일`). 2026-08-27에 부딪쳤다.
+- **Bash 도구에서 `cd`로 옮겨 다니기** — **작업 디렉터리가 호출 사이에
+  남는다.** `cd terminal/ghostty-src/src/terminal`로 한 번 들어가면 다음
+  호출의 상대 경로가 전부 거기 기준이 되어 `fd`·`rg`가 "not a directory"로
+  막힌다. 조사성 명령은 **저장소 루트 기준 상대 경로를 그대로 쓰고**, `cd`가
+  꼭 필요하면 같은 명령 안에서 끝낸다. 2026-08-27에 부딪쳤다.
 - **`std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기** — Zig 0.16에
   둘 다 없다. `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
@@ -420,7 +453,11 @@ libc를 안 링크해서 자유롭고, GL-M1이 그것으로 11,745,656 → 3,33
 - **`vt_test`의 CM-M0 검사를 `screen`에 붙이기** — `screen`은 파일 앞쪽의 작은
   화면이고 history가 없다. 스크롤백을 가진 것은 `fresh`이고, CM-M1·M2의 검사는
   자기 화면 `cm`·`pruned`를 쓴다. **CN-M0도 자기 화면 `wm`을 새로 만들었고
-  그래서 앞 검사들을 하나도 안 흔들었다. CN-M1도 자기 화면을 만든다.**
+  그래서 앞 검사들을 하나도 안 흔들었다. CN-M1도 자기 화면 `fm`·`fs`를 만든다.**
+- **`vt_test`에서 `before`/`after`를 지역 변수 이름으로 쓰기** — CM-M0의 검사가
+  `:327`·`:329`에서 이미 쓰고 있고, **Zig는 같은 함수 안의 shadowing을 컴파일
+  에러로 막는다.** `main()` 하나가 파일 전체라 이 파일의 모든 지역 변수 이름이
+  서로 부딪친다. **새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다.**
 
 ### 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
 
@@ -480,7 +517,7 @@ docker run --rm -v "$PWD":/workspace \
       Power Management · Hardware Discovery가 "M0 미착수"로 남아 있는데
       게이트에는 `CP-M2` · `PM-M1` · `HD-M2`가 3/3으로 돈다. **CN design은 이
       빚을 새로 만들지 않았다** — CN-M0을 닫으며 `Status:`를 갱신했다.
-      **CN-M1도 같은 자리를 고친다.**
+      **CN-M1 plan의 Task 6 Step 4가 같은 일을 계획에 명시해 두었다.**
 - [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.**
 - [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. **빌드해서 돌려 본
