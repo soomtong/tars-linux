@@ -728,5 +728,102 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copyExit이 프롬프트를 닫는다 OK\n", .{});
 
+    // 검사 22~25. **실제로 찾아서 커서를 옮긴다.**
+    //
+    // 스크롤백을 가진 화면을 새로 만든다. 20칸 5줄에 60줄을 먹이면 위쪽
+    // 55줄이 history로 간다.
+    //
+    //   L1 … L9  MARK  L11 … L29  MARK  L31 … L60
+    //            (10)            (30)
+    //
+    // **MARK가 둘인 것이 요점이다.** 하나면 `n`이 감기는지 옮기는지 갈리지
+    // 않는다.
+    const fs = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer fs.deinit();
+    var fl: usize = 1;
+    while (fl <= 60) : (fl += 1) {
+        if (fl == 10 or fl == 30) {
+            fs.feed("MARK\r\n");
+        } else {
+            fs.feed(std.fmt.bufPrint(&line, "L{d}\r\n", .{fl}) catch unreachable);
+        }
+    }
+    _ = try fs.cells(&buf);
+    fs.copyEnter();
+
+    // 검사 22. `/MARK` + Enter가 **가장 최근** MARK(30번째 줄)로 간다.
+    fs.findOpen();
+    for ("MARK") |ch| fs.findChar(ch);
+    const hit = try fs.findSubmit();
+    if (hit.matches != 2) {
+        std.debug.print("FAIL: found {d} match(es) for MARK (expected 2)\n", .{hit.matches});
+        return error.FindMatchCountWrong;
+    }
+    if (!hit.moved) {
+        std.debug.print("FAIL: the cursor did not move to a match\n", .{});
+        return error.FindDidNotMove;
+    }
+    // 커서가 선 줄의 글자를 읽어 확인한다. **좌표가 아니라 내용을 본다** —
+    // 뷰포트가 어디로 밀렸는지는 화면 크기에 딸린 값이라 바뀌기 쉽다.
+    var cur = fs.copyCursor() orelse return error.NoCopyCursor;
+    var text = rowText(try fs.cells(&buf), cur.y, &line);
+    if (!std.mem.startsWith(u8, text, "MARK")) {
+        std.debug.print("FAIL: / landed on '{s}' (expected a MARK row)\n", .{text});
+        return error.FindLandedWrong;
+    }
+    std.debug.print("vt_test: /가 매치로 커서를 옮긴다 OK (matches={d})\n", .{hit.matches});
+
+    // 검사 23. **프롬프트가 닫혔다.** Enter가 안 닫으면 그 뒤의 키가 전부
+    // 글자가 되어 copy mode가 먹통이 된다.
+    if (fs.findNeedle() != null) {
+        std.debug.print("FAIL: Enter left the find prompt open\n", .{});
+        return error.FindSubmitLeftPromptOpen;
+    }
+
+    // 검사 24. `n`이 **더 위의** MARK(10번째 줄)로 간다.
+    const prev_y = fs.scrollbar().offset + cur.y;
+    if (!try fs.findNext()) {
+        std.debug.print("FAIL: n did not move\n", .{});
+        return error.FindNextDidNotMove;
+    }
+    cur = fs.copyCursor().?;
+    text = rowText(try fs.cells(&buf), cur.y, &line);
+    if (!std.mem.startsWith(u8, text, "MARK")) {
+        std.debug.print("FAIL: n landed on '{s}' (expected a MARK row)\n", .{text});
+        return error.FindNextLandedWrong;
+    }
+    const next_y = fs.scrollbar().offset + cur.y;
+    if (next_y >= prev_y) {
+        std.debug.print(
+            "FAIL: n went down or stayed ({d} -> {d}), expected up\n",
+            .{ prev_y, next_y },
+        );
+        return error.FindNextWrongDirection;
+    }
+    std.debug.print("vt_test: n이 더 위의 매치로 간다 OK ({d} -> {d})\n", .{ prev_y, next_y });
+
+    // 검사 25. **매치가 없으면 커서가 안 움직인다.**
+    //
+    // **`before`/`after`라는 이름을 못 쓴다** — 이 파일의 CM-M0 검사가
+    // `:327`·`:329`에서 이미 쓰고 있고, Zig는 같은 함수 안의 shadowing을
+    // 컴파일 에러로 막는다.
+    const miss_from = fs.copyCursor().?;
+    fs.findOpen();
+    for ("NOSUCHTHING") |ch| fs.findChar(ch);
+    const miss = try fs.findSubmit();
+    if (miss.matches != 0 or miss.moved) {
+        std.debug.print(
+            "FAIL: a bogus needle reported matches={d} moved={}\n",
+            .{ miss.matches, miss.moved },
+        );
+        return error.FindFalsePositive;
+    }
+    const miss_to = fs.copyCursor().?;
+    if (miss_to.x != miss_from.x or miss_to.y != miss_from.y) {
+        std.debug.print("FAIL: a failed search moved the cursor\n", .{});
+        return error.FindMissMovedCursor;
+    }
+    std.debug.print("vt_test: 매치가 없으면 커서가 안 움직인다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

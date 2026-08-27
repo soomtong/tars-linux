@@ -635,12 +635,21 @@ pub fn main(init: std.process.Init) !void {
                         screen.findCancel();
                         dumpFind(screen, "cancel");
                     },
-                    // 확정은 Task 4가 채운다. **지금은 프롬프트만 닫는다** —
-                    // 여기를 비워 두면 Enter가 프롬프트를 영영 못 닫아서 그
-                    // 뒤의 키가 전부 글자가 된다.
+                    // **이 milestone에서 유일하게 시간이 걸리는 명령이다.**
+                    // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
+                    // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —
+                    // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
                     .find_submit => {
-                        screen.findCancel();
-                        dumpFind(screen, "submit (not wired yet)");
+                        const t0 = std.Io.Clock.now(.awake, init.io);
+                        const r = try screen.findSubmit();
+                        std.debug.print(
+                            "terminal: find> submit matches={d} moved={} us={d}\n",
+                            .{
+                                r.matches,
+                                r.moved,
+                                @divTrunc(t0.untilNow(init.io, .awake).nanoseconds, 1000),
+                            },
+                        );
                     },
                 }
                 dumpCopy(screen, @tagName(cmd));

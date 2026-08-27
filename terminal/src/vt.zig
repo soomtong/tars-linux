@@ -103,6 +103,19 @@ pub const Screen = struct {
     /// 우리가 못 정하고(선택한 만큼이다) 이쪽은 정할 수 있다.
     find_buf: [128]u8 = undefined,
     find_len: usize = 0,
+    /// 확정된 검색. `findSubmit`이 만들고 `copyExit`이 해제한다(design 결정 10).
+    ///
+    /// **`ScreenSearch`는 `screen: *ghostty_vt.Screen`을 들고 있다**
+    /// (`search/screen.zig:42`). 대체 화면(vim 등)으로 갈아타면
+    /// `term.screens.active`가 달라져 그 포인터가 낡는다 — `feed`가 포인터
+    /// 하나를 비교해 잡는다. **`pointFromPin`을 부르는 앵커 감시와 달리 비용이
+    /// 없다.**
+    ///
+    /// 이것을 안 해제하면 모드를 나갔다 다시 들어왔을 때 지난 매치 목록이 살아
+    /// 있고, 그 pin들은 그 사이 도착한 출력 때문에 이미 엉뚱한 자리를 가리킬 수
+    /// 있다. **증상이 "안 된다"가 아니라 "조용히 다른 자리로 간다"이다** —
+    /// CM-M1이 앵커에 대해 배운 것과 같은 병이다.
+    find: ?ghostty_vt.search.Screen = null,
 
     pub fn init(
         io: std.Io,
@@ -158,6 +171,9 @@ pub const Screen = struct {
     pub fn deinit(self: *Screen) void {
         const alloc = self.alloc;
         if (self.clip) |text| alloc.free(text);
+        // **term보다 먼저다.** ScreenSearch가 든 tracked pin은 PageList의
+        // 풀에서 왔으므로, term을 먼저 버리면 이미 없는 풀을 건드린다.
+        if (self.find) |*f| f.deinit();
         self.state.deinit(alloc);
         self.stream.deinit();
         self.term.deinit(alloc);
@@ -177,6 +193,20 @@ pub const Screen = struct {
     /// 커서만 있는 상태에서는 잘못 복사될 것이 없기 때문이다.
     pub fn feed(self: *Screen, bytes: []const u8) void {
         self.stream.nextSlice(bytes);
+
+        // 대체 화면으로 갈아탔으면 ScreenSearch가 든 포인터가 낡는다
+        // (확정 사실 6). **포인터 비교라 비용이 없다** — 아래 앵커 감시가
+        // `pointFromPin`을 부르는 것과 다르다.
+        //
+        // 앵커 감시는 선택 중일 때만 도는데(copy_anchor_y가 null이면 빠진다)
+        // 검색은 선택 없이도 살아 있을 수 있어서 **여기서 따로 본다.**
+        if (self.find) |*f| {
+            if (f.screen != self.term.screens.active) {
+                self.copyExit();
+                self.copy_pruned = true;
+                return;
+            }
+        }
 
         const want = self.copy_anchor_y orelse return;
         const now = anchorY(self.term.screens.active);
@@ -342,6 +372,10 @@ pub const Screen = struct {
         // 프롬프트도 함께 닫는다(design 결정 10). 안 닫으면 모드를 나갔다
         // 다시 들어왔을 때 지난 검색어가 화면에 남는다.
         self.findCancel();
+        // 매치 목록도 함께 버린다(design 결정 10). tracked pin을 들고 있으므로
+        // **screen이 살아 있는 동안** 해제해야 한다.
+        if (self.find) |*f| f.deinit();
+        self.find = null;
         self.term.screens.active.clearSelection();
     }
 
@@ -392,6 +426,124 @@ pub const Screen = struct {
     pub fn findNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_open) return null;
         return self.find_buf[0..self.find_len];
+    }
+
+    /// 검색 결과. `main.zig`가 로그에 쓴다.
+    ///
+    /// `matches`와 `moved`를 **따로** 주는 것에 뜻이 있다. 매치가 있는데 못
+    /// 옮긴 경우(전부 커서 아래에 있었다)와 매치가 아예 없는 경우는 사람에게
+    /// 다른 뜻이고, 하나로 묶으면 게이트가 그 둘을 못 가른다.
+    pub const FindResult = struct { matches: usize, moved: bool };
+
+    /// Enter. **검색을 돌리고 첫 매치로 커서를 옮긴다.**
+    ///
+    /// `searchAll()`은 블로킹이다(design 결정 5). Enter 한 번에 한 번뿐이므로
+    /// 그것으로 충분하고, **걸린 시간은 `main.zig`가 재서 `find>` 줄에 찍는다**
+    /// (CN-M1 plan 결정 5).
+    ///
+    /// 빈 검색어로 Enter를 누르면 프롬프트만 닫는다. 지난 검색은 그대로 살아
+    /// 있으므로 `n`이 계속 동작한다 — vim과 다른 자리이지만(vim은 지난 검색어를
+    /// 다시 쓴다) 검색 기록이 없는 우리에게는 이것이 가장 덜 놀라운 동작이다.
+    pub fn findSubmit(self: *Screen) !FindResult {
+        const none: FindResult = .{ .matches = 0, .moved = false };
+        if (!self.find_open) return none;
+
+        const len = self.find_len;
+        self.find_open = false;
+        if (len == 0) return none;
+
+        // **옛 검색을 먼저 해제한다.** 안 하면 `/`를 두 번 누를 때마다 매치
+        // 목록과 tracked pin이 그대로 샌다.
+        if (self.find) |*old| old.deinit();
+        self.find = null;
+
+        // **지역 변수에 만들고 나서 옮겨 담는다.** `self.find`가 optional이라
+        // `try .init(...)`이 그 껍질을 통과할지가 Zig 버전에 딸린 문제이고,
+        // 여기서 그것에 기대고 싶지 않다.
+        //
+        // **값으로 옮기는 것이 안전하다는 근거는 라이브러리 자신에 있다** —
+        // `resetIfDimensionsChanged`가 `self.deinit(); self.* = new;`로 같은
+        // 일을 한다(`search/screen.zig:223`). tracked pin은 PageList의 풀을
+        // 가리키지 ScreenSearch 자신을 가리키지 않는다.
+        const s = self.term.screens.active;
+        var fresh: ghostty_vt.search.Screen = try .init(
+            self.alloc,
+            s,
+            self.find_buf[0..len],
+        );
+        errdefer fresh.deinit();
+        try fresh.searchAll();
+        self.find = fresh;
+
+        return .{
+            .matches = self.find.?.matchesLen(),
+            // **첫 이동만 "커서보다 위"를 요구한다**(CN-M1 plan 결정 3).
+            .moved = try self.findStep(.next, true),
+        };
+    }
+
+    /// `n`. 목록의 다음(과거 방향) 매치로.
+    ///
+    /// **목록 끝에서 감긴다.** 라이브러리의 `Select.next` 주석은
+    /// "non-wrapping"이라고 하는데 `selectNext`의 코드는 감는다
+    /// (`search/screen.zig:851`). **주석이 아니라 코드가 맞다.** 감기는 것을
+    /// 감추지 않는 이유는, 막으려면 "끝에 닿았다"는 상태가 하나 늘고 그것을
+    /// 사람에게 알릴 자리가 또 필요하기 때문이다.
+    pub fn findNext(self: *Screen) !bool {
+        return self.findStep(.next, false);
+    }
+
+    /// `N`. 목록의 이전(미래 방향) 매치로.
+    pub fn findPrev(self: *Screen) !bool {
+        return self.findStep(.prev, false);
+    }
+
+    /// `/`의 첫 이동과 `n`/`N`이 함께 쓰는 한 자리.
+    ///
+    /// `above_only`가 참이면 **커서보다 위에 있는 매치를 만날 때까지 넘긴다.**
+    /// design 결정 4가 "`/`는 위로 찾는다"로 정했는데 라이브러리의 `select`는
+    /// 커서를 모르기 때문이다 — 커서를 `k`로 올려 둔 자리에서 `/`를 누르면 그
+    /// 필터가 없을 때 커서가 **아래로 뛴다.**
+    ///
+    /// **넘기는 횟수를 `matchesLen()`으로 막는 것이 필수다.** 목록이 감기므로
+    /// 상한이 없으면 "위에 아무것도 없는" 검색어에서 영원히 돈다.
+    ///
+    /// 마지막 네 줄이 `copyMove`·`copyMoveWord`와 글자 그대로 같다 —
+    /// **모든 이동 수단이 `copyApply`라는 문 하나를 통과한다**(design 결정 11).
+    fn findStep(
+        self: *Screen,
+        dir: ghostty_vt.search.Screen.Select,
+        above_only: bool,
+    ) !bool {
+        if (self.find == null) return false;
+        const f = &self.find.?;
+        const s = self.term.screens.active;
+        const total = f.matchesLen();
+        if (total == 0) return false;
+
+        const from = self.copyPin() orelse return false;
+        const from_pt = s.pages.pointFromPin(.screen, from) orelse return false;
+
+        var tried: usize = 0;
+        while (tried < total) : (tried += 1) {
+            if (!try f.select(dir)) return false;
+            const hl = f.selectedMatch() orelse return false;
+            const pin = hl.startPin();
+
+            if (above_only) {
+                const pt = s.pages.pointFromPin(.screen, pin) orelse continue;
+                if (pt.screen.y >= from_pt.screen.y) continue;
+            }
+
+            self.copyPlace(pin);
+
+            if (self.copy_kind == null) return true;
+            const sel = s.selection orelse return true;
+            const cursor = self.copyPin() orelse return true;
+            try self.copyApply(sel.start(), cursor);
+            return true;
+        }
+        return false;
     }
 
     /// 가지치기로 모드가 끊겼다는 사실을 **한 번만** 돌려준다.
