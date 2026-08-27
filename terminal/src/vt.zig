@@ -82,6 +82,28 @@ pub const Screen = struct {
     /// 버퍼 하나로 충분하다(`project_copy_mode`). 다음 `y`가 옛것을 해제한다.
     clip: ?[:0]const u8 = null,
 
+    /// 검색 프롬프트가 열려 있는가.
+    ///
+    /// **`input.State.mode`에도 같은 사실이 있다.** 중복처럼 보이지만 각자 다른
+    /// 일을 한다(CN-M1 plan 결정 1) — `input.zig`는 키를 글자로 돌리기 위해
+    /// 알아야 하고, 여기는 **그려야 하기 때문에** 알아야 한다. 그리고
+    /// `input.zig`는 `vt.zig`를 import하지 않으므로(IP design 결정 6) 물어볼
+    /// 길이 아예 없다. copy mode 자체가 이미 같은 모양이다
+    /// (`State.mode`와 `copy_cursor`).
+    ///
+    /// **이 값을 만지는 것은 네 함수뿐이다** — findOpen · findCancel ·
+    /// findSubmit · copyExit.
+    find_open: bool = false,
+
+    /// 검색어(design 결정 8). **고정 128바이트이고 넘치면 더 받지 않는다.**
+    ///
+    /// 스크롤백이 1000줄인 시스템에서 128자짜리 검색어를 칠 일이 없고, 동적
+    /// 할당은 "언제 해제하는가"를 copyExit·재검색·모드 재진입 **세 자리**에
+    /// 나눠 놓는다. `clip`이 할당을 쓰는 것과 갈리는 자리인데, 그쪽은 길이를
+    /// 우리가 못 정하고(선택한 만큼이다) 이쪽은 정할 수 있다.
+    find_buf: [128]u8 = undefined,
+    find_len: usize = 0,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -317,7 +339,59 @@ pub const Screen = struct {
         self.copy_cursor = null;
         self.copy_kind = null;
         self.copy_anchor_y = null;
+        // 프롬프트도 함께 닫는다(design 결정 10). 안 닫으면 모드를 나갔다
+        // 다시 들어왔을 때 지난 검색어가 화면에 남는다.
+        self.findCancel();
         self.term.screens.active.clearSelection();
+    }
+
+    /// `/`. 프롬프트를 연다. **언제나 빈 검색어로 시작한다** — 지난 검색어를
+    /// 되부르는 것은 design이 비워 둔 자리다.
+    ///
+    /// copy mode가 아니면 아무 일도 안 한다. `input.zig`의 표가 이미 그것을
+    /// 막지만, **두 곳이 같은 사실을 지키는 것이 이 파일의 규율이다**
+    /// (`copyMove`도 `copySelect`도 같은 첫 줄을 갖는다).
+    pub fn findOpen(self: *Screen) void {
+        if (self.copy_cursor == null) return;
+        self.find_open = true;
+        self.find_len = 0;
+    }
+
+    /// 프롬프트에 글자 하나. **버퍼가 차면 조용히 버린다.**
+    ///
+    /// 버리는 것을 로그로 알리지 않는 이유는 128자에 닿는 상황이 실전에
+    /// 없기 때문이다. 닿았다면 그것은 사람이 친 것이 아니라 키가 붙어 있는
+    /// 것이고, 그 증상은 화면에서 바로 보인다.
+    pub fn findChar(self: *Screen, ch: u8) void {
+        if (!self.find_open) return;
+        if (self.find_len >= self.find_buf.len) return;
+        self.find_buf[self.find_len] = ch;
+        self.find_len += 1;
+    }
+
+    /// Backspace. **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    ///
+    /// vim은 여기서 프롬프트를 닫지만 우리는 안 닫는다. 닫으면 Esc와 뜻이
+    /// 겹치고, 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
+    pub fn findErase(self: *Screen) void {
+        if (!self.find_open) return;
+        if (self.find_len == 0) return;
+        self.find_len -= 1;
+    }
+
+    /// 프롬프트만 닫는다. **copy mode는 유지한다**(design 결정 9).
+    pub fn findCancel(self: *Screen) void {
+        self.find_open = false;
+        self.find_len = 0;
+    }
+
+    /// 지금 프롬프트에 무엇이 쳐져 있는가. 닫혀 있으면 null이다.
+    ///
+    /// **`main.zig`가 `find_buf`를 직접 읽지 않게 하려고 함수로 낸다** —
+    /// `clipboard`·`copyCursor`·`scrollbar`와 같은 규율이다(design 결정 8).
+    pub fn findNeedle(self: *const Screen) ?[]const u8 {
+        if (!self.find_open) return null;
+        return self.find_buf[0..self.find_len];
     }
 
     /// 가지치기로 모드가 끊겼다는 사실을 **한 번만** 돌려준다.

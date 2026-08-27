@@ -272,6 +272,27 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
     }
 }
 
+/// 검색 프롬프트의 상태를 찍는다.
+///
+/// **게이트가 프롬프트를 볼 수 있는 유일한 창구다.** 프롬프트는 오버레이라
+/// `cells()`의 결과에 안 섞이고(design 결정 7), 그래서 `terminal: screen>` 줄에
+/// 절대 안 나타난다. 그 격리가 다섯 체인의 화면 판정을 지키는 대신 관측 수단을
+/// 하나 없앤다 — 이 줄이 그 자리를 메운다.
+///
+/// **`screen>`의 형식을 안 바꾸는 것이 이 설계 전체의 이유다.** 프롬프트를 셀에
+/// 섞었다면 로그 한 줄로 끝났겠지만, 그 줄을 보던 체인 다섯이 전부 흔들린다.
+///
+/// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8).
+/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpFind(screen: *vt.Screen, what: []const u8) void {
+    if (screen.findNeedle()) |n| {
+        std.debug.print("terminal: find> {s} needle={s} len={d}\n", .{ what, n, n.len });
+    } else {
+        // 프롬프트가 닫힌 뒤다. cancel과 submit이 여기로 온다.
+        std.debug.print("terminal: find> {s}\n", .{what});
+    }
+}
+
 /// `y`가 클립보드에 무엇을 담았는지를 찍는다.
 ///
 /// **게이트가 클립보드를 볼 수 있는 유일한 창구다.** 화면만 보면 복사가 됐는지
@@ -516,6 +537,31 @@ pub fn main(init: std.process.Init) !void {
                     // 이것이 copies 배열에서 **유일하게 PTY로 나가는 명령**이다.
                     // 다른 아홉은 전부 우리 안에서 끝난다.
                     .paste => dumpPaste(screen, session.master_fd),
+                    // 검색 프롬프트(CN-M1). **넷 다 화면 상태를 바꾸지 않는다** —
+                    // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
+                    .find_open => {
+                        screen.findOpen();
+                        dumpFind(screen, "open");
+                    },
+                    .find_char => |ch| {
+                        screen.findChar(ch);
+                        dumpFind(screen, "type");
+                    },
+                    .find_erase => {
+                        screen.findErase();
+                        dumpFind(screen, "erase");
+                    },
+                    .find_cancel => {
+                        screen.findCancel();
+                        dumpFind(screen, "cancel");
+                    },
+                    // 확정은 Task 4가 채운다. **지금은 프롬프트만 닫는다** —
+                    // 여기를 비워 두면 Enter가 프롬프트를 영영 못 닫아서 그
+                    // 뒤의 키가 전부 글자가 된다.
+                    .find_submit => {
+                        screen.findCancel();
+                        dumpFind(screen, "submit (not wired yet)");
+                    },
                 }
                 dumpCopy(screen, @tagName(cmd));
                 needs_redraw = true;

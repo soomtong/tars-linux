@@ -665,6 +665,55 @@ pub fn main() !void {
 
     try expectCopy(&cm, K.KEY_ESC, .exit);
 
+    // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
+    //
+    // 검사 17. `/`가 프롬프트를 열고, **그 안에서 키가 글자가 된다.**
+    // `n`으로 보는 것이 핵심이다 — 그것은 Task 5에서 copy 표의 명령이 되므로,
+    // 표보다 프롬프트가 먼저 보지 않으면 needle에 `n`을 못 치게 된다.
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    try expectCopy(&cm, K.KEY_SLASH, .find_open);
+    try expectCopy(&cm, K.KEY_N, .{ .find_char = 'n' });
+    try expectCopy(&cm, K.KEY_E, .{ .find_char = 'e' });
+    try expectCopy(&cm, K.KEY_W, .{ .find_char = 'w' });
+
+    // 검사 18. **Shift가 대문자를 만든다.** 프롬프트는 명령 표가 아니라
+    // keymap을 그대로 쓰므로 대소문자가 갈린다 — `w`/`b`가 Shift를 안 가르는
+    // 것과 정확히 반대다.
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_A, .{ .find_char = 'A' });
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 19. Backspace와 Enter와 Esc.
+    try expectCopy(&cm, K.KEY_BACKSPACE, .find_erase);
+    try expectCopy(&cm, K.KEY_ENTER, .find_submit);
+    // Enter가 프롬프트를 닫았으므로 여기서 `n`은 다시 **명령 표의 것**이다.
+    // Task 5 전까지 `n`은 모르는 키라 삼켜진다.
+    try expect(&cm, K.KEY_N, 1, "");
+
+    // 검사 20. **Esc는 프롬프트만 닫는다**(design 결정 9). 이 검사가 없으면
+    // "Esc 한 번에 모드까지 나간다"도 통과하고, 그러면 오타를 고치려던 사람이
+    // 스크롤 위치와 선택을 잃는다.
+    try expectCopy(&cm, K.KEY_SLASH, .find_open);
+    try expectCopy(&cm, K.KEY_X, .{ .find_char = 'x' });
+    try expectCopy(&cm, K.KEY_ESC, .find_cancel);
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: Esc in the find prompt left copy mode\n", .{});
+        return error.FindCancelLeftMode;
+    }
+    // **두 번째 Esc가 모드를 닫는다.**
+    try expectCopy(&cm, K.KEY_ESC, .exit);
+
+    // 검사 21. **모드 밖의 `/`는 평범한 글자다.** CN-M0의 검사 14와 같은
+    // 대조군이고, 이것이 없으면 셸에 `/`를 못 치게 된 것을 아무도 모른다.
+    try expect(&cm, K.KEY_SLASH, 1, "/");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&cm, K.KEY_SLASH, 1, "?");
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
     std.debug.print("input_test: copy mode OK\n", .{});
 
     std.debug.print("PASS\n", .{});

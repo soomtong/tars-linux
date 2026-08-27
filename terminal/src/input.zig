@@ -207,6 +207,24 @@ pub const Copy = union(enum) {
     /// `chord()`의 Meta 분기와 copy 표 **양쪽에** 같은 뜻이 적혀 있다 —
     /// 한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.
     paste,
+    // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
+    //
+    // **다섯이 한 덩어리다.** `find_open`이 프롬프트를 열고, `find_char`가
+    // 글자를 실어 나르고, `find_erase`가 지우고, `find_cancel`이 닫고,
+    // `find_submit`이 확정한다. `find_char`만 payload를 갖는데, **그것 하나
+    // 때문에 이 타입이 union이 됐다**(design 결정 6).
+
+    /// `/` — 프롬프트를 연다. **빈 검색어로 시작한다.**
+    find_open,
+    /// 프롬프트에 글자 하나. 버퍼가 차면 `vt.zig`가 조용히 버린다.
+    find_char: u8,
+    /// Backspace. **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    find_erase,
+    /// 프롬프트 중의 Esc. **프롬프트만 닫고 copy mode는 유지한다**
+    /// (design 결정 9). Esc를 두 번 눌러야 모드까지 나간다.
+    find_cancel,
+    /// 프롬프트 중의 Enter. 검색을 돌리고 첫 매치로 커서를 옮긴다.
+    find_submit,
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -334,7 +352,18 @@ pub const State = struct {
     /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
     mode: Mode = .normal,
 
-    pub const Mode = enum { normal, copy };
+    pub const Mode = enum {
+        normal,
+        copy,
+        /// 검색 프롬프트가 열려 있다. **copy mode 안의 모드다** — Esc로 여기서
+        /// 빠지면 `.copy`로 돌아가지 `.normal`이 아니다(design 결정 9).
+        ///
+        /// 이 상태에서만 **키가 명령이 아니라 글자가 된다.** copy 표가 `n`을
+        /// 명령으로 보는 것과, 프롬프트가 `n`을 글자로 보는 것이 갈리는 자리가
+        /// 여기이고, 그 갈림은 `handleKey`에서 **어느 분기가 먼저 오는가**로
+        /// 정해진다.
+        find,
+    };
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
@@ -538,6 +567,37 @@ pub const State = struct {
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return nothing;
 
+        // 1.4번 단계 — 검색 프롬프트(design 결정 7·9). **copy 표보다 앞이다.**
+        //
+        // 이 분기가 copy 표 앞에 있어야 하는 이유가 이 milestone의 핵심이다.
+        // 프롬프트가 열려 있을 때 `n`은 **명령이 아니라 글자**여야 하는데, copy
+        // 표가 먼저 보면 `n`을 `.find_next`로 삼켜서 "needle에 n을 못 친다"가
+        // 된다. 순서 하나가 그 사고를 막는다.
+        //
+        // **Ctrl 조합은 여기서 평범한 글자가 된다.** 프롬프트에 제어 문자를
+        // 넣을 이유가 없고, chord()까지 흘려보내면 Cmd+V가 프롬프트 안에서
+        // 붙여넣기로 동작하게 된다 — 그것은 검색 기록과 같은 종류의 기능이라
+        // design이 비워 둔 자리다.
+        if (self.mode == .find) {
+            switch (code) {
+                c.KEY_ESC => {
+                    self.mode = .copy;
+                    return .{ .copy = .find_cancel };
+                },
+                c.KEY_ENTER => {
+                    self.mode = .copy;
+                    return .{ .copy = .find_submit };
+                },
+                c.KEY_BACKSPACE => return .{ .copy = .find_erase },
+                else => {
+                    if (code >= keymap.len) return nothing;
+                    const ch = keymap[code][if (self.shifted()) 1 else 0];
+                    if (ch == 0) return nothing;
+                    return .{ .copy = .{ .find_char = ch } };
+                },
+            }
+        }
+
         // 1.5번 단계 — copy mode(design 결정 3). **아는 키만 명령이 되고
         // 나머지는 전부 삼킨다.** "모르는 키는 흘려보낸다"로 하면 모드 안에서
         // 친 글자가 셸에 도착하는 사고가 조용히 나고, 그것이 이 milestone의
@@ -565,6 +625,15 @@ pub const State = struct {
                 // 그것을 가로채면 두 표가 같은 키에 다른 뜻을 갖게 된다.
                 c.KEY_W => return .{ .copy = .word_next },
                 c.KEY_B => return .{ .copy = .word_prev },
+                // 검색 프롬프트를 연다(CN-M1). **Shift+/ 는 `?`이고 우리는
+                // 아래로 찾지 않으므로**(design 결정 4) 삼킨다 — 여기서
+                // `?`도 받으면 방향 상태가 하나 늘고 `n`/`N`의 뜻이 그것에
+                // 따라 뒤집힌다.
+                c.KEY_SLASH => {
+                    if (self.shifted()) return nothing;
+                    self.mode = .find;
+                    return .{ .copy = .find_open };
+                },
                 // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
                 //
                 //   Cmd+V   → 붙여넣기. **모드를 닫지 않는다.**

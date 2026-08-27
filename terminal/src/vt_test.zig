@@ -658,5 +658,75 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 선택이 w를 따라 넓어진다 OK ('{s}')\n", .{grabbed});
 
+    // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
+    //
+    // 화면을 따로 만든다(CM-M1 이래의 규율). 여기서는 버퍼만 보므로 작아도 된다.
+    const fm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer fm.deinit();
+    fm.feed("hello\r\n");
+    _ = try fm.cells(&buf);
+
+    // 검사 17. **copy mode가 아니면 프롬프트가 안 열린다.**
+    fm.findOpen();
+    if (fm.findNeedle() != null) {
+        std.debug.print("FAIL: the find prompt opened outside copy mode\n", .{});
+        return error.FindOpenedOutsideCopy;
+    }
+
+    // 검사 18. 열고, 치고, 지운다.
+    fm.copyEnter();
+    fm.findOpen();
+    fm.findChar('a');
+    fm.findChar('b');
+    fm.findChar('c');
+    var needle = fm.findNeedle() orelse return error.NoFindPrompt;
+    if (!std.mem.eql(u8, needle, "abc")) {
+        std.debug.print("FAIL: the prompt holds '{s}' (expected 'abc')\n", .{needle});
+        return error.FindNeedleWrong;
+    }
+    fm.findErase();
+    needle = fm.findNeedle().?;
+    if (!std.mem.eql(u8, needle, "ab")) {
+        std.debug.print("FAIL: backspace left '{s}' (expected 'ab')\n", .{needle});
+        return error.FindEraseWrong;
+    }
+    std.debug.print("vt_test: 프롬프트가 글자를 받고 지운다 OK ('{s}')\n", .{needle});
+
+    // 검사 19. **빈 프롬프트에서 Backspace는 프롬프트를 안 닫는다**
+    // (plan 결정 2). 이 검사가 없으면 "비면 닫는다"도 통과하고, 그러면
+    // 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
+    fm.findErase();
+    fm.findErase();
+    fm.findErase();
+    needle = fm.findNeedle() orelse {
+        std.debug.print("FAIL: backspace closed an empty prompt\n", .{});
+        return error.FindEraseClosedPrompt;
+    };
+    if (needle.len != 0) {
+        std.debug.print("FAIL: the prompt should be empty, holds '{s}'\n", .{needle});
+        return error.FindEraseWrong;
+    }
+    std.debug.print("vt_test: 빈 프롬프트의 Backspace가 안 닫는다 OK\n", .{});
+
+    // 검사 20. **버퍼가 넘쳐도 무너지지 않는다**(design 결정 8). 128자를 채우고
+    // 스무 자를 더 친다.
+    var fill: usize = 0;
+    while (fill < 148) : (fill += 1) fm.findChar('z');
+    needle = fm.findNeedle().?;
+    if (needle.len != 128) {
+        std.debug.print("FAIL: the needle grew to {d} (expected to stop at 128)\n", .{needle.len});
+        return error.FindNeedleOverflow;
+    }
+    std.debug.print("vt_test: 검색어가 128자에서 멈춘다 OK\n", .{});
+
+    // 검사 21. **copyExit이 프롬프트도 닫는다**(design 결정 10). 안 닫으면
+    // 모드를 다시 열었을 때 지난 검색어가 화면에 남는다.
+    fm.copyExit();
+    if (fm.findNeedle() != null) {
+        std.debug.print("FAIL: copyExit left the find prompt open\n", .{});
+        return error.FindSurvivedCopyExit;
+    }
+    std.debug.print("vt_test: copyExit이 프롬프트를 닫는다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
