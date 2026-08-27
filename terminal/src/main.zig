@@ -498,6 +498,10 @@ pub fn main(init: std.process.Init) !void {
                     .down => try screen.copyMove(0, 1),
                     .up => try screen.copyMove(0, -1),
                     .right => try screen.copyMove(1, 0),
+                    // 단어 이동(CN-M0). copyMove와 형제이고 선택 갱신도 같은
+                    // copyApply를 통과한다 — 그래서 여기 배선은 한 줄이다.
+                    .word_next => try screen.copyMoveWord(.next),
+                    .word_prev => try screen.copyMoveWord(.prev),
                     .select_char => try screen.copySelect(.char),
                     .select_line => try screen.copySelect(.line),
                     // yank는 **모드를 나간다.** 그래서 아래 dumpCopy는 좌표

@@ -168,10 +168,15 @@ pub const Action = union(enum) {
 
 /// copy mode 안에서 키가 만드는 명령.
 ///
-/// **CM-M2로 표가 닫혔다.** CM-M0부터 지켜 온 규율은 "쓰지 않을 variant를 미리
-/// 만들어 두지 않는다"였다 — `main.zig`의 switch가 `else` 없이 닫혀 있어서,
-/// variant를 더하는 순간 컴파일러가 배선할 자리를 알려주기 때문이다. 미리
-/// 만들어 두면 그 신호를 잃는다. 다음에 표를 늘릴 사람도 같은 순서로 하면 된다.
+/// **CM-M2가 닫았던 표를 CN-M0이 다시 연다.** CM-M0부터 지켜 온 규율은 "쓰지
+/// 않을 variant를 미리 만들어 두지 않는다"였다 — `main.zig`의 switch가 `else`
+/// 없이 닫혀 있어서, variant를 더하는 순간 컴파일러가 배선할 자리를 알려주기
+/// 때문이다. 미리 만들어 두면 그 신호를 잃는다. **이번에도 같은 순서로 한다:
+/// 여기에 둘을 더하면 `main.zig`가 컴파일 에러로 배선을 요구한다.**
+///
+/// **CN-M1이 이 타입을 `union(enum)`으로 바꾼다**(design 결정 6). 검색
+/// 프롬프트에 친 글자를 실어 나를 payload가 필요하기 때문이고, payload가 없는
+/// 지금은 바꾸지 않는다.
 pub const Copy = enum {
     enter,
     exit,
@@ -179,6 +184,13 @@ pub const Copy = enum {
     down,
     up,
     right,
+    /// `w` — 다음 단어의 첫 글자로.
+    ///
+    /// **쓰이지 않은 자리에 닿으면 움직이지 않는다**(CN-M0 plan 결정 1).
+    /// vim과 다른 자리이고, 줄 사이 이동은 `j`/`k`가 한다.
+    word_next,
+    /// `b` — 이전 단어의 첫 글자로. 단어 중간이면 **그 단어의 시작**으로 간다.
+    word_prev,
     /// `v` — 문자 단위 선택 시작/해제.
     select_char,
     /// `V` — 줄 단위 선택 시작/해제.
@@ -543,6 +555,12 @@ pub const State = struct {
                 c.KEY_J, c.KEY_DOWN => return .{ .copy = .down },
                 c.KEY_K, c.KEY_UP => return .{ .copy = .up },
                 c.KEY_L, c.KEY_RIGHT => return .{ .copy = .right },
+                // 단어 이동(CN-M0). **방향키 짝이 없다** — evdev에는 "다음
+                // 단어" 키가 없고, macOS의 Option+←/→가 그 뜻이지만 그 조합은
+                // chord()의 표에 이미 다른 뜻으로 있다(IP 결정 8). 모드 안에서
+                // 그것을 가로채면 두 표가 같은 키에 다른 뜻을 갖게 된다.
+                c.KEY_W => return .{ .copy = .word_next },
+                c.KEY_B => return .{ .copy = .word_prev },
                 // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
                 //
                 //   Cmd+V   → 붙여넣기. **모드를 닫지 않는다.**

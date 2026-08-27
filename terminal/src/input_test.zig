@@ -493,8 +493,17 @@ pub fn main() !void {
 
     // 검사 4. **모르는 키는 삼킨다**(design 결정 3). 게이트의 음성 검사와
     // 같은 사실을 여기서 먼저 본다.
+    //
+    // **CN-M0이 이 목록에서 `w`를 뺐다.** 그것이 이제 `.word_next`라서
+    // 여기서는 "모르는 키"가 아니다. 자리를 `z`로 메운다 — 게이트가 대조군으로
+    // 쓰는 것과 같은 키다.
+    //
+    // **`e`와 `n`은 아직 모르는 키이지만 영영 그렇지는 않다.** `e`는 CN이
+    // 일부러 안 만든 단어 이동이고(design 결정 2), `n`은 CN-M1의 검색이
+    // 가져간다. **그때 이 줄들이 바뀐다** — CM-M2가 `Cmd+V`에 대해 남긴
+    // 예고를 여기서 갚는다.
     try expect(&cm, K.KEY_Q, 1, "");
-    try expect(&cm, K.KEY_W, 1, "");
+    try expect(&cm, K.KEY_Z, 1, "");
     try expect(&cm, K.KEY_E, 1, "");
     try expect(&cm, K.KEY_R, 1, "");
     try expect(&cm, K.KEY_T, 1, "");
@@ -615,6 +624,42 @@ pub fn main() !void {
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
     try expectCopy(&cm, K.KEY_V, .select_line);
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expectCopy(&cm, K.KEY_ESC, .exit);
+
+    // ── CN-M0: 단어 이동 ────────────────────────────────────────────────
+    //
+    // 검사 14. **모드 밖의 `w`와 `b`는 평범한 글자다.** 대조군을 먼저 본다 —
+    // 이것이 없으면 "`w`가 언제나 삼켜진다"도 통과하고, 그러면 셸에 `w`를 못
+    // 치게 된 것을 아무도 모른다. **variant를 더하는 축만 보면 이 사고가
+    // 안 보인다**(CM-M2가 배운 것).
+    try expect(&cm, K.KEY_W, 1, "w");
+    try expect(&cm, K.KEY_B, 1, "b");
+
+    // 검사 15. 모드 안에서는 단어 이동 명령이 된다. **expectCopy는 `.bytes`가
+    // 오면 LeakedToPty로 실패하므로**, 이 두 줄이 곧 "PTY로 안 샌다"의
+    // 증명이다.
+    try expect(&cm, K.KEY_LEFTMETA, 1, "");
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_C, .enter);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&cm, K.KEY_LEFTMETA, 0, "");
+    try expectCopy(&cm, K.KEY_W, .word_next);
+    try expectCopy(&cm, K.KEY_B, .word_prev);
+
+    // **단어 이동은 모드를 안 닫는다.** `y`와 갈리는 자리이고, 안 그러면 `w`를
+    // 한 번 누른 뒤의 키가 전부 셸로 샌다.
+    if (cm.mode != .copy) {
+        std.debug.print("FAIL: a word motion left copy mode\n", .{});
+        return error.WordMotionLeftMode;
+    }
+
+    // 검사 16. **Shift는 단어 이동을 안 가른다.** vim의 `W`/`B`(WORD 단위)를
+    // 만들지 않았으므로(design 결정 2) 대문자도 같은 명령이다. 이것을 적어
+    // 두지 않으면 나중에 `W`를 더하는 사람이 "원래 갈려 있었나"를 못 안다.
+    try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&cm, K.KEY_W, .word_next);
+    try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
+
     try expectCopy(&cm, K.KEY_ESC, .exit);
 
     std.debug.print("input_test: copy mode OK\n", .{});
