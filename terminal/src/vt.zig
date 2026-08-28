@@ -149,6 +149,21 @@ pub const Screen = struct {
     /// 우리가 못 정하고(선택한 만큼이다) 이쪽은 정할 수 있다.
     find_buf: [128]u8 = undefined,
     find_len: usize = 0,
+    /// 마지막으로 확정한 검색어(design 결정 8). **`copyExit`이 지우지 않는
+    /// 유일한 검색 상태다.**
+    ///
+    /// 빈 Enter가 이것을 다시 쓴다. **모드를 나갔다 다시 들어와도 `/`+Enter가
+    /// 동작하는 것이 이 기능의 전부다** — 그래서 `copyExit`의 정리 목록에서
+    /// 이것만 빠진다.
+    ///
+    /// `find_buf`와 같은 고정 128바이트이고 같은 이유다 — 동적 할당은 "언제
+    /// 해제하는가"를 여러 자리에 나눠 놓는다.
+    ///
+    /// **성공·실패를 안 가리고 남긴다.** 못 찾은 검색어를 고쳐 다시 치는 것이
+    /// 흔한 일이고, vim도 그렇게 한다.
+    find_last: [128]u8 = undefined,
+    find_last_len: usize = 0,
+
     /// 확정된 검색. `findSubmit`이 만들고 `copyExit`이 해제한다(design 결정 10).
     ///
     /// **`ScreenSearch`는 `screen: *ghostty_vt.Screen`을 들고 있다**
@@ -501,8 +516,11 @@ pub const Screen = struct {
         self.term.screens.active.clearSelection();
     }
 
-    /// `/`. 프롬프트를 연다. **언제나 빈 검색어로 시작한다** — 지난 검색어를
-    /// 되부르는 것은 design이 비워 둔 자리다.
+    /// `/`. 프롬프트를 연다. **언제나 빈 검색어로 시작한다**(design 결정 8) —
+    /// 미리 채우면 전혀 다른 것을 찾을 때 먼저 여러 번 지워야 한다.
+    ///
+    /// 지난 검색어를 다시 쓰는 길은 **빈 Enter**이고 `findSubmit`이 그 자리다.
+    /// 프롬프트에서 `↑`로 되부르는 것은 design이 비워 둔 자리로 남는다.
     ///
     /// copy mode가 아니면 아무 일도 안 한다. `input.zig`의 표가 이미 그것을
     /// 막지만, **두 곳이 같은 사실을 지키는 것이 이 파일의 규율이다**
@@ -563,16 +581,35 @@ pub const Screen = struct {
     /// 그것으로 충분하고, **걸린 시간은 `main.zig`가 재서 `find>` 줄에 찍는다**
     /// (CN-M1 plan 결정 5).
     ///
-    /// 빈 검색어로 Enter를 누르면 프롬프트만 닫는다. 지난 검색은 그대로 살아
-    /// 있으므로 `n`이 계속 동작한다 — vim과 다른 자리이지만(vim은 지난 검색어를
-    /// 다시 쓴다) 검색 기록이 없는 우리에게는 이것이 가장 덜 놀라운 동작이다.
+    /// **빈 검색어로 Enter를 누르면 지난 검색어를 다시 쓴다**(CS-M1, design
+    /// 결정 8). vim과 같은 동작이다. 되부를 것이 아예 없으면 예전처럼 프롬프트만
+    /// 닫고, 그때도 지난 검색은 살아 있으므로 `n`이 계속 동작한다.
     pub fn findSubmit(self: *Screen) !FindResult {
         const none: FindResult = .{ .matches = 0, .moved = false };
         if (!self.find_open) return none;
 
-        const len = self.find_len;
         self.find_open = false;
-        if (len == 0) return none;
+
+        // **빈 Enter는 지난 검색어를 다시 쓴다**(design 결정 8). CN-M1이
+        // 프롬프트만 닫던 자리이고, 그때 "검색 기록이 없어서"라고 적어 두었다.
+        //
+        // 되부를 것이 아예 없으면 그대로 프롬프트만 닫는다 — 부팅 직후 `/`를
+        // 열고 그냥 Enter를 누른 경우다.
+        var len = self.find_len;
+        if (len == 0) {
+            if (self.find_last_len == 0) return none;
+            len = self.find_last_len;
+            @memcpy(self.find_buf[0..len], self.find_last[0..len]);
+        }
+
+        // **성공·실패와 무관하게 남긴다**(design 결정 8). 못 찾은 검색어를 고쳐
+        // 다시 치는 것이 흔한 일이고, 그러려면 실패한 것도 기억해야 한다.
+        //
+        // 위에서 되부른 경우에는 같은 값을 도로 쓰는 셈인데, 그래도 분기를
+        // 안 만든다 — `find_buf`와 `find_last`는 **서로 다른 배열**이라 겹칠
+        // 일이 없고, 규칙이 하나면 빠뜨릴 자리도 없다.
+        @memcpy(self.find_last[0..len], self.find_buf[0..len]);
+        self.find_last_len = len;
 
         // **옛 검색을 먼저 해제한다.** 안 하면 `/`를 두 번 누를 때마다 매치
         // 목록과 tracked pin이 그대로 샌다.

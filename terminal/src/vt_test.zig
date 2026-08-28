@@ -995,5 +995,66 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copy mode를 나가면 하이라이트가 사라진다 OK\n", .{});
 
+    // ── CS-M1: 검색 기록과 "못 찾았다" 메시지 ─────────────────────────────
+    //
+    // **새 화면을 만든다.** 앞의 `hs`는 검사 31에서 `copyExit`으로 끝났고 그
+    // 상태에 검사 넷이 기대고 있다 — 남의 화면에 붙이면 앞 검사가 흔들린다.
+    // CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`,
+    // CS-M0이 `hs`를 새로 만든 것과 같은 규율이다.
+    //
+    // 화면 모양은 `hs`와 같다(20x5, 8번과 18번 줄이 표적). 같은 모양을 쓰는
+    // 것은 게으름이 아니라 **기대값을 옮겨 쓸 수 있게 하려는 것**이다 —
+    // 검사 26이 확정한 `matches=2`를 여기서 다시 세지 않아도 된다.
+    const ls = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer ls.deinit();
+    var ls_i: usize = 1;
+    while (ls_i <= 20) : (ls_i += 1) {
+        if (ls_i == 8 or ls_i == 18) {
+            ls.feed("xxTARGETxx\r\n");
+        } else {
+            ls.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ls_i}) catch unreachable);
+        }
+    }
+    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
+    _ = try ls.cells(&buf);
+    ls.copyEnter();
+
+    // 검사 32. **빈 Enter가 지난 검색어를 다시 쓴다.**
+    ls.findOpen();
+    for ("TARGET") |ch| ls.findChar(ch);
+    const lhit = try ls.findSubmit();
+    if (lhit.matches == 0) {
+        std.debug.print("FAIL: /TARGET found nothing\n", .{});
+        return error.HistorySearchFoundNothing;
+    }
+    ls.findOpen();
+    // 글자를 하나도 안 치고 곧바로 Enter다.
+    const lhit2 = try ls.findSubmit();
+    if (lhit2.matches != lhit.matches) {
+        std.debug.print("FAIL: the empty Enter found {d} (expected the previous {d})\n", .{
+            lhit2.matches, lhit.matches,
+        });
+        return error.EmptySubmitDidNotRepeat;
+    }
+    std.debug.print("vt_test: 빈 Enter가 지난 검색어를 다시 쓴다 OK (matches={d})\n", .{lhit2.matches});
+
+    // 검사 33. **copy mode를 나갔다 들어와도 검색어가 남는다.**
+    //
+    // `copyExit`은 `find`·`find_matches`·`find_buf`를 전부 버린다 —
+    // **`find_last`만 안 버린다**(design 결정 8). 그 하나가 이 기능의 전부이고,
+    // 실수로 함께 지우면 여기서 `matches=0`이 되어 잡힌다.
+    ls.copyExit();
+    ls.copyEnter();
+    ls.findOpen();
+    const lhit3 = try ls.findSubmit();
+    if (lhit3.matches != lhit.matches) {
+        std.debug.print("FAIL: after leaving copy mode the empty Enter found {d} (expected {d})\n", .{
+            lhit3.matches, lhit.matches,
+        });
+        return error.HistoryLostOnExit;
+    }
+    std.debug.print("vt_test: copy mode를 나갔다 들어와도 검색어가 남는다 OK (matches={d})\n", .{lhit3.matches});
+
     std.debug.print("PASS\n", .{});
 }
