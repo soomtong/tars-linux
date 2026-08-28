@@ -170,6 +170,36 @@ const Prompt = struct {
     bg: u32,
 };
 
+/// 오버레이 한 줄에 쓸 글자를 정한다. **프롬프트가 우선이고, 닫혀 있으면
+/// "못 찾았다" 메시지다**(design 결정 9). 둘 다 없으면 null이고, 그러면
+/// 오버레이를 아예 안 그린다.
+///
+/// **`drawPrompt`는 이것을 모른다.** 그리는 함수는 "한 줄을 준 색으로 쓴다"
+/// 하나만 알고, 무엇을 쓸지는 여기서 끝난다 — CN-M1이 앞의 `/`를 `vt.zig`가
+/// 아니라 `main.zig`에서 붙인 것과 같은 경계다(모양은 여기가 정한다).
+///
+/// **프롬프트를 먼저 보는 것에 뜻이 있다.** 못 찾은 뒤에 `/`를 다시 열면 사람이
+/// 지금 치고 있는 것이 화면에 나와야 한다. 순서를 뒤집으면 새 검색어를 치는
+/// 동안 지난 실패 메시지가 화면에 남는다.
+///
+/// `buf`는 최소 **140바이트**여야 한다: `/` 하나 + needle 128 + `: not found`
+/// 열하나.
+fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
+    const MISS = ": not found";
+    if (screen.findNeedle()) |n| {
+        buf[0] = '/';
+        @memcpy(buf[1 .. 1 + n.len], n);
+        return buf[0 .. 1 + n.len];
+    }
+    if (screen.findMissed()) |n| {
+        buf[0] = '/';
+        @memcpy(buf[1 .. 1 + n.len], n);
+        @memcpy(buf[1 + n.len ..][0..MISS.len], MISS);
+        return buf[0 .. 1 + n.len + MISS.len];
+    }
+    return null;
+}
+
 /// 한 프레임에 찍는 style/pixel 줄의 상한. 화면 전체에 색이 깔린 프로그램이
 /// 돌면 셀 수천 개가 매 프레임 로그로 쏟아진다. 게이트가 검사에 쓰는 셀은
 /// 한 줄 안의 몇 개라 이만큼이면 넉넉하다.
@@ -371,6 +401,28 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
         // 프롬프트가 닫힌 뒤다. cancel과 submit이 여기로 온다.
         std.debug.print("terminal: find> {s}\n", .{what});
     }
+}
+
+/// 오버레이 한 줄에 무엇이 쓰였는지(CS-M1 plan 결정 3). **없으면 한 줄도 안
+/// 찍는다.**
+///
+/// **이 줄이 유일한 관측 수단이다.** 오버레이는 `cells()`에 안 섞이므로
+/// `screen>`에 영영 안 나오고, `dumpStyles`는 덮인 줄을 통째로 건너뛴다
+/// (`overlaid_row`). 그래서 이 줄이 없으면 게이트가 "화면에 그렇게 쓰였다"를
+/// 볼 창구가 하나도 없다 — `find> submit matches=0`은 "검색이 못 찾았다"까지만
+/// 말한다.
+///
+/// **`render()`에 넘어간 바로 그 값을 받는다.** 문자열을 여기서 다시 만들지
+/// 않는 이유는, 다시 만들면 그리는 것과 찍는 것이 갈릴 수 있기 때문이다.
+///
+/// `find> hl`과 같이 **매 프레임 찍는다**. "바뀔 때만"은 상태를 하나 더 만들고
+/// 그 판정이 틀리면 증상이 "로그가 안 나온다"라 조사하기 나쁘다.
+///
+/// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다.
+/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpOverlay(prompt: ?Prompt) void {
+    const p = prompt orelse return;
+    std.debug.print("terminal: find> overlay text={s}\n", .{p.text});
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -613,6 +665,16 @@ pub fn main(init: std.process.Init) !void {
             // 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
             // 개를 실어 온다.
             for (keys.copies) |cmd| {
+                // **"못 찾았다" 메시지는 다음 키에 사라진다**(design 결정 9).
+                //
+                // 끄는 자리가 **루프 안**인 것에 뜻이 있다. 밖에 두면 한 번의
+                // read에 여러 키가 실려 왔을 때(자동 반복) 첫 키만 메시지를
+                // 지운다.
+                //
+                // 그리고 `switch`보다 **앞**이라, 모든 명령이 예외 없이 지우고
+                // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
+                // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
+                screen.findClearMissed();
                 switch (cmd) {
                     .enter => screen.copyEnter(),
                     .exit => screen.copyExit(),
@@ -747,20 +809,17 @@ pub fn main(init: std.process.Init) !void {
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
         // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
         //
-        // 버퍼가 needle보다 한 칸 크다. `/` 한 글자 때문이다.
-        var prompt_buf: [129]u8 = undefined;
-        const prompt: ?Prompt = if (screen.findNeedle()) |n| blk: {
-            prompt_buf[0] = '/';
-            @memcpy(prompt_buf[1 .. 1 + n.len], n);
-            break :blk .{
-                .text = prompt_buf[0 .. 1 + n.len],
-                .rows = rows,
-                .cols = cols,
-                // **`cells()` 뒤에 읽어야 한다** — `state.colors`는 update()가
-                // 채운다(vt.zig의 defaultFg 주석).
-                .fg = screen.defaultFg(),
-                .bg = screen.defaultBg(),
-            };
+        // 버퍼가 needle보다 **열두 칸** 크다. 앞의 `/` 하나와 뒤의
+        // `: not found` 열하나 때문이다(CS-M1).
+        var prompt_buf: [140]u8 = undefined;
+        const prompt: ?Prompt = if (promptText(screen, &prompt_buf)) |t| .{
+            .text = t,
+            .rows = rows,
+            .cols = cols,
+            // **`cells()` 뒤에 읽어야 한다** — `state.colors`는 update()가
+            // 채운다(vt.zig의 defaultFg 주석).
+            .fg = screen.defaultFg(),
+            .bg = screen.defaultBg(),
         } else null;
 
         const frame_start = std.Io.Clock.now(.awake, init.io);
@@ -774,6 +833,7 @@ pub fn main(init: std.process.Init) !void {
 
         dumpScreen(cells);
         dumpHighlight(screen);
+        dumpOverlay(prompt);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
