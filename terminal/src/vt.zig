@@ -40,6 +40,22 @@ pub const RowSpan = struct {
 /// 커지면 그때 상한을 논의한다.
 pub const HlStats = struct { spans: usize, cells: usize, us: i64 };
 
+/// 매치 하이라이트의 바탕색(design 결정 1). **맞바꿈이 아니라 값이다.**
+///
+/// 배경 `#102030`과도 반전된 흰색과도 멀어야 사람이 넷을 가릴 수 있고, 색이
+/// **하나**여야 게이트가 `style>` 줄에서 셀 수 있다. 어두운 앰버를 골랐다.
+///
+/// | 상태 | 바탕 | 글자 |
+/// |---|---|---|
+/// | 기본 | `#102030` | 흰색 |
+/// | 선택 | 흰색 | `#102030` |
+/// | 매치 | `#705000` | 흰색 |
+/// | 선택 안의 매치 | 흰색 | `#705000` |
+///
+/// 상수가 `main.zig`가 아니라 여기 있는 이유는 색을 확정하는 것이 이 파일의
+/// 일이기 때문이다(TR design 결정 1). `pub`인 것은 `vt_test`가 본다.
+pub const MATCH_BG: u32 = 0x00705000;
+
 /// `color.RGB`를 프레임버퍼의 XRGB8888 한 워드로 만든다.
 fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
@@ -314,7 +330,23 @@ pub const Screen = struct {
         // (`render.zig`가 `sel.topLeft()`/`bottomRight()`로 계산한다). 절대 행
         // 번호를 우리가 세지 않는 이유가 이것이다(design 결정 6).
         const row_sels = row_data.items(.selection);
+        // 정렬된 범위 목록을 **앞으로만** 미는 커서다(design 결정 4). 셀마다
+        // 목록을 훑지 않으므로 전체가 O(범위 수)다.
+        const spans = self.hl_spans.items;
+        var hl_at: usize = 0;
+
         for (0..self.state.rows) |y| {
+            // `@as(usize, ...)`는 이 파일의 기존 규율이다 — 아래 선택 범위를
+            // 보는 자리가 `x >= @as(usize, range[0])`으로 쓴다.
+            while (hl_at < spans.len and
+                @as(usize, spans[hl_at].row) < y) : (hl_at += 1)
+            {}
+            var hl_end = hl_at;
+            while (hl_end < spans.len and
+                @as(usize, spans[hl_end].row) == y) : (hl_end += 1)
+            {}
+            const row_spans = spans[hl_at..hl_end];
+
             const cells_slice = row_cells[y].slice();
             const raws = cells_slice.items(.raw);
             const styles = cells_slice.items(.style);
@@ -345,6 +377,25 @@ pub const Screen = struct {
                     // inverse는 아무도 처리해 주지 않는다 — fg()도 bg()도
                     // 이 플래그를 안 본다.
                     if (st.flags.inverse) std.mem.swap(u32, &fg, &bg);
+                }
+
+                // 매치 하이라이트(CS-M0 design 결정 1). **맞바꿈이 아니라 값을
+                // 정한다.** 맞바꿈이면 선택 안의 매치가 아래에서 두 번 뒤집혀
+                // 원래 색으로 돌아와 안 보이고, 반전된 띠가 선택인지 매치인지
+                // 사람도 게이트도 못 가른다.
+                //
+                // **inverse 뒤·선택 앞이 이 층의 자리다.** inverse는 셀이 원래
+                // 가진 성질이라 매치가 덮어써야 하고, 선택과 커서는 사람이 지금
+                // 하는 동작이라 매치 **위에** 얹혀야 한다.
+                //
+                // **`fg`는 안 건드린다** — 매치가 원래 무슨 색 글자였는지를
+                // 지우지 않기 위해서다. 그래서 이 층은 한 줄로 말할 수 있다:
+                // "매치는 바탕만 정한다".
+                for (row_spans) |sp| {
+                    if (x >= @as(usize, sp.x0) and x <= @as(usize, sp.x1)) {
+                        bg = MATCH_BG;
+                        break;
+                    }
                 }
 
                 // 선택 영역도 inverse·커서와 **같은 연산**이다(design 결정 6).

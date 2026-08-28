@@ -921,5 +921,79 @@ pub fn main(init: std.process.Init) !void {
         hstats.spans, hstats.cells,
     });
 
+    // 검사 29. **매치 셀의 바탕이 MATCH_BG다.**
+    //
+    // 범위를 옳게 풀고도 색을 안 넣을 수 있다 — 검사 28과 이 검사가 그 둘을
+    // 가른다.
+    // **여섯이 아니라 다섯이다.** `/` 뒤 copy 커서는 매치의 첫 칸에 서 있고
+    // (`copyPlace`가 `top_x`로 옮긴다), 커서는 매치 **위에** 얹히는 층이라 그
+    // 한 칸이 또 한 번 맞바뀐다 — `fg=MATCH_BG, bg=기본`이 되어 아래 `hcnt`에서
+    // 빠진다. **그 한 칸을 따로 세는 것이 이 검사의 요점이다**: 여섯 번째가
+    // 조용히 사라진 것과 커서가 뒤집은 것은 다른 일이고, `hcnt`만 보면 안 갈린다.
+    //
+    // 칠하기 **전**의 수가 여섯인 것은 검사 28의 `cells=6`이 이미 확인했다.
+    var hcnt: usize = 0;
+    var hcursor: usize = 0;
+    for (try hs.cells(&buf)) |c| {
+        // 이름이 `painted`가 아닌 이유: CM-M0의 검사가 `:386`에서 그 이름을
+        // 쓰고 있고, `main()` 하나가 파일 전체라 Zig가 shadowing을 막는다.
+        const hpaint = c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG;
+        if (!hpaint) continue;
+        if (c.row != 0 or c.col < 2 or c.col > 7) {
+            std.debug.print("FAIL: painted a cell outside the match at {d},{d}\n", .{
+                c.row, c.col,
+            });
+            return error.HighlightPaintedWrongCell;
+        }
+        if (c.bg == vt.MATCH_BG) hcnt += 1 else hcursor += 1;
+    }
+    if (hcnt != 5 or hcursor != 1) {
+        std.debug.print("FAIL: {d} plain + {d} inverted match cell(s) (expected 5 + 1)\n", .{
+            hcnt, hcursor,
+        });
+        return error.HighlightPaintCountWrong;
+    }
+    std.debug.print("vt_test: 매치 셀의 바탕이 MATCH_BG다 OK (plain={d} cursor={d})\n", .{
+        hcnt, hcursor,
+    });
+
+    // 검사 30. **선택 안의 매치는 맞바뀌어 여전히 갈린다.**
+    //
+    // 매치를 맞바꿈으로 만들었다면 여기서 두 번 뒤집혀 기본 색으로 돌아왔을
+    // 것이고, 이 검사가 그것을 잡는다. 커서가 매치의 첫 칸에 서 있으므로
+    // (`copyPlace`가 `top_x`로 옮긴다) **그 한 칸은 또 한 번 맞바뀐다** — 그래서
+    // 뒤집힌 매치 셀은 여섯이 아니라 다섯이다.
+    try hs.copySelect(.line);
+    var hswapped: usize = 0;
+    for (try hs.cells(&buf)) |c| {
+        if (c.fg == vt.MATCH_BG and c.bg != vt.MATCH_BG) hswapped += 1;
+    }
+    if (hswapped != 5) {
+        std.debug.print("FAIL: {d} match cell(s) survived the selection (expected 5)\n", .{
+            hswapped,
+        });
+        return error.HighlightUnderSelectionWrong;
+    }
+    std.debug.print("vt_test: 선택 안의 매치가 맞바뀌어 남는다 OK (cells={d})\n", .{hswapped});
+
+    // 검사 31. **copy mode를 나가면 하이라이트가 사라진다.**
+    //
+    // `copyExit`이 `find_matches`를 안 버리면 여기서 잡힌다. 게이트의 음성
+    // 검사와 같은 것을 보지만, 이쪽이 훨씬 빨리 실패를 알려준다.
+    hs.copyExit();
+    var hleft: usize = 0;
+    for (try hs.cells(&buf)) |c| {
+        if (c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG) hleft += 1;
+    }
+    if (hleft != 0) {
+        std.debug.print("FAIL: {d} highlighted cell(s) survived copyExit\n", .{hleft});
+        return error.HighlightSurvivedExit;
+    }
+    if (hs.hlStats() != null) {
+        std.debug.print("FAIL: hlStats() was not null after copyExit\n", .{});
+        return error.HighlightStatsSurvivedExit;
+    }
+    std.debug.print("vt_test: copy mode를 나가면 하이라이트가 사라진다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
