@@ -886,5 +886,40 @@ pub fn main(init: std.process.Init) !void {
     for ("TARGET") |ch| hs.findChar(ch);
     _ = try hs.findSubmit();
 
+    // 검사 28. **화면에 보이는 매치 하나만 범위가 된다.**
+    //
+    // `copyPlace`가 뷰포트 위의 매치를 화면 맨 윗줄로 올리므로(`vt.zig:748`)
+    // `/`가 끝난 자리에서 매치는 언제나 row 0이다. 표적을 두 줄에 심었지만
+    // 화면이 5줄이라 한 번에 하나만 보인다 — 그것이 이 검사의 요점이다.
+    //
+    // **`cells()`를 부르고 나서 본다.** 범위는 그 안에서 만들어진다.
+    _ = try hs.cells(&buf);
+    const hspans = hs.hlSpans();
+    if (hspans.len != 1) {
+        std.debug.print("FAIL: {d} span(s) in view (expected 1)\n", .{hspans.len});
+        for (hspans) |sp| {
+            std.debug.print("  span row={d} x0={d} x1={d}\n", .{ sp.row, sp.x0, sp.x1 });
+        }
+        return error.HighlightSpanCountWrong;
+    }
+    // `xxTARGETxx`에서 TARGET은 x=2..7이다.
+    if (hspans[0].row != 0 or hspans[0].x0 != 2 or hspans[0].x1 != 7) {
+        std.debug.print("FAIL: span is row={d} x0={d} x1={d} (expected 0,2,7)\n", .{
+            hspans[0].row, hspans[0].x0, hspans[0].x1,
+        });
+        return error.HighlightSpanWrong;
+    }
+    const hstats = hs.hlStats() orelse {
+        std.debug.print("FAIL: hlStats() was null while a search was live\n", .{});
+        return error.HighlightStatsMissing;
+    };
+    if (hstats.cells != 6) {
+        std.debug.print("FAIL: highlight covered {d} cell(s) (expected 6)\n", .{hstats.cells});
+        return error.HighlightCellCountWrong;
+    }
+    std.debug.print("vt_test: 보이는 매치만 범위가 된다 OK (spans={d} cells={d})\n", .{
+        hstats.spans, hstats.cells,
+    });
+
     std.debug.print("PASS\n", .{});
 }

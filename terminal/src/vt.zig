@@ -16,6 +16,30 @@ pub const CellGlyph = struct {
     bg: u32,
 };
 
+/// 매치 하이라이트의 행별 범위 하나. **양 끝을 포함한다** — 라이브러리가
+/// `row_sels`로 주는 선택 범위와 같은 규약이다(design 결정 4).
+///
+/// **`Screen` 안이 아니라 여기 있는 이유**는 Zig가 struct의 필드 사이에 선언을
+/// 끼우는 것을 막기 때문이다. `Screen`의 기존 선언들(`Cursor`·`SelectKind`)이
+/// 전부 필드 뒤에 있는 것도 같은 규칙이고, `CellGlyph`처럼 바깥이 보는 타입은
+/// 파일 스코프가 자리가 맞다.
+pub const RowSpan = struct {
+    row: u16,
+    x0: u16,
+    x1: u16,
+
+    fn lessThan(_: void, a: RowSpan, b: RowSpan) bool {
+        if (a.row != b.row) return a.row < b.row;
+        return a.x0 < b.x0;
+    }
+};
+
+/// 마지막 `cells()`가 만든 하이라이트의 실측(design 결정 5).
+///
+/// **상한을 안 두기로 한 결정의 근거를 남기는 값이다.** `us`가 밀리초 단위로
+/// 커지면 그때 상한을 논의한다.
+pub const HlStats = struct { spans: usize, cells: usize, us: i64 };
+
 /// `color.RGB`를 프레임버퍼의 XRGB8888 한 워드로 만든다.
 fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
@@ -35,6 +59,12 @@ fn packRgb(c: ghostty_vt.color.RGB) u32 {
 /// 가리키게 된다. `init`이 `*Screen`을 돌려주는 이유가 이것이다.
 pub const Screen = struct {
     alloc: std.mem.Allocator,
+    /// 시간을 재기 위해 들고 있는다(plan 결정 1). `init`이 `Terminal`에 넘기고
+    /// 버리던 값이다.
+    ///
+    /// `cells()`에 인자로 넘기지 않는 이유는 그 호출부가 `vt_test`에만 열댓 곳
+    /// 있기 때문이다 — 이 milestone과 무관한 diff가 그만큼 생긴다.
+    io: std.Io,
     term: ghostty_vt.Terminal,
     /// `ghostty_vt.Stream`이 아니다 — 그쪽은 핸들러 타입을 받는 제네릭
     /// 함수(`stream.Stream(Handler)`)라서 필드 타입으로 못 쓴다.
@@ -134,6 +164,14 @@ pub const Screen = struct {
     /// (design 결정 7).
     find_matches: ?[]ghostty_vt.highlight.Flattened = null,
 
+    /// 하이라이트의 행별 범위. **매 `cells()`가 다시 만든다.**
+    ///
+    /// 매치 목록은 스냅숏이지만(design 결정 7) 좌표는 아니다 — 뷰포트가 움직이면
+    /// 같은 매치가 다른 행에 온다. 버퍼를 들고 있는 이유는 프레임마다 새로
+    /// 할당하지 않기 위해서다(`clearRetainingCapacity`).
+    hl_spans: std.ArrayListUnmanaged(RowSpan) = .empty,
+    hl_stats: HlStats = .{ .spans = 0, .cells = 0, .us = 0 },
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -143,6 +181,7 @@ pub const Screen = struct {
         const self = try alloc.create(Screen);
         self.* = .{
             .alloc = alloc,
+            .io = io,
             // 기본 색을 여기서 준다(design 결정 5). 값은 main.zig가 쓰던
             // 상수와 같게 유지한다 — 이번 변경이 화면의 색을 바꾸는 일이 되면
             // 게이트의 회귀와 우리 변경을 가르기 어려워진다.
@@ -194,6 +233,7 @@ pub const Screen = struct {
         // **바깥 슬라이스만 해제한다**(design 결정 6). 원소의 `chunks`는 위
         // `f.deinit()`이 이미 해제한 버퍼를 가리키는 얕은 복사다.
         if (self.find_matches) |m| alloc.free(m);
+        self.hl_spans.deinit(alloc);
         self.state.deinit(alloc);
         self.stream.deinit();
         self.term.deinit(alloc);
@@ -257,6 +297,10 @@ pub const Screen = struct {
         // update()는 beginUpdate() + endUpdate()다(`render.zig:326`).
         // 셀별 style은 endUpdate에서 채워지므로 이 호출 뒤에 읽어도 된다.
         try self.state.update(self.alloc, &self.term);
+
+        // 매치 하이라이트의 좌표를 먼저 푼다(CS-M0). 검색이 없으면 곧바로
+        // 돌아온다.
+        try self.findSpans();
 
         const colors = &self.state.colors;
         const default_fg = packRgb(colors.foreground);
@@ -400,6 +444,9 @@ pub const Screen = struct {
         // 해제한다 — 원소는 방금 `f.deinit()`이 해제한 버퍼를 가리킨다.
         if (self.find_matches) |m| self.alloc.free(m);
         self.find_matches = null;
+        // 좌표도 함께 비운다. 안 비우면 모드를 나간 프레임에 지난 범위가 한 번
+        // 더 칠해진다 — 게이트의 음성 검사(plan 결정 4)가 그것을 본다.
+        self.hl_spans.clearRetainingCapacity();
         self.term.screens.active.clearSelection();
     }
 
@@ -499,24 +546,15 @@ pub const Screen = struct {
         );
         errdefer fresh.deinit();
         try fresh.searchAll();
-        // **매치 목록을 지금 한 번만 받는다**(design 결정 2·6). `self.find`에
-        // 옮기기 **전에** 부르는 것에 뜻이 있다 — 여기서 실패하면 위의
-        // `errdefer fresh.deinit()`이 온전한 상태를 정리하고, `self.find`는
-        // 아직 아무것도 안 가리킨다.
-        //
-        // 슬라이스의 원소는 `fresh` 내부 버퍼를 가리키는 얕은 복사인데, 아래에서
-        // `fresh`를 **값으로** 옮겨도 그 버퍼는 힙에 그대로 있으므로 유효하다.
-        const found = try fresh.matches(self.alloc);
-        errdefer self.alloc.free(found);
 
         self.find = fresh;
-        self.find_matches = found;
 
-        return .{
-            .matches = self.find.?.matchesLen(),
-            // **첫 이동만 "커서보다 위"를 요구한다**(CN-M1 plan 결정 3).
-            .moved = try self.findStep(.next, true),
-        };
+        // **첫 이동만 "커서보다 위"를 요구한다**(CN-M1 plan 결정 3).
+        const moved = try self.findStep(.next, true);
+        // **이동 뒤에 스냅숏을 뜬다.** 왜 뒤여야 하는지는 `refreshMatches`에
+        // 적혀 있다 — `select()`가 앞의 목록을 해제한다.
+        try self.refreshMatches();
+        return .{ .matches = self.find.?.matchesLen(), .moved = moved };
     }
 
     /// 보관 중인 매치가 몇 개인가. 검색이 없으면 0이다.
@@ -529,6 +567,135 @@ pub const Screen = struct {
         return m.len;
     }
 
+    /// 매치 목록 스냅숏을 다시 뜬다. **`select()`를 부른 직후에 부른다.**
+    ///
+    /// **`select()`가 앞의 목록을 무효로 만든다.** 그것이 먼저 `reloadActive()`를
+    /// 부르는데, 그 함수가 `active_results`의 원소를 전부 `deinit`한 뒤 활성
+    /// 영역을 다시 찾는다(`search/screen.zig:682-683`). `pruneHistory()`도
+    /// history 쪽에 같은 일을 한다(`:402`). 그래서 `matches()`가 준 얕은 복사는
+    /// **다음 `select()`까지만** 유효하고, 그 뒤에 읽으면 해제된 메모리다 —
+    /// 디버그 allocator에서 0xAA로 나타난다.
+    ///
+    /// 깊은 복사(`Flattened.clone`)로 가지 않는 이유는 그러면 하이라이트가 낡은
+    /// 목록을, `n`이 새 목록을 보게 되기 때문이다. **어긋남을 만들지 않는 것이
+    /// design 결정 2의 요점이다.**
+    ///
+    /// `select`를 부르는 자리는 `findStep` 하나이고, 그것을 부르는 것은
+    /// `findSubmit`·`findNext`·`findPrev` **셋뿐이다.** 셋 다 끝에서 이것을
+    /// 부른다.
+    fn refreshMatches(self: *Screen) !void {
+        if (self.find_matches) |m| self.alloc.free(m);
+        self.find_matches = null;
+        if (self.find) |*f| self.find_matches = try f.matches(self.alloc);
+    }
+
+    /// 화면에 보이는 매치를 행별 범위로 푼다. **`cells()`가 매 프레임 부른다.**
+    ///
+    /// **매치마다 `pointFromPin`을 부르지 않는다**(design 결정 3). 그 함수는
+    /// 뷰포트 top-left에서 `node.next`를 따라 앞으로 훑고, 뷰포트보다 **위**에
+    /// 있는 pin은 목록 끝까지 훑은 뒤에야 null이 된다 — copy mode에서 매치
+    /// 대부분이 거기 있다. 라이브러리도 `Pin.before`에 "very expensive... should
+    /// not be called in performance critical paths"라고 적어 두었고 `isBetween`도
+    /// 같은 성질이라, 싼 pin 순서 비교는 애초에 없다.
+    ///
+    /// 그래서 방향을 뒤집는다. 뷰포트가 덮는 page node를 **한 번만** 훑고, 매치
+    /// 쪽은 `chunks`가 이미 든 `{node, serial, start, end}`와 비교만 한다.
+    /// 뷰포트가 걸치는 node는 보통 한두 개다.
+    ///
+    /// **매치 쪽 node 포인터를 역참조하는 자리가 이 함수에 없다**(design 위험 2).
+    /// 비교에만 쓴다 — 가지치기된 페이지를 읽지 않기 위해서이고, `Flattened`가
+    /// 그런 모양인 이유가 정확히 그것이다(`highlight.zig:107`). `serial`까지
+    /// 비교하는 것은 주소가 재사용된 경우를 거르기 위해서다.
+    fn findSpans(self: *Screen) !void {
+        self.hl_spans.clearRetainingCapacity();
+        self.hl_stats = .{ .spans = 0, .cells = 0, .us = 0 };
+
+        const matches = self.find_matches orelse return;
+        const pages = &self.term.screens.active.pages;
+        const rows = pages.rows;
+        const cols = pages.cols;
+        // **격자를 `state`가 아니라 `pages`에서 읽는다**(CM-M1이 `copyMove`에서
+        // 고친 것과 같다). `state`는 마지막 `cells()`의 스냅숏이라 첫 프레임에
+        // 0이고, 그러면 이 함수가 조용히 아무 일도 안 한다.
+        if (rows == 0 or cols == 0) return;
+
+        const t0 = std.Io.Clock.now(.awake, self.io);
+
+        const tl = pages.getTopLeft(.viewport);
+        // `row0`은 지금 노드의 첫 보이는 행이 화면 몇 번째 행인가,
+        // `y`는 지금 노드에서 몇 번째 행부터 보이는가다.
+        var row0: u16 = 0;
+        var y: u16 = tl.y;
+        var node_: ?*ghostty_vt.PageList.List.Node = tl.node;
+        while (node_) |node| : (node_ = node.next) {
+            if (row0 >= rows) break;
+            const take = @min(node.rows() - y, rows - row0);
+
+            for (matches) |m| {
+                const chunks = m.chunks.slice();
+                if (chunks.len == 0) continue;
+                const c_nodes = chunks.items(.node);
+                const c_serials = chunks.items(.serial);
+                const c_starts = chunks.items(.start);
+                const c_ends = chunks.items(.end);
+                for (0..chunks.len) |ci| {
+                    // **역참조가 아니라 비교다.** `c_nodes[ci]`가 가리키는
+                    // 메모리를 읽지 않는다 — 그것이 가지치기된 페이지일 수 있다.
+                    if (c_nodes[ci] != node) continue;
+                    if (c_serials[ci] != node.serial) continue;
+
+                    // `end`는 제외다(`endPin`이 `ends[last] - 1`을 쓴다).
+                    var ry = @max(c_starts[ci], y);
+                    const ry_end = @min(c_ends[ci], y + take);
+                    while (ry < ry_end) : (ry += 1) {
+                        // 첫 행만 `top_x`에서 시작하고 끝 행만 `bot_x`에서
+                        // 끝난다. soft wrap으로 여러 줄이 된 매치의 가운데
+                        // 줄은 줄 전체다.
+                        const is_first = ci == 0 and ry == c_starts[0];
+                        const is_last = ci == chunks.len - 1 and
+                            ry == c_ends[chunks.len - 1] - 1;
+                        try self.hl_spans.append(self.alloc, .{
+                            .row = row0 + (ry - y),
+                            .x0 = if (is_first) m.top_x else 0,
+                            .x1 = if (is_last) m.bot_x else cols - 1,
+                        });
+                    }
+                }
+            }
+
+            row0 += take;
+            y = 0;
+        }
+
+        // **`cells()`가 커서 하나로 따라갈 수 있게 정렬한다**(design 결정 4).
+        // 노드 사이는 이미 오름차순이지만 한 노드 안에서는 매치가 최신→오래된
+        // 순, 곧 행 내림차순으로 들어온다.
+        std.mem.sort(RowSpan, self.hl_spans.items, {}, RowSpan.lessThan);
+
+        var painted: usize = 0;
+        for (self.hl_spans.items) |sp| painted += @as(usize, sp.x1 - sp.x0) + 1;
+        self.hl_stats = .{
+            .spans = self.hl_spans.items.len,
+            .cells = painted,
+            .us = @intCast(@divTrunc(t0.untilNow(self.io, .awake).nanoseconds, 1000)),
+        };
+    }
+
+    /// 마지막 `cells()`가 만든 하이라이트의 실측. **검색이 없으면 null이다** —
+    /// `main.zig`가 이 null로 "찍을 것이 없다"를 판정한다(plan 결정 2).
+    pub fn hlStats(self: *const Screen) ?HlStats {
+        if (self.find == null) return null;
+        return self.hl_stats;
+    }
+
+    /// 하이라이트의 행별 범위. **검사가 좌표를 직접 보는 창구다.**
+    ///
+    /// `main.zig`는 이것을 안 쓴다 — 색은 `cells()`가 이미 해소해서 넘긴다
+    /// (TR design 결정 1).
+    pub fn hlSpans(self: *const Screen) []const RowSpan {
+        return self.hl_spans.items;
+    }
+
     /// `n`. 목록의 다음(과거 방향) 매치로.
     ///
     /// **목록 끝에서 감긴다.** 라이브러리의 `Select.next` 주석은
@@ -537,12 +704,16 @@ pub const Screen = struct {
     /// 감추지 않는 이유는, 막으려면 "끝에 닿았다"는 상태가 하나 늘고 그것을
     /// 사람에게 알릴 자리가 또 필요하기 때문이다.
     pub fn findNext(self: *Screen) !bool {
-        return self.findStep(.next, false);
+        const moved = try self.findStep(.next, false);
+        try self.refreshMatches();
+        return moved;
     }
 
     /// `N`. 목록의 이전(미래 방향) 매치로.
     pub fn findPrev(self: *Screen) !bool {
-        return self.findStep(.prev, false);
+        const moved = try self.findStep(.prev, false);
+        try self.refreshMatches();
+        return moved;
     }
 
     /// `/`의 첫 이동과 `n`/`N`이 함께 쓰는 한 자리.
