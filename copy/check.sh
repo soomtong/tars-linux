@@ -815,6 +815,86 @@ if [ "$(last_frame | grep -acE 'bg=705000' || true)" -ne 0 ]; then
 fi
 echo "leaving copy mode cleared the highlight"
 
+
+# ── 검사 17: 검색 기록 (CS-M1) ─────────────────────────────────────────
+#
+# **검사 16이 끝난 자리를 그대로 쓴다.** 방금 `esc`가 copy mode를 닫았고,
+# `copyExit`이 검색 상태를 전부 버리면서 **`find_last`만 남겼다**(design 결정 8).
+# 그것이 이 검사의 대상이다 — 모드를 나갔다 들어와서 `/`+Enter만 쳐도 지난
+# `findme`가 다시 돌아야 한다.
+#
+# **순서가 중요하다**(plan 결정 4). 아래 검사 18의 `zzz`를 먼저 찾으면 그것이
+# `find_last`를 덮어써서 빈 Enter도 matches=0을 낸다 — 그러면 "기록이
+# 동작했다"와 "빈 Enter가 아무 일도 안 했다"가 안 갈린다.
+#
+# **matches=4가 판정이다.** CS-M1 전에는 빈 Enter가 프롬프트만 닫아 matches=0이
+# 나왔다. 두 숫자가 이 기능의 있고 없음을 정확히 가른다. 넷인 것의 산수는
+# 검사 15에 적혀 있다(표적 둘 × 명령줄·출력줄 둘).
+SUBMITS_BEFORE="$(grep -ac 'terminal: find> submit' "$LOG" || true)"
+
+type_keys meta_l-shift-c
+sleep 2
+type_keys slash ret
+sleep 3
+
+SUBMITS_AFTER="$(grep -ac 'terminal: find> submit' "$LOG" || true)"
+# **줄이 늘었는지 먼저 본다.** 앞의 검색도 matches=4를 찍었으므로, 줄 수를 안
+# 세면 "빈 Enter가 아무 줄도 안 남겼다"를 옛 줄로 통과시킨다.
+if [ "$SUBMITS_AFTER" -le "$SUBMITS_BEFORE" ]; then
+  report_failure "the empty Enter did not submit (find> submit ${SUBMITS_BEFORE} -> ${SUBMITS_AFTER})"
+fi
+REPEAT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+case "$REPEAT" in
+  *"matches=4"*) ;;
+  *) report_failure "the empty Enter did not re-run 'findme': ${REPEAT}" ;;
+esac
+echo "an empty Enter re-ran the remembered search: ${REPEAT}"
+
+# ── 검사 18: "못 찾았다" 메시지 (CS-M1) ────────────────────────────────
+#
+# **오버레이는 screen> 에 영영 안 나오고**(CN-M1 design 결정 7) **style> 도
+# 덮인 줄을 건너뛴다**(main.zig의 overlaid_row). 그래서 `find> overlay` 한 줄이
+# 유일한 관측 수단이다(plan 결정 3).
+#
+# `zzz`는 이 화면 어디에도 없다 — 스크롤백은 `seq 1 100`의 숫자와 `findme`와
+# 셸 프롬프트뿐이다.
+type_keys slash z z z ret
+sleep 3
+
+MISS="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+case "$MISS" in
+  *"matches=0"*) ;;
+  *) report_failure "expected /zzz to find nothing, got: ${MISS}" ;;
+esac
+
+# **판정.** 마지막 프레임의 오버레이가 못 찾았다고 쓴다.
+#
+# 위의 matches=0과 이 줄은 **다른 것을 본다** — 그쪽은 "검색이 못 찾았다"이고
+# 이쪽은 "화면에 그렇게 쓰였다"이다. Task 3의 실수는 이 줄로만 잡힌다.
+#
+# **파이프 끝에 grep -q를 두지 않는다.** 첫 매치에서 빠져나가며 앞단에 SIGPIPE를
+# 일으키고 `set -o pipefail`이 그것을 실패로 판정한다.
+if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zzz: not found' || true)" -eq 0 ]; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "the overlay did not say that /zzz was not found"
+fi
+echo "the overlay reported that /zzz was not found"
+
+# **판정(음성).** 다음 키 하나에 메시지가 사라진다(design 결정 9).
+#
+# `k`는 copy 커서를 한 칸 올릴 뿐이라 화면의 다른 것을 안 건드린다. 안 사라지면
+# main.zig의 끄는 자리가 빠진 것이고, 증상은 **"메시지가 화면 아랫줄에 영영
+# 붙어 있다"**이다 — 사람에게는 "터미널이 고장 났다"로 보인다.
+type_keys k
+sleep 2
+if [ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -ne 0 ]; then
+  echo "--- last frame overlay lines ---"
+  last_frame | grep -a 'terminal: find> overlay'
+  report_failure "the not-found message survived the next key"
+fi
+echo "the next key cleared the not-found message"
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
