@@ -373,6 +373,27 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
     }
 }
 
+/// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
+///
+/// **상한을 안 두기로 한 결정의 근거를 남기는 줄이다.** `us=`가 밀리초 단위로
+/// 커지면 그때 상한을 논의한다. `style>`는 프레임당 16줄이 상한이라
+/// (`STYLE_DUMP_LIMIT`) 셀 수를 그것만으로 셀 수 없다 — 이 줄에는 상한이 없고,
+/// 둘을 함께 보는 것이 plan 결정 3이다.
+///
+/// **검색이 없으면 한 줄도 안 찍는다.** `hlStats()`가 null을 주는 자리가
+/// 그것이다(plan 결정 2).
+///
+/// **반드시 `render()` 뒤에 부른다** — 값은 그 프레임의 `cells()`가 만든다.
+///
+/// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다.
+/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpHighlight(screen: *vt.Screen) void {
+    const hl = screen.hlStats() orelse return;
+    std.debug.print("terminal: find> hl spans={d} cells={d} us={d}\n", .{
+        hl.spans, hl.cells, hl.us,
+    });
+}
+
 /// `y`가 클립보드에 무엇을 담았는지를 찍는다.
 ///
 /// **게이트가 클립보드를 볼 수 있는 유일한 창구다.** 화면만 보면 복사가 됐는지
@@ -752,6 +773,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         dumpScreen(cells);
+        dumpHighlight(screen);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
