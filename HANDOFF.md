@@ -1,38 +1,38 @@
-# HANDOFF: CS-M0이 끝났다 — 다음은 CS-M1(검색 기록 · "못 찾음" 메시지)
+# HANDOFF: Copy Search Feedback이 끝났다 — 진행 중인 서브프로젝트가 없다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Copy Search Feedback의 CS-M0(매치 하이라이트)이
-2026-08-28에 끝났다.** 게이트는 여덟 체인 3/3이고 **세 번 재서 21분 27초 ·
-21분 32초 · 21분 37초**다.
+`main`, working tree 깨끗함. **Copy Search Feedback(CS-M0·CS-M1)이 2026-08-28에
+끝났다.** 게이트는 여덟 체인 3/3이고 **세 번 재서 22분 35초 · 22분 24초 ·
+22분 19초**다.
 
 ```bash
 git status --short     # 비어 있어야 한다
 git log --oneline -10
+#   Close out CS-M1
+#   Check that the gate sees the search history and the miss message
+#   Say on screen when a search finds nothing
+#   Remember that the last search found nothing
+#   Repeat the last search when Enter is pressed on an empty prompt
+#   Plan CS-M1
 #   Close out CS-M0
 #   Sharpen the plain Korean writing rule
 #   Check that the gate sees the match highlight
 #   Log what the match highlight painted each frame
-#   Paint search matches with a distinct background
-#   Record that a match snapshot dies at the next select()
-#   Resolve visible matches into per-row spans
-#   Keep the search match list alongside the search
-#   Plan CS-M0
-#   Design the copy search feedback subproject
 ```
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**다음 세션이 할 첫 일: CS-M1의 plan을 쓴다.** design doc이 결정 8·9로 내용을
-이미 정해 두었다(검색 기록은 `find_last` 하나, "못 찾음"은 오버레이 줄에 쓰고
-다음 키에 지운다). **plan은 CS-M0이 끝난 지금 새로 쓴다** — 저장소 규칙이다.
+**다음 세션이 할 첫 일: 아래 "이월 숙제"에서 사용자와 함께 다음 서브프로젝트를
+고른다.** 진행 중인 것이 없다.
 
 - design: `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
-  (`Status:`를 CS-M0 완료로 갱신해 두었다)
-- CS-M0 plan: `docs/superpowers/plans/2026-08-28-tars-copy-search-feedback-cs-m0.md`
-- **기억: `docs/decisions/project_copy_search_feedback.md`**(CS-M0이 얻은 사실
-  전부가 거기 있다)
+  (`Status:`가 서브프로젝트 종료로 갱신돼 있다)
+- plan: `.../plans/2026-08-28-tars-copy-search-feedback-cs-m0.md` ·
+  `.../plans/2026-08-28-tars-copy-search-feedback-cs-m1.md`
+- **기억: `docs/decisions/project_copy_search_feedback.md`**(CS-M0·CS-M1이 얻은
+  사실 전부가 거기 있다)
 
 ## copy mode가 지금 할 수 있는 것
 
@@ -44,9 +44,58 @@ push할지 묻지 않는다 — 필요하면 그냥 한다.
 | `/` → 글자 → `Enter` | 스크롤백 검색(CN-M1) |
 | `n`·`N` | 매치 사이 왕복(CN-M1) |
 | — | **검색 뒤 화면의 매치가 어두운 앰버 바탕(`#705000`)으로 칠해진다(CS-M0)** |
+| `/` → `Enter`(빈 검색어) | **지난 검색어를 다시 쓴다(CS-M1). 모드를 나갔다 들어와도 남는다** |
+| — | **못 찾으면 아랫줄에 `/needle: not found`가 뜨고 다음 키에 사라진다(CS-M1)** |
 | `v`·`V` | 문자·줄 선택 |
 | `y` 또는 `Cmd+C` | 복사하고 **나간다** |
 | `Cmd+V` | 붙여넣기(**모드를 안 닫는다**) |
+
+## CS-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. 빈 Enter는 이미 `findSubmit`까지 도착하고 있었다.** `input.zig`의 `.find`
+분기가 `KEY_ENTER`를 버퍼 내용과 무관하게 `.find_submit`으로 넘긴다. `vt.zig`의
+`if (len == 0) return none;` 한 줄이 그것을 버리고 있었을 뿐이고, **그 한 줄을
+고치는 것이 검색 기록의 전부였다.** 그래서 CS-M1도 `input.zig`·`input_test.zig`를
+안 건드렸다.
+
+**2. 메시지에 쓸 글자는 `find_last`에서 올 수밖에 없다.** 메시지가 뜰 때는
+프롬프트가 이미 닫혀 있어서 `findNeedle()`이 null을 준다 — `find_buf`를 읽는
+창구가 그것뿐이다. **design 결정 8과 9가 여기서 맞물렸고, 둘을 따로 만들 수
+없었다는 뜻이다.**
+
+**3. 플래그는 "켠다"가 아니라 매번 값을 정한다.** design은 "`matches == 0`이면
+켠다"라고 적었는데, 그러면 끄는 자리가 `main.zig` 하나뿐이 되어 **성공한 검색이
+앞의 실패를 안 지우는 경로**가 남는다(poll 루프를 안 거치는 `vt_test`가 그렇다).
+`findSubmit`의 끝에서 `self.find_missed = count == 0;`으로 정한다.
+
+**4. 끄는 자리가 `switch`보다 앞인 것이 두 계약을 한꺼번에 만든다.** 모든 copy
+명령이 예외 없이 지우고(→ 다음 키에 사라진다) 그중 `.find_submit`만이 그 뒤에
+다시 켠다(→ 새로 실패하면 다시 뜬다). **루프 밖에 두면 안 된다** — 자동 반복으로
+여러 키가 한 번에 실려 오면 첫 키만 지운다.
+
+**5. 오버레이 내용을 볼 창구가 없어서 새로 만들었다.** 오버레이는 `screen>`에
+영영 안 나오고 **`dumpStyles`도 덮인 줄을 통째로 건너뛴다**(`overlaid_row`).
+`find> submit matches=0`은 "검색이 못 찾았다"까지만 말한다. 그래서
+**`terminal: find> overlay text=…`**가 "화면에 그렇게 쓰였다"의 유일한 증거다.
+`render()`에 넘어간 **바로 그 값**을 받아 찍는다.
+
+**6. 게이트 검사 순서를 뒤집어야 판정이 선다.** "못 찾음"을 먼저 검사하면 그
+needle이 `find_last`를 덮어써서 **이어지는 빈 Enter도 `matches=0`을 낸다** —
+"기록이 동작했다"와 "빈 Enter가 아무 일도 안 했다"가 안 갈린다. 기록을 먼저 보면
+`matches=4`가 나오고 CS-M1 전이라면 0이었으므로 정확히 갈린다. `vt_test`의 검사
+35도 같은 함정을 피해 **`findMissed()`가 다시 needle을 주는 것**으로 판정한다.
+
+**7. 이 게이트에서 처음 재는 값은 TCG 번역 비용을 포함한다.** 부팅 아홉에서 그
+부팅의 **첫** `searchAll()`은 39.7~69.6밀리초(폭 ±55%)였고, 빈 Enter로 되돌린
+**세 번째** 검색은 **18.2~20.7밀리초**(폭 ±6%)였다. 같은 needle로 같은
+스크롤백을 훑는데 3배 차이가 나고, CS-M1이 더한 것은 `@memcpy` 두 번뿐이라 코드가
+아낀 것일 수 없다. **CN-M1의 "60~70밀리초"를 인용할 때 이 단서를 함께 읽는다** —
+사람이 실제로 겪는 두 번째 이후 검색은 그보다 세 배 빠르다.
+
+**8. 게이트가 22분대가 됐다.** 21분 27~37초 → 22분 19~35초. 중앙값이 52초 늘었고
+plan의 예측은 36초(키 아홉 × `sleep 0.3` + `sleep` 아홉, × 체인 3회차)였다.
+**두 삼중값의 폭이 안 겹치지만**(사이 42초) 잡음이 ±3분이라 **"우리 코드가 52초를
+더했다"를 증명했다고는 하지 않는다.**
 
 ## CS-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -158,13 +207,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 21분 27초~37초다**(2026-08-28, CS-M0 이후 세 번
+3/3, 부팅 30회 이상. **기준선은 22분 19초~35초다**(2026-08-28, CS-M1 이후 세 번
 측정).
 
-**CS-M0은 게이트에 타이핑을 한 키도 안 더했다.** 검사 16이 검사 15가 끝난 자리를
-그대로 쓴다 — copy mode가 살아 있고 `/findme`의 매치 목록도 살아 있다. 그래서
-세 회차가 전부 CN-M1 기준선(21분 38초)보다 짧게 나왔다. **CN-M0도 CN-M1도 CS-M0도
-새 체인을 만들지 않았고 monitor 포트 45462는 계속 비어 있다.**
+**CS-M0은 게이트에 타이핑을 한 키도 안 더했고 CS-M1은 아홉 키를 더했다.**
+검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받는다 — 새 부팅이 없고,
+CS-M1의 검사 17은 검사 16이 치는 `esc`를 그대로 시험대로 쓴다. **CN-M0도
+CN-M1도 CS-M0도 CS-M1도 새 체인을 만들지 않았고 monitor 포트 45462는 계속 비어
+있다.**
 
 **체인 목록은 `CHAINS` 배열 하나에 있다**(`check.sh:146`). 진입 검사와 실행이
 같은 목록을 쓰므로 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -281,17 +331,23 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `terminal: find> submit matches=… moved=… us=…` ·
 `terminal: find> next moved=…` · `terminal: find> prev moved=…`(CN-M1) ·
 `terminal: style> N cell(s) hidden by the find prompt`(CN-M1) ·
-**`terminal: find> hl spans=… cells=… us=…`**(CS-M0)
+`terminal: find> hl spans=… cells=… us=…`(CS-M0) ·
+**`terminal: find> overlay text=…`**(CS-M1)
 
 **새 copy 명령의 로그는 공짜다** — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. **`find>`는 그와
 별개로 프롬프트 내용을 찍는 창구다** — 오버레이는 `cells()`에 안 섞여
 `screen>`에 영영 안 나오므로 이 줄이 유일한 관측 수단이다.
 
-**`find> hl`은 검색이 살아 있는 매 프레임 찍힌다**(CS-M0). "바뀔 때만"으로 하면
-상태가 하나 늘고, 그 판정이 틀렸을 때 증상이 "로그가 안 나온다"라 조사하기
+**`find> hl`과 `find> overlay`는 매 프레임 찍힌다**(CS-M0·CS-M1). "바뀔 때만"으로
+하면 상태가 하나 늘고, 그 판정이 틀렸을 때 증상이 "로그가 안 나온다"라 조사하기
 나쁘다. **`style>`가 프레임당 16줄 상한이라(`STYLE_DUMP_LIMIT`) 셀 수를 그것만으로
 셀 수 없다** — `find> hl`에는 상한이 없고, 둘을 함께 보는 것이 검사 16이다.
+
+**`find> overlay`가 오버레이 내용의 유일한 관측 수단이다**(CS-M1). `screen>`에
+영영 안 나오는 데다 **`dumpStyles`도 덮인 줄을 통째로 건너뛴다**(`overlaid_row`).
+`find> submit matches=0`은 "검색이 못 찾았다"까지만 말하지 "화면에 그렇게
+쓰였다"를 말하지 않는다 — **그 둘을 가르는 것이 검사 18이다.**
 
 **`terminal: screen>`의 형식은 절대 바꾸지 않는다** — 다섯 체인이 이 줄로
 화면을 판정한다. **CN-M1의 검색 프롬프트가 오버레이인 이유가 이것이다.**
@@ -311,10 +367,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-사용자가 `cp`로 넣는다. **CS-M0도 여섯 Task를 전부 인라인으로 냈고 잘 돌았다.**
-매 편집 뒤 `git diff --stat`으로 **더한 줄과 지운 줄을 따로 세어** 확인했고,
-**지운 줄이 0인 것이 "엉뚱한 것을 안 지웠다"의 증명**이었다(CS-M0의 편집은
-전부 순수 추가였다).
+사용자가 `cp`로 넣는다. **CS-M0의 여섯 Task도 CS-M1의 다섯 Task도 전부 인라인으로
+냈고 잘 돌았다.** 매 편집 뒤 `git diff --stat`으로 **더한 줄과 지운 줄을 따로
+세어** 확인했다. CS-M0은 편집이 전부 순수 추가라 **지운 줄이 0인 것**이 증명이었고,
+CS-M1은 지우는 편집이 넷이라 **지운 줄의 내용을 `git diff | grep '^-'`로 직접
+읽어** 확인했다 — 매번 정확히 제시한 것만 지워져 있었다.
 
 **plan이 각 Step의 코드를 파일 안에 그대로 담고 있는 것이 값지다.** 제시할 때
 plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다.
@@ -322,6 +379,9 @@ plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다.
 **plan이 틀릴 수 있다.** CS-M0에서 두 번 드러났다 — 매치 셀 수가 6이 아니라
 5였고(커서가 한 칸을 뒤집는다), `RowSpan`·`HlStats`를 struct의 필드 사이에 둔
 배치가 컴파일되지 않았다. **plan을 그대로 밟되 실측이 다르면 실측이 답이다.**
+**CS-M1은 다섯 Task가 전부 plan대로 한 번에 돌았다** — 그 차이를 만든 것은
+plan을 쓰기 전에 `input.zig`의 Enter 분기와 `dumpStyles`의 `overlaid_row`를
+직접 읽어 둔 것이다.
 
 **긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 22분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **`run_in_background`로 돌려야 한다.**
@@ -411,6 +471,14 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 - **`sendkey`로 대문자 치기** — 키 이름이 전부 소문자다. `shift-f`를 쓴다.
 - **"화면에 표적이 없다"로 "스크롤백으로 밀려났다"를 판정하기** — **"애초에 안
   쳐졌다"와 안 갈린다.** 실제로 쳐졌는지는 `find> type needle=…`로 따로 본다.
+- **`matches`로 "빈 Enter가 지난 검색어를 되불렀다"를 판정하기**(CS-M1) —
+  되부른 것이 **실패한 검색어**이면 0이 나오고, "빈 Enter가 아무 일도 안 했다"도
+  0이 나온다. **되부를 검색어가 매치를 갖는 것을 먼저 확보하거나**(게이트의
+  검사 17), **`findMissed()`가 다시 needle을 주는 것**으로 본다(`vt_test`의
+  검사 35).
+- **`find> submit matches=0`으로 "화면에 못 찾았다고 쓰였다"를 판정하기** —
+  그것은 검색의 결과이지 그린 것이 아니다. **오버레이는 `screen>`에도
+  `style>`에도 안 나오므로** `find> overlay text=…`로 따로 본다.
 - **`ScreenSearch.matches()`가 준 슬라이스를 `select()` 뒤에도 쓰기** —
   `reloadActive()`가 원소를 전부 해제한다. `refreshMatches()`로 다시 뜬다.
 - **그 슬라이스의 원소를 `deinit`하기** — 얕은 복사라 이중 해제다. 바깥
@@ -460,12 +528,16 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
   넘는다. `run_in_background`로 돌린다.
 - **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다.
 - **`vt_test`의 검사를 남의 화면에 붙이기** — 화면마다 크기와 history가 다르다.
-  CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`, **CS-M0이
-  `hs`를 새로 만들었고 그래서 앞 검사들을 하나도 안 흔들었다.**
+  CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`, CS-M0이 `hs`,
+  **CS-M1이 `ls`를 새로 만들었고 그래서 앞 검사들을 하나도 안 흔들었다.**
+  **`hs`와 `ls`는 모양이 같다**(20x5, 8·18번 줄이 표적) — 게으름이 아니라
+  기대값(`matches=2`)을 옮겨 쓰기 위한 것이다.
 - **`vt_test`에서 지역 변수 이름을 겹쳐 쓰기** — `main()` 하나가 파일 전체라 이
   파일의 모든 지역 변수 이름이 서로 부딪치고, **Zig는 shadowing을 컴파일
   에러로 막는다.** CM-M0이 `before`/`after`를, **CS-M0이 `painted`를** 이미
-  쓰고 있었다. **새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다.**
+  쓰고 있었다. **새 검사를 쓰기 전에 이름을 `rg`로 먼저 확인한다** — CS-M1은
+  `ls`·`ls_i`·`lhit`~`lhit5`·`lmiss`·`lmiss2`를 미리 확인하고 썼고 한 번도 안
+  부딪쳤다.
 
 ### 조사용 Zig 프로그램을 저장소 밖에서 돌리는 법
 
@@ -499,7 +571,7 @@ docker run --rm -v "$PWD":/workspace \
 만들어 마운트 지점으로 쓰고 컨테이너가 끝나도 그 0바이트 파일이 남는다.
 (2) `cp -r terminal /tmp/t`로 트리를 복사하는 방법은 1.5GB라 느리다.
 
-**CM-M1도 CM-M2도 CN-M0도 CN-M1도 프로브를 안 돌렸다.** 대신
+**CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다.** 대신
 `terminal/ghostty-src/src/terminal/`과 우리 소스를 직접 읽어서 계약을 확인하고,
 그것을 검사로 옮겨 실행으로 다시 증명했다. **소스를 읽어 얻은 사실은 반드시
 검사로 옮긴다.** **CS-M0에서 그 규율이 값을 했다** — 소스가 말해 주지 않은
@@ -507,13 +579,8 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
-**다음은 CS-M1이다.** design 결정 8·9가 내용을 이미 정해 두었고 plan만 쓰면 된다.
+**진행 중인 서브프로젝트가 없다.** 다음 것을 여기서 고른다.
 
-- [ ] **CS-M1: 검색 기록과 "못 찾음" 메시지.** `find_last: [128]u8`을 두고
-      `copyExit`이 **그것만** 안 지운다. 빈 Enter가 지난 검색어를 다시 쓴다.
-      `findSubmit`이 `matches == 0`이면 플래그를 켜고 오버레이 줄에
-      `/needle: not found`를 쓰며, `main.zig`가 copy 명령 처리 직전 **한
-      자리**에서 끈다. **`drawPrompt`는 안 바뀐다.**
 - [ ] **`terminal`을 `ReleaseSafe`로.** 42.7MB이고 initrd의 대부분이다.
       `@cImport`가 glibc fortify로 깨지는 것이 유일한 벽이고 우회는
       `project_zig_c_uapi_rule`에 있다. **게이트가 21분인 지금은 되재기가 싸다.**
@@ -552,6 +619,8 @@ docker run --rm -v "$PWD":/workspace \
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
 - ~~매치 하이라이트~~ — **CS-M0이 2026-08-28에 끝냈다.**
+- ~~검색 기록과 "못 찾음" 메시지~~ — **CS-M1이 2026-08-28에 끝냈다.** 빈 Enter가
+  지난 검색어를 다시 쓰고, 못 찾으면 오버레이 줄에 `/needle: not found`가 뜬다.
 - ~~copy mode의 단어 이동(`w`/`b`)~~ — **CN-M0이 2026-08-27에 끝냈다.**
 - ~~copy mode의 검색(`/`)~~ — **CN-M1이 2026-08-27에 끝냈다.** `n`/`N`과
   프롬프트 오버레이까지 함께 들어갔다.
@@ -566,10 +635,10 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 핵심 파일
 
-**줄 번호는 CS-M0 직후(2026-08-28) 기준이다.**
+**줄 번호는 CS-M1 직후(2026-08-28) 기준이다.**
 
-- `terminal/src/input.zig` — **CS-M0이 안 건드렸다.** 줄 번호는 CN-M1 기준
-  그대로다.
+- `terminal/src/input.zig` — **CS-M0도 CS-M1도 안 건드렸다.** 줄 번호는 CN-M1
+  기준 그대로다.
   - `:28` `keymap` · `:160` `Action` · `:184` `Copy` `union(enum)`(variant
     열아홉) · `:195` `word_next` · `:197` `word_prev` · `:218~231` 검색
     variant 일곱 · `:235` `Keys` · `:243` `Keys.copies` · `:352` `State.copies` ·
@@ -579,42 +648,53 @@ docker run --rm -v "$PWD":/workspace \
     `:636` `/` · `:648` `n`/`N` · `:664` `KEY_V`의 세 갈래
 - `terminal/src/vt.zig` — `Screen`. `cells()`가 색·inverse·**매치**·선택·커서를
   전부 해소해 `CellGlyph`로 넘긴다.
-  - **`:26` `RowSpan`(파일 스코프다) · `:41` `HlStats` · `:57` `MATCH_BG`** ·
+  - `:26` `RowSpan`(파일 스코프다) · `:41` `HlStats` · `:57` `MATCH_BG` ·
     `:83` `io`(CS-M0이 더했다) · `:101` `copy_cursor` · `:104` `copy_kind` ·
     `:120` `copy_anchor_y` · `:123` `copy_pruned` · `:129` `clip` ·
-    `:142` `find_open` · `:150` `find_buf`(128바이트) · `:164` `find` ·
-    **`:181` `find_matches` · `:188` `hl_spans`** · `:270` `feed` ·
-    `:300` `anchorY` · `:312` `cells` · **`:335` 하이라이트 커서를 잡는 자리** ·
-    `:483` `copyExit`(**검색·매치 목록·범위를 전부 여기서 버린다**) ·
-    `:510` `findOpen` · `:569` `findSubmit` · **`:616` `findMatchCount` ·
-    `:637` `refreshMatches`(**`select()` 뒤에 부르는 이유가 여기 적혀 있다**) ·
-    `:660` `findSpans`** · **`:737` `hlStats` · `:746` `hlSpans`** ·
-    `:757` `findNext` · `:764` `findPrev` · `:782` `findStep` ·
-    `:846` `copyMove` · `:886` `WORD_BOUNDARY` · `:931` `copyMoveWord` ·
-    `:1003` `copyPlace` · `:1066` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
-    `:1107` `copyYank` · `:1135` `clipboard`
+    `:142` `find_open` · `:150` `find_buf`(128바이트) ·
+    **`:164` `find_last` · `:165` `find_last_len` · `:178` `find_missed`**(CS-M1) ·
+    `:192` `find` · `:209` `find_matches` · `:216` `hl_spans` · `:298` `feed` ·
+    `:328` `anchorY` · `:340` `cells` ·
+    `:511` `copyExit`(**검색·매치 목록·범위·메시지를 전부 여기서 버리는데
+    `find_last`만 예외다**) · `:549` `findOpen` ·
+    **`:599` `findMissed` · `:610` `findClearMissed`**(CS-M1) ·
+    `:630` `findSubmit`(**빈 Enter가 `find_last`를 되부르는 자리가 `:643`,
+    `find_missed`를 정하는 자리가 `:697`이다**) · `:706` `findMatchCount` ·
+    `:727` `refreshMatches`(**`select()` 뒤에 부르는 이유가 여기 적혀 있다**) ·
+    `:750` `findSpans` · `:827` `hlStats` · `:836` `hlSpans` ·
+    `:847` `findNext` · `:854` `findPrev` · `:872` `findStep` ·
+    `:936` `copyMove` · `:976` `WORD_BOUNDARY` · `:1021` `copyMoveWord` ·
+    `:1093` `copyPlace` · `:1156` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
+    `:1197` `copyYank` · `:1225` `clipboard`
 - `terminal/src/main.zig` — `drawGlyph`·`render`·`dump*`, 그리고 `poll` 루프.
   **렌더는 루프 끝에 있고 `needs_redraw`가 문지기다.**
-  - `:91` `drawPrompt`(오버레이) · `:125` `render` · `:158` 오버레이를 그리는
-    자리(**present 바로 앞이다**) · `:165` `Prompt` · `:213` `dumpStyles`
+  - `:91` `drawPrompt`(오버레이. **CS-M1이 안 바꿨다**) · `:125` `render` ·
+    `:158` 오버레이를 그리는 자리(**present 바로 앞이다**) · `:165` `Prompt` ·
+    **`:187` `promptText`(오버레이 글자를 정하는 자리. 프롬프트가 우선이고
+    닫혀 있으면 "못 찾음" 메시지다)** · `:243` `dumpStyles`
     (**`overlaid_row`를 받아 덮인 줄을 건너뛴다. 프레임당 16줄 상한**) ·
-    `:346` `dumpCopy` · `:367` `dumpFind` · **`:390` `dumpHighlight`** ·
-    copy 배선 switch(**`else`가 없다**) · **`:776` `dumpHighlight` 호출
-    (`dumpScreen` 바로 다음)**
+    `:376` `dumpCopy` · `:397` `dumpFind` · **`:423` `dumpOverlay`** ·
+    `:442` `dumpHighlight` · **`:677` `screen.findClearMissed()`(copy 루프 안,
+    `switch`보다 앞이다)** · `:814` `prompt_buf`(**140바이트**) ·
+    copy 배선 switch(**`else`가 없다**) · `:835` `dumpHighlight` 호출 ·
+    **`:836` `dumpOverlay(prompt)` 호출**
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다.**
-- `terminal/src/input_test.zig` — **CS-M0이 안 건드렸다.** `:16` `expect` ·
+- `terminal/src/input_test.zig` — **CS-M0도 CS-M1도 안 건드렸다.** `:16` `expect` ·
   `:59` `expectCopy`(`:65`가 `std.meta.eql`을 쓴다) · `:497~` 검사 4의 "모르는
   키" 목록 · `:593~` CM-M2의 검사 11~13 · `:637~` CN-M0의 검사 14~16 ·
   `:673~` CN-M1의 검사 17~23
 - `terminal/src/vt_test.zig` — `:356` `cm`(CM-M0·M1) · `:386` `painted`(**이름
   충돌 주의**) · `:471` `pruned`(CM-M2) · `:551` `wm`(CN-M0) · `:664` `fm` ·
-  `:741` `fs`(CN-M1) · **`:837` `hs`(CS-M0의 검사 26~31)**. **새 검사는 자기
-  화면을 새로 만든다.**
-- `copy/check.sh` — 825줄. 검사 열여섯. `:108` `type_keys` · `:117` `key_lines` ·
+  `:741` `fs`(CN-M1) · `:837` `hs`(CS-M0의 검사 26~31) · **`:1008` `ls`(CS-M1의
+  검사 32~36)**. **새 검사는 자기 화면을 새로 만든다.**
+- `copy/check.sh` — 905줄. 검사 열여덟. `:108` `type_keys` · `:117` `key_lines` ·
   `:123` `copy_value` · `:134` `last_frame` · `:149` `scroll_field` ·
   `:161` `screen_count` · `:551~` CN-M0의 검사 14 · `:638~` CN-M1의 검사 15 ·
-  **`:765~` CS-M0의 검사 16(하이라이트)** · NUL 음성 검사는 파일 끝이다.
+  `:765~` CS-M0의 검사 16(하이라이트) · **`:819~` CS-M1의 검사 17(검색 기록) ·
+  `:853~` CS-M1의 검사 18("못 찾음" 메시지)** · NUL 음성 검사는 파일 끝이다.
+  **검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받고, 검사 17은 검사 16이
+  치는 `esc`를 시험대로 쓴다** — 순서를 바꾸면 판정이 무너진다.
 - `check.sh` — `:35` `BUILD_STEPS` · `:42` `require_build_steps` · `:146`
   `CHAINS` 배열 · `:160` 진입 검사 · `:176` `clean` 호출 하나.
 - `terminal/check.sh:73~79` — monitor 연결 재시도 loop. **`Connection refused`가

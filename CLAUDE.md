@@ -76,10 +76,12 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   Terminal Foundation(TF) · Zig Migration(ZM) · Input Policy(IP) ·
   Terminal Rendering(TR) · Copy Mode(CM-M0~M2) ·
   **Gate Latency(GL-M0~M1, 2026-08-26 완료 — 게이트 54분 15초 → 18분 08초)** ·
-  **Copy Navigation(CN-M0~M1, 2026-08-27 완료 — copy mode에 단어 이동 `w`/`b`와
-  스크롤백 검색 `/`·`n`·`N`)**. design doc은 전부
+  Copy Navigation(CN-M0~M1, 2026-08-27 완료 — copy mode에 단어 이동 `w`/`b`와
+  스크롤백 검색 `/`·`n`·`N`) ·
+  **Copy Search Feedback(CS-M0~M1, 2026-08-28 완료 — 매치 하이라이트, 검색
+  기록, "못 찾음" 메시지)**. design doc은 전부
   `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트가 없다**(2026-08-27 기준). 다음 것은 `HANDOFF.md`의
+- **진행 중인 서브프로젝트가 없다**(2026-08-28 기준). 다음 것은 `HANDOFF.md`의
   "이월 숙제"에서 사용자와 함께 고른다.
 - **주의: design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
   Power Management · Hardware Discovery가 각각 "M0 미착수"로 남아 있는데,
