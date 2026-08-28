@@ -762,8 +762,58 @@ if [ "$ROW_SECOND" -ge "$ROW_FIRST" ]; then
 fi
 echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND})"
 
+# ── 검사 16: 매치 하이라이트 (CS-M0) ────────────────────────────────────
+#
+# **검사 15가 끝난 자리를 그대로 쓴다.** copy mode가 살아 있고 `/findme`의 매치
+# 목록도 살아 있다 — 새 부팅도 새 타이핑도 없다. 게이트 시간을 안 늘리는 것이
+# design 위험 4에 대한 답이다.
+#
+# **두 겹으로 본다**(plan 결정 3). `find> hl`은 vt.zig가 센 값이고 `style>`는 그
+# 색이 정말 셀에 닿았는지다. 한 겹만 보면 "셌지만 안 칠했다"를 못 잡는다 —
+# TR design 결정 7이 style>/pixel>을 두 겹으로 둔 것과 같은 규율이다.
+HL="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
+if [ -z "$HL" ]; then
+  report_failure "no find> hl line; the highlight never ran"
+fi
+HL_CELLS=$(echo "$HL" | sed -E 's/.*cells=([0-9]+).*/\1/')
+# **needle이 여섯 자이므로 보이는 매치 하나당 정확히 여섯 칸이다.** 화면에 몇
+# 개가 보이는지는 스크롤 위치에 딸린 값이라 못 박지 않고, 여섯의 배수인 것과
+# 최소 하나는 있는 것만 본다.
+if [ "$HL_CELLS" -lt 6 ] || [ $(( HL_CELLS % 6 )) -ne 0 ]; then
+  report_failure "expected a multiple of six highlighted cells, got: ${HL}"
+fi
+# design 결정 5의 실측이다. **판정하지 않고 기록만 한다** — 상한을 둘지는 이
+# 값을 보고 사람이 정한다.
+echo "the match highlight: ${HL}"
+
+# **판정.** 마지막 프레임의 셀이 정말 MATCH_BG를 받았다.
+#
+# 커서가 선 한 칸은 매치 위에서 또 한 번 맞바뀌므로 `fg=705000 bg=FFFFFF`가
+# 되고, 나머지는 `fg=FFFFFF bg=705000`이다. 아래는 후자를 센다. vt_test의
+# 검사 29가 같은 갈림을 `plain=5 cursor=1`로 확인한다.
+HL_STYLED="$(last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=FFFFFF bg=705000' || true)"
+if [ "$HL_STYLED" -lt 1 ]; then
+  echo "--- style lines in the last frame ---"
+  last_frame | grep -a 'terminal: style>' | tail -n 20
+  report_failure "no cell reached the framebuffer with the match background"
+fi
+echo "${HL_STYLED} cell(s) reached the framebuffer with bg=705000"
+
 type_keys esc
 sleep 1
+
+# **판정(음성).** Esc가 copy mode를 닫으면 매치 목록도 함께 버려지므로
+# (design 결정 6의 해제 자리 셋 중 하나) 하이라이트가 화면에서 사라진다.
+#
+# 안 사라지면 `copyExit`이 `find_matches`를 안 버린 것이고, 그 상태는 다음
+# 검색에서 **이중 해제**로 이어진다 — 증상이 여기서는 색이지만 다음에는
+# 크래시다.
+if [ "$(last_frame | grep -acE 'bg=705000' || true)" -ne 0 ]; then
+  echo "--- style lines in the last frame ---"
+  last_frame | grep -a 'terminal: style>' | tail -n 20
+  report_failure "the highlight survived leaving copy mode"
+fi
+echo "leaving copy mode cleared the highlight"
 
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
