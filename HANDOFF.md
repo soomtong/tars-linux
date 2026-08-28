@@ -10,16 +10,20 @@
 git status --short     # 비어 있어야 한다
 git log --oneline -10
 #   Close out CS-M1
+#   Plan CS-M1
 #   Check that the gate sees the search history and the miss message
 #   Say on screen when a search finds nothing
 #   Remember that the last search found nothing
 #   Repeat the last search when Enter is pressed on an empty prompt
-#   Plan CS-M1
 #   Close out CS-M0
 #   Sharpen the plain Korean writing rule
 #   Check that the gate sees the match highlight
 #   Log what the match highlight painted each frame
 ```
+
+**`Plan CS-M1`이 코드 커밋들 뒤에 있는 것은 순서가 아니라 커밋 시점 때문이다.**
+plan은 코드보다 먼저 썼는데 파일을 마지막에 커밋했다. CS-M0은 `Plan CS-M0`을
+코드 앞에 냈으니, **다음 milestone은 plan을 쓰자마자 커밋한다.**
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
