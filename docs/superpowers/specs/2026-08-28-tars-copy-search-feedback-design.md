@@ -186,6 +186,22 @@ soft wrap으로 두 줄에 걸친 매치는 `chunks`가 표현한다. 첫 줄은
 `copyExit` · `Screen.deinit`. 두 값을 언제나 나란히 다루면 한쪽만 남는 상태를
 만들 수 없다.
 
+**CS-M0 구현 중에 이 결정에 사실 하나가 더해졌다(2026-08-28).** 슬라이스의 수명은
+"우리가 해제할 때까지"가 아니라 **"다음 `select()`까지"**다. `select`는 먼저
+`reloadActive()`를 부르는데 그것이 `active_results`의 원소를 전부 `deinit`한 뒤
+활성 영역을 다시 찾고(`search/screen.zig:682-683`), `pruneHistory()`도 history
+쪽에 같은 일을 한다(`:402`). **라이브러리 주석에는 이 말이 없다.**
+
+처음 구현은 `matches()`를 `findStep` **앞**에서 불렀고, 그래서 `cells()`가 읽을
+때 chunk 내용이 전부 `0xAA`(디버그 allocator가 해제한 메모리에 채우는 값)였다.
+**증상이 크래시가 아니라 "하이라이트가 하나도 안 나온다"였다.**
+
+**처방은 스냅숏을 `select()` 뒤에 뜨는 것이고 `refreshMatches()`가 그 자리다.**
+깊은 복사(`Flattened.clone`)로 가지 않는 이유는 그러면 하이라이트가 낡은 목록을,
+`n`이 새 목록을 보게 되기 때문이다 — **결정 2가 피하려던 어긋남이 그대로 생긴다.**
+`select`를 부르는 자리는 `findStep` 하나이고 그것을 부르는 것은 `findSubmit` ·
+`findNext` · `findPrev` 셋뿐이라, 셋 다 끝에서 `refreshMatches()`를 부른다.
+
 ### 결정 7. 매치 목록은 `searchAll()` 시점의 스냅숏이고 갱신하지 않는다
 
 `find`에 `feed`/`tick`/`reloadActive`를 부르지 않는다. 그래서 검색 뒤 도착한
