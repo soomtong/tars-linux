@@ -1056,5 +1056,66 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copy mode를 나갔다 들어와도 검색어가 남는다 OK (matches={d})\n", .{lhit3.matches});
 
+    // 검사 34. **못 찾으면 메시지가 켜지고 그 검색어를 준다.**
+    if (ls.findMissed() != null) {
+        std.debug.print("FAIL: the not-found message was on before any search failed\n", .{});
+        return error.MissedFlagStuckOn;
+    }
+    ls.findOpen();
+    for ("NOPE") |ch| ls.findChar(ch);
+    const lhit4 = try ls.findSubmit();
+    if (lhit4.matches != 0) {
+        std.debug.print("FAIL: /NOPE found {d} match(es) (expected none)\n", .{lhit4.matches});
+        return error.MissedSearchFoundSomething;
+    }
+    const lmiss = ls.findMissed() orelse {
+        std.debug.print("FAIL: findMissed() was null after a search found nothing\n", .{});
+        return error.MissedFlagNotSet;
+    };
+    if (!std.mem.eql(u8, lmiss, "NOPE")) {
+        std.debug.print("FAIL: findMissed() gave '{s}' (expected 'NOPE')\n", .{lmiss});
+        return error.MissedNeedleWrong;
+    }
+    std.debug.print("vt_test: 못 찾으면 메시지가 그 검색어를 준다 OK (needle={s})\n", .{lmiss});
+
+    // 검사 35. **메시지를 끄면 사라지고, 못 찾은 검색어도 기록에는 남는다.**
+    //
+    // 뒷부분이 design 결정 8의 "성공·실패와 무관하게 남긴다"를 보는 자리다.
+    // **판정을 `matches`로 하면 안 된다** — 되부른 `NOPE`도 0을 내고 "아무 일도
+    // 안 했다"도 0을 내서 둘이 안 갈린다. `findMissed()`가 다시 `NOPE`를 주는
+    // 것이 "정말로 되불렀다"의 증거다.
+    ls.findClearMissed();
+    if (ls.findMissed() != null) {
+        std.debug.print("FAIL: findClearMissed() did not turn the message off\n", .{});
+        return error.MissedFlagNotCleared;
+    }
+    ls.findOpen();
+    const lhit5 = try ls.findSubmit();
+    if (lhit5.matches != 0) {
+        std.debug.print("FAIL: the empty Enter found {d} (expected none)\n", .{lhit5.matches});
+        return error.FailedNeedleNotRemembered;
+    }
+    const lmiss2 = ls.findMissed() orelse {
+        std.debug.print("FAIL: the empty Enter did not re-run the failed needle\n", .{});
+        return error.FailedNeedleNotRemembered;
+    };
+    if (!std.mem.eql(u8, lmiss2, "NOPE")) {
+        std.debug.print("FAIL: the empty Enter re-ran '{s}' (expected 'NOPE')\n", .{lmiss2});
+        return error.FailedNeedleWrong;
+    }
+    std.debug.print("vt_test: 못 찾은 검색어도 기록에 남는다 OK (needle={s})\n", .{lmiss2});
+
+    // 검사 36. **copy mode를 나가면 메시지가 꺼진다.**
+    //
+    // 검사 33이 `find_last`가 **남는** 것을 보고, 이 검사가 `find_missed`는
+    // **안 남는** 것을 본다. 둘이 같은 함수의 서로 반대되는 두 계약이라 나란히
+    // 둔다.
+    ls.copyExit();
+    if (ls.findMissed() != null) {
+        std.debug.print("FAIL: the not-found message survived copyExit\n", .{});
+        return error.MissedFlagSurvivedExit;
+    }
+    std.debug.print("vt_test: copy mode를 나가면 메시지가 꺼진다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

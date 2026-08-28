@@ -164,6 +164,19 @@ pub const Screen = struct {
     find_last: [128]u8 = undefined,
     find_last_len: usize = 0,
 
+    /// 마지막 검색이 아무것도 못 찾았는가(design 결정 9). **오버레이 한 줄에
+    /// `/needle: not found`를 쓰는 조건이다.**
+    ///
+    /// `findSubmit`이 정하고, **`main.zig`가 copy 명령을 처리하기 직전 한
+    /// 자리에서 끈다.** 시계를 안 들여오는 이유는 poll 루프가 지금 시각을 안
+    /// 보기 때문이고, 다음 키까지 떠 있으면 사람이 메시지를 못 보고 넘길 일도
+    /// 없다.
+    ///
+    /// **메시지에 쓸 글자는 `find_last`에서 온다.** 메시지가 뜰 때는 프롬프트가
+    /// 이미 닫혀 있어서 `findNeedle()`이 null을 주기 때문이다 — 결정 8과 9가
+    /// 맞물리는 자리가 여기다.
+    find_missed: bool = false,
+
     /// 확정된 검색. `findSubmit`이 만들고 `copyExit`이 해제한다(design 결정 10).
     ///
     /// **`ScreenSearch`는 `screen: *ghostty_vt.Screen`을 들고 있다**
@@ -513,6 +526,14 @@ pub const Screen = struct {
         // 좌표도 함께 비운다. 안 비우면 모드를 나간 프레임에 지난 범위가 한 번
         // 더 칠해진다 — 게이트의 음성 검사(plan 결정 4)가 그것을 본다.
         self.hl_spans.clearRetainingCapacity();
+        // "못 찾았다" 메시지도 끈다(design 결정 9). 안 끄면 모드를 나간 뒤에도
+        // 화면 아랫줄에 메시지가 남는다.
+        //
+        // **`find_last`는 여기서 안 지운다**(design 결정 8). 이 함수가 검색
+        // 상태를 전부 버리는 자리인데 그것 하나만 빠지는 것이고, **모드를
+        // 나갔다 들어와도 `/`+Enter가 동작하는 것이 CS-M1의 전부다.**
+        // 검사 33이 이 예외를 본다.
+        self.find_missed = false;
         self.term.screens.active.clearSelection();
     }
 
@@ -566,6 +587,28 @@ pub const Screen = struct {
     pub fn findNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_open) return null;
         return self.find_buf[0..self.find_len];
+    }
+
+    /// 못 찾은 검색어. **메시지가 꺼져 있으면 null이다**(design 결정 9).
+    ///
+    /// `findNeedle`과 짝이다 — 그쪽은 "지금 치고 있는 것", 이쪽은 "방금 못 찾은
+    /// 것"이고, 오버레이 한 줄을 두 갈래로 가르는 것이 이 둘이다.
+    ///
+    /// **`main.zig`가 `find_last`를 직접 읽지 않게 하려고 함수로 낸다** —
+    /// `findNeedle`·`clipboard`·`copyCursor`와 같은 규율이다.
+    pub fn findMissed(self: *const Screen) ?[]const u8 {
+        if (!self.find_missed) return null;
+        return self.find_last[0..self.find_last_len];
+    }
+
+    /// "못 찾았다" 메시지를 끈다. **`main.zig`가 copy 명령을 처리하기 직전
+    /// 한 자리에서 부른다**(design 결정 9).
+    ///
+    /// 끄는 것이 명령 처리보다 **앞**이라, 새로 실패한 검색의 메시지는
+    /// `findSubmit`이 그 뒤에 다시 켜서 살아남는다. 순서 하나로 "다음 키에
+    /// 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다(plan 결정 2).
+    pub fn findClearMissed(self: *Screen) void {
+        self.find_missed = false;
     }
 
     /// 검색 결과. `main.zig`가 로그에 쓴다.
@@ -642,7 +685,17 @@ pub const Screen = struct {
         // **이동 뒤에 스냅숏을 뜬다.** 왜 뒤여야 하는지는 `refreshMatches`에
         // 적혀 있다 — `select()`가 앞의 목록을 해제한다.
         try self.refreshMatches();
-        return .{ .matches = self.find.?.matchesLen(), .moved = moved };
+
+        const count = self.find.?.matchesLen();
+        // **켜기만 하지 않고 매번 값을 정한다**(CS-M1 plan 결정 1). design은
+        // "0이면 켠다"라고 적었는데, 그대로 하면 끄는 자리가 `main.zig` 하나뿐이
+        // 되어 **성공한 검색이 앞의 실패를 안 지우는 경로**가 생긴다. poll 루프를
+        // 안 거치는 호출자(`vt_test`)가 그렇다.
+        //
+        // 켜는 자리와 끄는 자리를 안 가르는 것이 요점이고, CS-M0이
+        // `refreshMatches`를 셋 다에서 부른 것과 같은 규율이다.
+        self.find_missed = count == 0;
+        return .{ .matches = count, .moved = moved };
     }
 
     /// 보관 중인 매치가 몇 개인가. 검색이 없으면 0이다.
