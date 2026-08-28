@@ -15,7 +15,7 @@
 - [Execution scope](docs/decisions/feedback_execution_scope.md) — 빌드·QEMU·게이트 명령은 Claude가 직접 실행하고(2026-08-22 변경), 구현 파일 편집만 사용자에게 남긴다
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 중 기술 선택지를 계속 묻지 말고 추천안으로 정해 진행한다
 - [Push policy](docs/decisions/feedback_push_policy.md) — push는 묻지 말고 필요할 때 하고, 미푸시 커밋 수를 보고하지 않는다
-- [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유적 표현을 일반 어휘 자리에 쓰지 않는다. 평범한 한국어가 어색하면 영어를 섞어도 된다. 특히 제목과 첫 문장.
+- [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유적 표현을 일반 어휘 자리에 쓰지 않는다. 평범한 한국어가 어색하면 영어를 섞어도 된다. 조사와 어미를 생략하지 않고 부사·보조사·보조용언을 적극적으로 쓴다. 특히 제목과 첫 문장.
 
 ## 사용자 (user)
 
@@ -40,4 +40,5 @@
 - [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸을 고르고 기억하는 미래 기능(영속 저장소가 선행 조건)
 - [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위의 vim modal 선택 모드와 Cmd+V; CM-M2(2026-08-26)로 서브프로젝트가 끝났다. Cmd+V가 키 표 **두 곳**에 있어야 한다는 것, 가지치기가 pin을 무효로 만들지 않는다는 것, bracketed paste를 안 쓴다는 것이 여기 있다
 - [Copy navigation](docs/decisions/project_copy_navigation.md) — copy 커서에 얹은 이동 수단 둘; **CN-M0(단어 이동 `w`/`b`)과 CN-M1(검색 `/`·`n`·`N`)이 2026-08-27에 끝나 종료됐다.** 라이브러리의 "단어"에 **공백 덩어리가 포함된다**는 것, `pointFromPin`이 뷰포트 **아래쪽 밖을 안 알려준다**는 것, `Terminal.ScrollViewport`에 `.pin`이 없다는 것, `ScreenSearch`가 우리 선택을 안 건드린다는 것, `Select.next`의 주석과 달리 **코드는 감긴다**는 것, **QEMU `sendkey`의 키 이름이 전부 소문자**라는 것이 여기 있다
+- [Copy search feedback](docs/decisions/project_copy_search_feedback.md) — 검색 매치를 화면에 칠하는 층; **CS-M0(2026-08-28) 완료, CS-M1 미착수.** `matches()`가 준 목록이 **다음 `select()`에서 죽는다**는 것, 매치는 맞바꿈이 아니라 **값을 정하는 층**이어야 한다는 것(선택 안에서 상쇄된다), `pointFromPin`이 뷰포트 **위**의 pin에 대해 목록 끝까지 훑으므로 **좌표 푸는 방향을 뒤집었다**는 것, 하이라이트 계산이 **151마이크로초**라는 것이 여기 있다
 - [Gate latency](docs/decisions/project_gate_latency.md) — 게이트 54분 15초 → 18분 08초(GL-M0·M1, 2026-08-26); 54분의 8할은 같은 산출물을 24번 빌드하는 비용이었다, "빌드가 최신인가"를 mtime으로 판정하려는 시도는 **두 번 다 실패했고** 내용 해시로 가야 한다, gzip -9는 값을 못 한다

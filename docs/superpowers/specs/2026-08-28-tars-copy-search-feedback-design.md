@@ -1,7 +1,7 @@
 # TARS Copy Search Feedback — Design
 
 **Date:** 2026-08-28
-**Status:** 설계 확정. CS-M0 미착수
+**Status:** 설계 확정. **CS-M0 완료(2026-08-28)**. CS-M1 미착수
 
 ## 한 줄 요약
 
