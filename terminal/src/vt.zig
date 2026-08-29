@@ -27,6 +27,12 @@ pub const RowSpan = struct {
     row: u16,
     x0: u16,
     x1: u16,
+    /// 이 범위가 **지금 선택된 매치**인가(SP design 결정 2).
+    ///
+    /// **기본값을 안 주는 것에 뜻이 있다**(plan 결정 2). 만드는 자리가
+    /// `findSpans` 하나뿐인데, 기본값이 있으면 두 번째 자리가 생겼을 때
+    /// 정하는 것을 잊어도 컴파일이 통과한다.
+    current: bool,
 
     fn lessThan(_: void, a: RowSpan, b: RowSpan) bool {
         if (a.row != b.row) return a.row < b.row;
@@ -38,7 +44,11 @@ pub const RowSpan = struct {
 ///
 /// **상한을 안 두기로 한 결정의 근거를 남기는 값이다.** `us`가 밀리초 단위로
 /// 커지면 그때 상한을 논의한다.
-pub const HlStats = struct { spans: usize, cells: usize, us: i64 };
+
+/// `cur`은 **현재 매치가 칠한 셀 수**다(SP-M0). `cells`는 뜻을 안 바꾼다 —
+/// 여전히 보이는 매치 **전부**의 셀 수이고, 게이트의 검사 16이 그 뜻에 기대
+/// "needle 길이의 배수"를 본다.
+pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 
 /// 매치 하이라이트의 바탕색(design 결정 1). **맞바꿈이 아니라 값이다.**
 ///
@@ -214,7 +224,7 @@ pub const Screen = struct {
     /// 같은 매치가 다른 행에 온다. 버퍼를 들고 있는 이유는 프레임마다 새로
     /// 할당하지 않기 위해서다(`clearRetainingCapacity`).
     hl_spans: std.ArrayListUnmanaged(RowSpan) = .empty,
-    hl_stats: HlStats = .{ .spans = 0, .cells = 0, .us = 0 },
+    hl_stats: HlStats = .{ .spans = 0, .cells = 0, .cur = 0, .us = 0 },
 
     pub fn init(
         io: std.Io,
@@ -777,7 +787,7 @@ pub const Screen = struct {
     /// 비교하는 것은 주소가 재사용된 경우를 거르기 위해서다.
     fn findSpans(self: *Screen) !void {
         self.hl_spans.clearRetainingCapacity();
-        self.hl_stats = .{ .spans = 0, .cells = 0, .us = 0 };
+        self.hl_stats = .{ .spans = 0, .cells = 0, .cur = 0, .us = 0 };
 
         const matches = self.find_matches orelse return;
         const pages = &self.term.screens.active.pages;
@@ -787,6 +797,10 @@ pub const Screen = struct {
         // 고친 것과 같다). `state`는 마지막 `cells()`의 스냅숏이라 첫 프레임에
         // 0이고, 그러면 이 함수가 조용히 아무 일도 안 한다.
         if (rows == 0 or cols == 0) return;
+
+        // **루프 밖에서 한 번만 읽는다.** 매치마다 부르면 같은 값을 매치 수만큼
+        // 다시 구하는 셈이고, 이 함수는 매 프레임 돈다.
+        const cur_i = self.findCurrentIndex();
 
         const t0 = std.Io.Clock.now(.awake, self.io);
 
@@ -800,7 +814,7 @@ pub const Screen = struct {
             if (row0 >= rows) break;
             const take = @min(node.rows() - y, rows - row0);
 
-            for (matches) |m| {
+            for (matches, 0..) |m, mi| {
                 const chunks = m.chunks.slice();
                 if (chunks.len == 0) continue;
                 const c_nodes = chunks.items(.node);
@@ -827,6 +841,16 @@ pub const Screen = struct {
                             .row = row0 + (ry - y),
                             .x0 = if (is_first) m.top_x else 0,
                             .x1 = if (is_last) m.bot_x else cols - 1,
+                            // **좌표를 두 번 풀지 않는 것이 요점이다**(SP design
+                            // 결정 2). 현재 매치만 따로 다시 푸는 길로 가면 같은
+                            // 계산이 두 벌이 되고, 어긋났을 때 증상이 "색만
+                            // 엉뚱한 자리에 있다"라 조사하기 나쁘다.
+                            // **capture를 안 만든다.** 이 자리의 바깥 루프가
+                            // 이미 `ci`를 쓰고 있고(`for (0..chunks.len) |ci|`)
+                            // Zig는 shadowing을 컴파일 에러로 막는다. 이름을
+                            // 새로 고르는 대신 optional을 그대로 비교하면
+                            // 같은 실수가 다시 날 자리가 없어진다.
+                            .current = cur_i != null and cur_i.? == mi,
                         });
                     }
                 }
@@ -842,10 +866,16 @@ pub const Screen = struct {
         std.mem.sort(RowSpan, self.hl_spans.items, {}, RowSpan.lessThan);
 
         var painted: usize = 0;
-        for (self.hl_spans.items) |sp| painted += @as(usize, sp.x1 - sp.x0) + 1;
+        var painted_cur: usize = 0;
+        for (self.hl_spans.items) |sp| {
+            const w = @as(usize, sp.x1 - sp.x0) + 1;
+            painted += w;
+            if (sp.current) painted_cur += w;
+        }
         self.hl_stats = .{
             .spans = self.hl_spans.items.len,
             .cells = painted,
+            .cur = painted_cur,
             .us = @intCast(@divTrunc(t0.untilNow(self.io, .awake).nanoseconds, 1000)),
         };
     }
