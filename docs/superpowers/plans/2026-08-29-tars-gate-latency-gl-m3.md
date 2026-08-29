@@ -10,10 +10,11 @@
 **Design doc:** `docs/superpowers/specs/2026-08-26-tars-gate-latency-design.md`의
 "재개 (2026-08-28)" 절. 결정 9·10과 착수 전 실측 2·3이 내용을 이미 정해 두었다.
 
-**Architecture:** `@cImport` 세 곳에서 fortify를 끄고, `build.zig`에서 게스트로
-가는 두 모듈(`exe_mod`와 `ghostty_dep`)의 최적화 모드를 박는다. **체인 스크립트는
-한 줄도 안 바뀐다** — `terminal/prepare.sh:20`이 `zig build`를 부르므로 여섯
-체인 전부에 저절로 흘러간다.
+**Architecture:** `@cImport` 세 곳에서 fortify를 끄고, `build.zig`에 **게스트로
+가는 것 전용 최적화 옵션**을 만들어 기본값을 `ReleaseSafe`로 둔다. 호스트 검사
+모듈은 기존 `optimize`(기본 Debug)를 그대로 쓴다. **체인 스크립트는 한 줄도 안
+바뀐다** — `terminal/prepare.sh:20`이 옵션 없이 `zig build`를 부르므로 여섯
+체인 전부에 기본값이 저절로 흘러간다.
 
 **Tech Stack:** Zig 0.16, glibc 헤더, QEMU
 
@@ -187,47 +188,69 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 
 ---
 
-## Task 2: 게스트로 가는 두 모듈을 `ReleaseSafe`로 박는다
+## Task 2: 게스트로 가는 두 모듈의 기본값을 `ReleaseSafe`로 만든다
 
-### Step 1: `build.zig` (사용자가 편집)
+**design 결정 11대로 박지 않고 기본값이 있는 옵션으로 둔다.** 게이트가 부팅하는
+바이너리가 곧 제품이므로 기본값은 배포되는 것과 같아야 하고, 개발자가 내려갈
+문은 플래그 하나로 둔다. **축의 이름은 "개발이냐 배포냐"가 아니라 "게스트로
+가느냐"다** — 호스트 검사는 언제나 Debug가 맞다.
 
-`terminal/build.zig:12~16`에서 **지울 것:**
+### Step 1: 옵션을 만든다 (사용자가 편집)
+
+`terminal/build.zig:10`의 `const optimize = b.standardOptimizeOption(.{});`
+**바로 아래에 넣을 것:**
 
 ```zig
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
+
+    // GL-M3: **게스트로 가는 것**의 최적화 모드. 위의 `optimize`와 갈라 놓은
+    // 것이 이 milestone의 핵심 결정이다.
+    //
+    // 이 저장소에는 별도의 배포 경로가 없다 — prepare.sh가 만든 바이너리가
+    // 그대로 initrd에 들어가고 게이트가 그것을 부팅한다. **게이트가 부팅하는
+    // 바이너리가 곧 제품이다.** 그래서 "개발은 Debug, 배포는 Release"를 그대로
+    // 옮기면 게이트가 배포되지 않는 것을 검사하게 된다
+    // (docs/decisions/project_gate_chain_composition.md의 "게이트는 자기가 안
+    // 보는 것을 통과시킨다"와 같은 병이다). **기본값이 배포되는 것과 같아야
+    // 하는 이유가 이것이다.**
+    //
+    // 그래도 문은 둔다. 소스를 고친 뒤 `zig build`가 Debug 17.7초 대
+    // ReleaseSafe 27.1초라 개발 한 바퀴에 9.4초가 붙기 때문이다. 다만 그
+    // 문은 명시적으로 열어야 한다:
+    //
+    //   zig build -Dguest-optimize=Debug
+    //
+    // **이 문이 게이트를 흔들지 않는다.** clean()이 zig-out을 지우고 여덟
+    // 체인이 각자 부르는 prepare.sh:20이 **옵션 없이** zig build를 부르므로,
+    // 손으로 남긴 Debug 바이너리는 다음 게이트가 기본값으로 덮어쓴다.
+    //
+    // 위의 `optimize`는 이제 **호스트 검사 전용**이다. 그쪽은 게스트에 안
+    // 가므로 크기와 무관하고, 최적화하면 `zig build test`만 느려진다
+    // (소스를 고친 뒤 9.5초 대 25.8초). init/build.zig:29가 같은 선을 긋는다.
+    const guest_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "guest-optimize",
+        "게스트로 가는 terminal 바이너리의 최적화 모드 (기본 ReleaseSafe)",
+    ) orelse .ReleaseSafe;
+```
+
+### Step 2: 두 모듈이 그것을 쓰게 한다 (사용자가 편집)
+
+`exe_mod`에서 **지울 것:**
+
+```zig
         .optimize = optimize,
-    });
 ```
 
 **넣을 것:**
 
 ```zig
-    // GL-M3: 게스트로 가는 것은 이 exe 하나뿐이라 여기서 모드를 고정한다.
-    // Debug 49,373,160 → ReleaseSafe 10,577,200바이트(78.6% 감소)이고,
-    // initrd가 16,199,658 → 10,988,958바이트가 된다.
-    //
-    // **이 길이 열린 것은 fortify를 세 자리에서 껐기 때문이다**(drm.zig ·
-    // main.zig · pty.zig). TF-M4부터 네 서브프로젝트 동안 이 바이너리는
-    // Debug에 묶여 있었고, 크기 문제는 initrd gzip으로 우회해 왔다.
-    //
-    // **게이트 시간으로는 본전이다.** make_initrd가 회차당 0.97초씩 24회차에
-    // 23초를 벌고, clean 빌드 1회차가 47.6 → 70.9초로 23초를 잃는다. 증분
-    // 빌드는 3.17초 대 3.18초로 차이가 없다. 얻는 것은 시간이 아니라 initrd
-    // 크기와 게스트 실행 속도다.
-    //
-    // 아래 호스트 검사 모듈들은 `optimize`를 그대로 쓴다 — 게스트에 안 가므로
-    // 크기와 무관하고, 여기까지 최적화하면 `zig build test`만 느려진다.
-    // init/build.zig:29가 같은 선을 긋고 있다.
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = .ReleaseSafe,
-    });
+        // GL-M3: Debug 49,373,160 → ReleaseSafe 10,577,200바이트(78.6% 감소).
+        // initrd는 16,199,658 → 10,988,958바이트가 된다. 이 길이 열린 것은
+        // fortify를 세 자리에서 껐기 때문이다(drm.zig · main.zig · pty.zig).
+        .optimize = guest_optimize,
 ```
 
-`terminal/build.zig:25~28`(위 편집 뒤에는 아래로 밀려 있다)에서 **지울 것:**
+`ghostty_dep`에서 **지울 것:**
 
 ```zig
     const ghostty_dep = b.dependency("ghostty", .{
@@ -239,24 +262,36 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 **넣을 것:**
 
 ```zig
-    // 이 의존도 게스트로 간다. 함께 박는 것이 공짜라는 것을 쟀다 — exe_mod만
-    // 박으면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다 박으면
-    // 10,577,200바이트에 70.9초다. **작아지면서 안 느려진다.**
+    // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
+    // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
+    // 옮기면 10,577,200바이트에 70.9초다. **작아지면서 안 느려진다.**
     //
     // 그리고 이쪽이 성능의 본체다. searchAll()의 60~70밀리초를 쓰는 코드가
     // 여기 있다(CN-M1 실측). 아래 ghostty_host_dep은 호스트 검사용이라
     // `optimize`를 그대로 쓴다.
     const ghostty_dep = b.dependency("ghostty", .{
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = guest_optimize,
     });
 ```
 
-### Step 2: 빌드하고 크기를 확인한다 (Claude가 실행, 약 3분)
+### Step 3: 기본값과 문을 둘 다 확인한다 (Claude가 실행, 약 4분)
 
-`zig build && zig build test`, 그리고 `stat`으로 크기를 본다. 기대값은
-**10,577,200바이트**이고, `readelf -S`로 `.debug_info`가 남아 있는 것도 함께
-본다(결정 3).
+**옵션이 있다는 것 자체가 새 검사 대상이다.** 기본값만 보면 문이 열리는지
+모르고, 문만 보면 기본값이 맞는지 모른다.
+
+```bash
+zig build                          # 10,577,200 이어야 한다
+zig build -Dguest-optimize=Debug   # 49,373,560 이어야 한다
+zig build test                     # PASS, 그리고 이 값은 옵션과 무관해야 한다
+zig build --help                   # guest-optimize가 설명과 함께 나와야 한다
+```
+
+**마지막에 옵션 없이 한 번 더 빌드해서 zig-out을 기본값으로 되돌린다** —
+그러지 않으면 다음에 `make_initrd.sh`를 부르는 사람이 Debug 바이너리를 담는다.
+(게이트는 `clean()` 덕분에 안전하지만 손으로 돌릴 때는 아니다.)
+
+또 `readelf -S`로 `.debug_info`가 남아 있는 것을 본다(결정 3).
 
 ### Step 3: 커밋 (Claude가 실행)
 
