@@ -708,6 +708,34 @@ pub const Screen = struct {
         return m.len;
     }
 
+    /// 지금 선택된 매치가 `find_matches`의 몇 번째인가. 없으면 null이다.
+    ///
+    /// **라이브러리의 내부 필드를 읽는 유일한 자리다**(SP design 결정 1).
+    /// `ScreenSearch`에 `selectedIndex()` 같은 공개 함수가 없어서 `selected.idx`를
+    /// 직접 본다. 한 함수로 감싸 두는 이유는 나중에 라이브러리에 함수가 생기거나
+    /// 다른 방법으로 바꿀 때 고칠 자리를 하나로 두기 위해서다 — `findMissed`가
+    /// `find_last`를 감싼 것과 같은 경계다.
+    ///
+    /// **`idx`가 `find_matches`의 인덱스와 같은 좌표계라는 것이 이 함수의
+    /// 전제다.** `selectedMatch()`와 `matches()`가 같은 색인 규칙을 쓴다
+    /// (`search/screen.zig:771`과 `:234`) — 활성 영역은 뒤집어 담고 history는
+    /// 그대로 이어 붙이는 그 규칙이다. **그 전제가 조용히 깨지면 증상이 "번호가
+    /// 거꾸로 나온다"라 눈에 안 띄므로 `vt_test`의 검사 37·38이 뜻을 고정한다.**
+    ///
+    /// 범위를 함께 보는 이유는 라이브러리도 그렇게 하기 때문이다
+    /// (`selectedMatch()`가 `:783`에서 null을 준다). `select()`가
+    /// `reloadActive()`·`pruneHistory()`를 먼저 부르므로 목록이 줄어들 수 있고,
+    /// 그때 낡은 `idx`를 그대로 쓰면 범위를 벗어난다. **넷을 전부 null 하나로
+    /// 접는 것이 요점이다**(plan 결정 1) — 부르는 쪽은 "현재 매치가 없다"만
+    /// 알면 된다.
+    pub fn findCurrentIndex(self: *const Screen) ?usize {
+        if (self.find == null) return null;
+        const sel = self.find.?.selected orelse return null;
+        const m = self.find_matches orelse return null;
+        if (sel.idx >= m.len) return null;
+        return sel.idx;
+    }
+
     /// 매치 목록 스냅숏을 다시 뜬다. **`select()`를 부른 직후에 부른다.**
     ///
     /// **`select()`가 앞의 목록을 무효로 만든다.** 그것이 먼저 `reloadActive()`를
