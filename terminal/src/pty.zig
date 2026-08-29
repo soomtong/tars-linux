@@ -1,6 +1,8 @@
 const std = @import("std");
 
+// fortify를 끄는 이유는 drm.zig의 @cImport 위에 적혀 있다.
 const c = @cImport({
+    @cDefine("_FORTIFY_SOURCE", "0"); // GL-M3
     @cInclude("pty.h");
     @cInclude("sys/ioctl.h");
     @cInclude("unistd.h");

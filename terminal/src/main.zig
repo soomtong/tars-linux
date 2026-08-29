@@ -5,7 +5,11 @@ const input = @import("input.zig");
 const pty = @import("pty.zig");
 const vt = @import("vt.zig");
 
+// fortify를 끄는 이유는 drm.zig의 @cImport 위에 적혀 있다. 이 파일이 걸리는
+// 자리는 헤더가 아니라 `c.poll` 호출이다 — fortify가 켜지면 poll이 함수가
+// 아니라 매크로가 되고, 그 번역이 c_int 자리에 bool을 놓는다.
 const c = @cImport({
+    @cDefine("_FORTIFY_SOURCE", "0"); // GL-M3
     @cInclude("poll.h");
 });
 
