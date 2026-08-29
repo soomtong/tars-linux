@@ -937,7 +937,11 @@ pub fn main(init: std.process.Init) !void {
     for (try hs.cells(&buf)) |c| {
         // 이름이 `painted`가 아닌 이유: CM-M0의 검사가 `:386`에서 그 이름을
         // 쓰고 있고, `main()` 하나가 파일 전체라 Zig가 shadowing을 막는다.
-        const hpaint = c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG;
+        // **SP-M0이 색을 바꿨다.** 이 화면은 매치가 하나만 보이고 그 하나가 곧
+        // 현재 매치이므로, 여기 칠해지는 것은 `MATCH_BG`가 아니라 `CURRENT_BG`다.
+        // **`MATCH_BG` 쪽을 보는 검사는 `ps` 화면의 검사 39가 이어받는다** — 매치가
+        // 둘 이상 보여야 두 색이 함께 나오기 때문이다.
+        const hpaint = c.bg == vt.CURRENT_BG or c.fg == vt.CURRENT_BG;
         if (!hpaint) continue;
         if (c.row != 0 or c.col < 2 or c.col > 7) {
             std.debug.print("FAIL: painted a cell outside the match at {d},{d}\n", .{
@@ -945,7 +949,7 @@ pub fn main(init: std.process.Init) !void {
             });
             return error.HighlightPaintedWrongCell;
         }
-        if (c.bg == vt.MATCH_BG) hcnt += 1 else hcursor += 1;
+        if (c.bg == vt.CURRENT_BG) hcnt += 1 else hcursor += 1;
     }
     if (hcnt != 5 or hcursor != 1) {
         std.debug.print("FAIL: {d} plain + {d} inverted match cell(s) (expected 5 + 1)\n", .{
@@ -953,7 +957,7 @@ pub fn main(init: std.process.Init) !void {
         });
         return error.HighlightPaintCountWrong;
     }
-    std.debug.print("vt_test: 매치 셀의 바탕이 MATCH_BG다 OK (plain={d} cursor={d})\n", .{
+    std.debug.print("vt_test: 현재 매치 셀의 바탕이 CURRENT_BG다 OK (plain={d} cursor={d})\n", .{
         hcnt, hcursor,
     });
 
@@ -966,7 +970,9 @@ pub fn main(init: std.process.Init) !void {
     try hs.copySelect(.line);
     var hswapped: usize = 0;
     for (try hs.cells(&buf)) |c| {
-        if (c.fg == vt.MATCH_BG and c.bg != vt.MATCH_BG) hswapped += 1;
+        // **상수만 옮긴다.** 이 검사가 보는 것은 색의 값이 아니라 **"맞바꿈이
+        // 아니라 값을 정하는 층인가"**이므로, 상수를 옮겨도 뜻이 그대로 남는다.
+        if (c.fg == vt.CURRENT_BG and c.bg != vt.CURRENT_BG) hswapped += 1;
     }
     if (hswapped != 5) {
         std.debug.print("FAIL: {d} match cell(s) survived the selection (expected 5)\n", .{
@@ -983,7 +989,11 @@ pub fn main(init: std.process.Init) !void {
     hs.copyExit();
     var hleft: usize = 0;
     for (try hs.cells(&buf)) |c| {
-        if (c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG) hleft += 1;
+        // **두 색을 함께 센다**(SP-M0). 한 색만 보면, 이 화면처럼 그 색이 애초에
+        // 안 쓰이는 경우에 **아무것도 안 보는 검사**가 된다.
+        const hgone = c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG or
+            c.bg == vt.CURRENT_BG or c.fg == vt.CURRENT_BG;
+        if (hgone) hleft += 1;
     }
     if (hleft != 0) {
         std.debug.print("FAIL: {d} highlighted cell(s) survived copyExit\n", .{hleft});

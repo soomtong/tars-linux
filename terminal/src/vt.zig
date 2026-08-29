@@ -66,6 +66,25 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 /// 일이기 때문이다(TR design 결정 1). `pub`인 것은 `vt_test`가 본다.
 pub const MATCH_BG: u32 = 0x00705000;
 
+/// 지금 선택된 매치의 바탕색(SP design 결정 4). **`MATCH_BG`와 같은 계열의
+/// 더 밝은 색이다.**
+///
+/// 색상 계열을 같게 두고 밝기만 올리는 것에 뜻이 있다 — "같은 종류인데 이것이
+/// 지금 것"이라는 뜻을 밝기 차이가 전달한다. 다른 계열을 고르면 두 색이 서로
+/// 다른 것을 뜻하는 것처럼 보인다.
+///
+/// | 상태 | 바탕 | 글자 |
+/// |---|---|---|
+/// | 기본 | `#102030` | 흰색 |
+/// | 선택 | 흰색 | `#102030` |
+/// | 매치 | `#705000` | 흰색 |
+/// | **현재 매치** | **`#C08000`** | 흰색 |
+/// | 선택 안의 매치 | 흰색 | `#705000` |
+///
+/// **`fg`는 여전히 안 건드린다.** 그래서 CS design 결정 1의 "매치는 바탕만
+/// 정한다"가 한 줄 그대로 남는다.
+pub const CURRENT_BG: u32 = 0x00C08000;
+
 /// `color.RGB`를 프레임버퍼의 XRGB8888 한 워드로 만든다.
 fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
@@ -429,12 +448,26 @@ pub const Screen = struct {
                 // **`fg`는 안 건드린다** — 매치가 원래 무슨 색 글자였는지를
                 // 지우지 않기 위해서다. 그래서 이 층은 한 줄로 말할 수 있다:
                 // "매치는 바탕만 정한다".
+
+                // **먼저 걸린 것에서 멈추지 않는다**(plan 결정 3). 색이 하나일
+                // 때는 그 `break`가 순수한 최적화였지만, 둘이 되면 **목록
+                // 순서가 색을 정하는 것**이 된다. 매치끼리 겹칠 일이 없다고
+                // 믿고 있지만 증명한 적이 없으므로, 겹치면 **현재 매치가
+                // 이기게** 한다.
+                //
+                // `current`를 만났을 때는 더 볼 것이 없으므로 그때만 멈춘다.
+                var hit_match = false;
+                var hit_current = false;
                 for (row_spans) |sp| {
                     if (x >= @as(usize, sp.x0) and x <= @as(usize, sp.x1)) {
-                        bg = MATCH_BG;
-                        break;
+                        hit_match = true;
+                        if (sp.current) {
+                            hit_current = true;
+                            break;
+                        }
                     }
                 }
+                if (hit_match) bg = if (hit_current) CURRENT_BG else MATCH_BG;
 
                 // 선택 영역도 inverse·커서와 **같은 연산**이다(design 결정 6).
                 // 그래서 렌더러는 "선택"이라는 말을 배우지 않는다. 양 끝을
