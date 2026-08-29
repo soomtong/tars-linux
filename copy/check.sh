@@ -899,6 +899,77 @@ if [ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -ne 0 ]; then
 fi
 echo "the next key cleared the not-found message"
 
+# ── 검사 19: 현재 매치와 나머지가 다른 색이다 (SP-M0) ──────────────────
+#
+# **이 검사는 자기 조건을 스스로 만든다**(plan 결정 4). 두 색을 함께 보려면
+# 매치가 둘 이상 한 화면에 있어야 하는데, 검사 16의 자리는 `spans=1`이라
+# (2026-08-29 실측) 거기서는 못 본다. 체인 어딘가에 `spans=2`인 프레임이 있는
+# 것은 확인했지만 **어느 검사의 자리인지는 못 박지 못했고**, 앞 검사가 남긴
+# 스크롤 위치에 기대면 판정이 스크롤에 딸리게 된다.
+#
+# **needle을 한 줄에 두 번 심는다.** 같은 줄이면 뷰포트가 어디에 있든 둘이
+# 함께 보인다 — 스크롤과 무관해진다.
+#
+# **`findme`를 쓰면 안 된다.** 검사 15와 17이 `matches=4`를 판정에 쓰고 있어
+# 새 매치가 그 숫자를 깨뜨린다. `zq`는 이 화면 어디에도 없고, 검사 18의 `zzz`와도
+# 안 겹친다.
+#
+# **needle이 두 글자인 것에도 이유가 있다.** `style>`는 프레임당 16줄이
+# 상한이라(main.zig의 STYLE_DUMP_LIMIT), 긴 needle이면 명령줄과 출력줄의 매치
+# 넷이 상한을 넘어 **뒤쪽 색이 안 찍히고 "색이 안 닿았다"로 잘못 읽힌다.**
+# 두 글자면 여덟 칸이라 넉넉하다.
+#
+# **검사 18이 copy mode 안에서 끝났으므로 먼저 나간다.** 안 나가면 아래 타이핑이
+# 셸이 아니라 copy 명령으로 먹힌다.
+type_keys esc
+sleep 1
+
+echo "=== planting a line with two matches on it ==="
+type_keys e c h o spc z q spc z q ret
+sleep 3
+
+type_keys meta_l-shift-c
+sleep 2
+type_keys slash z q ret
+sleep 3
+
+# **판정.** 매치가 둘 이상 보이고, 그중 현재 매치가 두 칸이다.
+#
+# `zq`가 명령줄과 출력줄에 각각 둘씩이라 검색은 넷을 찾고, 화면에는 적어도
+# 출력줄의 둘이 보인다. 명령줄까지 보이면 넷이다 — **몇인지는 못 박지 않고
+# "둘 이상"만 본다.** 프롬프트가 화면 어디에 오는지는 앞 검사들이 남긴 상태에
+# 딸린 값이기 때문이다.
+HL2="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
+if [ -z "$HL2" ]; then
+  report_failure "no find> hl line after searching for zq"
+fi
+HL2_SPANS=$(echo "$HL2" | sed -E 's/.*spans=([0-9]+).*/\1/')
+HL2_CUR=$(echo "$HL2" | sed -E 's/.*cur=([0-9]+).*/\1/')
+if [ "$HL2_SPANS" -lt 2 ]; then
+  report_failure "expected at least two visible matches, got: ${HL2}"
+fi
+# **현재 매치는 정확히 하나이고 needle이 두 글자다.** `cur`이 4면 두 매치가
+# 함께 현재로 표시된 것이고, 0이면 findCurrentIndex()가 null을 준 것이다 —
+# 두 실패가 서로 다른 원인이라 숫자로 갈린다.
+if [ "$HL2_CUR" -ne 2 ]; then
+  report_failure "expected the current match to cover two cells, got: ${HL2}"
+fi
+echo "two match colours are live: ${HL2}"
+
+# **판정.** 두 색이 **함께** 프레임버퍼에 닿았다.
+#
+# `find> hl`은 vt.zig가 센 값이고 이쪽은 그 색이 정말 셀에 닿았는지다. 한 겹만
+# 보면 "셌지만 안 칠했다"를 못 잡는다 — 검사 16이 두 겹으로 보는 것과 같은
+# 규율이다.
+CUR_CELLS="$(last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=FFFFFF bg=C08000' || true)"
+OTHER_CELLS="$(last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=FFFFFF bg=705000' || true)"
+if [ "$CUR_CELLS" -lt 1 ] || [ "$OTHER_CELLS" -lt 1 ]; then
+  echo "--- style lines in the last frame ---"
+  last_frame | grep -a 'terminal: style>' | tail -n 20
+  report_failure "expected both colours on screen (current=${CUR_CELLS} other=${OTHER_CELLS})"
+fi
+echo "both match colours reached the framebuffer (current=${CUR_CELLS} other=${OTHER_CELLS})"
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
