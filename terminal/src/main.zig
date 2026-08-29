@@ -445,8 +445,12 @@ fn dumpOverlay(prompt: ?Prompt) void {
 /// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
 fn dumpHighlight(screen: *vt.Screen) void {
     const hl = screen.hlStats() orelse return;
-    std.debug.print("terminal: find> hl spans={d} cells={d} us={d}\n", .{
-        hl.spans, hl.cells, hl.us,
+    // **`cur=`을 `cells=` 뒤·`us=` 앞에 넣는다**(SP-M0 plan 결정 5).
+    // `copy/check.sh`의 검사 16이 `sed -E 's/.*cells=([0-9]+).*/\1/'`로
+    // `cells=`를 뽑으므로 그 뒤에 필드를 더하는 것은 안전하지만, **`cells=`를
+    // 옮기거나 `cells`를 부분 문자열로 갖는 이름을 쓰면 깨진다.**
+    std.debug.print("terminal: find> hl spans={d} cells={d} cur={d} us={d}\n", .{
+        hl.spans, hl.cells, hl.cur, hl.us,
     });
 }
 
