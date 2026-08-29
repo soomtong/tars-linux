@@ -105,13 +105,7 @@ report_failure() {
   exit 1
 }
 
-type_keys() {
-  local k
-  for k in "$@"; do
-    echo "sendkey $k" >&3
-    sleep 0.3
-  done
-}
+source ../gate_lib.sh
 
 # key> 줄이 지금까지 몇 개 찍혔는지. 음성 검사가 이 값의 변화를 본다.
 key_lines() {
