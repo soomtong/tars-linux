@@ -119,13 +119,7 @@ trap cleanup EXIT
 # (ctrl-c는 Ctrl을 누른 채 c를 누르는 것). 게스트 쪽에서 evdev 이벤트를
 # 다시 바이트로 바꾸는 것은 우리 코드(terminal/src/input.zig)이므로, 이
 # 게이트는 QEMU의 스캔코드 변환과 우리 keymap 두 겹을 함께 검사한다.
-type_keys() {
-  local k
-  for k in "$@"; do
-    echo "sendkey $k" >&3
-    sleep 0.3
-  done
-}
+source ../gate_lib.sh
 
 report_failure() {
   local msg="$1"

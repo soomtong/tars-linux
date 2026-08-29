@@ -105,13 +105,7 @@ report_failure() {
 
 # 게스트 셸에 한 글자씩 타이핑한다. CP·IP와 같은 함수다 — sendkey가 보내는
 # 것은 문자가 아니라 **키**이므로, 대문자는 shift-를 붙여야 한다.
-type_keys() {
-  local k
-  for k in "$@"; do
-    echo "sendkey $k" >&3
-    sleep 0.3
-  done
-}
+source ../gate_lib.sh
 
 # kill -TERM 1
 KILL_KEYS=(k i l l spc minus shift-t shift-e shift-r shift-m spc 1 ret)

@@ -37,6 +37,7 @@ fi
 
 MONITOR_PORT=45455
 LOG="$(mktemp)"
+source ../gate_lib.sh
 QEMU_PID=""
 
 # --- (변경 2) 스크린샷을 out/tf/ 아래 고정 이름으로 ---------------------
@@ -128,10 +129,7 @@ sleep 1
 # 2) "math 6 x 7" + Enter 를 한 글자씩 주입.
 #    fish 내장 math가 42를 출력하므로, 화면에 42가 나타나면 셸이 실제로
 #    명령을 "실행"한 것이다 — 단순 에코와 구분된다.
-for k in m a t h spc 6 spc x spc 7 ret; do
-  echo "sendkey $k" >&3
-  sleep 0.3
-done
+type_keys m a t h spc 6 spc x spc 7 ret
 
 # --- (변경 4) 결과도 고정 sleep 3 대신 폴링 -----------------------------
 # 42가 로그에 찍힌 뒤에 after 스크린샷을 뜨면, 픽셀 차이 검사와 로그 검사가
@@ -155,10 +153,7 @@ sleep 1
 # 이 milestone 전에는 terminal이 무한 sleep으로 버텨서 아무 일도 안 났다.
 SPAWNS_BEFORE=$(grep -c "terminal: spawned child pid" "$LOG")
 
-for k in e x i t ret; do
-  echo "sendkey $k" >&3
-  sleep 0.3
-done
+type_keys e x i t ret
 
 RESTARTED=0
 for _ in $(seq 1 60); do

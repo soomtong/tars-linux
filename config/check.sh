@@ -67,13 +67,7 @@ trap cleanup EXIT
 # shift-dot, '/'는 slash로 적어야 하고, 게스트 쪽에서 evdev 이벤트를 다시
 # 문자로 바꾸는 것은 우리 코드다(terminal/src/input.zig의 keymap). 두 겹이 다
 # 맞아야 파일에 한 줄이 써진다 — 이 게이트는 그 두 겹까지 검사하는 셈이다.
-type_keys() {
-  local k
-  for k in "$@"; do
-    echo "sendkey $k" >&3
-    sleep 0.3
-  done
-}
+source ../gate_lib.sh
 
 # echo shell=zsh > /config/tars.conf
 EDIT_KEYS=(e c h o spc s h e l l equal z s h spc shift-dot spc
@@ -85,6 +79,11 @@ READBACK_KEYS=(c a t spc slash c o n f i g slash t a r s dot c o n f ret)
 # 설정을 바꾼다.
 edit_config_in_guest() {
   local log="$1"
+
+  # type_keys가 보는 것은 전역 $LOG다. 이 체인은 부팅이 둘이라 로그를 인자로
+  # 받는 구조인데, 그 둘을 잇는 자리가 여기다. local로 선언하지 않는 것이
+  # 요점이다 — 함수 안에서만 살아 있으면 type_keys가 못 본다.
+  LOG="$log"
 
   # 프롬프트가 그려진 뒤에 쳐야 한다. "terminal: screen>" 첫 줄이 곧 DRM 열기 +
   # 폰트 래스터라이즈 + evdev 열기 + 셸 spawn + 첫 렌더가 전부 끝났다는

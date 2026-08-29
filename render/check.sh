@@ -101,13 +101,7 @@ report_failure() {
   exit 1
 }
 
-type_keys() {
-  local k
-  for k in "$@"; do
-    echo "sendkey $k" >&3
-    sleep 0.3
-  done
-}
+source ../gate_lib.sh
 
 qemu-system-x86_64 \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
