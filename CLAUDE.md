@@ -75,14 +75,17 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 - 완료된 서브프로젝트: Boot Foundation(BF-M0~M4) · Display Foundation(DF) ·
   Terminal Foundation(TF) · Zig Migration(ZM) · Input Policy(IP) ·
   Terminal Rendering(TR) · Copy Mode(CM-M0~M2) ·
-  **Gate Latency(GL-M0~M1, 2026-08-26 완료 — 게이트 54분 15초 → 18분 08초)** ·
+  **Gate Latency(GL-M0~M1, 2026-08-26 · GL-M2, 2026-08-29 — 54분 15초 →
+  18분 08초 → CN·CS의 타이핑으로 22분대 → 19분 11~16초. GL-M3 진행 중)** ·
   Copy Navigation(CN-M0~M1, 2026-08-27 완료 — copy mode에 단어 이동 `w`/`b`와
   스크롤백 검색 `/`·`n`·`N`) ·
   **Copy Search Feedback(CS-M0~M1, 2026-08-28 완료 — 매치 하이라이트, 검색
   기록, "못 찾음" 메시지)**. design doc은 전부
   `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트가 없다**(2026-08-28 기준). 다음 것은 `HANDOFF.md`의
-  "이월 숙제"에서 사용자와 함께 고른다.
+- **진행 중인 서브프로젝트는 Gate Latency의 GL-M3이다**(2026-08-29 기준).
+  `terminal`을 `ReleaseSafe`로 옮기는 일이고, 측정과 결정은 `HANDOFF.md`의
+  "GL-M3이 착수 전에 이미 확정한 것"에 전부 있다 — **plan만 쓰면 된다.**
+  그 뒤의 것은 `HANDOFF.md`의 "이월 숙제"에서 사용자와 함께 고른다.
 - **주의: design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
   Power Management · Hardware Discovery가 각각 "M0 미착수"로 남아 있는데,
   게이트에는 `CP-M2` · `PM-M1` · `HD-M2` 체인이 3/3으로 돌고 있다.

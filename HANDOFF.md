@@ -1,42 +1,131 @@
-# HANDOFF: Copy Search Feedback이 끝났다 — 진행 중인 서브프로젝트가 없다
+# HANDOFF: GL-M2가 끝났다 — 다음은 GL-M3(`terminal`을 `ReleaseSafe`로)
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Copy Search Feedback(CS-M0·CS-M1)이 2026-08-28에
-끝났다.** 게이트는 여덟 체인 3/3이고 **세 번 재서 22분 35초 · 22분 24초 ·
-22분 19초**다.
+`main`, working tree 깨끗함. **Gate Latency를 2026-08-28에 다시 열었고
+GL-M2(타이핑 대기를 폴링으로)가 2026-08-29에 끝났다.** 게이트는 여덟 체인
+3/3이고 **세 번 재서 19분 16초 · 19분 11초 · 19분 12초**다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -10
+git log --oneline -8
+#   Close out GL-M2                     ← 이 커밋
+#   Move the other five chains onto the shared typing helper
+#   Make the copy chain wait for the guest instead of a flat 0.3s
+#   Plan GL-M2
+#   Reopen the gate latency design for GL-M2 and GL-M3
+#   Match the handoff git log to what was actually committed
 #   Close out CS-M1
 #   Plan CS-M1
-#   Check that the gate sees the search history and the miss message
-#   Say on screen when a search finds nothing
-#   Remember that the last search found nothing
-#   Repeat the last search when Enter is pressed on an empty prompt
-#   Close out CS-M0
-#   Sharpen the plain Korean writing rule
-#   Check that the gate sees the match highlight
-#   Log what the match highlight painted each frame
 ```
 
-**`Plan CS-M1`이 코드 커밋들 뒤에 있는 것은 순서가 아니라 커밋 시점 때문이다.**
-plan은 코드보다 먼저 썼는데 파일을 마지막에 커밋했다. CS-M0은 `Plan CS-M0`을
-코드 앞에 냈으니, **다음 milestone은 plan을 쓰자마자 커밋한다.**
+**이번에는 plan을 쓰자마자 커밋했다** — CS-M1이 `Plan CS-M1`을 코드 뒤에 내서
+순서가 헷갈렸던 것을 고친 것이다. **다음 milestone도 그렇게 한다.**
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**다음 세션이 할 첫 일: 아래 "이월 숙제"에서 사용자와 함께 다음 서브프로젝트를
-고른다.** 진행 중인 것이 없다.
+**다음 세션이 할 첫 일: GL-M3의 plan을 쓰고 곧바로 커밋한다.** design은 이미
+다 정해 두었다(아래 "GL-M3이 착수 전에 이미 확정한 것").
 
-- design: `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
-  (`Status:`가 서브프로젝트 종료로 갱신돼 있다)
-- plan: `.../plans/2026-08-28-tars-copy-search-feedback-cs-m0.md` ·
-  `.../plans/2026-08-28-tars-copy-search-feedback-cs-m1.md`
-- **기억: `docs/decisions/project_copy_search_feedback.md`**(CS-M0·CS-M1이 얻은
-  사실 전부가 거기 있다)
+- design: `docs/superpowers/specs/2026-08-26-tars-gate-latency-design.md`
+  (**"재개 (2026-08-28)" 절이 GL-M2·M3의 본체다.** 결정 5~10이 거기 있고
+  GL-M2 결과도 `>` 인용으로 붙어 있다)
+- plan: `.../plans/2026-08-28-tars-gate-latency-gl-m2.md`
+  (Task별 결과가 `>` 인용으로 붙어 있다)
+- **기억: `docs/decisions/project_gate_latency.md`**(GL-M0·M1·M2가 얻은 사실
+  전부가 거기 있다)
+
+**직전 서브프로젝트는 Copy Search Feedback(CS-M0·M1, 2026-08-28)이었다.**
+design은 `.../specs/2026-08-28-tars-copy-search-feedback-design.md`, 기억은
+`docs/decisions/project_copy_search_feedback.md`다.
+
+## GL-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. 게이트가 3분 12초 줄었고 그것이 갈렸다.** 22분 19~35초 → **19분 11~16초**.
+두 삼중값의 폭이 안 겹치고(사이 3분 03초) 각 삼중의 내부 폭이 16초와 **5초**다.
+**CM 시절 "증가분을 갈랐다고 말할 수 있었던 적이 없다"던 것과 대비되는 자리이고,
+GL-M0의 30분 06초 다음으로 분명하다.** 다만 두 삼중값은 **다른 날에 쟀다.**
+
+**2. 처방은 상수를 낮추는 것이 아니라 관측으로 바꾸는 것이었다.** 키를 보낸 뒤
+**시리얼 로그가 자랄 때까지** 기다리고 아래로 0.05초(CM-M0의 실측) 위로 0.3초
+(옛 값)로 가둔다. **위 한도가 옛 값과 같은 것이 요점이다** — 로그를 한 글자도
+안 만드는 키가 있어도 느려지지 않는다는 것을 산수로 보인다.
+
+**3. 키당 평균이 0.135초가 됐고 그 이상은 못 줄인다.** 아래 한도 0.05초를 뺀
+0.085초는 게스트가 실제로 반응하는 데 걸리는 시간이다. **예상 16분 45초를 못
+맞춘 것도, 회차 예상에서 51초가 모자란 것도 전부 여기서 나온다** — 셸이
+프롬프트를 다시 그리는 구간은 copy mode 이동보다 반응이 느리다.
+
+**4. `key>` 줄 수는 키 개수가 아니다.** 세 회차가 78·82·71로 흔들렸는데 검사는
+전부 통과했다. `readKeys`가 한 번의 `read()`에 여러 키를 실어 오면 `key> 3
+byte(s)`처럼 **한 줄로** 찍히고, **타이핑이 빨라지면 배칭이 늘어 줄 수가 오히려
+준다.** 세려면 **바이트 합**을 본다.
+
+```bash
+grep -aoE 'key> [0-9]+ byte' /tmp/tmp.* | awk '{s+=$2} END {print s}'
+```
+
+앞뒤가 **95 대 95로 정확히 같았다**(줄 수는 95 대 78) — 키를 하나도 안 놓쳤다는
+증명이 이것이다. **`copy/check.sh`의 `key_lines()`도 같은 성질을 갖는다** —
+그 함수는 변화 여부만 보는 음성 검사라 지금까지 문제가 없었을 뿐이다.
+
+**5. 판정이 서는 이유는 로그가 조용하기 때문이다.** `main.zig`의 렌더가
+`needs_redraw`를 문지기로 두고 있어서(TR-M2) 아무 일도 없으면 프레임이 안
+찍힌다. **`needs_redraw`를 건드리는 사람은 `gate_lib.sh`도 함께 봐야 한다.**
+
+**6. 키를 세는 방법에 함정이 둘 있다.** `render`의 `type_keys`는 줄 끝의 `\`로
+이어져 있고 `config`·`power`는 인자가 배열이다. 줄 단위로 단어를 세면 각각
+82 대신 32, 57 대신 2, 48 대신 2가 나온다 — **실제로 처음 그렇게 세서 합이
+어긋났다.** 회차당 0.3초짜리 키는 **492개(147.6초)**였다.
+
+## GL-M3이 착수 전에 이미 확정한 것 — **다시 조사하지 말 것**
+
+**1. fortify 벽은 `drm.zig` 하나가 아니라 셋이다.** 기억 파일과 GL design이
+`drm.zig:3` 하나로 적어 두었는데 **틀렸다.**
+
+| 파일 | `@cImport` | 걸리는가 |
+|---|---|---|
+| `drm.zig:3` | `fcntl.h`·`sys/ioctl.h`·`sys/mman.h` | **걸린다** |
+| `main.zig:8` | `poll.h` | **걸린다** |
+| `pty.zig:3` | `pty.h`·`sys/ioctl.h`·`unistd.h` | **걸린다** |
+| `input.zig:12` | `linux/input.h` | 안 걸린다(커널 UAPI) |
+| `font.zig:3` | `stb_truetype.h` | 안 걸린다(glibc가 아니다) |
+
+`drm.zig`만 고치면 에러가 6개에서 1개로 줄 뿐이고, **`main.zig`가 내는 에러는
+모양이 아예 다르다** — `C import failed`가 아니라 `expected type 'c_int', found
+'bool'`이고 잡히는 자리가 헤더가 아니라 `main.zig:623`의 `c.poll` 호출이다.
+**에러 문구로는 같은 원인이라는 것을 알 수 없다.**
+
+**2. 셋에 `@cDefine("_FORTIFY_SOURCE", "0")`을 넣으면 빌드되고 검사도 통과한다.**
+
+| | Debug(현재) | ReleaseSafe |
+|---|---|---|
+| `terminal` | 49,373,160 | **10,577,200** |
+| initrd | 16,199,658 | **10,988,958** |
+| `make_initrd.sh` | 2.25초 | **1.28초** |
+| clean 빌드 | 47.6초 | **70.9초** |
+| 증분 빌드+검사 | 3.17초 | 3.18초 |
+| `zig build test` | PASS | **PASS** |
+
+**3. 게이트 시간으로는 본전이다.** `make_initrd`가 회차당 0.97초씩 24회차에
+23초를 벌고 clean 1회차가 23초를 잃는다. **얻는 것은 initrd 5.2MB, 게스트 실행
+속도, 그리고 "terminal은 Debug에 묶여 있다"는 제약 자체를 푸는 것이다.**
+
+**4. `build.zig`에서 박는다. 커맨드라인이 아니다.** GL-M1이 `init/build.zig:32`에
+한 것과 같은 형태다. **`exe_mod`와 게스트용 `ghostty_dep` 둘 다 박는다** —
+`exe_mod`만 박으면 11,218,920바이트에 71.0초이고 둘 다 박으면 10,577,200바이트에
+70.9초라, **작아지면서 안 느려진다.** 그리고 `searchAll()`의 60~70밀리초를 쓰는
+코드가 바로 그 라이브러리다. **호스트 검사 모듈들은 `optimize`를 그대로 둔다.**
+
+**5. `terminal/prepare.sh:20`이 `zig build`를 부른다.** 그래서 `build.zig` 한
+파일만 고치면 여섯 체인 전부에 흘러간다. **체인 스크립트는 안 건드린다.**
+
+**6. `make_initrd.sh:84~89`의 주석이 스스로를 부정하고 있다.** "strip하면 6.5MB
+까지 줄지만 심볼을 남긴다"고 적고 바로 다음 문장에서 "단, 심볼이 있다고
+트레이스가 바로 읽히지는 않았다"고 적는다. **GL-M3은 strip을 하지 않되 그
+주석의 숫자와 전제를 갱신한다** — "Debug 빌드라 42MB"라는 첫 문장이 통째로
+거짓이 되기 때문이다.
 
 ## copy mode가 지금 할 수 있는 것
 
@@ -211,14 +300,20 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 22분 19초~35초다**(2026-08-28, CS-M1 이후 세 번
-측정).
+3/3, 부팅 30회 이상. **기준선은 19분 11초~16초다**(2026-08-29, GL-M2 이후 세 번
+측정). 그 전 기준선은 22분 19초~35초였다.
+
+**타이핑 대기는 이제 `gate_lib.sh` 한 파일에 있다**(GL-M2). 여섯 체인이
+`source ../gate_lib.sh`로 쓰고, `config`만 전역 `$LOG`가 없어서
+`edit_config_in_guest`에 `LOG="$log"` 한 줄이 더 있다. **`sleep 0.3`은
+`power/check.sh:348`과 `device/check.sh:180`의 단발 둘만 남았다** — 그 둘은 키가
+아니라 monitor 명령 뒤의 정리 대기라 일부러 남겼다.
 
 **CS-M0은 게이트에 타이핑을 한 키도 안 더했고 CS-M1은 아홉 키를 더했다.**
 검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받는다 — 새 부팅이 없고,
 CS-M1의 검사 17은 검사 16이 치는 `esc`를 그대로 시험대로 쓴다. **CN-M0도
-CN-M1도 CS-M0도 CS-M1도 새 체인을 만들지 않았고 monitor 포트 45462는 계속 비어
-있다.**
+CN-M1도 CS-M0도 CS-M1도 GL-M2도 새 체인을 만들지 않았고 monitor 포트 45462는
+계속 비어 있다.**
 
 **체인 목록은 `CHAINS` 배열 하나에 있다**(`check.sh:146`). 진입 검사와 실행이
 같은 목록을 쓰므로 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -269,7 +364,7 @@ TR-M2 때 Chrome을 짚을 수 있었던 것은 **assertion에 앱 이름이 찍
 때문**이다. 그런 이름이 없으면 이 로그로는 부하를 못 가른다.
 
 - **`Amphetamine`과 `caffeinate`는 부하가 아니다.** 둘 다 수면 방지 도구이고,
-  22분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
+  19분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
   **Claude Code가 스스로 띄운다** — 이것을 배경 부하의 증거로 읽으면 안 된다.
 - **`coreaudiod` assertion**(`com.apple.audio.contextNNN`)은 오디오 세션이
   열려 있었다는 것만 말한다. 어느 앱인지도, CPU를 얼마나 썼는지도 없다.
@@ -387,7 +482,7 @@ plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다.
 plan을 쓰기 전에 `input.zig`의 Enter 분기와 `dumpStyles`의 `overlaid_row`를
 직접 읽어 둔 것이다.
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 22분이라 Bash
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 19분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **`run_in_background`로 돌려야 한다.**
 `copy` 체인 단독도 8분이라 마찬가지다.
 
@@ -472,6 +567,10 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 - **`terminal: key>` 줄로 붙여넣기를 감지하기** — 붙여넣기는 `pty.write`를 직접
   부르지 `keys.bytes`를 거치지 않는다. **거꾸로, `key>` 줄을 세는 것은 "모드
   안의 키가 PTY로 안 샜다"의 좋은 도구다.**
+- **`terminal: key>` 줄 수로 "키가 몇 개 도착했나"를 세기**(GL-M2) — `readKeys`가
+  한 번의 `read()`에 여러 키를 실어 오면 `key> 3 byte(s)`처럼 **한 줄**이다.
+  타이핑이 빨라지면 배칭이 늘어 **줄 수가 오히려 준다.** 세려면 바이트 합을
+  본다: `grep -aoE 'key> [0-9]+ byte' … | awk '{s+=$2} END {print s}'`.
 - **`sendkey`로 대문자 치기** — 키 이름이 전부 소문자다. `shift-f`를 쓴다.
 - **"화면에 표적이 없다"로 "스크롤백으로 밀려났다"를 판정하기** — **"애초에 안
   쳐졌다"와 안 갈린다.** 실제로 쳐졌는지는 `find> type needle=…`로 따로 본다.
@@ -528,7 +627,7 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 - **`/tmp`에 만든 파일이 `docker run --rm` 사이에 남기** — 안 남는다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 22분이라 상한을
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 19분이라 상한을
   넘는다. `run_in_background`로 돌린다.
 - **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다.
 - **`vt_test`의 검사를 남의 화면에 붙이기** — 화면마다 크기와 history가 다르다.
@@ -583,14 +682,13 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
-**진행 중인 서브프로젝트가 없다.** 다음 것을 여기서 고른다.
+**진행 중인 서브프로젝트가 있다 — Gate Latency의 GL-M3이다.** 아래 나머지는
+그것이 끝난 뒤에 고른다.
 
-- [ ] **`terminal`을 `ReleaseSafe`로.** 42.7MB이고 initrd의 대부분이다.
-      `@cImport`가 glibc fortify로 깨지는 것이 유일한 벽이고 우회는
-      `project_zig_c_uapi_rule`에 있다. **게이트가 21분인 지금은 되재기가 싸다.**
-- [ ] **`sleep 0.3` 줄이기.** 약 6분짜리이고 실측 16이 근거지만, side effect
-      우려로 GL 범위에서 뺐다. 다시 집을 때는 **타이핑 구간이 방향키 연타와 같은
-      여유를 갖는지**를 먼저 확인한다. **CS-M0은 키를 한 개도 안 더했다.**
+- [ ] **GL-M3: `terminal`을 `ReleaseSafe`로.** ← **다음에 할 것.** 측정과 결정은
+      위 "GL-M3이 착수 전에 이미 확정한 것"에 전부 있다 — **plan만 쓰면 된다.**
+      고칠 파일은 다섯이다: `terminal/build.zig` · `drm.zig` · `main.zig` ·
+      `pty.zig` · `kernel/make_initrd.sh`(주석만).
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다.**
@@ -622,6 +720,10 @@ docker run --rm -v "$PWD":/workspace \
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~`sleep 0.3` 줄이기~~ — **GL-M2가 2026-08-29에 끝냈다.** 상수를 낮추는 대신
+  로그가 자라는 것을 보는 형태로 갔고, 게이트가 3분 12초 줄었다. **"타이핑
+  구간이 방향키 연타와 같은 여유를 갖는가"라는 미뤄 둔 질문은 답하지 않고
+  사라졌다** — 짐작이 필요 없는 형태로 바꿨기 때문이다.
 - ~~매치 하이라이트~~ — **CS-M0이 2026-08-28에 끝냈다.**
 - ~~검색 기록과 "못 찾음" 메시지~~ — **CS-M1이 2026-08-28에 끝냈다.** 빈 Enter가
   지난 검색어를 다시 쓰고, 못 찾으면 오버레이 줄에 `/needle: not found`가 뜬다.
@@ -639,7 +741,8 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 핵심 파일
 
-**줄 번호는 CS-M1 직후(2026-08-28) 기준이다.**
+**`terminal/src/`의 줄 번호는 CS-M1 직후(2026-08-28) 기준이고 그대로 유효하다** —
+**GL-M2는 Zig 코드를 한 줄도 안 건드렸다.** 바뀐 것은 게이트 스크립트뿐이다.
 
 - `terminal/src/input.zig` — **CS-M0도 CS-M1도 안 건드렸다.** 줄 번호는 CN-M1
   기준 그대로다.
@@ -692,11 +795,17 @@ docker run --rm -v "$PWD":/workspace \
   충돌 주의**) · `:471` `pruned`(CM-M2) · `:551` `wm`(CN-M0) · `:664` `fm` ·
   `:741` `fs`(CN-M1) · `:837` `hs`(CS-M0의 검사 26~31) · **`:1008` `ls`(CS-M1의
   검사 32~36)**. **새 검사는 자기 화면을 새로 만든다.**
-- `copy/check.sh` — 905줄. 검사 열여덟. `:108` `type_keys` · `:117` `key_lines` ·
-  `:123` `copy_value` · `:134` `last_frame` · `:149` `scroll_field` ·
-  `:161` `screen_count` · `:551~` CN-M0의 검사 14 · `:638~` CN-M1의 검사 15 ·
-  `:765~` CS-M0의 검사 16(하이라이트) · **`:819~` CS-M1의 검사 17(검색 기록) ·
-  `:853~` CS-M1의 검사 18("못 찾음" 메시지)** · NUL 음성 검사는 파일 끝이다.
+- **`gate_lib.sh`(저장소 루트) — GL-M2가 만들었다.** 여섯 체인이
+  `source ../gate_lib.sh`로 쓰는 `type_keys` 하나가 전부다. **왜 고정 sleep이
+  아닌지, 왜 문자열이 아니라 파일 크기인지, 왜 `needs_redraw`에 기대는지가
+  전부 그 파일 주석에 있다.** 부르는 쪽은 fd 3과 `$LOG`를 갖춰야 하고,
+  없으면 `set -u`로 그 자리에서 죽는다(일부러 안 막았다).
+- `copy/check.sh` — 899줄. 검사 열여덟. `:108` `source ../gate_lib.sh` ·
+  `:111` `key_lines`(**절대값으로 키를 세면 안 된다 — 배칭**) ·
+  `:117` `copy_value` · `:128` `last_frame` · `:143` `scroll_field` ·
+  `:155` `screen_count` · `:545` CN-M0의 검사 14 · `:632` CN-M1의 검사 15 ·
+  `:759` CS-M0의 검사 16(하이라이트) · **`:813` CS-M1의 검사 17(검색 기록) ·
+  `:847` CS-M1의 검사 18("못 찾음" 메시지)** · NUL 음성 검사는 파일 끝이다.
   **검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받고, 검사 17은 검사 16이
   치는 `esc`를 시험대로 쓴다** — 순서를 바꾸면 판정이 무너진다.
 - `check.sh` — `:35` `BUILD_STEPS` · `:42` `require_build_steps` · `:146`
