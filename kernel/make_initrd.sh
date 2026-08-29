@@ -81,12 +81,20 @@ mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
 cp ../init/zig-out/bin/init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
-# terminal은 Debug 빌드라 42MB이고 대부분이 디버그 심볼이다. strip하면
-# initrd가 6.5MB까지 줄지만(부팅 25초 → 34초 차이), 심볼을 남긴다 —
-# strip한 바이너리에서는 QEMU 안의 에러 트레이스가 원리적으로 복구
-# 불가능해지기 때문이다. 단, 심볼이 있다고 트레이스가 바로 읽히지는
-# 않았다(2026-08-12 TF-M4 실측: strip 버전은 `???` 주소 두 줄, 심볼 버전은
-# 트레이스 자체가 없었다 — 원인 미규명). 크기는 아래 gzip으로 처리한다.
+# GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
+# 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
+# 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
+# `guest-optimize` 옵션이고 기본값이 ReleaseSafe다.
+#
+# **strip은 여전히 안 한다.** ReleaseSafe가 심볼을 지우지 않고도 78.6%를
+# 줄이므로 strip을 검토할 이유가 없어졌다 — `readelf -S`로 확인하면
+# `.debug_info`를 포함한 `.debug_*` 섹션 열 개가 그대로 있다.
+#
+# 옛 주석은 "심볼을 남기는 이유는 에러 트레이스"라고 적고 바로 다음 문장에서
+# "단, 심볼이 있다고 트레이스가 바로 읽히지는 않았다"고 스스로를 부정하고
+# 있었다 — 2026-08-12 TF-M4 실측에서 strip 버전은 `???` 주소 두 줄, 심볼
+# 버전은 트레이스 자체가 없었다. **그 이유는 지금도 규명되지 않았고, Debug
+# 에서도 안 읽혔으므로 ReleaseSafe에서 안 읽히는 것은 회귀가 아니다.**
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
