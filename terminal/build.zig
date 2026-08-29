@@ -9,10 +9,43 @@ pub fn build(b: *std.Build) void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
+    // GL-M3: **게스트로 가는 것**의 최적화 모드. 위의 `optimize`와 갈라 놓은
+    // 것이 이 milestone의 핵심 결정이다.
+    //
+    // 이 저장소에는 별도의 배포 경로가 없다 — prepare.sh가 만든 바이너리가
+    // 그대로 initrd에 들어가고 게이트가 그것을 부팅한다. **게이트가 부팅하는
+    // 바이너리가 곧 제품이다.** 그래서 "개발은 Debug, 배포는 Release"를 그대로
+    // 옮기면 게이트가 배포되지 않는 것을 검사하게 된다
+    // (docs/decisions/project_gate_chain_composition.md의 "게이트는 자기가 안
+    // 보는 것을 통과시킨다"와 같은 병이다). **기본값이 배포되는 것과 같아야
+    // 하는 이유가 이것이다.**
+    //
+    // 그래도 문은 둔다. 소스를 고친 뒤 `zig build`가 Debug 17.7초 대
+    // ReleaseSafe 27.1초라 개발 한 바퀴에 9.4초가 붙기 때문이다. 다만 그
+    // 문은 명시적으로 열어야 한다:
+    //
+    //   zig build -Dguest-optimize=Debug
+    //
+    // **이 문이 게이트를 흔들지 않는다.** clean()이 zig-out을 지우고 여덟
+    // 체인이 각자 부르는 prepare.sh:20이 **옵션 없이** zig build를 부르므로,
+    // 손으로 남긴 Debug 바이너리는 다음 게이트가 기본값으로 덮어쓴다.
+    //
+    // 위의 `optimize`는 이제 **호스트 검사 전용**이다. 그쪽은 게스트에 안
+    // 가므로 크기와 무관하고, 최적화하면 `zig build test`만 느려진다
+    // (소스를 고친 뒤 9.5초 대 25.8초). init/build.zig:29가 같은 선을 긋는다.
+    const guest_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "guest-optimize",
+        "게스트로 가는 terminal 바이너리의 최적화 모드 (기본 ReleaseSafe)",
+    ) orelse .ReleaseSafe;
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = optimize,
+        // GL-M3: Debug 49,373,160 → ReleaseSafe 10,577,200바이트(78.6% 감소).
+        // initrd는 16,199,658 → 10,988,958바이트가 된다. 이 길이 열린 것은
+        // fortify를 세 자리에서 껐기 때문이다(drm.zig · main.zig · pty.zig).
+        .optimize = guest_optimize,
     });
     exe_mod.addIncludePath(b.path("vendor"));
     exe_mod.addCSourceFile(.{
@@ -22,9 +55,16 @@ pub fn build(b: *std.Build) void {
     exe_mod.link_libc = true;
     exe_mod.linkSystemLibrary("m", .{});
 
+    // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
+    // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
+    // 옮기면 10,577,200바이트에 70.9초다. **작아지면서 안 느려진다.**
+    //
+    // 그리고 이쪽이 성능의 본체다. searchAll()의 60~70밀리초를 쓰는 코드가
+    // 여기 있다(CN-M1 실측). 아래 ghostty_host_dep은 호스트 검사용이라
+    // `optimize`를 그대로 쓴다.
     const ghostty_dep = b.dependency("ghostty", .{
         .target = target,
-        .optimize = optimize,
+        .optimize = guest_optimize,
     });
     exe_mod.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
 
