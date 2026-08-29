@@ -25,7 +25,7 @@
 
 - [Boot Foundation restart](docs/decisions/project_boot_foundation_restart.md) — 새 저장소에서 재시작한 이유와 첫 서브프로젝트 범위
 - [Zig rewrite intent](docs/decisions/project_zig_rewrite_intent.md) — Rust를 Zig로 옮긴 의도와 결말(2026-08-13 완료, 이제 Rust는 없다)
-- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰면 libc를 링크하지 않는다; `@cImport`가 되는 것과 안 되는 것
+- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰면 libc를 링크하지 않는다; `@cImport`가 되는 것과 안 되는 것; **fortify는 끌 수 있고(GL-M3) 벽은 한 파일이 아니라 glibc를 읽는 블록 전부다**
 - [Build host arch](docs/decisions/project_build_host_arch.md) — 호스트는 arm64, 게스트 산출물은 x86_64 크로스; `--platform` 금지
 - [Init supervisor](docs/decisions/project_init_supervisor.md) — PID 1은 셸이 되지 않고 자식 둘을 감독한다; 감독 루프의 순서가 backoff를 만든다
 - [Power management](docs/decisions/project_power_management.md) — ACPI·종료 경로 셋·시그널 핸들러가 없으면 관측조차 안 되는 성질
@@ -41,4 +41,4 @@
 - [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위의 vim modal 선택 모드와 Cmd+V; CM-M2(2026-08-26)로 서브프로젝트가 끝났다. Cmd+V가 키 표 **두 곳**에 있어야 한다는 것, 가지치기가 pin을 무효로 만들지 않는다는 것, bracketed paste를 안 쓴다는 것이 여기 있다
 - [Copy navigation](docs/decisions/project_copy_navigation.md) — copy 커서에 얹은 이동 수단 둘; **CN-M0(단어 이동 `w`/`b`)과 CN-M1(검색 `/`·`n`·`N`)이 2026-08-27에 끝나 종료됐다.** 라이브러리의 "단어"에 **공백 덩어리가 포함된다**는 것, `pointFromPin`이 뷰포트 **아래쪽 밖을 안 알려준다**는 것, `Terminal.ScrollViewport`에 `.pin`이 없다는 것, `ScreenSearch`가 우리 선택을 안 건드린다는 것, `Select.next`의 주석과 달리 **코드는 감긴다**는 것, **QEMU `sendkey`의 키 이름이 전부 소문자**라는 것이 여기 있다
 - [Copy search feedback](docs/decisions/project_copy_search_feedback.md) — 검색이 사람에게 보이게 만든 층; **CS-M0·CS-M1이 2026-08-28에 끝나 종료됐다.** `matches()`가 준 목록이 **다음 `select()`에서 죽는다**는 것, 매치는 맞바꿈이 아니라 **값을 정하는 층**이어야 한다는 것(선택 안에서 상쇄된다), `pointFromPin`이 뷰포트 **위**의 pin에 대해 목록 끝까지 훑으므로 **좌표 푸는 방향을 뒤집었다**는 것, "못 찾음" 메시지의 글자가 **`find_last`에서 올 수밖에 없다**는 것, **이 게이트에서 처음 재는 값은 TCG 번역 비용을 포함한다**는 것(같은 검색이 첫 번째 62ms · 세 번째 19ms)이 여기 있다
-- [Gate latency](docs/decisions/project_gate_latency.md) — 게이트 54분 15초 → 18분 08초(GL-M0·M1) → 22분대(CN·CS의 타이핑) → **19분 11~16초(GL-M2, 2026-08-29)**; 54분의 8할은 같은 산출물을 24번 빌드하는 비용이었다, "빌드가 최신인가"를 mtime으로 판정하려는 시도는 **두 번 다 실패했고** 내용 해시로 가야 한다, gzip -9는 값을 못 한다, **고정 대기는 관측으로 바꾼다**(키당 0.3초 → 0.135초), **`key>` 줄 수는 키 개수가 아니다**(배칭 — 세려면 바이트 합)
+- [Gate latency](docs/decisions/project_gate_latency.md) — 게이트 54분 15초 → 18분 08초(GL-M0·M1) → 22분대(CN·CS의 타이핑) → 19분 11~16초(GL-M2) → **16분 01~11초(GL-M3, 2026-08-29)**; 54분의 8할은 같은 산출물을 24번 빌드하는 비용이었다, "빌드가 최신인가"를 mtime으로 판정하려는 시도는 **두 번 다 실패했고** 내용 해시로 가야 한다, gzip -9는 값을 못 한다, **고정 대기는 관측으로 바꾼다**(그러면 그 뒤의 성능 개선이 게이트 시간으로 흘러든다), **`key>` 줄 수는 키 개수가 아니다**(배칭 — 세려면 바이트 합), **게이트가 부팅하는 바이너리가 곧 제품이라 최적화 기본값은 배포되는 것과 같아야 한다**

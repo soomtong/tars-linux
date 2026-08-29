@@ -1,40 +1,44 @@
-# HANDOFF: GL-M2가 끝났다 — 다음은 GL-M3(`terminal`을 `ReleaseSafe`로)
+# HANDOFF: Gate Latency가 끝났다 — 진행 중인 서브프로젝트가 없다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Gate Latency를 2026-08-28에 다시 열었고
-GL-M2(타이핑 대기를 폴링으로)가 2026-08-29에 끝났다.** 게이트는 여덟 체인
-3/3이고 **세 번 재서 19분 16초 · 19분 11초 · 19분 12초**다.
+`main`, working tree 깨끗함. **Gate Latency를 2026-08-28에 다시 열어
+GL-M2(타이핑 대기를 폴링으로)와 GL-M3(`terminal`을 `ReleaseSafe`로)를
+2026-08-29에 끝냈다.** 게이트는 여덟 체인 3/3이고 **세 번 재서 16분 11초 ·
+16분 10초 · 16분 01초**다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -8
-#   Close out GL-M2                     ← 이 커밋
+git log --oneline -10
+#   Close out GL-M3                     ← 이 커밋
+#   Refresh the initrd comment that had contradicted itself
+#   Default the guest terminal build to ReleaseSafe
+#   Turn off glibc fortify in the three cImport blocks
+#   Give the guest optimize mode a door instead of nailing it shut
+#   Plan GL-M3
+#   Close out GL-M2
 #   Move the other five chains onto the shared typing helper
 #   Make the copy chain wait for the guest instead of a flat 0.3s
 #   Plan GL-M2
-#   Reopen the gate latency design for GL-M2 and GL-M3
-#   Match the handoff git log to what was actually committed
-#   Close out CS-M1
-#   Plan CS-M1
 ```
 
-**이번에는 plan을 쓰자마자 커밋했다** — CS-M1이 `Plan CS-M1`을 코드 뒤에 내서
-순서가 헷갈렸던 것을 고친 것이다. **다음 milestone도 그렇게 한다.**
+**두 milestone 다 plan을 쓰자마자 커밋했다** — CS-M1이 `Plan CS-M1`을 코드 뒤에
+내서 순서가 헷갈렸던 것을 고친 것이다. **다음 milestone도 그렇게 한다.**
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**다음 세션이 할 첫 일: GL-M3의 plan을 쓰고 곧바로 커밋한다.** design은 이미
-다 정해 두었다(아래 "GL-M3이 착수 전에 이미 확정한 것").
+**다음 세션이 할 첫 일: 아래 "이월 숙제"에서 사용자와 함께 다음 서브프로젝트를
+고른다.** 진행 중인 것이 없다.
 
 - design: `docs/superpowers/specs/2026-08-26-tars-gate-latency-design.md`
-  (**"재개 (2026-08-28)" 절이 GL-M2·M3의 본체다.** 결정 5~10이 거기 있고
-  GL-M2 결과도 `>` 인용으로 붙어 있다)
-- plan: `.../plans/2026-08-28-tars-gate-latency-gl-m2.md`
-  (Task별 결과가 `>` 인용으로 붙어 있다)
-- **기억: `docs/decisions/project_gate_latency.md`**(GL-M0·M1·M2가 얻은 사실
-  전부가 거기 있다)
+  (**"재개 (2026-08-28)" 절이 GL-M2·M3의 본체다.** 결정 5~11이 거기 있고
+  두 milestone의 결과가 `>` 인용으로 붙어 있다. `Status:`도 갱신돼 있다)
+- plan: `.../plans/2026-08-28-tars-gate-latency-gl-m2.md` ·
+  `.../plans/2026-08-29-tars-gate-latency-gl-m3.md`
+- **기억: `docs/decisions/project_gate_latency.md`**(GL-M0~M3이 얻은 사실 전부가
+  거기 있다) · **`docs/decisions/project_zig_c_uapi_rule.md`**(fortify 우회가
+  통한다는 것을 GL-M3이 확정했다 — 그 문서의 옛 단언을 지웠다)
 
 **직전 서브프로젝트는 Copy Search Feedback(CS-M0·M1, 2026-08-28)이었다.**
 design은 `.../specs/2026-08-28-tars-copy-search-feedback-design.md`, 기억은
@@ -79,9 +83,42 @@ grep -aoE 'key> [0-9]+ byte' /tmp/tmp.* | awk '{s+=$2} END {print s}'
 82 대신 32, 57 대신 2, 48 대신 2가 나온다 — **실제로 처음 그렇게 세서 합이
 어긋났다.** 회차당 0.3초짜리 키는 **492개(147.6초)**였다.
 
-## GL-M3이 착수 전에 이미 확정한 것 — **다시 조사하지 말 것**
+## GL-M3이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-**1. fortify 벽은 `drm.zig` 하나가 아니라 셋이다.** 기억 파일과 GL design이
+**0. "게이트 시간으로는 본전"이라는 착수 전 예측이 틀렸고, 틀린 이유가 이
+milestone에서 가장 값지다.** 착수 전 셈은 빌드와 gzip만 보았다 — `make_initrd`가
+24회차에 23초를 벌고 clean 빌드가 47.6 → 70.9초로 23초를 잃으니 상쇄라는
+것이었다. **그 셈에 없던 경로가 있었다.**
+
+| copy 체인 회차당 | |
+|---|---|
+| GL-M2 전 | 167 · 167 · 166초 |
+| GL-M2 뒤 | 143 · 142 · 139초 |
+| **GL-M3 뒤** | **129 · 129 · 129초** |
+
+GL-M3이 회차당 13초를 더 깎았는데, GL-M2 뒤의 타이핑이 151키 × 0.135초 =
+20.4초였고 그중 **아래 한도 0.05초를 뺀 폴링 부분이 151 × 0.085 = 12.8초**다.
+**13초와 거의 정확히 같다.**
+
+**GL-M2가 게이트의 대기를 "고정 시간"에서 "게스트 응답 시간의 측정"으로 바꿔
+놓았고, GL-M3이 그 게스트를 열 배 빠르게 만들었다.** 그래서 게스트 속도 개선이
+게이트 시간으로 흘러들어 왔다. **GL-M3을 먼저 했다면 정말로 본전이었을 것이다** —
+고정 0.3초 대기는 게스트가 아무리 빨라져도 그대로다. **순서가 값을 했고 그것은
+계획한 것이 아니었다.**
+
+**그리고 이제 타이핑 대기의 병목은 아래 한도 0.05초 자신이다.** 게스트가 그
+안에 응답하므로 폴링이 대개 첫 검사에서 끝난다. 더 깎으려면 그 한도를 낮춰야
+하는데 **CM-M0의 실측은 0.05초까지만 허락한다.**
+
+**게스트가 얼마나 빨라졌나.**
+
+| | Debug | ReleaseSafe |
+|---|---|---|
+| 첫 프레임 | 209밀리초 | **10.7~22.0밀리초** |
+| 검색(그 부팅의 첫 번째) | 39.7~69.6밀리초 | **28.7~35.3밀리초** |
+| 검색(되부른 것) | 18.2~20.7밀리초 | **4.7~9.7밀리초** |
+
+**1. fortify 벽은 `drm.zig` 하나가 아니라 셋이었다.** 기억 파일과 GL design이
 `drm.zig:3` 하나로 적어 두었는데 **틀렸다.**
 
 | 파일 | `@cImport` | 걸리는가 |
@@ -98,34 +135,61 @@ grep -aoE 'key> [0-9]+ byte' /tmp/tmp.* | awk '{s+=$2} END {print s}'
 **에러 문구로는 같은 원인이라는 것을 알 수 없다.**
 
 **2. 셋에 `@cDefine("_FORTIFY_SOURCE", "0")`을 넣으면 빌드되고 검사도 통과한다.**
+그 세 줄에는 **`// GL-M3` 표식이 똑같이 붙어 있다** — `@cImport`를
+`b.addTranslateC`로 옮겨 우회가 필요 없어지면 `rg 'GL-M3' terminal/src`로 셋이
+한 번에 나온다.
 
-| | Debug(현재) | ReleaseSafe |
+| | Debug | ReleaseSafe |
 |---|---|---|
-| `terminal` | 49,373,160 | **10,577,200** |
-| initrd | 16,199,658 | **10,988,958** |
-| `make_initrd.sh` | 2.25초 | **1.28초** |
+| `terminal` | 49,373,565 | **10,577,208** |
+| initrd | 16,199,658 | **10,988,773** |
+| `make_initrd.sh` | 2.25초 | **1.32초** |
 | clean 빌드 | 47.6초 | **70.9초** |
-| 증분 빌드+검사 | 3.17초 | 3.18초 |
-| `zig build test` | PASS | **PASS** |
+| **소스를 고친 뒤 `zig build`** | **17.7초** | **27.1초** |
+| **소스를 고친 뒤 `zig build test`** | **9.5초** | **9.5초**(안 건드렸다) |
+| `.debug_*` 섹션 | 있다 | **있다**(열 개, `.debug_info` 포함) |
 
-**3. 게이트 시간으로는 본전이다.** `make_initrd`가 회차당 0.97초씩 24회차에
-23초를 벌고 clean 1회차가 23초를 잃는다. **얻는 것은 initrd 5.2MB, 게스트 실행
-속도, 그리고 "terminal은 Debug에 묶여 있다"는 제약 자체를 푸는 것이다.**
+**"증분"을 잴 때 no-op인지 편집 뒤인지를 갈라서 적을 것.** 착수 전에 잰
+"3.17초 대 3.18초"는 **아무것도 안 고쳤을 때의 no-op**이라 두 모드가 같게 나오는
+것이 당연했고, 개발 비용에 대해 아무것도 말해 주지 않았다. **실제 대가는
+`zig build` 한 번에 +9.4초다.**
 
-**4. `build.zig`에서 박는다. 커맨드라인이 아니다.** GL-M1이 `init/build.zig:32`에
-한 것과 같은 형태다. **`exe_mod`와 게스트용 `ghostty_dep` 둘 다 박는다** —
-`exe_mod`만 박으면 11,218,920바이트에 71.0초이고 둘 다 박으면 10,577,200바이트에
-70.9초라, **작아지면서 안 느려진다.** 그리고 `searchAll()`의 60~70밀리초를 쓰는
-코드가 바로 그 라이브러리다. **호스트 검사 모듈들은 `optimize`를 그대로 둔다.**
+**3. 최적화 모드는 박은 것이 아니라 기본값이 있는 옵션이다**(design 결정 11).
+
+```bash
+zig build                          # ReleaseSafe (기본값, 게이트가 쓰는 것)
+zig build -Dguest-optimize=Debug   # 개발자가 명시적으로 여는 문
+```
+
+**기본값이 배포되는 것과 같아야 하는 이유는 이 저장소에 별도의 배포 경로가
+없기 때문이다** — `prepare.sh`가 만든 바이너리가 그대로 initrd에 들어가고
+게이트가 그것을 부팅한다. **게이트가 부팅하는 바이너리가 곧 제품이다.**
+그래서 갈리는 축은 "개발이냐 배포냐"가 아니라 **"게스트로 가느냐"**다 —
+호스트 검사(`vt_test`·`input_test`·`font_test`)는 언제나 Debug가 맞다.
+
+**이 문이 게이트를 흔들지 않는다.** `clean()`이 `zig-out`을 지우고 여덟 체인이
+각자 부르는 `prepare.sh:20`이 **옵션 없이** `zig build`를 부르므로, 손으로 남긴
+Debug 바이너리는 다음 게이트가 기본값으로 덮어쓴다. **새 정적 검사를 만들지
+않은 근거가 이것이다.**
+
+**4. `guest_optimize`를 쓰는 자리는 둘뿐이다.** `exe_mod`(`build.zig:48`)와
+`ghostty_dep`(`:67`). 나머지 다섯(`pty_test_mod:80` · `ghostty_host_dep:108` ·
+`vt_test_mod:113` · `input_test_mod:125` · `font_test_mod:147`)은 `optimize`
+그대로다. **`ghostty_dep`을 함께 옮기는 것이 공짜다** — `exe_mod`만 옮기면
+11,218,920바이트에 71.0초이고 둘 다면 10,577,208바이트에 70.9초라 **작아지면서
+안 느려진다.** 그리고 `searchAll()`을 도는 코드가 바로 그 라이브러리다.
+**`pty_test`는 x86_64로 빌드되지만 initrd에 안 담기고 아무도 실행하지 않으므로
+게스트로 가는 것이 아니다.**
 
 **5. `terminal/prepare.sh:20`이 `zig build`를 부른다.** 그래서 `build.zig` 한
-파일만 고치면 여섯 체인 전부에 흘러간다. **체인 스크립트는 안 건드린다.**
+파일만 고치면 여섯 체인 전부에 흘러간다. **체인 스크립트는 한 줄도 안 건드렸다.**
 
-**6. `make_initrd.sh:84~89`의 주석이 스스로를 부정하고 있다.** "strip하면 6.5MB
-까지 줄지만 심볼을 남긴다"고 적고 바로 다음 문장에서 "단, 심볼이 있다고
-트레이스가 바로 읽히지는 않았다"고 적는다. **GL-M3은 strip을 하지 않되 그
-주석의 숫자와 전제를 갱신한다** — "Debug 빌드라 42MB"라는 첫 문장이 통째로
-거짓이 되기 때문이다.
+**6. strip은 여전히 안 한다.** ReleaseSafe가 심볼을 지우지 않고도 78.6%를
+줄이므로 검토할 이유가 없다. `make_initrd.sh`의 옛 주석은 "심볼을 남기는 이유는
+에러 트레이스"라고 적고 바로 다음 문장에서 "단, 심볼이 있다고 트레이스가 바로
+읽히지는 않았다"고 **스스로를 부정하고 있었다.** Debug에서도 안 읽혔으므로
+ReleaseSafe에서 안 읽히는 것은 회귀가 아니고, **그래서 "트레이스가 읽히는가"는
+확인 대상으로 삼지 않았다.** 확인한 것은 `.debug_*` 섹션이 남아 있는 것뿐이다.
 
 ## copy mode가 지금 할 수 있는 것
 
@@ -300,8 +364,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 19분 11초~16초다**(2026-08-29, GL-M2 이후 세 번
-측정). 그 전 기준선은 22분 19초~35초였다.
+3/3, 부팅 30회 이상. **기준선은 16분 01초~11초다**(2026-08-29, GL-M3 이후 세 번
+측정). 그 앞의 기준선은 GL-M2 뒤 19분 11~16초, 그 앞이 22분 19~35초였다.
 
 **타이핑 대기는 이제 `gate_lib.sh` 한 파일에 있다**(GL-M2). 여섯 체인이
 `source ../gate_lib.sh`로 쓰고, `config`만 전역 `$LOG`가 없어서
@@ -364,7 +428,7 @@ TR-M2 때 Chrome을 짚을 수 있었던 것은 **assertion에 앱 이름이 찍
 때문**이다. 그런 이름이 없으면 이 로그로는 부하를 못 가른다.
 
 - **`Amphetamine`과 `caffeinate`는 부하가 아니다.** 둘 다 수면 방지 도구이고,
-  19분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
+  16분짜리 게이트가 잠들지 않게 해 주므로 오히려 측정에 도움이 된다.
   **Claude Code가 스스로 띄운다** — 이것을 배경 부하의 증거로 읽으면 안 된다.
 - **`coreaudiod` assertion**(`com.apple.audio.contextNNN`)은 오디오 세션이
   열려 있었다는 것만 말한다. 어느 앱인지도, CPU를 얼마나 썼는지도 없다.
@@ -482,7 +546,7 @@ plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다.
 plan을 쓰기 전에 `input.zig`의 Enter 분기와 `dumpStyles`의 `overlaid_row`를
 직접 읽어 둔 것이다.
 
-**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 19분이라 Bash
+**긴 명령은 실행 전에 얼마나 걸리는지 알린다.** 루트 게이트는 16분이라 Bash
 도구의 10분 타임아웃을 넘는다 — **`run_in_background`로 돌려야 한다.**
 `copy` 체인 단독도 8분이라 마찬가지다.
 
@@ -554,9 +618,11 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 
 **17. `gzip -9`는 값을 못 하는 압축 레벨이다.** initrd는 `-6`으로 만든다.
 
-**18. `terminal`은 Debug에 묶여 있고 `init`은 아니다.** `-Doptimize=ReleaseSafe`가
-`terminal/src/drm.zig:3`의 `@cImport`를 glibc fortify 때문에 깨뜨린다. 우회
-(`@cDefine("_FORTIFY_SOURCE", "0")`)는 `project_zig_c_uapi_rule`에 있다.
+**18. `terminal`도 `init`도 이제 `ReleaseSafe`다.** ~~terminal은 Debug에 묶여
+있다~~ — **GL-M3이 2026-08-29에 풀었다.** glibc fortify가 `@cImport`를 깨뜨리는
+것은 맞지만 `@cDefine("_FORTIFY_SOURCE", "0")`으로 끄면 되고, **끌 자리는 한
+곳이 아니라 glibc 헤더를 읽는 블록 전부다**(`drm.zig` · `main.zig` · `pty.zig`).
+자세한 것은 `project_zig_c_uapi_rule`에 있다.
 
 **19. 디버그 allocator가 해제한 메모리를 `0xAA`로 채운다.** 라이브러리가 준 값에
 `0xAA`가 보이면 그것은 "초기화 안 됨"이 아니라 **"이미 해제됨"**이다. CS-M0이
@@ -627,7 +693,7 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 - **`/tmp`에 만든 파일이 `docker run --rm` 사이에 남기** — 안 남는다.
 - **임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기** — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 19분이라 상한을
+- **루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기** — 16분이라 상한을
   넘는다. `run_in_background`로 돌린다.
 - **`git cherry-pick`에 `-q`를 붙이기** — 그런 옵션이 없다.
 - **`vt_test`의 검사를 남의 화면에 붙이기** — 화면마다 크기와 history가 다르다.
@@ -682,13 +748,7 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
-**진행 중인 서브프로젝트가 있다 — Gate Latency의 GL-M3이다.** 아래 나머지는
-그것이 끝난 뒤에 고른다.
-
-- [ ] **GL-M3: `terminal`을 `ReleaseSafe`로.** ← **다음에 할 것.** 측정과 결정은
-      위 "GL-M3이 착수 전에 이미 확정한 것"에 전부 있다 — **plan만 쓰면 된다.**
-      고칠 파일은 다섯이다: `terminal/build.zig` · `drm.zig` · `main.zig` ·
-      `pty.zig` · `kernel/make_initrd.sh`(주석만).
+**진행 중인 서브프로젝트가 없다.** 다음 것을 여기서 고른다.
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다.**
@@ -720,6 +780,9 @@ docker run --rm -v "$PWD":/workspace \
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~`terminal`을 `ReleaseSafe`로~~ — **GL-M3이 2026-08-29에 끝냈다.** 49.4MB →
+  10.6MB, initrd 16.2MB → 11.0MB, 첫 프레임 209ms → 11~22ms. **fortify 벽은
+  세 곳이었고 우회가 통했다.**
 - ~~`sleep 0.3` 줄이기~~ — **GL-M2가 2026-08-29에 끝냈다.** 상수를 낮추는 대신
   로그가 자라는 것을 보는 형태로 갔고, 게이트가 3분 12초 줄었다. **"타이핑
   구간이 방향키 연타와 같은 여유를 갖는가"라는 미뤄 둔 질문은 답하지 않고
@@ -815,6 +878,13 @@ docker run --rm -v "$PWD":/workspace \
 - `kernel/build.sh:53~58` — GL-M1의 스킵 판정. `:75`가 스탬프를 적는 자리다.
 - `kernel/make_initrd.sh` 마지막 줄 — `gzip -6`. **`-9`로 되돌리지 말 것.**
 - `init/build.zig:32` — `exe_mod`만 `.ReleaseSafe`다.
+- **`terminal/build.zig` — GL-M3이 고쳤다.** `:12` `guest_optimize`(기본
+  `ReleaseSafe`, `-Dguest-optimize=Debug`가 문) · `:48` `exe_mod` · `:67`
+  `ghostty_dep`. **이 둘만 `guest_optimize`를 쓰고 나머지 다섯은 `optimize`
+  그대로다.** `:129~` 마지막 주석이 "누가 실행하는가"의 선을 긋는다.
+- **`terminal/src/drm.zig:3` · `main.zig:8` · `pty.zig:3` — fortify를 끄는 세
+  자리.** 이유는 **`drm.zig`에만** 길게 적혀 있고 나머지 둘은 그 자리를
+  가리킨다. 세 줄에 `// GL-M3` 표식이 붙어 있다.
 - `terminal/src/drm.zig:128`·`:138` — `setPixel`·`getPixel`. **범위 검사가
   없다.** 고치지 않고 호출부에서 막는다.
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.

@@ -1,6 +1,6 @@
 ---
 name: project_zig_c_uapi_rule
-description: "Zig에서 커널을 부를 때의 규칙 — 시스템 콜만 쓰면 libc를 링크하지 말고 std.os.linux로; libc가 필요할 때만 @cImport(구조체는 되고 ioctl 매크로는 안 되며 최적화 모드에서 fortify로 깨진다)"
+description: "Zig에서 커널을 부를 때의 규칙 — 시스템 콜만 쓰면 libc를 링크하지 말고 std.os.linux로; libc가 필요할 때만 @cImport(구조체는 되고 ioctl 매크로는 안 되며 최적화 모드에서 fortify로 깨진다); **그 fortify는 @cDefine(\"_FORTIFY_SOURCE\", \"0\")으로 끌 수 있고 GL-M3이 2026-08-29에 실제로 껐다 — Debug에 묶이지 않는다**; **벽은 한 파일이 아니라 glibc 헤더를 읽는 @cImport 블록 전부이고 파일마다 에러 문구가 달라서 같은 원인으로 안 보인다**(drm.zig는 'C import failed', main.zig는 poll 호출에서 'expected c_int, found bool')"
 metadata:
   node_type: memory
   type: project
@@ -42,13 +42,44 @@ translate-c가 번역하지 못한다.
   open can be called either with 2 or 3 arguments, not more
 ```
 
-즉 **`@cImport`로 `fcntl.h`를 끌어다 쓰는 코드는 Debug 모드에 묶인다.**
 우회는 `@cImport` 블록 안에서 `@cDefine("_FORTIFY_SOURCE", "0")`을 먼저
-선언하는 것이지만, TF-M4에서는 종료 게이트 도중에 검증 대상 바이너리의
-컴파일 모드를 바꾸는 위험을 피해 Debug를 유지하고 크기 문제는
+선언하는 것이다. TF-M4에서는 종료 게이트 도중에 검증 대상 바이너리의 컴파일
+모드를 바꾸는 위험을 피해 Debug를 유지하고 크기 문제는
 [[project_gate_chain_composition]]에 적은 initrd gzip 압축으로 해결했다.
-`@cImport`를 `b.addTranslateC`로 옮기게 되면(0.16 권장 경로) 이 제약도 함께
-재검토할 것.
+
+## 그 우회를 2026-08-29에 실제로 넣었다 (GL-M3)
+
+**한때 이 자리에 "`@cImport`로 `fcntl.h`를 끌어다 쓰는 코드는 Debug 모드에
+묶인다"고 적혀 있었는데, 그 문장은 지웠다.** 묶이지 않는다 — 우회가 통한다.
+
+**그리고 벽은 `drm.zig` 하나가 아니라 셋이었다.** 이 문서가 `drm.zig:3`만
+지목해 온 것이 조사를 잘못된 크기로 보이게 했다.
+
+| 파일 | `@cImport` | 걸리는가 |
+|---|---|---|
+| `drm.zig:3` | `fcntl.h` · `sys/ioctl.h` · `sys/mman.h` | **걸린다** |
+| `main.zig:8` | `poll.h` | **걸린다** |
+| `pty.zig:3` | `pty.h` · `sys/ioctl.h` · `unistd.h` | **걸린다** |
+| `input.zig:12` | `linux/input.h` | 안 걸린다(커널 UAPI다) |
+| `font.zig:3` | `stb_truetype.h` | 안 걸린다(glibc가 아니다) |
+
+**`drm.zig`만 고치면 에러가 6개에서 1개로 줄 뿐이고, 남는 하나는 모양이 아예
+다르다.** `C import failed`가 아니라 `expected type 'c_int', found 'bool'`이고
+잡히는 자리도 헤더가 아니라 `main.zig:623`의 `c.poll` 호출이다 — fortify가
+켜지면 `poll`이 함수가 아니라 매크로가 되고 그 번역이 `c_int` 자리에 `bool`을
+놓는다. **에러 문구로 검색해서는 같은 원인이라는 것을 알 수 없다.**
+
+**버퍼 검사를 잃어도 되는 근거는 대체물이다.** ReleaseSafe는 Zig 자신의 안전
+검사(경계·오버플로·널)를 전부 켠 채로 두고, 세 블록이 가져오는 것은 전부
+시스템 콜 래퍼라 glibc의 fortify가 볼 버퍼가 애초에 우리 코드에 없다.
+
+결과는 `terminal` 49,373,565 → **10,577,208바이트**(78.6% 감소), initrd
+16,199,658 → 10,988,773바이트, 첫 프레임 209밀리초 → 10.7~22.0밀리초다.
+자세한 것은 [[project_gate_latency]]에 있다.
+
+**`@cImport`를 `b.addTranslateC`로 옮기게 되면(0.16 권장 경로) 이 우회는 필요
+없어질 수 있다.** 그때 지울 자리를 찾도록 세 줄에 `GL-M3`을 똑같이 적어 두었다 —
+`rg 'GL-M3' terminal/src`로 셋이 한 번에 나온다.
 
 **Zig 라이브러리 타입을 구조체 필드로 쓸 때 주의:** 이건 C 상호운용이
 아니라 Zig 쪽 함정인데 같은 세션에서 겪었다. 재수출된 이름이 **제네릭
