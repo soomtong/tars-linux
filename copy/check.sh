@@ -780,18 +780,25 @@ fi
 # 값을 보고 사람이 정한다.
 echo "the match highlight: ${HL}"
 
-# **판정.** 마지막 프레임의 셀이 정말 MATCH_BG를 받았다.
+# **판정.** 마지막 프레임의 셀이 정말 CURRENT_BG를 받았다.
 #
-# 커서가 선 한 칸은 매치 위에서 또 한 번 맞바뀌므로 `fg=705000 bg=FFFFFF`가
-# 되고, 나머지는 `fg=FFFFFF bg=705000`이다. 아래는 후자를 센다. vt_test의
+# **SP-M0이 이 자리의 색을 바꿨다.** 2026-08-29 실측으로 이 자리는 `spans=1`,
+# 곧 **화면에 보이는 매치가 하나**이고 직전에 `n`으로 그리로 갔으므로 그
+# 하나가 곧 현재 매치다. 그래서 여기 칠해지는 것은 `MATCH_BG`가 아니라
+# `CURRENT_BG`이고, 옛 `bg=705000`을 그대로 두면 0개가 되어 실패한다.
+#
+# **두 색이 함께 있는 것은 검사 19가 본다** — 그쪽은 자기 조건을 스스로 만든다.
+#
+# 커서가 선 한 칸은 매치 위에서 또 한 번 맞바뀌므로 `fg=C08000 bg=FFFFFF`가
+# 되고, 나머지는 `fg=FFFFFF bg=C08000`이다. 아래는 후자를 센다. vt_test의
 # 검사 29가 같은 갈림을 `plain=5 cursor=1`로 확인한다.
-HL_STYLED="$(last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=FFFFFF bg=705000' || true)"
+HL_STYLED="$(last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=FFFFFF bg=C08000' || true)"
 if [ "$HL_STYLED" -lt 1 ]; then
   echo "--- style lines in the last frame ---"
   last_frame | grep -a 'terminal: style>' | tail -n 20
-  report_failure "no cell reached the framebuffer with the match background"
+  report_failure "no cell reached the framebuffer with the current-match background"
 fi
-echo "${HL_STYLED} cell(s) reached the framebuffer with bg=705000"
+echo "${HL_STYLED} cell(s) reached the framebuffer with bg=C08000"
 
 type_keys esc
 sleep 1
@@ -802,7 +809,10 @@ sleep 1
 # 안 사라지면 `copyExit`이 `find_matches`를 안 버린 것이고, 그 상태는 다음
 # 검색에서 **이중 해제**로 이어진다 — 증상이 여기서는 색이지만 다음에는
 # 크래시다.
-if [ "$(last_frame | grep -acE 'bg=705000' || true)" -ne 0 ]; then
+# **두 색을 함께 본다**(SP-M0). 한 색만 보면 다른 색으로 칠해진 하이라이트가
+# 살아남았을 때 이 검사가 그것을 놓친다 — 지금 이 자리는 현재 매치 하나뿐이라
+# `bg=705000`만 보면 **아무것도 안 보는 검사**가 된다.
+if [ "$(last_frame | grep -acE 'bg=(705000|C08000)' || true)" -ne 0 ]; then
   echo "--- style lines in the last frame ---"
   last_frame | grep -a 'terminal: style>' | tail -n 20
   report_failure "the highlight survived leaving copy mode"
