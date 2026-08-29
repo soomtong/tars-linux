@@ -1198,5 +1198,88 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: n이 현재 매치를 한 칸 옮긴다 OK (idx={d})\n", .{pcur2});
 
+    // 검사 39. **두 색이 한 화면에 나란히 있다.**
+    //
+    // `n`을 한 번 눌렀으므로 현재 매치는 8번 줄의 두 매치 중 하나다.
+    // `copyPlace`가 그 줄을 뷰포트 맨 위로 올리므로 **같은 줄의 다른 매치도
+    // 함께 보인다** — 한 줄에 둘을 심은 이유가 이것이고, 그래서 이 판정이
+    // 스크롤 위치에 안 딸린다.
+    //
+    // **어느 쪽이 현재 매치인지는 안 본다.** 라이브러리가 한 줄 안의 매치를
+    // 어느 순서로 주는지 확인한 적이 없고, 그것에 기대면 검사가 라이브러리의
+    // 안 적힌 성질에 딸리게 된다. 왼쪽이든 오른쪽이든 **셈은 똑같다.**
+    _ = try ps.cells(&buf);
+    const pspans = ps.hlSpans();
+    if (pspans.len != 2) {
+        std.debug.print("FAIL: {d} span(s) in view (expected 2)\n", .{pspans.len});
+        for (pspans) |sp| {
+            std.debug.print("  span row={d} x0={d} x1={d} current={}\n", .{
+                sp.row, sp.x0, sp.x1, sp.current,
+            });
+        }
+        return error.CurrentSpanCountWrong;
+    }
+    var cur_n: usize = 0;
+    for (pspans) |sp| {
+        if (sp.current) cur_n += 1;
+    }
+    if (cur_n != 1) {
+        std.debug.print("FAIL: {d} span(s) marked current (expected exactly 1)\n", .{cur_n});
+        return error.CurrentSpanMarkWrong;
+    }
+
+    // **셈이 이렇게 갈린다.** needle이 두 글자이므로 매치 하나가 두 칸이다.
+    //   - 현재 매치: 첫 칸에 copy 커서가 서서 한 번 더 맞바뀌므로
+    //     `bg=CURRENT_BG`가 **하나**, `fg=CURRENT_BG`가 **하나**
+    //   - 다른 매치: `bg=MATCH_BG`가 **둘**
+    // CS-M0의 검사 29가 `plain=5 cursor=1`로 본 것과 **같은 갈림**이고, HANDOFF의
+    // 실측 3("매치 여섯 칸 중 하나는 언제나 뒤집혀 있다")이 여기서도 그대로다.
+    var p_cur_plain: usize = 0;
+    var p_cur_cursor: usize = 0;
+    var p_other: usize = 0;
+    for (try ps.cells(&buf)) |c| {
+        if (c.bg == vt.CURRENT_BG) p_cur_plain += 1;
+        if (c.fg == vt.CURRENT_BG) p_cur_cursor += 1;
+        if (c.bg == vt.MATCH_BG) p_other += 1;
+    }
+    if (p_cur_plain != 1 or p_cur_cursor != 1 or p_other != 2) {
+        std.debug.print("FAIL: current plain={d} cursor={d}, other={d} (expected 1, 1, 2)\n", .{
+            p_cur_plain, p_cur_cursor, p_other,
+        });
+        return error.CurrentPaintCountWrong;
+    }
+    std.debug.print("vt_test: 현재 매치와 나머지가 다른 색이다 OK (cur={d}+{d} other={d})\n", .{
+        p_cur_plain, p_cur_cursor, p_other,
+    });
+
+    // 검사 40. **`hlStats`의 `cur`이 현재 매치만 센다.**
+    //
+    // 검사 39는 `cells()`가 내놓은 색을 세고, 이 검사는 `vt.zig`가 **스스로 센
+    // 값**을 본다. 둘이 어긋나면 게이트의 `cur=`을 믿을 수 없게 된다 —
+    // 게이트는 색을 직접 못 세고 이 숫자에 기댄다.
+    //
+    // **`cur`은 커서를 모른다.** 커서는 `cells()`가 얹는 층이라 `findSpans`
+    // 뒤에 온다. 그래서 `cur=2`이고 화면에 보이는 `bg=CURRENT_BG`는 하나다 —
+    // **둘이 다른 것이 정상이고, 그 차이가 정확히 1이다.**
+    const pstats = ps.hlStats() orelse {
+        std.debug.print("FAIL: hlStats() was null while a search was live\n", .{});
+        return error.CurrentStatsMissing;
+    };
+    if (pstats.cells != 4 or pstats.cur != 2) {
+        std.debug.print("FAIL: cells={d} cur={d} (expected 4 and 2)\n", .{
+            pstats.cells, pstats.cur,
+        });
+        return error.CurrentStatsWrong;
+    }
+    if (pstats.cur != p_cur_plain + p_cur_cursor) {
+        std.debug.print("FAIL: cur={d} but the framebuffer shows {d}+{d}\n", .{
+            pstats.cur, p_cur_plain, p_cur_cursor,
+        });
+        return error.CurrentStatsMismatch;
+    }
+    std.debug.print("vt_test: hlStats의 cur이 현재 매치만 센다 OK (cells={d} cur={d})\n", .{
+        pstats.cells, pstats.cur,
+    });
+
     std.debug.print("PASS\n", .{});
 }
