@@ -1117,5 +1117,76 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copy mode를 나가면 메시지가 꺼진다 OK\n", .{});
 
+    // ── SP-M0: 현재 매치 ────────────────────────────────────────────────
+    //
+    // **자기 화면을 새로 만든다.** 화면마다 크기와 history가 다르므로 남의
+    // 검사에 붙이면 기대값이 흔들린다. `hs`(CS-M0)와 같은 20x5에 같은 8·18번
+    // 줄을 표적으로 두는 것은 게으름이 아니라 **기대값을 옮겨 쓰기 위한
+    // 것이다** — 다른 것은 8번 줄에 매치가 **둘**이라는 점 하나다.
+    //
+    // 이름이 `ps`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
+    // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
+    // `cm`·`painted`·`pruned`·`wm`·`fm`·`fs`·`hs`·`ls`가 이미 쓰여 있다.
+    const ps = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer ps.deinit();
+    var ps_i: usize = 1;
+    while (ps_i <= 20) : (ps_i += 1) {
+        if (ps_i == 8) {
+            // **한 줄에 매치 둘.** 같은 줄이면 뷰포트가 어디에 있든 함께
+            // 보이므로, 두 색을 나란히 보는 검사가 스크롤에 안 딸린다.
+            ps.feed("qqzqqqzqqq\r\n");
+        } else if (ps_i == 18) {
+            ps.feed("qqzqqqqqqq\r\n");
+        } else {
+            ps.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ps_i}) catch unreachable);
+        }
+    }
+    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
+    _ = try ps.cells(&buf);
+    ps.copyEnter();
+
+    // 검사 37. **`/` 직후의 인덱스는 0이다.**
+    //
+    // 라이브러리 주석이 "0 = most recent match"라고 적었고(`SelectedMatch`),
+    // `select(.next)`가 선택이 없을 때 인덱스 0을 만든다(`selectNext`의 첫
+    // 분기). **그 뜻을 여기서 실행으로 고정한다** — 소스를 읽어 얻은 사실을
+    // 검사로 옮기는 규율이고, 이것이 깨지면 SP-M1의 번호가 거꾸로 나온다.
+    ps.findOpen();
+    for ("zq") |ch| ps.findChar(ch);
+    const phit = try ps.findSubmit();
+    if (phit.matches != 3) {
+        std.debug.print("FAIL: /zq found {d} match(es) (expected 3)\n", .{phit.matches});
+        return error.CurrentMatchSetupWrong;
+    }
+    const pcur = ps.findCurrentIndex() orelse {
+        std.debug.print("FAIL: no current index right after the search\n", .{});
+        return error.CurrentIndexMissing;
+    };
+    if (pcur != 0) {
+        std.debug.print("FAIL: the first match has index {d} (expected 0)\n", .{pcur});
+        return error.CurrentIndexWrong;
+    }
+    std.debug.print("vt_test: 검색 직후의 현재 매치는 0번이다 OK (matches={d})\n", .{phit.matches});
+
+    // 검사 38. **`n`이 인덱스를 하나 올린다.**
+    //
+    // 검사 37이 "0에서 시작한다"를 보고 이 검사가 "한 칸씩 간다"를 본다.
+    // 둘이 함께 있어야 번호가 뜻을 갖는다 — 시작점만 맞고 걸음이 틀리면
+    // `[3/12]`가 조용히 어긋난다.
+    if (!try ps.findNext()) {
+        std.debug.print("FAIL: n did not move to another match\n", .{});
+        return error.CurrentIndexNoMove;
+    }
+    const pcur2 = ps.findCurrentIndex() orelse {
+        std.debug.print("FAIL: no current index after n\n", .{});
+        return error.CurrentIndexMissing;
+    };
+    if (pcur2 != 1) {
+        std.debug.print("FAIL: after one n the index is {d} (expected 1)\n", .{pcur2});
+        return error.CurrentIndexWrong;
+    }
+    std.debug.print("vt_test: n이 현재 매치를 한 칸 옮긴다 OK (idx={d})\n", .{pcur2});
+
     std.debug.print("PASS\n", .{});
 }
