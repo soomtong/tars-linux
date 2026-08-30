@@ -1281,5 +1281,145 @@ pub fn main(init: std.process.Init) !void {
         pstats.cells, pstats.cur,
     });
 
+    // ── SP-M1: 결과 표시 ────────────────────────────────────────────────
+    //
+    // **자기 화면을 새로 만든다.** `hs`(CS-M0)·`ls`(CS-M1)와 같은 20x5에 같은
+    // 8·18번 줄을 표적으로 두는 것은 게으름이 아니라 **기대값(`matches=2`)을
+    // 옮겨 쓰기 위한 것이다.**
+    //
+    // 이름이 `ns`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
+    // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
+    // `cm`·`painted`·`pruned`·`wm`·`fm`·`fs`·`hs`·`ls`·`ps`가 이미 쓰여 있다.
+    const ns = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer ns.deinit();
+    var ns_i: usize = 1;
+    while (ns_i <= 20) : (ns_i += 1) {
+        if (ns_i == 8 or ns_i == 18) {
+            ns.feed("xxTARGETxx\r\n");
+        } else {
+            ns.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ns_i}) catch unreachable);
+        }
+    }
+    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
+    _ = try ns.cells(&buf);
+    ns.copyEnter();
+
+    // 검사 41. **성공한 검색이 결과 표시를 켜고, 그것은 "못 찾음"이 아니다.**
+    //
+    // CS-M1에서는 성공한 검색이 플래그를 **껐다.** SP-M1이 그것을 뒤집으므로
+    // 여기가 그 변경의 자리다 — `findStatusNeedle()`은 needle을 주고
+    // `findMissed()`는 null이어야 한다. **둘이 같은 플래그 위에 서 있으면서도
+    // 서로 다른 답을 내는 것이 결정 5의 요점이다.**
+    ns.findOpen();
+    for ("TARGET") |ch| ns.findChar(ch);
+    const nhit = try ns.findSubmit();
+    if (nhit.matches != 2) {
+        std.debug.print("FAIL: /TARGET found {d} match(es) (expected 2)\n", .{nhit.matches});
+        return error.StatusSetupWrong;
+    }
+    const nneedle = ns.findStatusNeedle() orelse {
+        std.debug.print("FAIL: findStatusNeedle() was null after a search found matches\n", .{});
+        return error.StatusFlagNotSet;
+    };
+    if (!std.mem.eql(u8, nneedle, "TARGET")) {
+        std.debug.print("FAIL: findStatusNeedle() gave '{s}' (expected 'TARGET')\n", .{nneedle});
+        return error.StatusNeedleWrong;
+    }
+    if (ns.findMissed() != null) {
+        std.debug.print("FAIL: findMissed() was set after a search that found matches\n", .{});
+        return error.MissedSetOnSuccess;
+    }
+    std.debug.print("vt_test: 성공한 검색이 결과 표시를 켠다 OK (needle={s})\n", .{nneedle});
+
+    // 검사 42. **번호의 재료가 맞고 `n`이 그것을 하나 올린다.**
+    //
+    // `promptText`가 쓰는 값이 정확히 이 둘이다 — `findCurrentIndex() + 1`과
+    // `findMatchCount()`. **그 함수는 `main.zig`의 private이라 여기서 못
+    // 부르므로**, 재료를 보는 것이 이 파일이 할 수 있는 전부이고 글자 자체는
+    // 게이트의 `find> overlay text=`가 본다.
+    //
+    // 검사 37·38이 `idx`만 보았고 이 검사가 **분모까지** 함께 본다. 분모는
+    // 스냅숏에서 오므로(`findMatchCount`), 그것이 `matchesLen()`과 어긋나면
+    // `[3/12]`의 뒤 숫자가 조용히 틀린다.
+    if (ns.findMatchCount() != 2) {
+        std.debug.print("FAIL: findMatchCount()={d} (expected 2)\n", .{ns.findMatchCount()});
+        return error.StatusTotalWrong;
+    }
+    const nidx = ns.findCurrentIndex() orelse {
+        std.debug.print("FAIL: no current index right after the search\n", .{});
+        return error.StatusIndexMissing;
+    };
+    if (nidx != 0) {
+        std.debug.print("FAIL: the first match has index {d} (expected 0)\n", .{nidx});
+        return error.StatusIndexWrong;
+    }
+    if (!try ns.findNext()) {
+        std.debug.print("FAIL: n did not move to another match\n", .{});
+        return error.StatusIndexNoMove;
+    }
+    const nidx2 = ns.findCurrentIndex() orelse {
+        std.debug.print("FAIL: no current index after n\n", .{});
+        return error.StatusIndexMissing;
+    };
+    if (nidx2 != 1 or ns.findMatchCount() != 2) {
+        std.debug.print("FAIL: after n the numbers are [{d}/{d}] (expected [2/2])\n", .{
+            nidx2 + 1, ns.findMatchCount(),
+        });
+        return error.StatusIndexWrong;
+    }
+    std.debug.print("vt_test: 번호가 [{d}/{d}]로 간다 OK\n", .{ nidx2 + 1, ns.findMatchCount() });
+
+    // 검사 43. **끄면 사라지고 `n`이 다시 켠다.**
+    //
+    // 결정 7의 수명이 이것이다 — 다음 키에 사라지고, 그 키가 검색 키면 다시
+    // 뜬다. `main.zig`가 `switch`보다 **앞**에서 끄기 때문에 그 순서가 나온다.
+    // **여기서는 그 순서를 손으로 흉내 낸다** — poll 루프를 안 거치기 때문이다.
+    ns.findClearStatus();
+    if (ns.findStatusNeedle() != null) {
+        std.debug.print("FAIL: findClearStatus() did not turn the status off\n", .{});
+        return error.StatusNotCleared;
+    }
+    if (!try ns.findNext()) {
+        std.debug.print("FAIL: the second n did not move\n", .{});
+        return error.StatusIndexNoMove;
+    }
+    if (ns.findStatusNeedle() == null) {
+        std.debug.print("FAIL: n did not turn the status back on\n", .{});
+        return error.StatusNotReset;
+    }
+    std.debug.print("vt_test: 끄면 사라지고 n이 다시 켠다 OK\n", .{});
+
+    // 검사 44. **매치가 없으면 번호가 아니라 "못 찾음"이다**(design 위험 1).
+    //
+    // 같은 플래그가 켜져 있는데 `findMissed()`가 needle을 주고
+    // `findCurrentIndex()`는 null이며 `hlSpans()`는 비어 있다 — **`promptText`의
+    // 두 갈래를 가르는 것이 `findMatchCount()` 하나**라는 것을 여기서 못 박는다.
+    ns.findOpen();
+    for ("NOPE") |ch| ns.findChar(ch);
+    const nhit2 = try ns.findSubmit();
+    if (nhit2.matches != 0) {
+        std.debug.print("FAIL: /NOPE found {d} match(es) (expected none)\n", .{nhit2.matches});
+        return error.StatusMissSetupWrong;
+    }
+    const nmiss = ns.findMissed() orelse {
+        std.debug.print("FAIL: findMissed() was null after a search found nothing\n", .{});
+        return error.StatusMissNotSet;
+    };
+    if (!std.mem.eql(u8, nmiss, "NOPE")) {
+        std.debug.print("FAIL: findMissed() gave '{s}' (expected 'NOPE')\n", .{nmiss});
+        return error.StatusMissNeedleWrong;
+    }
+    if (ns.findCurrentIndex() != null) {
+        std.debug.print("FAIL: there is a current index with no matches\n", .{});
+        return error.StatusIndexOnEmpty;
+    }
+    _ = try ns.cells(&buf);
+    if (ns.hlSpans().len != 0) {
+        std.debug.print("FAIL: {d} span(s) painted with no matches\n", .{ns.hlSpans().len});
+        return error.StatusSpansOnEmpty;
+    }
+    std.debug.print("vt_test: 매치가 없으면 번호가 아니라 못 찾음이다 OK (needle={s})\n", .{nmiss});
+
     std.debug.print("PASS\n", .{});
 }
