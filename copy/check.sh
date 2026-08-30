@@ -1002,6 +1002,60 @@ if [ "$CUR_CELLS" -lt 1 ] || [ "$OTHER_CELLS" -lt 1 ]; then
 fi
 echo "both match colours reached the framebuffer (current=${CUR_CELLS} other=${OTHER_CELLS})"
 
+# ── 검사 20: 현재 매치의 번호가 오버레이에 뜬다 (SP-M1) ────────────────
+#
+# **검사 19가 끝난 자리를 그대로 쓴다**(design 결정 9). copy mode가 살아 있고
+# `/zq`의 매치 넷도 살아 있다 — 새 부팅도 새 검색도 없다.
+#
+# **오버레이는 `screen>`에도 `style>`에도 안 나온다**(CN-M1 design 결정 7,
+# main.zig의 `overlaid_row`). 그래서 `find> overlay` 한 줄이 유일한 관측
+# 수단이고, CS-M1이 그 용도로 만들었다 — **SP-M1은 새 로그를 하나도 안 더한다**
+# (design 결정 8).
+#
+# **`[1/4]`인 것에 산수가 있다.** `zq`가 명령줄과 출력줄에 둘씩이라 넷이고,
+# `/`는 가장 최근 매치에 서므로 인덱스가 0이다(`vt_test`의 검사 37이 그 뜻을
+# 고정했다). 번호는 `idx + 1`이므로 1이다(design 결정 6).
+#
+# **커서가 매치보다 아래에 있는 것을 확인했다**(2026-08-30 실측). 로그가
+# `copy> enter row=46` → `copy> find_submit row=45`를 찍으므로 `above_only`가
+# 첫 매치를 건너뛰지 않는다 — 건너뛰면 인덱스가 1이 되어 `[2/4]`가 뜬다.
+if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [1/4]' || true)" -eq 0 ]; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "the overlay did not number the current match as [1/4]"
+fi
+echo "the overlay numbered the current match: /zq [1/4]"
+
+# **판정.** `n`이 번호를 하나 올린다.
+#
+# 앞 줄이 "번호가 뜬다"를 보고 이 줄이 **"그 번호가 커서를 따라간다"**를 본다.
+# 하나만 보면 안 된다 — 고정된 숫자를 찍는 코드도 앞 줄을 통과한다.
+type_keys n
+sleep 2
+if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [2/4]' || true)" -eq 0 ]; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "n did not move the number to [2/4]"
+fi
+echo "n moved the number to [2/4]"
+
+# **판정(음성).** 다음 키 하나에 번호가 사라진다(design 결정 7).
+#
+# 검사 18이 "못 찾음" 쪽에 대해 같은 것을 보는데, **SP-M1 뒤로 둘이 같은
+# 플래그를 쓰므로** 번호 쪽에서도 본다. 플래그를 넓히면서 끄는 자리를 빠뜨리면
+# 증상이 **"번호가 화면 아랫줄에 영영 붙어 있다"**이고, 사람에게는 "터미널이
+# 고장 났다"로 보인다.
+#
+# `k`는 copy 커서를 한 칸 올릴 뿐이라 화면의 다른 것을 안 건드린다.
+type_keys k
+sleep 2
+if [ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -ne 0 ]; then
+  echo "--- last frame overlay lines ---"
+  last_frame | grep -a 'terminal: find> overlay'
+  report_failure "the match number survived the next key"
+fi
+echo "the next key cleared the match number"
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #
 # grep -qP '\x00'은 GNU grep 3.11에서 매치되지 않으므로 바이트 수를 센다.
