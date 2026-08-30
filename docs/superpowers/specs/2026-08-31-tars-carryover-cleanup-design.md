@@ -1,7 +1,10 @@
 # TARS Carryover Cleanup — Design
 
 **Date:** 2026-08-31
-**Status:** CC-M0 진행 중 (plan은 `docs/superpowers/plans/2026-08-31-tars-carryover-cleanup-cc-m0.md`)
+**Status:** **완료(2026-08-31).** CC-M0이 이월 숙제 셋을 전부 없앴고 게이트가
+여덟 체인 3/3(16분 48.91초)으로 통과했다. plan은
+`docs/superpowers/plans/2026-08-31-tars-carryover-cleanup-cc-m0.md`.
+값과 결론은 아래 "CC-M0이 실측한 것" 절에 있다.
 
 ## 한 줄 요약
 
@@ -233,10 +236,78 @@ milestone이 끝나면 원래 규율로 돌아간다.
 지우는 편집은 `git diff | grep '^-'`로 지워진 줄의 내용을 직접 읽는다**(검산 4).
 사람이 읽는 자리가 없어졌으므로 그 자리를 기계적인 확인으로 메운다.
 
-## 비워 두는 자리
-
-아래 절은 CC-M0이 끝난 뒤 실측으로 채운다.
-
 ## CC-M0이 실측한 것 (2026-08-31)
 
-_(실행 후 채운다)_
+**검산 다섯이 전부 통과했다.** 게이트는 여덟 체인 3/3, **16분 48.91초**다.
+
+### 1. 눌린 두 값이 `olddefconfig`를 견뎠다 (검산 1)
+
+`kernel/build/.config`에 `# CONFIG_ACPI_EC is not set`과
+`# CONFIG_PNP_DEBUG_MESSAGES is not set`이 그대로 있다. **`ACPI_EC_DEBUGFS`는
+grep에 아예 안 잡혔다** — 위험 2가 예고한 대로 심볼째 없어졌다.
+
+### 2. 부팅이 안 깨졌다 (검산 2)
+
+새 커널로 부팅한 로그에 `ACPI Error:` 0줄, EC 흔적(`EC_CMD/EC_SC`·`ACPI: EC`)
+0줄, fish 배너 도달.
+
+### 3. `PNP_DEBUG_MESSAGES`를 껐는데 PNP 줄이 그대로 나온다 — 착수 전에 몰랐던 것
+
+끄고 부팅한 로그에 이 둘이 살아 있다.
+
+```
+[    0.351443] 00:04: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+[    0.359584] i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] at 0x60,0x64 irq 1,12
+```
+
+그 줄들은 `pnp_dbg`가 아니라 보통 `pr_info`다. **옵션 이름이 "PNP debug
+messages"라고 해서 PNP가 찍는 줄이 전부 그 옵션에 딸린 것은 아니다.**
+`project_kernel_config.md`가 "가장 겁났던 변화"라고 적어 둔 `SERIAL_8250_PNP`
+경로도, i8042가 펌웨어에게 주소를 받는 것도 그대로다.
+
+### 4. 빌드가 vendored 라이브러리를 안 쓴다 (검산 3)
+
+`terminal/vendor/libghostty-vt/`(98MB)를 지운 뒤 `prepare.sh` →
+`zig build test`가 통과했고, `terminal/vendor/`에 `fonts`와 `stb_truetype.h`만
+남았다. 그 디렉터리는 다시 생기지 않았다.
+
+**이 검산은 게이트가 못 한다.** `clean()`이 `terminal/vendor`를 일부러
+남기므로 손으로 지워야만 밟히는 경로다.
+
+### 5. 도구 둘을 돌려 본 결과
+
+| 도구 | 결과 |
+|---|---|
+| `stb_truetype_check` | arm64 native로 빌드·실행됐다. `glyph 'A': 6x10 pixels, 24 non-zero` |
+| `libghostty_vt_check` | **링크조차 안 된다.** `ld.lld: error: libghostty-vt.so is incompatible with elf64-littleaarch64` |
+
+**첫 줄의 `6x10`이 `font_test`의 기대값 표 첫 줄과 정확히 같다.** 도구가 고장
+난 것이 아니라 게이트와 겹쳐서 지운 것이라는 근거가 이것이다. 결정 4가 "결과가
+이상하면 멈춘다"고 적어 두었는데, 이상하지 않았다.
+
+### 6. 게스트에게 명령을 넣는 길
+
+`-serial stdio`에 FIFO를 물린다. 게이트 체인들이 쓰는 QEMU monitor의
+`sendkey`는 PS/2 키보드로 가므로 시리얼 콘솔의 fish에는 닿지 않는다.
+**함정이 셋이었다.**
+
+1. **`exec 4>"$FIFO"`는 그 자리에서 멈춘다.** FIFO를 쓰기 전용으로 여는
+   `open(2)`이 읽는 쪽을 기다리는데, 그 읽는 쪽인 QEMU는 다음 줄에서야
+   시작한다. 읽기·쓰기 겸용(`exec 4<>`)으로 열면 안 막힌다.
+2. **`-monitor none`을 붙여야 한다.** 안 붙이면 `-display none`일 때 QEMU가
+   monitor도 stdio로 보내려다 죽는다.
+3. **fish에서 `(...)`는 command substitution이다.** 글로브를 괄호로 감싸면 첫
+   경로가 명령으로 실행되고 fish의 implicit cd가 그리로 들어간다. 증상이
+   "프롬프트의 경로가 바뀐다"라 알아채기는 쉬웠다.
+
+### 7. 숫자
+
+| 무엇 | 값 |
+|---|---|
+| bzImage | 2,946,048 → **2,933,760**바이트 (−12,288, 0.42%) |
+| 없어진 디스크 | `vendor/libghostty-vt/` **98MB** + `Hanme_8x4x4.ttf` 451,512바이트 |
+| 저장소에서 지운 줄 | 97줄 (그중 88줄이 sanity `.c` 둘) |
+| 게이트 | **16분 48.91초** (기준선 16분 34.78초 · 16분 42.73초 · 16분 42.35초) |
+
+**게이트 시간은 안 갈렸고 갈릴 것을 기대하지도 않았다**(결정 7). 6초 차이는
+이 게이트의 잡음 ±3분 안이다.

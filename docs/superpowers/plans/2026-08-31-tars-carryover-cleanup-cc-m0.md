@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-31
 **Design:** `docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`
-**Status:** 진행 중
+**Status:** **완료(2026-08-31).** Task 아홉이 전부 계획대로 돌았다. 계획과
+다르게 나온 것은 없고, 계획에 없던 것을 하나 알았다 — `PNP_DEBUG_MESSAGES`를
+꺼도 `i8042: PNP:`와 `ttyS0 at I/O` 줄은 그대로 나온다(design 실측 3).
 
 ## 이 milestone이 끝나면
 

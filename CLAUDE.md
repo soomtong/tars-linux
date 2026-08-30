@@ -89,8 +89,10 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   Search Position(SP-M0~M1, 2026-08-29·30 완료 — 현재 매치를 밝은 앰버로,
   오버레이에 `/needle [3/12]`) ·
   **Render Cost(RC-M0, 2026-08-30 완료 — 한 프레임의 84.7%가 `fill`이라는 것을
-  재기만 했고 코드는 한 줄도 안 고쳤다)**. design doc은 전부
-  `docs/superpowers/specs/`에 날짜순으로 있다.
+  재기만 했고 코드는 한 줄도 안 고쳤다)** ·
+  **Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
+  커널 config 둘 끄기, sanity 도구 둘과 그 도구만 쓰던 98MB 산출물, 옛 폰트
+  파일)**. design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
 - **진행 중인 서브프로젝트가 없다**(2026-08-31 기준). 다음 것은 `HANDOFF.md`의
   "이월 숙제"에서 사용자와 함께 고른다.
 - **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**

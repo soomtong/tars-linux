@@ -1,17 +1,22 @@
-# HANDOFF: Render Cost가 끝났다 — 다음 서브프로젝트는 함께 고른다
+# HANDOFF: Carryover Cleanup이 끝났다 — 다음 서브프로젝트는 함께 고른다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Render Cost(RC-M0)를 2026-08-30에 시작해 같은
-날 끝냈다.** 재기만 하는 milestone 하나였고 **저장소의 코드는 한 줄도 안
-바뀌었다** — 바뀐 것은 design · plan · `HANDOFF.md` · 기억 넷뿐이다.
+`main`, working tree 깨끗함. **Carryover Cleanup(CC-M0)을 2026-08-31에 시작해
+같은 날 끝냈다.** 이월 숙제 셋을 실제로 없앤 milestone이고, **게이트가 여덟
+체인 3/3(16분 48.91초)으로 통과했다.**
 
-**답은 `fill`이다.** 한 프레임 21.3밀리초 중 `fill`이 18.0밀리초(84.7%)이고
-셀 배경은 0.9밀리초(4.2%)다. **그리고 착수 전 산수의 전제가 틀렸다는 것이
-이 milestone에서 가장 값진 것이다** — 아래 절을 볼 것.
+없앤 것 셋.
 
-**게이트는 안 돌렸다.** 저장소 코드가 안 바뀌었으므로 볼 것이 없다. 기준선은
-SP-M1 뒤의 **16분 34.78초 · 16분 42.73초 · 16분 42.35초**가 그대로 유효하다.
+1. 커널 `.config`에서 **`ACPI_EC`와 `PNP_DEBUG_MESSAGES`를 껐다.** 게스트에게
+   직접 물어 EC가 없다는 것을 확인하고 껐다.
+2. **`terminal/sanity/`의 도구 둘을 지웠다.** 그 도구만 쓰던
+   `vendor/libghostty-vt/`(98MB) 빌드도 함께 없앴다.
+3. **`Hanme_8x4x4.ttf`(451,512바이트)를 지웠다.**
+
+**이번 milestone만 편집도 Claude Code가 했다.** 사용자가 "배우는 것이 적으니
+전부 네가 써라"라고 정했고 자는 동안 진행했다. **다음 milestone은 원래
+규율로 돌아간다** — 구현 파일 편집은 사용자가 한다.
 
 **진행 중인 서브프로젝트가 없다.** 다음 것은 아래 "이월 숙제"에서 사용자와
 함께 고른다.
@@ -19,14 +24,14 @@ SP-M1 뒤의 **16분 34.78초 · 16분 42.73초 · 16분 42.35초**가 그대로
 ```bash
 git status --short     # 비어 있어야 한다
 git log --oneline -8
-#   Close out RC-M0                                    ← 이 커밋
-#   Correct where the probe gets its clock from        ← init이 main의 매개변수다
-#   Plan RC-M0
-#   Design a probe that splits one frame into six costs
-#   Close out SP-M1
-#   Check that the overlay numbers the current match   ← 게이트 검사 20
-#   Number the current match on the overlay line       ← promptText 세 갈래
-#   Check the numbers behind the match position        ← vt_test 검사 41~44
+#   Close out CC-M0                                    ← 이 커밋
+#   Remove the sanity tools and the library only they used
+#   Turn off ACPI_EC and PNP_DEBUG_MESSAGES
+#   Plan CC-M0
+#   Design the carryover cleanup
+#   Mark four design docs finished that finished weeks ago
+#   Record that render work is deferred, not pending
+#   Close out RC-M0
 ```
 
 **design과 plan을 코드보다 먼저 커밋했다.** GL-M2·M3이 세운 순서 그대로다.
@@ -37,13 +42,74 @@ push할지 묻지 않는다 — 필요하면 그냥 한다.
 
 **다음 세션이 할 첫 일: 아래 "이월 숙제"에서 다음 서브프로젝트를 고른다.**
 전체 비전에서 무엇이 남았는지는 boot foundation design의 "배경" 절에 있다.
+2026-08-31에 사용자에게 낸 후보 넷은 **CJK 입력기 · 실머신 USB 부팅 · 작은
+정리 묶음(이번에 한 것) · 부분 갱신**이었다. **CJK 입력기는 아래 층이 이미 서
+있다** — `font.zig`가 한글을 폰트의 advance로 재서 2칸으로 처리하고
+(`font_test`의 `한`·`가` 검사), unifont에 완성형 11172자가 전부 있다.
+**그리는 것은 되고 치는 것이 없다.**
 
-**직전 서브프로젝트가 Render Cost(RC-M0, 2026-08-30)다.**
+**직전 서브프로젝트가 Carryover Cleanup(CC-M0, 2026-08-31)이다.**
+
+- design: `docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`
+  ("CC-M0이 실측한 것" 절에 값과 결론이 전부 있다)
+- plan: `.../plans/2026-08-31-tars-carryover-cleanup-cc-m0.md`
+- **기억: `docs/decisions/project_carryover_cleanup.md`**
+
+## CC-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. QEMU의 게스트에는 Embedded Controller가 없다.** `/sys/bus/acpi/devices/`가
+준 목록에 `PNP0C09`가 없고, `PNP0C09*` 글로브에 fish가
+`No matches for wildcard`로 답했다. **HD-M1부터 남아 있던 "DSDT를 안 읽어
+봤으니 `ACPI_EC`를 남긴다"가 이것으로 끝났다.**
+
+**2. 게스트에 명령을 넣는 길은 `-serial stdio` + FIFO다.** 게이트 체인들이
+쓰는 QEMU monitor의 `sendkey`는 PS/2 키보드로 가므로 시리얼 콘솔의 fish에는
+닿지 않는다. **함정 셋을 전부 밟았다.**
+
+- **`exec 4>"$FIFO"`는 그 자리에서 멈춘다.** 쓰기 전용 `open(2)`이 읽는 쪽을
+  기다리는데 그 읽는 쪽인 QEMU는 다음 줄에서야 시작한다. **`exec 4<>`로 연다.**
+- **`-monitor none`을 붙인다.** 안 붙이면 `-display none`일 때 QEMU가 monitor도
+  stdio로 보내려다 죽는다.
+- **fish에서 `(...)`는 command substitution이다.** 글로브를 괄호로 감싸면 첫
+  경로가 명령으로 실행되고 implicit cd가 그리로 들어간다.
+
+**3. `PNP_DEBUG_MESSAGES`를 꺼도 우리가 읽던 PNP 줄은 안 없어진다.**
+`i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU]`와
+`00:04: ttyS0 at I/O 0x3f8`이 그대로 나온다 — 그 줄들은 `pnp_dbg`가 아니라
+보통 `pr_info`다. **옵션 이름이 "PNP debug messages"라고 해서 PNP가 찍는 줄이
+전부 그 옵션에 딸린 것은 아니다.**
+
+**4. `ACPI_EC`를 끄면 `ACPI_EC_DEBUGFS` 줄이 함께 사라진다.** 그 항목이
+`depends on ACPI_EC`라 심볼째 없어지고 `olddefconfig`가 줄을 지운다. 사고가
+아니라 정상이고, `.config` diff에 한 줄이 더 나오는 이유가 이것이다.
+
+**5. 우리 빌드는 vendor된 libghostty-vt 라이브러리를 안 쓴다.** 쓰는 것은
+ghostty-src를 Zig 패키지로 잡은 쪽이다 — `build.zig.zon`의
+`.ghostty = .{ .path = "ghostty-src" }`와 `build.zig`의
+`ghostty_dep.module("ghostty-vt")`. **증명은 98MB를 지운 뒤 `prepare.sh` →
+`zig build test`가 통과하는 것이었다.** `clean()`이 `terminal/vendor`를 일부러
+남기므로 **게이트로는 이 경로를 못 밟는다** — 손으로 지워야 한다.
+
+**6. 지우기 전에 한 번은 돌려 봐야 한다.** `stb_truetype_check`가
+`glyph 'A': 6x10 pixels, 24 non-zero`를 찍었고 **그 값이 `font_test`의 기대값
+표 첫 줄과 정확히 같다.** 도구가 고장 난 것이 아니라 게이트와 겹쳐서 지운
+것이라는 근거가 이것이다. `libghostty_vt_check`는 **링크조차 안 됐다** —
+`ld.lld: error: libghostty-vt.so is incompatible with elf64-littleaarch64`.
+
+**7. 숫자.** bzImage 2,946,048 → **2,933,760**바이트(−12,288, 0.42%).
+디스크에서 98MB + 451,512바이트. 저장소에서 97줄(그중 88줄이 sanity `.c` 둘).
+**게이트 시간은 안 갈렸다** — 16분 48.91초로 기준선과 6초 차이인데 잡음이
+±3분이다.
+
+## 그 앞의 서브프로젝트 — Render Cost (RC-M0, 2026-08-30)
 
 - design: `docs/superpowers/specs/2026-08-30-tars-render-cost-design.md`
   ("RC-M0이 실측한 것" 절에 값과 결론이 전부 있다)
 - plan: `.../plans/2026-08-30-tars-render-cost-rc-m0.md`
 - **기억: `docs/decisions/project_render_cost.md`**
+
+**답은 `fill`이다.** 한 프레임 21.3밀리초 중 `fill`이 18.0밀리초(84.7%)이고
+셀 배경은 0.9밀리초(4.2%)다. 저장소의 코드는 한 줄도 안 바뀌었다.
 
 ## RC-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -605,9 +671,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 16분 34.78초 · 16분 42.73초 · 16분 42.35초다**
-(2026-08-30, SP-M1 이후 세 번 측정). 그 앞의 기준선은 SP-M0 뒤 16분 30~45초,
-GL-M3 뒤 16분 01~11초, GL-M2 뒤 19분 11~16초, 그 앞이 22분 19~35초였다.
+3/3, 부팅 30회 이상. **가장 최근 값은 16분 48.91초다**(2026-08-31, CC-M0 이후
+한 번). 그 앞의 기준선이 16분 34.78초 · 16분 42.73초 · 16분 42.35초이므로
+**CC-M0은 게이트 시간을 안 바꿨다** — 6초 차이는 이 게이트의 잡음 ±3분 안이다.
+그 앞의 기준선은 SP-M0 뒤 16분 30~45초, GL-M3 뒤 16분 01~11초, GL-M2 뒤
+19분 11~16초, 그 앞이 22분 19~35초였다.
+
+**CC-M0이 커널 `.config`를 고쳤다.** `ACPI_EC`와 `PNP_DEBUG_MESSAGES`가 꺼져
+있고, 그 상태로 여덟 체인이 전부 부팅한다. bzImage가 2,933,760바이트다.
 
 **SP-M1은 잴 수 있는 차이를 안 만들었다.** 중앙값이 16분 40.36초에서
 16분 42.73초로 2.4초 늘었는데, 검사 20이 더한 것의 산수는 회차당 `sleep` 4초와
@@ -783,6 +854,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 근거는 `docs/decisions/feedback_execution_scope.md`(2026-08-22에 바뀌었다),
 `feedback_commit_delegation.md`, `feedback_design_question_load.md`.
 
+**CC-M0(2026-08-31)만 예외였다.** 사용자가 "이번 태스크는 배우는 것이 적으니
+전부 네가 써라"라고 정했고 자는 동안 편집까지 Claude Code가 했다. **그 예외는
+그 milestone으로 끝났다** — 위 표가 다시 유효하다. 사람이 읽는 자리를
+대신하려고 **매 편집 뒤 `git diff --stat`으로 줄 수를 세고 지우는 편집은
+`git diff | grep '^-'`로 내용을 직접 읽었다.**
+
 **인라인 제시는 "넣을 것"만 적는다.** 지울 것이 있는 편집은 `지울 것`과
 `넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
 사용자가 `cp`로 넣는다. **CS-M0의 여섯 Task도 CS-M1의 다섯 Task도 전부 인라인으로
@@ -894,8 +971,30 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, **키의
 `0xAA`가 보이면 그것은 "초기화 안 됨"이 아니라 **"이미 해제됨"**이다. CS-M0이
 이것으로 `matches()`의 수명을 찾아냈다.
 
+**21. 게스트 셸에 명령을 넣으려면 `-serial stdio`에 FIFO를 물린다** (CC-M0).
+QEMU monitor의 `sendkey`는 PS/2 키보드로 가므로 시리얼 콘솔의 fish에는 닿지
+않는다. **FIFO는 `exec 4<>`(읽기·쓰기 겸용)로 열어야 안 막히고**, `-monitor
+none`을 함께 줘야 QEMU가 stdio를 두 번 쓰려다 죽지 않는다. **게스트 셸이
+fish라 `(...)`가 command substitution이다** — 글로브를 괄호로 감싸면 첫 경로가
+명령으로 실행된다.
+
+**22. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다** (`project_kernel_config`).
+`ACPI_EC`와 `PNP_DEBUG_MESSAGES`는 둘 다 프롬프트가 있어서 CC-M0이 누른 값이
+`olddefconfig`를 견뎠다. **끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
+`.config`에서 줄이 사라진다** — `ACPI_EC_DEBUGFS`가 그랬다.
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
+- **QEMU에 넘길 FIFO를 `exec 4>`로 열기**(CC-M0) — 쓰기 전용 `open(2)`이 읽는
+  쪽을 기다리는데 그 읽는 쪽인 QEMU는 다음 줄에서야 시작한다. **증상이 에러가
+  아니라 아무 말 없이 멈추는 것이다.** `exec 4<>`로 연다.
+- **fish에 넣을 글로브를 괄호로 감싸기**(CC-M0) — fish에서 `(...)`는 command
+  substitution이라 **글로브의 첫 경로가 명령으로 실행되고** implicit cd가 그
+  디렉터리로 들어간다. 증상은 프롬프트의 경로가 바뀌는 것이다.
+- **`--platform linux/amd64`로 x86_64 도구를 돌리기**(CC-M0) — 두 devcontainer
+  이미지가 **둘 다 arm64**이고 컨테이너에 `qemu-x86_64`(user mode)가 없다.
+  x86_64 라이브러리는 **링크부터 안 된다**(`ld.lld: ... is incompatible with
+  elf64-littleaarch64`). 근거는 `project_build_host_arch`다.
 - **`cells()`가 격자 전체를 준다고 믿기**(RC-M0) — `vt.zig:504`가 글자도 없고
   배경도 기본인 셀을 뺀다. `ls` 뒤 화면이 7,285개가 아니라 **911개**다.
   **화면 전체를 전제로 픽셀 수를 세면 여덟 배가 틀린다.**
@@ -1066,12 +1165,12 @@ docker run --rm -v "$PWD":/workspace \
 - [ ] **`present`의 매 프레임 모드셋 — 미룬다.** 같은 결정에 딸린다. RC-M0이
       4%로 쟀으므로 애초에 급하지 않았고, 페이지 플립으로 바꾸는 것은 KMS
       이야기가 새로 들어오는 큰 변경이다.
-- [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.**
-- [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
-      만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. **빌드해서 돌려 본
-      적이 없다.**
-- [ ] **`terminal/vendor/fonts/Hanme_8x4x4.ttf`가 남아 있다.** `vendor/`가
-      gitignore라 저장소에는 없다. 지워도 게이트는 안 흔들린다.
+- [ ] **실머신으로 갈 때 `ACPI_EC`를 되켠다.** CC-M0이 2026-08-31에 껐는데,
+      **QEMU에 EC가 없다는 근거로 껐을 뿐이다.** 실제 x86 노트북의 DSDT에는
+      대개 EC가 있고 배터리·뚜껑·밝기 키가 그 위에 있다. **되켜지 않았을 때의
+      증상이 "AML이 실패한다"라서 원인까지 가는 길이 멀다.** 지금 `.config`는
+      QEMU를 대상으로 좁혀 놓은 것이라(`NET`도 `THERMAL`도 꺼져 있다) 실머신
+      부팅을 하게 되면 되켤 항목이 어차피 여럿이다.
 - [ ] **붙여넣기가 모드를 닫아야 하는가.** CM-M2가 "안 닫는다"로 정했다.
 - [ ] **억제 분기를 진짜 상황으로 보기.** CM-M2의 검사 13이 밟는 것은
       붙여넣기 에코이고 **대역이다.** 2026-08-26에 값을 저울질하고 안 하기로 골랐다.
@@ -1085,6 +1184,15 @@ docker run --rm -v "$PWD":/workspace \
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리~~ — **CC-M0이 2026-08-31에 껐다.**
+  근거는 게스트에게 직접 물어 받은 ACPI 장치 목록이다(`PNP0C09`가 없다).
+  **`ACPI_EC`를 실머신에서 되켜는 것은 위에 새 항목으로 남겼다.**
+- ~~`terminal/sanity/`의 수동 확인 도구 둘~~ — **CC-M0이 2026-08-31에
+  지웠다.** 지우기 전에 돌려 봤고, `stb_truetype_check`의 결과가 `font_test`의
+  기대값과 정확히 같았다. `libghostty_vt_check`는 이 컨테이너에서 링크조차 안
+  된다. **그 도구만 쓰던 `vendor/libghostty-vt/`(98MB) 빌드도 함께 없앴다.**
+- ~~`Hanme_8x4x4.ttf`가 남아 있다~~ — **CC-M0이 2026-08-31에 지웠다**
+  (451,512바이트). `vendor/`가 gitignore라 커밋에는 아무것도 안 남았다.
 - ~~design doc 셋의 `Status:` 줄이 낡았다~~ — **2026-08-31에 고쳤다. 셋이
   아니라 넷이었다.** BF-M1이 `plan not yet written`으로 남아 있었는데 plan은
   design과 같은 날(2026-08-03) 썼다. **넷 다 "중간에 멈춘 것"이 아니라 계획한
