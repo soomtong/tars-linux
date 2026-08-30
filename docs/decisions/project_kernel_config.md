@@ -57,12 +57,35 @@ ACPI의 `default y` 목록이 길어 보였지만 상당수는 손댈 필요가 
 `ACPI_REV_OVERRIDE_POSSIBLE`, `ACPI_AC`, `ACPI_BATTERY`, `ACPI_PROCESSOR`,
 `ACPI_TABLE_UPGRADE`(매 부팅 initrd를 뒤진다), `ACPI_DEBUG`.
 
-`ACPI_EC`는 **일부러 기본값 `y`로 남겼다.** QEMU의 DSDT를 읽어 본 적이
-없어서, EC opregion이 있는데 드라이버가 없으면 AML이 부팅 중에 실패하고 그
-사실은 커널을 한 번 더 빌드하고 나서야 알게 되기 때문이다. 이해하는 것은 끄고
-이해하지 못하는 것은 남긴다. 실제로는 `ACPI Error:`가 하나도 안 나왔으므로,
-DSDT를 읽어 보고 끄는 것이 정리 후보로 남았다(`PNP_DEBUG_MESSAGES`도 같은
-후보다).
+`ACPI_EC`는 HD-M1에서 **일부러 기본값 `y`로 남겼다.** QEMU의 DSDT를 읽어 본
+적이 없어서, EC opregion이 있는데 드라이버가 없으면 AML이 부팅 중에 실패하고
+그 사실은 커널을 한 번 더 빌드하고 나서야 알게 되기 때문이다. 이해하는 것은
+끄고 이해하지 못하는 것은 남긴다.
+
+**CC-M0(2026-08-31)이 그 조건을 채우고 껐다.** 게스트에게 직접 물었다 —
+`-serial stdio`로 fish에 `echo /sys/bus/acpi/devices/*`를 넣어 받은 목록에
+**Embedded Controller의 HID인 `PNP0C09`가 없다.** `PNP0C09*` 글로브에 fish가
+`No matches for wildcard`로 답한 것이 그 증거다. EC 장치가 없으므로 그것을
+가리키는 EmbeddedControl opregion을 실행할 AML도 없고, 끄고 부팅한 로그에도
+`ACPI Error:`가 한 줄도 없다.
+
+**`ACPI_EC`를 끄면 `ACPI_EC_DEBUGFS` 줄이 함께 사라진다.** 그 항목이
+`depends on ACPI_EC`라 심볼째 없어지고 `olddefconfig`가 줄을 지운다. 그래서
+`.config`에서 눌러 두었던 `# CONFIG_ACPI_EC_DEBUGFS is not set`도 함께 뺐다.
+
+`PNP_DEBUG_MESSAGES`도 함께 껐다. `drivers/pnp/core.c:220-223`이 `pnp_debug`를
+module parameter로 두고 `base.h:179`의 `pnp_dbg`가 `if (pnp_debug)`로 감싸는데,
+우리 cmdline은 `console=ttyS0` 하나뿐이라(`boot/limine.conf:7`) 켜진 적이 없다.
+**끄고 부팅해도 `i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU]`와
+`00:04: ttyS0 at I/O 0x3f8`은 그대로 나온다** — 그 줄들은 `pnp_dbg`가 아니라
+보통 `pr_info`다. 우리가 실제로 읽던 PNP 정보는 한 줄도 안 없어졌다.
+
+**둘을 끄고 bzImage가 2,946,048 → 2,933,760바이트가 됐다**(12,288바이트,
+0.42%). 크기가 이유였던 적은 없다 — 이유는 "쓰지 않는 것은 안 켠다"다.
+
+**실머신으로 갈 때 `ACPI_EC`를 되켠다.** 실제 x86 노트북의 DSDT에는 대개 EC가
+있고 배터리·뚜껑·밝기 키가 그 위에 있다. 되켜지 않았을 때의 증상이 "AML이
+실패한다"라서 원인까지 가는 길이 멀다.
 
 ## 한 항목을 켜면 무관해 보이는 것들이 함께 움직인다
 
