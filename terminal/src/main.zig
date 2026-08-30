@@ -682,7 +682,7 @@ pub fn main(init: std.process.Init) !void {
                 // 그리고 `switch`보다 **앞**이라, 모든 명령이 예외 없이 지우고
                 // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
                 // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
-                screen.findClearMissed();
+                screen.findClearStatus();
                 switch (cmd) {
                     .enter => screen.copyEnter(),
                     .exit => screen.copyExit(),

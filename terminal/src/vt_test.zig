@@ -1094,9 +1094,9 @@ pub fn main(init: std.process.Init) !void {
     // **판정을 `matches`로 하면 안 된다** — 되부른 `NOPE`도 0을 내고 "아무 일도
     // 안 했다"도 0을 내서 둘이 안 갈린다. `findMissed()`가 다시 `NOPE`를 주는
     // 것이 "정말로 되불렀다"의 증거다.
-    ls.findClearMissed();
+    ls.findClearStatus();
     if (ls.findMissed() != null) {
-        std.debug.print("FAIL: findClearMissed() did not turn the message off\n", .{});
+        std.debug.print("FAIL: findClearStatus() did not turn the message off\n", .{});
         return error.MissedFlagNotCleared;
     }
     ls.findOpen();
@@ -1117,7 +1117,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 검사 36. **copy mode를 나가면 메시지가 꺼진다.**
     //
-    // 검사 33이 `find_last`가 **남는** 것을 보고, 이 검사가 `find_missed`는
+    // 검사 33이 `find_last`가 **남는** 것을 보고, 이 검사가 `find_status`는
     // **안 남는** 것을 본다. 둘이 같은 함수의 서로 반대되는 두 계약이라 나란히
     // 둔다.
     ls.copyExit();

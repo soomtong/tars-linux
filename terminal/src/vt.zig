@@ -204,7 +204,7 @@ pub const Screen = struct {
     /// **메시지에 쓸 글자는 `find_last`에서 온다.** 메시지가 뜰 때는 프롬프트가
     /// 이미 닫혀 있어서 `findNeedle()`이 null을 주기 때문이다 — 결정 8과 9가
     /// 맞물리는 자리가 여기다.
-    find_missed: bool = false,
+    find_status: bool = false,
 
     /// 확정된 검색. `findSubmit`이 만들고 `copyExit`이 해제한다(design 결정 10).
     ///
@@ -569,14 +569,15 @@ pub const Screen = struct {
         // 좌표도 함께 비운다. 안 비우면 모드를 나간 프레임에 지난 범위가 한 번
         // 더 칠해진다 — 게이트의 음성 검사(plan 결정 4)가 그것을 본다.
         self.hl_spans.clearRetainingCapacity();
-        // "못 찾았다" 메시지도 끈다(design 결정 9). 안 끄면 모드를 나간 뒤에도
-        // 화면 아랫줄에 메시지가 남는다.
+        // 결과 표시도 끈다(CS design 결정 9 · SP design 결정 5). 안 끄면 모드를
+        // 나간 뒤에도 화면 아랫줄에 글자가 남는다. **"못 찾았다"와 `[3/12]`가
+        // 같은 플래그를 쓰므로 이 한 줄이 둘 다 끈다.**
         //
         // **`find_last`는 여기서 안 지운다**(design 결정 8). 이 함수가 검색
         // 상태를 전부 버리는 자리인데 그것 하나만 빠지는 것이고, **모드를
         // 나갔다 들어와도 `/`+Enter가 동작하는 것이 CS-M1의 전부다.**
         // 검사 33이 이 예외를 본다.
-        self.find_missed = false;
+        self.find_status = false;
         self.term.screens.active.clearSelection();
     }
 
@@ -632,26 +633,41 @@ pub const Screen = struct {
         return self.find_buf[0..self.find_len];
     }
 
-    /// 못 찾은 검색어. **메시지가 꺼져 있으면 null이다**(design 결정 9).
+    /// 결과를 보여 주는 중인 검색어. **상태가 꺼져 있으면 null이다.**
     ///
-    /// `findNeedle`과 짝이다 — 그쪽은 "지금 치고 있는 것", 이쪽은 "방금 못 찾은
-    /// 것"이고, 오버레이 한 줄을 두 갈래로 가르는 것이 이 둘이다.
+    /// `findNeedle`과 짝이다 — 그쪽은 "지금 치고 있는 것", 이쪽은 "방금 검색한
+    /// 것"이고, 오버레이 한 줄을 가르는 것이 이 둘이다.
     ///
     /// **`main.zig`가 `find_last`를 직접 읽지 않게 하려고 함수로 낸다** —
     /// `findNeedle`·`clipboard`·`copyCursor`와 같은 규율이다.
-    pub fn findMissed(self: *const Screen) ?[]const u8 {
-        if (!self.find_missed) return null;
+    pub fn findStatusNeedle(self: *const Screen) ?[]const u8 {
+        if (!self.find_status) return null;
         return self.find_last[0..self.find_last_len];
     }
 
-    /// "못 찾았다" 메시지를 끈다. **`main.zig`가 copy 명령을 처리하기 직전
-    /// 한 자리에서 부른다**(design 결정 9).
+    /// 못 찾은 검색어. **상태가 켜져 있고 매치가 하나도 없을 때만 준다.**
     ///
-    /// 끄는 것이 명령 처리보다 **앞**이라, 새로 실패한 검색의 메시지는
-    /// `findSubmit`이 그 뒤에 다시 켜서 살아남는다. 순서 하나로 "다음 키에
-    /// 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다(plan 결정 2).
-    pub fn findClearMissed(self: *Screen) void {
-        self.find_missed = false;
+    /// **CS-M1이 만든 계약을 새 플래그 위에서 그대로 낸다**(SP design 결정 5).
+    /// 그때는 `find_missed`가 "실패했다"를 직접 뜻했는데, 지금은 "결과를 보여
+    /// 주는 중"과 "매치가 0"이라는 **두 사실을 여기서 곱한다.** 그래서
+    /// `vt_test`의 검사 34·35·36이 한 글자도 안 바뀐 채 통과한다.
+    ///
+    /// **`promptText`의 두 갈래를 가르는 것이 `findMatchCount()` 하나**라는
+    /// 뜻이기도 하다 — 검사 44가 그것을 못 박는다.
+    pub fn findMissed(self: *const Screen) ?[]const u8 {
+        const n = self.findStatusNeedle() orelse return null;
+        if (self.findMatchCount() != 0) return null;
+        return n;
+    }
+
+    /// 결과 표시를 끈다. **`main.zig`가 copy 명령을 처리하기 직전 한 자리에서
+    /// 부른다**(SP design 결정 7).
+    ///
+    /// 끄는 것이 명령 처리보다 **앞**이라, 새 검색의 결과는 `findSubmit`·
+    /// `findNext`·`findPrev`가 그 뒤에 다시 켜서 살아남는다. 순서 하나로
+    /// "다음 키에 사라진다"와 "새로 검색하면 다시 뜬다"가 함께 나온다.
+    pub fn findClearStatus(self: *Screen) void {
+        self.find_status = false;
     }
 
     /// 검색 결과. `main.zig`가 로그에 쓴다.
@@ -730,14 +746,17 @@ pub const Screen = struct {
         try self.refreshMatches();
 
         const count = self.find.?.matchesLen();
-        // **켜기만 하지 않고 매번 값을 정한다**(CS-M1 plan 결정 1). design은
-        // "0이면 켠다"라고 적었는데, 그대로 하면 끄는 자리가 `main.zig` 하나뿐이
-        // 되어 **성공한 검색이 앞의 실패를 안 지우는 경로**가 생긴다. poll 루프를
-        // 안 거치는 호출자(`vt_test`)가 그렇다.
+        // **결과 표시를 켠다**(SP design 결정 5). CS-M1은 여기서
+        // `find_missed = count == 0`으로 **실패일 때만** 켰는데, SP-M1이 성공한
+        // 검색에도 `[3/12]`를 띄우면서 그 조건이 사라졌다 — 성공이든 실패든
+        // "방금 검색했다"는 같고, **무엇을 보여 줄지는 `promptText`가
+        // `findMatchCount()`로 가른다.**
         //
-        // 켜는 자리와 끄는 자리를 안 가르는 것이 요점이고, CS-M0이
-        // `refreshMatches`를 셋 다에서 부른 것과 같은 규율이다.
-        self.find_missed = count == 0;
+        // 조건이 없어진 것이 CS-M1보다 오히려 안전하다. 그때 조건을 붙여야
+        // 했던 이유는 **성공한 검색이 앞의 실패를 안 지우는 경로**를 막기
+        // 위해서였는데(poll 루프를 안 거치는 `vt_test`), 지금은 성공도 켜므로
+        // 그 경로가 아예 없다.
+        self.find_status = true;
         return .{ .matches = count, .moved = moved };
     }
 
@@ -938,6 +957,11 @@ pub const Screen = struct {
     pub fn findNext(self: *Screen) !bool {
         const moved = try self.findStep(.next, false);
         try self.refreshMatches();
+        // **검색이 살아 있을 때만 켠다**(SP design 결정 5). 모드에 들어와 `/`
+        // 없이 `n`을 누르면 보여 줄 것이 없다. **`moved`로 판단하면 안 된다** —
+        // 매치가 하나뿐이라 안 움직인 경우에도 false가 나오는데, 그때는 번호를
+        // 보여 주는 것이 맞다.
+        if (self.find != null) self.find_status = true;
         return moved;
     }
 
@@ -945,6 +969,7 @@ pub const Screen = struct {
     pub fn findPrev(self: *Screen) !bool {
         const moved = try self.findStep(.prev, false);
         try self.refreshMatches();
+        if (self.find != null) self.find_status = true;
         return moved;
     }
 
