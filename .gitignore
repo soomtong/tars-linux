@@ -16,8 +16,6 @@ out/
 
 terminal/ghostty-src/
 terminal/vendor/
-terminal/sanity/libghostty_vt_check
-terminal/sanity/stb_truetype_check
 
 terminal/zig-out/
 terminal/zig-pkg/
