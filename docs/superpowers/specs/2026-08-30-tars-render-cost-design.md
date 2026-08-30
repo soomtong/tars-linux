@@ -124,8 +124,14 @@ design · plan · `HANDOFF.md` · 기억 넷 말고 **한 줄도 안 바뀐다.*
 | `/tmp/probe_drm.zig` | `terminal/src/drm.zig` 자리에 마운트 | `present()`의 print만 지운 사본 |
 | `/tmp/probe_run.sh` | 컨테이너 안에서 실행 | 빌드 → 부팅 → 프레임 유도 → `out/probe/`로 반출 |
 
-`init.io`가 `main.zig`의 파일 스코프에서 보이므로 **`render()`의 시그니처를 안
-바꾸고도** 시계를 읽을 수 있다.
+**`render()`에 `io: std.Io`를 매개변수로 더한다.** 처음에는 시그니처를 안 바꿔도
+될 것으로 봤는데 **틀렸다** — `init`은 파일 스코프의 import가 아니라
+`main()`의 매개변수다(`main.zig:530`의 `pub fn main(init: std.process.Init)`).
+그래서 `render()` 안에서는 안 보인다. 프로브 사본이므로 시그니처를 바꾸는 데
+드는 비용은 호출부 한 줄뿐이다.
+
+같은 이유로 **`drawGlyph`가 찍은 픽셀 수를 반환하게 바꾼다.** `ink`를 세려면
+그 방법뿐이고, 호출부는 둘(`render`의 글리프 루프와 `drawPrompt`)이다.
 
 ## 재는 것 — 프레임마다 여덟 값
 
