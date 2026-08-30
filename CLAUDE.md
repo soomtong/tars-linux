@@ -73,7 +73,12 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
   "배경" 절
 - 완료된 서브프로젝트: Boot Foundation(BF-M0~M4) · Display Foundation(DF) ·
-  Terminal Foundation(TF) · Zig Migration(ZM) · Input Policy(IP) ·
+  Terminal Foundation(TF) · Zig Migration(ZM) ·
+  Config Persistence(CP-M0~M2, 2026-08-15 완료 — ext2 디스크에 `key=value`
+  설정을 남기고 부팅 사이에 읽는다) · Input Policy(IP) ·
+  Power Management(PM-M0~M1, 2026-08-20 완료 — 시그널로 끄고 되살린다) ·
+  Hardware Discovery(HD-M0~M2, 2026-08-22 완료 — 키보드를 capability로 찾고
+  전원 버튼에 응답한다) ·
   Terminal Rendering(TR) · Copy Mode(CM-M0~M2) ·
   **Gate Latency(GL-M0~M3, 2026-08-26·29 완료 — 54분 15초 → 18분 08초 →
   CN·CS의 타이핑으로 22분대 → 19분 11~16초(GL-M2) → 16분 01~11초(GL-M3))** ·
@@ -81,15 +86,19 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   스크롤백 검색 `/`·`n`·`N`) ·
   Copy Search Feedback(CS-M0~M1, 2026-08-28 완료 — 매치 하이라이트, 검색
   기록, "못 찾음" 메시지) ·
-  **Search Position(SP-M0~M1, 2026-08-29·30 완료 — 현재 매치를 밝은 앰버로,
-  오버레이에 `/needle [3/12]`)**. design doc은 전부
+  Search Position(SP-M0~M1, 2026-08-29·30 완료 — 현재 매치를 밝은 앰버로,
+  오버레이에 `/needle [3/12]`) ·
+  **Render Cost(RC-M0, 2026-08-30 완료 — 한 프레임의 84.7%가 `fill`이라는 것을
+  재기만 했고 코드는 한 줄도 안 고쳤다)**. design doc은 전부
   `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트가 없다**(2026-08-30 기준). 다음 것은 `HANDOFF.md`의
+- **진행 중인 서브프로젝트가 없다**(2026-08-31 기준). 다음 것은 `HANDOFF.md`의
   "이월 숙제"에서 사용자와 함께 고른다.
-- **주의: design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
-  Power Management · Hardware Discovery가 각각 "M0 미착수"로 남아 있는데,
-  게이트에는 `CP-M2` · `PM-M1` · `HD-M2` 체인이 3/3으로 돌고 있다.
-  **서브프로젝트의 실제 상태는 `check.sh`의 체인 목록이 가장 정확하다.**
+- **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**
+  2026-08-31에 낡은 것 넷(BF-M1 · Config Persistence · Power Management ·
+  Hardware Discovery)을 한꺼번에 고쳤다 — 넷 다 "중간에 멈춘 것"이 아니라
+  **계획한 milestone을 전부 끝내 놓고 표시만 안 한 것**이었다.
+  **그래도 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장
+  정확하다** — 게이트가 매번 돌리는 목록이라 낡을 수가 없다.
 - 현재 진행 상황: `HANDOFF.md`
 - 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
   한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로

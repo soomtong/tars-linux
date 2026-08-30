@@ -1,7 +1,9 @@
 # TARS Config Persistence — Design
 
 **Date:** 2026-08-14
-**Status:** 설계 승인됨, CP-M0 미착수
+**Status:** **완료(2026-08-15).** 아래 "Milestones"가 계획한 셋이 전부
+끝났다 — CP-M0·CP-M1이 2026-08-14에, CP-M2가 2026-08-15에. 루트 게이트가
+`CP-M2:./config/check.sh` 체인으로 3/3 돈다.
 
 ## 배경
 

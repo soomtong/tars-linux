@@ -1,7 +1,9 @@
 # TARS Power Management — Design
 
 **Date:** 2026-08-19
-**Status:** 설계 승인됨(2026-08-19). PM-M0 plan을 이어서 작성한다.
+**Status:** **완료(2026-08-20).** 아래 "Milestone 계획"이 세운 둘이 전부
+끝났다 — PM-M0(끄기)이 2026-08-19에, PM-M1(되살리기)이 2026-08-20에.
+루트 게이트가 `PM-M1:./power/check.sh` 체인으로 3/3 돈다.
 
 ## 배경
 

@@ -1066,10 +1066,6 @@ docker run --rm -v "$PWD":/workspace \
 - [ ] **`present`의 매 프레임 모드셋 — 미룬다.** 같은 결정에 딸린다. RC-M0이
       4%로 쟀으므로 애초에 급하지 않았고, 페이지 플립으로 바꾸는 것은 KMS
       이야기가 새로 들어오는 큰 변경이다.
-- [ ] **design doc 셋의 `Status:` 줄이 낡았다.** Config Persistence ·
-      Power Management · Hardware Discovery가 "M0 미착수"로 남아 있는데
-      게이트에는 `CP-M2` · `PM-M1` · `HD-M2`가 3/3으로 돈다. **CN design도 CS
-      design도 이 빚을 새로 만들지 않았다.**
 - [ ] **`ACPI_EC`와 `PNP_DEBUG_MESSAGES` 정리.**
 - [ ] **`terminal/sanity/`의 수동 확인 도구 둘.** x86_64용이라 arm64 gcc로 못
       만든다. 필요하면 `zig cc -target x86_64-linux-gnu`. **빌드해서 돌려 본
@@ -1089,6 +1085,15 @@ docker run --rm -v "$PWD":/workspace \
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~design doc 셋의 `Status:` 줄이 낡았다~~ — **2026-08-31에 고쳤다. 셋이
+  아니라 넷이었다.** BF-M1이 `plan not yet written`으로 남아 있었는데 plan은
+  design과 같은 날(2026-08-03) 썼다. **넷 다 "중간에 멈춘 것"이 아니라 계획한
+  milestone을 전부 끝내 놓고 표시만 안 한 것**이었다 — CP-M0~M2(08-15) ·
+  PM-M0~M1(08-20) · HD-M0~M2(08-22) · BF-M1(08-04). **`CLAUDE.md`도 같은 빚을
+  지고 있어서 함께 고쳤다** — 완료 목록에 CP·PM·HD가 빠져 있었고, 이 문제를
+  가리키던 "주의" 항목이 고치는 순간 틀린 말이 되므로 규율 문장으로 바꿨다.
+  **날짜는 plan 파일 이름이 아니라 `HANDOFF.md`의 커밋 히스토리에서 읽었다** —
+  HD는 둘이 하루씩 어긋났다.
 - ~~`fill` 하나의 비용을 따로 재기~~ — **RC-M0이 2026-08-30에 끝냈다.** 답은
   **`fill`**이고 프레임의 84.7%다. **덤으로 그 숙제가 딸고 있던 전제 하나를
   깼다** — `cells()`가 격자 전체를 안 주므로 `fill`은 여백 담당이 아니라 화면

@@ -1,7 +1,11 @@
 # TARS Boot Foundation — BF-M1 Design
 
 **Date:** 2026-08-03
-**Status:** Approved (design phase), plan not yet written
+**Status:** **완료(2026-08-04).** plan은 이 design과 같은 날 썼다
+(`docs/superpowers/plans/2026-08-03-tars-boot-foundation-bf-m1.md`). Boot
+Foundation 전체는 2026-08-07에 BF-M0~M4로 끝났고 게이트가 `BF-M4` 체인으로
+3/3 돈다 — 상위 design은
+`docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`다.
 
 ## 배경
 

@@ -1,7 +1,10 @@
 # TARS Hardware Discovery — Design
 
 **Date:** 2026-08-20
-**Status:** 설계 승인됨(2026-08-20). HD-M0 plan을 이어서 작성한다.
+**Status:** **완료(2026-08-22).** 아래 "Milestone 계획"이 세운 셋이 전부
+끝났다 — HD-M0(탐색기)이 2026-08-21에, HD-M1(ACPI)과 HD-M2(전원 버튼)가
+2026-08-22에. 루트 게이트가 `HD-M2:./device/check.sh`
+체인으로 3/3 돈다.
 
 ## 한 줄 요약
 
