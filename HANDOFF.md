@@ -1,29 +1,31 @@
-# HANDOFF: SP-M0의 숙제까지 풀었다 — 다음은 SP-M1이고 막는 것이 없다
+# HANDOFF: Search Position이 끝났다 — 다음 서브프로젝트는 함께 고른다
 
 ## 지금 어디인가
 
 `main`, working tree 깨끗함. **Search Position(SP)을 2026-08-29에 시작해
-SP-M0(현재 매치를 다른 색으로)을 끝냈고, 2026-08-30에 SP-M0이 남긴
-숙제(검사 15의 102줄)를 풀었다.** 게이트는 여덟 체인 3/3이고 **세 번 재서
-16분 30.01초 · 16분 40.36초 · 16분 44.91초**다(SP-M0 직후에 잰 값이고,
-숙제를 풀며 더한 `col` 판정은 키를 하나도 안 더하므로 다시 안 쟀다).
+2026-08-30에 끝냈다.** 셋이 들어갔다 — SP-M0(현재 매치를 다른 색으로) ·
+SP-M0이 남긴 숙제(검사 15의 102줄) · SP-M1(`/needle [3/12]` 번호).
+게이트는 여덟 체인 3/3이고 **세 번 재서 16분 34.78초 · 16분 42.73초 ·
+16분 42.35초**다.
+
+**진행 중인 서브프로젝트가 없다.** 다음 것은 아래 "이월 숙제"에서 사용자와
+함께 고른다.
 
 ```bash
 git status --short     # 비어 있어야 한다
 git log --oneline -12
-#   Explain the 102-row jump and pin it down with col  ← 이 커밋
+#   Close out SP-M1                                    ← 이 커밋
+#   Check that the overlay numbers the current match   ← 게이트 검사 20
+#   Number the current match on the overlay line       ← promptText 세 갈래
+#   Check the numbers behind the match position        ← vt_test 검사 41~44
+#   Widen the find flag to cover a successful search   ← find_status
+#   Plan SP-M1
+#   Explain the 102-row jump and pin it down with col  ← SP-M0의 숙제
 #   Close out SP-M0
-#   Check both match colours on screen at once       ← 게이트 검사 19
-#   Point check 16 at the current-match colour       ← 게이트 검사 16 수정
-#   Report how many cells the current match painted  ← cur= 로그
+#   Check both match colours on screen at once         ← 게이트 검사 19
+#   Point check 16 at the current-match colour
+#   Report how many cells the current match painted    ← cur= 로그
 #   Check that the two match colours appear side by side
-#   Paint the current match in its own colour        ← 색이 갈린 커밋
-#   Mark which highlighted span is the current match
-#   Pin down what the current match index means
-#   Give the current match an index the terminal can read
-#   Plan SP-M0
-#   Design Search Position: colour and number the current match
-#   Close out GL-M3
 ```
 
 **design과 plan을 코드보다 먼저 커밋했다.** GL-M2·M3이 세운 순서 그대로다.
@@ -32,19 +34,64 @@ git log --oneline -12
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**다음 세션이 할 첫 일: SP-M1(`[3/12]`)의 plan을 쓰고 시작한다.** design이 이미
-결정 5·6·7로 그것을 정해 두었고, **막고 있던 숙제는 풀렸다**(아래 절).
+**다음 세션이 할 첫 일: 아래 "이월 숙제"에서 다음 서브프로젝트를 고른다.**
+전체 비전에서 무엇이 남았는지는 boot foundation design의 "배경" 절에 있다.
+
+**직전 서브프로젝트가 Search Position(SP-M0·M1, 2026-08-29~30)이다.**
 
 - design: `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
-  (**"SP-M0이 남긴 숙제" 절이 다음 세션의 출발점이다.** 결정 10에는 SP-M0이
-  실행으로 답한 내용이 붙어 있다)
-- plan: `.../plans/2026-08-29-tars-search-position-sp-m0.md`
+  (결정 10에 SP-M0이 실행으로 답한 내용이, "SP-M0이 남긴 숙제" 절에 102줄의
+  답이 붙어 있다)
+- plan: `.../plans/2026-08-29-tars-search-position-sp-m0.md` ·
+  `.../plans/2026-08-30-tars-search-position-sp-m1.md`
 - **기억: `docs/decisions/project_search_position.md`**
 
-**직전 서브프로젝트는 Gate Latency(GL-M2·M3, 2026-08-29)였다.** design은
+그 앞이 Gate Latency(GL-M2·M3, 2026-08-29)다. design은
 `.../specs/2026-08-26-tars-gate-latency-design.md`의 "재개 (2026-08-28)" 절,
 기억은 `docs/decisions/project_gate_latency.md`다. 그 앞이 Copy Search
 Feedback(CS-M0·M1, 2026-08-28)이다.
+
+## SP-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. 상태를 하나로 두면 켜고 끄는 자리가 한 벌이다.** CS-M1의
+`find_missed`("마지막 검색이 실패했다")를 **`find_status`("마지막 검색 명령의
+결과를 보여 주는 중")로 넓혔다.** `[3/12]`와 "못 찾음"이 **수명이 같기**
+때문이고, 둘로 나눴다면 켜는 자리 셋과 끄는 자리 둘이 각각 두 벌이 됐을
+것이다. 하나를 빠뜨렸을 때 증상은 **"글자가 화면 아랫줄에 영영 붙어 있다"**다.
+
+**2. `findMissed()`는 이름도 계약도 그대로 두고 구현만 곱셈으로 바꿨다** —
+`상태가 켜짐 × 매치가 0`. **`vt_test`의 검사 34·35·36이 한 글자도 안 바뀐 채
+통과한 것이 그 증거이고**, Task 1이 맞게 됐는지 보는 첫 신호로 그것을 썼다.
+
+**3. 켜는 조건이 CS-M1보다 느슨해졌고 그것이 오히려 안전하다.** CS-M1이
+`find_missed = count == 0`이라는 조건을 붙여야 했던 이유는 **성공한 검색이 앞의
+실패를 안 지우는 경로**를 막기 위해서였는데, SP-M1은 성공도 켜므로 그 경로가
+아예 없다.
+
+**4. `findNext`·`findPrev`는 `find != null`로 판단한다.** `moved`로 하면 안
+된다 — 매치가 하나뿐이라 안 움직인 경우에도 false가 나오는데, 그때는 번호를
+보여 주는 것이 맞다.
+
+**5. 번호는 두 파일이 나눠 본다.** `promptText`가 `main.zig`의 private이라
+`vt_test`가 **못 부른다.** `vt_test`는 **재료**(`findCurrentIndex() + 1`과
+`findMatchCount()`)를 보고 게이트는 **글자**(`find> overlay text=/zq [1/4]`)를
+본다. 재료만 보면 "값은 맞는데 안 그렸다"를 못 잡고, 글자만 보면 실패했을 때
+`vt.zig`와 `main.zig` 중 어디가 틀렸는지 모른다.
+
+**6. 게이트 판정이 셋인 이유.** `[1/4]`가 뜨는 것만 보면 **고정된 숫자를 찍는
+코드도 통과한다.** `n` 뒤의 `[2/4]`가 "번호가 커서를 따라간다"를, `k` 뒤의
+"오버레이 0개"가 수명을 본다.
+
+**7. 오버레이가 뜨기 시작해도 색 검사가 안 흔들린다.** 검색 성공에도 오버레이가
+뜨면서 `dumpStyles`가 맨 아랫줄(46)을 건너뛰기 시작하는데, **착수 전에 로그로
+매치의 행 번호를 읽어 안 겹치는 것을 확인했다** — 검사 16이 **0번** 줄, 검사
+19가 **44·45번** 줄이다. 실행 결과도 SP-M0 때와 같은 값이었다(`5 cell(s)` ·
+`current=1 other=6`). **겹쳤다면 증상이 "색이 안 닿았다"라 원인을 오버레이에서
+찾기 어려웠을 것이다.**
+
+**8. `prompt_buf`는 173바이트다.** `/` 하나 + needle 128 + ` [` 둘 + 숫자 20 +
+`/` 하나 + 숫자 20 + `]` 하나. **`usize`가 최대 스무 자리이고**,
+`: not found` 열하나는 그보다 짧아서 이 크기가 둘 다 덮는다.
 
 ## SP-M0이 남긴 숙제 — **2026-08-30에 풀었다. 답은 "주석이 틀렸다"다**
 
@@ -88,6 +135,9 @@ Feedback(CS-M0·M1, 2026-08-28)이다.
 잘려 실패했고, `grep`을 좁히는 것도 "그 줄을 볼 생각을 했어야" 맞는다 —
 이번에 답을 준 `copy> enter row=0 col=0`은 애초에 찾을 목록에 없던 줄이다.
 `-v "$PWD":/workspace`가 이미 붙어 있으므로 `out/`(gitignore) 아래로 남긴다.
+
+**주의: 루트 게이트를 돌리면 그 로그가 사라진다.** `clean()`이 `out`을 통째로
+지운다(`check.sh:15`). **조사를 다 끝내고 게이트를 돌린다.**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -320,6 +370,7 @@ ReleaseSafe에서 안 읽히는 것은 회귀가 아니고, **그래서 "트레�
 | — | **검색 뒤 화면의 매치가 어두운 앰버 바탕(`#705000`)으로 칠해진다(CS-M0)** |
 | — | **그중 지금 선택된 매치만 밝은 앰버(`#C08000`)다(SP-M0)** |
 | `/` → `Enter`(빈 검색어) | **지난 검색어를 다시 쓴다(CS-M1). 모드를 나갔다 들어와도 남는다** |
+| — | **아랫줄에 `/needle [3/12]`가 뜬다(SP-M1). 아래에서부터 세고, 다음 키에 사라진다** |
 | — | **못 찾으면 아랫줄에 `/needle: not found`가 뜨고 다음 키에 사라진다(CS-M1)** |
 | `v`·`V` | 문자·줄 선택 |
 | `y` 또는 `Cmd+C` | 복사하고 **나간다** |
@@ -354,7 +405,7 @@ ReleaseSafe에서 안 읽히는 것은 회귀가 아니고, **그래서 "트레�
 **`terminal: find> overlay text=…`**가 "화면에 그렇게 쓰였다"의 유일한 증거다.
 `render()`에 넘어간 **바로 그 값**을 받아 찍는다.
 
-**6. 게이트 검사 순서를 뒤집어야 판정이 선다.** "못 찾음"을 먼저 검사하면 그
+**6. 게이트 검사 순서를 뒤집어야 두 경우가 갈린다.** "못 찾음"을 먼저 검사하면 그
 needle이 `find_last`를 덮어써서 **이어지는 빈 Enter도 `matches=0`을 낸다** —
 "기록이 동작했다"와 "빈 Enter가 아무 일도 안 했다"가 안 갈린다. 기록을 먼저 보면
 `matches=4`가 나오고 CS-M1 전이라면 0이었으므로 정확히 갈린다. `vt_test`의 검사
@@ -484,14 +535,20 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 **여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **기준선은 16분 30초~45초다**(2026-08-29, SP-M0 이후 세 번
-측정). 그 앞의 기준선은 GL-M3 뒤 16분 01~11초, 그 앞이 GL-M2 뒤 19분 11~16초,
-그 앞이 22분 19~35초였다.
+3/3, 부팅 30회 이상. **기준선은 16분 34.78초 · 16분 42.73초 · 16분 42.35초다**
+(2026-08-30, SP-M1 이후 세 번 측정). 그 앞의 기준선은 SP-M0 뒤 16분 30~45초,
+GL-M3 뒤 16분 01~11초, GL-M2 뒤 19분 11~16초, 그 앞이 22분 19~35초였다.
 
-**SP-M0이 중앙값을 34초 늘렸고 산수가 맞아떨어진다** — 검사 19가 회차당
+**SP-M1은 잴 수 있는 차이를 안 만들었다.** 중앙값이 16분 40.36초에서
+16분 42.73초로 2.4초 늘었는데, 검사 20이 더한 것의 산수는 회차당 `sleep` 4초와
+키 둘, 세 회차이므로 `4×3 + 2×0.135×3 ≈ 13초`다. **산수보다 작게 나온 것이고
+그것을 설명하려 들지 않는다** — 이 게이트의 잡음이 ±3분이라 2.4초든 13초든
+읽어 낼 수 없는 크기다.
+
+**SP-M0이 중앙값을 34초 늘렸고 산수가 맞아떨어졌다** — 검사 19가 회차당
 `sleep` 9초와 키 18개를 더하고 copy 체인이 게이트당 세 회차이므로
 `9×3 + 18×0.135×3 ≈ 34초`다. **그래도 증명은 아니다** — 두 삼중값의 간격이
-19초인데 이 게이트의 잡음은 ±3분이다.
+19초인데 잡음이 ±3분이다.
 
 **타이핑 대기는 이제 `gate_lib.sh` 한 파일에 있다**(GL-M2). 여섯 체인이
 `source ../gate_lib.sh`로 쓰고, `config`만 전역 `$LOG`가 없어서
@@ -499,11 +556,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `power/check.sh:348`과 `device/check.sh:180`의 단발 둘만 남았다** — 그 둘은 키가
 아니라 monitor 명령 뒤의 정리 대기라 일부러 남겼다.
 
-**CS-M0은 게이트에 타이핑을 한 키도 안 더했고 CS-M1은 아홉 키를 더했다.**
-검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받는다 — 새 부팅이 없고,
-CS-M1의 검사 17은 검사 16이 치는 `esc`를 그대로 시험대로 쓴다. **CN-M0도
-CN-M1도 CS-M0도 CS-M1도 GL-M2도 새 체인을 만들지 않았고 monitor 포트 45462는
-계속 비어 있다.**
+**CS-M0은 게이트에 타이핑을 한 키도 안 더했고 CS-M1은 아홉 키, SP-M1은 두
+키(`n`·`k`)를 더했다.** 검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받는다 —
+새 부팅이 없고, CS-M1의 검사 17은 검사 16이 치는 `esc`를 그대로 시험대로 쓴다.
+**검사 20도 검사 19가 끝난 자리를 이어받아 새 검색조차 안 한다.** **CN-M0도
+CN-M1도 CS-M0도 CS-M1도 GL-M2도 SP-M0도 SP-M1도 새 체인을 만들지 않았고
+monitor 포트 45462는 계속 비어 있다.**
 
 **체인 목록은 `CHAINS` 배열 하나에 있다**(`check.sh:146`). 진입 검사와 실행이
 같은 목록을 쓰므로 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -621,7 +679,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `terminal: find> next moved=…` · `terminal: find> prev moved=…`(CN-M1) ·
 `terminal: style> N cell(s) hidden by the find prompt`(CN-M1) ·
 `terminal: find> hl spans=… cells=… **cur=…** us=…`(CS-M0, `cur=`은 SP-M0) ·
-**`terminal: find> overlay text=…`**(CS-M1)
+**`terminal: find> overlay text=…`**(CS-M1. **SP-M1 뒤로 `/needle [3/12]`도
+이 줄로 나온다 — 새 로그를 하나도 안 만들었다**)
 
 **새 copy 명령의 로그는 공짜다** — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. **`find>`는 그와
@@ -901,10 +960,7 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
-**Search Position(SP)이 진행 중이고 다음은 SP-M1이다. 막는 것이 없다.**
-- [ ] **`[3/12]` 매치 위치 표시(SP-M1).** design이 이미 쓰여 있다(결정 5·6·7).
-      번호는 아래에서부터 세고(`idx + 1`), 표시는 다음 키에 사라지며, 상태
-      플래그를 하나로 두고 `findMissed()`가 그 위에 얹힌다.
+**진행 중인 서브프로젝트가 없다. 다음 것을 여기서 고른다.**
 - [ ] **`fill` 하나의 비용을 따로 재기.** 첫 프레임 209밀리초의 출처가 셀 배경
       칠하기인지 `fill`의 102만 번 volatile 쓰기인지 안 갈렸다. **부분 갱신
       논의의 전제다.**
@@ -931,9 +987,12 @@ docker run --rm -v "$PWD":/workspace \
 
 ### 끝난 숙제 (지운 것을 다시 줍지 말 것)
 
+- ~~`[3/12]` 매치 위치 표시~~ — **SP-M1이 2026-08-30에 끝냈다.** 상태 플래그를
+  새로 만들지 않고 CS-M1의 것을 넓혔고, 새 로그도 새 체인도 안 만들었다.
+  위에 절이 따로 있다.
 - ~~`n`의 이동 폭 102줄~~ — **2026-08-30에 풀었다.** 주석이 틀린 것이었고
   `n`은 멀쩡했다. 건너뛴 것은 `/`이고 그것은 의도된 동작이다. 위에 절이 따로
-  있다. **SP-M1을 막는 것이 없다.**
+  있다.
 - ~~현재 매치를 다른 색으로~~ — **SP-M0이 2026-08-29에 끝냈다.** `#C08000`이고,
   "라이브러리에서 꺼내는 자리"는 `selected.idx` 하나였다. **그 자리를 SP-M1이
   그대로 쓴다.**
@@ -961,10 +1020,10 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 핵심 파일
 
-**`terminal/src/`의 줄 번호는 SP-M0 직후(2026-08-29)에 다시 잰 값이다.**
-**앞 HANDOFF의 `main.zig` 줄 번호가 네 줄쯤 앞을 가리키고 있었다** — CS-M1
-기준이라고 적혀 있었지만 실제와 어긋나 있었다. 아래는 전부 확인한 값이다.
-**다음 milestone도 끝낼 때 이 절을 다시 재서 적는다.**
+**줄 번호는 SP-M1 직후(2026-08-30)에 `grep`으로 다시 잰 값이다.** SP-M1이
+`vt.zig`에 함수 하나를 더하고 `main.zig`의 `promptText`를 늘렸으므로 **앞
+milestone 기준 번호가 스무 줄 넘게 밀렸다.** **다음 milestone도 끝낼 때 이
+절을 다시 재서 적는다.**
 
 - `terminal/src/input.zig` — **CS-M0도 CS-M1도 안 건드렸다.** 줄 번호는 CN-M1
   기준 그대로다.
@@ -984,37 +1043,46 @@ docker run --rm -v "$PWD":/workspace \
   - **필드**: `:112` `io`(CS-M0) · `:130` `copy_cursor` · `:133` `copy_kind` ·
     `:149` `copy_anchor_y` · `:152` `copy_pruned` · `:158` `clip` ·
     `:171` `find_open` · `:179` `find_buf`(128바이트) ·
-    `:193` `find_last` · `:194` `find_last_len` · `:207` `find_missed`(CS-M1) ·
+    `:193` `find_last` · `:194` `find_last_len` ·
+    **`:207` `find_status`**(CS-M1의 `find_missed`를 SP-M1이 넓힌 것) ·
     `:221` `find` · `:238` `find_matches` · `:245` `hl_spans`
   - **함수**: `:327` `feed` · `:357` `anchorY` · `:369` `cells`(**매치 층은
     `break`를 안 한다 — SP-M0 뒤로 현재 매치가 이기게 하려면 행 안을 끝까지
-    봐야 한다**) · `:554` `copyExit`(**검색·매치 목록·범위·메시지를 전부 여기서
-    버리는데 `find_last`만 예외다**) · `:592` `findOpen` · `:642` `findMissed` ·
-    `:653` `findClearMissed`(CS-M1) · `:673` `findSubmit` ·
-    `:749` `findMatchCount` · **`:774` `findCurrentIndex`**(SP-M0. **라이브러리
+    봐야 한다**) · `:554` `copyExit`(**검색·매치 목록·범위·표시를 전부 여기서
+    버리는데 `find_last`만 예외다**) · `:593` `findOpen` ·
+    **`:643` `findStatusNeedle`**(SP-M1) ·
+    **`:657` `findMissed`**(**계약은 CS-M1 그대로이고 구현만
+    `상태 × 매치 0`인 곱셈이다**) · **`:669` `findClearStatus`**(SP-M1) ·
+    `:689` `findSubmit`(**끝에서 `find_status`를 조건 없이 켠다**) ·
+    `:768` `findMatchCount` · **`:793` `findCurrentIndex`**(SP-M0. **라이브러리
     내부 필드 `selected.idx`를 읽는 유일한 자리다**) ·
-    `:798` `refreshMatches`(**`select()` 뒤에 부르는 이유가 여기 적혀 있다.
+    `:817` `refreshMatches`(**`select()` 뒤에 부르는 이유가 여기 적혀 있다.
     SP-M0의 인덱스가 스냅숏과 안 어긋나는 근거이기도 하다**) ·
-    `:821` `findSpans`(**`cur_i`를 루프 밖에서 한 번만 읽는다. `ci`라는 이름은
-    안쪽 루프가 이미 쓰고 있어서 못 쓴다**) · `:918` `hlStats` ·
-    `:927` `hlSpans` · `:938` `findNext` · `:945` `findPrev` · `:963` `findStep` ·
-    `:1027` `copyMove` · `:1067` `WORD_BOUNDARY` · `:1112` `copyMoveWord` ·
-    `:1184` `copyPlace` · `:1247` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
-    `:1288` `copyYank` · `:1316` `clipboard`
+    `:840` `findSpans`(**`cur_i`를 루프 밖에서 한 번만 읽는다. `ci`라는 이름은
+    안쪽 루프가 이미 쓰고 있어서 못 쓴다**) · `:937` `hlStats` ·
+    `:946` `hlSpans` · **`:957` `findNext` · `:969` `findPrev`**(**둘 다
+    `find != null`일 때 `find_status`를 켠다 — `moved`로 판단하면 안 된다**) ·
+    `:988` `findStep` ·
+    `:1052` `copyMove` · `:1092` `WORD_BOUNDARY` · `:1137` `copyMoveWord` ·
+    `:1209` `copyPlace` · `:1272` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
+    `:1313` `copyYank` · `:1341` `clipboard`
 - `terminal/src/main.zig` — `drawGlyph`·`render`·`dump*`, 그리고 `poll` 루프.
   **렌더는 루프 끝에 있고 `needs_redraw`가 문지기다.**
   - `:95` `drawPrompt`(오버레이) · `:129` `render` · `:169` `Prompt` ·
-    **`:191` `promptText`(오버레이 글자를 정하는 자리. 프롬프트가 우선이고
-    닫혀 있으면 "못 찾음" 메시지다. **SP-M1이 세 갈래로 만들 자리다**)** ·
-    `:247` `dumpStyles`(**`overlaid_row`를 받아 덮인 줄을 건너뛴다. 프레임당
-    16줄 상한 — SP-M0이 게이트 needle을 두 글자로 고른 이유다**) ·
-    `:380` `dumpCopy` · `:401` `dumpFind` · `:427` `dumpOverlay` ·
-    **`:446` `dumpHighlight`(`cur=`이 `cells=` 뒤·`us=` 앞이다 — 검사 16의
+    **`:207` `promptText`(오버레이 글자를 정하는 자리. **갈래가 셋이다** —
+    프롬프트 · `[3/12]` · "못 찾음". **두 갈래를 가르는 것은
+    `findMatchCount()` 하나다**)** ·
+    `:274` `dumpStyles`(**`overlaid_row`를 받아 덮인 줄을 건너뛴다. 프레임당
+    16줄 상한 — SP-M0이 게이트 needle을 두 글자로 고른 이유다. **SP-M1 뒤로
+    검색이 성공해도 오버레이가 떠서 이 건너뛰기가 훨씬 자주 일어난다**) ·
+    `:392` `dumpScroll` · `:407` `dumpCopy` · `:428` `dumpFind` ·
+    `:454` `dumpOverlay` ·
+    **`:473` `dumpHighlight`(`cur=`이 `cells=` 뒤·`us=` 앞이다 — 검사 16의
     `sed`가 `cells=`를 뽑으므로 그 순서를 안 바꾼다)** ·
-    `:685` `screen.findClearMissed()`(copy 루프 안, `switch`보다 앞이다) ·
-    **`:757` `dumpCopy(screen, @tagName(cmd))`(모든 copy 명령에 대해 불린다 —
+    `:712` `screen.findClearStatus()`(copy 루프 안, `switch`보다 앞이다) ·
+    **`:784` `dumpCopy(screen, @tagName(cmd))`(모든 copy 명령에 대해 불린다 —
     `.find_submit`·`.find_next`도 `copy> … row=`을 낸다)** ·
-    `:822` `prompt_buf`(**140바이트. SP-M1이 173으로 늘릴 자리다**) ·
+    `:851` `prompt_buf`(**173바이트. SP-M1이 140에서 늘렸다**) ·
     copy 배선 switch(**`else`가 없다**)
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다.**
@@ -1022,19 +1090,24 @@ docker run --rm -v "$PWD":/workspace \
   `:59` `expectCopy`(`:65`가 `std.meta.eql`을 쓴다) · `:497~` 검사 4의 "모르는
   키" 목록 · `:593~` CM-M2의 검사 11~13 · `:637~` CN-M0의 검사 14~16 ·
   `:673~` CN-M1의 검사 17~23
-- `terminal/src/vt_test.zig` — `:356` `cm`(CM-M0·M1) · `:386` `painted`(**이름
-  충돌 주의**) · `:471` `pruned`(CM-M2) · `:551` `wm`(CN-M0) · `:664` `fm` ·
+- `terminal/src/vt_test.zig` — **1425줄.** `:356` `cm`(CM-M0·M1) ·
+  `:386` `painted`(**이름 충돌 주의**) · `:471` `pruned`(CM-M2) ·
+  `:551` `wm`(CN-M0) · `:664` `fm` ·
   `:741` `fs`(CN-M1) · `:837` `hs`(CS-M0의 검사 26~31. **SP-M0이 검사 29·30·31의
   상수를 `CURRENT_BG`로 옮겼다 — 이 화면은 보이는 매치가 하나이고 그것이 곧
   현재 매치이기 때문이다**) · `:1018` `ls`(CS-M1의 검사 32~36) ·
-  **`:1140` `ps`(SP-M0의 검사 37~40. 8번 줄이 `qqzqqqzqqq`로 매치가 **둘**이라
-  두 색을 나란히 볼 수 있다)**. **새 검사는 자기 화면을 새로 만든다.**
+  `:1140` `ps`(SP-M0의 검사 37~40. 8번 줄이 `qqzqqqzqqq`로 매치가 **둘**이라
+  두 색을 나란히 볼 수 있다) ·
+  **`:1293` `ns`(SP-M1의 검사 41~44. `hs`·`ls`와 같은 20x5에 같은 8·18번 줄이라
+  기대값 `matches=2`를 옮겨 쓴다. **번호의 재료만 보고 글자는 안 본다** —
+  `promptText`가 `main.zig`의 private이라 여기서 못 부른다)**.
+  **새 검사는 자기 화면을 새로 만든다.**
 - **`gate_lib.sh`(저장소 루트) — GL-M2가 만들었다.** 여섯 체인이
   `source ../gate_lib.sh`로 쓰는 `type_keys` 하나가 전부다. **왜 고정 sleep이
   아닌지, 왜 문자열이 아니라 파일 크기인지, 왜 `needs_redraw`에 기대는지가
   전부 그 파일 주석에 있다.** 부르는 쪽은 fd 3과 `$LOG`를 갖춰야 하고,
   없으면 `set -u`로 그 자리에서 죽는다(일부러 안 막았다).
-- `copy/check.sh` — **1012줄**(줄 번호는 2026-08-30에 다시 쟀다). 검사 열아홉.
+- `copy/check.sh` — **1066줄**(줄 번호는 2026-08-30에 다시 쟀다). 검사 **스물**.
   `:108` `source ../gate_lib.sh` ·
   `:111` `key_lines`(**절대값으로 키를 세면 안 된다 — 배칭**) ·
   `:117` `copy_value`(**마지막 `copy>` 줄을 본다.** `row`도 `col`도 이것으로
@@ -1045,12 +1118,13 @@ docker run --rm -v "$PWD":/workspace \
   `col` 판정 둘이 그것을 못 박는다 — 위의 "SP-M0이 남긴 숙제" 절**) ·
   `:791` CS-M0의 검사 16(하이라이트. **SP-M0이 `bg=C08000`으로
   옮겼고 음성 판정을 두 색으로 넓혔다**) · `:855` CS-M1의 검사 17(검색 기록) ·
-  `:889` CS-M1의 검사 18("못 찾음" 메시지) · **`:934` SP-M0의 검사 19(두 색이
-  동시에)** · NUL 음성 검사는 파일 끝이다.
+  `:889` CS-M1의 검사 18("못 찾음" 메시지) · `:934` SP-M0의 검사 19(두 색이
+  동시에) · **`:1005` SP-M1의 검사 20(번호)** · NUL 음성 검사는 파일 끝이다.
   **검사 16·17·18이 전부 검사 15가 끝난 자리를 이어받고, 검사 17은 검사 16이
   치는 `esc`를 시험대로 쓴다** — 순서를 바꾸면 판정이 무너진다.
   **검사 19만 자기 조건을 스스로 만든다**(`esc`로 모드를 나가고 `echo zq zq`를
-  심는다) — 그래서 앞 검사가 바뀌어도 안 흔들린다.
+  심는다) — 그래서 앞 검사가 바뀌어도 안 흔들린다. **검사 20은 그 검사 19의
+  자리를 이어받아 새 검색조차 안 하고 키 둘(`n`·`k`)만 친다.**
 - `check.sh` — `:35` `BUILD_STEPS` · `:42` `require_build_steps` · `:146`
   `CHAINS` 배열 · `:160` 진입 검사 · `:176` `clean` 호출 하나.
 - `terminal/check.sh:73~79` — monitor 연결 재시도 loop. **`Connection refused`가
