@@ -174,20 +174,36 @@ const Prompt = struct {
     bg: u32,
 };
 
-/// 오버레이 한 줄에 쓸 글자를 정한다. **프롬프트가 우선이고, 닫혀 있으면
-/// "못 찾았다" 메시지다**(design 결정 9). 둘 다 없으면 null이고, 그러면
-/// 오버레이를 아예 안 그린다.
+/// 오버레이 한 줄에 쓸 글자를 정한다. **갈래가 셋이다**(SP design 결정 7).
+///
+/// ```
+/// 프롬프트가 열려 있다        → /needle
+/// 닫혀 있고 상태가 켜져 있다  → 매치 0이면  /needle: not found
+///                               아니면      /needle [3/12]
+/// 그 밖                       → null (오버레이를 아예 안 그린다)
+/// ```
 ///
 /// **`drawPrompt`는 이것을 모른다.** 그리는 함수는 "한 줄을 준 색으로 쓴다"
 /// 하나만 알고, 무엇을 쓸지는 여기서 끝난다 — CN-M1이 앞의 `/`를 `vt.zig`가
 /// 아니라 `main.zig`에서 붙인 것과 같은 경계다(모양은 여기가 정한다).
 ///
-/// **프롬프트를 먼저 보는 것에 뜻이 있다.** 못 찾은 뒤에 `/`를 다시 열면 사람이
-/// 지금 치고 있는 것이 화면에 나와야 한다. 순서를 뒤집으면 새 검색어를 치는
-/// 동안 지난 실패 메시지가 화면에 남는다.
+/// **프롬프트를 먼저 보는 것에 뜻이 있다.** 검색을 마친 뒤에 `/`를 다시 열면
+/// 사람이 지금 치고 있는 것이 화면에 나와야 한다. 순서를 뒤집으면 새 검색어를
+/// 치는 동안 지난 결과가 화면에 남는다.
 ///
-/// `buf`는 최소 **140바이트**여야 한다: `/` 하나 + needle 128 + `: not found`
-/// 열하나.
+/// **두 갈래를 가르는 것은 `findMatchCount()` 하나다.** `find_status`는 "방금
+/// 검색했다"만 말하고 성패를 모른다 — `vt_test`의 검사 44가 그 갈림을 본다.
+///
+/// **번호는 라이브러리가 준 값을 그대로 쓴다**(결정 6). `idx + 1`이고
+/// `total - idx`로 뒤집지 않는다 — 뒤집으면 off-by-one이 들어갈 자리가 하나
+/// 생기고, 그 증상은 "번호가 하나씩 어긋난다"라 조용하다.
+///
+/// **`findCurrentIndex()`가 null이면 번호를 안 붙이고 needle만 쓴다**
+/// (design 위험 1). 매치는 있는데 선택이 없는 경로이고, 그때 0이나 1을
+/// 지어내면 사람이 커서와 어긋난 번호를 보게 된다.
+///
+/// `buf`는 최소 **173바이트**여야 한다: `/` 하나 + needle 128 + ` [` 둘 +
+/// 숫자 20 + `/` 하나 + 숫자 20 + `]` 하나. `usize`가 최대 스무 자리다.
 fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
     const MISS = ": not found";
     if (screen.findNeedle()) |n| {
@@ -195,13 +211,24 @@ fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
         @memcpy(buf[1 .. 1 + n.len], n);
         return buf[0 .. 1 + n.len];
     }
-    if (screen.findMissed()) |n| {
-        buf[0] = '/';
-        @memcpy(buf[1 .. 1 + n.len], n);
-        @memcpy(buf[1 + n.len ..][0..MISS.len], MISS);
-        return buf[0 .. 1 + n.len + MISS.len];
+
+    const n = screen.findStatusNeedle() orelse return null;
+    buf[0] = '/';
+    @memcpy(buf[1 .. 1 + n.len], n);
+    const len = 1 + n.len;
+
+    const total = screen.findMatchCount();
+    if (total == 0) {
+        @memcpy(buf[len..][0..MISS.len], MISS);
+        return buf[0 .. len + MISS.len];
     }
-    return null;
+
+    const idx = screen.findCurrentIndex() orelse return buf[0..len];
+    // **`bufPrint`가 실패하면 needle만 남긴다.** 위의 산수대로면 일어나지
+    // 않지만, 버퍼 크기를 누가 줄였을 때 증상이 panic이 되지 않게 막는다.
+    const tail = std.fmt.bufPrint(buf[len..], " [{d}/{d}]", .{ idx + 1, total }) catch
+        return buf[0..len];
+    return buf[0 .. len + tail.len];
 }
 
 /// 한 프레임에 찍는 style/pixel 줄의 상한. 화면 전체에 색이 깔린 프로그램이
@@ -817,9 +844,11 @@ pub fn main(init: std.process.Init) !void {
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
         // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
         //
-        // 버퍼가 needle보다 **열두 칸** 크다. 앞의 `/` 하나와 뒤의
-        // `: not found` 열하나 때문이다(CS-M1).
-        var prompt_buf: [140]u8 = undefined;
+        // 버퍼가 needle보다 **마흔다섯 칸** 크다. 앞의 `/` 하나와, 뒤에 올 수
+        // 있는 것 중 **긴 쪽**인 ` [20/20]` 마흔넷 때문이다(SP-M1). `usize`가
+        // 최대 스무 자리라 숫자 둘이 마흔이고, ` [`·`/`·`]`가 넷이다.
+        // `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
+        var prompt_buf: [173]u8 = undefined;
         const prompt: ?Prompt = if (promptText(screen, &prompt_buf)) |t| .{
             .text = t,
             .rows = rows,
