@@ -691,9 +691,13 @@ SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
 # 셸이 되비춘 명령줄 `@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
 # 둘이므로 2 × 2 = 4다. **plan은 이것을 2로 적었고 그것이 틀렸다.**
 #
-# 넷이어도 검사의 뜻은 그대로다: `/`는 가장 최근 매치인 표적 2의 **출력줄**로
-# 가고, 그 줄은 글자가 `findme`뿐이라 아래의 줄 단위 yank가 정확히 여섯 자를
-# 준다. `n`은 그 위의 명령줄로 올라간다.
+# 넷이어도 이 첫 검색의 뜻은 그대로다: `/`는 가장 최근 매치인 표적 2의
+# **출력줄**로 가고, 그 줄은 글자가 `findme`뿐이라 아래의 줄 단위 yank가
+# 정확히 여섯 자를 준다.
+#
+# **아래의 `n` 판정은 이 자리를 그대로 이어받지 않는다.** 그 사이에 `y`가
+# 모드를 닫고 다시 열기 때문이고, 그때 커서가 어디에 서는지가 두 번째 검색의
+# 결과를 바꾼다 — 자세한 것은 그 절의 주석에 적었다.
 case "$SUBMIT" in
   *"matches=4"*) ;;
   *) report_failure "expected four matches, got: ${SUBMIT}" ;;
@@ -731,6 +735,26 @@ echo "the search reached scrollback and the yanked line was findme"
 # **판정.** n이 더 위의 매치로 간다. y가 모드를 닫았으므로 다시 들어간다 —
 # 그런데 copyExit이 검색 상태를 버렸으므로(design 결정 10) 검색부터 다시 한다.
 # **그 버림이 곧 이 판정의 대상이다.**
+#
+# **이 두 번째 검색은 첫 검색과 다른 매치에 선다. 그것이 정상이다**(2026-08-30에
+# 실측으로 밝혔다). 세 가지가 겹쳐서 그렇게 된다.
+#
+#   1. 첫 검색이 표적 2의 출력줄을 뷰포트 **맨 윗줄**로 올렸고, `copyExit`은
+#      뷰포트를 되돌리지 않는다.
+#   2. 그래서 다시 들어올 때 셸 커서가 화면 밖이고, `copyEnter`가 커서를
+#      `{0,0}`에 둔다(`vt.zig:545`) — 그 자리가 곧 직전에 섰던 매치다.
+#   3. `/`의 첫 이동은 **커서보다 위**를 요구하므로(`findStep`의 `above_only`)
+#      커서와 같은 줄인 그 매치는 자격이 없어 다음 것으로 넘어간다. vim의 `/`가
+#      커서 자리의 매치를 건너뛰는 것과 같다.
+#
+# 그래서 `/`는 표적 2의 **명령줄**(col=16)에 서고 `n`은 그 다음 매치인 표적 1의
+# **출력줄**(col=0)로 간다. 둘 사이에 `seq 100`의 출력 백 줄과 그 명령줄이
+# 있으므로 이동 폭이 1이 아니라 **102**다. **`n`이 매치를 건너뛴 것이 아니다** —
+# 건너뛴 것은 `/`이고 그것은 위 3의 의도된 동작이다.
+#
+# **col을 함께 판정하는 이유가 이것이다.** row 폭만 보면 "위로 갔다"까지만 알
+# 수 있어서 매치를 하나 건너뛰었는지가 안 갈린다. col은 그 줄이 명령줄인지
+# 출력줄인지를 정확히 말한다 — 16은 `@(none) ~# echo `의 길이다.
 echo "=== n walks to the older match ==="
 type_keys meta_l-shift-c
 sleep 2
@@ -742,6 +766,10 @@ sleep 3
 # 그 값만 찍으면 "0에서 0으로 갔다"가 되어 안 움직인 것처럼 읽힌다.
 # `scroll> offset`을 더하면 스크롤백 전체에서의 자리가 된다.
 ROW_FIRST=$(( $(scroll_field offset) + $(copy_value row) ))
+COL_FIRST="$(copy_value col)"
+if [ "$COL_FIRST" -ne 16 ]; then
+  report_failure "/ should land on target 2's command line (col 16), got col ${COL_FIRST}"
+fi
 type_keys n
 sleep 2
 if ! grep -aq 'terminal: find> next moved=true' "$LOG"; then
@@ -749,12 +777,16 @@ if ! grep -aq 'terminal: find> next moved=true' "$LOG"; then
   report_failure "n did not move to another match"
 fi
 ROW_SECOND=$(( $(scroll_field offset) + $(copy_value row) ))
+COL_SECOND="$(copy_value col)"
+if [ "$COL_SECOND" -ne 0 ]; then
+  report_failure "n should land on target 1's output line (col 0), got col ${COL_SECOND}"
+fi
 # **판정.** n은 과거 방향으로 간다(design 결정 4). 같거나 커지면 방향이
 # 뒤집혔거나 안 움직인 것이고, moved=true만으로는 그것을 못 가른다.
 if [ "$ROW_SECOND" -ge "$ROW_FIRST" ]; then
   report_failure "n went down or stayed (row ${ROW_FIRST} -> ${ROW_SECOND}), expected up"
 fi
-echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND})"
+echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND}, col ${COL_FIRST} -> ${COL_SECOND})"
 
 # ── 검사 16: 매치 하이라이트 (CS-M0) ────────────────────────────────────
 #
