@@ -149,5 +149,37 @@ pub fn main() !void {
     }
     std.debug.print("hangul_test: 겹받침과 복합 모음은 한 겹만 벗는다 OK\n", .{});
 
+    // ── 7. 오토마타는 그릴 수 없는 상태를 만들지 않는다 (design 결정 3) ─
+    //
+    // **검사 2와 짝이다.** 검사 2는 "그런 상태는 그릴 것이 없다"만 말하고
+    // 이 검사가 "오토마타가 그런 상태를 애초에 안 만든다"를 말한다. 둘이
+    // 함께 있어야 모아주기를 뺀 것이 안전하다는 근거가 선다.
+    //
+    // 두벌식 키 서른셋을 3-순열로 전부 먹이고 **매 단계**를 본다. 마지막
+    // 상태만 보면 안 된다 — 중간에 한 번 지나가는 것만으로도 화면에서
+    // 글자가 사라진다.
+    //
+    // **셋이면 충분한 이유가 있다.** 조합 상태는 (초, 중, 종) 셋이라
+    // 넷째 키부터는 앞의 상태가 되풀이된다.
+    const keys = "rRseEfaqQtTdwWczxvgkoiOjpuPhynbml";
+    var bad: usize = 0;
+    var seen: usize = 0;
+    for (keys) |k1| for (keys) |k2| for (keys) |k3| {
+        var s = hangul.Syllable{};
+        for ([_]u8{ k1, k2, k3 }) |ch| {
+            s = hangul.feed(s, hangul.dubeol(ch).?).buf;
+            seen += 1;
+            if (!s.isEmpty() and s.codepoint() == null) bad += 1;
+        }
+    };
+    if (bad != 0) {
+        std.debug.print("FAIL: {d}단계 중 {d}번 그릴 수 없는 상태가 됐다\n", .{ seen, bad });
+        return error.UnreachableStateReached;
+    }
+    std.debug.print(
+        "hangul_test: 3-순열 {d}단계에서 그릴 수 없는 상태가 0번 OK\n",
+        .{seen},
+    );
+
     std.debug.print("PASS\n", .{});
 }
