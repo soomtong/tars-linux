@@ -1,37 +1,39 @@
-# HANDOFF: Carryover Cleanup이 끝났다 — 다음 서브프로젝트는 함께 고른다
+# HANDOFF: Hangul Input이 진행 중이다 — HI-M0이 끝났고 다음은 HI-M1
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Carryover Cleanup(CC-M0)을 2026-08-31에 시작해
-같은 날 끝냈다.** 이월 숙제 셋을 실제로 없앤 milestone이고, **게이트가 여덟
-체인 3/3(16분 48.91초)으로 통과했다.**
+`main`, working tree 깨끗함. **Hangul Input(HI)을 2026-08-31에 착수했고 HI-M0을
+같은 날 끝냈다.** 사용자가 이월 숙제에서 CJK 입력기를 골랐다.
 
-없앤 것 셋.
+**HI-M0은 재고 세우는 milestone이었다.** 게스트의 동작이 하나도 안 바뀌었고
+게이트 체인도 여덟 그대로다. **게이트는 3/3으로 16분 37.07초** — GL-M3의
+기준선(16분 01~11초)과 CC-M0(16분 48.91초) 사이라 잡음 안이다. 남은 것은 둘이다.
 
-1. 커널 `.config`에서 **`ACPI_EC`와 `PNP_DEBUG_MESSAGES`를 껐다.** 게스트에게
-   직접 물어 EC가 없다는 것을 확인하고 껐다.
-2. **`terminal/sanity/`의 도구 둘을 지웠다.** 그 도구만 쓰던
-   `vendor/libghostty-vt/`(98MB) 빌드도 함께 없앴다.
-3. **`Hanme_8x4x4.ttf`(451,512바이트)를 지웠다.**
+1. **`terminal/src/hangul.zig`가 두벌식으로 한글을 조합한다.** 자모 표 셋 ·
+   조합 상태 · 자판 표 · `feed` · `erase`.
+2. **`hangul_test`가 `zig build test`에 붙었다.** 검사 일곱이고 호스트에서
+   돈다 — **게이트 16분이 아니라 9.5초로 오토마타를 돌려볼 수 있다.**
 
-**이번 milestone만 편집도 Claude Code가 했다.** 사용자가 "배우는 것이 적으니
-전부 네가 써라"라고 정했고 자는 동안 진행했다. **다음 milestone은 원래
-규율로 돌아간다** — 구현 파일 편집은 사용자가 한다.
+**재서 알아낸 것 중 가장 큰 것은 빨간불이다.** `sendkey lang1`이 게스트에 안
+닿는다 — 아래 "HI-M0이 실행으로 증명한 것" 절의 1번.
 
-**진행 중인 서브프로젝트가 없다.** 다음 것은 아래 "이월 숙제"에서 사용자와
-함께 고른다.
+**다음은 HI-M1이다.** Shift+Space 하나로 한/영을 바꾸고, 조합 중인 글자를 커서
+자리에 그리고, 확정된 음절을 PTY로 보낸다. **게이트 체인 `hangul/check.sh`가
+거기서 생긴다.** plan은 그 시점에 새로 쓴다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -8
-#   Close out CC-M0                                    ← 이 커밋
-#   Remove the sanity tools and the library only they used
-#   Turn off ACPI_EC and PNP_DEBUG_MESSAGES
-#   Plan CC-M0
-#   Design the carryover cleanup
-#   Mark four design docs finished that finished weeks ago
-#   Record that render work is deferred, not pending
-#   Close out RC-M0
+git log --oneline -10
+#   Close out HI-M0                                    ← 이 커밋
+#   Prove the automaton never reaches an undrawable state
+#   Remove one jamo at a time on backspace
+#   Join compound jamo and carry the final over to the next syllable
+#   Compose a syllable from initial, vowel and final
+#   Add the dubeolsik layout table
+#   Add the hangul jamo tables and the composing syllable
+#   Plan HI-M0
+#   Design the hangul input subproject
+#   Add a README with how to see the screen locally
 ```
 
 **design과 plan을 코드보다 먼저 커밋했다.** GL-M2·M3이 세운 순서 그대로다.
@@ -40,21 +42,80 @@ git log --oneline -8
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
 
-**다음 세션이 할 첫 일: 아래 "이월 숙제"에서 다음 서브프로젝트를 고른다.**
-전체 비전에서 무엇이 남았는지는 boot foundation design의 "배경" 절에 있다.
-2026-08-31에 사용자에게 낸 후보 넷은 **CJK 입력기 · 실머신 USB 부팅 · 작은
-정리 묶음(이번에 한 것) · 부분 갱신**이었다.
+**이 서브프로젝트는 편집도 Claude Code가 한다.** 사용자가 HI-M0의 Task 5에서
+"한글 입력기를 Swift로 만들어 본 적이 있으니 네가 대신 해 달라"고 정했다.
+CC-M0의 예외와 같은 종류이고 이유만 다르다 — 그때는 "배우는 것이 적어서"였다.
+**CC-M0의 규율을 그대로 쓴다**: 매 편집 뒤 `git diff --stat`으로 더한 줄과
+지운 줄을 따로 세고, 지우는 편집은 `git diff | grep '^-'`로 내용을 직접 읽는다.
+**`input.zig`·`vt.zig`·`main.zig`처럼 이미 있는 파일을 건드릴 때는 diff를
+사용자에게 보여 준다** — 그쪽은 한글 이야기만이 아니기 때문이다.
 
-**그중 실머신 쪽이 같은 날 커졌다.** 사용자가 "TARS는 노트북 사용을 포함한다"로
-정했고, 그 기준으로 보면 지금 커널은 노트북에서 못 뜬다 — 이월 숙제의 그
-항목과 `docs/decisions/project_target_hardware.md`를 볼 것. **게이트가 그
-방향을 검증할 수 없다는 것이 그 일의 성질이다.**
+- design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
+  (결정 열 · milestone 넷 · "HI-M0이 실측한 것" 절)
+- plan: `.../plans/2026-08-31-tars-hangul-input-hi-m0.md`
+- **기억: `docs/decisions/project_hangul_input.md`**
+- **참고 코드: `/Users/dp/Repository/_input-method/PatInputMethod`**(사용자가
+  만든 macOS 입력기 Patal). 옮겨 올 것은 `macOS/Patal/Layouts/`의 자판 셋과
+  `StateMachine/`의 오토마타 모양이다.
 
-**CJK 입력기는 아래 층이 이미 서 있다** — `font.zig`가 한글을 폰트의 advance로
-재서 2칸으로 처리하고(`font_test`의 `한`·`가` 검사), unifont에 완성형 11172자가
-전부 있다. **그리는 것은 되고 치는 것이 없다.**
+## HI-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-**직전 서브프로젝트가 Carryover Cleanup(CC-M0, 2026-08-31)이다.**
+**1. `sendkey lang1`은 QEMU가 이름만 받고 조용히 버린다.** monitor에
+`sendkey lang1`·`lang2`를 넣으면 **에러가 없는데** `sendkey hangul`·
+`nosuchkey`는 `invalid parameter`를 낸다 — **둘이 유효한 QKeyCode라는 증명이
+이것이다.** 그런데 게스트에는 아무 줄도 안 온다. 대조군 `a`(30)와
+`shift`(42)와 `caps_lock`(58)은 전부 온다.
+
+**`atkbd: Unknown key pressed` 경고조차 없다는 것이 핵심이다.** 스캔코드가
+도착했는데 커널이 번역을 못 한 것이라면 그 경고가 뜨고 `setkeycodes`로 고칠
+길이 있다. 경고가 없으므로 **스캔코드가 QEMU를 떠나지 않았다.**
+
+**"에러를 안 내면서 아무 일도 안 한다"가 가장 나쁜 실패다.** 그래서 **한/영
+키는 게이트로 검증할 수 없고** HI-M3의 모양이 바뀌었다(design의 HI-M3 절).
+**안 해 본 우회가 하나 있다** — `-device usb-kbd`로 바꾸면 USB HID의 LANG1로
+갈 수 있는데 게스트 커널의 `USB_SUPPORT`가 꺼져 있어 실머신 config 일과 묶인다.
+
+**2. `sendkey <key> <hold_ms>`는 오차 4밀리초 안이다.** `shift 50`이
+52,543µs, `shift 500`이 499,979µs, `caps_lock 500`이 503,997µs다. **0.3초
+문턱을 판정하는 데 넉넉하고, 그래서 tap-vs-hold를 게이트가 볼 수 있다.**
+
+**3. evdev의 시각은 이미 손에 있었다.** `readKeys`가 `struct_input_event`를
+통째로 읽고 있고(`input.zig:752`) `ev.time.tv_sec`·`ev.time.tv_usec`을 버리고
+있었을 뿐이다. 컨테이너에서 그 이름으로 컴파일되는 것과 `@sizeOf`가 24인 것을
+확인했다. **커널이 찍은 시각이라 poll 루프가 늦어져도 안 흔들린다.**
+
+**4. 호환 자모도 두 칸이다.** `ㄷ`(9×9) · `ㅏ`(4×14) · `ㄸ`(11×9)이 전부
+`cell_width=16`이고 완성형과 같다. **조합하는 내내 폭이 안 바뀌므로** HI-M1이
+preedit을 그릴 때 폭을 조건부로 재지 않아도 된다 — 폭이 한 칸과 두 칸을 오가면
+조합할 때마다 커서 뒤의 글자가 밀렸다 당겨진다.
+
+**5. 첫가끝 글리프가 있어도 모아주기는 안 된다.** U+1103(초성 ㄷ)과
+U+11AB(종성 ㄴ)이 **둘 다 9×9에 `x_off=+4`**로 호환 자모와 똑같은 크기·자리다.
+조합용 폰트라면 초성은 왼쪽 위, 종성은 아래여야 하는데 unifont는 셋을 전부 셀
+가운데의 같은 조각으로 그린다. **"글리프가 있다"와 "겹쳐 그릴 수 있다"는
+다르다.** design 결정 3(모아주기 제외)의 근거가 이것이다.
+
+**6. 검사 둘이 짝이어야 근거가 선다.** `hangul_test`의 검사 2가 "그릴 수 없는
+상태는 코드포인트가 없다"를, 검사 7이 **"오토마타가 그 상태를 애초에 안
+만든다"**를 본다 — 두벌식 키 서른셋의 3-순열 **107,811단계에서 0번**이다
+(33³ × 3). 하나만 있으면 모아주기를 뺀 것이 안전하다는 근거가 안 선다.
+
+**7. 표를 옮겨 적으면서 두 번 틀렸고 코드가 맞았다.** plan을 쓰는 동안 `ghk`를
+"과"로 적었는데 두벌식에서 `g`는 ㄱ이 아니라 **ㅎ**이라 "화"가 맞다. 처방은
+`dubeol`에 `comptime` 앵커 넷을 건 것이고 `input.zig:98`이 `keymap`에 같은 못을
+박았다. **자판을 셋 더 옮기는 HI-M2가 같은 위험을 셋 더 진다.**
+
+**8. Task를 여덟으로 가른 것이 값을 했다.** 표 → 조합 상태 → 자판 → 기본 전이
+→ 겹자모 → 지우기 → 불변식 순서라, 뒤 단계가 틀렸을 때 앞 단계를 의심할 필요가
+없었다. **Task 5의 검사 여덟이 Task 6 뒤에도 한 글자 안 바뀌고 통과한 것**이
+겹자모를 넣으면서 앞 갈래를 안 건드렸다는 증거다.
+
+**9. 부분 구현으로 통과할 수 없는 검사를 plan에 적었다가 잡았다.** Task 5에
+`rkrk`("가가")를 넣었는데 그것은 받침 넘기기가 필요해서 Task 6 전에는 `각ㅏ`가
+나온다. **plan을 다시 읽는 자리에서 잡혔고 그 자리가 값을 했다** — 실행 중에
+만났다면 "오토마타가 틀렸나"를 먼저 의심했을 것이다.
+
+## 그 앞의 서브프로젝트 — Carryover Cleanup (CC-M0, 2026-08-31)
 
 - design: `docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`
   ("CC-M0이 실측한 것" 절에 값과 결론이 전부 있다)
@@ -1156,7 +1217,25 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 이월 숙제
 
-**진행 중인 서브프로젝트가 없다. 다음 것을 여기서 고른다.**
+**Hangul Input이 진행 중이다.** 아래는 그것과 별개로 남아 있는 것들이고, HI가
+끝난 뒤에 다시 고른다.
+
+**HI가 스스로 만든 숙제 넷** (design 비목표에서 왔다).
+
+- [ ] **기호 확장.** Patal의 `SymbolExtensionConfig` — 신세벌의 `ㅇ`+`ㄱ`/`ㅈ`/
+      `ㅂ` 트리거와 공세벌의 오른쪽 `ㅗ`/`ㅜ` 2단 조회다. 자판 배열 자체와
+      성질이 다른 층이라 자판 넷이 먼저 서야 얹을 자리가 생긴다.
+- [ ] **Patal의 나머지 trait들.** `아래아` · `수정기호` · `빠른마침표` ·
+      `옵션라틴` · `ESC라틴` · `두줄숫자` · `글자단위삭제`. HI는 자판의 기본
+      배열만 옮긴다.
+- [ ] **copy mode 검색창의 한글 입력.** `Copy.find_char`가 `u8` 하나를
+      나르므로(`input.zig:220`) 한글을 담을 수 없다. 넓히는 것은 별개의 일이다.
+- [ ] **입력기 상태를 화면에 보여 주기.** 지금 한/영 중 어느 쪽인지, 어느
+      자판인지, CapsLock이 켜져 있는지를 보여 주는 자리가 없다. 조합 중인
+      글자가 뜨는 것이 한글 상태의 유일한 신호다.
+
+**그 앞부터 있던 것들.**
+
 - [ ] **부분 갱신(dirty 추적) — 미룬다.** **사용자가 2026-08-30에 "당장 성능
       문제는 없다"로 정했다.** RC-M0이 이것을 렌더를 줄이는 유일한 길로
       좁혔지만(프레임의 84.7%가 `fill`이고 비용이 픽셀 수에 정비례하므로),
@@ -1264,6 +1343,11 @@ docker run --rm -v "$PWD":/workspace \
 milestone 기준 번호가 스무 줄 넘게 밀렸다.** **다음 milestone도 끝낼 때 이
 절을 다시 재서 적는다.**
 
+**HI-M0은 기존 파일의 번호를 하나도 안 밀었다.** 새 파일 둘(`hangul.zig` ·
+`hangul_test.zig`)을 더하고 `build.zig`에 열여섯 줄을 넣은 것이 전부이며,
+`input.zig`·`vt.zig`·`main.zig`는 한 글자도 안 건드렸다. **HI-M1이 그 셋을
+전부 건드리므로 그때 다시 잰다.**
+
 - `terminal/src/input.zig` — **CS-M0도 CS-M1도 안 건드렸다.** 줄 번호는 CN-M1
   기준 그대로다.
   - `:28` `keymap` · `:160` `Action` · `:184` `Copy` `union(enum)`(variant
@@ -1325,6 +1409,28 @@ milestone 기준 번호가 스무 줄 넘게 밀렸다.** **다음 milestone도 
     copy 배선 switch(**`else`가 없다**)
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다.**
+- **`terminal/src/hangul.zig` — HI-M0이 만들었다. 343줄.** 시스템 콜도
+  `vt.zig`도 `drm.zig`도 안 본다(design 결정 1). **아직 아무도 이 파일을 안
+  부른다** — HI-M1이 `input.zig`에서 부르기 시작한다.
+  - **표**: `:16` `CHO`(19) · `:22` `JUNG`(21) · `:32` `JONG`(28, **0번 칸은
+    자리만 채운다**) · `:45` 표 셋의 `comptime` 앵커
+  - **상태**: `:61` `Syllable`(**인덱스를 담는다. `jong`의 null이 "받침
+    없음"이고 0을 안 쓴다**) · `:87` `codepoint`(**못 그리는 조합이면
+    null이다 — 초성+종성 · 중성+종성 · 종성만. 빈 상태도 null이고 그 성질을
+    `feedConsonant`가 쓴다**)
+  - **자판**: `:109` `Jamo`(**variant가 둘뿐이다. HI-M2가 넓힌다**) ·
+    `:127` `dubeol` · `:171` 자판 표의 `comptime` 앵커 넷
+  - **겹자모**: `:183` `joinVowel` · `:194` `splitVowel`(**앞 모음만 준다**) ·
+    `:204` `joinFinal` · `:222` `splitFinal`(**앞뒤가 둘 다 필요하다**) ·
+    `:242` `finalToInitial`(**겹받침은 여기 안 온다**)
+  - **오토마타**: `:252` `Step` · `:264` `feed`(**switch에 `else`가 없다**) ·
+    `:271` `feedConsonant` · `:291` `feedVowel`(**받침 넘기기가 맨 앞이다**) ·
+    `:330` `erase`(**null이 "조합 중이 아니다"**)
+- **`terminal/src/hangul_test.zig` — 검사 일곱.** `typeAll`·`expectTyped`가
+  파일 위쪽에 있고, **`main`이 `std.process.Init`를 안 받는다**(파일도 폰트도
+  안 읽어서 `input_test`와 같은 모양이다). 검사 2와 검사 7이 **짝이다** —
+  하나는 "그릴 수 없는 상태는 코드포인트가 없다", 다른 하나는 "오토마타가 그
+  상태를 안 만든다"(3-순열 107,811단계).
 - `terminal/src/input_test.zig` — **CS-M0도 CS-M1도 안 건드렸다.** `:16` `expect` ·
   `:59` `expectCopy`(`:65`가 `std.meta.eql`을 쓴다) · `:497~` 검사 4의 "모르는
   키" 목록 · `:593~` CM-M2의 검사 11~13 · `:637~` CN-M0의 검사 14~16 ·
@@ -1389,7 +1495,8 @@ feedback 셋과 **`feedback_plain_korean`(글쓰기 규칙 — 2026-08-28에 강
 `project_copy_mode`, `project_gate_latency`, `project_input_policy`,
 `project_terminal_rendering`, `project_guest_environment`,
 `project_gate_chain_composition`, `project_build_host_arch`,
-`project_kernel_config`, `project_zig_c_uapi_rule`을 먼저 읽을 것.
+`project_kernel_config`, `project_zig_c_uapi_rule`,
+**`project_hangul_input`(진행 중)**을 먼저 읽을 것.
 
 ## IP-M2가 남긴 것 (그대로 이월)
 

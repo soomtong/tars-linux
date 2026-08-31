@@ -93,8 +93,12 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
   커널 config 둘 끄기, sanity 도구 둘과 그 도구만 쓰던 98MB 산출물, 옛 폰트
   파일)**. design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트가 없다**(2026-08-31 기준). 다음 것은 `HANDOFF.md`의
-  "이월 숙제"에서 사용자와 함께 고른다.
+- **진행 중인 서브프로젝트: Hangul Input(HI)**. 2026-08-31 착수, HI-M0 완료.
+  한글 자판 넷과 영문 자판 둘을 싣고 조합 중인 글자를 커서 자리에 그린다.
+  design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
+  `docs/decisions/project_hangul_input.md`. **이 서브프로젝트만 편집도 Claude
+  Code가 한다**(아래 "진행 방식"의 2번에 대한 예외 — 사용자가 macOS용 한글
+  입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고 정했다).
 - **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**
   2026-08-31에 낡은 것 넷(BF-M1 · Config Persistence · Power Management ·
   Hardware Discovery)을 한꺼번에 고쳤다 — 넷 다 "중간에 멈춘 것"이 아니라
