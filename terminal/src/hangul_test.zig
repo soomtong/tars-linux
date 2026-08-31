@@ -40,5 +40,23 @@ pub fn main() !void {
     }
     std.debug.print("hangul_test: 모아주기 상태 셋은 그릴 것이 없다 OK\n", .{});
 
+    // ── 3. 두벌식 표 ─────────────────────────────────────────────────
+    //
+    // **`jong`이 null인 키를 함께 본다.** ㄸ·ㅃ·ㅉ은 받침이 될 수 없고,
+    // 그것을 빠뜨리면 "가ㄸ" 같은 자리에서만 증상이 나온다.
+    if (hangul.dubeol('E').?.consonant.jong != null) {
+        std.debug.print("FAIL: ㄸ이 받침이 될 수 있다고 되어 있다\n", .{});
+        return error.WrongFinal;
+    }
+    if (hangul.dubeol('R').?.consonant.jong.? != 2) {
+        std.debug.print("FAIL: ㄲ의 받침 인덱스가 2가 아니다\n", .{});
+        return error.WrongFinal;
+    }
+    if (hangul.dubeol('1') != null) {
+        std.debug.print("FAIL: 숫자 키가 자모를 냈다\n", .{});
+        return error.NotAJamoKey;
+    }
+    std.debug.print("hangul_test: 두벌식 표 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

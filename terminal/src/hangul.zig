@@ -98,3 +98,83 @@ pub const Syllable = struct {
         return 0xAC00 + (@as(u21, c) * 21 + @as(u21, v)) * 28 + j;
     }
 };
+
+/// 자판이 키 하나에서 뽑아낸 자모.
+///
+/// **variant가 둘뿐인 것이 지금 쓰는 전부다.** 세벌식은 초성 전용·종성 전용
+/// 키가 있고 신세벌식은 조합 상태에 따라 중성과 종성이 갈리므로, HI-M2에서
+/// 이 union이 넓어진다. **미리 만들어 두지 않는 이유는** `feed`의 switch가
+/// `else` 없이 닫혀 있어서 variant를 더하는 순간 컴파일러가 배선할 자리를
+/// 알려주기 때문이다(CM-M0부터 지켜 온 규율).
+pub const Jamo = union(enum) {
+    /// 자음 하나. **두벌식은 같은 키가 초성도 종성도 되므로 둘을 함께 나른다.**
+    /// `jong`이 null인 것은 ㄸ·ㅃ·ㅉ 셋뿐이다 — 받침이 될 수 없는 자음이다.
+    consonant: struct { cho: u5, jong: ?u5 },
+    /// 모음 하나. 중성 인덱스다.
+    vowel: u5,
+};
+
+fn cons(cho: u5, jong: ?u5) Jamo {
+    return .{ .consonant = .{ .cho = cho, .jong = jong } };
+}
+
+/// 두벌식(KS X 5002). **인자는 쿼티 배치의 문자다.**
+///
+/// `'r'`은 "r이라는 글자"가 아니라 **"쿼티에서 r이 있는 자리의 키"**를 부르는
+/// 이름이다. Patal의 자판 맵이 쓰는 규약과 같고(`KeyCodeMapper.swift:11`),
+/// TARS에서 그 문자를 만드는 것은 `input.zig`의 `keymap` 배열(`:28`)이다.
+/// **그래서 한글 자판은 영문 배열이 쿼티든 드보락이든 안 흔들린다.**
+pub fn dubeol(ch: u8) ?Jamo {
+    return switch (ch) {
+        // 닿소리 열아홉 — {초성 인덱스, 종성 인덱스}
+        'r' => cons(0, 1), // ㄱ
+        'R' => cons(1, 2), // ㄲ
+        's' => cons(2, 4), // ㄴ
+        'e' => cons(3, 7), // ㄷ
+        'E' => cons(4, null), // ㄸ — 받침이 될 수 없다
+        'f' => cons(5, 8), // ㄹ
+        'a' => cons(6, 16), // ㅁ
+        'q' => cons(7, 17), // ㅂ
+        'Q' => cons(8, null), // ㅃ
+        't' => cons(9, 19), // ㅅ
+        'T' => cons(10, 20), // ㅆ
+        'd' => cons(11, 21), // ㅇ
+        'w' => cons(12, 22), // ㅈ
+        'W' => cons(13, null), // ㅉ
+        'c' => cons(14, 23), // ㅊ
+        'z' => cons(15, 24), // ㅋ
+        'x' => cons(16, 25), // ㅌ
+        'v' => cons(17, 26), // ㅍ
+        'g' => cons(18, 27), // ㅎ
+        // 홀소리 열넷 — 겹모음은 키가 없고 조합으로 만든다
+        'k' => .{ .vowel = 0 }, // ㅏ
+        'o' => .{ .vowel = 1 }, // ㅐ
+        'i' => .{ .vowel = 2 }, // ㅑ
+        'O' => .{ .vowel = 3 }, // ㅒ
+        'j' => .{ .vowel = 4 }, // ㅓ
+        'p' => .{ .vowel = 5 }, // ㅔ
+        'u' => .{ .vowel = 6 }, // ㅕ
+        'P' => .{ .vowel = 7 }, // ㅖ
+        'h' => .{ .vowel = 8 }, // ㅗ
+        'y' => .{ .vowel = 12 }, // ㅛ
+        'n' => .{ .vowel = 13 }, // ㅜ
+        'b' => .{ .vowel = 17 }, // ㅠ
+        'm' => .{ .vowel = 18 }, // ㅡ
+        'l' => .{ .vowel = 20 }, // ㅣ
+        else => null,
+    };
+}
+
+// 표를 옮겨 적을 때 사람이 틀리는 자리에 못을 박는다. **plan을 쓰는 동안
+// 실제로 두 번 틀렸다** — `g`를 ㄱ으로 읽어 `ghk`를 "과"로 적었는데 `g`는
+// ㅎ이라 "화"가 맞다. 아래 넷은 그 종류의 착각이 컴파일을 통과하지 못하게 한다.
+comptime {
+    if (CHO[dubeol('r').?.consonant.cho] != 'ㄱ')
+        @compileError("dubeol: r must be the initial of GIYEOK");
+    if (CHO[dubeol('g').?.consonant.cho] != 'ㅎ')
+        @compileError("dubeol: g must be the initial of HIEUH");
+    if (JUNG[dubeol('k').?.vowel] != 'ㅏ')
+        @compileError("dubeol: k must be the vowel A");
+    if (JUNG[dubeol('l').?.vowel] != 'ㅣ')
+        @compileError("dubeol: l must be the vowel I");
+}
