@@ -114,5 +114,40 @@ pub fn main() !void {
     try expectTyped("dkswj", "안저");
     try expectTyped("Rk", "까");
 
+    // ── 6. Backspace ─────────────────────────────────────────────────
+    //
+    // `단`을 세 번 지운다: 단 → 다 → ㄷ → 빈 상태. **그다음 한 번 더 지우면
+    // null이고 그것이 "조합 중이 아니다"**이며, 그때 부르는 쪽이 DEL을 보낸다.
+    var b = hangul.Syllable{ .cho = 3, .jung = 0, .jong = 4 };
+    const back = [_]?u21{ '다', 'ㄷ', null };
+    for (back) |want| {
+        const next = hangul.erase(b) orelse {
+            std.debug.print("FAIL: 조합 중인데 erase가 null을 냈다\n", .{});
+            return error.UnexpectedEnd;
+        };
+        const got = next.codepoint();
+        if (!std.meta.eql(got, want)) {
+            std.debug.print("FAIL: erase -> {?d}, want {?d}\n", .{ got, want });
+            return error.WrongErase;
+        }
+        b = next;
+    }
+    if (hangul.erase(b) != null) {
+        std.debug.print("FAIL: 빈 상태에서 erase가 null이 아니다\n", .{});
+        return error.UnexpectedErase;
+    }
+    std.debug.print("hangul_test: 단 -> 다 -> ㄷ -> 빈 상태 -> null OK\n", .{});
+
+    // 겹자모는 **한 겹만** 벗는다. 앉 → 안, 과 → 고.
+    if (hangul.erase(.{ .cho = 11, .jung = 0, .jong = 5 }).?.codepoint().? != '안') {
+        std.debug.print("FAIL: 앉을 지웠는데 안이 안 나온다\n", .{});
+        return error.WrongErase;
+    }
+    if (hangul.erase(.{ .cho = 0, .jung = 9 }).?.codepoint().? != '고') {
+        std.debug.print("FAIL: 과를 지웠는데 고가 안 나온다\n", .{});
+        return error.WrongErase;
+    }
+    std.debug.print("hangul_test: 겹받침과 복합 모음은 한 겹만 벗는다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

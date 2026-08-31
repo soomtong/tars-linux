@@ -321,3 +321,23 @@ fn feedVowel(buf: Syllable, v: u5) Step {
     // 뺐으므로 이 상태는 그릴 수 있다(design 결정 3의 표).
     return .{ .commit = buf.codepoint(), .buf = .{ .jung = v } };
 }
+
+/// Backspace. 조합 중이면 **자모를 하나** 뺀다(design 결정 6).
+///
+/// **null은 "조합 중이 아니다"라는 뜻이다.** 그때는 부르는 쪽이 지금처럼
+/// DEL(0x7F)을 PTY로 보낸다. 음절을 통째로 지우는 것은 Patal의 `글자단위삭제`
+/// trait이고 안 옮긴다(design 비목표).
+pub fn erase(buf: Syllable) ?Syllable {
+    if (buf.jong) |j| {
+        if (splitFinal(j)) |pair| {
+            return .{ .cho = buf.cho, .jung = buf.jung, .jong = pair.head };
+        }
+        return .{ .cho = buf.cho, .jung = buf.jung };
+    }
+    if (buf.jung) |v| {
+        if (splitVowel(v)) |head| return .{ .cho = buf.cho, .jung = head };
+        return .{ .cho = buf.cho };
+    }
+    if (buf.cho != null) return .{};
+    return null;
+}
