@@ -103,5 +103,16 @@ pub fn main() !void {
     try expectTyped("rkk", "가ㅏ");
     try expectTyped("gksrmf", "한글");
 
+    // ── 5. 겹자모와 받침 넘기기 ───────────────────────────────────────
+    //
+    // **여섯이 서로 다른 갈래를 밟는다.** 복합 모음 · ㅡㅣ · 홑받침 넘기기 ·
+    // 겹받침 만들기 · 겹받침 넘기기 · 쌍자음.
+    try expectTyped("rhk", "과");
+    try expectTyped("rml", "긔");
+    try expectTyped("dksk", "아나");
+    try expectTyped("dkswrj", "앉거");
+    try expectTyped("dkswj", "안저");
+    try expectTyped("Rk", "까");
+
     std.debug.print("PASS\n", .{});
 }

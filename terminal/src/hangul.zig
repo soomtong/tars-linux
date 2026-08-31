@@ -179,6 +179,75 @@ comptime {
         @compileError("dubeol: l must be the vowel I");
 }
 
+/// 복합 모음. (앞, 뒤) → 합친 것. 안 되면 null.
+fn joinVowel(a: u5, b: u5) ?u5 {
+    return switch (a) {
+        8 => switch (b) { 0 => 9, 1 => 10, 20 => 11, else => null }, // ㅗ+ㅏㅐㅣ
+        13 => switch (b) { 4 => 14, 5 => 15, 20 => 16, else => null }, // ㅜ+ㅓㅔㅣ
+        18 => switch (b) { 20 => 19, else => null }, // ㅡ+ㅣ = ㅢ
+        else => null,
+    };
+}
+
+/// 복합 모음의 **앞 모음만** 준다. 홑모음이면 null.
+/// **뒤 모음은 쓰는 자리가 없어서 안 만든다** — `erase`가 앞만 남기기 때문이다.
+fn splitVowel(v: u5) ?u5 {
+    return switch (v) {
+        9, 10, 11 => 8, // ㅘㅙㅚ → ㅗ
+        14, 15, 16 => 13, // ㅝㅞㅟ → ㅜ
+        19 => 18, // ㅢ → ㅡ
+        else => null,
+    };
+}
+
+/// 겹받침. (앞, 뒤) → 합친 것. 안 되면 null.
+fn joinFinal(a: u5, b: u5) ?u5 {
+    return switch (a) {
+        1 => switch (b) { 19 => 3, else => null }, // ㄱ+ㅅ = ㄳ
+        4 => switch (b) { 22 => 5, 27 => 6, else => null }, // ㄴ+ㅈㅎ
+        8 => switch (b) { // ㄹ
+            1 => 9, 16 => 10, 17 => 11, 19 => 12,
+            25 => 13, 26 => 14, 27 => 15,
+            else => null,
+        },
+        17 => switch (b) { 19 => 18, else => null }, // ㅂ+ㅅ = ㅄ
+        else => null,
+    };
+}
+
+const FinalPair = struct { head: u5, tail: u5 };
+
+/// 겹받침을 (앞, 뒤)로 가른다. 홑받침이면 null.
+/// **여기는 앞뒤가 둘 다 필요하다** — 받침 넘기기가 앞은 남기고 뒤만 넘긴다.
+fn splitFinal(j: u5) ?FinalPair {
+    return switch (j) {
+        3 => .{ .head = 1, .tail = 19 }, // ㄳ
+        5 => .{ .head = 4, .tail = 22 }, // ㄵ
+        6 => .{ .head = 4, .tail = 27 }, // ㄶ
+        9 => .{ .head = 8, .tail = 1 }, // ㄺ
+        10 => .{ .head = 8, .tail = 16 }, // ㄻ
+        11 => .{ .head = 8, .tail = 17 }, // ㄼ
+        12 => .{ .head = 8, .tail = 19 }, // ㄽ
+        13 => .{ .head = 8, .tail = 25 }, // ㄾ
+        14 => .{ .head = 8, .tail = 26 }, // ㄿ
+        15 => .{ .head = 8, .tail = 27 }, // ㅀ
+        18 => .{ .head = 17, .tail = 19 }, // ㅄ
+        else => null,
+    };
+}
+
+/// 종성 인덱스를 초성 인덱스로. **겹받침은 여기 안 온다** — `splitFinal`이
+/// 먼저 갈라서 뒷자만 넘긴다. 그리고 종성에는 ㄸ·ㅃ·ㅉ이 없으므로 초성
+/// 4·8·13은 이 함수에서 안 나온다.
+fn finalToInitial(j: u5) ?u5 {
+    return switch (j) {
+        1 => 0, 2 => 1, 4 => 2, 7 => 3, 8 => 5, 16 => 6, 17 => 7,
+        19 => 9, 20 => 10, 21 => 11, 22 => 12, 23 => 14, 24 => 15,
+        25 => 16, 26 => 17, 27 => 18,
+        else => null,
+    };
+}
+
 /// 자모 하나를 먹인 결과.
 pub const Step = struct {
     /// 확정돼서 PTY로 갈 글자. 없으면 null이다.
@@ -200,8 +269,13 @@ pub fn feed(buf: Syllable, jamo: Jamo) Step {
 }
 
 fn feedConsonant(buf: Syllable, cho: u5, jong: ?u5) Step {
-    if (buf.jong != null) {
-        // Task 6이 여기에 겹받침을 넣는다.
+    if (buf.jong) |cur| {
+        // 받침 자리가 찼으면 겹받침이 되는지 본다.
+        if (jong) |j| {
+            if (joinFinal(cur, j)) |merged| {
+                return .{ .buf = .{ .cho = buf.cho, .jung = buf.jung, .jong = merged } };
+            }
+        }
     } else if (buf.cho != null and buf.jung != null) {
         // 초성+중성이 서 있으면 받침으로 붙는다. ㄸ·ㅃ·ㅉ만 못 붙는다.
         if (jong) |j| {
@@ -215,14 +289,35 @@ fn feedConsonant(buf: Syllable, cho: u5, jong: ?u5) Step {
 }
 
 fn feedVowel(buf: Syllable, v: u5) Step {
-    if (buf.jong != null) {
-        // Task 6이 여기에 받침 넘기기를 넣는다.
+    // 받침이 있는데 모음이 왔다 — 그 받침을 다음 음절의 초성으로 넘긴다.
+    // **두벌식의 핵심이고, 겹받침은 뒷자만 넘어간다**(앉 + ㅓ → 안 + 저).
+    //
+    // `.?` 둘이 단언이다. `splitFinal`의 tail도, 홑받침도 전부
+    // `finalToInitial`의 표에 있다 — 종성 스물일곱 중 겹받침 열하나는 위
+    // 갈래로 빠지고 나머지 열여섯이 표에 그대로 있다.
+    if (buf.jong) |j| {
+        if (splitFinal(j)) |pair| {
+            const head = Syllable{ .cho = buf.cho, .jung = buf.jung, .jong = pair.head };
+            return .{
+                .commit = head.codepoint(),
+                .buf = .{ .cho = finalToInitial(pair.tail).?, .jung = v },
+            };
+        }
+        const head = Syllable{ .cho = buf.cho, .jung = buf.jung };
+        return .{
+            .commit = head.codepoint(),
+            .buf = .{ .cho = finalToInitial(j).?, .jung = v },
+        };
     }
     if (buf.jung == null) {
         if (buf.cho) |c| return .{ .buf = .{ .cho = c, .jung = v } };
         return .{ .buf = .{ .jung = v } };
     }
-    // 중성이 이미 있고 겹모음이 안 되면 앞을 확정하고 **중성만 있는 상태**로
-    // 남는다. 모아주기를 뺐으므로 이 상태는 그릴 수 있다(design 결정 3의 표).
+    // 중성이 이미 있다 — 복합 모음이 되는지 먼저 본다.
+    if (joinVowel(buf.jung.?, v)) |merged| {
+        return .{ .buf = .{ .cho = buf.cho, .jung = merged } };
+    }
+    // 안 되면 앞을 확정하고 **중성만 있는 상태**로 남는다. 모아주기를
+    // 뺐으므로 이 상태는 그릴 수 있다(design 결정 3의 표).
     return .{ .commit = buf.codepoint(), .buf = .{ .jung = v } };
 }
