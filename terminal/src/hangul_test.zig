@@ -1,6 +1,33 @@
 const std = @import("std");
 const hangul = @import("hangul.zig");
 
+/// 두벌식으로 문자열을 통째로 치고 나온 글자를 모은다.
+/// **마지막에 남은 조합도 확정한다** — 사람이 Enter를 치는 자리에 해당한다.
+fn typeAll(keys: []const u8, out: []u8) ![]const u8 {
+    var buf = hangul.Syllable{};
+    var len: usize = 0;
+    for (keys) |ch| {
+        const jamo = hangul.dubeol(ch) orelse return error.NotAJamoKey;
+        const step = hangul.feed(buf, jamo);
+        if (step.commit) |cp| len += try std.unicode.utf8Encode(cp, out[len..]);
+        buf = step.buf;
+    }
+    if (buf.codepoint()) |cp| len += try std.unicode.utf8Encode(cp, out[len..]);
+    return out[0..len];
+}
+
+/// 친 것과 나온 것을 짝지어 본다.
+fn expectTyped(keys: []const u8, want: []const u8) !void {
+    var out: [64]u8 = undefined;
+    const got = try typeAll(keys, &out);
+    if (std.mem.eql(u8, got, want)) {
+        std.debug.print("hangul_test: \"{s}\" -> \"{s}\" OK\n", .{ keys, want });
+        return;
+    }
+    std.debug.print("FAIL: \"{s}\" -> \"{s}\", want \"{s}\"\n", .{ keys, got, want });
+    return error.WrongComposition;
+}
+
 /// 한글 오토마타의 검사. **부팅도 폰트도 안 쓴다** — 자모를 넣고 코드포인트를
 /// 받는 순수 계산이라 게스트가 볼 것이 하나도 없다. 그래서 `main`이
 /// `std.process.Init`를 안 받는다(`vt_test`·`font_test`와 갈리는 자리다).
@@ -57,6 +84,24 @@ pub fn main() !void {
         return error.NotAJamoKey;
     }
     std.debug.print("hangul_test: 두벌식 표 OK\n", .{});
+
+    // ── 4. 기본 전이 ─────────────────────────────────────────────────
+    //
+    // **여덟이 서로 다른 갈래를 밟는다.** 초성만 · 중성만 · 초성+중성 ·
+    // 초성 뒤에 자음이 와서 확정 · 받침 붙이기 · 받침이 될 수 없는 자음이
+    // 와서 확정 · 중성 뒤에 모음이 와서 확정 · 여러 음절.
+    //
+    // **받침 넘기기가 필요한 것은 여기 없다.** `rkrk`("가가")처럼 받침 뒤에
+    // 모음이 오는 경우는 Task 6이 들어와야 맞게 나온다 — 지금 넣으면
+    // "각ㅏ"가 나온다.
+    try expectTyped("g", "ㅎ");
+    try expectTyped("k", "ㅏ");
+    try expectTyped("rk", "가");
+    try expectTyped("gr", "ㅎㄱ");
+    try expectTyped("rkt", "갓");
+    try expectTyped("rkE", "가ㄸ");
+    try expectTyped("rkk", "가ㅏ");
+    try expectTyped("gksrmf", "한글");
 
     std.debug.print("PASS\n", .{});
 }

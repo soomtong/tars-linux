@@ -178,3 +178,51 @@ comptime {
     if (JUNG[dubeol('l').?.vowel] != 'ㅣ')
         @compileError("dubeol: l must be the vowel I");
 }
+
+/// 자모 하나를 먹인 결과.
+pub const Step = struct {
+    /// 확정돼서 PTY로 갈 글자. 없으면 null이다.
+    commit: ?u21 = null,
+    /// 확정하고 남은 조합 상태.
+    buf: Syllable = .{},
+};
+
+/// 자모 하나를 조합 버퍼에 먹인다. **두벌식의 규칙이다.**
+///
+/// 세벌식·신세벌식이 들어오는 HI-M2에서 이 함수가 자판을 인자로 받게 된다.
+/// switch에 `else`가 없으므로 `Jamo`에 variant를 더하면 여기가 컴파일 에러를
+/// 낸다.
+pub fn feed(buf: Syllable, jamo: Jamo) Step {
+    return switch (jamo) {
+        .consonant => |c| feedConsonant(buf, c.cho, c.jong),
+        .vowel => |v| feedVowel(buf, v),
+    };
+}
+
+fn feedConsonant(buf: Syllable, cho: u5, jong: ?u5) Step {
+    if (buf.jong != null) {
+        // Task 6이 여기에 겹받침을 넣는다.
+    } else if (buf.cho != null and buf.jung != null) {
+        // 초성+중성이 서 있으면 받침으로 붙는다. ㄸ·ㅃ·ㅉ만 못 붙는다.
+        if (jong) |j| {
+            return .{ .buf = .{ .cho = buf.cho, .jung = buf.jung, .jong = j } };
+        }
+    }
+    // 나머지는 전부 "앞을 확정하고 새 초성으로 시작한다"이다.
+    // **빈 버퍼도 이 갈래로 온다** — `codepoint()`가 null을 주므로 확정될
+    // 것이 없고, 그래서 빈 경우를 따로 적지 않는다.
+    return .{ .commit = buf.codepoint(), .buf = .{ .cho = cho } };
+}
+
+fn feedVowel(buf: Syllable, v: u5) Step {
+    if (buf.jong != null) {
+        // Task 6이 여기에 받침 넘기기를 넣는다.
+    }
+    if (buf.jung == null) {
+        if (buf.cho) |c| return .{ .buf = .{ .cho = c, .jung = v } };
+        return .{ .buf = .{ .jung = v } };
+    }
+    // 중성이 이미 있고 겹모음이 안 되면 앞을 확정하고 **중성만 있는 상태**로
+    // 남는다. 모아주기를 뺐으므로 이 상태는 그릴 수 있다(design 결정 3의 표).
+    return .{ .commit = buf.codepoint(), .buf = .{ .jung = v } };
+}
