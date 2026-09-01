@@ -104,7 +104,9 @@ report_failure() {
   local marker
   for marker in \
     "tars-init: config " \
+    "tars-init: config .*toggles=" \
     "terminal: hangul layout=" \
+    "terminal: hangul layout=.*toggles=" \
     "terminal: screen>" \
     "terminal: hangul>" \
     "terminal: key>"; do
@@ -157,6 +159,27 @@ last_frame() {
 # 그래서 개수가 곧 "커서가 몇 칸을 먹었는가"다.
 inverted_cells() {
   last_frame | grep -acE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=FFFFFF" || true
+}
+
+# 키 하나를 `ms` 밀리초 동안 누르고 있다가 뗀다(HI-M3).
+#
+# **`type_keys`를 못 쓴다.** 이유가 둘이다.
+#   1. 그쪽은 `sendkey $k` 하나만 보내므로 hold 시간을 못 준다.
+#   2. 그쪽은 로그가 자라기를 기다리는데, **긴 CapsLock은 로그를 한 줄도 안
+#      만들 수 있다** — 대문자 잠금만 켜지고 화면은 그대로다. 그러면 0.3초를
+#      꽉 채우고 다음 줄로 간다(그 자체는 안전하지만 판정이 흐려진다).
+#
+# **hold가 끝나기를 여기서 기다려야 한다.** `sendkey`의 hold는 QEMU가 타이머로
+# 처리하므로 monitor는 즉시 돌아온다 — 안 기다리면 다음 키가 이 키를 **누른
+# 채로** 도착해서 "소비됨"이 켜지고 tap이 사라진다. 1.5초는 이 체인이 쓰는
+# 최대 hold(0.5초)에 게스트 반응 시간을 얹은 값이다.
+#
+# QEMU가 이 값을 오차 4밀리초 안에 지킨다는 것은 HI-M0이 evdev 타임스탬프로
+# 쟀다(실측 2). 그래서 문턱 0.3초의 양쪽을 게이트가 실제로 밟을 수 있다.
+hold_key() {
+  local key="$1" ms="$2"
+  echo "sendkey $key $ms" >&3
+  sleep 1.5
 }
 
 # 마지막 프레임의 화면 줄에서 그 문자열이 몇 번 나오는가.
@@ -212,6 +235,35 @@ if ! grep -aq 'terminal: hangul layout=sebeol_3p3' "$LOG"; then
   report_failure "the layout did not reach terminal through argv"
 fi
 echo "sebeol_3p3 came from the config file and reached the composer"
+
+# 전환 키 목록도 같은 짝을 이룬다(HI-M3). **판정이 둘이 아니라 셋이다.**
+#
+#   1. init이 파일에서 읽었다
+#   2. 그 값이 argv를 건너 terminal에 닿았다
+#   3. **`hangul_key`가 목록에 없다** — 기본값은 넷이므로, 설정을 통째로
+#      무시하는 코드는 `hangul_key,`로 시작하는 목록을 찍는다.
+#
+# 셋째가 이 체인이 "꺼짐"을 보는 유일한 자리다. 나머지 꺼짐 갈래 넷은
+# `input_test`가 호스트에서 본다.
+echo "=== the config disk should have selected three toggle keys ==="
+#
+# **CR을 먼저 지우고 나서 `$`를 쓴다 — 그러지 않으면 줄이 정확히 맞는데도 안
+# 맞는다.** 시리얼 로그는 줄을 CRLF로 끝내므로 `$` 바로 앞에 CR이 있다.
+# HI-M1 실측 4가 `[^ ]+`로 밟은 것과 같은 함정이고, `hangul_field`가 쓰는
+# 처방을 그대로 쓴다.
+#
+# **plan이 적어 둔 `\r\?$`는 안 통했다**(HI-M3 실측). GNU grep의 BRE는 `\r`을
+# CR 이스케이프로 안 보고 **리터럴 `r`로** 읽는다 — `-P` 없이는 그 표기가
+# 아무 뜻도 없다. 파이프로 CR을 지우는 쪽이 이 파일의 기존 관습과도 같다.
+EXPECT_TOGGLES='shift_space,capslock_tap,lctrl_tap'
+if ! tr -d '\r' < "$LOG" | grep -aq "tars-init: config .*toggles=${EXPECT_TOGGLES}\$"; then
+  report_failure "init did not read hangul_toggle=${EXPECT_TOGGLES} from the config disk"
+fi
+if ! tr -d '\r' < "$LOG" |
+  grep -aq "terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=${EXPECT_TOGGLES}\$"; then
+  report_failure "the toggle list did not reach terminal through argv"
+fi
+echo "three toggle keys came from the config file; hangul_key is off"
 
 # ── 검사 1: 대조군 — 한글이 꺼져 있으면 키가 PTY로 나간다 ──────────────
 #
@@ -419,5 +471,97 @@ if [ "$(screen_count '가나다')" -lt 2 ]; then
   report_failure "three syllables in a row got corrupted: the command line lost a character"
 fi
 echo "three syllables in a row survive on the command line"
+
+# ── 검사 12: 짧은 CapsLock이 한/영을 끈다 ──────────────────────────────
+#
+# **`sendkey caps_lock 100`의 100은 밀리초다.** 문턱이 0.3초이므로 이것은
+# tap이고, 검사 13의 500은 hold다. **둘이 짝이어야 뜻이 선다** — 짧은 것만
+# 보면 "언제나 전환한다"가 통과한다.
+#
+# 여기 오기 전에 검사 11이 한/영을 켜 두었다.
+#
+# **음성 검사가 함께 있어야 한다** — CapsLock이 글자를 만들면 명령줄이
+# 더러워지고, 그것이 표 밖의 키를 다루는 가장 흔한 실패 방식이다.
+echo "=== sendkey caps_lock 100 (tap) ==="
+BEFORE_CAPS="$(key_lines)"
+hold_key caps_lock 100
+ON="$(hangul_field on)"
+if [ "$ON" != "false" ]; then
+  report_failure "a short CapsLock left hangul on=${ON}, expected false"
+fi
+AFTER_CAPS="$(key_lines)"
+if [ "$AFTER_CAPS" != "$BEFORE_CAPS" ]; then
+  report_failure "CapsLock leaked to the PTY (key> lines ${BEFORE_CAPS} -> ${AFTER_CAPS})"
+fi
+echo "a short CapsLock turned hangul off and sent nothing to the shell"
+
+# ── 검사 13: 긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다 ─────────
+#
+# **판정이 화면이다.** 대문자 잠금에는 LED도 표시도 없으므로(결정 9), 켜졌는지
+# 아는 유일한 길은 다음 글자가 대문자로 나오는 것이다.
+#
+# **숫자를 함께 치는 것이 결정 9의 전부다** — CapsLock은 알파벳에만 적용되고
+# 숫자와 기호는 안 바뀐다. `abc1`을 쳐서 `ABC1`이 나와야 하고, Shift를 통째로
+# 걸어 버리는 구현은 `ABC!`를 낸다.
+#
+# **한/영이 안 바뀐 것도 함께 본다.** `hangul_field`는 마지막 `hangul>` 줄을
+# 읽는데, 그 줄은 `Action.hangul`이 나올 때만 찍힌다 — 긴 CapsLock이 잘못
+# 전환하면 새 줄이 `on=true`로 찍혀서 여기가 갈린다.
+echo "=== sendkey caps_lock 500 (hold) ==="
+hold_key caps_lock 500
+ON="$(hangul_field on)"
+if [ "$ON" != "false" ]; then
+  report_failure "a long CapsLock changed hangul to on=${ON}, expected false"
+fi
+type_keys a b c 1
+sleep 1
+if [ "$(screen_count 'ABC1')" -lt 1 ]; then
+  report_failure "a long CapsLock did not lock capitals (expected ABC1 on screen)"
+fi
+echo "a long CapsLock locked capitals and left the digit alone"
+
+# ── 검사 14: 한 번 더 길게 누르면 잠금이 풀린다 ─────────────────────────
+#
+# **켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다** — 검사 1과 9가
+# Shift+Space에 대해 이루는 짝과 같은 이유다.
+echo "=== sendkey caps_lock 500 again ==="
+hold_key caps_lock 500
+type_keys a
+sleep 1
+if [ "$(screen_count 'ABC1a')" -lt 1 ]; then
+  report_failure "a second long CapsLock did not release the capital lock"
+fi
+echo "a second long CapsLock released the lock"
+
+# ── 검사 15: 짧은 왼쪽 Ctrl이 한/영을 켠다 ─────────────────────────────
+echo "=== ctrl-c to clear the line, then sendkey ctrl 100 ==="
+type_keys ctrl-c
+sleep 1
+hold_key ctrl 100
+ON="$(hangul_field on)"
+if [ "$ON" != "true" ]; then
+  report_failure "a short left Ctrl left hangul on=${ON}, expected true"
+fi
+echo "a short left Ctrl turned hangul on"
+
+# ── 검사 16: Ctrl+C는 한/영을 안 바꾼다 ────────────────────────────────
+#
+# **이것이 결정 8의 심장이고 이 체인에서 가장 값진 한 줄이다.** 누른 동안 다른
+# 키가 오면 "소비됨"이 켜져서 tap이 아니어야 하는데, 그것이 없으면 터미널에서
+# 가장 흔한 조합인 Ctrl+C가 누를 때마다 한/영을 뒤집는다. 증상은 "가끔 한글이
+# 안 쳐진다"라 원인에서 아주 멀다.
+#
+# **판정이 서는 이유를 적어 둔다.** Ctrl+C는 그 자체로 `hangul>` 줄을 안 만든다
+# (조합 중이 아니면 `hangulLayer`가 확정할 것이 없어 null을 돌려준다). 그래서
+# 여기서 읽는 값은 검사 15가 남긴 `on=true`이고, **만약 Ctrl+C가 잘못
+# 전환했다면 `on=false`인 새 줄이 그 뒤에 찍혀서 갈린다.**
+echo "=== ctrl-c while hangul is on ==="
+type_keys ctrl-c
+sleep 1
+ON="$(hangul_field on)"
+if [ "$ON" != "true" ]; then
+  report_failure "Ctrl+C flipped hangul to on=${ON} — the left Ctrl tap was not consumed"
+fi
+echo "Ctrl+C did not flip hangul: the tap was consumed"
 
 echo "HI check PASS"

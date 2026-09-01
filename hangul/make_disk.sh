@@ -17,6 +17,17 @@ cd "$(dirname "$0")"
 #
 # **심는 값이 기본값과 달라야 한다.** 기본값은 shin_pcs이고 여기 심는 것은
 # sebeol_3p3다 — 같은 값을 심으면 설정을 통째로 무시하는 코드도 초록이 뜬다.
+#
+# `hangul_toggle`도 같은 규칙을 따른다(HI-M3). 기본값은 넷 다 켜진 것이고
+# 여기 심는 것은 **`hangul_key`를 뺀 셋**이다.
+#
+# **뺄 것으로 `hangul_key`를 고른 이유가 있다.** 그것이 게이트가 어차피 못
+# 보내는 유일한 키다 — QEMU가 `sendkey lang1`을 이름만 받고 조용히 버린다
+# (HI-M0 실측 1). `shift_space`를 뺐다면 기존 검사 2·9·11을 전부 다시 써야
+# 하고, tap 둘 중 하나를 뺐다면 HI-M3이 새로 만든 갈래를 게이트가 못 본다.
+#
+# **꺼짐의 판정은 로그 줄 하나로 끝난다.** `arg()`가 정규형을 만들므로 찍히는
+# 문자열에 `hangul_key`가 **없다는 것 자체가** "설정이 그것을 껐다"의 증거다.
 SIZE=16M
 IMG=../out/hangul.img
 
@@ -32,10 +43,14 @@ cat > "$SEED/tars.conf" <<'EOF'
 # hangul_layout=sebeol_3p3 — **기본값(shin_pcs)이 아닌 것이 요점이다.**
 #                            이 한 줄이 조합기를 갈아 끼운다.
 hangul_layout=sebeol_3p3
+# hangul_toggle — **`hangul_key`가 빠진 것이 요점이다.** 기본값은 넷이고,
+#                 설정을 통째로 무시하는 코드는 그 넷을 로그에 찍는다.
+hangul_toggle=shift_space,capslock_tap,lctrl_tap
 EOF
 
 truncate -s "$SIZE" "$IMG"
 mkfs.ext2 -F -q -m 0 -L tars-hangul -d "$SEED" "$IMG"
 rm -rf "$SEED"
 
-echo "make_disk: created ${IMG} (${SIZE}, ext2, hangul_layout=sebeol_3p3)"
+echo "make_disk: created ${IMG} (${SIZE}, ext2, hangul_layout=sebeol_3p3," \
+     "hangul_toggle without hangul_key)"
