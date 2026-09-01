@@ -215,6 +215,100 @@ comptime {
         @compileError("dubeol: l must be the vowel I");
 }
 
+/// 갈마들이 공세벌식 3-P3(https://pat.im/1128). **인자는 쿼티 배치의 문자다.**
+///
+/// **초성은 오른손, 중성과 종성은 왼손이다.** 그래서 초성이 중성·종성과
+/// 겹치는 키가 하나도 없고, 겹치는 것은 중성과 종성 여섯 자리뿐이다
+/// (`c v r e f d`) — 그 여섯을 가르는 것이 `feed`의 우선순위다.
+///
+/// **숫자 열이 자모다.** `1`이 종성 ㅋ, `3`이 종성 ㅂ, `9`가 중성 ㅜ다.
+/// 그래서 `nonSyllable`이 없으면 한글 상태에서 숫자를 칠 수가 없다.
+///
+/// 연타(`kk` = ㄲ)와 겹모음(`/f` = ㅘ)과 겹받침(`wx` = ㄺ)은 **표에 안 적는다** —
+/// 각각 `tenseInitial`·`joinVowel`·`joinFinal`이 이미 한다.
+fn sebeol3P3(ch: u8) ?Cand {
+    return switch (ch) {
+        // 초성 — 오른손.
+        'k' => .{ .cho = 0 }, // ㄱ
+        'h' => .{ .cho = 2 }, // ㄴ
+        'u' => .{ .cho = 3 }, // ㄷ
+        'y' => .{ .cho = 5 }, // ㄹ
+        'i' => .{ .cho = 6 }, // ㅁ
+        ';' => .{ .cho = 7 }, // ㅂ
+        'n' => .{ .cho = 9 }, // ㅅ
+        'j' => .{ .cho = 11 }, // ㅇ
+        'l' => .{ .cho = 12 }, // ㅈ
+        'o' => .{ .cho = 14 }, // ㅊ
+        '0' => .{ .cho = 15 }, // ㅋ
+        '\'' => .{ .cho = 16 }, // ㅌ
+        'p' => .{ .cho = 17 }, // ㅍ
+        'm' => .{ .cho = 18 }, // ㅎ
+
+        // 중성만 — 종성과 안 겹치는 자리.
+        't' => .{ .jung = 1 }, // ㅐ
+        '6' => .{ .jung = 2 }, // ㅑ
+        'T' => .{ .jung = 3 }, // ㅒ
+        '7' => .{ .jung = 7 }, // ㅖ
+        '4' => .{ .jung = 12 }, // ㅛ
+        'b' => .{ .jung = 13 }, // ㅜ — 왼쪽. **겹모음을 안 연다**
+        '5' => .{ .jung = 17 }, // ㅠ
+        'g' => .{ .jung = 18 }, // ㅡ — 왼쪽. **겹모음을 안 연다**
+
+        // 겹모음을 여는 오른쪽 셋(design 결정 12).
+        '/' => .{ .jung = 8, .jung_opens = true }, // ㅗ — `/f` = ㅘ
+        '9' => .{ .jung = 13, .jung_opens = true }, // ㅜ — `9r` = ㅝ
+        '8' => .{ .jung = 18, .jung_opens = true }, // ㅡ — `8d` = ㅢ
+
+        // 중성이자 종성 — 여섯. **이 자리가 갈마들이다.**
+        'f' => .{ .jung = 0, .jong = 26 }, // ㅏ / ㅍ
+        'r' => .{ .jung = 4, .jong = 23 }, // ㅓ / ㅊ
+        'c' => .{ .jung = 5, .jong = 7 }, // ㅔ / ㄷ
+        'e' => .{ .jung = 6, .jong = 25 }, // ㅕ / ㅌ
+        'v' => .{ .jung = 8, .jong = 22 }, // ㅗ / ㅈ — 왼쪽 ㅗ라 안 연다
+        'd' => .{ .jung = 20, .jong = 27 }, // ㅣ / ㅎ
+
+        // 종성만.
+        'x' => .{ .jong = 1 }, // ㄱ
+        'X' => .{ .jong = 2 }, // ㄲ
+        's' => .{ .jong = 4 }, // ㄴ
+        'S' => .{ .jong = 6 }, // ㄶ
+        'w' => .{ .jong = 8 }, // ㄹ
+        'W' => .{ .jong = 9 }, // ㄺ
+        'Z' => .{ .jong = 10 }, // ㄻ
+        'Q' => .{ .jong = 15 }, // ㅀ
+        'z' => .{ .jong = 16 }, // ㅁ
+        '3' => .{ .jong = 17 }, // ㅂ
+        'A' => .{ .jong = 18 }, // ㅄ
+        'q' => .{ .jong = 19 }, // ㅅ
+        '2' => .{ .jong = 20 }, // ㅆ
+        'a' => .{ .jong = 21 }, // ㅇ
+        '1' => .{ .jong = 24 }, // ㅋ
+        else => null,
+    };
+}
+
+// design 위험 1 — 표를 옮겨 적으면서 사람이 틀린다. HI-M0에서 실제로 두 번
+// 틀렸고(`g`를 ㄱ으로 읽었다) 처방이 `dubeol`의 앵커 넷이었다. **자판을 셋 더
+// 옮기는 HI-M2가 같은 위험을 셋 더 진다.**
+//
+// 3-P3의 앵커는 다섯이다. 손 양쪽에서 하나씩(초성 `k`, 종성 `x`), 갈마들이
+// 자리 하나(`c`가 중성이면서 종성), 그리고 **겹모음을 여는 쪽과 안 여는 쪽**
+// (`/`와 `v`가 둘 다 ㅗ인데 성질이 다르다). 마지막 둘이 가장 놓치기 쉽다 —
+// 값이 같아서 눈으로는 안 갈린다.
+comptime {
+    if (CHO[sebeol3P3('k').?.cho.?] != 'ㄱ')
+        @compileError("3-P3: k must be the initial GIYEOK");
+    if (JONG[sebeol3P3('x').?.jong.?] != 'ㄱ')
+        @compileError("3-P3: x must be the final GIYEOK");
+    if (JUNG[sebeol3P3('c').?.jung.?] != 'ㅔ' or
+        JONG[sebeol3P3('c').?.jong.?] != 'ㄷ')
+        @compileError("3-P3: c must be both the vowel E and the final DIGEUT");
+    if (JUNG[sebeol3P3('/').?.jung.?] != 'ㅗ' or !sebeol3P3('/').?.jung_opens)
+        @compileError("3-P3: / must be the right-hand O that opens a diphthong");
+    if (JUNG[sebeol3P3('v').?.jung.?] != 'ㅗ' or sebeol3P3('v').?.jung_opens)
+        @compileError("3-P3: v must be the left-hand O that does not open one");
+}
+
 /// 복합 모음. (앞, 뒤) → 합친 것. 안 되면 null.
 fn joinVowel(a: u5, b: u5) ?u5 {
     return switch (a) {
@@ -322,10 +416,8 @@ pub const Layout = enum {
     pub fn lookup(self: Layout, ch: u8) ?Cand {
         return switch (self) {
             .dubeol => dubeol(ch),
-            // 아래 셋은 Task 4·5가 채운다. 지금 두벌식을 가리키는 것은
-            // **자리를 잡아 두는 것**이고, 그 사이에 이 셋을 부르는 검사를
-            // 쓰지 않는다.
-            .sebeol_3p3 => dubeol(ch),
+            .sebeol_3p3 => sebeol3P3(ch),
+            // 신세벌 둘은 Task 5가 채운다.
             .shin_p2 => dubeol(ch),
             .shin_pcs => dubeol(ch),
         };

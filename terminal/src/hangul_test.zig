@@ -127,6 +127,35 @@ pub fn main() !void {
     try expectTyped(.dubeol, "dkswj", "안저");
     try expectTyped(.dubeol, "Rk", "까");
 
+    // ── 5.5. 공세벌 3-P3 (design 위험 2) ─────────────────────────────
+    //
+    // **열둘이 서로 다른 갈래를 밟는다.** 기본 음절 · 받침 · 갈마들이(같은
+    // 키가 중성이자 종성) · 연타 된소리(초성과 종성) · 겹모음을 여는 키와 안
+    // 여는 키 · 받침 넘기기가 없다는 것 · 겹받침 · 종성만 상태.
+    try expectTyped(.sebeol_3p3, "kf", "가");
+    try expectTyped(.sebeol_3p3, "kfx", "각");
+    // `c`는 초성 뒤에서는 중성 ㅔ이고, 초성+중성 뒤에서는 종성 ㄷ이다.
+    try expectTyped(.sebeol_3p3, "kc", "게");
+    try expectTyped(.sebeol_3p3, "kfc", "갇");
+    // 연타 — 초성 `kk`는 ㄲ, 종성 `xx`는 ㄲ받침.
+    try expectTyped(.sebeol_3p3, "kkf", "까");
+    try expectTyped(.sebeol_3p3, "kfxx", "갂");
+    // 겹모음은 **오른쪽 ㅗ에서만** 열린다. `/`는 열고 `v`는 안 연다.
+    try expectTyped(.sebeol_3p3, "k/f", "과");
+    try expectTyped(.sebeol_3p3, "kvf", "곺"); // ㅗ가 안 열려서 `f`가 종성 ㅍ
+    // **받침 넘기기가 없다**(design 결정 12). 두벌식이라면 `가구`가 될 자리다.
+    //
+    // **중성 후보만 있는 키를 골라야 한다.** `f`는 중성 ㅏ이자 종성 ㅍ이라
+    // 우선순위(종성 → 중성)에서 종성이 먼저 걸려 `각ㅍ`이 나온다 — 그것도
+    // 맞는 동작이지만 받침 넘기기를 보는 검사가 아니다. `b`는 중성 ㅜ뿐이다.
+    try expectTyped(.sebeol_3p3, "kfxb", "각ㅜ");
+    // 종성 후보가 있는 키는 새 종성으로 간다. 위와 짝이다.
+    try expectTyped(.sebeol_3p3, "kfxf", "각ㅍ");
+    // 겹받침은 두벌식과 같은 `joinFinal` 표를 쓴다.
+    try expectTyped(.sebeol_3p3, "kfxq", "갃");
+    // 종성 전용 키를 먼저 누르면 **종성만 상태**가 된다(검사 1의 다섯째 줄).
+    try expectTyped(.sebeol_3p3, "x", "ㄱ");
+
     // ── 6. Backspace ─────────────────────────────────────────────────
     //
     // `단`을 세 번 지운다: 단 → 다 → ㄷ → 빈 상태. **그다음 한 번 더 지우면
