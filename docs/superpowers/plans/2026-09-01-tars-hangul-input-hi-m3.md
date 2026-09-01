@@ -2,7 +2,13 @@
 
 **Date:** 2026-09-01
 **Design:** `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-**Status:** 착수 전.
+**Status:** **완료(2026-09-01).** Task 여덟이 전부 끝났고 게이트 아홉 체인
+3/3으로 **18분 27~37초**. **이것으로 Hangul Input 서브프로젝트가 닫혔다.**
+
+**Task 7에서 하나가 예상대로 깨졌고 처방만 틀렸다.** 줄 끝 앵커가 CR에 걸린 것은
+plan이 예측한 그대로인데, 적어 둔 처방 `\r\?$`가 안 통했다 — GNU grep의 BRE는
+`-P` 없이 `\r`을 리터럴 `r`로 읽는다. 듣는 처방은 `tr -d '\r'`이고 자세한 것은
+design의 "HI-M3이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 

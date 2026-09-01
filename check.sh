@@ -163,7 +163,7 @@ CHAINS=(
   "HD-M2:./device/check.sh"
   "TR-M2:./render/check.sh"
   "CM-M2:./copy/check.sh"
-  "HI-M2:./hangul/check.sh"
+  "HI-M3:./hangul/check.sh"
 )
 
 # 진입 검사는 **첫 부팅 전에** 아홉 개를 전부 훑는다. 하나라도 빠뜨렸으면

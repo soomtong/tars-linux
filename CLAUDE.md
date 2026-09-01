@@ -90,20 +90,22 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   오버레이에 `/needle [3/12]`) ·
   **Render Cost(RC-M0, 2026-08-30 완료 — 한 프레임의 84.7%가 `fill`이라는 것을
   재기만 했고 코드는 한 줄도 안 고쳤다)** ·
-  **Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
+  Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
   커널 config 둘 끄기, sanity 도구 둘과 그 도구만 쓰던 98MB 산출물, 옛 폰트
-  파일)**. design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트: Hangul Input(HI)**. 2026-08-31 착수, **HI-M2까지
-  완료(2026-09-01) — 한글 자판 넷(두벌식·공세벌 3-P3·신세벌 P2·신세벌 PCS)과
-  영문 자판 둘(쿼티·드보락)을 `tars.conf`가 고른다. 기본값은 `shin_pcs`와
-  `qwerty`. 게이트 아홉 체인 3/3으로 18분 06~08초.** 남은 것은 전환 키 셋과
-  CapsLock(HI-M3)뿐이고, **그 plan은 2026-09-01에 이미 썼다**
-  (`.../plans/2026-09-01-tars-hangul-input-hi-m3.md`) — 다음 세션은 Task 1부터
-  실행하면 된다.
-  design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
-  `docs/decisions/project_hangul_input.md`. **이 서브프로젝트만 편집도 Claude
-  Code가 한다**(아래 "진행 방식"의 2번에 대한 예외 — 사용자가 macOS용 한글
-  입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고 정했다).
+  파일) ·
+  **Hangul Input(HI-M0~M3, 2026-08-31·09-01 완료 — 한글 자판 넷(두벌식·공세벌
+  3-P3·신세벌 P2·신세벌 PCS)과 영문 자판 둘(쿼티·드보락)을 `tars.conf`가 고르고,
+  한/영 전환 키 넷(한/영 키·Shift+Space·짧은 CapsLock·짧은 왼쪽 Ctrl)도
+  `hangul_toggle`이 고른다. 긴 CapsLock은 대문자 잠금이다)**.
+  design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
+- **진행 중인 서브프로젝트: 없다.** 다음 것을 고르는 자리다 — 후보 목록은
+  `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의 "배경"
+  절에 있다.
+  **Hangul Input은 편집도 Claude Code가 했다**(아래 "진행 방식"의 2번에 대한
+  예외 — 사용자가 macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는
+  자리의 값이 낮다고 정했다). design은
+  `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
+  `docs/decisions/project_hangul_input.md`.
 - **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**
   2026-08-31에 낡은 것 넷(BF-M1 · Config Persistence · Power Management ·
   Hardware Discovery)을 한꺼번에 고쳤다 — 넷 다 "중간에 멈춘 것"이 아니라
