@@ -158,6 +158,82 @@ const dvorak_keymap = [_][2]u8{
 /// 영문 자판. **한글 자판과 직교한다**(HI design 결정 13).
 pub const LatinLayout = enum { qwerty, dvorak };
 
+/// 켜진 한/영 전환 키의 집합(HI design 결정 7).
+///
+/// **`init/src/config.zig`의 `Toggles`와 짝이다.** 거기가 "설정 파일에 무엇을
+/// 적을 수 있는가"이고 여기가 "그것이 키를 어떻게 바꾸는가"인데, 둘을 잇는
+/// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과
+/// `hangul.Layout`이 이미 정확히 같은 모양이다. **문자열 문법을 못 박는 것은
+/// `config_test`의 `arg` → `parse` 왕복 검사다.**
+pub const Toggles = struct {
+    hangul_key: bool = false,
+    shift_space: bool = false,
+    capslock_tap: bool = false,
+    lctrl_tap: bool = false,
+};
+
+/// `togglesArg`가 만드는 문자열을 담을 버퍼의 크기. `config.zig`의
+/// `TOGGLE_ARG_MAX`와 같은 값이다.
+pub const TOGGLE_ARG_MAX = 64;
+
+/// `parseToggles`가 이름을 거르는 화이트리스트. `config.zig`의 `ToggleKey`와
+/// 이름이 같아야 한다.
+const ToggleKey = enum { hangul_key, shift_space, capslock_tap, lctrl_tap };
+
+/// 콤마 목록을 집합으로 바꾼다.
+///
+/// **init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은 언제나
+/// 정규형이다.** 공백을 떼고 모르는 이름을 흘려보내는 관대함은 terminal을
+/// 손으로 띄울 때를 위한 것이고, 로그는 안 남긴다 — init이 이미 한 번 경고를
+/// 찍었으므로 같은 줄을 두 번 낼 이유가 없다.
+pub fn parseToggles(text: []const u8) Toggles {
+    var t = Toggles{};
+    var it = std.mem.splitScalar(u8, text, ',');
+    while (it.next()) |raw| {
+        const name = std.mem.trim(u8, raw, " \t");
+        // 빈 항목과 `none`과 모르는 이름이 전부 여기서 떨어진다.
+        const key = std.meta.stringToEnum(ToggleKey, name) orelse continue;
+        switch (key) {
+            .hangul_key => t.hangul_key = true,
+            .shift_space => t.shift_space = true,
+            .capslock_tap => t.capslock_tap = true,
+            .lctrl_tap => t.lctrl_tap = true,
+        }
+    }
+    return t;
+}
+
+/// 로그에 찍을 **정규형** 목록. `config.zig`의 `Toggles.arg`와 같은 문자열을
+/// 만든다.
+///
+/// **파싱한 결과를 다시 문자열로 만드는 것이 요점이다.** argv로 받은 문자열을
+/// 그대로 찍으면 "글자가 도착했다"만 증명되고 "우리가 그것을 맞게 읽었다"는
+/// 아무것도 증명되지 않는다 — `terminal: hangul layout=`이 `stringToEnum`을
+/// 거친 값을 `@tagName`으로 찍는 것과 같은 이유다.
+pub fn togglesArg(t: Toggles, buf: []u8) [:0]const u8 {
+    var len: usize = 0;
+    if (t.hangul_key) appendToggleName(buf, &len, "hangul_key");
+    if (t.shift_space) appendToggleName(buf, &len, "shift_space");
+    if (t.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
+    if (t.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
+    if (len == 0) appendToggleName(buf, &len, "none");
+    buf[len] = 0;
+    return buf[0..len :0];
+}
+
+fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
+    if (len.* > 0) {
+        if (len.* + 1 >= buf.len) return;
+        buf[len.*] = ',';
+        len.* += 1;
+    }
+    for (name) |ch| {
+        if (len.* + 1 >= buf.len) return;
+        buf[len.*] = ch;
+        len.* += 1;
+    }
+}
+
 // 두 표가 같은 길이여야 한다 — 아니면 한쪽에서만 배열 밖을 읽는다.
 // `qwerty_keymap.len`이 여러 곳에서 상한으로 쓰이기 때문이다.
 //
@@ -479,6 +555,19 @@ pub const State = struct {
 
     /// 영문 자판(HI-M2). `hangul_layout`과 마찬가지로 부팅 내내 상수다.
     latin_layout: LatinLayout = .qwerty,
+
+    /// 켜진 한/영 전환 키(HI-M3). **부팅 내내 상수다** — 자판 둘과 같은
+    /// 성질이고 설정 파일이 정한다.
+    ///
+    /// **기본값은 `config.zig`의 `Config`와 같아야 한다.** 진실은 그쪽에 있고
+    /// 여기 값은 `main.zig`가 argv로 매번 덮어쓰지만, 둘이 어긋나 있으면 읽는
+    /// 사람이 어느 쪽이 기본인지 알 수 없다.
+    toggles: Toggles = .{
+        .hangul_key = true,
+        .shift_space = true,
+        .capslock_tap = true,
+        .lctrl_tap = true,
+    },
 
     /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
     ///

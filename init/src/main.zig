@@ -178,11 +178,12 @@ const Child = struct {
     /// execve에 그대로 넘길 argv. argv[0]은 path와 같고 남는 자리는 null이다 —
     /// execve는 첫 null에서 멈추므로 인자가 하나인 자식도 같은 배열 타입을
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
-    /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로, **HI-M2에서
-    /// 다섯에서 일곱으로** 늘었다. terminal이 받는 넷째가 keyboard, 다섯째가
-    /// 키보드 장치 경로, 여섯째가 한글 자판, 일곱째가 영문 자판이고, 콘솔
-    /// 셸은 그 자리를 전부 null로 둔다.
-    argv: [7:null]?[*:0]const u8,
+    /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로, HI-M2에서
+    /// 다섯에서 일곱으로, **HI-M3에서 일곱에서 여덟으로** 늘었다. terminal이
+    /// 받는 넷째가 keyboard, 다섯째가 키보드 장치 경로, 여섯째가 한글 자판,
+    /// 일곱째가 영문 자판, 여덟째가 한/영 전환 키 목록이고, 콘솔 셸은 그
+    /// 자리를 전부 null로 둔다.
+    argv: [8:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -411,12 +412,22 @@ pub fn main(init: std.process.Init.Minimal) void {
     const cfg = loadConfig(storage_mounted);
     // **줄을 새로 만들지 않고 이 줄을 넓힌다**(HI-M2). 다른 체인들이
     // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
-    std.debug.print("tars-init: config shell={s} keyboard={s} hangul={s} latin={s}\n", .{
-        @tagName(cfg.shell),
-        @tagName(cfg.keyboard),
-        @tagName(cfg.hangul_layout),
-        @tagName(cfg.latin_layout),
-    });
+    //
+    // 이 배열이 argv로도 간다. **`main()`의 스택에 살고 `supervise()`가 영영
+    // 반환하지 않으므로** 프로세스 수명 내내 유효하다 — `keyboard_path`와
+    // 같은 근거다.
+    var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+    const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
+    std.debug.print(
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s}\n",
+        .{
+            @tagName(cfg.shell),
+            @tagName(cfg.keyboard),
+            @tagName(cfg.hangul_layout),
+            @tagName(cfg.latin_layout),
+            toggle_arg,
+        },
+    );
 
     logDrmDevicePresence();
 
@@ -469,6 +480,7 @@ pub fn main(init: std.process.Init.Minimal) void {
                 keyboard_path.cstr(),
                 hangul_arg.ptr,
                 latin_arg.ptr,
+                toggle_arg.ptr,
             },
         },
         .{
@@ -476,7 +488,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             .path = shell_path,
             // 콘솔 셸에는 플래그를 주지 않는다. 이쪽은 사용자가 직접 쓰는
             // 자리이므로, 나중에 설정 파일이 생기면 그것을 읽는 편이 맞다.
-            .argv = .{ shell_path.ptr, null, null, null, null, null, null },
+            .argv = .{ shell_path.ptr, null, null, null, null, null, null, null },
         },
     };
     supervise(&children, button_fds[0..button_count], envp);

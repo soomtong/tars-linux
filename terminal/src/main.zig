@@ -629,6 +629,19 @@ pub fn main(init: std.process.Init) !void {
     const hangul_layout = std.meta.stringToEnum(hangul.Layout, hangul_arg) orelse .shin_pcs;
     const latin_layout = std.meta.stringToEnum(input.LatinLayout, latin_arg) orelse .qwerty;
 
+    // 여덟째가 한/영 전환 키 목록이다(HI-M3, design 결정 7). **자판 둘과 달리
+    // enum 하나가 아니라 집합이라** `stringToEnum` 대신 콤마 파서를 쓴다.
+    //
+    // **fallback을 문자열로 두는 것에 뜻이 있다.** 집합 리터럴로 쓰면 기본값이
+    // 이 파일에도 한 벌 생기는데, 그 값은 `init/src/config.zig`의 `Config`와
+    // 같아야 하고 컴파일러가 그것을 못 잡는다. 문자열로 두면 적어도 눈으로
+    // 대조할 형태가 설정 파일과 같아진다.
+    const toggle_arg: []const u8 = if (args.len > 7)
+        std.mem.span(args[7])
+    else
+        "hangul_key,shift_space,capslock_tap,lctrl_tap";
+    const toggles = input.parseToggles(toggle_arg);
+
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
     // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
     // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
@@ -683,8 +696,14 @@ pub fn main(init: std.process.Init) !void {
     // 짝이다** — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
     // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
     // 뒤만 보면 여기 기본값이 우연히 맞아도 초록이다. HI 게이트가 둘을 다 본다.
-    std.debug.print("terminal: hangul layout={s} latin={s}\n", .{
-        @tagName(hangul_layout), @tagName(latin_layout),
+    // **`toggles=`는 파싱한 결과를 다시 문자열로 만든 것이다**(HI-M3).
+    // argv로 받은 문자열을 그대로 찍으면 "글자가 도착했다"만 증명되고
+    // "우리가 그것을 맞게 읽었다"는 아무것도 증명되지 않는다.
+    var toggle_buf: [input.TOGGLE_ARG_MAX]u8 = undefined;
+    std.debug.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
+        @tagName(hangul_layout),
+        @tagName(latin_layout),
+        input.togglesArg(toggles, &toggle_buf),
     });
 
     const screen = try vt.Screen.init(init.io, allocator, cols, rows);
@@ -705,6 +724,7 @@ pub fn main(init: std.process.Init) !void {
     var key_state: input.State = .{
         .hangul_layout = hangul_layout,
         .latin_layout = latin_layout,
+        .toggles = toggles,
     };
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
