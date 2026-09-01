@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-01
 **Design:** `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-**Status:** 착수 전
+**Status:** **완료(2026-09-01).** Task 아홉이 전부 끝났고 게이트 아홉 체인
+3/3으로 18분 06~08초다. 값은 design의 "HI-M2가 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 

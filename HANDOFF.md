@@ -1,78 +1,91 @@
-# HANDOFF: Hangul Input이 진행 중이다 — HI-M1이 끝났고 다음은 HI-M2
+# HANDOFF: Hangul Input이 진행 중이다 — HI-M2가 끝났고 다음은 HI-M3
 
 ## 지금 어디인가
 
 `main`, working tree 깨끗함. **Hangul Input(HI)을 2026-08-31에 착수했고
-HI-M0(8/31)과 HI-M1(9/1)을 끝냈다.** 사용자가 이월 숙제에서 CJK 입력기를 골랐다.
+HI-M0(8/31) · HI-M1(9/1) · HI-M2(9/1)를 끝냈다.** 남은 것은 HI-M3 하나다.
 
-**HI-M1로 게스트에서 실제로 한글을 친다.** Shift+Space로 한/영을 바꾸고,
-두벌식으로 조합하고, 조합 중인 글자가 커서 자리에 두 칸으로 뜨고, Enter를
-치면 확정된 음절이 셸에 닿아 실행된다. **게이트 체인이 아홉이 됐다.**
+**HI-M2로 자판이 여섯이 됐고 설정 파일이 고른다.** 한글 넷(두벌식 · 공세벌
+3-P3 · 신세벌 P2 · 신세벌 PCS)과 영문 둘(쿼티 · 드보락)이고, `tars.conf`의
+`hangul_layout`·`latin_layout`이 정한다. **기본값은 `shin_pcs`와 `qwerty`다** —
+사용자가 신세벌 PCS를 쓰기 때문이고, `keyboard=apple`이 정해진 근거와 같다.
 
-**닫은 뒤에 사고가 하나 나왔고 같은 날 고쳤다.** 사용자가 `가나다`를 쳤더니
-`가 다`가 됐다 — 게스트에 UTF-8 로케일이 없어서 셸이 우리 한글을 바이트로
-읽고 있었다. 아래 실측 9·10이 그 이야기이고, **게이트가 음절을 하나만
-확정시켜서 못 잡았다는 것이 더 값진 부분이다.**
+**게이트는 안 갈렸다.** 아홉 체인 3/3으로 **18분 08초 · 18분 07초 · 18분 06초**.
+체인을 안 늘리고 있는 부팅에 설정 디스크를 물렸다.
 
-지금 서 있는 것 다섯.
+지금 서 있는 것 일곱.
 
-1. **`terminal/src/hangul.zig`** — 자모 표 셋 · 조합 상태 · 두벌식 표 ·
-   `feed` · `erase`. 시스템 콜도 `vt.zig`도 안 본다.
-2. **`input.zig`의 한글 층** — `hangulLayer`가 copy 표 뒤·`chord()` 앞에
-   있고, 확정된 글자는 `commit_buf` → `takeCommit()`으로 나간다.
-3. **`vt.zig`의 preedit 층** — `cells()`가 커서 자리의 글자를 갈아 끼우고
-   **두 칸을 반전**한다.
-4. **`hangul/check.sh`** — 검사 열하나. 음성 검사(`key>` 줄 개수)와 반전 셀
-   개수가 판정 도구이고, **검사 11이 음절 셋을 이어 쳐서 로케일 사고를 잡는다.**
-5. **UTF-8 로케일** — `Dockerfile`의 `libc-bin:amd64` ·
+1. **`terminal/src/hangul.zig`** — 자모 표 셋 · 조합 상태 · **자판 넷** ·
+   `Layout` enum · `feed`의 우선순위 표 · `erase`. 시스템 콜도 `vt.zig`도 안 본다.
+2. **`input.zig`의 한글 층** — `hangulLayer`가 copy 표 뒤·`chord()` 앞에 있고,
+   확정된 글자는 `commit_buf` → `takeCommit()`으로, 자판이 되돌려 주는 기호는
+   `.bytes`로 나간다.
+3. **`input.zig`의 `keymap` 두 벌** — `qwerty_keymap`과 `dvorak_keymap`.
+   `latinChar()`가 고르고, **`hangulLayer`만 이 함수를 안 쓴다**(결정 13).
+4. **`vt.zig`의 preedit 층** — `cells()`가 커서 자리의 글자를 갈아 끼우고
+   **두 칸을 반전**한다. HI-M2에서 한 줄도 안 바뀌었다.
+5. **`init/src/config.zig`** — `HangulLayout`·`LatinLayout` enum과 `Config`의
+   필드 둘. argv가 다섯 칸에서 **일곱 칸**이 됐다.
+6. **`hangul/check.sh` + `hangul/make_disk.sh`** — 검사 **열둘**.
+   `hangul_layout=sebeol_3p3`을 심은 디스크를 물고 **한 번 부팅**한다.
+7. **UTF-8 로케일** — `Dockerfile`의 `libc-bin:amd64` ·
    `make_initrd.sh`의 `/usr/lib/locale/C.utf8` · `main.zig`의 `LANG=C.UTF-8`.
    **셋이 한 벌이고 terminfo와 같은 종류다** — 하나만 빠져도 조용히 깨진다.
 
-**호스트 검사가 `zig build test` 9.5초에 전부 돈다** — `hangul_test`(오토마타) ·
-`input_test`의 검사 24~31(한글 층) · `vt_test`의 검사 45~48(preedit).
+**호스트 검사가 `zig build test`에 전부 돈다** — `hangul_test`(자판 넷의 조합
+순서) · `config_test`(자판 이름 여섯) · `input_test`의 검사 24~35(한글 층 ·
+기호 되돌림 · 드보락) · `vt_test`의 검사 45~48(preedit) · `font_test`(겹받침
+호환 자모).
 
-## 다음 세션이 할 첫 일: HI-M2의 plan을 쓴다
+## 다음 세션이 할 첫 일: HI-M3의 plan을 쓴다
 
-**HI-M2는 자판이 여섯이 되고 설정 파일이 고르는 milestone이다.** 공세벌
-3-P3 · 신세벌 P2 · 신세벌 PCS를 더하고 영문 드보락을 더한다. `tars.conf`에
-`hangul_layout`과 `latin_layout`이 생기고, **파싱은 `config_test`가 호스트에서
-본다.**
+**HI-M3이 이 서브프로젝트의 마지막 milestone이다.** 전환 키 나머지 셋과
+CapsLock이고, `hangul_toggle` 설정이 여기서 생긴다.
 
 **plan을 쓰기 전에 읽을 것 넷.**
 
-1. design의 **결정 7**(설정 항목 셋)과 **위험 2**(갈마들이가 상태에 딸린다).
-2. `hangul.zig`의 `Jamo` union — **variant가 지금 둘뿐이다.** 세벌식은 초성
-   전용·종성 전용 키가 있고 신세벌식은 조합 상태에 따라 중성과 종성이 갈리므로
-   여기가 넓어진다. `feed`의 switch에 `else`가 없어서 컴파일러가 배선할 자리를
-   알려준다.
-3. `hangul.zig:264` `feed` — **HI-M2에서 이 함수가 자판을 인자로 받는다.**
-4. `config.zig:76`의 enum 화이트리스트와 `Keyboard.arg()` — 설정이 argv로
-   `terminal`에 오는 길. `main.zig:595`가 `keyboard`를 읽는 자리가 본보기다.
+1. design의 **결정 8**(tap-vs-hold는 뗄 때 판단한다) · **결정 9**(CapsLock
+   대문자 잠금) · **결정 7**(`hangul_toggle`이 다중 선택이다).
+2. **HI-M0의 실측 1** — `sendkey lang1`이 게스트에 안 닿는다. **그래서 한/영
+   키는 게이트로 검증할 수 없고**, 게이트가 보는 것은 짧은 CapsLock과 짧은
+   왼쪽 Ctrl 둘뿐이다. 한/영 키 분기는 `input_test`의 호스트 검사로 덮는다.
+3. **HI-M0의 실측 2** — `sendkey <key> <hold_ms>`가 오차 4밀리초 안이다.
+   0.3초 문턱을 판정하는 데 넉넉하다.
+4. `input.zig:752`의 `readKeys` — **`handleKey`가 처음으로 시각을 보게 되는
+   변경이다.** `ev.time.tv_sec`·`ev.time.tv_usec`이 이미 읽히고 버려지고 있다.
 
-**미리 정해진 것 셋.**
+**미리 정해진 것 넷.**
 
-- **자판을 셋 더 옮기는 것이 HI-M0 실측 5와 같은 위험을 셋 더 진다.**
-  표를 옮겨 적으면서 사람이 틀린다. `dubeol`이 `comptime` 앵커 넷을 건 것과
-  같은 못을 자판마다 박는다.
-- **`hangul_test`가 자판별로 조합 순서를 통째로 넣고 결과 문자열을 봐야 한다**
-  (design 위험 2). 오토마타와 자판을 따로 검사하면 갈마들이를 못 본다.
-- **게이트가 또 늘 수 있다.** HI 체인에 2차 부팅(설정을 물고 뜨는 것)이 붙으면
-  IP·CP·PM처럼 회차당 QEMU를 둘 띄우게 된다.
+- **`handleKey`가 순수 함수에서 시각을 보는 함수로 바뀐다.** 이것이 이
+  서브프로젝트에서 유일하게 그 함수의 성질 자체를 바꾸는 변경이고, 그래서
+  마지막에 뒀다. **`input_test`의 헬퍼 전부가 `handleKey`를 부르므로 시그니처를
+  바꾸면 컴파일러가 고칠 자리를 전부 짚어 준다** — HI-M1 실측 6과 같은 종류다.
+- **`hangul_toggle`은 enum 하나가 아니라 목록이다.** 콤마로 갈라 비트 집합을
+  만든다(결정 7). 파싱은 `config_test`가 호스트에서 본다. **모르는 이름은
+  로그만 남기고 넘어간다** — CP의 판단 그대로다.
+- **게이트 체인은 안 는다.** `hangul/check.sh`가 이미 설정 디스크를 물고 있으니
+  `hangul_toggle`을 그 파일에 한 줄 더하면 된다.
+- **CapsLock(58)은 evdev까지 온다**(HI-M0 실측 1). 지금 `keymap` 표는
+  `KEY_SPACE`(57)에서 끝나므로 표 밖이고, `chord()`에도 없다.
 
-**게이트로 검증할 수 없는 것 하나.** 한/영 키(`lang1`)는 HI-M3까지 미뤄져
-있고, 그때도 게이트가 아니라 `input_test`의 호스트 검사로 덮는다.
+**HI-M3이 끝나면 서브프로젝트가 닫힌다.** design doc의 `Status:` 줄과
+`check.sh`의 `CHAINS` 라벨(`HI-M2` → `HI-M3`)을 함께 고친다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -8
-#   Close out HI-M1                                    ← 이 커밋
-#   Add the hangul gate chain
-#   Wire the composing syllable to the screen
-#   Draw the composing syllable at the cursor
-#   Compose hangul in the input layer
-#   Plan HI-M1
-#   Close out HI-M0
-#   Prove the automaton never reaches an undrawable state
+git log --oneline -12
+#   Close out HI-M2                                    ← 이 커밋
+#   Point the hangul gate at a layout the config file chose
+#   Let the config file choose the hangul and latin layouts
+#   Let the sebeol layouts type digits and symbols
+#   Add the shin-sebeol P2 and PCS layouts
+#   Add the sebeol 3-P3 layout
+#   Give each layout its two composition traits
+#   Draw a lone final consonant with its compatibility jamo
+#   Let the composition state pick among candidates
+#   Plan HI-M2
+#   Widen the hangul design for four layouts
+#   Give the guest a UTF-8 locale so the shell reads hangul as one character
 ```
 
 ## 한글이 지금 할 수 있는 것
@@ -80,7 +93,9 @@ git log --oneline -8
 | 키 | 무엇 |
 |---|---|
 | `Shift+Space` | 한/영 전환. **공백은 PTY로 안 나간다** |
-| 두벌식 자판 | 자모를 모아 음절을 만들고 **커서 자리에 두 칸으로 그린다** |
+| 한글 자판 넷 | 자모를 모아 음절을 만들고 **커서 자리에 두 칸으로 그린다** |
+| 영문 자판 둘 | 쿼티·드보락. **드보락을 켜도 한글 배열은 안 흔들린다** |
+| 세벌식의 `Shift+M` 등 | 자판이 되돌려 주는 숫자·기호. **조합 중이면 음절이 먼저 나간다** |
 | `Backspace` | 조합 중이면 **자모 하나**를 뺀다(`단`→`다`→`ㄷ`→없음). 아니면 DEL |
 | Enter · Tab · Esc | 확정하고, 그 키의 바이트가 **확정된 글자 뒤에** 나간다 |
 | 숫자 · 기호 · 공백 | 같음 — 자모가 아닌 문자 키는 전부 확정을 유발한다 |
@@ -89,96 +104,169 @@ git log --oneline -8
 | `Cmd+Shift+C` | 확정하고 copy mode에 들어간다. **한/영 상태는 그대로 남는다** |
 | — | copy mode와 검색 프롬프트 **안에서는 한글이 안 조합된다**(한글 층이 그 표들보다 뒤다) |
 
-**아직 없는 것:** 자판 넷 중 셋(HI-M2) · 설정 파일(HI-M2) · 한/영 키와
-CapsLock과 tap-vs-hold(HI-M3).
+**설정 파일이 정하는 것 둘.**
+
+```
+hangul_layout = dubeol | sebeol_3p3 | shin_p2 | shin_pcs    # 기본 shin_pcs
+latin_layout  = qwerty | dvorak                             # 기본 qwerty
+```
+
+**아직 없는 것:** 한/영 키 · CapsLock · tap-vs-hold · `hangul_toggle`(HI-M3).
+기호 확장과 Patal의 옵션 trait들(비목표, 이월 숙제).
+
+## HI-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. 자판 넷의 겹침 구조가 서로 반대이고, 그것이 설계를 정했다.**
+
+| 자판 | 초성∩중성 | 중성∩종성 | 초성∩종성 |
+|---|---|---|---|
+| 두벌식 | 0 | 0 | **19 — 자음 키 전부** |
+| 공세벌 3-P3 | 0 | 6 (`c v r e f d`) | 0 |
+| 신세벌 P2 | 4 (`p o i /`) | **15 — 오른손 블록 전부** | 0 |
+| 신세벌 PCS | 3 (`p o i`) | **15** | 0 |
+
+**갈마들이는 신세벌식의 예외적인 키 몇 개가 아니라 오른손 블록 전체의
+규칙이다.** design 위험 2가 `c` 하나로 적어 둔 것보다 훨씬 넓었다. 그래서
+자판은 **후보**(`{초성?, 중성?, 종성?}`)를 주고 **조합 상태가 고른다.**
+
+**2. 우선순위의 규칙은 하나다 — 종성 자리가 차 있으면 종성이 중성보다 먼저다.**
+
+| 상태 | 순서 |
+|---|---|
+| 빈 상태 | 초성 → 중성 → 종성 |
+| 초성만 | 중성 → 초성 → 종성 |
+| 중성만 | 겹모음 → 초성 → 중성 → 종성 |
+| 종성만 | 겹받침 → 초성 → **종성 → 중성** |
+| 초+중 | 겹모음 → **종성 → 초성** → 중성 |
+| 초+중+종 | 겹받침 → 초성 → **종성 → 중성** |
+
+**증거는 신세벌 PCS의 `kfcc`(갂) 하나다** — `c`가 중성 ㅔ이자 종성 ㄱ이라,
+중성이 먼저면 연타 된소리가 가려져 `각ㅔ`가 된다. **plan을 쓰면서 손으로 돌려
+보다가 잡았고**, 실행 중에 만났다면 "신세벌 표가 틀렸나"를 먼저 의심했을 것이다.
+
+초+중과 초+중+종에서 초성과 종성의 순서가 반대인 것은 **순수하게 두벌식이
+정했다** — `가`+`r`은 `각`(종성 먼저), `각`+`e`는 `각ㄷ`(초성 먼저, 겹받침
+ㄱㄷ이 없으니 새 음절)이다. 세벌식은 초성∩종성이 0이라 안 흔들린다.
+
+**3. 자판에 딸리는 것은 셋뿐이고 나머지는 한국어의 규칙이다.**
+
+| 자판에 딸린 것 | 값 |
+|---|---|
+| 받침 넘기기(도깨비불) | 두벌식만 |
+| 연타 된소리(`kk`=ㄲ) | 세벌식 셋만 |
+| **겹모음을 여는 키인가** | 아래 |
+
+**셋째가 가장 늦게 찾은 것이다.** 세벌식에는 ㅗ가 두 자리 있고 **오른쪽만
+겹모음을 만든다** — 3-P3에서 `/f`는 ㅘ이지만 `vf`는 ㅗ와 ㅏ다. `joinVowel`이
+모음 인덱스만 보므로 이 표시가 없으면 `보아`가 `봐`가 된다. 그래서 조합 버퍼가
+`jung_opens`를 기억한다.
+
+**반대로 겹모음·겹받침 표는 자판 넷이 그대로 공유한다.** 세벌식 겹받침 스물둘
+(`xq`=ㄳ · `wd`=ㅀ · `3q`=ㅄ · `cq` · `wc` …)과 겹모음 열넷이 기존 표에 **하나도
+빠짐없이** 있었다.
+
+**4. 후보 struct 전환이 동작을 하나도 안 바꿨고, 그것이 Task를 자른 방식의
+값이다.** `Jamo` union → `Cand` struct + 우선순위 표로 바꾼 뒤 **기존 검사
+열넷이 한 글자도 안 바뀐 채 통과했고** 3-순열 107,811단계도 그대로 **0번**이다.
+새 자판을 함께 넣었다면 실패했을 때 "표가 틀렸나 우선순위가 틀렸나"를 가를 수
+없었다.
+
+**5. 종성만 상태도 그려진다 — 겹받침까지.**
+
+| 코드포인트 | 크기 | `cell_width` | `x_off` |
+|---|---|---|---|
+| `ㄱ` U+3131 | 9×9 | 16 | +4 |
+| `ㄳ` U+3133 | 12×9 | **16** | +3 |
+| `ㄺ` U+313A | 11×9 | **16** | +3 |
+
+**폭이 안 바뀌는 것이 요점이다**(HI-M0 실측 3의 전제). 못 그리는 것은
+초성+종성과 중성+종성 둘로 줄었다. **두벌식은 이 상태를 안 만든다** — 자음 키가
+전부 초성 후보를 갖고 빈 상태의 우선순위가 초성 먼저라, 3-순열이 여전히 0번이다.
+
+**6. 표를 옮겨 적는 실수가 이번엔 안 났고, 이유가 값지다.** 조합 순서 검사
+서른하나가 전부 첫 시도에 통과했다. **차이는 원본이다** — HI-M0의 두벌식은
+KS X 5002라는 **문서**를 보고 새로 적었고, HI-M2의 셋은 Patal의 Swift **코드**를
+인덱스로 옮겼다. **이 위험은 "표를 옮긴다"가 아니라 "사람이 읽고 다시 적는다"에
+딸려 있었다.** 그래도 `comptime` 앵커 열하나를 표와 같은 커밋에 걸었다 —
+값이 같아 눈으로 안 갈리는 자리(`/`와 `v`가 둘 다 ㅗ)를 컴파일러가 지킨다.
+
+**7. `commit_buf`를 안 넓혔다 — 기존 순서가 그대로 답이었다.** 세벌식의 기호
+되돌림은 조합 중이던 음절과 그 기호를 **둘 다** 내보내야 하는데 `commit_buf`는
+코드포인트 하나짜리다. 음절은 그쪽으로, 기호는 `.bytes`로 보내면
+**`readKeys`가 `takeCommit()`을 먼저 비우므로**(HI-M1 실측 2) 순서가 저절로
+맞다. **HI-M1이 Enter의 CR을 위해 만든 계약이 한 번 더 값을 했다.**
+
+**8. `config_test`의 비교 함수가 필드 둘만 보고 있었다.** 넓히지 않았으면 새로
+더한 자판 검사 여섯이 **전부 아무것도 안 보고 초록**이었다. SP-M0 실측 4와
+정확히 같은 자리다 — **검사를 더하는 사람은 그 검사가 무엇을 비교하는지도
+함께 본다.**
+
+**9. 드보락 검사의 본체는 "한글이 안 흔들린다"다.** 라틴 문자가 바뀌는 것
+(`KEY_S` → `o`)은 표를 옮겼으면 당연히 맞는다. 결정 13을 보는 유일한 자리는
+**드보락을 켠 채 두벌식으로 `KEY_R`이 ㄱ을 내는지**다 — 그 키는 드보락에서
+`p`이고, 배선이 틀리면 두벌식의 `p`인 **ㅔ**가 나온다. **증상이 "안 된다"가
+아니라 "다른 글자가 나온다"**라 원인을 오토마타에서 찾게 되는 종류다.
+
+**10. 게이트가 디스크를 물었는데 부팅은 그대로 하나다.** `mkfs.ext2 -d`가
+설정 파일이 든 이미지를 한 번에 굽는다(IP가 쓰는 방법). **심는 값이 기본값과
+달라야 한다** — 기본이 `shin_pcs`이고 심는 것이 `sebeol_3p3`이라, 설정을 통째로
+무시하는 코드는 검사 0에서도 검사 3~11의 키 시퀀스에서도 갈린다.
+
+**11. 같은 세션의 삼중값은 폭이 2.29초였다.**
+
+| | 체인 | 시간 |
+|---|---|---|
+| GL-M3 기준선 | 여덟 | 16분 01~11초 |
+| HI-M1 | 아홉 | 17분 41초 |
+| HI-M1 + 로케일 | 아홉 | 18분 24초 |
+| **HI-M2** | 아홉 | **18분 06~08초** |
+
+**안 갈린 것이 예상이었고 그대로다.** GL-M2가 "갈렸다"고 말할 수 있었던 삼중값의
+내부 폭이 16초와 5초였는데 그보다도 좁다. **게이트 잡음 ±3분은 서로 다른 날의
+측정에 대한 것이고, 비교하려는 두 값은 같은 세션에서 재는 편이 훨씬 낫다.**
 
 ## HI-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-**1. 셸이 한글을 되울린다 — 게스트에 로케일 설정이 없는데도.**
-`rg 'LANG|LC_ALL|locale' init/src kernel/make_initrd.sh`가 빈 결과라 C 로케일의
-fish가 UTF-8 세 바이트를 버릴까 걱정했는데, **되울리고 실행까지 한다** —
-`screen> @(none) ~# echo 갓 | 갓 |`이 명령줄과 출력줄 양쪽에 나온다. **그래서
-게이트가 왕복 전체를 본다.**
-
-**2. 확정된 글자는 `Action`이 못 나른다.** 조합을 끝내는 키가 자기 몫의 결과를
+**1. 확정된 글자는 `Action`이 못 나른다.** 조합을 끝내는 키가 자기 몫의 결과를
 따로 갖기 때문이다 — Enter는 `.bytes`, Shift+PageUp은 `.scroll`,
 Cmd+Shift+C는 `.copy = .enter`다. **`Action`은 union이라 하나만 담는다.**
 그래서 `State.commit_buf` → `takeCommit()`이라는 통로를 하나 더 두고,
 `readKeys`가 `handleKey` **직후, 그 키의 바이트보다 먼저** 비운다.
 **순서가 전부다** — 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착한다.
-증거는 게이트의 `terminal: key> 4 byte(s)` 한 줄이다.
+증거는 게이트의 `terminal: key> 4 byte(s)` 한 줄이다. **HI-M2가 이 계약을
+기호 되돌림에 그대로 다시 썼다.**
 
-**3. `Action.hangul`은 payload가 없는데 그것이 없으면 화면이 안 갱신된다.**
+**2. `Action.hangul`은 payload가 없는데 그것이 없으면 화면이 안 갱신된다.**
 자모 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
 `main.zig`의 `needs_redraw`가 안 켜진다 — **조합 중인 글자가 영영 안 나온다.**
 
-**4. 커서는 조합 중에 두 칸을 반전해야 한다.** `drawGlyph`가 셀 하나의 `fg`로
+**3. 커서는 조합 중에 두 칸을 반전해야 한다.** `drawGlyph`가 셀 하나의 `fg`로
 16픽셀을 통째로 찍으므로, 한 칸만 반전하면 **글자의 오른쪽 절반이 어두운
-바탕에 어두운 색으로 그려져 사라진다.** 로그로 관측된다.
+바탕에 어두운 색으로 그려져 사라진다.** 덕분에 게이트가 셀 수 있는 신호도
+생겼다 — 반전 셀이 1개(평소)에서 2개(조합 중)로 갈린다.
 
-```
-terminal: hangul> on=true preedit=가
-terminal: screen> @(none) ~# echo 가
-terminal: style> 0,16 fg=102030 bg=FFFFFF
-terminal: style> 0,17 fg=102030 bg=FFFFFF
-```
-
-**5. 시리얼 로그는 CRLF이고 그것이 게이트를 조용히 깨뜨렸다.**
+**4. 시리얼 로그는 CRLF이고 그것이 게이트를 조용히 깨뜨렸다.**
 `sed -E "s/.*preedit=([^ ]+).*/\1/"`에서 `preedit=`이 **줄 끝이라 `[^ ]+`가
 CR까지 삼켰다.** 증상이 지독하다 — `FAIL: preedit=가, expected 가`처럼
-**똑같아 보이는 값으로 실패한다.** `on=true`는 뒤에 공백이 있어 안 걸렸고,
-`copy/check.sh`의 `copy_value`는 `([0-9]+)`라 숫자에서 멈춘다 — **우연이지
-설계가 아니다.** 처방은 `tr -d '\r'`이고, **줄 끝의 값을 뽑는 새 헬퍼를 만드는
-사람은 같은 함정을 다시 만난다.**
+**똑같아 보이는 값으로 실패한다.** `copy/check.sh`의 `copy_value`는 `([0-9]+)`라
+숫자에서 멈춘다 — **우연이지 설계가 아니다.** 처방은 `tr -d '\r'`이고,
+**줄 끝의 값을 뽑는 새 헬퍼를 만드는 사람은 같은 함정을 다시 만난다.**
 
-**6. Task 1과 2를 나눌 수 없었다.** `Action`에 variant를 더하는 순간 같은 파일
-안의 `readKeys`가 컴파일 에러를 내서 Task 1만으로는 빌드가 안 된다. **컴파일러가
-배선할 자리를 알려주는 규율의 대가이고**, 같은 순간에 그 규율이 값도 했다 —
-`input_test`의 헬퍼 셋도 함께 에러를 냈다.
-
-**7. Zig는 안쪽 블록에서도 이름 가리기를 막는다.** `vt_test`의 블록 안에
-`var found`를 놓았다가 막혔다 — **SP-M0의 실측 9와 같은 자리**이고 그때는
-`vt.zig`의 optional capture였다. 처방도 같다: 이름을 바꾼다.
-
-**8. 게이트는 갈렸다고 말할 수 없다.** 아홉 체인 3/3으로 **17분 41초**이고
-로케일 404KB를 넣은 뒤가 **18분 24초**다. HI-M0(여덟 체인)이 16분 37.07초였다.
-**+107초는 design 결정 10이 예상한 "체인 하나 약 2분"과 비슷하지만**, 잡음이
-±3분이라 갈렸다고 단정하지 않는다.
-
-**9. 게스트에 UTF-8 로케일이 없으면 셸이 우리 한글을 바이트로 읽는다** —
+**5. 게스트에 UTF-8 로케일이 없으면 셸이 우리 한글을 바이트로 읽는다** —
 **사용자가 `가나다`를 쳐서 찾았다(2026-09-01).** `가나`까지 멀쩡한데 `다`를
 확정하면 `나`가 사라지고 `가 다`가 남는다. **셸은 세 음절을 정확히 받았고**
-(`fish: Unknown command: 가나다`) 깨지는 것은 화면뿐이다.
-
-```
-string length 나          → 3   ← fish 버퍼에 한 글자가 아니라 바이트 셋이 있다
-string length -V 나       → 1   ← 그래서 폭이 1
-string length \ub098   → 1   ← 이스케이프로 만든 같은 글자는 정상
-```
-
-로케일 데이터가 **하나도 없어서**(`libc6`에 없고 Debian은
+깨지는 것은 화면뿐이다. 로케일 데이터가 **하나도 없어서**(Debian은
 `/usr/lib/locale/C.utf8`을 **`libc-bin`**에 담는다) `setlocale`이 실패하고
-`mbrtowc`가 바이트를 하나씩 돌려준다. **`LANG=C.UTF-8`만 넘겨서는 안 된다** —
-fish까지 닿는 것은 확인했는데(`echo x=$LANG` → `x=C.UTF-8`) 파일이 없어서
-그래도 실패한다.
+`mbrtowc`가 바이트를 하나씩 돌려준다. **`LANG=C.UTF-8`만 넘겨서는 안 된다.**
 
-**그러면 fish가 믿는 폭이 "바이트를 Latin-1로 본 폭의 합"이 된다**(0x80~0x9F는
+그러면 fish가 믿는 폭이 "바이트를 Latin-1로 본 폭의 합"이 된다(0x80~0x9F는
 0칸, 0xA0 이상은 1칸). 이 규칙이 실측 열넷을 하나도 안 빼고 맞힌다 —
 `차`(EC **B0 A8**)가 **3**으로 나오는 것까지. **폭 3인 글자는 없으므로 그 값이
 이 모델의 증명이다.** 처음에는 "fish의 폭 표가 틀렸다"고 읽었고 그 읽기가
-폭 3에서 무너졌다.
+폭 3에서 무너졌다. **우리 코드는 한 줄도 안 고쳤다** — 처방은 셋이고
+**terminfo와 정확히 같은 종류의 짝**이다(Dockerfile · make_initrd.sh · main.zig).
 
-**우리 코드는 한 줄도 안 고쳤다.** libghostty는 `나`를 두 칸으로 정확히 센다.
-처방은 셋이고 **terminfo와 정확히 같은 종류의 짝이다** — 우리가 게스트에게 한
-말을 참으로 만들어 주는 데이터.
-
-| 자리 | 무엇 |
-|---|---|
-| `devcontainer/Dockerfile` | `libc-bin:amd64` |
-| `kernel/make_initrd.sh` | `/usr/lib/locale/C.utf8` 404KB를 넣는다 |
-| `terminal/src/main.zig` | `LANG=C.UTF-8`을 `TERM` 옆에서 설정한다 |
-
-**10. 게이트가 놓친 이유가 이 사고에서 가장 값지다.** 게이트는 음절을 **하나만**
+**6. 게이트가 놓친 이유가 이 사고에서 가장 값지다.** 게이트는 음절을 **하나만**
 확정시켰고 그것이 하필 `갓`이었다.
 
 ```
@@ -188,12 +276,19 @@ fish까지 닿는 것은 확인했는데(`echo x=$LANG` → `x=C.UTF-8`) 파일�
 **깨진 계산이 우연히 맞는 답을 낸다.** 그래서 로케일이 없는 채로 아홉 체인이
 3/3으로 통과했다. **"한 번 해서 통과하면 된다"가 아니라 "두 번째에 달라지는가"를
 봐야 하는 자리가 있다** — 조합·확정·커서 이동처럼 **상태가 쌓이는 기능**이 전부
-그렇다. 처방은 `hangul/check.sh`의 검사 11이고, 로케일 복사를 도로 빼서
-`FAIL: three syllables in a row got corrupted`가 나오는 것으로 이가 있는지
-확인했다.
+그렇다. 처방은 `hangul/check.sh`의 검사 11이다.
 
-**design과 plan을 코드보다 먼저 커밋했다.** GL-M2·M3이 세운 순서 그대로다.
-**다음 milestone도 그렇게 한다.**
+**7. 한글 층의 자리는 copy 표 뒤·`chord()` 앞이다.** 앞이면 모드 안의 `j`가
+ㅓ가 되고(CN-M1의 `n`과 같은 갈림), `chord()` 뒤면 Cmd+Shift+C가 한글 층에
+안 닿아 확정 목록이 무너진다. `chord()` 앞에서 **확정만 하고 null을 돌려
+흘려보내면** 그 키의 원래 뜻은 한 글자도 안 바뀐다.
+
+**8. Zig는 안쪽 블록에서도 이름 가리기를 막는다.** `vt_test`의 블록 안에
+`var found`를 놓았다가 막혔다 — **SP-M0의 실측 9와 같은 자리**이고 그때는
+`vt.zig`의 optional capture였다. 처방도 같다: 이름을 바꾼다.
+
+**design과 plan을 코드보다 먼저 커밋한다.** GL-M2·M3이 세운 순서 그대로이고
+HI-M1·M2가 그대로 했다.
 
 **push는 신경 쓰지 않는다**(`feedback_push_policy`). 미푸시 커밋 수를 세거나
 push할지 묻지 않는다 — 필요하면 그냥 한다.
@@ -207,12 +302,14 @@ CC-M0의 예외와 같은 종류이고 이유만 다르다 — 그때는 "배우
 사용자에게 보여 준다** — 그쪽은 한글 이야기만이 아니기 때문이다.
 
 - design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-  (결정 열 · milestone 넷 · "HI-M0이 실측한 것" 절)
-- plan: `.../plans/2026-08-31-tars-hangul-input-hi-m0.md`
+  (결정 열넷 · milestone 넷 · "HI-M0/M1/M2가 실측한 것" 절 셋)
+- plan: `.../plans/2026-08-31-tars-hangul-input-hi-m0.md` ·
+  `.../plans/2026-09-01-tars-hangul-input-hi-m1.md` ·
+  `.../plans/2026-09-01-tars-hangul-input-hi-m2.md`
 - **기억: `docs/decisions/project_hangul_input.md`**
 - **참고 코드: `/Users/dp/Repository/_input-method/PatInputMethod`**(사용자가
-  만든 macOS 입력기 Patal). 옮겨 올 것은 `macOS/Patal/Layouts/`의 자판 셋과
-  `StateMachine/`의 오토마타 모양이다.
+  만든 macOS 입력기 Patal). 자판 셋은 `macOS/Patal/Layouts/`에서 옮겨 왔고,
+  **HI-M3이 볼 것은 남아 있지 않다** — tap-vs-hold는 Patal에 없는 기능이다.
 
 ## HI-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
