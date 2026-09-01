@@ -451,6 +451,29 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다.
 /// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한글 입력기의 상태를 한 줄로 찍는다(HI-M1). 게이트가 "한/영이 바뀌었다"와
+/// "지금 이 글자를 조합 중이다"를 볼 수 있는 유일한 줄이다.
+///
+/// **`screen>`만 보면 갈리지 않는 것이 있다.** 조합 중인 글자는 셸이 되울린
+/// 글자와 화면에서 똑같이 생겼으므로, `screen>`에 `가`가 있는 것만으로는
+/// "아직 조합 중"과 "이미 셸에 갔다"를 못 가른다. CS-M1이 오버레이 내용을
+/// 볼 창구가 없어서 `find> overlay`를 새로 만든 것과 같은 자리다.
+///
+/// 조합 중이 아닐 때 `(none)`이라고 쓰는 이유는 빈 문자열이면 줄 끝이
+/// `preedit=`으로 끝나서, 로그가 잘린 것인지 값이 없는 것인지 갈리지 않기
+/// 때문이다.
+fn dumpHangul(state: *const input.State) void {
+    var utf8: [4]u8 = undefined;
+    const len: usize = if (state.preedit()) |cp|
+        std.unicode.utf8Encode(cp, &utf8) catch 0
+    else
+        0;
+    const text: []const u8 = if (len == 0) "(none)" else utf8[0..len];
+    std.debug.print("terminal: hangul> on={} preedit={s}\n", .{
+        state.hangul_on, text,
+    });
+}
+
 fn dumpOverlay(prompt: ?Prompt) void {
     const p = prompt orelse return;
     std.debug.print("terminal: find> overlay text={s}\n", .{p.text});
@@ -782,6 +805,23 @@ pub fn main(init: std.process.Init) !void {
                     ),
                 }
                 dumpCopy(screen, @tagName(cmd));
+                needs_redraw = true;
+            }
+            // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). **값을 만드는
+            // 것은 `input.State`이고 그리는 것은 `vt.zig`이며, 둘을 잇는 것이
+            // 여기다** — `input.zig`는 `vt.zig`를 import하지 않는다
+            // (IP design 결정 6). `find_open`이 이미 같은 길로 돈다.
+            //
+            // **`needs_redraw`를 여기서 켜야 한다.** 조합만 바뀐 키는 PTY로
+            // 아무것도 안 보내고 스크롤도 copy 명령도 안 만든다 — 그래서
+            // 이 한 줄이 없으면 조합 중인 글자가 **영영 화면에 안 나온다.**
+            //
+            // copy 루프 **뒤**인 것에도 뜻이 있다. copy mode에 들어가는 키가
+            // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
+            // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
+            if (keys.hangul) {
+                screen.setPreedit(key_state.preedit());
+                dumpHangul(&key_state);
                 needs_redraw = true;
             }
         }
