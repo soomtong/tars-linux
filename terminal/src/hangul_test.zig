@@ -7,8 +7,8 @@ fn typeAll(keys: []const u8, out: []u8) ![]const u8 {
     var buf = hangul.Syllable{};
     var len: usize = 0;
     for (keys) |ch| {
-        const jamo = hangul.dubeol(ch) orelse return error.NotAJamoKey;
-        const step = hangul.feed(buf, jamo);
+        const cand = hangul.dubeol(ch) orelse return error.NotAJamoKey;
+        const step = hangul.feed(buf, cand);
         if (step.commit) |cp| len += try std.unicode.utf8Encode(cp, out[len..]);
         buf = step.buf;
     }
@@ -71,11 +71,11 @@ pub fn main() !void {
     //
     // **`jong`이 null인 키를 함께 본다.** ㄸ·ㅃ·ㅉ은 받침이 될 수 없고,
     // 그것을 빠뜨리면 "가ㄸ" 같은 자리에서만 증상이 나온다.
-    if (hangul.dubeol('E').?.consonant.jong != null) {
+    if (hangul.dubeol('E').?.jong != null) {
         std.debug.print("FAIL: ㄸ이 받침이 될 수 있다고 되어 있다\n", .{});
         return error.WrongFinal;
     }
-    if (hangul.dubeol('R').?.consonant.jong.? != 2) {
+    if (hangul.dubeol('R').?.jong.? != 2) {
         std.debug.print("FAIL: ㄲ의 받침 인덱스가 2가 아니다\n", .{});
         return error.WrongFinal;
     }

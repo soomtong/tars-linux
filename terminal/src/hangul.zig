@@ -66,6 +66,15 @@ pub const Syllable = struct {
     /// 비교하는 자리마다 둘을 다 봐야 한다.
     jong: ?u5 = null,
 
+    /// 지금 중성이 겹모음을 **열 수 있는가**(`Cand.jung_opens`가 옮겨 온 값).
+    ///
+    /// **`codepoint()`는 이 값을 안 본다.** 그리는 데는 아무 영향이 없고,
+    /// 그래서 `vt.zig`도 `main.zig`도 이 필드를 모른다. 겹모음을 만들지
+    /// 판단하는 것은 **뒤 모음이 올 때**인데 그 판단의 근거는 **앞 모음이
+    /// 어느 키에서 왔는가**라, 그 사이에 키가 하나 지나간다. 그래서 버퍼가
+    /// 기억한다.
+    jung_opens: bool = false,
+
     pub fn isEmpty(self: Syllable) bool {
         return self.cho == null and self.jung == null and self.jong == null;
     }
@@ -99,23 +108,38 @@ pub const Syllable = struct {
     }
 };
 
-/// 자판이 키 하나에서 뽑아낸 자모.
+/// 자판이 키 하나에서 뽑아낸 **후보**(design 결정 11).
 ///
-/// **variant가 둘뿐인 것이 지금 쓰는 전부다.** 세벌식은 초성 전용·종성 전용
-/// 키가 있고 신세벌식은 조합 상태에 따라 중성과 종성이 갈리므로, HI-M2에서
-/// 이 union이 넓어진다. **미리 만들어 두지 않는 이유는** `feed`의 switch가
-/// `else` 없이 닫혀 있어서 variant를 더하는 순간 컴파일러가 배선할 자리를
-/// 알려주기 때문이다(CM-M0부터 지켜 온 규율).
-pub const Jamo = union(enum) {
-    /// 자음 하나. **두벌식은 같은 키가 초성도 종성도 되므로 둘을 함께 나른다.**
-    /// `jong`이 null인 것은 ㄸ·ㅃ·ㅉ 셋뿐이다 — 받침이 될 수 없는 자음이다.
-    consonant: struct { cho: u5, jong: ?u5 },
-    /// 모음 하나. 중성 인덱스다.
-    vowel: u5,
+/// **union이 아니라 struct인 것이 HI-M2의 가장 큰 결정이다.** 자판 넷의 겹침
+/// 구조가 서로 반대이기 때문이다 — 두벌식은 같은 키가 초성이자 종성이고
+/// (`r` = ㄱ/ㄱ) 중성과는 절대 안 겹치는데, 세벌식은 초성과 종성이 절대 안
+/// 겹치고 중성이 양쪽과 겹친다(신세벌 PCS는 오른손 블록 열다섯이 전부
+/// 중성∩종성이다).
+///
+/// 그래서 "이 키가 무엇인가"를 자판이 정하지 않는다. **자판은 될 수 있는 것을
+/// 전부 적고, 조합 상태가 고른다**(`feed`의 우선순위 표).
+pub const Cand = struct {
+    cho: ?u5 = null,
+    jung: ?u5 = null,
+    jong: ?u5 = null,
+    /// 이 중성이 겹모음의 **앞자리**가 될 수 있는가.
+    ///
+    /// 두벌식은 언제나 참이다. 세벌식은 ㅗ·ㅜ·ㅡ가 각각 두 자리에 있고
+    /// **오른쪽만 겹모음을 만든다** — 3-P3에서 `/f`는 ㅘ이지만 `vf`는
+    /// ㅗ와 ㅏ다. 이 표시가 없으면 `보아`가 `봐`가 된다.
+    jung_opens: bool = false,
 };
 
-fn cons(cho: u5, jong: ?u5) Jamo {
-    return .{ .consonant = .{ .cho = cho, .jong = jong } };
+/// 두벌식의 자음. **같은 키가 초성도 종성도 되므로 둘을 함께 나른다.**
+/// `jong`이 null인 것은 ㄸ·ㅃ·ㅉ 셋뿐이다 — 받침이 될 수 없는 자음이다.
+fn cons(cho: u5, jong: ?u5) Cand {
+    return .{ .cho = cho, .jong = jong };
+}
+
+/// 두벌식의 모음. **전부 겹모음을 연다** — ㅗ·ㅜ·ㅡ가 한 자리씩뿐이라
+/// 세벌식 같은 갈림이 없다.
+fn vowel(v: u5) Cand {
+    return .{ .jung = v, .jung_opens = true };
 }
 
 /// 두벌식(KS X 5002). **인자는 쿼티 배치의 문자다.**
@@ -124,7 +148,7 @@ fn cons(cho: u5, jong: ?u5) Jamo {
 /// 이름이다. Patal의 자판 맵이 쓰는 규약과 같고(`KeyCodeMapper.swift:11`),
 /// TARS에서 그 문자를 만드는 것은 `input.zig`의 `keymap` 배열(`:28`)이다.
 /// **그래서 한글 자판은 영문 배열이 쿼티든 드보락이든 안 흔들린다.**
-pub fn dubeol(ch: u8) ?Jamo {
+pub fn dubeol(ch: u8) ?Cand {
     return switch (ch) {
         // 닿소리 열아홉 — {초성 인덱스, 종성 인덱스}
         'r' => cons(0, 1), // ㄱ
@@ -147,20 +171,20 @@ pub fn dubeol(ch: u8) ?Jamo {
         'v' => cons(17, 26), // ㅍ
         'g' => cons(18, 27), // ㅎ
         // 홀소리 열넷 — 겹모음은 키가 없고 조합으로 만든다
-        'k' => .{ .vowel = 0 }, // ㅏ
-        'o' => .{ .vowel = 1 }, // ㅐ
-        'i' => .{ .vowel = 2 }, // ㅑ
-        'O' => .{ .vowel = 3 }, // ㅒ
-        'j' => .{ .vowel = 4 }, // ㅓ
-        'p' => .{ .vowel = 5 }, // ㅔ
-        'u' => .{ .vowel = 6 }, // ㅕ
-        'P' => .{ .vowel = 7 }, // ㅖ
-        'h' => .{ .vowel = 8 }, // ㅗ
-        'y' => .{ .vowel = 12 }, // ㅛ
-        'n' => .{ .vowel = 13 }, // ㅜ
-        'b' => .{ .vowel = 17 }, // ㅠ
-        'm' => .{ .vowel = 18 }, // ㅡ
-        'l' => .{ .vowel = 20 }, // ㅣ
+        'k' => vowel(0), // ㅏ
+        'o' => vowel(1), // ㅐ
+        'i' => vowel(2), // ㅑ
+        'O' => vowel(3), // ㅒ
+        'j' => vowel(4), // ㅓ
+        'p' => vowel(5), // ㅔ
+        'u' => vowel(6), // ㅕ
+        'P' => vowel(7), // ㅖ
+        'h' => vowel(8), // ㅗ
+        'y' => vowel(12), // ㅛ
+        'n' => vowel(13), // ㅜ
+        'b' => vowel(17), // ㅠ
+        'm' => vowel(18), // ㅡ
+        'l' => vowel(20), // ㅣ
         else => null,
     };
 }
@@ -169,13 +193,13 @@ pub fn dubeol(ch: u8) ?Jamo {
 // 실제로 두 번 틀렸다** — `g`를 ㄱ으로 읽어 `ghk`를 "과"로 적었는데 `g`는
 // ㅎ이라 "화"가 맞다. 아래 넷은 그 종류의 착각이 컴파일을 통과하지 못하게 한다.
 comptime {
-    if (CHO[dubeol('r').?.consonant.cho] != 'ㄱ')
+    if (CHO[dubeol('r').?.cho.?] != 'ㄱ')
         @compileError("dubeol: r must be the initial of GIYEOK");
-    if (CHO[dubeol('g').?.consonant.cho] != 'ㅎ')
+    if (CHO[dubeol('g').?.cho.?] != 'ㅎ')
         @compileError("dubeol: g must be the initial of HIEUH");
-    if (JUNG[dubeol('k').?.vowel] != 'ㅏ')
+    if (JUNG[dubeol('k').?.jung.?] != 'ㅏ')
         @compileError("dubeol: k must be the vowel A");
-    if (JUNG[dubeol('l').?.vowel] != 'ㅣ')
+    if (JUNG[dubeol('l').?.jung.?] != 'ㅣ')
         @compileError("dubeol: l must be the vowel I");
 }
 
@@ -256,70 +280,155 @@ pub const Step = struct {
     buf: Syllable = .{},
 };
 
-/// 자모 하나를 조합 버퍼에 먹인다. **두벌식의 규칙이다.**
+/// 후보 하나를 조합 버퍼에 먹인다. **자판이 아니라 조합 상태가 고른다**
+/// (design 결정 11).
 ///
-/// 세벌식·신세벌식이 들어오는 HI-M2에서 이 함수가 자판을 인자로 받게 된다.
-/// switch에 `else`가 없으므로 `Jamo`에 variant를 더하면 여기가 컴파일 에러를
-/// 낸다.
-pub fn feed(buf: Syllable, jamo: Jamo) Step {
-    return switch (jamo) {
-        .consonant => |c| feedConsonant(buf, c.cho, c.jong),
-        .vowel => |v| feedVowel(buf, v),
-    };
-}
+/// 우선순위가 상태마다 다른 것이 이 함수의 전부다.
+///
+/// | 상태 | 순서 |
+/// |---|---|
+/// | 빈 상태 | 초성 → 중성 → 종성 |
+/// | 초성만 | 중성 → 초성 → 종성 |
+/// | 중성만 | 겹모음 → 초성 → 중성 → 종성 |
+/// | 종성만 | 겹받침 → 초성 → 종성 → 중성 |
+/// | 초+중 | 겹모음 → 종성 → 초성 → 중성 |
+/// | 초+중+종 | 겹받침 → 초성 → 종성 → 중성 |
+///
+/// **규칙 하나로 말하면 "종성 자리가 차 있으면 종성이 중성보다 먼저"다.**
+/// 연타 된소리(신세벌의 `cc` = ㄲ받침)와 겹받침을 살리기 위해서다.
+///
+/// **초+중과 초+중+종에서 초성과 종성의 순서가 반대인 것은 순수하게 두벌식이
+/// 정했다.** `가`+`r`은 `각`이어야 하고(종성 먼저) `각`+`e`는 `각ㄷ`이어야
+/// 한다(초성 먼저 — 겹받침 ㄱㄷ이 없으니 새 음절이다). 세벌식은 초성과
+/// 종성이 겹치는 키가 **하나도 없어서** 이 두 줄에 안 흔들린다.
+pub fn feed(buf: Syllable, cand: Cand) Step {
+    const has_cho = buf.cho != null;
+    const has_jung = buf.jung != null;
+    const has_jong = buf.jong != null;
 
-fn feedConsonant(buf: Syllable, cho: u5, jong: ?u5) Step {
-    if (buf.jong) |cur| {
-        // 받침 자리가 찼으면 겹받침이 되는지 본다.
-        if (jong) |j| {
-            if (joinFinal(cur, j)) |merged| {
-                return .{ .buf = .{ .cho = buf.cho, .jung = buf.jung, .jong = merged } };
+    if (has_jong) {
+        // 겹받침이 먼저다. 초+중+종이든 종성만이든 같다.
+        if (cand.jong) |j| {
+            if (joinFinal(buf.jong.?, j)) |merged| return .{ .buf = .{
+                .cho = buf.cho,
+                .jung = buf.jung,
+                .jong = merged,
+                .jung_opens = buf.jung_opens,
+            } };
+        }
+        if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
+        if (cand.jong) |j| return commitAnd(buf, .{ .jong = j });
+        if (cand.jung) |v| {
+            // 받침 넘기기(도깨비불). **초성과 중성이 함께 있을 때만 뜻이
+            // 있다** — 종성만 있는 상태에서 넘기면 확정할 음절이 없다.
+            if (has_cho and has_jung) return carryFinal(buf, v, cand.jung_opens);
+            return commitAnd(buf, .{ .jung = v, .jung_opens = cand.jung_opens });
+        }
+        return .{ .buf = buf };
+    }
+
+    if (has_cho and has_jung) {
+        // 겹모음 → 종성 → 초성 → 중성.
+        if (cand.jung) |v| {
+            if (buf.jung_opens) {
+                if (joinVowel(buf.jung.?, v)) |merged| return .{ .buf = .{
+                    .cho = buf.cho,
+                    .jung = merged,
+                    // 합쳐진 겹모음은 더 합쳐지지 않는다.
+                    .jung_opens = false,
+                } };
             }
         }
-    } else if (buf.cho != null and buf.jung != null) {
-        // 초성+중성이 서 있으면 받침으로 붙는다. ㄸ·ㅃ·ㅉ만 못 붙는다.
-        if (jong) |j| {
-            return .{ .buf = .{ .cho = buf.cho, .jung = buf.jung, .jong = j } };
-        }
+        if (cand.jong) |j| return .{ .buf = .{
+            .cho = buf.cho,
+            .jung = buf.jung,
+            .jong = j,
+            .jung_opens = buf.jung_opens,
+        } };
+        if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
+        if (cand.jung) |v| return commitAnd(buf, .{
+            .jung = v,
+            .jung_opens = cand.jung_opens,
+        });
+        return .{ .buf = buf };
     }
-    // 나머지는 전부 "앞을 확정하고 새 초성으로 시작한다"이다.
-    // **빈 버퍼도 이 갈래로 온다** — `codepoint()`가 null을 주므로 확정될
-    // 것이 없고, 그래서 빈 경우를 따로 적지 않는다.
-    return .{ .commit = buf.codepoint(), .buf = .{ .cho = cho } };
+
+    if (has_cho) {
+        // 중성 → 초성 → 종성. **중성이 첫째인 것이 갈마들이의 자리다** —
+        // 신세벌 PCS의 `p`는 빈 상태에선 ㅍ이고 초성 뒤에선 ㅗ다.
+        if (cand.jung) |v| return .{ .buf = .{
+            .cho = buf.cho,
+            .jung = v,
+            .jung_opens = cand.jung_opens,
+        } };
+        if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
+        if (cand.jong) |j| return commitAnd(buf, .{ .jong = j });
+        return .{ .buf = buf };
+    }
+
+    if (has_jung) {
+        // 겹모음 → 초성 → 중성 → 종성.
+        if (cand.jung) |v| {
+            if (buf.jung_opens) {
+                if (joinVowel(buf.jung.?, v)) |merged| return .{ .buf = .{
+                    .jung = merged,
+                    .jung_opens = false,
+                } };
+            }
+        }
+        if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
+        if (cand.jung) |v| return commitAnd(buf, .{
+            .jung = v,
+            .jung_opens = cand.jung_opens,
+        });
+        if (cand.jong) |j| return commitAnd(buf, .{ .jong = j });
+        return .{ .buf = buf };
+    }
+
+    // 빈 상태 — 초성 → 중성 → 종성. **확정할 것이 없으므로 `commitAnd`가
+    // 아니라 그냥 새 버퍼다**(`codepoint()`가 null을 주니 결과는 같지만,
+    // 빈 상태를 확정 갈래로 보내지 않는 편이 읽기 쉽다).
+    if (cand.cho) |c| return .{ .buf = .{ .cho = c } };
+    if (cand.jung) |v| return .{ .buf = .{
+        .jung = v,
+        .jung_opens = cand.jung_opens,
+    } };
+    if (cand.jong) |j| return .{ .buf = .{ .jong = j } };
+    return .{ .buf = buf };
 }
 
-fn feedVowel(buf: Syllable, v: u5) Step {
-    // 받침이 있는데 모음이 왔다 — 그 받침을 다음 음절의 초성으로 넘긴다.
-    // **두벌식의 핵심이고, 겹받침은 뒷자만 넘어간다**(앉 + ㅓ → 안 + 저).
-    //
-    // `.?` 둘이 단언이다. `splitFinal`의 tail도, 홑받침도 전부
-    // `finalToInitial`의 표에 있다 — 종성 스물일곱 중 겹받침 열하나는 위
-    // 갈래로 빠지고 나머지 열여섯이 표에 그대로 있다.
-    if (buf.jong) |j| {
-        if (splitFinal(j)) |pair| {
-            const head = Syllable{ .cho = buf.cho, .jung = buf.jung, .jong = pair.head };
-            return .{
-                .commit = head.codepoint(),
-                .buf = .{ .cho = finalToInitial(pair.tail).?, .jung = v },
-            };
-        }
-        const head = Syllable{ .cho = buf.cho, .jung = buf.jung };
+/// 지금까지 모은 것을 확정하고 새 버퍼로 시작한다.
+///
+/// **빈 버퍼도 이 갈래로 올 수 있다** — `codepoint()`가 null을 주므로 확정될
+/// 것이 없고, 그래서 빈 경우를 따로 적지 않는다.
+fn commitAnd(buf: Syllable, next: Syllable) Step {
+    return .{ .commit = buf.codepoint(), .buf = next };
+}
+
+/// 받침을 다음 음절의 초성으로 넘긴다. **두벌식의 핵심이고, 겹받침은 뒷자만
+/// 넘어간다**(앉 + ㅓ → 안 + 저).
+///
+/// `.?` 둘이 단언이다. `splitFinal`의 tail도, 홑받침도 전부
+/// `finalToInitial`의 표에 있다 — 종성 스물일곱 중 겹받침 열하나는 위
+/// 갈래로 빠지고 나머지 열여섯이 표에 그대로 있다.
+fn carryFinal(buf: Syllable, v: u5, opens: bool) Step {
+    const j = buf.jong.?;
+    if (splitFinal(j)) |pair| {
+        const head = Syllable{ .cho = buf.cho, .jung = buf.jung, .jong = pair.head };
         return .{
             .commit = head.codepoint(),
-            .buf = .{ .cho = finalToInitial(j).?, .jung = v },
+            .buf = .{
+                .cho = finalToInitial(pair.tail).?,
+                .jung = v,
+                .jung_opens = opens,
+            },
         };
     }
-    if (buf.jung == null) {
-        if (buf.cho) |c| return .{ .buf = .{ .cho = c, .jung = v } };
-        return .{ .buf = .{ .jung = v } };
-    }
-    // 중성이 이미 있다 — 복합 모음이 되는지 먼저 본다.
-    if (joinVowel(buf.jung.?, v)) |merged| {
-        return .{ .buf = .{ .cho = buf.cho, .jung = merged } };
-    }
-    // 안 되면 앞을 확정하고 **중성만 있는 상태**로 남는다. 모아주기를
-    // 뺐으므로 이 상태는 그릴 수 있다(design 결정 3의 표).
-    return .{ .commit = buf.codepoint(), .buf = .{ .jung = v } };
+    const head = Syllable{ .cho = buf.cho, .jung = buf.jung };
+    return .{
+        .commit = head.codepoint(),
+        .buf = .{ .cho = finalToInitial(j).?, .jung = v, .jung_opens = opens },
+    };
 }
 
 /// Backspace. 조합 중이면 **자모를 하나** 뺀다(design 결정 6).
@@ -328,14 +437,27 @@ fn feedVowel(buf: Syllable, v: u5) Step {
 /// DEL(0x7F)을 PTY로 보낸다. 음절을 통째로 지우는 것은 Patal의 `글자단위삭제`
 /// trait이고 안 옮긴다(design 비목표).
 pub fn erase(buf: Syllable) ?Syllable {
+    // **`jung_opens`를 따라 옮긴다.** 안 옮기면 `과`를 지워 `고`가 된 뒤에
+    // 다시 친 `ㅏ`가 안 합쳐져서 `고ㅏ`가 된다.
     if (buf.jong) |j| {
         if (splitFinal(j)) |pair| {
-            return .{ .cho = buf.cho, .jung = buf.jung, .jong = pair.head };
+            return .{
+                .cho = buf.cho,
+                .jung = buf.jung,
+                .jong = pair.head,
+                .jung_opens = buf.jung_opens,
+            };
         }
-        return .{ .cho = buf.cho, .jung = buf.jung };
+        return .{ .cho = buf.cho, .jung = buf.jung, .jung_opens = buf.jung_opens };
     }
     if (buf.jung) |v| {
-        if (splitVowel(v)) |head| return .{ .cho = buf.cho, .jung = head };
+        // 겹모음을 한 겹 벗으면 **다시 열린 상태로 돌아간다** — 그 겹모음은
+        // 열린 키에서 왔기 때문이다.
+        if (splitVowel(v)) |head| return .{
+            .cho = buf.cho,
+            .jung = head,
+            .jung_opens = true,
+        };
         return .{ .cho = buf.cho };
     }
     if (buf.cho != null) return .{};
