@@ -702,6 +702,19 @@ pub const State = struct {
         self.hangul_buf = .{};
     }
 
+    /// 한/영을 뒤집는다. **조합 중이던 것을 먼저 확정한다** — 안 하면 꺼진 채로
+    /// 조합이 남아 화면에 글자가 붙박인다(`hangul_buf`가 비지 않았으면
+    /// `hangul_on`이 참이라는 불변식, HI-M1 검사 31).
+    ///
+    /// **전환 키 넷이 전부 이 함수를 지난다.** 그중 둘(CapsLock·왼쪽 Ctrl)은
+    /// `hangulLayer`가 아니라 `handleKey`의 modifier switch에서 들어오는데,
+    /// 확정을 잊으면 그 둘만 불변식을 깬다 — 한 자리로 모아 두면 그럴 수 없다.
+    fn toggleHangul(self: *State) Action {
+        self.commitHangul();
+        self.hangul_on = !self.hangul_on;
+        return .hangul;
+    }
+
     /// 확정된 코드포인트를 UTF-8로 담는다.
     ///
     /// 한글은 언제나 세 바이트라 실패하지 않는다. 실패했을 때 아무것도 안
@@ -755,12 +768,29 @@ pub const State = struct {
         // Ctrl·Alt·Meta를 함께 보는 이유는 Cmd+Shift+Space 같은 조합이
         // 한/영을 뜻하지 않기 때문이다. 그 조합들은 아래 갈래로 내려가
         // 확정만 하고 흘러간다.
-        if (code == c.KEY_SPACE and self.shifted() and
+        //
+        // **HI-M3부터 설정이 이 갈래를 끌 수 있다**(결정 7). 꺼져 있으면
+        // Shift+Space는 그냥 공백이고, 그것이 HI-M1이 "대가"로 적어 둔 것
+        // (`HELLO WORLD`를 칠 때 손버릇으로 한/영이 바뀐다)을 없애는 길이다.
+        if (self.toggles.shift_space and
+            code == c.KEY_SPACE and self.shifted() and
             !self.ctrled() and !self.alted() and !self.metaed())
         {
-            self.commitHangul();
-            self.hangul_on = !self.hangul_on;
-            return .hangul;
+            return self.toggleHangul();
+        }
+        // 실기의 한/영 키(evdev 122). **게이트가 이 키를 못 보낸다** — QEMU가
+        // `sendkey lang1`을 이름만 받고 조용히 버린다(HI-M0 실측 1). 그래서
+        // 이 갈래를 덮는 것은 `input_test`의 호스트 검사뿐이고, 그 사실을
+        // 여기 적어 둔다(`project_gate_chain_composition`).
+        //
+        // **`hangul_on`을 안 본다** — Shift+Space와 같은 이유로 꺼져 있을 때도
+        // 켤 수 있어야 한다.
+        //
+        // 이 갈래가 꺼져 있으면 122는 `qwerty_keymap.len`보다 큰 코드라 아래
+        // "표 밖의 키" 갈래로 가서 **확정만 하고 흘러간다** — 그것이 맞는
+        // 동작이다.
+        if (self.toggles.hangul_key and code == c.KEY_HANGEUL) {
+            return self.toggleHangul();
         }
         if (!self.hangul_on) return null;
 

@@ -1056,5 +1056,46 @@ pub fn main() !void {
 
     std.debug.print("input_test: dvorak OK\n", .{});
 
+    // ── HI-M3: 한/영 키와 전환 키 설정 ────────────────────────────────
+
+    // 검사 36. **실기의 한/영 키(122)가 전환한다.** 게이트가 이 키를 못
+    // 보내므로(HI-M0 실측 1) 이 검사가 그 갈래를 덮는 **유일한** 자리다.
+    var hk: input.State = .{ .hangul_layout = .dubeol };
+    try expectHangul(&hk, K.KEY_HANGEUL, "", null);
+    if (!hk.hangul_on) {
+        std.debug.print("FAIL: KEY_HANGEUL did not turn hangul on\n", .{});
+        return error.ToggleFailed;
+    }
+    try expectHangul(&hk, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hk, K.KEY_K, "", '가');
+    // **조합 중이던 글자가 확정되고 나간다.** 전환 키 넷이 전부 지켜야 하는
+    // 계약이고, 그것을 `toggleHangul` 한 자리로 모아 둔 이유다.
+    try expectHangul(&hk, K.KEY_HANGEUL, "가", null);
+    if (hk.hangul_on) {
+        std.debug.print("FAIL: KEY_HANGEUL did not turn hangul off\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 37. **꺼 두면 그 키는 아무 일도 안 한다.** 설정이 실제로 갈래를
+    // 끄는지 보는 자리다 — 안 보면 "목록을 파싱만 하고 안 쓰는" 코드가
+    // 통과한다.
+    var tg_off: input.State = .{
+        .hangul_layout = .dubeol,
+        .toggles = .{ .capslock_tap = true },
+    };
+    try expect(&tg_off, K.KEY_HANGEUL, 1, "");
+    if (tg_off.hangul_on) {
+        std.debug.print("FAIL: KEY_HANGEUL toggled with hangul_key off\n", .{});
+        return error.ToggleFailed;
+    }
+    // **Shift+Space도 꺼졌으니 공백이 PTY로 나간다.** 음성 검사가 아니라
+    // **양성** 검사인 것에 뜻이 있다 — 삼키면 빈 문자열이 온다. 이것이
+    // HI-M1이 적어 둔 "대가"를 없애는 길이다.
+    try expect(&tg_off, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&tg_off, K.KEY_SPACE, 1, " ");
+    try expect(&tg_off, K.KEY_LEFTSHIFT, 0, "");
+
+    std.debug.print("input_test: toggle keys OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
