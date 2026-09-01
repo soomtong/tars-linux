@@ -29,8 +29,18 @@ cd "$(dirname "$0")"
 # grep에 -a를 붙이는 이유는 로그에 NUL이 한 바이트라도 섞이면 grep이 파일을
 # binary로 취급해 "Binary file matches"만 뱉기 때문이다.
 #
-# 디스크를 물지 않는다. HI-M1의 한/영은 설정과 무관하다 — 자판과 전환 키가
-# 설정으로 가는 것은 HI-M2·M3이고, 그때 이 체인에 2차 부팅이 붙는다.
+# **디스크를 문다(HI-M2).** `hangul_layout=sebeol_3p3`이 든 이미지를 굽고
+# 읽기만 한다. **2차 부팅은 안 붙였다** — 설정이 자판까지 닿는지만 보면 되고,
+# 설정을 쓰고 다시 읽는 왕복은 CP 체인이 이미 본다(design 결정 14).
+#
+# 그래서 **이 체인이 게스트에서 돌리는 자판은 공세벌 3-P3 하나다.** 두벌식은
+# `hangul_test`가, 기본값이 shin_pcs라는 것은 `config_test`가 본다. 그 교환을
+# 받아들인 이유는 설정 → argv → 자판 선택 배선이 **호스트 검사로는 절대 안
+# 보이는 유일한 구간**이기 때문이다.
+#
+# 3-P3의 키는 초성이 오른손, 중성과 종성이 왼손이다. 아래에서 쓰는 것 넷:
+#   k = 초성 ㄱ    f = 중성 ㅏ    q = 종성 ㅅ    h = 초성 ㄴ    u = 초성 ㄷ
+# 그래서 `kf`가 `가`이고 `kfq`가 `갓`, `kfhfuf`가 `가나다`다.
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -64,6 +74,12 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   exit 1
 fi
 
+# 설정 디스크. **매 회차 새로 굽는다** — 그 이유는 make_disk.sh의 주석에 있다.
+if ! ./make_disk.sh; then
+  echo "FAIL: hangul config disk build failed"
+  exit 1
+fi
+
 # 45455=TF, 45456=CP, 45457=IP, 45458=PM, 45459=HD, 45460=TR, 45461=CM.
 # 겹치지 않는 번호를 쓰는 이유는 죽다 만 QEMU가 남았을 때 엉뚱한 게스트에
 # 명령을 보내지 않기 위해서다.
@@ -87,6 +103,8 @@ report_failure() {
   echo "--- markers ---"
   local marker
   for marker in \
+    "tars-init: config " \
+    "terminal: hangul layout=" \
     "terminal: screen>" \
     "terminal: hangul>" \
     "terminal: key>"; do
@@ -153,6 +171,7 @@ qemu-system-x86_64 \
   -vga none \
   -device virtio-gpu-pci \
   -display none \
+  -drive file=../out/hangul.img,if=virtio,format=raw \
   -serial file:"$LOG" \
   -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
   -no-reboot &
@@ -173,6 +192,26 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 [ "$CONNECTED" = "1" ] || report_failure "could not connect to the QEMU monitor"
+
+# ── 검사 0: 설정이 자판을 골랐다 ───────────────────────────────────────
+#
+# **줄 둘을 다 본다.** 앞의 줄은 "init이 디스크의 파일에서 읽었다"를, 뒤의
+# 줄은 "그 값이 argv를 건너 terminal에 닿았다"를 말한다. **앞만 보면 argv
+# 배선이 끊겨도 초록이고, 뒤만 보면 terminal의 기본값이 우연히 맞아도
+# 초록이다.**
+#
+# 심은 값이 기본값(shin_pcs)이 아닌 것이 이 검사의 전제다 — 같았다면 설정을
+# 통째로 무시하는 코드도 통과한다. **그리고 아래 검사 3~11이 전부 3-P3 키를
+# 쓰므로, 이 검사가 실패하면 그것들도 함께 실패한다** — 진짜 판정은 둘이 짝을
+# 이루는 데서 온다.
+echo "=== the config disk should have selected sebeol_3p3 ==="
+if ! grep -aq 'tars-init: config .*hangul=sebeol_3p3' "$LOG"; then
+  report_failure "init did not read hangul_layout=sebeol_3p3 from the config disk"
+fi
+if ! grep -aq 'terminal: hangul layout=sebeol_3p3' "$LOG"; then
+  report_failure "the layout did not reach terminal through argv"
+fi
+echo "sebeol_3p3 came from the config file and reached the composer"
 
 # ── 검사 1: 대조군 — 한글이 꺼져 있으면 키가 PTY로 나간다 ──────────────
 #
@@ -221,9 +260,9 @@ if [ "$AFTER_TOGGLE" != "$BEFORE_TOGGLE" ]; then
 fi
 echo "Shift+Space turned hangul on and sent nothing to the shell"
 
-# ── 검사 3: 두벌식이 조합되고, 그 글자는 PTY로 안 나간다 ───────────────
+# ── 검사 3: 세벌식이 조합되고, 그 글자는 PTY로 안 나간다 ───────────────
 #
-# `r`=ㄱ, `k`=ㅏ 라 `가`가 된다. 넷을 함께 본다.
+# 3-P3에서 `k`=초성 ㄱ, `f`=중성 ㅏ 라 `가`가 된다. 넷을 함께 본다.
 #
 #   1. `hangul> preedit=가`      — 조합 상태가 맞다
 #   2. 마지막 프레임의 `screen>`에 `가`  — **화면에 실제로 그려졌다**
@@ -232,12 +271,12 @@ echo "Shift+Space turned hangul on and sent nothing to the shell"
 #
 # **1만 보면 "값은 맞는데 안 그렸다"를 못 잡고, 2만 보면 "그렸는데 값이
 # 틀렸다"를 못 잡는다.** SP-M1의 실측 5가 같은 자리를 적어 두었다.
-echo "=== typing 'rk' (가) ==="
-type_keys r k
+echo "=== typing 'kf' (가) ==="
+type_keys k f
 sleep 1
 PRE="$(hangul_field preedit)"
 if [ "$PRE" != "가" ]; then
-  report_failure "typing 'rk' composed preedit=${PRE}, expected 가"
+  report_failure "typing 'kf' composed preedit=${PRE}, expected 가"
 fi
 if [ "$(screen_count '가')" -lt 1 ]; then
   report_failure "the composing syllable 가 was never drawn on screen"
@@ -253,8 +292,8 @@ fi
 echo "가 is composed, drawn across two cells, and nothing reached the shell"
 
 # ── 검사 4: 받침이 붙는다 ──────────────────────────────────────────────
-echo "=== typing 't' (갓) ==="
-type_keys t
+echo "=== typing 'q' (갓) ==="
+type_keys q
 sleep 1
 PRE="$(hangul_field preedit)"
 if [ "$PRE" != "갓" ]; then
@@ -287,8 +326,8 @@ echo "backspace removed one jamo and sent nothing to the shell"
 #
 # 셋이 아니라 넷인 것에 뜻이 있다. 셋이면 CR이 빠진 것이고, 하나면 확정이
 # 통째로 사라진 것이다.
-echo "=== typing 't' then Enter ==="
-type_keys t
+echo "=== typing 'q' then Enter ==="
+type_keys q
 sleep 1
 type_keys ret
 sleep 2
@@ -340,16 +379,16 @@ echo "Shift+Space turned hangul off"
 # **대조군이 하나 더 필요한 이유가 있다.** 검사 1은 한글을 켜기 **전**을
 # 봤으므로, 껐을 때 되돌아오는지는 아무것도 말하지 않는다 — 토글이 한
 # 방향으로만 동작해도 검사 1과 9가 전부 통과한다.
-echo "=== typing 'rk' with hangul off ==="
+echo "=== typing 'kf' with hangul off ==="
 BEFORE_LATIN="$(key_lines)"
-type_keys r k
+type_keys k f
 sleep 1
 AFTER_LATIN="$(key_lines)"
 if [ "$AFTER_LATIN" -le "$BEFORE_LATIN" ]; then
   report_failure "latin keys did not reach the PTY after turning hangul off"
 fi
-if [ "$(screen_count 'rk')" -lt 1 ]; then
-  report_failure "the shell never echoed 'rk' after turning hangul off"
+if [ "$(screen_count 'kf')" -lt 1 ]; then
+  report_failure "the shell never echoed 'kf' after turning hangul off"
 fi
 echo "latin input is back"
 
@@ -373,7 +412,7 @@ type_keys ctrl-c
 sleep 1
 type_keys e c h o spc
 type_keys shift-spc
-type_keys r k s k e k
+type_keys k f h f u f
 type_keys ret
 sleep 2
 if [ "$(screen_count '가나다')" -lt 2 ]; then
