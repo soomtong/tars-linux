@@ -1,14 +1,18 @@
 const std = @import("std");
 const hangul = @import("hangul.zig");
 
-/// 두벌식으로 문자열을 통째로 치고 나온 글자를 모은다.
+/// 자판 하나로 문자열을 통째로 치고 나온 글자를 모은다.
 /// **마지막에 남은 조합도 확정한다** — 사람이 Enter를 치는 자리에 해당한다.
-fn typeAll(keys: []const u8, out: []u8) ![]const u8 {
+///
+/// **조합 순서를 통째로 넣고 결과 문자열을 보는 것이 이 검사의 모양이다**
+/// (design 위험 2). 갈마들이는 "이 키가 무슨 자모인가"가 아니라 "이 상태에서
+/// 이 키가 무엇이 되는가"라, 표와 오토마타를 따로 보면 안 보인다.
+fn typeAll(layout: hangul.Layout, keys: []const u8, out: []u8) ![]const u8 {
     var buf = hangul.Syllable{};
     var len: usize = 0;
     for (keys) |ch| {
-        const cand = hangul.dubeol(ch) orelse return error.NotAJamoKey;
-        const step = hangul.feed(buf, cand);
+        const cand = layout.lookup(ch) orelse return error.NotAJamoKey;
+        const step = hangul.feed(buf, cand, layout);
         if (step.commit) |cp| len += try std.unicode.utf8Encode(cp, out[len..]);
         buf = step.buf;
     }
@@ -17,14 +21,18 @@ fn typeAll(keys: []const u8, out: []u8) ![]const u8 {
 }
 
 /// 친 것과 나온 것을 짝지어 본다.
-fn expectTyped(keys: []const u8, want: []const u8) !void {
+fn expectTyped(layout: hangul.Layout, keys: []const u8, want: []const u8) !void {
     var out: [64]u8 = undefined;
-    const got = try typeAll(keys, &out);
+    const got = try typeAll(layout, keys, &out);
     if (std.mem.eql(u8, got, want)) {
-        std.debug.print("hangul_test: \"{s}\" -> \"{s}\" OK\n", .{ keys, want });
+        std.debug.print("hangul_test: [{s}] \"{s}\" -> \"{s}\" OK\n", .{
+            @tagName(layout), keys, want,
+        });
         return;
     }
-    std.debug.print("FAIL: \"{s}\" -> \"{s}\", want \"{s}\"\n", .{ keys, got, want });
+    std.debug.print("FAIL: [{s}] \"{s}\" -> \"{s}\", want \"{s}\"\n", .{
+        @tagName(layout), keys, got, want,
+    });
     return error.WrongComposition;
 }
 
@@ -99,25 +107,25 @@ pub fn main() !void {
     // **받침 넘기기가 필요한 것은 여기 없다.** `rkrk`("가가")처럼 받침 뒤에
     // 모음이 오는 경우는 Task 6이 들어와야 맞게 나온다 — 지금 넣으면
     // "각ㅏ"가 나온다.
-    try expectTyped("g", "ㅎ");
-    try expectTyped("k", "ㅏ");
-    try expectTyped("rk", "가");
-    try expectTyped("gr", "ㅎㄱ");
-    try expectTyped("rkt", "갓");
-    try expectTyped("rkE", "가ㄸ");
-    try expectTyped("rkk", "가ㅏ");
-    try expectTyped("gksrmf", "한글");
+    try expectTyped(.dubeol, "g", "ㅎ");
+    try expectTyped(.dubeol, "k", "ㅏ");
+    try expectTyped(.dubeol, "rk", "가");
+    try expectTyped(.dubeol, "gr", "ㅎㄱ");
+    try expectTyped(.dubeol, "rkt", "갓");
+    try expectTyped(.dubeol, "rkE", "가ㄸ");
+    try expectTyped(.dubeol, "rkk", "가ㅏ");
+    try expectTyped(.dubeol, "gksrmf", "한글");
 
     // ── 5. 겹자모와 받침 넘기기 ───────────────────────────────────────
     //
     // **여섯이 서로 다른 갈래를 밟는다.** 복합 모음 · ㅡㅣ · 홑받침 넘기기 ·
     // 겹받침 만들기 · 겹받침 넘기기 · 쌍자음.
-    try expectTyped("rhk", "과");
-    try expectTyped("rml", "긔");
-    try expectTyped("dksk", "아나");
-    try expectTyped("dkswrj", "앉거");
-    try expectTyped("dkswj", "안저");
-    try expectTyped("Rk", "까");
+    try expectTyped(.dubeol, "rhk", "과");
+    try expectTyped(.dubeol, "rml", "긔");
+    try expectTyped(.dubeol, "dksk", "아나");
+    try expectTyped(.dubeol, "dkswrj", "앉거");
+    try expectTyped(.dubeol, "dkswj", "안저");
+    try expectTyped(.dubeol, "Rk", "까");
 
     // ── 6. Backspace ─────────────────────────────────────────────────
     //
@@ -172,7 +180,7 @@ pub fn main() !void {
     for (keys) |k1| for (keys) |k2| for (keys) |k3| {
         var s = hangul.Syllable{};
         for ([_]u8{ k1, k2, k3 }) |ch| {
-            s = hangul.feed(s, hangul.dubeol(ch).?).buf;
+            s = hangul.feed(s, hangul.dubeol(ch).?, .dubeol).buf;
             seen += 1;
             if (!s.isEmpty() and s.codepoint() == null) bad += 1;
         }

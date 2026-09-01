@@ -383,6 +383,14 @@ pub const State = struct {
     /// 필요가 없다.
     hangul_buf: hangul.Syllable = .{},
 
+    /// 한글 자판(HI-M2). **부팅 내내 상수다** — 설정 파일이 정하고 argv로
+    /// 오며, 런타임 전환은 안 한다(design 결정 7).
+    ///
+    /// **기본값이 `.dubeol`인 것은 이 필드의 뜻이 아니다.** 설정의 기본값은
+    /// `init/src/config.zig`의 `Config`에 있고 그것이 진실이다. 여기 값은
+    /// `main.zig`가 argv로 매번 덮어쓴다.
+    hangul_layout: hangul.Layout = .dubeol,
+
     /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
     ///
     /// **왜 반환값이 아니라 여기인가.** 조합을 끝내는 키는 자기 몫의 결과를
@@ -590,13 +598,13 @@ pub const State = struct {
             return null;
         }
         // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
-        // `dubeol`이 셋 다 null을 준다. **확정한 글자가 그 키의 바이트보다
+        // 자판이 셋 다 null을 준다. **확정한 글자가 그 키의 바이트보다
         // 먼저 나가는 것을 보장하는 것은 `readKeys`다.**
-        const jamo = hangul.dubeol(ch) orelse {
+        const cand = self.hangul_layout.lookup(ch) orelse {
             self.commitHangul();
             return null;
         };
-        const step = hangul.feed(self.hangul_buf, jamo);
+        const step = hangul.feed(self.hangul_buf, cand, self.hangul_layout);
         if (step.commit) |cp| self.pushCommit(cp);
         self.hangul_buf = step.buf;
         return .hangul;

@@ -284,6 +284,73 @@ fn finalToInitial(j: u5) ?u5 {
     };
 }
 
+/// 같은 초성을 잇달아 치면 된소리가 된다. **세벌식 셋만 쓴다**
+/// (design 결정 12) — 두벌식은 Shift로 치므로 `rr`이 `ㄱㄱ`이어야 한다.
+fn tenseInitial(c: u5) ?u5 {
+    return switch (c) {
+        0 => 1, // ㄱ → ㄲ
+        3 => 4, // ㄷ → ㄸ
+        7 => 8, // ㅂ → ㅃ
+        9 => 10, // ㅅ → ㅆ
+        12 => 13, // ㅈ → ㅉ
+        else => null,
+    };
+}
+
+/// 종성 자리의 연타. **둘뿐인 것은 우연이 아니다** — 종성에 올 수 있는
+/// 된소리가 ㄲ과 ㅆ밖에 없다.
+fn tenseFinal(j: u5) ?u5 {
+    return switch (j) {
+        1 => 2, // ㄱ → ㄲ
+        19 => 20, // ㅅ → ㅆ
+        else => null,
+    };
+}
+
+/// 한글 자판. **`Shell`·`Keyboard`와 같은 화이트리스트 구조다**
+/// (`init/src/config.zig`) — enum이 "무엇을 적을 수 있는가"를, 아래 switch들이
+/// "그것이 무엇을 하는가"를 정한다. 이름을 하나 더하면 switch들이 전부
+/// 컴파일 에러를 내서 빠뜨릴 수 없다.
+pub const Layout = enum {
+    dubeol,
+    sebeol_3p3,
+    shin_p2,
+    shin_pcs,
+
+    /// 쿼티 배치의 문자 하나 → 후보. **인자는 언제나 쿼티다**
+    /// (design 결정 13) — 영문 배열이 드보락이어도 여기 오는 문자는 안 바뀐다.
+    pub fn lookup(self: Layout, ch: u8) ?Cand {
+        return switch (self) {
+            .dubeol => dubeol(ch),
+            // 아래 셋은 Task 4·5가 채운다. 지금 두벌식을 가리키는 것은
+            // **자리를 잡아 두는 것**이고, 그 사이에 이 셋을 부르는 검사를
+            // 쓰지 않는다.
+            .sebeol_3p3 => dubeol(ch),
+            .shin_p2 => dubeol(ch),
+            .shin_pcs => dubeol(ch),
+        };
+    }
+
+    /// 받침 넘기기(도깨비불). **두벌식만이다**(design 결정 12).
+    ///
+    /// 세벌식은 초성 키와 종성 키가 아예 달라서 넘길 이유가 없고, 넘기면
+    /// 틀린다 — 3-P3에서 `각`+ㅜ는 `가구`가 아니라 `각ㅜ`가 맞다.
+    fn carriesFinal(self: Layout) bool {
+        return switch (self) {
+            .dubeol => true,
+            .sebeol_3p3, .shin_p2, .shin_pcs => false,
+        };
+    }
+
+    /// 연타 된소리. **세벌식 셋만이다.**
+    fn tenseByRepeat(self: Layout) bool {
+        return switch (self) {
+            .dubeol => false,
+            .sebeol_3p3, .shin_p2, .shin_pcs => true,
+        };
+    }
+};
+
 /// 자모 하나를 먹인 결과.
 pub const Step = struct {
     /// 확정돼서 PTY로 갈 글자. 없으면 null이다.
@@ -313,7 +380,7 @@ pub const Step = struct {
 /// 정했다.** `가`+`r`은 `각`이어야 하고(종성 먼저) `각`+`e`는 `각ㄷ`이어야
 /// 한다(초성 먼저 — 겹받침 ㄱㄷ이 없으니 새 음절이다). 세벌식은 초성과
 /// 종성이 겹치는 키가 **하나도 없어서** 이 두 줄에 안 흔들린다.
-pub fn feed(buf: Syllable, cand: Cand) Step {
+pub fn feed(buf: Syllable, cand: Cand, layout: Layout) Step {
     const has_cho = buf.cho != null;
     const has_jung = buf.jung != null;
     const has_jong = buf.jong != null;
@@ -329,11 +396,26 @@ pub fn feed(buf: Syllable, cand: Cand) Step {
             } };
         }
         if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
-        if (cand.jong) |j| return commitAnd(buf, .{ .jong = j });
+        if (cand.jong) |j| {
+            // 연타 된소리 — 신세벌의 `cc`가 ㄲ받침이 되는 자리다. **겹받침을
+            // 먼저 본 뒤이므로 `joinFinal`과 안 겹친다**(ㄱ+ㄱ은 겹받침 표에
+            // 없다).
+            if (layout.tenseByRepeat() and buf.jong.? == j) {
+                if (tenseFinal(j)) |t| return .{ .buf = .{
+                    .cho = buf.cho,
+                    .jung = buf.jung,
+                    .jong = t,
+                    .jung_opens = buf.jung_opens,
+                } };
+            }
+            return commitAnd(buf, .{ .jong = j });
+        }
         if (cand.jung) |v| {
-            // 받침 넘기기(도깨비불). **초성과 중성이 함께 있을 때만 뜻이
-            // 있다** — 종성만 있는 상태에서 넘기면 확정할 음절이 없다.
-            if (has_cho and has_jung) return carryFinal(buf, v, cand.jung_opens);
+            // 받침 넘기기(도깨비불). **두벌식만이고, 초성과 중성이 함께
+            // 있을 때만 뜻이 있다** — 종성만 있는 상태에서 넘기면 확정할
+            // 음절이 없다.
+            if (layout.carriesFinal() and has_cho and has_jung)
+                return carryFinal(buf, v, cand.jung_opens);
             return commitAnd(buf, .{ .jung = v, .jung_opens = cand.jung_opens });
         }
         return .{ .buf = buf };
@@ -373,7 +455,13 @@ pub fn feed(buf: Syllable, cand: Cand) Step {
             .jung = v,
             .jung_opens = cand.jung_opens,
         } };
-        if (cand.cho) |c| return commitAnd(buf, .{ .cho = c });
+        if (cand.cho) |c| {
+            // 연타 된소리 — 세벌식의 `kk`가 ㄲ이 되는 자리다.
+            if (layout.tenseByRepeat() and buf.cho.? == c) {
+                if (tenseInitial(c)) |t| return .{ .buf = .{ .cho = t } };
+            }
+            return commitAnd(buf, .{ .cho = c });
+        }
         if (cand.jong) |j| return commitAnd(buf, .{ .jong = j });
         return .{ .buf = buf };
     }
