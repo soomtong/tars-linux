@@ -832,7 +832,10 @@ pub fn main() !void {
 
     // ── HI-M1: 한글 ───────────────────────────────────────────────────
 
-    var hg: input.State = .{};
+    // **자판을 명시한다.** 아래 검사 여덟은 전부 두벌식을 보는데, HI-M2부터
+    // `State`의 기본값이 `shin_pcs`다(설정의 기본값과 같게 둔다). 안 적으면
+    // `r`이 ㄱ이 아니라 ㅓ가 되어 전부 갈린다.
+    var hg: input.State = .{ .hangul_layout = .dubeol };
 
     // 검사 24. **대조군 — 한글이 꺼져 있으면 아무것도 안 바뀐다.**
     // 이 검사가 없으면 아래 검사들이 "한글이 되는가"만 보고 "영문이 계속
@@ -983,6 +986,34 @@ pub fn main() !void {
     try expect(&sp, K.KEY_LEFTSHIFT, 0, "");
 
     std.debug.print("input_test: layout symbols OK\n", .{});
+
+    // ── HI-M2: 영문 드보락 ────────────────────────────────────────────
+
+    // 검사 34. **드보락이 라틴 문자를 바꾼다.** 쿼티의 `s` 자리(KEY_S)가
+    // 드보락에서는 `o`이고, `z` 자리는 `;`다.
+    var dv: input.State = .{ .latin_layout = .dvorak, .hangul_layout = .dubeol };
+    try expect(&dv, K.KEY_S, 1, "o");
+    try expect(&dv, K.KEY_Z, 1, ";");
+    try expect(&dv, K.KEY_R, 1, "p");
+    // Shift도 드보락 표를 탄다.
+    try expect(&dv, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&dv, K.KEY_S, 1, "O");
+    try expect(&dv, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 35. **그런데 한글 배열은 안 흔들린다**(design 결정 13). 이것이 이
+    // 검사의 전부다 — 한글 자판이 쓰는 것은 문자가 아니라 물리 키 위치이고,
+    // 그 위치를 부르는 이름이 쿼티 배치의 문자다.
+    //
+    // KEY_R은 드보락에서 `p`인데, 두벌식에서 ㄱ이 나와야 한다. **틀리면
+    // 여기서 ㅔ가 나온다**(두벌식의 `p`) — 증상이 "안 된다"가 아니라 "다른
+    // 글자가 나온다"라 원인을 오토마타에서 찾게 되는 자리다.
+    try expect(&dv, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&dv, K.KEY_SPACE, "", null);
+    try expect(&dv, K.KEY_LEFTSHIFT, 0, "");
+    try expectHangul(&dv, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&dv, K.KEY_K, "", '가');
+
+    std.debug.print("input_test: dvorak OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

@@ -69,6 +69,44 @@ pub const Keyboard = enum {
     }
 };
 
+/// 한글 자판(HI design 결정 7). **`Shell`·`Keyboard`와 같은 화이트리스트
+/// 구조다** — enum에 없는 이름은 파싱을 통과할 수 없다.
+///
+/// **이름이 `terminal/src/hangul.zig`의 `Layout`과 짝이어야 한다.** 여기가
+/// "무엇을 적을 수 있는가"이고 저기가 "그것이 어떻게 조합하는가"인데, 둘을
+/// 잇는 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다. **어긋나면
+/// 증상은 "설정을 적었는데 기본 자판으로 뜬다"이고, 로그에 자판 이름이
+/// 찍히므로 HI 게이트가 그것을 본다.**
+pub const HangulLayout = enum {
+    dubeol,
+    sebeol_3p3,
+    shin_p2,
+    shin_pcs,
+
+    pub fn arg(self: HangulLayout) [:0]const u8 {
+        return switch (self) {
+            .dubeol => "dubeol",
+            .sebeol_3p3 => "sebeol_3p3",
+            .shin_p2 => "shin_p2",
+            .shin_pcs => "shin_pcs",
+        };
+    }
+};
+
+/// 영문 자판. **한글 자판과 직교한다**(HI design 결정 13) — 한글 배열은
+/// 물리 키 위치를 쓰므로 이 값이 무엇이든 안 흔들린다.
+pub const LatinLayout = enum {
+    qwerty,
+    dvorak,
+
+    pub fn arg(self: LatinLayout) [:0]const u8 {
+        return switch (self) {
+            .qwerty => "qwerty",
+            .dvorak => "dvorak",
+        };
+    }
+};
+
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
 ///
 /// keyboard의 기본값이 apple인 이유는 이 기계를 쓰는 사람이 Apple 키보드를
@@ -76,6 +114,11 @@ pub const Keyboard = enum {
 pub const Config = struct {
     shell: Shell = .fish,
     keyboard: Keyboard = .apple,
+    /// **기본값이 `shin_pcs`인 것은 `keyboard`가 `apple`인 것과 같은
+    /// 근거다** — 이 기계를 쓰는 사람이 쓰는 것이 기본값이다. 두벌식이 더
+    /// 흔하다는 것은 이 기계의 사실이 아니다.
+    hangul_layout: HangulLayout = .shin_pcs,
+    latin_layout: LatinLayout = .qwerty,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -174,6 +217,21 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "hangul_layout")) {
+            // shell·keyboard와 완전히 같은 모양이다.
+            c.hangul_layout = std.meta.stringToEnum(HangulLayout, value) orelse {
+                std.debug.print("tars-init: unknown hangul_layout '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.hangul_layout),
+                });
+                continue;
+            };
+        } else if (std.mem.eql(u8, key, "latin_layout")) {
+            c.latin_layout = std.meta.stringToEnum(LatinLayout, value) orelse {
+                std.debug.print("tars-init: unknown latin_layout '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.latin_layout),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -205,8 +263,18 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\# keyboard: apple | pc
         \\#   apple = [Ctrl][Option][Cmd], pc = [Ctrl][Win][Alt]
         \\keyboard={s}
+        \\# hangul_layout: dubeol | sebeol_3p3 | shin_p2 | shin_pcs
+        \\hangul_layout={s}
+        \\# latin_layout: qwerty | dvorak
+        \\#   한글 자판은 물리 키 위치를 쓰므로 이 값에 안 흔들린다
+        \\latin_layout={s}
         \\
-    , .{ @tagName(c.shell), @tagName(c.keyboard) }) catch return error.FormatFailed;
+    , .{
+        @tagName(c.shell),
+        @tagName(c.keyboard),
+        @tagName(c.hangul_layout),
+        @tagName(c.latin_layout),
+    }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의
     // 계약은 "이 내용으로 만든다"이다. O_TRUNC는 나중에 이 함수가 갱신에도

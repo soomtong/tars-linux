@@ -8,17 +8,27 @@ const config = @import("config.zig");
 /// terminal/src/input_test.zig와 같은 모양(호스트 아키텍처 실행 파일,
 /// 실패하면 0이 아닌 종료 코드)으로 맞춘다 — 체인 스크립트가 둘을 똑같이
 /// 다룰 수 있어야 한다.
+/// **필드 넷을 전부 비교한다.** HI-M2가 둘을 더하면서 넓혔는데, 안 넓혔다면
+/// 새 키의 검사가 아무것도 안 보고 초록이 떴을 것이다 — 이 저장소가 반복해서
+/// 부딪친 "통과했다와 볼 것이 없었다를 가르는" 자리다(SP-M0 실측 4).
 fn expect(text: []const u8, want: config.Config) !void {
     const got = config.parse(text);
-    if (got.shell == want.shell and got.keyboard == want.keyboard) return;
+    if (got.shell == want.shell and got.keyboard == want.keyboard and
+        got.hangul_layout == want.hangul_layout and
+        got.latin_layout == want.latin_layout) return;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s}\n  want shell={s} keyboard={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s}\n",
         .{
             text,
             @tagName(got.shell),
             @tagName(got.keyboard),
+            @tagName(got.hangul_layout),
+            @tagName(got.latin_layout),
             @tagName(want.shell),
             @tagName(want.keyboard),
+            @tagName(want.hangul_layout),
+            @tagName(want.latin_layout),
         },
     );
     return error.UnexpectedConfig;
@@ -51,7 +61,10 @@ pub fn main() !void {
     // 이것이 CP design doc의 "설정 하나로 부팅이 막히지 않게 하는 장치"다.
     // 어느 줄도 예외를 던지지 않고, 어느 줄도 부팅을 멈추지 않는다.
     try expect("shell=nushell\n", .{}); // enum에 없는 셸
-    try expect("keyboard=dvorak\n", .{}); // enum에 없는 키보드
+    // **다른 enum의 이름이 새어 들어가지 않는다.** `dvorak`은 이제
+    // `LatinLayout`의 이름이지만 `Keyboard`에는 없다 — 화이트리스트가
+    // 키마다 따로 선다는 뜻이다.
+    try expect("keyboard=dvorak\n", .{});
     try expect("colour=red\n", .{}); // 모르는 키
     try expect("no equals here\n", .{}); // '=' 없음
     try expect("=value\n", .{}); // 키 없음
@@ -70,6 +83,43 @@ pub fn main() !void {
     // 한 줄이 깨져도 나머지 줄은 살아남는다. 이 성질이 없으면 오타 하나가
     // 파일 전체를 무효로 만든다.
     try expect("shell=nope\nkeyboard=pc\n", .{ .keyboard = .pc });
+
+    // ── HI-M2: 자판 두 줄 ───────────────────────────────────────────────
+    //
+    // **자판 이름 여섯이 전부 파싱된다.** 이 여섯 줄이 `config.zig`의 enum과
+    // `terminal/src/hangul.zig`의 `Layout`을 잇는 문자열을 못 박는다 — 둘을
+    // 잇는 것은 argv의 문자열뿐이라 컴파일러가 안 잡아 준다.
+    try expect("hangul_layout=dubeol\n", .{ .hangul_layout = .dubeol });
+    try expect("hangul_layout=sebeol_3p3\n", .{ .hangul_layout = .sebeol_3p3 });
+    try expect("hangul_layout=shin_p2\n", .{ .hangul_layout = .shin_p2 });
+    try expect("hangul_layout=shin_pcs\n", .{ .hangul_layout = .shin_pcs });
+    try expect("latin_layout=qwerty\n", .{ .latin_layout = .qwerty });
+    try expect("latin_layout=dvorak\n", .{ .latin_layout = .dvorak });
+
+    // 넷이 함께. 다른 키를 안 건드린다는 것까지 본다.
+    try expect(
+        "shell=bash\nkeyboard=pc\nhangul_layout=sebeol_3p3\nlatin_layout=dvorak\n",
+        .{
+            .shell = .bash,
+            .keyboard = .pc,
+            .hangul_layout = .sebeol_3p3,
+            .latin_layout = .dvorak,
+        },
+    );
+
+    // 깨진 값은 기본값(shin_pcs · qwerty)에 머문다.
+    try expect("hangul_layout=sebul\n", .{});
+    try expect("latin_layout=colemak\n", .{});
+    // **자판 이름이 서로 새어 들어가지 않는다.** `qwerty`는 `LatinLayout`의
+    // 이름이지 `HangulLayout`의 이름이 아니다.
+    try expect("hangul_layout=qwerty\n", .{});
+
+    // HI 게이트가 심는 파일 그대로. **기본값이 아닌 값 하나를 심는 것이
+    // 요점이다**(design 결정 14).
+    try expect(
+        "# HI 체인이 미리 심어 두는 설정\nhangul_layout=sebeol_3p3\n",
+        .{ .hangul_layout = .sebeol_3p3 },
+    );
 
     std.debug.print("PASS\n", .{});
 }

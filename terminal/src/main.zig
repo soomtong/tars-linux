@@ -1,6 +1,7 @@
 const std = @import("std");
 const drm = @import("drm.zig");
 const font = @import("font.zig");
+const hangul = @import("hangul.zig");
 const input = @import("input.zig");
 const pty = @import("pty.zig");
 const vt = @import("vt.zig");
@@ -618,6 +619,16 @@ pub fn main(init: std.process.Init) !void {
     const keyboard: [*:0]const u8 = if (args.len > 3) args[3] else "apple";
     const swap_alt_meta = std.mem.eql(u8, std.mem.span(keyboard), "pc");
 
+    // 여섯째와 일곱째가 자판 둘이다(HI-M2, design 결정 7). keyboard와 달리
+    // enum 이름이 그대로 오므로 `stringToEnum`으로 되돌린다 — **이름이
+    // `init/src/config.zig`의 enum과 짝이어야 하고 컴파일러가 그것을 못
+    // 잡는다.** init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은
+    // 언제나 맞고, 아래 fallback은 terminal을 손으로 띄울 때를 위한 것이다.
+    const hangul_arg: []const u8 = if (args.len > 5) std.mem.span(args[5]) else "shin_pcs";
+    const latin_arg: []const u8 = if (args.len > 6) std.mem.span(args[6]) else "qwerty";
+    const hangul_layout = std.meta.stringToEnum(hangul.Layout, hangul_arg) orelse .shin_pcs;
+    const latin_layout = std.meta.stringToEnum(input.LatinLayout, latin_arg) orelse .qwerty;
+
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
     // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
     // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
@@ -668,6 +679,13 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
         keyboard, swap_alt_meta,
     });
+    // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). **`tars-init:`의 줄과
+    // 짝이다** — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
+    // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
+    // 뒤만 보면 여기 기본값이 우연히 맞아도 초록이다. HI 게이트가 둘을 다 본다.
+    std.debug.print("terminal: hangul layout={s} latin={s}\n", .{
+        @tagName(hangul_layout), @tagName(latin_layout),
+    });
 
     const screen = try vt.Screen.init(init.io, allocator, cols, rows);
     defer screen.deinit();
@@ -684,7 +702,10 @@ pub fn main(init: std.process.Init) !void {
     // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 **안에만** 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
-    var key_state: input.State = .{};
+    var key_state: input.State = .{
+        .hangul_layout = hangul_layout,
+        .latin_layout = latin_layout,
+    };
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
 

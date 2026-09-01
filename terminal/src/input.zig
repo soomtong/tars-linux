@@ -26,7 +26,7 @@ const O_RDONLY: c_int = 0;
 /// 0은 "이 키는 문자를 만들지 않는다"는 뜻이다(modifier 키 등).
 /// 값은 리눅스 `input-event-codes.h`의 KEY_* 상수 순서 그대로이며,
 /// US QWERTY 레이아웃 하나만 하드코딩한다(design doc 6번 결정).
-const keymap = [_][2]u8{
+const qwerty_keymap = [_][2]u8{
     .{ 0, 0 }, //  0: (없음)
     .{ 0x1b, 0x1b }, //  1: KEY_ESC
     .{ '1', '!' }, //  2
@@ -87,6 +87,92 @@ const keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
+/// 드보락(US). **쿼티와 같은 칸에 같은 evdev 코드가 온다** — 다른 것은 값뿐이다.
+///
+/// **한글 자판은 이 표에 안 딸린다**(HI design 결정 13). 한글은 물리 키 위치를
+/// 쓰므로 조회는 언제나 `qwerty_keymap`으로 한다. 이 표가 쓰이는 것은 라틴
+/// 문자를 PTY로 보낼 때뿐이다. 그 갈림을 놓치면 드보락 사용자의 한글 배열이
+/// 통째로 뒤틀리는데, **증상이 "안 된다"가 아니라 "다른 글자가 나온다"**라
+/// 원인을 오토마타에서 찾게 된다.
+const dvorak_keymap = [_][2]u8{
+    .{ 0, 0 }, //  0: (없음)
+    .{ 0x1b, 0x1b }, //  1: KEY_ESC
+    .{ '1', '!' }, //  2
+    .{ '2', '@' }, //  3
+    .{ '3', '#' }, //  4
+    .{ '4', '$' }, //  5
+    .{ '5', '%' }, //  6
+    .{ '6', '^' }, //  7
+    .{ '7', '&' }, //  8
+    .{ '8', '*' }, //  9
+    .{ '9', '(' }, // 10
+    .{ '0', ')' }, // 11
+    .{ '[', '{' }, // 12: 쿼티의 `-` 자리
+    .{ ']', '}' }, // 13: 쿼티의 `=` 자리
+    .{ 0x7f, 0x7f }, // 14: KEY_BACKSPACE
+    .{ '\t', '\t' }, // 15: KEY_TAB
+    .{ '\'', '"' }, // 16: 쿼티 q
+    .{ ',', '<' }, // 17: 쿼티 w
+    .{ '.', '>' }, // 18: 쿼티 e
+    .{ 'p', 'P' }, // 19: 쿼티 r
+    .{ 'y', 'Y' }, // 20: 쿼티 t
+    .{ 'f', 'F' }, // 21: 쿼티 y
+    .{ 'g', 'G' }, // 22: 쿼티 u
+    .{ 'c', 'C' }, // 23: 쿼티 i
+    .{ 'r', 'R' }, // 24: 쿼티 o
+    .{ 'l', 'L' }, // 25: 쿼티 p
+    .{ '/', '?' }, // 26: 쿼티 `[`
+    .{ '=', '+' }, // 27: 쿼티 `]`
+    .{ '\r', '\r' }, // 28: KEY_ENTER
+    .{ 0, 0 }, // 29: KEY_LEFTCTRL
+    .{ 'a', 'A' }, // 30
+    .{ 'o', 'O' }, // 31: 쿼티 s
+    .{ 'e', 'E' }, // 32: 쿼티 d
+    .{ 'u', 'U' }, // 33: 쿼티 f
+    .{ 'i', 'I' }, // 34: 쿼티 g
+    .{ 'd', 'D' }, // 35: 쿼티 h
+    .{ 'h', 'H' }, // 36: 쿼티 j
+    .{ 't', 'T' }, // 37: 쿼티 k
+    .{ 'n', 'N' }, // 38: 쿼티 l
+    .{ 's', 'S' }, // 39: 쿼티 `;`
+    .{ '-', '_' }, // 40: 쿼티 `'`
+    .{ '`', '~' }, // 41
+    .{ 0, 0 }, // 42: KEY_LEFTSHIFT
+    .{ '\\', '|' }, // 43
+    .{ ';', ':' }, // 44: 쿼티 z
+    .{ 'q', 'Q' }, // 45: 쿼티 x
+    .{ 'j', 'J' }, // 46: 쿼티 c
+    .{ 'k', 'K' }, // 47: 쿼티 v
+    .{ 'x', 'X' }, // 48: 쿼티 b
+    .{ 'b', 'B' }, // 49: 쿼티 n
+    .{ 'm', 'M' }, // 50
+    .{ 'w', 'W' }, // 51: 쿼티 `,`
+    .{ 'v', 'V' }, // 52: 쿼티 `.`
+    .{ 'z', 'Z' }, // 53: 쿼티 `/`
+    .{ 0, 0 }, // 54: KEY_RIGHTSHIFT
+    .{ '*', '*' }, // 55: KEY_KPASTERISK
+    .{ 0, 0 }, // 56: KEY_LEFTALT
+    .{ ' ', ' ' }, // 57: KEY_SPACE
+};
+
+/// 영문 자판. **한글 자판과 직교한다**(HI design 결정 13).
+pub const LatinLayout = enum { qwerty, dvorak };
+
+// 두 표가 같은 길이여야 한다 — 아니면 한쪽에서만 배열 밖을 읽는다.
+// `qwerty_keymap.len`이 여러 곳에서 상한으로 쓰이기 때문이다.
+//
+// 나머지 둘은 드보락 표 자신의 정렬을 잡는다. 이 표는 쿼티와 값이 거의
+// 겹치지 않아서, 한 줄이 밀리면 **컴파일은 통과하고 게스트에서 엉뚱한 글자가
+// 나온다** — 쿼티 표가 IP-M1에 겪은 것과 같은 실패다.
+comptime {
+    if (dvorak_keymap.len != qwerty_keymap.len)
+        @compileError("dvorak_keymap must be the same length as qwerty_keymap");
+    if (dvorak_keymap[c.KEY_S][0] != 'o')
+        @compileError("dvorak_keymap drifted at KEY_S");
+    if (dvorak_keymap[c.KEY_Z][0] != ';')
+        @compileError("dvorak_keymap drifted at KEY_Z");
+}
+
 // 위 표의 규약은 "N번째 칸이 evdev 코드 N"인데, IP-M1까지 그것을 지켜주는
 // 것은 주석뿐이었다. 중간에 한 줄이 끼면 뒤가 전부 한 칸씩 밀리고, 그래도
 // **컴파일은 통과하며**, 주석만 거짓말이 된다. 증상은 "게스트에서 a를 쳤는데
@@ -97,12 +183,12 @@ const keymap = [_][2]u8{
 // 때문이다. IP-M2가 이 표 밖의 코드(KEY_LEFTMETA=125)를 처음 다루므로
 // 지금이 못을 박을 자리다.
 comptime {
-    if (keymap.len != c.KEY_SPACE + 1)
-        @compileError("keymap must end exactly at KEY_SPACE");
-    if (keymap[c.KEY_1][0] != '1') @compileError("keymap drifted at KEY_1");
-    if (keymap[c.KEY_ENTER][0] != '\r') @compileError("keymap drifted at KEY_ENTER");
-    if (keymap[c.KEY_A][0] != 'a') @compileError("keymap drifted at KEY_A");
-    if (keymap[c.KEY_Z][0] != 'z') @compileError("keymap drifted at KEY_Z");
+    if (qwerty_keymap.len != c.KEY_SPACE + 1)
+        @compileError("qwerty_keymap must end exactly at KEY_SPACE");
+    if (qwerty_keymap[c.KEY_1][0] != '1') @compileError("keymap drifted at KEY_1");
+    if (qwerty_keymap[c.KEY_ENTER][0] != '\r') @compileError("keymap drifted at KEY_ENTER");
+    if (qwerty_keymap[c.KEY_A][0] != 'a') @compileError("keymap drifted at KEY_A");
+    if (qwerty_keymap[c.KEY_Z][0] != 'z') @compileError("keymap drifted at KEY_Z");
 }
 
 /// 키 하나를 어떻게 번역할지 바꾸는, **바깥에서 들어오는** 상태.
@@ -386,10 +472,13 @@ pub const State = struct {
     /// 한글 자판(HI-M2). **부팅 내내 상수다** — 설정 파일이 정하고 argv로
     /// 오며, 런타임 전환은 안 한다(design 결정 7).
     ///
-    /// **기본값이 `.dubeol`인 것은 이 필드의 뜻이 아니다.** 설정의 기본값은
-    /// `init/src/config.zig`의 `Config`에 있고 그것이 진실이다. 여기 값은
-    /// `main.zig`가 argv로 매번 덮어쓴다.
-    hangul_layout: hangul.Layout = .dubeol,
+    /// **기본값은 `config.zig`의 `Config`와 같아야 한다.** 진실은 그쪽에
+    /// 있고 여기 값은 `main.zig`가 argv로 매번 덮어쓰지만, 둘이 어긋나 있으면
+    /// 읽는 사람이 어느 쪽이 기본인지 알 수 없다.
+    hangul_layout: hangul.Layout = .shin_pcs,
+
+    /// 영문 자판(HI-M2). `hangul_layout`과 마찬가지로 부팅 내내 상수다.
+    latin_layout: LatinLayout = .qwerty,
 
     /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
     ///
@@ -425,6 +514,23 @@ pub const State = struct {
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
+    }
+
+    /// 이 키가 만드는 **라틴 문자**. 영문 자판이 정한다.
+    ///
+    /// **한글 조회는 이 함수를 안 쓴다**(HI design 결정 13) — 한글 자판은 물리
+    /// 키 위치를 쓰므로 언제나 `qwerty_keymap`을 직접 본다. 그 갈림을 함수
+    /// 하나로 나눠 두면 "어느 표를 봐야 하는가"를 세 곳에서 각각 판단하지
+    /// 않아도 된다.
+    ///
+    /// 범위 검사는 호출부가 한다 — `qwerty_keymap.len`이 두 표의 상한이라는
+    /// 것을 위의 `comptime`이 못 박는다.
+    fn latinChar(self: State, code: u16) u8 {
+        const shift: usize = if (self.shifted()) 1 else 0;
+        return switch (self.latin_layout) {
+            .qwerty => qwerty_keymap[code][shift],
+            .dvorak => dvorak_keymap[code][shift],
+        };
     }
 
     fn ctrled(self: State) bool {
@@ -586,11 +692,15 @@ pub const State = struct {
         }
 
         // 표 밖의 키(방향키·PageUp·Delete 등)는 확정을 유발한다(결정 6).
-        if (code >= keymap.len) {
+        if (code >= qwerty_keymap.len) {
             self.commitHangul();
             return null;
         }
-        const ch = keymap[code][if (self.shifted()) 1 else 0];
+        // **언제나 쿼티다**(HI design 결정 13). 드보락을 켜도 한글 배열은 안
+        // 흔들린다 — 한글 자판이 쓰는 것은 문자가 아니라 물리 키 위치이고,
+        // 그 위치를 부르는 이름이 쿼티 배치의 문자다. 그래서 여기만
+        // `latinChar`를 안 쓴다.
+        const ch = qwerty_keymap[code][if (self.shifted()) 1 else 0];
         // 문자를 만들지 않는 키(표 안의 modifier 자리)다. 여기 오는 일은
         // 사실상 없지만, 0을 `dubeol`에 먹이지 않기 위해 먼저 거른다.
         if (ch == 0) {
@@ -775,8 +885,8 @@ pub const State = struct {
                 },
                 c.KEY_BACKSPACE => return .{ .copy = .find_erase },
                 else => {
-                    if (code >= keymap.len) return nothing;
-                    const ch = keymap[code][if (self.shifted()) 1 else 0];
+                    if (code >= qwerty_keymap.len) return nothing;
+                    const ch = self.latinChar(code);
                     if (ch == 0) return nothing;
                     return .{ .copy = .{ .find_char = ch } };
                 },
@@ -889,9 +999,9 @@ pub const State = struct {
         // 시퀀스를 보낸다.
         if (specialKey(code)) |key| return .{ .bytes = self.escape(key, ctx) };
 
-        if (code >= keymap.len) return nothing;
+        if (code >= qwerty_keymap.len) return nothing;
 
-        const ch = keymap[code][if (self.shifted()) 1 else 0];
+        const ch = self.latinChar(code);
         if (ch == 0) return nothing;
 
         // Ctrl이 눌려 있고 이 문자가 마스크 대상이면 제어 문자로 바꾼다.
