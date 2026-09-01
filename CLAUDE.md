@@ -93,7 +93,10 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
   커널 config 둘 끄기, sanity 도구 둘과 그 도구만 쓰던 98MB 산출물, 옛 폰트
   파일)**. design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트: Hangul Input(HI)**. 2026-08-31 착수, HI-M0 완료.
+- **진행 중인 서브프로젝트: Hangul Input(HI)**. 2026-08-31 착수, **HI-M1까지
+  완료(2026-09-01) — 게스트에서 두벌식으로 한글을 치고 조합 중인 글자가 커서
+  자리에 뜬다. 게이트 체인이 아홉이 됐다(17분 41초).** 남은 것은 자판 셋과
+  설정 파일(HI-M2), 전환 키 셋과 CapsLock(HI-M3)이다.
   한글 자판 넷과 영문 자판 둘을 싣고 조합 중인 글자를 커서 자리에 그린다.
   design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
   `docs/decisions/project_hangul_input.md`. **이 서브프로젝트만 편집도 Claude

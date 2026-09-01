@@ -1,67 +1,141 @@
-# HANDOFF: Hangul Input이 진행 중이다 — HI-M0이 끝났고 다음은 HI-M1
+# HANDOFF: Hangul Input이 진행 중이다 — HI-M1이 끝났고 다음은 HI-M2
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Hangul Input(HI)을 2026-08-31에 착수했고 HI-M0을
-같은 날 끝냈다.** 사용자가 이월 숙제에서 CJK 입력기를 골랐다.
+`main`, working tree 깨끗함. **Hangul Input(HI)을 2026-08-31에 착수했고
+HI-M0(8/31)과 HI-M1(9/1)을 끝냈다.** 사용자가 이월 숙제에서 CJK 입력기를 골랐다.
 
-**HI-M0은 재고 세우는 milestone이었다.** 게스트의 동작이 하나도 안 바뀌었고
-게이트 체인도 여덟 그대로다. **게이트는 3/3으로 16분 37.07초** — GL-M3의
-기준선(16분 01~11초)과 CC-M0(16분 48.91초) 사이라 잡음 안이다. 남은 것은 둘이다.
+**HI-M1로 게스트에서 실제로 한글을 친다.** Shift+Space로 한/영을 바꾸고,
+두벌식으로 조합하고, 조합 중인 글자가 커서 자리에 두 칸으로 뜨고, Enter를
+치면 확정된 음절이 셸에 닿아 실행된다. **게이트 체인이 아홉이 됐고 3/3으로
+17분 41초다**(HI-M0의 여덟 체인 16분 37.07초 대비 +64초, 잡음 ±3분 안).
 
-1. **`terminal/src/hangul.zig`가 두벌식으로 한글을 조합한다.** 자모 표 셋 ·
-   조합 상태 · 자판 표 · `feed` · `erase`.
-2. **`hangul_test`가 `zig build test`에 붙었다.** 검사 일곱이고 호스트에서
-   돈다 — **게이트 16분이 아니라 9.5초로 오토마타를 돌려볼 수 있다.**
+지금 서 있는 것 넷.
 
-**재서 알아낸 것 중 가장 큰 것은 빨간불이다.** `sendkey lang1`이 게스트에 안
-닿는다 — 아래 "HI-M0이 실행으로 증명한 것" 절의 1번.
+1. **`terminal/src/hangul.zig`** — 자모 표 셋 · 조합 상태 · 두벌식 표 ·
+   `feed` · `erase`. 시스템 콜도 `vt.zig`도 안 본다.
+2. **`input.zig`의 한글 층** — `hangulLayer`가 copy 표 뒤·`chord()` 앞에
+   있고, 확정된 글자는 `commit_buf` → `takeCommit()`으로 나간다.
+3. **`vt.zig`의 preedit 층** — `cells()`가 커서 자리의 글자를 갈아 끼우고
+   **두 칸을 반전**한다.
+4. **`hangul/check.sh`** — 검사 열. 음성 검사(`key>` 줄 개수)와 반전 셀
+   개수가 판정 도구다.
 
-## 다음 세션이 할 첫 일: HI-M1의 plan을 쓴다
+**호스트 검사가 `zig build test` 9.5초에 전부 돈다** — `hangul_test`(오토마타) ·
+`input_test`의 검사 24~31(한글 층) · `vt_test`의 검사 45~48(preedit).
 
-**HI-M1은 "실제로 한글을 칠 수 있게 되는" milestone이다.** Shift+Space 하나로
-한/영을 바꾸고, 두벌식으로 조합하고, 조합 중인 글자를 커서 자리에 그리고,
-확정된 음절을 UTF-8 세 바이트로 PTY에 보낸다.
+## 다음 세션이 할 첫 일: HI-M2의 plan을 쓴다
+
+**HI-M2는 자판이 여섯이 되고 설정 파일이 고르는 milestone이다.** 공세벌
+3-P3 · 신세벌 P2 · 신세벌 PCS를 더하고 영문 드보락을 더한다. `tars.conf`에
+`hangul_layout`과 `latin_layout`이 생기고, **파싱은 `config_test`가 호스트에서
+본다.**
 
 **plan을 쓰기 전에 읽을 것 넷.**
 
-1. design의 **결정 2·4·5·6**(층의 경계 · preedit을 우리가 그린다 · 축 셋이
-   직교한다 · 확정을 유발하는 것의 목록).
-2. `vt.zig:369` `cells()` — **여기에 층을 하나 더 얹는다.** 순서는
-   `inverse → 매치 → 선택 → preedit → 커서`다.
-3. `main.zig:712`와 `:784` — copy 명령이 `vt.zig`로 배선되는 자리. 한글도
-   같은 길을 탄다(`find_open`/`find_char`가 이미 그렇게 돈다).
-4. `input.zig:585`(find 분기)와 `:616`(copy 표) — **한/영 분기를 어느 순서에
-   넣을지가 `n`의 뜻이 세 층에서 갈린 것과 같은 종류의 결정이다**(CN-M1
-   실측 6).
+1. design의 **결정 7**(설정 항목 셋)과 **위험 2**(갈마들이가 상태에 딸린다).
+2. `hangul.zig`의 `Jamo` union — **variant가 지금 둘뿐이다.** 세벌식은 초성
+   전용·종성 전용 키가 있고 신세벌식은 조합 상태에 따라 중성과 종성이 갈리므로
+   여기가 넓어진다. `feed`의 switch에 `else`가 없어서 컴파일러가 배선할 자리를
+   알려준다.
+3. `hangul.zig:264` `feed` — **HI-M2에서 이 함수가 자판을 인자로 받는다.**
+4. `config.zig:76`의 enum 화이트리스트와 `Keyboard.arg()` — 설정이 argv로
+   `terminal`에 오는 길. `main.zig:595`가 `keyboard`를 읽는 자리가 본보기다.
 
 **미리 정해진 것 셋.**
 
-- **폭을 조건부로 재지 않아도 된다.** 초성만이든 완성형이든 `cell_width`가
-  전부 16이다(실측 4).
-- **`Action`에 variant가 하나 는다.** 조합 중인 음절을 `main.zig`로 넘길
-  통로가 필요하다. `Copy`가 `union(enum)`이 된 것과 같은 이유이고, switch에
-  `else`가 없으므로 컴파일러가 배선할 자리를 알려준다.
-- **게이트 체인 `hangul/check.sh`가 생기고 게이트가 대략 2분 는다.** 지금
-  16분 37초이고 체인이 여덟이다.
+- **자판을 셋 더 옮기는 것이 HI-M0 실측 5와 같은 위험을 셋 더 진다.**
+  표를 옮겨 적으면서 사람이 틀린다. `dubeol`이 `comptime` 앵커 넷을 건 것과
+  같은 못을 자판마다 박는다.
+- **`hangul_test`가 자판별로 조합 순서를 통째로 넣고 결과 문자열을 봐야 한다**
+  (design 위험 2). 오토마타와 자판을 따로 검사하면 갈마들이를 못 본다.
+- **게이트가 또 늘 수 있다.** HI 체인에 2차 부팅(설정을 물고 뜨는 것)이 붙으면
+  IP·CP·PM처럼 회차당 QEMU를 둘 띄우게 된다.
 
 **게이트로 검증할 수 없는 것 하나.** 한/영 키(`lang1`)는 HI-M3까지 미뤄져
 있고, 그때도 게이트가 아니라 `input_test`의 호스트 검사로 덮는다.
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -10
-#   Close out HI-M0                                    ← 이 커밋
+git log --oneline -8
+#   Close out HI-M1                                    ← 이 커밋
+#   Add the hangul gate chain
+#   Wire the composing syllable to the screen
+#   Draw the composing syllable at the cursor
+#   Compose hangul in the input layer
+#   Plan HI-M1
+#   Close out HI-M0
 #   Prove the automaton never reaches an undrawable state
-#   Remove one jamo at a time on backspace
-#   Join compound jamo and carry the final over to the next syllable
-#   Compose a syllable from initial, vowel and final
-#   Add the dubeolsik layout table
-#   Add the hangul jamo tables and the composing syllable
-#   Plan HI-M0
-#   Design the hangul input subproject
-#   Add a README with how to see the screen locally
 ```
+
+## 한글이 지금 할 수 있는 것
+
+| 키 | 무엇 |
+|---|---|
+| `Shift+Space` | 한/영 전환. **공백은 PTY로 안 나간다** |
+| 두벌식 자판 | 자모를 모아 음절을 만들고 **커서 자리에 두 칸으로 그린다** |
+| `Backspace` | 조합 중이면 **자모 하나**를 뺀다(`단`→`다`→`ㄷ`→없음). 아니면 DEL |
+| Enter · Tab · Esc | 확정하고, 그 키의 바이트가 **확정된 글자 뒤에** 나간다 |
+| 숫자 · 기호 · 공백 | 같음 — 자모가 아닌 문자 키는 전부 확정을 유발한다 |
+| 방향키를 비롯한 특수키 | 확정하고 이스케이프 시퀀스가 나간다 |
+| Ctrl · Alt · Meta 조합 | 확정만 하고 **그 조합의 원래 뜻은 안 바뀐다** |
+| `Cmd+Shift+C` | 확정하고 copy mode에 들어간다. **한/영 상태는 그대로 남는다** |
+| — | copy mode와 검색 프롬프트 **안에서는 한글이 안 조합된다**(한글 층이 그 표들보다 뒤다) |
+
+**아직 없는 것:** 자판 넷 중 셋(HI-M2) · 설정 파일(HI-M2) · 한/영 키와
+CapsLock과 tap-vs-hold(HI-M3).
+
+## HI-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. 셸이 한글을 되울린다 — 게스트에 로케일 설정이 없는데도.**
+`rg 'LANG|LC_ALL|locale' init/src kernel/make_initrd.sh`가 빈 결과라 C 로케일의
+fish가 UTF-8 세 바이트를 버릴까 걱정했는데, **되울리고 실행까지 한다** —
+`screen> @(none) ~# echo 갓 | 갓 |`이 명령줄과 출력줄 양쪽에 나온다. **그래서
+게이트가 왕복 전체를 본다.**
+
+**2. 확정된 글자는 `Action`이 못 나른다.** 조합을 끝내는 키가 자기 몫의 결과를
+따로 갖기 때문이다 — Enter는 `.bytes`, Shift+PageUp은 `.scroll`,
+Cmd+Shift+C는 `.copy = .enter`다. **`Action`은 union이라 하나만 담는다.**
+그래서 `State.commit_buf` → `takeCommit()`이라는 통로를 하나 더 두고,
+`readKeys`가 `handleKey` **직후, 그 키의 바이트보다 먼저** 비운다.
+**순서가 전부다** — 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착한다.
+증거는 게이트의 `terminal: key> 4 byte(s)` 한 줄이다.
+
+**3. `Action.hangul`은 payload가 없는데 그것이 없으면 화면이 안 갱신된다.**
+자모 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
+`main.zig`의 `needs_redraw`가 안 켜진다 — **조합 중인 글자가 영영 안 나온다.**
+
+**4. 커서는 조합 중에 두 칸을 반전해야 한다.** `drawGlyph`가 셀 하나의 `fg`로
+16픽셀을 통째로 찍으므로, 한 칸만 반전하면 **글자의 오른쪽 절반이 어두운
+바탕에 어두운 색으로 그려져 사라진다.** 로그로 관측된다.
+
+```
+terminal: hangul> on=true preedit=가
+terminal: screen> @(none) ~# echo 가
+terminal: style> 0,16 fg=102030 bg=FFFFFF
+terminal: style> 0,17 fg=102030 bg=FFFFFF
+```
+
+**5. 시리얼 로그는 CRLF이고 그것이 게이트를 조용히 깨뜨렸다.**
+`sed -E "s/.*preedit=([^ ]+).*/\1/"`에서 `preedit=`이 **줄 끝이라 `[^ ]+`가
+CR까지 삼켰다.** 증상이 지독하다 — `FAIL: preedit=가, expected 가`처럼
+**똑같아 보이는 값으로 실패한다.** `on=true`는 뒤에 공백이 있어 안 걸렸고,
+`copy/check.sh`의 `copy_value`는 `([0-9]+)`라 숫자에서 멈춘다 — **우연이지
+설계가 아니다.** 처방은 `tr -d '\r'`이고, **줄 끝의 값을 뽑는 새 헬퍼를 만드는
+사람은 같은 함정을 다시 만난다.**
+
+**6. Task 1과 2를 나눌 수 없었다.** `Action`에 variant를 더하는 순간 같은 파일
+안의 `readKeys`가 컴파일 에러를 내서 Task 1만으로는 빌드가 안 된다. **컴파일러가
+배선할 자리를 알려주는 규율의 대가이고**, 같은 순간에 그 규율이 값도 했다 —
+`input_test`의 헬퍼 셋도 함께 에러를 냈다.
+
+**7. Zig는 안쪽 블록에서도 이름 가리기를 막는다.** `vt_test`의 블록 안에
+`var found`를 놓았다가 막혔다 — **SP-M0의 실측 9와 같은 자리**이고 그때는
+`vt.zig`의 optional capture였다. 처방도 같다: 이름을 바꾼다.
+
+**8. 게이트는 갈렸다고 말할 수 없다.** 아홉 체인 3/3으로 **17분 41초**이고
+HI-M0(여덟 체인)이 16분 37.07초였다. **+64초는 design 결정 10이 예상한
+"체인 하나 약 2분"보다 작지만**, 잡음이 ±3분이라 갈렸다고 단정하지 않는다.
 
 **design과 plan을 코드보다 먼저 커밋했다.** GL-M2·M3이 세운 순서 그대로다.
 **다음 milestone도 그렇게 한다.**
@@ -564,7 +638,7 @@ zig build -Dguest-optimize=Debug   # 개발자가 명시적으로 여는 문
 그래서 갈리는 축은 "개발이냐 배포냐"가 아니라 **"게스트로 가느냐"**다 —
 호스트 검사(`vt_test`·`input_test`·`font_test`)는 언제나 Debug가 맞다.
 
-**이 문이 게이트를 흔들지 않는다.** `clean()`이 `zig-out`을 지우고 여덟 체인이
+**이 문이 게이트를 흔들지 않는다.** `clean()`이 `zig-out`을 지우고 아홉 체인이
 각자 부르는 `prepare.sh:20`이 **옵션 없이** `zig build`를 부르므로, 손으로 남긴
 Debug 바이너리는 다음 게이트가 기본값으로 덮어쓴다. **새 정적 검사를 만들지
 않은 근거가 이것이다.**
@@ -764,15 +838,16 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
-**여덟 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2),
-3/3, 부팅 30회 이상. **가장 최근 값은 16분 48.91초다**(2026-08-31, CC-M0 이후
-한 번). 그 앞의 기준선이 16분 34.78초 · 16분 42.73초 · 16분 42.35초이므로
-**CC-M0은 게이트 시간을 안 바꿨다** — 6초 차이는 이 게이트의 잡음 ±3분 안이다.
-그 앞의 기준선은 SP-M0 뒤 16분 30~45초, GL-M3 뒤 16분 01~11초, GL-M2 뒤
-19분 11~16초, 그 앞이 22분 19~35초였다.
+**아홉 체인**(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
+**HI-M1**), 3/3, 부팅 33회 이상. **가장 최근 값은 17분 41초다**(2026-09-01,
+HI-M1이 아홉째 체인을 더한 뒤). 여덟 체인 시절의 값은 HI-M0 16분 37.07초 ·
+CC-M0 16분 48.91초 · 그 앞 16분 34.78초 · 16분 42.73초 · 16분 42.35초였다.
+**HI 체인이 더한 것은 +64초이고 그것은 갈렸다고 말할 수 없다** — 잡음이
+±3분이다. 더 앞의 기준선은 SP-M0 뒤 16분 30~45초, GL-M3 뒤 16분 01~11초,
+GL-M2 뒤 19분 11~16초, 그 앞이 22분 19~35초였다.
 
 **CC-M0이 커널 `.config`를 고쳤다.** `ACPI_EC`와 `PNP_DEBUG_MESSAGES`가 꺼져
-있고, 그 상태로 여덟 체인이 전부 부팅한다. bzImage가 2,933,760바이트다.
+있고, 그 상태로 아홉 체인이 전부 부팅한다. bzImage가 2,933,760바이트다.
 
 **SP-M1은 잴 수 있는 차이를 안 만들었다.** 중앙값이 16분 40.36초에서
 16분 42.73초로 2.4초 늘었는데, 검사 20이 더한 것의 산수는 회차당 `sleep` 4초와
@@ -1271,7 +1346,7 @@ docker run --rm -v "$PWD":/workspace \
       `옵션라틴` · `ESC라틴` · `두줄숫자` · `글자단위삭제`. HI는 자판의 기본
       배열만 옮긴다.
 - [ ] **copy mode 검색창의 한글 입력.** `Copy.find_char`가 `u8` 하나를
-      나르므로(`input.zig:220`) 한글을 담을 수 없다. 넓히는 것은 별개의 일이다.
+      나르므로(`input.zig:234`) 한글을 담을 수 없다. 넓히는 것은 별개의 일이다.
 - [ ] **입력기 상태를 화면에 보여 주기.** 지금 한/영 중 어느 쪽인지, 어느
       자판인지, CapsLock이 켜져 있는지를 보여 주는 자리가 없다. 조합 중인
       글자가 뜨는 것이 한글 상태의 유일한 신호다.
@@ -1304,7 +1379,7 @@ docker run --rm -v "$PWD":/workspace \
       골랐다** — 방향은 그때 이미 있었다.
 
       **게이트가 이 방향을 검증할 수 없다는 것이 이 일의 성질이다.** QEMU에는
-      EC가 없고(CC-M0이 게스트에게 물어 확인했다) 여덟 체인이 전부 초록이어도
+      EC가 없고(CC-M0이 게스트에게 물어 확인했다) 아홉 체인이 전부 초록이어도
       노트북에 대해 아무것도 말하지 않는다. **`CONFIG_ACPI_CUSTOM_DSDT_FILE`이
       `.config`에 있으므로 실제 노트북의 DSDT를 덤프해 게스트에 물리는 길이
       있을 수 있다** — 확인해 본 적은 없는 아이디어다.
@@ -1380,57 +1455,59 @@ docker run --rm -v "$PWD":/workspace \
 
 ## 핵심 파일
 
-**줄 번호는 SP-M1 직후(2026-08-30)에 `grep`으로 다시 잰 값이다.** SP-M1이
-`vt.zig`에 함수 하나를 더하고 `main.zig`의 `promptText`를 늘렸으므로 **앞
-milestone 기준 번호가 스무 줄 넘게 밀렸다.** **다음 milestone도 끝낼 때 이
-절을 다시 재서 적는다.**
+**줄 번호는 HI-M1 직후(2026-09-01)에 `rg`로 다시 잰 값이다.** HI-M1이
+`input.zig`·`vt.zig`·`main.zig` 셋을 전부 건드렸고, `input.zig`는 한글 층
+때문에 **번호가 이백 줄 넘게 밀렸다.** **다음 milestone도 끝낼 때 이 절을
+다시 재서 적는다.**
 
-**HI-M0은 기존 파일의 번호를 하나도 안 밀었다.** 새 파일 둘(`hangul.zig` ·
-`hangul_test.zig`)을 더하고 `build.zig`에 열여섯 줄을 넣은 것이 전부이며,
-`input.zig`·`vt.zig`·`main.zig`는 한 글자도 안 건드렸다. **HI-M1이 그 셋을
-전부 건드리므로 그때 다시 잰다.**
-
-- `terminal/src/input.zig` — **CS-M0도 CS-M1도 안 건드렸다.** 줄 번호는 CN-M1
-  기준 그대로다.
-  - `:28` `keymap` · `:160` `Action` · `:184` `Copy` `union(enum)`(variant
-    열아홉) · `:195` `word_next` · `:197` `word_prev` · `:218~231` 검색
-    variant 일곱 · `:235` `Keys` · `:243` `Keys.copies` · `:352` `State.copies` ·
-    `:359` `State.Mode`(`normal`·`copy`·`find`) · `:458` `chord()` ·
-    `:488` Meta 분기의 `KEY_V` · `:585` find 분기(copy 표보다 **앞**이다) ·
-    `:616` copy 표 시작 · `:622~625` 방향키 넷 · `:630~631` 단어 이동 ·
-    `:636` `/` · `:648` `n`/`N` · `:664` `KEY_V`의 세 갈래
-- `terminal/src/vt.zig` — `Screen`. `cells()`가 색·inverse·**매치**·선택·커서를
-  전부 해소해 `CellGlyph`로 넘긴다.
+- `terminal/src/hangul.zig`(HI-M0) — 오토마타. **시스템 콜도 `vt.zig`도
+  `drm.zig`도 안 본다.**
+  - `:16` `CHO` · `:22` `JUNG` · `:32` `JONG` · `:45` 표 앵커(`comptime`) ·
+    `:61` `Syllable` · `:87` `codepoint()`(**못 그리는 조합이면 null**) ·
+    `:109` `Jamo`(**variant가 둘뿐 — HI-M2가 넓힌다**) · `:127` `dubeol` ·
+    `:171` 자판 앵커(`comptime`) · `:183` `joinVowel` · `:194` `splitVowel` ·
+    `:204` `joinFinal` · `:222` `splitFinal` · `:242` `finalToInitial` ·
+    `:252` `Step` · `:264` `feed`(**HI-M2가 자판을 인자로 받게 한다**) ·
+    `:330` `erase`
+- `terminal/src/input.zig` — **HI-M1이 한글 층을 넣었다.**
+  - `:29` `keymap` · `:161` `Action`(**`:180` `hangul`은 payload가 없다**) ·
+    `:198` `Copy` `union(enum)` · `:209`/`:211` 단어 이동 ·
+    `:232~245` 검색 variant 일곱 · `:249` `Keys` · `:257` `Keys.copies` ·
+    **`:264` `Keys.hangul`**(값이 아니라 사실만 나른다)
+  - **State 필드**: `:373` `copies` · **`:378` `hangul_on` ·
+    `:384` `hangul_buf` · `:397` `commit_buf`** · `:405` `Mode`
+  - **한글 층**: **`:497` `commitHangul` · `:507` `pushCommit` ·
+    `:517` `takeCommit`(**`handleKey` 직후, 그 키의 바이트보다 먼저 부른다**) ·
+    `:529` `preedit` · `:548` `hangulLayer`**(copy 표 뒤·`chord()` 앞)
+  - **`handleKey`의 분기 순서**: `:745` find → `:776` copy 표 →
+    **`:853` 한글 층** → `:618` `chord()` 호출. 표 안은 `:782~` 방향키 넷 ·
+    `:790` 단어 이동 · `:796` `/` · `:808` `n`/`N` · `:824` `KEY_V`의 세 갈래
+  - **`readKeys`**: `:899` 시작 · **`:930` `takeCommit()`(그 키의 결과보다
+    **먼저** out에 옮긴다 — 순서가 계약이다)**
+- `terminal/src/vt.zig` — `Screen`. `cells()`가 색·inverse·매치·선택·
+  **preedit**·커서를 전부 해소해 `CellGlyph`로 넘긴다.
   - **파일 스코프**: `:26` `RowSpan`(**`current: bool`이 SP-M0이 더했고
-    기본값이 없다** — 만드는 자리가 하나뿐이라 일부러 안 줬다) ·
-    `:51` `HlStats`(**`cur`이 SP-M0**) · `:67` `MATCH_BG` ·
-    **`:86` `CURRENT_BG`**(SP-M0)
-  - **필드**: `:112` `io`(CS-M0) · `:130` `copy_cursor` · `:133` `copy_kind` ·
-    `:149` `copy_anchor_y` · `:152` `copy_pruned` · `:158` `clip` ·
-    `:171` `find_open` · `:179` `find_buf`(128바이트) ·
-    `:193` `find_last` · `:194` `find_last_len` ·
-    **`:207` `find_status`**(CS-M1의 `find_missed`를 SP-M1이 넓힌 것) ·
-    `:221` `find` · `:238` `find_matches` · `:245` `hl_spans`
-  - **함수**: `:327` `feed` · `:357` `anchorY` · `:369` `cells`(**매치 층은
-    `break`를 안 한다 — SP-M0 뒤로 현재 매치가 이기게 하려면 행 안을 끝까지
-    봐야 한다**) · `:554` `copyExit`(**검색·매치 목록·범위·표시를 전부 여기서
-    버리는데 `find_last`만 예외다**) · `:593` `findOpen` ·
-    **`:643` `findStatusNeedle`**(SP-M1) ·
-    **`:657` `findMissed`**(**계약은 CS-M1 그대로이고 구현만
-    `상태 × 매치 0`인 곱셈이다**) · **`:669` `findClearStatus`**(SP-M1) ·
-    `:689` `findSubmit`(**끝에서 `find_status`를 조건 없이 켠다**) ·
-    `:768` `findMatchCount` · **`:793` `findCurrentIndex`**(SP-M0. **라이브러리
-    내부 필드 `selected.idx`를 읽는 유일한 자리다**) ·
-    `:817` `refreshMatches`(**`select()` 뒤에 부르는 이유가 여기 적혀 있다.
-    SP-M0의 인덱스가 스냅숏과 안 어긋나는 근거이기도 하다**) ·
-    `:840` `findSpans`(**`cur_i`를 루프 밖에서 한 번만 읽는다. `ci`라는 이름은
-    안쪽 루프가 이미 쓰고 있어서 못 쓴다**) · `:937` `hlStats` ·
-    `:946` `hlSpans` · **`:957` `findNext` · `:969` `findPrev`**(**둘 다
-    `find != null`일 때 `find_status`를 켠다 — `moved`로 판단하면 안 된다**) ·
-    `:988` `findStep` ·
-    `:1052` `copyMove` · `:1092` `WORD_BOUNDARY` · `:1137` `copyMoveWord` ·
-    `:1209` `copyPlace` · `:1272` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
-    `:1313` `copyYank` · `:1341` `clipboard`
+    기본값이 없다**) · `:51` `HlStats` · `:67` `MATCH_BG` ·
+    `:86` `CURRENT_BG`
+  - **필드**: `:112` `io` · `:130` `copy_cursor` · `:133` `copy_kind` ·
+    `:149` `copy_anchor_y` · `:152` `copy_pruned` · **`:166` `preedit`**(HI-M1) ·
+    `:172` `clip` · `:185` `find_open` · `:193` `find_buf`(128바이트) ·
+    `:207` `find_last` · `:208` `find_last_len` ·
+    `:221` `find_status`(CS-M1의 `find_missed`를 SP-M1이 넓힌 것) ·
+    `:235` `find` · `:252` `find_matches` · `:259` `hl_spans`
+  - **함수**: `:341` `feed` · `:371` `anchorY` · `:383` `cells`(**매치 층은
+    `break`를 안 한다. preedit 층은 커서 갈래 안에 있고 `span`이 1과 2를
+    가른다**) · **`:590` `setPreedit`**(HI-M1. **`copyExit`이 이것을 안
+    지운다**) · `:611` `copyExit` · `:650` `findOpen` ·
+    `:700` `findStatusNeedle` · `:714` `findMissed` ·
+    `:726` `findClearStatus` · `:746` `findSubmit` · `:825` `findMatchCount` ·
+    `:850` `findCurrentIndex`(**라이브러리 내부 필드 `selected.idx`를 읽는
+    유일한 자리다**) · `:874` `refreshMatches` · `:897` `findSpans` ·
+    `:994` `hlStats` · `:1003` `hlSpans` · `:1014` `findNext` ·
+    `:1026` `findPrev` · `:1045` `findStep` · `:1109` `copyMove` ·
+    `:1149` `WORD_BOUNDARY` · `:1194` `copyMoveWord` · `:1266` `copyPlace` ·
+    `:1329` `copyApply`(**모든 이동 수단이 통과하는 문**) ·
+    `:1370` `copyYank` · `:1398` `clipboard`
 - `terminal/src/main.zig` — `drawGlyph`·`render`·`dump*`, 그리고 `poll` 루프.
   **렌더는 루프 끝에 있고 `needs_redraw`가 문지기다.**
   - `:95` `drawPrompt`(오버레이) · `:129` `render` · `:169` `Prompt` ·
@@ -1441,13 +1518,18 @@ milestone 기준 번호가 스무 줄 넘게 밀렸다.** **다음 milestone도 
     16줄 상한 — SP-M0이 게이트 needle을 두 글자로 고른 이유다. **SP-M1 뒤로
     검색이 성공해도 오버레이가 떠서 이 건너뛰기가 훨씬 자주 일어난다**) ·
     `:392` `dumpScroll` · `:407` `dumpCopy` · `:428` `dumpFind` ·
-    `:454` `dumpOverlay` ·
-    **`:473` `dumpHighlight`(`cur=`이 `cells=` 뒤·`us=` 앞이다 — 검사 16의
+    **`:465` `dumpHangul`**(HI-M1. **`on=`과 `preedit=`을 찍는 유일한 자리다 —
+    `preedit=`이 줄 끝이라 게이트가 CR을 벗겨야 한다**) ·
+    `:477` `dumpOverlay` ·
+    **`:496` `dumpHighlight`(`cur=`이 `cells=` 뒤·`us=` 앞이다 — 검사 16의
     `sed`가 `cells=`를 뽑으므로 그 순서를 안 바꾼다)** ·
-    `:712` `screen.findClearStatus()`(copy 루프 안, `switch`보다 앞이다) ·
-    **`:784` `dumpCopy(screen, @tagName(cmd))`(모든 copy 명령에 대해 불린다 —
+    `:735` `screen.findClearStatus()`(copy 루프 안, `switch`보다 앞이다) ·
+    **`:807` `dumpCopy(screen, @tagName(cmd))`(모든 copy 명령에 대해 불린다 —
     `.find_submit`·`.find_next`도 `copy> … row=`을 낸다)** ·
-    `:851` `prompt_buf`(**173바이트. SP-M1이 140에서 늘렸다**) ·
+    **`:822` `if (keys.hangul)`(copy 루프 **뒤**다. `setPreedit` ·
+    `dumpHangul` · `needs_redraw`를 함께 한다 — **이 세 줄이 없으면 조합 중인
+    글자가 영영 화면에 안 나온다**)** ·
+    `:891` `prompt_buf`(**173바이트. SP-M1이 140에서 늘렸다**) ·
     copy 배선 switch(**`else`가 없다**)
 - `terminal/src/font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. **코드는 폰트에
   무관하다.**
