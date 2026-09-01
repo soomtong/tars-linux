@@ -107,6 +107,118 @@ pub const LatinLayout = enum {
     }
 };
 
+/// 한/영 전환 키(HI design 결정 7).
+///
+/// **`Shell`·`Keyboard`·자판 둘과 모양이 다른 유일한 설정이다.** 그 넷은
+/// 하나를 고르는 것이지만 전환 키는 배타적이지 않다 — 한/영 키를 쓰면서
+/// CapsLock도 쓰는 것이 정상이다. 그래서 enum 하나가 아니라 아래 `Toggles`
+/// 집합이 값이 되고, 이 enum은 **이름의 화이트리스트** 역할만 한다.
+pub const ToggleKey = enum {
+    /// 실기의 한/영 키(evdev 122). **게이트가 못 보낸다** — QEMU가
+    /// `sendkey lang1`을 이름만 받고 조용히 버린다(HI-M0 실측 1). 그래서 이
+    /// 갈래를 덮는 것은 `input_test`의 호스트 검사뿐이다.
+    hangul_key,
+    /// Shift+Space. HI-M1이 유일한 전환 키로 골랐던 것이고 이제 끌 수 있다 —
+    /// `HELLO WORLD`를 칠 때 한/영이 바뀌는 것이 그 대가였다.
+    shift_space,
+    /// CapsLock을 **짧게** 눌렀다 뗀 것. 길게 누르면 대문자 잠금이다(결정 9).
+    capslock_tap,
+    /// 왼쪽 Ctrl을 **짧게** 눌렀다 뗀 것. 누른 동안 다른 키가 오면 평범한
+    /// modifier이므로 아무 일도 안 일어난다(결정 8).
+    lctrl_tap,
+};
+
+/// `Toggles.arg`가 만드는 문자열을 담을 버퍼의 크기. 넷을 전부 켠 목록이
+/// 45바이트이고 NUL 하나가 더 든다.
+pub const TOGGLE_ARG_MAX = 64;
+
+comptime {
+    const longest = "hangul_key,shift_space,capslock_tap,lctrl_tap";
+    if (longest.len + 1 > TOGGLE_ARG_MAX)
+        @compileError("TOGGLE_ARG_MAX is too small for the full toggle list");
+}
+
+/// 켜진 전환 키의 집합.
+pub const Toggles = struct {
+    hangul_key: bool = false,
+    shift_space: bool = false,
+    capslock_tap: bool = false,
+    lctrl_tap: bool = false,
+
+    /// 콤마 목록을 집합으로 바꾼다.
+    ///
+    /// **모르는 이름은 로그만 남기고 넘어간다** — 설정 파일은 사람이 손으로
+    /// 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이라는 CP의 판단 그대로다.
+    /// 그 규칙이 **목록 안에서도** 서는 것이 여기서 새로운 점이다: 이름 하나가
+    /// 틀려도 나머지는 살아남는다.
+    ///
+    /// **빈 값(`hangul_toggle=`)은 뜻이 있는 입력이다.** 기본값으로 떨어뜨리지
+    /// 않는다 — 그러면 전환 키를 전부 끌 방법이 없어진다.
+    pub fn parse(value: []const u8) Toggles {
+        var t = Toggles{};
+        var it = std.mem.splitScalar(u8, value, ',');
+        while (it.next()) |raw| {
+            const name = std.mem.trim(u8, raw, " \t");
+            if (name.len == 0) continue;
+            // `arg()`가 빈 집합에 쓰는 이름이다. **왕복을 위해 여기서 받는다** —
+            // 안 받으면 전환 키를 다 끈 사람의 부팅 로그에 매번
+            // "모르는 이름 none"이 찍힌다.
+            if (std.mem.eql(u8, name, "none")) continue;
+            const key = std.meta.stringToEnum(ToggleKey, name) orelse {
+                std.debug.print("tars-init: unknown hangul_toggle '{s}', ignored\n", .{name});
+                continue;
+            };
+            switch (key) {
+                .hangul_key => t.hangul_key = true,
+                .shift_space => t.shift_space = true,
+                .capslock_tap => t.capslock_tap = true,
+                .lctrl_tap => t.lctrl_tap = true,
+            }
+        }
+        return t;
+    }
+
+    /// argv로 넘기고 로그에 찍을 **정규형** 콤마 목록. 버퍼는 호출자가 준다 —
+    /// 이 파일에는 힙이 없고, `Keyboard.arg()`처럼 상수 문자열을 돌려줄 수도
+    /// 없다(조합이 열여섯 가지다).
+    ///
+    /// **정규화가 이 함수의 값이다.** 설정 파일에 어떤 순서로 적었든 enum 선언
+    /// 순서로 나오므로, 로그에 찍힌 문자열 하나가 곧 집합 전체다. HI 게이트가
+    /// 그 줄 하나로 "무엇이 켜지고 무엇이 꺼졌는가"를 본다.
+    ///
+    /// 하나도 안 켜졌으면 `none`이다 — 빈 문자열을 argv에 넣으면 terminal
+    /// 쪽에서 "인자가 없다"와 구분이 안 된다.
+    pub fn arg(self: Toggles, buf: []u8) [:0]const u8 {
+        var len: usize = 0;
+        if (self.hangul_key) appendToggleName(buf, &len, "hangul_key");
+        if (self.shift_space) appendToggleName(buf, &len, "shift_space");
+        if (self.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
+        if (self.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
+        if (len == 0) appendToggleName(buf, &len, "none");
+        buf[len] = 0;
+        return buf[0..len :0];
+    }
+};
+
+/// `Toggles.arg`가 쓰는 이어붙이기. 첫 항목이 아니면 콤마를 먼저 넣는다.
+///
+/// **모자라면 자른다.** 위 `comptime`이 `TOGGLE_ARG_MAX`가 최악의 경우보다
+/// 크다는 것을 못 박으므로 이 길로 실제로 갈 일은 없고, 그래도 배열 밖을
+/// 쓰지 않는 쪽으로 적어 둔다. `len.* + 1`을 보는 것은 `buf[len]`에 들어갈
+/// NUL 한 칸을 남기기 위해서다.
+fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
+    if (len.* > 0) {
+        if (len.* + 1 >= buf.len) return;
+        buf[len.*] = ',';
+        len.* += 1;
+    }
+    for (name) |ch| {
+        if (len.* + 1 >= buf.len) return;
+        buf[len.*] = ch;
+        len.* += 1;
+    }
+}
+
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
 ///
 /// keyboard의 기본값이 apple인 이유는 이 기계를 쓰는 사람이 Apple 키보드를
@@ -119,6 +231,16 @@ pub const Config = struct {
     /// 흔하다는 것은 이 기계의 사실이 아니다.
     hangul_layout: HangulLayout = .shin_pcs,
     latin_layout: LatinLayout = .qwerty,
+    /// **기본값은 넷 다 켜진 것이다**(2026-09-01에 사용자가 정했다).
+    /// 전환 키가 많아서 곤란한 경우는 없고 없어서 곤란한 경우는 있다 —
+    /// 특히 `hangul_key`는 실기에서만 오는 키라 기본으로 꺼 두면 "왜 한/영
+    /// 키가 안 먹지"가 된다.
+    hangul_toggle: Toggles = .{
+        .hangul_key = true,
+        .shift_space = true,
+        .capslock_tap = true,
+        .lctrl_tap = true,
+    },
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -232,6 +354,11 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "hangul_toggle")) {
+            // **앞의 넷과 모양이 다른 유일한 키다**(결정 7). `stringToEnum`
+            // 하나로 안 끝나고 콤마로 갈라야 한다. 모르는 이름을 흘려보내는
+            // 규칙은 같고, 그 규칙이 **목록 안에서도** 선다.
+            c.hangul_toggle = Toggles.parse(value);
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -256,6 +383,9 @@ pub const SaveError = error{
 /// 바뀐다.
 pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     var buf: [MAX_FILE]u8 = undefined;
+    // `Toggles`만 상수 문자열이 아니라 조립해야 한다(조합이 열여섯 가지다).
+    // 이 배열은 아래 bufPrint가 값을 복사할 때까지만 살아 있으면 된다.
+    var toggle_buf: [TOGGLE_ARG_MAX]u8 = undefined;
     const text = std.fmt.bufPrint(&buf,
         \\# TARS configuration. Edit and reboot to apply.
         \\# shell: fish | bash | zsh
@@ -268,12 +398,18 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\# latin_layout: qwerty | dvorak
         \\#   한글 자판은 물리 키 위치를 쓰므로 이 값에 안 흔들린다
         \\latin_layout={s}
+        \\# hangul_toggle: hangul_key | shift_space | capslock_tap | lctrl_tap
+        \\#   콤마로 여럿을 켠다. 빈 값이면 전환 키가 하나도 없다
+        \\#   CapsLock과 왼쪽 Ctrl은 0.3초보다 **짧게** 눌렀다 뗐을 때만 한/영이고,
+        \\#   길게 누르면 CapsLock은 대문자 잠금, Ctrl은 평소의 Ctrl이다
+        \\hangul_toggle={s}
         \\
     , .{
         @tagName(c.shell),
         @tagName(c.keyboard),
         @tagName(c.hangul_layout),
         @tagName(c.latin_layout),
+        c.hangul_toggle.arg(&toggle_buf),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의
