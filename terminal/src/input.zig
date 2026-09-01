@@ -489,6 +489,61 @@ const none: []const u8 = &[_]u8{};
 /// 같은 뜻을 Action으로 감싼 것. TR-M2 전에는 `none` 자체가 반환값이었다.
 const nothing: Action = .{ .bytes = none };
 
+/// tap-vs-hold의 문턱(HI design 결정 8). 이보다 짧게 눌렀다 떼면 한/영이고,
+/// 길면 그 키의 원래 뜻이다.
+///
+/// **설정으로 안 뺀다.** 결정 7의 설정 항목이 셋이고, 문턱을 넷째로 만들면
+/// 게이트가 못 보는 설정이 하나 는다 — `sendkey`의 `hold_ms`는 게이트가 고르는
+/// 값이지 게스트가 고르는 값이 아니다. QEMU가 그 값을 오차 4밀리초 안에
+/// 지키므로(HI-M0 실측 2) 게이트가 이 문턱의 양쪽을 실제로 밟을 수 있다.
+const TAP_MAX_US: u64 = 300_000;
+
+/// tap 후보 하나의 상태(결정 8).
+///
+/// **셋이 다 필요하다.** `held`가 없으면 terminal이 뜨기 전부터 눌려 있던 키의
+/// 뗌을 tap으로 오해하고, `down_us`가 없으면 길이를 못 재고, `consumed`가
+/// 없으면 `Ctrl+C`가 한/영을 바꾼다.
+const Tap = struct {
+    /// 지금 눌려 있는가.
+    held: bool = false,
+    /// 누른 시각. `held`가 참일 때만 뜻이 있다.
+    down_us: u64 = 0,
+    /// 누른 동안 다른 키가 왔는가. 왔으면 이 키는 조합 키로 쓰인 것이다.
+    consumed: bool = false,
+
+    /// 누름을 기록한다.
+    ///
+    /// **자동 반복(value=2)은 시각을 안 덮어쓴다.** 덮어쓰면 길게 누르고 있는
+    /// 키가 영원히 "방금 눌린" 상태가 되어 뗄 때마다 tap이 된다 — 증상은
+    /// "길게 눌러도 한/영이 바뀐다"이고, 결정 9의 대문자 잠금을 통째로 막는다.
+    fn down(self: *Tap, time_us: u64) void {
+        if (self.held) return;
+        self.held = true;
+        self.down_us = time_us;
+        self.consumed = false;
+    }
+
+    /// 뗌을 기록하고 "짧게 눌렀다 뗐는가"를 답한다.
+    ///
+    /// **호출자는 설정이 꺼져 있어도 이 함수를 부른다.** 상태를 지우는 것이
+    /// 여기이므로, 건너뛰면 `held`가 참으로 남아 다음 키가 전부 소비 표시를
+    /// 켠다.
+    ///
+    /// 시각이 거꾸로 가면 tap이 아니다. `ev.time`은 벽시계라 이론상 뒤로 뛸 수
+    /// 있는데, 뺄셈이 감싸 돌면 엄청나게 긴 hold가 되므로 결과는 어차피 같다 —
+    /// 명시적으로 적는 것은 읽는 사람을 위해서다.
+    fn up(self: *Tap, time_us: u64) bool {
+        const was_held = self.held;
+        const was_consumed = self.consumed;
+        const down_us = self.down_us;
+        self.held = false;
+        self.consumed = false;
+        if (!was_held or was_consumed) return false;
+        if (time_us < down_us) return false;
+        return time_us - down_us < TAP_MAX_US;
+    }
+};
+
 /// modifier 상태를 들고 있는 작은 상태 머신.
 /// design doc 결정 2의 세 단계 중 1번(modifier 갱신)과 3번(기본 번역)에
 /// 해당한다. 2번(조합 dispatch)은 IP-M2에서 들어온다.
@@ -583,6 +638,14 @@ pub const State = struct {
     commit_buf: [4]u8 = undefined,
     commit_len: usize = 0,
 
+    /// CapsLock과 왼쪽 Ctrl의 tap 상태(HI-M3, design 결정 8).
+    ///
+    /// **설정이 꺼져 있어도 기록은 한다.** 갈래를 하나로 두면 "켜져 있을 때만
+    /// 기록한다"가 만드는 어긋남이 아예 없다 — 기록을 건너뛰면 `held`가 참으로
+    /// 남거나 거짓으로 남는 경계가 생기고, 그 경계는 게이트가 못 본다.
+    caps_tap: Tap = .{},
+    lctrl_tap: Tap = .{},
+
     /// 지금 키를 어떻게 해석하는가. **모드가 `input`에 있는 이유가 design
     /// 결정 1이다** — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
     /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
@@ -600,6 +663,23 @@ pub const State = struct {
         /// 정해진다.
         find,
     };
+
+    /// 결정 8의 2번 — 누른 동안 다른 키가 오면 "소비됨"을 켠다. 그 키는 조합
+    /// 키로 쓰인 것이므로 뗄 때 아무 일도 일어나면 안 된다.
+    ///
+    /// **`handleKey`의 modifier switch보다 앞에서 불러야 한다.** Shift·Alt·Meta
+    /// 갈래가 switch 안에서 `return`하므로, 뒤에 두면 `Ctrl+Shift+C`의 Shift가
+    /// Ctrl을 소비하지 못하고 Ctrl을 뗄 때 한/영이 뒤집힌다. **증상이 "가끔
+    /// 한글이 안 쳐진다"라 원인에서 아주 멀다.**
+    ///
+    /// **자기 자신은 뺀다.** 자동 반복(value=2)이 오면 자기가 자기를 소비한
+    /// 것이 된다.
+    fn markTapConsumed(self: *State, code: u16) void {
+        if (self.caps_tap.held and code != c.KEY_CAPSLOCK)
+            self.caps_tap.consumed = true;
+        if (self.lctrl_tap.held and code != c.KEY_LEFTCTRL)
+            self.lctrl_tap.consumed = true;
+    }
 
     fn shifted(self: State) bool {
         return self.shift_left or self.shift_right;
@@ -957,11 +1037,12 @@ pub const State = struct {
         // 실수로 raw_code를 다시 쓰면 보정이 빠진 코드가 흘러가는데, 이름이
         // 다르면 그 실수가 눈에 띈다.
         const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
-        // **Task 5가 이 두 줄을 지운다.** 지금은 시각을 배선만 하고 아무
-        // 판단도 하지 않는다 — 그래야 "기존 검사가 한 글자도 안 바뀐 채
-        // 통과했다"가 시그니처 변경이 맞았다는 증거가 된다. Zig는 안 쓰는
-        // 인자를 컴파일 에러로 막으므로 자리를 채워 두어야 한다.
-        _ = time_us;
+        // 0.5번 단계 — tap 소비 표시(결정 8의 2번). **아래 switch보다 앞이어야
+        // 하는 이유는 markTapConsumed의 주석에 있다.**
+        //
+        // 뗌(0)은 소비가 아니다. Ctrl을 누르기 전부터 눌려 있던 키를 떼는 것일
+        // 수 있고, 그것은 이 Ctrl을 조합 키로 쓴 것이 아니다.
+        if (value != 0) self.markTapConsumed(code);
 
         switch (code) {
             c.KEY_LEFTSHIFT => {
@@ -974,6 +1055,22 @@ pub const State = struct {
             },
             c.KEY_LEFTCTRL => {
                 self.ctrl_left = value != 0;
+                // 짧게 눌렀다 떼면 한/영이다(결정 8). **modifier 상태를 갱신한
+                // 뒤에 판단한다** — 순서가 뒤집히면 `ctrl_left`가 참인 채로
+                // `toggleHangul`이 불려서 `hangulLayer`의 Ctrl 갈래와 뜻이
+                // 어긋난다.
+                //
+                // **뗄 때 판단하므로 지연이 어디에도 없다.** Ctrl을 modifier로
+                // 쓸 때는 다음 키가 이미 `consumed`를 켰다.
+                //
+                // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다 — 그
+                // 함수가 상태를 지운다.
+                if (value == 0) {
+                    const tapped = self.lctrl_tap.up(time_us);
+                    if (tapped and self.toggles.lctrl_tap) return self.toggleHangul();
+                } else {
+                    self.lctrl_tap.down(time_us);
+                }
                 return nothing;
             },
             c.KEY_RIGHTCTRL => {

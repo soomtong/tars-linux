@@ -1097,5 +1097,92 @@ pub fn main() !void {
 
     std.debug.print("input_test: toggle keys OK\n", .{});
 
+    // ── HI-M3: tap-vs-hold (왼쪽 Ctrl) ────────────────────────────────
+    //
+    // **시각을 직접 준다.** 게이트는 `sendkey <key> <hold_ms>`로 같은 것을
+    // 보지만(HI-M0 실측 2) 여기서는 부팅 없이 문턱(0.3초)의 양쪽을 밟는다.
+
+    // 검사 38. **짧은 왼쪽 Ctrl이 한/영을 켠다.** 0.1초다.
+    var tp: input.State = .{ .hangul_layout = .dubeol };
+    try expectAt(&tp, K.KEY_LEFTCTRL, 1, 0, "");
+    try expectHangulAt(&tp, K.KEY_LEFTCTRL, 0, 100_000, "", null);
+    if (!tp.hangul_on) {
+        std.debug.print("FAIL: a short left Ctrl did not turn hangul on\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 39. **긴 왼쪽 Ctrl은 아무 일도 안 한다.** 0.4초다. 검사 38과 이
+    // 검사가 문턱의 양쪽이고, **둘이 짝이어야 뜻이 선다** — 짧은 것만 보면
+    // "언제나 전환한다"가 통과한다.
+    try expectAt(&tp, K.KEY_LEFTCTRL, 1, 1_000_000, "");
+    try expectAt(&tp, K.KEY_LEFTCTRL, 0, 1_400_000, "");
+    if (!tp.hangul_on) {
+        std.debug.print("FAIL: a long left Ctrl flipped hangul\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 40. **`Ctrl+C`가 한/영을 안 바꾼다 — 이것이 결정 8의 심장이다.**
+    // 누른 시간이 0.05초라 문턱보다 훨씬 짧은데도 tap이 아니어야 한다. 이
+    // 검사가 없으면 터미널에서 가장 흔한 조합이 누를 때마다 한/영을 뒤집고,
+    // **증상이 "가끔 한글이 안 쳐진다"라 원인에서 아주 멀다.**
+    try expectAt(&tp, K.KEY_LEFTCTRL, 1, 2_000_000, "");
+    try expectAt(&tp, K.KEY_C, 1, 2_010_000, "\x03");
+    try expectAt(&tp, K.KEY_LEFTCTRL, 0, 2_050_000, "");
+    if (!tp.hangul_on) {
+        std.debug.print("FAIL: Ctrl+C flipped hangul — the tap was not consumed\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 41. **Shift가 눌린 것도 소비다.** 소비 표시가 modifier switch
+    // **앞**에 있어야 하는 이유를 보는 유일한 자리다 — 뒤에 있으면 Shift
+    // 갈래가 먼저 `return`해서 그 줄이 실행되지 않는다.
+    try expectAt(&tp, K.KEY_LEFTCTRL, 1, 3_000_000, "");
+    try expectAt(&tp, K.KEY_LEFTSHIFT, 1, 3_010_000, "");
+    try expectAt(&tp, K.KEY_LEFTSHIFT, 0, 3_020_000, "");
+    try expectAt(&tp, K.KEY_LEFTCTRL, 0, 3_050_000, "");
+    if (!tp.hangul_on) {
+        std.debug.print("FAIL: Ctrl+Shift flipped hangul — Shift did not consume\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 42. **오른쪽 Ctrl은 tap이 아니다.** 결정 8이 왼쪽만 적었다 —
+    // 오른쪽까지 넣으면 오탐이 두 배가 되고, 얻는 것은 없다.
+    try expectAt(&tp, K.KEY_RIGHTCTRL, 1, 4_000_000, "");
+    try expectAt(&tp, K.KEY_RIGHTCTRL, 0, 4_100_000, "");
+    if (!tp.hangul_on) {
+        std.debug.print("FAIL: a short right Ctrl flipped hangul\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 43. **조합 중이면 tap이 그것을 확정시킨다.** 전환 키 넷이 전부
+    // `toggleHangul`을 지나므로 계약이 하나다 — 이 검사가 그것을 modifier
+    // switch 쪽에서 확인한다(검사 36은 `hangulLayer` 쪽에서 봤다).
+    try expectHangulAt(&tp, K.KEY_R, 1, 5_000_000, "", 'ㄱ');
+    try expectHangulAt(&tp, K.KEY_K, 1, 5_010_000, "", '가');
+    try expectAt(&tp, K.KEY_LEFTCTRL, 1, 5_020_000, "");
+    try expectHangulAt(&tp, K.KEY_LEFTCTRL, 0, 5_100_000, "가", null);
+    if (tp.hangul_on) {
+        std.debug.print("FAIL: a short left Ctrl did not turn hangul off\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 44. **설정이 꺼져 있으면 짧아도 아무 일도 안 한다.**
+    var lc_off: input.State = .{
+        .hangul_layout = .dubeol,
+        .toggles = .{ .hangul_key = true },
+    };
+    try expectAt(&lc_off, K.KEY_LEFTCTRL, 1, 0, "");
+    try expectAt(&lc_off, K.KEY_LEFTCTRL, 0, 100_000, "");
+    if (lc_off.hangul_on) {
+        std.debug.print("FAIL: left Ctrl toggled with lctrl_tap off\n", .{});
+        return error.ToggleFailed;
+    }
+    // 그래도 Ctrl은 Ctrl이다 — 설정이 끄는 것은 tap이지 modifier가 아니다.
+    try expectAt(&lc_off, K.KEY_LEFTCTRL, 1, 200_000, "");
+    try expectAt(&lc_off, K.KEY_C, 1, 210_000, "\x03");
+    try expectAt(&lc_off, K.KEY_LEFTCTRL, 0, 220_000, "");
+
+    std.debug.print("input_test: tap-vs-hold OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
