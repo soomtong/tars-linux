@@ -151,6 +151,20 @@ pub const Screen = struct {
     /// 가지치기 때문에 모드가 끊겼다는 것을 `main.zig`가 한 번 가져간다.
     copy_pruned: bool = false,
 
+    /// 조합 중인 한글 한 글자(HI design 결정 4). null이면 조합 중이 아니다.
+    ///
+    /// **PTY로 안 간 글자다.** 확정될 때만 셸로 가고, 그때까지는 우리가 커서
+    /// 자리에 그린다. 매 키마다 PTY로 보내고 백스페이스로 고치는 길을 버린
+    /// 이유는 design 결정 4에 있다 — 셸의 readline이 두 칸짜리 글자의 폭을
+    /// 알아야 한다.
+    ///
+    /// **같은 사실이 `input.State`에도 있다.** `find_open`이 그런 것과 같은
+    /// 중복이고 이유도 같다 — `input.zig`는 키를 자모로 돌리기 위해, 여기는
+    /// **그려야 하기 때문에** 알아야 한다. `input.zig`는 `vt.zig`를 import하지
+    /// 않으므로(IP design 결정 6) 물어볼 길이 아예 없고, `main.zig`가 키를
+    /// 읽은 직후에 넘긴다.
+    preedit: ?u21 = null,
+
     /// 클립보드. `y`가 만든 문자열을 **소유한다.**
     ///
     /// 프로세스 하나가 디스플레이를 독점하는 구조(TF design 결정 1)에서는
@@ -411,7 +425,9 @@ pub const Screen = struct {
                 if (n >= out.len) return out[0..n];
 
                 const raw = raws[x];
-                const cp = raw.codepoint();
+                // **`var`인 것이 HI-M1의 변경이다.** 아래 preedit 층이 커서
+                // 자리의 글자를 조합 중인 것으로 갈아 끼운다.
+                var cp = raw.codepoint();
 
                 var fg = default_fg;
                 var bg = default_bg;
@@ -496,7 +512,34 @@ pub const Screen = struct {
                         std.mem.swap(u32, &fg, &bg);
                     }
                 } else if (cursor) |vp| {
+                    // preedit 층(HI design 결정 4). **선택 뒤·커서 앞이 이
+                    // 층의 자리다** — 지금 치고 있는 글자라 무엇에도 안
+                    // 가려져야 하고, 커서는 여전히 그 자리를 가리켜야 한다.
+                    //
+                    // **copy mode 중에는 여기 안 온다**(위 갈래로 빠진다).
+                    // 셸 커서가 뷰포트 밖이면 `cursor`가 null이라 저절로 안
+                    // 그려진다 — 안 보이는 자리에 조합을 그릴 수는 없다.
                     if (@as(usize, vp.x) == x and @as(usize, vp.y) == y) {
+                        if (self.preedit) |pcp| cp = pcp;
+                    }
+                    // 커서는 한 칸, **조합 중에는 두 칸**을 반전한다.
+                    //
+                    // 한글은 16픽셀, 곧 두 칸이다(HI-M0 실측 3). `drawGlyph`가
+                    // 셀 하나의 `fg`로 16픽셀을 통째로 찍으므로, 한 칸만
+                    // 반전하면 글자의 오른쪽 절반이 어두운 바탕에 어두운
+                    // 색으로 그려져 **사라진다.** 두 칸이 함께 밝아야 조합
+                    // 중인 글자가 통째로 보이고, 게이트도 그 둘을 셀 수 있다.
+                    //
+                    // 커서가 마지막 열이면 오른쪽 칸이 없으므로 한 칸만
+                    // 반전된다. 그 프레임에서는 글리프의 오른쪽 절반이 격자
+                    // 밖 여백에 그려지고, `drawGlyph`가 프레임버퍼 경계를
+                    // 검사하므로 게스트가 죽지는 않는다. **줄바꿈을 하지
+                    // 않는 것이 의도다** — 조합 중인 글자는 아직 화면의
+                    // 내용이 아니다.
+                    const span: usize = if (self.preedit == null) 1 else 2;
+                    if (@as(usize, vp.y) == y and
+                        x >= @as(usize, vp.x) and x < @as(usize, vp.x) + span)
+                    {
                         std.mem.swap(u32, &fg, &bg);
                     }
                 }
@@ -532,6 +575,20 @@ pub const Screen = struct {
 
     pub fn defaultBg(self: *const Screen) u32 {
         return packRgb(self.state.colors.background);
+    }
+
+    /// 조합 중인 글자를 정한다. null이면 조합 중이 아니다.
+    ///
+    /// **`main.zig`가 키를 읽은 직후에 부른다.** 값을 만드는 것은
+    /// `input.State`이고 그리는 것은 위 `cells()`이며, 둘을 잇는 것이
+    /// `main.zig`다(HI design 결정 2).
+    ///
+    /// **`copyExit`이 이것을 안 지운다.** copy mode에 들어가는 순간
+    /// `input.zig`가 이미 확정했고(design 결정 6) `main.zig`가 그 결과로
+    /// `setPreedit(null)`을 부른다 — 여기서 또 지우면 같은 사실을 두 곳이
+    /// 관리하게 된다.
+    pub fn setPreedit(self: *Screen, cp: ?u21) void {
+        self.preedit = cp;
     }
 
     /// 뷰포트 좌표 한 쌍. 로그와 검사가 함께 쓴다.

@@ -1421,5 +1421,92 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 매치가 없으면 번호가 아니라 못 찾음이다 OK (needle={s})\n", .{nmiss});
 
+    // ── HI-M1: 조합 중인 글자 ─────────────────────────────────────────
+    //
+    // 반전된 셀은 기본 색이 뒤집힌 것이다(fg=102030 bg=FFFFFF). 선택도
+    // 커서도 같은 연산이라 같은 모양으로 나타나므로, **전후를 비교해야**
+    // 뜻이 생긴다 — 게이트의 `inverted_cells`가 쓰는 것과 같은 판정이다.
+    const pre = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer pre.deinit();
+    pre.feed("ab");
+
+    // 검사 45. **대조군 — 조합 중이 아니면 반전된 셀이 하나다.**
+    {
+        var inv: usize = 0;
+        for (try pre.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) inv += 1;
+        }
+        if (inv != 1) {
+            std.debug.print("FAIL: 커서만 있는데 반전된 셀이 {d}개다\n", .{inv});
+            return error.WrongCursorCells;
+        }
+    }
+
+    // 검사 46. **조합 중인 글자가 커서 자리에 뜨고 두 칸이 반전된다.**
+    //
+    // 두 칸인 것이 이 검사의 값이다(HI-M0 실측 3). 한 칸만 반전하면 게스트
+    // 화면에서 글자의 오른쪽 절반이 사라지는데, **화면을 안 보는 검사로는
+    // 그것을 셀 수로만 잡을 수 있다.**
+    pre.setPreedit('가');
+    {
+        var inv: usize = 0;
+        // **이름이 `found`가 아닌 것에 이유가 있다.** 이 파일의 바깥 스코프에
+        // 이미 `found`가 있고, Zig는 안쪽 블록에서도 가리는 것을 막는다 —
+        // SP-M0의 실측 9가 `vt.zig`에서 겪은 것과 같은 자리다.
+        var drew = false;
+        for (try pre.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) inv += 1;
+            // "ab" 뒤라 셸 커서는 0행 2열이다.
+            if (cell.codepoint == '가' and cell.row == 0 and cell.col == 2) {
+                drew = true;
+            }
+        }
+        if (!drew) {
+            std.debug.print("FAIL: 조합 중인 글자가 커서 자리에 없다\n", .{});
+            return error.PreeditNotDrawn;
+        }
+        if (inv != 2) {
+            std.debug.print("FAIL: 조합 중인데 반전된 셀이 {d}개다(2여야 한다)\n", .{inv});
+            return error.PreeditNotTwoCells;
+        }
+    }
+    std.debug.print("vt_test: 조합 중인 글자가 커서 자리에 두 칸으로 뜬다 OK\n", .{});
+
+    // 검사 47. **null로 되돌리면 흔적이 하나도 안 남는다.** 안 지워지면
+    // 증상이 "확정한 글자가 화면에 두 번 보인다"라 원인에서 멀다.
+    pre.setPreedit(null);
+    {
+        var inv: usize = 0;
+        for (try pre.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) inv += 1;
+            if (cell.codepoint == '가') {
+                std.debug.print("FAIL: 조합을 껐는데 글자가 남아 있다\n", .{});
+                return error.PreeditNotCleared;
+            }
+        }
+        if (inv != 1) {
+            std.debug.print("FAIL: 조합을 껐는데 반전된 셀이 {d}개다\n", .{inv});
+            return error.WrongCursorCells;
+        }
+    }
+    std.debug.print("vt_test: 조합을 끄면 커서가 다시 한 칸이다 OK\n", .{});
+
+    // 검사 48. **copy mode 중에는 안 그린다.** 그때 반전된 셀은 copy 커서
+    // 하나여야 하고, 둘이면 게이트가 어느 것이 copy 커서인지 못 가른다 —
+    // CM-M0이 셸 커서를 안 그리기로 한 것과 같은 이유다.
+    pre.setPreedit('가');
+    pre.copyEnter();
+    {
+        for (try pre.cells(&buf)) |cell| {
+            if (cell.codepoint == '가') {
+                std.debug.print("FAIL: copy mode 중에 조합이 그려졌다\n", .{});
+                return error.PreeditDrawnInCopyMode;
+            }
+        }
+    }
+    pre.copyExit();
+    pre.setPreedit(null);
+    std.debug.print("vt_test: copy mode 중에는 조합을 안 그린다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
