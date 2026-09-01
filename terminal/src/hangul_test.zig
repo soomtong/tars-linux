@@ -39,6 +39,8 @@ pub fn main() !void {
         .{ .s = .{ .jung = 0 }, .cp = 'ㅏ', .what = "중성만은 호환 자모" },
         .{ .s = .{ .cho = 3, .jung = 0 }, .cp = '다', .what = "초성+중성은 완성형" },
         .{ .s = .{ .cho = 3, .jung = 0, .jong = 4 }, .cp = '단', .what = "받침까지 완성형" },
+        .{ .s = .{ .jong = 4 }, .cp = 'ㄴ', .what = "종성만은 호환 자모" },
+        .{ .s = .{ .jong = 3 }, .cp = 'ㄳ', .what = "겹받침만도 호환 자모" },
     };
     for (wants) |want| {
         const got = want.s.codepoint();
@@ -49,15 +51,18 @@ pub fn main() !void {
         std.debug.print("hangul_test: {s} OK\n", .{want.what});
     }
 
-    // ── 2. 그릴 수 없는 세 상태 (design 결정 3) ───────────────────────
+    // ── 2. 그릴 수 없는 두 상태 (design 결정 3) ───────────────────────
     //
     // **모아주기를 뺀 것이 여기서 코드가 된다.** 완성형에 없는 조합이고
     // unifont가 첫가끝 자모를 겹쳐 그려 주지 않는다(HI-M0 실측 3). 아래
     // 검사 7이 "오토마타가 이 상태를 만들지 않는다"까지 본다.
+    //
+    // **셋이 아니라 둘이다.** 종성만은 HI-M2에서 그릴 수 있는 쪽으로 옮겼다 —
+    // 세벌식이 그 상태를 실제로 만들고, 호환 자모 하나로 그려진다. 남은 둘은
+    // 여전히 완성형에 없다.
     const cannot = [_]hangul.Syllable{
         .{ .cho = 3, .jong = 4 },
         .{ .jung = 0, .jong = 4 },
-        .{ .jong = 4 },
     };
     for (cannot) |s| {
         if (s.codepoint() != null) {
@@ -65,7 +70,7 @@ pub fn main() !void {
             return error.UnexpectedCodepoint;
         }
     }
-    std.debug.print("hangul_test: 모아주기 상태 셋은 그릴 것이 없다 OK\n", .{});
+    std.debug.print("hangul_test: 모아주기 상태 둘은 그릴 것이 없다 OK\n", .{});
 
     // ── 3. 두벌식 표 ─────────────────────────────────────────────────
     //

@@ -52,6 +52,16 @@ pub fn main(init: std.process.Init) !void {
         .{ .cp = 0xAC00, .w = 14, .h = 14, .cell_width = 16, .x_offset = 2, .y_offset = 2, .what = "한글 '가'" },
         // 0x7F를 넘지만 폭이 1칸이다. cellWidth의 옛 규칙이 틀렸던 자리다.
         .{ .cp = 0x00E9, .w = 6, .h = 12, .cell_width = 8, .x_offset = 1, .y_offset = 2, .what = "é는 0x7F를 넘어도 1칸" },
+        // **겹받침 호환 자모도 두 칸이다**(HI-M2). 종성만 있는 조합 상태를
+        // 그리기로 정한 근거가 이 두 줄이다 — 세벌식은 종성 전용 키가 있어서
+        // 그 상태를 만들고, `JONG` 표의 값이 전부 호환 자모라 겹받침까지
+        // 코드포인트 하나로 그려진다. **폭이 16이라는 것이 요점이다**:
+        // 조합하는 내내 폭이 안 바뀐다는 HI-M0 실측 3의 전제가 여기까지 선다.
+        //
+        // 폭이 다른 둘을 고른 이유는 표가 한 줄 밀렸을 때 잡히게 하기
+        // 위해서다(ㄳ 12픽셀, ㄺ 11픽셀).
+        .{ .cp = 0x3133, .w = 12, .h = 9, .cell_width = 16, .x_offset = 3, .y_offset = 4, .what = "겹받침 ㄳ도 두 칸" },
+        .{ .cp = 0x313A, .w = 11, .h = 9, .cell_width = 16, .x_offset = 3, .y_offset = 4, .what = "겹받침 ㄺ도 두 칸" },
     };
 
     for (wants) |want| {

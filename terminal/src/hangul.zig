@@ -95,8 +95,20 @@ pub const Syllable = struct {
     /// 없는 경우를 따로 갈라 적지 않아도 된다.
     pub fn codepoint(self: Syllable) ?u21 {
         const c = self.cho orelse {
+            const v = self.jung orelse {
+                // **종성만은 그려진다**(HI-M2가 넓혔다). `JONG` 표의 값이
+                // 전부 호환 자모라 겹받침까지 한 글자다 — `font_test`가
+                // `ㄳ`(12x9)과 `ㄺ`(11x9)을 굽고 둘 다 `cell_width=16`이다.
+                //
+                // 두벌식은 이 상태를 **안 만든다.** 자음 키가 전부 초성
+                // 후보를 갖고 빈 상태의 우선순위가 초성 먼저이기 때문이며,
+                // 아래 검사 7의 3-순열이 그것을 매번 다시 본다. 세벌식은
+                // 종성 전용 키가 따로 있어서 만든다.
+                if (self.jong) |j| return JONG[j];
+                return null;
+            };
+            // 중성+종성은 완성형에 없다(design 결정 3).
             if (self.jong != null) return null;
-            const v = self.jung orelse return null;
             return JUNG[v];
         };
         const v = self.jung orelse {
