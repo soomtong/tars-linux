@@ -817,12 +817,32 @@ pub const State = struct {
     /// TR-M2부터 반환이 `Action`이다. 그전에는 `[]const u8` 하나였고, 그래서
     /// "PTY로 보내지 않고 우리가 처리한다"를 표현할 방법이 없었다
     /// (design 결정 11).
-    pub fn handleKey(self: *State, raw_code: u16, value: i32, ctx: Context) Action {
+    ///
+    /// **HI-M3부터 시각도 받는다.** 이 서브프로젝트에서 유일하게 이 함수의
+    /// 성질 자체를 바꾸는 변경이고(순수 함수 → 시각을 보는 함수), 그래서
+    /// 마지막 milestone에 뒀다(design 결정 8).
+    ///
+    /// 값은 `ev.time`이 준 마이크로초다. **`Context`에 안 넣은 이유**는 그것이
+    /// `readKeys` 호출 하나에 한 번 조립되는 값인데 시각은 이벤트마다 다르기
+    /// 때문이다 — `swap_alt_meta`처럼 "부팅 내내 상수"인 값과 같은 자리에
+    /// 두면 읽는 사람이 속는다.
+    pub fn handleKey(
+        self: *State,
+        raw_code: u16,
+        value: i32,
+        time_us: u64,
+        ctx: Context,
+    ) Action {
         // 0번 단계 — 키보드 보정. modifier를 **기록하기 전에** 맞바꾼다.
         // 인자 이름을 raw_code로 바꾼 것은 실수를 막기 위해서다: 아래에서
         // 실수로 raw_code를 다시 쓰면 보정이 빠진 코드가 흘러가는데, 이름이
         // 다르면 그 실수가 눈에 띈다.
         const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+        // **Task 5가 이 두 줄을 지운다.** 지금은 시각을 배선만 하고 아무
+        // 판단도 하지 않는다 — 그래야 "기존 검사가 한 글자도 안 바뀐 채
+        // 통과했다"가 시그니처 변경이 맞았다는 증거가 된다. Zig는 안 쓰는
+        // 인자를 컴파일 에러로 막으므로 자리를 채워 두어야 한다.
+        _ = time_us;
 
         switch (code) {
             c.KEY_LEFTSHIFT => {
@@ -1019,6 +1039,22 @@ pub fn openDevice(path: [*:0]const u8) !c_int {
     return fd;
 }
 
+/// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
+///
+/// **커널이 찍은 시각이라 poll 루프가 늦어져도 안 흔들린다.** 한 번의 read가
+/// 이벤트 64개를 담을 수 있는데, `Clock.now`를 여기서 부르면 그 64개가 전부
+/// 같은 시각을 갖게 되어 tap 판정이 통째로 무너진다.
+///
+/// 음수는 0으로 떨어뜨린다. `tv_sec`이 음수가 되는 유일한 길은 커널이 고장 난
+/// 것이고, 그때 예외를 던지면 키 하나 때문에 터미널이 죽는다 — 이 파일이
+/// 바이트를 버릴지언정 안 죽는 쪽을 고르는 것과 같은 판단이다.
+fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
+    const sec = ev.time.tv_sec;
+    const usec = ev.time.tv_usec;
+    if (sec < 0 or usec < 0) return 0;
+    return @as(u64, @intCast(sec)) * 1_000_000 + @as(u64, @intCast(usec));
+}
+
 /// fd에서 한 번 read하고(poll이 읽을 게 있다고 알려준 뒤에만 호출한다),
 /// 그 안의 EV_KEY 이벤트들을 처리한다. PTY로 보낼 바이트는 out에 채우고,
 /// 스크롤 동작은 State의 배열에 모아 둘 다 돌려준다.
@@ -1049,7 +1085,9 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         const ev: *align(1) const c.struct_input_event =
             @ptrCast(&raw[i * ev_size]);
         if (ev.@"type" != c.EV_KEY) continue;
-        const action = self.handleKey(ev.code, ev.value, ctx);
+        // **이 값은 이미 손에 있었다**(HI-M0 실측 3). `readKeys`가
+        // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
+        const action = self.handleKey(ev.code, ev.value, eventMicros(ev), ctx);
         // **그 키의 결과보다 먼저** 확정된 글자를 옮긴다(HI design 결정 6).
         //
         // 순서가 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이

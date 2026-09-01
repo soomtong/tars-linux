@@ -14,7 +14,23 @@ const K = input.c;
 /// (`cursor_keys=false`)으로 충분하므로 여기서 채워 넣고, DECCKM 두 형태를
 /// 비교해야 하는 검사만 아래 expectCtx를 직접 부른다.
 fn expect(state: *input.State, code: u16, value: i32, want: []const u8) !void {
-    return expectCtx(state, .{}, code, value, want);
+    return expectFull(state, .{}, code, value, 0, want);
+}
+
+/// HI-M3부터 `handleKey`는 시각도 받는다. **본체를 `expectFull`로 옮기고 기존
+/// 헬퍼는 시각 0을 채우는 껍데기가 된다** — `expectCtx` 호출이 26군데라
+/// 인자를 하나 더하면 26줄이 바뀌고, 그러면 "기존 검사가 한 글자도 안 바뀐 채
+/// 통과했다"는 Task 1의 증거가 사라진다.
+///
+/// `Context`가 IP-M1에 들어왔을 때와 정확히 같은 모양이다.
+fn expectAt(
+    state: *input.State,
+    code: u16,
+    value: i32,
+    time_us: u64,
+    want: []const u8,
+) !void {
+    return expectFull(state, .{}, code, value, time_us, want);
 }
 
 /// TR-M2부터 handleKey는 바이트열이 아니라 `Action`을 돌려준다. 이 파일의
@@ -28,7 +44,18 @@ fn expectCtx(
     value: i32,
     want: []const u8,
 ) !void {
-    switch (state.handleKey(code, value, ctx)) {
+    return expectFull(state, ctx, code, value, 0, want);
+}
+
+fn expectFull(
+    state: *input.State,
+    ctx: input.Context,
+    code: u16,
+    value: i32,
+    time_us: u64,
+    want: []const u8,
+) !void {
+    switch (state.handleKey(code, value, time_us, ctx)) {
         .bytes => |bytes| {
             if (std.mem.eql(u8, bytes, want)) return;
             std.debug.print(
@@ -64,7 +91,7 @@ fn expectCtx(
 /// copy 명령이 나오기를 기대한다. **바이트가 오면 실패다** — 그것이 정확히
 /// "모드 안에서 키가 PTY로 샌다"는 사고이기 때문이다.
 fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
-    switch (state.handleKey(code, 1, .{})) {
+    switch (state.handleKey(code, 1, 0, .{})) {
         .copy => |cmd| {
             // **union에는 `==`가 없다**(CN-M1 Task 1). `std.meta.eql`이 태그를
             // 먼저 보고 payload를 그다음에 본다 — `.find_char`가 생기면 글자까지
@@ -109,7 +136,7 @@ fn expectScroll(
     value: i32,
     want: input.Scroll,
 ) !void {
-    switch (state.handleKey(code, value, .{})) {
+    switch (state.handleKey(code, value, 0, .{})) {
         .scroll => |s| {
             if (s == want) return;
             std.debug.print(
@@ -155,7 +182,21 @@ fn expectHangul(
     want_commit: []const u8,
     want_preedit: ?u21,
 ) !void {
-    switch (state.handleKey(code, 1, .{})) {
+    return expectHangulAt(state, code, 1, 0, want_commit, want_preedit);
+}
+
+/// 시각과 누름/뗌을 직접 주는 형태(HI-M3). **tap이 한/영을 바꾸는 것은 키를
+/// 뗄 때이므로**(결정 8) `value = 0`을 넣을 수 있어야 하는데, 위 껍데기는
+/// 언제나 누름(1)이다.
+fn expectHangulAt(
+    state: *input.State,
+    code: u16,
+    value: i32,
+    time_us: u64,
+    want_commit: []const u8,
+    want_preedit: ?u21,
+) !void {
+    switch (state.handleKey(code, value, time_us, .{})) {
         .hangul => {},
         .bytes => |bytes| {
             std.debug.print(
