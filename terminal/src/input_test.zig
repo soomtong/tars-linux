@@ -51,6 +51,13 @@ fn expectCtx(
             );
             return error.UnexpectedCopy;
         },
+        .hangul => {
+            std.debug.print(
+                "FAIL: code={d} value={d} -> got hangul, want bytes {any}\n",
+                .{ code, value, want },
+            );
+            return error.UnexpectedHangul;
+        },
     }
 }
 
@@ -82,6 +89,13 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
                 .{ code, @tagName(s), @tagName(want) },
             );
             return error.UnexpectedScroll;
+        },
+        .hangul => {
+            std.debug.print(
+                "FAIL: code={d} -> got hangul, want copy .{s}\n",
+                .{ code, @tagName(want) },
+            );
+            return error.UnexpectedHangul;
         },
     }
 }
@@ -118,7 +132,79 @@ fn expectScroll(
             );
             return error.UnexpectedCopy;
         },
+        .hangul => {
+            std.debug.print(
+                "FAIL: code={d} -> got hangul, want scroll .{s}\n",
+                .{ code, @tagName(want) },
+            );
+            return error.UnexpectedHangul;
+        },
     }
+}
+
+/// 한글 층이 이 키를 처리하기를 기대한다(HI-M1). **바이트가 오면 실패다** —
+/// 그것이 곧 "조합 중인 자모가 PTY로 샜다"이고, 이 milestone의 가장 흔한
+/// 실패 방식이다.
+///
+/// 셋을 한 번에 본다: 어느 variant가 왔는가 · 무엇이 확정됐는가 · 무엇을
+/// 조합 중인가. **셋이 함께 있어야 뜻이 선다** — 확정만 보면 화면이 안 바뀐
+/// 것을 못 잡고, 조합만 보면 확정된 글자가 셸에 안 간 것을 못 잡는다.
+fn expectHangul(
+    state: *input.State,
+    code: u16,
+    want_commit: []const u8,
+    want_preedit: ?u21,
+) !void {
+    switch (state.handleKey(code, 1, .{})) {
+        .hangul => {},
+        .bytes => |bytes| {
+            std.debug.print(
+                "FAIL: code={d} -> got {d} byte(s) {any}, want hangul\n",
+                .{ code, bytes.len, bytes },
+            );
+            return error.LeakedToPty;
+        },
+        .scroll => |s| {
+            std.debug.print(
+                "FAIL: code={d} -> got scroll .{s}, want hangul\n",
+                .{ code, @tagName(s) },
+            );
+            return error.UnexpectedScroll;
+        },
+        .copy => |cmd| {
+            std.debug.print(
+                "FAIL: code={d} -> got copy .{s}, want hangul\n",
+                .{ code, @tagName(cmd) },
+            );
+            return error.UnexpectedCopy;
+        },
+    }
+    try expectCommit(state, code, want_commit);
+    try expectPreedit(state, code, want_preedit);
+}
+
+/// 확정된 글자를 본다. **`handleKey`를 부른 직후에만 뜻이 있다** — 한 번
+/// 가져가면 비워지기 때문이다(`takeCommit`). `readKeys`가 지키는 순서를 이
+/// 파일이 같은 순서로 흉내 내는 자리다.
+fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
+    const got = state.takeCommit();
+    if (std.mem.eql(u8, got, want)) return;
+    std.debug.print(
+        "FAIL: code={d} -> committed \"{s}\", want \"{s}\"\n",
+        .{ code, got, want },
+    );
+    return error.WrongCommit;
+}
+
+/// 조합 중인 글자를 본다. null이 "조합 중이 아니다"이다.
+fn expectPreedit(state: *input.State, code: u16, want: ?u21) !void {
+    const got = state.preedit();
+    if (std.meta.eql(got, want)) return;
+    std.debug.print(
+        "FAIL: code={d} -> preedit {?d}, want {?d}\n",
+        .{ code, got, want },
+    );
+    return error.WrongPreedit;
 }
 
 pub fn main() !void {
@@ -743,6 +829,122 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_ESC, .exit);
 
     std.debug.print("input_test: copy mode OK\n", .{});
+
+    // ── HI-M1: 한글 ───────────────────────────────────────────────────
+
+    var hg: input.State = .{};
+
+    // 검사 24. **대조군 — 한글이 꺼져 있으면 아무것도 안 바뀐다.**
+    // 이 검사가 없으면 아래 검사들이 "한글이 되는가"만 보고 "영문이 계속
+    // 되는가"를 안 본다. `r`은 두벌식에서 ㄱ이라 가장 잘 갈린다.
+    try expect(&hg, K.KEY_R, 1, "r");
+    try expectPreedit(&hg, K.KEY_R, null);
+
+    // 검사 25. **Shift+Space가 한/영을 바꾸고 공백은 PTY로 안 나간다.**
+    // 빈 슬라이스가 아니라 `.hangul`이 와야 한다 — `.bytes = ""`로 만들면
+    // 화면이 다시 안 그려져서 그 뒤의 조합이 안 보인다.
+    try expect(&hg, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&hg, K.KEY_SPACE, "", null);
+    try expect(&hg, K.KEY_LEFTSHIFT, 0, "");
+    if (!hg.hangul_on) {
+        std.debug.print("FAIL: Shift+Space did not turn hangul on\n", .{});
+        return error.ToggleFailed;
+    }
+
+    // 검사 26. **두벌식으로 `한글`을 친다.** `gksrmf`이고 `hangul_test`의
+    // 검사 4가 같은 글자열을 오토마타 쪽에서 본다 — **이 검사가 보는 것은
+    // 오토마타가 아니라 배선이다.** evdev 코드 → keymap → dubeol → feed까지
+    // 한 줄이라도 어긋나면 여기서 갈린다.
+    try expectHangul(&hg, K.KEY_G, "", 'ㅎ');
+    try expectHangul(&hg, K.KEY_K, "", '하');
+    try expectHangul(&hg, K.KEY_S, "", '한');
+    // `ㄱ`은 `ㄴ`과 겹받침이 안 되므로 `한`이 확정되고 새 초성이 된다.
+    try expectHangul(&hg, K.KEY_R, "한", 'ㄱ');
+    try expectHangul(&hg, K.KEY_M, "", '그');
+    try expectHangul(&hg, K.KEY_F, "", '글');
+
+    // 검사 27. **Enter가 확정시키고, 확정된 글자와 CR이 둘 다 나간다.**
+    // `expect`가 반환된 바이트를, 이어지는 `expectCommit`이 그보다 **먼저**
+    // 나갈 글자를 본다 — 두 줄의 순서가 곧 `readKeys`의 계약이다.
+    try expect(&hg, K.KEY_ENTER, 1, "\r");
+    try expectCommit(&hg, K.KEY_ENTER, "글");
+    try expectPreedit(&hg, K.KEY_ENTER, null);
+
+    // 검사 28. **확정을 유발하는 것 넷**(design 결정 6). 넷이 서로 다른
+    // 갈래로 빠진다: 공백(자모가 아닌 문자 키) · 방향키(표 밖) ·
+    // Ctrl 조합 · Meta 조합으로 copy mode 진입.
+    //
+    // **Cmd+Shift+C가 이 목록에서 가장 미묘하다.** 반환값이 `.copy = .enter`라
+    // 확정된 글자를 담을 자리가 없고, 그래서 `commit_buf`라는 통로가 생겼다.
+    try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hg, K.KEY_K, "", '가');
+    try expect(&hg, K.KEY_SPACE, 1, " ");
+    try expectCommit(&hg, K.KEY_SPACE, "가");
+
+    try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hg, K.KEY_K, "", '가');
+    try expect(&hg, K.KEY_LEFT, 1, "\x1b[D");
+    try expectCommit(&hg, K.KEY_LEFT, "가");
+
+    try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hg, K.KEY_K, "", '가');
+    try expect(&hg, K.KEY_LEFTCTRL, 1, "");
+    try expect(&hg, K.KEY_C, 1, "\x03");
+    try expectCommit(&hg, K.KEY_C, "가");
+    try expect(&hg, K.KEY_LEFTCTRL, 0, "");
+
+    try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hg, K.KEY_K, "", '가');
+    try expect(&hg, K.KEY_LEFTMETA, 1, "");
+    try expect(&hg, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&hg, K.KEY_C, .enter);
+    try expectCommit(&hg, K.KEY_C, "가");
+    try expect(&hg, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&hg, K.KEY_LEFTMETA, 0, "");
+
+    // 검사 29. **한글이 켜져 있어도 copy mode의 `j`는 아래로 간다.**
+    // 한글 층이 copy 표보다 **뒤**라는 것이 이 한 줄이고, 순서를 뒤집으면
+    // 모드 안에서 커서가 안 움직이고 ㅓ가 조합된다.
+    if (!hg.hangul_on) {
+        std.debug.print("FAIL: copy mode entry turned hangul off\n", .{});
+        return error.HangulLostOnCopyEnter;
+    }
+    try expectCopy(&hg, K.KEY_J, .down);
+    try expectCopy(&hg, K.KEY_ESC, .exit);
+    // **모드를 나와도 한/영은 그대로다**(design 결정 5의 직교성).
+    if (!hg.hangul_on) {
+        std.debug.print("FAIL: leaving copy mode turned hangul off\n", .{});
+        return error.HangulLostOnCopyExit;
+    }
+
+    // 검사 30. **Backspace가 자모를 하나씩 뺀다.** 마지막 하나가 대조군이다 —
+    // 조합이 비고 나면 평소처럼 DEL이 나가야 한다. 그 줄이 없으면 "조합 중이
+    // 아닌데도 Backspace를 삼킨다"가 통과하고, 증상은 "셸에서 글자를 못
+    // 지운다"라 원인에서 멀다.
+    try expectHangul(&hg, K.KEY_G, "", 'ㅎ');
+    try expectHangul(&hg, K.KEY_K, "", '하');
+    try expectHangul(&hg, K.KEY_S, "", '한');
+    try expectHangul(&hg, K.KEY_BACKSPACE, "", '하');
+    try expectHangul(&hg, K.KEY_BACKSPACE, "", 'ㅎ');
+    try expectHangul(&hg, K.KEY_BACKSPACE, "", null);
+    try expect(&hg, K.KEY_BACKSPACE, 1, "\x7f");
+
+    // 검사 31. **한/영을 끄면 조합이 먼저 확정된다.** 이것이
+    // "`hangul_buf`가 비지 않았으면 `hangul_on`이 참"이라는 불변식을 세우는
+    // 자리다 — 안 확정하면 꺼진 채로 조합이 남아 화면에 글자가 붙박인다.
+    try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
+    try expectHangul(&hg, K.KEY_K, "", '가');
+    try expect(&hg, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&hg, K.KEY_SPACE, "가", null);
+    try expect(&hg, K.KEY_LEFTSHIFT, 0, "");
+    if (hg.hangul_on) {
+        std.debug.print("FAIL: Shift+Space did not turn hangul off\n", .{});
+        return error.ToggleFailed;
+    }
+    // 껐으니 `r`은 다시 `r`이다.
+    try expect(&hg, K.KEY_R, 1, "r");
+
+    std.debug.print("input_test: hangul OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

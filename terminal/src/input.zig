@@ -1,4 +1,5 @@
 const std = @import("std");
+const hangul = @import("hangul.zig");
 
 /// `pub`인 이유는 `input_test.zig`가 `input.c.KEY_LEFT`처럼 커널이 정한
 /// 이름으로 검사를 쓰기 위해서다. IP-M1까지 테스트는 103/105 같은 숫자
@@ -164,6 +165,19 @@ pub const Action = union(enum) {
     scroll: Scroll,
     /// copy mode의 명령. 이것도 PTY로 보내지 않는다.
     copy: Copy,
+    /// 한글 층이 이 키를 처리했다(HI-M1). **payload가 없는 것에 뜻이 있다.**
+    ///
+    /// 나르는 것은 "조합 중인 글자가 바뀌었을 수 있으니 다시 그려라"라는
+    /// 사실 하나뿐이다. **값은 `State.preedit()`이 준다** — 조합은 마지막
+    /// 하나만 화면에 남으므로 스크롤·copy처럼 순서대로 모을 것이 없다.
+    ///
+    /// **확정된 글자도 여기 없다.** 그것은 `takeCommit()`이 따로 주며,
+    /// 이유는 그 함수의 주석에 있다.
+    ///
+    /// 이 variant가 없으면 조합 중인 글자가 **영영 화면에 안 나온다.**
+    /// 자모 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
+    /// `main.zig`의 `needs_redraw`가 안 켜진다.
+    hangul,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -241,6 +255,13 @@ pub const Keys = struct {
     /// copy mode 명령도 같은 이유로 순서대로 모은다. `j`를 누르고 있으면
     /// 자동 반복이 여러 개를 실어 오고, 그만큼 내려가야 한다.
     copies: []const Copy,
+    /// 이 배치에서 조합 중인 글자가 바뀌었는가(HI-M1).
+    ///
+    /// **값이 아니라 사실만 나른다.** 값은 `State.preedit()`이 주며,
+    /// 조합은 마지막 하나만 화면에 남으므로 스크롤·copy처럼 **순서대로 모을
+    /// 것이 없다** — 자동 반복으로 자모가 여럿 실려 와도 그려야 할 글자는
+    /// 마지막 하나다.
+    hangul: bool,
 };
 
 /// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
@@ -351,6 +372,31 @@ pub const State = struct {
     /// 이유로 힙을 쓰지 않는다.
     copies: [8]Copy = undefined,
 
+    /// 한글을 치는 중인가(HI design 결정 5). **`Mode`에 넣지 않는다** —
+    /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
+    /// 들어갔다 나와도 이 값은 그대로여야 한다.
+    hangul_on: bool = false,
+
+    /// 조합 중인 음절. **비어 있지 않으면 `hangul_on`이 반드시 참이다** —
+    /// 한/영을 끄는 자리가 먼저 확정하기 때문이다(아래 `hangulLayer`).
+    /// 그 불변식이 서 있으므로 "꺼져 있는데 조합이 남은" 상태를 따로 다룰
+    /// 필요가 없다.
+    hangul_buf: hangul.Syllable = .{},
+
+    /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
+    ///
+    /// **왜 반환값이 아니라 여기인가.** 조합을 끝내는 키는 자기 몫의 결과를
+    /// 따로 갖는다 — Enter는 바이트를, Shift+PageUp은 스크롤을, Cmd+Shift+C는
+    /// copy 명령을 만든다. `Action`은 그중 **하나만** 담을 수 있으므로
+    /// 확정된 글자를 담을 자리가 반환값에 없다. 세 variant 전부에 "앞에 붙은
+    /// 글자가 있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 **그 통로를
+    /// 비우는 자리를 한 곳으로 못 박는** 쪽을 골랐다.
+    ///
+    /// **한 키가 확정시키는 음절은 많아야 하나다.** 한글 음절은 UTF-8로
+    /// 언제나 세 바이트라(U+0800~U+FFFF) 넷이면 넉넉하다.
+    commit_buf: [4]u8 = undefined,
+    commit_len: usize = 0,
+
     /// 지금 키를 어떻게 해석하는가. **모드가 `input`에 있는 이유가 design
     /// 결정 1이다** — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
     /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
@@ -440,6 +486,120 @@ pub const State = struct {
         self.seq[0] = ESC;
         self.seq[1] = byte;
         return self.seq[0..2];
+    }
+
+    /// 조합 중인 글자를 확정해 `commit_buf`에 담고 버퍼를 비운다.
+    ///
+    /// **`codepoint()`가 null인 경우는 "조합 중이 아니다"뿐이다.** 그릴 수
+    /// 없는 상태를 오토마타가 애초에 안 만들기 때문이고(`hangul_test`의
+    /// 검사 7이 3-순열 107,811단계에서 0번을 봤다), 그래서 여기서 null을
+    /// "버릴 것이 없다"로 읽어도 안전하다.
+    fn commitHangul(self: *State) void {
+        if (self.hangul_buf.codepoint()) |cp| self.pushCommit(cp);
+        self.hangul_buf = .{};
+    }
+
+    /// 확정된 코드포인트를 UTF-8로 담는다.
+    ///
+    /// 한글은 언제나 세 바이트라 실패하지 않는다. 실패했을 때 아무것도 안
+    /// 보내는 쪽을 고른 것은, 잘못된 바이트가 셸에 도착하면 그 뒤의 모든
+    /// 글자가 밀려서 증상이 원인에서 멀어지기 때문이다.
+    fn pushCommit(self: *State, cp: u21) void {
+        self.commit_len = std.unicode.utf8Encode(cp, &self.commit_buf) catch 0;
+    }
+
+    /// 방금 확정된 글자를 가져간다. 없으면 빈 슬라이스다.
+    ///
+    /// **`handleKey` 직후에, 그 키가 만든 바이트보다 먼저 부른다.** 순서가
+    /// 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이 실행되고
+    /// 글자는 다음 줄에 남는다. 그 순서를 지키는 자리는 `readKeys` 하나이며
+    /// `input_test`가 같은 순서로 검사한다.
+    pub fn takeCommit(self: *State) []const u8 {
+        const out = self.commit_buf[0..self.commit_len];
+        self.commit_len = 0;
+        return out;
+    }
+
+    /// 지금 조합 중인 글자. 없으면 null.
+    ///
+    /// **`main.zig`가 이것을 `vt.zig`에 넘긴다.** `input.zig`는 `vt.zig`를
+    /// import하지 않으므로(IP design 결정 6) 직접 그릴 길이 없고, 그릴 수
+    /// 있는 쪽은 조합을 모른다. 둘을 잇는 것이 `main.zig`이며 `find_open`이
+    /// 이미 같은 모양이다.
+    pub fn preedit(self: State) ?u21 {
+        return self.hangul_buf.codepoint();
+    }
+
+    /// 1.7번 단계 — 한글(HI design 결정 2·5·6).
+    /// **copy 표 뒤·`chord()` 앞이다.**
+    ///
+    /// **왜 copy 표 뒤인가.** copy mode와 검색 프롬프트 안에서는 키가
+    /// 명령이거나 검색어의 글자여야 한다. 한글을 그보다 앞에 두면 모드 안에서
+    /// 친 `j`가 아래로 가는 대신 ㅓ가 된다 — CN-M1이 `n`에서 겪은 것과 같은
+    /// 종류의 갈림이고 답도 같다: **먼저 오는 분기가 이긴다.**
+    ///
+    /// **왜 `chord()` 앞인가.** 확정을 유발하는 것의 목록(결정 6)에
+    /// Ctrl·Alt·Meta 조합과 copy mode 진입이 들어 있는데, `chord()`가 먼저
+    /// 돌면 그 키들이 여기 닿지 않는다. 여기서 확정만 해 두고 **null을 돌려
+    /// 흘려보내면** 그 키의 원래 뜻은 한 글자도 안 바뀐다.
+    ///
+    /// null은 "한글 층이 이 키에 관심이 없다"는 뜻이고, 그때 키는 평소의
+    /// 길(`chord` → `specialKey` → `keymap`)을 그대로 간다.
+    fn hangulLayer(self: *State, code: u16) ?Action {
+        // 한/영은 Shift+Space다(HI-M1). **한글이 꺼져 있을 때도 봐야 하므로**
+        // 아래 `hangul_on` 검사보다 앞이다.
+        //
+        // Ctrl·Alt·Meta를 함께 보는 이유는 Cmd+Shift+Space 같은 조합이
+        // 한/영을 뜻하지 않기 때문이다. 그 조합들은 아래 갈래로 내려가
+        // 확정만 하고 흘러간다.
+        if (code == c.KEY_SPACE and self.shifted() and
+            !self.ctrled() and !self.alted() and !self.metaed())
+        {
+            self.commitHangul();
+            self.hangul_on = !self.hangul_on;
+            return .hangul;
+        }
+        if (!self.hangul_on) return null;
+
+        // Ctrl·Alt·Meta 조합은 한글이 아니다(결정 6). **확정만 하고
+        // 흘려보낸다** — Cmd+Shift+C(copy mode 진입)도 이 갈래로 온다.
+        if (self.ctrled() or self.alted() or self.metaed()) {
+            self.commitHangul();
+            return null;
+        }
+
+        // Backspace는 **조합 중일 때만** 우리 것이다(결정 6). 조합 중이 아니면
+        // null을 돌려 평소처럼 DEL(0x7F)이 나가게 한다 — `erase`가 그 둘을
+        // null로 갈라 준다.
+        if (code == c.KEY_BACKSPACE) {
+            const next = hangul.erase(self.hangul_buf) orelse return null;
+            self.hangul_buf = next;
+            return .hangul;
+        }
+
+        // 표 밖의 키(방향키·PageUp·Delete 등)는 확정을 유발한다(결정 6).
+        if (code >= keymap.len) {
+            self.commitHangul();
+            return null;
+        }
+        const ch = keymap[code][if (self.shifted()) 1 else 0];
+        // 문자를 만들지 않는 키(표 안의 modifier 자리)다. 여기 오는 일은
+        // 사실상 없지만, 0을 `dubeol`에 먹이지 않기 위해 먼저 거른다.
+        if (ch == 0) {
+            self.commitHangul();
+            return null;
+        }
+        // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
+        // `dubeol`이 셋 다 null을 준다. **확정한 글자가 그 키의 바이트보다
+        // 먼저 나가는 것을 보장하는 것은 `readKeys`다.**
+        const jamo = hangul.dubeol(ch) orelse {
+            self.commitHangul();
+            return null;
+        };
+        const step = hangul.feed(self.hangul_buf, jamo);
+        if (step.commit) |cp| self.pushCommit(cp);
+        self.hangul_buf = step.buf;
+        return .hangul;
     }
 
     /// design doc 결정 2의 **2번 단계 — 조합 dispatch**. TF design doc이
@@ -688,6 +848,10 @@ pub const State = struct {
             }
         }
 
+        // 1.7번 단계 — 한글(HI-M1). **copy 표 뒤·chord() 앞이다.**
+        // 그 자리를 고른 이유는 hangulLayer의 주석에 있다.
+        if (self.hangulLayer(code)) |action| return action;
+
         // 2번 단계 — 조합 dispatch. 특수키 조회보다 **먼저**다.
         // 뒤에 두면 Cmd+←가 여기 닿기 전에 ESC [ D로 번역돼 새어 나가고,
         // TR-M2부터는 Shift+PageUp이 ESC [ 5 ~ 로 번역돼 새어 나간다.
@@ -741,18 +905,38 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .bytes = out[0..0],
         .scrolls = self.scrolls[0..0],
         .copies = self.copies[0..0],
+        .hangul = false,
     };
 
     const count = @as(usize, @intCast(n)) / ev_size;
     var written: usize = 0;
     var scrolled: usize = 0;
     var copied: usize = 0;
+    var hangul_changed = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event =
             @ptrCast(&raw[i * ev_size]);
         if (ev.@"type" != c.EV_KEY) continue;
-        switch (self.handleKey(ev.code, ev.value, ctx)) {
+        const action = self.handleKey(ev.code, ev.value, ctx);
+        // **그 키의 결과보다 먼저** 확정된 글자를 옮긴다(HI design 결정 6).
+        //
+        // 순서가 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이
+        // 실행되고 글자는 다음 줄에 남는다. **이 두 줄의 자리가 곧
+        // `takeCommit`의 계약이다.**
+        //
+        // 확정이 일어났다는 것은 조합 버퍼가 비었다는 뜻이므로 화면도 다시
+        // 그려야 한다 — 그래서 `hangul_changed`를 여기서도 켠다.
+        const commit = self.takeCommit();
+        if (commit.len > 0) {
+            hangul_changed = true;
+            for (commit) |byte| {
+                if (written >= out.len) break;
+                out[written] = byte;
+                written += 1;
+            }
+        }
+        switch (action) {
             // 키 하나가 여러 바이트가 될 수 있으므로(IP-M1의 이스케이프
             // 시퀀스) 슬라이스를 통째로 옮긴다. handleKey가 돌려준 슬라이스는
             // State.seq를 가리키고 다음 키가 그것을 덮어쓰므로, **여기서 즉시
@@ -773,12 +957,16 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
                 self.copies[copied] = cmd;
                 copied += 1;
             },
+            // 조합만 바뀐 키다. PTY로 나갈 것도 모을 것도 없고, `main.zig`가
+            // 다시 그리기만 하면 된다.
+            .hangul => hangul_changed = true,
         }
     }
     return .{
         .bytes = out[0..written],
         .scrolls = self.scrolls[0..scrolled],
         .copies = self.copies[0..copied],
+        .hangul = hangul_changed,
     };
 }
 
