@@ -50,6 +50,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 바꾸므로(design doc 결정 7) 그 terminfo가 게스트에 있어야 진실이 된다 —
 # /usr/share/terminfo/x/xterm이 이 패키지에 들어 있다. fish-common/zsh-common과
 # 같이 architecture: all이라 :amd64를 붙이지 않는다.
+#
+# HI-M1이 libc-bin을 더한다. **libc6에는 로케일 데이터가 없다** — Debian은
+# 미리 컴파일된 /usr/lib/locale/C.utf8을 libc-bin에 담는다. 그것이 없으면
+# 게스트에 UTF-8 로케일이 아예 없고, 셸의 `setlocale`이 실패해서 **fish가
+# 우리가 보낸 한글 세 바이트를 한 글자가 아니라 바이트 셋으로 읽는다.**
+# 증상은 "입력이 안 된다"가 아니라 **명령줄의 앞 글자가 지워지는 것**이다 —
+# fish가 바이트마다 폭을 세어(0x80~0x9F는 0칸, 0xA0 이상은 1칸) 커서를
+# 두 칸짜리 글자의 가운데에 세우고 거기에 다음 글자를 쓰기 때문이다.
+# ncurses-base와 같은 종류의 항목이다: **우리가 게스트에게 한 말을 참으로
+# 만들어 주는 데이터.**
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -66,6 +76,7 @@ RUN dpkg --add-architecture amd64 \
         libcap2:amd64 \
         coreutils:amd64 \
         libc6:amd64 \
+        libc-bin:amd64 \
         libgcc-s1:amd64 \
         libpcre2-8-0:amd64 \
         libpcre2-32-0:amd64 \

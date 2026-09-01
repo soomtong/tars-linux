@@ -31,7 +31,7 @@
 - [Power management](docs/decisions/project_power_management.md) — ACPI·종료 경로 셋·시그널 핸들러가 없으면 관측조차 안 되는 성질
 - [Device discovery](docs/decisions/project_device_discovery.md) — 입력 장치를 번호가 아니라 성질로 찾는다; AT 키보드도 `KEY_POWER`를 갖고 있다
 - [Config persistence](docs/decisions/project_config_persistence.md) — 설정은 `/config/tars.conf` 하나, 파서는 PID 1 한 벌, 영속성은 두 번 부팅으로만 증명된다
-- [Guest environment](docs/decisions/project_guest_environment.md) — 게스트에 `PATH`가 없다(외부 명령은 절대 경로); `TERM`은 셸마다 다르고 그 terminfo는 initrd에 직접 넣어야 한다
+- [Guest environment](docs/decisions/project_guest_environment.md) — 게스트에 `PATH`가 없다(외부 명령은 절대 경로); `TERM`은 셸마다 다르고 그 terminfo는 initrd에 직접 넣어야 한다; **로케일도 마찬가지다**(HI-M1) — `libc6`에 로케일 데이터가 없어 `libc-bin`의 `/usr/lib/locale/C.utf8`을 따로 넣어야 하고, **`LANG`만 설정하면 `setlocale`이 조용히 실패해 셸이 한글을 바이트로 읽는다**
 - [Input policy](docs/decisions/project_input_policy.md) — evdev 코드를 셸이 아는 바이트로 번역하는 세 단계; 키보드 차이는 맨 앞에서 한 번만 보정하고, 반환은 "바이트열 또는 동작"이라 스크롤 키가 PTY로 안 샌다
 - [Terminal rendering](docs/decisions/project_terminal_rendering.md) — 색·오프셋·스크롤은 `vt.zig`에서 확정하고 렌더러는 숫자만 받는다; 스크롤백 한도는 값 둘을 함께 줘야 걸린다, 라이브러리에 대해 짐작하면 틀리는 것 셋, NUL이 `grep`을 막는 성질, 죽은 검사가 남기는 구멍
 - [Font selection](docs/decisions/project_font_selection.md) — 후보를 가르는 것은 커버리지가 아니라 16px 중간값 비율이다; 현재 폰트(unifont 17.0.03)의 실측값과 다시 바꿀 때 고칠 자리 열

@@ -636,6 +636,23 @@ pub fn main(init: std.process.Init) !void {
     // 말하는 쪽이 거짓말이 된다(design 결정 8).
     _ = setenv("TERM", "xterm-256color", 1);
 
+    // 로케일도 여기서 정한다(HI-M1). **TERM과 같은 자리에 있는 이유가 다르다** —
+    // TERM은 시리얼 콘솔 셸과 값이 갈려야 해서 여기 있고, LANG은 갈릴 이유가
+    // 없는데도 여기 있다. PID 1은 커널이 준 envp 블록을 그대로 execve에 넘기고
+    // (`init/src/main.zig:389`) 거기에 항목을 더하려면 블록을 새로 만들어야
+    // 하는데, **한글 입력을 받는 셸은 이쪽 하나뿐이라** 그 값을 치르지 않는다.
+    // 시리얼 콘솔 셸은 C 로케일로 남는다.
+    //
+    // **이것이 없으면 셸이 한글을 한 글자로 읽지 못한다.** `setlocale`이
+    // 실패하면 `mbrtowc`가 바이트를 하나씩 돌려주고, fish는 우리가 보낸 세
+    // 바이트를 **세 글자로** 들고 바이트마다 폭을 센다(0x80~0x9F는 0칸,
+    // 0xA0 이상은 1칸). 그러면 커서가 두 칸짜리 글자의 가운데에 서고 다음
+    // 글자가 앞 글자를 지운다 — **증상이 입력이 아니라 화면에 나타난다.**
+    //
+    // 값이 참이 되려면 `/usr/lib/locale/C.utf8`이 게스트에 있어야 한다.
+    // `make_initrd.sh`가 그것을 넣고, terminfo와 정확히 같은 종류의 짝이다.
+    _ = setenv("LANG", "C.UTF-8", 1);
+
     const argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
     const session = try pty.spawn(shell_path, &argv, cols, rows);
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한

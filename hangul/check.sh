@@ -353,4 +353,32 @@ if [ "$(screen_count 'rk')" -lt 1 ]; then
 fi
 echo "latin input is back"
 
+# ── 검사 11: 음절 셋을 이어 쳐도 앞 글자가 안 지워진다 ─────────────────
+#
+# **이 검사가 없어서 HI-M1이 사고를 안고 통과했다.** 위 검사들은 음절을
+# **하나만** 확정시키는데, 그러면 게스트에 UTF-8 로케일이 없어도 통과한다 —
+# 로케일이 없으면 셸이 우리가 보낸 세 바이트를 한 글자가 아니라 **세 글자로**
+# 읽고 바이트마다 폭을 세는데(0x80~0x9F는 0칸, 0xA0 이상은 1칸), `갓`은
+# EA B0 93이라 1+1+0 = 2가 되어 **깨진 계산이 우연히 맞는 답을 낸다.**
+#
+# 두 번째 음절부터 어긋난 폭이 쌓여서 셸이 커서를 두 칸짜리 글자의 가운데에
+# 세우고, 거기에 다음 글자를 써서 앞 글자를 지운다. 증상은 `가나다`가
+# **`가 다`**로 나타나는 것이다.
+#
+# `가나다`가 **둘** 나와야 한다 — 명령줄과 출력줄. 깨지면 명령줄이 `가 다`가
+# 되므로 하나로 준다. **출력줄은 깨져도 멀쩡하다**(그쪽은 셸이 커서를
+# 계산하지 않고 쭉 쓰기만 한다). 그래서 "둘"이 판정이고 "하나 이상"은 아니다.
+echo "=== typing 'echo 가나다' ==="
+type_keys ctrl-c
+sleep 1
+type_keys e c h o spc
+type_keys shift-spc
+type_keys r k s k e k
+type_keys ret
+sleep 2
+if [ "$(screen_count '가나다')" -lt 2 ]; then
+  report_failure "three syllables in a row got corrupted: the command line lost a character"
+fi
+echo "three syllables in a row survive on the command line"
+
 echo "HI check PASS"

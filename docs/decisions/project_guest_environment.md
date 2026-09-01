@@ -109,3 +109,39 @@ TR-M0에서는 terminfo가 없어서 셸이 능력을 몰랐던 것이라 **진�
 
 관련: [[project_init_supervisor]], [[project_config_persistence]],
 [[project_gate_chain_composition]]
+
+## 결과 3: 로케일이 없었다 — HI-M1(2026-09-01)에 고쳤다
+
+**`LANG`도 `LC_ALL`도 없으므로 게스트의 모든 프로세스가 C 로케일이다.** 그리고
+`libc6`에는 로케일 데이터가 없다 — Debian은 미리 컴파일된
+`/usr/lib/locale/C.utf8`을 **`libc-bin`**에 담는다. 그것을 안 받아 왔으므로
+게스트에는 UTF-8 로케일이 **아예 없었다.**
+
+**증상이 입력이 아니라 화면에 나타난다.** 한글 입력기(HI-M1)가 확정된 음절을
+UTF-8 세 바이트로 PTY에 보내는데, 셸의 `setlocale`이 실패한 상태라
+`mbrtowc`가 바이트를 하나씩 돌려준다. fish는 그것을 **한 글자가 아니라 세
+글자로** 들고, 바이트마다 폭을 센다 — 0x80~0x9F는 C1 제어라 0칸, 0xA0 이상은
+1칸이다. 그러면 커서가 두 칸짜리 글자의 **가운데**에 서고 다음 글자가 앞
+글자를 지운다. `가나다`가 `가 다`가 된다.
+
+```
+string length 나          → 3   ← 세 글자로 센다
+string length -V 나       → 1   ← 그래서 폭이 1
+string length \ub098   → 1   ← 이스케이프로 만든 같은 글자는 정상
+```
+
+**`LANG`만 설정해서는 안 된다.** 값이 셸까지 닿는 것은 확인했는데
+(`echo x=$LANG` → `x=C.UTF-8`) 로케일 파일이 없어서 `setlocale`이 그래도
+실패한다. **환경변수와 데이터가 한 벌이어야 한다** — TERM과 terminfo가 정확히
+같은 모양이고, 그래서 고치는 자리도 같다.
+
+| 자리 | 무엇 |
+|---|---|
+| `devcontainer/Dockerfile` | `libc-bin:amd64`를 받아 sysroot에 푼다 |
+| `kernel/make_initrd.sh` | `/usr/lib/locale/C.utf8` 404KB를 initrd에 넣는다 |
+| `terminal/src/main.zig` | `TERM` 옆에서 `LANG=C.UTF-8`을 설정한다 |
+
+**시리얼 콘솔 셸은 C 로케일로 남는다.** PID 1이 커널의 envp 블록을 그대로
+넘기므로 거기에 항목을 더하려면 블록을 새로 만들어야 하는데, 한글 입력을 받는
+셸은 화면 쪽 하나뿐이라 그 값을 안 치렀다. **TERM이 둘로 갈리는 것과 이유가
+다르다** — 그쪽은 갈려야 맞고, 이쪽은 갈릴 이유가 없는데도 갈려 있다.

@@ -141,6 +141,20 @@ cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/config.fish" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/__fish_build_paths.fish" "$WORKDIR/usr/share/fish/"
 
+# HI-M1: UTF-8 로케일. **terminal이 LANG=C.UTF-8을 넘기므로 그 데이터가
+# 게스트에 있어야 그 말이 참이 된다** — terminfo와 정확히 같은 종류의 항목이다.
+#
+# 없으면 셸의 `setlocale`이 실패하고 `mbrtowc`가 바이트를 하나씩 돌려준다.
+# 그러면 fish가 우리가 보낸 한글 세 바이트를 **한 글자가 아니라 세 글자로**
+# 들고, 바이트마다 폭을 세어(0x80~0x9F는 0칸, 0xA0 이상은 1칸) 커서를 두 칸짜리
+# 글자의 가운데에 세운다. **증상은 "한글이 안 쳐진다"가 아니라 "앞 글자가
+# 지워진다"이고**, 그래서 원인에서 멀다.
+#
+# 404KB이고 그중 368KB가 LC_CTYPE이다. 카테고리 하나만 넣지 않는 이유는
+# `setlocale(LC_ALL, ...)`이 카테고리마다 파일을 찾기 때문이다.
+mkdir -p "$WORKDIR/usr/lib/locale"
+cp -r "$SYSROOT/usr/lib/locale/C.utf8" "$WORKDIR/usr/lib/locale/"
+
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —
 # **조용한 실패**라서 input/check.sh가 initrd 목록을 직접 확인한다.
