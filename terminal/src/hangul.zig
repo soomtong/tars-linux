@@ -309,6 +309,110 @@ comptime {
         @compileError("3-P3: v must be the left-hand O that does not open one");
 }
 
+/// 신세벌식 P2·PCS의 **공통 부분**. 둘의 차이는 넷뿐이라 나머지를 여기 모은다.
+///
+/// **오른손 블록 열다섯이 전부 중성이자 종성이다**(design 결정 11의 표).
+/// 신세벌식이 "갈마들이"라 불리는 이유가 이것이고, 이 자판을 옮기면서 후보
+/// struct가 필요해졌다.
+///
+/// **대문자는 중성을 강제한다.** 왼손 글쇠가 중성도 종성도 되는데 Shift를
+/// 누르면 종성 후보가 빠진다 — 그래야 `앋`이 될 자리에서 `아ㄷ`을 칠 수 있다.
+/// Patal이 `"f": 중성.아, "F": 중성.아`로 적어 둔 것이 그 뜻이다.
+fn shinCommon(ch: u8) ?Cand {
+    return switch (ch) {
+        // 초성 — 오른손. 연타는 `tenseInitial`이 한다.
+        'k' => .{ .cho = 0 }, // ㄱ
+        'h' => .{ .cho = 2 }, // ㄴ
+        'u' => .{ .cho = 3 }, // ㄷ
+        'y' => .{ .cho = 5 }, // ㄹ
+        ';' => .{ .cho = 7 }, // ㅂ
+        'n' => .{ .cho = 9 }, // ㅅ
+        'j' => .{ .cho = 11 }, // ㅇ
+        'l' => .{ .cho = 12 }, // ㅈ
+        'm' => .{ .cho = 18 }, // ㅎ
+
+        // 초성이자 중성 — 갈마들이 셋. 빈 상태에선 초성이고 초성 뒤에선
+        // 중성이다(`feed`의 우선순위: 초성만 상태는 중성이 첫째).
+        'i' => .{ .cho = 6, .jung = 18, .jung_opens = true }, // ㅁ / ㅡ
+        'o' => .{ .cho = 14, .jung = 13, .jung_opens = true }, // ㅊ / ㅜ
+        'p' => .{ .cho = 17, .jung = 8, .jung_opens = true }, // ㅍ / ㅗ
+
+        // 중성이자 종성 — 왼손 열다섯.
+        'f' => .{ .jung = 0, .jong = 26 }, // ㅏ / ㅍ
+        'e' => .{ .jung = 1, .jong = 17 }, // ㅐ / ㅂ
+        'w' => .{ .jung = 2, .jong = 8 }, // ㅑ / ㄹ
+        'q' => .{ .jung = 3, .jong = 19 }, // ㅒ / ㅅ
+        'r' => .{ .jung = 4, .jong = 25 }, // ㅓ / ㅌ
+        'c' => .{ .jung = 5, .jong = 1 }, // ㅔ / ㄱ
+        't' => .{ .jung = 6, .jong = 24 }, // ㅕ / ㅋ
+        's' => .{ .jung = 7, .jong = 4 }, // ㅖ / ㄴ
+        'v' => .{ .jung = 8, .jong = 22 }, // ㅗ / ㅈ — 왼쪽 ㅗ라 안 연다
+        'x' => .{ .jung = 12, .jong = 20 }, // ㅛ / ㅆ
+        'b' => .{ .jung = 13, .jong = 23 }, // ㅜ / ㅊ — 왼쪽 ㅜ라 안 연다
+        'a' => .{ .jung = 17, .jong = 21 }, // ㅠ / ㅇ
+        'g' => .{ .jung = 18, .jong = 7 }, // ㅡ / ㄷ — 왼쪽 ㅡ라 안 연다
+        'z' => .{ .jung = 19, .jong = 16 }, // ㅢ / ㅁ
+        'd' => .{ .jung = 20, .jong = 27 }, // ㅣ / ㅎ
+
+        // 대문자 — **중성만 남는다.**
+        'F' => .{ .jung = 0 },
+        'E' => .{ .jung = 1 },
+        'W' => .{ .jung = 2 },
+        'Q' => .{ .jung = 3 },
+        'R' => .{ .jung = 4 },
+        'C' => .{ .jung = 5 },
+        'T' => .{ .jung = 6 },
+        'S' => .{ .jung = 7 },
+        'V' => .{ .jung = 8 },
+        'X' => .{ .jung = 12 },
+        'B' => .{ .jung = 13 },
+        'A' => .{ .jung = 17 },
+        'G' => .{ .jung = 18 },
+        'Z' => .{ .jung = 19 },
+        'D' => .{ .jung = 20 },
+        else => null,
+    };
+}
+
+/// 신세벌식 P2. 공통에 더해 초성 ㅌ이 `'`, ㅋ이 `/`이고, **`/`는 중성 ㅗ이기도
+/// 하다** — 이 자판에만 있는 네 번째 갈마들이 키다.
+fn shinP2(ch: u8) ?Cand {
+    return switch (ch) {
+        '\'' => .{ .cho = 16 }, // ㅌ
+        '/' => .{ .cho = 15, .jung = 8, .jung_opens = true }, // ㅋ / ㅗ
+        else => shinCommon(ch),
+    };
+}
+
+/// 신세벌식 PCS. 오른쪽 새끼손가락 키가 없는 50% 미만 키보드를 위한 배열이라
+/// 초성 ㅌ·ㅋ이 `,`와 `.`으로 내려와 있다. **`/`와 `'`는 자모가 아니다.**
+fn shinPcs(ch: u8) ?Cand {
+    return switch (ch) {
+        ',' => .{ .cho = 16 }, // ㅌ
+        '.' => .{ .cho = 15 }, // ㅋ
+        else => shinCommon(ch),
+    };
+}
+
+// 신세벌의 앵커는 여섯이다. 갈마들이 두 종류를 각각 하나씩(`c`가 중성이자
+// 종성, `p`가 초성이자 중성), **대문자가 종성 후보를 떨어뜨리는 것**,
+// 겹모음을 여는 쪽과 안 여는 쪽(`p`와 `v`가 둘 다 ㅗ), 그리고 **P2와 PCS를
+// 가르는 자리**다.
+comptime {
+    if (JUNG[shinPcs('c').?.jung.?] != 'ㅔ' or JONG[shinPcs('c').?.jong.?] != 'ㄱ')
+        @compileError("shin: c must be both the vowel E and the final GIYEOK");
+    if (CHO[shinPcs('p').?.cho.?] != 'ㅍ' or JUNG[shinPcs('p').?.jung.?] != 'ㅗ')
+        @compileError("shin: p must be both the initial PIEUP and the vowel O");
+    if (shinPcs('C').?.jong != null)
+        @compileError("shin: shift must drop the final candidate");
+    if (!shinPcs('p').?.jung_opens or shinPcs('v').?.jung_opens)
+        @compileError("shin: only the right-hand O opens a diphthong");
+    if (CHO[shinPcs(',').?.cho.?] != 'ㅌ' or shinPcs('\'') != null)
+        @compileError("shin PCS: TIEUT is on comma and the quote is not a jamo");
+    if (CHO[shinP2('\'').?.cho.?] != 'ㅌ' or CHO[shinP2('/').?.cho.?] != 'ㅋ')
+        @compileError("shin P2: TIEUT is on quote and KIEUK on slash");
+}
+
 /// 복합 모음. (앞, 뒤) → 합친 것. 안 되면 null.
 fn joinVowel(a: u5, b: u5) ?u5 {
     return switch (a) {
@@ -417,9 +521,8 @@ pub const Layout = enum {
         return switch (self) {
             .dubeol => dubeol(ch),
             .sebeol_3p3 => sebeol3P3(ch),
-            // 신세벌 둘은 Task 5가 채운다.
-            .shin_p2 => dubeol(ch),
-            .shin_pcs => dubeol(ch),
+            .shin_p2 => shinP2(ch),
+            .shin_pcs => shinPcs(ch),
         };
     }
 

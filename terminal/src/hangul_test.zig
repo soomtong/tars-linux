@@ -156,6 +156,45 @@ pub fn main() !void {
     // 종성 전용 키를 먼저 누르면 **종성만 상태**가 된다(검사 1의 다섯째 줄).
     try expectTyped(.sebeol_3p3, "x", "ㄱ");
 
+    // ── 5.6. 신세벌 PCS (design 위험 2) ──────────────────────────────
+    //
+    // **갈마들이가 두 종류다.** `p`는 초성 ㅍ이자 중성 ㅗ이고, `c`는 중성
+    // ㅔ이자 종성 ㄱ이다. 앞의 것은 "빈 상태냐 초성 뒤냐"로 갈리고 뒤의 것은
+    // "초성만이냐 초성+중성이냐"로 갈린다 — **같은 표로 두 갈림을 다 만드는
+    // 것이 후보 struct의 값이다.**
+    try expectTyped(.shin_pcs, "kf", "가");
+    try expectTyped(.shin_pcs, "p", "ㅍ"); // 빈 상태 → 초성
+    try expectTyped(.shin_pcs, "kp", "고"); // 초성 뒤 → 중성
+    try expectTyped(.shin_pcs, "kc", "게"); // 초성 뒤 → 중성
+    try expectTyped(.shin_pcs, "kfc", "각"); // 초성+중성 뒤 → 종성
+    // 연타 — 초성 `kk`는 ㄲ, 종성 `cc`는 ㄲ받침. **`cc`가 "종성이 중성보다
+    // 먼저"여야 하는 유일한 증거다**(우선순위를 뒤집으면 `각ㅔ`가 된다).
+    try expectTyped(.shin_pcs, "kkf", "까");
+    try expectTyped(.shin_pcs, "kfcc", "갂");
+    // 겹모음은 오른쪽에서만 열린다. `p`는 열고 `v`는 안 연다.
+    try expectTyped(.shin_pcs, "kpf", "과");
+    try expectTyped(.shin_pcs, "kvf", "곺");
+    // 대문자가 종성 후보를 떨어뜨린다. `kfg`는 `갇`이지만 `kfG`는 `가ㅡ`다.
+    try expectTyped(.shin_pcs, "kfg", "갇");
+    try expectTyped(.shin_pcs, "kfG", "가ㅡ");
+    // 받침 넘기기가 없다. **신세벌은 왼손 열다섯이 전부 중성이자 종성이라
+    // 중성 후보만 있는 키가 대문자뿐이다** — `F`가 그것이다.
+    try expectTyped(.shin_pcs, "kfcF", "각ㅏ");
+    // 겹받침 — `wd`(ㄹ+ㅎ)가 ㅀ이다.
+    try expectTyped(.shin_pcs, "kfwd", "갏");
+    // ㅌ과 ㅋ은 PCS에서 `,`와 `.`이다.
+    try expectTyped(.shin_pcs, ",f", "타");
+    try expectTyped(.shin_pcs, ".f", "카");
+
+    // ── 5.7. 신세벌 P2 — PCS와 갈리는 자리만 본다 ────────────────────
+    //
+    // **나머지가 같다는 것은 `shinCommon` 하나를 공유하는 것으로 이미 서 있다.**
+    // 여기서 볼 것은 갈린 넷뿐이다.
+    try expectTyped(.shin_p2, "'f", "타"); // ㅌ이 `'`
+    try expectTyped(.shin_p2, "/f", "카"); // ㅋ이 `/`
+    try expectTyped(.shin_p2, "k/f", "과"); // `/`가 중성 ㅗ이기도 하다
+    try expectTyped(.shin_p2, "kf", "가");
+
     // ── 6. Backspace ─────────────────────────────────────────────────
     //
     // `단`을 세 번 지운다: 단 → 다 → ㄷ → 빈 상태. **그다음 한 번 더 지우면
