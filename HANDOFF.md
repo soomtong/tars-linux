@@ -1,9 +1,15 @@
-# HANDOFF: Hangul Input이 진행 중이다 — HI-M2가 끝났고 다음은 HI-M3
+# HANDOFF: HI-M3의 plan이 나왔다 — 다음 세션은 Task 1부터 실행한다
 
 ## 지금 어디인가
 
 `main`, working tree 깨끗함. **Hangul Input(HI)을 2026-08-31에 착수했고
-HI-M0(8/31) · HI-M1(9/1) · HI-M2(9/1)를 끝냈다.** 남은 것은 HI-M3 하나다.
+HI-M0(8/31) · HI-M1(9/1) · HI-M2(9/1)를 끝냈다. 마지막 milestone인 HI-M3의
+plan을 2026-09-01에 썼고 커밋했다 — 코드는 아직 한 줄도 안 건드렸다.**
+
+**plan: `docs/superpowers/plans/2026-09-01-tars-hangul-input-hi-m3.md`**
+(2,428줄 · Task 여덟 · Step 54). **그 파일이 자기 완결적이다** — 지울 것과
+넣을 것이 전문으로 적혀 있고 검사 코드도 그대로 들어 있다. 이 HANDOFF는
+"왜 그렇게 썼는지"만 담는다.
 
 **HI-M2로 자판이 여섯이 됐고 설정 파일이 고른다.** 한글 넷(두벌식 · 공세벌
 3-P3 · 신세벌 P2 · 신세벌 PCS)과 영문 둘(쿼티 · 드보락)이고, `tars.conf`의
@@ -37,44 +43,116 @@ HI-M0(8/31) · HI-M1(9/1) · HI-M2(9/1)를 끝냈다.** 남은 것은 HI-M3 하�
 기호 되돌림 · 드보락) · `vt_test`의 검사 45~48(preedit) · `font_test`(겹받침
 호환 자모).
 
-## 다음 세션이 할 첫 일: HI-M3의 plan을 쓴다
+## 다음 세션이 할 첫 일: plan의 Task 1을 연다
 
-**HI-M3이 이 서브프로젝트의 마지막 milestone이다.** 전환 키 나머지 셋과
-CapsLock이고, `hangul_toggle` 설정이 여기서 생긴다.
+**plan을 처음부터 다시 설계하지 말 것.** 아래 "plan을 쓰면서 확정한 것"이
+그 근거를 전부 담고 있고, 조사에 쓴 시간이 이미 값을 했다.
 
-**plan을 쓰기 전에 읽을 것 넷.**
+```bash
+git log --oneline -3       # 70e1185 Plan HI-M3  ← 여기까지 와 있다
+git status --short         # 비어 있어야 한다
+```
 
-1. design의 **결정 8**(tap-vs-hold는 뗄 때 판단한다) · **결정 9**(CapsLock
-   대문자 잠금) · **결정 7**(`hangul_toggle`이 다중 선택이다).
-2. **HI-M0의 실측 1** — `sendkey lang1`이 게스트에 안 닿는다. **그래서 한/영
-   키는 게이트로 검증할 수 없고**, 게이트가 보는 것은 짧은 CapsLock과 짧은
-   왼쪽 Ctrl 둘뿐이다. 한/영 키 분기는 `input_test`의 호스트 검사로 덮는다.
-3. **HI-M0의 실측 2** — `sendkey <key> <hold_ms>`가 오차 4밀리초 안이다.
-   0.3초 문턱을 판정하는 데 넉넉하다.
-4. `input.zig:752`의 `readKeys` — **`handleKey`가 처음으로 시각을 보게 되는
-   변경이다.** `ev.time.tv_sec`·`ev.time.tv_usec`이 이미 읽히고 버려지고 있다.
+`docs/superpowers/plans/2026-09-01-tars-hangul-input-hi-m3.md`를 읽고 Task 1의
+Step 1부터 순서대로 간다. **Task마다 커밋이 하나씩 있고 그 문구도 plan에
+적혀 있다.**
 
-**미리 정해진 것 넷.**
-
-- **`handleKey`가 순수 함수에서 시각을 보는 함수로 바뀐다.** 이것이 이
-  서브프로젝트에서 유일하게 그 함수의 성질 자체를 바꾸는 변경이고, 그래서
-  마지막에 뒀다. **`input_test`의 헬퍼 전부가 `handleKey`를 부르므로 시그니처를
-  바꾸면 컴파일러가 고칠 자리를 전부 짚어 준다** — HI-M1 실측 6과 같은 종류다.
-- **`hangul_toggle`은 enum 하나가 아니라 목록이다.** 콤마로 갈라 비트 집합을
-  만든다(결정 7). 파싱은 `config_test`가 호스트에서 본다. **모르는 이름은
-  로그만 남기고 넘어간다** — CP의 판단 그대로다.
-- **게이트 체인은 안 는다.** `hangul/check.sh`가 이미 설정 디스크를 물고 있으니
-  `hangul_toggle`을 그 파일에 한 줄 더하면 된다.
-- **CapsLock(58)은 evdev까지 온다**(HI-M0 실측 1). 지금 `keymap` 표는
-  `KEY_SPACE`(57)에서 끝나므로 표 밖이고, `chord()`에도 없다.
+| Task | 무엇 | 검증 |
+|---|---|---|
+| 1 | `handleKey`가 시각을 받는다 (**동작 0 변화**) | 기존 검사가 한 글자도 안 바뀌고 통과 |
+| 2 | `hangul_toggle` 설정 | `config_test` (호스트) |
+| 3 | 설정을 argv로 terminal까지 | 빌드 + 양쪽 호스트 검사 |
+| 4 | 한/영 키(122)와 `shift_space` 게이트 | `input_test` 36·37 |
+| 5 | tap 뼈대와 짧은 왼쪽 Ctrl | `input_test` 38~44 |
+| 6 | CapsLock — 짧으면 한/영, 길면 대문자 잠금 | `input_test` 45~48 |
+| 7 | 게이트가 tap 둘을 본다 | `hangul/check.sh` 12~16 |
+| 8 | 루트 게이트 3회전 + 서브프로젝트 닫기 | 아홉 체인 3/3 |
 
 **HI-M3이 끝나면 서브프로젝트가 닫힌다.** design doc의 `Status:` 줄과
-`check.sh`의 `CHAINS` 라벨(`HI-M2` → `HI-M3`)을 함께 고친다.
+`check.sh`의 `CHAINS` 라벨(`HI-M2` → `HI-M3`)을 함께 고친다 — Task 8이다.
+
+## plan을 쓰면서 확정한 것 — **다시 조사하지 말 것**
+
+**1. `hangul_toggle`의 기본값은 넷 다 켜진 것이다.** 2026-09-01에 사용자가
+정했다. `keyboard=apple`·`hangul_layout=shin_pcs`와 같은 종류의 결정("이
+기계를 쓰는 사람이 쓰는 것")이라 Claude가 못 정한다. 근거는 **전환 키가 많아서
+곤란한 경우는 없고 없어서 곤란한 경우는 있다**는 것이고, 특히 `hangul_key`는
+실기에서만 오는 키라 기본으로 꺼 두면 "왜 한/영 키가 안 먹지"가 된다.
+
+**2. 그 답이 게이트 디스크에 심을 값을 정했다.** "심는 값이 기본값과 달라야
+한다"(design 결정 14)가 서려면 하나를 빼야 하는데 **뺄 수 있는 것은
+`hangul_key` 하나뿐이다** — `shift_space`를 빼면 기존 검사 2·9·11을 다시 써야
+하고, tap 둘 중 하나를 빼면 HI-M3이 새로 만드는 갈래를 게이트가 못 본다.
+**그 키가 하필 게이트가 어차피 못 보내는 키라는 것이 잘 맞았다**(HI-M0 실측 1).
+심는 값은 `shift_space,capslock_tap,lctrl_tap`이다.
+
+**3. Zig는 안 쓰는 함수 인자를 컴파일 에러로 막는다.** 컨테이너에서 확인했다
+(`error: unused function parameter`, zig 0.16.0). 그래서 Task 1에
+`_ = time_us;` 두 줄이 들어가고 **Task 5가 그것을 지운다** — plan에 언제
+사라지는지가 적혀 있다.
+
+**4. `expectCtx` 호출이 26군데라 시그니처를 직접 못 넓힌다.** 넓히면 기존
+검사가 26줄 바뀌는데, **"기존 검사가 한 글자도 안 바뀐 채 통과했다"가 Task 1의
+유일한 판정이다.** 그래서 본체를 `expectFull`로 옮기고 껍데기 넷(`expect` ·
+`expectCtx` · `expectAt` · `expectHangulAt`)을 남긴다 — **`Context`가 IP-M1에
+들어왔을 때와 정확히 같은 모양이다.**
+
+**5. 소비 표시를 modifier switch 뒤에 두면 Shift가 안 세어진다.** Shift·Alt·
+Meta 갈래가 switch **안에서** `return`하기 때문이다. 증상은 "Ctrl+Shift+C를
+쓸 때만 한/영이 바뀐다"라 원인에서 멀다. `markTapConsumed`가 switch **앞**에
+있고, `input_test`의 검사 41이 그 자리를 보는 유일한 검사다.
+
+**6. 기존 검사가 안 깨지는 근거를 실제로 세었다.** `input_test`의 왼쪽 Ctrl
+누름/뗌 쌍이 여섯인데(263·283 / 292·296 / 543·545 / 894·897 …) **전부 사이에
+다른 키가 있어 소비된다.** 다른 체인들도 `ctrl-c`·`ctrl-alt-delete` 조합뿐이고
+`sendkey ctrl`이나 `caps_lock`을 단독으로 보내는 곳이 **하나도 없다.**
+하나라도 소비 안 된 쌍이 있으면 시각이 0-0이라 tap으로 판정되어
+`got hangul, want bytes`로 **시끄럽게** 실패한다 — 조용히 통과하는 길이 없다.
+
+**7. 검사 48의 글자를 `k`에서 `o`로 바꿨다.** "대문자 잠금이 한글 조합에 안
+닿는다"를 보는 검사인데, `rk`(가)로는 새도 아무것도 안 보인다 — 두벌식에 `K`가
+따로 없다. `o`(ㅐ)와 `O`(ㅒ)는 갈리므로 `개`가 `걔`가 되는 것이 보인다.
+**plan을 쓰면서 손으로 돌려 보다가 잡았고**, 실행 중에 만났다면 "검사가
+통과하니 안전하다"고 믿었을 것이다. HI-M2의 `kfcc`와 같은 종류다.
+
+**8. `screen_count 'ABC1'`이 결정 9를 통째로 본다.** `ABC`만 세면 "CapsLock이
+Shift를 통째로 건다"는 구현이 통과한다. 숫자 하나를 붙이면 "알파벳에만"이라는
+조건이 화면에서 갈린다(그 구현은 `ABC!`를 낸다).
+
+**9. `none`을 파서가 받아 줘야 왕복이 닫힌다.** 빈 집합에 `arg()`가 `none`을
+쓰는데(빈 문자열을 argv에 넣으면 "인자가 없다"와 구분이 안 된다) 그 이름이
+`ToggleKey`에 없어서, 안 막으면 전환 키를 다 끈 사람의 부팅 로그에 매번 경고가
+찍힌다. **`arg` → `parse` 왕복을 검사로 못 박으니 이 구멍이 드러났다.**
+
+**10. 줄 끝 앵커(`$`)가 CR에 걸릴 수 있다.** 게이트의 새 판정이 "목록이 정확히
+이것이다"를 보려면 `$`가 필요한데, 시리얼 로그는 CRLF다 — HI-M1 실측 4가
+`[^ ]+`로 밟은 것과 같은 함정이다. **Task 7에 확인 Step(Step 5)을 따로 뒀고
+처방(`\r\?$`)도 적어 뒀다.** 미리 붙이면 필요 없는 복잡함이고, 안 적어 두면
+실패했을 때 원인을 다시 찾는다.
+
+**11. `sendkey`의 hold를 안 기다리면 다음 키가 소비를 켠다.** QEMU의 monitor는
+hold 타이머를 걸고 즉시 돌아온다. `type_keys`는 로그가 자라면 바로 다음 키로
+가므로 이 함정을 밟고, 게다가 **긴 CapsLock은 로그를 한 줄도 안 만들 수
+있다**(대문자 잠금만 켜지고 화면은 그대로다). 그래서 `hold_key`가 고정
+`sleep 1.5`를 쓰고 **`gate_lib.sh`가 아니라 `hangul/check.sh`에 산다** — 이
+체인 하나만 쓰기 때문이다(GL-M2가 `type_keys`를 모은 근거는 "다섯 벌로 있었다"
+였다).
+
+**12. `handleKey`의 새 인자는 `Context`에 안 들어간다.** `Context`는 `readKeys`
+호출 하나에 한 번 조립되는데 시각은 **이벤트마다 다르다** — 한 번의 `read`가
+이벤트 64개를 담을 수 있다. `swap_alt_meta`처럼 "부팅 내내 상수"인 값과 같은
+자리에 두면 읽는 사람이 속는다. 자리는 `ctx` **앞**이다.
+
+**13. 게이트 시간은 안 갈릴 것으로 예상한다.** 체인이 안 늘고 부팅도 안
+늘었으며, 는 것은 키 몇 개와 `hold_key`의 sleep 여섯 번(9초)뿐이다. HI-M2
+기준선이 18분 06~08초이므로 **18분 10~20초 근처**를 예상한다. **같은 세션에서
+재는 것이 요점이다**(HI-M2 실측 11).
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -12
-#   Close out HI-M2                                    ← 이 커밋
+git log --oneline -13
+#   Plan HI-M3                                         ← 이 커밋
+#   Close out HI-M2
 #   Point the hangul gate at a layout the config file chose
 #   Let the config file choose the hangul and latin layouts
 #   Let the sebeol layouts type digits and symbols
@@ -111,7 +189,8 @@ hangul_layout = dubeol | sebeol_3p3 | shin_p2 | shin_pcs    # 기본 shin_pcs
 latin_layout  = qwerty | dvorak                             # 기본 qwerty
 ```
 
-**아직 없는 것:** 한/영 키 · CapsLock · tap-vs-hold · `hangul_toggle`(HI-M3).
+**아직 없는 것:** 한/영 키 · CapsLock · tap-vs-hold · `hangul_toggle`
+(**HI-M3 — plan은 나왔고 코드는 아직이다**).
 기호 확장과 Patal의 옵션 trait들(비목표, 이월 숙제).
 
 ## HI-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
@@ -305,7 +384,8 @@ CC-M0의 예외와 같은 종류이고 이유만 다르다 — 그때는 "배우
   (결정 열넷 · milestone 넷 · "HI-M0/M1/M2가 실측한 것" 절 셋)
 - plan: `.../plans/2026-08-31-tars-hangul-input-hi-m0.md` ·
   `.../plans/2026-09-01-tars-hangul-input-hi-m1.md` ·
-  `.../plans/2026-09-01-tars-hangul-input-hi-m2.md`
+  `.../plans/2026-09-01-tars-hangul-input-hi-m2.md` ·
+  **`.../plans/2026-09-01-tars-hangul-input-hi-m3.md`(다음 세션이 실행할 것)**
 - **기억: `docs/decisions/project_hangul_input.md`**
 - **참고 코드: `/Users/dp/Repository/_input-method/PatInputMethod`**(사용자가
   만든 macOS 입력기 Patal). 자판 셋은 `macOS/Patal/Layouts/`에서 옮겨 왔고,

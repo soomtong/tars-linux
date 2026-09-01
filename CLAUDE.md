@@ -97,7 +97,9 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   완료(2026-09-01) — 한글 자판 넷(두벌식·공세벌 3-P3·신세벌 P2·신세벌 PCS)과
   영문 자판 둘(쿼티·드보락)을 `tars.conf`가 고른다. 기본값은 `shin_pcs`와
   `qwerty`. 게이트 아홉 체인 3/3으로 18분 06~08초.** 남은 것은 전환 키 셋과
-  CapsLock(HI-M3)뿐이다.
+  CapsLock(HI-M3)뿐이고, **그 plan은 2026-09-01에 이미 썼다**
+  (`.../plans/2026-09-01-tars-hangul-input-hi-m3.md`) — 다음 세션은 Task 1부터
+  실행하면 된다.
   design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
   `docs/decisions/project_hangul_input.md`. **이 서브프로젝트만 편집도 Claude
   Code가 한다**(아래 "진행 방식"의 2번에 대한 예외 — 사용자가 macOS용 한글
