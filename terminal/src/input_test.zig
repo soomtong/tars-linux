@@ -1184,5 +1184,83 @@ pub fn main() !void {
 
     std.debug.print("input_test: tap-vs-hold OK\n", .{});
 
+    // ── HI-M3: CapsLock ───────────────────────────────────────────────
+
+    // 검사 45. **짧은 CapsLock이 한/영을 켜고 끈다.** 0.2초다.
+    var cl: input.State = .{ .hangul_layout = .dubeol };
+    try expectAt(&cl, K.KEY_CAPSLOCK, 1, 0, "");
+    try expectHangulAt(&cl, K.KEY_CAPSLOCK, 0, 200_000, "", null);
+    if (!cl.hangul_on) {
+        std.debug.print("FAIL: a short CapsLock did not turn hangul on\n", .{});
+        return error.ToggleFailed;
+    }
+    try expectAt(&cl, K.KEY_CAPSLOCK, 1, 1_000_000, "");
+    try expectHangulAt(&cl, K.KEY_CAPSLOCK, 0, 1_200_000, "", null);
+    if (cl.hangul_on) {
+        std.debug.print("FAIL: a second short CapsLock did not turn hangul off\n", .{});
+        return error.ToggleFailed;
+    }
+    // **대문자 잠금은 안 켜졌다.** 짧은 tap이 그것까지 건드렸으면 여기서
+    // `A`가 나온다 — 이 한 줄이 두 축이 안 섞였다는 증거다.
+    try expectAt(&cl, K.KEY_A, 1, 2_000_000, "a");
+
+    // 검사 46. **긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다.** 0.4초다.
+    try expectAt(&cl, K.KEY_CAPSLOCK, 1, 3_000_000, "");
+    try expectAt(&cl, K.KEY_CAPSLOCK, 0, 3_400_000, "");
+    if (cl.hangul_on) {
+        std.debug.print("FAIL: a long CapsLock flipped hangul\n", .{});
+        return error.ToggleFailed;
+    }
+    try expectAt(&cl, K.KEY_A, 1, 4_000_000, "A");
+    // **숫자와 기호는 안 바뀐다 — 결정 9의 전부가 이 두 줄이다.** Shift를
+    // 통째로 걸어 버리는 구현은 여기서 `!`와 `_`를 낸다.
+    try expectAt(&cl, K.KEY_1, 1, 4_010_000, "1");
+    try expectAt(&cl, K.KEY_MINUS, 1, 4_020_000, "-");
+    // **Shift와 겹치면 소문자다.** 진짜 키보드의 동작이고, XOR로 쓴 이유다.
+    try expectAt(&cl, K.KEY_LEFTSHIFT, 1, 4_030_000, "");
+    try expectAt(&cl, K.KEY_A, 1, 4_040_000, "a");
+    // 숫자는 Shift 그대로다 — CapsLock이 안 닿았으므로 XOR도 안 일어난다.
+    try expectAt(&cl, K.KEY_1, 1, 4_050_000, "!");
+    try expectAt(&cl, K.KEY_LEFTSHIFT, 0, 4_060_000, "");
+    // 한 번 더 길게 누르면 꺼진다. **켜지는 것만 보면 토글이 한 방향으로만
+    // 동작해도 통과한다** — 게이트의 검사 1과 9가 같은 짝이다.
+    try expectAt(&cl, K.KEY_CAPSLOCK, 1, 5_000_000, "");
+    try expectAt(&cl, K.KEY_CAPSLOCK, 0, 5_400_000, "");
+    try expectAt(&cl, K.KEY_A, 1, 6_000_000, "a");
+
+    // 검사 47. **`capslock_tap`이 꺼져 있으면 짧아도 대문자 잠금이다.**
+    // 그때 CapsLock은 그냥 CapsLock이고, 그것이 이 설정의 뜻이다.
+    var cl_off: input.State = .{
+        .hangul_layout = .dubeol,
+        .toggles = .{ .hangul_key = true },
+    };
+    try expectAt(&cl_off, K.KEY_CAPSLOCK, 1, 0, "");
+    try expectAt(&cl_off, K.KEY_CAPSLOCK, 0, 100_000, "");
+    if (cl_off.hangul_on) {
+        std.debug.print("FAIL: CapsLock toggled hangul with capslock_tap off\n", .{});
+        return error.ToggleFailed;
+    }
+    try expectAt(&cl_off, K.KEY_A, 1, 200_000, "A");
+
+    // 검사 48. **대문자 잠금이 한글 조합에 안 닿는다.** 한글 조회는 언제나
+    // 쿼티 표의 **Shift 안 누른** 칸에서 오므로(결정 13) 자동으로 그렇지만,
+    // 못 박아 두지 않으면 나중에 누가 `hangulLayer`를 `latinChar`로 바꿔 쓰면서
+    // 조용히 깨뜨린다.
+    var cl_hg: input.State = .{ .hangul_layout = .dubeol };
+    // 길게 눌러 대문자 잠금을 켠다.
+    try expectAt(&cl_hg, K.KEY_CAPSLOCK, 1, 0, "");
+    try expectAt(&cl_hg, K.KEY_CAPSLOCK, 0, 400_000, "");
+    // 짧게 눌러 한글을 켠다.
+    try expectAt(&cl_hg, K.KEY_CAPSLOCK, 1, 1_000_000, "");
+    try expectHangulAt(&cl_hg, K.KEY_CAPSLOCK, 0, 1_100_000, "", null);
+    // **`o`를 고른 것에 뜻이 있다.** 두벌식에서 소문자 `o`는 ㅐ이고 대문자
+    // `O`는 ㅒ라, 대문자 잠금이 한글 층에 새면 `개`가 아니라 `걔`가 나온다.
+    // `k`(ㅏ)로는 대문자 칸이 따로 없어서 아무것도 안 보인다 —
+    // **증상이 "안 된다"가 아니라 "다른 글자가 나온다"인 종류다.**
+    try expectHangulAt(&cl_hg, K.KEY_R, 1, 2_000_000, "", 'ㄱ');
+    try expectHangulAt(&cl_hg, K.KEY_O, 1, 2_010_000, "", '개');
+
+    std.debug.print("input_test: capslock OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

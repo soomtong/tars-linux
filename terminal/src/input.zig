@@ -646,6 +646,17 @@ pub const State = struct {
     caps_tap: Tap = .{},
     lctrl_tap: Tap = .{},
 
+    /// 대문자 잠금(HI design 결정 9). CapsLock을 **길게** 누르면 뒤집힌다.
+    ///
+    /// **지금 상태를 보여 주는 자리가 없다는 것을 알고 넘어간다** — LED도 화면
+    /// 표시도 없으므로 켜 놓은 것을 잊으면 대문자가 나오는 것으로만 안다.
+    /// 비목표의 "입력기 상태를 화면에 보여 주기"와 같은 숙제다.
+    ///
+    /// **한글 조합은 이 값에 안 흔들린다.** `hangulLayer`가 `latinChar`를 안
+    /// 쓰고 `qwerty_keymap`을 직접 보기 때문이고(결정 13), 그것을 못 박는
+    /// 것이 `input_test`의 검사 48이다.
+    caps_lock: bool = false,
+
     /// 지금 키를 어떻게 해석하는가. **모드가 `input`에 있는 이유가 design
     /// 결정 1이다** — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
     /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
@@ -695,11 +706,23 @@ pub const State = struct {
     /// 범위 검사는 호출부가 한다 — `qwerty_keymap.len`이 두 표의 상한이라는
     /// 것을 위의 `comptime`이 못 박는다.
     fn latinChar(self: State, code: u16) u8 {
-        const shift: usize = if (self.shifted()) 1 else 0;
-        return switch (self.latin_layout) {
-            .qwerty => qwerty_keymap[code][shift],
-            .dvorak => dvorak_keymap[code][shift],
+        const pair = switch (self.latin_layout) {
+            .qwerty => qwerty_keymap[code],
+            .dvorak => dvorak_keymap[code],
         };
+        // CapsLock은 **알파벳에만** 적용된다(HI design 결정 9). 숫자와 기호는
+        // 안 바뀌고, 그것이 Shift와 CapsLock이 갈리는 자리이자 진짜 CapsLock의
+        // 성질이다.
+        //
+        // 판단의 근거를 **Shift 안 누른 칸의 값**으로 삼는 이유는 그것이
+        // 드보락에서도 그대로 서기 때문이다 — 쿼티의 `q` 자리는 드보락에서
+        // `'`이고 알파벳이 아니므로 CapsLock이 안 닿는다. 코드가 아니라 값을
+        // 보므로 표를 하나 더 유지할 필요도 없다.
+        const caps = self.caps_lock and pair[0] >= 'a' and pair[0] <= 'z';
+        // bool에서 `!=`가 XOR이다. **둘 다면 소문자**이고, 그것이 진짜 키보드의
+        // 동작이다 — CapsLock을 켜 두고 Shift+A를 누르면 `a`가 나온다.
+        const shift = self.shifted() != caps;
+        return pair[if (shift) 1 else 0];
     }
 
     fn ctrled(self: State) bool {
@@ -1091,6 +1114,32 @@ pub const State = struct {
             },
             c.KEY_RIGHTMETA => {
                 self.meta_right = value != 0;
+                return nothing;
+            },
+            // CapsLock(58)은 `keymap` 표 밖이다 — 표가 `KEY_SPACE`(57)에서
+            // 끝난다. 그래서 HI-M3 전에는 `handleKey` 맨 끝에서 조용히
+            // `nothing`이 됐고, TARS에 대문자 잠금이 아예 없었다(design 조사 7).
+            c.KEY_CAPSLOCK => {
+                if (value == 0) {
+                    // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다 —
+                    // 그 함수가 상태를 지운다.
+                    const tapped = self.caps_tap.up(time_us);
+                    if (tapped and self.toggles.capslock_tap)
+                        return self.toggleHangul();
+                    // 짧은 tap이 아니면 원래 뜻이다(결정 9).
+                    //
+                    // **누를 때가 아니라 뗄 때 뒤집는 것이 진짜 CapsLock과
+                    // 다른 유일한 자리다.** 누를 때 뒤집으면 짧게 눌렀다 뗐을
+                    // 때 대문자 잠금이 한 번 켜졌다 꺼지므로 tap을 만들 수가
+                    // 없다.
+                    //
+                    // **`capslock_tap`이 꺼져 있으면 `tapped`가 무엇이든 여기
+                    // 온다.** 그때 CapsLock은 그냥 CapsLock이고, 갈래를 나누지
+                    // 않으므로 "언제나 뗄 때"라는 규칙이 하나로 선다.
+                    self.caps_lock = !self.caps_lock;
+                } else {
+                    self.caps_tap.down(time_us);
+                }
                 return nothing;
             },
             else => {},
