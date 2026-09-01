@@ -946,5 +946,43 @@ pub fn main() !void {
 
     std.debug.print("input_test: hangul OK\n", .{});
 
+    // ── HI-M2: 자판이 되돌려 주는 기호 ────────────────────────────────
+
+    // 검사 32. **세벌식은 숫자 열이 자모라 되돌려 줄 자리가 필요하다.**
+    // 3-P3에서 `1`은 종성 ㅋ이고, 숫자 `1`은 Shift+M에 있다. 이것이 없으면
+    // 3-P3 사용자는 한글 상태에서 숫자를 아예 못 친다.
+    var sb: input.State = .{ .hangul_layout = .sebeol_3p3 };
+    try expect(&sb, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&sb, K.KEY_SPACE, "", null);
+    try expect(&sb, K.KEY_LEFTSHIFT, 0, "");
+
+    // 조합이 비어 있을 때 — 기호만 나간다.
+    try expect(&sb, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&sb, K.KEY_M, 1, "1");
+    try expectCommit(&sb, K.KEY_M, "");
+    try expect(&sb, K.KEY_LEFTSHIFT, 0, "");
+
+    // **조합 중이면 음절이 먼저 나간다.** 뒤집히면 셸에 `1가`가 도착한다.
+    // `kf`가 3-P3의 `가`이고, `hangul_test`가 같은 글자열을 오토마타 쪽에서
+    // 본다 — **여기가 보는 것은 배선이다.**
+    try expectHangul(&sb, K.KEY_K, "", 'ㄱ');
+    try expectHangul(&sb, K.KEY_F, "", '가');
+    try expect(&sb, K.KEY_LEFTSHIFT, 1, "");
+    try expect(&sb, K.KEY_M, 1, "1");
+    try expectCommit(&sb, K.KEY_M, "가");
+    try expectPreedit(&sb, K.KEY_M, null);
+    try expect(&sb, K.KEY_LEFTSHIFT, 0, "");
+
+    // 검사 33. **신세벌 P2는 유니코드 기호를 준다.** `nonSyllable`이 `?u8`이
+    // 아니라 `?u21`인 이유가 이 한 줄이고, UTF-8 세 바이트가 `seq`에 담겨
+    // 나간다.
+    var sp: input.State = .{ .hangul_layout = .shin_p2 };
+    try expect(&sp, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&sp, K.KEY_SPACE, "", null);
+    try expect(&sp, K.KEY_Y, 1, "✕");
+    try expect(&sp, K.KEY_LEFTSHIFT, 0, "");
+
+    std.debug.print("input_test: layout symbols OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

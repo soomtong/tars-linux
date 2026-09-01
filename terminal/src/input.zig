@@ -597,6 +597,19 @@ pub const State = struct {
             self.commitHangul();
             return null;
         }
+        // 자판이 되돌려 주는 기호(HI-M2). 세벌식은 숫자 열이 자모라 이것이
+        // 없으면 한글 상태에서 숫자를 못 친다.
+        //
+        // **조합 중이던 음절과 이 기호가 둘 다 나가야 한다.** `commit_buf`는
+        // 코드포인트 하나짜리라 둘을 못 담으므로 음절은 그쪽으로, 기호는
+        // `.bytes`로 내보낸다 — `readKeys`가 `takeCommit()`을 그 키의 바이트보다
+        // **먼저** 비우므로 순서가 저절로 맞다(HI-M1 실측 2). 뒤집히면 셸에
+        // `1가`가 도착한다.
+        if (self.hangul_layout.nonSyllable(ch)) |cp| {
+            self.commitHangul();
+            const n = std.unicode.utf8Encode(cp, &self.seq) catch return .hangul;
+            return .{ .bytes = self.seq[0..n] };
+        }
         // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
         // 자판이 셋 다 null을 준다. **확정한 글자가 그 키의 바이트보다
         // 먼저 나가는 것을 보장하는 것은 `readKeys`다.**
