@@ -421,6 +421,11 @@ pub const Screen = struct {
             const cells_slice = row_cells[y].slice();
             const raws = cells_slice.items(.raw);
             const styles = cells_slice.items(.style);
+            // 바로 앞 칸이 **확정한** 색. 폭 2 글자의 뒷칸이 이것을 물려받는다
+            // (아래 spacer 층). **행마다 새로 시작한다** — 앞 행의 마지막 칸은
+            // 이 행의 첫 칸과 이웃이 아니다.
+            var prev_fg = default_fg;
+            var prev_bg = default_bg;
             for (0..self.state.cols) |x| {
                 if (n >= out.len) return out[0..n];
 
@@ -543,6 +548,36 @@ pub const Screen = struct {
                         std.mem.swap(u32, &fg, &bg);
                     }
                 }
+
+                // 폭 2 글자의 **뒷칸은 자기 색을 갖지 않는다**(2026-09-02).
+                //
+                // spacer는 화면의 독립된 칸이 아니라 **앞 글자의 오른쪽
+                // 절반이다.** 그것이 자기 배경을 갖는다는 것 자체가 모델의
+                // 거짓이고, 그래서 위의 색 층 넷을 전부 지난 **뒤에** 앞 칸이
+                // 확정한 값을 그대로 물려받는다.
+                //
+                // **왜 이 한 자리로 끝나는가.** `drawGlyph`는 16픽셀을 첫 셀의
+                // `fg` **하나로** 찍는데 배경은 칸마다 따로 정해진다. 두 칸의
+                // 배경이 다르면 글자의 오른쪽 절반이 배경과 같은 색이 되어
+                // **사라진다** — 커서가 확정된 한글 위에 올 때 실제로 그랬다.
+                // 물려받게 하면 커서·copy 커서·선택·매치가 함께 맞고, 앞으로
+                // 색 층을 더해도 자동으로 맞는다.
+                //
+                // **`fg`도 물려받는다.** 이 칸은 글자를 안 그리므로 렌더에는
+                // 안 쓰이지만, `dumpStyles`가 찍는 값이 곧 게이트의 판정이라
+                // 두 칸이 같은 색으로 보여야 반전된 셀을 셀 수 있다. inverse가
+                // 이미 이렇게 동작한다(라이브러리가 spacer에도 같은 `style_id`를
+                // 붙인다) — 그것과 모양이 같아지는 것이다.
+                //
+                // **`spacer_head`는 제외한다.** 그것은 soft-wrap 끝에서 다음
+                // 줄로 넘어간 글자를 위해 비워 둔 자리이지 앞 글자의 절반이
+                // 아니다.
+                if (raw.wide == .spacer_tail) {
+                    fg = prev_fg;
+                    bg = prev_bg;
+                }
+                prev_fg = fg;
+                prev_bg = bg;
 
                 // 그릴 글자도 없고 칠할 색도 기본인 셀만 건너뛴다.
                 if (cp == 0 and bg == default_bg) continue;

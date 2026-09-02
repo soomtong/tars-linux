@@ -1508,5 +1508,94 @@ pub fn main(init: std.process.Init) !void {
     pre.setPreedit(null);
     std.debug.print("vt_test: copy mode 중에는 조합을 안 그린다 OK\n", .{});
 
+    // ── 확정된 폭 2 글자 위의 커서 ────────────────────────────────────
+    //
+    // **HI-M1이 조합 중인 글자에 대해서만 덮은 어긋남이 확정된 글자에도
+    // 있었다.** `drawGlyph`는 16픽셀을 **첫 셀의 `fg` 하나로** 찍는데 배경은
+    // 칸마다 따로 정해지므로, 두 칸의 배경이 다르면 글자의 오른쪽 절반이
+    // 배경과 같은 색이 되어 **사라진다.**
+    //
+    // **HI-M1이 이것을 못 본 이유는 게이트가 그 상황을 안 만들었기
+    // 때문이다** — 확정 뒤 커서는 글자 **다음** 칸에 있고, 글자 **위**로
+    // 오려면 왼쪽 화살표나 `Ctrl+A`로 되돌아가야 한다. 사용자가 실기에서
+    // 그렇게 하다가 찾았다(2026-09-02).
+    //
+    // **inverse와 매치 하이라이트는 이미 맞다.** 앞의 것은 라이브러리가
+    // spacer 셀에도 같은 `style_id`를 붙이기 때문이고, 뒤의 것은 매치 범위가
+    // spacer까지 덮기 때문이다. **구멍은 커서 둘뿐이었다.**
+    const wide = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer wide.deinit();
+    wide.feed("한글");
+
+    // 검사 49. **대조군 — 커서가 글자 뒤 빈 칸에 있으면 한 칸이다.**
+    // 이것이 없으면 "언제나 두 칸"인 구현도 아래 검사를 통과한다.
+    {
+        var inv: usize = 0;
+        for (try wide.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) inv += 1;
+        }
+        if (inv != 1) {
+            std.debug.print("FAIL: 빈 칸의 커서인데 반전된 셀이 {d}개다\n", .{inv});
+            return error.WrongCursorCells;
+        }
+    }
+
+    // 검사 50. **커서가 확정된 한글 위로 오면 두 칸이 반전된다.**
+    // 한글 두 자가 네 칸이므로 CUB 4가 첫 글자 위로 데려간다.
+    wide.feed("\x1b[4D");
+    {
+        var inv: usize = 0;
+        var lit = false;
+        for (try wide.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) {
+                inv += 1;
+                // **그 두 칸이 글자의 두 칸이어야 한다.** 개수만 세면 엉뚱한
+                // 자리가 하나 더 밝아도 통과한다.
+                if (cell.row != 0 or cell.col > 1) {
+                    std.debug.print(
+                        "FAIL: 반전된 셀이 엉뚱한 자리다 row={d} col={d}\n",
+                        .{ cell.row, cell.col },
+                    );
+                    return error.WrongCursorCells;
+                }
+                if (cell.col == 0 and cell.codepoint == '한') lit = true;
+            }
+        }
+        if (inv != 2) {
+            std.debug.print(
+                "FAIL: 커서가 한글 위인데 반전된 셀이 {d}개다(2여야 한다)\n",
+                .{inv},
+            );
+            return error.WideCursorNotTwoCells;
+        }
+        if (!lit) {
+            std.debug.print("FAIL: 반전된 첫 칸에 글자가 없다\n", .{});
+            return error.WideCursorNotTwoCells;
+        }
+    }
+    std.debug.print("vt_test: 확정된 한글 위의 커서가 두 칸이다 OK\n", .{});
+
+    // 검사 51. **copy 커서도 같다.** 셸 커서와 다른 코드 경로라 따로 본다 —
+    // 그쪽만 고치고 이쪽을 두면 copy mode에서 같은 증상이 남는다.
+    const wcopy = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer wcopy.deinit();
+    wcopy.feed("한글 abc\r\n");
+    wcopy.copyEnter();
+    try wcopy.copyMove(0, -1); // 0행 0열 — 한글 첫 글자 위
+    {
+        var inv: usize = 0;
+        for (try wcopy.cells(&buf)) |cell| {
+            if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) inv += 1;
+        }
+        if (inv != 2) {
+            std.debug.print(
+                "FAIL: copy 커서가 한글 위인데 반전된 셀이 {d}개다(2여야 한다)\n",
+                .{inv},
+            );
+            return error.WideCursorNotTwoCells;
+        }
+    }
+    std.debug.print("vt_test: copy 커서도 한글 위에서 두 칸이다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

@@ -564,4 +564,60 @@ if [ "$ON" != "true" ]; then
 fi
 echo "Ctrl+C did not flip hangul: the tap was consumed"
 
+# ── 검사 17: 확정된 한글 **위**의 커서가 두 칸을 먹는다 ────────────────
+#
+# **사용자가 실기에서 찾은 버그다(2026-09-02).** 조합 중인 글자는 HI-M1이
+# 두 칸을 반전하게 했는데(검사 3), **확정된 글자 위로 커서가 되돌아오면**
+# 한 칸만 반전됐다. `drawGlyph`는 16픽셀을 첫 셀의 `fg` 하나로 찍으므로
+# 오른쪽 절반이 어두운 배경에 어두운 색으로 그려져 **사라진다.**
+#
+# **HI-M1의 게이트가 이것을 못 본 이유가 있다.** 확정 뒤 커서는 글자 **다음**
+# 칸에 있어서(검사 8이 보는 상태) 글자 **위**로 오는 경로가 없었다 — 방향키로
+# 되돌아와야 한다. 그래서 이 검사가 커서를 실제로 왼쪽으로 옮긴다.
+#
+# 판정이 둘인 것이 요점이다. `inverted_cells`는 **셀 모델**을, `ink>`는
+# **프레임버퍼의 픽셀**을 본다 — 이 버그의 증상은 화면에서 사라지는 것이므로
+# 픽셀 쪽이 본질에 가깝고, 셀 쪽은 원인에 가깝다.
+echo "=== compose 가, commit it, then walk the cursor back onto it ==="
+# **화면을 먼저 지운다.** `dumpInk`는 폭 2 글자를 앞에서부터 여덟 개까지만
+# 찍는데(`INK_DUMP_LIMIT`), 여기까지 오면 화면에 옛 한글이 여덟 개를 넘어서
+# **커서 아래 글자가 목록에 안 들어온다.** 그러면 아래 ink 판정이 엉뚱한
+# 글자를 보고 조용히 통과한다 — 처음 쓸 때 실제로 그랬고, 수정을 꺼 놓고
+# 돌려 보다가 잡았다.
+type_keys ctrl-l
+sleep 1
+type_keys k f
+sleep 1
+# 공백이 조합을 확정시키고 자기도 PTY로 나간다. 화면은 `가 `가 된다.
+type_keys spc
+sleep 1
+# 공백 위로, 그리고 `가` 위로. fish가 폭 2를 알므로 두 번째 left가 두 칸을
+# 건너뛴다.
+type_keys left left
+sleep 1
+
+# 픽셀 쪽 증거를 **먼저** 본다. 이 버그의 증상은 "화면에서 사라진다"이므로
+# 픽셀이 본질이고 셀 수는 원인이다.
+#
+# **버그였을 때 `right`가 128(8×16 전부)이 된다** — 커서가 첫 칸만 밝히므로
+# 오른쪽 절반이 통째로 "배경과 다른 색"으로 세어지기 때문이다. 고쳐지면 두
+# 칸 다 밝아서 글자의 획만 세어지므로 128보다 훨씬 작다.
+INK_LINE="$(last_frame | grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+AC00 left=[0-9]+ right=[0-9]+' | tail -n 1)"
+if [ -z "$INK_LINE" ]; then
+  report_failure "no ink line for U+AC00 in the last frame, so the renderer never treated 가 as a wide glyph"
+fi
+INK_RIGHT="$(echo "$INK_LINE" | sed -E 's/.*right=([0-9]+).*/\1/')"
+if [ "$INK_RIGHT" -ge 128 ]; then
+  report_failure "the right half of 가 is entirely off-background (right=${INK_RIGHT}), so it vanished under the cursor"
+fi
+if [ "$INK_RIGHT" -eq 0 ]; then
+  report_failure "the right half of 가 has no ink (right=0), so it was drawn as a narrow glyph"
+fi
+
+INV="$(inverted_cells)"
+if [ "$INV" != "2" ]; then
+  report_failure "the cursor on a committed 가 took ${INV} inverted cell(s), expected 2"
+fi
+echo "the cursor covers both cells of a committed 가 (ink right=${INK_RIGHT})"
+
 echo "HI check PASS"
