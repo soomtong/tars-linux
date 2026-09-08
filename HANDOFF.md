@@ -1,44 +1,90 @@
-# HANDOFF: Input Status(IS)에 착수했다 — IS-M0의 Task 1을 넣는 자리
+# HANDOFF: IS-M0을 끝냈다 — 다음은 IS-M1의 plan을 쓰는 자리
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Input Status(IS)를 2026-09-02에 착수했다.**
-design과 plan을 코드보다 먼저 커밋했고(GL-M2·M3이 세운 순서, HI-M1~M3이 그대로
-했다), **코드는 아직 한 줄도 안 들어갔다.**
+`main`, working tree 깨끗함. **Input Status(IS)의 IS-M0을 2026-09-02에
+끝냈다.** 상태 줄이 화면 맨 아래 여백에 뜨고 칸이 셋이다.
+
+```
+  EN  공세벌 3-P3  쿼티        ← 부팅 직후 (게이트 디스크가 sebeol_3p3을 심는다)
+  한  공세벌 3-P3  쿼티        ← Shift+Space 뒤
+```
 
 | | 파일 | 커밋 |
 |---|---|---|
-| design | `docs/superpowers/specs/2026-09-02-tars-input-status-design.md` | `be24cf4` |
+| design | `docs/superpowers/specs/2026-09-02-tars-input-status-design.md` | `be24cf4` (Status와 실측 절은 마지막 커밋에서 갱신) |
 | plan (IS-M0) | `docs/superpowers/plans/2026-09-02-tars-input-status-is-m0.md` | `7d7d06c` |
+| Task 1 | `status.zig` · `status_test.zig` · `build.zig` | `17072d9` |
+| Task 2 | `main.zig`의 `drawStatus`와 `render` 배선 | `3360c79` |
+| Task 3 | `main.zig`의 `dumpStatus` | `780c2f0` |
+| Task 4 | `hangul/check.sh`의 검사 0a·2a | `f1f69c1` |
 
-**바로 다음에 할 것은 이 문서의 "바로 다음에 할 것" 절에 있다.**
+**게이트는 아홉 체인 3/3으로 19분 06.47초다**(직전 18분 43.9초에서 +22.6초,
+설명되는 값이다).
 
-**직전 게이트 기준선은 18분 43.9초다**(2026-09-02, spacer 수정 뒤 아홉 체인
-3/3). IS-M0은 **키를 하나도 안 더하고** 새 로그 줄도 전환이 있을 때만 찍으므로
-**거의 안 늘어야 한다** — 분 단위로 늘었다면 `dumpStatus`의 "바뀌었을 때만"
-조건이 안 걸린 것이다.
+## 바로 다음에 할 것: IS-M1의 plan을 쓴다
 
-## IS가 만드는 것 — 화면 맨 아래 여백의 상태 줄 하나
+**plan은 아직 없다.** `CLAUDE.md`의 규칙대로 milestone이 끝난 시점에 새로
+쓴다 — 전체를 미리 상세 설계하지 않는다.
 
+IS-M1이 담을 것은 design의 "Milestone" 절에 있다.
+
+- **`CAPS` 칸과 색 셋**(`STATUS_FG`에 `STATUS_ON`·`STATUS_OFF`를 더한다)
+- **`Action.hangul` → `Action.redraw` 이름 바꾸기**(자리 열넷, 전부 컴파일러가
+  잡는다)와 CapsLock 분기가 그것을 돌려주게 하기
+- **게이트 판정 하나** — 긴 CapsLock 뒤의 `status>` 줄
+- `MAX_LEN`이 30에서 **36**이 된다(`  CAPS` 여섯)
+
+```bash
+git status --short     # 비어 있어야 한다
+git log --oneline -3   # f1f69c1 Check that... / 780c2f0 Log the... / 3360c79 Draw the...
 ```
-  한  신세벌 PCS  쿼티  CAPS
-```
 
-**격자 바깥에 그린다.** 프레임버퍼가 1280×800이고 `GRID_Y=20`·`rows=47`·
-`ROW_HEIGHT=16`이라 격자가 y=20~772를 쓰고 **아래 여백 28픽셀이 남는다.** 지금은
-`fill(MARGIN_COLOR)`이 통째로 칠하고 마는 자리이고, 16픽셀 글자 한 줄이 그대로
-들어간다. **그래서 터미널 47줄을 한 줄도 안 뺏고, `cells()`·`rows`·PTY 크기·검색
-프롬프트와 아무 데서도 안 부딪힌다.**
+## IS-M0이 세운 것 셋
 
-milestone은 둘이다.
+1. **`terminal/src/status.zig`** — `statusText`가 `input.State`를 받아 한 줄을
+   만든다. 시스템 콜도 프레임버퍼도 `vt.zig`도 안 본다. 이름 표 둘이 **`else`
+   없는 `switch`**이고 `MAX_LEN`은 그 표에서 **`comptime`에 센다**(실측 30).
+   **`input.zig`를 import하므로 `status_test`는 `link_libc = true`가
+   필요하다** — `hangul_test`와 갈리는 자리다.
+2. **`main.zig`의 상태 줄 층** — `STATUS_FG`(0x00808890) · `drawStatus` ·
+   `Status` struct · `render`의 인자 `st` · `dumpStatus`와 루프 상태 둘.
+   **`drawStatus`는 `drawPrompt`를 재사용하지 않는다** — 그쪽은 바이트 하나를
+   글자 하나로 세므로 `한`이 글리프 셋으로 그려진다.
+3. **`hangul/check.sh`의 검사 0a·2a와 헬퍼 둘**(`status_text`·`status_ink`).
+   **키를 하나도 안 더했다** — 검사 2가 이미 누른 `shift-spc`가 전환까지 나른다.
 
-| | 무엇 | 갱신 경로 |
-|---|---|---|
-| **IS-M0** | 칸 셋(한/영 · 한글 자판 · 영문 자판) | **기존 것만 쓴다** — `Action.hangul`이 이미 `needs_redraw`를 켠다 |
-| IS-M1 | `CAPS` 칸과 색 셋 · `Action.hangul` → `Action.redraw` | **새 경로 하나** |
+**호스트 검사에 `status_test`가 늘었다** — `zig build test`가 이제 다섯을
+돌린다(`input_test` · `vt_test` · `font_test` · `hangul_test` ·
+**`status_test`**, 검사 열하나).
 
-**둘로 가른 이유가 IS-M0의 성격을 정한다.** M0이 증명된 갱신 경로만 쓰므로,
-M1에서 `CAPS`가 안 밝아지면 그리는 층을 의심할 필요가 없다.
+## IS-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"IS-M0이 실측한 것"** 절(항목 여덟)에 있다. 요약 넷.
+
+**1. `render> first frame`을 echo하는 체인이 하나도 없다.** plan Step 2가
+"값은 게이트 로그에 있다"고 전제했는데 체인들은 시리얼 로그를 `mktemp`에 두고
+**판정 결과만** echo한다. **파일을 하나도 안 고치고 꺼내는 길이 있다** —
+`docker run -e TMPDIR=/workspace/out`으로 `mktemp`을 bind-mount된 디렉터리로
+돌리면 호스트에서 `$LOG`를 읽는다. 다음에 시리얼 원문이 필요한 사람이 쓴다.
+
+**2. 문서에 적힌 기준선은 게이트 시간만이 아니라 전부 낡는다.** design의 첫
+프레임 기준선 11~22밀리초가 이 세션의 착수 전 값 **27.9밀리초**와 안 맞았다.
+착수 전 커밋의 파일 둘만 되돌려 같은 세션에서 다시 재니 **27,905µs →
+38,875µs, +11.0밀리초**다. 낡은 값과 비교했으면 +17~28밀리초로 보여 위험 4가
+실현된 것처럼 읽혔을 것이다. **캐시가 다시 굽는 것은 아니다** — 개수가
+11 → 19 → … → 38로 단조 증가한다.
+
+**3. "매 프레임 안 찍는다"는 게이트 시간보다 로그 줄 수가 곧게 본다.**
+`screen>` 57번에 `status>` **12줄**이다(매 프레임이면 114줄). 게이트 시간
+차이 +22.6초는 신호로 쓰기엔 무디다 — 같은 세션 삼중값의 폭이 2.29초이고
+다른 날 잡음이 ±3분이다.
+
+**4. `build.zig`의 `test_step`에서 `input_test`가 빠질 뻔했다.** 똑같이 생긴
+`dependOn` 다섯 줄 중 하나를 "지울 줄"로 준 편집이 **첫 줄**에 들어갔다.
+`zig build test`는 **이 상태로도 초록이다** — 검사가 틀린 것이 아니라 **아예
+안 도는 것**이다. 커밋 전 `git diff`가 잡았다. **줄이 서로 구별되지 않는
+자리는 지울 줄만으로 위치를 지정할 수 없다.**
 
 ## 착수 전에 확정한 것 — **다시 논의하지 말 것**
 
@@ -48,11 +94,8 @@ M1에서 `CAPS`가 안 밝아지면 그리는 층을 의심할 필요가 없다.
 푼다.**
 
 **2. 자판 이름은 예쁜 이름이다.** 사용자가 골랐다 — `신세벌 PCS` ·
-`공세벌 3-P3` · `신세벌 P2` · `두벌식` · `쿼티` · `드보락`. `@tagName`을 그대로
-쓰는 쪽과 저울질했고, **표가 하나 느는 대가를 받아들였다.** 처방은 `else` 없는
-`switch`다 — 자판을 다섯째로 더하는 사람이 이름을 빼먹으면 **컴파일 에러**다.
-HI-M2 실측 6("이 위험은 '표를 옮긴다'가 아니라 **'사람이 읽고 다시 적는다'**에
-딸려 있었다")에 대한 처방이고, 여기서는 언어가 공짜로 해 준다.
+`공세벌 3-P3` · `신세벌 P2` · `두벌식` · `쿼티` · `드보락`. 처방은 `else` 없는
+`switch`이고, 자판을 다섯째로 더하는 사람이 이름을 빼먹으면 **컴파일 에러**다.
 
 **3. 칸은 자리가 고정이고 `CAPS`는 색만 바뀐다.** "켜졌을 때만 나타남"을 안 고른
 것은 문자열 길이가 수시로 바뀌면 눈도 게이트도 어렵기 때문이다. `CAPS`와 `caps`로
@@ -60,7 +103,7 @@ HI-M2 실측 6("이 위험은 '표를 옮긴다'가 아니라 **'사람이 읽�
 
 **4. `Action.hangul`에 갱신 구멍이 하나 열려 있다**(`input.zig:1139`). 긴
 CapsLock이 `self.caps_lock`만 뒤집고 `nothing`을 돌려주므로 `needs_redraw`가 안
-켜진다. **지금은 버그가 아니다** — 대문자 잠금은 다음에 치는 글자에서만 드러나고
+켜진다. **지금도 버그가 아니다** — 대문자 잠금은 다음에 치는 글자에서만 드러나고
 그 글자가 어차피 다시 그린다. **`CAPS` 칸이 생기는 IS-M1에서 버그가 되고**,
 처방은 `.hangul`을 `.redraw`로 넓히는 것이다(자리 열넷, 전부 컴파일러가 잡는다).
 `Action.caps`를 새로 더하는 쪽을 안 고른 것은 셋째 호출자가 생기면 `main.zig`가
@@ -69,54 +112,14 @@ CapsLock이 `self.caps_lock`만 뒤집고 `nothing`을 돌려주므로 `needs_re
 
 **5. `status.zig`는 `input.zig`를 import한다.** design 결정 5의 "순수 모듈"은
 `status.zig`가 **스스로 하는 일**에 대한 말이고 import까지 비어 있다는 뜻이
-아니다. `statusText`가 `input.State`와 `input.LatinLayout`을 봐야 하므로
-`@cImport("linux/input.h")`가 따라오고, **그래서 `status_test`는 `hangul_test`와
-달리 `link_libc = true`가 필요하다.** `LatinLayout`을 옮기지 않는다 — 이름 하나
-때문에 `latinChar()`와 `keymap`의 경계를 흔드는 것은 이 milestone의 일이 아니다.
+아니다. **`LatinLayout`을 옮기지 않는다** — 이름 하나 때문에 `latinChar()`와
+`keymap`의 경계를 흔드는 것은 이 서브프로젝트의 일이 아니다.
 
-**6. `MAX_LEN`은 이름 표에서 `comptime`에 센다.** `promptText`가 173을 주석의
-산수로 정당화한 것과 다른데, **여기는 값의 집합이 닫혀 있기** 때문이다(needle 같은
-가변 입력이 없다). **`std.enums.values`가 Zig 0.16에서 도는 것을 실제로 컴파일해서
-확인했고**, `공세벌 3-P3`이 **14바이트**라는 것도 그 값으로 확인했다. IS-M0의
-`MAX_LEN`은 3 + 2 + 14 + 2 + 9 = **30**이고 IS-M1이 `  CAPS` 여섯을 더해 36이
-된다. `splitSequence`도 0.16에서 돈다.
-
-**7. plan이 design보다 게이트 판정을 하나 더 갖는다.** design은 IS-M0에 `text=`
-판정 둘만 뒀는데, **그 둘은 `statusText`가 만든 문자열을 되읽을 뿐이라
-`drawStatus`가 통째로 비어 있어도 초록이다.** 여백은 격자 밖이라
-`screen>`·`style>`·`ink>`가 하나도 못 본다. 그래서 띠 안의 `STATUS_FG` 픽셀을
-세는 `status> ink fg=` 줄을 IS-M0에 넣었다 — 안 그러면 `drawStatus`가 한
-milestone 내내 검증 없이 서 있게 된다.
-
-**8. 편집은 사용자가 한다.** `CLAUDE.md`의 기본 규칙으로 돌아왔다 — HI의
-예외("사용자가 macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의
-값이 낮다")는 상태 줄과 렌더 배선에 안 걸린다. **명령 실행은 Claude Code가
-한다.** 100줄이 넘는 새 파일은 Claude가 `/tmp`에 만들고 사용자가 `cp`한다.
-
-## 바로 다음에 할 것: IS-M0의 Task 1 Step 1
-
-**plan의 Task 1 Step 1에 `terminal/src/status_test.zig`의 전문(116줄)이 있다.**
-`/tmp/status_test.zig`에 한 번 만들어 두었지만 **세션이 바뀌면 없다고 가정하고
-plan에서 다시 만든다.**
-
-```bash
-git status --short     # 비어 있어야 한다
-git log --oneline -3   # 7d7d06c Plan IS-M0 / be24cf4 Design ... / 38d6c3c Record ...
-```
-
-Task 다섯의 비용은 이렇다.
-
-| Task | 무엇 | 비용 |
-|---|---|---|
-| 1 | `status.zig` + `status_test.zig` + `build.zig` — 검사 열하나 | 초 단위 |
-| 2 | `drawStatus`와 `render()` 배선 | 빌드만 |
-| 3 | `status>` 두 줄 (값이 바뀔 때만) | 빌드만 |
-| 4 | `hangul/check.sh`에 검사 0a·2a | 3~4분 |
-| 5 | 루트 게이트 3회전 + 문서 | 약 18분 |
-
-**Task 2와 3을 나눈 이유는 "실패했을 때 어디가 틀렸는지"다.** 게이트가 실패했을 때
-`text=`가 틀렸으면 Task 3(또는 1)이고, `ink fg=0`이면 Task 2다 — SP-M1 실측 5의
-"두 파일이 나눠 본다"를 여기서는 두 Task가 나눠 진다.
+**6. 편집은 사용자가 한다.** `CLAUDE.md`의 기본 규칙이다 — HI의 예외("사용자가
+macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다")는
+상태 줄과 렌더 배선에 안 걸린다. **명령 실행은 Claude Code가 한다.** 100줄이
+넘는 새 파일은 Claude가 `/tmp`에 만들고 사용자가 `cp`한다 — **`/tmp`는 세션이
+끊기면 비워지므로 만든 자리에서 바로 복사한다.**
 
 **컨테이너 한 줄.** 호스트는 macOS aarch64이고 `linux/input.h`가 없으므로
 `zig build test`를 호스트에서 직접 돌릴 수 없다.
