@@ -26,23 +26,23 @@ pub fn main() !void {
     //
     // `input.State`의 기본값은 한/영 꺼짐 · `shin_pcs` · `qwerty`다.
     // **이 줄이 곧 아무 설정도 없는 부팅의 화면이다.**
-    try expectText(.{}, "EN  신세벌 PCS  쿼티");
+    try expectText(.{}, "EN  신세벌 PCS  쿼티  CAPS");
 
     // ── 검사 2: 한/영이 첫 칸을 가른다 ───────────────────────────────
-    try expectText(.{ .hangul_on = true }, "한  신세벌 PCS  쿼티");
+    try expectText(.{ .hangul_on = true }, "한  신세벌 PCS  쿼티  CAPS");
 
     // ── 검사 3~6: 한글 자판 넷의 이름 ────────────────────────────────
     //
     // **자판 이름 표를 옮겨 적는 것이 이 milestone의 유일한 "사람이 읽고
     // 다시 적는" 자리다**(HI-M2 실측 6). 넷을 전부 못 박는다.
-    try expectText(.{ .hangul_layout = .dubeol }, "EN  두벌식  쿼티");
-    try expectText(.{ .hangul_layout = .sebeol_3p3 }, "EN  공세벌 3-P3  쿼티");
-    try expectText(.{ .hangul_layout = .shin_p2 }, "EN  신세벌 P2  쿼티");
-    try expectText(.{ .hangul_layout = .shin_pcs }, "EN  신세벌 PCS  쿼티");
+    try expectText(.{ .hangul_layout = .dubeol }, "EN  두벌식  쿼티  CAPS");
+    try expectText(.{ .hangul_layout = .sebeol_3p3 }, "EN  공세벌 3-P3  쿼티  CAPS");
+    try expectText(.{ .hangul_layout = .shin_p2 }, "EN  신세벌 P2  쿼티  CAPS");
+    try expectText(.{ .hangul_layout = .shin_pcs }, "EN  신세벌 PCS  쿼티  CAPS");
 
     // ── 검사 7~8: 영문 자판 둘의 이름 ────────────────────────────────
-    try expectText(.{ .latin_layout = .qwerty }, "EN  신세벌 PCS  쿼티");
-    try expectText(.{ .latin_layout = .dvorak }, "EN  신세벌 PCS  드보락");
+    try expectText(.{ .latin_layout = .qwerty }, "EN  신세벌 PCS  쿼티  CAPS");
+    try expectText(.{ .latin_layout = .dvorak }, "EN  신세벌 PCS  드보락  CAPS");
 
     // ── 검사 9: 칸이 언제나 셋이다 ───────────────────────────────────
     //
@@ -60,11 +60,11 @@ pub fn main() !void {
             }
             fields += 1;
         }
-        if (fields != 3) {
-            std.debug.print("FAIL: {d} field(s) in \"{s}\", want 3\n", .{ fields, line });
+        if (fields != 4) {
+            std.debug.print("FAIL: {d} field(s) in \"{s}\", want 4\n", .{ fields, line });
             return error.WrongStatusFieldCount;
         }
-        std.debug.print("status_test: 3 fields OK\n", .{});
+        std.debug.print("status_test: 4 fields OK\n", .{});
     }
 
     // ── 검사 10: 가장 긴 줄이 `MAX_LEN`과 **정확히** 같다 ────────────
@@ -74,7 +74,12 @@ pub fn main() !void {
     // 뜻이다 — 버퍼가 남아도는 것도 사고의 신호다.
     //
     // 가장 긴 조합은 `한`(3, `EN`보다 길다) + `공세벌 3-P3`(14) +
-    // `드보락`(9) + 공백 넷이다.
+    // `드보락`(9) + `CAPS`(4) + 공백 여섯 = **36**이다.
+    //
+    // **IS-M1에서 이 값이 30에서 36으로 저절로 늘었다.** `statusText`에
+    // `GAP + CAPS`를 더하면서 `MAX_LEN`의 산수도 함께 고쳤을 뿐, 버퍼를
+    // 손으로 늘린 자리는 한 군데도 없다 — 그것이 이름 표에서 comptime에
+    // 세게 한 값이고, IS-M0 실측 1이 "아직 오지 않았다"고 적어 둔 자리다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
         const line = status.statusText(&input.State{
@@ -105,6 +110,20 @@ pub fn main() !void {
         });
         return error.LayoutCountChanged;
     }
+
+    // ── 검사 12: 대문자 잠금은 **글자를 안 바꾼다** ──────────────────
+    //
+    // design 결정 3이다 — `CAPS`와 `caps`는 흘깃 봐서 같아 보이므로 자리를
+    // 유지한 채 **색**으로 가른다. 그래서 `statusText`는 `caps_lock`을 아예
+    // 안 읽는다.
+    //
+    // **읽고 나서 무시하는 것보다 안 읽는 편이 낫다.** 나중에 누가 켜졌을 때
+    // 글자를 바꾸고 싶어지면, 그 자리에 필드가 없다는 것이 먼저 눈에 띈다.
+    //
+    // 색을 고르는 것은 `main.zig`이고 그것을 보는 것은 게이트의
+    // `status> caps ink` 줄이다 — **이 파일은 색을 볼 수 없다.**
+    try expectText(.{ .caps_lock = true }, "EN  신세벌 PCS  쿼티  CAPS");
+    try expectText(.{ .caps_lock = false }, "EN  신세벌 PCS  쿼티  CAPS");
 
     std.debug.print("status_test: all checks passed\n", .{});
 }

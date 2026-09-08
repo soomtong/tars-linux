@@ -31,6 +31,16 @@ fn latinName(l: input.LatinLayout) []const u8 {
     };
 }
 
+/// `CAPS` 칸의 글자. **상태와 무관하게 언제나 이 넉 자다**(design 결정 3) —
+/// 켜짐과 꺼짐은 글자가 아니라 **색**으로 가른다. `CAPS`와 `caps`로 가르지
+/// 않는 것은 흘깃 봐서 같아 보이기 때문이고, 칸을 아예 지우지 않는 것은
+/// 문자열 길이가 수시로 바뀌면 눈도 게이트도 어렵기 때문이다(결정 2).
+///
+/// **`main.zig`가 이 이름을 쓴다.** 상태 줄의 꼬리 `CAPS.len` 바이트만 다른
+/// 색으로 그리는데, 그 길이를 저쪽에 4로 다시 적으면 여기를 고친 사람이
+/// 저쪽을 안 고쳐도 컴파일이 통과한다.
+pub const CAPS = "CAPS";
+
 /// 상태 줄이 쓸 수 있는 가장 긴 바이트 수.
 ///
 /// **이름 표에서 직접 센다**(design 결정 5). `promptText`가 173을 주석의
@@ -39,9 +49,10 @@ fn latinName(l: input.LatinLayout) []const u8 {
 /// 그래서 **자판을 더하는 사람이 버퍼를 같이 안 늘려도 컴파일러가 맞춰
 /// 준다.** `hangulName`의 `switch`와 같은 종류의 못이다.
 ///
-/// 한/영 칸은 `한`(3)과 `EN`(2) 중 긴 쪽인 3이다.
+/// 한/영 칸은 `한`(3)과 `EN`(2) 중 긴 쪽인 3이다. `CAPS` 칸은 길이가 하나뿐
+/// 이라 그대로 더한다.
 ///
-/// **IS-M1이 여기에 `GAP.len + "CAPS".len`을 더한다** — 30에서 36이 된다.
+/// **IS-M1에서 30이 36이 됐고, 버퍼를 손으로 늘린 자리는 없다.**
 pub const MAX_LEN: usize = blk: {
     var hl: usize = 0;
     for (std.enums.values(hangul.Layout)) |t| {
@@ -51,7 +62,7 @@ pub const MAX_LEN: usize = blk: {
     for (std.enums.values(input.LatinLayout)) |t| {
         if (latinName(t).len > ll) ll = latinName(t).len;
     }
-    break :blk 3 + GAP.len + hl + GAP.len + ll;
+    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len;
 };
 
 /// `buf`의 `at`부터 `s`를 쓰고 쓴 길이를 돌려준다.
@@ -75,5 +86,10 @@ pub fn statusText(state: *const input.State, buf: []u8) []const u8 {
     len += put(buf, len, hangulName(state.hangul_layout));
     len += put(buf, len, GAP);
     len += put(buf, len, latinName(state.latin_layout));
+    len += put(buf, len, GAP);
+    // **`state.caps_lock`을 안 읽는다**(design 결정 3). 켜짐과 꺼짐은 글자가
+    // 아니라 색으로 갈리며, 색을 고르는 것은 `main.zig`다. `status_test`의
+    // 검사 12가 이 사실을 못 박는다.
+    len += put(buf, len, CAPS);
     return buf[0..len];
 }
