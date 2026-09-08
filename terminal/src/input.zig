@@ -1146,6 +1146,16 @@ pub const State = struct {
                     // 온다.** 그때 CapsLock은 그냥 CapsLock이고, 갈래를 나누지
                     // 않으므로 "언제나 뗄 때"라는 규칙이 하나로 선다.
                     self.caps_lock = !self.caps_lock;
+                    // **`nothing`이 아니라 `.redraw`다**(IS design 결정 8).
+                    // 상태 줄의 `CAPS` 칸이 이 값을 보여 주므로, 여기서
+                    // 안 켜면 `main.zig`의 `needs_redraw`가 안 켜지고
+                    // **다음 키를 칠 때까지 안 밝아진다.**
+                    //
+                    // **IS-M1 전까지는 이것이 버그가 아니었다** — 대문자
+                    // 잠금은 다음에 치는 글자에서만 드러나고 그 글자가
+                    // 어차피 다시 그렸다. 화면에 표시가 생기는 순간
+                    // 버그가 됐다.
+                    return .redraw;
                 } else {
                     self.caps_tap.down(time_us);
                 }

@@ -224,6 +224,21 @@ fn expectHangulAt(
     try expectPreedit(state, code, want_preedit);
 }
 
+/// 이 키가 **화면만 다시 그리게** 하기를 기대한다(IS-M1). 확정된 글자도
+/// PTY로 나갈 바이트도 없다.
+///
+/// **긴 CapsLock이 이 모양이다.** 대문자 잠금을 뒤집는 것 말고는 아무 일도
+/// 안 하는데, 상태 줄의 `CAPS` 칸이 **그 자리에서** 밝아져야 하므로
+/// `nothing`으로는 부족하다 — `main.zig`의 `needs_redraw`가 안 켜져서
+/// **다음 키를 칠 때까지 안 밝아진다**(IS design 결정 8).
+///
+/// 속은 `expectHangulAt`과 같다. **이름을 따로 두는 이유는 읽는 사람을
+/// 위해서다** — CapsLock 자리에 "Hangul"이라는 이름이 서 있으면 그것이
+/// 한글과 무슨 상관인지 다음 사람이 찾아 헤맨다.
+fn expectRedrawAt(state: *input.State, code: u16, value: i32, time_us: u64) !void {
+    return expectHangulAt(state, code, value, time_us, "", null);
+}
+
 /// 확정된 글자를 본다. **`handleKey`를 부른 직후에만 뜻이 있다** — 한 번
 /// 가져가면 비워지기 때문이다(`takeCommit`). `readKeys`가 지키는 순서를 이
 /// 파일이 같은 순서로 흉내 내는 자리다.
@@ -1206,7 +1221,9 @@ pub fn main() !void {
 
     // 검사 46. **긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다.** 0.4초다.
     try expectAt(&cl, K.KEY_CAPSLOCK, 1, 3_000_000, "");
-    try expectAt(&cl, K.KEY_CAPSLOCK, 0, 3_400_000, "");
+    // **뗄 때 `.redraw`가 나와야 한다**(IS-M1). 대문자 잠금이 뒤집혔으니
+    // 상태 줄의 `CAPS` 칸을 그 자리에서 다시 그려야 한다.
+    try expectRedrawAt(&cl, K.KEY_CAPSLOCK, 0, 3_400_000);
     if (cl.hangul_on) {
         std.debug.print("FAIL: a long CapsLock flipped hangul\n", .{});
         return error.ToggleFailed;
@@ -1225,7 +1242,7 @@ pub fn main() !void {
     // 한 번 더 길게 누르면 꺼진다. **켜지는 것만 보면 토글이 한 방향으로만
     // 동작해도 통과한다** — 게이트의 검사 1과 9가 같은 짝이다.
     try expectAt(&cl, K.KEY_CAPSLOCK, 1, 5_000_000, "");
-    try expectAt(&cl, K.KEY_CAPSLOCK, 0, 5_400_000, "");
+    try expectRedrawAt(&cl, K.KEY_CAPSLOCK, 0, 5_400_000);
     try expectAt(&cl, K.KEY_A, 1, 6_000_000, "a");
 
     // 검사 47. **`capslock_tap`이 꺼져 있으면 짧아도 대문자 잠금이다.**
@@ -1235,7 +1252,9 @@ pub fn main() !void {
         .toggles = .{ .hangul_key = true },
     };
     try expectAt(&cl_off, K.KEY_CAPSLOCK, 1, 0, "");
-    try expectAt(&cl_off, K.KEY_CAPSLOCK, 0, 100_000, "");
+    // **설정이 꺼져 있어도 `.redraw`다.** 한/영은 안 바뀌지만 대문자 잠금은
+    // 바뀌었고, 상태 줄은 그것도 보여 준다.
+    try expectRedrawAt(&cl_off, K.KEY_CAPSLOCK, 0, 100_000);
     if (cl_off.hangul_on) {
         std.debug.print("FAIL: CapsLock toggled hangul with capslock_tap off\n", .{});
         return error.ToggleFailed;
@@ -1249,7 +1268,7 @@ pub fn main() !void {
     var cl_hg: input.State = .{ .hangul_layout = .dubeol };
     // 길게 눌러 대문자 잠금을 켠다.
     try expectAt(&cl_hg, K.KEY_CAPSLOCK, 1, 0, "");
-    try expectAt(&cl_hg, K.KEY_CAPSLOCK, 0, 400_000, "");
+    try expectRedrawAt(&cl_hg, K.KEY_CAPSLOCK, 0, 400_000);
     // 짧게 눌러 한글을 켠다.
     try expectAt(&cl_hg, K.KEY_CAPSLOCK, 1, 1_000_000, "");
     try expectHangulAt(&cl_hg, K.KEY_CAPSLOCK, 0, 1_100_000, "", null);
