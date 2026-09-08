@@ -626,46 +626,72 @@ fn dumpOverlay(prompt: ?Prompt) void {
 /// **첫 프레임은 반드시 찍힌다**(`last_len`이 null이다). 기준선이 없으면
 /// 게이트가 "부팅 직후의 상태"를 볼 창구가 없다.
 ///
-/// **줄이 둘인 이유가 이 milestone의 검증 구조다.** 여백은 격자 밖이라
+/// **줄이 셋인 이유가 이 서브프로젝트의 검증 구조다.** 여백은 격자 밖이라
 /// `screen>`·`style>`·`ink>`가 하나도 못 본다. `text=`만 있으면 `statusText`가
 /// 만든 문자열을 되읽는 것뿐이고 **"글자는 만들었는데 화면에 안 그렸다"를 못
-/// 잡는다.** 그래서 띠 안에서 `STATUS_FG`인 픽셀을 직접 센다 — `dumpInk`가
+/// 잡는다.** 그래서 띠 안에서 우리 색인 픽셀을 직접 센다 — `dumpInk`가
 /// `getPixel`로 프레임버퍼를 읽는 것과 같은 방법이다.
+///
+/// **셋째 줄(`caps ink`)은 `text=`가 원리적으로 못 보는 것을 본다**(IS-M1).
+/// `CAPS` 칸은 켜지든 꺼지든 **글자가 똑같으므로**(design 결정 3) 갈리는
+/// 것은 색뿐이다.
+///
+/// **x 범위를 안 잰다 — 띠 전체를 세도 답이 같다.** `STATUS_ON`과
+/// `STATUS_OFF`는 여백 안에서 `CAPS` 칸에만 쓰이기 때문이다. 범위를 재려
+/// 들면 `drawStatus`의 **col 전진 산수까지** 여기서 다시 해야 하고, 어긋나면
+/// 언제나 0이 나온다 — 증상이 "안 그렸다"와 똑같아서 원인을 엉뚱한 데서
+/// 찾게 된다.
+///
+/// **메모가 `text`만 보면 안 된다.** `CAPS`는 켜져도 글자가 안 바뀌므로,
+/// `caps`를 함께 기억하지 않으면 CapsLock을 눌러도 **새 줄이 한 줄도 안
+/// 찍힌다** — 그리고 그 증상은 "구멍이 안 고쳐졌다"와 구별이 안 된다
+/// (둘 다 `on=0`이다).
 ///
 /// **`render` 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
 fn dumpStatus(
     fb: drm.Framebuffer,
-    text: []const u8,
-    rows: u16,
+    st: Status,
     last: *[status.MAX_LEN]u8,
     last_len: *?usize,
+    last_caps: *bool,
 ) void {
     if (last_len.*) |n| {
-        if (std.mem.eql(u8, last[0..n], text)) return;
+        if (std.mem.eql(u8, last[0..n], st.text) and last_caps.* == st.caps) return;
     }
-    @memcpy(last[0..text.len], text);
-    last_len.* = text.len;
-    std.debug.print("terminal: status> text={s}\n", .{text});
+    @memcpy(last[0..st.text.len], st.text);
+    last_len.* = st.text.len;
+    last_caps.* = st.caps;
+    std.debug.print("terminal: status> text={s}\n", .{st.text});
 
     // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 **같은 산수로** y를
     // 구해야 한다 — 어긋나면 언제나 0이 나오고, 증상이 "안 그렸다"와 똑같아서
     // 원인을 `drawStatus`에서 찾게 된다.
-    const grid_bottom = GRID_Y + @as(u32, rows) * ROW_HEIGHT;
+    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
     if (fb.height < grid_bottom + ROW_HEIGHT) {
         std.debug.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
+        std.debug.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
-    var count: usize = 0;
+    // **한 번 훑으며 셋을 함께 센다.** 띠를 세 번 훑을 이유가 없다.
+    var fg: usize = 0;
+    var on: usize = 0;
+    var off: usize = 0;
     var row: u32 = 0;
     while (row < ROW_HEIGHT) : (row += 1) {
         var col: u32 = 0;
         while (col < fb.width) : (col += 1) {
-            if (fb.getPixel(col, y + row) & 0x00FFFFFF == STATUS_FG) count += 1;
+            const px = fb.getPixel(col, y + row) & 0x00FFFFFF;
+            if (px == STATUS_FG) fg += 1;
+            if (px == STATUS_ON) on += 1;
+            if (px == STATUS_OFF) off += 1;
         }
     }
-    std.debug.print("terminal: status> ink fg={d}\n", .{count});
+    std.debug.print("terminal: status> ink fg={d}\n", .{fg});
+    // **`on`과 `off`를 한 줄에 함께 찍는다.** 하나만 보면 "아예 안 그렸다"와
+    // "반대 색으로 그렸다"가 안 갈린다 — 게이트가 언제나 둘을 같이 읽는다.
+    std.debug.print("terminal: status> caps ink on={d} off={d}\n", .{ on, off });
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -910,6 +936,11 @@ pub fn main(init: std.process.Init) !void {
     // 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
     var last_status: [status.MAX_LEN]u8 = undefined;
     var last_status_len: ?usize = null;
+    // **글자와 따로 기억해야 한다**(IS-M1). `CAPS` 칸은 켜져도 글자가 안
+    // 바뀌므로, 이 값이 없으면 CapsLock을 눌러도 새 `status>` 줄이 한 줄도
+    // 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
+    // 초기값은 무엇이든 된다.
+    var last_status_caps = false;
     // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 **안에만** 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
@@ -1175,7 +1206,7 @@ pub fn main(init: std.process.Init) !void {
         dumpScreen(cells);
         dumpHighlight(screen);
         dumpOverlay(prompt);
-        dumpStatus(fb, status_line.text, status_line.rows, &last_status, &last_status_len);
+        dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
