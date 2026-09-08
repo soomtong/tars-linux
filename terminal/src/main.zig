@@ -557,6 +557,57 @@ fn dumpOverlay(prompt: ?Prompt) void {
     std.debug.print("terminal: find> overlay text={s}\n", .{p.text});
 }
 
+/// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). **값이 바뀌었을 때만 찍는다.**
+///
+/// **RC-M0 실측 7이 시리얼 한 줄에 0.6~8.8밀리초라고 쟀다.** 프레임이 21
+/// 밀리초인데 두 줄을 매 프레임 찍으면 최악 18밀리초가 붙는다. 덤으로 로그가
+/// 읽기 좋아진다 — **한 줄이 곧 한 번의 전환이다.**
+///
+/// **첫 프레임은 반드시 찍힌다**(`last_len`이 null이다). 기준선이 없으면
+/// 게이트가 "부팅 직후의 상태"를 볼 창구가 없다.
+///
+/// **줄이 둘인 이유가 이 milestone의 검증 구조다.** 여백은 격자 밖이라
+/// `screen>`·`style>`·`ink>`가 하나도 못 본다. `text=`만 있으면 `statusText`가
+/// 만든 문자열을 되읽는 것뿐이고 **"글자는 만들었는데 화면에 안 그렸다"를 못
+/// 잡는다.** 그래서 띠 안에서 `STATUS_FG`인 픽셀을 직접 센다 — `dumpInk`가
+/// `getPixel`로 프레임버퍼를 읽는 것과 같은 방법이다.
+///
+/// **`render` 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
+fn dumpStatus(
+    fb: drm.Framebuffer,
+    text: []const u8,
+    rows: u16,
+    last: *[status.MAX_LEN]u8,
+    last_len: *?usize,
+) void {
+    if (last_len.*) |n| {
+        if (std.mem.eql(u8, last[0..n], text)) return;
+    }
+    @memcpy(last[0..text.len], text);
+    last_len.* = text.len;
+    std.debug.print("terminal: status> text={s}\n", .{text});
+
+    // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 **같은 산수로** y를
+    // 구해야 한다 — 어긋나면 언제나 0이 나오고, 증상이 "안 그렸다"와 똑같아서
+    // 원인을 `drawStatus`에서 찾게 된다.
+    const grid_bottom = GRID_Y + @as(u32, rows) * ROW_HEIGHT;
+    if (fb.height < grid_bottom + ROW_HEIGHT) {
+        std.debug.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
+        return;
+    }
+    const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
+
+    var count: usize = 0;
+    var row: u32 = 0;
+    while (row < ROW_HEIGHT) : (row += 1) {
+        var col: u32 = 0;
+        while (col < fb.width) : (col += 1) {
+            if (fb.getPixel(col, y + row) & 0x00FFFFFF == STATUS_FG) count += 1;
+        }
+    }
+    std.debug.print("terminal: status> ink fg={d}\n", .{count});
+}
+
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
 ///
 /// **상한을 안 두기로 한 결정의 근거를 남기는 줄이다.** `us=`가 밀리초 단위로
@@ -795,6 +846,10 @@ pub fn main(init: std.process.Init) !void {
     // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     var last_glyph_count: usize = 0;
+    // 마지막으로 찍은 상태 줄. **`?usize`인 것에 뜻이 있다** — 0을 초기값으로
+    // 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
+    var last_status: [status.MAX_LEN]u8 = undefined;
+    var last_status_len: ?usize = null;
     // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 **안에만** 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
@@ -1055,6 +1110,7 @@ pub fn main(init: std.process.Init) !void {
         dumpScreen(cells);
         dumpHighlight(screen);
         dumpOverlay(prompt);
+        dumpStatus(fb, status_line.text, status_line.rows, &last_status, &last_status_len);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
