@@ -165,6 +165,21 @@ status_ink() {
     sed -E 's/.*fg=([0-9]+).*/\1/'
 }
 
+# 마지막 `status> caps ink` 줄에서 값 하나(`on`이나 `off`)를 뽑는다.
+#
+# **이 줄이 IS-M1의 판정 전부다.** `CAPS` 칸은 켜지든 꺼지든 글자가 같으므로
+# (design 결정 3) `status_text`로는 잠금 상태를 볼 수 없다 — 갈리는 것은
+# 색뿐이고, 색은 프레임버퍼를 직접 읽어야 보인다.
+#
+# `tr -d '\r'`는 `status_text`와 같은 이유다(HI-M1 실측 4). `off=`가 줄 끝이라
+# 안 지우면 `"37"`이 아니라 `"37\r"`이 나오고, `[ "$X" -le 0 ]`가
+# **"integer expression expected"로 죽는다** — 값이 같아 보이는데 실패하는
+# 그 함정의 사촌이다.
+status_caps() {
+  grep -a 'terminal: status> caps ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E "s/.*$1=([0-9]+).*/\1/"
+}
+
 # 마지막 프레임만 잘라낸다. main.zig가 한 프레임을 screen> 로 시작하므로
 # (dumpScreen이 render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧
 # 마지막 프레임이다. **누적으로 세면 "부팅 이후 몇 번 찍혔는가"가 된다.**
@@ -301,8 +316,8 @@ echo "three toggle keys came from the config file; hangul_key is off"
 # 여기서 갈린다(검사 0과 같은 규율).
 echo "=== the status line should be drawn in the bottom margin ==="
 TEXT="$(status_text)"
-if [ "$TEXT" != "EN  공세벌 3-P3  쿼티" ]; then
-  report_failure "the status line reads \"${TEXT}\", expected \"EN  공세벌 3-P3  쿼티\""
+if [ "$TEXT" != "EN  공세벌 3-P3  쿼티  CAPS" ]; then
+  report_failure "the status line reads \"${TEXT}\", expected \"EN  공세벌 3-P3  쿼티  CAPS\""
 fi
 INK="$(status_ink)"
 if [ -z "$INK" ]; then
@@ -311,7 +326,20 @@ fi
 if [ "$INK" -le 0 ]; then
   report_failure "the status band has no STATUS_FG pixels (fg=${INK}), so nothing was drawn"
 fi
-echo "the status line reads \"${TEXT}\" and put ${INK} pixel(s) in the margin"
+# 부팅 직후에는 대문자 잠금이 꺼져 있다. **둘을 함께 본다** — `on=0`만 보면
+# `CAPS` 칸을 **아예 안 그린** 코드도 통과한다(IS-M1).
+CAPS_ON="$(status_caps on)"
+CAPS_OFF="$(status_caps off)"
+if [ -z "$CAPS_ON" ]; then
+  report_failure "no 'status> caps ink' line at all, so the CAPS field was never measured"
+fi
+if [ "$CAPS_ON" -ne 0 ]; then
+  report_failure "the CAPS field is lit at boot (on=${CAPS_ON}), expected the dim colour"
+fi
+if [ "$CAPS_OFF" -le 0 ]; then
+  report_failure "the CAPS field has no dim pixels (off=${CAPS_OFF}), so it was never drawn"
+fi
+echo "the status line reads \"${TEXT}\", ${INK} pixel(s) of text and a dim CAPS (off=${CAPS_OFF})"
 
 # ── 검사 1: 대조군 — 한글이 꺼져 있으면 키가 PTY로 나간다 ──────────────
 #
@@ -370,8 +398,8 @@ echo "Shift+Space turned hangul on and sent nothing to the shell"
 # `status>` 줄**을 만든다. IS-M0이 새 갱신 경로를 하나도 안 만들었다는 것의
 # 증거가 이 줄이다.
 TEXT="$(status_text)"
-if [ "$TEXT" != "한  공세벌 3-P3  쿼티" ]; then
-  report_failure "after Shift+Space the status line reads \"${TEXT}\", expected \"한  공세벌 3-P3  쿼티\""
+if [ "$TEXT" != "한  공세벌 3-P3  쿼티  CAPS" ]; then
+  report_failure "after Shift+Space the status line reads \"${TEXT}\", expected \"한  공세벌 3-P3  쿼티  CAPS\""
 fi
 echo "the status line followed the toggle: \"${TEXT}\""
 
@@ -568,14 +596,37 @@ echo "a short CapsLock turned hangul off and sent nothing to the shell"
 # 걸어 버리는 구현은 `ABC!`를 낸다.
 #
 # **한/영이 안 바뀐 것도 함께 본다.** `hangul_field`는 마지막 `hangul>` 줄을
-# 읽는데, 그 줄은 `Action.hangul`이 나올 때만 찍힌다 — 긴 CapsLock이 잘못
-# 전환하면 새 줄이 `on=true`로 찍혀서 여기가 갈린다.
+# 읽는다. **IS-M1 전에는 그 줄이 `Action.hangul`이 나올 때만 찍혔고, 이제는
+# 긴 CapsLock도 `Action.redraw`를 돌려주므로 매번 찍힌다** — 값이 `on=false`
+# 라 기대는 그대로이고, 잘못 전환하면 `on=true`로 찍혀서 여기가 갈린다.
 echo "=== sendkey caps_lock 500 (hold) ==="
 hold_key caps_lock 500
 ON="$(hangul_field on)"
 if [ "$ON" != "false" ]; then
   report_failure "a long CapsLock changed hangul to on=${ON}, expected false"
 fi
+
+# ── 검사 13a: 잠금이 **키 하나 더 안 치고** 화면에 뜬다 ─────────────────
+#
+# **이 자리가 IS-M1의 심장이고, design 결정 8의 구멍을 보는 유일한 판정이다.**
+# `Action.redraw`가 없으면 CapsLock을 뗀 프레임에는 아직 어두운 `CAPS`가
+# 그려져 있고, 아래 `type_keys`가 만드는 **다음 프레임에서야** 밝아진다.
+#
+# **그래서 이 판정이 `type_keys`보다 앞이어야 한다.** 뒤에 두면 구멍이 있는
+# 코드도 통과한다 — 순서 하나가 이 검사의 전부다.
+#
+# **`off=0`을 함께 보는 것이 짝이다.** `on>0`만 보면 두 색을 겹쳐 그린
+# 코드도 통과한다.
+CAPS_ON="$(status_caps on)"
+CAPS_OFF="$(status_caps off)"
+if [ "$CAPS_ON" -le 0 ]; then
+  report_failure "a long CapsLock did not light the CAPS field (on=${CAPS_ON}); Action.redraw is missing"
+fi
+if [ "$CAPS_OFF" -ne 0 ]; then
+  report_failure "the CAPS field still has ${CAPS_OFF} dim pixel(s) after the lock turned on"
+fi
+echo "the CAPS field lit up (on=${CAPS_ON}) right after the long CapsLock, with no extra key"
+
 type_keys a b c 1
 sleep 1
 if [ "$(screen_count 'ABC1')" -lt 1 ]; then
@@ -589,6 +640,22 @@ echo "a long CapsLock locked capitals and left the digit alone"
 # Shift+Space에 대해 이루는 짝과 같은 이유다.
 echo "=== sendkey caps_lock 500 again ==="
 hold_key caps_lock 500
+
+# ── 검사 14a: 잠금이 풀리면 `CAPS`도 다시 어두워진다 ────────────────────
+#
+# **켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다** — 검사 13a와
+# 이것이 이루는 짝이, 검사 1과 9가 Shift+Space에 대해 이루는 짝과 같다.
+# 여기도 `type_keys` **앞**이다.
+CAPS_ON="$(status_caps on)"
+CAPS_OFF="$(status_caps off)"
+if [ "$CAPS_ON" -ne 0 ]; then
+  report_failure "the CAPS field is still lit (on=${CAPS_ON}) after the lock was released"
+fi
+if [ "$CAPS_OFF" -le 0 ]; then
+  report_failure "the CAPS field went blank (off=${CAPS_OFF}) instead of dim after release"
+fi
+echo "the CAPS field went dim again (off=${CAPS_OFF}) right after the second long CapsLock"
+
 type_keys a
 sleep 1
 if [ "$(screen_count 'ABC1a')" -lt 1 ]; then
