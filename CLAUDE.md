@@ -96,14 +96,14 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **Hangul Input(HI-M0~M3, 2026-08-31·09-01 완료 — 한글 자판 넷(두벌식·공세벌
   3-P3·신세벌 P2·신세벌 PCS)과 영문 자판 둘(쿼티·드보락)을 `tars.conf`가 고르고,
   한/영 전환 키 넷(한/영 키·Shift+Space·짧은 CapsLock·짧은 왼쪽 Ctrl)도
-  `hangul_toggle`이 고른다. 긴 CapsLock은 대문자 잠금이다)**.
+  `hangul_toggle`이 고른다. 긴 CapsLock은 대문자 잠금이다)** ·
+  **Input Status(IS-M0~M1, 2026-09-02·09-09 완료 — 화면 맨 아래 여백에 상태
+  줄 하나를 그려 한/영 · 현재 자판 · 대문자 잠금을 보여 준다. HI가 남긴
+  비목표 중 하나였다)**.
   design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트: Input Status(IS-M0~M1, 2026-09-02 착수).** 화면 맨
-  아래 여백에 상태 줄 하나를 그려 한/영 · 현재 자판 · 대문자 잠금을 보여 준다.
-  HI가 남긴 비목표 중 하나였다. design은
-  `.../specs/2026-09-02-tars-input-status-design.md`, plan은
-  `.../plans/2026-09-02-tars-input-status-is-m0.md`. **편집은 사용자가 한다** —
-  아래 "진행 방식"의 2번, 즉 기본 규칙이다.
+- **진행 중인 서브프로젝트: 없다.** 다음 후보는 `HANDOFF.md`의 "바로 다음에
+  할 것" 절에 있다. **편집은 사용자가 한다** — 아래 "진행 방식"의 2번, 즉
+  기본 규칙이다.
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은

@@ -1,62 +1,126 @@
-# HANDOFF: IS-M0을 끝냈다 — 다음은 IS-M1의 plan을 쓰는 자리
+# HANDOFF: Input Status를 끝냈다 — 다음 서브프로젝트는 아직 안 골랐다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Input Status(IS)의 IS-M0을 2026-09-02에
-끝냈다.** 상태 줄이 화면 맨 아래 여백에 뜨고 칸이 셋이다.
+`main`, working tree 깨끗함. **Input Status(IS)가 2026-09-09에 닫혔다**
+(IS-M0 · IS-M1). 상태 줄이 화면 맨 아래 여백에 뜨고 칸이 **넷**이다.
 
 ```
-  EN  공세벌 3-P3  쿼티        ← 부팅 직후 (게이트 디스크가 sebeol_3p3을 심는다)
-  한  공세벌 3-P3  쿼티        ← Shift+Space 뒤
+  EN  공세벌 3-P3  쿼티  CAPS   ← 부팅 직후 (게이트 디스크가 sebeol_3p3을 심는다)
+  한  공세벌 3-P3  쿼티  CAPS   ← Shift+Space 뒤
+  EN  공세벌 3-P3  쿼티  CAPS   ← 긴 CapsLock 뒤. **글자는 같고 CAPS가 앰버로 밝아진다**
 ```
 
 | | 파일 | 커밋 |
 |---|---|---|
-| design | `docs/superpowers/specs/2026-09-02-tars-input-status-design.md` | `be24cf4` (Status와 실측 절은 마지막 커밋에서 갱신) |
-| plan (IS-M0) | `docs/superpowers/plans/2026-09-02-tars-input-status-is-m0.md` | `7d7d06c` |
-| Task 1 | `status.zig` · `status_test.zig` · `build.zig` | `17072d9` |
-| Task 2 | `main.zig`의 `drawStatus`와 `render` 배선 | `3360c79` |
-| Task 3 | `main.zig`의 `dumpStatus` | `780c2f0` |
-| Task 4 | `hangul/check.sh`의 검사 0a·2a | `f1f69c1` |
+| design | `docs/superpowers/specs/2026-09-02-tars-input-status-design.md` | Status와 실측 절 둘은 마지막 커밋에서 갱신 |
+| plan (IS-M1) | `docs/superpowers/plans/2026-09-08-tars-input-status-is-m1.md` | `d7c5de3` |
+| Task 1 | `.hangul` → `.redraw` 이름 바꾸기 | `9611afc` |
+| Task 2 | 긴 CapsLock이 `.redraw`를 돌려준다 | `42d065b` |
+| Task 3 | `status.zig`의 `CAPS` 칸 | `0d10a7d` |
+| Task 4 | `main.zig`의 색 셋과 `drawRun` | `7c5a21d` |
+| Task 5 | `main.zig`의 `caps ink` 줄과 메모 | `7fb01a7` |
+| Task 6 | `hangul/check.sh`의 검사 13a·14a | `fc6e3af` |
 
-**게이트는 아홉 체인 3/3으로 19분 06.47초다**(직전 18분 43.9초에서 +22.6초,
-설명되는 값이다).
+**게이트는 아홉 체인 3/3으로 18분 32.80초다**(직전 19분 06.47초에서 −34초,
+잡음 범위다).
 
-## 바로 다음에 할 것: IS-M1의 plan을 쓴다
+## 바로 다음에 할 것: 다음 서브프로젝트를 고른다
 
-**plan은 아직 없다.** `CLAUDE.md`의 규칙대로 milestone이 끝난 시점에 새로
-쓴다 — 전체를 미리 상세 설계하지 않는다.
+**정해진 것이 없다.** IS가 닫혔고 이월 숙제 목록만 남아 있다.
 
-IS-M1이 담을 것은 design의 "Milestone" 절에 있다.
-
-- **`CAPS` 칸과 색 셋**(`STATUS_FG`에 `STATUS_ON`·`STATUS_OFF`를 더한다)
-- **`Action.hangul` → `Action.redraw` 이름 바꾸기**(자리 열넷, 전부 컴파일러가
-  잡는다)와 CapsLock 분기가 그것을 돌려주게 하기
-- **게이트 판정 하나** — 긴 CapsLock 뒤의 `status>` 줄
-- `MAX_LEN`이 30에서 **36**이 된다(`  CAPS` 여섯)
+- **HI가 남긴 넷** — 기호 확장과 Patal의 옵션 trait들 · 모아주기(첫가끝
+  조합, **design 결정 3이 근거를 대고 뺐다**) · copy mode 검색창의 한글 입력
+- **실머신 커널 `.config`**(`docs/decisions/project_target_hardware.md`) —
+  지금 `EFI`·`USB_SUPPORT`·`NVMe`·`PCI_MSI`·`DRM_I915`·`THERMAL`이 전부 꺼져
+  있어 **이 커널은 노트북에서 아예 못 뜬다.** 사용자가 2026-08-31에 "TARS는
+  노트북 사용을 포함한다"고 정했다. **게이트가 이 방향을 검증할 수 없다**는
+  것이 이 후보의 무게다
+- IS design의 비목표(상태 줄 색·자리를 설정으로 빼기 등) — **값이 낮다고
+  적어 둔 것들이다**
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -3   # f1f69c1 Check that... / 780c2f0 Log the... / 3360c79 Draw the...
+git log --oneline -3   # 문서 커밋 / fc6e3af Check that the CAPS... / 7fb01a7 Count the...
 ```
 
-## IS-M0이 세운 것 셋
+## IS가 세운 것
 
 1. **`terminal/src/status.zig`** — `statusText`가 `input.State`를 받아 한 줄을
    만든다. 시스템 콜도 프레임버퍼도 `vt.zig`도 안 본다. 이름 표 둘이 **`else`
-   없는 `switch`**이고 `MAX_LEN`은 그 표에서 **`comptime`에 센다**(실측 30).
+   없는 `switch`**이고 `MAX_LEN`은 그 표에서 **`comptime`에 센다**(실측 36).
    **`input.zig`를 import하므로 `status_test`는 `link_libc = true`가
    필요하다** — `hangul_test`와 갈리는 자리다.
-2. **`main.zig`의 상태 줄 층** — `STATUS_FG`(0x00808890) · `drawStatus` ·
-   `Status` struct · `render`의 인자 `st` · `dumpStatus`와 루프 상태 둘.
+   **`statusText`는 `caps_lock`을 아예 안 읽는다** — `CAPS` 넉 자는 언제나
+   그대로이고 갈리는 것은 색뿐이라, 결정 3을 주석이 아니라 구조로 못 박았다.
+2. **`main.zig`의 상태 줄 층** — 색 셋(`STATUS_FG` 0x00808890 ·
+   `STATUS_ON` 0x00C08000 · `STATUS_OFF` 0x00303840) · `drawStatus`와
+   `drawRun` · `Status` struct(`text`·`rows`·`caps`) · `render`의 인자 `st` ·
+   `dumpStatus`와 루프 상태 **셋**.
    **`drawStatus`는 `drawPrompt`를 재사용하지 않는다** — 그쪽은 바이트 하나를
    글자 하나로 세므로 `한`이 글리프 셋으로 그려진다.
-3. **`hangul/check.sh`의 검사 0a·2a와 헬퍼 둘**(`status_text`·`status_ink`).
-   **키를 하나도 안 더했다** — 검사 2가 이미 누른 `shift-spc`가 전환까지 나른다.
+   **`drawRun`이 따로 있는 이유**는 색이 칸마다 다르기 때문이다. 인덱스를
+   세며 한 번에 그리면 바이트 위치와 col을 동시에 굴려야 하고 폭 2 글자에서
+   어긋난다 — 대신 "한 토막을 한 색으로 그리고 다음 col을 돌려준다".
+3. **`input.zig`의 `Action.redraw`** — 이름이 `.hangul`에서 넓어졌고
+   (IS-M1), **긴 CapsLock이 그것을 돌려준다.** 그 뜻은 원래부터 "한글"이
+   아니라 "화면을 다시 그려라"였다. `Action.caps`를 새로 더하지 **않았다** —
+   셋째 호출자가 생기면 `main.zig`가 `if (keys.hangul or keys.caps)`가 되고
+   그 조건에 넷째를 빼먹는 것이 다음 사고다.
+4. **`hangul/check.sh`의 검사 0a·2a·13a·14a와 헬퍼 셋**
+   (`status_text`·`status_ink`·`status_caps`). **키를 하나도 안 더했다** —
+   검사 2의 `shift-spc`와 검사 13·14의 `hold_key caps_lock 500`이 이미
+   필요한 것을 전부 누른다.
 
 **호스트 검사에 `status_test`가 늘었다** — `zig build test`가 이제 다섯을
 돌린다(`input_test` · `vt_test` · `font_test` · `hangul_test` ·
-**`status_test`**, 검사 열하나).
+**`status_test`**, 검사 열둘).
+
+**게이트가 상태 줄에 대해 보는 값 셋.**
+
+| 줄 | 값 | 무엇 |
+|---|---|---|
+| `status> text=` | `EN  공세벌 3-P3  쿼티  CAPS` | 글자를 맞게 만들었다 |
+| `status> ink fg=` | 383(영문) · 381(한글) | 앞 세 칸이 프레임버퍼에 닿았다 |
+| `status> caps ink` | `on=87 off=87` | **`CAPS` 칸의 색이 갈렸다** |
+
+**`on`과 `off`가 같은 값인 것에 뜻이 있다** — 같은 글리프를 색만 바꿔
+칠했다는 증거다.
+
+## IS-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"IS-M1이 실측한 것"** 절(항목 열하나)에 있다. 요약 다섯.
+
+**1. "전부 컴파일러가 잡는다"는 참이지만 "한 번에 보여 준다"는 아니다.**
+선언 둘만 먼저 고치고 빌드해 나머지를 물어보는 수법을 썼는데 Zig가
+`error: 3 compilation errors`로 **셋까지만 보고하고 멈췄다.** 자리가 열둘이라
+그대로 갔으면 네 번 왕복했을 것이다. **이름을 바꿀 때는 미리 `rg`로 목록을
+만들고, 컴파일러가 준 것을 그 목록의 검산으로 쓴다.**
+
+**2. "자리 열넷"은 타입에 대한 셈이었다.** 컴파일러가 못 잡는 자리가 다섯 더
+있었다 — 지역 변수 `hangul_changed` 넷과 주석 하나. **실제로 주석
+하나(`input.zig:1372`)를 놓쳤고 `rg`가 잡았다.**
+
+**3. "지울 것을 안 지우고 넣기만 한" 편집은 증상이 조용하다.** 옛 줄이 남고
+새 줄이 더해져 **같은 시각에 같은 키를 두 번 뗐고** 잠금이 두 번 뒤집혔다.
+실패 메시지(`got redraw, want bytes`)는 **"구현이 틀렸나"로 읽히지 "검사가
+중복됐나"로는 안 읽힌다.** 잡은 것은 `rg -n 'KEY_CAPSLOCK'`으로 **자리를
+세어 본 것**이다. IS-M0 실측 4의 사촌이고 방향만 반대다.
+
+**4. 같은 것을 두 층이 지킬 때, 위층을 확인하려면 아래층을 먼저 꺼야 한다.**
+음성 확인으로 `return .redraw;` 한 줄만 죽였더니 체인이 **부팅에 가지도 못하고
+`input_test`에서 멈췄다.** 게이트 판정을 보려면 호스트 검사 넷까지 함께
+되돌려야 했다 — 그리고 그 사실 자체가 "18분짜리에 가기 전에 초 단위로 답하는
+층이 있다"는 증거다. 되돌린 뒤 판정은 제 몫을 했다.
+
+```
+FAIL: a long CapsLock did not light the CAPS field (on=0); Action.redraw is missing
+terminal: status> caps ink on=0 off=87
+```
+
+**5. 값이 같아야 하는 두 수를 한 줄에 함께 찍은 것이 판정을 만들었다.**
+위의 `off=87`이 **"안 그렸다"가 아니라 "안 밝아졌다"**를 가리킨다 — 하나만
+찍었으면 둘이 안 갈렸다.
 
 ## IS-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -101,14 +165,14 @@ git log --oneline -3   # f1f69c1 Check that... / 780c2f0 Log the... / 3360c79 Dr
 것은 문자열 길이가 수시로 바뀌면 눈도 게이트도 어렵기 때문이다. `CAPS`와 `caps`로
 가르지 않는 것은 **흘깃 봐서 같아 보이기** 때문이고, 대신 밝기로 가른다.
 
-**4. `Action.hangul`에 갱신 구멍이 하나 열려 있다**(`input.zig:1139`). 긴
-CapsLock이 `self.caps_lock`만 뒤집고 `nothing`을 돌려주므로 `needs_redraw`가 안
-켜진다. **지금도 버그가 아니다** — 대문자 잠금은 다음에 치는 글자에서만 드러나고
-그 글자가 어차피 다시 그린다. **`CAPS` 칸이 생기는 IS-M1에서 버그가 되고**,
-처방은 `.hangul`을 `.redraw`로 넓히는 것이다(자리 열넷, 전부 컴파일러가 잡는다).
-`Action.caps`를 새로 더하는 쪽을 안 고른 것은 셋째 호출자가 생기면 `main.zig`가
+**4. `Action.hangul`의 갱신 구멍은 IS-M1이 닫았다.** 긴 CapsLock이
+`self.caps_lock`만 뒤집고 `nothing`을 돌려줘서 `needs_redraw`가 안 켜지던
+자리다. **IS-M0까지는 버그가 아니었다** — 대문자 잠금은 다음에 치는 글자에서만
+드러나고 그 글자가 어차피 다시 그렸다. **`CAPS` 칸이 생기면서 버그가 됐고**,
+처방은 `.hangul`을 `.redraw`로 **넓힌** 것이다. `Action.caps`를 새로 더하는
+쪽을 안 고른 것은 셋째 호출자가 생기면 `main.zig`가
 `if (keys.hangul or keys.caps)`가 되고 그 조건에 넷째를 빼먹는 것이 다음 사고이기
-때문이다. **HI-M1 실측 2와 같은 함정이고 이번에는 자모 키가 아니라 CapsLock이다.**
+때문이다. **HI-M1 실측 2와 같은 함정이었고 이번에는 자모 키가 아니라 CapsLock이다.**
 
 **5. `status.zig`는 `input.zig`를 import한다.** design 결정 5의 "순수 모듈"은
 `status.zig`가 **스스로 하는 일**에 대한 말이고 import까지 비어 있다는 뜻이
