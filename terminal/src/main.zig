@@ -29,11 +29,28 @@ const CELL_W: u32 = 8; // unifont의 라틴 advance. 폰트가 준 값과 같아
                        // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
 const ROW_HEIGHT: u32 = 16;
 
-/// 상태 줄의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서 읽히되
-/// 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
-///
-/// **IS-M1이 여기에 둘을 더한다**(`STATUS_ON`·`STATUS_OFF`).
+/// 상태 줄 앞 세 칸의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서
+/// 읽히되 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
 const STATUS_FG: u32 = 0x00808890;
+
+/// 대문자 잠금이 **켜졌을 때** `CAPS` 칸의 색(IS-M1).
+///
+/// **SP-M0의 `CURRENT_BG`와 같은 앰버다.** 이 저장소는 이미 그 색으로
+/// "지금 봐야 할 것"을 뜻한다(검색의 현재 매치) — 켜진 대문자 잠금이
+/// 정확히 그런 것이다.
+const STATUS_ON: u32 = 0x00C08000;
+
+/// 꺼졌을 때 `CAPS` 칸의 색. 여백(`MARGIN_COLOR` = 0x00102030)보다 조금
+/// 밝아 **자리는 보이되 안 읽힌다.**
+///
+/// **칸을 지우지 않는 이유는 결정 2다** — 문자열 길이가 수시로 바뀌면 눈도
+/// 게이트도 어렵다. 그리고 이 색이 **게이트의 대조군**이다: 꺼졌을 때
+/// `off>0`을 함께 보지 않으면 "아예 안 그렸다"와 "어둡게 그렸다"가 안
+/// 갈린다.
+///
+/// **`MARGIN_COLOR`와 달라야 한다.** 같으면 `dumpStatus`가 여백 전체를
+/// 세면서 픽셀 수만 개를 돌려준다.
+const STATUS_OFF: u32 = 0x00303840;
 
 /// 한 셀의 배경을 칠한다. 글리프보다 **먼저** 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
@@ -155,27 +172,64 @@ fn drawPrompt(
 fn drawStatus(
     fb: drm.Framebuffer,
     cache: *font.Cache,
-    text: []const u8,
-    rows: u16,
+    st: Status,
 ) !void {
-    const grid_bottom = GRID_Y + @as(u32, rows) * ROW_HEIGHT;
+    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
     if (fb.height < grid_bottom + ROW_HEIGHT) return;
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
+    // 꼬리 넉 자가 `CAPS` 칸이다. **길이를 4로 여기 다시 적지 않고
+    // `status.CAPS`에서 얻는다** — 이름을 고치는 사람이 이 파일을 안 고쳐도
+    // 되게. `statusText`가 언제나 그것으로 끝내므로 이 자름은 항상 맞는다.
+    if (st.text.len < status.CAPS.len) return;
+    const caps_at = st.text.len - status.CAPS.len;
+
+    // **두 번 나눠 그린다.** 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
+    // 그리면 바이트 위치와 col을 동시에 굴려야 하고, 폭 2 글자에서 어긋나기
+    // 쉽다 — 그 어긋남은 "글자가 겹쳐 보인다"로 나타나 원인에서 멀다.
+    const col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0);
+    _ = try drawRun(
+        fb,
+        cache,
+        st.text[caps_at..],
+        y,
+        if (st.caps) STATUS_ON else STATUS_OFF,
+        col,
+    );
+}
+
+/// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, **다음 칸의 col을**
+/// 돌려준다.
+///
+/// `drawStatus`가 이것을 두 번 부른다 — 앞 세 칸은 `STATUS_FG`로, 꼬리의
+/// `CAPS`는 잠금 상태에 따라 `STATUS_ON`이나 `STATUS_OFF`로.
+///
+/// **`drawPrompt`를 재사용하지 않는 이유가 이 함수의 두 줄에 있다**
+/// (design 결정 6). 그쪽은 바이트 하나를 글자 하나로 세므로 `한`이 글리프
+/// 셋으로 그려진다. 여기는 UTF-8을 디코드하고, 폭 2 글자는 두 칸을 전진한다.
+fn drawRun(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    text: []const u8,
+    y: u32,
+    fg: u32,
+    start_col: u32,
+) !u32 {
     // `statusText`가 만든 문자열이라 UTF-8이 깨질 수 없다. 그래도 catch로
     // 받는 것은, 깨졌을 때 터미널이 죽는 대신 상태 줄만 사라지는 쪽이
     // 낫기 때문이다 — `pushCommit`이 인코딩 실패에 대해 고른 것과 같은 판단이다.
-    var view = std.unicode.Utf8View.init(text) catch return;
+    var view = std.unicode.Utf8View.init(text) catch return start_col;
     var it = view.iterator();
-    var col: u32 = 0;
+    var col = start_col;
     while (it.nextCodepoint()) |cp| {
         const glyph = try cache.find(cp);
-        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, STATUS_FG);
+        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
         // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
         // 글자가 같은 자리에 겹쳐 그려지고, 증상이 "글자 하나가 뭉갠 것처럼
         // 보인다"라 원인에서 멀다.
         col += @max(1, glyph.cell_width / CELL_W);
     }
+    return col;
 }
 
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
@@ -225,7 +279,7 @@ fn render(
 
     // **프롬프트와 안 겹친다** — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
-    try drawStatus(fb, cache, st.text, st.rows);
+    try drawStatus(fb, cache, st);
 
     try fb.present();
 }
@@ -250,6 +304,12 @@ const Prompt = struct {
 const Status = struct {
     text: []const u8,
     rows: u16,
+    /// 대문자 잠금이 켜져 있는가(IS-M1).
+    ///
+    /// **`text`에는 안 들어 있다.** `CAPS` 넉 자는 언제나 그대로이고 이 값은
+    /// **색**만 고른다(design 결정 3) — 그래서 `statusText`가 아니라 여기서
+    /// 따로 나른다.
+    caps: bool,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. **갈래가 셋이다**(SP design 결정 7).
@@ -1098,6 +1158,9 @@ pub fn main(init: std.process.Init) !void {
         const status_line: Status = .{
             .text = status.statusText(&key_state, &status_buf),
             .rows = rows,
+            // **`statusText`가 아니라 여기서 읽는다**(design 결정 3). 잠금은
+            // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
+            .caps = key_state.caps_lock,
         };
 
         const frame_start = std.Io.Clock.now(.awake, init.io);
