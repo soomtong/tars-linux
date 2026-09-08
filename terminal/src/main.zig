@@ -4,6 +4,7 @@ const font = @import("font.zig");
 const hangul = @import("hangul.zig");
 const input = @import("input.zig");
 const pty = @import("pty.zig");
+const status = @import("status.zig");
 const vt = @import("vt.zig");
 
 // fortify를 끄는 이유는 drm.zig의 @cImport 위에 적혀 있다. 이 파일이 걸리는
@@ -27,6 +28,12 @@ const GRID_Y: u32 = 20;
 const CELL_W: u32 = 8; // unifont의 라틴 advance. 폰트가 준 값과 같아야
                        // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
 const ROW_HEIGHT: u32 = 16;
+
+/// 상태 줄의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서 읽히되
+/// 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
+///
+/// **IS-M1이 여기에 둘을 더한다**(`STATUS_ON`·`STATUS_OFF`).
+const STATUS_FG: u32 = 0x00808890;
 
 /// 한 셀의 배경을 칠한다. 글리프보다 **먼저** 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
@@ -119,6 +126,58 @@ fn drawPrompt(
     }
 }
 
+/// 입력기 상태 줄(IS design 결정 6). **격자 바깥의 아래 여백에 그린다** —
+/// 터미널 줄을 한 줄도 안 뺏는다.
+///
+/// ```
+/// 격자 아래 끝 = GRID_Y + rows * ROW_HEIGHT = 20 + 47*16 = 772
+/// 아래 여백    = fb.height - 772            = 28
+/// 글자 줄의 y  = 772 + (28 - 16) / 2        = 778
+/// ```
+///
+/// **`drawPrompt`를 재사용할 수 없다.** 그쪽은 `for (text) |ch|`로 **바이트
+/// 하나를 글자 하나로** 세는데(검색 needle이 지금 ASCII뿐이라 여태 안
+/// 드러났다), 이 줄에는 `한`처럼 UTF-8 세 바이트짜리 글자가 들어간다. 그대로
+/// 두면 글리프 셋이 그려지고 뒤 칸이 전부 두 칸씩 밀린다.
+///
+/// **폭 2 글자는 두 칸을 전진한다.** `render()`가 격자에서 col을 쓰는 것과
+/// 같은 규칙인데, 거기는 라이브러리가 spacer 셀로 col을 미리 맞춰 줬고
+/// (TF-M2) 여기는 우리가 센다.
+///
+/// **여백이 한 줄보다 좁으면 아무것도 안 그린다.** 높이가 다른 화면에서는
+/// `rows`가 여백을 다 먹을 수 있는데, 그때 그리면 격자 바깥이 아니라 **화면
+/// 밖에** 쓴다 — `setPixel`은 범위를 검사하지 않는다(`drm.zig:149`).
+///
+/// **띠를 따로 안 지운다.** `render()`가 매 프레임 `fill(MARGIN_COLOR)`로
+/// 시작하므로 지난 프레임의 꼬리가 남을 수 없다. `drawPrompt`가 줄 전체를
+/// 먼저 칠해야 했던 것은 그쪽이 **격자 안**이라 `fill` 뒤에 셀 배경이 다시
+/// 덮이기 때문이고, 여백은 그 덮임이 없다.
+fn drawStatus(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    text: []const u8,
+    rows: u16,
+) !void {
+    const grid_bottom = GRID_Y + @as(u32, rows) * ROW_HEIGHT;
+    if (fb.height < grid_bottom + ROW_HEIGHT) return;
+    const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
+
+    // `statusText`가 만든 문자열이라 UTF-8이 깨질 수 없다. 그래도 catch로
+    // 받는 것은, 깨졌을 때 터미널이 죽는 대신 상태 줄만 사라지는 쪽이
+    // 낫기 때문이다 — `pushCommit`이 인코딩 실패에 대해 고른 것과 같은 판단이다.
+    var view = std.unicode.Utf8View.init(text) catch return;
+    var it = view.iterator();
+    var col: u32 = 0;
+    while (it.nextCodepoint()) |cp| {
+        const glyph = try cache.find(cp);
+        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, STATUS_FG);
+        // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
+        // 글자가 같은 자리에 겹쳐 그려지고, 증상이 "글자 하나가 뭉갠 것처럼
+        // 보인다"라 원인에서 멀다.
+        col += @max(1, glyph.cell_width / CELL_W);
+    }
+}
+
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
 /// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
 ///
@@ -132,6 +191,10 @@ fn render(
     cache: *font.Cache,
     cells: []const vt.CellGlyph,
     prompt: ?Prompt,
+    // **이름이 `status`가 아니다.** 이 파일이 `status.zig`를 그 이름으로
+    // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
+    // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
+    st: Status,
 ) !void {
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
@@ -160,6 +223,10 @@ fn render(
         try drawPrompt(fb, cache, p.text, p.rows, p.cols, p.fg, p.bg);
     }
 
+    // **프롬프트와 안 겹친다** — 프롬프트는 격자의 마지막 줄이고 이것은 격자
+    // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
+    try drawStatus(fb, cache, st.text, st.rows);
+
     try fb.present();
 }
 
@@ -173,6 +240,16 @@ const Prompt = struct {
     cols: u16,
     fg: u32,
     bg: u32,
+};
+
+/// 상태 줄 한 줄에 필요한 것 전부. `Prompt`와 같은 이유로 묶는다 —
+/// 호출부가 하나뿐이고, 늘어놓으면 `rows`를 다른 `u16`과 뒤바꿔 넣어도
+/// 컴파일이 통과한다.
+///
+/// **`Prompt`와 달리 optional이 아니다.** 상태 줄은 언제나 뜬다(결정 2).
+const Status = struct {
+    text: []const u8,
+    rows: u16,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. **갈래가 셋이다**(SP design 결정 7).
@@ -957,8 +1034,17 @@ pub fn main(init: std.process.Init) !void {
             .bg = screen.defaultBg(),
         } else null;
 
+        // 상태 줄을 여기서 만든다. **`prompt`와 같은 자리이고 같은 이유다** —
+        // 모양은 `main.zig`가 정하고 그리는 함수는 "한 줄을 준 색으로 쓴다"
+        // 하나만 안다.
+        var status_buf: [status.MAX_LEN]u8 = undefined;
+        const status_line: Status = .{
+            .text = status.statusText(&key_state, &status_buf),
+            .rows = rows,
+        };
+
         const frame_start = std.Io.Clock.now(.awake, init.io);
-        try render(fb, &cache, cells, prompt);
+        try render(fb, &cache, cells, prompt, status_line);
         if (!first_frame_timed) {
             first_frame_timed = true;
             std.debug.print("terminal: render> first frame {d}us\n", .{
