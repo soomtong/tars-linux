@@ -78,12 +78,12 @@ fn expectFull(
             );
             return error.UnexpectedCopy;
         },
-        .hangul => {
+        .redraw => {
             std.debug.print(
-                "FAIL: code={d} value={d} -> got hangul, want bytes {any}\n",
+                "FAIL: code={d} value={d} -> got redraw, want bytes {any}\n",
                 .{ code, value, want },
             );
-            return error.UnexpectedHangul;
+            return error.UnexpectedRedraw;
         },
     }
 }
@@ -117,12 +117,12 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
             );
             return error.UnexpectedScroll;
         },
-        .hangul => {
+        .redraw => {
             std.debug.print(
-                "FAIL: code={d} -> got hangul, want copy .{s}\n",
+                "FAIL: code={d} -> got redraw, want copy .{s}\n",
                 .{ code, @tagName(want) },
             );
-            return error.UnexpectedHangul;
+            return error.UnexpectedRedraw;
         },
     }
 }
@@ -159,12 +159,12 @@ fn expectScroll(
             );
             return error.UnexpectedCopy;
         },
-        .hangul => {
+        .redraw => {
             std.debug.print(
-                "FAIL: code={d} -> got hangul, want scroll .{s}\n",
+                "FAIL: code={d} -> got redraw, want scroll .{s}\n",
                 .{ code, @tagName(want) },
             );
-            return error.UnexpectedHangul;
+            return error.UnexpectedRedraw;
         },
     }
 }
@@ -197,7 +197,7 @@ fn expectHangulAt(
     want_preedit: ?u21,
 ) !void {
     switch (state.handleKey(code, value, time_us, .{})) {
-        .hangul => {},
+        .redraw => {},
         .bytes => |bytes| {
             std.debug.print(
                 "FAIL: code={d} -> got {d} byte(s) {any}, want hangul\n",
@@ -885,7 +885,7 @@ pub fn main() !void {
     try expectPreedit(&hg, K.KEY_R, null);
 
     // 검사 25. **Shift+Space가 한/영을 바꾸고 공백은 PTY로 안 나간다.**
-    // 빈 슬라이스가 아니라 `.hangul`이 와야 한다 — `.bytes = ""`로 만들면
+    // 빈 슬라이스가 아니라 `.redraw`이 와야 한다 — `.bytes = ""`로 만들면
     // 화면이 다시 안 그려져서 그 뒤의 조합이 안 보인다.
     try expect(&hg, K.KEY_LEFTSHIFT, 1, "");
     try expectHangul(&hg, K.KEY_SPACE, "", null);

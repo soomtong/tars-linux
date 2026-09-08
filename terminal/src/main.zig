@@ -1002,14 +1002,16 @@ pub fn main(init: std.process.Init) !void {
             // 여기다** — `input.zig`는 `vt.zig`를 import하지 않는다
             // (IP design 결정 6). `find_open`이 이미 같은 길로 돈다.
             //
-            // **`needs_redraw`를 여기서 켜야 한다.** 조합만 바뀐 키는 PTY로
+            // **`needs_redraw`를 여기서 켜야 한다.** 화면만 바뀐 키는 PTY로
             // 아무것도 안 보내고 스크롤도 copy 명령도 안 만든다 — 그래서
-            // 이 한 줄이 없으면 조합 중인 글자가 **영영 화면에 안 나온다.**
+            // 이 한 줄이 없으면 조합 중인 글자가 **영영 화면에 안 나오고**,
+            // 대문자 잠금을 켜도 `CAPS` 칸이 **다음 키를 칠 때까지 안
+            // 밝아진다**(IS design 결정 8).
             //
             // copy 루프 **뒤**인 것에도 뜻이 있다. copy mode에 들어가는 키가
             // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
             // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
-            if (keys.hangul) {
+            if (keys.redraw) {
                 screen.setPreedit(key_state.preedit());
                 dumpHangul(&key_state);
                 needs_redraw = true;

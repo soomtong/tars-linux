@@ -327,19 +327,28 @@ pub const Action = union(enum) {
     scroll: Scroll,
     /// copy mode의 명령. 이것도 PTY로 보내지 않는다.
     copy: Copy,
-    /// 한글 층이 이 키를 처리했다(HI-M1). **payload가 없는 것에 뜻이 있다.**
+    /// 이 키가 **화면을 바꿨다.** PTY로 나갈 바이트도, 모아 둘 스크롤도
+    /// copy 명령도 없다 — 다시 그리기만 하면 된다.
     ///
-    /// 나르는 것은 "조합 중인 글자가 바뀌었을 수 있으니 다시 그려라"라는
-    /// 사실 하나뿐이다. **값은 `State.preedit()`이 준다** — 조합은 마지막
-    /// 하나만 화면에 남으므로 스크롤·copy처럼 순서대로 모을 것이 없다.
+    /// **payload가 없는 것에 뜻이 있다.** 나르는 것은 "다시 그려라"라는
+    /// 사실 하나뿐이고, 무엇이 바뀌었는지는 상태를 읽어 알아낸다 —
+    /// 조합 중인 글자는 `State.preedit()`이, 대문자 잠금은
+    /// `State.caps_lock`이 준다.
     ///
-    /// **확정된 글자도 여기 없다.** 그것은 `takeCommit()`이 따로 주며,
+    /// **확정된 글자는 여기 없다.** 그것은 `takeCommit()`이 따로 주며,
     /// 이유는 그 함수의 주석에 있다.
     ///
-    /// 이 variant가 없으면 조합 중인 글자가 **영영 화면에 안 나온다.**
-    /// 자모 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
-    /// `main.zig`의 `needs_redraw`가 안 켜진다.
-    hangul,
+    /// 이 variant가 없으면 **화면이 영영 안 갱신되는 키가 생긴다.** 자모
+    /// 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
+    /// `main.zig`의 `needs_redraw`가 안 켜진다(HI-M1 실측 2).
+    ///
+    /// **이름이 `hangul`이 아니라 `redraw`인 이유가 IS-M1이다**(IS design
+    /// 결정 8). 뜻은 원래부터 "한글"이 아니라 "다시 그려라"였는데, 한글이
+    /// 아닌 둘째 호출자(긴 CapsLock)가 생기면서 그 이름이 좁다는 것이
+    /// 드러났다. **`Action.caps`를 따로 더하지 않았다** — 셋째 호출자가
+    /// 생기면 `main.zig`가 `if (keys.hangul or keys.caps)`가 되고, 그
+    /// 조건에 넷째를 빼먹는 것이 다음 사고다.
+    redraw,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -417,13 +426,13 @@ pub const Keys = struct {
     /// copy mode 명령도 같은 이유로 순서대로 모은다. `j`를 누르고 있으면
     /// 자동 반복이 여러 개를 실어 오고, 그만큼 내려가야 한다.
     copies: []const Copy,
-    /// 이 배치에서 조합 중인 글자가 바뀌었는가(HI-M1).
+    /// 이 배치가 화면을 바꿨는가(HI-M1 · IS-M1에서 이름이 넓어졌다).
     ///
-    /// **값이 아니라 사실만 나른다.** 값은 `State.preedit()`이 주며,
-    /// 조합은 마지막 하나만 화면에 남으므로 스크롤·copy처럼 **순서대로 모을
-    /// 것이 없다** — 자동 반복으로 자모가 여럿 실려 와도 그려야 할 글자는
-    /// 마지막 하나다.
-    hangul: bool,
+    /// **값이 아니라 사실만 나른다.** 무엇이 바뀌었는지는 상태를 읽어
+    /// 알아내며, 스크롤·copy처럼 **순서대로 모을 것이 없다** — 자동 반복으로
+    /// 자모가 여럿 실려 와도 그려야 할 글자는 마지막 하나이고, 대문자 잠금을
+    /// 두 번 뒤집으면 마지막 값 하나만 그리면 된다.
+    redraw: bool,
 };
 
 /// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
@@ -815,7 +824,7 @@ pub const State = struct {
     fn toggleHangul(self: *State) Action {
         self.commitHangul();
         self.hangul_on = !self.hangul_on;
-        return .hangul;
+        return .redraw;
     }
 
     /// 확정된 코드포인트를 UTF-8로 담는다.
@@ -910,7 +919,7 @@ pub const State = struct {
         if (code == c.KEY_BACKSPACE) {
             const next = hangul.erase(self.hangul_buf) orelse return null;
             self.hangul_buf = next;
-            return .hangul;
+            return .redraw;
         }
 
         // 표 밖의 키(방향키·PageUp·Delete 등)는 확정을 유발한다(결정 6).
@@ -939,7 +948,7 @@ pub const State = struct {
         // `1가`가 도착한다.
         if (self.hangul_layout.nonSyllable(ch)) |cp| {
             self.commitHangul();
-            const n = std.unicode.utf8Encode(cp, &self.seq) catch return .hangul;
+            const n = std.unicode.utf8Encode(cp, &self.seq) catch return .redraw;
             return .{ .bytes = self.seq[0..n] };
         }
         // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
@@ -952,7 +961,7 @@ pub const State = struct {
         const step = hangul.feed(self.hangul_buf, cand, self.hangul_layout);
         if (step.commit) |cp| self.pushCommit(cp);
         self.hangul_buf = step.buf;
-        return .hangul;
+        return .redraw;
     }
 
     /// design doc 결정 2의 **2번 단계 — 조합 dispatch**. TF design doc이
@@ -1337,14 +1346,14 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .bytes = out[0..0],
         .scrolls = self.scrolls[0..0],
         .copies = self.copies[0..0],
-        .hangul = false,
+        .redraw = false,
     };
 
     const count = @as(usize, @intCast(n)) / ev_size;
     var written: usize = 0;
     var scrolled: usize = 0;
     var copied: usize = 0;
-    var hangul_changed = false;
+    var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event =
@@ -1360,10 +1369,10 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         // `takeCommit`의 계약이다.**
         //
         // 확정이 일어났다는 것은 조합 버퍼가 비었다는 뜻이므로 화면도 다시
-        // 그려야 한다 — 그래서 `hangul_changed`를 여기서도 켠다.
+        // 그려야 한다 — 그래서 `redraw`를 여기서도 켠다.
         const commit = self.takeCommit();
         if (commit.len > 0) {
-            hangul_changed = true;
+            redraw = true;
             for (commit) |byte| {
                 if (written >= out.len) break;
                 out[written] = byte;
@@ -1393,14 +1402,14 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
             },
             // 조합만 바뀐 키다. PTY로 나갈 것도 모을 것도 없고, `main.zig`가
             // 다시 그리기만 하면 된다.
-            .hangul => hangul_changed = true,
+            .redraw => redraw = true,
         }
     }
     return .{
         .bytes = out[0..written],
         .scrolls = self.scrolls[0..scrolled],
         .copies = self.copies[0..copied],
-        .hangul = hangul_changed,
+        .redraw = redraw,
     };
 }
 
