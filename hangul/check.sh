@@ -145,6 +145,26 @@ hangul_field() {
     sed -E "s/.*$1=([^ ]+).*/\1/"
 }
 
+# 마지막 status> text= 줄의 값. **언제나 마지막 줄을 본다** — 그 줄이 곧
+# 지금의 상태다(`hangul_field`와 같은 이유).
+#
+# **함정 둘을 한꺼번에 피한다.**
+#   1. `tr -d '\r'` — 시리얼 로그는 줄을 CRLF로 끝내는데 `text=`의 값이 줄
+#      끝이다. 안 지우면 `"EN  공세벌 3-P3  쿼티"`와 비교했을 때 **똑같아
+#      보이는 값으로 실패한다**(HI-M1 실측 4 · HI-M3 실측 1이 같은 자리다).
+#   2. `s/.*text=//` — `hangul_field`처럼 `([^ ]+)`로 잡으면 **첫 칸에서
+#      멈춘다.** 이 값에는 공백이 들어 있다.
+status_text() {
+  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*text=//'
+}
+
+# 마지막 `status> ink fg=` 줄의 개수.
+status_ink() {
+  grep -a 'terminal: status> ink fg=' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*fg=([0-9]+).*/\1/'
+}
+
 # 마지막 프레임만 잘라낸다. main.zig가 한 프레임을 screen> 로 시작하므로
 # (dumpScreen이 render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧
 # 마지막 프레임이다. **누적으로 세면 "부팅 이후 몇 번 찍혔는가"가 된다.**
@@ -265,6 +285,34 @@ if ! tr -d '\r' < "$LOG" |
 fi
 echo "three toggle keys came from the config file; hangul_key is off"
 
+# ── 검사 0a: 부팅 직후의 상태 줄 ───────────────────────────────────────
+#
+# **판정이 둘이다.**
+#   1. `text=` — `statusText`가 만든 글자가 맞다
+#   2. `ink fg=` — **그 글자가 프레임버퍼에 실제로 닿았다**
+#
+# **둘째가 이 체인에서 상태 줄의 그리기를 보는 유일한 자리다.** 상태 줄은
+# 격자 **바깥**의 여백에 있어서 `screen>`·`style>`·`ink>`가 하나도 못 본다 —
+# 첫째만 보면 `statusText`가 만든 문자열을 되읽는 것뿐이고 `drawStatus`가
+# 통째로 비어 있어도 초록이다.
+#
+# **자판 칸이 `공세벌 3-P3`인 것이 판정의 절반이다.** 기본값은 `신세벌 PCS`이고
+# 게이트 디스크가 `sebeol_3p3`을 심으므로, 설정을 통째로 무시하는 코드는
+# 여기서 갈린다(검사 0과 같은 규율).
+echo "=== the status line should be drawn in the bottom margin ==="
+TEXT="$(status_text)"
+if [ "$TEXT" != "EN  공세벌 3-P3  쿼티" ]; then
+  report_failure "the status line reads \"${TEXT}\", expected \"EN  공세벌 3-P3  쿼티\""
+fi
+INK="$(status_ink)"
+if [ -z "$INK" ]; then
+  report_failure "no 'status> ink fg=' line at all, so dumpStatus never ran"
+fi
+if [ "$INK" -le 0 ]; then
+  report_failure "the status band has no STATUS_FG pixels (fg=${INK}), so nothing was drawn"
+fi
+echo "the status line reads \"${TEXT}\" and put ${INK} pixel(s) in the margin"
+
 # ── 검사 1: 대조군 — 한글이 꺼져 있으면 키가 PTY로 나간다 ──────────────
 #
 # **이 검사가 없으면 아래 음성 검사가 뜻을 잃는다.** 키가 원래부터 안 나가고
@@ -311,6 +359,21 @@ if [ "$AFTER_TOGGLE" != "$BEFORE_TOGGLE" ]; then
   report_failure "Shift+Space leaked to the PTY (key> lines ${BEFORE_TOGGLE} -> ${AFTER_TOGGLE})"
 fi
 echo "Shift+Space turned hangul on and sent nothing to the shell"
+
+# ── 검사 2a: 상태 줄의 첫 칸이 한/영을 따라간다 ────────────────────────
+#
+# **자판 칸이 안 흔들리는 것도 함께 본다.** 한/영만 바뀌었으므로 뒤 두 칸은
+# 같아야 한다 — 통째로 다시 만드는 코드가 자판을 잘못 읽으면 여기서 갈린다.
+#
+# **키를 하나도 안 더한다.** 검사 2가 이미 `shift-spc`를 눌렀고, 그 전환이
+# `Action.hangul` → `needs_redraw` → 새 프레임 → **값이 바뀌었으니 새
+# `status>` 줄**을 만든다. IS-M0이 새 갱신 경로를 하나도 안 만들었다는 것의
+# 증거가 이 줄이다.
+TEXT="$(status_text)"
+if [ "$TEXT" != "한  공세벌 3-P3  쿼티" ]; then
+  report_failure "after Shift+Space the status line reads \"${TEXT}\", expected \"한  공세벌 3-P3  쿼티\""
+fi
+echo "the status line followed the toggle: \"${TEXT}\""
 
 # ── 검사 3: 세벌식이 조합되고, 그 글자는 PTY로 안 나간다 ───────────────
 #
