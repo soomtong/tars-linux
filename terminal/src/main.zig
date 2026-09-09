@@ -158,7 +158,10 @@ fn drawPrompt(
         drawCellBackground(fb, GRID_X + col * CELL_W, y, p.bg);
     }
 
-    col = try drawRun(fb, cache, p.text, y, p.fg, 0);
+    // **격자 오른쪽 끝에서 끊는다.** needle은 128바이트까지 자라는데 격자는
+    // 100칸 남짓이라, 안 끊으면 검색어가 여백으로 삐져나온다.
+    const max_x = GRID_X + @as(u32, p.cols) * CELL_W;
+    col = try drawRun(fb, cache, p.text, y, p.fg, 0, max_x);
 
     const cp = p.edit orelse return .{ .cols = col, .x0 = 0, .x1 = 0, .y = y };
 
@@ -226,7 +229,9 @@ fn drawStatus(
     // **두 번 나눠 그린다.** 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
     // 그리면 바이트 위치와 col을 동시에 굴려야 하고, 폭 2 글자에서 어긋나기
     // 쉽다 — 그 어긋남은 "글자가 겹쳐 보인다"로 나타나 원인에서 멀다.
-    const col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0);
+    // **상태 줄의 경계는 화면 끝이다.** 격자 바깥의 여백에 그리므로 격자
+    // 오른쪽 끝에 맞출 이유가 없다 — 프롬프트와 갈리는 자리다.
+    const col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0, fb.width);
     _ = try drawRun(
         fb,
         cache,
@@ -234,6 +239,7 @@ fn drawStatus(
         y,
         if (st.caps) STATUS_ON else STATUS_OFF,
         col,
+        fb.width,
     );
 }
 
@@ -253,6 +259,8 @@ fn drawRun(
     y: u32,
     fg: u32,
     start_col: u32,
+    /// 이 x를 넘어가는 글자는 안 그린다(SH-M2). 아래 주석에 근거가 있다.
+    max_x: u32,
 ) !u32 {
     // `statusText`가 만든 문자열이라 UTF-8이 깨질 수 없다. 그래도 catch로
     // 받는 것은, 깨졌을 때 터미널이 죽는 대신 상태 줄만 사라지는 쪽이
@@ -262,13 +270,15 @@ fn drawRun(
     var col = start_col;
     while (it.nextCodepoint()) |cp| {
         const glyph = try cache.find(cp);
-        // **화면 밖으로 안 나간다.** `setPixel`은 범위를 검사하지 않으므로
-        // (`drm.zig:149`) 여기서 멈추지 않으면 프레임버퍼 밖에 쓴다.
+        // **부르는 쪽이 정한 경계에서 멈춘다**(SH-M2). `setPixel`은 범위를
+        // 검사하지 않으므로(`drm.zig:149`) 멈추지 않으면 프레임버퍼 밖에 쓴다.
         //
-        // **`drawPrompt`가 이 함수를 쓰기 시작하면서 필요해졌다**(SH-M2).
-        // needle은 128바이트까지 자라는데 격자는 100칸 남짓이다. 상태 줄은
-        // 짧아서 여태 안 닿았지만, 같은 함수가 지키는 편이 낫다.
-        if (GRID_X + col * CELL_W + glyph.cell_width > fb.width) break;
+        // **경계를 인자로 받는 이유는 둘이 다르기 때문이다.** 상태 줄은 격자
+        // 바깥이라 화면 끝(`fb.width`)이 경계이고, 프롬프트는 격자의 마지막
+        // 줄이라 격자 오른쪽 끝이 경계다 — 여백으로 삐져나오면 검색어가
+        // 터미널 밖에 그려진다. **needle은 128바이트까지 자라는데 격자는
+        // 100칸 남짓이라 실제로 닿는 경계다.**
+        if (GRID_X + col * CELL_W + glyph.cell_width > max_x) break;
         drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
         // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
         // 글자가 같은 자리에 겹쳐 그려지고, 증상이 "글자 하나가 뭉갠 것처럼
