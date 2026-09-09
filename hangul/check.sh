@@ -885,4 +885,96 @@ if [ "$COLS" != "3" ]; then
 fi
 echo "Esc dropped only the composing letter and left /가 (cols=${COLS})"
 
+# ── 검사 20: 화면의 한글을 잡아 검색창에 붙여넣는다 (FP-M1) ────────────
+#
+# **이 체인이 FP의 사슬 전체를 밟는 유일한 자리다.**
+#   copy mode에서 `가`를 잡는다 → y가 클립보드에 넣는다
+#   → `/`가 프롬프트를 연다 → `Cmd+V`가 **셸이 아니라 needle로** 간다
+#   → Enter가 제출해서 화면의 `가`를 찾는다
+#
+# **작업 흐름이 여기서 닫힌다.** 지금까지는 화면에서 본 한글을 눈으로 읽고
+# 손으로 다시 쳐야 했다(검사 18이 그 손을 흉내 낸다).
+#
+# **커서를 한 칸도 안 옮긴다**(FP-M1 실측 4). 검사 17이 `ctrl-l` 뒤에 `가`를
+# 치고 `left left`로 셸 커서를 그 글자 위에 올려 뒀고, `copyEnter`가 셸
+# 커서의 viewport 좌표를 물려받는다.
+#
+# **음성 검사가 `key_lines`가 아니라 `clip> paste` 줄 수인 것이 요점이다**
+# (FP-M1 실측 1). 붙여넣기는 `pty.write`를 직접 부르지 `keys.bytes`를 안
+# 거치므로 `key>` 줄을 아예 안 만든다 — 그 수법을 여기 쓰면 셸로 새도
+# 초록이다.
+echo "=== yank 가, open the prompt, paste it back ==="
+PASTES_BEFORE="$(grep -ac 'terminal: clip> paste' "$LOG" || true)"
+
+# 프롬프트를 닫고(Esc 하나) copy mode도 나간다(Esc 둘). **둘 다 삼켜진다** —
+# 모드 밖이었다면 ESC가 셸로 나갔을 것이다.
+type_keys esc
+sleep 1
+type_keys esc
+sleep 1
+
+# 다시 들어가면 copy 커서가 셸 커서 자리, 곧 `가` 위다.
+type_keys meta_l-shift-c
+sleep 1
+type_keys v
+sleep 1
+type_keys y
+sleep 1
+
+CLIP_LINE="$(grep -a 'terminal: clip> len=' "$LOG" | tail -n 1 | tr -d '\r')"
+CLIP_LEN="$(echo "$CLIP_LINE" | sed -E 's/.*len=([0-9]+).*/\1/')"
+if [ -z "$CLIP_LEN" ] || [ "$CLIP_LEN" -lt 1 ]; then
+  echo "--- clip> lines ---"
+  grep -a 'terminal: clip>' "$LOG" | tail -n 5
+  report_failure "y did not put anything on the clipboard: ${CLIP_LINE}"
+fi
+
+# 붙여넣는다.
+type_keys meta_l-shift-c
+sleep 1
+type_keys slash
+sleep 1
+if ! grep -aq 'terminal: find> open' "$LOG"; then
+  report_failure "the search prompt never reopened for the paste"
+fi
+type_keys meta_l-v
+sleep 1
+
+# **판정 하나가 두 수를 함께 본다.** `put`이 `clip`과 같으면 통째로
+# 들어갔다는 뜻이고, 0이면 안 들어간 것이다. 첫 줄 자르기는 `vt_test`의
+# 검사 58이 호스트에서 초 단위로 이미 본다 — 여기서 보는 것은 **배선**이다.
+PASTE_LINE="$(grep -a 'terminal: find> paste ' "$LOG" | tail -n 1 | tr -d '\r')"
+if [ -z "$PASTE_LINE" ]; then
+  echo "--- find> lines ---"
+  grep -a 'terminal: find> ' "$LOG" | tail -n 5
+  report_failure "Cmd+V in the prompt produced no 'find> paste' line at all"
+fi
+PUT="$(echo "$PASTE_LINE" | sed -E 's/.*put=([0-9]+).*/\1/')"
+if [ "$PUT" != "$CLIP_LEN" ]; then
+  report_failure "the paste put ${PUT} byte(s) into the needle, expected ${CLIP_LEN}: ${PASTE_LINE}"
+fi
+
+# **음성 검사.** 셸 갈래를 안 탔다.
+PASTES_AFTER="$(grep -ac 'terminal: clip> paste' "$LOG" || true)"
+if [ "$PASTES_AFTER" != "$PASTES_BEFORE" ]; then
+  report_failure "the paste went to the shell instead of the needle (clip> paste ${PASTES_BEFORE} -> ${PASTES_AFTER})"
+fi
+
+# **needle이 그 글자다.** 기존 `find> overlay` 줄을 그대로 쓴다.
+if ! grep -aq 'terminal: find> overlay text=/가' "$LOG"; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "the pasted 가 never showed up in the prompt overlay"
+fi
+
+# **붙인 한글이 화면의 한글을 찾는다.**
+type_keys ret
+sleep 1
+SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
+MATCHES="$(echo "$SUBMIT" | sed -E 's/.*matches=([0-9]+).*/\1/')"
+if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
+  report_failure "the pasted needle found ${MATCHES:-no} match(es): ${SUBMIT}"
+fi
+echo "yanked 가 went into the needle (${PUT}/${CLIP_LEN} bytes) and found ${MATCHES} match(es)"
+
 echo "HI check PASS"
