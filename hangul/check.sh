@@ -180,6 +180,15 @@ status_caps() {
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
+# 마지막 `find> ink` 줄에서 값 하나를 뽑는다(SH-M2).
+#
+# `tr -d '\r'`는 `status_caps`와 같은 이유다 — `ink=`가 줄 끝이라 안 지우면
+# `[ "$X" -le 0 ]`가 **"integer expression expected"로 죽는다**.
+find_ink() {
+  grep -a 'terminal: find> ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E "s/.*$1=([0-9]+).*/\1/"
+}
+
 # 마지막 프레임만 잘라낸다. main.zig가 한 프레임을 screen> 로 시작하므로
 # (dumpScreen이 render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧
 # 마지막 프레임이다. **누적으로 세면 "부팅 이후 몇 번 찍혔는가"가 된다.**
@@ -814,5 +823,66 @@ if [ "$KEYS_AFTER" != "$KEYS_BEFORE" ]; then
   report_failure "the prompt leaked to the shell (key> ${KEYS_BEFORE} -> ${KEYS_AFTER})"
 fi
 echo "the search prompt composed 가 and found ${MATCHES} match(es) without leaking to the shell"
+
+# ── 검사 19: 프롬프트의 한글이 제 모양으로 보이고 조합이 반전된다 (SH-M2) ─
+#
+# **판정 셋이 한 줄에서 나온다**(`find> ink`).
+#   cols — `/가ㄱ`가 5칸이다. 바이트를 세는 구현은 4가 된다(/ 1 + 가 3,
+#          그리고 조합은 아예 안 그린다)
+#   inv  — 반전 구간이 **글자색**으로 칠해졌다
+#   ink  — 그 위에 글자가 **배경색**으로 그려졌다
+#
+# **`inv`만 보면 사각형만 칠한 구현이 통과한다.** IS-M1의 `caps ink on/off`와
+# 같은 짝이다.
+#
+# 3-P3에서 `k`는 초성 ㄱ, `f`는 중성 ㅏ다. `k f k`면 `가`가 확정되어 needle에
+# 들어가고 새 `ㄱ`이 조합 중으로 남는다 — **한 프레임에 확정된 한글과 조합
+# 중인 한글이 함께 있는 상태**이고, 그것이 이 검사가 필요로 하는 그림이다.
+echo "=== reopen the prompt and compose on top of a committed syllable ==="
+type_keys slash
+sleep 1
+type_keys k f k
+sleep 1
+
+if ! grep -aq 'terminal: find> overlay text=/가 preedit=ㄱ' "$LOG"; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "the overlay does not carry the committed 가 and the composing ㄱ"
+fi
+
+COLS="$(find_ink cols)"
+INV="$(find_ink inv)"
+INK="$(find_ink ink)"
+if [ "$COLS" != "5" ]; then
+  report_failure "the prompt drew ${COLS} column(s) for /가ㄱ, expected 5 (it is counting bytes)"
+fi
+if [ "$INV" -le 0 ]; then
+  report_failure "the composing letter is not inverted (inv=${INV})"
+fi
+if [ "$INK" -le 0 ]; then
+  report_failure "the inverted block has no glyph in it (ink=${INK}); it is a solid rectangle"
+fi
+echo "the prompt drew /가ㄱ in ${COLS} columns with the composing letter inverted (inv=${INV} ink=${INK})"
+
+# ── 검사 19a: Esc가 조합만 버린다 (SH design 결정 3) ───────────────────
+#
+# **`input_test`의 검사 53이 같은 사실을 반환값 쪽에서 본다.** 여기서는
+# 화면 쪽에서 본다 — 반전이 사라지고 검색어는 남는다.
+type_keys esc
+sleep 1
+if ! grep -aq 'terminal: find> overlay text=/가 preedit=(none)' "$LOG"; then
+  echo "--- overlay lines ---"
+  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  report_failure "Esc did not drop the composing letter (or it dropped the needle too)"
+fi
+INV="$(find_ink inv)"
+if [ "$INV" -ne 0 ]; then
+  report_failure "the inverted block is still on screen after Esc (inv=${INV})"
+fi
+COLS="$(find_ink cols)"
+if [ "$COLS" != "3" ]; then
+  report_failure "the prompt drew ${COLS} column(s) for /가, expected 3"
+fi
+echo "Esc dropped only the composing letter and left /가 (cols=${COLS})"
 
 echo "HI check PASS"
