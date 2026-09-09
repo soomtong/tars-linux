@@ -1597,5 +1597,74 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copy 커서도 한글 위에서 두 칸이다 OK\n", .{});
 
+    // ── SH-M0: needle이 UTF-8을 안다 ────────────────────────────────────
+    //
+    // **화면을 따로 만든다**(CM-M1 이래의 규율). 여기서 보는 것은 버퍼뿐이라
+    // 20×5로 충분하다. `copyEnter` 앞에 feed·cells가 있는 것은 검사 18과 같은
+    // 이유다 — `findOpen()`은 copy mode 안에서만 열린다.
+    const um = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer um.deinit();
+    um.feed("hello\r\n");
+    _ = try um.cells(&buf);
+    um.copyEnter();
+    um.findOpen();
+
+    // 검사 52. **음절 하나가 통째로 들어간다**(SH design 결정 7).
+    // `가`는 EA B0 80, `나`는 EB 82 98이라 여섯 바이트여야 한다.
+    um.findBytes("가");
+    um.findBytes("나");
+    var un = um.findNeedle() orelse return error.NoFindPrompt;
+    if (!std.mem.eql(u8, un, "가나")) {
+        std.debug.print("FAIL: 프롬프트가 '{s}'를 들고 있다(가나여야 한다)\n", .{un});
+        return error.FindNeedleWrong;
+    }
+    if (un.len != 6) {
+        std.debug.print("FAIL: needle이 {d}바이트다(6이어야 한다)\n", .{un.len});
+        return error.FindNeedleWrong;
+    }
+    std.debug.print("vt_test: 프롬프트가 한글 음절을 통째로 받는다 OK ('{s}')\n", .{un});
+
+    // 검사 53. **자리가 모자라면 하나도 안 넣는다**(SH design 결정 7).
+    //
+    // **이 검사가 이 Task의 본체다.** "들어가는 만큼 넣는다"는 구현도 검사
+    // 52를 통과하고, 그 구현은 경계에서 음절을 반만 남긴다. 깨진 바이트열은
+    // 화면의 어떤 셀과도 안 맞아 **"검색이 조용히 안 맞는다"**가 된다.
+    //
+    // 지금 6바이트다. 120을 더해 126으로 만든다.
+    var pad: usize = 0;
+    while (pad < 120) : (pad += 1) um.findChar('z');
+    un = um.findNeedle().?;
+    if (un.len != 126) {
+        std.debug.print("FAIL: 채운 뒤 needle이 {d}바이트다(126이어야 한다)\n", .{un.len});
+        return error.FindNeedleWrong;
+    }
+    // 126 + 3 > 128이므로 `다`는 통째로 거절된다. 바이트 단위였으면 두
+    // 바이트만 들어가 128이 되고 꼬리가 깨진다.
+    um.findBytes("다");
+    un = um.findNeedle().?;
+    if (un.len != 126) {
+        std.debug.print(
+            "FAIL: 자리가 둘뿐인데 needle이 {d}바이트가 됐다(126이어야 한다)\n",
+            .{un.len},
+        );
+        return error.FindNeedleOverflow;
+    }
+    // **그래도 ASCII 둘은 들어간다.** 거절이 "버퍼를 잠근다"가 아니라 "이
+    // 덩어리가 안 맞는다"라는 뜻임을 못 박는다.
+    um.findChar('y');
+    um.findChar('y');
+    un = um.findNeedle().?;
+    if (un.len != 128) {
+        std.debug.print("FAIL: ASCII 둘 뒤 needle이 {d}바이트다(128이어야 한다)\n", .{un.len});
+        return error.FindNeedleWrong;
+    }
+    // 이제 꽉 찼다. 한 바이트도 더 안 들어간다(검사 20이 보던 것과 같은 규칙).
+    um.findChar('y');
+    if (um.findNeedle().?.len != 128) {
+        std.debug.print("FAIL: 꽉 찬 needle이 더 자랐다\n", .{});
+        return error.FindNeedleOverflow;
+    }
+    std.debug.print("vt_test: 자리가 모자라면 음절을 통째로 거절한다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

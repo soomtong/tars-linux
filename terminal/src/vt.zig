@@ -688,16 +688,31 @@ pub const Screen = struct {
         self.find_len = 0;
     }
 
-    /// 프롬프트에 글자 하나. **버퍼가 차면 조용히 버린다.**
+    /// 프롬프트에 바이트 여럿을 **통째로** 넣는다(SH design 결정 7).
     ///
-    /// 버리는 것을 로그로 알리지 않는 이유는 128자에 닿는 상황이 실전에
-    /// 없기 때문이다. 닿았다면 그것은 사람이 친 것이 아니라 키가 붙어 있는
-    /// 것이고, 그 증상은 화면에서 바로 보인다.
-    pub fn findChar(self: *Screen, ch: u8) void {
+    /// **다 들어가거나 하나도 안 들어간다.** 바이트 단위로 채우다가 자리가
+    /// 떨어지면 UTF-8 한 글자가 반만 남는데, 깨진 바이트열은 화면의 어떤
+    /// 셀과도 안 맞으므로 **검색이 조용히 안 맞는다.** 버퍼가 128바이트라
+    /// 손으로 쳐서는 사실상 안 닿는 경계지만(한글 42자), 붙여넣기가 들어오면
+    /// yank한 줄 하나가 한 번에 닿는다.
+    ///
+    /// 버리는 것을 로그로 알리지 않는 이유는 예전 `findChar`의 주석과 같다 —
+    /// 128자에 닿는 상황은 사람이 친 것이 아니라 키가 붙어 있는 것이고, 그
+    /// 증상은 화면에서 바로 보인다.
+    pub fn findBytes(self: *Screen, bytes: []const u8) void {
         if (!self.find_open) return;
-        if (self.find_len >= self.find_buf.len) return;
-        self.find_buf[self.find_len] = ch;
-        self.find_len += 1;
+        if (self.find_len + bytes.len > self.find_buf.len) return;
+        @memcpy(self.find_buf[self.find_len .. self.find_len + bytes.len], bytes);
+        self.find_len += bytes.len;
+    }
+
+    /// 프롬프트에 글자 하나. **ASCII 한 바이트가 곧 한 글자다.**
+    ///
+    /// `findBytes`의 껍데기다 — 넘칠 때의 규칙을 두 자리에 적지 않기 위함이고,
+    /// 그래서 `main.zig`의 `find_char` 갈래는 한 글자도 안 바뀐다.
+    pub fn findChar(self: *Screen, ch: u8) void {
+        const one = [_]u8{ch};
+        self.findBytes(&one);
     }
 
     /// Backspace. **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2).
