@@ -3,6 +3,7 @@ const linux = std.os.linux;
 const config = @import("config.zig");
 const power = @import("power.zig");
 const devices = @import("devices.zig");
+const storage = @import("storage.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -50,8 +51,14 @@ fn mountDevpts() void {
 }
 
 /// 설정 저장소를 붙인다. initramfs는 tmpfs라 전원이 꺼지면 통째로 사라진다 —
-/// 재부팅을 넘어 살아남는 것은 이 virtio-blk 디스크(/dev/vda) 하나뿐이다.
-/// 파티션 테이블 없이 디스크 전체가 ext2라서 /dev/vda1이 아니라 /dev/vda다.
+/// 재부팅을 넘어 살아남는 것은 이 디스크 하나뿐이다. 파티션 테이블 없이
+/// 디스크 전체가 ext2라서 /dev/nvme0n1p1이 아니라 /dev/nvme0n1이다.
+///
+/// **RM-M2까지는 /dev/vda가 여기 박혀 있었다.** 그 이름은 virtio-blk에만
+/// 있어서 노트북에서는 저장소를 영영 못 찾았다 — 부팅은 됐고 설정만 매번
+/// 사라졌다. 이제 storage.zig가 후보 열넷을 훑어 **ext2 라벨이 `tars-`로
+/// 시작하는** 첫 디스크를 고른다. 이름이 아니라 디스크 안의 표식으로 고르는
+/// 것이라, virtio든 NVMe든 SATA든 같은 코드가 지난다.
 ///
 /// MS_SYNCHRONOUS로 붙이는 이유가 이 서브프로젝트의 핵심이다. 보통 파일에
 /// 쓴 내용은 page cache에만 올라가고 커널이 알아서 나중에 디스크로 내려보낸다.
@@ -60,9 +67,29 @@ fn mountDevpts() void {
 /// 있다. 설정 파일은 어쩌다 한 번 쓰는 것이라 성능 대가가 사실상 없다.
 ///
 /// 디스크가 없는 부팅도 정상 경로다 — BF 체인은 ISO 부팅이라 -drive가 없다.
-/// 그때는 errno 2(ENOENT)로 실패하고 로그 한 줄만 남으며, 부팅은 계속된다.
+/// 그때는 후보 열넷이 전부 ENOENT로 열리지 않아 로그 한 줄만 남으며, 부팅은
+/// 계속된다.
 fn mountConfig() bool {
-    return mountFs("/dev/vda", "/config", "ext2", linux.MS.SYNCHRONOUS);
+    var found: storage.Found = .{};
+    if (!storage.findConfigDisk(&found)) {
+        std.debug.print("tars-init: no disk labelled {s}* among {d} candidates\n", .{
+            storage.LABEL_PREFIX, storage.CANDIDATES.len,
+        });
+        return false;
+    }
+
+    // **이 줄이 RM-M2의 판정이다.** 고른 이름과 고른 근거가 한 줄에 함께
+    // 있어야 실패했을 때 갈린다 — "후보에 그 이름이 없었다"와 "라벨을 못
+    // 읽었다"와 "라벨이 우리 것이 아니었다"와 "골랐는데 mount가 실패했다"가
+    // 서로 다른 병이다(IS-M1 실측 5와 같은 종류).
+    std.debug.print("tars-init: config storage {s} (label {s})\n", .{
+        found.path, found.label(),
+    });
+
+    // mountFs는 한 글자도 안 고친다. 이 함수가 찍는
+    // `tars-init: mounted ext2 at /config`를 config/check.sh:206과
+    // power/check.sh:85가 마커로 갖고 있다.
+    return mountFs(found.path, "/config", "ext2", linux.MS.SYNCHRONOUS);
 }
 
 /// 설정 파일의 자리. 저장소가 붙은 뒤에만 의미가 있다.
