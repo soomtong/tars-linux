@@ -1,9 +1,9 @@
 # TARS Search Hangul — Design
 
 **Date:** 2026-09-09
-**Status:** **진행 중(SH-M0 착수 전).** plan은 아직 없다. milestone이 셋이고
-(SH-M0 · SH-M1 · SH-M2) 한 milestone이 끝나면 다음 plan을 그 시점에 새로
-쓴다.
+**Status:** **SH-M0 · SH-M1 완료(2026-09-09), SH-M2 진행 중.** plan 셋이
+`docs/superpowers/plans/`에 있다. 아래 "SH-M0이 실측한 것" · "SH-M1이 실측한
+것" 절이 실행이 증명한 것을 담는다.
 
 Hangul Input(HI-M0~M3, 2026-08-31·09-01)이 남긴 비목표 셋 중 하나를 집는다 —
 **"copy mode 검색창의 한글 입력"**이다. HI의 design이 그것을 이렇게 적어
@@ -268,6 +268,69 @@ find 분기가 `hangulLayer`를 부른다 · `Esc`·`Enter`·`Backspace` 세 갈
 | 2 | `find_buf` 128바이트 경계에서 음절이 반만 들어간다 | 결정 7. `vt_test`가 경계를 직접 친다(SH-M0) |
 | 3 | **게이트 프로브가 copy mode를 안 열고 `/`를 누른다.** `findOpen()`은 `copy_cursor`가 있어야 열린다 — **2026-09-02에 실제로 이것에 속아 "한글 검색이 안 된다"고 잘못 보고했다** | `find> open` 줄이 있는지 **먼저** 본다. `copy/check.sh`가 이미 그렇게 한다 |
 | 4 | 시리얼 로그가 CRLF다(HI-M1 실측 4). needle을 줄 **끝**에서 뽑는 새 헬퍼를 만들면 CR이 섞여 **"똑같아 보이는 값으로 실패"**한다 | 새 값을 줄 끝에 두지 않거나 `tr -d '\r'`로 먼저 지운다. 기존 `find> type needle=X len=N`은 `len=`이 뒤에 있어 안전하다 |
+
+## SH-M0이 실측한 것 (2026-09-09)
+
+**1. 게이트를 호스트에서 돌릴 수 없다 — plan의 명령 줄이 틀렸다.** macOS의
+`make`는 3.81이고 리눅스 커널 Makefile이 `GNU Make >= 4.0`을 요구해서 첫
+체인에서 2.7초 만에 죽는다(`nproc`도 리눅스 것이다). 맞는 명령은
+`docker run ... bash check.sh`이고, 다른 plan들이 전부 그렇게 적어 두었는데
+SH-M0의 plan만 `time ./check.sh`였다.
+
+**2. 새 검사 둘이 서로 다른 종류로 실패했고, 그것이 Task를 자른 방식의
+값이다.** Task 1은 컴파일 에러(`no field or member function named 'findBytes'`),
+Task 2는 런타임 실패(`FAIL: Backspace가 '가▒'를 남겼다`)다. 앞은 부를 함수가
+없는 것이고 뒤는 함수는 있는데 뜻이 틀린 것이다.
+
+**3. `findChar`가 껍데기가 됐는데 옛 검사 18·19·20이 한 글자도 안 바뀐 채
+통과했다.** 넘칠 때의 규칙이 `findBytes` 한 자리로 모였고 뜻은 안 바뀌었다는
+증거다. `main.zig`의 `find_char` 갈래도 한 글자도 안 바꿨다.
+
+**4. 게이트는 안 갈렸다.** 아홉 체인 3/3으로 **18분 36.52초**다(직전 기준선
+18분 32.80초에서 +3.7초, 잡음 범위). 이 milestone은 부팅하는 바이너리를
+사실상 안 바꾸므로 예상대로다.
+
+## SH-M1이 실측한 것 (2026-09-09)
+
+**1. Zig의 이름 가리기 금지를 한 Task에서 두 번 밟았다.** 새 `State`를
+`sb`로 지었는데 HI-M2의 검사가 이미 그 이름을 쓰고 있었고(`redeclaration of
+local variable 'sb'`), 이어서 switch capture를 `cm`으로 지었는데 copy mode
+검사의 `State`가 그 이름이었다(`capture 'cm' shadows local variable from outer
+scope`). **plan이 위험 1에 이 함정을 적어 두고도 새 이름 둘에서 다시
+밟았다** — 적어 두는 것으로는 안 막히고, 컴파일 에러가 막는다.
+
+**2. 예측한 그 자리에서 실패했다.** 검사 50(`Shift+Space`, code=57)이
+`got copy .find_char, want hangul`으로 죽었다 — plan이 Step 2에서 "50이 먼저
+실패한다"고 적은 그대로다. **틀린 예측을 고쳐 적은 자리이기도 하다**: 처음
+초안은 "50은 통과한다"였는데, 쓰는 도중에 `KEY_SPACE`가 find 분기의 `else`로
+빠져 `.find_char = ' '`가 된다는 것을 다시 읽고 고쳤다.
+
+**3. `Copy`의 새 variant는 `handleKey`가 아니라 `readKeys`가 만든다.** design
+결정 4가 "`find_text` variant를 안 골랐다"고 적은 것과 어긋나 보이지만
+아니다 — 거기서 물리친 후보는 **`handleKey`가 그것을 돌려주는** 모양이었고,
+그러면 `Enter` 하나가 확정과 제출 둘을 담아야 해서 통로가 결국 둘이 된다.
+`commit_buf`가 이미 둘을 갈라 놓았으므로 variant는 나르기만 한다.
+
+**4. Zig는 컨테이너 필드 사이의 선언을 막는다.** `Copy.Commit`을
+`find_commit` 바로 뒤에 뒀더니 `declarations are not allowed between container
+fields`다. 필드를 전부 적은 뒤에 선언이 온다.
+
+**5. `std.posix`에 `pipe`도 `write`도 `close`도 없다**(Zig 0.16). I/O가
+`std.Io`로 옮겨 갔다. `input_test`가 `readKeys`를 직접 돌리려면 libc를 직접
+선언해야 하고, **`input.zig`가 `read`와 `open`을 이미 그렇게 선언해 두었다.**
+착수 전에 컨테이너의 `lib/std/posix.zig`를 확인해서 plan을 고쳤다 — 안 했으면
+Task 2의 Step 2에서 컴파일 에러로 만났을 것이다.
+
+**6. `readKeys`를 파이프로 돌리는 검사가 결정 5를 정면으로 본다.** 그 사실
+("모드를 `handleKey` **앞에서** 읽는다")은 `handleKey` 안에 아예 없고
+`readKeys`의 두 줄 **사이**에 있어서, `handleKey`만 부르는 검사로는 원리적으로
+못 본다. 판정은 `keys.bytes.len != 0` 한 줄이다 — 뒤에서 읽는 구현은 거기서
+`한` 세 바이트를 내놓는다.
+
+**7. 게이트 체인이 첫 시도에 통과했다.** `find> commit needle=가 len=3` ·
+`matches=1` · `key>` 줄 개수 불변(음성 검사)이 전부 한 번에 맞았다. 루트
+게이트는 아홉 체인 3/3으로 **18분 48.22초**다(SH-M0의 18분 36.52초에서
++11.7초 — 키 넷과 판정 다섯이 는 설명되는 값이다).
 
 ## 비목표
 

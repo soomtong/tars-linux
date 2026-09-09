@@ -1,36 +1,51 @@
-# HANDOFF: Search Hangul — SH-M0을 닫았다 (needle이 UTF-8을 안다)
+# HANDOFF: Search Hangul — SH-M0·M1을 닫았다 (검색창에 한글을 친다)
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **SH-M0이 끝났다** — `find_buf`가 글자 단위가
-됐고 게이트 아홉 체인 3/3이 **18분 36.52초**로 초록이다(직전 기준선 18분
-32.80초에서 +3.7초, 잡음 범위).
+`main`, working tree 깨끗함. **SH-M0과 SH-M1이 끝났다** — 검색 프롬프트에서
+한글이 조합되고 확정분이 needle로 간다. 게이트 아홉 체인 3/3이 **18분
+48.22초**로 초록이다.
 
 | | 파일 | 커밋 |
 |---|---|---|
-| design | `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md` | `1f84bc5` |
-| plan (SH-M0) | `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m0.md` | `9d89970` |
-| plan (SH-M1) | `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m1.md` | 아래 |
-| Task 1 | `findBytes` — 통째로 받거나 거절 · `findChar`가 껍데기 | `c8f3460` |
-| Task 2 | `findErase`가 UTF-8 한 글자를 지운다 | `2e751af` |
+| design | `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md` | `1f84bc5` (실측 절 둘은 아래) |
+| plan (SH-M0) | `.../plans/2026-09-09-tars-search-hangul-sh-m0.md` | `9d89970` |
+| plan (SH-M1) | `.../plans/2026-09-09-tars-search-hangul-sh-m1.md` | `c1774e0` |
+| plan (SH-M2) | `.../plans/2026-09-09-tars-search-hangul-sh-m2.md` | 아래 |
+| M0 Task 1 | `findBytes` — 통째로 받거나 거절 · `findChar`가 껍데기 | `c8f3460` |
+| M0 Task 2 | `findErase`가 UTF-8 한 글자를 지운다 | `2e751af` |
+| M1 Task 1 | find 분기가 `hangulLayer`를 부른다 · `commit_buf` 여덟 | `49c7e7e` |
+| M1 Task 2 | `Copy.find_commit` · `readKeys`의 목적지 갈래 | `6465e0c` |
+| M1 Task 3 | `hangul/check.sh`의 검사 18 | `cb2826f` |
 
 ```bash
 git status --short     # 비어 있어야 한다
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
-  bash -c 'zig build test'   # 마지막이 PASS, vt_test의 마지막 검사가 54
+  bash -c 'zig build test'   # 마지막이 PASS. input_test의 새 줄 둘, vt_test의 새 줄 셋
 ```
 
-## 바로 다음에 할 것: SH-M1
+**게이트는 컨테이너 안에서 돌린다.** 호스트의 `make`는 3.81이라 커널
+Makefile이 거절한다(아래 SH-M0 실측 1).
 
-plan이 `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m1.md`에
-Task 넷으로 있다. **넣을 코드가 통째로 들어 있다.**
+```bash
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } 2> /tmp/gate.time
+```
+
+## 바로 다음에 할 것: SH-M2 (SH의 마지막 milestone)
+
+plan이 `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m2.md`에
+Task 셋으로 있고 **넣을 코드가 통째로 들어 있다.**
 
 | Task | 무엇 | 검증 |
 |---|---|---|
-| 1 | find 분기가 `hangulLayer`를 부른다 · `commit_buf` 여덟 바이트 | `input_test` 검사 49~55 |
-| 2 | `Copy.find_commit` · `readKeys`의 목적지 갈래 · `main.zig` 배선 | `input_test` 검사 56·57 |
-| 3 | `hangul/check.sh`의 검사 18 | 체인 하나만 먼저 |
-| 4 | 루트 게이트 3/3 | 18분대 |
+| 1 | `drawPrompt`가 UTF-8·폭 2·preedit 반전을 안다(`drawRun` 재사용) | 빌드 + 게이트 |
+| 2 | `hangul/check.sh`의 검사 19 — `find> ink cols/inv/ink` | 체인 하나만 먼저 |
+| 3 | 루트 게이트 3/3 · design `Status:` 닫기 · 기억 한 파일 | 19분대 |
+
+**지금 프롬프트의 한글은 깨져 보인다 — 의도된 중간 상태다.** `drawPrompt`가
+바이트 하나를 글자 하나로 세고(`main.zig:138`), 조합 중인 글자는 copy mode라
+격자에도 안 그려진다. **검색은 맞는 결과를 낸다** — 그 갈림이 SH-M2의 경계다.
 
 ## SH-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -58,6 +73,30 @@ Task를 자른 방식의 값이다** — Task 1은 부를 함수가 없는 것�
 `orelse return error.NoFindPrompt`로 열림을 확인하고, 그 뒤로는 이미 열려
 있음이 보장되므로 `.?`를 쓴다 — **다른 규칙이 아니라 같은 사실을 두 번 안
 적는 것이다.**
+
+## SH-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"SH-M1이 실측한 것"** 절(항목 일곱)에 있다. 요약 넷.
+
+**1. Zig의 이름 가리기 금지를 한 Task에서 두 번 밟았다.** 새 `State`를 `sb`로
+(HI-M2가 이미 씀), switch capture를 `cm`으로(copy mode 검사가 이미 씀) 지었다.
+**plan이 그 함정을 위험 목록에 적어 두고도 새 이름 둘에서 다시 밟았다** —
+적어 두는 것으로는 안 막히고 컴파일 에러가 막는다.
+
+**2. `Copy.find_commit`을 만드는 것은 `handleKey`가 아니라 `readKeys`다.**
+design 결정 4가 물리친 후보는 **`handleKey`가 그것을 돌려주는** 모양이었고,
+그러면 `Enter` 하나가 확정과 제출 둘을 담아야 해서 통로가 결국 둘이 된다.
+`commit_buf`가 이미 둘을 갈라 놓았으므로 이 variant는 **나르기만 한다.**
+
+**3. `std.posix`에 `pipe`·`write`·`close`가 없다**(Zig 0.16). I/O가 `std.Io`로
+옮겨 갔다. 처방은 libc 직접 선언이고 `input.zig`가 이미 `read`·`open`에 대해
+쓰던 방법이다. **착수 전에 컨테이너의 `lib/std/posix.zig`를 확인해서 plan을
+고쳤다.**
+
+**4. `readKeys`를 파이프로 돌리는 검사가 결정 5를 정면으로 본다.** "모드를
+`handleKey` 앞에서 읽는다"는 사실은 `handleKey` 안에 **아예 없고**
+`readKeys`의 두 줄 사이에 있어서, `handleKey`만 부르는 검사로는 원리적으로 못
+본다. 판정은 `keys.bytes.len != 0` 한 줄이다.
 
 ## SH가 무엇인가
 
