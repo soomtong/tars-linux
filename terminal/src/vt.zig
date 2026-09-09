@@ -736,6 +736,34 @@ pub const Screen = struct {
         self.find_len = i;
     }
 
+    /// `Cmd+V`. 클립보드의 **첫 줄**을 needle에 붙이고, 넣은 바이트 수를
+    /// 돌려준다(FP design 결정 4·5).
+    ///
+    /// **개행에서 자르는 것이 이 함수의 본체다.** 화면 셀에는 개행이 없으므로
+    /// 개행이 든 needle은 **영영 안 맞는다** — 증상이 "붙여넣었는데 못 찾음이
+    /// 뜬다"라 조용하다. 셸 쪽 `dumpPaste`는 개행이 곧 실행이 되는 것을
+    /// 감수했지만(CM design 결정 9), 검색은 감수할 수 있는 종류가 아니다.
+    /// 셸에서는 잘못 붙은 것이 화면에 보이고 검색에서는 안 보인다.
+    ///
+    /// **줄 끝 공백은 여기서 안 다룬다.** `copyYank`가 이미 트림한다 —
+    /// 두 줄을 잡으면 `가나\n다라` 열세 바이트가 나오고 `가나` 뒤에 바로
+    /// `0A`가 온다(FP-M0 실측 1).
+    ///
+    /// **넣는 일은 `findBytes`에 그대로 넘긴다.** 통째로 받거나 거절하는
+    /// 규칙도, 프롬프트가 닫혀 있으면 아무 일도 안 하는 규칙도 그쪽 한
+    /// 자리에만 적힌다(SH design 결정 7).
+    ///
+    /// 돌려주는 수를 `main.zig`가 `put=`으로 찍는다. **`clip=`과 함께 한 줄에
+    /// 찍는 것이 판정을 만든다**(FP design 결정 6) — 0 하나만으로는 "클립보드가
+    /// 비었다"와 "너무 길어 거절됐다"가 안 갈린다.
+    pub fn findPaste(self: *Screen) usize {
+        const text = self.clip orelse return 0;
+        const end = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
+        const before = self.find_len;
+        self.findBytes(text[0..end]);
+        return self.find_len - before;
+    }
+
     /// 프롬프트만 닫는다. **copy mode는 유지한다**(design 결정 9).
     pub fn findCancel(self: *Screen) void {
         self.find_open = false;

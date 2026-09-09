@@ -1709,5 +1709,141 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: Backspace가 UTF-8 한 글자를 지운다 OK\n", .{});
 
+    // ── FP-M0: 클립보드의 첫 줄이 needle로 간다 ─────────────────────────
+
+    // 검사 55. **대조군.** `um`은 한 번도 y를 안 눌렀다. 빈 클립보드에
+    // 붙여넣기를 하면 0을 돌려주고 needle이 안 자란다.
+    //
+    // **이 검사가 대조군인 것에 뜻이 있다.** 아래 56~59가 전부 "무언가
+    // 들어갔다"를 보므로, "아무것도 없을 때 아무 일도 안 한다"를 따로 안
+    // 보면 `findPaste`가 늘 무언가를 넣는 구현도 전부 통과한다.
+    if (um.findPaste() != 0) {
+        std.debug.print("FAIL: 빈 클립보드가 needle에 무언가를 넣었다\n", .{});
+        return error.FindPasteFromEmptyClip;
+    }
+    if (um.findNeedle().?.len != 0) {
+        std.debug.print(
+            "FAIL: 빈 클립보드 뒤 needle이 {d}바이트다(0이어야 한다)\n",
+            .{um.findNeedle().?.len},
+        );
+        return error.FindPasteFromEmptyClip;
+    }
+    std.debug.print("vt_test: 빈 클립보드는 needle을 안 건드린다 OK\n", .{});
+
+    // 화면을 새로 만든다. 두 줄이 필요하고 `um`은 "hello" 한 줄뿐이다.
+    // `가나`·`다라`가 각각 폭 2 글자 둘이라 col 0~3을 먹는다.
+    const pm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer pm.deinit();
+    pm.feed("가나\r\n다라\r\n");
+    _ = try pm.cells(&buf);
+
+    // 검사 56. **한 줄 클립보드가 통째로 들어간다.**
+    //
+    // **yank가 먼저이고 findOpen이 나중이다**(plan 실측 3). `copyYank`가
+    // `copyExit` → `findCancel()`까지 부르므로 순서를 뒤집으면 프롬프트가
+    // 닫힌 채로 붙여넣게 된다.
+    pm.copyEnter();
+    try pm.copyMove(0, -1); // row 2(셸 커서) → row 1 = `다라`
+    try pm.copySelect(.line);
+    const one = (try pm.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, one, "다라")) {
+        std.debug.print("FAIL: 한 줄 yank가 '{s}'를 줬다(다라여야 한다)\n", .{one});
+        return error.WrongClipText;
+    }
+    pm.copyEnter();
+    pm.findOpen();
+    var put = pm.findPaste();
+    if (put != 6) {
+        std.debug.print("FAIL: 붙여넣기가 {d}바이트를 넣었다(6이어야 한다)\n", .{put});
+        return error.FindPasteWrong;
+    }
+    un = pm.findNeedle() orelse return error.NoFindPrompt;
+    if (!std.mem.eql(u8, un, "다라")) {
+        std.debug.print("FAIL: 붙여넣은 뒤 needle이 '{s}'다(다라여야 한다)\n", .{un});
+        return error.FindPasteWrong;
+    }
+    std.debug.print("vt_test: 클립보드 한 줄이 needle로 간다 OK ('{s}')\n", .{un});
+
+    // 검사 57. **이미 친 글자 뒤에 붙는다.** 덮어쓰지 않는다.
+    //
+    // `findOpen()`이 `find_len`을 0으로 되돌리므로 여기서 다시 열어 비운다.
+    pm.findOpen();
+    pm.findBytes("가");
+    put = pm.findPaste();
+    if (put != 6) {
+        std.debug.print("FAIL: 이어 붙일 때 {d}바이트를 넣었다(6이어야 한다)\n", .{put});
+        return error.FindPasteWrong;
+    }
+    un = pm.findNeedle().?;
+    if (!std.mem.eql(u8, un, "가다라")) {
+        std.debug.print("FAIL: 이어 붙인 needle이 '{s}'다(가다라여야 한다)\n", .{un});
+        return error.FindPasteWrong;
+    }
+    if (un.len != 9) {
+        std.debug.print("FAIL: 이어 붙인 needle이 {d}바이트다(9여야 한다)\n", .{un.len});
+        return error.FindPasteWrong;
+    }
+    std.debug.print("vt_test: 붙여넣기가 친 글자 뒤에 이어진다 OK ('{s}')\n", .{un});
+
+    // 검사 58. **여러 줄이면 첫 줄만 넣는다**(FP design 결정 5).
+    //
+    // **이 검사가 이 Task의 본체다.** 개행이 든 needle은 화면의 어떤 셀과도
+    // 안 맞으므로 "붙여넣었는데 못 찾음이 뜬다"가 되고, 그 증상은 조용하다.
+    //
+    // 키 순서는 plan 실측 2가 프로브로 확인한 것이다. row 0에 앵커를 두고
+    // row 1의 col 3까지 끈다.
+    pm.copyEnter();
+    try pm.copyMove(0, -1);
+    try pm.copyMove(0, -1); // row 0 = `가나`
+    try pm.copySelect(.char);
+    try pm.copyMove(0, 1); // row 1 = `다라`
+    var mv: usize = 0;
+    while (mv < 3) : (mv += 1) try pm.copyMove(1, 0);
+    const many = (try pm.copyYank()) orelse return error.NothingYanked;
+    // **클립보드 쪽을 먼저 못 박는다**(plan 실측 1). 여기가 초록이어야
+    // 아래 판정이 "첫 줄만 넣었다"를 뜻한다 — 클립보드에 애초에 개행이
+    // 없었다면 "잘랐다"와 "자를 것이 없었다"가 안 갈린다.
+    if (many.len != 13) {
+        std.debug.print("FAIL: 두 줄 yank가 {d}바이트다(13이어야 한다)\n", .{many.len});
+        return error.WrongClipText;
+    }
+    if (many[6] != '\n') {
+        std.debug.print("FAIL: 두 줄 yank의 7번째 바이트가 0x{X:0>2}다(0A여야 한다)\n", .{many[6]});
+        return error.WrongClipText;
+    }
+    pm.copyEnter();
+    pm.findOpen();
+    put = pm.findPaste();
+    if (put != 6) {
+        std.debug.print("FAIL: 두 줄에서 {d}바이트를 넣었다(첫 줄 6이어야 한다)\n", .{put});
+        return error.FindPasteMultiline;
+    }
+    un = pm.findNeedle().?;
+    if (!std.mem.eql(u8, un, "가나")) {
+        std.debug.print("FAIL: 첫 줄만 넣었어야 하는데 needle이 '{s}'다\n", .{un});
+        return error.FindPasteMultiline;
+    }
+    std.debug.print("vt_test: 여러 줄은 첫 줄만 들어간다 OK ('{s}')\n", .{un});
+
+    // 검사 59. **자리가 모자라면 하나도 안 넣는다.** 규칙이 `findBytes`
+    // 한 자리에 있다는 것을 붙여넣기 쪽에서도 못 박는다(SH design 결정 7).
+    //
+    // 126 + 6 = 132 > 128이라 통째로 거절된다. 바이트 단위로 채웠다면 두
+    // 바이트만 들어가 `가`가 반만 남는다.
+    pm.findOpen();
+    var pad2: usize = 0;
+    while (pad2 < 126) : (pad2 += 1) pm.findChar('z');
+    put = pm.findPaste();
+    if (put != 0) {
+        std.debug.print("FAIL: 자리가 둘뿐인데 {d}바이트를 넣었다(0이어야 한다)\n", .{put});
+        return error.FindPasteOverflow;
+    }
+    un = pm.findNeedle().?;
+    if (un.len != 126) {
+        std.debug.print("FAIL: 거절 뒤 needle이 {d}바이트다(126이어야 한다)\n", .{un.len});
+        return error.FindPasteOverflow;
+    }
+    std.debug.print("vt_test: 자리가 모자라면 붙여넣기를 통째로 거절한다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
