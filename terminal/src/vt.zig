@@ -715,14 +715,25 @@ pub const Screen = struct {
         self.findBytes(&one);
     }
 
-    /// Backspace. **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    /// Backspace. **UTF-8 한 글자를 지운다**(SH design 결정 8).
     ///
-    /// vim은 여기서 프롬프트를 닫지만 우리는 안 닫는다. 닫으면 Esc와 뜻이
-    /// 겹치고, 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
+    /// 바이트 하나만 줄이면 `가`(EA B0 80)가 두 바이트짜리 쓰레기가 되고, 그
+    /// needle은 화면의 어떤 셀과도 안 맞는다 — **증상이 "지웠는데 못
+    /// 찾는다"라 조용하다.**
+    ///
+    /// 이어지는 바이트(`0b10xxxxxx`)를 앞으로 건너뛰어 시작 바이트를 찾는다.
+    /// **0까지 가면 그대로 비운다** — 시작 바이트가 없는 버퍼는 `findBytes`가
+    /// 만들지 않지만, 여기서 멈추지 못해 아래로 도는 것이 더 나쁘다.
+    ///
+    /// **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2). vim은
+    /// 여기서 프롬프트를 닫지만 우리는 안 닫는다. 닫으면 Esc와 뜻이 겹치고,
+    /// 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
     pub fn findErase(self: *Screen) void {
         if (!self.find_open) return;
         if (self.find_len == 0) return;
-        self.find_len -= 1;
+        var i = self.find_len - 1;
+        while (i > 0 and (self.find_buf[i] & 0xC0) == 0x80) i -= 1;
+        self.find_len = i;
     }
 
     /// 프롬프트만 닫는다. **copy mode는 유지한다**(design 결정 9).

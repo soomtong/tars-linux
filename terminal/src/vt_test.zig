@@ -1666,5 +1666,48 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 자리가 모자라면 음절을 통째로 거절한다 OK\n", .{});
 
+    // 검사 54. **Backspace가 음절을 통째로 지운다**(SH design 결정 8).
+    //
+    // `findOpen()`이 `find_len`을 0으로 되돌리므로 꽉 찬 버퍼를 여기서 비운다.
+    um.findOpen();
+    um.findBytes("가");
+    um.findBytes("나");
+    um.findErase();
+    un = um.findNeedle().?;
+    if (!std.mem.eql(u8, un, "가")) {
+        std.debug.print("FAIL: Backspace가 '{s}'를 남겼다(가여야 한다)\n", .{un});
+        return error.FindEraseWrong;
+    }
+    // **바이트 수를 따로 본다.** 바이트 단위로 지우면 6 → 5가 되는데, 그
+    // 다섯 바이트를 `{s}`로 찍으면 눈에는 `가` 뒤에 깨진 두 바이트가 붙어
+    // 있는 것으로 보인다 — 위의 eql이 이미 그것을 잡지만, **틀린 값이
+    // 몇인지**를 로그가 말해 주는 편이 고치는 자리를 좁힌다.
+    if (un.len != 3) {
+        std.debug.print("FAIL: Backspace 뒤 needle이 {d}바이트다(3이어야 한다)\n", .{un.len});
+        return error.FindEraseWrong;
+    }
+    // **ASCII는 뜻이 안 바뀐다.** 한 바이트가 곧 한 글자다.
+    um.findChar('z');
+    um.findErase();
+    un = um.findNeedle().?;
+    if (!std.mem.eql(u8, un, "가")) {
+        std.debug.print("FAIL: ASCII Backspace가 '{s}'를 남겼다(가여야 한다)\n", .{un});
+        return error.FindEraseWrong;
+    }
+    // **빈 프롬프트에서는 여전히 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    // 검사 19가 ASCII로 보던 것을 여기서 한글 뒤에도 확인한다 — 앞으로
+    // 걸어가는 루프가 0에서 멈추는지가 이 줄이 보는 것이다.
+    um.findErase();
+    um.findErase();
+    un = um.findNeedle() orelse {
+        std.debug.print("FAIL: Backspace가 빈 프롬프트를 닫았다\n", .{});
+        return error.FindEraseClosedPrompt;
+    };
+    if (un.len != 0) {
+        std.debug.print("FAIL: 프롬프트가 비어야 하는데 {d}바이트다\n", .{un.len});
+        return error.FindEraseWrong;
+    }
+    std.debug.print("vt_test: Backspace가 UTF-8 한 글자를 지운다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
