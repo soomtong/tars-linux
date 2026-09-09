@@ -95,6 +95,22 @@ pub fn build(b: *std.Build) void {
         .root_module = devices_test_mod,
     });
 
+    // RM-M2: ext2 superblock의 매직과 라벨을 보는 함수의 검사. 이것도
+    // 게스트가 아니라 컨테이너가 직접 실행하므로 host_target이다.
+    // storage.zig의 tarsLabel은 시스템 콜을 안 하는 순수 함수라(devices.zig가
+    // bitSet을 그렇게 가른 것과 같은 선) 진짜 블록 장치가 필요 없다 —
+    // 이 검사가 개발 기계의 디스크를 건드리지 않는다.
+    const storage_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/storage_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const storage_test = b.addExecutable(.{
+        .name = "storage_test",
+        .root_module = storage_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -103,4 +119,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(config_test).step);
     test_step.dependOn(&b.addRunArtifact(power_test).step);
     test_step.dependOn(&b.addRunArtifact(devices_test).step);
+    test_step.dependOn(&b.addRunArtifact(storage_test).step);
 }
