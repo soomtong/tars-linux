@@ -36,13 +36,32 @@ LOG="$(mktemp)"
 VARS="$(mktemp)"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd "$VARS"
 
-# RM-M1: NVMe로 물릴 디스크. **이 milestone은 이것을 마운트하지 않는다** —
-# init이 /dev/vda를 하드코딩하고 있어서(init/src/main.zig:65) 못 찾는다.
-# 여기서 보는 것은 "커널이 NVMe 컨트롤러를 잡는다"까지이고, 그 위에 파일을
-# 두고 읽는 것은 RM-M2다.
+# RM-M2: NVMe로 물릴 설정 디스크. RM-M1까지는 라벨도 내용도 없는 빈 ext2였고
+# init이 /dev/vda를 하드코딩해서 마운트조차 못 했다. 이제 둘 다 심는다.
+#
+# **라벨이 이 체인의 판정 근거다**(design 결정 10). init은 /dev/nvme0n1이라는
+# **이름**이 아니라 디스크 안의 이 표식을 보고 고른다 — HD-M2가 키보드에 대해
+# 세운 "이름이 아니라 성질로"의 블록 장치 판이다. 게이트 디스크 넷이 이미
+# tars-config·tars-input·tars-power·tars-hangul이므로 그 규칙에 이름 하나를
+# 더하는 것뿐이고, **그 넷을 한 글자도 안 건드린다.**
+#
+# **심는 값이 기본값과 달라야 한다**(hangul/make_disk.sh가 세운 규칙).
+# hangul_layout의 기본값은 shin_pcs이고 여기 심는 것은 sebeol_3p3다 — 같은
+# 값을 심으면 설정 파일을 통째로 무시하는 코드도 초록이 뜬다.
+#
+# **shell을 안 건드리는 이유가 있다.** 이 체인의 첫 판정이 `Welcome to fish`라서
+# shell=bash를 심으면 그 줄이 사라진다. latin_layout도 마찬가지다 — 아래에서
+# 'usb'를 쳐야 하므로 dvorak을 심으면 글자가 갈린다. **기본값과 다르면서
+# 나머지 판정을 안 흔드는 키는 hangul_layout 하나다.**
 DISK="$(mktemp)"
+SEED="$(mktemp -d)"
+cat > "$SEED/tars.conf" <<'EOF'
+# machine 체인이 NVMe 디스크에 미리 심어 두는 설정. 게스트는 읽기만 한다.
+hangul_layout=sebeol_3p3
+EOF
 dd if=/dev/zero of="$DISK" bs=1M count=8 status=none
-mkfs.ext2 -q -F "$DISK"
+mkfs.ext2 -F -q -m 0 -L tars-machine -d "$SEED" "$DISK"
+rm -rf "$SEED"
 
 MONITOR_PORT=45471
 QEMU_PID=""
@@ -128,7 +147,19 @@ fail() {
   echo "FAIL: $1"
   shift
   for pattern in "$@"; do
-    denoise | grep -a "$pattern" | head -3 | sed 's/^/  /'
+    # **`|| true`가 없으면 이 루프가 첫 패턴에서 죽는다.** 이 파일은
+    # `set -euo pipefail`이고, 안 맞는 grep은 종료 코드 1이며 pipefail이 그것을
+    # 파이프라인 전체의 코드로 올린다 — 그러면 set -e가 함수를 그 자리에서
+    # 끝내고 **뒤의 패턴은 로그에 있어도 안 찍힌다.**
+    #
+    # 하필 첫 패턴이 "없는 것"인 경우가 가장 흔하다(그것이 실패의 이유라서
+    # 목록의 앞에 적힌다). RM-M2의 음성 확인에서 드러났다 —
+    # `no disk labelled`와 `nvme`가 로그에 분명히 있는데 문맥이 통째로 비어
+    # 나왔다. RM-M0에서는 첫 패턴(`PANIC`)이 마침 있어서 안 드러났다.
+    #
+    # **실측 7의 사촌이다** — 그때는 말이 시리얼에 있는데 grep이 못 읽었고,
+    # 이번에는 grep이 읽을 수 있는데 셸이 그 앞에서 함수를 끝냈다.
+    denoise | grep -a "$pattern" | head -3 | sed 's/^/  /' || true
   done
   exit 1
 }
@@ -204,12 +235,52 @@ if ! grep -a "tars-init: keyboard device" "$LOG" | grep -aq "USB Keyboard"; then
 fi
 echo "init picked the USB keyboard with no PS/2 in the machine"
 
-# 판정 7. NVMe 컨트롤러를 잡았다. 마운트는 안 한다 — init이 /dev/vda를
-# 하드코딩하고 있어서 못 읽는다(RM-M2가 그것을 넓힌다).
+# 판정 7. NVMe 컨트롤러를 잡았다. 이 아래 넷이 그 위에 서 있으므로 이것을
+# 먼저 본다 — 컨트롤러가 안 붙었으면 나머지 넷의 실패는 증상일 뿐이다.
 if ! grep -aq "nvme nvme0: pci function" "$LOG"; then
   fail "the NVMe controller never came up" "nvme" "pci"
 fi
 echo "the NVMe controller came up"
+
+# ── RM-M2: 설정이 NVMe에서 온다 ────────────────────────────────────────
+#
+# 판정 넷으로 나누는 이유는 "설정이 안 왔다"의 병이 넷이기 때문이다 —
+# 못 골랐다 · 골랐는데 안 붙었다 · 붙었는데 파일이 없다 · 읽었는데 값이 안
+# 쓰였다. 하나만 보면 어느 것인지 안 갈린다(IS-M1 실측 5와 같은 종류).
+
+# 판정 8. **이 milestone의 심장이다.** init이 /dev/vda가 아니라 NVMe를 골랐고,
+# 고른 근거가 이름이 아니라 라벨이라는 것이 한 줄에 다 있다. 이 줄이 없고
+# `no disk labelled tars-*`가 있으면 후보 훑기가 NVMe까지 못 갔거나 라벨을
+# 못 읽은 것이다.
+WANT_DISK="tars-init: config storage /dev/nvme0n1 (label tars-machine)"
+if ! grep -aqF "$WANT_DISK" "$LOG"; then
+  fail "init did not pick the NVMe disk by its ext2 label" \
+    "tars-init: config storage" "tars-init: no disk labelled" "nvme"
+fi
+echo "init found the config disk on NVMe by its ext2 label"
+
+# 판정 9. 골랐다는 것과 붙었다는 것이 다르다. 여기서 갈리는 것은 "라벨은
+# 맞는데 파일시스템이 깨졌다"다.
+if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
+  fail "the labelled disk was picked but never mounted" \
+    "tars-init: config storage" "tars-init: failed to mount"
+fi
+
+# 판정 10. 붙었다는 것과 읽었다는 것이 또 다르다. mkfs.ext2의 -d가 안 먹었으면
+# 여기서 created(씨앗 심기)로 갈린다.
+if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
+  fail "the config disk mounted but tars.conf was not read" \
+    "tars-init: created /config" "tars-init: loaded /config"
+fi
+
+# 판정 11. **읽었다는 것과 값이 쓰였다는 것이 또 다르다.** 기본값이 shin_pcs
+# 이므로 이 줄이 "디스크에 심은 한 줄이 실제 동작이 됐다"를 말한다 —
+# 설정 파일을 파싱해 놓고 버리는 코드가 여기서 걸린다.
+if ! grep -a "tars-init: config " "$LOG" | grep -aq "hangul=sebeol_3p3"; then
+  fail "the seeded hangul_layout never reached the config line" \
+    "tars-init: config " "tars-init: loaded /config"
+fi
+echo "the value seeded on the NVMe disk became the running configuration"
 
 # ── 그리고 실제로 친다 ─────────────────────────────────────────────────
 #
