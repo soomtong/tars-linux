@@ -1,27 +1,35 @@
-# HANDOFF: Search Hangul — SH-M0·M1을 닫았다 (검색창에 한글을 친다)
+# HANDOFF: Search Hangul을 끝냈다 — 검색창에서 한글을 치고, 보인다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **SH-M0과 SH-M1이 끝났다** — 검색 프롬프트에서
-한글이 조합되고 확정분이 needle로 간다. 게이트 아홉 체인 3/3이 **18분
-48.22초**로 초록이다.
+`main`, working tree 깨끗함. **Search Hangul(SH-M0·M1·M2)이 2026-09-09에
+전부 끝났다.** `/` 프롬프트에서 한글을 치고, 조합 중인 글자가 검색어 끝에
+반전으로 자라고, 확정되면 검색어의 일부가 된다.
+
+**게이트는 아홉 체인 3/3으로 18분 58.81초다.**
+
+```
+  /가█ㄱ█        ← ㄱ이 조합 중이라 반전돼 있다(게이트 실측 inv=239 ink=17)
+  /가            ← Esc는 조합만 버린다(cols=3)
+```
 
 | | 파일 | 커밋 |
 |---|---|---|
-| design | `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md` | `1f84bc5` (실측 절 둘은 아래) |
-| plan (SH-M0) | `.../plans/2026-09-09-tars-search-hangul-sh-m0.md` | `9d89970` |
-| plan (SH-M1) | `.../plans/2026-09-09-tars-search-hangul-sh-m1.md` | `c1774e0` |
-| plan (SH-M2) | `.../plans/2026-09-09-tars-search-hangul-sh-m2.md` | 아래 |
+| design | `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md` | `1f84bc5`(실측 절 셋은 나중 커밋) |
+| plan 셋 | `.../plans/2026-09-09-tars-search-hangul-sh-m{0,1,2}.md` | `9d89970` · `c1774e0` · `49da082` |
 | M0 Task 1 | `findBytes` — 통째로 받거나 거절 · `findChar`가 껍데기 | `c8f3460` |
 | M0 Task 2 | `findErase`가 UTF-8 한 글자를 지운다 | `2e751af` |
 | M1 Task 1 | find 분기가 `hangulLayer`를 부른다 · `commit_buf` 여덟 | `49c7e7e` |
 | M1 Task 2 | `Copy.find_commit` · `readKeys`의 목적지 갈래 | `6465e0c` |
 | M1 Task 3 | `hangul/check.sh`의 검사 18 | `cb2826f` |
+| M2 Task 1 | `drawPrompt`가 UTF-8·폭 2·반전을 안다 · `find> ink` | `163acd8` |
+| M2 Task 2 | `hangul/check.sh`의 검사 19·19a | `f5c07d9` |
+| 뒤늦게 잡은 것 | 프롬프트가 격자 오른쪽 끝에서 끊긴다(`max_x`) | `11d681d` |
 
 ```bash
 git status --short     # 비어 있어야 한다
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
-  bash -c 'zig build test'   # 마지막이 PASS. input_test의 새 줄 둘, vt_test의 새 줄 셋
+  bash -c 'zig build test'   # 마지막이 PASS
 ```
 
 **게이트는 컨테이너 안에서 돌린다.** 호스트의 `make`는 3.81이라 커널
@@ -32,20 +40,56 @@ Makefile이 거절한다(아래 SH-M0 실측 1).
   bash check.sh ; } 2> /tmp/gate.time
 ```
 
-## 바로 다음에 할 것: SH-M2 (SH의 마지막 milestone)
+## 이 세션은 편집도 Claude Code가 했다 — **다음 세션은 다시 기본 규칙이다**
 
-plan이 `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m2.md`에
-Task 셋으로 있고 **넣을 코드가 통째로 들어 있다.**
+사용자가 2026-09-09에 "외출해야 하니 이번 세션의 구현에 대한 모든 결정을
+위임한다"고 정했다. `CLAUDE.md`의 기본 규칙("파일 편집은 사용자가")에 대한
+**이 세션 한정 예외**이고, HI의 예외와 같은 종류이며 이유만 다르다.
 
-| Task | 무엇 | 검증 |
-|---|---|---|
-| 1 | `drawPrompt`가 UTF-8·폭 2·preedit 반전을 안다(`drawRun` 재사용) | 빌드 + 게이트 |
-| 2 | `hangul/check.sh`의 검사 19 — `find> ink cols/inv/ink` | 체인 하나만 먼저 |
-| 3 | 루트 게이트 3/3 · design `Status:` 닫기 · 기억 한 파일 | 19분대 |
+## 바로 다음에 할 것 — **손에 있는 후보 넷**
 
-**지금 프롬프트의 한글은 깨져 보인다 — 의도된 중간 상태다.** `drawPrompt`가
-바이트 하나를 글자 하나로 세고(`main.zig:138`), 조합 중인 글자는 copy mode라
-격자에도 안 그려진다. **검색은 맞는 결과를 낸다** — 그 갈림이 SH-M2의 경계다.
+진행 중인 서브프로젝트가 없다. **사용자가 고를 자리다.**
+
+- **검색창의 붙여넣기** — SH design의 비목표 절이 근거를 통째로 모아 뒀다.
+  **SH가 놓은 두 층 위에 정확히 얹힌다**(needle이 글자 단위여야 하고,
+  붙인 한글이 보이려면 `drawPrompt`가 폭 2를 알아야 한다). 착수하면 정할 것
+  둘도 그 절에 있다 — **다시 캐지 말 것.**
+- **HI가 남긴 둘** — 기호 확장과 Patal의 옵션 trait들 · 모아주기(첫가끝 조합,
+  **HI design 결정 3이 근거를 대고 뺐다**). "copy mode 검색창의 한글 입력"은
+  이번에 없어졌다.
+- **실머신 커널 `.config`**(`docs/decisions/project_target_hardware.md`) —
+  지금 `EFI`·`USB_SUPPORT`·`NVMe`·`PCI_MSI`·`DRM_I915`·`THERMAL`이 전부 꺼져
+  있어 **이 커널은 노트북에서 아예 못 뜬다.** 사용자가 2026-08-31에 "TARS는
+  노트북 사용을 포함한다"고 정했다. **게이트가 이 방향을 검증할 수 없다**는
+  것이 이 후보의 무게다.
+- IS design의 비목표(상태 줄 색·자리를 설정으로 빼기 등) — **값이 낮다고
+  적어 둔 것들이다.**
+
+## SH가 세운 것 — 저장소에 서 있는 것 다섯
+
+1. **`vt.zig`의 `findBytes`·`findErase`** — needle이 글자 단위다. 통째로
+   받거나 거절하고, Backspace는 이어지는 바이트를 건너뛴다.
+2. **`input.zig`의 find 분기** — `Esc`·`Enter`를 먼저 가로채고 나머지를
+   `hangulLayer`에 넘긴다. **한글 층은 여전히 한 벌이다.**
+3. **`Copy.find_commit`과 `readKeys`의 목적지 갈래** — 확정된 음절이 셸로
+   가느냐 needle로 가느냐를 **`handleKey` 앞에서 읽은 모드**가 정한다.
+4. **`main.zig`의 `drawPrompt`** — `drawRun`을 재사용해 UTF-8과 폭 2를 알고,
+   조합 중인 글자 하나를 색을 맞바꿔 그린다. 그린 결과(`PromptInk`)를
+   돌려주어 게이트가 볼 자리를 만든다.
+5. **검사들** — `vt_test` 52·53·54 · `input_test` 49~57(**56·57은 `readKeys`를
+   파이프로 직접 돌린다**) · `hangul/check.sh` 18·19·19a.
+
+## 프롬프트에서 한글이 지금 할 수 있는 것
+
+| 키 | 무엇 |
+|---|---|
+| 자모 키 | 조합된다. **needle로 안 새고** 확정될 때만 들어간다 |
+| `Enter` | **확정하고 제출한다**(폭포). 확정분이 needle에 먼저 들어간다 |
+| `Esc` | **조합만 버린다.** 한 번 더 누르면 프롬프트, 또 누르면 copy mode |
+| `Backspace` | 조합 중이면 자모 하나, 아니면 needle의 **UTF-8 한 글자** |
+| 한/영 전환 넷 | 프롬프트 안에서도 된다. **상태를 물려받는다**(새 상태가 없다) |
+| 세벌식 기호 되돌림 | 음절과 기호가 **둘 다** needle로 간다(`commit_buf` 여덟 바이트) |
+| 한글 off | ASCII 경로가 **한 글자도 안 바뀐다**(검사 49가 대조군이다) |
 
 ## SH-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
@@ -98,29 +142,44 @@ design 결정 4가 물리친 후보는 **`handleKey`가 그것을 돌려주는**
 `readKeys`의 두 줄 사이에 있어서, `handleKey`만 부르는 검사로는 원리적으로 못
 본다. 판정은 `keys.bytes.len != 0` 한 줄이다.
 
-## SH가 무엇인가
+## SH-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-**`/` 프롬프트에서 한글을 칠 수 있게 한다.** 조합 중인 글자는 검색어 끝에
-반전으로 보이고, 확정되면 검색어의 일부가 된다. HI가 남긴 비목표 셋 중
-하나다.
+전문은 design의 **"SH-M2가 실측한 것"** 절(항목 일곱)에 있다. 요약 넷.
 
-```
-  /한글█ㅅ█        ← ㅅ이 조합 중이라 반전돼 있다
-  /한글█서█        ← 그 자리에서 자라난다
-  /한글서버         ← 확정되면 반전이 풀린다
-```
+**1. 조합 중인 글자를 `text`에 안 붙이는 쪽이 옳았다.** 붙이면 "어디부터
+반전인가"를 바이트 오프셋으로 함께 날라야 하고, 어긋나면 반전이 한 글자
+밀린다. `Prompt.edit: ?u21` 하나로 끝났다 — **조합 중인 글자는 언제나
+하나**이기 때문이다.
 
-**milestone 셋이고 아래층부터 올라간다.**
+**2. "그린 함수가 자기가 칠한 범위를 돌려준다"가 IS-M0의 함정을 없앤다.**
+`dumpStatus`는 `drawStatus`와 같은 y 산수를 다시 해야 했고 어긋나면 언제나
+0이 나온다(증상이 "안 그렸다"와 똑같다). `drawPrompt`는 `PromptInk`로 픽셀
+범위를 그대로 준다.
+
+**3. 정수 하나가 UTF-8을 가른다.** `/가ㄱ`가 `cols=5`면 폭 2를 안 것이고 4면
+바이트를 센 것이다. 첫 시도에 `cols=5 inv=239 ink=17`이었고 **반전 두 칸의
+256픽셀이 239 + 17로 정확히 갈린다** — 배경이 뒤집혔고 그 위에 글자가 있다는
+증거가 한 줄에 함께 있다.
+
+**4. 게이트가 초록인 뒤에 코드를 다시 읽어 하나를 더 잡았다.** `drawRun`이
+`fb.width`에서 멈추므로 128바이트 needle이 격자를 넘어 여백으로 삐져나올 수
+있었다(옛 `drawPrompt`는 `cols`에서 끊었다). 경계를 인자로 받게 고치고 게이트를
+한 번 더 돌렸다. **초록은 "내가 본 것이 맞다"이지 "볼 것을 다 봤다"가 아니다.**
+
+## SH가 무엇이었나
+
+**`/` 프롬프트에서 한글을 칠 수 있게 했다.** HI가 남긴 비목표 셋 중
+하나였고, milestone 셋으로 아래층부터 올라갔다.
 
 | | 무엇 | 검증 |
 |---|---|---|
-| SH-M0 | needle이 UTF-8을 안다(`findBytes`·`findErase`) | **호스트에서 초 단위.** 게이트에 안 간다 |
+| SH-M0 | needle이 UTF-8을 안다(`findBytes`·`findErase`) | **호스트에서 초 단위** |
 | SH-M1 | 칠 수 있다(`commit_buf`·`readKeys`·find 분기) | `input_test` + 게이트 |
 | SH-M2 | 보인다(`drawPrompt` UTF-8 · preedit 반전) | 게이트가 반전 픽셀 두 색을 센다 |
 
-**SH-M1이 끝난 시점에 프롬프트의 한글은 글리프 셋으로 깨져 보인다** —
-`drawPrompt`가 아직 바이트 단위라서이고 **의도된 중간 상태다.** 검색은 맞는
-결과를 내고 화면만 틀린다. 그 갈림이 SH-M2의 경계를 그린다.
+**SH-M1이 끝난 시점에 프롬프트의 한글은 글리프 셋으로 깨져 보였다** —
+`drawPrompt`가 아직 바이트 단위라서였고 **의도된 중간 상태였다.** 검색은 맞는
+결과를 내고 화면만 틀렸다. 그 갈림이 SH-M2의 경계를 그렸다.
 
 ## 조사로 확인한 것 — **다시 조사하지 말 것**
 

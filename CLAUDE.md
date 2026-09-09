@@ -99,15 +99,16 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   `hangul_toggle`이 고른다. 긴 CapsLock은 대문자 잠금이다)** ·
   **Input Status(IS-M0~M1, 2026-09-02·09-09 완료 — 화면 맨 아래 여백에 상태
   줄 하나를 그려 한/영 · 현재 자판 · 대문자 잠금을 보여 준다. HI가 남긴
-  비목표 중 하나였다)**.
+  비목표 중 하나였다)** ·
+  **Search Hangul(SH-M0~M2, 2026-09-09 완료 — copy mode 검색창에서 한글을
+  친다. 조합 중인 글자는 검색어 끝에 반전으로 뜬다. HI가 남긴 비목표 셋 중
+  하나였다)**.
   design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-- **진행 중인 서브프로젝트: Search Hangul(SH-M0~M2, 2026-09-09 착수).**
-  copy mode 검색창에서 한글을 칠 수 있게 한다 — HI가 남긴 비목표 셋 중
-  하나다. design은 `.../specs/2026-09-09-tars-search-hangul-design.md`,
-  SH-M0 plan은 `.../plans/2026-09-09-tars-search-hangul-sh-m0.md`,
-  지금 어디인지는 `HANDOFF.md`의 "바로 다음에 할 것" 절에 있다.
-  **편집은 사용자가 한다** — 아래 "진행 방식"의 2번, 즉 기본 규칙이다
-  (HI의 예외는 이 서브프로젝트에 안 걸린다).
+  **Search Hangul도 편집을 Claude Code가 했다** — 사용자가 2026-09-09에
+  "외출해야 하니 이번 세션의 구현 결정을 전부 위임한다"고 정했다. 아래 HI의
+  예외와 같은 종류이고 이유만 다르다. 기억은
+  `docs/decisions/project_search_hangul.md`.
+  **다음 서브프로젝트는 다시 기본 규칙(사용자가 편집)이다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
