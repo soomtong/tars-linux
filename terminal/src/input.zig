@@ -410,10 +410,47 @@ pub const Copy = union(enum) {
     find_cancel,
     /// 프롬프트 중의 Enter. 검색을 돌리고 첫 매치로 커서를 옮긴다.
     find_submit,
+    /// 프롬프트에서 확정된 글자가 needle로 간다(SH-M1, design 결정 4).
+    ///
+    /// **이 variant를 만드는 것은 `handleKey`가 아니라 `readKeys`다.** 그
+    /// 갈림이 design이 "`find_text` variant를 안 골랐다"고 적은 것과 어긋나
+    /// 보이지만 아니다 — 거기서 말한 후보는 **`handleKey`가 이것을
+    /// 돌려주는** 모양이었고, 그러면 `Enter` 하나가 확정과 제출 둘을 담아야
+    /// 해서 통로가 결국 둘이 된다. 여기서는 그 둘을 **`commit_buf`가 이미
+    /// 갈라 놓았고**, 이 variant는 나르기만 한다.
+    ///
+    /// **payload가 슬라이스가 아니라 값인 것이 계약이다.** `commit_buf`는
+    /// 다음 키가 덮어쓰므로, 한 번의 read에 여러 키가 실려 오면(자동 반복)
+    /// 슬라이스는 마지막 값을 가리키게 된다 — `Action.bytes`를 `readKeys`가
+    /// **즉시 복사하는** 것과 같은 이유이고, 여기서는 복사가 대입이다.
+    find_commit: Commit,
     /// `n` — 목록의 다음(과거 방향) 매치로. **끝에서 감긴다**(CN-M1).
     find_next,
     /// `N` — 목록의 이전(미래 방향) 매치로.
     find_prev,
+
+    /// `find_commit`이 나르는 바이트. **여덟인 이유는 `commit_buf`와 같다**
+    /// (SH design 결정 6) — 음절 넷 + 기호 넷.
+    ///
+    /// **필드 뒤에 있는 것은 취향이 아니라 문법이다** — Zig는 컨테이너 필드
+    /// 사이의 선언을 막는다(`declarations are not allowed between container
+    /// fields`).
+    ///
+    /// `buf`를 0으로 채워 두는 것은 `std.meta.eql` 때문이다.
+    /// `input_test`의 `expectCopy`가 union을 그것으로 비교하는데,
+    /// `undefined`로 두면 `len` 뒤의 쓰레기가 비교에 들어간다.
+    pub const Commit = struct {
+        buf: [8]u8 = [_]u8{0} ** 8,
+        len: u8 = 0,
+
+        pub fn init(bytes: []const u8) Commit {
+            var out: Commit = .{};
+            const n = @min(bytes.len, out.buf.len);
+            @memcpy(out.buf[0..n], bytes[0..n]);
+            out.len = @intCast(n);
+            return out;
+        }
+    };
 };
 
 /// 한 번의 read가 만든 것 전부.
@@ -1439,6 +1476,12 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         if (ev.@"type" != c.EV_KEY) continue;
         // **이 값은 이미 손에 있었다**(HI-M0 실측 3). `readKeys`가
         // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
+        // **모드를 `handleKey` 앞에서 읽는다**(SH design 결정 5). `Enter`가
+        // `.find` → `.copy`로 모드를 바꾸므로, 뒤에서 읽으면 그 키가 확정시킨
+        // 마지막 음절이 needle이 아니라 **셸로 샌다.** 증상이 "검색어의
+        // 마지막 글자가 빠지고 셸에 이상한 글자가 남는다"라 원인에서 멀다.
+        // `input_test`의 검사 56이 이 두 줄의 순서를 정면으로 본다.
+        const to_needle = self.mode == .find;
         const action = self.handleKey(ev.code, ev.value, eventMicros(ev), ctx);
         // **그 키의 결과보다 먼저** 확정된 글자를 옮긴다(HI design 결정 6).
         //
@@ -1451,7 +1494,19 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         const commit = self.takeCommit();
         if (commit.len > 0) {
             redraw = true;
-            for (commit) |byte| {
+            if (to_needle) {
+                // 검색 프롬프트에서 확정된 글자다. **PTY로 한 바이트도 안
+                // 나간다** — 목적지가 needle이고, 그것을 아는 것은 `vt.zig`를
+                // 볼 수 있는 `main.zig`다(IP design 결정 6).
+                //
+                // **copy 명령 목록에 싣는 것이 순서를 지킨다.** 같은 키가
+                // 만든 `.find_submit`이 아래 switch에서 뒤에 실리므로,
+                // 확정 → 제출의 순서가 저절로 맞는다.
+                if (copied < self.copies.len) {
+                    self.copies[copied] = .{ .find_commit = Copy.Commit.init(commit) };
+                    copied += 1;
+                }
+            } else for (commit) |byte| {
                 if (written >= out.len) break;
                 out[written] = byte;
                 written += 1;

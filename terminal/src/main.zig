@@ -1057,6 +1057,17 @@ pub fn main(init: std.process.Init) !void {
                         screen.findCancel();
                         dumpFind(screen, "cancel");
                     },
+                    // 확정된 한글이 needle로 들어간다(SH-M1). **`findChar`가
+                    // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다** —
+                    // 바이트씩 넣으면 128바이트 경계에서 음절이 반만 들어간다.
+                    //
+                    // **이 명령을 만드는 것은 `handleKey`가 아니라
+                    // `readKeys`다**(design 결정 4·5). 그 함수가 모드를
+                    // `handleKey` **앞에서** 읽어 목적지를 가른다.
+                    .find_commit => |cmt| {
+                        screen.findBytes(cmt.buf[0..cmt.len]);
+                        dumpFind(screen, "commit");
+                    },
                     // **이 milestone에서 유일하게 시간이 걸리는 명령이다.**
                     // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
                     // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —

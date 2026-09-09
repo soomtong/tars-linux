@@ -252,6 +252,42 @@ fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
     return error.WrongCommit;
 }
 
+/// **libc를 직접 선언한다**(SH-M1). Zig 0.16의 `std.posix`에는 `pipe`도
+/// `write`도 `close`도 없다 — I/O가 `std.Io`로 옮겨 갔기 때문이다.
+/// `input.zig`가 `read`와 `open`을 같은 이유로 이렇게 선언해 두었다.
+extern "c" fn pipe(fds: *[2]c_int) c_int;
+extern "c" fn write(fd: c_int, buf: [*]const u8, count: usize) isize;
+extern "c" fn close(fd: c_int) c_int;
+
+/// evdev 이벤트 하나를 만든다(SH-M1). **`readKeys`를 직접 돌리는 검사만
+/// 쓴다** — 나머지는 `handleKey`를 부르므로 이벤트가 필요 없다.
+///
+/// `time`을 0으로 두는 것은 tap 판정을 안 건드리기 위해서다. 여기서 보는
+/// 키는 전부 자모와 Enter라 tap과 무관하다.
+fn keyEvent(code: u16, value: i32) input.c.struct_input_event {
+    var ev = std.mem.zeroes(input.c.struct_input_event);
+    ev.@"type" = input.c.EV_KEY;
+    ev.code = code;
+    ev.value = value;
+    return ev;
+}
+
+/// 이벤트들을 파이프에 통째로 넣고 fd 짝을 돌려준다. **쓰는 쪽은 여기서
+/// 닫는다.**
+///
+/// 안 닫으면 `readKeys`의 `read`가 다음 이벤트를 기다리며 막힐 수 있다.
+/// 닫아 두면 한 번의 read가 있는 것을 전부 가져가고(24바이트 × 넷은
+/// `PIPE_BUF` 4096 안이라 쪼개지지 않는다) 그 뒤는 EOF다.
+fn feedEvents(evs: []const input.c.struct_input_event) ![2]c_int {
+    var fds: [2]c_int = undefined;
+    if (pipe(&fds) != 0) return error.PipeFailed;
+    const bytes = std.mem.sliceAsBytes(evs);
+    if (write(fds[1], bytes.ptr, bytes.len) != @as(isize, @intCast(bytes.len)))
+        return error.WriteFailed;
+    _ = close(fds[1]);
+    return fds;
+}
+
 /// 조합 중인 글자를 본다. null이 "조합 중이 아니다"이다.
 fn expectPreedit(state: *input.State, code: u16, want: ?u21) !void {
     const got = state.preedit();
@@ -1393,6 +1429,121 @@ pub fn main() !void {
     try expect(&fsb, K.KEY_LEFTSHIFT, 0, "");
 
     std.debug.print("input_test: 검색 프롬프트의 한글 OK\n", .{});
+
+    // 검사 56. **확정된 음절이 셸이 아니라 needle로 간다**(SH design 결정 4·5).
+    //
+    // **`readKeys`를 직접 돌리는 이 파일의 첫 검사다.** 여태 `handleKey`만
+    // 봤는데, 결정 5가 말하는 사실("모드를 `handleKey` **앞에서** 읽는다")은
+    // 그 함수 안에 아예 없다 — `readKeys`의 두 줄 **사이**에 있다.
+    //
+    // 파이프를 파는 이유는 그 함수가 fd에서 읽기 때문이다. 이벤트 넷을 한
+    // 번의 write로 넣으면 read 한 번이 전부 가져간다(PIPE_BUF가 4096이고
+    // 이벤트 하나가 24바이트다).
+    {
+        var fk: input.State = .{ .hangul_layout = .dubeol };
+        fk.hangul_on = true;
+        fk.mode = .find;
+
+        // `한` + Enter. **Enter가 이 검사의 심장이다** — 그 키가 모드를
+        // `.copy`로 바꾸므로, `readKeys`가 모드를 뒤에서 읽으면 마지막 음절이
+        // needle이 아니라 **셸로 샌다.**
+        const evs = [_]input.c.struct_input_event{
+            keyEvent(K.KEY_G, 1), keyEvent(K.KEY_K, 1),
+            keyEvent(K.KEY_S, 1), keyEvent(K.KEY_ENTER, 1),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+
+        var out: [64]u8 = undefined;
+        const keys = input.readKeys(&fk, fds[0], &out, .{});
+
+        // **아무것도 셸로 안 샜다.** 이 한 줄이 결정 5의 판정 전부다 —
+        // 뒤에서 읽는 구현은 여기서 `한`(세 바이트)을 내놓는다.
+        if (keys.bytes.len != 0) {
+            std.debug.print(
+                "FAIL: {d} byte(s) \"{s}\" leaked to the shell from the find prompt\n",
+                .{ keys.bytes.len, keys.bytes },
+            );
+            return error.LeakedToPty;
+        }
+        // 확정분이 먼저, 제출이 그다음이다. **순서가 뒤집히면 빈 검색어로
+        // 검색한다.**
+        if (keys.copies.len != 2) {
+            std.debug.print(
+                "FAIL: the find prompt made {d} copy command(s), want 2\n",
+                .{keys.copies.len},
+            );
+            return error.WrongCopyCount;
+        }
+        switch (keys.copies[0]) {
+            // **이름이 `cm`이 아니다.** 위쪽 copy mode 검사의 `State`가 그
+            // 이름을 쓰고 있고 Zig는 이름 가리기를 막는다(HI-M1 실측 8 ·
+            // SP-M0 실측 9). 이 파일에서 두 번째로 밟은 자리다.
+            .find_commit => |cmt| {
+                if (!std.mem.eql(u8, cmt.buf[0..cmt.len], "한")) {
+                    std.debug.print(
+                        "FAIL: the needle got \"{s}\", want \"한\"\n",
+                        .{cmt.buf[0..cmt.len]},
+                    );
+                    return error.WrongCommit;
+                }
+            },
+            // **capture 없이 쓴다.** union의 `else` 갈래에서 payload를 잡으면
+            // 남은 variant들의 타입이 같아야 하고, 여기서는 안 같다.
+            else => {
+                std.debug.print(
+                    "FAIL: the first copy command is .{s}, want .find_commit\n",
+                    .{@tagName(keys.copies[0])},
+                );
+                return error.WrongCopyCommand;
+            },
+        }
+        // **`!=`로 태그를 비교할 수 없다** — union에는 `==`가 없다(CN-M1
+        // Task 1이 `std.meta.eql`을 쓴 것과 같은 자리다). 여기서는 payload가
+        // 없는 variant 하나만 보면 되므로 `activeTag`가 맞다.
+        if (std.meta.activeTag(keys.copies[1]) != .find_submit) {
+            std.debug.print(
+                "FAIL: the second copy command is .{s}, want .find_submit\n",
+                .{@tagName(keys.copies[1])},
+            );
+            return error.WrongCopyCommand;
+        }
+    }
+
+    // 검사 57. **대조군 — 셸에서는 그대로 PTY로 나간다.** 이것이 없으면
+    // "언제나 needle로 보낸다"는 구현도 검사 56을 통과하고, 그 구현은 셸의
+    // 한글을 통째로 없앤다.
+    {
+        var nk: input.State = .{ .hangul_layout = .dubeol };
+        nk.hangul_on = true;
+
+        const evs = [_]input.c.struct_input_event{
+            keyEvent(K.KEY_G, 1), keyEvent(K.KEY_K, 1),
+            keyEvent(K.KEY_S, 1), keyEvent(K.KEY_ENTER, 1),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+
+        var out: [64]u8 = undefined;
+        const keys = input.readKeys(&nk, fds[0], &out, .{});
+        // 확정된 `한` 뒤에 Enter의 CR이다 — **순서가 곧 HI-M1의 계약이다.**
+        if (!std.mem.eql(u8, keys.bytes, "한\r")) {
+            std.debug.print(
+                "FAIL: the shell got \"{s}\", want \"한\\r\"\n",
+                .{keys.bytes},
+            );
+            return error.UnexpectedBytes;
+        }
+        if (keys.copies.len != 0) {
+            std.debug.print(
+                "FAIL: the shell path made {d} copy command(s), want 0\n",
+                .{keys.copies.len},
+            );
+            return error.WrongCopyCount;
+        }
+    }
+
+    std.debug.print("input_test: 확정된 음절이 모드를 따라 갈린다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
