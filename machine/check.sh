@@ -35,6 +35,16 @@ fi
 LOG="$(mktemp)"
 VARS="$(mktemp)"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd "$VARS"
+
+# RM-M1: NVMe로 물릴 디스크. **이 milestone은 이것을 마운트하지 않는다** —
+# init이 /dev/vda를 하드코딩하고 있어서(init/src/main.zig:65) 못 찾는다.
+# 여기서 보는 것은 "커널이 NVMe 컨트롤러를 잡는다"까지이고, 그 위에 파일을
+# 두고 읽는 것은 RM-M2다.
+DISK="$(mktemp)"
+dd if=/dev/zero of="$DISK" bs=1M count=8 status=none
+mkfs.ext2 -q -F "$DISK"
+
+MONITOR_PORT=45471
 QEMU_PID=""
 
 cleanup() {
@@ -45,17 +55,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# q35는 PCIe 기계다. RM-M1이 여기에 MSI와 USB와 NVMe를 얹으므로 M0에서부터
-# q35로 시작한다 — 기계를 나중에 바꾸면 M1의 실패가 "기계 탓인가 장치 탓인가"로
-# 갈리지 않는다.
+# q35는 PCIe 기계다. 그래서 장치들이 legacy INTx가 아니라 MSI로 인터럽트를
+# 받고, 커널이 그것을 협상한 증거가 _OSC 줄에 남는다.
+#
+# **i8042=off가 이 체인의 핵심이다**(RM-M1, design 결정 7). PS/2 컨트롤러를
+# 남겨 두면 init이 capability로 첫 키보드를 고를 때 그쪽을 잡아서, usb-kbd가
+# 있으나 없으나 게이트가 초록이다 — **USB 경로가 아예 안 밟힌다.** 끄고 나면
+# 이 게스트에 키보드가 USB 하나뿐이라 판정이 진짜가 된다.
+# IS-M1 실측 4와 같은 종류다: 같은 것을 두 층이 지킬 때 위층을 확인하려면
+# 아래층을 먼저 꺼야 한다.
 qemu-system-x86_64 \
-  -machine q35 \
+  -machine q35,i8042=off \
   -m 512 \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file="$VARS" \
   -cdrom ../out/tars.iso \
+  -device qemu-xhci,id=xhci \
+  -device usb-kbd,bus=xhci.0 \
+  -drive file="$DISK",if=none,id=cfg,format=raw \
+  -device nvme,drive=cfg,serial=tarscfg \
   -serial file:"$LOG" \
   -display none \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
   -no-reboot &
 QEMU_PID=$!
 
@@ -156,6 +177,66 @@ if grep -aq "tars-init: giving up on terminal" "$LOG"; then
   fail "init gave up on the terminal even though simpledrm came up" \
     "tars-init: started terminal" "dri/card0"
 fi
+
+# ── RM-M1: 노트북 장치 넷 ──────────────────────────────────────────────
+
+# 판정 4. PCIe가 MSI를 협상했다. q35의 _OSC 협상 결과에 MSI가 들어 있어야
+# 장치들이 legacy INTx 대신 MSI로 인터럽트를 받는다. CONFIG_PCI_MSI가
+# 꺼져 있으면 커널이 그 비트를 아예 요청하지 않는다.
+if ! grep -a "_OSC: OS supports" "$LOG" | grep -aq "MSI"; then
+  fail "the kernel never negotiated MSI with the PCIe host bridge" \
+    "_OSC" "PCI"
+fi
+echo "PCIe negotiated MSI"
+
+# 판정 5. xHCI 컨트롤러가 붙었다.
+if ! grep -aq "xHCI Host Controller" "$LOG"; then
+  fail "the xHCI controller never came up" "xhci" "usb"
+fi
+
+# 판정 6. **이 milestone의 심장이다.** HID가 evdev까지 왔고, init이 고른
+# 키보드가 USB다. i8042=off이므로 PS/2가 없고, 그래서 이 줄이 "USB 경로가
+# 통째로 서 있다"를 말한다 — 커널의 HID 층 · evdev · init의 capability 탐색이
+# 한 줄에 다 걸려 있다.
+if ! grep -a "tars-init: keyboard device" "$LOG" | grep -aq "USB Keyboard"; then
+  fail "init did not pick the USB keyboard (is i8042 still on? did USB_HID build?)" \
+    "tars-init: keyboard device" "input: " "hid-generic"
+fi
+echo "init picked the USB keyboard with no PS/2 in the machine"
+
+# 판정 7. NVMe 컨트롤러를 잡았다. 마운트는 안 한다 — init이 /dev/vda를
+# 하드코딩하고 있어서 못 읽는다(RM-M2가 그것을 넓힌다).
+if ! grep -aq "nvme nvme0: pci function" "$LOG"; then
+  fail "the NVMe controller never came up" "nvme" "pci"
+fi
+echo "the NVMe controller came up"
+
+# ── 그리고 실제로 친다 ─────────────────────────────────────────────────
+#
+# "장치가 보인다"와 "키가 화면에 닿는다"는 다른 일이다. 앞의 판정 여섯은
+# 전부 커널이 만든 줄이거나 init이 연 결과이고, 여기부터가 **USB 키보드로
+# 친 글자가 PTY를 지나 격자에 그려지는가**다. CM·HI·SH의 체인이 전부
+# 이렇게 판정한다.
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor" "terminal: grid"
+
+echo "=== typing 'usb' on the USB keyboard ==="
+for k in u s b; do
+  echo "sendkey $k" >&3
+  sleep 0.4
+done
+sleep 2
+
+# 마지막 프레임의 화면 줄에 그 세 글자가 있어야 한다. 셸의 입력줄에 에코된다.
+if ! grep -a "terminal: screen>" "$LOG" | tail -20 | grep -aq "usb"; then
+  fail "keys typed on the USB keyboard never reached the grid" \
+    "terminal: screen>" "terminal: key>"
+fi
+echo "keys from the USB keyboard reached the grid"
 
 echo "PASS"
 exit 0
