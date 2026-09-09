@@ -1,40 +1,63 @@
-# HANDOFF: Search Hangul을 시작했다 — SH-M0의 Task 1 Step 1에서 멈췄다
+# HANDOFF: Search Hangul — SH-M0을 닫았다 (needle이 UTF-8을 안다)
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **새 서브프로젝트 Search Hangul(SH)을 골라
-design과 plan을 썼고 코드는 아직 한 줄도 안 바꿨다.**
+`main`, working tree 깨끗함. **SH-M0이 끝났다** — `find_buf`가 글자 단위가
+됐고 게이트 아홉 체인 3/3이 **18분 36.52초**로 초록이다(직전 기준선 18분
+32.80초에서 +3.7초, 잡음 범위).
 
 | | 파일 | 커밋 |
 |---|---|---|
 | design | `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md` | `1f84bc5` |
 | plan (SH-M0) | `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m0.md` | `9d89970` |
+| plan (SH-M1) | `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m1.md` | 아래 |
+| Task 1 | `findBytes` — 통째로 받거나 거절 · `findChar`가 껍데기 | `c8f3460` |
+| Task 2 | `findErase`가 UTF-8 한 글자를 지운다 | `2e751af` |
 
 ```bash
 git status --short     # 비어 있어야 한다
-git log --oneline -3   # 9d89970 Plan SH-M0... / 1f84bc5 Design a way... / fa34280 Close out IS-M1...
+docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
+  bash -c 'zig build test'   # 마지막이 PASS, vt_test의 마지막 검사가 54
 ```
 
-## 바로 다음에 할 것: SH-M0의 Task 1 Step 1
+## 바로 다음에 할 것: SH-M1
 
-**plan의 Task 1 Step 1을 그대로 하면 된다** — `terminal/src/vt_test.zig`의
-함수 끝(검사 51의 print 뒤, `PASS` 앞)에 **검사 52·53**을 넣는 것이다.
-넣을 코드는 plan 파일에 통째로 있다.
+plan이 `docs/superpowers/plans/2026-09-09-tars-search-hangul-sh-m1.md`에
+Task 넷으로 있다. **넣을 코드가 통째로 들어 있다.**
 
-**편집은 사용자가 한다** — HI의 예외("사용자가 macOS 한글 입력기를 직접 만들어
-본 영역")는 여기 안 걸린다. **명령 실행은 Claude Code가 한다.**
+| Task | 무엇 | 검증 |
+|---|---|---|
+| 1 | find 분기가 `hangulLayer`를 부른다 · `commit_buf` 여덟 바이트 | `input_test` 검사 49~55 |
+| 2 | `Copy.find_commit` · `readKeys`의 목적지 갈래 · `main.zig` 배선 | `input_test` 검사 56·57 |
+| 3 | `hangul/check.sh`의 검사 18 | 체인 하나만 먼저 |
+| 4 | 루트 게이트 3/3 | 18분대 |
 
-그 뒤 Claude가 이것을 돌려 **컴파일 에러**를 확인한다(그것이 정상이다).
+## SH-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+**1. `./check.sh`를 호스트에서 직접 돌리면 안 된다 — plan의 명령 줄이
+틀렸다.** macOS의 `make`는 3.81이고 리눅스 커널 Makefile이 `GNU Make >= 4.0`을
+요구해서 **첫 체인의 커널 빌드에서 2.7초 만에 죽는다.** 체인들은 `nproc`도
+쓴다. 맞는 명령은 컨테이너 안이다.
 
 ```bash
-docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
-  bash -c 'zig build test'
-# 기대: error: no member named 'findBytes' in struct 'vt.Screen'
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } 2> /tmp/gate.time
 ```
 
-**기준선은 이미 잡혀 있다**(2026-09-09 실측) — 위 명령이 `PASS`로 끝나고
-`vt_test`의 마지막 검사가 **51**이다(`copy 커서도 한글 위에서 두 칸이다 OK`).
-그래서 새 검사가 **52부터**다.
+**2. 새 검사가 예측한 그 모양으로 실패했다.** Task 1은 컴파일 에러
+(`no field or member function named 'findBytes' in 'vt.Screen'`), Task 2는
+런타임 실패(`FAIL: Backspace가 '가▒'를 남겼다`)다. **둘이 다른 종류인 것이
+Task를 자른 방식의 값이다** — Task 1은 부를 함수가 없는 것이고 Task 2는 함수는
+있는데 뜻이 틀린 것이다.
+
+**3. `findChar`가 껍데기가 됐는데 옛 검사 18·19·20이 한 글자도 안 바뀐 채
+통과했다.** 넘칠 때의 규칙이 `findBytes` 한 자리로 모였고 뜻은 안 바뀌었다는
+증거다. `main.zig`의 `find_char` 갈래도 한 글자도 안 바꿨다.
+
+**4. Zig의 `.?`가 `orelse`보다 짧게 쓰이는 자리가 검사 안에 있다.** 검사 52는
+`orelse return error.NoFindPrompt`로 열림을 확인하고, 그 뒤로는 이미 열려
+있음이 보장되므로 `.?`를 쓴다 — **다른 규칙이 아니라 같은 사실을 두 번 안
+적는 것이다.**
 
 ## SH가 무엇인가
 
