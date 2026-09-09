@@ -750,4 +750,69 @@ if [ "$INV" != "2" ]; then
 fi
 echo "the cursor covers both cells of a committed 가 (ink right=${INK_RIGHT})"
 
+# ── 검사 18: 검색창에서 한글을 친다 (SH-M1) ───────────────────────────
+#
+# **이 체인이 SH-M1의 사슬 전체를 밟는 유일한 자리다.**
+#   copy mode 진입 → `/`가 프롬프트를 연다(한/영 상태를 물려받는다)
+#   → 자판이 자모를 만들고 hangul.zig가 음절로 모은다
+#   → 확정분이 **PTY가 아니라** find_buf로 간다(SH design 결정 4·5)
+#   → Enter가 확정하고 제출해서 화면의 `가`를 찾는다
+#
+# **음성 검사가 여기서도 값이다.** `key>` 줄은 PTY로 바이트가 나갈 때만
+# 찍히므로(main.zig의 `if (keys.bytes.len > 0)`), 개수가 안 늘어나는 것이 곧
+# "조합도 확정도 셸로 안 샜다"이다. 샜다면 셸에 `가`가 찍히고 검색 결과가
+# 아니라 명령행이 바뀐다.
+#
+# **`find> open`을 먼저 본다**(SH design 위험 3). `findOpen()`은 copy mode
+# 안에서만 열리므로, copy mode 진입이 실패하면 그 뒤의 판정이 전부 "한글이
+# 안 된다"처럼 보인다 — 2026-09-02에 실제로 그렇게 잘못 보고한 적이 있다.
+#
+# **검사 17이 끝난 자리를 그대로 쓴다** — 화면에 `가 `가 있고(ctrl-l로 지운
+# 뒤라 깨끗하다) 한글이 켜져 있다(검사 15가 켰고 16이 그대로 뒀다).
+# **한글이 켜진 채로 프롬프트가 열리는 것 자체가 결정 1의 검사다.**
+echo "=== enter copy mode, open the prompt, type 가, submit ==="
+KEYS_BEFORE="$(key_lines)"
+type_keys meta_l-shift-c
+sleep 1
+type_keys slash
+sleep 1
+if ! grep -aq 'terminal: find> open' "$LOG"; then
+  report_failure "the search prompt never opened, so copy mode was not active"
+fi
+
+# 3-P3에서 `k`가 초성 ㄱ, `f`가 중성 ㅏ다(위 검사 3~11이 쓰는 그 키다).
+type_keys k f
+sleep 1
+
+# 조합 중에는 needle이 아직 안 자란다. **preedit으로 확인한다** — 이 줄이
+# "자모가 needle로 새지 않았다"까지 함께 말한다.
+PRE="$(hangul_field preedit)"
+if [ "$PRE" != "가" ]; then
+  report_failure "the prompt is composing preedit=${PRE}, expected 가"
+fi
+
+type_keys ret
+sleep 1
+
+# **확정분이 needle에 닿았다.** `find> commit`은 main.zig의 `.find_commit`
+# 갈래만 찍는다 — 문구가 이 파일과 main.zig 양쪽에 있고, 한쪽을 고치면 다른
+# 쪽도 고쳐야 한다.
+if ! grep -aq 'terminal: find> commit needle=가 len=3' "$LOG"; then
+  report_failure "the committed 가 never reached the needle (no find> commit line)"
+fi
+
+# **검색이 매치를 만들었다.** 화면에 `가 `가 있으므로 하나 이상이어야 한다.
+SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
+MATCHES="$(echo "$SUBMIT" | sed -E 's/.*matches=([0-9]+).*/\1/')"
+if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
+  report_failure "the hangul needle found ${MATCHES:-no} match(es): ${SUBMIT}"
+fi
+
+# **음성 검사.** 조합도 확정도 PTY로 안 나갔다.
+KEYS_AFTER="$(key_lines)"
+if [ "$KEYS_AFTER" != "$KEYS_BEFORE" ]; then
+  report_failure "the prompt leaked to the shell (key> ${KEYS_BEFORE} -> ${KEYS_AFTER})"
+fi
+echo "the search prompt composed 가 and found ${MATCHES} match(es) without leaking to the shell"
+
 echo "HI check PASS"
