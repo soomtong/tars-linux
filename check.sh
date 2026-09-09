@@ -164,6 +164,7 @@ CHAINS=(
   "TR-M2:./render/check.sh"
   "CM-M2:./copy/check.sh"
   "HI-M3:./hangul/check.sh"
+  "RM-M0:./machine/check.sh"
 )
 
 # 진입 검사는 **첫 부팅 전에** 아홉 개를 전부 훑는다. 하나라도 빠뜨렸으면
