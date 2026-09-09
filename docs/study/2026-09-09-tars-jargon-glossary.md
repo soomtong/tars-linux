@@ -44,13 +44,19 @@ milestone 번호를 붙여 부른다.
 | CC | Carryover Cleanup | 이월 숙제(안 쓰는 config·도구·파일)를 없앤 정리 |
 | HI | Hangul Input | 한글 자판 넷과 영문 자판 둘, 한/영 전환 키 넷 |
 | IS | Input Status | 화면 맨 아래 여백에 한/영·자판·대문자 잠금을 보여주는 상태 줄 |
-| SH | Search Hangul | copy mode 검색창(`/`)에서 한글을 칠 수 있게 하는 것(진행 중) |
+| SH | Search Hangul | copy mode 검색창(`/`)에서 한글을 칠 수 있게 하는 것 |
+| FP | Find Paste | 검색창에서 `Cmd+V`로 클립보드를 needle에 붙이는 것 |
 
 `-M0`, `-M1`, `-M2`처럼 뒤에 붙는 숫자는 그 서브프로젝트 안의 milestone
 순번이다. 숫자 자체에 뜻이 있는 게 아니라 이 서브프로젝트를 몇 단계로
 쪼갰고 지금 몇 번째인가를 가리킨다. 예를 들어 HI-M3는 Hangul Input의 네
 번째 milestone이고, HI가 끝났다는 것은 HI-M0부터 HI-M3까지 계획한
 milestone을 전부 마쳤다는 뜻이다.
+
+**FP가 왜 `SP`가 아니라 `FP`인가.** `SP`는 이미 Search Position(2026-08-29·
+30)이 쓴다. 그리고 코드의 어휘 자체가 search가 아니라 find다 —
+`find_open`·`findBytes`·`findNeedle`·`find_buf`. 저장소가 실제로 쓰는 말을
+따라 이름을 정했다.
 
 ## 2. 프로젝트 운영 용어
 
@@ -163,6 +169,29 @@ Pseudo Terminal. 커널이 제공하는 가상 터미널 장치 쌍(master/slave
 문자 하나로 표현 못 하는 키를 이스케이프 시퀀스로 묶어 이 파이프에 흘려
 보내는 이유가 여기서 나온다(자세한 내용은 `2026-08-15-keyboard-escape-
 sequence-crash-course.md` 참고).
+
+### needle
+
+검색어를 가리키는 관용어(찾을 바늘, 건초더미에서 찾는다는 비유). 코드의
+변수·함수 이름(`find_buf`, `findNeedle`, `screen.findNeedle()`)과 게이트
+로그(`find> overlay text=/가`)가 실제로 이 말을 쓴다. Copy Navigation이
+검색을 만들 때부터 자리 잡은 이름이고, Search Position의 `/needle [3/12]`
+표시, Search Hangul의 글자 단위 조합, Find Paste의 붙여넣기가 전부 이
+버퍼 하나(`find_buf`)를 채우는 이야기다.
+
+### bracketed paste / OSC 52
+
+터미널이 붙여넣은 텍스트를 **타이핑과 구별**할 수 있게 하는 두 표준 기능.
+bracketed paste는 붙여넣는 내용을 이스케이프 시퀀스로 감싸 셸이 "이건
+사람이 친 게 아니라 붙인 것"이라고 알게 하고, OSC 52는 셸이 이스케이프
+시퀀스로 시스템 클립보드를 읽고 쓰게 하는 통로다. TARS는 Copy Mode 결정
+9에서 bracketed paste를 넣지 않기로 했다(셸이 그 모드를 받는지 확인한
+적이 없어서) — 그래서 `dumpPaste`가 붙여넣은 개행을 실행으로 감수한다.
+OSC 52도 같은 이유로 비목표다: TARS의 클립보드는 `y`(yank)가 채우는
+`Screen.clip` 하나뿐이고, 프로세스 간 시스템 클립보드는 다루지 않는다.
+Find Paste가 여러 줄 붙여넣기에서 **첫 줄만** 넣기로 한 것도(결정 5) 이
+빈 자리의 결과다 — bracketed paste가 없어 개행이 곧 줄바꿈이자 검색에서는
+영원히 안 맞는 needle이 되기 때문이다.
 
 ### initrd
 
