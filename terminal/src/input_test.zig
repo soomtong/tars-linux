@@ -1281,5 +1281,118 @@ pub fn main() !void {
 
     std.debug.print("input_test: capslock OK\n", .{});
 
+    // ── SH-M1: 검색 프롬프트의 한글 ──────────────────────────────────────
+    //
+    // **State를 새로 만든다.** 위의 `hg`는 tap 상태와 대문자 잠금이 묻어
+    // 있고, 여기서 보는 것은 모드와 한글 층의 관계뿐이다.
+    var fp: input.State = .{ .hangul_layout = .dubeol };
+
+    // 검사 49. **대조군 — 한글이 꺼져 있으면 프롬프트가 한 글자도 안 바뀐다.**
+    // 이 검사가 없으면 아래 여섯이 전부 "한글이 되는가"만 보고, ASCII 경로가
+    // 깨진 것을 아무도 모른다(SH design 결정 4의 마지막 줄).
+    try expect(&fp, K.KEY_LEFTMETA, 1, "");
+    try expect(&fp, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&fp, K.KEY_C, .enter);
+    try expect(&fp, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&fp, K.KEY_LEFTMETA, 0, "");
+    try expectCopy(&fp, K.KEY_SLASH, .find_open);
+    try expectCopy(&fp, K.KEY_G, .{ .find_char = 'g' });
+    try expectCopy(&fp, K.KEY_K, .{ .find_char = 'k' });
+
+    // 검사 50. **프롬프트 안에서 한/영을 켤 수 있다**(design 결정 1).
+    // 프롬프트가 지금의 상태를 물려받으므로, 영문으로 열린 채 한글을 치려면
+    // 여기서 바꾸는 길이 있어야 한다. `hangulLayer`가 이 갈래를 `hangul_on`
+    // 검사보다 **앞**에 두고 있어 꺼져 있을 때도 닿는다.
+    try expect(&fp, K.KEY_LEFTSHIFT, 1, "");
+    try expectHangul(&fp, K.KEY_SPACE, "", null);
+    try expect(&fp, K.KEY_LEFTSHIFT, 0, "");
+    if (!fp.hangul_on) {
+        std.debug.print("FAIL: Shift+Space in the find prompt did not turn hangul on\n", .{});
+        return error.ToggleFailed;
+    }
+    if (fp.mode != .find) {
+        std.debug.print("FAIL: Shift+Space closed the find prompt\n", .{});
+        return error.FindModeLost;
+    }
+
+    // 검사 51. **자모 키가 needle이 아니라 조합으로 간다.** `gks`가 `한`이다.
+    // **`.find_char`로 새면 needle이 `gks`가 되고**, 그것이 이 서브프로젝트가
+    // 없애려는 바로 그 증상이다(design "왜 지금인가").
+    try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
+    try expectHangul(&fp, K.KEY_K, "", '하');
+    try expectHangul(&fp, K.KEY_S, "", '한');
+
+    // 검사 52. **Backspace가 두 갈래다.** 조합 중이면 자모 하나(`한`→`하`),
+    // 아니면 needle의 마지막 글자다. **갈래를 나누는 것은 `hangul.erase`가
+    // 주는 null 하나**이고, 그래서 find 분기에 조건문이 안 생긴다.
+    try expectHangul(&fp, K.KEY_BACKSPACE, "", '하');
+    try expectHangul(&fp, K.KEY_BACKSPACE, "", 'ㅎ');
+    try expectHangul(&fp, K.KEY_BACKSPACE, "", null);
+    // 조합이 없으니 이제 needle을 지운다.
+    try expectCopy(&fp, K.KEY_BACKSPACE, .find_erase);
+
+    // 검사 53. **Esc는 조합만 버린다**(design 결정 3). 프롬프트는 살아 있고
+    // 모드도 `.find` 그대로다 — `Esc`가 한 겹씩 벗기는 규칙(CN-M1 결정 9)이
+    // 셋째 겹으로 늘어난 자리다.
+    //
+    // **버린다는 것이 요점이다** — 확정하면 `Esc`가 취소가 아니라 입력이 된다.
+    try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
+    try expectHangul(&fp, K.KEY_K, "", '하');
+    try expectHangulAt(&fp, K.KEY_ESC, 1, 0, "", null);
+    if (fp.mode != .find) {
+        std.debug.print("FAIL: Esc on a composing syllable also closed the prompt\n", .{});
+        return error.FindModeLost;
+    }
+    // **두 번째 Esc가 프롬프트를 닫는다.** 조합이 없으니 평소의 갈래다.
+    try expectCopy(&fp, K.KEY_ESC, .find_cancel);
+    if (fp.mode != .copy) {
+        std.debug.print("FAIL: the second Esc did not fall back to copy mode\n", .{});
+        return error.FindCancelLeftMode;
+    }
+
+    // 검사 54. **Enter가 확정하고 제출한다**(design 결정 3). 둘이 **함께**
+    // 나오는 것이 이 검사의 전부다 — `Action`은 하나만 담으므로 확정분은
+    // `commit_buf`를 타고, `expectCommit`이 그것을 본다.
+    //
+    // **`Esc`와 다른 규칙인 것이 모순이 아니다.** `Esc`는 취소라 겹이,
+    // `Enter`는 진행이라 폭포가 자연스럽다.
+    try expectCopy(&fp, K.KEY_SLASH, .find_open);
+    try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
+    try expectHangul(&fp, K.KEY_K, "", '하');
+    try expectHangul(&fp, K.KEY_S, "", '한');
+    try expectCopy(&fp, K.KEY_ENTER, .find_submit);
+    try expectCommit(&fp, K.KEY_ENTER, "한");
+    try expectPreedit(&fp, K.KEY_ENTER, null);
+    if (fp.mode != .copy) {
+        std.debug.print("FAIL: Enter in the find prompt did not leave the prompt\n", .{});
+        return error.FindSubmitStayed;
+    }
+    try expectCopy(&fp, K.KEY_ESC, .exit);
+
+    // 검사 55. **세벌식의 기호 되돌림이 프롬프트에서 둘을 함께 싣는다**
+    // (design 결정 6). 셸에서는 음절이 `commit_buf`로, 기호가 `.bytes`로
+    // 갈라져 나갔다(HI-M2 실측 7) — **목적지가 둘이었기 때문이다.**
+    // 프롬프트에서는 목적지가 needle 하나뿐이라 통로 하나에 둘을 실어야
+    // 하고, 그것이 `commit_buf`를 여덟 바이트로 넓히는 유일한 이유다.
+    //
+    // 3-P3에서 `k`는 초성 ㄱ, `f`는 중성 ㅏ, `Shift+M`은 숫자 `1`이다.
+    var fsb: input.State = .{ .hangul_layout = .sebeol_3p3 };
+    fsb.hangul_on = true;
+    try expect(&fsb, K.KEY_LEFTMETA, 1, "");
+    try expect(&fsb, K.KEY_LEFTSHIFT, 1, "");
+    try expectCopy(&fsb, K.KEY_C, .enter);
+    try expect(&fsb, K.KEY_LEFTSHIFT, 0, "");
+    try expect(&fsb, K.KEY_LEFTMETA, 0, "");
+    try expectCopy(&fsb, K.KEY_SLASH, .find_open);
+    try expectHangul(&fsb, K.KEY_K, "", 'ㄱ');
+    try expectHangul(&fsb, K.KEY_F, "", '가');
+    try expect(&fsb, K.KEY_LEFTSHIFT, 1, "");
+    // **`.bytes`가 아니라 `.redraw`다.** 프롬프트에서 `.bytes`를 돌려주면
+    // 그 기호가 PTY로 나가서 **셸에 `1`이 찍힌다.**
+    try expectHangul(&fsb, K.KEY_M, "가1", null);
+    try expect(&fsb, K.KEY_LEFTSHIFT, 0, "");
+
+    std.debug.print("input_test: 검색 프롬프트의 한글 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

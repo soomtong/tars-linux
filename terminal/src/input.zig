@@ -642,9 +642,15 @@ pub const State = struct {
     /// 글자가 있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 **그 통로를
     /// 비우는 자리를 한 곳으로 못 박는** 쪽을 골랐다.
     ///
-    /// **한 키가 확정시키는 음절은 많아야 하나다.** 한글 음절은 UTF-8로
-    /// 언제나 세 바이트라(U+0800~U+FFFF) 넷이면 넉넉하다.
-    commit_buf: [4]u8 = undefined,
+    /// **한 키가 확정시키는 것은 많아야 둘이다**(SH design 결정 6). 음절
+    /// 하나는 UTF-8로 언제나 세 바이트지만(U+0800~U+FFFF), 세벌식의 기호
+    /// 되돌림은 **조합 중이던 음절과 그 기호를 함께** 내보낸다.
+    ///
+    /// **셸에서는 넷으로 충분했다**(HI-M2 실측 7). 목적지가 둘이라 음절은
+    /// 이 버퍼로, 기호는 `.bytes`로 갈라 보냈기 때문이다. **검색 프롬프트는
+    /// 목적지가 needle 하나뿐이라** 통로 하나에 둘을 실어야 한다 — 여덟은
+    /// 음절 4 + 기호 4다.
+    commit_buf: [8]u8 = undefined,
     commit_len: usize = 0,
 
     /// CapsLock과 왼쪽 Ctrl의 tap 상태(HI-M3, design 결정 8).
@@ -833,7 +839,28 @@ pub const State = struct {
     /// 보내는 쪽을 고른 것은, 잘못된 바이트가 셸에 도착하면 그 뒤의 모든
     /// 글자가 밀려서 증상이 원인에서 멀어지기 때문이다.
     fn pushCommit(self: *State, cp: u21) void {
-        self.commit_len = std.unicode.utf8Encode(cp, &self.commit_buf) catch 0;
+        var utf8: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(cp, &utf8) catch return;
+        self.appendCommit(utf8[0..n]);
+    }
+
+    /// 확정 통로의 **뒤에** 바이트를 잇는다(SH-M1).
+    ///
+    /// **덮어쓰지 않는 것이 SH design 결정 6이다.** 한 키가 음절과 기호를
+    /// 함께 확정시키는 경로가 있고(세벌식 기호 되돌림), 검색 프롬프트에서는
+    /// 그 둘의 목적지가 같다.
+    ///
+    /// 넘치면 **뒤를 버린다.** 여덟 바이트는 음절 넷과 기호 넷이라 닿을 수
+    /// 없는 경계지만, 자르는 자리를 정해 두지 않으면 그 자리가 없다.
+    ///
+    /// **비우는 자리는 여전히 `takeCommit` 하나다** — 한 키가 끝날 때마다
+    /// `readKeys`가 비우므로 키를 건너 쌓이지 않는다.
+    fn appendCommit(self: *State, bytes: []const u8) void {
+        for (bytes) |b| {
+            if (self.commit_len >= self.commit_buf.len) return;
+            self.commit_buf[self.commit_len] = b;
+            self.commit_len += 1;
+        }
     }
 
     /// 방금 확정된 글자를 가져간다. 없으면 빈 슬라이스다.
@@ -1178,15 +1205,56 @@ pub const State = struct {
         // 붙여넣기로 동작하게 된다 — 그것은 검색 기록과 같은 종류의 기능이라
         // design이 비워 둔 자리다.
         if (self.mode == .find) {
+            // **Esc와 Enter를 한글 층보다 먼저 가로챈다**(SH design 결정 3).
+            //
+            // 둘 다 `hangulLayer`에 그냥 넘기면 뜻이 어긋난다. Esc는 거기서
+            // **확정**되는데(자모가 아닌 키의 갈래) 우리는 **버려야** 하고,
+            // Enter는 확정된 뒤 null이 돌아와 아래 ASCII 갈래로 흘러
+            // `find_char = '\r'`이 된다.
             switch (code) {
                 c.KEY_ESC => {
+                    // 조합 중이면 그 겹만 벗긴다. **확정하지 않는다** —
+                    // 확정하면 Esc가 취소가 아니라 입력이 된다.
+                    if (self.hangul_buf.codepoint() != null) {
+                        self.hangul_buf = .{};
+                        return .redraw;
+                    }
                     self.mode = .copy;
                     return .{ .copy = .find_cancel };
                 },
                 c.KEY_ENTER => {
+                    // 확정하고 제출한다(폭포). 확정분은 `commit_buf`를 타고
+                    // `readKeys`가 needle로 옮기는데, **그 판단은 여기서
+                    // 모드를 바꾸기 전의 값으로 해야 한다**(SH design 결정 5).
+                    self.commitHangul();
                     self.mode = .copy;
                     return .{ .copy = .find_submit };
                 },
+                else => {},
+            }
+            // **한글 층을 부른다. 다시 적지 않는다**(SH design 결정 4).
+            // 전환 키 넷 · Ctrl 조합 · 표 밖의 키 · 기호 되돌림 · Backspace가
+            // 전부 그 함수 한 벌에 있고, 여기서 다시 적으면 두 벌이 된다.
+            if (self.hangulLayer(code)) |act| {
+                switch (act) {
+                    // 기호 되돌림. 셸이었다면 이 바이트가 PTY로 나갔겠지만
+                    // 프롬프트에서는 needle로 가야 한다 — **확정된 음절 뒤에**
+                    // 이어 붙이고 화면만 다시 그린다(SH design 결정 6).
+                    .bytes => |b| {
+                        self.appendCommit(b);
+                        return .redraw;
+                    },
+                    // 조합이 자랐거나 확정됐다. 확정분은 `commit_buf`에 있다.
+                    else => return act,
+                }
+            }
+            // 한글 층이 관심 없는 키다. **ASCII 경로가 한 글자도 안 바뀐다.**
+            //
+            // **`Backspace`가 여기 있는 것에 뜻이 있다.** 조합 중이면
+            // `hangulLayer`가 자모를 하나 빼고 `.redraw`를 돌려주므로 여기
+            // 안 온다 — 갈래를 가르는 조건이 이 분기에 안 생기고
+            // `hangul.erase`의 null 하나가 그 일을 한다.
+            switch (code) {
                 c.KEY_BACKSPACE => return .{ .copy = .find_erase },
                 else => {
                     if (code >= qwerty_keymap.len) return nothing;
