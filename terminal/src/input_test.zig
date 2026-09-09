@@ -1545,5 +1545,61 @@ pub fn main() !void {
 
     std.debug.print("input_test: 확정된 음절이 모드를 따라 갈린다 OK\n", .{});
 
+    // 검사 58. **프롬프트 안의 `Cmd+V`가 붙여넣기다**(FP design 결정 1).
+    //
+    // 지금은 `.find_char = 'v'`가 돌아온다 — find 분기가 copy 표와 `chord()`
+    // 보다 **앞**이라 `Cmd+V`가 둘 중 어디에도 안 닿고, `latinChar()`는
+    // modifier를 안 보기 때문이다. **needle에 글자 `v`가 들어가는 것**이
+    // 이 Task가 없애는 증상이다.
+    //
+    // **대조군이 같은 블록에 있다** — Meta를 떼면 `v`는 여전히 글자다.
+    // 그것이 없으면 "프롬프트에서 v는 언제나 paste"라는 구현도 통과하고,
+    // 그 구현은 검색어에 `v`를 못 치게 만든다.
+    {
+        var fv: input.State = .{};
+        try expect(&fv, K.KEY_LEFTMETA, 1, "");
+        try expect(&fv, K.KEY_LEFTSHIFT, 1, "");
+        try expectCopy(&fv, K.KEY_C, .enter);
+        try expect(&fv, K.KEY_LEFTSHIFT, 0, "");
+        try expectCopy(&fv, K.KEY_SLASH, .find_open);
+        // Meta는 아직 눌려 있다.
+        try expectCopy(&fv, K.KEY_V, .paste);
+        // **붙여넣기는 프롬프트를 안 닫는다.** copy mode에서 그런 것과 같다
+        // (`input_test` 검사 12) — 붙여넣고 이어서 더 칠 수 있어야 한다.
+        if (fv.mode != .find) {
+            std.debug.print("FAIL: Cmd+V in the find prompt left the prompt\n", .{});
+            return error.PasteLeftFindMode;
+        }
+        // 대조군.
+        try expect(&fv, K.KEY_LEFTMETA, 0, "");
+        try expectCopy(&fv, K.KEY_V, .{ .find_char = 'v' });
+    }
+
+    // 검사 59. **조합 중에 붙여넣으면 음절이 먼저 확정된다**(FP design 결정 2).
+    //
+    // 새 자리가 `hangulLayer`보다 **앞**이라, `commitHangul()`을 명시적으로
+    // 안 부르면 조합 중인 `한`이 **소리 없이 사라진다.** 증상은 "붙여넣었더니
+    // 앞 글자가 없어졌다"이고 원인에서 멀다.
+    //
+    // **`Enter`가 이미 같은 한 줄을 쓴다**(`input.zig`의 find 분기). 새
+    // 기계가 아니라 같은 처방의 두 번째 손님이다.
+    {
+        var fc: input.State = .{ .hangul_layout = .dubeol };
+        fc.hangul_on = true;
+        fc.mode = .find;
+        try expectHangul(&fc, K.KEY_G, "", 'ㅎ');
+        try expectHangul(&fc, K.KEY_K, "", '하');
+        try expectHangul(&fc, K.KEY_S, "", '한');
+        try expect(&fc, K.KEY_LEFTMETA, 1, "");
+        try expectCopy(&fc, K.KEY_V, .paste);
+        // 확정분은 `commit_buf`에 있다. **`Action`은 하나만 담으므로**
+        // 붙여넣기와 확정이 같은 키에서 함께 나올 길은 이것뿐이다.
+        try expectCommit(&fc, K.KEY_V, "한");
+        try expectPreedit(&fc, K.KEY_V, null);
+        try expect(&fc, K.KEY_LEFTMETA, 0, "");
+    }
+
+    std.debug.print("input_test: 프롬프트의 Cmd+V가 붙여넣기다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

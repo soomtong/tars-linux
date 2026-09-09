@@ -1064,14 +1064,6 @@ pub const State = struct {
                 // 있는 시스템에서 이 어긋남은 A안을 고른 대가이고, 감추지
                 // 않고 여기 적어둔다(design doc 결정 8).
                 c.KEY_BACKSPACE => .{ .bytes = self.one(0x15) },
-                // Cmd+V(CM-M2). **이 줄은 모드 밖의 붙여넣기만 담당한다** —
-                // 모드 안에서는 아래 copy 표가 chord()보다 먼저라 여기까지
-                // 오지 않으므로, 같은 뜻이 그쪽에도 적혀 있다(design 결정 4).
-                //
-                // 바이트가 아니라 copy 명령인 이유는, 무엇을 보낼지가
-                // 클립보드에 달려 있고 클립보드는 vt.zig가 들기 때문이다.
-                // input.zig는 vt.zig를 import하지 않는다(IP design 결정 6).
-                c.KEY_V => .{ .copy = .paste },
                 else => null,
             };
         }
@@ -1230,6 +1222,33 @@ pub const State = struct {
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return nothing;
 
+        // 1.35번 단계 — 붙여넣기(FP design 결정 1·2). **모드 분기 셋보다
+        // 앞이고, 그 자리가 이 단계의 전부다.**
+        //
+        // `Cmd+V`가 "붙여넣기다"라고 적힌 자리가 여기 **하나**다. 예전에는
+        // 둘이었다 — copy 표 안(모드 안)과 `chord()`의 Meta 분기(모드 밖).
+        // 그리고 find 분기가 그 둘보다 앞이라 **프롬프트에서는 `v`가 글자로
+        // 새고 있었다.** 셋째 자리를 더하는 대신 하나로 모은다. 넷째 모드가
+        // 생길 때 빼먹는 것이 다음 사고이기 때문이고, IS-M1이 `Action.caps`를
+        // 안 만든 이유와 같은 종류다.
+        //
+        // **목적지는 여기서 안 정한다.** 무엇을 보낼지가 클립보드에 달려
+        // 있고 클립보드는 `vt.zig`가 든다 — `input.zig`는 그 파일을 import하지
+        // 않는다(IP design 결정 6). `main.zig`가 프롬프트가 열렸는지로 가른다.
+        //
+        // **`commitHangul()`이 필요한 이유는 이 자리가 `hangulLayer`보다
+        // 앞이기 때문이다.** 조합 중에 `Cmd+V`를 누르면 음절이 먼저 확정돼야
+        // 하는데, 그 일을 해 주던 층을 지나치게 됐다. `Enter`가 아래 find
+        // 분기에서 이미 같은 한 줄을 쓴다.
+        //
+        // **그 뒤는 저절로 맞는다.** `readKeys`의 `takeCommit()`이 action과
+        // 무관하게 돌면서 `to_needle`로 목적지를 가르므로, 셸이면 PTY로 find
+        // 모드면 needle로 간다 — 새 통로가 안 는다.
+        if (self.metaed() and code == c.KEY_V) {
+            self.commitHangul();
+            return .{ .copy = .paste };
+        }
+
         // 1.4번 단계 — 검색 프롬프트(design 결정 7·9). **copy 표보다 앞이다.**
         //
         // 이 분기가 copy 표 앞에 있어야 하는 이유가 이 milestone의 핵심이다.
@@ -1348,24 +1367,15 @@ pub const State = struct {
                 c.KEY_N => return .{
                     .copy = if (self.shifted()) .find_prev else .find_next,
                 },
-                // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
-                //
-                //   Cmd+V   → 붙여넣기. **모드를 닫지 않는다.**
-                //   Shift+V → 줄 선택
-                //   v       → 문자 선택
-                //
-                // **Meta를 가장 먼저 보는 것은 chord()의 규칙과 같다** — 둘 다
-                // 눌렸을 때 Cmd가 이긴다. 임의의 선택이지만 결정적이어야 해서
-                // 두 곳이 같은 순서를 쓴다.
+                // `v`가 두 갈래다. **셋이었는데 하나가 위로 올라갔다** —
+                // `Cmd+V`는 1.35번 단계가 모드를 가리지 않고 먼저 가로챈다
+                // (FP design 결정 1). 그래서 여기 오는 `v`에는 Meta가 없다.
                 //
                 // Shift를 여기서 보는 것은 chord()의 예외와 성격이 다르다.
                 // 모드 안의 표는 원래 문자 키를 직접 읽으므로, 대문자 V가
                 // 소문자 v와 다른 명령이라는 것을 볼 자리가 여기뿐이다.
-                c.KEY_V => {
-                    if (self.metaed()) return .{ .copy = .paste };
-                    return .{
-                        .copy = if (self.shifted()) .select_line else .select_char,
-                    };
+                c.KEY_V => return .{
+                    .copy = if (self.shifted()) .select_line else .select_char,
                 },
                 // yank는 **모드를 닫는다.** 여기서 mode를 되돌리지 않으면
                 // 복사는 했는데 모드에 갇혀서 그다음 키가 전부 삼켜진다 —
