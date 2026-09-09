@@ -108,13 +108,13 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   "외출해야 하니 이번 세션의 구현 결정을 전부 위임한다"고 정했다. 아래 HI의
   예외와 같은 종류이고 이유만 다르다. 기억은
   `docs/decisions/project_search_hangul.md`.
-  **진행 중: Find Paste(FP-M0 완료, 2026-09-09).** `/` 프롬프트에서 `Cmd+V`가
-  클립보드의 첫 줄을 검색어에 붙이게 한다 — SH design의 비목표 절이 다음
-  후보로 지목하고 근거까지 모아 둔 것이다. design은
-  `.../specs/2026-09-09-tars-find-paste-design.md`.
-  **FP-M0도 편집을 Claude Code가 했다** — 사용자가 "외출해야 하니 이
-  milestone의 구현을 대신 해 달라"고 정했다. SH의 예외와 같은 종류이고 범위만
-  더 좁다. **FP-M1부터는 다시 기본 규칙(사용자가 편집)이다.**
+  **Find Paste(FP-M0~M1, 2026-09-09 완료 — copy mode에서 잡은 글자를 `/`
+  프롬프트에 `Cmd+V`로 붙이면 셸이 아니라 검색어로 간다. 여러 줄은 첫 줄만
+  들어간다).** SH design의 비목표 절이 다음 후보로 지목하고 근거까지 모아 둔
+  것이었다. design은 `.../specs/2026-09-09-tars-find-paste-design.md`.
+  **FP도 편집을 Claude Code가 했다** — 사용자가 외출하며 milestone 단위로 두
+  번 위임했다. SH의 예외와 같은 종류다.
+  **다음 서브프로젝트는 다시 기본 규칙(사용자가 편집)이다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
