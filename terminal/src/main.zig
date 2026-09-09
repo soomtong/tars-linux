@@ -881,6 +881,26 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
     std.debug.print("terminal: clip> paste len={d}\n", .{text.len});
 }
 
+/// `Cmd+V`가 클립보드의 첫 줄을 **검색어에** 붙인다(FP design 결정 3·6).
+///
+/// **두 수를 한 줄에 함께 찍는다.** `put=0` 하나만으로는 "클립보드가 비었다"와
+/// "128바이트를 넘어 거절됐다"가 안 갈리고, `clip=50 put=20`은 여러 줄이 첫
+/// 줄에서 잘렸다는 것까지 한 줄로 말한다. IS-M1 실측 5가 `on=87 off=87`로
+/// 배운 것과 같다.
+///
+/// **접두사가 `clip>`가 아니라 `find>`인 것에 뜻이 있다.** 게이트의 음성
+/// 검사가 "`clip> paste` 줄이 안 늘었다"로 셸 갈래를 안 탔음을 보므로,
+/// 두 갈래가 다른 접두사를 써야 그 판정이 선다. **`key>` 줄로는 못 본다** —
+/// 붙여넣기는 `pty.write`를 직접 부르지 `keys.bytes`를 안 거친다.
+///
+/// 문구가 이 파일과 `hangul/check.sh` 양쪽에 있다 — **한쪽을 고치면 다른
+/// 쪽도 고쳐야 한다**(`clip>`가 이미 그런 자리다).
+fn dumpFindPaste(screen: *vt.Screen) void {
+    const clip_len = if (screen.clipboard()) |t| t.len else 0;
+    const put = screen.findPaste();
+    std.debug.print("terminal: find> paste clip={d} put={d}\n", .{ clip_len, put });
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -1152,9 +1172,21 @@ pub fn main(init: std.process.Init) !void {
                     // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
                     // 살아 있는가"를 본다.
                     //
-                    // 이것이 copies 배열에서 **유일하게 PTY로 나가는 명령**이다.
-                    // 다른 아홉은 전부 우리 안에서 끝난다.
-                    .paste => dumpPaste(screen, session.master_fd),
+                    // **목적지가 여기서 갈린다**(FP design 결정 3). `input.zig`는
+                    // `vt.zig`를 import하지 않으므로(IP design 결정 6) 이 갈래는
+                    // 여기에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
+                    // 알고, 클립보드도 프롬프트도 이 파일이 본다.
+                    //
+                    // **판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
+                    // 이다.** `main.zig`가 볼 수 있는 것이 화면 쪽 사실이고,
+                    // `findBytes`가 이미 `find_open`을 스스로 지킨다.
+                    //
+                    // 셸 갈래는 여전히 copies 배열에서 **유일하게 PTY로 나가는
+                    // 명령**이다. 다른 아홉은 전부 우리 안에서 끝난다.
+                    .paste => if (screen.findNeedle() != null)
+                        dumpFindPaste(screen)
+                    else
+                        dumpPaste(screen, session.master_fd),
                     // 검색 프롬프트(CN-M1). **넷 다 화면 상태를 바꾸지 않는다** —
                     // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
                     .find_open => {
