@@ -5,11 +5,16 @@
 # 크로스 컴파일이거나 amd64 패키지에서 조달한다 — ZM-M3.
 FROM debian:trixie-slim
 
+# RM-M0이 ovmf를 더한다. 게이트의 아홉 체인은 전부 QEMU의 기본 BIOS(SeaBIOS)로
+# 부팅하는데, 실머신 노트북은 예외 없이 UEFI다. ovmf는 EDK II를 미리 빌드해 둔
+# 펌웨어 이미지(/usr/share/OVMF/OVMF_CODE_4M.fd)라서 **Architecture: all이다** —
+# 컨테이너가 arm64인데도 x86_64 게스트용 펌웨어가 그대로 깔린다. 3.6MB다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         gcc-multilib-x86-64-linux-gnu \
         binutils \
         qemu-system-x86 \
+        ovmf \
         git \
         ca-certificates \
         flex \

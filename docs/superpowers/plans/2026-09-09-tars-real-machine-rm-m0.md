@@ -29,7 +29,7 @@
 
 **1. `RELOCATABLE`이 진짜 벽이다.** `EFI`만 켜면 시리얼이 320바이트에서 멈춘다.
 limine이 `PANIC: linux: Non-relocatable kernel could not be loaded at required
-address 0x100000`을 찍는데 **그 말이 GOP 콘솔로만 가서 안 보인다.**
+address 0x1000000`을 찍는데 **그 말이 GOP 콘솔로만 가서 안 보인다.**
 `serial: yes`가 그것을 들리게 한다.
 
 **2. `.config`를 켜는 데 층이 있다.** `USB_SUPPORT`를 켜도 `USB`는 안 켜지고,
@@ -102,7 +102,7 @@ docker run --rm tars-devcontainer bash -c \
 | | 없으면 |
 |---|---|
 | `EFI` | 커널이 UEFI 핸드오프(메모리 맵·시스템 테이블)를 모른다 |
-| `RELOCATABLE` | **limine이 0x100000에 못 실어서 부팅이 시작도 안 된다**(실측 1) |
+| `RELOCATABLE` | **limine이 0x1000000에 못 실어서 부팅이 시작도 안 된다**(실측 1) |
 | `SYSFB_SIMPLEFB` | `screen_info`에서 `simple-framebuffer` 플랫폼 장치가 안 만들어진다 |
 | `DRM_SIMPLEDRM` | 그 장치에 붙어 `/dev/dri/card0`을 낼 드라이버가 없다 |
 

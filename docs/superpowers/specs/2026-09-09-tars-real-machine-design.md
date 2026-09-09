@@ -97,13 +97,13 @@ limine의 메뉴와 에러는 GOP 콘솔로 가고 우리는 `-display none`이�
 안 보인다.** `limine.conf`에 `serial: yes` 한 줄을 넣자 답이 나왔다.
 
 ```
-PANIC: linux: Non-relocatable kernel could not be loaded at required address 0x100000
+PANIC: linux: Non-relocatable kernel could not be loaded at required address 0x1000000
 Stacktrace:
   [0x1e28c685] <panic+0x155>
   [0x1e2aa505] <linux_load+0x805>
 ```
 
-**`CONFIG_RELOCATABLE`이 꺼져 있었다.** BIOS에서는 0x100000이 비어 있어서
+**`CONFIG_RELOCATABLE`이 꺼져 있었다.** BIOS에서는 0x1000000이 비어 있어서
 `PHYSICAL_START=0x1000000`짜리 비재배치 커널이 그대로 실렸는데, UEFI에서는
 펌웨어가 그 자리를 쓰고 있어서 limine이 옮길 수가 없다.
 

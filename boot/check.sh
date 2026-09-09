@@ -21,8 +21,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# RM-M0: -vga none이 새로 붙었다. 이 체인이 검증하는 것은 **감독 루프의 포기
+# 경로**이고(아래 MAX_FAST_RESTARTS 판정) 그것을 밟으려면 /dev/dri/card0이
+# 없어야 한다. 여태 그 전제는 "virtio-gpu를 안 물렸다"에 얹힌 암묵적인
+# 것이었는데, RM-M0이 SYSFB_SIMPLEFB와 DRM_SIMPLEDRM을 켜면서 **limine이
+# 넘긴 VGA 프레임버퍼만으로도 card0이 생겼다** — 터미널이 뜨고 이 체인이
+# `FAIL: init never gave up on the terminal`로 죽었다.
+#
+# 커널 쪽을 되돌리는 것이 아니라 이 줄을 넣은 이유: BIOS 부팅에서도 픽셀이
+# 나오게 된 것은 잃을 수 없는 개선이다(legacy 기계에서도 화면이 뜬다).
+# 그리고 이 플래그가 전제를 **암묵에서 명시로** 옮긴다 — 이 체인이 왜
+# 프레임버퍼 없이 부팅하는지가 QEMU 줄에 적힌다.
 qemu-system-x86_64 \
   -cdrom ../out/tars.iso \
+  -vga none \
   -serial file:"$LOG" \
   -display none \
   -no-reboot &
