@@ -1,6 +1,231 @@
-# HANDOFF: Find Paste를 끝냈다 — 잡은 글자를 검색창에 붙여넣는다
+# HANDOFF: 커널이 노트북에서 눈을 뜬다 — Real Machine RM-M0·M1이 끝났다
 
 ## 지금 어디인가
+
+`main`, working tree 깨끗함. **Real Machine(RM-M0 · RM-M1)이 2026-09-09·10에
+끝났다.** 커널이 **UEFI로 부팅**하고, **EFI GOP 프레임버퍼 위의 simpledrm**에
+그리고, **USB 키보드**로 받고, **NVMe·SATA**를 본다. 게이트에 **열번째 체인**이
+생겼다.
+
+**게이트는 열 체인 3/3으로 20분 23.41초다**(착수 전 아홉 체인 19분 40.02초 →
+RM-M0 뒤 19분 52.07초 → 20분 23.41초. 부팅이 33회에서 36회가 됐고 커널이
+22.1% 커졌는데 +43초다).
+
+```
+efi: EFI v2.7 by Debian distribution of EDK II              ← 펌웨어가 UEFI다
+[drm] Initialized simpledrm 1.0.0 for simple-framebuffer.0  ← GPU 드라이버 없이
+terminal: grid 155x47 (fb 1280x800)                          ← 펌웨어의 네이티브 모드
+tars-init: keyboard device /dev/input/event1 (QEMU QEMU USB Keyboard)
+nvme nvme0: pci function 0000:00:04.0
+```
+
+| | 파일 | 커밋 |
+|---|---|---|
+| design | `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md` | `3f3882f`(실측 절 둘과 Status는 나중 커밋) |
+| plan 둘 | `.../plans/2026-09-09-tars-real-machine-rm-m{0,1}.md` | `e9f775f` · `8919516` |
+| M0 부팅 | Dockerfile의 `ovmf` · `.config` 넷 · `serial: yes` · 하이브리드 ISO · `boot/check.sh`의 `-vga none` | `4a26379` |
+| M0 체인 | `machine/check.sh`(새 파일) · `check.sh`의 `CHAINS` | `a87888f` |
+| M1 커널 | `.config`의 노트북 장치들(라운드 셋) | `9445e97` |
+| M1 체인 | `i8042=off` · xhci · usb-kbd · nvme · 판정 넷 + 타이핑 | `16afc52` |
+
+```bash
+git status --short     # 비어 있어야 한다
+docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
+  bash -c 'zig build test'   # 마지막이 PASS
+```
+
+**`PASS`가 넷인 것이 정상이다.** 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다(IS-M1이 만들 때부터).
+**세는 것으로 판정하지 말 것** — 종료 코드와 `*_test:` 접두사 다섯을 본다.
+
+**게이트는 컨테이너 안에서 돌린다.** 호스트의 `make`는 3.81이라 커널
+Makefile이 거절한다.
+
+```bash
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } 2> /tmp/gate.time
+```
+
+**게이트는 20분이 넘으므로 백그라운드로 돌려야 한다** — Bash 도구의 타임아웃
+상한이 10분이고, 넘겨 주면 잘려서 exit 143이 된다.
+
+**이미지를 다시 빌드해야 한다.** `devcontainer/Dockerfile`에 `ovmf`가 들어갔다.
+안 하면 `machine/check.sh`가 첫 줄에서
+`FAIL: /usr/share/OVMF/OVMF_CODE_4M.fd not found`로 죽는다.
+
+```bash
+docker build -t tars-devcontainer devcontainer/
+```
+
+## 이 세션은 편집도 Claude Code가 했다 — **RM이 끝나면 다시 기본 규칙이다**
+
+사용자가 2026-09-09에 브레인스토밍 중간에 **"나 이제 자러 가니까 이번 태스크의
+모든 작업을 마무리해줘"**라고 위임했다. `CLAUDE.md`의 기본 규칙("파일 편집은
+사용자가")에 대한 **이 서브프로젝트 한정 예외**이고 SH·FP 세션의 예외와 같은
+종류다.
+
+**사용자가 고른 것은 셋이다** — 후보 셋 중 실머신 `.config`를 고른 것 ·
+`.config`를 하나로 유지하는 것 · 게이트에 체인을 하나 더하는 것. **나머지
+결정 여섯(3~8)은 Claude가 정했고 근거를 각 결정에 적었다.**
+
+## 바로 다음에 할 것 — **RM-M2**
+
+**RM-M2 — 설정 저장소를 찾는다.** `init/src/main.zig:65`가 `/dev/vda`를
+하드코딩한다. 노트북에는 virtio가 없으니 `/dev/nvme0n1`이나 `/dev/sda`다.
+
+```zig
+return mountFs("/dev/vda", "/config", "ext2", linux.MS.SYNCHRONOUS);
+```
+
+**부팅은 지금도 된다** — 못 찾으면 `tars-init: no config storage, using
+defaults`로 넘어간다. 안 되는 것은 **설정이 부팅 사이에 남는 것**이다.
+
+**RM에서 코드를 건드리는 유일한 milestone이다.** M0·M1·M3은 `.config`와 셸
+스크립트뿐이다.
+
+**체인 쪽 준비는 이미 돼 있다** — `machine/check.sh`가 이미 8MB ext2 이미지를
+`mktemp`으로 만들어 `-device nvme`로 물린다. **마운트만 안 한다.** M2는 그
+디스크에 `tars.conf`를 심고(`hangul/make_disk.sh`가 본보기다) 읽히는지 보면
+된다.
+
+**정할 것 둘.** (1) 후보 목록을 어디에 두는가 — `init`에 박는가 설정으로
+빼는가. (2) 여러 개가 있으면 무엇을 고르는가 — 첫째인가, 라벨/UUID인가.
+**HD-M2가 키보드에 대해 답한 것("이름이 아니라 성질로")이 참고가 되지만
+블록 장치에는 capability가 없다.**
+
+**RM-M3 — 게이트가 못 보는 것들.** `ACPI_EC`(노트북 DSDT에 거의 항상 있고,
+없으면 AML이 그 자리에서 실패해 배터리·뚜껑·밝기 키가 통째로 안 붙는다) ·
+`ACPI_AC` · `ACPI_BATTERY` · `ACPI_PROCESSOR` · `THERMAL`. 켜고 QEMU에서 회귀가
+없음만 확인한다. 그리고 실기용 USB 이미지 만드는 법과 **Secure Boot를 꺼야
+한다**를 문서에 적는다.
+
+**RM 밖에 남아 있는 후보들.**
+
+- **HI가 남긴 둘** — 기호 확장과 Patal의 옵션 trait들 · 모아주기(첫가끝 조합,
+  **HI design 결정 3이 근거를 대고 뺐다**)
+- IS design의 비목표(상태 줄 색·자리를 설정으로 빼기 등) — **값이 낮다고
+  적어 둔 것들이다.**
+- FP design의 비목표 넷 — bracketed paste(CM 결정 9) · 시스템 클립보드
+  (OSC 52) · 검색 기록 `↑`(CN-M1) · 프롬프트 안의 커서 이동. **다시 캐지 말고
+  그 절을 읽을 것.**
+- **`SUSPEND`(S3)는 RM 밖이다.** `ACPI_BUTTON`이 켜져 있어 lid 이벤트는 이미
+  오지만, 뚜껑을 닫아 절전으로 가는 것은 별 서브프로젝트다.
+
+## RM이 세운 것 — 저장소에 서 있는 것 다섯
+
+1. **`kernel/.config`** — `EFI`·`RELOCATABLE`·`SYSFB_SIMPLEFB`·`DRM_SIMPLEDRM`
+   (M0)과 `PCI_MSI`·USB(HCD 넷 + HID + storage)·`SCSI`/`BLK_DEV_SD`·
+   `BLK_DEV_NVME`·`ATA`/`SATA_AHCI`/`ATA_PIIX`(M1). **`DRM_I915`도 `AMDGPU`도
+   안 켰다** — simpledrm으로 충분하다는 것이 실측이다.
+2. **`boot/limine.conf`의 `serial: yes`** — 부트로더가 실패하면 그 말이
+   시리얼로 나온다. **이 한 줄이 M0의 벽을 찾았다.**
+3. **`boot/make_iso.sh`의 하이브리드 레시피** — ISO 하나가 El Torito 항목
+   둘(BIOS · UEFI)을 담는다. `boot/check.sh`는 SeaBIOS로,
+   `machine/check.sh`는 OVMF로 **같은 바이트를** 부팅한다.
+4. **`machine/check.sh`** — 열번째 체인. 판정 일곱 + 타이핑 하나. `denoise()`가
+   limine의 escape를 걷어내 실패 메시지에 부트로더의 말을 붙인다.
+5. **`boot/check.sh`의 `-vga none`** — 그 체인의 전제("`card0`이 없다")를
+   암묵에서 명시로 옮겼다.
+
+## RM-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"RM-M0이 실측한 것"** 절(실측 6~9)에 있다. 요약 넷.
+
+**1. 진짜 벽은 `CONFIG_EFI`가 아니라 `CONFIG_RELOCATABLE`이었다.** `EFI`만
+켜면 시리얼이 **320바이트에서 멈춘다.** BIOS에서는 `PHYSICAL_START=0x1000000`이
+비어 있어서 비재배치 커널이 그대로 실렸는데, UEFI에서는 펌웨어가 그 자리를
+쓴다. **limine의 `PANIC`이 GOP 콘솔로만 가서 안 보였고**, `serial: yes` 한 줄이
+그것을 들리게 했다.
+
+```
+PANIC: linux: Non-relocatable kernel could not be loaded at required address 0x1000000
+```
+
+**2. "들린다"와 "읽힌다"가 또 다르다.** limine은 글자마다 커서 이동 escape를
+끼워 넣어서(`P` `ESC[01;02H` `A` …) `grep "PANIC"`이 **아무것도 못 찾는다.**
+음성 확인에서 문맥 줄이 비어 나와 드러났고, 처방은 실패 경로에서만 escape를
+걷어내는 `denoise()`다. **우리 쪽 줄에는 escape가 안 붙으므로 판정들은 이
+처리 없이도 맞는다.**
+
+**3. 커널 설정 하나가 다른 체인의 암묵적 전제를 깼다.** `SYSFB_SIMPLEFB`를
+켜니 **BIOS 부팅에서도 `card0`이 생겨서** `boot/check.sh`의 포기 경로 검사가
+`FAIL: init never gave up on the terminal`로 죽었다. **커널을 안 되돌렸다** —
+legacy 기계에서도 화면이 뜨게 된 것은 잃을 수 없다. 처방은 `-vga none`이고
+그것이 전제를 암묵에서 명시로 옮긴다.
+
+**4. 게이트가 커널을 15회가 아니라 1회 빌드한다.** 로그를 세니 실제 빌드
+**1회**, `skipping make` **29회**다(체인 열 × 3회). GL-M0이 `clean()`을 1회로
+옮기고 GL-M1이 해시 스탬프를 넣은 결과다. **`project_kernel_config`의 "15배"는
+낡은 문장이었고 그 파일을 고쳤다.**
+
+## RM-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"RM-M1이 실측한 것"** 절(실측 10~14)에 있다. 요약 넷.
+
+**1. `.config`를 켜는 데 층이 셋이다.** `USB_SUPPORT`를 켜도 `USB`는 안 켜지고,
+`USB`를 켜야 `USB_XHCI_HCD` 줄이 **나타난다.** 라운드마다 되접어야 다음 층이
+드러난다. **손으로 한 줄도 안 적었는데 켜진 다섯**(`USB_HID` ·
+`USB_XHCI_PCI` · `USB_EHCI_PCI` · `SATA_HOST` · `I2C_HID`)이 층이 제대로
+접혔다는 증거다.
+
+**2. `i8042=off`가 없으면 이 milestone이 아무것도 안 본다.** 음성 확인이
+증명했다 — PS/2를 남기니 `init`이 그쪽을 골랐다.
+
+```
+FAIL: init did not pick the USB keyboard
+  tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
+```
+
+`usb-kbd`도 xHCI도 그대로 물려 있는데 **PS/2가 있다는 것만으로** 판정이
+가짜가 된다. **IS-M1 실측 4의 사촌이다.**
+
+**3. PS/2를 끈 채로 코드를 한 글자도 안 고쳤다.** HD-M2가 키보드를 이름이
+아니라 capability로 찾게 만들어 둔 것이 값을 냈다 — **그때 design이 근거로 댄
+것이 정확히 "노트북 실 하드웨어로 가는 방향"이었고, 3주 뒤에 그 근거가 실행으로
+확인됐다.**
+
+**4. `.config` 하나로 유지하는 대가가 5.68초다.** 커널 빌드가 50.947 →
+56.627초(+11.1%), bzImage가 2,933,760 → 3,580,928바이트(+22.1%). 게이트가 그것을
+**1배로만** 치른다(실측 8). `git stash`로 RM-M0 상태를 되살려 **같은 세션에서**
+둘을 쟀다 — IS-M0 실측 2의 규율이다.
+
+## 착수 전에 스파이크로 확인한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"착수 전에 실측한 것"** 절(항목 다섯)에 있다. 요약 셋.
+
+**1. `ovmf`는 `Architecture: all`이라 arm64 컨테이너에 그대로 깔린다**(3.6MB).
+terminfo·로케일과 같은 **"아키텍처가 없는 데이터"**다. `OVMF_CODE_4M.fd`를
+쓰고(`.secboot`는 Secure Boot용, 우리 커널은 서명이 없다) **`OVMF_VARS_4M.fd`는
+매번 복사한다** — 읽기 전용으로 물리면 펌웨어가 부트 항목을 못 만든다.
+
+**2. simpledrm이 EFI GOP 위에 `/dev/dri/card0`을 그대로 내놓는다.** TARS가
+KMS ioctl을 직접 쏘는 방식이 그 위에서 통하고, 펌웨어가 잡아 둔 모드가
+실기에서는 **패널의 네이티브 해상도**다. **그래서 `DRM_I915`·`DRM_AMDGPU`가
+필요 없다** — 켜면 게이트가 단 한 번도 probe 못 하는 코드가 커널에서 가장 큰
+드라이버 둘만큼 는다.
+
+**3. `boot/limine-binary/`에 `BOOTX64.EFI`와 `limine-uefi-cd.bin`이 이미
+있었다.** BF-M0이 limine 배포 tarball을 통째로 커밋했고 그때는 BIOS 파일 둘만
+썼다. **UEFI 경로의 부트로더 쪽은 처음부터 저장소에 있었다.**
+
+## 게이트가 RM에 대해 보는 것 — `machine/check.sh`의 판정 일곱 + 하나
+
+| 보는 것 | 없으면 무엇이 틀렸나 |
+|---|---|
+| `Welcome to fish` | 부팅이 아예 안 됐다. 여기서 limine의 `PANIC`이 보인다 |
+| `efi: EFI v` | **pflash 인자가 안 먹어 SeaBIOS로 떴다.** 초록인데 아무것도 새로 안 보는 최악의 실패 |
+| `Initialized simpledrm` | `SYSFB_SIMPLEFB` 또는 `DRM_SIMPLEDRM`이 없다 |
+| `terminal: grid 155x47 (fb 1280x800)` | **모드가 갈렸다.** 수를 정확히 박는 것이 "네이티브 모드를 그대로 쓴다"를 보는 유일한 방법 |
+| `_OSC ... MSI` | `PCI_MSI`가 없다 |
+| `xHCI Host Controller` | `USB_XHCI_HCD`가 없다 |
+| `keyboard device ... USB Keyboard` | **이 체인의 심장.** HID → evdev → `init`의 capability 탐색이 한 줄에 다 걸린다 |
+| `nvme nvme0: pci function` | `BLK_DEV_NVME`가 없다 |
+| **`usb`를 쳐서 격자에 나온다** | 장치가 보이는 것과 키가 화면에 닿는 것은 다르다 |
+
+**격자 수 `155x47`은 다른 체인에서 베껴 오면 안 된다.** virtio-gpu 체인들은
+1024x768이고 OVMF의 GOP 기본은 **1280x800**이다.
+
+## 그 앞의 서브프로젝트 — Find Paste (FP-M0·M1, 2026-09-09)
 
 `main`, working tree 깨끗함. **Find Paste(FP-M0 · FP-M1)가 2026-09-09에 전부
 끝났다.** copy mode에서 잡은 글자를 `/` 프롬프트에 `Cmd+V`로 붙이면 **셸이

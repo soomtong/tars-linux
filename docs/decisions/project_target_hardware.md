@@ -40,7 +40,26 @@ design의 비목표 절)뿐이었고, 노트북이 대상인지는 어디에도 
 배터리가 안 보인다"로 나타나서 원인이 커널 config라는 데까지 가는 길이 멀다.
 EC는 ECDT 테이블로 아주 이른 시점에 잡히는 경로도 있는데 그것도 함께 없어진다.
 
-## 게이트는 이것을 검증할 수 없다
+## 게이트는 이것을 검증할 수 없다 — **절반만 참이었다(RM, 2026-09-09)**
+
+> **아래 절은 `ACPI_EC` 하나를 보고 쓴 것이고, 나머지 항목에는 QEMU에 길이
+> 있었다.** Real Machine(RM)이 `ovmf` 패키지 하나로 그 길을 열었다 —
+> UEFI 부팅 · `RELOCATABLE` · simpledrm · `PCI_MSI`(q35) · USB HID
+> (`qemu-xhci` + `usb-kbd` + `i8042=off`) · NVMe · AHCI가 전부 열번째 체인
+> (`machine/check.sh`)에서 실제로 밟힌다. **못 보는 것이 열에서 셋으로
+> 줄었다** — `ACPI_EC` · 실 GPU 드라이버 · 배터리/온도.
+>
+> 그리고 그 셋 중 둘은 안 켜기로 정했다. **`DRM_I915`·`DRM_AMDGPU`가
+> 필요 없다** — TARS가 `/dev/dri/card0`에 KMS ioctl을 직접 쏘는데
+> **simpledrm이 EFI GOP 프레임버퍼 위에 그 card0을 그대로 내놓는다.**
+> 펌웨어가 잡아 둔 모드가 실기에서는 패널의 네이티브 해상도다. 전문은
+> `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
+>
+> **위 표의 `ACPI_BUTTON`을 뺀 나머지 중 켜진 것.** `EFI` · `USB_SUPPORT` ·
+> `BLK_DEV_NVME` · AHCI · `PCI_MSI`는 RM-M0·M1이 켰다. `ACPI_EC` ·
+> `ACPI_AC` · `ACPI_BATTERY` · `THERMAL` · `ACPI_PROCESSOR` · `SUSPEND`는
+> RM-M3이 남았다.
+
 
 **QEMU의 `pc` 기계에는 EC가 없다.** CC-M0이 게스트에게 직접 물어 확인했다 —
 `/sys/bus/acpi/devices/`에 `PNP0C09`가 없다. 그래서 "노트북에서 EC가 필요하다"는

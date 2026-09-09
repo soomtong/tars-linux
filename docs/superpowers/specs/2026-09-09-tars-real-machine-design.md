@@ -1,9 +1,11 @@
 # TARS Real Machine — Design
 
 **Date:** 2026-09-09
-**Status:** **진행 중 — RM-M0 착수 직전.** milestone 넷(RM-M0~M3)을 계획했고
-아래 "착수 전에 실측한 것" 절이 스파이크가 증명한 것을 담는다. 착수 전 게이트
-기준선은 아홉 체인 3/3으로 **19분 40.02초**(FP-M1 시점).
+**Status:** **진행 중 — RM-M0 · RM-M1 완료(2026-09-09·10), RM-M2 · RM-M3 남음.**
+milestone 넷을 계획했고 plan 둘이 `docs/superpowers/plans/`에 있다. 아래 실측
+절 셋("착수 전에" · "RM-M0이" · "RM-M1이")이 실행이 증명한 것을 담는다.
+착수 전 게이트 기준선은 아홉 체인 3/3으로 **19분 40.02초**(FP-M1 시점),
+RM-M0 뒤 열 체인 3/3으로 **19분 52.07초**, RM-M1 뒤 **20분 23.41초**다.
 
 `docs/decisions/project_target_hardware.md`가 2026-08-31에 지목한 것을 집는다 —
 **지금 커널은 노트북에서 아예 못 뜬다.** 사용자가 그날 "TARS는 노트북 사용을
@@ -399,6 +401,8 @@ SH-M1이 끝난 시점에 프롬프트의 한글이 깨져 보였던 것과 같�
 빌드 시간을 재서 plan에 적는다 — 15배가 견딜 만한지가 결정 1의 대가다.
 **게이트 시간의 잡음이 ±3분이므로**(IS-M0 실측 3) 단일 게이트 시간 차이로
 판정하지 않고 커널 빌드 시간을 따로 잰다.
+**→ 실현되지 않았다.** 배수가 15가 아니라 **1**이고(실측 8) 증가분이
+5.68초다(실측 11). "15배"는 GL-M0·M1 이전에 쓰인 낡은 문장이었다.
 
 **위험 3. `serial: yes`가 로그를 시끄럽게 만들어 기존 판정을 흔든다.** limine이
 글자마다 escape를 찍는다. **`boot/check.sh`의 `grep -q "Welcome to fish"`는
@@ -417,6 +421,156 @@ QEMU 10.0.11이다. **깨지는 방식이 조용하지 않다**(격자 수가 �
 `fish`·`zig` 버전이 그때와 달라질 수 있다. **버전은 Dockerfile에 못으로 박혀
 있다**(`ZIG_VERSION=0.16.0`)는 것이 이 위험의 크기를 줄인다 — 다만 apt
 패키지는 안 박혀 있다.
+
+## RM-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+### 실측 6. `boot/check.sh`가 깨졌고, 깨진 이유가 좋은 쪽이었다
+
+plan Task 4의 판정("`boot/check.sh`가 여전히 통과한다")이 잡았다.
+
+```
+Boot reached the fish banner after ~3s
+init mounted all four filesystems
+FAIL: init never gave up on the terminal
+```
+
+**터미널이 뜬 것이 실패였다.** 그 체인이 검증하는 것은 감독 루프의 **포기
+경로**(`MAX_FAST_RESTARTS = 3`)이고, 그것을 밟으려면 `/dev/dri/card0`이
+없어야 한다. 여태 그 전제는 "virtio-gpu를 안 물렸다"에 얹힌 **암묵적인**
+것이었는데, `SYSFB_SIMPLEFB`와 `DRM_SIMPLEDRM`을 켜자 **limine이 넘긴 VGA
+프레임버퍼만으로도 `card0`이 생겼다.**
+
+**커널 쪽을 되돌리지 않았다.** BIOS 부팅에서도 픽셀이 나오게 된 것은 잃을 수
+없는 개선이다 — legacy 기계에서도 화면이 뜬다는 뜻이고, 이 서브프로젝트가
+향하는 방향 그 자체다. 처방은 `boot/check.sh`에 `-vga none` 한 줄이고,
+**그것이 전제를 암묵에서 명시로 옮긴다.**
+
+`-vga none`으로 돌린 결과가 옛 계약을 정확히 되살렸다.
+
+```
+tars-init: /dev/dri/card0 not found
+tars-init: started terminal (pid 19) / (pid 25) / (pid 26)
+tars-init: giving up on terminal after 3 fast exits
+```
+
+**design 결정 2("기존 아홉은 한 글자도 안 건드린다")를 지키지 못했다.**
+한 줄을 건드렸고, 이유는 "새 체인이 옛 체인을 흔들어서"가 아니라 **커널
+설정 변경이 옛 체인의 전제를 바꿔서**다. 결정 2가 막으려던 위험(체인들을
+한꺼번에 흔드는 것)과는 다른 종류다.
+
+### 실측 7. `serial: yes`가 들리게 만든 말은 `grep`으로 못 읽는다
+
+음성 확인에서 드러났다. `CONFIG_RELOCATABLE`을 끄고 체인을 돌리니 exit 1은
+맞는데 **`fail()`이 찍기로 한 문맥 줄이 비어 나왔다.**
+
+limine은 글자마다 커서 이동 escape를 끼워 넣는다 —
+`P` `ESC[01;02H` `A` `ESC[01;03H` `N` … 이라서 `grep "PANIC"`이 아무것도 못
+찾는다. 처방은 실패 경로에서만 escape를 걷어내는 `denoise()`이고, 걷어내자
+말이 도로 붙었다.
+
+```
+FAIL: expected fish banner not found (waited 120s)
+  linux: Loading kernel `boot():/boot/bzImage`...PANIC: linux: Non-relocatable
+  kernel could not be loaded at required address 0x1000000Stacktrace:  [0x1e28c685] <panic+0x155>
+```
+
+**"들린다"와 "읽힌다"가 다르다.** `serial: yes`는 말을 시리얼로 보냈을 뿐이고,
+그 말을 판정이 쓰려면 한 겹이 더 필요했다. **우리 쪽 줄에는 escape가 안
+붙으므로 판정 셋은 이 처리 없이도 맞는다** — 걷어내기가 필요한 곳은 사람이
+읽는 자리뿐이다.
+
+### 실측 8. 게이트가 커널을 15회가 아니라 **1회** 빌드한다
+
+`project_kernel_config`가 "루트 게이트의 `clean()`이 매 회차 `kernel/build`를
+지우므로 커널 빌드 15회다. 설정 변경이 빌드에 더하는 시간은 그대로 15배가
+된다"고 적어 뒀다. **그 문장이 낡았다.**
+
+게이트 로그를 세어 보면 실제 빌드가 **1회**이고 `kernel: bzImage matches
+.config and build.sh, skipping make`가 **29회**다(체인 10 × 3회 = 30번 호출).
+
+- **GL-M0이 `clean()`을 게이트 시작 1회로 옮겼다.**
+- **GL-M1이 `.config`와 `build.sh`의 sha256 스탬프를 넣었다.**
+
+**그래서 design 결정 1의 대가가 15배가 아니라 1배다.** RM-M1의 실측(+5.68초)에
+15를 곱하면 85초지만 실제로는 5.68초다. **문서에 적힌 배수는 게이트 시간과
+같은 종류로 낡는다**(IS-M0 실측 2와 같은 교훈이고, 이번에는 시간이 아니라
+구조다).
+
+### 실측 9. 게이트가 열 체인 3/3으로 19분 52.07초다
+
+직전 아홉 체인 값이 19분 40.02초였으므로 **+12.05초**다. 체인 하나가 3회
+늘고 커널이 4.3% 커졌는데도 잡음(±3분) 안이다 — 새 체인의 부팅이 5초로
+싸고, 커널을 한 번만 빌드하기 때문이다(실측 8).
+
+## RM-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+### 실측 10. `.config`의 층이 정확히 셋이었고 되접기가 그것을 드러냈다
+
+라운드마다 켜고 → 빌드 → 되접기를 셋 돌아 고정점에 닿았다. **우리가 손으로
+한 줄도 안 적었는데 켜진 것 다섯**이 층이 제대로 접혔다는 증거다.
+
+```
+CONFIG_USB_HID=y        ← USB=y가 켰다
+CONFIG_USB_XHCI_PCI=y   ← USB_XHCI_HCD=y가 켰다
+CONFIG_USB_EHCI_PCI=y   ← USB_EHCI_HCD=y가 켰다
+CONFIG_SATA_HOST=y      ← SATA_AHCI=y가 켰다
+CONFIG_I2C_HID=y        ← HID_SUPPORT=y가 켰다 (노트북 I2C 터치패드/키보드)
+```
+
+**`USB_HID`를 명시하지 않은 것이 옳았다.** 적었으면 "이 줄이 이 기능을
+켠다"가 틀린 기록이 된다 — 실제로 켜는 것은 `USB=y`다.
+
+### 실측 11. 커널 빌드가 50.947초 → 56.627초다 (+5.68초, +11.1%)
+
+결정 1("`.config`는 하나")의 대가다. 같은 컨테이너에서 `rm -rf kernel/build`
+뒤에 잰 값이고, `git stash`로 RM-M0 상태를 되살려 **같은 세션에서** 둘을
+쟀다(IS-M0 실측 2의 규율 — 다른 날에 잰 기준선과 비교하지 않는다).
+
+**게이트는 이것을 1배로 치른다**(실측 8). `project_kernel_config`가 ACPI에
+대해 "15배는 39초라 정책을 바꿀 이유가 못 된다"고 판단했던 자리인데,
+지금은 **5.68초**다. 결정 1을 다시 볼 이유가 없다.
+
+bzImage는 3,060,736 → 3,580,928바이트(+17.0%)다.
+
+### 실측 12. `i8042=off`가 없으면 이 milestone이 아무것도 안 본다
+
+음성 확인이 design 결정 7을 정면으로 증명했다. 그 플래그만 빼고 체인을
+돌렸다.
+
+```
+FAIL: init did not pick the USB keyboard (is i8042 still on? did USB_HID build?)
+  tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
+```
+
+`usb-kbd`도 `qemu-xhci`도 그대로 물려 있고 커널의 USB 스택도 그대로인데,
+**PS/2가 있다는 것만으로 `init`이 그쪽을 골랐다.** 그 플래그가 없었으면
+`usb-kbd`를 아예 안 물려도 게이트가 초록이었을 것이다.
+
+**IS-M1 실측 4의 사촌이다** — "같은 것을 두 층이 지킬 때 위층을 확인하려면
+아래층을 먼저 꺼야 한다." 그때는 호스트 검사 넷을 되돌려야 게이트 판정이
+보였고, 이번에는 PS/2를 꺼야 USB 판정이 보인다.
+
+### 실측 13. 게이트가 열 체인 3/3으로 20분 23.41초다
+
+RM-M0 뒤 값(19분 52.07초)에서 **+31.34초**다. 설명되는 값이다 — 커널 빌드
++5.68초(1배, 실측 8·11)와 체인이 새로 하는 일(모니터 연결 · 글자 셋 타이핑
+0.4초씩 · 확인 대기 2초 · NVMe와 xHCI 초기화)이 3회 돈다.
+
+착수 전 아홉 체인 값 19분 40.02초에서 보면 **전체 +43.39초**이고, 그 사이에
+게이트가 **부팅 33회에서 36회**로 늘고 커널이 22.1% 커졌다.
+
+### 실측 14. "장치가 보인다"와 "키가 화면에 닿는다"가 다르다
+
+체인의 판정 여섯은 전부 커널이 만든 줄이거나 `init`이 연 결과다. 일곱째만이
+**USB 키보드로 친 글자가 PTY를 지나 격자에 그려지는가**를 본다.
+
+```
+=== typing 'usb' on the USB keyboard ===
+keys from the USB keyboard reached the grid
+```
+
+QEMU 모니터의 `sendkey`가 `usb-kbd`로 간다는 것은 문서가 아니라 이 줄이
+증명한다 — `i8042=off`라 경쟁자가 없으므로 다른 해석이 없다.
 
 ## 이 세션의 예외 — 편집을 Claude Code가 한다
 
