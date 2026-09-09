@@ -105,7 +105,24 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
     }
 }
 
-/// 프롬프트 오버레이(design 결정 7). **격자를 다 그린 뒤 마지막 줄만 덮는다.**
+/// 프롬프트가 그려진 결과(SH-M2). **게이트가 이 값으로 판정한다.**
+///
+/// `cols`는 마지막으로 쓴 **다음 칸**이다 — `/가`가 3이면 폭 2를 안 것이고
+/// 4면 바이트를 센 것이라, 정수 하나가 SH design 결정 9를 통째로 본다.
+///
+/// `x0`·`x1`은 반전 구간의 픽셀 범위다. 조합 중이 아니면 둘이 같다.
+/// **그린 함수가 자기가 칠한 범위를 그대로 돌려주는 것**이 요점이다 —
+/// `dumpStatus`처럼 산수를 다시 하면 어긋났을 때 언제나 0이 나오고 증상이
+/// "안 그렸다"와 구별되지 않는다(IS-M0 실측의 경고).
+const PromptInk = struct {
+    cols: u32,
+    x0: u32,
+    x1: u32,
+    y: u32,
+};
+
+/// 프롬프트 오버레이(CN-M1 design 결정 7). **격자를 다 그린 뒤 마지막 줄만
+/// 덮는다.**
 ///
 /// **`render`가 `present()`로 끝나므로 반드시 그 안에서, present 앞에 그려야
 /// 한다.** 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
@@ -114,33 +131,55 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
 /// 프레임의 꼬리가 오른쪽에 남는다 — Backspace를 눌렀는데 글자가 안 지워지는
 /// 것처럼 보인다.
 ///
-/// **반전하지 않는다**(CN-M1 plan 결정 6). 선택도 copy 커서도 "색 둘을
-/// 맞바꾼다"로 나타나므로, 프롬프트까지 반전하면 화면 맨 아래의 흰 띠가
+/// **검색어는 반전하지 않는다**(CN-M1 plan 결정 6). 선택도 copy 커서도 "색
+/// 둘을 맞바꾼다"로 나타나므로, 프롬프트까지 반전하면 화면 맨 아래의 흰 띠가
 /// 선택인지 프롬프트인지 갈리지 않는다. 앞의 `/` 한 글자가 그 표시다.
+///
+/// **조합 중인 글자 하나만 반전한다**(SH design 결정 2). 위 문단과 어긋나지
+/// 않는다 — 저기서 말한 것은 **줄 전체**이고 이것은 **글자 하나**다. 그리고
+/// 그 하나는 "아직 검색어가 아닌 것"이라 표시가 필요하다. 격자 안의 preedit이
+/// 이미 같은 규칙을 쓴다.
+///
+/// **`drawRun`을 재사용한다**(SH design 결정 9). IS-M1이 상태 줄의 색을 칸마다
+/// 가르려고 "한 토막을 한 색으로 그리고 다음 col을 돌려준다"는 모양으로
+/// 만들었는데, 프롬프트의 반전 구간이 정확히 그 모양을 필요로 한다.
+/// **바이트 하나를 글자 하나로 세던 옛 코드가 이 재사용으로 사라진다** —
+/// IS design이 주석에 미리 적어 둔 함정이었다.
 fn drawPrompt(
     fb: drm.Framebuffer,
     cache: *font.Cache,
-    text: []const u8,
-    rows: u16,
-    cols: u16,
-    fg: u32,
-    bg: u32,
-) !void {
-    if (rows == 0) return;
-    const y = GRID_Y + @as(u32, rows - 1) * ROW_HEIGHT;
+    p: Prompt,
+) !PromptInk {
+    if (p.rows == 0) return .{ .cols = 0, .x0 = 0, .x1 = 0, .y = 0 };
+    const y = GRID_Y + @as(u32, p.rows - 1) * ROW_HEIGHT;
 
     var col: u32 = 0;
-    while (col < cols) : (col += 1) {
-        drawCellBackground(fb, GRID_X + col * CELL_W, y, bg);
+    while (col < p.cols) : (col += 1) {
+        drawCellBackground(fb, GRID_X + col * CELL_W, y, p.bg);
     }
 
-    col = 0;
-    for (text) |ch| {
-        if (col >= cols) break;
-        const glyph = try cache.find(ch);
-        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
-        col += 1;
+    col = try drawRun(fb, cache, p.text, y, p.fg, 0);
+
+    const cp = p.edit orelse return .{ .cols = col, .x0 = 0, .x1 = 0, .y = y };
+
+    // **조합 중인 글자는 색을 맞바꿔 그린다.** 배경을 글자색으로 칠하고 획을
+    // 배경색으로 찍는다 — 격자 안의 커서·선택이 쓰는 규칙 그대로다.
+    //
+    // **두 칸을 칠해야 한다.** `drawGlyph`는 16픽셀을 첫 셀의 색 하나로
+    // 찍으므로, 한 칸만 반전하면 글자의 오른쪽 절반이 어두운 바탕에 어두운
+    // 색으로 그려져 **사라진다**(HI-M1 실측 3 · 2026-09-02의 사고와 같은
+    // 메커니즘이다).
+    const glyph = try cache.find(cp);
+    const span = @max(1, glyph.cell_width / CELL_W);
+    const x0 = GRID_X + col * CELL_W;
+    var i: u32 = 0;
+    while (i < span and col + i < p.cols) : (i += 1) {
+        drawCellBackground(fb, GRID_X + (col + i) * CELL_W, y, p.fg);
     }
+    drawGlyph(fb, glyph, x0, y, p.bg);
+    // **`span`이 아니라 `i`로 x1을 센다.** 칸이 모자라 덜 칠했으면 덜 칠한
+    // 만큼만 세야 판정이 실제 픽셀과 맞는다.
+    return .{ .cols = col + span, .x0 = x0, .x1 = x0 + i * CELL_W, .y = y };
 }
 
 /// 입력기 상태 줄(IS design 결정 6). **격자 바깥의 아래 여백에 그린다** —
@@ -223,6 +262,13 @@ fn drawRun(
     var col = start_col;
     while (it.nextCodepoint()) |cp| {
         const glyph = try cache.find(cp);
+        // **화면 밖으로 안 나간다.** `setPixel`은 범위를 검사하지 않으므로
+        // (`drm.zig:149`) 여기서 멈추지 않으면 프레임버퍼 밖에 쓴다.
+        //
+        // **`drawPrompt`가 이 함수를 쓰기 시작하면서 필요해졌다**(SH-M2).
+        // needle은 128바이트까지 자라는데 격자는 100칸 남짓이다. 상태 줄은
+        // 짧아서 여태 안 닿았지만, 같은 함수가 지키는 편이 낫다.
+        if (GRID_X + col * CELL_W + glyph.cell_width > fb.width) break;
         drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
         // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
         // 글자가 같은 자리에 겹쳐 그려지고, 증상이 "글자 하나가 뭉갠 것처럼
@@ -249,7 +295,7 @@ fn render(
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
     // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
     st: Status,
-) !void {
+) !?PromptInk {
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
 
@@ -273,15 +319,18 @@ fn render(
         drawGlyph(fb, glyph, x, y, cell.fg);
     }
 
-    if (prompt) |p| {
-        try drawPrompt(fb, cache, p.text, p.rows, p.cols, p.fg, p.bg);
-    }
+    // **그린 결과를 돌려준다**(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
+    // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
+    // 같은 산수를 다시 하지 않는다.
+    var ink: ?PromptInk = null;
+    if (prompt) |p| ink = try drawPrompt(fb, cache, p);
 
     // **프롬프트와 안 겹친다** — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try drawStatus(fb, cache, st);
 
     try fb.present();
+    return ink;
 }
 
 /// 오버레이 한 줄에 필요한 것 전부.
@@ -290,6 +339,14 @@ fn render(
 /// 늘어놓으면 `rows`와 `cols`, `fg`와 `bg`를 뒤바꿔 넣어도 컴파일이 통과한다.
 const Prompt = struct {
     text: []const u8,
+    /// 조합 중인 글자(SH-M2, design 결정 2). **프롬프트가 열려 있을 때만
+    /// 있다** — 닫힌 뒤의 오버레이(`/needle [3/12]`)에는 조합이 붙지 않는다.
+    ///
+    /// **`text`에 안 붙인 것이 SH-M2 plan의 결정이다.** 붙이면 "어디부터
+    /// 반전인가"를 바이트 오프셋으로 함께 날라야 하고, 그 둘이 어긋나면
+    /// 반전이 한 글자 밀린다. 조합 중인 글자는 언제나 **하나**라 코드포인트
+    /// 하나면 충분하다.
+    edit: ?u21,
     rows: u16,
     cols: u16,
     fg: u32,
@@ -614,7 +671,56 @@ fn dumpHangul(state: *const input.State) void {
 
 fn dumpOverlay(prompt: ?Prompt) void {
     const p = prompt orelse return;
-    std.debug.print("terminal: find> overlay text={s}\n", .{p.text});
+    // **조합 중인 글자를 함께 찍는다**(SH-M2). `text=`만 보면 "조합이 아직
+    // 검색어가 아니다"를 게이트가 볼 창구가 없다.
+    //
+    // `(none)`이라고 쓰는 이유는 `dumpHangul`과 같다 — 빈 문자열이면 줄이
+    // 잘린 것인지 값이 없는 것인지 갈리지 않는다.
+    var utf8: [4]u8 = undefined;
+    const len: usize = if (p.edit) |cp|
+        std.unicode.utf8Encode(cp, &utf8) catch 0
+    else
+        0;
+    const edit: []const u8 = if (len == 0) "(none)" else utf8[0..len];
+    std.debug.print("terminal: find> overlay text={s} preedit={s}\n", .{ p.text, edit });
+}
+
+/// 프롬프트가 실제로 그린 것을 픽셀로 센다(SH-M2).
+///
+/// **판정 셋이 한 줄에 있다.**
+///   `cols` — 그린 칸 수. `/가`가 3이면 폭 2를 안 것이고 4면 바이트를 센 것이다
+///   `inv`  — 반전 구간에서 **글자색**인 픽셀. 배경이 뒤집혔다는 증거
+///   `ink`  — 반전 구간에서 **배경색**인 픽셀. 그 위에 글자를 그렸다는 증거
+///
+/// **`inv`만 보면 사각형만 칠한 구현도 통과한다.** IS-M1이 `CAPS` 칸에서
+/// `on`과 `off`를 한 줄에 함께 찍은 것과 같은 이유다.
+///
+/// **범위를 여기서 다시 계산하지 않는다.** `drawPrompt`가 자기가 칠한 픽셀
+/// 범위를 그대로 돌려준다 — `dumpStatus`가 `drawStatus`의 y 산수를 다시 해야
+/// 했던 자리와 갈리는 지점이고, 어긋나면 언제나 0이 나오는 그 함정을 아예
+/// 안 만든다.
+///
+/// **반드시 `render()` 뒤에 부른다** — 그 전에 부르면 이전 프레임을 읽는다.
+///
+/// 문구가 이 파일과 `hangul/check.sh` 양쪽에 중복된다.
+/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
+    const k = ink orelse return;
+    const p = prompt orelse return;
+    var inv: usize = 0;
+    var glyph_ink: usize = 0;
+    var x = k.x0;
+    while (x < k.x1) : (x += 1) {
+        var row: u32 = 0;
+        while (row < ROW_HEIGHT) : (row += 1) {
+            const px = fb.getPixel(x, k.y + row) & 0x00FFFFFF;
+            if (px == (p.fg & 0x00FFFFFF)) inv += 1;
+            if (px == (p.bg & 0x00FFFFFF)) glyph_ink += 1;
+        }
+    }
+    std.debug.print("terminal: find> ink cols={d} inv={d} ink={d}\n", .{
+        k.cols, inv, glyph_ink,
+    });
 }
 
 /// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). **값이 바뀌었을 때만 찍는다.**
@@ -1185,6 +1291,13 @@ pub fn main(init: std.process.Init) !void {
         var prompt_buf: [173]u8 = undefined;
         const prompt: ?Prompt = if (promptText(screen, &prompt_buf)) |t| .{
             .text = t,
+            // **프롬프트가 열려 있을 때만 조합을 붙인다**(SH-M2). 닫힌 뒤의
+            // 오버레이는 지난 검색의 결과 표시이고, 그 위에 조합을 그리면
+            // 검색어가 자라는 것처럼 보인다.
+            //
+            // `findNeedle()`이 열림의 진실이다 — `promptText`가 갈래를 가를
+            // 때 보는 값과 같은 것이라 둘이 어긋날 수 없다.
+            .edit = if (screen.findNeedle() != null) key_state.preedit() else null,
             .rows = rows,
             .cols = cols,
             // **`cells()` 뒤에 읽어야 한다** — `state.colors`는 update()가
@@ -1206,7 +1319,7 @@ pub fn main(init: std.process.Init) !void {
         };
 
         const frame_start = std.Io.Clock.now(.awake, init.io);
-        try render(fb, &cache, cells, prompt, status_line);
+        const prompt_ink = try render(fb, &cache, cells, prompt, status_line);
         if (!first_frame_timed) {
             first_frame_timed = true;
             std.debug.print("terminal: render> first frame {d}us\n", .{
@@ -1217,6 +1330,7 @@ pub fn main(init: std.process.Init) !void {
         dumpScreen(cells);
         dumpHighlight(screen);
         dumpOverlay(prompt);
+        dumpPromptInk(fb, prompt_ink, prompt);
         dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
