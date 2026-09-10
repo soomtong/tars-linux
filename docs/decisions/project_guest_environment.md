@@ -1,6 +1,6 @@
 ---
 name: project_guest_environment
-description: "게스트의 환경변수는 커널이 준 HOME=/ 와 TERM=linux 둘뿐이다 — PATH가 없으므로 게스트에서 외부 명령을 칠 때는 절대 경로로, TERM은 terminal 쪽 setenv로 xterm-256color가 되고 그 terminfo는 initrd에 직접 넣는다(시리얼 셸은 linux 유지)"
+description: "게스트의 환경변수는 커널이 준 HOME=/ 와 TERM=linux 둘에서 시작한다 — PATH는 UT-M0부터 PID 1이 지어 자식 둘에게 준다(PATH=/usr/bin:/bin), TERM은 terminal 쪽 setenv로 xterm-256color가 되고 그 terminfo는 initrd에 직접 넣는다(시리얼 셸은 linux 유지)"
 metadata:
   node_type: memory
   type: project
@@ -21,20 +21,57 @@ const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 게이트가 띄우는 셸은 전부 no-config 모드(`fish --no-config` / `bash --norc`
 / `zsh -f`)라 셸 초기화 파일이 채워줄 여지도 없다.
 
-## 결과 1: `PATH`가 없다
+## 결과 1: `PATH`가 없었다 — UT-M0(2026-09-10)에 고쳤다
 
-게스트 셸에서 `sleep 100`은 실패할 수 있다. **외부 명령은 절대 경로로 쓴다**
-— `/usr/bin/sleep`, `/usr/bin/bash`. IP-M0 게이트가 그렇게 고쳐졌고
-(`input/check.sh`), IP-M2가 fish에서 bash로 갈아타는 대목도 같은 제약을
-받는다.
+**2026-08-17부터 2026-09-10까지 참이었던 것.** 게스트 셸에서 `sleep 100`이
+실패했다. 그동안 **외부 명령은 절대 경로로 썼다** — `/usr/bin/sleep`,
+`/usr/bin/bash`. IP-M0 게이트가 그렇게 고쳐졌고(`input/check.sh`), IP-M2가
+fish에서 bash로 갈아타는 대목도 같은 제약을 받았다. **열 체인이 전부 그렇게
+쓰여 있고 지금도 그렇다** — 절대 경로는 PATH가 있어도 여전히 맞기 때문에
+고칠 이유가 없다.
 
 CP-M2까지 이 사실이 드러나지 않은 이유는 그때까지 게이트가 화면 셸에서 **셸
 builtin만** 썼기 때문이다(`echo ... > /config/tars.conf`). IP-M0의
 `/usr/bin/sleep`이 화면 셸에서 외부 바이너리를 실행한 첫 사례다.
 
-`PATH`를 채워주는 것이 옳은 해결처럼 보이지만 지금은 하지 않는다 — 채우는
-자리가 PID 1인지(`init`), 터미널인지, 셸 설정인지는 설정 시스템과 함께
-결정할 문제이고, 게이트에 절대 경로를 쓰는 비용은 키 몇 개다.
+이 문서는 그때 **유예를 적어 뒀다** — *"채우는 자리가 PID 1인지, 터미널인지,
+셸 설정인지는 설정 시스템과 함께 결정할 문제이고, 게이트에 절대 경로를 쓰는
+비용은 키 몇 개다."* **그 설정 시스템이 CP-M2로 2026-08-15에 생겼고, 비용이
+"키 몇 개"인 것도 더 이상 참이 아니게 됐다** — 2026-09-10에 사용자가 기계를
+실제로 써 보고 "`ls` 같은 것들이 없다"고 지목했다. 게이트가 아니라 사람이
+쓰는 기계가 됐다는 뜻이다.
+
+**UT-M0이 그 자리를 PID 1로 정했다.** `PATH`는 `TERM`과 달리 자식마다 갈릴
+이유가 없는 값이고(화면 셸도 시리얼 콘솔 셸도 같은 `/usr/bin`을 본다), 그래서
+`terminal`의 `setenv` 옆이 아니라 커널 블록을 짓는 자리로 갔다. **아래 결과
+3의 `LANG`이 갈릴 이유 없이 갈려 있는 자기비판을 이 문서가 적어 뒀고, 그
+실수를 반복하지 않은 것이 이 결정이다.**
+
+| 자리 | 무엇 |
+|---|---|
+| `init/src/environ.zig` | 커널 블록을 복사하고 끝에 `PATH=/usr/bin:/bin`을 붙인 새 블록을 짓는다. **시스템 콜을 안 한다** |
+| `init/src/environ_test.zig` | 그 함수의 호스트 검사 넷. 부팅 20초가 아니라 0.1초로 돈다 |
+| `init/src/main.zig` | `main()`의 스택에 블록을 잡고 `supervise()`가 자식 둘에게 그대로 넘긴다 |
+| `tools/check.sh` | 열한번째 체인. 게스트에 **절대 경로 없이** `ls`를 친다 |
+
+**값이 `/usr/bin:/bin` 둘뿐인 것에 뜻이 있다.** 도구는 전부 `/usr/bin`에 넣고
+`/bin`에는 `sh` 하나만 둔다. 이 문자열과 `kernel/make_initrd.sh`가 넣는 자리가
+어긋나면 증상은 "어떤 명령도 안 찾아진다"이고 원인에서 멀다.
+
+**자리가 모자라면 커널 블록을 그대로 돌려준다.** PATH가 없는 게스트는
+불편하지만 살아 있고, 버퍼를 넘겨 쓴 PID 1은 기계를 아예 못 켠다. 그때
+init이 `tars-init: env unchanged (no room for PATH)`를 찍고, 그 침묵이 곧
+게이트의 판정이다.
+
+**시리얼 콘솔 셸도 받는다 — 다만 관측된 적은 없다.** `supervise()`가
+`start(c, envp)`를 한 루프에서 부르는 코드 구조가 보장할 뿐이다. 아래
+`TERM`에 대해 이 문서가 같은 말을 적어 둔 것과 같은 기준이고, 저장소의 열한
+체인 전부가 `-serial file:`(쓰기 전용)이라 시리얼 셸에 타이핑한 체인이
+하나도 없다.
+
+**함께 생긴 것이 뼈대 넷이다** — `/bin/sh`(→ `../usr/bin/bash` 심볼릭 링크) ·
+`/tmp`(모드 1777) · `/etc/passwd` · `/etc/group`. `PATH`만으로는 부족했다.
+자세히는 [[project_userland_tools]].
 
 ## 결과 2: `TERM`은 거짓말이었다 — IP-M1(2026-08-18)에 고쳤다
 
@@ -101,14 +138,23 @@ TR-M0에서는 terminfo가 없어서 셸이 능력을 몰랐던 것이라 **진�
 `smkx`를 보내지 않는다(DECCKM이 계속 꺼져 있다). 자세히는
 [[project_gate_chain_composition]]의 "게이트가 구조적으로 밟을 수 없는 경로".
 
-**How to apply:** 게스트에서 명령을 실행하는 코드나 게이트를 쓸 때는 `PATH`가
-없다고 가정하고 절대 경로를 쓴다. 환경변수에 의존하는 동작을 보게 되면
-"그 변수가 게스트에 실제로 있는가"를 먼저 확인한다 — 기본값은 **없다**다.
+**How to apply:** 게스트에 지금 있는 환경변수는 **넷**이다 —
+`HOME=/`(커널) · `TERM`(화면 셸은 `xterm-256color`, 시리얼 셸은 `linux`) ·
+`LANG=C.UTF-8`(화면 셸만) · `PATH=/usr/bin:/bin`(둘 다). **그 밖의 것은
+없다고 가정한다.**
+
+게이트를 새로 쓸 때는 여전히 **절대 경로를 기본으로 쓴다.** PATH가 생겼어도
+절대 경로가 틀린 것이 아니고, 열 체인이 그렇게 쓰여 있어 일관성이 값이다.
+**이름으로 부르는 것을 일부러 시험하는 자리는 `tools/check.sh` 하나다** —
+그것이 그 체인의 존재 이유다.
+
 새 환경변수가 필요해지면 그것을 넣는 자리(PID 1 / terminal / 셸 설정)가
-`TERM`처럼 자식마다 달라야 하는 값인지 먼저 판단한다.
+`TERM`처럼 **자식마다 달라야 하는 값인지** 먼저 판단한다. 갈릴 이유가 없으면
+PID 1이고, 그 길은 `init/src/environ.zig`에 이미 깔려 있다 — `PATH_ENTRY`
+옆에 항목을 하나 더하고 `MAX_ENTRIES`가 남는지만 보면 된다.
 
 관련: [[project_init_supervisor]], [[project_config_persistence]],
-[[project_gate_chain_composition]]
+[[project_gate_chain_composition]], [[project_userland_tools]]
 
 ## 결과 3: 로케일이 없었다 — HI-M1(2026-09-01)에 고쳤다
 
@@ -145,3 +191,10 @@ string length \ub098   → 1   ← 이스케이프로 만든 같은 글자는 �
 넘기므로 거기에 항목을 더하려면 블록을 새로 만들어야 하는데, 한글 입력을 받는
 셸은 화면 쪽 하나뿐이라 그 값을 안 치렀다. **TERM이 둘로 갈리는 것과 이유가
 다르다** — 그쪽은 갈려야 맞고, 이쪽은 갈릴 이유가 없는데도 갈려 있다.
+
+**UT-M0(2026-09-10)이 그 값을 치렀다 — `LANG`은 아직 안 옮겼다.** 블록을
+새로 짓는 코드가 `init/src/environ.zig`에 생겼으므로, `LANG`을 PID 1로
+옮기는 비용은 이제 `PATH_ENTRY` 옆에 줄 하나다. **안 옮긴 이유는 UT-M0의
+범위가 아니어서이지 어려워서가 아니다** — 옮기면 시리얼 셸도 UTF-8이 되고,
+그 변화를 볼 체인이 저장소에 없다(시리얼 셸에 타이핑하는 체인이 하나도
+없다). **다음에 이 문단을 읽는 사람에게 남기는 후보다.**
