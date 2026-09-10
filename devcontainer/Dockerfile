@@ -9,6 +9,12 @@ FROM debian:trixie-slim
 # 부팅하는데, 실머신 노트북은 예외 없이 UEFI다. ovmf는 EDK II를 미리 빌드해 둔
 # 펌웨어 이미지(/usr/share/OVMF/OVMF_CODE_4M.fd)라서 **Architecture: all이다** —
 # 컨테이너가 arm64인데도 x86_64 게스트용 펌웨어가 그대로 깔린다. 3.6MB다.
+#
+# UT-M1이 zstd를 더한다. **어떤 빌드 단계도 이것을 부르지 않는다** — 재는
+# 도구다. UT-M0의 크기 스파이크가 압축기 셋 중 zstd 하나를 컨테이너에 없어서
+# 못 쟀고(design 실측 15), UT-M2가 27MB를 더하면 그 질문이 다시 살아난다.
+# 그때 재려고 이미지를 또 굽지 않으려고 지금 넣는다. 커널은 CONFIG_RD_ZSTD를
+# 이미 켜 뒀으므로 카드는 커널 재설정 없이 손에 있다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         gcc-multilib-x86-64-linux-gnu \
@@ -31,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xz-utils \
         unzip \
         e2fsprogs \
+        zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # initrd에 들어갈 x86_64 유저랜드. 컨테이너가 arm64라서 컨테이너 자신의
@@ -65,6 +72,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 두 칸짜리 글자의 가운데에 세우고 거기에 다음 글자를 쓰기 때문이다.
 # ncurses-base와 같은 종류의 항목이다: **우리가 게스트에게 한 말을 참으로
 # 만들어 주는 데이터.**
+#
+# UT-M1이 층 1(GNU 한 벌)을 더한다 — **UT가 이 목록을 처음 넓히는 자리다.**
+# coreutils는 이미 있었고(UT-M0 전부터), 없던 것은 별도 패키지 여덟이다:
+# grep · findutils(find·xargs) · sed · mawk(awk) · diffutils(diff·cmp) ·
+# less · procps(ps·top) · util-linux(dmesg 하나 때문에 받는다).
+#
+# 라이브러리 넷이 따라온다. **design 실측 3은 둘이라고 적었는데 그것이
+# 불완전했다** — 바이너리의 DT_NEEDED만 보고 .so의 DT_NEEDED를 안 봤다.
+#
+#   libacl1     sed·cp·mv
+#   libattr1    coreutils(cp·mv 계열). 실측 3에 없던 이름이다
+#   libproc2-0  ps·top
+#   libsystemd0 **libproc2가 데려온다.** 이것도 실측 3에 없었다
+#
+# libsystemd는 lzma·zstd·gcrypt를 dlopen으로만 열고 DT_NEEDED에는
+# libcap·libm·libc뿐이다(libcap은 zsh가 이미 데려와 있다). 저널 압축을 쓸
+# 때만 열리는 경로이고 ps/top은 저널을 안 본다 — 그래서 copy_lib_deps가
+# 따라가는 사슬은 4.2MB가 아니라 1.38MB다.
+#
+# **apt-get download가 의존을 안 따라가는 것이 여기서 값을 낸다.** 라이브러리
+# 넷을 손으로 안 적으면 make_initrd.sh가 그 소네임을 찍고 즉시 죽는다 —
+# 게스트가 부팅한 뒤 그 명령을 처음 칠 때가 아니라 빌드 때 드러난다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -80,6 +109,18 @@ RUN dpkg --add-architecture amd64 \
         libtinfo6:amd64 \
         libcap2:amd64 \
         coreutils:amd64 \
+        grep:amd64 \
+        findutils:amd64 \
+        sed:amd64 \
+        mawk:amd64 \
+        diffutils:amd64 \
+        less:amd64 \
+        procps:amd64 \
+        util-linux:amd64 \
+        libacl1:amd64 \
+        libattr1:amd64 \
+        libproc2-0:amd64 \
+        libsystemd0:amd64 \
         libc6:amd64 \
         libc-bin:amd64 \
         libgcc-s1:amd64 \
