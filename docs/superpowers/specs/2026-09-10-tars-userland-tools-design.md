@@ -1,10 +1,12 @@
 # TARS Userland Tools — Design
 
 **Date:** 2026-09-10
-**Status:** **진행 중 — UT-M0 완료(2026-09-10).** milestone 넷(UT-M0~M3) 중
-첫째가 끝났다. `PATH`가 서고 뼈대 넷이 생겼으며 열한번째 체인이 게이트에
-등록됐다. 착수 전 기준선은 열 체인 3/3으로 **20분 29.84초**(RM-M3 시점)였다 —
-UT-M0 뒤의 값은 아래 "UT-M0이 실행으로 증명한 것"에 있다.
+**Status:** **진행 중 — UT-M0·M1 완료(2026-09-10 · 2026-09-11).** milestone
+넷(UT-M0~M3) 중 둘이 끝났다. M0이 `PATH`와 뼈대 넷을 세우고 열한번째 체인을
+등록했고, **M1이 목록을 한 파일로 빼고 그 위에 GNU 한 벌(도구 50)을
+세웠다.** 착수 전 기준선은 열 체인 3/3으로 **20분 29.84초**(RM-M3 시점)였고
+M0 뒤가 **21분 09.60초**였다 — M1 뒤의 값은 아래 "UT-M1이 실행으로 증명한
+것"에 있다.
 
 사용자가 2026-09-10에 지목했다 — **"터미널 환경에서 기본적인 unix/linux
 utilities가 부족하다. 예를 들면 `ls` 같은 것들이 없다."** 그리고 조건을 하나
@@ -90,7 +92,7 @@ config  dev  init  lib  lib64  proc  sys  terminal  usr  vendor
 
 ### 3. GNU는 이미 저장소 안에 있다 — 비용이 복사 줄뿐이다
 
-`devcontainer/Dockerfile:82`가 **`coreutils:amd64`를 통째로** 받아 sysroot에
+`devcontainer/Dockerfile:111`가 **`coreutils:amd64`를 통째로** 받아 sysroot에
 풀어 뒀다. `make_initrd.sh`가 그중 넷만 복사하고 있었을 뿐이다.
 
 ```
@@ -118,6 +120,12 @@ less 243  ps 150  top 135  dmesg 88                          합계 1,621 KB
 새로 필요한 라이브러리는 **둘뿐**이다 — `sed`가 `libacl1`(74KB),
 `ps`/`top`이 `libproc2`(237KB). 나머지가 요구하는 `libpcre2-8` ·
 `libselinux1` · `libtinfo6` · `libm`은 **이미 initrd에 있다.**
+
+> ⚠️ **이 문단이 틀렸다 — 아래 실측 22를 함께 읽을 것.** 바이너리의
+> `DT_NEEDED`만 보고 **`.so`의 `DT_NEEDED`는 안 봤다.** 실제로는 넷이다:
+> `libproc2`가 **`libsystemd`**를 데려오고 coreutils가 **`libattr`**를
+> 요구한다. **아래 실측 4·5도 같은 방식으로 쟀으므로 UT-M2가 Dockerfile을
+> 고치기 전에 `.so`를 한 겹 더 재야 한다.**
 
 ### 4. 모던 도구가 거의 공짜다 — 둘만 빼고
 
@@ -437,8 +445,8 @@ M1~M3이 각자 검사를 더한다.
 
 | | 무엇 | 검증 |
 |---|---|---|
-| **UT-M0** | 뼈대 전부(결정 1·6) + `ls` **하나만** + 크기 스파이크 | 화면 셸에서 절대 경로 없이 `ls`가 돈다. 시리얼 쪽은 아래 |
-| **UT-M1** | 층 1(GNU) + `make_initrd.sh` 리팩터(결정 7) | initrd 목록 검사 + 화면에서 실행 |
+| **UT-M0** ✅ | 뼈대 전부(결정 1·6) + `ls` **하나만** + 크기 스파이크 | 화면 셸에서 절대 경로 없이 `ls`가 돈다. 시리얼 쪽은 아래 |
+| **UT-M1** ✅ | 층 1(GNU) + `make_initrd.sh` 리팩터(결정 7) | initrd 목록 검사 + 화면에서 실행 |
 | **UT-M2** | 층 2(모던 12개) | `libgit2` 사슬이 실제로 딸려 오는가 · 이름이 `fd`/`bat`인가 |
 | **UT-M3** | 층 3(git · `vim.tiny` · 결정 8) | `git init`→`add`→`commit`→`log`가 한 번에 돈다 |
 
@@ -735,3 +743,163 @@ docker run ... bash check.sh   0.21s user 0.47s system 0% cpu 21:09.60 total
 
 **위험 4가 실제로 걸린 체인은 CM 하나였고**(실측 17), 나머지 아홉은 한 글자도
 안 갈렸다. 결정 2가 기존 이름을 아무것도 안 덮어쓴 값이 여기서 나타난다.
+
+## UT-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전부 2026-09-11에 쟀다.
+
+### 실측 22. **실측 3이 불완전했다 — 새 라이브러리는 둘이 아니라 넷이다**
+
+실측 3은 *"새로 필요한 라이브러리는 **둘뿐**이다 — `sed`가 `libacl1`,
+`ps`/`top`이 `libproc2`"*라고 적었다. **바이너리의 `DT_NEEDED`만 보고 `.so`의
+`DT_NEEDED`는 안 봤다.**
+
+```
+libacl.so.1.1.2302      38,832   NEEDED: libc.so.6
+libproc2.so.0.0.2      207,368   NEEDED: libsystemd.so.0 libc.so.6   ← 안 본 줄
+libsystemd.so.0.40.0 1,131,784   NEEDED: libcap.so.2 libm.so.6 libc.so.6
+```
+
+그리고 coreutils 36개의 `DT_NEEDED` 합집합에 **`libattr.so.1`**이 있다 —
+실측 3이 "이미 initrd에 있다"고 적은 넷(`libpcre2-8`·`libselinux1`·
+`libtinfo6`·`libm`)에 없던 이름이다.
+
+**`copy_lib_deps`는 이 실수를 안 한다** — 재귀로 따라가고, 못 찾으면 소네임을
+찍고 즉시 죽는다. 그래서 이 실측은 **`make_initrd.sh`가 아니라 사람이 쓴
+문서가 틀렸던 것**이고, Dockerfile의 `apt-get download` 목록은 사람이
+손으로 적는 자리라 그 틀림이 그대로 통과할 수 있었다. **실측 3을 그대로 믿고
+`libsystemd0`을 안 적었으면 빌드가 죽었을 것이다** — 조용히가 아니라 크게
+죽는 쪽이라는 것이 `copy_lib_deps`가 설계된 값이다.
+
+**`libsystemd`는 lzma·zstd·gcrypt를 안 데려온다.** trixie의 libsystemd는 그
+셋을 `dlopen`으로 열고 `DT_NEEDED`에는 `libcap`·`libm`·`libc`뿐이다.
+저널 압축을 쓸 때만 열리는 경로이고 `ps`/`top`은 저널을 안 본다 — **사슬은
+4.2MB가 아니라 1.38MB다.** 이 구분을 안 하면 `ps` 하나 때문에 OpenSSL급
+비용을 치른다고 잘못 판단하고 도구를 뺐을 것이다.
+
+### 실측 23. `awk`는 `.deb` 안에 없다 — 결정 4가 **지금** 값을 낸다
+
+`mawk` 패키지는 `/usr/bin/mawk`만 담는다. `/usr/bin/awk`는 Debian의
+alternatives가 **postinst에서** 만드는 심볼릭 링크라, `dpkg -x`로 푼
+sysroot에는 없다.
+
+**결정 4("initrd 안의 이름은 우리가 정한다")가 UT-M2의 `fd`·`bat`을 위한
+것이라고 적혀 있었는데, 실제로는 M1에서 이미 필요했다.** 목록의 형식이
+`src:dest`여야 하는 지금 당장의 이유가 이 한 줄이다.
+
+```
+usr/bin/mawk:usr/bin/awk
+```
+
+### 실측 24. 정적 검사는 **tautology**다 — 음성 확인 둘이 갈렸다
+
+결정 7이 *"`check.sh`의 initrd 목록 검사가 **같은 배열**을 볼 수 있다"*고
+적었다. 그렇게 만들고 나서 **그 검사가 무엇을 못 보는지**를 실행으로 물었다.
+
+| 무엇을 망가뜨렸나 | 검사 1(정적) | 검사 5(`ps ax` 타이핑) |
+|---|---|---|
+| `install_tool`에서 `copy_lib_deps`를 뺐다 | **초록** | **FAIL** |
+| 목록에서 `usr/bin/ps` 줄을 지웠다 | **초록** | **FAIL** |
+
+```
+FAIL: 'ps ax' never listed the supervised terminal (did libproc2/libsystemd resolve?)
+  ps: error while loading shared libraries: libproc2.so.0: cannot open shared object file
+```
+
+**둘 다 정적 검사를 그냥 지난다.** 첫째는 파일이 실제로 들어갔기 때문이고,
+둘째는 검사가 목록을 되읽으므로 목록에서 사라진 것을 찾지 않기 때문이다.
+
+**그래서 정적 검사가 증명하는 것은 "목록이 완전한가"가 아니라 "`make_initrd.sh`가
+목록이 말하는 것을 전부 넣었는가"다.** 루프가 끊기거나 dest가 어긋나거나
+cpio가 떨어뜨리면 잡는다. 목록의 완전성은 게이트가 아니라 design이 답할
+질문이다. **이 경계를 알고 두는 것이, 모르고 "게이트가 도구를 다 본다"고
+믿는 것보다 낫다** — SH-M2의 "초록은 볼 것을 다 봤다가 아니다"와 같은 종류다.
+
+### 실측 25. 리팩터가 셸 셋의 실패 반경을 넓혔다 — 첫 음성 확인이 그것을 보여 줬다
+
+`copy_lib_deps`를 통째로 뺀 첫 음성 확인은 **검사 5가 아니라 검사 3에서**
+죽었다.
+
+```
+/usr/bin/fish: error while loading shared libraries: libpcre2-32.so.0
+```
+
+**리팩터가 fish·bash·zsh도 같은 루프에 넣었기 때문이다.** 예전에는 셸의
+`copy_lib_deps`가 손으로 쓴 별도 줄이라 도구 쪽 실수와 무관했는데, 이제
+루프 한 줄이 기계 전체를 세운다. **고칠 자리가 하나가 되는 것의 뒷면이
+망가뜨릴 자리도 하나가 되는 것**이고, 그 자리가 게이트 첫 판정에서 즉시
+드러나는 것이 이 구조가 안전한 이유다.
+
+그래서 `ps`만 겨냥한 **두 번째 음성 확인**을 따로 했다 — `case`로 `ps`와
+`top`만 건너뛰게 하니(둘 다 `libproc2`를 데려오므로 하나만 빼면 안 빠진다)
+검사 1~4가 초록이고 검사 5가 정확히 죽었다. **첫 음성 확인은 "검사 셋 중
+어느 것이 잡았나"를 못 가른다.**
+
+### 실측 26. 게이트가 타이핑하면 안 되는 도구가 둘 있다
+
+`less`와 `top`은 화면을 통째로 가져가는 대화형 프로그램이다. `sendkey`로
+치면 체인이 그 자리에서 매달리고, 증상은 실패가 아니라 **타임아웃**이라
+원인에서 멀다. **둘에 대해 게이트가 보는 것은 목록 검사까지다** —
+`guest_tools.sh`의 그 자리에 이유를 적어 뒀다.
+
+`dmesg`도 안 친다. 매달리지는 않지만 출력이 커널 로그 전체라 **게이트가
+grep하는 화면 로그를 뒤덮는다.** 대신 프로브에서 한 번 쳐서 도는 것을 눈으로
+봤다(`dmesg: bad usage`가 나왔다 — 인자를 파싱했다는 뜻이므로 바이너리는
+돈다).
+
+### 실측 27. 화면이 낸 것
+
+```
+root@(none) ~# ps ax
+    1 ?        S      0:00 /init
+   31 ?        S      0:00 /terminal /usr/bin/fish --no-config apple /dev/input/event1 ...
+   32 ttyS0    Ss+    0:00 /usr/bin/fish
+   33 pts/0    Ssl    0:00 /usr/bin/fish --no-config
+root@(none) ~# awk /root/ /etc/passwd
+root:x:0:0:root:/:/bin/sh
+root@(none) ~# sed s/root/tars/ /etc/group
+tars:x:0:
+```
+
+**`ps ax` 네 줄이 이 저장소의 구조를 처음으로 게스트 안에서 보여 준다** —
+PID 1, 그것이 띄운 `/terminal`, 그리고 **fish 둘**(시리얼 `ttyS0`와 화면
+`pts/0`). design의 "자식 둘이 같은 블록을 받는 것은 **코드 구조상 보장**"이
+지금까지 코드를 읽어야만 알 수 있던 사실이었는데, **그 둘이 실제로 나란히
+떠 있는 것을 화면에서 본 것**이 이 항목의 값이다(환경변수가 같다는 것까지
+증명하지는 않는다 — 그 구분은 그대로다).
+
+`sed` 검사의 판정을 `tars:x:0:`으로 잡은 이유가 실행 중에 정해졌다.
+`sed -n 1p /etc/group`은 `root:x:0:`을 내는데 그것은 `/etc/passwd` 줄의
+앞부분과 겹쳐서 **바로 위 `awk` 검사와 구분이 안 된다** — 검사 둘이 같은
+글자를 보면 하나가 죽어도 둘 다 초록일 수 있다. 치환을 시키면 그 글자를
+만들 수 있는 것이 `sed`뿐이다.
+
+### 실측 28. 크기
+
+```
+initrd gzip   11,148,279 → 13,434,703 bytes   (+2,286,424)
+initrd plain                 38,840,832 bytes  (실측 12의 33,371,648에서)
+usr/bin 항목            5 → 50
+새 라이브러리           libacl · libattr · libproc2 · libsystemd
+```
+
+**들어온 라이브러리가 정확히 그 넷이다** — lzma·zstd·gcrypt는 안 왔고,
+`dlopen` 판단이 맞았다는 직접 증거다.
+
+### 실측 29. 게이트 — 열한 체인 3/3으로 **21분 35.63초**
+
+```
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+docker run ... bash check.sh   0.24s user 0.56s system 0% cpu 21:35.63 total
+```
+
+UT-M0의 **21분 09.60초**에서 **+26.03초**다(RM-M3 시점 열 체인
+20분 29.84초에서는 누적 +65.79초). **설명되는 값이다** — initrd가
+2,286,424바이트 커져 `gzip`과 부팅이 각각 조금씩 늘고(회차마다 39회 부팅),
+UT 체인이 타이핑 셋(약 54글자)을 더했다. 잡음 ±3분 안이다. 위험 2가
+"언제부터 느려졌나를 캘 수 있게 남긴다"고 적은 자리다.
+
+**위험 4가 이번에는 아무 체인도 안 건드렸다.** UT-M0에서 `/etc/passwd` 한
+줄이 CM 체인을 깼는데(실측 17), M1은 도구 45개를 더하고도 열 체인이 한
+글자도 안 갈렸다. **뼈대가 아니라 도구를 더하는 변경이라는 예측이 맞았고,
+결정 2가 기존 이름을 아무것도 안 덮어쓴 값이 여기서 두 번째로 나타난다.**

@@ -125,20 +125,22 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **RM은 편집도 Claude Code가 했다** — 사용자가 2026-09-09에 자러 가며
   서브프로젝트 단위로 위임했고, 2026-09-10에 외출하며 한 번 더 위임했다.
   SH·FP의 예외와 같은 종류다.
-  **Userland Tools(UT-M0, 2026-09-10 — 진행 중. 게스트 셸이 `/usr/bin/ls`가
-  아니라 `ls` 세 글자로 명령을 찾는다. PID 1이 커널의 envp 블록에
-  `PATH=/usr/bin:/bin`을 더한 새 블록을 지어 자식 둘에게 주고, git이 딛고 설
-  뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` · `/etc/group`)이 섰다. 게이트에
-  **열한번째 체인 `tools/check.sh`**가 생겼다. 남은 것은 UT-M1(GNU 한 벌 +
-  `make_initrd.sh` 목록 배열 리팩터) · UT-M2(모던 열둘) · UT-M3(git ·
+  **Userland Tools(UT-M0·M1, 2026-09-10·11 — 진행 중. 게스트 셸이
+  `/usr/bin/ls`가 아니라 `ls` 세 글자로 명령을 찾고, 그 자리에 **GNU 한 벌
+  50개**가 서 있다. PID 1이 커널의 envp 블록에 `PATH=/usr/bin:/bin`을 더한 새
+  블록을 지어 자식 둘에게 주고, git이 딛고 설 뼈대 넷(`/bin/sh` · `/tmp` ·
+  `/etc/passwd` · `/etc/group`)이 섰다. **M1이 바이너리 목록을
+  `kernel/guest_tools.sh` 한 파일로 뺐고**(`make_initrd.sh`와
+  `tools/check.sh`가 같은 배열을 본다) 게이트에 **열한번째 체인
+  `tools/check.sh`**가 있다. 남은 것은 UT-M2(모던 열둘) · UT-M3(git ·
   `vim.tiny`)).** design은
   `.../specs/2026-09-10-tars-userland-tools-design.md`, 기억은
   `docs/decisions/project_userland_tools.md`.
-  **UT-M0도 편집을 Claude Code가 했다** — 사용자가 2026-09-10에 외출하며
-  "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. SH·FP·RM의
-  예외와 같은 종류이고 **세션 단위**다.
-  **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0은 그 위의 세션 한정 예외였다 —
-  다음 세션은 다시 기본 규칙이다. 파일 편집은 사용자가 한다.**
+  **UT-M0·M1도 편집을 Claude Code가 했다** — 사용자가 2026-09-10과 09-11에
+  각각 외출하며 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다.
+  SH·FP·RM의 예외와 같은 종류이고 **세션 단위**다.
+  **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0·M1은 각각 그 위의 세션 한정
+  예외였다 — 다음 세션은 다시 기본 규칙이다. 파일 편집은 사용자가 한다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은

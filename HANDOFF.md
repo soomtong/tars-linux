@@ -1,144 +1,165 @@
-# HANDOFF: Userland Tools UT-M0 — 통로가 열렸다
+# HANDOFF: Userland Tools UT-M1 — 목록이 한 자리가 됐고 GNU 한 벌이 섰다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **UT-M0이 2026-09-10에 끝났다.** 게스트 셸이
-`/usr/bin/ls`가 아니라 **`ls`** 세 글자로 명령을 찾는다. 그리고 git이 딛고 설
-뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` · `/etc/group`)이 섰다.
+`main`, working tree 깨끗함. **UT-M1이 2026-09-11에 끝났다.** 게스트에
+**도구 50개**가 서 있고, 그 목록은 저장소에 **한 자리**에만 있다.
 
 ```
-root@(none) ~# ls
-bin/  config/  dev/  etc/  init*  lib/  lib64/  proc/  root/  sys/
-terminal*  tmp/  usr/  vendor/
-root@(none) ~# ls -l /bin
-lrwxrwxrwx 1 root root 15 Sep 10 14:15 sh -> ../usr/bin/bash*
+root@(none) ~# ps ax
+    1 ?        S      0:00 /init
+   31 ?        S      0:00 /terminal /usr/bin/fish --no-config apple ...
+   32 ttyS0    Ss+    0:00 /usr/bin/fish
+   33 pts/0    Ssl    0:00 /usr/bin/fish --no-config
+root@(none) ~# awk /root/ /etc/passwd
+root:x:0:0:root:/:/bin/sh
+root@(none) ~# sed s/root/tars/ /etc/group
+tars:x:0:
 ```
 
-**게이트는 열한 체인 3/3으로 21분 09.60초다** — 착수 전 기준선 20분 29.84초에서
-**+39.76초**다. 열한번째 체인이 회차마다 부팅을 한 번 더하므로 설명되는 값이고,
-잡음 ±3분 안이다. 그 열한번째가 `tools/check.sh`다.
+**게이트는 열한 체인 3/3으로 21분 35.63초다** — UT-M0의 21분 09.60초에서
+**+26.03초**다(initrd가 2.29MB 커지고 UT 체인이 타이핑 셋을 더했다. 잡음
+±3분 안이다).
 
-**이 세션은 편집도 Claude Code가 했다.** 사용자가 2026-09-10에 외출하며
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 외출하며
 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. `CLAUDE.md`의 기본
-규칙("파일 편집은 사용자가")에 대한 **이 세션 한정 예외**이고 SH·FP·RM
+규칙("파일 편집은 사용자가")에 대한 **이 세션 한정 예외**이고 SH·FP·RM·UT-M0
 세션의 예외와 같은 종류다. **다음 세션은 다시 기본 규칙이다.**
 
-## UT-M0의 커밋들
+## UT-M1의 커밋들
 
 | | 파일 | 커밋 |
 |---|---|---|
-| Task 1 | `init/src/environ.zig` · `environ_test.zig` · `init/build.zig` | `65eac43` |
-| Task 2 | `init/src/main.zig`의 envp와 로그 | `d4d2d04` |
-| Task 3 | `kernel/make_initrd.sh`의 뼈대 넷 + `ls` | `753c7c6` |
-| **계획 밖** | `copy/check.sh`의 `col 16` → `20` | `abb0bda` |
-| Task 4 | `tools/check.sh` · `check.sh`의 `CHAINS` | `0b944f4` |
-| Task 6 | design · 기억 둘 · MEMORY · CLAUDE.md | `e3fe0af` |
+| plan | `.../plans/2026-09-11-tars-userland-tools-ut-m1.md` | `82cbaf3` |
+| Task 0 | `devcontainer/Dockerfile`(`.deb` 여덟 + 라이브러리 넷 + `zstd`) | `b2a4ae9` |
+| Task 1 | `kernel/guest_tools.sh` · `kernel/make_initrd.sh` | `346e76a` |
+| Task 2·3·4 | `tools/check.sh` · `check.sh`의 `CHAINS` | `d256795` |
+| Task 7 | design · 기억 · MEMORY · CLAUDE.md | 이 커밋 |
 | 마무리 | HANDOFF | 이 커밋 |
 
-**Task 0(크기 스파이크)은 커밋이 없다** — 코드를 한 줄도 안 고치고 재기만
-했다. 결과는 design의 실측 15에 있다.
+**Task 5(음성 확인)와 Task 6(게이트)은 커밋이 없다** — 코드를 일부러 뒤로
+되돌렸다가 `git checkout`으로 복구했고, 결과는 design의 실측 24·25·29에 있다.
 
-## 바로 다음에 할 것 — **UT-M1(층 1: GNU 한 벌)**
+## 바로 다음에 할 것 — **UT-M2(층 2: 모던 열둘)**
 
 design의 milestone 표가 그대로 서 있다.
 
 | | 무엇 | 검증 |
 |---|---|---|
-| **UT-M1** | 층 1(GNU) + `make_initrd.sh` 리팩터(**결정 7**) | initrd 목록 검사 + 화면에서 실행 |
 | **UT-M2** | 층 2(모던 12개) | `libgit2` 사슬이 실제로 딸려 오는가 · 이름이 `fd`/`bat`인가 |
 | **UT-M3** | 층 3(git · `vim.tiny` · 결정 8) | `git init`→`add`→`commit`→`log`가 한 번에 돈다 |
 
-**UT-M1의 본체는 도구가 아니라 결정 7(목록 배열 리팩터)이다.** 지금
-`make_initrd.sh`는 바이너리 하나에 세 줄(`cp` · `chmod` · `copy_lib_deps`)을
-손으로 쓴다 — **50개를 그렇게 쓸 수 없고**, 손으로 쓰는 한 `cp`는 했는데
-`copy_lib_deps`를 빼먹는 실수가 언제든 난다. 그 실패는 빌드 때가 아니라
-**게스트가 그 명령을 처음 칠 때** 나타난다(위험 3).
+**UT-M2는 UT-M1보다 쉽다 — 배열에 열두 줄을 더하는 일이다.** M1이 치른
+비용(리팩터)이 여기서 값을 낸다. 손댈 자리는 셋이다.
 
-**M1이 Dockerfile을 처음 넓힌다.** `grep`·`find`·`sed`·`awk`·`diff`·`less`·
-`ps`·`top`·`dmesg`는 coreutils가 아니라 별도 패키지라 sysroot에 없다
-(design 실측 3). coreutils 35개는 이미 있다.
+1. `devcontainer/Dockerfile` — `.deb` 열둘 + 라이브러리 열여덟
+   (`libgit2` 사슬 15 · `libncursesw6` · `libjq` · `libonig`)
+2. `kernel/guest_tools.sh` — 열두 줄. **둘이 이름이 다르다**:
+   `usr/lib/cargo/bin/fd:usr/bin/fd`(심볼릭 링크가 아니라 **실체**를
+   복사한다 — design 실측 9) · `usr/bin/batcat:usr/bin/bat`
+3. `tools/check.sh` — 화면 검사 하나쯤. **`htop`·`ncdu`·`top`·`less`는
+   타이핑하면 안 된다**(실측 26 — 대화형이라 체인이 타임아웃으로 매달린다)
 
-**`devcontainer/Dockerfile`에 `zstd`도 함께 더할지 정한다.** 지금 없어서
-UT-M0의 스파이크가 세 압축기 중 하나를 못 쟀다. 지금은 `gzip -6`으로
-충분하다는 것이 실측이므로 **급하지 않다.**
+**M2에서 `libsystemd`류의 놀라움이 또 나올 수 있다.** design 실측 4·5가
+`DT_NEEDED`를 바이너리에 대해서만 쟀다 — **`.so`의 `DT_NEEDED`는 안 봤고,
+그것이 M1에서 틀린 자리다**(실측 22). `libgit2` 사슬 15개는 그 표에 이미
+사슬로 적혀 있지만 `libjq`·`libonig`·`libncursesw6`은 안 그렇다.
+**Dockerfile을 고치기 전에 `.so`의 `DT_NEEDED`를 한 번 더 재는 것이
+30초짜리 보험이다.**
 
-## UT-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+**크기는 걱정 안 해도 된다** — 실측 15가 78MB 트리로 부팅해서 1초 차이를
+봤다. 지금 gzip 13.4MB이고 M2 뒤에 약 30MB로 간다.
 
-전문은 design의 **"UT-M0이 실행으로 증명한 것"** 절(실측 15~20)에 있다.
+## UT-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"UT-M1이 실행으로 증명한 것"** 절(실측 22~29)에 있다.
 요약 다섯.
 
-**1. 크기의 벽이 없었다 — 위험 1이 거짓이었다.** 실제 `.deb` 스물넷을 풀어
-밸러스트로 얹은 initrd(gzip **30,019,165바이트**)가 원본(11,076,312)보다
-**1초** 느리게 떴다. TF-M2의 53MB 벽이 재현되지 않았다.
+**1. design 실측 3이 불완전했다 — 새 라이브러리는 둘이 아니라 넷이다.**
+`.so`의 `DT_NEEDED`를 안 봤다.
 
 ```
-RESULT orig: booted in 4s
-RESULT ut:   booted in 5s
+libproc2.so.0.0.2      207,368   NEEDED: libsystemd.so.0 libc.so.6   ← 안 본 줄
+libsystemd.so.0.40.0 1,131,784   NEEDED: libcap.so.2 libm.so.6 libc.so.6
 ```
 
-**`gzip -6`을 유지한다.** `xz`는 9MB 작지만 압축에 31초를 쓰고 게이트가 그
-비용을 회차마다 치른다. `zstd`는 컨테이너에 없어서 못 쟀다. **압축기를
-바꾸는 카드는 커널이 이미 열어 뒀다**(`CONFIG_RD_XZ`·`ZSTD`).
+그리고 coreutils가 **`libattr.so.1`**을 요구한다. **틀린 것은 코드가 아니라
+문서였다** — `copy_lib_deps`는 재귀로 따라가 못 찾으면 죽는다. 위험한 자리는
+사람이 손으로 적는 `apt-get download` 목록이다.
 
-**2. cpio 목록에 `./` 접두사가 없다.** 항목 이름이 `usr/bin/ls`이지
-`./usr/bin/ls`가 아니다. **plan이 `./`를 붙여 적어 뒀고 그대로 썼으면 검사가
-언제나 빨강이었다.** `input/check.sh:83`이 실제 기준이다.
+**`libsystemd`는 lzma·zstd·gcrypt를 `dlopen`으로만 연다** — 사슬이 4.2MB가
+아니라 **1.38MB**다. 이 구분을 안 했으면 `ps` 하나 때문에 OpenSSL급 비용을
+치른다고 잘못 판단하고 도구를 뺐을 것이다.
 
-**3. `/etc/passwd` 한 줄이 CM 체인을 깼다 — 위험 4가 참이었다.** fish가 uid
-0을 이름으로 풀게 되면서 프롬프트가 `@(none) ~#` → **`root@(none) ~#`**이 됐고,
-`copy/check.sh`가 박아 둔 `col 16`(=`@(none) ~# echo `의 길이)이 20이 됐다.
+**2. 목록과 검사가 같은 파일을 보면 그 검사는 tautology가 된다.**
+
+| 무엇을 망가뜨렸나 | 검사 1(정적) | 검사 5(`ps ax`) |
+|---|---|---|
+| `install_tool`에서 `copy_lib_deps`를 뺐다 | **초록** | **FAIL** |
+| 목록에서 `usr/bin/ps` 줄을 지웠다 | **초록** | **FAIL** |
+
+**정적 검사가 증명하는 것은 "목록이 완전한가"가 아니라 "`make_initrd.sh`가
+목록이 말하는 것을 전부 넣었는가"다.** 목록의 완전성은 게이트가 아니라
+design이 답할 질문이다. `tools/check.sh`의 검사 1 주석이 그 경계를 적어 뒀다.
+
+**3. 리팩터가 셸 셋의 실패 반경을 넓혔다.** `copy_lib_deps`를 통째로 뺀 첫
+음성 확인이 검사 5가 아니라 **검사 3**에서 죽었다.
 
 ```
-FAIL: / should land on target 2's command line (col 16), got col 20
+/usr/bin/fish: error while loading shared libraries: libpcre2-32.so.0
 ```
 
-**프롬프트 폭에 기대는 자리는 저장소에 그 한 줄뿐이었다**(`rg`로 세었다).
-바로 위 `w`/`b` 검사가 `h`를 마흔 번 눌러 col 0에서 시작하는 것은 CN-M1이
-같은 함정을 **의도적으로** 피한 것이다.
+루프가 fish·bash·zsh도 함께 다루기 때문이다. **고칠 자리가 하나가 되는 것의
+뒷면이 망가뜨릴 자리도 하나가 되는 것**이고, 그것이 게이트 첫 판정에서 즉시
+드러나는 것이 이 구조가 안전한 이유다. **특정 도구를 겨냥한 음성 확인은 그
+도구만 건너뛰게 해야 한다**(`ps`와 `top` 둘 다 — 하나만 빼면 `libproc2`가
+다른 쪽으로 딸려 온다).
 
-**4. `git checkout`으로 되돌려도 `zig-out`이 안 따라온다.** 음성 확인 뒤
-소스를 복구했는데 체인이 계속 빨갰다 — `zig-out/bin/init`이 음성 확인용
-3,360,856바이트 그대로였고, 소스 mtime이 **더 새것인데도** 그랬다.
-**`rm -rf zig-out`을 한 번 하면 3,363,824바이트로 바뀐다.** 음성 확인이라는
-수법 자체가 이 함정을 부른다(코드를 일부러 뒤로 되돌리는 것이 본체라서).
+**4. 게이트가 타이핑하면 안 되는 도구가 있다.** `less`·`top`은 화면을 통째로
+가져가 체인이 **타임아웃으로** 매달리고, 증상이 실패가 아니라서 원인에서
+멀다. `dmesg`는 매달리지 않지만 출력이 커널 로그 전체라 게이트가 grep하는
+화면 로그를 뒤덮는다. **셋 다 목록 검사까지만 본다.**
 
-**5. 실패의 모양이 예측한 그대로였다.** 검사를 먼저 쓰니 **컴파일 에러**
-(`unable to load 'environ.zig': FileNotFound`)였고, 음성 확인은 검사 2에서
-정확히 죽으며 `tars-init: env unchanged (no room for PATH)`를 보여 줬다.
+**5. `awk`는 `.deb` 안에 없다.** `mawk` 패키지는 `/usr/bin/mawk`만 담고
+`/usr/bin/awk`는 alternatives가 postinst에서 만드는 링크다. `batcat`·`fdfind`와
+같은 종류인데 **결정 4가 UT-M2용이라고 적혀 있던 것이 이미 M1에서
+필요했다** — 목록 형식이 `src:dest`여야 하는 지금 당장의 이유다.
 
-## UT-M0이 세운 것 — 저장소에 서 있는 것 다섯
+## UT-M1이 세운 것 — 저장소에 서 있는 것 넷
 
-1. **`init/src/environ.zig`의 `withPath`** — 커널 블록을 복사하고 끝에
-   `PATH=/usr/bin:/bin`을 붙인 새 블록을 짓는다. **시스템 콜을 하나도 안
-   한다.** 자리가 모자라면 **커널 블록을 그대로 돌려준다** — PATH 없는
-   게스트는 살아 있고, 버퍼를 넘겨 쓴 PID 1은 기계를 아예 못 켠다.
-2. **`init/src/environ_test.zig`** — 검사 넷(정상 경로에서 **순서까지** ·
-   빈 블록 대조군 · 넘침 폴백 · `PATH_ENTRY` 값). 부팅 20초가 아니라
-   **0.1초**로 돈다.
-3. **`init/src/main.zig`의 두 갈래 로그** — `tars-init: env PATH=...` 또는
-   `env unchanged (no room for PATH)`. **폴백을 침묵이 아니라 말로 알린다.**
-4. **`kernel/make_initrd.sh`의 뼈대** — `/bin/sh`(→`../usr/bin/bash`,
-   **상대 경로 심볼릭 링크**) · `/tmp`(1777) · `/etc/passwd` · `/etc/group` ·
-   `/usr/bin/ls`. **`/bin/sh`는 `tars.conf`의 `shell`과 무관하게 언제나
-   bash다.**
-5. **`tools/check.sh`** — 열한번째 체인. 검사 다섯(initrd 목록 · init의 로그 ·
-   **절대 경로 없이 `ls`** · 음성(`Unknown command`) · `ls -l /bin`).
+1. **`kernel/guest_tools.sh`의 `GUEST_TOOLS`** — 바이너리 목록이 사는 유일한
+   자리. 형식은 `sysroot 안의 경로:initrd 안의 경로`. **데이터만 있는
+   파일이라 게이트 체인이 부작용 없이 source할 수 있다** — `SYSROOT`도
+   `WORKDIR`도 참조하지 않고 명령을 하나도 실행하지 않는다.
+2. **`kernel/make_initrd.sh`의 `install_tool()`** — `cp`·`chmod`·
+   `copy_lib_deps` 셋을 한 루프에서 한다. 원본이 없으면 **어느 패키지를
+   Dockerfile에 더하라고 말하며 죽는다.** 손으로 쓴 26줄이 사라졌다.
+3. **`devcontainer/Dockerfile`** — `.deb` 여덟(grep · findutils · sed ·
+   mawk · diffutils · less · procps · util-linux) + 라이브러리 넷(libacl1 ·
+   libattr1 · libproc2-0 · libsystemd0) + **`zstd`**(재는 도구. 어떤 빌드
+   단계도 안 부른다 — UT-M2가 압축기를 재려 할 때 이미지를 또 굽지 않으려고
+   지금 넣었다).
+4. **`tools/check.sh`의 검사 여덟** — 검사 1이 `GUEST_TOOLS`를 읽고,
+   5~7이 `ps ax`·`awk`·`sed`를 치고, 8이 넷 전부의 음성 확인이다.
 
-## 게이트가 UT에 대해 보는 것 — `tools/check.sh`의 검사 다섯
+## 게이트가 UT에 대해 보는 것 — `tools/check.sh`의 검사 여덟
 
 | 보는 것 | 없으면 무엇이 틀렸나 |
 |---|---|
-| initrd 목록에 다섯(`bin/sh`·`tmp`·`etc/passwd`·`etc/group`·`usr/bin/ls`) | `make_initrd.sh`가 안 넣었다. **부팅 20초를 쓰기 전에** 여기서 죽는다 |
+| initrd에 뼈대 넷 + **목록의 50개 전부** | `make_initrd.sh`가 목록이 말하는 것을 다 안 넣었다. **부팅 20초를 쓰기 전에** 여기서 죽는다 |
 | `tars-init: env PATH=/usr/bin:/bin` | `withPath`가 폴백했거나 `main.zig`가 옛 포인터를 쓴다 |
-| **`ls`를 쳐서 `vendor`가 화면에 나온다** | **이 milestone의 심장.** PATH가 셸에 안 닿았다 |
-| `Unknown command`가 **없다** | 위의 `vendor`가 다른 곳에서 왔다(음성 확인) |
+| `ls`를 쳐서 `vendor`가 나온다 | **UT-M0의 심장.** PATH가 셸에 안 닿았다 |
 | `ls -l /bin`에 `bash` | `/bin/sh` 링크가 끊겼다 |
+| **`ps ax`에 `/terminal`** | **UT-M1의 심장.** `ps`→`libproc2`→`libsystemd`→`libcap` 사슬이 런타임에 안 풀렸다 |
+| `awk /root/ /etc/passwd`에 `root:x:0:0:root` | `mawk`를 `awk`라는 이름으로 안 넣었다(결정 4) |
+| `sed s/root/tars/ /etc/group`에 `tars:x:0:` | `sed`가 안 돈다. **판정 글자를 치환 결과로 잡은 것은 위 `awk` 검사와 글자가 겹치지 않게 하려는 것이다** |
+| `Unknown command`와 `error while loading shared libraries`가 **없다** | 위의 넷 중 무언가가 사실은 다른 곳에서 왔다 |
 
-**시리얼 콘솔 셸은 이 체인도 안 본다.** 저장소의 열한 체인 전부가
-`-serial file:`(쓰기 전용)이고 키는 QEMU monitor로 **화면 셸**에만 간다.
-자식 둘이 같은 블록을 받는다는 것은 `supervise()`가 `start(c, envp)`를 한
-루프에서 부르는 **코드 구조상 보장**이다 — `project_guest_environment`가
-`TERM`에 대해 적어 둔 것과 **같은 기준이고 새 기준이 아니다.**
+**시리얼 콘솔 셸은 이 체인도 안 본다** — 열한 체인 전부가 `-serial file:`
+(쓰기 전용)이고 키는 QEMU monitor로 화면 셸에만 간다. 다만 **`ps ax`가 그
+셸을 화면에서 보여 준다**(`32 ttyS0 Ss+ /usr/bin/fish`) — 자식 둘이 나란히
+떠 있는 것을 처음으로 눈으로 본 자리다. **환경변수가 같다는 것까지 증명하지는
+않는다**(그것은 여전히 `supervise()`의 코드 구조상 보장이다).
 
 ## 설계에서 사용자가 정한 것 — **다시 논의하지 말 것**
 
@@ -160,12 +181,11 @@ FAIL: / should land on target 2's command line (col 16), got col 20
 
 | 파일 | 왜 중요한가 |
 |---|---|
-| `docs/.../specs/2026-09-10-tars-userland-tools-design.md` | **먼저 읽는다.** 실측 20 · 비목표 8 · 결정 9 · 위험 4 |
+| `docs/.../specs/2026-09-10-tars-userland-tools-design.md` | **먼저 읽는다.** 실측 29 · 비목표 8 · 결정 9 · 위험 4 |
 | `docs/decisions/project_userland_tools.md` | 이 서브프로젝트의 기억. 다시 캐지 말 것이 여기 있다 |
-| `docs/decisions/project_guest_environment.md` | **UT-M0이 이 문서의 "결과 1"을 닫았다.** `LANG`을 PID 1로 옮기는 후보가 결과 3 끝에 남아 있다 |
-| `init/src/environ.zig` | 새 환경변수를 더할 자리. `PATH_ENTRY` 옆에 한 줄이면 된다 |
-| `kernel/make_initrd.sh` | **UT-M1의 결정 7이 여기를 목록 배열로 바꾼다** |
-| `devcontainer/Dockerfile:70-90` | `apt-get download` 목록. **UT-M1~M3이 여기를 넓힌다** |
+| **`kernel/guest_tools.sh`** | **UT-M2·M3이 여기에 줄을 더한다.** 그 외에 고칠 자리가 없다 |
+| `kernel/make_initrd.sh` | 뼈대(결정 6)와 특수 트리(fish shares · locale · terminfo · zsh 모듈)는 여전히 손으로 쓴다 |
+| `devcontainer/Dockerfile:102-131` | `apt-get download` 목록. **UT-M2~M3이 여기를 넓힌다** |
 | `tools/check.sh` | UT 체인. milestone마다 검사가 자란다 |
 | `copy/check.sh`의 `col 20` | **게스트의 사용자 데이터베이스를 건드리면 여기도 본다** |
 
@@ -175,11 +195,10 @@ FAIL: / should land on target 2's command line (col 16), got col 20
 git status --short     # 비어 있어야 한다
 open -a OrbStack       # 첫 docker 명령 전에
 
-# init 호스트 검사(초 단위). environ_test가 다섯째다
-docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
-  bash -c 'zig build test'
+# 도구를 더한 뒤 이미지를 다시 굽는다(네트워크를 쓰는 유일한 단계)
+docker build -t tars-devcontainer devcontainer/
 
-# UT 체인 단독(약 1~2분, 커널이 캐시돼 있으면)
+# UT 체인 단독(약 2~3분, 커널이 캐시돼 있으면)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash tools/check.sh
 
@@ -194,6 +213,75 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 판정하지 말 것.**
 
 **코드를 되돌린 뒤에는 `rm -rf init/zig-out`을 한 번 한다**(실측 18).
+
+---
+
+## 그 앞의 milestone — Userland Tools UT-M0 (2026-09-10)
+
+**게스트 셸이 `/usr/bin/ls`가 아니라 `ls` 세 글자로 명령을 찾게 됐다.**
+PID 1이 커널의 envp 블록에 `PATH=/usr/bin:/bin`을 더한 새 블록을 지어 자식
+둘에게 주고, git이 딛고 설 뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` ·
+`/etc/group`)이 섰다. 게이트에 열한번째 체인 `tools/check.sh`가 생겼다.
+
+**그때 게이트는 열한 체인 3/3으로 21분 09.60초였다**(착수 전 기준선
+20분 29.84초에서 +39.76초).
+
+### UT-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 실측 15~21. 요약 넷.
+
+**1. 크기의 벽이 없었다 — 위험 1이 거짓이었다.** 실제 `.deb` 스물넷을 풀어
+밸러스트로 얹은 initrd(gzip **30,019,165바이트**)가 원본(11,076,312)보다
+**1초** 느리게 떴다. TF-M2의 53MB 벽이 재현되지 않았다.
+
+```
+RESULT orig: booted in 4s
+RESULT ut:   booted in 5s
+```
+
+**`gzip -6`을 유지한다.** `xz`는 9MB 작지만 압축에 31초를 쓰고 게이트가 그
+비용을 회차마다 치른다. **압축기를 바꾸는 카드는 커널이 이미 열어 뒀고**
+(`CONFIG_RD_XZ`·`ZSTD`) **UT-M1이 `zstd`를 컨테이너에 넣어 재는 도구까지
+갖춰 놨다.**
+
+**2. cpio 목록에 `./` 접두사가 없다.** 항목 이름이 `usr/bin/ls`이지
+`./usr/bin/ls`가 아니다. **plan이 `./`를 붙여 적어 뒀고 그대로 썼으면 검사가
+언제나 빨강이었다.** `input/check.sh:83`이 실제 기준이다.
+
+**3. `/etc/passwd` 한 줄이 CM 체인을 깼다 — 위험 4가 참이었다.** fish가 uid
+0을 이름으로 풀게 되면서 프롬프트가 `@(none) ~#` → **`root@(none) ~#`**이 됐고,
+`copy/check.sh`가 박아 둔 `col 16`(=`@(none) ~# echo `의 길이)이 20이 됐다.
+
+```
+FAIL: / should land on target 2's command line (col 16), got col 20
+```
+
+**프롬프트 폭에 기대는 자리는 저장소에 그 한 줄뿐이었다**(`rg`로 세었다).
+**UT-M1은 뼈대를 안 건드려서 이 종류가 다시 오지 않았다** — 도구 45개를
+더하고도 열 체인이 한 글자도 안 갈렸다.
+
+**4. `git checkout`으로 되돌려도 `zig-out`이 안 따라온다.** 음성 확인 뒤
+소스를 복구했는데 체인이 계속 빨갰다 — `zig-out/bin/init`이 음성 확인용
+바이너리 그대로였고, 소스 mtime이 **더 새것인데도** 그랬다.
+**`rm -rf zig-out`을 한 번 하면 된다.** 음성 확인이라는 수법 자체가 이
+함정을 부른다(코드를 일부러 뒤로 되돌리는 것이 본체라서).
+
+### UT-M0이 세운 것 — 저장소에 서 있는 것 다섯
+
+1. **`init/src/environ.zig`의 `withPath`** — 커널 블록을 복사하고 끝에
+   `PATH=/usr/bin:/bin`을 붙인 새 블록을 짓는다. **시스템 콜을 하나도 안
+   한다.** 자리가 모자라면 **커널 블록을 그대로 돌려준다** — PATH 없는
+   게스트는 살아 있고, 버퍼를 넘겨 쓴 PID 1은 기계를 아예 못 켠다.
+2. **`init/src/environ_test.zig`** — 검사 넷(정상 경로에서 **순서까지** ·
+   빈 블록 대조군 · 넘침 폴백 · `PATH_ENTRY` 값). 부팅 20초가 아니라
+   **0.1초**로 돈다.
+3. **`init/src/main.zig`의 두 갈래 로그** — `tars-init: env PATH=...` 또는
+   `env unchanged (no room for PATH)`. **폴백을 침묵이 아니라 말로 알린다.**
+4. **`kernel/make_initrd.sh`의 뼈대** — `/bin/sh`(→`../usr/bin/bash`,
+   **상대 경로 심볼릭 링크**) · `/tmp`(1777) · `/etc/passwd` · `/etc/group`.
+   **`/bin/sh`는 `tars.conf`의 `shell`과 무관하게 언제나 bash다.**
+5. **`tools/check.sh`** — 열한번째 체인. **UT-M1이 검사를 다섯에서 여덟로
+   늘렸다.**
 
 ---
 

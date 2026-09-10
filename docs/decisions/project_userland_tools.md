@@ -1,6 +1,6 @@
 ---
 name: project_userland_tools
-description: "게스트에서 쓸 도구 한 벌(GNU + 모던 + git)을 세우고 그 이름이 PATH로 손에 닿게 하는 층(UT) — UT-M0(2026-09-10)이 PATH와 뼈대 넷을 세웠고, 조달은 Debian .deb 하나로 통일하며 libgit2 사슬 11.4MB를 감수한다"
+description: "게스트에서 쓸 도구 한 벌(GNU + 모던 + git)을 세우고 그 이름이 PATH로 손에 닿게 하는 층(UT) — UT-M0(2026-09-10)이 PATH와 뼈대 넷을, UT-M1(2026-09-11)이 목록 한 자리(kernel/guest_tools.sh)와 GNU 한 벌 50개를 세웠다. 조달은 Debian .deb 하나로 통일하며 libgit2 사슬 11.4MB를 감수한다"
 metadata:
   node_type: memory
   type: project
@@ -13,19 +13,21 @@ metadata:
 **git은 필수** 도구가 될 것"*.
 
 design은 `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md`,
-milestone 넷(UT-M0~M3)이고 **UT-M0이 2026-09-10에 끝났다.**
+milestone 넷(UT-M0~M3)이고 **UT-M0이 2026-09-10에, UT-M1이 2026-09-11에
+끝났다.**
 
 ## 다시 조사하지 말 것 — 착수 전 실측
 
 **1. 진짜 벽은 `ls`가 없는 것이 아니라 `PATH`가 없는 것이었다.** 자세히는
 [[project_guest_environment]]의 결과 1. UT-M0이 그것을 닫았다.
 
-**2. GNU는 이미 저장소 안에 있다.** `devcontainer/Dockerfile:82`가
+**2. GNU는 이미 저장소 안에 있다.** `devcontainer/Dockerfile:111`가
 `coreutils:amd64`를 통째로 받아 sysroot에 풀어 뒀고 `make_initrd.sh`가 넷만
 복사하고 있었다. 바이너리 하나가 42~154KB이고, coreutils 35개 합계 2,490KB다.
 **`grep`·`find`·`sed`·`awk`·`diff`·`less`·`ps`는 coreutils가 아니라 별도
 패키지라** sysroot에 없다 — Dockerfile에 더해야 한다(합계 1,621KB, 새
-라이브러리는 `libacl1` 74KB와 `libproc2` 237KB 둘뿐).
+라이브러리는 `libacl1` 74KB와 `libproc2` 237KB 둘뿐 — **이 문장이 틀렸다.
+아래 "UT-M1이 실행으로 증명한 것"의 1을 함께 읽을 것**).
 
 **3. 모던 도구 열둘 중 열이 새 라이브러리를 하나도 안 부른다.**
 `rg`·`fd`·`sd`·`procs`·`duf`·`tree`·`hyperfine`이 공짜다(`duf`는 Go 정적이라
@@ -154,6 +156,67 @@ zig-out/bin/init  3,363,824 bytes   ← 제대로 된 것
 
 **`ls` 하나만 넣은 것이 M0의 모양이다.** 통로가 열렸는지를 도구 50개와 섞지
 않는다 — 실패하면 원인이 하나뿐이다.
+
+## UT-M1이 실행으로 증명한 것 (2026-09-11)
+
+**1. 위 실측 2가 불완전했다 — 새 라이브러리는 둘이 아니라 넷이다.**
+`libacl1`·`libproc2`만 적었는데, **`.so`의 `DT_NEEDED`를 안 봤다.**
+`libproc2.so.0`이 **`libsystemd.so.0`(1,131,784)**을 데려오고, coreutils가
+**`libattr.so.1`**을 요구한다.
+
+**`libsystemd`는 lzma·zstd·gcrypt를 안 데려온다** — trixie는 그 셋을
+`dlopen`으로 열고 `DT_NEEDED`에는 `libcap`·`libm`·`libc`뿐이다. 사슬은
+4.2MB가 아니라 **1.38MB**다. **이 구분을 안 하면 `ps` 하나 때문에 OpenSSL급
+비용을 치른다고 잘못 판단하고 도구를 뺀다.**
+
+**틀린 것은 코드가 아니라 문서였다.** `copy_lib_deps`는 재귀로 따라가고 못
+찾으면 소네임을 찍고 죽는다. 위험한 자리는 **사람이 손으로 적는
+`apt-get download` 목록**이고, 그래서 이 실수가 통과할 수 있었다.
+**게스트에 도구를 더할 때는 바이너리의 `DT_NEEDED`가 아니라 그것이 부르는
+`.so`까지 한 겹 더 본다.**
+
+**2. `awk`는 `.deb` 안에 없다.** `mawk` 패키지는 `/usr/bin/mawk`만 담고
+`/usr/bin/awk`는 Debian alternatives가 postinst에서 만드는 링크다. 위 실측 8
+(`batcat`·`fdfind`)과 **같은 종류이고, 이미 M1에서 필요했다** — 목록 형식이
+`src:dest`여야 하는 지금 당장의 이유다.
+
+**3. 목록과 검사가 같은 파일을 보게 하면 그 검사는 tautology가 된다.**
+결정 7이 그것을 값으로 적어 뒀는데, 음성 확인 둘이 경계를 보여 줬다 —
+`copy_lib_deps`를 빼도, 목록에서 `ps` 줄을 지워도 **정적 검사는 초록이고
+타이핑 검사가 잡는다.**
+
+**그래서 정적 검사가 증명하는 것은 "목록이 완전한가"가 아니라
+"`make_initrd.sh`가 목록이 말하는 것을 전부 넣었는가"다.** 목록의 완전성은
+게이트가 아니라 design이 답할 질문이다. [[project_gate_chain_composition]]이
+모으는 종류의 교훈이고 SH-M2의 "초록은 볼 것을 다 봤다가 아니다"와 같다.
+
+**4. 리팩터가 셸 셋의 실패 반경을 넓혔다.** 루프가 fish·bash·zsh도 함께
+다루므로 `copy_lib_deps` 한 줄이 빠지면 **기계 전체가 안 뜬다**(첫 음성
+확인이 `/usr/bin/fish: error while loading ... libpcre2-32.so.0`으로 검사 3에서
+죽었다). **고칠 자리가 하나가 되는 것의 뒷면이 망가뜨릴 자리도 하나가 되는
+것**이고, 그것이 게이트 첫 판정에서 즉시 드러나는 것이 이 구조가 안전한
+이유다. 특정 도구를 겨냥한 음성 확인은 **그 도구만 건너뛰게** 해야 한다.
+
+**5. 게이트가 타이핑하면 안 되는 도구가 둘 있다 — `less`·`top`.** 화면을
+통째로 가져가는 대화형 프로그램이라 `sendkey`로 치면 체인이 매달리고,
+증상이 실패가 아니라 **타임아웃**이라 원인에서 멀다. `dmesg`는 매달리지는
+않지만 출력이 커널 로그 전체라 게이트가 grep하는 화면 로그를 뒤덮는다.
+**셋 다 목록 검사까지가 게이트가 보는 전부다.**
+
+## UT-M1이 세운 것
+
+| 무엇 | 어디 |
+|---|---|
+| `GUEST_TOOLS` 배열 — **바이너리 목록이 사는 유일한 자리**(50개) | `kernel/guest_tools.sh` |
+| `install_tool()` — `cp`·`chmod`·`copy_lib_deps`를 한 루프에서 | `kernel/make_initrd.sh` |
+| `.deb` 여덟 + 라이브러리 넷 + `zstd`(재는 도구) | `devcontainer/Dockerfile` |
+| 검사 1이 같은 배열을 읽고, 검사 5~7이 `ps ax`·`awk`·`sed`를 친다 | `tools/check.sh` |
+
+**게이트는 열한 체인 3/3으로 21분 35.63초다**(UT-M0의 21분 09.60초에서
++26.03초 — initrd가 2.29MB 커지고 타이핑 셋이 늘었다. 잡음 ±3분 안이다).
+**위험 4가 이번에는 아무 체인도 안 건드렸다** — 도구 45개를 더하고도 나머지
+열 체인이 한 글자도 안 갈렸다. 뼈대가 아니라 도구를 더하는 변경이었기
+때문이고, UT-M0에서 `/etc/passwd` 한 줄이 CM 체인을 깬 것과 대조된다.
 
 **How to apply:** 게스트에 도구를 더할 때는 **바이너리 크기가 아니라
 `DT_NEEDED`가 데려오는 라이브러리**를 먼저 본다 — `make_initrd.sh`의
