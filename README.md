@@ -102,10 +102,71 @@ sips -s format png /tmp/tars.ppm --out /tmp/tars.png && open /tmp/tars.png
 버전도 다를 수 있다. 눈으로 보는 용도로 쓰고, 통과 여부는 아래 게이트로
 정한다.
 
+## 실기 노트북에 꽂아 보기
+
+**`out/tars.iso`를 그대로 USB에 쓰면 된다.** 하이브리드 ISO라 변환이 필요 없고
+(El Torito 항목 둘 — BIOS와 UEFI), 같은 바이트를 게이트의 두 체인이 각각
+SeaBIOS와 OVMF로 부팅한다.
+
+**먼저 `diskutil list`로 디스크 번호를 확인한다.** 아래 `<N>`을 그대로
+복사해 붙이면 안 된다 — **번호를 틀리면 자기 기계의 디스크를 지운다.**
+
+```bash
+diskutil list                       # 어느 것이 USB인지 크기와 이름으로 확인한다
+diskutil unmountDisk /dev/disk<N>   # 안 하면 dd가 Resource busy로 죽는다
+sudo dd if=out/tars.iso of=/dev/rdisk<N> bs=4m status=progress
+sync
+```
+
+**대상은 파티션이 아니라 디스크 전체다.** `/dev/disk4s1`이 아니라
+`/dev/disk4`이고, `rdisk`가 버퍼를 안 거쳐 훨씬 빠르다.
+
+### 꽂기 전에 펌웨어에서 할 일
+
+**Secure Boot를 꺼야 한다.** 우리 커널에는 서명이 없고 shim도 안 쓴다. 안 끄면
+증상이 **"부팅 항목이 아예 안 보인다"**라 원인에서 아주 멀다 — USB가 안
+읽히는 것으로 오해하기 쉽다. 보통 전원을 켜고 F2/Del/F12로 펌웨어 설정에
+들어가 Security 아래에 있다.
+
+### 설정을 부팅 사이에 남기려면
+
+`init`은 **ext2 라벨이 `tars-`로 시작하는** 첫 블록 장치를 `/config`로 붙인다
+(`/dev/vda` · `nvme0n1..3` · `sda..sdd` · `mmcblk0..1` 순으로 훑는다).
+그런 디스크가 없으면 부팅은 그대로 되고 **설정만 매번 사라진다.**
+
+```bash
+# 두 번째 USB 스틱 하나를 통째로 설정 디스크로 쓸 때
+mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
+```
+
+**파티션이 아니라 디스크 전체를 포맷한다** — 지금 `init`은 파티션을 안 본다.
+그리고 노트북 내장 디스크는 GPT라 이 훑기에 걸리지 않는다(superblock 매직이
+안 맞는다). **남의 파일시스템을 잡을 길이 없다는 뜻이다.**
+
+### 무엇을 기대하고 무엇을 기대하지 않는가
+
+화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
+모드가 **패널의 네이티브 해상도**다. USB 키보드도 된다 — 허브를 거쳐 늦게
+열거돼도 `init`이 최대 3초까지 기다린다.
+
+**안 되는 것을 미리 적어 둔다.**
+
+| 안 되는 것 | 왜 |
+|---|---|
+| 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
+| 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
+| 네트워크 | `CONFIG_NET is not set` |
+| 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
+| 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
+
+**이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다.** 열 체인이 전부
+QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 **"켜 봤다"에서
+멈춘다.** 꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.
+
 ## 게이트
 
 ```bash
-# 전체 — 여덟 체인 × 3회차, 약 16분
+# 전체 — 열 체인 × 3회차, 약 20분
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
 
 # 한 체인만
