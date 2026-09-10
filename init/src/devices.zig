@@ -246,13 +246,69 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
     return found;
 }
 
+/// 키보드가 나타나기를 기다리는 상한. **USB 키보드는 비동기로 열거된다** —
+/// PID 1이 뜨는 시점에 아직 `/sys/class/input`에 없을 수 있고, 그러면 한 번만
+/// 훑는 탐색기는 "키보드가 없다"고 답한다.
+///
+/// **RM-M3이 이것을 실측으로 잡았다.** QEMU에서 USB 키보드가 0.88~0.93초에
+/// 열거되고 PID 1의 훑기가 그 언저리라, 회차에 따라 `init`이 전원 버튼을
+/// 키보드로 골랐다(`keyboard device /dev/input/event0 (Power Button)`).
+/// 게이트에서는 스무 번에 한 번쯤이지만 **실기에서는 이쪽이 정상이다** —
+/// 허브를 거치거나 느린 키보드면 열거가 몇 초씩 걸린다.
+///
+/// **결정 6("못 찾아도 부팅을 막지 않는다")을 어기지 않는다.** 기다림이
+/// 유한하고, 끝나면 예전과 똑같이 event0으로 떨어진다. 무한히 기다리는 것과
+/// 한정해서 기다리는 것은 다른 일이다.
+pub const KEYBOARD_WAIT_MS: isize = 3000;
+
+/// 다시 묻는 간격. 짧을수록 늦게 뜬 키보드를 빨리 잡지만 그만큼 sysfs를 더
+/// 훑는다. 25ms면 상한까지 120번이고, 한 번이 open 서른두 번이라 부팅에서
+/// 보이지 않는 비용이다.
+const KEYBOARD_POLL_MS: isize = 25;
+
+/// power.zig에도 같은 함수가 있다. `failed`와 같은 이유로 공용 모듈을 만들지
+/// 않는다 — 세 줄짜리 헬퍼다.
+fn sleepMillis(ms: isize) void {
+    const req = linux.timespec{
+        .sec = @divTrunc(ms, 1000),
+        .nsec = @rem(ms, 1000) * 1_000_000,
+    };
+    _ = linux.nanosleep(&req, null);
+}
+
+/// 키보드처럼 생긴 evdev 번호를 max_ms까지 기다리며 찾는다.
+///
+/// **max_ms를 인자로 받는 것은 검사 때문이다.** `devices_test`의 "키보드가
+/// 없으면 event0으로 떨어진다"는 검사가 기본값을 쓰면 3초를 잔다 — 호스트
+/// 검사가 초 단위로 도는 값을 잃는다.
+pub fn findKeyboardWaiting(sys_root: []const u8, max_ms: isize) ?u8 {
+    var waited: isize = 0;
+    while (true) {
+        if (findKeyboard(sys_root)) |n| {
+            // 기다린 적이 있을 때만 찍는다. 늘 찍으면 정상 부팅의 로그가
+            // 한 줄 늘고, 그 줄은 아무것도 안 가른다.
+            if (waited > 0) {
+                std.debug.print("tars-init: keyboard showed up after {d}ms\n", .{waited});
+            }
+            return n;
+        }
+        if (waited >= max_ms) return null;
+        sleepMillis(KEYBOARD_POLL_MS);
+        waited += KEYBOARD_POLL_MS;
+    }
+}
+
 /// 키보드 장치 경로를 정하고 로그로 남긴다. 못 찾아도 **부팅을 막지 않는다**
 /// (design 결정 6) — 탐색기의 버그가 기계를 못 켜게 만드는 것이 가장 나쁜
 /// 결말이다. 그때는 예전 상수와 같은 event0으로 떨어진다.
 pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
-    const n = findKeyboard(sys_root) orelse blk: {
-        std.debug.print("tars-init: no keyboard found under {s}, falling back to event0\n", .{
-            sys_root,
+    resolveKeyboardWaiting(sys_root, out, KEYBOARD_WAIT_MS);
+}
+
+pub fn resolveKeyboardWaiting(sys_root: []const u8, out: *Path, max_ms: isize) void {
+    const n = findKeyboardWaiting(sys_root, max_ms) orelse blk: {
+        std.debug.print("tars-init: no keyboard found under {s} in {d}ms, falling back to event0\n", .{
+            sys_root, max_ms,
         });
         break :blk 0;
     };

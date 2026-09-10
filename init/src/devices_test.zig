@@ -92,6 +92,15 @@ fn writeEvents(fd: i32, events: []const devices.Event) !void {
     }
 }
 
+/// 벽시계 밀리초. **`std.time.Timer`를 안 쓴다** — Zig 0.16에 없다
+/// (`std.time`에 `Timer` 멤버가 없다). SH-M1이 `std.posix`의 `pipe`에서 겪은
+/// 것과 같은 종류이고, 처방도 같다: 커널 인터페이스를 직접 부른다.
+fn nowMillis() i64 {
+    var ts: linux.timespec = undefined;
+    if (failed(linux.clock_gettime(.MONOTONIC, &ts))) |_| return 0;
+    return @as(i64, ts.sec) * 1000 + @divTrunc(@as(i64, ts.nsec), 1_000_000);
+}
+
 /// config_test·power_test와 같은 모양이다: 호스트 아키텍처 실행 파일이고,
 /// 실패하면 0이 아닌 종료 코드로 끝난다. 체인 스크립트가 셋을 똑같이 다룰
 /// 수 있어야 한다.
@@ -210,8 +219,11 @@ pub fn main() !void {
     }
 
     // ── 7. 폴백은 부팅을 막지 않는다 (design 결정 6) ──────────────────
+    //
+    // **max_ms를 0으로 준다.** 기본값(3000)을 쓰면 이 검사 하나가 3초를 자고,
+    // 호스트 검사가 초 단위로 도는 값을 잃는다. 기다림 자체는 검사 7a가 본다.
     var fallback = devices.Path{};
-    devices.resolveKeyboard(BUTTON, &fallback);
+    devices.resolveKeyboardWaiting(BUTTON, &fallback, 0);
     if (!std.mem.eql(u8, fallback.slice(), "/dev/input/event0")) {
         std.debug.print("FAIL: fallback gave '{s}', want /dev/input/event0\n", .{
             fallback.slice(),
@@ -229,6 +241,52 @@ pub fn main() !void {
     }
 
     std.debug.print("devices_test: a missing keyboard falls back to event0\n", .{});
+
+    // ── 7a. 기다림은 있는 키보드를 늦추지 않는다 (RM-M3) ──────────────
+    //
+    // **이 검사의 요점은 "빠르다"이다.** 기다림을 넣는 가장 흔한 실수는
+    // 찾은 뒤에도 자는 것이고(자고 나서 묻기), 그러면 모든 부팅이 3초씩
+    // 늘어난다. 증상은 "부팅이 좀 느리다"뿐이라 아무도 못 잡는다.
+    //
+    // 상한을 넉넉히 주고 벽시계로 잰다. 찾자마자 돌아오면 밀리초 단위이고,
+    // 순서가 뒤집혀 있으면 최소 KEYBOARD_POLL_MS는 잔다.
+    {
+        const started = nowMillis();
+        const n = devices.findKeyboardWaiting(FULL, 5000);
+        const elapsed_ms = nowMillis() - started;
+        if (n == null) {
+            std.debug.print("FAIL: the keyboard that is right there was not found\n", .{});
+            return error.PresentKeyboardMissed;
+        }
+        if (elapsed_ms >= 25) {
+            std.debug.print("FAIL: finding a present keyboard took {d}ms (it slept first)\n", .{
+                elapsed_ms,
+            });
+            return error.SleptBeforeLooking;
+        }
+    }
+
+    // 없을 때는 상한만큼만 기다리고 **돌아온다.** 무한히 기다리면 결정 6이
+    // 깨지고 증상은 "기계가 안 켜진다"다 — 이 저장소에서 가장 나쁜 결말이다.
+    {
+        const started = nowMillis();
+        const n = devices.findKeyboardWaiting(BUTTON, 100);
+        const elapsed_ms = nowMillis() - started;
+        if (n != null) {
+            std.debug.print("FAIL: a lone power button was found as a keyboard after waiting\n", .{});
+            return error.PowerButtonMisreadAfterWait;
+        }
+        if (elapsed_ms < 100) {
+            std.debug.print("FAIL: gave up after {d}ms, want at least 100ms\n", .{elapsed_ms});
+            return error.GaveUpTooEarly;
+        }
+        if (elapsed_ms > 1000) {
+            std.debug.print("FAIL: waited {d}ms for a 100ms budget\n", .{elapsed_ms});
+            return error.WaitedTooLong;
+        }
+    }
+
+    std.debug.print("devices_test: waiting finds a late keyboard without slowing a present one\n", .{});
 
     // ── 8. 전원 버튼 판정 (HD-M2) ─────────────────────────────────────
     //
