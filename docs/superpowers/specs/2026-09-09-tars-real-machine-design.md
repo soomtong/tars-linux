@@ -6,7 +6,7 @@
 ("착수 전에" · "RM-M0이" · "RM-M1이" · "RM-M2가" · "RM-M3이")이 실행이 증명한
 것을 담는다. 착수 전 게이트 기준선은 아홉 체인 3/3으로 **19분 40.02초**
 (FP-M1 시점), RM-M0 뒤 열 체인 3/3으로 **19분 52.07초**, RM-M1 뒤
-**20분 23.41초**, RM-M2 뒤 **20분 15.37초**, RM-M3 뒤 **GATE_TIME**이다.
+**20분 23.41초**, RM-M2 뒤 **20분 15.37초**, RM-M3 뒤 **20분 29.84초**다.
 
 `docs/decisions/project_target_hardware.md`가 2026-08-31에 지목한 것을 집는다 —
 **지금 커널은 노트북에서 아예 못 뜬다.** 사용자가 그날 "TARS는 노트북 사용을
@@ -960,6 +960,34 @@ tars-init: keyboard device /dev/input/event1 (QEMU QEMU USB Keyboard)
 **`std.time.Timer`가 Zig 0.16에 없다** — `std.time`에 그 멤버가 아예 없다.
 SH-M1 실측 3(`std.posix`의 `pipe`)과 같은 종류이고 처방도 같다: 커널
 인터페이스(`clock_gettime`)를 직접 부른다.
+
+### 실측 26. 게이트가 20분 29.84초이고, **고침이 그 안에서 정확히 한 번 일했다**
+
+RM-M2 뒤 값(20분 15.37초)에서 **+14.47초**다. 잡음(±3분) 안이고, 커널이
+1.7% 커진 것과 판정 둘이 3회 도는 것으로 설명된다.
+
+**그런데 이 게이트에서 가장 값진 줄은 시간이 아니다.**
+
+```
+tars-init: config shell=fish keyboard=apple hangul=sebeol_3p3 ...
+tars-init: /dev/dri/card0 exists
+[    0.979251] hid-generic ...: input: USB HID v1.11 Keyboard [QEMU QEMU USB Keyboard]
+tars-init: keyboard showed up after 25ms          ← 기다림이 걸렸다
+tars-init: keyboard device /dev/input/event1 (QEMU QEMU USB Keyboard)
+```
+
+**HID 장치가 `init`의 훑기보다 늦게 나타난 회차가 서른 번 중 한 번 있었고,
+`init`이 폴링 한 칸(25ms)을 기다려 잡았다.** 고침이 없었으면 그 회차는
+`keyboard device /dev/input/event0 (Power Button)`을 찍고 게이트가 빨개졌다.
+실측 23이 잰 빈도(일곱 번에 한 번 ~ 스무 번에 한 번)와 맞는 값이다.
+
+**폴백은 진짜 부팅에서 0회다.** 게이트 로그의 `no keyboard found` 21줄은
+**전부 `devices_test`의 가짜 트리**(`/tmp/tars-devices-test/button in 0ms`)이고,
+게스트 부팅에서 나온 것은 하나도 없다. `terminal/check.sh`와
+`device/check.sh`가 그 줄의 **부재**를 요구하는 것이 여기서 값을 낸다.
+
+**판정 둘도 3회씩 돌았다** — `thermal_sys: Registered thermal governor
+'step_wise'`와 `cpuidle: using governor ladder`.
 
 ## 이 세션의 예외 — 편집을 Claude Code가 한다
 
