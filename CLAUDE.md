@@ -114,10 +114,11 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   것이었다. design은 `.../specs/2026-09-09-tars-find-paste-design.md`.
   **FP도 편집을 Claude Code가 했다** — 사용자가 외출하며 milestone 단위로 두
   번 위임했다. SH의 예외와 같은 종류다.
-  **진행 중: Real Machine(RM-M0~M1 완료 2026-09-09·10, M2·M3 남음 — 일반
+  **진행 중: Real Machine(RM-M0~M2 완료 2026-09-09·10, M3 남음 — 일반
   x86_64 노트북에서 뜨는 커널. UEFI로 부팅하고 EFI GOP 프레임버퍼 위의
-  simpledrm에 그리고 USB 키보드로 받는다. 게이트에 열번째 체인
-  `machine/check.sh`가 생겼다).** design은
+  simpledrm에 그리고 USB 키보드로 받고 **NVMe 디스크에서 설정을 읽는다**.
+  설정 디스크는 `/dev/vda`라는 이름이 아니라 **ext2 라벨 `tars-`**로 찾는다.
+  게이트에 열번째 체인 `machine/check.sh`가 생겼다).** design은
   `.../specs/2026-09-09-tars-real-machine-design.md`, 기억은
   `docs/decisions/project_real_machine.md`.
   **RM도 편집을 Claude Code가 한다** — 사용자가 2026-09-09에 브레인스토밍
