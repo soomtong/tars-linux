@@ -282,6 +282,45 @@ if ! grep -a "tars-init: config " "$LOG" | grep -aq "hangul=sebeol_3p3"; then
 fi
 echo "the value seeded on the NVMe disk became the running configuration"
 
+# ── RM-M3: 노트북 ACPI 다섯 중 게이트가 볼 수 있는 둘 ──────────────────
+#
+# 이 milestone이 켠 다섯(ACPI_EC · ACPI_AC · ACPI_BATTERY · ACPI_PROCESSOR ·
+# THERMAL) 중 **셋은 QEMU에 대상이 없어서 영영 못 본다.** EC(PNP0C09)도
+# 어댑터도 배터리도 이 기계에 없다. 그래서 그 셋은 "켜 봤다"에서 멈추고,
+# design이 그 사실을 명시적으로 적는다.
+#
+# **그런데 둘은 보인다** — 착수 전 표는 THERMAL을 "못 본다"로 적었고
+# ACPI_PROCESSOR는 아예 안 적었는데, 재 보니 둘 다 로그에 줄을 남긴다.
+# **조사가 design의 문장을 절반 뒤집은 것이 이 서브프로젝트에서 두 번째다**
+# (첫 번째는 `ovmf` 하나로 못 보는 것이 열에서 셋으로 준 것).
+#
+# **이 판정 둘이 무엇을 증명하고 무엇을 증명하지 않는가.** 증명하는 것은
+# "그 코드가 커널에 들어갔고 init이 돌았다"까지다. **장치에 붙었다는 것은
+# 아니다** — 온도 존도 배터리도 여기 없다. 그 구분을 아는 채로 보는 것이
+# 안 보는 것보다 낫다.
+
+# 판정 12. THERMAL 코어가 떴다. 거버너 이름까지 박는 것은
+# THERMAL_DEFAULT_GOV_STEP_WISE가 함께 켜졌다는 것을 보기 위함이다 —
+# 되접기가 딸고 온 것이라 우리가 손으로 안 적었다.
+if ! grep -aq "thermal_sys: Registered thermal governor 'step_wise'" "$LOG"; then
+  fail "the thermal core never registered its governor" "thermal" "Registered thermal"
+fi
+
+# 판정 13. cpuidle이 떴다. **간접 증거인 것을 알고 쓴다** — CPU_IDLE은 우리가
+# 켠 것이 아니라 ACPI_PROCESSOR=y가 끌고 온 것이고(되접기가 그것을 드러냈다),
+# 그래서 이 줄이 없다는 것은 그 사슬 어딘가가 끊겼다는 뜻이다.
+#
+# **직접 증거는 따로 있다** — QEMU가 _PPC notify를 보내면 ACPI_PROCESSOR가
+# `Warning: Processor Platform Limit event detected, but not handled.`를 찍는다.
+# 그것이 "객체에 붙었다"를 말하는 유일한 줄이지만 **판정으로 안 쓴다**:
+# notify가 오는 시점이 QEMU에 달렸고, 3회차 중 한 번만 안 와도 게이트가
+# 빨개진다. 값보다 flaky 위험이 크다.
+if ! grep -aq "cpuidle: using governor" "$LOG"; then
+  fail "cpuidle never came up (did ACPI_PROCESSOR pull CPU_IDLE in?)" \
+    "cpuidle" "ACPI: Added _OSI(Processor"
+fi
+echo "the thermal core and cpuidle both came up"
+
 # ── 그리고 실제로 친다 ─────────────────────────────────────────────────
 #
 # "장치가 보인다"와 "키가 화면에 닿는다"는 다른 일이다. 앞의 판정 여섯은
