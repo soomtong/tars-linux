@@ -113,47 +113,43 @@ chmod 0755 "$WORKDIR/terminal"
 mkdir -p "$WORKDIR/vendor/fonts"
 cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
 
-cp "$SYSROOT/usr/bin/fish" "$WORKDIR/usr/bin/fish"
-chmod 0755 "$WORKDIR/usr/bin/fish"
-
-# CP-M2: 설정으로 고를 수 있는 셸 셋. initrd 안의 자리는 sysroot의 원래
-# 자리와 무관하게 우리가 정한다 — init/src/config.zig의 Shell.path()가
-# 여기와 같은 경로를 돌려줘야 한다. 둘이 어긋나면 부팅 후 "execve failed"로만
-# 나타난다.
-cp "$SYSROOT/usr/bin/bash" "$WORKDIR/usr/bin/bash"
-cp "$SYSROOT/usr/bin/zsh" "$WORKDIR/usr/bin/zsh"
-chmod 0755 "$WORKDIR/usr/bin/bash" "$WORKDIR/usr/bin/zsh"
-
-cp "$SYSROOT/usr/bin/cat" "$WORKDIR/usr/bin/cat"
-cp "$SYSROOT/usr/bin/uname" "$WORKDIR/usr/bin/uname"
-cp "$SYSROOT/usr/bin/mkdir" "$WORKDIR/usr/bin/mkdir"
-# IP-M0: 게이트가 Ctrl+C로 죽일 자식이 필요하다. 프롬프트에서 줄이
-# 취소되는 것만 보면 "셸이 바이트를 받았다"까지만 증명된다 — 커널이
-# foreground process group에 SIGINT를 보낸다는 것(design doc 결정 3)을
-# 검사하려면 셸이 아닌 프로세스가 하나 떠 있어야 한다. coreutils는 이미
-# sysroot에 있으므로 Dockerfile은 건드리지 않는다.
-cp "$SYSROOT/usr/bin/sleep" "$WORKDIR/usr/bin/sleep"
-# UT-M0: **`ls` 하나만 넣는다.** 통로(PATH)가 열렸는지를 도구 50개와 섞지
-# 않는다 — 실패하면 원인이 하나뿐이다. 나머지는 UT-M1이 목록 배열과 함께
-# 가져온다(design 결정 7).
-cp "$SYSROOT/usr/bin/ls" "$WORKDIR/usr/bin/ls"
-chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
-           "$WORKDIR/usr/bin/mkdir" "$WORKDIR/usr/bin/sleep" \
-           "$WORKDIR/usr/bin/ls"
-
 # init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
-# (ZM-M1). 나머지는 전부 glibc 동적 링크다.
+# (ZM-M1). terminal은 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
-copy_lib_deps "$WORKDIR/usr/bin/fish"
-copy_lib_deps "$WORKDIR/usr/bin/bash"
-copy_lib_deps "$WORKDIR/usr/bin/zsh"
-copy_lib_deps "$WORKDIR/usr/bin/cat"
-copy_lib_deps "$WORKDIR/usr/bin/uname"
-copy_lib_deps "$WORKDIR/usr/bin/mkdir"
-copy_lib_deps "$WORKDIR/usr/bin/sleep"
-# ls는 libselinux1을 요구한다. 이미 initrd에 있지만(fish가 끌고 왔다)
-# 그 사실에 기대지 않는다 — copy_lib_deps는 이미 있는 것을 건너뛴다.
-copy_lib_deps "$WORKDIR/usr/bin/ls"
+
+# ── 유저랜드 바이너리 ────────────────────────────────────────────────────
+#
+# UT-M1 결정 7. **목록은 여기 없다** — guest_tools.sh의 GUEST_TOOLS 배열
+# 하나이고, tools/check.sh가 같은 파일을 source해서 initrd 목록을 검사한다.
+#
+# 예전에는 바이너리 하나마다 cp·chmod·copy_lib_deps 세 줄을 이 자리에 손으로
+# 썼다. 여덟 개일 때는 읽혔지만 50개는 못 읽고, 손으로 쓰는 한 `cp`는 했는데
+# `copy_lib_deps`를 빼먹는 실수가 언제든 난다 — 그 실패는 빌드 때가 아니라
+# **게스트가 그 명령을 처음 칠 때** 나타난다(design 위험 3). 루프 하나로
+# 두면 빼먹을 자리가 없어진다.
+install_tool() {
+  local src="$SYSROOT/$1" dest="$WORKDIR/$2"
+
+  # 없는 것을 조용히 건너뛰지 않는다. 게스트가 그 명령을 못 찾는 것은 부팅
+  # 20분 뒤에 사람이 발견하는 실패이고, 여기서 죽으면 30초 뒤에 드러난다.
+  if [ ! -f "$src" ]; then
+    echo "make_initrd: ${1} not found in ${SYSROOT}" >&2
+    echo "             add the package that provides it to devcontainer/Dockerfile" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+  chmod 0755 "$dest"
+  # copy_lib_deps는 이미 있는 소네임을 건너뛰므로 배열의 순서는 상관없다.
+  copy_lib_deps "$dest"
+}
+
+. ./guest_tools.sh
+
+for entry in "${GUEST_TOOLS[@]}"; do
+  install_tool "${entry%%:*}" "${entry#*:}"
+done
 
 # /bin/sh는 **언제나 bash다.** tars.conf의 shell 설정과 무관하다 —
 # #!/bin/sh 스크립트의 동작이 사용자의 셸 취향에 따라 달라지면 안 된다
