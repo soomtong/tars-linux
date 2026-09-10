@@ -1,18 +1,191 @@
-# HANDOFF: Real Machine이 끝났다 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Userland Tools를 설계했다 — UT-M0을 실행할 차례다
+
+## 목표
+
+**게스트에서 쓸 도구 한 벌을 세우고, 그 이름이 손에 닿게 한다.**
+
+사용자가 2026-09-10에 기계를 **실제로 써 보고** 지목했다 — *"터미널 환경에서
+기본적인 unix/linux utilities가 부족하다. 예를 들면 `ls` 같은 것들이 없다."*
+조건이 둘 붙었다: *"gnu 기본 유틸리티도 좋지만 **modern alternative가 기본
+탑재**되면 좋겠다"* · *"tars-linux는 거의 **개발용**으로 사용되기 때문에
+**git은 필수** 도구가 될 것"*.
+
+저장소 어휘로 **Userland Tools (UT)**다.
 
 ## 지금 어디인가
+
+`main`, working tree 깨끗함. **코드는 아직 한 줄도 안 고쳤다.** 이번 세션은
+조사와 설계만 했고 커밋 둘을 남겼다.
+
+| | 파일 | 커밋 |
+|---|---|---|
+| design | `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md` | `d872574` |
+| plan (UT-M0) | `docs/superpowers/plans/2026-09-10-tars-userland-tools-ut-m0.md` | `1f92e64` |
+
+**게이트 기준선은 열 체인 3/3으로 20분 29.84초**(RM-M3 시점). **이번 세션에서
+게이트를 안 돌렸다** — 코드를 안 고쳤으므로 돌릴 이유가 없었다.
+
+## 다음 세션이 **가장 먼저 물어야 할 것**
+
+세션 끝에 실행 방식을 물었는데 답을 받기 전에 닫혔다. **두 가지를 함께
+묻는다.**
+
+1. **실행 방식** — subagent-driven(Task마다 새 subagent + 사이사이 검토) 대
+   inline(이 세션에서 체크포인트마다 확인).
+2. **편집 분담** — **RM이 끝났으므로 `CLAUDE.md`의 기본 규칙이 돌아와 있다:
+   파일 편집은 사용자가 한다.** SH·FP·RM 세션은 사용자가 명시적으로 위임한
+   예외였다. 이번에도 위임할지 사용자에게 확인한다. **묻지 말고 편집하지
+   말 것.**
+
+## 바로 다음에 할 것 — **UT-M0 Task 0(크기 스파이크)**
+
+plan의 Task 0은 **코드를 한 줄도 안 고친다.** 실제 `.deb` 스물넷을 풀어
+밸러스트로 얹은 initrd를 만들고, gzip·zstd·xz 셋으로 재고, **그 initrd로 실제
+부팅해서 시간을 비교**한다.
+
+**이것이 첫째인 이유는 답이 "못 뜬다"면 UT-M1~M3의 목록이 통째로 바뀌기
+때문이다.** TF-M2 시절 **53MB에서 부팅조차 못 한 벽**이 있었고, 이 계획 뒤의
+initrd가 gzip **약 30MB**로 추정된다 — 벽의 절반을 넘는다.
+
+**밸러스트를 난수나 0으로 채우면 답이 통째로 틀린다** — 난수는 안 줄고 0은
+사라져서 압축률이 실제와 다르다. plan의 Step 2가 진짜 바이너리를 쓴다.
+
+## 설계에서 사용자가 정한 것 — **다시 논의하지 말 것**
+
+| | 정한 것 | 안 고른 쪽 |
+|---|---|---|
+| 이름 규칙 | **GNU와 모던을 둘 다, 이름은 각자 그대로** | `ls`를 치면 `eza`가 뜨게 하기(게이트 화면 판정이 흔들린다) |
+| `PATH` 자리 | **PID 1(init)** — 자식 둘이 다 받는다 | `terminal`의 `setenv`(시리얼 셸이 못 받는다) · `tars.conf` 항목 |
+| 조달 경로 | **Debian `.deb` 하나로 통일.** `libgit2` 사슬 11.4MB 감수 | upstream musl 정적(의존 0이지만 경로가 둘로 갈린다) |
+| 네트워킹 | **별도 서브프로젝트로 미룬다** | 이번에 함께 넣기 |
+| 영속 저장 | **git 설정만 `/config`에** | 쓸 수 있는 `/home`까지 이번에 |
+| 편집기 | **`vim.tiny`**(가벼운 것 하나 먼저) | `neovim`(라이브러리 9 + 런타임 24MB) · `helix`(trixie에 없다) |
+| 추가 도구 | `procs`·`htop`·`tree`·`duf`·`ncdu`·`jq`·`hyperfine` **전부 넣는다** | 바탕만 굽기 |
+
+**`herdr`(https://herdr.dev)는 이번에 건너뛴다** — Homebrew for Linux로
+관리되는 것이라 네트워킹과 패키지 매니저가 선 뒤의 일이다. **이 방향이 UT의
+크기를 정해 준다: 지금은 바탕 한 벌만 굽고 긴 꼬리는 나중에 Homebrew가
+맡는다.**
+
+## 조사로 확정한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"착수 전에 실측한 것"** 절(실측 14개)에 있다. 요약 아홉.
+
+**1. 진짜 벽은 `ls`가 없는 것이 아니라 `PATH`가 없는 것이다.** 커널이 PID 1에게
+주는 envp는 `HOME=/`와 `TERM=linux` 둘뿐이고 PID 1이 그대로 흘려보낸다
+(`init/src/main.zig:418`). **넣어도 이름으로는 못 부른다.**
+`project_guest_environment`가 2026-08-17에 "설정 시스템과 함께 결정할 문제"로
+미뤄 뒀는데 **그 설정 시스템(CP-M2)이 2026-08-15에 생겼다 — 유예가 만료됐다.**
+
+**2. initrd에 `/bin`도 `/tmp`도 `/etc`도 없다.** 최상위가 `config dev init lib
+lib64 proc sys terminal usr vendor`뿐이다. **이것이 git에 그대로 걸린다** —
+셸 서브커맨드가 `/bin/sh`를, 임시 파일이 `/tmp`를, 커밋 작성자가
+`/etc/passwd`를 찾는다.
+
+**3. GNU는 이미 저장소 안에 있다.** `Dockerfile:82`가 `coreutils:amd64`를
+통째로 받아 sysroot에 풀어 뒀고 `make_initrd.sh`가 넷만 복사했을 뿐이다.
+바이너리 하나가 42~154KB다.
+
+**4. 모던 도구 열둘 중 열이 새 라이브러리를 하나도 안 부른다.** `rg`·`fd`·
+`sd`·`procs`·`duf`·`tree`·`hyperfine`이 공짜다(`duf`는 Go 정적이라 `DT_NEEDED`가
+비어 있다). **문제는 `eza`와 `bat` 둘뿐**이고, 둘이 `libgit2`를 통해 **사슬 15개
+11.4MB**를 데려온다(OpenSSL `libcrypto` 6.4MB + Kerberos 한 벌).
+
+**5. git이 사슬보다 싸다.** 바이너리 3,987KB에 `NEEDED`가 `libpcre2-8`(이미
+있음)과 `libz` 둘뿐이다. `/usr/lib/git-core`가 25MB로 보이지만 **168개 중
+대부분이 `git` 자신에 대한 하드링크**이고 별도 실체는 **네트워크 헬퍼 일곱
+16MB**다 — **`# CONFIG_NET is not set`이라 한 줄도 안 돈다. 안 넣는다.**
+
+**6. 게스트에 네트워크가 아예 없다.** 그래서 이번 git은 **로컬 전용**이다 —
+`clone`·`fetch`·`push`·`pull`이 안 되고 `init`·`add`·`commit`·`log`·`diff`·
+`branch`·`stash`가 된다.
+
+**7. 셸이 무조건 no-config로 뜬다**(`init/src/main.zig:482`가 조건 없이
+`--no-config`/`--norc`/`-f`를 넘긴다). **그래서 `zoxide`와 `fzf`는 훅을 걸 자리가
+없어 넣어도 안 돈다.**
+
+**8. Debian이 이름을 바꿔 놓은 것이 둘.** `bat`은 `/usr/bin/batcat`이고,
+`fd`의 실체는 **`/usr/lib/cargo/bin/fd`**이며 `/usr/bin/fdfind`는 심볼릭
+링크다 — **실체를 복사해야 한다.** initrd 안의 이름은 우리가 `bat`·`fd`로
+정한다(design 결정 4).
+
+**9. 커널이 압축기를 전부 안다.** `CONFIG_RD_GZIP`·`XZ`·`ZSTD`가 다 `y`라
+**위험 1의 처방에 커널 재설정이 필요 없다.**
+
+## 설계 중에 발견해 명시적으로 닫은 것 둘
+
+**1. 시리얼 콘솔 셸은 관측할 수 없다.** 저장소의 **열 체인 중 시리얼 셸에
+타이핑한 것이 하나도 없다** — 전부 `-serial file:`(쓰기 전용)이고 키는 QEMU
+monitor로 **화면 셸**에만 간다. 그래서 UT-M0은 둘로 나눠 본다: init이 찍는
+`tars-init: env PATH=...`(**직접 관측**) + `supervise()`가 `start(c, envp)`를
+한 루프에서 부른다는 **코드 구조상 보장**. `project_guest_environment`가 `TERM`에
+대해 똑같이 적어 둔 기준이다 — **새 기준을 만드는 것이 아니다.**
+
+**2. 재부팅하면 사라진다.** initramfs는 tmpfs라 게스트에서 만든 git 저장소가
+전원을 끄면 없다. **이 조사에서 가장 무거운 발견이지만 이번 범위 밖이고**
+(design 비목표 2) 사용자가 "git 설정만 `/config`에"로 정했다. 처방은 심볼릭
+링크 하나다 — `/.gitconfig -> /config/gitconfig`. `/config`는
+`MS_SYNCHRONOUS`로 **읽기·쓰기** 마운트라(`init/src/main.zig:92`)
+`git config --global`이 그대로 영속한다.
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-10-tars-userland-tools-design.md` | **먼저 읽는다.** 실측 14 · 비목표 8 · 결정 9 · 위험 4 |
+| `docs/.../plans/2026-09-10-tars-userland-tools-ut-m0.md` | Task 7개. 전부 실제 코드와 실제 명령이 들어 있다 |
+| `init/src/main.zig:418` | envp를 잡는 자리. Task 2가 여기를 고친다 |
+| `init/src/main.zig:482` | 셸에 `--no-config`를 조건 없이 넘기는 자리(실측 7의 근거) |
+| `init/src/main.zig:92` | `/config`가 `MS_SYNCHRONOUS`인 자리 |
+| `init/build.zig:104-122` | `storage_test` 블록과 `test_step` 목록. Task 1이 여기에 `environ_test`를 엮는다 |
+| `kernel/make_initrd.sh:78-136` | 디렉터리를 만들고 바이너리를 복사하는 자리. Task 3이 여기 |
+| `devcontainer/Dockerfile:70-90` | `apt-get download` 목록. **UT-M1~M3이 여기를 넓힌다** |
+| `check.sh:170-186` | `CHAINS` 배열. Task 4가 `UT-M0:./tools/check.sh`를 더한다 |
+| `gate_lib.sh:37` | `type_keys`. 새 체인이 이것을 쓴다 |
+| `docs/decisions/project_guest_environment.md` | **UT-M0이 이 문서의 "결과 1"을 닫는다.** Task 6 Step 2가 그 자리다 |
+
+## 이번 세션에서 막혔던 것
+
+**OrbStack이 꺼져 있었다.** `docker` 호출이 전부 소켓 에러로 죽었다. `open -a
+OrbStack` 뒤 **3초**만에 떴다. 다음 세션도 첫 `docker` 명령 전에 확인한다.
+
+**`ls`가 호스트에서 출력을 안 냈다.** `ls -F`/`ls -1`이 빈 결과를 냈고 `fd -d 1`은
+정상이었다. 원인을 안 팠다 — 저장소 탐색은 `fd`/`rg`로 하면 되고 이것이 작업을
+막지 않았다. **다음 세션도 `ls` 대신 `fd`를 쓰면 된다.**
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+# init 호스트 검사(초 단위). UT-M0 Task 1이 여기에 environ_test를 더한다
+docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
+  bash -c 'zig build test'
+
+# 루트 게이트. **컨테이너 안에서, 백그라운드로** — 호스트 make가 3.81이라
+# 커널 Makefile이 거절하고, 20분이 넘어 Bash 도구 상한 10분에 잘린다
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
+```
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다(IS-M1이 만들 때부터). **세는 것으로
+판정하지 말 것.**
+
+---
+
+## 그 앞의 서브프로젝트 — Real Machine (RM-M0~M3, 2026-09-09·10)
 
 `main`, working tree 깨끗함. **Real Machine(RM-M0~M3)이 2026-09-09·10에 전부
 끝났다.** 커널이 **UEFI로 부팅**하고, **EFI GOP 프레임버퍼 위의 simpledrm**에
 그리고, **USB 키보드**로 받고, **NVMe 디스크에서 설정을 읽고**, **노트북의
 ACPI 다섯**을 켜고 있다. 실기에 꽂는 법은 `README.md`에 있다.
 
-**진행 중인 서브프로젝트가 없다 — 사용자가 고를 자리다.**
+**RM이 끝나면서 `CLAUDE.md`의 기본 규칙이 돌아왔다 — 파일 편집은 사용자가
+한다.**
 
-**그리고 RM이 끝났으므로 `CLAUDE.md`의 기본 규칙이 돌아왔다 — 다음
-서브프로젝트부터 파일 편집은 사용자가 한다.**
-
-**게이트는 열 체인 3/3으로 20분 29.84초다**(RM-M2 뒤 20분 15.37초에서
+**그때 게이트는 열 체인 3/3으로 20분 29.84초였다**(RM-M2 뒤 20분 15.37초에서
 +14.47초. 커널이 1.7% 커지고 판정 둘이 늘었다. 잡음 ±3분 안이다).
 
 ```bash
@@ -80,9 +253,10 @@ FAIL: init did not pick the USB keyboard
 `project_gate_latency`의 "게이트가 부팅하는 바이너리가 곧 제품이다"의
 반대편이다).
 
-## 바로 다음에 할 것 — **사용자가 고를 자리다**
+## RM이 남긴 후보 여섯 — **2026-09-10에 여섯 다 안 골랐다**
 
-진행 중인 서브프로젝트가 없다. **"실머신 커널 `.config`"는 이번에 없어졌다.**
+**사용자가 목록 밖에서 골랐다.** 기계를 실제로 써 보고 "`ls` 같은 것들이
+없다"를 발견해서 **Userland Tools(UT)**가 됐다. **여섯은 그대로 남아 있다.**
 
 - **HI가 남긴 둘** — 기호 확장과 Patal의 옵션 trait들 · 모아주기(첫가끝 조합,
   **HI design 결정 3이 근거를 대고 뺐다**)
