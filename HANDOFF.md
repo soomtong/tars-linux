@@ -1,173 +1,131 @@
-# HANDOFF: 설정이 노트북 저장장치에서 온다 — Real Machine RM-M2가 끝났다
+# HANDOFF: Real Machine이 끝났다 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 지금 어디인가
 
-`main`, working tree 깨끗함. **Real Machine(RM-M0 · RM-M1 · RM-M2)이
-2026-09-09·10에 끝났다.** 커널이 **UEFI로 부팅**하고, **EFI GOP 프레임버퍼
-위의 simpledrm**에 그리고, **USB 키보드**로 받고, **NVMe 디스크에서 설정을
-읽는다.** 남은 것은 **RM-M3 하나**다.
+`main`, working tree 깨끗함. **Real Machine(RM-M0~M3)이 2026-09-09·10에 전부
+끝났다.** 커널이 **UEFI로 부팅**하고, **EFI GOP 프레임버퍼 위의 simpledrm**에
+그리고, **USB 키보드**로 받고, **NVMe 디스크에서 설정을 읽고**, **노트북의
+ACPI 다섯**을 켜고 있다. 실기에 꽂는 법은 `README.md`에 있다.
 
-**게이트는 열 체인 3/3으로 20분 15.37초다**(RM-M1 뒤 20분 23.41초에서
-−8.04초. 잡음 ±3분 안이고 커널이 안 바뀌었으므로 맞는 값이다).
+**진행 중인 서브프로젝트가 없다 — 사용자가 고를 자리다.**
 
-```
-tars-init: config storage /dev/nvme0n1 (label tars-machine)  ← 이름이 아니라 라벨로
-tars-init: mounted ext2 at /config                            ← 문구가 안 바뀌었다
-tars-init: loaded /config/tars.conf
-terminal: status> text=EN  공세벌 3-P3  쿼티  CAPS            ← 심은 값이 픽셀이 됐다
-```
+**그리고 RM이 끝났으므로 `CLAUDE.md`의 기본 규칙이 돌아왔다 — 다음
+서브프로젝트부터 파일 편집은 사용자가 한다.**
 
-| | 파일 | 커밋 |
-|---|---|---|
-| plan | `docs/superpowers/plans/2026-09-10-tars-real-machine-rm-m2.md` | `5c13ab8` |
-| Task 1 | `init/src/storage.zig` · `storage_test.zig` · `build.zig` | `29ba9d1` |
-| Task 2 | `main.zig`의 `mountConfig`가 후보를 훑는다 | `e16d362` |
-| Task 3 | `machine/check.sh`의 라벨 디스크 · 판정 넷 · `fail()` 고침 | `ff8cb80` |
-| 마무리 | design 실측 절·결정 9~13 · 기억 · HANDOFF | `5d873f5` · 이 커밋 |
+**게이트는 열 체인 3/3으로 20분 29.84초다**(RM-M2 뒤 20분 15.37초에서
++14.47초. 커널이 1.7% 커지고 판정 둘이 늘었다. 잡음 ±3분 안이다).
 
 ```bash
 git status --short     # 비어 있어야 한다
 docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
-  bash -c 'zig build test'   # 마지막이 storage_test
+  bash -c 'zig build test'   # config·power·devices·storage 넷
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'   # 마지막이 PASS
-```
 
-**`init`의 검사가 넷이 됐다** — `config_test`(`PASS`) · `power_test` ·
-`devices_test` · **`storage_test`**(RM-M2가 만들었다).
-
-**`terminal` 쪽 `PASS`가 넷인 것은 여전히 정상이다.** 다섯 바이너리가 다 돌지만
-`status_test.zig`만 `PASS`를 안 찍는다(IS-M1이 만들 때부터).
-**세는 것으로 판정하지 말 것** — 종료 코드와 `*_test:` 접두사 다섯을 본다.
-
-**게이트는 컨테이너 안에서 돌린다.** 호스트의 `make`는 3.81이라 커널
-Makefile이 거절한다.
-
-```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } 2> /tmp/gate.time
 ```
 
-**게이트는 20분이 넘으므로 백그라운드로 돌려야 한다** — Bash 도구의 타임아웃
-상한이 10분이고, 넘겨 주면 잘려서 exit 143이 된다.
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다.** 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다(IS-M1이 만들 때부터).
+**세는 것으로 판정하지 말 것** — 종료 코드와 `*_test:` 접두사 다섯을 본다.
 
-## 이 세션은 편집도 Claude Code가 했다 — **RM이 끝나면 다시 기본 규칙이다**
+**게이트는 컨테이너 안에서 돌린다**(호스트 `make`가 3.81이라 커널 Makefile이
+거절한다). **20분이 넘으므로 백그라운드로 돌려야 한다** — Bash 도구의
+타임아웃 상한이 10분이고, 넘겨 주면 잘려서 exit 143이 된다.
 
-사용자가 2026-09-09에 브레인스토밍 중간에 **"나 이제 자러 가니까 이번 태스크의
-모든 작업을 마무리해줘"**라고 위임했다. `CLAUDE.md`의 기본 규칙("파일 편집은
-사용자가")에 대한 **이 서브프로젝트 한정 예외**이고 SH·FP 세션의 예외와 같은
-종류다.
+## RM-M3의 커밋들
 
-**사용자가 고른 것은 넷이다** — 결정 1(`.config`를 하나로) · 결정 2(체인을
-하나 더한다) · **결정 9(후보 목록을 `init`에 박는다)** · **결정 10(라벨이
-`tars-`로 시작하는 첫 디스크)**. 뒤의 둘은 RM-M2 착수 때 골랐다.
-**나머지 아홉은 Claude가 정했고 근거를 각 결정에 적었다.**
+| | 파일 | 커밋 |
+|---|---|---|
+| plan | `.../plans/2026-09-10-tars-real-machine-rm-m3.md` | `964e0f3` |
+| Task 1 | `kernel/.config`의 ACPI 다섯 | `14f691e` |
+| **계획 밖** | `init/src/devices.zig`의 키보드 기다림 + 검사 | `7cc3691` |
+| Task 0 | `machine/check.sh`의 판정 12·13 | `74067c7` |
+| Task 3 | `README.md`의 실기 절 | `b5f68d8` |
+| Task 4 | design·기억·`CLAUDE.md` | `eb918e5` · `17b8f2d` |
 
-## 바로 다음에 할 것 — **RM-M3 하나뿐이다**
+## **RM-M3이 계획을 깼다 — 먼저 읽을 것**
 
-**RM-M3 — 게이트가 못 보는 것들.** `ACPI_EC`(노트북 DSDT에 거의 항상 있고,
-없으면 AML이 그 자리에서 실패해 배터리·뚜껑·밝기 키가 통째로 안 붙는다) ·
-`ACPI_AC` · `ACPI_BATTERY` · `ACPI_PROCESSOR` · `THERMAL`. **켜고 QEMU에서
-회귀가 없음만 확인한다** — QEMU `pc`/`q35`에 EC도 배터리도 없으므로 "켜 봤다"와
-"된다"가 안 갈린다는 것을 명시적으로 적는다.
+**"RM-M2가 코드를 건드리는 유일한 milestone이다"가 틀린 문장이 됐다.**
+RM-M3이 `init/src/devices.zig`를 고쳤고, **실측이 강제했다.**
 
-그리고 **실기용 USB 이미지 만드는 법**과 **Secure Boot를 꺼야 한다**를 문서에
-적는다. `out/tars.iso`가 이미 하이브리드라 `dd`로 그대로 쓰면 되고
-(`EFI/BOOT/BOOTX64.EFI`가 트리에 있다), 커널에 서명이 없으니 펌웨어 설정에서
-Secure Boot를 꺼야 한다.
+`ACPI_PROCESSOR`를 켜니 `CPU_IDLE`이 딸려 왔고, 그것이 게스트의 타이밍
+지터를 넓혀 **RM-M1부터 잠복하던 경합**을 게이트 위로 밀어 올렸다.
 
-**`.config`를 켤 때 층을 먼저 확인한다** — RM-M1 실측 10이 그 규율을 세웠다.
-`ACPI`는 이미 켜져 있으므로 이번에는 층이 얕을 것이다.
+```
+FAIL: init did not pick the USB keyboard
+  tars-init: keyboard device /dev/input/event0 (Power Button)
+  [    0.927854] input: QEMU QEMU USB Keyboard as ...input1   ← 훑은 뒤에 나타났다
+```
 
-**RM 밖에 남아 있는 후보들.**
+**`init`은 부팅에서 딱 한 번 `/sys/class/input`을 훑었다.** USB 키보드는
+비동기로 열거되므로 그 시점에 아직 없을 수 있고, 탐색기는 **정확하게**
+"없다"고 답한 뒤 `event0`(전원 버튼)으로 떨어진다. **탐색기의 버그가 아니다 —
+`project_device_discovery`의 두 절이 전부 "버그"를 전제로 쓰여 있었고 이것이
+세 번째 이유다.**
+
+**이것이 게이트 flake가 아니라 실기 버그인 것이 결정적이다.** 허브 둘을
+끼워 열거를 **1.693초**로 늦추니 `init`이 **650ms를 기다려** 찾았다. 고침이
+없었으면 그 노트북에서 **키보드가 통째로 안 먹는다** — 허브를 거친 키보드는
+실기에서 예외가 아니다.
+
+처방은 `findKeyboardWaiting`이다. **25ms 간격으로 최대 3초까지 다시 본다.**
+찾으면 즉시 돌아오고 상한이 끝나면 예전대로 `event0`으로 떨어지므로
+**HD 결정 6("못 찾아도 부팅을 막지 않는다")을 안 어긴다** — 무한히 기다리는
+것과 한정해서 기다리는 것은 다른 일이다.
+
+**안 고른 둘.** `ACPI_PROCESSOR`를 되돌리기(=게이트만 초록이 되고 실기 버그가
+남는다) · 체인에 `sleep` 넣기(=게이트만 고치고 제품은 안 고친다.
+`project_gate_latency`의 "게이트가 부팅하는 바이너리가 곧 제품이다"의
+반대편이다).
+
+## 바로 다음에 할 것 — **사용자가 고를 자리다**
+
+진행 중인 서브프로젝트가 없다. **"실머신 커널 `.config`"는 이번에 없어졌다.**
 
 - **HI가 남긴 둘** — 기호 확장과 Patal의 옵션 trait들 · 모아주기(첫가끝 조합,
   **HI design 결정 3이 근거를 대고 뺐다**)
+- **`SUSPEND`(S3 절전)** — RM이 명시적으로 비목표로 뺐다. `ACPI_BUTTON`이
+  켜져 있어 **뚜껑 이벤트는 이미 온다.** RM-M3이 `ACPI_PROCESSOR`·`THERMAL`을
+  켜 놓았으므로 전원 관리 쪽 바닥이 그때보다 넓다.
+- **배터리·온도를 상태 줄에 띄우기** — RM-M3이 커널 쪽을 열어 뒀다
+  (`ACPI_BATTERY`·`ACPI_AC`·`THERMAL`). IS가 만든 상태 줄에 칸을 더하는 일이고,
+  **게이트가 못 본다**는 것이 이 후보의 무게다(QEMU에 배터리가 없다).
+- **실기에 실제로 꽂아 보기** — RM이 처음부터 비목표로 적어 둔 것이다.
+  `README.md`에 절차가 있다. **이것은 코드가 아니라 사람이 하는 일이다.**
 - IS design의 비목표(상태 줄 색·자리를 설정으로 빼기 등) — **값이 낮다고
   적어 둔 것들이다.**
 - FP design의 비목표 넷 — bracketed paste(CM 결정 9) · 시스템 클립보드
   (OSC 52) · 검색 기록 `↑`(CN-M1) · 프롬프트 안의 커서 이동. **다시 캐지 말고
   그 절을 읽을 것.**
-- **`SUSPEND`(S3)는 RM 밖이다.** `ACPI_BUTTON`이 켜져 있어 lid 이벤트는 이미
-  오지만, 뚜껑을 닫아 절전으로 가는 것은 별 서브프로젝트다.
-- **`/config`를 파티션 테이블 위에 두기.** RM-M2가 명시적으로 안 한 것이다
-  (design 결정 12) — 지금 디스크 전체가 파티션 없는 ext2다.
+- **`/config`를 파티션 테이블 위에 두기** — RM-M2 결정 12가 명시적으로 안 한
+  것이다. 지금 디스크 전체가 파티션 없는 ext2다.
 
-## RM-M2가 세운 것 — 저장소에 서 있는 것 넷
+## RM이 세운 것 — 저장소에 서 있는 것 아홉
 
-1. **`init/src/storage.zig`** — 후보 열넷(`vd*` · `nvme*n1` · `sd*` ·
-   `mmcblk*`)을 순서대로 열어 앞 2048바이트를 읽고, ext2 superblock의
-   매직(`0xEF53`)과 라벨을 본다. **`devices.zig`와 같은 모양이다** — 이름을
-   순서대로 열어 보고 안 되면 다음 것(`getdents64`를 피한 그 근거 그대로).
-2. **`tarsLabel`이 순수 함수인 것** — 시스템 콜이 없어 호스트 검사가 규칙을
-   그대로 본다. `bitSet`/`looksLikeKeyboard`와 같은 선이다.
-3. **`machine/check.sh`의 판정 넷** — 골랐다 · 붙었다 · 읽었다 · **값이
-   쓰였다**. 넷으로 나눈 이유는 "설정이 안 왔다"의 병이 넷이기 때문이다.
-4. **`machine/check.sh`의 `fail()`에 붙은 `|| true`** — RM-M0부터 있던
-   잠복 결함을 고쳤다(아래).
-
-## RM-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
-
-전문은 design의 **"RM-M2가 실측한 것"** 절(실측 15~20)에 있다. 요약 다섯.
-
-**1. 오프셋은 손으로 심은 버퍼로 원리적으로 못 본다.** 검사가 가짜
-superblock을 만들 때 쓰는 오프셋이 **구현이 쓰는 것과 같은 수**라, 1080과
-1144가 둘 다 틀려도 초록이 뜬다. 그래서 `mkfs.ext2`가 구운 바이트를 먼저
-봤다(`1080`이 `53 ef`, `1144`가 `tars-config` + NUL 패딩).
-
-**분업이 셋이다** — 호스트 검사가 **규칙**을, 스파이크가 **오프셋**을,
-체인이 **셋이 함께 도는가**를 본다. 어느 하나도 나머지 둘을 대신 못 한다.
-
-**2. `set -euo pipefail`이 실패 진단을 삼키고 있었다 — RM-M0부터.**
-라벨을 빼고 체인을 돌렸더니 `FAIL:` 한 줄만 나오고 문맥이 **통째로 비었다.**
-안 맞는 `grep`은 exit 1이고 `pipefail`이 그것을 파이프라인 코드로 올려
-`set -e`가 함수를 죽인다.
-
-```bash
-denoise | grep -a "$pattern" | head -3 | sed 's/^/  /' || true
-#                                                        ^^^^^^^ 이것이 없었다
-```
-
-**하필 첫 패턴이 "없는 것"인 경우가 가장 흔하다** — 그것이 실패의 이유라서
-목록의 앞에 적힌다. RM-M0에서는 첫 패턴이 `PANIC`이라 마침 있었고, 그래서
-실측 7의 로그가 멀쩡히 나왔다. **결함은 그때부터 있었고 드러날 조건이 없었다.**
-
-**"들린다"(serial) · "읽힌다"(escape) · "찍힌다"(pipefail)가 각각 다르다.**
-
-**3. 라벨을 빼면 체인이 정확히 그 자리에서 죽는다.** 음성 확인이 결정 10을
-정면으로 증명했다 — `-L tars-machine`만 빼고 디스크도 NVMe도 `tars.conf`도
-그대로 뒀다.
-
-```
-FAIL: init did not pick the NVMe disk by its ext2 label
-  tars-init: no disk labelled tars-* among 14 candidates
-  [    0.429552] nvme nvme0: pci function 0000:00:04.0
-```
-
-**디스크는 붙었고 커널도 봤는데 `init`이 라벨을 못 찾았다**가 세 줄에 다 있다.
-**실측 12(`i8042=off`)의 사촌이고, 이 서브프로젝트에서 세 번째다.**
-
-**4. 호스트 검사도 음성 확인을 거쳤고, Zig가 하나를 대신 막았다.** 접두사
-검사를 끄니 검사 3(`ForeignDiskAccepted` — `debian-root`를 받았다), 매직
-검사를 무력화하니 검사 7(`WrongMagicAccepted`)이 잡았다. **부수 발견: 매직
-검사 줄을 통째로 지우면 컴파일이 안 된다** — `magic`이 안 쓰인 변수가 되기
-때문이다. 검사가 못 잡는 자리를 컴파일러가 잡았다.
-
-**5. 옛 경로가 게이트에서 열여덟 번 지났다.**
-
-```
-  3  config storage /dev/nvme0n1 (label tars-machine)   ← 새 경로
-  6  config storage /dev/vda (label tars-config)
-  3  config storage /dev/vda (label tars-input)
-  6  config storage /dev/vda (label tars-power)
- 12  no disk labelled tars-* among 14 candidates        ← 디스크 없는 부팅
- 18  tars-init: mounted ext2 at /config                 ← 문구가 안 바뀌었다
-```
-
-`hangul` 체인은 성공하면 로그를 안 뿌려 표에 안 보이지만, 그 판정이 심어 둔
-`hangul_layout=sebeol_3p3`을 요구하므로 못 찾았으면 죽는다. **`/dev/vda`를
-지운 편집이 그 이름을 쓰던 다섯 체인을 안 깼다는 것을 게이트가 증명한다.**
-`init` 바이너리는 3,331,160 → 3,357,336바이트다(+26KB, +0.8%).
+1. **`kernel/.config`** — `EFI`·`RELOCATABLE`·`SYSFB_SIMPLEFB`·`DRM_SIMPLEDRM`
+   (M0) · `PCI_MSI`·USB(HCD 넷 + HID + storage)·`SCSI`/`BLK_DEV_SD`·
+   `BLK_DEV_NVME`·`ATA`/`SATA_AHCI`/`ATA_PIIX`(M1) ·
+   `ACPI_EC`/`AC`/`BATTERY`/`PROCESSOR`·`THERMAL`(M3).
+   **`DRM_I915`도 `AMDGPU`도 안 켰다** — simpledrm으로 충분하다는 것이 실측이다.
+2. **`boot/limine.conf`의 `serial: yes`** — 부트로더가 실패하면 그 말이
+   시리얼로 나온다. **이 한 줄이 M0의 벽을 찾았다.**
+3. **`boot/make_iso.sh`의 하이브리드 레시피** — ISO 하나가 El Torito 항목
+   둘(BIOS · UEFI)을 담는다. `boot/check.sh`는 SeaBIOS로,
+   `machine/check.sh`는 OVMF로 **같은 바이트를** 부팅한다.
+4. **`machine/check.sh`** — 열번째 체인. **판정 열셋 + 타이핑 하나.**
+   `denoise()`가 limine의 escape를 걷어낸다.
+5. **`boot/check.sh`의 `-vga none`** — 그 체인의 전제("`card0`이 없다")를
+   암묵에서 명시로 옮겼다.
+6. **`init/src/storage.zig`** — 설정 디스크를 **이름이 아니라 ext2 라벨**로
+   찾는다(M2).
+7. **`init/src/devices.zig`의 `findKeyboardWaiting`** — 늦게 열거되는 키보드를
+   기다린다(M3, 계획 밖).
+8. **`README.md`의 "실기 노트북에 꽂아 보기"** — `dd` 절차 · **Secure Boot를
+   꺼야 한다** · 설정 디스크 라벨 · **안 되는 것 표**.
+9. **`machine/check.sh`의 `fail()`에 붙은 `|| true`** — RM-M0부터 있던 잠복
+   결함(M2가 잡았다).
 
 ## 설정 디스크를 고르는 규칙 — 한 표로
 
@@ -181,105 +139,121 @@ FAIL: init did not pick the NVMe disk by its ext2 label
 | 못 찾으면 | `no disk labelled tars-* among 14 candidates` → 기본값. **부팅은 계속된다** |
 | 여는 방식 | `O_NONBLOCK` — 매체 없는 리더에서 `open(2)`이 매달리면 기계가 안 켜진다 |
 
-## RM-M0·M1이 세운 것 — 저장소에 서 있는 것 다섯
+## RM-M3이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-1. **`kernel/.config`** — `EFI`·`RELOCATABLE`·`SYSFB_SIMPLEFB`·`DRM_SIMPLEDRM`
-   (M0)과 `PCI_MSI`·USB(HCD 넷 + HID + storage)·`SCSI`/`BLK_DEV_SD`·
-   `BLK_DEV_NVME`·`ATA`/`SATA_AHCI`/`ATA_PIIX`(M1). **`DRM_I915`도 `AMDGPU`도
-   안 켰다** — simpledrm으로 충분하다는 것이 실측이다.
-2. **`boot/limine.conf`의 `serial: yes`** — 부트로더가 실패하면 그 말이
-   시리얼로 나온다. **이 한 줄이 M0의 벽을 찾았다.**
-3. **`boot/make_iso.sh`의 하이브리드 레시피** — ISO 하나가 El Torito 항목
-   둘(BIOS · UEFI)을 담는다. `boot/check.sh`는 SeaBIOS로,
-   `machine/check.sh`는 OVMF로 **같은 바이트를** 부팅한다.
-4. **`machine/check.sh`** — 열번째 체인. **판정 열하나 + 타이핑 하나.**
-   `denoise()`가 limine의 escape를 걷어내 실패 메시지에 부트로더의 말을 붙인다.
-5. **`boot/check.sh`의 `-vga none`** — 그 체인의 전제("`card0`이 없다")를
-   암묵에서 명시로 옮겼다.
+전문은 design의 **"RM-M3이 실측한 것"** 절(실측 21~26)에 있다. 요약 다섯.
 
-## RM-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**
+**1. 층이 얕았고 열둘이 딸려 왔고 값이 쌌다.** 되접기가 **한 라운드**에
+고정점에 닿았다(`CONFIG_ACPI=y`가 이미 상위 메뉴를 열어 뒀다). 빌드
+56.937 → 57.193초(**+0.256초**), bzImage 3,580,928 → 3,642,368(**+1.7%**).
+**결정 3이 `DRM_I915`를 안 켠 것과 조건이 같은데 답이 다른 이유가 크기다.**
 
-전문은 design의 **"RM-M0이 실측한 것"** 절(실측 6~9)에 있다. 요약 넷.
-
-**1. 진짜 벽은 `CONFIG_EFI`가 아니라 `CONFIG_RELOCATABLE`이었다.** `EFI`만
-켜면 시리얼이 **320바이트에서 멈춘다.** BIOS에서는 `PHYSICAL_START=0x1000000`이
-비어 있어서 비재배치 커널이 그대로 실렸는데, UEFI에서는 펌웨어가 그 자리를
-쓴다. **limine의 `PANIC`이 GOP 콘솔로만 가서 안 보였고**, `serial: yes` 한 줄이
-그것을 들리게 했다.
+**2. 착수 전 표가 또 절반 틀렸다.** `THERMAL`을 "못 본다"로 적었고
+`ACPI_PROCESSOR`는 아예 안 적었는데 둘 다 보인다.
 
 ```
-PANIC: linux: Non-relocatable kernel could not be loaded at required address 0x1000000
+thermal_sys: Registered thermal governor 'step_wise'
+cpuidle: using governor ladder
+Warning: Processor Platform Limit event detected, but not handled.   ← 직접 증거
 ```
 
-**2. "들린다"와 "읽힌다"가 또 다르다.** limine은 글자마다 커서 이동 escape를
-끼워 넣어서(`P` `ESC[01;02H` `A` …) `grep "PANIC"`이 **아무것도 못 찾는다.**
-음성 확인에서 문맥 줄이 비어 나와 드러났고, 처방은 실패 경로에서만 escape를
-걷어내는 `denoise()`다. **우리 쪽 줄에는 escape가 안 붙으므로 판정들은 이
-처리 없이도 맞는다.**
+셋째 줄은 `_PPC` notify를 **실제로 받았다**는 뜻이지만 **판정으로는 안 쓴다** —
+notify 시점이 QEMU에 달려 flaky하다. **못 보는 것이 다섯에서 셋으로 줄었다**
+(`ACPI_EC`·`ACPI_AC`·`ACPI_BATTERY`).
+
+**3. `CPU_IDLE`이 잠복 경합을 드러냈다.** 두 커널을 같은 세션에서 다섯 번씩
+쟀다 — RM-M2는 USB 열거 0.882~0.898초(실패 0), RM-M3은 0.880~**0.928**초
+(실패 1). **RM-M3이 만든 것이 아니라 넓혀서 드러냈다.** 위의 "계획을 깼다"
+절이 본문이다.
+
+**4. 게이트가 통과하는 것과 고쳤다는 것이 다르다.** 기다림을 넣고 여섯 번
+돌려 6/6인데 **`keyboard showed up after`가 한 번도 안 나왔다** — `init`이
+커지며 훑는 시점이 밀려 **우연히 경합을 피한 것**이다. `resolveKeyboard`를
+sysfs 마운트 직후로 끌어올려도 마찬가지였고, **열거를 늦추고 나서야 고침이
+도는 것을 봤다.** SH-M2의 "초록은 볼 것을 다 봤다가 아니다"의 한 걸음 더
+나쁜 판 — **초록이 '내가 본 것'조차 아니었다.**
+
+**5. 그리고 게이트가 그 경합을 서른 번 중 한 번 잡았다.**
+
+```
+[    0.979251] hid-generic ...: input: USB HID v1.11 Keyboard [QEMU QEMU USB Keyboard]
+tars-init: keyboard showed up after 25ms
+tars-init: keyboard device /dev/input/event1 (QEMU QEMU USB Keyboard)
+```
+
+고침이 없었으면 그 회차가 전원 버튼을 골라 게이트가 빨개졌다. **진짜 부팅의
+폴백은 0회다** — 로그의 `no keyboard found` 21줄은 전부 `devices_test`의
+가짜 트리(`/tmp/tars-devices-test/button in 0ms`)다.
+
+## 기다림을 고칠 사람에게 — 실수 둘을 검사가 잡는다
+
+| 실수 | 검사 | 왜 위험한가 |
+|---|---|---|
+| 묻기 전에 자기 | `SleptBeforeLooking` | **모든 부팅이 느려지고 증상이 "좀 느리다"뿐이라 아무도 못 잡는다** |
+| 기다림이 없음 | `GaveUpTooEarly` | 고친 줄 알았는데 안 고쳤다 |
+
+**`std.time.Timer`가 Zig 0.16에 없다** — SH-M1이 `std.posix`의 `pipe`에서
+겪은 것과 같은 종류이고 처방도 같다: `clock_gettime`을 직접 부른다.
+
+## RM-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"RM-M2가 실측한 것"** 절(실측 15~20)에 있다. 요약 넷.
+
+**1. 오프셋은 손으로 심은 버퍼로 원리적으로 못 본다.** 검사가 가짜
+superblock을 만들 때 쓰는 오프셋이 **구현이 쓰는 것과 같은 수**라, 1080과
+1144가 둘 다 틀려도 초록이 뜬다. 그래서 `mkfs.ext2`가 구운 바이트를 먼저
+봤다. **분업이 셋이다** — 호스트 검사가 **규칙**을, 스파이크가 **오프셋**을,
+체인이 **셋이 함께 도는가**를 본다.
+
+**2. `set -euo pipefail`이 실패 진단을 삼키고 있었다 — RM-M0부터.** 안 맞는
+`grep`은 exit 1이고 `pipefail`이 그것을 파이프라인 코드로 올려 `set -e`가
+`fail()`을 죽인다. **하필 첫 패턴이 "없는 것"인 경우가 가장 흔하다.**
+처방은 `|| true`. **"들린다"(serial) · "읽힌다"(escape) · "찍힌다"(pipefail)가
+각각 다르다.**
+
+**3. 라벨을 빼면 체인이 정확히 그 자리에서 죽는다**(음성 확인).
+**4. 옛 경로가 게이트에서 열여덟 번 지났다** — `/dev/vda`를 지운 편집이 그
+이름을 쓰던 다섯 체인을 안 깼다는 증거다.
+
+## RM-M0·M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 실측 6~14. 요약 여섯.
+
+**1. 진짜 벽은 `CONFIG_EFI`가 아니라 `CONFIG_RELOCATABLE`이었다.** BIOS에서는
+`PHYSICAL_START=0x1000000`이 비어 있어 비재배치 커널이 그대로 실렸는데
+UEFI에서는 펌웨어가 그 자리를 쓴다. **limine의 `PANIC`이 GOP 콘솔로만 가서
+안 보였고** `serial: yes` 한 줄이 그것을 들리게 했다.
+
+**2. "들린다"와 "읽힌다"가 다르다.** limine이 글자마다 escape를 끼워 넣어
+`grep "PANIC"`이 아무것도 못 찾는다. 처방이 `denoise()`다.
 
 **3. 커널 설정 하나가 다른 체인의 암묵적 전제를 깼다.** `SYSFB_SIMPLEFB`를
-켜니 **BIOS 부팅에서도 `card0`이 생겨서** `boot/check.sh`의 포기 경로 검사가
-`FAIL: init never gave up on the terminal`로 죽었다. **커널을 안 되돌렸다** —
-legacy 기계에서도 화면이 뜨게 된 것은 잃을 수 없다. 처방은 `-vga none`이고
-그것이 전제를 암묵에서 명시로 옮긴다.
+켜니 BIOS 부팅에서도 `card0`이 생겨 `boot/check.sh`가 죽었다. **커널을 안
+되돌렸다** — 처방은 `-vga none`이고 전제를 암묵에서 명시로 옮긴다.
+**RM-M3의 경합이 이것의 재발이다.**
 
-**4. 게이트가 커널을 15회가 아니라 1회 빌드한다.** 로그를 세니 실제 빌드
-**1회**, `skipping make` **29회**다(체인 열 × 3회). GL-M0이 `clean()`을 1회로
-옮기고 GL-M1이 해시 스탬프를 넣은 결과다. **`project_kernel_config`의 "15배"는
-낡은 문장이었고 그 파일을 고쳤다.**
+**4. 게이트가 커널을 15회가 아니라 1회 빌드한다**(GL-M0·M1 이후. 실제 빌드
+1회 · `skipping make` 29회).
 
-## RM-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
+**5. `.config`를 켜는 데 층이 셋이다**(M1). 손으로 한 줄도 안 적었는데 켜진
+다섯이 층이 접혔다는 증거다.
 
-전문은 design의 **"RM-M1이 실측한 것"** 절(실측 10~14)에 있다. 요약 넷.
-
-**1. `.config`를 켜는 데 층이 셋이다.** `USB_SUPPORT`를 켜도 `USB`는 안 켜지고,
-`USB`를 켜야 `USB_XHCI_HCD` 줄이 **나타난다.** 라운드마다 되접어야 다음 층이
-드러난다. **손으로 한 줄도 안 적었는데 켜진 다섯**(`USB_HID` ·
-`USB_XHCI_PCI` · `USB_EHCI_PCI` · `SATA_HOST` · `I2C_HID`)이 층이 제대로
-접혔다는 증거다.
-
-**2. `i8042=off`가 없으면 이 milestone이 아무것도 안 본다.** 음성 확인이
-증명했다 — PS/2를 남기니 `init`이 그쪽을 골랐다.
-
-```
-FAIL: init did not pick the USB keyboard
-  tars-init: keyboard device /dev/input/event1 (AT Translated Set 2 keyboard)
-```
-
-`usb-kbd`도 xHCI도 그대로 물려 있는데 **PS/2가 있다는 것만으로** 판정이
-가짜가 된다. **IS-M1 실측 4의 사촌이다.**
-
-**3. PS/2를 끈 채로 코드를 한 글자도 안 고쳤다.** HD-M2가 키보드를 이름이
-아니라 capability로 찾게 만들어 둔 것이 값을 냈다 — **그때 design이 근거로 댄
-것이 정확히 "노트북 실 하드웨어로 가는 방향"이었고, 3주 뒤에 그 근거가 실행으로
-확인됐다.** **RM-M2가 같은 일을 블록 장치에 대해 했다** — 이번에는 capability가
-없어서 ext2 라벨이 그 자리를 대신한다.
-
-**4. `.config` 하나로 유지하는 대가가 5.68초다.** 커널 빌드가 50.947 →
-56.627초(+11.1%), bzImage가 2,933,760 → 3,580,928바이트(+22.1%). 게이트가 그것을
-**1배로만** 치른다(실측 8). `git stash`로 RM-M0 상태를 되살려 **같은 세션에서**
-둘을 쟀다 — IS-M0 실측 2의 규율이다.
+**6. `i8042=off`가 없으면 M1이 아무것도 안 본다.** PS/2를 남기니 `init`이
+그쪽을 골랐다. **그리고 PS/2를 끈 채로 코드를 한 글자도 안 고쳤다** —
+HD-M2의 capability 탐색이 3주 뒤에 값을 냈다.
 
 ## 착수 전에 스파이크로 확인한 것 — **다시 조사하지 말 것**
 
-전문은 design의 **"착수 전에 실측한 것"** 절(항목 다섯)에 있다. 요약 셋.
-
 **1. `ovmf`는 `Architecture: all`이라 arm64 컨테이너에 그대로 깔린다**(3.6MB).
-terminfo·로케일과 같은 **"아키텍처가 없는 데이터"**다. `OVMF_CODE_4M.fd`를
-쓰고(`.secboot`는 Secure Boot용, 우리 커널은 서명이 없다) **`OVMF_VARS_4M.fd`는
-매번 복사한다** — 읽기 전용으로 물리면 펌웨어가 부트 항목을 못 만든다.
+`OVMF_CODE_4M.fd`를 쓰고 **`OVMF_VARS_4M.fd`는 매번 복사한다**.
 
-**2. simpledrm이 EFI GOP 위에 `/dev/dri/card0`을 그대로 내놓는다.** TARS가
-KMS ioctl을 직접 쏘는 방식이 그 위에서 통하고, 펌웨어가 잡아 둔 모드가
-실기에서는 **패널의 네이티브 해상도**다. **그래서 `DRM_I915`·`DRM_AMDGPU`가
-필요 없다** — 켜면 게이트가 단 한 번도 probe 못 하는 코드가 커널에서 가장 큰
-드라이버 둘만큼 는다.
+**2. simpledrm이 EFI GOP 위에 `/dev/dri/card0`을 그대로 내놓는다.**
+**그래서 `DRM_I915`·`DRM_AMDGPU`가 필요 없다.**
 
 **3. `boot/limine-binary/`에 `BOOTX64.EFI`와 `limine-uefi-cd.bin`이 이미
-있었다.** BF-M0이 limine 배포 tarball을 통째로 커밋했고 그때는 BIOS 파일 둘만
-썼다. **UEFI 경로의 부트로더 쪽은 처음부터 저장소에 있었다.**
+있었다** — BF-M0이 tarball을 통째로 커밋했다.
 
-## 게이트가 RM에 대해 보는 것 — `machine/check.sh`의 판정 열하나 + 하나
+## 게이트가 RM에 대해 보는 것 — `machine/check.sh`의 판정 열셋 + 하나
 
 | 보는 것 | 없으면 무엇이 틀렸나 |
 |---|---|
@@ -290,21 +264,27 @@ KMS ioctl을 직접 쏘는 방식이 그 위에서 통하고, 펌웨어가 잡�
 | `giving up on terminal`이 **없다** | card0이 있었으므로 감독자가 포기할 이유가 없다 |
 | `_OSC ... MSI` | `PCI_MSI`가 없다 |
 | `xHCI Host Controller` | `USB_XHCI_HCD`가 없다 |
-| `keyboard device ... USB Keyboard` | **M1의 심장.** HID → evdev → `init`의 capability 탐색이 한 줄에 다 걸린다 |
+| `keyboard device ... USB Keyboard` | **M1의 심장.** HID → evdev → capability 탐색 → **그리고 M3의 기다림**이 한 줄에 다 걸린다 |
 | `nvme nvme0: pci function` | `BLK_DEV_NVME`가 없다 |
 | `config storage /dev/nvme0n1 (label tars-machine)` | **M2의 심장.** 후보 훑기가 NVMe까지 못 갔거나 라벨을 못 읽었다 |
-| `mounted ext2 at /config` | 골랐는데 mount가 실패했다 — 라벨은 맞고 파일시스템이 틀렸다 |
+| `mounted ext2 at /config` | 골랐는데 mount가 실패했다 |
 | `loaded /config/tars.conf` | 붙었는데 파일이 없다. `mkfs.ext2 -d`가 안 먹었다 |
-| `hangul=sebeol_3p3` | **읽었는데 값이 안 쓰였다.** 파싱해 놓고 버리는 코드가 걸린다 |
+| `hangul=sebeol_3p3` | **읽었는데 값이 안 쓰였다** |
+| `Registered thermal governor 'step_wise'` | `THERMAL`이 없다 |
+| `cpuidle: using governor` | `ACPI_PROCESSOR`가 `CPU_IDLE`을 못 끌고 왔다 |
 | **`usb`를 쳐서 격자에 나온다** | 장치가 보이는 것과 키가 화면에 닿는 것은 다르다 |
 
-**격자 수 `155x47`은 다른 체인에서 베껴 오면 안 된다.** virtio-gpu 체인들은
+**격자 수 `155x47`은 다른 체인에서 베껴 오면 안 된다** — virtio-gpu 체인들은
 1024x768이고 OVMF의 GOP 기본은 **1280x800**이다.
 
 **`machine` 체인이 심는 값이 `hangul_layout=sebeol_3p3`인 이유가 있다.**
-`shell`을 바꾸면 첫 판정(`Welcome to fish`)이 사라지고, `latin_layout`을
+`shell`을 바꾸면 첫 판정(`Welcome to fish`)이 사라지고 `latin_layout`을
 바꾸면 마지막 판정(`usb`를 친다)이 갈린다. **기본값과 다르면서 나머지 판정을
 안 흔드는 키는 그것 하나다.**
+
+**판정 12·13이 증명하는 것과 안 하는 것.** "그 코드가 커널에 들어갔고 init이
+돌았다"까지다. **장치에 붙었다는 것은 아니다** — 온도 존도 배터리도 QEMU에
+없다. 그 구분을 아는 채로 보는 것이 안 보는 것보다 낫다.
 
 ## 그 앞의 서브프로젝트 — Find Paste (FP-M0·M1, 2026-09-09)
 
