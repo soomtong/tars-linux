@@ -688,7 +688,7 @@ sleep 3
 
 SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
 # **넷인 것에 산수가 있다.** `echo findme` 한 번이 스크롤백에 두 줄을 남긴다 —
-# 셸이 되비춘 명령줄 `@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
+# 셸이 되비춘 명령줄 `root@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
 # 둘이므로 2 × 2 = 4다. **plan은 이것을 2로 적었고 그것이 틀렸다.**
 #
 # 넷이어도 이 첫 검색의 뜻은 그대로다: `/`는 가장 최근 매치인 표적 2의
@@ -720,7 +720,7 @@ fi
 # **판정.** 커서가 선 줄을 줄 단위로 잡아 복사하면 findme가 나온다.
 #
 # 여섯 자가 나오는 것이 곧 "출력줄에 섰다"의 증거다. 명령줄에 섰다면
-# `@(none) ~# echo findme`가 통째로 나와 len이 훨씬 크다.
+# `root@(none) ~# echo findme`가 통째로 나와 len이 훨씬 크다.
 type_keys shift-v
 sleep 1
 type_keys y
@@ -747,14 +747,24 @@ echo "the search reached scrollback and the yanked line was findme"
 #      커서와 같은 줄인 그 매치는 자격이 없어 다음 것으로 넘어간다. vim의 `/`가
 #      커서 자리의 매치를 건너뛰는 것과 같다.
 #
-# 그래서 `/`는 표적 2의 **명령줄**(col=16)에 서고 `n`은 그 다음 매치인 표적 1의
+# 그래서 `/`는 표적 2의 **명령줄**(col=20)에 서고 `n`은 그 다음 매치인 표적 1의
 # **출력줄**(col=0)로 간다. 둘 사이에 `seq 100`의 출력 백 줄과 그 명령줄이
 # 있으므로 이동 폭이 1이 아니라 **102**다. **`n`이 매치를 건너뛴 것이 아니다** —
 # 건너뛴 것은 `/`이고 그것은 위 3의 의도된 동작이다.
 #
 # **col을 함께 판정하는 이유가 이것이다.** row 폭만 보면 "위로 갔다"까지만 알
 # 수 있어서 매치를 하나 건너뛰었는지가 안 갈린다. col은 그 줄이 명령줄인지
-# 출력줄인지를 정확히 말한다 — 16은 `@(none) ~# echo `의 길이다.
+# 출력줄인지를 정확히 말한다 — 20은 `root@(none) ~# echo `의 길이다.
+#
+# **이 수가 UT-M0(2026-09-10)에 16에서 20으로 바뀌었다.** 그때 initrd에
+# `/etc/passwd`가 생겼고, fish가 uid 0을 이름으로 풀 수 있게 되면서 프롬프트가
+# `@(none) ~#`에서 `root@(none) ~#`으로 네 글자 길어졌다. **게스트의 사용자
+# 데이터베이스를 건드리는 사람은 이 수도 함께 본다** — 증상은 여기의 FAIL
+# 한 줄이고 원인은 kernel/make_initrd.sh에 있어서 서로 멀다.
+#
+# 이 줄이 프롬프트 폭에 기대는 저장소의 유일한 자리다(2026-09-10에 `rg`로
+# 세어 확인했다). 바로 위 `w`/`b` 검사가 col 0에서 시작하도록 h를 마흔 번
+# 누르는 것은 CN-M1이 같은 함정을 의도적으로 피한 것이다.
 echo "=== n walks to the older match ==="
 type_keys meta_l-shift-c
 sleep 2
@@ -767,8 +777,8 @@ sleep 3
 # `scroll> offset`을 더하면 스크롤백 전체에서의 자리가 된다.
 ROW_FIRST=$(( $(scroll_field offset) + $(copy_value row) ))
 COL_FIRST="$(copy_value col)"
-if [ "$COL_FIRST" -ne 16 ]; then
-  report_failure "/ should land on target 2's command line (col 16), got col ${COL_FIRST}"
+if [ "$COL_FIRST" -ne 20 ]; then
+  report_failure "/ should land on target 2's command line (col 20), got col ${COL_FIRST}"
 fi
 type_keys n
 sleep 2
