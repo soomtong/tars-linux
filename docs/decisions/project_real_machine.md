@@ -1,6 +1,6 @@
 ---
 name: project_real_machine
-description: "일반 x86_64 노트북에서 뜨는 커널을 만드는 층(RM, 2026-09-09 착수 · RM-M0·M1 완료 · M2·M3 남음) — 진짜 벽은 CONFIG_EFI가 아니라 CONFIG_RELOCATABLE이었고 그것을 찾은 것은 limine.conf의 `serial: yes` 한 줄이다; simpledrm이 EFI GOP 프레임버퍼 위에 /dev/dri/card0을 그대로 내놓으므로 DRM_I915도 AMDGPU도 필요 없다; ovmf 패키지는 Architecture: all이라 arm64 컨테이너에 그대로 깔린다; .config를 켜는 데 층이 셋이라 되접기를 라운드마다 해야 다음 층 줄이 나타난다; i8042=off로 PS/2를 아예 끄지 않으면 USB 키보드 판정이 아무것도 안 본다; SYSFB_SIMPLEFB를 켠 것만으로 boot/check.sh의 암묵적 전제(card0이 없다)가 깨져 -vga none을 명시해야 했다; 게이트는 커널을 15회가 아니라 1회 빌드한다(GL-M0·M1 이후)"
+description: "일반 x86_64 노트북에서 뜨는 커널을 만드는 층(RM, 2026-09-09 착수 · RM-M0·M1·M2 완료 · M3 남음) — 진짜 벽은 CONFIG_EFI가 아니라 CONFIG_RELOCATABLE이었고 그것을 찾은 것은 limine.conf의 `serial: yes` 한 줄이다; simpledrm이 EFI GOP 프레임버퍼 위에 /dev/dri/card0을 그대로 내놓으므로 DRM_I915도 AMDGPU도 필요 없다; ovmf 패키지는 Architecture: all이라 arm64 컨테이너에 그대로 깔린다; .config를 켜는 데 층이 셋이라 되접기를 라운드마다 해야 다음 층 줄이 나타난다; i8042=off로 PS/2를 아예 끄지 않으면 USB 키보드 판정이 아무것도 안 본다; SYSFB_SIMPLEFB를 켠 것만으로 boot/check.sh의 암묵적 전제(card0이 없다)가 깨져 -vga none을 명시해야 했다; 게이트는 커널을 15회가 아니라 1회 빌드한다(GL-M0·M1 이후); 설정 디스크는 /dev/vda라는 이름이 아니라 ext2 라벨 tars-로 찾는다(후보 열넷을 훑고 superblock을 읽어 거른다 — 마운트로 시험하지 않는다)"
 metadata:
   node_type: memory
   type: project
@@ -11,10 +11,11 @@ metadata:
 "실머신용 `.config`를 만든다"**이고, 저장소 어휘로 **Real Machine (RM)**이다.
 design은 `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
 
-**사용자가 고른 것은 둘이다** — `.config`를 하나로 유지하고(둘로 안 나눔),
-게이트에 **열번째 체인을 하나 더한다**(기존 아홉을 안 옮김). 그리고 대상은
-특정 기계가 아니라 **"일반 x86_64 노트북"**이다. 나머지 결정 여섯은 사용자가
-자러 간 뒤 Claude가 정했고 근거가 design에 적혀 있다.
+**사용자가 고른 것은 넷이다** — `.config`를 하나로 유지하고(둘로 안 나눔),
+게이트에 **열번째 체인을 하나 더하고**(기존 아홉을 안 옮김), RM-M2에서
+**후보 목록을 `init`에 박고**, **라벨이 `tars-`로 시작하는 첫 디스크를**
+고른다. 그리고 대상은 특정 기계가 아니라 **"일반 x86_64 노트북"**이다.
+나머지 결정 아홉은 Claude가 정했고 근거가 design에 적혀 있다.
 
 ## "게이트가 이 방향을 검증할 수 없다"는 절반만 참이었다
 
@@ -180,12 +181,56 @@ FAT 이미지(광학 매체)이고, 트리의 `EFI/BOOT/BOOTX64.EFI`는 이 ISO�
 dd로 쓴 뒤 펌웨어가 **파일로** 찾을 때 쓰인다. 실기에 꽂는 것은 후자다.
 **둘 다 BF-M0이 커밋한 limine 배포 tarball에 처음부터 들어 있었다.**
 
+## 설정 디스크는 이름이 아니라 ext2 라벨로 찾는다 (RM-M2)
+
+`init/src/main.zig`가 `/dev/vda`를 하드코딩하고 있었다. 그 이름은 virtio-blk에만
+있어서 **노트북에서는 저장소를 영영 못 찾았다** — 부팅은 됐고 설정만 매번
+사라졌다. `init/src/storage.zig`가 후보 열넷을 훑어 **ext2 라벨이 `tars-`로
+시작하는** 첫 디스크를 고른다.
+
+```
+/dev/vda vdb vdc vdd · nvme0n1…nvme3n1 · sda sdb sdc sdd · mmcblk0 mmcblk1
+```
+
+**HD-M2의 "이름이 아니라 성질로"의 블록 장치 판이다.** 블록 장치에는
+capability가 없지만 **ext2 라벨이 그 자리를 대신한다** — 그리고 게이트 디스크
+넷이 이미 `tars-config`·`tars-input`·`tars-power`·`tars-hangul`이었다(CP-M0이
+`-L`을 "나중에 알아보기 위함"이라고 적으며 넣었고 셋이 베꼈다). **그래서
+접두사 규칙이 기존 체인을 한 글자도 안 건드린다.**
+
+**마운트로 시험하지 않는다.** superblock(오프셋 1024)의 매직 `0xEF53`과 라벨
+(`s_volume_name`, superblock 안 120)을 **읽어서** 거르고 mount는 고른 하나에만
+한 번 한다. 근거 셋: 실패 줄이 열셋 안 찍힌다 · `mountFs`의 로그 계약이 안
+바뀐다(다섯 체인이 마커로 갖고 있다) · mount(2)는 fs를 ext3/4로 잘못 잡으면
+저널 재생 같은 **쓰기**를 할 수 있다.
+
+**파티션은 안 본다**(디스크 전체만). 부수 효과가 안전 쪽이다 — 노트북 내장
+디스크는 예외 없이 GPT라 디스크 전체를 읽으면 매직이 안 맞고, **그래서 남의
+root 파티션을 `/config`로 잡을 길이 아예 없다.**
+
+**오프셋은 손으로 심은 버퍼로 원리적으로 못 본다** — 검사가 구현과 같은 수를
+두 번 적은 것이 되기 때문이다. 그래서 `mkfs.ext2`가 구운 바이트를 먼저 봤다
+(`1080`이 `53 ef`, `1144`가 `tars-config`). **분업이 셋이다: 호스트 검사가
+규칙을, 스파이크가 오프셋을, 체인이 셋이 함께 도는가를 본다.**
+
+## `set -euo pipefail`이 실패 진단을 조용히 삼킨다
+
+`machine/check.sh`의 `fail()`이 문맥 줄을 붙이는 루프에서 **첫 패턴이 없으면
+그 자리에서 함수가 끝났다.** 안 맞는 `grep`은 종료 코드 1이고 `pipefail`이
+그것을 파이프라인 전체의 코드로 올리며 `set -e`가 함수를 죽인다.
+
+```bash
+denoise | grep -a "$pattern" | head -3 | sed 's/^/  /' || true   # ← || true가 없었다
+```
+
+**하필 첫 패턴이 "없는 것"인 경우가 가장 흔하다** — 그것이 실패의 이유라서
+목록의 앞에 적힌다. RM-M0에서는 첫 패턴이 `PANIC`이었고 마침 있어서 결함이
+드러날 조건이 없었다. **RM-M2의 음성 확인이 잡았다.**
+
+**"들린다"(serial) · "읽힌다"(escape) · "찍힌다"(pipefail)가 각각 다르다.**
+
 ## 남은 것
 
-- **RM-M2 — 설정 저장소를 찾는다.** `init/src/main.zig:65`가 `/dev/vda`를
-  하드코딩한다. 노트북에는 virtio가 없어서 `/dev/nvme0n1`이나 `/dev/sda`다.
-  **부팅은 지금도 된다**(못 찾으면 기본값으로 간다) — 안 되는 것은 설정이
-  부팅 사이에 남는 것이다. **RM에서 코드를 건드리는 유일한 milestone이다.**
 - **RM-M3 — 게이트가 못 보는 것들.** `ACPI_EC`(노트북 DSDT에 거의 항상 있고
   없으면 AML이 실패해 배터리·뚜껑·밝기 키가 통째로 안 붙는다) · `ACPI_AC` ·
   `ACPI_BATTERY` · `ACPI_PROCESSOR` · `THERMAL`. 켜고 QEMU에서 회귀가 없음만
