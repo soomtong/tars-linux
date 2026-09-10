@@ -4,6 +4,7 @@ const config = @import("config.zig");
 const power = @import("power.zig");
 const devices = @import("devices.zig");
 const storage = @import("storage.zig");
+const environ = @import("environ.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -414,10 +415,30 @@ fn supervise(
 }
 
 pub fn main(init: std.process.Init.Minimal) void {
-    // 커널이 PID 1의 스택에 올려준 환경 변수 블록.
-    const envp = init.environ.block.slice.ptr;
+    // 커널이 PID 1의 스택에 올려준 환경 변수 블록. 커널은 둘만 준다
+    // (HOME=/ · TERM=linux) — PATH가 없어서 게스트 셸이 명령을 이름으로
+    // 못 찾았다.
+    //
+    // **이 버퍼가 main()의 스택에 있는 것이 중요하다.** supervise()가 영영
+    // 반환하지 않으므로 프로세스 수명 내내 유효하다 — keyboard_path·argv와
+    // 같은 근거다. 자식은 fork 뒤 execve로 이 포인터를 읽는다.
+    var env_buf: environ.Block = undefined;
+    const envp = environ.withPath(init.environ.block.slice.ptr, &env_buf);
 
     std.debug.print("tars-init: starting as PID 1\n", .{});
+
+    // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
+    // 블록을 받는다는 것은 supervise()가 start(c, envp)를 한 루프에서
+    // 부르는 코드 구조가 보장한다 — 시리얼 콘솔 셸에 타이핑한 체인이
+    // 저장소에 하나도 없어서 그쪽은 관측이 아니라 구조로 안다.
+    //
+    // withPath가 자리 부족으로 폴백했으면 이 줄이 안 나온다. 그 침묵이
+    // 곧 판정이다.
+    if (envp != init.environ.block.slice.ptr) {
+        std.debug.print("tars-init: env {s}\n", .{environ.PATH_ENTRY});
+    } else {
+        std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
+    }
 
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
