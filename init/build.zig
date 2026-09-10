@@ -111,6 +111,21 @@ pub fn build(b: *std.Build) void {
         .root_module = storage_test_mod,
     });
 
+    // UT-M0: 커널 envp 블록에 PATH를 더하는 함수의 검사. storage_test와 같은
+    // 이유로 host_target이다 — environ.zig는 시스템 콜을 하나도 안 하는 순수
+    // 계산이라 게스트가 필요 없다. main.zig에 두면 이 검사가 원리적으로
+    // 불가능해진다(PID 1의 감독 루프는 호스트에서 못 돈다).
+    const environ_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/environ_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const environ_test = b.addExecutable(.{
+        .name = "environ_test",
+        .root_module = environ_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -120,4 +135,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(power_test).step);
     test_step.dependOn(&b.addRunArtifact(devices_test).step);
     test_step.dependOn(&b.addRunArtifact(storage_test).step);
+    test_step.dependOn(&b.addRunArtifact(environ_test).step);
 }
