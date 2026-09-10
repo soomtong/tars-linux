@@ -75,8 +75,20 @@ copy_lib_deps() {
   done
 }
 
+# UT-M0이 /bin · /tmp · /etc 셋을 더한다. 지금까지 없었고, 그 없음이 git에
+# 그대로 걸린다(design 실측 2).
+#
+#   /bin   → sh 하나만 산다. #!/bin/sh 스크립트와 git의 셸 서브커맨드가
+#            이 경로를 컴파일 타임에 박아 두고 찾는다.
+#   /tmp   → git도 편집기도 임시 파일을 여기 만든다. 없으면 조용히 실패한다.
+#   /etc   → passwd·group. whoami가 이름을 내고, git이 커밋 작성자를
+#            유추할 자리다.
 mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
-         "$WORKDIR/config"
+         "$WORKDIR/config" "$WORKDIR/bin" "$WORKDIR/tmp" "$WORKDIR/etc"
+
+# /tmp는 아무나 쓰고 남의 것은 못 지운다. 게스트가 지금은 root 하나뿐이라
+# 동작 차이가 없지만, 이 비트가 없는 /tmp를 보고 겁내는 프로그램이 있다.
+chmod 1777 "$WORKDIR/tmp"
 
 cp ../init/zig-out/bin/init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
@@ -121,8 +133,13 @@ cp "$SYSROOT/usr/bin/mkdir" "$WORKDIR/usr/bin/mkdir"
 # 검사하려면 셸이 아닌 프로세스가 하나 떠 있어야 한다. coreutils는 이미
 # sysroot에 있으므로 Dockerfile은 건드리지 않는다.
 cp "$SYSROOT/usr/bin/sleep" "$WORKDIR/usr/bin/sleep"
+# UT-M0: **`ls` 하나만 넣는다.** 통로(PATH)가 열렸는지를 도구 50개와 섞지
+# 않는다 — 실패하면 원인이 하나뿐이다. 나머지는 UT-M1이 목록 배열과 함께
+# 가져온다(design 결정 7).
+cp "$SYSROOT/usr/bin/ls" "$WORKDIR/usr/bin/ls"
 chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
-           "$WORKDIR/usr/bin/mkdir" "$WORKDIR/usr/bin/sleep"
+           "$WORKDIR/usr/bin/mkdir" "$WORKDIR/usr/bin/sleep" \
+           "$WORKDIR/usr/bin/ls"
 
 # init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
 # (ZM-M1). 나머지는 전부 glibc 동적 링크다.
@@ -134,6 +151,30 @@ copy_lib_deps "$WORKDIR/usr/bin/cat"
 copy_lib_deps "$WORKDIR/usr/bin/uname"
 copy_lib_deps "$WORKDIR/usr/bin/mkdir"
 copy_lib_deps "$WORKDIR/usr/bin/sleep"
+# ls는 libselinux1을 요구한다. 이미 initrd에 있지만(fish가 끌고 왔다)
+# 그 사실에 기대지 않는다 — copy_lib_deps는 이미 있는 것을 건너뛴다.
+copy_lib_deps "$WORKDIR/usr/bin/ls"
+
+# /bin/sh는 **언제나 bash다.** tars.conf의 shell 설정과 무관하다 —
+# #!/bin/sh 스크립트의 동작이 사용자의 셸 취향에 따라 달라지면 안 된다
+# (design 결정 6). 셋 중 bash만이 POSIX sh 모드를 갖는다.
+#
+# 상대 경로로 건다. cpio가 링크의 내용을 그대로 담고 게스트의 루트가
+# 곧 이 트리라 절대 경로도 맞지만, 상대로 두면 이 트리를 다른 자리에
+# 풀어 봐도 끊어지지 않는다.
+ln -sf ../usr/bin/bash "$WORKDIR/bin/sh"
+
+# passwd가 없으면 whoami가 이름 대신 "cannot find name for user ID 0"을
+# 내고, **git이 커밋 작성자를 유추하려다 실패한다.** 한 줄이면 된다.
+#
+# 셸을 /bin/sh로 적는 것에 뜻이 있다 — 위의 링크와 같은 자리를 가리켜야
+# 하고, tars.conf가 셸을 바꿔도 이 줄은 안 바뀐다.
+cat > "$WORKDIR/etc/passwd" <<'EOF'
+root:x:0:0:root:/:/bin/sh
+EOF
+cat > "$WORKDIR/etc/group" <<'EOF'
+root:x:0:
+EOF
 
 # /usr/share/fish/*는 fish 패키지가 아니라 fish-common(arch: all)이 준다.
 mkdir -p "$WORKDIR/usr/share/fish"
