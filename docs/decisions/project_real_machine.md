@@ -1,6 +1,6 @@
 ---
 name: project_real_machine
-description: "일반 x86_64 노트북에서 뜨는 커널을 만드는 층(RM, 2026-09-09 착수 · RM-M0·M1·M2 완료 · M3 남음) — 진짜 벽은 CONFIG_EFI가 아니라 CONFIG_RELOCATABLE이었고 그것을 찾은 것은 limine.conf의 `serial: yes` 한 줄이다; simpledrm이 EFI GOP 프레임버퍼 위에 /dev/dri/card0을 그대로 내놓으므로 DRM_I915도 AMDGPU도 필요 없다; ovmf 패키지는 Architecture: all이라 arm64 컨테이너에 그대로 깔린다; .config를 켜는 데 층이 셋이라 되접기를 라운드마다 해야 다음 층 줄이 나타난다; i8042=off로 PS/2를 아예 끄지 않으면 USB 키보드 판정이 아무것도 안 본다; SYSFB_SIMPLEFB를 켠 것만으로 boot/check.sh의 암묵적 전제(card0이 없다)가 깨져 -vga none을 명시해야 했다; 게이트는 커널을 15회가 아니라 1회 빌드한다(GL-M0·M1 이후); 설정 디스크는 /dev/vda라는 이름이 아니라 ext2 라벨 tars-로 찾는다(후보 열넷을 훑고 superblock을 읽어 거른다 — 마운트로 시험하지 않는다)"
+description: "일반 x86_64 노트북에서 뜨는 커널을 만드는 층(RM, 2026-09-09 착수 · **2026-09-10 완료**, RM-M0~M3) — 진짜 벽은 CONFIG_EFI가 아니라 CONFIG_RELOCATABLE이었고 그것을 찾은 것은 limine.conf의 `serial: yes` 한 줄이다; simpledrm이 EFI GOP 프레임버퍼 위에 /dev/dri/card0을 그대로 내놓으므로 DRM_I915도 AMDGPU도 필요 없다; ovmf 패키지는 Architecture: all이라 arm64 컨테이너에 그대로 깔린다; .config를 켜는 데 층이 셋이라 되접기를 라운드마다 해야 다음 층 줄이 나타난다; i8042=off로 PS/2를 아예 끄지 않으면 USB 키보드 판정이 아무것도 안 본다; SYSFB_SIMPLEFB를 켠 것만으로 boot/check.sh의 암묵적 전제(card0이 없다)가 깨져 -vga none을 명시해야 했다; 게이트는 커널을 15회가 아니라 1회 빌드한다(GL-M0·M1 이후); 설정 디스크는 /dev/vda라는 이름이 아니라 ext2 라벨 tars-로 찾는다(후보 열넷을 훑고 superblock을 읽어 거른다 — 마운트로 시험하지 않는다); 노트북 ACPI 다섯을 켜니 그것이 끌고 온 CPU_IDLE이 RM-M1부터 잠복하던 경합(USB 키보드가 열거되기 전에 init이 훑으면 전원 버튼을 키보드로 고른다)을 드러냈고, 처방은 커널을 되돌리는 것이 아니라 init이 한정된 시간 동안 다시 보게 하는 것이었다 — 이것은 게이트 flake가 아니라 실기 버그다(허브를 거치면 열거가 1.7초)"
 metadata:
   node_type: memory
   type: project
@@ -15,7 +15,7 @@ design은 `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
 게이트에 **열번째 체인을 하나 더하고**(기존 아홉을 안 옮김), RM-M2에서
 **후보 목록을 `init`에 박고**, **라벨이 `tars-`로 시작하는 첫 디스크를**
 고른다. 그리고 대상은 특정 기계가 아니라 **"일반 x86_64 노트북"**이다.
-나머지 결정 아홉은 Claude가 정했고 근거가 design에 적혀 있다.
+나머지 결정 열하나는 Claude가 정했고 근거가 design에 적혀 있다.
 
 ## "게이트가 이 방향을 검증할 수 없다"는 절반만 참이었다
 
@@ -29,9 +29,12 @@ design은 `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
 | `PCI_MSI` | **본다** | `-machine q35`(PCIe)의 `_OSC` 협상 |
 | `USB_SUPPORT`·`USB_HID` | **본다** | `qemu-xhci` + `usb-kbd` + **`i8042=off`** |
 | `BLK_DEV_NVME` · AHCI | **본다** | `-device nvme` · q35의 `ich9-ahci` |
-| `ACPI_EC` · 실 GPU · 배터리/온도 | **못 본다** | QEMU에 EC도 GPU도 배터리도 없다 |
+| `THERMAL` · `ACPI_PROCESSOR` | **본다**(RM-M3에서 뒤집혔다) | 거버너 등록 줄과 `_PPC` notify |
+| `ACPI_EC` · `ACPI_AC` · `ACPI_BATTERY` · 실 GPU | **못 본다** | QEMU에 EC도 어댑터도 배터리도 GPU도 없다 |
 
 **못 보는 것이 열에서 셋으로 줄었고, 그 셋 중 둘은 안 켜기로 정했다.**
+**그리고 RM-M3에서 한 번 더 줄었다** — 재 보니 `THERMAL`과 `ACPI_PROCESSOR`도
+줄을 남긴다(아래). **착수 전에 쓴 표는 두 번 다 실측보다 비관적이었다.**
 
 ## 진짜 벽은 `EFI`가 아니라 `RELOCATABLE`이었다
 
@@ -229,13 +232,93 @@ denoise | grep -a "$pattern" | head -3 | sed 's/^/  /' || true   # ← || true�
 
 **"들린다"(serial) · "읽힌다"(escape) · "찍힌다"(pipefail)가 각각 다르다.**
 
+## 노트북 ACPI 다섯을 켜니 잠복 경합이 드러났다 (RM-M3)
+
+`ACPI_EC` · `ACPI_AC` · `ACPI_BATTERY` · `ACPI_PROCESSOR` · `THERMAL`을 켰다.
+층이 얕아 되접기가 **한 라운드**에 고정점에 닿았고(`CONFIG_ACPI=y`가 이미
+상위 메뉴를 열어 뒀다) **열둘이 딸려 왔다.** 대가는 빌드 **+0.256초**,
+bzImage **+61,440바이트(+1.7%)** — 결정 3이 `DRM_I915`를 안 켠 것과 조건이
+같은데 답이 다른 이유가 **크기**다.
+
+**착수 전 표가 또 절반 틀렸다.** `THERMAL`을 "못 본다"로 적었고
+`ACPI_PROCESSOR`는 아예 안 적었는데, 재 보니 둘 다 줄을 남긴다 —
+`thermal_sys: Registered thermal governor 'step_wise'`와
+`cpuidle: using governor ladder`. 그리고 **직접 증거가 따로 있다**:
+`Warning: Processor Platform Limit event detected`는 QEMU의 `_PPC` notify를
+`ACPI_PROCESSOR`가 **실제로 받았다**는 뜻이다(판정으로는 안 쓴다 — notify
+시점이 QEMU에 달려 flaky하다). **못 보는 것이 다섯에서 셋으로 줄었다.**
+
+### 그런데 `CPU_IDLE`이 딸려 오면서 게이트가 깨졌다
+
+```
+FAIL: init did not pick the USB keyboard
+  tars-init: keyboard device /dev/input/event0 (Power Button)
+  [    0.927854] input: QEMU QEMU USB Keyboard as ...input1
+```
+
+**같은 커널로 바로 앞 회차가 통과했다 — 경합이다.** 두 커널을 같은 세션에서
+다섯 번씩 돌려 쟀다: RM-M2는 USB 열거가 0.882~0.898초(실패 0), RM-M3은
+0.880~0.928초(실패 1). **RM-M3이 경합을 만든 것이 아니라 지터를 넓혀
+드러냈다.** RM-M1부터 잠복해 있었다.
+
+**처방이 "커널을 되돌린다"가 아니다.** `init`이 첫 훑기에 없다고 포기하는
+대신 25ms 간격으로 **최대 3초까지 다시 본다**(`findKeyboardWaiting`).
+찾으면 즉시 돌아오고 상한이 끝나면 예전대로 `event0`으로 떨어지므로
+**HD 결정 6("못 찾아도 부팅을 막지 않는다")을 안 어긴다** — 무한히 기다리는
+것과 한정해서 기다리는 것은 다른 일이다.
+
+**이것이 게이트 flake가 아니라 실기 버그인 것이 결정적이다.** 허브를 둘
+끼워 열거를 **1.693초**로 늦추니 `init`이 **650ms를 기다려** 찾았다.
+고침이 없었으면 그 부팅은 전원 버튼을 키보드로 골랐다 — 허브를 거친 키보드는
+실기에서 예외가 아니다.
+
+### 초록이 아무것도 증명하지 않는 자리가 있었다
+
+기다림을 넣고 체인을 여섯 번 돌리니 6/6 통과인데 **`keyboard showed up
+after` 줄이 한 번도 안 나왔다.** `init` 바이너리가 커지며 훑는 시점이 뒤로
+밀려 **우연히 경합을 피한 것**이다. `resolveKeyboard`를 sysfs 마운트 직후로
+끌어올려도 마찬가지였다. **열거를 늦추고 나서야 고침이 도는 것을 봤다.**
+
+**SH-M2가 적은 "초록은 '내가 본 것이 맞다'이지 '볼 것을 다 봤다'가 아니다"의
+한 걸음 더 나쁜 판이다** — 초록이 '내가 본 것'조차 아니었다.
+
+### 기다림을 넣을 때의 실수 둘
+
+호스트 검사가 각각 잡는다. **첫째가 특히 위험하다** — 묻기 전에 자면 **모든
+부팅이 느려지고 증상이 "부팅이 좀 느리다"뿐이라 아무도 못 잡는다.**
+
+| 실수 | 잡는 검사 |
+|---|---|
+| 자고 나서 묻기 | `SleptBeforeLooking`(있는 키보드가 26ms 걸렸다) |
+| 기다림이 없음 | `GaveUpTooEarly`(0ms 만에 포기했다) |
+
+**`std.time.Timer`가 Zig 0.16에 없다** — SH-M1이 `std.posix`의 `pipe`에서 겪은
+것과 같은 종류이고 처방도 같다: `clock_gettime`을 직접 부른다.
+
+## 실기에 꽂는 법은 README에 있다
+
+`README.md`의 **"실기 노트북에 꽂아 보기"** 절이다. 요점 넷.
+
+1. `out/tars.iso`를 **디스크 전체**에 `dd`한다(하이브리드라 변환이 없다).
+2. **Secure Boot를 꺼야 한다.** 커널에 서명이 없고, 안 끄면 증상이 "부팅
+   항목이 아예 안 보인다"라 원인에서 아주 멀다.
+3. 설정을 남기려면 **`tars-`로 시작하는 ext2 라벨**을 가진 디스크가 있어야
+   한다.
+4. **안 되는 것을 표로 적었다** — 밝기·외부 모니터·절전·네트워크·터치패드.
+
+**그리고 "이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다"를 적었다.**
+꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.
+
 ## 남은 것
 
-- **RM-M3 — 게이트가 못 보는 것들.** `ACPI_EC`(노트북 DSDT에 거의 항상 있고
-  없으면 AML이 실패해 배터리·뚜껑·밝기 키가 통째로 안 붙는다) · `ACPI_AC` ·
-  `ACPI_BATTERY` · `ACPI_PROCESSOR` · `THERMAL`. 켜고 QEMU에서 회귀가 없음만
-  확인한다. 그리고 실기용 USB 이미지 만드는 법과 **Secure Boot를 꺼야 한다**를
-  문서에 적는다.
+**RM은 끝났다.** 계획한 milestone 넷을 전부 했다. 남긴 것은 아래 둘이고,
+**둘 다 처음부터 비목표로 적어 둔 것**이지 중간에 포기한 것이 아니다.
+
+- **실기에서 실제로 부팅해 보기.** 특정 기계가 없다는 것이 착수 때의 전제였고
+  (사용자가 "일반 x86_64 노트북"을 골랐다), 그래서 판정이 전부 QEMU다.
+  `README.md`에 꽂는 법을 적었으니 **다음은 꽂아 보는 사람의 몫이다.**
+- **`/config`를 파티션 테이블 위에 두기.** RM-M2 결정 12가 명시적으로 안 한
+  것이다 — 지금 디스크 전체가 파티션 없는 ext2다.
 
 **`SUSPEND`(S3)는 RM 밖이다.** `ACPI_BUTTON`이 켜져 있어 lid 이벤트는 이미
 오지만 뚜껑을 닫아 절전으로 가는 것은 별 서브프로젝트다.
@@ -244,7 +327,10 @@ denoise | grep -a "$pattern" | head -3 | sed 's/^/  /' || true   # ← || true�
 먼저 확인하고(메뉴인지 코어인지 드라이버인지), (2) 라운드마다 되접어 다음 층의
 줄을 드러내고, (3) **게이트가 그것을 밟는 길이 있는지 먼저 묻고**, (4) 없으면
 "켜 봤다"와 "된다"가 안 갈린다는 것을 명시적으로 적고, (5) 부트로더 단계가
-의심되면 `serial: yes`의 출력을 **escape를 걷어내고** 읽는다.
+의심되면 `serial: yes`의 출력을 **escape를 걷어내고** 읽는다. 그리고
+(6) **설정을 켠 뒤 게이트가 초록이어도 "무엇이 딸려 왔는지"를 센다** —
+RM-M3에서 `ACPI_PROCESSOR`가 끌고 온 `CPU_IDLE`이 다른 체인의 타이밍을
+흔들었고, 우리가 켠 줄만 보고 있었으면 원인을 못 찾았다.
 
 관련: [[project_target_hardware]] · [[project_kernel_config]] ·
 [[project_device_discovery]] · [[project_gate_latency]] ·

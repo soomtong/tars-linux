@@ -1,6 +1,6 @@
 ---
 name: project_device_discovery
-description: "입력 장치를 번호가 아니라 성질로 찾는다 — sysfs capability 비트맵은 가장 높은 워드가 맨 앞이고 빈 상위 워드는 생략되므로 원하는 워드를 뒤에서부터 세어야 한다; EV_KEY는 1번이고 0번(EV_SYN)으로 착각하면 거의 모든 장치가 키보드로 보인다; 판정 기준은 이름이 아니라 KEY_ESC~KEY_D 범위(udev input_id와 같은 기준)라서 EV_KEY를 가진 전원 버튼이 걸러진다; **역방향은 성립하지 않아서 AT 키보드도 KEY_POWER를 갖고 있고(1번 워드 0xfeffffdfffefffff의 52번 비트), 그래서 전원 버튼 판정에 '키보드가 아니다'를 더해야 한다 — 안 더해도 종료는 정상 동작하므로 게이트가 watching 개수를 세지 않으면 아무도 모른다**; 전원 버튼은 첫 하나가 아니라 후보를 전부 연다(상한 넷, QEMU에서는 실제로 하나); 탐색 함수는 뿌리 경로를 인자로 받아 검사가 개발 기계의 /sys를 읽지 않게 하되 open(2)은 /dev/input 고정이다; 탐색 실패는 부팅을 막지 않고 event0으로 떨어지는데 ACPI를 켠 뒤 그것은 전원 버튼을 키보드로 여는 것을 뜻하므로 'no keyboard found'가 없어야 한다는 둘째 검사로 닫는다; 결과 경로는 main()의 스택에 살고 supervise()가 noreturn이라는 성질에 수명을 의존한다"
+description: "입력 장치를 번호가 아니라 성질로 찾는다 — sysfs capability 비트맵은 가장 높은 워드가 맨 앞이고 빈 상위 워드는 생략되므로 원하는 워드를 뒤에서부터 세어야 한다; EV_KEY는 1번이고 0번(EV_SYN)으로 착각하면 거의 모든 장치가 키보드로 보인다; 판정 기준은 이름이 아니라 KEY_ESC~KEY_D 범위(udev input_id와 같은 기준)라서 EV_KEY를 가진 전원 버튼이 걸러진다; **역방향은 성립하지 않아서 AT 키보드도 KEY_POWER를 갖고 있고(1번 워드 0xfeffffdfffefffff의 52번 비트), 그래서 전원 버튼 판정에 '키보드가 아니다'를 더해야 한다 — 안 더해도 종료는 정상 동작하므로 게이트가 watching 개수를 세지 않으면 아무도 모른다**; 전원 버튼은 첫 하나가 아니라 후보를 전부 연다(상한 넷, QEMU에서는 실제로 하나); 탐색 함수는 뿌리 경로를 인자로 받아 검사가 개발 기계의 /sys를 읽지 않게 하되 open(2)은 /dev/input 고정이다; 탐색 실패는 부팅을 막지 않고 event0으로 떨어지는데 ACPI를 켠 뒤 그것은 전원 버튼을 키보드로 여는 것을 뜻하므로 'no keyboard found'가 없어야 한다는 둘째 검사로 닫는다; 결과 경로는 main()의 스택에 살고 supervise()가 noreturn이라는 성질에 수명을 의존한다; **탐색은 버그 없이도 실패한다 — USB 키보드는 비동기로 열거되므로 PID 1이 훑는 시점에 아직 없을 수 있고, QEMU에서는 밀리초 여유라 가끔이지만 허브를 거치면 1.7초라 실기에서는 이쪽이 정상이다. 처방은 25ms 간격으로 최대 3초까지 다시 보는 것이고, 상한이 끝나면 예전대로 event0으로 떨어지므로 결정 6을 안 어긴다. 기다림을 넣을 때의 실수는 묻기 전에 자는 것이고 그러면 모든 부팅이 느려지는데 증상이 조용하다**"
 metadata:
   node_type: memory
   type: project
@@ -165,9 +165,12 @@ libc도 힙도 없다([[project_zig_c_uapi_rule]]). `getdents64`를 직접 다�
 연달아 나오는 것을 눈으로 볼 수 있다.
 
 ```
-tars-init: no keyboard found under /tmp/tars-devices-test/button, falling back to event0
+tars-init: no keyboard found under /tmp/tars-devices-test/button in 0ms, falling back to event0
 tars-init: keyboard device /dev/input/event0 (Power Button)
 ```
+
+(`in 0ms`는 RM-M3이 기다림을 넣으면서 붙었다 — 아래 절. 게이트의 `grep`은
+`no keyboard found`까지만 보므로 그 문구 변경에 안 흔들린다.)
 
 닫는 방법은 검사를 하나 더 두는 것이다. `terminal/check.sh`가 `keyboard
 device /dev/input/event`가 **있어야 한다**와 `no keyboard found`가 **없어야
@@ -181,6 +184,46 @@ device /dev/input/event`가 **있어야 한다**와 `no keyboard found`가 **없
 로그의 `(Power Button)`이 그것이다. design 결정 6이 "탐색기의 버그가 기계를 못
 켜게 만드는 것이 가장 나쁜 결말"이라며 받아들인 결말이고, 위의 둘째 검사가
 그것이 조용히 일어나는 것을 막는다.
+
+## 탐색은 **버그 없이도** 실패한다 — 장치가 아직 없을 수 있다 (RM-M3)
+
+위의 두 절은 전부 "탐색기의 버그"를 전제로 쓰였다. **2026-09-10에 세 번째
+이유가 드러났다: 탐색이 맞는데 장치가 아직 없다.**
+
+`init`은 부팅에서 **딱 한 번** `/sys/class/input`을 훑었다. USB 키보드는
+**비동기로 열거된다** — PID 1이 그 시점에 뜨면 키보드가 아직 그 트리에 없고,
+탐색기는 정확하게 "없다"고 답한 뒤 `event0`(전원 버튼)으로 떨어진다.
+
+```
+tars-init: keyboard device /dev/input/event0 (Power Button)
+[    0.927854] input: QEMU QEMU USB Keyboard as ...input1   ← 0.9초 뒤에 나타났다
+```
+
+**QEMU에서는 여유가 밀리초 단위라 스무 번에 한 번쯤이지만, 실기에서는 이쪽이
+정상이다.** 허브 둘을 끼워 재 보니 열거가 **1.693초**였다 — 허브를 거친
+키보드는 노트북에서 예외가 아니다. 고침이 없으면 **그 기계에서 키보드가
+통째로 안 먹는다.**
+
+처방은 `findKeyboardWaiting`이다. 25ms 간격으로 **최대 3초까지 다시 본다.**
+찾으면 즉시 돌아오고, 상한이 끝나면 예전과 똑같이 `event0`으로 떨어진다 —
+**결정 6을 안 어긴다. 무한히 기다리는 것과 한정해서 기다리는 것은 다른
+일이다.**
+
+```
+tars-init: keyboard showed up after 650ms
+```
+
+**기다림을 넣을 때의 실수 둘을 호스트 검사가 각각 잡는다.**
+
+| 실수 | 검사 | 왜 위험한가 |
+|---|---|---|
+| 묻기 전에 자기 | `SleptBeforeLooking` | **모든 부팅이 느려지고 증상이 "좀 느리다"뿐이라 아무도 못 잡는다** |
+| 기다림이 없음 | `GaveUpTooEarly` | 고친 줄 알았는데 안 고쳤다 |
+
+**그리고 게이트가 초록인 것이 고침의 증거가 아니었다.** 넣고 여섯 번 돌려
+6/6 통과인데 `keyboard showed up after` 줄이 한 번도 안 나왔다 — `init`
+바이너리가 커지며 훑는 시점이 뒤로 밀려 **우연히 경합을 피한 것**이다.
+**열거를 늦추고 나서야 고침이 도는 것을 봤다.**
 
 ## HD-M0은 자기가 옳다는 것을 증명하지 못했다 — HD-M1이 했다
 

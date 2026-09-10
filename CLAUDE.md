@@ -114,17 +114,19 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   것이었다. design은 `.../specs/2026-09-09-tars-find-paste-design.md`.
   **FP도 편집을 Claude Code가 했다** — 사용자가 외출하며 milestone 단위로 두
   번 위임했다. SH의 예외와 같은 종류다.
-  **진행 중: Real Machine(RM-M0~M2 완료 2026-09-09·10, M3 남음 — 일반
-  x86_64 노트북에서 뜨는 커널. UEFI로 부팅하고 EFI GOP 프레임버퍼 위의
-  simpledrm에 그리고 USB 키보드로 받고 **NVMe 디스크에서 설정을 읽는다**.
-  설정 디스크는 `/dev/vda`라는 이름이 아니라 **ext2 라벨 `tars-`**로 찾는다.
-  게이트에 열번째 체인 `machine/check.sh`가 생겼다).** design은
+  **Real Machine(RM-M0~M3, 2026-09-09·10 완료 — 일반 x86_64 노트북에서 뜨는
+  커널. UEFI로 부팅하고 EFI GOP 프레임버퍼 위의 simpledrm에 그리고 USB
+  키보드로 받고 NVMe 디스크에서 설정을 읽는다. 설정 디스크는 `/dev/vda`라는
+  이름이 아니라 **ext2 라벨 `tars-`**로 찾고, 노트북 ACPI 다섯도 켜져 있다.
+  게이트에 열번째 체인 `machine/check.sh`가 생겼고, 실기에 꽂는 법은
+  `README.md`에 있다).** design은
   `.../specs/2026-09-09-tars-real-machine-design.md`, 기억은
   `docs/decisions/project_real_machine.md`.
-  **RM도 편집을 Claude Code가 한다** — 사용자가 2026-09-09에 브레인스토밍
-  중간에 "자러 가니까 이번 태스크의 모든 작업을 마무리해 달라"고 위임했다.
+  **RM은 편집도 Claude Code가 했다** — 사용자가 2026-09-09에 자러 가며
+  서브프로젝트 단위로 위임했고, 2026-09-10에 외출하며 한 번 더 위임했다.
   SH·FP의 예외와 같은 종류다.
-  **RM이 끝나면 다시 기본 규칙(사용자가 편집)이다.**
+  **RM이 끝났으므로 다음 서브프로젝트부터 다시 기본 규칙이다 — 파일 편집은
+  사용자가 한다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
