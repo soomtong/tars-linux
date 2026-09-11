@@ -166,6 +166,15 @@ WANT+=(lib/x86_64-linux-gnu/libncursesw.so.6 lib/x86_64-linux-gnu/libstdc++.so.6
 WANT+=(usr/bin/vi usr/bin/pager usr/bin/editor .gitconfig
        usr/share/git-core/templates/info/exclude)
 
+# **SC-M0: 링크 셋.** 위 .gitconfig과 같은 자리이고 같은 이유로 여기
+# literal이다 — 배열(guest_tools.sh)은 바이너리만 알고 이 셋은 make_initrd.sh가
+# 손으로 건다. 그래서 **이 셋에 대해서는 검사 1이 tautology가 아니다.**
+#
+# 가리키는 대상(/config/bashrc 등)은 여기서 안 본다. 그 파일은 initrd가
+# 아니라 **설정 디스크**에 있고, 이 체인에는 디스크가 없다(SC-M1이
+# config 체인에서 그것을 본다).
+WANT+=(.bashrc .zshrc .config/fish/config.fish)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 
 # **명령 치환으로 패딩을 만들면 안 된다.** `$(printf '\n%s\n' ...)`은 끝의
@@ -292,6 +301,34 @@ if ! wait_for_screen "/terminal"; then
     "terminal: screen>" "error while loading"
 fi
 echo "ps walked /proc and found the supervised terminal"
+
+# ── SC-M0: 같은 화면으로 플래그를 본다 ─────────────────────────────────
+#
+# **`ps ax`가 자식 둘의 argv를 그대로 보여 준다.** SC-M0 전에는 이렇게
+# 나왔다:
+#
+#   31 ?      S    0:00 /terminal /usr/bin/fish --no-config apple ...
+#   33 pts/0  Ssl  0:00 /usr/bin/fish --no-config
+#
+# 기본값이 shell_config=on이므로 이제 첫 줄의 셋째 인자가 `none`이고
+# 둘째 줄에는 인자가 아예 없다. **부팅을 더 안 쓰고 플래그 변경을 화면에서
+# 증명한다** — 이 체인이 이미 치는 명령의 출력을 한 번 더 보는 것뿐이다.
+#
+# 긍정과 부정을 둘 다 본다. 긍정만 보면 init이 `none`을 넘겼다는 것까지이고,
+# **부정이 있어야 terminal이 그것을 실제로 안 붙였다는 것까지** 간다.
+# 파이프 대신 here-string을 쓰는 것은 이 스크립트의 pipefail 때문이다
+# (gate_lib.sh:107의 주석과 같다). 이름을 PS_SCREEN으로 두는 것은
+# gate_lib.sh의 wait_for_screen이 `screen`이라는 지역 변수를 쓰고 있어서다.
+PS_SCREEN="$(grep -a "terminal: screen>" "$LOG")"
+if ! grep -aq -- "/usr/bin/fish none" <<<"$PS_SCREEN"; then
+  fail "init did not pass 'none' to the terminal; shell_config never reached argv" \
+    "terminal: screen>" "tars-init: config shell="
+fi
+if grep -aq -- "--no-config" <<<"$PS_SCREEN"; then
+  fail "a shell still carries --no-config even though shell_config defaults to on" \
+    "terminal: screen>"
+fi
+echo "both children run without a no-config flag (shell_config=on reached argv)"
 
 # ── 검사 6: awk가 돈다 — **결정 4의 이름 바꾸기** ───────────────────────
 #
