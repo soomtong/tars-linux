@@ -958,8 +958,14 @@ pub fn main(init: std.process.Init) !void {
     // 인자 없이 손으로 실행할 때를 위해 기본값은 남긴다.
     //
     // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
-    // no-config 플래그(fish --no-config / bash --norc / zsh -f)를 계속 주는
-    // 이유는 프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있기 때문이다.
+    //
+    // **SC-M0 전에는 이 플래그가 조건 없이 붙었다.** 이유로 적혀 있던 것은
+    // "프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있다"였는데,
+    // 2026-09-11에 재 보니 **설정을 다 읽은 fish의 프롬프트가 `--no-config`로
+    // 뜬 것과 글자까지 같았다**(design 실측 14(c)). 그 이유는 이제 없다.
+    //
+    // 인자 없이 손으로 실행할 때의 기본값은 `--no-config`로 남긴다 — 그때는
+    // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
     const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
     const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
     // 넷째 인자가 키보드 종류다(IP-M2, design doc 결정 9). enum을 여기 다시
@@ -1027,7 +1033,29 @@ pub fn main(init: std.process.Init) !void {
     // `make_initrd.sh`가 그것을 넣고, terminfo와 정확히 같은 종류의 짝이다.
     _ = setenv("LANG", "C.UTF-8", 1);
 
-    const argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
+    // SC-M0 결정 6. **TERM·LANG과 같은 자리에 있는 이유가 TERM과 같다** —
+    // 값이 두 셸에서 갈려야 해서 여기 있다. 화면은 TARS의 화면이라 다른
+    // 제품의 배너가 뜰 자리가 아니고, 시리얼 콘솔은 fish를 그대로 보는
+    // 자리다(machine/check.sh:117이 그 인사말을 UEFI 부팅의 마커로 쓴다 —
+    // **여기서 끄면 그 마커가 살고, /etc/fish/config.fish로 끄면 죽는다**).
+    //
+    // fish의 `fish_greeting` 함수는 `set -q fish_greeting`이 참이면 기본
+    // 문구를 안 만들고, 값이 비어 있으면 아무것도 안 찍는다. 환경 변수는
+    // fish에서 전역 변수로 보이므로 `set -q`가 참이 된다. 2026-09-11에
+    // 게스트에서 확인했다(design 실측 14(b)).
+    //
+    // bash·zsh는 이런 이름의 환경 변수를 모른다 — 조건 없이 넣는다.
+    _ = setenv("fish_greeting", "", 1);
+
+    // SC-M0 결정 3. init이 `"none"`을 넘기면 셸에 플래그를 안 붙인다 —
+    // 슬롯을 null로 덮으면 execv가 거기서 멈추므로 배열 길이를 안 바꿔도
+    // 된다(sentinel은 그대로 배열 끝에 있다).
+    //
+    // **문자열 하나로 말하는 이유**는 `config.zig`의 `configFlag` 주석에
+    // 있다 — argv를 짓는 쪽(PID 1)과 쓰는 쪽(여기)이 프로세스 경계로
+    // 갈려 있어서 "인자가 없다"를 포인터로 못 보낸다.
+    var argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
+    if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) argv[1] = null;
     const session = try pty.spawn(shell_path, &argv, cols, rows);
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
     // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
