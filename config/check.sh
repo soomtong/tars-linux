@@ -102,6 +102,23 @@ RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c re
 OFF_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o f f spc
           shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 
+# ── SC-M2 ───────────────────────────────────────────────────────────────
+# echo exit >> /config/zshrc — 3차 부팅에서 친다. **일부러 죽는 rc다.**
+# 이 한 줄이 셸을 rc 처리 도중에 끝내므로 셸은 프롬프트를 그리기 전에 죽는다.
+BREAK_KEYS=(e c h o spc e x i t spc shift-dot shift-dot spc
+            slash c o n f i g slash z s h r c ret)
+# grep exit /config/zshrc — 되읽기.
+#
+# **cat이 아니라 grep인 이유가 둘이다.** 하나는 M1의 이유 그대로(씨앗이 열몇
+# 줄이라 긴 출력의 첫 줄이 프레임에 안 남는다), 다른 하나는 **이 부팅이 부정
+# 검사를 갖고 있다는 것**이다 — cat하면 `echo tars-rc-alive`가 화면에 뜨고
+# 3차의 판정이 그것을 보게 된다. 화면에 안 띄우는 것이 요점이다.
+BREAK_READBACK_KEYS=(g r e p spc e x i t spc slash c o n f i g slash z s h r c ret)
+# echo shell_config=on >> /config/tars.conf — 2차가 쓴 off를 되돌린다.
+# **마지막 줄이 이긴다**(config_test.zig가 그 규칙을 못 박고 있다).
+ON_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o n spc
+         shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
+
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
 edit_config_in_guest() {
@@ -246,26 +263,128 @@ watch_console_shell() {
   return 0
 }
 
-# 3차 부팅의 훅. **타이핑을 안 하므로 관측 창만 있다.** 2차가 쓰는 함수를
-# 그대로 쓸 수 없는 이유는 그쪽이 설정을 고치기 때문이다 — 3차가 그것을
-# 부르면 tars.conf에 off가 한 줄 더 붙는다(해롭진 않지만 거짓말이 된다).
-watch_console_shell_quiet() {
+# 3차 부팅의 훅. **관측 창 + 4차가 밟을 함정을 판다**(SC-M2).
+#
+# M1까지 이 부팅은 아무것도 안 쳤다. 이유는 *"타이핑을 하면 그 글자가 화면에
+# 남고, 판정 글자가 우연히 화면에 생기는 길이 하나 늘어난다"*였고 **그 이유는
+# 그대로 산다.** 그래서 여기서 치는 두 명령과 그 되읽기에 `tars-rc-alive`가
+# 한 글자도 안 들어간다(위 BREAK_READBACK_KEYS의 주석).
+#
+# 심는 것 둘:
+#   1. `/config/zshrc` 끝에 `exit` — **일부러 죽는 rc다.**
+#   2. `tars.conf`에 `shell_config=on` — 2차가 쓴 off를 되돌린다.
+#
+# **이 부팅은 안 다친다.** 여기 셸은 off라 rc를 안 읽으므로 함정을 파도 밟지
+# 않는다. 4차부터 밟는다.
+plant_broken_rc() {
+  local log="$1"
+  LOG="$log"
+
   sleep 5
+
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -q "terminal: screen>" "$log"; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$ready" != "1" ]; then
+    echo "FAIL(boot 3): terminal never rendered a prompt; there was nothing to type into"
+    return 1
+  fi
+
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  if [ "$connected" != "1" ]; then
+    echo "FAIL(boot 3): could not connect to QEMU monitor on port ${MONITOR_PORT}"
+    return 1
+  fi
+
+  type_keys "${BREAK_KEYS[@]}"
+  type_keys "${BREAK_READBACK_KEYS[@]}"
+  local ok=0
+  if wait_for_screen '\| exit'; then ok=1; fi
+  if [ "$ok" != "1" ]; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 3): the exit line never landed in /config/zshrc; boot 4 would have no trap to spring"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 3: planted a shell-killing 'exit' in /config/zshrc for the fourth boot"
+
+  type_keys "${ON_KEYS[@]}"
+  type_keys "${READBACK_KEYS[@]}"
+  ok=0
+  if wait_for_screen '\| shell_config=on'; then ok=1; fi
+
+  exec 3<&-
+  exec 3>&-
+
+  if [ "$ok" != "1" ]; then
+    echo "FAIL(boot 3): typed shell_config=on but /config/tars.conf never read it back"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 3: turned shell_config back on so the fourth boot walks into that trap"
+  return 0
+}
+
+# 4차 부팅의 훅. **타이핑은 없고 기다리는 것이 둘이다.**
+#
+#   1. terminal의 탈출로는 콘솔 셸의 것보다 **늦게** 온다 — 콘솔 셸은 죽는 데
+#      0초가 걸리고 terminal은 DRM을 열고 폰트를 굽고 나서 셸을 띄우므로 한
+#      바퀴가 몇 초다. 부팅의 마커가 빠른 쪽(콘솔 셸)이라 느린 쪽을 여기서
+#      기다린다.
+#   2. **되살아난 둘이 그대로 사는지** 본다. 확인할 것이 "없어야 할 것"(더
+#      이상의 재시작·포기)이라 부재를 폴링으로 증명할 수 없다 — 2차 부팅의
+#      5초와 같은 이유의 고정 대기이고, 재시작 backoff 1초에 terminal의 기동
+#      몇 초를 더해 넉넉히 잡았다.
+watch_rescue() {
+  local log="$1"
+
+  local seen=0
+  for _ in $(seq 1 60); do
+    if grep -q "tars-init: terminal died" "$log"; then seen=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$seen" != "1" ]; then
+    echo "FAIL(boot 4): the console shell was rescued but the terminal never was"
+    return 1
+  fi
+
+  sleep 8
+  return 0
+}
+
+# 5차 부팅의 훅. **M1의 3차와 같은 자리다** — 볼 것이 전부 "없어야 할 것"이라
+# 타이핑을 안 하고 관측 창만 둔다.
+watch_quiet() {
+  sleep 8
   return 0
 }
 
 # 부팅 한 번. $1 = 시리얼 로그 파일, $2 = 기다릴 마커, $3 = (선택) 마커를 본 뒤
-# QEMU를 죽이기 전에 부를 함수.
+# QEMU를 죽이기 전에 부를 함수, $4 = (선택) 커널 cmdline.
+#
+# **넷째 인자는 SC-M2가 더했다.** 5차 부팅만 다른 cmdline으로 뜬다 — 탈출로 2가
+# 보는 것이 `/proc/cmdline`이라 그것 말고 심을 자리가 없다(실기에서는 limine의
+# 부팅 메뉴가 이 자리다).
 boot_once() {
   local log="$1"
   local marker="$2"
   local hook="${3:-}"
+  local cmdline="${4:-console=ttyS0}"
 
   qemu-system-x86_64 \
     -m "$GUEST_MEM" \
     -kernel ../kernel/build/arch/x86/boot/bzImage \
     -initrd ../kernel/initrd.cpio \
-    -append "console=ttyS0" \
+    -append "$cmdline" \
     -vga none \
     -device virtio-gpu-pci \
     -drive file="${REPO_ROOT}/out/config.img",if=virtio,format=raw \
@@ -335,7 +454,7 @@ report_failure() {
 
 # ---------------------------------------------------------------- 1차 부팅
 # 빈 디스크. init이 씨앗을 심고(fish), 그 다음 사람이 zsh로 고친다.
-echo "=== boot 1/3: empty disk, seed the config and the rc files, then edit them from inside ==="
+echo "=== boot 1/5: empty disk, seed the config and the rc files, then edit them from inside ==="
 if ! boot_once "$LOG1" "tars-init: created /config/tars.conf" edit_config_in_guest; then
   report_failure "$LOG1" "first boot did not seed and edit /config/tars.conf"
 fi
@@ -385,7 +504,7 @@ echo "boot 1: seeded with fish, then edited to zsh from inside the guest"
 
 # ---------------------------------------------------------------- 2차 부팅
 # 같은 이미지를 그대로 다시 물린다. make_disk.sh를 부르지 않는다.
-echo "=== boot 2/3: same image, the guest-written config should pick the shell and its rc ==="
+echo "=== boot 2/5: same image, the guest-written config should pick the shell and its rc ==="
 if ! boot_once "$LOG2" "tars-init: started console shell" watch_console_shell; then
   report_failure "$LOG2" "second boot never started a console shell"
 fi
@@ -475,8 +594,8 @@ echo "boot 2: the config written inside the guest selected zsh for both shells"
 # **이 부팅은 아무것도 안 친다.** 볼 것이 전부 **없어야 할 것**이기 때문이다 —
 # 타이핑을 하면 그 글자가 화면에 남고, 판정 글자가 우연히 화면에 생기는 길이
 # 하나 늘어난다.
-echo "=== boot 3/3: same image with shell_config=off, the rc must not run ==="
-if ! boot_once "$LOG3" "tars-init: started console shell" watch_console_shell_quiet; then
+echo "=== boot 3/5: same image with shell_config=off, the rc must not run ==="
+if ! boot_once "$LOG3" "tars-init: started console shell" plant_broken_rc; then
   report_failure "$LOG3" "third boot never started a console shell"
 fi
 
@@ -511,6 +630,122 @@ if grep -q "Attempted to kill init" "$LOG3"; then
   report_failure "$LOG3" "kernel panicked because PID 1 exited on the third boot"
 fi
 
+# ---------------------------------------------------------------- 4차 부팅
+# 또 같은 이미지다. 3차가 `/config/zshrc`에 `exit` 한 줄을 심고
+# `shell_config=on`을 되돌려 두었다 — **이 부팅의 두 셸은 뜨자마자 죽는다.**
+#
+# design 위험 3이 말하는 상태가 정확히 이것이다: *"rc가 깨지면 그것을 고칠
+# 셸이 없다."* M1까지 이 기계의 탈출로는 호스트에서 ext2 이미지를 직접 고치는
+# 것뿐이었다.
+LOG4="$(mktemp)"
+echo "=== boot 4/5: the rc kills both shells; the supervisor must bring them back without it ==="
+if ! boot_once "$LOG4" "tars-init: console shell died" watch_rescue; then
+  report_failure "$LOG4" "the supervisor never rescued a shell from the rc that kills it"
+fi
+
+# 먼저 **이 부팅이 함정을 실제로 밟았는지** 확인한다. 아래 검사들은 "되살아
+# 났다"를 보는데, 애초에 안 죽었으면 전부 공허해진다.
+if ! grep -q "tars-init: config shell=zsh.*shell_config=on" "$LOG4"; then
+  report_failure "$LOG4" "fourth boot did not read back the shell_config=on the third boot restored"
+fi
+
+# 콘솔 셸이 rc를 **읽었다**는 증거. 그 rc의 마지막 줄이 exit이므로 "읽었다"와
+# "죽었다"가 같은 사실이다. **세 번인 것이 정책 그 자체다** — 처음 뜨고, 두 번
+# 재시작하고, 세 번째 빠른 종료에서 탈출로가 발동한다(main.zig의
+# MAX_FAST_RESTARTS = 3). boot/check.sh가 같은 모양으로 센다.
+ALIVE="$(grep "tars-rc-alive" "$LOG4" | grep -cv "terminal: screen>" || true)"
+if [ "$ALIVE" != "3" ]; then
+  report_failure "$LOG4" "the console shell ran the broken rc ${ALIVE} times, want exactly 3 (the rescue must stop it there)"
+fi
+
+# ★ SC-M2가 증명하려는 것의 절반. **자식 둘 다 탈출로를 받는다**(결정 4의
+#   "두 셸이 같은 설정을 따른다"가 여기까지 온다).
+if ! grep -q "tars-init: console shell died .* times fast" "$LOG4"; then
+  report_failure "$LOG4" "the supervisor never offered the console shell a life without the rc"
+fi
+if ! grep -q "tars-init: terminal died .* times fast" "$LOG4"; then
+  report_failure "$LOG4" "the supervisor never offered the terminal a life without the rc"
+fi
+
+# 그리고 **그 탈출이 성공했다.** 포기 줄이 하나도 없다는 것이 그 뜻이다 —
+# 탈출로가 없던 M1이었다면 이 부팅은 자식 둘을 다 포기한 기계로 끝난다.
+if grep -q "tars-init: giving up on" "$LOG4"; then
+  report_failure "$LOG4" "the supervisor gave up anyway; the rescue did not save the shell"
+fi
+
+# 개수가 정책이다. 처음 셋은 rc를 읽고 죽었고 넷째가 rc 없이 살아남았다.
+# 다섯이면 되살린 것도 죽은 것이고, 셋이면 탈출로가 안 돌았다는 뜻이다.
+for want in "console shell" "terminal"; do
+  STARTS="$(grep -c "tars-init: started ${want}" "$LOG4" || true)"
+  if [ "$STARTS" != "4" ]; then
+    report_failure "$LOG4" "init started the ${want} ${STARTS} times, want exactly 4 (three with the rc, one without)"
+  fi
+done
+
+# 되살아난 화면 셸이 실제로 프롬프트를 그렸다. 죽는 동안에는 이 줄이 안
+# 나온다 — 셸이 rc 처리 중에 죽어서 PTY에 아무것도 안 오기 때문이다.
+if ! grep -q "terminal: screen>" "$LOG4"; then
+  report_failure "$LOG4" "the rescued terminal never rendered; the machine came back unusable"
+fi
+
+if grep -q "Attempted to kill init" "$LOG4"; then
+  report_failure "$LOG4" "kernel panicked because PID 1 exited on the fourth boot"
+fi
+echo "boot 4: the rc killed both shells three times, then the supervisor brought them back without it"
+
+# ---------------------------------------------------------------- 5차 부팅
+# 같은 이미지, 같은 함정. **다른 것은 커널 cmdline의 한 단어뿐이다.**
+#
+# **4차가 이 부팅의 부정 검사를 진짜로 만든다** — 같은 디스크로 방금 셸이
+# 여섯 번 죽는 것을 봤으므로, 여기서 아무도 안 죽으면 그것은 tars.noconfig가
+# 한 일이다. M1의 3차가 2차에 기대던 구조와 같다.
+LOG5="$(mktemp)"
+echo "=== boot 5/5: same disk, same trap, but tars.noconfig on the command line ==="
+if ! boot_once "$LOG5" "tars-init: started console shell" watch_quiet "console=ttyS0 tars.noconfig"; then
+  report_failure "$LOG5" "fifth boot never started a console shell"
+fi
+
+# 기계가 2·3·4차와 같은 디스크를 봤다는 것부터.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG5"; then
+  report_failure "$LOG5" "fifth boot did not load /config/tars.conf"
+fi
+
+# ★ SC-M2가 증명하려는 나머지 절반. **파일에는 on이라고 적혀 있다**(4차가 같은
+#   파일에서 on을 읽었다). 그런데 실효값이 off다 — cmdline이 이긴 것이다.
+if ! grep -q "tars-init: tars.noconfig on the kernel command line beats /config/tars.conf" "$LOG5"; then
+  report_failure "$LOG5" "init never reported that the command line token outranked the config file"
+fi
+if ! grep -q "tars-init: config shell=zsh.*shell_config=off" "$LOG5"; then
+  report_failure "$LOG5" "the command line token did not turn shell_config off"
+fi
+
+# 그리고 **아무도 rc를 안 읽었다.** 같은 디스크에서 4차는 여섯 번 죽었다.
+if grep -q "tars-rc-alive" "$LOG5"; then
+  report_failure "$LOG5" "tars.noconfig did not keep the shells out of the rc"
+fi
+if grep -q "times fast" "$LOG5"; then
+  report_failure "$LOG5" "a shell still died on the fifth boot; the token did not reach the rc decision"
+fi
+if grep -q "tars-init: giving up on" "$LOG5"; then
+  report_failure "$LOG5" "the supervisor gave up on a child that had no reason to die"
+fi
+
+# 한 번 뜨고 그대로 산다. 4차의 넷과 나란히 놓으면 이 수가 이야기 전부다.
+for want in "console shell" "terminal"; do
+  STARTS="$(grep -c "tars-init: started ${want}" "$LOG5" || true)"
+  if [ "$STARTS" != "1" ]; then
+    report_failure "$LOG5" "init started the ${want} ${STARTS} times on the fifth boot, want exactly 1"
+  fi
+done
+
+if ! grep -q "terminal: screen>" "$LOG5"; then
+  report_failure "$LOG5" "the terminal never rendered on the fifth boot"
+fi
+if grep -q "Attempted to kill init" "$LOG5"; then
+  report_failure "$LOG5" "kernel panicked because PID 1 exited on the fifth boot"
+fi
+echo "boot 5: one word on the kernel command line beat the config file, and nothing died"
+
 # 정보성. ext2가 "not clean"이라고 말하는 것은 예상된 결과다(1차를 kill했다).
 if grep -q "mounting unchecked fs" "$LOG2"; then
   echo "note: ext2 reported an unclean superblock on boot 2 (expected: boot 1 was killed)"
@@ -524,6 +759,10 @@ echo "--- init log (boot 2) ---"
 grep 'tars-init:' "$LOG2" || true
 echo "--- init log (boot 3) ---"
 grep 'tars-init:' "$LOG3" || true
+echo "--- init log (boot 4) ---"
+grep 'tars-init:' "$LOG4" || true
+echo "--- init log (boot 5) ---"
+grep 'tars-init:' "$LOG5" || true
 
 echo "PASS"
 exit 0
