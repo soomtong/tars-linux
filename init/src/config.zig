@@ -72,6 +72,107 @@ pub const Shell = enum {
             .on => "none",
         };
     }
+
+    /// 이 셸의 rc 파일이 **설정 디스크에서** 갖는 이름(SC design 결정 1).
+    ///
+    /// **홈의 이름이 아니라 여기 이름이다.** 홈에는 링크만 있고
+    /// (`kernel/make_initrd.sh`가 건다) 실체는 전부 이 자리다 — 홈(`/`)은
+    /// tmpfs라 부팅마다 비워지고, 살아남는 것은 `/config` 하나뿐이다.
+    ///
+    /// | 홈의 이름 | 여기 |
+    /// |---|---|
+    /// | `/.bashrc` | `/config/bashrc` |
+    /// | `/.zshrc` | `/config/zshrc` |
+    /// | `/.config/fish/config.fish` | `/config/fish.config` |
+    ///
+    /// **`fish.config`로 적은 것에 뜻이 있다** — `/config` 안을 평평하게
+    /// 두어 `gitconfig`과 같은 층에 세운다(결정 1).
+    ///
+    /// `main.zig`의 `CONFIG_PATH`가 같은 `/config`를 알고 있다. 둘을 한
+    /// 자리로 모으려면 힙 없이 경로를 조립해야 해서, 지금은 **이름 셋이
+    /// `make_initrd.sh`의 링크 셋과 짝이라는 것**을 주석으로 못 박는 쪽을
+    /// 고른다 — 어긋나면 증상은 "rc를 고쳤는데 안 읽힌다"이고,
+    /// `config/check.sh`의 2차 부팅이 그것을 본다.
+    pub fn rcPath(self: Shell) [:0]const u8 {
+        return switch (self) {
+            .fish => "/config/fish.config",
+            .bash => "/config/bashrc",
+            .zsh => "/config/zshrc",
+        };
+    }
+
+    /// 첫 부팅에 깔아 두는 내용(결정 7).
+    ///
+    /// **규칙이 하나뿐이다: 아무것도 찍지 않는다.** 설정 디스크를 붙이는
+    /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — 씨앗이 배너
+    /// 한 줄을 찍으면 그 좌표가 통째로 밀린다. 그래서 여기 쓸 수 있는 줄은
+    /// **주석과 alias 둘뿐**이고, `config_test.zig`의 `expectQuietSeed`가
+    /// 그 규칙을 부팅 없이 0.1초에 확인한다.
+    ///
+    /// **프롬프트를 안 건드린다**(비목표 5). 실측 9가 그 비용을 적고 있고,
+    /// 그 비용은 사용자가 자기 rc에 프롬프트를 쓸 때 **자기 기계에서만**
+    /// 치르면 된다.
+    ///
+    /// 셋의 문법 차이를 나란히 두는 것에도 뜻이 있다 — `shell`을 바꾼
+    /// 사용자가 새 셸의 파일을 열었을 때 빈 파일이 아니라 읽을 것이 있다.
+    pub fn rcSeed(self: Shell) []const u8 {
+        return switch (self) {
+            .fish =>
+            \\# TARS shell config — fish
+            \\#
+            \\# 이 파일의 실체는 설정 디스크의 /config/fish.config이고, 홈의
+            \\# ~/.config/fish/config.fish는 그리로 가는 링크다. 홈(/)은 tmpfs라
+            \\# 부팅마다 비워지므로 살아남는 자리는 설정 디스크 하나뿐이다.
+            \\#
+            \\# /config/tars.conf에 shell_config=off를 적으면 셸이 이 파일을
+            \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
+            \\# source ~/.config/fish/config.fish
+            \\#
+            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
+            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
+            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\alias tars-config='cat /config/tars.conf'
+            \\alias tars-rc='cat /config/fish.config'
+            \\
+            ,
+            .bash =>
+            \\# TARS shell config — bash
+            \\#
+            \\# 이 파일의 실체는 설정 디스크의 /config/bashrc이고, 홈의
+            \\# ~/.bashrc는 그리로 가는 링크다. 홈(/)은 tmpfs라 부팅마다
+            \\# 비워지므로 살아남는 자리는 설정 디스크 하나뿐이다.
+            \\#
+            \\# /config/tars.conf에 shell_config=off를 적으면 셸이 이 파일을
+            \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
+            \\# source ~/.bashrc
+            \\#
+            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
+            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
+            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\alias tars-config='cat /config/tars.conf'
+            \\alias tars-rc='cat /config/bashrc'
+            \\
+            ,
+            .zsh =>
+            \\# TARS shell config — zsh
+            \\#
+            \\# 이 파일의 실체는 설정 디스크의 /config/zshrc이고, 홈의
+            \\# ~/.zshrc는 그리로 가는 링크다. 홈(/)은 tmpfs라 부팅마다
+            \\# 비워지므로 살아남는 자리는 설정 디스크 하나뿐이다.
+            \\#
+            \\# /config/tars.conf에 shell_config=off를 적으면 셸이 이 파일을
+            \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
+            \\# source ~/.zshrc
+            \\#
+            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
+            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
+            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\alias tars-config='cat /config/tars.conf'
+            \\alias tars-rc='cat /config/zshrc'
+            \\
+            ,
+        };
+    }
 };
 
 /// 물리 키보드 종류. **재배치가 아니라 하드웨어 선언이다** — 사용자가 키를
@@ -478,9 +579,16 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     const fd: i32 = @intCast(rc);
     defer _ = linux.close(fd);
 
-    // /config는 MS_SYNCHRONOUS로 마운트돼 있다. 그래서 이 write가 돌아온
-    // 시점에 데이터도 디렉터리 엔트리도 이미 디스크에 있다 — fsync를 따로
-    // 부르지 않는 것이 실수가 아니라 그 마운트 플래그의 값어치다.
+    return writeAll(fd, text, path);
+}
+
+/// fd에 전부 쓴다. **`save`와 `seedRcFiles`가 같은 루프를 쓴다** — SC-M1이
+/// 둘째 호출자를 만들면서 뺐다.
+///
+/// `/config`는 `MS_SYNCHRONOUS`로 마운트돼 있다. 그래서 이 write가 돌아온
+/// 시점에 데이터도 디렉터리 엔트리도 이미 디스크에 있다 — fsync를 따로
+/// 부르지 않는 것이 실수가 아니라 그 마운트 플래그의 값어치다.
+fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
     var written: usize = 0;
     while (written < text.len) {
         const n = linux.write(fd, text.ptr + written, text.len - written);
@@ -494,4 +602,53 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         if (n == 0) return error.WriteFailed;
         written += n;
     }
+}
+
+/// 셸 rc 파일 셋을 "없으면 만든다"(SC design 결정 7).
+///
+/// **`/config`가 마운트됐을 때만 부른다.** 안 붙은 부팅에서는 `/config`가
+/// initrd 안의 빈 디렉터리(tmpfs)이므로, 여기서 만들면 부팅마다 새로 생겼다
+/// 사라지는 파일이 되고 "고치고 재부팅하면 남는다"는 약속이 그 부팅에서만
+/// 거짓이 된다. **없는 편이 낫다** — 링크가 끊긴 채로 셸이 뜨고, 그것은
+/// SC-M0이 이미 여섯 체인에서 확인한 정상 경로다.
+///
+/// **`shell_config`를 안 본다.** `off`여도 깐다 — 셸이 안 읽을 뿐 파일은
+/// 있는 것이 맞고, 나중에 `on`으로 바꾼 사람이 빈 디렉터리를 안 만난다.
+/// `shell`도 안 본다: 셋 다 깐다는 결정 7의 근거가 같다 — `tars.conf`의
+/// `shell`은 언제든 바뀔 수 있고, 바뀐 뒤에야 씨앗이 생기면 "고치고
+/// 재부팅했는데 rc가 없다"가 된다. 비용은 부팅마다 `open()` 셋이다.
+///
+/// **이미 있으면 손대지 않는다.** 그때부터 그 파일은 사용자의 것이다.
+/// `O_EXCL`이 그 질문을 커널에게 한 번에 묻는다 — `save`가 `O_EXCL`을 안
+/// 쓰는 것과 다른 이유는, 저쪽은 "파일이 없다"를 `load`가 이미 답했기
+/// 때문이다.
+pub fn seedRcFiles() void {
+    for (std.enums.values(Shell)) |sh| seedRcFile(sh);
+}
+
+fn seedRcFile(sh: Shell) void {
+    const path = sh.rcPath();
+    const rc = linux.open(path.ptr, .{
+        .ACCMODE = .WRONLY,
+        .CREAT = true,
+        .EXCL = true,
+    }, 0o644);
+    if (failed(rc)) |e| {
+        // 이미 있다 = 사용자의 파일이다. 조용히 둔다 — 여기서 로그를 찍으면
+        // 부팅마다 세 줄이 늘고, 그 셋은 아무것도 알려주지 않는다.
+        if (e == .EXIST) return;
+        std.debug.print("tars-init: could not seed {s} (errno {d})\n", .{
+            path, @intFromEnum(e),
+        });
+        return;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+
+    writeAll(fd, sh.rcSeed(), path) catch return;
+
+    // **`created`가 아니라 `seeded`다.** `tars-init: created /config/tars.conf`
+    // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
+    // 그 검사가 rc 세 줄까지 함께 보게 된다.
+    std.debug.print("tars-init: seeded {s}\n", .{path});
 }

@@ -47,6 +47,53 @@ fn expect(text: []const u8, want: config.Config) !void {
     return error.UnexpectedConfig;
 }
 
+/// 씨앗 rc가 "아무것도 안 찍는다"를 문법으로 확인한다(SC-M1).
+///
+/// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 **우리가
+/// 쓸 수 있는 줄의 종류를 둘로 제한한다** — 주석과 alias. 그 둘은 어느
+/// 셸에서도 출력을 만들지 않는다.
+///
+/// **위험 3의 반쪽이 여기 있다.** design이 *"우리가 까는 것은 절대로 셸을
+/// 죽이지 않아야 한다"*고 적었고, 그 "절대로"를 지키는 장치가 이 함수다.
+fn expectQuietSeed(sh: config.Shell) !void {
+    const text = sh.rcSeed();
+    if (text.len == 0 or text[text.len - 1] != '\n') {
+        std.debug.print("FAIL: the {s} seed does not end with a newline\n", .{@tagName(sh)});
+        return error.BadSeed;
+    }
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var aliases: usize = 0;
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0) continue;
+        if (line[0] == '#') continue;
+        if (std.mem.startsWith(u8, line, "alias ")) {
+            aliases += 1;
+            continue;
+        }
+        std.debug.print(
+            "FAIL: the {s} seed has a line that is neither a comment nor an alias:\n  {s}\n",
+            .{ @tagName(sh), line },
+        );
+        return error.BadSeed;
+    }
+    // **alias가 하나도 없으면 1차 부팅의 `tars-config`가 무의미해진다.**
+    // 게이트는 그 alias가 있다는 것으로 "셸이 이 파일을 읽었다"를 판정한다.
+    if (aliases == 0) {
+        std.debug.print("FAIL: the {s} seed defines no alias for the gate to find\n", .{@tagName(sh)});
+        return error.BadSeed;
+    }
+    // 씨앗은 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
+    // `tars-rc`를 쳤을 때 없는 파일을 cat한다 — **문서가 아니라 실행되는
+    // 문장이라 틀린 것이 드러난다.**
+    if (std.mem.indexOf(u8, text, sh.rcPath()) == null) {
+        std.debug.print("FAIL: the {s} seed never names its own path {s}\n", .{
+            @tagName(sh), sh.rcPath(),
+        });
+        return error.BadSeed;
+    }
+}
+
 pub fn main() !void {
     // 빈 입력은 기본값이다. 이 한 줄이 "설정 파일이 없을 때의 TARS"를 못
     // 박는다 — Config의 기본값을 바꾸면 여기가 먼저 터진다.
@@ -254,6 +301,18 @@ pub fn main() !void {
         std.debug.print("FAIL: \"none\" did not round-trip to an empty set\n", .{});
         return error.ToggleRoundTripFailed;
     }
+
+    // ── SC-M1: 씨앗 rc의 불변식 ─────────────────────────────────────────
+    //
+    // **이 검사의 목적은 지금 통과하는 것이 아니라 나중에 막는 것이다.**
+    // 설정 디스크를 붙이는 체인이 다섯이고(design 실측 4) 그중 셋이 화면의
+    // 셀 좌표로 판정한다. 씨앗이 부팅할 때 한 글자라도 찍으면 그 좌표가
+    // 통째로 밀리고, 증상은 **부팅 20초 뒤에 엉뚱한 체인이 깨지는 것**이다.
+    //
+    // 그래서 규칙을 코드 모양으로 못 박는다: **주석이 아닌 줄은 전부
+    // `alias `로 시작한다.** alias는 정의만 하고 아무것도 실행하지 않는
+    // 유일한 종류의 줄이다.
+    for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
 
     std.debug.print("PASS\n", .{});
 }
