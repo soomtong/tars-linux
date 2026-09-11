@@ -32,6 +32,15 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
+# 이 체인만 RM 때부터 `-m 512`를 손으로 갖고 있었다(저장소의 열두 QEMU 호출
+# 중 유일하게). UT-M2가 그 수를 gate_lib.sh로 옮겼다 — 나머지 열하나가 기본
+# 128MiB로 돌고 있었고 UT-M2의 initrd가 거기서 panic한다.
+#
+# **아래 타이핑은 gate_lib.sh의 type_keys가 아니라 자체 루프다.** 왜 그런지는
+# 이 주석을 쓰는 시점에 기록이 없다 — 고치려는 사람은 먼저 `sendkey` 사이의
+# 0.4초가 USB 키보드에 필요한 값인지부터 재는 것이 좋다(PS/2가 아니다).
+source ../gate_lib.sh
+
 LOG="$(mktemp)"
 VARS="$(mktemp)"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd "$VARS"
@@ -85,7 +94,7 @@ trap cleanup EXIT
 # 아래층을 먼저 꺼야 한다.
 qemu-system-x86_64 \
   -machine q35,i8042=off \
-  -m 512 \
+  -m "$GUEST_MEM" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file="$VARS" \
   -cdrom ../out/tars.iso \

@@ -111,6 +111,7 @@ source ../gate_lib.sh
 KILL_KEYS=(k i l l spc minus shift-t shift-e shift-r shift-m spc 1 ret)
 
 qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
   -append "console=ttyS0" \
@@ -301,6 +302,7 @@ EDIT_KEYS=(e c h o spc s h e l l equal z s h spc shift-dot spc
 echo "=== boot 2/2: edit the config in the guest, then ctrl-alt-delete ==="
 
 qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
   -append "console=ttyS0" \

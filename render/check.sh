@@ -104,6 +104,7 @@ report_failure() {
 source ../gate_lib.sh
 
 qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
   -append "console=ttyS0" \

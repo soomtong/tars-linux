@@ -27,6 +27,11 @@ cd "$(dirname "$0")"
 # "QEMU가 사라졌다"가 리셋으로도 성립할 수 있으므로, 아래 음성 검사가
 # Restarting system이 없음을 요구해서 둘을 가른다.
 
+# $GUEST_MEM 하나 때문에 source한다 — 이 체인은 타이핑을 안 하므로 type_keys를
+# 안 쓴다(회차당 타이핑 0회). gate_lib.sh는 함수와 변수만 있고 명령을 하나도
+# 실행하지 않는다.
+source ../gate_lib.sh
+
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
   exit 1
@@ -103,6 +108,7 @@ report_failure() {
 }
 
 qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
   -append "console=ttyS0" \
