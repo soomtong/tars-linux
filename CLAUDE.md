@@ -181,10 +181,19 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   `/config`의 rc 셋에 훅을 걸어 **기계가 배운 것 둘**(자주 간 디렉터리 ·
   쳤던 명령)을 부팅 사이에 남긴다. design은
   `.../specs/2026-09-11-tars-shell-memory-design.md`,
-  plan은 `.../plans/2026-09-11-tars-shell-memory-sm-m0.md`.
+  plan은 `.../plans/2026-09-11-tars-shell-memory-sm-m0.md`, 기억은
+  `docs/decisions/project_shell_memory.md`.
+  **SM-M0이 2026-09-11에 끝났다** — 도구 둘이 게스트에 서고 `tools/check.sh`가
+  검사 둘(17·18)로 그것을 친다. **`make_initrd.sh`는 한 글자도 안 고쳤다**
+  (배열에 줄 둘을 더한 것이 전부다). **M0이 게이트 자신의 것도 하나 고쳤다** —
+  맨 뒤 음성 확인이 `grep -q`의 SIGPIPE와 `pipefail` 때문에 **매치할수록
+  초록이 되는 검사**였다(쓰인 날부터 죽어 있었고 5/5 재현). 같은 모양이 저장소에
+  다섯 더 있고 `config/check.sh:552`가 다음 후보다. **M1·M2는 미착수다.**
   **착수 세션(design + M0 plan)도 편집을 Claude Code가 했다** — 사용자가
   2026-09-11에 "이번 세션도 위임"으로 정했고 **그 세션이 고친 것은 문서
-  둘뿐이다**(코드는 한 줄도 안 건드렸다).
+  둘뿐이다**(코드는 한 줄도 안 건드렸다). **SM-M0 세션도 같은 위임이었다** —
+  사용자가 2026-09-11에 "이번 구현에 대한 모든 결정을 위임한다"고 정했다.
+  SH·FP·RM·UT·SC와 같은 종류이고 **세션 단위**다.
   **다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고

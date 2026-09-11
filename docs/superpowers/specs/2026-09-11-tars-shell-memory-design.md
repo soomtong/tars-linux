@@ -1,7 +1,8 @@
 # TARS Shell Memory — Design
 
 **Date:** 2026-09-11
-**Status:** 착수(SM-M0 예정). Shell Config(SC-M0~M2)가 2026-09-11에 닫히면서
+**Status:** 진행 중 — **SM-M0 완료(2026-09-11)**, M1·M2 미착수.
+Shell Config(SC-M0~M2)가 2026-09-11에 닫히면서
 **훅을 걸 자리**가 생겼고, 이 서브프로젝트가 그 자리에 처음으로 무언가를
 건다. `zoxide`와 `fzf`를 게스트에 세우고, 셸 셋의 씨앗 rc가 그 둘의 훅을
 기본으로 담고, **기계가 사용자에게서 배운 것 둘**(자주 간 디렉터리 · 쳤던
@@ -276,6 +277,204 @@ zoxide: not a directory: /definitely/not/here     exit 1
 어디에도 없다** — `zoxide`가 그 글자를 만든 유일한 주체가 된다.
 
 `query` 출력은 개행 하나로 끝나는 한 줄이다.
+
+## SM-M0이 실행으로 증명한 것
+
+**2026-09-11 실행.** 실측 1~15는 착수 전에 잰 것이고, 여기부터는 코드를
+고치고 돌려서 안 것이다. **예상과 달랐던 것을 먼저 적는다.**
+
+### 실측 18 — **zoxide는 마지막 키워드가 경로의 마지막 컴포넌트와 맞아야 한다**
+
+plan이 여기서 틀렸다. 검사 18을 `zoxide add /usr/bin/../share/terminfo/x`
+→ `zoxide query terminfo`로 짰는데 첫 실행에서 이렇게 나왔다.
+
+```
+root@(none) /t/r (main)# zoxide add /usr/bin/../share/terminfo/x
+root@(none) /t/r (main)# zoxide query terminfo
+zoxide: no match found
+root@(none) /t/r (main) [1]#
+```
+
+컨테이너에서 arm64 zoxide 0.9.7로 좁혔다.
+
+```
+$ zoxide query --list
+/usr/share/terminfo/x           ← 정규화는 맞았다. 실측 15가 옳다
+$ zoxide query terminfo         → zoxide: no match found   rc=1
+$ zoxide query x                → /usr/share/terminfo/x    rc=0
+$ zoxide query terminfo x       → /usr/share/terminfo/x    rc=0
+```
+
+**실측 15가 틀린 것이 아니다.** 그때는 `add /usr/bin/../share/fonts` →
+`query fonts`였고 마지막 컴포넌트가 마침 `fonts`라 맞았다. **실측 15는
+정규화를 이름 붙였고, 그 옆의 불변식은 이름 붙이지 않았다** — plan이 겹침을
+피하려고 `fonts`를 `terminfo/x`로 바꿨을 때 이름 없는 쪽이 깨졌다.
+
+**키워드 둘(`terminfo x`)로 갔다.** `x` 하나로도 맞지만, SM-M2가 DB를 부팅
+너머로 남기면 `x`로 끝나는 경로가 여럿일 수 있다.
+
+### 실측 19 — **맨 뒤의 음성 확인은 쓰인 날부터 죽어 있었다**
+
+**이 milestone에서 가장 값진 발견이고, 새 도구와 아무 상관이 없다.**
+
+되돌림 2(zoxide 바이너리를 지우고 검사 18의 `..`를 빼서 판정을 가짜로 만든
+것)의 예상은 *"검사 18은 초록으로 거짓말하고 맨 뒤의 검사 19가 잡는다"*였다.
+**체인 전체가 PASS했다.** 세 번 돌려 세 번 다 그랬다.
+
+첫 의심은 경합이었다. 시리얼 로그를 꺼내 보니 근거가 있었다.
+
+| 로그 줄 | 무엇 |
+|---|---|
+| 69421 | `/usr/share/terminfo/x`가 처음 화면에 = **타이핑한 줄의 에코** |
+| 69813 | `Unknown command`가 처음 화면에 = 셸이 실제로 실패한 결과 |
+
+**392줄이 비어 있다.** positive가 명령의 *출력*이 아니라 *에코*로 만족되면
+그 검사는 즉시 돌아오고, 그물은 증거가 프레임에 실리기 전의 로그를 읽기
+시작한다.
+
+**그런데 그것이 원인이 아니었다.** 로그에는 `Unknown command`가 든 프레임이
+스무 줄이나 있었고 그 줄들은 `terminal: screen>`도 함께 달고 있었다. 검사
+19의 조건이 그 스물을 못 본 것이다.
+
+```
+$ bash -c 'grep -a "terminal: screen>" serial.log | grep -aq "Unknown command"; echo $?'
+0            ← pipefail 없이
+$ bash -c 'set -uo pipefail; grep -a ... | grep -aq ...; echo $?'
+141          ← 5회 중 5회
+```
+
+**`grep -q`가 첫 매치에서 즉시 나가고, 3.7MB를 아직 쏟고 있던 앞단 grep이
+SIGPIPE로 죽는다. `set -uo pipefail`이 그 141을 파이프라인의 종료 코드로
+올리고 `if`는 그것을 "안 맞았다"로 읽는다** — **매치할수록 초록이 되는
+검사**였다.
+
+**이 파일이 자기 함정에 걸렸다.** 같은 스크립트의 검사 1이 파이프라인 대신
+변수와 case를 쓰는 이유로 이 함정을 주석에 적어 두었고, `fail()`의 `|| true`
+(RM-M2)와 `gate_lib.sh:108`도 같은 것을 경고한다. **아는 것과 안 밟는 것이
+다르다.**
+
+`-q`를 빼서 뒤쪽 grep이 입력을 끝까지 읽게 했다. 고친 뒤 되돌림 2는 두 번 다
+예상대로 나온다.
+
+```
+zoxide learned a directory and gave it back normalized     ← 검사 18의 거짓말
+FAIL: the shell said it could not find one of the commands ← 그물이 잡았다
+```
+
+**같은 모양이 저장소에 다섯 더 있다**(`rg '\| *grep -[a-z]*q'`).
+
+| 자리 | 모양 | SIGPIPE가 나면 |
+|---|---|---|
+| `config/check.sh:552` | `if … \| grep -qv …; then fail` | **조용한 초록** — 이 자리와 같은 종류 |
+| `config/check.sh:573·576` | `if ! … \| grep -q …` | 거짓 빨강(시끄럽다) |
+| `machine/check.sh:226·241·288·354` | `if ! … \| grep -aq …` | 거짓 빨강 |
+
+**SM-M0은 자기 그물만 고쳤다.** 다섯은 이 milestone이 만든 것이 아니고,
+고치면 그 체인들을 다시 돌려 판정해야 한다. **`config/check.sh:552`가 다음
+후보다** — 유일하게 조용한 쪽이다.
+
+### 실측 20 — 관문 하나를 더했다. **그것은 고친 것이 아니라 보장한 것이다**
+
+검사 19 앞에 `uname -o`를 치고 `GNU/Linux`를 기다리는 관문을 넣었다. 셸은
+명령을 하나씩 처리하므로 **관문의 출력이 뜬 순간 그 앞의 모든 명령은 이미
+실행되고 그려졌다.**
+
+**정직하게 적는다: 이 관문은 되돌림 2를 고치지 않았다.** SIGPIPE를 고친 뒤
+**관문을 꺼도 잡는다**(실측). 안 켜도 잡히는 이유는 아래 grep이 3.7MB를 읽는
+**동안에도 로그가 계속 자라서** 에러 프레임이 결국 읽히기 때문 — 즉 "grep이
+게스트보다 느리다"는 **우연한 성질**에 기대고 있었다. 관문은 그 우연을
+보장으로 바꾼다. 비용은 명령 하나다.
+
+**관문의 판정 글자도 타이핑한 줄과 겹치면 안 된다** — 겹치면 관문 자신이
+같은 함정에 빠져 아무것도 안 기다린다. `uname -o`는 여섯 글자를 치고
+`GNU/Linux`를 본다.
+
+### 실측 16 — 크기와 `DT_NEEDED`는 **예측이 그대로 맞았다**
+
+```
+/usr/local/amd64-sysroot/usr/bin/fzf      4368112   libc.so.6
+/usr/local/amd64-sysroot/usr/bin/zoxide   1173976   libgcc_s.so.1 libm.so.6 libc.so.6
+libgcc_s.so.1: ok   libm.so.6: ok   libc.so.6: ok
+```
+
+실측 2와 바이트까지 같다. **새 라이브러리가 0이라는 예측도 맞았고, 그래서
+`copy_lib_deps`를 깨뜨리는 되돌림을 하나 안 했다** — 아무것도 안 죽는
+되돌림은 음성 확인이 아니다.
+
+**세 milestone 만에 라이브러리 예측이 두 번 연속 맞았다**(UT-M3이 처음,
+SM-M0이 둘째). UT-M1·M2에서는 두 번 다 틀렸다.
+
+### 실측 17 — initrd가 5.5MB 늘었고, tmpfs 벽까지 **165MiB** 남았다
+
+| | 전 | 후 | 증가 | 예측 |
+|---|---|---|---|---|
+| gzip | 34,869,668 | 37,162,196 | +2,292,528 | "+2MB 안쪽" → **살짝 빗나갔다**(2.19 MiB) |
+| 푼 것 | 90,329,088 | 95,871,488 | **+5,542,400** | +5,542,088 → **312바이트 차이** |
+
+312바이트는 cpio 헤더 패딩이다. **푼 크기가 그대로 RAM에 남는다** —
+initramfs는 tmpfs이고 크기 기본값이 RAM의 절반이다. `GUEST_MEM=512`이므로
+벽은 256MiB, 지금 91.4MiB를 쓰니 **여유가 약 165MiB**다. UT design 실측 34가
+이 여유를 안 쟀던 것을 자기비판으로 적어 두었다 — 이제 수가 있다.
+
+gzip 쪽 예측이 빗나간 것은 방향이 안전한 쪽이라 아무것도 안 바꿨다.
+
+### 실측 21 — 되돌림 1·3의 결과
+
+**되돌림 1(`guest_tools.sh`에서 `fzf` 줄을 지운다), 두 번 다 예상대로.**
+
+```
+the initrd carries the four bones and all 66 tools the list names   ← 정적 검사는 초록
+FAIL: fzf did not filter the git template tree
+  … fish: Unknown command: fzf
+```
+
+**정적 검사가 tautology라는 것의 실연이다** — 목록에서 줄을 지우면 찾을 것도
+함께 없어진다. 목록의 완전함을 증명하는 것은 정적 검사가 아니라 **타이핑**이다.
+
+**되돌림 3(fzf의 walker root를 `/config`로), 두 번 다 예상대로.**
+
+```
+FAIL: fzf did not filter the git template tree
+=== fzf 명령 뒤 화면 마지막 줄
+  terminal: screen> root@(none) ~#
+=== 화면에 에러 문구가 있나
+  (없음)
+```
+
+**"실패했는데 아무 말도 없는" 실패의 모양이다.** fzf는 빈 디렉터리를 훑고
+조용히 `exit 1`한다. 실측 7이 글로 경고한 것을 실행으로 봤다. design을 쓰고
+self-review에서 이 자리를 잡았던 것이 옳았다.
+
+### 실측 22 — 루트 게이트 **26분 27.84초, 첫 회차에 통과**
+
+```
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+18 PASS   0 FAIL
+```
+
+기준선은 SC-M2의 **25분 58.09초**이고 **+29.75초**다. M0은 부팅을 하나도 안
+더했으므로 잡음(±3분) 안이다. 늘어난 것은 `tools` 체인의 명령 넷(fzf 하나 ·
+zoxide 둘 · 관문 하나) × 세 회차뿐이다.
+
+| 세는 것 | 수 | 뜻 |
+|---|---|---|
+| `Unknown command` | **0** | 열한 체인 어디서도 못 찾은 명령이 없다 |
+| `error while loading shared libraries` | **0** | 새 라이브러리 0이 게스트에서도 맞았다 |
+| `not a directory` | **0** | `zoxide add`가 세 회차 다 성공했다 |
+| `Welcome to fish` | **6** | **SC-M0·M1·M2와 같다 — 회귀 없음** |
+| `fzf filtered a file tree` | **3** | 새 검사 17 × 세 회차 |
+| `zoxide learned a directory` | **3** | 새 검사 18 × 세 회차 |
+| `to drain the guest before the net reads` | **3** | 새 관문 × 세 회차 |
+| `all 67 tools the list names` | **3** | 65 → **67** |
+
+**plan이 여기서도 작게 틀렸다.** Task 6 Step 3은 `templates/description`과
+`/usr/share/terminfo/x`가 각각 **3**일 것으로 적었는데 **둘 다 0이다.** 그
+글자는 게스트 **화면**에 있고, 화면 덤프는 체인이 컨테이너 안에 만드는
+`$LOG`에 살며 **실패했을 때만** 루트 게이트의 stdout으로 나온다. 초록일 때
+루트 로그에 남는 것은 체인이 스스로 찍는 `echo` 줄뿐이다 — 위 표의 아래 넷이
+그것이다. **`Welcome to fish`가 6으로 세어지는 것은 그 줄을 시리얼에 직접
+찍는 체인이 따로 있기 때문**이고, 그래서 이 둘을 같은 방식으로 셀 수 있다고
+믿은 것이 틀렸다.
 
 ## 비목표
 

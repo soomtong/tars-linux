@@ -1,6 +1,20 @@
 # SM-M0 Implementation Plan — 도구 둘이 서고, 훅은 아직 없다
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **완료: 2026-09-11.** Task 일곱 전부. **이 plan이 세 군데에서 틀렸고 지우지
+> 않고 그 자리에 적어 두었다** — 각 Task 안의 `⚠ plan이 틀렸다` 블록을 볼 것.
+> 요약:
+>
+> 1. **Task 3의 `zoxide query terminfo`가 영원히 못 찾는다.** zoxide는
+>    마지막 키워드가 경로의 **마지막 컴포넌트**와 맞아야 한다. `terminfo x`로
+>    고쳤다.
+> 2. **Task 5 되돌림 2의 예상이 반대였다.** "검사 18은 거짓말하고 맨 뒤
+>    그물이 잡는다"가 아니라 **체인 전체가 PASS**했다 — 그물이 `grep -q`의
+>    SIGPIPE와 `pipefail` 때문에 **쓰인 날부터 죽어 있었다.** 이것이 이
+>    milestone에서 가장 값진 발견이고 **새 도구와 아무 상관이 없다.**
+> 3. **Task 2의 gzip 증가 예측 "+2MB 안쪽"이 살짝 빗나갔다**(+2,292,528).
+>    푼 크기는 312바이트 차이로 맞았다.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** `zoxide`와 `fzf`를 게스트에 세운다. **훅은 안 건다** — 씨앗 rc는 한
 글자도 안 바뀌고, 사람이 `zoxide`·`fzf`를 **직접 이름으로 불러서** 둘이 도는
@@ -75,7 +89,7 @@ SM-M0의 도구 둘은 그 함정에 특히 취약하다. **둘 다 경로를 �
 **Files:**
 - Modify: `devcontainer/Dockerfile:180`(`vim-tiny:amd64 \`) **바로 뒤**
 
-- [ ] **Step 1: 고치기 전 상태를 기록한다**
+- [x] **Step 1: 고치기 전 상태를 기록한다**
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -87,7 +101,7 @@ zcat -f kernel/initrd.cpio | wc -c       # 기준선: 90,329,088
 **기대:** `vim-tiny:amd64 \`가 한 줄 나온다. 크기 둘을 적어 둔다 — Task 2가
 이 수와 비교한다.
 
-- [ ] **Step 2: Dockerfile에 두 줄을 넣는다**
+- [x] **Step 2: Dockerfile에 두 줄을 넣는다**
 
 `vim-tiny:amd64 \` 줄 **바로 뒤**에 넣는다.
 
@@ -103,7 +117,7 @@ zcat -f kernel/initrd.cpio | wc -c       # 기준선: 90,329,088
 부터)보다 **앞**이다. 라이브러리 칸에 넣으면 "이건 도구인가 사슬인가"가
 흐려진다.
 
-- [ ] **Step 3: 이미지를 다시 빌드한다**
+- [x] **Step 3: 이미지를 다시 빌드한다**
 
 ```bash
 docker build -t tars-devcontainer -f devcontainer/Dockerfile . 2>&1 | tail -20
@@ -117,7 +131,7 @@ docker build -t tars-devcontainer -f devcontainer/Dockerfile . 2>&1 | tail -20
 trixie에 없다는 뜻이다. 그럴 리 없다는 것을 착수 전에 확인했다(design 실측
 1 — 둘 다 `main`에 있다).
 
-- [ ] **Step 4: sysroot에 실체가 들어왔는지 확인하고 amd64로 다시 잰다**
+- [x] **Step 4: sysroot에 실체가 들어왔는지 확인하고 amd64로 다시 잰다**
 
 ```bash
 docker run --rm tars-devcontainer bash -c '
@@ -148,7 +162,7 @@ libc.so.6: ok
 찾으면 죽으므로 Task 2가 그 자리에서 실패하지만, **원인에서 가장 가까운
 자리는 여기다.**
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add devcontainer/Dockerfile
@@ -162,7 +176,7 @@ git commit -m "Bring two tools that learn into the sysroot"
 **Files:**
 - Modify: `kernel/guest_tools.sh` (배열의 맨 끝, `usr/bin/vim.tiny:usr/bin/vim` 뒤)
 
-- [ ] **Step 1: 배열 끝에 층 하나를 더한다**
+- [x] **Step 1: 배열 끝에 층 하나를 더한다**
 
 `usr/bin/vim.tiny:usr/bin/vim` 줄과 닫는 `)` **사이**에 넣는다.
 
@@ -198,7 +212,7 @@ git commit -m "Bring two tools that learn into the sysroot"
   usr/bin/fzf:usr/bin/fzf
 ```
 
-- [ ] **Step 2: `make_initrd.sh`가 목록만 보고 둘을 넣는지 확인한다**
+- [x] **Step 2: `make_initrd.sh`가 목록만 보고 둘을 넣는지 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -210,7 +224,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 **`cp: cannot stat`가 나오면 Task 1이 안 끝난 것이다** — sysroot에 파일이
 없다는 뜻이고, 이미지를 다시 빌드했는지 확인한다.
 
-- [ ] **Step 3: cpio 안에 우리가 정한 이름으로 있는지 본다**
+- [x] **Step 3: cpio 안에 우리가 정한 이름으로 있는지 본다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -227,7 +241,7 @@ usr/bin/zoxide
 **접두사 `./`가 없는 것이 정상이다**(UT-M0 실측). 이 목록은 `find .`이 아닌
 방식으로 만들어진다.
 
-- [ ] **Step 4: 위험 4를 잰다 — 크기와 프롬프트까지의 시간**
+- [x] **Step 4: 위험 4를 잰다 — 크기와 프롬프트까지의 시간**
 
 ```bash
 stat -f "%z" kernel/initrd.cpio                            # gzip 뒤
@@ -242,13 +256,19 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 | gzip | 34,869,668 | 바이너리 둘이 이미 압축된 Go/Rust라 **+2MB 안쪽**으로 본다 |
 | 푼 것 | 90,329,088 | **+5,542,088**(design 실측 2) |
 
+> ⚠ **plan이 틀렸다 (작은 쪽, 2026-09-11).** 실측은 gzip **37,162,196**
+> (**+2,292,528** = 2.19 MiB로 "+2MB 안쪽"을 살짝 넘겼다) · 푼 것
+> **95,871,488**(**+5,542,400**, 예측과 **312바이트** 차이 = cpio 헤더
+> 패딩). 방향이 안전한 쪽이라 아무것도 안 바꿨다. **tmpfs 벽(RAM 512의
+> 절반 = 256MiB)까지 여유 약 165MiB.**
+
 **푼 크기가 그대로 RAM에 남는다** — initramfs는 tmpfs다(UT-M2가 128MiB에서
 `System is deadlocked on memory`를 본 자리). `gate_lib.sh`의 `GUEST_MEM=512`가
 이미 서 있어서 96MB는 문제가 아니지만, **수를 적어 두는 것이 다음 사람이 그
 벽에 얼마나 남았는지 아는 유일한 방법이다**(UT design 실측 34가 그 여유를 안
 쟀던 것을 자기비판으로 적고 있다).
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add kernel/guest_tools.sh
@@ -267,7 +287,7 @@ git commit -m "Put the two learning tools on the list and change nothing else"
 - Modify: `tools/check.sh:573` 부근 — `# ── 검사 17: 음성 확인` **앞**에 둘을
   넣고 그 검사의 번호를 **19**로 민다
 
-- [ ] **Step 1: 검사 17을 넣는다 — fzf**
+- [x] **Step 1: 검사 17을 넣는다 — fzf**
 
 `# ── 검사 17: 음성 확인 — **위의 아홉 전부에 대해** ───` 줄 **바로 앞**에
 넣는다.
@@ -343,7 +363,25 @@ echo "zoxide learned a directory and gave it back normalized"
 
 ```
 
-- [ ] **Step 2: 음성 확인의 번호를 19로 민다**
+> ⚠ **plan이 틀렸다 (2026-09-11).** 위의 `zoxide query terminfo`는
+> **영원히 `no match found`다.** zoxide는 **마지막 키워드가 경로의 마지막
+> 컴포넌트와 맞을 것을 요구하고**, 저장된 것은 `/usr/share/terminfo/x`라
+> 마지막 컴포넌트가 `x`다. arm64 0.9.7로 좁혔다:
+>
+> ```
+> $ zoxide query --list     → /usr/share/terminfo/x   ← 정규화는 맞았다
+> $ zoxide query terminfo   → zoxide: no match found  rc=1
+> $ zoxide query x          → /usr/share/terminfo/x   rc=0
+> $ zoxide query terminfo x → /usr/share/terminfo/x   rc=0
+> ```
+>
+> **design 실측 15가 틀린 것이 아니다** — 그때는 `fonts`로 쟀고 마지막
+> 컴포넌트가 마침 `fonts`였다. **정규화는 이름 붙였는데 그 옆의 불변식은
+> 이름 붙이지 않았고**, plan이 겹침을 피하려고 경로를 바꿀 때 이름 없는
+> 쪽이 깨졌다. **`terminfo x`로 고쳤다**(`x` 하나로도 맞지만 M2가 DB를
+> 남기면 `x`로 끝나는 경로가 여럿일 수 있다).
+
+- [x] **Step 2: 음성 확인의 번호를 19로 민다**
 
 **지울 것:**
 
@@ -376,7 +414,7 @@ echo "zoxide learned a directory and gave it back normalized"
 # 한 글자도 고치지 않고 새 도구 둘의 음성 확인을 얻는다.
 ```
 
-- [ ] **Step 3: 체인의 머리 주석에 한 문단을 더한다**
+- [x] **Step 3: 체인의 머리 주석에 한 문단을 더한다**
 
 `# **열 체인 중 어느 것도 이것을 못 본다.**` 줄 **바로 앞**에 넣는다.
 
@@ -391,7 +429,7 @@ echo "zoxide learned a directory and gave it back normalized"
 #
 ```
 
-- [ ] **Step 4: bash 문법만 먼저 본다 — 부팅 20초를 쓰기 전에**
+- [x] **Step 4: bash 문법만 먼저 본다 — 부팅 20초를 쓰기 전에**
 
 ```bash
 bash -n tools/check.sh && echo "syntax ok"
@@ -399,7 +437,7 @@ bash -n tools/check.sh && echo "syntax ok"
 
 **기대:** `syntax ok`. `type_keys`의 줄 이음(`\`)을 잘못 쓰면 여기서 죽는다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add tools/check.sh
@@ -410,7 +448,7 @@ git commit -m "Type two tools that print paths, and judge on what only they can 
 
 ## Task 4: UT 체인 단독 실행
 
-- [ ] **Step 1: 돌린다**
+- [x] **Step 1: 돌린다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -419,7 +457,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **얼마나 걸리나:** 캐시가 살아 있으면 약 30초, 커널을 다시 빌드하면 몇 분.
 
-- [ ] **Step 2: 초록인지, 그리고 **새 줄 둘**이 찍혔는지 본다**
+- [x] **Step 2: 초록인지, 그리고 **새 줄 둘**이 찍혔는지 본다**
 
 **기대(마지막 다섯 줄):**
 
@@ -431,7 +469,7 @@ zoxide learned a directory and gave it back normalized
 PASS
 ```
 
-- [ ] **Step 3: 실패했을 때 어디를 보나**
+- [x] **Step 3: 실패했을 때 어디를 보나**
 
 | 증상 | 첫 의심 |
 |---|---|
@@ -444,7 +482,7 @@ PASS
 **`sendkey`가 못 치는 글자가 있는지도 여기서 드러난다** — 타이핑한 명령줄이
 화면에 **온전히** 찍혔는지를 먼저 본다(UT-M3이 대문자로 배운 자리).
 
-- [ ] **Step 4: 커밋 없음**
+- [x] **Step 4: 커밋 없음**
 
 이 Task는 관측만 한다.
 
@@ -459,7 +497,7 @@ PASS
 각 되돌림은 **고치고 → 돌리고 → `git checkout`으로 복구하고 → 다시 한 번**
 이다.
 
-- [ ] **되돌림 1: `guest_tools.sh`에서 `fzf` 줄을 지운다**
+- [x] **되돌림 1: `guest_tools.sh`에서 `fzf` 줄을 지운다**
 
 ```bash
 # usr/bin/fzf:usr/bin/fzf 줄을 지우고
@@ -479,7 +517,7 @@ FAIL: fzf did not filter the git template tree
 파일을 보므로 줄을 지우면 **찾을 것도 함께 없어진다.** 목록의 완전함을
 증명하는 것은 정적 검사가 아니라 **타이핑**이다.
 
-- [ ] **되돌림 2: zoxide의 판정을 일부러 가짜로 만든다 — 이 milestone에서 가장 값진 확인**
+- [x] **되돌림 2: zoxide의 판정을 일부러 가짜로 만든다 — 이 milestone에서 가장 값진 확인**
 
 두 곳을 동시에 고친다.
 
@@ -507,7 +545,40 @@ FAIL: the shell said it could not find one of the commands
 그리고 이것이 **맨 뒤의 음성 확인이 왜 그 자리에 있는지**를 함께 보여 준다 —
 개별 검사가 가짜여도 그 검사가 그물에 걸린다.
 
-- [ ] **되돌림 3: fzf의 walker root를 `/config`로 바꾼다**
+> ⚠ **plan이 틀렸다 — 그리고 이것이 M0에서 가장 값진 발견이 됐다
+> (2026-09-11).** 위 예상의 앞 절반은 맞았고(검사 18이 초록으로 거짓말한다)
+> **뒤 절반이 틀렸다. 체인 전체가 PASS했다 — 세 번 돌려 세 번 다.**
+>
+> 첫 의심은 경합이었고 근거도 있었다. 시리얼 로그에서 판정 글자가 처음 뜬
+> 줄이 **69421**(타이핑한 줄의 에코), `Unknown command`가 처음 뜬 줄이
+> **69813**으로 **392줄이 비어 있었다.**
+>
+> **그런데 그것이 원인이 아니었다.** 로그에는 `Unknown command`와
+> `terminal: screen>`를 **함께 단 줄이 스물** 있었다. 검사 19의 조건이
+> 그 스물을 못 본 것이다:
+>
+> ```
+> $ bash -c 'grep -a "…screen>" serial.log | grep -aq "Unknown command"; echo $?'
+> 0      ← pipefail 없이
+> $ bash -c 'set -uo pipefail; … | grep -aq …; echo $?'
+> 141    ← 5회 중 5회
+> ```
+>
+> **`grep -q`가 첫 매치에 즉시 나가고, 3.7MB를 아직 쏟던 앞단 grep이
+> SIGPIPE로 죽는다. `set -uo pipefail`이 그 141을 파이프라인 코드로 올리고
+> `if`가 "안 맞았다"로 읽는다** — **매치할수록 초록이 되는 검사**였다.
+> **그물은 쓰인 날부터 죽어 있었고, 새 도구와 아무 상관이 없다.**
+>
+> **이 파일이 자기 함정에 걸렸다** — 같은 스크립트 검사 1의 주석,
+> `fail()`의 `|| true`(RM-M2), `gate_lib.sh:108`이 전부 이 함정을
+> 경고하고 있다. `-q`를 빼서 고쳤고, 고친 뒤 되돌림 2는 두 번 다 예상대로
+> 나온다. **같은 모양이 저장소에 다섯 더 있다**(design 실측 19의 표).
+>
+> 검사 19 앞에 배수 관문(`uname -o` → `GNU/Linux`)도 넣었는데, **정직하게
+> 그것은 고친 것이 아니라 보장한 것이다** — SIGPIPE를 고친 뒤에는 관문을
+> 꺼도 잡힌다(grep이 3.7MB를 읽는 동안 로그가 자라서다. 우연한 성질이다).
+
+- [x] **되돌림 3: fzf의 walker root를 `/config`로 바꾼다**
 
 ```bash
 # 검사 17의 마지막 인자를 slash c o n f i g 로 바꾼다
@@ -520,14 +591,14 @@ git checkout tools/check.sh
 디렉터리를 훑고 조용히 `exit 1`한다. design 실측 7의 경고를 실행으로 보는
 자리이고, **"실패했는데 아무 말도 없는" 실패의 모양**이다.
 
-- [ ] **안 하는 되돌림 하나를 적어 둔다**
+- [x] **안 하는 되돌림 하나를 적어 둔다**
 
 **`copy_lib_deps`를 zoxide에만 건너뛰게 하는 것은 안 한다.** 새 라이브러리가
 0이라(실측 2) **아무것도 안 깨진다** — 되돌림이 아무 것도 안 죽이면 그것은
 음성 확인이 아니다. UT-M1·M2에서 이 되돌림이 값을 냈던 것은 그때 사슬이
 열여섯·셋이었기 때문이다.
 
-- [ ] **결과를 적는다**
+- [x] **결과를 적는다**
 
 여섯 번의 실행 결과(셋 × 두 번)를 design의 실측 절에 쓸 수 있게 정리한다.
 **예상과 다른 것이 하나라도 있으면 그것이 이 milestone에서 가장 중요한
@@ -537,7 +608,7 @@ git checkout tools/check.sh
 
 ## Task 6: 루트 게이트
 
-- [ ] **Step 1: 백그라운드로 돌린다**
+- [x] **Step 1: 백그라운드로 돌린다**
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -548,7 +619,7 @@ git checkout tools/check.sh
 58.09초**이고, M0은 부팅을 하나도 안 더하므로 **잡음(±3분) 안에 있어야
 한다.**
 
-- [ ] **Step 2: 체인 열하나가 3/3인지 본다**
+- [x] **Step 2: 체인 열하나가 3/3인지 본다**
 
 ```bash
 grep -c "^PASS" /tmp/gate.log
@@ -559,7 +630,7 @@ tail -5 /tmp/gate.time
 **`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
 `status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
 
-- [ ] **Step 3: 새 도구가 다른 체인을 안 건드렸는지 수로 확인한다**
+- [x] **Step 3: 새 도구가 다른 체인을 안 건드렸는지 수로 확인한다**
 
 ```bash
 grep -ac "Unknown command" /tmp/gate.log          # 0이어야 한다
@@ -574,7 +645,25 @@ grep -ac "Welcome to fish" /tmp/gate.log          # 6 — M0·M1·M2와 같아�
 방식을 안 건드리므로 **6이 그대로여야 한다.** 달라지면 우리가 모르는 영향이
 있는 것이다.
 
-- [ ] **Step 4: 커밋 없음**
+> ⚠ **plan이 틀렸다 (작은 쪽, 2026-09-11).** `templates/description`과
+> `/usr/share/terminfo/x`는 **3이 아니라 0이다.** 그 글자는 게스트
+> **화면**에 있고, 화면 덤프는 체인이 컨테이너 안에 만드는 `$LOG`에 살며
+> **실패했을 때만** 루트 게이트의 stdout으로 나온다. 초록일 때 루트 로그에
+> 남는 것은 체인이 스스로 찍는 `echo` 줄뿐이다 — **대신 셀 것**:
+>
+> ```
+> fzf filtered a file tree                 3
+> zoxide learned a directory               3
+> to drain the guest before the net reads  3
+> all 67 tools the list names              3
+> ```
+>
+> 나머지 넷(`Unknown command` 0 · `error while loading` 0 ·
+> `not a directory` 0 · `Welcome to fish` **6**)은 예상대로였다.
+> **실측: 26분 27.84초, 18 PASS / 0 FAIL, 첫 회차에 통과**(기준선
+> 25분 58.09초에서 +29.75초).
+
+- [x] **Step 4: 커밋 없음**
 
 관측만 한다.
 
@@ -593,7 +682,7 @@ grep -ac "Welcome to fish" /tmp/gate.log          # 6 — M0·M1·M2와 같아�
 - Modify: `docs/superpowers/plans/2026-09-11-tars-shell-memory-sm-m0.md`
   (체크박스를 채운다)
 
-- [ ] **Step 1: design에 실측을 더한다**
+- [x] **Step 1: design에 실측을 더한다**
 
 `## 비목표` 절 **앞**에 새 절을 만든다. 실측 번호는 **16**에서 시작한다
 (1~15는 착수 전 실측이다).
@@ -611,7 +700,7 @@ grep -ac "Welcome to fish" /tmp/gate.log          # 6 — M0·M1·M2와 같아�
 **예상과 달랐던 것을 먼저 쓴다.** 이 저장소의 design은 "맞았다"보다 "틀렸다"를
 더 길게 적는다 — 다음 사람이 쓰는 것이 그쪽이기 때문이다.
 
-- [ ] **Step 2: 기억 파일을 만든다**
+- [x] **Step 2: 기억 파일을 만든다**
 
 `docs/decisions/project_shell_memory.md`. `project_shell_config.md`와 같은
 모양으로 쓰고, **다시 캐지 말 것**을 맨 위에 둔다. 반드시 들어갈 것 셋:
@@ -622,29 +711,29 @@ grep -ac "Welcome to fish" /tmp/gate.log          # 6 — M0·M1·M2와 같아�
    처방이라는 것
 3. **fzf 0.60에 셸 통합이 내장돼 있어 `.deb`의 예제를 안 넣는다는 것**
 
-- [ ] **Step 3: `MEMORY.md`에 한 줄**
+- [x] **Step 3: `MEMORY.md`에 한 줄**
 
 ```markdown
 - [Shell memory](docs/decisions/project_shell_memory.md) — 기계가 배운 것을 /config에 남기고 fzf가 그것을 뒤지는 층(SM, 2026-09-11 착수 · M0 완료) …
 ```
 
-- [ ] **Step 4: `CLAUDE.md`의 목록에 SM을 더한다**
+- [x] **Step 4: `CLAUDE.md`의 목록에 SM을 더한다**
 
 "완료된 서브프로젝트" 문단 끝에 **진행 중**으로 적는다. `Shell
 Config(SC-M0~M2)` 바로 뒤다.
 
-- [ ] **Step 5: `HANDOFF.md`를 새로 쓴다**
+- [x] **Step 5: `HANDOFF.md`를 새로 쓴다**
 
 맨 앞에 SM-M0 절을 넣고 기존 SC-M2 절을 `## 그 앞의 milestone —`으로 민다.
 **"바로 다음에 할 것"은 SM-M1의 plan을 쓰는 것이다**(훅 두 줄 · 결정 6의
 허용 목록 · `config/check.sh`의 6차 부팅).
 
-- [ ] **Step 6: 이 plan의 체크박스를 채우고, 틀린 자리를 표시한다**
+- [x] **Step 6: 이 plan의 체크박스를 채우고, 틀린 자리를 표시한다**
 
 **plan이 틀렸던 자리를 지우지 말고 그 위에 적는다** — SC-M2의 마지막 커밋이
 `Tick off the plan and note where it guessed wrong`인 이유다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md \

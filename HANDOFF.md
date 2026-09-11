@@ -1,4 +1,199 @@
-# HANDOFF: **SM — 새 서브프로젝트를 열고 design과 M0 plan까지 썼다. 코드는 한 줄도 안 고쳤다**
+# HANDOFF: **SM-M0 — 도구 둘이 섰고, 게이트가 자기 그물이 죽어 있었다는 것을 알았다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **SM-M0이 2026-09-11에 끝났다.** `zoxide`와
+`fzf`가 게스트에 서고 `tools/check.sh`가 둘을 타이핑한다. **훅은 아직
+없다** — 그것은 SM-M1이다.
+
+```
+c8706db  Bring two tools that learn into the sysroot
+dec1f8f  Put the two learning tools on the list and change nothing else
+47da921  Type two tools that print paths, and judge on what only they can say
+d1379eb  Give zoxide the keyword it actually matches on
+0505a7f  Wake the net that had been sleeping since it was written
+```
+
+**게이트는 26분 27.84초, 18 PASS / 0 FAIL, 첫 회차에 통과했다**(기준선
+SC-M2의 25분 58.09초에서 **+29.75초**, 잡음 안). 부팅을 하나도 안 더했고
+늘어난 것은 `tools` 체인의 명령 넷 × 세 회차뿐이다.
+
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 *"이번 구현에
+대한 모든 결정을 위임한다"*고 정했다. **이 세션 한정 예외이고 다음 세션은
+다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## **이 세션이 찾은 것 하나 — 게이트의 그물이 쓰인 날부터 죽어 있었다**
+
+**새 도구와 아무 상관이 없고, M0에서 가장 값진 것이다.**
+
+`tools/check.sh`의 맨 뒤 음성 확인이 이렇게 생겨 있었다.
+
+```bash
+if grep -a "terminal: screen>" "$LOG" | grep -aq "Unknown command"; then
+```
+
+`grep -q`가 **첫 매치에서 즉시 나가고**, 3.7MB짜리 로그를 아직 쏟던 앞단
+grep이 SIGPIPE로 죽는다. 스크립트 맨 위의 `set -uo pipefail`이 그 **141**을
+파이프라인 종료 코드로 올리고 `if`는 그것을 **"안 맞았다"로 읽는다** —
+**매치할수록 초록이 되는 검사**였다. 5회 중 5회 재현했다.
+
+**이 파일이 자기 함정에 걸렸다** — 같은 스크립트 검사 1의 주석, `fail()`의
+`|| true`(RM-M2), `gate_lib.sh:108`이 전부 이 함정을 경고하고 있었다.
+**아는 것과 안 밟는 것이 다르다.**
+
+**같은 모양이 저장소에 다섯 더 있다**(`rg '\| *grep -[a-z]*q'`).
+
+| 자리 | 모양 | SIGPIPE가 나면 |
+|---|---|---|
+| **`config/check.sh:552`** | `if … \| grep -qv …; then fail` | **조용한 초록 — 다음 후보다** |
+| `config/check.sh:573·576` | `if ! … \| grep -q …` | 거짓 빨강(시끄럽다) |
+| `machine/check.sh:226·241·288·354` | `if ! … \| grep -aq …` | 거짓 빨강 |
+
+**SM-M0은 자기 그물만 고쳤다** — 다섯은 이 milestone이 만든 것이 아니고,
+고치면 그 체인들을 다시 돌려 판정해야 한다.
+
+## 바로 다음에 할 것 — **SM-M1의 plan을 쓴다**
+
+design의 Milestone 절이 M1을 이렇게 잡아 두었다.
+
+| | 무엇 | 검증 |
+|---|---|---|
+| **SM-M1** | 훅이 걸린다 | `config/check.sh` **6차 부팅**에서 `z tmp`가 돈다 |
+| SM-M2 | 배운 것이 남는다 | **7차 부팅**이 이전 부팅에서 배운 것을 찾는다 |
+
+M1이 건드리는 자리 셋을 design이 이미 지목해 두었다.
+
+| 파일 | 무엇 |
+|---|---|
+| `init/src/config.zig`의 `rcSeed()` | 훅 두 줄이 여기 들어간다 |
+| `init/src/config_test.zig`의 `expectQuietSeed` | **정확 허용 목록으로 넓힌다**(결정 6) |
+| `config/check.sh` | 6차 부팅을 더한다 |
+
+**M1의 훅은 파일이 아니라 플래그를 쓴다** — fzf 0.60에 `--zsh`/`--bash`/
+`--fish`가 내장돼 있고 자동완성까지 함께 낸다(실측 6, 결정 7).
+
+⚠ **씨앗에 쓸 수 있는 줄은 주석과 `alias` 둘뿐이었다**(SC-M1). 훅 두 줄은
+그 규칙을 넓히는 것이고, **부팅할 때 한 글자라도 찍으면 설정 디스크를 붙이는
+다섯 체인의 화면 좌표가 밀린다.** `expectQuietSeed`가 호스트에서 0.1초에
+막는다 — 그것을 넓히는 것이 M1의 가장 조심할 자리다.
+
+⚠ **M1·M2는 Zig를 건드리므로 `rm -rf init/zig-out terminal/zig-out` 함정이
+다시 깨어난다.** M0에서는 잠들어 있었다. 그리고 SC가 세 번 본
+**"`zig build test`가 직전 내용의 결과를 낸다"**도 함께 깨어난다 —
+**음성 확인은 두 번씩 돌릴 것.**
+
+## 이 milestone이 실제로 한 것
+
+| 파일 | 무엇 | 코드 줄 |
+|---|---|---|
+| `devcontainer/Dockerfile` | `.deb` 둘을 amd64 sysroot에 | **+2** |
+| `kernel/guest_tools.sh` | 배열에 층 4 두 줄 | **+2**(주석 포함 +30) |
+| `tools/check.sh` | 검사 17·18 · 관문 하나 · 그물 수리 | +8(주석 포함 +약 120) |
+| **`kernel/make_initrd.sh`** | **한 글자도 안 고쳤다** | **0** |
+| `init/` · `terminal/` | 안 고쳤다 | 0 |
+
+**`make_initrd.sh`가 0인 것이 이 milestone의 성적표다** — UT-M1 결정 7의
+구조가 **바깥에서 온 새 도구에도** 선다.
+
+## 수 몇 개
+
+| | 전 | 후 |
+|---|---|---|
+| initrd gzip | 34,869,668 | **37,162,196**(+2,292,528) |
+| initrd 푼 것 | 90,329,088 | **95,871,488**(+5,542,400 — 예측과 312바이트 차이) |
+| 도구 수 | 65 | **67** |
+| tmpfs 벽까지 여유 | — | **약 165MiB**(벽은 RAM 512의 절반 = 256MiB) |
+
+바이너리는 zoxide **1,173,976**(`libgcc_s·libm·libc`) · fzf **4,368,112**
+(`libc`). **새 라이브러리 0** — 예측이 그대로 맞았고 그래서
+`copy_lib_deps`를 깨뜨리는 되돌림을 **안 했다**(아무것도 안 죽는 되돌림은
+음성 확인이 아니다).
+
+## plan이 틀렸던 자리 셋 — **다시 밟지 말 것**
+
+**1. `zoxide query terminfo`는 영원히 못 찾는다.** zoxide는 **마지막
+키워드가 경로의 마지막 컴포넌트와 맞을 것을 요구한다.**
+
+```
+$ zoxide query --list     → /usr/share/terminfo/x   ← 정규화는 맞았다
+$ zoxide query terminfo   → zoxide: no match found  rc=1
+$ zoxide query terminfo x → /usr/share/terminfo/x   rc=0
+```
+
+design 실측 15가 틀린 것이 아니다 — 그때는 `fonts`로 쟀고 마지막 컴포넌트가
+마침 `fonts`였다. **정규화는 이름 붙였는데 그 옆의 불변식은 이름 붙이지
+않았다.**
+
+**2. 되돌림 2의 예상이 반대였다** — 위의 "이 세션이 찾은 것".
+
+**3. 루트 게이트에서 `templates/description`·`/usr/share/terminfo/x`는
+0이다**(3이 아니다). 그 글자는 게스트 **화면**에 있고 화면 덤프는
+**실패했을 때만** 루트 stdout으로 나온다. 초록일 때 셀 것은 체인이 스스로
+찍는 `echo` 줄이다(`fzf filtered a file tree` 등 넷, 각 3).
+
+## 되돌림 셋이 각각 보여 준 것
+
+| | 무엇을 깨뜨렸나 | 무엇을 봤나 |
+|---|---|---|
+| **1** | `guest_tools.sh`에서 `fzf` 줄 | **정적 목록 검사의 tautology** — `all 66 tools`로 초록이고 타이핑만 죽는다 |
+| **2** | zoxide 바이너리 + 검사 18의 `..` | 검사 18이 **초록으로 거짓말**하고 — 예상과 달리 — **그물도 못 잡았다** |
+| **3** | fzf의 walker root를 `/config`로 | **"실패했는데 아무 말도 없는" 실패의 모양.** 화면에 에러가 한 줄도 없다 |
+
+**전부 두 번씩 돌렸고 두 번 다 같았다**(SC가 세 번 본 "낡은 결과" 때문에 이
+저장소의 규칙이다).
+
+**안 한 되돌림 하나:** `copy_lib_deps`를 건너뛰게 하는 것. 새 라이브러리가
+0이라 아무것도 안 죽는다.
+
+## 안 한 것 · 안 물어본 것
+
+| | 왜 |
+|---|---|
+| 훅 · 히스토리 · `XDG_DATA_HOME` | **M1·M2다** |
+| `config/check.sh`의 6·7차 부팅 | 같다 |
+| `grep -q` 다섯 자리를 고치는 것 | 이 milestone이 만든 것이 아니다. **`config/check.sh:552`가 다음 후보** |
+| `git-delta` | 비목표 1 — 사용자가 범위에서 뺐다 |
+| zsh 두 세션의 겹쳐 쓰기 | 위험 3으로 알고 둔다 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-memory-design.md` | **SM의 전부.** 착수 전 실측 1~15 + **M0이 실행으로 증명한 16~22** |
+| `docs/decisions/project_shell_memory.md` | **새 파일.** 다시 캐지 말 것 셋 + 게이트에서 찾은 것 |
+| `docs/.../plans/2026-09-11-tars-shell-memory-sm-m0.md` | 체크박스 전부 채움. **틀린 자리 셋에 `⚠ plan이 틀렸다` 블록** |
+| `tools/check.sh:670~` | **그물과 관문.** 주석이 왜 `-q`가 없는지를 스스로 적는다 |
+| `kernel/guest_tools.sh`의 층 4 | 새 도구가 들어가는 자리. **M1은 여기를 안 건드린다** |
+| `init/src/config.zig`의 `rcSeed()` | **M1이 여는 첫 파일** |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash tools/check.sh 2>&1 | grep -aE "^(FAIL|PASS)"     # 약 40초
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time    # 약 26분
+
+# 체인의 시리얼 로그를 꺼내 보는 법 (이 세션이 처음 썼다)
+docker run --rm -v "$PWD":/workspace -v /tmp/tarsout:/out -w /workspace \
+  tars-devcontainer bash -c \
+  'bash tools/check.sh > /out/stdout.log 2>&1; cp /tmp/tmp.* /out/serial.log'
+```
+
+**기준선: SM-M0의 열한 체인 3/3 = 26분 27.84초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+---
+
+## 그 앞의 세션 — SM 착수 (2026-09-11)
+
+**새 서브프로젝트를 열고 design과 M0 plan까지 썼다. 코드는 한 줄도 안 고쳤다**
 
 ## 지금 어디인가
 
