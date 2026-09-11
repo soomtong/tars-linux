@@ -1,113 +1,192 @@
-# HANDOFF: Userland Tools UT-M2 — 계획과 실측이 섰다. **편집 한 자리부터 시작한다**
+# HANDOFF: Userland Tools UT-M2 완료 — **도구 63개가 섰고, 게이트 자신의 것 둘을 고쳤다**
 
 ## 지금 어디인가
 
-`main`. **working tree에 plan 파일 하나가 있고 나머지는 깨끗하다.**
-2026-09-11 두 번째 세션은 **코드를 한 줄도 안 고쳤다** — UT-M2를 재고
-계획했다. 게이트도 안 돌렸다(고친 것이 없으니 돌릴 것이 없다).
+`main`, working tree 깨끗함. **UT-M2가 2026-09-11(세 번째 세션)에 끝났다.**
+게스트에 **도구 63개**가 서 있다 — GNU 한 벌 50에 **모던 열셋**이 더해졌고,
+이름은 Debian이 아니라 **우리가 정한 것**으로 선다.
 
-**이 세션은 기본 규칙이다 — 파일 편집은 사용자가 한다.** UT-M0·M1의 위임은
-그 세션 한정이었고 이미 끝났다. 다음 세션도 사용자가 따로 위임하지 않는 한
-기본 규칙이다.
+```
+root@(none) ~# eza vendor
+fonts
+root@(none) ~# fd otf vendor
+vendor/fonts/unifont.otf
+root@(none) ~# jq --version
+jq-1.7
+```
 
-**사용자가 목록에 `btop`을 더하라고 했다**(세션 중간에). 재 보고 넣기로 했고
-근거는 아래에 있다. **그래서 층 2가 열둘이 아니라 열셋이다** — design의
-최종 목록과 milestone 표는 아직 열둘이라고 적고 있으니, UT-M2를 끝낼 때
-함께 고친다.
+**게이트는 열한 체인 3/3으로 23분 02.73초다**(UT-M1의 21분 35.63초에서
++1분 27.10초. initrd가 gzip으로 18.6MB 커졌고 회차마다 39번 부팅한다. 잡음
+±3분 안이다).
 
-## 바로 다음에 할 것 — **plan의 Task 0, 편집부터**
+**`kernel/make_initrd.sh`를 한 글자도 안 고쳤다** — M1의 결정 7이 값을 낸
+자리이고, 이것이 이 milestone의 성적표다.
 
-**plan:** `docs/superpowers/plans/2026-09-11-tars-userland-tools-ut-m2.md`
-(Task 일곱이 전부 코드와 명령까지 적혀 있다. **그 파일이 지시서다.**)
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 외출하며
+"이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. **이 세션 한정
+예외이고 다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
 
-| | 무엇 | 누가 |
+## 바로 다음에 할 것 — **UT-M3의 plan을 쓴다**
+
+**남은 milestone은 UT-M3 하나다**(git · `vim.tiny` · 결정 8). design의
+milestone 표가 그것만 남기고 있고, `CLAUDE.md`의 규칙대로 **그 plan은 그
+시점에 새로 쓴다.**
+
+UT-M3 착수 전에 **반드시 먼저 할 것 하나**: `.deb`를 풀고
+`copy_lib_deps`와 **같은 규칙**(`readelf -d`의 `DT_NEEDED`를 `.so`까지 재귀)
+으로 폐포를 재라. **M1이 그것을 안 해서 라이브러리 둘을 놓쳤고, M2가 30초
+들여 해서 빌드를 한 번에 통과했다.** design은 "층 3은 새 라이브러리가 없다"
+고 적고 있는데 **그 문장이 M1·M2에서 두 번 다 틀렸다.**
+
+## **UT-M2가 계획을 깼다 — 먼저 읽을 것**
+
+plan은 Task 일곱을 적어 뒀고 일곱 다 했다. 그런데 **계획에 없던 것 둘이
+나왔고, 둘 다 도구가 아니라 게이트 자신의 문제였다.**
+
+### 1. QEMU의 기본 메모리 128MiB에서 **기계가 안 켜진다**
+
+첫 체인 실행이 도구가 아니라 **부팅**에서 죽었다.
+
+```
+[    1.265957] Kernel panic - not syncing: System is deadlocked on memory
+```
+
+initramfs는 tmpfs다 — **푼 84MB가 통째로 RAM에 남는다.** 커널 코드와 예약이
+48MB라 128MiB 안에 자리가 없다. 넷을 재서 경계를 찾았다: **128은 panic,
+256부터 뜬다**(512·1024도 뜬다).
+
+**이것이 UT-M0 실측 15("크기의 벽이 없었다")의 반대편이다.** 그 78MB
+스파이크도 128MiB에서 돌았고, **78은 되고 84는 안 되는 경계 위를 지나온
+것이다.** 남은 여유를 아무도 안 쟀다.
+
+처방은 `gate_lib.sh`의 **`GUEST_MEM=512`**다. 512인 이유는 256이 뜨긴 하지만
+tmpfs 84MB를 빼면 여유가 125MB뿐이고 **UT-M3이 git과 vim.tiny를 더하기**
+때문이다.
+
+**저장소의 QEMU 호출 열둘 중 `machine/check.sh`만 RM 때부터 `-m 512`를 손으로
+갖고 있었다** — 나머지 열하나는 QEMU의 기본값으로 돌고 있었고, **아무도 그
+수를 고른 적이 없다는 것이 UT-M2 전까지 드러나지 않았다.** 이제 열둘 전부가
+`-m "$GUEST_MEM"`이고, 타이핑을 안 하는 `boot/check.sh`·`device/check.sh`도
+**이 수 하나 때문에** `gate_lib.sh`를 source한다.
+
+**실기에는 영향이 없다** — 128MiB는 QEMU의 기본값이지 이 기계의 요구사항이
+아니다. **게이트만의 제약이라 실기에서는 영원히 안 보였을 것이다.**
+
+### 2. `sleep 2`가 짐작이었고 **8회 중 2회 틀렸다**
+
+메모리를 고친 뒤 체인이 `fd`에서 깨졌다가 `eza`에서 깨졌다가 했다. 도구
+문제로 보였는데 — **깨진 회차의 마지막 화면에 찾던 글자가 정확히 찍혀
+있었다.**
+
+```
+eza vendor | fonts | root@(none) ~# fd otf vendor | vendor/fonts/unifont.otf
+```
+
+**출력이 틀린 것이 아니라 검사가 먼저 본 것이다.** 같은 시퀀스를 여덟 번
+돌려 **6/8**을 쟀다.
+
+원인은 `ps ax`다. 화면을 통째로 채운 뒤로 격자 전체를 다시 그려야 하고
+(RC-M0: 한 프레임의 84.7%가 `fill`), 게이트는 **arm64 호스트에서 x86_64를
+TCG로 흉내내는 중**이라 그 한 프레임이 2초를 넘는 회차가 있다.
+**`fd` 하나만 따로 여덟 번 치면 8/8이다** — 앞의 `ps ax`가 있어야 재현된다.
+
+처방은 `gate_lib.sh`의 **`wait_for_screen`**(15초까지 0.1초 간격, 찾으면 즉시
+귀환). **`type_keys`가 GL-M2에서 배운 것과 글자 그대로 같은 교훈**이고 값도
+같은 방향이다 — UT 체인의 고정 sleep 합계 17초가 부팅마다 사라져
+**게이트를 느리게 하지 않고 빠르게 한다.**
+
+**루트 게이트 안에서는 스물네 번의 기다림이 한 번도 2초를 안 넘었다**
+(`the screen took about` 줄 0회). 직접 재현의 2/8과 모순이 아니다 — 그
+회차들이 필요로 한 시간이 2초를 **조금** 넘는 것이었고 게이트는 체인을 하나씩
+돌려 기계가 덜 바쁘다. **고침이 필요 없었다는 뜻이 아니라, 고침이 있으면 이
+차이가 보이지 않는다는 뜻이다.**
+
+**나머지 열 체인은 아직 고정 sleep이다.** 깨지는 것을 본 자리만 고쳤다 —
+그쪽은 3/3을 여러 판 지나왔다. **다음에 깨지는 체인이 있으면 그 체인이 이
+함수를 쓰면 된다.**
+
+## UT-M2의 커밋들
+
+| | 파일 | 커밋 |
 |---|---|---|
-| **0** | `devcontainer/Dockerfile` — `.deb` 13 + 라이브러리 19 · 이미지 재빌드 | **편집: 사용자** / 빌드: Claude |
-| **1** | `kernel/guest_tools.sh` — 열세 줄 | **편집: 사용자** |
-| **2** | `tools/check.sh` — 정적 둘 + 화면 검사 셋 | **편집: 사용자** |
-| **3** | `check.sh`의 `CHAINS` 한 줄(`UT-M1`→`UT-M2`) | **편집: 사용자** |
-| **4** | 음성 확인 둘 | Claude |
-| **5** | 루트 게이트(백그라운드 22~25분) | Claude |
-| **6** | 문서 넷 | Claude |
+| plan | `.../plans/2026-09-11-tars-userland-tools-ut-m2.md` | `c90586d` |
+| Task 0 | `devcontainer/Dockerfile`(`.deb` 13 + 라이브러리 19) | `0b95f31` |
+| Task 1 | `kernel/guest_tools.sh`(열세 줄) | `9a1533d` |
+| **계획 밖 1** | `gate_lib.sh`의 `GUEST_MEM` + 체인 열하나 | `5f00c8b` |
+| Task 2 | `tools/check.sh`(검사 8·9·10 + 정적 둘) | `d0ac30d` |
+| Task 3 | `check.sh`의 `CHAINS` | `a9dc4f7` |
+| **계획 밖 2** | `gate_lib.sh`의 `wait_for_screen` | `5fb9bcf` |
+| Task 6 | design · 기억 · MEMORY · CLAUDE · HANDOFF | 이 커밋 |
 
-**Task 0의 "넣을 것" 두 덩어리가 plan 안에 그대로 있다** — 주석 블록 하나와
-`util-linux:amd64 \` 뒤에 붙일 패키지 32줄. 지울 것은 없다.
+**Task 4(음성 확인)와 Task 5(게이트)는 커밋이 없다** — 코드를 일부러 뒤로
+되돌렸다가 `git checkout`으로 복구했고, 결과는 design의 실측 33에 있다.
 
-**`kernel/make_initrd.sh`는 한 글자도 안 고친다.** 고쳐야 한다면 UT-M1의
-결정 7(목록을 한 자리로)이 값을 못 낸 것이고, 그것이 이 milestone의
-성적표다.
+## UT-M2가 실행으로 증명한 것 — **다시 조사하지 말 것**
 
-## 이 세션이 실측한 것 — **다시 조사하지 말 것**
+전문은 design의 **"UT-M2가 실행으로 증명한 것"** 절(실측 30~37)에 있다.
+위의 "계획을 깼다" 둘 말고 넷 더.
 
-컨테이너 안에서 `.deb` 서른둘을 풀고 `copy_lib_deps`와 **같은 규칙**
-(`readelf -d`의 `DT_NEEDED`를 `.so`까지 재귀, `find_in_sysroot`의 디렉터리
-넷)으로 폐포를 쟀다. HANDOFF이 "30초짜리 보험"이라고 지목한 자리다.
+**1. 사슬이 15가 아니라 16이다 — 그런데 Dockerfile은 안 고쳤다.**
+`libkrb5`가 **`libresolv.so.2`**를 데려오고 `libcrypto`는 `libgit2` 직접이
+아니라 **`libssh2`를 거친다.** **`libresolv`는 `libc6`이 담고 있어 적으면
+apt가 "없는 패키지"라고 죽는다.** 착수 전 실측이 `MISSING=0`을 말했고
+**빌드가 한 번에 통과했다.**
 
-**1. `MISSING`이 0이다.** plan의 패키지 목록이면 `make_initrd.sh`가 소네임을
-못 찾아 죽는 일이 없다. **빌드가 통과할 것을 빌드 전에 안다.**
+**2. `btop`은 4.01MB이고 `libstdc++`의 유일한 사용자다.** 기존 50과 층 2의
+나머지 열둘 전부의 `DT_NEEDED`를 확인했다. **빼는 사람은 `libstdc++6`도
+함께 뺀다.**
 
-**2. design 실측 5의 사슬이 15가 아니라 16이다.**
+**3. 크기와 부팅.** gzip 13,434,703 → **32,007,022**, 푼 크기 38,840,832 →
+**84,417,024**. `make_initrd.sh` 전체가 **3.449초**이고 프롬프트까지
+**2.24~2.45초**다. **압축기 교체 카드를 이번에도 안 썼다** — 비용의 자리가
+압축도 부팅도 아니다.
 
-```
-libgit2.so.1.9 → libgssapi_krb5 → libkrb5 → libresolv.so.2   ← 표에 없던 줄
-               → libssh2 → libcrypto.so.3 → libz · libzstd   ← libgit2 직접이 아니다
-```
+**4. 음성 확인에서 검사 1이 또 tautology였다.** dest를 `fdfind`로 되돌리면
+검사 1은 **초록**이고 검사 9가 `Unknown command: fd`로 죽는다.
+`copy_lib_deps`를 **eza·bat 둘에만** 건너뛰면 검사 8이
+`error while loading shared libraries: libgit2.so.1.9`로 죽고 **검사 1~7은
+전부 초록으로 지나간다** — M1의 처방("겨냥한 도구만 건너뛰게 한다")이 그대로
+먹은 모양이다.
 
-**그런데 Dockerfile은 안 고쳐도 된다** — `libresolv`는 `libc6`이 담고 있고
-그것은 이미 sysroot에 있다. **`libresolv`를 패키지 목록에 적으면 apt가
-"없는 패키지"라고 죽는다.**
+## 게이트가 UT에 대해 보는 것 — `tools/check.sh`의 검사 열하나
 
-**3. 크기.** 바이너리 열둘 28,593,592 + 새 라이브러리 19 소네임 12,969,880
-+ btop 한 벌 4,008,264 = **약 45.6MB**. design의 "층 2 = 27.3MB"는 `.deb`
-압축 크기가 섞인 값이다. **크기는 벽이 아니다**(UT-M0 실측 15).
-
-**4. `.deb` 안의 경로 — design 실측 9가 맞다.** `fd`의 실체는
-`usr/lib/cargo/bin/fd`(3,504,736)이고 `usr/bin/fdfind`가 상대 심볼릭 링크다.
-`bat`은 `usr/bin/batcat`. **실체의 경로를 src로 적는다.**
-
-**5. `btop`을 쟀다.** trixie에 있다(1.3.2-0.1). 바이너리 1,510,496 +
-**`libstdc++.so.6` 2,497,768 하나** = 4.01MB. **게스트에서 btop이
-`libstdc++`의 유일한 사용자다**(기존 50 + 층 2의 열둘 전부 확인) —
-**btop을 빼는 사람은 `libstdc++6`도 함께 뺀다.** 테마 63,503바이트는 안
-넣는다(내장 Default로 돈다). UTF-8 요구는 이미 충족돼 있다 — terminal이
-`LANG=C.UTF-8`을 넘기고(`terminal/src/main.zig:1028`) `usr/lib/locale/C.utf8`이
-initrd에 있다(HI-M1).
-
-**6. `bat`의 헤더 문자열 `File: `이 바이너리에서 확인되지 않았다**
-(`strings`로 봤다). `-P`(`--paging=never`)는 있다. **그래서 게이트가 bat을
-타이핑하지 않는다** — 낼 수 있는 글자가 전부 검사 6·7과 겹친다.
-
-## 게이트 검사를 셋으로 정한 이유 — 각각 다르다
+M1의 여덟에 셋이 늘었다. **치는 것은 일곱, 못 치는 것은 넷이고 못 치는
+이유가 각각 다르다.**
 
 | 치는 것 | 판정 글자 | 무엇을 보나 |
 |---|---|---|
-| `eza vendor` | `fonts` | **libgit2 사슬 열여섯**이 런타임에 풀리는가. M1의 `ps ax` 자리를 잇는다 |
-| `fd otf vendor` | `unifont` | 결정 4의 이름 바꾸기. **인자 `vendor`가 중요하다** — 인자가 없으면 `/proc`·`/sys`를 훑어 화면을 뒤덮는다 |
-| `jq --version` | `jq-[0-9]` | `libjq`→`libonig`. 게스트에 JSON 파일이 없고, **이 검사가 보는 것은 파싱이 아니라 동적 링크**라 `--version`으로 충분하다 |
+| `eza vendor` | `fonts` | **UT-M2의 심장.** libgit2 사슬 **열여섯**이 런타임에 풀리는가 |
+| `fd otf vendor` | `unifont` | 결정 4의 이름 바꾸기. **인자 `vendor`가 중요하다** — 없으면 `/proc`·`/sys`를 훑어 화면을 뒤덮는다 |
+| `jq --version` | `jq-[0-9]` | `libjq`→`libonig`. **보는 것은 파싱이 아니라 동적 링크**다 |
 
-**안 치는 넷과 그 이유가 각각 다르다.** `htop`·`btop`·`ncdu`는 대화형이라
-매달린다(실측 26). `bat`은 판정 글자를 못 만든다. **그래서 그 셋이 쓰는
-`libncursesw.so.6`·`libstdc++.so.6`은 검사 1이 정적으로만 본다** — 게이트가
-그 셋에 대해 볼 수 있는 전부가 그것이고, 알고 두는 것이 낫다.
-
-## 음성 확인 둘을 미리 정해 뒀다 (plan Task 4)
-
-| 무엇을 되돌리나 | 무엇이 죽어야 하나 |
+| 안 치는 넷 | 왜 |
 |---|---|
-| `usr/bin/fd` → `usr/bin/fdfind` | **검사 1은 초록**(같은 배열을 읽는 tautology — 실측 24) · **검사 9가 FAIL** |
-| `install_tool`에서 `copy_lib_deps`를 **eza와 bat 둘에 대해서만** 건너뛴다 | 검사 8이 `error while loading shared libraries: libgit2.so.1.9` |
+| `htop` · `btop` · `ncdu` | 대화형이라 체인이 **타임아웃으로** 매달린다(M1의 `less`·`top`과 같다) |
+| `bat` | **판정 글자를 못 만든다** — 낼 수 있는 글자가 전부 검사 6·7과 겹치고 헤더의 `File: `는 바이너리에서 확인되지 않았다 |
 
-**둘 다 건너뛰어야 하는 것이 M1이 배운 것이다**(실측 25) — 하나만 빼면
-나머지가 같은 사슬을 데려와 아무것도 안 드러난다(`ps`와 `top`이 그랬다).
-**M2는 Zig를 안 건드리므로 실측 18의 `zig-out` 함정은 이번에 없다.**
+**그래서 그 넷이 쓰는 `libncursesw.so.6`·`libstdc++.so.6`은 검사 1이 정적으로만
+본다** — 게이트가 그 넷에 대해 볼 수 있는 전부이고, **알고 두는 것이 낫다.**
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-10-tars-userland-tools-design.md` | **먼저 읽는다.** 실측 37 · 비목표 8 · 결정 9 · 위험 4 |
+| `docs/decisions/project_userland_tools.md` | 이 서브프로젝트의 기억. 다시 캐지 말 것이 여기 있다 |
+| **`kernel/guest_tools.sh`** | **UT-M3이 여기에 줄을 더한다.** 그 외에 고칠 자리가 없다 |
+| **`gate_lib.sh`** | **`GUEST_MEM`과 `wait_for_screen`.** payload를 키우거나 새 화면 검사를 쓰는 사람이 보는 자리 |
+| `kernel/make_initrd.sh` | 뼈대와 특수 트리(fish shares · locale · terminfo · zsh 모듈)는 여전히 손으로 쓴다 |
+| `devcontainer/Dockerfile:99-163` | `apt-get download` 목록. **UT-M3이 여기를 넓힌다** |
+| `tools/check.sh` | UT 체인. milestone마다 검사가 자란다 |
+| `copy/check.sh`의 `col 20` | **게스트의 사용자 데이터베이스를 건드리면 여기도 본다** |
 
 ## 명령 모음
 
 ```bash
-git status --short
+git status --short     # 비어 있어야 한다
 open -a OrbStack       # 첫 docker 명령 전에
 
-docker build -t tars-devcontainer devcontainer/   # Task 0. 3~5분, 네트워크
+docker build -t tars-devcontainer devcontainer/   # 도구를 더한 뒤. 3~5분, 네트워크
 
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash tools/check.sh                             # UT 체인 단독, 3~5분
@@ -116,8 +195,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
 ```
 
-**기준선: UT-M1의 열한 체인 3/3 = 21분 35.63초.** M2 뒤에 얼마나 느는지를
-그 수에서 읽는다(잡음 ±3분).
+**기준선: UT-M2의 열한 체인 3/3 = 23분 02.73초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**코드를 되돌린 뒤에는 `rm -rf init/zig-out`을 한 번 한다**(실측 18).
+**M2는 Zig를 한 글자도 안 건드려서 이번엔 그 함정이 없었다.**
 
 ---
 
