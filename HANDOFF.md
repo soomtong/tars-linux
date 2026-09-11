@@ -1,4 +1,180 @@
-# HANDOFF: **SM-M0 — 도구 둘이 섰고, 게이트가 자기 그물이 죽어 있었다는 것을 알았다**
+# HANDOFF: **SM-M1 — 훅이 걸렸고, 첫 회차를 믿을 수 없다는 것을 재서 알았다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **SM-M1이 2026-09-12에 끝났다.** 씨앗 rc 셋이
+`zoxide`·`fzf`의 훅을 담고, `config/check.sh`가 **부팅 일곱**으로 늘어 그 훅이
+실제로 걸리는 것을 본다. **`XDG_DATA_HOME`·히스토리는 아직 없다** — 그것은
+SM-M2다.
+
+**게이트는 27분 05.06초, 18 PASS / 0 FAIL, 첫 회차에 통과했다**(기준선 SM-M0의
+26분 27.84초에서 **+37.22초**. 부팅이 둘 늘어 회차마다 여섯 번 더 켜졌으니
+**부팅당 약 6초**이고, design 위험 5가 "+40초 안쪽"으로 본 것과 맞는다).
+
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-12에 *"이번 구현에
+대한 모든 결정을 위임한다"*고 정했다. **이 세션 한정 예외이고 다음 세션은 다시
+기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## 이 milestone이 실제로 한 것
+
+| 파일 | 무엇 | 줄 |
+|---|---|---|
+| `init/src/config.zig` | `hookLines()` + 씨앗 셋에 훅 두 줄 | +93 / −11 |
+| `init/src/config_test.zig` | `expectQuietSeed`를 **양방향 + 덮개**로 | +약 100 |
+| `config/check.sh` | 부팅 **둘**(6차 수리 · 7차 증명) | +약 280 |
+| `kernel/` · `terminal/` · `devcontainer/` | **안 고쳤다** | 0 |
+
+## 바로 다음에 할 것 — **SM-M2의 plan을 쓴다**
+
+| | 무엇 | 검증 |
+|---|---|---|
+| **SM-M2** | 배운 것이 남는다(design 결정 2·3·4·9) | **8차 부팅**이 7차에서 배운 디렉터리와 명령을 찾는다 |
+
+M2가 건드리는 자리를 design이 이미 지목해 두었다.
+
+| 파일 | 무엇 |
+|---|---|
+| `init/src/environ.zig` | env **넷**을 더한다 — `XDG_DATA_HOME` · `HISTFILE` · `HISTSIZE` · `SAVEHIST`(결정 3) |
+| `init/src/main.zig` | `/config/xdg`를 `seedRcFiles` 옆에서 `mkdir`(결정 9) |
+| `config/check.sh` | **8차 부팅** |
+
+**8차가 싼 이유를 적어 둔다** — 7차가 DB에 넣는 것이
+`/usr/share/terminfo/x` 하나이고, `XDG_DATA_HOME`이 켜지면 **그 하나가 8차까지
+살아남는다.** 그래서 8차는 `cd`를 한 번도 안 치고 `z terminfo x` → `pwd`만으로
+판정한다 — **7차가 8차를 진짜로 만든다.**
+
+⚠ **`HISTFILE`은 셸마다 다른 파일이어야 한다**(형식이 다르다 — zsh는
+`: <ts>:<dur>;<cmd>`, bash는 평문). init이 `cfg.shell`을 이미 알고 있으므로 그
+자리에서 정한다.
+
+⚠ **M2는 씨앗을 안 건드려도 된다**(결정 3 — 히스토리 줄이 rc에 한 줄도 필요
+없다). 그러면 `expectQuietSeed`도 안 건드린다.
+
+## **이 세션이 잰 것 하나 — 음성 확인의 첫 회차를 믿을 수 없다**
+
+**새 코드와 아무 상관이 없고, 이번에 가장 값진 것이다.**
+
+되돌림의 **첫 회차가 두 번 거짓 초록이었다.** SC가 세 번 보고
+*"`zig build test`가 직전 내용의 결과를 낸다"*고 적어 둔 그 증상이고, 이번에는
+넘기지 않고 쟀다.
+
+| 조건 | 깨뜨린 것을 첫 회차가 잡았나 |
+|---|---|
+| 따뜻한 캐시 | **5회 중 4회.** 1회는 거짓 초록 |
+| **`rm -rf init/.zig-cache init/zig-out`** | **4회 중 4회** |
+
+**`--summary all`의 `cached` 수로는 어느 회차를 믿을지 갈릴 수 없다** — 그래서
+*"두 번 돌린다"*가 처방이 안 된다. 바인드 마운트는 범인이 아니다(10/10 새
+내용). 본문은 **`docs/decisions/project_zig_out_staleness.md`**(새 파일).
+
+⚠ **그리고 이 세션이 여기서 한 번 틀렸다.** 처음에는 *"범인은 install 단계이고
+`zig-out`을 지우면 된다"*고 결론을 냈는데 `init/build.zig`가 `config_test`를
+**install하지 않는다** — 관측 넷이 우연히 맞았던 것이다. **인과를 문서에 적기
+전에 그것이 코드에서 가능한지 먼저 보는 것**이 이 자리의 교훈이다.
+
+⚠ **이 세션이 사고도 하나 냈다.** 되돌림을 복구하려고 `git checkout
+init/src/config.zig`를 쳤는데, 그 파일에는 **이 milestone의 구현 전부**가
+커밋 전 상태로 들어 있었다 — 한 줄 되돌리려다 93줄을 지웠다. `/tmp`의 백업으로
+복구하고 체인을 다시 돌려 확인했다. **커밋 안 한 구현이 있는 파일에
+`git checkout`을 쓰지 않는다.**
+
+## design이 틀렸던 자리 둘 — **다시 밟지 말 것**
+
+**1. 부팅이 하나가 아니라 둘 필요했다.** 결정 8이 M1에 6차 하나를 배정했는데,
+그 시점의 `/config/zshrc`에는 **3차가 심은 `exit`가 아직 있다.** 그것을 읽는
+부팅은 셸이 죽고 탈출로가 **rc 없이** 되살리므로 훅도 함께 안 걸린다. 그래서
+**6차가 `tars.noconfig`로 떠서 그 파일을 지우고 7차가 증명한다.**
+**design이 부팅을 세면서 앞 부팅들이 남긴 디스크 상태를 안 봤다.**
+
+**2. 결정 8의 6차 시퀀스가 자기 함정에 걸려 있었다.** `cd /tmp` → `z tmp` →
+`pwd`로 `/tmp`을 보는 것인데 **그 글자가 방금 타이핑한 줄에 있다.** 실측 15가
+스스로 경고한 함정이고, 경고한 문서가 다음 절에서 밟았다. 7차는 `..`가 든
+경로로 간다.
+
+## 게이트가 훅을 판정하는 법
+
+```
+cd /usr/bin/../share/terminfo/x     ← 훅이 여기서 배운다(chpwd)
+cd /
+z terminfo x
+pwd  →  /usr/share/terminfo/x       ← 이 글자를 만들 수 있는 것은 DB 하나뿐
+whence -w fzf-history-widget  →  fzf-history-widget: function
+```
+
+**`tools/check.sh` 검사 18과 판정 글자가 같고 차이는 누가 `add`를 불렀나
+하나다** — 그 검사는 사람이 쳤고 이쪽은 **아무도 안 친다.**
+
+**`function`이다 `widget`이 아니다**(실측 24 — design은 명령만 적고 출력을 안
+적었다).
+
+## 되돌림 넷이 각각 보여 준 것
+
+| | 무엇을 깨뜨렸나 | 무엇을 봤나 |
+|---|---|---|
+| **A** | 씨앗에 `echo` 한 줄 | 정방향이 잡는다(0.1초) |
+| **B** | 씨앗에서 훅 한 줄 | **역방향**이 잡는다 — 이 milestone의 새 그물 |
+| **B2** | 훅을 **두 자리에서 함께** | **덮개**가 잡는다 |
+| **C** | zoxide 훅만(`command -v zoxide-nope`) | 7차의 `z` 판정이 빨강. **`whence` 판정에는 안 닿는다** |
+| **D** | fzf 훅만 | **`z`는 초록, 위젯만 빨강** — 판정 둘이 독립이다 |
+
+**C·D는 두 번씩, A·B·B2는 캐시를 비우고 한 번씩 재확인했다.**
+
+## 안 한 것 · 안 물어본 것
+
+| | 왜 |
+|---|---|
+| `XDG_DATA_HOME` · 히스토리 넷 · `/config/xdg` | **M2다** |
+| 8차 부팅 | 같다 |
+| 위험 3(zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다) | **알고 둔다.** `setopt APPEND_HISTORY`는 허용 목록을 한 줄 더 넓히는 일이다 |
+| `grep -q` 다섯 자리 | M0이 남긴 숙제. `config/check.sh:552`가 다음 후보 |
+| `check.sh`의 `CHAINS` 라벨(`CP-M2`) | SC-M2도 안 고쳤다 — 체인을 **만든** milestone의 이름으로 둔다 |
+| `git-delta` | 비목표 1 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-memory-design.md` | **SM의 전부.** 실측 1~22(M0) + **M1이 잰 23~33** · 결정 10·11이 새로 섰고 **결정 8에 정정 블록**이 붙었다 |
+| `docs/decisions/project_zig_out_staleness.md` | **새 파일.** 음성 확인을 하는 사람이 먼저 읽을 것 |
+| `docs/decisions/project_shell_memory.md` | M0·M1이 배운 것 전부 |
+| `docs/.../plans/2026-09-12-tars-shell-memory-sm-m1.md` | 체크박스 전부 채움. **틀린 자리에 `⚠ plan이 틀렸다` 블록** |
+| `init/src/config.zig`의 `hookLines()` | **두 벌 중 한 벌.** 다른 한 벌은 같은 파일의 씨앗 셋이고, 잇는 것은 컴파일러가 아니라 `config_test.zig` |
+| `config/check.sh`의 `probe_shell_hooks` | **7차의 판정 둘.** M2가 8차를 여기 옆에 붙인다 |
+| `init/src/environ.zig` | **M2가 여는 첫 파일** |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+# ★ Zig를 고친 뒤 음성 확인을 할 때는 먼저 지운다(위의 "잰 것 하나")
+rm -rf init/.zig-cache init/zig-out terminal/.zig-cache terminal/zig-out
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'cd init && zig build test'                      # 약 20초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash config/check.sh 2>&1 | tail -40                     # 약 1분 40초, 부팅 일곱
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time      # 약 27분
+
+# 씨앗의 실제 바이트를 꺼내 보는 법 (SM-M1이 처음 썼다)
+#   init/src/seed_dump.zig 를 임시로 만들고
+#   for (std.enums.values(config.Shell)) |sh|
+#       std.debug.print("===== {s}\n{s}", .{ @tagName(sh), sh.rcSeed() });
+#   docker run … bash -c 'cd init && zig run src/seed_dump.zig'
+```
+
+**기준선: SM-M1의 열한 체인 3/3 = 27분 05.06초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+---
+
+## 그 앞의 세션 — SM-M0 (2026-09-11): 도구 둘이 섰고, 게이트가 자기 그물이 죽어 있었다는 것을 알았다
 
 ## 지금 어디인가
 

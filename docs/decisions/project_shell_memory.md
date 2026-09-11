@@ -1,6 +1,6 @@
 ---
 name: project_shell_memory
-description: "기계가 사용자에게서 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)을 부팅 너머로 남기는 층(SM) — 2026-09-11 착수, SM-M0 완료. M0은 zoxide·fzf를 게스트에 세우기만 하고 훅은 안 건다. M0이 배운 것 셋: SC 결정 1의 링크 패턴을 기각한 근거 · 판정 글자가 타이핑한 줄과 겹치면 검사가 가짜라는 것과 `..`가 그 처방이라는 것 · fzf 0.60에 셸 통합이 내장돼 있어 .deb의 예제를 안 넣는다는 것. 그리고 M0이 게이트 자신에게서 찾은 것 — tools/check.sh의 맨 뒤 음성 확인이 `grep -q`의 SIGPIPE + pipefail로 쓰인 날부터 죽어 있었다"
+description: "기계가 사용자에게서 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)을 부팅 너머로 남기는 층(SM) — 2026-09-11 착수, SM-M0·M1 완료. M0은 zoxide·fzf를 세우기만 하고 M1이 씨앗 rc에 훅을 걸었다. M0이 배운 것 셋: SC 결정 1의 링크 패턴을 기각한 근거 · 판정 글자가 타이핑한 줄과 겹치면 검사가 가짜라는 것과 `..`가 그 처방이라는 것 · fzf 0.60에 셸 통합이 내장돼 있어 .deb의 예제를 안 넣는다는 것. M0이 게이트 자신에게서 찾은 것 — tools/check.sh의 맨 뒤 음성 확인이 `grep -q`의 SIGPIPE + pipefail로 쓰인 날부터 죽어 있었다. M1이 배운 것 셋: 훅 줄에 `command -v` 관문이 필요하다는 것(없으면 도구가 없을 때 fish가 여섯 줄을 찍고 다섯 체인의 화면 좌표가 밀린다) · 허용 목록을 씨앗에서 조립하면 역방향 검사가 tautology가 된다는 것 · design이 부팅을 세면서 앞 부팅들이 남긴 디스크 상태를 안 봤다는 것(부팅이 하나가 아니라 둘 늘었다). 그리고 M1이 처음 잰 것 — '깨뜨렸는데 첫 회차가 초록'이 따뜻한 캐시에서 5회 중 1회이고, 처방은 두 번 돌리는 것이 아니라 음성 확인 전에 `.zig-cache`와 `zig-out`을 함께 지우는 것이다([[project_zig_out_staleness]])"
 metadata:
   node_type: memory
   type: project
@@ -11,18 +11,19 @@ metadata:
 미뤄 둔 그 자리를 SC가 열었고, SM이 그리로 들어간다.
 
 design은 `docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md`,
-milestone 셋(SM-M0·M1·M2)이고 **2026-09-11 현재 M0만 끝났다.**
+milestone 셋(SM-M0·M1·M2)이고 **2026-09-12 현재 M0·M1이 끝났다.**
 
 | | 무엇 | 검증 | 상태 |
 |---|---|---|---|
-| SM-M0 | 도구 둘이 선다. **훅 없음** | `tools/check.sh`가 둘을 타이핑한다 | **완료** |
-| SM-M1 | 훅이 걸린다 | `config/check.sh` 6차 부팅에서 `z tmp` | 미착수 |
-| SM-M2 | 배운 것이 남는다 | 7차 부팅이 이전 부팅에서 배운 것을 찾는다 | 미착수 |
+| SM-M0 | 도구 둘이 선다. **훅 없음** | `tools/check.sh`가 둘을 타이핑한다 | **완료(09-11)** |
+| SM-M1 | 훅이 걸린다 | `config/check.sh`가 부팅 **둘**을 더한다 — 6차가 깨진 rc를 지우고 **7차가 `z`를 돌린다** | **완료(09-12)** |
+| SM-M2 | 배운 것이 남는다 | **8차** 부팅이 이전 부팅에서 배운 것을 찾는다 | 미착수 |
 
 관련: [[project_shell_config]](훅을 걸 자리 — `/config`의 rc 셋 — 을 만든
 층이고, 그 결정 1을 SM이 기각했다) · [[project_userland_tools]](도구가 서는
 구조 전부 — `guest_tools.sh` 배열 하나) · [[project_guest_environment]]
-(M2가 env 넷을 더할 자리).
+(M2가 env 넷을 더할 자리) · [[project_zig_out_staleness]](M1이 그 비율을 쟀다.
+**Zig를 고친 뒤 체인을 단독으로 돌리는 사람이 먼저 읽을 것**).
 
 ## 다시 조사하지 말 것 셋
 
@@ -116,6 +117,110 @@ if grep -a "terminal: screen>" "$LOG" | grep -aq "Unknown command"; then
 | | 왜 |
 |---|---|
 | `kernel/make_initrd.sh` | **한 글자도 안 고쳤다.** 배열에 줄 둘을 더한 것이 전부다 — UT-M1 결정 7의 구조가 바깥에서 온 새 도구에도 선다는 증명 |
-| Zig 코드 전부 | M1이 `config.zig`의 `rcSeed()`와 `config_test.zig`의 `expectQuietSeed`를, M2가 `environ.zig`를 건드린다 |
-| `config/check.sh`의 6·7차 부팅 | M1·M2의 일이다 |
+| Zig 코드 전부 | M1이 `config.zig`의 `rcSeed()`와 `config_test.zig`의 `expectQuietSeed`를 건드렸고, M2가 `environ.zig`를 건드린다 |
+| `config/check.sh`의 부팅 6·7·8 | 6·7은 M1이 했고 8은 M2다 |
 | `git-delta` | 비목표 1 — 사용자가 이번 범위에서 뺐다 |
+
+# SM-M1 (2026-09-12) — 훅이 걸렸다
+
+## 다시 조사하지 말 것 셋
+
+### 1. **훅 줄에는 관문이 붙는다** — 없으면 게이트 다섯 체인이 밀린다
+
+```
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"    # zsh · bash
+type -q zoxide && zoxide init fish | source                  # fish
+```
+
+관문이 있으면 셋 다 **0바이트**이고, **없으면 도구가 없는 기계에서 찍는다** —
+zsh 50바이트 · bash 38바이트 · **fish 191바이트(6줄)**. 설정 디스크를 붙이는
+체인이 다섯이고 그중 셋이 화면의 **셀 좌표**로 판정하므로, 그 한 줄이 SM과
+아무 상관없는 체인 넷을 깨뜨린다.
+
+**관문의 값은 "도구가 없어도 도는 것"이 아니라 "실패의 자리를 정하는 것"이다.**
+관문이 있으면 도구가 사라진 기계는 조용히 기억을 잃고, 그 사실을 말하는 자리는
+`config/check.sh`의 7차 부팅 하나다.
+
+### 2. **허용 목록을 씨앗에서 조립하면 역방향 검사가 tautology가 된다**
+
+`config_test.zig`의 `expectQuietSeed`가 검사 셋을 갖고 있다.
+
+| | 무엇 | 무엇을 막나 |
+|---|---|---|
+| 정방향 | 비주석·비`alias` 줄은 `hookLines()`의 한 줄과 **글자 그대로 같다** | 씨앗에 아무 문장이나 들어오는 것 |
+| 역방향 | `hookLines()`의 **전부**가 씨앗에 있다 | **훅을 지우는 것이 통과하는 것** |
+| 덮개 | 훅 목록이 `zoxide`·`fzf` 둘을 다 덮는다 | **두 자리에서 함께 지우는 것** |
+
+**그래서 씨앗의 훅 글자와 `hookLines()`의 글자를 두 벌로 둔다.** `++`로
+조립하면 역방향이 언제나 참이 된다 — UT-M1의 정적 목록 검사가 같은 이유로
+가짜였고, SM-M0의 되돌림 1이 그것을 실연했다.
+
+**`startsWith`가 아니라 `eql`인 것도 같은 종류다** — 접두사로 보면
+`command -v zoxide >/dev/null && rm -rf /`가 통과한다.
+
+### 3. **design이 부팅을 세면서 앞 부팅이 남긴 디스크 상태를 안 봤다**
+
+결정 8은 M1이 부팅 **하나**를 더한다고 적었다. 실제로는 **둘**이다 — 3차가
+심은 `exit`가 4·5차를 지나서도 `/config/zshrc`에 남아 있고, 그것을 읽는 부팅은
+셸이 죽고 탈출로가 **rc 없이** 되살리므로 **훅도 함께 안 걸린다.**
+
+| 부팅 | cmdline | 하는 일 |
+|---|---|---|
+| **6차** | `tars.noconfig` | **`rm /config/zshrc`** — 수리만 한다 |
+| **7차** | 기본 | init이 그것만 다시 깔고(`O_EXCL`) **그 씨앗의 훅이 돈다** |
+
+**한 줄만 지우지 않고 파일을 통째로 지운 것이 이 milestone에서 가장 만족스러운
+자리다.** 7차의 rc가 **정확히 `rcSeed()`의 내용**이 되고(사람이 타이핑한 줄이
+한 줄도 없다), `O_EXCL`의 계약을 빈 디스크가 아닌 자리에서 다시 증명하고,
+타이핑이 `rm`과 `ls` 둘로 끝난다.
+
+**6차가 `tars.noconfig`로 뜨는 것에 뜻이 있다** — SC-M2가 그 토큰을 만든 근거가
+*"설정을 고칠 셸이 없을 때 쓰는 것"*이었고, **M1이 그것을 실제로 그 용도로
+썼다.**
+
+## 게이트가 훅을 판정하는 법 — **아무도 `zoxide add`를 안 친다**
+
+```
+cd /usr/bin/../share/terminfo/x     ← 훅이 여기서 배운다(chpwd)
+cd /
+z terminfo x
+pwd  →  /usr/share/terminfo/x       ← 이 글자를 만들 수 있는 것은 DB 하나뿐
+```
+
+**`tools/check.sh` 검사 18과 판정 글자가 같다.** 그 검사는 사람이
+`zoxide add`를 쳤고 이쪽은 **아무도 안 친다** — **둘의 차이가 정확히 "훅"이다.**
+
+그리고 이 판정이 좁은 이유가 셋이다. `..`가 든 경로는 화면에 그대로 남지만
+정규형과 **다른 글자**이고, zsh 프롬프트에 **cwd가 없고**(`(none)#`), `cd`와
+`z`는 **아무것도 안 찍는다.**
+
+**fzf 쪽 판정은 `whence -w fzf-history-widget` → `fzf-history-widget:
+function`이다.** `widget`이 아니라 **`function`**이다 — `zle -N`로 위젯이 되지만
+`whence -w`가 보는 것은 그 이름의 함수다. `Ctrl+R`을 치면 TUI가 화면을 가져가
+체인이 매달리므로, 게이트가 보는 것은 **위젯이 정의됐다는 것까지**다.
+
+## 셸 셋의 훅 자리가 다르다
+
+| 셸 | 훅이 걸리는 자리 |
+|---|---|
+| zsh | `chpwd_functions` — **디렉터리를 옮길 때** |
+| fish | `--on-variable PWD` — 같다 |
+| bash | `PROMPT_COMMAND` — **프롬프트마다** |
+
+**bash로는 `bash -i -c '…'`으로 훅을 확인할 수 없다** — 프롬프트를 안 그리므로
+`PROMPT_COMMAND`가 한 번도 안 돈다. `zoxide: no match found`가 나오는 것이
+버그가 아니라 이 차이다. 게이트가 zsh로 판정하는 이유가 하나 늘었다.
+
+## M1이 새 코드와 무관하게 잰 것 — 첫 회차를 믿을 수 없다
+
+음성 확인의 **첫 회차가 두 번 거짓 초록이었다.** SC가 세 번 보고 넘긴 그
+증상이고, M1이 처음으로 비율을 쟀다 — **따뜻한 캐시에서 5회 중 1회**,
+`rm -rf init/.zig-cache init/zig-out` 뒤에는 **4회 중 4회** 옳다.
+
+본문은 [[project_zig_out_staleness]]. **Zig를 고치고 체인을 단독으로 돌리는
+사람이 먼저 읽을 자리다.**
+
+**그리고 여기서 한 번 틀리게 적었다가 고쳤다** — 처음에는 *"범인은 install
+단계이고 `zig-out`을 지우면 된다"*고 결론을 냈는데 `init/build.zig`가
+`config_test`를 **install하지 않는다.** 관측 넷이 우연히 맞았던 것이고,
+**인과를 문서에 적기 전에 그것이 코드에서 가능한지 먼저 봐야 했다.**
