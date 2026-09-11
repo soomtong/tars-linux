@@ -109,7 +109,7 @@ tautology가 아니라는 증거를 4차가 만들어 준다. M1의 3차가 2차
 그리고 이 토큰은 **부분 문자열로 찾으면 조용히 틀린다**: `indexOf`로 짜면
 `tars.noconfigured` 같은 것에 걸리고 증상은 "부팅했더니 rc가 안 읽힌다"뿐이다.
 
-- [ ] **Step 1: `config_test.zig`의 `for (std.enums.values(config.Shell))` 줄 앞에 넣는다**
+- [x] **Step 1: `config_test.zig`의 `for (std.enums.values(config.Shell))` 줄 앞에 넣는다**
 
 ```zig
     // ── SC-M2: cmdline 토큰 ─────────────────────────────────────────────
@@ -138,7 +138,7 @@ tautology가 아니라는 증거를 4차가 만들어 준다. M1의 3차가 2차
     try expectCmdline("tars.noconfig=0", true);
 ```
 
-- [ ] **Step 2: 그 헬퍼를 `expectQuietSeed` 아래에 넣는다**
+- [x] **Step 2: 그 헬퍼를 `expectQuietSeed` 아래에 넣는다**
 
 ```zig
 /// cmdline 한 줄이 rc를 끄는가(SC-M2 결정 9).
@@ -153,7 +153,7 @@ fn expectCmdline(text: []const u8, want: bool) !void {
 }
 ```
 
-- [ ] **Step 3: 실패를 본다**
+- [x] **Step 3: 실패를 본다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -169,7 +169,7 @@ Expected: 컴파일 실패 — `no member named 'cmdlineWantsNoConfig' in struct
 
 **Files:** Modify `init/src/config.zig`
 
-- [ ] **Step 1: `ShellConfig` enum **아래**에 상수 둘과 순수 함수를 넣는다**
+- [x] **Step 1: `ShellConfig` enum **아래**에 상수 둘과 순수 함수를 넣는다**
 
 ```zig
 /// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). **`tars.conf`를 이기는
@@ -209,7 +209,7 @@ pub fn cmdlineWantsNoConfig(text: []const u8) bool {
 }
 ```
 
-- [ ] **Step 2: 파일 끝(`seedRcFile` 아래)에 그 독자를 넣는다**
+- [x] **Step 2: 파일 끝(`seedRcFile` 아래)에 그 독자를 넣는다**
 
 ```zig
 /// `/proc/cmdline`을 읽어 위 토큰이 있는지 본다.
@@ -253,7 +253,7 @@ pub fn cmdlineNoConfig(path: [:0]const u8) bool {
 }
 ```
 
-- [ ] **Step 3: 호스트 검사가 통과하는 것을 본다 — 두 번 돌린다**
+- [x] **Step 3: 호스트 검사가 통과하는 것을 본다 — 두 번 돌린다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -263,7 +263,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 Expected: `PASS`. **두 번 돌리는 이유는 design 실측 26이다**(`zig build test`가
 두 번, 직전 내용의 결과를 냈다. 원인 미상).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add init/src/config.zig init/src/config_test.zig
@@ -276,7 +276,7 @@ git commit -m "Let one word on the command line outrank the config file"
 
 **Files:** Modify `init/src/main.zig`
 
-- [ ] **Step 1: `const cfg = loadConfig(storage_mounted);` 한 줄을 바꾼다**
+- [x] **Step 1: `const cfg = loadConfig(storage_mounted);` 한 줄을 바꾼다**
 
 **지울 것:**
 
@@ -312,7 +312,7 @@ git commit -m "Let one word on the command line outrank the config file"
     }
 ```
 
-- [ ] **Step 2: 빌드만 확인한다**
+- [x] **Step 2: 빌드만 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -322,7 +322,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 Expected: `PASS`(호스트 검사는 이 갈래를 안 지난다 — 지나는 것은 4차·5차
 부팅이다).
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add init/src/main.zig
@@ -335,7 +335,7 @@ git commit -m "Read the command line before trusting the disk"
 
 **Files:** Modify `init/src/main.zig`
 
-- [ ] **Step 1: `Kind` enum **아래**, `TERMINAL_PATH` **위**에 `Rescue`와 슬롯 둘을 넣는다**
+- [x] **Step 1: `Kind` enum **아래**, `TERMINAL_PATH` **위**에 `Rescue`와 슬롯 둘을 넣는다**
 
 ```zig
 /// 탈출로 1(SC design 결정 8). 감독자가 포기하기 **직전에** argv의 이 자리를
@@ -357,7 +357,7 @@ const TERMINAL_FLAG_SLOT: usize = 2;
 const CONSOLE_FLAG_SLOT: usize = 1;
 ```
 
-- [ ] **Step 2: `Child`에 필드 하나를 더한다. `given_up` 아래에 넣는다**
+- [x] **Step 2: `Child`에 필드 하나를 더한다. `given_up` 아래에 넣는다**
 
 ```zig
     /// 남아 있는 탈출로. **한 번 쓰면 null이 된다** — 결정 8의 "한 번만"이
@@ -366,7 +366,7 @@ const CONSOLE_FLAG_SLOT: usize = 1;
     rescue: ?Rescue = null,
 ```
 
-- [ ] **Step 3: `supervise`의 포기 갈래 **앞**에 탈출 분기를 넣는다**
+- [x] **Step 3: `supervise`의 포기 갈래 **앞**에 탈출 분기를 넣는다**
 
 `if (c.fast_restarts >= MAX_FAST_RESTARTS) {` 바로 **다음 줄**에 **넣을 것**:
 
@@ -402,7 +402,7 @@ const CONSOLE_FLAG_SLOT: usize = 1;
 `c.fast_restarts = 0`이 로그 **뒤**인 것에 뜻이 있다 — 찍는 수가 "몇 번 죽고
 나서 이 결정을 했는가"여야 한다.
 
-- [ ] **Step 4: `main`에서 탈출로를 만든다. `const console_flag ...` 블록 **아래**에 넣는다**
+- [x] **Step 4: `main`에서 탈출로를 만든다. `const console_flag ...` 블록 **아래**에 넣는다**
 
 ```zig
     // SC-M2 결정 8 — 탈출로 1. **자식 둘 다에게 준다**(결정 4가 두 셸을 같은
@@ -426,7 +426,7 @@ const CONSOLE_FLAG_SLOT: usize = 1;
         null;
 ```
 
-- [ ] **Step 5: `children` 리터럴의 자식 둘에 `.rescue`를 더한다**
+- [x] **Step 5: `children` 리터럴의 자식 둘에 `.rescue`를 더한다**
 
 terminal 쪽 `.argv = .{ ... },` **아래**:
 
@@ -440,7 +440,7 @@ terminal 쪽 `.argv = .{ ... },` **아래**:
             .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
 ```
 
-- [ ] **Step 6: 빌드와 호스트 검사**
+- [x] **Step 6: 빌드와 호스트 검사**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -449,7 +449,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 Expected: `PASS`.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add init/src/main.zig
@@ -462,7 +462,7 @@ git commit -m "Give a dying shell one last life without its rc"
 
 **Files:** Modify `config/check.sh`
 
-- [ ] **Step 1: `boot_once`가 cmdline을 받게 한다**
+- [x] **Step 1: `boot_once`가 cmdline을 받게 한다**
 
 **지울 것:**
 
@@ -493,7 +493,7 @@ boot_once() {
 
 그리고 같은 함수 안의 `-append "console=ttyS0" \`를 **지우고** `-append "$cmdline" \`를 **넣는다.**
 
-- [ ] **Step 2: 3차 부팅의 훅을 "심는 훅"으로 바꾼다**
+- [x] **Step 2: 3차 부팅의 훅을 "심는 훅"으로 바꾼다**
 
 **지울 것:**
 
@@ -619,7 +619,7 @@ watch_quiet() {
 }
 ```
 
-- [ ] **Step 3: 타이핑 키 배열 둘을 `OFF_KEYS` 아래에 더한다**
+- [x] **Step 3: 타이핑 키 배열 둘을 `OFF_KEYS` 아래에 더한다**
 
 ```bash
 # ── SC-M2 ───────────────────────────────────────────────────────────────
@@ -638,7 +638,7 @@ ON_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o n spc
          shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 ```
 
-- [ ] **Step 4: 3차 부팅의 훅 이름과 제목을 바꾼다**
+- [x] **Step 4: 3차 부팅의 훅 이름과 제목을 바꾼다**
 
 **지울 것:**
 
@@ -652,7 +652,7 @@ if ! boot_once "$LOG3" "tars-init: started console shell" watch_console_shell_qu
 if ! boot_once "$LOG3" "tars-init: started console shell" plant_broken_rc; then
 ```
 
-- [ ] **Step 5: 3차 부팅의 마지막 줄 뒤에 4차·5차를 통째로 더한다**
+- [x] **Step 5: 3차 부팅의 마지막 줄 뒤에 4차·5차를 통째로 더한다**
 
 `echo "boot 3: shell_config=off kept both shells out of the rc that boot 2 ran"` 아래의 두 검사
 (`giving up on console shell` · `Attempted to kill init`) 다음, `# 정보성. ext2가 ...` **앞**에
@@ -777,7 +777,7 @@ fi
 echo "boot 5: one word on the kernel command line beat the config file, and nothing died"
 ```
 
-- [ ] **Step 6: 로그 파일 선언과 마지막 덤프를 다섯으로 맞춘다**
+- [x] **Step 6: 로그 파일 선언과 마지막 덤프를 다섯으로 맞춘다**
 
 `LOG3="$(mktemp)"` 아래는 그대로 두고(4차·5차는 위에서 선언한다), 파일 끝의
 덤프 셋 아래에 **넣을 것**:
@@ -791,7 +791,7 @@ grep 'tars-init:' "$LOG5" || true
 
 그리고 부팅 제목 셋의 `1/3`·`2/3`·`3/3`을 `1/5`·`2/5`·`3/5`로 고친다.
 
-- [ ] **Step 7: 체인을 단독으로 돌린다**
+- [x] **Step 7: 체인을 단독으로 돌린다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -800,7 +800,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 Expected: `PASS`. 부팅 다섯이라 약 2분.
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add config/check.sh
@@ -817,13 +817,13 @@ design 실측 26 때문에 **전부 두 번씩 돌린다**(`zig build test`가 �
 내용의 결과를 냈다. 원인 미상). 그리고 Zig를 되돌린 뒤에는
 `rm -rf init/zig-out terminal/zig-out`을 한 번 한다(UT design 실측 18).
 
-- [ ] **Step 1: 탈출로 1을 끈다 — 4차가 죽어야 한다**
+- [x] **Step 1: 탈출로 1을 끈다 — 4차가 죽어야 한다**
 
 `main.zig`의 `rescue_flag`를 조건 없이 `null`로 둔다. 기대: 4차 부팅에서
 `the supervisor never offered the console shell a life without the rc`.
 **1·2·3차와 5차는 통과해야 한다** — 5차는 탈출로 1을 안 쓰기 때문이다.
 
-- [ ] **Step 2: `storage_mounted` 조건을 뗀다 — `boot/check.sh`가 죽어야 한다**
+- [x] **Step 2: `storage_mounted` 조건을 뗀다 — `boot/check.sh`가 죽어야 한다**
 
 `if (storage_mounted and cfg.shell_config == .on)`에서 `storage_mounted and`를
 지우고 **`boot/check.sh`를 돌린다.** 기대:
@@ -833,19 +833,19 @@ design 실측 26 때문에 **전부 두 번씩 돌린다**(`zig build test`가 �
 깨뜨릴 수 있다는 것을 실행으로 보는 자리이고, 그 조건이 왜 있는지가 로그 한
 줄이 된다.
 
-- [ ] **Step 3: 결정 9의 덮어쓰기를 지운다 — 5차가 죽어야 한다**
+- [x] **Step 3: 결정 9의 덮어쓰기를 지운다 — 5차가 죽어야 한다**
 
 `main.zig`의 `if (config.cmdlineNoConfig(...))` 블록을 통째로 지운다. 기대:
 5차 부팅에서 `init never reported that the command line token outranked the
 config file`. **4차까지는 전부 통과한다.**
 
-- [ ] **Step 4: 토큰 매칭을 느슨하게 한다 — 호스트 검사가 죽어야 한다**
+- [x] **Step 4: 토큰 매칭을 느슨하게 한다 — 호스트 검사가 죽어야 한다**
 
 `cmdlineWantsNoConfig`의 본문을
 `return std.mem.indexOf(u8, text, NO_CONFIG_TOKEN) != null;`로 바꾼다.
 기대: **부팅 전에** `FAIL: cmdline "console=ttyS0 tars.noconfigured" gave true, want false`.
 
-- [ ] **Step 5: 전부 되돌리고 깨끗한지 확인한다**
+- [x] **Step 5: 전부 되돌리고 깨끗한지 확인한다**
 
 ```bash
 git checkout init/src/main.zig init/src/config.zig
@@ -857,7 +857,7 @@ git status --short     # 비어 있어야 한다
 
 ## Task 7: 루트 게이트
 
-- [ ] **Step 1: 백그라운드로 돌린다 (약 25분)**
+- [x] **Step 1: 백그라운드로 돌린다 (약 25분)**
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -867,7 +867,7 @@ git status --short     # 비어 있어야 한다
 Expected: 열한 체인 3/3. **기준선은 SC-M1의 24분 36.55초**이고, 부팅 둘이
 늘었으니 **+1분 안쪽**이면 예상대로다(M1의 부팅 하나가 +27.76초였다).
 
-- [ ] **Step 2: 씨앗·탈출로가 다른 체인을 안 건드렸다는 것을 따로 본다**
+- [x] **Step 2: 씨앗·탈출로가 다른 체인을 안 건드렸다는 것을 따로 본다**
 
 ```bash
 grep -c "tars-init: giving up on" /tmp/gate.log        # BF 3회 + ... 세어 본다
@@ -879,12 +879,12 @@ grep -ac "Welcome to fish" /tmp/gate.log               # 6이어야 한다(M0·M
 
 ## Task 8: 문서
 
-- [ ] **Step 1: design의 `Status:`와 milestone 표, 위험 3을 닫는다**
-- [ ] **Step 2: design에 "SC-M2가 실행으로 증명한 것"(실측 29~)을 더한다**
-- [ ] **Step 3: `docs/decisions/project_shell_config.md`에 SC-M2 절을 더한다**
-- [ ] **Step 4: `MEMORY.md`·`CLAUDE.md`의 한 줄을 고친다**
-- [ ] **Step 5: `HANDOFF.md`를 SC-M2로 새로 쓴다**
-- [ ] **Step 6: 커밋**
+- [x] **Step 1: design의 `Status:`와 milestone 표, 위험 3을 닫는다**
+- [x] **Step 2: design에 "SC-M2가 실행으로 증명한 것"(실측 29~)을 더한다**
+- [x] **Step 3: `docs/decisions/project_shell_config.md`에 SC-M2 절을 더한다**
+- [x] **Step 4: `MEMORY.md`·`CLAUDE.md`의 한 줄을 고친다**
+- [x] **Step 5: `HANDOFF.md`를 SC-M2로 새로 쓴다**
+- [x] **Step 6: 커밋**
 
 ---
 
@@ -908,3 +908,26 @@ grep -ac "Welcome to fish" /tmp/gate.log               # 6이어야 한다(M0·M
 `rescue_flag: ?[:0]const u8` · `cmdlineWantsNoConfig([]const u8) bool` ·
 `cmdlineNoConfig([:0]const u8) bool` — Task 1의 검사가 부르는 이름과 Task 2가
 정의하는 이름이 같다.
+
+---
+
+## 실행 노트 (2026-09-11) — plan과 달랐던 것 둘
+
+**1. Task 6 Step 1의 실패 메시지가 예상과 다른 자리에서 나왔다.** plan은
+`the supervisor never offered the console shell a life without the rc`를
+기대했는데 실제로는 그 앞에서 죽었다 —
+
+```
+FAIL: the supervisor never rescued a shell from the rc that kills it
+```
+
+탈출로가 없으면 **`boot_once`가 기다리는 마커(`tars-init: console shell died`)
+자체가 안 나오므로** 120초 폴링이 먼저 끝난다. 진단으로는 이쪽이 더 정확하고
+(무엇이 안 일어났는지를 그대로 말한다) 대신 **실패에 120초가 든다.**
+
+**2. `watch_rescue`의 60초 폴링은 실제로는 몇 초다.** plan이 *"terminal은
+DRM을 열고 폰트를 굽고 나서 셸을 띄우므로 한 바퀴가 몇 초"*라고 적었는데
+로그는 `terminal exited (pid 34, status 0, lived 1s)`다 — **셸이 rc를 읽다
+죽는 것은 첫 렌더보다 먼저 일어난다**(design 실측 31).
+
+**게이트는 25분 58.09초로 첫 회차에 통과했다**(design 실측 35).
