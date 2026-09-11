@@ -467,13 +467,14 @@ pub fn main(init: std.process.Init.Minimal) void {
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
             @tagName(cfg.hangul_layout),
             @tagName(cfg.latin_layout),
             toggle_arg,
+            @tagName(cfg.shell_config),
         },
     );
 
@@ -500,7 +501,18 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
     const shell = resolveShell(cfg.shell);
     const shell_path = shell.path();
-    const shell_flag = shell.noConfigFlag();
+    // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
+    // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
+    const shell_flag = shell.configFlag(cfg.shell_config);
+    // **콘솔 셸은 `"none"`을 안 쓴다**(결정 4). 이쪽은 init이 셸을 직접
+    // exec하므로 argv를 짓는 쪽과 쓰는 쪽이 같다 — "인자가 없다"를 null
+    // 슬롯으로 그대로 말할 수 있다. 지금까지 이 자리는 **조건 없이 null**
+    // 이었고, `main.zig`의 아래 주석이 *"나중에 설정 파일이 생기면 그것을
+    // 읽는 편이 맞다"*고 예고해 둔 자리다.
+    const console_flag: ?[*:0]const u8 = switch (cfg.shell_config) {
+        .on => null,
+        .off => shell.noConfigFlag().ptr,
+    };
     // 셸과 달리 폴백 검사(resolveShell 같은 것)가 없다. 키보드 종류는
     // 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미 화이트리스트다.
     const keyboard_arg = cfg.keyboard.arg();
@@ -534,9 +546,12 @@ pub fn main(init: std.process.Init.Minimal) void {
         .{
             .kind = .console_shell,
             .path = shell_path,
-            // 콘솔 셸에는 플래그를 주지 않는다. 이쪽은 사용자가 직접 쓰는
-            // 자리이므로, 나중에 설정 파일이 생기면 그것을 읽는 편이 맞다.
-            .argv = .{ shell_path.ptr, null, null, null, null, null, null, null },
+            // **위 주석이 예고한 것을 SC-M0이 실행한 자리다.** 그때 적어
+            // 둔 것은 *"나중에 설정 파일이 생기면 그것을 읽는 편이 맞다"*
+            // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
+            // 지금까지와 같고, `off`면 플래그가 들어간다 — **두 셸이 같은
+            // 설정을 따른다**(결정 4).
+            .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
         },
     };
     supervise(&children, button_fds[0..button_count], envp);
