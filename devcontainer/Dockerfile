@@ -178,6 +178,8 @@ RUN dpkg --add-architecture amd64 \
         hyperfine:amd64 \
         git:amd64 \
         vim-tiny:amd64 \
+        zoxide:amd64 \
+        fzf:amd64 \
         libgit2-1.9:amd64 \
         libgssapi-krb5-2:amd64 \
         libkrb5-3:amd64 \
