@@ -1,4 +1,225 @@
-# HANDOFF: **SC-M0 — 자리가 섰고, 셸이 색을 쓰기 시작하면서 게이트가 셋 깨졌다**
+# HANDOFF: **SC-M1 — 씨앗이 깔렸고, 게이트가 세 번 부팅해서 한 줄로 갈랐다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **SC-M1이 2026-09-11에 끝났다.** Shell Config의
+두 번째 milestone이고, **남은 것은 SC-M2(탈출로 둘)뿐이다.**
+
+```
+$ debugfs -R 'cat /tars.conf' out/config.img
+shell=zsh                 ← 1차 부팅에서 사람이 쓴 것
+shell_config=off          ← 2차 부팅에서 사람이 더한 것
+```
+
+**이 두 줄이 이 milestone의 성적표다.** 같은 디스크, 같은 셸(zsh), 같은 rc
+파일인데 **둘째 줄 하나 때문에 3차 부팅은 그 rc를 안 읽는다.**
+
+**게이트는 열한 체인 3/3으로 24분 36.55초다**(SC-M0의 24분 08.79초에서
++27.76초. **design 위험 4가 적은 +1분의 절반이다**). **첫 회차에 통과했다** —
+SC-M0은 두 번째 회차였다.
+
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 외출하며
+"이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. **이 세션 한정
+예외이고 다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## 바로 다음에 할 것 — **SC-M2의 plan을 쓴다**
+
+design의 milestone 표에 하나만 남았다.
+
+| | 무엇 | 검증 |
+|---|---|---|
+| **SC-M2** | 탈출로 둘(결정 8·9) | 일부러 죽는 rc를 깔면 **감독자가 되살린다** · `tars.noconfig`가 `tars.conf`를 **이긴다** |
+
+`CLAUDE.md`대로 **그 plan은 그 시점에 새로 쓴다.**
+
+**SC-M2 착수 전에 반드시 읽을 것:** design의 **위험 3**. M1이 그 위험의
+**절반**을 닫았다 — `expectQuietSeed`가 *"우리가 까는 것"*을 막는다. 남은
+절반은 *"사용자가 쓰는 것"*이고 **그것이 M2의 전부다.**
+
+그리고 **M2는 M1이 안 만든 종류의 테스트가 필요하다.** M1의 게이트는
+"무해한 rc가 읽힌다/안 읽힌다"만 본다 — **죽는 rc도 매달리는 rc도 한 번도
+안 깔아 봤다.** 결정 8이 덮는 것은 죽는 rc까지이고 매달리는 rc는 결정 9의
+몫이라는 것(design이 그렇게 적고 있다)이 plan의 첫 질문이다.
+
+## **이 milestone을 지배한 사실 하나 — 씨앗은 한 글자도 찍으면 안 된다**
+
+설정 디스크를 붙이는 체인이 다섯이고 그중 셋이 화면의 **셀 좌표**로
+판정한다. M0까지는 그 다섯의 셸이 rc를 읽으려 해도 읽을 파일이 없어서 아무
+일도 안 일어났다. **M1이 그 파일을 만드는 순간 다섯 체인의 화면이 씨앗의
+내용을 따라간다.**
+
+그래서 씨앗에 쓸 수 있는 줄을 **주석과 `alias` 둘로** 제한하고, 그것을
+`init/src/config_test.zig`의 **`expectQuietSeed`**가 호스트에서 0.1초에
+확인한다.
+
+```
+FAIL: the zsh seed has a line that is neither a comment nor an alias:
+  echo hello
+```
+
+**이 검사의 목적은 지금 통과하는 것이 아니라 나중에 막는 것이다.** 씨앗을
+늘리는 사람이 보는 것은 부팅 20초 뒤에 밀린 화면 좌표가 아니라 이 줄이다.
+
+**SC-M0의 교훈(셸이 색을 쓰기 시작해서 게이트가 셋 깨졌다)의 다음 판이고,
+이번에는 깨지기 전에 막았다.**
+
+## 게이트가 무엇을 어떻게 보는가 — 부팅 셋
+
+| 부팅 | 셸 | 치는 것 | 증명하는 것 |
+|---|---|---|---|
+| **1차** | fish | `tars-config` → `echo shell=zsh > …conf` → `echo echo tars-rc-alive >> …zshrc` → 되읽기 둘 | 씨앗 셋이 생겼다 · **fish가 `/config/fish.config`를 읽었다** · 씨앗 `tars.conf`가 실제로 `shell_config=on`을 담고 있다 |
+| **2차** | zsh | `echo shell_config=off >> …conf` → 되읽기 | **두 셸이 다 `/config/zshrc`를 읽었다** · 씨앗을 다시 안 만든다 |
+| **3차** | zsh | **아무것도 안 친다** | **같은 rc가 안 읽힌다** — 부정 검사 |
+
+**1차의 첫 명령 `tars-config`가 가장 밀도가 높다.** 씨앗이 정의한 alias이고,
+그 출력은 씨앗 `tars.conf`의 **마지막 줄** `shell_config=on`이다. 한 번의
+타이핑이 위 표의 셋을 동시에 증명한다. **SC-M0의 게이트는 로그의 기본값만
+봤고 파일의 내용은 못 봤다.**
+
+**판정 글자 `tars-rc-alive`는 씨앗이 아니라 사람이 심는다** — 씨앗에 `echo`를
+넣을 수 없으니 1차 부팅에서 게이트가 `/config/zshrc`에 한 줄을 **더한다**
+(덮어쓰지 않는다).
+
+**그 글자를 어디서 보는지가 결정 4의 두 절반이다.**
+
+| 어디 | 누가 찍나 |
+|---|---|
+| `terminal: screen>`가 **아닌** 줄 | 시리얼 콘솔 셸 — init이 직접 exec했다 |
+| `terminal: screen>` 줄 | 화면 셸 — terminal이 PTY에 띄웠다 |
+
+**콘솔 셸에는 타이핑을 못 하지만 그 셸이 스스로 찍는 것은 읽을 수 있다** —
+열한 체인이 전부 `-serial file:`(쓰기 전용)이다. `terminal:` 디버그 줄 중
+셸의 텍스트를 나르는 것은 `screen>` 하나뿐이라(`style>`·`ink>`·`status>`는
+수만 낸다) 이 구분이 정확하다.
+
+## 음성 확인이 준 것 — **다시 조사하지 말 것**
+
+전문은 design의 실측 22~28. **`init/src/main.zig`의 `console_flag` 한 줄의
+세 상태가 세 검사에 각각 걸린다.**
+
+| 어떻게 뒀나 | 무엇이 죽나 |
+|---|---|
+| 조건 없이 **플래그** | 2차의 **시리얼** 검사만. 화면 셸은 여전히 `tars-rc-alive`를 찍는다 |
+| 조건 없이 **null** | **3차의 부정 검사만.** 1차·2차는 전부 초록으로 지나간다 |
+| 씨앗을 아예 안 깜 | 1차의 `tars-config`(`fish: Unknown command`) |
+| 씨앗에 `echo hello` | **부팅 전에** 호스트 검사 |
+
+> **둘째 줄이 이 milestone에서 가장 값진 확인이다.** 결정 10이 *"3차가 이
+> 설계에서 가장 강한 검사"*라고 적었는데, **1차와 2차가 전부 통과하는
+> 결함이 실제로 있고 3차만 그것을 본다**는 것이 관측으로 확인됐다.
+> `off`가 tautology가 아니다.
+
+**SC-M0의 실측 16이 이것을 예고했다** — 그때는 되돌림 셋 중 어느 것도 부정
+검사를 못 건드려서 네 번째를 손으로 만들어야 했다. **M1에서는 계획한
+되돌림이 겨냥한 검사를 정확히 맞혔다.**
+
+## ⚠ **`zig build test`가 두 번, 직전 내용의 결과를 냈다** — 원인 미상
+
+| 파일의 상태 | 첫 실행이 보고한 것 |
+|---|---|
+| zsh 씨앗에 `echo hello` | **`PASS`** — 직전(깨끗한 상태)의 결과 |
+| fish 씨앗의 alias 둘을 지움 | **zsh에 대한 FAIL** — 직전(zsh를 깨뜨렸던 상태)의 결과 |
+
+**두 번 다 두 번째 실행은 옳았다.** 재현을 **열여덟 번** 시도했고(같은
+파일로 여섯 · `.zig-cache`를 지운 것 포함, zsh와 fish를 **번갈아** 열둘)
+**한 번도 안 나왔다.** bind mount의 지연도 아니다 — 컨테이너가 호스트가 쓴
+파일을 세 번 다 즉시 봤다. 같은 세션에서 `FAIL: init build failed`가 한 번
+떴다가 다음 실행에 사라진 일도 있다.
+
+**원인을 못 찾았고, 그래서 이 milestone의 음성 확인은 전부 두 번씩 돌렸다.**
+UT-M2가 화면에 대해 배운 것(*"출력이 틀린 것이 아니라 검사가 먼저 본
+것이다"*)과 같은 종류의 위험이 **빌드 쪽에도 있을 수 있다**는 뜻이다.
+**다음 사람도 음성 확인을 한 번으로 판정하지 말 것.**
+
+## **`debugfs`로 이미지에 직접 물을 수 있다** — 이 저장소에서 처음 쓴 도구
+
+게이트 로그에 `tars-init: seeded`가 **CP·IP·RM에서만** 보이고 `power`·
+`hangul`에는 없다. **씨앗이 안 깔린 것이 아니라 그 두 체인이 성공했을 때 첫
+부팅의 시리얼 로그를 안 찍는 것이다**(`power/check.sh:424`가 찍는 것은 재시작
+쌍의 `$LOG_A`이고, 씨앗이 깔리는 첫 부팅의 `$LOG`는 실패했을 때만 나온다).
+**로그에 없는 것과 안 일어난 것이 다르다.**
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c "debugfs -R 'ls /' out/power.img"      # 컨테이너에 debugfs가 있다
+```
+
+넷 다 `tars.conf fish.config bashrc zshrc`였다(`power`·`hangul`·`config`·
+`input`). **게이트가 화면과 로그로만 묻던 것을 파일시스템에 직접 물을 수
+있다** — 다음에 "게이트가 못 보는 것" 칸을 줄이고 싶은 사람이 볼 자리다.
+
+## SC-M1의 커밋들
+
+| | 파일 | 커밋 |
+|---|---|---|
+| plan | `.../plans/2026-09-11-tars-shell-config-sc-m1.md` | `8423c02` |
+| Task 1·2 | `init/src/config_test.zig` · `init/src/config.zig` | `367fc63` |
+| Task 3 | `init/src/main.zig` | `9cc95eb` |
+| **Task 4·5·6** | `config/check.sh` | `10c9de2` |
+| Task 9 | design · 기억 · MEMORY · CLAUDE · HANDOFF | 이 커밋 |
+
+**Task 4·5·6이 한 커밋인 것은 plan과 다르다** — 셋 다 `config/check.sh`
+한 파일이고 체인을 한 번만 돌려 셋을 함께 확인했다. **Task 7(음성 확인)과
+Task 8(게이트)은 커밋이 없다** — 코드를 일부러 되돌렸다가 `git checkout`으로
+복구했고, 결과는 design의 실측 22~28에 있다.
+
+## SC-M1이 게이트로 **못 보는 것** — 알고 둔다
+
+| 못 보는 것 | 왜 |
+|---|---|
+| **bash·fish의 rc가 읽히는가** | rc가 실제로 읽히는 것을 보는 셸은 **zsh 하나**다(2차·3차의 셸). fish는 1차의 `tars-config`가 alias 하나로 보지만 **`off`가 그것을 막는지는 안 본다.** bash는 로그의 `seeded` 한 줄이 전부다 — **다만 IP 체인의 2차 부팅이 bash로 뜨므로 씨앗이 bash를 깨뜨리면 그 체인이 죽는다** |
+| 씨앗의 **내용이 맞는가** | 호스트 검사가 보는 것은 **문법 범주**(주석/alias)와 자기 경로다. alias의 명령이 실제로 도는지는 `tars-config` 하나만 본다 |
+| `off`일 때도 **씨앗을 깐다**는 것 | 코드가 `shell_config`를 안 보는 구조라 볼 것이 없다. 3차 부팅은 파일이 **이미 있는** 상태라 이 갈래를 안 지난다 |
+| 사용자가 rc를 **지웠을 때** 다시 깔리는가 | 코드로는 깔린다(`O_EXCL`). 게이트가 그 갈래를 안 지난다 |
+| **죽는 rc · 매달리는 rc** | **SC-M2의 일이다.** M1까지는 design 위험 3의 절반이 열려 있다 |
+| `copy/check.sh`의 앰버 하이라이트 계수 | M0이 남긴 **알고 두는 부채**. 그대로다 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-config-design.md` | **SC의 전부.** 실측 28 · 비목표 8 · 결정 10(5는 철회) · 위험 넷(1·2·4는 닫혔다) |
+| `docs/decisions/project_shell_config.md` | 이 서브프로젝트의 기억. **다시 캐지 말 것**이 여기 있다 |
+| `docs/.../plans/2026-09-11-tars-shell-config-sc-m1.md` | 끝난 plan |
+| `init/src/config.zig` | `Shell.rcPath()`·**`Shell.rcSeed()`**·`seedRcFiles()`·`writeAll()` |
+| `init/src/config_test.zig` | **`expectQuietSeed`** — 씨앗을 늘리는 사람이 가장 먼저 만나는 자리 |
+| `init/src/main.zig` | `if (storage_mounted) config.seedRcFiles();` 한 줄 · **`console_flag`**(음성 확인이 겨눈 자리) |
+| `config/check.sh` | **부팅 셋.** 타이핑 시퀀스 여섯이 파일 위쪽에 모여 있다 |
+| `power/check.sh:424` | **성공했을 때 첫 부팅의 로그를 안 찍는다** — `debugfs`가 필요했던 이유 |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'cd init && zig build test'          # 호스트 검사만, 10초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash config/check.sh                         # CP 체인 단독, 부팅 셋이라 약 1분
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c "debugfs -R 'ls -l /' out/config.img"   # 게이트가 남긴 디스크에 직접
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
+```
+
+**기준선: SC-M1의 열한 체인 3/3 = 24분 36.55초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**코드를 되돌린 뒤에는 `rm -rf init/zig-out terminal/zig-out`을 한 번 한다**
+(UT design 실측 18). **SC-M1은 Zig를 건드렸으므로 이 함정이 살아 있었다.**
+**그리고 위의 ⚠ 때문에 음성 확인은 두 번씩 돌린다.**
+
+---
+
+## 그 앞의 milestone — Shell Config SC-M0 (2026-09-11)
+
+**자리가 섰고, 셸이 색을 쓰기 시작하면서 게이트가 셋 깨졌다**
 
 ## 지금 어디인가
 

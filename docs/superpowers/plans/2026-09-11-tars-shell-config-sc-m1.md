@@ -105,7 +105,7 @@ design 결정 10의 표를 실제 명령으로 옮긴 것이다.
 온다 — 원인에서 가장 먼 증상이다. **0.1초짜리 호스트 검사가 같은 것을 코드
 모양으로 잡는다.**
 
-- [ ] **Step 1: 검사 함수와 호출 셋을 `main()` 끝의 `PASS` 앞에 더한다**
+- [x] **Step 1: 검사 함수와 호출 셋을 `main()` 끝의 `PASS` 앞에 더한다**
 
 `init/src/config_test.zig`의 `std.debug.print("PASS\n", .{});` **앞**에
 **넣을 것**:
@@ -175,7 +175,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
 }
 ```
 
-- [ ] **Step 2: 컴파일 실패를 확인한다**
+- [x] **Step 2: 컴파일 실패를 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -186,7 +186,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 (`no member named 'rcSeed'`). **테스트 실패가 아니라 컴파일 실패인 것이
 정상이다** — SC-M0 Task 1과 같은 자리다.
 
-- [ ] **Step 3: 아직 커밋하지 않는다**
+- [x] **Step 3: 아직 커밋하지 않는다**
 
 Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에 남기지 않는다.
 
@@ -196,7 +196,7 @@ Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에
 
 **Files:** Modify `init/src/config.zig`
 
-- [ ] **Step 1: `Shell`에 `rcPath()`와 `rcSeed()`를 더한다**
+- [x] **Step 1: `Shell`에 `rcPath()`와 `rcSeed()`를 더한다**
 
 `init/src/config.zig`의 `configFlag` 함수 **바로 뒤**, `Shell`의 닫는 `};`
 앞에 **넣을 것**:
@@ -304,7 +304,7 @@ Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에
     }
 ```
 
-- [ ] **Step 2: `save`의 쓰기 루프를 `writeAll`로 뺀다**
+- [x] **Step 2: `save`의 쓰기 루프를 `writeAll`로 뺀다**
 
 `init/src/config.zig`의 `save` 안에서 **지울 것**:
 
@@ -357,7 +357,7 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
 }
 ```
 
-- [ ] **Step 3: `seedRcFiles`를 파일 끝에 더한다**
+- [x] **Step 3: `seedRcFiles`를 파일 끝에 더한다**
 
 `init/src/config.zig`의 **맨 끝**에 **넣을 것**:
 
@@ -412,7 +412,7 @@ fn seedRcFile(sh: Shell) void {
 }
 ```
 
-- [ ] **Step 4: 호스트 검사가 통과하는지 확인한다**
+- [x] **Step 4: 호스트 검사가 통과하는지 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -422,7 +422,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 **Expected:** 마지막 줄이 `PASS`, 종료 코드 0. `FAIL:` 줄이 하나도 없어야
 한다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add init/src/config.zig init/src/config_test.zig
@@ -435,7 +435,7 @@ git commit -m "Lay down three rc files that say nothing out loud"
 
 **Files:** Modify `init/src/main.zig`
 
-- [ ] **Step 1: `loadConfig` 뒤에 한 줄을 더한다**
+- [x] **Step 1: `loadConfig` 뒤에 한 줄을 더한다**
 
 `init/src/main.zig`에서 **지울 것**:
 
@@ -459,7 +459,7 @@ git commit -m "Lay down three rc files that say nothing out loud"
     if (storage_mounted) config.seedRcFiles();
 ```
 
-- [ ] **Step 2: 빌드와 호스트 검사**
+- [x] **Step 2: 빌드와 호스트 검사**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -468,7 +468,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **Expected:** 종료 코드 0.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add init/src/main.zig
@@ -481,7 +481,7 @@ git commit -m "Only lay the seeds when there is a disk to keep them"
 
 **Files:** Modify `config/check.sh`
 
-- [ ] **Step 1: 타이핑 시퀀스 넷을 더한다**
+- [x] **Step 1: 타이핑 시퀀스 넷을 더한다**
 
 `config/check.sh`의 `READBACK_KEYS=(...)` 줄 **뒤**에 **넣을 것**:
 
@@ -509,7 +509,7 @@ APPEND_KEYS=(e c h o spc e c h o spc t a r s minus r c minus a l i v e spc
 RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c ret)
 ```
 
-- [ ] **Step 2: 1차 부팅의 훅을 다시 쓴다**
+- [x] **Step 2: 1차 부팅의 훅을 다시 쓴다**
 
 `config/check.sh`의 `edit_config_in_guest()` 안에서, `type_keys`를 부르는
 부분을 갈아 끼운다. **지울 것**:
@@ -596,7 +596,7 @@ RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c re
 }
 ```
 
-- [ ] **Step 3: 1차 부팅 뒤의 검사에 씨앗 셋을 더한다**
+- [x] **Step 3: 1차 부팅 뒤의 검사에 씨앗 셋을 더한다**
 
 `config/check.sh`에서 `echo "boot 1: init reported shell_config=on (the sixth
 key reached the log)"` 줄 **뒤**에 **넣을 것**:
@@ -613,7 +613,7 @@ done
 echo "boot 1: init seeded all three rc files on the empty disk"
 ```
 
-- [ ] **Step 4: CP 체인 단독 실행**
+- [x] **Step 4: CP 체인 단독 실행**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -628,7 +628,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 fish 문법이 틀렸거나 (c) `shell_config`가 `off`로 읽힌 것이다. 셋이 화면에서
 서로 다른 모양으로 나타난다 — (b)는 fish의 문법 에러 메시지가 함께 뜬다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add config/check.sh
@@ -641,7 +641,7 @@ git commit -m "Ask the first boot to read what it just wrote for the shell"
 
 **Files:** Modify `config/check.sh`
 
-- [ ] **Step 1: 2차 부팅의 훅을 만든다**
+- [x] **Step 1: 2차 부팅의 훅을 만든다**
 
 `config/check.sh`의 `watch_console_shell()` 함수 **전체를 지우고** **넣을 것**:
 
@@ -705,7 +705,7 @@ watch_console_shell() {
 }
 ```
 
-- [ ] **Step 2: `OFF_KEYS`를 더한다**
+- [x] **Step 2: `OFF_KEYS`를 더한다**
 
 `config/check.sh`의 `RC_READBACK_KEYS=(...)` **뒤**에 **넣을 것**:
 
@@ -716,7 +716,7 @@ OFF_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o f f spc
           shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 ```
 
-- [ ] **Step 3: 2차 부팅 뒤의 검사에 셋을 더한다**
+- [x] **Step 3: 2차 부팅 뒤의 검사에 셋을 더한다**
 
 `config/check.sh`에서 `echo "boot 2: the config written inside the guest
 selected zsh for both shells"` 줄 **앞**에 **넣을 것**:
@@ -752,7 +752,7 @@ fi
 echo "boot 2: init left the existing rc files alone"
 ```
 
-- [ ] **Step 4: `boot_once` 호출의 주석과 배너를 고친다**
+- [x] **Step 4: `boot_once` 호출의 주석과 배너를 고친다**
 
 `config/check.sh`에서 **지울 것**:
 
@@ -778,7 +778,7 @@ echo "=== boot 1/2: empty disk, seed the config then edit it from inside the gue
 echo "=== boot 1/3: empty disk, seed the config and the rc files, then edit them from inside ==="
 ```
 
-- [ ] **Step 5: CP 체인 단독 실행**
+- [x] **Step 5: CP 체인 단독 실행**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -787,7 +787,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **Expected:** `PASS`. 새 줄 셋이 보인다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add config/check.sh
@@ -803,7 +803,7 @@ git commit -m "Watch both shells run a line the user left on the disk"
 **design 결정 10이 "이 설계에서 가장 강한 검사"라고 적은 자리다.** 2차만
 있으면 "rc를 읽는다"까지이고, `off`가 그것을 막는다는 것은 로그 수준에 머문다.
 
-- [ ] **Step 1: `LOG3`을 만든다**
+- [x] **Step 1: `LOG3`을 만든다**
 
 `config/check.sh`에서 **지울 것**:
 
@@ -820,7 +820,7 @@ LOG2="$(mktemp)"
 LOG3="$(mktemp)"
 ```
 
-- [ ] **Step 2: 3차 부팅을 파일 끝의 `--- init log` 절 앞에 더한다**
+- [x] **Step 2: 3차 부팅을 파일 끝의 `--- init log` 절 앞에 더한다**
 
 `config/check.sh`의 `# 정보성. ext2가 "not clean"이라고...` 주석 **앞**에
 **넣을 것**:
@@ -869,7 +869,7 @@ if grep -q "Attempted to kill init" "$LOG3"; then
 fi
 ```
 
-- [ ] **Step 3: 조용한 관측 훅을 더한다**
+- [x] **Step 3: 조용한 관측 훅을 더한다**
 
 `config/check.sh`의 `watch_console_shell()` **뒤**에 **넣을 것**:
 
@@ -883,7 +883,7 @@ watch_console_shell_quiet() {
 }
 ```
 
-- [ ] **Step 4: 로그 덤프에 3차를 더한다**
+- [x] **Step 4: 로그 덤프에 3차를 더한다**
 
 `config/check.sh`에서 **지울 것**:
 
@@ -901,7 +901,7 @@ echo "--- init log (boot 3) ---"
 grep 'tars-init:' "$LOG3" || true
 ```
 
-- [ ] **Step 5: CP 체인 단독 실행**
+- [x] **Step 5: CP 체인 단독 실행**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -910,7 +910,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **Expected:** `PASS`. **부팅이 셋이라 이 체인은 약 1분 30초다.**
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add config/check.sh
@@ -930,7 +930,7 @@ git commit -m "Turn the key off and watch the same rc stay shut"
 **커밋하지 않는다.** 각 Step에서 **어느 검사가 죽었는지**를 그대로 기록한다 —
 그것이 이 milestone의 실측이 된다.
 
-- [ ] **Step 1: 씨앗을 안 깔면 1차가 죽는가**
+- [x] **Step 1: 씨앗을 안 깔면 1차가 죽는가**
 
 `init/src/main.zig`의 `if (storage_mounted) config.seedRcFiles();`를 임시로
 지운 뒤 체인을 돌린다.
@@ -943,7 +943,7 @@ git commit -m "Turn the key off and watch the same rc stay shut"
 git checkout init/src/main.zig
 ```
 
-- [ ] **Step 2: 씨앗이 있어도 `alias`가 없으면 죽는가**
+- [x] **Step 2: 씨앗이 있어도 `alias`가 없으면 죽는가**
 
 `init/src/config.zig`의 fish 씨앗에서 `alias tars-config=...` 한 줄을 임시로
 지운다. **`expectQuietSeed`의 "alias가 하나도 없으면" 검사가 호스트에서 먼저
@@ -955,7 +955,7 @@ git checkout init/src/main.zig
 git checkout init/src/config.zig
 ```
 
-- [ ] **Step 3: 씨앗이 무언가를 찍으면 호스트 검사가 죽는가**
+- [x] **Step 3: 씨앗이 무언가를 찍으면 호스트 검사가 죽는가**
 
 `init/src/config.zig`의 zsh 씨앗에 `echo hello` 한 줄을 임시로 더한다.
 
@@ -973,7 +973,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 git checkout init/src/config.zig
 ```
 
-- [ ] **Step 4: `off`가 실제로 플래그를 안 주면 3차가 죽는가**
+- [x] **Step 4: `off`가 실제로 플래그를 안 주면 3차가 죽는가**
 
 `init/src/main.zig`의 `console_flag`를 **조건 없이 null**로 되돌린다
 (즉 SC-M0의 결정 4를 깨뜨린다).
@@ -987,7 +987,7 @@ git checkout init/src/config.zig
 git checkout init/src/main.zig
 ```
 
-- [ ] **Step 5: 되돌린 뒤 캐시를 지운다**
+- [x] **Step 5: 되돌린 뒤 캐시를 지운다**
 
 ```bash
 rm -rf init/zig-out terminal/zig-out
@@ -996,7 +996,7 @@ rm -rf init/zig-out terminal/zig-out
 **Zig를 되돌린 뒤에는 이것을 한 번 한다**(UT design 실측 18). **SC-M1은
 Zig를 건드리므로 이 함정이 살아 있다.**
 
-- [ ] **Step 6: 커밋하지 않는다**
+- [x] **Step 6: 커밋하지 않는다**
 
 ---
 
@@ -1004,7 +1004,7 @@ Zig를 건드리므로 이 함정이 살아 있다.**
 
 **Files:** 없음
 
-- [ ] **Step 1: 백그라운드로 돌린다**
+- [x] **Step 1: 백그라운드로 돌린다**
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1014,7 +1014,7 @@ Zig를 건드리므로 이 함정이 살아 있다.**
 **약 25분이다.** Bash 도구 상한이 10분이라 **백그라운드로 돌리고 주기적으로
 `/tmp/gate.log`를 본다.**
 
-- [ ] **Step 2: 결과를 본다**
+- [x] **Step 2: 결과를 본다**
 
 ```bash
 tail -30 /tmp/gate.log; cat /tmp/gate.time
@@ -1027,7 +1027,7 @@ tail -30 /tmp/gate.log; cat /tmp/gate.time
 **`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
 `status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
 
-- [ ] **Step 3: 씨앗이 다른 체인의 화면을 안 건드렸는지 직접 확인한다**
+- [x] **Step 3: 씨앗이 다른 체인의 화면을 안 건드렸는지 직접 확인한다**
 
 게이트가 초록이어도 이것을 따로 본다. **설정 디스크를 붙이는 체인이
 다섯이고, 그 다섯의 셸이 이번 milestone부터 파일을 읽는다.**
@@ -1055,28 +1055,28 @@ alias를 **부르지** 정의를 찍지 않는다), 셋째도 **0**이어야 한
 - Modify `CLAUDE.md`
 - Modify `HANDOFF.md`
 
-- [ ] **Step 1: design의 `Status:` 줄과 실측 절을 고친다**
+- [x] **Step 1: design의 `Status:` 줄과 실측 절을 고친다**
 
 `Status:`를 **SC-M1 완료**로 바꾸고, Task 7의 음성 확인 결과와 Task 8의 게이트
 시간을 **"SC-M1이 실행으로 증명한 것"** 절로 더한다(실측 22부터).
 
-- [ ] **Step 2: `docs/decisions/project_shell_config.md`에 M1의 기억을 더한다**
+- [x] **Step 2: `docs/decisions/project_shell_config.md`에 M1의 기억을 더한다**
 
 **다시 캐지 말 것**: 씨앗이 조용해야 하는 이유와 그것을 지키는 장치,
 `tars-config` alias가 게이트의 판정으로도 쓰인다는 것, 판정 글자를 씨앗이
 아니라 사람이 심는 이유.
 
-- [ ] **Step 3: `MEMORY.md`의 해당 줄을 고친다**
+- [x] **Step 3: `MEMORY.md`의 해당 줄을 고친다**
 
-- [ ] **Step 4: `CLAUDE.md`의 Shell Config 문단을 고친다**
+- [x] **Step 4: `CLAUDE.md`의 Shell Config 문단을 고친다**
 
 **SC-M2가 아직 남아 있으므로 여전히 진행 중으로 적는다.**
 
-- [ ] **Step 5: `HANDOFF.md`를 새로 쓴다**
+- [x] **Step 5: `HANDOFF.md`를 새로 쓴다**
 
 맨 위가 SC-M1이고 그 아래가 SC-M0이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add docs MEMORY.md CLAUDE.md HANDOFF.md
