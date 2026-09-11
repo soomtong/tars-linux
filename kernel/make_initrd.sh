@@ -208,6 +208,26 @@ ln -sf vim "$WORKDIR/usr/bin/editor"
 # **부팅을 막지 않는다**는 것이 RM-M2가 라벨을 못 찾았을 때와 같은 모양이다.
 ln -sf config/gitconfig "$WORKDIR/.gitconfig"
 
+# SC-M0 결정 1. **위 .gitconfig과 글자 그대로 같은 문제에 같은 답이다** —
+# 셸의 rc 파일도 $HOME에서 읽히고 게스트의 HOME은 / 이며 /는 tmpfs다.
+# 영속하는 것은 /config 하나뿐이다.
+#
+# **/config 안은 평평하다.** fish만 홈에서 한 단 더 깊은 자리를 쓰는데
+# ($XDG_CONFIG_HOME/fish/config.fish, 즉 /.config/fish/config.fish),
+# 대상 이름을 fish.config로 두어 gitconfig·bashrc·zshrc와 같은 층에
+# 세운다 — /config/fish/ 디렉터리를 만들면 그 디렉터리는 fish만 쓴다.
+#
+# **파일은 여기서 안 만든다.** initrd에 넣으면 tmpfs에 생겨서 부팅마다
+# 초기화되고, 그러면 링크가 가리키는 자리와 파일이 있는 자리가 갈린다.
+# 씨앗은 init이 /config를 마운트한 뒤에 깐다(SC-M1).
+#
+# **설정 디스크를 못 찾으면?** .gitconfig과 같다 — 링크가 initrd 안의 빈
+# /config를 가리키고 셸은 rc가 없는 채로 뜬다. **부팅을 안 막는다.**
+mkdir -p "$WORKDIR/.config/fish"
+ln -sf ../../config/fish.config "$WORKDIR/.config/fish/config.fish"
+ln -sf config/bashrc "$WORKDIR/.bashrc"
+ln -sf config/zshrc "$WORKDIR/.zshrc"
+
 # git init이 새 저장소에 복사하는 템플릿(hooks 샘플 13 · info/exclude ·
 # description). **26,140바이트이고, 없으면 git init이 매번 경고를 찍는다** —
 # `warning: templates not found in /usr/share/git-core/templates`. 저장소는
