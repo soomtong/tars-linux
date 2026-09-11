@@ -160,6 +160,63 @@ done
 # 풀어 봐도 끊어지지 않는다.
 ln -sf ../usr/bin/bash "$WORKDIR/bin/sh"
 
+# UT-M3. **vi와 vim은 한 실체다**(design 결정 4). guest_tools.sh에 줄을 둘
+# 적으면 install_tool이 cp를 두 번 해서 1.76MB짜리 사본이 두 벌 생긴다 —
+# 같은 파일에 이름이 둘 있는 것을 파일 둘로 만드는 것은 파일 시스템에
+# 대한 거짓말이다. 위 /bin/sh가 이미 그 모양을 세워 뒀다.
+ln -sf vim "$WORKDIR/usr/bin/vi"
+
+# UT-M3. **Debian git의 기본 페이저는 `less`가 아니라 `pager`다** — alternatives
+# 이름이고 postinst가 만드는 링크라 dpkg -x로 푼 sysroot에 없다. 2026-09-11에
+# 게스트에서 직접 봤다:
+#
+#   root@(none) /t/r (main)# git log
+#   error: cannot run pager: No such file or directory
+#   fatal: unable to execute pager 'pager'
+#
+# **매달리는 것이 아니라 죽는다.** 그래서 게이트는 안 깨지고 사람만 깨진다 —
+# `git log`·`git diff`·`git branch -a`가 전부 이 경로다. mawk→awk ·
+# fdfind→fd · vim.tiny→vi와 **같은 종류**(결정 4)이고, 다른 것은 이 이름을
+# 우리가 고른 것이 아니라 **git 바이너리가 컴파일 타임에 박아 뒀다**는 점이다.
+ln -sf less "$WORKDIR/usr/bin/pager"
+
+# 같은 종류가 하나 더 있다. 게스트에게 직접 물어서 알았다:
+#
+#   root@(none) ~# git var -l
+#   GIT_EDITOR=editor        GIT_SEQUENCE_EDITOR=editor        GIT_PAGER=pager
+#
+# `git commit`을 -m 없이 치는 것 · `git rebase -i` · `git config --edit`가
+# 전부 이 이름을 부른다. **vim은 이제 이름이 셋이고 실체는 하나다**
+# (vim · vi · editor).
+ln -sf vim "$WORKDIR/usr/bin/editor"
+
+# UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
+# /다. 그런데 /는 tmpfs라 **재부팅하면 사라진다** — 영속하는 것은 설정
+# 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다
+# (init/src/main.zig가 MS_RDONLY 없이 마운트한다).
+#
+# **그래서 링크 하나로 잇는다.** GIT_CONFIG_GLOBAL 환경변수를 쓰는 쪽은
+# "그 변수를 어디서 넣을까"(PID 1인지 terminal인지)를 또 정해야 하고,
+# 그것은 결정 1이 PATH에 대해 이미 치른 비용을 한 번 더 치르는 일이다.
+# 새 코드 경로가 없다.
+#
+# 상대 경로인 이유는 /bin/sh와 같다 — 이 트리를 다른 자리에 풀어도 안
+# 끊어진다.
+#
+# **설정 디스크를 못 찾으면?** /config는 initrd 안의 빈 디렉터리로 남고
+# 링크는 거기를 가리킨다. git이 쓰면 tmpfs에 쓰이고 재부팅하면 사라진다 —
+# **부팅을 막지 않는다**는 것이 RM-M2가 라벨을 못 찾았을 때와 같은 모양이다.
+ln -sf config/gitconfig "$WORKDIR/.gitconfig"
+
+# git init이 새 저장소에 복사하는 템플릿(hooks 샘플 13 · info/exclude ·
+# description). **26,140바이트이고, 없으면 git init이 매번 경고를 찍는다** —
+# `warning: templates not found in /usr/share/git-core/templates`. 저장소는
+# 그래도 만들어지지만, 개발용이라고 부르는 기계가 git init마다 경고를 내는
+# 것은 고장으로 보인다. btop 테마를 뺀 것과 판단이 다른 이유가 그것이다:
+# 저쪽은 안 쓰는 것이고 이쪽은 git init이 **매번** 쓴다.
+mkdir -p "$WORKDIR/usr/share/git-core"
+cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
+
 # passwd가 없으면 whoami가 이름 대신 "cannot find name for user ID 0"을
 # 내고, **git이 커밋 작성자를 유추하려다 실패한다.** 한 줄이면 된다.
 #
