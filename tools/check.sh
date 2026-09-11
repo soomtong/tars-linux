@@ -28,6 +28,12 @@ cd "$(dirname "$0")"
 # 전부 읽거나 찍는 명령이었다. `/tmp`(UT-M0이 놓고 아무도 안 쓰던 뼈대)와
 # `/config`(CP가 만든 마운트)가 그 쓰기를 받는다.
 #
+# **SM-M0이 도구 둘(zoxide · fzf)을 더하고 검사 둘을 더 친다** — 훅은 아직
+# 없으므로 사람이 이름으로 직접 부르는 것까지다. 둘 다 경로를 찍는 도구라
+# **판정 글자를 타이핑한 명령줄과 겹치지 않게 만드는 것**이 이 둘의 설계
+# 전부다: fzf는 검색어(`descr`)와 판정(`templates/description`)을 다르게
+# 하고, zoxide는 `..`를 지나는 경로를 쳐서 **정규화된 답만** 판정으로 쓴다.
+#
 # **열 체인 중 어느 것도 이것을 못 본다.** 나머지는 전부 게스트 명령을 절대
 # 경로로 친다 — docs/decisions/project_guest_environment.md가 IP-M0에서
 # 그렇게 고치라고 적어 둔 그대로다. 그 문서의 "결과 1"을 닫는 체인이다.
@@ -570,16 +576,83 @@ if ! wait_for_screen "Linking: gcc"; then
 fi
 echo "vi ran under the name we gave it"
 
-# ── 검사 17: 음성 확인 — **위의 아홉 전부에 대해** ──────────────────────
+# ── 검사 17: fzf가 돈다 — **비대화형 필터 모드** ────────────────────────
+#
+# fzf는 화면을 통째로 가져가는 TUI다. 그냥 치면 이 체인이 실패가 아니라
+# **타임아웃**으로 죽는다 — less·top·htop·btop·ncdu가 목록 검사까지만 받는
+# 이유와 같다(UT design 실측 26).
+#
+# **`--filter`가 그 함정을 비켜 간다.** 매치를 찍고 즉시 끝나고, stdin이
+# tty면 내장 walker로 파일 트리를 훑는다(SM design 실측 7). 게스트 셸의
+# stdin은 terminal이 만든 PTY라 tty이고, 그래서 **파이프도 따옴표도 필요
+# 없다** — sendkey로 `|`와 `"`를 만들지 않아도 된다.
+#
+# **walker root를 /config로 잡으면 안 된다.** 이 체인에는 설정 디스크가
+# 없어서 거기가 빈 디렉터리이고 fzf는 아무것도 못 찾는다(exit 1).
+# /usr/share/git-core/templates는 UT-M3이 git의 경고를 없애려고 넣은 것이고
+# **디스크 없이도 항상 거기 있다.**
+#
+# **검색어와 판정 글자가 다른 것이 이 프로브의 설계다.** `descr`을 치고
+# `templates/description`을 본다 — 판정 글자가 타이핑한 명령줄에 있으면 그
+# 검사는 도구가 죽어도 초록이다(SM design 실측 15). 이 저장소가 같은 함정에
+# 세 번 걸렸다: bat은 그래서 검사를 아예 못 만들었고, 정적 목록 검사는 그래서
+# tautology다.
+echo "=== typing 'fzf --filter=descr --walker-root=/usr/share/git-core' ==="
+type_keys f z f spc minus minus f i l t e r equal d e s c r spc \
+          minus minus w a l k e r minus r o o t equal \
+          slash u s r slash s h a r e slash g i t minus c o r e ret
+
+if ! wait_for_screen "templates/description"; then
+  fail "fzf did not filter the git template tree" \
+    "terminal: screen>" "Unknown command" "error while loading"
+fi
+echo "fzf filtered a file tree without taking the screen"
+
+# ── 검사 18: zoxide가 배우고 돌려준다 — **DB 왕복** ─────────────────────
+#
+# 두 명령이 한 사실을 증명한다 — 쓰고(add) 읽는다(query). **M0에는 훅이
+# 없으니 셸이 대신 불러 주지 않는다** — 사람이 직접 두 번 부른다. 훅이
+# `chpwd`에 걸려 `cd` 한 번으로 add가 일어나는 것은 SM-M1이 본다.
+#
+# **치는 경로에 `..`가 있는 것이 이 검사의 핵심이다.** zoxide는 경로를
+# 정규화해서 저장하므로(SM design 실측 15) DB가 돌려주는
+# `/usr/share/terminfo/x`는 **화면의 다른 어디에도 없는 글자**다 — 타이핑한
+# 명령줄에도 없다. **zoxide가 그 글자를 만든 유일한 주체가 된다.**
+#
+# terminfo를 고른 이유는 다른 검사와 안 겹치기 때문이다. vendor/fonts는
+# 검사 8·9가 이미 판정에 쓰고 있고, 검사 둘이 같은 글자를 보면 하나가 죽어도
+# 둘 다 초록일 수 있다(검사 7·8의 주석과 같은 이유).
+#
+# DB는 `$HOME/.local/share/zoxide/db.zo`에 생긴다. 홈(/)은 tmpfs라 이 부팅과
+# 함께 사라지고 **M0에서는 그것이 맞다** — 부팅을 넘어 남게 하는 것은 SM-M2이고
+# 그때 XDG_DATA_HOME이 이 자리를 /config로 옮긴다. **이 검사의 판정 글자는
+# 그때도 안 바뀐다.**
+echo "=== typing 'zoxide add /usr/bin/../share/terminfo/x' ==="
+type_keys z o x i d e spc a d d spc \
+          slash u s r slash b i n slash dot dot slash s h a r e \
+          slash t e r m i n f o slash x ret
+
+echo "=== typing 'zoxide query terminfo' ==="
+type_keys z o x i d e spc q u e r y spc t e r m i n f o ret
+
+if ! wait_for_screen "/usr/share/terminfo/x"; then
+  fail "zoxide did not give back the directory it had just learned" \
+    "terminal: screen>" "Unknown command" "error while loading" \
+    "no match found"
+fi
+echo "zoxide learned a directory and gave it back normalized"
+
+# ── 검사 19: 음성 확인 — **위의 열하나 전부에 대해** ────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
-# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi 아홉을
-# 다 친 뒤에 한 번 보면 아홉 전부의 음성 확인이 된다. UT-M0 때는 ls
-# 하나뿐이라 바로 뒤에 있었다.
+# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi · fzf ·
+# zoxide 열하나를 다 친 뒤에 한 번 보면 열하나 전부의 음성 확인이 된다.
+# UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
 #
-# **번호가 11에서 17로 뛴 것은 UT-M3이 검사 다섯을 앞에 끼웠기 때문이다** —
-# 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는 늘어난 것까지
-# 함께 본다. 그것이 이 자리의 값이다.
+# **번호가 11 → 17 → 19로 뛴 것은 앞에 검사가 끼워졌기 때문이다**(UT-M3이
+# 다섯, SM-M0이 둘). 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는
+# **늘어난 것까지 함께 본다.** 그것이 이 자리의 값이다 — SM-M0은 이 검사를
+# 한 글자도 고치지 않고 새 도구 둘의 음성 확인을 얻는다.
 #
 # **positive 검사만으로는 안 닫히는 길이 있다.** 예를 들어 검사 5의
 # `/terminal`은 화면 어딘가에 그 글자가 있으면 초록인데, ps가 죽고 그 앞의
