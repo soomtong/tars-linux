@@ -125,28 +125,32 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **RM은 편집도 Claude Code가 했다** — 사용자가 2026-09-09에 자러 가며
   서브프로젝트 단위로 위임했고, 2026-09-10에 외출하며 한 번 더 위임했다.
   SH·FP의 예외와 같은 종류다.
-  **Userland Tools(UT-M0·M1·M2, 2026-09-10·11 — 진행 중. 게스트 셸이
-  `/usr/bin/ls`가 아니라 `ls` 세 글자로 명령을 찾고, 그 자리에 **도구 63개**가
-  서 있다 — GNU 한 벌 50과 **모던 열셋**(`eza`·`bat`·`fd`·`rg`·`sd`·`procs`·
-  `htop`·`btop`·`tree`·`duf`·`ncdu`·`jq`·`hyperfine`. 이름은 Debian이 아니라
-  **우리가 정한 것**으로 선다). PID 1이 커널의 envp 블록에
-  `PATH=/usr/bin:/bin`을 더한 새 블록을 지어 자식 둘에게 주고, git이 딛고 설
-  뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` · `/etc/group`)이 섰다. **M1이
+  **Userland Tools(UT-M0~M3, 2026-09-10·11 완료 — 게스트 셸이
+  `/usr/bin/ls`가 아니라 `ls` 세 글자로 명령을 찾고, 그 자리에 **도구 65개**가
+  서 있다 — GNU 한 벌 50 · **모던 열셋**(`eza`·`bat`·`fd`·`rg`·`sd`·`procs`·
+  `htop`·`btop`·`tree`·`duf`·`ncdu`·`jq`·`hyperfine`) · **개발 둘**(`git` ·
+  `vim.tiny`). 이름은 Debian이 아니라 **우리가 정한 것**으로 선다. PID 1이
+  커널의 envp 블록에 `PATH=/usr/bin:/bin`을 더한 새 블록을 지어 자식 둘에게
+  주고, 뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` · `/etc/group`)과 **링크
+  넷**(`vi`·`pager`·`editor`→`/.gitconfig`)이 섰다. **게스트에서 `git init`
+  →`add`→`commit`→`log`가 돌고 전역 설정이 `/config`에 남는다.** **M1이
   바이너리 목록을 `kernel/guest_tools.sh` 한 파일로 뺐고**(`make_initrd.sh`와
   `tools/check.sh`가 같은 배열을 본다) **M2는 그 배열에 줄만 더해
   `make_initrd.sh`를 한 글자도 안 고쳤다.** 게이트에 **열한번째 체인
-  `tools/check.sh`**가 있다. **M2가 게이트 자신의 것 둘도 고쳤다** —
-  `gate_lib.sh`의 **`GUEST_MEM=512`**(QEMU 기본 128MiB에서는 푼 84MB짜리
-  initramfs가 tmpfs를 채워 기계가 아예 안 켜진다)와 **`wait_for_screen`**
-  (명령 뒤 `sleep 2`하고 한 번 grep하던 검사가 8회 중 2회 틀렸다. 화면에는
-  찾던 글자가 있었고 검사가 먼저 본 것이었다). **남은 것은 UT-M3(git ·
-  `vim.tiny`) 하나다.**)** design은
+  `tools/check.sh`**가 있고 검사가 열여섯이다. **M2가 게이트 자신의 것 둘도
+  고쳤다** — `gate_lib.sh`의 **`GUEST_MEM=512`**(QEMU 기본 128MiB에서는 푼
+  84MB짜리 initramfs가 tmpfs를 채워 기계가 아예 안 켜진다)와
+  **`wait_for_screen`**(명령 뒤 `sleep 2`하고 한 번 grep하던 검사가 8회 중
+  2회 틀렸다. 화면에는 찾던 글자가 있었고 검사가 먼저 본 것이었다).
+  **M3이 배운 것 둘: Debian은 프로그램이 부르는 이름(`pager`·`editor`)을
+  alternatives 링크로 두고 `dpkg -x`는 그것을 안 만든다 · 게이트가 화면에서
+  긴 출력을 판정할 때는 첫 줄이 아니라 마지막에 남는 줄을 본다.**)** design은
   `.../specs/2026-09-10-tars-userland-tools-design.md`, 기억은
   `docs/decisions/project_userland_tools.md`.
-  **UT-M0·M1·M2도 편집을 Claude Code가 했다** — 사용자가 2026-09-10과 09-11에
+  **UT-M0~M3도 편집을 Claude Code가 했다** — 사용자가 2026-09-10과 09-11에
   세션마다 외출하며 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다.
   SH·FP·RM의 예외와 같은 종류이고 **세션 단위**다.
-  **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0·M1·M2는 각각 그 위의 세션 한정
+  **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0~M3은 각각 그 위의 세션 한정
   예외였다 — 다음 세션은 다시 기본 규칙이다. 파일 편집은 사용자가 한다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고

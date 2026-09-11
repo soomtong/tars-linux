@@ -1,6 +1,6 @@
 ---
 name: project_userland_tools
-description: "게스트에서 쓸 도구 한 벌(GNU + 모던 + git)을 세우고 그 이름이 PATH로 손에 닿게 하는 층(UT) — UT-M0(2026-09-10)이 PATH와 뼈대 넷을, UT-M1(2026-09-11)이 목록 한 자리(kernel/guest_tools.sh)와 GNU 한 벌 50개를 세웠다. 조달은 Debian .deb 하나로 통일하며 libgit2 사슬 11.4MB를 감수한다"
+description: "게스트에서 쓸 도구 한 벌(GNU + 모던 + git)을 세우고 그 이름이 PATH로 손에 닿게 하는 층(UT) — 2026-09-10·11에 milestone 넷이 다 끝났다. PATH와 뼈대 넷(M0) · 목록 한 자리 kernel/guest_tools.sh와 GNU 50(M1) · 모던 13(M2) · git과 vim.tiny와 링크 넷(M3)으로 도구 65가 선다. 조달은 Debian .deb 하나로 통일하며 libgit2 사슬 11.4MB를 감수한다"
 metadata:
   node_type: memory
   type: project
@@ -317,3 +317,114 @@ GB 단위다) — **게이트만의 제약이라 실기에서는 영원히 안 �
 `wait_for_screen`을 쓴다** — 그 둘의 차이가 8회 중 2회다.
 
 관련: [[project_gate_latency]], [[project_gate_chain_composition]]
+
+---
+
+## UT-M3 (2026-09-11) — **git이 섰고, 이름 둘을 바이너리가 정해 놓았다**
+
+목록이 63에서 **65**가 되고 **링크 넷**이 섰다. 이 milestone의 성격이 앞의
+셋과 다르다 — **더한 것의 대부분이 바이너리가 아니라 이름이다.**
+
+**1. 새 라이브러리가 0이다 — 이 예측이 처음 맞았다.** git은 `libpcre2-8`·
+`libz`·`libc`를, `vim.tiny`는 `libm`·`libtinfo`·`libselinux`·`libacl`·
+`libc`를 부르는데 일곱 다 이미 있었다(`libz`는 M2의 `libgit2` 사슬이,
+`libacl`은 `sed`가, `libselinux`는 fish가 데려왔다). **M1·M2에서 두 번 틀린
+뒤다**(실측 22·30). **그래도 재고 나서 알았다 — 맞는 날과 틀린 날은 재기
+전에 구별되지 않고, 그 확인은 30초다.**
+
+**2. Debian git은 페이저와 편집기를 alternatives 이름으로 부른다.**
+게스트에게 `git var -l`로 직접 물었다 — `GIT_PAGER=pager` ·
+`GIT_EDITOR=editor`. 둘 다 postinst가 만드는 링크라 `dpkg -x`로 푼 sysroot에
+없고, 없으면 이렇게 죽는다.
+
+```
+root@(none) /t/r (main)# git log
+error: cannot run pager: No such file or directory
+```
+
+**매달리는 것이 아니라 죽는다 — 게이트는 안 깨지고 사람만 깨진다.**
+`git log`·`git diff`·`git branch -a`가 전부 이 경로이고 `-m` 없는
+`git commit`과 `rebase -i`가 `editor` 경로다. **`mawk`→`awk`와 같은
+종류인데(결정 4) 그쪽 이름은 우리가 골랐고 이쪽 이름은 바이너리가 정해
+놓았다.** 처방은 링크 둘(`pager`→`less` · `editor`→`vim`)이고, **vim은
+이제 이름이 셋이고 실체는 하나다.**
+
+**게스트에 새 도구를 넣을 때는 그 도구가 부르는 다른 도구의 이름도 함께
+본다** — `DT_NEEDED`는 라이브러리만 말하고, 이 종류는 말하지 않는다.
+
+**3. `/usr/lib/git-core`는 통째로 안 넣는다.** 168 항목 = **심볼릭 링크 141
++ 실체 26**(design 실측 7이 "하드링크"라고 적은 것의 정정. 결론은 같다).
+실체 26 중 큰 것 일곱 약 16MB가 네트워크 헬퍼이고, 나머지는 셸 스크립트다.
+`init`·`add`·`commit`·`log`·`status`는 전부 builtin이라 **그 트리 없이
+돈다** — 부팅해서 확인했다.
+
+**4. 커밋에는 `user.email` 하나가 필수다.** 호스트 이름이 `(none)`이라 git이
+이메일을 자동으로 못 만든다(`fatal: unable to auto-detect email address (got
+'root@(none).(none)')`). **이름은 `/etc/passwd`의 gecos에서 온다** — UT-M0의
+뼈대가 여기서 값을 낸다. 그래서 작성자가 `root <tars>`이고, 게이트의 검사
+15가 그 한 줄로 **뼈대와 결정 8을 함께** 본다.
+
+**5. 결정 8이 실제로 돈다.** `git config --global user.email tars` 뒤
+`cat /config/gitconfig`가 `email = tars`를 낸다 — git이 `/.gitconfig` 링크를
+**풀고 저쪽에** 쓴다. **읽는 자리를 바꿔서 물어야** 링크를 따라간 것과
+링크를 덮어쓴 것이 갈린다. **게이트에는 설정 디스크가 없으므로 증명되는
+것은 "/config에 쓰인다"까지이고**, 그 디스크가 부팅 사이를 지킨다는 것은
+CP 체인이 같은 마운트로 이미 증명한 것이다.
+
+**6. 긴 출력의 첫 줄은 화면 프레임에 안 남는다.** `vi --version`의 판정을
+`VIM - Vi IMproved`로 잡았는데 **프레임 어디에도 없었다**(0회). 출력 약
+50줄이 한 번에 오고 프레임이 그려질 때는 첫 줄이 이미 스크롤로 사라진
+뒤다. **판정은 마지막까지 남는 줄로 잡는다**(`Linking: gcc`). `dmesg`를 안
+치는 이유의 뒷면이다.
+
+**7. sendkey에는 대문자가 없다.** `git var GIT_PAGER`를 치면 변수 이름이
+**통째로 안 쳐진다.** 대문자는 `shift-g`처럼 보내야 하고 이 저장소의 체인은
+그것을 쓴 적이 없다 — **게이트가 칠 명령은 전부 소문자여야 한다.**
+
+**8. 검사 1에 잠복 결함이 있었다 — 아카이브의 마지막 항목을 영영 못 찾는다.**
+`PADDED_LIST="$(printf '\n%s\n' "$LIST")"`에서 **명령 치환이 끝의 개행을
+도로 지운다.** `.gitconfig`이 마침 마지막 항목이라 드러났다(파일은 분명히
+있는데 FAIL). 지금까지 안 드러난 이유는 마지막 항목이 한 번도 `WANT`에 없어서다.
+**증상이 조용한 초록이 아니라 설명 안 되는 빨강**이라는 점에서 TR-M2의
+글로브와 방향이 반대다. 고침은 명령 치환을 안 쓰는 것.
+
+**9. 음성 확인 셋 — 이번엔 정적 검사가 tautology가 아니었다.**
+
+| 무엇을 되돌렸나 | 검사 1(정적) | 화면 검사 |
+|---|---|---|
+| `.gitconfig` 링크 | **FAIL**(부팅 전) | 거기까지 못 간다 |
+| `pager` 링크(+literal) | 초록 | **전부 초록 — 아무도 못 본다** |
+| 목록의 `usr/bin/git` 줄 | 초록 | **검사 12 FAIL**(`Unknown command: git`) |
+
+**링크 넷과 템플릿은 배열이 아니라 `tools/check.sh`에 literal로 적혀 있어서**
+`make_initrd.sh`에서 그 줄을 지우면 부팅 전에 죽는다. **목록과 검사가 같은
+파일을 보면 tautology가 되고 다른 파일을 보면 진짜 검사가 된다**는 것이 두
+줄로 나란히 보였다. 그리고 **`pager`는 게이트가 영영 못 본다** — 게이트는
+`--no-pager`로 치기 때문이고, 그것이 그 이름을 정적 검사에 박아 둔 이유다.
+
+## UT-M3이 세운 것
+
+| 무엇 | 어디 |
+|---|---|
+| 목록 63 → **65**(git · vim.tiny). **새 라이브러리 0** | `kernel/guest_tools.sh` |
+| 링크 넷(`vi`·`pager`·`editor`·`.gitconfig`) + git 템플릿 | `kernel/make_initrd.sh` |
+| `.deb` 둘. 라이브러리는 **한 줄도 안 더했다** | `devcontainer/Dockerfile` |
+| 검사 12~16(git init·config·commit·log·vi) + 정적 다섯 + **패딩 결함 고침** | `tools/check.sh` |
+
+**게이트는 열한 체인 3/3으로 23분 43.15초다**(UT-M2의 23분 02.73초에서
++40.42초 — initrd가 gzip으로 2.85MB 커졌고 UT 체인이 타이핑을 약 150글자
+더했다. 잡음 ±3분 안이다). **`wait_for_screen`이 이번에도 한 번도 2초를 안
+넘었다**(기다림 열다섯, `the screen took about` 0회). **위험 4가 이번에도
+아무 체인도 안 건드렸다** — fish 프롬프트가 저장소 안에서 `(main)`을 붙이는데도
+그렇다. 프롬프트 폭에 기대는 자리는 `copy/check.sh`의 `col 20` 하나뿐이고
+**CM 체인은 저장소 안으로 들어가지 않는다.**
+
+**How to apply:** 게스트에 도구를 더할 때 `DT_NEEDED`만 보지 말고 **그 도구가
+이름으로 부르는 다른 프로그램**(페이저·편집기·헬퍼)도 함께 본다 — Debian은
+그것들을 alternatives 링크로 두고 `dpkg -x`는 그 링크를 안 만든다. 그리고
+**게이트가 화면에서 긴 출력을 판정할 때는 첫 줄이 아니라 마지막에 남는
+줄**을 본다. 게이트가 사람과 **다른 모양으로** 치는 자리(`--no-pager`)가
+생기면, 사람 쪽 모양이 성립하는 데 필요한 것은 **정적 검사에 literal로**
+박아 둔다 — 타이핑으로는 영영 안 드러난다.
+
+관련: [[project_gate_chain_composition]], [[project_guest_environment]]

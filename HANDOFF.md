@@ -1,4 +1,244 @@
-# HANDOFF: Userland Tools UT-M2 완료 — **도구 63개가 섰고, 게이트 자신의 것 둘을 고쳤다**
+# HANDOFF: **Userland Tools가 끝났다** — 도구 65개와 링크 넷, 그리고 git
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **UT-M3이 2026-09-11(네 번째 세션)에 끝났고,
+그것으로 Userland Tools 서브프로젝트 전체(UT-M0~M3)가 닫혔다.**
+
+```
+root@(none) /tmp# git init -b main r
+Initialized empty Git repository in /tmp/r/.git/
+root@(none) /t/r (main)# git commit -m one
+[main (root-commit) 4204d69] one
+root@(none) /t/r (main)# git --no-pager log
+Author: root <tars>
+```
+
+**마지막 줄이 이 milestone의 요약이다** — `root`는 UT-M0이 놓은
+`/etc/passwd`의 gecos에서 오고, `tars`는 `git config --global`이
+`/.gitconfig` 링크를 풀고 `/config/gitconfig`에 쓴 값이다(결정 8).
+**한 줄이 뼈대와 결정 8을 함께 증명한다.**
+
+**게이트는 열한 체인 3/3으로 23분 43.15초다**(UT-M2의 23분 02.73초에서
+**+40.42초**. initrd가 gzip으로 2.85MB 커졌다. 잡음 ±3분 안이다).
+
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 외출하며
+"이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. **이 세션 한정
+예외이고 다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## 바로 다음에 할 것 — **후보를 고르는 일부터다**
+
+**UT가 닫혀서 열려 있는 milestone이 하나도 없다.** 다음 서브프로젝트를 고르는
+것이 첫 일이고, **사용자가 고른다.** UT 자신이 후보를 넷 남겼고 그중 하나가
+확실히 무거워졌다.
+
+### 1. **쓸 수 있는 작업 공간** — UT 비목표 2. **UT가 이것을 아프게 만들었다**
+
+design이 *"이 조사에서 가장 무거운 발견이지만 이번 범위 밖"*이라고 적어
+둔 것인데, **git이 서면서 실제 통증이 됐다.** 게스트에서 저장소를 만들 수
+있는데 **재부팅하면 통째로 사라진다** — initramfs는 tmpfs다. 영속하는 것은
+`/config`(ext2) 하나뿐이고 그건 `tars.conf`와 `gitconfig`용이다.
+
+디스크 레이아웃 · 파티션 · 마운트 정책이 본체이고, **RM-M2 결정 12
+("파티션을 안 본다")를 다시 열어야 할 수도 있다.** `init/src/storage.zig`가
+라벨로 디스크를 찾는 코드를 이미 갖고 있는 것이 시작점이다.
+
+### 2. **네트워킹** — UT 비목표 1. **뒤에 둘이 매달려 있다**
+
+`# CONFIG_NET is not set`이다. 커널 · NIC 드라이버 · DHCP · DNS · TLS
+인증서까지 층이 두껍고 **게이트가 그것을 어떻게 볼지도 따로 설계해야 한다.**
+이것이 풀리면 **git의 네트워크 헬퍼 일곱**(결정 5가 자리를 적어 뒀다)과
+**패키지 매니저 `herdr`**(비목표 3)가 따라온다.
+
+### 3. 셸 설정 — UT 비목표 6
+
+`init/src/main.zig`가 **조건 없이** `--no-config`/`--norc`/`-f`를 넘긴다.
+그래서 `zoxide`·`fzf`는 넣어도 훅을 걸 자리가 없어 안 돈다. **UT-M3이
+`/config`에 사용자 파일을 두는 첫 선례를 만들었다**(`gitconfig`) — 셸 rc를
+같은 자리에 두는 길이 그만큼 짧아졌다.
+
+### 4. 편집기를 제대로 — UT 비목표 4
+
+`vim.tiny`가 섰지만 `-eval`·`-syntax`가 없는 판이다(`vi --version`이 그대로
+보여 준다). `neovim`은 라이브러리 9 + 런타임 24MB이고 `helix`는 trixie에
+없어 **조달 경로 하나 규칙을 깨는 유일한 항목**이다. **본체는 "런타임을
+어디서 자를지"다.**
+
+**그리고 RM이 남긴 여섯이 그대로 있다** — 아래 RM 절을 볼 것. 그중
+**실기에 실제로 꽂아 보기**는 코드가 아니라 사람이 하는 일이고 `README.md`에
+절차가 있다.
+
+## UT-M3이 계획을 깼다 — 먼저 읽을 것
+
+plan은 Task 여덟을 적었고 여덟 다 했다. 그런데 **착수 전 프로브가 계획을 넷
+바꿨고, 그중 둘은 "게이트가 영영 못 보는 것"에 대한 것이다.**
+
+### 1. **Debian git은 페이저와 편집기를 alternatives 이름으로 부른다**
+
+게스트에게 직접 물었다.
+
+```
+root@(none) ~# git var -l
+GIT_EDITOR=editor    GIT_SEQUENCE_EDITOR=editor    GIT_PAGER=pager
+```
+
+둘 다 postinst가 만드는 링크라 `dpkg -x`로 푼 sysroot에 없다. 없으면:
+
+```
+root@(none) /t/r (main)# git log
+error: cannot run pager: No such file or directory
+```
+
+**매달리는 것이 아니라 죽는다 — 그래서 게이트는 안 깨지고 사람만 깨진다.**
+`git log`·`git diff`·`git branch -a`가 전부 이 경로다. `mawk`→`awk`와 같은
+종류(결정 4)인데 **그쪽 이름은 우리가 골랐고 이쪽 이름은 바이너리가 정해
+놓았다.** 처방은 `make_initrd.sh`의 링크 둘이고 **vim은 이제 이름이 셋,
+실체는 하나다**(`vim`·`vi`·`editor`).
+
+**게스트에 도구를 더할 때는 `DT_NEEDED`만 보지 말고 그 도구가 이름으로 부르는
+다른 프로그램도 본다.**
+
+### 2. **긴 출력의 첫 줄은 화면 프레임에 안 남는다**
+
+`vi --version`의 판정을 `VIM - Vi IMproved`로 잡았는데 **프레임 어디에도
+없었다**(0회). 50줄이 한 번에 오고, 프레임이 그려질 때는 첫 줄이 이미
+스크롤된 뒤다. **판정은 마지막까지 남는 줄로 잡는다** — `Linking: gcc`.
+`dmesg`를 안 치는 이유(출력이 화면을 뒤덮는다)의 **뒷면**이다.
+
+### 3. **검사 1에 잠복 결함이 있었다 — 마지막 항목을 영영 못 찾는다**
+
+`.gitconfig`을 검사에 더하니 파일이 initrd에 **분명히 있는데** FAIL이었다.
+원인은 패딩이다.
+
+```bash
+PADDED_LIST="$(printf '\n%s\n' "$INITRD_LIST")"   # ← 명령 치환이 끝의 개행을 지운다
+PADDED_LIST=$'\n'"${INITRD_LIST}"$'\n'            # ← 고침
+```
+
+**지금까지 안 드러난 이유는 아카이브의 마지막 항목이 한 번도 `WANT`에 없었기
+때문이다.** 증상이 조용한 초록이 아니라 **설명 안 되는 빨강**이라 첫 실행에서
+잡혔다 — TR-M2의 글로브와 방향이 반대다.
+
+### 4. **sendkey에는 대문자가 없다**
+
+`git var GIT_PAGER`를 치니 변수 이름이 **통째로 안 쳐졌다.** 대문자는
+`shift-g`처럼 보내야 하고 이 저장소의 체인은 그것을 쓴 적이 없다.
+**게이트가 칠 명령은 전부 소문자여야 한다.**
+
+## UT-M3의 커밋들
+
+| | 파일 | 커밋 |
+|---|---|---|
+| plan | `.../plans/2026-09-11-tars-userland-tools-ut-m3.md` | `1221573` |
+| Task 0 | `devcontainer/Dockerfile`(`.deb` 둘 · 라이브러리 **0**) | `e11bdff` |
+| Task 1 | `kernel/guest_tools.sh`(두 줄) | `ff9e177` |
+| Task 2 | `kernel/make_initrd.sh`(링크 넷 + 템플릿) | `5e2acc6` |
+| Task 3 | `tools/check.sh`(검사 12~16 + 정적 다섯 + **패딩 고침**) | `2701f8d` |
+| Task 4 | `check.sh`의 `CHAINS` | `8315165` |
+| Task 7 | design · 기억 · MEMORY · CLAUDE · HANDOFF | 이 커밋 |
+
+**Task 5(음성 확인)와 Task 6(게이트)은 커밋이 없다** — 코드를 일부러
+되돌렸다가 `git checkout`으로 복구했고, 결과는 design의 실측 48에 있다.
+
+## UT-M3이 실행으로 증명한 것 — **다시 조사하지 말 것**
+
+전문은 design의 **"UT-M3이 실행으로 증명한 것"** 절(실측 38~49). 위의 넷
+말고 다섯 더.
+
+**1. 새 라이브러리가 0이다 — 이 예측이 처음 맞았다.** `git`의 `libpcre2-8`·
+`libz`와 `vim.tiny`의 `libm`·`libtinfo`·`libselinux`·`libacl`이 전부 이미
+있었다. **M1·M2에서 두 번 틀린 뒤이고, 그래도 재고 나서 알았다** — 그
+확인은 30초다.
+
+**2. `/usr/lib/git-core`는 통째로 안 넣는다.** 168 항목 = **심볼릭 링크 141 +
+실체 26**(design 실측 7의 "하드링크"는 정정이다. 결론은 같다). 실체 26 중
+큰 것 일곱 약 16MB가 네트워크 헬퍼이고, `init`·`add`·`commit`·`log`·`status`
+는 전부 builtin이라 **그 트리 없이 돈다.** 부팅해서 확인했다.
+
+**3. 커밋에는 `user.email` 하나가 필수다.** 호스트 이름이 `(none)`이라
+자동 감지가 죽는다(`fatal: unable to auto-detect email address`). **이름은
+`/etc/passwd`의 gecos에서 온다** — UT-M0의 뼈대가 여기서 값을 낸다.
+
+**4. 크기와 시간.** gzip 32,007,022 → **34,855,376**, 푼 것 84,417,024 →
+**90,291,712**. `make_initrd.sh` 3.656초, 프롬프트까지 약 3초.
+**`GUEST_MEM=512`가 이 수를 미리 보고 고른 값이었다** — 256을 골랐으면
+여유가 165MB로 줄었다. **압축기 교체 카드는 이번에도 안 썼다(세 번째).**
+
+**5. 음성 확인 셋 — 이번엔 정적 검사가 tautology가 아니었다.**
+
+| 무엇을 되돌렸나 | 검사 1(정적) | 화면 검사 |
+|---|---|---|
+| `.gitconfig` 링크 | **FAIL**(부팅 전) | 거기까지 못 간다 |
+| `pager` 링크(+literal) | 초록 | **전부 초록 — 아무도 못 본다** |
+| 목록의 `usr/bin/git` 줄 | 초록 | **검사 12 FAIL**(`Unknown command: git`) |
+
+**링크 넷과 템플릿은 배열이 아니라 `tools/check.sh`에 literal로 적혀 있다** —
+그래서 지우면 부팅 20초를 쓰기 전에 죽는다. **목록과 검사가 같은 파일을 보면
+tautology가 되고 다른 파일을 보면 진짜 검사가 된다**는 것이 두 줄로 나란히
+보인 자리다. **둘째 줄이 가장 중요하다** — `pager`는 게이트가 `--no-pager`로
+치기 때문에 **영영 못 본다.**
+
+## 게이트가 UT에 대해 보는 것 — `tools/check.sh`의 검사 열여섯
+
+M2의 열하나에 다섯이 늘었다. **치는 것은 아홉이 됐다**(`ls`·`ps`·`awk`·
+`sed`·`eza`·`fd`·`jq`·**`git`**·**`vi`**).
+
+| 치는 것 | 판정 글자 | 무엇을 보나 |
+|---|---|---|
+| `cd /tmp` · `git init -b main r` | `Initialized empty` | git이 돈다 · **`/tmp`(M0의 뼈대)를 처음으로 실제로 쓴다** · 템플릿이 있다 |
+| `git config --global user.email tars` · `cat /config/gitconfig` | `email = tars` | **결정 8** — 링크를 **풀고** `/config`에 쓴다. 읽는 자리를 바꿔서 물어야 갈린다 |
+| `touch a` · `git add a` · `git commit -m one` | `root-commit` | add→commit. **git만 만들 수 있는 글자다** |
+| `git --no-pager log` | `Author: root <tars>` | **뼈대와 결정 8을 한 줄로** |
+| `vi --version` | `Linking: gcc` | vim이 우리가 준 이름으로 돈다. **첫 줄이 아니라 마지막 줄** |
+
+| 못 보는 것 | 왜 |
+|---|---|
+| `usr/bin/pager` · `usr/bin/editor` | 게이트는 `--no-pager`와 `-m`으로 친다 — **타이핑으로는 영영 안 드러난다.** 정적 literal이 전부다 |
+| `htop` · `btop` · `ncdu` · `less` · `top` | 대화형이라 체인이 **타임아웃으로** 매달린다 |
+| `bat` | 판정 글자를 못 만든다(낼 수 있는 글자가 전부 다른 검사와 겹친다) |
+| `/config`가 **부팅 사이를** 지키는가 | 이 체인엔 디스크가 없다. **CP 체인이 같은 마운트로 이미 증명했다** |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-10-tars-userland-tools-design.md` | **UT의 전부.** 실측 49 · 비목표 8 · 결정 9 · 위험 4 |
+| `docs/decisions/project_userland_tools.md` | 이 서브프로젝트의 기억. 다시 캐지 말 것이 여기 있다 |
+| `kernel/guest_tools.sh` | 바이너리 목록이 사는 **유일한 자리**(65) |
+| `kernel/make_initrd.sh` | 뼈대 넷 · **링크 넷** · 특수 트리(fish shares · locale · terminfo · zsh 모듈 · git 템플릿)는 손으로 쓴다 |
+| `gate_lib.sh` | `GUEST_MEM` · `type_keys` · `wait_for_screen` |
+| `tools/check.sh` | UT 체인. 검사 열여섯 |
+| `devcontainer/Dockerfile:99-190` | `apt-get download` 목록 |
+| `copy/check.sh`의 `col 20` | **게스트의 사용자 데이터베이스를 건드리면 여기도 본다** |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker build -t tars-devcontainer devcontainer/   # 도구를 더한 뒤. 네트워크
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash tools/check.sh                             # UT 체인 단독, 캐시되면 30초
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
+```
+
+**기준선: UT-M3의 열한 체인 3/3 = 23분 43.15초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**코드를 되돌린 뒤에는 `rm -rf init/zig-out`을 한 번 한다**(실측 18).
+**M3도 Zig를 한 글자도 안 건드려서 이번에도 그 함정이 없었다.**
+
+---
+
+## 그 앞의 milestone — Userland Tools UT-M2 (2026-09-11)
+
+**도구 63개가 섰고, 게이트 자신의 것 둘을 고쳤다**
 
 ## 지금 어디인가
 
