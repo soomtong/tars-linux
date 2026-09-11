@@ -1,6 +1,129 @@
-# HANDOFF: Userland Tools UT-M1 — 목록이 한 자리가 됐고 GNU 한 벌이 섰다
+# HANDOFF: Userland Tools UT-M2 — 계획과 실측이 섰다. **편집 한 자리부터 시작한다**
 
 ## 지금 어디인가
+
+`main`. **working tree에 plan 파일 하나가 있고 나머지는 깨끗하다.**
+2026-09-11 두 번째 세션은 **코드를 한 줄도 안 고쳤다** — UT-M2를 재고
+계획했다. 게이트도 안 돌렸다(고친 것이 없으니 돌릴 것이 없다).
+
+**이 세션은 기본 규칙이다 — 파일 편집은 사용자가 한다.** UT-M0·M1의 위임은
+그 세션 한정이었고 이미 끝났다. 다음 세션도 사용자가 따로 위임하지 않는 한
+기본 규칙이다.
+
+**사용자가 목록에 `btop`을 더하라고 했다**(세션 중간에). 재 보고 넣기로 했고
+근거는 아래에 있다. **그래서 층 2가 열둘이 아니라 열셋이다** — design의
+최종 목록과 milestone 표는 아직 열둘이라고 적고 있으니, UT-M2를 끝낼 때
+함께 고친다.
+
+## 바로 다음에 할 것 — **plan의 Task 0, 편집부터**
+
+**plan:** `docs/superpowers/plans/2026-09-11-tars-userland-tools-ut-m2.md`
+(Task 일곱이 전부 코드와 명령까지 적혀 있다. **그 파일이 지시서다.**)
+
+| | 무엇 | 누가 |
+|---|---|---|
+| **0** | `devcontainer/Dockerfile` — `.deb` 13 + 라이브러리 19 · 이미지 재빌드 | **편집: 사용자** / 빌드: Claude |
+| **1** | `kernel/guest_tools.sh` — 열세 줄 | **편집: 사용자** |
+| **2** | `tools/check.sh` — 정적 둘 + 화면 검사 셋 | **편집: 사용자** |
+| **3** | `check.sh`의 `CHAINS` 한 줄(`UT-M1`→`UT-M2`) | **편집: 사용자** |
+| **4** | 음성 확인 둘 | Claude |
+| **5** | 루트 게이트(백그라운드 22~25분) | Claude |
+| **6** | 문서 넷 | Claude |
+
+**Task 0의 "넣을 것" 두 덩어리가 plan 안에 그대로 있다** — 주석 블록 하나와
+`util-linux:amd64 \` 뒤에 붙일 패키지 32줄. 지울 것은 없다.
+
+**`kernel/make_initrd.sh`는 한 글자도 안 고친다.** 고쳐야 한다면 UT-M1의
+결정 7(목록을 한 자리로)이 값을 못 낸 것이고, 그것이 이 milestone의
+성적표다.
+
+## 이 세션이 실측한 것 — **다시 조사하지 말 것**
+
+컨테이너 안에서 `.deb` 서른둘을 풀고 `copy_lib_deps`와 **같은 규칙**
+(`readelf -d`의 `DT_NEEDED`를 `.so`까지 재귀, `find_in_sysroot`의 디렉터리
+넷)으로 폐포를 쟀다. HANDOFF이 "30초짜리 보험"이라고 지목한 자리다.
+
+**1. `MISSING`이 0이다.** plan의 패키지 목록이면 `make_initrd.sh`가 소네임을
+못 찾아 죽는 일이 없다. **빌드가 통과할 것을 빌드 전에 안다.**
+
+**2. design 실측 5의 사슬이 15가 아니라 16이다.**
+
+```
+libgit2.so.1.9 → libgssapi_krb5 → libkrb5 → libresolv.so.2   ← 표에 없던 줄
+               → libssh2 → libcrypto.so.3 → libz · libzstd   ← libgit2 직접이 아니다
+```
+
+**그런데 Dockerfile은 안 고쳐도 된다** — `libresolv`는 `libc6`이 담고 있고
+그것은 이미 sysroot에 있다. **`libresolv`를 패키지 목록에 적으면 apt가
+"없는 패키지"라고 죽는다.**
+
+**3. 크기.** 바이너리 열둘 28,593,592 + 새 라이브러리 19 소네임 12,969,880
++ btop 한 벌 4,008,264 = **약 45.6MB**. design의 "층 2 = 27.3MB"는 `.deb`
+압축 크기가 섞인 값이다. **크기는 벽이 아니다**(UT-M0 실측 15).
+
+**4. `.deb` 안의 경로 — design 실측 9가 맞다.** `fd`의 실체는
+`usr/lib/cargo/bin/fd`(3,504,736)이고 `usr/bin/fdfind`가 상대 심볼릭 링크다.
+`bat`은 `usr/bin/batcat`. **실체의 경로를 src로 적는다.**
+
+**5. `btop`을 쟀다.** trixie에 있다(1.3.2-0.1). 바이너리 1,510,496 +
+**`libstdc++.so.6` 2,497,768 하나** = 4.01MB. **게스트에서 btop이
+`libstdc++`의 유일한 사용자다**(기존 50 + 층 2의 열둘 전부 확인) —
+**btop을 빼는 사람은 `libstdc++6`도 함께 뺀다.** 테마 63,503바이트는 안
+넣는다(내장 Default로 돈다). UTF-8 요구는 이미 충족돼 있다 — terminal이
+`LANG=C.UTF-8`을 넘기고(`terminal/src/main.zig:1028`) `usr/lib/locale/C.utf8`이
+initrd에 있다(HI-M1).
+
+**6. `bat`의 헤더 문자열 `File: `이 바이너리에서 확인되지 않았다**
+(`strings`로 봤다). `-P`(`--paging=never`)는 있다. **그래서 게이트가 bat을
+타이핑하지 않는다** — 낼 수 있는 글자가 전부 검사 6·7과 겹친다.
+
+## 게이트 검사를 셋으로 정한 이유 — 각각 다르다
+
+| 치는 것 | 판정 글자 | 무엇을 보나 |
+|---|---|---|
+| `eza vendor` | `fonts` | **libgit2 사슬 열여섯**이 런타임에 풀리는가. M1의 `ps ax` 자리를 잇는다 |
+| `fd otf vendor` | `unifont` | 결정 4의 이름 바꾸기. **인자 `vendor`가 중요하다** — 인자가 없으면 `/proc`·`/sys`를 훑어 화면을 뒤덮는다 |
+| `jq --version` | `jq-[0-9]` | `libjq`→`libonig`. 게스트에 JSON 파일이 없고, **이 검사가 보는 것은 파싱이 아니라 동적 링크**라 `--version`으로 충분하다 |
+
+**안 치는 넷과 그 이유가 각각 다르다.** `htop`·`btop`·`ncdu`는 대화형이라
+매달린다(실측 26). `bat`은 판정 글자를 못 만든다. **그래서 그 셋이 쓰는
+`libncursesw.so.6`·`libstdc++.so.6`은 검사 1이 정적으로만 본다** — 게이트가
+그 셋에 대해 볼 수 있는 전부가 그것이고, 알고 두는 것이 낫다.
+
+## 음성 확인 둘을 미리 정해 뒀다 (plan Task 4)
+
+| 무엇을 되돌리나 | 무엇이 죽어야 하나 |
+|---|---|
+| `usr/bin/fd` → `usr/bin/fdfind` | **검사 1은 초록**(같은 배열을 읽는 tautology — 실측 24) · **검사 9가 FAIL** |
+| `install_tool`에서 `copy_lib_deps`를 **eza와 bat 둘에 대해서만** 건너뛴다 | 검사 8이 `error while loading shared libraries: libgit2.so.1.9` |
+
+**둘 다 건너뛰어야 하는 것이 M1이 배운 것이다**(실측 25) — 하나만 빼면
+나머지가 같은 사슬을 데려와 아무것도 안 드러난다(`ps`와 `top`이 그랬다).
+**M2는 Zig를 안 건드리므로 실측 18의 `zig-out` 함정은 이번에 없다.**
+
+## 명령 모음
+
+```bash
+git status --short
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker build -t tars-devcontainer devcontainer/   # Task 0. 3~5분, 네트워크
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash tools/check.sh                             # UT 체인 단독, 3~5분
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
+```
+
+**기준선: UT-M1의 열한 체인 3/3 = 21분 35.63초.** M2 뒤에 얼마나 느는지를
+그 수에서 읽는다(잡음 ±3분).
+
+---
+
+## 그 앞의 milestone — Userland Tools UT-M1 (2026-09-11)
+
+**목록이 한 자리가 됐고 GNU 한 벌이 섰다.**
 
 `main`, working tree 깨끗함. **UT-M1이 2026-09-11에 끝났다.** 게스트에
 **도구 50개**가 서 있고, 그 목록은 저장소에 **한 자리**에만 있다.
@@ -40,35 +163,17 @@ tars:x:0:
 **Task 5(음성 확인)와 Task 6(게이트)은 커밋이 없다** — 코드를 일부러 뒤로
 되돌렸다가 `git checkout`으로 복구했고, 결과는 design의 실측 24·25·29에 있다.
 
-## 바로 다음에 할 것 — **UT-M2(층 2: 모던 열둘)**
-
-design의 milestone 표가 그대로 서 있다.
+## 다음 milestone 표 (design 그대로)
 
 | | 무엇 | 검증 |
 |---|---|---|
-| **UT-M2** | 층 2(모던 12개) | `libgit2` 사슬이 실제로 딸려 오는가 · 이름이 `fd`/`bat`인가 |
+| **UT-M2** | 층 2(모던 12개 **+ btop = 13**) | `libgit2` 사슬이 실제로 딸려 오는가 · 이름이 `fd`/`bat`인가 |
 | **UT-M3** | 층 3(git · `vim.tiny` · 결정 8) | `git init`→`add`→`commit`→`log`가 한 번에 돈다 |
 
-**UT-M2는 UT-M1보다 쉽다 — 배열에 열두 줄을 더하는 일이다.** M1이 치른
-비용(리팩터)이 여기서 값을 낸다. 손댈 자리는 셋이다.
-
-1. `devcontainer/Dockerfile` — `.deb` 열둘 + 라이브러리 열여덟
-   (`libgit2` 사슬 15 · `libncursesw6` · `libjq` · `libonig`)
-2. `kernel/guest_tools.sh` — 열두 줄. **둘이 이름이 다르다**:
-   `usr/lib/cargo/bin/fd:usr/bin/fd`(심볼릭 링크가 아니라 **실체**를
-   복사한다 — design 실측 9) · `usr/bin/batcat:usr/bin/bat`
-3. `tools/check.sh` — 화면 검사 하나쯤. **`htop`·`ncdu`·`top`·`less`는
-   타이핑하면 안 된다**(실측 26 — 대화형이라 체인이 타임아웃으로 매달린다)
-
-**M2에서 `libsystemd`류의 놀라움이 또 나올 수 있다.** design 실측 4·5가
-`DT_NEEDED`를 바이너리에 대해서만 쟀다 — **`.so`의 `DT_NEEDED`는 안 봤고,
-그것이 M1에서 틀린 자리다**(실측 22). `libgit2` 사슬 15개는 그 표에 이미
-사슬로 적혀 있지만 `libjq`·`libonig`·`libncursesw6`은 안 그렇다.
-**Dockerfile을 고치기 전에 `.so`의 `DT_NEEDED`를 한 번 더 재는 것이
-30초짜리 보험이다.**
-
-**크기는 걱정 안 해도 된다** — 실측 15가 78MB 트리로 부팅해서 1초 차이를
-봤다. 지금 gzip 13.4MB이고 M2 뒤에 약 30MB로 간다.
+**UT-M2의 착수 준비는 2026-09-11 두 번째 세션이 끝냈다** — 실측도 plan도
+이 문서 맨 위에 있다. 그때 HANDOFF이 남긴 숙제("Dockerfile을 고치기 전에
+`.so`의 `DT_NEEDED`를 한 번 더 재라")를 실제로 했고, **사슬이 15가 아니라
+16이었다.** 맨 위의 실측 2를 볼 것.
 
 ## UT-M1이 실행으로 증명한 것 — **다시 조사하지 말 것**
 
