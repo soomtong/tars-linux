@@ -1,6 +1,20 @@
 const std = @import("std");
 const config = @import("config.zig");
 
+/// `expectQuietSeed`가 훅을 몇 개까지 셀 수 있는가. 힙이 없어서 상한이
+/// 필요하고, 지금은 셸마다 둘이다(`zoxide`·`fzf`). 늘리면 그 함수가 **조용히
+/// 덜 검사하는 대신 실패한다** — 상한이 검사를 좁히는 것보다 낫다.
+const MAX_HOOK_LINES = 8;
+
+/// 이 기계가 훅을 걸어야 하는 도구들. **`hookLines()`가 이 둘을 전부 덮는지
+/// 보는 것이 `expectHooksCoverTheTools`이고, 그것이 없으면 "씨앗과
+/// `hookLines()`에서 함께 지우기"가 조용히 통과한다** — 정방향도 역방향도
+/// 만족되기 때문이다.
+///
+/// 그 편집이 정당할 수도 있다(도구를 뺀다면). 그때는 **이 배열을 먼저
+/// 고쳐야 한다** — 손이 한 번 멈추는 자리를 만드는 것이 이 배열의 전부다.
+const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
+
 /// config.zig에서 유일하게 시스템 콜이 없는 함수가 parse다. HANDOFF가
 /// "단위 테스트가 없다"고 오래 적어두고 있었는데, keyboard 키가 들어오면서
 /// 파서의 분기가 둘이 된 지금이 그 저울을 놓을 자리다.
@@ -47,11 +61,23 @@ fn expect(text: []const u8, want: config.Config) !void {
     return error.UnexpectedConfig;
 }
 
-/// 씨앗 rc가 "아무것도 안 찍는다"를 문법으로 확인한다(SC-M1).
+/// 씨앗 rc가 쓸 수 있는 줄을 담고 있는지 확인한다(SC-M1, SM-M1이 넓혔다).
 ///
 /// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 **우리가
-/// 쓸 수 있는 줄의 종류를 둘로 제한한다** — 주석과 alias. 그 둘은 어느
-/// 셸에서도 출력을 만들지 않는다.
+/// 쓸 수 있는 줄의 종류를 제한한다.**
+///
+/// | | 종류 | 왜 조용한가 |
+/// |---|---|---|
+/// | SC-M1 | 주석 | 셸이 안 읽는다 |
+/// | SC-M1 | `alias …` | 정의만 하고 실행하지 않는다 |
+/// | **SM-M1** | **`hookLines()`의 한 줄과 글자 그대로 같은 줄** | **실측 23이 셋 다 0바이트를 쟀다** |
+///
+/// **SM-M1이 문법 범주가 아니라 정확 허용 목록으로 넓힌 이유**(design 결정 6):
+/// *"주석 · alias · `eval` 세 범주"*로 넓히면 `eval` 뒤에 아무 문장이나 올 수
+/// 있고, 그러면 이 규칙이 막으려던 것이 정확히 그것이다.
+///
+/// **역방향도 본다.** 정방향만으로는 **훅을 지우는 것이 통과한다** — 아무
+/// 줄도 안 남으면 위반할 줄도 없기 때문이다.
 ///
 /// **위험 3의 반쪽이 여기 있다.** design이 *"우리가 까는 것은 절대로 셸을
 /// 죽이지 않아야 한다"*고 적었고, 그 "절대로"를 지키는 장치가 이 함수다.
@@ -59,6 +85,16 @@ fn expectQuietSeed(sh: config.Shell) !void {
     const text = sh.rcSeed();
     if (text.len == 0 or text[text.len - 1] != '\n') {
         std.debug.print("FAIL: the {s} seed does not end with a newline\n", .{@tagName(sh)});
+        return error.BadSeed;
+    }
+    const hooks = sh.hookLines();
+    // 훅이 씨앗에서 **보였는가**. 힙이 없으므로 상한이 필요하고, 지금 둘이다 —
+    // 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
+    var seen = [_]bool{false} ** MAX_HOOK_LINES;
+    if (hooks.len > seen.len) {
+        std.debug.print("FAIL: the {s} shell has {d} hook lines; raise MAX_HOOK_LINES\n", .{
+            @tagName(sh), hooks.len,
+        });
         return error.BadSeed;
     }
     var lines = std.mem.splitScalar(u8, text, '\n');
@@ -71,9 +107,31 @@ fn expectQuietSeed(sh: config.Shell) !void {
             aliases += 1;
             continue;
         }
+        // **`startsWith`가 아니라 `eql`이다.** 접두사로 보면
+        // `command -v zoxide >/dev/null && rm -rf /`가 통과한다.
+        var is_hook = false;
+        for (hooks, 0..) |hook, i| {
+            if (!std.mem.eql(u8, line, hook)) continue;
+            seen[i] = true;
+            is_hook = true;
+            break;
+        }
+        if (is_hook) continue;
         std.debug.print(
-            "FAIL: the {s} seed has a line that is neither a comment nor an alias:\n  {s}\n",
+            "FAIL: the {s} seed has a line that is not a comment, not an alias,\n" ++
+                "      and not one of its hook lines:\n  {s}\n" ++
+                "      the hook lines are:\n",
             .{ @tagName(sh), line },
+        );
+        for (hooks) |hook| std.debug.print("        {s}\n", .{hook});
+        return error.BadSeed;
+    }
+    // ── 역방향 — **훅을 지우는 것이 통과하지 않게 한다** ──────────────────
+    for (hooks, 0..) |hook, i| {
+        if (seen[i]) continue;
+        std.debug.print(
+            "FAIL: the {s} seed does not carry its hook line:\n  {s}\n",
+            .{ @tagName(sh), hook },
         );
         return error.BadSeed;
     }
@@ -90,6 +148,31 @@ fn expectQuietSeed(sh: config.Shell) !void {
         std.debug.print("FAIL: the {s} seed never names its own path {s}\n", .{
             @tagName(sh), sh.rcPath(),
         });
+        return error.BadSeed;
+    }
+}
+
+/// 훅 목록이 도구 **둘 다**에 훅을 거는가(SM-M1).
+///
+/// **`expectQuietSeed`의 양방향으로는 안 닫히는 길이 하나 있다** — 씨앗과
+/// `hookLines()`에서 **함께** 지우면 정방향(위반할 줄이 없다)도
+/// 역방향(찾을 훅이 없다)도 만족된다. 그 길을 닫는 것이 이 함수다.
+///
+/// **도구 이름이 훅 줄에 들어 있는지만 본다.** 훅이 실제로 도는 것은 호스트가
+/// 증명할 수 없고, `config/check.sh`의 7차 부팅이 그것을 본다 — 여기가 보는
+/// 것은 *"우리가 그 둘을 걸려고 했다"*까지다.
+fn expectHooksCoverTheTools(sh: config.Shell) !void {
+    const hooks = sh.hookLines();
+    for (HOOKED_TOOLS) |tool| {
+        var found = false;
+        for (hooks) |hook| {
+            if (std.mem.indexOf(u8, hook, tool) != null) {
+                found = true;
+                break;
+            }
+        }
+        if (found) continue;
+        std.debug.print("FAIL: no {s} hook line for the {s} seed\n", .{ tool, @tagName(sh) });
         return error.BadSeed;
     }
 }
@@ -320,10 +403,19 @@ pub fn main() !void {
     // 셀 좌표로 판정한다. 씨앗이 부팅할 때 한 글자라도 찍으면 그 좌표가
     // 통째로 밀리고, 증상은 **부팅 20초 뒤에 엉뚱한 체인이 깨지는 것**이다.
     //
-    // 그래서 규칙을 코드 모양으로 못 박는다: **주석이 아닌 줄은 전부
-    // `alias `로 시작한다.** alias는 정의만 하고 아무것도 실행하지 않는
-    // 유일한 종류의 줄이다.
+    // 그래서 규칙을 코드 모양으로 못 박는다: **주석이 아닌 줄은 `alias `로
+    // 시작하거나 그 셸의 훅 줄과 글자 그대로 같다.**
+    //
+    // ── SM-M1: 그 문을 두 줄만큼 넓혔다 ─────────────────────────────────
+    //
+    // 넓히는 방법이 **정확 허용 목록**인 이유가 design 결정 6이고, 검사가
+    // 셋인 이유는 각각 다른 실수를 막기 때문이다.
+    //
+    //   정방향  씨앗에 아무 문장이나 들어오는 것
+    //   역방향  **훅을 지우는 것이 통과하는 것**
+    //   덮개    씨앗과 hookLines()에서 **함께** 지우는 것
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
+    for (std.enums.values(config.Shell)) |sh| try expectHooksCoverTheTools(sh);
 
     // ── SC-M2: cmdline 토큰 ─────────────────────────────────────────────
     //

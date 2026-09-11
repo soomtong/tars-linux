@@ -137,13 +137,62 @@ pub const Shell = enum {
         };
     }
 
+    /// 씨앗 rc가 담는 훅 줄들(SM design 결정 5). 셸마다 둘이다 — `zoxide`가
+    /// "어디에 갔는가"를, `fzf`가 "무엇을 쳤는가"를 이 기계에 잇는다.
+    ///
+    /// **`command -v`/`type -q` 관문을 지우면 안 된다.** 도구가 없을 때 관문
+    /// 없는 훅은 부팅하면서 `command not found`를 찍는다 — zsh 50바이트 ·
+    /// bash 38바이트 · **fish 191바이트(6줄)**(SM-M1 실측 27). 그 한 줄이
+    /// 설정 디스크를 붙이는 다섯 체인의 화면 좌표를 밀어 버린다. 관문이 있으면
+    /// 셋 다 **0바이트**다(실측 23).
+    ///
+    /// **`fzf`의 통합은 `.deb`의 예제 스크립트가 아니라 바이너리 내장이다**
+    /// (결정 7) — `--zsh`/`--bash`/`--fish`가 자동완성까지 함께 낸다. 그래서
+    /// 두 줄이 `zoxide`와 대칭으로 생긴다.
+    const HOOKS_FISH = [_][]const u8{
+        "type -q zoxide && zoxide init fish | source",
+        "type -q fzf && fzf --fish | source",
+    };
+    const HOOKS_BASH = [_][]const u8{
+        "command -v zoxide >/dev/null && eval \"$(zoxide init bash)\"",
+        "command -v fzf >/dev/null && eval \"$(fzf --bash)\"",
+    };
+    const HOOKS_ZSH = [_][]const u8{
+        "command -v zoxide >/dev/null && eval \"$(zoxide init zsh)\"",
+        "command -v fzf >/dev/null && eval \"$(fzf --zsh)\"",
+    };
+
+    /// 이 셸의 훅 줄들. **`rcSeed()`가 담는 글자와 여기 글자가 두 벌인 것은
+    /// 실수가 아니다**(SM design 결정 10).
+    ///
+    /// `rcSeed()`를 이 목록에서 `++`로 조립하면 두 벌이 하나가 되고, 그 순간
+    /// `config_test.zig`의 **역방향 검사가 tautology가 된다** — "훅이 씨앗에
+    /// 있는가"를 묻는데 답이 언제나 참이 되기 때문이다. 이 저장소가 반복해서
+    /// 부딪친 자리다(UT-M1의 정적 목록 검사가 같은 이유로 가짜였다).
+    ///
+    /// **두 벌을 잇는 것은 컴파일러가 아니라 그 검사이고, 그것이 결정 6의
+    /// 목적이다** — `HangulLayout` ↔ `hangul.Layout`, `Shell.path()` ↔
+    /// `make_initrd.sh`와 같은 종류의 이음매를 이 파일이 이미 둘 갖고 있다.
+    pub fn hookLines(self: Shell) []const []const u8 {
+        return switch (self) {
+            .fish => &HOOKS_FISH,
+            .bash => &HOOKS_BASH,
+            .zsh => &HOOKS_ZSH,
+        };
+    }
+
     /// 첫 부팅에 깔아 두는 내용(결정 7).
     ///
     /// **규칙이 하나뿐이다: 아무것도 찍지 않는다.** 설정 디스크를 붙이는
     /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — 씨앗이 배너
     /// 한 줄을 찍으면 그 좌표가 통째로 밀린다. 그래서 여기 쓸 수 있는 줄은
-    /// **주석과 alias 둘뿐**이고, `config_test.zig`의 `expectQuietSeed`가
-    /// 그 규칙을 부팅 없이 0.1초에 확인한다.
+    /// **주석 · alias · 위 `hookLines()`에 글자 그대로 있는 줄** 셋뿐이고,
+    /// `config_test.zig`의 `expectQuietSeed`가 그 규칙을 부팅 없이 0.1초에
+    /// 확인한다.
+    ///
+    /// **SM-M1이 그 문을 두 줄만큼 넓혔다.** 넓힌 방식이 "`eval`도 허용"이
+    /// 아니라 **정확 허용 목록**인 이유는 결정 6에 있다 — `eval` 뒤에는 아무
+    /// 문장이나 올 수 있고, 그러면 이 규칙이 막으려던 것이 그대로 열린다.
     ///
     /// **프롬프트를 안 건드린다**(비목표 5). 실측 9가 그 비용을 적고 있고,
     /// 그 비용은 사용자가 자기 rc에 프롬프트를 쓸 때 **자기 기계에서만**
@@ -164,11 +213,22 @@ pub const Shell = enum {
             \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
             \\# source ~/.config/fish/config.fish
             \\#
-            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
-            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
-            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\# 여기 있는 것이 주석과 alias와 훅 두 줄뿐인 데 이유가 있다: 이
+            \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
+            \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
+            \\# 기계에서 치른다.
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/fish.config'
+            \\#
+            \\# 아래 둘이 이 기계가 기억하는 법이다.
+            \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
+            \\#   fzf     무엇을 쳤는지 — Ctrl+R(히스토리) · Ctrl+T(파일) · Alt+C(디렉터리)
+            \\#
+            \\# type -q 관문을 지우지 말 것. 도구가 없을 때 그것이 없으면 fish가
+            \\# 부팅하면서 여섯 줄을 찍고, 그 여섯 줄이 게이트 다섯 체인의 화면
+            \\# 좌표를 밀어 버린다.
+            \\type -q zoxide && zoxide init fish | source
+            \\type -q fzf && fzf --fish | source
             \\
             ,
             .bash =>
@@ -182,11 +242,22 @@ pub const Shell = enum {
             \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
             \\# source ~/.bashrc
             \\#
-            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
-            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
-            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\# 여기 있는 것이 주석과 alias와 훅 두 줄뿐인 데 이유가 있다: 이
+            \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
+            \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
+            \\# 기계에서 치른다.
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/bashrc'
+            \\#
+            \\# 아래 둘이 이 기계가 기억하는 법이다.
+            \\#   zoxide  어느 디렉터리에 갔는지 — 프롬프트마다 배우고 z <조각>으로 간다
+            \\#   fzf     무엇을 쳤는지 — Ctrl+R(히스토리) · Ctrl+T(파일) · Alt+C(디렉터리)
+            \\#
+            \\# command -v 관문을 지우지 말 것. 도구가 없을 때 그것이 없으면 bash가
+            \\# 부팅하면서 command not found를 찍고, 그 한 줄이 게이트 다섯 체인의
+            \\# 화면 좌표를 밀어 버린다.
+            \\command -v zoxide >/dev/null && eval "$(zoxide init bash)"
+            \\command -v fzf >/dev/null && eval "$(fzf --bash)"
             \\
             ,
             .zsh =>
@@ -200,11 +271,22 @@ pub const Shell = enum {
             \\# 안 읽는다. 고친 것은 재부팅해야 반영된다 — 지금 적용하려면
             \\# source ~/.zshrc
             \\#
-            \\# 여기 있는 것이 주석과 alias뿐인 데 이유가 있다: 이 파일이 부팅할
-            \\# 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가 밀린다. 늘리는
-            \\# 것도 지우는 것도 마음대로지만, 그 대가는 자기 기계에서 치른다.
+            \\# 여기 있는 것이 주석과 alias와 훅 두 줄뿐인 데 이유가 있다: 이
+            \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
+            \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
+            \\# 기계에서 치른다.
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/zshrc'
+            \\#
+            \\# 아래 둘이 이 기계가 기억하는 법이다.
+            \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
+            \\#   fzf     무엇을 쳤는지 — Ctrl+R(히스토리) · Ctrl+T(파일) · Alt+C(디렉터리)
+            \\#
+            \\# command -v 관문을 지우지 말 것. 도구가 없을 때 그것이 없으면 zsh가
+            \\# 부팅하면서 command not found를 찍고, 그 한 줄이 게이트 다섯 체인의
+            \\# 화면 좌표를 밀어 버린다.
+            \\command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+            \\command -v fzf >/dev/null && eval "$(fzf --zsh)"
             \\
             ,
         };
