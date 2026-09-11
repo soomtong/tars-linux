@@ -247,6 +247,18 @@ if ! grep -q "tars-init: config shell=fish" "$LOG1"; then
   report_failure "$LOG1" "first boot did not start from the default (fish)"
 fi
 
+# SC-M0. **같은 줄을 넓혀서 본다** — 새 줄을 안 만든 이유는 이 파일과
+# 다른 체인들이 `tars-init: config shell=`을 앞부분으로 grep하고 있기
+# 때문이다(main.zig의 그 자리 주석이 HI-M2에 대해 같은 것을 적고 있다).
+#
+# **여기가 게이트에서 기본값을 보는 유일한 자리다.** 씨앗 파일이 실제로
+# `shell_config=on`을 담았다는 것은 SC-M1이 2차 부팅으로 본다 — 이 검사가
+# 보는 것은 **파서가 그 키를 알고, 기본값이 on이라는 것**까지다.
+if ! grep -q "tars-init: config shell=fish.*shell_config=on" "$LOG1"; then
+  report_failure "$LOG1" "first boot did not report the default shell_config=on"
+fi
+echo "boot 1: init reported shell_config=on (the sixth key reached the log)"
+
 if grep -q "Attempted to kill init" "$LOG1"; then
   report_failure "$LOG1" "kernel panicked because PID 1 exited on the first boot"
 fi
