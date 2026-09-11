@@ -623,6 +623,14 @@ echo "fzf filtered a file tree without taking the screen"
 # 검사 8·9가 이미 판정에 쓰고 있고, 검사 둘이 같은 글자를 보면 하나가 죽어도
 # 둘 다 초록일 수 있다(검사 7·8의 주석과 같은 이유).
 #
+# **키워드가 둘인 것에 이유가 있다 — plan이 여기서 틀렸다.** 처음에는
+# `zoxide query terminfo` 하나였고 `zoxide: no match found`가 나왔다
+# (2026-09-11 실측). zoxide는 **마지막 키워드가 경로의 마지막 컴포넌트와
+# 일치할 것을 요구한다** — 저장된 것은 `/usr/share/terminfo/x`이고 마지막
+# 컴포넌트는 `x`라서 `terminfo` 하나로는 절대 안 맞는다. `x` 하나로도
+# 맞지만 **둘을 치는 쪽을 골랐다**: SM-M2가 DB를 부팅 너머로 남기면 `x`로
+# 끝나는 경로가 여럿일 수 있고, 그때 이 검사가 무엇을 봤는지 애매해진다.
+#
 # DB는 `$HOME/.local/share/zoxide/db.zo`에 생긴다. 홈(/)은 tmpfs라 이 부팅과
 # 함께 사라지고 **M0에서는 그것이 맞다** — 부팅을 넘어 남게 하는 것은 SM-M2이고
 # 그때 XDG_DATA_HOME이 이 자리를 /config로 옮긴다. **이 검사의 판정 글자는
@@ -632,8 +640,8 @@ type_keys z o x i d e spc a d d spc \
           slash u s r slash b i n slash dot dot slash s h a r e \
           slash t e r m i n f o slash x ret
 
-echo "=== typing 'zoxide query terminfo' ==="
-type_keys z o x i d e spc q u e r y spc t e r m i n f o ret
+echo "=== typing 'zoxide query terminfo x' ==="
+type_keys z o x i d e spc q u e r y spc t e r m i n f o spc x ret
 
 if ! wait_for_screen "/usr/share/terminfo/x"; then
   fail "zoxide did not give back the directory it had just learned" \
