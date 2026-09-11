@@ -1,4 +1,209 @@
-# HANDOFF: **Userland Tools가 끝났다** — 도구 65개와 링크 넷, 그리고 git
+# HANDOFF: **Shell Config가 설계까지 왔다** — 코드는 아직 한 줄도 안 고쳤다
+
+## 지금 어디인가
+
+`main`. **UT가 닫힌 뒤 사용자가 다음 서브프로젝트로 "셸 설정"을 골랐고
+(2026-09-11), design doc과 SC-M0 plan을 썼다.** 구현은 시작 전이다 —
+**저장소의 코드는 이 세션 전과 글자 하나 다르지 않다.**
+
+```
+root@(none) ~# env fish_greeting= fish | root@(none) ~#
+root@(none) ~# zsh | (none)#
+```
+
+**이 두 줄이 이번 세션의 전부다.** 첫 줄은 인사말을 끄는 법이 실제로 먹는다는
+것이고(결정 6), 둘째 줄은 **zsh 마법사가 안 뜬다**는 것이다(결정 5 철회).
+둘 다 게스트에 직접 물어서 알았다.
+
+**게이트는 안 돌렸다.** 코드를 안 고쳤으므로 기준선은 UT-M3 그대로
+**열한 체인 3/3 = 23분 43.15초**다.
+
+**이 세션은 기본 규칙이었다** — UT의 네 세션에 걸린 "편집 위임"은 세션 한정
+예외였고 그것이 끝났다. **다음 세션도 기본 규칙이다: 파일 편집은 사용자가
+한다.** Claude Code는 넣을 것을 제시하고, 명령을 실행하고, 커밋을 만든다.
+
+## 바로 다음에 할 것 — **SC-M0 Task 1**
+
+plan은 `docs/superpowers/plans/2026-09-11-tars-shell-config-sc-m0.md`이고
+Task가 열이다. **Task 1은 `init/src/config_test.zig`의 `expect()`를 여섯
+필드로 넓히고 검사 다섯을 더한 뒤 컴파일 실패를 보는 것이다.**
+
+**Task 1이 Task 2보다 먼저인 이유가 그 파일 안에 이미 적혀 있다** —
+`config_test.zig`의 머리 주석이 *"필드 넷을 전부 비교한다. HI-M2가 둘을
+더하면서 넓혔는데, 안 넓혔다면 새 키의 검사가 아무것도 안 보고 초록이 떴을
+것이다"*라고 말한다. `expect()`를 안 넓히고 검사만 더하면 tautology다.
+
+plan에 **넣을 것과 지울 것이 전부 적혀 있다.** 순서대로 따라가면 된다.
+
+## 이 세션이 만든 것 셋
+
+| | 파일 | 커밋 |
+|---|---|---|
+| design | `docs/superpowers/specs/2026-09-11-tars-shell-config-design.md` | `b3263ce` |
+| 프로브 결과 | 같은 파일(실측 14 · 결정 5 철회 · 위험 1·2 해소) | `05d9866` |
+| plan | `docs/superpowers/plans/2026-09-11-tars-shell-config-sc-m0.md` | `b22aaec` |
+
+## 프로브가 계획을 둘 바꿨다 — **다시 조사하지 말 것**
+
+전문은 design의 **실측 14**. 코드를 한 글자도 안 고치고 게스트 화면 셸에서
+`fish`와 `zsh`를 맨손으로 띄운 것이 전부다.
+
+### 1. **결정 5가 철회됐다** — zsh 마법사는 안 뜬다
+
+```
+root@(none) ~# zsh | (none)#
+```
+
+`/.zshrc`도 `/.zshenv`도 없는데 `-f` 없이 띄운 zsh가 곧바로 프롬프트를
+냈다. sysroot에 `usr/share/zsh/functions/Newuser/zsh-newuser-install`이
+있다는 사실로 세운 추론이었는데, **그것이 initrd에 안 들어갔다는 것을 안
+봤다.** UT-M3이 `pager`로 배운 것("sysroot에 있는 것과 initrd에 있는 것은
+다르다")이 **반대 방향으로** 작동했다 — 그때는 없어서 죽었고 이번엔 없어서
+살았다. **`/.zshenv`를 만들지 말 것.**
+
+### 2. **`ps ax`가 셸의 argv를 화면에 보여 준다** — M0이 게이트로 증명할 수 있다
+
+`tools/check.sh`가 이미 그 명령을 친다(검사 5). 지금 화면에 이렇게 나온다:
+
+```
+31 ?      S    0:00 /terminal /usr/bin/fish --no-config apple ...
+33 pts/0  Ssl  0:00 /usr/bin/fish --no-config
+```
+
+**SC-M0 뒤에는 저 두 줄에서 `--no-config`가 사라지고 첫 줄에 `none`이
+선다.** 부팅을 하나도 더 안 쓰고 플래그 변경을 화면에서 본다. 이것을 안
+찾았으면 M0의 게이트는 정적 검사와 로그 한 줄뿐이었다. plan Task 6이 그것을
+검사로 만든다 — **긍정(`none`이 있다)과 부정(`--no-config`가 없다)을 둘 다
+본다.**
+
+### 3. 인사말을 끄는 법이 먹는다 — **게이트를 한 줄도 안 고친다**
+
+```
+root@(none) ~# fish | Welcome to fish, the friendly interactive shell | Type help for ...
+root@(none) ~# env fish_greeting= fish | root@(none) ~#
+```
+
+**`machine/check.sh:117`이 그 인사말을 UEFI 부팅의 마커로 grep하고 있다.**
+그래서 `/etc/fish/config.fish`로 시스템 전체를 끄면 그 마커가 죽는다.
+`terminal`이 `setenv("fish_greeting", "")`를 하면 **화면 셸만 조용해지고
+시리얼 콘솔 셸은 지금처럼 찍는다** — `TERM`·`LANG`이 이미 그 자리에 있는
+것과 같은 근거다.
+
+### 4. **프롬프트가 안 움직인다** — 위험을 절반으로 줄였다
+
+위 둘째 줄의 `root@(none) ~#`는 **안쪽 fish가 그린 것**이다. 설정을 다 읽은
+fish의 기본 프롬프트가 `--no-config`로 뜬 것과 **글자까지 같다.**
+design 실측 9가 걱정한 게이트 좌표계(`copy/check.sh`의 `col 20`)가 그대로
+선다.
+
+### 5. `sendkey`의 `shift-minus`가 게스트에 닿는다
+
+밑줄이 제대로 쳐졌다(`fish_greeting=`). UT-M3 실측 9가 *"이 저장소의 체인은
+shift 조합을 쓴 적이 없다"*고만 적은 것에 대한 답이다.
+
+## 프로브를 다시 돌리는 법
+
+스크립트는 `/tmp`에 있었고 이 세션과 함께 사라진다. 다시 만들려면
+`tools/check.sh:191-233`의 QEMU 호출과 monitor 연결을 그대로 베끼고,
+`type_keys`로 아래를 순서대로 친다.
+
+```
+f i s h ret                                              # 인사말이 뜬다
+e x i t ret
+e n v spc f i s h shift-minus g r e e t i n g equal spc f i s h ret   # 안 뜬다
+e x i t ret
+z s h ret                                                # 마법사가 안 뜬다
+```
+
+판정은 `grep -a "terminal: screen>" "$LOG" | tail -1`로 마지막 프레임을
+찍어 눈으로 본다. **빌드가 캐시돼 있으면 전체가 2분이다.**
+
+## 설계에서 사용자가 정한 것 — **다시 논의하지 말 것**
+
+| | 정한 것 | 안 고른 쪽 |
+|---|---|---|
+| 잇는 방법 | **링크 셋** — `/config` 아래 평평하게 | `HOME=/config`(프롬프트가 바뀐다) · 셸별 환경변수(bash가 구멍) |
+| 설정 키 | `shell_config` **enum** `{on, off}`, 기본 `on` | `bool` · 기본 `off` |
+| 왜 끌 수 있어야 하나 | **embedded 장비의 init 1으로 쓸 때** — 터미널이 아니라 앱 하나가 도는 기계에서는 설정이 없는 쪽이 안전하다(사용자가 댄 근거) | 언제나 켜기 |
+| 씨앗 | **셋 다**, 프롬프트를 안 건드린다 | 현재 셸만 · 주석만 · 프롬프트를 우리가 정하기 |
+| 탈출로 | **둘 다** — 감독자의 마지막 한 번 + `tars.noconfig` | 하나만 |
+| 게이트 | **`config/check.sh`를 세 부팅으로** | 열두번째 체인 |
+
+## Milestone 셋
+
+| | 무엇 | 검증 |
+|---|---|---|
+| **SC-M0** | 자리 — 결정 1(링크 셋)·2·3·4·6 | `shell_config=on` 로그 · `ps ax` 화면 · **열한 체인 3/3** |
+| **SC-M1** | 씨앗 셋(결정 7) + 게이트(결정 10) | `config/check.sh` 세 부팅 — 1차가 깔고 사람이 고친다 · 2차가 읽는다 · 3차는 `off`라 **안 읽는다** |
+| **SC-M2** | 탈출로 둘(결정 8·9) | 죽는 rc를 깔면 감독자가 되살린다 · `tars.noconfig`가 `tars.conf`를 이긴다 |
+
+**M1·M2의 plan은 그 시점에 새로 쓴다**(`CLAUDE.md`).
+
+## SC-M0이 게이트로 **못 보는 것** — 알고 둔다
+
+| 못 보는 것 | 왜 |
+|---|---|
+| rc가 **실제로 읽히는가** | 파일이 아직 없다. SC-M1의 일이다 |
+| `off`가 rc를 **막는가** | 같은 이유. SC-M1의 3차 부팅이 부정 검사로 본다 |
+| 링크가 가리키는 **대상** | `tools/check.sh`에 디스크가 없어 `/config`가 빈 디렉터리다. 링크의 **존재**까지만 본다 |
+| 인사말이 화면에 없다 | **어느 체인도 이것을 판정으로 안 갖는다.** plan Task 9 Step 3이 사람이 한 번 보는 자리이고 그것이 전부다 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-config-design.md` | **SC의 전부.** 실측 14 · 비목표 8 · 결정 10(5는 철회) · 위험 넷 |
+| `docs/.../plans/2026-09-11-tars-shell-config-sc-m0.md` | **Task 열. 넣을 것과 지울 것이 전부 적혀 있다** |
+| `init/src/config.zig:39` | `noConfigFlag()`. 여기에 `configFlag()`가 붙는다 |
+| `init/src/config_test.zig:15` | `expect()`. **여섯 필드로 안 넓히면 새 검사가 tautology다** |
+| `init/src/main.zig:503` · `:537` | 플래그 둘. `:537`의 주석이 이 milestone을 예고해 뒀다 |
+| `terminal/src/main.zig:964` · `:1011` · `:1030` | `"none"`을 읽는 자리 · `setenv` 셋이 사는 자리 · 셸 argv |
+| `kernel/make_initrd.sh:209` | `.gitconfig` 링크. **링크 셋이 바로 뒤에 붙는다** |
+| `tools/check.sh:166` · `:294` | 정적 literal 목록 · `ps ax` 검사의 마지막 줄 |
+| `config/check.sh:246` | 1차 부팅의 `shell=fish` 판정. 바로 뒤에 `shell_config=on`이 붙는다 |
+| `machine/check.sh:117` | **fish 인사말이 UEFI 부팅의 마커다.** 인사말을 건드리는 사람은 여기를 본다 |
+| `copy/check.sh:758` | `col 20`. **프롬프트 글자 수가 게이트에 박혀 있다** |
+
+## 명령 모음
+
+```bash
+git status --short     # graft 것 둘 말고는 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'cd init && zig build test'          # 호스트 검사만, 10초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash tools/check.sh                          # UT 체인 단독, 캐시되면 30초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash config/check.sh                         # CP 체인 단독, 부팅 둘이라 약 1분
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
+```
+
+**기준선: UT-M3의 열한 체인 3/3 = 23분 43.15초.** 이 세션은 코드를 안
+고쳤으므로 그대로다.
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**코드를 되돌린 뒤에는 `rm -rf init/zig-out terminal/zig-out`을 한 번 한다**
+(UT design 실측 18). **SC-M0은 Zig를 건드리므로 UT의 네 milestone과 달리 이
+함정이 살아 있다.**
+
+## 저장소 밖의 것 하나
+
+`.gitignore`가 바뀌고 `.ignore`가 새로 생겼다(`graft/` 관련). **이 세션의
+작업이 아니라 다른 도구가 만든 것이라 손대지 않았다.** 커밋할지는 사용자가
+정한다.
+
+---
+
+## 그 앞의 milestone — Userland Tools UT-M3 (2026-09-11)
+
+**도구 65개와 링크 넷, 그리고 git**
 
 ## 지금 어디인가
 
