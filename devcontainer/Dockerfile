@@ -117,6 +117,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # libssl3t64 · libmbedtls21/libmbedx509-7/libmbedcrypto16). trixie가 올라가면
 # apt가 "없는 패키지"라고 죽는다 — 그때는 `apt-cache search` 한 번으로 새
 # 이름을 찾아 여기를 고치면 된다. 조용히 실패하지 않는다.
+#
+# ── UT-M3: 층 3(git · vim.tiny)과 **라이브러리 0** ──────────────────────
+#
+# **줄 둘이 전부다.** 착수 전에 M2와 똑같은 규칙으로(.so의 DT_NEEDED까지
+# 재귀) 폐포를 쟀고 **새 소네임이 하나도 없었다.**
+#
+#   git        libpcre2-8 · libz · libc      셋 다 이미 있다
+#              (libz는 eza·bat의 libgit2 사슬이 데려와 있다)
+#   vim.tiny   libm · libtinfo · libselinux · libacl   넷 다 이미 있다
+#              (libacl은 sed가, libselinux는 fish가 데려왔다)
+#
+# **design의 "층 3은 새 라이브러리가 없다"가 M1·M2에서는 두 번 다 틀렸고
+# 여기서 처음 맞았다.** 그래도 재고 나서 알았다는 것이 이 주석의 요지다 —
+# 30초짜리 확인을 건너뛰면 맞는 날과 틀린 날이 구별되지 않는다.
+#
+# **git 패키지의 나머지는 안 쓴다.** /usr/lib/git-core의 168 항목 중
+# **141이 심볼릭 링크이고 실체는 26**이다(design 실측 7은 "하드링크"라고
+# 적었는데 trixie에서는 심볼릭 링크다 — 결론은 같다). 실체 26 중 큰 것
+# 일곱(약 16MB)이 design 결정 5가 뺀 네트워크 헬퍼이고, init·add·commit·
+# log·diff·branch는 전부 git 바이너리 안의 builtin이라 **그 트리가 통째로
+# 없어도 돈다.** **.deb는 통째로 풀되 initrd에는 guest_tools.sh가 적은 둘만
+# 들어간다** — 푸는 자리(sysroot)와 넣는 자리(initrd)가 다른 것이 이 구조의
+# 값이다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -153,6 +176,8 @@ RUN dpkg --add-architecture amd64 \
         ncdu:amd64 \
         jq:amd64 \
         hyperfine:amd64 \
+        git:amd64 \
+        vim-tiny:amd64 \
         libgit2-1.9:amd64 \
         libgssapi-krb5-2:amd64 \
         libkrb5-3:amd64 \
