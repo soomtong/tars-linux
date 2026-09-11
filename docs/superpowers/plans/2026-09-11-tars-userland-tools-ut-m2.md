@@ -26,8 +26,9 @@
 
 2026-09-11에 컨테이너 안에서 `.deb` 서른을 풀고, `make_initrd.sh`의
 `copy_lib_deps`와 **같은 규칙**(`readelf -d`의 `DT_NEEDED`를 `.so`까지 재귀,
-`find_in_sysroot`의 디렉터리 넷)으로 폐포를 다시 쟀다. HANDOFF이 "30초짜리
-보험"이라고 지목한 자리다 — UT-M1에서 틀린 것이 정확히 여기였다(실측 22).
+`find_in_sysroot`의 디렉터리 넷)으로 closure를 다시 쟀다. HANDOFF이
+"30초짜리 보험"이라고 지목한 자리다 — UT-M1에서 틀린 것이 정확히
+여기였다(실측 22).
 
 ### 1. `MISSING`이 0이다
 

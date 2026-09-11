@@ -121,7 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── UT-M3: 층 3(git · vim.tiny)과 **라이브러리 0** ──────────────────────
 #
 # **줄 둘이 전부다.** 착수 전에 M2와 똑같은 규칙으로(.so의 DT_NEEDED까지
-# 재귀) 폐포를 쟀고 **새 소네임이 하나도 없었다.**
+# 재귀) closure를 쟀고 **새 소네임이 하나도 없었다.**
 #
 #   git        libpcre2-8 · libz · libc      셋 다 이미 있다
 #              (libz는 eza·bat의 libgit2 사슬이 데려와 있다)
