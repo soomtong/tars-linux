@@ -160,10 +160,18 @@ printf "alpha\nbravo\n"          | fzf --filter=zzz   →  (없음)      exit 1
 있으므로 **파이프도 따옴표도 없이** 칠 수 있다.
 
 ```
-fzf --filter=zshrc --walker-root=/config    →  /config/zshrc
+fzf --filter=descr --walker-root=/usr/share/git-core
+  →  /usr/share/git-core/templates/description
 ```
 
 `sendkey`로 `|`·`"`를 만들지 않아도 된다는 것이 이 실측의 값이다.
+
+**walker root를 `/config`로 잡으면 안 된다** — `tools/check.sh`에는 설정
+디스크가 없어서 거기가 **빈 디렉터리**이고, fzf는 아무것도 못 찾아 `exit 1`
+이다(실측 12). `/usr/share/git-core/templates`는 UT-M3이 넣은 것이고 **디스크
+없이도 항상 거기 있다.** 그리고 판정 글자 `templates/description`은 타이핑한
+`descr`과 겹치지 않는다 — **fuzzy 검색어와 판정 글자가 다른 것이 이 프로브의
+설계다.**
 
 ### 8. `fzf`가 뺏는 키 넷은 **게이트가 치는 키 넷과 안 겹친다**
 
@@ -251,6 +259,23 @@ MAX_ENTRIES = 16
 terminal 쪽 setenv에 있고, LANG은 갈릴 이유가 없는데도 거기 있다 — 여기가 그
 실수를 반복하지 않는 자리다."* **SM이 더하는 넷은 자식마다 갈릴 이유가
 없다**(결정 3).
+
+### 15. **`zoxide`는 경로를 정규화한다** — 그것이 게이트의 판정을 진짜로 만든다
+
+```
+$ zoxide add /usr/bin/../share/fonts     exit 0
+$ zoxide query fonts
+/usr/share/fonts                          ← DB가 돌려준 것. 우리가 친 글자가 아니다
+$ zoxide add /definitely/not/here
+zoxide: not a directory: /definitely/not/here     exit 1
+```
+
+**게이트가 이것을 쓴다.** 판정 글자가 타이핑한 명령줄에도 있으면 그 검사는
+도구가 죽어도 초록이다(UT design 실측 26의 `bat`이 검사를 못 만든 이유와 같은
+문제다). `..`를 지나는 경로를 치면 **DB가 돌려주는 글자가 화면의 다른
+어디에도 없다** — `zoxide`가 그 글자를 만든 유일한 주체가 된다.
+
+`query` 출력은 개행 하나로 끝나는 한 줄이다.
 
 ## 비목표
 
@@ -397,7 +422,7 @@ init이 `cfg.shell`을 이미 알고 있으므로 그 자리에서 정한다.
 
 | 체인 | 디스크 | 무엇을 보나 |
 |---|---|---|
-| `tools/check.sh` | **없다** | 목록 검사 + **바이너리가 돈다** — `fzf --filter=zshrc --walker-root=/config`(실측 7) · `zoxide add /tmp` → `zoxide query tmp` |
+| `tools/check.sh` | **없다** | 목록 검사 + **바이너리가 돈다** — `fzf --filter=descr --walker-root=/usr/share/git-core`(실측 7) · `zoxide add /usr/bin/../share/terminfo/x` → `zoxide query terminfo` |
 | `config/check.sh` | 있다 | **훅이 걸렸다 + 부팅을 넘어 기억한다** — 부팅 둘을 더한다 |
 
 **부팅 6·7차가 하는 일.**
