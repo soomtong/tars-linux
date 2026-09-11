@@ -114,11 +114,54 @@ GUEST_TOOLS=(
   # 검사(파일이 들어갔는가)까지가 게이트가 이 둘에 대해 보는 전부다.
   usr/bin/less:usr/bin/less
 
-  # ps는 libproc2 → libsystemd → libcap 세 층을 데려온다. 저장소에서 가장
-  # 긴 동적 사슬이고, 그래서 tools/check.sh가 `ps ax`를 실제로 친다 —
-  # 위험 3의 대표 검사다.
+  # ps는 libproc2 → libsystemd → libcap 세 층을 데려온다. **M1까지는 저장소에서
+  # 가장 긴 동적 사슬이었고**(M2의 libgit2 사슬 열여섯이 그 자리를 가져갔다),
+  # 그래서 tools/check.sh가 `ps ax`를 실제로 친다 — 위험 3의 대표 검사다.
   usr/bin/ps:usr/bin/ps
   usr/bin/top:usr/bin/top
 
   usr/bin/dmesg:usr/bin/dmesg
+
+  # ── 층 2 · 모던 13 ─────────────────────────────────────────────────────
+  # design 최종 목록의 층 2 열둘에 **btop**을 더한 것이다(사용자가 2026-09-11에
+  # 요청했다). 라이브러리 열아홉이 딸려 오고, 그중 열여섯이 eza·bat 둘이
+  # 데려오는 libgit2 사슬이다 — **네트워크가 없는 기계의 TLS·Kerberos·SSH
+  # 스택**이고 design 결정 3이 그 대가를 명시적으로 감수했다.
+  #
+  # **게이트가 타이핑하는 것은 eza·fd·jq 셋뿐이다.** htop·btop·ncdu는 화면을
+  # 통째로 가져가는 대화형이라 sendkey로 치면 체인이 타임아웃으로 매달린다
+  # (design 실측 26 — less·top이 같은 이유로 빠져 있다). bat은 매달리지는
+  # 않지만 화면에 내는 글자가 전부 다른 검사와 겹쳐서 판정을 못 만든다
+  # (아래 tools/check.sh의 주석).
+  usr/bin/eza:usr/bin/eza
+
+  # 이름을 바꾸는 둘 — **결정 4**. Debian이 이름 충돌을 피하려고 바꿔 놓은
+  # 것이고(design 실측 9), 우리 initrd에는 그 제약이 없다. mawk→awk와 같은
+  # 자리다.
+  #
+  # **fd는 심볼릭 링크가 아니라 실체를 적는다.** .deb 안에서
+  # usr/bin/fdfind는 ../lib/cargo/bin/fd를 가리키는 상대 링크이고, cp가
+  # 따라가 주기는 하지만 sysroot 구조가 바뀌면 조용히 깨진다.
+  usr/bin/batcat:usr/bin/bat
+  usr/lib/cargo/bin/fd:usr/bin/fd
+
+  usr/bin/rg:usr/bin/rg
+  usr/bin/sd:usr/bin/sd
+  usr/bin/procs:usr/bin/procs
+  usr/bin/htop:usr/bin/htop
+
+  # btop은 게스트에서 **libstdc++.so.6의 유일한 사용자다**(기존 50개와 층 2의
+  # 나머지 열둘 전부의 DT_NEEDED를 2026-09-11에 확인했다). 이 줄을 지우는
+  # 사람은 devcontainer/Dockerfile의 libstdc++6도 함께 지운다.
+  #
+  # 테마(/usr/share/btop/themes 63,503바이트)는 안 넣는다 — 내장 Default로
+  # 돈다. btop이 UTF-8 로케일을 요구하는 것은 terminal이 LANG=C.UTF-8을
+  # 넘기고 usr/lib/locale/C.utf8이 initrd에 있어서 이미 충족돼 있다(HI-M1).
+  usr/bin/btop:usr/bin/btop
+
+  usr/bin/tree:usr/bin/tree
+  usr/bin/duf:usr/bin/duf
+  usr/bin/ncdu:usr/bin/ncdu
+  usr/bin/jq:usr/bin/jq
+  usr/bin/hyperfine:usr/bin/hyperfine
 )
