@@ -22,6 +22,12 @@ cd "$(dirname "$0")"
 # 못 만든다. **넷의 이유가 각각 다르고, 그 넷이 쓰는 라이브러리 둘은 검사
 # 1이 정적으로만 본다.**
 #
+# **UT-M3이 층 3(git · vim.tiny)을 더하고 검사 다섯을 더 친다** — 저장소를
+# 만들고, 전역 설정을 /config에 쓰고, 커밋하고, 그것을 다시 읽는다. **여기서
+# 처음으로 게이트가 게스트에 무언가를 쓴다** — 지금까지 열한 체인이 친 것은
+# 전부 읽거나 찍는 명령이었다. `/tmp`(UT-M0이 놓고 아무도 안 쓰던 뼈대)와
+# `/config`(CP가 만든 마운트)가 그 쓰기를 받는다.
+#
 # **열 체인 중 어느 것도 이것을 못 본다.** 나머지는 전부 게스트 명령을 절대
 # 경로로 친다 — docs/decisions/project_guest_environment.md가 IP-M0에서
 # 그렇게 고치라고 적어 둔 그대로다. 그 문서의 "결과 1"을 닫는 체인이다.
@@ -138,8 +144,37 @@ done
 # LIB_DEST가 바뀌었거나 cpio가 떨어뜨린 경우.
 WANT+=(lib/x86_64-linux-gnu/libncursesw.so.6 lib/x86_64-linux-gnu/libstdc++.so.6)
 
+# **UT-M3: 배열에 없는 다섯.** 링크 셋과 `.gitconfig`는 바이너리가 아니라
+# make_initrd.sh가 손으로 거는 것이고(뼈대 넷과 같은 자리), 템플릿은 트리다.
+#
+# **이 다섯에 대해서는 검사 1이 tautology가 아니다.** 아래 이름들이 배열이
+# 아니라 여기 literal로 적혀 있어서, make_initrd.sh에서 그 줄을 지우면
+# **부팅 20초를 쓰기 전에 여기서 죽는다.** 배열을 되읽는 검사와 다른 점이
+# 이것이고(design 실측 24·33), 그래서 M1·M2의 음성 확인이 보여 준 경계가
+# 여기서는 반대로 선다.
+#
+#   usr/bin/vi       vim의 두 번째 이름(결정 4). 실체는 usr/bin/vim이고
+#                    배열이 그쪽만 안다
+#   usr/bin/pager    **git이 컴파일 타임에 박아 둔 이름이다.** 없으면
+#                    `git log`가 `cannot run pager`로 죽는다 — 게이트는
+#                    --no-pager로 치므로 **타이핑으로는 영영 안 드러난다**
+#   usr/bin/editor   같은 종류. -m 없는 git commit과 rebase -i가 이 이름을
+#                    부른다. 게이트는 -m을 주므로 이것도 정적으로만 본다
+#   .gitconfig       결정 8. 아래 검사 13이 이 링크를 실제로 통과시킨다
+#   templates/...    없으면 git init이 매번 경고를 찍는다. 잎 하나를 보는
+#                    것으로 cp -r 전체를 본다
+WANT+=(usr/bin/vi usr/bin/pager usr/bin/editor .gitconfig
+       usr/share/git-core/templates/info/exclude)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
-PADDED_LIST="$(printf '\n%s\n' "$INITRD_LIST")"
+
+# **명령 치환으로 패딩을 만들면 안 된다.** `$(printf '\n%s\n' ...)`은 끝의
+# 개행을 명령 치환이 도로 지운다 — 그래서 **아카이브의 마지막 항목은 어떤
+# 이름을 찾아도 영원히 못 맞춘다.** UT-M3에서 `.gitconfig`이 마침 마지막
+# 항목이라 드러났다. 지금까지 안 드러난 이유는 마지막 항목이 한 번도 WANT에
+# 없었기 때문이고, **증상은 초록이 아니라 설명 안 되는 빨강**이었을 것이다
+# (TR-M2의 글로브와 같은 종류인데 방향이 반대다 — 그쪽은 조용한 초록이었다).
+PADDED_LIST=$'\n'"${INITRD_LIST}"$'\n'
 for want in "${WANT[@]}"; do
   case "$PADDED_LIST" in
     *$'\n'"${want}"$'\n'*) ;;
@@ -366,12 +401,147 @@ echo "jq loaded libjq and libonig"
 # bat이 잃는 것은 크지 않다 — 라이브러리는 eza와 같은 사슬이라 검사 8이
 # 보고, 이름은 검사 1이 dest로 본다.
 
-# ── 검사 11: 음성 확인 — **위의 일곱 전부에 대해** ──────────────────────
+# ── 검사 12: git이 저장소를 만든다 — **UT-M3의 심장** ───────────────────
+#
+# `/tmp`로 먼저 옮기는 것에 뜻이 둘 있다. 게스트의 cwd가 `/`이고 거기는
+# initrd 트리라 저장소를 만들 자리가 아니라는 것이 하나, 그리고 **UT-M0이
+# 놓은 뼈대 `/tmp`(모드 1777)를 이 저장소가 처음으로 실제로 쓴다**는 것이
+# 둘이다 — M0이 만들어 두고 아무도 안 쓰던 자리다.
+#
+# **`-b main`을 주는 이유는 화면을 아끼기 위해서다.** 안 주면 git이 기본
+# 브랜치 이름에 대한 힌트를 다섯 줄 찍는다. 판정을 만드는 데 방해가 되지는
+# 않지만, 게이트가 보는 화면에 안 읽을 글자를 다섯 줄 늘릴 이유가 없다.
+#
+# 판정 `Initialized empty`는 git만 만들 수 있다 — 타이핑한 명령줄은
+# `git init -b main r`이라 겹치지 않는다. **이 한 줄이 템플릿까지 본다**:
+# /usr/share/git-core/templates가 없으면 이 줄 앞에 `warning: templates not
+# found`가 함께 나온다(검사는 통과하지만 화면이 말해 준다).
+echo "=== typing 'cd /tmp' and 'git init -b main r' ==="
+type_keys c d spc slash t m p ret
+if ! wait_for_screen "/tmp#"; then
+  fail "the shell never moved into /tmp (is the 1777 bone there?)" \
+    "terminal: screen>"
+fi
+
+type_keys g i t spc i n i t spc minus b spc m a i n spc r ret
+if ! wait_for_screen "Initialized empty"; then
+  fail "git did not create a repository under /tmp" \
+    "terminal: screen>" "Unknown command" "error while loading"
+fi
+echo "git created a repository in the 1777 bone /tmp"
+
+# ── 검사 13: 전역 설정이 /config로 간다 — **결정 8** ────────────────────
+#
+# git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은 /다. 그런데
+# /는 tmpfs라 재부팅하면 사라지므로 make_initrd.sh가
+# `/.gitconfig -> config/gitconfig` 링크를 걸어 뒀다. **git이 그 링크를 풀고
+# 저쪽에 쓰는지를 여기서 본다** — 쓰는 쪽이 링크를 따라가지 않고 링크 자체를
+# 덮어쓰면 설정은 tmpfs에 남고 재부팅하면 사라진다. 둘은 화면에서 구별되지
+# 않으므로 **읽는 자리를 바꿔서** 묻는다: /config/gitconfig를 cat한다.
+#
+# **이 체인에는 설정 디스크가 없다.** 그래서 /config는 initrd 안의 빈
+# 디렉터리(tmpfs)이고, 이 검사가 증명하는 것은 "링크가 풀려 /config에
+# 쓰인다"까지다. 그 디스크가 부팅 사이에 파일을 지킨다는 것은 **CP 체인이
+# 같은 마운트로 이미 증명한 것**이다 — 알고 두는 경계다.
+#
+# 판정을 `email = tars`로 잡는 것은 타이핑한 명령줄(`user.email tars`)과
+# 글자가 겹치지 않게 하기 위해서다. 등호 양쪽의 공백은 git이 파일을 쓸 때
+# 만드는 것이고 우리가 친 적이 없다.
+echo "=== typing 'git config --global user.email tars' and reading it back ==="
+type_keys g i t spc c o n f i g spc minus minus g l o b a l spc \
+          u s e r dot e m a i l spc t a r s ret
+type_keys c a t spc slash c o n f i g slash g i t c o n f i g ret
+
+if ! wait_for_screen "email = tars"; then
+  fail "git config --global did not land in /config (did the .gitconfig link resolve?)" \
+    "terminal: screen>" "No such file"
+fi
+echo "the global gitconfig resolved through the link into /config"
+
+# ── 검사 14: add와 commit이 돈다 ────────────────────────────────────────
+#
+# **신원이 검사 13에 달려 있다.** 게스트의 호스트 이름이 `(none)`이라 git이
+# 이메일을 자동으로 못 만들고, 설정이 없으면 커밋이 이렇게 죽는다:
+#
+#   fatal: unable to auto-detect email address (got 'root@(none).(none)')
+#
+# 이름은 안 줘도 된다 — /etc/passwd의 gecos에서 `root`가 온다(UT-M0의 뼈대).
+# **그래서 검사 13이 실패하면 이 검사도 실패하고, 순서가 그 인과를 그대로
+# 보여 준다.**
+#
+# 판정 `root-commit`은 git이 첫 커밋에만 찍는 글자다 — `[main (root-commit)
+# 4204d69] one`. 타이핑한 명령줄에도, 다른 어느 검사에도 없다.
+echo "=== typing 'cd r', 'touch a', 'git add a', 'git commit -m one' ==="
+type_keys c d spc r ret
+if ! wait_for_screen "/t/r"; then
+  fail "the shell never moved into the new repository" "terminal: screen>"
+fi
+
+type_keys t o u c h spc a ret
+type_keys g i t spc a d d spc a ret
+type_keys g i t spc c o m m i t spc minus m spc o n e ret
+
+if ! wait_for_screen "root-commit"; then
+  fail "git did not record a first commit" \
+    "terminal: screen>" "Unknown command" "error while loading"
+fi
+echo "git recorded a first commit"
+
+# ── 검사 15: log가 돈다 — **한 줄이 둘을 증명한다** ─────────────────────
+#
+# **`--no-pager`가 없으면 이 체인이 매달린다.** Debian git의 기본 페이저는
+# alternatives 이름 `pager`이고, make_initrd.sh가 그것을 less로 걸어 뒀다.
+# less는 화면을 통째로 가져가는 대화형이라 sendkey로 열면 체인이 실패가
+# 아니라 **타임아웃**으로 죽는다(design 실측 26의 less·top과 같다).
+# **사람이 치는 모양(`git log`)과 게이트가 치는 모양이 다른 자리이고,
+# 그 차이가 여기 적혀 있어야 한다.**
+#
+# 판정 `Author: root <tars>`가 한 줄로 둘을 증명한다.
+#   root    /etc/passwd의 gecos에서 왔다 — **UT-M0의 뼈대**
+#   tars    검사 13이 /config에 쓴 값이다 — **결정 8**
+# 둘 중 하나라도 안 서면 이 줄이 안 나온다.
+echo "=== typing 'git --no-pager log' ==="
+type_keys g i t spc minus minus n o minus p a g e r spc l o g ret
+
+if ! wait_for_screen "Author: root <tars>"; then
+  fail "git log did not show the author we configured" \
+    "terminal: screen>" "cannot run pager"
+fi
+echo "git log named the author the passwd bone and /config together made"
+
+# ── 검사 16: vi가 **우리가 준 이름으로** 돈다 ───────────────────────────
+#
+# 편집기를 여는 것은 안 한다 — 화면을 통째로 가져가는 대화형이라 htop·btop·
+# ncdu·less·top과 같은 자리다. **다만 `--version`은 찍고 즉시 끝나므로 그
+# 다섯과 달리 바이너리가 도는 것까지는 본다.**
+#
+# **판정이 첫 줄이 아니라 마지막 줄인 것에 이유가 있다.** 처음에는
+# `VIM - Vi IMproved`로 잡았는데 **화면 프레임 어디에도 그 글자가 없었다**
+# (2026-09-11 실측, 0회). 출력 약 50줄이 한 번에 오고, 프레임이 그려질 때는
+# 첫 줄이 이미 스크롤로 사라진 뒤다. `Linking: gcc`는 출력의 마지막 줄이라
+# 프롬프트와 함께 화면에 남는다.
+#
+# **긴 출력을 내는 명령의 판정은 마지막까지 남는 줄로 잡는다** — 이 저장소가
+# dmesg를 안 치는 이유(출력이 화면을 뒤덮는다)의 뒷면이다.
+echo "=== typing 'vi --version' ==="
+type_keys v i spc minus minus v e r s i o n ret
+
+if ! wait_for_screen "Linking: gcc"; then
+  fail "vi did not print its version under the name we gave it" \
+    "terminal: screen>" "Unknown command" "error while loading"
+fi
+echo "vi ran under the name we gave it"
+
+# ── 검사 17: 음성 확인 — **위의 아홉 전부에 대해** ──────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
-# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq 일곱을 다 친 뒤에
-# 한 번 보면 일곱 전부의 음성 확인이 된다. UT-M0 때는 ls 하나뿐이라 바로
-# 뒤에 있었다.
+# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi 아홉을
+# 다 친 뒤에 한 번 보면 아홉 전부의 음성 확인이 된다. UT-M0 때는 ls
+# 하나뿐이라 바로 뒤에 있었다.
+#
+# **번호가 11에서 17로 뛴 것은 UT-M3이 검사 다섯을 앞에 끼웠기 때문이다** —
+# 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는 늘어난 것까지
+# 함께 본다. 그것이 이 자리의 값이다.
 #
 # **positive 검사만으로는 안 닫히는 길이 있다.** 예를 들어 검사 5의
 # `/terminal`은 화면 어딘가에 그 글자가 있으면 초록인데, ps가 죽고 그 앞의
