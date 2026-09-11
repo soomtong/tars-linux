@@ -20,6 +20,42 @@ pub const ShellConfig = enum {
     off,
 };
 
+/// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). **`tars.conf`를 이기는
+/// 것은 이 키 하나뿐이다** — 우선순위는 **cmdline > tars.conf > 기본값**이고,
+/// 다른 다섯 키는 cmdline을 안 본다. 그 예외의 근거는 하나다: *"`tars.conf`를
+/// 고칠 셸이 없을 때 쓰는 것"*.
+pub const NO_CONFIG_TOKEN = "tars.noconfig";
+
+/// 커널 cmdline이 사는 자리. `/proc`은 설정을 읽기 전에 이미 붙어 있다
+/// (design 실측 13 — `main.zig`가 `/proc`을 먼저 붙이고 그 다음이 `/config`다).
+pub const CMDLINE_PATH: [:0]const u8 = "/proc/cmdline";
+
+/// cmdline 문자열에 위 토큰이 있는가. **시스템 콜이 없는 순수 함수라서
+/// `parse`와 같은 성질이다** — 게스트를 안 띄우고 검증할 수 있고,
+/// `config_test.zig`가 실제로 그렇게 한다.
+///
+/// **부분 문자열이 아니라 토큰으로 본다.** `indexOf` 한 줄로 짜면
+/// `tars.noconfigured`나 `nottars.noconfig`에도 걸리고, 그 실수의 증상은
+/// "부팅했더니 rc가 안 읽힌다" 하나뿐이라 원인에서 아주 멀다.
+///
+/// **값이 붙어 있어도 받는다**(`tars.noconfig=1`). 이 토큰은 있고 없음이
+/// 전부이고 값은 뜻이 없다 — 그래서 값을 본 것을 로그로 알린다. 끄는 방법은
+/// `tars.noconfig=0`이 아니라 그 단어를 안 적는 것이다.
+pub fn cmdlineWantsNoConfig(text: []const u8) bool {
+    var it = std.mem.tokenizeAny(u8, text, " \t\r\n");
+    while (it.next()) |token| {
+        const eq = std.mem.indexOfScalar(u8, token, '=') orelse token.len;
+        if (!std.mem.eql(u8, token[0..eq], NO_CONFIG_TOKEN)) continue;
+        if (eq != token.len) {
+            std.debug.print("tars-init: {s} takes no value, '{s}' means the same thing\n", .{
+                NO_CONFIG_TOKEN, token,
+            });
+        }
+        return true;
+    }
+    return false;
+}
+
 /// 셸 화이트리스트. 설정 파일에 적을 수 있는 것은 **이름**뿐이고 경로가
 /// 아니다 — `shell=/etc/passwd` 같은 입력이 애초에 성립하지 않는다
 /// (design doc "5. 설정 하나로 부팅이 막히지 않게 하는 세 장치"의 1번).
@@ -651,4 +687,44 @@ fn seedRcFile(sh: Shell) void {
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
     // 그 검사가 rc 세 줄까지 함께 보게 된다.
     std.debug.print("tars-init: seeded {s}\n", .{path});
+}
+
+/// `/proc/cmdline`을 읽어 `NO_CONFIG_TOKEN`이 있는지 본다(SC-M2 결정 9).
+///
+/// **못 읽으면 false다.** 이 함수의 답은 "사용자의 설정을 덮어쓸까"이고,
+/// 못 읽었을 때 덮는 쪽으로 기울면 `/proc`이 안 붙은 부팅에서 rc가 조용히
+/// 꺼진다 — `load`가 "읽기에 실패한 파일은 덮어쓰지 않는다"고 정한 것과 같은
+/// 방향이다.
+///
+/// **`load`의 읽기 루프를 공유하지 않는다.** 저쪽은 optional로 ENOENT 하나를
+/// 구분해야 해서 계약이 다르다(그 구분이 seeding을 부르는 조건이다). 세 줄을
+/// 아끼려고 그 구분을 흐리는 것보다 각자 갖는 편이 읽기 쉽다 — 이 파일 머리의
+/// `failed`가 `main.zig`와 겹치는 것과 같은 판단이다.
+pub fn cmdlineNoConfig(path: [:0]const u8) bool {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
+    if (failed(rc)) |e| {
+        std.debug.print("tars-init: cannot read {s} (errno {d}), assuming no {s}\n", .{
+            path, @intFromEnum(e), NO_CONFIG_TOKEN,
+        });
+        return false;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+
+    // x86의 COMMAND_LINE_SIZE가 2048이라 MAX_FILE 안에 넉넉히 들어간다.
+    var buf: [MAX_FILE]u8 = undefined;
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, buf.len - len);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            std.debug.print("tars-init: failed to read {s} (errno {d})\n", .{
+                path, @intFromEnum(e),
+            });
+            return false;
+        }
+        if (n == 0) break;
+        len += n;
+    }
+    return cmdlineWantsNoConfig(buf[0..len]);
 }

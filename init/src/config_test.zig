@@ -94,6 +94,17 @@ fn expectQuietSeed(sh: config.Shell) !void {
     }
 }
 
+/// cmdline 한 줄이 rc를 끄는가(SC-M2 결정 9).
+///
+/// **`expect`와 같은 자리에 있는 함수다** — `config.zig`에서 시스템 콜이
+/// 없는 부분이 이제 둘이고, 둘 다 게스트를 안 띄우고 검증할 수 있다.
+fn expectCmdline(text: []const u8, want: bool) !void {
+    const got = config.cmdlineWantsNoConfig(text);
+    if (got == want) return;
+    std.debug.print("FAIL: cmdline \"{s}\" gave {}, want {}\n", .{ text, got, want });
+    return error.UnexpectedCmdline;
+}
+
 pub fn main() !void {
     // 빈 입력은 기본값이다. 이 한 줄이 "설정 파일이 없을 때의 TARS"를 못
     // 박는다 — Config의 기본값을 바꾸면 여기가 먼저 터진다.
@@ -313,6 +324,32 @@ pub fn main() !void {
     // `alias `로 시작한다.** alias는 정의만 하고 아무것도 실행하지 않는
     // 유일한 종류의 줄이다.
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
+
+    // ── SC-M2: cmdline 토큰 ─────────────────────────────────────────────
+    //
+    // **탈출로 2의 전부가 이 함수 하나다**(design 결정 9). rc가 셸을 죽이면
+    // `tars.conf`를 고칠 자리가 사라지므로, 그때 사람이 쥘 수 있는 것은
+    // 부팅 순간의 cmdline 한 단어뿐이다(실측 12 — 실기는 limine 메뉴를
+    // 지난다).
+    //
+    // **토큰으로 본다.** 부분 문자열로 찾으면 아래 넷째·다섯째 줄이 참이
+    // 되고, 그 실수의 증상은 "부팅했더니 rc가 안 읽힌다" 하나뿐이라 원인에서
+    // 아주 멀다.
+    try expectCmdline("console=ttyS0", false);
+    try expectCmdline("console=ttyS0 tars.noconfig", true);
+    try expectCmdline("tars.noconfig console=ttyS0", true);
+    try expectCmdline("console=ttyS0 tars.noconfigured", false);
+    try expectCmdline("console=ttyS0 nottars.noconfig", false);
+    // 실제 cmdline은 줄바꿈으로 끝난다(`/proc/cmdline`이 그렇다).
+    try expectCmdline("console=ttyS0 tars.noconfig\n", true);
+    // 빈 cmdline도 정상 입력이다.
+    try expectCmdline("", false);
+    // **값이 붙어도 받는다.** 이 토큰은 있고 없음이 전부이고 값은 뜻이
+    // 없다 — 끄는 방법은 `tars.noconfig=0`이 아니라 안 적는 것이다.
+    // 받아 주지 않으면 `=1`을 적은 사람이 아무 일도 안 일어나는 것을 보고
+    // 탈출로가 아예 없다고 믿는다.
+    try expectCmdline("tars.noconfig=1", true);
+    try expectCmdline("tars.noconfig=0", true);
 
     std.debug.print("PASS\n", .{});
 }
