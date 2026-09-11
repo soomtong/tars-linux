@@ -176,9 +176,16 @@ echo "the framebuffer really holds CC6666 at ${CELL}"
 
 # ── 검사 3: 커서가 그려지는가 ──────────────────────────────────────────
 #
-# 커서는 기본 색을 맞바꾼 셀이다 — fg=102030 bg=FFFFFF. 이 검사가 없으면
-# 커서가 조용히 사라져도 아무도 모른다(vt_test는 호스트에서만 본다).
-if ! grep -aq "terminal: style> [0-9]*,[0-9]* fg=102030 bg=FFFFFF" "$LOG"; then
+# 커서는 그 셀의 색 둘을 맞바꾼 셀이다. **표식은 `fg`가 기본 배경색
+# (102030)이라는 것**이고 `bg`는 그 글자가 원래 갖고 있던 전경색이다.
+# 이 검사가 없으면 커서가 조용히 사라져도 아무도 모른다(vt_test는 호스트에서만
+# 본다).
+#
+# **`bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다** — 자세히는
+# `hangul/check.sh`의 `inverted_cells`에 있다. 셸이 색을 쓰기 시작하면 커서
+# 아래 글자의 전경색이 기본값이 아닐 수 있고, 그러면 커서가 멀쩡히 있는데도
+# 이 검사가 못 본다.
+if ! grep -aqE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=[0-9A-F]{6}" "$LOG"; then
   report_failure "no inverted cell on screen, so the cursor was never drawn"
 fi
 echo "the cursor is on screen as an inverted cell"

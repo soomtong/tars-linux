@@ -198,11 +198,20 @@ last_frame() {
 
 # 마지막 프레임에서 **반전된 셀**이 전부 몇 개인가.
 #
-# 기본 색은 fg=FFFFFF bg=102030이고(vt.zig의 init), 반전되면 정확히 뒤집힌
-# 값이 된다. 이 화면에는 선택도 매치도 없으므로 반전된 셀은 커서뿐이고,
-# 그래서 개수가 곧 "커서가 몇 칸을 먹었는가"다.
+# 기본 색은 fg=FFFFFF bg=102030이다(vt.zig의 init). 반전은 그 셀의 fg와 bg를
+# 맞바꾸므로 **반전된 셀의 표식은 `fg`가 기본 배경색(102030)이라는 것**이고,
+# `bg`는 그 글자가 원래 갖고 있던 전경색이다. 이 화면에는 선택도 매치도
+# 없으므로 반전된 셀은 커서뿐이고, 그래서 개수가 곧 "커서가 몇 칸을
+# 먹었는가"다.
+#
+# **`bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다.** 그 표기는 "반전됐다"가
+# 아니라 "반전됐고 **그 글자의 전경색이 기본값이다**"를 뜻했는데, 그 둘이
+# 같았던 이유는 **셸이 색을 하나도 안 썼기 때문**이다 — `--no-config`로 뜬
+# fish는 구문 강조를 안 한다. 설정을 읽는 fish는 명령줄을 칠하고, 커서가
+# 그 위에 서면 `fg=102030 bg=D54E53`(fish가 모르는 명령에 쓰는 빨강)이 된다.
+# **커서는 두 칸을 제대로 덮고 있었는데 검사가 못 봤다**(SC-M0 실측 21).
 inverted_cells() {
-  last_frame | grep -acE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=FFFFFF" || true
+  last_frame | grep -acE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=[0-9A-F]{6}" || true
 }
 
 # 키 하나를 `ms` 밀리초 동안 누르고 있다가 뗀다(HI-M3).
@@ -300,8 +309,22 @@ echo "=== the config disk should have selected three toggle keys ==="
 # **plan이 적어 둔 `\r\?$`는 안 통했다**(HI-M3 실측). GNU grep의 BRE는 `\r`을
 # CR 이스케이프로 안 보고 **리터럴 `r`로** 읽는다 — `-P` 없이는 그 표기가
 # 아무 뜻도 없다. 파이프로 CR을 지우는 쪽이 이 파일의 기존 관습과도 같다.
+#
+# **SC-M0이 이 줄의 끝을 옮겼다.** `tars-init: config ...` 한 줄에 여섯째
+# 필드(`shell_config=on`)가 붙으면서 `toggles=` 목록이 더 이상 줄의 끝이
+# 아니게 됐다. 그 milestone의 plan은 *"다른 체인들이
+# `tars-init: config shell=`을 **앞부분**으로 grep하므로 앞이 안 바뀌어야
+# 한다"*까지만 적었는데, **이 체인은 뒤에 매달려 있었다** — 줄을 넓히는 것은
+# 앞과 뒤를 동시에 건드린다.
+#
+# 그래서 끝 대신 **경계**를 본다: 목록 다음에 공백이 오거나 줄이 끝난다.
+# `$` 하나만 쓰던 이유(짧은 목록이 긴 목록의 접두사로 맞는 것을 막는다)가
+# 이 모양에서도 그대로 산다 — 정규형에서 `hangul_key`는 맨 앞에 오므로
+# `shift_space,...` 뒤에 또 이름이 붙는 일이 없고, 붙었다면 공백이 아니라
+# 콤마라 안 맞는다. **필드가 또 늘어도 이 줄은 안 고친다.**
 EXPECT_TOGGLES='shift_space,capslock_tap,lctrl_tap'
-if ! tr -d '\r' < "$LOG" | grep -aq "tars-init: config .*toggles=${EXPECT_TOGGLES}\$"; then
+if ! tr -d '\r' < "$LOG" |
+  grep -aqE "tars-init: config .*toggles=${EXPECT_TOGGLES}( |\$)"; then
   report_failure "init did not read hangul_toggle=${EXPECT_TOGGLES} from the config disk"
 fi
 if ! tr -d '\r' < "$LOG" |
