@@ -458,6 +458,14 @@ pub fn main(init: std.process.Init.Minimal) void {
 
     const storage_mounted = mountConfig();
     const cfg = loadConfig(storage_mounted);
+    // SC-M1 결정 7. **`loadConfig`보다 뒤이고 자식을 띄우기보다 앞이다** —
+    // 앞이어야 하는 이유는 이 부팅의 셸이 곧바로 이 파일을 읽기 때문이고,
+    // `loadConfig` 뒤인 이유는 `tars.conf`의 씨앗이 먼저 생기는 편이 로그의
+    // 순서로 읽기에 맞기 때문이다(둘 사이에 의존은 없다).
+    //
+    // **`cfg`를 안 넘긴다.** 씨앗은 `shell_config`도 `shell`도 안 본다 —
+    // 그 근거는 `config.seedRcFiles`의 주석에 있다.
+    if (storage_mounted) config.seedRcFiles();
     // **줄을 새로 만들지 않고 이 줄을 넓힌다**(HI-M2). 다른 체인들이
     // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
     //
