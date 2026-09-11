@@ -666,7 +666,65 @@ echo "zoxide learned a directory and gave it back normalized"
 # `/terminal`은 화면 어딘가에 그 글자가 있으면 초록인데, ps가 죽고 그 앞의
 # 프레임이 남아 있어도 그럴 수 있다. 못 찾았다는 말이 화면에 없다는 것이
 # 그 길을 닫는다.
-if grep -a "terminal: screen>" "$LOG" | grep -aq "Unknown command"; then
+#
+# ── 관문: 이 그물은 **기다린 다음에** 읽어야 한다 ───────────────────────
+#
+# 되돌림 2에서 잰 것이 이 관문의 근거다. zoxide 바이너리를 지우고 검사 18의
+# 판정을 가짜로 만들었을 때 시리얼 로그가 이렇게 생겼다:
+#
+#   69421줄   `/usr/share/terminfo/x`가 처음 화면에 = 타이핑한 줄의 에코
+#   69813줄   `Unknown command`가 처음 화면에 = 셸이 실제로 실패한 결과
+#
+# **392줄이 비어 있다.** 위의 positive가 명령의 *출력*이 아니라 *에코*로
+# 만족되면 그 검사는 즉시 돌아오고, 이 그물은 증거가 프레임에 실리기 전의
+# 로그를 읽기 시작한다.
+#
+# 셸은 명령을 하나씩 처리하므로 **관문 명령의 출력이 화면에 뜬 순간, 그 앞의
+# 모든 명령은 이미 실행되고 그려졌다.** 그것을 여기서 한 번 확인하고 읽는다.
+#
+# **정직하게: 이 관문은 되돌림 2를 고친 것이 아니다.** 되돌림 2가 초록으로
+# 거짓말한 진짜 원인은 아래 `grep -q`의 SIGPIPE였고, 그것을 고친 뒤에는
+# **이 관문을 꺼도 잡는다**(2026-09-11 실측). 안 켜도 잡히는 이유는 아래
+# grep이 3.7MB를 읽는 **동안에도 로그가 계속 자라서** 에러 프레임이 결국
+# 읽히기 때문이다 — 즉 "grep이 게스트보다 느리다"는 **우연한 성질**에
+# 기대고 있었다. 관문은 그 우연을 보장으로 바꾼다. 비용은 명령 하나다.
+#
+# **관문의 판정 글자도 타이핑한 줄과 겹치면 안 된다** — 겹치면 관문 자신이
+# 같은 함정에 빠져 아무것도 안 기다린다. `uname -o`는 `GNU/Linux`를 찍고,
+# 그 글자는 타이핑한 여섯 글자 어디에도 없다. 이 체인의 판정 글자를 고르는
+# 규칙(검사 17·18의 주석)이 관문에도 그대로 적용된다.
+echo "=== typing 'uname -o' to drain the guest before the net reads ==="
+type_keys u n a m e spc minus o ret
+if ! wait_for_screen "GNU/Linux"; then
+  fail "the guest never drained — the net below would read too early" \
+    "terminal: screen>"
+fi
+
+# **`-q`가 없는 것에 이유가 있다 — 이 그물은 SM-M0까지 죽어 있었다.**
+#
+# 원래 여기는 `... | grep -aq "Unknown command"`였다. `grep -q`는 **첫
+# 매치에서 즉시 빠져나가고**, 3.7MB짜리 로그를 아직 쏟고 있던 앞단 grep이
+# SIGPIPE로 죽는다. 이 스크립트 맨 위의 `set -uo pipefail`이 그 141을
+# 파이프라인의 종료 코드로 올리고, `if`는 그것을 **"안 맞았다"로 읽는다** —
+# 즉 **매치할수록 초록이 되는 검사**였다. 되돌림 2에서 5회 중 5회 재현했다.
+#
+# **이 파일이 자기 함정에 걸린 것이다.** 검사 1의 주석이 같은 이유로
+# 파이프라인 대신 변수와 case를 쓴다고 적어 두었고, fail()의 `|| true`도
+# (RM-M2), gate_lib.sh:108도 같은 것을 경고한다. 아는 것과 안 밟는 것이
+# 다르다는 자리다.
+#
+# `-q`를 빼면 뒤쪽 grep이 **입력을 끝까지 읽어서** 앞단이 SIGPIPE를 안 받는다.
+# 출력은 안 보고 종료 코드만 쓰므로 /dev/null로 버린다.
+#
+# **같은 모양이 저장소에 다섯 더 있다**(2026-09-11 `rg '\| *grep -[a-z]*q'`):
+#   config/check.sh:552      `if … | grep -qv …; then fail`   ← 조용한 초록 쪽
+#   config/check.sh:573·576  `if ! … | grep -q …; then fail`  ← 시끄러운 빨강 쪽
+#   machine/check.sh:226·241·288·354  같은 `!` 형
+# `!` 형은 SIGPIPE가 나면 **거짓 빨강**이라 눈에 띄지만, `!`가 없는 형은
+# 이 자리처럼 조용히 죽는다. SM-M0은 자기 그물만 고치고 나머지는 안 건드렸다 —
+# 고치면 그 체인들을 다시 돌려 판정해야 하고, 그 다섯은 이 milestone이
+# 만든 것이 아니다.
+if grep -a "terminal: screen>" "$LOG" | grep -a "Unknown command" >/dev/null; then
   fail "the shell said it could not find one of the commands" \
     "terminal: screen>" "tars-init: env"
 fi
