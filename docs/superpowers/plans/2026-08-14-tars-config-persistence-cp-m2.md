@@ -220,7 +220,7 @@ Expected(예상이며, 다르면 Task 2의 해당 경로만 고친다):
 - 모듈 union: 위와 같거나 여기에 `libgdbm.so.6`, `libpcre2-8.so.0` 등이 더 붙음
 - `/usr/share/zsh` 몇 MB, 모듈 디렉터리 1~3MB
 
-**출력 전체를 붙여서 알릴 것.** 특히 모듈 union에 위 목록 밖의 소네임이 있으면
+**출력 전체를 붙여서 알릴 것.** 특히 모듈 union에 위 목록 밖의 SONAME이 있으면
 Task 2에서 `make_initrd.sh`가 그 이름을 찍고 죽는다 — 그때 대응은 둘이다.
 (a) 해당 패키지를 Dockerfile 목록에 추가, (b) 그 모듈을 initrd에서 제외.
 설정 파일 하나 읽는 셸에 `zsh/db/gdbm`은 필요 없으므로 (b)가 보통 맞다.
@@ -303,13 +303,13 @@ cp -r "$SYSROOT/usr/lib/x86_64-linux-gnu/zsh" "$WORKDIR/usr/lib/x86_64-linux-gnu
 # zsh/curses는 libncursesw.so.6, zsh/db/gdbm은 libgdbm.so.6. 둘 다 zmodload로
 # 이름을 대고 부를 때만 열리는 선택적 모듈이라 우리 셸은 부를 일이 없다.
 # 라이브러리 두 개를 게스트에 들이는 대신 모듈을 뺀다 — 남겨두면 아래
-# copy_lib_deps가 그 소네임을 찍고 즉시 죽는다(그게 정상 동작이다).
+# copy_lib_deps가 그 SONAME을 찍고 즉시 죽는다(그게 정상 동작이다).
 rm -f  "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/curses.so
 rm -rf "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/db
 
 # 모듈도 각자 동적 의존을 갖는다. 바이너리에만 copy_lib_deps를 돌리면 빠진
 # 라이브러리가 **부팅 후 dlopen 시점에야** 드러나고, 그 실패는 로그에서
-# 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 소네임을 찍고 즉시 죽는다.
+# 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 SONAME을 찍고 즉시 죽는다.
 while IFS= read -r mod; do
   copy_lib_deps "$mod"
 done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
@@ -344,7 +344,7 @@ make_initrd: cannot resolve libgdbm.so.6 (needed by .../zsh/5.9/zsh/db/gdbm.so) 
 ```
 
 **이건 고장이 아니라 설계된 동작이다**(`project_build_host_arch`). Step 2의 두
-`rm`이 이미 알려진 두 모듈을 빼므로 이 메시지가 나온다면 **다른 소네임**일
+`rm`이 이미 알려진 두 모듈을 빼므로 이 메시지가 나온다면 **다른 SONAME**일
 것이다 — 그대로 알릴 것. 대응은 (a) 패키지를 Dockerfile 목록에 추가,
 (b) 그 모듈을 `rm` 줄에 추가. 선택적 모듈이면 (b)가 맞다.
 
@@ -1230,7 +1230,7 @@ cp "$SYSROOT/usr/share/terminfo/l/linux" "$WORKDIR/usr/share/terminfo/l/"
 **깨지는 것을 보고 나서 넣는다** — design doc이 그렇게 정했고, 안 깨지면
 불필요한 짐이다.
 
-### B. `make_initrd.sh`가 소네임을 찍고 죽는다
+### B. `make_initrd.sh`가 SONAME을 찍고 죽는다
 
 Task 2 Step 3에서 다룬다. 설계된 동작이므로 당황하지 말 것 — 이름이 곧 답이다.
 

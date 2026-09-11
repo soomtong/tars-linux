@@ -32,7 +32,7 @@
 
 ### 1. `MISSING`이 0이다
 
-아래 패키지 목록이면 `make_initrd.sh`가 소네임을 못 찾아 죽는 일이 없다.
+아래 패키지 목록이면 `make_initrd.sh`가 SONAME을 못 찾아 죽는 일이 없다.
 **빌드가 통과할 것을 빌드 전에 안다.**
 
 ### 2. `libresolv.so.2`가 design 표에 없다
@@ -59,7 +59,7 @@ design 실측 5의 표는 `libcrypto`를 `libgit2`가 직접 끄는 것처럼 �
 | | 바이트 |
 |---|---|
 | 바이너리 열둘 | 28,593,592 |
-| 새 라이브러리 19 소네임 | 12,969,880 |
+| 새 라이브러리 19 SONAME | 12,969,880 |
 | `btop` + `libstdc++.so.6` | 1,510,496 + 2,497,768 |
 | **합계** | **약 45.6 MB** |
 
@@ -132,7 +132,7 @@ M1의 결정 7이 값을 못 낸 것이다.
 #
 # ── UT-M2: 층 2(모던 13개)와 라이브러리 열아홉 ──────────────────────────
 #
-# 도구 13에 딸려 오는 새 소네임을 2026-09-11에 컨테이너 안에서 다시 쟀다.
+# 도구 13에 딸려 오는 새 SONAME을 2026-09-11에 컨테이너 안에서 다시 쟀다.
 # 바이너리의 DT_NEEDED만 보지 않고 **.so의 DT_NEEDED까지 재귀로** 봤다 —
 # UT-M1이 libsystemd를 놓쳤던 자리이고(design 실측 22), M2는 라이브러리를
 # 열아홉 더하므로 같은 누락의 값이 훨씬 비싸다.
@@ -217,7 +217,7 @@ docker run --rm tars-devcontainer bash -c '
   done'
 ```
 
-**Verify:** 열셋이 `ok`, 소네임 일곱의 경로가 전부 나온다. `libresolv.so.2`가
+**Verify:** 열셋이 `ok`, SONAME 일곱의 경로가 전부 나온다. `libresolv.so.2`가
 `libc6`에서 이미 와 있다는 것을 여기서 눈으로 본다.
 
 - [ ] **Step 5: Commit**
@@ -297,7 +297,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ```
 
 **Expected:** 죽지 않는다(Task 0이 라이브러리 열아홉을 sysroot에 세웠으므로
-`copy_lib_deps`가 소네임을 다 푼다). gzip 13.4MB → **30MB 안팎**, 푼 크기
+`copy_lib_deps`가 SONAME을 다 푼다). gzip 13.4MB → **30MB 안팎**, 푼 크기
 약 78MB. `gzip -6`에 드는 시간이 얼마나 느는지를 이 자리에서 본다 —
 **UT-M0 실측 15가 압축기 교체 카드를 열어 뒀고, 재기 전에는 안 쓴다.**
 
@@ -347,7 +347,7 @@ git commit -m "Add the modern layer of thirteen to the one list"
 # 알고 두는 것이 낫다.
 #
 # 라이브러리가 아예 없는 경우는 사실 여기까지 못 온다 — copy_lib_deps가
-# 소네임을 못 풀면 **빌드 때** 죽는다. 이 둘이 잡는 것은 그 다음이다:
+# SONAME을 못 풀면 **빌드 때** 죽는다. 이 둘이 잡는 것은 그 다음이다:
 # LIB_DEST가 바뀌었거나 cpio가 떨어뜨린 경우.
 WANT+=(lib/x86_64-linux-gnu/libncursesw.so.6 lib/x86_64-linux-gnu/libstdc++.so.6)
 ```

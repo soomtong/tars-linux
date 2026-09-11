@@ -92,12 +92,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 따라가는 사슬은 4.2MB가 아니라 1.38MB다.
 #
 # **apt-get download가 의존을 안 따라가는 것이 여기서 값을 낸다.** 라이브러리
-# 넷을 손으로 안 적으면 make_initrd.sh가 그 소네임을 찍고 즉시 죽는다 —
+# 넷을 손으로 안 적으면 make_initrd.sh가 그 SONAME을 찍고 즉시 죽는다 —
 # 게스트가 부팅한 뒤 그 명령을 처음 칠 때가 아니라 빌드 때 드러난다.
 #
 # ── UT-M2: 층 2(모던 13개)와 라이브러리 열아홉 ──────────────────────────
 #
-# 도구 13에 딸려 오는 새 소네임을 2026-09-11에 컨테이너 안에서 다시 쟀다.
+# 도구 13에 딸려 오는 새 SONAME을 2026-09-11에 컨테이너 안에서 다시 쟀다.
 # 바이너리의 DT_NEEDED만 보지 않고 **.so의 DT_NEEDED까지 재귀로** 봤다 —
 # UT-M1이 libsystemd를 놓쳤던 자리이고(design 실측 22), M2는 라이브러리를
 # 열아홉 더하므로 같은 누락의 값이 훨씬 비싸다.
@@ -121,7 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── UT-M3: 층 3(git · vim.tiny)과 **라이브러리 0** ──────────────────────
 #
 # **줄 둘이 전부다.** 착수 전에 M2와 똑같은 규칙으로(.so의 DT_NEEDED까지
-# 재귀) closure를 쟀고 **새 소네임이 하나도 없었다.**
+# 재귀) closure를 쟀고 **새 SONAME이 하나도 없었다.**
 #
 #   git        libpcre2-8 · libz · libc      셋 다 이미 있다
 #              (libz는 eza·bat의 libgit2 사슬이 데려와 있다)

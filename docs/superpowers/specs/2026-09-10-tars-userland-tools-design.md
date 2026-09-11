@@ -581,7 +581,7 @@ GL이 54분 15초 → 16분 01초로 줄여 놓은 것을 되돌리는 방향이
 안 치는 일이 생긴다.
 
 **처방이 결정 7이다.** 배열 하나를 돌면서 `cp`와 `copy_lib_deps`를 함께 하므로
-**빼먹을 자리가 없어진다.** `make_initrd.sh`는 소네임을 못 찾으면 즉시 죽는데,
+**빼먹을 자리가 없어진다.** `make_initrd.sh`는 SONAME을 못 찾으면 즉시 죽는데,
 그것이 정상 동작이다.
 
 ### 위험 4 — 화면 판정이 흔들린다
@@ -789,7 +789,7 @@ libsystemd.so.0.40.0 1,131,784   NEEDED: libcap.so.2 libm.so.6 libc.so.6
 실측 3이 "이미 initrd에 있다"고 적은 넷(`libpcre2-8`·`libselinux1`·
 `libtinfo6`·`libm`)에 없던 이름이다.
 
-**`copy_lib_deps`는 이 실수를 안 한다** — 재귀로 따라가고, 못 찾으면 소네임을
+**`copy_lib_deps`는 이 실수를 안 한다** — 재귀로 따라가고, 못 찾으면 SONAME을
 찍고 즉시 죽는다. 그래서 이 실측은 **`make_initrd.sh`가 아니라 사람이 쓴
 문서가 틀렸던 것**이고, Dockerfile의 `apt-get download` 목록은 사람이
 손으로 적는 자리라 그 틀림이 그대로 통과할 수 있었다. **실측 3을 그대로 믿고

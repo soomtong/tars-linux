@@ -408,7 +408,7 @@ WORKDIR /workspace
 
 `apt-get download`는 **의존을 따라가지 않는다** — 이름을 댄 `.deb` 하나씩만
 받는다. 그래서 목록이 명시적이고, 빠진 게 있으면 Task 5에서
-`make_initrd.sh`가 소네임을 찍으며 즉시 죽는다(조용히 통과하지 않는다).
+`make_initrd.sh`가 SONAME을 찍으며 즉시 죽는다(조용히 통과하지 않는다).
 
 이 여덟 줄은 **Task 1의 실측에서 나온 최소 집합**이다. 옛 initrd에 실제로
 들어 있던 `.so`는 아홉 개이고 소속은 넷뿐이다.
@@ -429,7 +429,7 @@ WORKDIR /workspace
 `coreutils`의 Depends에는 `libacl1`·`libattr1`·`libcap2`·`libgmp10`·
 `libssl3t64`·`libsystemd0`가 더 있지만, 우리가 넣는 세 바이너리
 (`cat`/`uname`/`mkdir`)는 그중 아무것도 링크하지 않으므로 받지 않는다.
-나중에 `ls` 같은 것을 추가해서 resolver가 소네임을 찍고 죽으면, 그때 해당
+나중에 `ls` 같은 것을 추가해서 resolver가 SONAME을 찍고 죽으면, 그때 해당
 패키지 줄을 추가하고 이미지를 다시 빌드한다.
 
 - [ ] **Step 2: 새 이미지를 별도 태그로 빌드**
@@ -728,8 +728,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer:arm64 \
 Expected: 에러 없이 끝나고 크기가 **14MB 근처**. ZM-M2 종료 시점 값과 같아야
 한다 — 유저랜드의 출처만 바뀌었을 뿐 내용물은 같은 trixie 패키지다.
 
-`make_initrd: cannot resolve <소네임>`이 나오면 sysroot 패키지 목록이 모자란
-것이다. 그 소네임을 알릴 것 — Task 2 Step 1의 `apt-get download` 목록에 한 줄
+`make_initrd: cannot resolve <SONAME>`이 나오면 sysroot 패키지 목록이 모자란
+것이다. 그 SONAME을 알릴 것 — Task 2 Step 1의 `apt-get download` 목록에 한 줄
 추가하고 이미지를 다시 빌드한다. **이 실패는 조용하지 않게 설계한 것이다.**
 
 - [ ] **Step 3: initrd 내용물을 직접 열어서 확인**
@@ -1066,7 +1066,7 @@ plan을 쓴 뒤 실행 직전에 추가한 Step인데, 이번 milestone에서 �
 ### 3. Zig 산출물은 로더를 `DT_NEEDED`에도 적는다
 
 `terminal`의 `readelf -d`에 `ld-linux-x86-64.so.2`가 들어 있다. Debian이
-만든 `fish`·`mkdir`에는 없다. `ldd`는 소네임을 절대 경로로 해석해 돌려주므로
+만든 `fish`·`mkdir`에는 없다. `ldd`는 SONAME을 절대 경로로 해석해 돌려주므로
 이 사실이 가려져 있었고, `PT_INTERP`와 `DT_NEEDED`를 각각 처리하는 새
 resolver에서 사본이 둘 생겼다. `NEEDED` 순회에서 `ld-linux*`를 건너뛰는
 한 줄로 해결했고, 그 뒤 파일 목록이 264줄 완전 일치했다.

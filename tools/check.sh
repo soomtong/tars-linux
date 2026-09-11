@@ -140,7 +140,7 @@ done
 # 알고 두는 것이 낫다.
 #
 # 라이브러리가 아예 없는 경우는 사실 여기까지 못 온다 — copy_lib_deps가
-# 소네임을 못 풀면 **빌드 때** 죽는다. 이 둘이 잡는 것은 그 다음이다:
+# SONAME을 못 풀면 **빌드 때** 죽는다. 이 둘이 잡는 것은 그 다음이다:
 # LIB_DEST가 바뀌었거나 cpio가 떨어뜨린 경우.
 WANT+=(lib/x86_64-linux-gnu/libncursesw.so.6 lib/x86_64-linux-gnu/libstdc++.so.6)
 

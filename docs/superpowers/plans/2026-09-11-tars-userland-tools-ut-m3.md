@@ -181,7 +181,7 @@ root@(none) /t/r (main) [128]#     ← 직전 명령이 실패한 뒤
 
 - [ ] **Step 1: 주석을 먼저 더한다** — 왜 라이브러리가 0인지
 
-`ENV AMD64_SYSROOT=` 줄 **앞에** UT-M3 절을 잇는다. 새 소네임이 하나도 없다는
+`ENV AMD64_SYSROOT=` 줄 **앞에** UT-M3 절을 잇는다. 새 SONAME이 하나도 없다는
 것과 `/usr/lib/git-core`를 안 쓰는 이유를 적는다(실측 1·3).
 
 - [ ] **Step 2: `hyperfine:amd64 \` 뒤에 두 줄**

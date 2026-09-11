@@ -45,7 +45,7 @@ x86_64를 TCG로 번역했다. **에뮬레이터를 에뮬레이션하고 있었
 - 인터프리터는 `DT_NEEDED`가 아니라 **`PT_INTERP`**에 있다(`readelf -p .interp`).
 - 의존의 의존은 **재귀**로 따라가야 한다.
 
-그리고 `ldd`가 소네임을 절대 경로로 해석해 돌려주기 때문에 가려져 있던
+그리고 `ldd`가 SONAME을 절대 경로로 해석해 돌려주기 때문에 가려져 있던
 사실 하나: **Zig가 만든 바이너리는 로더를 `DT_NEEDED`에도 적는다**
 (`terminal`에 `ld-linux-x86-64.so.2`가 들어 있다. Debian이 만든 `fish`·
 `mkdir`에는 없다). `PT_INTERP` 처리와 겹치므로 `NEEDED` 순회에서
@@ -60,7 +60,7 @@ x86_64를 TCG로 번역했다. **에뮬레이터를 에뮬레이션하고 있었
 대가는 **initrd에 새 바이너리를 넣으려면 `Dockerfile`의 패키지 목록을
 고쳐야 한다**는 것이다(`apt-get install` 한 줄로 안 끝난다). `apt-get
 download`는 의존을 따라가지 않으므로 목록은 명시적이다. 빠지면
-`make_initrd.sh`가 소네임을 찍고 즉시 죽는다 — 조용히 통과하지 않게 일부러
+`make_initrd.sh`가 SONAME을 찍고 즉시 죽는다 — 조용히 통과하지 않게 일부러
 그렇게 만들었다.
 
 sysroot는 `.deb`가 푼 자리라 usrmerge 규칙대로 `/usr/lib/...`이지만,

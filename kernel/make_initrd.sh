@@ -57,7 +57,7 @@ copy_lib_deps() {
   for soname in $(readelf -d "$bin" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
     # 로더는 위에서 PT_INTERP가 지정한 자리(/lib64)에 이미 넣었다. DT_NEEDED에
     # 로더를 또 적어두는 바이너리가 있는데, 그대로 처리하면 /lib/x86_64-linux-gnu
-    # 에 사본이 하나 더 생긴다. ldd는 소네임을 절대 경로로 해석해 돌려주므로
+    # 에 사본이 하나 더 생긴다. ldd는 SONAME을 절대 경로로 해석해 돌려주므로
     # 이 중복이 드러나지 않았다.
     case "$soname" in ld-linux*) continue ;; esac
 
@@ -141,7 +141,7 @@ install_tool() {
   mkdir -p "$(dirname "$dest")"
   cp "$src" "$dest"
   chmod 0755 "$dest"
-  # copy_lib_deps는 이미 있는 소네임을 건너뛰므로 배열의 순서는 상관없다.
+  # copy_lib_deps는 이미 있는 SONAME을 건너뛰므로 배열의 순서는 상관없다.
   copy_lib_deps "$dest"
 }
 
@@ -283,13 +283,13 @@ cp -r "$SYSROOT/usr/lib/x86_64-linux-gnu/zsh" "$WORKDIR/usr/lib/x86_64-linux-gnu
 # zsh/curses는 libncursesw.so.6, zsh/db/gdbm은 libgdbm.so.6. 둘 다 zmodload로
 # 이름을 대고 부를 때만 열리는 선택적 모듈이라 우리 셸은 부를 일이 없다.
 # 라이브러리 두 개를 게스트에 들이는 대신 모듈을 뺀다 — 남겨두면 아래
-# copy_lib_deps가 그 소네임을 찍고 즉시 죽는다(그게 정상 동작이다).
+# copy_lib_deps가 그 SONAME을 찍고 즉시 죽는다(그게 정상 동작이다).
 rm -f  "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/curses.so
 rm -rf "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/db
 
 # 모듈도 각자 동적 의존을 갖는다. 바이너리에만 copy_lib_deps를 돌리면 빠진
 # 라이브러리가 **부팅 후 dlopen 시점에야** 드러나고, 그 실패는 로그에서
-# 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 소네임을 찍고 즉시 죽는다.
+# 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 SONAME을 찍고 즉시 죽는다.
 while IFS= read -r mod; do
   copy_lib_deps "$mod"
 done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')

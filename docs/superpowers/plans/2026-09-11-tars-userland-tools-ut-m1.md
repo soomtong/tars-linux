@@ -94,7 +94,7 @@ libsystemd.so.0.40.0 1,131,784   NEEDED: libcap.so.2 libm.so.6 libc.so.6
 
 **`apt-get download`는 의존을 안 따라간다** — 이 목록은 언제나 명시적이다
 (그 성질이 지금 값을 낸다: `libsystemd0`을 손으로 적지 않으면
-`make_initrd.sh`가 소네임을 찍고 즉시 죽는다).
+`make_initrd.sh`가 SONAME을 찍고 즉시 죽는다).
 
 - [ ] **Step 2: `zstd`를 함께 더한다** — HANDOFF이 남긴 결정
 
@@ -144,7 +144,7 @@ docker run --rm tars-devcontainer bash -c '
 `install_tool()`이 하는 것 넷: 원본이 없으면 **어느 패키지를 Dockerfile에
 더하라고 말하며 죽고**, `mkdir -p`, `cp`, `chmod 0755`, `copy_lib_deps`.
 
-**`copy_lib_deps`가 이미 있는 소네임을 건너뛰므로 순서는 상관없다.**
+**`copy_lib_deps`가 이미 있는 SONAME을 건너뛰므로 순서는 상관없다.**
 
 **Verify:** initrd가 만들어지고 목록에 49개가 다 있다.
 

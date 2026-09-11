@@ -263,7 +263,7 @@ zle는 terminfo를 찾는다 — CP-M2에서 zsh를 띄우면
 `fish-common`을 필요로 했던 것과 같은 구조라 `make_initrd.sh`에 선례가 있다.
 `Dockerfile` 추가 목록은 `bash:amd64`, `zsh:amd64`, `zsh-common`,
 `libtinfo6:amd64` 정도로 예상하고, 빠진 것이 있으면 `make_initrd.sh`가
-소네임을 찍고 즉시 죽는다 — 조용히 통과하지 않도록 이미 그렇게 만들어져
+SONAME을 찍고 즉시 죽는다 — 조용히 통과하지 않도록 이미 그렇게 만들어져
 있다([[project_build_host_arch]]).
 
 **3. initrd가 커진다.** 지금 53MB(gzip 11.8MB)이고 대부분이 디버그 심볼

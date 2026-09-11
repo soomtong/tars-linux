@@ -666,7 +666,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 ./usr/bin/sleep
 ```
 
-`make_initrd.sh`가 소네임을 찍고 죽으면 sysroot에 없는 라이브러리를
+`make_initrd.sh`가 SONAME을 찍고 죽으면 sysroot에 없는 라이브러리를
 요구한다는 뜻이지만, `sleep`은 `cat`과 같은 패키지·같은 의존이라 그럴
 가능성은 낮다.
 
