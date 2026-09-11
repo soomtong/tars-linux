@@ -1,4 +1,253 @@
-# HANDOFF: **SC-M1 — 씨앗이 깔렸고, 게이트가 세 번 부팅해서 한 줄로 갈랐다**
+# HANDOFF: **SC-M2 — rc를 일부러 깨뜨렸고, 기계가 두 가지 방법으로 돌아왔다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **SC-M2가 2026-09-11에 끝났고, 그것으로 Shell
+Config 서브프로젝트 전체(SC-M0~M2)가 닫혔다.**
+
+```
+tars-init: console shell died 3 times fast, the rc files are the suspect; restarting it with -f
+tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tars.noconfig on the kernel command line
+tars-init: started console shell (pid 41, /usr/bin/zsh)      ← 넷째. 이 셸은 안 죽는다
+```
+
+**이 세 줄이 이 milestone의 성적표다.** 사용자가 rc에 심은 `exit` 한 줄이 셸을
+세 번 죽였고, 감독자가 **포기하기 직전에** 그 rc를 빼고 한 번 더 띄웠다.
+
+**게이트는 열한 체인 3/3으로 25분 58.09초다**(SC-M1의 24분 36.55초에서
+**+1분 21.54초**. 부팅이 둘 늘었고 **4차·5차가 관측 창 8초씩을 고정으로
+쓴다** — 확인할 것이 "없어야 할 것"이라 폴링으로 못 줄인다). **첫 회차에
+통과했다.**
+
+**이 세션도 편집을 Claude Code가 했다.** 사용자가 2026-09-11에 외출하며
+"이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. **이 세션 한정
+예외이고 다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## 바로 다음에 할 것 — **후보를 고르는 일부터다**
+
+**열려 있는 milestone이 하나도 없다.** 다음 서브프로젝트를 고르는 것이 첫
+일이고, **사용자가 고른다.** SC 자신이 남긴 것과 UT가 남긴 것이 겹친다.
+
+### 1. **`zoxide`·`fzf`** — SC 비목표 1. **SC가 이것의 유일한 장애물을 치웠다**
+
+UT 비목표 6이 *"셸 설정을 다루는 서브프로젝트가 생기면 그때 함께 온다"*고
+적었고, 이제 **훅을 걸 자리가 있다**(`/config`의 rc 셋). 남은 일은 **도구
+조달 하나뿐이고** 그것은 UT가 절차를 세워 뒀다 — `.deb` 목록 · 라이브러리
+closure · `guest_tools.sh` · `tools/check.sh`의 검사. **가장 짧은 후보다.**
+
+### 2. **쓸 수 있는 작업 공간** — UT 비목표 2. **git이 서면서 통증이 됐다**
+
+게스트에서 저장소를 만들 수 있는데 재부팅하면 통째로 사라진다(initramfs는
+tmpfs다). 영속하는 것은 `/config` 하나뿐이고 그건 `tars.conf`·`gitconfig`·
+**rc 셋**용이다. 디스크 레이아웃·파티션·마운트 정책이 본체이고 **RM-M2
+결정 12("파티션을 안 본다")를 다시 열어야 할 수도 있다.**
+
+### 3. **네트워킹** — UT 비목표 1. 뒤에 둘이 매달려 있다
+
+`# CONFIG_NET is not set`이다. 풀리면 **git의 네트워크 헬퍼 일곱**과 **패키지
+매니저 `herdr`**가 따라온다. 층이 두껍고 **게이트가 그것을 어떻게 볼지도
+따로 설계해야 한다.**
+
+### 4. 셸 히스토리를 영속시키는 것 — SC 비목표 2
+
+rc와 같은 자리에 둘 수 있지만 **크기 정책이 본체다** — rc는 사람이 쓰는
+만큼만 자라고 히스토리는 기계가 자라게 한다. `/config`는 16MB ext2다.
+
+**그리고 RM이 남긴 여섯이 그대로 있다.** 그중 **실기에 실제로 꽂아 보기**는
+코드가 아니라 사람이 하는 일이고 `README.md`에 절차가 있다 — **이제 그
+절차에 `tars.noconfig`가 함께 간다**(limine 메뉴에서 cmdline을 고칠 수 있고,
+그것이 이 milestone이 만든 탈출로 2다. **게이트는 `-append`로만 심어 봤다**).
+
+## **이 milestone을 지배한 사실 하나 — 감독자는 자식이 왜 죽었는지 모른다**
+
+`fast_restarts >= 3`만으로는 **"사용자의 rc가 셸을 죽였다"**와 **"GPU가 없어서
+terminal이 못 뜬다"**를 가를 수 없다. 그런데 둘째 경우에 탈출로가 발동하면
+**BF 체인이 깨진다** — `boot/check.sh`가 재시작 횟수를 **정확히 3**으로 세고
+있고(그 수가 곧 `MAX_FAST_RESTARTS` 정책이다) 탈출로는 그것을 6으로 만든다.
+
+**처방은 조건 하나다 — 설정 디스크가 안 붙은 부팅에는 탈출로를 안 준다.**
+
+```zig
+const rescue_flag: ?[:0]const u8 = if (storage_mounted and cfg.shell_config == .on)
+    shell.noConfigFlag()
+else
+    null;
+```
+
+그런 기계에는 rc 실체가 아예 없다(홈의 링크가 끊어져 있다). **고칠 수 있는
+것이 없는데 다시 띄우는 것은 탈출이 아니라 소음이다.**
+
+**착수 전에 찾았다.** SC-M0은 같은 종류의 파손을 **루트 게이트가 죽고 나서**
+셋 찾았는데(실측 19), M2는 plan을 쓰면서 `giving up`을 grep하는 자리 넷을
+먼저 훑었다 — 그리고 음성 확인이 그 판단을 확인했다:
+
+```
+FAIL: init started the terminal 6 times, want exactly 3
+```
+
+**우리 코드가 남의 검사를 깨뜨리는 것을 실행으로 본 자리다.**
+
+## 탈출로 둘은 성격이 달라 서로를 대체 못 한다
+
+| | 발동 | 덮는 것 | 대가 |
+|---|---|---|---|
+| **결정 8**(감독자) | 자식이 **죽어야** 한다 | 죽는 rc | 자동. 매달리는 rc는 못 본다 |
+| **결정 9**(cmdline `tars.noconfig`) | 사람이 부팅 순간에 적는다 | **죽는 것도 매달리는 것도** | 사람이 그 자리에 있어야 한다 |
+
+**우선순위를 설계에 못 박았다: cmdline > `tars.conf` > 기본값.** 여섯 키 중
+이 하나만 예외이고 근거는 *"`tars.conf`를 고칠 셸이 없을 때 쓰는 것"*이다.
+
+토큰은 **부분 문자열이 아니라 토큰**으로 본다(`tars.noconfigured`가 안
+걸린다). **값이 붙어도 받는다**(`tars.noconfig=1`) — 있고 없음이 전부이고,
+끄는 방법은 `=0`이 아니라 **안 적는 것**이다.
+
+## 게이트가 무엇을 어떻게 보는가 — 부팅 다섯
+
+| 부팅 | cmdline | `tars.conf` | `/config/zshrc` | 치는 것 | 증명하는 것 |
+|---|---|---|---|---|---|
+| **1·2차** | 기본 | M1 그대로 | M1 그대로 | M1 그대로 | M1 그대로 |
+| **3차** | 기본 | `+shell_config=off` | 씨앗+마커 | **`exit`를 심고 `on`을 되돌린다** | M1의 부정 검사 **+ 4차의 함정** |
+| **4차** | 기본 | `+shell_config=on` | **+`exit`** | 없음 | **결정 8** |
+| **5차** | **`tars.noconfig`** | 같음(`on`) | 같음 | 없음 | **결정 9** |
+
+**4차와 5차가 같은 디스크를 본다.** 4차는 그 디스크로 셸이 **죽는다**는 것을
+보였고 5차는 **같은 디스크에서 한 단어 때문에 안 죽는다**는 것을 본다 —
+**4차가 5차의 부정 검사를 진짜로 만든다**(M1의 3차가 2차에 기대던 구조다).
+
+**3차가 타이핑을 시작한 것이 M1과 달라진 점이다.** M1은 *"3차는 아무것도 안
+친다"*고 적었고 그 이유(판정 글자가 우연히 화면에 생기는 길)는 그대로 살아
+있다 — 그래서 **3차가 치는 것에 `tars-rc-alive`가 한 글자도 안 들어간다.**
+되읽기가 `cat /config/zshrc`가 아니라 **`grep exit /config/zshrc`**인 것이
+그래서다.
+
+### 4차 부팅의 수 셋이 이야기 전부다
+
+| 무엇 | 수 | 왜 |
+|---|---|---|
+| 시리얼의 `tars-rc-alive` | **3** | rc를 세 번 읽었다. 그 파일 끝이 `exit`이라 **"읽었다"와 "죽었다"가 같은 사실**이다 |
+| `started console shell` · `started terminal` | **각 4** | 셋은 rc와 함께 죽고 넷째가 rc 없이 산다 |
+| `giving up on` | **0** | 탈출이 성공했다는 것의 정의 |
+
+**하나만 보면 안 갈린다** — `alive`가 3인데 `started`가 3이면 탈출로가 안 돈
+것이고, `started`가 5면 되살린 것도 죽은 것이다.
+
+## 음성 확인이 준 것 — **다시 조사하지 말 것**
+
+전문은 design의 실측 29~34. **넷 다 겨냥한 검사를 정확히 맞혔다**(M1에 이어
+두 번째다. SC-M0은 셋 다 빗나갔다).
+
+| 무엇을 되돌렸나 | 무엇이 죽나 |
+|---|---|
+| `rescue_flag`를 조건 없이 `null` | **4차 부팅만.** 1·2·3차와 5차는 초록 |
+| `storage_mounted and`를 뗀다 | **`boot/check.sh`** — `started the terminal 6 times` |
+| 결정 9의 덮어쓰기를 지운다 | **5차 부팅만.** 4차까지 초록 |
+| 토큰 매칭을 `indexOf`로 | **호스트 검사** — 부팅 전에 |
+
+**첫 줄이 이 milestone에서 처음 본 광경을 만들었다** — 탈출로를 끄면
+`giving up on console shell`과 `giving up on terminal`이 나란히 찍힌다.
+**자식 둘이 다 포기된 기계 = 셸이 하나도 없는 기계다.** design 위험 3이
+말로만 적어 두었던 상태이고 **M2 전에는 아무도 본 적이 없다.**
+
+## ⚠ **`zig build test`의 낡은 결과가 세 번째로 나왔다 — 이번엔 단서가 있다**
+
+토큰 매칭을 깨뜨려 놓고 돌린 첫 실행이 `PASS`, 두 번째가 옳은 `FAIL`이었다
+(M1의 두 번에 더한다). 그리고 복구 직후 **컨테이너 하나 안에서** 명령 둘을
+나란히 돌렸다:
+
+```
+$ git checkout init/src/config.zig                    # 호스트 md5: 2c37dddd...
+$ docker run ... 'md5sum src/config.zig; grep -c tokenizeAny src/config.zig'
+9d823625232124eaaa934aa0c9913459  src/config.zig      ← 옛 내용
+1                                                      ← 밀리초 뒤, 새 내용
+```
+
+**같은 컨테이너 안에서 먼저 읽은 명령이 옛 파일을 봤다.** zig의 캐시가 아니라
+**컨테이너의 첫 읽기가 낡은 것**이고, M1이 *"bind mount의 지연은 아니다"*라고
+적은 것이 이번에 흔들렸다. **재현은 여전히 못 했다** — 작은 파일로 쓰기 여섯 ·
+rename 여섯, M1의 열여덟 판에 열두 판을 더했다. **처방은 그대로: 음성 확인을
+한 번으로 판정하지 말 것.**
+
+## 탈출로가 다른 체인을 안 건드렸다 — 수 다섯
+
+| 무엇 | 수 | 뜻 |
+|---|---|---|
+| `tars-init: giving up on` | **3** — 전부 `terminal` | **BF 체인의 세 회차뿐이다** |
+| `times fast`(탈출로의 줄) | **6** | `config` 4차의 자식 둘 × 세 회차. **다른 체인엔 없다** |
+| `on the kernel command line beats` | **3** | 5차 × 세 회차 |
+| `cannot read /proc/cmdline` | **0** | ISO로 뜨는 BF 체인까지 전부 읽었다 |
+| `Welcome to fish` 전체 / 화면 줄 | **6 / 0** | M0·M1과 같다 |
+
+## SC-M2의 커밋들
+
+| | 파일 | 커밋 |
+|---|---|---|
+| plan | `.../plans/2026-09-11-tars-shell-config-sc-m2.md` | `abb5a7c` |
+| Task 1·2 | `init/src/config_test.zig` · `init/src/config.zig` | `ac856cf` |
+| Task 3 | `init/src/main.zig`(결정 9) | `a24f404` |
+| Task 4 | `init/src/main.zig`(결정 8) | `0d3bf1f` |
+| Task 5 | `config/check.sh` | `ffb9787` |
+| Task 8 | design · 기억 · MEMORY · CLAUDE · HANDOFF | 이 커밋 |
+
+**Task 6(음성 확인)과 Task 7(게이트)은 커밋이 없다** — 코드를 일부러
+되돌렸다가 `git checkout`으로 복구했고, 결과는 design의 실측 29~35에 있다.
+
+## SC-M2가 게이트로 **못 보는 것** — 알고 둔다
+
+| 못 보는 것 | 왜 |
+|---|---|
+| **매달리는 rc** | 결정 9가 덮는다고 적혀 있지만 게이트는 **죽는 rc만** 심는다. 매달리는 rc를 심으면 그 부팅의 타임아웃이 곧 체인의 타임아웃이고, 실패했을 때 "매달렸다"와 "게이트가 느리다"가 안 갈린다 |
+| **탈출로 1이 두 번 안 도는가** | 코드로는 `c.rescue = null` 한 줄이다. rc 없이 뜬 셸이 **안 죽으므로** 게이트가 그 갈래를 안 지난다 |
+| bash·fish에서 **죽는** rc | 4차·5차의 셸은 zsh 하나다. M1의 "bash·fish의 rc가 읽히는가"와 같은 한계다 |
+| 실기에서 **limine 메뉴로** 토큰을 적는 것 | 게이트는 `-append`로 심는다. RM이 남긴 "실기에 꽂아 보기"와 함께 간다 |
+| `copy/check.sh`의 앰버 하이라이트 계수 | M0이 남긴 **알고 두는 부채**. 그대로다 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-config-design.md` | **SC의 전부.** 실측 35 · 비목표 8 · 결정 10(5는 철회) · 위험 넷(**전부 닫혔다**) |
+| `docs/decisions/project_shell_config.md` | 이 서브프로젝트의 기억. **다시 캐지 말 것**이 여기 있다 |
+| `init/src/config.zig` | `NO_CONFIG_TOKEN` · **`cmdlineWantsNoConfig()`**(순수) · `cmdlineNoConfig()` · `rcSeed()` · `seedRcFiles()` |
+| `init/src/main.zig` | **`Rescue`·`TERMINAL_FLAG_SLOT`(2)·`CONSOLE_FLAG_SLOT`(1)** · 감독 루프의 탈출 분기 · `rescue_flag`의 두 조건 · 결정 9의 덮어쓰기 |
+| `init/src/config_test.zig` | `expectQuietSeed` · **`expectCmdline`**(토큰 아홉) |
+| `config/check.sh` | **부팅 다섯.** 타이핑 시퀀스 아홉이 파일 위쪽에 모여 있다 |
+| `boot/check.sh`의 `want exactly 3` | **감독 루프를 건드리는 사람이 가장 먼저 볼 자리** |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'cd init && zig build test'          # 호스트 검사만, 10초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash config/check.sh                         # CP 체인 단독, 부팅 다섯이라 1분 06초
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash boot/check.sh                           # **감독 루프를 고쳤으면 이것도**
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c "debugfs -R 'ls -l /' out/config.img"   # 게이트가 남긴 디스크에 직접
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # 루트 게이트, 백그라운드로
+```
+
+**기준선: SC-M2의 열한 체인 3/3 = 25분 58.09초.**
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**코드를 되돌린 뒤에는 `rm -rf init/zig-out terminal/zig-out`을 한 번 한다**
+(UT design 실측 18). **그리고 위의 ⚠ 때문에 음성 확인은 두 번씩 돌린다.**
+
+---
+
+## 그 앞의 milestone — Shell Config SC-M1 (2026-09-11)
+
+**씨앗이 깔렸고, 게이트가 세 번 부팅해서 한 줄로 갈랐다**
 
 ## 지금 어디인가
 

@@ -234,6 +234,29 @@ mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
 그리고 노트북 내장 디스크는 GPT라 이 훑기에 걸리지 않는다(superblock 매직이
 안 맞는다). **남의 파일시스템을 잡을 길이 없다는 뜻이다.**
 
+### 셸 설정을 고쳤는데 셸이 안 뜨면
+
+설정 디스크가 붙으면 `init`이 rc 파일 셋을 거기에 깔고 홈에서 링크로 잇는다
+(`/config/bashrc` · `/config/zshrc` · `/config/fish.config`). **그 파일은
+그때부터 당신 것이고, 우리는 그 안에 무엇이 들었는지 모른다** — 거기 적은 한
+줄이 셸을 죽이면 그 셸로는 그것을 고칠 수 없다.
+
+탈출로가 둘이고, 둘의 성격이 다르다.
+
+| 증상 | 무엇이 구해 주나 |
+|---|---|
+| 셸이 **뜨자마자 죽는다** | 아무것도 안 해도 된다. 감독자가 세 번 보고 나서 **rc 없이 한 번 더 띄운다** |
+| 셸이 **매달린다**(`read` 한 줄, 무한 루프) | 부팅 순간에 limine 메뉴에서 커널 cmdline에 **`tars.noconfig`**를 더한다 |
+
+```
+tars-init: console shell died 3 times fast, the rc files are the suspect; restarting it with -f
+tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tars.noconfig on the kernel command line
+```
+
+`tars.noconfig`는 **`tars.conf`를 이긴다**(우선순위: cmdline > `tars.conf` >
+기본값). 그 한 번의 부팅에서만 rc를 안 읽으므로, 그동안 rc를 고치거나
+`tars.conf`에 `shell_config=off`를 적어 두면 된다.
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
@@ -257,7 +280,7 @@ QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 **
 ## 게이트
 
 ```bash
-# 전체 — 열한 체인 × 3회차, 약 24분
+# 전체 — 열한 체인 × 3회차, 약 26분
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
 
 # 한 체인만
