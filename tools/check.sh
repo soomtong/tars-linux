@@ -232,7 +232,8 @@ for _ in $(seq 1 20); do
 done
 [ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor" "terminal: grid"
 
-# **아래 여덟 자리에 `sleep 2`가 없다.** UT-M2 전에는 명령마다 2~3초를 무조건
+# **아래 어느 자리에도 `sleep 2`가 없다**(UT-M3 뒤로 열다섯이다). UT-M2 전에는
+# 명령마다 2~3초를 무조건
 # 쉬고 한 번 grep했는데, 그 수를 아무도 잰 적이 없고 8회 중 2회 깨졌다 —
 # 깨진 회차의 마지막 화면에는 찾던 글자가 정확히 찍혀 있었다. gate_lib.sh의
 # wait_for_screen 주석이 본문이다. 찾으면 즉시 돌아오므로 이 체인은 그 변경
