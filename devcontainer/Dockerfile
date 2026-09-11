@@ -94,6 +94,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # **apt-get download가 의존을 안 따라가는 것이 여기서 값을 낸다.** 라이브러리
 # 넷을 손으로 안 적으면 make_initrd.sh가 그 소네임을 찍고 즉시 죽는다 —
 # 게스트가 부팅한 뒤 그 명령을 처음 칠 때가 아니라 빌드 때 드러난다.
+#
+# ── UT-M2: 층 2(모던 13개)와 라이브러리 열아홉 ──────────────────────────
+#
+# 도구 13에 딸려 오는 새 소네임을 2026-09-11에 컨테이너 안에서 다시 쟀다.
+# 바이너리의 DT_NEEDED만 보지 않고 **.so의 DT_NEEDED까지 재귀로** 봤다 —
+# UT-M1이 libsystemd를 놓쳤던 자리이고(design 실측 22), M2는 라이브러리를
+# 열아홉 더하므로 같은 누락의 값이 훨씬 비싸다.
+#
+#   libgit2 사슬 16   eza · bat 둘이 데려온다. design 실측 5는 15라고 적었고
+#                     그 표에 libresolv.so.2가 없다 — libkrb5가 데려온다.
+#                     **libresolv는 libc6이 담고 있어 여기 안 적는다.**
+#   libncursesw6      htop · ncdu
+#   libjq1 · libonig5 jq (libonig는 libjq가 데려온다)
+#   libstdc++6        **btop 하나뿐이다.** btop을 빼는 사람은 이 줄도 뺀다
+#
+# libcrypto.so.3 하나가 6.5MB로 가장 크다. **네트워크가 없는 기계가 TLS·
+# Kerberos·SSH 스택을 지는 것**이고, 사용자가 그 대가를 알고 Debian 경로를
+# 유지하기로 정했다(design 결정 3).
+#
+# **버전이 이름에 박힌 패키지가 넷이다**(libgit2-1.9 · libssh2-1t64 ·
+# libssl3t64 · libmbedtls21/libmbedx509-7/libmbedcrypto16). trixie가 올라가면
+# apt가 "없는 패키지"라고 죽는다 — 그때는 `apt-cache search` 한 번으로 새
+# 이름을 찾아 여기를 고치면 된다. 조용히 실패하지 않는다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -117,6 +140,38 @@ RUN dpkg --add-architecture amd64 \
         less:amd64 \
         procps:amd64 \
         util-linux:amd64 \
+        eza:amd64 \
+        bat:amd64 \
+        fd-find:amd64 \
+        ripgrep:amd64 \
+        sd:amd64 \
+        procs:amd64 \
+        htop:amd64 \
+        btop:amd64 \
+        tree:amd64 \
+        duf:amd64 \
+        ncdu:amd64 \
+        jq:amd64 \
+        hyperfine:amd64 \
+        libgit2-1.9:amd64 \
+        libgssapi-krb5-2:amd64 \
+        libkrb5-3:amd64 \
+        libk5crypto3:amd64 \
+        libkrb5support0:amd64 \
+        libcom-err2:amd64 \
+        libkeyutils1:amd64 \
+        libmbedtls21:amd64 \
+        libmbedx509-7:amd64 \
+        libmbedcrypto16:amd64 \
+        libhttp-parser2.9:amd64 \
+        libssh2-1t64:amd64 \
+        libssl3t64:amd64 \
+        libzstd1:amd64 \
+        zlib1g:amd64 \
+        libncursesw6:amd64 \
+        libjq1:amd64 \
+        libonig5:amd64 \
+        libstdc++6:amd64 \
         libacl1:amd64 \
         libattr1:amd64 \
         libproc2-0:amd64 \
