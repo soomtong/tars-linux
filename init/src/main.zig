@@ -190,6 +190,24 @@ const Kind = enum {
     }
 };
 
+/// 탈출로 1(SC design 결정 8). 감독자가 포기하기 **직전에** argv의 이 자리를
+/// 이 값으로 바꾸고 딱 한 번 다시 띄운다.
+///
+/// **자리가 자식마다 다르다.** terminal은 argv[2]가 "셸에 넘길 플래그"이고
+/// (argv[1]은 셸 경로다), 콘솔 셸은 argv[1]이 그 플래그 자체다 — argv를 짓는
+/// 쪽과 쓰는 쪽이 갈리느냐 아니냐의 차이가 여기서도 한 번 더 나온다
+/// (`config.zig`의 `configFlag` 주석이 같은 비대칭을 적고 있다). 그래서
+/// 슬롯 번호를 값으로 들고 다닌다.
+const Rescue = struct {
+    slot: usize,
+    flag: [:0]const u8,
+};
+
+/// 위 슬롯 둘. **아래 `children` 배열의 argv 리터럴과 짝이고, 어긋나면
+/// 탈출로가 엉뚱한 인자를 덮어쓴다** — terminal이면 키보드 종류 자리다.
+const TERMINAL_FLAG_SLOT: usize = 2;
+const CONSOLE_FLAG_SLOT: usize = 1;
+
 /// terminal은 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다.
 const TERMINAL_PATH: [:0]const u8 = "/terminal";
 
@@ -217,6 +235,10 @@ const Child = struct {
     started_at: isize = 0,
     fast_restarts: u32 = 0,
     given_up: bool = false,
+    /// 남아 있는 탈출로. **한 번 쓰면 null이 된다** — 결정 8의 "한 번만"이
+    /// 상태 하나로 표현되는 자리다. 처음부터 null이면 이 자식에게는 탈출로가
+    /// 없다(설정 디스크가 없거나 이미 `shell_config=off`다).
+    rescue: ?Rescue = null,
 };
 
 fn monotonicSeconds() isize {
@@ -354,6 +376,34 @@ fn supervise(
             }
 
             if (c.fast_restarts >= MAX_FAST_RESTARTS) {
+                // ── 탈출로 1(SC-M2 결정 8) ──────────────────────────────
+                //
+                // 포기하기 **직전에** rc 없이 한 번 더 띄운다. 빨리 죽는
+                // 이유 중 우리가 고칠 수 있는 것은 사용자의 rc 하나뿐이고,
+                // 그것을 뺀 셸은 SC 이전의 셸과 같다 — 이 저장소가 오래
+                // 돌려 온 상태다. `resolveShell()`이 없는 셸에 대해 하는
+                // 폴백과 **같은 모양**이다: 설정이 가리키는 것이 실제로 안
+                // 되면 되는 것으로 떨어지고, 부팅은 계속된다.
+                //
+                // **덮는 것은 "죽는 rc"까지다.** 매달리는 rc(`read` 한 줄,
+                // 무한 루프)는 자식이 안 죽으니 이 길로 안 온다 — 그것이
+                // 탈출로 2가 따로 있는 이유다(결정 9).
+                if (c.rescue) |r| {
+                    c.argv[r.slot] = r.flag.ptr;
+                    c.rescue = null; // 한 번만
+                    // 이 줄 둘이 이 기능의 사용자 인터페이스 전부다.
+                    // "왜 내 rc가 안 먹지"가 로그 한 줄로 답이 되어야 한다.
+                    std.debug.print("tars-init: {s} died {d} times fast, the rc files are the suspect; restarting it with {s}\n", .{
+                        c.kind.name(), c.fast_restarts, r.flag,
+                    });
+                    std.debug.print("tars-init: to keep it that way put shell_config=off in {s}, or {s} on the kernel command line\n", .{
+                        CONFIG_PATH, config.NO_CONFIG_TOKEN,
+                    });
+                    // 로그 **뒤**에 0으로 되돌린다 — 찍는 수가 "몇 번 죽고
+                    // 나서 이 결정을 했는가"여야 한다.
+                    c.fast_restarts = 0;
+                    continue;
+                }
                 c.given_up = true;
                 std.debug.print("tars-init: giving up on {s} after {d} fast exits\n", .{
                     c.kind.name(), c.fast_restarts,
@@ -543,6 +593,25 @@ pub fn main(init: std.process.Init.Minimal) void {
         .on => null,
         .off => shell.noConfigFlag().ptr,
     };
+    // SC-M2 결정 8 — 탈출로 1. **자식 둘 다에게 준다**(결정 4가 두 셸을 같은
+    // 설정으로 묶은 것의 연장이다).
+    //
+    // **`storage_mounted`를 함께 보는 것이 이 조건의 핵심이다.** 디스크가 안
+    // 붙은 부팅에는 rc 실체가 아예 없다 — 홈의 링크는 끊어져 있고 셸은
+    // 아무것도 안 읽는다(SC-M0이 여섯 체인에서 확인한 정상 경로다). 그런
+    // 기계에서 자식이 죽는 이유는 rc가 아니고, **고칠 수 있는 것이 없는데
+    // 다시 띄우는 것은 탈출이 아니라 소음이다.**
+    //
+    // 그리고 그 소음은 남의 검사를 깬다: BF 체인은 `-vga none`이라 terminal이
+    // 매번 죽고, `boot/check.sh`가 그 재시작 횟수를 **정확히 3**으로 세고
+    // 있다(그 수가 곧 `MAX_FAST_RESTARTS` 정책이다). 조건 없이 주면 6이 된다.
+    //
+    // `off`일 때 안 주는 이유는 단순하다 — 이미 rc를 안 읽는 셸에서 뺄 것이
+    // 없다.
+    const rescue_flag: ?[:0]const u8 = if (storage_mounted and cfg.shell_config == .on)
+        shell.noConfigFlag()
+    else
+        null;
     // 셸과 달리 폴백 검사(resolveShell 같은 것)가 없다. 키보드 종류는
     // 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미 화이트리스트다.
     const keyboard_arg = cfg.keyboard.arg();
@@ -572,6 +641,7 @@ pub fn main(init: std.process.Init.Minimal) void {
                 latin_arg.ptr,
                 toggle_arg.ptr,
             },
+            .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
         },
         .{
             .kind = .console_shell,
@@ -582,6 +652,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             // 지금까지와 같고, `off`면 플래그가 들어간다 — **두 셸이 같은
             // 설정을 따른다**(결정 4).
             .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
+            .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
         },
     };
     supervise(&children, button_fds[0..button_count], envp);
