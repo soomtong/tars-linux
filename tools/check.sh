@@ -16,6 +16,12 @@ cd "$(dirname "$0")"
 # initrd에 있는 것과 게스트에서 도는 것은 다르고, 그 사이에 라이브러리가
 # 있다. 검사 5~7이 사슬이 가장 긴 셋(ps · awk · sed)을 실제로 친다.
 #
+# **UT-M2가 층 2(모던 13)를 더하고 검사 셋을 더 친다** — eza(libgit2 사슬
+# 열여섯) · fd(결정 4의 이름 바꾸기) · jq(libjq→libonig). 열셋 중 넷은
+# 게이트가 못 친다: htop·btop·ncdu는 대화형이라 매달리고, bat은 판정 글자를
+# 못 만든다. **넷의 이유가 각각 다르고, 그 넷이 쓰는 라이브러리 둘은 검사
+# 1이 정적으로만 본다.**
+#
 # **열 체인 중 어느 것도 이것을 못 본다.** 나머지는 전부 게스트 명령을 절대
 # 경로로 친다 — docs/decisions/project_guest_environment.md가 IP-M0에서
 # 그렇게 고치라고 적어 둔 그대로다. 그 문서의 "결과 1"을 닫는 체인이다.
@@ -122,6 +128,16 @@ for entry in "${GUEST_TOOLS[@]}"; do
   WANT+=("${entry#*:}")
 done
 
+# **타이핑으로는 절대 증명할 수 없는 라이브러리 둘.** 이 둘을 쓰는 도구가
+# htop·ncdu·btop뿐인데 셋 다 대화형이라 게이트가 못 친다(실측 26). 파일이
+# 들어갔다는 것까지가 게이트가 이 셋에 대해 볼 수 있는 전부이고, 그 사실을
+# 알고 두는 것이 낫다.
+#
+# 라이브러리가 아예 없는 경우는 사실 여기까지 못 온다 — copy_lib_deps가
+# 소네임을 못 풀면 **빌드 때** 죽는다. 이 둘이 잡는 것은 그 다음이다:
+# LIB_DEST가 바뀌었거나 cpio가 떨어뜨린 경우.
+WANT+=(lib/x86_64-linux-gnu/libncursesw.so.6 lib/x86_64-linux-gnu/libstdc++.so.6)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 PADDED_LIST="$(printf '\n%s\n' "$INITRD_LIST")"
 for want in "${WANT[@]}"; do
@@ -138,6 +154,7 @@ done
 echo "the initrd carries the four bones and all ${#GUEST_TOOLS[@]} tools the list names"
 
 qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
   -append "console=ttyS0" \
@@ -276,11 +293,88 @@ if ! grep -a "terminal: screen>" "$LOG" | grep -aq "tars:x:0:"; then
 fi
 echo "sed rewrote a line"
 
-# ── 검사 8: 음성 확인 — **위의 넷 전부에 대해** ─────────────────────────
+# ── 검사 8: eza가 돈다 — **libgit2 사슬 열여섯** ────────────────────────
+#
+# **UT-M2의 심장이다.** eza·bat이 데려오는 사슬이 저장소에서 가장 길다.
+#
+#   eza → libgit2.so.1.9 → libssh2 → libcrypto.so.3 → libz · libzstd
+#                        → libgssapi_krb5 → libkrb5 → libresolv · libcom_err
+#                                                   · libkeyutils · libk5crypto
+#                        → libmbedtls → libmbedx509 → libmbedcrypto
+#                        → libhttp_parser
+#
+# 열여섯 전부를 로더가 실행 시점에 풀어야 한다(dlopen이 아니다). M1의
+# `ps ax`가 libproc2→libsystemd→libcap 셋을 보던 자리를 이것이 이어받는다.
+#
+# 판정 글자를 `fonts`로 잡는다. 게스트 루트에 vendor/fonts가 있고, **화면
+# 어느 프레임에도 그 글자가 없다** — 검사 3의 `ls`는 루트 항목만 냈고
+# 타이핑한 명령줄 자체는 `eza vendor`다. 검사 둘이 같은 글자를 보면 하나가
+# 죽어도 둘 다 초록일 수 있다(검사 7의 주석과 같은 이유).
+echo "=== typing 'eza vendor' ==="
+type_keys e z a spc v e n d o r ret
+sleep 2
+
+if ! grep -a "terminal: screen>" "$LOG" | grep -aq "fonts"; then
+  fail "eza did not list the vendor directory (did the libgit2 chain resolve?)" \
+    "terminal: screen>" "error while loading"
+fi
+echo "eza listed a directory through the sixteen-library libgit2 chain"
+
+# ── 검사 9: fd가 **우리가 준 이름으로** 돈다 — 결정 4 ───────────────────
+#
+# .deb 안에서 실체는 /usr/lib/cargo/bin/fd이고 /usr/bin/fdfind가 그것을
+# 가리키는 심볼릭 링크다. guest_tools.sh가 `usr/lib/cargo/bin/fd:usr/bin/fd`로
+# 넣지 않았으면 이 줄이 `Unknown command`다 — mawk→awk와 같은 자리이고,
+# **initrd 안의 이름은 우리가 정한다는 결정 4를 M2에서 보는 자리다.**
+#
+# **인자로 vendor를 주는 것이 중요하다.** fd는 인자가 없으면 현재 디렉터리
+# 아래를 전부 훑는데, 게스트의 cwd가 / 이고 거기에 /proc·/sys가 있다.
+# 훑는 데 오래 걸리고 출력이 화면을 뒤덮는다 — less·top이 매달리는 것과
+# 종류는 다르지만 게이트에 미치는 결과가 같다.
+echo "=== typing 'fd otf vendor' ==="
+type_keys f d spc o t f spc v e n d o r ret
+sleep 2
+
+if ! grep -a "terminal: screen>" "$LOG" | grep -aq "unifont"; then
+  fail "fd did not find the font under the name we gave it" \
+    "terminal: screen>" "Unknown command"
+fi
+echo "fd ran under the name we gave it"
+
+# ── 검사 10: jq가 돈다 — libjq → libonig ────────────────────────────────
+#
+# 게스트에 JSON 파일이 하나도 없고, 게이트에 파일을 만들어 넣는 것은 이
+# 검사 하나를 위해 initrd를 넓히는 일이다. `--version`으로 충분한 이유는
+# **이 검사가 보는 것이 파싱이 아니라 동적 링크**이기 때문이다 — libjq도
+# libonig도 DT_NEEDED라 로더가 exec 시점에 둘 다 풀어야 하고, 못 풀면
+# 한 글자도 안 찍고 죽는다.
+#
+# 버전을 `jq-1.7`로 박지 않고 `jq-[0-9]`로 보는 것은 trixie가 올라가면
+# 갈릴 자리라서다. 타이핑한 명령줄은 `jq --version`이라 이 정규식과 안
+# 겹친다.
+echo "=== typing 'jq --version' ==="
+type_keys j q spc minus minus v e r s i o n ret
+sleep 2
+
+if ! grep -a "terminal: screen>" "$LOG" | grep -aqE "jq-[0-9]"; then
+  fail "jq did not print its version (did libjq/libonig resolve?)" \
+    "terminal: screen>" "error while loading"
+fi
+echo "jq loaded libjq and libonig"
+
+# **bat은 일부러 안 친다.** 매달리지는 않지만(-P로 페이저를 끌 수 있다)
+# 화면에 내는 글자가 문제다 — /etc/passwd도 /etc/group도 검사 6·7이 이미
+# 본 글자이고, 헤더의 `File: ` 문자열은 바이너리 안에서 확인되지 않았다
+# (2026-09-11, `strings`로 확인). **판정을 만들 수 없는 검사는 안 만든다.**
+# bat이 잃는 것은 크지 않다 — 라이브러리는 eza와 같은 사슬이라 검사 8이
+# 보고, 이름은 검사 1이 dest로 본다.
+
+# ── 검사 11: 음성 확인 — **위의 일곱 전부에 대해** ──────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
-# 이유가 그것이다 — ls · ps · awk · sed 넷을 다 친 뒤에 한 번 보면 넷
-# 전부의 음성 확인이 된다. UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
+# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq 일곱을 다 친 뒤에
+# 한 번 보면 일곱 전부의 음성 확인이 된다. UT-M0 때는 ls 하나뿐이라 바로
+# 뒤에 있었다.
 #
 # **positive 검사만으로는 안 닫히는 길이 있다.** 예를 들어 검사 5의
 # `/terminal`은 화면 어딘가에 그 글자가 있으면 초록인데, ps가 죽고 그 앞의
