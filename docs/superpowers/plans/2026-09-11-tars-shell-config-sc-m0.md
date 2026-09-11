@@ -115,7 +115,7 @@ etc/passwd
 키의 검사가 아무것도 안 보고 초록이 떴을 것이다."* **`expect()`를 안 넓히고
 검사만 더하면 그 검사는 tautology다.**
 
-- [ ] **Step 1: `expect()`의 비교와 출력에 여섯째 필드를 더한다**
+- [x] **Step 1: `expect()`의 비교와 출력에 여섯째 필드를 더한다**
 
 `init/src/config_test.zig`의 비교 조건에서 **지울 것**:
 
@@ -173,7 +173,7 @@ etc/passwd
             @tagName(want.shell_config),
 ```
 
-- [ ] **Step 2: 검사 다섯을 `main()` 끝에 더한다**
+- [x] **Step 2: 검사 다섯을 `main()` 끝에 더한다**
 
 `init/src/config_test.zig`의 `pub fn main()` 안, 마지막 `try expect(...)`
 뒤에 **넣을 것**:
@@ -194,7 +194,7 @@ etc/passwd
     try expect("shell=zsh\nshell_config=off\n", .{ .shell = .zsh, .shell_config = .off });
 ```
 
-- [ ] **Step 3: 컴파일 실패를 확인한다**
+- [x] **Step 3: 컴파일 실패를 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -206,7 +206,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 (`no field named 'shell_config'`). **테스트 실패가 아니라 컴파일 실패인
 것이 정상이다** — Zig에서 구조체 필드는 타입이라 런타임까지 안 간다.
 
-- [ ] **Step 4: 아직 커밋하지 않는다**
+- [x] **Step 4: 아직 커밋하지 않는다**
 
 Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에 남기지 않는다.
 
@@ -216,7 +216,7 @@ Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에
 
 **Files:** Modify `init/src/config.zig`
 
-- [ ] **Step 1: `ShellConfig` enum을 `Shell` 위에 더한다**
+- [x] **Step 1: `ShellConfig` enum을 `Shell` 위에 더한다**
 
 `init/src/config.zig`의 `pub const Shell = enum {` **바로 앞**에 **넣을 것**:
 
@@ -233,7 +233,7 @@ pub const ShellConfig = enum {
 };
 ```
 
-- [ ] **Step 2: `Shell`에 `configFlag()`를 더한다**
+- [x] **Step 2: `Shell`에 `configFlag()`를 더한다**
 
 `init/src/config.zig`의 `noConfigFlag` 함수 **바로 뒤**, `Shell`의 닫는
 `};` 앞에 **넣을 것**:
@@ -258,7 +258,7 @@ pub const ShellConfig = enum {
     }
 ```
 
-- [ ] **Step 3: `Config`에 필드를 더한다**
+- [x] **Step 3: `Config`에 필드를 더한다**
 
 `init/src/config.zig`의 `hangul_toggle: Toggles = .{` 블록이 끝나는 `},`
 **뒤**, `Config`의 닫는 `};` 앞에 **넣을 것**:
@@ -271,7 +271,7 @@ pub const ShellConfig = enum {
     shell_config: ShellConfig = .on,
 ```
 
-- [ ] **Step 4: `parse`에 분기를 더한다**
+- [x] **Step 4: `parse`에 분기를 더한다**
 
 `init/src/config.zig`의 `parse` 안에서 **지울 것**:
 
@@ -298,7 +298,7 @@ pub const ShellConfig = enum {
         }
 ```
 
-- [ ] **Step 5: `save`의 씨앗 텍스트에 두 줄을 더한다**
+- [x] **Step 5: `save`의 씨앗 텍스트에 두 줄을 더한다**
 
 `init/src/config.zig`의 `save` 안 `bufPrint` 템플릿에서 **지울 것**:
 
@@ -336,7 +336,7 @@ pub const ShellConfig = enum {
     }) catch return error.FormatFailed;
 ```
 
-- [ ] **Step 6: 테스트가 통과하는지 확인한다**
+- [x] **Step 6: 테스트가 통과하는지 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -346,7 +346,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 **Expected:** 아무 출력 없이 종료 코드 0. `FAIL: input=` 줄이 하나도 없어야
 한다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add init/src/config.zig init/src/config_test.zig
@@ -359,7 +359,7 @@ git commit -m "Give the config file a sixth key and the shells a choice"
 
 **Files:** Modify `init/src/main.zig`
 
-- [ ] **Step 1: 플래그 둘을 만든다**
+- [x] **Step 1: 플래그 둘을 만든다**
 
 `init/src/main.zig`에서 **지울 것**:
 
@@ -384,7 +384,7 @@ git commit -m "Give the config file a sixth key and the shells a choice"
     };
 ```
 
-- [ ] **Step 2: 로그 줄을 넓힌다**
+- [x] **Step 2: 로그 줄을 넓힌다**
 
 `init/src/main.zig`의 `std.debug.print`에서 **지울 것**:
 
@@ -419,7 +419,7 @@ git commit -m "Give the config file a sixth key and the shells a choice"
 `tars-init: config shell=`으로 grep하고 있어서 앞부분이 안 바뀌어야 한다 —
 이 줄 바로 위의 주석이 HI-M2에 대해 같은 것을 적고 있다.
 
-- [ ] **Step 3: 콘솔 셸의 argv 슬롯을 쓴다**
+- [x] **Step 3: 콘솔 셸의 argv 슬롯을 쓴다**
 
 `init/src/main.zig`의 `children` 배열에서 **지울 것**:
 
@@ -440,7 +440,7 @@ git commit -m "Give the config file a sixth key and the shells a choice"
             .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
 ```
 
-- [ ] **Step 4: 빌드와 호스트 테스트**
+- [x] **Step 4: 빌드와 호스트 테스트**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -449,7 +449,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **Expected:** 종료 코드 0, 출력 없음.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add init/src/main.zig
@@ -462,7 +462,7 @@ git commit -m "Carry the new key to both children and say it in one line"
 
 **Files:** Modify `terminal/src/main.zig`
 
-- [ ] **Step 1: 인사말을 끈다**
+- [x] **Step 1: 인사말을 끈다**
 
 `terminal/src/main.zig`의 `_ = setenv("LANG", "C.UTF-8", 1);` **바로 뒤**에
 **넣을 것**:
@@ -483,7 +483,7 @@ git commit -m "Carry the new key to both children and say it in one line"
     _ = setenv("fish_greeting", "", 1);
 ```
 
-- [ ] **Step 2: `"none"`이면 셸 argv에 안 붙인다**
+- [x] **Step 2: `"none"`이면 셸 argv에 안 붙인다**
 
 `terminal/src/main.zig`에서 **지울 것**:
 
@@ -527,7 +527,7 @@ git commit -m "Carry the new key to both children and say it in one line"
     // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
 ```
 
-- [ ] **Step 3: 빌드**
+- [x] **Step 3: 빌드**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -536,7 +536,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 **Expected:** 종료 코드 0. `prepare.sh`가 다섯 바이너리를 빌드한다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add terminal/src/main.zig
@@ -549,7 +549,7 @@ git commit -m "Let none mean no flag, and hush a banner meant for someone else"
 
 **Files:** Modify `kernel/make_initrd.sh`
 
-- [ ] **Step 1: `.gitconfig` 링크 뒤에 링크 셋을 더한다**
+- [x] **Step 1: `.gitconfig` 링크 뒤에 링크 셋을 더한다**
 
 `kernel/make_initrd.sh`의 `ln -sf config/gitconfig "$WORKDIR/.gitconfig"`
 줄 **바로 뒤**에 **넣을 것**:
@@ -576,7 +576,7 @@ ln -sf config/bashrc "$WORKDIR/.bashrc"
 ln -sf config/zshrc "$WORKDIR/.zshrc"
 ```
 
-- [ ] **Step 2: initrd를 짓고 링크 셋을 눈으로 확인한다**
+- [x] **Step 2: initrd를 짓고 링크 셋을 눈으로 확인한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -594,7 +594,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 순서는 다를 수 있다. **`./` 접두사가 붙어 있으면 안 된다**(실측 6).
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add kernel/make_initrd.sh
@@ -607,7 +607,7 @@ git commit -m "Point three rc names at the only disk that survives"
 
 **Files:** Modify `tools/check.sh`
 
-- [ ] **Step 1: 정적 검사에 링크 셋을 더한다**
+- [x] **Step 1: 정적 검사에 링크 셋을 더한다**
 
 `tools/check.sh`에서 **지울 것**:
 
@@ -632,7 +632,7 @@ WANT+=(usr/bin/vi usr/bin/pager usr/bin/editor .gitconfig
 WANT+=(.bashrc .zshrc .config/fish/config.fish)
 ```
 
-- [ ] **Step 2: `ps ax` 검사에 argv 판정을 더한다**
+- [x] **Step 2: `ps ax` 검사에 argv 판정을 더한다**
 
 `tools/check.sh`에서 이 줄을 찾는다(검사 5의 마지막 줄이다):
 
@@ -672,7 +672,7 @@ fi
 echo "both children run without a no-config flag (shell_config=on reached argv)"
 ```
 
-- [ ] **Step 3: UT 체인 단독 실행**
+- [x] **Step 3: UT 체인 단독 실행**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -689,7 +689,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 `/usr/bin/fish none`으로 잡은 것이 `/terminal`을 뺀 이유가 그 폭이다**
 (`/terminal`은 바로 앞 검사가 이미 본다).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add tools/check.sh
@@ -702,7 +702,7 @@ git commit -m "Read the flag off the screen the chain already prints"
 
 **Files:** Modify `config/check.sh`
 
-- [ ] **Step 1: 1차 부팅 판정에 한 줄을 더한다**
+- [x] **Step 1: 1차 부팅 판정에 한 줄을 더한다**
 
 `config/check.sh`에서 **지울 것**:
 
@@ -727,7 +727,7 @@ fi
 echo "boot 1: init reported shell_config=on (the sixth key reached the log)"
 ```
 
-- [ ] **Step 2: CP 체인 단독 실행**
+- [x] **Step 2: CP 체인 단독 실행**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -738,7 +738,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 `boot 1: init reported shell_config=on (the sixth key reached the log)`이
 보인다. **부팅이 둘이라 이 체인은 약 1분이다.**
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add config/check.sh
@@ -755,7 +755,7 @@ git commit -m "Ask the first boot which way the sixth key points"
 같은 파일을 보면 그 검사는 초록인데 아무것도 안 보는 검사다. **커밋하지
 않는다.**
 
-- [ ] **Step 1: 링크 하나를 지우고 정적 검사가 죽는지 본다**
+- [x] **Step 1: 링크 하나를 지우고 정적 검사가 죽는지 본다**
 
 `kernel/make_initrd.sh`에서 `ln -sf config/bashrc "$WORKDIR/.bashrc"` 한
 줄을 임시로 지운 뒤:
@@ -771,7 +771,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 git checkout kernel/make_initrd.sh
 ```
 
-- [ ] **Step 2: terminal의 `"none"` 처리를 지우고 화면 검사가 죽는지 본다**
+- [x] **Step 2: terminal의 `"none"` 처리를 지우고 화면 검사가 죽는지 본다**
 
 `terminal/src/main.zig`에서 다음 한 줄을 임시로 지운다:
 
@@ -794,7 +794,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 git checkout terminal/src/main.zig
 ```
 
-- [ ] **Step 3: `Config`의 기본값을 `off`로 바꾸고 둘이 다 죽는지 본다**
+- [x] **Step 3: `Config`의 기본값을 `off`로 바꾸고 둘이 다 죽는지 본다**
 
 `init/src/config.zig`에서 `shell_config: ShellConfig = .on,`을
 `.off,`로 임시로 바꾼 뒤:
@@ -810,7 +810,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 git checkout init/src/config.zig
 ```
 
-- [ ] **Step 4: 되돌린 뒤 캐시를 지운다**
+- [x] **Step 4: 되돌린 뒤 캐시를 지운다**
 
 ```bash
 rm -rf init/zig-out terminal/zig-out
@@ -819,7 +819,7 @@ rm -rf init/zig-out terminal/zig-out
 **Zig를 되돌린 뒤에는 이것을 한 번 한다**(UT design 실측 18). M1·M2·M3은
 Zig를 안 건드려서 이 함정이 없었는데, **SC-M0은 Zig를 건드린다.**
 
-- [ ] **Step 5: 커밋하지 않는다**
+- [x] **Step 5: 커밋하지 않는다**
 
 결과는 design의 실측 절에 문장으로 적는다(Task 10).
 
@@ -829,7 +829,7 @@ Zig를 안 건드려서 이 함정이 없었는데, **SC-M0은 Zig를 건드린�
 
 **Files:** 없음
 
-- [ ] **Step 1: 백그라운드로 돌린다**
+- [x] **Step 1: 백그라운드로 돌린다**
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -840,7 +840,7 @@ Zig를 안 건드려서 이 함정이 없었는데, **SC-M0은 Zig를 건드린�
 3.81이라 커널 Makefile이 거절한다. Bash 도구 상한이 10분이라
 **백그라운드로 돌리고 주기적으로 `/tmp/gate.log`를 본다.**
 
-- [ ] **Step 2: 결과를 본다**
+- [x] **Step 2: 결과를 본다**
 
 ```bash
 tail -30 /tmp/gate.log; cat /tmp/gate.time
@@ -853,7 +853,7 @@ tail -30 /tmp/gate.log; cat /tmp/gate.time
 **`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
 `status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
 
-- [ ] **Step 3: 인사말이 화면에 없는지 직접 확인한다**
+- [x] **Step 3: 인사말이 화면에 없는지 직접 확인한다**
 
 게이트가 초록이어도 이것을 따로 본다 — **어느 체인도 "인사말이 없다"를
 판정으로 갖고 있지 않다.**
@@ -884,30 +884,30 @@ grep -a "terminal: screen>" /tmp/gate.log | grep -c "Welcome to fish"
 - Modify `CLAUDE.md`
 - Modify `HANDOFF.md`
 
-- [ ] **Step 1: design의 `Status:` 줄과 실측 절을 고친다**
+- [x] **Step 1: design의 `Status:` 줄과 실측 절을 고친다**
 
 `Status:`를 **SC-M0 완료**로 바꾸고, Task 8의 음성 확인 결과와 Task 9의
 게이트 시간을 **"SC-M0이 실행으로 증명한 것"** 절로 더한다. 특히 Task 8
 Step 2에서 **어느 검사가 죽었는지**를 그대로 적는다.
 
-- [ ] **Step 2: `docs/decisions/project_shell_config.md`를 만든다**
+- [x] **Step 2: `docs/decisions/project_shell_config.md`를 만든다**
 
 이 서브프로젝트의 기억. **다시 캐지 말 것**이 여기 들어간다 — 프로브 결과
 넷(인사말 · 프롬프트가 안 움직인다 · zsh 마법사가 없다 · `shift-minus`),
 `"none"` 토큰이 왜 필요한지, `machine/check.sh:117`이 인사말에 매달려
 있다는 것.
 
-- [ ] **Step 3: `MEMORY.md`에 한 줄을 더한다**
+- [x] **Step 3: `MEMORY.md`에 한 줄을 더한다**
 
-- [ ] **Step 4: `CLAUDE.md`의 완료 목록에 Shell Config를 더한다**
+- [x] **Step 4: `CLAUDE.md`의 완료 목록에 Shell Config를 더한다**
 
 **SC-M1·M2가 아직 남아 있으므로 "완료"가 아니라 진행 중으로 적는다.**
 
-- [ ] **Step 5: `HANDOFF.md`를 새로 쓴다**
+- [x] **Step 5: `HANDOFF.md`를 새로 쓴다**
 
 맨 위가 SC-M0이고 그 아래가 UT-M3이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add docs MEMORY.md CLAUDE.md HANDOFF.md

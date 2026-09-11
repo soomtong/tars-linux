@@ -152,6 +152,19 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   SH·FP·RM의 예외와 같은 종류이고 **세션 단위**다.
   **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0~M3은 각각 그 위의 세션 한정
   예외였다 — 다음 세션은 다시 기본 규칙이다. 파일 편집은 사용자가 한다.**
+  **Shell Config(SC-M0, 2026-09-11 완료 — 아직 진행 중인 서브프로젝트다.
+  `tars.conf`의 여섯째 키 `shell_config`가 `{on, off}`로 셸의 no-config
+  플래그를 켜고 끄고, `/config`의 rc 셋(`bashrc`·`zshrc`·`fish.config`)이
+  링크로 홈에 이어졌다. 화면 셸에는 `"none"` 토큰이 가고 콘솔 셸은 슬롯이
+  null이다 — 둘이 같은 설정을 따른다. fish 인사말은 `terminal`의
+  `setenv("fish_greeting", "")`로 **화면 셸만** 껐다. `machine/check.sh:117`이
+  그 인사말을 UEFI 부팅의 마커로 쓰고 있어서다. **파일은 아직 안 깐다** —
+  씨앗은 SC-M1, 탈출로 둘은 SC-M2다.)** design은
+  `.../specs/2026-09-11-tars-shell-config-design.md`, 기억은
+  `docs/decisions/project_shell_config.md`.
+  **SC-M0도 편집을 Claude Code가 했다** — 사용자가 2026-09-11에 외출하며
+  "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. UT의 네 세션과
+  같은 종류이고 **세션 단위**다. **다음 세션은 다시 기본 규칙이다.**
   **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
   macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
   정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
