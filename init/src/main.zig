@@ -457,7 +457,29 @@ pub fn main(init: std.process.Init.Minimal) void {
     mountDevpts();
 
     const storage_mounted = mountConfig();
-    const cfg = loadConfig(storage_mounted);
+    var cfg = loadConfig(storage_mounted);
+    // SC-M2 결정 9 — 탈출로 2. **cmdline > tars.conf > 기본값.**
+    //
+    // 이 키 하나만 이 예외를 갖는다. 근거는 *"`tars.conf`를 고칠 셸이 없을
+    // 때 쓰는 것"*이다 — 사용자의 rc가 셸을 죽이거나 매달리게 만들면 설정을
+    // 고칠 자리가 통째로 사라진다(design 위험 3). 실기는 limine 메뉴를
+    // 지나므로 사람이 부팅 순간에 이 단어를 적어 넣을 수 있다(실측 12).
+    //
+    // **`loadConfig` 바로 뒤인 것이 중요하다.** 아래의 `config shell=` 로그
+    // 줄과 argv 배선이 전부 `cfg`를 보므로, 여기서 덮으면 그 뒤는 아무것도
+    // 안 고쳐도 된다 — 게이트도 그 한 줄에서 **실효값**을 읽는다.
+    //
+    // **매달리는 rc까지 덮는 것이 탈출로 1과 다른 점이다**(결정 8은 자식이
+    // 죽어야 발동한다). 대가는 사람이 부팅 순간에 개입해야 한다는 것이고,
+    // 그래서 둘이 서로를 대체하지 않는다.
+    if (config.cmdlineNoConfig(config.CMDLINE_PATH)) {
+        // **크게 찍는다.** 이 줄이 없으면 "설정 파일에는 on이라고 적혀 있는데
+        // 왜 rc가 안 읽히지"가 영영 안 풀린다.
+        std.debug.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
+            config.NO_CONFIG_TOKEN, CONFIG_PATH,
+        });
+        cfg.shell_config = .off;
+    }
     // SC-M1 결정 7. **`loadConfig`보다 뒤이고 자식을 띄우기보다 앞이다** —
     // 앞이어야 하는 이유는 이 부팅의 셸이 곧바로 이 파일을 읽기 때문이고,
     // `loadConfig` 뒤인 이유는 `tars.conf`의 씨앗이 먼저 생기는 편이 로그의
