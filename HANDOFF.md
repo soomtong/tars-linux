@@ -1,4 +1,182 @@
-# HANDOFF: **SC-M2 — rc를 일부러 깨뜨렸고, 기계가 두 가지 방법으로 돌아왔다**
+# HANDOFF: **SM — 새 서브프로젝트를 열고 design과 M0 plan까지 썼다. 코드는 한 줄도 안 고쳤다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **2026-09-11에 Shell Memory(SM) 서브프로젝트를
+열었다.** 이 세션이 한 것은 **후보 고르기 · design · SM-M0 plan** 셋이고,
+**구현은 시작하지 않았다** — `devcontainer/Dockerfile`·`kernel/guest_tools.sh`·
+`tools/check.sh` 어느 것도 아직 한 글자도 안 바뀌었다.
+
+```
+0b030e4  Design a machine that remembers where you went and what you typed
+701f04b  Plan the two tools in, and make the gate judge on what it did not type
+```
+
+**커밋 둘이 이 세션의 전부다.** 게이트는 안 돌렸다 — 기준선은 여전히 SC-M2의
+**열한 체인 3/3 = 25분 58.09초**다.
+
+**이 세션은 편집을 Claude Code가 했다**(문서 둘뿐이다). 사용자가 2026-09-11에
+"이번 세션도 위임"으로 정했다. **이 세션 한정 예외이고 다음 세션은 다시 기본
+규칙이다 — 파일 편집은 사용자가 한다.** SM-M0 plan은 그 규칙에 맞게 쓰여
+있다: 모든 편집 단계가 **`넣을 것` 블록**으로 되어 있어 Claude가 제시하고
+사용자가 넣으면 된다.
+
+## 바로 다음에 할 것 — **SM-M0 Task 1부터**
+
+plan이 `docs/superpowers/plans/2026-09-11-tars-shell-memory-sm-m0.md`에 있고
+**Task 일곱이 전부 미체크다.**
+
+| Task | 무엇 | 파일 |
+|---|---|---|
+| **1** | `.deb` 둘을 sysroot에 들이고 amd64로 다시 잰다 | `devcontainer/Dockerfile:180` 뒤 **+2줄** |
+| **2** | initrd 목록에 두 줄을 얹는다 | `kernel/guest_tools.sh` 배열 끝 |
+| **3** | 게이트가 둘을 친다(검사 17·18, 음성 확인을 19로 민다) | `tools/check.sh:573` 앞 |
+| **4** | UT 체인 단독 실행 | — |
+| **5** | **음성 확인 셋, 각각 두 번** | — |
+| **6** | 루트 게이트(약 26분) | — |
+| **7** | 문서(design 실측 16~20 · 기억 새 파일 · MEMORY · CLAUDE · HANDOFF) | — |
+
+**Task 1이 도커 이미지를 다시 빌드한다(몇 분).** `.deb`를 예순 몇 개 다시
+받으므로 캐시가 `apt-get download` 줄에서 깨진다.
+
+## 이 서브프로젝트가 무엇인가 — 한 문단
+
+**UT는 도구를 세웠고, SC는 그 도구에 훅을 걸 자리를 만들었다. SM은 그 자리에
+처음으로 훅을 걸고, 기계가 부팅을 넘어 기억하게 한다.**
+
+| 기계가 배운 것 | 어디에 남나 | 사용자가 뒤지는 법 |
+|---|---|---|
+| 어느 디렉터리에 자주 갔나 | `zoxide`의 `db.zo` | `z <조각>` |
+| 어떤 명령을 쳤나 | 셸 히스토리 | `Ctrl+R` (fzf) |
+
+**범위 셋이고 milestone 셋이다.**
+
+| | 무엇 | 검증 |
+|---|---|---|
+| **SM-M0** | 도구 둘이 선다. **훅 없음** | `tools/check.sh`가 둘을 타이핑한다 |
+| **SM-M1** | 훅이 걸린다 | `config/check.sh` **6차 부팅**에서 `z tmp`가 돈다 |
+| **SM-M2** | 배운 것이 남는다 | **7차 부팅**이 이전 부팅에서 배운 것을 찾는다 |
+
+**`git-delta`는 비목표 1이다** — 사용자가 이번 범위에서 뺐다. UT 비목표 5와
+SM 비목표 1을 함께 읽을 것.
+
+## **plan을 지배하는 사실 하나 — 판정 글자가 가짜일 수 있다**
+
+> **판정 글자가 타이핑한 명령줄에 있으면, 그 검사는 도구가 죽어도 초록이다.**
+
+`zoxide`·`fzf` 둘 다 **경로를 찍는 도구**라 이 함정에 특히 약하다. 경로는
+우리가 방금 타이핑한 것이기 때문이다.
+
+| 순진한 프로브 | 왜 가짜인가 |
+|---|---|
+| `zoxide add /tmp` → `query tmp` → `/tmp` | `/tmp`은 프롬프트에도 있고 검사 12가 이미 쳤다 |
+| `fzf --filter=description …` → `description` | **타이핑한 줄에 그 글자가 있다** |
+
+**처방 둘.** fzf는 검색어(`descr`)와 판정(`templates/description`)을 다르게
+하고, **zoxide는 `..`를 지나는 경로를 친다** — 정규화해서 저장하므로 DB가
+돌려주는 글자가 화면의 다른 어디에도 없다.
+
+```
+$ zoxide add /usr/bin/../share/terminfo/x
+$ zoxide query terminfo
+/usr/share/terminfo/x          ← zoxide가 그 글자를 만든 유일한 주체다
+```
+
+**Task 5의 되돌림 2가 이것을 실제로 깨뜨려 본다** — zoxide 바이너리를 아예
+지우고 `..`만 빼면 **검사 18이 초록으로 거짓말을 하고** 맨 뒤의 음성 확인이
+잡는다. `..` 셋 글자가 그 검사를 진짜로 만드는 전부다.
+
+## 착수 전에 실측을 열다섯 했다 — **다시 조사하지 말 것**
+
+전문은 design의 실측 1~15. **다시 재면 안 되는 것들이고, 그중 셋이 설계를
+바꿨다.**
+
+| 실측 | 무엇을 알았나 |
+|---|---|
+| **2** | amd64 크기 `zoxide` 1,173,976 · `fzf` 4,368,112, **새 라이브러리 0**(`libgcc_s`·`libm`·`libc` 셋 다 이미 있다) |
+| **4** | **댕글링 링크에서 zoxide는 `cd`마다 에러 두 줄**, 없는 경로를 준 env는 **`mkdir -p`하고 exit 0** → **결정 1이 SC 결정 1의 링크 패턴을 기각했다** |
+| **6** | **fzf 0.60에 `--zsh`/`--bash`/`--fish`가 내장**돼 있고 자동완성까지 낸다 → **`.deb`의 예제 스크립트를 안 넣는다**(결정 7) |
+| 3 · 11 | **`XDG_DATA_HOME` 하나가 zoxide DB와 fish 히스토리를 동시에 옮긴다** → `_ZO_DATA_DIR`이 필요 없다 |
+| 9 · 10 | zsh는 **`HISTFILE`과 `SAVEHIST` 둘 다** 필요하고 **둘 다 env에서 먹는다** · bash는 세션 사이에 append한다 → **씨앗 rc에 히스토리 줄이 한 줄도 필요 없다** |
+| 7 | `fzf --filter`는 비대화형이고 **tty면 walker로 파일을 찾는다** → 게이트가 파이프·따옴표 없이 칠 수 있다 |
+| 8 | **게이트는 `tab`·`ctrl-r`·`ctrl-t`·`alt-c`를 한 번도 안 친다**(치는 것은 `ctrl-c` 12 · `alt-l` 10 · `ctrl-a` 9 · `ctrl-l` 3) — fzf가 뺏는 키 전부와 안 겹친다 |
+| 15 | **zoxide가 경로를 정규화한다** — 위의 "판정 글자가 가짜일 수 있다"의 처방 |
+
+**측정 환경:** 크기와 `DT_NEEDED`는 **amd64 `.deb`**로, 동작(DB 경로·히스토리·
+훅의 출력)은 devcontainer가 arm64라 **arm64 바이너리**로 쟀다. design의
+실측 절 머리에 그것이 적혀 있다.
+
+## 이 세션이 **틀렸다가 고친 것 하나**
+
+design을 쓰고 나서 self-review에서 잡았다 — 결정 8의 fzf 프로브가
+`--walker-root=/config`였는데 **`tools/check.sh`에는 설정 디스크가 없어서 그
+자리가 빈 디렉터리다.** fzf는 아무것도 못 찾고 `exit 1`이며 **화면에는 에러가
+한 줄도 없다.** `/usr/share/git-core/templates`로 고쳤다(UT-M3이 넣은 것이고
+디스크 없이도 항상 있다).
+
+**Task 5의 되돌림 3이 그 틀린 버전을 일부러 돌려 본다** — "실패했는데 아무
+말도 없는" 실패의 모양을 한 번 보기 위해서다.
+
+## 안 한 것 · 안 물어본 것
+
+| | 왜 |
+|---|---|
+| **구현 Task 하나도** | 사용자가 plan까지 보고 handoff를 택했다 |
+| 게이트 실행 | 코드가 안 바뀌었으니 돌릴 이유가 없다 |
+| `config/check.sh`의 6·7차 부팅 | **M1·M2의 일이다.** M0은 `config` 체인을 안 건드린다 |
+| zsh 두 세션의 겹쳐 쓰기를 고치는 것 | **위험 3으로 알고 둔다.** 고치려면 `setopt`가 필요하고 그건 결정 6의 허용 목록을 넓히는 일이다 |
+| `/config`가 찼을 때 | 비목표 3 |
+
+## 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-memory-design.md` | **SM의 전부.** 실측 15 · 비목표 7 · 결정 9 · 위험 5 · Milestone 셋 |
+| `docs/.../plans/2026-09-11-tars-shell-memory-sm-m0.md` | **다음 세션이 여는 파일.** Task 일곱, 전부 미체크 |
+| `kernel/guest_tools.sh` | 배열 하나가 목록이 사는 유일한 자리. **머리 주석이 형식과 "지울 때 보아야 할 것"을 스스로 적는다** |
+| `tools/check.sh:573` | 음성 확인(현 검사 17)이 **언제나 맨 뒤**다. 새 검사는 그 앞에 들어간다 |
+| `devcontainer/Dockerfile:143` · `:180` | `AMD64_SYSROOT=/usr/local/amd64-sysroot` · `vim-tiny:amd64`(두 줄이 그 뒤에 들어간다) |
+| `init/src/config.zig`의 `rcSeed()` | **M1이 여기에 훅 두 줄을 넣는다.** M0은 안 건드린다 |
+| `init/src/config_test.zig`의 `expectQuietSeed` | **M1이 여기를 정확 허용 목록으로 넓힌다**(결정 6) |
+| `init/src/environ.zig` | **M2가 여기에 env 넷을 더한다.** `MAX_ENTRIES=16`, 지금 쓰는 것 3 |
+| `gate_lib.sh`의 `wait_for_screen` | 패턴을 `terminal: screen>` 줄들에 **ERE로** 맞춘다. 판정 글자를 고를 때 이것을 알고 골라야 한다 |
+
+## 명령 모음
+
+```bash
+git status --short     # 비어 있어야 한다
+open -a OrbStack       # 첫 docker 명령 전에
+
+# Task 1 — 이미지 재빌드(몇 분)
+docker build -t tars-devcontainer -f devcontainer/Dockerfile . 2>&1 | tail -20
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash -c 'cd kernel && ./make_initrd.sh'      # Task 2
+
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash tools/check.sh                          # Task 4·5, 캐시되면 30초
+
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time   # Task 6, 약 26분
+```
+
+**기준선: SC-M2의 열한 체인 3/3 = 25분 58.09초.** M0은 부팅을 하나도 안
+더하므로 **잡음(±3분) 안에 있어야 한다.**
+
+**initrd 기준선(Task 2가 비교한다): gzip 34,869,668 / 푼 것 90,329,088.**
+design 실측 2가 예측하는 증가는 푼 것 **+5,542,088**이다.
+
+**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+
+**M0은 Zig를 한 줄도 안 건드리므로 `rm -rf init/zig-out terminal/zig-out`
+함정은 이번엔 잠들어 있다.** M1·M2에서 다시 깨어난다.
+
+---
+
+## 그 앞의 milestone — Shell Config SC-M2 (2026-09-11)
+
+**rc를 일부러 깨뜨렸고, 기계가 두 가지 방법으로 돌아왔다**
 
 ## 지금 어디인가
 
