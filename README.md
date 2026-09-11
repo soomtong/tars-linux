@@ -102,6 +102,97 @@ sips -s format png /tmp/tars.ppm --out /tmp/tars.png && open /tmp/tars.png
 버전도 다를 수 있다. 눈으로 보는 용도로 쓰고, 통과 여부는 아래 게이트로
 정한다.
 
+## VM에서 다른 배포판처럼 띄우기
+
+위 명령들이 `-vga none -device virtio-gpu-pci`를 붙이는 것은 게이트 체인들과
+같은 경로를 밟기 위한 것이고 **필수가 아니다.** `out/tars.iso`는 옵션 없이
+`-cdrom` 하나만 줘도 뜬다.
+
+```bash
+qemu-system-x86_64 -m 1024 -cdrom out/tars.iso \
+  -display cocoa -serial stdio -no-reboot
+```
+
+이때 픽셀은 virtio-gpu가 아니라 **Limine이 펌웨어(BIOS VBE · UEFI GOP)에서 잡아
+커널에 넘긴 프레임버퍼 위의 simpledrm**에서 나온다 — 아래 실기 노트북이 밟는
+것과 같은 경로다. 시리얼에 이렇게 남는다.
+
+```
+[drm] Initialized simpledrm 1.0.0 for simple-framebuffer.0 on minor 0
+terminal: grid 155x47 (fb 1280x800)
+```
+
+**그래서 VM이 어떤 디스플레이 장치를 주든 대체로 상관없다.** 커널에 켜 둔 DRM
+드라이버는 `SIMPLEDRM`과 `VIRTIO_GPU` 둘뿐이라 VMware의 vmwgfx나 QXL은 자기
+드라이버로 안 붙지만, 그 장치들도 펌웨어가 선형 프레임버퍼를 남기므로 simpledrm이
+받는다. **다만 확인한 것은 QEMU의 기본 VGA와 virtio-gpu 둘뿐이다** —
+VirtualBox·VMware에서 직접 띄워 보지는 않았다.
+
+### VM에 주어야 하는 것
+
+| 항목 | 값 | 왜 |
+|---|---|---|
+| CPU | **x86_64** | arm64 빌드가 없다 |
+| 메모리 | **1GB** (최소 512MB) | 84MB짜리 initramfs가 tmpfs로 풀린다. QEMU 기본 128MB면 **기계가 아예 안 켜진다** — `gate_lib.sh`의 `GUEST_MEM=512`가 그것 때문이다 |
+| 펌웨어 | BIOS · UEFI 아무거나 | El Torito 항목 둘이 한 ISO에 있다 |
+| Secure Boot | **끈다** | 아래 실기 절과 같은 이유다 |
+| 디스크 | 없어도 된다 | 붙이면 설정이 남는다(아래) |
+| 네트워크 | 안 된다 | `# CONFIG_NET is not set` |
+
+키보드는 따로 줄 것이 없다. VM이 기본으로 주는 PS/2(`AT Translated Set 2
+keyboard`)를 `init`이 capability로 골라 잡는다. USB 키보드만 있는 VM도 된다 —
+`machine/check.sh`가 `i8042=off`로 PS/2를 없애고 그 경로만 남겨 검증한다.
+
+### UTM (Apple Silicon)
+
+호스트가 arm64라 **x86_64 게스트는 무조건 에뮬레이션이다.** VirtualBox와 VMware
+Fusion은 Apple Silicon에서 ARM 게스트만 돌리므로 쓸 수 없고, GUI로 다루려면
+UTM이다(속은 같은 QEMU다).
+
+```bash
+brew install --cask utm
+```
+
+New VM → **Emulate**(Virtualize가 아니다) → Other → Boot ISO에 `out/tars.iso` →
+Architecture `x86_64` → 메모리 1024MB 이상. 디스크는 안 만들어도 된다.
+
+Intel Mac이나 x86 호스트라면 VirtualBox·VMware Fusion에서도 "Other Linux
+(64-bit)"로 ISO를 물리면 된다.
+
+### VM에 설정 디스크 붙이기
+
+실기의 USB 스틱과 같은 것을 파일로 만든다. 라벨 규칙은 아래 실기 절과 같고,
+macOS에는 `mkfs.ext2`가 없으니 컨테이너에서 만든다.
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  mkdir -p /tmp/seed && printf "hangul_layout=sebeol_3p3\n" > /tmp/seed/tars.conf
+  dd if=/dev/zero of=out/tars-config.img bs=1M count=64 status=none
+  mkfs.ext2 -F -q -m 0 -L tars-config -d /tmp/seed out/tars-config.img
+'
+
+qemu-system-x86_64 -m 1024 -cdrom out/tars.iso \
+  -drive file=out/tars-config.img,if=virtio,format=raw \
+  -display cocoa -serial stdio -no-reboot
+```
+
+**오래 쓸 이미지는 `out/` 밖에 둔다** — 루트 `check.sh`가 시작할 때 `out/`을
+지운다. UTM이면 이 `.img`를 두 번째 드라이브(raw)로 추가하면 `sda`로 잡힌다.
+
+디스크가 없으면 시리얼에 이렇게 나오고 부팅은 그대로 된다.
+
+```
+tars-init: no disk labelled tars-* among 14 candidates
+tars-init: no config storage, using defaults
+```
+
+### 설치는 안 된다
+
+**인스톨러가 없다.** live ISO 하나뿐이고 디스크에 설치하는 경로가 없다. 게스트
+안에서 만든 파일은 `/config`에 쓴 것 말고 **재부팅하면 전부 사라진다** —
+initramfs가 tmpfs이기 때문이다. `HANDOFF.md`가 다음 서브프로젝트 후보 1번으로
+올려 둔 것이 이것이다.
+
 ## 실기 노트북에 꽂아 보기
 
 **`out/tars.iso`를 그대로 USB에 쓰면 된다.** 하이브리드 ISO라 변환이 필요 없고
@@ -159,14 +250,14 @@ mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
-**이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다.** 열 체인이 전부
+**이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다.** 열한 체인이 전부
 QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 **"켜 봤다"에서
 멈춘다.** 꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.
 
 ## 게이트
 
 ```bash
-# 전체 — 열 체인 × 3회차, 약 20분
+# 전체 — 열한 체인 × 3회차, 약 24분
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
 
 # 한 체인만
