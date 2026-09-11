@@ -192,4 +192,32 @@ GUEST_TOOLS=(
   # 거는 자리가 /bin/sh와 같고, 그래서 tools/check.sh의 검사 1이 `usr/bin/vi`
   # 를 뼈대 쪽 literal로 본다.
   usr/bin/vim.tiny:usr/bin/vim
+
+  # ── 층 4 · 셸 메모리 2 ─────────────────────────────────────────────────
+  # SM-M0. 기계가 사용자에게서 배운 것을 뒤지는 도구 둘이다 — zoxide는 어느
+  # 디렉터리에 자주 갔는지를, fzf는 무엇을 쳤는지를(Ctrl+R) 뒤진다.
+  #
+  # **UT 비목표 6이 이 둘을 여기까지 미뤄 둔 이유는 크기가 아니라 훅이었다** —
+  # 셸이 무조건 no-config로 뜨는 한 rc에 훅을 걸 자리가 없었다. SC가 그 자리를
+  # 만들었고(/config의 rc 셋), **SM-M1이 거기에 훅을 건다. M0에는 아직
+  # 없다** — 사람이 이름으로 직접 부르는 것까지다.
+  #
+  # **새 라이브러리가 0이다.** zoxide는 libgcc_s·libm·libc를, fzf는 libc만
+  # 부른다. libgcc_s는 btop의 libstdc++가, libm은 vim.tiny가 이미 데려왔다
+  # (2026-09-11 amd64 .deb의 DT_NEEDED로 확인). **그래서 이 둘에 대해서는
+  # copy_lib_deps를 빼도 게스트가 멀쩡하다** — design 위험이 하나 없는
+  # milestone이고, 그것을 아는 것이 모르는 것보다 낫다.
+  #
+  # **fzf의 .deb가 데려오는 나머지는 안 넣는다.**
+  #   usr/bin/fzf-tmux                              tmux가 없다
+  #   usr/share/doc/fzf/examples/key-bindings.*      결정 7이 이유다
+  #   usr/share/fish/vendor_functions.d/fzf_*.fish   같은 이유
+  # fzf 0.60에는 `--zsh`/`--bash`/`--fish`가 내장돼 있고 그쪽이 자동완성까지
+  # 함께 낸다. **SM-M1의 훅이 파일이 아니라 그 플래그를 쓴다.**
+  #
+  # **게이트는 둘 다 친다.** fzf는 TUI라 그냥 치면 매달리지만(less·top·htop·
+  # btop·ncdu와 같은 자리) `--filter`가 찍고 즉시 끝난다 — **이 저장소에서
+  # 처음으로, 대화형 도구를 비대화형 모드로 쳐서 보는 자리다.**
+  usr/bin/zoxide:usr/bin/zoxide
+  usr/bin/fzf:usr/bin/fzf
 )
