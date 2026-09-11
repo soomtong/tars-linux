@@ -119,6 +119,53 @@ BREAK_READBACK_KEYS=(g r e p spc e x i t spc slash c o n f i g slash z s h r c r
 ON_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o n spc
          shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 
+# ── SM-M1 ───────────────────────────────────────────────────────────────
+#
+# **6차 부팅은 수리만 한다.** 3차가 심은 `exit`가 아직 `/config/zshrc`에
+# 있어서, 그 파일을 읽는 부팅은 셸이 죽고 탈출로가 **rc 없이** 되살린다 —
+# 훅도 함께 안 걸린다. 훅을 보려면 먼저 그 줄을 없애야 한다.
+#
+# **한 줄만 지우지 않고 파일을 통째로 지운다.** 이유가 셋이다.
+#   1. 7차의 rc가 **정확히 우리 씨앗**이 된다 — 1차에서 사람이 더한
+#      `echo tars-rc-alive`도 없다. 증명 대상이 `rcSeed()`의 내용 그 자체다.
+#   2. `seedRcFiles`의 `O_EXCL`이 "없으면 만든다"를 **빈 디스크가 아닌
+#      자리에서** 다시 증명한다. 셋 중 하나만 지웠으니 7차의 `seeded`도
+#      하나여야 한다 — 그것이 `O_EXCL`의 정확한 계약이다.
+#   3. 타이핑이 두 명령으로 끝난다.
+RM_RC_KEYS=(r m spc slash c o n f i g slash z s h r c ret)
+# ls /config/zshrc — 되읽기. **판정 글자는 ls가 만든다**(`No such file`).
+# 타이핑한 줄에는 그 글자가 없다 — 이 체인의 오래된 규칙이다.
+RM_READBACK_KEYS=(l s spc slash c o n f i g slash z s h r c ret)
+
+# ── 7차 부팅이 치는 넷 ──────────────────────────────────────────────────
+#
+# **design 결정 8의 시퀀스가 여기서 바뀌었다.** design은 `cd /tmp` → `cd /` →
+# `z tmp` → `pwd`로 `/tmp`을 보라고 적었는데, **`/tmp`은 방금 타이핑한
+# `cd /tmp`에 들어 있다** — 훅이 죽어도 초록인 검사다(M0이 세 번 밟은 함정).
+#
+# **처방은 M0의 것 그대로다.** `..`를 지나는 경로를 `cd`하면 셸이 `$PWD`를
+# 정규화하고 훅이 그 정규형을 DB에 넣는다. 화면에 남는 타이핑은 `..`가 든
+# 쪽이고, `/usr/share/terminfo/x`를 만든 주체는 **DB뿐이다.**
+#
+# **`tools/check.sh` 검사 18과 판정 글자가 같은 것에 뜻이 있다.** 그 검사는
+# 사람이 `zoxide add`를 쳤고 이쪽은 **아무도 안 친다.** 둘의 차이가 훅이다.
+HOOK_CD_KEYS=(c d spc slash u s r slash b i n slash dot dot slash
+              s h a r e slash t e r m i n f o slash x ret)
+HOOK_HOME_KEYS=(c d spc slash ret)
+HOOK_Z_KEYS=(z spc t e r m i n f o spc x ret)
+HOOK_PWD_KEYS=(p w d ret)
+# whence -w fzf-history-widget — fzf 통합이 **위젯을 정의했다**는 것을
+# `Ctrl+R`을 안 치고 보는 법(design 비목표 2 — 셋 다 TUI라 게이트가 치면
+# 체인이 매달린다).
+#
+# **판정 글자가 `widget`이 아니라 `function`이다**(SM-M1 실측 24). `zle -N`로
+# 위젯이 되지만 `whence -w`가 보는 것은 그 이름의 함수다. design 결정 8이
+# 명령만 적고 출력을 안 적어서 실측으로 정했다.
+#
+# 치는 것이 전부 소문자다 — `sendkey`에 대문자가 없다(UT-M3).
+HOOK_WIDGET_KEYS=(w h e n c e spc minus w spc
+                  f z f minus h i s t o r y minus w i d g e t ret)
+
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
 edit_config_in_guest() {
@@ -363,8 +410,136 @@ watch_rescue() {
 
 # 5차 부팅의 훅. **M1의 3차와 같은 자리다** — 볼 것이 전부 "없어야 할 것"이라
 # 타이핑을 안 하고 관측 창만 둔다.
+#
+# ⚠ **여기에 타이핑을 더하지 말 것.** SM-M1이 rc 수리를 6차 부팅으로 따로
+# 뽑은 이유가 이 함수다 — 수리를 여기 얹으면 SC-M2의 증명(아무도 안 죽는다)과
+# SM-M1의 준비(깨진 rc를 지운다)가 한 함수에서 엉키고, 5차의 부정 검사가
+# 화면에 생긴 글자에 걸릴 길이 하나 늘어난다.
 watch_quiet() {
   sleep 8
+  return 0
+}
+
+# 6차 부팅의 훅. **수리만 한다**(SM-M1).
+#
+# 이 부팅의 셸은 `tars.noconfig`로 떠서 rc를 안 읽는다 — 그래서 3차가 심은
+# `exit`를 밟지 않고, 그 파일을 지울 수 있다. **SC-M2가 그 토큰을 만든 근거가
+# 정확히 이것이었다**(*"설정을 고칠 셸이 없을 때 쓰는 것"*). 게이트가 자기
+# 탈출로를 실제로 그 용도로 쓰는 첫 자리다.
+repair_broken_rc() {
+  local log="$1"
+  LOG="$log"
+
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -q "terminal: screen>" "$log"; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$ready" != "1" ]; then
+    echo "FAIL(boot 6): terminal never rendered a prompt; there was nothing to type into"
+    return 1
+  fi
+
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  if [ "$connected" != "1" ]; then
+    echo "FAIL(boot 6): could not connect to QEMU monitor on port ${MONITOR_PORT}"
+    return 1
+  fi
+
+  type_keys "${RM_RC_KEYS[@]}"
+  type_keys "${RM_READBACK_KEYS[@]}"
+
+  local ok=0
+  if wait_for_screen "No such file"; then ok=1; fi
+
+  exec 3<&-
+  exec 3>&-
+
+  if [ "$ok" != "1" ]; then
+    echo "FAIL(boot 6): /config/zshrc is still there; the seventh boot would read the broken rc"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 6: removed the rc the third boot broke, so the seventh boot gets a fresh seed"
+  return 0
+}
+
+# 7차 부팅의 훅. **이 milestone이 증명하려는 것 전부가 여기 있다**(SM-M1).
+#
+# 이 부팅의 `/config/zshrc`는 init이 **방금 다시 깐 씨앗**이다(6차가 지웠다).
+# 사람이 손댄 줄이 한 줄도 없으므로 **증명 대상이 `rcSeed()`의 내용 그
+# 자체다.**
+#
+# 판정 둘이 서로 독립이다 — 하나가 죽어도 다른 하나는 초록이어야 하고,
+# SM-M1의 되돌림 C·D가 그것을 한 번씩 실제로 깨뜨려 봤다.
+#
+#   1. `z`가 돈다      → zoxide 훅이 `chpwd`에 걸렸다
+#   2. 위젯이 있다      → fzf 통합이 돌았다
+probe_shell_hooks() {
+  local log="$1"
+  LOG="$log"
+
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -q "terminal: screen>" "$log"; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$ready" != "1" ]; then
+    echo "FAIL(boot 7): terminal never rendered a prompt; there was nothing to type into"
+    return 1
+  fi
+
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  if [ "$connected" != "1" ]; then
+    echo "FAIL(boot 7): could not connect to QEMU monitor on port ${MONITOR_PORT}"
+    return 1
+  fi
+
+  # **`cd` 뒤에 `pwd`를 넣지 않는다.** 넣으면 판정 글자가 `z`보다 먼저 화면에
+  # 생기고, 그때부터 이 검사는 zoxide가 죽어도 초록이다.
+  type_keys "${HOOK_CD_KEYS[@]}"
+  type_keys "${HOOK_HOME_KEYS[@]}"
+  type_keys "${HOOK_Z_KEYS[@]}"
+  type_keys "${HOOK_PWD_KEYS[@]}"
+
+  # 행의 **첫머리**가 그 경로인 것이 `pwd`의 출력이다. 타이핑한 줄은 프롬프트로
+  # 시작하므로 안 걸린다 — 이 파일이 오래 쓰고 있는 수법이고, 여기서는 `..`가
+  # 든 경로와 정규형이 애초에 다른 글자라 belt가 둘이다.
+  if ! wait_for_screen '\| /usr/share/terminfo/x'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 7): nobody typed 'zoxide add', and z did not walk back to the directory the cd should have taught"
+    echo "  셋 중 하나다 — 씨앗의 훅 줄이 안 돌았거나(rc를 안 읽었다),"
+    echo "  zoxide가 없거나, cd가 실패했다. 아래 마지막 화면에 'command not"
+    echo "  found'가 있으면 둘째다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 7: nobody typed 'zoxide add' — the cd hook learned the directory and z walked back to it"
+
+  type_keys "${HOOK_WIDGET_KEYS[@]}"
+  local ok=0
+  if wait_for_screen '\| fzf-history-widget: function'; then ok=1; fi
+
+  exec 3<&-
+  exec 3>&-
+
+  if [ "$ok" != "1" ]; then
+    echo "FAIL(boot 7): the fzf integration never defined its history widget"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 7: the fzf integration defined its Ctrl+R widget without the gate pressing Ctrl+R"
   return 0
 }
 
@@ -454,7 +629,7 @@ report_failure() {
 
 # ---------------------------------------------------------------- 1차 부팅
 # 빈 디스크. init이 씨앗을 심고(fish), 그 다음 사람이 zsh로 고친다.
-echo "=== boot 1/5: empty disk, seed the config and the rc files, then edit them from inside ==="
+echo "=== boot 1/7: empty disk, seed the config and the rc files, then edit them from inside ==="
 if ! boot_once "$LOG1" "tars-init: created /config/tars.conf" edit_config_in_guest; then
   report_failure "$LOG1" "first boot did not seed and edit /config/tars.conf"
 fi
@@ -504,7 +679,7 @@ echo "boot 1: seeded with fish, then edited to zsh from inside the guest"
 
 # ---------------------------------------------------------------- 2차 부팅
 # 같은 이미지를 그대로 다시 물린다. make_disk.sh를 부르지 않는다.
-echo "=== boot 2/5: same image, the guest-written config should pick the shell and its rc ==="
+echo "=== boot 2/7: same image, the guest-written config should pick the shell and its rc ==="
 if ! boot_once "$LOG2" "tars-init: started console shell" watch_console_shell; then
   report_failure "$LOG2" "second boot never started a console shell"
 fi
@@ -594,7 +769,7 @@ echo "boot 2: the config written inside the guest selected zsh for both shells"
 # **이 부팅은 아무것도 안 친다.** 볼 것이 전부 **없어야 할 것**이기 때문이다 —
 # 타이핑을 하면 그 글자가 화면에 남고, 판정 글자가 우연히 화면에 생기는 길이
 # 하나 늘어난다.
-echo "=== boot 3/5: same image with shell_config=off, the rc must not run ==="
+echo "=== boot 3/7: same image with shell_config=off, the rc must not run ==="
 if ! boot_once "$LOG3" "tars-init: started console shell" plant_broken_rc; then
   report_failure "$LOG3" "third boot never started a console shell"
 fi
@@ -638,7 +813,7 @@ fi
 # 셸이 없다."* M1까지 이 기계의 탈출로는 호스트에서 ext2 이미지를 직접 고치는
 # 것뿐이었다.
 LOG4="$(mktemp)"
-echo "=== boot 4/5: the rc kills both shells; the supervisor must bring them back without it ==="
+echo "=== boot 4/7: the rc kills both shells; the supervisor must bring them back without it ==="
 if ! boot_once "$LOG4" "tars-init: console shell died" watch_rescue; then
   report_failure "$LOG4" "the supervisor never rescued a shell from the rc that kills it"
 fi
@@ -700,7 +875,7 @@ echo "boot 4: the rc killed both shells three times, then the supervisor brought
 # 여섯 번 죽는 것을 봤으므로, 여기서 아무도 안 죽으면 그것은 tars.noconfig가
 # 한 일이다. M1의 3차가 2차에 기대던 구조와 같다.
 LOG5="$(mktemp)"
-echo "=== boot 5/5: same disk, same trap, but tars.noconfig on the command line ==="
+echo "=== boot 5/7: same disk, same trap, but tars.noconfig on the command line ==="
 if ! boot_once "$LOG5" "tars-init: started console shell" watch_quiet "console=ttyS0 tars.noconfig"; then
   report_failure "$LOG5" "fifth boot never started a console shell"
 fi
@@ -746,6 +921,97 @@ if grep -q "Attempted to kill init" "$LOG5"; then
 fi
 echo "boot 5: one word on the kernel command line beat the config file, and nothing died"
 
+# ---------------------------------------------------------------- 6차 부팅
+# 같은 이미지, 같은 함정, 같은 cmdline 토큰. **이 부팅은 증명하지 않고
+# 수리한다**(SM-M1).
+#
+# 3차가 심은 `exit`가 아직 `/config/zshrc`에 있다. 그 파일을 읽는 부팅은 셸이
+# 죽고 탈출로가 rc 없이 되살리므로 **훅도 함께 안 걸린다** — 7차가 훅을 보려면
+# 먼저 이 줄이 없어져야 한다. `tars.noconfig`로 뜬 이 부팅의 셸은 rc를 안
+# 읽으니 함정을 밟지 않고 그 파일을 지울 수 있다.
+#
+# **design 결정 8은 M1이 부팅 하나를 더한다고 적었다.** 그 계산에 이 수리가
+# 빠져 있었다 — 4차·5차가 쓰고 간 디스크 상태를 안 본 것이다.
+LOG6="$(mktemp)"
+echo "=== boot 6/7: same broken rc, but tars.noconfig gives us a shell that can delete it ==="
+if ! boot_once "$LOG6" "tars-init: started console shell" repair_broken_rc "console=ttyS0 tars.noconfig"; then
+  report_failure "$LOG6" "sixth boot could not remove the rc the third boot broke"
+fi
+
+# 이 부팅도 5차와 같은 기계여야 한다 — 아래 수리가 "됐다"고 말하기 전에.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG6"; then
+  report_failure "$LOG6" "sixth boot did not load /config/tars.conf"
+fi
+if ! grep -q "tars-init: config shell=zsh.*shell_config=off" "$LOG6"; then
+  report_failure "$LOG6" "the command line token did not turn shell_config off on the sixth boot"
+fi
+# 5차와 나란히 — 토큰이 셸을 함정에서 빼낸 것이 두 번 연속 재현된다.
+if grep -q "times fast" "$LOG6"; then
+  report_failure "$LOG6" "a shell still died on the sixth boot; there would have been no shell to repair with"
+fi
+if grep -q "Attempted to kill init" "$LOG6"; then
+  report_failure "$LOG6" "kernel panicked because PID 1 exited on the sixth boot"
+fi
+
+# ---------------------------------------------------------------- 7차 부팅
+# 같은 이미지, **기본 cmdline.** 6차가 `/config/zshrc`를 지웠으므로 init이
+# 그것만 다시 깔고(`O_EXCL`), 셸이 그 씨앗을 읽는다.
+#
+# ★ **SM-M1이 증명하려는 것이 여기 있다.** 그리고 그 증명의 성질이 M0과
+#   다르다 — `tools/check.sh` 검사 18은 사람이 `zoxide add`를 쳤고, 이 부팅은
+#   **아무도 안 친다.** 같은 판정 글자를 보는 두 검사의 차이가 정확히 "훅"이다.
+LOG7="$(mktemp)"
+echo "=== boot 7/7: init re-seeds the rc it lost, and the hooks in that seed must run ==="
+if ! boot_once "$LOG7" "tars-init: started console shell" probe_shell_hooks; then
+  report_failure "$LOG7" "the hooks in the seeded rc did not run on the seventh boot"
+fi
+
+# **`O_EXCL`의 정확한 계약이 이 두 검사다** — 없어진 하나는 다시 깔고, 있는
+# 둘은 안 건드린다. 셋을 다 깔면 사용자가 bashrc에 쓴 것이 조용히 사라진다.
+if ! grep -q "tars-init: seeded /config/zshrc" "$LOG7"; then
+  report_failure "$LOG7" "init did not re-seed the /config/zshrc that the sixth boot removed"
+fi
+for rc in /config/bashrc /config/fish.config; do
+  if grep -q "tars-init: seeded ${rc}" "$LOG7"; then
+    report_failure "$LOG7" "seventh boot re-seeded ${rc}; O_EXCL should have left the existing file alone"
+  fi
+done
+echo "boot 7: init re-seeded only the rc that was missing"
+
+# 기계가 같은 디스크를 봤고, cmdline 토큰이 없으므로 rc가 다시 읽힌다.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG7"; then
+  report_failure "$LOG7" "seventh boot did not load /config/tars.conf"
+fi
+if ! grep -q "tars-init: config shell=zsh.*shell_config=on" "$LOG7"; then
+  report_failure "$LOG7" "seventh boot did not read back shell_config=on"
+fi
+
+# **7차의 rc는 사람이 손댄 적이 없는 씨앗이다.** 1차에서 사람이 더한 줄은
+# 6차가 파일과 함께 지웠다 — 이 부정 검사가 그것을 말한다. 이 글자가 보이면
+# 6차의 `rm`이 안 먹었거나 init이 다른 파일을 깐 것이다.
+if grep -q "tars-rc-alive" "$LOG7"; then
+  report_failure "$LOG7" "the seventh boot's rc still carries the line a human typed; it is not the seed"
+fi
+
+# 그리고 **그 씨앗은 셸을 안 죽인다.** 훅 두 줄이 늘어난 파일이라 이 검사가
+# 전보다 중요해졌다 — design 위험 1이 말하는 실패가 여기로도 온다.
+if grep -q "times fast" "$LOG7"; then
+  report_failure "$LOG7" "a shell died on the seventh boot; the hooks in the seed are not safe to read"
+fi
+if grep -q "tars-init: giving up on" "$LOG7"; then
+  report_failure "$LOG7" "the supervisor gave up on a child on the seventh boot"
+fi
+for want in "console shell" "terminal"; do
+  STARTS="$(grep -c "tars-init: started ${want}" "$LOG7" || true)"
+  if [ "$STARTS" != "1" ]; then
+    report_failure "$LOG7" "init started the ${want} ${STARTS} times on the seventh boot, want exactly 1 (the seeded hooks must not cost a restart)"
+  fi
+done
+if grep -q "Attempted to kill init" "$LOG7"; then
+  report_failure "$LOG7" "kernel panicked because PID 1 exited on the seventh boot"
+fi
+echo "boot 7: the machine learned a directory from a cd nobody told it to remember"
+
 # 정보성. ext2가 "not clean"이라고 말하는 것은 예상된 결과다(1차를 kill했다).
 if grep -q "mounting unchecked fs" "$LOG2"; then
   echo "note: ext2 reported an unclean superblock on boot 2 (expected: boot 1 was killed)"
@@ -763,6 +1029,10 @@ echo "--- init log (boot 4) ---"
 grep 'tars-init:' "$LOG4" || true
 echo "--- init log (boot 5) ---"
 grep 'tars-init:' "$LOG5" || true
+echo "--- init log (boot 6) ---"
+grep 'tars-init:' "$LOG6" || true
+echo "--- init log (boot 7) ---"
+grep 'tars-init:' "$LOG7" || true
 
 echo "PASS"
 exit 0
