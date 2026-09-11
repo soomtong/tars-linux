@@ -9,6 +9,17 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
+/// 셸이 사용자의 rc 파일을 읽을 것인가(SC design 결정 2).
+///
+/// **`bool`이 아니라 enum인 데 뜻이 있다.** 이 파일의 다른 키가 전부
+/// `stringToEnum` 화이트리스트이고, 그 모양을 따르면 "모르는 값은 로그만
+/// 남기고 기본값에 머문다"는 규칙이 공짜로 따라온다. 여섯째 키만 다른
+/// 모양일 이유가 없다.
+pub const ShellConfig = enum {
+    on,
+    off,
+};
+
 /// 셸 화이트리스트. 설정 파일에 적을 수 있는 것은 **이름**뿐이고 경로가
 /// 아니다 — `shell=/etc/passwd` 같은 입력이 애초에 성립하지 않는다
 /// (design doc "5. 설정 하나로 부팅이 막히지 않게 하는 세 장치"의 1번).
@@ -41,6 +52,24 @@ pub const Shell = enum {
             .fish => "--no-config",
             .bash => "--norc",
             .zsh => "-f",
+        };
+    }
+
+    /// terminal의 argv에 넣을 값(SC design 결정 3). `off`면 위 플래그이고,
+    /// `on`이면 **`"none"`**이다.
+    ///
+    /// **왜 빈 문자열이나 null이 아닌가.** terminal은 argv를 **짓는 쪽과
+    /// 쓰는 쪽이 다르다** — 이 값이 프로세스 경계를 문자열로 건너가므로
+    /// "인자가 없다"를 포인터로 표현할 수 없고, 빈 문자열을 넣으면 저쪽에서
+    /// "인자를 안 받았다"와 구분이 안 된다. `Toggles.arg`가 빈 집합에
+    /// `none`을 쓰는 것과 **글자 그대로 같은 이유다**(아래 그 주석을 볼 것).
+    ///
+    /// 콘솔 셸은 이 함수를 안 쓴다. 그쪽은 init이 argv를 직접 짓기 때문에
+    /// 슬롯을 null로 두면 그만이다.
+    pub fn configFlag(self: Shell, sc: ShellConfig) [:0]const u8 {
+        return switch (sc) {
+            .off => self.noConfigFlag(),
+            .on => "none",
         };
     }
 };
@@ -241,6 +270,11 @@ pub const Config = struct {
         .capslock_tap = true,
         .lctrl_tap = true,
     },
+    /// **기본값이 `on`인 근거는 위 `keyboard`·`hangul_layout`과 같다** —
+    /// 이 기계를 쓰는 사람이 쓰는 것이 기본값이고, 이 기계는 개발용이다.
+    /// embedded 장비의 init 1으로 쓰는 사람은 `keyboard=pc`를 적듯 `off`를
+    /// 명시적으로 적는다(design 비목표 4).
+    shell_config: ShellConfig = .on,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -359,6 +393,15 @@ pub fn parse(text: []const u8) Config {
             // 하나로 안 끝나고 콤마로 갈라야 한다. 모르는 이름을 흘려보내는
             // 규칙은 같고, 그 규칙이 **목록 안에서도** 선다.
             c.hangul_toggle = Toggles.parse(value);
+        } else if (std.mem.eql(u8, key, "shell_config")) {
+            // shell·keyboard·자판 둘과 완전히 같은 모양이다. `hangul_toggle`만
+            // 집합이라 다르고, 여섯째 키는 다시 enum 하나다.
+            c.shell_config = std.meta.stringToEnum(ShellConfig, value) orelse {
+                std.debug.print("tars-init: unknown shell_config '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.shell_config),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -403,6 +446,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   CapsLock과 왼쪽 Ctrl은 0.3초보다 **짧게** 눌렀다 뗐을 때만 한/영이고,
         \\#   길게 누르면 CapsLock은 대문자 잠금, Ctrl은 평소의 Ctrl이다
         \\hangul_toggle={s}
+        \\# shell_config: on | off
+        \\#   on이면 셸이 홈의 rc 파일을 읽는다. 그 파일들은 /config에 있고
+        \\#   홈에는 링크만 있다 — /config/bashrc · /config/zshrc ·
+        \\#   /config/fish.config. off면 셸이 설정 없이 뜬다
+        \\shell_config={s}
         \\
     , .{
         @tagName(c.shell),
@@ -410,6 +458,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.hangul_layout),
         @tagName(c.latin_layout),
         c.hangul_toggle.arg(&toggle_buf),
+        @tagName(c.shell_config),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의

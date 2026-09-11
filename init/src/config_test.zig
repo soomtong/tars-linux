@@ -16,14 +16,18 @@ fn expect(text: []const u8, want: config.Config) !void {
     if (got.shell == want.shell and got.keyboard == want.keyboard and
         got.hangul_layout == want.hangul_layout and
         got.latin_layout == want.latin_layout and
+        // **SC-M0: 여섯째 필드.** 이 줄이 없으면 아래 shell_config 검사가
+        // 아무것도 안 보고 초록으로 지나간다 — 이 함수의 머리 주석이
+        // HI-M2에 대해 적어 둔 것과 글자 그대로 같은 자리다.
+        got.shell_config == want.shell_config and
         // **`std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다** —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
     var got_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     var want_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -31,11 +35,13 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(got.hangul_layout),
             @tagName(got.latin_layout),
             got.hangul_toggle.arg(&got_buf),
+            @tagName(got.shell_config),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
             @tagName(want.latin_layout),
             want.hangul_toggle.arg(&want_buf),
+            @tagName(want.shell_config),
         },
     );
     return error.UnexpectedConfig;
@@ -189,6 +195,20 @@ pub fn main() !void {
             .hangul_toggle = .{ .capslock_tap = true },
         },
     );
+
+    // ── SC-M0: 여섯째 키 ────────────────────────────────────────────────
+    //
+    // **앞의 다섯과 완전히 같은 모양이다**(hangul_toggle만 다르다).
+    // enum이 화이트리스트이고, 모르는 값은 기본값에 머문다.
+    try expect("shell_config=off\n", .{ .shell_config = .off });
+    // 기본값을 명시적으로 적는 것도 통과한다. 씨앗 파일이 실제로 그렇게
+    // 생겼으므로 이 왕복이 참이어야 한다.
+    try expect("shell_config=on\n", .{});
+    try expect("shell_config=yes\n", .{}); // enum에 없는 값
+    try expect("shell_config=\n", .{}); // 값 없음
+    // 다른 키와 섞여도 각자 선다. 깨진 줄 하나가 파일 전체를 무효로 만들지
+    // 않는다는 성질이 여섯째 키에도 그대로 적용된다.
+    try expect("shell=zsh\nshell_config=off\n", .{ .shell = .zsh, .shell_config = .off });
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //
