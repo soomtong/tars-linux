@@ -164,4 +164,32 @@ GUEST_TOOLS=(
   usr/bin/ncdu:usr/bin/ncdu
   usr/bin/jq:usr/bin/jq
   usr/bin/hyperfine:usr/bin/hyperfine
+
+  # ── 층 3 · 개발 2 ──────────────────────────────────────────────────────
+  # 사용자가 2026-09-10에 조건으로 달았다 — *"tars-linux는 거의 개발용으로
+  # 사용되기 때문에 git은 필수 도구가 될 것"*.
+  #
+  # **줄 둘에 새 라이브러리가 하나도 안 딸려 온다.** git은 libpcre2-8·libz·
+  # libc를, vim.tiny는 libm·libtinfo·libselinux·libacl·libc를 부르는데
+  # 일곱 다 이미 initrd에 있다(libz는 M2의 libgit2 사슬이, libacl은 sed가,
+  # libselinux는 fish가 데려왔다). **M1·M2에서 두 번 틀렸던 예측이 여기서
+  # 처음 맞았고, 그래도 재고 나서 알았다.**
+  #
+  # **/usr/lib/git-core는 안 넣는다.** init·add·commit·log·diff·branch가
+  # 전부 git 바이너리 안의 builtin이라 그 트리 없이 돈다. 거기 있는 실체
+  # 26개 중 큰 것 일곱이 네트워크 헬퍼이고(design 결정 5), 이 기계는
+  # `# CONFIG_NET is not set`이다.
+  #
+  # **게이트는 git을 친다. vi는 `--version`까지만 친다** — 편집기는 화면을
+  # 통째로 가져가는 대화형이라 sendkey로 열면 체인이 매달린다(less·top·
+  # htop·btop·ncdu와 같다). 다만 `--version`은 찍고 즉시 끝나므로 **그 넷과
+  # 달리 바이너리가 도는 것까지는 본다.**
+  usr/bin/git:usr/bin/git
+
+  # 이름을 바꾸는 셋째 — **결정 4**. mawk→awk · fdfind→fd와 같은 자리다.
+  # **실체는 vim 하나이고 `/usr/bin/vi`는 make_initrd.sh가 심볼릭 링크로
+  # 건다** — 여기 줄을 둘 적으면 1.76MB짜리 사본이 두 벌 생긴다. 링크를
+  # 거는 자리가 /bin/sh와 같고, 그래서 tools/check.sh의 검사 1이 `usr/bin/vi`
+  # 를 뼈대 쪽 literal로 본다.
+  usr/bin/vim.tiny:usr/bin/vim
 )
