@@ -78,3 +78,50 @@ type_keys() {
     done
   done
 }
+
+# 화면 줄에 패턴이 **나타날 때까지** 기다린다. 있으면 0, 15초가 지나면 1.
+#
+# **UT-M2가 이것을 만든 이유.** 명령을 친 뒤 `sleep 2`를 하고 한 번 grep하는
+# 것이 이 저장소의 오래된 모양인데, UT-M2에서 그것이 8회 중 2회 깨졌다.
+# 깨진 회차의 **마지막 화면에는 찾던 글자가 정확히 찍혀 있었다** —
+#
+#   eza vendor | fonts | root@(none) ~# fd otf vendor | vendor/fonts/unifont.otf
+#
+# 출력이 틀린 것이 아니라 **검사가 먼저 본 것**이다. `ps ax`가 화면을 통째로
+# 채운 뒤로 격자 전체를 다시 그려야 하고(RC-M0: 한 프레임의 84.7%가 fill),
+# 게이트는 arm64 호스트에서 x86_64를 TCG로 흉내내는 중이라 그 한 프레임이
+# 2초를 넘는 회차가 있다. **2라는 수를 아무도 잰 적이 없다.**
+#
+# type_keys가 GL-M2에서 배운 것과 같다 — 고정 sleep은 짐작이고, 짐작이
+# 틀리는 날의 증상은 게이트가 가끔 깨지는 것이다. 로그를 보면 짐작이 사라진다.
+#
+# **찾으면 즉시 돌아오므로 이 변경은 게이트를 느리게 하지 않는다.** 오히려
+# 빠르다: UT 체인의 고정 sleep 합계가 부팅당 17초였다.
+#
+# 한도 15초는 "이 정도면 렌더가 아니라 진짜 실패"의 선이다. 못 찾고 돌아오면
+# 부르는 쪽이 fail()로 진단을 찍는다 — **막지 않고 알린다.**
+#
+# 2초를 넘게 기다린 회차는 말해 준다. 그 줄이 자주 보이기 시작하면 렌더가
+# 느려진 것이고, 침묵보다 낫다.
+#
+# 패턴은 ERE다(grep -E). 파이프 대신 here-string을 쓰는 것은 이 스크립트들의
+# pipefail 때문이다 — `grep | grep -q`는 앞단에 SIGPIPE를 일으킬 수 있고
+# pipefail이 그것을 파이프라인 실패로 올린다.
+#
+# **다른 체인들은 아직 고정 sleep이다.** UT 체인만 고친 것은 깨지는 것을 이
+# 자리에서 봤기 때문이고, 나머지 열은 3/3을 여러 판 지나왔다. 다음에 깨지는
+# 체인이 있으면 그 체인이 이 함수를 쓰면 된다.
+wait_for_screen() {
+  local pattern="$1" i screen
+  for i in $(seq 1 150); do
+    screen="$(grep -a "terminal: screen>" "$LOG")"
+    if grep -aqE -- "$pattern" <<<"$screen"; then
+      if [ "$i" -gt 20 ]; then
+        echo "  (the screen took about $((i / 10))s to show /${pattern}/)"
+      fi
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}

@@ -197,14 +197,18 @@ for _ in $(seq 1 20); do
 done
 [ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor" "terminal: grid"
 
+# **아래 여덟 자리에 `sleep 2`가 없다.** UT-M2 전에는 명령마다 2~3초를 무조건
+# 쉬고 한 번 grep했는데, 그 수를 아무도 잰 적이 없고 8회 중 2회 깨졌다 —
+# 깨진 회차의 마지막 화면에는 찾던 글자가 정확히 찍혀 있었다. gate_lib.sh의
+# wait_for_screen 주석이 본문이다. 찾으면 즉시 돌아오므로 이 체인은 그 변경
+# 뒤에 **더 빠르다**(부팅당 고정 17초가 사라졌다).
 echo "=== typing 'ls' with no absolute path ==="
 type_keys l s ret
-sleep 2
 
 # 게스트 루트에는 vendor 디렉터리가 있다(폰트가 거기 있다). 화면 줄에만
 # 있어야 한다 — tars-init: 줄에도 vendor가 나올 수 있으므로 screen>으로
-# 먼저 거른다.
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "vendor"; then
+# 먼저 거른다(wait_for_screen이 그 거르기를 한다).
+if ! wait_for_screen "vendor"; then
   fail "'ls' with no path never listed the guest root (is PATH reaching the shell?)" \
     "terminal: screen>" "tars-init: env"
 fi
@@ -217,9 +221,8 @@ echo "the shell resolved 'ls' through PATH"
 # 보여주므로, 여기서 보는 것은 "무엇을 가리키는가"다.
 echo "=== typing 'ls -l /bin' ==="
 type_keys l s spc minus l spc slash b i n ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "bash"; then
+if ! wait_for_screen "bash"; then
   fail "/bin/sh does not point at bash" \
     "terminal: screen>" "tars-init: env"
 fi
@@ -247,9 +250,8 @@ echo "/bin/sh points at bash"
 # 접두사에는 슬래시가 없으므로 접두사 자신과 헷갈리지 않는다.
 echo "=== typing 'ps ax' ==="
 type_keys p s spc a x ret
-sleep 3
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "/terminal"; then
+if ! wait_for_screen "/terminal"; then
   fail "'ps ax' never listed the supervised terminal (did libproc2/libsystemd resolve?)" \
     "terminal: screen>" "error while loading"
 fi
@@ -267,9 +269,8 @@ echo "ps walked /proc and found the supervised terminal"
 # 없으면 맞는 줄을 그대로 출력한다.
 echo "=== typing 'awk /root/ /etc/passwd' ==="
 type_keys a w k spc slash r o o t slash spc slash e t c slash p a s s w d ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "root:x:0:0:root"; then
+if ! wait_for_screen "root:x:0:0:root"; then
   fail "awk did not print the passwd line (is mawk installed under the name awk?)" \
     "terminal: screen>" "Unknown command"
 fi
@@ -285,9 +286,8 @@ echo "awk ran under the name we gave it"
 # 안 만든다).
 echo "=== typing 'sed s/root/tars/ /etc/group' ==="
 type_keys s e d spc s slash r o o t slash t a r s slash spc slash e t c slash g r o u p ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "tars:x:0:"; then
+if ! wait_for_screen "tars:x:0:"; then
   fail "sed did not rewrite the group line (did libacl come along?)" \
     "terminal: screen>" "Unknown command"
 fi
@@ -312,9 +312,8 @@ echo "sed rewrote a line"
 # 죽어도 둘 다 초록일 수 있다(검사 7의 주석과 같은 이유).
 echo "=== typing 'eza vendor' ==="
 type_keys e z a spc v e n d o r ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "fonts"; then
+if ! wait_for_screen "fonts"; then
   fail "eza did not list the vendor directory (did the libgit2 chain resolve?)" \
     "terminal: screen>" "error while loading"
 fi
@@ -333,9 +332,8 @@ echo "eza listed a directory through the sixteen-library libgit2 chain"
 # 종류는 다르지만 게이트에 미치는 결과가 같다.
 echo "=== typing 'fd otf vendor' ==="
 type_keys f d spc o t f spc v e n d o r ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aq "unifont"; then
+if ! wait_for_screen "unifont"; then
   fail "fd did not find the font under the name we gave it" \
     "terminal: screen>" "Unknown command"
 fi
@@ -354,9 +352,8 @@ echo "fd ran under the name we gave it"
 # 겹친다.
 echo "=== typing 'jq --version' ==="
 type_keys j q spc minus minus v e r s i o n ret
-sleep 2
 
-if ! grep -a "terminal: screen>" "$LOG" | grep -aqE "jq-[0-9]"; then
+if ! wait_for_screen "jq-[0-9]"; then
   fail "jq did not print its version (did libjq/libonig resolve?)" \
     "terminal: screen>" "error while loading"
 fi
