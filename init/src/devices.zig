@@ -34,7 +34,7 @@ pub const MAX_PATH = 64;
 const WORD_BITS: usize = 64;
 
 /// 입력 이벤트 종류. include/uapi/linux/input-event-codes.h와 같아야 한다.
-/// **EV_SYN이 0번이라 EV_KEY는 1번이다.** 여기를 0으로 착각하면 EV_SYN만
+/// EV_SYN이 0번이라 EV_KEY는 1번이다. 여기를 0으로 착각하면 EV_SYN만
 /// 가진 장치까지 전부 통과한다.
 const EV_KEY: u16 = 1;
 
@@ -52,7 +52,7 @@ const KEY_POWER: u16 = 116;
 
 /// 열어 둘 전원 버튼의 상한(design 결정 4). ACPI는 FADT의 고정 하드웨어
 /// 버튼과 DSDT가 선언한 장치를 각각 등록할 수 있어서, 하나만 골랐다가 틀리면
-/// 버튼이 **조용히** 죽는다. HD-M1의 실측으로는 QEMU에 하나뿐이지만, 그
+/// 버튼이 조용히 죽는다. HD-M1의 실측으로는 QEMU에 하나뿐이지만, 그
 /// 침묵보다는 넉넉한 상한으로 전부 여는 편이 낫다.
 pub const MAX_BUTTONS: usize = 4;
 
@@ -83,9 +83,9 @@ const VALUE_PRESS: i32 = 1;
 
 /// sysfs 비트맵 문자열에서 code번 비트의 값이 1인지 본다.
 ///
-/// **문자열은 가장 높은 워드가 맨 앞이다.** 커널의 input_print_bitmap이
+/// 문자열은 가장 높은 워드가 맨 앞이다. 커널의 input_print_bitmap이
 /// 배열을 거꾸로 훑으면서 찍고, 비어 있는 상위 워드는 아예 건너뛴다. 그래서
-/// 워드의 개수가 고정이 아니고, 우리가 원하는 워드는 **뒤에서부터** 세어야
+/// 워드의 개수가 고정이 아니고, 우리가 원하는 워드는 뒤에서부터 세어야
 /// 찾을 수 있다. 이 뒤집힘이 이 파일에서 유일하게 미묘한 부분이다.
 pub fn bitSet(bitmap: []const u8, code: u16) bool {
     const want_word: usize = code / WORD_BITS;
@@ -123,7 +123,7 @@ pub fn looksLikeKeyboard(ev: []const u8, key: []const u8) bool {
 
 /// 이 장치가 "누르면 기계가 꺼지는 물리 버튼"인가.
 ///
-/// **키보드를 명시적으로 제외하는 것이 이 함수의 핵심이다.** QEMU의 AT
+/// 키보드를 명시적으로 제외하는 것이 이 함수의 핵심이다. QEMU의 AT
 /// 키보드도 KEY_POWER를 갖고 있다 — devices_test가 실측해 둔 비트맵의 1번
 /// 워드 0xfeffffdfffefffff에서 52번 비트의 값이 1이고, atkbd가 ACPI 확장 키를
 /// 스캔코드 표에 갖고 있기 때문이다. 제외하지 않으면 PID 1이 키보드 fd까지
@@ -226,7 +226,7 @@ pub fn findKeyboard(sys_root: []const u8) ?u8 {
 
 /// 전원 버튼처럼 생긴 evdev 번호를 out에 채우고 그 개수를 돌려준다.
 ///
-/// 키보드와 달리 첫 번째 것만 쓰지 않고 **전부** 모은다(design 결정 4).
+/// 키보드와 달리 첫 번째 것만 쓰지 않고 전부 모은다(design 결정 4).
 /// 키보드가 여럿일 이유는 없지만 전원 버튼은 둘일 수 있고, 그중 어느 것이
 /// 실제로 우는지는 밖에서 알 수 없기 때문이다.
 pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
@@ -246,17 +246,17 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
     return found;
 }
 
-/// 키보드가 나타나기를 기다리는 상한. **USB 키보드는 비동기로 열거된다** —
+/// 키보드가 나타나기를 기다리는 상한. USB 키보드는 비동기로 열거된다 —
 /// PID 1이 뜨는 시점에 아직 `/sys/class/input`에 없을 수 있고, 그러면 한 번만
 /// 훑는 탐색기는 "키보드가 없다"고 답한다.
 ///
-/// **RM-M3이 이것을 실측으로 잡았다.** QEMU에서 USB 키보드가 0.88~0.93초에
+/// RM-M3이 이것을 실측으로 잡았다. QEMU에서 USB 키보드가 0.88~0.93초에
 /// 열거되고 PID 1의 훑기가 그 언저리라, 회차에 따라 `init`이 전원 버튼을
 /// 키보드로 골랐다(`keyboard device /dev/input/event0 (Power Button)`).
-/// 게이트에서는 스무 번에 한 번쯤이지만 **실기에서는 이쪽이 정상이다** —
+/// 게이트에서는 스무 번에 한 번쯤이지만 실기에서는 이쪽이 정상이다 —
 /// 허브를 거치거나 느린 키보드면 열거가 몇 초씩 걸린다.
 ///
-/// **결정 6("못 찾아도 부팅을 막지 않는다")을 어기지 않는다.** 기다림이
+/// 결정 6("못 찾아도 부팅을 막지 않는다")을 어기지 않는다. 기다림이
 /// 유한하고, 끝나면 예전과 똑같이 event0으로 떨어진다. 무한히 기다리는 것과
 /// 한정해서 기다리는 것은 다른 일이다.
 pub const KEYBOARD_WAIT_MS: isize = 3000;
@@ -278,7 +278,7 @@ fn sleepMillis(ms: isize) void {
 
 /// 키보드처럼 생긴 evdev 번호를 max_ms까지 기다리며 찾는다.
 ///
-/// **max_ms를 인자로 받는 것은 검사 때문이다.** `devices_test`의 "키보드가
+/// max_ms를 인자로 받는 것은 검사 때문이다. `devices_test`의 "키보드가
 /// 없으면 event0으로 떨어진다"는 검사가 기본값을 쓰면 3초를 잔다 — 호스트
 /// 검사가 초 단위로 도는 값을 잃는다.
 pub fn findKeyboardWaiting(sys_root: []const u8, max_ms: isize) ?u8 {
@@ -298,7 +298,7 @@ pub fn findKeyboardWaiting(sys_root: []const u8, max_ms: isize) ?u8 {
     }
 }
 
-/// 키보드 장치 경로를 정하고 로그로 남긴다. 못 찾아도 **부팅을 막지 않는다**
+/// 키보드 장치 경로를 정하고 로그로 남긴다. 못 찾아도 부팅을 막지 않는다
 /// (design 결정 6) — 탐색기의 버그가 기계를 못 켜게 만드는 것이 가장 나쁜
 /// 결말이다. 그때는 예전 상수와 같은 event0으로 떨어진다.
 pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
@@ -326,10 +326,10 @@ pub fn resolveKeyboardWaiting(sys_root: []const u8, out: *Path, max_ms: isize) v
     std.debug.print("tars-init: keyboard device {s} ({s})\n", .{ out.slice(), name });
 }
 
-/// 버튼 fd에 쌓인 것을 **전부** 읽어 비우고, 그 안에 전원 버튼 누름이
+/// 버튼 fd에 쌓인 것을 전부 읽어 비우고, 그 안에 전원 버튼 누름이
 /// 있었는지 돌려준다. poll이 "읽을 것이 있다"고 알려 준 뒤에만 부른다.
 ///
-/// **다 읽어 비우는 것이 이 함수의 절반이다.** 남겨 두면 다음 poll이 곧바로
+/// 다 읽어 비우는 것이 이 함수의 절반이다. 남겨 두면 다음 poll이 곧바로
 /// 다시 깨어나서 PID 1이 CPU를 태우는 바쁜 루프가 된다 —
 /// terminal/src/main.zig:216이 PTY master의 POLLHUP에서 똑같은 함정을 적어
 /// 두었다.
@@ -367,11 +367,11 @@ pub fn drainButton(fd: i32) bool {
 
 /// 전원 버튼 후보를 전부 열고 fd를 out에 채운 뒤 그 개수를 돌려준다.
 ///
-/// **여는 것은 진짜 /dev/input이다.** 탐색(sys_root)만 주입받고 여는 쪽은
+/// 여는 것은 진짜 /dev/input이다. 탐색(sys_root)만 주입받고 여는 쪽은
 /// 고정인 이유는, 이 함수가 하는 일의 절반이 open(2)이라 호스트 검사에서
 /// 시험할 대상이 아니기 때문이다. 검사가 보는 것은 findPowerButtons까지다.
 ///
-/// 하나도 못 찾아도 **부팅을 막지 않는다**(design 결정 6). 그때는 0을
+/// 하나도 못 찾아도 부팅을 막지 않는다(design 결정 6). 그때는 0을
 /// 돌려주고, 감독 루프의 poll은 fd 0개짜리가 되어 그냥 1초 sleep이 된다 —
 /// 폴백이 따로 필요 없는 구조다.
 ///
@@ -381,7 +381,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
     var candidates: [MAX_BUTTONS]u8 = undefined;
     const n = findPowerButtons(sys_root, &candidates);
     if (n == 0) {
-        // device/check.sh가 이 줄이 **없음**을 요구한다. 탐색기가 조용히
+        // device/check.sh가 이 줄이 없음을 요구한다. 탐색기가 조용히
         // 실패하면 버튼은 안 먹는데 부팅은 멀쩡해 보이기 때문이다.
         std.debug.print("tars-init: no power button found under {s}\n", .{sys_root});
         return 0;

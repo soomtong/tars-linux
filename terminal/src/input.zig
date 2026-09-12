@@ -87,12 +87,12 @@ const qwerty_keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
-/// 드보락(US). **쿼티와 같은 칸에 같은 evdev 코드가 온다** — 다른 것은 값뿐이다.
+/// 드보락(US). 쿼티와 같은 칸에 같은 evdev 코드가 온다 — 다른 것은 값뿐이다.
 ///
-/// **한글 자판은 이 표에 안 딸린다**(HI design 결정 13). 한글은 물리 키 위치를
+/// 한글 자판은 이 표에 안 딸린다(HI design 결정 13). 한글은 물리 키 위치를
 /// 쓰므로 조회는 언제나 `qwerty_keymap`으로 한다. 이 표가 쓰이는 것은 라틴
 /// 문자를 PTY로 보낼 때뿐이다. 그 갈림을 놓치면 드보락 사용자의 한글 배열이
-/// 통째로 뒤틀리는데, **증상이 "안 된다"가 아니라 "다른 글자가 나온다"**라
+/// 통째로 뒤틀리는데, 증상이 "안 된다"가 아니라 "다른 글자가 나온다"라
 /// 원인을 오토마타에서 찾게 된다.
 const dvorak_keymap = [_][2]u8{
     .{ 0, 0 }, //  0: (없음)
@@ -155,16 +155,16 @@ const dvorak_keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
-/// 영문 자판. **한글 자판과 직교한다**(HI design 결정 13).
+/// 영문 자판. 한글 자판과 직교한다(HI design 결정 13).
 pub const LatinLayout = enum { qwerty, dvorak };
 
 /// 켜진 한/영 전환 키의 집합(HI design 결정 7).
 ///
-/// **`init/src/config.zig`의 `Toggles`와 짝이다.** 거기가 "설정 파일에 무엇을
+/// `init/src/config.zig`의 `Toggles`와 짝이다. 거기가 "설정 파일에 무엇을
 /// 적을 수 있는가"이고 여기가 "그것이 키를 어떻게 바꾸는가"인데, 둘을 잇는
 /// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과
-/// `hangul.Layout`이 이미 정확히 같은 모양이다. **문자열 문법을 못 박는 것은
-/// `config_test`의 `arg` → `parse` 왕복 검사다.**
+/// `hangul.Layout`이 이미 정확히 같은 모양이다. 문자열 문법을 못 박는 것은
+/// `config_test`의 `arg` → `parse` 왕복 검사다.
 pub const Toggles = struct {
     hangul_key: bool = false,
     shift_space: bool = false,
@@ -182,8 +182,8 @@ const ToggleKey = enum { hangul_key, shift_space, capslock_tap, lctrl_tap };
 
 /// 콤마 목록을 집합으로 바꾼다.
 ///
-/// **init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은 언제나
-/// 정규형이다.** 공백을 떼고 모르는 이름을 흘려보내는 관대함은 terminal을
+/// init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은 언제나
+/// 정규형이다. 공백을 떼고 모르는 이름을 흘려보내는 관대함은 terminal을
 /// 손으로 띄울 때를 위한 것이고, 로그는 안 남긴다 — init이 이미 한 번 경고를
 /// 찍었으므로 같은 줄을 두 번 낼 이유가 없다.
 pub fn parseToggles(text: []const u8) Toggles {
@@ -203,10 +203,10 @@ pub fn parseToggles(text: []const u8) Toggles {
     return t;
 }
 
-/// 로그에 찍을 **정규형** 목록. `config.zig`의 `Toggles.arg`와 같은 문자열을
+/// 로그에 찍을 정규형 목록. `config.zig`의 `Toggles.arg`와 같은 문자열을
 /// 만든다.
 ///
-/// **파싱한 결과를 다시 문자열로 만드는 것이 요점이다.** argv로 받은 문자열을
+/// 파싱한 결과를 다시 문자열로 만드는 것이 요점이다. argv로 받은 문자열을
 /// 그대로 찍으면 "글자가 도착했다"만 증명되고 "우리가 그것을 맞게 읽었다"는
 /// 아무것도 증명되지 않는다 — `terminal: hangul layout=`이 `stringToEnum`을
 /// 거친 값을 `@tagName`으로 찍는 것과 같은 이유다.
@@ -238,8 +238,8 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
 // `qwerty_keymap.len`이 여러 곳에서 상한으로 쓰이기 때문이다.
 //
 // 나머지 둘은 드보락 표 자신의 정렬을 잡는다. 이 표는 쿼티와 값이 거의
-// 겹치지 않아서, 한 줄이 밀리면 **컴파일은 통과하고 게스트에서 엉뚱한 글자가
-// 나온다** — 쿼티 표가 IP-M1에 겪은 것과 같은 실패다.
+// 겹치지 않아서, 한 줄이 밀리면 컴파일은 통과하고 게스트에서 엉뚱한 글자가
+// 나온다 — 쿼티 표가 IP-M1에 겪은 것과 같은 실패다.
 comptime {
     if (dvorak_keymap.len != qwerty_keymap.len)
         @compileError("dvorak_keymap must be the same length as qwerty_keymap");
@@ -251,11 +251,11 @@ comptime {
 
 // 위 표의 규약은 "N번째 칸이 evdev 코드 N"인데, IP-M1까지 그것을 지켜주는
 // 것은 주석뿐이었다. 중간에 한 줄이 끼면 뒤가 전부 한 칸씩 밀리고, 그래도
-// **컴파일은 통과하며**, 주석만 거짓말이 된다. 증상은 "게스트에서 a를 쳤는데
+// 컴파일은 통과하며, 주석만 거짓말이 된다. 증상은 "게스트에서 a를 쳤는데
 // s가 나온다"로 나타나므로 원인을 찾는 데 부팅 한 바퀴가 든다.
 //
 // 그래서 표의 양끝과 가운데를 커널의 이름에 못 박는다. 다섯 줄로 표 전체의
-// 정렬을 잡는 이유는, 한 줄이 끼면 그 뒤의 앵커가 **반드시** 하나는 어긋나기
+// 정렬을 잡는 이유는, 한 줄이 끼면 그 뒤의 앵커가 반드시 하나는 어긋나기
 // 때문이다. IP-M2가 이 표 밖의 코드(KEY_LEFTMETA=125)를 처음 다루므로
 // 지금이 못을 박을 자리다.
 comptime {
@@ -267,13 +267,13 @@ comptime {
     if (qwerty_keymap[c.KEY_Z][0] != 'z') @compileError("keymap drifted at KEY_Z");
 }
 
-/// 키 하나를 어떻게 번역할지 바꾸는, **바깥에서 들어오는** 상태.
+/// 키 하나를 어떻게 번역할지 바꾸는, 바깥에서 들어오는 상태.
 ///
 /// design doc 결정 6: `input.zig`는 `vt.zig`를 import하지 않는다. DECCKM
 /// 상태가 VT 안에 있다고 해서 여기서 직접 부르게 하면 (1) 지금 단방향인
 /// 모듈 의존(main만 다섯을 안다)이 깨지고, (2) `ghostty-vt`를 링크하지 않는
 /// `input_test`가 빌드조차 되지 않는다. 그래서 `main.zig`가 매 키마다
-/// **값으로** 채워 넘긴다 — packed struct의 비트 읽기 한 번이라 값이 없다.
+/// 값으로 채워 넘긴다 — packed struct의 비트 읽기 한 번이라 값이 없다.
 pub const Context = struct {
     /// DECCKM(DEC Cursor Key Mode, private mode 1). 켜져 있으면 방향키와
     /// Home/End가 `ESC [` 대신 `ESC O`로 시작한다. 이 모드를 켜는 것은
@@ -286,7 +286,7 @@ pub const Context = struct {
     /// IP-M2가 읽기 시작했다. handleKey 맨 앞에서 56↔125, 100↔126을
     /// 맞바꾸는 데 쓰인다(swapAltMeta).
     ///
-    /// DECCKM과 달리 이 값은 **부팅 내내 상수다.** PID 1이 설정 파일을
+    /// DECCKM과 달리 이 값은 부팅 내내 상수다. PID 1이 설정 파일을
     /// 읽어 argv로 넘긴 것을 main.zig가 그대로 채우므로, 프로세스가 사는
     /// 동안 바뀌지 않는다 — 누를 때와 뗄 때 값이 달라져 modifier가 눌린
     /// 채로 남는 일이 구조적으로 없다는 뜻이다.
@@ -295,7 +295,7 @@ pub const Context = struct {
 
 /// 스크롤백을 움직이는 동작(design 결정 12).
 ///
-/// **여기에 화면 크기가 없는 것이 요점이다.** `page_up`이 몇 줄인지는
+/// 여기에 화면 크기가 없는 것이 요점이다. `page_up`이 몇 줄인지는
 /// `input.zig`가 알 수 없고 알 필요도 없다 — 격자 크기를 아는 것은
 /// `main.zig`이고, 그쪽이 이 값을 `rows` 만큼의 delta로 바꾼다. design doc
 /// 결정 6이 "input.zig는 vt.zig를 import하지 않는다"로 세운 경계와 같은
@@ -314,38 +314,38 @@ pub const Scroll = enum {
 /// 키 하나가 만드는 결과.
 ///
 /// IP 시절 이 자리는 `[]const u8` 하나였다. 보낼 것이 바이트뿐이었기
-/// 때문이다. **스크롤 키는 바이트가 아니라 동작이고 PTY로 새어 나가면 안
-/// 되므로**, 그 구분을 표현할 수 있게 넓힌다(design 결정 11).
+/// 때문이다. 스크롤 키는 바이트가 아니라 동작이고 PTY로 새어 나가면 안
+/// 되므로, 그 구분을 표현할 수 있게 넓힌다(design 결정 11).
 ///
 /// `project_copy_mode`가 "IP의 dispatch 단계가 그대로 진입점"이라고 적어 둔
-/// 자리가 이곳이다. 이번에 넓히는 것은 **통로**이고 모드 상태는 넣지
+/// 자리가 이곳이다. 이번에 넓히는 것은 통로이고 모드 상태는 넣지
 /// 않는다 — copy mode가 나중에 이 union에 자기 variant를 더한다.
 pub const Action = union(enum) {
     /// PTY로 보낼 바이트열. 빈 슬라이스는 "보낼 것이 없다"는 뜻이다.
     bytes: []const u8,
-    /// 우리가 처리할 동작. **PTY로 보내지 않는다.**
+    /// 우리가 처리할 동작. PTY로 보내지 않는다.
     scroll: Scroll,
     /// copy mode의 명령. 이것도 PTY로 보내지 않는다.
     copy: Copy,
-    /// 이 키가 **화면을 바꿨다.** PTY로 나갈 바이트도, 모아 둘 스크롤도
+    /// 이 키가 화면을 바꿨다. PTY로 나갈 바이트도, 모아 둘 스크롤도
     /// copy 명령도 없다 — 다시 그리기만 하면 된다.
     ///
-    /// **payload가 없는 것에 뜻이 있다.** 나르는 것은 "다시 그려라"라는
+    /// payload가 없는 것에 뜻이 있다. 나르는 것은 "다시 그려라"라는
     /// 사실 하나뿐이고, 무엇이 바뀌었는지는 상태를 읽어 알아낸다 —
     /// 조합 중인 글자는 `State.preedit()`이, 대문자 잠금은
     /// `State.caps_lock`이 준다.
     ///
-    /// **확정된 글자는 여기 없다.** 그것은 `takeCommit()`이 따로 주며,
+    /// 확정된 글자는 여기 없다. 그것은 `takeCommit()`이 따로 주며,
     /// 이유는 그 함수의 주석에 있다.
     ///
-    /// 이 variant가 없으면 **화면이 영영 안 갱신되는 키가 생긴다.** 자모
+    /// 이 variant가 없으면 화면이 영영 안 갱신되는 키가 생긴다. 자모
     /// 키는 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서
     /// `main.zig`의 `needs_redraw`가 안 켜진다(HI-M1 실측 2).
     ///
-    /// **이름이 `hangul`이 아니라 `redraw`인 이유가 IS-M1이다**(IS design
+    /// 이름이 `hangul`이 아니라 `redraw`인 이유가 IS-M1이다(IS design
     /// 결정 8). 뜻은 원래부터 "한글"이 아니라 "다시 그려라"였는데, 한글이
     /// 아닌 둘째 호출자(긴 CapsLock)가 생기면서 그 이름이 좁다는 것이
-    /// 드러났다. **`Action.caps`를 따로 더하지 않았다** — 셋째 호출자가
+    /// 드러났다. `Action.caps`를 따로 더하지 않았다 — 셋째 호출자가
     /// 생기면 `main.zig`가 `if (keys.hangul or keys.caps)`가 되고, 그
     /// 조건에 넷째를 빼먹는 것이 다음 사고다.
     redraw,
@@ -353,18 +353,18 @@ pub const Action = union(enum) {
 
 /// copy mode 안에서 키가 만드는 명령.
 ///
-/// **CM-M2가 닫았던 표를 CN-M0이 다시 연다.** CM-M0부터 지켜 온 규율은 "쓰지
+/// CM-M2가 닫았던 표를 CN-M0이 다시 연다. CM-M0부터 지켜 온 규율은 "쓰지
 /// 않을 variant를 미리 만들어 두지 않는다"였다 — `main.zig`의 switch가 `else`
 /// 없이 닫혀 있어서, variant를 더하는 순간 컴파일러가 배선할 자리를 알려주기
-/// 때문이다. 미리 만들어 두면 그 신호를 잃는다. **이번에도 같은 순서로 한다:
-/// 여기에 둘을 더하면 `main.zig`가 컴파일 에러로 배선을 요구한다.**
+/// 때문이다. 미리 만들어 두면 그 신호를 잃는다. 이번에도 같은 순서로 한다:
+/// 여기에 둘을 더하면 `main.zig`가 컴파일 에러로 배선을 요구한다.
 ///
-/// **CN-M1이 이것을 `union(enum)`으로 바꿨다**(design 결정 6). 검색 프롬프트에
-/// 친 글자를 실어 나를 payload가 필요하기 때문이다. **전환 자체는 아무 동작도
-/// 안 바꿨다** — 그때 variant를 함께 더하지 않은 것에 뜻이 있다. 형태 전환과
+/// CN-M1이 이것을 `union(enum)`으로 바꿨다(design 결정 6). 검색 프롬프트에
+/// 친 글자를 실어 나를 payload가 필요하기 때문이다. 전환 자체는 아무 동작도
+/// 안 바꿨다 — 그때 variant를 함께 더하지 않은 것에 뜻이 있다. 형태 전환과
 /// 기능 추가를 한 Step에 두면 컴파일 에러 목록에 둘이 섞여 갈리지 않는다.
 ///
-/// **union에는 `==`가 없다.** 이 타입을 비교하는 자리는
+/// union에는 `==`가 없다. 이 타입을 비교하는 자리는
 /// `input_test.zig`의 `expectCopy` 하나이고 `std.meta.eql`을 쓴다.
 pub const Copy = union(enum) {
     enter,
@@ -375,64 +375,64 @@ pub const Copy = union(enum) {
     right,
     /// `w` — 다음 단어의 첫 글자로.
     ///
-    /// **쓰이지 않은 자리에 닿으면 움직이지 않는다**(CN-M0 plan 결정 1).
+    /// 쓰이지 않은 자리에 닿으면 움직이지 않는다(CN-M0 plan 결정 1).
     /// vim과 다른 자리이고, 줄 사이 이동은 `j`/`k`가 한다.
     word_next,
-    /// `b` — 이전 단어의 첫 글자로. 단어 중간이면 **그 단어의 시작**으로 간다.
+    /// `b` — 이전 단어의 첫 글자로. 단어 중간이면 그 단어의 시작으로 간다.
     word_prev,
     /// `v` — 문자 단위 선택 시작/해제.
     select_char,
     /// `V` — 줄 단위 선택 시작/해제.
     select_line,
-    /// `y` 또는 `Cmd+C` — 클립보드로 옮기고 **모드를 나간다.**
+    /// `y` 또는 `Cmd+C` — 클립보드로 옮기고 모드를 나간다.
     yank,
-    /// `Cmd+V` — 클립보드를 PTY에 쓴다. **모드를 건드리지 않는다.**
+    /// `Cmd+V` — 클립보드를 PTY에 쓴다. 모드를 건드리지 않는다.
     ///
-    /// 이 variant만 모드 **밖에서도** 만들어진다(design 결정 4). 그래서
-    /// `chord()`의 Meta 분기와 copy 표 **양쪽에** 같은 뜻이 적혀 있다 —
+    /// 이 variant만 모드 밖에서도 만들어진다(design 결정 4). 그래서
+    /// `chord()`의 Meta 분기와 copy 표 양쪽에 같은 뜻이 적혀 있다 —
     /// 한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.
     paste,
     // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
     //
-    // **다섯이 한 덩어리다.** `find_open`이 프롬프트를 열고, `find_char`가
+    // 다섯이 한 덩어리다. `find_open`이 프롬프트를 열고, `find_char`가
     // 글자를 실어 나르고, `find_erase`가 지우고, `find_cancel`이 닫고,
-    // `find_submit`이 확정한다. `find_char`만 payload를 갖는데, **그것 하나
-    // 때문에 이 타입이 union이 됐다**(design 결정 6).
+    // `find_submit`이 확정한다. `find_char`만 payload를 갖는데, 그것 하나
+    // 때문에 이 타입이 union이 됐다(design 결정 6).
 
-    /// `/` — 프롬프트를 연다. **빈 검색어로 시작한다.**
+    /// `/` — 프롬프트를 연다. 빈 검색어로 시작한다.
     find_open,
     /// 프롬프트에 글자 하나. 버퍼가 차면 `vt.zig`가 조용히 버린다.
     find_char: u8,
-    /// Backspace. **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    /// Backspace. 빈 프롬프트에서는 아무 일도 안 한다(CN-M1 plan 결정 2).
     find_erase,
-    /// 프롬프트 중의 Esc. **프롬프트만 닫고 copy mode는 유지한다**
+    /// 프롬프트 중의 Esc. 프롬프트만 닫고 copy mode는 유지한다
     /// (design 결정 9). Esc를 두 번 눌러야 모드까지 나간다.
     find_cancel,
     /// 프롬프트 중의 Enter. 검색을 돌리고 첫 매치로 커서를 옮긴다.
     find_submit,
     /// 프롬프트에서 확정된 글자가 needle로 간다(SH-M1, design 결정 4).
     ///
-    /// **이 variant를 만드는 것은 `handleKey`가 아니라 `readKeys`다.** 그
+    /// 이 variant를 만드는 것은 `handleKey`가 아니라 `readKeys`다. 그
     /// 갈림이 design이 "`find_text` variant를 안 골랐다"고 적은 것과 어긋나
-    /// 보이지만 아니다 — 거기서 말한 후보는 **`handleKey`가 이것을
-    /// 돌려주는** 모양이었고, 그러면 `Enter` 하나가 확정과 제출 둘을 담아야
-    /// 해서 통로가 결국 둘이 된다. 여기서는 그 둘을 **`commit_buf`가 이미
-    /// 갈라 놓았고**, 이 variant는 나르기만 한다.
+    /// 보이지만 아니다 — 거기서 말한 후보는 `handleKey`가 이것을
+    /// 돌려주는 모양이었고, 그러면 `Enter` 하나가 확정과 제출 둘을 담아야
+    /// 해서 통로가 결국 둘이 된다. 여기서는 그 둘을 `commit_buf`가 이미
+    /// 갈라 놓았고, 이 variant는 나르기만 한다.
     ///
-    /// **payload가 슬라이스가 아니라 값인 것이 계약이다.** `commit_buf`는
+    /// payload가 슬라이스가 아니라 값인 것이 계약이다. `commit_buf`는
     /// 다음 키가 덮어쓰므로, 한 번의 read에 여러 키가 실려 오면(자동 반복)
     /// 슬라이스는 마지막 값을 가리키게 된다 — `Action.bytes`를 `readKeys`가
-    /// **즉시 복사하는** 것과 같은 이유이고, 여기서는 복사가 대입이다.
+    /// 즉시 복사하는 것과 같은 이유이고, 여기서는 복사가 대입이다.
     find_commit: Commit,
-    /// `n` — 목록의 다음(과거 방향) 매치로. **끝에서 감긴다**(CN-M1).
+    /// `n` — 목록의 다음(과거 방향) 매치로. 끝에서 감긴다(CN-M1).
     find_next,
     /// `N` — 목록의 이전(미래 방향) 매치로.
     find_prev,
 
-    /// `find_commit`이 나르는 바이트. **여덟인 이유는 `commit_buf`와 같다**
+    /// `find_commit`이 나르는 바이트. 여덟인 이유는 `commit_buf`와 같다
     /// (SH design 결정 6) — 음절 넷 + 기호 넷.
     ///
-    /// **필드 뒤에 있는 것은 취향이 아니라 문법이다** — Zig는 컨테이너 필드
+    /// 필드 뒤에 있는 것은 취향이 아니라 문법이다 — Zig는 컨테이너 필드
     /// 사이의 선언을 막는다(`declarations are not allowed between container
     /// fields`).
     ///
@@ -456,7 +456,7 @@ pub const Copy = union(enum) {
 /// 한 번의 read가 만든 것 전부.
 pub const Keys = struct {
     bytes: []const u8,
-    /// **순서대로 적용해야 한다.** PageUp을 누르고 있으면 자동 반복이 한
+    /// 순서대로 적용해야 한다. PageUp을 누르고 있으면 자동 반복이 한
     /// 번의 read에 여러 개를 실어 오는데, 마지막 하나만 보면 몇 번을 눌렀든
     /// 한 화면만 올라간다.
     scrolls: []const Scroll,
@@ -465,19 +465,19 @@ pub const Keys = struct {
     copies: []const Copy,
     /// 이 배치가 화면을 바꿨는가(HI-M1 · IS-M1에서 이름이 넓어졌다).
     ///
-    /// **값이 아니라 사실만 나른다.** 무엇이 바뀌었는지는 상태를 읽어
-    /// 알아내며, 스크롤·copy처럼 **순서대로 모을 것이 없다** — 자동 반복으로
+    /// 값이 아니라 사실만 나른다. 무엇이 바뀌었는지는 상태를 읽어
+    /// 알아내며, 스크롤·copy처럼 순서대로 모을 것이 없다 — 자동 반복으로
     /// 자모가 여럿 실려 와도 그려야 할 글자는 마지막 하나이고, 대문자 잠금을
     /// 두 번 뒤집으면 마지막 값 하나만 그리면 된다.
     redraw: bool,
 };
 
 /// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
-/// 반대로 **테스트 쪽 `"\x1b[A"`는 이름을 붙이지 않는다** — 거기서는 그것이
+/// 반대로 테스트 쪽 `"\x1b[A"`는 이름을 붙이지 않는다 — 거기서는 그것이
 /// 와이어 포맷 자체이고, 쪼개는 순간 무슨 바이트가 나가는지 한눈에 안 보인다.
 const ESC: u8 = 0x1b;
 
-/// 특수키가 만드는 이스케이프 시퀀스는 모양이 **둘뿐**이다.
+/// 특수키가 만드는 이스케이프 시퀀스는 모양이 둘뿐이다.
 ///
 /// 이 셋을 keymap 배열에 넣지 않는 이유는 두 가지다. (1) keymap의 칸은
 /// `[2]u8`(Shift 안 누름 / 누름) 문자 한 쌍이라 여러 바이트를 담을 수 없다.
@@ -486,7 +486,7 @@ const ESC: u8 = 0x1b;
 const SpecialKey = union(enum) {
     /// `ESC [ X`. DECCKM이 켜져 있으면 `ESC O X`가 된다(design doc 결정 5).
     cursor: u8,
-    /// `ESC [ N ~`. **DECCKM의 영향을 받지 않는다** — 흔한 오해라 여기 적어둔다.
+    /// `ESC [ N ~`. DECCKM의 영향을 받지 않는다 — 흔한 오해라 여기 적어둔다.
     tilde: u8,
 };
 
@@ -513,7 +513,7 @@ fn specialKey(code: u16) ?SpecialKey {
 /// PC 키보드 보정(design doc 결정 9). 스페이스 옆 두 키의 순서가 Apple과
 /// 정확히 뒤집혀 있으므로 코드를 맞바꾼다.
 ///
-/// **파이프라인의 맨 앞에서 한 번만 부른다.** 그러면 그 뒤 로직은 어느
+/// 파이프라인의 맨 앞에서 한 번만 부른다. 그러면 그 뒤 로직은 어느
 /// 키보드인지 전혀 몰라도 된다 — chord도 keymap도 specialKey도 고칠 것이
 /// 없다는 것이 이 자리를 고른 이유다. 뒤로 갈수록 "여기도 보정해야 하나"를
 /// 물어야 하는 곳이 늘어난다.
@@ -538,7 +538,7 @@ const nothing: Action = .{ .bytes = none };
 /// tap-vs-hold의 문턱(HI design 결정 8). 이보다 짧게 눌렀다 떼면 한/영이고,
 /// 길면 그 키의 원래 뜻이다.
 ///
-/// **설정으로 안 뺀다.** 결정 7의 설정 항목이 셋이고, 문턱을 넷째로 만들면
+/// 설정으로 안 뺀다. 결정 7의 설정 항목이 셋이고, 문턱을 넷째로 만들면
 /// 게이트가 못 보는 설정이 하나 는다 — `sendkey`의 `hold_ms`는 게이트가 고르는
 /// 값이지 게스트가 고르는 값이 아니다. QEMU가 그 값을 오차 4밀리초 안에
 /// 지키므로(HI-M0 실측 2) 게이트가 이 문턱의 양쪽을 실제로 밟을 수 있다.
@@ -546,7 +546,7 @@ const TAP_MAX_US: u64 = 300_000;
 
 /// tap 후보 하나의 상태(결정 8).
 ///
-/// **셋이 다 필요하다.** `held`가 없으면 terminal이 뜨기 전부터 눌려 있던 키의
+/// 셋이 다 필요하다. `held`가 없으면 terminal이 뜨기 전부터 눌려 있던 키의
 /// 뗌을 tap으로 오해하고, `down_us`가 없으면 길이를 못 재고, `consumed`가
 /// 없으면 `Ctrl+C`가 한/영을 바꾼다.
 const Tap = struct {
@@ -559,7 +559,7 @@ const Tap = struct {
 
     /// 누름을 기록한다.
     ///
-    /// **자동 반복(value=2)은 시각을 안 덮어쓴다.** 덮어쓰면 길게 누르고 있는
+    /// 자동 반복(value=2)은 시각을 안 덮어쓴다. 덮어쓰면 길게 누르고 있는
     /// 키가 영원히 "방금 눌린" 상태가 되어 뗄 때마다 tap이 된다 — 증상은
     /// "길게 눌러도 한/영이 바뀐다"이고, 결정 9의 대문자 잠금을 통째로 막는다.
     fn down(self: *Tap, time_us: u64) void {
@@ -571,7 +571,7 @@ const Tap = struct {
 
     /// 뗌을 기록하고 "짧게 눌렀다 뗐는가"를 답한다.
     ///
-    /// **호출자는 설정이 꺼져 있어도 이 함수를 부른다.** 상태를 지우는 것이
+    /// 호출자는 설정이 꺼져 있어도 이 함수를 부른다. 상태를 지우는 것이
     /// 여기이므로, 건너뛰면 `held`가 참으로 남아 다음 키가 전부 소비 표시를
     /// 켠다.
     ///
@@ -606,7 +606,7 @@ pub const State = struct {
     // 아래 chord()가 생기는 지금이다 — 비트만 있으면 반환값이 안 바뀌어서
     // 검사할 수가 없었다.
     //
-    // 이름을 alt/meta로 붙이는 것은 **물리 키 이름**을 따른 것이다.
+    // 이름을 alt/meta로 붙이는 것은 물리 키 이름을 따른 것이다.
     // 어느 것이 Option이고 어느 것이 Cmd인지는 키보드 종류가 정하며,
     // 그 보정은 handleKey 맨 앞에서 코드를 맞바꾸는 것으로 끝난다(결정 9).
     // 여기까지 내려오면 "왼쪽 Alt 키가 눌려 있다"는 사실만 남는다.
@@ -635,21 +635,21 @@ pub const State = struct {
     /// 이유로 힙을 쓰지 않는다.
     copies: [8]Copy = undefined,
 
-    /// 한글을 치는 중인가(HI design 결정 5). **`Mode`에 넣지 않는다** —
+    /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
     /// 들어갔다 나와도 이 값은 그대로여야 한다.
     hangul_on: bool = false,
 
-    /// 조합 중인 음절. **비어 있지 않으면 `hangul_on`이 반드시 참이다** —
+    /// 조합 중인 음절. 비어 있지 않으면 `hangul_on`이 반드시 참이다 —
     /// 한/영을 끄는 자리가 먼저 확정하기 때문이다(아래 `hangulLayer`).
     /// 그 불변식이 서 있으므로 "꺼져 있는데 조합이 남은" 상태를 따로 다룰
     /// 필요가 없다.
     hangul_buf: hangul.Syllable = .{},
 
-    /// 한글 자판(HI-M2). **부팅 내내 상수다** — 설정 파일이 정하고 argv로
+    /// 한글 자판(HI-M2). 부팅 내내 상수다 — 설정 파일이 정하고 argv로
     /// 오며, 런타임 전환은 안 한다(design 결정 7).
     ///
-    /// **기본값은 `config.zig`의 `Config`와 같아야 한다.** 진실은 그쪽에
+    /// 기본값은 `config.zig`의 `Config`와 같아야 한다. 진실은 그쪽에
     /// 있고 여기 값은 `main.zig`가 argv로 매번 덮어쓰지만, 둘이 어긋나 있으면
     /// 읽는 사람이 어느 쪽이 기본인지 알 수 없다.
     hangul_layout: hangul.Layout = .shin_pcs,
@@ -657,10 +657,10 @@ pub const State = struct {
     /// 영문 자판(HI-M2). `hangul_layout`과 마찬가지로 부팅 내내 상수다.
     latin_layout: LatinLayout = .qwerty,
 
-    /// 켜진 한/영 전환 키(HI-M3). **부팅 내내 상수다** — 자판 둘과 같은
+    /// 켜진 한/영 전환 키(HI-M3). 부팅 내내 상수다 — 자판 둘과 같은
     /// 성질이고 설정 파일이 정한다.
     ///
-    /// **기본값은 `config.zig`의 `Config`와 같아야 한다.** 진실은 그쪽에 있고
+    /// 기본값은 `config.zig`의 `Config`와 같아야 한다. 진실은 그쪽에 있고
     /// 여기 값은 `main.zig`가 argv로 매번 덮어쓰지만, 둘이 어긋나 있으면 읽는
     /// 사람이 어느 쪽이 기본인지 알 수 없다.
     toggles: Toggles = .{
@@ -672,57 +672,57 @@ pub const State = struct {
 
     /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
     ///
-    /// **왜 반환값이 아니라 여기인가.** 조합을 끝내는 키는 자기 몫의 결과를
+    /// 왜 반환값이 아니라 여기인가. 조합을 끝내는 키는 자기 몫의 결과를
     /// 따로 갖는다 — Enter는 바이트를, Shift+PageUp은 스크롤을, Cmd+Shift+C는
-    /// copy 명령을 만든다. `Action`은 그중 **하나만** 담을 수 있으므로
+    /// copy 명령을 만든다. `Action`은 그중 하나만 담을 수 있으므로
     /// 확정된 글자를 담을 자리가 반환값에 없다. 세 variant 전부에 "앞에 붙은
-    /// 글자가 있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 **그 통로를
-    /// 비우는 자리를 한 곳으로 못 박는** 쪽을 골랐다.
+    /// 글자가 있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 그 통로를
+    /// 비우는 자리를 한 곳으로 못 박는 쪽을 골랐다.
     ///
-    /// **한 키가 확정시키는 것은 많아야 둘이다**(SH design 결정 6). 음절
+    /// 한 키가 확정시키는 것은 많아야 둘이다(SH design 결정 6). 음절
     /// 하나는 UTF-8로 언제나 세 바이트지만(U+0800~U+FFFF), 세벌식의 기호
-    /// 되돌림은 **조합 중이던 음절과 그 기호를 함께** 내보낸다.
+    /// 되돌림은 조합 중이던 음절과 그 기호를 함께 내보낸다.
     ///
-    /// **셸에서는 넷으로 충분했다**(HI-M2 실측 7). 목적지가 둘이라 음절은
-    /// 이 버퍼로, 기호는 `.bytes`로 갈라 보냈기 때문이다. **검색 프롬프트는
-    /// 목적지가 needle 하나뿐이라** 통로 하나에 둘을 실어야 한다 — 여덟은
+    /// 셸에서는 넷으로 충분했다(HI-M2 실측 7). 목적지가 둘이라 음절은
+    /// 이 버퍼로, 기호는 `.bytes`로 갈라 보냈기 때문이다. 검색 프롬프트는
+    /// 목적지가 needle 하나뿐이라 통로 하나에 둘을 실어야 한다 — 여덟은
     /// 음절 4 + 기호 4다.
     commit_buf: [8]u8 = undefined,
     commit_len: usize = 0,
 
     /// CapsLock과 왼쪽 Ctrl의 tap 상태(HI-M3, design 결정 8).
     ///
-    /// **설정이 꺼져 있어도 기록은 한다.** 갈래를 하나로 두면 "켜져 있을 때만
+    /// 설정이 꺼져 있어도 기록은 한다. 갈래를 하나로 두면 "켜져 있을 때만
     /// 기록한다"가 만드는 어긋남이 아예 없다 — 기록을 건너뛰면 `held`가 참으로
     /// 남거나 거짓으로 남는 경계가 생기고, 그 경계는 게이트가 못 본다.
     caps_tap: Tap = .{},
     lctrl_tap: Tap = .{},
 
-    /// 대문자 잠금(HI design 결정 9). CapsLock을 **길게** 누르면 뒤집힌다.
+    /// 대문자 잠금(HI design 결정 9). CapsLock을 길게 누르면 뒤집힌다.
     ///
-    /// **지금 상태를 보여 주는 자리가 없다는 것을 알고 넘어간다** — LED도 화면
+    /// 지금 상태를 보여 주는 자리가 없다는 것을 알고 넘어간다 — LED도 화면
     /// 표시도 없으므로 켜 놓은 것을 잊으면 대문자가 나오는 것으로만 안다.
     /// 비목표의 "입력기 상태를 화면에 보여 주기"와 같은 숙제다.
     ///
-    /// **한글 조합은 이 값에 안 흔들린다.** `hangulLayer`가 `latinChar`를 안
+    /// 한글 조합은 이 값에 안 흔들린다. `hangulLayer`가 `latinChar`를 안
     /// 쓰고 `qwerty_keymap`을 직접 보기 때문이고(결정 13), 그것을 못 박는
     /// 것이 `input_test`의 검사 48이다.
     caps_lock: bool = false,
 
-    /// 지금 키를 어떻게 해석하는가. **모드가 `input`에 있는 이유가 design
-    /// 결정 1이다** — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
+    /// 지금 키를 어떻게 해석하는가. 모드가 `input`에 있는 이유가 design
+    /// 결정 1이다 — "이 키를 어떻게 해석하는가"는 번역의 문제이고, 선택
     /// 영역이 `vt`에 있는 것은 그것이 화면 상태이기 때문이다.
     mode: Mode = .normal,
 
     pub const Mode = enum {
         normal,
         copy,
-        /// 검색 프롬프트가 열려 있다. **copy mode 안의 모드다** — Esc로 여기서
+        /// 검색 프롬프트가 열려 있다. copy mode 안의 모드다 — Esc로 여기서
         /// 빠지면 `.copy`로 돌아가지 `.normal`이 아니다(design 결정 9).
         ///
-        /// 이 상태에서만 **키가 명령이 아니라 글자가 된다.** copy 표가 `n`을
+        /// 이 상태에서만 키가 명령이 아니라 글자가 된다. copy 표가 `n`을
         /// 명령으로 보는 것과, 프롬프트가 `n`을 글자로 보는 것이 갈리는 자리가
-        /// 여기이고, 그 갈림은 `handleKey`에서 **어느 분기가 먼저 오는가**로
+        /// 여기이고, 그 갈림은 `handleKey`에서 어느 분기가 먼저 오는가로
         /// 정해진다.
         find,
     };
@@ -730,12 +730,12 @@ pub const State = struct {
     /// 결정 8의 2번 — 누른 동안 다른 키가 오면 "소비됨"을 켠다. 그 키는 조합
     /// 키로 쓰인 것이므로 뗄 때 아무 일도 일어나면 안 된다.
     ///
-    /// **`handleKey`의 modifier switch보다 앞에서 불러야 한다.** Shift·Alt·Meta
+    /// `handleKey`의 modifier switch보다 앞에서 불러야 한다. Shift·Alt·Meta
     /// 갈래가 switch 안에서 `return`하므로, 뒤에 두면 `Ctrl+Shift+C`의 Shift가
-    /// Ctrl을 소비하지 못하고 Ctrl을 뗄 때 한/영이 뒤집힌다. **증상이 "가끔
-    /// 한글이 안 쳐진다"라 원인에서 아주 멀다.**
+    /// Ctrl을 소비하지 못하고 Ctrl을 뗄 때 한/영이 뒤집힌다. 증상이 "가끔
+    /// 한글이 안 쳐진다"라 원인에서 아주 멀다.
     ///
-    /// **자기 자신은 뺀다.** 자동 반복(value=2)이 오면 자기가 자기를 소비한
+    /// 자기 자신은 뺀다. 자동 반복(value=2)이 오면 자기가 자기를 소비한
     /// 것이 된다.
     fn markTapConsumed(self: *State, code: u16) void {
         if (self.caps_tap.held and code != c.KEY_CAPSLOCK)
@@ -748,9 +748,9 @@ pub const State = struct {
         return self.shift_left or self.shift_right;
     }
 
-    /// 이 키가 만드는 **라틴 문자**. 영문 자판이 정한다.
+    /// 이 키가 만드는 라틴 문자. 영문 자판이 정한다.
     ///
-    /// **한글 조회는 이 함수를 안 쓴다**(HI design 결정 13) — 한글 자판은 물리
+    /// 한글 조회는 이 함수를 안 쓴다(HI design 결정 13) — 한글 자판은 물리
     /// 키 위치를 쓰므로 언제나 `qwerty_keymap`을 직접 본다. 그 갈림을 함수
     /// 하나로 나눠 두면 "어느 표를 봐야 하는가"를 세 곳에서 각각 판단하지
     /// 않아도 된다.
@@ -762,16 +762,16 @@ pub const State = struct {
             .qwerty => qwerty_keymap[code],
             .dvorak => dvorak_keymap[code],
         };
-        // CapsLock은 **알파벳에만** 적용된다(HI design 결정 9). 숫자와 기호는
+        // CapsLock은 알파벳에만 적용된다(HI design 결정 9). 숫자와 기호는
         // 안 바뀌고, 그것이 Shift와 CapsLock이 갈리는 자리이자 진짜 CapsLock의
         // 성질이다.
         //
-        // 판단의 근거를 **Shift 안 누른 칸의 값**으로 삼는 이유는 그것이
+        // 판단의 근거를 Shift 안 누른 칸의 값으로 삼는 이유는 그것이
         // 드보락에서도 그대로 서기 때문이다 — 쿼티의 `q` 자리는 드보락에서
         // `'`이고 알파벳이 아니므로 CapsLock이 안 닿는다. 코드가 아니라 값을
         // 보므로 표를 하나 더 유지할 필요도 없다.
         const caps = self.caps_lock and pair[0] >= 'a' and pair[0] <= 'z';
-        // bool에서 `!=`가 XOR이다. **둘 다면 소문자**이고, 그것이 진짜 키보드의
+        // bool에서 `!=`가 XOR이다. 둘 다면 소문자이고, 그것이 진짜 키보드의
         // 동작이다 — CapsLock을 켜 두고 Shift+A를 누르면 `a`가 나온다.
         const shift = self.shifted() != caps;
         return pair[if (shift) 1 else 0];
@@ -816,8 +816,8 @@ pub const State = struct {
         self.seq[0] = ESC;
         switch (key) {
             .cursor => |final| {
-                // 여기가 결정 5다. `ESC [`인지 `ESC O`인지를 **추측하지
-                // 않는다** — 셸이 보낸 `ESC [ ? 1 h`를 libghostty-vt가 이미
+                // 여기가 결정 5다. `ESC [`인지 `ESC O`인지를 추측하지
+                // 않는다 — 셸이 보낸 `ESC [ ? 1 h`를 libghostty-vt가 이미
                 // 받아뒀고, main.zig가 그 값을 ctx에 담아 넘겨준다.
                 self.seq[1] = if (ctx.cursor_keys) 'O' else '[';
                 self.seq[2] = final;
@@ -835,10 +835,10 @@ pub const State = struct {
     /// `ESC <byte>` 두 바이트. 터미널에서 "Meta+그 글자"를 뜻하는 오래된
     /// 관례이고, readline·zle·fish가 전부 기본값으로 안다.
     ///
-    /// 이 ESC는 `Ctrl+[`가 만드는 것과 **완전히 같은 바이트**다. 그래서
+    /// 이 ESC는 `Ctrl+[`가 만드는 것과 완전히 같은 바이트다. 그래서
     /// 받는 쪽은 ESC 다음 바이트를 잠깐 기다려서 "Meta 조합"인지 "혼자 온
     /// ESC"인지 가른다(readline의 keyseq-timeout). 우리 쪽에서 지켜야 할
-    /// 것은 **두 바이트를 한 번의 write로 보내는 것**뿐인데, readKeys가
+    /// 것은 두 바이트를 한 번의 write로 보내는 것뿐인데, readKeys가
     /// out에 모아 main.zig가 한 번 pty.write하는 지금 구조가 이미 그렇다.
     fn escPrefixed(self: *State, byte: u8) []const u8 {
         self.seq[0] = ESC;
@@ -848,7 +848,7 @@ pub const State = struct {
 
     /// 조합 중인 글자를 확정해 `commit_buf`에 담고 버퍼를 비운다.
     ///
-    /// **`codepoint()`가 null인 경우는 "조합 중이 아니다"뿐이다.** 그릴 수
+    /// `codepoint()`가 null인 경우는 "조합 중이 아니다"뿐이다. 그릴 수
     /// 없는 상태를 오토마타가 애초에 안 만들기 때문이고(`hangul_test`의
     /// 검사 7이 3-순열 107,811단계에서 0번을 봤다), 그래서 여기서 null을
     /// "버릴 것이 없다"로 읽어도 안전하다.
@@ -857,11 +857,11 @@ pub const State = struct {
         self.hangul_buf = .{};
     }
 
-    /// 한/영을 뒤집는다. **조합 중이던 것을 먼저 확정한다** — 안 하면 꺼진 채로
+    /// 한/영을 뒤집는다. 조합 중이던 것을 먼저 확정한다 — 안 하면 꺼진 채로
     /// 조합이 남아 화면에 글자가 붙박인다(`hangul_buf`가 비지 않았으면
     /// `hangul_on`이 참이라는 불변식, HI-M1 검사 31).
     ///
-    /// **전환 키 넷이 전부 이 함수를 지난다.** 그중 둘(CapsLock·왼쪽 Ctrl)은
+    /// 전환 키 넷이 전부 이 함수를 지난다. 그중 둘(CapsLock·왼쪽 Ctrl)은
     /// `hangulLayer`가 아니라 `handleKey`의 modifier switch에서 들어오는데,
     /// 확정을 잊으면 그 둘만 불변식을 깬다 — 한 자리로 모아 두면 그럴 수 없다.
     fn toggleHangul(self: *State) Action {
@@ -881,16 +881,16 @@ pub const State = struct {
         self.appendCommit(utf8[0..n]);
     }
 
-    /// 확정 통로의 **뒤에** 바이트를 잇는다(SH-M1).
+    /// 확정 통로의 뒤에 바이트를 잇는다(SH-M1).
     ///
-    /// **덮어쓰지 않는 것이 SH design 결정 6이다.** 한 키가 음절과 기호를
+    /// 덮어쓰지 않는 것이 SH design 결정 6이다. 한 키가 음절과 기호를
     /// 함께 확정시키는 경로가 있고(세벌식 기호 되돌림), 검색 프롬프트에서는
     /// 그 둘의 목적지가 같다.
     ///
-    /// 넘치면 **뒤를 버린다.** 여덟 바이트는 음절 넷과 기호 넷이라 닿을 수
+    /// 넘치면 뒤를 버린다. 여덟 바이트는 음절 넷과 기호 넷이라 닿을 수
     /// 없는 경계지만, 자르는 자리를 정해 두지 않으면 그 자리가 없다.
     ///
-    /// **비우는 자리는 여전히 `takeCommit` 하나다** — 한 키가 끝날 때마다
+    /// 비우는 자리는 여전히 `takeCommit` 하나다 — 한 키가 끝날 때마다
     /// `readKeys`가 비우므로 키를 건너 쌓이지 않는다.
     fn appendCommit(self: *State, bytes: []const u8) void {
         for (bytes) |b| {
@@ -902,7 +902,7 @@ pub const State = struct {
 
     /// 방금 확정된 글자를 가져간다. 없으면 빈 슬라이스다.
     ///
-    /// **`handleKey` 직후에, 그 키가 만든 바이트보다 먼저 부른다.** 순서가
+    /// `handleKey` 직후에, 그 키가 만든 바이트보다 먼저 부른다. 순서가
     /// 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이 실행되고
     /// 글자는 다음 줄에 남는다. 그 순서를 지키는 자리는 `readKeys` 하나이며
     /// `input_test`가 같은 순서로 검사한다.
@@ -914,7 +914,7 @@ pub const State = struct {
 
     /// 지금 조합 중인 글자. 없으면 null.
     ///
-    /// **`main.zig`가 이것을 `vt.zig`에 넘긴다.** `input.zig`는 `vt.zig`를
+    /// `main.zig`가 이것을 `vt.zig`에 넘긴다. `input.zig`는 `vt.zig`를
     /// import하지 않으므로(IP design 결정 6) 직접 그릴 길이 없고, 그릴 수
     /// 있는 쪽은 조합을 모른다. 둘을 잇는 것이 `main.zig`이며 `find_open`이
     /// 이미 같은 모양이다.
@@ -923,29 +923,29 @@ pub const State = struct {
     }
 
     /// 1.7번 단계 — 한글(HI design 결정 2·5·6).
-    /// **copy 표 뒤·`chord()` 앞이다.**
+    /// copy 표 뒤·`chord()` 앞이다.
     ///
-    /// **왜 copy 표 뒤인가.** copy mode와 검색 프롬프트 안에서는 키가
+    /// 왜 copy 표 뒤인가. copy mode와 검색 프롬프트 안에서는 키가
     /// 명령이거나 검색어의 글자여야 한다. 한글을 그보다 앞에 두면 모드 안에서
     /// 친 `j`가 아래로 가는 대신 ㅓ가 된다 — CN-M1이 `n`에서 겪은 것과 같은
-    /// 종류의 갈림이고 답도 같다: **먼저 오는 분기가 이긴다.**
+    /// 종류의 갈림이고 답도 같다: 먼저 오는 분기가 이긴다.
     ///
-    /// **왜 `chord()` 앞인가.** 확정을 유발하는 것의 목록(결정 6)에
+    /// 왜 `chord()` 앞인가. 확정을 유발하는 것의 목록(결정 6)에
     /// Ctrl·Alt·Meta 조합과 copy mode 진입이 들어 있는데, `chord()`가 먼저
-    /// 돌면 그 키들이 여기 닿지 않는다. 여기서 확정만 해 두고 **null을 돌려
-    /// 흘려보내면** 그 키의 원래 뜻은 한 글자도 안 바뀐다.
+    /// 돌면 그 키들이 여기 닿지 않는다. 여기서 확정만 해 두고 null을 돌려
+    /// 흘려보내면 그 키의 원래 뜻은 한 글자도 안 바뀐다.
     ///
     /// null은 "한글 층이 이 키에 관심이 없다"는 뜻이고, 그때 키는 평소의
     /// 길(`chord` → `specialKey` → `keymap`)을 그대로 간다.
     fn hangulLayer(self: *State, code: u16) ?Action {
-        // 한/영은 Shift+Space다(HI-M1). **한글이 꺼져 있을 때도 봐야 하므로**
+        // 한/영은 Shift+Space다(HI-M1). 한글이 꺼져 있을 때도 봐야 하므로
         // 아래 `hangul_on` 검사보다 앞이다.
         //
         // Ctrl·Alt·Meta를 함께 보는 이유는 Cmd+Shift+Space 같은 조합이
         // 한/영을 뜻하지 않기 때문이다. 그 조합들은 아래 갈래로 내려가
         // 확정만 하고 흘러간다.
         //
-        // **HI-M3부터 설정이 이 갈래를 끌 수 있다**(결정 7). 꺼져 있으면
+        // HI-M3부터 설정이 이 갈래를 끌 수 있다(결정 7). 꺼져 있으면
         // Shift+Space는 그냥 공백이고, 그것이 HI-M1이 "대가"로 적어 둔 것
         // (`HELLO WORLD`를 칠 때 손버릇으로 한/영이 바뀐다)을 없애는 길이다.
         if (self.toggles.shift_space and
@@ -954,30 +954,30 @@ pub const State = struct {
         {
             return self.toggleHangul();
         }
-        // 실기의 한/영 키(evdev 122). **게이트가 이 키를 못 보낸다** — QEMU가
+        // 실기의 한/영 키(evdev 122). 게이트가 이 키를 못 보낸다 — QEMU가
         // `sendkey lang1`을 이름만 받고 조용히 버린다(HI-M0 실측 1). 그래서
         // 이 갈래를 덮는 것은 `input_test`의 호스트 검사뿐이고, 그 사실을
         // 여기 적어 둔다(`project_gate_chain_composition`).
         //
-        // **`hangul_on`을 안 본다** — Shift+Space와 같은 이유로 꺼져 있을 때도
+        // `hangul_on`을 안 본다 — Shift+Space와 같은 이유로 꺼져 있을 때도
         // 켤 수 있어야 한다.
         //
         // 이 갈래가 꺼져 있으면 122는 `qwerty_keymap.len`보다 큰 코드라 아래
-        // "표 밖의 키" 갈래로 가서 **확정만 하고 흘러간다** — 그것이 맞는
+        // "표 밖의 키" 갈래로 가서 확정만 하고 흘러간다 — 그것이 맞는
         // 동작이다.
         if (self.toggles.hangul_key and code == c.KEY_HANGEUL) {
             return self.toggleHangul();
         }
         if (!self.hangul_on) return null;
 
-        // Ctrl·Alt·Meta 조합은 한글이 아니다(결정 6). **확정만 하고
-        // 흘려보낸다** — Cmd+Shift+C(copy mode 진입)도 이 갈래로 온다.
+        // Ctrl·Alt·Meta 조합은 한글이 아니다(결정 6). 확정만 하고
+        // 흘려보낸다 — Cmd+Shift+C(copy mode 진입)도 이 갈래로 온다.
         if (self.ctrled() or self.alted() or self.metaed()) {
             self.commitHangul();
             return null;
         }
 
-        // Backspace는 **조합 중일 때만** 우리 것이다(결정 6). 조합 중이 아니면
+        // Backspace는 조합 중일 때만 우리 것이다(결정 6). 조합 중이 아니면
         // null을 돌려 평소처럼 DEL(0x7F)이 나가게 한다 — `erase`가 그 둘을
         // null로 갈라 준다.
         if (code == c.KEY_BACKSPACE) {
@@ -991,7 +991,7 @@ pub const State = struct {
             self.commitHangul();
             return null;
         }
-        // **언제나 쿼티다**(HI design 결정 13). 드보락을 켜도 한글 배열은 안
+        // 언제나 쿼티다(HI design 결정 13). 드보락을 켜도 한글 배열은 안
         // 흔들린다 — 한글 자판이 쓰는 것은 문자가 아니라 물리 키 위치이고,
         // 그 위치를 부르는 이름이 쿼티 배치의 문자다. 그래서 여기만
         // `latinChar`를 안 쓴다.
@@ -1005,10 +1005,10 @@ pub const State = struct {
         // 자판이 되돌려 주는 기호(HI-M2). 세벌식은 숫자 열이 자모라 이것이
         // 없으면 한글 상태에서 숫자를 못 친다.
         //
-        // **조합 중이던 음절과 이 기호가 둘 다 나가야 한다.** `commit_buf`는
+        // 조합 중이던 음절과 이 기호가 둘 다 나가야 한다. `commit_buf`는
         // 코드포인트 하나짜리라 둘을 못 담으므로 음절은 그쪽으로, 기호는
         // `.bytes`로 내보낸다 — `readKeys`가 `takeCommit()`을 그 키의 바이트보다
-        // **먼저** 비우므로 순서가 저절로 맞다(HI-M1 실측 2). 뒤집히면 셸에
+        // 먼저 비우므로 순서가 저절로 맞다(HI-M1 실측 2). 뒤집히면 셸에
         // `1가`가 도착한다.
         if (self.hangul_layout.nonSyllable(ch)) |cp| {
             self.commitHangul();
@@ -1016,8 +1016,8 @@ pub const State = struct {
             return .{ .bytes = self.seq[0..n] };
         }
         // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
-        // 자판이 셋 다 null을 준다. **확정한 글자가 그 키의 바이트보다
-        // 먼저 나가는 것을 보장하는 것은 `readKeys`다.**
+        // 자판이 셋 다 null을 준다. 확정한 글자가 그 키의 바이트보다
+        // 먼저 나가는 것을 보장하는 것은 `readKeys`다.
         const cand = self.hangul_layout.lookup(ch) orelse {
             self.commitHangul();
             return null;
@@ -1028,10 +1028,10 @@ pub const State = struct {
         return .redraw;
     }
 
-    /// design doc 결정 2의 **2번 단계 — 조합 dispatch**. TF design doc이
+    /// design doc 결정 2의 2번 단계 — 조합 dispatch. TF design doc이
     /// "여긴 나중에"라고 비워두고 두 서브프로젝트를 건너온 자리다.
     ///
-    /// 여기가 3번(기본 번역)보다 **먼저** 불려야 한다. 뒤에 두면 Cmd+←가
+    /// 여기가 3번(기본 번역)보다 먼저 불려야 한다. 뒤에 두면 Cmd+←가
     /// 여기 닿기 전에 특수키 조회에서 그냥 ESC [ D로 번역돼 새어 나간다.
     /// "가로챌 것을 먼저 가로채고, 남은 것만 평소대로"가 규칙이다.
     ///
@@ -1039,12 +1039,12 @@ pub const State = struct {
     /// 없었던 것처럼 흘러간다. Ctrl이 마스크 대상이 아닌 문자를 다루는
     /// 방식(Ctrl+1 → '1')과 같은 규칙이다.
     ///
-    /// Meta를 먼저 보는 것은 **둘 다 눌렸을 때 Cmd가 이긴다**는 뜻이고,
+    /// Meta를 먼저 보는 것은 둘 다 눌렸을 때 Cmd가 이긴다는 뜻이고,
     /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
     fn chord(self: *State, code: u16) ?Action {
         if (self.metaed()) {
-            // copy mode 진입(CM-M0). **Meta 분기 안에서 Shift를 한 번 더 보는
-            // 예외가 여기 하나뿐이어야 한다**(design 위험 2). iTerm2의 copy
+            // copy mode 진입(CM-M0). Meta 분기 안에서 Shift를 한 번 더 보는
+            // 예외가 여기 하나뿐이어야 한다(design 위험 2). iTerm2의 copy
             // mode 진입키와 같은 자리를 고른 대가다.
             //
             // 모드를 여기서 바로 세우고 나가는 이유는, 이 뒤에 오는 키들이
@@ -1076,9 +1076,9 @@ pub const State = struct {
                 else => null,
             };
         }
-        // Shift 계열 — 스크롤(TR design 결정 12). **바이트가 아니라 동작이다.**
+        // Shift 계열 — 스크롤(TR design 결정 12). 바이트가 아니라 동작이다.
         //
-        // Cmd·Option보다 **뒤에** 있는 것에 뜻이 있다. 위 두 분기는 조합이
+        // Cmd·Option보다 뒤에 있는 것에 뜻이 있다. 위 두 분기는 조합이
         // 표에 없어도 null을 돌려주며 chord 전체를 끝내므로, Cmd+Shift+PageUp은
         // 스크롤하지 않고 맨 PageUp이 된다. 임의의 선택이지만 결정적이고,
         // Cmd는 project_copy_mode가 예약한 자리라 여기서 뜻을 더하지 않는다.
@@ -1105,11 +1105,11 @@ pub const State = struct {
     /// "PTY로 보내지 않고 우리가 처리한다"를 표현할 방법이 없었다
     /// (design 결정 11).
     ///
-    /// **HI-M3부터 시각도 받는다.** 이 서브프로젝트에서 유일하게 이 함수의
+    /// HI-M3부터 시각도 받는다. 이 서브프로젝트에서 유일하게 이 함수의
     /// 성질 자체를 바꾸는 변경이고(순수 함수 → 시각을 보는 함수), 그래서
     /// 마지막 milestone에 뒀다(design 결정 8).
     ///
-    /// 값은 `ev.time`이 준 마이크로초다. **`Context`에 안 넣은 이유**는 그것이
+    /// 값은 `ev.time`이 준 마이크로초다. `Context`에 안 넣은 이유는 그것이
     /// `readKeys` 호출 하나에 한 번 조립되는 값인데 시각은 이벤트마다 다르기
     /// 때문이다 — `swap_alt_meta`처럼 "부팅 내내 상수"인 값과 같은 자리에
     /// 두면 읽는 사람이 속는다.
@@ -1120,13 +1120,13 @@ pub const State = struct {
         time_us: u64,
         ctx: Context,
     ) Action {
-        // 0번 단계 — 키보드 보정. modifier를 **기록하기 전에** 맞바꾼다.
+        // 0번 단계 — 키보드 보정. modifier를 기록하기 전에 맞바꾼다.
         // 인자 이름을 raw_code로 바꾼 것은 실수를 막기 위해서다: 아래에서
         // 실수로 raw_code를 다시 쓰면 보정이 빠진 코드가 흘러가는데, 이름이
         // 다르면 그 실수가 눈에 띈다.
         const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
-        // 0.5번 단계 — tap 소비 표시(결정 8의 2번). **아래 switch보다 앞이어야
-        // 하는 이유는 markTapConsumed의 주석에 있다.**
+        // 0.5번 단계 — tap 소비 표시(결정 8의 2번). 아래 switch보다 앞이어야
+        // 하는 이유는 markTapConsumed의 주석에 있다.
         //
         // 뗌(0)은 소비가 아니다. Ctrl을 누르기 전부터 눌려 있던 키를 떼는 것일
         // 수 있고, 그것은 이 Ctrl을 조합 키로 쓴 것이 아니다.
@@ -1143,12 +1143,12 @@ pub const State = struct {
             },
             c.KEY_LEFTCTRL => {
                 self.ctrl_left = value != 0;
-                // 짧게 눌렀다 떼면 한/영이다(결정 8). **modifier 상태를 갱신한
-                // 뒤에 판단한다** — 순서가 뒤집히면 `ctrl_left`가 참인 채로
+                // 짧게 눌렀다 떼면 한/영이다(결정 8). modifier 상태를 갱신한
+                // 뒤에 판단한다 — 순서가 뒤집히면 `ctrl_left`가 참인 채로
                 // `toggleHangul`이 불려서 `hangulLayer`의 Ctrl 갈래와 뜻이
                 // 어긋난다.
                 //
-                // **뗄 때 판단하므로 지연이 어디에도 없다.** Ctrl을 modifier로
+                // 뗄 때 판단하므로 지연이 어디에도 없다. Ctrl을 modifier로
                 // 쓸 때는 다음 키가 이미 `consumed`를 켰다.
                 //
                 // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다 — 그
@@ -1193,21 +1193,21 @@ pub const State = struct {
                         return self.toggleHangul();
                     // 짧은 tap이 아니면 원래 뜻이다(결정 9).
                     //
-                    // **누를 때가 아니라 뗄 때 뒤집는 것이 진짜 CapsLock과
-                    // 다른 유일한 자리다.** 누를 때 뒤집으면 짧게 눌렀다 뗐을
+                    // 누를 때가 아니라 뗄 때 뒤집는 것이 진짜 CapsLock과
+                    // 다른 유일한 자리다. 누를 때 뒤집으면 짧게 눌렀다 뗐을
                     // 때 대문자 잠금이 한 번 켜졌다 꺼지므로 tap을 만들 수가
                     // 없다.
                     //
-                    // **`capslock_tap`이 꺼져 있으면 `tapped`가 무엇이든 여기
-                    // 온다.** 그때 CapsLock은 그냥 CapsLock이고, 갈래를 나누지
+                    // `capslock_tap`이 꺼져 있으면 `tapped`가 무엇이든 여기
+                    // 온다. 그때 CapsLock은 그냥 CapsLock이고, 갈래를 나누지
                     // 않으므로 "언제나 뗄 때"라는 규칙이 하나로 선다.
                     self.caps_lock = !self.caps_lock;
-                    // **`nothing`이 아니라 `.redraw`다**(IS design 결정 8).
+                    // `nothing`이 아니라 `.redraw`다(IS design 결정 8).
                     // 상태 줄의 `CAPS` 칸이 이 값을 보여 주므로, 여기서
                     // 안 켜면 `main.zig`의 `needs_redraw`가 안 켜지고
-                    // **다음 키를 칠 때까지 안 밝아진다.**
+                    // 다음 키를 칠 때까지 안 밝아진다.
                     //
-                    // **IS-M1 전까지는 이것이 버그가 아니었다** — 대문자
+                    // IS-M1 전까지는 이것이 버그가 아니었다 — 대문자
                     // 잠금은 다음에 치는 글자에서만 드러나고 그 글자가
                     // 어차피 다시 그렸다. 화면에 표시가 생기는 순간
                     // 버그가 됐다.
@@ -1222,26 +1222,26 @@ pub const State = struct {
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return nothing;
 
-        // 1.35번 단계 — 붙여넣기(FP design 결정 1·2). **모드 분기 셋보다
-        // 앞이고, 그 자리가 이 단계의 전부다.**
+        // 1.35번 단계 — 붙여넣기(FP design 결정 1·2). 모드 분기 셋보다
+        // 앞이고, 그 자리가 이 단계의 전부다.
         //
-        // `Cmd+V`가 "붙여넣기다"라고 적힌 자리가 여기 **하나**다. 예전에는
+        // `Cmd+V`가 "붙여넣기다"라고 적힌 자리가 여기 하나다. 예전에는
         // 둘이었다 — copy 표 안(모드 안)과 `chord()`의 Meta 분기(모드 밖).
-        // 그리고 find 분기가 그 둘보다 앞이라 **프롬프트에서는 `v`가 글자로
-        // 새고 있었다.** 셋째 자리를 더하는 대신 하나로 모은다. 넷째 모드가
+        // 그리고 find 분기가 그 둘보다 앞이라 프롬프트에서는 `v`가 글자로
+        // 새고 있었다. 셋째 자리를 더하는 대신 하나로 모은다. 넷째 모드가
         // 생길 때 빼먹는 것이 다음 사고이기 때문이고, IS-M1이 `Action.caps`를
         // 안 만든 이유와 같은 종류다.
         //
-        // **목적지는 여기서 안 정한다.** 무엇을 보낼지가 클립보드에 달려
+        // 목적지는 여기서 안 정한다. 무엇을 보낼지가 클립보드에 달려
         // 있고 클립보드는 `vt.zig`가 든다 — `input.zig`는 그 파일을 import하지
         // 않는다(IP design 결정 6). `main.zig`가 프롬프트가 열렸는지로 가른다.
         //
-        // **`commitHangul()`이 필요한 이유는 이 자리가 `hangulLayer`보다
-        // 앞이기 때문이다.** 조합 중에 `Cmd+V`를 누르면 음절이 먼저 확정돼야
+        // `commitHangul()`이 필요한 이유는 이 자리가 `hangulLayer`보다
+        // 앞이기 때문이다. 조합 중에 `Cmd+V`를 누르면 음절이 먼저 확정돼야
         // 하는데, 그 일을 해 주던 층을 지나치게 됐다. `Enter`가 아래 find
         // 분기에서 이미 같은 한 줄을 쓴다.
         //
-        // **그 뒤는 저절로 맞는다.** `readKeys`의 `takeCommit()`이 action과
+        // 그 뒤는 저절로 맞는다. `readKeys`의 `takeCommit()`이 action과
         // 무관하게 돌면서 `to_needle`로 목적지를 가르므로, 셸이면 PTY로 find
         // 모드면 needle로 간다 — 새 통로가 안 는다.
         if (self.metaed() and code == c.KEY_V) {
@@ -1249,27 +1249,27 @@ pub const State = struct {
             return .{ .copy = .paste };
         }
 
-        // 1.4번 단계 — 검색 프롬프트(design 결정 7·9). **copy 표보다 앞이다.**
+        // 1.4번 단계 — 검색 프롬프트(design 결정 7·9). copy 표보다 앞이다.
         //
         // 이 분기가 copy 표 앞에 있어야 하는 이유가 이 milestone의 핵심이다.
-        // 프롬프트가 열려 있을 때 `n`은 **명령이 아니라 글자**여야 하는데, copy
+        // 프롬프트가 열려 있을 때 `n`은 명령이 아니라 글자여야 하는데, copy
         // 표가 먼저 보면 `n`을 `.find_next`로 삼켜서 "needle에 n을 못 친다"가
         // 된다. 순서 하나가 그 사고를 막는다.
         //
-        // **Ctrl 조합은 여기서 평범한 글자가 된다.** 프롬프트에 제어 문자를
+        // Ctrl 조합은 여기서 평범한 글자가 된다. 프롬프트에 제어 문자를
         // 넣을 이유가 없고, chord()까지 흘려보내면 Cmd+V가 프롬프트 안에서
         // 붙여넣기로 동작하게 된다 — 그것은 검색 기록과 같은 종류의 기능이라
         // design이 비워 둔 자리다.
         if (self.mode == .find) {
-            // **Esc와 Enter를 한글 층보다 먼저 가로챈다**(SH design 결정 3).
+            // Esc와 Enter를 한글 층보다 먼저 가로챈다(SH design 결정 3).
             //
             // 둘 다 `hangulLayer`에 그냥 넘기면 뜻이 어긋난다. Esc는 거기서
-            // **확정**되는데(자모가 아닌 키의 갈래) 우리는 **버려야** 하고,
+            // 확정되는데(자모가 아닌 키의 갈래) 우리는 버려야 하고,
             // Enter는 확정된 뒤 null이 돌아와 아래 ASCII 갈래로 흘러
             // `find_char = '\r'`이 된다.
             switch (code) {
                 c.KEY_ESC => {
-                    // 조합 중이면 그 겹만 벗긴다. **확정하지 않는다** —
+                    // 조합 중이면 그 겹만 벗긴다. 확정하지 않는다 —
                     // 확정하면 Esc가 취소가 아니라 입력이 된다.
                     if (self.hangul_buf.codepoint() != null) {
                         self.hangul_buf = .{};
@@ -1280,21 +1280,21 @@ pub const State = struct {
                 },
                 c.KEY_ENTER => {
                     // 확정하고 제출한다(폭포). 확정분은 `commit_buf`를 타고
-                    // `readKeys`가 needle로 옮기는데, **그 판단은 여기서
-                    // 모드를 바꾸기 전의 값으로 해야 한다**(SH design 결정 5).
+                    // `readKeys`가 needle로 옮기는데, 그 판단은 여기서
+                    // 모드를 바꾸기 전의 값으로 해야 한다(SH design 결정 5).
                     self.commitHangul();
                     self.mode = .copy;
                     return .{ .copy = .find_submit };
                 },
                 else => {},
             }
-            // **한글 층을 부른다. 다시 적지 않는다**(SH design 결정 4).
+            // 한글 층을 부른다. 다시 적지 않는다(SH design 결정 4).
             // 전환 키 넷 · Ctrl 조합 · 표 밖의 키 · 기호 되돌림 · Backspace가
             // 전부 그 함수 한 벌에 있고, 여기서 다시 적으면 두 벌이 된다.
             if (self.hangulLayer(code)) |act| {
                 switch (act) {
                     // 기호 되돌림. 셸이었다면 이 바이트가 PTY로 나갔겠지만
-                    // 프롬프트에서는 needle로 가야 한다 — **확정된 음절 뒤에**
+                    // 프롬프트에서는 needle로 가야 한다 — 확정된 음절 뒤에
                     // 이어 붙이고 화면만 다시 그린다(SH design 결정 6).
                     .bytes => |b| {
                         self.appendCommit(b);
@@ -1304,9 +1304,9 @@ pub const State = struct {
                     else => return act,
                 }
             }
-            // 한글 층이 관심 없는 키다. **ASCII 경로가 한 글자도 안 바뀐다.**
+            // 한글 층이 관심 없는 키다. ASCII 경로가 한 글자도 안 바뀐다.
             //
-            // **`Backspace`가 여기 있는 것에 뜻이 있다.** 조합 중이면
+            // `Backspace`가 여기 있는 것에 뜻이 있다. 조합 중이면
             // `hangulLayer`가 자모를 하나 빼고 `.redraw`를 돌려주므로 여기
             // 안 온다 — 갈래를 가르는 조건이 이 분기에 안 생기고
             // `hangul.erase`의 null 하나가 그 일을 한다.
@@ -1321,12 +1321,12 @@ pub const State = struct {
             }
         }
 
-        // 1.5번 단계 — copy mode(design 결정 3). **아는 키만 명령이 되고
-        // 나머지는 전부 삼킨다.** "모르는 키는 흘려보낸다"로 하면 모드 안에서
+        // 1.5번 단계 — copy mode(design 결정 3). 아는 키만 명령이 되고
+        // 나머지는 전부 삼킨다. "모르는 키는 흘려보낸다"로 하면 모드 안에서
         // 친 글자가 셸에 도착하는 사고가 조용히 나고, 그것이 이 milestone의
         // 음성 검사 대상이다.
         //
-        // chord()보다 **앞**이라 모드 안에서는 Cmd 조합도 전부 삼켜진다.
+        // chord()보다 앞이라 모드 안에서는 Cmd 조합도 전부 삼켜진다.
         // CM-M1의 `Cmd+C`와 CM-M2의 `Cmd+V`는 chord()가 아니라 이 표에
         // 들어와야 한다.
         //
@@ -1342,14 +1342,14 @@ pub const State = struct {
                 c.KEY_J, c.KEY_DOWN => return .{ .copy = .down },
                 c.KEY_K, c.KEY_UP => return .{ .copy = .up },
                 c.KEY_L, c.KEY_RIGHT => return .{ .copy = .right },
-                // 단어 이동(CN-M0). **방향키 짝이 없다** — evdev에는 "다음
+                // 단어 이동(CN-M0). 방향키 짝이 없다 — evdev에는 "다음
                 // 단어" 키가 없고, macOS의 Option+←/→가 그 뜻이지만 그 조합은
                 // chord()의 표에 이미 다른 뜻으로 있다(IP 결정 8). 모드 안에서
                 // 그것을 가로채면 두 표가 같은 키에 다른 뜻을 갖게 된다.
                 c.KEY_W => return .{ .copy = .word_next },
                 c.KEY_B => return .{ .copy = .word_prev },
-                // 검색 프롬프트를 연다(CN-M1). **Shift+/ 는 `?`이고 우리는
-                // 아래로 찾지 않으므로**(design 결정 4) 삼킨다 — 여기서
+                // 검색 프롬프트를 연다(CN-M1). Shift+/ 는 `?`이고 우리는
+                // 아래로 찾지 않으므로(design 결정 4) 삼킨다 — 여기서
                 // `?`도 받으면 방향 상태가 하나 늘고 `n`/`N`의 뜻이 그것에
                 // 따라 뒤집힌다.
                 c.KEY_SLASH => {
@@ -1357,17 +1357,17 @@ pub const State = struct {
                     self.mode = .find;
                     return .{ .copy = .find_open };
                 },
-                // `n`/`N`(CN-M1). **Shift 하나로 방향이 갈린다** — `w`/`b`가
+                // `n`/`N`(CN-M1). Shift 하나로 방향이 갈린다 — `w`/`b`가
                 // Shift를 안 가르는 것과 반대이고, 그것은 vim의 `W`를 안
                 // 만들었기 때문이다(design 결정 2). 여기서는 대문자 자체가
                 // 뜻을 갖는다.
                 //
-                // **프롬프트가 열려 있으면 이 줄에 닿지 않는다.** find 분기가
+                // 프롬프트가 열려 있으면 이 줄에 닿지 않는다. find 분기가
                 // copy 표보다 앞이라 `n`이 글자가 된다 — 순서가 그것을 정한다.
                 c.KEY_N => return .{
                     .copy = if (self.shifted()) .find_prev else .find_next,
                 },
-                // `v`가 두 갈래다. **셋이었는데 하나가 위로 올라갔다** —
+                // `v`가 두 갈래다. 셋이었는데 하나가 위로 올라갔다 —
                 // `Cmd+V`는 1.35번 단계가 모드를 가리지 않고 먼저 가로챈다
                 // (FP design 결정 1). 그래서 여기 오는 `v`에는 Meta가 없다.
                 //
@@ -1377,14 +1377,14 @@ pub const State = struct {
                 c.KEY_V => return .{
                     .copy = if (self.shifted()) .select_line else .select_char,
                 },
-                // yank는 **모드를 닫는다.** 여기서 mode를 되돌리지 않으면
+                // yank는 모드를 닫는다. 여기서 mode를 되돌리지 않으면
                 // 복사는 했는데 모드에 갇혀서 그다음 키가 전부 삼켜진다 —
                 // 게이트의 검사 9가 정확히 그것을 본다.
                 c.KEY_Y => {
                     self.mode = .normal;
                     return .{ .copy = .yank };
                 },
-                // **Cmd+C가 chord()가 아니라 여기 있는 이유**(design 결정 4).
+                // Cmd+C가 chord()가 아니라 여기 있는 이유(design 결정 4).
                 // copy 분기가 chord()보다 앞이라 모드 안에서는 Cmd 조합이
                 // chord()에 아예 닿지 않는다. CM-M2의 Cmd+V도 이 자리에 온다.
                 //
@@ -1398,21 +1398,21 @@ pub const State = struct {
             }
         }
 
-        // 1.7번 단계 — 한글(HI-M1). **copy 표 뒤·chord() 앞이다.**
+        // 1.7번 단계 — 한글(HI-M1). copy 표 뒤·chord() 앞이다.
         // 그 자리를 고른 이유는 hangulLayer의 주석에 있다.
         if (self.hangulLayer(code)) |action| return action;
 
-        // 2번 단계 — 조합 dispatch. 특수키 조회보다 **먼저**다.
+        // 2번 단계 — 조합 dispatch. 특수키 조회보다 먼저다.
         // 뒤에 두면 Cmd+←가 여기 닿기 전에 ESC [ D로 번역돼 새어 나가고,
         // TR-M2부터는 Shift+PageUp이 ESC [ 5 ~ 로 번역돼 새어 나간다.
         if (self.chord(code)) |action| return action;
 
-        // 특수키를 keymap 조회보다 **먼저** 본다. 방향키(102~111)는 어차피
+        // 특수키를 keymap 조회보다 먼저 본다. 방향키(102~111)는 어차피
         // keymap 배열 밖이라 순서를 바꿔도 결과는 같지만, design doc 결정 2가
         // 정한 "가로챌 것을 먼저 가로채고 남은 것만 평소대로"를 코드 순서로
         // 남겨둔다 — IP-M2의 조합 dispatch가 바로 위에 얹혔다.
         //
-        // `Ctrl+←`(`ESC [ 1 ; 5 D`)는 **IP-M2도 하지 않는다.** 결정 8의
+        // `Ctrl+←`(`ESC [ 1 ; 5 D`)는 IP-M2도 하지 않는다. 결정 8의
         // 표에 있는 것은 Option과 Cmd 일곱 줄뿐이고, Ctrl+방향키를 누를
         // 이유가 있는 앱이 아직 없다. 지금도 Ctrl/Shift를 무시하고 맨
         // 시퀀스를 보낸다.
@@ -1440,7 +1440,7 @@ pub fn openDevice(path: [*:0]const u8) !c_int {
 
 /// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
 ///
-/// **커널이 찍은 시각이라 poll 루프가 늦어져도 안 흔들린다.** 한 번의 read가
+/// 커널이 찍은 시각이라 poll 루프가 늦어져도 안 흔들린다. 한 번의 read가
 /// 이벤트 64개를 담을 수 있는데, `Clock.now`를 여기서 부르면 그 64개가 전부
 /// 같은 시각을 갖게 되어 tap 판정이 통째로 무너진다.
 ///
@@ -1458,7 +1458,7 @@ fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
 /// 그 안의 EV_KEY 이벤트들을 처리한다. PTY로 보낼 바이트는 out에 채우고,
 /// 스크롤 동작은 State의 배열에 모아 둘 다 돌려준다.
 ///
-/// **루프 조건에서 `written < out.len`이 빠진 것이 TR-M2의 변경이다.**
+/// 루프 조건에서 `written < out.len`이 빠진 것이 TR-M2의 변경이다.
 /// 그전에는 바이트 버퍼가 차면 이벤트 처리 자체가 멈췄는데, 그러면 뒤따라온
 /// 스크롤 키가 통째로 사라진다. 바이트는 여전히 버려지지만(아래 break),
 /// 그것과 "동작을 못 본다"는 다른 종류의 손실이다.
@@ -1484,20 +1484,20 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         const ev: *align(1) const c.struct_input_event =
             @ptrCast(&raw[i * ev_size]);
         if (ev.@"type" != c.EV_KEY) continue;
-        // **이 값은 이미 손에 있었다**(HI-M0 실측 3). `readKeys`가
+        // 이 값은 이미 손에 있었다(HI-M0 실측 3). `readKeys`가
         // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
-        // **모드를 `handleKey` 앞에서 읽는다**(SH design 결정 5). `Enter`가
+        // 모드를 `handleKey` 앞에서 읽는다(SH design 결정 5). `Enter`가
         // `.find` → `.copy`로 모드를 바꾸므로, 뒤에서 읽으면 그 키가 확정시킨
-        // 마지막 음절이 needle이 아니라 **셸로 샌다.** 증상이 "검색어의
+        // 마지막 음절이 needle이 아니라 셸로 샌다. 증상이 "검색어의
         // 마지막 글자가 빠지고 셸에 이상한 글자가 남는다"라 원인에서 멀다.
         // `input_test`의 검사 56이 이 두 줄의 순서를 정면으로 본다.
         const to_needle = self.mode == .find;
         const action = self.handleKey(ev.code, ev.value, eventMicros(ev), ctx);
-        // **그 키의 결과보다 먼저** 확정된 글자를 옮긴다(HI design 결정 6).
+        // 그 키의 결과보다 먼저 확정된 글자를 옮긴다(HI design 결정 6).
         //
         // 순서가 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이
-        // 실행되고 글자는 다음 줄에 남는다. **이 두 줄의 자리가 곧
-        // `takeCommit`의 계약이다.**
+        // 실행되고 글자는 다음 줄에 남는다. 이 두 줄의 자리가 곧
+        // `takeCommit`의 계약이다.
         //
         // 확정이 일어났다는 것은 조합 버퍼가 비었다는 뜻이므로 화면도 다시
         // 그려야 한다 — 그래서 `redraw`를 여기서도 켠다.
@@ -1505,11 +1505,11 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         if (commit.len > 0) {
             redraw = true;
             if (to_needle) {
-                // 검색 프롬프트에서 확정된 글자다. **PTY로 한 바이트도 안
-                // 나간다** — 목적지가 needle이고, 그것을 아는 것은 `vt.zig`를
+                // 검색 프롬프트에서 확정된 글자다. PTY로 한 바이트도 안
+                // 나간다 — 목적지가 needle이고, 그것을 아는 것은 `vt.zig`를
                 // 볼 수 있는 `main.zig`다(IP design 결정 6).
                 //
-                // **copy 명령 목록에 싣는 것이 순서를 지킨다.** 같은 키가
+                // copy 명령 목록에 싣는 것이 순서를 지킨다. 같은 키가
                 // 만든 `.find_submit`이 아래 switch에서 뒤에 실리므로,
                 // 확정 → 제출의 순서가 저절로 맞는다.
                 if (copied < self.copies.len) {
@@ -1525,8 +1525,8 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         switch (action) {
             // 키 하나가 여러 바이트가 될 수 있으므로(IP-M1의 이스케이프
             // 시퀀스) 슬라이스를 통째로 옮긴다. handleKey가 돌려준 슬라이스는
-            // State.seq를 가리키고 다음 키가 그것을 덮어쓰므로, **여기서 즉시
-            // 복사하는 것이 계약이다.**
+            // State.seq를 가리키고 다음 키가 그것을 덮어쓰므로, 여기서 즉시
+            // 복사하는 것이 계약이다.
             .bytes => |bytes| for (bytes) |byte| {
                 if (written >= out.len) break;
                 out[written] = byte;

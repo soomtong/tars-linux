@@ -10,16 +10,16 @@ cd "$(dirname "$0")"
 #   → evdev가 KEY_LEFTMETA·KEY_LEFTSHIFT·KEY_C를 올린다
 #   → input.zig의 chord()가 그것을 .copy = .enter로 바꾸고 모드를 연다
 #   → main.zig가 vt.zig의 copy 커서를 만들고 copy> 줄을 찍는다
-#   → 모드 안에서 친 키가 **PTY로 나가지 않는다**
+#   → 모드 안에서 친 키가 PTY로 나가지 않는다
 #   → V로 잡은 줄이 화면에서 반전되고 y가 그 글자를 클립보드로 옮긴다
 #   → Cmd+V가 그 글자를 셸에 써 넣고, Enter를 치면 셸이 그것을 실행한다
-#   → **복사한 글자가 실행 결과로 화면에 다시 나타난다**
+#   → 복사한 글자가 실행 결과로 화면에 다시 나타난다
 #   → Esc로 나오면 다시 나간다
 #
-# **마지막 줄이 CM-M2가 더하는 값이다.** 클립보드에 글자가 담겼다는 것까지는
+# 마지막 줄이 CM-M2가 더하는 값이다. 클립보드에 글자가 담겼다는 것까지는
 # CM-M1이 로그로 증명했지만, 그것이 셸에 닿는다는 것은 왕복으로만 증명된다.
 #
-# **음성 검사가 이 체인의 값이다.** "모드에 들어갔다"만 보면 키를 삼키는지
+# 음성 검사가 이 체인의 값이다. "모드에 들어갔다"만 보면 키를 삼키는지
 # 아닌지는 아무것도 증명되지 않는다 — 그리고 키가 새는 것이 이 기능의 가장
 # 흔한 실패 방식이다.
 #
@@ -112,7 +112,7 @@ key_lines() {
   grep -ac 'terminal: key>' "$LOG" || true
 }
 
-# copy> 줄에서 값 하나를 뽑는다. **언제나 마지막 줄을 본다** — 마지막 줄이
+# copy> 줄에서 값 하나를 뽑는다. 언제나 마지막 줄을 본다 — 마지막 줄이
 # 곧 지금의 상태다.
 copy_value() {
   grep -a 'terminal: copy>' "$LOG" | tail -n 1 |
@@ -121,7 +121,7 @@ copy_value() {
 
 # 마지막 프레임만 잘라낸다.
 #
-# **누적으로 세면 안 되는 이유**가 있다. style> 줄은 매 프레임 다시 찍히므로,
+# 누적으로 세면 안 되는 이유가 있다. style> 줄은 매 프레임 다시 찍히므로,
 # 로그 전체에서 세면 "지금 화면이 어떻게 생겼는가"가 아니라 "부팅 이후 몇 번
 # 찍혔는가"가 된다. main.zig가 한 프레임을 screen> 로 시작하므로(dumpScreen이
 # render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧 마지막 프레임이다.
@@ -129,24 +129,24 @@ last_frame() {
   awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$LOG"
 }
 
-# 마지막 프레임에서 그 행의 **반전된 셀**이 몇 개인가.
+# 마지막 프레임에서 그 행의 반전된 셀이 몇 개인가.
 #
 # 기본 색은 fg=FFFFFF bg=102030이다(vt.zig의 init). 반전은 그 셀의 fg와 bg를
-# 맞바꾸므로 **반전된 셀의 표식은 `fg`가 기본 배경색(102030)이라는 것**이고,
+# 맞바꾸므로 반전된 셀의 표식은 `fg`가 기본 배경색(102030)이라는 것이고,
 # `bg`는 그 글자가 원래 갖고 있던 전경색이다. 선택도 커서도 "색 둘을
 # 맞바꾼다"는 같은 연산이므로 둘 다 이 모양으로 나타난다 — 그래서 선택
-# **전후**를 비교해야 뜻이 생긴다.
+# 전후를 비교해야 뜻이 생긴다.
 #
-# **`bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다.** 자세히는 `hangul/check.sh`의
+# `bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다. 자세히는 `hangul/check.sh`의
 # 같은 함수에 있다 — 그 표기는 "그 글자의 전경색이 기본값이다"까지 뜻했고,
-# 셸이 색을 쓰기 시작하면 그것이 더는 참이 아니다. **이 체인은 안 깨졌지만
-# 같은 가정 위에 서 있었다** — 깨지고 나서 고치면 원인이 두 개가 된다.
+# 셸이 색을 쓰기 시작하면 그것이 더는 참이 아니다. 이 체인은 안 깨졌지만
+# 같은 가정 위에 서 있었다 — 깨지고 나서 고치면 원인이 두 개가 된다.
 inverted_cells() {
   last_frame | grep -acE "terminal: style> $1,[0-9]+ fg=102030 bg=[0-9A-F]{6}" || true
 }
 
-# scroll> 줄에서 값 하나를 뽑는다. copy_value와 같은 모양이고, **언제나 마지막
-# 줄을 본다** — 그 줄이 곧 지금의 뷰포트 위치다.
+# scroll> 줄에서 값 하나를 뽑는다. copy_value와 같은 모양이고, 언제나 마지막
+# 줄을 본다 — 그 줄이 곧 지금의 뷰포트 위치다.
 scroll_field() {
   grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
     sed -E "s/.*$1=([0-9]+).*/\1/"
@@ -154,7 +154,7 @@ scroll_field() {
 
 # 마지막 프레임의 화면 줄에서 그 문자열이 몇 번 나오는가.
 #
-# **누적으로 세면 안 된다.** screen> 줄은 매 프레임 다시 찍히므로 로그 전체에서
+# 누적으로 세면 안 된다. screen> 줄은 매 프레임 다시 찍히므로 로그 전체에서
 # 세면 "부팅 이후 몇 번 찍혔는가"가 된다. last_frame이 그것을 막는다.
 #
 # grep -o는 겹치는 매치를 세지 않는다. 아래 검사들이 세는 두 문자열은 화면에서
@@ -205,7 +205,7 @@ sleep 3
 
 # ── 검사 1: 대조군 — 모드 밖에서는 키가 PTY로 나간다 ───────────────────
 #
-# **이 검사가 없으면 아래 음성 검사가 뜻을 잃는다.** 키가 원래부터 안 나가고
+# 이 검사가 없으면 아래 음성 검사가 뜻을 잃는다. 키가 원래부터 안 나가고
 # 있었다면 "모드가 삼켰다"를 증명하지 못한다.
 BEFORE_CONTROL="$(key_lines)"
 type_keys z
@@ -223,7 +223,7 @@ sleep 1
 # ── 모드에 들어간다 ─────────────────────────────────────────────────────
 #
 # QEMU monitor의 조합 키는 `-`로 잇는다. meta_l이 Cmd, shift가 Shift다.
-# **세 키 조합이 게스트까지 도착하는지가 design 위험 4다** — 실패하면 아래
+# 세 키 조합이 게스트까지 도착하는지가 design 위험 4다 — 실패하면 아래
 # 검사 2가 걸리고, 그때는 진입키를 두 키 조합으로 바꾼다.
 echo "=== entering copy mode (Cmd+Shift+C) ==="
 type_keys meta_l-shift-c
@@ -238,7 +238,7 @@ echo "entered copy mode: ${ENTER_LINE}"
 
 # ── 검사 3: 음성 검사 — 모드 안에서 친 키가 PTY로 안 샌다 ──────────────
 #
-# **이 체인에서 CM-M0이 더하는 가장 값진 검사다.** q w e r t는 copy mode의
+# 이 체인에서 CM-M0이 더하는 가장 값진 검사다. q w e r t는 copy mode의
 # 명령이 아니므로 전부 삼켜져야 하고, Enter도 마찬가지다.
 #
 # 두 겹으로 본다. (1) key> 줄이 안 늘어난다 = PTY로 바이트가 안 나갔다.
@@ -259,7 +259,7 @@ echo "copy mode swallowed every key (key> stayed at ${AFTER_LEAK})"
 
 # ── 검사 4: 커서가 움직이고, 화면 끝에서는 뷰포트가 대신 움직인다 ──────
 #
-# **커서는 셸 커서 자리에서 시작하고, 셸 프롬프트는 맨 아랫줄에 있다.**
+# 커서는 셸 커서 자리에서 시작하고, 셸 프롬프트는 맨 아랫줄에 있다.
 # 그래서 첫 이동으로 j를 쓸 수 없다 — 커서가 이미 max_y이고 뷰포트도 바닥
 # 이라 아무 데도 못 간다(2026-08-24에 이 게이트가 실제로 그렇게 걸렸다).
 # 먼저 k로 한 줄 올라가고, 그다음 j로 되돌아온다. 위아래 둘 다 정확한 값을
@@ -314,7 +314,7 @@ echo "the viewport followed the cursor up (offset ${SCROLL_BEFORE} -> ${SCROLL_A
 
 # ── 검사 6: Esc로 나오고, 나온 뒤에는 다시 PTY로 나간다 ────────────────
 #
-# **이 대조군이 없으면 "영영 못 나온다"도 통과한다.**
+# 이 대조군이 없으면 "영영 못 나온다"도 통과한다.
 echo "=== leaving copy mode (Esc) ==="
 type_keys esc
 sleep 2
@@ -337,7 +337,7 @@ echo "keys reach the PTY again after leaving copy mode (${BEFORE_AGAIN} -> ${AFT
 type_keys backspace
 sleep 1
 
-# 복사 대상을 `echo echo PASTED`의 **출력 줄**로 만드는 것이 요령이다
+# 복사 대상을 `echo echo PASTED`의 출력 줄로 만드는 것이 요령이다
 # (design 결정 7). sendkey로 따옴표를 치지 않아도 되고, 화면에 그 글자만
 # 있는 줄이 하나 생긴다. 대문자는 shift-를 붙인다.
 echo "=== typing 'echo echo PASTED' ==="
@@ -357,8 +357,8 @@ type_keys meta_l-shift-c
 sleep 2
 ROW_ENTER="$(copy_value row)"
 
-# 출력 줄은 프롬프트 바로 위다. **커서는 언제나 맨 아랫줄(프롬프트)에서
-# 시작하므로 위로 한 칸이 그 줄이다**(CM-M0 실측).
+# 출력 줄은 프롬프트 바로 위다. 커서는 언제나 맨 아랫줄(프롬프트)에서
+# 시작하므로 위로 한 칸이 그 줄이다(CM-M0 실측).
 type_keys k
 sleep 1
 ROW_TARGET="$(copy_value row)"
@@ -366,7 +366,7 @@ if [ "$ROW_TARGET" -ne "$((ROW_ENTER - 1))" ]; then
   report_failure "k moved the cursor from row ${ROW_ENTER} to ${ROW_TARGET} (expected $((ROW_ENTER - 1)))"
 fi
 
-# 대조군. **선택하기 전에 그 줄에서 반전된 셀은 copy 커서 하나뿐이다.**
+# 대조군. 선택하기 전에 그 줄에서 반전된 셀은 copy 커서 하나뿐이다.
 # 이것이 없으면 아래 검사가 "원래부터 색이 있었다"로도 통과한다.
 BEFORE_SEL="$(inverted_cells "$ROW_TARGET")"
 if [ "$BEFORE_SEL" -ne 1 ]; then
@@ -394,7 +394,7 @@ echo "=== yanking (y) ==="
 type_keys y
 sleep 2
 
-# len과 text를 **한 줄에서 함께** 본다. text만 보면 뒤에 뭐가 더 붙어도
+# len과 text를 한 줄에서 함께 본다. text만 보면 뒤에 뭐가 더 붙어도
 # 통과하고, len만 보면 다른 11자여도 통과한다.
 if ! grep -aq 'terminal: clip> len=11 text=echo PASTED' "$LOG"; then
   report_failure "y did not put 'echo PASTED' on the clipboard"
@@ -404,7 +404,7 @@ if ! grep -aq 'terminal: copy> yank' "$LOG"; then
 fi
 echo "the clipboard holds the output line"
 
-# 대조군. **이것이 없으면 "복사는 했는데 모드에 갇혀 있다"가 통과한다.**
+# 대조군. 이것이 없으면 "복사는 했는데 모드에 갇혀 있다"가 통과한다.
 # key> 줄은 PTY로 바이트가 나갈 때만 찍히므로, 그것이 늘어나는 것이 곧
 # "모드가 닫혔다"이다.
 BEFORE_YANK_EXIT="$(key_lines)"
@@ -421,16 +421,16 @@ sleep 1
 
 # ── 검사 10: 대조군 — 붙여넣기 전에는 그 줄이 어디에도 없다 ────────────
 #
-# **이것이 없으면 아래 검사 12가 "원래부터 화면에 있었다"로도 통과한다**
+# 이것이 없으면 아래 검사 12가 "원래부터 화면에 있었다"로도 통과한다
 # (design 결정 7의 시나리오 6). IP-M0이 sleep에서 데인 것과 같은 병이고,
 # project_gate_chain_composition이 "성공 경로가 하나뿐인가"를 물으라고 적어
 # 둔 자리다.
 #
-# screen> 은 행 사이를 ' | '로 구분하므로 '| PASTED |'는 **그 글자만 있는 줄**을
+# screen> 은 행 사이를 ' | '로 구분하므로 '| PASTED |'는 그 글자만 있는 줄을
 # 뜻한다. 검사 7이 만든 '| echo PASTED |'와는 겹치지 않는다 — 거기서 PASTED
 # 앞에 오는 것은 '| '가 아니라 'o '다.
 #
-# 마지막 프레임이 아니라 **로그 전체**를 보는 것이 일부러다. "지금 화면에
+# 마지막 프레임이 아니라 로그 전체를 보는 것이 일부러다. "지금 화면에
 # 없다"보다 "지금까지 한 번도 없었다"가 더 강한 대조군이다.
 if grep -aqF '| PASTED |' "$LOG"; then
   report_failure "a line containing only 'PASTED' was on the screen before any paste"
@@ -439,8 +439,8 @@ echo "control: nothing has printed 'PASTED' on a line of its own yet"
 
 # ── 검사 11: Cmd+V가 클립보드를 셸의 입력줄에 써 넣는다 ────────────────
 #
-# 붙여넣기는 화면에 **입력줄의 에코**로 나타난다. 그것을 'echo PASTED'의
-# 등장 횟수로 세는데, **절대값을 쓸 수 없다** — 붙여넣기 전에 이미 둘이다.
+# 붙여넣기는 화면에 입력줄의 에코로 나타난다. 그것을 'echo PASTED'의
+# 등장 횟수로 세는데, 절대값을 쓸 수 없다 — 붙여넣기 전에 이미 둘이다.
 # 검사 7이 친 명령줄 'echo echo PASTED'가 부분 문자열로 걸리고, 그 출력줄이
 # 하나 더 있기 때문이다. 그래서 전후 차이를 본다.
 #
@@ -463,7 +463,7 @@ echo "the clipboard reached the shell (echoes ${ECHOES_BEFORE} -> ${ECHOES_AFTER
 # ── 검사 12: 판정 — 왕복이 닫힌다 ──────────────────────────────────────
 #
 # 붙여넣은 것이 실행되면 'PASTED'만 있는 줄이 새로 생긴다. 검사 10과 짝을
-# 이루는 자리이고, **이 체인 전체가 증명하려는 한 문장이 여기서 참이 된다** —
+# 이루는 자리이고, 이 체인 전체가 증명하려는 한 문장이 여기서 참이 된다 —
 # 화면에서 잡은 글자가 클립보드를 거쳐 셸까지 돌아왔다.
 echo "=== running the pasted command (Enter) ==="
 type_keys ret
@@ -475,11 +475,11 @@ echo "the round trip closed: a yanked line came back as the shell's output"
 
 # ── 검사 13: copy mode 중에는 뷰포트가 출력을 따라가지 않는다 ──────────
 #
-# **CM-M0이 넣어 두고 아무도 밟은 적 없는 분기다**(main.zig의
+# CM-M0이 넣어 두고 아무도 밟은 적 없는 분기다(main.zig의
 # `if (!screen.copyActive()) screen.scrollToBottom();`). 모드 안에서는 셸에
 # 아무것도 보낼 수 없어 출력을 만들 방법이 없었는데, 붙여넣기가 그 방법이 된다.
 #
-# 억제를 보려면 뷰포트가 **바닥이 아니어야 한다.** 바닥에 있으면
+# 억제를 보려면 뷰포트가 바닥이 아니어야 한다. 바닥에 있으면
 # scrollToBottom이 원래 아무 일도 안 하므로 억제했는지 안 했는지 구분되지
 # 않는다. 그래서 먼저 위로 올린다.
 echo "=== entering copy mode and scrolling up ==="
@@ -508,21 +508,21 @@ if [ "$PASTES_AFTER" -le "$PASTES_BEFORE" ]; then
   report_failure "Cmd+V did nothing inside copy mode (clip> paste count stayed at ${PASTES_BEFORE})"
 fi
 
-# **모드가 안 닫혔다.** 붙여넣기는 y와 달리 모드를 건드리지 않는다. dumpCopy가
+# 모드가 안 닫혔다. 붙여넣기는 y와 달리 모드를 건드리지 않는다. dumpCopy가
 # 좌표를 찍는 것이 곧 copy 커서가 살아 있다는 뜻이다 — 모드 밖이었다면 좌표
 # 없이 'copy> paste'만 찍힌다.
 if ! grep -aqE 'terminal: copy> paste row=[0-9]+ col=[0-9]+' "$LOG"; then
   report_failure "the paste inside copy mode did not keep the copy cursor alive"
 fi
 
-# **판정.** 셸이 붙여넣은 글자를 되울렸는데도 뷰포트가 그대로다.
+# 판정. 셸이 붙여넣은 글자를 되울렸는데도 뷰포트가 그대로다.
 OFFSET_AFTER="$(scroll_field offset)"
 if [ "$OFFSET_AFTER" -ne "$OFFSET_UP" ]; then
   report_failure "output that arrived during copy mode moved the viewport (offset ${OFFSET_UP} -> ${OFFSET_AFTER})"
 fi
 echo "copy mode held the viewport still while output arrived (offset stayed at ${OFFSET_UP})"
 
-# 대조군. **이것이 없으면 "scrollToBottom이 아예 안 불린다"도 통과한다.**
+# 대조군. 이것이 없으면 "scrollToBottom이 아예 안 불린다"도 통과한다.
 # 모드를 나가고 Enter를 치면 셸이 붙여넣은 명령을 실행하고, 그 출력이 도착할
 # 때는 억제가 풀려 있으므로 뷰포트가 바닥으로 돌아와야 한다.
 #
@@ -540,7 +540,7 @@ if [ "$OFFSET_END" -ne "$((TOTAL_END - LEN_END))" ]; then
 fi
 echo "the viewport followed the output again once copy mode was closed (offset ${OFFSET_END})"
 
-# 붙여넣은 명령이 정말로 셸까지 갔다는 것은, 그것이 **두 번째** 출력줄을
+# 붙여넣은 명령이 정말로 셸까지 갔다는 것은, 그것이 두 번째 출력줄을
 # 만드는 것으로 증명된다. Enter 하나만으로도 새 프롬프트가 생기며 뷰포트는
 # 바닥으로 돌아오므로, 위 검사만으로는 "붙여넣기는 실패했는데 Enter만 먹었다"가
 # 걸러지지 않는다.
@@ -552,7 +552,7 @@ echo "the paste inside copy mode reached the shell too (${PASTED_ROWS} 'PASTED' 
 
 # ── 검사 14: 단어 단위 이동 (CN-M0) ────────────────────────────────────
 #
-# **게이트가 보는 것은 둘뿐이다**(CN-M0 plan 결정 3): 키가 게스트까지 도달해
+# 게이트가 보는 것은 둘뿐이다(CN-M0 plan 결정 3): 키가 게스트까지 도달해
 # 커서가 단어 단위로 움직였다는 것과, 그 키가 PTY로 안 샜다는 것이다. 선택이
 # 함께 넓어지는 것은 vt_test가 정확한 문자열로 본다 — 여기서 왕복을 보려면
 # 기대 문자열을 미리 정확히 적어야 하는데 그 값은 호스트 검사로만 확정된다.
@@ -578,7 +578,7 @@ sleep 2
 type_keys k
 sleep 1
 
-# **커서를 col 0으로 확실히 보낸다.** copyMove의 좌우는 줄을 넘나들지 않고
+# 커서를 col 0으로 확실히 보낸다. copyMove의 좌우는 줄을 넘나들지 않고
 # x를 0에서 멈추므로(vt.zig), h를 충분히 많이 누르면 반드시 col 0이다.
 # 프롬프트 길이에 기대지 않는 것이 요점이다 — 그 길이는 fish가 정한다.
 for _ in $(seq 1 40); do
@@ -595,7 +595,7 @@ ROW_WORD="$(copy_value row)"
 # 음성 검사의 기준선. w와 b는 PTY로 나가면 안 된다.
 KEYS_BEFORE_WORD="$(key_lines)"
 
-# **판정 1.** w가 공백을 건너뛰어 'beta'의 b(col 6)로 간다. 건너뛰기가 없으면
+# 판정 1. w가 공백을 건너뛰어 'beta'의 b(col 6)로 간다. 건너뛰기가 없으면
 # 여기서 5가 나온다.
 type_keys w
 sleep 1
@@ -604,7 +604,7 @@ if [ "$COL_W1" -ne 6 ]; then
   report_failure "w landed at col ${COL_W1} (expected 6, the 'b' of beta)"
 fi
 
-# **판정 2.** 한 번 더 누르면 'gamma'의 g(col 11)다.
+# 판정 2. 한 번 더 누르면 'gamma'의 g(col 11)다.
 type_keys w
 sleep 1
 COL_W2="$(copy_value col)"
@@ -612,7 +612,7 @@ if [ "$COL_W2" -ne 11 ]; then
   report_failure "the second w landed at col ${COL_W2} (expected 11)"
 fi
 
-# **판정 3.** b가 그것을 정확히 되돌린다.
+# 판정 3. b가 그것을 정확히 되돌린다.
 type_keys b
 sleep 1
 COL_B1="$(copy_value col)"
@@ -620,13 +620,13 @@ if [ "$COL_B1" -ne 6 ]; then
   report_failure "b landed at col ${COL_B1} (expected 6)"
 fi
 
-# **판정 4.** 줄을 안 넘었다. 단어 이동은 줄 안의 일이다.
+# 판정 4. 줄을 안 넘었다. 단어 이동은 줄 안의 일이다.
 ROW_AFTER_WORD="$(copy_value row)"
 if [ "$ROW_AFTER_WORD" -ne "$ROW_WORD" ]; then
   report_failure "the word motions changed rows (${ROW_WORD} -> ${ROW_AFTER_WORD})"
 fi
 
-# **판정 5(음성).** 셋 다 PTY로 안 나갔다. 모드 안에서 친 w가 셸에 도착하면
+# 판정 5(음성). 셋 다 PTY로 안 나갔다. 모드 안에서 친 w가 셸에 도착하면
 # 입력줄이 더럽혀지고, 그것이 이 기능의 가장 흔한 실패 방식이다.
 KEYS_AFTER_WORD="$(key_lines)"
 if [ "$KEYS_AFTER_WORD" -ne "$KEYS_BEFORE_WORD" ]; then
@@ -639,13 +639,13 @@ sleep 1
 
 # ── 검사 15: 스크롤백 검색 (CN-M1) ─────────────────────────────────────
 #
-# **design이 정한 완료 조건을 그대로 밟는다**: `/`로 스크롤백 위쪽의 글자를
+# design이 정한 완료 조건을 그대로 밟는다: `/`로 스크롤백 위쪽의 글자를
 # 찾아 커서가 그리로 옮겨진 것을 보고, 그 자리에서 V·y로 잡은 줄이 clip>에
 # 나온다.
 #
 # 표적을 둘 만든다. 하나면 n이 "옮겼다"와 "감겼다"를 못 가른다.
 #
-# **needle이 소문자인 것은 QEMU의 제약이다.** `sendkey`가 받는 이름은 QKeyCode
+# needle이 소문자인 것은 QEMU의 제약이다. `sendkey`가 받는 이름은 QKeyCode
 # 이고 그것들이 전부 소문자다 — `sendkey F`는 없는 이름이라 QEMU가 조용히
 # 버린다(체인은 monitor의 응답을 안 읽으므로 에러도 안 보인다). 대문자를
 # 치려면 `shift-f`처럼 앞에 붙여야 하고, 그것은 여섯 글자에 여섯 번이다.
@@ -659,10 +659,10 @@ sleep 2
 type_keys s e q spc 1 0 0 ret
 sleep 4
 
-# 표적이 스크롤백으로 밀려 **화면에서 사라졌는지** 확인한다. 화면에 남아
+# 표적이 스크롤백으로 밀려 화면에서 사라졌는지 확인한다. 화면에 남아
 # 있으면 이 검사는 "검색"이 아니라 "화면 안에서 커서 옮기기"가 된다.
 #
-# **이 검사 하나만으로는 "밀려났다"와 "애초에 안 쳐졌다"를 못 가른다.** 처음
+# 이 검사 하나만으로는 "밀려났다"와 "애초에 안 쳐졌다"를 못 가른다. 처음
 # 돌렸을 때 대문자가 통째로 버려져 `echo `만 쳐졌는데도 여기를 통과했다.
 # 아래 `needle=` 검사가 그것을 잡는다.
 if [ "$(screen_count 'findme')" -ne 0 ]; then
@@ -675,7 +675,7 @@ sleep 2
 
 FIND_BEFORE="$(key_lines)"
 
-# `/` 를 열고 needle을 친다. **프롬프트가 화면에 나타나는지는 find> 줄로 본다** —
+# `/` 를 열고 needle을 친다. 프롬프트가 화면에 나타나는지는 find> 줄로 본다 —
 # 오버레이는 cells()에 안 섞이므로 screen> 에는 영영 안 나온다(design 결정 7).
 type_keys slash
 sleep 1
@@ -695,15 +695,15 @@ type_keys ret
 sleep 3
 
 SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
-# **넷인 것에 산수가 있다.** `echo findme` 한 번이 스크롤백에 두 줄을 남긴다 —
+# 넷인 것에 산수가 있다. `echo findme` 한 번이 스크롤백에 두 줄을 남긴다 —
 # 셸이 되비춘 명령줄 `root@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
-# 둘이므로 2 × 2 = 4다. **plan은 이것을 2로 적었고 그것이 틀렸다.**
+# 둘이므로 2 × 2 = 4다. plan은 이것을 2로 적었고 그것이 틀렸다.
 #
 # 넷이어도 이 첫 검색의 뜻은 그대로다: `/`는 가장 최근 매치인 표적 2의
-# **출력줄**로 가고, 그 줄은 글자가 `findme`뿐이라 아래의 줄 단위 yank가
+# 출력줄로 가고, 그 줄은 글자가 `findme`뿐이라 아래의 줄 단위 yank가
 # 정확히 여섯 자를 준다.
 #
-# **아래의 `n` 판정은 이 자리를 그대로 이어받지 않는다.** 그 사이에 `y`가
+# 아래의 `n` 판정은 이 자리를 그대로 이어받지 않는다. 그 사이에 `y`가
 # 모드를 닫고 다시 열기 때문이고, 그때 커서가 어디에 서는지가 두 번째 검색의
 # 결과를 바꾼다 — 자세한 것은 그 절의 주석에 적었다.
 case "$SUBMIT" in
@@ -714,18 +714,18 @@ case "$SUBMIT" in
   *"moved=true"*) ;;
   *) report_failure "the search found matches but did not move the cursor: ${SUBMIT}" ;;
 esac
-# design 결정 5의 실측이다. **판정하지 않고 기록만 한다** — 값을 놓고 무엇을
+# design 결정 5의 실측이다. 판정하지 않고 기록만 한다 — 값을 놓고 무엇을
 # 할지는 사람이 정한다.
 echo "search over the full scrollback: ${SUBMIT}"
 
-# **판정(음성).** 프롬프트에 친 여섯 글자와 `/`·Enter가 PTY로 안 나갔다.
+# 판정(음성). 프롬프트에 친 여섯 글자와 `/`·Enter가 PTY로 안 나갔다.
 # 이것이 이 기능의 가장 흔한 실패 방식이다 — 검색어가 셸의 입력줄에 도착한다.
 FIND_AFTER="$(key_lines)"
 if [ "$FIND_AFTER" -ne "$FIND_BEFORE" ]; then
   report_failure "the find prompt leaked to the PTY (key> ${FIND_BEFORE} -> ${FIND_AFTER})"
 fi
 
-# **판정.** 커서가 선 줄을 줄 단위로 잡아 복사하면 findme가 나온다.
+# 판정. 커서가 선 줄을 줄 단위로 잡아 복사하면 findme가 나온다.
 #
 # 여섯 자가 나오는 것이 곧 "출력줄에 섰다"의 증거다. 명령줄에 섰다면
 # `root@(none) ~# echo findme`가 통째로 나와 len이 훨씬 크다.
@@ -740,34 +740,34 @@ if ! grep -aq 'terminal: clip> len=6 text=findme' "$LOG"; then
 fi
 echo "the search reached scrollback and the yanked line was findme"
 
-# **판정.** n이 더 위의 매치로 간다. y가 모드를 닫았으므로 다시 들어간다 —
+# 판정. n이 더 위의 매치로 간다. y가 모드를 닫았으므로 다시 들어간다 —
 # 그런데 copyExit이 검색 상태를 버렸으므로(design 결정 10) 검색부터 다시 한다.
-# **그 버림이 곧 이 판정의 대상이다.**
+# 그 버림이 곧 이 판정의 대상이다.
 #
-# **이 두 번째 검색은 첫 검색과 다른 매치에 선다. 그것이 정상이다**(2026-08-30에
+# 이 두 번째 검색은 첫 검색과 다른 매치에 선다. 그것이 정상이다(2026-08-30에
 # 실측으로 밝혔다). 세 가지가 겹쳐서 그렇게 된다.
 #
-#   1. 첫 검색이 표적 2의 출력줄을 뷰포트 **맨 윗줄**로 올렸고, `copyExit`은
+#   1. 첫 검색이 표적 2의 출력줄을 뷰포트 맨 윗줄로 올렸고, `copyExit`은
 #      뷰포트를 되돌리지 않는다.
 #   2. 그래서 다시 들어올 때 셸 커서가 화면 밖이고, `copyEnter`가 커서를
 #      `{0,0}`에 둔다(`vt.zig:545`) — 그 자리가 곧 직전에 섰던 매치다.
-#   3. `/`의 첫 이동은 **커서보다 위**를 요구하므로(`findStep`의 `above_only`)
+#   3. `/`의 첫 이동은 커서보다 위를 요구하므로(`findStep`의 `above_only`)
 #      커서와 같은 줄인 그 매치는 자격이 없어 다음 것으로 넘어간다. vim의 `/`가
 #      커서 자리의 매치를 건너뛰는 것과 같다.
 #
-# 그래서 `/`는 표적 2의 **명령줄**(col=20)에 서고 `n`은 그 다음 매치인 표적 1의
-# **출력줄**(col=0)로 간다. 둘 사이에 `seq 100`의 출력 백 줄과 그 명령줄이
-# 있으므로 이동 폭이 1이 아니라 **102**다. **`n`이 매치를 건너뛴 것이 아니다** —
+# 그래서 `/`는 표적 2의 명령줄(col=20)에 서고 `n`은 그 다음 매치인 표적 1의
+# 출력줄(col=0)로 간다. 둘 사이에 `seq 100`의 출력 백 줄과 그 명령줄이
+# 있으므로 이동 폭이 1이 아니라 102다. `n`이 매치를 건너뛴 것이 아니다 —
 # 건너뛴 것은 `/`이고 그것은 위 3의 의도된 동작이다.
 #
-# **col을 함께 판정하는 이유가 이것이다.** row 폭만 보면 "위로 갔다"까지만 알
+# col을 함께 판정하는 이유가 이것이다. row 폭만 보면 "위로 갔다"까지만 알
 # 수 있어서 매치를 하나 건너뛰었는지가 안 갈린다. col은 그 줄이 명령줄인지
 # 출력줄인지를 정확히 말한다 — 20은 `root@(none) ~# echo `의 길이다.
 #
-# **이 수가 UT-M0(2026-09-10)에 16에서 20으로 바뀌었다.** 그때 initrd에
+# 이 수가 UT-M0(2026-09-10)에 16에서 20으로 바뀌었다. 그때 initrd에
 # `/etc/passwd`가 생겼고, fish가 uid 0을 이름으로 풀 수 있게 되면서 프롬프트가
-# `@(none) ~#`에서 `root@(none) ~#`으로 네 글자 길어졌다. **게스트의 사용자
-# 데이터베이스를 건드리는 사람은 이 수도 함께 본다** — 증상은 여기의 FAIL
+# `@(none) ~#`에서 `root@(none) ~#`으로 네 글자 길어졌다. 게스트의 사용자
+# 데이터베이스를 건드리는 사람은 이 수도 함께 본다 — 증상은 여기의 FAIL
 # 한 줄이고 원인은 kernel/make_initrd.sh에 있어서 서로 멀다.
 #
 # 이 줄이 프롬프트 폭에 기대는 저장소의 유일한 자리다(2026-09-10에 `rg`로
@@ -779,7 +779,7 @@ sleep 2
 type_keys slash f i n d m e ret
 sleep 3
 
-# **절대 행으로 센다.** `copy> row=`은 뷰포트 안의 행이고, 매치가 화면 밖이면
+# 절대 행으로 센다. `copy> row=`은 뷰포트 안의 행이고, 매치가 화면 밖이면
 # `copyPlace`가 그 pin을 뷰포트의 맨 위로 올리므로(CN-M0) 언제나 0이다 —
 # 그 값만 찍으면 "0에서 0으로 갔다"가 되어 안 움직인 것처럼 읽힌다.
 # `scroll> offset`을 더하면 스크롤백 전체에서의 자리가 된다.
@@ -799,7 +799,7 @@ COL_SECOND="$(copy_value col)"
 if [ "$COL_SECOND" -ne 0 ]; then
   report_failure "n should land on target 1's output line (col 0), got col ${COL_SECOND}"
 fi
-# **판정.** n은 과거 방향으로 간다(design 결정 4). 같거나 커지면 방향이
+# 판정. n은 과거 방향으로 간다(design 결정 4). 같거나 커지면 방향이
 # 뒤집혔거나 안 움직인 것이고, moved=true만으로는 그것을 못 가른다.
 if [ "$ROW_SECOND" -ge "$ROW_FIRST" ]; then
   report_failure "n went down or stayed (row ${ROW_FIRST} -> ${ROW_SECOND}), expected up"
@@ -808,11 +808,11 @@ echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND}, c
 
 # ── 검사 16: 매치 하이라이트 (CS-M0) ────────────────────────────────────
 #
-# **검사 15가 끝난 자리를 그대로 쓴다.** copy mode가 살아 있고 `/findme`의 매치
+# 검사 15가 끝난 자리를 그대로 쓴다. copy mode가 살아 있고 `/findme`의 매치
 # 목록도 살아 있다 — 새 부팅도 새 타이핑도 없다. 게이트 시간을 안 늘리는 것이
 # design 위험 4에 대한 답이다.
 #
-# **두 겹으로 본다**(plan 결정 3). `find> hl`은 vt.zig가 센 값이고 `style>`는 그
+# 두 겹으로 본다(plan 결정 3). `find> hl`은 vt.zig가 센 값이고 `style>`는 그
 # 색이 정말 셀에 닿았는지다. 한 겹만 보면 "셌지만 안 칠했다"를 못 잡는다 —
 # TR design 결정 7이 style>/pixel>을 두 겹으로 둔 것과 같은 규율이다.
 HL="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
@@ -820,24 +820,24 @@ if [ -z "$HL" ]; then
   report_failure "no find> hl line; the highlight never ran"
 fi
 HL_CELLS=$(echo "$HL" | sed -E 's/.*cells=([0-9]+).*/\1/')
-# **needle이 여섯 자이므로 보이는 매치 하나당 정확히 여섯 칸이다.** 화면에 몇
+# needle이 여섯 자이므로 보이는 매치 하나당 정확히 여섯 칸이다. 화면에 몇
 # 개가 보이는지는 스크롤 위치에 딸린 값이라 못 박지 않고, 여섯의 배수인 것과
 # 최소 하나는 있는 것만 본다.
 if [ "$HL_CELLS" -lt 6 ] || [ $(( HL_CELLS % 6 )) -ne 0 ]; then
   report_failure "expected a multiple of six highlighted cells, got: ${HL}"
 fi
-# design 결정 5의 실측이다. **판정하지 않고 기록만 한다** — 상한을 둘지는 이
+# design 결정 5의 실측이다. 판정하지 않고 기록만 한다 — 상한을 둘지는 이
 # 값을 보고 사람이 정한다.
 echo "the match highlight: ${HL}"
 
-# **판정.** 마지막 프레임의 셀이 정말 CURRENT_BG를 받았다.
+# 판정. 마지막 프레임의 셀이 정말 CURRENT_BG를 받았다.
 #
-# **SP-M0이 이 자리의 색을 바꿨다.** 2026-08-29 실측으로 이 자리는 `spans=1`,
-# 곧 **화면에 보이는 매치가 하나**이고 직전에 `n`으로 그리로 갔으므로 그
+# SP-M0이 이 자리의 색을 바꿨다. 2026-08-29 실측으로 이 자리는 `spans=1`,
+# 곧 화면에 보이는 매치가 하나이고 직전에 `n`으로 그리로 갔으므로 그
 # 하나가 곧 현재 매치다. 그래서 여기 칠해지는 것은 `MATCH_BG`가 아니라
 # `CURRENT_BG`이고, 옛 `bg=705000`을 그대로 두면 0개가 되어 실패한다.
 #
-# **두 색이 함께 있는 것은 검사 19가 본다** — 그쪽은 자기 조건을 스스로 만든다.
+# 두 색이 함께 있는 것은 검사 19가 본다 — 그쪽은 자기 조건을 스스로 만든다.
 #
 # 커서가 선 한 칸은 매치 위에서 또 한 번 맞바뀌므로 `fg=C08000 bg=FFFFFF`가
 # 되고, 나머지는 `fg=FFFFFF bg=C08000`이다. 아래는 후자를 센다. vt_test의
@@ -853,15 +853,15 @@ echo "${HL_STYLED} cell(s) reached the framebuffer with bg=C08000"
 type_keys esc
 sleep 1
 
-# **판정(음성).** Esc가 copy mode를 닫으면 매치 목록도 함께 버려지므로
+# 판정(음성). Esc가 copy mode를 닫으면 매치 목록도 함께 버려지므로
 # (design 결정 6의 해제 자리 셋 중 하나) 하이라이트가 화면에서 사라진다.
 #
 # 안 사라지면 `copyExit`이 `find_matches`를 안 버린 것이고, 그 상태는 다음
-# 검색에서 **이중 해제**로 이어진다 — 증상이 여기서는 색이지만 다음에는
+# 검색에서 이중 해제로 이어진다 — 증상이 여기서는 색이지만 다음에는
 # 크래시다.
-# **두 색을 함께 본다**(SP-M0). 한 색만 보면 다른 색으로 칠해진 하이라이트가
+# 두 색을 함께 본다(SP-M0). 한 색만 보면 다른 색으로 칠해진 하이라이트가
 # 살아남았을 때 이 검사가 그것을 놓친다 — 지금 이 자리는 현재 매치 하나뿐이라
-# `bg=705000`만 보면 **아무것도 안 보는 검사**가 된다.
+# `bg=705000`만 보면 아무것도 안 보는 검사가 된다.
 if [ "$(last_frame | grep -acE 'bg=(705000|C08000)' || true)" -ne 0 ]; then
   echo "--- style lines in the last frame ---"
   last_frame | grep -a 'terminal: style>' | tail -n 20
@@ -872,16 +872,16 @@ echo "leaving copy mode cleared the highlight"
 
 # ── 검사 17: 검색 기록 (CS-M1) ─────────────────────────────────────────
 #
-# **검사 16이 끝난 자리를 그대로 쓴다.** 방금 `esc`가 copy mode를 닫았고,
-# `copyExit`이 검색 상태를 전부 버리면서 **`find_last`만 남겼다**(design 결정 8).
+# 검사 16이 끝난 자리를 그대로 쓴다. 방금 `esc`가 copy mode를 닫았고,
+# `copyExit`이 검색 상태를 전부 버리면서 `find_last`만 남겼다(design 결정 8).
 # 그것이 이 검사의 대상이다 — 모드를 나갔다 들어와서 `/`+Enter만 쳐도 지난
 # `findme`가 다시 돌아야 한다.
 #
-# **순서가 중요하다**(plan 결정 4). 아래 검사 18의 `zzz`를 먼저 찾으면 그것이
+# 순서가 중요하다(plan 결정 4). 아래 검사 18의 `zzz`를 먼저 찾으면 그것이
 # `find_last`를 덮어써서 빈 Enter도 matches=0을 낸다 — 그러면 "기록이
 # 동작했다"와 "빈 Enter가 아무 일도 안 했다"가 안 갈린다.
 #
-# **matches=4가 판정이다.** CS-M1 전에는 빈 Enter가 프롬프트만 닫아 matches=0이
+# matches=4가 판정이다. CS-M1 전에는 빈 Enter가 프롬프트만 닫아 matches=0이
 # 나왔다. 두 숫자가 이 기능의 있고 없음을 정확히 가른다. 넷인 것의 산수는
 # 검사 15에 적혀 있다(표적 둘 × 명령줄·출력줄 둘).
 SUBMITS_BEFORE="$(grep -ac 'terminal: find> submit' "$LOG" || true)"
@@ -892,7 +892,7 @@ type_keys slash ret
 sleep 3
 
 SUBMITS_AFTER="$(grep -ac 'terminal: find> submit' "$LOG" || true)"
-# **줄이 늘었는지 먼저 본다.** 앞의 검색도 matches=4를 찍었으므로, 줄 수를 안
+# 줄이 늘었는지 먼저 본다. 앞의 검색도 matches=4를 찍었으므로, 줄 수를 안
 # 세면 "빈 Enter가 아무 줄도 안 남겼다"를 옛 줄로 통과시킨다.
 if [ "$SUBMITS_AFTER" -le "$SUBMITS_BEFORE" ]; then
   report_failure "the empty Enter did not submit (find> submit ${SUBMITS_BEFORE} -> ${SUBMITS_AFTER})"
@@ -906,8 +906,8 @@ echo "an empty Enter re-ran the remembered search: ${REPEAT}"
 
 # ── 검사 18: "못 찾았다" 메시지 (CS-M1) ────────────────────────────────
 #
-# **오버레이는 screen> 에 영영 안 나오고**(CN-M1 design 결정 7) **style> 도
-# 덮인 줄을 건너뛴다**(main.zig의 overlaid_row). 그래서 `find> overlay` 한 줄이
+# 오버레이는 screen> 에 영영 안 나오고(CN-M1 design 결정 7) style> 도
+# 덮인 줄을 건너뛴다(main.zig의 overlaid_row). 그래서 `find> overlay` 한 줄이
 # 유일한 관측 수단이다(plan 결정 3).
 #
 # `zzz`는 이 화면 어디에도 없다 — 스크롤백은 `seq 1 100`의 숫자와 `findme`와
@@ -921,12 +921,12 @@ case "$MISS" in
   *) report_failure "expected /zzz to find nothing, got: ${MISS}" ;;
 esac
 
-# **판정.** 마지막 프레임의 오버레이가 못 찾았다고 쓴다.
+# 판정. 마지막 프레임의 오버레이가 못 찾았다고 쓴다.
 #
-# 위의 matches=0과 이 줄은 **다른 것을 본다** — 그쪽은 "검색이 못 찾았다"이고
+# 위의 matches=0과 이 줄은 다른 것을 본다 — 그쪽은 "검색이 못 찾았다"이고
 # 이쪽은 "화면에 그렇게 쓰였다"이다. Task 3의 실수는 이 줄로만 잡힌다.
 #
-# **파이프 끝에 grep -q를 두지 않는다.** 첫 매치에서 빠져나가며 앞단에 SIGPIPE를
+# 파이프 끝에 grep -q를 두지 않는다. 첫 매치에서 빠져나가며 앞단에 SIGPIPE를
 # 일으키고 `set -o pipefail`이 그것을 실패로 판정한다.
 if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zzz: not found' || true)" -eq 0 ]; then
   echo "--- overlay lines ---"
@@ -935,11 +935,11 @@ if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zzz: not found' ||
 fi
 echo "the overlay reported that /zzz was not found"
 
-# **판정(음성).** 다음 키 하나에 메시지가 사라진다(design 결정 9).
+# 판정(음성). 다음 키 하나에 메시지가 사라진다(design 결정 9).
 #
 # `k`는 copy 커서를 한 칸 올릴 뿐이라 화면의 다른 것을 안 건드린다. 안 사라지면
-# main.zig의 끄는 자리가 빠진 것이고, 증상은 **"메시지가 화면 아랫줄에 영영
-# 붙어 있다"**이다 — 사람에게는 "터미널이 고장 났다"로 보인다.
+# main.zig의 끄는 자리가 빠진 것이고, 증상은 "메시지가 화면 아랫줄에 영영
+# 붙어 있다"이다 — 사람에게는 "터미널이 고장 났다"로 보인다.
 type_keys k
 sleep 2
 if [ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -ne 0 ]; then
@@ -951,25 +951,25 @@ echo "the next key cleared the not-found message"
 
 # ── 검사 19: 현재 매치와 나머지가 다른 색이다 (SP-M0) ──────────────────
 #
-# **이 검사는 자기 조건을 스스로 만든다**(plan 결정 4). 두 색을 함께 보려면
+# 이 검사는 자기 조건을 스스로 만든다(plan 결정 4). 두 색을 함께 보려면
 # 매치가 둘 이상 한 화면에 있어야 하는데, 검사 16의 자리는 `spans=1`이라
 # (2026-08-29 실측) 거기서는 못 본다. 체인 어딘가에 `spans=2`인 프레임이 있는
-# 것은 확인했지만 **어느 검사의 자리인지는 못 박지 못했고**, 앞 검사가 남긴
+# 것은 확인했지만 어느 검사의 자리인지는 못 박지 못했고, 앞 검사가 남긴
 # 스크롤 위치에 기대면 판정이 스크롤에 딸리게 된다.
 #
-# **needle을 한 줄에 두 번 심는다.** 같은 줄이면 뷰포트가 어디에 있든 둘이
+# needle을 한 줄에 두 번 심는다. 같은 줄이면 뷰포트가 어디에 있든 둘이
 # 함께 보인다 — 스크롤과 무관해진다.
 #
-# **`findme`를 쓰면 안 된다.** 검사 15와 17이 `matches=4`를 판정에 쓰고 있어
+# `findme`를 쓰면 안 된다. 검사 15와 17이 `matches=4`를 판정에 쓰고 있어
 # 새 매치가 그 숫자를 깨뜨린다. `zq`는 이 화면 어디에도 없고, 검사 18의 `zzz`와도
 # 안 겹친다.
 #
-# **needle이 두 글자인 것에도 이유가 있다.** `style>`는 프레임당 16줄이
+# needle이 두 글자인 것에도 이유가 있다. `style>`는 프레임당 16줄이
 # 상한이라(main.zig의 STYLE_DUMP_LIMIT), 긴 needle이면 명령줄과 출력줄의 매치
-# 넷이 상한을 넘어 **뒤쪽 색이 안 찍히고 "색이 안 닿았다"로 잘못 읽힌다.**
+# 넷이 상한을 넘어 뒤쪽 색이 안 찍히고 "색이 안 닿았다"로 잘못 읽힌다.
 # 두 글자면 여덟 칸이라 넉넉하다.
 #
-# **검사 18이 copy mode 안에서 끝났으므로 먼저 나간다.** 안 나가면 아래 타이핑이
+# 검사 18이 copy mode 안에서 끝났으므로 먼저 나간다. 안 나가면 아래 타이핑이
 # 셸이 아니라 copy 명령으로 먹힌다.
 type_keys esc
 sleep 1
@@ -983,11 +983,11 @@ sleep 2
 type_keys slash z q ret
 sleep 3
 
-# **판정.** 매치가 둘 이상 보이고, 그중 현재 매치가 두 칸이다.
+# 판정. 매치가 둘 이상 보이고, 그중 현재 매치가 두 칸이다.
 #
 # `zq`가 명령줄과 출력줄에 각각 둘씩이라 검색은 넷을 찾고, 화면에는 적어도
-# 출력줄의 둘이 보인다. 명령줄까지 보이면 넷이다 — **몇인지는 못 박지 않고
-# "둘 이상"만 본다.** 프롬프트가 화면 어디에 오는지는 앞 검사들이 남긴 상태에
+# 출력줄의 둘이 보인다. 명령줄까지 보이면 넷이다 — 몇인지는 못 박지 않고
+# "둘 이상"만 본다. 프롬프트가 화면 어디에 오는지는 앞 검사들이 남긴 상태에
 # 딸린 값이기 때문이다.
 HL2="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
 if [ -z "$HL2" ]; then
@@ -998,7 +998,7 @@ HL2_CUR=$(echo "$HL2" | sed -E 's/.*cur=([0-9]+).*/\1/')
 if [ "$HL2_SPANS" -lt 2 ]; then
   report_failure "expected at least two visible matches, got: ${HL2}"
 fi
-# **현재 매치는 정확히 하나이고 needle이 두 글자다.** `cur`이 4면 두 매치가
+# 현재 매치는 정확히 하나이고 needle이 두 글자다. `cur`이 4면 두 매치가
 # 함께 현재로 표시된 것이고, 0이면 findCurrentIndex()가 null을 준 것이다 —
 # 두 실패가 서로 다른 원인이라 숫자로 갈린다.
 if [ "$HL2_CUR" -ne 2 ]; then
@@ -1006,7 +1006,7 @@ if [ "$HL2_CUR" -ne 2 ]; then
 fi
 echo "two match colours are live: ${HL2}"
 
-# **판정.** 두 색이 **함께** 프레임버퍼에 닿았다.
+# 판정. 두 색이 함께 프레임버퍼에 닿았다.
 #
 # `find> hl`은 vt.zig가 센 값이고 이쪽은 그 색이 정말 셀에 닿았는지다. 한 겹만
 # 보면 "셌지만 안 칠했다"를 못 잡는다 — 검사 16이 두 겹으로 보는 것과 같은
@@ -1022,19 +1022,19 @@ echo "both match colours reached the framebuffer (current=${CUR_CELLS} other=${O
 
 # ── 검사 20: 현재 매치의 번호가 오버레이에 뜬다 (SP-M1) ────────────────
 #
-# **검사 19가 끝난 자리를 그대로 쓴다**(design 결정 9). copy mode가 살아 있고
+# 검사 19가 끝난 자리를 그대로 쓴다(design 결정 9). copy mode가 살아 있고
 # `/zq`의 매치 넷도 살아 있다 — 새 부팅도 새 검색도 없다.
 #
-# **오버레이는 `screen>`에도 `style>`에도 안 나온다**(CN-M1 design 결정 7,
+# 오버레이는 `screen>`에도 `style>`에도 안 나온다(CN-M1 design 결정 7,
 # main.zig의 `overlaid_row`). 그래서 `find> overlay` 한 줄이 유일한 관측
-# 수단이고, CS-M1이 그 용도로 만들었다 — **SP-M1은 새 로그를 하나도 안 더한다**
+# 수단이고, CS-M1이 그 용도로 만들었다 — SP-M1은 새 로그를 하나도 안 더한다
 # (design 결정 8).
 #
-# **`[1/4]`인 것에 산수가 있다.** `zq`가 명령줄과 출력줄에 둘씩이라 넷이고,
+# `[1/4]`인 것에 산수가 있다. `zq`가 명령줄과 출력줄에 둘씩이라 넷이고,
 # `/`는 가장 최근 매치에 서므로 인덱스가 0이다(`vt_test`의 검사 37이 그 뜻을
 # 고정했다). 번호는 `idx + 1`이므로 1이다(design 결정 6).
 #
-# **커서가 매치보다 아래에 있는 것을 확인했다**(2026-08-30 실측). 로그가
+# 커서가 매치보다 아래에 있는 것을 확인했다(2026-08-30 실측). 로그가
 # `copy> enter row=46` → `copy> find_submit row=45`를 찍으므로 `above_only`가
 # 첫 매치를 건너뛰지 않는다 — 건너뛰면 인덱스가 1이 되어 `[2/4]`가 뜬다.
 if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [1/4]' || true)" -eq 0 ]; then
@@ -1044,9 +1044,9 @@ if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [1/4]' || true)
 fi
 echo "the overlay numbered the current match: /zq [1/4]"
 
-# **판정.** `n`이 번호를 하나 올린다.
+# 판정. `n`이 번호를 하나 올린다.
 #
-# 앞 줄이 "번호가 뜬다"를 보고 이 줄이 **"그 번호가 커서를 따라간다"**를 본다.
+# 앞 줄이 "번호가 뜬다"를 보고 이 줄이 "그 번호가 커서를 따라간다"를 본다.
 # 하나만 보면 안 된다 — 고정된 숫자를 찍는 코드도 앞 줄을 통과한다.
 type_keys n
 sleep 2
@@ -1057,11 +1057,11 @@ if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [2/4]' || true)
 fi
 echo "n moved the number to [2/4]"
 
-# **판정(음성).** 다음 키 하나에 번호가 사라진다(design 결정 7).
+# 판정(음성). 다음 키 하나에 번호가 사라진다(design 결정 7).
 #
-# 검사 18이 "못 찾음" 쪽에 대해 같은 것을 보는데, **SP-M1 뒤로 둘이 같은
-# 플래그를 쓰므로** 번호 쪽에서도 본다. 플래그를 넓히면서 끄는 자리를 빠뜨리면
-# 증상이 **"번호가 화면 아랫줄에 영영 붙어 있다"**이고, 사람에게는 "터미널이
+# 검사 18이 "못 찾음" 쪽에 대해 같은 것을 보는데, SP-M1 뒤로 둘이 같은
+# 플래그를 쓰므로 번호 쪽에서도 본다. 플래그를 넓히면서 끄는 자리를 빠뜨리면
+# 증상이 "번호가 화면 아랫줄에 영영 붙어 있다"이고, 사람에게는 "터미널이
 # 고장 났다"로 보인다.
 #
 # `k`는 copy 커서를 한 칸 올릴 뿐이라 화면의 다른 것을 안 건드린다.

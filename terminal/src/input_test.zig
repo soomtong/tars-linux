@@ -7,7 +7,7 @@ const input = @import("input.zig");
 /// IP-M2에서 검사가 두 배로 는다.
 const K = input.c;
 
-/// IP-M0부터 handleKey는 바이트 **하나**가 아니라 바이트 **열**을 돌려준다.
+/// IP-M0부터 handleKey는 바이트 하나가 아니라 바이트 열을 돌려준다.
 /// "보낼 것 없음"은 null이 아니라 빈 슬라이스다.
 ///
 /// IP-M1부터 handleKey는 `Context`도 받는다. 대부분의 검사는 기본값
@@ -17,8 +17,8 @@ fn expect(state: *input.State, code: u16, value: i32, want: []const u8) !void {
     return expectFull(state, .{}, code, value, 0, want);
 }
 
-/// HI-M3부터 `handleKey`는 시각도 받는다. **본체를 `expectFull`로 옮기고 기존
-/// 헬퍼는 시각 0을 채우는 껍데기가 된다** — `expectCtx` 호출이 26군데라
+/// HI-M3부터 `handleKey`는 시각도 받는다. 본체를 `expectFull`로 옮기고 기존
+/// 헬퍼는 시각 0을 채우는 껍데기가 된다 — `expectCtx` 호출이 26군데라
 /// 인자를 하나 더하면 26줄이 바뀌고, 그러면 "기존 검사가 한 글자도 안 바뀐 채
 /// 통과했다"는 Task 1의 증거가 사라진다.
 ///
@@ -34,8 +34,8 @@ fn expectAt(
 }
 
 /// TR-M2부터 handleKey는 바이트열이 아니라 `Action`을 돌려준다. 이 파일의
-/// 검사 대부분은 여전히 바이트를 보므로, **"바이트가 아닌 것이 왔다"를
-/// 실패로 취급하는 것**이 이 헬퍼의 새 일이다. 그냥 무시하면 스크롤 키가
+/// 검사 대부분은 여전히 바이트를 보므로, "바이트가 아닌 것이 왔다"를
+/// 실패로 취급하는 것이 이 헬퍼의 새 일이다. 그냥 무시하면 스크롤 키가
 /// 실수로 PTY 쪽 표에 들어갔을 때 검사가 조용히 통과한다.
 fn expectCtx(
     state: *input.State,
@@ -88,12 +88,12 @@ fn expectFull(
     }
 }
 
-/// copy 명령이 나오기를 기대한다. **바이트가 오면 실패다** — 그것이 정확히
+/// copy 명령이 나오기를 기대한다. 바이트가 오면 실패다 — 그것이 정확히
 /// "모드 안에서 키가 PTY로 샌다"는 사고이기 때문이다.
 fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
     switch (state.handleKey(code, 1, 0, .{})) {
         .copy => |cmd| {
-            // **union에는 `==`가 없다**(CN-M1 Task 1). `std.meta.eql`이 태그를
+            // union에는 `==`가 없다(CN-M1 Task 1). `std.meta.eql`이 태그를
             // 먼저 보고 payload를 그다음에 본다 — `.find_char`가 생기면 글자까지
             // 비교하게 되고, 그것이 우리가 원하는 것이다.
             if (std.meta.eql(cmd, want)) return;
@@ -127,7 +127,7 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
     }
 }
 
-/// 스크롤 동작을 기대하는 검사. **바이트가 오면 실패다** — 그것이 곧
+/// 스크롤 동작을 기대하는 검사. 바이트가 오면 실패다 — 그것이 곧
 /// "스크롤 키가 PTY로 샜다"는 뜻이고, design 결정 11이 막으려는 바로 그
 /// 상황이다.
 fn expectScroll(
@@ -169,12 +169,12 @@ fn expectScroll(
     }
 }
 
-/// 한글 층이 이 키를 처리하기를 기대한다(HI-M1). **바이트가 오면 실패다** —
+/// 한글 층이 이 키를 처리하기를 기대한다(HI-M1). 바이트가 오면 실패다 —
 /// 그것이 곧 "조합 중인 자모가 PTY로 샜다"이고, 이 milestone의 가장 흔한
 /// 실패 방식이다.
 ///
 /// 셋을 한 번에 본다: 어느 variant가 왔는가 · 무엇이 확정됐는가 · 무엇을
-/// 조합 중인가. **셋이 함께 있어야 뜻이 선다** — 확정만 보면 화면이 안 바뀐
+/// 조합 중인가. 셋이 함께 있어야 뜻이 선다 — 확정만 보면 화면이 안 바뀐
 /// 것을 못 잡고, 조합만 보면 확정된 글자가 셸에 안 간 것을 못 잡는다.
 fn expectHangul(
     state: *input.State,
@@ -185,8 +185,8 @@ fn expectHangul(
     return expectHangulAt(state, code, 1, 0, want_commit, want_preedit);
 }
 
-/// 시각과 누름/뗌을 직접 주는 형태(HI-M3). **tap이 한/영을 바꾸는 것은 키를
-/// 뗄 때이므로**(결정 8) `value = 0`을 넣을 수 있어야 하는데, 위 껍데기는
+/// 시각과 누름/뗌을 직접 주는 형태(HI-M3). tap이 한/영을 바꾸는 것은 키를
+/// 뗄 때이므로(결정 8) `value = 0`을 넣을 수 있어야 하는데, 위 껍데기는
 /// 언제나 누름(1)이다.
 fn expectHangulAt(
     state: *input.State,
@@ -224,22 +224,22 @@ fn expectHangulAt(
     try expectPreedit(state, code, want_preedit);
 }
 
-/// 이 키가 **화면만 다시 그리게** 하기를 기대한다(IS-M1). 확정된 글자도
+/// 이 키가 화면만 다시 그리게 하기를 기대한다(IS-M1). 확정된 글자도
 /// PTY로 나갈 바이트도 없다.
 ///
-/// **긴 CapsLock이 이 모양이다.** 대문자 잠금을 뒤집는 것 말고는 아무 일도
-/// 안 하는데, 상태 줄의 `CAPS` 칸이 **그 자리에서** 밝아져야 하므로
+/// 긴 CapsLock이 이 모양이다. 대문자 잠금을 뒤집는 것 말고는 아무 일도
+/// 안 하는데, 상태 줄의 `CAPS` 칸이 그 자리에서 밝아져야 하므로
 /// `nothing`으로는 부족하다 — `main.zig`의 `needs_redraw`가 안 켜져서
-/// **다음 키를 칠 때까지 안 밝아진다**(IS design 결정 8).
+/// 다음 키를 칠 때까지 안 밝아진다(IS design 결정 8).
 ///
-/// 속은 `expectHangulAt`과 같다. **이름을 따로 두는 이유는 읽는 사람을
-/// 위해서다** — CapsLock 자리에 "Hangul"이라는 이름이 서 있으면 그것이
+/// 속은 `expectHangulAt`과 같다. 이름을 따로 두는 이유는 읽는 사람을
+/// 위해서다 — CapsLock 자리에 "Hangul"이라는 이름이 서 있으면 그것이
 /// 한글과 무슨 상관인지 다음 사람이 찾아 헤맨다.
 fn expectRedrawAt(state: *input.State, code: u16, value: i32, time_us: u64) !void {
     return expectHangulAt(state, code, value, time_us, "", null);
 }
 
-/// 확정된 글자를 본다. **`handleKey`를 부른 직후에만 뜻이 있다** — 한 번
+/// 확정된 글자를 본다. `handleKey`를 부른 직후에만 뜻이 있다 — 한 번
 /// 가져가면 비워지기 때문이다(`takeCommit`). `readKeys`가 지키는 순서를 이
 /// 파일이 같은 순서로 흉내 내는 자리다.
 fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
@@ -252,15 +252,15 @@ fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
     return error.WrongCommit;
 }
 
-/// **libc를 직접 선언한다**(SH-M1). Zig 0.16의 `std.posix`에는 `pipe`도
+/// libc를 직접 선언한다(SH-M1). Zig 0.16의 `std.posix`에는 `pipe`도
 /// `write`도 `close`도 없다 — I/O가 `std.Io`로 옮겨 갔기 때문이다.
 /// `input.zig`가 `read`와 `open`을 같은 이유로 이렇게 선언해 두었다.
 extern "c" fn pipe(fds: *[2]c_int) c_int;
 extern "c" fn write(fd: c_int, buf: [*]const u8, count: usize) isize;
 extern "c" fn close(fd: c_int) c_int;
 
-/// evdev 이벤트 하나를 만든다(SH-M1). **`readKeys`를 직접 돌리는 검사만
-/// 쓴다** — 나머지는 `handleKey`를 부르므로 이벤트가 필요 없다.
+/// evdev 이벤트 하나를 만든다(SH-M1). `readKeys`를 직접 돌리는 검사만
+/// 쓴다 — 나머지는 `handleKey`를 부르므로 이벤트가 필요 없다.
 ///
 /// `time`을 0으로 두는 것은 tap 판정을 안 건드리기 위해서다. 여기서 보는
 /// 키는 전부 자모와 Enter라 tap과 무관하다.
@@ -272,8 +272,8 @@ fn keyEvent(code: u16, value: i32) input.c.struct_input_event {
     return ev;
 }
 
-/// 이벤트들을 파이프에 통째로 넣고 fd 짝을 돌려준다. **쓰는 쪽은 여기서
-/// 닫는다.**
+/// 이벤트들을 파이프에 통째로 넣고 fd 짝을 돌려준다. 쓰는 쪽은 여기서
+/// 닫는다.
 ///
 /// 안 닫으면 `readKeys`의 `read`가 다음 이벤트를 기다리며 막힐 수 있다.
 /// 닫아 두면 한 번의 read가 있는 것을 전부 가져가고(24바이트 × 넷은
@@ -343,7 +343,7 @@ pub fn main() !void {
     try expect(&state, K.KEY_A, 2, "a"); // autorepeat
 
     // 표에 없는 키코드는 조용히 무시한다. 여기만 숫자로 남기는 이유는 이
-    // 줄의 요점이 **이름이 없는 코드**라서다 — 이름을 붙이면 뜻이 사라진다.
+    // 줄의 요점이 이름이 없는 코드라서다 — 이름을 붙이면 뜻이 사라진다.
     try expect(&state, 200, 1, "");
 
     // ── Ctrl 제어 문자 (IP-M0) ──────────────────────────────────────────
@@ -416,7 +416,7 @@ pub fn main() !void {
     //
     // 이 모드가 실제로 켜지는지는 셸에 달려 있고(smkx), --no-config로 뜬
     // 셸이 안 보내면 게이트는 이 경로를 한 번도 밟지 않는다(design doc
-    // 위험 4). 그래서 **여기서** 두 형태를 다 본다.
+    // 위험 4). 그래서 여기서 두 형태를 다 본다.
     const ckm = input.Context{ .cursor_keys = true };
     try expectCtx(&state, ckm, K.KEY_UP, 1, "\x1bOA");
     try expectCtx(&state, ckm, K.KEY_DOWN, 1, "\x1bOB");
@@ -444,7 +444,7 @@ pub fn main() !void {
 
     // ── Option 조합 (design doc 결정 8) ─────────────────────────────────
     //
-    // 셸이 **이미 아는 언어**로 번역한다(A안). ESC 접두사는 터미널에서
+    // 셸이 이미 아는 언어로 번역한다(A안). ESC 접두사는 터미널에서
     // "Meta+그 글자"를 뜻하는 오래된 관례이고, readline/zle/fish가 전부
     // 기본값으로 안다 — 설정 파일 없이 동작한다는 것이 A안을 고른 결정적
     // 이유였다(그래야 --no-config로 뜬 셸에서 게이트가 증명할 수 있다).
@@ -472,7 +472,7 @@ pub fn main() !void {
 
     // ── Cmd 조합 ────────────────────────────────────────────────────────
     //
-    // 이쪽은 ESC 접두사가 아니라 **제어 문자 한 바이트**다. Cmd+←가 0x01
+    // 이쪽은 ESC 접두사가 아니라 제어 문자 한 바이트다. Cmd+←가 0x01
     // (Ctrl+A)인 이유는 그것이 readline의 beginning-of-line이기 때문이지
     // 무슨 대응 관계가 있어서가 아니다 — "셸이 이미 아는 언어"라는 것이
     // 유일한 기준이다.
@@ -483,15 +483,15 @@ pub fn main() !void {
 
     // Cmd+Delete는 표에 없다 → 맨 Delete가 나간다.
     try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
-    // Cmd+C는 **여전히 일부러 비워둔 자리**다(design doc 비목표, CM design
+    // Cmd+C는 여전히 일부러 비워둔 자리다(design doc 비목표, CM design
     // 결정 4). 모드 밖에서는 무엇을 복사할지가 정해져 있지 않다.
     try expect(&state, K.KEY_C, 1, "c");
-    // **Cmd+V는 CM-M2가 채웠다.** 원래 이 자리에 "복사·붙여넣기는 그때 이 두
+    // Cmd+V는 CM-M2가 채웠다. 원래 이 자리에 "복사·붙여넣기는 그때 이 두
     // 줄이 바뀐다"고 적혀 있었는데, 바뀐 것은 둘 중 하나뿐이다 — 붙여넣기는
     // 모드 밖에서도 뜻이 있지만 복사는 그렇지 않기 때문이다.
     //
     // 바이트가 아니라 copy 명령이 오는 것이 핵심이고, 그것을 여기서 보는 것은
-    // 아래 copy mode 검사들과 다른 일이다. 이 줄은 **모드가 normal일 때**를
+    // 아래 copy mode 검사들과 다른 일이다. 이 줄은 모드가 normal일 때를
     // 본다 — 즉 chord()의 Meta 분기 쪽이다.
     try expectCopy(&state, K.KEY_V, .paste);
     try expect(&state, K.KEY_LEFTMETA, 0, "");
@@ -502,7 +502,7 @@ pub fn main() !void {
 
     // ── 둘 다 눌리면 Cmd가 이긴다 ───────────────────────────────────────
     //
-    // 임의의 선택이지만 **결정적**이어야 한다. macOS에서 Cmd가 더 강한
+    // 임의의 선택이지만 결정적이어야 한다. macOS에서 Cmd가 더 강한
     // modifier라는 직관과 맞고, 코드에서는 chord가 Meta를 먼저 보는 것으로
     // 표현된다. 이 줄이 그 순서를 못 박는다.
     try expect(&state, K.KEY_LEFTALT, 1, "");
@@ -514,7 +514,7 @@ pub fn main() !void {
 
     // ── 조합은 DECCKM보다 강하다 ────────────────────────────────────────
     //
-    // dispatch가 특수키 조회보다 **먼저** 오기 때문이다(design doc 결정 2의
+    // dispatch가 특수키 조회보다 먼저 오기 때문이다(design doc 결정 2의
     // "가로챌 것을 먼저"). Option+←는 DECCKM이 켜져 있어도 ESC b이고,
     // ESC O D로 바뀌지 않는다. 순서가 뒤집히면 이 줄이 먼저 터진다.
     try expectCtx(&state, ckm, K.KEY_LEFTALT, 1, "");
@@ -527,7 +527,7 @@ pub fn main() !void {
     // 스페이스 옆 두 키의 순서가 Apple과 PC에서 정확히 뒤집혀 있다.
     //   Apple: [Ctrl] [Option 56] [Cmd 125]
     //   PC:    [Ctrl] [Win 125]   [Alt 56]
-    // 그래서 하는 일은 modifier를 기록하기 **전에** 코드를 맞바꾸는 것뿐이고,
+    // 그래서 하는 일은 modifier를 기록하기 전에 코드를 맞바꾸는 것뿐이고,
     // 그 뒤 로직(chord, keymap, specialKey)은 어느 키보드인지 전혀 모른다.
     //
     // 이 검사가 게이트보다 중요한 이유가 하나 있다: 게이트는 QEMU가 보내는
@@ -554,7 +554,7 @@ pub fn main() !void {
     try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x1bb");
     try expectCtx(&state, pc, K.KEY_RIGHTMETA, 0, "");
 
-    // 교환은 **modifier 키에만** 일어난다. 글자 키는 그대로다.
+    // 교환은 modifier 키에만 일어난다. 글자 키는 그대로다.
     try expectCtx(&state, pc, K.KEY_A, 1, "a");
     try expectCtx(&state, pc, K.KEY_LEFT, 1, "\x1b[D");
 
@@ -567,7 +567,7 @@ pub fn main() !void {
 
     // ── Shift 스크롤 (TR-M2, design 결정 11·12) ─────────────────────────
     //
-    // 여기서 처음으로 키가 **바이트가 아닌 것**을 돌려준다. IP-M2까지
+    // 여기서 처음으로 키가 바이트가 아닌 것을 돌려준다. IP-M2까지
     // handleKey의 반환은 []const u8 하나였고, 그래서 "PTY로 보내지 않고
     // 우리가 처리한다"를 표현할 방법이 아예 없었다.
     //
@@ -588,7 +588,7 @@ pub fn main() !void {
     try expect(&state, K.KEY_DELETE, 1, "\x1b[3~");
     try expect(&state, K.KEY_LEFTSHIFT, 0, "");
 
-    // **Shift를 떼면 넷 다 원래대로 돌아온다.** 이 줄들이 없으면 "스크롤이
+    // Shift를 떼면 넷 다 원래대로 돌아온다. 이 줄들이 없으면 "스크롤이
     // 되는가"만 보고 "안 되어야 할 때 원래대로인가"를 안 보게 된다. Home/End는
     // 특히 중요하다 — 셸의 줄 편집이 쓰는 키다.
     try expect(&state, K.KEY_PAGEUP, 1, "\x1b[5~");
@@ -622,7 +622,7 @@ pub fn main() !void {
 
     // ── 여전히 안 하는 것 ───────────────────────────────────────────────
     //
-    // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **TR-M2도 하지 않는다.**
+    // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 TR-M2도 하지 않는다.
     // 바로 위에서 Shift에 뜻이 생겼지만 그것은 PageUp/PageDown/Home/End 넷뿐이고,
     // 방향키 자체는 여전히 맨 시퀀스로 나간다.
     // IP-M1의 주석은 "M2의 조합 dispatch가 이 위에 얹히면서 바뀐다"고 적었지만
@@ -672,18 +672,18 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_UP, .up);
     try expectCopy(&cm, K.KEY_RIGHT, .right);
 
-    // 검사 4. **모르는 키는 삼킨다**(design 결정 3). 게이트의 음성 검사와
+    // 검사 4. 모르는 키는 삼킨다(design 결정 3). 게이트의 음성 검사와
     // 같은 사실을 여기서 먼저 본다.
     //
-    // **CN-M0이 이 목록에서 `w`를 뺐다.** 그것이 이제 `.word_next`라서
+    // CN-M0이 이 목록에서 `w`를 뺐다. 그것이 이제 `.word_next`라서
     // 여기서는 "모르는 키"가 아니다. 자리를 `z`로 메운다 — 게이트가 대조군으로
     // 쓰는 것과 같은 키다.
     //
-    // **`n`은 CN-M1의 검색이 가져갔다.** CN-M0이 여기 남긴 예고가 그것이었고,
+    // `n`은 CN-M1의 검색이 가져갔다. CN-M0이 여기 남긴 예고가 그것이었고,
     // 이 목록에 `n`이 없었던 덕에 이번에는 아무 줄도 안 깨졌다 — `w`를 배선할
     // 때와 갈리는 자리다.
     //
-    // **`e`는 아직 모르는 키다.** CN이 일부러 안 만든 단어 이동이고
+    // `e`는 아직 모르는 키다. CN이 일부러 안 만든 단어 이동이고
     // (design 결정 2), 누군가 `e`를 더하면 그때 이 줄이 바뀐다.
     // 예고를 여기서 갚는다.
     try expect(&cm, K.KEY_Q, 1, "");
@@ -695,14 +695,14 @@ pub fn main() !void {
 
     // 검사 5. Cmd 조합도 모드 안에서는 chord()에 닿지 않는다. 모드 밖이라면
     // Cmd+←가 0x01(beginning-of-line)이 되지만, 안에서는 copy 표가 먼저다.
-    // **CM-M1의 Cmd+C와 CM-M2의 Cmd+V가 chord()가 아니라 copy 표에 들어와야
-    // 하는 이유가 이것이다.**
+    // CM-M1의 Cmd+C와 CM-M2의 Cmd+V가 chord()가 아니라 copy 표에 들어와야
+    // 하는 이유가 이것이다.
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expectCopy(&cm, K.KEY_LEFT, .left);
     try expect(&cm, K.KEY_LEFTMETA, 0, "");
 
     // 검사 6. Esc가 모드를 닫고, 닫힌 뒤에는 h가 다시 글자가 된다.
-    // **이 대조군이 없으면 "영영 못 나온다"도 통과한다.**
+    // 이 대조군이 없으면 "영영 못 나온다"도 통과한다.
     try expectCopy(&cm, K.KEY_ESC, .exit);
     if (cm.mode != .normal) {
         std.debug.print("FAIL: Esc did not leave copy mode\n", .{});
@@ -713,7 +713,7 @@ pub fn main() !void {
     // ── CM-M1: 선택과 복사 ──────────────────────────────────────────────
     //
     // 검사 7. v와 V가 갈린다. 같은 키코드가 Shift 하나로 다른 명령이 되므로,
-    // **둘을 나란히 보지 않으면 "언제나 select_char"도 통과한다.**
+    // 둘을 나란히 보지 않으면 "언제나 select_char"도 통과한다.
     //
     // 앞의 검사 6이 Esc로 모드를 닫아 두었으므로 먼저 다시 연다. modifier 키
     // 자체는 언제나 빈 바이트열이라 expect로 본다.
@@ -733,15 +733,15 @@ pub fn main() !void {
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
     try expectCopy(&cm, K.KEY_V, .select_char);
 
-    // 검사 8. Cmd 없는 c는 여전히 삼켜진다. **이것이 없으면 아래 검사 10이
-    // "c는 언제나 yank"로도 통과한다.**
+    // 검사 8. Cmd 없는 c는 여전히 삼켜진다. 이것이 없으면 아래 검사 10이
+    // "c는 언제나 yank"로도 통과한다.
     try expect(&cm, K.KEY_C, 1, "");
     if (cm.mode != .copy) {
         std.debug.print("FAIL: a bare 'c' left copy mode\n", .{});
         return error.ModeLeftByBareC;
     }
 
-    // 검사 9. y가 yank를 내고 **모드를 닫는다.** 닫혔다는 것을 h가 다시
+    // 검사 9. y가 yank를 내고 모드를 닫는다. 닫혔다는 것을 h가 다시
     // 글자가 되는 것으로 확인한다.
     try expectCopy(&cm, K.KEY_Y, .yank);
     if (cm.mode != .normal) {
@@ -751,8 +751,8 @@ pub fn main() !void {
     try expect(&cm, K.KEY_H, 1, "h");
 
     // 검사 10. Cmd+C도 같은 일을 한다. 모드 밖에서는 Cmd+C가 표에 없어
-    // 그냥 'c'가 된다는 것도 함께 본다 — **normal 모드의 Cmd+C를 비워 두는
-    // 것이 design 결정 4다.**
+    // 그냥 'c'가 된다는 것도 함께 본다 — normal 모드의 Cmd+C를 비워 두는
+    // 것이 design 결정 4다.
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expect(&cm, K.KEY_C, 1, "c");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -768,12 +768,12 @@ pub fn main() !void {
 
     // ── CM-M2: 붙여넣기 ─────────────────────────────────────────────────
     //
-    // 검사 11. **Cmd+V는 모드 밖에서도 붙여넣는다**(design 결정 4). 여기가
+    // 검사 11. Cmd+V는 모드 밖에서도 붙여넣는다(design 결정 4). 여기가
     // Cmd+C와 갈리는 자리다 — Cmd+C는 모드 안에서만 뜻이 있어서 copy 표 한
     // 곳이면 됐지만, Cmd+V는 chord()의 Meta 분기에도 있어야 한다.
     //
     // 대조군으로 Cmd 없는 v가 여전히 평범한 글자라는 것을 먼저 본다.
-    // **이것이 없으면 "v는 언제나 paste"도 통과한다.**
+    // 이것이 없으면 "v는 언제나 paste"도 통과한다.
     try expect(&cm, K.KEY_V, 1, "v");
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expectCopy(&cm, K.KEY_V, .paste);
@@ -783,16 +783,16 @@ pub fn main() !void {
     }
     try expect(&cm, K.KEY_LEFTMETA, 0, "");
 
-    // 검사 12. 모드 **안에서도** 붙여넣는다. copy 분기가 chord()보다 앞이라
+    // 검사 12. 모드 안에서도 붙여넣는다. copy 분기가 chord()보다 앞이라
     // 모드 안에서는 Cmd 조합이 chord()에 아예 닿지 않으므로, 같은 뜻을 표
-    // 양쪽에 적어야 한다. **한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.**
+    // 양쪽에 적어야 한다. 한쪽만 넣으면 나머지 모드에서 조용히 안 먹는다.
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
     try expectCopy(&cm, K.KEY_C, .enter);
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
     try expectCopy(&cm, K.KEY_V, .paste);
 
-    // **붙여넣기는 모드를 닫지 않는다** — y와 갈리는 자리다. 게이트의 억제
+    // 붙여넣기는 모드를 닫지 않는다 — y와 갈리는 자리다. 게이트의 억제
     // 검사가 이 성질에 기댄다: 모드가 닫히면 에코가 도착할 때
     // scrollToBottom이 그대로 불려서 볼 것이 없어진다.
     if (cm.mode != .copy) {
@@ -801,8 +801,8 @@ pub fn main() !void {
     }
     try expect(&cm, K.KEY_LEFTMETA, 0, "");
 
-    // 검사 13. Cmd를 뗀 v는 모드 안에서 다시 선택 명령이다. **Meta 분기가 v를
-    // 통째로 가져가지 않았다**는 것을 이 셋이 못 박는다 — Step 3에서 갈라 놓은
+    // 검사 13. Cmd를 뗀 v는 모드 안에서 다시 선택 명령이다. Meta 분기가 v를
+    // 통째로 가져가지 않았다는 것을 이 셋이 못 박는다 — Step 3에서 갈라 놓은
     // 세 갈래를 나란히 보는 자리다.
     try expectCopy(&cm, K.KEY_V, .select_char);
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -812,15 +812,15 @@ pub fn main() !void {
 
     // ── CN-M0: 단어 이동 ────────────────────────────────────────────────
     //
-    // 검사 14. **모드 밖의 `w`와 `b`는 평범한 글자다.** 대조군을 먼저 본다 —
+    // 검사 14. 모드 밖의 `w`와 `b`는 평범한 글자다. 대조군을 먼저 본다 —
     // 이것이 없으면 "`w`가 언제나 삼켜진다"도 통과하고, 그러면 셸에 `w`를 못
-    // 치게 된 것을 아무도 모른다. **variant를 더하는 축만 보면 이 사고가
-    // 안 보인다**(CM-M2가 배운 것).
+    // 치게 된 것을 아무도 모른다. variant를 더하는 축만 보면 이 사고가
+    // 안 보인다(CM-M2가 배운 것).
     try expect(&cm, K.KEY_W, 1, "w");
     try expect(&cm, K.KEY_B, 1, "b");
 
-    // 검사 15. 모드 안에서는 단어 이동 명령이 된다. **expectCopy는 `.bytes`가
-    // 오면 LeakedToPty로 실패하므로**, 이 두 줄이 곧 "PTY로 안 샌다"의
+    // 검사 15. 모드 안에서는 단어 이동 명령이 된다. expectCopy는 `.bytes`가
+    // 오면 LeakedToPty로 실패하므로, 이 두 줄이 곧 "PTY로 안 샌다"의
     // 증명이다.
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -830,14 +830,14 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_W, .word_next);
     try expectCopy(&cm, K.KEY_B, .word_prev);
 
-    // **단어 이동은 모드를 안 닫는다.** `y`와 갈리는 자리이고, 안 그러면 `w`를
+    // 단어 이동은 모드를 안 닫는다. `y`와 갈리는 자리이고, 안 그러면 `w`를
     // 한 번 누른 뒤의 키가 전부 셸로 샌다.
     if (cm.mode != .copy) {
         std.debug.print("FAIL: a word motion left copy mode\n", .{});
         return error.WordMotionLeftMode;
     }
 
-    // 검사 16. **Shift는 단어 이동을 안 가른다.** vim의 `W`/`B`(WORD 단위)를
+    // 검사 16. Shift는 단어 이동을 안 가른다. vim의 `W`/`B`(WORD 단위)를
     // 만들지 않았으므로(design 결정 2) 대문자도 같은 명령이다. 이것을 적어
     // 두지 않으면 나중에 `W`를 더하는 사람이 "원래 갈려 있었나"를 못 안다.
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -848,7 +848,7 @@ pub fn main() !void {
 
     // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
     //
-    // 검사 17. `/`가 프롬프트를 열고, **그 안에서 키가 글자가 된다.**
+    // 검사 17. `/`가 프롬프트를 열고, 그 안에서 키가 글자가 된다.
     // `n`으로 보는 것이 핵심이다 — 그것은 Task 5에서 copy 표의 명령이 되므로,
     // 표보다 프롬프트가 먼저 보지 않으면 needle에 `n`을 못 치게 된다.
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
@@ -861,7 +861,7 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_E, .{ .find_char = 'e' });
     try expectCopy(&cm, K.KEY_W, .{ .find_char = 'w' });
 
-    // 검사 18. **Shift가 대문자를 만든다.** 프롬프트는 명령 표가 아니라
+    // 검사 18. Shift가 대문자를 만든다. 프롬프트는 명령 표가 아니라
     // keymap을 그대로 쓰므로 대소문자가 갈린다 — `w`/`b`가 Shift를 안 가르는
     // 것과 정확히 반대다.
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -871,12 +871,12 @@ pub fn main() !void {
     // 검사 19. Backspace와 Enter와 Esc.
     try expectCopy(&cm, K.KEY_BACKSPACE, .find_erase);
     try expectCopy(&cm, K.KEY_ENTER, .find_submit);
-    // Enter가 프롬프트를 닫았으므로 여기서 `n`은 다시 **명령 표의 것**이다.
+    // Enter가 프롬프트를 닫았으므로 여기서 `n`은 다시 명령 표의 것이다.
     // Task 2 시점에는 모르는 키라 삼켜졌고, Task 5가 검색 이동을 붙이면서
-    // `.find_next`가 됐다 — **이 줄이 그 예고를 갚은 자리다.**
+    // `.find_next`가 됐다 — 이 줄이 그 예고를 갚은 자리다.
     try expectCopy(&cm, K.KEY_N, .find_next);
 
-    // 검사 20. **Esc는 프롬프트만 닫는다**(design 결정 9). 이 검사가 없으면
+    // 검사 20. Esc는 프롬프트만 닫는다(design 결정 9). 이 검사가 없으면
     // "Esc 한 번에 모드까지 나간다"도 통과하고, 그러면 오타를 고치려던 사람이
     // 스크롤 위치와 선택을 잃는다.
     try expectCopy(&cm, K.KEY_SLASH, .find_open);
@@ -886,17 +886,17 @@ pub fn main() !void {
         std.debug.print("FAIL: Esc in the find prompt left copy mode\n", .{});
         return error.FindCancelLeftMode;
     }
-    // **두 번째 Esc가 모드를 닫는다.**
+    // 두 번째 Esc가 모드를 닫는다.
     try expectCopy(&cm, K.KEY_ESC, .exit);
 
-    // 검사 21. **모드 밖의 `/`는 평범한 글자다.** CN-M0의 검사 14와 같은
+    // 검사 21. 모드 밖의 `/`는 평범한 글자다. CN-M0의 검사 14와 같은
     // 대조군이고, 이것이 없으면 셸에 `/`를 못 치게 된 것을 아무도 모른다.
     try expect(&cm, K.KEY_SLASH, 1, "/");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
     try expect(&cm, K.KEY_SLASH, 1, "?");
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
 
-    // 검사 22. **`n`/`N`이 모드 안에서 명령이고 밖에서는 글자다.**
+    // 검사 22. `n`/`N`이 모드 안에서 명령이고 밖에서는 글자다.
     try expect(&cm, K.KEY_N, 1, "n");
     try expect(&cm, K.KEY_LEFTMETA, 1, "");
     try expect(&cm, K.KEY_LEFTSHIFT, 1, "");
@@ -908,7 +908,7 @@ pub fn main() !void {
     try expectCopy(&cm, K.KEY_N, .find_prev);
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
 
-    // 검사 23. **프롬프트 안에서는 `n`이 다시 글자다.** 이것이 이 milestone에서
+    // 검사 23. 프롬프트 안에서는 `n`이 다시 글자다. 이것이 이 milestone에서
     // 순서 하나가 정하는 사실이고, 깨지면 "검색어에 n을 못 친다"가 된다.
     try expectCopy(&cm, K.KEY_SLASH, .find_open);
     try expectCopy(&cm, K.KEY_N, .{ .find_char = 'n' });
@@ -924,18 +924,18 @@ pub fn main() !void {
 
     // ── HI-M1: 한글 ───────────────────────────────────────────────────
 
-    // **자판을 명시한다.** 아래 검사 여덟은 전부 두벌식을 보는데, HI-M2부터
+    // 자판을 명시한다. 아래 검사 여덟은 전부 두벌식을 보는데, HI-M2부터
     // `State`의 기본값이 `shin_pcs`다(설정의 기본값과 같게 둔다). 안 적으면
     // `r`이 ㄱ이 아니라 ㅓ가 되어 전부 갈린다.
     var hg: input.State = .{ .hangul_layout = .dubeol };
 
-    // 검사 24. **대조군 — 한글이 꺼져 있으면 아무것도 안 바뀐다.**
+    // 검사 24. 대조군 — 한글이 꺼져 있으면 아무것도 안 바뀐다.
     // 이 검사가 없으면 아래 검사들이 "한글이 되는가"만 보고 "영문이 계속
     // 되는가"를 안 본다. `r`은 두벌식에서 ㄱ이라 가장 잘 갈린다.
     try expect(&hg, K.KEY_R, 1, "r");
     try expectPreedit(&hg, K.KEY_R, null);
 
-    // 검사 25. **Shift+Space가 한/영을 바꾸고 공백은 PTY로 안 나간다.**
+    // 검사 25. Shift+Space가 한/영을 바꾸고 공백은 PTY로 안 나간다.
     // 빈 슬라이스가 아니라 `.redraw`이 와야 한다 — `.bytes = ""`로 만들면
     // 화면이 다시 안 그려져서 그 뒤의 조합이 안 보인다.
     try expect(&hg, K.KEY_LEFTSHIFT, 1, "");
@@ -946,9 +946,9 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 26. **두벌식으로 `한글`을 친다.** `gksrmf`이고 `hangul_test`의
-    // 검사 4가 같은 글자열을 오토마타 쪽에서 본다 — **이 검사가 보는 것은
-    // 오토마타가 아니라 배선이다.** evdev 코드 → keymap → dubeol → feed까지
+    // 검사 26. 두벌식으로 `한글`을 친다. `gksrmf`이고 `hangul_test`의
+    // 검사 4가 같은 글자열을 오토마타 쪽에서 본다 — 이 검사가 보는 것은
+    // 오토마타가 아니라 배선이다. evdev 코드 → keymap → dubeol → feed까지
     // 한 줄이라도 어긋나면 여기서 갈린다.
     try expectHangul(&hg, K.KEY_G, "", 'ㅎ');
     try expectHangul(&hg, K.KEY_K, "", '하');
@@ -958,18 +958,18 @@ pub fn main() !void {
     try expectHangul(&hg, K.KEY_M, "", '그');
     try expectHangul(&hg, K.KEY_F, "", '글');
 
-    // 검사 27. **Enter가 확정시키고, 확정된 글자와 CR이 둘 다 나간다.**
-    // `expect`가 반환된 바이트를, 이어지는 `expectCommit`이 그보다 **먼저**
+    // 검사 27. Enter가 확정시키고, 확정된 글자와 CR이 둘 다 나간다.
+    // `expect`가 반환된 바이트를, 이어지는 `expectCommit`이 그보다 먼저
     // 나갈 글자를 본다 — 두 줄의 순서가 곧 `readKeys`의 계약이다.
     try expect(&hg, K.KEY_ENTER, 1, "\r");
     try expectCommit(&hg, K.KEY_ENTER, "글");
     try expectPreedit(&hg, K.KEY_ENTER, null);
 
-    // 검사 28. **확정을 유발하는 것 넷**(design 결정 6). 넷이 서로 다른
+    // 검사 28. 확정을 유발하는 것 넷(design 결정 6). 넷이 서로 다른
     // 갈래로 빠진다: 공백(자모가 아닌 문자 키) · 방향키(표 밖) ·
     // Ctrl 조합 · Meta 조합으로 copy mode 진입.
     //
-    // **Cmd+Shift+C가 이 목록에서 가장 미묘하다.** 반환값이 `.copy = .enter`라
+    // Cmd+Shift+C가 이 목록에서 가장 미묘하다. 반환값이 `.copy = .enter`라
     // 확정된 글자를 담을 자리가 없고, 그래서 `commit_buf`라는 통로가 생겼다.
     try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
     try expectHangul(&hg, K.KEY_K, "", '가');
@@ -997,8 +997,8 @@ pub fn main() !void {
     try expect(&hg, K.KEY_LEFTSHIFT, 0, "");
     try expect(&hg, K.KEY_LEFTMETA, 0, "");
 
-    // 검사 29. **한글이 켜져 있어도 copy mode의 `j`는 아래로 간다.**
-    // 한글 층이 copy 표보다 **뒤**라는 것이 이 한 줄이고, 순서를 뒤집으면
+    // 검사 29. 한글이 켜져 있어도 copy mode의 `j`는 아래로 간다.
+    // 한글 층이 copy 표보다 뒤라는 것이 이 한 줄이고, 순서를 뒤집으면
     // 모드 안에서 커서가 안 움직이고 ㅓ가 조합된다.
     if (!hg.hangul_on) {
         std.debug.print("FAIL: copy mode entry turned hangul off\n", .{});
@@ -1006,13 +1006,13 @@ pub fn main() !void {
     }
     try expectCopy(&hg, K.KEY_J, .down);
     try expectCopy(&hg, K.KEY_ESC, .exit);
-    // **모드를 나와도 한/영은 그대로다**(design 결정 5의 직교성).
+    // 모드를 나와도 한/영은 그대로다(design 결정 5의 직교성).
     if (!hg.hangul_on) {
         std.debug.print("FAIL: leaving copy mode turned hangul off\n", .{});
         return error.HangulLostOnCopyExit;
     }
 
-    // 검사 30. **Backspace가 자모를 하나씩 뺀다.** 마지막 하나가 대조군이다 —
+    // 검사 30. Backspace가 자모를 하나씩 뺀다. 마지막 하나가 대조군이다 —
     // 조합이 비고 나면 평소처럼 DEL이 나가야 한다. 그 줄이 없으면 "조합 중이
     // 아닌데도 Backspace를 삼킨다"가 통과하고, 증상은 "셸에서 글자를 못
     // 지운다"라 원인에서 멀다.
@@ -1024,7 +1024,7 @@ pub fn main() !void {
     try expectHangul(&hg, K.KEY_BACKSPACE, "", null);
     try expect(&hg, K.KEY_BACKSPACE, 1, "\x7f");
 
-    // 검사 31. **한/영을 끄면 조합이 먼저 확정된다.** 이것이
+    // 검사 31. 한/영을 끄면 조합이 먼저 확정된다. 이것이
     // "`hangul_buf`가 비지 않았으면 `hangul_on`이 참"이라는 불변식을 세우는
     // 자리다 — 안 확정하면 꺼진 채로 조합이 남아 화면에 글자가 붙박인다.
     try expectHangul(&hg, K.KEY_R, "", 'ㄱ');
@@ -1043,7 +1043,7 @@ pub fn main() !void {
 
     // ── HI-M2: 자판이 되돌려 주는 기호 ────────────────────────────────
 
-    // 검사 32. **세벌식은 숫자 열이 자모라 되돌려 줄 자리가 필요하다.**
+    // 검사 32. 세벌식은 숫자 열이 자모라 되돌려 줄 자리가 필요하다.
     // 3-P3에서 `1`은 종성 ㅋ이고, 숫자 `1`은 Shift+M에 있다. 이것이 없으면
     // 3-P3 사용자는 한글 상태에서 숫자를 아예 못 친다.
     var sb: input.State = .{ .hangul_layout = .sebeol_3p3 };
@@ -1057,9 +1057,9 @@ pub fn main() !void {
     try expectCommit(&sb, K.KEY_M, "");
     try expect(&sb, K.KEY_LEFTSHIFT, 0, "");
 
-    // **조합 중이면 음절이 먼저 나간다.** 뒤집히면 셸에 `1가`가 도착한다.
+    // 조합 중이면 음절이 먼저 나간다. 뒤집히면 셸에 `1가`가 도착한다.
     // `kf`가 3-P3의 `가`이고, `hangul_test`가 같은 글자열을 오토마타 쪽에서
-    // 본다 — **여기가 보는 것은 배선이다.**
+    // 본다 — 여기가 보는 것은 배선이다.
     try expectHangul(&sb, K.KEY_K, "", 'ㄱ');
     try expectHangul(&sb, K.KEY_F, "", '가');
     try expect(&sb, K.KEY_LEFTSHIFT, 1, "");
@@ -1068,7 +1068,7 @@ pub fn main() !void {
     try expectPreedit(&sb, K.KEY_M, null);
     try expect(&sb, K.KEY_LEFTSHIFT, 0, "");
 
-    // 검사 33. **신세벌 P2는 유니코드 기호를 준다.** `nonSyllable`이 `?u8`이
+    // 검사 33. 신세벌 P2는 유니코드 기호를 준다. `nonSyllable`이 `?u8`이
     // 아니라 `?u21`인 이유가 이 한 줄이고, UTF-8 세 바이트가 `seq`에 담겨
     // 나간다.
     var sp: input.State = .{ .hangul_layout = .shin_p2 };
@@ -1081,7 +1081,7 @@ pub fn main() !void {
 
     // ── HI-M2: 영문 드보락 ────────────────────────────────────────────
 
-    // 검사 34. **드보락이 라틴 문자를 바꾼다.** 쿼티의 `s` 자리(KEY_S)가
+    // 검사 34. 드보락이 라틴 문자를 바꾼다. 쿼티의 `s` 자리(KEY_S)가
     // 드보락에서는 `o`이고, `z` 자리는 `;`다.
     var dv: input.State = .{ .latin_layout = .dvorak, .hangul_layout = .dubeol };
     try expect(&dv, K.KEY_S, 1, "o");
@@ -1092,12 +1092,12 @@ pub fn main() !void {
     try expect(&dv, K.KEY_S, 1, "O");
     try expect(&dv, K.KEY_LEFTSHIFT, 0, "");
 
-    // 검사 35. **그런데 한글 배열은 안 흔들린다**(design 결정 13). 이것이 이
+    // 검사 35. 그런데 한글 배열은 안 흔들린다(design 결정 13). 이것이 이
     // 검사의 전부다 — 한글 자판이 쓰는 것은 문자가 아니라 물리 키 위치이고,
     // 그 위치를 부르는 이름이 쿼티 배치의 문자다.
     //
-    // KEY_R은 드보락에서 `p`인데, 두벌식에서 ㄱ이 나와야 한다. **틀리면
-    // 여기서 ㅔ가 나온다**(두벌식의 `p`) — 증상이 "안 된다"가 아니라 "다른
+    // KEY_R은 드보락에서 `p`인데, 두벌식에서 ㄱ이 나와야 한다. 틀리면
+    // 여기서 ㅔ가 나온다(두벌식의 `p`) — 증상이 "안 된다"가 아니라 "다른
     // 글자가 나온다"라 원인을 오토마타에서 찾게 되는 자리다.
     try expect(&dv, K.KEY_LEFTSHIFT, 1, "");
     try expectHangul(&dv, K.KEY_SPACE, "", null);
@@ -1109,8 +1109,8 @@ pub fn main() !void {
 
     // ── HI-M3: 한/영 키와 전환 키 설정 ────────────────────────────────
 
-    // 검사 36. **실기의 한/영 키(122)가 전환한다.** 게이트가 이 키를 못
-    // 보내므로(HI-M0 실측 1) 이 검사가 그 갈래를 덮는 **유일한** 자리다.
+    // 검사 36. 실기의 한/영 키(122)가 전환한다. 게이트가 이 키를 못
+    // 보내므로(HI-M0 실측 1) 이 검사가 그 갈래를 덮는 유일한 자리다.
     var hk: input.State = .{ .hangul_layout = .dubeol };
     try expectHangul(&hk, K.KEY_HANGEUL, "", null);
     if (!hk.hangul_on) {
@@ -1119,7 +1119,7 @@ pub fn main() !void {
     }
     try expectHangul(&hk, K.KEY_R, "", 'ㄱ');
     try expectHangul(&hk, K.KEY_K, "", '가');
-    // **조합 중이던 글자가 확정되고 나간다.** 전환 키 넷이 전부 지켜야 하는
+    // 조합 중이던 글자가 확정되고 나간다. 전환 키 넷이 전부 지켜야 하는
     // 계약이고, 그것을 `toggleHangul` 한 자리로 모아 둔 이유다.
     try expectHangul(&hk, K.KEY_HANGEUL, "가", null);
     if (hk.hangul_on) {
@@ -1127,7 +1127,7 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 37. **꺼 두면 그 키는 아무 일도 안 한다.** 설정이 실제로 갈래를
+    // 검사 37. 꺼 두면 그 키는 아무 일도 안 한다. 설정이 실제로 갈래를
     // 끄는지 보는 자리다 — 안 보면 "목록을 파싱만 하고 안 쓰는" 코드가
     // 통과한다.
     var tg_off: input.State = .{
@@ -1139,8 +1139,8 @@ pub fn main() !void {
         std.debug.print("FAIL: KEY_HANGEUL toggled with hangul_key off\n", .{});
         return error.ToggleFailed;
     }
-    // **Shift+Space도 꺼졌으니 공백이 PTY로 나간다.** 음성 검사가 아니라
-    // **양성** 검사인 것에 뜻이 있다 — 삼키면 빈 문자열이 온다. 이것이
+    // Shift+Space도 꺼졌으니 공백이 PTY로 나간다. 음성 검사가 아니라
+    // 양성 검사인 것에 뜻이 있다 — 삼키면 빈 문자열이 온다. 이것이
     // HI-M1이 적어 둔 "대가"를 없애는 길이다.
     try expect(&tg_off, K.KEY_LEFTSHIFT, 1, "");
     try expect(&tg_off, K.KEY_SPACE, 1, " ");
@@ -1150,10 +1150,10 @@ pub fn main() !void {
 
     // ── HI-M3: tap-vs-hold (왼쪽 Ctrl) ────────────────────────────────
     //
-    // **시각을 직접 준다.** 게이트는 `sendkey <key> <hold_ms>`로 같은 것을
+    // 시각을 직접 준다. 게이트는 `sendkey <key> <hold_ms>`로 같은 것을
     // 보지만(HI-M0 실측 2) 여기서는 부팅 없이 문턱(0.3초)의 양쪽을 밟는다.
 
-    // 검사 38. **짧은 왼쪽 Ctrl이 한/영을 켠다.** 0.1초다.
+    // 검사 38. 짧은 왼쪽 Ctrl이 한/영을 켠다. 0.1초다.
     var tp: input.State = .{ .hangul_layout = .dubeol };
     try expectAt(&tp, K.KEY_LEFTCTRL, 1, 0, "");
     try expectHangulAt(&tp, K.KEY_LEFTCTRL, 0, 100_000, "", null);
@@ -1162,8 +1162,8 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 39. **긴 왼쪽 Ctrl은 아무 일도 안 한다.** 0.4초다. 검사 38과 이
-    // 검사가 문턱의 양쪽이고, **둘이 짝이어야 뜻이 선다** — 짧은 것만 보면
+    // 검사 39. 긴 왼쪽 Ctrl은 아무 일도 안 한다. 0.4초다. 검사 38과 이
+    // 검사가 문턱의 양쪽이고, 둘이 짝이어야 뜻이 선다 — 짧은 것만 보면
     // "언제나 전환한다"가 통과한다.
     try expectAt(&tp, K.KEY_LEFTCTRL, 1, 1_000_000, "");
     try expectAt(&tp, K.KEY_LEFTCTRL, 0, 1_400_000, "");
@@ -1172,10 +1172,10 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 40. **`Ctrl+C`가 한/영을 안 바꾼다 — 이것이 결정 8의 심장이다.**
+    // 검사 40. `Ctrl+C`가 한/영을 안 바꾼다 — 이것이 결정 8의 심장이다.
     // 누른 시간이 0.05초라 문턱보다 훨씬 짧은데도 tap이 아니어야 한다. 이
     // 검사가 없으면 터미널에서 가장 흔한 조합이 누를 때마다 한/영을 뒤집고,
-    // **증상이 "가끔 한글이 안 쳐진다"라 원인에서 아주 멀다.**
+    // 증상이 "가끔 한글이 안 쳐진다"라 원인에서 아주 멀다.
     try expectAt(&tp, K.KEY_LEFTCTRL, 1, 2_000_000, "");
     try expectAt(&tp, K.KEY_C, 1, 2_010_000, "\x03");
     try expectAt(&tp, K.KEY_LEFTCTRL, 0, 2_050_000, "");
@@ -1184,8 +1184,8 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 41. **Shift가 눌린 것도 소비다.** 소비 표시가 modifier switch
-    // **앞**에 있어야 하는 이유를 보는 유일한 자리다 — 뒤에 있으면 Shift
+    // 검사 41. Shift가 눌린 것도 소비다. 소비 표시가 modifier switch
+    // 앞에 있어야 하는 이유를 보는 유일한 자리다 — 뒤에 있으면 Shift
     // 갈래가 먼저 `return`해서 그 줄이 실행되지 않는다.
     try expectAt(&tp, K.KEY_LEFTCTRL, 1, 3_000_000, "");
     try expectAt(&tp, K.KEY_LEFTSHIFT, 1, 3_010_000, "");
@@ -1196,7 +1196,7 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 42. **오른쪽 Ctrl은 tap이 아니다.** 결정 8이 왼쪽만 적었다 —
+    // 검사 42. 오른쪽 Ctrl은 tap이 아니다. 결정 8이 왼쪽만 적었다 —
     // 오른쪽까지 넣으면 오탐이 두 배가 되고, 얻는 것은 없다.
     try expectAt(&tp, K.KEY_RIGHTCTRL, 1, 4_000_000, "");
     try expectAt(&tp, K.KEY_RIGHTCTRL, 0, 4_100_000, "");
@@ -1205,7 +1205,7 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 43. **조합 중이면 tap이 그것을 확정시킨다.** 전환 키 넷이 전부
+    // 검사 43. 조합 중이면 tap이 그것을 확정시킨다. 전환 키 넷이 전부
     // `toggleHangul`을 지나므로 계약이 하나다 — 이 검사가 그것을 modifier
     // switch 쪽에서 확인한다(검사 36은 `hangulLayer` 쪽에서 봤다).
     try expectHangulAt(&tp, K.KEY_R, 1, 5_000_000, "", 'ㄱ');
@@ -1217,7 +1217,7 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
 
-    // 검사 44. **설정이 꺼져 있으면 짧아도 아무 일도 안 한다.**
+    // 검사 44. 설정이 꺼져 있으면 짧아도 아무 일도 안 한다.
     var lc_off: input.State = .{
         .hangul_layout = .dubeol,
         .toggles = .{ .hangul_key = true },
@@ -1237,7 +1237,7 @@ pub fn main() !void {
 
     // ── HI-M3: CapsLock ───────────────────────────────────────────────
 
-    // 검사 45. **짧은 CapsLock이 한/영을 켜고 끈다.** 0.2초다.
+    // 검사 45. 짧은 CapsLock이 한/영을 켜고 끈다. 0.2초다.
     var cl: input.State = .{ .hangul_layout = .dubeol };
     try expectAt(&cl, K.KEY_CAPSLOCK, 1, 0, "");
     try expectHangulAt(&cl, K.KEY_CAPSLOCK, 0, 200_000, "", null);
@@ -1251,13 +1251,13 @@ pub fn main() !void {
         std.debug.print("FAIL: a second short CapsLock did not turn hangul off\n", .{});
         return error.ToggleFailed;
     }
-    // **대문자 잠금은 안 켜졌다.** 짧은 tap이 그것까지 건드렸으면 여기서
+    // 대문자 잠금은 안 켜졌다. 짧은 tap이 그것까지 건드렸으면 여기서
     // `A`가 나온다 — 이 한 줄이 두 축이 안 섞였다는 증거다.
     try expectAt(&cl, K.KEY_A, 1, 2_000_000, "a");
 
-    // 검사 46. **긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다.** 0.4초다.
+    // 검사 46. 긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다. 0.4초다.
     try expectAt(&cl, K.KEY_CAPSLOCK, 1, 3_000_000, "");
-    // **뗄 때 `.redraw`가 나와야 한다**(IS-M1). 대문자 잠금이 뒤집혔으니
+    // 뗄 때 `.redraw`가 나와야 한다(IS-M1). 대문자 잠금이 뒤집혔으니
     // 상태 줄의 `CAPS` 칸을 그 자리에서 다시 그려야 한다.
     try expectRedrawAt(&cl, K.KEY_CAPSLOCK, 0, 3_400_000);
     if (cl.hangul_on) {
@@ -1265,30 +1265,30 @@ pub fn main() !void {
         return error.ToggleFailed;
     }
     try expectAt(&cl, K.KEY_A, 1, 4_000_000, "A");
-    // **숫자와 기호는 안 바뀐다 — 결정 9의 전부가 이 두 줄이다.** Shift를
+    // 숫자와 기호는 안 바뀐다 — 결정 9의 전부가 이 두 줄이다. Shift를
     // 통째로 걸어 버리는 구현은 여기서 `!`와 `_`를 낸다.
     try expectAt(&cl, K.KEY_1, 1, 4_010_000, "1");
     try expectAt(&cl, K.KEY_MINUS, 1, 4_020_000, "-");
-    // **Shift와 겹치면 소문자다.** 진짜 키보드의 동작이고, XOR로 쓴 이유다.
+    // Shift와 겹치면 소문자다. 진짜 키보드의 동작이고, XOR로 쓴 이유다.
     try expectAt(&cl, K.KEY_LEFTSHIFT, 1, 4_030_000, "");
     try expectAt(&cl, K.KEY_A, 1, 4_040_000, "a");
     // 숫자는 Shift 그대로다 — CapsLock이 안 닿았으므로 XOR도 안 일어난다.
     try expectAt(&cl, K.KEY_1, 1, 4_050_000, "!");
     try expectAt(&cl, K.KEY_LEFTSHIFT, 0, 4_060_000, "");
-    // 한 번 더 길게 누르면 꺼진다. **켜지는 것만 보면 토글이 한 방향으로만
-    // 동작해도 통과한다** — 게이트의 검사 1과 9가 같은 짝이다.
+    // 한 번 더 길게 누르면 꺼진다. 켜지는 것만 보면 토글이 한 방향으로만
+    // 동작해도 통과한다 — 게이트의 검사 1과 9가 같은 짝이다.
     try expectAt(&cl, K.KEY_CAPSLOCK, 1, 5_000_000, "");
     try expectRedrawAt(&cl, K.KEY_CAPSLOCK, 0, 5_400_000);
     try expectAt(&cl, K.KEY_A, 1, 6_000_000, "a");
 
-    // 검사 47. **`capslock_tap`이 꺼져 있으면 짧아도 대문자 잠금이다.**
+    // 검사 47. `capslock_tap`이 꺼져 있으면 짧아도 대문자 잠금이다.
     // 그때 CapsLock은 그냥 CapsLock이고, 그것이 이 설정의 뜻이다.
     var cl_off: input.State = .{
         .hangul_layout = .dubeol,
         .toggles = .{ .hangul_key = true },
     };
     try expectAt(&cl_off, K.KEY_CAPSLOCK, 1, 0, "");
-    // **설정이 꺼져 있어도 `.redraw`다.** 한/영은 안 바뀌지만 대문자 잠금은
+    // 설정이 꺼져 있어도 `.redraw`다. 한/영은 안 바뀌지만 대문자 잠금은
     // 바뀌었고, 상태 줄은 그것도 보여 준다.
     try expectRedrawAt(&cl_off, K.KEY_CAPSLOCK, 0, 100_000);
     if (cl_off.hangul_on) {
@@ -1297,8 +1297,8 @@ pub fn main() !void {
     }
     try expectAt(&cl_off, K.KEY_A, 1, 200_000, "A");
 
-    // 검사 48. **대문자 잠금이 한글 조합에 안 닿는다.** 한글 조회는 언제나
-    // 쿼티 표의 **Shift 안 누른** 칸에서 오므로(결정 13) 자동으로 그렇지만,
+    // 검사 48. 대문자 잠금이 한글 조합에 안 닿는다. 한글 조회는 언제나
+    // 쿼티 표의 Shift 안 누른 칸에서 오므로(결정 13) 자동으로 그렇지만,
     // 못 박아 두지 않으면 나중에 누가 `hangulLayer`를 `latinChar`로 바꿔 쓰면서
     // 조용히 깨뜨린다.
     var cl_hg: input.State = .{ .hangul_layout = .dubeol };
@@ -1308,10 +1308,10 @@ pub fn main() !void {
     // 짧게 눌러 한글을 켠다.
     try expectAt(&cl_hg, K.KEY_CAPSLOCK, 1, 1_000_000, "");
     try expectHangulAt(&cl_hg, K.KEY_CAPSLOCK, 0, 1_100_000, "", null);
-    // **`o`를 고른 것에 뜻이 있다.** 두벌식에서 소문자 `o`는 ㅐ이고 대문자
+    // `o`를 고른 것에 뜻이 있다. 두벌식에서 소문자 `o`는 ㅐ이고 대문자
     // `O`는 ㅒ라, 대문자 잠금이 한글 층에 새면 `개`가 아니라 `걔`가 나온다.
     // `k`(ㅏ)로는 대문자 칸이 따로 없어서 아무것도 안 보인다 —
-    // **증상이 "안 된다"가 아니라 "다른 글자가 나온다"인 종류다.**
+    // 증상이 "안 된다"가 아니라 "다른 글자가 나온다"인 종류다.
     try expectHangulAt(&cl_hg, K.KEY_R, 1, 2_000_000, "", 'ㄱ');
     try expectHangulAt(&cl_hg, K.KEY_O, 1, 2_010_000, "", '개');
 
@@ -1319,11 +1319,11 @@ pub fn main() !void {
 
     // ── SH-M1: 검색 프롬프트의 한글 ──────────────────────────────────────
     //
-    // **State를 새로 만든다.** 위의 `hg`는 tap 상태와 대문자 잠금이 묻어
+    // State를 새로 만든다. 위의 `hg`는 tap 상태와 대문자 잠금이 묻어
     // 있고, 여기서 보는 것은 모드와 한글 층의 관계뿐이다.
     var fp: input.State = .{ .hangul_layout = .dubeol };
 
-    // 검사 49. **대조군 — 한글이 꺼져 있으면 프롬프트가 한 글자도 안 바뀐다.**
+    // 검사 49. 대조군 — 한글이 꺼져 있으면 프롬프트가 한 글자도 안 바뀐다.
     // 이 검사가 없으면 아래 여섯이 전부 "한글이 되는가"만 보고, ASCII 경로가
     // 깨진 것을 아무도 모른다(SH design 결정 4의 마지막 줄).
     try expect(&fp, K.KEY_LEFTMETA, 1, "");
@@ -1335,10 +1335,10 @@ pub fn main() !void {
     try expectCopy(&fp, K.KEY_G, .{ .find_char = 'g' });
     try expectCopy(&fp, K.KEY_K, .{ .find_char = 'k' });
 
-    // 검사 50. **프롬프트 안에서 한/영을 켤 수 있다**(design 결정 1).
+    // 검사 50. 프롬프트 안에서 한/영을 켤 수 있다(design 결정 1).
     // 프롬프트가 지금의 상태를 물려받으므로, 영문으로 열린 채 한글을 치려면
     // 여기서 바꾸는 길이 있어야 한다. `hangulLayer`가 이 갈래를 `hangul_on`
-    // 검사보다 **앞**에 두고 있어 꺼져 있을 때도 닿는다.
+    // 검사보다 앞에 두고 있어 꺼져 있을 때도 닿는다.
     try expect(&fp, K.KEY_LEFTSHIFT, 1, "");
     try expectHangul(&fp, K.KEY_SPACE, "", null);
     try expect(&fp, K.KEY_LEFTSHIFT, 0, "");
@@ -1351,27 +1351,27 @@ pub fn main() !void {
         return error.FindModeLost;
     }
 
-    // 검사 51. **자모 키가 needle이 아니라 조합으로 간다.** `gks`가 `한`이다.
-    // **`.find_char`로 새면 needle이 `gks`가 되고**, 그것이 이 서브프로젝트가
+    // 검사 51. 자모 키가 needle이 아니라 조합으로 간다. `gks`가 `한`이다.
+    // `.find_char`로 새면 needle이 `gks`가 되고, 그것이 이 서브프로젝트가
     // 없애려는 바로 그 증상이다(design "왜 지금인가").
     try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
     try expectHangul(&fp, K.KEY_K, "", '하');
     try expectHangul(&fp, K.KEY_S, "", '한');
 
-    // 검사 52. **Backspace가 두 갈래다.** 조합 중이면 자모 하나(`한`→`하`),
-    // 아니면 needle의 마지막 글자다. **갈래를 나누는 것은 `hangul.erase`가
-    // 주는 null 하나**이고, 그래서 find 분기에 조건문이 안 생긴다.
+    // 검사 52. Backspace가 두 갈래다. 조합 중이면 자모 하나(`한`→`하`),
+    // 아니면 needle의 마지막 글자다. 갈래를 나누는 것은 `hangul.erase`가
+    // 주는 null 하나이고, 그래서 find 분기에 조건문이 안 생긴다.
     try expectHangul(&fp, K.KEY_BACKSPACE, "", '하');
     try expectHangul(&fp, K.KEY_BACKSPACE, "", 'ㅎ');
     try expectHangul(&fp, K.KEY_BACKSPACE, "", null);
     // 조합이 없으니 이제 needle을 지운다.
     try expectCopy(&fp, K.KEY_BACKSPACE, .find_erase);
 
-    // 검사 53. **Esc는 조합만 버린다**(design 결정 3). 프롬프트는 살아 있고
+    // 검사 53. Esc는 조합만 버린다(design 결정 3). 프롬프트는 살아 있고
     // 모드도 `.find` 그대로다 — `Esc`가 한 겹씩 벗기는 규칙(CN-M1 결정 9)이
     // 셋째 겹으로 늘어난 자리다.
     //
-    // **버린다는 것이 요점이다** — 확정하면 `Esc`가 취소가 아니라 입력이 된다.
+    // 버린다는 것이 요점이다 — 확정하면 `Esc`가 취소가 아니라 입력이 된다.
     try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
     try expectHangul(&fp, K.KEY_K, "", '하');
     try expectHangulAt(&fp, K.KEY_ESC, 1, 0, "", null);
@@ -1379,18 +1379,18 @@ pub fn main() !void {
         std.debug.print("FAIL: Esc on a composing syllable also closed the prompt\n", .{});
         return error.FindModeLost;
     }
-    // **두 번째 Esc가 프롬프트를 닫는다.** 조합이 없으니 평소의 갈래다.
+    // 두 번째 Esc가 프롬프트를 닫는다. 조합이 없으니 평소의 갈래다.
     try expectCopy(&fp, K.KEY_ESC, .find_cancel);
     if (fp.mode != .copy) {
         std.debug.print("FAIL: the second Esc did not fall back to copy mode\n", .{});
         return error.FindCancelLeftMode;
     }
 
-    // 검사 54. **Enter가 확정하고 제출한다**(design 결정 3). 둘이 **함께**
+    // 검사 54. Enter가 확정하고 제출한다(design 결정 3). 둘이 함께
     // 나오는 것이 이 검사의 전부다 — `Action`은 하나만 담으므로 확정분은
     // `commit_buf`를 타고, `expectCommit`이 그것을 본다.
     //
-    // **`Esc`와 다른 규칙인 것이 모순이 아니다.** `Esc`는 취소라 겹이,
+    // `Esc`와 다른 규칙인 것이 모순이 아니다. `Esc`는 취소라 겹이,
     // `Enter`는 진행이라 폭포가 자연스럽다.
     try expectCopy(&fp, K.KEY_SLASH, .find_open);
     try expectHangul(&fp, K.KEY_G, "", 'ㅎ');
@@ -1405,9 +1405,9 @@ pub fn main() !void {
     }
     try expectCopy(&fp, K.KEY_ESC, .exit);
 
-    // 검사 55. **세벌식의 기호 되돌림이 프롬프트에서 둘을 함께 싣는다**
+    // 검사 55. 세벌식의 기호 되돌림이 프롬프트에서 둘을 함께 싣는다
     // (design 결정 6). 셸에서는 음절이 `commit_buf`로, 기호가 `.bytes`로
-    // 갈라져 나갔다(HI-M2 실측 7) — **목적지가 둘이었기 때문이다.**
+    // 갈라져 나갔다(HI-M2 실측 7) — 목적지가 둘이었기 때문이다.
     // 프롬프트에서는 목적지가 needle 하나뿐이라 통로 하나에 둘을 실어야
     // 하고, 그것이 `commit_buf`를 여덟 바이트로 넓히는 유일한 이유다.
     //
@@ -1423,18 +1423,18 @@ pub fn main() !void {
     try expectHangul(&fsb, K.KEY_K, "", 'ㄱ');
     try expectHangul(&fsb, K.KEY_F, "", '가');
     try expect(&fsb, K.KEY_LEFTSHIFT, 1, "");
-    // **`.bytes`가 아니라 `.redraw`다.** 프롬프트에서 `.bytes`를 돌려주면
-    // 그 기호가 PTY로 나가서 **셸에 `1`이 찍힌다.**
+    // `.bytes`가 아니라 `.redraw`다. 프롬프트에서 `.bytes`를 돌려주면
+    // 그 기호가 PTY로 나가서 셸에 `1`이 찍힌다.
     try expectHangul(&fsb, K.KEY_M, "가1", null);
     try expect(&fsb, K.KEY_LEFTSHIFT, 0, "");
 
     std.debug.print("input_test: 검색 프롬프트의 한글 OK\n", .{});
 
-    // 검사 56. **확정된 음절이 셸이 아니라 needle로 간다**(SH design 결정 4·5).
+    // 검사 56. 확정된 음절이 셸이 아니라 needle로 간다(SH design 결정 4·5).
     //
-    // **`readKeys`를 직접 돌리는 이 파일의 첫 검사다.** 여태 `handleKey`만
-    // 봤는데, 결정 5가 말하는 사실("모드를 `handleKey` **앞에서** 읽는다")은
-    // 그 함수 안에 아예 없다 — `readKeys`의 두 줄 **사이**에 있다.
+    // `readKeys`를 직접 돌리는 이 파일의 첫 검사다. 여태 `handleKey`만
+    // 봤는데, 결정 5가 말하는 사실("모드를 `handleKey` 앞에서 읽는다")은
+    // 그 함수 안에 아예 없다 — `readKeys`의 두 줄 사이에 있다.
     //
     // 파이프를 파는 이유는 그 함수가 fd에서 읽기 때문이다. 이벤트 넷을 한
     // 번의 write로 넣으면 read 한 번이 전부 가져간다(PIPE_BUF가 4096이고
@@ -1444,9 +1444,9 @@ pub fn main() !void {
         fk.hangul_on = true;
         fk.mode = .find;
 
-        // `한` + Enter. **Enter가 이 검사의 심장이다** — 그 키가 모드를
+        // `한` + Enter. Enter가 이 검사의 심장이다 — 그 키가 모드를
         // `.copy`로 바꾸므로, `readKeys`가 모드를 뒤에서 읽으면 마지막 음절이
-        // needle이 아니라 **셸로 샌다.**
+        // needle이 아니라 셸로 샌다.
         const evs = [_]input.c.struct_input_event{
             keyEvent(K.KEY_G, 1), keyEvent(K.KEY_K, 1),
             keyEvent(K.KEY_S, 1), keyEvent(K.KEY_ENTER, 1),
@@ -1457,7 +1457,7 @@ pub fn main() !void {
         var out: [64]u8 = undefined;
         const keys = input.readKeys(&fk, fds[0], &out, .{});
 
-        // **아무것도 셸로 안 샜다.** 이 한 줄이 결정 5의 판정 전부다 —
+        // 아무것도 셸로 안 샜다. 이 한 줄이 결정 5의 판정 전부다 —
         // 뒤에서 읽는 구현은 여기서 `한`(세 바이트)을 내놓는다.
         if (keys.bytes.len != 0) {
             std.debug.print(
@@ -1466,8 +1466,8 @@ pub fn main() !void {
             );
             return error.LeakedToPty;
         }
-        // 확정분이 먼저, 제출이 그다음이다. **순서가 뒤집히면 빈 검색어로
-        // 검색한다.**
+        // 확정분이 먼저, 제출이 그다음이다. 순서가 뒤집히면 빈 검색어로
+        // 검색한다.
         if (keys.copies.len != 2) {
             std.debug.print(
                 "FAIL: the find prompt made {d} copy command(s), want 2\n",
@@ -1476,7 +1476,7 @@ pub fn main() !void {
             return error.WrongCopyCount;
         }
         switch (keys.copies[0]) {
-            // **이름이 `cm`이 아니다.** 위쪽 copy mode 검사의 `State`가 그
+            // 이름이 `cm`이 아니다. 위쪽 copy mode 검사의 `State`가 그
             // 이름을 쓰고 있고 Zig는 이름 가리기를 막는다(HI-M1 실측 8 ·
             // SP-M0 실측 9). 이 파일에서 두 번째로 밟은 자리다.
             .find_commit => |cmt| {
@@ -1488,7 +1488,7 @@ pub fn main() !void {
                     return error.WrongCommit;
                 }
             },
-            // **capture 없이 쓴다.** union의 `else` 갈래에서 payload를 잡으면
+            // capture 없이 쓴다. union의 `else` 갈래에서 payload를 잡으면
             // 남은 variant들의 타입이 같아야 하고, 여기서는 안 같다.
             else => {
                 std.debug.print(
@@ -1498,7 +1498,7 @@ pub fn main() !void {
                 return error.WrongCopyCommand;
             },
         }
-        // **`!=`로 태그를 비교할 수 없다** — union에는 `==`가 없다(CN-M1
+        // `!=`로 태그를 비교할 수 없다 — union에는 `==`가 없다(CN-M1
         // Task 1이 `std.meta.eql`을 쓴 것과 같은 자리다). 여기서는 payload가
         // 없는 variant 하나만 보면 되므로 `activeTag`가 맞다.
         if (std.meta.activeTag(keys.copies[1]) != .find_submit) {
@@ -1510,7 +1510,7 @@ pub fn main() !void {
         }
     }
 
-    // 검사 57. **대조군 — 셸에서는 그대로 PTY로 나간다.** 이것이 없으면
+    // 검사 57. 대조군 — 셸에서는 그대로 PTY로 나간다. 이것이 없으면
     // "언제나 needle로 보낸다"는 구현도 검사 56을 통과하고, 그 구현은 셸의
     // 한글을 통째로 없앤다.
     {
@@ -1526,7 +1526,7 @@ pub fn main() !void {
 
         var out: [64]u8 = undefined;
         const keys = input.readKeys(&nk, fds[0], &out, .{});
-        // 확정된 `한` 뒤에 Enter의 CR이다 — **순서가 곧 HI-M1의 계약이다.**
+        // 확정된 `한` 뒤에 Enter의 CR이다 — 순서가 곧 HI-M1의 계약이다.
         if (!std.mem.eql(u8, keys.bytes, "한\r")) {
             std.debug.print(
                 "FAIL: the shell got \"{s}\", want \"한\\r\"\n",
@@ -1545,14 +1545,14 @@ pub fn main() !void {
 
     std.debug.print("input_test: 확정된 음절이 모드를 따라 갈린다 OK\n", .{});
 
-    // 검사 58. **프롬프트 안의 `Cmd+V`가 붙여넣기다**(FP design 결정 1).
+    // 검사 58. 프롬프트 안의 `Cmd+V`가 붙여넣기다(FP design 결정 1).
     //
     // 지금은 `.find_char = 'v'`가 돌아온다 — find 분기가 copy 표와 `chord()`
-    // 보다 **앞**이라 `Cmd+V`가 둘 중 어디에도 안 닿고, `latinChar()`는
-    // modifier를 안 보기 때문이다. **needle에 글자 `v`가 들어가는 것**이
+    // 보다 앞이라 `Cmd+V`가 둘 중 어디에도 안 닿고, `latinChar()`는
+    // modifier를 안 보기 때문이다. needle에 글자 `v`가 들어가는 것이
     // 이 Task가 없애는 증상이다.
     //
-    // **대조군이 같은 블록에 있다** — Meta를 떼면 `v`는 여전히 글자다.
+    // 대조군이 같은 블록에 있다 — Meta를 떼면 `v`는 여전히 글자다.
     // 그것이 없으면 "프롬프트에서 v는 언제나 paste"라는 구현도 통과하고,
     // 그 구현은 검색어에 `v`를 못 치게 만든다.
     {
@@ -1564,7 +1564,7 @@ pub fn main() !void {
         try expectCopy(&fv, K.KEY_SLASH, .find_open);
         // Meta는 아직 눌려 있다.
         try expectCopy(&fv, K.KEY_V, .paste);
-        // **붙여넣기는 프롬프트를 안 닫는다.** copy mode에서 그런 것과 같다
+        // 붙여넣기는 프롬프트를 안 닫는다. copy mode에서 그런 것과 같다
         // (`input_test` 검사 12) — 붙여넣고 이어서 더 칠 수 있어야 한다.
         if (fv.mode != .find) {
             std.debug.print("FAIL: Cmd+V in the find prompt left the prompt\n", .{});
@@ -1575,13 +1575,13 @@ pub fn main() !void {
         try expectCopy(&fv, K.KEY_V, .{ .find_char = 'v' });
     }
 
-    // 검사 59. **조합 중에 붙여넣으면 음절이 먼저 확정된다**(FP design 결정 2).
+    // 검사 59. 조합 중에 붙여넣으면 음절이 먼저 확정된다(FP design 결정 2).
     //
-    // 새 자리가 `hangulLayer`보다 **앞**이라, `commitHangul()`을 명시적으로
-    // 안 부르면 조합 중인 `한`이 **소리 없이 사라진다.** 증상은 "붙여넣었더니
+    // 새 자리가 `hangulLayer`보다 앞이라, `commitHangul()`을 명시적으로
+    // 안 부르면 조합 중인 `한`이 소리 없이 사라진다. 증상은 "붙여넣었더니
     // 앞 글자가 없어졌다"이고 원인에서 멀다.
     //
-    // **`Enter`가 이미 같은 한 줄을 쓴다**(`input.zig`의 find 분기). 새
+    // `Enter`가 이미 같은 한 줄을 쓴다(`input.zig`의 find 분기). 새
     // 기계가 아니라 같은 처방의 두 번째 손님이다.
     {
         var fc: input.State = .{ .hangul_layout = .dubeol };
@@ -1592,7 +1592,7 @@ pub fn main() !void {
         try expectHangul(&fc, K.KEY_S, "", '한');
         try expect(&fc, K.KEY_LEFTMETA, 1, "");
         try expectCopy(&fc, K.KEY_V, .paste);
-        // 확정분은 `commit_buf`에 있다. **`Action`은 하나만 담으므로**
+        // 확정분은 `commit_buf`에 있다. `Action`은 하나만 담으므로
         // 붙여넣기와 확정이 같은 키에서 함께 나올 길은 이것뿐이다.
         try expectCommit(&fc, K.KEY_V, "한");
         try expectPreedit(&fc, K.KEY_V, null);

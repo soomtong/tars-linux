@@ -5,16 +5,16 @@ cd "$(dirname "$0")"
 
 # IP 체인 — 키보드 입력 정책.
 #
-# IP-M2부터 부팅이 **두 번**이다.
+# IP-M2부터 부팅이 두 번이다.
 #
 #   1차 — 디스크 없이. /config mount가 실패하면 init이 기본값(fish, apple)로
 #         폴백하므로 이 체인은 그 폴백 경로를 덤으로 밟는다. Ctrl+C · TERM ·
 #         방향키 · Option/Cmd를 여기서 본다.
 #   2차 — keyboard=pc가 이미 적힌 디스크를 물고. 같은 물리 키가 1차와
-#         **반대로** 동작하는 것을 본다.
+#         반대로 동작하는 것을 본다.
 #
 # 2차를 붙인 이유는 디스크가 없으면 설정이 영원히 apple이라 pc 경로를
-# **구조적으로** 밟을 방법이 없기 때문이다 — 게이트가 못 보는 것은 게이트가
+# 구조적으로 밟을 방법이 없기 때문이다 — 게이트가 못 보는 것은 게이트가
 # 통과시킨다(docs/decisions/project_gate_chain_composition.md). DECCKM과
 # 달리 이건 우리가 파일 한 줄로 켤 수 있으므로 켠다.
 #
@@ -61,10 +61,10 @@ if ! (cd ../kernel && ./make_initrd.sh); then
 fi
 
 # TERM이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc 결정 7).
-# 없어도 부팅은 계속되고 셸은 기능을 덜 쓸 뿐이라 **조용한 실패**다 — 부팅해서
+# 없어도 부팅은 계속되고 셸은 기능을 덜 쓸 뿐이라 조용한 실패다 — 부팅해서
 # 알아내는 것보다 여기서 cpio 목록을 보는 편이 싸고 정확하다.
 #
-# **이름을 정확히 본다(TR-M2).** 그전에는 `*terminfo/x/xterm*` 글로브라
+# 이름을 정확히 본다(TR-M2). 그전에는 `*terminfo/x/xterm*` 글로브라
 # xterm-256color가 없어도 통과했고, 실제로 TR-M0이 TERM을 바꾼 뒤로 두
 # milestone 동안 그 상태였다. 조용한 실패를 막으려고 만든 검사가 조용히
 # 실패한 자리라, 접두사가 아니라 줄 하나를 통째로 맞춘다.
@@ -115,7 +115,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# sendkey가 보내는 것은 문자가 아니라 **키**다. modifier는 `-`로 붙인다
+# sendkey가 보내는 것은 문자가 아니라 키다. modifier는 `-`로 붙인다
 # (ctrl-c는 Ctrl을 누른 채 c를 누르는 것). 게스트 쪽에서 evdev 이벤트를
 # 다시 바이트로 바꾸는 것은 우리 코드(terminal/src/input.zig)이므로, 이
 # 게이트는 QEMU의 스캔코드 변환과 우리 keymap 두 겹을 함께 검사한다.
@@ -205,8 +205,8 @@ echo "=== boot 1/2: no disk, so the config falls back to its defaults ==="
 start_guest "$LOG"
 
 # ── 1) 죽일 자식을 하나 띄운다 ─────────────────────────────────────────
-# `sleep 100 &`가 아니라 foreground로 띄운다. SIGINT는 **foreground process
-# group**에만 가기 때문이다 — 그게 이 검사의 요점이다.
+# `sleep 100 &`가 아니라 foreground로 띄운다. SIGINT는 foreground process
+# group에만 가기 때문이다 — 그게 이 검사의 요점이다.
 #
 # 절대 경로로 치는 이유는 PATH다. 커널의 envp_init은 HOME과 TERM 두 개뿐이고
 # (init/src/main.zig:307이 그 환경을 그대로 자식에게 넘긴다), --no-config로
@@ -247,7 +247,7 @@ sleep 1
 #
 # dumpScreen은 화면 전체를 한 줄에 찍고 행을 " | "로 나눈다(main.zig:55).
 # vt.zig의 cells()가 빈 칸(codepoint 0)을 건너뛰므로 행의 첫머리는 그 행의
-# 실제 첫 글자다 — 그래서 **행의 첫머리가 ctrlcok인 것**이 명령의 출력이다.
+# 실제 첫 글자다 — 그래서 행의 첫머리가 ctrlcok인 것이 명령의 출력이다.
 # 방금 타이핑한 명령줄 행에도 ctrlcok가 들어 있지만 그 행은 프롬프트와
 # echo로 시작한다.
 echo "=== typing 'echo ctrlcok' ==="
@@ -268,7 +268,7 @@ fi
 echo "ctrl-c killed the foreground child and the shell came back"
 
 # ── 5) TERM이 xterm인지 (IP-M1, design doc 결정 7) ────────────────────
-# sendkey는 문자가 아니라 **키**를 보내므로 대문자는 shift-로 조합한다.
+# sendkey는 문자가 아니라 키를 보내므로 대문자는 shift-로 조합한다.
 # `$`는 shift-4다. 덕분에 이 줄은 Shift+문자 경로도 덤으로 한 번 더 밟는다.
 #
 # 출력 행(행 첫머리가 xterm인 것)을 본다. 방금 타이핑한 명령줄 행에도 TERM
@@ -292,7 +292,7 @@ echo "TERM is xterm inside the pty shell"
 #   방향키가 동작하면  → echo aXbc → 출력 행 "aXbc"
 #   방향키가 무시되면  → echo abcX → 출력 행 "abcX"
 #
-# 그래서 **둘 다** 검사한다. 긍정 검사만으로는 "방향키가 통째로 무시됐다"를
+# 그래서 둘 다 검사한다. 긍정 검사만으로는 "방향키가 통째로 무시됐다"를
 # 구분할 수 없다 — 게이트는 자기가 안 보는 것을 통과시킨다
 # (docs/decisions/project_gate_chain_composition.md).
 #
@@ -358,8 +358,8 @@ echo "the pty shell is now bash (readline territory)"
 #   아무것도 안 감 → echo aa bbX → 출력 행 "aa bbX"
 #   맨 ←가 샜다    → echo aa bXb → 출력 행 "aa bXb"
 #
-# 세 번째가 이 검사의 핵심이다. **IP-M1까지 Option+←는 실제로 맨 ←를
-# 보내고 있었다** — Alt가 modifier로 추적되지도 않았기 때문이다. 그
+# 세 번째가 이 검사의 핵심이다. IP-M1까지 Option+←는 실제로 맨 ←를
+# 보내고 있었다 — Alt가 modifier로 추적되지도 않았기 때문이다. 그
 # 상태와 구분되지 않으면 이 게이트는 아무것도 증명하지 않는다
 # (docs/decisions/project_gate_chain_composition.md).
 echo "=== typing 'echo aa bb', then alt-left X ==="
@@ -389,7 +389,7 @@ fi
 echo "option+left moved the cursor by a word"
 
 # 부수적이지만 결정적인 증거 하나. main.zig가 매 키마다 바이트 수를 찍는데,
-# 이번 범위에서 **2바이트를 만드는 것은 Option 조합뿐**이다(맨 방향키는 3,
+# 이번 범위에서 2바이트를 만드는 것은 Option 조합뿐이다(맨 방향키는 3,
 # 평문은 1). 그래서 이 한 줄이 "ESC b 경로를 실제로 밟았다"를 말한다.
 if ! grep -q "terminal: key> 2 byte(s)" "$LOG"; then
   report_failure "the screen looks right but no 2-byte sequence was ever sent; something else moved the cursor"
@@ -397,8 +397,8 @@ fi
 
 # ── 9) Cmd+← = 줄 처음으로 ────────────────────────────────────────────
 # 방향을 뒤집어서 검사한다. 줄 처음에 `echo `를 끼워 넣어 그것이 명령이
-# 되는 것을 본다 — 출력 행의 첫머리가 "cc dd"가 되려면 echo가 줄 **맨
-# 앞**에 들어가는 수밖에 없으므로 성공 경로가 하나뿐이다.
+# 되는 것을 본다 — 출력 행의 첫머리가 "cc dd"가 되려면 echo가 줄 맨
+# 앞에 들어가는 수밖에 없으므로 성공 경로가 하나뿐이다.
 #
 #   제대로 동작 → echo cc dd → 출력 행 "cc dd"
 #   실패        → cc ddecho  → bash: cc: command not found
@@ -427,7 +427,7 @@ stop_guest
 
 # design doc 위험 4의 관측. --no-config로 뜬 셸이 smkx를 보내지 않으면
 # DECCKM은 계속 꺼져 있고 `ESC O` 경로는 게이트가 한 번도 밟지 않는다.
-# 실패가 아니라 **어느 쪽이었는지 기록**이다 — 안 밟은 경로는 input_test가
+# 실패가 아니라 어느 쪽이었는지 기록이다 — 안 밟은 경로는 input_test가
 # 덮는다(main.zig가 매 키마다 decckm=을 찍는다).
 if grep -q "decckm=true" "$LOG"; then
   echo "DECCKM was on: this run exercised the ESC O form"
@@ -463,7 +463,7 @@ grep 'tars-init:' "$LOG" || true
 # Alt와 Meta의 의미를 맞바꾼다. 1차 부팅은 디스크가 없어 설정이 언제나
 # 기본값(apple)이라, 이 경로를 밟을 방법이 구조적으로 없었다
 # (docs/decisions/project_gate_chain_composition.md의 "게이트가 구조적으로
-# 밟을 수 없는 경로"). DECCKM과 달리 이건 **우리가 켤 수 있는 것**이므로
+# 밟을 수 없는 경로"). DECCKM과 달리 이건 우리가 켤 수 있는 것이므로
 # 부팅을 하나 더 붙였다.
 #
 # 두 검사는 1차 부팅과 정확히 반대 모양이다.

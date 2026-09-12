@@ -13,11 +13,11 @@ cd "$(dirname "$0")"
 #   → main.zig가 그 색으로 셀 배경을 칠한다
 #   → 프레임버퍼에서 그 픽셀을 되읽어 같은 값이 나온다
 #
-# **두 겹으로 보는 것이 이 체인의 값이다**(design 결정 7). style> 만 보면
+# 두 겹으로 보는 것이 이 체인의 값이다(design 결정 7). style> 만 보면
 # 파서가 옳고 렌더러가 틀렸을 때 통과한다 — HD-M2가 잡은 "조용한 실패"와
 # 같은 종류의 구멍이다.
 #
-# 검사에 배경색 칠한 **공백**을 쓰는 이유는 셀 전체가 배경색이라 어느 픽셀을
+# 검사에 배경색 칠한 공백을 쓰는 이유는 셀 전체가 배경색이라 어느 픽셀을
 # 읽어도 같기 때문이다. 글자가 있는 셀은 중앙 픽셀이 글리프의 획일 수 있다.
 #
 # grep에 -a를 붙이는 이유는 로그에 NUL이 한 바이트라도 섞이면 grep이 파일을
@@ -164,7 +164,7 @@ CELL="$(echo "$STYLE_LINE" | sed -E 's/.*style> ([0-9]+,[0-9]+) .*/\1/')"
 
 # ── 검사 2: 렌더러가 그 색을 픽셀로 옮겼는가 ───────────────────────────
 #
-# **이 체인에서 가장 값진 검사다.** 위의 검사만 있으면 파서가 옳고 렌더러가
+# 이 체인에서 가장 값진 검사다. 위의 검사만 있으면 파서가 옳고 렌더러가
 # 틀렸을 때 게이트가 통과한다.
 if ! grep -aq "terminal: pixel> ${CELL} = CC6666" "$LOG"; then
   echo "FAIL: the parser said CC6666 at ${CELL} but the framebuffer says otherwise"
@@ -176,12 +176,12 @@ echo "the framebuffer really holds CC6666 at ${CELL}"
 
 # ── 검사 3: 커서가 그려지는가 ──────────────────────────────────────────
 #
-# 커서는 그 셀의 색 둘을 맞바꾼 셀이다. **표식은 `fg`가 기본 배경색
-# (102030)이라는 것**이고 `bg`는 그 글자가 원래 갖고 있던 전경색이다.
+# 커서는 그 셀의 색 둘을 맞바꾼 셀이다. 표식은 `fg`가 기본 배경색
+# (102030)이라는 것이고 `bg`는 그 글자가 원래 갖고 있던 전경색이다.
 # 이 검사가 없으면 커서가 조용히 사라져도 아무도 모른다(vt_test는 호스트에서만
 # 본다).
 #
-# **`bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다** — 자세히는
+# `bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다 — 자세히는
 # `hangul/check.sh`의 `inverted_cells`에 있다. 셸이 색을 쓰기 시작하면 커서
 # 아래 글자의 전경색이 기본값이 아닐 수 있고, 그러면 커서가 멀쩡히 있는데도
 # 이 검사가 못 본다.
@@ -198,10 +198,10 @@ echo "the cursor is on screen as an inverted cell"
 # 칠 수 있으므로 한글을 직접 못 친다 — 셸의 printf가 바이트를 만들어 주는
 # 것이 유일한 길이다.
 #
-# 한글 **바로 뒤에** 배경색 칠한 공백을 붙이는 이유가 요점이다. 그 공백의
+# 한글 바로 뒤에 배경색 칠한 공백을 붙이는 이유가 요점이다. 그 공백의
 # style> 줄이 좌표를 주므로, 게이트가 한글 셀의 열 번호에 2를 더한 값과
-# 비교할 수 있다 — 이것이 "다음 글자가 겹치지 않는다"의 **파서 쪽** 증거이고,
-# 아래 ink> 검사가 **렌더러 쪽** 증거다. 둘이 따로 틀릴 수 있다.
+# 비교할 수 있다 — 이것이 "다음 글자가 겹치지 않는다"의 파서 쪽 증거이고,
+# 아래 ink> 검사가 렌더러 쪽 증거다. 둘이 따로 틀릴 수 있다.
 echo "=== typing printf '\\xed\\x95\\x9c\\033[41m \\033[0m\\n' ==="
 type_keys p r i n t f spc apostrophe \
   backslash x e d backslash x 9 5 backslash x 9 c \
@@ -227,7 +227,7 @@ echo "the parser assembled U+D55C from three UTF-8 bytes"
 
 # ── 검사 5: 렌더러가 두 칸에 걸쳐 찍었는가 ─────────────────────────────
 #
-# **이 체인에서 TR-M1이 더하는 가장 값진 검사다.** left만 있고 right가 0이면
+# 이 체인에서 TR-M1이 더하는 가장 값진 검사다. left만 있고 right가 0이면
 # 글자가 반쪽만 그려진 것인데, 셀 하나만 보는 검사로는 그것을 못 잡는다.
 INK_LINE="$(grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+D55C left=[0-9]+ right=[0-9]+' "$LOG" | tail -n 1)"
 if [ -z "$INK_LINE" ]; then
@@ -276,16 +276,16 @@ echo "the glyph cache is ${FONT_BYTES} bytes, well inside the guest's memory"
 
 # ── 스크롤백을 만든다 (TR-M2) ──────────────────────────────────────────
 #
-# `seq 200`. 게스트에 seq 바이너리는 없지만 **fish가 seq를 함수로 갖고 있고**
+# `seq 200`. 게스트에 seq 바이너리는 없지만 fish가 seq를 함수로 갖고 있고
 # (/usr/share/fish/functions/seq.fish, make_initrd.sh가 디렉터리째 복사한다)
 # PATH가 비어 있어도 동작한다. 8타로 끝나는 것도 이유다.
 #
-# 200줄인 이유는 **history가 한 화면(47줄)보다 넉넉히 커야** .top과 page_up이
+# 200줄인 이유는 history가 한 화면(47줄)보다 넉넉히 커야 .top과 page_up이
 # 서로 다른 자리로 가기 때문이다. 60줄이면 한 번의 page_up이 맨 위에 닿아
 # 버려서 두 키를 구분할 수 없다. 1000줄 한도에는 한참 못 미치므로 게이트에서
 # 가지치기가 일어나지 않는다 — 그래야 아래 검사들이 행 번호에 기대도 된다.
 #
-# 화면 내용은 `| 1 |`이 **한 줄 전체**와 일치한다는 성질로 본다. dumpScreen이
+# 화면 내용은 `| 1 |`이 한 줄 전체와 일치한다는 성질로 본다. dumpScreen이
 # 행 사이에 " | "를 넣으므로 숫자 하나뿐인 줄은 이 형태로만 나타나고, 10이나
 # 21에는 걸리지 않는다. 첫 행에는 앞쪽 구분자가 없으므로 `screen> 1 |` 형태도
 # 함께 본다.
@@ -294,7 +294,7 @@ type_keys s e q spc 2 0 0 ret
 sleep 4
 
 # scroll> 줄에서 값 하나를 뽑는다. 아래에서 여러 번 쓰므로 함수로 둔다.
-# **언제나 마지막 줄을 본다** — 이 로그는 매 프레임 찍히므로 마지막 줄이 곧
+# 언제나 마지막 줄을 본다 — 이 로그는 매 프레임 찍히므로 마지막 줄이 곧
 # 지금의 상태다.
 scroll_field() {
   grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | sed -E "s/.*$1=([0-9]+).*/\1/"
@@ -334,7 +334,7 @@ echo "$((TOTAL - LEN)) rows of history exist and the viewport sits at the bottom
 
 # ── 검사 9: 밀려난 줄은 지금 화면에 없다 ───────────────────────────────
 #
-# **이 음성 검사가 없으면 검사 12가 뜻을 잃는다** — 처음부터 화면에 있었다면
+# 이 음성 검사가 없으면 검사 12가 뜻을 잃는다 — 처음부터 화면에 있었다면
 # "스크롤해서 보였다"를 증명하지 못한다.
 if line_one_on_screen; then
   echo "FAIL: line '1' is still on screen before scrolling"
@@ -365,7 +365,7 @@ echo "the viewport moved up exactly one screen (offset ${BOTTOM_OFFSET} -> ${UP_
 
 # ── 검사 11: 화면도 함께 바뀌었는가 ────────────────────────────────────
 #
-# **위치 숫자만 보면 뷰포트는 움직였는데 화면은 그대로인 상태를 못 잡는다.**
+# 위치 숫자만 보면 뷰포트는 움직였는데 화면은 그대로인 상태를 못 잡는다.
 # 렌더를 키 쪽으로 열지 않았을 때가 정확히 그 상태다(TR-M2의 구조 변경).
 UP_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
 if [ "$UP_SCREEN" = "$BOTTOM_SCREEN" ]; then
@@ -383,7 +383,7 @@ sleep 2
 
 # ── 검사 12: 맨 위에서 밀려났던 줄이 보이는가 ──────────────────────────
 #
-# **이 체인에서 TR-M2가 더하는 가장 값진 검사다.** 위치와 내용을 한 번에
+# 이 체인에서 TR-M2가 더하는 가장 값진 검사다. 위치와 내용을 한 번에
 # 본다 — offset이 0이고, 검사 9에서 없다고 확인한 바로 그 줄이 화면에 있다.
 TOP_OFFSET="$(scroll_field offset)"
 if [ "$TOP_OFFSET" -ne 0 ]; then
@@ -415,8 +415,8 @@ echo "shift-end brought the viewport back to the bottom"
 # ── 출력이 오면 저절로 내려온다 (design 결정 13) ───────────────────────
 #
 # 올라간 상태에서 글자 하나를 친다. 셸이 그것을 되울려 보내므로 PTY 출력이
-# 도착하고, 그때 우리가 scrollToBottom()을 불러야 한다. **라이브러리는 이
-# 일을 해 주지 않는다** — vt_test가 호스트에서 그 사실을 못 박고 있고,
+# 도착하고, 그때 우리가 scrollToBottom()을 불러야 한다. 라이브러리는 이
+# 일을 해 주지 않는다 — vt_test가 호스트에서 그 사실을 못 박고 있고,
 # 여기서는 우리 코드가 그것을 메웠는지를 본다.
 echo "=== sendkey shift-pgup, then a plain key ==="
 type_keys shift-pgup
@@ -446,7 +446,7 @@ sleep 1
 # (design 결정 3) dumpScreen이 그것을 안 거르면 utf8Encode(0)이 NUL을 만든다.
 #
 # `grep -qP '\x00'`을 쓰지 않는다. GNU grep 3.11에서 그것은 NUL이 든 파일에도
-# **매치되지 않는다** — 그대로 뒀으면 항상 통과하는 가짜 검사가 된다
+# 매치되지 않는다 — 그대로 뒀으면 항상 통과하는 가짜 검사가 된다
 # (plan을 쓰면서 컨테이너에서 확인했다). 바이트 수를 세는 쪽은 확실하다.
 if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
   report_failure "a NUL byte leaked into the log (dumpScreen did not skip empty cells)"

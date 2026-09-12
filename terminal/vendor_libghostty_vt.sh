@@ -18,7 +18,7 @@ fi
 # CC-M0(2026-08-31): 여기에 있던 `zig build -Demit-lib-vt` 한 줄을 뺐다.
 #
 # 그 줄은 vendor/libghostty-vt/ 아래에 x86_64용 C 라이브러리 98MB를 만들었는데,
-# **그것을 읽는 자리가 terminal/sanity/libghostty_vt_main.c 하나뿐이었고** 그
+# 그것을 읽는 자리가 terminal/sanity/libghostty_vt_main.c 하나뿐이었고 그
 # 도구를 같은 milestone에서 지웠다. 우리 빌드가 쓰는 것은 이 라이브러리가
 # 아니라 ghostty-src를 Zig 패키지로 잡은 쪽이다 — build.zig.zon의
 # `.ghostty = .{ .path = "ghostty-src" }`와 build.zig의

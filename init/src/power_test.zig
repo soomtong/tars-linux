@@ -40,7 +40,7 @@ pub fn main() !void {
     std.debug.print("power_test: SIGTERM becomes a pending power_off action\n", .{});
 
     // 4. 같은 핸들러가 SIGINT를 다르게 기록해야 한다. 이것이 PM-M1의 전부다 —
-    //    Ctrl+Alt+Del은 reboot(CAD_OFF) 뒤에 **SIGINT로** 도착하므로
+    //    Ctrl+Alt+Del은 reboot(CAD_OFF) 뒤에 SIGINT로 도착하므로
     //    (kernel/reboot.c:835의 kill_cad_pid(SIGINT, 1)), 키보드 경로와
     //    `kill -INT 1` 경로가 이 한 분기로 합쳐진다.
     _ = linux.kill(linux.getpid(), .INT);

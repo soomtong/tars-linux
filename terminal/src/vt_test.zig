@@ -3,7 +3,7 @@ const vt = @import("vt.zig");
 
 /// 한 행의 글자만 이어 붙인다. "화면이 정말 달라졌는가"를 비교하는 데 쓴다.
 ///
-/// 위치 숫자(`scrollbar()`)만 보면 **뷰포트는 움직였는데 화면은 그대로인**
+/// 위치 숫자(`scrollbar()`)만 보면 뷰포트는 움직였는데 화면은 그대로인
 /// 상태를 못 잡는다. 그것이 정확히 `cells()`가 뷰포트를 안 따라갈 때의
 /// 증상이라 여기서 따로 본다.
 fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
         return error.UnexpectedFirstCell;
     }
 
-    // 2차: 두 번째 조각을 먹인다. **1차 내용이 살아 있어야 한다** —
+    // 2차: 두 번째 조각을 먹인다. 1차 내용이 살아 있어야 한다 —
     // 이게 TF-M3에서 새로 필요해진 성질이다.
     screen.feed("OK\r\n");
     const second = try screen.cells(&buf);
@@ -56,8 +56,8 @@ pub fn main(init: std.process.Init) !void {
     screen.feed("2J");
     const third = try screen.cells(&buf);
     std.debug.print("after split escape (clear): {d} cells\n", .{third.len});
-    // TR-M0 전까지 이 단언은 `third.len != 0`이었다. 결정 3 뒤로는 **커서
-    // 셀 하나가 남는다** — 글자는 없지만 색이 반전되어 기본 배경과 다르기
+    // TR-M0 전까지 이 단언은 `third.len != 0`이었다. 결정 3 뒤로는 커서
+    // 셀 하나가 남는다 — 글자는 없지만 색이 반전되어 기본 배경과 다르기
     // 때문이다. 회귀가 아니라 의도한 결과이고, 그래서 "글자가 하나도
     // 안 남았는가"로 조건을 옮긴다.
     if (third.len != 1) {
@@ -85,8 +85,8 @@ pub fn main(init: std.process.Init) !void {
         .{ .cp = 'D', .fg = 0xD54E53, .bg = 0x102030, .what = "SGR 1;31 bold는 밝게" },
         .{ .cp = 'E', .fg = 0x102030, .bg = 0xFFFFFF, .what = "SGR 7 inverse는 맞바꾼다" },
         .{ .cp = 'F', .fg = 0x123456, .bg = 0x102030, .what = "truecolor" },
-        // A와 다른 것을 본다. A는 스타일을 가진 적이 없고, G는 **가졌다가
-        // SGR 0으로 되돌아온** 셀이다. 리셋이 고장나면 A는 멀쩡한데 G만
+        // A와 다른 것을 본다. A는 스타일을 가진 적이 없고, G는 가졌다가
+        // SGR 0으로 되돌아온 셀이다. 리셋이 고장나면 A는 멀쩡한데 G만
         // 틀린다.
         .{ .cp = 'G', .fg = 0xFFFFFF, .bg = 0x102030, .what = "SGR 0 뒤의 셀" },
     };
@@ -144,7 +144,7 @@ pub fn main(init: std.process.Init) !void {
 
     // ── TR-M2: 스크롤백 ───────────────────────────────────────────────
     //
-    // 격자를 155x47로 잡는 이유는 **게이트가 실제로 쓰는 크기**이기 때문이다
+    // 격자를 155x47로 잡는 이유는 게이트가 실제로 쓰는 크기이기 때문이다
     // (프레임버퍼 1280x800, 여백 20, 셀 8x16). 가지치기가 페이지 통째로
     // 일어나므로 한 페이지에 몇 줄이 들어가는지가 cols에 달려 있고, 다른
     // 크기로 재면 아래 단언의 여유폭이 뜻을 잃는다.
@@ -163,8 +163,8 @@ pub fn main(init: std.process.Init) !void {
 
     // ── 1. 한도가 정말 효력을 갖는가 ──────────────────────────────────
     //
-    // **design 결정 10이 말한 max_scrollback_lines만으로는 아무 일도
-    // 일어나지 않는다.** 기본 max_scrollback_bytes(10,000)가 먼저 걸려서
+    // design 결정 10이 말한 max_scrollback_lines만으로는 아무 일도
+    // 일어나지 않는다. 기본 max_scrollback_bytes(10,000)가 먼저 걸려서
     // history가 454줄에서 멈춘다 — 2026-08-23에 실측한 값이다. 아래쪽 경계
     // 700이 그 옛 동작을 막는 자리다.
     //
@@ -196,7 +196,7 @@ pub fn main(init: std.process.Init) !void {
 
     // ── 3. .top이 뷰포트를 옮기고 cells()가 따라간다 ──────────────────
     //
-    // 위치와 화면을 **따로** 본다. offset만 보면 뷰포트는 움직였는데
+    // 위치와 화면을 따로 본다. offset만 보면 뷰포트는 움직였는데
     // cells()가 옛 자리를 그대로 읽는 상태를 못 잡는다.
     const at_bottom = try big.cells(&big_buf);
     const bottom_row0 = rowText(at_bottom, 0, &text_a);
@@ -236,7 +236,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: .bottom과 delta가 정확히 움직인다 OK\n", .{});
 
-    // ── 5. 새 출력은 뷰포트를 **안** 내린다 (design 결정 13의 근거) ────
+    // ── 5. 새 출력은 뷰포트를 안 내린다 (design 결정 13의 근거) ────
     //
     // 이 단언이 통과한다는 것은 라이브러리가 그 일을 해 주지 않는다는 뜻이고,
     // 그래서 main.zig가 feed 직후에 scrollToBottom()을 불러야 한다. 여기가
@@ -298,7 +298,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 검사 2. 반전. 커서가 앉은 셀은 fg와 bg가 맞바뀌어 나온다.
     //
-    // **글자가 없는 셀이어도 나와야 한다** — 반전된 배경이 그릴 것이기
+    // 글자가 없는 셀이어도 나와야 한다 — 반전된 배경이 그릴 것이기
     // 때문이다(TR design 결정 3). 그래서 좌표를 화면 왼쪽 위로 옮겨 놓고 본다.
     fresh.copyExit();
     fresh.copyEnter();
@@ -323,7 +323,7 @@ pub fn main(init: std.process.Init) !void {
         return error.CursorCellMissing;
     }
 
-    // 검사 3. 맨 윗줄에서 위로 더 가면 **뷰포트가 대신 올라간다.**
+    // 검사 3. 맨 윗줄에서 위로 더 가면 뷰포트가 대신 올라간다.
     const before = fresh.scrollbar().offset;
     try fresh.copyMove(0, -1);
     const after = fresh.scrollbar().offset;
@@ -356,7 +356,7 @@ pub fn main(init: std.process.Init) !void {
     const cm = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer cm.deinit();
     cm.feed("hello world\r\nsecond line\r\n");
-    // **한 프레임을 먼저 그린다.** copyEnter는 셸 커서 자리를 RenderState에서
+    // 한 프레임을 먼저 그린다. copyEnter는 셸 커서 자리를 RenderState에서
     // 읽는데(`state.cursor.viewport`), 한 번도 그리지 않은 화면에서는 그 값이
     // null이라 커서가 셸 커서가 아니라 왼쪽 위에서 시작한다. main.zig는 키를
     // 받기 전에 이미 그렸으므로, 검사도 같은 조건에서 시작해야 실제 동작을 본다.
@@ -377,12 +377,12 @@ pub fn main(init: std.process.Init) !void {
     var moved: usize = 0;
     while (moved < 4) : (moved += 1) try cm.copyMove(1, 0);
 
-    // 색을 먼저 본다. **복사보다 렌더를 먼저 보는 이유**는, y가 선택을
+    // 색을 먼저 본다. 복사보다 렌더를 먼저 보는 이유는, y가 선택을
     // 지우고 나가기 때문이다.
     //
     // 이 시점의 선택은 col 0..4 = "hello"이고 커서는 col 4다. col 0은
-    // 반전되어 있어야 하고, **col 4는 선택과 커서가 겹쳐 두 번 뒤집히므로
-    // 기본 색으로 돌아와 있어야 한다.**
+    // 반전되어 있어야 하고, col 4는 선택과 커서가 겹쳐 두 번 뒤집히므로
+    // 기본 색으로 돌아와 있어야 한다.
     const painted = try cm.cells(&buf);
     var saw_start = false;
     var saw_cursor = false;
@@ -426,7 +426,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 문자 선택과 y OK ('{s}')\n", .{yanked});
 
-    // 검사 6. **역방향 선택**(design 위험 3). 앵커를 col 4에 두고 왼쪽으로
+    // 검사 6. 역방향 선택(design 위험 3). 앵커를 col 4에 두고 왼쪽으로
     // 끌어도 같은 글자가 나와야 한다. 라이브러리가 topLeft/bottomRight로
     // 정렬한다는 것을 여기서 실행으로 확인한다.
     cm.copyEnter();
@@ -444,7 +444,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 역방향 선택도 같은 글자를 준다 OK ('{s}')\n", .{backward});
 
-    // 검사 7. 줄 선택. **줄 끝 공백이 트림되어 나오는 것**이 요점이다 —
+    // 검사 7. 줄 선택. 줄 끝 공백이 트림되어 나오는 것이 요점이다 —
     // 화면은 20칸이고 글자는 11자다.
     cm.copyEnter();
     try cm.copyMove(0, -1);
@@ -457,7 +457,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("vt_test: 줄 선택이 끝 공백을 트림한다 OK ('{s}')\n", .{whole_line});
 
     // 검사 8. 같은 방식을 다시 누르면 선택이 풀린다. 풀린 뒤의 y는 아무것도
-    // 안 준다. **이것이 없으면 "v는 언제나 새 선택"도 통과한다.**
+    // 안 준다. 이것이 없으면 "v는 언제나 새 선택"도 통과한다.
     cm.copyEnter();
     try cm.copySelect(.char);
     try cm.copySelect(.char);
@@ -467,7 +467,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: v를 다시 누르면 선택이 풀린다 OK\n", .{});
 
-    // 검사 9. **가지치기 방어**(design 위험 1). 두 겹으로 본다.
+    // 검사 9. 가지치기 방어(design 위험 1). 두 겹으로 본다.
     const pruned = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer pruned.deinit();
     var pl: usize = 1;
@@ -478,8 +478,8 @@ pub fn main(init: std.process.Init) !void {
     pruned.copyEnter();
     try pruned.copySelect(.char);
 
-    // (1) 대조군 — 평범한 출력으로는 모드가 안 끊긴다. **이것이 없으면
-    //     "언제나 나간다"도 통과한다.**
+    // (1) 대조군 — 평범한 출력으로는 모드가 안 끊긴다. 이것이 없으면
+    //     "언제나 나간다"도 통과한다.
     pruned.feed("just a line\r\n");
     if (!pruned.copyActive()) {
         std.debug.print("FAIL: an ordinary line of output dropped copy mode\n", .{});
@@ -513,7 +513,7 @@ pub fn main(init: std.process.Init) !void {
     //
     // 검사 10. `clipboard()`가 마지막 y의 결과를 그대로 들고 있다.
     //
-    // **검사 8이 아무것도 못 담은 y를 불렀는데도 값이 남아 있어야 한다.**
+    // 검사 8이 아무것도 못 담은 y를 불렀는데도 값이 남아 있어야 한다.
     // 빈 yank가 클립보드를 지우면 붙여넣기가 조용히 사라지는데, 그 사고는
     // 게이트가 못 본다 — 게이트는 y를 한 번만 누른다.
     const held = cm.clipboard() orelse {
@@ -525,8 +525,8 @@ pub fn main(init: std.process.Init) !void {
         return error.WrongClipboard;
     }
 
-    // 대조군. y를 한 번도 안 부른 화면의 클립보드는 null이다. **이것이 없으면
-    // "clipboard()가 언제나 무언가를 준다"도 통과한다.**
+    // 대조군. y를 한 번도 안 부른 화면의 클립보드는 null이다. 이것이 없으면
+    // "clipboard()가 언제나 무언가를 준다"도 통과한다.
     if (pruned.clipboard() != null) {
         std.debug.print("FAIL: a screen that never yanked already has a clipboard\n", .{});
         return error.ClipboardNotEmpty;
@@ -545,7 +545,7 @@ pub fn main(init: std.process.Init) !void {
     //   col:  0....4 5 6...9 10 11...15 16......19
     //         alpha  _ beta  _  gamma   (쓰인 적 없음)
     //
-    // **공백 둘(col 5, col 10)이 이 검사의 핵심이다.** 라이브러리는 그것도
+    // 공백 둘(col 5, col 10)이 이 검사의 핵심이다. 라이브러리는 그것도
     // 한 단어로 세므로(plan의 확정 사실 2), 우리 w가 한 번 더 건너뛰지
     // 않으면 아래 첫 단언에서 6이 아니라 5가 나온다.
     const wm = try vt.Screen.init(init.io, init.gpa, 20, 5);
@@ -558,7 +558,7 @@ pub fn main(init: std.process.Init) !void {
     // 셸 커서는 다음 줄(row 1)에 있다. 한 번 올라가면 글자가 있는 줄이다.
     try wm.copyMove(0, -1);
 
-    // 검사 11. `w`가 **다음 단어의 첫 글자**로 간다.
+    // 검사 11. `w`가 다음 단어의 첫 글자로 간다.
     try wm.copyMoveWord(.next);
     var wc = wm.copyCursor() orelse return error.NoCopyCursor;
     if (wc.y != 0 or wc.x != 6) {
@@ -579,10 +579,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: w가 공백 덩어리를 건너뛴다 OK (0 -> 6 -> 11)\n", .{});
 
-    // 검사 12. **쓰이지 않은 자리에 닿으면 움직이지 않는다**(plan 결정 1).
+    // 검사 12. 쓰이지 않은 자리에 닿으면 움직이지 않는다(plan 결정 1).
     // gamma가 마지막 단어이고 col 16부터는 한 번도 쓰인 적이 없다.
     //
-    // **이 검사가 없으면 "빈 셀을 한 칸씩 기어간다"도 통과한다** — 그 구현은
+    // 이 검사가 없으면 "빈 셀을 한 칸씩 기어간다"도 통과한다 — 그 구현은
     // w가 l과 같아지는 구간을 만든다.
     try wm.copyMoveWord(.next);
     wc = wm.copyCursor().?;
@@ -623,10 +623,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: b가 화면 위로 안 샌다 OK\n", .{});
 
-    // 검사 15. **단어 중간에서 b는 그 단어의 시작으로 간다**(plan 결정 2).
+    // 검사 15. 단어 중간에서 b는 그 단어의 시작으로 간다(plan 결정 2).
     //
     // col 0에서 오른쪽으로 여덟 칸 = beta의 't'(col 8). 거기서 b는 col 6이다.
-    // **이 검사가 없으면 "언제나 이전 단어로 간다"도 통과하고**, 그러면 w로
+    // 이 검사가 없으면 "언제나 이전 단어로 간다"도 통과하고, 그러면 w로
     // 간 자리에서 b를 눌러도 원래 자리로 안 돌아온다.
     var step: usize = 0;
     while (step < 8) : (step += 1) try wm.copyMove(1, 0);
@@ -641,10 +641,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 단어 중간의 b가 그 단어 앞으로 간다 OK\n", .{});
 
-    // 검사 16. **선택 중이면 함께 넓힌다**(design 결정 11).
+    // 검사 16. 선택 중이면 함께 넓힌다(design 결정 11).
     //
     // col 6('b')에서 v로 잡고 w를 누르면 커서가 col 11로 가고, 선택은
-    // col 6..11이 된다. **끝 셀이 포함되므로 여섯 자다** — "beta g".
+    // col 6..11이 된다. 끝 셀이 포함되므로 여섯 자다 — "beta g".
     // 게이트는 이 왕복을 안 본다(plan 결정 3). 여기가 유일한 자리다.
     try wm.copySelect(.char);
     try wm.copyMoveWord(.next);
@@ -666,7 +666,7 @@ pub fn main(init: std.process.Init) !void {
     fm.feed("hello\r\n");
     _ = try fm.cells(&buf);
 
-    // 검사 17. **copy mode가 아니면 프롬프트가 안 열린다.**
+    // 검사 17. copy mode가 아니면 프롬프트가 안 열린다.
     fm.findOpen();
     if (fm.findNeedle() != null) {
         std.debug.print("FAIL: the find prompt opened outside copy mode\n", .{});
@@ -692,7 +692,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 프롬프트가 글자를 받고 지운다 OK ('{s}')\n", .{needle});
 
-    // 검사 19. **빈 프롬프트에서 Backspace는 프롬프트를 안 닫는다**
+    // 검사 19. 빈 프롬프트에서 Backspace는 프롬프트를 안 닫는다
     // (plan 결정 2). 이 검사가 없으면 "비면 닫는다"도 통과하고, 그러면
     // 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
     fm.findErase();
@@ -708,7 +708,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 빈 프롬프트의 Backspace가 안 닫는다 OK\n", .{});
 
-    // 검사 20. **버퍼가 넘쳐도 무너지지 않는다**(design 결정 8). 128자를 채우고
+    // 검사 20. 버퍼가 넘쳐도 무너지지 않는다(design 결정 8). 128자를 채우고
     // 스무 자를 더 친다.
     var fill: usize = 0;
     while (fill < 148) : (fill += 1) fm.findChar('z');
@@ -719,7 +719,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 검색어가 128자에서 멈춘다 OK\n", .{});
 
-    // 검사 21. **copyExit이 프롬프트도 닫는다**(design 결정 10). 안 닫으면
+    // 검사 21. copyExit이 프롬프트도 닫는다(design 결정 10). 안 닫으면
     // 모드를 다시 열었을 때 지난 검색어가 화면에 남는다.
     fm.copyExit();
     if (fm.findNeedle() != null) {
@@ -728,7 +728,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copyExit이 프롬프트를 닫는다 OK\n", .{});
 
-    // 검사 22~25. **실제로 찾아서 커서를 옮긴다.**
+    // 검사 22~25. 실제로 찾아서 커서를 옮긴다.
     //
     // 스크롤백을 가진 화면을 새로 만든다. 20칸 5줄에 60줄을 먹이면 위쪽
     // 55줄이 history로 간다.
@@ -736,7 +736,7 @@ pub fn main(init: std.process.Init) !void {
     //   L1 … L9  MARK  L11 … L29  MARK  L31 … L60
     //            (10)            (30)
     //
-    // **MARK가 둘인 것이 요점이다.** 하나면 `n`이 감기는지 옮기는지 갈리지
+    // MARK가 둘인 것이 요점이다. 하나면 `n`이 감기는지 옮기는지 갈리지
     // 않는다.
     const fs = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer fs.deinit();
@@ -751,7 +751,7 @@ pub fn main(init: std.process.Init) !void {
     _ = try fs.cells(&buf);
     fs.copyEnter();
 
-    // 검사 22. `/MARK` + Enter가 **가장 최근** MARK(30번째 줄)로 간다.
+    // 검사 22. `/MARK` + Enter가 가장 최근 MARK(30번째 줄)로 간다.
     fs.findOpen();
     for ("MARK") |ch| fs.findChar(ch);
     const hit = try fs.findSubmit();
@@ -763,7 +763,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: the cursor did not move to a match\n", .{});
         return error.FindDidNotMove;
     }
-    // 커서가 선 줄의 글자를 읽어 확인한다. **좌표가 아니라 내용을 본다** —
+    // 커서가 선 줄의 글자를 읽어 확인한다. 좌표가 아니라 내용을 본다 —
     // 뷰포트가 어디로 밀렸는지는 화면 크기에 딸린 값이라 바뀌기 쉽다.
     var cur = fs.copyCursor() orelse return error.NoCopyCursor;
     var text = rowText(try fs.cells(&buf), cur.y, &line);
@@ -773,14 +773,14 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: /가 매치로 커서를 옮긴다 OK (matches={d})\n", .{hit.matches});
 
-    // 검사 23. **프롬프트가 닫혔다.** Enter가 안 닫으면 그 뒤의 키가 전부
+    // 검사 23. 프롬프트가 닫혔다. Enter가 안 닫으면 그 뒤의 키가 전부
     // 글자가 되어 copy mode가 먹통이 된다.
     if (fs.findNeedle() != null) {
         std.debug.print("FAIL: Enter left the find prompt open\n", .{});
         return error.FindSubmitLeftPromptOpen;
     }
 
-    // 검사 24. `n`이 **더 위의** MARK(10번째 줄)로 간다.
+    // 검사 24. `n`이 더 위의 MARK(10번째 줄)로 간다.
     const prev_y = fs.scrollbar().offset + cur.y;
     if (!try fs.findNext()) {
         std.debug.print("FAIL: n did not move\n", .{});
@@ -802,9 +802,9 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: n이 더 위의 매치로 간다 OK ({d} -> {d})\n", .{ prev_y, next_y });
 
-    // 검사 25. **매치가 없으면 커서가 안 움직인다.**
+    // 검사 25. 매치가 없으면 커서가 안 움직인다.
     //
-    // **`before`/`after`라는 이름을 못 쓴다** — 이 파일의 CM-M0 검사가
+    // `before`/`after`라는 이름을 못 쓴다 — 이 파일의 CM-M0 검사가
     // `:327`·`:329`에서 이미 쓰고 있고, Zig는 같은 함수 안의 shadowing을
     // 컴파일 에러로 막는다.
     const miss_from = fs.copyCursor().?;
@@ -827,12 +827,12 @@ pub fn main(init: std.process.Init) !void {
 
     // ── CS-M0: 매치 하이라이트 ────────────────────────────────────────────
     //
-    // **새 화면을 만든다.** 앞의 `fs`는 20x5에 60줄을 먹였고 검사 22~25가 그
+    // 새 화면을 만든다. 앞의 `fs`는 20x5에 60줄을 먹였고 검사 22~25가 그
     // 커서 자리에 기대고 있다 — 남의 화면에 붙이면 앞 검사가 흔들린다.
     // CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`를 새로
     // 만든 것과 같은 규율이다.
     //
-    // 표적을 **두 줄**(8번·18번)에 심는다. 5줄짜리 화면이라 한 번에 하나만
+    // 표적을 두 줄(8번·18번)에 심는다. 5줄짜리 화면이라 한 번에 하나만
     // 보이고, 그래서 "화면에 보이는 것만 칠한다"를 검사가 가를 수 있다.
     const hs = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer hs.deinit();
@@ -844,7 +844,7 @@ pub fn main(init: std.process.Init) !void {
             hs.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{hl_i}) catch unreachable);
         }
     }
-    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // `copyEnter` 전에 한 번 그린다. `state.cursor.viewport`는 `cells()`가
     // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
     _ = try hs.cells(&buf);
     hs.copyEnter();
@@ -865,10 +865,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 매치 목록을 그대로 보관한다 OK (matches={d})\n", .{hhit.matches});
 
-    // 검사 27. **다시 검색해도 앞 목록이 이중 해제되지 않는다.**
+    // 검사 27. 다시 검색해도 앞 목록이 이중 해제되지 않는다.
     //
     // `matches()`가 주는 것은 얕은 복사라(design 결정 6), 원소를 `deinit`하면
-    // ScreenSearch가 같은 버퍼를 다시 해제한다. 그 실수는 **두 번째 검색에서**
+    // ScreenSearch가 같은 버퍼를 다시 해제한다. 그 실수는 두 번째 검색에서
     // 터진다 — 첫 검색만 하는 검사로는 영영 안 잡힌다.
     hs.findOpen();
     for ("R1") |ch| hs.findChar(ch);
@@ -886,13 +886,13 @@ pub fn main(init: std.process.Init) !void {
     for ("TARGET") |ch| hs.findChar(ch);
     _ = try hs.findSubmit();
 
-    // 검사 28. **화면에 보이는 매치 하나만 범위가 된다.**
+    // 검사 28. 화면에 보이는 매치 하나만 범위가 된다.
     //
     // `copyPlace`가 뷰포트 위의 매치를 화면 맨 윗줄로 올리므로(`vt.zig:748`)
     // `/`가 끝난 자리에서 매치는 언제나 row 0이다. 표적을 두 줄에 심었지만
     // 화면이 5줄이라 한 번에 하나만 보인다 — 그것이 이 검사의 요점이다.
     //
-    // **`cells()`를 부르고 나서 본다.** 범위는 그 안에서 만들어진다.
+    // `cells()`를 부르고 나서 본다. 범위는 그 안에서 만들어진다.
     _ = try hs.cells(&buf);
     const hspans = hs.hlSpans();
     if (hspans.len != 1) {
@@ -921,25 +921,25 @@ pub fn main(init: std.process.Init) !void {
         hstats.spans, hstats.cells,
     });
 
-    // 검사 29. **매치 셀의 바탕이 MATCH_BG다.**
+    // 검사 29. 매치 셀의 바탕이 MATCH_BG다.
     //
     // 범위를 옳게 풀고도 색을 안 넣을 수 있다 — 검사 28과 이 검사가 그 둘을
     // 가른다.
-    // **여섯이 아니라 다섯이다.** `/` 뒤 copy 커서는 매치의 첫 칸에 서 있고
-    // (`copyPlace`가 `top_x`로 옮긴다), 커서는 매치 **위에** 얹히는 층이라 그
+    // 여섯이 아니라 다섯이다. `/` 뒤 copy 커서는 매치의 첫 칸에 서 있고
+    // (`copyPlace`가 `top_x`로 옮긴다), 커서는 매치 위에 얹히는 층이라 그
     // 한 칸이 또 한 번 맞바뀐다 — `fg=MATCH_BG, bg=기본`이 되어 아래 `hcnt`에서
-    // 빠진다. **그 한 칸을 따로 세는 것이 이 검사의 요점이다**: 여섯 번째가
+    // 빠진다. 그 한 칸을 따로 세는 것이 이 검사의 요점이다: 여섯 번째가
     // 조용히 사라진 것과 커서가 뒤집은 것은 다른 일이고, `hcnt`만 보면 안 갈린다.
     //
-    // 칠하기 **전**의 수가 여섯인 것은 검사 28의 `cells=6`이 이미 확인했다.
+    // 칠하기 전의 수가 여섯인 것은 검사 28의 `cells=6`이 이미 확인했다.
     var hcnt: usize = 0;
     var hcursor: usize = 0;
     for (try hs.cells(&buf)) |c| {
         // 이름이 `painted`가 아닌 이유: CM-M0의 검사가 `:386`에서 그 이름을
         // 쓰고 있고, `main()` 하나가 파일 전체라 Zig가 shadowing을 막는다.
-        // **SP-M0이 색을 바꿨다.** 이 화면은 매치가 하나만 보이고 그 하나가 곧
+        // SP-M0이 색을 바꿨다. 이 화면은 매치가 하나만 보이고 그 하나가 곧
         // 현재 매치이므로, 여기 칠해지는 것은 `MATCH_BG`가 아니라 `CURRENT_BG`다.
-        // **`MATCH_BG` 쪽을 보는 검사는 `ps` 화면의 검사 39가 이어받는다** — 매치가
+        // `MATCH_BG` 쪽을 보는 검사는 `ps` 화면의 검사 39가 이어받는다 — 매치가
         // 둘 이상 보여야 두 색이 함께 나오기 때문이다.
         const hpaint = c.bg == vt.CURRENT_BG or c.fg == vt.CURRENT_BG;
         if (!hpaint) continue;
@@ -961,17 +961,17 @@ pub fn main(init: std.process.Init) !void {
         hcnt, hcursor,
     });
 
-    // 검사 30. **선택 안의 매치는 맞바뀌어 여전히 갈린다.**
+    // 검사 30. 선택 안의 매치는 맞바뀌어 여전히 갈린다.
     //
     // 매치를 맞바꿈으로 만들었다면 여기서 두 번 뒤집혀 기본 색으로 돌아왔을
     // 것이고, 이 검사가 그것을 잡는다. 커서가 매치의 첫 칸에 서 있으므로
-    // (`copyPlace`가 `top_x`로 옮긴다) **그 한 칸은 또 한 번 맞바뀐다** — 그래서
+    // (`copyPlace`가 `top_x`로 옮긴다) 그 한 칸은 또 한 번 맞바뀐다 — 그래서
     // 뒤집힌 매치 셀은 여섯이 아니라 다섯이다.
     try hs.copySelect(.line);
     var hswapped: usize = 0;
     for (try hs.cells(&buf)) |c| {
-        // **상수만 옮긴다.** 이 검사가 보는 것은 색의 값이 아니라 **"맞바꿈이
-        // 아니라 값을 정하는 층인가"**이므로, 상수를 옮겨도 뜻이 그대로 남는다.
+        // 상수만 옮긴다. 이 검사가 보는 것은 색의 값이 아니라 "맞바꿈이
+        // 아니라 값을 정하는 층인가"이므로, 상수를 옮겨도 뜻이 그대로 남는다.
         if (c.fg == vt.CURRENT_BG and c.bg != vt.CURRENT_BG) hswapped += 1;
     }
     if (hswapped != 5) {
@@ -982,15 +982,15 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 선택 안의 매치가 맞바뀌어 남는다 OK (cells={d})\n", .{hswapped});
 
-    // 검사 31. **copy mode를 나가면 하이라이트가 사라진다.**
+    // 검사 31. copy mode를 나가면 하이라이트가 사라진다.
     //
     // `copyExit`이 `find_matches`를 안 버리면 여기서 잡힌다. 게이트의 음성
     // 검사와 같은 것을 보지만, 이쪽이 훨씬 빨리 실패를 알려준다.
     hs.copyExit();
     var hleft: usize = 0;
     for (try hs.cells(&buf)) |c| {
-        // **두 색을 함께 센다**(SP-M0). 한 색만 보면, 이 화면처럼 그 색이 애초에
-        // 안 쓰이는 경우에 **아무것도 안 보는 검사**가 된다.
+        // 두 색을 함께 센다(SP-M0). 한 색만 보면, 이 화면처럼 그 색이 애초에
+        // 안 쓰이는 경우에 아무것도 안 보는 검사가 된다.
         const hgone = c.bg == vt.MATCH_BG or c.fg == vt.MATCH_BG or
             c.bg == vt.CURRENT_BG or c.fg == vt.CURRENT_BG;
         if (hgone) hleft += 1;
@@ -1007,13 +1007,13 @@ pub fn main(init: std.process.Init) !void {
 
     // ── CS-M1: 검색 기록과 "못 찾았다" 메시지 ─────────────────────────────
     //
-    // **새 화면을 만든다.** 앞의 `hs`는 검사 31에서 `copyExit`으로 끝났고 그
+    // 새 화면을 만든다. 앞의 `hs`는 검사 31에서 `copyExit`으로 끝났고 그
     // 상태에 검사 넷이 기대고 있다 — 남의 화면에 붙이면 앞 검사가 흔들린다.
     // CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`,
     // CS-M0이 `hs`를 새로 만든 것과 같은 규율이다.
     //
     // 화면 모양은 `hs`와 같다(20x5, 8번과 18번 줄이 표적). 같은 모양을 쓰는
-    // 것은 게으름이 아니라 **기대값을 옮겨 쓸 수 있게 하려는 것**이다 —
+    // 것은 게으름이 아니라 기대값을 옮겨 쓸 수 있게 하려는 것이다 —
     // 검사 26이 확정한 `matches=2`를 여기서 다시 세지 않아도 된다.
     const ls = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer ls.deinit();
@@ -1025,12 +1025,12 @@ pub fn main(init: std.process.Init) !void {
             ls.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ls_i}) catch unreachable);
         }
     }
-    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // `copyEnter` 전에 한 번 그린다. `state.cursor.viewport`는 `cells()`가
     // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
     _ = try ls.cells(&buf);
     ls.copyEnter();
 
-    // 검사 32. **빈 Enter가 지난 검색어를 다시 쓴다.**
+    // 검사 32. 빈 Enter가 지난 검색어를 다시 쓴다.
     ls.findOpen();
     for ("TARGET") |ch| ls.findChar(ch);
     const lhit = try ls.findSubmit();
@@ -1049,10 +1049,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 빈 Enter가 지난 검색어를 다시 쓴다 OK (matches={d})\n", .{lhit2.matches});
 
-    // 검사 33. **copy mode를 나갔다 들어와도 검색어가 남는다.**
+    // 검사 33. copy mode를 나갔다 들어와도 검색어가 남는다.
     //
     // `copyExit`은 `find`·`find_matches`·`find_buf`를 전부 버린다 —
-    // **`find_last`만 안 버린다**(design 결정 8). 그 하나가 이 기능의 전부이고,
+    // `find_last`만 안 버린다(design 결정 8). 그 하나가 이 기능의 전부이고,
     // 실수로 함께 지우면 여기서 `matches=0`이 되어 잡힌다.
     ls.copyExit();
     ls.copyEnter();
@@ -1066,7 +1066,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: copy mode를 나갔다 들어와도 검색어가 남는다 OK (matches={d})\n", .{lhit3.matches});
 
-    // 검사 34. **못 찾으면 메시지가 켜지고 그 검색어를 준다.**
+    // 검사 34. 못 찾으면 메시지가 켜지고 그 검색어를 준다.
     if (ls.findMissed() != null) {
         std.debug.print("FAIL: the not-found message was on before any search failed\n", .{});
         return error.MissedFlagStuckOn;
@@ -1088,10 +1088,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 못 찾으면 메시지가 그 검색어를 준다 OK (needle={s})\n", .{lmiss});
 
-    // 검사 35. **메시지를 끄면 사라지고, 못 찾은 검색어도 기록에는 남는다.**
+    // 검사 35. 메시지를 끄면 사라지고, 못 찾은 검색어도 기록에는 남는다.
     //
     // 뒷부분이 design 결정 8의 "성공·실패와 무관하게 남긴다"를 보는 자리다.
-    // **판정을 `matches`로 하면 안 된다** — 되부른 `NOPE`도 0을 내고 "아무 일도
+    // 판정을 `matches`로 하면 안 된다 — 되부른 `NOPE`도 0을 내고 "아무 일도
     // 안 했다"도 0을 내서 둘이 안 갈린다. `findMissed()`가 다시 `NOPE`를 주는
     // 것이 "정말로 되불렀다"의 증거다.
     ls.findClearStatus();
@@ -1115,10 +1115,10 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 못 찾은 검색어도 기록에 남는다 OK (needle={s})\n", .{lmiss2});
 
-    // 검사 36. **copy mode를 나가면 메시지가 꺼진다.**
+    // 검사 36. copy mode를 나가면 메시지가 꺼진다.
     //
-    // 검사 33이 `find_last`가 **남는** 것을 보고, 이 검사가 `find_status`는
-    // **안 남는** 것을 본다. 둘이 같은 함수의 서로 반대되는 두 계약이라 나란히
+    // 검사 33이 `find_last`가 남는 것을 보고, 이 검사가 `find_status`는
+    // 안 남는 것을 본다. 둘이 같은 함수의 서로 반대되는 두 계약이라 나란히
     // 둔다.
     ls.copyExit();
     if (ls.findMissed() != null) {
@@ -1129,10 +1129,10 @@ pub fn main(init: std.process.Init) !void {
 
     // ── SP-M0: 현재 매치 ────────────────────────────────────────────────
     //
-    // **자기 화면을 새로 만든다.** 화면마다 크기와 history가 다르므로 남의
+    // 자기 화면을 새로 만든다. 화면마다 크기와 history가 다르므로 남의
     // 검사에 붙이면 기대값이 흔들린다. `hs`(CS-M0)와 같은 20x5에 같은 8·18번
-    // 줄을 표적으로 두는 것은 게으름이 아니라 **기대값을 옮겨 쓰기 위한
-    // 것이다** — 다른 것은 8번 줄에 매치가 **둘**이라는 점 하나다.
+    // 줄을 표적으로 두는 것은 게으름이 아니라 기대값을 옮겨 쓰기 위한
+    // 것이다 — 다른 것은 8번 줄에 매치가 둘이라는 점 하나다.
     //
     // 이름이 `ps`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
     // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
@@ -1142,7 +1142,7 @@ pub fn main(init: std.process.Init) !void {
     var ps_i: usize = 1;
     while (ps_i <= 20) : (ps_i += 1) {
         if (ps_i == 8) {
-            // **한 줄에 매치 둘.** 같은 줄이면 뷰포트가 어디에 있든 함께
+            // 한 줄에 매치 둘. 같은 줄이면 뷰포트가 어디에 있든 함께
             // 보이므로, 두 색을 나란히 보는 검사가 스크롤에 안 딸린다.
             ps.feed("qqzqqqzqqq\r\n");
         } else if (ps_i == 18) {
@@ -1151,16 +1151,16 @@ pub fn main(init: std.process.Init) !void {
             ps.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ps_i}) catch unreachable);
         }
     }
-    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // `copyEnter` 전에 한 번 그린다. `state.cursor.viewport`는 `cells()`가
     // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
     _ = try ps.cells(&buf);
     ps.copyEnter();
 
-    // 검사 37. **`/` 직후의 인덱스는 0이다.**
+    // 검사 37. `/` 직후의 인덱스는 0이다.
     //
     // 라이브러리 주석이 "0 = most recent match"라고 적었고(`SelectedMatch`),
     // `select(.next)`가 선택이 없을 때 인덱스 0을 만든다(`selectNext`의 첫
-    // 분기). **그 뜻을 여기서 실행으로 고정한다** — 소스를 읽어 얻은 사실을
+    // 분기). 그 뜻을 여기서 실행으로 고정한다 — 소스를 읽어 얻은 사실을
     // 검사로 옮기는 규율이고, 이것이 깨지면 SP-M1의 번호가 거꾸로 나온다.
     ps.findOpen();
     for ("zq") |ch| ps.findChar(ch);
@@ -1179,7 +1179,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 검색 직후의 현재 매치는 0번이다 OK (matches={d})\n", .{phit.matches});
 
-    // 검사 38. **`n`이 인덱스를 하나 올린다.**
+    // 검사 38. `n`이 인덱스를 하나 올린다.
     //
     // 검사 37이 "0에서 시작한다"를 보고 이 검사가 "한 칸씩 간다"를 본다.
     // 둘이 함께 있어야 번호가 뜻을 갖는다 — 시작점만 맞고 걸음이 틀리면
@@ -1198,16 +1198,16 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: n이 현재 매치를 한 칸 옮긴다 OK (idx={d})\n", .{pcur2});
 
-    // 검사 39. **두 색이 한 화면에 나란히 있다.**
+    // 검사 39. 두 색이 한 화면에 나란히 있다.
     //
     // `n`을 한 번 눌렀으므로 현재 매치는 8번 줄의 두 매치 중 하나다.
-    // `copyPlace`가 그 줄을 뷰포트 맨 위로 올리므로 **같은 줄의 다른 매치도
-    // 함께 보인다** — 한 줄에 둘을 심은 이유가 이것이고, 그래서 이 판정이
+    // `copyPlace`가 그 줄을 뷰포트 맨 위로 올리므로 같은 줄의 다른 매치도
+    // 함께 보인다 — 한 줄에 둘을 심은 이유가 이것이고, 그래서 이 판정이
     // 스크롤 위치에 안 딸린다.
     //
-    // **어느 쪽이 현재 매치인지는 안 본다.** 라이브러리가 한 줄 안의 매치를
+    // 어느 쪽이 현재 매치인지는 안 본다. 라이브러리가 한 줄 안의 매치를
     // 어느 순서로 주는지 확인한 적이 없고, 그것에 기대면 검사가 라이브러리의
-    // 안 적힌 성질에 딸리게 된다. 왼쪽이든 오른쪽이든 **셈은 똑같다.**
+    // 안 적힌 성질에 딸리게 된다. 왼쪽이든 오른쪽이든 셈은 똑같다.
     _ = try ps.cells(&buf);
     const pspans = ps.hlSpans();
     if (pspans.len != 2) {
@@ -1228,11 +1228,11 @@ pub fn main(init: std.process.Init) !void {
         return error.CurrentSpanMarkWrong;
     }
 
-    // **셈이 이렇게 갈린다.** needle이 두 글자이므로 매치 하나가 두 칸이다.
+    // 셈이 이렇게 갈린다. needle이 두 글자이므로 매치 하나가 두 칸이다.
     //   - 현재 매치: 첫 칸에 copy 커서가 서서 한 번 더 맞바뀌므로
-    //     `bg=CURRENT_BG`가 **하나**, `fg=CURRENT_BG`가 **하나**
-    //   - 다른 매치: `bg=MATCH_BG`가 **둘**
-    // CS-M0의 검사 29가 `plain=5 cursor=1`로 본 것과 **같은 갈림**이고, HANDOFF의
+    //     `bg=CURRENT_BG`가 하나, `fg=CURRENT_BG`가 하나
+    //   - 다른 매치: `bg=MATCH_BG`가 둘
+    // CS-M0의 검사 29가 `plain=5 cursor=1`로 본 것과 같은 갈림이고, HANDOFF의
     // 실측 3("매치 여섯 칸 중 하나는 언제나 뒤집혀 있다")이 여기서도 그대로다.
     var p_cur_plain: usize = 0;
     var p_cur_cursor: usize = 0;
@@ -1252,15 +1252,15 @@ pub fn main(init: std.process.Init) !void {
         p_cur_plain, p_cur_cursor, p_other,
     });
 
-    // 검사 40. **`hlStats`의 `cur`이 현재 매치만 센다.**
+    // 검사 40. `hlStats`의 `cur`이 현재 매치만 센다.
     //
-    // 검사 39는 `cells()`가 내놓은 색을 세고, 이 검사는 `vt.zig`가 **스스로 센
-    // 값**을 본다. 둘이 어긋나면 게이트의 `cur=`을 믿을 수 없게 된다 —
+    // 검사 39는 `cells()`가 내놓은 색을 세고, 이 검사는 `vt.zig`가 스스로 센
+    // 값을 본다. 둘이 어긋나면 게이트의 `cur=`을 믿을 수 없게 된다 —
     // 게이트는 색을 직접 못 세고 이 숫자에 기댄다.
     //
-    // **`cur`은 커서를 모른다.** 커서는 `cells()`가 얹는 층이라 `findSpans`
+    // `cur`은 커서를 모른다. 커서는 `cells()`가 얹는 층이라 `findSpans`
     // 뒤에 온다. 그래서 `cur=2`이고 화면에 보이는 `bg=CURRENT_BG`는 하나다 —
-    // **둘이 다른 것이 정상이고, 그 차이가 정확히 1이다.**
+    // 둘이 다른 것이 정상이고, 그 차이가 정확히 1이다.
     const pstats = ps.hlStats() orelse {
         std.debug.print("FAIL: hlStats() was null while a search was live\n", .{});
         return error.CurrentStatsMissing;
@@ -1283,9 +1283,9 @@ pub fn main(init: std.process.Init) !void {
 
     // ── SP-M1: 결과 표시 ────────────────────────────────────────────────
     //
-    // **자기 화면을 새로 만든다.** `hs`(CS-M0)·`ls`(CS-M1)와 같은 20x5에 같은
-    // 8·18번 줄을 표적으로 두는 것은 게으름이 아니라 **기대값(`matches=2`)을
-    // 옮겨 쓰기 위한 것이다.**
+    // 자기 화면을 새로 만든다. `hs`(CS-M0)·`ls`(CS-M1)와 같은 20x5에 같은
+    // 8·18번 줄을 표적으로 두는 것은 게으름이 아니라 기대값(`matches=2`)을
+    // 옮겨 쓰기 위한 것이다.
     //
     // 이름이 `ns`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
     // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
@@ -1300,17 +1300,17 @@ pub fn main(init: std.process.Init) !void {
             ns.feed(std.fmt.bufPrint(&line, "R{d}\r\n", .{ns_i}) catch unreachable);
         }
     }
-    // **`copyEnter` 전에 한 번 그린다.** `state.cursor.viewport`는 `cells()`가
+    // `copyEnter` 전에 한 번 그린다. `state.cursor.viewport`는 `cells()`가
     // 채우므로, 그 전에 들어가면 커서가 (0,0)에서 시작한다.
     _ = try ns.cells(&buf);
     ns.copyEnter();
 
-    // 검사 41. **성공한 검색이 결과 표시를 켜고, 그것은 "못 찾음"이 아니다.**
+    // 검사 41. 성공한 검색이 결과 표시를 켜고, 그것은 "못 찾음"이 아니다.
     //
-    // CS-M1에서는 성공한 검색이 플래그를 **껐다.** SP-M1이 그것을 뒤집으므로
+    // CS-M1에서는 성공한 검색이 플래그를 껐다. SP-M1이 그것을 뒤집으므로
     // 여기가 그 변경의 자리다 — `findStatusNeedle()`은 needle을 주고
-    // `findMissed()`는 null이어야 한다. **둘이 같은 플래그 위에 서 있으면서도
-    // 서로 다른 답을 내는 것이 결정 5의 요점이다.**
+    // `findMissed()`는 null이어야 한다. 둘이 같은 플래그 위에 서 있으면서도
+    // 서로 다른 답을 내는 것이 결정 5의 요점이다.
     ns.findOpen();
     for ("TARGET") |ch| ns.findChar(ch);
     const nhit = try ns.findSubmit();
@@ -1332,14 +1332,14 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 성공한 검색이 결과 표시를 켠다 OK (needle={s})\n", .{nneedle});
 
-    // 검사 42. **번호의 재료가 맞고 `n`이 그것을 하나 올린다.**
+    // 검사 42. 번호의 재료가 맞고 `n`이 그것을 하나 올린다.
     //
     // `promptText`가 쓰는 값이 정확히 이 둘이다 — `findCurrentIndex() + 1`과
-    // `findMatchCount()`. **그 함수는 `main.zig`의 private이라 여기서 못
-    // 부르므로**, 재료를 보는 것이 이 파일이 할 수 있는 전부이고 글자 자체는
+    // `findMatchCount()`. 그 함수는 `main.zig`의 private이라 여기서 못
+    // 부르므로, 재료를 보는 것이 이 파일이 할 수 있는 전부이고 글자 자체는
     // 게이트의 `find> overlay text=`가 본다.
     //
-    // 검사 37·38이 `idx`만 보았고 이 검사가 **분모까지** 함께 본다. 분모는
+    // 검사 37·38이 `idx`만 보았고 이 검사가 분모까지 함께 본다. 분모는
     // 스냅숏에서 오므로(`findMatchCount`), 그것이 `matchesLen()`과 어긋나면
     // `[3/12]`의 뒤 숫자가 조용히 틀린다.
     if (ns.findMatchCount() != 2) {
@@ -1370,11 +1370,11 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 번호가 [{d}/{d}]로 간다 OK\n", .{ nidx2 + 1, ns.findMatchCount() });
 
-    // 검사 43. **끄면 사라지고 `n`이 다시 켠다.**
+    // 검사 43. 끄면 사라지고 `n`이 다시 켠다.
     //
     // 결정 7의 수명이 이것이다 — 다음 키에 사라지고, 그 키가 검색 키면 다시
-    // 뜬다. `main.zig`가 `switch`보다 **앞**에서 끄기 때문에 그 순서가 나온다.
-    // **여기서는 그 순서를 손으로 흉내 낸다** — poll 루프를 안 거치기 때문이다.
+    // 뜬다. `main.zig`가 `switch`보다 앞에서 끄기 때문에 그 순서가 나온다.
+    // 여기서는 그 순서를 손으로 흉내 낸다 — poll 루프를 안 거치기 때문이다.
     ns.findClearStatus();
     if (ns.findStatusNeedle() != null) {
         std.debug.print("FAIL: findClearStatus() did not turn the status off\n", .{});
@@ -1390,11 +1390,11 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 끄면 사라지고 n이 다시 켠다 OK\n", .{});
 
-    // 검사 44. **매치가 없으면 번호가 아니라 "못 찾음"이다**(design 위험 1).
+    // 검사 44. 매치가 없으면 번호가 아니라 "못 찾음"이다(design 위험 1).
     //
     // 같은 플래그가 켜져 있는데 `findMissed()`가 needle을 주고
-    // `findCurrentIndex()`는 null이며 `hlSpans()`는 비어 있다 — **`promptText`의
-    // 두 갈래를 가르는 것이 `findMatchCount()` 하나**라는 것을 여기서 못 박는다.
+    // `findCurrentIndex()`는 null이며 `hlSpans()`는 비어 있다 — `promptText`의
+    // 두 갈래를 가르는 것이 `findMatchCount()` 하나라는 것을 여기서 못 박는다.
     ns.findOpen();
     for ("NOPE") |ch| ns.findChar(ch);
     const nhit2 = try ns.findSubmit();
@@ -1424,13 +1424,13 @@ pub fn main(init: std.process.Init) !void {
     // ── HI-M1: 조합 중인 글자 ─────────────────────────────────────────
     //
     // 반전된 셀은 기본 색이 뒤집힌 것이다(fg=102030 bg=FFFFFF). 선택도
-    // 커서도 같은 연산이라 같은 모양으로 나타나므로, **전후를 비교해야**
+    // 커서도 같은 연산이라 같은 모양으로 나타나므로, 전후를 비교해야
     // 뜻이 생긴다 — 게이트의 `inverted_cells`가 쓰는 것과 같은 판정이다.
     const pre = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer pre.deinit();
     pre.feed("ab");
 
-    // 검사 45. **대조군 — 조합 중이 아니면 반전된 셀이 하나다.**
+    // 검사 45. 대조군 — 조합 중이 아니면 반전된 셀이 하나다.
     {
         var inv: usize = 0;
         for (try pre.cells(&buf)) |cell| {
@@ -1442,15 +1442,15 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    // 검사 46. **조합 중인 글자가 커서 자리에 뜨고 두 칸이 반전된다.**
+    // 검사 46. 조합 중인 글자가 커서 자리에 뜨고 두 칸이 반전된다.
     //
     // 두 칸인 것이 이 검사의 값이다(HI-M0 실측 3). 한 칸만 반전하면 게스트
-    // 화면에서 글자의 오른쪽 절반이 사라지는데, **화면을 안 보는 검사로는
-    // 그것을 셀 수로만 잡을 수 있다.**
+    // 화면에서 글자의 오른쪽 절반이 사라지는데, 화면을 안 보는 검사로는
+    // 그것을 셀 수로만 잡을 수 있다.
     pre.setPreedit('가');
     {
         var inv: usize = 0;
-        // **이름이 `found`가 아닌 것에 이유가 있다.** 이 파일의 바깥 스코프에
+        // 이름이 `found`가 아닌 것에 이유가 있다. 이 파일의 바깥 스코프에
         // 이미 `found`가 있고, Zig는 안쪽 블록에서도 가리는 것을 막는다 —
         // SP-M0의 실측 9가 `vt.zig`에서 겪은 것과 같은 자리다.
         var drew = false;
@@ -1472,7 +1472,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 조합 중인 글자가 커서 자리에 두 칸으로 뜬다 OK\n", .{});
 
-    // 검사 47. **null로 되돌리면 흔적이 하나도 안 남는다.** 안 지워지면
+    // 검사 47. null로 되돌리면 흔적이 하나도 안 남는다. 안 지워지면
     // 증상이 "확정한 글자가 화면에 두 번 보인다"라 원인에서 멀다.
     pre.setPreedit(null);
     {
@@ -1491,7 +1491,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 조합을 끄면 커서가 다시 한 칸이다 OK\n", .{});
 
-    // 검사 48. **copy mode 중에는 안 그린다.** 그때 반전된 셀은 copy 커서
+    // 검사 48. copy mode 중에는 안 그린다. 그때 반전된 셀은 copy 커서
     // 하나여야 하고, 둘이면 게이트가 어느 것이 copy 커서인지 못 가른다 —
     // CM-M0이 셸 커서를 안 그리기로 한 것과 같은 이유다.
     pre.setPreedit('가');
@@ -1510,24 +1510,24 @@ pub fn main(init: std.process.Init) !void {
 
     // ── 확정된 폭 2 글자 위의 커서 ────────────────────────────────────
     //
-    // **HI-M1이 조합 중인 글자에 대해서만 덮은 어긋남이 확정된 글자에도
-    // 있었다.** `drawGlyph`는 16픽셀을 **첫 셀의 `fg` 하나로** 찍는데 배경은
+    // HI-M1이 조합 중인 글자에 대해서만 덮은 어긋남이 확정된 글자에도
+    // 있었다. `drawGlyph`는 16픽셀을 첫 셀의 `fg` 하나로 찍는데 배경은
     // 칸마다 따로 정해지므로, 두 칸의 배경이 다르면 글자의 오른쪽 절반이
-    // 배경과 같은 색이 되어 **사라진다.**
+    // 배경과 같은 색이 되어 사라진다.
     //
-    // **HI-M1이 이것을 못 본 이유는 게이트가 그 상황을 안 만들었기
-    // 때문이다** — 확정 뒤 커서는 글자 **다음** 칸에 있고, 글자 **위**로
+    // HI-M1이 이것을 못 본 이유는 게이트가 그 상황을 안 만들었기
+    // 때문이다 — 확정 뒤 커서는 글자 다음 칸에 있고, 글자 위로
     // 오려면 왼쪽 화살표나 `Ctrl+A`로 되돌아가야 한다. 사용자가 실기에서
     // 그렇게 하다가 찾았다(2026-09-02).
     //
-    // **inverse와 매치 하이라이트는 이미 맞다.** 앞의 것은 라이브러리가
+    // inverse와 매치 하이라이트는 이미 맞다. 앞의 것은 라이브러리가
     // spacer 셀에도 같은 `style_id`를 붙이기 때문이고, 뒤의 것은 매치 범위가
-    // spacer까지 덮기 때문이다. **구멍은 커서 둘뿐이었다.**
+    // spacer까지 덮기 때문이다. 구멍은 커서 둘뿐이었다.
     const wide = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer wide.deinit();
     wide.feed("한글");
 
-    // 검사 49. **대조군 — 커서가 글자 뒤 빈 칸에 있으면 한 칸이다.**
+    // 검사 49. 대조군 — 커서가 글자 뒤 빈 칸에 있으면 한 칸이다.
     // 이것이 없으면 "언제나 두 칸"인 구현도 아래 검사를 통과한다.
     {
         var inv: usize = 0;
@@ -1540,7 +1540,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    // 검사 50. **커서가 확정된 한글 위로 오면 두 칸이 반전된다.**
+    // 검사 50. 커서가 확정된 한글 위로 오면 두 칸이 반전된다.
     // 한글 두 자가 네 칸이므로 CUB 4가 첫 글자 위로 데려간다.
     wide.feed("\x1b[4D");
     {
@@ -1549,7 +1549,7 @@ pub fn main(init: std.process.Init) !void {
         for (try wide.cells(&buf)) |cell| {
             if (cell.fg == 0x102030 and cell.bg == 0xFFFFFF) {
                 inv += 1;
-                // **그 두 칸이 글자의 두 칸이어야 한다.** 개수만 세면 엉뚱한
+                // 그 두 칸이 글자의 두 칸이어야 한다. 개수만 세면 엉뚱한
                 // 자리가 하나 더 밝아도 통과한다.
                 if (cell.row != 0 or cell.col > 1) {
                     std.debug.print(
@@ -1575,7 +1575,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 확정된 한글 위의 커서가 두 칸이다 OK\n", .{});
 
-    // 검사 51. **copy 커서도 같다.** 셸 커서와 다른 코드 경로라 따로 본다 —
+    // 검사 51. copy 커서도 같다. 셸 커서와 다른 코드 경로라 따로 본다 —
     // 그쪽만 고치고 이쪽을 두면 copy mode에서 같은 증상이 남는다.
     const wcopy = try vt.Screen.init(init.io, init.gpa, 20, 5);
     defer wcopy.deinit();
@@ -1599,7 +1599,7 @@ pub fn main(init: std.process.Init) !void {
 
     // ── SH-M0: needle이 UTF-8을 안다 ────────────────────────────────────
     //
-    // **화면을 따로 만든다**(CM-M1 이래의 규율). 여기서 보는 것은 버퍼뿐이라
+    // 화면을 따로 만든다(CM-M1 이래의 규율). 여기서 보는 것은 버퍼뿐이라
     // 20×5로 충분하다. `copyEnter` 앞에 feed·cells가 있는 것은 검사 18과 같은
     // 이유다 — `findOpen()`은 copy mode 안에서만 열린다.
     const um = try vt.Screen.init(init.io, init.gpa, 20, 5);
@@ -1609,7 +1609,7 @@ pub fn main(init: std.process.Init) !void {
     um.copyEnter();
     um.findOpen();
 
-    // 검사 52. **음절 하나가 통째로 들어간다**(SH design 결정 7).
+    // 검사 52. 음절 하나가 통째로 들어간다(SH design 결정 7).
     // `가`는 EA B0 80, `나`는 EB 82 98이라 여섯 바이트여야 한다.
     um.findBytes("가");
     um.findBytes("나");
@@ -1624,11 +1624,11 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 프롬프트가 한글 음절을 통째로 받는다 OK ('{s}')\n", .{un});
 
-    // 검사 53. **자리가 모자라면 하나도 안 넣는다**(SH design 결정 7).
+    // 검사 53. 자리가 모자라면 하나도 안 넣는다(SH design 결정 7).
     //
-    // **이 검사가 이 Task의 본체다.** "들어가는 만큼 넣는다"는 구현도 검사
+    // 이 검사가 이 Task의 본체다. "들어가는 만큼 넣는다"는 구현도 검사
     // 52를 통과하고, 그 구현은 경계에서 음절을 반만 남긴다. 깨진 바이트열은
-    // 화면의 어떤 셀과도 안 맞아 **"검색이 조용히 안 맞는다"**가 된다.
+    // 화면의 어떤 셀과도 안 맞아 "검색이 조용히 안 맞는다"가 된다.
     //
     // 지금 6바이트다. 120을 더해 126으로 만든다.
     var pad: usize = 0;
@@ -1649,7 +1649,7 @@ pub fn main(init: std.process.Init) !void {
         );
         return error.FindNeedleOverflow;
     }
-    // **그래도 ASCII 둘은 들어간다.** 거절이 "버퍼를 잠근다"가 아니라 "이
+    // 그래도 ASCII 둘은 들어간다. 거절이 "버퍼를 잠근다"가 아니라 "이
     // 덩어리가 안 맞는다"라는 뜻임을 못 박는다.
     um.findChar('y');
     um.findChar('y');
@@ -1666,7 +1666,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 자리가 모자라면 음절을 통째로 거절한다 OK\n", .{});
 
-    // 검사 54. **Backspace가 음절을 통째로 지운다**(SH design 결정 8).
+    // 검사 54. Backspace가 음절을 통째로 지운다(SH design 결정 8).
     //
     // `findOpen()`이 `find_len`을 0으로 되돌리므로 꽉 찬 버퍼를 여기서 비운다.
     um.findOpen();
@@ -1678,15 +1678,15 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: Backspace가 '{s}'를 남겼다(가여야 한다)\n", .{un});
         return error.FindEraseWrong;
     }
-    // **바이트 수를 따로 본다.** 바이트 단위로 지우면 6 → 5가 되는데, 그
+    // 바이트 수를 따로 본다. 바이트 단위로 지우면 6 → 5가 되는데, 그
     // 다섯 바이트를 `{s}`로 찍으면 눈에는 `가` 뒤에 깨진 두 바이트가 붙어
-    // 있는 것으로 보인다 — 위의 eql이 이미 그것을 잡지만, **틀린 값이
-    // 몇인지**를 로그가 말해 주는 편이 고치는 자리를 좁힌다.
+    // 있는 것으로 보인다 — 위의 eql이 이미 그것을 잡지만, 틀린 값이
+    // 몇인지를 로그가 말해 주는 편이 고치는 자리를 좁힌다.
     if (un.len != 3) {
         std.debug.print("FAIL: Backspace 뒤 needle이 {d}바이트다(3이어야 한다)\n", .{un.len});
         return error.FindEraseWrong;
     }
-    // **ASCII는 뜻이 안 바뀐다.** 한 바이트가 곧 한 글자다.
+    // ASCII는 뜻이 안 바뀐다. 한 바이트가 곧 한 글자다.
     um.findChar('z');
     um.findErase();
     un = um.findNeedle().?;
@@ -1694,7 +1694,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: ASCII Backspace가 '{s}'를 남겼다(가여야 한다)\n", .{un});
         return error.FindEraseWrong;
     }
-    // **빈 프롬프트에서는 여전히 아무 일도 안 한다**(CN-M1 plan 결정 2).
+    // 빈 프롬프트에서는 여전히 아무 일도 안 한다(CN-M1 plan 결정 2).
     // 검사 19가 ASCII로 보던 것을 여기서 한글 뒤에도 확인한다 — 앞으로
     // 걸어가는 루프가 0에서 멈추는지가 이 줄이 보는 것이다.
     um.findErase();
@@ -1711,10 +1711,10 @@ pub fn main(init: std.process.Init) !void {
 
     // ── FP-M0: 클립보드의 첫 줄이 needle로 간다 ─────────────────────────
 
-    // 검사 55. **대조군.** `um`은 한 번도 y를 안 눌렀다. 빈 클립보드에
+    // 검사 55. 대조군. `um`은 한 번도 y를 안 눌렀다. 빈 클립보드에
     // 붙여넣기를 하면 0을 돌려주고 needle이 안 자란다.
     //
-    // **이 검사가 대조군인 것에 뜻이 있다.** 아래 56~59가 전부 "무언가
+    // 이 검사가 대조군인 것에 뜻이 있다. 아래 56~59가 전부 "무언가
     // 들어갔다"를 보므로, "아무것도 없을 때 아무 일도 안 한다"를 따로 안
     // 보면 `findPaste`가 늘 무언가를 넣는 구현도 전부 통과한다.
     if (um.findPaste() != 0) {
@@ -1737,9 +1737,9 @@ pub fn main(init: std.process.Init) !void {
     pm.feed("가나\r\n다라\r\n");
     _ = try pm.cells(&buf);
 
-    // 검사 56. **한 줄 클립보드가 통째로 들어간다.**
+    // 검사 56. 한 줄 클립보드가 통째로 들어간다.
     //
-    // **yank가 먼저이고 findOpen이 나중이다**(plan 실측 3). `copyYank`가
+    // yank가 먼저이고 findOpen이 나중이다(plan 실측 3). `copyYank`가
     // `copyExit` → `findCancel()`까지 부르므로 순서를 뒤집으면 프롬프트가
     // 닫힌 채로 붙여넣게 된다.
     pm.copyEnter();
@@ -1764,7 +1764,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 클립보드 한 줄이 needle로 간다 OK ('{s}')\n", .{un});
 
-    // 검사 57. **이미 친 글자 뒤에 붙는다.** 덮어쓰지 않는다.
+    // 검사 57. 이미 친 글자 뒤에 붙는다. 덮어쓰지 않는다.
     //
     // `findOpen()`이 `find_len`을 0으로 되돌리므로 여기서 다시 열어 비운다.
     pm.findOpen();
@@ -1785,9 +1785,9 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 붙여넣기가 친 글자 뒤에 이어진다 OK ('{s}')\n", .{un});
 
-    // 검사 58. **여러 줄이면 첫 줄만 넣는다**(FP design 결정 5).
+    // 검사 58. 여러 줄이면 첫 줄만 넣는다(FP design 결정 5).
     //
-    // **이 검사가 이 Task의 본체다.** 개행이 든 needle은 화면의 어떤 셀과도
+    // 이 검사가 이 Task의 본체다. 개행이 든 needle은 화면의 어떤 셀과도
     // 안 맞으므로 "붙여넣었는데 못 찾음이 뜬다"가 되고, 그 증상은 조용하다.
     //
     // 키 순서는 plan 실측 2가 프로브로 확인한 것이다. row 0에 앵커를 두고
@@ -1800,7 +1800,7 @@ pub fn main(init: std.process.Init) !void {
     var mv: usize = 0;
     while (mv < 3) : (mv += 1) try pm.copyMove(1, 0);
     const many = (try pm.copyYank()) orelse return error.NothingYanked;
-    // **클립보드 쪽을 먼저 못 박는다**(plan 실측 1). 여기가 초록이어야
+    // 클립보드 쪽을 먼저 못 박는다(plan 실측 1). 여기가 초록이어야
     // 아래 판정이 "첫 줄만 넣었다"를 뜻한다 — 클립보드에 애초에 개행이
     // 없었다면 "잘랐다"와 "자를 것이 없었다"가 안 갈린다.
     if (many.len != 13) {
@@ -1825,7 +1825,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 여러 줄은 첫 줄만 들어간다 OK ('{s}')\n", .{un});
 
-    // 검사 59. **자리가 모자라면 하나도 안 넣는다.** 규칙이 `findBytes`
+    // 검사 59. 자리가 모자라면 하나도 안 넣는다. 규칙이 `findBytes`
     // 한 자리에 있다는 것을 붙여넣기 쪽에서도 못 박는다(SH design 결정 7).
     //
     // 126 + 6 = 132 > 128이라 통째로 거절된다. 바이트 단위로 채웠다면 두

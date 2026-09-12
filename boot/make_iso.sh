@@ -16,8 +16,8 @@ cp "$LIMINE_BIN/limine-bios-cd.bin" "$STAGE/boot/limine/limine-bios-cd.bin"
 
 # RM-M0: ISO 하나가 BIOS와 UEFI를 둘 다 태운다. El Torito 부트 카탈로그는
 # 항목 둘을 담을 수 있고(BIOS는 -b, UEFI는 --efi-boot) 펌웨어가 자기 것을
-# 고른다. boot/check.sh는 SeaBIOS로, machine/check.sh는 OVMF로 **같은
-# 바이트를** 부팅한다 — 그것이 두 ISO로 나누지 않은 이유다.
+# 고른다. boot/check.sh는 SeaBIOS로, machine/check.sh는 OVMF로 같은
+# 바이트를 부팅한다 — 그것이 두 ISO로 나누지 않은 이유다.
 #
 # 아래 두 파일은 서로 다른 경로다.
 #   limine-uefi-cd.bin        El Torito가 가리키는 FAT 이미지. 광학 매체 부팅

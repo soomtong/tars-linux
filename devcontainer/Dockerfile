@@ -7,10 +7,10 @@ FROM debian:trixie-slim
 
 # RM-M0이 ovmf를 더한다. 게이트의 아홉 체인은 전부 QEMU의 기본 BIOS(SeaBIOS)로
 # 부팅하는데, 실머신 노트북은 예외 없이 UEFI다. ovmf는 EDK II를 미리 빌드해 둔
-# 펌웨어 이미지(/usr/share/OVMF/OVMF_CODE_4M.fd)라서 **Architecture: all이다** —
+# 펌웨어 이미지(/usr/share/OVMF/OVMF_CODE_4M.fd)라서 Architecture: all이다 —
 # 컨테이너가 arm64인데도 x86_64 게스트용 펌웨어가 그대로 깔린다. 3.6MB다.
 #
-# UT-M1이 zstd를 더한다. **어떤 빌드 단계도 이것을 부르지 않는다** — 재는
+# UT-M1이 zstd를 더한다. 어떤 빌드 단계도 이것을 부르지 않는다 — 재는
 # 도구다. UT-M0의 크기 스파이크가 압축기 셋 중 zstd 하나를 컨테이너에 없어서
 # 못 쟀고(design 실측 15), UT-M2가 27MB를 더하면 그 질문이 다시 살아난다.
 # 그때 재려고 이미지를 또 굽지 않으려고 지금 넣는다. 커널은 CONFIG_RD_ZSTD를
@@ -63,82 +63,82 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # /usr/share/terminfo/x/xterm이 이 패키지에 들어 있다. fish-common/zsh-common과
 # 같이 architecture: all이라 :amd64를 붙이지 않는다.
 #
-# HI-M1이 libc-bin을 더한다. **libc6에는 로케일 데이터가 없다** — Debian은
+# HI-M1이 libc-bin을 더한다. libc6에는 로케일 데이터가 없다 — Debian은
 # 미리 컴파일된 /usr/lib/locale/C.utf8을 libc-bin에 담는다. 그것이 없으면
-# 게스트에 UTF-8 로케일이 아예 없고, 셸의 `setlocale`이 실패해서 **fish가
-# 우리가 보낸 한글 세 바이트를 한 글자가 아니라 바이트 셋으로 읽는다.**
-# 증상은 "입력이 안 된다"가 아니라 **명령줄의 앞 글자가 지워지는 것**이다 —
+# 게스트에 UTF-8 로케일이 아예 없고, 셸의 `setlocale`이 실패해서 fish가
+# 우리가 보낸 한글 세 바이트를 한 글자가 아니라 바이트 셋으로 읽는다.
+# 증상은 "입력이 안 된다"가 아니라 명령줄의 앞 글자가 지워지는 것이다 —
 # fish가 바이트마다 폭을 세어(0x80~0x9F는 0칸, 0xA0 이상은 1칸) 커서를
 # 두 칸짜리 글자의 가운데에 세우고 거기에 다음 글자를 쓰기 때문이다.
-# ncurses-base와 같은 종류의 항목이다: **우리가 게스트에게 한 말을 참으로
-# 만들어 주는 데이터.**
+# ncurses-base와 같은 종류의 항목이다: 우리가 게스트에게 한 말을 참으로
+# 만들어 주는 데이터.
 #
-# UT-M1이 층 1(GNU 한 벌)을 더한다 — **UT가 이 목록을 처음 넓히는 자리다.**
+# UT-M1이 층 1(GNU 한 벌)을 더한다 — UT가 이 목록을 처음 넓히는 자리다.
 # coreutils는 이미 있었고(UT-M0 전부터), 없던 것은 별도 패키지 여덟이다:
 # grep · findutils(find·xargs) · sed · mawk(awk) · diffutils(diff·cmp) ·
 # less · procps(ps·top) · util-linux(dmesg 하나 때문에 받는다).
 #
-# 라이브러리 넷이 따라온다. **design 실측 3은 둘이라고 적었는데 그것이
-# 불완전했다** — 바이너리의 DT_NEEDED만 보고 .so의 DT_NEEDED를 안 봤다.
+# 라이브러리 넷이 따라온다. design 실측 3은 둘이라고 적었는데 그것이
+# 불완전했다 — 바이너리의 DT_NEEDED만 보고 .so의 DT_NEEDED를 안 봤다.
 #
 #   libacl1     sed·cp·mv
 #   libattr1    coreutils(cp·mv 계열). 실측 3에 없던 이름이다
 #   libproc2-0  ps·top
-#   libsystemd0 **libproc2가 데려온다.** 이것도 실측 3에 없었다
+#   libsystemd0 libproc2가 데려온다. 이것도 실측 3에 없었다
 #
 # libsystemd는 lzma·zstd·gcrypt를 dlopen으로만 열고 DT_NEEDED에는
 # libcap·libm·libc뿐이다(libcap은 zsh가 이미 데려와 있다). 저널 압축을 쓸
 # 때만 열리는 경로이고 ps/top은 저널을 안 본다 — 그래서 copy_lib_deps가
 # 따라가는 사슬은 4.2MB가 아니라 1.38MB다.
 #
-# **apt-get download가 의존을 안 따라가는 것이 여기서 값을 낸다.** 라이브러리
+# apt-get download가 의존을 안 따라가는 것이 여기서 값을 낸다. 라이브러리
 # 넷을 손으로 안 적으면 make_initrd.sh가 그 SONAME을 찍고 즉시 죽는다 —
 # 게스트가 부팅한 뒤 그 명령을 처음 칠 때가 아니라 빌드 때 드러난다.
 #
 # ── UT-M2: 층 2(모던 13개)와 라이브러리 열아홉 ──────────────────────────
 #
 # 도구 13에 딸려 오는 새 SONAME을 2026-09-11에 컨테이너 안에서 다시 쟀다.
-# 바이너리의 DT_NEEDED만 보지 않고 **.so의 DT_NEEDED까지 재귀로** 봤다 —
+# 바이너리의 DT_NEEDED만 보지 않고 .so의 DT_NEEDED까지 재귀로 봤다 —
 # UT-M1이 libsystemd를 놓쳤던 자리이고(design 실측 22), M2는 라이브러리를
 # 열아홉 더하므로 같은 누락의 값이 훨씬 비싸다.
 #
 #   libgit2 사슬 16   eza · bat 둘이 데려온다. design 실측 5는 15라고 적었고
 #                     그 표에 libresolv.so.2가 없다 — libkrb5가 데려온다.
-#                     **libresolv는 libc6이 담고 있어 여기 안 적는다.**
+#                     libresolv는 libc6이 담고 있어 여기 안 적는다.
 #   libncursesw6      htop · ncdu
 #   libjq1 · libonig5 jq (libonig는 libjq가 데려온다)
-#   libstdc++6        **btop 하나뿐이다.** btop을 빼는 사람은 이 줄도 뺀다
+#   libstdc++6        btop 하나뿐이다. btop을 빼는 사람은 이 줄도 뺀다
 #
-# libcrypto.so.3 하나가 6.5MB로 가장 크다. **네트워크가 없는 기계가 TLS·
-# Kerberos·SSH 스택을 지는 것**이고, 사용자가 그 대가를 알고 Debian 경로를
+# libcrypto.so.3 하나가 6.5MB로 가장 크다. 네트워크가 없는 기계가 TLS·
+# Kerberos·SSH 스택을 지는 것이고, 사용자가 그 대가를 알고 Debian 경로를
 # 유지하기로 정했다(design 결정 3).
 #
-# **버전이 이름에 박힌 패키지가 넷이다**(libgit2-1.9 · libssh2-1t64 ·
+# 버전이 이름에 박힌 패키지가 넷이다(libgit2-1.9 · libssh2-1t64 ·
 # libssl3t64 · libmbedtls21/libmbedx509-7/libmbedcrypto16). trixie가 올라가면
 # apt가 "없는 패키지"라고 죽는다 — 그때는 `apt-cache search` 한 번으로 새
 # 이름을 찾아 여기를 고치면 된다. 조용히 실패하지 않는다.
 #
-# ── UT-M3: 층 3(git · vim.tiny)과 **라이브러리 0** ──────────────────────
+# ── UT-M3: 층 3(git · vim.tiny)과 라이브러리 0 ──────────────────────
 #
-# **줄 둘이 전부다.** 착수 전에 M2와 똑같은 규칙으로(.so의 DT_NEEDED까지
-# 재귀) closure를 쟀고 **새 SONAME이 하나도 없었다.**
+# 줄 둘이 전부다. 착수 전에 M2와 똑같은 규칙으로(.so의 DT_NEEDED까지
+# 재귀) closure를 쟀고 새 SONAME이 하나도 없었다.
 #
 #   git        libpcre2-8 · libz · libc      셋 다 이미 있다
 #              (libz는 eza·bat의 libgit2 사슬이 데려와 있다)
 #   vim.tiny   libm · libtinfo · libselinux · libacl   넷 다 이미 있다
 #              (libacl은 sed가, libselinux는 fish가 데려왔다)
 #
-# **design의 "층 3은 새 라이브러리가 없다"가 M1·M2에서는 두 번 다 틀렸고
-# 여기서 처음 맞았다.** 그래도 재고 나서 알았다는 것이 이 주석의 요지다 —
+# design의 "층 3은 새 라이브러리가 없다"가 M1·M2에서는 두 번 다 틀렸고
+# 여기서 처음 맞았다. 그래도 재고 나서 알았다는 것이 이 주석의 요지다 —
 # 30초짜리 확인을 건너뛰면 맞는 날과 틀린 날이 구별되지 않는다.
 #
-# **git 패키지의 나머지는 안 쓴다.** /usr/lib/git-core의 168 항목 중
-# **141이 심볼릭 링크이고 실체는 26**이다(design 실측 7은 "하드링크"라고
+# git 패키지의 나머지는 안 쓴다. /usr/lib/git-core의 168 항목 중
+# 141이 심볼릭 링크이고 실체는 26이다(design 실측 7은 "하드링크"라고
 # 적었는데 trixie에서는 심볼릭 링크다 — 결론은 같다). 실체 26 중 큰 것
 # 일곱(약 16MB)이 design 결정 5가 뺀 네트워크 헬퍼이고, init·add·commit·
-# log·diff·branch는 전부 git 바이너리 안의 builtin이라 **그 트리가 통째로
-# 없어도 돈다.** **.deb는 통째로 풀되 initrd에는 guest_tools.sh가 적은 둘만
-# 들어간다** — 푸는 자리(sysroot)와 넣는 자리(initrd)가 다른 것이 이 구조의
+# log·diff·branch는 전부 git 바이너리 안의 builtin이라 그 트리가 통째로
+# 없어도 돈다. .deb는 통째로 풀되 initrd에는 guest_tools.sh가 적은 둘만
+# 들어간다 — 푸는 자리(sysroot)와 넣는 자리(initrd)가 다른 것이 이 구조의
 # 값이다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 

@@ -21,7 +21,7 @@ const c = @cImport({
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
 // 화면 여백을 칠할 색. 셀의 배경색은 이제 상수가 아니라 vt.zig가 셀마다
-// 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 **바깥**에만 쓴다.
+// 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 바깥에만 쓴다.
 const MARGIN_COLOR: u32 = 0x00102030;
 const GRID_X: u32 = 20;
 const GRID_Y: u32 = 20;
@@ -33,26 +33,26 @@ const ROW_HEIGHT: u32 = 16;
 /// 읽히되 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
 const STATUS_FG: u32 = 0x00808890;
 
-/// 대문자 잠금이 **켜졌을 때** `CAPS` 칸의 색(IS-M1).
+/// 대문자 잠금이 켜졌을 때 `CAPS` 칸의 색(IS-M1).
 ///
-/// **SP-M0의 `CURRENT_BG`와 같은 앰버다.** 이 저장소는 이미 그 색으로
+/// SP-M0의 `CURRENT_BG`와 같은 앰버다. 이 저장소는 이미 그 색으로
 /// "지금 봐야 할 것"을 뜻한다(검색의 현재 매치) — 켜진 대문자 잠금이
 /// 정확히 그런 것이다.
 const STATUS_ON: u32 = 0x00C08000;
 
 /// 꺼졌을 때 `CAPS` 칸의 색. 여백(`MARGIN_COLOR` = 0x00102030)보다 조금
-/// 밝아 **자리는 보이되 안 읽힌다.**
+/// 밝아 자리는 보이되 안 읽힌다.
 ///
-/// **칸을 지우지 않는 이유는 결정 2다** — 문자열 길이가 수시로 바뀌면 눈도
-/// 게이트도 어렵다. 그리고 이 색이 **게이트의 대조군**이다: 꺼졌을 때
+/// 칸을 지우지 않는 이유는 결정 2다 — 문자열 길이가 수시로 바뀌면 눈도
+/// 게이트도 어렵다. 그리고 이 색이 게이트의 대조군이다: 꺼졌을 때
 /// `off>0`을 함께 보지 않으면 "아예 안 그렸다"와 "어둡게 그렸다"가 안
 /// 갈린다.
 ///
-/// **`MARGIN_COLOR`와 달라야 한다.** 같으면 `dumpStatus`가 여백 전체를
+/// `MARGIN_COLOR`와 달라야 한다. 같으면 `dumpStatus`가 여백 전체를
 /// 세면서 픽셀 수만 개를 돌려준다.
 const STATUS_OFF: u32 = 0x00303840;
 
-/// 한 셀의 배경을 칠한다. 글리프보다 **먼저** 전부 칠해야 한다
+/// 한 셀의 배경을 칠한다. 글리프보다 먼저 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
 /// 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
 fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
@@ -68,17 +68,17 @@ fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
 /// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4).
 ///
 /// TR-M1에서 이 선택의 근거가 짐작에서 실측으로 바뀌었다. 이 폰트의
-/// coverage는 **0 아니면 255뿐이고 그 사이 값이 하나도 없다.** unifont는
+/// coverage는 0 아니면 255뿐이고 그 사이 값이 하나도 없다. unifont는
 /// 16x16 격자를 그대로 담은 비트맵 폰트이고 unitsPerEm이 64라 16px에서
 /// scale이 정확히 0.25다 — 안티앨리어싱이 아예 일어나지 않는다. 그래서
 /// 게이트의 픽셀 검사가 정확한 상수와 비교할 수 있다.
 ///
-/// **글리프의 오프셋을 반영한다.** stb가 주는 비트맵은 글자를 감싸는 최소
+/// 글리프의 오프셋을 반영한다. stb가 주는 비트맵은 글자를 감싸는 최소
 /// 사각형이라, 셀 모서리에 그대로 찍으면 'A'와 'g'의 baseline이 어긋나고
 /// 한글이 라틴보다 위로 솟는다. `Glyph`가 들고 있는 두 오프셋은 굽는
 /// 자리에서 이미 셀 기준으로 바뀌어 있으므로 여기서는 더하기만 한다.
 ///
-/// **좌표를 부호 있는 수로 계산하고 범위를 검사한다.** `setPixel`이 검사를
+/// 좌표를 부호 있는 수로 계산하고 범위를 검사한다. `setPixel`이 검사를
 /// 하지 않기 때문이다(`drm.zig:128`) — 프레임버퍼 밖에 쓰면 mmap 영역을
 /// 넘어 게스트가 죽는다. font_test가 "한글 11172자가 전부 셀 안에 들어간다"를
 /// 단언하지만, 그것은 이 폰트에 대한 사실이지 코드의 성질이 아니다.
@@ -105,13 +105,13 @@ fn drawGlyph(fb: drm.Framebuffer, glyph: font.Glyph, x: u32, y: u32, color: u32)
     }
 }
 
-/// 프롬프트가 그려진 결과(SH-M2). **게이트가 이 값으로 판정한다.**
+/// 프롬프트가 그려진 결과(SH-M2). 게이트가 이 값으로 판정한다.
 ///
-/// `cols`는 마지막으로 쓴 **다음 칸**이다 — `/가`가 3이면 폭 2를 안 것이고
+/// `cols`는 마지막으로 쓴 다음 칸이다 — `/가`가 3이면 폭 2를 안 것이고
 /// 4면 바이트를 센 것이라, 정수 하나가 SH design 결정 9를 통째로 본다.
 ///
 /// `x0`·`x1`은 반전 구간의 픽셀 범위다. 조합 중이 아니면 둘이 같다.
-/// **그린 함수가 자기가 칠한 범위를 그대로 돌려주는 것**이 요점이다 —
+/// 그린 함수가 자기가 칠한 범위를 그대로 돌려주는 것이 요점이다 —
 /// `dumpStatus`처럼 산수를 다시 하면 어긋났을 때 언제나 0이 나오고 증상이
 /// "안 그렸다"와 구별되지 않는다(IS-M0 실측의 경고).
 const PromptInk = struct {
@@ -121,29 +121,29 @@ const PromptInk = struct {
     y: u32,
 };
 
-/// 프롬프트 오버레이(CN-M1 design 결정 7). **격자를 다 그린 뒤 마지막 줄만
-/// 덮는다.**
+/// 프롬프트 오버레이(CN-M1 design 결정 7). 격자를 다 그린 뒤 마지막 줄만
+/// 덮는다.
 ///
-/// **`render`가 `present()`로 끝나므로 반드시 그 안에서, present 앞에 그려야
-/// 한다.** 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
+/// `render`가 `present()`로 끝나므로 반드시 그 안에서, present 앞에 그려야
+/// 한다. 밖에서 그리면 다음 프레임까지 화면에 안 나온다.
 ///
 /// 줄 전체를 먼저 배경색으로 지운다. 안 지우면 검색어가 짧아졌을 때 지난
 /// 프레임의 꼬리가 오른쪽에 남는다 — Backspace를 눌렀는데 글자가 안 지워지는
 /// 것처럼 보인다.
 ///
-/// **검색어는 반전하지 않는다**(CN-M1 plan 결정 6). 선택도 copy 커서도 "색
+/// 검색어는 반전하지 않는다(CN-M1 plan 결정 6). 선택도 copy 커서도 "색
 /// 둘을 맞바꾼다"로 나타나므로, 프롬프트까지 반전하면 화면 맨 아래의 흰 띠가
 /// 선택인지 프롬프트인지 갈리지 않는다. 앞의 `/` 한 글자가 그 표시다.
 ///
-/// **조합 중인 글자 하나만 반전한다**(SH design 결정 2). 위 문단과 어긋나지
-/// 않는다 — 저기서 말한 것은 **줄 전체**이고 이것은 **글자 하나**다. 그리고
+/// 조합 중인 글자 하나만 반전한다(SH design 결정 2). 위 문단과 어긋나지
+/// 않는다 — 저기서 말한 것은 줄 전체이고 이것은 글자 하나다. 그리고
 /// 그 하나는 "아직 검색어가 아닌 것"이라 표시가 필요하다. 격자 안의 preedit이
 /// 이미 같은 규칙을 쓴다.
 ///
-/// **`drawRun`을 재사용한다**(SH design 결정 9). IS-M1이 상태 줄의 색을 칸마다
+/// `drawRun`을 재사용한다(SH design 결정 9). IS-M1이 상태 줄의 색을 칸마다
 /// 가르려고 "한 토막을 한 색으로 그리고 다음 col을 돌려준다"는 모양으로
 /// 만들었는데, 프롬프트의 반전 구간이 정확히 그 모양을 필요로 한다.
-/// **바이트 하나를 글자 하나로 세던 옛 코드가 이 재사용으로 사라진다** —
+/// 바이트 하나를 글자 하나로 세던 옛 코드가 이 재사용으로 사라진다 —
 /// IS design이 주석에 미리 적어 둔 함정이었다.
 fn drawPrompt(
     fb: drm.Framebuffer,
@@ -158,19 +158,19 @@ fn drawPrompt(
         drawCellBackground(fb, GRID_X + col * CELL_W, y, p.bg);
     }
 
-    // **격자 오른쪽 끝에서 끊는다.** needle은 128바이트까지 자라는데 격자는
+    // 격자 오른쪽 끝에서 끊는다. needle은 128바이트까지 자라는데 격자는
     // 100칸 남짓이라, 안 끊으면 검색어가 여백으로 삐져나온다.
     const max_x = GRID_X + @as(u32, p.cols) * CELL_W;
     col = try drawRun(fb, cache, p.text, y, p.fg, 0, max_x);
 
     const cp = p.edit orelse return .{ .cols = col, .x0 = 0, .x1 = 0, .y = y };
 
-    // **조합 중인 글자는 색을 맞바꿔 그린다.** 배경을 글자색으로 칠하고 획을
+    // 조합 중인 글자는 색을 맞바꿔 그린다. 배경을 글자색으로 칠하고 획을
     // 배경색으로 찍는다 — 격자 안의 커서·선택이 쓰는 규칙 그대로다.
     //
-    // **두 칸을 칠해야 한다.** `drawGlyph`는 16픽셀을 첫 셀의 색 하나로
+    // 두 칸을 칠해야 한다. `drawGlyph`는 16픽셀을 첫 셀의 색 하나로
     // 찍으므로, 한 칸만 반전하면 글자의 오른쪽 절반이 어두운 바탕에 어두운
-    // 색으로 그려져 **사라진다**(HI-M1 실측 3 · 2026-09-02의 사고와 같은
+    // 색으로 그려져 사라진다(HI-M1 실측 3 · 2026-09-02의 사고와 같은
     // 메커니즘이다).
     const glyph = try cache.find(cp);
     const span = @max(1, glyph.cell_width / CELL_W);
@@ -180,12 +180,12 @@ fn drawPrompt(
         drawCellBackground(fb, GRID_X + (col + i) * CELL_W, y, p.fg);
     }
     drawGlyph(fb, glyph, x0, y, p.bg);
-    // **`span`이 아니라 `i`로 x1을 센다.** 칸이 모자라 덜 칠했으면 덜 칠한
+    // `span`이 아니라 `i`로 x1을 센다. 칸이 모자라 덜 칠했으면 덜 칠한
     // 만큼만 세야 판정이 실제 픽셀과 맞는다.
     return .{ .cols = col + span, .x0 = x0, .x1 = x0 + i * CELL_W, .y = y };
 }
 
-/// 입력기 상태 줄(IS design 결정 6). **격자 바깥의 아래 여백에 그린다** —
+/// 입력기 상태 줄(IS design 결정 6). 격자 바깥의 아래 여백에 그린다 —
 /// 터미널 줄을 한 줄도 안 뺏는다.
 ///
 /// ```
@@ -194,22 +194,22 @@ fn drawPrompt(
 /// 글자 줄의 y  = 772 + (28 - 16) / 2        = 778
 /// ```
 ///
-/// **`drawPrompt`를 재사용할 수 없다.** 그쪽은 `for (text) |ch|`로 **바이트
-/// 하나를 글자 하나로** 세는데(검색 needle이 지금 ASCII뿐이라 여태 안
+/// `drawPrompt`를 재사용할 수 없다. 그쪽은 `for (text) |ch|`로 바이트
+/// 하나를 글자 하나로 세는데(검색 needle이 지금 ASCII뿐이라 여태 안
 /// 드러났다), 이 줄에는 `한`처럼 UTF-8 세 바이트짜리 글자가 들어간다. 그대로
 /// 두면 글리프 셋이 그려지고 뒤 칸이 전부 두 칸씩 밀린다.
 ///
-/// **폭 2 글자는 두 칸을 전진한다.** `render()`가 격자에서 col을 쓰는 것과
+/// 폭 2 글자는 두 칸을 전진한다. `render()`가 격자에서 col을 쓰는 것과
 /// 같은 규칙인데, 거기는 라이브러리가 spacer 셀로 col을 미리 맞춰 줬고
 /// (TF-M2) 여기는 우리가 센다.
 ///
-/// **여백이 한 줄보다 좁으면 아무것도 안 그린다.** 높이가 다른 화면에서는
-/// `rows`가 여백을 다 먹을 수 있는데, 그때 그리면 격자 바깥이 아니라 **화면
-/// 밖에** 쓴다 — `setPixel`은 범위를 검사하지 않는다(`drm.zig:149`).
+/// 여백이 한 줄보다 좁으면 아무것도 안 그린다. 높이가 다른 화면에서는
+/// `rows`가 여백을 다 먹을 수 있는데, 그때 그리면 격자 바깥이 아니라 화면
+/// 밖에 쓴다 — `setPixel`은 범위를 검사하지 않는다(`drm.zig:149`).
 ///
-/// **띠를 따로 안 지운다.** `render()`가 매 프레임 `fill(MARGIN_COLOR)`로
+/// 띠를 따로 안 지운다. `render()`가 매 프레임 `fill(MARGIN_COLOR)`로
 /// 시작하므로 지난 프레임의 꼬리가 남을 수 없다. `drawPrompt`가 줄 전체를
-/// 먼저 칠해야 했던 것은 그쪽이 **격자 안**이라 `fill` 뒤에 셀 배경이 다시
+/// 먼저 칠해야 했던 것은 그쪽이 격자 안이라 `fill` 뒤에 셀 배경이 다시
 /// 덮이기 때문이고, 여백은 그 덮임이 없다.
 fn drawStatus(
     fb: drm.Framebuffer,
@@ -220,16 +220,16 @@ fn drawStatus(
     if (fb.height < grid_bottom + ROW_HEIGHT) return;
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
-    // 꼬리 넉 자가 `CAPS` 칸이다. **길이를 4로 여기 다시 적지 않고
-    // `status.CAPS`에서 얻는다** — 이름을 고치는 사람이 이 파일을 안 고쳐도
+    // 꼬리 넉 자가 `CAPS` 칸이다. 길이를 4로 여기 다시 적지 않고
+    // `status.CAPS`에서 얻는다 — 이름을 고치는 사람이 이 파일을 안 고쳐도
     // 되게. `statusText`가 언제나 그것으로 끝내므로 이 자름은 항상 맞는다.
     if (st.text.len < status.CAPS.len) return;
     const caps_at = st.text.len - status.CAPS.len;
 
-    // **두 번 나눠 그린다.** 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
+    // 두 번 나눠 그린다. 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
     // 그리면 바이트 위치와 col을 동시에 굴려야 하고, 폭 2 글자에서 어긋나기
     // 쉽다 — 그 어긋남은 "글자가 겹쳐 보인다"로 나타나 원인에서 멀다.
-    // **상태 줄의 경계는 화면 끝이다.** 격자 바깥의 여백에 그리므로 격자
+    // 상태 줄의 경계는 화면 끝이다. 격자 바깥의 여백에 그리므로 격자
     // 오른쪽 끝에 맞출 이유가 없다 — 프롬프트와 갈리는 자리다.
     const col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0, fb.width);
     _ = try drawRun(
@@ -243,13 +243,13 @@ fn drawStatus(
     );
 }
 
-/// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, **다음 칸의 col을**
+/// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, 다음 칸의 col을
 /// 돌려준다.
 ///
 /// `drawStatus`가 이것을 두 번 부른다 — 앞 세 칸은 `STATUS_FG`로, 꼬리의
 /// `CAPS`는 잠금 상태에 따라 `STATUS_ON`이나 `STATUS_OFF`로.
 ///
-/// **`drawPrompt`를 재사용하지 않는 이유가 이 함수의 두 줄에 있다**
+/// `drawPrompt`를 재사용하지 않는 이유가 이 함수의 두 줄에 있다
 /// (design 결정 6). 그쪽은 바이트 하나를 글자 하나로 세므로 `한`이 글리프
 /// 셋으로 그려진다. 여기는 UTF-8을 디코드하고, 폭 2 글자는 두 칸을 전진한다.
 fn drawRun(
@@ -270,14 +270,14 @@ fn drawRun(
     var col = start_col;
     while (it.nextCodepoint()) |cp| {
         const glyph = try cache.find(cp);
-        // **부르는 쪽이 정한 경계에서 멈춘다**(SH-M2). `setPixel`은 범위를
+        // 부르는 쪽이 정한 경계에서 멈춘다(SH-M2). `setPixel`은 범위를
         // 검사하지 않으므로(`drm.zig:149`) 멈추지 않으면 프레임버퍼 밖에 쓴다.
         //
-        // **경계를 인자로 받는 이유는 둘이 다르기 때문이다.** 상태 줄은 격자
+        // 경계를 인자로 받는 이유는 둘이 다르기 때문이다. 상태 줄은 격자
         // 바깥이라 화면 끝(`fb.width`)이 경계이고, 프롬프트는 격자의 마지막
         // 줄이라 격자 오른쪽 끝이 경계다 — 여백으로 삐져나오면 검색어가
-        // 터미널 밖에 그려진다. **needle은 128바이트까지 자라는데 격자는
-        // 100칸 남짓이라 실제로 닿는 경계다.**
+        // 터미널 밖에 그려진다. needle은 128바이트까지 자라는데 격자는
+        // 100칸 남짓이라 실제로 닿는 경계다.
         if (GRID_X + col * CELL_W + glyph.cell_width > max_x) break;
         drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
         // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
@@ -291,17 +291,17 @@ fn drawRun(
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
 /// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
 ///
-/// **두 벌로 나눠 그린다**(design 결정 6). 배경을 전부 칠하고 나서 글리프를
+/// 두 벌로 나눠 그린다(design 결정 6). 배경을 전부 칠하고 나서 글리프를
 /// 전부 그린다. 섞으면 다음 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
-/// `cache`가 `*font.Cache`인 이유는 TR-M1부터 **그리는 도중에 글자를 굽기
-/// 때문이다.** 캐시에 없는 글자가 화면에 나타나면 그 자리에서 래스터라이징이
+/// `cache`가 `*font.Cache`인 이유는 TR-M1부터 그리는 도중에 글자를 굽기
+/// 때문이다. 캐시에 없는 글자가 화면에 나타나면 그 자리에서 래스터라이징이
 /// 일어난다 — 한 자당 밀리초 이하이고 같은 글자는 한 번뿐이다.
 fn render(
     fb: drm.Framebuffer,
     cache: *font.Cache,
     cells: []const vt.CellGlyph,
     prompt: ?Prompt,
-    // **이름이 `status`가 아니다.** 이 파일이 `status.zig`를 그 이름으로
+    // 이름이 `status`가 아니다. 이 파일이 `status.zig`를 그 이름으로
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
     // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
     st: Status,
@@ -329,13 +329,13 @@ fn render(
         drawGlyph(fb, glyph, x, y, cell.fg);
     }
 
-    // **그린 결과를 돌려준다**(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
+    // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
     // 같은 산수를 다시 하지 않는다.
     var ink: ?PromptInk = null;
     if (prompt) |p| ink = try drawPrompt(fb, cache, p);
 
-    // **프롬프트와 안 겹친다** — 프롬프트는 격자의 마지막 줄이고 이것은 격자
+    // 프롬프트와 안 겹친다 — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try drawStatus(fb, cache, st);
 
@@ -345,16 +345,16 @@ fn render(
 
 /// 오버레이 한 줄에 필요한 것 전부.
 ///
-/// 인자를 일곱 개 늘어놓지 않고 묶는 이유는 **호출부가 하나뿐**이기 때문이다.
+/// 인자를 일곱 개 늘어놓지 않고 묶는 이유는 호출부가 하나뿐이기 때문이다.
 /// 늘어놓으면 `rows`와 `cols`, `fg`와 `bg`를 뒤바꿔 넣어도 컴파일이 통과한다.
 const Prompt = struct {
     text: []const u8,
-    /// 조합 중인 글자(SH-M2, design 결정 2). **프롬프트가 열려 있을 때만
-    /// 있다** — 닫힌 뒤의 오버레이(`/needle [3/12]`)에는 조합이 붙지 않는다.
+    /// 조합 중인 글자(SH-M2, design 결정 2). 프롬프트가 열려 있을 때만
+    /// 있다 — 닫힌 뒤의 오버레이(`/needle [3/12]`)에는 조합이 붙지 않는다.
     ///
-    /// **`text`에 안 붙인 것이 SH-M2 plan의 결정이다.** 붙이면 "어디부터
+    /// `text`에 안 붙인 것이 SH-M2 plan의 결정이다. 붙이면 "어디부터
     /// 반전인가"를 바이트 오프셋으로 함께 날라야 하고, 그 둘이 어긋나면
-    /// 반전이 한 글자 밀린다. 조합 중인 글자는 언제나 **하나**라 코드포인트
+    /// 반전이 한 글자 밀린다. 조합 중인 글자는 언제나 하나라 코드포인트
     /// 하나면 충분하다.
     edit: ?u21,
     rows: u16,
@@ -367,19 +367,19 @@ const Prompt = struct {
 /// 호출부가 하나뿐이고, 늘어놓으면 `rows`를 다른 `u16`과 뒤바꿔 넣어도
 /// 컴파일이 통과한다.
 ///
-/// **`Prompt`와 달리 optional이 아니다.** 상태 줄은 언제나 뜬다(결정 2).
+/// `Prompt`와 달리 optional이 아니다. 상태 줄은 언제나 뜬다(결정 2).
 const Status = struct {
     text: []const u8,
     rows: u16,
     /// 대문자 잠금이 켜져 있는가(IS-M1).
     ///
-    /// **`text`에는 안 들어 있다.** `CAPS` 넉 자는 언제나 그대로이고 이 값은
-    /// **색**만 고른다(design 결정 3) — 그래서 `statusText`가 아니라 여기서
+    /// `text`에는 안 들어 있다. `CAPS` 넉 자는 언제나 그대로이고 이 값은
+    /// 색만 고른다(design 결정 3) — 그래서 `statusText`가 아니라 여기서
     /// 따로 나른다.
     caps: bool,
 };
 
-/// 오버레이 한 줄에 쓸 글자를 정한다. **갈래가 셋이다**(SP design 결정 7).
+/// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
 ///
 /// ```
 /// 프롬프트가 열려 있다        → /needle
@@ -388,26 +388,26 @@ const Status = struct {
 /// 그 밖                       → null (오버레이를 아예 안 그린다)
 /// ```
 ///
-/// **`drawPrompt`는 이것을 모른다.** 그리는 함수는 "한 줄을 준 색으로 쓴다"
+/// `drawPrompt`는 이것을 모른다. 그리는 함수는 "한 줄을 준 색으로 쓴다"
 /// 하나만 알고, 무엇을 쓸지는 여기서 끝난다 — CN-M1이 앞의 `/`를 `vt.zig`가
 /// 아니라 `main.zig`에서 붙인 것과 같은 경계다(모양은 여기가 정한다).
 ///
-/// **프롬프트를 먼저 보는 것에 뜻이 있다.** 검색을 마친 뒤에 `/`를 다시 열면
+/// 프롬프트를 먼저 보는 것에 뜻이 있다. 검색을 마친 뒤에 `/`를 다시 열면
 /// 사람이 지금 치고 있는 것이 화면에 나와야 한다. 순서를 뒤집으면 새 검색어를
 /// 치는 동안 지난 결과가 화면에 남는다.
 ///
-/// **두 갈래를 가르는 것은 `findMatchCount()` 하나다.** `find_status`는 "방금
+/// 두 갈래를 가르는 것은 `findMatchCount()` 하나다. `find_status`는 "방금
 /// 검색했다"만 말하고 성패를 모른다 — `vt_test`의 검사 44가 그 갈림을 본다.
 ///
-/// **번호는 라이브러리가 준 값을 그대로 쓴다**(결정 6). `idx + 1`이고
+/// 번호는 라이브러리가 준 값을 그대로 쓴다(결정 6). `idx + 1`이고
 /// `total - idx`로 뒤집지 않는다 — 뒤집으면 off-by-one이 들어갈 자리가 하나
 /// 생기고, 그 증상은 "번호가 하나씩 어긋난다"라 조용하다.
 ///
-/// **`findCurrentIndex()`가 null이면 번호를 안 붙이고 needle만 쓴다**
+/// `findCurrentIndex()`가 null이면 번호를 안 붙이고 needle만 쓴다
 /// (design 위험 1). 매치는 있는데 선택이 없는 경로이고, 그때 0이나 1을
 /// 지어내면 사람이 커서와 어긋난 번호를 보게 된다.
 ///
-/// `buf`는 최소 **173바이트**여야 한다: `/` 하나 + needle 128 + ` [` 둘 +
+/// `buf`는 최소 173바이트여야 한다: `/` 하나 + needle 128 + ` [` 둘 +
 /// 숫자 20 + `/` 하나 + 숫자 20 + `]` 하나. `usize`가 최대 스무 자리다.
 fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
     const MISS = ": not found";
@@ -429,7 +429,7 @@ fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
     }
 
     const idx = screen.findCurrentIndex() orelse return buf[0..len];
-    // **`bufPrint`가 실패하면 needle만 남긴다.** 위의 산수대로면 일어나지
+    // `bufPrint`가 실패하면 needle만 남긴다. 위의 산수대로면 일어나지
     // 않지만, 버퍼 크기를 누가 줄였을 때 증상이 panic이 되지 않게 막는다.
     const tail = std.fmt.bufPrint(buf[len..], " [{d}/{d}]", .{ idx + 1, total }) catch
         return buf[0..len];
@@ -439,19 +439,19 @@ fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
 /// 한 프레임에 찍는 style/pixel 줄의 상한. 화면 전체에 색이 깔린 프로그램이
 /// 돌면 셀 수천 개가 매 프레임 로그로 쏟아진다.
 ///
-/// **SC-M0이 16에서 96으로 올렸다.** 16은 "게이트가 검사에 쓰는 셀은 한 줄
+/// SC-M0이 16에서 96으로 올렸다. 16은 "게이트가 검사에 쓰는 셀은 한 줄
 /// 안의 몇 개라 넉넉하다"고 적고 고른 수였는데, 그 문장이 참이었던 이유는
-/// **셸이 색을 하나도 안 썼기 때문**이다 — `--no-config`로 뜬 fish는 구문
+/// 셸이 색을 하나도 안 썼기 때문이다 — `--no-config`로 뜬 fish는 구문
 /// 강조를 안 해서 프롬프트도 명령줄도 기본 색이었고, 색이 있는 셀은 검사가
 /// 만든 것뿐이었다.
 ///
-/// 설정을 읽는 fish는 프롬프트를 칠하고 명령줄을 강조한다. 그러면 **셀이
+/// 설정을 읽는 fish는 프롬프트를 칠하고 명령줄을 강조한다. 그러면 셀이
 /// 순서대로 덤프되므로 화면 맨 위의 명령줄이 예산을 먼저 다 쓰고, 그 아래
-/// 줄에 있는 프로그램 출력의 색이 잘린다** — `render/check.sh`가
+/// 줄에 있는 프로그램 출력의 색이 잘린다 — `render/check.sh`가
 /// `printf '\033[41m \033[0m\n'`의 빨강 배경을 영영 못 보게 된다(SC-M0 실측
 /// 19(a)). 명령줄 하나가 32칸을 썼고, 한 줄은 최대 80칸이다.
 ///
-/// 96은 **색칠된 80칸 한 줄 + 검사가 보는 아래 줄들**을 덮는 수다. 상한이
+/// 96은 색칠된 80칸 한 줄 + 검사가 보는 아래 줄들을 덮는 수다. 상한이
 /// 있다는 성질은 그대로이고(`{d} more cell(s) not shown`이 잘린 것을 말한다),
 /// 자르는 자리만 셸이 색을 쓰는 세상으로 옮겼다.
 const STYLE_DUMP_LIMIT: usize = 96;
@@ -459,7 +459,7 @@ const STYLE_DUMP_LIMIT: usize = 96;
 /// 검증용으로 화면 내용을 serial 콘솔에 한 줄로 덤프한다.
 /// check.sh가 이 줄을 grep해서 "입력이 실제로 셸을 움직였는가"를 판단한다.
 ///
-/// **이 줄의 형식은 바꾸지 않는다.** 여섯 체인 중 다섯(TF·CP·IP·PM·HD)이
+/// 이 줄의 형식은 바꾸지 않는다. 여섯 체인 중 다섯(TF·CP·IP·PM·HD)이
 /// `terminal: screen>.*` 형태로 이 줄을 보고 화면을 판정한다. 색은 여기
 /// 섞지 않고 아래 dumpStyles가 별도의 줄로 낸다(design 결정 7).
 fn dumpScreen(cells: []const vt.CellGlyph) void {
@@ -489,7 +489,7 @@ fn dumpScreen(cells: []const vt.CellGlyph) void {
 /// 통과한다. `pixel>`만 찍으면 실패는 잡히지만 어느 단계에서 틀어졌는지를
 /// 따로 조사해야 한다.
 ///
-/// **반드시 render() 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의
+/// 반드시 render() 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의
 /// 픽셀을 읽는다.
 fn dumpStyles(
     fb: drm.Framebuffer,
@@ -503,14 +503,14 @@ fn dumpStyles(
     var skipped: usize = 0;
     var hidden: usize = 0;
     for (cells) |cell| {
-        // **덮인 줄은 아예 건너뛴다.** 이 함수가 두 줄을 찍는 것에 뜻이 있다 —
+        // 덮인 줄은 아예 건너뛴다. 이 함수가 두 줄을 찍는 것에 뜻이 있다 —
         // `style>`는 파서가 본 색이고 `pixel>`은 프레임버퍼에서 되읽은 값이며,
         // 둘이 어긋나면 렌더러가 틀렸다는 뜻이다(TR design 결정 7). 우리가 덮은
         // 줄에서는 그 전제가 깨진다: pixel>이 셀이 아니라 프롬프트를 말한다.
         //
         // 지금 이 줄을 보는 체인은 없지만(pixel>을 쓰는 것은 render 체인
-        // 하나뿐이고 그 체인은 copy mode에 안 들어간다) **게이트가 못 보는
-        // 부채를 새로 만들지 않는다.**
+        // 하나뿐이고 그 체인은 copy mode에 안 들어간다) 게이트가 못 보는
+        // 부채를 새로 만들지 않는다.
         if (overlaid_row) |r| {
             if (cell.row == r) {
                 hidden += 1;
@@ -526,7 +526,7 @@ fn dumpStyles(
         std.debug.print("terminal: style> {d},{d} fg={X:0>6} bg={X:0>6}\n", .{
             cell.row, cell.col, cell.fg, cell.bg,
         });
-        // 셀의 **중앙**을 읽는다. 모서리는 이웃 셀과의 경계라 off-by-one에
+        // 셀의 중앙을 읽는다. 모서리는 이웃 셀과의 경계라 off-by-one에
         // 취약하다.
         const px = GRID_X + @as(u32, cell.col) * CELL_W + CELL_W / 2;
         const py = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -549,16 +549,16 @@ fn dumpStyles(
 /// 글자다.
 const INK_DUMP_LIMIT: usize = 8;
 
-/// 폭 2칸 글자가 **정말 두 칸에 걸쳐 찍혔는지**를 프레임버퍼에서 되읽어
+/// 폭 2칸 글자가 정말 두 칸에 걸쳐 찍혔는지를 프레임버퍼에서 되읽어
 /// 센다.
 ///
 /// `style>`/`pixel>`이 색을 두 겹으로 보는 것과 같은 이유다(design 결정 7).
-/// 한글은 **"파서가 폭 2칸으로 셌는가"와 "렌더러가 두 칸을 칠했는가"가 따로
-/// 틀릴 수 있다.** 셀 하나만 보면 그 차이를 못 잡는다 — 글자가 왼쪽 반쪽만
+/// 한글은 "파서가 폭 2칸으로 셌는가"와 "렌더러가 두 칸을 칠했는가"가 따로
+/// 틀릴 수 있다. 셀 하나만 보면 그 차이를 못 잡는다 — 글자가 왼쪽 반쪽만
 /// 그려져도 그 셀에는 잉크가 있기 때문이다. 그래서 왼쪽 8픽셀과 오른쪽
 /// 8픽셀을 따로 센다.
 ///
-/// **반드시 render() 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의
+/// 반드시 render() 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의
 /// 픽셀을 읽는다.
 fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) void {
     var shown: usize = 0;
@@ -600,13 +600,13 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
 
 /// 뷰포트가 스크롤백의 어디에 있는지를 찍는다.
 ///
-/// **게이트가 스크롤 위치를 볼 수 있는 유일한 창구다.** 화면 덤프만으로는
+/// 게이트가 스크롤 위치를 볼 수 있는 유일한 창구다. 화면 덤프만으로는
 /// "올라갔다"와 "출력이 달라졌다"를 가를 수 없다 — 같은 글자가 두 번 나오는
-/// 화면이면 둘이 구분되지 않는다. 거꾸로 이 줄만 보면 **뷰포트는 움직였는데
-/// 화면은 그대로인** 상태를 못 잡으므로, 게이트는 둘을 나란히 본다.
+/// 화면이면 둘이 구분되지 않는다. 거꾸로 이 줄만 보면 뷰포트는 움직였는데
+/// 화면은 그대로인 상태를 못 잡으므로, 게이트는 둘을 나란히 본다.
 /// `style>`/`pixel>`이 색을 두 겹으로 보는 것과 같은 구조다(design 결정 7).
 ///
-/// **매 프레임 찍는다.** `font>`처럼 "바뀌었을 때만"으로 하면 게이트가
+/// 매 프레임 찍는다. `font>`처럼 "바뀌었을 때만"으로 하면 게이트가
 /// `tail -n 1`로 현재 상태를 읽을 수 없어진다 — "바닥에 그대로 있다"도
 /// 검사해야 하는 사실이다(design 결정 13).
 fn dumpScroll(screen: *vt.Screen) void {
@@ -618,12 +618,12 @@ fn dumpScroll(screen: *vt.Screen) void {
 
 /// copy mode에서 무슨 일이 일어났는지를 찍는다.
 ///
-/// **게이트가 모드 안을 볼 수 있는 유일한 창구다.** 화면만 보면 "모드에
+/// 게이트가 모드 안을 볼 수 있는 유일한 창구다. 화면만 보면 "모드에
 /// 들어갔다"와 "아무 일도 안 일어났다"가 구분되지 않는다 — 모드에 들어가도
 /// 화면에서 달라지는 것은 커서 반전 하나뿐이기 때문이다.
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8). 기존
-/// 체인들과 같은 구조이고, **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 체인들과 같은 구조이고, 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
     if (screen.copyCursor()) |cc| {
         std.debug.print("terminal: copy> {s} row={d} col={d}\n", .{ what, cc.y, cc.x });
@@ -635,16 +635,16 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
 
 /// 검색 프롬프트의 상태를 찍는다.
 ///
-/// **게이트가 프롬프트를 볼 수 있는 유일한 창구다.** 프롬프트는 오버레이라
+/// 게이트가 프롬프트를 볼 수 있는 유일한 창구다. 프롬프트는 오버레이라
 /// `cells()`의 결과에 안 섞이고(design 결정 7), 그래서 `terminal: screen>` 줄에
 /// 절대 안 나타난다. 그 격리가 다섯 체인의 화면 판정을 지키는 대신 관측 수단을
 /// 하나 없앤다 — 이 줄이 그 자리를 메운다.
 ///
-/// **`screen>`의 형식을 안 바꾸는 것이 이 설계 전체의 이유다.** 프롬프트를 셀에
+/// `screen>`의 형식을 안 바꾸는 것이 이 설계 전체의 이유다. 프롬프트를 셀에
 /// 섞었다면 로그 한 줄로 끝났겠지만, 그 줄을 보던 체인 다섯이 전부 흔들린다.
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8).
-/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpFind(screen: *vt.Screen, what: []const u8) void {
     if (screen.findNeedle()) |n| {
         std.debug.print("terminal: find> {s} needle={s} len={d}\n", .{ what, n, n.len });
@@ -654,27 +654,27 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
     }
 }
 
-/// 오버레이 한 줄에 무엇이 쓰였는지(CS-M1 plan 결정 3). **없으면 한 줄도 안
-/// 찍는다.**
+/// 오버레이 한 줄에 무엇이 쓰였는지(CS-M1 plan 결정 3). 없으면 한 줄도 안
+/// 찍는다.
 ///
-/// **이 줄이 유일한 관측 수단이다.** 오버레이는 `cells()`에 안 섞이므로
+/// 이 줄이 유일한 관측 수단이다. 오버레이는 `cells()`에 안 섞이므로
 /// `screen>`에 영영 안 나오고, `dumpStyles`는 덮인 줄을 통째로 건너뛴다
 /// (`overlaid_row`). 그래서 이 줄이 없으면 게이트가 "화면에 그렇게 쓰였다"를
 /// 볼 창구가 하나도 없다 — `find> submit matches=0`은 "검색이 못 찾았다"까지만
 /// 말한다.
 ///
-/// **`render()`에 넘어간 바로 그 값을 받는다.** 문자열을 여기서 다시 만들지
+/// `render()`에 넘어간 바로 그 값을 받는다. 문자열을 여기서 다시 만들지
 /// 않는 이유는, 다시 만들면 그리는 것과 찍는 것이 갈릴 수 있기 때문이다.
 ///
-/// `find> hl`과 같이 **매 프레임 찍는다**. "바뀔 때만"은 상태를 하나 더 만들고
+/// `find> hl`과 같이 매 프레임 찍는다. "바뀔 때만"은 상태를 하나 더 만들고
 /// 그 판정이 틀리면 증상이 "로그가 안 나온다"라 조사하기 나쁘다.
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다.
-/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 /// 한글 입력기의 상태를 한 줄로 찍는다(HI-M1). 게이트가 "한/영이 바뀌었다"와
 /// "지금 이 글자를 조합 중이다"를 볼 수 있는 유일한 줄이다.
 ///
-/// **`screen>`만 보면 갈리지 않는 것이 있다.** 조합 중인 글자는 셸이 되울린
+/// `screen>`만 보면 갈리지 않는 것이 있다. 조합 중인 글자는 셸이 되울린
 /// 글자와 화면에서 똑같이 생겼으므로, `screen>`에 `가`가 있는 것만으로는
 /// "아직 조합 중"과 "이미 셸에 갔다"를 못 가른다. CS-M1이 오버레이 내용을
 /// 볼 창구가 없어서 `find> overlay`를 새로 만든 것과 같은 자리다.
@@ -696,7 +696,7 @@ fn dumpHangul(state: *const input.State) void {
 
 fn dumpOverlay(prompt: ?Prompt) void {
     const p = prompt orelse return;
-    // **조합 중인 글자를 함께 찍는다**(SH-M2). `text=`만 보면 "조합이 아직
+    // 조합 중인 글자를 함께 찍는다(SH-M2). `text=`만 보면 "조합이 아직
     // 검색어가 아니다"를 게이트가 볼 창구가 없다.
     //
     // `(none)`이라고 쓰는 이유는 `dumpHangul`과 같다 — 빈 문자열이면 줄이
@@ -712,23 +712,23 @@ fn dumpOverlay(prompt: ?Prompt) void {
 
 /// 프롬프트가 실제로 그린 것을 픽셀로 센다(SH-M2).
 ///
-/// **판정 셋이 한 줄에 있다.**
+/// 판정 셋이 한 줄에 있다.
 ///   `cols` — 그린 칸 수. `/가`가 3이면 폭 2를 안 것이고 4면 바이트를 센 것이다
-///   `inv`  — 반전 구간에서 **글자색**인 픽셀. 배경이 뒤집혔다는 증거
-///   `ink`  — 반전 구간에서 **배경색**인 픽셀. 그 위에 글자를 그렸다는 증거
+///   `inv`  — 반전 구간에서 글자색인 픽셀. 배경이 뒤집혔다는 증거
+///   `ink`  — 반전 구간에서 배경색인 픽셀. 그 위에 글자를 그렸다는 증거
 ///
-/// **`inv`만 보면 사각형만 칠한 구현도 통과한다.** IS-M1이 `CAPS` 칸에서
+/// `inv`만 보면 사각형만 칠한 구현도 통과한다. IS-M1이 `CAPS` 칸에서
 /// `on`과 `off`를 한 줄에 함께 찍은 것과 같은 이유다.
 ///
-/// **범위를 여기서 다시 계산하지 않는다.** `drawPrompt`가 자기가 칠한 픽셀
+/// 범위를 여기서 다시 계산하지 않는다. `drawPrompt`가 자기가 칠한 픽셀
 /// 범위를 그대로 돌려준다 — `dumpStatus`가 `drawStatus`의 y 산수를 다시 해야
 /// 했던 자리와 갈리는 지점이고, 어긋나면 언제나 0이 나오는 그 함정을 아예
 /// 안 만든다.
 ///
-/// **반드시 `render()` 뒤에 부른다** — 그 전에 부르면 이전 프레임을 읽는다.
+/// 반드시 `render()` 뒤에 부른다 — 그 전에 부르면 이전 프레임을 읽는다.
 ///
 /// 문구가 이 파일과 `hangul/check.sh` 양쪽에 중복된다.
-/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
     const k = ink orelse return;
     const p = prompt orelse return;
@@ -748,37 +748,37 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
     });
 }
 
-/// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). **값이 바뀌었을 때만 찍는다.**
+/// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). 값이 바뀌었을 때만 찍는다.
 ///
-/// **RC-M0 실측 7이 시리얼 한 줄에 0.6~8.8밀리초라고 쟀다.** 프레임이 21
+/// RC-M0 실측 7이 시리얼 한 줄에 0.6~8.8밀리초라고 쟀다. 프레임이 21
 /// 밀리초인데 두 줄을 매 프레임 찍으면 최악 18밀리초가 붙는다. 덤으로 로그가
-/// 읽기 좋아진다 — **한 줄이 곧 한 번의 전환이다.**
+/// 읽기 좋아진다 — 한 줄이 곧 한 번의 전환이다.
 ///
-/// **첫 프레임은 반드시 찍힌다**(`last_len`이 null이다). 기준선이 없으면
+/// 첫 프레임은 반드시 찍힌다(`last_len`이 null이다). 기준선이 없으면
 /// 게이트가 "부팅 직후의 상태"를 볼 창구가 없다.
 ///
-/// **줄이 셋인 이유가 이 서브프로젝트의 검증 구조다.** 여백은 격자 밖이라
+/// 줄이 셋인 이유가 이 서브프로젝트의 검증 구조다. 여백은 격자 밖이라
 /// `screen>`·`style>`·`ink>`가 하나도 못 본다. `text=`만 있으면 `statusText`가
-/// 만든 문자열을 되읽는 것뿐이고 **"글자는 만들었는데 화면에 안 그렸다"를 못
-/// 잡는다.** 그래서 띠 안에서 우리 색인 픽셀을 직접 센다 — `dumpInk`가
+/// 만든 문자열을 되읽는 것뿐이고 "글자는 만들었는데 화면에 안 그렸다"를 못
+/// 잡는다. 그래서 띠 안에서 우리 색인 픽셀을 직접 센다 — `dumpInk`가
 /// `getPixel`로 프레임버퍼를 읽는 것과 같은 방법이다.
 ///
-/// **셋째 줄(`caps ink`)은 `text=`가 원리적으로 못 보는 것을 본다**(IS-M1).
-/// `CAPS` 칸은 켜지든 꺼지든 **글자가 똑같으므로**(design 결정 3) 갈리는
+/// 셋째 줄(`caps ink`)은 `text=`가 원리적으로 못 보는 것을 본다(IS-M1).
+/// `CAPS` 칸은 켜지든 꺼지든 글자가 똑같으므로(design 결정 3) 갈리는
 /// 것은 색뿐이다.
 ///
-/// **x 범위를 안 잰다 — 띠 전체를 세도 답이 같다.** `STATUS_ON`과
+/// x 범위를 안 잰다 — 띠 전체를 세도 답이 같다. `STATUS_ON`과
 /// `STATUS_OFF`는 여백 안에서 `CAPS` 칸에만 쓰이기 때문이다. 범위를 재려
-/// 들면 `drawStatus`의 **col 전진 산수까지** 여기서 다시 해야 하고, 어긋나면
+/// 들면 `drawStatus`의 col 전진 산수까지 여기서 다시 해야 하고, 어긋나면
 /// 언제나 0이 나온다 — 증상이 "안 그렸다"와 똑같아서 원인을 엉뚱한 데서
 /// 찾게 된다.
 ///
-/// **메모가 `text`만 보면 안 된다.** `CAPS`는 켜져도 글자가 안 바뀌므로,
-/// `caps`를 함께 기억하지 않으면 CapsLock을 눌러도 **새 줄이 한 줄도 안
-/// 찍힌다** — 그리고 그 증상은 "구멍이 안 고쳐졌다"와 구별이 안 된다
+/// 메모가 `text`만 보면 안 된다. `CAPS`는 켜져도 글자가 안 바뀌므로,
+/// `caps`를 함께 기억하지 않으면 CapsLock을 눌러도 새 줄이 한 줄도 안
+/// 찍힌다 — 그리고 그 증상은 "구멍이 안 고쳐졌다"와 구별이 안 된다
 /// (둘 다 `on=0`이다).
 ///
-/// **`render` 뒤에 불러야 한다.** 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
+/// `render` 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
 fn dumpStatus(
     fb: drm.Framebuffer,
     st: Status,
@@ -794,7 +794,7 @@ fn dumpStatus(
     last_caps.* = st.caps;
     std.debug.print("terminal: status> text={s}\n", .{st.text});
 
-    // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 **같은 산수로** y를
+    // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 같은 산수로 y를
     // 구해야 한다 — 어긋나면 언제나 0이 나오고, 증상이 "안 그렸다"와 똑같아서
     // 원인을 `drawStatus`에서 찾게 된다.
     const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
@@ -805,7 +805,7 @@ fn dumpStatus(
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
-    // **한 번 훑으며 셋을 함께 센다.** 띠를 세 번 훑을 이유가 없다.
+    // 한 번 훑으며 셋을 함께 센다. 띠를 세 번 훑을 이유가 없다.
     var fg: usize = 0;
     var on: usize = 0;
     var off: usize = 0;
@@ -820,31 +820,31 @@ fn dumpStatus(
         }
     }
     std.debug.print("terminal: status> ink fg={d}\n", .{fg});
-    // **`on`과 `off`를 한 줄에 함께 찍는다.** 하나만 보면 "아예 안 그렸다"와
+    // `on`과 `off`를 한 줄에 함께 찍는다. 하나만 보면 "아예 안 그렸다"와
     // "반대 색으로 그렸다"가 안 갈린다 — 게이트가 언제나 둘을 같이 읽는다.
     std.debug.print("terminal: status> caps ink on={d} off={d}\n", .{ on, off });
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
 ///
-/// **상한을 안 두기로 한 결정의 근거를 남기는 줄이다.** `us=`가 밀리초 단위로
+/// 상한을 안 두기로 한 결정의 근거를 남기는 줄이다. `us=`가 밀리초 단위로
 /// 커지면 그때 상한을 논의한다. `style>`는 프레임당 16줄이 상한이라
 /// (`STYLE_DUMP_LIMIT`) 셀 수를 그것만으로 셀 수 없다 — 이 줄에는 상한이 없고,
 /// 둘을 함께 보는 것이 plan 결정 3이다.
 ///
-/// **검색이 없으면 한 줄도 안 찍는다.** `hlStats()`가 null을 주는 자리가
+/// 검색이 없으면 한 줄도 안 찍는다. `hlStats()`가 null을 주는 자리가
 /// 그것이다(plan 결정 2).
 ///
-/// **반드시 `render()` 뒤에 부른다** — 값은 그 프레임의 `cells()`가 만든다.
+/// 반드시 `render()` 뒤에 부른다 — 값은 그 프레임의 `cells()`가 만든다.
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다.
-/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpHighlight(screen: *vt.Screen) void {
     const hl = screen.hlStats() orelse return;
-    // **`cur=`을 `cells=` 뒤·`us=` 앞에 넣는다**(SP-M0 plan 결정 5).
+    // `cur=`을 `cells=` 뒤·`us=` 앞에 넣는다(SP-M0 plan 결정 5).
     // `copy/check.sh`의 검사 16이 `sed -E 's/.*cells=([0-9]+).*/\1/'`로
-    // `cells=`를 뽑으므로 그 뒤에 필드를 더하는 것은 안전하지만, **`cells=`를
-    // 옮기거나 `cells`를 부분 문자열로 갖는 이름을 쓰면 깨진다.**
+    // `cells=`를 뽑으므로 그 뒤에 필드를 더하는 것은 안전하지만, `cells=`를
+    // 옮기거나 `cells`를 부분 문자열로 갖는 이름을 쓰면 깨진다.
     std.debug.print("terminal: find> hl spans={d} cells={d} cur={d} us={d}\n", .{
         hl.spans, hl.cells, hl.cur, hl.us,
     });
@@ -852,7 +852,7 @@ fn dumpHighlight(screen: *vt.Screen) void {
 
 /// `y`가 클립보드에 무엇을 담았는지를 찍는다.
 ///
-/// **게이트가 클립보드를 볼 수 있는 유일한 창구다.** 화면만 보면 복사가 됐는지
+/// 게이트가 클립보드를 볼 수 있는 유일한 창구다. 화면만 보면 복사가 됐는지
 /// 알 방법이 아예 없다 — 복사는 화면을 안 바꾼다.
 ///
 /// `len`을 함께 찍는 이유는 글자가 잘리거나 뒤에 뭐가 더 붙는 경우를 게이트가
@@ -860,7 +860,7 @@ fn dumpHighlight(screen: *vt.Screen) void {
 /// 다른 문자열이다.
 ///
 /// 문구가 이 파일과 `copy/check.sh` 양쪽에 중복된다(design 결정 8).
-/// **한쪽을 고치면 다른 쪽도 고쳐야 한다.**
+/// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpClip(text: ?[]const u8) void {
     if (text) |t| {
         std.debug.print("terminal: clip> len={d} text={s}\n", .{ t.len, t });
@@ -873,18 +873,18 @@ fn dumpClip(text: ?[]const u8) void {
 
 /// `Cmd+V`가 클립보드를 셸에 쓴다.
 ///
-/// 쓰는 일과 찍는 일을 한 함수에 둔 이유는 **길이가 두 곳에서 갈리지 않게**
+/// 쓰는 일과 찍는 일을 한 함수에 둔 이유는 길이가 두 곳에서 갈리지 않게
 /// 하기 위해서다. 게이트가 `len=11`을 보고 "11바이트가 나갔다"로 읽는데, 쓰기와
 /// 로그가 떨어져 있으면 그 둘이 다른 슬라이스를 볼 여지가 생긴다.
 ///
-/// **bracketed paste로 감싸지 않는다**(design 결정 9). 여러 줄을 붙이면 개행이
+/// bracketed paste로 감싸지 않는다(design 결정 9). 여러 줄을 붙이면 개행이
 /// 곧 실행이 되는 것을 감수한다 — 셸이 그 모드를 받는지 확인한 적이 없고,
 /// 확인 없이 넣으면 게이트가 못 보는 코드가 느는 것이
 /// `project_gate_chain_composition`이 경고한 부채 그대로다.
 ///
 /// 새 접두사를 만들지 않고 `clip>`를 쓰는 것은 design 결정 8이다. 문구가 이
-/// 파일과 `copy/check.sh` 양쪽에 중복된다 — **한쪽을 고치면 다른 쪽도 고쳐야
-/// 한다.**
+/// 파일과 `copy/check.sh` 양쪽에 중복된다 — 한쪽을 고치면 다른 쪽도 고쳐야
+/// 한다.
 fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
     const text = screen.clipboard() orelse {
         // 아직 아무것도 복사하지 않았는데 Cmd+V를 눌렀다. 조용히 넘어가면
@@ -896,20 +896,20 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
     std.debug.print("terminal: clip> paste len={d}\n", .{text.len});
 }
 
-/// `Cmd+V`가 클립보드의 첫 줄을 **검색어에** 붙인다(FP design 결정 3·6).
+/// `Cmd+V`가 클립보드의 첫 줄을 검색어에 붙인다(FP design 결정 3·6).
 ///
-/// **두 수를 한 줄에 함께 찍는다.** `put=0` 하나만으로는 "클립보드가 비었다"와
+/// 두 수를 한 줄에 함께 찍는다. `put=0` 하나만으로는 "클립보드가 비었다"와
 /// "128바이트를 넘어 거절됐다"가 안 갈리고, `clip=50 put=20`은 여러 줄이 첫
 /// 줄에서 잘렸다는 것까지 한 줄로 말한다. IS-M1 실측 5가 `on=87 off=87`로
 /// 배운 것과 같다.
 ///
-/// **접두사가 `clip>`가 아니라 `find>`인 것에 뜻이 있다.** 게이트의 음성
+/// 접두사가 `clip>`가 아니라 `find>`인 것에 뜻이 있다. 게이트의 음성
 /// 검사가 "`clip> paste` 줄이 안 늘었다"로 셸 갈래를 안 탔음을 보므로,
-/// 두 갈래가 다른 접두사를 써야 그 판정이 선다. **`key>` 줄로는 못 본다** —
+/// 두 갈래가 다른 접두사를 써야 그 판정이 선다. `key>` 줄로는 못 본다 —
 /// 붙여넣기는 `pty.write`를 직접 부르지 `keys.bytes`를 안 거친다.
 ///
-/// 문구가 이 파일과 `hangul/check.sh` 양쪽에 있다 — **한쪽을 고치면 다른
-/// 쪽도 고쳐야 한다**(`clip>`가 이미 그런 자리다).
+/// 문구가 이 파일과 `hangul/check.sh` 양쪽에 있다 — 한쪽을 고치면 다른
+/// 쪽도 고쳐야 한다(`clip>`가 이미 그런 자리다).
 fn dumpFindPaste(screen: *vt.Screen) void {
     const clip_len = if (screen.clipboard()) |t| t.len else 0;
     const put = screen.findPaste();
@@ -923,7 +923,7 @@ pub fn main(init: std.process.Init) !void {
     fb.fill(MARGIN_COLOR);
     try fb.present();
 
-    // 화면 크기를 여기서 **한 번만** 계산해 렌더러·Terminal·PTY winsize
+    // 화면 크기를 여기서 한 번만 계산해 렌더러·Terminal·PTY winsize
     // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
     // 그리는 폭이 달라져 줄바꿈이 엉킨다.
     const cols: u16 = @intCast((fb.width - 2 * GRID_X) / CELL_W);
@@ -974,10 +974,10 @@ pub fn main(init: std.process.Init) !void {
     //
     // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
     //
-    // **SC-M0 전에는 이 플래그가 조건 없이 붙었다.** 이유로 적혀 있던 것은
+    // SC-M0 전에는 이 플래그가 조건 없이 붙었다. 이유로 적혀 있던 것은
     // "프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있다"였는데,
-    // 2026-09-11에 재 보니 **설정을 다 읽은 fish의 프롬프트가 `--no-config`로
-    // 뜬 것과 글자까지 같았다**(design 실측 14(c)). 그 이유는 이제 없다.
+    // 2026-09-11에 재 보니 설정을 다 읽은 fish의 프롬프트가 `--no-config`로
+    // 뜬 것과 글자까지 같았다(design 실측 14(c)). 그 이유는 이제 없다.
     //
     // 인자 없이 손으로 실행할 때의 기본값은 `--no-config`로 남긴다 — 그때는
     // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
@@ -991,19 +991,19 @@ pub fn main(init: std.process.Init) !void {
     const swap_alt_meta = std.mem.eql(u8, std.mem.span(keyboard), "pc");
 
     // 여섯째와 일곱째가 자판 둘이다(HI-M2, design 결정 7). keyboard와 달리
-    // enum 이름이 그대로 오므로 `stringToEnum`으로 되돌린다 — **이름이
+    // enum 이름이 그대로 오므로 `stringToEnum`으로 되돌린다 — 이름이
     // `init/src/config.zig`의 enum과 짝이어야 하고 컴파일러가 그것을 못
-    // 잡는다.** init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은
+    // 잡는다. init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은
     // 언제나 맞고, 아래 fallback은 terminal을 손으로 띄울 때를 위한 것이다.
     const hangul_arg: []const u8 = if (args.len > 5) std.mem.span(args[5]) else "shin_pcs";
     const latin_arg: []const u8 = if (args.len > 6) std.mem.span(args[6]) else "qwerty";
     const hangul_layout = std.meta.stringToEnum(hangul.Layout, hangul_arg) orelse .shin_pcs;
     const latin_layout = std.meta.stringToEnum(input.LatinLayout, latin_arg) orelse .qwerty;
 
-    // 여덟째가 한/영 전환 키 목록이다(HI-M3, design 결정 7). **자판 둘과 달리
-    // enum 하나가 아니라 집합이라** `stringToEnum` 대신 콤마 파서를 쓴다.
+    // 여덟째가 한/영 전환 키 목록이다(HI-M3, design 결정 7). 자판 둘과 달리
+    // enum 하나가 아니라 집합이라 `stringToEnum` 대신 콤마 파서를 쓴다.
     //
-    // **fallback을 문자열로 두는 것에 뜻이 있다.** 집합 리터럴로 쓰면 기본값이
+    // fallback을 문자열로 두는 것에 뜻이 있다. 집합 리터럴로 쓰면 기본값이
     // 이 파일에도 한 벌 생기는데, 그 값은 `init/src/config.zig`의 `Config`와
     // 같아야 하고 컴파일러가 그것을 못 잡는다. 문자열로 두면 적어도 눈으로
     // 대조할 형태가 설정 파일과 같아진다.
@@ -1021,7 +1021,7 @@ pub fn main(init: std.process.Init) !void {
     // 기대하는 것이 어긋난다 — Home이 linux에서는 `ESC [ 1 ~`, xterm에서는
     // `ESC O H`다.
     //
-    // execv는 환경을 그대로 상속하므로 **fork 전에** 고쳐두면 자식이 받는다.
+    // execv는 환경을 그대로 상속하므로 fork 전에 고쳐두면 자식이 받는다.
     // 이 setenv가 PID 1이 아니라 여기 있는 이유는 시리얼 콘솔 셸 때문이다 —
     // 그쪽은 정말로 커널 콘솔이라 TERM=linux가 맞다. 같은 기계 안에서 두
     // 셸의 TERM이 다른 것이 정상이다(design doc 결정 7).
@@ -1031,28 +1031,28 @@ pub fn main(init: std.process.Init) !void {
     // 말하는 쪽이 거짓말이 된다(design 결정 8).
     _ = setenv("TERM", "xterm-256color", 1);
 
-    // 로케일도 여기서 정한다(HI-M1). **TERM과 같은 자리에 있는 이유가 다르다** —
+    // 로케일도 여기서 정한다(HI-M1). TERM과 같은 자리에 있는 이유가 다르다 —
     // TERM은 시리얼 콘솔 셸과 값이 갈려야 해서 여기 있고, LANG은 갈릴 이유가
     // 없는데도 여기 있다. PID 1은 커널이 준 envp 블록을 그대로 execve에 넘기고
     // (`init/src/main.zig:389`) 거기에 항목을 더하려면 블록을 새로 만들어야
-    // 하는데, **한글 입력을 받는 셸은 이쪽 하나뿐이라** 그 값을 치르지 않는다.
+    // 하는데, 한글 입력을 받는 셸은 이쪽 하나뿐이라 그 값을 치르지 않는다.
     // 시리얼 콘솔 셸은 C 로케일로 남는다.
     //
-    // **이것이 없으면 셸이 한글을 한 글자로 읽지 못한다.** `setlocale`이
+    // 이것이 없으면 셸이 한글을 한 글자로 읽지 못한다. `setlocale`이
     // 실패하면 `mbrtowc`가 바이트를 하나씩 돌려주고, fish는 우리가 보낸 세
-    // 바이트를 **세 글자로** 들고 바이트마다 폭을 센다(0x80~0x9F는 0칸,
+    // 바이트를 세 글자로 들고 바이트마다 폭을 센다(0x80~0x9F는 0칸,
     // 0xA0 이상은 1칸). 그러면 커서가 두 칸짜리 글자의 가운데에 서고 다음
-    // 글자가 앞 글자를 지운다 — **증상이 입력이 아니라 화면에 나타난다.**
+    // 글자가 앞 글자를 지운다 — 증상이 입력이 아니라 화면에 나타난다.
     //
     // 값이 참이 되려면 `/usr/lib/locale/C.utf8`이 게스트에 있어야 한다.
     // `make_initrd.sh`가 그것을 넣고, terminfo와 정확히 같은 종류의 짝이다.
     _ = setenv("LANG", "C.UTF-8", 1);
 
-    // SC-M0 결정 6. **TERM·LANG과 같은 자리에 있는 이유가 TERM과 같다** —
+    // SC-M0 결정 6. TERM·LANG과 같은 자리에 있는 이유가 TERM과 같다 —
     // 값이 두 셸에서 갈려야 해서 여기 있다. 화면은 TARS의 화면이라 다른
     // 제품의 배너가 뜰 자리가 아니고, 시리얼 콘솔은 fish를 그대로 보는
     // 자리다(machine/check.sh:117이 그 인사말을 UEFI 부팅의 마커로 쓴다 —
-    // **여기서 끄면 그 마커가 살고, /etc/fish/config.fish로 끄면 죽는다**).
+    // 여기서 끄면 그 마커가 살고, /etc/fish/config.fish로 끄면 죽는다).
     //
     // fish의 `fish_greeting` 함수는 `set -q fish_greeting`이 참이면 기본
     // 문구를 안 만들고, 값이 비어 있으면 아무것도 안 찍는다. 환경 변수는
@@ -1066,7 +1066,7 @@ pub fn main(init: std.process.Init) !void {
     // 슬롯을 null로 덮으면 execv가 거기서 멈추므로 배열 길이를 안 바꿔도
     // 된다(sentinel은 그대로 배열 끝에 있다).
     //
-    // **문자열 하나로 말하는 이유**는 `config.zig`의 `configFlag` 주석에
+    // 문자열 하나로 말하는 이유는 `config.zig`의 `configFlag` 주석에
     // 있다 — argv를 짓는 쪽(PID 1)과 쓰는 쪽(여기)이 프로세스 경계로
     // 갈려 있어서 "인자가 없다"를 포인터로 못 보낸다.
     var argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
@@ -1074,7 +1074,7 @@ pub fn main(init: std.process.Init) !void {
     const session = try pty.spawn(shell_path, &argv, cols, rows);
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
     // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
-    // 개수를 세는 마커라 **그대로 둔다**.
+    // 개수를 세는 마커라 그대로 둔다.
     std.debug.print("terminal: spawned child pid {d} ({s})\n", .{
         session.child_pid, shell_path,
     });
@@ -1085,11 +1085,11 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
         keyboard, swap_alt_meta,
     });
-    // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). **`tars-init:`의 줄과
-    // 짝이다** — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
+    // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
+    // 짝이다 — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
     // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
     // 뒤만 보면 여기 기본값이 우연히 맞아도 초록이다. HI 게이트가 둘을 다 본다.
-    // **`toggles=`는 파싱한 결과를 다시 문자열로 만든 것이다**(HI-M3).
+    // `toggles=`는 파싱한 결과를 다시 문자열로 만든 것이다(HI-M3).
     // argv로 받은 문자열을 그대로 찍으면 "글자가 도착했다"만 증명되고
     // "우리가 그것을 맞게 읽었다"는 아무것도 증명되지 않는다.
     var toggle_buf: [input.TOGGLE_ARG_MAX]u8 = undefined;
@@ -1111,16 +1111,16 @@ pub fn main(init: std.process.Init) !void {
     // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     var last_glyph_count: usize = 0;
-    // 마지막으로 찍은 상태 줄. **`?usize`인 것에 뜻이 있다** — 0을 초기값으로
+    // 마지막으로 찍은 상태 줄. `?usize`인 것에 뜻이 있다 — 0을 초기값으로
     // 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
     var last_status: [status.MAX_LEN]u8 = undefined;
     var last_status_len: ?usize = null;
-    // **글자와 따로 기억해야 한다**(IS-M1). `CAPS` 칸은 켜져도 글자가 안
+    // 글자와 따로 기억해야 한다(IS-M1). `CAPS` 칸은 켜져도 글자가 안
     // 바뀌므로, 이 값이 없으면 CapsLock을 눌러도 새 `status>` 줄이 한 줄도
     // 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
     // 초기값은 무엇이든 된다.
     var last_status_caps = false;
-    // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 **안에만** 있었다 —
+    // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
     var key_state: input.State = .{
@@ -1144,7 +1144,7 @@ pub fn main(init: std.process.Init) !void {
         if (fds[0].revents & c.POLLIN != 0) {
             // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
             // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
-            // 캐시하지 않고 **키를 읽는 순간의 값**을 쓴다. packed struct의
+            // 캐시하지 않고 키를 읽는 순간의 값을 쓴다. packed struct의
             // 비트 읽기 한 번이라 비용이 없다 — design doc 결정 6이 "값으로
             // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
             const ctx = input.Context{
@@ -1156,7 +1156,7 @@ pub fn main(init: std.process.Init) !void {
             const keys = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
             if (keys.bytes.len > 0) {
                 // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
-                // 마커라 **그대로 둔다**. 뒤에 decckm을 덧붙이는 이유는
+                // 마커라 그대로 둔다. 뒤에 decckm을 덧붙이는 이유는
                 // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
                 // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
                 std.debug.print("terminal: key> {d} byte(s) decckm={}\n", .{
@@ -1164,8 +1164,8 @@ pub fn main(init: std.process.Init) !void {
                 });
                 pty.write(session.master_fd, keys.bytes);
             }
-            // 스크롤은 PTY로 나가지 않는다(design 결정 11). **한 화면이 몇
-            // 줄인지를 아는 것은 여기뿐이라**, page_up/page_down을 rows 만큼의
+            // 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
+            // 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
             // delta로 바꾸는 것도 여기서 한다 — input.zig는 격자 크기를 모른다.
             //
             // 순서대로 도는 이유는 자동 반복 때문이다. PageUp을 누르고 있으면
@@ -1183,13 +1183,13 @@ pub fn main(init: std.process.Init) !void {
             // 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
             // 개를 실어 온다.
             for (keys.copies) |cmd| {
-                // **"못 찾았다" 메시지는 다음 키에 사라진다**(design 결정 9).
+                // "못 찾았다" 메시지는 다음 키에 사라진다(design 결정 9).
                 //
-                // 끄는 자리가 **루프 안**인 것에 뜻이 있다. 밖에 두면 한 번의
+                // 끄는 자리가 루프 안인 것에 뜻이 있다. 밖에 두면 한 번의
                 // read에 여러 키가 실려 왔을 때(자동 반복) 첫 키만 메시지를
                 // 지운다.
                 //
-                // 그리고 `switch`보다 **앞**이라, 모든 명령이 예외 없이 지우고
+                // 그리고 `switch`보다 앞이라, 모든 명령이 예외 없이 지우고
                 // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
                 // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
                 screen.findClearStatus();
@@ -1206,31 +1206,31 @@ pub fn main(init: std.process.Init) !void {
                     .word_prev => try screen.copyMoveWord(.prev),
                     .select_char => try screen.copySelect(.char),
                     .select_line => try screen.copySelect(.line),
-                    // yank는 **모드를 나간다.** 그래서 아래 dumpCopy는 좌표
+                    // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
                     // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
                     // 때문이다.
                     .yank => dumpClip(try screen.copyYank()),
-                    // 붙여넣기는 **모드를 건드리지 않는다.** 그래서 모드 안에서
+                    // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
                     // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
                     // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
                     // 살아 있는가"를 본다.
                     //
-                    // **목적지가 여기서 갈린다**(FP design 결정 3). `input.zig`는
+                    // 목적지가 여기서 갈린다(FP design 결정 3). `input.zig`는
                     // `vt.zig`를 import하지 않으므로(IP design 결정 6) 이 갈래는
                     // 여기에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
                     // 알고, 클립보드도 프롬프트도 이 파일이 본다.
                     //
-                    // **판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
-                    // 이다.** `main.zig`가 볼 수 있는 것이 화면 쪽 사실이고,
+                    // 판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
+                    // 이다. `main.zig`가 볼 수 있는 것이 화면 쪽 사실이고,
                     // `findBytes`가 이미 `find_open`을 스스로 지킨다.
                     //
-                    // 셸 갈래는 여전히 copies 배열에서 **유일하게 PTY로 나가는
-                    // 명령**이다. 다른 아홉은 전부 우리 안에서 끝난다.
+                    // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
+                    // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
                     .paste => if (screen.findNeedle() != null)
                         dumpFindPaste(screen)
                     else
                         dumpPaste(screen, session.master_fd),
-                    // 검색 프롬프트(CN-M1). **넷 다 화면 상태를 바꾸지 않는다** —
+                    // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
                     // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
                     .find_open => {
                         screen.findOpen();
@@ -1248,18 +1248,18 @@ pub fn main(init: std.process.Init) !void {
                         screen.findCancel();
                         dumpFind(screen, "cancel");
                     },
-                    // 확정된 한글이 needle로 들어간다(SH-M1). **`findChar`가
-                    // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다** —
+                    // 확정된 한글이 needle로 들어간다(SH-M1). `findChar`가
+                    // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다 —
                     // 바이트씩 넣으면 128바이트 경계에서 음절이 반만 들어간다.
                     //
-                    // **이 명령을 만드는 것은 `handleKey`가 아니라
-                    // `readKeys`다**(design 결정 4·5). 그 함수가 모드를
-                    // `handleKey` **앞에서** 읽어 목적지를 가른다.
+                    // 이 명령을 만드는 것은 `handleKey`가 아니라
+                    // `readKeys`다(design 결정 4·5). 그 함수가 모드를
+                    // `handleKey` 앞에서 읽어 목적지를 가른다.
                     .find_commit => |cmt| {
                         screen.findBytes(cmt.buf[0..cmt.len]);
                         dumpFind(screen, "commit");
                     },
-                    // **이 milestone에서 유일하게 시간이 걸리는 명령이다.**
+                    // 이 milestone에서 유일하게 시간이 걸리는 명령이다.
                     // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
                     // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —
                     // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
@@ -1275,7 +1275,7 @@ pub fn main(init: std.process.Init) !void {
                             },
                         );
                     },
-                    // **결과를 버리지 않고 찍는다.** 못 옮긴 것과 옮긴 것은
+                    // 결과를 버리지 않고 찍는다. 못 옮긴 것과 옮긴 것은
                     // 사람에게 다른 뜻이고, 아래 dumpCopy의 좌표만으로는
                     // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
                     .find_next => std.debug.print(
@@ -1290,18 +1290,18 @@ pub fn main(init: std.process.Init) !void {
                 dumpCopy(screen, @tagName(cmd));
                 needs_redraw = true;
             }
-            // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). **값을 만드는
+            // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). 값을 만드는
             // 것은 `input.State`이고 그리는 것은 `vt.zig`이며, 둘을 잇는 것이
-            // 여기다** — `input.zig`는 `vt.zig`를 import하지 않는다
+            // 여기다 — `input.zig`는 `vt.zig`를 import하지 않는다
             // (IP design 결정 6). `find_open`이 이미 같은 길로 돈다.
             //
-            // **`needs_redraw`를 여기서 켜야 한다.** 화면만 바뀐 키는 PTY로
+            // `needs_redraw`를 여기서 켜야 한다. 화면만 바뀐 키는 PTY로
             // 아무것도 안 보내고 스크롤도 copy 명령도 안 만든다 — 그래서
-            // 이 한 줄이 없으면 조합 중인 글자가 **영영 화면에 안 나오고**,
-            // 대문자 잠금을 켜도 `CAPS` 칸이 **다음 키를 칠 때까지 안
-            // 밝아진다**(IS design 결정 8).
+            // 이 한 줄이 없으면 조합 중인 글자가 영영 화면에 안 나오고,
+            // 대문자 잠금을 켜도 `CAPS` 칸이 다음 키를 칠 때까지 안
+            // 밝아진다(IS design 결정 8).
             //
-            // copy 루프 **뒤**인 것에도 뜻이 있다. copy mode에 들어가는 키가
+            // copy 루프 뒤인 것에도 뜻이 있다. copy mode에 들어가는 키가
             // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
             // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
             if (keys.redraw) {
@@ -1323,39 +1323,39 @@ pub fn main(init: std.process.Init) !void {
                 break;
             }
             screen.feed(out);
-            // design 결정 13. **라이브러리는 이것을 해 주지 않는다** — 올라간
+            // design 결정 13. 라이브러리는 이것을 해 주지 않는다 — 올라간
             // 상태에서 출력을 먹여도 뷰포트가 그대로라는 것을 2026-08-23에
             // 실측했고, vt_test가 그 사실을 못 박고 있다. 대부분의 터미널이
             // 이렇게 동작하며, 그러지 않으면 "화면이 멈춘 것 같다"는 혼란이
             // 생긴다.
             //
             // 부수 효과가 하나 있다: 뷰포트가 history에 머무는 동안 가지치기가
-            // 일어나는 상황이 이 한 줄로 **구조적으로** 안 생긴다. 가지치기는
+            // 일어나는 상황이 이 한 줄로 구조적으로 안 생긴다. 가지치기는
             // 그 페이지를 가리키던 pin을 무효로 만드는데, 여기서 창이 닫힌다.
-            // **copy mode 중에는 억제한다**(CM-M0). 백그라운드 출력이 한 줄만
+            // copy mode 중에는 억제한다(CM-M0). 백그라운드 출력이 한 줄만
             // 도착해도 사람이 올라가서 보고 있던 자리가 화면 밖으로 튕기기
             // 때문이다.
             //
             // 그 대가로 위 주석이 말한 창이 열린다 — 뷰포트가 history에
             // 머무는 동안 가지치기가 일어날 수 있게 된다(design 위험 1).
-            // CM-M1이 방어를 넣었는데, **계획했던 모양이 아니다**: 가지치기는
+            // CM-M1이 방어를 넣었는데, 계획했던 모양이 아니다: 가지치기는
             // 선택을 null로 만들지 않고 tracked pin을 이웃 페이지의 왼쪽 위로
             // 옮기므로, vt.zig의 feed가 앵커의 screen 좌표 y를 대신 감시한다.
             //
-            // **이 억제 분기 자체는 CM-M2의 게이트가 밟는다.** 모드 안에서는
+            // 이 억제 분기 자체는 CM-M2의 게이트가 밟는다. 모드 안에서는
             // 셸에 아무것도 보낼 수 없어 출력을 만들 방법이 없었는데,
             // Cmd+V가 그 방법이 됐다 — 붙여넣은 글자를 셸이 되울리는 것이
             // 곧 "모드 중에 도착한 PTY 출력"이다.
             if (!screen.copyActive()) screen.scrollToBottom();
             // 위 feed가 가지치기를 만났으면 vt.zig가 모드를 이미 닫았다
-            // (design 위험 1). **로그를 안 남기면 사람이 "왜 갑자기 모드가
-            // 풀렸지"를 영영 모른다.**
+            // (design 위험 1). 로그를 안 남기면 사람이 "왜 갑자기 모드가
+            // 풀렸지"를 영영 모른다.
             if (screen.copyTakePruned()) dumpCopy(screen, "pruned");
             needs_redraw = true;
         }
 
         // 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
-        // PTY 출력 분기 **안에만** 있었다 — 스크롤은 키로 일어나므로 그대로
+        // PTY 출력 분기 안에만 있었다 — 스크롤은 키로 일어나므로 그대로
         // 두면 뷰포트만 움직이고 화면은 안 바뀐다.
         //
         // 플래그를 두는 이유는 그리는 횟수를 늘리지 않기 위해서다. modifier
@@ -1365,18 +1365,18 @@ pub fn main(init: std.process.Init) !void {
 
         const cells = try screen.cells(cell_buf);
 
-        // 프롬프트 문자열을 여기서 만든다. **`vt.zig`는 앞의 `/`를 모른다** —
+        // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
         // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
         //
-        // 버퍼가 needle보다 **마흔다섯 칸** 크다. 앞의 `/` 하나와, 뒤에 올 수
-        // 있는 것 중 **긴 쪽**인 ` [20/20]` 마흔넷 때문이다(SP-M1). `usize`가
+        // 버퍼가 needle보다 마흔다섯 칸 크다. 앞의 `/` 하나와, 뒤에 올 수
+        // 있는 것 중 긴 쪽인 ` [20/20]` 마흔넷 때문이다(SP-M1). `usize`가
         // 최대 스무 자리라 숫자 둘이 마흔이고, ` [`·`/`·`]`가 넷이다.
         // `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
         var prompt_buf: [173]u8 = undefined;
         const prompt: ?Prompt = if (promptText(screen, &prompt_buf)) |t| .{
             .text = t,
-            // **프롬프트가 열려 있을 때만 조합을 붙인다**(SH-M2). 닫힌 뒤의
+            // 프롬프트가 열려 있을 때만 조합을 붙인다(SH-M2). 닫힌 뒤의
             // 오버레이는 지난 검색의 결과 표시이고, 그 위에 조합을 그리면
             // 검색어가 자라는 것처럼 보인다.
             //
@@ -1385,20 +1385,20 @@ pub fn main(init: std.process.Init) !void {
             .edit = if (screen.findNeedle() != null) key_state.preedit() else null,
             .rows = rows,
             .cols = cols,
-            // **`cells()` 뒤에 읽어야 한다** — `state.colors`는 update()가
+            // `cells()` 뒤에 읽어야 한다 — `state.colors`는 update()가
             // 채운다(vt.zig의 defaultFg 주석).
             .fg = screen.defaultFg(),
             .bg = screen.defaultBg(),
         } else null;
 
-        // 상태 줄을 여기서 만든다. **`prompt`와 같은 자리이고 같은 이유다** —
+        // 상태 줄을 여기서 만든다. `prompt`와 같은 자리이고 같은 이유다 —
         // 모양은 `main.zig`가 정하고 그리는 함수는 "한 줄을 준 색으로 쓴다"
         // 하나만 안다.
         var status_buf: [status.MAX_LEN]u8 = undefined;
         const status_line: Status = .{
             .text = status.statusText(&key_state, &status_buf),
             .rows = rows,
-            // **`statusText`가 아니라 여기서 읽는다**(design 결정 3). 잠금은
+            // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
             .caps = key_state.caps_lock,
         };

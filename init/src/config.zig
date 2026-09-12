@@ -11,7 +11,7 @@ fn failed(rc: usize) ?linux.E {
 
 /// 셸이 사용자의 rc 파일을 읽을 것인가(SC design 결정 2).
 ///
-/// **`bool`이 아니라 enum인 데 뜻이 있다.** 이 파일의 다른 키가 전부
+/// `bool`이 아니라 enum인 데 뜻이 있다. 이 파일의 다른 키가 전부
 /// `stringToEnum` 화이트리스트이고, 그 모양을 따르면 "모르는 값은 로그만
 /// 남기고 기본값에 머문다"는 규칙이 공짜로 따라온다. 여섯째 키만 다른
 /// 모양일 이유가 없다.
@@ -20,8 +20,8 @@ pub const ShellConfig = enum {
     off,
 };
 
-/// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). **`tars.conf`를 이기는
-/// 것은 이 키 하나뿐이다** — 우선순위는 **cmdline > tars.conf > 기본값**이고,
+/// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). `tars.conf`를 이기는
+/// 것은 이 키 하나뿐이다 — 우선순위는 cmdline > tars.conf > 기본값이고,
 /// 다른 다섯 키는 cmdline을 안 본다. 그 예외의 근거는 하나다: *"`tars.conf`를
 /// 고칠 셸이 없을 때 쓰는 것"*.
 pub const NO_CONFIG_TOKEN = "tars.noconfig";
@@ -30,15 +30,15 @@ pub const NO_CONFIG_TOKEN = "tars.noconfig";
 /// (design 실측 13 — `main.zig`가 `/proc`을 먼저 붙이고 그 다음이 `/config`다).
 pub const CMDLINE_PATH: [:0]const u8 = "/proc/cmdline";
 
-/// cmdline 문자열에 위 토큰이 있는가. **시스템 콜이 없는 순수 함수라서
-/// `parse`와 같은 성질이다** — 게스트를 안 띄우고 검증할 수 있고,
+/// cmdline 문자열에 위 토큰이 있는가. 시스템 콜이 없는 순수 함수라서
+/// `parse`와 같은 성질이다 — 게스트를 안 띄우고 검증할 수 있고,
 /// `config_test.zig`가 실제로 그렇게 한다.
 ///
-/// **부분 문자열이 아니라 토큰으로 본다.** `indexOf` 한 줄로 짜면
+/// 부분 문자열이 아니라 토큰으로 본다. `indexOf` 한 줄로 짜면
 /// `tars.noconfigured`나 `nottars.noconfig`에도 걸리고, 그 실수의 증상은
 /// "부팅했더니 rc가 안 읽힌다" 하나뿐이라 원인에서 아주 멀다.
 ///
-/// **값이 붙어 있어도 받는다**(`tars.noconfig=1`). 이 토큰은 있고 없음이
+/// 값이 붙어 있어도 받는다(`tars.noconfig=1`). 이 토큰은 있고 없음이
 /// 전부이고 값은 뜻이 없다 — 그래서 값을 본 것을 로그로 알린다. 끄는 방법은
 /// `tars.noconfig=0`이 아니라 그 단어를 안 적는 것이다.
 pub fn cmdlineWantsNoConfig(text: []const u8) bool {
@@ -56,7 +56,7 @@ pub fn cmdlineWantsNoConfig(text: []const u8) bool {
     return false;
 }
 
-/// 셸 화이트리스트. 설정 파일에 적을 수 있는 것은 **이름**뿐이고 경로가
+/// 셸 화이트리스트. 설정 파일에 적을 수 있는 것은 이름뿐이고 경로가
 /// 아니다 — `shell=/etc/passwd` 같은 입력이 애초에 성립하지 않는다
 /// (design doc "5. 설정 하나로 부팅이 막히지 않게 하는 세 장치"의 1번).
 pub const Shell = enum {
@@ -69,8 +69,8 @@ pub const Shell = enum {
     /// 실행하는가"를 정한다. 둘을 붙여 두면 Shell에 이름을 하나 더 넣는 순간
     /// switch가 컴파일 에러를 내서 경로를 빼먹을 수 없다.
     ///
-    /// 여기 적힌 경로는 kernel/make_initrd.sh가 복사해 넣는 자리와 **같아야
-    /// 한다.** 어긋나면 부팅 후 execve 실패로만 드러난다.
+    /// 여기 적힌 경로는 kernel/make_initrd.sh가 복사해 넣는 자리와 같아야
+    /// 한다. 어긋나면 부팅 후 execve 실패로만 드러난다.
     pub fn path(self: Shell) [:0]const u8 {
         return switch (self) {
             .fish => "/usr/bin/fish",
@@ -92,13 +92,13 @@ pub const Shell = enum {
     }
 
     /// terminal의 argv에 넣을 값(SC design 결정 3). `off`면 위 플래그이고,
-    /// `on`이면 **`"none"`**이다.
+    /// `on`이면 `"none"`이다.
     ///
-    /// **왜 빈 문자열이나 null이 아닌가.** terminal은 argv를 **짓는 쪽과
-    /// 쓰는 쪽이 다르다** — 이 값이 프로세스 경계를 문자열로 건너가므로
+    /// 왜 빈 문자열이나 null이 아닌가. terminal은 argv를 짓는 쪽과
+    /// 쓰는 쪽이 다르다 — 이 값이 프로세스 경계를 문자열로 건너가므로
     /// "인자가 없다"를 포인터로 표현할 수 없고, 빈 문자열을 넣으면 저쪽에서
     /// "인자를 안 받았다"와 구분이 안 된다. `Toggles.arg`가 빈 집합에
-    /// `none`을 쓰는 것과 **글자 그대로 같은 이유다**(아래 그 주석을 볼 것).
+    /// `none`을 쓰는 것과 글자 그대로 같은 이유다(아래 그 주석을 볼 것).
     ///
     /// 콘솔 셸은 이 함수를 안 쓴다. 그쪽은 init이 argv를 직접 짓기 때문에
     /// 슬롯을 null로 두면 그만이다.
@@ -109,9 +109,9 @@ pub const Shell = enum {
         };
     }
 
-    /// 이 셸의 rc 파일이 **설정 디스크에서** 갖는 이름(SC design 결정 1).
+    /// 이 셸의 rc 파일이 설정 디스크에서 갖는 이름(SC design 결정 1).
     ///
-    /// **홈의 이름이 아니라 여기 이름이다.** 홈에는 링크만 있고
+    /// 홈의 이름이 아니라 여기 이름이다. 홈에는 링크만 있고
     /// (`kernel/make_initrd.sh`가 건다) 실체는 전부 이 자리다 — 홈(`/`)은
     /// tmpfs라 부팅마다 비워지고, 살아남는 것은 `/config` 하나뿐이다.
     ///
@@ -121,12 +121,12 @@ pub const Shell = enum {
     /// | `/.zshrc` | `/config/zshrc` |
     /// | `/.config/fish/config.fish` | `/config/fish.config` |
     ///
-    /// **`fish.config`로 적은 것에 뜻이 있다** — `/config` 안을 평평하게
+    /// `fish.config`로 적은 것에 뜻이 있다 — `/config` 안을 평평하게
     /// 두어 `gitconfig`과 같은 층에 세운다(결정 1).
     ///
     /// `main.zig`의 `CONFIG_PATH`가 같은 `/config`를 알고 있다. 둘을 한
-    /// 자리로 모으려면 힙 없이 경로를 조립해야 해서, 지금은 **이름 셋이
-    /// `make_initrd.sh`의 링크 셋과 짝이라는 것**을 주석으로 못 박는 쪽을
+    /// 자리로 모으려면 힙 없이 경로를 조립해야 해서, 지금은 이름 셋이
+    /// `make_initrd.sh`의 링크 셋과 짝이라는 것을 주석으로 못 박는 쪽을
     /// 고른다 — 어긋나면 증상은 "rc를 고쳤는데 안 읽힌다"이고,
     /// `config/check.sh`의 2차 부팅이 그것을 본다.
     pub fn rcPath(self: Shell) [:0]const u8 {
@@ -137,28 +137,28 @@ pub const Shell = enum {
         };
     }
 
-    /// 이 기계가 기억하는 것 둘 중 **쳤던 명령**의 자리(SM design 결정 3).
+    /// 이 기계가 기억하는 것 둘 중 쳤던 명령의 자리(SM design 결정 3).
     ///
-    /// **셸마다 다른 파일인 이유는 형식이다** — zsh는 `: <ts>:<dur>;<cmd>`,
+    /// 셸마다 다른 파일인 이유는 형식이다 — zsh는 `: <ts>:<dur>;<cmd>`,
     /// bash는 평문이라 한 파일에 섞으면 서로의 것을 못 읽는다. init이
     /// `cfg.shell`을 이미 알고 있으므로 그 자리에서 정한다.
     ///
-    /// **fish는 빈 목록이다.** fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
+    /// fish는 빈 목록이다. fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
     /// 따라오고(실측 11·40), 줄 수를 정하는 변수가 아예 없다(비목표 4).
     ///
-    /// **씨앗 rc에는 히스토리 줄이 한 줄도 없다**(결정 3). 실측 9·10이
+    /// 씨앗 rc에는 히스토리 줄이 한 줄도 없다(결정 3). 실측 9·10이
     /// 근거다 — 셋 다 env에서 먹는다. 그래서 이 milestone은
     /// `rcSeed()`도 `expectQuietSeed`도 한 글자 안 건드린다.
     const HIST_BASH = [_][:0]const u8{
         "HISTFILE=/config/bash_history",
-        // bash는 `HISTFILESIZE`를 안 줘도 이 수로 **파일까지** 자른다
+        // bash는 `HISTFILESIZE`를 안 줘도 이 수로 파일까지 자른다
         // (실측 37). 5,000줄 = 약 250KB = 16MiB 디스크의 1.5%(결정 4).
         "HISTSIZE=5000",
     };
     const HIST_ZSH = [_][:0]const u8{
         "HISTFILE=/config/zsh_history",
         "HISTSIZE=5000",
-        // **zsh는 이것이 없으면 한 줄도 안 쓴다**(실측 9). `HISTFILE`만 주고
+        // zsh는 이것이 없으면 한 줄도 안 쓴다(실측 9). `HISTFILE`만 주고
         // 끝내는 것이 이 자리에서 가장 흔한 실수이고, 증상은 "히스토리가
         // 그냥 안 남는다"라 원인에서 멀다.
         "SAVEHIST=5000",
@@ -176,13 +176,13 @@ pub const Shell = enum {
     /// 씨앗 rc가 담는 훅 줄들(SM design 결정 5). 셸마다 둘이다 — `zoxide`가
     /// "어디에 갔는가"를, `fzf`가 "무엇을 쳤는가"를 이 기계에 잇는다.
     ///
-    /// **`command -v`/`type -q` 관문을 지우면 안 된다.** 도구가 없을 때 관문
+    /// `command -v`/`type -q` 관문을 지우면 안 된다. 도구가 없을 때 관문
     /// 없는 훅은 부팅하면서 `command not found`를 찍는다 — zsh 50바이트 ·
-    /// bash 38바이트 · **fish 191바이트(6줄)**(SM-M1 실측 27). 그 한 줄이
+    /// bash 38바이트 · fish 191바이트(6줄)(SM-M1 실측 27). 그 한 줄이
     /// 설정 디스크를 붙이는 다섯 체인의 화면 좌표를 밀어 버린다. 관문이 있으면
-    /// 셋 다 **0바이트**다(실측 23).
+    /// 셋 다 0바이트다(실측 23).
     ///
-    /// **`fzf`의 통합은 `.deb`의 예제 스크립트가 아니라 바이너리 내장이다**
+    /// `fzf`의 통합은 `.deb`의 예제 스크립트가 아니라 바이너리 내장이다
     /// (결정 7) — `--zsh`/`--bash`/`--fish`가 자동완성까지 함께 낸다. 그래서
     /// 두 줄이 `zoxide`와 대칭으로 생긴다.
     const HOOKS_FISH = [_][]const u8{
@@ -198,16 +198,16 @@ pub const Shell = enum {
         "command -v fzf >/dev/null && eval \"$(fzf --zsh)\"",
     };
 
-    /// 이 셸의 훅 줄들. **`rcSeed()`가 담는 글자와 여기 글자가 두 벌인 것은
-    /// 실수가 아니다**(SM design 결정 10).
+    /// 이 셸의 훅 줄들. `rcSeed()`가 담는 글자와 여기 글자가 두 벌인 것은
+    /// 실수가 아니다(SM design 결정 10).
     ///
     /// `rcSeed()`를 이 목록에서 `++`로 조립하면 두 벌이 하나가 되고, 그 순간
-    /// `config_test.zig`의 **역방향 검사가 tautology가 된다** — "훅이 씨앗에
+    /// `config_test.zig`의 역방향 검사가 tautology가 된다 — "훅이 씨앗에
     /// 있는가"를 묻는데 답이 언제나 참이 되기 때문이다. 이 저장소가 반복해서
     /// 부딪친 자리다(UT-M1의 정적 목록 검사가 같은 이유로 가짜였다).
     ///
-    /// **두 벌을 잇는 것은 컴파일러가 아니라 그 검사이고, 그것이 결정 6의
-    /// 목적이다** — `HangulLayout` ↔ `hangul.Layout`, `Shell.path()` ↔
+    /// 두 벌을 잇는 것은 컴파일러가 아니라 그 검사이고, 그것이 결정 6의
+    /// 목적이다 — `HangulLayout` ↔ `hangul.Layout`, `Shell.path()` ↔
     /// `make_initrd.sh`와 같은 종류의 이음매를 이 파일이 이미 둘 갖고 있다.
     pub fn hookLines(self: Shell) []const []const u8 {
         return switch (self) {
@@ -219,19 +219,19 @@ pub const Shell = enum {
 
     /// 첫 부팅에 깔아 두는 내용(결정 7).
     ///
-    /// **규칙이 하나뿐이다: 아무것도 찍지 않는다.** 설정 디스크를 붙이는
+    /// 규칙이 하나뿐이다: 아무것도 찍지 않는다. 설정 디스크를 붙이는
     /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — 씨앗이 배너
     /// 한 줄을 찍으면 그 좌표가 통째로 밀린다. 그래서 여기 쓸 수 있는 줄은
-    /// **주석 · alias · 위 `hookLines()`에 글자 그대로 있는 줄** 셋뿐이고,
+    /// 주석 · alias · 위 `hookLines()`에 글자 그대로 있는 줄 셋뿐이고,
     /// `config_test.zig`의 `expectQuietSeed`가 그 규칙을 부팅 없이 0.1초에
     /// 확인한다.
     ///
-    /// **SM-M1이 그 문을 두 줄만큼 넓혔다.** 넓힌 방식이 "`eval`도 허용"이
-    /// 아니라 **정확 허용 목록**인 이유는 결정 6에 있다 — `eval` 뒤에는 아무
+    /// SM-M1이 그 문을 두 줄만큼 넓혔다. 넓힌 방식이 "`eval`도 허용"이
+    /// 아니라 정확 허용 목록인 이유는 결정 6에 있다 — `eval` 뒤에는 아무
     /// 문장이나 올 수 있고, 그러면 이 규칙이 막으려던 것이 그대로 열린다.
     ///
-    /// **프롬프트를 안 건드린다**(비목표 5). 실측 9가 그 비용을 적고 있고,
-    /// 그 비용은 사용자가 자기 rc에 프롬프트를 쓸 때 **자기 기계에서만**
+    /// 프롬프트를 안 건드린다(비목표 5). 실측 9가 그 비용을 적고 있고,
+    /// 그 비용은 사용자가 자기 rc에 프롬프트를 쓸 때 자기 기계에서만
     /// 치르면 된다.
     ///
     /// 셋의 문법 차이를 나란히 두는 것에도 뜻이 있다 — `shell`을 바꾼
@@ -329,7 +329,7 @@ pub const Shell = enum {
     }
 };
 
-/// 물리 키보드 종류. **재배치가 아니라 하드웨어 선언이다** — 사용자가 키를
+/// 물리 키보드 종류. 재배치가 아니라 하드웨어 선언이다 — 사용자가 키를
 /// 임의로 옮기는 문이 아니라, "스페이스 옆 두 키가 어느 순서인가"라는 사실
 /// 하나를 알려주는 것이다(design doc 비목표: 범용 키바인딩 엔진은 안 만든다).
 ///
@@ -353,14 +353,14 @@ pub const Keyboard = enum {
     }
 };
 
-/// 한글 자판(HI design 결정 7). **`Shell`·`Keyboard`와 같은 화이트리스트
-/// 구조다** — enum에 없는 이름은 파싱을 통과할 수 없다.
+/// 한글 자판(HI design 결정 7). `Shell`·`Keyboard`와 같은 화이트리스트
+/// 구조다 — enum에 없는 이름은 파싱을 통과할 수 없다.
 ///
-/// **이름이 `terminal/src/hangul.zig`의 `Layout`과 짝이어야 한다.** 여기가
+/// 이름이 `terminal/src/hangul.zig`의 `Layout`과 짝이어야 한다. 여기가
 /// "무엇을 적을 수 있는가"이고 저기가 "그것이 어떻게 조합하는가"인데, 둘을
-/// 잇는 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다. **어긋나면
+/// 잇는 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다. 어긋나면
 /// 증상은 "설정을 적었는데 기본 자판으로 뜬다"이고, 로그에 자판 이름이
-/// 찍히므로 HI 게이트가 그것을 본다.**
+/// 찍히므로 HI 게이트가 그것을 본다.
 pub const HangulLayout = enum {
     dubeol,
     sebeol_3p3,
@@ -377,7 +377,7 @@ pub const HangulLayout = enum {
     }
 };
 
-/// 영문 자판. **한글 자판과 직교한다**(HI design 결정 13) — 한글 배열은
+/// 영문 자판. 한글 자판과 직교한다(HI design 결정 13) — 한글 배열은
 /// 물리 키 위치를 쓰므로 이 값이 무엇이든 안 흔들린다.
 pub const LatinLayout = enum {
     qwerty,
@@ -393,21 +393,21 @@ pub const LatinLayout = enum {
 
 /// 한/영 전환 키(HI design 결정 7).
 ///
-/// **`Shell`·`Keyboard`·자판 둘과 모양이 다른 유일한 설정이다.** 그 넷은
+/// `Shell`·`Keyboard`·자판 둘과 모양이 다른 유일한 설정이다. 그 넷은
 /// 하나를 고르는 것이지만 전환 키는 배타적이지 않다 — 한/영 키를 쓰면서
 /// CapsLock도 쓰는 것이 정상이다. 그래서 enum 하나가 아니라 아래 `Toggles`
-/// 집합이 값이 되고, 이 enum은 **이름의 화이트리스트** 역할만 한다.
+/// 집합이 값이 되고, 이 enum은 이름의 화이트리스트 역할만 한다.
 pub const ToggleKey = enum {
-    /// 실기의 한/영 키(evdev 122). **게이트가 못 보낸다** — QEMU가
+    /// 실기의 한/영 키(evdev 122). 게이트가 못 보낸다 — QEMU가
     /// `sendkey lang1`을 이름만 받고 조용히 버린다(HI-M0 실측 1). 그래서 이
     /// 갈래를 덮는 것은 `input_test`의 호스트 검사뿐이다.
     hangul_key,
     /// Shift+Space. HI-M1이 유일한 전환 키로 골랐던 것이고 이제 끌 수 있다 —
     /// `HELLO WORLD`를 칠 때 한/영이 바뀌는 것이 그 대가였다.
     shift_space,
-    /// CapsLock을 **짧게** 눌렀다 뗀 것. 길게 누르면 대문자 잠금이다(결정 9).
+    /// CapsLock을 짧게 눌렀다 뗀 것. 길게 누르면 대문자 잠금이다(결정 9).
     capslock_tap,
-    /// 왼쪽 Ctrl을 **짧게** 눌렀다 뗀 것. 누른 동안 다른 키가 오면 평범한
+    /// 왼쪽 Ctrl을 짧게 눌렀다 뗀 것. 누른 동안 다른 키가 오면 평범한
     /// modifier이므로 아무 일도 안 일어난다(결정 8).
     lctrl_tap,
 };
@@ -431,12 +431,12 @@ pub const Toggles = struct {
 
     /// 콤마 목록을 집합으로 바꾼다.
     ///
-    /// **모르는 이름은 로그만 남기고 넘어간다** — 설정 파일은 사람이 손으로
+    /// 모르는 이름은 로그만 남기고 넘어간다 — 설정 파일은 사람이 손으로
     /// 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이라는 CP의 판단 그대로다.
-    /// 그 규칙이 **목록 안에서도** 서는 것이 여기서 새로운 점이다: 이름 하나가
+    /// 그 규칙이 목록 안에서도 서는 것이 여기서 새로운 점이다: 이름 하나가
     /// 틀려도 나머지는 살아남는다.
     ///
-    /// **빈 값(`hangul_toggle=`)은 뜻이 있는 입력이다.** 기본값으로 떨어뜨리지
+    /// 빈 값(`hangul_toggle=`)은 뜻이 있는 입력이다. 기본값으로 떨어뜨리지
     /// 않는다 — 그러면 전환 키를 전부 끌 방법이 없어진다.
     pub fn parse(value: []const u8) Toggles {
         var t = Toggles{};
@@ -444,7 +444,7 @@ pub const Toggles = struct {
         while (it.next()) |raw| {
             const name = std.mem.trim(u8, raw, " \t");
             if (name.len == 0) continue;
-            // `arg()`가 빈 집합에 쓰는 이름이다. **왕복을 위해 여기서 받는다** —
+            // `arg()`가 빈 집합에 쓰는 이름이다. 왕복을 위해 여기서 받는다 —
             // 안 받으면 전환 키를 다 끈 사람의 부팅 로그에 매번
             // "모르는 이름 none"이 찍힌다.
             if (std.mem.eql(u8, name, "none")) continue;
@@ -462,11 +462,11 @@ pub const Toggles = struct {
         return t;
     }
 
-    /// argv로 넘기고 로그에 찍을 **정규형** 콤마 목록. 버퍼는 호출자가 준다 —
+    /// argv로 넘기고 로그에 찍을 정규형 콤마 목록. 버퍼는 호출자가 준다 —
     /// 이 파일에는 힙이 없고, `Keyboard.arg()`처럼 상수 문자열을 돌려줄 수도
     /// 없다(조합이 열여섯 가지다).
     ///
-    /// **정규화가 이 함수의 값이다.** 설정 파일에 어떤 순서로 적었든 enum 선언
+    /// 정규화가 이 함수의 값이다. 설정 파일에 어떤 순서로 적었든 enum 선언
     /// 순서로 나오므로, 로그에 찍힌 문자열 하나가 곧 집합 전체다. HI 게이트가
     /// 그 줄 하나로 "무엇이 켜지고 무엇이 꺼졌는가"를 본다.
     ///
@@ -486,7 +486,7 @@ pub const Toggles = struct {
 
 /// `Toggles.arg`가 쓰는 이어붙이기. 첫 항목이 아니면 콤마를 먼저 넣는다.
 ///
-/// **모자라면 자른다.** 위 `comptime`이 `TOGGLE_ARG_MAX`가 최악의 경우보다
+/// 모자라면 자른다. 위 `comptime`이 `TOGGLE_ARG_MAX`가 최악의 경우보다
 /// 크다는 것을 못 박으므로 이 길로 실제로 갈 일은 없고, 그래도 배열 밖을
 /// 쓰지 않는 쪽으로 적어 둔다. `len.* + 1`을 보는 것은 `buf[len]`에 들어갈
 /// NUL 한 칸을 남기기 위해서다.
@@ -506,16 +506,16 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
 ///
 /// keyboard의 기본값이 apple인 이유는 이 기계를 쓰는 사람이 Apple 키보드를
-/// 먼저 꽂기 때문이다. pc는 보정을 **켜는** 쪽이라 명시적으로 적어야 한다.
+/// 먼저 꽂기 때문이다. pc는 보정을 켜는 쪽이라 명시적으로 적어야 한다.
 pub const Config = struct {
     shell: Shell = .fish,
     keyboard: Keyboard = .apple,
-    /// **기본값이 `shin_pcs`인 것은 `keyboard`가 `apple`인 것과 같은
-    /// 근거다** — 이 기계를 쓰는 사람이 쓰는 것이 기본값이다. 두벌식이 더
+    /// 기본값이 `shin_pcs`인 것은 `keyboard`가 `apple`인 것과 같은
+    /// 근거다 — 이 기계를 쓰는 사람이 쓰는 것이 기본값이다. 두벌식이 더
     /// 흔하다는 것은 이 기계의 사실이 아니다.
     hangul_layout: HangulLayout = .shin_pcs,
     latin_layout: LatinLayout = .qwerty,
-    /// **기본값은 넷 다 켜진 것이다**(2026-09-01에 사용자가 정했다).
+    /// 기본값은 넷 다 켜진 것이다(2026-09-01에 사용자가 정했다).
     /// 전환 키가 많아서 곤란한 경우는 없고 없어서 곤란한 경우는 있다 —
     /// 특히 `hangul_key`는 실기에서만 오는 키라 기본으로 꺼 두면 "왜 한/영
     /// 키가 안 먹지"가 된다.
@@ -525,7 +525,7 @@ pub const Config = struct {
         .capslock_tap = true,
         .lctrl_tap = true,
     },
-    /// **기본값이 `on`인 근거는 위 `keyboard`·`hangul_layout`과 같다** —
+    /// 기본값이 `on`인 근거는 위 `keyboard`·`hangul_layout`과 같다 —
     /// 이 기계를 쓰는 사람이 쓰는 것이 기본값이고, 이 기계는 개발용이다.
     /// embedded 장비의 init 1으로 쓰는 사람은 `keyboard=pc`를 적듯 `off`를
     /// 명시적으로 적는다(design 비목표 4).
@@ -539,7 +539,7 @@ const MAX_FILE = 4096;
 
 /// 설정 파일을 읽어 파싱한다.
 ///
-/// **optional을 돌려주는 이유는 딱 하나를 구분하기 위해서다.** null은 오직
+/// optional을 돌려주는 이유는 딱 하나를 구분하기 위해서다. null은 오직
 /// "파일이 없다"(ENOENT)는 뜻이고, 그때만 호출자가 seeding(save)을 한다.
 /// 파일은 있는데 못 열었거나 못 읽었으면 null이 아니라 기본값 Config를
 /// 돌려준다 — 읽기에 실패한 파일을 우리가 덮어써 버리면 사용자가 손으로 쓴
@@ -585,10 +585,10 @@ pub fn load(path: [:0]const u8) ?Config {
 /// 파일에서 유일하게 게스트를 띄우지 않고도 검증할 수 있는 부분이다.
 ///
 /// 규칙(design doc "3. 설정 파일"): `#`으로 시작하면 주석, 빈 줄은 무시,
-/// 나머지는 **첫 번째** `=`에서 키와 값으로 나누고 양쪽 공백을 뗀다.
+/// 나머지는 첫 번째 `=`에서 키와 값으로 나누고 양쪽 공백을 뗀다.
 /// 모르는 키와 모르는 값은 로그만 남기고 넘어간다 — 설정 파일은 사용자가
 /// 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이다.
-/// **pub인 이유는 config_test.zig가 부르기 때문이다.** 이 파일에서 유일하게
+/// pub인 이유는 config_test.zig가 부르기 때문이다. 이 파일에서 유일하게
 /// 시스템 콜이 없는 함수이고, 그래서 유일하게 게스트를 띄우지 않고 검증할 수
 /// 있는 부분이다 — IP-M2가 그 검사를 실제로 만들었다.
 pub fn parse(text: []const u8) Config {
@@ -644,9 +644,9 @@ pub fn parse(text: []const u8) Config {
                 continue;
             };
         } else if (std.mem.eql(u8, key, "hangul_toggle")) {
-            // **앞의 넷과 모양이 다른 유일한 키다**(결정 7). `stringToEnum`
+            // 앞의 넷과 모양이 다른 유일한 키다(결정 7). `stringToEnum`
             // 하나로 안 끝나고 콤마로 갈라야 한다. 모르는 이름을 흘려보내는
-            // 규칙은 같고, 그 규칙이 **목록 안에서도** 선다.
+            // 규칙은 같고, 그 규칙이 목록 안에서도 선다.
             c.hangul_toggle = Toggles.parse(value);
         } else if (std.mem.eql(u8, key, "shell_config")) {
             // shell·keyboard·자판 둘과 완전히 같은 모양이다. `hangul_toggle`만
@@ -698,7 +698,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\latin_layout={s}
         \\# hangul_toggle: hangul_key | shift_space | capslock_tap | lctrl_tap
         \\#   콤마로 여럿을 켠다. 빈 값이면 전환 키가 하나도 없다
-        \\#   CapsLock과 왼쪽 Ctrl은 0.3초보다 **짧게** 눌렀다 뗐을 때만 한/영이고,
+        \\#   CapsLock과 왼쪽 Ctrl은 0.3초보다 짧게 눌렀다 뗐을 때만 한/영이고,
         \\#   길게 누르면 CapsLock은 대문자 잠금, Ctrl은 평소의 Ctrl이다
         \\hangul_toggle={s}
         \\# shell_config: on | off
@@ -736,7 +736,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     return writeAll(fd, text, path);
 }
 
-/// fd에 전부 쓴다. **`save`와 `seedRcFiles`가 같은 루프를 쓴다** — SC-M1이
+/// fd에 전부 쓴다. `save`와 `seedRcFiles`가 같은 루프를 쓴다 — SC-M1이
 /// 둘째 호출자를 만들면서 뺐다.
 ///
 /// `/config`는 `MS_SYNCHRONOUS`로 마운트돼 있다. 그래서 이 write가 돌아온
@@ -760,19 +760,19 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
 
 /// 셸 rc 파일 셋을 "없으면 만든다"(SC design 결정 7).
 ///
-/// **`/config`가 마운트됐을 때만 부른다.** 안 붙은 부팅에서는 `/config`가
+/// `/config`가 마운트됐을 때만 부른다. 안 붙은 부팅에서는 `/config`가
 /// initrd 안의 빈 디렉터리(tmpfs)이므로, 여기서 만들면 부팅마다 새로 생겼다
 /// 사라지는 파일이 되고 "고치고 재부팅하면 남는다"는 약속이 그 부팅에서만
-/// 거짓이 된다. **없는 편이 낫다** — 링크가 끊긴 채로 셸이 뜨고, 그것은
+/// 거짓이 된다. 없는 편이 낫다 — 링크가 끊긴 채로 셸이 뜨고, 그것은
 /// SC-M0이 이미 여섯 체인에서 확인한 정상 경로다.
 ///
-/// **`shell_config`를 안 본다.** `off`여도 깐다 — 셸이 안 읽을 뿐 파일은
+/// `shell_config`를 안 본다. `off`여도 깐다 — 셸이 안 읽을 뿐 파일은
 /// 있는 것이 맞고, 나중에 `on`으로 바꾼 사람이 빈 디렉터리를 안 만난다.
 /// `shell`도 안 본다: 셋 다 깐다는 결정 7의 근거가 같다 — `tars.conf`의
 /// `shell`은 언제든 바뀔 수 있고, 바뀐 뒤에야 씨앗이 생기면 "고치고
 /// 재부팅했는데 rc가 없다"가 된다. 비용은 부팅마다 `open()` 셋이다.
 ///
-/// **이미 있으면 손대지 않는다.** 그때부터 그 파일은 사용자의 것이다.
+/// 이미 있으면 손대지 않는다. 그때부터 그 파일은 사용자의 것이다.
 /// `O_EXCL`이 그 질문을 커널에게 한 번에 묻는다 — `save`가 `O_EXCL`을 안
 /// 쓰는 것과 다른 이유는, 저쪽은 "파일이 없다"를 `load`가 이미 답했기
 /// 때문이다.
@@ -801,7 +801,7 @@ fn seedRcFile(sh: Shell) void {
 
     writeAll(fd, sh.rcSeed(), path) catch return;
 
-    // **`created`가 아니라 `seeded`다.** `tars-init: created /config/tars.conf`
+    // `created`가 아니라 `seeded`다. `tars-init: created /config/tars.conf`
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
     // 그 검사가 rc 세 줄까지 함께 보게 된다.
     std.debug.print("tars-init: seeded {s}\n", .{path});
@@ -809,12 +809,12 @@ fn seedRcFile(sh: Shell) void {
 
 /// `/proc/cmdline`을 읽어 `NO_CONFIG_TOKEN`이 있는지 본다(SC-M2 결정 9).
 ///
-/// **못 읽으면 false다.** 이 함수의 답은 "사용자의 설정을 덮어쓸까"이고,
+/// 못 읽으면 false다. 이 함수의 답은 "사용자의 설정을 덮어쓸까"이고,
 /// 못 읽었을 때 덮는 쪽으로 기울면 `/proc`이 안 붙은 부팅에서 rc가 조용히
 /// 꺼진다 — `load`가 "읽기에 실패한 파일은 덮어쓰지 않는다"고 정한 것과 같은
 /// 방향이다.
 ///
-/// **`load`의 읽기 루프를 공유하지 않는다.** 저쪽은 optional로 ENOENT 하나를
+/// `load`의 읽기 루프를 공유하지 않는다. 저쪽은 optional로 ENOENT 하나를
 /// 구분해야 해서 계약이 다르다(그 구분이 seeding을 부르는 조건이다). 세 줄을
 /// 아끼려고 그 구분을 흐리는 것보다 각자 갖는 편이 읽기 쉽다 — 이 파일 머리의
 /// `failed`가 `main.zig`와 겹치는 것과 같은 판단이다.

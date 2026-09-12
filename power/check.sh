@@ -16,8 +16,8 @@ REPO_ROOT="$(cd .. && pwd)"
 #
 # 마지막 칸을 게이트가 어떻게 보는가가 이 체인의 성격을 정한다. HD-M1이
 # 커널에 ACPI를 켜기 전에는 reboot(POWER_OFF)이 HALT로 강등돼서 QEMU가 스스로
-# 끝나지 않았고, 이 게이트가 대신 죽여 줬다. 이제는 **QEMU가 스스로 사라지는
-# 것**이 통과 조건이다 — 우리가 죽여 주던 그 손길이 없어진 것 자체가 전원이
+# 끝나지 않았고, 이 게이트가 대신 죽여 줬다. 이제는 QEMU가 스스로 사라지는
+# 것이 통과 조건이다 — 우리가 죽여 주던 그 손길이 없어진 것 자체가 전원이
 # 진짜로 끊겼다는 증거다.
 #
 # -no-reboot은 그대로 둔다. 전원을 끄는 경로에는 영향이 없고, 루트 게이트가
@@ -104,7 +104,7 @@ report_failure() {
 }
 
 # 게스트 셸에 한 글자씩 타이핑한다. CP·IP와 같은 함수다 — sendkey가 보내는
-# 것은 문자가 아니라 **키**이므로, 대문자는 shift-를 붙여야 한다.
+# 것은 문자가 아니라 키이므로, 대문자는 shift-를 붙여야 한다.
 source ../gate_lib.sh
 
 # kill -TERM 1
@@ -162,7 +162,7 @@ type_keys "${KILL_KEYS[@]}"
 
 # 종료 순서가 도는 데 걸리는 시간은 유예 3초가 지배한다. 대화형 셸은
 # SIGTERM을 무시하므로(POSIX), 셸 둘은 그 3초가 지난 뒤 SIGKILL로 죽는다.
-# 로그의 문자열이 아니라 **프로세스의 존재**를 본다. 이것이 HD-M1이 바꾼
+# 로그의 문자열이 아니라 프로세스의 존재를 본다. 이것이 HD-M1이 바꾼
 # 통과 조건이다 — 게스트가 reboot(POWER_OFF)을 불렀고 커널이 그것을 ACPI로
 # 실행했다면, QEMU는 우리가 아무것도 하지 않아도 사라진다.
 GONE=0
@@ -183,7 +183,7 @@ wait "$QEMU_PID" 2>/dev/null
 QEMU_PID=""
 
 # 여기서부터는 "어떻게 꺼졌는가"를 따진다. 위의 GONE 하나만 보면 기계가
-# 꺼진 것은 알 수 있지만 **왜** 꺼졌는지는 알 수 없다.
+# 꺼진 것은 알 수 있지만 왜 꺼졌는지는 알 수 없다.
 for marker in \
   "tars-init: signal handlers installed (TERM, INT)" \
   "tars-init: shutdown requested (action power_off)" \
@@ -212,7 +212,7 @@ fi
 
 # 음성 검사 3 — POWER_OFF가 HALT로 강등되지 않았는가. 커널에서 ACPI가
 # 빠지면 이 줄이 다시 나온다. 그때는 위의 GONE도 함께 실패하지만, 실패의
-# **이유**를 알려 주는 것은 이 한 줄뿐이다.
+# 이유를 알려 주는 것은 이 한 줄뿐이다.
 if grep -q "Power off not available: System halted instead" "$LOG"; then
   report_failure "the kernel demoted POWER_OFF to a halt; is CONFIG_ACPI still on?"
 fi
@@ -240,7 +240,7 @@ fi
 echo "boot 1/2 PASS: the guest shut itself down from a shell command"
 
 # ============================================================== 부팅 2/2 (A)
-# 재시작 경로. **-no-reboot을 뺀다** — 게스트가 reboot(RESTART)를 부르면 QEMU가
+# 재시작 경로. -no-reboot을 뺀다 — 게스트가 reboot(RESTART)를 부르면 QEMU가
 # 정말로 다시 부팅해야 하기 때문이다. 두 부팅의 QEMU 옵션이 이렇게 갈리는 것이
 # PM을 기존 체인에 얹지 않고 새 체인으로 만든 이유였다(design 결정 8).
 #

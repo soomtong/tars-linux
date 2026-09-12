@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
-    // ── 여기서부터는 게스트가 아니라 **빌드 호스트**가 실행한다 ──────────
+    // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //
     // project_build_host_arch의 4번 규칙: "이 산출물은 누가 실행하는가"를
     // 먼저 묻는다. config_test는 QEMU 게스트가 아니라 컨테이너가 직접

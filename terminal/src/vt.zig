@@ -3,7 +3,7 @@ const ghostty_vt = @import("ghostty-vt");
 
 /// 렌더러에게 넘기는 셀 하나.
 ///
-/// `fg`·`bg`는 프레임버퍼와 같은 `0x00RRGGBB` 형식으로 **이미 해소된** 값이다.
+/// `fg`·`bg`는 프레임버퍼와 같은 `0x00RRGGBB` 형식으로 이미 해소된 값이다.
 /// `Style`을 그대로 흘려보내지 않는 이유가 design 결정 1이다 — 색을 푸는 데
 /// 필요한 것(팔레트, 기본 fg/bg, bold 옵션)이 전부 여기 `RenderState`에 있고,
 /// 렌더러는 팔레트도 SGR도 몰라야 한다. inverse와 커서도 여기서 두 색을
@@ -16,10 +16,10 @@ pub const CellGlyph = struct {
     bg: u32,
 };
 
-/// 매치 하이라이트의 행별 범위 하나. **양 끝을 포함한다** — 라이브러리가
+/// 매치 하이라이트의 행별 범위 하나. 양 끝을 포함한다 — 라이브러리가
 /// `row_sels`로 주는 선택 범위와 같은 규약이다(design 결정 4).
 ///
-/// **`Screen` 안이 아니라 여기 있는 이유**는 Zig가 struct의 필드 사이에 선언을
+/// `Screen` 안이 아니라 여기 있는 이유는 Zig가 struct의 필드 사이에 선언을
 /// 끼우는 것을 막기 때문이다. `Screen`의 기존 선언들(`Cursor`·`SelectKind`)이
 /// 전부 필드 뒤에 있는 것도 같은 규칙이고, `CellGlyph`처럼 바깥이 보는 타입은
 /// 파일 스코프가 자리가 맞다.
@@ -27,9 +27,9 @@ pub const RowSpan = struct {
     row: u16,
     x0: u16,
     x1: u16,
-    /// 이 범위가 **지금 선택된 매치**인가(SP design 결정 2).
+    /// 이 범위가 지금 선택된 매치인가(SP design 결정 2).
     ///
-    /// **기본값을 안 주는 것에 뜻이 있다**(plan 결정 2). 만드는 자리가
+    /// 기본값을 안 주는 것에 뜻이 있다(plan 결정 2). 만드는 자리가
     /// `findSpans` 하나뿐인데, 기본값이 있으면 두 번째 자리가 생겼을 때
     /// 정하는 것을 잊어도 컴파일이 통과한다.
     current: bool,
@@ -42,18 +42,18 @@ pub const RowSpan = struct {
 
 /// 마지막 `cells()`가 만든 하이라이트의 실측(design 결정 5).
 ///
-/// **상한을 안 두기로 한 결정의 근거를 남기는 값이다.** `us`가 밀리초 단위로
+/// 상한을 안 두기로 한 결정의 근거를 남기는 값이다. `us`가 밀리초 단위로
 /// 커지면 그때 상한을 논의한다.
 
-/// `cur`은 **현재 매치가 칠한 셀 수**다(SP-M0). `cells`는 뜻을 안 바꾼다 —
-/// 여전히 보이는 매치 **전부**의 셀 수이고, 게이트의 검사 16이 그 뜻에 기대
+/// `cur`은 현재 매치가 칠한 셀 수다(SP-M0). `cells`는 뜻을 안 바꾼다 —
+/// 여전히 보이는 매치 전부의 셀 수이고, 게이트의 검사 16이 그 뜻에 기대
 /// "needle 길이의 배수"를 본다.
 pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 
-/// 매치 하이라이트의 바탕색(design 결정 1). **맞바꿈이 아니라 값이다.**
+/// 매치 하이라이트의 바탕색(design 결정 1). 맞바꿈이 아니라 값이다.
 ///
 /// 배경 `#102030`과도 반전된 흰색과도 멀어야 사람이 넷을 가릴 수 있고, 색이
-/// **하나**여야 게이트가 `style>` 줄에서 셀 수 있다. 어두운 앰버를 골랐다.
+/// 하나여야 게이트가 `style>` 줄에서 셀 수 있다. 어두운 앰버를 골랐다.
 ///
 /// | 상태 | 바탕 | 글자 |
 /// |---|---|---|
@@ -66,8 +66,8 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 /// 일이기 때문이다(TR design 결정 1). `pub`인 것은 `vt_test`가 본다.
 pub const MATCH_BG: u32 = 0x00705000;
 
-/// 지금 선택된 매치의 바탕색(SP design 결정 4). **`MATCH_BG`와 같은 계열의
-/// 더 밝은 색이다.**
+/// 지금 선택된 매치의 바탕색(SP design 결정 4). `MATCH_BG`와 같은 계열의
+/// 더 밝은 색이다.
 ///
 /// 색상 계열을 같게 두고 밝기만 올리는 것에 뜻이 있다 — "같은 종류인데 이것이
 /// 지금 것"이라는 뜻을 밝기 차이가 전달한다. 다른 계열을 고르면 두 색이 서로
@@ -78,10 +78,10 @@ pub const MATCH_BG: u32 = 0x00705000;
 /// | 기본 | `#102030` | 흰색 |
 /// | 선택 | 흰색 | `#102030` |
 /// | 매치 | `#705000` | 흰색 |
-/// | **현재 매치** | **`#C08000`** | 흰색 |
+/// | 현재 매치 | `#C08000` | 흰색 |
 /// | 선택 안의 매치 | 흰색 | `#705000` |
 ///
-/// **`fg`는 여전히 안 건드린다.** 그래서 CS design 결정 1의 "매치는 바탕만
+/// `fg`는 여전히 안 건드린다. 그래서 CS design 결정 1의 "매치는 바탕만
 /// 정한다"가 한 줄 그대로 남는다.
 pub const CURRENT_BG: u32 = 0x00C08000;
 
@@ -90,7 +90,7 @@ fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
 }
 
-/// 터미널 상태를 **계속 들고 있는** 화면.
+/// 터미널 상태를 계속 들고 있는 화면.
 ///
 /// TF-M2의 `parseToCells`는 호출할 때마다 Terminal을 새로 만들고 버렸다.
 /// 입력이 생기면 PTY 출력이 여러 조각으로 나눠 도착하므로, 조각마다 새
@@ -98,7 +98,7 @@ fn packRgb(c: ghostty_vt.color.RGB) u32 {
 /// 경계에서 잘렸을 때 파서 상태도 잃는다. 그래서 Terminal과 Stream을
 /// 프로그램 수명 내내 유지한다.
 ///
-/// **반드시 힙에 두고 포인터로 다뤄야 한다.** `Terminal.vtStream()`이
+/// 반드시 힙에 두고 포인터로 다뤄야 한다. `Terminal.vtStream()`이
 /// 돌려주는 Stream은 내부에 `&terminal` 포인터를 담고 있어서
 /// (`Terminal.zig:374-377`), Screen 값이 복사·이동되면 그 포인터가 옛 주소를
 /// 가리키게 된다. `init`이 `*Screen`을 돌려주는 이유가 이것이다.
@@ -120,7 +120,7 @@ pub const Screen = struct {
     state: ghostty_vt.RenderState,
     /// copy mode의 커서. null이면 copy mode가 아니다.
     ///
-    /// **뷰포트 좌표다**(0이 화면 맨 윗줄). 절대 행이 아닌 이유는 이동이
+    /// 뷰포트 좌표다(0이 화면 맨 윗줄). 절대 행이 아닌 이유는 이동이
     /// 화면 위의 일이기 때문이다 — 뷰포트가 한 줄 올라가면 커서는 화면의
     /// 같은 자리에 남고, 그래서 가리키는 내용이 한 줄 위가 된다. 그것이
     /// 화면 끝에서 계속 움직였을 때 사람이 기대하는 동작이다.
@@ -132,19 +132,19 @@ pub const Screen = struct {
     /// 지금 무엇을 잡고 있는가. null이면 커서만 움직이는 중이다.
     copy_kind: ?SelectKind = null,
 
-    /// 앵커의 **screen 좌표 y**. 가지치기 감시용이다(CM-M1).
+    /// 앵커의 screen 좌표 y. 가지치기 감시용이다(CM-M1).
     ///
     /// 이 값이 왜 필요한지가 이 milestone에서 가장 미묘한 자리다.
     /// `main.zig`가 copy mode 중에 `scrollToBottom()`을 억제하므로, 뷰포트가
     /// history에 머무는 동안 가지치기가 일어날 수 있다(design 위험 1).
-    /// **그때 라이브러리는 선택을 null로 만들지 않는다** — tracked pin을
+    /// 그때 라이브러리는 선택을 null로 만들지 않는다 — tracked pin을
     /// 살아 있는 이웃 페이지의 왼쪽 위로 옮긴다
     /// (`PageList.erasePage`, `PageList.eraseRows`). 선택은 멀쩡히 존재하고
     /// 가리키는 내용만 달라진다. 그래서 "selection이 null인가"로는 절대 못
     /// 잡고, 조용히 엉뚱한 자리를 복사하게 된다.
     ///
-    /// screen 좌표는 목록 맨 위에서부터 세는 절대 좌표라 **아래에 줄이 붙는
-    /// 것으로는 안 변한다.** 변하는 경우가 앞에서 줄이 지워졌을 때와 pin이
+    /// screen 좌표는 목록 맨 위에서부터 세는 절대 좌표라 아래에 줄이 붙는
+    /// 것으로는 안 변한다. 변하는 경우가 앞에서 줄이 지워졌을 때와 pin이
     /// 옮겨졌을 때뿐이고, 그 둘이 정확히 우리가 잡고 싶은 것이다.
     copy_anchor_y: ?u32 = null,
 
@@ -153,19 +153,19 @@ pub const Screen = struct {
 
     /// 조합 중인 한글 한 글자(HI design 결정 4). null이면 조합 중이 아니다.
     ///
-    /// **PTY로 안 간 글자다.** 확정될 때만 셸로 가고, 그때까지는 우리가 커서
+    /// PTY로 안 간 글자다. 확정될 때만 셸로 가고, 그때까지는 우리가 커서
     /// 자리에 그린다. 매 키마다 PTY로 보내고 백스페이스로 고치는 길을 버린
     /// 이유는 design 결정 4에 있다 — 셸의 readline이 두 칸짜리 글자의 폭을
     /// 알아야 한다.
     ///
-    /// **같은 사실이 `input.State`에도 있다.** `find_open`이 그런 것과 같은
+    /// 같은 사실이 `input.State`에도 있다. `find_open`이 그런 것과 같은
     /// 중복이고 이유도 같다 — `input.zig`는 키를 자모로 돌리기 위해, 여기는
-    /// **그려야 하기 때문에** 알아야 한다. `input.zig`는 `vt.zig`를 import하지
+    /// 그려야 하기 때문에 알아야 한다. `input.zig`는 `vt.zig`를 import하지
     /// 않으므로(IP design 결정 6) 물어볼 길이 아예 없고, `main.zig`가 키를
     /// 읽은 직후에 넘긴다.
     preedit: ?u21 = null,
 
-    /// 클립보드. `y`가 만든 문자열을 **소유한다.**
+    /// 클립보드. `y`가 만든 문자열을 소유한다.
     ///
     /// 프로세스 하나가 디스플레이를 독점하는 구조(TF design 결정 1)에서는
     /// 버퍼 하나로 충분하다(`project_copy_mode`). 다음 `y`가 옛것을 해제한다.
@@ -173,85 +173,85 @@ pub const Screen = struct {
 
     /// 검색 프롬프트가 열려 있는가.
     ///
-    /// **`input.State.mode`에도 같은 사실이 있다.** 중복처럼 보이지만 각자 다른
+    /// `input.State.mode`에도 같은 사실이 있다. 중복처럼 보이지만 각자 다른
     /// 일을 한다(CN-M1 plan 결정 1) — `input.zig`는 키를 글자로 돌리기 위해
-    /// 알아야 하고, 여기는 **그려야 하기 때문에** 알아야 한다. 그리고
+    /// 알아야 하고, 여기는 그려야 하기 때문에 알아야 한다. 그리고
     /// `input.zig`는 `vt.zig`를 import하지 않으므로(IP design 결정 6) 물어볼
     /// 길이 아예 없다. copy mode 자체가 이미 같은 모양이다
     /// (`State.mode`와 `copy_cursor`).
     ///
-    /// **이 값을 만지는 것은 네 함수뿐이다** — findOpen · findCancel ·
+    /// 이 값을 만지는 것은 네 함수뿐이다 — findOpen · findCancel ·
     /// findSubmit · copyExit.
     find_open: bool = false,
 
-    /// 검색어(design 결정 8). **고정 128바이트이고 넘치면 더 받지 않는다.**
+    /// 검색어(design 결정 8). 고정 128바이트이고 넘치면 더 받지 않는다.
     ///
     /// 스크롤백이 1000줄인 시스템에서 128자짜리 검색어를 칠 일이 없고, 동적
-    /// 할당은 "언제 해제하는가"를 copyExit·재검색·모드 재진입 **세 자리**에
+    /// 할당은 "언제 해제하는가"를 copyExit·재검색·모드 재진입 세 자리에
     /// 나눠 놓는다. `clip`이 할당을 쓰는 것과 갈리는 자리인데, 그쪽은 길이를
     /// 우리가 못 정하고(선택한 만큼이다) 이쪽은 정할 수 있다.
     find_buf: [128]u8 = undefined,
     find_len: usize = 0,
-    /// 마지막으로 확정한 검색어(design 결정 8). **`copyExit`이 지우지 않는
-    /// 유일한 검색 상태다.**
+    /// 마지막으로 확정한 검색어(design 결정 8). `copyExit`이 지우지 않는
+    /// 유일한 검색 상태다.
     ///
-    /// 빈 Enter가 이것을 다시 쓴다. **모드를 나갔다 다시 들어와도 `/`+Enter가
-    /// 동작하는 것이 이 기능의 전부다** — 그래서 `copyExit`의 정리 목록에서
+    /// 빈 Enter가 이것을 다시 쓴다. 모드를 나갔다 다시 들어와도 `/`+Enter가
+    /// 동작하는 것이 이 기능의 전부다 — 그래서 `copyExit`의 정리 목록에서
     /// 이것만 빠진다.
     ///
     /// `find_buf`와 같은 고정 128바이트이고 같은 이유다 — 동적 할당은 "언제
     /// 해제하는가"를 여러 자리에 나눠 놓는다.
     ///
-    /// **성공·실패를 안 가리고 남긴다.** 못 찾은 검색어를 고쳐 다시 치는 것이
+    /// 성공·실패를 안 가리고 남긴다. 못 찾은 검색어를 고쳐 다시 치는 것이
     /// 흔한 일이고, vim도 그렇게 한다.
     find_last: [128]u8 = undefined,
     find_last_len: usize = 0,
 
-    /// 마지막 검색이 아무것도 못 찾았는가(design 결정 9). **오버레이 한 줄에
-    /// `/needle: not found`를 쓰는 조건이다.**
+    /// 마지막 검색이 아무것도 못 찾았는가(design 결정 9). 오버레이 한 줄에
+    /// `/needle: not found`를 쓰는 조건이다.
     ///
-    /// `findSubmit`이 정하고, **`main.zig`가 copy 명령을 처리하기 직전 한
-    /// 자리에서 끈다.** 시계를 안 들여오는 이유는 poll 루프가 지금 시각을 안
+    /// `findSubmit`이 정하고, `main.zig`가 copy 명령을 처리하기 직전 한
+    /// 자리에서 끈다. 시계를 안 들여오는 이유는 poll 루프가 지금 시각을 안
     /// 보기 때문이고, 다음 키까지 떠 있으면 사람이 메시지를 못 보고 넘길 일도
     /// 없다.
     ///
-    /// **메시지에 쓸 글자는 `find_last`에서 온다.** 메시지가 뜰 때는 프롬프트가
+    /// 메시지에 쓸 글자는 `find_last`에서 온다. 메시지가 뜰 때는 프롬프트가
     /// 이미 닫혀 있어서 `findNeedle()`이 null을 주기 때문이다 — 결정 8과 9가
     /// 맞물리는 자리가 여기다.
     find_status: bool = false,
 
     /// 확정된 검색. `findSubmit`이 만들고 `copyExit`이 해제한다(design 결정 10).
     ///
-    /// **`ScreenSearch`는 `screen: *ghostty_vt.Screen`을 들고 있다**
+    /// `ScreenSearch`는 `screen: *ghostty_vt.Screen`을 들고 있다
     /// (`search/screen.zig:42`). 대체 화면(vim 등)으로 갈아타면
     /// `term.screens.active`가 달라져 그 포인터가 낡는다 — `feed`가 포인터
-    /// 하나를 비교해 잡는다. **`pointFromPin`을 부르는 앵커 감시와 달리 비용이
-    /// 없다.**
+    /// 하나를 비교해 잡는다. `pointFromPin`을 부르는 앵커 감시와 달리 비용이
+    /// 없다.
     ///
     /// 이것을 안 해제하면 모드를 나갔다 다시 들어왔을 때 지난 매치 목록이 살아
     /// 있고, 그 pin들은 그 사이 도착한 출력 때문에 이미 엉뚱한 자리를 가리킬 수
-    /// 있다. **증상이 "안 된다"가 아니라 "조용히 다른 자리로 간다"이다** —
+    /// 있다. 증상이 "안 된다"가 아니라 "조용히 다른 자리로 간다"이다 —
     /// CM-M1이 앵커에 대해 배운 것과 같은 병이다.
     find: ?ghostty_vt.search.Screen = null,
-    /// 확정된 검색의 매치 **전부**. `findSubmit`이 만들고 `copyExit`이 버린다.
+    /// 확정된 검색의 매치 전부. `findSubmit`이 만들고 `copyExit`이 버린다.
     ///
-    /// **`ScreenSearch.matches()`가 주는 것은 얕은 복사다**
+    /// `ScreenSearch.matches()`가 주는 것은 얕은 복사다
     /// (`search/screen.zig:234`가 `@memcpy`로 구조체만 옮긴다). 각 `Flattened`의
-    /// `chunks`는 ScreenSearch 내부 버퍼를 그대로 가리키므로, **원소를
-    /// `deinit`하면 이중 해제**다. `alloc.free(slice)` 하나만 부른다
+    /// `chunks`는 ScreenSearch 내부 버퍼를 그대로 가리키므로, 원소를
+    /// `deinit`하면 이중 해제다. `alloc.free(slice)` 하나만 부른다
     /// (design 결정 6).
     ///
-    /// `find`와 **언제나 나란히** 다룬다 — 한쪽만 남은 상태를 만들지 않는다.
+    /// `find`와 언제나 나란히 다룬다 — 한쪽만 남은 상태를 만들지 않는다.
     /// 해제 자리가 셋이고 `find`의 것과 정확히 같다: `findSubmit`의 옛것 정리 ·
     /// `copyExit` · `deinit`.
     ///
     /// 왜 `find`에게 매번 물어보지 않고 슬라이스를 들고 있는가: `matches()`가
     /// 부를 때마다 할당한다. 매 프레임 부르는 자리(`cells`)가 생기므로 한 번만
-    /// 받아 둔다. **목록은 `searchAll()` 시점의 스냅숏이고 갱신하지 않는다**
+    /// 받아 둔다. 목록은 `searchAll()` 시점의 스냅숏이고 갱신하지 않는다
     /// (design 결정 7).
     find_matches: ?[]ghostty_vt.highlight.Flattened = null,
 
-    /// 하이라이트의 행별 범위. **매 `cells()`가 다시 만든다.**
+    /// 하이라이트의 행별 범위. 매 `cells()`가 다시 만든다.
     ///
     /// 매치 목록은 스냅숏이지만(design 결정 7) 좌표는 아니다 — 뷰포트가 움직이면
     /// 같은 매치가 다른 행에 온다. 버퍼를 들고 있는 이유는 프레임마다 새로
@@ -280,7 +280,7 @@ pub const Screen = struct {
             .term = try .init(io, alloc, .{
                 .cols = cols,
                 .rows = rows,
-                // 스크롤백 한도(design 결정 10). **두 값을 함께 줘야 한다.**
+                // 스크롤백 한도(design 결정 10). 두 값을 함께 줘야 한다.
                 //
                 // 결정 10은 max_scrollback_lines만 말했는데, 그것만 주면
                 // 아무것도 바뀌지 않는다 — 기본 max_scrollback_bytes(10,000)가
@@ -306,7 +306,7 @@ pub const Screen = struct {
             .stream = undefined,
             .state = .empty,
         };
-        // term이 최종 주소에 자리잡은 **뒤에** stream을 만든다.
+        // term이 최종 주소에 자리잡은 뒤에 stream을 만든다.
         self.stream = self.term.vtStream();
         return self;
     }
@@ -314,10 +314,10 @@ pub const Screen = struct {
     pub fn deinit(self: *Screen) void {
         const alloc = self.alloc;
         if (self.clip) |text| alloc.free(text);
-        // **term보다 먼저다.** ScreenSearch가 든 tracked pin은 PageList의
+        // term보다 먼저다. ScreenSearch가 든 tracked pin은 PageList의
         // 풀에서 왔으므로, term을 먼저 버리면 이미 없는 풀을 건드린다.
         if (self.find) |*f| f.deinit();
-        // **바깥 슬라이스만 해제한다**(design 결정 6). 원소의 `chunks`는 위
+        // 바깥 슬라이스만 해제한다(design 결정 6). 원소의 `chunks`는 위
         // `f.deinit()`이 이미 해제한 버퍼를 가리키는 얕은 복사다.
         if (self.find_matches) |m| alloc.free(m);
         self.hl_spans.deinit(alloc);
@@ -329,7 +329,7 @@ pub const Screen = struct {
 
     /// PTY에서 읽은 바이트를 ANSI 파서에 먹인다. 화면 상태가 갱신된다.
     ///
-    /// **먹인 뒤에 앵커가 제자리에 있는지 본다**(CM-M1, design 위험 1).
+    /// 먹인 뒤에 앵커가 제자리에 있는지 본다(CM-M1, design 위험 1).
     /// 어긋났으면 모드를 통째로 닫는다 — 조용히 엉뚱한 자리를 복사하는 것보다
     /// 낫고, 사람은 다시 `Cmd+Shift+C`를 누르면 된다.
     ///
@@ -342,11 +342,11 @@ pub const Screen = struct {
         self.stream.nextSlice(bytes);
 
         // 대체 화면으로 갈아탔으면 ScreenSearch가 든 포인터가 낡는다
-        // (확정 사실 6). **포인터 비교라 비용이 없다** — 아래 앵커 감시가
+        // (확정 사실 6). 포인터 비교라 비용이 없다 — 아래 앵커 감시가
         // `pointFromPin`을 부르는 것과 다르다.
         //
         // 앵커 감시는 선택 중일 때만 도는데(copy_anchor_y가 null이면 빠진다)
-        // 검색은 선택 없이도 살아 있을 수 있어서 **여기서 따로 본다.**
+        // 검색은 선택 없이도 살아 있을 수 있어서 여기서 따로 본다.
         if (self.find) |*f| {
             if (f.screen != self.term.screens.active) {
                 self.copyExit();
@@ -367,7 +367,7 @@ pub const Screen = struct {
     ///
     /// 선택이 없으면 null이다. `pointFromPin`은 라이브러리가 스스로 "느리다"고
     /// 적어 둔 함수라(`Selection.zig`의 NOTE) 셀마다 부르면 안 되지만, 여기는
-    /// **선택이 있을 때 PTY 출력 한 조각에 한 번**이라 문제가 되지 않는다.
+    /// 선택이 있을 때 PTY 출력 한 조각에 한 번이라 문제가 되지 않는다.
     fn anchorY(s: *ghostty_vt.Screen) ?u32 {
         const sel = s.selection orelse return null;
         const pt = s.pages.pointFromPin(.screen, sel.start()) orelse return null;
@@ -377,7 +377,7 @@ pub const Screen = struct {
     /// 그릴 것이 있는 셀을 out에 채워 반환한다. out은 최소 cols*rows
     /// 크기여야 안전하다.
     ///
-    /// **글자가 없어도 색이 있으면 내보낸다**(design 결정 3). 배경색이
+    /// 글자가 없어도 색이 있으면 내보낸다(design 결정 3). 배경색이
     /// 생긴 뒤로는 빈 셀도 그릴 것이 있기 때문이다 — `ls` 출력의 색 띠,
     /// 커서 자리, 그리고 나중의 선택 영역이 그렇다.
     pub fn cells(self: *Screen, out: []CellGlyph) ![]CellGlyph {
@@ -397,11 +397,11 @@ pub const Screen = struct {
         var n: usize = 0;
         const row_data = self.state.row_data.slice();
         const row_cells = row_data.items(.cells);
-        // 그 행에서 선택된 x 범위. **라이브러리가 채워 준다**
+        // 그 행에서 선택된 x 범위. 라이브러리가 채워 준다
         // (`render.zig`가 `sel.topLeft()`/`bottomRight()`로 계산한다). 절대 행
         // 번호를 우리가 세지 않는 이유가 이것이다(design 결정 6).
         const row_sels = row_data.items(.selection);
-        // 정렬된 범위 목록을 **앞으로만** 미는 커서다(design 결정 4). 셀마다
+        // 정렬된 범위 목록을 앞으로만 미는 커서다(design 결정 4). 셀마다
         // 목록을 훑지 않으므로 전체가 O(범위 수)다.
         const spans = self.hl_spans.items;
         var hl_at: usize = 0;
@@ -421,8 +421,8 @@ pub const Screen = struct {
             const cells_slice = row_cells[y].slice();
             const raws = cells_slice.items(.raw);
             const styles = cells_slice.items(.style);
-            // 바로 앞 칸이 **확정한** 색. 폭 2 글자의 뒷칸이 이것을 물려받는다
-            // (아래 spacer 층). **행마다 새로 시작한다** — 앞 행의 마지막 칸은
+            // 바로 앞 칸이 확정한 색. 폭 2 글자의 뒷칸이 이것을 물려받는다
+            // (아래 spacer 층). 행마다 새로 시작한다 — 앞 행의 마지막 칸은
             // 이 행의 첫 칸과 이웃이 아니다.
             var prev_fg = default_fg;
             var prev_bg = default_bg;
@@ -430,7 +430,7 @@ pub const Screen = struct {
                 if (n >= out.len) return out[0..n];
 
                 const raw = raws[x];
-                // **`var`인 것이 HI-M1의 변경이다.** 아래 preedit 층이 커서
+                // `var`인 것이 HI-M1의 변경이다. 아래 preedit 층이 커서
                 // 자리의 글자를 조합 중인 것으로 갈아 끼운다.
                 var cp = raw.codepoint();
 
@@ -457,24 +457,24 @@ pub const Screen = struct {
                     if (st.flags.inverse) std.mem.swap(u32, &fg, &bg);
                 }
 
-                // 매치 하이라이트(CS-M0 design 결정 1). **맞바꿈이 아니라 값을
-                // 정한다.** 맞바꿈이면 선택 안의 매치가 아래에서 두 번 뒤집혀
+                // 매치 하이라이트(CS-M0 design 결정 1). 맞바꿈이 아니라 값을
+                // 정한다. 맞바꿈이면 선택 안의 매치가 아래에서 두 번 뒤집혀
                 // 원래 색으로 돌아와 안 보이고, 반전된 띠가 선택인지 매치인지
                 // 사람도 게이트도 못 가른다.
                 //
-                // **inverse 뒤·선택 앞이 이 층의 자리다.** inverse는 셀이 원래
+                // inverse 뒤·선택 앞이 이 층의 자리다. inverse는 셀이 원래
                 // 가진 성질이라 매치가 덮어써야 하고, 선택과 커서는 사람이 지금
-                // 하는 동작이라 매치 **위에** 얹혀야 한다.
+                // 하는 동작이라 매치 위에 얹혀야 한다.
                 //
-                // **`fg`는 안 건드린다** — 매치가 원래 무슨 색 글자였는지를
+                // `fg`는 안 건드린다 — 매치가 원래 무슨 색 글자였는지를
                 // 지우지 않기 위해서다. 그래서 이 층은 한 줄로 말할 수 있다:
                 // "매치는 바탕만 정한다".
 
-                // **먼저 걸린 것에서 멈추지 않는다**(plan 결정 3). 색이 하나일
-                // 때는 그 `break`가 순수한 최적화였지만, 둘이 되면 **목록
-                // 순서가 색을 정하는 것**이 된다. 매치끼리 겹칠 일이 없다고
-                // 믿고 있지만 증명한 적이 없으므로, 겹치면 **현재 매치가
-                // 이기게** 한다.
+                // 먼저 걸린 것에서 멈추지 않는다(plan 결정 3). 색이 하나일
+                // 때는 그 `break`가 순수한 최적화였지만, 둘이 되면 목록
+                // 순서가 색을 정하는 것이 된다. 매치끼리 겹칠 일이 없다고
+                // 믿고 있지만 증명한 적이 없으므로, 겹치면 현재 매치가
+                // 이기게 한다.
                 //
                 // `current`를 만났을 때는 더 볼 것이 없으므로 그때만 멈춘다.
                 var hit_match = false;
@@ -490,7 +490,7 @@ pub const Screen = struct {
                 }
                 if (hit_match) bg = if (hit_current) CURRENT_BG else MATCH_BG;
 
-                // 선택 영역도 inverse·커서와 **같은 연산**이다(design 결정 6).
+                // 선택 영역도 inverse·커서와 같은 연산이다(design 결정 6).
                 // 그래서 렌더러는 "선택"이라는 말을 배우지 않는다. 양 끝을
                 // 포함하는 범위다(`render.zig`가 `start.x <= end.x`를 단언한
                 // 뒤 그대로 담는다).
@@ -500,16 +500,16 @@ pub const Screen = struct {
                     }
                 }
 
-                // 커서는 inverse와 **같은 연산**이다(design 결정 2). 그래서
+                // 커서는 inverse와 같은 연산이다(design 결정 2). 그래서
                 // 렌더러는 커서라는 것도 배우지 않는다. 뷰포트 밖으로
                 // 나가면 viewport가 null이므로 TR-M2가 이 자리를 다시
                 // 손대지 않아도 된다.
                 //
-                // **copy mode 중에는 셸 커서를 그리지 않는다**(CM-M0). 반전된
+                // copy mode 중에는 셸 커서를 그리지 않는다(CM-M0). 반전된
                 // 셀이 둘이면 게이트가 어느 것이 copy 커서인지 못 가른다.
                 //
                 // 커서가 선택 안에 있으면 위에서 한 번, 여기서 또 한 번
-                // 맞바뀌어 **원래 색으로 돌아온다**(CM-M1). 예외를 두지 않는다 —
+                // 맞바뀌어 원래 색으로 돌아온다(CM-M1). 예외를 두지 않는다 —
                 // 반전된 띠 가운데 뚫린 구멍이 곧 커서라 오히려 잘 보이고,
                 // 예외를 넣으면 "선택"이 렌더 쪽으로 새어 나간다.
                 if (self.copy_cursor) |cc| {
@@ -517,29 +517,29 @@ pub const Screen = struct {
                         std.mem.swap(u32, &fg, &bg);
                     }
                 } else if (cursor) |vp| {
-                    // preedit 층(HI design 결정 4). **선택 뒤·커서 앞이 이
-                    // 층의 자리다** — 지금 치고 있는 글자라 무엇에도 안
+                    // preedit 층(HI design 결정 4). 선택 뒤·커서 앞이 이
+                    // 층의 자리다 — 지금 치고 있는 글자라 무엇에도 안
                     // 가려져야 하고, 커서는 여전히 그 자리를 가리켜야 한다.
                     //
-                    // **copy mode 중에는 여기 안 온다**(위 갈래로 빠진다).
+                    // copy mode 중에는 여기 안 온다(위 갈래로 빠진다).
                     // 셸 커서가 뷰포트 밖이면 `cursor`가 null이라 저절로 안
                     // 그려진다 — 안 보이는 자리에 조합을 그릴 수는 없다.
                     if (@as(usize, vp.x) == x and @as(usize, vp.y) == y) {
                         if (self.preedit) |pcp| cp = pcp;
                     }
-                    // 커서는 한 칸, **조합 중에는 두 칸**을 반전한다.
+                    // 커서는 한 칸, 조합 중에는 두 칸을 반전한다.
                     //
                     // 한글은 16픽셀, 곧 두 칸이다(HI-M0 실측 3). `drawGlyph`가
                     // 셀 하나의 `fg`로 16픽셀을 통째로 찍으므로, 한 칸만
                     // 반전하면 글자의 오른쪽 절반이 어두운 바탕에 어두운
-                    // 색으로 그려져 **사라진다.** 두 칸이 함께 밝아야 조합
+                    // 색으로 그려져 사라진다. 두 칸이 함께 밝아야 조합
                     // 중인 글자가 통째로 보이고, 게이트도 그 둘을 셀 수 있다.
                     //
                     // 커서가 마지막 열이면 오른쪽 칸이 없으므로 한 칸만
                     // 반전된다. 그 프레임에서는 글리프의 오른쪽 절반이 격자
                     // 밖 여백에 그려지고, `drawGlyph`가 프레임버퍼 경계를
-                    // 검사하므로 게스트가 죽지는 않는다. **줄바꿈을 하지
-                    // 않는 것이 의도다** — 조합 중인 글자는 아직 화면의
+                    // 검사하므로 게스트가 죽지는 않는다. 줄바꿈을 하지
+                    // 않는 것이 의도다 — 조합 중인 글자는 아직 화면의
                     // 내용이 아니다.
                     const span: usize = if (self.preedit == null) 1 else 2;
                     if (@as(usize, vp.y) == y and
@@ -549,27 +549,27 @@ pub const Screen = struct {
                     }
                 }
 
-                // 폭 2 글자의 **뒷칸은 자기 색을 갖지 않는다**(2026-09-02).
+                // 폭 2 글자의 뒷칸은 자기 색을 갖지 않는다(2026-09-02).
                 //
-                // spacer는 화면의 독립된 칸이 아니라 **앞 글자의 오른쪽
-                // 절반이다.** 그것이 자기 배경을 갖는다는 것 자체가 모델의
-                // 거짓이고, 그래서 위의 색 층 넷을 전부 지난 **뒤에** 앞 칸이
+                // spacer는 화면의 독립된 칸이 아니라 앞 글자의 오른쪽
+                // 절반이다. 그것이 자기 배경을 갖는다는 것 자체가 모델의
+                // 거짓이고, 그래서 위의 색 층 넷을 전부 지난 뒤에 앞 칸이
                 // 확정한 값을 그대로 물려받는다.
                 //
-                // **왜 이 한 자리로 끝나는가.** `drawGlyph`는 16픽셀을 첫 셀의
-                // `fg` **하나로** 찍는데 배경은 칸마다 따로 정해진다. 두 칸의
+                // 왜 이 한 자리로 끝나는가. `drawGlyph`는 16픽셀을 첫 셀의
+                // `fg` 하나로 찍는데 배경은 칸마다 따로 정해진다. 두 칸의
                 // 배경이 다르면 글자의 오른쪽 절반이 배경과 같은 색이 되어
-                // **사라진다** — 커서가 확정된 한글 위에 올 때 실제로 그랬다.
+                // 사라진다 — 커서가 확정된 한글 위에 올 때 실제로 그랬다.
                 // 물려받게 하면 커서·copy 커서·선택·매치가 함께 맞고, 앞으로
                 // 색 층을 더해도 자동으로 맞는다.
                 //
-                // **`fg`도 물려받는다.** 이 칸은 글자를 안 그리므로 렌더에는
+                // `fg`도 물려받는다. 이 칸은 글자를 안 그리므로 렌더에는
                 // 안 쓰이지만, `dumpStyles`가 찍는 값이 곧 게이트의 판정이라
                 // 두 칸이 같은 색으로 보여야 반전된 셀을 셀 수 있다. inverse가
                 // 이미 이렇게 동작한다(라이브러리가 spacer에도 같은 `style_id`를
                 // 붙인다) — 그것과 모양이 같아지는 것이다.
                 //
-                // **`spacer_head`는 제외한다.** 그것은 soft-wrap 끝에서 다음
+                // `spacer_head`는 제외한다. 그것은 soft-wrap 끝에서 다음
                 // 줄로 넘어간 글자를 위해 비워 둔 자리이지 앞 글자의 절반이
                 // 아니다.
                 if (raw.wide == .spacer_tail) {
@@ -603,7 +603,7 @@ pub const Screen = struct {
     /// 값을 `RenderState`가 되돌려준 것이므로 이쪽이 언제나 실제로 쓰이는
     /// 값이다.
     ///
-    /// **`cells()` 뒤에 부를 것.** `state.colors`는 `update()`가 채운다.
+    /// `cells()` 뒤에 부를 것. `state.colors`는 `update()`가 채운다.
     pub fn defaultFg(self: *const Screen) u32 {
         return packRgb(self.state.colors.foreground);
     }
@@ -614,11 +614,11 @@ pub const Screen = struct {
 
     /// 조합 중인 글자를 정한다. null이면 조합 중이 아니다.
     ///
-    /// **`main.zig`가 키를 읽은 직후에 부른다.** 값을 만드는 것은
+    /// `main.zig`가 키를 읽은 직후에 부른다. 값을 만드는 것은
     /// `input.State`이고 그리는 것은 위 `cells()`이며, 둘을 잇는 것이
     /// `main.zig`다(HI design 결정 2).
     ///
-    /// **`copyExit`이 이것을 안 지운다.** copy mode에 들어가는 순간
+    /// `copyExit`이 이것을 안 지운다. copy mode에 들어가는 순간
     /// `input.zig`가 이미 확정했고(design 결정 6) `main.zig`가 그 결과로
     /// `setPreedit(null)`을 부른다 — 여기서 또 지우면 같은 사실을 두 곳이
     /// 관리하게 된다.
@@ -641,7 +641,7 @@ pub const Screen = struct {
             .{ .x = 0, .y = 0 };
     }
 
-    /// copy mode를 나간다. **선택도 함께 지운다** — 안 지우면 모드를 나간 뒤에도
+    /// copy mode를 나간다. 선택도 함께 지운다 — 안 지우면 모드를 나간 뒤에도
     /// 반전된 띠가 화면에 남는다.
     pub fn copyExit(self: *Screen) void {
         self.copy_cursor = null;
@@ -651,10 +651,10 @@ pub const Screen = struct {
         // 다시 들어왔을 때 지난 검색어가 화면에 남는다.
         self.findCancel();
         // 매치 목록도 함께 버린다(design 결정 10). tracked pin을 들고 있으므로
-        // **screen이 살아 있는 동안** 해제해야 한다.
+        // screen이 살아 있는 동안 해제해야 한다.
         if (self.find) |*f| f.deinit();
         self.find = null;
-        // 매치 목록도 같은 자리에서 버린다(design 결정 6). **바깥 슬라이스만**
+        // 매치 목록도 같은 자리에서 버린다(design 결정 6). 바깥 슬라이스만
         // 해제한다 — 원소는 방금 `f.deinit()`이 해제한 버퍼를 가리킨다.
         if (self.find_matches) |m| self.alloc.free(m);
         self.find_matches = null;
@@ -662,25 +662,25 @@ pub const Screen = struct {
         // 더 칠해진다 — 게이트의 음성 검사(plan 결정 4)가 그것을 본다.
         self.hl_spans.clearRetainingCapacity();
         // 결과 표시도 끈다(CS design 결정 9 · SP design 결정 5). 안 끄면 모드를
-        // 나간 뒤에도 화면 아랫줄에 글자가 남는다. **"못 찾았다"와 `[3/12]`가
-        // 같은 플래그를 쓰므로 이 한 줄이 둘 다 끈다.**
+        // 나간 뒤에도 화면 아랫줄에 글자가 남는다. "못 찾았다"와 `[3/12]`가
+        // 같은 플래그를 쓰므로 이 한 줄이 둘 다 끈다.
         //
-        // **`find_last`는 여기서 안 지운다**(design 결정 8). 이 함수가 검색
-        // 상태를 전부 버리는 자리인데 그것 하나만 빠지는 것이고, **모드를
-        // 나갔다 들어와도 `/`+Enter가 동작하는 것이 CS-M1의 전부다.**
+        // `find_last`는 여기서 안 지운다(design 결정 8). 이 함수가 검색
+        // 상태를 전부 버리는 자리인데 그것 하나만 빠지는 것이고, 모드를
+        // 나갔다 들어와도 `/`+Enter가 동작하는 것이 CS-M1의 전부다.
         // 검사 33이 이 예외를 본다.
         self.find_status = false;
         self.term.screens.active.clearSelection();
     }
 
-    /// `/`. 프롬프트를 연다. **언제나 빈 검색어로 시작한다**(design 결정 8) —
+    /// `/`. 프롬프트를 연다. 언제나 빈 검색어로 시작한다(design 결정 8) —
     /// 미리 채우면 전혀 다른 것을 찾을 때 먼저 여러 번 지워야 한다.
     ///
-    /// 지난 검색어를 다시 쓰는 길은 **빈 Enter**이고 `findSubmit`이 그 자리다.
+    /// 지난 검색어를 다시 쓰는 길은 빈 Enter이고 `findSubmit`이 그 자리다.
     /// 프롬프트에서 `↑`로 되부르는 것은 design이 비워 둔 자리로 남는다.
     ///
     /// copy mode가 아니면 아무 일도 안 한다. `input.zig`의 표가 이미 그것을
-    /// 막지만, **두 곳이 같은 사실을 지키는 것이 이 파일의 규율이다**
+    /// 막지만, 두 곳이 같은 사실을 지키는 것이 이 파일의 규율이다
     /// (`copyMove`도 `copySelect`도 같은 첫 줄을 갖는다).
     pub fn findOpen(self: *Screen) void {
         if (self.copy_cursor == null) return;
@@ -688,11 +688,11 @@ pub const Screen = struct {
         self.find_len = 0;
     }
 
-    /// 프롬프트에 바이트 여럿을 **통째로** 넣는다(SH design 결정 7).
+    /// 프롬프트에 바이트 여럿을 통째로 넣는다(SH design 결정 7).
     ///
-    /// **다 들어가거나 하나도 안 들어간다.** 바이트 단위로 채우다가 자리가
+    /// 다 들어가거나 하나도 안 들어간다. 바이트 단위로 채우다가 자리가
     /// 떨어지면 UTF-8 한 글자가 반만 남는데, 깨진 바이트열은 화면의 어떤
-    /// 셀과도 안 맞으므로 **검색이 조용히 안 맞는다.** 버퍼가 128바이트라
+    /// 셀과도 안 맞으므로 검색이 조용히 안 맞는다. 버퍼가 128바이트라
     /// 손으로 쳐서는 사실상 안 닿는 경계지만(한글 42자), 붙여넣기가 들어오면
     /// yank한 줄 하나가 한 번에 닿는다.
     ///
@@ -706,7 +706,7 @@ pub const Screen = struct {
         self.find_len += bytes.len;
     }
 
-    /// 프롬프트에 글자 하나. **ASCII 한 바이트가 곧 한 글자다.**
+    /// 프롬프트에 글자 하나. ASCII 한 바이트가 곧 한 글자다.
     ///
     /// `findBytes`의 껍데기다 — 넘칠 때의 규칙을 두 자리에 적지 않기 위함이고,
     /// 그래서 `main.zig`의 `find_char` 갈래는 한 글자도 안 바뀐다.
@@ -715,17 +715,17 @@ pub const Screen = struct {
         self.findBytes(&one);
     }
 
-    /// Backspace. **UTF-8 한 글자를 지운다**(SH design 결정 8).
+    /// Backspace. UTF-8 한 글자를 지운다(SH design 결정 8).
     ///
     /// 바이트 하나만 줄이면 `가`(EA B0 80)가 두 바이트짜리 쓰레기가 되고, 그
-    /// needle은 화면의 어떤 셀과도 안 맞는다 — **증상이 "지웠는데 못
-    /// 찾는다"라 조용하다.**
+    /// needle은 화면의 어떤 셀과도 안 맞는다 — 증상이 "지웠는데 못
+    /// 찾는다"라 조용하다.
     ///
     /// 이어지는 바이트(`0b10xxxxxx`)를 앞으로 건너뛰어 시작 바이트를 찾는다.
-    /// **0까지 가면 그대로 비운다** — 시작 바이트가 없는 버퍼는 `findBytes`가
+    /// 0까지 가면 그대로 비운다 — 시작 바이트가 없는 버퍼는 `findBytes`가
     /// 만들지 않지만, 여기서 멈추지 못해 아래로 도는 것이 더 나쁘다.
     ///
-    /// **빈 프롬프트에서는 아무 일도 안 한다**(CN-M1 plan 결정 2). vim은
+    /// 빈 프롬프트에서는 아무 일도 안 한다(CN-M1 plan 결정 2). vim은
     /// 여기서 프롬프트를 닫지만 우리는 안 닫는다. 닫으면 Esc와 뜻이 겹치고,
     /// 지우려고 연타하던 사람이 마지막 한 번에 프롬프트를 잃는다.
     pub fn findErase(self: *Screen) void {
@@ -736,25 +736,25 @@ pub const Screen = struct {
         self.find_len = i;
     }
 
-    /// `Cmd+V`. 클립보드의 **첫 줄**을 needle에 붙이고, 넣은 바이트 수를
+    /// `Cmd+V`. 클립보드의 첫 줄을 needle에 붙이고, 넣은 바이트 수를
     /// 돌려준다(FP design 결정 4·5).
     ///
-    /// **개행에서 자르는 것이 이 함수의 본체다.** 화면 셀에는 개행이 없으므로
-    /// 개행이 든 needle은 **영영 안 맞는다** — 증상이 "붙여넣었는데 못 찾음이
+    /// 개행에서 자르는 것이 이 함수의 본체다. 화면 셀에는 개행이 없으므로
+    /// 개행이 든 needle은 영영 안 맞는다 — 증상이 "붙여넣었는데 못 찾음이
     /// 뜬다"라 조용하다. 셸 쪽 `dumpPaste`는 개행이 곧 실행이 되는 것을
     /// 감수했지만(CM design 결정 9), 검색은 감수할 수 있는 종류가 아니다.
     /// 셸에서는 잘못 붙은 것이 화면에 보이고 검색에서는 안 보인다.
     ///
-    /// **줄 끝 공백은 여기서 안 다룬다.** `copyYank`가 이미 트림한다 —
+    /// 줄 끝 공백은 여기서 안 다룬다. `copyYank`가 이미 트림한다 —
     /// 두 줄을 잡으면 `가나\n다라` 열세 바이트가 나오고 `가나` 뒤에 바로
     /// `0A`가 온다(FP-M0 실측 1).
     ///
-    /// **넣는 일은 `findBytes`에 그대로 넘긴다.** 통째로 받거나 거절하는
+    /// 넣는 일은 `findBytes`에 그대로 넘긴다. 통째로 받거나 거절하는
     /// 규칙도, 프롬프트가 닫혀 있으면 아무 일도 안 하는 규칙도 그쪽 한
     /// 자리에만 적힌다(SH design 결정 7).
     ///
-    /// 돌려주는 수를 `main.zig`가 `put=`으로 찍는다. **`clip=`과 함께 한 줄에
-    /// 찍는 것이 판정을 만든다**(FP design 결정 6) — 0 하나만으로는 "클립보드가
+    /// 돌려주는 수를 `main.zig`가 `put=`으로 찍는다. `clip=`과 함께 한 줄에
+    /// 찍는 것이 판정을 만든다(FP design 결정 6) — 0 하나만으로는 "클립보드가
     /// 비었다"와 "너무 길어 거절됐다"가 안 갈린다.
     pub fn findPaste(self: *Screen) usize {
         const text = self.clip orelse return 0;
@@ -764,7 +764,7 @@ pub const Screen = struct {
         return self.find_len - before;
     }
 
-    /// 프롬프트만 닫는다. **copy mode는 유지한다**(design 결정 9).
+    /// 프롬프트만 닫는다. copy mode는 유지한다(design 결정 9).
     pub fn findCancel(self: *Screen) void {
         self.find_open = false;
         self.find_len = 0;
@@ -772,33 +772,33 @@ pub const Screen = struct {
 
     /// 지금 프롬프트에 무엇이 쳐져 있는가. 닫혀 있으면 null이다.
     ///
-    /// **`main.zig`가 `find_buf`를 직접 읽지 않게 하려고 함수로 낸다** —
+    /// `main.zig`가 `find_buf`를 직접 읽지 않게 하려고 함수로 낸다 —
     /// `clipboard`·`copyCursor`·`scrollbar`와 같은 규율이다(design 결정 8).
     pub fn findNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_open) return null;
         return self.find_buf[0..self.find_len];
     }
 
-    /// 결과를 보여 주는 중인 검색어. **상태가 꺼져 있으면 null이다.**
+    /// 결과를 보여 주는 중인 검색어. 상태가 꺼져 있으면 null이다.
     ///
     /// `findNeedle`과 짝이다 — 그쪽은 "지금 치고 있는 것", 이쪽은 "방금 검색한
     /// 것"이고, 오버레이 한 줄을 가르는 것이 이 둘이다.
     ///
-    /// **`main.zig`가 `find_last`를 직접 읽지 않게 하려고 함수로 낸다** —
+    /// `main.zig`가 `find_last`를 직접 읽지 않게 하려고 함수로 낸다 —
     /// `findNeedle`·`clipboard`·`copyCursor`와 같은 규율이다.
     pub fn findStatusNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_status) return null;
         return self.find_last[0..self.find_last_len];
     }
 
-    /// 못 찾은 검색어. **상태가 켜져 있고 매치가 하나도 없을 때만 준다.**
+    /// 못 찾은 검색어. 상태가 켜져 있고 매치가 하나도 없을 때만 준다.
     ///
-    /// **CS-M1이 만든 계약을 새 플래그 위에서 그대로 낸다**(SP design 결정 5).
+    /// CS-M1이 만든 계약을 새 플래그 위에서 그대로 낸다(SP design 결정 5).
     /// 그때는 `find_missed`가 "실패했다"를 직접 뜻했는데, 지금은 "결과를 보여
-    /// 주는 중"과 "매치가 0"이라는 **두 사실을 여기서 곱한다.** 그래서
+    /// 주는 중"과 "매치가 0"이라는 두 사실을 여기서 곱한다. 그래서
     /// `vt_test`의 검사 34·35·36이 한 글자도 안 바뀐 채 통과한다.
     ///
-    /// **`promptText`의 두 갈래를 가르는 것이 `findMatchCount()` 하나**라는
+    /// `promptText`의 두 갈래를 가르는 것이 `findMatchCount()` 하나라는
     /// 뜻이기도 하다 — 검사 44가 그것을 못 박는다.
     pub fn findMissed(self: *const Screen) ?[]const u8 {
         const n = self.findStatusNeedle() orelse return null;
@@ -806,10 +806,10 @@ pub const Screen = struct {
         return n;
     }
 
-    /// 결과 표시를 끈다. **`main.zig`가 copy 명령을 처리하기 직전 한 자리에서
-    /// 부른다**(SP design 결정 7).
+    /// 결과 표시를 끈다. `main.zig`가 copy 명령을 처리하기 직전 한 자리에서
+    /// 부른다(SP design 결정 7).
     ///
-    /// 끄는 것이 명령 처리보다 **앞**이라, 새 검색의 결과는 `findSubmit`·
+    /// 끄는 것이 명령 처리보다 앞이라, 새 검색의 결과는 `findSubmit`·
     /// `findNext`·`findPrev`가 그 뒤에 다시 켜서 살아남는다. 순서 하나로
     /// "다음 키에 사라진다"와 "새로 검색하면 다시 뜬다"가 함께 나온다.
     pub fn findClearStatus(self: *Screen) void {
@@ -818,18 +818,18 @@ pub const Screen = struct {
 
     /// 검색 결과. `main.zig`가 로그에 쓴다.
     ///
-    /// `matches`와 `moved`를 **따로** 주는 것에 뜻이 있다. 매치가 있는데 못
+    /// `matches`와 `moved`를 따로 주는 것에 뜻이 있다. 매치가 있는데 못
     /// 옮긴 경우(전부 커서 아래에 있었다)와 매치가 아예 없는 경우는 사람에게
     /// 다른 뜻이고, 하나로 묶으면 게이트가 그 둘을 못 가른다.
     pub const FindResult = struct { matches: usize, moved: bool };
 
-    /// Enter. **검색을 돌리고 첫 매치로 커서를 옮긴다.**
+    /// Enter. 검색을 돌리고 첫 매치로 커서를 옮긴다.
     ///
     /// `searchAll()`은 블로킹이다(design 결정 5). Enter 한 번에 한 번뿐이므로
-    /// 그것으로 충분하고, **걸린 시간은 `main.zig`가 재서 `find>` 줄에 찍는다**
+    /// 그것으로 충분하고, 걸린 시간은 `main.zig`가 재서 `find>` 줄에 찍는다
     /// (CN-M1 plan 결정 5).
     ///
-    /// **빈 검색어로 Enter를 누르면 지난 검색어를 다시 쓴다**(CS-M1, design
+    /// 빈 검색어로 Enter를 누르면 지난 검색어를 다시 쓴다(CS-M1, design
     /// 결정 8). vim과 같은 동작이다. 되부를 것이 아예 없으면 예전처럼 프롬프트만
     /// 닫고, 그때도 지난 검색은 살아 있으므로 `n`이 계속 동작한다.
     pub fn findSubmit(self: *Screen) !FindResult {
@@ -838,7 +838,7 @@ pub const Screen = struct {
 
         self.find_open = false;
 
-        // **빈 Enter는 지난 검색어를 다시 쓴다**(design 결정 8). CN-M1이
+        // 빈 Enter는 지난 검색어를 다시 쓴다(design 결정 8). CN-M1이
         // 프롬프트만 닫던 자리이고, 그때 "검색 기록이 없어서"라고 적어 두었다.
         //
         // 되부를 것이 아예 없으면 그대로 프롬프트만 닫는다 — 부팅 직후 `/`를
@@ -850,27 +850,27 @@ pub const Screen = struct {
             @memcpy(self.find_buf[0..len], self.find_last[0..len]);
         }
 
-        // **성공·실패와 무관하게 남긴다**(design 결정 8). 못 찾은 검색어를 고쳐
+        // 성공·실패와 무관하게 남긴다(design 결정 8). 못 찾은 검색어를 고쳐
         // 다시 치는 것이 흔한 일이고, 그러려면 실패한 것도 기억해야 한다.
         //
         // 위에서 되부른 경우에는 같은 값을 도로 쓰는 셈인데, 그래도 분기를
-        // 안 만든다 — `find_buf`와 `find_last`는 **서로 다른 배열**이라 겹칠
+        // 안 만든다 — `find_buf`와 `find_last`는 서로 다른 배열이라 겹칠
         // 일이 없고, 규칙이 하나면 빠뜨릴 자리도 없다.
         @memcpy(self.find_last[0..len], self.find_buf[0..len]);
         self.find_last_len = len;
 
-        // **옛 검색을 먼저 해제한다.** 안 하면 `/`를 두 번 누를 때마다 매치
+        // 옛 검색을 먼저 해제한다. 안 하면 `/`를 두 번 누를 때마다 매치
         // 목록과 tracked pin이 그대로 샌다.
         if (self.find) |*old| old.deinit();
         self.find = null;
         if (self.find_matches) |m| self.alloc.free(m);
         self.find_matches = null;
 
-        // **지역 변수에 만들고 나서 옮겨 담는다.** `self.find`가 optional이라
+        // 지역 변수에 만들고 나서 옮겨 담는다. `self.find`가 optional이라
         // `try .init(...)`이 그 껍질을 통과할지가 Zig 버전에 딸린 문제이고,
         // 여기서 그것에 기대고 싶지 않다.
         //
-        // **값으로 옮기는 것이 안전하다는 근거는 라이브러리 자신에 있다** —
+        // 값으로 옮기는 것이 안전하다는 근거는 라이브러리 자신에 있다 —
         // `resetIfDimensionsChanged`가 `self.deinit(); self.* = new;`로 같은
         // 일을 한다(`search/screen.zig:223`). tracked pin은 PageList의 풀을
         // 가리키지 ScreenSearch 자신을 가리키지 않는다.
@@ -885,21 +885,21 @@ pub const Screen = struct {
 
         self.find = fresh;
 
-        // **첫 이동만 "커서보다 위"를 요구한다**(CN-M1 plan 결정 3).
+        // 첫 이동만 "커서보다 위"를 요구한다(CN-M1 plan 결정 3).
         const moved = try self.findStep(.next, true);
-        // **이동 뒤에 스냅숏을 뜬다.** 왜 뒤여야 하는지는 `refreshMatches`에
+        // 이동 뒤에 스냅숏을 뜬다. 왜 뒤여야 하는지는 `refreshMatches`에
         // 적혀 있다 — `select()`가 앞의 목록을 해제한다.
         try self.refreshMatches();
 
         const count = self.find.?.matchesLen();
-        // **결과 표시를 켠다**(SP design 결정 5). CS-M1은 여기서
-        // `find_missed = count == 0`으로 **실패일 때만** 켰는데, SP-M1이 성공한
+        // 결과 표시를 켠다(SP design 결정 5). CS-M1은 여기서
+        // `find_missed = count == 0`으로 실패일 때만 켰는데, SP-M1이 성공한
         // 검색에도 `[3/12]`를 띄우면서 그 조건이 사라졌다 — 성공이든 실패든
-        // "방금 검색했다"는 같고, **무엇을 보여 줄지는 `promptText`가
-        // `findMatchCount()`로 가른다.**
+        // "방금 검색했다"는 같고, 무엇을 보여 줄지는 `promptText`가
+        // `findMatchCount()`로 가른다.
         //
         // 조건이 없어진 것이 CS-M1보다 오히려 안전하다. 그때 조건을 붙여야
-        // 했던 이유는 **성공한 검색이 앞의 실패를 안 지우는 경로**를 막기
+        // 했던 이유는 성공한 검색이 앞의 실패를 안 지우는 경로를 막기
         // 위해서였는데(poll 루프를 안 거치는 `vt_test`), 지금은 성공도 켜므로
         // 그 경로가 아예 없다.
         self.find_status = true;
@@ -908,7 +908,7 @@ pub const Screen = struct {
 
     /// 보관 중인 매치가 몇 개인가. 검색이 없으면 0이다.
     ///
-    /// **`matchesLen()`과 언제나 같아야 한다.** 다르면 슬라이스가 낡은 것이고,
+    /// `matchesLen()`과 언제나 같아야 한다. 다르면 슬라이스가 낡은 것이고,
     /// 그것은 곧 `find`와 `find_matches`가 따로 놀았다는 뜻이다. 검사 26이 이
     /// 등식을 본다.
     pub fn findMatchCount(self: *const Screen) usize {
@@ -918,23 +918,23 @@ pub const Screen = struct {
 
     /// 지금 선택된 매치가 `find_matches`의 몇 번째인가. 없으면 null이다.
     ///
-    /// **라이브러리의 내부 필드를 읽는 유일한 자리다**(SP design 결정 1).
+    /// 라이브러리의 내부 필드를 읽는 유일한 자리다(SP design 결정 1).
     /// `ScreenSearch`에 `selectedIndex()` 같은 공개 함수가 없어서 `selected.idx`를
     /// 직접 본다. 한 함수로 감싸 두는 이유는 나중에 라이브러리에 함수가 생기거나
     /// 다른 방법으로 바꿀 때 고칠 자리를 하나로 두기 위해서다 — `findMissed`가
     /// `find_last`를 감싼 것과 같은 경계다.
     ///
-    /// **`idx`가 `find_matches`의 인덱스와 같은 좌표계라는 것이 이 함수의
-    /// 전제다.** `selectedMatch()`와 `matches()`가 같은 색인 규칙을 쓴다
+    /// `idx`가 `find_matches`의 인덱스와 같은 좌표계라는 것이 이 함수의
+    /// 전제다. `selectedMatch()`와 `matches()`가 같은 색인 규칙을 쓴다
     /// (`search/screen.zig:771`과 `:234`) — 활성 영역은 뒤집어 담고 history는
-    /// 그대로 이어 붙이는 그 규칙이다. **그 전제가 조용히 깨지면 증상이 "번호가
-    /// 거꾸로 나온다"라 눈에 안 띄므로 `vt_test`의 검사 37·38이 뜻을 고정한다.**
+    /// 그대로 이어 붙이는 그 규칙이다. 그 전제가 조용히 깨지면 증상이 "번호가
+    /// 거꾸로 나온다"라 눈에 안 띄므로 `vt_test`의 검사 37·38이 뜻을 고정한다.
     ///
     /// 범위를 함께 보는 이유는 라이브러리도 그렇게 하기 때문이다
     /// (`selectedMatch()`가 `:783`에서 null을 준다). `select()`가
     /// `reloadActive()`·`pruneHistory()`를 먼저 부르므로 목록이 줄어들 수 있고,
-    /// 그때 낡은 `idx`를 그대로 쓰면 범위를 벗어난다. **넷을 전부 null 하나로
-    /// 접는 것이 요점이다**(plan 결정 1) — 부르는 쪽은 "현재 매치가 없다"만
+    /// 그때 낡은 `idx`를 그대로 쓰면 범위를 벗어난다. 넷을 전부 null 하나로
+    /// 접는 것이 요점이다(plan 결정 1) — 부르는 쪽은 "현재 매치가 없다"만
     /// 알면 된다.
     pub fn findCurrentIndex(self: *const Screen) ?usize {
         if (self.find == null) return null;
@@ -944,21 +944,21 @@ pub const Screen = struct {
         return sel.idx;
     }
 
-    /// 매치 목록 스냅숏을 다시 뜬다. **`select()`를 부른 직후에 부른다.**
+    /// 매치 목록 스냅숏을 다시 뜬다. `select()`를 부른 직후에 부른다.
     ///
-    /// **`select()`가 앞의 목록을 무효로 만든다.** 그것이 먼저 `reloadActive()`를
+    /// `select()`가 앞의 목록을 무효로 만든다. 그것이 먼저 `reloadActive()`를
     /// 부르는데, 그 함수가 `active_results`의 원소를 전부 `deinit`한 뒤 활성
     /// 영역을 다시 찾는다(`search/screen.zig:682-683`). `pruneHistory()`도
     /// history 쪽에 같은 일을 한다(`:402`). 그래서 `matches()`가 준 얕은 복사는
-    /// **다음 `select()`까지만** 유효하고, 그 뒤에 읽으면 해제된 메모리다 —
+    /// 다음 `select()`까지만 유효하고, 그 뒤에 읽으면 해제된 메모리다 —
     /// 디버그 allocator에서 0xAA로 나타난다.
     ///
     /// 깊은 복사(`Flattened.clone`)로 가지 않는 이유는 그러면 하이라이트가 낡은
-    /// 목록을, `n`이 새 목록을 보게 되기 때문이다. **어긋남을 만들지 않는 것이
-    /// design 결정 2의 요점이다.**
+    /// 목록을, `n`이 새 목록을 보게 되기 때문이다. 어긋남을 만들지 않는 것이
+    /// design 결정 2의 요점이다.
     ///
     /// `select`를 부르는 자리는 `findStep` 하나이고, 그것을 부르는 것은
-    /// `findSubmit`·`findNext`·`findPrev` **셋뿐이다.** 셋 다 끝에서 이것을
+    /// `findSubmit`·`findNext`·`findPrev` 셋뿐이다. 셋 다 끝에서 이것을
     /// 부른다.
     fn refreshMatches(self: *Screen) !void {
         if (self.find_matches) |m| self.alloc.free(m);
@@ -966,20 +966,20 @@ pub const Screen = struct {
         if (self.find) |*f| self.find_matches = try f.matches(self.alloc);
     }
 
-    /// 화면에 보이는 매치를 행별 범위로 푼다. **`cells()`가 매 프레임 부른다.**
+    /// 화면에 보이는 매치를 행별 범위로 푼다. `cells()`가 매 프레임 부른다.
     ///
-    /// **매치마다 `pointFromPin`을 부르지 않는다**(design 결정 3). 그 함수는
-    /// 뷰포트 top-left에서 `node.next`를 따라 앞으로 훑고, 뷰포트보다 **위**에
+    /// 매치마다 `pointFromPin`을 부르지 않는다(design 결정 3). 그 함수는
+    /// 뷰포트 top-left에서 `node.next`를 따라 앞으로 훑고, 뷰포트보다 위에
     /// 있는 pin은 목록 끝까지 훑은 뒤에야 null이 된다 — copy mode에서 매치
     /// 대부분이 거기 있다. 라이브러리도 `Pin.before`에 "very expensive... should
     /// not be called in performance critical paths"라고 적어 두었고 `isBetween`도
     /// 같은 성질이라, 싼 pin 순서 비교는 애초에 없다.
     ///
-    /// 그래서 방향을 뒤집는다. 뷰포트가 덮는 page node를 **한 번만** 훑고, 매치
+    /// 그래서 방향을 뒤집는다. 뷰포트가 덮는 page node를 한 번만 훑고, 매치
     /// 쪽은 `chunks`가 이미 든 `{node, serial, start, end}`와 비교만 한다.
     /// 뷰포트가 걸치는 node는 보통 한두 개다.
     ///
-    /// **매치 쪽 node 포인터를 역참조하는 자리가 이 함수에 없다**(design 위험 2).
+    /// 매치 쪽 node 포인터를 역참조하는 자리가 이 함수에 없다(design 위험 2).
     /// 비교에만 쓴다 — 가지치기된 페이지를 읽지 않기 위해서이고, `Flattened`가
     /// 그런 모양인 이유가 정확히 그것이다(`highlight.zig:107`). `serial`까지
     /// 비교하는 것은 주소가 재사용된 경우를 거르기 위해서다.
@@ -991,12 +991,12 @@ pub const Screen = struct {
         const pages = &self.term.screens.active.pages;
         const rows = pages.rows;
         const cols = pages.cols;
-        // **격자를 `state`가 아니라 `pages`에서 읽는다**(CM-M1이 `copyMove`에서
+        // 격자를 `state`가 아니라 `pages`에서 읽는다(CM-M1이 `copyMove`에서
         // 고친 것과 같다). `state`는 마지막 `cells()`의 스냅숏이라 첫 프레임에
         // 0이고, 그러면 이 함수가 조용히 아무 일도 안 한다.
         if (rows == 0 or cols == 0) return;
 
-        // **루프 밖에서 한 번만 읽는다.** 매치마다 부르면 같은 값을 매치 수만큼
+        // 루프 밖에서 한 번만 읽는다. 매치마다 부르면 같은 값을 매치 수만큼
         // 다시 구하는 셈이고, 이 함수는 매 프레임 돈다.
         const cur_i = self.findCurrentIndex();
 
@@ -1020,7 +1020,7 @@ pub const Screen = struct {
                 const c_starts = chunks.items(.start);
                 const c_ends = chunks.items(.end);
                 for (0..chunks.len) |ci| {
-                    // **역참조가 아니라 비교다.** `c_nodes[ci]`가 가리키는
+                    // 역참조가 아니라 비교다. `c_nodes[ci]`가 가리키는
                     // 메모리를 읽지 않는다 — 그것이 가지치기된 페이지일 수 있다.
                     if (c_nodes[ci] != node) continue;
                     if (c_serials[ci] != node.serial) continue;
@@ -1039,11 +1039,11 @@ pub const Screen = struct {
                             .row = row0 + (ry - y),
                             .x0 = if (is_first) m.top_x else 0,
                             .x1 = if (is_last) m.bot_x else cols - 1,
-                            // **좌표를 두 번 풀지 않는 것이 요점이다**(SP design
+                            // 좌표를 두 번 풀지 않는 것이 요점이다(SP design
                             // 결정 2). 현재 매치만 따로 다시 푸는 길로 가면 같은
                             // 계산이 두 벌이 되고, 어긋났을 때 증상이 "색만
                             // 엉뚱한 자리에 있다"라 조사하기 나쁘다.
-                            // **capture를 안 만든다.** 이 자리의 바깥 루프가
+                            // capture를 안 만든다. 이 자리의 바깥 루프가
                             // 이미 `ci`를 쓰고 있고(`for (0..chunks.len) |ci|`)
                             // Zig는 shadowing을 컴파일 에러로 막는다. 이름을
                             // 새로 고르는 대신 optional을 그대로 비교하면
@@ -1058,7 +1058,7 @@ pub const Screen = struct {
             y = 0;
         }
 
-        // **`cells()`가 커서 하나로 따라갈 수 있게 정렬한다**(design 결정 4).
+        // `cells()`가 커서 하나로 따라갈 수 있게 정렬한다(design 결정 4).
         // 노드 사이는 이미 오름차순이지만 한 노드 안에서는 매치가 최신→오래된
         // 순, 곧 행 내림차순으로 들어온다.
         std.mem.sort(RowSpan, self.hl_spans.items, {}, RowSpan.lessThan);
@@ -1078,14 +1078,14 @@ pub const Screen = struct {
         };
     }
 
-    /// 마지막 `cells()`가 만든 하이라이트의 실측. **검색이 없으면 null이다** —
+    /// 마지막 `cells()`가 만든 하이라이트의 실측. 검색이 없으면 null이다 —
     /// `main.zig`가 이 null로 "찍을 것이 없다"를 판정한다(plan 결정 2).
     pub fn hlStats(self: *const Screen) ?HlStats {
         if (self.find == null) return null;
         return self.hl_stats;
     }
 
-    /// 하이라이트의 행별 범위. **검사가 좌표를 직접 보는 창구다.**
+    /// 하이라이트의 행별 범위. 검사가 좌표를 직접 보는 창구다.
     ///
     /// `main.zig`는 이것을 안 쓴다 — 색은 `cells()`가 이미 해소해서 넘긴다
     /// (TR design 결정 1).
@@ -1095,16 +1095,16 @@ pub const Screen = struct {
 
     /// `n`. 목록의 다음(과거 방향) 매치로.
     ///
-    /// **목록 끝에서 감긴다.** 라이브러리의 `Select.next` 주석은
+    /// 목록 끝에서 감긴다. 라이브러리의 `Select.next` 주석은
     /// "non-wrapping"이라고 하는데 `selectNext`의 코드는 감는다
-    /// (`search/screen.zig:851`). **주석이 아니라 코드가 맞다.** 감기는 것을
+    /// (`search/screen.zig:851`). 주석이 아니라 코드가 맞다. 감기는 것을
     /// 감추지 않는 이유는, 막으려면 "끝에 닿았다"는 상태가 하나 늘고 그것을
     /// 사람에게 알릴 자리가 또 필요하기 때문이다.
     pub fn findNext(self: *Screen) !bool {
         const moved = try self.findStep(.next, false);
         try self.refreshMatches();
-        // **검색이 살아 있을 때만 켠다**(SP design 결정 5). 모드에 들어와 `/`
-        // 없이 `n`을 누르면 보여 줄 것이 없다. **`moved`로 판단하면 안 된다** —
+        // 검색이 살아 있을 때만 켠다(SP design 결정 5). 모드에 들어와 `/`
+        // 없이 `n`을 누르면 보여 줄 것이 없다. `moved`로 판단하면 안 된다 —
         // 매치가 하나뿐이라 안 움직인 경우에도 false가 나오는데, 그때는 번호를
         // 보여 주는 것이 맞다.
         if (self.find != null) self.find_status = true;
@@ -1121,16 +1121,16 @@ pub const Screen = struct {
 
     /// `/`의 첫 이동과 `n`/`N`이 함께 쓰는 한 자리.
     ///
-    /// `above_only`가 참이면 **커서보다 위에 있는 매치를 만날 때까지 넘긴다.**
+    /// `above_only`가 참이면 커서보다 위에 있는 매치를 만날 때까지 넘긴다.
     /// design 결정 4가 "`/`는 위로 찾는다"로 정했는데 라이브러리의 `select`는
     /// 커서를 모르기 때문이다 — 커서를 `k`로 올려 둔 자리에서 `/`를 누르면 그
-    /// 필터가 없을 때 커서가 **아래로 뛴다.**
+    /// 필터가 없을 때 커서가 아래로 뛴다.
     ///
-    /// **넘기는 횟수를 `matchesLen()`으로 막는 것이 필수다.** 목록이 감기므로
+    /// 넘기는 횟수를 `matchesLen()`으로 막는 것이 필수다. 목록이 감기므로
     /// 상한이 없으면 "위에 아무것도 없는" 검색어에서 영원히 돈다.
     ///
     /// 마지막 네 줄이 `copyMove`·`copyMoveWord`와 글자 그대로 같다 —
-    /// **모든 이동 수단이 `copyApply`라는 문 하나를 통과한다**(design 결정 11).
+    /// 모든 이동 수단이 `copyApply`라는 문 하나를 통과한다(design 결정 11).
     fn findStep(
         self: *Screen,
         dir: ghostty_vt.search.Screen.Select,
@@ -1167,7 +1167,7 @@ pub const Screen = struct {
         return false;
     }
 
-    /// 가지치기로 모드가 끊겼다는 사실을 **한 번만** 돌려준다.
+    /// 가지치기로 모드가 끊겼다는 사실을 한 번만 돌려준다.
     /// `main.zig`가 로그 한 줄을 찍는 데 쓴다.
     pub fn copyTakePruned(self: *Screen) bool {
         defer self.copy_pruned = false;
@@ -1182,16 +1182,16 @@ pub const Screen = struct {
         return self.copy_cursor;
     }
 
-    /// 커서를 옮긴다. **화면 끝을 넘으면 뷰포트가 대신 움직인다.**
+    /// 커서를 옮긴다. 화면 끝을 넘으면 뷰포트가 대신 움직인다.
     ///
     /// 좌우는 화면 안에서 멈춘다(줄을 넘나들지 않는다). 위아래는 화면 끝에서
     /// 뷰포트를 한 줄 밀고 커서는 그 끝에 남는다 — 스크롤백을 거슬러 올라가며
     /// 훑는 동작이 이것으로 만들어진다.
     ///
-    /// **격자 크기를 `state`가 아니라 `pages`에서 읽는다**(CM-M1에서 고쳤다).
+    /// 격자 크기를 `state`가 아니라 `pages`에서 읽는다(CM-M1에서 고쳤다).
     /// `state`는 마지막 `cells()`가 찍은 스냅숏이라, 한 번도 그리지 않은
-    /// 화면에서는 `cols`·`rows`가 0이고 그러면 이 함수가 **조용히 아무 일도
-    /// 안 한다.** CM-M0의 주석은 "cells()보다 먼저 불려도 안전하다"고 적었는데,
+    /// 화면에서는 `cols`·`rows`가 0이고 그러면 이 함수가 조용히 아무 일도
+    /// 안 한다. CM-M0의 주석은 "cells()보다 먼저 불려도 안전하다"고 적었는데,
     /// 크래시가 안 난다는 뜻으로는 맞지만 동작한다는 뜻으로는 틀렸다 —
     /// 실전에서 안 드러난 이유는 main.zig가 키를 받기 전에 이미 한 프레임을
     /// 그렸기 때문이다. `pages`는 언제나 살아 있는 값이다.
@@ -1219,7 +1219,7 @@ pub const Screen = struct {
         self.copy_cursor = .{ .x = @intCast(x), .y = @intCast(y) };
 
         // 선택 중이면 커서를 따라 넓힌다. 앵커는 우리가 안 들고 있고
-        // **지금 선택의 start가 곧 앵커다**(design 결정 5). 줄 선택일 때 그
+        // 지금 선택의 start가 곧 앵커다(design 결정 5). 줄 선택일 때 그
         // start는 앵커 줄 위의 어느 pin이므로, selectLine이 같은 줄을 다시
         // 돌려준다.
         if (self.copy_kind == null) return;
@@ -1230,7 +1230,7 @@ pub const Screen = struct {
 
     /// 단어 경계로 치는 코드포인트.
     ///
-    /// **값은 ghostty 자신의 검사가 쓰는 기본값과 같다**(`Screen.zig:9800`).
+    /// 값은 ghostty 자신의 검사가 쓰는 기본값과 같다(`Screen.zig:9800`).
     /// 라이브러리는 이 목록을 설정에서 받도록 되어 있는데
     /// (`Surface.zig:1217`의 `selection_word_chars`) 우리에게는 설정이 없으므로
     /// 상수로 둔다. `/config/tars.conf`로 뺄 수 있는 자리이지만 바꾸고 싶어 한
@@ -1246,7 +1246,7 @@ pub const Screen = struct {
     /// 단어 이동의 방향. `w`가 next, `b`가 prev다.
     pub const WordDir = enum { next, prev };
 
-    /// 그 자리에 글자가 쓰였는가. **한 번도 안 쓰인 셀과 공백은 다르다** —
+    /// 그 자리에 글자가 쓰였는가. 한 번도 안 쓰인 셀과 공백은 다르다 —
     /// `"alpha"` 뒤의 공백은 쓰인 셀이고, 줄 끝의 남은 칸은 아니다.
     /// `selectWord`가 후자에서 null을 주므로(plan 확정 사실 3) 우리도 그
     /// 경계를 같은 기준으로 본다.
@@ -1254,7 +1254,7 @@ pub const Screen = struct {
         return pin.rowAndCell().cell.hasText();
     }
 
-    /// 그 자리가 단어 경계인가. **쓰이지 않은 셀도 경계로 친다.**
+    /// 그 자리가 단어 경계인가. 쓰이지 않은 셀도 경계로 친다.
     fn boundaryAt(pin: ghostty_vt.Pin) bool {
         const cell = pin.rowAndCell().cell;
         if (!cell.hasText()) return true;
@@ -1270,15 +1270,15 @@ pub const Screen = struct {
         return a.node == b.node and a.y == b.y and a.x == b.x;
     }
 
-    /// `w`/`b`. **커서를 단어 단위로 옮긴다.**
+    /// `w`/`b`. 커서를 단어 단위로 옮긴다.
     ///
-    /// **라이브러리가 세는 "단어"와 vim의 `w`는 다르다**(design 결정 3).
+    /// 라이브러리가 세는 "단어"와 vim의 `w`는 다르다(design 결정 3).
     /// `selectWord`는 공백 덩어리도 한 단어로 세므로(`"ABC  DEF"`가 셋),
-    /// 공백에 내려앉으면 한 번 더 건너뛰는 일을 우리가 한다. **경계 판정이라는
-    /// 어려운 부분은 끝까지 라이브러리에 남는다** — 우리가 정하는 것은 "어느
+    /// 공백에 내려앉으면 한 번 더 건너뛰는 일을 우리가 한다. 경계 판정이라는
+    /// 어려운 부분은 끝까지 라이브러리에 남는다 — 우리가 정하는 것은 "어느
     /// 방향으로 몇 번 부르는가"뿐이다.
     ///
-    /// 쓰이지 않은 자리에 닿으면 **움직이지 않는다**(CN-M0 plan 결정 1).
+    /// 쓰이지 않은 자리에 닿으면 움직이지 않는다(CN-M0 plan 결정 1).
     /// vim은 다음 줄의 첫 단어로 가지만, 줄 사이 이동은 `j`/`k`가 이미 한다.
     pub fn copyMoveWord(self: *Screen, dir: WordDir) !void {
         if (self.copy_cursor == null) return;
@@ -1292,7 +1292,7 @@ pub const Screen = struct {
 
         self.copyPlace(target);
 
-        // 선택 중이면 커서를 따라 넓힌다. **`copyMove`와 같은 문을 통과한다**
+        // 선택 중이면 커서를 따라 넓힌다. `copyMove`와 같은 문을 통과한다
         // (design 결정 11) — 이동 수단마다 선택 갱신을 따로 짜면 그중 하나만
         // 어긋나도 "어떤 키로 움직였느냐에 따라 복사되는 글자가 다르다"가 된다.
         if (self.copy_kind == null) return;
@@ -1303,9 +1303,9 @@ pub const Screen = struct {
 
     /// 다음 단어의 첫 글자. 갈 곳이 없으면 null.
     ///
-    /// **두 번까지만 건너뛴다.** 지금 단어에서 한 번, 그것이 공백 덩어리면 한
+    /// 두 번까지만 건너뛴다. 지금 단어에서 한 번, 그것이 공백 덩어리면 한
     /// 번 더다. 세 번째는 있을 수 없다 — 경계 문자들이 연달아 오면 라이브러리가
-    /// 그것을 **한 덩어리로** 묶기 때문이다(`expect_boundary` 로직).
+    /// 그것을 한 덩어리로 묶기 때문이다(`expect_boundary` 로직).
     fn wordNext(s: *ghostty_vt.Screen, from: ghostty_vt.Pin) ?ghostty_vt.Pin {
         var pin = from;
         var hop: u8 = 0;
@@ -1320,7 +1320,7 @@ pub const Screen = struct {
 
     /// 이전 단어의 첫 글자. 갈 곳이 없으면 null.
     ///
-    /// **커서가 단어 중간이면 그 단어의 시작으로 간다**(vim과 같다,
+    /// 커서가 단어 중간이면 그 단어의 시작으로 간다(vim과 같다,
     /// CN-M0 plan 결정 2). 그러지 않으면 `w`로 간 자리에서 `b`를 눌러도 원래
     /// 자리로 안 돌아온다.
     fn wordPrev(s: *ghostty_vt.Screen, from: ghostty_vt.Pin) ?ghostty_vt.Pin {
@@ -1340,18 +1340,18 @@ pub const Screen = struct {
         return pin;
     }
 
-    /// 목표 pin에 커서를 놓는다. **화면 밖이면 뷰포트를 옮긴다.**
+    /// 목표 pin에 커서를 놓는다. 화면 밖이면 뷰포트를 옮긴다.
     ///
-    /// `pointFromPin(.viewport, …)`이 뷰포트 **위쪽** 밖은 null로 알려주지만
-    /// **아래쪽 밖은 알려주지 않는다** — 노드를 계속 따라가며 y를 더해서
+    /// `pointFromPin(.viewport, …)`이 뷰포트 위쪽 밖은 null로 알려주지만
+    /// 아래쪽 밖은 알려주지 않는다 — 노드를 계속 따라가며 y를 더해서
     /// `rows`보다 큰 값을 그냥 돌려준다(`PageList.zig:5614`). 그래서 아래쪽은
-    /// 우리가 가른다. **이것을 빠뜨리면 커서가 화면 밖 좌표를 갖고, 증상은
-    /// 크래시가 아니라 "커서가 안 보인다"가 된다.**
+    /// 우리가 가른다. 이것을 빠뜨리면 커서가 화면 밖 좌표를 갖고, 증상은
+    /// 크래시가 아니라 "커서가 안 보인다"가 된다.
     ///
     /// 뷰포트를 미는 두 경로가 모두 `Screen.scroll`을 통과하는 것에 뜻이 있다.
     /// `pages.scroll`을 직접 부르면 `assertIntegrity`와 kitty dirty 표시를
-    /// 건너뛴다(`Screen.zig:1576`). **`Terminal.ScrollViewport`에는 `.pin`이
-    /// 없어서**(`Terminal.zig:2504`) 기존 `scrollByRows`로는 위쪽을 못 다룬다.
+    /// 건너뛴다(`Screen.zig:1576`). `Terminal.ScrollViewport`에는 `.pin`이
+    /// 없어서(`Terminal.zig:2504`) 기존 `scrollByRows`로는 위쪽을 못 다룬다.
     fn copyPlace(self: *Screen, pin: ghostty_vt.Pin) void {
         const s = self.term.screens.active;
         const rows: u32 = s.pages.rows;
@@ -1362,10 +1362,10 @@ pub const Screen = struct {
                 self.copy_cursor = .{ .x = @intCast(co.x), .y = @intCast(co.y) };
                 return;
             }
-            // 뷰포트 **아래**다. 최소한만 민다 — 목표가 맨 아랫줄이 된다.
+            // 뷰포트 아래다. 최소한만 민다 — 목표가 맨 아랫줄이 된다.
             s.scroll(.{ .delta_row = @intCast(co.y - rows + 1) });
         } else {
-            // 뷰포트 **위**다. 목표를 화면 맨 윗줄로 올린다.
+            // 뷰포트 위다. 목표를 화면 맨 윗줄로 올린다.
             s.scroll(.{ .pin = pin });
         }
 
@@ -1389,7 +1389,7 @@ pub const Screen = struct {
         });
     }
 
-    /// `v`/`V`. **같은 방식을 다시 누르면 푼다.**
+    /// `v`/`V`. 같은 방식을 다시 누르면 푼다.
     ///
     /// 다른 방식을 누르면 앵커를 지금 커서 자리로 새로 잡는다. vim은 앵커를
     /// 유지하지만, 그러려면 "문자 앵커를 줄 앵커로 승격하는" 자리가 하나 더
@@ -1411,7 +1411,7 @@ pub const Screen = struct {
 
     /// 앵커와 커서로 선택을 다시 만들어 화면에 넘긴다.
     ///
-    /// **역방향(앵커보다 커서가 앞)을 우리가 정렬하지 않는다**(design 위험 3의
+    /// 역방향(앵커보다 커서가 앞)을 우리가 정렬하지 않는다(design 위험 3의
     /// 답). `selectionString`은 `sel.topLeft()`/`bottomRight()`를 쓰고
     /// (`formatter.zig`), 렌더도 같은 둘을 쓴다(`render.zig`). 그래서
     /// `ordered()`를 부를 자리가 없다.
@@ -1425,8 +1425,8 @@ pub const Screen = struct {
 
         const sel: ghostty_vt.Selection = switch (kind) {
             .char => .init(anchor, cursor, false),
-            // 줄 선택은 양 끝을 줄 전체로 넓힌다. **줄 끝 공백 트림을 손으로
-            // 짜지 않는다** — selectLine이 이미 한다.
+            // 줄 선택은 양 끝을 줄 전체로 넓힌다. 줄 끝 공백 트림을 손으로
+            // 짜지 않는다 — selectLine이 이미 한다.
             .line => copyLineSel(s, anchor, cursor) orelse .init(anchor, cursor, false),
         };
         try s.select(sel);
@@ -1435,7 +1435,7 @@ pub const Screen = struct {
 
     /// 앵커 줄과 커서 줄을 합친 선택.
     ///
-    /// 어느 쪽이 위인지를 **라이브러리에게 묻는다**. 화면 좌표를 우리가 세면
+    /// 어느 쪽이 위인지를 라이브러리에게 묻는다. 화면 좌표를 우리가 세면
     /// 스크롤백 위에서 틀린다 — 앵커가 뷰포트 밖에 있을 수 있기 때문이다.
     fn copyLineSel(
         s: *ghostty_vt.Screen,
@@ -1452,7 +1452,7 @@ pub const Screen = struct {
         };
     }
 
-    /// `y`. 선택을 클립보드로 옮기고 **모드를 나간다.**
+    /// `y`. 선택을 클립보드로 옮기고 모드를 나간다.
     ///
     /// 돌려주는 슬라이스는 `self.clip`이 소유한다 — 다음 `y`까지만 유효하다.
     /// 선택이 없으면 null을 돌려주고 클립보드는 그대로 둔다(모드는 나간다).
@@ -1465,7 +1465,7 @@ pub const Screen = struct {
         const text = try s.selectionString(self.alloc, .{ .sel = sel });
         if (self.clip) |old| self.alloc.free(old);
         self.clip = text;
-        // copyExit이 선택을 지우므로 **문자열을 먼저 뽑아 둔 뒤에** 부른다.
+        // copyExit이 선택을 지우므로 문자열을 먼저 뽑아 둔 뒤에 부른다.
         self.copyExit();
         return text;
     }
@@ -1477,11 +1477,11 @@ pub const Screen = struct {
     ///
     /// 반환 타입이 `?[]const u8`인 것에 뜻이 있다. `clip`은 실제로
     /// `?[:0]const u8`인데, sentinel을 밖으로 내보내면 호출부가 그것을 직접
-    /// free해도 되는 값으로 오해할 여지가 생긴다. **소유권은 `Screen`에 있고
-    /// 다음 `y`가 옛것을 해제한다.**
+    /// free해도 되는 값으로 오해할 여지가 생긴다. 소유권은 `Screen`에 있고
+    /// 다음 `y`가 옛것을 해제한다.
     ///
     /// `return self.clip;` 한 줄로 줄이지 않는다. 그렇게 쓰면 `?[:0]const u8`을
-    /// `?[]const u8`로 바꾸는 일을 **optional 껍질을 쓴 채** 요구하게 된다.
+    /// `?[]const u8`로 바꾸는 일을 optional 껍질을 쓴 채 요구하게 된다.
     /// 먼저 풀고 나서 돌려주면 sentinel을 떼는 평범한 슬라이스 coercion이 되고,
     /// 그 형태는 바로 위 `copyYank`가 이미 쓰고 있는 것이다.
     pub fn clipboard(self: *const Screen) ?[]const u8 {
@@ -1492,8 +1492,8 @@ pub const Screen = struct {
     /// 뷰포트가 스크롤백의 어디에 있는지.
     ///
     /// `total`은 스크롤 가능한 전체 행 수, `offset`은 뷰포트 맨 윗줄이 그중
-    /// 몇 번째인가, `len`은 언제나 `rows`다. **"바닥에 있다"는
-    /// `offset == total - len`이다.**
+    /// 몇 번째인가, `len`은 언제나 `rows`다. "바닥에 있다"는
+    /// `offset == total - len`이다.
     ///
     /// 라이브러리 타입을 그대로 흘려보내지 않고 우리 struct로 옮겨 담는
     /// 이유는 TR-M0이 색에 대해 한 것과 같다(design 결정 1) — `main.zig`가
@@ -1516,7 +1516,7 @@ pub const Screen = struct {
 
     /// 활성 영역의 맨 위로 = 평소 상태로.
     ///
-    /// **PTY 출력이 도착할 때마다 불러야 한다**(design 결정 13). 라이브러리는
+    /// PTY 출력이 도착할 때마다 불러야 한다(design 결정 13). 라이브러리는
     /// 그 일을 해 주지 않는다 — 올라간 상태에서 출력을 먹여도 뷰포트가
     /// 그대로라는 것을 2026-08-23에 실측했고, `vt_test`가 그 사실을 못 박고
     /// 있다.
@@ -1524,7 +1524,7 @@ pub const Screen = struct {
         self.term.scrollViewport(.bottom);
     }
 
-    /// 상대 이동. **위가 음수다.**
+    /// 상대 이동. 위가 음수다.
     ///
     /// 몇 줄이 한 화면인지는 여기서 정하지 않는다. 격자 크기를 아는 것은
     /// `main.zig`이고, 그쪽이 `rows`를 넘겨준다.

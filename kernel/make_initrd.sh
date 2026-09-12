@@ -98,15 +98,15 @@ chmod 0755 "$WORKDIR/init"
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
 # `guest-optimize` 옵션이고 기본값이 ReleaseSafe다.
 #
-# **strip은 여전히 안 한다.** ReleaseSafe가 심볼을 지우지 않고도 78.6%를
+# strip은 여전히 안 한다. ReleaseSafe가 심볼을 지우지 않고도 78.6%를
 # 줄이므로 strip을 검토할 이유가 없어졌다 — `readelf -S`로 확인하면
 # `.debug_info`를 포함한 `.debug_*` 섹션 열 개가 그대로 있다.
 #
 # 옛 주석은 "심볼을 남기는 이유는 에러 트레이스"라고 적고 바로 다음 문장에서
 # "단, 심볼이 있다고 트레이스가 바로 읽히지는 않았다"고 스스로를 부정하고
 # 있었다 — 2026-08-12 TF-M4 실측에서 strip 버전은 `???` 주소 두 줄, 심볼
-# 버전은 트레이스 자체가 없었다. **그 이유는 지금도 규명되지 않았고, Debug
-# 에서도 안 읽혔으므로 ReleaseSafe에서 안 읽히는 것은 회귀가 아니다.**
+# 버전은 트레이스 자체가 없었다. 그 이유는 지금도 규명되지 않았고, Debug
+# 에서도 안 읽혔으므로 ReleaseSafe에서 안 읽히는 것은 회귀가 아니다.
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
@@ -119,13 +119,13 @@ copy_lib_deps "$WORKDIR/terminal"
 
 # ── 유저랜드 바이너리 ────────────────────────────────────────────────────
 #
-# UT-M1 결정 7. **목록은 여기 없다** — guest_tools.sh의 GUEST_TOOLS 배열
+# UT-M1 결정 7. 목록은 여기 없다 — guest_tools.sh의 GUEST_TOOLS 배열
 # 하나이고, tools/check.sh가 같은 파일을 source해서 initrd 목록을 검사한다.
 #
 # 예전에는 바이너리 하나마다 cp·chmod·copy_lib_deps 세 줄을 이 자리에 손으로
 # 썼다. 여덟 개일 때는 읽혔지만 50개는 못 읽고, 손으로 쓰는 한 `cp`는 했는데
 # `copy_lib_deps`를 빼먹는 실수가 언제든 난다 — 그 실패는 빌드 때가 아니라
-# **게스트가 그 명령을 처음 칠 때** 나타난다(design 위험 3). 루프 하나로
+# 게스트가 그 명령을 처음 칠 때 나타난다(design 위험 3). 루프 하나로
 # 두면 빼먹을 자리가 없어진다.
 install_tool() {
   local src="$SYSROOT/$1" dest="$WORKDIR/$2"
@@ -151,7 +151,7 @@ for entry in "${GUEST_TOOLS[@]}"; do
   install_tool "${entry%%:*}" "${entry#*:}"
 done
 
-# /bin/sh는 **언제나 bash다.** tars.conf의 shell 설정과 무관하다 —
+# /bin/sh는 언제나 bash다. tars.conf의 shell 설정과 무관하다 —
 # #!/bin/sh 스크립트의 동작이 사용자의 셸 취향에 따라 달라지면 안 된다
 # (design 결정 6). 셋 중 bash만이 POSIX sh 모드를 갖는다.
 #
@@ -160,13 +160,13 @@ done
 # 풀어 봐도 끊어지지 않는다.
 ln -sf ../usr/bin/bash "$WORKDIR/bin/sh"
 
-# UT-M3. **vi와 vim은 한 실체다**(design 결정 4). guest_tools.sh에 줄을 둘
+# UT-M3. vi와 vim은 한 실체다(design 결정 4). guest_tools.sh에 줄을 둘
 # 적으면 install_tool이 cp를 두 번 해서 1.76MB짜리 사본이 두 벌 생긴다 —
 # 같은 파일에 이름이 둘 있는 것을 파일 둘로 만드는 것은 파일 시스템에
 # 대한 거짓말이다. 위 /bin/sh가 이미 그 모양을 세워 뒀다.
 ln -sf vim "$WORKDIR/usr/bin/vi"
 
-# UT-M3. **Debian git의 기본 페이저는 `less`가 아니라 `pager`다** — alternatives
+# UT-M3. Debian git의 기본 페이저는 `less`가 아니라 `pager`다 — alternatives
 # 이름이고 postinst가 만드는 링크라 dpkg -x로 푼 sysroot에 없다. 2026-09-11에
 # 게스트에서 직접 봤다:
 #
@@ -174,10 +174,10 @@ ln -sf vim "$WORKDIR/usr/bin/vi"
 #   error: cannot run pager: No such file or directory
 #   fatal: unable to execute pager 'pager'
 #
-# **매달리는 것이 아니라 죽는다.** 그래서 게이트는 안 깨지고 사람만 깨진다 —
+# 매달리는 것이 아니라 죽는다. 그래서 게이트는 안 깨지고 사람만 깨진다 —
 # `git log`·`git diff`·`git branch -a`가 전부 이 경로다. mawk→awk ·
-# fdfind→fd · vim.tiny→vi와 **같은 종류**(결정 4)이고, 다른 것은 이 이름을
-# 우리가 고른 것이 아니라 **git 바이너리가 컴파일 타임에 박아 뒀다**는 점이다.
+# fdfind→fd · vim.tiny→vi와 같은 종류(결정 4)이고, 다른 것은 이 이름을
+# 우리가 고른 것이 아니라 git 바이너리가 컴파일 타임에 박아 뒀다는 점이다.
 ln -sf less "$WORKDIR/usr/bin/pager"
 
 # 같은 종류가 하나 더 있다. 게스트에게 직접 물어서 알았다:
@@ -186,16 +186,16 @@ ln -sf less "$WORKDIR/usr/bin/pager"
 #   GIT_EDITOR=editor        GIT_SEQUENCE_EDITOR=editor        GIT_PAGER=pager
 #
 # `git commit`을 -m 없이 치는 것 · `git rebase -i` · `git config --edit`가
-# 전부 이 이름을 부른다. **vim은 이제 이름이 셋이고 실체는 하나다**
+# 전부 이 이름을 부른다. vim은 이제 이름이 셋이고 실체는 하나다
 # (vim · vi · editor).
 ln -sf vim "$WORKDIR/usr/bin/editor"
 
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
-# /다. 그런데 /는 tmpfs라 **재부팅하면 사라진다** — 영속하는 것은 설정
+# /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다
 # (init/src/main.zig가 MS_RDONLY 없이 마운트한다).
 #
-# **그래서 링크 하나로 잇는다.** GIT_CONFIG_GLOBAL 환경변수를 쓰는 쪽은
+# 그래서 링크 하나로 잇는다. GIT_CONFIG_GLOBAL 환경변수를 쓰는 쪽은
 # "그 변수를 어디서 넣을까"(PID 1인지 terminal인지)를 또 정해야 하고,
 # 그것은 결정 1이 PATH에 대해 이미 치른 비용을 한 번 더 치르는 일이다.
 # 새 코드 경로가 없다.
@@ -203,42 +203,42 @@ ln -sf vim "$WORKDIR/usr/bin/editor"
 # 상대 경로인 이유는 /bin/sh와 같다 — 이 트리를 다른 자리에 풀어도 안
 # 끊어진다.
 #
-# **설정 디스크를 못 찾으면?** /config는 initrd 안의 빈 디렉터리로 남고
+# 설정 디스크를 못 찾으면? /config는 initrd 안의 빈 디렉터리로 남고
 # 링크는 거기를 가리킨다. git이 쓰면 tmpfs에 쓰이고 재부팅하면 사라진다 —
-# **부팅을 막지 않는다**는 것이 RM-M2가 라벨을 못 찾았을 때와 같은 모양이다.
+# 부팅을 막지 않는다는 것이 RM-M2가 라벨을 못 찾았을 때와 같은 모양이다.
 ln -sf config/gitconfig "$WORKDIR/.gitconfig"
 
-# SC-M0 결정 1. **위 .gitconfig과 글자 그대로 같은 문제에 같은 답이다** —
+# SC-M0 결정 1. 위 .gitconfig과 글자 그대로 같은 문제에 같은 답이다 —
 # 셸의 rc 파일도 $HOME에서 읽히고 게스트의 HOME은 / 이며 /는 tmpfs다.
 # 영속하는 것은 /config 하나뿐이다.
 #
-# **/config 안은 평평하다.** fish만 홈에서 한 단 더 깊은 자리를 쓰는데
+# /config 안은 평평하다. fish만 홈에서 한 단 더 깊은 자리를 쓰는데
 # ($XDG_CONFIG_HOME/fish/config.fish, 즉 /.config/fish/config.fish),
 # 대상 이름을 fish.config로 두어 gitconfig·bashrc·zshrc와 같은 층에
 # 세운다 — /config/fish/ 디렉터리를 만들면 그 디렉터리는 fish만 쓴다.
 #
-# **파일은 여기서 안 만든다.** initrd에 넣으면 tmpfs에 생겨서 부팅마다
+# 파일은 여기서 안 만든다. initrd에 넣으면 tmpfs에 생겨서 부팅마다
 # 초기화되고, 그러면 링크가 가리키는 자리와 파일이 있는 자리가 갈린다.
 # 씨앗은 init이 /config를 마운트한 뒤에 깐다(SC-M1).
 #
-# **설정 디스크를 못 찾으면?** .gitconfig과 같다 — 링크가 initrd 안의 빈
-# /config를 가리키고 셸은 rc가 없는 채로 뜬다. **부팅을 안 막는다.**
+# 설정 디스크를 못 찾으면? .gitconfig과 같다 — 링크가 initrd 안의 빈
+# /config를 가리키고 셸은 rc가 없는 채로 뜬다. 부팅을 안 막는다.
 mkdir -p "$WORKDIR/.config/fish"
 ln -sf ../../config/fish.config "$WORKDIR/.config/fish/config.fish"
 ln -sf config/bashrc "$WORKDIR/.bashrc"
 ln -sf config/zshrc "$WORKDIR/.zshrc"
 
 # git init이 새 저장소에 복사하는 템플릿(hooks 샘플 13 · info/exclude ·
-# description). **26,140바이트이고, 없으면 git init이 매번 경고를 찍는다** —
+# description). 26,140바이트이고, 없으면 git init이 매번 경고를 찍는다 —
 # `warning: templates not found in /usr/share/git-core/templates`. 저장소는
 # 그래도 만들어지지만, 개발용이라고 부르는 기계가 git init마다 경고를 내는
 # 것은 고장으로 보인다. btop 테마를 뺀 것과 판단이 다른 이유가 그것이다:
-# 저쪽은 안 쓰는 것이고 이쪽은 git init이 **매번** 쓴다.
+# 저쪽은 안 쓰는 것이고 이쪽은 git init이 매번 쓴다.
 mkdir -p "$WORKDIR/usr/share/git-core"
 cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
 
 # passwd가 없으면 whoami가 이름 대신 "cannot find name for user ID 0"을
-# 내고, **git이 커밋 작성자를 유추하려다 실패한다.** 한 줄이면 된다.
+# 내고, git이 커밋 작성자를 유추하려다 실패한다. 한 줄이면 된다.
 #
 # 셸을 /bin/sh로 적는 것에 뜻이 있다 — 위의 링크와 같은 자리를 가리켜야
 # 하고, tars.conf가 셸을 바꿔도 이 줄은 안 바뀐다.
@@ -255,14 +255,14 @@ cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/config.fish" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/__fish_build_paths.fish" "$WORKDIR/usr/share/fish/"
 
-# HI-M1: UTF-8 로케일. **terminal이 LANG=C.UTF-8을 넘기므로 그 데이터가
-# 게스트에 있어야 그 말이 참이 된다** — terminfo와 정확히 같은 종류의 항목이다.
+# HI-M1: UTF-8 로케일. terminal이 LANG=C.UTF-8을 넘기므로 그 데이터가
+# 게스트에 있어야 그 말이 참이 된다 — terminfo와 정확히 같은 종류의 항목이다.
 #
 # 없으면 셸의 `setlocale`이 실패하고 `mbrtowc`가 바이트를 하나씩 돌려준다.
-# 그러면 fish가 우리가 보낸 한글 세 바이트를 **한 글자가 아니라 세 글자로**
+# 그러면 fish가 우리가 보낸 한글 세 바이트를 한 글자가 아니라 세 글자로
 # 들고, 바이트마다 폭을 세어(0x80~0x9F는 0칸, 0xA0 이상은 1칸) 커서를 두 칸짜리
-# 글자의 가운데에 세운다. **증상은 "한글이 안 쳐진다"가 아니라 "앞 글자가
-# 지워진다"이고**, 그래서 원인에서 멀다.
+# 글자의 가운데에 세운다. 증상은 "한글이 안 쳐진다"가 아니라 "앞 글자가
+# 지워진다"이고, 그래서 원인에서 멀다.
 #
 # 404KB이고 그중 368KB가 LC_CTYPE이다. 카테고리 하나만 넣지 않는 이유는
 # `setlocale(LC_ALL, ...)`이 카테고리마다 파일을 찾기 때문이다.
@@ -271,13 +271,13 @@ cp -r "$SYSROOT/usr/lib/locale/C.utf8" "$WORKDIR/usr/lib/locale/"
 
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —
-# **조용한 실패**라서 input/check.sh가 initrd 목록을 직접 확인한다.
+# 조용한 실패라서 input/check.sh가 initrd 목록을 직접 확인한다.
 #
-# **TR-M2에서 xterm-256color가 늘었다.** TR-M0이 TERM을 xterm에서
+# TR-M2에서 xterm-256color가 늘었다. TR-M0이 TERM을 xterm에서
 # xterm-256color로 바꿨는데(TR design 결정 8) 이 줄은 따라오지 않아서, 게스트가
 # 광고하는 이름의 terminfo가 실제로는 없는 상태로 두 milestone을 건너왔다.
 # input/check.sh의 검사가 `*terminfo/x/xterm*` 글로브라 xterm 하나만으로도
-# 통과했다 — **조용한 실패를 막으려고 만든 검사가 조용히 실패한 자리다.**
+# 통과했다 — 조용한 실패를 막으려고 만든 검사가 조용히 실패한 자리다.
 #
 # 옛 이름 xterm도 남긴다. 손으로 띄운 셸이 그 이름을 쓸 수 있고, 두 파일을
 # 합쳐도 8KB다.
@@ -294,7 +294,7 @@ cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
 # zsh는 바이너리 하나가 아니다. zle(줄 편집), complete, parameter 같은
 # "내장처럼 보이는" 기능 대부분이 실행 중에 dlopen되는 .so 모듈이고, 그것을
 # 찾을 자리(module_path)는 zsh 안에 컴파일 타임에 박혀 있다. 그래서 이 트리만은
-# initrd 안에서도 **sysroot와 같은 경로**를 유지해야 한다 — 다른 라이브러리처럼
+# initrd 안에서도 sysroot와 같은 경로를 유지해야 한다 — 다른 라이브러리처럼
 # /lib/x86_64-linux-gnu로 모으면 zsh가 영영 못 찾는다.
 mkdir -p "$WORKDIR/usr/lib/x86_64-linux-gnu"
 cp -r "$SYSROOT/usr/lib/x86_64-linux-gnu/zsh" "$WORKDIR/usr/lib/x86_64-linux-gnu/"
@@ -308,13 +308,13 @@ rm -f  "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/curses.so
 rm -rf "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh/"*/zsh/db
 
 # 모듈도 각자 동적 의존을 갖는다. 바이너리에만 copy_lib_deps를 돌리면 빠진
-# 라이브러리가 **부팅 후 dlopen 시점에야** 드러나고, 그 실패는 로그에서
+# 라이브러리가 부팅 후 dlopen 시점에야 드러나고, 그 실패는 로그에서
 # 알아보기 어렵다. 여기서 돌려야 make_initrd.sh가 SONAME을 찍고 즉시 죽는다.
 while IFS= read -r mod; do
   copy_lib_deps "$mod"
 done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 
-# /usr/share/zsh(zsh-common)는 **넣지 않는다.** fish가 fish-common을 필요로
+# /usr/share/zsh(zsh-common)는 넣지 않는다. fish가 fish-common을 필요로
 # 했던 것과 같은 구조이긴 한데 크기가 다르다 — 17MB이고 대부분이 완성
 # 함수(Completion)다. zsh는 이 트리가 없어도 조용히 시작한다: 여기 있는 것은
 # 전부 fpath에서 autoload되는 함수이고, ~/.zshrc가 없는 우리 게스트에서는

@@ -7,12 +7,12 @@ const std = @import("std");
 // translate-c가 번역하지 못한다. TF-M4가 2026-08-12에 겪고
 // docs/decisions/project_zig_c_uapi_rule.md에 적어 둔 그대로다.
 //
-// **버퍼 검사를 잃어도 되는 이유는 대체물이 있기 때문이다.** ReleaseSafe는
+// 버퍼 검사를 잃어도 되는 이유는 대체물이 있기 때문이다. ReleaseSafe는
 // Zig 자신의 안전 검사(경계·오버플로·널)를 전부 켠 채로 두고, 여기서
 // 가져오는 것은 open/ioctl/mmap 래퍼라 glibc의 fortify가 볼 버퍼가 애초에
 // 우리 코드에 없다.
 //
-// **같은 줄이 main.zig와 pty.zig에도 있다.** 셋을 다 꺼야 빌드된다 —
+// 같은 줄이 main.zig와 pty.zig에도 있다. 셋을 다 꺼야 빌드된다 —
 // drm.zig만 고치면 에러가 6개에서 1개로 줄 뿐이고, 남는 하나는 모양이 달라서
 // 같은 원인으로 보이지 않는다(main.zig의 `c.poll`이 `expected type 'c_int',
 // found 'bool'`을 낸다). 이유를 여기에만 적는 것은 셋에 같은 설명을 두면

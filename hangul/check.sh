@@ -9,19 +9,19 @@ cd "$(dirname "$0")"
 #   게스트에서 Shift+Space를 누른다
 #   → input.zig의 hangulLayer가 한/영을 켠다
 #   → 두벌식 키가 자모가 되고 hangul.zig가 음절로 모은다
-#   → 그 글자가 **PTY로 안 나가고** 커서 자리에 그려진다
+#   → 그 글자가 PTY로 안 나가고 커서 자리에 그려진다
 #   → Backspace가 자모를 하나 뺀다
-#   → Enter가 조합을 확정시켜 UTF-8 세 바이트와 CR을 **한 번에** 내보낸다
-#   → **셸이 그 한글을 되울리고 실행한다**
+#   → Enter가 조합을 확정시켜 UTF-8 세 바이트와 CR을 한 번에 내보낸다
+#   → 셸이 그 한글을 되울리고 실행한다
 #   → Shift+Space를 다시 누르면 영문으로 돌아온다
 #
-# **음성 검사가 이 체인의 값이다.** "한글이 조합된다"만 보면 조합 중인 자모가
+# 음성 검사가 이 체인의 값이다. "한글이 조합된다"만 보면 조합 중인 자모가
 # PTY로 새는지는 아무것도 증명되지 않는다 — 그리고 그것이 이 기능의 가장 흔한
 # 실패 방식이다. 도구는 CM 체인과 같은 `terminal: key>` 줄 개수다. 그 줄은
 # PTY로 바이트가 나갈 때만 찍히므로(main.zig의 `if (keys.bytes.len > 0)`)
 # 개수가 안 늘어나는 것이 곧 "아무것도 안 나갔다"이다.
 #
-# **반전된 셀의 개수가 두 번째 도구다.** 한글은 두 칸이라(HI-M0 실측 3) 조합
+# 반전된 셀의 개수가 두 번째 도구다. 한글은 두 칸이라(HI-M0 실측 3) 조합
 # 중에는 커서가 두 칸을 반전한다. 하나만 반전되면 게스트 화면에서 글자의
 # 오른쪽 절반이 어두운 바탕에 어두운 색으로 그려져 사라지는데, 로그만 보는
 # 게이트가 그 사고를 잡는 길이 이 셀 개수다.
@@ -29,14 +29,14 @@ cd "$(dirname "$0")"
 # grep에 -a를 붙이는 이유는 로그에 NUL이 한 바이트라도 섞이면 grep이 파일을
 # binary로 취급해 "Binary file matches"만 뱉기 때문이다.
 #
-# **디스크를 문다(HI-M2).** `hangul_layout=sebeol_3p3`이 든 이미지를 굽고
-# 읽기만 한다. **2차 부팅은 안 붙였다** — 설정이 자판까지 닿는지만 보면 되고,
+# 디스크를 문다(HI-M2). `hangul_layout=sebeol_3p3`이 든 이미지를 굽고
+# 읽기만 한다. 2차 부팅은 안 붙였다 — 설정이 자판까지 닿는지만 보면 되고,
 # 설정을 쓰고 다시 읽는 왕복은 CP 체인이 이미 본다(design 결정 14).
 #
-# 그래서 **이 체인이 게스트에서 돌리는 자판은 공세벌 3-P3 하나다.** 두벌식은
+# 그래서 이 체인이 게스트에서 돌리는 자판은 공세벌 3-P3 하나다. 두벌식은
 # `hangul_test`가, 기본값이 shin_pcs라는 것은 `config_test`가 본다. 그 교환을
-# 받아들인 이유는 설정 → argv → 자판 선택 배선이 **호스트 검사로는 절대 안
-# 보이는 유일한 구간**이기 때문이다.
+# 받아들인 이유는 설정 → argv → 자판 선택 배선이 호스트 검사로는 절대 안
+# 보이는 유일한 구간이기 때문이다.
 #
 # 3-P3의 키는 초성이 오른손, 중성과 종성이 왼손이다. 아래에서 쓰는 것 넷:
 #   k = 초성 ㄱ    f = 중성 ㅏ    q = 종성 ㅅ    h = 초성 ㄴ    u = 초성 ㄷ
@@ -74,7 +74,7 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   exit 1
 fi
 
-# 설정 디스크. **매 회차 새로 굽는다** — 그 이유는 make_disk.sh의 주석에 있다.
+# 설정 디스크. 매 회차 새로 굽는다 — 그 이유는 make_disk.sh의 주석에 있다.
 if ! ./make_disk.sh; then
   echo "FAIL: hangul config disk build failed"
   exit 1
@@ -132,12 +132,12 @@ key_lines() {
   grep -ac 'terminal: key>' "$LOG" || true
 }
 
-# 마지막 hangul> 줄에서 값 하나를 뽑는다. **언제나 마지막 줄을 본다** — 그
+# 마지막 hangul> 줄에서 값 하나를 뽑는다. 언제나 마지막 줄을 본다 — 그
 # 줄이 곧 지금의 상태다.
 #
-# **`tr -d '\r'`이 없으면 안 된다.** 시리얼 로그는 줄을 CRLF로 끝내는데
+# `tr -d '\r'`이 없으면 안 된다. 시리얼 로그는 줄을 CRLF로 끝내는데
 # `preedit=`은 줄 끝이라 `[^ ]+`가 CR까지 삼킨다. 증상이 지독하다 —
-# `preedit=가, expected 가`처럼 **똑같아 보이는 값으로 실패한다.**
+# `preedit=가, expected 가`처럼 똑같아 보이는 값으로 실패한다.
 # `copy/check.sh`의 `copy_value`가 이 함정을 안 밟은 것은 `([0-9]+)`로 잡아
 # 숫자에서 멈추기 때문이고, 우연이지 설계가 아니다.
 hangul_field() {
@@ -145,15 +145,15 @@ hangul_field() {
     sed -E "s/.*$1=([^ ]+).*/\1/"
 }
 
-# 마지막 status> text= 줄의 값. **언제나 마지막 줄을 본다** — 그 줄이 곧
+# 마지막 status> text= 줄의 값. 언제나 마지막 줄을 본다 — 그 줄이 곧
 # 지금의 상태다(`hangul_field`와 같은 이유).
 #
-# **함정 둘을 한꺼번에 피한다.**
+# 함정 둘을 한꺼번에 피한다.
 #   1. `tr -d '\r'` — 시리얼 로그는 줄을 CRLF로 끝내는데 `text=`의 값이 줄
-#      끝이다. 안 지우면 `"EN  공세벌 3-P3  쿼티"`와 비교했을 때 **똑같아
-#      보이는 값으로 실패한다**(HI-M1 실측 4 · HI-M3 실측 1이 같은 자리다).
-#   2. `s/.*text=//` — `hangul_field`처럼 `([^ ]+)`로 잡으면 **첫 칸에서
-#      멈춘다.** 이 값에는 공백이 들어 있다.
+#      끝이다. 안 지우면 `"EN  공세벌 3-P3  쿼티"`와 비교했을 때 똑같아
+#      보이는 값으로 실패한다(HI-M1 실측 4 · HI-M3 실측 1이 같은 자리다).
+#   2. `s/.*text=//` — `hangul_field`처럼 `([^ ]+)`로 잡으면 첫 칸에서
+#      멈춘다. 이 값에는 공백이 들어 있다.
 status_text() {
   grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
     sed -E 's/.*text=//'
@@ -167,13 +167,13 @@ status_ink() {
 
 # 마지막 `status> caps ink` 줄에서 값 하나(`on`이나 `off`)를 뽑는다.
 #
-# **이 줄이 IS-M1의 판정 전부다.** `CAPS` 칸은 켜지든 꺼지든 글자가 같으므로
+# 이 줄이 IS-M1의 판정 전부다. `CAPS` 칸은 켜지든 꺼지든 글자가 같으므로
 # (design 결정 3) `status_text`로는 잠금 상태를 볼 수 없다 — 갈리는 것은
 # 색뿐이고, 색은 프레임버퍼를 직접 읽어야 보인다.
 #
 # `tr -d '\r'`는 `status_text`와 같은 이유다(HI-M1 실측 4). `off=`가 줄 끝이라
 # 안 지우면 `"37"`이 아니라 `"37\r"`이 나오고, `[ "$X" -le 0 ]`가
-# **"integer expression expected"로 죽는다** — 값이 같아 보이는데 실패하는
+# "integer expression expected"로 죽는다 — 값이 같아 보이는데 실패하는
 # 그 함정의 사촌이다.
 status_caps() {
   grep -a 'terminal: status> caps ink ' "$LOG" | tail -n 1 | tr -d '\r' |
@@ -183,7 +183,7 @@ status_caps() {
 # 마지막 `find> ink` 줄에서 값 하나를 뽑는다(SH-M2).
 #
 # `tr -d '\r'`는 `status_caps`와 같은 이유다 — `ink=`가 줄 끝이라 안 지우면
-# `[ "$X" -le 0 ]`가 **"integer expression expected"로 죽는다**.
+# `[ "$X" -le 0 ]`가 "integer expression expected"로 죽는다.
 find_ink() {
   grep -a 'terminal: find> ink ' "$LOG" | tail -n 1 | tr -d '\r' |
     sed -E "s/.*$1=([0-9]+).*/\1/"
@@ -191,40 +191,40 @@ find_ink() {
 
 # 마지막 프레임만 잘라낸다. main.zig가 한 프레임을 screen> 로 시작하므로
 # (dumpScreen이 render 직후 첫 번째다) 마지막 screen> 부터 파일 끝까지가 곧
-# 마지막 프레임이다. **누적으로 세면 "부팅 이후 몇 번 찍혔는가"가 된다.**
+# 마지막 프레임이다. 누적으로 세면 "부팅 이후 몇 번 찍혔는가"가 된다.
 last_frame() {
   awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$LOG"
 }
 
-# 마지막 프레임에서 **반전된 셀**이 전부 몇 개인가.
+# 마지막 프레임에서 반전된 셀이 전부 몇 개인가.
 #
 # 기본 색은 fg=FFFFFF bg=102030이다(vt.zig의 init). 반전은 그 셀의 fg와 bg를
-# 맞바꾸므로 **반전된 셀의 표식은 `fg`가 기본 배경색(102030)이라는 것**이고,
+# 맞바꾸므로 반전된 셀의 표식은 `fg`가 기본 배경색(102030)이라는 것이고,
 # `bg`는 그 글자가 원래 갖고 있던 전경색이다. 이 화면에는 선택도 매치도
 # 없으므로 반전된 셀은 커서뿐이고, 그래서 개수가 곧 "커서가 몇 칸을
 # 먹었는가"다.
 #
-# **`bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다.** 그 표기는 "반전됐다"가
-# 아니라 "반전됐고 **그 글자의 전경색이 기본값이다**"를 뜻했는데, 그 둘이
-# 같았던 이유는 **셸이 색을 하나도 안 썼기 때문**이다 — `--no-config`로 뜬
+# `bg=FFFFFF`로 박아 두었던 것을 SC-M0이 고쳤다. 그 표기는 "반전됐다"가
+# 아니라 "반전됐고 그 글자의 전경색이 기본값이다"를 뜻했는데, 그 둘이
+# 같았던 이유는 셸이 색을 하나도 안 썼기 때문이다 — `--no-config`로 뜬
 # fish는 구문 강조를 안 한다. 설정을 읽는 fish는 명령줄을 칠하고, 커서가
 # 그 위에 서면 `fg=102030 bg=D54E53`(fish가 모르는 명령에 쓰는 빨강)이 된다.
-# **커서는 두 칸을 제대로 덮고 있었는데 검사가 못 봤다**(SC-M0 실측 19(c)).
+# 커서는 두 칸을 제대로 덮고 있었는데 검사가 못 봤다(SC-M0 실측 19(c)).
 inverted_cells() {
   last_frame | grep -acE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=[0-9A-F]{6}" || true
 }
 
 # 키 하나를 `ms` 밀리초 동안 누르고 있다가 뗀다(HI-M3).
 #
-# **`type_keys`를 못 쓴다.** 이유가 둘이다.
+# `type_keys`를 못 쓴다. 이유가 둘이다.
 #   1. 그쪽은 `sendkey $k` 하나만 보내므로 hold 시간을 못 준다.
-#   2. 그쪽은 로그가 자라기를 기다리는데, **긴 CapsLock은 로그를 한 줄도 안
-#      만들 수 있다** — 대문자 잠금만 켜지고 화면은 그대로다. 그러면 0.3초를
+#   2. 그쪽은 로그가 자라기를 기다리는데, 긴 CapsLock은 로그를 한 줄도 안
+#      만들 수 있다 — 대문자 잠금만 켜지고 화면은 그대로다. 그러면 0.3초를
 #      꽉 채우고 다음 줄로 간다(그 자체는 안전하지만 판정이 흐려진다).
 #
-# **hold가 끝나기를 여기서 기다려야 한다.** `sendkey`의 hold는 QEMU가 타이머로
-# 처리하므로 monitor는 즉시 돌아온다 — 안 기다리면 다음 키가 이 키를 **누른
-# 채로** 도착해서 "소비됨"이 켜지고 tap이 사라진다. 1.5초는 이 체인이 쓰는
+# hold가 끝나기를 여기서 기다려야 한다. `sendkey`의 hold는 QEMU가 타이머로
+# 처리하므로 monitor는 즉시 돌아온다 — 안 기다리면 다음 키가 이 키를 누른
+# 채로 도착해서 "소비됨"이 켜지고 tap이 사라진다. 1.5초는 이 체인이 쓰는
 # 최대 hold(0.5초)에 게스트 반응 시간을 얹은 값이다.
 #
 # QEMU가 이 값을 오차 4밀리초 안에 지킨다는 것은 HI-M0이 evdev 타임스탬프로
@@ -272,14 +272,14 @@ done
 
 # ── 검사 0: 설정이 자판을 골랐다 ───────────────────────────────────────
 #
-# **줄 둘을 다 본다.** 앞의 줄은 "init이 디스크의 파일에서 읽었다"를, 뒤의
-# 줄은 "그 값이 argv를 건너 terminal에 닿았다"를 말한다. **앞만 보면 argv
+# 줄 둘을 다 본다. 앞의 줄은 "init이 디스크의 파일에서 읽었다"를, 뒤의
+# 줄은 "그 값이 argv를 건너 terminal에 닿았다"를 말한다. 앞만 보면 argv
 # 배선이 끊겨도 초록이고, 뒤만 보면 terminal의 기본값이 우연히 맞아도
-# 초록이다.**
+# 초록이다.
 #
 # 심은 값이 기본값(shin_pcs)이 아닌 것이 이 검사의 전제다 — 같았다면 설정을
-# 통째로 무시하는 코드도 통과한다. **그리고 아래 검사 3~11이 전부 3-P3 키를
-# 쓰므로, 이 검사가 실패하면 그것들도 함께 실패한다** — 진짜 판정은 둘이 짝을
+# 통째로 무시하는 코드도 통과한다. 그리고 아래 검사 3~11이 전부 3-P3 키를
+# 쓰므로, 이 검사가 실패하면 그것들도 함께 실패한다 — 진짜 판정은 둘이 짝을
 # 이루는 데서 온다.
 echo "=== the config disk should have selected sebeol_3p3 ==="
 if ! grep -aq 'tars-init: config .*hangul=sebeol_3p3' "$LOG"; then
@@ -290,50 +290,50 @@ if ! grep -aq 'terminal: hangul layout=sebeol_3p3' "$LOG"; then
 fi
 echo "sebeol_3p3 came from the config file and reached the composer"
 
-# 전환 키 목록도 같은 짝을 이룬다(HI-M3). **판정이 둘이 아니라 셋이다.**
+# 전환 키 목록도 같은 짝을 이룬다(HI-M3). 판정이 둘이 아니라 셋이다.
 #
 #   1. init이 파일에서 읽었다
 #   2. 그 값이 argv를 건너 terminal에 닿았다
-#   3. **`hangul_key`가 목록에 없다** — 기본값은 넷이므로, 설정을 통째로
+#   3. `hangul_key`가 목록에 없다 — 기본값은 넷이므로, 설정을 통째로
 #      무시하는 코드는 `hangul_key,`로 시작하는 목록을 찍는다.
 #
 # 셋째가 이 체인이 "꺼짐"을 보는 유일한 자리다. 나머지 꺼짐 갈래 넷은
 # `input_test`가 호스트에서 본다.
 echo "=== the config disk should have selected three toggle keys ==="
 #
-# **CR을 먼저 지우고 나서 `$`를 쓴다 — 그러지 않으면 줄이 정확히 맞는데도 안
-# 맞는다.** 시리얼 로그는 줄을 CRLF로 끝내므로 `$` 바로 앞에 CR이 있다.
+# CR을 먼저 지우고 나서 `$`를 쓴다 — 그러지 않으면 줄이 정확히 맞는데도 안
+# 맞는다. 시리얼 로그는 줄을 CRLF로 끝내므로 `$` 바로 앞에 CR이 있다.
 # HI-M1 실측 4가 `[^ ]+`로 밟은 것과 같은 함정이고, `hangul_field`가 쓰는
 # 처방을 그대로 쓴다.
 #
-# **plan이 적어 둔 `\r\?$`는 안 통했다**(HI-M3 실측). GNU grep의 BRE는 `\r`을
-# CR 이스케이프로 안 보고 **리터럴 `r`로** 읽는다 — `-P` 없이는 그 표기가
+# plan이 적어 둔 `\r\?$`는 안 통했다(HI-M3 실측). GNU grep의 BRE는 `\r`을
+# CR 이스케이프로 안 보고 리터럴 `r`로 읽는다 — `-P` 없이는 그 표기가
 # 아무 뜻도 없다. 파이프로 CR을 지우는 쪽이 이 파일의 기존 관습과도 같다.
 #
-# **SC-M0이 이 줄의 끝을 옮겼다.** `tars-init: config ...` 한 줄에 여섯째
+# SC-M0이 이 줄의 끝을 옮겼다. `tars-init: config ...` 한 줄에 여섯째
 # 필드(`shell_config=on`)가 붙으면서 `toggles=` 목록이 더 이상 줄의 끝이
 # 아니게 됐다. 그 milestone의 plan은 *"다른 체인들이
-# `tars-init: config shell=`을 **앞부분**으로 grep하므로 앞이 안 바뀌어야
-# 한다"*까지만 적었는데, **이 체인은 뒤에 매달려 있었다** — 줄을 넓히는 것은
+# `tars-init: config shell=`을 앞부분으로 grep하므로 앞이 안 바뀌어야
+# 한다"*까지만 적었는데, 이 체인은 뒤에 매달려 있었다 — 줄을 넓히는 것은
 # 앞과 뒤를 동시에 건드린다.
 #
-# 그래서 끝 대신 **경계**를 본다: 목록 다음에 공백이 오거나 줄이 끝난다.
+# 그래서 끝 대신 경계를 본다: 목록 다음에 공백이 오거나 줄이 끝난다.
 # `$` 하나만 쓰던 이유(짧은 목록이 긴 목록의 접두사로 맞는 것을 막는다)가
 # 이 모양에서도 그대로 산다 — 정규형에서 `hangul_key`는 맨 앞에 오므로
 # `shift_space,...` 뒤에 또 이름이 붙는 일이 없고, 붙었다면 공백이 아니라
-# 콤마라 안 맞는다. **필드가 또 늘어도 이 줄은 안 고친다.**
+# 콤마라 안 맞는다. 필드가 또 늘어도 이 줄은 안 고친다.
 #
-# ⚠ **`-q`를 쓰면 안 된다**(SM-M2가 이 자리에서 게이트를 한 번 빨갛게 만들었다).
+# ⚠ `-q`를 쓰면 안 된다(SM-M2가 이 자리에서 게이트를 한 번 빨갛게 만들었다).
 # `grep -q`는 첫 매치에서 즉시 나가고, 아직 로그를 쏟고 있던 앞단 `tr`이
-# SIGPIPE로 죽는다. 이 파일 맨 위의 `pipefail`이 그 **141**을 파이프라인 종료
-# 코드로 올리고 `if !`는 그것을 *"안 맞았다"*로 읽는다 — **판정 글자가 로그에
-# 멀쩡히 있는데 빨갛다.**
+# SIGPIPE로 죽는다. 이 파일 맨 위의 `pipefail`이 그 141을 파이프라인 종료
+# 코드로 올리고 `if !`는 그것을 *"안 맞았다"*로 읽는다 — 판정 글자가 로그에
+# 멀쩡히 있는데 빨갛다.
 #
-# **파이프 버퍼(64KiB)보다 로그가 크면 터진다.** 로그는 QEMU가 살아 있는 동안
-# 계속 자라므로 이것은 크기가 아니라 **경주**이고, 그래서 회차마다 갈린다
+# 파이프 버퍼(64KiB)보다 로그가 크면 터진다. 로그는 QEMU가 살아 있는 동안
+# 계속 자라므로 이것은 크기가 아니라 경주이고, 그래서 회차마다 갈린다
 # (2026-09-12의 루트 게이트에서 run 1/3은 초록, run 2/3이 빨강이었다).
 #
-# 처방은 `-q`를 빼서 뒤쪽 grep이 입력을 **끝까지 읽게** 하는 것이다 —
+# 처방은 `-q`를 빼서 뒤쪽 grep이 입력을 끝까지 읽게 하는 것이다 —
 # `tools/check.sh:706`이 같은 병을 같은 방법으로 고쳤다. 같은 모양이 저장소에
 # 일곱 더 있다(`machine/check.sh` 넷 · `config/check.sh` 셋).
 EXPECT_TOGGLES='shift_space,capslock_tap,lctrl_tap'
@@ -349,16 +349,16 @@ echo "three toggle keys came from the config file; hangul_key is off"
 
 # ── 검사 0a: 부팅 직후의 상태 줄 ───────────────────────────────────────
 #
-# **판정이 둘이다.**
+# 판정이 둘이다.
 #   1. `text=` — `statusText`가 만든 글자가 맞다
-#   2. `ink fg=` — **그 글자가 프레임버퍼에 실제로 닿았다**
+#   2. `ink fg=` — 그 글자가 프레임버퍼에 실제로 닿았다
 #
-# **둘째가 이 체인에서 상태 줄의 그리기를 보는 유일한 자리다.** 상태 줄은
-# 격자 **바깥**의 여백에 있어서 `screen>`·`style>`·`ink>`가 하나도 못 본다 —
+# 둘째가 이 체인에서 상태 줄의 그리기를 보는 유일한 자리다. 상태 줄은
+# 격자 바깥의 여백에 있어서 `screen>`·`style>`·`ink>`가 하나도 못 본다 —
 # 첫째만 보면 `statusText`가 만든 문자열을 되읽는 것뿐이고 `drawStatus`가
 # 통째로 비어 있어도 초록이다.
 #
-# **자판 칸이 `공세벌 3-P3`인 것이 판정의 절반이다.** 기본값은 `신세벌 PCS`이고
+# 자판 칸이 `공세벌 3-P3`인 것이 판정의 절반이다. 기본값은 `신세벌 PCS`이고
 # 게이트 디스크가 `sebeol_3p3`을 심으므로, 설정을 통째로 무시하는 코드는
 # 여기서 갈린다(검사 0과 같은 규율).
 echo "=== the status line should be drawn in the bottom margin ==="
@@ -373,8 +373,8 @@ fi
 if [ "$INK" -le 0 ]; then
   report_failure "the status band has no STATUS_FG pixels (fg=${INK}), so nothing was drawn"
 fi
-# 부팅 직후에는 대문자 잠금이 꺼져 있다. **둘을 함께 본다** — `on=0`만 보면
-# `CAPS` 칸을 **아예 안 그린** 코드도 통과한다(IS-M1).
+# 부팅 직후에는 대문자 잠금이 꺼져 있다. 둘을 함께 본다 — `on=0`만 보면
+# `CAPS` 칸을 아예 안 그린 코드도 통과한다(IS-M1).
 CAPS_ON="$(status_caps on)"
 CAPS_OFF="$(status_caps off)"
 if [ -z "$CAPS_ON" ]; then
@@ -390,7 +390,7 @@ echo "the status line reads \"${TEXT}\", ${INK} pixel(s) of text and a dim CAPS 
 
 # ── 검사 1: 대조군 — 한글이 꺼져 있으면 키가 PTY로 나간다 ──────────────
 #
-# **이 검사가 없으면 아래 음성 검사가 뜻을 잃는다.** 키가 원래부터 안 나가고
+# 이 검사가 없으면 아래 음성 검사가 뜻을 잃는다. 키가 원래부터 안 나가고
 # 있었다면 "조합 중에 안 나간다"는 아무것도 증명하지 않는다.
 echo "=== typing 'echo ' with hangul off ==="
 BEFORE_ECHO="$(key_lines)"
@@ -413,7 +413,7 @@ fi
 
 # ── 검사 2: Shift+Space가 한/영을 켠다 ─────────────────────────────────
 #
-# **`hangul>` 줄이 나온다는 것 자체가 절반이다.** 그 줄은 `keys.hangul`이
+# `hangul>` 줄이 나온다는 것 자체가 절반이다. 그 줄은 `keys.hangul`이
 # 참일 때만 찍히므로(main.zig), 줄이 없으면 `Action.hangul`이 `readKeys`까지
 # 못 왔다는 뜻이다.
 echo "=== sendkey shift-spc ==="
@@ -427,7 +427,7 @@ ON="$(hangul_field on)"
 if [ "$ON" != "true" ]; then
   report_failure "Shift+Space left hangul on=${ON}, expected true"
 fi
-# **공백이 셸로 새면 안 된다.** 전환 키가 글자를 만들면 명령줄에 빈칸이
+# 공백이 셸로 새면 안 된다. 전환 키가 글자를 만들면 명령줄에 빈칸이
 # 하나씩 늘어난다.
 AFTER_TOGGLE="$(key_lines)"
 if [ "$AFTER_TOGGLE" != "$BEFORE_TOGGLE" ]; then
@@ -437,12 +437,12 @@ echo "Shift+Space turned hangul on and sent nothing to the shell"
 
 # ── 검사 2a: 상태 줄의 첫 칸이 한/영을 따라간다 ────────────────────────
 #
-# **자판 칸이 안 흔들리는 것도 함께 본다.** 한/영만 바뀌었으므로 뒤 두 칸은
+# 자판 칸이 안 흔들리는 것도 함께 본다. 한/영만 바뀌었으므로 뒤 두 칸은
 # 같아야 한다 — 통째로 다시 만드는 코드가 자판을 잘못 읽으면 여기서 갈린다.
 #
-# **키를 하나도 안 더한다.** 검사 2가 이미 `shift-spc`를 눌렀고, 그 전환이
-# `Action.hangul` → `needs_redraw` → 새 프레임 → **값이 바뀌었으니 새
-# `status>` 줄**을 만든다. IS-M0이 새 갱신 경로를 하나도 안 만들었다는 것의
+# 키를 하나도 안 더한다. 검사 2가 이미 `shift-spc`를 눌렀고, 그 전환이
+# `Action.hangul` → `needs_redraw` → 새 프레임 → 값이 바뀌었으니 새
+# `status>` 줄을 만든다. IS-M0이 새 갱신 경로를 하나도 안 만들었다는 것의
 # 증거가 이 줄이다.
 TEXT="$(status_text)"
 if [ "$TEXT" != "한  공세벌 3-P3  쿼티  CAPS" ]; then
@@ -455,12 +455,12 @@ echo "the status line followed the toggle: \"${TEXT}\""
 # 3-P3에서 `k`=초성 ㄱ, `f`=중성 ㅏ 라 `가`가 된다. 넷을 함께 본다.
 #
 #   1. `hangul> preedit=가`      — 조합 상태가 맞다
-#   2. 마지막 프레임의 `screen>`에 `가`  — **화면에 실제로 그려졌다**
-#   3. 반전된 셀이 **둘**        — 두 칸을 먹었다(HI-M0 실측 3)
+#   2. 마지막 프레임의 `screen>`에 `가`  — 화면에 실제로 그려졌다
+#   3. 반전된 셀이 둘        — 두 칸을 먹었다(HI-M0 실측 3)
 #   4. `key>` 줄이 안 늘었다     — 음성 검사
 #
-# **1만 보면 "값은 맞는데 안 그렸다"를 못 잡고, 2만 보면 "그렸는데 값이
-# 틀렸다"를 못 잡는다.** SP-M1의 실측 5가 같은 자리를 적어 두었다.
+# 1만 보면 "값은 맞는데 안 그렸다"를 못 잡고, 2만 보면 "그렸는데 값이
+# 틀렸다"를 못 잡는다. SP-M1의 실측 5가 같은 자리를 적어 두었다.
 echo "=== typing 'kf' (가) ==="
 type_keys k f
 sleep 1
@@ -493,7 +493,7 @@ echo "the final attached: 가 -> 갓"
 
 # ── 검사 5: Backspace가 자모를 하나 뺀다 ───────────────────────────────
 #
-# **음절을 통째로 지우지 않는 것이 요점이다**(design 결정 6). 그리고
+# 음절을 통째로 지우지 않는 것이 요점이다(design 결정 6). 그리고
 # Backspace도 PTY로 안 나가야 한다 — 나가면 셸이 앞 글자를 하나 지운다.
 echo "=== sendkey backspace ==="
 type_keys backspace
@@ -510,8 +510,8 @@ echo "backspace removed one jamo and sent nothing to the shell"
 
 # ── 검사 6: Enter가 확정시키고 네 바이트가 한 번에 나간다 ──────────────
 #
-# **`key> 4 byte(s)`가 이 milestone의 결승선이다.** 확정된 음절의 UTF-8 세
-# 바이트와 CR 하나가 **같은 write**로 나갔다는 뜻이고, 그것이 `readKeys`가
+# `key> 4 byte(s)`가 이 milestone의 결승선이다. 확정된 음절의 UTF-8 세
+# 바이트와 CR 하나가 같은 write로 나갔다는 뜻이고, 그것이 `readKeys`가
 # 지키는 순서 계약(확정이 먼저)의 유일한 관측 가능한 증거다.
 #
 # 셋이 아니라 넷인 것에 뜻이 있다. 셋이면 CR이 빠진 것이고, 하나면 확정이
@@ -532,7 +532,7 @@ echo "Enter committed 갓 and sent 3 UTF-8 bytes plus CR in one write"
 
 # ── 검사 7: 셸이 그 한글을 되울리고 실행한다 ───────────────────────────
 #
-# 명령줄에 하나(`echo 갓`), 출력줄에 하나. **둘이라는 것이 왕복의 증거다** —
+# 명령줄에 하나(`echo 갓`), 출력줄에 하나. 둘이라는 것이 왕복의 증거다 —
 # 하나면 셸이 되울리기만 하고 실행은 안 된 것이고, 없으면 세 바이트가 셸에
 # 도착하지 않았거나 깨진 것이다.
 #
@@ -547,7 +547,7 @@ echo "the shell echoed 갓 on the command line and printed it as output"
 # ── 검사 8: 조합이 끝난 뒤 커서가 다시 한 칸이다 ───────────────────────
 #
 # 안 돌아오면 증상이 "커서가 항상 두 칸으로 뚱뚱하다"이고, 원인은 `preedit`을
-# 안 지운 것이다. **검사 3의 값과 짝이어야 뜻이 선다.**
+# 안 지운 것이다. 검사 3의 값과 짝이어야 뜻이 선다.
 INV="$(inverted_cells)"
 if [ "$INV" != "1" ]; then
   report_failure "after committing, the cursor takes ${INV} inverted cell(s), expected 1"
@@ -566,7 +566,7 @@ echo "Shift+Space turned hangul off"
 
 # ── 검사 10: 영문이 돌아온다 ───────────────────────────────────────────
 #
-# **대조군이 하나 더 필요한 이유가 있다.** 검사 1은 한글을 켜기 **전**을
+# 대조군이 하나 더 필요한 이유가 있다. 검사 1은 한글을 켜기 전을
 # 봤으므로, 껐을 때 되돌아오는지는 아무것도 말하지 않는다 — 토글이 한
 # 방향으로만 동작해도 검사 1과 9가 전부 통과한다.
 echo "=== typing 'kf' with hangul off ==="
@@ -584,18 +584,18 @@ echo "latin input is back"
 
 # ── 검사 11: 음절 셋을 이어 쳐도 앞 글자가 안 지워진다 ─────────────────
 #
-# **이 검사가 없어서 HI-M1이 사고를 안고 통과했다.** 위 검사들은 음절을
-# **하나만** 확정시키는데, 그러면 게스트에 UTF-8 로케일이 없어도 통과한다 —
-# 로케일이 없으면 셸이 우리가 보낸 세 바이트를 한 글자가 아니라 **세 글자로**
+# 이 검사가 없어서 HI-M1이 사고를 안고 통과했다. 위 검사들은 음절을
+# 하나만 확정시키는데, 그러면 게스트에 UTF-8 로케일이 없어도 통과한다 —
+# 로케일이 없으면 셸이 우리가 보낸 세 바이트를 한 글자가 아니라 세 글자로
 # 읽고 바이트마다 폭을 세는데(0x80~0x9F는 0칸, 0xA0 이상은 1칸), `갓`은
-# EA B0 93이라 1+1+0 = 2가 되어 **깨진 계산이 우연히 맞는 답을 낸다.**
+# EA B0 93이라 1+1+0 = 2가 되어 깨진 계산이 우연히 맞는 답을 낸다.
 #
 # 두 번째 음절부터 어긋난 폭이 쌓여서 셸이 커서를 두 칸짜리 글자의 가운데에
 # 세우고, 거기에 다음 글자를 써서 앞 글자를 지운다. 증상은 `가나다`가
-# **`가 다`**로 나타나는 것이다.
+# `가 다`로 나타나는 것이다.
 #
-# `가나다`가 **둘** 나와야 한다 — 명령줄과 출력줄. 깨지면 명령줄이 `가 다`가
-# 되므로 하나로 준다. **출력줄은 깨져도 멀쩡하다**(그쪽은 셸이 커서를
+# `가나다`가 둘 나와야 한다 — 명령줄과 출력줄. 깨지면 명령줄이 `가 다`가
+# 되므로 하나로 준다. 출력줄은 깨져도 멀쩡하다(그쪽은 셸이 커서를
 # 계산하지 않고 쭉 쓰기만 한다). 그래서 "둘"이 판정이고 "하나 이상"은 아니다.
 echo "=== typing 'echo 가나다' ==="
 type_keys ctrl-c
@@ -612,13 +612,13 @@ echo "three syllables in a row survive on the command line"
 
 # ── 검사 12: 짧은 CapsLock이 한/영을 끈다 ──────────────────────────────
 #
-# **`sendkey caps_lock 100`의 100은 밀리초다.** 문턱이 0.3초이므로 이것은
-# tap이고, 검사 13의 500은 hold다. **둘이 짝이어야 뜻이 선다** — 짧은 것만
+# `sendkey caps_lock 100`의 100은 밀리초다. 문턱이 0.3초이므로 이것은
+# tap이고, 검사 13의 500은 hold다. 둘이 짝이어야 뜻이 선다 — 짧은 것만
 # 보면 "언제나 전환한다"가 통과한다.
 #
 # 여기 오기 전에 검사 11이 한/영을 켜 두었다.
 #
-# **음성 검사가 함께 있어야 한다** — CapsLock이 글자를 만들면 명령줄이
+# 음성 검사가 함께 있어야 한다 — CapsLock이 글자를 만들면 명령줄이
 # 더러워지고, 그것이 표 밖의 키를 다루는 가장 흔한 실패 방식이다.
 echo "=== sendkey caps_lock 100 (tap) ==="
 BEFORE_CAPS="$(key_lines)"
@@ -635,16 +635,16 @@ echo "a short CapsLock turned hangul off and sent nothing to the shell"
 
 # ── 검사 13: 긴 CapsLock은 한/영을 안 바꾸고 대문자 잠금을 켠다 ─────────
 #
-# **판정이 화면이다.** 대문자 잠금에는 LED도 표시도 없으므로(결정 9), 켜졌는지
+# 판정이 화면이다. 대문자 잠금에는 LED도 표시도 없으므로(결정 9), 켜졌는지
 # 아는 유일한 길은 다음 글자가 대문자로 나오는 것이다.
 #
-# **숫자를 함께 치는 것이 결정 9의 전부다** — CapsLock은 알파벳에만 적용되고
+# 숫자를 함께 치는 것이 결정 9의 전부다 — CapsLock은 알파벳에만 적용되고
 # 숫자와 기호는 안 바뀐다. `abc1`을 쳐서 `ABC1`이 나와야 하고, Shift를 통째로
 # 걸어 버리는 구현은 `ABC!`를 낸다.
 #
-# **한/영이 안 바뀐 것도 함께 본다.** `hangul_field`는 마지막 `hangul>` 줄을
-# 읽는다. **IS-M1 전에는 그 줄이 `Action.hangul`이 나올 때만 찍혔고, 이제는
-# 긴 CapsLock도 `Action.redraw`를 돌려주므로 매번 찍힌다** — 값이 `on=false`
+# 한/영이 안 바뀐 것도 함께 본다. `hangul_field`는 마지막 `hangul>` 줄을
+# 읽는다. IS-M1 전에는 그 줄이 `Action.hangul`이 나올 때만 찍혔고, 이제는
+# 긴 CapsLock도 `Action.redraw`를 돌려주므로 매번 찍힌다 — 값이 `on=false`
 # 라 기대는 그대로이고, 잘못 전환하면 `on=true`로 찍혀서 여기가 갈린다.
 echo "=== sendkey caps_lock 500 (hold) ==="
 hold_key caps_lock 500
@@ -653,16 +653,16 @@ if [ "$ON" != "false" ]; then
   report_failure "a long CapsLock changed hangul to on=${ON}, expected false"
 fi
 
-# ── 검사 13a: 잠금이 **키 하나 더 안 치고** 화면에 뜬다 ─────────────────
+# ── 검사 13a: 잠금이 키 하나 더 안 치고 화면에 뜬다 ─────────────────
 #
-# **이 자리가 IS-M1의 심장이고, design 결정 8의 구멍을 보는 유일한 판정이다.**
+# 이 자리가 IS-M1의 심장이고, design 결정 8의 구멍을 보는 유일한 판정이다.
 # `Action.redraw`가 없으면 CapsLock을 뗀 프레임에는 아직 어두운 `CAPS`가
-# 그려져 있고, 아래 `type_keys`가 만드는 **다음 프레임에서야** 밝아진다.
+# 그려져 있고, 아래 `type_keys`가 만드는 다음 프레임에서야 밝아진다.
 #
-# **그래서 이 판정이 `type_keys`보다 앞이어야 한다.** 뒤에 두면 구멍이 있는
+# 그래서 이 판정이 `type_keys`보다 앞이어야 한다. 뒤에 두면 구멍이 있는
 # 코드도 통과한다 — 순서 하나가 이 검사의 전부다.
 #
-# **`off=0`을 함께 보는 것이 짝이다.** `on>0`만 보면 두 색을 겹쳐 그린
+# `off=0`을 함께 보는 것이 짝이다. `on>0`만 보면 두 색을 겹쳐 그린
 # 코드도 통과한다.
 CAPS_ON="$(status_caps on)"
 CAPS_OFF="$(status_caps off)"
@@ -683,16 +683,16 @@ echo "a long CapsLock locked capitals and left the digit alone"
 
 # ── 검사 14: 한 번 더 길게 누르면 잠금이 풀린다 ─────────────────────────
 #
-# **켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다** — 검사 1과 9가
+# 켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다 — 검사 1과 9가
 # Shift+Space에 대해 이루는 짝과 같은 이유다.
 echo "=== sendkey caps_lock 500 again ==="
 hold_key caps_lock 500
 
 # ── 검사 14a: 잠금이 풀리면 `CAPS`도 다시 어두워진다 ────────────────────
 #
-# **켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다** — 검사 13a와
+# 켜지는 것만 보면 토글이 한 방향으로만 동작해도 통과한다 — 검사 13a와
 # 이것이 이루는 짝이, 검사 1과 9가 Shift+Space에 대해 이루는 짝과 같다.
-# 여기도 `type_keys` **앞**이다.
+# 여기도 `type_keys` 앞이다.
 CAPS_ON="$(status_caps on)"
 CAPS_OFF="$(status_caps off)"
 if [ "$CAPS_ON" -ne 0 ]; then
@@ -723,15 +723,15 @@ echo "a short left Ctrl turned hangul on"
 
 # ── 검사 16: Ctrl+C는 한/영을 안 바꾼다 ────────────────────────────────
 #
-# **이것이 결정 8의 심장이고 이 체인에서 가장 값진 한 줄이다.** 누른 동안 다른
+# 이것이 결정 8의 심장이고 이 체인에서 가장 값진 한 줄이다. 누른 동안 다른
 # 키가 오면 "소비됨"이 켜져서 tap이 아니어야 하는데, 그것이 없으면 터미널에서
 # 가장 흔한 조합인 Ctrl+C가 누를 때마다 한/영을 뒤집는다. 증상은 "가끔 한글이
 # 안 쳐진다"라 원인에서 아주 멀다.
 #
-# **판정이 서는 이유를 적어 둔다.** Ctrl+C는 그 자체로 `hangul>` 줄을 안 만든다
+# 판정이 서는 이유를 적어 둔다. Ctrl+C는 그 자체로 `hangul>` 줄을 안 만든다
 # (조합 중이 아니면 `hangulLayer`가 확정할 것이 없어 null을 돌려준다). 그래서
-# 여기서 읽는 값은 검사 15가 남긴 `on=true`이고, **만약 Ctrl+C가 잘못
-# 전환했다면 `on=false`인 새 줄이 그 뒤에 찍혀서 갈린다.**
+# 여기서 읽는 값은 검사 15가 남긴 `on=true`이고, 만약 Ctrl+C가 잘못
+# 전환했다면 `on=false`인 새 줄이 그 뒤에 찍혀서 갈린다.
 echo "=== ctrl-c while hangul is on ==="
 type_keys ctrl-c
 sleep 1
@@ -741,24 +741,24 @@ if [ "$ON" != "true" ]; then
 fi
 echo "Ctrl+C did not flip hangul: the tap was consumed"
 
-# ── 검사 17: 확정된 한글 **위**의 커서가 두 칸을 먹는다 ────────────────
+# ── 검사 17: 확정된 한글 위의 커서가 두 칸을 먹는다 ────────────────
 #
-# **사용자가 실기에서 찾은 버그다(2026-09-02).** 조합 중인 글자는 HI-M1이
-# 두 칸을 반전하게 했는데(검사 3), **확정된 글자 위로 커서가 되돌아오면**
+# 사용자가 실기에서 찾은 버그다(2026-09-02). 조합 중인 글자는 HI-M1이
+# 두 칸을 반전하게 했는데(검사 3), 확정된 글자 위로 커서가 되돌아오면
 # 한 칸만 반전됐다. `drawGlyph`는 16픽셀을 첫 셀의 `fg` 하나로 찍으므로
-# 오른쪽 절반이 어두운 배경에 어두운 색으로 그려져 **사라진다.**
+# 오른쪽 절반이 어두운 배경에 어두운 색으로 그려져 사라진다.
 #
-# **HI-M1의 게이트가 이것을 못 본 이유가 있다.** 확정 뒤 커서는 글자 **다음**
-# 칸에 있어서(검사 8이 보는 상태) 글자 **위**로 오는 경로가 없었다 — 방향키로
+# HI-M1의 게이트가 이것을 못 본 이유가 있다. 확정 뒤 커서는 글자 다음
+# 칸에 있어서(검사 8이 보는 상태) 글자 위로 오는 경로가 없었다 — 방향키로
 # 되돌아와야 한다. 그래서 이 검사가 커서를 실제로 왼쪽으로 옮긴다.
 #
-# 판정이 둘인 것이 요점이다. `inverted_cells`는 **셀 모델**을, `ink>`는
-# **프레임버퍼의 픽셀**을 본다 — 이 버그의 증상은 화면에서 사라지는 것이므로
+# 판정이 둘인 것이 요점이다. `inverted_cells`는 셀 모델을, `ink>`는
+# 프레임버퍼의 픽셀을 본다 — 이 버그의 증상은 화면에서 사라지는 것이므로
 # 픽셀 쪽이 본질에 가깝고, 셀 쪽은 원인에 가깝다.
 echo "=== compose 가, commit it, then walk the cursor back onto it ==="
-# **화면을 먼저 지운다.** `dumpInk`는 폭 2 글자를 앞에서부터 여덟 개까지만
+# 화면을 먼저 지운다. `dumpInk`는 폭 2 글자를 앞에서부터 여덟 개까지만
 # 찍는데(`INK_DUMP_LIMIT`), 여기까지 오면 화면에 옛 한글이 여덟 개를 넘어서
-# **커서 아래 글자가 목록에 안 들어온다.** 그러면 아래 ink 판정이 엉뚱한
+# 커서 아래 글자가 목록에 안 들어온다. 그러면 아래 ink 판정이 엉뚱한
 # 글자를 보고 조용히 통과한다 — 처음 쓸 때 실제로 그랬고, 수정을 꺼 놓고
 # 돌려 보다가 잡았다.
 type_keys ctrl-l
@@ -773,10 +773,10 @@ sleep 1
 type_keys left left
 sleep 1
 
-# 픽셀 쪽 증거를 **먼저** 본다. 이 버그의 증상은 "화면에서 사라진다"이므로
+# 픽셀 쪽 증거를 먼저 본다. 이 버그의 증상은 "화면에서 사라진다"이므로
 # 픽셀이 본질이고 셀 수는 원인이다.
 #
-# **버그였을 때 `right`가 128(8×16 전부)이 된다** — 커서가 첫 칸만 밝히므로
+# 버그였을 때 `right`가 128(8×16 전부)이 된다 — 커서가 첫 칸만 밝히므로
 # 오른쪽 절반이 통째로 "배경과 다른 색"으로 세어지기 때문이다. 고쳐지면 두
 # 칸 다 밝아서 글자의 획만 세어지므로 128보다 훨씬 작다.
 INK_LINE="$(last_frame | grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+AC00 left=[0-9]+ right=[0-9]+' | tail -n 1)"
@@ -799,24 +799,24 @@ echo "the cursor covers both cells of a committed 가 (ink right=${INK_RIGHT})"
 
 # ── 검사 18: 검색창에서 한글을 친다 (SH-M1) ───────────────────────────
 #
-# **이 체인이 SH-M1의 사슬 전체를 밟는 유일한 자리다.**
+# 이 체인이 SH-M1의 사슬 전체를 밟는 유일한 자리다.
 #   copy mode 진입 → `/`가 프롬프트를 연다(한/영 상태를 물려받는다)
 #   → 자판이 자모를 만들고 hangul.zig가 음절로 모은다
-#   → 확정분이 **PTY가 아니라** find_buf로 간다(SH design 결정 4·5)
+#   → 확정분이 PTY가 아니라 find_buf로 간다(SH design 결정 4·5)
 #   → Enter가 확정하고 제출해서 화면의 `가`를 찾는다
 #
-# **음성 검사가 여기서도 값이다.** `key>` 줄은 PTY로 바이트가 나갈 때만
+# 음성 검사가 여기서도 값이다. `key>` 줄은 PTY로 바이트가 나갈 때만
 # 찍히므로(main.zig의 `if (keys.bytes.len > 0)`), 개수가 안 늘어나는 것이 곧
 # "조합도 확정도 셸로 안 샜다"이다. 샜다면 셸에 `가`가 찍히고 검색 결과가
 # 아니라 명령행이 바뀐다.
 #
-# **`find> open`을 먼저 본다**(SH design 위험 3). `findOpen()`은 copy mode
+# `find> open`을 먼저 본다(SH design 위험 3). `findOpen()`은 copy mode
 # 안에서만 열리므로, copy mode 진입이 실패하면 그 뒤의 판정이 전부 "한글이
 # 안 된다"처럼 보인다 — 2026-09-02에 실제로 그렇게 잘못 보고한 적이 있다.
 #
-# **검사 17이 끝난 자리를 그대로 쓴다** — 화면에 `가 `가 있고(ctrl-l로 지운
+# 검사 17이 끝난 자리를 그대로 쓴다 — 화면에 `가 `가 있고(ctrl-l로 지운
 # 뒤라 깨끗하다) 한글이 켜져 있다(검사 15가 켰고 16이 그대로 뒀다).
-# **한글이 켜진 채로 프롬프트가 열리는 것 자체가 결정 1의 검사다.**
+# 한글이 켜진 채로 프롬프트가 열리는 것 자체가 결정 1의 검사다.
 echo "=== enter copy mode, open the prompt, type 가, submit ==="
 KEYS_BEFORE="$(key_lines)"
 type_keys meta_l-shift-c
@@ -831,7 +831,7 @@ fi
 type_keys k f
 sleep 1
 
-# 조합 중에는 needle이 아직 안 자란다. **preedit으로 확인한다** — 이 줄이
+# 조합 중에는 needle이 아직 안 자란다. preedit으로 확인한다 — 이 줄이
 # "자모가 needle로 새지 않았다"까지 함께 말한다.
 PRE="$(hangul_field preedit)"
 if [ "$PRE" != "가" ]; then
@@ -841,21 +841,21 @@ fi
 type_keys ret
 sleep 1
 
-# **확정분이 needle에 닿았다.** `find> commit`은 main.zig의 `.find_commit`
+# 확정분이 needle에 닿았다. `find> commit`은 main.zig의 `.find_commit`
 # 갈래만 찍는다 — 문구가 이 파일과 main.zig 양쪽에 있고, 한쪽을 고치면 다른
 # 쪽도 고쳐야 한다.
 if ! grep -aq 'terminal: find> commit needle=가 len=3' "$LOG"; then
   report_failure "the committed 가 never reached the needle (no find> commit line)"
 fi
 
-# **검색이 매치를 만들었다.** 화면에 `가 `가 있으므로 하나 이상이어야 한다.
+# 검색이 매치를 만들었다. 화면에 `가 `가 있으므로 하나 이상이어야 한다.
 SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
 MATCHES="$(echo "$SUBMIT" | sed -E 's/.*matches=([0-9]+).*/\1/')"
 if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
   report_failure "the hangul needle found ${MATCHES:-no} match(es): ${SUBMIT}"
 fi
 
-# **음성 검사.** 조합도 확정도 PTY로 안 나갔다.
+# 음성 검사. 조합도 확정도 PTY로 안 나갔다.
 KEYS_AFTER="$(key_lines)"
 if [ "$KEYS_AFTER" != "$KEYS_BEFORE" ]; then
   report_failure "the prompt leaked to the shell (key> ${KEYS_BEFORE} -> ${KEYS_AFTER})"
@@ -864,18 +864,18 @@ echo "the search prompt composed 가 and found ${MATCHES} match(es) without leak
 
 # ── 검사 19: 프롬프트의 한글이 제 모양으로 보이고 조합이 반전된다 (SH-M2) ─
 #
-# **판정 셋이 한 줄에서 나온다**(`find> ink`).
+# 판정 셋이 한 줄에서 나온다(`find> ink`).
 #   cols — `/가ㄱ`가 5칸이다. 바이트를 세는 구현은 4가 된다(/ 1 + 가 3,
 #          그리고 조합은 아예 안 그린다)
-#   inv  — 반전 구간이 **글자색**으로 칠해졌다
-#   ink  — 그 위에 글자가 **배경색**으로 그려졌다
+#   inv  — 반전 구간이 글자색으로 칠해졌다
+#   ink  — 그 위에 글자가 배경색으로 그려졌다
 #
-# **`inv`만 보면 사각형만 칠한 구현이 통과한다.** IS-M1의 `caps ink on/off`와
+# `inv`만 보면 사각형만 칠한 구현이 통과한다. IS-M1의 `caps ink on/off`와
 # 같은 짝이다.
 #
 # 3-P3에서 `k`는 초성 ㄱ, `f`는 중성 ㅏ다. `k f k`면 `가`가 확정되어 needle에
-# 들어가고 새 `ㄱ`이 조합 중으로 남는다 — **한 프레임에 확정된 한글과 조합
-# 중인 한글이 함께 있는 상태**이고, 그것이 이 검사가 필요로 하는 그림이다.
+# 들어가고 새 `ㄱ`이 조합 중으로 남는다 — 한 프레임에 확정된 한글과 조합
+# 중인 한글이 함께 있는 상태이고, 그것이 이 검사가 필요로 하는 그림이다.
 echo "=== reopen the prompt and compose on top of a committed syllable ==="
 type_keys slash
 sleep 1
@@ -904,7 +904,7 @@ echo "the prompt drew /가ㄱ in ${COLS} columns with the composing letter inver
 
 # ── 검사 19a: Esc가 조합만 버린다 (SH design 결정 3) ───────────────────
 #
-# **`input_test`의 검사 53이 같은 사실을 반환값 쪽에서 본다.** 여기서는
+# `input_test`의 검사 53이 같은 사실을 반환값 쪽에서 본다. 여기서는
 # 화면 쪽에서 본다 — 반전이 사라지고 검색어는 남는다.
 type_keys esc
 sleep 1
@@ -925,26 +925,26 @@ echo "Esc dropped only the composing letter and left /가 (cols=${COLS})"
 
 # ── 검사 20: 화면의 한글을 잡아 검색창에 붙여넣는다 (FP-M1) ────────────
 #
-# **이 체인이 FP의 사슬 전체를 밟는 유일한 자리다.**
+# 이 체인이 FP의 사슬 전체를 밟는 유일한 자리다.
 #   copy mode에서 `가`를 잡는다 → y가 클립보드에 넣는다
-#   → `/`가 프롬프트를 연다 → `Cmd+V`가 **셸이 아니라 needle로** 간다
+#   → `/`가 프롬프트를 연다 → `Cmd+V`가 셸이 아니라 needle로 간다
 #   → Enter가 제출해서 화면의 `가`를 찾는다
 #
-# **작업 흐름이 여기서 닫힌다.** 지금까지는 화면에서 본 한글을 눈으로 읽고
+# 작업 흐름이 여기서 닫힌다. 지금까지는 화면에서 본 한글을 눈으로 읽고
 # 손으로 다시 쳐야 했다(검사 18이 그 손을 흉내 낸다).
 #
-# **커서를 한 칸도 안 옮긴다**(FP-M1 실측 4). 검사 17이 `ctrl-l` 뒤에 `가`를
+# 커서를 한 칸도 안 옮긴다(FP-M1 실측 4). 검사 17이 `ctrl-l` 뒤에 `가`를
 # 치고 `left left`로 셸 커서를 그 글자 위에 올려 뒀고, `copyEnter`가 셸
 # 커서의 viewport 좌표를 물려받는다.
 #
-# **음성 검사가 `key_lines`가 아니라 `clip> paste` 줄 수인 것이 요점이다**
+# 음성 검사가 `key_lines`가 아니라 `clip> paste` 줄 수인 것이 요점이다
 # (FP-M1 실측 1). 붙여넣기는 `pty.write`를 직접 부르지 `keys.bytes`를 안
 # 거치므로 `key>` 줄을 아예 안 만든다 — 그 수법을 여기 쓰면 셸로 새도
 # 초록이다.
 echo "=== yank 가, open the prompt, paste it back ==="
 PASTES_BEFORE="$(grep -ac 'terminal: clip> paste' "$LOG" || true)"
 
-# 프롬프트를 닫고(Esc 하나) copy mode도 나간다(Esc 둘). **둘 다 삼켜진다** —
+# 프롬프트를 닫고(Esc 하나) copy mode도 나간다(Esc 둘). 둘 다 삼켜진다 —
 # 모드 밖이었다면 ESC가 셸로 나갔을 것이다.
 type_keys esc
 sleep 1
@@ -978,9 +978,9 @@ fi
 type_keys meta_l-v
 sleep 1
 
-# **판정 하나가 두 수를 함께 본다.** `put`이 `clip`과 같으면 통째로
+# 판정 하나가 두 수를 함께 본다. `put`이 `clip`과 같으면 통째로
 # 들어갔다는 뜻이고, 0이면 안 들어간 것이다. 첫 줄 자르기는 `vt_test`의
-# 검사 58이 호스트에서 초 단위로 이미 본다 — 여기서 보는 것은 **배선**이다.
+# 검사 58이 호스트에서 초 단위로 이미 본다 — 여기서 보는 것은 배선이다.
 PASTE_LINE="$(grep -a 'terminal: find> paste ' "$LOG" | tail -n 1 | tr -d '\r')"
 if [ -z "$PASTE_LINE" ]; then
   echo "--- find> lines ---"
@@ -992,20 +992,20 @@ if [ "$PUT" != "$CLIP_LEN" ]; then
   report_failure "the paste put ${PUT} byte(s) into the needle, expected ${CLIP_LEN}: ${PASTE_LINE}"
 fi
 
-# **음성 검사.** 셸 갈래를 안 탔다.
+# 음성 검사. 셸 갈래를 안 탔다.
 PASTES_AFTER="$(grep -ac 'terminal: clip> paste' "$LOG" || true)"
 if [ "$PASTES_AFTER" != "$PASTES_BEFORE" ]; then
   report_failure "the paste went to the shell instead of the needle (clip> paste ${PASTES_BEFORE} -> ${PASTES_AFTER})"
 fi
 
-# **needle이 그 글자다.** 기존 `find> overlay` 줄을 그대로 쓴다.
+# needle이 그 글자다. 기존 `find> overlay` 줄을 그대로 쓴다.
 if ! grep -aq 'terminal: find> overlay text=/가' "$LOG"; then
   echo "--- overlay lines ---"
   grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
   report_failure "the pasted 가 never showed up in the prompt overlay"
 fi
 
-# **붙인 한글이 화면의 한글을 찾는다.**
+# 붙인 한글이 화면의 한글을 찾는다.
 type_keys ret
 sleep 1
 SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
