@@ -1,9 +1,11 @@
-# HANDOFF: 히스토리가 전원 버튼에서 사라지는 것을 쟀다 — 다음은 SD-M1이다
+# HANDOFF: 그 한 줄이 씨앗에 섰다 — 다음은 SD-M2다(게이트)
 
 ## 지금 어디인가
 
-`main`이 깨끗하다. Shell History Durability(SD)의 M0이 2026-09-12에 끝났다.
-코드는 한 줄도 안 고쳤고 실측 열넷이 design에 있다
+Shell History Durability(SD)의 M0과 M1이 2026-09-12에 끝났다. 씨앗 rc의
+zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담고, 호스트 검사 넷이 그
+줄을 지운 것도 오타도 목록과 함께 지운 것도 0.1초에 빨갛게 만든다. 실측
+열넷과 되돌림 넷이 design에 있다
 (`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`).
 
 이 서브프로젝트는 SM 비목표 9("zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다")를
@@ -13,7 +15,7 @@
 시그널 핸들러를 하나도 안 가져서 먼저 죽는다는 우연이다. 게스트에서 세 번
 부팅해 확인했다(실측 14 — 콘솔 0, 화면 1).
 
-다음은 SD-M1이다(코드와 호스트 검사). 아래 "바로 다음에 할 것".
+다음은 SD-M2다(게이트). 아래 "바로 다음에 할 것".
 
 그 앞이 Gate Accuracy(GA-M0·M1)이고, 그 앞이 Shell Memory(SM-M0~M2), 그
 뒤에 문서와 소스 주석의 강조를 걷어냈다. 루트 게이트의 가장 최근 값은 27분
@@ -27,12 +29,14 @@
 | `b8d2d75` | 그 전제를 측정으로 갈아 치우고 제목을 Concurrency → Durability로, 접두사를 HC → SD로 바꿨다. SM design 넷에 ⚠ 정정을 달았다 |
 | `7b56a45` | SD-M0 plan(측정 여섯) |
 | `caccb45` | 실측 9~14 · HANDOFF · 기억 `project_shutdown_signals` |
+| SD-M1 커밋 | `histOptionLines()`와 씨앗의 한 줄, 호스트 검사 셋. 해시는 `git log --oneline` 맨 위다 |
 
 다음 세션이 먼저 알아야 하는 실측 넷이다. 나머지 열은 design에 있다.
 
-1. 고칠 것은 씨앗 rc의 한 줄 `setopt INC_APPEND_HISTORY`다. 그 줄은 기동할
+1. 씨앗 rc의 한 줄 `setopt INC_APPEND_HISTORY`가 M1에서 섰다. 그 줄은 기동할
    때 0바이트이고(실측 9), 오타가 나면 stderr 65바이트가 나와 다섯 체인의
-   화면 좌표를 민다 — 그래서 두 벌 규율이 필요하다.
+   화면 좌표를 민다 — 그래서 상수가 세 벌이다(`HIST_OPTIONS_ZSH` · 씨앗 ·
+   검사의 `KNOWN_HIST_OPTIONS`).
 2. SD-M2는 `config/check.sh` 7차에서 `fc -W`를 뺀다. 그 명령이 다른 세션이
    써 둔 줄을 지우기 때문이고(실측 10), 옵션이 켜지면 애초에 필요 없다.
    SM-M2가 넣은 우회가 이 옵션과 함께 없어진다.
@@ -50,7 +54,11 @@ Task 1~6에 스크립트가 글자 그대로 있다. 컨테이너 `tars-measure`
 zsh도 fish도 없어서 `apt-get`으로 넣어야 한다.
 
 ⚠ 파일 편집은 사용자가 한다(아래 "협업 방식"). SD는 위임 세션이 아니다 —
-SD-M1의 구현 파일은 Claude가 "넣을 것"을 제시하고 사용자가 넣는다.
+SD-M1의 구현 파일도 Claude가 "넣을 것"을 제시하고 사용자가 넣었다. 다만
+되돌림(음성 확인)은 사용자가 "직접 진행해 달라"고 정해서 Claude가 했고,
+방법은 `/tmp` 사본을 `-v`로 마운트하는 것이었다 — 저장소 파일이 한 번도 안
+바뀌므로 되돌리는 것을 잊는 경로가 없다. 이 방법을 다음 되돌림의 기본으로
+쓴다.
 
 ## 그 앞의 둘 (2026-09-12, 본문은 기억 파일에)
 
@@ -95,24 +103,45 @@ SIGPIPE를 안 받는다.
 컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. 아래 "명령 모음"의 첫
 형태로 친다.
 
-## 바로 다음에 할 것 — SD-M1
+## SD-M1이 넣은 것 (끝났다)
 
-plan은 아직 없다. `CLAUDE.md`대로 착수 시점에 새로 쓴다. design의 결정
-2·3·4·6·7이 그 내용이고, 고칠 파일이 둘이다.
+`init/src/config.zig`에 `Shell.histOptionLines()`가 섰다(zsh 한 줄 · bash 0 ·
+fish 0). 씨앗 `rcSeed()`의 zsh 갈래가 그 글자를 따로 한 벌 더 적는다 —
+조립하지 않는다. `init/src/config_test.zig`는 `expectQuietSeed`의 허용 목록을
+`hookLines()`와 `histOptionLines()`의 합으로 보고 역방향도 함께 넓혔고, 새
+검사 `expectHistOptions`가 개수를 못 박는다.
 
-1. `init/src/config.zig` — `histOptionLines()`를 `hookLines()`와 같은 모양으로
-   더한다(zsh 한 줄 `setopt INC_APPEND_HISTORY` · bash 0 · fish 0). 씨앗
-   rc(`rcSeed()`)의 zsh 갈래에 그 글자를 따로 한 벌 더 적고, 왜 있는지를 주석으로
-   그 위에 적는다(지우면 전원 버튼이 히스토리를 지운다).
-2. `init/src/config_test.zig` — `expectQuietSeed`의 허용 목록을 `hookLines()`와
-   `histOptionLines()`의 합으로 보고 역방향도 함께 넓힌다. 새 검사
-   `expectHistOptions`가 개수를 못 박는다(zsh 1 · bash 0 · fish 0).
+design이 예고하지 않은 것을 하나 더 넣었다. 두 벌에는 구멍이 있다 — 씨앗과
+목록을 함께 고치면 양방향이 둘 다 만족된다. 그래서 검사 쪽에 셋째 벌
+`KNOWN_HIST_OPTIONS`를 두었다(`HOOKED_TOOLS`와 같은 자리다). 되돌림 넷이
+각각 다른 줄에서 죽는 것을 확인했다 — 씨앗 줄을 `echo hi`로(정방향) · 씨앗에서만
+지우기(역방향) · 씨앗과 목록에서 함께 지우기(개수) · 둘을 함께 오타로
+(`KNOWN_HIST_OPTIONS`).
 
-그 뒤가 SD-M2다(게이트). 실측 10·11이 그 모양을 이미 정해 두었다 — 7차에서
-`fc -W`를 빼고, 판정은 앵커 붙인 `grep -c`의 숫자로 한다.
+config 체인 단독이 1분 26.01초에 `FAIL` 없이 끝났다(기준선과 같다). 씨앗이
+여섯 줄 커졌는데 화면 좌표를 보는 검사가 하나도 안 밀렸고, 7·8차의 히스토리
+판정도 새 옵션과 안 부딪쳤다.
 
-⚠ 조립하지 않는다. `rcSeed()`를 `histOptionLines()`에서 `++`로 만들면 역방향
-검사가 tautology가 된다(SM 결정 10). 두 벌을 잇는 것은 컴파일러가 아니라 검사다.
+⚠ 그 초록이 "옵션이 일한다"를 뜻하지는 않는다. 7차가 `fc -W`를 치는 한
+옵션이 꺼져 있어도 같은 초록이 난다. 그것을 가르는 것이 M2다.
+
+## 바로 다음에 할 것 — SD-M2
+
+plan은 아직 없다. `CLAUDE.md`대로 착수 시점에 새로 쓴다. design의 결정 5와
+실측 10·11·12가 그 내용이고, 고칠 파일이 하나다(`config/check.sh`).
+
+1. 7차에서 `fc -W`를 뺀다(`HIST_WRITE_KEYS`). 그 명령이 다른 세션이 써 둔
+   줄을 지우고(실측 10), 옵션이 켜지면 애초에 필요 없다.
+2. 음성·양성 대조군을 중첩 zsh 둘로 만든다(결정 5). 음성은 첫 명령이
+   `unsetopt INC_APPEND_HISTORY`이고 양성은 아무것도 안 친다. 판정은 그
+   세션이 살아 있는 동안 한다 — 나갈 때는 옵션이 꺼진 세션도 append한다
+   (실측 11의 다섯째 행).
+3. 판정은 앵커 붙인 `grep -c`의 숫자로 한다(실측 11). 앵커가 없으면 그
+   `grep` 명령줄이 자기를 세어 음성 기대값이 0이 아니라 1이 되고 검사가
+   조용히 죽는다. 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같아서
+   (실측 12) 프롬프트로는 판정할 수 없다.
+
+그 뒤에 루트 게이트 3/3과 기억 파일(`docs/decisions/`)을 쓰면 SD가 닫힌다.
 
 ## 명령 모음
 
@@ -828,6 +857,8 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   `cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다).
 - `config.zig` — `/config/tars.conf` 파서 한 벌. 키 여섯. `rcSeed()`가 씨앗 rc를
   담고 `histEntries()`가 셸마다 갈린다(zsh 셋 · bash 둘 · fish 0).
+  `histOptionLines()`는 env로는 못 주는 것을 담는다(zsh 한 줄 · 나머지 0) —
+  `setopt`를 나르는 환경 변수가 없어서 그 줄만 파일로 간다(SD 확인 1).
 - `environ.zig` — `withTarsEnv`가 커널 envp 블록 뒤에 `PATH` ·
   `XDG_DATA_HOME` · 히스토리 env를 붙인다.
 - `storage.zig` — 설정 디스크를 ext2 라벨 `tars-`로 찾는다(장치 이름이
@@ -842,8 +873,11 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   (`project_shutdown_signals`).
 - `config_test.zig`의 `expectQuietSeed` — 씨앗 rc가 부팅할 때 한 글자도
   안 찍는 것을 호스트에서 막는다. 쓸 수 있는 줄은 주석 · `alias` · `command -v`
-  관문이 붙은 훅뿐이다. 씨앗의 훅 글자와 `hookLines()`의 글자는 두 벌로 둔다
-  — 조립하면 역방향 검사가 tautology가 된다.
+  관문이 붙은 훅 · `histOptionLines()`의 줄뿐이다. 씨앗의 글자와 목록의
+  글자는 두 벌로 둔다 — 조립하면 역방향 검사가 tautology가 된다. 두 벌을
+  함께 고치는 구멍은 셋째 벌이 막는다(훅은 `HOOKED_TOOLS`, 옵션은
+  `KNOWN_HIST_OPTIONS`). 상수를 늘리기 전에 그 줄의 stdout·stderr를 먼저
+  잰다.
 
 ### 게이트
 

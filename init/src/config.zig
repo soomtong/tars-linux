@@ -146,9 +146,14 @@ pub const Shell = enum {
     /// fish는 빈 목록이다. fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
     /// 따라오고(실측 11·40), 줄 수를 정하는 변수가 아예 없다(비목표 4).
     ///
-    /// 씨앗 rc에는 히스토리 줄이 한 줄도 없다(결정 3). 실측 9·10이
-    /// 근거다 — 셋 다 env에서 먹는다. 그래서 이 milestone은
-    /// `rcSeed()`도 `expectQuietSeed`도 한 글자 안 건드린다.
+    /// 히스토리 env는 씨앗 rc를 한 글자도 안 건드린다(SM 결정 3). 실측
+    /// 9·10이 근거다 — 셋 다 env에서 먹는다.
+    ///
+    /// 그 문장을 옵션까지 덮는 것으로 읽으면 안 된다. `setopt`를 zsh에
+    /// 나르는 환경 변수는 없어서 옵션은 파일로만 줄 수 있다(SD 확인 1).
+    /// 그래서 SD-M1이 씨앗의 zsh 갈래에 한 줄을 더했고, 그 줄의 목록이
+    /// 아래 `histOptionLines()`다. env로 되는 것과 파일로만 되는 것이
+    /// 갈리는 자리가 여기다.
     const HIST_BASH = [_][:0]const u8{
         "HISTFILE=/config/bash_history",
         // bash는 `HISTFILESIZE`를 안 줘도 이 수로 파일까지 자른다
@@ -217,18 +222,58 @@ pub const Shell = enum {
         };
     }
 
+    /// 씨앗 rc가 담는 히스토리 옵션 줄(SD design 결정 1·3). zsh만 하나이고
+    /// bash와 fish는 빈 목록이다.
+    ///
+    /// 이 한 줄이 하는 일은 쓰는 시점을 옮기는 것이다. 이 줄이 없으면 zsh는
+    /// 셸이 죽으면서 한 번에 쓰는데, 그 기회가 두 셸에게 다르게 온다 —
+    /// 화면 셸은 `terminal`이 먼저 죽어 PTY가 닫히면서 SIGHUP을 받고, 콘솔
+    /// 셸은 받을 데가 없어 SIGTERM을 무시한 채 3초를 버틴 뒤 SIGKILL에
+    /// 죽는다. 그래서 전원 버튼을 누르면 콘솔 셸에 친 명령이 통째로
+    /// 사라진다(SD 실측 4·14 — 게스트에서 콘솔 0, 화면 1을 쟀다).
+    ///
+    /// 이 줄이 있으면 명령마다 그 자리에서 파일에 쓰므로 SIGKILL에도
+    /// 남는다(실측 3·6).
+    ///
+    /// bash가 0인 것은 빠뜨린 것이 아니다. bash에는 `setopt` 한 줄에
+    /// 대응하는 것이 없어서 `PROMPT_COMMAND='history -a'` 같은 프롬프트 훅이
+    /// 필요하고, 그것은 허용 목록을 한 범주 더 넓히는 일이다(비목표 1).
+    /// fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이 애초에
+    /// 없다(실측 8).
+    ///
+    /// `rcSeed()`가 담는 글자와 여기 글자가 두 벌인 이유는 `hookLines()`의
+    /// 머리 주석과 같다 — 조립하면 역방향 검사가 tautology가 된다.
+    const HIST_OPTIONS_ZSH = [_][]const u8{
+        "setopt INC_APPEND_HISTORY",
+    };
+
+    /// 이 셸의 히스토리 옵션 줄들.
+    pub fn histOptionLines(self: Shell) []const []const u8 {
+        return switch (self) {
+            .fish => &[_][]const u8{},
+            .bash => &[_][]const u8{},
+            .zsh => &HIST_OPTIONS_ZSH,
+        };
+    }
+
     /// 첫 부팅에 깔아 두는 내용(결정 7).
     ///
     /// 규칙이 하나뿐이다: 아무것도 찍지 않는다. 설정 디스크를 붙이는
     /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — 씨앗이 배너
     /// 한 줄을 찍으면 그 좌표가 통째로 밀린다. 그래서 여기 쓸 수 있는 줄은
-    /// 주석 · alias · 위 `hookLines()`에 글자 그대로 있는 줄 셋뿐이고,
+    /// 주석 · alias · 위 `hookLines()`와 `histOptionLines()`에 글자 그대로
+    /// 있는 줄뿐이고,
     /// `config_test.zig`의 `expectQuietSeed`가 그 규칙을 부팅 없이 0.1초에
     /// 확인한다.
     ///
     /// SM-M1이 그 문을 두 줄만큼 넓혔다. 넓힌 방식이 "`eval`도 허용"이
     /// 아니라 정확 허용 목록인 이유는 결정 6에 있다 — `eval` 뒤에는 아무
     /// 문장이나 올 수 있고, 그러면 이 규칙이 막으려던 것이 그대로 열린다.
+    ///
+    /// SD-M1이 zsh 갈래에서 한 줄 더 넓혔다. 같은 방식이다 — 범주
+    /// (`setopt `로 시작하면 통과)가 아니라 정확 허용 목록이고, 그 줄을
+    /// 허용하는 근거는 취향이 아니라 재 본 값이다(SD 실측 9 — 0바이트,
+    /// 오타는 stderr 65바이트).
     ///
     /// 프롬프트를 안 건드린다(비목표 5). 실측 9가 그 비용을 적고 있고,
     /// 그 비용은 사용자가 자기 rc에 프롬프트를 쓸 때 자기 기계에서만
@@ -323,6 +368,13 @@ pub const Shell = enum {
             \\# 화면 좌표를 밀어 버린다.
             \\command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
             \\command -v fzf >/dev/null && eval "$(fzf --zsh)"
+            \\#
+            \\# 아래 한 줄이 히스토리를 명령마다 그 자리에서 파일에 쓴다.
+            \\# 이 줄이 없으면 zsh는 셸이 죽으면서 한 번에 쓰는데, 전원 버튼을
+            \\# 눌러도 콘솔 셸에는 그 기회가 안 온다 — 대화형 셸은 SIGTERM을
+            \\# 무시하고 3초 뒤 SIGKILL에 죽으므로, 그 세션에 친 명령이 통째로
+            \\# 사라진다. 지우면 그 동작으로 돌아간다.
+            \\setopt INC_APPEND_HISTORY
             \\
             ,
         };

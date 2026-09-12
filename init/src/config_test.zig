@@ -15,6 +15,22 @@ const MAX_HOOK_LINES = 8;
 /// 고쳐야 한다 — 손이 한 번 멈추는 자리를 만드는 것이 이 배열의 전부다.
 const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 
+/// `expectQuietSeed`가 히스토리 옵션 줄을 몇 개까지 셀 수 있는가.
+/// `MAX_HOOK_LINES`와 같은 이유로 상한이 필요하다 — 힙이 없다.
+const MAX_HIST_OPTION_LINES = 4;
+
+/// 씨앗에 들어와도 좋다고 우리가 직접 재 본 옵션 줄(SD design 결정 4).
+///
+/// `HOOKED_TOOLS`와 같은 자리다 — 손이 한 번 멈추는 자리를 만드는 것이
+/// 전부다. `histOptionLines()`와 씨앗은 두 벌이라 함께 고치면 검사가
+/// 통과하는데, 그 구멍을 이 셋째 벌이 막는다.
+///
+/// 새 `setopt` 줄을 씨앗에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
+/// 줄의 stdout·stderr가 0바이트인 것을 재고 여기 적어야 한다. 없는 옵션
+/// 이름은 stderr 65바이트이고, 그 65바이트가 설정 디스크를 붙이는 다섯
+/// 체인의 화면 좌표를 민다.
+const KNOWN_HIST_OPTIONS = [_][]const u8{"setopt INC_APPEND_HISTORY"};
+
 /// config.zig에서 유일하게 시스템 콜이 없는 함수가 parse다. HANDOFF가
 /// "단위 테스트가 없다"고 오래 적어두고 있었는데, keyboard 키가 들어오면서
 /// 파서의 분기가 둘이 된 지금이 그 저울을 놓을 자리다.
@@ -81,6 +97,32 @@ fn expect(text: []const u8, want: config.Config) !void {
 ///
 /// 위험 3의 반쪽이 여기 있다. design이 *"우리가 까는 것은 절대로 셸을
 /// 죽이지 않아야 한다"*고 적었고, 그 "절대로"를 지키는 장치가 이 함수다.
+/// 씨앗 rc가 쓸 수 있는 줄만 담고 있는지 확인한다(SC-M1이 세우고 SM-M1과
+/// SD-M1이 한 줄씩 넓혔다).
+///
+/// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 우리가
+/// 쓸 수 있는 줄의 종류를 제한한다.
+///
+/// | | 종류 | 왜 조용한가 |
+/// |---|---|---|
+/// | SC-M1 | 주석 | 셸이 안 읽는다 |
+/// | SC-M1 | `alias …` | 정의만 하고 실행하지 않는다 |
+/// | SM-M1 | `hookLines()`의 한 줄과 글자 그대로 같은 줄 | SM 실측 23이 셋 다 0바이트를 쟀다 |
+/// | SD-M1 | `histOptionLines()`의 한 줄과 글자 그대로 같은 줄 | SD 실측 9가 0바이트를 쟀다 |
+///
+/// SM-M1이 문법 범주가 아니라 정확 허용 목록으로 넓힌 이유(SM design 결정 6):
+/// "주석 · alias · `eval` 세 범주"로 넓히면 `eval` 뒤에 아무 문장이나 올 수
+/// 있고, 그러면 이 규칙이 막으려던 것이 정확히 그것이다.
+///
+/// SD-M1의 넷째 줄도 같은 이유로 범주가 아니다(SD 결정 4). `setopt `를
+/// 접두사로 열면 뒤에 아무 이름이나 올 수 있고, 없는 이름은 stderr
+/// 65바이트다(SD 실측 9).
+///
+/// 역방향도 본다. 정방향만으로는 훅이나 옵션 줄을 지우는 것이 통과한다 —
+/// 아무 줄도 안 남으면 위반할 줄도 없기 때문이다.
+///
+/// 위험 3의 반쪽이 여기 있다. SC design이 "우리가 까는 것은 절대로 셸을
+/// 죽이지 않아야 한다"고 적었고, 그 "절대로"를 지키는 장치가 이 함수다.
 fn expectQuietSeed(sh: config.Shell) !void {
     const text = sh.rcSeed();
     if (text.len == 0 or text[text.len - 1] != '\n') {
@@ -88,13 +130,22 @@ fn expectQuietSeed(sh: config.Shell) !void {
         return error.BadSeed;
     }
     const hooks = sh.hookLines();
-    // 훅이 씨앗에서 보였는가. 힙이 없으므로 상한이 필요하고, 지금 둘이다 —
-    // 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
+    const opts = sh.histOptionLines();
+    // 훅과 옵션 줄이 씨앗에서 보였는가. 힙이 없으므로 상한이 둘 다
+    // 필요하고, 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
     var seen = [_]bool{false} ** MAX_HOOK_LINES;
+    var seen_opt = [_]bool{false} ** MAX_HIST_OPTION_LINES;
     if (hooks.len > seen.len) {
         std.debug.print("FAIL: the {s} shell has {d} hook lines; raise MAX_HOOK_LINES\n", .{
             @tagName(sh), hooks.len,
         });
+        return error.BadSeed;
+    }
+    if (opts.len > seen_opt.len) {
+        std.debug.print(
+            "FAIL: the {s} shell has {d} history option lines; raise MAX_HIST_OPTION_LINES\n",
+            .{ @tagName(sh), opts.len },
+        );
         return error.BadSeed;
     }
     var lines = std.mem.splitScalar(u8, text, '\n');
@@ -109,29 +160,46 @@ fn expectQuietSeed(sh: config.Shell) !void {
         }
         // `startsWith`가 아니라 `eql`이다. 접두사로 보면
         // `command -v zoxide >/dev/null && rm -rf /`가 통과한다.
-        var is_hook = false;
+        var allowed = false;
         for (hooks, 0..) |hook, i| {
             if (!std.mem.eql(u8, line, hook)) continue;
             seen[i] = true;
-            is_hook = true;
+            allowed = true;
             break;
         }
-        if (is_hook) continue;
+        if (!allowed) {
+            for (opts, 0..) |opt, i| {
+                if (!std.mem.eql(u8, line, opt)) continue;
+                seen_opt[i] = true;
+                allowed = true;
+                break;
+            }
+        }
+        if (allowed) continue;
         std.debug.print(
             "FAIL: the {s} seed has a line that is not a comment, not an alias,\n" ++
-                "      and not one of its hook lines:\n  {s}\n" ++
-                "      the hook lines are:\n",
+                "      and not one of its hook or history option lines:\n  {s}\n" ++
+                "      the allowed lines are:\n",
             .{ @tagName(sh), line },
         );
         for (hooks) |hook| std.debug.print("        {s}\n", .{hook});
+        for (opts) |opt| std.debug.print("        {s}\n", .{opt});
         return error.BadSeed;
     }
-    // ── 역방향 — 훅을 지우는 것이 통과하지 않게 한다 ──────────────────
+    // ── 역방향 — 훅이나 옵션 줄을 지우는 것이 통과하지 않게 한다 ────────
     for (hooks, 0..) |hook, i| {
         if (seen[i]) continue;
         std.debug.print(
             "FAIL: the {s} seed does not carry its hook line:\n  {s}\n",
             .{ @tagName(sh), hook },
+        );
+        return error.BadSeed;
+    }
+    for (opts, 0..) |opt, i| {
+        if (seen_opt[i]) continue;
+        std.debug.print(
+            "FAIL: the {s} seed does not carry its history option line:\n  {s}\n",
+            .{ @tagName(sh), opt },
         );
         return error.BadSeed;
     }
@@ -179,10 +247,13 @@ fn expectHooksCoverTheTools(sh: config.Shell) !void {
 
 /// 히스토리 env가 셸의 성질과 맞는가(SM-M2 design 결정 3).
 ///
-/// `expectQuietSeed`와 짝이 아니다 — 이 milestone은 씨앗을 안 건드린다.
-/// 히스토리는 rc가 아니라 env로 세우고(실측 9·10·11), 그 결정이 옳은지는
-/// `config/check.sh`의 8차 부팅이 본다. 여기가 보는 것은 우리가 셸마다
-/// 무엇을 주려고 했는가까지다.
+/// 이 함수는 env만 본다. 히스토리를 rc가 아니라 env로 세운 것이 SM의
+/// 결정이고(SM 실측 9·10·11), 그 결정이 옳은지는 `config/check.sh`의 8차
+/// 부팅이 본다. 여기가 보는 것은 우리가 셸마다 무엇을 주려고 했는가까지다.
+///
+/// 씨앗 쪽의 짝은 아래 `expectHistOptions`다. SD-M1이 그것을 더했다 —
+/// env로 되는 것(`HISTFILE`·`HISTSIZE`·`SAVEHIST`)과 파일로만 되는 것
+/// (`setopt`)이 갈리므로 검사도 둘이다.
 ///
 /// 보는 것 셋:
 ///   1. 개수가 셸의 성질과 맞다 — fish 0 · bash 2 · zsh 3
@@ -225,6 +296,55 @@ fn expectHistEntries(sh: config.Shell) !void {
             @tagName(sh), saw_savehist,
         });
         return error.BadHistEnv;
+    }
+}
+
+/// 히스토리 옵션 줄이 셸의 성질과 맞는가(SD design 결정 4).
+///
+/// `expectHistEntries`가 `SAVEHIST`를 zsh에만 못 박은 것과 같은 모양이고,
+/// 개수가 본체다 — zsh 1 · bash 0 · fish 0.
+///
+/// 그 0 둘이 빠뜨린 것이 아니라 정한 것이라는 데 이 함수의 값이 있다.
+/// fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이 없고(SD 실측 8),
+/// bash는 `setopt` 한 줄에 대응하는 것이 없어 프롬프트 훅이 필요하다
+/// (SD 실측 7, 비목표 1). 누가 bash를 여는 날에는 이 숫자를 먼저 고쳐야
+/// 하고, 그 자리가 이 함수다.
+///
+/// 보는 것이 둘이다.
+///   1. 개수가 셸의 성질과 맞다
+///   2. 모든 줄이 `KNOWN_HIST_OPTIONS`에 있다 — 우리가 직접 재 본 글자다
+///
+/// 둘째가 없으면 `INC_APPEND_HISTORYY`로 오타를 낸 것이 호스트를 통과한다.
+/// 개수는 여전히 1이고, 씨앗과 `histOptionLines()`를 함께 틀리게 고치면
+/// `expectQuietSeed`의 양방향도 만족되기 때문이다. 그 오타의 대가는
+/// stderr 65바이트이고 다섯 체인의 화면 좌표다(SD 실측 9).
+fn expectHistOptions(sh: config.Shell) !void {
+    const want_len: usize = switch (sh) {
+        .fish => 0,
+        .bash => 0,
+        .zsh => 1,
+    };
+    const lines = sh.histOptionLines();
+    if (lines.len != want_len) {
+        std.debug.print("FAIL: the {s} shell carries {d} history option lines, want {d}\n", .{
+            @tagName(sh), lines.len, want_len,
+        });
+        return error.BadHistOption;
+    }
+    for (lines) |line| {
+        var known = false;
+        for (KNOWN_HIST_OPTIONS) |k| {
+            if (!std.mem.eql(u8, line, k)) continue;
+            known = true;
+            break;
+        }
+        if (known) continue;
+        std.debug.print(
+            "FAIL: the {s} shell wants an option line nobody measured:\n  {s}\n" ++
+                "      measure its stdout and stderr first, then add it to KNOWN_HIST_OPTIONS\n",
+            .{ @tagName(sh), line },
+        );
+        return error.BadHistOption;
     }
 }
 
@@ -467,6 +587,14 @@ pub fn main() !void {
     //   덮개    씨앗과 hookLines()에서 함께 지우는 것
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
     for (std.enums.values(config.Shell)) |sh| try expectHooksCoverTheTools(sh);
+
+    // ── SD-M1: 히스토리 옵션 줄 ─────────────────────────────────────────
+    //
+    // 검사가 셋인 구조가 SM-M1과 같다. 정방향과 역방향은 위
+    // `expectQuietSeed`가 함께 보고, 셋째(씨앗과 `histOptionLines()`에서
+    // 함께 지우는 것)를 이 줄이 막는다 — zsh의 개수를 1로 못 박으므로
+    // 목록이 비면 그 자리에서 빨개진다.
+    for (std.enums.values(config.Shell)) |sh| try expectHistOptions(sh);
 
     // ── SM-M2: 히스토리 env ─────────────────────────────────────────────
     for (std.enums.values(config.Shell)) |sh| try expectHistEntries(sh);
