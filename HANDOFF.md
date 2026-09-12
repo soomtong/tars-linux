@@ -1,12 +1,14 @@
-# HANDOFF: 그 한 줄이 씨앗에 섰다 — 다음은 SD-M2다(게이트)
+# HANDOFF: SD가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
 
 ## 지금 어디인가
 
-Shell History Durability(SD)의 M0과 M1이 2026-09-12에 끝났다. 씨앗 rc의
-zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담고, 호스트 검사 넷이 그
-줄을 지운 것도 오타도 목록과 함께 지운 것도 0.1초에 빨갛게 만든다. 실측
-열넷과 되돌림 넷이 design에 있다
-(`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`).
+Shell History Durability(SD)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다.
+씨앗 rc의 zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담고, 호스트 검사
+넷이 그 줄을 지운 것도 오타도 목록과 함께 지운 것도 0.1초에 빨갛게 만들고,
+게이트의 7차 부팅이 중첩 zsh 둘로 그 줄이 게스트에서 하는 일을 판정한다
+(`neg0` · `aft1` · `pos1`). 실측 열여덟이 design에 있다
+(`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`),
+본문 요약은 `docs/decisions/project_shell_history.md`에 있다.
 
 이 서브프로젝트는 SM 비목표 9("zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다")를
 고치려고 열었는데, 착수 전 측정이 그 전제를 뒤집었다. 겹쳐쓰기는 안 난다 —
@@ -15,37 +17,43 @@ zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담고, 호스트 검사 �
 시그널 핸들러를 하나도 안 가져서 먼저 죽는다는 우연이다. 게스트에서 세 번
 부팅해 확인했다(실측 14 — 콘솔 0, 화면 1).
 
-다음은 SD-M2다(게이트). 아래 "바로 다음에 할 것".
+다음 일은 아직 안 정해졌다. 아래 "바로 다음에 할 것"이 후보 목록이다.
 
 그 앞이 Gate Accuracy(GA-M0·M1)이고, 그 앞이 Shell Memory(SM-M0~M2), 그
-뒤에 문서와 소스 주석의 강조를 걷어냈다. 루트 게이트의 가장 최근 값은 27분
-35.61초 3/3이다.
+뒤에 문서와 소스 주석의 강조를 걷어냈다.
 
-## SD가 지금까지 한 일 (2026-09-12)
+⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
+넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## SD가 한 일 (2026-09-12, 하루에 닫혔다)
 
 | 커밋 | 무엇 |
 |---|---|
 | `7562d3b` | 첫 design. 전제가 "두 세션이 서로를 지운다"였고 그것이 틀렸다 |
 | `b8d2d75` | 그 전제를 측정으로 갈아 치우고 제목을 Concurrency → Durability로, 접두사를 HC → SD로 바꿨다. SM design 넷에 ⚠ 정정을 달았다 |
 | `7b56a45` | SD-M0 plan(측정 여섯) |
-| `caccb45` | 실측 9~14 · HANDOFF · 기억 `project_shutdown_signals` |
-| SD-M1 커밋 | `histOptionLines()`와 씨앗의 한 줄, 호스트 검사 셋. 해시는 `git log --oneline` 맨 위다 |
+| `caccb45` | 실측 9~14 · 기억 `project_shutdown_signals` |
+| `68b06c5` | SD-M1. `histOptionLines()`와 씨앗의 한 줄, 호스트 검사 셋 |
+| `b316901` | SD-M2. 7차의 중첩 zsh 둘과 `fc -W` 제거, 8차의 판정 글자 이동 |
 
-다음 세션이 먼저 알아야 하는 실측 넷이다. 나머지 열은 design에 있다.
+다음 세션이 먼저 알아야 하는 다섯이다. 나머지는 design과 기억 파일에 있다.
 
-1. 씨앗 rc의 한 줄 `setopt INC_APPEND_HISTORY`가 M1에서 섰다. 그 줄은 기동할
-   때 0바이트이고(실측 9), 오타가 나면 stderr 65바이트가 나와 다섯 체인의
-   화면 좌표를 민다 — 그래서 상수가 세 벌이다(`HIST_OPTIONS_ZSH` · 씨앗 ·
-   검사의 `KNOWN_HIST_OPTIONS`).
-2. SD-M2는 `config/check.sh` 7차에서 `fc -W`를 뺀다. 그 명령이 다른 세션이
-   써 둔 줄을 지우기 때문이고(실측 10), 옵션이 켜지면 애초에 필요 없다.
-   SM-M2가 넣은 우회가 이 옵션과 함께 없어진다.
+1. 씨앗 rc의 한 줄 `setopt INC_APPEND_HISTORY`. 그 줄은 기동할 때 0바이트이고
+   (실측 9), 오타가 나면 stderr 65바이트가 나와 다섯 체인의 화면 좌표를
+   민다 — 그래서 상수가 세 벌이다(`HIST_OPTIONS_ZSH` · 씨앗 · 검사의
+   `KNOWN_HIST_OPTIONS`).
+2. `fc -W`를 되살리지 말 것. 그 명령은 메모리의 목록으로 파일을 통째로
+   덮어써서 다른 세션이 써 둔 줄을 지운다(실측 10). SM-M2가 "게이트가
+   전원을 뽑는다"를 이유로 넣었던 우회이고, 옵션이 켜진 지금은 필요도 없다.
 3. 게이트 판정의 `grep`에는 앵커를 붙인다(실측 11). 옵션이 켜지면 그 `grep`
    명령줄이 실행 전에 파일에 써져서 패턴이 자기를 센다 — 앵커 없이는 음성
-   기대값이 0이 아니라 1이 되고 검사가 조용히 죽는다.
-   `grep -c '^echo target$'` → 1 · 앵커 없이 → 2 · 없는 표적 → 0.
+   기대값이 0이 아니라 1이 되고 검사가 조용히 죽는다. 체인은 `^…$` 대신
+   `grep -x`를 쓴다(게스트에 따옴표를 안 쳐도 된다).
 4. 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같다(실측 12). 그래서
-   판정은 프롬프트가 아니라 위 `grep -c`의 숫자로 한다.
+   판정은 프롬프트가 아니라 우리가 만든 글자(`neg0`·`aft1`·`pos1`)로 한다.
+5. 음성 판정은 그 세션이 살아 있는 동안 한다(실측 11의 다섯째 행). 옵션을
+   끈 세션도 나갈 때는 자기 목록을 append하므로, 나간 뒤에 세면 음성과 양성이
+   같은 숫자가 된다. 거꾸로 그 성질이 `aft1` 판정의 근거다.
 
 측정 하네스는 `/tmp`에 있었고 저장소에 안 넣었다. 다시 필요하면 plan
 (`docs/superpowers/plans/2026-09-12-tars-shell-history-durability-sd-m0.md`)의
@@ -53,12 +61,12 @@ Task 1~6에 스크립트가 글자 그대로 있다. 컨테이너 `tars-measure`
 없어졌을 것이다(`sleep 7200`) — Task 0이 다시 세우는 방법이다. devcontainer에는
 zsh도 fish도 없어서 `apt-get`으로 넣어야 한다.
 
-⚠ 파일 편집은 사용자가 한다(아래 "협업 방식"). SD는 위임 세션이 아니다 —
-SD-M1의 구현 파일도 Claude가 "넣을 것"을 제시하고 사용자가 넣었다. 다만
-되돌림(음성 확인)은 사용자가 "직접 진행해 달라"고 정해서 Claude가 했고,
-방법은 `/tmp` 사본을 `-v`로 마운트하는 것이었다 — 저장소 파일이 한 번도 안
-바뀌므로 되돌리는 것을 잊는 경로가 없다. 이 방법을 다음 되돌림의 기본으로
-쓴다.
+되돌림(음성 확인)은 `/tmp` 사본을 `-v`로 마운트해서 한다 — 저장소 파일이 한
+번도 안 바뀌므로 되돌리는 것을 잊는 경로가 없다. SD-M2에서 그 방법이 한
+가지를 더 가르쳐 주었다: 호스트 검사가 먼저 죽이는 반사실은 마운트가 둘
+필요하다. 씨앗에서 그 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에
+막으므로, 게이트가 무엇을 보는지 확인하려면 그 loop 한 줄
+(`if (seen_opt[i] or true) continue;`)도 함께 눕혀야 한다.
 
 ## 그 앞의 둘 (2026-09-12, 본문은 기억 파일에)
 
@@ -103,6 +111,44 @@ SIGPIPE를 안 받는다.
 컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. 아래 "명령 모음"의 첫
 형태로 친다.
 
+## SD-M2가 넣은 것 (끝났다)
+
+`config/check.sh` 7차 부팅이 중첩 zsh 둘을 띄운다. 둘 다 같은 씨앗 rc를 읽고,
+다른 것은 음성이 첫 명령으로 `unsetopt INC_APPEND_HISTORY`를 치는 것 하나뿐
+이다. 판정 셋이 화면의 글자다.
+
+```
+(none)# zsh
+(none)# unsetopt INC_APPEND_HISTORY
+(none)# negmark=1
+(none)# echo neg$(grep -cx negmark=1 /config/zsh_history)
+neg0                                    ← 옵션을 끈 세션은 안 쓴다
+(none)# exit
+(none)# echo aft$(grep -cx negmark=1 /config/zsh_history)
+aft1                                    ← 그 명령은 분명히 쳐졌다
+(none)# zsh
+(none)# posmark=1
+(none)# echo pos$(grep -cx posmark=1 /config/zsh_history)
+pos1                                    ← 옵션이 켜진 세션은 그 자리에서 쓴다
+```
+
+가운데 `aft1`은 design에 없던 것이다. 음성이 보는 것은 "파일에 그 줄이 없다"
+이고, 그것만으로는 "아직 안 썼다"와 "애초에 안 쳐졌다"가 안 갈린다.
+
+8차의 판정 글자가 `whence -w fzf-history-widget`에서 `posmark=1`로 옮겨졌다.
+`history`가 최근 16개만 찍는데 7차가 중첩 세션 둘을 돌면서 그 뒤로 줄이
+아홉쯤 더 붙어 옛 글자가 창 밖으로 밀려났다. 7차에 명령을 더 더하는 사람은
+이 수를 다시 세야 한다.
+
+반사실이 이 검사의 값을 증명했다. 씨앗에서 그 줄만 뺀 `config.zig` 사본을
+마운트하면 체인이 7차에서 죽는데, 예상한 `pos1`이 아니라 첫째 `neg0`에서
+죽는다 — 옵션이 없으면 그 시점에 `/config/zsh_history`가 아예 없어서
+`grep`이 에러를 내고 `echo`가 숫자 없는 `neg`를 찍는다. 고친 것의 크기가
+"늦게 쓴다"가 아니라 "파일이 없다"였다.
+
+config 체인 단독이 1분 36.42초다(SD-M1의 1분 26.01초에서 +10.4초. 7차에
+타이핑이 100키쯤 늘어난 값이다).
+
 ## SD-M1이 넣은 것 (끝났다)
 
 `init/src/config.zig`에 `Shell.histOptionLines()`가 섰다(zsh 한 줄 · bash 0 ·
@@ -122,26 +168,25 @@ config 체인 단독이 1분 26.01초에 `FAIL` 없이 끝났다(기준선과 �
 여섯 줄 커졌는데 화면 좌표를 보는 검사가 하나도 안 밀렸고, 7·8차의 히스토리
 판정도 새 옵션과 안 부딪쳤다.
 
-⚠ 그 초록이 "옵션이 일한다"를 뜻하지는 않는다. 7차가 `fc -W`를 치는 한
-옵션이 꺼져 있어도 같은 초록이 난다. 그것을 가르는 것이 M2다.
+그 초록이 "옵션이 일한다"를 뜻하지는 않았다. 7차가 `fc -W`를 치는 한 옵션이
+꺼져 있어도 같은 초록이 났기 때문이다. 그것을 가른 것이 M2이고, 이제
+`pos1`이 그 자리를 본다.
 
-## 바로 다음에 할 것 — SD-M2
+## 바로 다음에 할 것 — 다음 서브프로젝트를 고른다
 
-plan은 아직 없다. `CLAUDE.md`대로 착수 시점에 새로 쓴다. design의 결정 5와
-실측 10·11·12가 그 내용이고, 고칠 파일이 하나다(`config/check.sh`).
+SD가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
+고른 뒤 design부터 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
 
-1. 7차에서 `fc -W`를 뺀다(`HIST_WRITE_KEYS`). 그 명령이 다른 세션이 써 둔
-   줄을 지우고(실측 10), 옵션이 켜지면 애초에 필요 없다.
-2. 음성·양성 대조군을 중첩 zsh 둘로 만든다(결정 5). 음성은 첫 명령이
-   `unsetopt INC_APPEND_HISTORY`이고 양성은 아무것도 안 친다. 판정은 그
-   세션이 살아 있는 동안 한다 — 나갈 때는 옵션이 꺼진 세션도 append한다
-   (실측 11의 다섯째 행).
-3. 판정은 앵커 붙인 `grep -c`의 숫자로 한다(실측 11). 앵커가 없으면 그
-   `grep` 명령줄이 자기를 세어 음성 기대값이 0이 아니라 1이 되고 검사가
-   조용히 죽는다. 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같아서
-   (실측 12) 프롬프트로는 판정할 수 없다.
+무엇을 고르든 먼저 할 것 하나. 이 저장소의 서브프로젝트 스물넷이
+`docs/superpowers/specs/`에 날짜순으로 있고, 실제로 서 있는 것의 목록은
+`check.sh`의 `CHAINS` 배열이 가장 정확하다 — 게이트가 매번 돌리는 목록이라
+낡을 수가 없다.
 
-그 뒤에 루트 게이트 3/3과 기억 파일(`docs/decisions/`)을 쓰면 SD가 닫힌다.
+셸 쪽을 이어서 볼 사람에게는 SD 비목표 1(bash의 히스토리)이 가장 가깝다.
+크기를 미리 알아 둘 것은 그것이 `setopt` 한 줄이 아니라 프롬프트 훅
+(`PROMPT_COMMAND='history -a'`)이고, `expectQuietSeed`의 허용을 한 범주 더
+넓히는 일이라는 것이다. 여는 사람은 게스트의 `/etc/bash.bashrc`를 먼저
+볼 것.
 
 ## 명령 모음
 
@@ -179,10 +224,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 27분 35.61초다(2026-09-12,
-GA-M1 뒤. 그 앞이 주석 정리 뒤의 27분 35.11초이고 0.5초 차이다 — GA는
-빌드도 부팅도 하나 안 더했으니 맞는 값이다. 그 앞이 SM-M2의 28분
-03.23초다). 기준선의 역사는 `project_gate_latency`에 있다 — 54분 15초에서
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 28분 14.55초다(2026-09-12,
+SD-M2 뒤). 그 앞이 GA-M1 뒤의 27분 35.61초이고 38.9초 차이인데, SD-M2가
+`config` 체인의 7차에 타이핑을 100키쯤 더해 그 체인 단독이 10.4초 길어졌고
+게이트가 그것을 세 번 돈다 — 31초가 설명되는 값이라 나머지는 잡음이다.
+그 앞이 주석 정리 뒤의 27분 35.11초, 그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에 있다 — 54분 15초에서
 GL-M0~M3이 16분대로 내렸고, 그 뒤 체인이 둘 늘고 `config`가 부팅 여덟이
 되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라 그보다 작은 차이는
 갈렸다고 말하지 않는다.
@@ -347,26 +393,27 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 | 하는 일 | 누가 |
 |---|---|
 | 무엇을 왜 하는지 설명 | Claude |
-| 구현 파일 편집 | 사용자 |
+| 구현 파일 편집 | Claude ← 2026-09-12에 바뀐 자리 |
 | 빌드·QEMU·게이트·조사성 명령 | Claude |
 | 결과 로그를 줄 단위로 해석 | Claude |
 | design/plan/HANDOFF/기억 파일, git commit | Claude |
+| 들어간 코드를 읽고 판단 | 사용자 |
 
-근거는 `docs/decisions/feedback_execution_scope.md`(2026-08-22에 바뀌었다),
-`feedback_commit_delegation.md`, `feedback_design_question_load.md`.
+근거는 `docs/decisions/feedback_execution_scope.md`(2026-08-22에 명령 실행이,
+2026-09-12에 파일 편집이 바뀌었다), `feedback_commit_delegation.md`,
+`feedback_design_question_load.md`.
 
-위임은 세션 단위의 예외로만 있었다. CC-M0(2026-08-31, "배우는 것이 적으니
-전부 네가 써라")과 SH·FP·RM·UT·SC·SM의 세션들(2026-09-09~12, 사용자가 외출하며
-"이번 세션의 구현 결정을 전부 위임한다")에서 편집까지 Claude Code가 했다.
-그 예외는 해당 세션으로 끝나고 위 표가 다시 유효하다. 위임된 세션에서는
-사람이 읽는 자리를 대신하려고 매 편집 뒤 `git diff --stat`으로 줄 수를 세고
-지우는 편집은 `git diff | grep '^-'`로 내용을 직접 읽었다.
+편집이 넘어온 것은 검토가 없어진 것이 아니라 자리를 옮긴 것이다 — 타이핑
+하면서 읽는 것에서, 들어간 코드를 읽고 판단하는 것으로. 사용자가 SD-M2를
+시작하며 그렇게 정했고 근거는 "리눅스 시스템 빌드를 직접 해 보면서 감을
+잡았고 타이핑도 충분히 해 봤다"는 것이다. 그 전까지 위임은 세션 단위의
+예외였다(CC-M0 · SH·FP·RM·UT·SC·SM).
 
-인라인 제시는 "넣을 것"만 적는다. 지울 것이 있는 편집은 `지울 것`과
-`넣을 것`을 따로 표시하고, 100줄이 넘으면 Claude가 `/tmp`에 원본을 만들어
-사용자가 `cp`로 넣는다. 매 편집 뒤 `git diff --stat`으로 더한 줄과 지운 줄을
-따로 세어 확인한다 — 순수 추가면 지운 줄이 0인 것이 증명이고, 지우는
-편집이 있으면 그 내용을 `git diff | grep '^-'`로 직접 읽는다.
+그래서 Claude 쪽 책임이 늘었다. 사람이 타이핑하면서 자연히 보던 것을 대신
+본다 — 매 편집 뒤 `git diff --stat`으로 더한 줄과 지운 줄을 따로 세고, 지우는
+편집은 `git diff | grep '^-'`로 지운 줄의 내용을 직접 읽는다. 순수 추가면
+지운 줄이 0인 것이 증명이다. 그리고 큰 편집은 무엇이 어떤 모양으로 들어가는지
+먼저 설명한다.
 
 plan이 각 Step의 코드를 파일 안에 그대로 담고 있는 것이 값지다. 제시할 때
 plan의 그 절을 가리키면 되고 다시 옮겨 적을 필요가 없다.
@@ -493,7 +540,17 @@ trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물
 `grep -c '^echo target$'`가 1이고, 앵커를 빼면 자기 명령줄까지 세어 2가 된다.
 음성 검사에서는 그 차이가 0과 1이라 검사가 조용히 죽는다.
 
-25. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
+25. `sendkey`가 `$(`와 `)`를 게스트까지 옮긴다 (SD-M2 실측 17).
+`shift-4`($) · `shift-9`(`(`) · `shift-0`(`)`)이고, 게이트가 명령 치환을 칠 수
+있다는 뜻이다. 판정 글자를 우리가 만들 때 쓴다.
+
+26. `wait_for_screen`은 마지막 프레임이 아니라 로그 전체를 본다
+(`gate_lib.sh`). 그래서 `0`이나 `1` 같은 한 글자는 판정 글자가 못 된다 —
+앞선 어느 프레임에 걸릴 여지가 있다. SD-M2의 처방은 숫자를
+`echo neg$(grep -cx …)`로 감싸 `neg0`을 만드는 것이고, 실패했을 때 화면에
+`neg1`이 남는 것이 덤으로 진단이 된다.
+
+27. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
 `ACPI_EC`와 `PNP_DEBUG_MESSAGES`는 둘 다 프롬프트가 있어서 CC-M0이 누른 값이
 `olddefconfig`를 견뎠다. 끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
 `.config`에서 줄이 사라진다 — `ACPI_EC_DEBUGFS`가 그랬다.
@@ -504,6 +561,10 @@ trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물
   저장을 통째로 끈다. `exit`에서도 SIGHUP에서도 파일을 안 만들고, `fc -W`를
   직접 치면 써진다. 그래서 `-f`는 대조군이 못 된다. 옵션 하나만 다르게 하려면
   rc를 읽은 세션에서 `unsetopt`를 친다.
+- 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — 씨앗에서
+  `setopt` 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에 죽여서
+  게이트가 그 줄을 보는 자리까지 못 간다. 그 loop 한 줄도 함께 눕힌 사본을
+  둘째 마운트로 준다. M1이 값을 한다는 증거이기도 하다.
 - 셸이 실행했어야 할 명령의 흔적이 없는 것으로 "잃었다"를 판정하기(SD-M0) —
   "애초에 안 쳐졌다"와 안 갈린다. 첫 회차가 그 상태였다. 먼저 그 명령이
   실행된 증거(입력 줄과 출력)를 로그에서 보고, 그 다음에 기록이 없는 것을
@@ -706,16 +767,14 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-Shell History Durability(SD)가 진행 중이다 — M0이 끝났고 M1·M2가 남았다. 그것은
-숙제가 아니라 지금 하는 일이므로 위 "바로 다음에 할 것"에 있다. 아래는 손에
-남아 있는 것들이고, SD가 닫힌 뒤 다음 서브프로젝트를 고를 때 후보로 함께 본다.
+SD가 닫혔으므로 아래가 다음 서브프로젝트의 후보 전부다.
 
 SM이 남긴 것.
 
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(비목표 2 —
       TUI라 체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
 
-SD가 진행 중에 남긴 것 — 둘 다 SD design의 비목표다.
+SD가 남긴 것 — 둘 다 SD design의 비목표다.
 
 - [ ] bash의 히스토리(SD 비목표 1). bash는 `exit` 말고는 전부 잃는다(SD 실측
       7 — SIGTERM도 SIGHUP도). `setopt` 한 줄에 대응하는 것이 없어서
@@ -770,6 +829,10 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
 
 한 줄씩만 남긴다. 본문은 각 서브프로젝트의 design과 `docs/decisions/`에 있다.
 
+- ~~콘솔 셸에 친 명령이 전원 버튼과 함께 사라지는 것~~ — SD-M0~M2
+  (2026-09-12)가 서브프로젝트로 했다. 씨앗 rc의 `setopt INC_APPEND_HISTORY`
+  한 줄이고, 게이트의 7차가 중첩 zsh 둘로 그것을 판정한다.
+  `project_shell_history`.
 - ~~`grep -q` SIGPIPE 일곱 자리~~ — GA-M0·M1(2026-09-12)이 서브프로젝트로
   했다. 일곱을 고치고 `check.sh`의 진입 검사가 재발을 막는다.
   `project_gate_accuracy`.
@@ -893,8 +956,10 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   하고, 없으면 `set -u`로 그 자리에서 죽는다(일부러 안 막았다).
 - `config/check.sh` — 부팅 여덟. `probe_persisted_memory`가 8차를 본다.
   8차는 아무것도 안 심고 기계가 한 번 꺼졌다 켜졌다는 것만 다르다. 7차가
-  `fc -W`를 직접 치는 이유는 게이트가 전원을 뽑기 때문이다(`boot_once`의
-  `kill "$QEMU_PID"` — 실기는 PID 1의 SIGTERM이 있어 안전하다).
+  `fc -W`를 치던 이유는 게이트가 전원을 뽑기 때문이었는데(`boot_once`의
+  `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — 씨앗의 옵션이 칠 때마다 쓰므로
+  필요 없고, 그 명령이 다른 세션의 줄을 지워서 7차의 새 검사를 망가뜨린다.
+  7차의 중첩 zsh 둘과 판정 셋(`neg0`·`aft1`·`pos1`)이 그 자리에 있다.
 - `copy/check.sh` — 검사 스물. `key_lines`(절대값으로 키를 세면 안 된다 —
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은
@@ -917,7 +982,8 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
 ### 기억
 
 `MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 새 세션이 먼저
-읽을 것은 여섯이다 — 협업 방식 feedback 다섯(`feedback_execution_scope` ·
+읽을 것은 여섯이고 그중 `feedback_execution_scope`가 2026-09-12에 바뀌었다
+(구현 파일 편집이 Claude에게 왔다) — 협업 방식 feedback 다섯(`feedback_execution_scope` ·
 `feedback_commit_delegation` · `feedback_design_question_load` ·
 `feedback_plain_korean` · `feedback_no_emphasis`)과 `user_learning_goal`.
 
@@ -925,7 +991,8 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
 `project_gate_chain_composition`·`project_gate_latency`·
 `project_zig_out_staleness`, 빌드·Zig를 건드리면 `project_zig_c_uapi_rule`·
 `project_build_host_arch`, 게스트 환경이면 `project_guest_environment`·
-`project_userland_tools`·`project_shell_config`·`project_shell_memory`,
+`project_userland_tools`·`project_shell_config`·`project_shell_memory`·
+`project_shell_history`,
 종료·시그널이면 `project_shutdown_signals`·`project_power_management`·
 `project_init_supervisor`,
 화면이면 `project_terminal_rendering`·`project_render_cost`, 입력이면

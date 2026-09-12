@@ -1,5 +1,23 @@
 # SD-M2 Implementation Plan — 게이트가 그 한 줄이 하는 일을 본다
 
+> 완료: 2026-09-12. Task 일곱 전부. config 체인 단독 1분 36.42초에 `FAIL`
+> 없음, 반사실이 7차에서 죽었고, 루트 게이트 3/3.
+>
+> 사용자가 이 milestone부터 편집까지 위임했다 — "검증에 대한 부분이 많으니
+> Claude Code가 직접 진행"이고, 근거는 리눅스 시스템 빌드와 타이핑을 이미
+> 충분히 해 봐서 코드를 읽는 자리의 값이 편집하는 자리보다 크다는 것이다.
+>
+> plan이 두 군데에서 틀렸고 지우지 않고 남긴다.
+>
+> 1. Task 5가 마운트 하나로 된다고 적었는데 둘이 필요했다. 씨앗에서 그 줄을
+>    빼면 SD-M1의 역방향 검사가 부팅 전에 죽여서 게이트가 7차까지 못 간다.
+>    `config_test.zig`의 그 loop 한 줄(`if (seen_opt[i] or true) continue;`)도
+>    함께 눕혀야 반사실이 게이트에 닿는다. M1이 값을 한다는 증거다.
+> 2. Task 5 Step 2의 기대값이 틀렸다. *"앞의 둘은 초록이고 셋째에서 죽는다"*로
+>    적었는데 실제로는 첫째(`neg0`)에서 죽었다 — 옵션이 없으면 그 시점에
+>    `/config/zsh_history`가 아예 없어서 `grep`이 에러를 내고 `echo`가 숫자
+>    없는 `neg`를 찍는다. design 실측 16이 그 화면이다.
+
 > For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

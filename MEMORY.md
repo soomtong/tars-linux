@@ -61,3 +61,4 @@
 - [Shell memory](docs/decisions/project_shell_memory.md) — 기계가 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)을 부팅 너머로 남기는 층(SM-M0~M2, 2026-09-12 종료)
 - [Gate accuracy](docs/decisions/project_gate_accuracy.md) — 게이트가 거짓 판정을 내던 일곱 자리와 그것을 막는 진입 검사(GA-M0·M1, 2026-09-12 종료)
 - [Shutdown signals](docs/decisions/project_shutdown_signals.md) — 대화형 셸은 SIGTERM을 무시한다; 종료 경로에서 무엇이 저장되는지는 누가 먼저 죽어 PTY를 닫는지에 갈린다
+- [Shell history](docs/decisions/project_shell_history.md) — 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 `setopt INC_APPEND_HISTORY` 한 줄로 고친 층(SD-M0~M2, 2026-09-12 종료)
