@@ -1,29 +1,56 @@
-# HANDOFF: SD가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
+# HANDOFF: BH가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
 
 ## 지금 어디인가
 
-Shell History Durability(SD)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다.
-씨앗 rc의 zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담고, 호스트 검사
-넷이 그 줄을 지운 것도 오타도 목록과 함께 지운 것도 0.1초에 빨갛게 만들고,
-게이트의 7차 부팅이 중첩 zsh 둘로 그 줄이 게스트에서 하는 일을 판정한다
-(`neg0` · `aft1` · `pos1`). 실측 열여덟이 design에 있다
-(`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`),
-본문 요약은 `docs/decisions/project_shell_history.md`에 있다.
+Bash History Durability(BH)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다.
+SD가 zsh에 대해 한 일을 bash에 대해 했다 — 씨앗 rc의 bash 갈래가
+`PROMPT_COMMAND='history -a'` 한 줄을 훅 두 줄보다 먼저 담고, 호스트 검사
+다섯이 그 줄과 그 자리를 지키고, 게이트의 7차 부팅이 중첩 bash 둘로 그 줄이
+게스트에서 하는 일을 판정한다(`bneg0` · `baft1` · `bpos1`). 실측 열셋이
+design에 있다
+(`docs/superpowers/specs/2026-09-12-tars-bash-history-durability-design.md`).
 
-이 서브프로젝트는 SM 비목표 9("zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다")를
-고치려고 열었는데, 착수 전 측정이 그 전제를 뒤집었다. 겹쳐쓰기는 안 난다 —
-`APPEND_HISTORY`가 zsh의 기본값이다. 대신 더 나쁜 것이 나왔다: 콘솔 셸에 친
-명령은 전원 버튼을 누르면 사라지고, 화면 셸에 친 것이 남는 이유는 `terminal`이
-시그널 핸들러를 하나도 안 가져서 먼저 죽는다는 우연이다. 게스트에서 세 번
-부팅해 확인했다(실측 14 — 콘솔 0, 화면 1).
+BH가 계획에 없던 것을 하나 더 고쳤다. 게스트에 `/dev/fd`가 없어서 씨앗의
+fzf 훅이 부팅할 때마다 `bash: /dev/fd/63: No such file or directory` 한 줄을
+찍고 있었다. 씨앗은 아무것도 안 찍어야 한다는 이 저장소의 규칙을 정확히 그
+한 줄이 깨고 있었고, 게이트에 bash로 뜨는 자리가 없어서 아무도 못 봤다.
+이제 `main.zig`의 `linkDevFd()`가 그 링크를 만든다.
+
+그 앞이 SD(같은 일의 zsh 판)이고, 그 앞이 Gate Accuracy(GA-M0·M1), 그 앞이
+Shell Memory(SM-M0~M2)다.
 
 다음 일은 아직 안 정해졌다. 아래 "바로 다음에 할 것"이 후보 목록이다.
 
-그 앞이 Gate Accuracy(GA-M0·M1)이고, 그 앞이 Shell Memory(SM-M0~M2), 그
-뒤에 문서와 소스 주석의 강조를 걷어냈다.
-
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## BH가 한 일 (2026-09-12, 하루에 닫혔다)
+
+| 커밋 | 무엇 |
+|---|---|
+| `3488953` | design. 착수 전 실측 여섯을 컨테이너에서 재고 시작했다 |
+| `4771c8b` | BH-M0. 게스트 실측 셋(7·8·9)과 SD 실측 7의 정정(실측 10) |
+| `97db8bf` | BH-M1. `HIST_OPTIONS_BASH`와 씨앗의 한 줄, 호스트 검사 다섯 |
+| (이 커밋) | BH-M2. 7차의 중첩 bash 둘과 `linkDevFd()`, 1차의 새 검사 |
+
+다음 세션이 먼저 알아야 하는 다섯이다.
+
+1. 씨앗의 그 줄은 훅보다 먼저 있어야 한다. `PROMPT_COMMAND`는 변수가
+   하나뿐이라 마지막 대입이 이기는데 `zoxide init bash`가 같은 변수를 쓴다.
+   뒤집히면 증상이 조용하다 — 히스토리는 남고 `z`만 아무것도 안 배운다.
+   `config_test.zig`의 `expectPromptCommandBeforeHooks`가 그 순서를 본다.
+2. 그 검사가 보는 대상은 `histOptionLines()` 전체가 아니라 `PROMPT_COMMAND`를
+   건드리는 줄이다. zsh 씨앗의 `setopt`는 훅보다 뒤에 있고 그것이 맞다 —
+   `setopt`는 다른 줄과 안 부딪치므로 순서를 요구할 근거가 없다.
+3. 씨앗에 새 줄을 들일 때 재는 방법이 셸마다 다르다. 비대화형 bash는
+   `PROMPT_COMMAND`를 아예 안 돌아서 `bash -c '<줄>'`로는 오타도 0바이트다.
+   `KNOWN_HIST_OPTIONS`의 주석이 그 절차를 셸별로 나눠 적고 있다.
+4. 게이트의 bash 판정이 zsh 판정보다 앞에 있다. bash 중첩 안에서 친 것은
+   zsh 히스토리에 안 들어가므로 7차가 zsh 파일에 더하는 것은 세 줄뿐인데,
+   그 셋이 `posmark=1` 뒤에 오면 8차의 `history` 16줄 창에서 그 글자를 민다.
+5. 중첩 bash는 프롬프트로 기다릴 수 있다(`bash-5.2#`). 중첩 zsh와 갈리는
+   자리다 — zsh는 프롬프트가 바깥과 같아서 아무것도 못 가른다. 안 기다리면
+   rc를 읽는 중에 타이핑이 끼어들어 글자가 쪼개진다.
 
 ## SD가 한 일 (2026-09-12, 하루에 닫혔다)
 
@@ -111,82 +138,56 @@ SIGPIPE를 안 받는다.
 컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. 아래 "명령 모음"의 첫
 형태로 친다.
 
-## SD-M2가 넣은 것 (끝났다)
+## SD가 넣은 것 (끝났다. BH가 같은 구조를 bash에 썼다)
 
 `config/check.sh` 7차 부팅이 중첩 zsh 둘을 띄운다. 둘 다 같은 씨앗 rc를 읽고,
 다른 것은 음성이 첫 명령으로 `unsetopt INC_APPEND_HISTORY`를 치는 것 하나뿐
-이다. 판정 셋이 화면의 글자다.
+이다. 판정 셋이 화면의 글자다 — `neg0`(옵션을 끈 세션은 안 쓴다) ·
+`aft1`(그 명령은 분명히 쳐졌다) · `pos1`(옵션이 켜진 세션은 그 자리에서 쓴다).
+BH-M2가 그 바로 앞에 bash 판본 셋을 같은 모양으로 놓았다.
 
-```
-(none)# zsh
-(none)# unsetopt INC_APPEND_HISTORY
-(none)# negmark=1
-(none)# echo neg$(grep -cx negmark=1 /config/zsh_history)
-neg0                                    ← 옵션을 끈 세션은 안 쓴다
-(none)# exit
-(none)# echo aft$(grep -cx negmark=1 /config/zsh_history)
-aft1                                    ← 그 명령은 분명히 쳐졌다
-(none)# zsh
-(none)# posmark=1
-(none)# echo pos$(grep -cx posmark=1 /config/zsh_history)
-pos1                                    ← 옵션이 켜진 세션은 그 자리에서 쓴다
-```
-
-가운데 `aft1`은 design에 없던 것이다. 음성이 보는 것은 "파일에 그 줄이 없다"
+가운데 `aft1`이 design에 없던 것이다. 음성이 보는 것은 "파일에 그 줄이 없다"
 이고, 그것만으로는 "아직 안 썼다"와 "애초에 안 쳐졌다"가 안 갈린다.
 
+`init/src/config.zig`에 `Shell.histOptionLines()`가 있다(zsh 1 · bash 1 ·
+fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조립하지 않는다.
+조립하면 `config_test.zig`의 역방향 검사가 tautology가 되기 때문이다. 검사
+쪽에 셋째 벌 `KNOWN_HIST_OPTIONS`가 있고, 그것이 "씨앗과 목록을 함께 고치면
+양방향이 둘 다 만족된다"는 구멍을 막는다.
+
+반사실이 이 검사들의 값을 증명했다. 씨앗에서 그 줄만 뺀 사본을 마운트하면
+체인이 7차에서 죽는데, 예상한 양성이 아니라 첫째 음성에서 죽는다 — 옵션이
+없으면 그 시점에 히스토리 파일이 아예 없어서 `grep`이 에러를 내고 `echo`가
+숫자 없는 글자를 찍는다. 고친 것의 크기가 "늦게 쓴다"가 아니라 "파일이
+없다"였다. BH-M2의 반사실도 글자 그대로 같은 모양으로 나왔다.
+
 8차의 판정 글자가 `whence -w fzf-history-widget`에서 `posmark=1`로 옮겨졌다.
-`history`가 최근 16개만 찍는데 7차가 중첩 세션 둘을 돌면서 그 뒤로 줄이
-아홉쯤 더 붙어 옛 글자가 창 밖으로 밀려났다. 7차에 명령을 더 더하는 사람은
-이 수를 다시 세야 한다.
+`history`가 최근 16개만 찍는데 7차가 중첩 세션을 여럿 돌면서 그 뒤로 줄이
+붙어 옛 글자가 창 밖으로 밀려났다. 7차에 명령을 더하는 사람은 이 수를 다시
+세야 한다 — BH-M2가 bash 판정을 zsh 판정 앞에 놓은 이유가 이것이다.
 
-반사실이 이 검사의 값을 증명했다. 씨앗에서 그 줄만 뺀 `config.zig` 사본을
-마운트하면 체인이 7차에서 죽는데, 예상한 `pos1`이 아니라 첫째 `neg0`에서
-죽는다 — 옵션이 없으면 그 시점에 `/config/zsh_history`가 아예 없어서
-`grep`이 에러를 내고 `echo`가 숫자 없는 `neg`를 찍는다. 고친 것의 크기가
-"늦게 쓴다"가 아니라 "파일이 없다"였다.
-
-config 체인 단독이 1분 36.42초다(SD-M1의 1분 26.01초에서 +10.4초. 7차에
-타이핑이 100키쯤 늘어난 값이다).
-
-## SD-M1이 넣은 것 (끝났다)
-
-`init/src/config.zig`에 `Shell.histOptionLines()`가 섰다(zsh 한 줄 · bash 0 ·
-fish 0). 씨앗 `rcSeed()`의 zsh 갈래가 그 글자를 따로 한 벌 더 적는다 —
-조립하지 않는다. `init/src/config_test.zig`는 `expectQuietSeed`의 허용 목록을
-`hookLines()`와 `histOptionLines()`의 합으로 보고 역방향도 함께 넓혔고, 새
-검사 `expectHistOptions`가 개수를 못 박는다.
-
-design이 예고하지 않은 것을 하나 더 넣었다. 두 벌에는 구멍이 있다 — 씨앗과
-목록을 함께 고치면 양방향이 둘 다 만족된다. 그래서 검사 쪽에 셋째 벌
-`KNOWN_HIST_OPTIONS`를 두었다(`HOOKED_TOOLS`와 같은 자리다). 되돌림 넷이
-각각 다른 줄에서 죽는 것을 확인했다 — 씨앗 줄을 `echo hi`로(정방향) · 씨앗에서만
-지우기(역방향) · 씨앗과 목록에서 함께 지우기(개수) · 둘을 함께 오타로
-(`KNOWN_HIST_OPTIONS`).
-
-config 체인 단독이 1분 26.01초에 `FAIL` 없이 끝났다(기준선과 같다). 씨앗이
-여섯 줄 커졌는데 화면 좌표를 보는 검사가 하나도 안 밀렸고, 7·8차의 히스토리
-판정도 새 옵션과 안 부딪쳤다.
-
-그 초록이 "옵션이 일한다"를 뜻하지는 않았다. 7차가 `fc -W`를 치는 한 옵션이
-꺼져 있어도 같은 초록이 났기 때문이다. 그것을 가른 것이 M2이고, 이제
-`pos1`이 그 자리를 본다.
+본문은 `docs/decisions/project_shell_history.md`에 있다.
 
 ## 바로 다음에 할 것 — 다음 서브프로젝트를 고른다
 
-SD가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
+BH가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
 고른 뒤 design부터 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
 
-무엇을 고르든 먼저 할 것 하나. 이 저장소의 서브프로젝트 스물넷이
+무엇을 고르든 먼저 할 것 하나. 이 저장소의 서브프로젝트 스물다섯이
 `docs/superpowers/specs/`에 날짜순으로 있고, 실제로 서 있는 것의 목록은
 `check.sh`의 `CHAINS` 배열이 가장 정확하다 — 게이트가 매번 돌리는 목록이라
 낡을 수가 없다.
 
-셸 쪽을 이어서 볼 사람에게는 SD 비목표 1(bash의 히스토리)이 가장 가깝다.
-크기를 미리 알아 둘 것은 그것이 `setopt` 한 줄이 아니라 프롬프트 훅
-(`PROMPT_COMMAND='history -a'`)이고, `expectQuietSeed`의 허용을 한 범주 더
-넓히는 일이라는 것이다. 여는 사람은 게스트의 `/etc/bash.bashrc`를 먼저
-볼 것.
+셸의 히스토리는 셋 다 끝났다. fish는 애초에 이 문제가 없었고(SD 실측 8),
+zsh는 SD가, bash는 BH가 했다. 그래서 이 방향으로 남은 것은 SD 비목표 8
+하나다 — 종료가 늘 3초 걸리는 것이고, 그것은 PID 1의 시그널 경로를 여는
+일이라 PM·BF 체인이 보는 종료 로그와 감독 루프의 계약을 다시 여는 크기다.
+
+BH가 열어 둔 문이 하나 있다. 게이트에 bash로 뜨는 체인이 여전히 없다 —
+BH-M2가 중첩으로 갈음했고 그 선택의 근거는 design 결정 6에 있다. `/dev/fd`가
+그 자리에서 나온 것처럼, `shell=bash`로 한 부팅을 정식으로 띄우면 아직
+아무도 안 본 것이 더 나올 수 있다. 크기는 config 체인에 부팅 하나(약 10초,
+게이트로는 30초)다.
 
 ## 명령 모음
 
@@ -224,14 +225,19 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 28분 14.55초다(2026-09-12,
-SD-M2 뒤). 그 앞이 GA-M1 뒤의 27분 35.61초이고 38.9초 차이인데, SD-M2가
-`config` 체인의 7차에 타이핑을 100키쯤 더해 그 체인 단독이 10.4초 길어졌고
-게이트가 그것을 세 번 돈다 — 31초가 설명되는 값이라 나머지는 잡음이다.
-그 앞이 주석 정리 뒤의 27분 35.11초, 그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에 있다 — 54분 15초에서
-GL-M0~M3이 16분대로 내렸고, 그 뒤 체인이 둘 늘고 `config`가 부팅 여덟이
-되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라 그보다 작은 차이는
-갈렸다고 말하지 않는다.
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 28분 55.53초다(2026-09-12,
+BH-M2 뒤). 그 앞이 SD-M2 뒤의 28분 14.55초이고 41초 차이인데, BH-M2가
+`config` 체인의 7차에 타이핑을 200키쯤 더해 그 체인 단독이 16.9초 길어졌고
+게이트가 그것을 세 번 돈다 — 51초가 설명되는 값이라 나머지는 잡음이다.
+그 앞이 GA-M1 뒤의 27분 35.61초, 그 앞이 주석 정리 뒤의 27분 35.11초,
+그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에
+있다 — 54분 15초에서 GL-M0~M3이 16분대로 내렸고, 그 뒤 체인이 둘 늘고
+`config`가 부팅 여덟이 되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라
+그보다 작은 차이는 갈렸다고 말하지 않는다.
+
+`config` 체인 단독의 역사도 적어 둔다 — SD-M1 1분 26.01초 → SD-M2 1분
+36.42초 → BH-M1 1분 35.77초 → BH-M2 1분 52.64초. 7차에 타이핑을 더한
+milestone에서만 늘었다.
 
 `{ time docker run ... ; } 2> /tmp/gate.time`으로 감싸면 그 파일이 docker의
 stderr도 함께 받아 200KB가 넘는다. `time`의 값은 파일 맨 끝에 있으므로
@@ -344,6 +350,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `init` 코드(또는 커널)와 `check.sh` 양쪽에 있다. 한쪽을 고치면 다른 쪽도
 고쳐야 한다.
 
+`linked /dev/fd to /proc/self/fd`(BH-M2. `config/check.sh`의 1차가 본다) ·
 `signal handlers installed (TERM, INT)` · `ctrl-alt-del now arrives as SIGINT` ·
 `shutdown requested (action power_off)` · `shutdown requested (action restart)` ·
 `sent SIGTERM to every process` · `every child is gone (reaped N)` ·
@@ -550,7 +557,42 @@ trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물
 `echo neg$(grep -cx …)`로 감싸 `neg0`을 만드는 것이고, 실패했을 때 화면에
 `neg1`이 남는 것이 덤으로 진단이 된다.
 
-27. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
+27. 게스트에 `/dev/fd`가 있다 (BH-M2가 세웠다). devtmpfs는 그 링크를 안
+만들고 우리는 udev를 안 쓰므로 원래 없었고, bash의 process
+substitution(`< <(…)`)이 게스트에서만 실패했다. `main.zig`의 `linkDevFd()`가
+`/proc`과 `/dev`가 붙은 뒤 만든다. 이 링크를 지우면 씨앗의 fzf 훅이 부팅할
+때마다 한 줄을 찍는다 — `config/check.sh`의 1차 부팅이 그 로그를 본다.
+
+28. `script -qfc "<셸> -i"`는 `sh -c` 래퍼를 하나 끼운다 (BH 실측 10).
+그래서 자식 pid로 찾은 것에 시그널을 보내면 셸이 아니라 래퍼가 받고, 래퍼가
+죽으면 `script`도 끝나 PTY가 닫히므로 결과가 전부 "SIGHUP을 받았다"로
+수렴한다. SD 실측 7의 "bash는 SIGHUP에서 안 쓴다"가 이것 때문에 틀렸다.
+처방은 `exec`를 넣는 것(`script -qfc "exec bash -i"`)과
+`/proc/<pid>/cmdline`을 함께 찍는 것이다.
+
+29. 시그널을 보낸 세션의 파일은 정리보다 먼저 읽는다 (BH-M0). `kill -KILL`로
+PTY 주인을 치우는 것 자체가 SIGHUP을 만들어서, 정리 뒤에 읽으면 모든 케이스가
+ptyclose가 된다. 그 오류를 알려 주는 것은 SIGKILL 칸이다 — 핸들러가 없는
+시그널이 정리 동작을 할 수는 없으므로, 그 칸에 값이 있으면 측정이 틀린 것이다.
+
+30. 복사해 온 `.zig-cache`는 소스 변경을 가린다 (BH-M1 실측 11).
+`cp -r init /tmp/w`로 옮긴 뒤 거기서 소스를 바꿔 가며 `zig build test`를
+돌리면 옛 산출물이 다시 실행된다. 에러도 경고도 없고 `PASS` 한 줄이 정상
+통과와 글자 그대로 같아서, 되돌림 검증에서는 결론이 정확히 거꾸로 뒤집힌다.
+처방은 복사 직후 `rm -rf .zig-cache zig-out` 한 줄이다. 같은 자리에서 소스만
+바꾸는 것은 zig가 정상으로 감지하므로 회차마다 지울 필요는 없다.
+
+31. 비대화형 bash는 `PROMPT_COMMAND`를 아예 실행하지 않는다 (BH 실측 5).
+`bash -c '<줄>'`로 재면 오타 난 프롬프트 훅도 stdout·stderr가 0바이트다.
+대화형 세션을 띄워 화면 바이트를 재야 하고, 오타는 프롬프트가 그려질 때마다
+찍힌다. zsh의 `setopt` 오타가 기동할 때 한 번인 것과 다르다.
+
+32. bash의 `history -a`는 직전 명령까지만 쓴다 (BH 실측 4). zsh의
+`INC_APPEND_HISTORY`는 명령을 읽자마자 써서 실행 중인 명령이 이미 파일에
+있는데(실측 24), bash는 `PROMPT_COMMAND`에서 돌기 때문에 자기 줄이 아직 없다.
+게이트에서 파일을 세는 자리의 기대값이 이 한 칸으로 달라진다.
+
+33. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
 `ACPI_EC`와 `PNP_DEBUG_MESSAGES`는 둘 다 프롬프트가 있어서 CC-M0이 누른 값이
 `olddefconfig`를 견뎠다. 끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
 `.config`에서 줄이 사라진다 — `ACPI_EC_DEBUGFS`가 그랬다.
@@ -561,6 +603,18 @@ trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물
   저장을 통째로 끈다. `exit`에서도 SIGHUP에서도 파일을 안 만들고, `fc -W`를
   직접 치면 써진다. 그래서 `-f`는 대조군이 못 된다. 옵션 하나만 다르게 하려면
   rc를 읽은 세션에서 `unsetopt`를 친다.
+- 컨테이너에서 잰 셸 동작을 게스트 값으로 그대로 읽기(BH) — 하루에 세 번
+  걸렸다. 컨테이너에는 `/dev/fd`가 있고 게스트에는 없었으며(실측 13),
+  `script`의 래퍼가 시그널을 가로챘고(실측 10), 비대화형 bash가
+  `PROMPT_COMMAND`를 안 돌았다(실측 5). 셋 다 증상이 같다 — 에러가 없고, 값이
+  나오고, 그 값이 틀렸다. 처방은 재기 전에 "재는 환경과 돌 환경이 무엇이
+  다른가"를 먼저 적는 것이고, 모르겠으면 게스트에서 5분을 쓰는 것이다.
+  `project_measuring_shells`에 사례 셋이 있다.
+- 중첩 셸이 뜨자마자 타이핑하기(BH-M2) — rc를 읽는 동안 들어간 글자가 화면의
+  에러 줄과 섞여 쪼개진다(`HIS` · `TF` · `HISTFI`를 실제로 봤다). 그 회차는
+  통과했지만 운이었다. bash는 프롬프트가 `bash-5.2#`로 바뀌므로
+  `wait_for_screen`으로 기다릴 수 있다. zsh는 프롬프트가 같아서 못 기다리고,
+  그럴 때는 판정이 실패했을 때 조용하지 않은지를 대신 확인한다.
 - 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — 씨앗에서
   `setopt` 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에 죽여서
   게이트가 그 줄을 보는 자리까지 못 간다. 그 loop 한 줄도 함께 눕힌 사본을
@@ -774,13 +828,8 @@ SM이 남긴 것.
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(비목표 2 —
       TUI라 체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
 
-SD가 남긴 것 — 둘 다 SD design의 비목표다.
+SD가 남긴 것 — SD design의 비목표다.
 
-- [ ] bash의 히스토리(SD 비목표 1). bash는 `exit` 말고는 전부 잃는다(SD 실측
-      7 — SIGTERM도 SIGHUP도). `setopt` 한 줄에 대응하는 것이 없어서
-      `PROMPT_COMMAND='history -a'` 같은 프롬프트 훅이 필요하고, 그러면
-      `expectQuietSeed`의 허용을 한 범주 더 넓힌다. 여는 사람은 게스트의
-      `/etc/bash.bashrc`를 먼저 볼 것(거기서 `histappend`가 켜져 있을 수 있다).
 - [ ] 종료가 늘 3초 걸리는 것(SD 비목표 8). 대화형 셸이 SIGTERM을 무시하므로
       `power.zig`의 `GRACE_SECONDS = 3`을 매번 꽉 쓴다. 고치려면 SD 결정 8
       (PID 1이 SIGHUP을 보내는 것)을 여는 일이고, PM·BF 체인이 보는 종료
@@ -833,6 +882,11 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   (2026-09-12)가 서브프로젝트로 했다. 씨앗 rc의 `setopt INC_APPEND_HISTORY`
   한 줄이고, 게이트의 7차가 중첩 zsh 둘로 그것을 판정한다.
   `project_shell_history`.
+- ~~bash의 히스토리~~ — BH-M0~M2(2026-09-12)가 서브프로젝트로 했다. 씨앗 rc의
+  `PROMPT_COMMAND='history -a'` 한 줄이고 훅보다 먼저 있어야 한다. 게이트의
+  7차가 중첩 bash 둘로 판정한다. 같은 기억 파일에 이어 적었다.
+- ~~게스트에 `/dev/fd`가 없어서 씨앗의 fzf 훅이 에러를 찍던 것~~ — BH-M2가
+  찾아서 고쳤다. `main.zig`의 `linkDevFd()`. `project_measuring_shells`.
 - ~~`grep -q` SIGPIPE 일곱 자리~~ — GA-M0·M1(2026-09-12)이 서브프로젝트로
   했다. 일곱을 고치고 `check.sh`의 진입 검사가 재발을 막는다.
   `project_gate_accuracy`.

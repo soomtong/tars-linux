@@ -1,8 +1,14 @@
 # TARS Bash History Durability — Design
 
 Date: 2026-09-12
-Status: 진행 중 — M0·M1을 했다(실측 7~11). 씨앗 rc의 bash 갈래가 그 한 줄을
-담고 호스트 검사 다섯이 그것을 지킨다. M2(게이트 판정)가 다음이다.
+Status: 완료(2026-09-12) — M0·M1·M2를 다 했다. 씨앗 rc의 bash 갈래가
+`PROMPT_COMMAND='history -a'` 한 줄을 훅보다 먼저 담고, 호스트 검사 다섯이
+그 줄과 그 자리를 지키고, 게이트의 7차 부팅이 중첩 bash 둘로 그 줄이
+게스트에서 하는 일을 판정한다(`bneg0` · `baft1` · `bpos1`). 실측 열셋이 아래
+있다.
+
+M2가 계획에 없던 것을 하나 고쳤다 — 게스트에 `/dev/fd`가 없어서 씨앗의 fzf
+훅이 부팅할 때 에러 한 줄을 찍고 있었다(실측 13 · 결정 9).
 
 SD(Shell History Durability)가 zsh에 대해 한 일을 bash에 대해 한다. SD가
 자기 비목표 1로 남긴 것이고, 그 비목표가 남긴 이유는 "bash에는 `setopt` 한
@@ -543,6 +549,149 @@ M1이 타이핑을 안 더했으므로 안 늘어야 맞다. 씨앗이 열한 �
 
 그 초록이 "그 줄이 게스트에서 일한다"를 뜻하지는 않는다. 게이트에는 아직
 bash로 뜨는 자리가 없다(확인 4). 그것을 세우는 것이 BH-M2다.
+
+## BH-M2가 넣은 것 (끝났다)
+
+plan: `docs/superpowers/plans/2026-09-12-tars-bash-history-durability-bh-m2.md`
+
+`config/check.sh` 7차 부팅이 중첩 bash 둘을 띄운다. 둘 다 같은 씨앗 rc를
+읽고, 다른 것은 음성이 첫 명령으로 `PROMPT_COMMAND=`를 치는 것 하나뿐이다.
+판정 셋이 화면의 글자다.
+
+```
+(none)# bash
+bash-5.2# HISTFILE=/config/bash_history
+bash-5.2# PROMPT_COMMAND=
+bash-5.2# bnegmark=1
+bash-5.2# echo bneg$(grep -cx bnegmark=1 /config/bash_history)
+bneg0                                   ← 훅을 끈 세션은 안 쓴다
+bash-5.2# exit
+(none)# echo baft$(grep -cx bnegmark=1 /config/bash_history)
+baft1                                   ← 그 명령은 분명히 쳐졌다
+(none)# bash
+bash-5.2# HISTFILE=/config/bash_history
+bash-5.2# bposmark=1
+bash-5.2# echo bpos$(grep -cx bposmark=1 /config/bash_history)
+bpos1                                   ← 씨앗의 훅이 그 자리에서 쓴다
+```
+
+bash 판정이 zsh 판정보다 앞에 있다. bash 중첩 안에서 친 것은 zsh 히스토리에
+안 들어가므로 7차가 zsh 파일에 더하는 것은 세 줄뿐인데(`bash` 둘과
+`echo baft`), 그 셋이 `posmark=1` 뒤에 오면 8차의 `history` 16줄 창에서 그
+글자를 민다. 앞에 두어 `posmark=1`을 파일 끝에서 두 번째에 남겼다.
+
+config 체인 단독이 1분 52.64초다(M1의 1분 35.77초에서 +16.9초. 7차에 타이핑이
+200키쯤 늘어난 값이다).
+
+### 실측 12 — `history -a`를 쓰는 세션은 나가면서 남의 줄을 안 지운다
+
+M2에 들어가기 전에 결정 1을 한 번 의심했다. bash는 `histappend`가 꺼져
+있으면 종료할 때 `$HISTFILE`을 자기 메모리 목록으로 덮어쓰므로, 다른 세션이
+써 둔 줄을 지울 수 있어 보였다 — SD 실측 10이 zsh의 `fc -W`에 대해 잰 것과
+같은 구조다.
+
+세션 둘이 같은 `HISTFILE`을 보게 하고 한쪽을 `exit`으로 내보냈다.
+
+| `histappend` | A가 나가기 전 | A가 나간 뒤 |
+|---|---|---|
+| 꺼짐 | `amark=1` · `bmark=1` | `amark=1` · `bmark=1` |
+| 켜짐 | `amark=1` · `bmark=1` | `amark=1` · `bmark=1` |
+
+안 지운다. `history -a`가 이미 append해 두면 bash가 종료 시 다시 쓸 것이
+없기 때문이다. 결정 1("`histappend`는 안 쓴다")이 그대로 선다.
+
+### 실측 13 — 게스트에 `/dev/fd`가 없었다. 씨앗이 그래서 한 줄을 찍고 있었다
+
+M2가 계획에 없이 찾은 것이고, 이 milestone에서 가장 값진 발견이다.
+
+7차에 중첩 bash를 띄우자 화면이 이렇게 나왔다.
+
+```
+(none)# bash | HISbash: /dev/fd/63: No such file or directory | TF...bash-5.2# HISTFI
+```
+
+`bash`를 친 직후 씨앗의 fzf 훅이 에러 한 줄을 찍고, 그 사이에 `HISTFILE=`
+타이핑이 끼어들어 `HIS` · `TF` · `HISTFI`로 쪼개졌다. 그 회차는 결국
+통과했지만 운이었다.
+
+원인이 셋으로 나뉜다.
+
+1. `fzf --bash` 출력의 마지막 줄이 최상위에서 process substitution을 돈다 —
+   `__fzf_orig_completion < <(complete -p …)`. 함수 안이 아니라 `eval`하는
+   그 자리에서 실행된다.
+2. process substitution은 `/dev/fd/63` 같은 경로를 연다.
+3. 게스트에 `/dev/fd`가 없다. devtmpfs는 드라이버가 등록한 장치 노드만
+   담고, 보통 그 링크를 만들어 주는 udev나 init 스크립트를 우리는 안 쓴다.
+
+이 한 줄이 씨앗의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
+찍어야 하고, 그 규칙을 지키려고 `expectQuietSeed`가 있다. 그런데 그 검사는
+글자를 보지 실행을 안 해 본다.
+
+SM-M1이 그 훅을 넣을 때 잰 "관문이 있으면 셋 다 0바이트"(SM 실측 23)도
+컨테이너에서 잰 값이었다. 컨테이너에는 `/dev/fd`가 있다. BH 실측 5·10이
+드러낸 것과 같은 종류다 — 컨테이너 값을 게스트 값으로 읽으면 틀린다.
+
+게이트가 이것을 오래 못 본 이유는 열한 체인 중 bash로 뜨는 것이 하나도
+없었기 때문이다(확인 4). `input/check.sh`가 bash를 치기는 하는데 `--norc`라
+씨앗을 안 읽는다.
+
+### 결정 9 — `/dev/fd` 링크는 init이 만든다 (M2에서 더했다)
+
+고칠 자리가 둘이었다. bash의 fzf 훅을 바꾸는 것과, 없는 링크를 만드는 것이다.
+
+링크를 만든다. 보통의 리눅스 시스템에 있는 것이 우리 게스트에 없는 것이
+결함이고, 훅을 바꾸면 그 결함이 다음 도구에서 또 드러난다.
+
+`main.zig`에 `linkDevFd()`가 서서 `/proc`과 `/dev`가 둘 다 붙은 뒤
+`symlink("/proc/self/fd", "/dev/fd")`를 한다. 로그 한 줄
+(`tars-init: linked /dev/fd to /proc/self/fd`)을 찍고 `config/check.sh`의 1차
+부팅이 그 줄을 본다.
+
+이것이 BH의 범위를 넘는다는 반론이 가능하다. 넘지 않는다고 본 이유는
+M2의 검사가 그 에러와 같은 화면에서 돌기 때문이다 — 안 고치면 이
+milestone이 세운 판정 셋이 타이밍에 따라 흔들린다.
+
+### 중첩 bash는 프롬프트로 기다릴 수 있다
+
+같은 화면이 가르쳐 준 것이 하나 더 있다. 중첩 zsh는 프롬프트가 바깥과 같아서
+"떴는가"를 아무것도 못 가르는데(SD 실측 12), bash는 `bash-5.2#`로 바뀐다.
+그래서 첫 중첩 뒤에 `wait_for_screen 'bash-5\.2#'`를 넣어 rc를 다 읽을
+때까지 기다린다.
+
+둘째 중첩에는 못 넣는다. `wait_for_screen`은 마지막 프레임이 아니라 로그
+전체를 보므로(HANDOFF 실측 26) 같은 글자가 앞선 프레임에 이미 있다. 대신
+둘째가 흔들리면 `bpos`가 숫자 없이 나와 검사가 죽으므로 조용하지는 않다.
+
+### 반사실 — 씨앗에서 그 줄만 빼면 7차가 죽는다
+
+마운트가 둘 필요하다. 씨앗에서 그 줄을 빼면 `config_test.zig`의 역방향
+검사가 부팅 전에 막으므로, 그 loop 한 줄(`if (seen_opt[i] or true) continue;`)도
+함께 눕힌 사본을 둘째 마운트로 준다. SD-M2가 배운 것과 같다.
+
+체인이 7차에서 죽는데, 예상한 `bpos1`이 아니라 첫째 `bneg0`에서 죽는다.
+
+```
+bash-5.2# echo bneg$(grep -cx bnegmark=1 /config/bash_history)
+grep: /config/bash_history: No such file or directory
+bneg
+```
+
+씨앗의 훅이 없으면 `HISTFILE=` 대입 뒤에도 파일이 안 생긴다 — 파일을 만드는
+것이 그 훅이기 때문이다. 고친 것의 크기가 "늦게 쓴다"가 아니라 "파일이
+없다"이고, SD-M2가 zsh에서 본 것과 글자 그대로 같은 모양이다.
+
+### 실측 14 — 루트 게이트가 28분 55.53초에 11체인 3/3
+
+기준선이 SD-M2 뒤의 28분 14.55초이고 41초 늘었다. config 체인 단독이
+16.9초 길어졌고 게이트가 그것을 세 번 도니 51초가 설명되는 값이라 나머지는
+잡음이다. 이 게이트의 잡음이 ±3분이므로 갈렸다고 말하지 않는다.
+
+`skipping make`가 32회다. 기대값이 `체인 수 × 3 − 1` = 32이므로 커널 빌드
+캐시(GL-M1)도 정상이다.
+
+`/dev/fd` 링크가 열한 체인 어디도 안 깨뜨렸다. init의 로그가 한 줄 늘었는데,
+그 줄은 시리얼로 가지 프레임버퍼로 안 가므로 화면 좌표를 보는 검사와는
+애초에 다른 층이다.
 
 ## 위험
 

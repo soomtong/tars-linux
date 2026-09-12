@@ -232,6 +232,58 @@ AFT_COUNT_KEYS=(e c h o spc a f t shift-4 shift-9
 # 더 가깝게 둔다.
 EXIT_KEYS=(e x i t ret)
 
+# ── BH-M2 ───────────────────────────────────────────────────────────────
+#
+# 같은 실험을 bash로 한 번 더 한다. SD-M2가 zsh에 대해 세운 구조를 그대로
+# 쓰되 셋이 다르다.
+#
+#   1. 중첩이 bash다. 씨앗은 `~/.bashrc` 링크로 그대로 읽힌다.
+#   2. 첫 명령이 HISTFILE 대입이다. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
+#      /config/zsh_history이고, 안 맞추면 이 검사가 zsh 파일에 섞인 평문을
+#      센다 — 양성이 우연히 통과할 수 있다(BH 위험 4).
+#   3. 옵션을 끄는 방법이 `PROMPT_COMMAND=`다. bash에는 `unsetopt`가 없다.
+#
+# 이 셋이 아래 zsh 판정보다 앞에서 쳐지는 이유는 8차다. bash 중첩 안에서 친
+# 것은 zsh 히스토리에 안 들어가므로 여기서 느는 것은 세 줄뿐인데(`bash` 둘과
+# `echo baft`), 그 셋이 `posmark=1` 뒤에 오면 8차의 `history` 16줄 창에서 그
+# 글자를 민다.
+#
+# 앵커(`grep -cx`)를 붙이는 이유가 zsh와 다르다. zsh에서는 grep 명령줄이
+# 실행 전에 파일에 써져서 패턴이 자기를 세는데(SD 실측 24), bash의
+# PROMPT_COMMAND는 직전 명령까지만 쓰므로 자기 줄이 아직 없다(BH 실측 4).
+# 그래도 붙인다 — 앵커 없는 패턴이 의도한 것보다 많이 세는 것은 같다.
+BNEST_KEYS=(b a s h ret)
+# HISTFILE=/config/bash_history — 대문자는 shift-<글자>, 밑줄은 shift-minus다.
+BHISTFILE_KEYS=(shift-h shift-i shift-s shift-t shift-f shift-i shift-l shift-e
+                equal slash c o n f i g slash b a s h shift-minus
+                h i s t o r y ret)
+# PROMPT_COMMAND= — 음성 세션이 훅을 끄는 한 줄. 빈 값 대입이라 화면에
+# 한 글자도 안 찍는다.
+BNEG_UNSET_KEYS=(shift-p shift-r shift-o shift-m shift-p shift-t shift-minus
+                 shift-c shift-o shift-m shift-m shift-a shift-n shift-d
+                 equal ret)
+# bnegmark=1 / bposmark=1 — 세는 대상. 변수 대입이라 화면에 안 찍고, 공백이
+# 없어서 `grep -x`의 패턴에 따옴표가 필요 없다.
+BNEG_MARK_KEYS=(b n e g m a r k equal 1 ret)
+BPOS_MARK_KEYS=(b p o s m a r k equal 1 ret)
+# echo bneg$(grep -cx bnegmark=1 /config/bash_history) — 판정 글자를 우리가
+# 만든다. zsh 쪽의 같은 배열과 다른 것은 표적과 파일 이름과 앞의 b뿐이다.
+BNEG_COUNT_KEYS=(e c h o spc b n e g shift-4 shift-9
+                 g r e p spc minus c x spc b n e g m a r k equal 1 spc
+                 slash c o n f i g slash b a s h shift-minus h i s t o r y
+                 shift-0 ret)
+# echo baft$(grep -cx bnegmark=1 /config/bash_history) — 음성이 나간 뒤 같은
+# 표적을 한 번 더 센다. 이 명령은 bash가 아니라 zsh에서 쳐진다(음성 세션은
+# 이미 나갔다). 셋의 문법이 이 자리에서는 같아서 그대로 돈다.
+BAFT_COUNT_KEYS=(e c h o spc b a f t shift-4 shift-9
+                 g r e p spc minus c x spc b n e g m a r k equal 1 spc
+                 slash c o n f i g slash b a s h shift-minus h i s t o r y
+                 shift-0 ret)
+BPOS_COUNT_KEYS=(e c h o spc b p o s shift-4 shift-9
+                 g r e p spc minus c x spc b p o s m a r k equal 1 spc
+                 slash c o n f i g slash b a s h shift-minus h i s t o r y
+                 shift-0 ret)
+
 # ── 8차 부팅이 치는 셋 ──────────────────────────────────────────────────
 #
 # `z`와 `pwd`는 7차의 것을 그대로 다시 쓴다(HOOK_Z_KEYS · HOOK_PWD_KEYS).
@@ -618,6 +670,94 @@ probe_shell_hooks() {
   fi
   echo "boot 7: the fzf integration defined its Ctrl+R widget without the gate pressing Ctrl+R"
 
+  # ── BH-M2: bash 씨앗의 한 줄이 게스트에서 하는 일을 본다 ──────────────
+  #
+  # 구조가 아래 SD-M2의 것과 같다. 중첩 둘이 음성·양성이고 둘 다 같은 씨앗
+  # rc를 읽으며, 다른 것은 음성이 훅을 끄는 한 줄뿐이다.
+  #
+  #   bneg0  훅을 끈 세션이 친 명령은 살아 있는 동안 파일에 없다
+  #   baft1  그 세션이 나가면서 썼다 — 그러니 그 명령은 분명히 쳐졌다
+  #   bpos1  씨앗의 훅이 살아 있는 세션은 치는 그 자리에서 파일에 쓴다
+  #
+  # ⚠ HISTFILE 대입을 지우지 말 것. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
+  #   /config/zsh_history이고, 그것을 안 맞추면 아래 grep이 zsh 형식 파일에
+  #   섞인 평문을 센다 — 양성이 우연히 통과할 수 있다.
+  type_keys "${BNEST_KEYS[@]}"
+  # 중첩 bash가 rc를 다 읽을 때까지 기다린다. 안 기다리면 rc를 읽는 중에
+  # 타이핑이 끼어들어 글자가 쪼개진다 — BH-M2가 실제로 `HIS` · `TF` ·
+  # `HISTFI`로 갈라지는 화면을 봤다. 그 회차는 결국 통과했지만 운이었다.
+  #
+  # 기다릴 수 있다는 것 자체가 bash의 이점이다. 중첩 zsh는 프롬프트가 바깥과
+  # 같아서 아무것도 못 가르는데(SD 실측 12) bash는 `bash-5.2#`로 바뀐다.
+  if ! wait_for_screen 'bash-5\.2#'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 7): the nested bash never drew its prompt"
+    echo "  /usr/bin/bash가 게스트에 없거나, 씨앗 rc가 셸을 매달리게 한 것이다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${BHISTFILE_KEYS[@]}"
+  type_keys "${BNEG_UNSET_KEYS[@]}"
+  type_keys "${BNEG_MARK_KEYS[@]}"
+  type_keys "${BNEG_COUNT_KEYS[@]}"
+  ok=0
+  if wait_for_screen '\| bneg0'; then ok=1; fi
+
+  if [ "$ok" != "1" ]; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 7): the bash session with its prompt hook cleared still wrote its command to the history file"
+    echo "  화면에 bneg1이 있으면 PROMPT_COMMAND= 가 안 먹은 것이다."
+    echo "  bneg라는 글자가 숫자 없이 있으면 /config/bash_history가 아직 없어서"
+    echo "  grep이 에러를 낸 것이고, 그것은 씨앗의 그 줄이 안 걸렸다는 뜻이다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 7: with the prompt hook cleared, a typed command is not in the bash history while that session lives"
+
+  type_keys "${EXIT_KEYS[@]}"
+  type_keys "${BAFT_COUNT_KEYS[@]}"
+  ok=0
+  if wait_for_screen '\| baft1'; then ok=1; fi
+
+  if [ "$ok" != "1" ]; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 7): the negative bash session's command never reached the file, so the check above saw nothing"
+    echo "  화면에 baft0이 있으면 그 명령이 애초에 안 쳐진 것이고, 그러면"
+    echo "  위의 bneg0은 씨앗의 줄과 아무 상관이 없다. 중첩 bash가 떴는지부터"
+    echo "  본다 — 프롬프트가 bash-5.2#로 바뀌었어야 한다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 7: that same command did land when the bash session left, so the zero above meant 'not yet written'"
+
+  type_keys "${BNEST_KEYS[@]}"
+  type_keys "${BHISTFILE_KEYS[@]}"
+  type_keys "${BPOS_MARK_KEYS[@]}"
+  type_keys "${BPOS_COUNT_KEYS[@]}"
+  ok=0
+  if wait_for_screen '\| bpos1'; then ok=1; fi
+
+  if [ "$ok" != "1" ]; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 7): with the seeded prompt hook on, a typed command was not in the bash history file yet"
+    echo "  화면에 bpos0이 있으면 씨앗의 PROMPT_COMMAND 줄이 안 걸린 것이다 —"
+    echo "  그 줄이 없거나(rcSeed의 bash 갈래), bash가 /config/bashrc를 안"
+    echo "  읽었거나, 뒤에 오는 zoxide 훅이 그 변수를 덮어쓴 것이다."
+    echo "  bpos만 숫자 없이 있으면 둘째 중첩의 HISTFILE 대입이 rc 읽기 중에"
+    echo "  쪼개져서 표적이 zsh 파일로 갔다는 뜻이다."
+    echo "  이 줄이 BH가 넣은 그 한 줄을 게이트가 보는 유일한 자리다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 7: the seeded prompt hook put a typed command on the config disk the moment it was typed"
+
+  # 양성 bash에서 나온다. 아래 zsh 판정이 zsh 세션에서 돌아야 한다.
+  type_keys "${EXIT_KEYS[@]}"
+
   # ── SD-M2: 그 한 줄이 게스트에서 실제로 하는 일을 본다 ────────────────
   #
   # 중첩 zsh 둘이 음성·양성 대조군이다(SD 결정 5). 둘 다 같은 씨앗 rc를
@@ -921,6 +1061,15 @@ for rc in /config/bashrc /config/zshrc /config/fish.config; do
   fi
 done
 echo "boot 1: init seeded all three rc files on the empty disk"
+
+# BH-M2. devtmpfs는 /dev/fd를 안 만들고 우리는 udev를 안 쓴다. 그 링크가
+# 없으면 bash의 process substitution이 여는 /dev/fd/63이 없어서, 씨앗의
+# fzf 훅이 rc를 읽는 자리에서 `No such file or directory` 한 줄을 찍는다 —
+# 씨앗이 아무것도 안 찍어야 한다는 규칙을 정확히 그 한 줄이 깬다.
+if ! grep -q "tars-init: linked /dev/fd to /proc/self/fd" "$LOG1"; then
+  report_failure "$LOG1" "first boot did not link /dev/fd; bash process substitution will fail in the seeded rc"
+fi
+echo "boot 1: /dev/fd is linked, so process substitution works in the shells we seed"
 
 # SM-M2. 이 부팅의 셸은 fish다(씨앗이 기본값이다). fish의 히스토리는
 # XDG_DATA_HOME 아래로 통째로 따라오므로(실측 11·40) HISTFILE이 한 줄도

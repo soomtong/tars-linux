@@ -120,6 +120,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Shell Memory (SM-M0~M2) | 2026-09-12 | `zoxide`·`fzf`와 히스토리 env로 기계가 배운 것 둘이 부팅을 넘는다 |
 | Gate Accuracy (GA-M0·M1) | 2026-09-12 | 게이트가 거짓을 말하던 일곱 자리를 없애고 `check.sh`의 진입 검사가 재발을 막는다 |
 | Shell History Durability (SD-M0~M2) | 2026-09-12 | 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지지 않는다 — 씨앗 rc의 `setopt INC_APPEND_HISTORY` 한 줄 |
+| Bash History Durability (BH-M0~M2) | 2026-09-12 | 같은 일을 bash에 했다 — `PROMPT_COMMAND='history -a'` 한 줄이 zoxide 훅보다 먼저. 덤으로 게스트에 없던 `/dev/fd`를 세웠다 |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

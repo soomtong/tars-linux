@@ -51,6 +51,35 @@ fn mountDevpts() void {
     _ = mountFs("devpts", "/dev/pts", "devpts", 0);
 }
 
+/// `/dev/fd`를 `/proc/self/fd`로 잇는다(BH-M2가 찾았다).
+///
+/// devtmpfs는 드라이버가 등록한 장치 노드만 담으므로 이 링크가 없다.
+/// 보통의 배포판에서는 udev나 init 스크립트가 만들어 주는데 우리는 둘 다
+/// 안 쓴다. 그래서 bash의 process substitution(`< <(…)`)이 여는
+/// `/dev/fd/63`이 게스트에 없고, 증상은 셸이 rc를 읽으면서
+/// `bash: /dev/fd/63: No such file or directory`를 찍는 것이다.
+///
+/// 그 한 줄이 씨앗의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
+/// 찍어야 한다. 찍는 것이 `fzf --bash` 출력의 마지막 줄
+/// (`__fzf_orig_completion < <(complete -p …)`)이고, SM-M1이 그 훅을 넣을 때
+/// 잰 "셋 다 0바이트"(SM 실측 23)는 컨테이너에서 잰 값이었다. 컨테이너에는
+/// 이 링크가 있다.
+///
+/// 게이트가 이것을 오래 못 본 이유는 열한 체인 중 bash로 뜨는 것이 하나도
+/// 없었기 때문이다. BH-M2가 7차에 중첩 bash를 띄우면서 처음 드러났다.
+///
+/// `/proc`이 먼저 붙어 있어야 한다 — 아래 호출 순서가 그것을 지킨다.
+fn linkDevFd() void {
+    const rc = linux.symlink("/proc/self/fd", "/dev/fd");
+    if (failed(rc)) |e| {
+        // 이미 있다 = 누군가 먼저 만들었다. 조용히 둔다.
+        if (e == .EXIST) return;
+        std.debug.print("tars-init: could not link /dev/fd (errno {d})\n", .{@intFromEnum(e)});
+        return;
+    }
+    std.debug.print("tars-init: linked /dev/fd to /proc/self/fd\n", .{});
+}
+
 /// `XDG_DATA_HOME`이 가리키는 디렉터리를 만든다(SM design 결정 9).
 /// 설정 디스크가 붙었을 때만 부른다 — 안 붙은 기계에서는 `/config`가
 /// tmpfs의 빈 디렉터리이고, 거기에 도구가 자기 자리를 만드는 것이 정상
@@ -503,6 +532,9 @@ pub fn main(init: std.process.Init.Minimal) void {
     _ = mountFs("sysfs", "/sys", "sysfs", 0);
     _ = mountFs("devtmpfs", "/dev", "devtmpfs", 0);
     mountDevpts();
+    // /proc과 /dev가 둘 다 선 뒤여야 한다. 링크의 대상이 /proc 안에 있고
+    // 링크가 놓일 자리가 /dev다.
+    linkDevFd();
 
     const storage_mounted = mountConfig();
     var cfg = loadConfig(storage_mounted);
