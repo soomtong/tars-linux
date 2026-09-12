@@ -235,11 +235,10 @@ pub const Shell = enum {
     /// 이 줄이 있으면 명령마다 그 자리에서 파일에 쓰므로 SIGKILL에도
     /// 남는다(실측 3·6).
     ///
-    /// bash가 0인 것은 빠뜨린 것이 아니다. bash에는 `setopt` 한 줄에
-    /// 대응하는 것이 없어서 `PROMPT_COMMAND='history -a'` 같은 프롬프트 훅이
-    /// 필요하고, 그것은 허용 목록을 한 범주 더 넓히는 일이다(비목표 1).
-    /// fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이 애초에
-    /// 없다(실측 8).
+    /// bash는 BH-M1이 채웠다. `setopt` 한 줄에 대응하는 것이 없어서
+    /// 프롬프트 훅을 쓰고, 그래서 순서가 생긴다 — 아래 `HIST_OPTIONS_BASH`의
+    /// 주석에 있다. fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이
+    /// 애초에 없다(실측 8).
     ///
     /// `rcSeed()`가 담는 글자와 여기 글자가 두 벌인 이유는 `hookLines()`의
     /// 머리 주석과 같다 — 조립하면 역방향 검사가 tautology가 된다.
@@ -247,11 +246,30 @@ pub const Shell = enum {
         "setopt INC_APPEND_HISTORY",
     };
 
+    /// bash의 히스토리 옵션 줄(BH design 결정 1·3).
+    ///
+    /// zsh의 `setopt`와 하는 일은 같고 생긴 것이 다르다. bash에는 쓰는
+    /// 시점을 옮기는 옵션이 없어서 프롬프트 훅을 쓴다 — `PROMPT_COMMAND`는
+    /// 명령이 끝나고 다음 프롬프트를 그리기 직전에 도는 자리다.
+    ///
+    /// 그래서 zsh와 타이밍이 한 칸 다르다. zsh는 명령을 읽자마자 쓰므로
+    /// 실행 중인 명령이 이미 파일에 있는데(SD 실측 24), bash는 직전 명령까지만
+    /// 있다(BH 실측 4). 게이트가 이 파일을 세는 자리에서 이 차이가 값을
+    /// 바꾼다.
+    ///
+    /// `shopt -s histappend`는 안 쓴다. 그 옵션이 정하는 것은 셸이 끝날 때
+    /// 덮어쓸 것인가 이어 쓸 것인가이고, 우리가 지는 싸움은 "끝날 때가 아예
+    /// 안 온다"이다(BH 실측 10 — SIGKILL 칸). `history -a`는 언제나 append라
+    /// 함께 켤 이유도 없다.
+    const HIST_OPTIONS_BASH = [_][]const u8{
+        "PROMPT_COMMAND='history -a'",
+    };
+
     /// 이 셸의 히스토리 옵션 줄들.
     pub fn histOptionLines(self: Shell) []const []const u8 {
         return switch (self) {
             .fish => &[_][]const u8{},
-            .bash => &[_][]const u8{},
+            .bash => &HIST_OPTIONS_BASH,
             .zsh => &HIST_OPTIONS_ZSH,
         };
     }
@@ -333,6 +351,19 @@ pub const Shell = enum {
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — 프롬프트마다 배우고 z <조각>으로 간다
             \\#   fzf     무엇을 쳤는지 — Ctrl+R(히스토리) · Ctrl+T(파일) · Alt+C(디렉터리)
+            \\#
+            \\# 아래 한 줄이 히스토리를 명령마다 그 자리에서 파일에 쓴다. 이 줄이
+            \\# 없으면 bash는 셸이 끝날 때 한 번에 쓰는데, 전원 버튼을 눌러도 콘솔
+            \\# 셸에는 그 기회가 안 온다 — 대화형 셸은 SIGTERM을 무시하고 3초 뒤
+            \\# SIGKILL에 죽으므로 그 세션에 친 명령이 통째로 사라진다.
+            \\#
+            \\# 이 줄은 아래 훅보다 먼저 있어야 한다. PROMPT_COMMAND는 변수가
+            \\# 하나뿐이라 마지막 대입이 이기는데, zoxide의 훅이 같은 변수를 쓴다.
+            \\# 순서가 이대로면 zoxide가 우리 값을 보존하며 앞에 붙여
+            \\# __zoxide_hook;history -a가 되고 둘 다 돈다. 뒤집으면 우리 대입이
+            \\# zoxide를 지우고, 증상은 히스토리는 남는데 z가 아무 디렉터리도 안
+            \\# 배우는 것이다.
+            \\PROMPT_COMMAND='history -a'
             \\#
             \\# command -v 관문을 지우지 말 것. 도구가 없을 때 그것이 없으면 bash가
             \\# 부팅하면서 command not found를 찍고, 그 한 줄이 게이트 다섯 체인의

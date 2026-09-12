@@ -1,7 +1,8 @@
 # TARS Bash History Durability — Design
 
 Date: 2026-09-12
-Status: 진행 중 — M0을 했다(실측 7~10). M1이 다음이다.
+Status: 진행 중 — M0·M1을 했다(실측 7~11). 씨앗 rc의 bash 갈래가 그 한 줄을
+담고 호스트 검사 다섯이 그것을 지킨다. M2(게이트 판정)가 다음이다.
 
 SD(Shell History Durability)가 zsh에 대해 한 일을 bash에 대해 한다. SD가
 자기 비목표 1로 남긴 것이고, 그 비목표가 남긴 이유는 "bash에는 `setopt` 한
@@ -249,14 +250,23 @@ SD 비목표 1이 "허용 목록을 한 범주 더 넓히는 일"이라고 적�
 ### 결정 4 — 그 순서를 검사가 못 박는다
 
 확인 3이 근거다. 순서는 코드를 보면 맞는데, 씨앗을 고치는 사람이 줄을
-옮기면 조용히 깨진다. `config_test.zig`에 검사를 하나 더 둔다 — 씨앗에서
-`histOptionLines()`의 모든 줄이 `hookLines()`의 모든 줄보다 앞선 줄 번호에
-있는가.
+옮기면 조용히 깨진다. `config_test.zig`에 검사를 하나 더 둔다.
 
-셸 셋 전부에 건다. 지금 조건을 만족하는 것은 bash 하나뿐이지만(zsh는 옵션
-줄이 있고 fish는 없다), 검사를 셋에 걸어 두면 나중에 zsh 씨앗의 줄을 옮기는
-편집도 잡힌다. zsh의 `setopt`는 순서와 무관하지만, 무관한 것을 지키는
-비용이 0이다.
+검사가 보는 것을 고를 때 한 번 틀렸다가 고쳤다. 처음에는 "`histOptionLines()`의
+모든 줄이 `hookLines()`의 모든 줄보다 앞선다"로 적었는데, 소스를 읽으니 zsh
+씨앗의 `setopt INC_APPEND_HISTORY`가 훅 두 줄보다 뒤에 있다
+(`config.zig:369~377`). 셸 셋에 그대로 걸면 zsh가 그 자리에서 빨개진다.
+
+zsh 씨앗을 옮기는 것은 안 한다. 순서를 요구하는 근거는 "옵션 줄이라서"가
+아니라 "`PROMPT_COMMAND`가 하나뿐인 변수라서"이고, `setopt`는 다른 줄과 안
+부딪친다. 옮기면 규칙과 근거가 어긋난 채로 남는다.
+
+그래서 검사는 이렇게 읽는다 — 씨앗에서 `PROMPT_COMMAND`를 건드리는 줄이
+있으면, 그 줄은 그 셸의 모든 훅 줄보다 앞선 줄 번호에 있어야 한다.
+
+셸 셋 전부에 건다. 지금 대상이 있는 것은 bash 하나지만, 이 모양이면 나중에
+누가 zsh나 fish 씨앗에 `PROMPT_COMMAND`를 넣어도 같은 못에 걸린다 —
+위험 3이 말하는 것이 정확히 그 경우다.
 
 ### 결정 5 — 새 줄을 들이는 검증 절차를 고친다
 
@@ -467,17 +477,95 @@ PTY 주인을 치우고 나서 파일을 읽었는데, 그 정리 자체가 PTY�
 SD 실측 7이 틀린 것도 같은 함정으로 보인다. 그 하네스가 `exec` 없는
 `script -qfc "zsh -i"` 모양이었다.
 
+## BH-M1이 넣은 것 (끝났다)
+
+plan: `docs/superpowers/plans/2026-09-12-tars-bash-history-durability-bh-m1.md`
+
+`config.zig`에 `HIST_OPTIONS_BASH`가 섰고 `histOptionLines()`의 bash 갈래가
+그것을 돌려준다(zsh 1 · bash 1 · fish 0). 씨앗 `rcSeed()`의 bash 갈래가 그
+글자를 따로 한 벌 더 적되 훅 두 줄보다 먼저 적는다 — 씨앗에서 그 줄이
+366번, zoxide 훅이 371번이다.
+
+`config_test.zig`는 `KNOWN_HIST_OPTIONS`에 원소를 하나 더 받았고,
+`expectHistOptions`의 bash 개수가 0에서 1이 됐고, 새 검사
+`expectPromptCommandBeforeHooks`가 섰다. `KNOWN_HIST_OPTIONS`의 머리 주석이
+결정 5대로 바뀌었다 — 재는 방법이 셸마다 다르다는 것을 그 자리에 적었다.
+
+`config.zig`가 +37 −6, `config_test.zig`가 +86 −12다. 지운 18줄은 전부 낡은
+주석과 `.bash => 0` 두 줄이다.
+
+### 되돌림 다섯이 각각 다른 줄에서 죽었다
+
+이것이 검사가 값을 한다는 증거다.
+
+| | 무엇을 망가뜨렸나 | 죽은 자리 | 에러 |
+|---|---|---|---|
+| 1 | 씨앗의 그 줄만 오타로 | `expectQuietSeed` 정방향 | `BadSeed` |
+| 2 | 씨앗에서만 지우기 | `expectQuietSeed` 역방향 | `BadSeed` |
+| 3 | 씨앗과 `HIST_OPTIONS_BASH`에서 함께 지우기 | `expectHistOptions` 개수 | `BadHistOption` |
+| 4 | 둘을 함께 오타로 | `KNOWN_HIST_OPTIONS` | `BadHistOption` |
+| 5 | 씨앗에서 훅 두 줄 아래로 옮기기 | `expectPromptCommandBeforeHooks` | `BadSeedOrder` |
+
+5번의 메시지가 이 milestone이 새로 얻은 것이다.
+
+```
+FAIL: the bash seed assigns PROMPT_COMMAND on line 38, after its first hook on line 36
+      that assignment wipes the zoxide hook; move it above the hooks
+```
+
+### 실측 11 — 복사해 온 `.zig-cache`는 소스 변경을 가린다
+
+되돌림 회차를 통째로 한 번 버리고 얻은 값이다.
+
+되돌림 다섯을 한 컨테이너 안에서 돌리려고 `cp -r /workspace/init /tmp/w`로
+복사한 뒤 거기서 소스를 바꿔 가며 `zig build test`를 돌렸다. 다섯이 전부
+`PASS`로 나왔다 — 검사가 안 죽은 것이 아니라 새 코드가 아예 안 돌았다.
+`init/.zig-cache`와 `zig-out`이 함께 복사되면서 zig가 옛 산출물을 다시
+실행했다.
+
+증상이 나쁘다. 에러도 경고도 없고, `PASS` 한 줄이 정상 통과와 글자 그대로
+같다. 되돌림 검증에서 이것이 나면 "검사가 값을 안 한다"로 읽히므로 결론이
+정확히 거꾸로 뒤집힌다.
+
+처방은 복사 직후 `rm -rf .zig-cache zig-out` 한 줄이다. 같은 자리에서 소스만
+바꾸는 것은 zig가 정상으로 감지하므로, 회차마다 지울 필요는 없고 복사 직후
+한 번이면 된다.
+
+`project_zig_out_staleness`의 처방("음성 확인 전에 캐시를 지운다")과 같은
+뿌리인데, 그 기억은 같은 자리에서 빌드하는 경우를 적었고 이쪽은 캐시를 다른
+디렉터리로 옮기는 경우다.
+
+### config 체인은 안 길어졌다
+
+부팅 여덟이 1분 35.77초에 `FAIL` 없이 끝났다. SD-M2의 1분 36.42초와 같다 —
+M1이 타이핑을 안 더했으므로 안 늘어야 맞다. 씨앗이 열한 줄 커졌는데 화면
+좌표를 보는 검사가 하나도 안 밀렸다.
+
+그 초록이 "그 줄이 게스트에서 일한다"를 뜻하지는 않는다. 게이트에는 아직
+bash로 뜨는 자리가 없다(확인 4). 그것을 세우는 것이 BH-M2다.
+
 ## 위험
 
 ### 위험 1 — 순서 검사가 zsh와 fish에서 공허하게 통과한다
 
-결정 4가 셸 셋 전부에 거는데, 조건을 만족할 줄이 실제로 있는 것은 bash
-하나뿐이다. fish는 옵션 줄이 0이라 "모든 옵션 줄이 훅보다 앞선다"가 공허하게
-참이다.
+결정 4가 셸 셋 전부에 거는데, `PROMPT_COMMAND`를 건드리는 줄이 실제로 있는
+것은 bash 하나뿐이다. zsh와 fish에서는 볼 줄이 없으므로 "그 줄이 훅보다
+앞선다"가 공허하게 참이 된다.
 
 이 저장소가 반복해서 부딪친 자리다(SP-M0 실측 4 — 통과했다와 볼 것이
 없었다를 가르는 것). 처방은 검사가 실제로 무엇을 보았는지를 세고, 본 것이
 0이면 그 사실을 화면에 적는 것이다. 검사가 조용히 초록이 되지 않게 한다.
+
+M1이 그 처방을 넣었다. `zig build test`가 이제 두 줄을 찍는다.
+
+```
+note: the fish seed touches PROMPT_COMMAND on no line; nothing to order
+note: the zsh seed touches PROMPT_COMMAND on no line; nothing to order
+```
+
+bash에 대해서는 이 줄이 없다 — 볼 것이 있었고 실제로 봤다는 뜻이다. 그
+줄이 셋으로 늘면 bash의 씨앗에서 그 줄이 사라진 것이므로, 다른 검사가
+죽기 전에 이 줄 수가 먼저 말해 준다.
 
 ### 위험 2 — 7차 부팅이 길어지고 8차의 화면 좌표가 밀린다
 

@@ -25,11 +25,24 @@ const MAX_HIST_OPTION_LINES = 4;
 /// 전부다. `histOptionLines()`와 씨앗은 두 벌이라 함께 고치면 검사가
 /// 통과하는데, 그 구멍을 이 셋째 벌이 막는다.
 ///
-/// 새 `setopt` 줄을 씨앗에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
-/// 줄의 stdout·stderr가 0바이트인 것을 재고 여기 적어야 한다. 없는 옵션
-/// 이름은 stderr 65바이트이고, 그 65바이트가 설정 디스크를 붙이는 다섯
-/// 체인의 화면 좌표를 민다.
-const KNOWN_HIST_OPTIONS = [_][]const u8{"setopt INC_APPEND_HISTORY"};
+/// 새 줄을 씨앗에 넣으려면 먼저 그 줄이 조용한 것을 재고 여기 적어야
+/// 한다. 재는 방법이 셸마다 다르다는 것이 BH-M1이 배운 것이다.
+///
+/// zsh의 `setopt`는 rc를 읽는 그 자리에서 돌므로 `zsh -c '<줄>'`로 잰다.
+/// 없는 옵션 이름은 stderr 65바이트다(SD 실측 9).
+///
+/// bash의 `PROMPT_COMMAND`는 다르다. 비대화형 bash는 그 변수를 아예 실행하지
+/// 않아서 `bash -c '<줄>'`은 오타가 나도 0바이트를 돌려준다(BH 실측 5).
+/// 대화형 세션을 띄워 화면 전체의 바이트를 재야 한다 — 오타는 프롬프트가
+/// 그려질 때마다 `bash: <이름>: command not found`를 찍는다. zsh의 오타가
+/// 기동할 때 한 번인 것과 달리 이쪽은 계속 찍힌다.
+///
+/// 재지 않고 여기에 줄을 더하면 그 대가는 설정 디스크를 붙이는 다섯 체인의
+/// 화면 좌표다.
+const KNOWN_HIST_OPTIONS = [_][]const u8{
+    "setopt INC_APPEND_HISTORY",
+    "PROMPT_COMMAND='history -a'",
+};
 
 /// config.zig에서 유일하게 시스템 콜이 없는 함수가 parse다. HANDOFF가
 /// "단위 테스트가 없다"고 오래 적어두고 있었는데, keyboard 키가 들어오면서
@@ -302,13 +315,12 @@ fn expectHistEntries(sh: config.Shell) !void {
 /// 히스토리 옵션 줄이 셸의 성질과 맞는가(SD design 결정 4).
 ///
 /// `expectHistEntries`가 `SAVEHIST`를 zsh에만 못 박은 것과 같은 모양이고,
-/// 개수가 본체다 — zsh 1 · bash 0 · fish 0.
+/// 개수가 본체다 — zsh 1 · bash 1 · fish 0.
 ///
-/// 그 0 둘이 빠뜨린 것이 아니라 정한 것이라는 데 이 함수의 값이 있다.
-/// fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이 없고(SD 실측 8),
-/// bash는 `setopt` 한 줄에 대응하는 것이 없어 프롬프트 훅이 필요하다
-/// (SD 실측 7, 비목표 1). 누가 bash를 여는 날에는 이 숫자를 먼저 고쳐야
-/// 하고, 그 자리가 이 함수다.
+/// fish의 0이 빠뜨린 것이 아니라 정한 것이라는 데 이 함수의 값이 있다.
+/// fish는 `exit`·SIGTERM·SIGHUP 셋 다에서 쓰므로 고칠 것이 없다(SD 실측 8).
+/// bash의 1은 BH-M1이 채웠고, zsh와 글자가 아주 다르다 — `setopt`가 아니라
+/// `PROMPT_COMMAND` 대입이다.
 ///
 /// 보는 것이 둘이다.
 ///   1. 개수가 셸의 성질과 맞다
@@ -321,7 +333,7 @@ fn expectHistEntries(sh: config.Shell) !void {
 fn expectHistOptions(sh: config.Shell) !void {
     const want_len: usize = switch (sh) {
         .fish => 0,
-        .bash => 0,
+        .bash => 1,
         .zsh => 1,
     };
     const lines = sh.histOptionLines();
@@ -346,6 +358,61 @@ fn expectHistOptions(sh: config.Shell) !void {
         );
         return error.BadHistOption;
     }
+}
+
+/// 씨앗에서 `PROMPT_COMMAND`를 건드리는 줄이 훅 줄보다 앞에 있는가
+/// (BH design 결정 4).
+///
+/// `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이긴다. zoxide의 bash
+/// 훅이 같은 변수를 쓰는데, 그 훅은 기존 값을 보존하며 앞에 붙인다
+/// (BH 실측 6·9 — `PROMPT_COMMAND="__zoxide_hook;${PROMPT_COMMAND#;}"`).
+/// 그래서 우리 줄이 먼저면 둘 다 돌고, 나중이면 zoxide가 통째로 지워진다.
+///
+/// 증상이 조용해서 이 검사가 필요하다. 히스토리는 멀쩡히 남고 `z`만 아무
+/// 디렉터리도 안 배운다 — 게이트가 그것을 보는 자리는 8차 부팅 하나뿐이다.
+///
+/// 보는 대상이 `histOptionLines()` 전체가 아니라 `PROMPT_COMMAND`를 건드리는
+/// 줄인 이유가 있다. zsh 씨앗의 `setopt INC_APPEND_HISTORY`는 훅 두 줄보다
+/// 뒤에 있고 그것이 맞다 — `setopt`는 다른 줄과 안 부딪치므로 순서를 요구할
+/// 근거가 없다. 규칙과 근거를 맞춰 둔다.
+fn expectPromptCommandBeforeHooks(sh: config.Shell) !void {
+    const text = sh.rcSeed();
+    const hooks = sh.hookLines();
+
+    var last_prompt: ?usize = null;
+    var first_hook: ?usize = null;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var idx: usize = 0;
+    while (lines.next()) |raw| : (idx += 1) {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0 or line[0] == '#') continue;
+        if (std.mem.startsWith(u8, line, "PROMPT_COMMAND")) last_prompt = idx;
+        for (hooks) |h| {
+            if (!std.mem.eql(u8, line, h)) continue;
+            if (first_hook == null) first_hook = idx;
+        }
+    }
+
+    // 볼 것이 없으면 그 사실을 적는다. 조용한 초록은 통과와 구분이 안 된다
+    // (위험 1, SP-M0 실측 4).
+    if (last_prompt == null) {
+        std.debug.print(
+            "note: the {s} seed touches PROMPT_COMMAND on no line; nothing to order\n",
+            .{@tagName(sh)},
+        );
+        return;
+    }
+    if (first_hook == null) {
+        std.debug.print("FAIL: the {s} seed carries no hook line to order against\n", .{@tagName(sh)});
+        return error.BadSeedOrder;
+    }
+    if (last_prompt.? < first_hook.?) return;
+    std.debug.print(
+        "FAIL: the {s} seed assigns PROMPT_COMMAND on line {d}, after its first hook on line {d}\n" ++
+            "      that assignment wipes the zoxide hook; move it above the hooks\n",
+        .{ @tagName(sh), last_prompt.?, first_hook.? },
+    );
+    return error.BadSeedOrder;
 }
 
 /// cmdline 한 줄이 rc를 끄는가(SC-M2 결정 9).
@@ -595,6 +662,13 @@ pub fn main() !void {
     // 함께 지우는 것)를 이 줄이 막는다 — zsh의 개수를 1로 못 박으므로
     // 목록이 비면 그 자리에서 빨개진다.
     for (std.enums.values(config.Shell)) |sh| try expectHistOptions(sh);
+
+    // ── BH-M1: PROMPT_COMMAND의 순서 ────────────────────────────────────
+    //
+    // 위 셋(정방향·역방향·개수)이 "그 줄이 있는가"를 보고, 이 줄이 "어디에
+    // 있는가"를 본다. bash에서만 볼 것이 생기는 검사이고, 볼 것이 없는 셸에
+    // 대해서는 그 사실을 화면에 적는다.
+    for (std.enums.values(config.Shell)) |sh| try expectPromptCommandBeforeHooks(sh);
 
     // ── SM-M2: 히스토리 env ─────────────────────────────────────────────
     for (std.enums.values(config.Shell)) |sh| try expectHistEntries(sh);
