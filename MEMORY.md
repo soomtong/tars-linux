@@ -20,6 +20,7 @@
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 중 기술 선택지를 계속 묻지 말고 추천안으로 정해 진행한다
 - [Push policy](docs/decisions/feedback_push_policy.md) — push는 묻지 말고 필요할 때 하고, 미푸시 커밋 수를 보고하지 않는다
 - [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유를 일반 어휘 자리에 쓰지 않고, 조사·어미를 생략하지 않는다. 특히 제목과 첫 문장
+- [No emphasis](docs/decisions/feedback_no_emphasis.md) — 문서에 `**` 강조를 쓰지 않는다(2026-09-12). 코드 안의 `**`는 강조가 아니라 내용이라 남긴다
 
 ## 사용자 (user)
 
