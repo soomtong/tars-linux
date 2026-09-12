@@ -322,13 +322,27 @@ echo "=== the config disk should have selected three toggle keys ==="
 # 이 모양에서도 그대로 산다 — 정규형에서 `hangul_key`는 맨 앞에 오므로
 # `shift_space,...` 뒤에 또 이름이 붙는 일이 없고, 붙었다면 공백이 아니라
 # 콤마라 안 맞는다. **필드가 또 늘어도 이 줄은 안 고친다.**
+#
+# ⚠ **`-q`를 쓰면 안 된다**(SM-M2가 이 자리에서 게이트를 한 번 빨갛게 만들었다).
+# `grep -q`는 첫 매치에서 즉시 나가고, 아직 로그를 쏟고 있던 앞단 `tr`이
+# SIGPIPE로 죽는다. 이 파일 맨 위의 `pipefail`이 그 **141**을 파이프라인 종료
+# 코드로 올리고 `if !`는 그것을 *"안 맞았다"*로 읽는다 — **판정 글자가 로그에
+# 멀쩡히 있는데 빨갛다.**
+#
+# **파이프 버퍼(64KiB)보다 로그가 크면 터진다.** 로그는 QEMU가 살아 있는 동안
+# 계속 자라므로 이것은 크기가 아니라 **경주**이고, 그래서 회차마다 갈린다
+# (2026-09-12의 루트 게이트에서 run 1/3은 초록, run 2/3이 빨강이었다).
+#
+# 처방은 `-q`를 빼서 뒤쪽 grep이 입력을 **끝까지 읽게** 하는 것이다 —
+# `tools/check.sh:706`이 같은 병을 같은 방법으로 고쳤다. 같은 모양이 저장소에
+# 일곱 더 있다(`machine/check.sh` 넷 · `config/check.sh` 셋).
 EXPECT_TOGGLES='shift_space,capslock_tap,lctrl_tap'
 if ! tr -d '\r' < "$LOG" |
-  grep -aqE "tars-init: config .*toggles=${EXPECT_TOGGLES}( |\$)"; then
+  grep -aE "tars-init: config .*toggles=${EXPECT_TOGGLES}( |\$)" >/dev/null; then
   report_failure "init did not read hangul_toggle=${EXPECT_TOGGLES} from the config disk"
 fi
 if ! tr -d '\r' < "$LOG" |
-  grep -aq "terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=${EXPECT_TOGGLES}\$"; then
+  grep -a "terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=${EXPECT_TOGGLES}\$" >/dev/null; then
   report_failure "the toggle list did not reach terminal through argv"
 fi
 echo "three toggle keys came from the config file; hangul_key is off"
