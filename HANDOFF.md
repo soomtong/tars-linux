@@ -19,69 +19,53 @@
 뒤에 문서와 소스 주석의 강조를 걷어냈다. 루트 게이트의 가장 최근 값은 27분
 35.61초 3/3이다.
 
-## GA가 한 일 (2026-09-12)
+## SD가 지금까지 한 일 (2026-09-12)
 
 | 커밋 | 무엇 |
 |---|---|
-| `f10ead1` | 일곱 자리에서 `-q`를 빼고 `>/dev/null`로 바꿨다(`machine` 넷 · `config` 셋) |
-| 이번 세션 | `check.sh`에 `require_no_early_exit_pipe`를 더했다 |
+| `7562d3b` | 첫 design. 전제가 "두 세션이 서로를 지운다"였고 그것이 틀렸다 |
+| `b8d2d75` | 그 전제를 측정으로 갈아 치우고 제목을 Concurrency → Durability로, 접두사를 HC → SD로 바꿨다. SM design 넷에 ⚠ 정정을 달았다 |
+| `7b56a45` | SD-M0 plan(측정 여섯) |
+| `caccb45` | 실측 9~14 · HANDOFF · 기억 `project_shutdown_signals` |
 
-본문은 `docs/decisions/project_gate_accuracy.md`에 있다. 실측 넷만 여기
-적어 둔다.
+다음 세션이 먼저 알아야 하는 실측 넷이다. 나머지 열은 design에 있다.
 
-1. 임계는 파이프 버퍼 64KiB가 아니다. 앞단 출력이 22,840바이트 — 버퍼의
-   3분의 1 — 일 때 이미 200회 중 63~160회 터진다. 앞단 `grep`이 약 4KB
-   블록으로 나눠 쓰기 때문이고, 읽는 쪽이 닫혔으면 버퍼가 비어 있어도
-   쓰는 순간 난다. 이 문서가 전에 적어 둔 64KiB 모델이 틀렸다.
-2. 단일 임계값으로 말할 수 없다. 변수가 셋이다 — 앞단 출력량 · 앞단이
-   입력을 훑는 시간 · 뒤단이 나가는 지점. 같은 2만 바이트가 한 실험에서
-   80% 터지고 다른 실험에서 200/200 안전했다.
-3. `config/check.sh:894`가 가장 나빴다. 평시에는 앞단이 0줄이라 안전해
-   보이는데, 이 검사가 빨개져야 하는 상황(시리얼 콘솔이 정말 fish)에서만
-   앞단이 커진다. 그 상황을 합성하니 97,054바이트에서 200회 중 200회
-   통과라고 말했다. 검사가 망가지는 조건이 검사가 필요한 조건과 같아서
-   평시 관측으로는 영영 안 드러난다.
-4. `machine`의 넷은 지금 안전했고 구조적으로도 안전했다(앞단 71~267
-   바이트, 부팅당 고정 줄 수). 그래도 고친 이유는 앞단의 패턴이 자라기
-   때문이다 — SC-M0이 `tars-init: config …`에 필드를 붙였을 때 `hangul`
-   체인이 그 줄 끝에 매달려 깨진 전례가 있다.
+1. 고칠 것은 씨앗 rc의 한 줄 `setopt INC_APPEND_HISTORY`다. 그 줄은 기동할
+   때 0바이트이고(실측 9), 오타가 나면 stderr 65바이트가 나와 다섯 체인의
+   화면 좌표를 민다 — 그래서 두 벌 규율이 필요하다.
+2. SD-M2는 `config/check.sh` 7차에서 `fc -W`를 뺀다. 그 명령이 다른 세션이
+   써 둔 줄을 지우기 때문이고(실측 10), 옵션이 켜지면 애초에 필요 없다.
+   SM-M2가 넣은 우회가 이 옵션과 함께 없어진다.
+3. 게이트 판정의 `grep`에는 앵커를 붙인다(실측 11). 옵션이 켜지면 그 `grep`
+   명령줄이 실행 전에 파일에 써져서 패턴이 자기를 센다 — 앵커 없이는 음성
+   기대값이 0이 아니라 1이 되고 검사가 조용히 죽는다.
+   `grep -c '^echo target$'` → 1 · 앵커 없이 → 2 · 없는 표적 → 0.
+4. 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같다(실측 12). 그래서
+   판정은 프롬프트가 아니라 위 `grep -c`의 숫자로 한다.
 
-⚠ 파일 편집은 사용자가 한다(아래 "협업 방식"). SH·FP·RM·UT·SC·SM은
-사용자가 외출하며 세션 단위로 위임한 예외였고, 그 위임은 해당 세션으로
-끝났다.
+측정 하네스는 `/tmp`에 있었고 저장소에 안 넣었다. 다시 필요하면 plan
+(`docs/superpowers/plans/2026-09-12-tars-shell-history-durability-sd-m0.md`)의
+Task 1~6에 스크립트가 글자 그대로 있다. 컨테이너 `tars-measure`도 이미
+없어졌을 것이다(`sleep 7200`) — Task 0이 다시 세우는 방법이다. devcontainer에는
+zsh도 fish도 없어서 `apt-get`으로 넣어야 한다.
 
-## 그 뒤에 문서와 주석을 정리했다 (2026-09-12)
+⚠ 파일 편집은 사용자가 한다(아래 "협업 방식"). SD는 위임 세션이 아니다 —
+SD-M1의 구현 파일은 Claude가 "넣을 것"을 제시하고 사용자가 넣는다.
 
-| 커밋 | 무엇 |
-|---|---|
-| `ba3cae4` | 경량화 — 세션 로그 4022줄과 해결된 항목을 지우고 낡은 값을 고쳤다 |
-| `680b784` | md 142개에서 `**` 강조 13,083쌍(52KB)을 지웠다 |
-| `94d1dfb` | 그 규칙을 `feedback_no_emphasis`에 적었다 |
-| 이번 세션 | 소스 49개의 주석에서 1,985쌍(3,970바이트)을 지웠다 |
+## 그 앞의 둘 (2026-09-12, 본문은 기억 파일에)
 
-`HANDOFF.md` 305KB → 52KB · `MEMORY.md` 68KB → 7.4KB(색인 줄 여덟이 본문을
-복제하고 있었다) · `CLAUDE.md` 19KB → 9KB. 강조를 쓰지 않는 규칙과 지울 때
-남겨야 하는 자리는 `docs/decisions/feedback_no_emphasis.md`에 있다. 전역
-규칙이 2026-09-12 늦게 "문서/주석 작성시"로 넓어졌다.
+| 서브프로젝트 | 커밋 | 무엇 | 본문 |
+|---|---|---|---|
+| Gate Accuracy | `f10ead1` · `1e71762` | 게이트가 거짓을 말하던 일곱 자리에서 `-q`를 빼고, `check.sh`의 진입 검사가 재발을 막는다 | `docs/decisions/project_gate_accuracy.md` |
+| 강조 걷어내기 | `ba3cae4` · `680b784` · `94d1dfb` · `642b5b1` | md 142개에서 13,083쌍, 소스 49개의 주석에서 1,985쌍을 지웠다 | `docs/decisions/feedback_no_emphasis.md` |
 
-md 정리 뒤에 sanity 검사를 일곱 했고 전부 통과했다 — 두 커밋이 건드린 non-md
-파일이 0 · 스크립트가 읽는 `.md`가 없음(코드의 `.md` 언급은 전부 주석의
-문서 포인터다) · `init`의 `zig build`와 `zig build test` PASS · `terminal`도
-PASS(둘 다 컨테이너 안에서 캐시를 지우고 돌렸다) · md 142개의 코드 펜스 짝이
-전부 맞음 · 깨진 내부 링크 0 · `boot` 체인 단독 PASS.
+GA의 실측 넷 중 다시 쓸 둘은 아래 "시도했으나 안 되는 접근"에 옮겨져 있다
+(64KiB 모델이 틀렸다는 것 · 바이트 수 하나로 못 잰다는 것).
 
-주석 정리는 소스를 건드리므로 검증이 더 무거웠다. 파일마다 별표를 전부 뺀
-문자열이 HEAD와 같음(`**`만이 아니라 모든 `*`를 뺐는데도 같으므로 지운
-바이트가 별표 외에 없다는 증명) · 셸 22개 `bash -n` · 루트 게이트 3/3
-27분 35.11초. 줄 수는 하나도 안 변했다(2,242 삽입 · 2,242 삭제).
-
-걱정했던 "주석 줄만 골라내는 판별"은 필요 없었다. 줄머리가 주석 기호가
-아닌데 `**`가 있는 줄이 셸에는 0개, Zig에는 8개뿐이었고 그중 다섯이 배열
-반복 연산자(`[_]u8{0} ** 32` 꼴)다. 그 다섯만 보호하고 나머지를 전부 지우면
-되므로 짝을 셀 필요가 없고, 강조가 줄을 넘나드는 자리도 저절로 처리된다.
-
-남은 것 하나. 강조를 지운 줄의 줄바꿈은 md에서도 소스에서도 다시 잡지
-않았다. 이유는 `feedback_no_emphasis`에 있다.
+지금 쓰는 사람에게 남는 것은 규칙 하나다 — 문서와 주석에 `**`를 쓰지 않는다.
+`**`가 내용인 자리는 남긴다(md의 코드 블록·인라인 코드, Zig의 배열 반복
+연산자 다섯 자리). 검증 방법과 지운 자리의 목록은
+`docs/decisions/feedback_no_emphasis.md`에 있다.
 
 ## 파이프 뒤의 `grep -q`는 게이트가 막는다 (GA-M1)
 
@@ -144,6 +128,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 # 루트 게이트 (약 28분)
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
+
+# 대화형 셸을 재는 컨테이너 (SD-M0. devcontainer에는 zsh도 fish도 없다)
+docker run -d --name tars-measure tars-devcontainer sleep 7200
+docker exec tars-measure bash -c 'apt-get update -qq && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish >/dev/null 2>&1'
+# 스크립트는 호스트에서 Write로 만들고 docker cp로 넣는다(heredoc 금지 —
+# 중첩 따옴표에서 $HISTFILE이 호스트 bash에 먼저 먹힌다)
+
+# 게스트를 부팅해 전원 버튼까지 밟는 단발 측정 (SD-M0 Task 6, 약 5분)
+docker run --rm -v "$PWD":/workspace -v /tmp/sd_guest.sh:/tmp/sd_guest.sh:ro \
+  -w /workspace tars-devcontainer bash /tmp/sd_guest.sh > /tmp/sd14.log 2>&1
 ```
 
 ## 게이트 현황
@@ -682,9 +677,9 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-지금 진행 중인 서브프로젝트가 없다. 아래는 손에 남아 있는 것들이고, 다음
-서브프로젝트를 고를 때 후보로 함께 본다. 위의 "바로 다음에 할 것"이 그중 넷을
-가까운 순서로 다시 적어 뒀다.
+Shell History Durability(SD)가 진행 중이다 — M0이 끝났고 M1·M2가 남았다. 그것은
+숙제가 아니라 지금 하는 일이므로 위 "바로 다음에 할 것"에 있다. 아래는 손에
+남아 있는 것들이고, SD가 닫힌 뒤 다음 서브프로젝트를 고를 때 후보로 함께 본다.
 
 SM이 남긴 것.
 
@@ -839,7 +834,12 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   아니다, RM).
 - `devices.zig` — 입력 장치를 번호가 아니라 capability로 찾는다. 탐색은 버그
   없이도 실패한다(USB 키보드가 비동기 열거라 최대 3초까지 다시 본다).
-- `power.zig` — 시그널·ACPI·종료 경로.
+- `power.zig` — 시그널·ACPI·종료 경로. `kill(-1, .TERM)` → `GRACE_SECONDS = 3`
+  → `kill(-1, .KILL)`이고, 대화형 셸은 TERM을 무시하므로 유예를 매번 꽉 쓴다
+  (178줄의 주석이 그것을 적고 있다). 그 셋이 두 자식에게 다르게 닿는다 —
+  화면 셸은 `terminal`이 죽어 PTY가 닫히면서 SIGHUP을 받고, 콘솔 셸은 받을 데가
+  없어 SIGKILL에 죽는다. 저장되는 것과 사라지는 것이 거기서 갈린다
+  (`project_shutdown_signals`).
 - `config_test.zig`의 `expectQuietSeed` — 씨앗 rc가 부팅할 때 한 글자도
   안 찍는 것을 호스트에서 막는다. 쓸 수 있는 줄은 주석 · `alias` · `command -v`
   관문이 붙은 훅뿐이다. 씨앗의 훅 글자와 `hookLines()`의 글자는 두 벌로 둔다
@@ -883,15 +883,17 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
 ### 기억
 
 `MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 새 세션이 먼저
-읽을 것은 다섯이다 — 협업 방식 feedback 넷(`feedback_execution_scope` ·
+읽을 것은 여섯이다 — 협업 방식 feedback 다섯(`feedback_execution_scope` ·
 `feedback_commit_delegation` · `feedback_design_question_load` ·
-`feedback_plain_korean`)과 `user_learning_goal`.
+`feedback_plain_korean` · `feedback_no_emphasis`)과 `user_learning_goal`.
 
 그다음은 손에 든 일에 따라 고른다. 게이트를 건드리면
 `project_gate_chain_composition`·`project_gate_latency`·
 `project_zig_out_staleness`, 빌드·Zig를 건드리면 `project_zig_c_uapi_rule`·
 `project_build_host_arch`, 게스트 환경이면 `project_guest_environment`·
 `project_userland_tools`·`project_shell_config`·`project_shell_memory`,
+종료·시그널이면 `project_shutdown_signals`·`project_power_management`·
+`project_init_supervisor`,
 화면이면 `project_terminal_rendering`·`project_render_cost`, 입력이면
 `project_input_policy`·`project_hangul_input`·`project_device_discovery`,
 실기면 `project_real_machine`·`project_kernel_config`·
