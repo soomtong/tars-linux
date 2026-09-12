@@ -114,6 +114,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Userland Tools (UT-M0~M3) | 2026-09-11 | 게스트에 도구 65개가 서고 `PATH`로 이름이 손에 닿는다. 목록은 `kernel/guest_tools.sh` 한 파일. 열한번째 체인 `tools/check.sh` |
 | Shell Config (SC-M0~M2) | 2026-09-11 | `tars.conf`의 `shell_config`가 rc를 켜고 끄고, 탈출로 둘(rc 없이 한 번 더 · 커널 cmdline `tars.noconfig`)이 섰다 |
 | Shell Memory (SM-M0~M2) | 2026-09-12 | `zoxide`·`fzf`와 히스토리 env로 기계가 배운 것 둘이 부팅을 넘는다 |
+| Gate Accuracy (GA-M0·M1) | 2026-09-12 | 게이트가 거짓을 말하던 일곱 자리를 없애고 `check.sh`의 진입 검사가 재발을 막는다 |
 
 위 표의 서브프로젝트 여럿은 "파일 편집은 사용자가"의 예외였다. HI는
 사용자가 "macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이

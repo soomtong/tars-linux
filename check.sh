@@ -58,6 +58,47 @@ require_build_steps() {
   return "$missing"
 }
 
+# GA-M1: 파이프 뒤에서 조기 종료하는 grep을 막는다.
+#
+# `grep -q`는 첫 매치에서 즉시 나가고, 아직 출력을 쓰고 있던 앞단이
+# SIGPIPE로 죽는다. 체인들이 맨 위에 `set -uo pipefail`을 두므로 그 141이
+# 파이프라인 전체의 종료 코드가 되고, `if`가 그것을 "안 맞았다"로 읽는다.
+# `!`가 붙은 형은 거짓 빨강이 되고 안 붙은 형은 거짓 초록이 된다.
+#
+# 이 저장소가 같은 함정에 세 번 걸렸다 — tools/check.sh(SM-M0) ·
+# hangul/check.sh(SM-M2) · 그리고 GA-M0이 고친 일곱. 세 번 다 주석으로
+# 경고를 적어 둔 뒤에 다시 밟았다. 그래서 주석이 아니라 실행으로 막는다.
+#
+# 패턴을 좁게 쓰면 못 찾는다. SM-M0이 쓴 `\| *grep -[a-z]*q`는 플래그 끝이
+# `q`인 것만 찾아 `-aqE` 한 자리를 놓쳤고, 그 한 자리가 2026-09-12의 루트
+# 게이트를 빨갛게 만들었다. 그래서 `q`가 플래그 가운데 있어도 잡는다.
+#
+# `tail`은 대상이 아니다 — 입력을 끝까지 읽으므로 앞단을 죽이지 않는다.
+# `head`와 `grep -m N`도 같은 병을 만들지만 이 저장소에 쓰인 자리가 없어
+# 범위에 안 넣었다(GA design 결정 3).
+EARLY_EXIT_PIPE='\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q'
+
+require_no_early_exit_pipe() {
+  local script="$1"
+  local hits
+
+  # `grep -n`을 먼저 걸고 주석을 나중에 거른다. 순서를 뒤집으면 번호가
+  # 원본과 어긋나서 고칠 자리를 못 가리킨다 — require_build_steps가 반대
+  # 순서여도 괜찮았던 것은 그 검사가 번호를 안 쓰기 때문이다.
+  #
+  # 매치가 0이거나 전부 주석이면 이 파이프라인이 0이 아닌 코드로 끝나고,
+  # 그것이 "위반 없음"의 정상 경로다. 뒤단에 `-q`가 없으므로 이 줄 자신은
+  # 이 검사가 막는 모양이 아니다.
+  hits="$(grep -nE "$EARLY_EXIT_PIPE" "$script" | grep -vE '^[0-9]+:[[:space:]]*#')" \
+    || return 0
+
+  echo "check FAIL: ${script} pipes into a grep that exits early:" >&2
+  echo "$hits" >&2
+  echo "  SIGPIPE kills the upstream and pipefail turns 141 into a false verdict." >&2
+  echo "  drop the -q and redirect the output to /dev/null instead (GA-M0)." >&2
+  return 1
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
@@ -203,9 +244,22 @@ CHAINS=(
 entry_failed=0
 for entry in "${CHAINS[@]}"; do
   require_build_steps "${entry#*:}" || entry_failed=1
+  require_no_early_exit_pipe "${entry#*:}" || entry_failed=1
 done
+
+# 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를
+# 넣으면 미래에 EARLY_EXIT_PIPE를 고쳐 자기가 자기에게 걸리는 순간 게이트가
+# 즉시 빨개져서 드러나고, 빼 두면 이 파일에 새로 들어오는 파이프라인을
+# 아무도 안 본다 — 조용한 쪽보다 시끄러운 쪽이 낫다.
+for extra in ./gate_lib.sh ./check.sh; do
+  require_no_early_exit_pipe "$extra" || entry_failed=1
+done
+
+# 문구가 둘을 덮는다. 빌드 스텝을 빠뜨린 체인은 남이 만들어 둔 산출물로
+# 거짓 초록이 되고, 조기 종료 파이프는 거짓 판정이 된다 — 둘 다 게이트가
+# 거짓을 말하는 한 종류다.
 if [ "$entry_failed" -ne 0 ]; then
-  echo "TARS check FAIL: a chain would have run without building what it boots" >&2
+  echo "TARS check FAIL: the entry checks found something that would make a run lie" >&2
   exit 1
 fi
 
