@@ -1,7 +1,7 @@
 # TARS Bash History Durability — Design
 
 Date: 2026-09-12
-Status: 착수 — M0부터 시작한다.
+Status: 진행 중 — M0을 했다(실측 7~10). M1이 다음이다.
 
 SD(Shell History Durability)가 zsh에 대해 한 일을 bash에 대해 한다. SD가
 자기 비목표 1로 남긴 것이고, 그 비목표가 남긴 이유는 "bash에는 `setopt` 한
@@ -21,14 +21,24 @@ SD가 zsh에 대해 고친 문제는 셸을 가리지 않는다. 파일에 글�
 통째로 잃는다. 콘솔 셸이 정확히 그 경로에 있다 — 시그널 핸들러를 가진 주인이
 없어서 SIGTERM을 무시한 채 3초를 버티다 SIGKILL에 죽는다(SD 실측 4·14).
 
-bash는 zsh보다 나쁘다. SD 실측 7이 `exit`에서만 쓰고 SIGTERM과 SIGHUP
-둘 다에서 안 쓴다고 쟀다. zsh는 SIGHUP에서 쓰므로 화면 셸만큼은 우연히
-살아남았는데, bash는 그 우연조차 없다.
+이 문서를 열 때는 bash가 zsh보다 나쁠 것으로 보았다. SD 실측 7이 bash는
+`exit`에서만 쓰고 SIGTERM과 SIGHUP 둘 다에서 안 쓴다고 쟀기 때문이다. zsh는
+SIGHUP에서 쓰므로 화면 셸만큼은 우연히 살아남는데 bash는 그 우연조차 없다는
+읽기였다.
 
-SD가 그 값에 유보를 하나 달아 두었다. "Debian의 `/etc/bash.bashrc`가
+BH-M0이 그 값을 정정했다. bash도 SIGHUP에서 쓴다(실측 10). SD의 하네스가
+`script`의 래퍼에 시그널을 보내서 셸에 안 닿았던 것으로 보이고, 그래서
+게스트에서 두 셸의 운명이 zsh와 같은 모양으로 갈린다 — 콘솔 0, 화면 1
+(실측 8).
+
+고칠 것은 그래도 같다. 콘솔 셸이 잃는다는 사실이 이 서브프로젝트의 전제이고,
+그 전제는 실측 8이 게스트에서 직접 확인했다.
+
+SD가 자기 값에 유보를 하나 달아 두었다. "Debian의 `/etc/bash.bashrc`가
 `histappend`를 켜는 것에 기댈 수 있어서, bash를 정말로 고치는 사람은
-게스트의 그 파일을 먼저 봐야 한다"였다. 착수 전 실측 1·2가 그 유보를
-지웠다.
+게스트의 그 파일을 먼저 봐야 한다"였다. 착수 전 실측 1·2와 BH-M0의 실측 7이
+그 유보를 지웠다 — 그 파일은 `histappend`를 켜지도 않고 게스트에 있지도
+않다.
 
 ## 착수 전에 실측한 것 — 다시 조사하지 말 것
 
@@ -358,6 +368,104 @@ SD와 같은 모양이다. 측정 · 씨앗과 호스트 검사 · 게이트 판
 죽어야 한다. 호스트 검사가 먼저 죽이므로 마운트가 둘 필요하다는 것은 SD-M2가
 배운 것이고(`config_test.zig`의 역방향 loop 한 줄도 함께 눕힌다), 여기서는
 순서 검사까지 있으므로 눕힐 자리가 하나 더 있을 수 있다.
+
+## BH-M0이 실행으로 증명한 것
+
+plan: `docs/superpowers/plans/2026-09-12-tars-bash-history-durability-bh-m0.md`
+
+실측 7·8·9는 게스트를 세 번 부팅해서 쟀다. 실측 10은 컨테이너에서 쟀고,
+실측 8의 결과를 설명하려다 나왔다.
+
+### 실측 7 — 게스트에 `SYS_BASHRC`가 없다. 경로는 맞다
+
+`ls -a /etc`의 출력이 `.` · `..` · `group` · `passwd` 넷이다. 착수 전 실측 1이
+소스로 본 것과 같다.
+
+경로가 맞는지도 함께 쟀다. 게스트에서 `/etc/bash.bashrc`를 만들어
+`echo BHSYSRCWASREAD` 한 줄을 넣고 bash를 둘 띄웠다 — 비대화형
+(`bash -c true`)과 대화형(`bash -i -c true`)이다. 그 글자가 한 번만 찍혔다.
+경로는 `/etc/bash.bashrc`가 맞고, 읽는 것은 대화형일 때뿐이다.
+
+`/etc`는 tmpfs라 그 파일이 이 부팅에서만 살고 다음 부팅에 안 따라간다.
+측정이 게스트 상태를 안 더럽힌다.
+
+### 실측 8 — 콘솔 셸이 잃고 화면 셸이 남는다. zsh와 같은 모양이다
+
+`shell=bash`로 부팅한 게스트에서 콘솔 셸에 `echo bhconsolemarker`를 치고,
+화면 셸에 `sendkey`로 `echo bhscreenmarker`를 친 뒤 `system_powerdown`을
+눌렀다. 다시 부팅해 `/config/bash_history`를 읽었다.
+
+| | 값 |
+|---|---|
+| 파일이 있는가 | `BHFILE=yes` |
+| 콘솔 셸의 마커 | `BHCON=0` |
+| 화면 셸의 마커 | `BHSCR=1` |
+
+파일 전체가 `echo bhscreenmarker` 한 줄이다. 콘솔 셸이 친 것은 하나도 없다.
+
+"안 쳐졌다"와 "잃었다"를 먼저 갈랐다. 콘솔 쪽은 `bhconsolemarker` 에코가
+시리얼 로그에 있고, 화면 쪽은 `terminal: key>` 줄이 20개로 보낸 키 수와
+정확히 같다(`e c h o spc b h s c r e e n m a r k e r ret`). 둘 다 분명히
+쳐졌다.
+
+종료 경로도 확인했다 — `sent SIGTERM` · `grace period expired (reaped 2)` ·
+`sent SIGKILL` · `calling reboot(POWER_OFF)`가 전부 로그에 있다.
+
+이 값이 SD 실측 14(zsh — 콘솔 0, 화면 1)와 글자 그대로 같다. 이 문서가
+예상한 "둘 다 0"이 아니다. 왜 화면 셸이 남았는지를 실측 10이 답한다.
+
+### 실측 9 — 게스트 zoxide도 `PROMPT_COMMAND`를 앞에 붙인다
+
+게스트의 zoxide는 0.9.7이고, `zoxide init bash | grep -n PROMPT_COMMAND`의
+출력이 착수 전 실측 6과 글자 그대로 같다.
+
+```
+39:if [[ ${PROMPT_COMMAND:=} != *'__zoxide_hook'* ]]; then
+40:    PROMPT_COMMAND="__zoxide_hook;${PROMPT_COMMAND#;}"
+46:    [[ ${PROMPT_COMMAND:=} != *'__zoxide_hook'* ]] || return 0
+```
+
+arm64로 잰 값을 amd64 게스트에 옮겨도 되는 것이 확인됐다. 결정 3의 순서는
+그대로 선다.
+
+### 실측 10 — bash는 SIGHUP에서 쓴다. SD 실측 7이 틀렸다
+
+실측 8이 예상과 어긋나서 컨테이너에서 다시 쟀다. `SYS_BASHRC`를 비운 조건
+(`: > /etc/bash.bashrc`)에서 대화형 bash를 다섯 번 띄우고 각각 다르게
+끝냈다.
+
+| 끝나는 방법 | bash가 살아남았나 | 히스토리 |
+|---|---|---|
+| `exit` | 죽었다 | 써진다 |
+| SIGHUP을 셸에 직접 | 죽었다 | 써진다 |
+| SIGTERM을 셸에 직접 | 살아 있다 | 파일이 없다 |
+| SIGKILL을 셸에 직접 | 죽었다 | 파일이 없다 |
+| PTY 주인을 SIGTERM | 죽었다 | 파일이 없다 |
+
+SIGHUP 행이 SD 실측 7과 다르다. bash는 SIGHUP에서 쓴다. 그래서 실측 8의
+화면 셸이 남은 것이 설명된다 — `terminal`이 SIGTERM에 죽고 PTY가 닫히면서
+안쪽 bash가 SIGHUP을 받는다.
+
+SIGTERM 행은 HANDOFF 실측 22와 같다. 대화형 셸은 자기에게 온 SIGTERM을
+무시하고 살아남는다. 콘솔 셸이 잃는 이유가 이 한 칸이다 — 무시한 채 3초를
+버티다 SIGKILL에 죽고, SIGKILL 칸에는 쓸 기회가 없다.
+
+이 표를 얻기까지 회차 둘을 설계 오류로 버렸고, 버린 이유가 다음 사람에게
+값지다.
+
+첫 회차는 정리 코드가 측정을 오염시켰다. 시그널을 보낸 뒤 `kill -KILL`로
+PTY 주인을 치우고 나서 파일을 읽었는데, 그 정리 자체가 PTY를 닫아 SIGHUP을
+만든다. 다섯 칸이 전부 "써진다"로 나왔고 SIGKILL 칸까지 그랬다 — 핸들러가
+없는 시그널이 정리 동작을 할 수 없으므로 그 한 칸이 오류의 증거였다.
+
+둘째 회차는 시그널이 셸에 안 닿았다. `script -qfc "bash -i"`는 `bash`를 바로
+띄우지 않고 `sh -c "bash -i"` 래퍼를 하나 끼운다. 자식 pid를 찾으면 그 래퍼가
+잡히고, 거기에 시그널을 보내면 래퍼가 죽으면서 `script`도 끝나 PTY가 닫힌다 —
+결과가 또 전부 SIGHUP이 된다. 처방은 `script -qfc "exec bash -i"`이고, 진단은
+`/proc/<pid>/cmdline`을 함께 찍는 것이다.
+
+SD 실측 7이 틀린 것도 같은 함정으로 보인다. 그 하네스가 `exec` 없는
+`script -qfc "zsh -i"` 모양이었다.
 
 ## 위험
 
