@@ -223,7 +223,17 @@ fi
 # 판정 4. PCIe가 MSI를 협상했다. q35의 _OSC 협상 결과에 MSI가 들어 있어야
 # 장치들이 legacy INTx 대신 MSI로 인터럽트를 받는다. CONFIG_PCI_MSI가
 # 꺼져 있으면 커널이 그 비트를 아예 요청하지 않는다.
-if ! grep -a "_OSC: OS supports" "$LOG" | grep -aq "MSI"; then
+# ⚠ 파이프 뒤의 `grep`에 `-q`를 쓰지 않는다(GA-M0). `-q`는 첫 매치에서
+# 즉시 나가고, 아직 출력을 쓰고 있던 앞단이 SIGPIPE로 죽는다. 이 파일 맨
+# 위의 `pipefail`이 그 141을 파이프라인 종료 코드로 올리고 `if !`는 그것을
+# "안 맞았다"로 읽는다 — 판정 글자가 로그에 멀쩡히 있는데 빨갛다.
+#
+# 이 파일의 네 자리는 앞단이 부팅당 한두 줄만 내므로 지금은 안 터진다
+# (GA design 실측 5). 그래도 고친 이유는 앞단의 패턴이 자라기 때문이다 —
+# SC-M0이 `tars-init: config …` 한 줄에 필드를 붙였을 때 hangul 체인이
+# 그 줄 끝에 매달려 깨졌고, 같은 변경이 아래 판정 11의 앞단을 넓힌다.
+# 아래 셋도 같은 이유로 `-q`가 없다.
+if ! grep -a "_OSC: OS supports" "$LOG" | grep -a "MSI" >/dev/null; then
   fail "the kernel never negotiated MSI with the PCIe host bridge" \
     "_OSC" "PCI"
 fi
@@ -238,7 +248,7 @@ fi
 # 키보드가 USB다. i8042=off이므로 PS/2가 없고, 그래서 이 줄이 "USB 경로가
 # 통째로 서 있다"를 말한다 — 커널의 HID 층 · evdev · init의 capability 탐색이
 # 한 줄에 다 걸려 있다.
-if ! grep -a "tars-init: keyboard device" "$LOG" | grep -aq "USB Keyboard"; then
+if ! grep -a "tars-init: keyboard device" "$LOG" | grep -a "USB Keyboard" >/dev/null; then
   fail "init did not pick the USB keyboard (is i8042 still on? did USB_HID build?)" \
     "tars-init: keyboard device" "input: " "hid-generic"
 fi
@@ -285,7 +295,7 @@ fi
 # 판정 11. 읽었다는 것과 값이 쓰였다는 것이 또 다르다. 기본값이 shin_pcs
 # 이므로 이 줄이 "디스크에 심은 한 줄이 실제 동작이 됐다"를 말한다 —
 # 설정 파일을 파싱해 놓고 버리는 코드가 여기서 걸린다.
-if ! grep -a "tars-init: config " "$LOG" | grep -aq "hangul=sebeol_3p3"; then
+if ! grep -a "tars-init: config " "$LOG" | grep -a "hangul=sebeol_3p3" >/dev/null; then
   fail "the seeded hangul_layout never reached the config line" \
     "tars-init: config " "tars-init: loaded /config"
 fi
@@ -351,7 +361,7 @@ done
 sleep 2
 
 # 마지막 프레임의 화면 줄에 그 세 글자가 있어야 한다. 셸의 입력줄에 에코된다.
-if ! grep -a "terminal: screen>" "$LOG" | tail -20 | grep -aq "usb"; then
+if ! grep -a "terminal: screen>" "$LOG" | tail -20 | grep -a "usb" >/dev/null; then
   fail "keys typed on the USB keyboard never reached the grid" \
     "terminal: screen>" "terminal: key>"
 fi

@@ -891,7 +891,22 @@ fi
 
 # 시리얼 콘솔이 정말 fish가 아닌지. 화면 덤프(terminal: screen>) 안의 문자열은
 # 터미널이 렌더링한 픽셀의 텍스트일 뿐이라 제외한다.
-if grep "Welcome to fish, the friendly interactive shell" "$LOG2" | grep -qv "terminal: screen>"; then
+# ⚠ 여기가 일곱 중 가장 나빴던 자리다(GA-M0). `!`가 없는 형이라 SIGPIPE의
+# 141이 "안 맞았다"가 되고 `if`가 거짓이 되어 조용히 통과한다 — 거짓 빨강이
+# 아니라 거짓 초록이다.
+#
+# 평시에는 앞단 출력이 0줄이다. 2차 부팅은 두 셸이 다 zsh라 fish 인사말이
+# 아예 없다. 그래서 "앞단이 작아서 안전하다"로 읽히는데, 이 검사가 관심
+# 있는 상황은 평시가 아니다 — 시리얼 콘솔이 정말 fish로 떴다면 화면 셸도
+# fish이므로 인사말이 screen> 프레임마다 붙어 앞단이 커진다.
+#
+# 그 상황을 합성해서 200회씩 쟀다(GA design 실측 4). 화면 인사말이 1,000줄
+# 이면 앞단이 97,054바이트이고, `-q`를 쓴 코드는 200회 중 200회 통과라고
+# 말했다. `-q`를 뺀 코드는 같은 상황에서 200/200 실패를 말한다.
+#
+# 검사가 망가지는 조건이 검사가 필요한 조건과 같다 — 그래서 이 병은
+# 평시 관측으로 영영 안 드러난다.
+if grep "Welcome to fish, the friendly interactive shell" "$LOG2" | grep -v "terminal: screen>" >/dev/null; then
   report_failure "$LOG2" "the serial console still ran fish on the second boot"
 fi
 
@@ -912,10 +927,15 @@ fi
 # 아래 "시리얼 콘솔이 정말 fish가 아닌지"가 이미 같은 구분을 쓰고 있다.
 # 콘솔 셸에는 타이핑을 못 하지만(체인이 -serial file:, 쓰기 전용)
 # 그 셸이 스스로 찍는 것은 읽을 수 있다.
-if ! grep "tars-rc-alive" "$LOG2" | grep -qv "terminal: screen>"; then
+if ! grep "tars-rc-alive" "$LOG2" | grep -v "terminal: screen>" >/dev/null; then
   report_failure "$LOG2" "the serial console shell never ran the line the user added to /config/zshrc"
 fi
-if ! grep -a "terminal: screen>" "$LOG2" | grep -q "tars-rc-alive"; then
+# 위 둘이 이 파일에서 앞단이 자라는 자리다(GA-M0). 이 줄의 앞단은 screen>
+# 줄 전체이고 매 프레임 47줄이 다시 찍히며, 바로 위 줄의 앞단도
+# tars-rc-alive가 화면에 떠 있는 동안 프레임마다 한 줄씩 늘어난다.
+# 2026-09-12에 쟀을 때 둘 다 5.7KB라 200/200 초록이었지만, 네 배면 위 줄은
+# 200회 중 160회, 이 줄은 63회 빨개진다(GA design 실측 1).
+if ! grep -a "terminal: screen>" "$LOG2" | grep -a "tars-rc-alive" >/dev/null; then
   report_failure "$LOG2" "the screen shell never ran the line the user added to /config/zshrc"
 fi
 echo "boot 2: both shells read /config/zshrc (the user's line ran twice)"
