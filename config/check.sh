@@ -310,6 +310,47 @@ HISTORY_KEYS=(h i s t o r y ret)
 BASH_KEYS=(e c h o spc s h e l l equal b a s h spc
            shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 
+# ── BB-M2 ───────────────────────────────────────────────────────────────
+#
+# 9차 부팅이 치는 여섯. 7차가 중첩으로 본 것을 production 부팅에서 다시 보고,
+# 7차가 볼 수 없던 것 하나(zoxide가 bash에서도 배우는가)를 더 본다.
+#
+# 판정 글자에 `bprod` 접두사를 붙인다(BB 결정 4). `wait_for_screen`이 마지막
+# 프레임이 아니라 로그 전체를 보므로(실측 26), 7차가 쓰는 `bneg`·`baft`·`bpos`와
+# 글자가 겹치면 안 된다.
+#
+# 표적 디렉터리가 7차와 다른 것에 이유가 있다(BB 확인 6). DB에는 7차가 넣은
+# `/usr/share/terminfo/x`가 이미 있어서, 같은 글자를 쓰면 이 부팅의 훅이 안
+# 걸려도 `z`가 그리로 간다.
+BPROD_CD_KEYS=(c d spc slash u s r slash s h a r e slash dot dot slash b i n ret)
+# z usr bin — 인자가 둘인 것이 핵심이다(BB 실측 6). 인자가 하나이고 그것이
+# 현재 디렉터리 아래의 실제 디렉터리이면 zoxide는 DB를 안 보고 그냥 `cd`한다.
+# `/`에서 `z bin`을 치면 `/usr/bin`이 아니라 `/bin`으로 가고, 그러면 훅이 안
+# 걸려도 검사가 초록이 된다. 7차의 `z terminfo x`가 이 함정을 안 밟은 이유도
+# 인자가 둘이어서다.
+BPROD_Z_KEYS=(z spc u s r spc b i n ret)
+# bprodmark=1 — 세는 대상. 변수 대입이라 화면에 한 글자도 안 찍는다.
+BPROD_MARK_KEYS=(b p r o d m a r k equal 1 ret)
+# echo bprod$(grep -cx bprodmark=1 /config/bash_history)
+#
+# BH-M2의 중첩 판정과 다른 것이 하나다 — 앞에서 `HISTFILE`을 안 맞춘다.
+# 이 부팅은 `shell=bash`로 떴으므로 env의 `HISTFILE`이 이미 그 파일이고,
+# 손으로 맞추면 이 검사가 보려는 것(env가 셸별로 갈려서 온다)이 사라진다
+# (BB 결정 5 · 실측 8).
+BPROD_COUNT_KEYS=(e c h o spc b p r o d shift-4 shift-9
+                  g r e p spc minus c x spc b p r o d m a r k equal 1 spc
+                  slash c o n f i g slash b a s h shift-minus h i s t o r y
+                  shift-0 ret)
+# echo bprodw$(type -t __fzf_history__) — `Ctrl+R`을 안 치고 위젯을 보는 법
+# (BB 결정 7). 7차의 `whence -w`에 대응하는 bash 쪽 한 줄이다.
+#
+# `declare -F __fzf_history__`를 쓰지 않는다. 그 명령의 출력은 이름 그
+# 자체라서 타이핑한 줄과 글자가 같다(BB 실측 9) — 판정 글자는 우리가 만든다.
+BPROD_WIDGET_KEYS=(e c h o spc b p r o d w shift-4 shift-9
+                   t y p e spc minus t spc
+                   shift-minus shift-minus f z f shift-minus h i s t o r y
+                   shift-minus shift-minus shift-0 ret)
+
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
 edit_config_in_guest() {
@@ -972,6 +1013,132 @@ probe_persisted_memory() {
   return 0
 }
 
+# 9차 부팅의 훅. 이 milestone이 증명하려는 것 전부가 여기 있다(BB-M2).
+#
+# 7차의 중첩 bash와 판정 대상이 겹치는 것 하나(히스토리)와, 겹치지 않는 것
+# 둘(zoxide · fzf)이 있다. 겹치는 것을 다시 보는 이유는 조건이 다르기
+# 때문이다 — 7차는 env를 손으로 맞춘 중첩 세션이고 여기는 init이 띄운
+# production 셸이다.
+#
+# 판정 셋이 서로 다른 실패를 본다.
+#
+#   1. /usr/bin으로 간다      → zoxide 훅이 bash의 PROMPT_COMMAND에 살아 있다
+#   2. bprod1                 → 씨앗의 `history -a` 줄이 env가 준 파일에 쓴다
+#   3. bprodwfunction         → fzf 통합이 이 셸에서 위젯을 정의했다
+#
+# 1과 2가 한 변수를 두고 겨루는 둘이라는 것이 이 부팅의 요점이다(BH design
+# 결정 3). `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이기는데, 씨앗이
+# 히스토리 줄을 훅보다 먼저 두어 둘이 함께 산다. 뒤집히면 2는 초록이고 1이
+# 빨개진다 — 호스트 검사(`expectPromptCommandBeforeHooks`)가 씨앗의 순서를
+# 보고 있고, 이 둘이 그 순서의 결과를 게스트에서 본다.
+probe_bash_production() {
+  local log="$1"
+  LOG="$log"
+
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -q "terminal: screen>" "$log"; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if [ "$ready" != "1" ]; then
+    echo "FAIL(boot 9): terminal never rendered a prompt; there was nothing to type into"
+    return 1
+  fi
+
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  if [ "$connected" != "1" ]; then
+    echo "FAIL(boot 9): could not connect to QEMU monitor on port ${MONITOR_PORT}"
+    return 1
+  fi
+
+  # ── 0. 프롬프트를 기다린다 ─────────────────────────────────────────────
+  #
+  # 이 부팅의 셸이 bash라서 할 수 있는 것이다(BB 결정 8 · 실측 5). zsh로 뜬
+  # 부팅에서는 중첩 셸의 프롬프트가 바깥과 같아서 아무것도 못 가르는데,
+  # bash는 프롬프트에 자기 이름을 적는다.
+  #
+  # 버전 숫자를 고정하지 않는다. 게스트의 bash는 `guest_tools.sh`가 정하는
+  # Debian 스냅샷에서 오므로 5.2가 아닌 날이 온다 — 그날 이 체인이 조용히
+  # 깨지는 것보다 패턴을 느슨하게 두는 편이 낫다.
+  if ! wait_for_screen 'bash-[0-9]+\.[0-9]+#'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 9): the screen never showed a bash prompt"
+    echo "  셸이 bash가 아니거나(로그의 config shell= 줄을 본다), 프롬프트가"
+    echo "  bash-<버전># 모양이 아니다(그러면 이 패턴을 고친다)."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 9: the shell that came up introduces itself as bash"
+
+  # ── 1. zoxide 훅이 bash에서도 걸리는가 ─────────────────────────────────
+  #
+  # 아무도 `zoxide add`를 치지 않는다 — 7차의 zsh 판정과 같은 자리이고,
+  # 그것이 훅의 정의다. 화면에 남는 타이핑은 `..`가 든 쪽이라
+  # (`cd /usr/share/../bin`) 행의 첫머리가 `/usr/bin`인 행을 만들 수 있는
+  # 것은 `pwd`의 출력뿐이다.
+  type_keys "${BPROD_CD_KEYS[@]}"
+  type_keys "${HOOK_HOME_KEYS[@]}"
+  type_keys "${BPROD_Z_KEYS[@]}"
+  type_keys "${HOOK_PWD_KEYS[@]}"
+  if ! wait_for_screen '\| /usr/bin'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 9): z did not walk back into the directory this boot just visited"
+    echo "  둘 중 하나다 — 씨앗의 zoxide 훅이 eval되지 않았거나(그러면 z가"
+    echo "  없는 명령이다), PROMPT_COMMAND의 마지막 대입이 히스토리 줄이 되어"
+    echo "  훅을 밀어냈다. 뒤엣것이면 아래 bprod1은 초록으로 남는다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 9: the zoxide hook survived the PROMPT_COMMAND it shares with history"
+
+  # ── 2. 씨앗의 히스토리 줄이 env가 준 파일에 쓰는가 ─────────────────────
+  #
+  # BH-M2가 중첩으로 본 것과 판정 글자의 모양이 같고 조건이 다르다. 여기는
+  # `HISTFILE`을 손으로 안 맞춘다(BB 결정 5) — 그 값이 env로 오는 것까지
+  # 함께 판정된다.
+  type_keys "${BPROD_MARK_KEYS[@]}"
+  type_keys "${BPROD_COUNT_KEYS[@]}"
+  if ! wait_for_screen 'bprod1'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 9): the typed line is not in /config/bash_history while this session lives"
+    echo "  셋 중 하나다 — 씨앗의 PROMPT_COMMAND 줄이 없거나, env의 HISTFILE이"
+    echo "  다른 파일을 가리키거나, 그 파일에 쓸 수 없다. 화면에 bprod0이"
+    echo "  남았으면 앞의 둘이고, 숫자 없는 글자가 남았으면 파일이 없다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 9: a command typed into the production bash was on the disk the moment it was typed"
+
+  # ── 3. fzf 통합이 이 셸에서 위젯을 정의했는가 ──────────────────────────
+  #
+  # `Ctrl+R`은 안 친다(SM 비목표 2 · BB 결정 7). 7차가 zsh에 대해
+  # `whence -w`로 물어본 것과 같은 자리이고, bash에서는 `type -t`가 그 창구다.
+  type_keys "${BPROD_WIDGET_KEYS[@]}"
+  local ok=0
+  if wait_for_screen 'bprodwfunction'; then ok=1; fi
+
+  exec 3<&-
+  exec 3>&-
+
+  if [ "$ok" != "1" ]; then
+    echo "FAIL(boot 9): the fzf integration did not define its Ctrl+R widget in bash"
+    echo "  화면에 bprodw만 남았으면 그 이름의 함수가 없는 것이고(씨앗의 fzf"
+    echo "  줄이 안 돌았다), 아무것도 안 남았으면 명령이 화면에 안 닿았다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 9: the fzf integration defined its Ctrl+R widget in bash too"
+  return 0
+}
+
 # 부팅 한 번. $1 = 시리얼 로그 파일, $2 = 기다릴 마커, $3 = (선택) 마커를 본 뒤
 # QEMU를 죽이기 전에 부를 함수, $4 = (선택) 커널 cmdline.
 #
@@ -1547,14 +1714,15 @@ echo "boot 8: the machine remembered a directory and a command across a power cu
 # 것이 이것 하나다 — 1차가 fish이고 2~8차가 zsh다. 게이트의 열한 체인을
 # 통틀어도 bash로 뜨는 부팅이 이것뿐이다.
 #
-# ★ BB-M1이 증명하려는 것이 여기 있다. 중첩 bash로는 정의상 볼 수 없는 것
-#   다섯이 이 부팅의 로그에 있다(BB design "중첩 bash가 못 보는 여섯"의
-#   1·2·3·4·6). BH-M2가 중첩으로 갈음한 자리이고, 그때 못 본 것 하나가
-#   게스트에 `/dev/fd`가 없다는 것이었다.
+# ★ BB가 증명하려는 것이 여기 있다. 중첩 bash로는 정의상 볼 수 없는 것
+#   여섯 중 다섯(1·2·3·4·6)이 이 부팅의 로그에 있고, 나머지 하나(5 — 훅 둘이
+#   한 변수를 두고 겨루는 것)는 아래 `probe_bash_production`이 화면에서 본다.
+#   BH-M2가 중첩으로 갈음한 자리이고, 그때 못 본 것 하나가 게스트에
+#   `/dev/fd`가 없다는 것이었다.
 LOG9="$(mktemp)"
 echo "=== boot 9/9: the config now says bash; init must boot that shell for real ==="
-if ! boot_once "$LOG9" "tars-init: started console shell"; then
-  report_failure "$LOG9" "the ninth boot did not reach a console shell with shell=bash"
+if ! boot_once "$LOG9" "tars-init: started console shell" probe_bash_production; then
+  report_failure "$LOG9" "the ninth boot did not prove what the bash seed does in a real boot"
 fi
 
 # 같은 디스크를 봤고, 8차가 더한 넷째 줄이 이겼다(BB 확인 2).
