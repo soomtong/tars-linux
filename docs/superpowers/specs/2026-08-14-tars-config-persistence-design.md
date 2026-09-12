@@ -1,7 +1,7 @@
 # TARS Config Persistence — Design
 
-**Date:** 2026-08-14
-**Status:** **완료(2026-08-15).** 아래 "Milestones"가 계획한 셋이 전부
+Date: 2026-08-14
+Status: 완료(2026-08-15). 아래 "Milestones"가 계획한 셋이 전부
 끝났다 — CP-M0·CP-M1이 2026-08-14에, CP-M2가 2026-08-15에. 루트 게이트가
 `CP-M2:./config/check.sh` 체인으로 3/3 돈다.
 
@@ -9,7 +9,7 @@
 
 Init Supervisor(IS, 2026-08-14 완료)까지 오면서 TARS는 부팅하고, 화면에
 텍스트를 그리고, 키를 받고, 죽은 자식을 되살릴 줄 알게 됐다. 그런데
-**아무것도 기억하지 못한다.** 루트 파일시스템이 `kernel/initrd.cpio` =
+아무것도 기억하지 못한다. 루트 파일시스템이 `kernel/initrd.cpio` =
 initramfs(tmpfs)라서 전원이 꺼지면 모든 것이 사라지고, 다음 부팅은 언제나
 빌드 시점에 구운 그 상태에서 시작한다.
 
@@ -17,9 +17,9 @@ initramfs(tmpfs)라서 전원이 꺼지면 모든 것이 사라지고, 다음 �
 것을 다음 부팅의 기본값으로 쓰고 싶다"였다
 (`docs/decisions/project_boot_shell_selection.md`, 2026-08-11). 이건 단독
 기능이 될 수 없다 — "마지막 선택을 기억한다"는 말 자체가 재부팅을 넘어
-살아남는 저장소를 전제하기 때문이다. 그래서 이 서브프로젝트는 **설정
-영속화**(Config Persistence, CP)로 잡고, 셸 선택은 그 저장소의 **첫 사용
-사례**로 다룬다. 폰트 크기·색상·키바인딩 등 앞으로 생길 설정도 전부 여기서
+살아남는 저장소를 전제하기 때문이다. 그래서 이 서브프로젝트는 설정
+영속화(Config Persistence, CP)로 잡고, 셸 선택은 그 저장소의 첫 사용
+사례로 다룬다. 폰트 크기·색상·키바인딩 등 앞으로 생길 설정도 전부 여기서
 만드는 저장소를 쓰게 된다.
 
 IS는 이 서브프로젝트의 준비운동이었다. PID 1이 `execve`로 셸이 되어버리는
@@ -36,8 +36,8 @@ IS는 이 서브프로젝트의 준비운동이었다. PID 1이 `execve`로 셸�
 |---|---|---|
 | `CONFIG_BLOCK` | `y` | 블록 계층 자체는 켜져 있다 |
 | `CONFIG_VIRTIO`, `CONFIG_VIRTIO_PCI` | `y` | virtio 버스는 이미 있다(DF에서 GPU 때문에) |
-| `CONFIG_BLK_DEV` | **not set** | 블록 *드라이버* 메뉴가 꺼져 있어 `VIRTIO_BLK`이 목록에 나타나지도 않는다 |
-| `CONFIG_EXT2_FS`/`EXT4_FS`/`VFAT_FS` | **전부 not set** | 디스크에 쓸 수 있는 파일시스템이 하나도 없다 |
+| `CONFIG_BLK_DEV` | not set | 블록 *드라이버* 메뉴가 꺼져 있어 `VIRTIO_BLK`이 목록에 나타나지도 않는다 |
+| `CONFIG_EXT2_FS`/`EXT4_FS`/`VFAT_FS` | 전부 not set | 디스크에 쓸 수 있는 파일시스템이 하나도 없다 |
 
 게이트 쪽:
 
@@ -52,33 +52,33 @@ IS는 이 서브프로젝트의 준비운동이었다. PID 1이 `execve`로 셸�
 ## 목표 (MVP)
 
 게스트 안에서 설정 파일을 고치고 재부팅하면 다음 부팅의 셸이 실제로 바뀐다.
-이것을 **QEMU를 두 번 띄우는 자동 게이트**로 검증한다. 1차 부팅에서 게스트
+이것을 QEMU를 두 번 띄우는 자동 게이트로 검증한다. 1차 부팅에서 게스트
 셸에 `echo shell=zsh > /config/tars.conf`를 타이핑하고, QEMU를 죽였다가, 같은
 디스크 이미지로 2차 부팅해서 셸이 바뀐 것을 확인한다.
 
-BF/TF 게이트가 "1회 부팅 + 로그 grep"이었던 것과 달리 **한 스크립트 안에서
-부팅이 두 번 일어나는 것**이 이 서브프로젝트가 만드는 새로운 검증 모양이다.
+BF/TF 게이트가 "1회 부팅 + 로그 grep"이었던 것과 달리 한 스크립트 안에서
+부팅이 두 번 일어나는 것이 이 서브프로젝트가 만드는 새로운 검증 모양이다.
 영속성은 원리적으로 한 번의 부팅으로는 증명할 수 없다.
 
 ## 비목표
 
-- **게스트 안에서 셸을 고르는 명령·메뉴.** `tars-config shell zsh` 같은 CLI나
+- 게스트 안에서 셸을 고르는 명령·메뉴. `tars-config shell zsh` 같은 CLI나
   터미널 안의 선택 UI는 이번 범위 밖이다. 이번 종료점은 "파일을 고치고
-  재부팅"이며, 설정을 **누가 어떤 UI로** 쓰는가는 별도 주제다. 저장소와
+  재부팅"이며, 설정을 누가 어떤 UI로 쓰는가는 별도 주제다. 저장소와
   읽기/쓰기라는 뼈대를 먼저 완성한다.
-- **게스트 안에서의 재부팅.** PID 1에 시그널 처리(SIGTERM)나 `reboot(2)`
+- 게스트 안에서의 재부팅. PID 1에 시그널 처리(SIGTERM)나 `reboot(2)`
   경로를 넣지 않는다. 게이트는 QEMU를 죽였다가 다시 띄우는 방식으로
   재부팅을 대신한다. 전원 관리는 그 자체로 하나의 주제이며 `HANDOFF.md`의
   숙제로 남아 있다.
-- **nushell.** Debian 아카이브에 없다(2026-08-14 확인). 넣으려면 벤더 자체
+- nushell. Debian 아카이브에 없다(2026-08-14 확인). 넣으려면 벤더 자체
   apt 저장소나 GitHub 릴리스 tarball을 `Dockerfile`에 Debian이 아닌 출처로
   추가해야 하고, 바이너리도 커서 initrd가 눈에 띄게 커진다. 이번에는
-  **bash/zsh/fish 셋**만 넣는다 — 셋 다 Debian 아카이브에 있어 기존 sysroot
+  bash/zsh/fish 셋만 넣는다 — 셋 다 Debian 아카이브에 있어 기존 sysroot
   방식(`apt-get download`)을 그대로 쓴다. 필요해지면 나중에 추가한다.
-- **파티션 테이블.** 디스크 전체(`/dev/vda`)를 파일시스템 하나로 쓴다. MBR/GPT
+- 파티션 테이블. 디스크 전체(`/dev/vda`)를 파일시스템 하나로 쓴다. MBR/GPT
   파싱은 이 단계에서 배울 대상이 아니다.
-- **여러 사용자·권한 모델.** 설정 파일은 root 소유 하나뿐이다.
-- **설정 마이그레이션(스키마 버전).** 모르는 키는 무시하고 로그만 남긴다.
+- 여러 사용자·권한 모델. 설정 파일은 root 소유 하나뿐이다.
+- 설정 마이그레이션(스키마 버전). 모르는 키는 무시하고 로그만 남긴다.
 
 ## 핵심 설계 결정
 
@@ -88,17 +88,17 @@ BF/TF 게이트가 "1회 부팅 + 로그 grep"이었던 것과 달리 **한 스�
 
 | 안 | 내용 | 판단 |
 |---|---|---|
-| **A. virtio-blk + ext2** | 디스크 전체에 fs 하나, init이 `/config`에 마운트 | **채택** |
+| A. virtio-blk + ext2 | 디스크 전체에 fs 하나, init이 `/config`에 마운트 | 채택 |
 | B. virtio-blk + vfat | 같은 구조에 FAT | 탈락 |
 | C. 파일시스템 없이 raw 블록 | 고정 오프셋에 텍스트를 직접 read/write | 탈락 |
 
-**C가 먼저 탈락하는 이유가 범위 결정과 직결된다.** 이번 종료점이 "게스트
+C가 먼저 탈락하는 이유가 범위 결정과 직결된다. 이번 종료점이 "게스트
 안에서 파일을 고치고 재부팅"인데, raw 블록에는 `echo shell=zsh > ...`으로 쓸
 대상 자체가 없다. 사용자가 손으로 고칠 수 있어야 한다는 요구가 곧
 "파일시스템이 있어야 한다"는 뜻이다. 파일시스템 코드를 아끼는 대신 사용자가
 쓸 수 없는 저장소가 된다.
 
-**B(FAT) 대신 A(ext2)인 이유는 둘.** 하나, FAT에는 유닉스 퍼미션·소유자가
+B(FAT) 대신 A(ext2)인 이유는 둘. 하나, FAT에는 유닉스 퍼미션·소유자가
 없어 마운트 옵션(`uid`/`gid`/`umask`)으로 흉내 내야 하는데 배울 것이 없는
 잡음이다. 둘, ext2는 저널이 없어 드라이버가 작고 동작이 투명하다. 저널링
 (ext4)은 "전원이 끊겨도 메타데이터가 일관적"을 위한 장치인데, 설정 파일 몇
@@ -121,8 +121,8 @@ virtio 버스(`CONFIG_VIRTIO_PCI=y`)는 DF에서 GPU 때문에 이미 켜져 있
 
 이 설계에서 제일 중요한 한 줄이다.
 
-게스트에서 `echo shell=zsh > /config/tars.conf`를 치면 그 데이터는 **page
-cache에만 올라가고 디스크에는 가지 않는다.** 리눅스는 언제 내려보낼지를
+게스트에서 `echo shell=zsh > /config/tars.conf`를 치면 그 데이터는 page
+cache에만 올라가고 디스크에는 가지 않는다. 리눅스는 언제 내려보낼지를
 알아서 정한다(보통 수십 초 뒤, 또는 `sync`/언마운트 시점). 그 상태로 QEMU를
 죽이면 설정이 사라진다 — "영속화를 만들었는데 값이 안 남는다"는, 이 주제에서
 가장 헷갈리는 종류의 실패다. 그리고 이번 게이트는 정확히 그 순서(쓰기 → 즉시
@@ -164,9 +164,9 @@ pub fn save(path: [:0]const u8, c: Config) !void;
 (PID 1 노릇)을 한다. 여기에 파서까지 넣으면 파일 하나가 두 가지 일을 하게
 되므로 분리한다.
 
-**`init`이 쓰기까지 하는 이유는 죽은 코드를 만들지 않기 위해서다.** 이번
+`init`이 쓰기까지 하는 이유는 죽은 코드를 만들지 않기 위해서다. 이번
 범위에서 설정을 고치는 주체는 사용자(손으로)이므로, 가만두면 "쓰기"는 아무도
-호출하지 않는 기능이 된다. 그래서 쓰기의 실사용을 **first-boot seeding**으로
+호출하지 않는 기능이 된다. 그래서 쓰기의 실사용을 first-boot seeding으로
 잡는다 — 빈 디스크로 처음 부팅하면 init이 기본 설정 파일을 주석과 함께
 만들어 놓는다. 덕분에 사용자는 빈 파일 앞에서 무엇을 쓸 수 있는지 알게 되고,
 게이트는 "1차 부팅에서 생겼다 → 2차 부팅에서 읽혔다"로 영속성을 증명할 수
@@ -177,13 +177,13 @@ pub fn save(path: [:0]const u8, c: Config) !void;
 설정 파일이 PID 1의 동작을 바꾸는 순간, 설정을 잘못 쓰면 부팅이 안 되는
 상태가 만들어진다. 셋으로 막는다.
 
-1. **화이트리스트.** `shell` 값은 임의 경로가 아니라 이름(`fish`/`bash`/
+1. 화이트리스트. `shell` 값은 임의 경로가 아니라 이름(`fish`/`bash`/
    `zsh`)만 받고 init이 경로로 매핑한다. `shell=/etc/passwd` 같은 것이 애초에
    성립하지 않는다.
-2. **모르는 값은 기본값으로 폴백 + 로그.** `shell=nushell`이라고 써두면
+2. 모르는 값은 기본값으로 폴백 + 로그. `shell=nushell`이라고 써두면
    `tars-init: unknown shell 'nushell', falling back to fish`를 찍고 부팅을
    계속한다.
-3. **마운트 실패는 치명적이지 않다.** 디스크가 없으면 로그만 남기고 내장
+3. 마운트 실패는 치명적이지 않다. 디스크가 없으면 로그만 남기고 내장
    기본값으로 간다. BF 체인이 정확히 이 경우다(ISO 부팅이라 `-drive`가 없다)
    — BF 게이트는 손대지 않아도 계속 통과해야 한다.
 
@@ -195,13 +195,13 @@ pub fn save(path: [:0]const u8, c: Config) !void;
 
 두 부팅 사이에 설정을 바꾸는 방법이 둘 있다.
 
-- **호스트에서** `debugfs -w -R "write ..."`로 ext2 이미지를 직접 편집한다.
+- 호스트에서 `debugfs -w -R "write ..."`로 ext2 이미지를 직접 편집한다.
   쉽고 결정적이다.
-- **게스트 안에서** `sendkey`로 셸에 `echo shell=zsh > /config/tars.conf`를
+- 게스트 안에서 `sendkey`로 셸에 `echo shell=zsh > /config/tars.conf`를
   타이핑한다. 글자 수만큼 sendkey가 필요하고(`=`는 `equal`, `>`는
   `shift-dot`, `/`는 `slash`) 조금 번거롭다.
 
-**게스트 타이핑을 고른다.** 사용자가 실제로 할 행동이 그것이고, 그래야
+게스트 타이핑을 고른다. 사용자가 실제로 할 행동이 그것이고, 그래야
 "게스트에서 쓴 것이 디스크에 도달했는가"까지 한 번에 검증된다 — 호스트
 편집은 이 부분(파일시스템 쓰기 경로 + `MS_SYNCHRONOUS`)을 통째로 건너뛴다.
 게이트가 자기가 보지 않는 것을 통과시키는 문제는
@@ -216,8 +216,8 @@ pub fn save(path: [:0]const u8, c: Config) !void;
 ### 7. 세 번째 체인 `config/check.sh`
 
 루트 `check.sh`는 지금 BF·TF 두 체인을 각각 3회 돌린다. 여기에 CP가 세
-번째로 붙는다. TF 체인에 얹지 않는 이유는 CP의 검증이 **한 스크립트 안에서
-QEMU를 두 번 띄우는** 구조라 기존 1회 부팅 게이트와 모양이 다르기 때문이다.
+번째로 붙는다. TF 체인에 얹지 않는 이유는 CP의 검증이 한 스크립트 안에서
+QEMU를 두 번 띄우는 구조라 기존 1회 부팅 게이트와 모양이 다르기 때문이다.
 비용은 회차당 부팅 2회 × 3회 = 부팅 6회가 늘어나는 것이다(ZM-M3 이후 TF
 계열 부팅 1회가 수 초 수준이라 감당 가능하다).
 
@@ -225,9 +225,9 @@ QEMU를 두 번 띄우는** 구조라 기존 1회 부팅 게이트와 모양이 
 
 | M | 내용 | 게이트가 보는 것 |
 |---|---|---|
-| **CP-M0** | 커널 config 3줄, `config/make_disk.sh`(16MB raw + `mkfs.ext2`), QEMU `-drive`, init의 `/config` 마운트(`MS_SYNCHRONOUS`), 컨테이너에 `e2fsprogs` 추가 | 1회 부팅 + `tars-init: mounted ext2 at /config`. 디스크 없는 BF 체인도 여전히 통과 |
-| **CP-M1** | `init/src/config.zig` — `key=value` 파서 + first-boot seeding | **2회 부팅.** 1차 `created`, 2차 `loaded`. 여기서 영속성이 처음 증명된다 |
-| **CP-M2** | `Dockerfile`에 bash/zsh 추가 → sysroot → `make_initrd.sh` → `Kind.path()`가 config를 본다 | 2회 부팅 + 1차에서 sendkey 편집 → 2차에서 셸이 바뀐다 |
+| CP-M0 | 커널 config 3줄, `config/make_disk.sh`(16MB raw + `mkfs.ext2`), QEMU `-drive`, init의 `/config` 마운트(`MS_SYNCHRONOUS`), 컨테이너에 `e2fsprogs` 추가 | 1회 부팅 + `tars-init: mounted ext2 at /config`. 디스크 없는 BF 체인도 여전히 통과 |
+| CP-M1 | `init/src/config.zig` — `key=value` 파서 + first-boot seeding | 2회 부팅. 1차 `created`, 2차 `loaded`. 여기서 영속성이 처음 증명된다 |
+| CP-M2 | `Dockerfile`에 bash/zsh 추가 → sysroot → `make_initrd.sh` → `Kind.path()`가 config를 본다 | 2회 부팅 + 1차에서 sendkey 편집 → 2차에서 셸이 바뀐다 |
 
 각 milestone이 끝난 뒤에 다음 milestone의 상세 plan을 쓴다 — 전체를 미리
 설계하지 않는다(이 저장소의 모든 서브프로젝트와 동일).
@@ -250,14 +250,14 @@ tars-linux/
 
 ## 미리 알고 들어가는 위험
 
-**1. `TERM`이 없다.** `terminal/src/*.zig`를 grep해도 자식에게 `TERM`을
+1. `TERM`이 없다. `terminal/src/*.zig`를 grep해도 자식에게 `TERM`을
 설정하는 코드가 없고, 그래도 fish는 잘 돈다. 그런데 bash의 readline과 zsh의
 zle는 terminfo를 찾는다 — CP-M2에서 zsh를 띄우면
 `can't find terminal definition` 류가 나올 수 있다. 대응은 `spawn`에서
 `TERM=linux`를 넘기고 `ncurses-base`(arch: all)의 terminfo를 initrd에 넣는
-것이다. **실제로 깨지는 것을 보고 나서 넣는다** — 안 깨지면 불필요한 짐이다.
+것이다. 실제로 깨지는 것을 보고 나서 넣는다 — 안 깨지면 불필요한 짐이다.
 
-**2. zsh는 바이너리 하나가 아니다.** Debian zsh는
+2. zsh는 바이너리 하나가 아니다. Debian zsh는
 `/usr/lib/x86_64-linux-gnu/zsh/<버전>/`의 모듈 `.so`들과
 `zsh-common`(arch: all)의 `/usr/share/zsh` 함수들을 함께 필요로 한다. fish가
 `fish-common`을 필요로 했던 것과 같은 구조라 `make_initrd.sh`에 선례가 있다.
@@ -266,7 +266,7 @@ zle는 terminfo를 찾는다 — CP-M2에서 zsh를 띄우면
 SONAME을 찍고 즉시 죽는다 — 조용히 통과하지 않도록 이미 그렇게 만들어져
 있다([[project_build_host_arch]]).
 
-**3. initrd가 커진다.** 지금 53MB(gzip 11.8MB)이고 대부분이 디버그 심볼
+3. initrd가 커진다. 지금 53MB(gzip 11.8MB)이고 대부분이 디버그 심볼
 붙은 `terminal` 42MB다. bash/zsh는 각각 1MB 안팎이라 큰 문제는 아니지만, BF
 체인이 limine의 BIOS INT13h로 ISO에서 읽는 경로는 크기에 민감하다
 (`kernel/make_initrd.sh:117-121`). 부팅 시간이 눈에 띄게 늘면 `init`을

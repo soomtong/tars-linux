@@ -1,11 +1,11 @@
 # MEMORY
 
-이 저장소에서 세션을 넘어 유지되는 기억의 **색인**이다. 본문은
+이 저장소에서 세션을 넘어 유지되는 기억의 색인이다. 본문은
 `docs/decisions/`에 한 파일씩 들어 있다. 새 기억은
-`docs/decisions/<name>.md`를 만들고 여기에 **한 줄만** 추가한다 — 본문을 이
+`docs/decisions/<name>.md`를 만들고 여기에 한 줄만 추가한다 — 본문을 이
 파일에 쓰지 않는다. 줄이 길어지면 그것은 본문이 색인으로 새어 나온 것이다.
 
-**2026-09-12에 이 규칙대로 되돌렸다.** 줄 여덟이 2~15KB까지 자라 본문을 통째로
+2026-09-12에 이 규칙대로 되돌렸다. 줄 여덟이 2~15KB까지 자라 본문을 통째로
 복제하고 있었다(가장 긴 줄이 14,963바이트였고 본문 파일은 27,837바이트였다).
 지운 내용은 전부 본문 파일에 있고, 지우기 전에 대조해서 확인했다.
 
@@ -31,7 +31,7 @@
 - [Zig rewrite intent](docs/decisions/project_zig_rewrite_intent.md) — Rust를 Zig로 옮긴 의도와 결말(2026-08-13 완료, 이제 Rust는 없다)
 - [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰면 libc를 링크하지 않는다; fortify를 끌 자리는 한 파일이 아니라 glibc를 읽는 블록 전부다
 - [Build host arch](docs/decisions/project_build_host_arch.md) — 호스트는 arm64, 게스트 산출물은 x86_64 크로스; `--platform` 금지
-- [Zig 산출물 staleness](docs/decisions/project_zig_out_staleness.md) — 빌드 산출물이 소스보다 낡은 채로 판정에 쓰인다(증상이 양쪽으로 난다); 처방은 음성 확인 전에 캐시를 **컨테이너 안에서** 지우는 것이다
+- [Zig 산출물 staleness](docs/decisions/project_zig_out_staleness.md) — 빌드 산출물이 소스보다 낡은 채로 판정에 쓰인다(증상이 양쪽으로 난다); 처방은 음성 확인 전에 캐시를 컨테이너 안에서 지우는 것이다
 - [Init supervisor](docs/decisions/project_init_supervisor.md) — PID 1은 셸이 되지 않고 자식 둘을 감독한다; 감독 루프의 순서가 backoff를 만든다
 - [Power management](docs/decisions/project_power_management.md) — ACPI·종료 경로 셋·시그널 핸들러가 없으면 관측조차 안 되는 성질
 - [Device discovery](docs/decisions/project_device_discovery.md) — 입력 장치를 번호가 아니라 성질로 찾는다; 탐색은 버그 없이도 실패한다(USB는 비동기 열거라 3초까지 다시 본다)
@@ -49,7 +49,7 @@
 - [Search position](docs/decisions/project_search_position.md) — "지금 몇 번째 매치인가"를 꺼내는 자리와 그 위의 색·번호(SP-M0·M1, 2026-08-30 종료)
 - [Gate latency](docs/decisions/project_gate_latency.md) — 게이트 54분 15초를 16분대로 내린 길과 그 과정에서 틀린 접근들(GL-M0~M3, 2026-08-29 종료)
 - [Render cost](docs/decisions/project_render_cost.md) — 한 프레임의 비용을 구간별로 갈라 잰 결과 — 답은 `fill` 84.7%(RC-M0, 2026-08-30 종료, 코드는 안 고쳤다)
-- [Target hardware](docs/decisions/project_target_hardware.md) — **TARS는 노트북 사용을 포함한다**(사용자, 2026-08-31); 실머신 `.config`가 서브프로젝트 하나라는 판단의 근거 — 그 일은 RM이 했다
+- [Target hardware](docs/decisions/project_target_hardware.md) — TARS는 노트북 사용을 포함한다(사용자, 2026-08-31); 실머신 `.config`가 서브프로젝트 하나라는 판단의 근거 — 그 일은 RM이 했다
 - [Carryover cleanup](docs/decisions/project_carryover_cleanup.md) — 이월 숙제 셋을 없앤 CC-M0(2026-08-31)과 그때 배운 게스트 조작 방법들
 - [Hangul input](docs/decisions/project_hangul_input.md) — 한글을 치는 층 — 자판 여섯과 전환 키 넷(HI-M0~M3, 2026-09-01 종료)
 - [Input status](docs/decisions/project_input_status.md) — 화면 맨 아래 여백의 상태 줄 한 줄(IS-M0·M1, 2026-09-09 종료)

@@ -13,7 +13,7 @@ possible. Stated directly (2026-08-03): "나는 프로젝트 완성보다 학습
 목적으로 대화를 진행하고 있다" (I'm having this conversation for learning,
 not project completion).
 
-**How to apply:** Favor thorough explanations of *why* (e.g. why a specific
+How to apply: Favor thorough explanations of *why* (e.g. why a specific
 kernel .config option is needed, why a boot failure happens) over speed of
 reaching the exit gate. This aligns with the project's own design principle
 of "필요한 옵션만 하나씩 켜며 이해" (turn on only the options you need, one

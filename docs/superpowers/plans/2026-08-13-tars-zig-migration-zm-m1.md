@@ -1,17 +1,17 @@
 # TARS Zig Migration — ZM-M1 `init`을 Zig로 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md` 참고):** 파일
+> 단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md` 참고): 파일
 > 작성과 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을
 > 제시하고 결과를 해석한다. 위 SUB-SKILL 문구는 다른 저장소용 기본값이며 이
 > 저장소에는 적용하지 않는다.
 
-**Goal:** PID 1인 `tars-init`을 Rust에서 Zig로 다시 쓴다. **libc를 링크하지
-않고** `std.os.linux`의 raw syscall을 직접 호출한다. 관측 가능한 동작은 한
+Goal: PID 1인 `tars-init`을 Rust에서 Zig로 다시 쓴다. libc를 링크하지
+않고 `std.os.linux`의 raw syscall을 직접 호출한다. 관측 가능한 동작은 한
 줄도 바꾸지 않는다 — 로그 문자열까지 그대로 유지한다.
 
-**Architecture:** Rust 소스는 이 milestone에서 지우지 않는다(ZM-M2에서 지운다).
+Architecture: Rust 소스는 이 milestone에서 지우지 않는다(ZM-M2에서 지운다).
 `init/`에 `build.zig`와 `src/main.zig`를 추가해 Cargo와 잠시 공존시키고,
 initrd·게이트 스크립트가 참조하는 산출물 경로만 `init/target/release/tars-init`
 에서 `init/zig-out/bin/init`으로 옮긴다. 게이트가 깨지면 그 한 줄만 되돌리면
@@ -23,7 +23,7 @@ libc를 링크하지 않는 선택에서 따라오는 결과가 둘이다. 첫�
 그대로 돌려주는 규약을 코드에서 직접 다루게 된다. libc가 `-1` 리턴 + `errno`
 전역으로 바꿔주던 그 변환을 `std.os.linux.errno()`로 우리가 한다.
 
-**Tech Stack:** Zig 0.16.0(`std.os.linux`, `std.process.Init.Minimal`),
+Tech Stack: Zig 0.16.0(`std.os.linux`, `std.process.Init.Minimal`),
 bash, Docker(`tars-devcontainer` 이미지), QEMU
 
 ---
@@ -35,9 +35,9 @@ bash, Docker(`tars-devcontainer` 이미지), QEMU
 끝남이 확인된 상태여야 한다(design doc 커밋 `b9b2b65`, working tree는
 `.claude/` 미추적만 남은 상태).
 
-**이 milestone에서 쓰는 Zig 0.16.0 API는 전부 호스트의 표준 라이브러리
+이 milestone에서 쓰는 Zig 0.16.0 API는 전부 호스트의 표준 라이브러리
 소스(`/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std`, 컨테이너와 동일한
-0.16.0)에서 확인했다.** 문서가 아니라 소스에서 확인한 것들이라 시그니처는
+0.16.0)에서 확인했다. 문서가 아니라 소스에서 확인한 것들이라 시그니처는
 정확하다.
 
 | 쓰는 것 | 위치 | 시그니처 |
@@ -58,19 +58,19 @@ bash, Docker(`tars-devcontainer` 이미지), QEMU
 | `F_OK` | `os/linux.zig:3867` | `0` |
 | `O` | `os/linux.zig:310` | x86_64는 `packed struct(u32)`, `.ACCMODE` 필드 |
 
-**design doc의 리스크 두 개가 이 조사로 해소됐다.**
+design doc의 리스크 두 개가 이 조사로 해소됐다.
 
-1. **`TIOCSCTTY`를 손으로 선언할 필요가 없다.** `std.os.linux.T.IOCSCTTY`가
+1. `TIOCSCTTY`를 손으로 선언할 필요가 없다. `std.os.linux.T.IOCSCTTY`가
    이미 있다(x86_64에서 `0x540e`). design doc의 "필요한 상수는 손으로
    선언한다"는 이 milestone에서는 적용되지 않는다.
-2. **`environ` 대체 경로가 확정됐다.** Zig 0.16의 main은 첫 인자로
+2. `environ` 대체 경로가 확정됐다. Zig 0.16의 main은 첫 인자로
    `std.process.Init.Minimal`을 받을 수 있고(`std/start.zig:699`), 그 안의
    `environ.block.slice`가 커널이 PID 1 스택에 올려준 envp다. libc 없이
    시작하는 경로(`std/start.zig:508-519`)가 스택에서 직접 읽어 채운다.
    `.ptr`을 붙여 `execve`에 넘기는 것은 std 자신이 쓰는 방식과 같다
    (`std/Io/Threaded.zig:16792`의 `env_block.slice.ptr`).
 
-**`Init.Minimal`을 쓰는 이유:** 인자 없는 `main()`이나 전체 `Init`을 받으면
+`Init.Minimal`을 쓰는 이유: 인자 없는 `main()`이나 전체 `Init`을 받으면
 `std/start.zig:704-716`이 allocator·`Io.Threaded`·environ map을 먼저
 구성한다. PID 1에게는 전부 불필요한 준비 작업이고, libc 없는 Debug 빌드에서는
 `smp_allocator`까지 끌어온다. `Init.Minimal`은 그 분기를 통째로 건너뛴다.
@@ -79,18 +79,18 @@ bash, Docker(`tars-devcontainer` 이미지), QEMU
 
 ## Task 1: Zig 프로젝트 골격과 빌드
 
-이 Task는 **부팅 경로를 건드리지 않는다.** initrd에는 여전히 Rust `init`이
+이 Task는 부팅 경로를 건드리지 않는다. initrd에는 여전히 Rust `init`이
 들어간다. 여기서 확인하는 것은 "Zig로 컴파일이 되는가"와 "정적 바이너리가
 나오는가" 둘뿐이다.
 
-**Files:**
+Files:
 - Modify: `.gitignore`
 - Create: `init/build.zig`
 - Create: `init/src/main.zig`
 
-- [ ] **Step 1: `.gitignore`에 Zig 산출물 추가**
+- [ ] Step 1: `.gitignore`에 Zig 산출물 추가
 
-`init/target/` 줄 **바로 아래**에 두 줄을 넣는다. 첫 `zig build`보다 먼저
+`init/target/` 줄 바로 아래에 두 줄을 넣는다. 첫 `zig build`보다 먼저
 해야 한다 — 이 저장소는 빌드 산출물을 실수로 커밋한 전력이 있다
 (`CLAUDE.md`의 "Commit 전 git status 확인").
 
@@ -103,7 +103,7 @@ init/.zig-cache/
 kms/target/
 ```
 
-- [ ] **Step 2: `init/build.zig` 작성**
+- [ ] Step 2: `init/build.zig` 작성
 
 ```zig
 const std = @import("std");
@@ -143,10 +143,10 @@ pub fn build(b: *std.Build) void {
 `abi`를 `.musl`로 둔 것은 관례일 뿐 실질 영향이 없다. libc를 링크하지 않으면
 abi 태그는 링크 결과에 관여하지 않는다.
 
-- [ ] **Step 3: `init/src/main.zig` 작성**
+- [ ] Step 3: `init/src/main.zig` 작성
 
-Rust판(`init/src/main.rs`)과 함수 단위로 1:1 대응하고, **출력 문자열도 전부
-동일하다.** 다른 것은 libc 래퍼가 raw syscall로 바뀐 것뿐이다.
+Rust판(`init/src/main.rs`)과 함수 단위로 1:1 대응하고, 출력 문자열도 전부
+동일하다. 다른 것은 libc 래퍼가 raw syscall로 바뀐 것뿐이다.
 
 ```zig
 const std = @import("std");
@@ -264,7 +264,7 @@ pub fn main(init: std.process.Init.Minimal) void {
 }
 ```
 
-- [ ] **Step 4: 빌드**
+- [ ] Step 4: 빌드
 
 Run:
 ```bash
@@ -279,7 +279,7 @@ Expected: 아무 것도 출력하지 않고 종료 코드 0. `init/zig-out/bin/i
 확인했지만, 가장 가능성 있는 실패 지점은 `init.environ.block.slice.ptr`의
 타입 coercion과 `main`의 인자 타입 매칭이다.
 
-- [ ] **Step 5: 정적 바이너리인지 확인**
+- [ ] Step 5: 정적 바이너리인지 확인
 
 libc를 링크하지 않은 것이 실제로 반영됐는지 보는 단계다. 이게 확인돼야
 Task 2에서 `copy_lib_deps` 줄을 지울 수 있다.
@@ -302,7 +302,7 @@ Expected:
 libc가 링크된 것이다. 그 경우 Task 2의 `copy_lib_deps` 삭제를 하면 안 되므로
 즉시 알릴 것.
 
-- [ ] **Step 6: Commit**
+- [ ] Step 6: Commit
 
 ```bash
 git add .gitignore init/build.zig init/src/main.zig
@@ -319,13 +319,13 @@ git commit -m "Add a Zig implementation of init alongside the Rust one"
 
 여기서 실제로 부팅되는 PID 1이 바뀐다.
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh:20`, `kernel/make_initrd.sh:45`
 - Modify: `boot/check.sh:7`
 - Modify: `terminal/check.sh:14`
 - Modify: `check.sh:18`
 
-- [ ] **Step 1: `kernel/make_initrd.sh`의 복사 경로 변경**
+- [ ] Step 1: `kernel/make_initrd.sh`의 복사 경로 변경
 
 현재 20번째 줄:
 
@@ -339,9 +339,9 @@ cp ../init/target/release/tars-init "$WORKDIR/init"
 cp ../init/zig-out/bin/init "$WORKDIR/init"
 ```
 
-- [ ] **Step 2: `kernel/make_initrd.sh`에서 init의 라이브러리 복사 제거**
+- [ ] Step 2: `kernel/make_initrd.sh`에서 init의 라이브러리 복사 제거
 
-45번째 줄 `copy_lib_deps "$WORKDIR/init"`을 **삭제**하고, 그 자리에 왜
+45번째 줄 `copy_lib_deps "$WORKDIR/init"`을 삭제하고, 그 자리에 왜
 없어졌는지 남긴다. 수정 후 45~50번째 줄 근처는 이렇게 된다:
 
 ```bash
@@ -354,7 +354,7 @@ copy_lib_deps "$WORKDIR/usr/bin/uname"
 copy_lib_deps "$WORKDIR/usr/bin/mkdir"
 ```
 
-- [ ] **Step 3: `boot/check.sh`의 빌드 명령 교체**
+- [ ] Step 3: `boot/check.sh`의 빌드 명령 교체
 
 현재 7번째 줄:
 
@@ -368,7 +368,7 @@ copy_lib_deps "$WORKDIR/usr/bin/mkdir"
 (cd ../init && zig build)
 ```
 
-- [ ] **Step 4: `terminal/check.sh`의 빌드 명령 교체**
+- [ ] Step 4: `terminal/check.sh`의 빌드 명령 교체
 
 현재 14번째 줄이 포함된 블록:
 
@@ -388,7 +388,7 @@ if ! (cd ../init && zig build); then
 fi
 ```
 
-- [ ] **Step 5: 루트 `check.sh`의 clean 목록 갱신**
+- [ ] Step 5: 루트 `check.sh`의 clean 목록 갱신
 
 현재 18번째 줄:
 
@@ -407,7 +407,7 @@ fi
 않는다. 15~16번째 줄의 `kms/target` 관련 주석은 그대로 둔다(ZM-M2에서 함께
 정리한다).
 
-- [ ] **Step 6: TF 체인 1회 실행**
+- [ ] Step 6: TF 체인 1회 실행
 
 Run:
 ```bash
@@ -417,9 +417,9 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 
 Expected: 마지막에 `PASS`. 소요 시간은 TF-M4 때와 비슷할 것이다.
 
-- [ ] **Step 7: `tars-init` 로그를 육안으로 확인**
+- [ ] Step 7: `tars-init` 로그를 육안으로 확인
 
-**이 Step을 건너뛰면 안 된다.** 게이트는 `tars-init:` 로그를 하나도
+이 Step을 건너뛰면 안 된다. 게이트는 `tars-init:` 로그를 하나도
 grep하지 않으므로(`boot/check.sh:38`은 fish 배너를, `terminal/check.sh:87`은
 `terminal: screen>`을 본다), `init`이 마운트에 전부 실패해도 부팅만 되면
 PASS가 나올 수 있다.
@@ -449,7 +449,7 @@ virtio-gpu-pci` 없이 부팅하므로 `not found`가 정상이다(`HANDOFF.md`�
 
 로그가 이전(Rust판)과 다른 부분이 있으면 그 줄을 그대로 알릴 것.
 
-- [ ] **Step 8: Commit**
+- [ ] Step 8: Commit
 
 ```bash
 git add kernel/make_initrd.sh boot/check.sh terminal/check.sh check.sh
@@ -465,9 +465,9 @@ BF는 TF와 initrd 로딩 경로가 다르다 — limine이 ISO9660에서 BIOS I
 읽는다. `make_initrd.sh`를 건드렸으므로 반드시 따로 확인한다. DF-M3와
 TF-M4에서 이 파일 변경으로 다른 체인이 조용히 깨진 사고가 두 번 있었다.
 
-**Files:** 없음(확인만)
+Files: 없음(확인만)
 
-- [ ] **Step 1: BF 체인 1회 실행**
+- [ ] Step 1: BF 체인 1회 실행
 
 Run:
 ```bash
@@ -478,7 +478,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 Expected: `PASS`. `boot/check.sh:35-47`이 fish 배너까지 걸린 실제 시간을
 출력하므로 그 숫자를 기록할 것 — TF-M4 기준은 약 34초였다.
 
-- [ ] **Step 2: 로그에서 두 가지 확인**
+- [ ] Step 2: 로그에서 두 가지 확인
 
 Run:
 ```bash
@@ -491,7 +491,7 @@ Expected:
   `/terminal` 자식만 죽고 PID 1은 그대로 fish를 exec한다.
 - 배너까지 걸린 초 — 34초 언저리면 정상.
 
-- [ ] **Step 3: initrd 크기 확인**
+- [ ] Step 3: initrd 크기 확인
 
 Run:
 ```bash
@@ -499,16 +499,16 @@ ls -l kernel/initrd.cpio
 ```
 
 Expected: 11.8MB 근처. `init`이 정적이 되면서 조금 커지고 `.so` 복사가
-빠지면서 조금 작아지므로 순변화는 작을 것이다. **13MB를 넘으면 알릴 것** —
+빠지면서 조금 작아지므로 순변화는 작을 것이다. 13MB를 넘으면 알릴 것 —
 BF는 initrd 크기에 민감한 경로다(53MB에서는 부팅 자체가 안 됐다).
 
 ---
 
 ## Task 4: 종료 게이트 3/3
 
-**Files:** 없음(확인만)
+Files: 없음(확인만)
 
-- [ ] **Step 1: 루트 게이트 전체 실행**
+- [ ] Step 1: 루트 게이트 전체 실행
 
 Run:
 ```bash
@@ -523,7 +523,7 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 
 BF 3회 + TF 3회이고 매 회차 `clean()` 후 재빌드라 시간이 오래 걸린다.
 
-- [ ] **Step 2: 6회 전부에서 init 로그 확인**
+- [ ] Step 2: 6회 전부에서 init 로그 확인
 
 Run:
 ```bash
@@ -540,12 +540,12 @@ Expected: 첫 명령은 `6`, 두 번째는 `0`.
 
 ## Task 5: 문서와 기억 갱신
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-08-13-tars-zig-migration-design.md`
 - Modify: `HANDOFF.md`
 - Modify: 이 plan 파일(말미에 "실제 실행에서 plan과 달라진 점" 추가)
 
-- [ ] **Step 1: Claude가 문서를 갱신한다**
+- [ ] Step 1: Claude가 문서를 갱신한다
 
 이 저장소 관례상 design doc·plan·`HANDOFF.md` 작성은 Claude가 한다
 (`docs/decisions/feedback_commit_delegation.md`). 사용자는 Task 4까지의
@@ -554,11 +554,11 @@ Expected: 첫 명령은 `6`, 두 번째는 `0`.
 갱신 내용:
 - design doc의 Status를 `ZM-M1 complete`로.
 - design doc 리스크 절에서 `environ`과 ioctl 상수 항목을 실제 결과로 교체.
-- 이 plan 말미에 "실제 실행에서 plan과 달라진 점"을 추가. **이 절이 다음
-  세션이 가장 먼저 읽는 부분이므로 빠짐없이 적는다.**
+- 이 plan 말미에 "실제 실행에서 plan과 달라진 점"을 추가. 이 절이 다음
+  세션이 가장 먼저 읽는 부분이므로 빠짐없이 적는다.
 - `HANDOFF.md`를 ZM-M2 기준으로 다시 씀.
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다.
 
@@ -566,58 +566,58 @@ Claude가 수행한다.
 
 ## 이번 milestone에서 하지 않는 것
 
-- **Rust 소스 삭제** — ZM-M2. 이 milestone 동안은 되돌아갈 곳으로 남긴다.
-- **`kms/` 삭제, `display/check.sh` 삭제, Dockerfile rustup 제거** — ZM-M2.
-- **`init`의 최적화 모드 변경** — libc를 안 쓰므로 `ReleaseSafe`가 가능해지지만,
+- Rust 소스 삭제 — ZM-M2. 이 milestone 동안은 되돌아갈 곳으로 남긴다.
+- `kms/` 삭제, `display/check.sh` 삭제, Dockerfile rustup 제거 — ZM-M2.
+- `init`의 최적화 모드 변경 — libc를 안 쓰므로 `ReleaseSafe`가 가능해지지만,
   동작을 바꾸지 않는다는 원칙에 따라 Debug 기본값을 유지한다. 최적화는
   필요해질 때 별도로 다룬다.
-- **PID 1 기능 보강(좀비 수거, 셸 종료 처리)** — design doc의 비목표.
+- PID 1 기능 보강(좀비 수거, 셸 종료 처리) — design doc의 비목표.
 
 ---
 
 ## 실제 실행에서 plan과 달라진 점 (2026-08-13 완료)
 
-**다음 세션은 이 절부터 읽을 것.** ZM-M1은 `TARS check PASS`로 완료됐다
+다음 세션은 이 절부터 읽을 것. ZM-M1은 `TARS check PASS`로 완료됐다
 (BF 3/3, TF 3/3, 커밋 `57c8373`·`7e4f414`).
 
 ### 1. plan의 검증 방법이 틀렸다 — 게이트에 검사를 추가했다
 
 Task 2 Step 7은 `grep 'tars-init:' /tmp/zm-m1-tf.log`로 육안 확인하라고
-썼는데 **아무것도 안 나왔다.** `init`이 조용해서가 아니라
+썼는데 아무것도 안 나왔다. `init`이 조용해서가 아니라
 `terminal/check.sh:30`이 `LOG="$(mktemp)"`로 컨테이너 안 임시 파일에 serial을
 받고 `--rm`과 함께 사라지기 때문이다. PASS일 때는 그 로그를 출력하지도
 않는다(실패 시에만 startup 마커를 찍는다). `boot/check.sh`는 끝에서
 `cat "$LOG"`를 하므로 BF만 우연히 보였던 것이다.
 
-plan을 고쳐 우회하는 대신 **게이트 자체를 고쳤다.** 두 체인에
+plan을 고쳐 우회하는 대신 게이트 자체를 고쳤다. 두 체인에
 `tars-init: mounted ...` 네 줄 검사를 넣었고, TF는 `--- init log ---` 아래
 `tars-init:` 줄을 매 회차 출력한다. 이유는 [[project_gate_chain_composition]]의
 "게이트는 자기가 안 보는 것을 통과시킨다" 절에 적었다 — 요약하면 검증을
 사람 눈에 맡기는 설계는 다음 milestone부터 아무도 안 지킨다.
 
-**마커 문자열이 `init/src/main.zig`와 `boot/check.sh`·`terminal/check.sh`
-세 곳에 중복된다.** init의 출력 문자열을 바꾸면 세 곳을 같이 고쳐야 한다.
+마커 문자열이 `init/src/main.zig`와 `boot/check.sh`·`terminal/check.sh`
+세 곳에 중복된다. init의 출력 문자열을 바꾸면 세 곳을 같이 고쳐야 한다.
 
 ### 2. Zig 0.16 API는 전부 첫 시도에 컴파일됐다
 
 plan 작성 전에 호스트의 `/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std`
 (컨테이너와 같은 0.16.0)를 직접 읽어 시그니처를 확인한 것이 통했다.
 `std.process.Init.Minimal`, `init.environ.block.slice.ptr`,
-`linux.T.IOCSCTTY`, `linux.O{.ACCMODE}` 전부 예상대로였다. **문서나 기억이
-아니라 설치된 std 소스를 읽을 것** — 같은 버전이 호스트에 있으면 가장 확실한
+`linux.T.IOCSCTTY`, `linux.O{.ACCMODE}` 전부 예상대로였다. 문서나 기억이
+아니라 설치된 std 소스를 읽을 것 — 같은 버전이 호스트에 있으면 가장 확실한
 근거다.
 
 ### 3. 크기: Rust 449KB → Zig 11.4MB (25배), 그런데 부팅은 안 느려졌다
 
 Debug 빌드라 디버그 정보와 std의 패닉·포매팅 기계가 통째로 들어간다.
-initrd는 11.8MB → **14MB**(gzip 후). plan에 적어둔 "13MB 넘으면 알릴 것"
+initrd는 11.8MB → 14MB(gzip 후). plan에 적어둔 "13MB 넘으면 알릴 것"
 선을 넘겨서 `ReleaseSafe` 전환을 검토했다.
 
-**결론은 전환하지 않는 것이다.** 게이트 3회차 부팅 시간이 34/33/33초로
+결론은 전환하지 않는 것이다. 게이트 3회차 부팅 시간이 34/33/33초로
 기존과 같았다. 단독 BF 1회에서 39초가 나와 크기 탓으로 의심했으나 3회
 반복에서 사라진 노이즈였다. libc를 안 쓰게 되면서 `ReleaseSafe`가 가능해진
-것은 사실이므로(fortify 제약 소멸), **나중에 initrd에 셸 바이너리가 추가되어
-크기가 다시 문제가 되면 꺼낼 카드**로 남긴다.
+것은 사실이므로(fortify 제약 소멸), 나중에 initrd에 셸 바이너리가 추가되어
+크기가 다시 문제가 되면 꺼낼 카드로 남긴다.
 
 ### 4. `file` 명령이 devcontainer에 없다
 

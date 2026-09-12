@@ -1,11 +1,11 @@
 # SH-M2 Implementation Plan — 보인다
 
-> **실행 방식은 `CLAUDE.md`를 따른다.** 설명 먼저 → 명령 실행은 Claude Code가
+> 실행 방식은 `CLAUDE.md`를 따른다. 설명 먼저 → 명령 실행은 Claude Code가
 > → 결과를 상세히 설명. 승인 뒤의 `git commit`도 Claude Code가 만든다.
-> **이번 세션에 한해 편집도 Claude Code가 한다**(사용자가 2026-09-09에 위임).
+> 이번 세션에 한해 편집도 Claude Code가 한다(사용자가 2026-09-09에 위임).
 
-**Goal:** 프롬프트의 한글이 제 모양으로 보이고, 조합 중인 글자가 검색어 끝에
-**반전**으로 자란다.
+Goal: 프롬프트의 한글이 제 모양으로 보이고, 조합 중인 글자가 검색어 끝에
+반전으로 자란다.
 
 ```
   /한글█ㅅ█        ← ㅅ이 조합 중이라 반전돼 있다
@@ -13,56 +13,56 @@
   /한글서버         ← 확정되면 반전이 풀린다
 ```
 
-**Architecture:** `drawPrompt`가 IS-M1의 `drawRun`을 **재사용해** UTF-8과 폭 2를
+Architecture: `drawPrompt`가 IS-M1의 `drawRun`을 재사용해 UTF-8과 폭 2를
 알게 되고, 조합 중인 글자 하나를 그 뒤에 색을 맞바꿔 그린다. 그리고 그린
-결과(다음 칸의 col과 반전 구간의 픽셀 범위)를 **돌려주어** 게이트가 판정할
+결과(다음 칸의 col과 반전 구간의 픽셀 범위)를 돌려주어 게이트가 판정할
 자리를 만든다.
 
-**Tech Stack:** Zig · `terminal/src/main.zig` · `hangul/check.sh` ·
+Tech Stack: Zig · `terminal/src/main.zig` · `hangul/check.sh` ·
 컨테이너 안의 `zig build` · 게이트
 
 ---
 
 ## 지금 무엇이 깨져 있는가
 
-SH-M1이 끝난 시점에 **검색은 맞는 결과를 내고 화면만 틀리다.**
+SH-M1이 끝난 시점에 검색은 맞는 결과를 내고 화면만 틀리다.
 
 | | 지금 | 왜 |
 |---|---|---|
-| needle의 `가` | 글리프 **셋**(EA·B0·80 각각)으로 그려지고 뒤 칸이 두 칸 밀린다 | `drawPrompt`가 `for (text) \|ch\|`로 **바이트 하나를 글자 하나로** 센다(`main.zig:138`) |
-| 조합 중인 글자 | **아예 안 보인다** | preedit은 격자 안에 그려지는데 copy mode에서는 `cells()`가 억제한다(`vt_test` 검사 47) |
+| needle의 `가` | 글리프 셋(EA·B0·80 각각)으로 그려지고 뒤 칸이 두 칸 밀린다 | `drawPrompt`가 `for (text) \|ch\|`로 바이트 하나를 글자 하나로 센다(`main.zig:138`) |
+| 조합 중인 글자 | 아예 안 보인다 | preedit은 격자 안에 그려지는데 copy mode에서는 `cells()`가 억제한다(`vt_test` 검사 47) |
 
-**둘째가 SH design 결정 2를 못 지키는 자리다.** "보이는 것과 찾을 것이 다르다"를
+둘째가 SH design 결정 2를 못 지키는 자리다. "보이는 것과 찾을 것이 다르다"를
 사람이 볼 길이 없으면, `Enter`를 쳤을 때 `서`가 먼저 확정되고 검색된다는 사실이
 화면 어디에도 안 나타난다.
 
-## 결정 — **조합 중인 글자를 `text`에 안 붙인다**
+## 결정 — 조합 중인 글자를 `text`에 안 붙인다
 
-`promptText`가 만드는 문자열에 조합 중인 글자를 **이어 붙이지 않고**,
+`promptText`가 만드는 문자열에 조합 중인 글자를 이어 붙이지 않고,
 `Prompt`가 `edit: ?u21`로 따로 나른다.
 
-**붙이는 쪽을 안 고른 이유가 셋이다.**
+붙이는 쪽을 안 고른 이유가 셋이다.
 
-1. 붙이면 **"어디부터 반전인가"를 바이트 오프셋으로 함께 날라야 한다.** 값 둘이
+1. 붙이면 "어디부터 반전인가"를 바이트 오프셋으로 함께 날라야 한다. 값 둘이
    서로 맞아야 하는 상태가 하나 늘고, 어긋나면 반전이 한 글자 밀린다.
-2. `promptText`는 갈래가 셋인데(SP design 결정 7) 조합이 붙는 곳은 **하나**다.
+2. `promptText`는 갈래가 셋인데(SP design 결정 7) 조합이 붙는 곳은 하나다.
    붙이려면 그 함수 안에서 갈래를 다시 갈라야 한다.
-3. **조합 중인 글자는 언제나 하나다.** 코드포인트 하나면 충분하고, 그리는 쪽이
+3. 조합 중인 글자는 언제나 하나다. 코드포인트 하나면 충분하고, 그리는 쪽이
    폭을 물어보는 것도 한 번이다.
 
-**결정 2(반전)와 결정 9(UTF-8)는 그대로다** — 바꾼 것은 그것을 나르는 모양뿐이다.
+결정 2(반전)와 결정 9(UTF-8)는 그대로다 — 바꾼 것은 그것을 나르는 모양뿐이다.
 
-## 게이트가 무엇으로 판정하는가 — **정수 하나가 UTF-8을 가른다**
+## 게이트가 무엇으로 판정하는가 — 정수 하나가 UTF-8을 가른다
 
-`drawPrompt`가 **다음 칸의 col**을 돌려주고 그것을 시리얼에 찍는다.
+`drawPrompt`가 다음 칸의 col을 돌려주고 그것을 시리얼에 찍는다.
 
 ```
 /가  →  cols=3   (슬래시 1 + 한글 2)   ← 폭 2를 알았다
 /가  →  cols=4   (슬래시 1 + 바이트 3) ← 바이트를 셌다
 ```
 
-**반전은 IS-M1의 `caps ink on=87 off=87`과 같은 방법으로 본다** — 반전 구간
-안에서 **두 색을 함께** 센다.
+반전은 IS-M1의 `caps ink on=87 off=87`과 같은 방법으로 본다 — 반전 구간
+안에서 두 색을 함께 센다.
 
 ```
 terminal: find> ink cols=5 inv=226 ink=30
@@ -71,13 +71,13 @@ terminal: find> ink cols=5 inv=226 ink=30
                       └ 그린 칸 수
 ```
 
-**`inv`만 보면 "글자를 안 그리고 사각형만 칠했다"가 통과한다.** 둘을 한 줄에
+`inv`만 보면 "글자를 안 그리고 사각형만 칠했다"가 통과한다. 둘을 한 줄에
 함께 찍는 것이 그 갈림을 만든다.
 
-**범위를 다시 계산하지 않는다.** `dumpStatus`는 `drawStatus`와 같은 산수로 y를
+범위를 다시 계산하지 않는다. `dumpStatus`는 `drawStatus`와 같은 산수로 y를
 다시 구해야 했고 IS-M0이 그 위험을 적어 뒀는데(어긋나면 언제나 0이고, 증상이
-"안 그렸다"와 똑같다), 여기서는 **그린 함수가 자기가 칠한 픽셀 범위를 그대로
-돌려준다.** 같은 산수가 두 곳에 안 생긴다.
+"안 그렸다"와 똑같다), 여기서는 그린 함수가 자기가 칠한 픽셀 범위를 그대로
+돌려준다. 같은 산수가 두 곳에 안 생긴다.
 
 ## 파일 구조
 
@@ -86,22 +86,22 @@ terminal: find> ink cols=5 inv=226 ink=30
 | `terminal/src/main.zig` | `drawRun`에 클립 한 줄 · `drawPrompt`가 UTF-8과 반전을 안다 · `Prompt.edit` · `PromptInk` · `render`의 반환값 · `dumpOverlay`에 `preedit=` · `dumpPromptInk` |
 | `hangul/check.sh` | 검사 19 |
 
-**호스트 검사가 안 는다 — 그것이 이 milestone의 성질이다.** `promptText`도
+호스트 검사가 안 는다 — 그것이 이 milestone의 성질이다. `promptText`도
 `drawPrompt`도 `main.zig`에 있고 그 파일은 프레임버퍼와 시리얼을 잡고 있어
-호스트에서 못 돈다. **CS-M1이 `find> overlay`를 만든 이유가 정확히 이것이었다.**
+호스트에서 못 돈다. CS-M1이 `find> overlay`를 만든 이유가 정확히 이것이었다.
 그래서 게이트 판정 셋(`cols` · `inv` · `ink`)이 이 milestone의 검증 전부다.
 
 ---
 
 ## Task 1: `drawPrompt`가 UTF-8과 폭 2를 안다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` — `drawRun` · `drawPrompt` · `Prompt` ·
   `render` · 호출부
 
-- [ ] **Step 1: `drawRun`이 화면 밖으로 안 나가게 한다**
+- [ ] Step 1: `drawRun`이 화면 밖으로 안 나가게 한다
 
-`drawRun`의 `while` 안, `drawGlyph` **앞**에 넣는다.
+`drawRun`의 `while` 안, `drawGlyph` 앞에 넣는다.
 
 ```zig
         // **화면 밖으로 안 나간다.** `setPixel`은 범위를 검사하지 않으므로
@@ -113,7 +113,7 @@ terminal: find> ink cols=5 inv=226 ink=30
         if (GRID_X + col * CELL_W + glyph.cell_width > fb.width) break;
 ```
 
-- [ ] **Step 2: `Prompt`에 조합 중인 글자를 더하고 `drawPrompt`를 다시 쓴다**
+- [ ] Step 2: `Prompt`에 조합 중인 글자를 더하고 `drawPrompt`를 다시 쓴다
 
 `Prompt`에 필드 하나를 더한다.
 
@@ -127,7 +127,7 @@ terminal: find> ink cols=5 inv=226 ink=30
     edit: ?u21,
 ```
 
-`drawPrompt`를 통째로 바꾼다. **지울 것은 함수 하나(주석 포함)이고**, 넣을
+`drawPrompt`를 통째로 바꾼다. 지울 것은 함수 하나(주석 포함)이고, 넣을
 것이 아래다.
 
 ```zig
@@ -205,10 +205,10 @@ fn drawPrompt(
 }
 ```
 
-**`i`를 `span` 대신 `x1`에 쓰는 것에 뜻이 있다** — 칸이 모자라 덜 칠했으면
+`i`를 `span` 대신 `x1`에 쓰는 것에 뜻이 있다 — 칸이 모자라 덜 칠했으면
 덜 칠한 만큼만 세야 판정이 실제 픽셀과 맞는다.
 
-- [ ] **Step 3: `render`가 그 결과를 돌려준다**
+- [ ] Step 3: `render`가 그 결과를 돌려준다
 
 `render`의 시그니처를 `!void`에서 `!?PromptInk`로 바꾸고, 프롬프트 갈래를
 아래로 바꾼다.
@@ -218,9 +218,9 @@ fn drawPrompt(
     if (prompt) |p| ink = try drawPrompt(fb, cache, p);
 ```
 
-끝에서 `try fb.present();` **뒤에** `return ink;`를 넣는다.
+끝에서 `try fb.present();` 뒤에 `return ink;`를 넣는다.
 
-- [ ] **Step 4: 호출부 셋을 고친다**
+- [ ] Step 4: 호출부 셋을 고친다
 
 `main` 루프의 프롬프트 구성에 `edit`을 더한다.
 
@@ -253,7 +253,7 @@ fn drawPrompt(
         dumpPromptInk(fb, prompt_ink, prompt);
 ```
 
-- [ ] **Step 5: 덤프 둘**
+- [ ] Step 5: 덤프 둘
 
 `dumpOverlay`를 바꾼다.
 
@@ -313,17 +313,17 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
 }
 ```
 
-- [ ] **Step 6: 빌드와 호스트 검사**
+- [ ] Step 6: 빌드와 호스트 검사
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대: 둘 다 초록이고 검사 개수가 안 는다.** 이 milestone은 호스트에서 볼
+기대: 둘 다 초록이고 검사 개수가 안 는다. 이 milestone은 호스트에서 볼
 수 있는 층을 안 건드린다.
 
-- [ ] **Step 7: commit**
+- [ ] Step 7: commit
 
 ```bash
 git add terminal/src/main.zig
@@ -334,12 +334,12 @@ git commit -m "Draw the search prompt in UTF-8 and invert the composing letter"
 
 ## Task 2: 게이트가 반전 픽셀 두 색을 센다
 
-**Files:**
+Files:
 - Modify: `hangul/check.sh` — 검사 19
 
-- [ ] **Step 1: 검사 19를 넣는다**
+- [ ] Step 1: 검사 19를 넣는다
 
-**검사 18이 끝난 자리를 그대로 쓴다** — 한글이 켜져 있고 화면에 `가`가 있고
+검사 18이 끝난 자리를 그대로 쓴다 — 한글이 켜져 있고 화면에 `가`가 있고
 copy mode 안이다(검사 18의 `Enter`가 프롬프트만 닫았다).
 
 `hangul/check.sh`의 `echo "HI check PASS"` 앞에 넣는다.
@@ -417,16 +417,16 @@ find_ink() {
 }
 ```
 
-- [ ] **Step 2: 이 체인만 한 번 돌린다** (약 1분)
+- [ ] Step 2: 이 체인만 한 번 돌린다 (약 1분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash hangul/check.sh
 ```
 
-**기대: `HI check PASS`이고 새 줄 둘이 그 앞에 있다.**
+기대: `HI check PASS`이고 새 줄 둘이 그 앞에 있다.
 
-- [ ] **Step 3: commit**
+- [ ] Step 3: commit
 
 ```bash
 git add hangul/check.sh
@@ -437,16 +437,16 @@ git commit -m "Count the inverted pixels of the composing letter in the prompt"
 
 ## Task 3: 루트 게이트 3/3과 마무리
 
-- [ ] **Step 1: 게이트를 돌린다** (약 19분)
+- [ ] Step 1: 게이트를 돌린다 (약 19분)
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } 2> /tmp/sh-m2.time
 ```
 
-- [ ] **Step 2: design의 `Status:`를 닫고 HANDOFF를 고친다**
+- [ ] Step 2: design의 `Status:`를 닫고 HANDOFF를 고친다
 
-**서브프로젝트가 끝나므로 design doc의 `Status:` 줄을 함께 고친다**
+서브프로젝트가 끝나므로 design doc의 `Status:` 줄을 함께 고친다
 (`CLAUDE.md`의 규율). `docs/decisions/`에 기억도 한 파일 남기고 `MEMORY.md`에
 한 줄 더한다.
 
@@ -461,8 +461,8 @@ git commit -m "Close out Search Hangul with a prompt that shows what it composes
 
 | # | 위험 | 처방 |
 |---|---|---|
-| 1 | **`p.fg`와 `p.bg`가 `getPixel`이 주는 값과 형식이 다르다**(알파 바이트) | `dumpStatus`가 이미 `& 0x00FFFFFF`로 마스크한다. 양쪽 다 마스크한다 |
-| 2 | 반전 구간의 `ink`가 0이다 — 글리프가 배경색과 **정확히** 같은 색으로 안 그려졌을 수 있다 | `drawGlyph`는 준 색을 그대로 찍는다(`setPixel(color)`). 0이면 그것은 진짜로 안 그린 것이다 |
-| 3 | **`cols`가 5가 아니라 4다 — `가`가 확정 안 되고 `ㄱ`만 조합 중일 수 있다** | 3-P3의 `k`는 초성 전용이라 초+중 상태에서 새 음절을 연다. 검사 18이 같은 키로 `가`를 이미 만들었다 |
+| 1 | `p.fg`와 `p.bg`가 `getPixel`이 주는 값과 형식이 다르다(알파 바이트) | `dumpStatus`가 이미 `& 0x00FFFFFF`로 마스크한다. 양쪽 다 마스크한다 |
+| 2 | 반전 구간의 `ink`가 0이다 — 글리프가 배경색과 정확히 같은 색으로 안 그려졌을 수 있다 | `drawGlyph`는 준 색을 그대로 찍는다(`setPixel(color)`). 0이면 그것은 진짜로 안 그린 것이다 |
+| 3 | `cols`가 5가 아니라 4다 — `가`가 확정 안 되고 `ㄱ`만 조합 중일 수 있다 | 3-P3의 `k`는 초성 전용이라 초+중 상태에서 새 음절을 연다. 검사 18이 같은 키로 `가`를 이미 만들었다 |
 | 4 | 프롬프트가 매 프레임 시리얼 두 줄을 더 찍어 게이트가 느려진다 | 프롬프트가 열린 프레임에만 찍힌다. `find> hl`·`find> overlay`가 이미 같은 조건이다 |
 | 5 | `drawRun`의 새 클립이 상태 줄을 자른다 | 상태 줄은 30칸 남짓이고 화면은 100칸이다. 자르는 조건이 `fb.width`라 실화면에서 안 닿는다 |

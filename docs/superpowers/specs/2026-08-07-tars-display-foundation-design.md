@@ -1,7 +1,7 @@
 # TARS Display Foundation — Design
 
-**Date:** 2026-08-07
-**Status:** DF-M3 complete (2026-08-08); Display Foundation complete
+Date: 2026-08-07
+Status: DF-M3 complete (2026-08-08); Display Foundation complete
 
 ## 배경
 
@@ -11,15 +11,15 @@ shell prompt까지 부팅하는 것을 끝냈다. 최종 비전에 있던 후보
 PTY/terminal, input policy, IME, 패키지 관리자, AI 도구 통합) 중 이번
 서브프로젝트가 다룰 영역을 고르면서, "compositor"라는 이름이 실제로는 창
 합성·입력 라우팅까지 포함하는 것처럼 들려 범위가 불명확했다. 그래서 이번
-서브프로젝트는 **Display Foundation**으로 이름 붙이고, 범위를 "KMS/DRM으로
+서브프로젝트는 Display Foundation으로 이름 붙이고, 범위를 "KMS/DRM으로
 화면에 픽셀을 띄우는 것"까지로 좁혔다 — 실제 compositor(창 합성, 입력
 라우팅, 여러 클라이언트 관리)는 Display Foundation이 만든 기반 위에서
 움직이는 별도의 이후 서브프로젝트로 남긴다.
 
 지금까지 QEMU 부팅은 전부 serial 콘솔(`-serial stdio -display none`)만
 썼고, kernel `.config`는 화면 출력과 관련된 어떤 서브시스템도 켜져 있지
-않다(`CONFIG_DRM`, `CONFIG_FB` 모두 `is not set`). 더 근본적으로 **PCI 버스
-지원 자체가 꺼져 있다**(`CONFIG_PCI is not set`, 2026-08-07 `kernel/.config`
+않다(`CONFIG_DRM`, `CONFIG_FB` 모두 `is not set`). 더 근본적으로 PCI 버스
+지원 자체가 꺼져 있다(`CONFIG_PCI is not set`, 2026-08-07 `kernel/.config`
 확인) — Boot Foundation은 initramfs를 통째로 메모리에 올려 부팅했기 때문에
 디스크/PCI 드라이버가 전혀 필요 없었다. Display Foundation은 QEMU의 가상
 GPU가 PCI 장치로 노출되므로, 화면 출력 이전에 PCI 버스 지원부터 새로 켜야
@@ -28,7 +28,7 @@ GPU가 PCI 장치로 노출되므로, 화면 출력 이전에 PCI 버스 지원�
 ## 목표 (MVP)
 
 QEMU에서 가상 GPU에 대해 DRM/KMS로 모드를 설정하고 framebuffer에 단색을
-채워, 화면에 그 색이 실제로 나타나는 것을 **자동화된 스크립트**로 검증한다.
+채워, 화면에 그 색이 실제로 나타나는 것을 자동화된 스크립트로 검증한다.
 텍스트(fish 배너)가 아니라 픽셀이 결과물이라는 점이 Boot Foundation과의
 핵심 차이다.
 
@@ -85,39 +85,39 @@ dumb buffer 생성 → `mmap` → 픽셀 채우기 → CRTC에 모드 설정)을
 
 ### DF-M0 — 검증 파이프라인 sanity check
 
-- **결과:** DRM 드라이버 없이도 `-device virtio-gpu-pci`를 붙여 부팅하고,
+- 결과: DRM 드라이버 없이도 `-device virtio-gpu-pci`를 붙여 부팅하고,
   `/dev/tcp` + QEMU monitor `screendump` + ImageMagick으로 이어지는 검증
   파이프라인 자체가 정상 동작함을 확인
-- **포함:** devcontainer에 `imagemagick` 패키지 추가, screendump/픽셀 검사
+- 포함: devcontainer에 `imagemagick` 패키지 추가, screendump/픽셀 검사
   스크립트 초안
-- **Exit gate:** PPM 파일이 기대한 해상도로 생성되고 ImageMagick으로 읽힘
+- Exit gate: PPM 파일이 기대한 해상도로 생성되고 ImageMagick으로 읽힘
   (색상 내용은 아직 검사하지 않음 — 드라이버가 없으니 정의되지 않은 화면)
-- **제외:** DRM 드라이버, 커널 설정 변경
+- 제외: DRM 드라이버, 커널 설정 변경
 
 ### DF-M1 — PCI + DRM/virtio-gpu 드라이버 활성화
 
-- **결과:** `CONFIG_PCI`부터 `CONFIG_DRM`, `CONFIG_DRM_VIRTIO_GPU`까지
+- 결과: `CONFIG_PCI`부터 `CONFIG_DRM`, `CONFIG_DRM_VIRTIO_GPU`까지
   필요한 kernel 옵션을 켜고 재빌드, 부팅 시 드라이버가 가상 GPU를 인식
-- **포함:** kernel `.config` 변경, `/dev/dri/card0` 노드가 devtmpfs에
+- 포함: kernel `.config` 변경, `/dev/dri/card0` 노드가 devtmpfs에
   생성되는지 init 로그로 확인
-- **Exit gate:** serial(dmesg)에 virtio-gpu 드라이버 probe 성공 로그가
+- Exit gate: serial(dmesg)에 virtio-gpu 드라이버 probe 성공 로그가
   보이고 `/dev/dri/card0`가 존재
-- **제외:** 실제로 화면에 그리는 것(다음 milestone)
+- 제외: 실제로 화면에 그리는 것(다음 milestone)
 
 ### DF-M2 — 픽셀 그리기(MVP 종료점)
 
-- **결과:** `kms/` 바이너리가 DRM ioctl로 모드 설정 + dumb buffer 채우기를
+- 결과: `kms/` 바이너리가 DRM ioctl로 모드 설정 + dumb buffer 채우기를
   수행해 화면에 지정한 단색이 나타남
-- **포함:** `kms/` Rust 바이너리, init이 부팅 시 이를 실행하도록 연결
-- **Exit gate:** DF-M0의 검증 파이프라인으로 screendump → 지정 좌표 픽셀
+- 포함: `kms/` Rust 바이너리, init이 부팅 시 이를 실행하도록 연결
+- Exit gate: DF-M0의 검증 파이프라인으로 screendump → 지정 좌표 픽셀
   색이 의도한 색과 일치
-- **제외:** 여러 색/도형, 사용자 입력에 반응하는 그리기
+- 제외: 여러 색/도형, 사용자 입력에 반응하는 그리기
 
 ### DF-M3 — 종료 게이트
 
-- **결과:** DF-M0~M2 전체를 재현 가능한 단일 스크립트로 묶고, 반복
+- 결과: DF-M0~M2 전체를 재현 가능한 단일 스크립트로 묶고, 반복
   실행해도 매번 동일하게 픽셀 검증을 통과
-- **Exit gate:** 스크립트 3회 연속 실행 성공(BF-M4와 동일한 패턴)
+- Exit gate: 스크립트 3회 연속 실행 성공(BF-M4와 동일한 패턴)
 
 ## 저장소 구조 (추가분)
 

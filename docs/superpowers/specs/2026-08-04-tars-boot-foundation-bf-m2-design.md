@@ -1,7 +1,7 @@
 # TARS Boot Foundation — BF-M2 Design
 
-**Date:** 2026-08-04
-**Status:** Completed (2026-08-05) — QEMU serial 로그에서 fish 배너 확인,
+Date: 2026-08-04
+Status: Completed (2026-08-05) — QEMU serial 로그에서 fish 배너 확인,
 `kernel/check.sh` PASS
 
 ## 배경
@@ -9,8 +9,8 @@
 [BF-M1](2026-08-03-tars-boot-foundation-bf-m1-design.md)에서 kernel.org
 6.18.42 LTS를 `allnoconfig`에서 반복 확장한 `.config`로 빌드하고, init
 바이너리가 없어 `Kernel panic - not syncing: No working init found`가
-발생하는 지점까지 검증했다. 이 문서는 다음 단계인 **BF-M2 — 직접 만든
-init(PID 1)**을 다룬다. 전체 milestone 구조와 배경은
+발생하는 지점까지 검증했다. 이 문서는 다음 단계인 BF-M2 — 직접 만든
+init(PID 1)을 다룬다. 전체 milestone 구조와 배경은
 [design doc](2026-08-01-tars-boot-foundation-design.md)을 참고.
 
 ## 목표
@@ -68,14 +68,14 @@ Rust로 작성한 init 바이너리가 PID 1로 실행되어 `/proc`, `/sys`, `/
 
 각 `mount()` 호출은 반환값을 확인해 실패 시 `errno`를 serial(표준
 출력)로 로그만 남기고 계속 진행한다 — 하나의 mount 실패로 나머지
-단계까지 막지 않는다. 마지막 `execve()`는 **fork 없이 자기 자신을
-대체**한다: init 프로세스(PID 1)가 그대로 fish가 된다. fish가 종료되면
+단계까지 막지 않는다. 마지막 `execve()`는 fork 없이 자기 자신을
+대체한다: init 프로세스(PID 1)가 그대로 fish가 된다. fish가 종료되면
 PID 1이 사라지므로 커널이 panic하는데, 이는 이번 milestone에서 의도적으로
 막지 않는다 — "PID 1은 죽으면 안 된다"는 경계를 보여주는 결과이며,
 exit gate(프롬프트 확인) 이후 QEMU를 강제 종료하므로 실제로 이 경로를
 밟을 필요도 없다.
 
-**추가된 단계 4(2026-08-05, Task 5 실측 후 추가):** 처음엔 mount 이후
+추가된 단계 4(2026-08-05, Task 5 실측 후 추가): 처음엔 mount 이후
 바로 execve했더니 fish가 `tcgetpgrp failed` 경고 후 `setpgid:
 Inappropriate ioctl for device`(ENOTTY)로 job control 설정에 실패해
 치명적 신호로 스스로 종료했고, 커널이 `Attempted to kill init!`으로
@@ -93,32 +93,32 @@ mount 실패 처리와 동일한 "실패해도 계속 진행" 철학이다.
 
 ### 4. Shell: bash 대신 fish, 의존 라이브러리 + terminfo 데이터 복사
 
-**결정 배경(2026-08-04, plan 작성 전 재검토):** 당초 bash를 채택했으나,
+결정 배경(2026-08-04, plan 작성 전 재검토): 당초 bash를 채택했으나,
 devcontainer 안에서 실측한 결과 fish로도 무리 없이 전환 가능하다고
 판단해 fish로 변경한다. devcontainer(Debian bookworm) 안에서 `ldd
 /usr/bin/fish`와 `ldd /bin/bash`를 비교한 결과:
 
-**버전 갱신(2026-08-05, Task 1 진행 중 재검토):** fish 4.0(2025-02
+버전 갱신(2026-08-05, Task 1 진행 중 재검토): fish 4.0(2025-02
 릴리스)이 C++에서 Rust로 완전히 재작성되면서 curses/terminfo 의존
 방식이 바뀌었고(Rust crate로 자체 구현 + xterm-256color fallback 내장),
 musl 정적 링크 빌드도 배포된다는 사실을 확인해 devcontainer 베이스를
 `debian:bookworm-slim`에서 `debian:trixie-slim`으로 바꾸고 apt로 fish
-4.0.2를 설치하기로 했다(핵심 설계 결정 5 참고). **아래 `ldd` 비교표와
+4.0.2를 설치하기로 했다(핵심 설계 결정 5 참고). 아래 `ldd` 비교표와
 terminfo 결론은 bookworm/fish 3.6.0 기준 실측 결과이며, trixie/fish
 4.0.2로 전환한 뒤에는 그대로 믿지 않고 Task 4에서 동일한 실험(`ldd`
 비교, `/usr/lib/terminfo` 제거 후 `env -i fish -i` 실행)을 다시 수행해
-확인한다** — fish 공식 블로그의 "terminfo fallback 내장" 서술만으로
+확인한다 — fish 공식 블로그의 "terminfo fallback 내장" 서술만으로
 `/usr/lib/terminfo/l/linux` 포함 여부를 결정하지 않는다.
 
 | | bash | fish 3.6.0 (bookworm) |
 |---|---|---|
 | 의존 `.so` | `libtinfo.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2` (3개) | 위 3개 + `libpcre2-32.so.0`, `libstdc++.so.6`, `libm.so.6`, `libgcc_s.so.1` (7개) |
 
-**fish 4.0.2(trixie) 재실측 결과:** `kernel/make_initrd.sh` Step 3
+fish 4.0.2(trixie) 재실측 결과: `kernel/make_initrd.sh` Step 3
 실행으로 실제 initramfs에 담긴 `ldd usr/bin/fish` 결과를 확인했다 —
 `libgcc_s.so.1`, `libc.so.6`, `libpcre2-8.so.0`, `libpcre2-32.so.0`,
 `libm.so.6`, `/lib64/ld-linux-x86-64.so.2` (6개). fish 3.6.0과 비교하면
-**`libstdc++.so.6`가 사라지고**(C++→Rust 재작성이 실제 링크 의존성에
+`libstdc++.so.6`가 사라지고(C++→Rust 재작성이 실제 링크 의존성에
 반영됨) `libpcre2-8.so.0`이 새로 추가됐다(PCRE2의 8-bit 변형, 32-bit
 변형과 별개로 필요해짐).
 
@@ -127,7 +127,7 @@ fish-common 패키지의 `.fish` completion 스크립트(수백 개)와
 `env -i HOME=/nonexistent fish -i` 실험으로 확인했다 — initramfs에
 담지 않는다.
 
-**terminfo 데이터 파일이라는 새 의존성 카테고리:** `ldd`는 동적
+terminfo 데이터 파일이라는 새 의존성 카테고리: `ldd`는 동적
 라이브러리 링크만 추적하고, 런타임에 파일 경로로 조회하는 데이터는
 잡지 못한다. `/usr/lib/terminfo` 디렉터리를 치운 상태에서 재실행한
 결과, fish는 `Could not set up terminal` 경고를 여러 줄 출력했다(치명적
@@ -140,21 +140,21 @@ fish-common 패키지의 `.fish` completion 스크립트(수백 개)와
 initramfs에 포함하기로 했었다(전체 terminfo 데이터베이스가 아니라
 `TERM=linux`용 엔트리 하나로 충분).
 
-**재실측 결과(2026-08-05, trixie/fish 4.0.2, Task 4 진행 중):** 위에서
+재실측 결과(2026-08-05, trixie/fish 4.0.2, Task 4 진행 중): 위에서
 예고한 대로 다시 실측했다. trixie 이미지에는 terminfo 데이터가
 `/usr/lib/terminfo/l/linux`가 아니라 `/usr/share/terminfo/l/linux`에
 있다(ncurses-base 6.5, 경로 자체가 bookworm과 다름). 하지만 더 중요한
 결과는 따로 있다 — `env -i HOME=/nonexistent fish -c 'exit'`를 terminfo
 파일이 전혀 없는 상태(trixie-slim 이미지에는 애초에 `/usr/lib/terminfo`
-경로가 존재하지 않음)에서 실행해도 **경고 없이 exit code 0으로 조용히
-종료**됐다. fish 공식 블로그가 서술한 "Rust crate로 terminfo를 자체
+경로가 존재하지 않음)에서 실행해도 경고 없이 exit code 0으로 조용히
+종료됐다. fish 공식 블로그가 서술한 "Rust crate로 terminfo를 자체
 처리하고 xterm-256color를 내장 fallback으로 쓴다"는 내용이 실측으로
-확인된 것이다. 따라서 **terminfo 파일을 initramfs에 포함하지 않기로
-결론을 바꾼다** — fish 3.6.0(C++/ncurses)에서만 있던 의존성이며 fish
+확인된 것이다. 따라서 terminfo 파일을 initramfs에 포함하지 않기로
+결론을 바꾼다 — fish 3.6.0(C++/ncurses)에서만 있던 의존성이며 fish
 4.0(Rust)에는 해당하지 않는다.
 
-**세 번째 의존성 카테고리: `/usr/share/fish`(fish 자신의 런타임
-에셋)(2026-08-05, Task 5 실측):** initramfs에 init/fish/라이브러리만
+세 번째 의존성 카테고리: `/usr/share/fish`(fish 자신의 런타임
+에셋)(2026-08-05, Task 5 실측): initramfs에 init/fish/라이브러리만
 담아 부팅했더니 `Fish cannot find its asset files in '/usr/share/fish'`
 에러로 fish가 즉시 종료됐다. `ldd`(링킹)나 terminfo(외부 데이터 조회)와
 또 다른 카테고리다 — fish의 내장 함수 상당수가 컴파일된 코드가 아니라
@@ -197,7 +197,7 @@ cpio에 담는다. terminfo는 포함하지 않는다(위 재실측 결과 참�
 끌어오지만, 이는 initramfs에 담을 대상이 아니라 devcontainer 안에서
 `/usr/bin/fish`와 그 라이브러리를 추출해 오기 위한 소스일 뿐이다.
 
-**베이스 이미지 변경(2026-08-05):** bookworm의 apt는 fish 3.6.0까지만
+베이스 이미지 변경(2026-08-05): bookworm의 apt는 fish 3.6.0까지만
 제공한다. fish 4.0(Rust 재작성) 이상을 쓰기 위해 devcontainer 베이스를
 `debian:bookworm-slim`에서 `debian:trixie-slim`(Debian 13, 2025-08
 릴리스, apt로 fish 4.0.2 제공)으로 바꾼다. 커널 빌드 도구 체인

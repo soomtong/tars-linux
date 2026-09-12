@@ -1,13 +1,13 @@
 # TARS Boot Foundation — BF-M2 Rust Init Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** BF-M2를 완료한다 — Rust로 작성한 init 바이너리가 PID 1로 실행되어
+Goal: BF-M2를 완료한다 — Rust로 작성한 init 바이너리가 PID 1로 실행되어
 `/proc`, `/sys`, `/dev`(devtmpfs)를 mount한 뒤 fish로 자신을 대체(execve)해
 QEMU serial에 fish의 시작 배너(`Welcome to fish, the friendly interactive
 shell`)가 출력되는 지점까지 검증한다.
 
-**Architecture:** `init/`에 독립된 Rust 바이너리 프로젝트를 만든다.
+Architecture: `init/`에 독립된 Rust 바이너리 프로젝트를 만든다.
 `x86_64-unknown-linux-gnu` 타깃(std, glibc 동적 링크)으로 빌드하고, `libc`
 crate로 `mount(2)`/`execve(2)`를 raw FFI로 직접 호출한다. `kernel/
 make_initrd.sh`를 확장해 init 바이너리, fish 바이너리, 둘의 `ldd` 의존
@@ -16,7 +16,7 @@ make_initrd.sh`를 확장해 init 바이너리, fish 바이너리, 둘의 `ldd` 
 `kernel/check.sh`는 BF-M1과 동일한 빌드→부팅→grep→PASS/FAIL 패턴을
 유지하되 판정 문자열만 바꾼다.
 
-**Tech Stack:** Rust stable(rustup, `x86_64-unknown-linux-gnu`), `libc`
+Tech Stack: Rust stable(rustup, `x86_64-unknown-linux-gnu`), `libc`
 crate, fish 4.0.2(Debian trixie apt), Linux 6.18.42(BF-M1에서 빌드됨),
 QEMU system x86_64(TCG), cpio, bash
 
@@ -30,7 +30,7 @@ QEMU system x86_64(TCG), cpio, bash
 `kernel/.config`, `kernel/build/arch/x86/boot/bzImage`가 이미 존재해야
 한다(없다면 Task 5에서 `check.sh`가 `build.sh`를 호출해 새로 빌드한다).
 
-**Design doc과의 관계:**
+Design doc과의 관계:
 [2026-08-04-tars-boot-foundation-bf-m2-design.md](../specs/2026-08-04-tars-boot-foundation-bf-m2-design.md)
 의 결정을 그대로 따른다 — std+glibc 동적 링크, `libc` crate raw FFI,
 fish(bash 아님) + terminfo 파일 포함, timeout 강제 종료 + 배너 grep.
@@ -39,12 +39,12 @@ fish(bash 아님) + terminfo 파일 포함, timeout 강제 종료 + 배너 grep.
 
 ### Task 1: devcontainer에 Rust 툴체인과 fish 추가
 
-**Files:**
+Files:
 - Modify: `devcontainer/Dockerfile`
 
-- [x] **Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가 (trixie 베이스)**
+- [x] Step 1: Dockerfile에 rustup 설치와 fish 패키지 추가 (trixie 베이스)
 
-**갱신(2026-08-05):** 당초 `debian:bookworm-slim` 기준으로 작성했고
+갱신(2026-08-05): 당초 `debian:bookworm-slim` 기준으로 작성했고
 `rustc`/`cargo`/`fish 3.6.0` 설치까지 실제로 확인했으나, fish 4.0(Rust
 재작성, curses 의존 제거, musl 정적 빌드 지원) 이상을 쓰기 위해 베이스
 이미지를 `debian:trixie-slim`(Debian 13, apt로 fish 4.0.2 제공)으로
@@ -90,7 +90,7 @@ WORKDIR /workspace
 참고). rustup은 `--profile minimal`로 `rustc`/`cargo`/`rust-std`만
 설치해 이미지 크기를 줄인다.
 
-- [x] **Step 2: 이미지 재빌드**
+- [x] Step 2: 이미지 재빌드
 
 Run:
 ```bash
@@ -100,7 +100,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [x] **Step 3: 툴체인 확인**
+- [x] Step 3: 툴체인 확인
 
 Run:
 ```bash
@@ -112,7 +112,7 @@ Expected: 세 명령 모두 버전 문자열을 출력하고 `command not found`
 (예: `rustc 1.8x.x`, `cargo 1.8x.x`, `fish, version 4.0.2` 또는 trixie가
 제공하는 그 이상 버전).
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add devcontainer/Dockerfile
@@ -123,12 +123,12 @@ git commit -m "Add Rust toolchain and fish shell to devcontainer"
 
 ### Task 2: Rust init 프로젝트 뼈대
 
-**Files:**
+Files:
 - Create: `init/Cargo.toml`
 - Create: `init/src/main.rs`
 - Modify: `.gitignore`
 
-- [x] **Step 1: `.gitignore`에 Rust 빌드 산출물 추가**
+- [x] Step 1: `.gitignore`에 Rust 빌드 산출물 추가
 
 `.gitignore`에 다음 줄을 추가한다:
 
@@ -136,7 +136,7 @@ git commit -m "Add Rust toolchain and fish shell to devcontainer"
 init/target/
 ```
 
-- [x] **Step 2: `Cargo.toml` 작성**
+- [x] Step 2: `Cargo.toml` 작성
 
 `init/Cargo.toml`:
 ```toml
@@ -149,7 +149,7 @@ edition = "2021"
 libc = "0.2"
 ```
 
-- [x] **Step 3: 최소 `main.rs` 작성**
+- [x] Step 3: 최소 `main.rs` 작성
 
 `init/src/main.rs`:
 ```rust
@@ -162,7 +162,7 @@ fn main() {
 먼저 "Rust 프로젝트가 devcontainer에서 빌드되고, 동적 링크된 ELF가
 나온다"는 것부터 확인한다.
 
-- [x] **Step 4: 빌드 확인**
+- [x] Step 4: 빌드 확인
 
 Run:
 ```bash
@@ -174,9 +174,9 @@ Expected: 종료 코드 0. `Compiling tars-init v0.1.0 ...`, `Finished
 release [optimized] target(s) in ...`. `init/target/release/tars-init`
 파일이 생성된다.
 
-- [x] **Step 5: 동적 링크 확인**
+- [x] Step 5: 동적 링크 확인
 
-**갱신(2026-08-05):** `file` 패키지가 devcontainer 이미지에 없어
+갱신(2026-08-05): `file` 패키지가 devcontainer 이미지에 없어
 (`command not found`) `binutils`(이미 설치돼 있음)의 `readelf -h`로
 대체한다.
 
@@ -191,7 +191,7 @@ Devices X86-64`가 보임. `ldd` 출력에 `libc.so.6`과
 `/lib64/ld-linux-x86-64.so.2`가 보임 — design doc 핵심 결정 1이 의도한
 대로 init 자신도 glibc 동적 링크임을 확인하는 지점이다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add .gitignore init/Cargo.toml init/Cargo.lock init/src/main.rs
@@ -206,12 +206,12 @@ crate였다면 커밋하지 않는 것이 관례지만, init은 최종 실행 �
 
 ### Task 3: mount 3회 + execve로 fish 실행
 
-**Files:**
+Files:
 - Modify: `init/src/main.rs`
 
-- [x] **Step 1: mount와 execve 로직 작성**
+- [x] Step 1: mount와 execve 로직 작성
 
-**갱신(2026-08-05):** 원안은 `libc::environ`을 그대로 썼으나 빌드 시
+갱신(2026-08-05): 원안은 `libc::environ`을 그대로 썼으나 빌드 시
 `error[E0425]: cannot find value \`environ\` in crate \`libc\`` 발생
 (libc crate 0.2.189 기준). `libc` crate의 재노출에 의존하는 대신
 glibc가 항상 제공하는 POSIX 심볼 `environ`을 `extern "C"`로 직접
@@ -282,7 +282,7 @@ glibc가 프로세스에 항상 제공하는 전역 `char **environ` 심볼을 �
 직접 `extern "C"`로 선언한 것으로, 현재 프로세스의 환경변수를 그대로
 fish에 넘기기 위해 사용한다.
 
-- [x] **Step 2: 빌드 확인**
+- [x] Step 2: 빌드 확인
 
 Run:
 ```bash
@@ -292,9 +292,9 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/init \
 
 Expected: 종료 코드 0, `Finished release [optimized] target(s)`.
 
-- [x] **Step 3: 커밋**
+- [x] Step 3: 커밋
 
-**추가 커밋(2026-08-05, Task 5 실측 중 발견):** mount 이후 바로
+추가 커밋(2026-08-05, Task 5 실측 중 발견): mount 이후 바로
 execve하면 fish가 controlling terminal이 없어 job control 설정에
 실패해(`setpgid: Inappropriate ioctl for device`) 커널이 `Attempted to
 kill init!`으로 panic했다. `open("/dev/console")` → `setsid()` →
@@ -311,20 +311,20 @@ git commit -m "Implement mount and execve in Rust init"
 
 ### Task 4: initramfs에 init/fish/라이브러리 담기
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh`
 
-**재검증 완료(2026-08-05):** Step 3을 처음 실행했을 때
+재검증 완료(2026-08-05): Step 3을 처음 실행했을 때
 `/usr/lib/terminfo/l/linux`가 trixie 이미지에 없어(`cp: cannot stat`)
 실패했다. 재실측 결과 trixie의 terminfo 데이터는 `/usr/share/terminfo/
 l/linux`에 있지만(경로 자체가 bookworm과 다름), 더 중요하게는 `env -i
 HOME=/nonexistent fish -c 'exit'`를 terminfo 없이 실행해도 경고 없이
 exit code 0으로 조용히 종료됨을 확인했다(design doc 핵심 설계 결정 4
 재실측 결과 참고) — fish 4.0(Rust)은 curses/terminfo 의존을 제거했다는
-공식 블로그 서술이 실측으로 확인됐다. 따라서 **terminfo 복사를
-아예 제거**한다. 아래 스크립트는 이미 이 결론을 반영한 최종판이다.
+공식 블로그 서술이 실측으로 확인됐다. 따라서 terminfo 복사를
+아예 제거한다. 아래 스크립트는 이미 이 결론을 반영한 최종판이다.
 
-- [x] **Step 1: `make_initrd.sh`를 실제 바이너리 패키징 스크립트로 교체**
+- [x] Step 1: `make_initrd.sh`를 실제 바이너리 패키징 스크립트로 교체
 
 BF-M1의 `make_initrd.sh`는 실행 권한만 있는 빈 `/init` 파일 하나만
 담았다(커널의 "init 존재 확인 vs 실행 성공" 판단 로직을 통과시키기 위한
@@ -375,13 +375,13 @@ x86-64.so.2 (주소)`. `grep -oE '/[^ ]+\.so[0-9.]*'`는 두 형태 모두에서
 는 target 디렉터리가 이미 존재해야 성공하며, initramfs cpio 안에 없으면
 커널이 자동으로 만들어주지 않는다.
 
-- [x] **Step 2: 실행 권한 확인**
+- [x] Step 2: 실행 권한 확인
 
 ```bash
 chmod +x kernel/make_initrd.sh
 ```
 
-- [x] **Step 3: 단독 실행으로 cpio 생성 확인**
+- [x] Step 3: 단독 실행으로 cpio 생성 확인
 
 Run:
 ```bash
@@ -393,12 +393,12 @@ Expected: 종료 코드 0. `cpio -itv` 목록에 `init`, `usr/bin/fish`,
 그리고 `lib/x86_64-linux-gnu/libc.so.6` 등 여러 `.so` 파일과
 `lib64/ld-linux-x86-64.so.2`가 보인다(terminfo는 포함하지 않는다).
 
-**만약 `ldd` 파싱이 실패하거나 파일이 빠지면:** `ldd` 원본 출력을 그대로
+만약 `ldd` 파싱이 실패하거나 파일이 빠지면: `ldd` 원본 출력을 그대로
 확인해(`docker run ... ldd usr/bin/fish`) 정규식이 실제 경로 형식과
 맞는지 점검한다 — devcontainer의 glibc 버전에 따라 라이브러리 경로가
 `/lib/x86_64-linux-gnu/`가 아닌 다른 경로일 수 있다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add kernel/make_initrd.sh
@@ -409,7 +409,7 @@ git commit -m "Package init, fish, and dependencies into initramfs"
 저장소에 커밋해 왔으므로(작고 재현 목적) 이 관례를 유지한다 — Step 3에서
 생성된 최신 `initrd.cpio`도 함께 커밋 대상에 포함된다.
 
-**추가 커밋(2026-08-05, Task 5 실측 중 발견):** init/fish/라이브러리만
+추가 커밋(2026-08-05, Task 5 실측 중 발견): init/fish/라이브러리만
 담아 부팅했더니 `Fish cannot find its asset files in '/usr/share/fish'`
 로 fish가 즉시 종료됐다. `functions/`, `config.fish`,
 `__fish_build_paths.fish`만 최소로 추려 `/usr/share/fish`에 추가하는
@@ -420,10 +420,10 @@ git commit -m "Package init, fish, and dependencies into initramfs"
 
 ### Task 5: check.sh 배너 판정으로 변경 + 전체 부팅 검증
 
-**Files:**
+Files:
 - Modify: `kernel/check.sh`
 
-- [x] **Step 1: exit gate 문자열을 fish 배너로 변경**
+- [x] Step 1: exit gate 문자열을 fish 배너로 변경
 
 `kernel/check.sh`의 판정 부분을 다음으로 교체한다(빌드/실행 부분은
 BF-M1과 동일하게 유지):
@@ -462,7 +462,7 @@ exit 1
 `(cd ../init && cargo build --release)`를 추가해 `check.sh` 한 번 실행으로
 kernel, init, initramfs가 모두 최신 상태로 재생성되게 한다.
 
-- [x] **Step 2: 실행해서 결과 확인**
+- [x] Step 2: 실행해서 결과 확인
 
 Run:
 ```bash
@@ -476,7 +476,7 @@ Expected: serial 로그에 `tars-init: starting as PID 1`, 3개의 mount 로그
 (`Welcome to fish, the friendly interactive shell`)와 프롬프트가 출력되고
 `PASS`, 종료 코드 0.
 
-**만약 FAIL이면:** 로그 마지막 부분을 읽고 원인을 판단한다. 예상 가능한
+만약 FAIL이면: 로그 마지막 부분을 읽고 원인을 판단한다. 예상 가능한
 실패 유형과 확인 방법:
 - `tars-init: failed to mount ... (errno 2)`(ENOENT) — mount target
   디렉터리(`/proc`, `/sys`, `/dev`)가 initramfs 루트에 없음. init이
@@ -493,7 +493,7 @@ Expected: serial 로그에 `tars-init: starting as PID 1`, 3개의 mount 로그
   멈추면 init 바이너리 자체가 실행되지 않은 것 — `file init/target/
   release/tars-init`로 ELF 아키텍처(x86-64)를 재확인한다.
 
-**실제로 발생했던 두 가지 실패 유형(2026-08-05, 기록용):**
+실제로 발생했던 두 가지 실패 유형(2026-08-05, 기록용):
 - `Fish cannot find its asset files in '/usr/share/fish'` — fish의
   내장 함수가 `/usr/share/fish/functions/*.fish` 스크립트로 구현돼
   있어 initramfs에 없으면 즉시 종료된다. Task 4로 돌아가
@@ -507,7 +507,7 @@ Expected: serial 로그에 `tars-init: starting as PID 1`, 3개의 mount 로그
 이 반복 자체가 BF-M1과 동일한 학습 사이클이므로, 몇 차례 반복이 필요할
 수 있다. 원인을 고치면 Step 2를 다시 실행한다.
 
-- [x] **Step 3: 커밋**
+- [x] Step 3: 커밋
 
 ```bash
 git add kernel/check.sh kernel/initrd.cpio

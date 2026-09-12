@@ -53,7 +53,7 @@ milestone 번호를 붙여 부른다.
 번째 milestone이고, HI가 끝났다는 것은 HI-M0부터 HI-M3까지 계획한
 milestone을 전부 마쳤다는 뜻이다.
 
-**FP가 왜 `SP`가 아니라 `FP`인가.** `SP`는 이미 Search Position(2026-08-29·
+FP가 왜 `SP`가 아니라 `FP`인가. `SP`는 이미 Search Position(2026-08-29·
 30)이 쓴다. 그리고 코드의 어휘 자체가 search가 아니라 find다 —
 `find_open`·`findBytes`·`findNeedle`·`find_buf`. 저장소가 실제로 쓰는 말을
 따라 이름을 정했다.
@@ -181,7 +181,7 @@ sequence-crash-course.md` 참고).
 
 ### bracketed paste / OSC 52
 
-터미널이 붙여넣은 텍스트를 **타이핑과 구별**할 수 있게 하는 두 표준 기능.
+터미널이 붙여넣은 텍스트를 타이핑과 구별할 수 있게 하는 두 표준 기능.
 bracketed paste는 붙여넣는 내용을 이스케이프 시퀀스로 감싸 셸이 "이건
 사람이 친 게 아니라 붙인 것"이라고 알게 하고, OSC 52는 셸이 이스케이프
 시퀀스로 시스템 클립보드를 읽고 쓰게 하는 통로다. TARS는 Copy Mode 결정
@@ -189,7 +189,7 @@ bracketed paste는 붙여넣는 내용을 이스케이프 시퀀스로 감싸 �
 적이 없어서) — 그래서 `dumpPaste`가 붙여넣은 개행을 실행으로 감수한다.
 OSC 52도 같은 이유로 비목표다: TARS의 클립보드는 `y`(yank)가 채우는
 `Screen.clip` 하나뿐이고, 프로세스 간 시스템 클립보드는 다루지 않는다.
-Find Paste가 여러 줄 붙여넣기에서 **첫 줄만** 넣기로 한 것도(결정 5) 이
+Find Paste가 여러 줄 붙여넣기에서 첫 줄만 넣기로 한 것도(결정 5) 이
 빈 자리의 결과다 — bracketed paste가 없어 개행이 곧 줄바꿈이자 검색에서는
 영원히 안 맞는 needle이 되기 때문이다.
 

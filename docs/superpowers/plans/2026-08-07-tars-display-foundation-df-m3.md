@@ -1,18 +1,18 @@
 # TARS Display Foundation — DF-M3 종료 게이트 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고):** 파일
+> 단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고): 파일
 > 작성과 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을
 > 제시하고 결과를 해석한다. 위 SUB-SKILL 문구는 다른 저장소용 기본값이며 이
 > 저장소에는 적용하지 않는다.
 
-**Goal:** DF-M3를 완료한다 — DF-M0~M2 전체 체인(kernel 빌드 → init 빌드 →
+Goal: DF-M3를 완료한다 — DF-M0~M2 전체 체인(kernel 빌드 → init 빌드 →
 kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screendump →
-지정 좌표 픽셀 색 검사)을 재현 가능한 단일 스크립트로 묶어 **3회 연속
-성공**시켜 Display Foundation 서브프로젝트의 종료 게이트를 통과한다.
+지정 좌표 픽셀 색 검사)을 재현 가능한 단일 스크립트로 묶어 3회 연속
+성공시켜 Display Foundation 서브프로젝트의 종료 게이트를 통과한다.
 
-**Architecture:** 두 가지 변경이 필요하다.
+Architecture: 두 가지 변경이 필요하다.
 
 1. `display/check.sh`는 현재 `kernel/build/arch/x86/boot/bzImage`와
    `kernel/initrd.cpio`가 이미 만들어져 있다고 가정한다(빌드 단계가 없다) —
@@ -26,8 +26,8 @@ kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screen
    `../kms/target/release/kms`를 initrd에 복사하기 때문 — 지금까지는 이
    빌드도 사용자가 수동으로 먼저 해뒀다).
 2. 저장소 루트 `check.sh`(BF-M4 산출물)는 현재 `boot/check.sh`를 3회
-   반복하는 것만 한다. 이번 세션에서 사용자와 논의해 **BF 체인과 DF 체인을
-   모두 포함하도록 확장**하기로 했다 — DF-M1에서 `kernel/.config`를 바꿔
+   반복하는 것만 한다. 이번 세션에서 사용자와 논의해 BF 체인과 DF 체인을
+   모두 포함하도록 확장하기로 했다 — DF-M1에서 `kernel/.config`를 바꿔
    PCI/DRM/virtio-gpu를 켰으므로, BF 체인(fish 배너 부팅)이 그 변경 이후에도
    여전히 통과하는지 함께 재검증하는 것이 의미 있다는 판단이다(회귀
    안전망). `run_chain()`이라는 공용 함수로 일반화해 두 체인을 각각 3회
@@ -37,7 +37,7 @@ kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screen
    때문에 커널 전체 재빌드가 기존 3회에서 6회(BF 3 + DF 3)로 늘어 실행
    시간이 그만큼 길어진다 — 의도된 트레이드오프다.
 
-**Tech Stack:** bash, Docker(`tars-devcontainer` 이미지), QEMU monitor
+Tech Stack: bash, Docker(`tars-devcontainer` 이미지), QEMU monitor
 `screendump` + ImageMagick(DF-M0~M2 산출물, 수정 없음)
 
 ---
@@ -49,7 +49,7 @@ kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screen
 포함)이 PASS함이 확인된 상태여야 한다(HANDOFF.md 기준 최신 커밋
 `aeae89c`).
 
-**이번 세션 결정 사항(design doc에 이미 정의된 DF-M3 exit gate를 구체화):**
+이번 세션 결정 사항(design doc에 이미 정의된 DF-M3 exit gate를 구체화):
 - 새 아키텍처 결정 없음 — design doc(`2026-08-07-tars-display-foundation-
   design.md`) DF-M3 절의 "재현 가능한 단일 스크립트 + 3회 연속 성공"을
   BF-M4와 동일한 clean-rebuild 패턴으로 구현한다.
@@ -61,10 +61,10 @@ kms 빌드 → initrd 생성 → QEMU `-device virtio-gpu-pci` 부팅 → screen
 
 ### Task 1: `display/check.sh`를 자기 완결적으로 만들기 (kernel/init/kms 빌드 포함)
 
-**Files:**
+Files:
 - Modify: `display/check.sh`
 
-- [x] **Step 1: `display/check.sh`에 빌드 단계 추가**
+- [x] Step 1: `display/check.sh`에 빌드 단계 추가
 
 `display/check.sh` 전체를 아래 내용으로 교체한다(기존 `MONITOR_PORT=45454`
 이후 로직은 그대로 유지하고, `cd "$(dirname "$0")"` 바로 다음에 빌드 단계
@@ -201,7 +201,7 @@ DF-M0 때부터의 기존 설계). `set -e` 없이는 `./build.sh`가 실패해�
 계속 진행해 버리므로, 나머지 코드와 동일하게 각 명령의 성공 여부를 명시적으로
 검사하는 패턴을 그대로 따른다.
 
-- [x] **Step 2: 실행 권한 확인**
+- [x] Step 2: 실행 권한 확인
 
 ```bash
 ls -la display/check.sh
@@ -210,7 +210,7 @@ ls -la display/check.sh
 Expected: 이미 `rwxr-xr-x` (DF-M0 때 부여됨) — 실행 권한이 없다면
 `chmod +x display/check.sh`.
 
-- [x] **Step 3: 단독 실행해서 여전히 PASS하는지 확인**
+- [x] Step 3: 단독 실행해서 여전히 PASS하는지 확인
 
 Run:
 ```bash
@@ -225,7 +225,7 @@ Expected: kernel/init/kms 빌드 로그가 먼저 출력되고, 이어서 DF-M2 
 Step은 clean 빌드가 아니어도 된다 — "스크립트가 자기 완결적으로 동작하는가"만
 확인한다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add display/check.sh
@@ -236,10 +236,10 @@ git commit -m "Make display/check.sh self-contained with kernel/init/kms build s
 
 ### Task 2: 루트 `check.sh`를 BF+DF 다중 체인 3회 검증으로 확장
 
-**Files:**
+Files:
 - Modify: `check.sh` (저장소 루트)
 
-- [x] **Step 1: `check.sh` 전체 교체**
+- [x] Step 1: `check.sh` 전체 교체
 
 `check.sh`(저장소 루트):
 ```bash
@@ -280,7 +280,7 @@ echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
 DF 순서로 두 번 호출하므로 BF 체인이 먼저 3회, 그다음 DF 체인이 3회
 실행된다(교차 실행이 아니다 — 한 체인이 끝나야 다음 체인이 시작).
 
-- [x] **Step 2: `.gitignore` 대상에 `kms/target` 포함 확인**
+- [x] Step 2: `.gitignore` 대상에 `kms/target` 포함 확인
 
 Run:
 ```bash
@@ -291,7 +291,7 @@ Expected: 네 경로 모두 `.gitignore`의 어느 줄에 걸리는지 출력된
 `.gitignore:9:kms/target\tkms/target`). 하나라도 출력이 없으면 `clean()`이
 추적 파일을 지울 위험이 있으므로 Step 1로 돌아가 대상 목록을 다시 확인한다.
 
-- [x] **Step 3(정정): `boot/check.sh`에 `kms` 빌드 단계 추가**
+- [x] Step 3(정정): `boot/check.sh`에 `kms` 빌드 단계 추가
 
 Task 2 Step 3을 처음 실행했을 때 `BF-M4 run 1/3`에서
 `cp: cannot stat '../kms/target/release/kms': No such file or directory`로
@@ -318,14 +318,14 @@ Task 1에서 추가한 것과 동일한 `kms` 빌드 단계를 끼워 넣는다)
 달리 `if ! (...); then ... fi`로 감쌀 필요가 없다 — 빌드 명령이 실패하면
 `-e`가 스크립트를 바로 종료시킨다(기존 세 줄과 동일한 스타일 유지).
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add boot/check.sh
 git commit -m "Build kms crate in boot/check.sh before generating initrd"
 ```
 
-- [x] **Step 5: 실행해서 BF+DF 모두 3회 연속 PASS 확인**
+- [x] Step 5: 실행해서 BF+DF 모두 3회 연속 PASS 확인
 
 Run:
 ```bash
@@ -341,7 +341,7 @@ Expected: `=== BF-M4 run 1/3 ===`부터 `=== BF-M4 run 3/3 PASSED ===`까지 세
 종료 코드 0. 매 회차마다 kernel 전체 재컴파일이 일어나므로(6회) 실행
 시간이 `display/check.sh` 단독 실행보다 훨씬 길다 — 정상이다.
 
-**만약 특정 체인/회차에서 FAIL이 나면:** `{체인명} FAIL: run N/3 failed`로
+만약 특정 체인/회차에서 FAIL이 나면: `{체인명} FAIL: run N/3 failed`로
 어느 체인, 몇 번째 회차인지 먼저 확인한다.
 - BF 체인이 실패하면: DF-M1에서 바뀐 `kernel/.config`(PCI/DRM/virtio-gpu
   활성화)가 fish 배너 부팅 경로에 영향을 줬을 가능성을 의심한다 —
@@ -351,7 +351,7 @@ Expected: `=== BF-M4 run 1/3 ===`부터 `=== BF-M4 run 3/3 PASSED ===`까지 세
   플레이키니스, screendump 전 `sleep 5`)이 재현된 것일 가능성이 크다 —
   `display/check.sh`의 `sleep 5`를 더 늘려본다.
 
-- [x] **Step 6: `git status`로 초기화 재현성 확인**
+- [x] Step 6: `git status`로 초기화 재현성 확인
 
 Run:
 ```bash
@@ -362,7 +362,7 @@ Expected: `kernel/initrd.cpio`가 수정된 것으로 나타날 수 있다(BF-M4
 동일한 이유 — 빌드 산출물이지만 관례상 git에 커밋돼 있음). 그 외 추적
 파일에 의도치 않은 변경이 없는지 확인한다.
 
-- [x] **Step 7: 커밋**
+- [x] Step 7: 커밋
 
 `kernel/initrd.cpio`가 변경되지 않았다면:
 ```bash
@@ -382,11 +382,11 @@ git commit -m "Refresh initrd.cpio from DF-M3 check.sh run"
 
 ### Task 3: design doc·HANDOFF.md 정리
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`
 - Modify: `HANDOFF.md`
 
-- [x] **Step 1: design doc Status 갱신**
+- [x] Step 1: design doc Status 갱신
 
 `docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md`의
 2번째 줄:
@@ -395,14 +395,14 @@ git commit -m "Refresh initrd.cpio from DF-M3 check.sh run"
 **Status:** DF-M3 complete (2026-08-07); Display Foundation complete
 ```
 
-- [x] **Step 2: 커밋**
+- [x] Step 2: 커밋
 
 ```bash
 git add docs/superpowers/specs/2026-08-07-tars-display-foundation-design.md
 git commit -m "Mark Display Foundation complete after DF-M3"
 ```
 
-- [x] **Step 3: HANDOFF.md를 다음 서브프로젝트 착수 전 상태로 갱신**
+- [x] Step 3: HANDOFF.md를 다음 서브프로젝트 착수 전 상태로 갱신
 
 `superpowers:handoff` 스킬로 현재 상태(Display Foundation 전체 완료, 다음
 서브프로젝트 미정)를 반영해 새로 작성한다. 다음 서브프로젝트 후보는
@@ -410,7 +410,7 @@ git commit -m "Mark Display Foundation complete after DF-M3"
 절 최종 비전 목록(compositor, PTY/terminal, input policy, IME, 패키지
 관리자, AI 도구 통합)을 참고해 사용자와 논의할 것을 남긴다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add HANDOFF.md

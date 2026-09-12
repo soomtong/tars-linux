@@ -1,18 +1,18 @@
 # TARS Display Foundation — DF-M1 PCI + DRM/virtio-gpu 드라이버 활성화 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고):** 파일
+> 단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고): 파일
 > 작성과 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을
 > 제시하고 결과를 해석한다. 위 SUB-SKILL 문구는 다른 저장소용 기본값이며 이
 > 저장소에는 적용하지 않는다.
 
-**Goal:** DF-M1을 완료한다 — kernel `.config`에서 `CONFIG_PCI`, `CONFIG_DRM`,
+Goal: DF-M1을 완료한다 — kernel `.config`에서 `CONFIG_PCI`, `CONFIG_DRM`,
 `CONFIG_DRM_VIRTIO_GPU`, `CONFIG_VIRTIO_PCI`를 활성화하고 재빌드하여, QEMU
 `-device virtio-gpu-pci`를 붙여 부팅했을 때 커널이 드라이버를 통해 가상
 GPU를 인식하고 `/dev/dri/card0` 노드가 devtmpfs에 생성됨을 확인한다.
 
-**Architecture:** `kernel/.config`를 `scripts/config`(다운로드된 kernel
+Architecture: `kernel/.config`를 `scripts/config`(다운로드된 kernel
 source tree에 포함된 표준 도구)로 직접 수정한 뒤 `kernel/build.sh`(이미
 `make olddefconfig`를 실행함)로 재빌드한다. `init/src/main.rs`에
 `/dev/dri/card0` 존재 여부를 devtmpfs mount 직후 serial 로그로 남기는 코드를
@@ -23,7 +23,7 @@ source tree에 포함된 표준 도구)로 직접 수정한 뒤 `kernel/build.sh
 직접 작성한 init 로그 문구는 우리가 정한 그대로 나오므로 확실한 판정 기준이
 된다.
 
-**Tech Stack:** Linux kernel 6.18.42 Kconfig(`scripts/config`), QEMU
+Tech Stack: Linux kernel 6.18.42 Kconfig(`scripts/config`), QEMU
 `-device virtio-gpu-pci`, Rust(`init/`, 기존 `mount_fs` 패턴 재사용), bash
 check 스크립트(기존 `kernel/check.sh` 스타일)
 
@@ -37,7 +37,7 @@ check 스크립트(기존 `kernel/check.sh` 스타일)
 이미 존재), `tars-devcontainer` 이미지가 `imagemagick` 포함 버전으로 빌드돼
 있어야 한다.
 
-**현재 상태(2026-08-07 확인):** `kernel/.config`에서 `CONFIG_PCI`,
+현재 상태(2026-08-07 확인): `kernel/.config`에서 `CONFIG_PCI`,
 `CONFIG_DRM`, `CONFIG_FB`는 `# ... is not set`으로 존재하지만 꺼져 있고,
 `CONFIG_DRM_VIRTIO_GPU`, `CONFIG_VIRTIO_PCI`, `CONFIG_VIRTIO`는 `CONFIG_PCI`가
 꺼져 있어 아예 파일에 나타나지도 않는다(하위 옵션이라 상위 조건이 거짓이면
@@ -46,7 +46,7 @@ check 스크립트(기존 `kernel/check.sh` 스타일)
 devtmpfs를 mount하고 있으므로(`init/src/main.rs`), 드라이버가 성공적으로
 probe하면 별도 udev 없이도 `/dev/dri/card0`가 자동으로 나타난다.
 
-**Design doc과의 관계:**
+Design doc과의 관계:
 [2026-08-07-tars-display-foundation-design.md](../specs/2026-08-07-tars-display-foundation-design.md)
 DF-M1 절의 결정을 그대로 따른다 — kernel `.config` 변경과
 `/dev/dri/card0`가 devtmpfs에 생성되는지 init 로그로 확인하는 것까지가
@@ -58,10 +58,10 @@ doc의 "검증 방법" 절은 "DF-M1까지는 색상 대신 serial dmesg 로그 
 
 ### Task 1: kernel `.config`에서 PCI/DRM/virtio-gpu 옵션 활성화
 
-**Files:**
+Files:
 - Modify: `kernel/.config`
 
-- [x] **Step 1: `scripts/config`로 옵션 활성화**
+- [x] Step 1: `scripts/config`로 옵션 활성화
 
 `scripts/config`는 다운로드된 kernel source tree(`kernel/src/linux-6.18.42/`)
 안에 포함된 표준 스크립트로, `.config` 파일의 특정 옵션 값을 직접
@@ -84,7 +84,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 
 Expected: 출력 없이 종료 코드 0(`scripts/config`는 조용히 파일을 수정한다).
 
-- [x] **Step 2: 재빌드(olddefconfig + bzImage)**
+- [x] Step 2: 재빌드(olddefconfig + bzImage)
 
 `kernel/build.sh`는 `.config`를 `build/.config`로 복사한 뒤
 `make olddefconfig`를 실행한다 — 이 과정에서 우리가 방금 켠 다섯 옵션이
@@ -102,7 +102,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 Expected: 종료 코드 0, 마지막 근처에 `Kernel: arch/x86/boot/bzImage is
 ready`가 출력된다.
 
-- [x] **Step 3: 옵션이 실제로 `y`로 반영됐는지 확인**
+- [x] Step 3: 옵션이 실제로 `y`로 반영됐는지 확인
 
 Run:
 ```bash
@@ -118,13 +118,13 @@ CONFIG_DRM_VIRTIO_GPU=y
 CONFIG_VIRTIO_PCI=y
 ```
 
-**만약 어떤 줄이 `=m`으로 나오거나 아예 안 보이면:** Step 1의
+만약 어떤 줄이 `=m`으로 나오거나 아예 안 보이면: Step 1의
 `--enable`이 아니라 `--module`로 잘못 적용됐거나, 의존성이 아직 만족되지
 않은 것이다. `--enable`은 `y`를 강제하므로 이 경우는 드물지만, 발생하면
 `kernel/build/.config`에서 해당 옵션 주변 의존성 줄(`depends on` 계열)을
 확인해서 알려달라 — 어떤 옵션이 더 필요한지 함께 판단한다.
 
-- [x] **Step 4: 정규화된 config를 `kernel/.config`로 복사**
+- [x] Step 4: 정규화된 config를 `kernel/.config`로 복사
 
 `build.sh`가 실행한 `olddefconfig`는 `build/.config`만 갱신하고 원본
 `kernel/.config`는 건드리지 않는다. 우리가 git에 커밋할 대상은
@@ -136,7 +136,7 @@ Run:
 cp kernel/build/.config kernel/.config
 ```
 
-- [x] **Step 5: 변경 규모 확인**
+- [x] Step 5: 변경 규모 확인
 
 Run:
 ```bash
@@ -147,7 +147,7 @@ Expected: `kernel/.config | N ++++----` 형태로 변경된 줄 수가 나온다
 Step 1에서 지정한 다섯 옵션 외에도 `olddefconfig`가 함께 켠 하위 의존
 옵션들이 있어서 몇십 줄 단위로 바뀌는 것이 정상이다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add kernel/.config
@@ -158,10 +158,10 @@ git commit -m "Enable PCI, DRM, and virtio-gpu kernel config for DF-M1"
 
 ### Task 2: init에 `/dev/dri/card0` 존재 확인 로그 추가
 
-**Files:**
+Files:
 - Modify: `init/src/main.rs`
 
-- [x] **Step 1: 존재 확인 함수 추가 및 호출**
+- [x] Step 1: 존재 확인 함수 추가 및 호출
 
 지금 `init`은 `proc`/`sysfs`/`devtmpfs`를 mount하고 바로 fish로 exec한다
 — 화면이나 DRM에 대해 아무것도 확인하지 않는다. DF-M1의 exit gate("
@@ -203,7 +203,7 @@ fn main() {
     // ... (이하 기존 코드 그대로)
 ```
 
-- [x] **Step 2: 컴파일 확인**
+- [x] Step 2: 컴파일 확인
 
 Run:
 ```bash
@@ -215,7 +215,7 @@ Expected: 종료 코드 0, `Finished \`release\` profile [optimized] target(s)`�
 출력된다. 에러 없이 컴파일되면 `std::path::Path::exists()` 호출이
 문제없다는 뜻이다(별도 crate 의존성 추가 불필요 — `std`에 포함됨).
 
-- [x] **Step 3: initrd 재생성**
+- [x] Step 3: initrd 재생성
 
 새로 빌드한 `tars-init` 바이너리를 initrd에 반영한다.
 
@@ -228,7 +228,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kernel
 Expected: 종료 코드 0, `N blocks` 형태의 줄이 출력되고
 `kernel/initrd.cpio`의 수정 시각이 갱신된다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add init/src/main.rs kernel/initrd.cpio
@@ -239,10 +239,10 @@ git commit -m "Log /dev/dri/card0 presence from init for DF-M1 verification"
 
 ### Task 3: `kernel/check-virtio-gpu.sh` — 드라이버 probe 검증
 
-**Files:**
+Files:
 - Create: `kernel/check-virtio-gpu.sh`
 
-- [x] **Step 1: 검증 스크립트 작성**
+- [x] Step 1: 검증 스크립트 작성
 
 기존 `kernel/check.sh`(fish 배너 grep)와 같은 구조이되, `-device
 virtio-gpu-pci`를 붙이고 `/dev/dri/card0 exists` 로그를 grep한다. `-vga
@@ -286,13 +286,13 @@ exit 1
 자동 PASS/FAIL 판정 자체는 우리가 제어하는 `/dev/dri/card0 exists` 문구로
 한다.
 
-- [x] **Step 2: 실행 권한 부여**
+- [x] Step 2: 실행 권한 부여
 
 ```bash
 chmod +x kernel/check-virtio-gpu.sh
 ```
 
-- [x] **Step 3: 실행**
+- [x] Step 3: 실행
 
 Run:
 ```bash
@@ -304,7 +304,7 @@ Expected: 커널 부팅 로그(dmesg)와 `tars-init: ...` 줄들이 출력되고
 `tars-init: /dev/dri/card0 exists`가 포함되며, 마지막에 `PASS`와 종료
 코드 0.
 
-**만약 `FAIL: /dev/dri/card0 was not found`이 나오면:** 출력된 전체 로그를
+만약 `FAIL: /dev/dri/card0 was not found`이 나오면: 출력된 전체 로그를
 붙여서 알려달라. 확인할 지점은 두 가지다.
 1. PCI 장치 자체가 열거됐는지 — dmesg에서 `virtio-pci` 또는 `0000:00:`로
    시작하는 PCI 장치 인식 줄이 있는지 찾는다. 없다면 `CONFIG_PCI`가 실제로
@@ -314,7 +314,7 @@ Expected: 커널 부팅 로그(dmesg)와 `tars-init: ...` 줄들이 출력되고
    `kernel/.config`에서 `CONFIG_ACPI` 상태를 확인하고 필요하면 Task 1과
    같은 방식(`scripts/config --enable ACPI` + 재빌드)으로 추가한다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add kernel/check-virtio-gpu.sh

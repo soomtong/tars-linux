@@ -1,25 +1,25 @@
 # TARS Input Policy — Design
 
-**Date:** 2026-08-15
-**Status:** **완료 (2026-08-19).** IP-M0·M1·M2 전부 끝났고 목표 다섯이 모두
+Date: 2026-08-15
+Status: 완료 (2026-08-19). IP-M0·M1·M2 전부 끝났고 목표 다섯이 모두
 게이트로 증명된다. 루트 게이트는 4체인(BF-M4 · TF-M4 · CP-M2 · IP-M2)
 3/3으로 통과하며, 회차당 부팅 18회에 22분 20초다.
 
 ## 배경
 
 Config Persistence(CP-M0~M2)가 2026-08-15에 끝나면서 진행 중인 서브프로젝트가
-없어졌다. 최종 비전에서 아직 손대지 않은 후보 중 **입력 정책(Input
-Policy)** 을 다음으로 골랐다.
+없어졌다. 최종 비전에서 아직 손대지 않은 후보 중 입력 정책(Input
+Policy) 을 다음으로 골랐다.
 
 고른 이유는 세 가지다.
 
-1. **이 프로젝트의 원래 동기다.** Boot Foundation design doc의 "배경"이
+1. 이 프로젝트의 원래 동기다. Boot Foundation design doc의 "배경"이
    나열한 최종 비전 첫 항목이 "macOS 키바인딩 의미론"이다. 그런데 지금
    TARS의 키보드는 Shift 하나만 아는 상태로 멈춰 있다.
-2. **지금 만든 것 위에 바로 얹힌다.** 새 커널 옵션도, 새 장치도, 새
+2. 지금 만든 것 위에 바로 얹힌다. 새 커널 옵션도, 새 장치도, 새
    외부 의존도 필요 없다. 이미 열려 있는 evdev fd에서 이미 읽고 있는
-   이벤트를 **다르게 해석**하는 일이다.
-3. **QEMU 안에서 게이트로 증명할 수 있다.** CP-M2가 monitor `sendkey`로
+   이벤트를 다르게 해석하는 일이다.
+3. QEMU 안에서 게이트로 증명할 수 있다. CP-M2가 monitor `sendkey`로
    게스트 셸에 직접 타이핑하는 길을 이미 뚫어놨다.
 
 Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 세
@@ -37,46 +37,46 @@ Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 �
 
 `terminal/src/input.zig`는 148줄이고, 다음이 전부다.
 
-- **keymap 테이블이 evdev 코드 57(`KEY_SPACE`)에서 끝난다.** 방향키
+- keymap 테이블이 evdev 코드 57(`KEY_SPACE`)에서 끝난다. 방향키
   (103/105/106/108), Home/End(102/107), Delete(111), PageUp/Down(104/109),
   F1~F12(59~88)는 배열 밖이라 `code >= keymap.len`에서 걸러진다.
-- **`State`가 아는 modifier는 Shift 둘뿐이다** (`shift_left`,
+- `State`가 아는 modifier는 Shift 둘뿐이다 (`shift_left`,
   `shift_right`). 29번(`KEY_LEFTCTRL`)과 56번(`KEY_LEFTALT`)은 테이블에
   `.{ 0, 0 }`로 자리만 있고 주석에 "이번 범위 밖"이라고 적혀 있다.
-- **`handleKey`의 반환 타입이 `?u8`이다.** 키 하나가 바이트 하나가 된다.
+- `handleKey`의 반환 타입이 `?u8`이다. 키 하나가 바이트 하나가 된다.
 
 세 번째가 나머지 둘의 원인이다. 터미널에서 ←는 `ESC [ D` 3바이트이므로
-**한 바이트만 돌려줄 수 있는 함수로는 방향키를 표현할 수 없다.** 표를
+한 바이트만 돌려줄 수 있는 함수로는 방향키를 표현할 수 없다. 표를
 늘리는 것으로는 해결되지 않는다.
 
 부수적으로, Ctrl+C가 지금 동작하지 않는 이유도 여기서 설명된다. 시그널을
-우리가 보내야 해서가 아니라, `0x03` 바이트가 **만들어지지 않아서**다
+우리가 보내야 해서가 아니라, `0x03` 바이트가 만들어지지 않아서다
 (아래 3번 결정).
 
 ### 사용자가 정한 범위 (2026-08-15)
 
-- **"다 됐다"의 기준:** 터미널 기본기(Ctrl 제어 문자, 특수키, terminfo)를
-  깔고 **그 위에 macOS 편집 의미론까지** 올린다. 설정 파일로 키를 임의
+- "다 됐다"의 기준: 터미널 기본기(Ctrl 제어 문자, 특수키, terminfo)를
+  깔고 그 위에 macOS 편집 의미론까지 올린다. 설정 파일로 키를 임의
   재배치하는 범용 엔진은 이번이 아니다.
-- **물리 키보드:** Apple 키보드와 PC 키보드를 **둘 다 쓴다.** 따라서
+- 물리 키보드: Apple 키보드와 PC 키보드를 둘 다 쓴다. 따라서
   Alt↔Meta 보정을 코드에 박을 수 없고 스위치로 빼야 한다.
 
 ## 목표 (MVP)
 
 부팅한 TARS의 화면 터미널에서 다음이 전부 동작한다.
 
-1. **Ctrl 제어 문자** — `Ctrl+C`로 실행 중인 명령을 죽이고, `Ctrl+D`로
+1. Ctrl 제어 문자 — `Ctrl+C`로 실행 중인 명령을 죽이고, `Ctrl+D`로
    EOF를 보내고, `Ctrl+Z`로 멈춘다.
-2. **특수키** — 방향키, Home/End, Delete, PageUp/PageDown이 셸의 줄
+2. 특수키 — 방향키, Home/End, Delete, PageUp/PageDown이 셸의 줄
    편집기에 제대로 전달된다.
-3. **`TERM`이 진실을 말한다** — PTY 셸의 `TERM`이 `xterm`이고,
+3. `TERM`이 진실을 말한다 — PTY 셸의 `TERM`이 `xterm`이고,
    그에 맞는 terminfo가 initrd에 있다.
-4. **macOS 편집 의미론** — `Option+←/→`로 단어 단위 이동,
+4. macOS 편집 의미론 — `Option+←/→`로 단어 단위 이동,
    `Option+Backspace`로 단어 삭제, `Cmd+←/→`로 줄 처음/끝 이동.
-5. **키보드 종류를 설정으로 고른다** — `/config/tars.conf`의
+5. 키보드 종류를 설정으로 고른다 — `/config/tars.conf`의
    `keyboard=apple|pc`가 Alt↔Meta 보정을 켜고 끈다.
 
-그리고 이 다섯이 **게이트로 증명된다** — 사람이 화면을 보고 판단하는
+그리고 이 다섯이 게이트로 증명된다 — 사람이 화면을 보고 판단하는
 것이 아니라, `check.sh`가 QEMU monitor로 키를 보내고 화면 덤프를 검사해서
 판정한다.
 
@@ -84,13 +84,13 @@ Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 �
 
 | 목표 | 게이트가 보는 것 | 자리 |
 |---|---|---|
-| 1 | `sleep 100` 실행 중 `ctrl-c` → 프롬프트 복귀. 음성 검사로 `echo notdead`가 **안 도는 것**을 함께 본다 | IP-M0 |
+| 1 | `sleep 100` 실행 중 `ctrl-c` → 프롬프트 복귀. 음성 검사로 `echo notdead`가 안 도는 것을 함께 본다 | IP-M0 |
 | 2 | `echo abc` → ← ← `X` → 출력 행 `aXbc`. 음성 검사는 `abcX` | IP-M1 |
 | 3 | 게스트에서 `echo $TERM` → 출력 행 `xterm` + initrd cpio 목록에 terminfo | IP-M1 |
 | 4 | bash 프롬프트에서 `alt-left` → `aa Xbb`, `meta_l-left` → `cc dd`. 음성 검사 셋(`aa bbX`·`aa bXb`·`command not found`) + `key> 2 byte(s)` | IP-M2 1차 부팅 |
-| 5 | `keyboard=pc` 디스크로 재부팅 → 같은 물리 키가 **반대로** 동작 | IP-M2 2차 부팅 |
+| 5 | `keyboard=pc` 디스크로 재부팅 → 같은 물리 키가 반대로 동작 | IP-M2 2차 부팅 |
 
-**게이트가 끝내 못 밟은 경로가 하나 남았다.** DECCKM(`ESC O` 형태)이다.
+게이트가 끝내 못 밟은 경로가 하나 남았다. DECCKM(`ESC O` 형태)이다.
 `fish --no-config`도 `bash --norc`도 `smkx`를 보내지 않아서 게이트 로그는
 매번 `DECCKM stayed off`다. 이 분기는 `input_test`가 `Context.cursor_keys`를
 값으로 주입해 대신 본다 — 그 처방과, `keyboard=pc`에는 왜 같은 처방을 쓰지
@@ -98,25 +98,25 @@ Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 �
 
 ## 비목표
 
-- **범용 키바인딩 엔진.** 매핑은 코드에 박힌 표다. 설정 파일에서 읽는 것은
-  `keyboard=apple|pc` 하나뿐이며, 이건 재배치가 아니라 **하드웨어 종류
-  선언**이다.
-- **F1~F12, 키패드, Insert.** TUI 앱이 아직 하나도 없어서 누를 이유가
+- 범용 키바인딩 엔진. 매핑은 코드에 박힌 표다. 설정 파일에서 읽는 것은
+  `keyboard=apple|pc` 하나뿐이며, 이건 재배치가 아니라 하드웨어 종류
+  선언이다.
+- F1~F12, 키패드, Insert. TUI 앱이 아직 하나도 없어서 누를 이유가
   없다. keymap 테이블에 넣는 비용 자체는 싸지만, 게이트가 볼 수 없는 표를
   늘리는 것은 `project_gate_chain_composition`이 경고한 것과 같은 종류의
   부채다.
-- **마우스 입력.** TF design doc에서도 비목표였다.
-- **CapsLock 재배치.** macOS 사용자가 흔히 Ctrl로 바꿔 쓰는 키지만, 그건
+- 마우스 입력. TF design doc에서도 비목표였다.
+- CapsLock 재배치. macOS 사용자가 흔히 Ctrl로 바꿔 쓰는 키지만, 그건
   "임의 재배치"의 문이다.
-- **CSI u / modifyOtherKeys.** modifier를 명시적으로 인코딩해 넘기는 현대적
+- CSI u / modifyOtherKeys. modifier를 명시적으로 인코딩해 넘기는 현대적
   방식이지만, 받는 쪽(zsh/bash)이 기본적으로 지원하지 않는다. TARS가 자기
   TUI 앱을 갖게 되면 그때 다시 본다.
-- **`Cmd+C` / `Cmd+V` / `Cmd+↑↓`.** 복사·붙여넣기·스크롤은 스크롤백과
+- `Cmd+C` / `Cmd+V` / `Cmd+↑↓`. 복사·붙여넣기·스크롤은 스크롤백과
   클립보드가 선행 조건이라 `docs/decisions/project_copy_mode.md`의 몫이다.
-  **이번에 이 조합들을 다른 용도로 쓰지 않고 비워둔다.**
-- **키보드 레이아웃(비-US).** US QWERTY 하드코딩을 유지한다. 한/영 키
+  이번에 이 조합들을 다른 용도로 쓰지 않고 비워둔다.
+- 키보드 레이아웃(비-US). US QWERTY 하드코딩을 유지한다. 한/영 키
   처리도 CJK IME 서브프로젝트의 몫이다.
-- **시리얼 콘솔 셸의 입력.** 그쪽은 커널의 tty 계층이 처리하며 우리
+- 시리얼 콘솔 셸의 입력. 그쪽은 커널의 tty 계층이 처리하며 우리
   코드를 지나지 않는다.
 
 ## 핵심 설계 결정
@@ -151,7 +151,7 @@ evdev fd ──poll──> readKeys ──> handleKey ──┐
                                             └──> []const u8 ──> pty.write
 ```
 
-**2번이 3번보다 먼저여야 한다.** 뒤에 두면 `Cmd+←`가 dispatch에 닿기 전에
+2번이 3번보다 먼저여야 한다. 뒤에 두면 `Cmd+←`가 dispatch에 닿기 전에
 3번에서 그냥 `←`로 번역돼 새어 나간다. "가로챌 것을 먼저 가로채고, 남은
 것만 평소대로"가 규칙이다.
 
@@ -164,12 +164,12 @@ evdev fd ──poll──> readKeys ──> handleKey ──┐
 `TIOCSCTTY`까지 해준다. 즉 셸이 제어 터미널을 제대로 갖고 있고, PTY에는
 커널의 line discipline(N_TTY)이 붙어 있다.
 
-우리가 master fd에 `0x03` 한 바이트를 쓰면, **커널이** `ISIG`와
+우리가 master fd에 `0x03` 한 바이트를 쓰면, 커널이 `ISIG`와
 `VINTR == 0x03`을 보고 foreground process group에 SIGINT를 보낸다. 우리
 쪽에 시그널 코드는 한 줄도 필요 없다.
 
-Ctrl 제어 문자를 만드는 규칙은 한 줄이다: **Shift를 먼저 적용해 문자를
-정한 뒤 `& 0x1F`.**
+Ctrl 제어 문자를 만드는 규칙은 한 줄이다: Shift를 먼저 적용해 문자를
+정한 뒤 `& 0x1F`.
 
 | 조합 | 문자 | 결과 | 뜻 |
 |---|---|---|---|
@@ -187,8 +187,8 @@ Ctrl 제어 문자를 만드는 규칙은 한 줄이다: **Shift를 먼저 적�
 
 다만 마스크는 문자가 0x40~0x7F일 때만 의미가 있다. `Ctrl+1`에 적용하면
 `0x31 & 0x1F = 0x11`(XON)이 나오는데 아무도 그런 뜻으로 쓰지 않는다.
-그래서 적용 대상을 **`a`~`z`, `@ [ \ ] ^ _`, Space, 그리고 예외로
-`?`→`0x7F`** 로 명시적으로 한정하고, 나머지는 Ctrl을 무시하고 원래 문자를
+그래서 적용 대상을 `a`~`z`, `@ [ \ ] ^ _`, Space, 그리고 예외로
+`?`→`0x7F` 로 명시적으로 한정하고, 나머지는 Ctrl을 무시하고 원래 문자를
 보낸다. xterm이 하는 것과 같다.
 
 ### 4. modifier는 물리 키 하나당 비트 하나
@@ -209,7 +209,7 @@ Ctrl 제어 문자를 만드는 규칙은 한 줄이다: **Shift를 먼저 적�
 (DEC Cursor Key Mode, 모드 1)이 켜졌는지에 달렸고, 그걸 켜는 것은 셸이
 보내는 `ESC [ ? 1 h`다.
 
-**그 시퀀스는 이미 우리가 파싱하고 있다.** `vt.zig`의 `Screen.feed`가
+그 시퀀스는 이미 우리가 파싱하고 있다. `vt.zig`의 `Screen.feed`가
 libghostty-vt에 먹이고, `terminal/ghostty-src/src/terminal/Terminal.zig:83`의
 `modes` 필드가 상태를 들고 있으며,
 `terminal/ghostty-src/src/terminal/modes.zig:288`에 `cursor_keys`(= 모드 1)가
@@ -236,13 +236,13 @@ pub const Context = struct {
 
 이유가 셋이다.
 
-1. **의존 방향이 단방향으로 유지된다.** 지금 `main.zig`만 다섯 모듈
+1. 의존 방향이 단방향으로 유지된다. 지금 `main.zig`만 다섯 모듈
    (`drm`/`font`/`input`/`pty`/`vt`)을 알고 그 다섯은 서로 모른다.
    `input → vt` 화살표를 그리면 이 성질이 깨지고, 다음에 `vt`가 무언가
    필요해지면 순환이 생긴다.
-2. **`input_test`가 혼자 돌 수 있다.** `terminal/build.zig:61-69`의
+2. `input_test`가 혼자 돌 수 있다. `terminal/build.zig:61-69`의
    `input_test_mod`는 libc만 링크하고 `ghostty-vt`를 붙이지 않는다.
-3. **bool 하나가 포인터보다 검증하기 쉽다.** 테스트에서
+3. bool 하나가 포인터보다 검증하기 쉽다. 테스트에서
    `ctx.cursor_keys = true`로 두 형태를 다 확인할 수 있다.
 
 대가는 `main.zig`의 루프가 매 키마다 `modes.get`을 호출한다는 것인데,
@@ -254,20 +254,20 @@ packed struct의 비트 읽기 한 번이라 값이 없다.
 (`init/main.c`의 `envp_init`)을 init이 물려주고, `pty.zig:41`이
 `execv`(환경 그대로 상속)를 쓰기 때문이다.
 
-**그런데 PTY 셸이 말을 거는 상대는 리눅스 콘솔이 아니라
-libghostty-vt다.** xterm 계열 에뮬레이터이고, `TERM=linux`와는 특수키
+그런데 PTY 셸이 말을 거는 상대는 리눅스 콘솔이 아니라
+libghostty-vt다. xterm 계열 에뮬레이터이고, `TERM=linux`와는 특수키
 시퀀스가 실제로 다르다 — Home이 linux terminfo에서는 `ESC [ 1 ~`,
 xterm terminfo(`khome`)에서는 `ESC O H`다. 우리가 어느 쪽을 보내든 한쪽은
 틀린다.
 
 (결정 5의 표에서 Home의 DECCKM 꺼짐 형태를 `ESC [ H`로 적은 것과 어긋나
-보일 수 있는데, 어긋난 것이 아니다. xterm terminfo의 `khome`은 **DECCKM
-켜짐 형태**를 등록해 두고 `smkx`로 그 모드를 켜는 구조다. 우리는 모드를
+보일 수 있는데, 어긋난 것이 아니다. xterm terminfo의 `khome`은 DECCKM
+켜짐 형태를 등록해 두고 `smkx`로 그 모드를 켜는 구조다. 우리는 모드를
 VT에서 되읽어 그때그때 맞는 쪽을 보내므로 양쪽 다 맞다.)
 
 그래서 `terminal`이 `forkpty` 직전에 `setenv("TERM", "xterm", 1)`을
 호출한다. `execv`가 환경을 상속하므로 fork 전에 고쳐두면 자식이 받는다.
-**시리얼 콘솔 셸의 `TERM`은 `linux` 그대로 둔다** — 그쪽은 진짜 커널
+시리얼 콘솔 셸의 `TERM`은 `linux` 그대로 둔다 — 그쪽은 진짜 커널
 콘솔이다. 같은 기계 안에서 두 셸의 `TERM`이 다른 것이 정상이다.
 
 `xterm-256color`가 아니라 `xterm`인 이유는 우리가 아직 색을 한 개도 그리지
@@ -277,7 +277,7 @@ VT에서 되읽어 그때그때 맞는 쪽을 보내므로 양쪽 다 맞다.)
 
 이에 따라 initrd에 `/usr/share/terminfo/x/xterm`이 필요하다.
 `ncurses-base` 패키지에 들어 있고, `project_build_host_arch`의 3번
-규칙대로 `devcontainer/Dockerfile`의 **아래쪽** `apt-get download :amd64`
+규칙대로 `devcontainer/Dockerfile`의 아래쪽 `apt-get download :amd64`
 목록에 추가해야 한다(`ncurses-base`는 arch: all이다).
 
 이것으로 HANDOFF의 "`TERM`/terminfo — 절반만 닫혔다" 숙제가 닫힌다.
@@ -287,18 +287,18 @@ VT에서 되읽어 그때그때 맞는 쪽을 보내므로 양쪽 다 맞다.)
 `Option+←`를 눌렀을 때 PTY에 무슨 바이트를 흘려보낼 것인가. 셋을
 검토했다.
 
-- **A안 — 셸이 이미 아는 제어 코드/시퀀스로 번역한다.** `Cmd+←` →
+- A안 — 셸이 이미 아는 제어 코드/시퀀스로 번역한다. `Cmd+←` →
   `0x01`(Ctrl+A) 같은 식. readline·zle·fish가 전부 기본값으로 아는
   것들이라 설정 없이 동작한다.
-- **B안 — 표준 특수키 시퀀스를 보내고 셸 쪽에 바인딩을 심는다.** 더
+- B안 — 표준 특수키 시퀀스를 보내고 셸 쪽에 바인딩을 심는다. 더
   "정직"하지만 셸마다 설정 파일이 세 벌 생기고, 게이트가
   `--no-config`/`--norc`/`-f`로 도는 현재 구조와 정면 충돌한다. 그
   플래그는 프롬프트를 예측 가능하게 만들려고 일부러 넣은 것이라 뺄 수
   없다.
-- **C안 — CSI u / modifyOtherKeys로 modifier를 인코딩해 넘긴다.** 애매함이
+- C안 — CSI u / modifyOtherKeys로 modifier를 인코딩해 넘긴다. 애매함이
   없는 현대적 방식이지만 받는 쪽이 지원해야 의미가 있다.
 
-**A안을 고른다. 결정적인 이유는 검증이다** — A안만이 "설정 파일 없는 셸
+A안을 고른다. 결정적인 이유는 검증이다 — A안만이 "설정 파일 없는 셸
 모두에서 즉시 동작"하고, 그건 곧 게이트가 화면 덤프로 증명할 수 있다는
 뜻이다. B안의 검증은 우리가 심은 설정을 검증하는 자기충족이 되고, C안은
 검증할 수신자가 없다.
@@ -313,7 +313,7 @@ VT에서 되읽어 그때그때 맞는 쪽을 보내므로 양쪽 다 맞다.)
 | Cmd+→ | `0x05` | end-of-line |
 | Cmd+Backspace | `0x15` | 줄 앞부분 삭제 |
 
-**알고 들어가는 어긋남 하나:** `0x15`(Ctrl+U)가 bash에서는 커서 앞까지만
+알고 들어가는 어긋남 하나: `0x15`(Ctrl+U)가 bash에서는 커서 앞까지만
 지우지만(`unix-line-discard`), zsh에서는 줄 전체를 지운다
 (`kill-whole-line`). macOS의 Cmd+Backspace는 bash 쪽 동작이다. 셸을 바꿔
 끼울 수 있는 시스템에서 이런 어긋남은 A안을 고른 대가이며, 감추지 않고
@@ -322,7 +322,7 @@ VT에서 되읽어 그때그때 맞는 쪽을 보내므로 양쪽 다 맞다.)
 
 ### 9. Alt ↔ Meta swap — `keyboard=apple|pc`
 
-PC 키보드와 Apple 키보드는 스페이스 옆 두 키의 **순서가 정확히 뒤집혀**
+PC 키보드와 Apple 키보드는 스페이스 옆 두 키의 순서가 정확히 뒤집혀
 있다.
 
 ```
@@ -332,11 +332,11 @@ PC:     [Ctrl] [Win]   [Alt]     [Space]
          29     125      56
 ```
 
-`keyboard=pc`일 때 하는 일은 **modifier 상태를 기록하기 전에 56↔125,
-100↔126을 맞바꾸는 것**뿐이다. 파이프라인 1단계 맨 앞에서 한 번 교환하면
+`keyboard=pc`일 때 하는 일은 modifier 상태를 기록하기 전에 56↔125,
+100↔126을 맞바꾸는 것뿐이다. 파이프라인 1단계 맨 앞에서 한 번 교환하면
 그 뒤 로직은 어느 키보드인지 전혀 몰라도 된다.
 
-설정 경로는 CP가 깔아둔 길을 **한 글자도 바꾸지 않고** 그대로 쓴다.
+설정 경로는 CP가 깔아둔 길을 한 글자도 바꾸지 않고 그대로 쓴다.
 
 ```
 /config/tars.conf ──읽는 것은 PID 1 하나뿐──> init/src/config.zig
@@ -349,7 +349,7 @@ PC:     [Ctrl] [Win]   [Alt]     [Space]
 
 `terminal`은 여전히 설정 파일을 읽지 않는다. CP가 "파서가 두 벌이 되면 두
 프로세스가 같은 파일에서 서로 다른 답을 얻을 수 있다"는 이유로 정한
-원칙이고, **이번이 그 구조가 두 번째 키에도 버티는지 보는 첫 시험이다.**
+원칙이고, 이번이 그 구조가 두 번째 키에도 버티는지 보는 첫 시험이다.
 
 argv 셋째 자리를 쓰는 것이 안전한 이유는 `terminal/src/main.zig:116`이
 셸에 넘기는 argv를 `{shell_path, shell_flag}` 둘로 따로 조립하기 때문이다
@@ -362,18 +362,18 @@ argv 셋째 자리를 쓰는 것이 안전한 이유는 `terminal/src/main.zig:1
 ### 10. 죽어 있던 테스트 바이너리 셋을 되살린다
 
 `terminal/build.zig`는 `pty_test`/`vt_test`/`input_test` 세 실행 파일을
-빌드하는데, **어느 게이트도 이것들을 실행하지 않는다.** `terminal/check.sh`는
+빌드하는데, 어느 게이트도 이것들을 실행하지 않는다. `terminal/check.sh`는
 `prepare.sh`(= `zig build`)만 부르고 끝난다. TF-M3 plan을 보면 당시엔 손으로
 `./zig-out/bin/input_test`를 돌렸는데, 그때는 컨테이너가 amd64였다.
-**ZM-M3에서 컨테이너를 arm64로 바꾼 뒤로는 실행 자체가 불가능하다** —
+ZM-M3에서 컨테이너를 arm64로 바꾼 뒤로는 실행 자체가 불가능하다 —
 x86_64 바이너리이기 때문이다.
 
 IP는 이 저장소에서 가장 표가 큰 작업이다. keymap 테이블, Ctrl 마스크 예외
 목록, 특수키 시퀀스 표, dispatch 표 — 오타 하나가 조용히 지나갈 자리가
 많다. 부팅 게이트만으로 다 덮으려면 부팅 시간이 감당되지 않는다.
 
-해결은 `project_build_host_arch`의 4번 규칙 그대로다: **호스트에서 도는
-도구는 호스트 아키텍처로 빌드한다.** `build.zig`에서 `terminal` 본체는
+해결은 `project_build_host_arch`의 4번 규칙 그대로다: 호스트에서 도는
+도구는 호스트 아키텍처로 빌드한다. `build.zig`에서 `terminal` 본체는
 지금처럼 x86_64로 고정하고, `*_test` 셋만 native 타깃으로 다시 빌드한다.
 컨테이너가 arm64 리눅스이므로 `@cImport("linux/input.h")`도 그대로 된다.
 그리고 `terminal/check.sh`가 이 셋을 실제로 실행하게 한다.
@@ -381,38 +381,38 @@ IP는 이 저장소에서 가장 표가 큰 작업이다. keymap 테이블, Ctrl
 이것이 IP-M0의 첫 Step이다. 새 기능을 얹기 전에 얹을 자리에 저울부터
 놓는 것이다.
 
-### 11. 네 번째 체인 `input/check.sh`, 부팅은 **한 번**
+### 11. 네 번째 체인 `input/check.sh`, 부팅은 한 번
 
 CP는 영속성을 증명해야 해서 QEMU를 두 번 띄웠지만, IP가 증명할 것은 전부
-한 세션 안에 있다. **부팅 한 번**이면 된다.
+한 세션 안에 있다. 부팅 한 번이면 된다.
 
 디스크는 물리지 않는다. `/config` mount가 실패하면 CP가 만든 폴백이 fish로
 떨어뜨려 주므로, IP 게이트는 그 폴백 경로를 덤으로 한 번 더 밟는다.
 
 CP의 `boot_once`/`type_keys` 구조를 그대로 빌려오되 monitor 포트는
-**45457**을 쓴다(BF/TF 45455, CP 45456). 죽다 만 QEMU에 엉뚱한 키를 보내지
+45457을 쓴다(BF/TF 45455, CP 45456). 죽다 만 QEMU에 엉뚱한 키를 보내지
 않으려는 CP의 이유가 그대로 적용된다.
 
 체인 디렉터리가 소스 디렉터리와 다른 것은 CP의 선례와 같다 — `config/`의
 체인이 검사하는 소스는 `init/`에 있다.
 
-#### 조정 (2026-08-19, IP-M2 착수 시점): 부팅은 **두 번**이 된다
+#### 조정 (2026-08-19, IP-M2 착수 시점): 부팅은 두 번이 된다
 
-위의 "부팅 한 번"은 틀렸다. 같은 문서의 **목표 5**가 "`keyboard=apple|pc`가
-Alt↔Meta 보정을 켜고 끄는 것이 **게이트로 증명된다**"고 적었는데, 디스크를
+위의 "부팅 한 번"은 틀렸다. 같은 문서의 목표 5가 "`keyboard=apple|pc`가
+Alt↔Meta 보정을 켜고 끄는 것이 게이트로 증명된다"고 적었는데, 디스크를
 안 물면 `/config` mount가 실패하고 `loadConfig`가 기본값을 돌려주므로
-**설정은 영원히 `apple`이다.** `pc` 경로를 게이트가 한 번도 밟지 못한다.
+설정은 영원히 `apple`이다. `pc` 경로를 게이트가 한 번도 밟지 못한다.
 
 이것은 `project_gate_chain_composition`이 IP-M1에서 기록한 "게이트가
-**구조적으로** 밟을 수 없는 경로"와 같은 병이다. 그런데 **처방이 다르다.**
+구조적으로 밟을 수 없는 경로"와 같은 병이다. 그런데 처방이 다르다.
 DECCKM은 우리가 켤 수 없는 것(셸이 `smkx`를 보내야 한다)이라 "호스트 단위
 검사가 대신 보고, 어느 쪽을 밟았는지 로그로 남긴다"로 갔지만, `keyboard=pc`는
-**파일 한 줄로 우리가 켤 수 있다.** 켤 수 있는 것을 안 켜고 "게이트가 못
+파일 한 줄로 우리가 켤 수 있다. 켤 수 있는 것을 안 켜고 "게이트가 못
 본다"고 적는 것은 게으름이지 구조적 한계가 아니다.
 
-비용이 작은 이유는 `mkfs.ext2 -d`다 — **내용이 이미 든 이미지**를 구우면
+비용이 작은 이유는 `mkfs.ext2 -d`다 — 내용이 이미 든 이미지를 구우면
 CP처럼 게스트에 타이핑해서 설정을 고칠 필요가 없다. 2차 부팅은 읽기만 한다
-(부팅 1회 ≈ 4초 + sendkey 25개). 디스크 없는 부팅은 **1차로 그대로 남으므로**
+(부팅 1회 ≈ 4초 + sendkey 25개). 디스크 없는 부팅은 1차로 그대로 남으므로
 위 문단이 말한 "폴백 경로를 덤으로 밟는다"는 성질도 유지된다.
 
 monitor 포트는 1·2차가 45457 하나를 공유한다 — CP가 45456으로 이미 그렇게
@@ -427,7 +427,7 @@ monitor 포트는 1·2차가 45457 하나를 공유한다 — CP가 45456으로 
 - `handleKey`를 `[]const u8` + `Context`로 전환 (결정 1)
 - modifier 8키 비트마스크 (결정 4)
 - Ctrl 제어 문자 (결정 3)
-- **Exit gate:** `input/check.sh` 신설. `sleep 100` 실행 중 `ctrl-c`를
+- Exit gate: `input/check.sh` 신설. `sleep 100` 실행 중 `ctrl-c`를
   보내고, 이어서 친 `echo ctrlc_ok`가 화면에 나타난다
 
 ### IP-M1 — 특수키와 `TERM`
@@ -436,24 +436,24 @@ monitor 포트는 1·2차가 45457 하나를 공유한다 — CP가 45456으로 
 - `main.zig`가 `modes.get(.cursor_keys)`를 `Context`에 채운다 (결정 6)
 - `setenv("TERM", "xterm", 1)` + `ncurses-base` terminfo를 initrd에
   (결정 7)
-- **Exit gate:** `echo abc`를 친 뒤 ← ←로 커서를 옮기고 `X`를 끼워 넣어
-  화면이 `echo aXbc`가 된다. `echo abcX`는 **없어야** 한다
+- Exit gate: `echo abc`를 친 뒤 ← ←로 커서를 옮기고 `X`를 끼워 넣어
+  화면이 `echo aXbc`가 된다. `echo abcX`는 없어야 한다
 
 ### IP-M2 — macOS 의미론
 
 - Option/Cmd dispatch 표 (결정 8)
 - `init/src/config.zig`에 `Keyboard` enum + argv 셋째 인자 (결정 9)
 - Alt↔Meta swap
-- **Exit gate:** bash 프롬프트에서 `echo foo bar`를 친 뒤 `alt-left`로
+- Exit gate: bash 프롬프트에서 `echo foo bar`를 친 뒤 `alt-left`로
   단어 이동해 `echo foo Xbar`, 이어서 `meta_l-left`로 줄 처음에 가서
   `Yecho foo Xbar`. 각각의 "없어야 할 것"(`echo foo barX`)도 함께 검사
 
-  **조정 (2026-08-19):** 게이트의 구체적 모양은 plan이 둘을 고쳤다.
-  (1) `Cmd+←`는 줄 처음에 `Y` 대신 **`echo `를 끼워 넣는다** — 위 모양은
+  조정 (2026-08-19): 게이트의 구체적 모양은 plan이 둘을 고쳤다.
+  (1) `Cmd+←`는 줄 처음에 `Y` 대신 `echo `를 끼워 넣는다 — 위 모양은
   `Yecho`가 실행돼 `command not found`가 되므로 "제대로 동작했다"의 화면
   증거가 없다. 끼워 넣는 것이 명령 자체가 되면 출력 행이 곧 증거다.
-  (2) "없어야 할 것"이 **둘**이다 — 아무것도 안 간 경우(`aa bbX`)와 **맨
-  ←가 샌 경우(`aa bXb`, IP-M1까지의 실제 동작)**. 후자를 안 보면 게이트가
+  (2) "없어야 할 것"이 둘이다 — 아무것도 안 간 경우(`aa bbX`)와 맨
+  ←가 샌 경우(`aa bXb`, IP-M1까지의 실제 동작). 후자를 안 보면 게이트가
   아무것도 증명하지 않는다. 자세한 것은
   `docs/superpowers/plans/2026-08-19-tars-input-policy-ip-m2.md` Task 5·6.
 
@@ -477,35 +477,35 @@ check.sh                ← 네 번째 체인 등록
 
 ## 미리 알고 들어가는 위험
 
-1. **QEMU `sendkey`가 `meta_l`을 실제로 게스트에 KEY_LEFTMETA로 전달하는지
-   확인되지 않았다.** QEMU의 `QKeyCode` enum에는 있지만 PS/2 스캔코드 →
+1. QEMU `sendkey`가 `meta_l`을 실제로 게스트에 KEY_LEFTMETA로 전달하는지
+   확인되지 않았다. QEMU의 `QKeyCode` enum에는 있지만 PS/2 스캔코드 →
    `atkbd` → evdev 경로를 실측하지 않았다. IP-M2의 첫 확인 대상이다.
    전달되지 않으면 `keyboard=pc` 쪽(=Alt를 Cmd로 취급)으로 게이트를
    돌리는 우회가 있다.
-2. **fish의 기본 바인딩이 결정 8의 표와 어긋날 수 있다.** readline과
+2. fish의 기본 바인딩이 결정 8의 표와 어긋날 수 있다. readline과
    zle는 문서로 확실하지만 fish는 자체 에디터다. 그래서 IP-M2의 게이트는
    프롬프트에서 `bash`를 쳐서 readline 지형으로 들어간 뒤 검사한다.
-3. **`ncurses-base`가 arch: all이라 `apt-get download ncurses-base:amd64`가
-   기대대로 동작하지 않을 수 있다.** arch-independent 패키지의 `:amd64`
+3. `ncurses-base`가 arch: all이라 `apt-get download ncurses-base:amd64`가
+   기대대로 동작하지 않을 수 있다. arch-independent 패키지의 `:amd64`
    지정은 apt 버전에 따라 다르게 처리된다.
-4. **DECCKM이 실제로 켜지는지 관측하지 못할 수 있다.** `--no-config`로
+4. DECCKM이 실제로 켜지는지 관측하지 못할 수 있다. `--no-config`로
    뜬 셸이 `smkx`를 보내지 않으면 `cursor_keys`가 계속 false이고, `ESC O`
    경로는 게이트가 한 번도 밟지 않는다. 그 경우는 `input_test`가 두 형태를
    모두 검사하는 것으로 대신하고, 게이트가 보지 못한다는 사실을 plan에
    명시한다.
-5. **타이핑이 길어지면 게이트 시간이 는다.** 현재 루트 게이트는 3체인
+5. 타이핑이 길어지면 게이트 시간이 는다. 현재 루트 게이트는 3체인
    12부팅에 14분 35초다. IP 체인은 부팅 자체는 ~4초지만 `sendkey` 한
    글자당 0.3초가 든다. CP가 3부팅에 81초를 더했고 IP는 글자가 더 많으니
    +4~6분을 예상한다. 필요하면 `sendkey` 간격을 줄이는 것이 첫 손잡이다.
 
 ## 검증 방법
 
-**검사는 화면 덤프의 명령줄 자체를 본다.** 실행 결과가 아니라 편집된 줄이
+검사는 화면 덤프의 명령줄 자체를 본다. 실행 결과가 아니라 편집된 줄이
 화면에 어떻게 그려졌는지가 증거다. `terminal/src/main.zig`의
 `dumpScreen`이 화면 전체를 `terminal: screen> ` 한 줄로 찍고 행을 ` | `로
 나누므로, 게이트는 그 줄을 grep한다.
 
-**"없어야 할 것"을 함께 검사한다.** 방향키가 통째로 무시돼도
+"없어야 할 것"을 함께 검사한다. 방향키가 통째로 무시돼도
 `echo abcX`는 멀쩡히 실행되므로 긍정 검사만으로는 구분이 안 된다.
 `project_gate_chain_composition`이 남긴 교훈 — 게이트는 자기가 안 보는
 것을 통과시킨다.
@@ -525,7 +525,7 @@ check.sh                ← 네 번째 체인 등록
 
 ## 협업 방식
 
-기존과 같다. 설명 먼저 → 파일 작성과 명령 실행은 **사용자가 직접** →
+기존과 같다. 설명 먼저 → 파일 작성과 명령 실행은 사용자가 직접 →
 결과를 Claude가 상세 해석. Claude는 design/plan 문서·`HANDOFF.md`·기억
 파일 작성과 승인된 내용의 git commit만 대신 수행한다.
 

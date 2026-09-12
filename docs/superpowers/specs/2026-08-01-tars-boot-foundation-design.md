@@ -1,7 +1,7 @@
 # TARS Boot Foundation — Design
 
-**Date:** 2026-08-01
-**Status:** Completed (BF-M0~M4 전부 완료, 2026-08-07)
+Date: 2026-08-01
+Status: Completed (BF-M0~M4 전부 완료, 2026-08-07)
 
 ## 배경
 
@@ -9,7 +9,7 @@ TARS는 이전 저장소(`tars.git`)에서 V0~V1 M12까지 진행했으나, 부�
 쌓인 자잘한 guest-evidence 수정(RC6~RC21: fbdev capture race, ptmx mknod,
 devpts mount point 등)이 근본 원인 이해 없이 누적되었다. 이 문서는 그 저장소를
 버리고 `git@github.com:soomtong/tars-linux.git`에 완전히 새로 시작하는 첫
-서브프로젝트, **Boot Foundation**의 설계를 다룬다.
+서브프로젝트, Boot Foundation의 설계를 다룬다.
 
 최종 비전(macOS 키바인딩 의미론, ghostty 기반 내장 terminal, Linux용
 homebrew 스타일 패키지 관리자, Claude Code/Codex 등 AI 코딩 도구 통합, 직접
@@ -58,11 +58,11 @@ QEMU는 `-kernel`/`-initrd` 같은 QEMU 전용 direct boot 경로를 쓰지 않�
 
 각 milestone은 다음 순서로 진행한다.
 
-1. **설명 먼저** — 지금 만들 것이 무엇이고 왜 필요한지 (예: kernel `.config`의
+1. 설명 먼저 — 지금 만들 것이 무엇이고 왜 필요한지 (예: kernel `.config`의
    특정 옵션이 왜 필요한지) 사전 설명
-2. **사용자가 직접 실행** — 명령 실행이나 코드 작성은 사용자가 직접 수행
+2. 사용자가 직접 실행 — 명령 실행이나 코드 작성은 사용자가 직접 수행
    (페어 프로그래밍)
-3. **결과 상세 설명** — 실행 후 무슨 일이 일어났는지, 왜 그렇게 동작했는지
+3. 결과 상세 설명 — 실행 후 무슨 일이 일어났는지, 왜 그렇게 동작했는지
    상세히 설명
 
 속도보다 이해를 우선한다. 각 milestone은 작은 학습 사이클로 취급한다.
@@ -71,45 +71,45 @@ QEMU는 `-kernel`/`-initrd` 같은 QEMU 전용 direct boot 경로를 쓰지 않�
 
 ### BF-M0 — 툴체인 기반선
 
-- **결과:** Docker Linux devcontainer에서 cross toolchain(gcc, binutils,
+- 결과: Docker Linux devcontainer에서 cross toolchain(gcc, binutils,
   xorriso, limine)이 준비되고, 최소 static ELF를 QEMU `-kernel` direct
   boot로 띄우는 sanity check 통과
-- **Exit gate:** QEMU serial 출력에서 sanity check 바이너리의 출력 확인
+- Exit gate: QEMU serial 출력에서 sanity check 바이너리의 출력 확인
 
 ### BF-M1 — 최소 kernel 자체 빌드
 
-- **결과:** kernel.org 소스를 자체 `.config`로 빌드한 `vmlinuz`가 QEMU
+- 결과: kernel.org 소스를 자체 `.config`로 빌드한 `vmlinuz`가 QEMU
   `-kernel`로 부팅되고, init을 찾지 못해 kernel panic 발생
-- **포함:** 최소 `.config` 구성(필요한 옵션만 하나씩 켜며 이해: 콘솔,
+- 포함: 최소 `.config` 구성(필요한 옵션만 하나씩 켜며 이해: 콘솔,
   virtio, devtmpfs 등)
-- **Exit gate:** QEMU serial에 kernel boot 로그와 "no init found" 계열
+- Exit gate: QEMU serial에 kernel boot 로그와 "no init found" 계열
   panic 메시지 확인 — 이는 실패가 아니라 "커널이 여기까지만 책임진다"는
   경계를 확인하는 의도된 gate
-- **제외:** init, bootloader
+- 제외: init, bootloader
 
 ### BF-M2 — 직접 만든 init (PID 1)
 
-- **결과:** Rust로 작성한 정적 바이너리 init이 PID 1로 실행되어 `/proc`,
+- 결과: Rust로 작성한 정적 바이너리 init이 PID 1로 실행되어 `/proc`,
   `/sys`, `devtmpfs`를 mount하고 shell을 실행
-- **포함:** initramfs(cpio) 패키징, QEMU `-kernel`/`-initrd` direct boot로
+- 포함: initramfs(cpio) 패키징, QEMU `-kernel`/`-initrd` direct boot로
   검증 (bootloader는 아직 도입하지 않음)
-- **Exit gate:** QEMU 콘솔에서 mount 결과와 shell prompt 확인
-- **제외:** bootloader, ISO
+- Exit gate: QEMU 콘솔에서 mount 결과와 shell prompt 확인
+- 제외: bootloader, ISO
 
 ### BF-M3 — 진짜 bootloader + hybrid ISO
 
-- **결과:** Limine 설정 + `xorriso`로 kernel+initramfs+limine을 담은 El
+- 결과: Limine 설정 + `xorriso`로 kernel+initramfs+limine을 담은 El
   Torito hybrid ISO 생성, QEMU `-cdrom out/tars.iso`로 부팅
-- **포함:** Limine config 작성, hybrid ISO 빌드 스크립트
-- **Exit gate:** `-kernel`/`-initrd` 없이 `-cdrom`만으로 BF-M2와 동일한
+- 포함: Limine config 작성, hybrid ISO 빌드 스크립트
+- Exit gate: `-kernel`/`-initrd` 없이 `-cdrom`만으로 BF-M2와 동일한
   shell prompt 도달
-- **제외:** 실머신 부팅
+- 제외: 실머신 부팅
 
 ### BF-M4 — 종료 게이트
 
-- **결과:** BF-M0~M3 전체를 재현 가능한 단일 스크립트로 묶고, 반복 실행해도
+- 결과: BF-M0~M3 전체를 재현 가능한 단일 스크립트로 묶고, 반복 실행해도
   매번 동일하게 shell prompt까지 도달
-- **Exit gate:** 스크립트 3회 연속 실행 성공 (일관성 확인)
+- Exit gate: 스크립트 3회 연속 실행 성공 (일관성 확인)
 
 ## 저장소 구조 (초기)
 

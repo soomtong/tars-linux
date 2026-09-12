@@ -1,51 +1,51 @@
 # HI-M1 — 실제로 한글을 칠 수 있게 된다
 
-**Date:** 2026-09-01
-**Design:** `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-**Status:** 착수 전
+Date: 2026-09-01
+Design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
+Status: 착수 전
 
 ## 이 milestone이 끝나면
 
-- **Shift+Space 하나로 한/영이 바뀐다.** `input.State`에 축이 하나 생기고
+- Shift+Space 하나로 한/영이 바뀐다. `input.State`에 축이 하나 생기고
   `Mode`와 직교한다(design 결정 5).
-- **두벌식으로 조합한 글자가 커서 자리에 보인다.** `vt.zig`의 `cells()`에 층이
+- 두벌식으로 조합한 글자가 커서 자리에 보인다. `vt.zig`의 `cells()`에 층이
   하나 늘고 순서는 `inverse → 매치 → 선택 → preedit → 커서`다(결정 4).
-- **확정된 음절이 UTF-8 세 바이트로 PTY에 나간다.** 확정을 유발하는 것의
+- 확정된 음절이 UTF-8 세 바이트로 PTY에 나간다. 확정을 유발하는 것의
   목록(결정 6)이 전부 선다 — 자모가 아닌 문자 키 · Enter · Tab · Esc ·
   방향키 · 한/영 전환 · copy mode 진입 · Ctrl·Alt·Meta 조합.
-- **Backspace가 조합 중이면 자모를 하나 뺀다.** 조합 중이 아니면 지금처럼
+- Backspace가 조합 중이면 자모를 하나 뺀다. 조합 중이 아니면 지금처럼
   DEL(0x7F)을 보낸다.
-- **게이트 체인이 아홉이 된다.** `hangul/check.sh`가 생기고 게이트가 대략 2분
+- 게이트 체인이 아홉이 된다. `hangul/check.sh`가 생기고 게이트가 대략 2분
   는다(design 결정 10).
 
-**아직 안 하는 것.** 자판은 두벌식 하나뿐이고 설정 파일도 안 건드린다(HI-M2).
+아직 안 하는 것. 자판은 두벌식 하나뿐이고 설정 파일도 안 건드린다(HI-M2).
 한/영 키 · CapsLock · tap-vs-hold도 안 한다(HI-M3).
 
-**편집도 Claude Code가 한다.** 이 서브프로젝트의 예외이고 근거는 design 실측
-7이다. **CC-M0의 규율을 그대로 쓴다** — 매 편집 뒤 `git diff --stat`으로 더한
+편집도 Claude Code가 한다. 이 서브프로젝트의 예외이고 근거는 design 실측
+7이다. CC-M0의 규율을 그대로 쓴다 — 매 편집 뒤 `git diff --stat`으로 더한
 줄과 지운 줄을 따로 세고, 지우는 편집은 `git diff | grep '^-'`로 내용을 직접
-읽는다. **`input.zig`·`vt.zig`·`main.zig`를 건드리는 Task는 diff를 사용자에게
-보여 준다**(HANDOFF의 협업 규율).
+읽는다. `input.zig`·`vt.zig`·`main.zig`를 건드리는 Task는 diff를 사용자에게
+보여 준다(HANDOFF의 협업 규율).
 
 ## 왜 이 순서인가
 
-**Task 1이 가장 크고 그것만 호스트에서 9.5초로 돌려볼 수 있다.** 한글 층의
+Task 1이 가장 크고 그것만 호스트에서 9.5초로 돌려볼 수 있다. 한글 층의
 분기 순서와 확정 목록이 이 milestone에서 가장 틀리기 쉬운 자리인데,
 `input_test`가 부팅 없이 전부 본다. HI-M0이 오토마타를 그렇게 세운 것과 같은
 이유다.
 
-**Task 2·3·4가 통로를 한 칸씩 잇는다.** `readKeys`(배치) → `vt.zig`(그리기) →
+Task 2·3·4가 통로를 한 칸씩 잇는다. `readKeys`(배치) → `vt.zig`(그리기) →
 `main.zig`(배선). 각각이 끝날 때마다 `zig build test`가 돌고, 뒤 단계가
 틀렸을 때 앞 단계를 의심할 필요가 없다.
 
-**Task 5의 게이트가 마지막이다.** 호스트 검사가 전부 통과한 뒤에 부팅한다 —
+Task 5의 게이트가 마지막이다. 호스트 검사가 전부 통과한 뒤에 부팅한다 —
 16분을 쓰기 전에 0.1초로 잡을 수 있는 실패를 먼저 잡는다.
 
 ## 착수 전에 확정한 것
 
 ### 1. `Action`은 확정된 글자를 못 나른다 — 그래서 통로를 하나 더 둔다
 
-조합을 끝내는 키는 **자기 몫의 결과를 따로 갖는다.**
+조합을 끝내는 키는 자기 몫의 결과를 따로 갖는다.
 
 | 조합 중에 누른 키 | 확정 | 그 키 자신의 결과 |
 |---|---|---|
@@ -55,15 +55,15 @@
 | Cmd+Shift+C | `한` | `.copy = .enter` |
 | Ctrl+C | `한` | `.bytes = "\x03"` |
 
-`Action`은 union이라 **하나만** 담는다. 세 variant 전부에 "앞에 붙은 글자가
-있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 **그 통로를 비우는 자리를
-한 곳으로 못 박는** 쪽을 고른다.
+`Action`은 union이라 하나만 담는다. 세 variant 전부에 "앞에 붙은 글자가
+있을 수 있다"를 지우는 것보다, 통로를 하나 더 두고 그 통로를 비우는 자리를
+한 곳으로 못 박는 쪽을 고른다.
 
 - `State.commit_buf` / `commit_len` — `handleKey`가 채운다.
 - `State.takeCommit()` — 가져가면 비워진다.
-- **`readKeys`가 `handleKey` 직후, 그 키의 바이트보다 먼저 비운다.**
+- `readKeys`가 `handleKey` 직후, 그 키의 바이트보다 먼저 비운다.
 
-**순서가 이 결정의 전부다.** 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서
+순서가 이 결정의 전부다. 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서
 빈 줄이 실행되고 글자는 다음 줄에 남는다.
 
 ### 2. `Action`의 새 variant는 payload가 없다
@@ -73,14 +73,14 @@ hangul,
 ```
 
 나르는 것은 "조합 중인 글자가 바뀌었을 수 있으니 다시 그려라"라는 사실
-하나뿐이다. **값은 `State.preedit()`이 준다** — 조합은 마지막 하나만 화면에
+하나뿐이다. 값은 `State.preedit()`이 준다 — 조합은 마지막 하나만 화면에
 남으므로 스크롤·copy처럼 순서대로 모을 것이 없다.
 
-**이 variant가 없으면 조합 중인 글자가 영영 화면에 안 나온다.** 자모 키는
+이 variant가 없으면 조합 중인 글자가 영영 화면에 안 나온다. 자모 키는
 PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서 `needs_redraw`가
 안 켜진다(`main.zig:838`).
 
-### 3. 한글 층은 copy 표 **뒤**, `chord()` **앞**이다
+### 3. 한글 층은 copy 표 뒤, `chord()` 앞이다
 
 | 자리 | 왜 |
 |---|---|
@@ -89,42 +89,42 @@ PTY로 아무것도 안 보내고 스크롤도 copy 명령도 안 만들어서 `
 | `chord()` 앞 | 결정 6의 목록에 Ctrl·Alt·Meta와 copy 진입이 있는데, `chord()`가 먼저 돌면 그 키들이 한글 층에 안 닿는다 |
 
 한글 층이 `null`을 돌려주면 그 키는 평소의 길(`chord` → `specialKey` →
-`keymap`)을 **한 글자도 안 바뀐 채** 간다. 확정만 해 두고 흘려보내는 것이
+`keymap`)을 한 글자도 안 바뀐 채 간다. 확정만 해 두고 흘려보내는 것이
 Ctrl·Alt·Meta 갈래의 전부다.
 
-### 4. 커서는 조합 중에 **두 칸**을 반전한다
+### 4. 커서는 조합 중에 두 칸을 반전한다
 
-한글은 16픽셀, 곧 두 칸이다(HI-M0 실측 4). **한 칸만 반전하면 글자의 오른쪽
-절반이 어두운 바탕에 어두운 색으로 그려져 사라진다** — `drawGlyph`가 셀
+한글은 16픽셀, 곧 두 칸이다(HI-M0 실측 4). 한 칸만 반전하면 글자의 오른쪽
+절반이 어두운 바탕에 어두운 색으로 그려져 사라진다 — `drawGlyph`가 셀
 하나의 `fg`로 16픽셀을 통째로 찍기 때문이다(`main.zig:155`).
 
-두 칸이 함께 밝아야 조합 중인 글자가 통째로 보이고, **게이트도 그 둘을 셀 수
-있다**: 반전 셀이 1개(평소 커서) → 2개(조합 중)로 갈린다.
+두 칸이 함께 밝아야 조합 중인 글자가 통째로 보이고, 게이트도 그 둘을 셀 수
+있다: 반전 셀이 1개(평소 커서) → 2개(조합 중)로 갈린다.
 
-**커서가 마지막 열이면 오른쪽 칸이 없다.** 그 프레임에서는 한 칸만 반전되고
+커서가 마지막 열이면 오른쪽 칸이 없다. 그 프레임에서는 한 칸만 반전되고
 글리프의 오른쪽 절반이 격자 밖 여백에 그려진다. `drawGlyph`가 프레임버퍼
-경계를 검사하므로(`main.zig:64-74`) 게스트가 죽지는 않는다. **줄바꿈을 하지
-않는 것이 의도다** — 조합 중인 글자는 아직 화면의 내용이 아니다.
+경계를 검사하므로(`main.zig:64-74`) 게스트가 죽지는 않는다. 줄바꿈을 하지
+않는 것이 의도다 — 조합 중인 글자는 아직 화면의 내용이 아니다.
 
 ### 5. 조합 중에는 폭을 조건부로 재지 않는다
 
 HI-M0 실측 4가 근거다. 초성만(`ㄱ` 9×9)이든 완성형(`갓` 14×14)이든
-`cell_width`가 전부 16이다. **조합하는 내내 폭이 안 바뀌므로** 커서 뒤의
+`cell_width`가 전부 16이다. 조합하는 내내 폭이 안 바뀌므로 커서 뒤의
 글자가 밀렸다 당겨지는 일이 없고, `cells()`가 언제나 두 칸을 반전하면 된다.
 
 ### 6. `hangul_buf`가 비지 않았으면 `hangul_on`이 반드시 참이다
 
-한/영을 끄는 자리가 **먼저 확정하기 때문에** 성립하는 불변식이다. 이것이
+한/영을 끄는 자리가 먼저 확정하기 때문에 성립하는 불변식이다. 이것이
 서 있으므로 `hangulLayer`가 `if (!self.hangul_on) return null;` 한 줄로
 한글이 꺼진 경우를 통째로 빠져나갈 수 있다 — 꺼져 있는데 조합이 남아 있는
 상태를 따로 다룰 필요가 없다.
 
 ### 7. Shift+Space를 고른 대가를 적어 둔다
 
-**대문자를 이어 치다가 Shift를 누른 채 공백을 치면 한/영이 바뀐다.**
+대문자를 이어 치다가 Shift를 누른 채 공백을 치면 한/영이 바뀐다.
 `HELLO WORLD`를 칠 때 흔한 손버릇이다. design 결정 7이 전환 키를 다중
 선택으로 만들어 두었고 HI-M3이 나머지 셋(한/영 키 · 짧은 CapsLock · 짧은 왼쪽
-Ctrl)을 더하므로, **그때 Shift+Space를 끌 수 있게 된다.** 지금은 게이트가
+Ctrl)을 더하므로, 그때 Shift+Space를 끌 수 있게 된다. 지금은 게이트가
 보낼 수 있는 유일한 전환 키라 이것으로 시작한다(HI-M0 실측 1이 `lang1`을
 막았다).
 
@@ -132,23 +132,23 @@ Ctrl)을 더하므로, **그때 Shift+Space를 끌 수 있게 된다.** 지금�
 
 게스트에 `LANG`도 `LC_ALL`도 설정하는 코드가 없다(`rg 'LANG|LC_ALL|locale'
 init/src kernel/make_initrd.sh`가 빈 결과다). C 로케일의 fish가 UTF-8 세
-바이트를 그대로 되울리는지는 **부팅해서 봐야 안다.**
+바이트를 그대로 되울리는지는 부팅해서 봐야 안다.
 
-**그래서 게이트의 뼈대는 셸에 안 기댄다.** 확정된 바이트가 나갔다는 것은
+그래서 게이트의 뼈대는 셸에 안 기댄다. 확정된 바이트가 나갔다는 것은
 `terminal: key> 4 byte(s)` 한 줄이 증명한다 — 우리 프로세스가 PTY에 무엇을
-썼는지는 셸이 그것으로 무엇을 하든 상관없이 우리가 안다. **셸의 되울림은
+썼는지는 셸이 그것으로 무엇을 하든 상관없이 우리가 안다. 셸의 되울림은
 Task 5 Step 1에서 실측하고, 되울리면 검사 7을 넣고 안 되울리면 그 사실을
-숙제로 적는다.**
+숙제로 적는다.
 
 ---
 
 ## Task 1 — 한글 층을 `input.zig`에 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig`
 - Modify: `terminal/src/input_test.zig`
 
-**이 Task가 이 milestone의 절반이다.** 그리고 전부 호스트에서 9.5초에 돈다.
+이 Task가 이 milestone의 절반이다. 그리고 전부 호스트에서 9.5초에 돈다.
 
 ### Step 1: `hangul.zig`를 import한다
 
@@ -165,7 +165,7 @@ const std = @import("std");
 const hangul = @import("hangul.zig");
 ```
 
-**`vt.zig`가 아니라 `hangul.zig`인 것이 요점이다.** IP design 결정 6("input.zig는
+`vt.zig`가 아니라 `hangul.zig`인 것이 요점이다. IP design 결정 6("input.zig는
 vt.zig를 import하지 않는다")은 그대로 유효하다 — `hangul.zig`는 시스템 콜도
 `vt.zig`도 `drm.zig`도 안 보는 순수 계산이라 `input_test`가 그것을 끌고 와도
 빌드가 안 무거워진다(HI design 결정 1).
@@ -211,13 +211,13 @@ pub const Action = union(enum) {
 };
 ```
 
-**이 한 줄이 배선할 자리를 알려준다.** `input_test.zig`의 헬퍼 셋이 `Action`을
+이 한 줄이 배선할 자리를 알려준다. `input_test.zig`의 헬퍼 셋이 `Action`을
 `else` 없이 switch하고 있으므로 여기서 컴파일 에러가 셋 난다 — CM-M0부터 지켜
 온 규율이다.
 
 ### Step 3: `State`에 한글 상태 셋을 더한다
 
-`terminal/src/input.zig:352` (`copies` 필드 **뒤**, `mode` 필드 **앞**)
+`terminal/src/input.zig:352` (`copies` 필드 뒤, `mode` 필드 앞)
 
 넣을 것:
 ```zig
@@ -249,7 +249,7 @@ pub const Action = union(enum) {
 
 ### Step 4: 확정과 조회를 하는 함수 넷을 더한다
 
-`terminal/src/input.zig`의 `State` 안, `chord` 정의 **앞**에 넣는다.
+`terminal/src/input.zig`의 `State` 안, `chord` 정의 앞에 넣는다.
 
 넣을 것:
 ```zig
@@ -388,10 +388,10 @@ pub const Action = union(enum) {
 
 ### Step 6: `input_test.zig`의 헬퍼 셋에 갈래를 더한다
 
-**세 자리 전부 컴파일 에러로 잡힌다.** 아래 셋을 각 switch의 마지막 갈래로
+세 자리 전부 컴파일 에러로 잡힌다. 아래 셋을 각 switch의 마지막 갈래로
 넣는다.
 
-`expectCtx`의 `.copy` 갈래 **뒤**에 넣을 것:
+`expectCtx`의 `.copy` 갈래 뒤에 넣을 것:
 ```zig
         .hangul => {
             std.debug.print(
@@ -402,7 +402,7 @@ pub const Action = union(enum) {
         },
 ```
 
-`expectCopy`의 `.scroll` 갈래 **뒤**에 넣을 것:
+`expectCopy`의 `.scroll` 갈래 뒤에 넣을 것:
 ```zig
         .hangul => {
             std.debug.print(
@@ -413,7 +413,7 @@ pub const Action = union(enum) {
         },
 ```
 
-`expectScroll`의 `.copy` 갈래 **뒤**에 넣을 것:
+`expectScroll`의 `.copy` 갈래 뒤에 넣을 것:
 ```zig
         .hangul => {
             std.debug.print(
@@ -426,7 +426,7 @@ pub const Action = union(enum) {
 
 ### Step 7: 한글용 헬퍼 셋을 더한다
 
-`input_test.zig`의 `expectScroll` **뒤**에 넣을 것:
+`input_test.zig`의 `expectScroll` 뒤에 넣을 것:
 ```zig
 /// 한글 층이 이 키를 처리하기를 기대한다(HI-M1). **바이트가 오면 실패다** —
 /// 그것이 곧 "조합 중인 자모가 PTY로 샜다"이고, 이 milestone의 가장 흔한
@@ -497,7 +497,7 @@ fn expectPreedit(state: *input.State, code: u16, want: ?u21) !void {
 ### Step 8: 검사 여섯을 더한다
 
 `input_test.zig`의 `std.debug.print("input_test: copy mode OK\n", .{});`
-**뒤**, `PASS` **앞**에 넣을 것:
+뒤, `PASS` 앞에 넣을 것:
 ```zig
     // ── HI-M1: 한글 ───────────────────────────────────────────────────
 
@@ -626,7 +626,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 Expected: `input_test: hangul OK`가 새로 나오고 `PASS`. `vt_test`·`font_test`·
 `hangul_test`의 기존 출력은 한 줄도 안 바뀐다.
 
-**`hangul_test`의 출력이 안 바뀌는 것이 신호다.** 이 Task는 오토마타를 한
+`hangul_test`의 출력이 안 바뀌는 것이 신호다. 이 Task는 오토마타를 한
 글자도 안 건드렸다.
 
 ### Step 10: diff를 확인하고 커밋
@@ -637,9 +637,9 @@ git diff --stat terminal/src/input.zig terminal/src/input_test.zig
 git diff terminal/src/input.zig | grep '^-' | grep -v '^---'
 ```
 Expected: 지운 줄은 Step 1·2·5가 대체한 것들뿐이다(`const std` 한 줄 ·
-`Action` 정의 여섯 줄 · 주석 한 줄). **그 밖의 줄이 지워졌으면 멈춘다.**
+`Action` 정의 여섯 줄 · 주석 한 줄). 그 밖의 줄이 지워졌으면 멈춘다.
 
-**diff를 사용자에게 보여 준 뒤** 커밋한다.
+diff를 사용자에게 보여 준 뒤 커밋한다.
 
 ```bash
 git add terminal/src/input.zig terminal/src/input_test.zig
@@ -650,9 +650,9 @@ git commit -m "Compose hangul in the input layer"
 
 ## Task 2 — `readKeys`가 확정된 글자를 먼저 내보낸다
 
-**Files:** Modify `terminal/src/input.zig`
+Files: Modify `terminal/src/input.zig`
 
-**이 Task가 순서 계약을 코드로 만든다.** Task 1은 `commit_buf`를 채우기만
+이 Task가 순서 계약을 코드로 만든다. Task 1은 `commit_buf`를 채우기만
 했고 아무도 안 비웠다.
 
 ### Step 1: `Keys`에 필드를 하나 더한다
@@ -756,7 +756,7 @@ git commit -m "Compose hangul in the input layer"
 
 ### Step 4: `.hangul` 갈래를 더하고 반환에 실어 보낸다
 
-`terminal/src/input.zig:772` (`.copy` 갈래 **뒤**)
+`terminal/src/input.zig:772` (`.copy` 갈래 뒤)
 
 지울 것:
 ```zig
@@ -799,7 +799,7 @@ Run:
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'
 ```
-Expected: 출력이 Task 1과 **한 글자도 안 다르다.** `readKeys`를 부르는 검사가
+Expected: 출력이 Task 1과 한 글자도 안 다르다. `readKeys`를 부르는 검사가
 없기 때문이고, 그것이 이 Task를 게이트가 보아야 하는 이유다(Task 5).
 
 ### Step 6: diff를 확인하고 커밋
@@ -811,7 +811,7 @@ git diff terminal/src/input.zig | grep '^-' | grep -v '^---'
 ```
 Expected: 지운 줄은 위 셋이 대체한 것들뿐이다.
 
-**diff를 사용자에게 보여 준 뒤** 커밋한다.
+diff를 사용자에게 보여 준 뒤 커밋한다.
 
 ```bash
 git add terminal/src/input.zig
@@ -822,13 +822,13 @@ git commit -m "Send the committed syllable before the key that ended it"
 
 ## Task 3 — 조합 중인 글자를 커서 자리에 그린다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig`
 - Modify: `terminal/src/vt_test.zig`
 
 ### Step 1: `Screen`에 필드를 하나 더한다
 
-`terminal/src/vt.zig:152` (`copy_pruned` 필드 **뒤**)
+`terminal/src/vt.zig:152` (`copy_pruned` 필드 뒤)
 
 넣을 것:
 ```zig
@@ -849,7 +849,7 @@ git commit -m "Send the committed syllable before the key that ended it"
 
 ### Step 2: setter를 더한다
 
-`terminal/src/vt.zig:535` (`defaultBg` **뒤**, `pub const Cursor` **앞**)
+`terminal/src/vt.zig:535` (`defaultBg` 뒤, `pub const Cursor` 앞)
 
 넣을 것:
 ```zig
@@ -863,7 +863,7 @@ git commit -m "Send the committed syllable before the key that ended it"
     }
 ```
 
-**`copyExit`에서 안 지운다.** copy mode에 들어가는 순간 `input.zig`가 이미
+`copyExit`에서 안 지운다. copy mode에 들어가는 순간 `input.zig`가 이미
 확정했고(design 결정 6), `main.zig`가 그 결과로 `setPreedit(null)`을 부른다.
 여기서 또 지우면 같은 사실을 두 곳이 관리하게 된다.
 
@@ -942,13 +942,13 @@ git commit -m "Send the committed syllable before the key that ended it"
                 }
 ```
 
-**아래 `if (cp == 0 and bg == default_bg) continue;`는 안 고친다.** preedit이
+아래 `if (cp == 0 and bg == default_bg) continue;`는 안 고친다. preedit이
 얹힌 셀은 `cp`가 0이 아니라 저절로 내보내지고, 오른쪽 칸은 글자가 없어도
 반전되어 `bg`가 기본과 달라 역시 내보내진다.
 
 ### Step 5: `vt_test`에 검사 셋을 더한다
 
-`vt_test.zig`의 `PASS` **앞**에 넣을 것:
+`vt_test.zig`의 `PASS` 앞에 넣을 것:
 ```zig
     // ── HI-M1: 조합 중인 글자 ─────────────────────────────────────────
     //
@@ -1041,8 +1041,8 @@ Run:
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'
 ```
-Expected: `vt_test: preedit OK`가 새로 나오고 `PASS`. **기존 `vt_test` 출력이
-한 줄도 안 바뀌어야 한다** — preedit이 null인 동안 `cells()`의 결과가 전과
+Expected: `vt_test: preedit OK`가 새로 나오고 `PASS`. 기존 `vt_test` 출력이
+한 줄도 안 바뀌어야 한다 — preedit이 null인 동안 `cells()`의 결과가 전과
 같다는 뜻이고, `span`이 1로 남는 것을 44개의 기존 검사가 함께 본다.
 
 ### Step 7: diff를 확인하고 커밋
@@ -1054,7 +1054,7 @@ git diff terminal/src/vt.zig | grep '^-' | grep -v '^---'
 ```
 Expected: 지운 줄은 Step 3의 두 줄과 Step 4의 아홉 줄뿐이다.
 
-**diff를 사용자에게 보여 준 뒤** 커밋한다.
+diff를 사용자에게 보여 준 뒤 커밋한다.
 
 ```bash
 git add terminal/src/vt.zig terminal/src/vt_test.zig
@@ -1065,11 +1065,11 @@ git commit -m "Draw the composing syllable at the cursor"
 
 ## Task 4 — `main.zig`가 둘을 잇는다
 
-**Files:** Modify `terminal/src/main.zig`
+Files: Modify `terminal/src/main.zig`
 
 ### Step 1: `dumpHangul`을 더한다
 
-`terminal/src/main.zig:453` (`dumpFind` **뒤**, `dumpOverlay` **앞**)
+`terminal/src/main.zig:453` (`dumpFind` 뒤, `dumpOverlay` 앞)
 
 넣을 것:
 ```zig
@@ -1143,7 +1143,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 ```
 Expected: 빌드가 통과하고 호스트 검사 출력이 Task 3과 같다.
 
-**`zig build`를 따로 부르는 것에 뜻이 있다.** `zig build test`는 호스트 검사
+`zig build`를 따로 부르는 것에 뜻이 있다. `zig build test`는 호스트 검사
 넷만 만들고 게스트 바이너리를 안 만든다 — `main.zig`의 실수는 그쪽에서만
 잡힌다.
 
@@ -1156,7 +1156,7 @@ git diff terminal/src/main.zig | grep '^-' | grep -v '^---'
 ```
 Expected: 지운 줄은 Step 2가 대체한 세 줄뿐이다.
 
-**diff를 사용자에게 보여 준 뒤** 커밋한다.
+diff를 사용자에게 보여 준 뒤 커밋한다.
 
 ```bash
 git add terminal/src/main.zig
@@ -1167,13 +1167,13 @@ git commit -m "Wire the composing syllable to the screen"
 
 ## Task 5 — 게이트 체인 `hangul/check.sh`
 
-**Files:**
+Files:
 - Create: `hangul/check.sh`
 - Modify: `check.sh`
 
 ### Step 1: 먼저 손으로 한 번 부팅해서 로그를 읽는다 (Claude가 실행, 약 4분)
 
-**게이트의 기대값을 짐작으로 적지 않는다.** 특히 확정 전 실측 8(셸이 한글을
+게이트의 기대값을 짐작으로 적지 않는다. 특히 확정 전 실측 8(셸이 한글을
 되울리는가)이 여기서 답을 얻는다.
 
 Claude가 `/tmp/hi-m1-probe.sh`를 만들어 컨테이너 안에서 돌린다.
@@ -1232,23 +1232,23 @@ awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", b
   grep -a 'terminal: style>'
 ```
 
-**읽는 것 넷.**
+읽는 것 넷.
 
 1. `hangul> on=true preedit=ㄱ` → `가` → `갓` 순으로 나오는가.
-2. `갓`을 조합하는 동안 `key>` 줄이 **안 늘었는가**(음성 검사의 근거).
+2. `갓`을 조합하는 동안 `key>` 줄이 안 늘었는가(음성 검사의 근거).
 3. Enter 뒤 `terminal: key> 4 byte(s)`가 나오는가 — 확정된 세 바이트와 CR
-   하나가 **한 번의 write로** 나갔다는 증명이다.
-4. **마지막 프레임의 `screen>`에 `갓`이 몇 번 나오는가.** 두 번이면 셸이
+   하나가 한 번의 write로 나갔다는 증명이다.
+4. 마지막 프레임의 `screen>`에 `갓`이 몇 번 나오는가. 두 번이면 셸이
    한글을 되울린 것이고(명령줄 + 출력줄) 검사 7을 게이트에 넣는다. 안
-   나오거나 깨져 나오면 **그것이 실측이고** 검사 7 대신 그 사실을 design에
+   나오거나 깨져 나오면 그것이 실측이고 검사 7 대신 그 사실을 design에
    숙제로 적는다(확정 전 실측 8).
 
-**`out/`은 gitignore이고, 루트 게이트를 돌리면 `clean()`이 통째로 지운다**
+`out/`은 gitignore이고, 루트 게이트를 돌리면 `clean()`이 통째로 지운다
 (`check.sh:15`). 그래서 Task 6보다 먼저 여기서 읽어 둔다.
 
 ### Step 2: `hangul/check.sh`를 만든다
 
-**100줄이 넘으므로 Claude가 `/tmp/hangul_check.sh`에 만들어 둔다.**
+100줄이 넘으므로 Claude가 `/tmp/hangul_check.sh`에 만들어 둔다.
 
 ```bash
 mkdir -p hangul
@@ -1596,7 +1596,7 @@ echo "latin input is back"
 echo "HI check PASS"
 ```
 
-**검사 7이 원래 자리에 없다.** Step 1의 실측 4가 "셸이 한글을 되울린다"로
+검사 7이 원래 자리에 없다. Step 1의 실측 4가 "셸이 한글을 되울린다"로
 나오면, 검사 6 뒤에 아래를 끼워 넣고 번호를 하나씩 민다.
 
 ```bash
@@ -1640,7 +1640,7 @@ fi
 ```
 
 그리고 `check.sh`의 체인 설명 주석 끝(`# 이 체인이 더하는 비용의 대부분은 ...`
-문단 **뒤**, `# 이름과 경로를 한 곳에 모은다.` **앞**)에 넣을 것:
+문단 뒤, `# 이름과 경로를 한 곳에 모은다.` 앞)에 넣을 것:
 
 ```
 # HI 체인은 한글 입력을 본다. CM 체인과 판정 도구가 같다 — `key>` 줄 개수의
@@ -1657,7 +1657,7 @@ fi
 
 ### Step 4: 체인 하나만 먼저 돌린다 (Claude가 실행, 약 6분)
 
-**루트 게이트 18분을 쓰기 전에 이 체인만 3회 돌린다.**
+루트 게이트 18분을 쓰기 전에 이 체인만 3회 돌린다.
 
 Run:
 ```bash
@@ -1670,7 +1670,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ```
 Expected: `HI check PASS`가 세 번 나온다.
 
-**3회를 도는 이유는 flakiness다.** 타이핑이 게스트의 응답을 기다리는 구조라
+3회를 도는 이유는 flakiness다. 타이핑이 게스트의 응답을 기다리는 구조라
 (GL-M2) 한 번 통과한 것이 다음에도 통과한다는 보장이 없다.
 
 ### Step 5: 커밋
@@ -1686,7 +1686,7 @@ git commit -m "Add the hangul gate chain"
 
 ### Step 1: 돌린다 (Claude가 실행, 약 18분)
 
-**Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.**
+Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.
 
 Run:
 ```bash
@@ -1696,11 +1696,11 @@ Expected: `TARS check PASS: all chains 3/3 consecutive runs succeeded`
 
 ### Step 2: 걸린 시간을 적어 둔다
 
-기준선은 HI-M0의 **16분 37.07초**(여덟 체인)이고, GL-M3의 16분 01~11초와
-CC-M0의 16분 48.91초가 그 옆에 있다. **체인 하나에 약 2분이라는 design
-결정 10의 셈이 여기서 처음 검증된다.**
+기준선은 HI-M0의 16분 37.07초(여덟 체인)이고, GL-M3의 16분 01~11초와
+CC-M0의 16분 48.91초가 그 옆에 있다. 체인 하나에 약 2분이라는 design
+결정 10의 셈이 여기서 처음 검증된다.
 
-**잡음이 ±3분이라는 것을 잊지 않는다.** 18분대가 나와도 "2분 늘었다"고
+잡음이 ±3분이라는 것을 잊지 않는다. 18분대가 나와도 "2분 늘었다"고
 단정할 수 없다 — 갈렸다고 말하려면 GL-M2의 실측 1처럼 두 삼중값의 폭이 안
 겹쳐야 한다. 값만 적고 판단은 보수적으로 쓴다.
 
@@ -1708,43 +1708,43 @@ CC-M0의 16분 48.91초가 그 옆에 있다. **체인 하나에 약 2분이라�
 
 ## Task 7 — 문서를 맞춘다
 
-**Files:** design doc · `HANDOFF.md` · `MEMORY.md` · `docs/decisions/`
+Files: design doc · `HANDOFF.md` · `MEMORY.md` · `docs/decisions/`
 
 ### Step 1: design doc을 고친다
 
 `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
 
-- `Status:` 줄을 **HI-M1 완료**로 바꾸고 plan 경로를 더한다.
-- **"HI-M1이 실측한 것"** 절을 만든다. 적을 것 넷.
-  1. 셸이 한글을 되울리는가 (Task 5 Step 1의 실측 4). **안 되울리면 그것이
-     HI-M2 이후의 숙제이고, 원인이 로케일이라는 것까지 적는다.**
+- `Status:` 줄을 HI-M1 완료로 바꾸고 plan 경로를 더한다.
+- "HI-M1이 실측한 것" 절을 만든다. 적을 것 넷.
+  1. 셸이 한글을 되울리는가 (Task 5 Step 1의 실측 4). 안 되울리면 그것이
+     HI-M2 이후의 숙제이고, 원인이 로케일이라는 것까지 적는다.
   2. 게이트 시간과 체인 하나의 실제 비용 (Task 6).
   3. `Action`을 넓히는 대신 통로를 하나 더 둔 결정과 그 근거(확정 전 실측 1).
-     **design 결정 6이 "확정 목록"만 적고 "어떻게 내보내는가"를 안 적었으므로
-     그 자리를 여기서 메운다.**
+     design 결정 6이 "확정 목록"만 적고 "어떻게 내보내는가"를 안 적었으므로
+     그 자리를 여기서 메운다.
   4. 커서가 두 칸을 반전하는 이유(확정 전 실측 4).
-- **결정 4에 두 칸 반전을 한 줄 더한다.** 지금은 "커서 칸과 그 오른쪽 칸을
-  함께 먹는다"까지만 적혀 있고 **왜 반전까지 두 칸인지**가 없다.
+- 결정 4에 두 칸 반전을 한 줄 더한다. 지금은 "커서 칸과 그 오른쪽 칸을
+  함께 먹는다"까지만 적혀 있고 왜 반전까지 두 칸인지가 없다.
 
 ### Step 2: `HANDOFF.md`를 고친다
 
-- 맨 위를 **"HI-M1이 끝났다"**로 바꾸고 다음 세션의 첫 일을 HI-M2의 plan으로
+- 맨 위를 "HI-M1이 끝났다"로 바꾸고 다음 세션의 첫 일을 HI-M2의 plan으로
   적는다.
-- **"HI-M1이 실행으로 증명한 것 — 다시 조사하지 말 것"** 절을 만든다.
-- **"copy mode가 지금 할 수 있는 것" 표 옆에 한글 표를 하나 만든다** —
+- "HI-M1이 실행으로 증명한 것 — 다시 조사하지 말 것" 절을 만든다.
+- "copy mode가 지금 할 수 있는 것" 표 옆에 한글 표를 하나 만든다 —
   Shift+Space · 두벌식 · Backspace · 확정을 유발하는 것들.
 - 게이트 체인이 아홉이 됐다는 것과 새 시간을 적는다.
 
 ### Step 3: 기억을 고친다
 
-`docs/decisions/project_hangul_input.md`에 HI-M1 절을 더한다. **새 파일을
-만들지 않는다** — 같은 서브프로젝트다.
+`docs/decisions/project_hangul_input.md`에 HI-M1 절을 더한다. 새 파일을
+만들지 않는다 — 같은 서브프로젝트다.
 
 ### Step 4: `CLAUDE.md`
 
-**서브프로젝트가 아직 안 끝났다**(HI-M2·M3이 남았다). 완료 목록은 안 고치고,
-"진행 중인 서브프로젝트: Hangul Input(HI)" 줄의 **"HI-M0 완료"를 "HI-M1
-완료"로만** 고친다.
+서브프로젝트가 아직 안 끝났다(HI-M2·M3이 남았다). 완료 목록은 안 고치고,
+"진행 중인 서브프로젝트: Hangul Input(HI)" 줄의 "HI-M0 완료"를 "HI-M1
+완료"로만 고친다.
 
 ### Step 5: 커밋
 

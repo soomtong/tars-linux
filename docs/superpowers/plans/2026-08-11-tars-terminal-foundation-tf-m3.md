@@ -1,32 +1,32 @@
 # TF-M3 (evdev 키보드 입력) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **이 저장소(tars-linux)는 예외:** `CLAUDE.md`에 명시된 대로 파일 작성과 명령
-> 실행은 **사용자가 직접** 하고, Claude는 설명 + 승인된 내용의 git commit만
+> 이 저장소(tars-linux)는 예외: `CLAUDE.md`에 명시된 대로 파일 작성과 명령
+> 실행은 사용자가 직접 하고, Claude는 설명 + 승인된 내용의 git commit만
 > 수행하는 pairing 방식을 쓴다. 위 서브스킬들이 기본으로 제안하는
 > subagent-driven/inline 자동 실행은 이 저장소에 적용하지 않는다
 > (`docs/decisions/feedback_commit_delegation.md`,
 > `docs/decisions/feedback_execution_scope.md` 참고 — 색인은 `MEMORY.md`).
 
-**Goal:** 커널에 evdev + i8042(PS/2) 키보드 경로를 켜고, Terminal Foundation
+Goal: 커널에 evdev + i8042(PS/2) 키보드 경로를 켜고, Terminal Foundation
 앱이 `/dev/input/event0`에서 키 이벤트를 읽어 PTY master로 써 넣고, 그
-결과로 돌아온 출력을 다시 파싱해 프레임버퍼를 갱신하는 **이벤트 루프**를
+결과로 돌아온 출력을 다시 파싱해 프레임버퍼를 갱신하는 이벤트 루프를
 만든다. 최종적으로 QEMU monitor `sendkey`로 주입한 타이핑이 대화형 `fish`를
 움직이고 그 결과가 화면에 나타나는 것을 자동 검증한다. (Terminal Foundation
 MVP 종료점)
 
-**Architecture:** `main.zig`를 "한 번 읽고 한 번 그리는 직선 파이프라인"에서
+Architecture: `main.zig`를 "한 번 읽고 한 번 그리는 직선 파이프라인"에서
 `poll(2)`로 두 fd(evdev, PTY master)를 동시에 기다리는 루프로 바꾼다. 이를
 위해 세 모듈이 바뀐다 — 신규 `input.zig`(evdev 파싱 + US QWERTY 키맵 +
 Shift 상태), `pty.zig`(임의 프로그램 실행 + winsize 전달 + 1회 read),
-`vt.zig`(호출마다 버려지던 `Terminal`을 **상태를 유지하는 `Screen`**으로
+`vt.zig`(호출마다 버려지던 `Terminal`을 상태를 유지하는 `Screen`으로
 승격). 화면 크기는 프레임버퍼 해상도에서 한 번 계산해 렌더러·`Terminal`·
 `forkpty` winsize 세 곳에 같은 값을 넘긴다. 자식 프로세스는 먼저 `cat`
 (에코만 하므로 화면 기대값이 완전히 예측 가능)으로 루프를 검증한 뒤
 대화형 `fish`로 교체한다.
 
-**Tech Stack:** Zig 0.16.0, Linux 6.18.42 (`CONFIG_INPUT_EVDEV` /
+Tech Stack: Zig 0.16.0, Linux 6.18.42 (`CONFIG_INPUT_EVDEV` /
 `CONFIG_KEYBOARD_ATKBD` / `CONFIG_SERIO_I8042` 신규 활성화),
 libc `poll()`/`forkpty()`, `libghostty-vt`(vendored), QEMU monitor
 `sendkey` + `screendump`.
@@ -36,46 +36,46 @@ libc `poll()`/`forkpty()`, `libghostty-vt`(vendored), QEMU monitor
 ## 이 milestone이 답하는 질문 (HANDOFF의 숙제)
 
 `HANDOFF.md`가 "TF-M3에서 함께 검증할 것"으로 남긴 Zig ↔ C 상호운용 질문에
-대해, 이 plan은 **미리 예측을 적어두고** 실행으로 확인한다.
+대해, 이 plan은 미리 예측을 적어두고 실행으로 확인한다.
 
-**가설 1 — `struct input_event`는 translate-c로 잘 넘어온다.**
+가설 1 — `struct input_event`는 translate-c로 잘 넘어온다.
 근거: 이 구조체는 `struct timeval time; __u16 type; __u16 code; __s32 value;`
-로, **비트필드가 없다.** translate-c가 구조체를 opaque로 강등시키는 알려진
+로, 비트필드가 없다. translate-c가 구조체를 opaque로 강등시키는 알려진
 한계(ziglang/zig#1499, #4001)는 비트필드가 있을 때 발동하므로 여기엔
 해당하지 않을 것이다.
 
-**가설 2 — `EVIOCGBIT` 같은 ioctl 매크로는 여전히 못 가져온다.**
+가설 2 — `EVIOCGBIT` 같은 ioctl 매크로는 여전히 못 가져온다.
 근거: `_IOR(...)` 매크로 확장이라 `drm.zig:108-110`이 `_IOWR`을 손으로 비트
 연산으로 재구현해야 했던 것과 같은 상황이다.
 
 이번 milestone은 장치가 키보드 하나뿐인 QEMU 환경이라 `/dev/input/event0`을
 하드코딩하고 ioctl 열거를 아예 하지 않는다(YAGNI). 따라서 실제로 확인되는
-것은 **가설 1**이고, 가설 2는 "이번엔 필요조차 없었다"로 남는다. 결론이
+것은 가설 1이고, 가설 2는 "이번엔 필요조차 없었다"로 남는다. 결론이
 "UAPI 구조체는 되지만 ioctl 매크로는 안 된다"로 나오면, 앞으로 커널 UAPI를
 쓸 때마다 "구조체는 `@cImport`, 매크로는 손으로"라는 규칙을 갖고 가면 된다.
 
-가설 1이 **틀리면**(컴파일 에러 또는 `@sizeOf`가 24가 아님) Task 2 Step 3의
+가설 1이 틀리면(컴파일 에러 또는 `@sizeOf`가 24가 아님) Task 2 Step 3의
 대안 코드(`extern struct` 손 정의)로 바로 전환한다.
 
 ---
 
 ## 이번 범위에서 뺀 것 (YAGNI)
 
-- **커서 그리기** — 어디에 타이핑 중인지 눈으로 보기엔 좋지만 `RenderState`의
+- 커서 그리기 — 어디에 타이핑 중인지 눈으로 보기엔 좋지만 `RenderState`의
   커서 API를 새로 조사해야 하고, 검증 게이트에는 불필요하다.
-- **장치 열거(`EVIOCGBIT`)** — QEMU에 입력 장치가 하나뿐이라 `event0`
+- 장치 열거(`EVIOCGBIT`) — QEMU에 입력 장치가 하나뿐이라 `event0`
   하드코딩으로 충분하다.
-- **`EVIOCGRAB`(독점 grab)** — 커널 VT도 같은 키를 받지만 `console=ttyS0` +
+- `EVIOCGRAB`(독점 grab) — 커널 VT도 같은 키를 받지만 `console=ttyS0` +
   `-vga none`이라 화면에 간섭하지 않는다.
-- **Meta(Cmd) 조합 dispatch, 탭 전환, 마우스** — design doc이 명시한 MVP 비목표.
-- **부분 갱신(dirty rect)** — 매 갱신마다 화면 전체를 다시 그린다. 키 입력
+- Meta(Cmd) 조합 dispatch, 탭 전환, 마우스 — design doc이 명시한 MVP 비목표.
+- 부분 갱신(dirty rect) — 매 갱신마다 화면 전체를 다시 그린다. 키 입력
   빈도에서 성능 문제가 될 수 없다.
 
 ---
 
 ## 사전 확인 (Task 0)
 
-- [ ] **Step 1: 현재 상태 확인**
+- [ ] Step 1: 현재 상태 확인
 
 ```bash
 git log --oneline -3
@@ -84,7 +84,7 @@ git status
 
 Expected: 최신 커밋이 `17079b0`(HANDOFF 갱신)이고 working tree가 깨끗함.
 
-- [ ] **Step 2: Zig가 `linux/input.h`를 제공하는지 확인**
+- [ ] Step 2: Zig가 `linux/input.h`를 제공하는지 확인
 
 Zig 툴체인은 자체 배포판에 리눅스 UAPI 헤더를 포함한다. 이 Task 전체가 그
 헤더에 의존하므로 먼저 존재를 확인한다.
@@ -97,28 +97,28 @@ docker run --rm --platform linux/amd64 tars-devcontainer \
 Expected: `.../lib/libc/include/any-linux-any/linux/input.h` 같은 경로가
 최소 하나 출력됨.
 
-**만약 아무것도 안 나오면:** 컨테이너의 시스템 헤더를 대신 쓴다.
+만약 아무것도 안 나오면: 컨테이너의 시스템 헤더를 대신 쓴다.
 
 ```bash
 docker run --rm --platform linux/amd64 tars-devcontainer ls -la /usr/include/linux/input.h
 ```
 
 이것도 없으면 `linux-libc-dev` 패키지가 필요하다는 뜻이므로, Task 2 Step 3의
-**대안 경로(손으로 `extern struct` 정의)**로 바로 간다.
+대안 경로(손으로 `extern struct` 정의)로 바로 간다.
 
 ---
 
 ## Task 1: 커널에 evdev + i8042(PS/2) 키보드 경로 켜기
 
-**목적:** 지금 `kernel/.config`는 입력 코어(`CONFIG_INPUT=y`)만 켜져 있고
+목적: 지금 `kernel/.config`는 입력 코어(`CONFIG_INPUT=y`)만 켜져 있고
 키보드 드라이버도, `/dev/input/event*`를 만드는 evdev도 없다. 즉 QEMU 안에서
-`/dev/input/` 디렉터리가 비어 있다. 코드를 한 줄도 쓰기 전에 **커널이 키보드를
-인식하는지부터** 확인한다.
+`/dev/input/` 디렉터리가 비어 있다. 코드를 한 줄도 쓰기 전에 커널이 키보드를
+인식하는지부터 확인한다.
 
-**Files:**
+Files:
 - Modify: `kernel/.config`
 
-- [ ] **Step 1: `kernel/.config` 수정**
+- [ ] Step 1: `kernel/.config` 수정
 
 아래 세 줄을 찾아서(각각 957~983번째 줄 근처) 바꾼다.
 
@@ -155,13 +155,13 @@ CONFIG_SERIO_LIBPS2=y
 |---|---|
 | `CONFIG_SERIO` / `CONFIG_SERIO_I8042` | 메인보드의 PS/2 컨트롤러(i8042 칩) 드라이버. QEMU의 `pc`/`q35` 머신에 기본 내장돼 있어 실행 인자를 바꿀 필요가 없다. |
 | `CONFIG_SERIO_LIBPS2` | PS/2 프로토콜 공용 헬퍼. `KEYBOARD_ATKBD`가 `select`하므로 사실 자동으로 켜지지만, 명시해두면 `.config`만 읽어도 의도가 보인다. |
-| `CONFIG_KEYBOARD_ATKBD` | AT/PS-2 키보드 드라이버. 스캔코드를 받아 **input 코어에 keycode로 올린다**. |
-| `CONFIG_INPUT_EVDEV` | input 코어의 이벤트를 `/dev/input/eventN` 캐릭터 장치로 **사용자 공간에 노출**한다. 우리가 실제로 읽을 파일이 여기서 생긴다. |
+| `CONFIG_KEYBOARD_ATKBD` | AT/PS-2 키보드 드라이버. 스캔코드를 받아 input 코어에 keycode로 올린다. |
+| `CONFIG_INPUT_EVDEV` | input 코어의 이벤트를 `/dev/input/eventN` 캐릭터 장치로 사용자 공간에 노출한다. 우리가 실제로 읽을 파일이 여기서 생긴다. |
 
 `kernel/build.sh`가 빌드 전에 `make olddefconfig`을 돌리므로, 의존성이 빠진
 게 있어도 kconfig가 기본값으로 채워준다.
 
-- [ ] **Step 2: 커널 재빌드 + 부팅 로그에서 키보드 인식 확인**
+- [ ] Step 2: 커널 재빌드 + 부팅 로그에서 키보드 인식 확인
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
@@ -182,7 +182,7 @@ grep -iE "i8042|serio|^input:" /tmp/boot.log || echo "(none found)"
 '
 ```
 
-Expected: 마지막 블록에 아래와 **비슷한** 줄들이 나온다.
+Expected: 마지막 블록에 아래와 비슷한 줄들이 나온다.
 
 ```
 i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] at 0x60,0x64 irq 1,12
@@ -190,13 +190,13 @@ serio: i8042 KBD port at 0x60,0x64 irq 1
 input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input0
 ```
 
-`input: AT Translated Set 2 keyboard as ...` 줄이 **핵심**이다 — 커널이
+`input: AT Translated Set 2 keyboard as ...` 줄이 핵심이다 — 커널이
 키보드를 input 장치로 등록했다는 뜻이고, `CONFIG_INPUT_EVDEV=y`이므로 이
 장치에 대해 devtmpfs가 `/dev/input/event0`을 자동으로 만든다. `init`은 이미
-`/dev`에 devtmpfs를 마운트하므로(`init/src/main.rs:100`) **init 수정은
-필요 없다** — TF-M2의 devpts와 달리 devtmpfs가 알아서 해준다.
+`/dev`에 devtmpfs를 마운트하므로(`init/src/main.rs:100`) init 수정은
+필요 없다 — TF-M2의 devpts와 달리 devtmpfs가 알아서 해준다.
 
-**만약 `(none found)`이 나오면:** `.config` 수정이 `olddefconfig`에 의해
+만약 `(none found)`이 나오면: `.config` 수정이 `olddefconfig`에 의해
 되돌려졌을 수 있다. 실제 빌드에 쓰인 설정을 확인한다.
 
 ```bash
@@ -207,7 +207,7 @@ grep -E "CONFIG_(INPUT_EVDEV|KEYBOARD_ATKBD|SERIO_I8042)" kernel/build/.config
 옵션의 `depends on`을 커널 소스(`src/linux-6.18.42/drivers/input/Kconfig`,
 `drivers/input/keyboard/Kconfig`, `drivers/input/serio/Kconfig`)에서 확인한다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 승인 후 Claude가 커밋한다.
 
@@ -220,17 +220,17 @@ git commit -m "Enable evdev and i8042 PS/2 keyboard in kernel config"
 
 ## Task 2: `input.zig` — evdev 이벤트 파싱 + US QWERTY 키맵
 
-**목적:** `/dev/input/event0`에서 `struct input_event`를 읽어 "PTY로 보낼
-바이트"로 바꾸는 모듈. **변환 로직을 순수 함수로 분리**해서 QEMU도 커널도
+목적: `/dev/input/event0`에서 `struct input_event`를 읽어 "PTY로 보낼
+바이트"로 바꾸는 모듈. 변환 로직을 순수 함수로 분리해서 QEMU도 커널도
 없이 devcontainer 네이티브 테스트로 먼저 검증한다 — TF-M2에서 `vt_test`가
 컴파일 에러 0회를 만들어준 것과 같은 전략이다.
 
-**Files:**
+Files:
 - Create: `terminal/src/input.zig`
 - Create: `terminal/src/input_test.zig`
 - Modify: `terminal/build.zig`
 
-- [ ] **Step 1: `terminal/src/input.zig` 작성**
+- [ ] Step 1: `terminal/src/input.zig` 작성
 
 ```zig
 const std = @import("std");
@@ -379,7 +379,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8) []const u8 {
 
 `ev.@"type"`으로 쓴 이유: `type`은 Zig에서 기본 타입 이름이라 그냥
 `ev.type`으로 쓰면 파서가 헷갈릴 수 있다. `@"..."` 문법은 어떤 이름이든
-식별자로 강제하므로 **항상 안전하다**(`ev.type`이 컴파일된다면 둘은 완전히
+식별자로 강제하므로 항상 안전하다(`ev.type`이 컴파일된다면 둘은 완전히
 같은 식별자다).
 
 `*align(1)`을 붙인 이유: `raw`는 그냥 `u8` 배열이라 정렬 보장이 없는데,
@@ -387,7 +387,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8) []const u8 {
 항상 정렬이 맞지만, 컴파일러에게 "정렬을 가정하지 말라"고 알려주는 쪽이
 안전하다.
 
-- [ ] **Step 2: `terminal/src/input_test.zig` 작성 (네이티브 테스트)**
+- [ ] Step 2: `terminal/src/input_test.zig` 작성 (네이티브 테스트)
 
 fd도 커널도 필요 없다 — 상태 머신만 검증한다.
 
@@ -457,7 +457,7 @@ pub fn eventSize() usize {
 }
 ```
 
-- [ ] **Step 3: `terminal/build.zig`에 `input_test` 실행 파일 추가**
+- [ ] Step 3: `terminal/build.zig`에 `input_test` 실행 파일 추가
 
 `vt_test` 블록 다음에 추가한다.
 
@@ -475,7 +475,7 @@ pub fn eventSize() usize {
     b.installArtifact(input_test);
 ```
 
-- [ ] **Step 4: 네이티브 실행으로 검증 (QEMU 불필요)**
+- [ ] Step 4: 네이티브 실행으로 검증 (QEMU 불필요)
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -489,8 +489,8 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-**만약 `error: 'struct_input_event' is opaque` 또는 비슷한 에러가 나면
-(= 가설 1이 틀림):** `@cImport` 대신 손으로 정의한다. `input.zig`의
+만약 `error: 'struct_input_event' is opaque` 또는 비슷한 에러가 나면
+(= 가설 1이 틀림): `@cImport` 대신 손으로 정의한다. `input.zig`의
 `const c = @cImport(...)` 블록을 아래로 교체하고, `c.struct_input_event` →
 `InputEvent`, `c.EV_KEY` → `EV_KEY`, `c.KEY_LEFTSHIFT` → `KEY_LEFTSHIFT`,
 `c.KEY_RIGHTSHIFT` → `KEY_RIGHTSHIFT`로 바꾼다. `drm.zig`가 DRM UAPI에 대해
@@ -514,7 +514,7 @@ const KEY_RIGHTSHIFT: u16 = 54;
 
 (이 경우 `ev.@"type"`은 `ev.ev_type`이 된다.)
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 ```bash
 git add terminal/src/input.zig terminal/src/input_test.zig terminal/build.zig
@@ -525,19 +525,19 @@ git commit -m "Add evdev input module with US QWERTY keymap and shift state"
 
 ## Task 3: `pty.zig` 일반화 + `vt.zig`를 상태 유지형으로 승격
 
-**목적:** 두 가지 구조적 제약을 푼다.
+목적: 두 가지 구조적 제약을 푼다.
 
 1. `pty.zig`는 `fish -c`만 실행할 수 있고 winsize를 `null`로 넘긴다 —
-   PTY가 **0열 × 0행**이라 대화형 셸이 화면 폭을 알 수 없다.
+   PTY가 0열 × 0행이라 대화형 셸이 화면 폭을 알 수 없다.
 2. `vt.parseToCells()`는 호출할 때마다 `Terminal`을 새로 만들고 버린다 —
    출력이 조각조각 도착하는 이벤트 루프에서는 앞 내용이 매번 사라진다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/pty.zig`
 - Modify: `terminal/src/vt.zig`
 - Modify: `terminal/src/vt_test.zig`
 
-- [ ] **Step 1: `terminal/src/pty.zig` 교체**
+- [ ] Step 1: `terminal/src/pty.zig` 교체
 
 ```zig
 const std = @import("std");
@@ -633,12 +633,12 @@ pub fn write(fd: c_int, bytes: []const u8) void {
 }
 ```
 
-**만약 `struct_winsize` 필드 이름 관련 에러가 나면:** glibc의
+만약 `struct_winsize` 필드 이름 관련 에러가 나면: glibc의
 `struct winsize`는 `ws_row`/`ws_col`/`ws_xpixel`/`ws_ypixel` 네 필드이며
 `<termios.h>`나 `<sys/ioctl.h>`에 있다. 에러가 "unknown field"라면
 `@cInclude("termios.h")`를 추가한다.
 
-- [ ] **Step 2: `terminal/src/vt.zig` 교체**
+- [ ] Step 2: `terminal/src/vt.zig` 교체
 
 ```zig
 const std = @import("std");
@@ -730,9 +730,9 @@ pub const Screen = struct {
 `RenderState.update`는 반복 호출을 전제로 만들어진 API다 —
 `render.zig:354-355`에 "This will reset the terminal dirty state since it is
 consumed by this render state update"라고 적혀 있다. 즉 매번 전체를 다시
-만드는 게 아니라 **변경된 행만 갱신**하고 나머지는 이전 내용을 유지한다.
+만드는 게 아니라 변경된 행만 갱신하고 나머지는 이전 내용을 유지한다.
 
-- [ ] **Step 3: `terminal/src/vt_test.zig`를 새 API + 상태 유지 검증으로 교체**
+- [ ] Step 3: `terminal/src/vt_test.zig`를 새 API + 상태 유지 검증으로 교체
 
 ```zig
 const std = @import("std");
@@ -786,7 +786,7 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
-- [ ] **Step 4: 네이티브 테스트 두 개 모두 통과 확인**
+- [ ] Step 4: 네이티브 테스트 두 개 모두 통과 확인
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -796,14 +796,14 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/termin
 Expected: 세 번 모두 `PASS`. `vt_test`의 `after 2nd feed`가 `after 1st feed`
 보다 셀 수가 많아야 하고, `after split escape (clear): 0 cells`가 나와야 한다.
 
-**주의:** 이 Step에서 `zig build`가 `main.zig` 컴파일 에러로 실패한다.
+주의: 이 Step에서 `zig build`가 `main.zig` 컴파일 에러로 실패한다.
 `main.zig`가 아직 `vt.parseToCells`(방금 없앤 함수)를 부르고 있기 때문이다.
 Task 4에서 `main.zig`를 고칠 때까지는 정상이다 — 임시로 넘어가려면
 `main.zig:57`의 `vt.parseToCells(...)` 줄을 Task 4의 코드로 먼저 바꿔도 되고,
-아니면 Task 4까지 한 번에 진행해도 된다. **Task 3과 Task 4를 연달아
-진행하는 것을 권장한다.**
+아니면 Task 4까지 한 번에 진행해도 된다. Task 3과 Task 4를 연달아
+진행하는 것을 권장한다.
 
-- [ ] **Step 5: Commit** (Task 4의 `main.zig` 수정까지 끝난 뒤)
+- [ ] Step 5: Commit (Task 4의 `main.zig` 수정까지 끝난 뒤)
 
 ```bash
 git add terminal/src/pty.zig terminal/src/vt.zig terminal/src/vt_test.zig
@@ -814,17 +814,17 @@ git commit -m "Make PTY spawn generic with winsize and keep VT state across feed
 
 ## Task 4: `main.zig` 이벤트 루프 + `cat` 자식으로 왕복 확인
 
-**목적:** 드디어 입력이 화면까지 도달하는 경로를 만든다. 자식은 **`cat`**으로
+목적: 드디어 입력이 화면까지 도달하는 경로를 만든다. 자식은 `cat`으로
 둔다 — PTY 회선 규율(line discipline)이 입력한 문자를 그대로 master로
 에코해주므로, 화면에 나타날 내용이 100% 예측 가능하다. 여기서 통과하면
 "evdev 읽기 → PTY write → 에코 → vt 파싱 → 재렌더" 루프 자체는 검증된
 것이고, 남은 변수는 fish 하나뿐이 된다.
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh`
 - Modify: `terminal/src/main.zig`
 
-- [ ] **Step 1: `kernel/make_initrd.sh`에 `cat` 추가**
+- [ ] Step 1: `kernel/make_initrd.sh`에 `cat` 추가
 
 `cp /usr/bin/fish "$WORKDIR/usr/bin/fish"` 줄 다음에 추가한다.
 
@@ -839,7 +839,7 @@ chmod 0755 "$WORKDIR/usr/bin/cat"
 copy_lib_deps "$WORKDIR/usr/bin/cat"
 ```
 
-- [ ] **Step 2: `terminal/src/main.zig` 전면 교체**
+- [ ] Step 2: `terminal/src/main.zig` 전면 교체
 
 ```zig
 const std = @import("std");
@@ -998,7 +998,7 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
-**만약 `c.poll`/`c.struct_pollfd` 관련 에러가 나면:** `poll.h`의
+만약 `c.poll`/`c.struct_pollfd` 관련 에러가 나면: `poll.h`의
 `struct pollfd`는 `{ int fd; short events; short revents; }`다. translate-c가
 못 가져오면 `input.zig`가 `open`을 직접 선언한 것과 같은 방식으로 쓴다.
 
@@ -1008,10 +1008,10 @@ const POLLIN: i16 = 0x001;
 extern "c" fn poll(fds: [*]PollFd, nfds: c_ulong, timeout: c_int) c_int;
 ```
 
-**만약 `fds.len`을 `poll`의 두 번째 인자로 못 넘긴다는 타입 에러가 나면:**
+만약 `fds.len`을 `poll`의 두 번째 인자로 못 넘긴다는 타입 에러가 나면:
 `nfds_t`는 `c_ulong`이므로 `@as(c.nfds_t, fds.len)`로 감싼다.
 
-- [ ] **Step 3: 컴파일 확인**
+- [ ] Step 3: 컴파일 확인
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/terminal \
@@ -1020,7 +1020,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/termin
 
 Expected: 에러 없이 `zig-out/bin/terminal` 생성.
 
-- [ ] **Step 4: QEMU에서 `cat` 왕복 수동 확인**
+- [ ] Step 4: QEMU에서 `cat` 왕복 수동 확인
 
 `check.sh`를 아직 고치지 않았으므로 이번엔 monitor에 직접 명령을 보낸다.
 
@@ -1069,12 +1069,12 @@ terminal: screen> ta
 terminal: screen> tars | tars     ← Enter 후 cat이 한 줄을 다시 출력
 ```
 
-키를 누를 때마다 `key>`와 `screen>`이 **번갈아** 나오는 것이 핵심이다 —
+키를 누를 때마다 `key>`와 `screen>`이 번갈아 나오는 것이 핵심이다 —
 입력이 PTY를 한 바퀴 돌아 화면 상태까지 도달했다는 뜻이다. 마지막에
 `tars`가 두 번 보이는 이유는 한 번은 회선 규율의 에코, 한 번은 `cat`이
 개행을 받고 내보낸 출력이기 때문이다.
 
-- [ ] **Step 5: screendump 육안 확인**
+- [ ] Step 5: screendump 육안 확인
 
 ```bash
 sips -s format png tf-m3-cat.ppm --out tf-m3-cat.png
@@ -1083,7 +1083,7 @@ open tf-m3-cat.png
 
 화면 (20,20) 근처에 `tars`가 두 줄로 보이면 성공이다.
 
-**만약 `terminal: key>`가 한 번도 안 나오면:** 세 가지를 순서대로 확인한다.
+만약 `terminal: key>`가 한 번도 안 나오면: 세 가지를 순서대로 확인한다.
 1. `terminal: opened /dev/input/event0`이 나왔는가 → 안 나오면 Task 1의
    커널 config가 실제로 적용되지 않은 것이다.
 2. `sendkey`가 QEMU monitor에 도달했는가 → monitor 포트 연결 실패면
@@ -1091,7 +1091,7 @@ open tf-m3-cat.png
 3. 커널이 키를 다른 곳으로 보냈는가 → `/tmp/boot.log`에 커널 VT 관련
    메시지가 있는지 본다.
 
-- [ ] **Step 6: Commit** (Task 3 Step 5와 함께)
+- [ ] Step 6: Commit (Task 3 Step 5와 함께)
 
 ```bash
 git add terminal/src/main.zig kernel/make_initrd.sh
@@ -1102,15 +1102,15 @@ git commit -m "Add poll event loop feeding evdev keystrokes into PTY"
 
 ## Task 5: 대화형 `fish`로 교체 + `check.sh` 자동 검증 게이트
 
-**목적:** MVP 종료점. 자식을 대화형 `fish`로 바꾸고, `check.sh`가
+목적: MVP 종료점. 자식을 대화형 `fish`로 바꾸고, `check.sh`가
 "입력 전/후 화면이 달라졌는가"(렌더링 경로)와 "셸이 실제로 명령을
 실행했는가"(파싱 경로)를 각각 확인하도록 만든다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig`
 - Modify: `terminal/check.sh`
 
-- [ ] **Step 1: `main.zig`의 자식을 대화형 fish로 교체**
+- [ ] Step 1: `main.zig`의 자식을 대화형 fish로 교체
 
 `main.zig`의 아래 두 줄을:
 
@@ -1129,7 +1129,7 @@ git commit -m "Add poll event loop feeding evdev keystrokes into PTY"
     const session = try pty.spawn("/usr/bin/fish", &argv, cols, rows);
 ```
 
-- [ ] **Step 2: `terminal/check.sh`의 검증 블록 교체**
+- [ ] Step 2: `terminal/check.sh`의 검증 블록 교체
 
 먼저 스크립트 위쪽의 아래 줄을 지운다(더 이상 안 쓴다 — 아래에서 `BEFORE`/
 `AFTER` 두 장을 따로 만든다).
@@ -1213,11 +1213,11 @@ exit 0
 ```
 
 기존 픽셀 검사(배경색 `#102030` 확인, glyph 영역 unique color 개수)를 없앤
-이유: **전후 비교가 그보다 강한 검사**이기 때문이다. 배경색 확인은 "DRM
+이유: 전후 비교가 그보다 강한 검사이기 때문이다. 배경색 확인은 "DRM
 프레임버퍼가 우리 것"임을, unique color 검사는 "뭔가 그려졌음"을 보였는데,
-전후 비교는 "**입력 때문에** 화면이 바뀌었음"을 보인다.
+전후 비교는 "입력 때문에 화면이 바뀌었음"을 보인다.
 
-- [ ] **Step 3: 전체 파이프라인 검증**
+- [ ] Step 3: 전체 파이프라인 검증
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
@@ -1227,12 +1227,12 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 Expected: `PASS`. 중간에 `Pixels changed after typing: N`(N ≥ 100)과
 `Found '42' in parsed screen dump`가 보여야 한다.
 
-**만약 화면이 안 바뀌면(`DIFF_PIXELS` 0):** 로그의 `terminal: screen>` 줄을
+만약 화면이 안 바뀌면(`DIFF_PIXELS` 0): 로그의 `terminal: screen>` 줄을
 본다. 파싱은 되는데 화면이 그대로면 `render()`의 `fb.present()` 문제이고,
 `screen>` 줄 자체가 없으면 fish가 아직 안 떴거나 입력을 못 받은 것이다 —
 `sleep 30`을 늘려본다.
 
-**만약 `42`가 안 나오면:** `terminal: screen>` 줄에 무엇이 찍혔는지 본다.
+만약 `42`가 안 나오면: `terminal: screen>` 줄에 무엇이 찍혔는지 본다.
 - `math`가 fish 내장이 아닌 옛 버전이면 `Unknown command`가 보인다. 이때는
   검증 명령을 `echo tars`로 바꾸고 grep 대상도 `tars`로 바꾼다(단, 이 경우
   에코와 출력을 구분하지 못하므로 "화면이 바뀌었다"까지만 보증된다).
@@ -1246,7 +1246,7 @@ Expected: `PASS`. 중간에 `Pixels changed after typing: N`(N ≥ 100)과
   확인해서, 있으면 그 바이트를 PTY master에 써 보내는 처리를 `main.zig`에
   추가한다.
 
-- [ ] **Step 4: screendump 육안 확인**
+- [ ] Step 4: screendump 육안 확인
 
 ```bash
 sips -s format png tf-m3-after-XXXXXX.ppm --out tf-m3-after.png
@@ -1255,7 +1255,7 @@ open tf-m3-after.png
 
 fish 프롬프트, 타이핑한 `math 6 x 7`, 그리고 결과 `42`가 보이면 성공이다.
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 ```bash
 git add terminal/src/main.zig terminal/check.sh
@@ -1276,7 +1276,7 @@ git commit -m "Run interactive fish and verify typed input reaches the shell"
 - [x] screendump 육안 확인 완료
 - [x] `HANDOFF.md` 갱신 + TF-M4(종료 게이트: 3회 연속 검증)로 이어갈 준비
 
-**완료: 2026-08-11.** 커밋 5개 — `77d58d1`(커널 config), `01f1356`(input.zig),
+완료: 2026-08-11. 커밋 5개 — `77d58d1`(커널 config), `01f1356`(input.zig),
 `ba2be66`(pty/vt), `f0c4b1f`(이벤트 루프), `0cf6bef`(대화형 fish + 게이트).
 
 ---
@@ -1291,20 +1291,20 @@ plan Task 3 Step 2의 `stream: ghostty_vt.Stream` 이 컴파일 에러를 냈다
 src/vt.zig:25:23: error: expected type 'type', found 'fn (comptime type) type'
 ```
 
-`lib_vt.zig:81`이 재수출하는 `Stream`은 **핸들러 타입을 받는 제네릭 함수**
+`lib_vt.zig:81`이 재수출하는 `Stream`은 핸들러 타입을 받는 제네릭 함수
 (`stream.Stream(Handler)`)이지 타입이 아니다. `HANDOFF.md`에 "`lib_vt.zig:81`
 에서 재수출되므로 필드 타입으로 바로 쓸 수 있다"고 적어둔 관찰은 재수출
 사실만 맞고 사용 가능성 판단이 틀렸다.
 
-필요한 것은 **Terminal용으로 이미 인스턴스화된** `ghostty_vt.TerminalStream`
+필요한 것은 Terminal용으로 이미 인스턴스화된 `ghostty_vt.TerminalStream`
 이다(`stream_terminal.zig:26` → `terminal/main.zig:59` → `lib_vt.zig:80`).
 `Terminal.zig:30`도 정확히 이것을 `const Stream = ...`으로 가져다 쓰므로,
 `vtStream()`의 반환 타입이 곧 `TerminalStream`이다.
 
-**교훈:** 제네릭이 흔한 Zig 라이브러리에서는 "이름이 재수출된다"와 "필드
+교훈: 제네릭이 흔한 Zig 라이브러리에서는 "이름이 재수출된다"와 "필드
 타입으로 쓸 수 있다"가 다른 문제다. 다음에 vendor된 Zig 라이브러리의 타입을
-구조체 필드로 쓸 때는 **재수출 줄이 아니라 그 타입을 실제로 필드/변수로
-선언한 사용처**를 찾아 대조할 것. 여기서는 `Terminal.zig:30`이 그 사용처였고,
+구조체 필드로 쓸 때는 재수출 줄이 아니라 그 타입을 실제로 필드/변수로
+선언한 사용처를 찾아 대조할 것. 여기서는 `Terminal.zig:30`이 그 사용처였고,
 그것만 봤으면 에러 없이 지나갔다.
 
 부수 소득: `stream_terminal.zig:35-37`에서 `Handler`가 `terminal: *Terminal`
@@ -1321,14 +1321,14 @@ serio: i8042 AUX port at 0x60,0x64 irq 12      ← 나옴 (plan에 없던 줄)
 input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input0
 ```
 
-`i8042: PNP: PS/2 Controller [...]`는 i8042가 **ACPI PNP 테이블에서 컨트롤러를
-발견**했을 때 찍는 로그인데, 이 커널은 `CONFIG_PNP`/ACPI가 꺼져 있어 그 경로를
+`i8042: PNP: PS/2 Controller [...]`는 i8042가 ACPI PNP 테이블에서 컨트롤러를
+발견했을 때 찍는 로그인데, 이 커널은 `CONFIG_PNP`/ACPI가 꺼져 있어 그 경로를
 안 탄다. 대신 x86 레거시 고정 포트(0x60/0x64, IRQ 1/12)를 하드코딩해서 붙는다.
-**게이트로 삼을 줄은 `serio: i8042 KBD port`와 `input: AT Translated ...` 둘**
+게이트로 삼을 줄은 `serio: i8042 KBD port`와 `input: AT Translated ...` 둘
 이며, 첫 줄의 부재는 실패 신호가 아니다.
 
 `AUX port`(마우스)도 등록되지만 `CONFIG_INPUT_MOUSE`를 껐으므로 붙을 드라이버가
-없어 `input1`은 생기지 않는다. → **input 장치가 키보드 하나뿐**이라는 것이
+없어 `input1`은 생기지 않는다. → input 장치가 키보드 하나뿐이라는 것이
 실측으로 확인됐고, `/dev/input/event0` 하드코딩(장치 열거 생략)의 근거가 됐다.
 
 ### 3. initrd에 `uname`/`mkdir`을 추가해야 했다 (plan에 없던 작업)
@@ -1341,16 +1341,16 @@ fish: Unknown command: uname
 ```
 
 initrd에 `fish`와 `cat`밖에 없어서다. 이건 BF milestone부터 있던 문제라
-`cat` 단계에서는 무해했지만, **Task 5에서 자식을 대화형 fish로 바꾸면 같은
-에러가 우리 PTY로 쏟아져 화면을 뒤덮는다.** `--no-config`는 `config.fish`
-소싱만 막고 `/usr/share/fish/functions/`의 **함수 오토로드는 못 막기**
+`cat` 단계에서는 무해했지만, Task 5에서 자식을 대화형 fish로 바꾸면 같은
+에러가 우리 PTY로 쏟아져 화면을 뒤덮는다. `--no-config`는 `config.fish`
+소싱만 막고 `/usr/share/fish/functions/`의 함수 오토로드는 못 막기
 때문이다.
 
 그래서 Task 5에서 `make_initrd.sh`에 `uname`과 `mkdir`을 추가했다. 결과적으로
 before 스크린샷이 `@(none) ~#` 프롬프트 한 줄로 깨끗하게 나왔다.
 
-**교훈:** initrd에 셸을 넣는다는 것은 **그 셸이 프롬프트를 그리며 호출하는
-외부 명령까지** 넣는다는 뜻이다. 비대화형(`-c`)에서는 안 드러나고 대화형으로
+교훈: initrd에 셸을 넣는다는 것은 그 셸이 프롬프트를 그리며 호출하는
+외부 명령까지 넣는다는 뜻이다. 비대화형(`-c`)에서는 안 드러나고 대화형으로
 바꾸는 순간 드러난다.
 
 ### 4. 키 이벤트는 배치로 도착한다 — `readKeys`의 루프가 값을 했다
@@ -1364,22 +1364,22 @@ terminal: key> 4 byte(s)     ← 'a','r','s',CR 이 한 번의 read()에
 
 앞선 키의 렌더링(전체 화면 fill + DRM present)이 0.3초보다 오래 걸려 그동안
 evdev 커널 버퍼에 이벤트가 쌓인 것이다. `readKeys`가 한 번의 `read()`에서
-**여러 `input_event`를 순회하도록** 만든 설계(plan Task 2 Step 1)가 아니었다면
+여러 `input_event`를 순회하도록 만든 설계(plan Task 2 Step 1)가 아니었다면
 `ars`가 통째로 유실됐다. evdev를 쓸 때 "한 번 read = 한 이벤트"로 가정하면
 안 된다는 것이 실측으로 확인됐다.
 
 ### 5. Zig ↔ C 상호운용 가설 결론
 
-- **가설 1 (`struct input_event`가 translate-c로 넘어온다) — 확인.**
+- 가설 1 (`struct input_event`가 translate-c로 넘어온다) — 확인.
   `@sizeOf(c.struct_input_event) == 24`. opaque였다면 `@sizeOf` 자체가
   컴파일 에러였을 것이므로, 필드까지 온전히 넘어왔다는 뜻이다.
   24 = `struct timeval` 16 + `type` 2 + `code` 2 + `value` 4로 C ABI와 일치.
-- **가설 2 (ioctl 매크로는 못 가져온다) — 이번엔 확인할 필요조차 없었다.**
+- 가설 2 (ioctl 매크로는 못 가져온다) — 이번엔 확인할 필요조차 없었다.
   장치가 하나뿐이라 `/dev/input/event0`을 하드코딩하고 `EVIOCGBIT` 열거를
   아예 안 했다.
 
-정리된 규칙: **커널 UAPI의 평범한(비트필드 없는) 구조체는 `@cImport`로
-그대로 쓰고, `_IOR`/`_IOWR` 계열 매크로만 손으로 재구현한다.**
+정리된 규칙: 커널 UAPI의 평범한(비트필드 없는) 구조체는 `@cImport`로
+그대로 쓰고, `_IOR`/`_IOWR` 계열 매크로만 손으로 재구현한다.
 `drm.zig:108-110`이 `_IOWR`을 비트 연산으로 직접 쓴 것과 대비되는 지점이다.
 (→ `docs/decisions/project_zig_c_uapi_rule.md`)
 
@@ -1389,7 +1389,7 @@ evdev 커널 버퍼에 이벤트가 쌓인 것이다. `readKeys`가 한 번의 `
   별도 호출로 먹여도 화면 지우기로 해석돼 0 cells (파서 상태 유지).
   '하'가 col 5, spacer가 col 6(codepoint 0으로 걸러짐), '이'가 col 7 —
   `col * CELL_W` 렌더링 결정의 실측 근거.
-- `check.sh`: 프레임버퍼 1280x800 → grid 155x47. 전후 픽셀 차이 **533**
+- `check.sh`: 프레임버퍼 1280x800 → grid 155x47. 전후 픽셀 차이 533
   (임계값 100). serial 로그에서 `42` 발견.
 - 최종 화면: `@(none) ~# math 6 x 7` / `42` / `@(none) ~#` 세 줄.
   세 번째 줄의 새 프롬프트가 대화형 루프 한 사이클 완주의 증거다.

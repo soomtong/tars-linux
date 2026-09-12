@@ -1,20 +1,20 @@
 # TARS Display Foundation — DF-M2 픽셀 그리기(MVP 종료점) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고):** 파일
+> 단, 이 저장소는 pairing 방식 고정(`CLAUDE.md`, HANDOFF.md 참고): 파일
 > 작성과 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을
 > 제시하고 결과를 해석한다. 위 SUB-SKILL 문구는 다른 저장소용 기본값이며 이
 > 저장소에는 적용하지 않는다.
 
-**Goal:** DF-M2를 완료한다 — 새 Rust 바이너리 `kms`가 `/dev/dri/card0`를
+Goal: DF-M2를 완료한다 — 새 Rust 바이너리 `kms`가 `/dev/dri/card0`를
 직접 열어 DRM ioctl(리소스 조회 → dumb buffer 생성 → mmap → 픽셀 채우기 →
 framebuffer 등록 → CRTC 모드 설정)을 순서대로 호출해 화면 전체를 단색(빨강)
 으로 채우고, `init`이 부팅 중 이를 실행하도록 연결하며, `display/check.sh`의
 screendump 파이프라인으로 실제 화면 픽셀 색을 검사해 성공을 확인한다. 이
 milestone이 design doc이 정의한 MVP 종료점이다.
 
-**Architecture:** design doc §3의 결정대로 DRM 초기화 코드는 `init`
+Architecture: design doc §3의 결정대로 DRM 초기화 코드는 `init`
 안에 넣지 않고 새 디렉터리 `kms/`에 별도 Rust 바이너리로 만든다. `drm`
 crate 같은 래퍼를 쓰지 않고, `libc::ioctl`을 직접 호출한다 — ioctl 요청
 번호는 커널 소스에 이미 다운로드된
@@ -27,7 +27,7 @@ Task 5에서 비로소 `tars-init`이 `fork`+`execve`로 `kms`를 실행하도�
 파이프라인(`display/check.sh`)에 픽셀 색 검사를 추가해 공식 exit gate를
 자동 검증한다.
 
-**Tech Stack:** Rust(`libc` crate, raw `ioctl`/`mmap`/`fork`/`execve`
+Tech Stack: Rust(`libc` crate, raw `ioctl`/`mmap`/`fork`/`execve`
 syscall), Linux DRM/KMS uapi(`drm.h`, `drm_mode.h`), QEMU
 `-device virtio-gpu-pci`, ImageMagick(픽셀 색 검사)
 
@@ -40,7 +40,7 @@ DF-M1이 완료돼 있어야 한다 — `kernel/.config`에 `CONFIG_PCI`, `CONFI
 `/dev/dri/card0`가 devtmpfs에 생성됨을 이미 확인했다(`tars-init: /dev/dri/card0
 exists` 로그).
 
-**ioctl 번호/struct 레이아웃 출처:** 이 plan의 모든 Rust struct와 ioctl
+ioctl 번호/struct 레이아웃 출처: 이 plan의 모든 Rust struct와 ioctl
 번호는 이 저장소에 다운로드된 커널 소스 트리
 `kernel/src/linux-6.18.42/include/uapi/drm/drm.h`,
 `kernel/src/linux-6.18.42/include/uapi/drm/drm_mode.h`를 직접 읽어 확인한
@@ -59,13 +59,13 @@ request = (dir << 30) | (type << 8) | (nr << 16 >> 16 /* nr는 8비트 */) | (si
 `std::mem::size_of::<T>()`로 struct 크기를 컴파일 타임에 정확히 계산할 수
 있어 C의 `sizeof()`와 동일한 값을 보장한다.
 
-**개발 중 임시 initrd 규칙:** Task 1~4는 `kms` 바이너리를 `/init`으로 삼는
+개발 중 임시 initrd 규칙: Task 1~4는 `kms` 바이너리를 `/init`으로 삼는
 임시 initrd를 그때그때 만들어서 검증한다(파일로 저장하지 않고 매번
 `docker run` 안에서 `mktemp -d`로 구성) — `tars-init`이 PID 1로 남아있는
 정식 부팅 경로와 완전히 분리해서, 이 단계에서 실수해도 Boot
-Foundation/DF-M1이 이미 검증한 정식 경로에 영향이 없게 한다. **PID 1이
+Foundation/DF-M1이 이미 검증한 정식 경로에 영향이 없게 한다. PID 1이
 정상 종료(`main()`이 `Ok(())` 반환)하면 커널이 `Kernel panic - not
-syncing: Attempted to kill init!`를 내는 것이 정상이다** — 이건 실패가
+syncing: Attempted to kill init!`를 내는 것이 정상이다 — 이건 실패가
 아니라 "kms가 할 일을 마치고 프로세스가 끝났다"는 신호다. 우리가 보려는
 건 그 직전까지 출력된 `kms: ...` 로그 줄들이다.
 
@@ -73,11 +73,11 @@ syncing: Attempted to kill init!`를 내는 것이 정상이다** — 이건 실
 
 ### Task 1: `kms/` 크레이트 생성 — DRM 디바이스 열기 + 리소스 개수 조회
 
-**Files:**
+Files:
 - Create: `kms/Cargo.toml`
 - Create: `kms/src/main.rs`
 
-- [x] **Step 1: `kms/Cargo.toml` 작성**
+- [x] Step 1: `kms/Cargo.toml` 작성
 
 `init/Cargo.toml`과 같은 패턴(`libc` 하나만 의존)이되, 바이너리 이름을
 명시적으로 `kms`로 고정한다(패키지 이름은 `tars-init`처럼 `tars-` 접두를
@@ -98,7 +98,7 @@ path = "src/main.rs"
 libc = "0.2"
 ```
 
-- [x] **Step 2: `kms/src/main.rs` 작성 — 첫 ioctl 호출로 배관 검증**
+- [x] Step 2: `kms/src/main.rs` 작성 — 첫 ioctl 호출로 배관 검증
 
 가장 작은 단위부터 시작한다: `/dev/dri/card0`를 열고
 `DRM_IOCTL_MODE_GETRESOURCES`를 호출해 crtc/connector/encoder 개수만
@@ -179,7 +179,7 @@ fn main() -> io::Result<()> {
 }
 ```
 
-**정정(2026-08-07 Task 1 진행 중 발견):** 애초 이 Step은 `ensure_devtmpfs_mounted`
+정정(2026-08-07 Task 1 진행 중 발견): 애초 이 Step은 `ensure_devtmpfs_mounted`
 없이 작성됐으나, 실제로 임시 initrd로 부팅해보니 `/dev/dri/card0` open이
 `ENOENT`로 실패했다 — 이 throwaway initrd의 `/init`(=`kms`)이 `tars-init`과
 달리 devtmpfs를 `/dev`에 mount하는 단계가 아예 없었기 때문이다(initramfs만
@@ -187,7 +187,7 @@ fn main() -> io::Result<()> {
 방어적으로 mount를 한 번 시도하고 실패(예: Task 5 이후 `tars-init`이 이미
 mount해둔 상태에서 나는 `EBUSY`)는 무시하도록 고쳐서 반영했다.
 
-- [x] **Step 3: 컴파일 확인**
+- [x] Step 3: 컴파일 확인
 
 Run:
 ```bash
@@ -197,7 +197,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kms \
 
 Expected: 종료 코드 0, `Finished \`release\` profile [optimized] target(s)`.
 
-- [x] **Step 4: 임시 initrd로 부팅 검증**
+- [x] Step 4: 임시 initrd로 부팅 검증
 
 `kms` 바이너리를 `/init`으로 삼는 임시 initrd를 만들어 실제 virtio-gpu-pci
 장치를 붙인 QEMU에서 실행한다 — DF-M1까지 만든 실제 커널을 그대로
@@ -234,13 +234,13 @@ scanout 하나짜리 가상 장치라 세 값 모두 1일 가능성이 높다 �
 init!`가 출력된다. 이 panic은 위 "개발 중 임시 initrd 규칙"에서 설명한
 대로 정상이다.
 
-**만약 `kms:` 로그 줄 자체가 안 보이고 ioctl 관련 에러(`Error { ... }`)로
-panic 없이 종료되면:** ioctl 번호 계산이나 struct 크기가 커널 기대값과
+만약 `kms:` 로그 줄 자체가 안 보이고 ioctl 관련 에러(`Error { ... }`)로
+panic 없이 종료되면: ioctl 번호 계산이나 struct 크기가 커널 기대값과
 다른 것이다 — 어떤 에러(`Os { code: N, ... }`)가 나왔는지 알려달라. errno
 `22`(EINVAL)면 struct 크기 불일치, `19`(ENODEV)면 애초에 `/dev/dri/card0`가
 아직 준비 안 된 것(DF-M1 재확인 필요)일 가능성이 높다.
 
-- [x] **Step 5: 커밋**
+- [x] Step 5: 커밋
 
 ```bash
 git add kms/Cargo.toml kms/src/main.rs
@@ -251,10 +251,10 @@ git commit -m "Add kms binary skeleton with DRM resource count query"
 
 ### Task 2: 연결된 connector/encoder/crtc 선택
 
-**Files:**
+Files:
 - Modify: `kms/src/main.rs`
 
-- [x] **Step 1: 나머지 struct 정의와 리소스 선택 로직 추가**
+- [x] Step 1: 나머지 struct 정의와 리소스 선택 로직 추가
 
 Task 1의 `DrmModeCardRes` 정의 뒤에 세 개의 struct를 더 추가한다:
 
@@ -381,7 +381,7 @@ fn find_connected_connector(
 }
 ```
 
-**정정 1(2026-08-07 Task 2 진행 중 발견):** 애초 두 번째 `GETCONNECTOR` 호출
+정정 1(2026-08-07 Task 2 진행 중 발견): 애초 두 번째 `GETCONNECTOR` 호출
 전에 `encoders_ptr`/`props_ptr`/`prop_values_ptr`만 0으로 되돌리고
 `count_encoders`/`count_props`는 그대로 뒀는데, 실제로 부팅해보니
 `EFAULT`(errno 14, "Bad address")가 났다 — 커널은 "호출자가 넘긴 count가
@@ -389,7 +389,7 @@ fn find_connected_connector(
 그대로 두고 포인터만 null로 만들면 null 주소에 복사를 시도해 실패한다.
 포인터를 비울 때는 그에 대응하는 count도 함께 0으로 만들어야 한다.
 
-**정정 2(2026-08-07 Task 2 진행 중 발견):** 정정 1을 반영해 다시
+정정 2(2026-08-07 Task 2 진행 중 발견): 정정 1을 반영해 다시
 부팅하니 `kms: connector 38 connected, mode 1280x800`까지는 성공했지만
 이어서 `ENOENT`(errno 2)가 났다 — `find_crtc`에 넘긴 `connector.encoder_id`
 값이 `0`이었기 때문이다. 이 필드는 "지금 이 connector에 실제로 붙어 있는"
@@ -461,7 +461,7 @@ fn main() -> io::Result<()> {
 }
 ```
 
-- [x] **Step 2: 컴파일 확인**
+- [x] Step 2: 컴파일 확인
 
 Run:
 ```bash
@@ -471,7 +471,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kms \
 
 Expected: 종료 코드 0.
 
-- [x] **Step 3: 임시 initrd로 부팅 검증**
+- [x] Step 3: 임시 initrd로 부팅 검증
 
 Task 1 Step 4와 동일한 명령을 다시 실행한다(내용은 같으므로 그대로
 재사용):
@@ -503,13 +503,13 @@ Expected: `kms: N crtcs, N connectors, N encoders` 뒤에 `kms: connector N
 connected, mode WxH`, `kms: selected crtc N`이 순서대로 출력되고, 마지막에
 `Attempted to kill init!` panic(정상).
 
-**만약 `no connected connector with modes found`가 나오면:** QEMU
+만약 `no connected connector with modes found`가 나오면: QEMU
 virtio-gpu가 `+edid` feature로 초기화됐는지(DF-M1 dmesg에서
 `[drm] features: -virgl +edid ...` 확인) 다시 보고, 그래도 안 되면 전체
 로그를 붙여달라 — connector 목록 자체가 비었는지, `connection` 값이
 무엇으로 나오는지 함께 본다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add kms/src/main.rs
@@ -520,10 +520,10 @@ git commit -m "Select connected connector and target crtc in kms"
 
 ### Task 3: dumb buffer 생성 + mmap + 단색 채우기
 
-**Files:**
+Files:
 - Modify: `kms/src/main.rs`
 
-- [x] **Step 1: dumb buffer struct와 생성/매핑/채우기 코드 추가**
+- [x] Step 1: dumb buffer struct와 생성/매핑/채우기 코드 추가
 
 `DrmModeGetEncoder` 뒤에 두 struct를 추가한다:
 
@@ -625,7 +625,7 @@ fn main() -> io::Result<()> {
 빨강이 된다. 행마다 `dumb.pitch`(줄 사이 실제 바이트 간격 — 폭×4바이트와
 다를 수 있어 반드시 이 값을 써야 한다)만큼 건너뛰며 픽셀을 채운다.
 
-- [x] **Step 2: 컴파일 확인**
+- [x] Step 2: 컴파일 확인
 
 Run:
 ```bash
@@ -635,7 +635,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kms \
 
 Expected: 종료 코드 0.
 
-- [x] **Step 3: 임시 initrd로 부팅 검증**
+- [x] Step 3: 임시 initrd로 부팅 검증
 
 Task 1 Step 4와 동일한 명령(재사용):
 
@@ -667,7 +667,7 @@ framebuffer with solid red`가 추가로 출력되고 panic으로 끝난다(정�
 CRTC에 이 buffer를 연결하지 않았으므로(Task 4) 화면에 실제로 보이는 색은
 없다 — 이 Step은 ioctl 호출들이 에러 없이 성공하는지만 확인한다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add kms/src/main.rs
@@ -678,10 +678,10 @@ git commit -m "Create dumb buffer and fill it with solid red in kms"
 
 ### Task 4: framebuffer 등록 + CRTC 설정 — 실제로 화면에 그리기
 
-**Files:**
+Files:
 - Modify: `kms/src/main.rs`
 
-- [x] **Step 1: `DrmModeCrtc`, `DrmModeFbCmd` struct와 마무리 로직 추가**
+- [x] Step 1: `DrmModeCrtc`, `DrmModeFbCmd` struct와 마무리 로직 추가
 
 `DrmModeMapDumb` 뒤에 두 struct를 추가한다:
 
@@ -752,7 +752,7 @@ struct DrmModeFbCmd {
 `mode`로 어떤 타이밍(해상도 등)을 쓸지 지정한다 — 이 호출이 성공하면
 실제로 화면에 픽셀이 나타난다.
 
-- [x] **Step 2: 컴파일 확인**
+- [x] Step 2: 컴파일 확인
 
 Run:
 ```bash
@@ -762,7 +762,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/kms \
 
 Expected: 종료 코드 0.
 
-- [x] **Step 3: 임시 initrd + screendump로 실제 픽셀 색 확인**
+- [x] Step 3: 임시 initrd + screendump로 실제 픽셀 색 확인
 
 여기서부터는 Task 1~3의 로그 확인만으로는 부족하다 — 실제로 화면에 빨강이
 나타났는지 DF-M0의 screendump 파이프라인을 그대로 빌려 확인한다. 이
@@ -817,13 +817,13 @@ Expected: 마지막 줄이 `0,0: (255,0,0) #FF0000 srgb(255,0,0)` 같은 형태�
 실제로 나타남)를 이 시점에 이미 달성한 것이다. Task 5~6은 이 로직을 정식
 부팅 경로에 통합하고 자동 검증 스크립트로 굳히는 작업이다.
 
-**만약 색이 검정(`#000000`)이거나 예상과 다르면:** `sleep 3`를 늘려서
+만약 색이 검정(`#000000`)이거나 예상과 다르면: `sleep 3`를 늘려서
 다시 시도해본다 — QEMU 쪽 scanout 반영에 시간이 더 필요할 수 있다. 그래도
 안 되면 위 명령에서 `-display none`을 빼고 `-serial stdio`를 추가해
 `kms:` 로그가 `Attempted to kill init` 전에 전부 정상 출력됐는지(에러 없이
 `set crtc N to fb N`까지 도달했는지) 먼저 확인해서 알려달라.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add kms/src/main.rs
@@ -834,11 +834,11 @@ git commit -m "Register framebuffer and set CRTC to draw solid red in kms"
 
 ### Task 5: `init`에 통합 — 부팅 시 `kms` 실행
 
-**Files:**
+Files:
 - Modify: `init/src/main.rs`
 - Modify: `kernel/make_initrd.sh`
 
-- [x] **Step 1: `init`이 `kms`를 fork+exec하도록 수정**
+- [x] Step 1: `init`이 `kms`를 fork+exec하도록 수정
 
 `init/src/main.rs`에서 `log_drm_device_presence` 함수 뒤에 새 함수를
 추가한다:
@@ -881,7 +881,7 @@ fn run_kms() {
     setup_controlling_terminal();
 ```
 
-- [x] **Step 2: `make_initrd.sh`가 `kms` 바이너리를 포함하도록 수정**
+- [x] Step 2: `make_initrd.sh`가 `kms` 바이너리를 포함하도록 수정
 
 `kernel/make_initrd.sh`에서 `fish` 복사 블록 앞(또는 뒤, 순서는 무관)에
 `kms` 복사를 추가한다. 기존 `copy_lib_deps` 헬퍼 함수를 그대로
@@ -908,7 +908,7 @@ copy_lib_deps "$WORKDIR/usr/bin/fish"
 `chmod 0755 "$WORKDIR/kms"` 두 줄, 그리고 `copy_lib_deps "$WORKDIR/kms"`
 한 줄만 새로 끼워 넣으면 된다.)
 
-- [x] **Step 3: init 재컴파일**
+- [x] Step 3: init 재컴파일
 
 Run:
 ```bash
@@ -918,7 +918,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/init \
 
 Expected: 종료 코드 0.
 
-- [x] **Step 4: 정식 initrd 재생성**
+- [x] Step 4: 정식 initrd 재생성
 
 Run:
 ```bash
@@ -931,11 +931,11 @@ Expected: 종료 코드 0, `N blocks` 출력, `kernel/initrd.cpio` 갱신됨(Tas
 `make_initrd.sh` 실행 시점에 존재해야 하므로, Task 4까지 순서대로
 진행했다면 이미 충족돼 있다).
 
-- [x] **Step 5: 정식 부팅 경로로 확인**
+- [x] Step 5: 정식 부팅 경로로 확인
 
 `kernel/check-virtio-gpu.sh`(DF-M1에서 만든, `-device virtio-gpu-pci`를
-붙이는 스크립트)로 확인한다 — **`kernel/check.sh`(Boot Foundation부터
-있던 기본 스크립트)는 쓰지 않는다.** `kernel/check.sh`는 애초에
+붙이는 스크립트)로 확인한다 — `kernel/check.sh`(Boot Foundation부터
+있던 기본 스크립트)는 쓰지 않는다. `kernel/check.sh`는 애초에
 virtio-gpu 장치를 QEMU에 붙이지 않으므로, 그걸로 확인하면 `/dev/dri/card0`
 자체가 없어서 `kms`가 정상적으로 실패하는 모습만 보게 된다(이건 버그가
 아니라 장치가 없다는 당연한 결과다). `kernel/check-virtio-gpu.sh`가
@@ -953,18 +953,18 @@ interactive shell`이 순서대로 나오고 `PASS`(이 스크립트의 PASS 조
 `/dev/dri/card0 exists` grep이지만, `-serial stdio`로 전체 로그가 출력되므로
 fish 배너까지 눈으로 함께 확인할 수 있다).
 
-**만약 `kms exited with status`가 0이 아니면:** `waitpid`가 돌려준
+만약 `kms exited with status`가 0이 아니면: `waitpid`가 돌려준
 `status`는 raw wait status(하위 8비트가 exit code, 다른 비트는 시그널
 정보)라 값 해석이 필요할 수 있다 — 정확한 숫자를 알려달라.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add init/src/main.rs kernel/make_initrd.sh kernel/initrd.cpio
 git commit -m "Run kms from init during boot"
 ```
 
-**정정(2026-08-07 Task 6 진행 중 발견):** Task 5의 `run_kms`는 애초
+정정(2026-08-07 Task 6 진행 중 발견): Task 5의 `run_kms`는 애초
 `waitpid`로 `kms`가 끝날 때까지 기다렸는데, `display/check.sh`로 실제
 exit gate를 검증해보니 해상도(`1280x800`)는 맞지만 픽셀 색이 빨강이 아닌
 검정(`#000000`)으로 나왔다. 커널 소스(`drm_file.c`, `drm_framebuffer.c`,
@@ -981,7 +981,7 @@ panic했기 때문이다(`do_exit()`의 `is_global_init()` 체크가 `exit_files
 호출보다 먼저 실행됨) — fd가 한 번도 안 닫혀서 framebuffer가 그대로
 남아있었다.
 
-**수정:** `kms`가 `SETCRTC` 성공 후 `Ok(())`로 반환하는 대신
+수정: `kms`가 `SETCRTC` 성공 후 `Ok(())`로 반환하는 대신
 `loop { unsafe { libc::pause() }; }`로 fd를 계속 붙든 채 영원히
 대기하도록 바꿨다. `tars-init`의 `run_kms`는 더 이상 `waitpid`로
 기다리지 않고 `fork` 직후 바로 다음(콘솔 설정 → fish exec)으로
@@ -992,10 +992,10 @@ panic했기 때문이다(`do_exit()`의 `is_global_init()` 체크가 `exit_files
 
 ### Task 6: `display/check.sh` 확장 — 픽셀 색 검사로 공식 exit gate 검증
 
-**Files:**
+Files:
 - Modify: `display/check.sh`
 
-- [x] **Step 1: 해상도 확인 뒤에 픽셀 색 검사 추가**
+- [x] Step 1: 해상도 확인 뒤에 픽셀 색 검사 추가
 
 DF-M0의 `display/check.sh`는 지금 해상도가 파싱되면 바로 `PASS`한다. 이제
 `kms`가 화면 전체를 빨강으로 채우므로, 좌표 `(10,10)`의 픽셀 색이
@@ -1054,7 +1054,7 @@ exit 1
 `magick identify ...`, `magick <file> -crop ... txt:-`로 구분해서
 받는다).
 
-- [x] **Step 2: 실행**
+- [x] Step 2: 실행
 
 Run:
 ```bash
@@ -1065,12 +1065,12 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace \
 Expected: `Captured screendump: ... (WxH)`, `Pixel at (10,10): 0,0:
 (255,0,0) #FF0000 srgb(255,0,0)` 형태의 줄, 마지막에 `PASS`, 종료 코드 0.
 
-**만약 `FAIL: expected red`가 나오면:** `sleep 3`(screendump 전 대기)을
+만약 `FAIL: expected red`가 나오면: `sleep 3`(screendump 전 대기)을
 늘려서 재시도한다 — kms가 CRTC 설정을 마치기 전에 screendump가 찍혔을
 가능성이 있다. 그래도 안 되면 `Pixel at (10,10): ...`에 실제로 어떤 값이
 나왔는지 알려달라.
 
-- [x] **Step 3: 커밋**
+- [x] Step 3: 커밋
 
 ```bash
 git add display/check.sh

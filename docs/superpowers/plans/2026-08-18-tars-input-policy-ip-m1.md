@@ -1,22 +1,22 @@
 # TARS Input Policy IP-M1 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** IP-M0가 넓혀 놓은 바닥(`[]const u8` 반환) 위에 **이스케이프
-시퀀스**를 올린다. 방향키·Home/End·Delete·PageUp/PageDown이 셸의 줄
-편집기까지 도달하고, 그 시퀀스의 모양을 **추측하지 않고 VT에게 물어본다**
+Goal: IP-M0가 넓혀 놓은 바닥(`[]const u8` 반환) 위에 이스케이프
+시퀀스를 올린다. 방향키·Home/End·Delete·PageUp/PageDown이 셸의 줄
+편집기까지 도달하고, 그 시퀀스의 모양을 추측하지 않고 VT에게 물어본다
 (DECCKM). 그리고 지금 거짓말을 하고 있는 `TERM`을 `xterm`으로 고치고 그
-terminfo를 게스트에 넣는다. 이 milestone이 끝나면 게스트 셸에서 **줄 가운데를
-고칠 수 있다.**
+terminfo를 게스트에 넣는다. 이 milestone이 끝나면 게스트 셸에서 줄 가운데를
+고칠 수 있다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
+Design doc: `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
 (결정 5·6·7이 이 milestone의 몫)
 
-**배경 자료:** `docs/study/2026-08-15-keyboard-escape-sequence-crash-course.md`
+배경 자료: `docs/study/2026-08-15-keyboard-escape-sequence-crash-course.md`
 
-**Tech Stack:** Zig 0.16.0, libghostty-vt(`modes.get`), bash, QEMU monitor
+Tech Stack: Zig 0.16.0, libghostty-vt(`modes.get`), bash, QEMU monitor
 `sendkey`, Docker(`tars-devcontainer`, arm64), Debian `ncurses-base`
 
 ---
@@ -37,32 +37,32 @@ Task 5   게이트 확장 — 방향키 + TERM                ← 증명
 Task 6   루트 게이트 4체인 3/3
 ```
 
-Task 1과 2를 나누는 이유는 IP-M0의 Task 2/3 분리와 같다. **시그니처를 넓히는
+Task 1과 2를 나누는 이유는 IP-M0의 Task 2/3 분리와 같다. 시그니처를 넓히는
 변경과 동작을 바꾸는 변경을 한 커밋에 섞으면, 실패했을 때 어느 쪽이
-원인인지 알 수 없다.** Task 1이 끝난 시점에서 `zig build test`는 M0와 똑같이
+원인인지 알 수 없다. Task 1이 끝난 시점에서 `zig build test`는 M0와 똑같이
 통과해야 한다 — 그게 "아직 아무것도 안 바뀌었다"의 증거다.
 
 Task 3이 Task 2 뒤인 이유는 관측 가능성이다. `cursor_keys`를 채워도 특수키가
 없으면 그 값을 읽는 코드가 없다. IP-M0에서 Alt/Meta 넷을 미룬 것과 같은
 기준이다.
 
-Task 4가 게이트보다 앞인 이유는 **`TERM` 변경이 이 milestone에서 가장 넓게
-번지는 변경**이기 때문이다. `terminal`은 세 체인(TF/CP/IP)이 전부 띄우는
+Task 4가 게이트보다 앞인 이유는 `TERM` 변경이 이 milestone에서 가장 넓게
+번지는 변경이기 때문이다. `terminal`은 세 체인(TF/CP/IP)이 전부 띄우는
 프로세스이고, 셸이 보는 `TERM`이 바뀌면 셸이 그리는 프롬프트가 바뀔 수 있다.
 게이트를 고치기 전에 기존 게이트가 살아 있는지부터 본다.
 
 ## 미리 밝혀두는 범위 조정 둘
 
-**1. F1~F12·키패드·Insert는 넣지 않는다.** design doc 비목표 그대로다. 표에
+1. F1~F12·키패드·Insert는 넣지 않는다. design doc 비목표 그대로다. 표에
 넣는 비용 자체는 싸지만 게이트가 볼 수 없는 표를 늘리는 것은
 `project_gate_chain_composition`이 경고한 부채다. 이번에 넣는 특수키는 아홉
 개다 — ↑↓←→, Home, End, Delete, PageUp, PageDown.
 
-**2. modifier + 특수키 조합(`Ctrl+←` 등)은 이번이 아니다.** 터미널 관례는
-`ESC [ 1 ; 5 D` 같은 형태인데, 이건 design doc 결정 2의 **2번 단계(조합
-dispatch)** 에 속하고 그 자리는 IP-M2가 연다. 이번 코드에서 `Ctrl+←`는 Ctrl을
-무시하고 그냥 `←`를 보낸다. **의도된 동작이며, `input_test`에 그렇게
-적어둔다** — 나중에 M2가 이 줄을 고치면서 "여기가 바뀌는 자리"임을 알게 된다.
+2. modifier + 특수키 조합(`Ctrl+←` 등)은 이번이 아니다. 터미널 관례는
+`ESC [ 1 ; 5 D` 같은 형태인데, 이건 design doc 결정 2의 2번 단계(조합
+dispatch) 에 속하고 그 자리는 IP-M2가 연다. 이번 코드에서 `Ctrl+←`는 Ctrl을
+무시하고 그냥 `←`를 보낸다. 의도된 동작이며, `input_test`에 그렇게
+적어둔다 — 나중에 M2가 이 줄을 고치면서 "여기가 바뀌는 자리"임을 알게 된다.
 
 `State.seq`가 8바이트인데 이번에 가장 긴 시퀀스는 4바이트(`ESC [ 3 ~`)다.
 6바이트를 쓰는 것은 위 1번 형태이므로 M2다.
@@ -72,10 +72,10 @@ dispatch)** 에 속하고 그 자리는 IP-M2가 연다. 이번 코드에서 `Ct
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-**이번 편집은 전부 국소 블록 교체다.** `input.zig`가 209줄이지만 고치는 곳은
+이번 편집은 전부 국소 블록 교체다. `input.zig`가 209줄이지만 고치는 곳은
 30줄 안팎의 블록 넷이므로 인라인으로 제시한다(IP-M0에서 이 방식이 잘 통했다).
 `/tmp` + `cp` + `diff` 경로는 이번에 쓰지 않는다.
 
@@ -83,7 +83,7 @@ dispatch)** 에 속하고 그 자리는 IP-M2가 연다. 이번 코드에서 `Ct
 
 ## Task 1: `Context` 구조체가 도착한다
 
-design doc 결정 6의 자리를 만든다. **동작은 하나도 바뀌지 않는다** — 아무도
+design doc 결정 6의 자리를 만든다. 동작은 하나도 바뀌지 않는다 — 아무도
 `ctx`를 읽지 않는다. IP-M0가 "M0에는 채울 내용이 없어서 미뤘다"고 적어둔 것을
 지금 꺼낸다.
 
@@ -91,15 +91,15 @@ design doc 결정 6의 자리를 만든다. **동작은 하나도 바뀌지 않�
 하나만 다섯 모듈(`drm`/`font`/`input`/`pty`/`vt`)을 알고 그 다섯은 서로
 모른다. `input → vt` 화살표를 그리는 순간 이 성질이 깨지고, 다음에 `vt`가
 무언가 필요해지면 순환이 생긴다. 그리고 `input_test`는 `ghostty-vt`를 링크하지
-않으므로(`build.zig:73-83`) import가 생기면 **호스트 테스트가 아예 빌드되지
-않는다.** 저울이 먼저 부서진다.
+않으므로(`build.zig:73-83`) import가 생기면 호스트 테스트가 아예 빌드되지
+않는다. 저울이 먼저 부서진다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` (`Context` 추가, `handleKey`/`readKeys` 시그니처)
 - Modify: `terminal/src/input_test.zig` (`expect` 헬퍼)
 - Modify: `terminal/src/main.zig:146`
 
-- [ ] **Step 1: 테스트의 헬퍼를 먼저 바꾼다**
+- [ ] Step 1: 테스트의 헬퍼를 먼저 바꾼다
 
 `terminal/src/input_test.zig:6-14`의 `expect` 함수를 이것으로 바꾼다.
 
@@ -131,17 +131,17 @@ fn expectCtx(
 }
 ```
 
-M0가 쓴 검사 스물몇 줄은 **한 글자도 안 고친다.** `expect`의 겉모습이
+M0가 쓴 검사 스물몇 줄은 한 글자도 안 고친다. `expect`의 겉모습이
 그대로이기 때문이다 — 그게 이 헬퍼를 둘로 나눈 이유다.
 
-- [ ] **Step 2: 컴파일이 깨지는 것을 확인**
+- [ ] Step 2: 컴파일이 깨지는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: **컴파일 에러.** `input.Context`가 아직 없고, `handleKey`는 인자를 셋만
+기대: 컴파일 에러. `input.Context`가 아직 없고, `handleKey`는 인자를 셋만
 받는다. 대략 이런 메시지 둘이 나온다.
 
 ```
@@ -149,9 +149,9 @@ error: struct 'input' has no member named 'Context'
 error: expected 3 argument(s), found 4
 ```
 
-- [ ] **Step 3: `input.zig`에 `Context`를 추가**
+- [ ] Step 3: `input.zig`에 `Context`를 추가
 
-`terminal/src/input.zig:80-81`의 `none` 정의 **바로 앞에** 다음을 넣는다.
+`terminal/src/input.zig:80-81`의 `none` 정의 바로 앞에 다음을 넣는다.
 
 ```zig
 /// 키 하나를 어떻게 번역할지 바꾸는, **바깥에서 들어오는** 상태.
@@ -176,7 +176,7 @@ pub const Context = struct {
 };
 ```
 
-- [ ] **Step 4: `handleKey`와 `readKeys`가 `ctx`를 받게 한다**
+- [ ] Step 4: `handleKey`와 `readKeys`가 `ctx`를 받게 한다
 
 세 곳이다. 먼저 `input.zig:131-134`의 `handleKey` 선언.
 
@@ -188,7 +188,7 @@ pub const Context = struct {
 ```
 
 이 Task에서는 본문에서 `ctx`를 읽지 않으므로, 함수 첫 줄에 다음을 넣어
-"안 쓰는 인자" 에러를 막는다. **Task 2에서 이 줄을 지운다.**
+"안 쓰는 인자" 에러를 막는다. Task 2에서 이 줄을 지운다.
 
 ```zig
         // Task 2가 이 줄을 지우고 진짜로 읽는다.
@@ -205,7 +205,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) []const u8 {
         for (self.handleKey(ev.code, ev.value, ctx)) |byte| {
 ```
 
-- [ ] **Step 5: `main.zig`가 아직은 기본값을 넘긴다**
+- [ ] Step 5: `main.zig`가 아직은 기본값을 넘긴다
 
 `terminal/src/main.zig:146`의
 
@@ -221,14 +221,14 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) []const u8 {
             const bytes = input.readKeys(&key_state, keyboard_fd, &key_buf, .{});
 ```
 
-- [ ] **Step 6: 통과하는 것을 확인 (아무것도 안 바뀌었다는 증거)**
+- [ ] Step 6: 통과하는 것을 확인 (아무것도 안 바뀌었다는 증거)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: M0와 **글자 하나 다르지 않은** 출력.
+기대: M0와 글자 하나 다르지 않은 출력.
 
 ```
 input_event size = 24 (expected 24)
@@ -244,7 +244,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 
 기대: 에러 없이 끝난다.
 
-- [ ] **Step 7: Commit**
+- [ ] Step 7: Commit
 
 Claude가 수행한다. 커밋 메시지: `Pass a translation context into every key event`
 
@@ -255,29 +255,29 @@ Claude가 수행한다. 커밋 메시지: `Pass a translation context into every
 이 milestone의 본체다. 여기서 처음으로 `State.seq`가 1바이트보다 길게 쓰인다 —
 IP-M0가 8바이트로 잡아두고 한 번도 안 썼던 그 배열이다.
 
-**표를 어떻게 둘 것인가.** 기존 `keymap`은 `[2]u8`(Shift 안 누름 / 누름)
+표를 어떻게 둘 것인가. 기존 `keymap`은 `[2]u8`(Shift 안 누름 / 누름)
 배열이라 여러 바이트를 담을 수 없다. 그리고 방향키는 코드 102~111에 있어서
-지금 표(0~57)를 그 자리까지 늘리면 **58~101 마흔네 칸이 전부 `.{ 0, 0 }`인
-표**가 된다. 그래서 특수키는 별도 `switch`로 뺀다. 조회가 `keymap` 배열 밖에서
-일어나므로 `code >= keymap.len` 검사보다 **먼저** 물어봐야 한다.
+지금 표(0~57)를 그 자리까지 늘리면 58~101 마흔네 칸이 전부 `.{ 0, 0 }`인
+표가 된다. 그래서 특수키는 별도 `switch`로 뺀다. 조회가 `keymap` 배열 밖에서
+일어나므로 `code >= keymap.len` 검사보다 먼저 물어봐야 한다.
 
-**두 가지 모양뿐이다.**
+두 가지 모양뿐이다.
 
 | 모양 | 예 | DECCKM |
 |---|---|---|
-| 커서 계열 `ESC [ X` / `ESC O X` | ↑↓→← Home End | **영향 받음** |
+| 커서 계열 `ESC [ X` / `ESC O X` | ↑↓→← Home End | 영향 받음 |
 | 틸드 계열 `ESC [ N ~` | Delete PageUp PageDown | 영향 없음 |
 
 그래서 union 하나로 표현하고, 마지막 글자(또는 숫자)만 표에 적는다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input_test.zig` (검사 추가)
 - Modify: `terminal/src/input.zig` (`SpecialKey`, `escape`, `handleKey`)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 추가**
+- [ ] Step 1: 실패하는 검사를 먼저 추가
 
 `terminal/src/input_test.zig`의 마지막 검사(`try expect(&state, 46, 1, "c");`,
-102줄) **뒤에**, `std.debug.print("PASS\n", .{});` **앞에** 다음을 넣는다.
+102줄) 뒤에, `std.debug.print("PASS\n", .{});` 앞에 다음을 넣는다.
 
 ```zig
     // ── 특수키 → 이스케이프 시퀀스 (IP-M1) ──────────────────────────────
@@ -344,21 +344,21 @@ IP-M0가 8바이트로 잡아두고 한 번도 안 썼던 그 배열이다.
     try expect(&state, 110, 1, ""); // KEY_INSERT
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인**
+- [ ] Step 2: 실패하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: 컴파일은 되고 **실행이 실패**한다. 첫 실패는 `code=103 value=1`이며
+기대: 컴파일은 되고 실행이 실패한다. 첫 실패는 `code=103 value=1`이며
 `got={ }`, `want={ 27, 91, 65 }`다. 지금 103은 `code >= keymap.len`(58)에 걸려
 빈 슬라이스로 떨어진다 — 그것이 지금 방향키가 아무 일도 안 하는 이유의 전부다.
 
 `27, 91, 65`가 `ESC [ A`라는 것을 눈으로 확인하고 넘어간다. 0x1b=27,
 `[`=91, `A`=65.
 
-- [ ] **Step 3: `input.zig`에 특수키 표를 추가**
+- [ ] Step 3: `input.zig`에 특수키 표를 추가
 
 `terminal/src/input.zig`의 `Context` 정의와 `none` 사이(= keymap 배열 바로
 뒤)에 다음을 넣는다.
@@ -398,9 +398,9 @@ fn specialKey(code: u16) ?SpecialKey {
 }
 ```
 
-- [ ] **Step 4: `State`에 `escape`를 추가**
+- [ ] Step 4: `State`에 `escape`를 추가
 
-`input.zig`의 `one` 함수(`:125-129`) **바로 뒤에** 다음을 넣는다.
+`input.zig`의 `one` 함수(`:125-129`) 바로 뒤에 다음을 넣는다.
 
 ```zig
     /// 특수키의 바이트열을 seq에 담아 슬라이스로 돌려준다.
@@ -426,11 +426,11 @@ fn specialKey(code: u16) ?SpecialKey {
     }
 ```
 
-- [ ] **Step 5: `handleKey`가 특수키를 먼저 보게 한다**
+- [ ] Step 5: `handleKey`가 특수키를 먼저 보게 한다
 
-`input.zig`의 `handleKey`에서 Task 1이 넣어둔 `_ = ctx;` 줄을 **지우고**,
+`input.zig`의 `handleKey`에서 Task 1이 넣어둔 `_ = ctx;` 줄을 지우고,
 `if (value == 0) return none;` 과 `if (code >= keymap.len) return none;`
-**사이에** 다음을 넣는다.
+사이에 다음을 넣는다.
 
 ```zig
         // 특수키를 keymap 조회보다 **먼저** 본다. 방향키(102~111)는 어차피
@@ -459,7 +459,7 @@ fn specialKey(code: u16) ?SpecialKey {
         ...
 ```
 
-- [ ] **Step 6: 통과하는 것을 확인**
+- [ ] Step 6: 통과하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -473,13 +473,13 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-**여기서 `error: no field named 'KEY_PAGEUP'` 류가 나오면 알려 달라.**
+여기서 `error: no field named 'KEY_PAGEUP'` 류가 나오면 알려 달라.
 `@cImport(linux/input.h)`가 `input-event-codes.h`를 통해 이 상수들을
 가져오는지는 컨테이너의 `linux-libc-dev` 버전에 달려 있다. 실패하면 숫자
 리터럴(103/108/106/105/102/107/111/104/109)로 대체하고 주석에 이름을 적는
 것이 우회다 — 다만 이름 쪽이 읽기 좋으므로 먼저 이렇게 시도한다.
 
-- [ ] **Step 7: Commit**
+- [ ] Step 7: Commit
 
 Claude가 수행한다. 커밋 메시지: `Turn the arrow and edit keys into escape sequences`
 
@@ -494,12 +494,12 @@ libghostty-vt의 `Terminal`에 `modes` 필드가 있으며
 (`ghostty-src/src/terminal/Terminal.zig:83`), `ModeState.get`이
 `pub fn get(self: *const ModeState, mode: Mode) bool`이다
 (`modes.zig:47`). `cursor_keys`는 `modes.zig:288`에 private mode 1로 등록돼
-있다. **필요한 것이 전부 이미 있다.**
+있다. 필요한 것이 전부 이미 있다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig:145-151`
 
-- [ ] **Step 1: 키를 읽기 직전에 모드를 되읽는다**
+- [ ] Step 1: 키를 읽기 직전에 모드를 되읽는다
 
 `terminal/src/main.zig:145-151`의 블록을 이것으로 바꾼다.
 
@@ -527,7 +527,7 @@ libghostty-vt의 `Terminal`에 `modes` 필드가 있으며
         }
 ```
 
-- [ ] **Step 2: 빌드되는지 확인**
+- [ ] Step 2: 빌드되는지 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -541,7 +541,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 vendor된 ghostty 버전이 다르다는 뜻이니 알려 달라 —
 `terminal/ghostty-src/src/terminal/Terminal.zig`에서 `modes:`를 다시 찾는다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다. 커밋 메시지: `Ask the VT which cursor key mode is active`
 
@@ -551,20 +551,20 @@ Claude가 수행한다. 커밋 메시지: `Ask the VT which cursor key mode is a
 
 지금 PTY 셸이 보는 `TERM`은 `linux`다. 커널의 `envp_init`이 준 값이 PID 1을
 거쳐 그대로 내려온 것이고(`docs/decisions/project_guest_environment.md`),
-**그런데 그 셸이 말을 거는 상대는 리눅스 콘솔이 아니라 libghostty-vt**다.
+그런데 그 셸이 말을 거는 상대는 리눅스 콘솔이 아니라 libghostty-vt다.
 xterm 계열이고, 특수키 시퀀스가 실제로 다르다.
 
-이 Task는 이 milestone에서 **가장 넓게 번지는 변경**이다. `terminal`은 세
+이 Task는 이 milestone에서 가장 넓게 번지는 변경이다. `terminal`은 세
 체인이 전부 띄우는 프로세스이므로, 셸이 능력을 더 갖게 되면 프롬프트가
-그려지는 방식이 바뀔 수 있다. 그래서 게이트를 고치기 **전에** 기존 게이트가
+그려지는 방식이 바뀔 수 있다. 그래서 게이트를 고치기 전에 기존 게이트가
 살아 있는지부터 본다.
 
-**Files:**
+Files:
 - Modify: `devcontainer/Dockerfile:53-66`
 - Modify: `terminal/src/main.zig` (extern 선언 + `setenv`)
 - Modify: `kernel/make_initrd.sh:134` 뒤
 
-- [ ] **Step 1: `ncurses-base`를 sysroot에 굽는다**
+- [ ] Step 1: `ncurses-base`를 sysroot에 굽는다
 
 `devcontainer/Dockerfile:58`의 `zsh-common \` 뒤에 한 줄을 넣는다.
 
@@ -585,7 +585,7 @@ xterm 계열이고, 특수키 시퀀스가 실제로 다르다.
 # 있으므로 그 선례를 따르면 된다.
 ```
 
-- [ ] **Step 2: 이미지를 다시 굽고 terminfo가 들어왔는지 확인**
+- [ ] Step 2: 이미지를 다시 굽고 terminfo가 들어왔는지 확인
 
 ```bash
 docker build -t tars-devcontainer -f devcontainer/Dockerfile . 2>&1 | tail -20
@@ -601,7 +601,7 @@ docker run --rm tars-devcontainer bash -c \
 기대: `xterm`이 목록에 있다(보통 `xterm`, `xterm-256color`, `xterm-color`,
 `xterm-mono`, `xterm-r6` 등이 함께 나온다).
 
-**`xterm`이 없으면 멈추고 알린다.** 그 경우 두 갈래다 — Debian trixie의
+`xterm`이 없으면 멈추고 알린다. 그 경우 두 갈래다 — Debian trixie의
 `ncurses-base`가 xterm을 `ncurses-term`으로 옮겼거나, `dpkg -x`가
 `/usr/share/terminfo`를 다른 자리에 풀었거나. 아래로 확인한다.
 
@@ -610,9 +610,9 @@ docker run --rm tars-devcontainer bash -c \
   "find /usr/local/amd64-sysroot -name 'xterm' -path '*terminfo*'"
 ```
 
-- [ ] **Step 3: `terminal`이 `forkpty` 직전에 `TERM`을 덮어쓴다**
+- [ ] Step 3: `terminal`이 `forkpty` 직전에 `TERM`을 덮어쓴다
 
-`terminal/src/main.zig:11`(cImport 블록 닫는 줄) **뒤에** extern 선언을
+`terminal/src/main.zig:11`(cImport 블록 닫는 줄) 뒤에 extern 선언을
 추가한다.
 
 ```zig
@@ -622,7 +622,7 @@ docker run --rm tars-devcontainer bash -c \
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 ```
 
-그리고 `main.zig:116`의 `const argv = ...` **바로 앞에** 다음을 넣는다.
+그리고 `main.zig:116`의 `const argv = ...` 바로 앞에 다음을 넣는다.
 
 ```zig
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
@@ -642,9 +642,9 @@ extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int
     _ = setenv("TERM", "xterm", 1);
 ```
 
-- [ ] **Step 4: terminfo 파일을 initrd에 넣는다**
+- [ ] Step 4: terminfo 파일을 initrd에 넣는다
 
-`kernel/make_initrd.sh:134`(`__fish_build_paths.fish`를 복사하는 줄) **뒤에**
+`kernel/make_initrd.sh:134`(`__fish_build_paths.fish`를 복사하는 줄) 뒤에
 다음을 넣는다.
 
 ```bash
@@ -660,7 +660,7 @@ mkdir -p "$WORKDIR/usr/share/terminfo/x"
 cp "$SYSROOT/usr/share/terminfo/x/xterm" "$WORKDIR/usr/share/terminfo/x/xterm"
 ```
 
-- [ ] **Step 5: initrd에 실제로 들어갔는지 확인**
+- [ ] Step 5: initrd에 실제로 들어갔는지 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -676,10 +676,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 ./usr/share/terminfo/x/xterm
 ```
 
-- [ ] **Step 6: 기존 두 체인이 살아 있는지 확인 (이 Task의 핵심)**
+- [ ] Step 6: 기존 두 체인이 살아 있는지 확인 (이 Task의 핵심)
 
 `TERM`이 바뀌면 셸이 프롬프트를 그리는 방식이 바뀔 수 있다. TF와 CP 체인은
-화면 덤프를 grep하므로 **여기서 깨질 수 있다.** 게이트를 고치기 전에 본다.
+화면 덤프를 grep하므로 여기서 깨질 수 있다. 게이트를 고치기 전에 본다.
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -693,19 +693,19 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 기대: 둘 다 `PASS`.
 
-**깨진다면 무엇이 달라졌는지가 중요하다.** 화면 덤프 줄을 그대로 붙여 달라.
+깨진다면 무엇이 달라졌는지가 중요하다. 화면 덤프 줄을 그대로 붙여 달라.
 예상되는 변화는 셋이다.
 
-- fish가 이제 색을 쓴다 → 덤프는 codepoint만 찍으므로 **영향 없어야 한다**.
+- fish가 이제 색을 쓴다 → 덤프는 codepoint만 찍으므로 영향 없어야 한다.
   영향이 있다면 libghostty-vt가 SGR을 셀에 남기는 방식과 관련이 있다.
 - fish가 bracketed paste(`ESC [ ? 2004 h`)나 `smkx`(`ESC [ ? 1 h`)를 보낸다 →
-  **이건 오히려 좋은 소식이다.** 후자가 오면 design doc 위험 4가 해소되고
+  이건 오히려 좋은 소식이다. 후자가 오면 design doc 위험 4가 해소되고
   게이트가 `ESC O` 경로를 실제로 밟는다.
 - 프롬프트가 줄 전체 repaint 방식으로 바뀌어 덤프의 행 구성이 달라진다 →
-  grep 패턴을 손봐야 할 수 있다. 이때는 **패턴을 느슨하게 만들지 말고**
+  grep 패턴을 손봐야 할 수 있다. 이때는 패턴을 느슨하게 만들지 말고
   무엇이 달라졌는지 먼저 설명한다(게이트가 헛되게 통과하지 않도록).
 
-- [ ] **Step 7: Commit**
+- [ ] Step 7: Commit
 
 Claude가 수행한다. 커밋 메시지: `Tell the shell it is talking to an xterm`
 
@@ -713,21 +713,21 @@ Claude가 수행한다. 커밋 메시지: `Tell the shell it is talking to an xt
 
 ## Task 5: 게이트가 방향키를 증명한다
 
-부팅은 여전히 **한 번**이다. IP-M0 게이트가 Ctrl+C를 끝내고 프롬프트로
+부팅은 여전히 한 번이다. IP-M0 게이트가 Ctrl+C를 끝내고 프롬프트로
 돌아온 그 자리에서 이어서 친다 — 부팅을 하나 더 붙이는 대신 `sendkey` 열
 몇 개(≈4초)를 더하는 쪽이 싸다.
 
-**게이트가 헛되게 통과하지 않게 하는 장치가 이번에도 있다.** 방향키가 통째로
-무시돼도 `echo abcX`는 멀쩡히 실행되어 화면에 출력이 뜬다. 그래서 **`aXbc`가
-있어야 한다**와 **`abcX`가 없어야 한다**를 함께 본다. IP-M0의 `notdead`
+게이트가 헛되게 통과하지 않게 하는 장치가 이번에도 있다. 방향키가 통째로
+무시돼도 `echo abcX`는 멀쩡히 실행되어 화면에 출력이 뜬다. 그래서 `aXbc`가
+있어야 한다와 `abcX`가 없어야 한다를 함께 본다. IP-M0의 `notdead`
 검사와 같은 종류다.
 
-**Files:**
+Files:
 - Modify: `input/check.sh`
 
-- [ ] **Step 1: initrd에 terminfo가 있는지부터 검사**
+- [ ] Step 1: initrd에 terminfo가 있는지부터 검사
 
-`input/check.sh:42-45`의 `make_initrd.sh` 블록 **뒤에** 다음을 넣는다.
+`input/check.sh:42-45`의 `make_initrd.sh` 블록 뒤에 다음을 넣는다.
 
 ```bash
 # TERM=xterm이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc
@@ -750,11 +750,11 @@ case "$INITRD_LIST" in
 esac
 ```
 
-- [ ] **Step 2: Ctrl+C 검사 뒤에 두 검사를 이어 붙인다**
+- [ ] Step 2: Ctrl+C 검사 뒤에 두 검사를 이어 붙인다
 
 지금 `input/check.sh:181-197`은 이 순서다: `FOUND` 루프 → monitor 닫기 →
-QEMU 죽이기 → `FOUND` 판정. 새 검사를 넣으려면 **판정을 앞으로 당기고
-QEMU를 더 살려둬야 한다.**
+QEMU 죽이기 → `FOUND` 판정. 새 검사를 넣으려면 판정을 앞으로 당기고
+QEMU를 더 살려둬야 한다.
 
 `:181-197`을 통째로 이것으로 바꾼다.
 
@@ -845,7 +845,7 @@ else
 fi
 ```
 
-- [ ] **Step 3: 마커 목록에 하나 더한다**
+- [ ] Step 3: 마커 목록에 하나 더한다
 
 `input/check.sh:83`의 `"terminal: screen>" \` 뒤(= `"terminal: key>"` 앞)는
 그대로 두고, `report_failure`의 마커 목록 맨 뒤에 한 줄을 넣는다. `:84`의
@@ -865,7 +865,7 @@ fi
 "타이핑이 안 됐다", 있는데 `xterm` 행이 없으면 "`setenv`가 안 먹었다"로
 갈라진다.
 
-- [ ] **Step 4: IP 체인을 단독으로 돌린다**
+- [ ] Step 4: IP 체인을 단독으로 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -882,8 +882,8 @@ the arrow keys moved the cursor inside the line
 DECCKM ...
 ```
 
-**실패하면 `report_failure`가 찍는 마커 목록과 마지막 화면 덤프 다섯 줄을
-그대로 붙여 달라.** 구분해야 할 실패가 넷이다.
+실패하면 `report_failure`가 찍는 마커 목록과 마지막 화면 덤프 다섯 줄을
+그대로 붙여 달라. 구분해야 할 실패가 넷이다.
 
 - `TERM` 행이 아예 없다 → `shift-4`(`$`)나 `shift-t` 같은 키 이름이 QEMU에
   없거나 우리 keymap에서 다르게 번역됐다. 화면 덤프의 명령줄 행을 보면
@@ -897,7 +897,7 @@ DECCKM ...
   안 켠 상태라면 셸은 그걸 `ESC` + `OD`로 읽는다. `decckm=` 로그가 이때
   결정적인 증거다.
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 Claude가 수행한다. 커밋 메시지: `Make the gate edit the middle of a line`
 
@@ -905,10 +905,10 @@ Claude가 수행한다. 커밋 메시지: `Make the gate edit the middle of a li
 
 ## Task 6: 루트 게이트 전체
 
-**Files:**
+Files:
 - Modify: `check.sh:53`
 
-- [ ] **Step 1: 체인 이름을 갱신**
+- [ ] Step 1: 체인 이름을 갱신
 
 `check.sh:53`의
 
@@ -930,7 +930,7 @@ run_chain "IP-M1" ./input/check.sh
 # sendkey는 글자당 0.3초라, 이 체인에서 비싼 쪽은 타이핑이다.
 ```
 
-- [ ] **Step 2: 전체 게이트 (오래 걸린다 — 20분 안팎)**
+- [ ] Step 2: 전체 게이트 (오래 걸린다 — 20분 안팎)
 
 ```bash
 time docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -940,11 +940,11 @@ time docker run --rm -v "$PWD":/workspace -w /workspace \
 기대: 마지막 줄이
 `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**측정값을 기록해 달라** — IP-M0가 19분 49초였다. 늘어난 분량이 추가한
+측정값을 기록해 달라 — IP-M0가 19분 49초였다. 늘어난 분량이 추가한
 `sendkey` 개수(≈14개 × 0.3초 × 3회 ≈ 13초)와 맞는지 본다. 그보다 훨씬 크면
 `TERM` 변경이 셸의 시작 시간이나 렌더 횟수를 늘린 것이므로 따로 봐야 한다.
 
-- [ ] **Step 3: Commit + push**
+- [ ] Step 3: Commit + push
 
 Claude가 수행한다. 커밋 메시지: `Retarget the aggregate gate at IP-M1`
 
@@ -954,26 +954,26 @@ Claude가 수행한다. 커밋 메시지: `Retarget the aggregate gate at IP-M1`
 
 - [ ] `input.Context`가 있고 `handleKey`/`readKeys`가 그것을 받는다
 - [ ] ↑↓←→·Home·End가 `ESC [ X`를, DECCKM이 켜지면 `ESC O X`를 보낸다
-- [ ] Delete·PageUp·PageDown이 `ESC [ N ~`을 보내고 **DECCKM에 흔들리지 않는다**
+- [ ] Delete·PageUp·PageDown이 `ESC [ N ~`을 보내고 DECCKM에 흔들리지 않는다
 - [ ] `main.zig`가 `screen.term.modes.get(.cursor_keys)`로 그 값을 채운다
 - [ ] PTY 셸의 `TERM`이 `xterm`이고 시리얼 콘솔 셸은 `linux` 그대로다
 - [ ] `/usr/share/terminfo/x/xterm`이 initrd에 있고 게이트가 그것을 확인한다
 - [ ] 게이트가 `echo abc` → ← ← → `X` → `echo aXbc`를 증명하고 `echo abcX`가
-      **없음**을 함께 확인한다
+      없음을 함께 확인한다
 - [ ] 루트 게이트가 4체인 3/3으로 PASS한다
 
 ## 이 milestone이 남기는 것 (IP-M2가 이어받는다)
 
-- **Alt/Meta 넷이 여전히 추적되지 않는다.** modifier 여덟 개의 나머지 절반은
+- Alt/Meta 넷이 여전히 추적되지 않는다. modifier 여덟 개의 나머지 절반은
   dispatch 표와 함께 M2에서 처음 관측 가능해진다.
-- **`Context.swap_alt_meta`가 아무도 안 읽는 필드로 남는다.** `keyboard=`
+- `Context.swap_alt_meta`가 아무도 안 읽는 필드로 남는다. `keyboard=`
   설정이 도착하는 M2까지.
-- **modifier + 특수키 조합이 맨 시퀀스로 새어 나간다.** `Ctrl+←`가 지금
+- modifier + 특수키 조합이 맨 시퀀스로 새어 나간다. `Ctrl+←`가 지금
   `ESC [ D`다. design doc 결정 2의 2번 단계(조합 dispatch)가 이 위에 얹히면
   가로채진다. `input_test`에 그 줄이 명시돼 있다.
-- **`State.seq`는 아직 4바이트까지만 쓴다.** 6바이트(`ESC [ 1 ; 5 D`)는 M2다.
-- **QEMU `sendkey meta_l`이 게스트에 닿는지 미검증.** M2의 첫 확인 대상이며,
+- `State.seq`는 아직 4바이트까지만 쓴다. 6바이트(`ESC [ 1 ; 5 D`)는 M2다.
+- QEMU `sendkey meta_l`이 게스트에 닿는지 미검증. M2의 첫 확인 대상이며,
   안 되면 `keyboard=pc` 쪽으로 게이트를 돌리는 우회가 있다(design doc 위험 1).
-- **fish의 기본 바인딩이 design doc 결정 8의 표와 맞는지 미검증.** M2 게이트는
+- fish의 기본 바인딩이 design doc 결정 8의 표와 맞는지 미검증. M2 게이트는
   `/usr/bin/bash`를 쳐서 readline 지형으로 들어간 뒤 검사한다 — 절대 경로인
   이유는 게스트에 `PATH`가 없기 때문이다(`project_guest_environment`).

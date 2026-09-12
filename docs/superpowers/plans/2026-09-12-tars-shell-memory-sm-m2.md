@@ -1,103 +1,103 @@
 # SM-M2 Implementation Plan — 배운 것이 부팅을 넘어 남는다
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 기계가 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)이 **전원을 끊어도
-남는다.** 게이트의 **8차 부팅**이 그것을 본다 — 그 부팅은 `cd`를 한 번도 안
+Goal: 기계가 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)이 전원을 끊어도
+남는다. 게이트의 8차 부팅이 그것을 본다 — 그 부팅은 `cd`를 한 번도 안
 치는데 `z`가 7차에서 배운 자리로 걸어 들어가고, `history`가 7차만 친 명령을
 갖고 있다.
 
-**Architecture:** 새 파일이 하나도 없다. 고치는 파일이 다섯이고, **씨앗 rc와
-`expectQuietSeed`는 한 글자도 안 건드린다**(design 결정 3 — 히스토리 줄이 rc에
+Architecture: 새 파일이 하나도 없다. 고치는 파일이 다섯이고, 씨앗 rc와
+`expectQuietSeed`는 한 글자도 안 건드린다(design 결정 3 — 히스토리 줄이 rc에
 한 줄도 필요 없다).
 
 | 파일 | 이 milestone에서 하는 일 |
 |---|---|
-| `init/src/environ.zig` | `withPath` → **`withTarsEnv`**. `XDG_DATA_HOME`과 히스토리 항목들을 커널 블록 뒤에 붙인다 |
+| `init/src/environ.zig` | `withPath` → `withTarsEnv`. `XDG_DATA_HOME`과 히스토리 항목들을 커널 블록 뒤에 붙인다 |
 | `init/src/config.zig` | `Shell.histEntries()` — 셸마다 다른 `HISTFILE`·`HISTSIZE`·`SAVEHIST` |
-| `init/src/main.zig` | env 블록을 **셸이 정해진 뒤에** 짓고, `/config/xdg`를 `seedRcFiles` 옆에서 만든다 |
+| `init/src/main.zig` | env 블록을 셸이 정해진 뒤에 짓고, `/config/xdg`를 `seedRcFiles` 옆에서 만든다 |
 | `init/src/environ_test.zig` · `config_test.zig` | 위 둘의 호스트 검사 |
-| `config/check.sh` | 7차가 `fc -W`를 더 치고, **8차 부팅**이 선다 |
-| `tools/check.sh` | **주석 한 자리만** — DB가 이제 `/config/xdg`에 산다 |
-| `kernel/` · `terminal/` · `devcontainer/` | **안 고친다** |
+| `config/check.sh` | 7차가 `fc -W`를 더 치고, 8차 부팅이 선다 |
+| `tools/check.sh` | 주석 한 자리만 — DB가 이제 `/config/xdg`에 산다 |
+| `kernel/` · `terminal/` · `devcontainer/` | 안 고친다 |
 
-**Tech Stack:** Zig 0.16(init) · bash(게이트 체인) · QEMU monitor `sendkey`
+Tech Stack: Zig 0.16(init) · bash(게이트 체인) · QEMU monitor `sendkey`
 
-**협업 규칙:** 이 세션은 **기본 규칙**이다 — 구현 파일은 Claude가 "넣을 것"을
-제시하고 **사용자가 직접 넣는다.** 빌드·부팅·게이트 실행과 조사성 명령은
+협업 규칙: 이 세션은 기본 규칙이다 — 구현 파일은 Claude가 "넣을 것"을
+제시하고 사용자가 직접 넣는다. 빌드·부팅·게이트 실행과 조사성 명령은
 Claude가 돌린다. 커밋도 Claude가 만든다.
 
-**읽고 시작할 것:**
+읽고 시작할 것:
 `docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md` — 특히
-**실측 3(zoxide는 `XDG_DATA_HOME`을 본다) · 4(없는 경로는 만들고 댕글링 링크는
-에러다) · 9·10·11(히스토리 env) · 결정 2·3·4·9**. 그리고 이 plan의 Task 1이
-그 위에 실측 **34~41**을 얹었다 — **셋이 design을 고쳤다.**
+실측 3(zoxide는 `XDG_DATA_HOME`을 본다) · 4(없는 경로는 만들고 댕글링 링크는
+에러다) · 9·10·11(히스토리 env) · 결정 2·3·4·9. 그리고 이 plan의 Task 1이
+그 위에 실측 34~41을 얹었다 — 셋이 design을 고쳤다.
 
-그리고 `docs/decisions/project_zig_out_staleness.md`. **음성 확인을 하기 전에
-`rm -rf init/.zig-cache init/zig-out`을 친다.** 안 치면 5회 중 1회가 거짓
+그리고 `docs/decisions/project_zig_out_staleness.md`. 음성 확인을 하기 전에
+`rm -rf init/.zig-cache init/zig-out`을 친다. 안 치면 5회 중 1회가 거짓
 초록이고, 어느 회차인지 알려 주는 신호가 없다.
 
 ---
 
 ## 이 milestone을 지배하는 사실 셋
 
-### 1. **게이트는 전원을 뽑는다** — 그래서 7차가 히스토리를 직접 써야 한다
+### 1. 게이트는 전원을 뽑는다 — 그래서 7차가 히스토리를 직접 써야 한다
 
 `boot_once`는 마커를 보면 `kill "$QEMU_PID"`로 기계를 끝낸다. 게스트 입장에서
-그것은 전원이 끊긴 것이고, **셸이 나갈 때 하는 일이 하나도 안 일어난다.**
+그것은 전원이 끊긴 것이고, 셸이 나갈 때 하는 일이 하나도 안 일어난다.
 
 실측 34가 그 경계를 정확히 그었다.
 
 | 셸이 어떻게 끝나나 | `HISTFILE`이 써지나 |
 |---|---|
-| `exit` | **써진다** |
-| SIGTERM | **써진다** |
-| SIGHUP | **써진다** |
-| SIGKILL(=전원) | **안 써진다** |
+| `exit` | 써진다 |
+| SIGTERM | 써진다 |
+| SIGHUP | 써진다 |
+| SIGKILL(=전원) | 안 써진다 |
 
-**이것은 나쁜 소식이 아니라 좋은 소식 반이다.** 실기에서 전원 버튼을 누르면
-PID 1이 자식에게 SIGTERM을 보내므로(`power.zig`) **히스토리는 저장된다.**
-저장이 안 되는 것은 "코드를 뽑는 것"뿐이고, **게이트가 하는 일이 정확히
-그것이다.**
+이것은 나쁜 소식이 아니라 좋은 소식 반이다. 실기에서 전원 버튼을 누르면
+PID 1이 자식에게 SIGTERM을 보내므로(`power.zig`) 히스토리는 저장된다.
+저장이 안 되는 것은 "코드를 뽑는 것"뿐이고, 게이트가 하는 일이 정확히
+그것이다.
 
-그래서 7차 부팅이 `fc -W` 한 줄을 더 친다. **그것은 편법이 아니라 게이트가
-못 하는 것(정상 종료)을 대신하는 한 줄이다** — 그리고 그 한 줄이 없었으면
+그래서 7차 부팅이 `fc -W` 한 줄을 더 친다. 그것은 편법이 아니라 게이트가
+못 하는 것(정상 종료)을 대신하는 한 줄이다 — 그리고 그 한 줄이 없었으면
 8차가 왜 빨간지 영영 안 갈렸을 것이다.
 
-### 2. zoxide의 DB는 **`cd` 그 순간에** 디스크로 간다
+### 2. zoxide의 DB는 `cd` 그 순간에 디스크로 간다
 
 히스토리와 달리 `db.zo`는 셸이 나갈 때가 아니라 `zoxide add`마다 쓰인다.
 실측 42(예행)에서 `kill -9`로 끝낸 세션의 DB가 그대로 남았다. `/config`가
 `MS_SYNCHRONOUS`로 붙어 있어(`main.zig:93`) 쓴 시점에 이미 디스크에 있다.
 
-**그래서 판정 둘이 서로 다른 실패를 본다** — `z`는 "자리를 옮겼나"를,
+그래서 판정 둘이 서로 다른 실패를 본다 — `z`는 "자리를 옮겼나"를,
 `history`는 "나갈 때 쓰는 것을 누가 대신 썼나"를 본다.
 
-### 3. env 넷은 **아무것도 안 찍는다**
+### 3. env 넷은 아무것도 안 찍는다
 
-실측 39c가 셸 셋을 `env -i` 위에서 전/후로 쟀고 **바이트가 같았다**.
+실측 39c가 셸 셋을 `env -i` 위에서 전/후로 쟀고 바이트가 같았다.
 
 | 셸 | 전 | 후 |
 |---|---|---|
-| zsh | 371 | **371** |
-| bash | 127 | **127** |
-| fish | 863 | **863** |
+| zsh | 371 | 371 |
+| bash | 127 | 127 |
+| fish | 863 | 863 |
 
 위험 1(씨앗이 한 글자라도 찍으면 다섯 체인의 화면 좌표가 밀린다)이 이번에도
-같은 자리에 있고, 이 표가 착수 전 근거다. **그래도 게이트의 첫 회차가 진짜
-검사다.**
+같은 자리에 있고, 이 표가 착수 전 근거다. 그래도 게이트의 첫 회차가 진짜
+검사다.
 
 ---
 
 ## Task 1: 컨테이너에서 먼저 잰다 (완료 — 실측 34~42)
 
-**Files:** 없음(측정만)
+Files: 없음(측정만)
 
-**측정 환경:** devcontainer가 arm64라 arm64 바이너리로 쟀다 — zsh 5.9 ·
+측정 환경: devcontainer가 arm64라 arm64 바이너리로 쟀다 — zsh 5.9 ·
 fish 4.0.2 · zoxide 0.9.7 · fzf 0.60, 게스트의 amd64와 같은 Debian trixie
-스냅샷이다. **pty를 줬다**(`script -qfc` + fifo) — 게스트의 셸은 PTY 위에
+스냅샷이다. pty를 줬다(`script -qfc` + fifo) — 게스트의 셸은 PTY 위에
 살고, 히스토리를 언제 쓰는지는 그 차이에 갈릴 수 있는 종류의 질문이다.
 
 ```bash
@@ -106,7 +106,7 @@ docker exec tars-measure bash -c 'apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish zoxide fzf'
 ```
 
-- [x] **Step 1: 실측 34 — 셸이 어떻게 끝나야 `HISTFILE`이 써지나**
+- [x] Step 1: 실측 34 — 셸이 어떻게 끝나야 `HISTFILE`이 써지나
 
 ```
 exit      file=yes  content=[echo marker_exit/exit/]
@@ -115,10 +115,10 @@ HUP       file=yes  content=[echo marker_HUP/]
 KILL      file=NO   content=[-]
 ```
 
-**design 결정 3은 "남는다"를 적으면서 게이트가 전원을 뽑는다는 것을 안
-봤다.** 위의 "지배하는 사실 1"이 이 표에서 나왔다.
+design 결정 3은 "남는다"를 적으면서 게이트가 전원을 뽑는다는 것을 안
+봤다. 위의 "지배하는 사실 1"이 이 표에서 나왔다.
 
-- [x] **Step 2: 실측 35 — `fc -W`가 쓰고, `wc -l`은 공백 없이 숫자를 찍는다**
+- [x] Step 2: 실측 35 — `fc -W`가 쓰고, `wc -l`은 공백 없이 숫자를 찍는다
 
 ```
 $ (7차와 같은 순서로 치고) fc -W ; wc -l $HISTFILE
@@ -126,10 +126,10 @@ $ (7차와 같은 순서로 치고) fc -W ; wc -l $HISTFILE
 ```
 
 파일은 평문 한 줄에 명령 하나다(`EXTENDED_HISTORY`가 꺼져 있다 — 실측 9와
-같다). **GNU `wc`는 파일이 하나면 앞에 공백을 안 넣는다** — 그래서 게이트가
+같다). GNU `wc`는 파일이 하나면 앞에 공백을 안 넣는다 — 그래서 게이트가
 `\| [0-9]` 하나로 이 출력을 타이핑한 줄과 가를 수 있다.
 
-- [x] **Step 3: 실측 36 — 새 셸이 그 파일을 읽고 `history`가 찍는 모양**
+- [x] Step 3: 실측 36 — 새 셸이 그 파일을 읽고 `history`가 찍는 모양
 
 ```
     1  cd /usr/bin/../share/terminfo/x
@@ -138,19 +138,19 @@ $ (7차와 같은 순서로 치고) fc -W ; wc -l $HISTFILE
     4  fc -W
 ```
 
-**네 칸 들여쓰고 번호, 공백 둘, 명령이다.** design 결정 8이 그랬듯 이 결정도
+네 칸 들여쓰고 번호, 공백 둘, 명령이다. design 결정 8이 그랬듯 이 결정도
 명령만 적혀 있었고 출력은 안 적혀 있었다.
 
-- [x] **Step 4: 실측 37 — bash는 `HISTSIZE`만으로 파일까지 자른다**
+- [x] Step 4: 실측 37 — bash는 `HISTSIZE`만으로 파일까지 자른다
 
 ```
 HISTSIZE=5로 열두 개를 치고 나간 뒤:  파일 5줄  [echo cmd_9/…/exit/]
 ```
 
-`HISTFILESIZE`를 안 줘도 잘린다. **결정 4의 5,000줄 상한이 bash에서도 선다**는
+`HISTFILESIZE`를 안 줘도 잘린다. 결정 4의 5,000줄 상한이 bash에서도 선다는
 뜻이고, env 항목을 하나 안 늘려도 된다.
 
-- [x] **Step 5: 실측 38 — `XDG_DATA_HOME` 하나가 DB를 옮긴다**
+- [x] Step 5: 실측 38 — `XDG_DATA_HOME` 하나가 DB를 옮긴다
 
 ```
 XDG_DATA_HOME=…/config/xdg zoxide add /usr/bin/../share/terminfo/x
@@ -159,16 +159,16 @@ XDG_DATA_HOME=…/config/xdg zoxide add /usr/bin/../share/terminfo/x
   → ls $XDG_DATA_HOME/zoxide  →  db.zo
 ```
 
-실측 3·4의 재확인이고, **`ls`의 출력이 `db.zo` 한 단어라는 것**이 8차 부팅의
+실측 3·4의 재확인이고, `ls`의 출력이 `db.zo` 한 단어라는 것이 8차 부팅의
 둘째 판정이 된다.
 
-- [x] **Step 6: 실측 39 — env 넷의 비용은 0바이트다**
+- [x] Step 6: 실측 39 — env 넷의 비용은 0바이트다
 
-위 "지배하는 사실 3"의 표. **`env -i` 위에서 재야 한다** — 처음에는 앞
+위 "지배하는 사실 3"의 표. `env -i` 위에서 재야 한다 — 처음에는 앞
 측정의 `export`가 새서 fish가 남의 히스토리를 읽는 것을 보고 한 번 놀랐다
 (그것이 실측 41이 됐다).
 
-- [x] **Step 7: 실측 40 — fish 히스토리는 `XDG_DATA_HOME` 아래로 자동으로 간다**
+- [x] Step 7: 실측 40 — fish 히스토리는 `XDG_DATA_HOME` 아래로 자동으로 간다
 
 ```
 …/xdg/fish/fish_history
@@ -176,10 +176,10 @@ XDG_DATA_HOME=…/config/xdg zoxide add /usr/bin/../share/terminfo/x
   when: 1789172042
 ```
 
-실측 11이 맞았다. **fish에게는 env를 하나도 안 준다** — `XDG_DATA_HOME`
+실측 11이 맞았다. fish에게는 env를 하나도 안 준다 — `XDG_DATA_HOME`
 하나가 히스토리까지 옮긴다.
 
-- [x] **Step 8: 실측 41 — fish는 첫 대화형 기동에 `$HISTFILE`을 가져온다**
+- [x] Step 8: 실측 41 — fish는 첫 대화형 기동에 `$HISTFILE`을 가져온다
 
 ```
 HISTFILE=…/borrowed_bash_history 를 주고 fish를 처음 띄우면
@@ -187,15 +187,15 @@ HISTFILE=…/borrowed_bash_history 를 주고 fish를 처음 띄우면
                  - cmd: echo bash_line_two
 ```
 
-**우연히 발견한 것이고, 우리 설계에서는 안 일어난다** — `histEntries()`가
+우연히 발견한 것이고, 우리 설계에서는 안 일어난다 — `histEntries()`가
 fish에 빈 목록을 주므로 `shell=fish`인 기계에는 `HISTFILE`이 아예 없다.
-**`shell`을 bash에서 fish로 바꾼 사람에게는 이것이 기능이 된다**(쳤던 명령이
+`shell`을 bash에서 fish로 바꾼 사람에게는 이것이 기능이 된다(쳤던 명령이
 따라온다). 문서에 적어 두고 코드로는 아무것도 안 한다.
 
-- [x] **Step 9: 실측 42 — 7차→8차를 컨테이너에서 통째로 예행했다**
+- [x] Step 9: 실측 42 — 7차→8차를 컨테이너에서 통째로 예행했다
 
 씨앗과 같은 훅이 든 `.zshrc`를 놓고, 7차를 `kill -9`로 끝내고(전원), 새
-세션을 띄워 **`cd`를 한 번도 안 치고** 판정 셋을 확인했다.
+세션을 띄워 `cd`를 한 번도 안 치고 판정 셋을 확인했다.
 
 ```
 === 7차 (전원을 뽑는다)
@@ -213,7 +213,7 @@ db.zo                                     ← 그 기억이 설정 디스크에 
     5  whence -w fzf-history-widget       ← 7차만 친 명령이 목록에 있다
 ```
 
-**이 세 줄이 Task 7이 쓸 판정 셋 그대로다.** 게이트를 짜기 전에 판정이 실제로
+이 세 줄이 Task 7이 쓸 판정 셋 그대로다. 게이트를 짜기 전에 판정이 실제로
 나오는 것을 봤다는 뜻이고, M0·M1이 각각 한 번씩 "판정 글자가 안 나온다"로
 되돌아간 자리를 이번에는 앞에서 막았다.
 
@@ -221,13 +221,13 @@ db.zo                                     ← 그 기억이 설정 디스크에 
 
 ## Task 2: `config.zig` — `Shell.histEntries()`
 
-**Files:**
+Files:
 - Modify: `init/src/config.zig` (`Shell` enum 안, `rcPath()`와 `hookLines()`
   사이)
 
-- [x] **Step 1: 상수 둘과 함수 하나를 넣는다**
+- [x] Step 1: 상수 둘과 함수 하나를 넣는다
 
-`rcPath()`의 닫는 `}` 바로 뒤, `HOOKS_FISH` 주석 앞에 **넣을 것**:
+`rcPath()`의 닫는 `}` 바로 뒤, `HOOKS_FISH` 주석 앞에 넣을 것:
 
 ```zig
     /// 이 기계가 기억하는 것 둘 중 **쳤던 명령**의 자리(SM design 결정 3).
@@ -267,7 +267,7 @@ db.zo                                     ← 그 기억이 설정 디스크에 
     }
 ```
 
-- [x] **Step 2: 컴파일한다**
+- [x] Step 2: 컴파일한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -280,12 +280,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 ## Task 3: `environ.zig` — `withPath`가 `withTarsEnv`가 된다
 
-**Files:**
+Files:
 - Modify: `init/src/environ.zig`
 
-- [x] **Step 1: 상수 둘을 더한다**
+- [x] Step 1: 상수 둘을 더한다
 
-`PATH_ENTRY` 선언 바로 뒤에 **넣을 것**:
+`PATH_ENTRY` 선언 바로 뒤에 넣을 것:
 
 ```zig
 /// `XDG_DATA_HOME`이 가리키는 자리(SM design 결정 2). **이 한 경로가 둘을
@@ -307,12 +307,12 @@ pub const XDG_DATA_DIR = "/config/xdg";
 pub const XDG_ENTRY: [:0]const u8 = "XDG_DATA_HOME=" ++ XDG_DATA_DIR;
 ```
 
-- [x] **Step 2: `withPath`를 통째로 `withTarsEnv`로 바꾼다**
+- [x] Step 2: `withPath`를 통째로 `withTarsEnv`로 바꾼다
 
-**지울 것** — `withPath`의 머리 주석부터 함수 끝까지(`init/src/environ.zig:37`
+지울 것 — `withPath`의 머리 주석부터 함수 끝까지(`init/src/environ.zig:37`
 ~ `:56`).
 
-**넣을 것**:
+넣을 것:
 
 ```zig
 /// 커널이 준 블록을 buf에 복사하고 **우리 것을 뒤에 붙인 뒤** buf를 돌려준다.
@@ -354,29 +354,29 @@ pub fn withTarsEnv(
 }
 ```
 
-- [x] **Step 3: 컴파일은 아직 깨진다**
+- [x] Step 3: 컴파일은 아직 깨진다
 
 `main.zig`가 아직 `withPath`를 부르므로 Task 5까지는 `zig build`가 빨갛다.
-**정상이다** — 이름을 바꾼 것이 부르는 자리를 반드시 지나가게 만드는 것이
+정상이다 — 이름을 바꾼 것이 부르는 자리를 반드시 지나가게 만드는 것이
 이 편집의 값이다.
 
 ---
 
 ## Task 4: 호스트 검사 둘
 
-**Files:**
+Files:
 - Modify: `init/src/environ_test.zig`
 - Modify: `init/src/config_test.zig`
 
-- [x] **Step 1: `environ_test.zig`를 새 계약으로 고친다**
+- [x] Step 1: `environ_test.zig`를 새 계약으로 고친다
 
-머리의 `const environ = @import("environ.zig");` 아래에 **넣을 것**:
+머리의 `const environ = @import("environ.zig");` 아래에 넣을 것:
 
 ```zig
 const config = @import("config.zig");
 ```
 
-그리고 `pub fn main()` 안의 블록 1~3을 **지우고** 아래로 **바꾼다**(블록 4는
+그리고 `pub fn main()` 안의 블록 1~3을 지우고 아래로 바꾼다(블록 4는
 그대로 두고 그 앞에 온다).
 
 ```zig
@@ -471,7 +471,7 @@ const config = @import("config.zig");
     }
 ```
 
-블록 4(기존 `PATH 값이 design 결정 1과 같다`) 뒤에 **넣을 것**:
+블록 4(기존 `PATH 값이 design 결정 1과 같다`) 뒤에 넣을 것:
 
 ```zig
     // ── 6. XDG 항목의 값과 경로가 한 글자를 공유한다 ────────────────────
@@ -489,21 +489,21 @@ const config = @import("config.zig");
     }
 ```
 
-마지막 줄의 문구도 넓힌다 — **지울 것**:
+마지막 줄의 문구도 넓힌다 — 지울 것:
 
 ```zig
     std.debug.print("environ_test: PATH is appended to the kernel's block ({d} slots)\n", .{environ.MAX_ENTRIES});
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     std.debug.print("environ_test: PATH, XDG_DATA_HOME and the shell's history env are appended to the kernel's block ({d} slots)\n", .{environ.MAX_ENTRIES});
 ```
 
-- [x] **Step 2: `config_test.zig`에 히스토리 검사를 더한다**
+- [x] Step 2: `config_test.zig`에 히스토리 검사를 더한다
 
-`expectHooksCoverTheTools`의 닫는 `}` 뒤에 **넣을 것**:
+`expectHooksCoverTheTools`의 닫는 `}` 뒤에 넣을 것:
 
 ```zig
 /// 히스토리 env가 셸의 성질과 맞는가(SM-M2 design 결정 3).
@@ -558,7 +558,7 @@ fn expectHistEntries(sh: config.Shell) !void {
 }
 ```
 
-`main()`의 `expectHooksCoverTheTools` 줄 바로 뒤에 **넣을 것**:
+`main()`의 `expectHooksCoverTheTools` 줄 바로 뒤에 넣을 것:
 
 ```zig
     // ── SM-M2: 히스토리 env ─────────────────────────────────────────────
@@ -572,19 +572,19 @@ fn expectHistEntries(sh: config.Shell) !void {
     }
 ```
 
-- [x] **Step 3: 호스트 검사를 돌린다** (Task 5 뒤에 함께 돈다 — 지금은
+- [x] Step 3: 호스트 검사를 돌린다 (Task 5 뒤에 함께 돈다 — 지금은
       `main.zig`가 아직 안 고쳐져 빌드가 빨갛다)
 
 ---
 
-## Task 5: `main.zig` — env 블록이 **셸이 정해진 뒤로** 내려간다
+## Task 5: `main.zig` — env 블록이 셸이 정해진 뒤로 내려간다
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig`
 
-- [x] **Step 1: `mountDevpts` 옆에 `/config/xdg`를 만드는 함수를 넣는다**
+- [x] Step 1: `mountDevpts` 옆에 `/config/xdg`를 만드는 함수를 넣는다
 
-`mountDevpts()`의 닫는 `}` 뒤에 **넣을 것**:
+`mountDevpts()`의 닫는 `}` 뒤에 넣을 것:
 
 ```zig
 /// `XDG_DATA_HOME`이 가리키는 디렉터리를 만든다(SM design 결정 9).
@@ -609,12 +609,12 @@ fn makeXdgDir() void {
 }
 ```
 
-- [x] **Step 2: `main()` 머리의 env 블록을 지운다**
+- [x] Step 2: `main()` 머리의 env 블록을 지운다
 
-**지울 것** — `main.zig:467`의 `pub fn main(...) {` 바로 아래, 주석 포함
+지울 것 — `main.zig:467`의 `pub fn main(...) {` 바로 아래, 주석 포함
 `var env_buf` 선언부터 `tars-init: env unchanged` 블록의 닫는 `}`까지
-(`:468` ~ `:491`). **`std.debug.print("tars-init: starting as PID 1\n", .{});`
-한 줄은 남기고 맨 위로 올린다.**
+(`:468` ~ `:491`). `std.debug.print("tars-init: starting as PID 1\n", .{});`
+한 줄은 남기고 맨 위로 올린다.
 
 즉 `main()`의 시작이 이렇게 된다.
 
@@ -625,15 +625,15 @@ pub fn main(init: std.process.Init.Minimal) void {
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
 ```
 
-- [x] **Step 3: `seedRcFiles` 옆에서 `/config/xdg`를 만든다**
+- [x] Step 3: `seedRcFiles` 옆에서 `/config/xdg`를 만든다
 
-**지울 것**(`main.zig:540`):
+지울 것(`main.zig:540`):
 
 ```zig
     if (storage_mounted) config.seedRcFiles();
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     if (storage_mounted) {
@@ -646,9 +646,9 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
 ```
 
-- [x] **Step 4: `resolveShell` 뒤에서 env 블록을 짓는다**
+- [x] Step 4: `resolveShell` 뒤에서 env 블록을 짓는다
 
-`const shell_path = shell.path();` 바로 뒤에 **넣을 것**:
+`const shell_path = shell.path();` 바로 뒤에 넣을 것:
 
 ```zig
     // ── env 블록은 여기서 짓는다(SM-M2) ──────────────────────────────────
@@ -697,7 +697,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
 ```
 
-- [x] **Step 5: 빌드와 호스트 검사**
+- [x] Step 5: 빌드와 호스트 검사
 
 ```bash
 rm -rf init/.zig-cache init/zig-out
@@ -709,46 +709,46 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 ---
 
-## Task 6: 호스트 음성 확인 셋 — **캐시를 비우고 한 번씩**
+## Task 6: 호스트 음성 확인 셋 — 캐시를 비우고 한 번씩
 
-**Files:** 없음(되돌렸다 복구)
+Files: 없음(되돌렸다 복구)
 
-**절차는 매번 같다.** 고치고 → `rm -rf init/.zig-cache init/zig-out` →
+절차는 매번 같다. 고치고 → `rm -rf init/.zig-cache init/zig-out` →
 `zig build test` 한 번 → 빨간 것을 확인 → 되돌린다.
 (`docs/decisions/project_zig_out_staleness.md` — 안 지우면 5회 중 1회가
 거짓 초록이고 어느 회차인지 알려 주는 신호가 없다.)
 
-- [x] **되돌림 A: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
+- [x] 되돌림 A: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다
 
 기대: `FAIL: the zsh shell carries 2 history env entries, want 3`.
-**실측 9를 지키는 그물이 도는지 보는 것이다.**
+실측 9를 지키는 그물이 도는지 보는 것이다.
 
-- [x] **되돌림 B: `HIST_BASH`의 `HISTFILE`을 zsh와 같은 파일로 바꾼다**
+- [x] 되돌림 B: `HIST_BASH`의 `HISTFILE`을 zsh와 같은 파일로 바꾼다
 
 기대: `FAIL: bash and zsh point HISTFILE at the same file`.
 (개수 검사만으로는 안 잡힌다 — 그래서 그 한 줄이 따로 있다.)
 
-- [x] **되돌림 C: `withTarsEnv`에서 `buf[n + 1] = XDG_ENTRY.ptr;`를 지우고
-      `added`를 `1 + hist.len`으로 바꾼다**
+- [x] 되돌림 C: `withTarsEnv`에서 `buf[n + 1] = XDG_ENTRY.ptr;`를 지우고
+      `added`를 `1 + hist.len`으로 바꾼다
 
 기대: `FAIL: PATH and XDG_DATA_HOME are not the first two we add`.
-**이 되돌림이 "블록을 제대로 지었는가"의 유일한 호스트 그물이다.**
+이 되돌림이 "블록을 제대로 지었는가"의 유일한 호스트 그물이다.
 
 ---
 
-## Task 7: `config/check.sh` — 7차가 한 줄 더 치고, **8차가 선다**
+## Task 7: `config/check.sh` — 7차가 한 줄 더 치고, 8차가 선다
 
-**Files:**
+Files:
 - Modify: `config/check.sh`
 - Modify: `tools/check.sh` (주석 한 자리)
 
-- [x] **Step 1: 머리글 `/7` → `/8` — 일곱 자리**
+- [x] Step 1: 머리글 `/7` → `/8` — 일곱 자리
 
 `=== boot 1/7:` … `=== boot 7/7:` 일곱 줄을 전부 `/8`로 바꾼다.
 
-- [x] **Step 2: 키 배열 넷을 더한다**
+- [x] Step 2: 키 배열 넷을 더한다
 
-`HOOK_WIDGET_KEYS` 선언 뒤에 **넣을 것**:
+`HOOK_WIDGET_KEYS` 선언 뒤에 넣을 것:
 
 ```bash
 # ── SM-M2 ───────────────────────────────────────────────────────────────
@@ -785,10 +785,10 @@ XDG_LS_KEYS=(l s spc slash c o n f i g slash x d g slash z o x i d e ret)
 HISTORY_KEYS=(h i s t o r y ret)
 ```
 
-- [x] **Step 3: 7차의 훅에 `fc -W`와 되읽기를 붙인다**
+- [x] Step 3: 7차의 훅에 `fc -W`와 되읽기를 붙인다
 
-`probe_shell_hooks`의 마지막 `echo "boot 7: the fzf integration …"` **앞**에
-**넣을 것**(위젯 판정의 `if` 블록 뒤, `return 0` 앞):
+`probe_shell_hooks`의 마지막 `echo "boot 7: the fzf integration …"` 앞에
+넣을 것(위젯 판정의 `if` 블록 뒤, `return 0` 앞):
 
 ```bash
   # ── SM-M2: 8차가 읽을 것을 여기서 디스크에 쓴다 ──────────────────────
@@ -819,12 +819,12 @@ HISTORY_KEYS=(h i s t o r y ret)
   echo "boot 7: the shell wrote its history to the config disk before the power was cut"
 ```
 
-그리고 위젯 판정 블록의 `exec 3<&-` / `exec 3>&-` 두 줄은 **지운다** —
+그리고 위젯 판정 블록의 `exec 3<&-` / `exec 3>&-` 두 줄은 지운다 —
 monitor를 여기서 닫으면 위의 타이핑이 못 간다.
 
-- [x] **Step 4: 8차의 훅 함수를 더한다**
+- [x] Step 4: 8차의 훅 함수를 더한다
 
-`probe_shell_hooks`의 닫는 `}` 뒤, `boot_once` 앞에 **넣을 것**:
+`probe_shell_hooks`의 닫는 `}` 뒤, `boot_once` 앞에 넣을 것:
 
 ```bash
 # 8차 부팅의 훅. **이 milestone이 증명하려는 것 전부가 여기 있다**(SM-M2).
@@ -924,10 +924,10 @@ probe_persisted_memory() {
 }
 ```
 
-- [x] **Step 5: 1차·7차에 env 검사를 더한다**
+- [x] Step 5: 1차·7차에 env 검사를 더한다
 
 1차 부팅의 `echo "boot 1: init seeded all three rc files on the empty disk"`
-뒤에 **넣을 것**:
+뒤에 넣을 것:
 
 ```bash
 # SM-M2. **이 부팅의 셸은 fish다**(씨앗이 기본값이다). fish의 히스토리는
@@ -944,7 +944,7 @@ echo "boot 1: the env block carries XDG_DATA_HOME, and fish asked for no HISTFIL
 ```
 
 7차 부팅의 `if ! grep -q "tars-init: config shell=zsh.*shell_config=on" "$LOG7"`
-블록 뒤에 **넣을 것**:
+블록 뒤에 넣을 것:
 
 ```bash
 # SM-M2. 이 부팅의 셸은 zsh다 — 셋이 다 나와야 한다. **SAVEHIST가 없으면
@@ -960,10 +960,10 @@ for want in \
 done
 ```
 
-- [x] **Step 6: 8차 부팅 블록을 더한다**
+- [x] Step 6: 8차 부팅 블록을 더한다
 
 7차 블록의 마지막 `echo "boot 7: the machine learned a directory …"` 뒤,
-`# 정보성. ext2가 …` 앞에 **넣을 것**:
+`# 정보성. ext2가 …` 앞에 넣을 것:
 
 ```bash
 # ---------------------------------------------------------------- 8차 부팅
@@ -1015,16 +1015,16 @@ fi
 echo "boot 8: the machine remembered a directory and a command across a power cut"
 ```
 
-그리고 맨 끝의 init 로그 덤프에 한 벌 **더한다**:
+그리고 맨 끝의 init 로그 덤프에 한 벌 더한다:
 
 ```bash
 echo "--- init log (boot 8) ---"
 grep 'tars-init:' "$LOG8" || true
 ```
 
-- [x] **Step 7: `tools/check.sh`의 낡은 주석 한 자리**
+- [x] Step 7: `tools/check.sh`의 낡은 주석 한 자리
 
-`tools/check.sh:634` 근처의 **지울 것**:
+`tools/check.sh:634` 근처의 지울 것:
 
 ```
 # DB는 `$HOME/.local/share/zoxide/db.zo`에 생긴다. 홈(/)은 tmpfs라 이 부팅과
@@ -1033,7 +1033,7 @@ grep 'tars-init:' "$LOG8" || true
 # 그때도 안 바뀐다.**
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```
 # DB는 **`$XDG_DATA_HOME/zoxide/db.zo`**에 생긴다(SM-M2가 옮겼다). 이 체인에는
@@ -1052,7 +1052,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh 2>&1 | tail -50
 ```
 
-- [x] **Step 1: 통과할 때까지 돌린다**(부팅 여덟, 약 1분 50초)
+- [x] Step 1: 통과할 때까지 돌린다(부팅 여덟, 약 1분 50초)
 
 기대하는 새 줄 넷:
 
@@ -1065,28 +1065,28 @@ boot 8: the history list carries a command only the seventh boot typed
 boot 8: the machine remembered a directory and a command across a power cut
 ```
 
-⚠ **첫 실행에서 가장 그럴듯한 실패는 `shift-w`다.** 화면에 `fc: bad option`이
+⚠ 첫 실행에서 가장 그럴듯한 실패는 `shift-w`다. 화면에 `fc: bad option`이
 보이면 대문자가 게스트에 안 닿은 것이고, 그때는 `terminal/src/input.zig`의
-shift 경로를 보기 전에 **monitor에 직접 `sendkey shift-w`를 쳐서** 어느 겹이
+shift 경로를 보기 전에 monitor에 직접 `sendkey shift-w`를 쳐서 어느 겹이
 문제인지 먼저 가른다(QEMU가 안 보낸 것과 우리 keymap이 안 받은 것은 다른
 병이다).
 
-- [x] **Step 2: 걸린 시간을 적어 둔다** (SM-M1은 부팅 일곱에 약 1분 40초였다)
+- [x] Step 2: 걸린 시간을 적어 둔다 (SM-M1은 부팅 일곱에 약 1분 40초였다)
 
 ---
 
 ## Task 9: 게스트 음성 확인 둘 + 측정 하나
 
-**Files:** 없음(되돌렸다 복구)
+Files: 없음(되돌렸다 복구)
 
-**매번 앞에 `rm -rf init/.zig-cache init/zig-out`을 친다.**
+매번 앞에 `rm -rf init/.zig-cache init/zig-out`을 친다.
 
-- [x] **되돌림 D: `XDG_DATA_DIR`을 `/tmp/xdg`로 바꾼다**
+- [x] 되돌림 D: `XDG_DATA_DIR`을 `/tmp/xdg`로 바꾼다
 
 (`environ.zig` 한 줄. `environ_test`의 값 검사 둘도 함께 고쳐야 호스트를
-지난다 — **그 두 줄을 고쳐야 한다는 것 자체가 그물이 산다는 증거다.**)
+지난다 — 그 두 줄을 고쳐야 한다는 것 자체가 그물이 산다는 증거다.)
 
-기대: **7차는 초록이고 8차의 첫 판정이 빨갛다.**
+기대: 7차는 초록이고 8차의 첫 판정이 빨갛다.
 
 ```
 boot 7: nobody typed 'zoxide add' — the cd hook learned the directory …
@@ -1094,28 +1094,28 @@ boot 7: the shell wrote its history to the config disk before the power was cut
 FAIL(boot 8): the machine forgot the directory the seventh boot learned
 ```
 
-**이 비대칭이 이 milestone이 증명하는 것의 정확한 모양이다** — 한 부팅
-안에서는 되고, 부팅을 넘으면 안 된다. M1의 7차는 이 되돌림을 **못 잡는다.**
+이 비대칭이 이 milestone이 증명하는 것의 정확한 모양이다 — 한 부팅
+안에서는 되고, 부팅을 넘으면 안 된다. M1의 7차는 이 되돌림을 못 잡는다.
 
-- [x] **되돌림 E: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
+- [x] 되돌림 E: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다
 
 (`config_test.zig`의 `want_len`도 함께 고쳐야 호스트를 지난다.)
 
-기대: **7차의 새 판정이 빨갛다** — 파일이 아예 안 만들어져 `wc`가
+기대: 7차의 새 판정이 빨갛다 — 파일이 아예 안 만들어져 `wc`가
 `No such file`을 찍는다.
 
 ```
 FAIL(boot 7): 'fc -W' left no history file for the eighth boot to read
 ```
 
-**실측 9의 재현이고, 그 실측이 없었으면 `HISTFILE`만 주고 끝냈을 자리다.**
+실측 9의 재현이고, 그 실측이 없었으면 `HISTFILE`만 주고 끝냈을 자리다.
 
-- [x] **측정 F(음성 확인이 아니다): `makeXdgDir()` 호출을 지운다**
+- [x] 측정 F(음성 확인이 아니다): `makeXdgDir()` 호출을 지운다
 
-기대: **초록일 것이다.** zoxide가 없는 경로를 스스로 만든다(실측 4·38).
+기대: 초록일 것이다. zoxide가 없는 경로를 스스로 만든다(실측 4·38).
 
-**초록이면 그것을 그대로 적는다** — 그 `mkdir`은 기능이 아니라 **실패의
-자리를 정하는 것**이고, SM-M0이 관문에 대해 *"고친 것이 아니라 보장한
+초록이면 그것을 그대로 적는다 — 그 `mkdir`은 기능이 아니라 실패의
+자리를 정하는 것이고, SM-M0이 관문에 대해 *"고친 것이 아니라 보장한
 것이다"*라고 적은 것과 같은 종류다. 빨갛다면 실측 4가 게스트에서 안 맞는
 것이니 그쪽이 훨씬 중요한 발견이다.
 
@@ -1128,13 +1128,13 @@ FAIL(boot 7): 'fc -W' left no history file for the eighth boot to read
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 ```
 
-- [x] **Step 1: 3/3, FAIL 0** — **28분 03.23초**(기준선 SM-M1 27분 05.06초,
-      +57.71초). **첫 게이트는 빨갰다** — 아래 "plan이 틀렸던 자리" 4번.
+- [x] Step 1: 3/3, FAIL 0 — 28분 03.23초(기준선 SM-M1 27분 05.06초,
+      +57.71초). 첫 게이트는 빨갰다 — 아래 "plan이 틀렸던 자리" 4번.
 
-기준선은 SM-M1의 **27분 05.06초**다. 부팅이 하나 늘어 회차마다 세 번 더
-켜지므로 **부팅당 약 6초 × 3 = +20초 안쪽**으로 본다.
+기준선은 SM-M1의 27분 05.06초다. 부팅이 하나 늘어 회차마다 세 번 더
+켜지므로 부팅당 약 6초 × 3 = +20초 안쪽으로 본다.
 
-- [x] **Step 2: 세는 것**
+- [x] Step 2: 세는 것
 
 ```bash
 for s in 'command not found' 'Unknown command' 'Welcome to fish' \
@@ -1145,86 +1145,86 @@ done
 
 | 세는 것 | 기대 | 뜻 |
 |---|---|---|
-| `command not found` | **0** | env 넷이 열한 체인 어디서도 한 글자도 안 찍었다 |
+| `command not found` | 0 | env 넷이 열한 체인 어디서도 한 글자도 안 찍었다 |
 | `Unknown command` | 0 | fish 쪽도 같다 |
-| `Welcome to fish` | **6** | SC-M0~SM-M1과 같다 — **회귀 없음** |
+| `Welcome to fish` | 6 | SC-M0~SM-M1과 같다 — 회귀 없음 |
 | `boot 8: the machine remembered` | 3 | 새 부팅 × 세 회차 |
 | `all 67 tools` | 3 | `tools` 체인은 안 건드렸다 |
 
-⚠ **설정 디스크를 붙이는 다섯 체인이 전부 새 env를 받는다**(조건이 없다 —
-결정 9). 그중 셋이 화면의 **셀 좌표**로 판정하므로, 실측 39c가 예측하는
+⚠ 설정 디스크를 붙이는 다섯 체인이 전부 새 env를 받는다(조건이 없다 —
+결정 9). 그중 셋이 화면의 셀 좌표로 판정하므로, 실측 39c가 예측하는
 "안 깨진다"를 확인하는 것이 이 게이트에서 가장 중요한 일이다.
 
 ---
 
-## Task 11: 문서 — **서브프로젝트가 닫힌다**
+## Task 11: 문서 — 서브프로젝트가 닫힌다
 
-- [x] **Step 1: design** — 실측 34~42 · 결정 3에 **정정 블록**(게이트는 전원을
-      뽑으므로 7차가 `fc -W`를 친다) · **`Status:` 줄을 "완료"로**
-- [x] **Step 2: `docs/decisions/project_shell_memory.md`** — M2가 배운 것
-- [x] **Step 3: `MEMORY.md` · `CLAUDE.md`**(완료 목록에 SM을 넣는다) ·
+- [x] Step 1: design — 실측 34~42 · 결정 3에 정정 블록(게이트는 전원을
+      뽑으므로 7차가 `fc -W`를 친다) · `Status:` 줄을 "완료"로
+- [x] Step 2: `docs/decisions/project_shell_memory.md` — M2가 배운 것
+- [x] Step 3: `MEMORY.md` · `CLAUDE.md`(완료 목록에 SM을 넣는다) ·
       `HANDOFF.md`
-- [x] **Step 4: 이 plan의 체크박스와 `⚠ plan이 틀렸다` 블록**(틀린 자리가
+- [x] Step 4: 이 plan의 체크박스와 `⚠ plan이 틀렸다` 블록(틀린 자리가
       있었다면 지우지 않고 남긴다)
-- [x] **Step 5: 커밋** — Claude가 만든다
+- [x] Step 5: 커밋 — Claude가 만든다
 
 ---
 
-## ⚠ plan이 틀렸던 자리 넷 — **지우지 않고 남긴다**
+## ⚠ plan이 틀렸던 자리 넷 — 지우지 않고 남긴다
 
-### 1. 되돌림 C가 **다른 줄에서** 빨개졌다
+### 1. 되돌림 C가 다른 줄에서 빨개졌다
 
 plan은 `FAIL: PATH and XDG_DATA_HOME are not the first two we add`를
-기대했는데 실제로는 **개수 검사가 먼저 걸렸다**.
+기대했는데 실제로는 개수 검사가 먼저 걸렸다.
 
 ```
 FAIL: want 7 entries for zsh, got 6
 ```
 
-그물은 산다(같은 블록 1이 잡는다). **판정 줄까지 예측한 것이 과했고**, 되돌림의
+그물은 산다(같은 블록 1이 잡는다). 판정 줄까지 예측한 것이 과했고, 되돌림의
 기대를 적을 때는 "어느 검사가 먼저 실행되는가"까지 봐야 한다.
 
-### 2. 되돌림 D가 **`config/check.sh`도 함께 고쳐야** 게이트에 닿는다
+### 2. 되돌림 D가 `config/check.sh`도 함께 고쳐야 게이트에 닿는다
 
 plan은 *"`environ_test`의 값 검사 둘도 함께 고쳐야 호스트를 지난다"*까지만
-적었는데, **이 milestone이 Task 7 Step 5에서 1차 부팅에 넣은 grep**
+적었는데, 이 milestone이 Task 7 Step 5에서 1차 부팅에 넣은 grep
 (`tars-init: env PATH=… XDG_DATA_HOME=/config/xdg`)이 `report_failure`로
-**1차에서 즉시 죽인다** — 7차·8차에 닿지도 못한다.
+1차에서 즉시 죽인다 — 7차·8차에 닿지도 못한다.
 
 그 한 줄까지 함께 바꾸니 기대한 그림이 그대로 나왔다(7차 초록 · 8차 빨강).
-**그물을 새로 놓은 milestone의 되돌림은 자기가 놓은 그물에도 걸린다.**
+그물을 새로 놓은 milestone의 되돌림은 자기가 놓은 그물에도 걸린다.
 
 ### 3. 되돌림 E는 `want_len` 하나로는 호스트를 못 지난다
 
-`expectHistEntries`의 **`SAVEHIST`는 zsh만 받는다** 검사도 함께 걸린다
+`expectHistEntries`의 `SAVEHIST`는 zsh만 받는다 검사도 함께 걸린다
 (`FAIL: SAVEHIST belongs to zsh alone`). 그 줄까지 임시로 꺼야 게스트까지
-간다 — **검사를 셋으로 나눈 것의 대가이고, 그 대가는 치를 만하다.**
+간다 — 검사를 셋으로 나눈 것의 대가이고, 그 대가는 치를 만하다.
 
-### 4. **게이트가 한 번 빨갰고, 그것은 이 plan이 만든 것이 아니었다**
+### 4. 게이트가 한 번 빨갰고, 그것은 이 plan이 만든 것이 아니었다
 
 plan은 Task 10의 위험으로 *"다섯 체인이 새 env를 받는다"*만 봤다. 실제로 첫
-게이트를 죽인 것은 **`hangul/check.sh:326`의 SIGPIPE**였다 — 판정 글자가
-로그에 멀쩡히 있는데 빨갰고, **같은 게이트의 run 1/3은 초록이었다.**
+게이트를 죽인 것은 `hangul/check.sh:326`의 SIGPIPE였다 — 판정 글자가
+로그에 멀쩡히 있는데 빨갰고, 같은 게이트의 run 1/3은 초록이었다.
 
 SM-M0이 `tools/check.sh`에서 고친 그 병이고, 그때 만든 목록이 이 자리를 못
-센 이유는 `rg` 패턴이 **플래그 끝이 `q`인 것만** 찾았기 때문이다(여기는
+센 이유는 `rg` 패턴이 플래그 끝이 `q`인 것만 찾았기 때문이다(여기는
 `-aqE`). 그 두 줄을 고치고 HI 체인을 단독으로 돌려 확인한 뒤 게이트를 다시
 돌렸다.
 
-**plan에 "안 하는 것"으로 적혀 있던 `grep -q` 숙제가 스스로 찾아온 것이고,
-그때는 하는 수밖에 없다** — 남은 일곱은 여전히 숙제다.
+plan에 "안 하는 것"으로 적혀 있던 `grep -q` 숙제가 스스로 찾아온 것이고,
+그때는 하는 수밖에 없다 — 남은 일곱은 여전히 숙제다.
 
 ## 이 milestone이 안 하는 것
 
 | | 왜 |
 |---|---|
-| 위험 3(zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다) | **알고 둔다.** `setopt APPEND_HISTORY`는 씨앗 허용 목록을 한 줄 더 넓히는 일이고, 이 서브프로젝트가 먼저 증명할 것은 "남는다"다 |
-| `Ctrl+R`을 게이트가 치는 것 | 비목표 2. TUI라 체인이 매달린다 — 보는 것은 **위젯이 정의됐다는 것**까지다 |
+| 위험 3(zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다) | 알고 둔다. `setopt APPEND_HISTORY`는 씨앗 허용 목록을 한 줄 더 넓히는 일이고, 이 서브프로젝트가 먼저 증명할 것은 "남는다"다 |
+| `Ctrl+R`을 게이트가 치는 것 | 비목표 2. TUI라 체인이 매달린다 — 보는 것은 위젯이 정의됐다는 것까지다 |
 | `/config`가 찼을 때의 정책 | 비목표 3. 상한 5,000줄(=1.5%)까지가 이 서브프로젝트다 |
 | fish 히스토리의 줄 수 상한 | 비목표 4. fish에 그 변수가 없다 |
 | `git-delta` | 비목표 1 |
 | `grep -q` 다섯 자리 | SM-M0이 남긴 숙제. `config/check.sh:552`가 다음 후보 |
-| 실측 41(fish가 `$HISTFILE`을 가져온다)을 쓰는 것 | 우리 설계에서는 안 일어난다(fish에 `HISTFILE`을 안 준다). **문서에만 적는다** |
+| 실측 41(fish가 `$HISTFILE`을 가져온다)을 쓰는 것 | 우리 설계에서는 안 일어난다(fish에 `HISTFILE`을 안 준다). 문서에만 적는다 |
 
 ---
 
@@ -1240,8 +1240,8 @@ SM-M0이 `tools/check.sh`에서 고친 그 병이고, 그때 만든 목록이 �
 | 위험 1 — 한 글자도 찍으면 안 된다 | 실측 39c(0바이트) · Task 10 |
 | 위험 5 — 게이트가 늘어난다 | Task 10(+20초 안쪽) |
 
-**design이 안 적었고 이 plan이 더한 것 하나:** 게이트가 전원을 뽑는다는 사실
-(실측 34)과 그 처방(`fc -W` + `wc` 되읽기). **결정 3은 "부팅 사이에 남는다"를
-적으면서 게이트가 기계를 어떻게 끝내는지를 안 봤다** — M1에서 design이
+design이 안 적었고 이 plan이 더한 것 하나: 게이트가 전원을 뽑는다는 사실
+(실측 34)과 그 처방(`fc -W` + `wc` 되읽기). 결정 3은 "부팅 사이에 남는다"를
+적으면서 게이트가 기계를 어떻게 끝내는지를 안 봤다 — M1에서 design이
 "앞 부팅이 남긴 디스크 상태를 안 봤다"와 같은 종류의 빈 자리이고, 이번에는
 착수 전에 걸렸다.

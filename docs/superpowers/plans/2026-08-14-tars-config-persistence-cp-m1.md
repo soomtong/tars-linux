@@ -1,25 +1,25 @@
 # TARS Config Persistence CP-M1 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** CP-M0가 만든 `/config` 저장소에 **내용**을 담는다. `key=value` 설정
+Goal: CP-M0가 만든 `/config` 저장소에 내용을 담는다. `key=value` 설정
 파일을 읽는 파서와, 빈 디스크로 처음 부팅했을 때 기본 설정 파일을 만들어 두는
-first-boot seeding을 넣고, **한 스크립트 안에서 QEMU를 두 번 띄워** 1차 부팅이
+first-boot seeding을 넣고, 한 스크립트 안에서 QEMU를 두 번 띄워 1차 부팅이
 만든 파일을 2차 부팅이 읽는 것을 확인한다. 여기서 영속성이 처음 증명된다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-14-tars-config-persistence-design.md`
+Design doc: `docs/superpowers/specs/2026-08-14-tars-config-persistence-design.md`
 (승인 완료 — 설계를 다시 열지 않는다)
 
-**Tech Stack:** Zig 0.16.0(`std.os.linux`의 `open`/`read`/`write`/`close`,
+Tech Stack: Zig 0.16.0(`std.os.linux`의 `open`/`read`/`write`/`close`,
 libc 없음), bash, QEMU, Docker(`tars-devcontainer`, arm64)
 
 ---
 
 ## 왜 이 순서인가
 
-이 milestone은 **코드 → 배선 → 게이트** 순으로 간다. 코드가 먼저인 이유는
+이 milestone은 코드 → 배선 → 게이트 순으로 간다. 코드가 먼저인 이유는
 게이트가 볼 마커(로그 문자열)를 코드가 정하기 때문이다.
 
 ```
@@ -32,9 +32,9 @@ config/check.sh  부팅 1회 → kill → 부팅 1회  ← Task 3  ★ 이번의
 check.sh     라벨 CP-M0 → CP-M1              ← Task 4
 ```
 
-**게이트 구조 변경이 이 milestone의 무게중심이다.** BF·TF·CP 세 체인 모두
+게이트 구조 변경이 이 milestone의 무게중심이다. BF·TF·CP 세 체인 모두
 지금까지 "부팅 1회 + 로그 grep"이었다. 영속성은 원리적으로 한 번의 부팅으로
-증명할 수 없다 — 1차 부팅이 만든 것을, **디스크를 다시 굽지 않고**, 2차 부팅이
+증명할 수 없다 — 1차 부팅이 만든 것을, 디스크를 다시 굽지 않고, 2차 부팅이
 읽어야 한다. `make_disk.sh`를 두 부팅 사이에 다시 부르면 게이트는 아무것도
 검증하지 못하면서 초록불을 낸다(`project_gate_chain_composition`의 반복되는
 함정).
@@ -50,14 +50,14 @@ pub fn load(path: [:0]const u8) Config;      // 실패해도 기본값을 돌려
 pub fn save(path: [:0]const u8, c: Config) !void;
 ```
 
-`load`를 **`?Config`로 바꾼다.** 이유는 seeding 판단 때문이다 — `Config`만
+`load`를 `?Config`로 바꾼다. 이유는 seeding 판단 때문이다 — `Config`만
 돌려주면 "파일이 없어서 기본값"과 "파일은 있는데 내용이 비어서 기본값"을
 호출자가 구분할 수 없고, 그러면 언제 `save`를 불러야 하는지 알 수 없다.
 
-null의 의미를 **오직 하나(ENOENT = 파일이 없다)로 좁힌다.** 열기 실패(권한 등),
+null의 의미를 오직 하나(ENOENT = 파일이 없다)로 좁힌다. 열기 실패(권한 등),
 읽기 실패, 파싱 실패는 전부 null이 아니라 기본값 `Config`를 돌려준다.
-**못 읽은 파일을 우리가 덮어쓰면 사용자가 손으로 쓴 설정이 사라지기
-때문이다.** "실패해도 기본값으로 부팅한다"는 design doc의 요구는 그대로
+못 읽은 파일을 우리가 덮어쓰면 사용자가 손으로 쓴 설정이 사라지기
+때문이다. "실패해도 기본값으로 부팅한다"는 design doc의 요구는 그대로
 지켜진다.
 
 ---
@@ -67,25 +67,25 @@ null의 의미를 **오직 하나(ENOENT = 파일이 없다)로 좁힌다.** 열
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
 ---
 
 ## Task 1: `init/src/config.zig` — 설정 모듈
 
-**Files:**
+Files:
 - Create: `init/src/config.zig`
 
-`init/build.zig`는 **건드리지 않는다.** `main.zig`가 root source file이고,
+`init/build.zig`는 건드리지 않는다. `main.zig`가 root source file이고,
 같은 모듈 안의 파일은 `@import("config.zig")` 한 줄로 붙는다 — `build.zig`에
 모듈을 추가해야 하는 것은 *다른* 모듈(패키지)을 붙일 때뿐이다.
 
 libc가 없으므로 `std.fs`가 아니라 `std.os.linux`의 시스템 콜을 직접 쓴다
 (`docs/decisions/project_zig_c_uapi_rule.md`). 힙 할당자도 없으므로 파일
-전체를 **스택 버퍼**에 읽는다.
+전체를 스택 버퍼에 읽는다.
 
-- [ ] **Step 1: `init/src/config.zig` 생성**
+- [ ] Step 1: `init/src/config.zig` 생성
 
 ```zig
 const std = @import("std");
@@ -264,9 +264,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
 }
 ```
 
-- [ ] **Step 2: 컴파일되는지만 확인**
+- [ ] Step 2: 컴파일되는지만 확인
 
-아직 `main.zig`가 이 파일을 import하지 않으므로 **빌드에 포함되지 않는다.**
+아직 `main.zig`가 이 파일을 import하지 않으므로 빌드에 포함되지 않는다.
 Zig는 import되지 않은 파일을 컴파일하지 않는다. 그래서 이 Step에서는 파일이
 제대로 만들어졌는지만 본다.
 
@@ -277,10 +277,10 @@ wc -l init/src/config.zig && head -3 init/src/config.zig
 
 Expected: 180줄 안팎, 첫 줄이 `const std = @import("std");`.
 
-실제 컴파일은 Task 2 Step 5에서 `main.zig`가 import한 뒤에 일어난다. **여기서
-오타가 있어도 지금은 안 잡힌다** — Task 2에서 한꺼번에 잡힌다.
+실제 컴파일은 Task 2 Step 5에서 `main.zig`가 import한 뒤에 일어난다. 여기서
+오타가 있어도 지금은 안 잡힌다 — Task 2에서 한꺼번에 잡힌다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다.
 
@@ -288,10 +288,10 @@ Claude가 수행한다.
 
 ## Task 2: `main.zig` 배선
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig` (`mountFs` 반환형 + 호출 5곳 + `loadConfig` 추가 + `main`)
 
-여기서 정하는 **로그 세 줄이 곧 게이트의 마커**다.
+여기서 정하는 로그 세 줄이 곧 게이트의 마커다.
 
 | 상황 | 로그 |
 |---|---|
@@ -299,12 +299,12 @@ Claude가 수행한다.
 | 붙었고 파일이 없었다(1차 부팅) | `tars-init: created /config/tars.conf` |
 | 붙었고 파일이 있었다(2차 부팅) | `tars-init: loaded /config/tars.conf` |
 
-그리고 **어느 경로든 마지막에 결과 한 줄**을 찍는다:
+그리고 어느 경로든 마지막에 결과 한 줄을 찍는다:
 `tars-init: config shell=fish`. "어디서 왔는가"와 "결과가 무엇인가"를 나누어
 찍으면, 나중에 값이 이상할 때 파싱이 틀린 건지 파일을 안 읽은 건지가 로그만
 보고 갈린다.
 
-- [ ] **Step 1: import 추가**
+- [ ] Step 1: import 추가
 
 `init/src/main.zig:1-2`:
 
@@ -323,9 +323,9 @@ const config = @import("config.zig");
 
 로 바꾼다.
 
-- [ ] **Step 2: `mountFs`가 성공 여부를 돌려주게 한다**
+- [ ] Step 2: `mountFs`가 성공 여부를 돌려주게 한다
 
-`init/src/main.zig:12-26`. **로그 문자열은 한 글자도 바꾸지 않는다** —
+`init/src/main.zig:12-26`. 로그 문자열은 한 글자도 바꾸지 않는다 —
 `tars-init: mounted {s} at {s}` 네 줄은 `boot/check.sh`·`terminal/check.sh`·
 `config/check.sh`가 grep하는 마커다(`HANDOFF.md`의 "마커 문자열 중복 주의").
 
@@ -374,7 +374,7 @@ fn mountFs(
 }
 ```
 
-- [ ] **Step 3: 기존 호출 두 자리를 `_ =`로 받는다**
+- [ ] Step 3: 기존 호출 두 자리를 `_ =`로 받는다
 
 `mountDevpts` 안(41번째 줄):
 
@@ -392,7 +392,7 @@ fn mountConfig() bool {
 
 (`mountConfig` 위의 주석 블록은 그대로 둔다.)
 
-- [ ] **Step 4: `loadConfig`를 추가한다**
+- [ ] Step 4: `loadConfig`를 추가한다
 
 `mountConfig` 함수 바로 다음에 넣는다.
 
@@ -429,7 +429,7 @@ fn loadConfig(storage_mounted: bool) config.Config {
 }
 ```
 
-- [ ] **Step 5: `main`에서 호출한다**
+- [ ] Step 5: `main`에서 호출한다
 
 `init/src/main.zig`의 `main` 안, 마운트 묶음을 이렇게 바꾼다.
 
@@ -460,12 +460,12 @@ fn loadConfig(storage_mounted: bool) config.Config {
     logDrmDevicePresence();
 ```
 
-**`cfg`를 아직 아무도 쓰지 않는다.** `Kind.path()`가 이 값을 보는 것은
+`cfg`를 아직 아무도 쓰지 않는다. `Kind.path()`가 이 값을 보는 것은
 CP-M2다. 지금은 로그 한 줄이 유일한 사용처이고, 그것으로 충분하다 — 게이트가
-2차 부팅에서 "파일을 열었다"를 넘어 **"내용이 실제로 파싱됐다"**까지 보게
+2차 부팅에서 "파일을 열었다"를 넘어 "내용이 실제로 파싱됐다"까지 보게
 해주는 줄이기 때문이다.
 
-- [ ] **Step 6: 빌드**
+- [ ] Step 6: 빌드
 
 Run:
 ```bash
@@ -475,12 +475,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 Expected: 출력 없이 종료 코드 0.
 
-**Task 1의 `config.zig`가 처음으로 컴파일되는 순간이다.** 에러가 나면 대부분
+Task 1의 `config.zig`가 처음으로 컴파일되는 순간이다. 에러가 나면 대부분
 여기서 난다. 나오면 전문을 붙여서 알릴 것 — 특히 `linux.open`의 `O` 구조체
 필드 이름(`ACCMODE`/`CREAT`/`TRUNC`)과 `linux.read`/`linux.write`의 포인터
 타입이 후보다.
 
-- [ ] **Step 7: 여전히 정적 바이너리인지 확인**
+- [ ] Step 7: 여전히 정적 바이너리인지 확인
 
 Run:
 ```bash
@@ -494,7 +494,7 @@ Expected: `0`, 그리고 12MB 안팎.
 `copy_lib_deps`를 부르지 않으므로, 동적 의존이 하나라도 생기면 부팅이 로더
 에러로 죽는다. `std.fs`가 아니라 `std.os.linux`를 쓴 것이 여기서 값을 한다.
 
-- [ ] **Step 8: Commit**
+- [ ] Step 8: Commit
 
 Claude가 수행한다.
 
@@ -502,27 +502,27 @@ Claude가 수행한다.
 
 ## Task 3: 게이트를 2회 부팅으로 바꾼다
 
-**Files:**
+Files:
 - Modify: `config/check.sh` (전면 재작성)
 
-**이 Task가 CP-M1의 실제 작업량이다.** 지금 스크립트는 "빌드 → 디스크 굽기 →
-부팅 1회 → grep"인데, "빌드 → 디스크 굽기 → 부팅 → **kill** → **같은
-이미지로** 부팅 → grep"이 되어야 한다.
+이 Task가 CP-M1의 실제 작업량이다. 지금 스크립트는 "빌드 → 디스크 굽기 →
+부팅 1회 → grep"인데, "빌드 → 디스크 굽기 → 부팅 → kill → 같은
+이미지로 부팅 → grep"이 되어야 한다.
 
 세 가지를 특히 지킨다.
 
-1. **`make_disk.sh`는 딱 한 번, 첫 부팅 앞에서만 부른다.** 두 부팅 사이에서
+1. `make_disk.sh`는 딱 한 번, 첫 부팅 앞에서만 부른다. 두 부팅 사이에서
    다시 부르면 2차 부팅도 빈 디스크를 보게 되고, 게이트는 통과하면서
    아무것도 증명하지 않는다.
-2. **1차 QEMU가 완전히 끝난 것을 확인하고 2차를 띄운다.** 두 QEMU가 같은
+2. 1차 QEMU가 완전히 끝난 것을 확인하고 2차를 띄운다. 두 QEMU가 같은
    이미지 파일을 동시에 열면 파일시스템이 깨진다. `kill` 다음의 `wait`이 그
    보장이다.
-3. **부정 검사를 넣는다.** 1차 로그에 `loaded`가 **없어야** 하고, 2차 로그에
-   `created`가 **없어야** 한다. 특히 2차의 `created` 부재가 곧 "1차가 쓴
+3. 부정 검사를 넣는다. 1차 로그에 `loaded`가 없어야 하고, 2차 로그에
+   `created`가 없어야 한다. 특히 2차의 `created` 부재가 곧 "1차가 쓴
    파일이 살아남았다"는 증거다 — 긍정 검사만으로는 매번 새로 만들어지는
    상황을 잡지 못한다.
 
-- [ ] **Step 1: `config/check.sh`를 아래 내용으로 교체**
+- [ ] Step 1: `config/check.sh`를 아래 내용으로 교체
 
 ```bash
 #!/usr/bin/env bash
@@ -714,7 +714,7 @@ echo "PASS"
 exit 0
 ```
 
-- [ ] **Step 2: 실행 권한이 남아 있는지 확인**
+- [ ] Step 2: 실행 권한이 남아 있는지 확인
 
 Run:
 ```bash
@@ -724,7 +724,7 @@ ls -l config/check.sh config/make_disk.sh
 Expected: 둘 다 `-rwxr-xr-x`. 편집기가 새 파일로 만들었다면 실행 비트가
 사라졌을 수 있다 — 그러면 `chmod +x config/check.sh`.
 
-- [ ] **Step 3: CP 체인 단독 실행**
+- [ ] Step 3: CP 체인 단독 실행
 
 Run:
 ```bash
@@ -744,26 +744,26 @@ boot 2: init loaded the config written by boot 1 (shell=fish)
 PASS
 ```
 
-**여기가 이 milestone에서 가장 깨지기 쉬운 지점이다.** 실패하면
+여기가 이 milestone에서 가장 깨지기 쉬운 지점이다. 실패하면
 `--- markers ---` 블록을 통째로 붙여서 알릴 것. 원인 갈래는 이렇다.
 
-- **1차에서 `created`가 안 나오고 `mounted ext2 at /config`도 없다** →
+- 1차에서 `created`가 안 나오고 `mounted ext2 at /config`도 없다 →
   CP-M0가 깨진 것이다. 커널이나 디스크 쪽이지 이번 코드가 아니다.
-- **`mounted`는 있는데 `created`가 없고 `failed to create ... (errno 13)`** →
+- `mounted`는 있는데 `created`가 없고 `failed to create ... (errno 13)` →
   EACCES. `/config`가 읽기 전용으로 붙었다는 뜻이다.
-- **`failed to create ... (errno 30)`** → EROFS. 같은 원인의 다른 얼굴.
-- **`failed to write ... (errno 28)`** → ENOSPC. 16MB짜리 디스크가 찼을 리는
+- `failed to create ... (errno 30)` → EROFS. 같은 원인의 다른 얼굴.
+- `failed to write ... (errno 28)` → ENOSPC. 16MB짜리 디스크가 찼을 리는
   없으니 이미지가 sparse인 채 커널에는 다른 크기로 보이는 상황을 의심한다.
-- **2차에서 `created`가 또 나왔다** → 영속성이 실제로 안 된 것이다. 확인 순서:
+- 2차에서 `created`가 또 나왔다 → 영속성이 실제로 안 된 것이다. 확인 순서:
   (1) `make_disk.sh`가 두 번 불리지 않았는지, (2) 두 QEMU가 같은
   `out/config.img`를 가리키는지, (3) `mountConfig`의 `MS_SYNCHRONOUS`가
   그대로인지.
-- **2차에서 `loaded`는 나왔는데 `config shell=fish`가 없다** → 파일은
+- 2차에서 `loaded`는 나왔는데 `config shell=fish`가 없다 → 파일은
   읽었는데 파서가 값을 못 꺼낸 것이다. `--- init log (boot 2) ---`에
   `unknown config key` 또는 `unknown shell`이 함께 찍혀 있을 것이고, 그
   문자열이 곧 원인이다.
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다.
 
@@ -771,10 +771,10 @@ Claude가 수행한다.
 
 ## Task 4: 루트 게이트의 라벨
 
-**Files:**
+Files:
 - Modify: `check.sh:40-45`
 
-- [ ] **Step 1: 주석과 라벨 갱신**
+- [ ] Step 1: 주석과 라벨 갱신
 
 바꾸기 전:
 
@@ -803,10 +803,10 @@ run_chain "CP-M1" ./config/check.sh
 ```
 
 `clean()`은 손대지 않는다 — 이미 `out`을 통째로 지우므로 `out/config.img`가
-매 회차 사라지고, `config/check.sh`가 다시 굽는다. **이것이 "1차 부팅은 항상
-빈 디스크"를 보장하는 장치다.**
+매 회차 사라지고, `config/check.sh`가 다시 굽는다. 이것이 "1차 부팅은 항상
+빈 디스크"를 보장하는 장치다.
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다.
 
@@ -814,12 +814,12 @@ Claude가 수행한다.
 
 ## Task 5: 나머지 두 체인과 전체 게이트
 
-**Files:** 없음(확인만)
+Files: 없음(확인만)
 
 `init` 바이너리가 바뀌었으므로 세 체인을 다 돌린다. initrd를 읽는 경로가
 BF(limine이 ISO에서 BIOS INT13h로)와 나머지(QEMU `-initrd`)로 서로 다르다.
 
-- [ ] **Step 1: BF 체인 — 디스크가 없어도 통과해야 한다**
+- [ ] Step 1: BF 체인 — 디스크가 없어도 통과해야 한다
 
 Run:
 ```bash
@@ -829,7 +829,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 Expected: `PASS`.
 
-로그에는 CP-M0에서 생긴 실패 줄에 더해 **새 줄 두 개**가 나타나야 한다.
+로그에는 CP-M0에서 생긴 실패 줄에 더해 새 줄 두 개가 나타나야 한다.
 
 ```
 tars-init: failed to mount ext2 at /config (errno 2)
@@ -837,7 +837,7 @@ tars-init: no config storage, using defaults
 tars-init: config shell=fish
 ```
 
-**`created`도 `loaded`도 나오면 안 된다.** 나온다면 `loadConfig`가
+`created`도 `loaded`도 나오면 안 된다. 나온다면 `loadConfig`가
 `storage_mounted`를 안 보고 있다는 뜻이고, 그러면 initramfs(tmpfs) 위에 설정
 파일을 만들고 있는 것이다 — 재부팅하면 사라지는 가짜 영속성이라 더 나쁘다.
 
@@ -849,7 +849,7 @@ grep -c 'tars-init: no config storage, using defaults' /tmp/cp-m1-bf.log
 
 Expected: `0`, `3`.
 
-- [ ] **Step 2: TF 체인**
+- [ ] Step 2: TF 체인
 
 Run:
 ```bash
@@ -859,7 +859,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 Expected: `PASS`. TF도 `-drive`가 없으므로 BF와 같은 세 줄이 나온다.
 
-- [ ] **Step 3: 루트 게이트 전체**
+- [ ] Step 3: 루트 게이트 전체
 
 Run:
 ```bash
@@ -873,14 +873,14 @@ Expected 마지막 줄:
 TARS check PASS: all chains 3/3 consecutive runs succeeded
 ```
 
-CP-M0에서 **13분 08초**였다. 늘어나는 것은 CP 회차마다 부팅 1회씩, 총 3회분의
-부팅 시간뿐이고 **빌드는 그대로다**(회차당 clean 재빌드 9회는 변함없다).
-ZM-M3 이후 TF 계열 부팅 1회가 수 초 수준이므로 **13분 30초 안팎**을 예상한다.
-**실제 시간을 재서 알릴 것** — 예상보다 크게 늘었다면 2차 부팅이 마커를 못
+CP-M0에서 13분 08초였다. 늘어나는 것은 CP 회차마다 부팅 1회씩, 총 3회분의
+부팅 시간뿐이고 빌드는 그대로다(회차당 clean 재빌드 9회는 변함없다).
+ZM-M3 이후 TF 계열 부팅 1회가 수 초 수준이므로 13분 30초 안팎을 예상한다.
+실제 시간을 재서 알릴 것 — 예상보다 크게 늘었다면 2차 부팅이 마커를 못
 찾고 120초 타임아웃을 다 쓰고 있다는 신호일 수 있다(그 경우 FAIL이 나야
 하지만, 폴링 상한이 어디에 걸리는지 아는 것이 다음 milestone에서 중요하다).
 
-- [ ] **Step 4: 통합 로그에서 숫자 확인**
+- [ ] Step 4: 통합 로그에서 숫자 확인
 
 Run:
 ```bash
@@ -898,42 +898,42 @@ Expected: `12`, `6`, `6`, `6`, `3`, `3`, `12`, `0`.
 
 각 숫자가 무엇을 말하는지가 이 Step의 내용이다.
 
-- **12** — 부팅 12회. BF 3 + TF 3 + CP 3회차×2 = 12. CP-M0의 9에서 3이 늘었다.
-- **6** — 마운트 성공은 CP 3회차의 두 부팅씩 = 6.
-- **6** — BF·TF 6회는 디스크가 없으므로 실패가 정상이다. **0이면 오히려
-  이상하다**(마운트 시도 자체가 사라졌다는 뜻).
-- **6** — 위 실패 6회와 정확히 짝을 이뤄야 한다. 짝이 안 맞으면
+- 12 — 부팅 12회. BF 3 + TF 3 + CP 3회차×2 = 12. CP-M0의 9에서 3이 늘었다.
+- 6 — 마운트 성공은 CP 3회차의 두 부팅씩 = 6.
+- 6 — BF·TF 6회는 디스크가 없으므로 실패가 정상이다. 0이면 오히려
+  이상하다(마운트 시도 자체가 사라졌다는 뜻).
+- 6 — 위 실패 6회와 정확히 짝을 이뤄야 한다. 짝이 안 맞으면
   `loadConfig`가 마운트 실패를 다르게 해석하고 있다.
-- **3 / 3** — seeding은 회차마다 1차 부팅에서만, load는 2차 부팅에서만.
-  **이 둘이 각각 3이라는 것이 영속성의 증명이다.** `created`가 6이면 2차
+- 3 / 3 — seeding은 회차마다 1차 부팅에서만, load는 2차 부팅에서만.
+  이 둘이 각각 3이라는 것이 영속성의 증명이다. `created`가 6이면 2차
   부팅도 빈 디스크를 본 것이고, `loaded`가 6이면 1차 부팅이 빈 디스크가
   아니었던 것이다.
-- **12** — 결과 줄은 어느 경로로 갔든 매 부팅 한 번.
-- **0** — 하나라도 있으면 게이트가 PASS했더라도 실패로 본다.
+- 12 — 결과 줄은 어느 경로로 갔든 매 부팅 한 번.
+- 0 — 하나라도 있으면 게이트가 PASS했더라도 실패로 본다.
 
 ---
 
 ## Task 6: 문서 갱신
 
-**Files:**
+Files:
 - Modify: `HANDOFF.md`
 - Modify: 이 plan 파일(말미에 "실제 실행에서 plan과 달라진 점" 추가)
 
-- [ ] **Step 1: Claude가 문서를 갱신한다**
+- [ ] Step 1: Claude가 문서를 갱신한다
 
 사용자는 Task 5까지의 결과만 전달하면 된다.
 
 갱신 내용:
-- 이 plan 말미에 "실제 실행에서 plan과 달라진 점". **다음 세션이 가장 먼저
-  읽는 부분이므로 빠짐없이 적는다** — Zig 컴파일 에러가 났다면 무엇이었는지,
+- 이 plan 말미에 "실제 실행에서 plan과 달라진 점". 다음 세션이 가장 먼저
+  읽는 부분이므로 빠짐없이 적는다 — Zig 컴파일 에러가 났다면 무엇이었는지,
   2차 부팅의 ext2 경고 문구가 실제로 무엇이었는지, 게이트 소요 시간, 그리고
   Task 5 Step 4의 여덟 숫자.
 - `HANDOFF.md`를 CP-M2 기준으로 다시 쓴다.
 
-`docs/decisions/`의 새 기억 파일은 **CP-M2까지 끝난 뒤** 서브프로젝트 단위로
+`docs/decisions/`의 새 기억 파일은 CP-M2까지 끝난 뒤 서브프로젝트 단위로
 쓴다(design doc의 결정들이 셋 다 실행돼 봐야 "결정"으로 굳는다).
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다.
 
@@ -941,56 +941,56 @@ Claude가 수행한다.
 
 ## 이번 milestone에서 하지 않는 것
 
-- **`Kind.path()`가 설정을 보는 것.** 셸은 여전히 `/usr/bin/fish` 상수다.
+- `Kind.path()`가 설정을 보는 것. 셸은 여전히 `/usr/bin/fish` 상수다.
   `cfg.shell`은 읽히고 로그에 찍히지만 아직 아무 동작도 바꾸지 않는다 —
   CP-M2가 그 한 줄을 잇는다.
-- **bash/zsh를 initrd에 넣는 것.** CP-M2. `Shell` enum에 이름만 있고 대응하는
-  바이너리는 아직 게스트에 없다. **이것이 M2의 순서를 정한다** — 설정에
+- bash/zsh를 initrd에 넣는 것. CP-M2. `Shell` enum에 이름만 있고 대응하는
+  바이너리는 아직 게스트에 없다. 이것이 M2의 순서를 정한다 — 설정에
   `shell=zsh`를 써도 지금은 아무 일도 안 일어나므로 위험하지 않지만, M2에서
   경로를 잇는 순간 바이너리가 먼저 있어야 한다.
-- **게스트에서 sendkey로 설정 파일을 고치는 것.** CP-M2. 이번 2차 부팅이 읽는
-  것은 1차 부팅이 **스스로 쓴** 씨앗 파일이다.
-- **설정 갱신 API.** `save`의 호출자는 seeding 하나뿐이다. "게스트에서 설정을
+- 게스트에서 sendkey로 설정 파일을 고치는 것. CP-M2. 이번 2차 부팅이 읽는
+  것은 1차 부팅이 스스로 쓴 씨앗 파일이다.
+- 설정 갱신 API. `save`의 호출자는 seeding 하나뿐이다. "게스트에서 설정을
   바꾸는 명령"은 design doc의 비목표.
-- **`parse`에 대한 단위 테스트.** `parse`는 시스템 콜이 없는 순수 함수라
+- `parse`에 대한 단위 테스트. `parse`는 시스템 콜이 없는 순수 함수라
   `zig build test`로 검증할 수 있는 유일한 부분이지만, 이 저장소에는 아직
   테스트 러너가 붙은 적이 없고 게이트가 그 자리를 대신해 왔다. 테스트를
   들이는 것은 그 자체로 하나의 결정이므로 여기서 곁다리로 하지 않는다 —
   파서가 복잡해지는 시점(키가 여러 개가 되는 CP-M2 이후)에 따로 꺼낸다.
-- **`TERM` 전달.** `HANDOFF.md`의 숙제 그대로, CP-M2에서 zsh/bash가 실제로
+- `TERM` 전달. `HANDOFF.md`의 숙제 그대로, CP-M2에서 zsh/bash가 실제로
   깨지는 것을 보고 나서 넣는다.
 
 ---
 
 ## 실제 실행에서 plan과 달라진 점 (2026-08-14 완료)
 
-**다음 세션은 이 절부터 읽을 것.** CP-M1은 `TARS check PASS`(BF 3/3, TF 3/3,
-CP-M1 3/3)로 완료됐다. 루트 게이트 전체 소요는 **13분 14초**.
+다음 세션은 이 절부터 읽을 것. CP-M1은 `TARS check PASS`(BF 3/3, TF 3/3,
+CP-M1 3/3)로 완료됐다. 루트 게이트 전체 소요는 13분 14초.
 
 ### 1. 한 번도 안 막혔다 — 컴파일 에러도, 게이트 실패도 없다
 
 Task 2 Step 6(첫 컴파일)에서 `linux.open`의 `O` 구조체 필드 이름이나
-`read`/`write`의 포인터 타입이 걸릴 것으로 봤는데 **한 번에 통과했다.** 설치된
+`read`/`write`의 포인터 타입이 걸릴 것으로 봤는데 한 번에 통과했다. 설치된
 std 0.16.0 소스에서 시그니처를 미리 읽고 쓴 것이 그대로 맞았다
 (`O`는 `packed struct(u32)`에 `ACCMODE`/`CREAT`/`TRUNC` 필드,
 `read(fd, [*]u8, usize)`, `write(fd, [*]const u8, usize)`).
 
 Task 3 Step 3에 errno별 진단 갈래를 다섯 개 준비했는데 하나도 쓰이지 않았다.
-CP-M0에 이어 두 번째로, **준비한 실패가 안 나는** milestone이다.
+CP-M0에 이어 두 번째로, 준비한 실패가 안 나는 milestone이다.
 
 ### 2. 부팅이 33% 늘었는데 시간은 0.8%만 늘었다
 
-CP-M0 13분 08초 → CP-M1 **13분 14초**(+6초). 부팅은 9회 → 12회다.
+CP-M0 13분 08초 → CP-M1 13분 14초(+6초). 부팅은 9회 → 12회다.
 plan은 "13분 30초 안팎"을 예상했으니 그보다도 덜 늘었다.
 
-**이 게이트의 시간은 사실상 전부 clean 재빌드 9회다.** 부팅 1회는 몇 초라서
+이 게이트의 시간은 사실상 전부 clean 재빌드 9회다. 부팅 1회는 몇 초라서
 회차당 부팅을 더 늘려도 총 시간은 거의 안 변한다 — CP-M2에서 부팅 횟수를
 걱정할 필요가 없다는 실측 근거다.
 
 ### 3. plan의 기대치 하나가 틀렸다 (Task 5 Step 1)
 
-`boot/check.sh`를 **직접** 부를 때 `no config storage, using defaults`가 `3`일
-것이라고 적었는데 **`1`이 맞다.** 3회 반복은 루트 `check.sh`의 `run_chain`이
+`boot/check.sh`를 직접 부를 때 `no config storage, using defaults`가 `3`일
+것이라고 적었는데 `1`이 맞다. 3회 반복은 루트 `check.sh`의 `run_chain`이
 하는 일이고, 체인 스크립트를 직접 부르면 부팅은 1회다. 전체 게이트에서는
 BF 3 + TF 3 = 6이 되고, 그쪽 숫자는 맞았다.
 
@@ -1008,8 +1008,8 @@ BF 3 + TF 3 = 6이 되고, 그쪽 숫자는 맞았다.
 | `Attempted to kill init` | 0 | 패닉 없음 |
 | `unknown config key` / `unknown shell` / `could not seed` | 0 / 0 / 0 | 폴백 경로 미발동 |
 
-마지막 줄이 덤으로 알려주는 것이 있다 — **씨앗 파일이 파서 자신의 규칙을
-정확히 만족한다.** `save`가 쓴 텍스트를 `load`가 경고 하나 없이 되읽었으므로
+마지막 줄이 덤으로 알려주는 것이 있다 — 씨앗 파일이 파서 자신의 규칙을
+정확히 만족한다. `save`가 쓴 텍스트를 `load`가 경고 하나 없이 되읽었으므로
 쓰기와 읽기가 어긋나지 않았다.
 
 ### 5. 두 부팅의 로그는 한 줄만 다르다
@@ -1019,13 +1019,13 @@ boot 1:  tars-init: created /config/tars.conf
 boot 2:  tars-init: loaded /config/tars.conf
 ```
 
-앞의 여섯 줄(PID 1 시작 + 마운트 다섯)이 완전히 같다. **커널도 initrd도 init
+앞의 여섯 줄(PID 1 시작 + 마운트 다섯)이 완전히 같다. 커널도 initrd도 init
 바이너리도 같은 상태에서 시작했는데 행동이 갈렸고, 그 차이의 유일한 원인이
-디스크에 남은 30바이트짜리 파일이다.** 이것이 이 milestone이 증명하려던 것
+디스크에 남은 30바이트짜리 파일이다. 이것이 이 milestone이 증명하려던 것
 전부다.
 
 `MS_SYNCHRONOUS`가 실제로 일한 것도 여기서 처음 확인됐다. 게이트는 `created`
-줄을 보자마자 QEMU를 죽이고, init은 `write(2)`가 돌아온 **뒤에** 그 줄을
+줄을 보자마자 QEMU를 죽이고, init은 `write(2)`가 돌아온 뒤에 그 줄을
 찍는다. 동기 마운트가 아니었다면 데이터가 page cache에만 있는 채로 프로세스가
 사라져 2차 부팅이 다시 `created`를 찍었을 것이다.
 
@@ -1035,5 +1035,5 @@ boot 2:  tars-init: loaded /config/tars.conf
 killed)`가 세 회차 모두 찍혔다. ext2는 마운트 시 슈퍼블록을 "not clean"으로
 표시하고 언마운트 시 되돌리는데, 1차 부팅이 언마운트 없이 죽으므로 그 표시가
 남는다. 커널은 경고만 하고 마운트해 준다 — 저널 없는 파일시스템의 정직한
-모습이고, 이 경고가 **없다면** 오히려 1차 부팅이 예상과 다르게 끝났다는
+모습이고, 이 경고가 없다면 오히려 1차 부팅이 예상과 다르게 끝났다는
 신호다.

@@ -1,20 +1,20 @@
 # TARS Power Management PM-M1 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** 게스트 안에서 시스템을 **되살릴** 수 있게 한다. Ctrl+Alt+Del을 누르면
+Goal: 게스트 안에서 시스템을 되살릴 수 있게 한다. Ctrl+Alt+Del을 누르면
 커널이 우리를 건너뛰고 재부팅하는 대신 PID 1에게 `SIGINT`로 알려 주고, PID 1이
 PM-M0에서 만든 종료 순서를 그대로 탄 뒤 `reboot(RESTART)`를 부른다. 이
 milestone이 끝나면 "설정을 고치고 재부팅해야 반영된다"는 CP의 정책이 게스트
 안에서 사람 손 없이 완결된다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-19-tars-power-management-design.md`
+Design doc: `docs/superpowers/specs/2026-08-19-tars-power-management-design.md`
 (결정 1의 `SIGINT` 절반, 결정 4, 결정 8의 부팅 A, 결정 9가 이 milestone의
 몫이다. design은 이미 승인되어 있으므로 다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16.0(`std.os.linux`의 `sigaction`/`reboot`), QEMU monitor
+Tech Stack: Zig 0.16.0(`std.os.linux`의 `sigaction`/`reboot`), QEMU monitor
 `sendkey`, `awk`, Docker(`tars-devcontainer`, arm64)
 
 ---
@@ -34,82 +34,82 @@ Task 4   BF 게이트의 사각지대를 닫는다              ← 이월된 �
 Task 5   루트 게이트를 갱신하고 3/3
 ```
 
-**Task 1이 맨 앞인 이유**는 PM-M0과 같다. 부팅 20초를 쓰기 전에 0.1초로 잡을
+Task 1이 맨 앞인 이유는 PM-M0과 같다. 부팅 20초를 쓰기 전에 0.1초로 잡을
 수 있는 실패를 먼저 잡는다. 다만 이번 Task 1에는 PM-M0에 없던 성격이 하나
-있다 — **로그 문구 하나가 바뀌기 때문에 기존 게이트를 함께 고쳐야 한다.**
+있다 — 로그 문구 하나가 바뀌기 때문에 기존 게이트를 함께 고쳐야 한다.
 `signal handlers installed (TERM)`이 `(TERM, INT)`가 되는데, 그 문자열은
 `power/check.sh:179`가 요구하고 있다. 고치지 않으면 PM-M0 게이트가 깨진다.
 이것이 `project_gate_chain_composition`이 적어 둔 "로그 문구는 두 곳에
 중복된다"가 실제로 청구서를 내미는 첫 자리다.
 
-**Task 2가 구현보다 앞인 이유는 PM-M0 때보다 훨씬 절실하다.** PM-M0의 실패는
-"아무 일도 일어나지 않음"이었지만, **PM-M1의 실패는 "성공처럼 보인다."**
+Task 2가 구현보다 앞인 이유는 PM-M0 때보다 훨씬 절실하다. PM-M0의 실패는
+"아무 일도 일어나지 않음"이었지만, PM-M1의 실패는 "성공처럼 보인다."
 `reboot(CAD_OFF)`가 없는 지금도 Ctrl+Alt+Del을 누르면 커널이 즉시 재부팅하므로
 (`kernel/reboot.c:832`의 `if (C_A_D) schedule_work(&cad_work);`), 게스트는 다시
 뜨고, 새 설정을 읽고, zsh를 띄운다. design 결정 8이 나열한 부팅 A의 마커 셋
 (`starting as PID 1` 두 번 · `config shell=zsh` · `started console shell
-(/usr/bin/zsh)`)이 **구현을 하나도 안 한 상태에서 전부 통과한다.**
+(/usr/bin/zsh)`)이 구현을 하나도 안 한 상태에서 전부 통과한다.
 
 그래서 이 plan은 design이 정하지 않은 검사를 아래 "이번에 정하는 것"에서
 추가한다. 그 검사 없이 게이트를 만들면, 게이트가 자기가 안 보는 것을
 통과시킨다 — Task 4에서 닫으려는 사각지대와 똑같은 실패다.
 
-**Task 4를 여기에 두는 이유**는 design 결정 9가 적은 그대로 시점이다. 감독
+Task 4를 여기에 두는 이유는 design 결정 9가 적은 그대로 시점이다. 감독
 루프에 손을 댄 milestone이 그 루프의 관측되지 않던 경로에 검사를 다는 자리다.
 
 ## 이번에 정하는 것 다섯 (design doc이 안 정한 자리)
 
-**1. `reboot(CAD_OFF)`는 `install()` 안이 아니라 별도 함수다.**
+1. `reboot(CAD_OFF)`는 `install()` 안이 아니라 별도 함수다.
 
 design 결정 4는 "mount 직후, 자식을 띄우기 전에" 부르라고만 했다. 자연스러운
-구현은 `install()` 안에 한 줄 더하는 것인데, **그렇게 하면 호스트 검사가
-`reboot(2)`를 부르게 된다.** `power_test`는 `install()`을 부르고, 그 검사는
+구현은 `install()` 안에 한 줄 더하는 것인데, 그렇게 하면 호스트 검사가
+`reboot(2)`를 부르게 된다. `power_test`는 `install()`을 부르고, 그 검사는
 Docker 컨테이너 안에서 돈다. 컨테이너에 `CAP_SYS_BOOT`이 없으면 `EPERM`으로
-끝나지만, 있으면 **개발 기계의 커널이 `C_A_D`를 0으로 바꾼다.** 그것은 이
+끝나지만, 있으면 개발 기계의 커널이 `C_A_D`를 0으로 바꾼다. 그것은 이
 저장소의 검사가 호스트를 건드리는 일이고, PM-M0이 "`shutdown()`을 호스트에서
 부르지 말 것"이라고 적어 둔 것과 정확히 같은 종류의 위험이다.
 
 그래서 `disableCtrlAltDel()`을 따로 두고, 그것을 부르는 자리는 `main.zig`
-하나로 한정한다. **`power_test`가 부르는 함수 중에는 `reboot(2)`를 부르는
-것이 하나도 없다**는 성질을 유지하는 것이 규칙이다.
+하나로 한정한다. `power_test`가 부르는 함수 중에는 `reboot(2)`를 부르는
+것이 하나도 없다는 성질을 유지하는 것이 규칙이다.
 
-부르는 순서는 `install()` **다음**이다. 순서가 뒤집히면 그 사이의 짧은 창에서
+부르는 순서는 `install()` 다음이다. 순서가 뒤집히면 그 사이의 짧은 창에서
 Ctrl+Alt+Del이 눌렸을 때 핸들러 없는 `SIGINT`가 도착한다. PID 1이라 커널이
 버려 주므로 사고는 안 나지만, "키를 빼앗기 전에 받을 준비를 끝낸다"가 읽기에
 맞다.
 
-**2. 부팅 A는 재부팅이 아니라 "우리를 거쳐 간 재부팅"을 본다.**
+2. 부팅 A는 재부팅이 아니라 "우리를 거쳐 간 재부팅"을 본다.
 
 위에서 적은 대로 재부팅 자체는 구현 없이도 일어난다. 그래서 부팅 A가 요구하는
-줄에 다음 넷을 **더한다.** 이 넷이 커널의 직접 재부팅과 우리 종료 순서를
+줄에 다음 넷을 더한다. 이 넷이 커널의 직접 재부팅과 우리 종료 순서를
 가르는 유일한 증거다.
 
 | 문구 | 무엇을 가르는가 |
 |---|---|
 | `tars-init: ctrl-alt-del now arrives as SIGINT` | `CAD_OFF`가 실제로 먹었다 |
 | `tars-init: shutdown requested (action restart)` | 키가 우리 핸들러에 닿았다 |
-| `tars-init: calling reboot(RESTART)` | 재부팅을 **우리가** 시켰다 |
+| `tars-init: calling reboot(RESTART)` | 재부팅을 우리가 시켰다 |
 | `Restarting system` (커널이 찍는다, `reboot.c:294`) | 커널이 그 요청을 받았다 |
 
-**3. 두 부팅의 순서는 B(끄기) → A(되살리기)이고, 디스크는 한 번만 굽는다.**
+3. 두 부팅의 순서는 B(끄기) → A(되살리기)이고, 디스크는 한 번만 굽는다.
 
-부팅 A는 게스트 안에서 `/config/tars.conf`를 `shell=zsh`로 고치므로, **끝나고
-나면 디스크가 zsh다.** 그 디스크로 부팅 B를 돌리면 `power/check.sh:140`의
+부팅 A는 게스트 안에서 `/config/tars.conf`를 `shell=zsh`로 고치므로, 끝나고
+나면 디스크가 zsh다. 그 디스크로 부팅 B를 돌리면 `power/check.sh:140`의
 `config shell=bash` 검사와 `:147`의 `bash-` 프롬프트 검사가 무너진다.
 
 순서를 뒤집으면 그 문제가 통째로 사라진다. 부팅 B는 설정을 고치지 않으므로
 (치는 것은 `kill -TERM 1` 하나다) 디스크는 `shell=bash`인 채로 남고, 부팅 A가
-그것을 그대로 물고 뜬다. **두 부팅 사이에 `make_disk.sh`를 다시 부를 필요가
-없다.**
+그것을 그대로 물고 뜬다. 두 부팅 사이에 `make_disk.sh`를 다시 부를 필요가
+없다.
 
 CP 체인이 "두 부팅 사이에서는 절대 다시 굽지 않는다"고 못 박은 것과 결과는
 같지만 이유는 다르다. CP는 영속성이 검증 대상이라 다시 구우면 증명이
-무너졌다. PM은 부팅 A **한 번 안에서** 편집·재부팅·반영이 전부 일어나므로
+무너졌다. PM은 부팅 A 한 번 안에서 편집·재부팅·반영이 전부 일어나므로
 영속성에 기대지 않는다. 여기서 다시 굽지 않는 것은 단지 필요가 없어서다.
 
-**4. "2차 부팅의 로그"는 `awk`로 잘라낸다.**
+4. "2차 부팅의 로그"는 `awk`로 잘라낸다.
 
-부팅 A는 QEMU 하나가 두 번 부팅하므로 **로그 파일이 하나**다. design 결정 8이
+부팅 A는 QEMU 하나가 두 번 부팅하므로 로그 파일이 하나다. design 결정 8이
 "그 뒤에 `config shell=zsh`가 있다"고 순서를 요구한 것을 `grep`만으로는 지킬
 수 없다. 두 번째 `starting as PID 1`부터를 잘라내어 거기서만 찾는다.
 
@@ -119,10 +119,10 @@ awk '/tars-init: starting as PID 1/{n++} n>=2' "$LOG_A"
 
 이 한 줄이 "재부팅 뒤에"라는 조건을 파일 자체로 만들어 준다.
 
-**5. 무한 재부팅은 개수로 잡는다.**
+5. 무한 재부팅은 개수로 잡는다.
 
 design의 "위험과 대응"이 적은 그대로다. `-no-reboot`을 뺐으므로 게스트가
-계속 재부팅하면 게이트가 영영 안 끝난다. 마커를 본 뒤 **3초를 더 기다렸다가**
+계속 재부팅하면 게이트가 영영 안 끝난다. 마커를 본 뒤 3초를 더 기다렸다가
 `starting as PID 1`의 개수를 다시 센다. 셋 이상이면 그 자체가 실패다.
 
 3초인 근거는 부팅 한 번이 약 4초라는 실측이다. 고리에 빠졌다면 그 안에 최소
@@ -133,17 +133,17 @@ design의 "위험과 대응"이 적은 그대로다. `-no-reboot`을 뺐으므�
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree가 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-**이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 하나다** —
+이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 하나다 —
 `power/check.sh`(Task 2에서 214줄이 340줄 남짓이 된다). 나머지는 전부 짧은
 블록이라 인라인으로 제시한다.
 
-**인라인으로 제시하는 블록은 "넣을 것"만 적는다.** 문맥 줄을 포함한 블록을
+인라인으로 제시하는 블록은 "넣을 것"만 적는다. 문맥 줄을 포함한 블록을
 제시했다가 기존 줄이 복제된 사고가 IP-M2에 있었다.
 
-**이미지 재빌드는 필요 없다.** zsh는 이미 initrd에 들어가고(CP-M2가 쓴다),
+이미지 재빌드는 필요 없다. zsh는 이미 initrd에 들어가고(CP-M2가 쓴다),
 `awk`는 devcontainer의 기본 도구다.
 
 ---
@@ -153,12 +153,12 @@ design의 "위험과 대응"이 적은 그대로다. `-no-reboot`을 뺐으므�
 부팅 없이 판정할 수 있는 전부다. `reboot(RESTART)`는 호스트에서 부를 수
 없으므로, 여기서 보는 것은 "`SIGINT`이 `Action.restart`라는 값이 되는가"까지다.
 
-**Files:**
+Files:
 - Modify: `init/src/power_test.zig` (검사 추가)
 - Modify: `init/src/power.zig` (`Action`, `onSignal`, `install`, `shutdown`)
 - Modify: `power/check.sh:179` (바뀌는 로그 문구)
 
-- [ ] **Step 1: 실패할 검사를 먼저 쓴다**
+- [ ] Step 1: 실패할 검사를 먼저 쓴다
 
 `init/src/power_test.zig`의 마지막 줄
 
@@ -167,7 +167,7 @@ design의 "위험과 대응"이 적은 그대로다. `-no-reboot`을 뺐으므�
 }
 ```
 
-에서 `}` **앞**에 이 블록을 넣는다(마지막 `}`는 그대로 두고 그 위에 끼운다).
+에서 `}` 앞에 이 블록을 넣는다(마지막 `}`는 그대로 두고 그 위에 끼운다).
 
 ```zig
 
@@ -202,17 +202,17 @@ design의 "위험과 대응"이 적은 그대로다. `-no-reboot`을 뺐으므�
     std.debug.print("power_test: SIGINT becomes a pending restart action\n", .{});
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [ ] Step 2: 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: **`power_test`가 시그널 2에 죽는다.** PM-M0 Task 1의 Step 4에서 시그널
+기대: `power_test`가 시그널 2에 죽는다. PM-M0 Task 1의 Step 4에서 시그널
 15로 죽었던 것과 같은 모양이고, 이유도 같다 — `.INT` 분기가 없어서
 `onSignal`이 `return`해 버리고, 그러면 `SIGINT`의 기본 동작(프로세스 종료)이
-일어나지 않는다… 가 아니다. **핸들러는 이미 달려 있지 않다.** `install()`이
+일어나지 않는다… 가 아니다. 핸들러는 이미 달려 있지 않다. `install()`이
 `.TERM`에만 `sigaction`을 걸어 두었으므로 `SIGINT`는 기본 동작 그대로
 프로세스를 죽인다.
 
@@ -221,11 +221,11 @@ run power_test: error: the following command terminated unexpectedly:
 ... (signal 2)
 ```
 
-이 구분이 중요하다. **핸들러가 없어서 죽는 것**과 **핸들러가 있는데 분기가
-없어서 무시하는 것**은 다른 실패인데, 지금은 앞의 것이다. 다음 Step이 둘 다
+이 구분이 중요하다. 핸들러가 없어서 죽는 것과 핸들러가 있는데 분기가
+없어서 무시하는 것은 다른 실패인데, 지금은 앞의 것이다. 다음 Step이 둘 다
 고친다.
 
-- [ ] **Step 3: `Action`에 `restart`를 더한다**
+- [ ] Step 3: `Action`에 `restart`를 더한다
 
 `init/src/power.zig`의
 
@@ -248,7 +248,7 @@ pub const Action = enum(u8) {
 };
 ```
 
-- [ ] **Step 4: `onSignal`에 `.INT` 분기를 더한다**
+- [ ] Step 4: `onSignal`에 `.INT` 분기를 더한다
 
 `init/src/power.zig`의
 
@@ -269,7 +269,7 @@ pub const Action = enum(u8) {
     };
 ```
 
-- [ ] **Step 5: `install()`이 두 시그널을 건다**
+- [ ] Step 5: `install()`이 두 시그널을 건다
 
 `init/src/power.zig`의
 
@@ -303,7 +303,7 @@ pub const Action = enum(u8) {
     std.debug.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
 ```
 
-- [ ] **Step 6: `shutdown()`이 `RESTART`를 부를 수 있게 한다**
+- [ ] Step 6: `shutdown()`이 `RESTART`를 부를 수 있게 한다
 
 `init/src/power.zig`의
 
@@ -325,7 +325,7 @@ pub const Action = enum(u8) {
     };
 ```
 
-- [ ] **Step 7: 통과를 확인한다**
+- [ ] Step 7: 통과를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
@@ -340,7 +340,7 @@ power_test: SIGTERM becomes a pending power_off action
 power_test: SIGINT becomes a pending restart action
 ```
 
-- [ ] **Step 8: 바뀐 로그 문구를 게이트에도 반영한다**
+- [ ] Step 8: 바뀐 로그 문구를 게이트에도 반영한다
 
 `power/check.sh:179`의
 
@@ -354,12 +354,12 @@ power_test: SIGINT becomes a pending restart action
   "tars-init: signal handlers installed (TERM, INT)" \
 ```
 
-**이 한 줄을 빼먹으면 다음 Step에서 PM-M0 게이트가 깨진다.**
+이 한 줄을 빼먹으면 다음 Step에서 PM-M0 게이트가 깨진다.
 `power/check.sh:81`의 마커 목록에도 같은 문구가 있지만 그쪽은 괄호가 없어서
 (`"tars-init: signal handlers installed"`) 고칠 필요가 없다 — 실패 보고용
 목록이라 부분 일치로 충분하기 때문이다.
 
-- [ ] **Step 9: PM-M0 게이트가 그대로 도는지 본다**
+- [ ] Step 9: PM-M0 게이트가 그대로 도는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -371,7 +371,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 `SIGINT` 핸들러가 하나 늘었을 뿐 끄는 경로는 한 줄도 안 바뀌었으므로 통과가
 정상이다. 여기서 깨진다면 Step 8을 안 했거나 `power.zig` 편집이 틀린 것이다.
 
-- [ ] **Step 10: 커밋**
+- [ ] Step 10: 커밋
 
 ```bash
 git add init/src/power.zig init/src/power_test.zig power/check.sh
@@ -382,22 +382,22 @@ git commit -m "Let a SIGINT ask PID 1 to restart"
 
 ## Task 2: 부팅 A를 붙이고 "우리를 거치지 않은 재부팅"이 실패로 잡히는 것을 본다
 
-**이 Task의 실패는 PM-M0 Task 2와 성격이 다르다.** 그때는 아무 일도 일어나지
-않는 것을 봤지만, 이번에는 **게스트가 실제로 재부팅하고 새 설정으로 다시 뜬다.**
+이 Task의 실패는 PM-M0 Task 2와 성격이 다르다. 그때는 아무 일도 일어나지
+않는 것을 봤지만, 이번에는 게스트가 실제로 재부팅하고 새 설정으로 다시 뜬다.
 `reboot(CAD_OFF)`가 없어서 커널이 우리를 건너뛰고 직접 재부팅하기 때문이다
 (`kernel/reboot.c:26`의 `static int C_A_D = 1;`).
 
-그래서 이 Step에서 확인해야 할 것은 "실패했다"가 아니라 **"어느 줄에서
-실패했는가"** 다. `shutdown requested (action restart)`가 없어서 실패해야
+그래서 이 Step에서 확인해야 할 것은 "실패했다"가 아니라 "어느 줄에서
+실패했는가" 다. `shutdown requested (action restart)`가 없어서 실패해야
 한다. `starting as PID 1`이 두 번 안 나와서 실패한다면 그것은 게이트가 아직
 아무것도 증명하지 못한다는 뜻이다.
 
-**Files:**
+Files:
 - Modify: `power/check.sh` (부팅 A 추가, 214줄 → 340줄 남짓)
 
-- [ ] **Step 1: 게이트 스크립트를 통째로 교체한다**
+- [ ] Step 1: 게이트 스크립트를 통째로 교체한다
 
-**이 파일은 340줄이 넘으므로 `/tmp` 경로를 쓴다.** Claude가
+이 파일은 340줄이 넘으므로 `/tmp` 경로를 쓴다. Claude가
 `/tmp/tars-power-check-m1.sh`에 완성본을 만들어 두면, 다음 명령으로 제자리에
 넣고 대조한다.
 
@@ -407,8 +407,8 @@ chmod +x power/check.sh
 diff /tmp/tars-power-check-m1.sh power/check.sh && echo "identical"
 ```
 
-완성본은 **Task 1 Step 8의 수정을 포함한 현재 파일에, 아래 두 덩어리가 더해진
-것**이다. 기존 214줄은 마지막 두 줄을 빼고 한 글자도 바뀌지 않는다.
+완성본은 Task 1 Step 8의 수정을 포함한 현재 파일에, 아래 두 덩어리가 더해진
+것이다. 기존 214줄은 마지막 두 줄을 빼고 한 글자도 바뀌지 않는다.
 
 먼저 기존 파일의 마지막 두 줄
 
@@ -612,13 +612,13 @@ grep 'tars-init:' "$LOG_A" || true
 echo "PM-M1 PASS: the guest can shut itself down and bring itself back up"
 ```
 
-- [ ] **Step 2: 문법을 먼저 본다**
+- [ ] Step 2: 문법을 먼저 본다
 
 ```bash
 bash -n power/check.sh && echo "syntax ok"
 ```
 
-- [ ] **Step 3: 실패를 확인한다**
+- [ ] Step 3: 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -629,15 +629,15 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 1. `boot 1/2 PASS: the guest shut itself down from a shell command`가 먼저
    나온다. PM-M0이 만든 부팅은 그대로 통과해야 한다.
-2. 그 다음 부팅 2에서 **`missing restart log line: tars-init: ctrl-alt-del now
-   arrives as SIGINT`** 로 실패한다.
+2. 그 다음 부팅 2에서 `missing restart log line: tars-init: ctrl-alt-del now
+   arrives as SIGINT` 로 실패한다.
 
 마커 목록에서는 `terminal: screen>`과 `signal handlers installed (TERM, INT)`가
 `found`이고, `ctrl-alt-del now arrives as SIGINT`부터 `calling
-reboot(RESTART)`까지가 `MISSING`이어야 한다. 그리고 **`--- boots seen: 2 ---`**
+reboot(RESTART)`까지가 `MISSING`이어야 한다. 그리고 `--- boots seen: 2 ---`
 이 함께 보일 것이다.
 
-**그 `2`가 이 Step의 핵심이다.** 게스트는 실제로 재부팅했고, `config
+그 `2`가 이 Step의 핵심이다. 게스트는 실제로 재부팅했고, `config
 shell=zsh`도 아마 `found`일 것이다. 구현을 한 줄도 안 했는데 design이 나열한
 마커 셋이 통과한 것이다 — 커널이 우리를 건너뛰고 직접 재부팅했기 때문이다.
 게이트를 저 여섯 줄로 세우지 않았다면 이 milestone은 아무것도 안 하고
@@ -648,7 +648,7 @@ shell=zsh`도 아마 `found`일 것이다. 구현을 한 줄도 안 했는데 de
 핸들러가 그 조합을 못 받았다). 그 경우 알려 달라 — Task 3이 고칠 수 있는
 문제가 아니다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 실패하는 게이트도 커밋한다. 다음 커밋이 무엇을 고쳤는지가 히스토리에 남는다.
 
@@ -664,11 +664,11 @@ git commit -m "Ask the gate to prove the restart went through PID 1"
 시스템 콜 한 번이다. 이 milestone에서 새로 쓰는 코드는 사실상 이 함수 하나뿐이고,
 나머지는 전부 PM-M0이 만든 길을 재사용한다.
 
-**Files:**
+Files:
 - Modify: `init/src/power.zig` (`disableCtrlAltDel` 추가)
 - Modify: `init/src/main.zig` (`power.install()` 다음 줄)
 
-- [ ] **Step 1: `power.zig`에 함수를 더한다**
+- [ ] Step 1: `power.zig`에 함수를 더한다
 
 `init/src/power.zig`의 `take()` 함수
 
@@ -681,7 +681,7 @@ pub fn take() ?Action {
 }
 ```
 
-**바로 아래**에 이 블록을 넣는다.
+바로 아래에 이 블록을 넣는다.
 
 ```zig
 
@@ -712,7 +712,7 @@ pub fn disableCtrlAltDel() void {
 }
 ```
 
-- [ ] **Step 2: `main.zig`에서 부른다**
+- [ ] Step 2: `main.zig`에서 부른다
 
 `init/src/main.zig`의
 
@@ -720,7 +720,7 @@ pub fn disableCtrlAltDel() void {
     power.install();
 ```
 
-**바로 아래**에 이 블록을 넣는다.
+바로 아래에 이 블록을 넣는다.
 
 ```zig
 
@@ -731,19 +731,19 @@ pub fn disableCtrlAltDel() void {
     power.disableCtrlAltDel();
 ```
 
-- [ ] **Step 3: 컴파일과 호스트 검사를 먼저 본다**
+- [ ] Step 3: 컴파일과 호스트 검사를 먼저 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
   tars-devcontainer bash -c "zig build && zig build test"
 ```
 
-기대: 둘 다 통과. `power_test`의 출력은 Task 1 Step 7과 **한 글자도 달라지지
-않아야 한다.** `ctrl-alt-del now arrives as SIGINT`가 거기 섞여 나온다면
+기대: 둘 다 통과. `power_test`의 출력은 Task 1 Step 7과 한 글자도 달라지지
+않아야 한다. `ctrl-alt-del now arrives as SIGINT`가 거기 섞여 나온다면
 `disableCtrlAltDel()`이 `install()` 안으로 들어갔다는 뜻이고, 그러면 Step 1의
 주석이 경고한 위험이 그대로 살아난다.
 
-- [ ] **Step 4: 게이트를 통과시킨다**
+- [ ] Step 4: 게이트를 통과시킨다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -758,7 +758,7 @@ PM-M1 PASS: the guest can shut itself down and bring itself back up
 
 그 앞에 `boot 1/2 PASS`와 `boot 2/2 PASS`가 하나씩 있어야 한다.
 
-**부팅 2의 init 로그를 통째로 보내 달라.** 게이트가 마지막에
+부팅 2의 init 로그를 통째로 보내 달라. 게이트가 마지막에
 `--- init log (boot 2) ---`로 찍어 준다. 그 로그 안에서 다음 순서가 보이는
 것이 이 milestone이 만든 것 전부다.
 
@@ -780,7 +780,7 @@ tars-init: config shell=zsh                       ← 아까 쓴 설정
 tars-init: started console shell (pid N, /usr/bin/zsh)
 ```
 
-- [ ] **Step 5: 다른 체인이 안 깨졌는지 본다**
+- [ ] Step 5: 다른 체인이 안 깨졌는지 본다
 
 `main.zig`를 건드렸으므로 나머지 넷을 한 번씩 돌린다.
 
@@ -792,7 +792,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
 기대: 넷 다 PASS. 새로 찍히는 줄 둘(`(TERM, INT)`,
 `ctrl-alt-del now arrives as SIGINT`)은 다른 체인이 검사하지 않는다.
 
-- [ ] **Step 6: 커밋**
+- [ ] Step 6: 커밋
 
 ```bash
 git add init/src/power.zig init/src/main.zig
@@ -804,21 +804,21 @@ git commit -m "Route ctrl-alt-delete through PID 1"
 ## Task 4: BF 게이트의 사각지대를 닫는다
 
 design 결정 9가 적은 이월 숙제다. `boot/check.sh`는 fish 배너를 보자마자 QEMU를
-죽이므로, 감독 루프의 **재시작·포기 경로를 한 번도 관측한 적이 없다.**
+죽이므로, 감독 루프의 재시작·포기 경로를 한 번도 관측한 적이 없다.
 `given_up`이 깨져서 무한 재시작이 나도 BF는 지금 통과한다.
 
 BF 체인은 GPU가 없어서(`-cdrom`만 주고 virtio-gpu를 안 준다) `/terminal`이 매
-회차 죽는 구성이다. **그 경로를 이미 매번 밟고 있으면서 보지 않고 있을 뿐이다.**
+회차 죽는 구성이다. 그 경로를 이미 매번 밟고 있으면서 보지 않고 있을 뿐이다.
 
 세 개라는 숫자는 `main.zig`의 코드에서 그대로 나온다. 처음 뜨고(1), 빨리 죽어
 `fast_restarts`가 1이 되고 `MAX_FAST_RESTARTS`(3) 미만이라 재시작하고(2), 또 죽어
 2가 되고 재시작하고(3), 세 번째로 죽을 때 3이 되어 `:301`의
 `if (c.fast_restarts >= MAX_FAST_RESTARTS)`가 성립하며 포기한다.
 
-**Files:**
+Files:
 - Modify: `boot/check.sh` (배너 확인 뒤 폴링 하나 + 판정 둘)
 
-- [ ] **Step 1: 포기 로그를 기다리는 폴링을 넣는다**
+- [ ] Step 1: 포기 로그를 기다리는 폴링을 넣는다
 
 `boot/check.sh`의
 
@@ -826,7 +826,7 @@ BF 체인은 GPU가 없어서(`-cdrom`만 주고 virtio-gpu를 안 준다) `/ter
 cat "$LOG"
 ```
 
-**바로 위**에 이 블록을 넣는다.
+바로 위에 이 블록을 넣는다.
 
 ```bash
 # 배너가 나왔다고 바로 죽이면 감독 루프의 재시작·포기 경로를 영영 못 본다.
@@ -849,7 +849,7 @@ fi
 
 ```
 
-- [ ] **Step 2: 판정 둘을 넣는다**
+- [ ] Step 2: 판정 둘을 넣는다
 
 `boot/check.sh`의
 
@@ -857,7 +857,7 @@ fi
   echo "init mounted all four filesystems"
 ```
 
-**바로 아래**에 이 블록을 넣는다.
+바로 아래에 이 블록을 넣는다.
 
 ```bash
 
@@ -882,13 +882,13 @@ fi
   echo "init restarted the terminal twice and then gave up (started ${STARTS} times)"
 ```
 
-- [ ] **Step 3: 문법을 본다**
+- [ ] Step 3: 문법을 본다
 
 ```bash
 bash -n boot/check.sh && echo "syntax ok"
 ```
 
-- [ ] **Step 4: BF 게이트를 돌린다**
+- [ ] Step 4: BF 게이트를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -903,12 +903,12 @@ init restarted the terminal twice and then gave up (started 3 times)
 PASS
 ```
 
-**여기서 `started N times, want exactly 3`으로 실패하면 알려 달라.** 그것은
-게이트의 버그가 아니라 **처음으로 관측된 감독 루프의 실제 동작**이고, 그
+여기서 `started N times, want exactly 3`으로 실패하면 알려 달라. 그것은
+게이트의 버그가 아니라 처음으로 관측된 감독 루프의 실제 동작이고, 그
 숫자가 몇인지에 따라 무엇을 고칠지가 갈린다. 이 검사를 만든 목적이 정확히
 그것이다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add boot/check.sh
@@ -919,11 +919,11 @@ git commit -m "Watch the supervisor give up in the boot gate"
 
 ## Task 5: 루트 게이트를 갱신한다
 
-**Files:**
+Files:
 - Modify: `check.sh:69-75` (주석과 체인 이름)
 - Modify: `HANDOFF.md`
 
-- [ ] **Step 1: 체인 이름을 올린다**
+- [ ] Step 1: 체인 이름을 올린다
 
 `check.sh`의
 
@@ -937,7 +937,7 @@ run_chain "PM-M0" ./power/check.sh
 run_chain "PM-M1" ./power/check.sh
 ```
 
-- [ ] **Step 2: 부팅 횟수 주석을 갱신한다**
+- [ ] Step 2: 부팅 횟수 주석을 갱신한다
 
 `check.sh`의
 
@@ -960,7 +960,7 @@ run_chain "PM-M1" ./power/check.sh
 # 포기하는 것까지 기다리기 때문이다 — 재시작 backoff가 1초라 3초 남짓이다.
 ```
 
-- [ ] **Step 3: 루트 게이트를 돌린다**
+- [ ] Step 3: 루트 게이트를 돌린다
 
 이 명령은 30분 안팎으로 걸릴 것이다(PM-M0 시점의 실측이 26분 10초였고, 부팅
 셋과 BF의 대기 셋이 더해진다).
@@ -977,25 +977,25 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 
 그리고 그 앞에 `PM-M1 PASS: 3/3 consecutive runs succeeded`가 있어야 한다.
 
-**실제 소요 시간을 기록해 달라.** `HANDOFF.md`와 다음 plan이 그 숫자를 쓴다.
+실제 소요 시간을 기록해 달라. `HANDOFF.md`와 다음 plan이 그 숫자를 쓴다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 ```bash
 git add check.sh
 git commit -m "Count the restart boot in the root gate"
 ```
 
-- [ ] **Step 5: `HANDOFF.md`와 기억을 갱신한다**
+- [ ] Step 5: `HANDOFF.md`와 기억을 갱신한다
 
 Claude가 쓴다. 담을 것:
 
 - PM-M1 완료, 그것으로 Power Management 서브프로젝트 전체가 끝났다는 것
 - 루트 게이트 다섯 체인 24부팅과 실측 시간
-- **로그 문구 중복 목록의 갱신** — `(TERM)`이 `(TERM, INT)`로 바뀌었고
+- 로그 문구 중복 목록의 갱신 — `(TERM)`이 `(TERM, INT)`로 바뀌었고
   `ctrl-alt-del now arrives as SIGINT`와 `calling reboot(RESTART)`가 늘었다
-- 이번에 알아낸 사실: 커널의 기본 `C_A_D = 1` 때문에 **게이트가 구현 없이도
-  통과할 뻔했다**는 것(Task 2 Step 3에서 실제로 관측한 것)
+- 이번에 알아낸 사실: 커널의 기본 `C_A_D = 1` 때문에 게이트가 구현 없이도
+  통과할 뻔했다는 것(Task 2 Step 3에서 실제로 관측한 것)
 - BF 사각지대가 닫혔다는 것과 그때 관측된 `started terminal` 실제 횟수
 - 다음 서브프로젝트 후보 우선순위를 매길 자리라는 것
 
@@ -1017,9 +1017,9 @@ Claude가 쓴다. 담을 것:
 
 ## 이 milestone이 끝나면 무엇이 참이 되는가
 
-CP가 정한 "설정을 고치고 **재부팅**해야 반영된다"는 정책이 게스트 안에서
+CP가 정한 "설정을 고치고 재부팅해야 반영된다"는 정책이 게스트 안에서
 사람 손 없이 완결된다. CP-M2는 그것을 증명하려고 QEMU를 두 번 띄우고 그
-사이에 게이트가 개입해야 했다. PM-M1의 부팅 A는 **QEMU 하나가 스스로**
+사이에 게이트가 개입해야 했다. PM-M1의 부팅 A는 QEMU 하나가 스스로
 편집 → 재부팅 → 반영을 다 하고, 게이트는 그것을 지켜보기만 한다.
 
 남는 것은 PM 비목표에 적힌 그대로다. 진짜 전원 차단(ACPI)은 `terminal`의

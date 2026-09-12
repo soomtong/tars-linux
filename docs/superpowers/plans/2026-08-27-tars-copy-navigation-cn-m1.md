@@ -1,41 +1,41 @@
 # TARS Copy Navigation CN-M1 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 구현 파일 편집은
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 구현 파일 편집은
 > 사용자가 하고, 빌드·QEMU·게이트·조사성 명령은 Claude가 실행하며, Claude는 각
 > Step의 정확한 내용을 제시하고 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는
 > 이 저장소에 적용하지 않는다.
 
-**Goal:** copy mode에서 `/`로 스크롤백을 검색해 커서를 매치로 옮기고, `n`/`N`으로
+Goal: copy mode에서 `/`로 스크롤백을 검색해 커서를 매치로 옮기고, `n`/`N`으로
 매치 사이를 왕복한다. 지금은 `hjkl`과 `w`/`b`가 전부라, 1000줄짜리 스크롤백에서
 원하는 줄에 닿으려면 화면을 몇십 번 넘겨야 한다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-26-tars-copy-navigation-design.md`
-(결정 4·5·6·7·8·9·10·11이 이 milestone의 몫이다. **design은 승인되어 있으므로
-다시 논의하지 않는다.**)
+Design doc: `docs/superpowers/specs/2026-08-26-tars-copy-navigation-design.md`
+(결정 4·5·6·7·8·9·10·11이 이 milestone의 몫이다. design은 승인되어 있으므로
+다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16, libghostty-vt(`search.Screen`), evdev, QEMU monitor
+Tech Stack: Zig 0.16, libghostty-vt(`search.Screen`), evdev, QEMU monitor
 `sendkey`, bash 게이트 스크립트
 
 ## 이 milestone은 CN-M0보다 훨씬 크다
 
 CN-M0은 기존 구조에 형제 함수 하나와 표 두 줄을 더하는 일이었다. CN-M1은
-**이 시스템에 없던 개념 둘**을 만든다.
+이 시스템에 없던 개념 둘을 만든다.
 
-1. **화면에 우리 글자를 그리는 일.** 지금까지 프레임버퍼에 나타난 모든 글자는
-   `cells()`가 넘긴 셀, 즉 셸의 것이었다. 프롬프트는 처음으로 **우리가 만든
-   글자**다.
-2. **모드 안의 모드.** copy mode 안에서 키가 명령이 아니라 **글자**가 되는
+1. 화면에 우리 글자를 그리는 일. 지금까지 프레임버퍼에 나타난 모든 글자는
+   `cells()`가 넘긴 셀, 즉 셸의 것이었다. 프롬프트는 처음으로 우리가 만든
+   글자다.
+2. 모드 안의 모드. copy mode 안에서 키가 명령이 아니라 글자가 되는
    구간이 생긴다.
 
-그래서 Task가 여섯이다. **각 Task 끝은 커밋 지점이고, 그 시점에 무언가가 실제로
-동작한다** — 중간에 멈춰도 저장소가 반쯤 짜인 상태로 남지 않는다.
+그래서 Task가 여섯이다. 각 Task 끝은 커밋 지점이고, 그 시점에 무언가가 실제로
+동작한다 — 중간에 멈춰도 저장소가 반쯤 짜인 상태로 남지 않는다.
 
 | Task | 끝나면 무엇이 되는가 |
 |---|---|
-| 1 | `Copy`가 `union(enum)`이 된다. **동작은 하나도 안 바뀐다** |
+| 1 | `Copy`가 `union(enum)`이 된다. 동작은 하나도 안 바뀐다 |
 | 2 | `/abc`를 치면 로그에 `find> needle=abc`가 찍힌다(화면엔 아직 안 보인다) |
-| 3 | 그 프롬프트가 화면 마지막 줄에 **보인다** |
-| 4 | Enter가 검색을 돌려 커서가 매치로 **간다** |
+| 3 | 그 프롬프트가 화면 마지막 줄에 보인다 |
+| 4 | Enter가 검색을 돌려 커서가 매치로 간다 |
 | 5 | `n`/`N`이 매치 사이를 왕복한다 |
 | 6 | 게이트가 그것을 게스트에서 보고, 문서가 갱신된다 |
 
@@ -45,81 +45,81 @@ CN-M0은 기존 구조에 형제 함수 하나와 표 두 줄을 더하는 일�
 
 ### CN-M0이 실행으로 증명해 둔 것
 
-1. **`copyPlace(pin)`이 이미 있다**(`vt.zig:508`). pin 하나를 받아 커서를 놓고,
-   화면 밖이면 뷰포트를 민다. **검색의 커서 이동은 이 함수를 그대로 쓴다** —
+1. `copyPlace(pin)`이 이미 있다(`vt.zig:508`). pin 하나를 받아 커서를 놓고,
+   화면 밖이면 뷰포트를 민다. 검색의 커서 이동은 이 함수를 그대로 쓴다 —
    CN-M1이 새로 짤 것이 아니다.
-2. **`pointFromPin(.viewport, …)`은 아래쪽 밖을 안 알려준다.** `copyPlace`의
+2. `pointFromPin(.viewport, …)`은 아래쪽 밖을 안 알려준다. `copyPlace`의
    `if (co.y >= rows) return;`이 그것을 가른다. 이미 들어 있다.
-3. **`copyApply`가 모든 이동 수단이 통과하는 문이다**(design 결정 11).
+3. `copyApply`가 모든 이동 수단이 통과하는 문이다(design 결정 11).
    `n`/`N`도 같은 문을 통과한다.
-4. **`main.zig`의 copy switch에 `else`가 없다.** variant를 더하면 컴파일러가
-   배선할 자리를 짚는다. **Task 1이 이 신호를 일부러 아껴 둔다** — union 전환과
+4. `main.zig`의 copy switch에 `else`가 없다. variant를 더하면 컴파일러가
+   배선할 자리를 짚는다. Task 1이 이 신호를 일부러 아껴 둔다 — union 전환과
    variant 추가를 같은 Step에서 하면 컴파일 에러 목록에 두 가지가 섞여 무엇이
    무엇 때문인지 안 갈린다.
-5. **검사도 화면을 만든 뒤 `cells()`를 한 번 부르고 시작한다.**
-6. **자기 화면을 새로 만든다.** CN-M0의 `wm`이 앞 검사들을 하나도 안 흔든
+5. 검사도 화면을 만든 뒤 `cells()`를 한 번 부르고 시작한다.
+6. 자기 화면을 새로 만든다. CN-M0의 `wm`이 앞 검사들을 하나도 안 흔든
    이유이고, CN-M1은 `fm`을 만든다.
 
 ### 이 plan을 쓰면서 소스에서 확인한 것 아홉
 
-**전부 vendor된 ghostty 소스와 우리 소스를 직접 읽어서 얻었다. 프로브는 돌리지
-않았고, 이 사실들은 각 Task의 검사로 옮겨 실행으로 다시 증명한다.**
+전부 vendor된 ghostty 소스와 우리 소스를 직접 읽어서 얻었다. 프로브는 돌리지
+않았고, 이 사실들은 각 Task의 검사로 옮겨 실행으로 다시 증명한다.
 
-**1. `search`는 우리 모듈로 공개되어 있다.** `lib_vt.zig:52`가
+1. `search`는 우리 모듈로 공개되어 있다. `lib_vt.zig:52`가
 `pub const search = terminal.search;`다. 그러므로
-**`ghostty_vt.search.Screen`이 `ScreenSearch`**다. (`search.Thread`만
+`ghostty_vt.search.Screen`이 `ScreenSearch`다. (`search.Thread`만
 `options.artifact`로 막혀 있고 우리는 안 쓴다.)
 
-**2. design 위험 1이 해소됐다 — `ScreenSearch`는 우리 선택을 안 건드린다.**
+2. design 위험 1이 해소됐다 — `ScreenSearch`는 우리 선택을 안 건드린다.
 `selectNext`/`selectPrev`(`search/screen.zig:817`·`:871`)가 하는 일은 tracked
 pin을 잡고 `self.selected`를 바꾸는 것뿐이다. `search/screen.zig` ·
 `search/pagelist.zig` · `search/active.zig` 셋 전체에 `screen.select(` 도
-`screen.selection =` 도 **없다.** 그러므로 `ScreenSearch`를 "매치의 좌표를
-알려주는 것"으로만 쓰는 설계가 그대로 성립하고, **우리가 피해 다닐 것이
-없다.**
+`screen.selection =` 도 없다. 그러므로 `ScreenSearch`를 "매치의 좌표를
+알려주는 것"으로만 쓰는 설계가 그대로 성립하고, 우리가 피해 다닐 것이
+없다.
 
-**3. 매치에서 pin을 꺼내는 길이 한 줄이다.** `selectedMatch()`(`:771`)가
+3. 매치에서 pin을 꺼내는 길이 한 줄이다. `selectedMatch()`(`:771`)가
 `?FlattenedHighlight`를 주고, 그 타입에 `startPin()`(`highlight.zig:174`)이
-있다. **`copyPlace`가 받는 타입과 정확히 같다.**
+있다. `copyPlace`가 받는 타입과 정확히 같다.
 
-**4. `Select.next`의 주석은 "non-wrapping"이라고 하는데 코드는 감긴다.**
+4. `Select.next`의 주석은 "non-wrapping"이라고 하는데 코드는 감긴다.
 `selectNext`가
 `const next_idx = if (prev.idx + 1 >= active_len + history_len) 0 else prev.idx + 1;`
-(`:851`)이다. **주석을 믿지 말고 코드를 믿는다.** `n`을 계속 누르면 가장 오래된
+(`:851`)이다. 주석을 믿지 말고 코드를 믿는다. `n`을 계속 누르면 가장 오래된
 매치 다음에 가장 최근 매치로 되돌아온다. 우리는 그것을 감추지 않는다.
 
-**5. needle은 라이브러리가 복사한다.** `SlidingWindow.init`이
+5. needle은 라이브러리가 복사한다. `SlidingWindow.init`이
 `const needle = try alloc.dupe(u8, needle_unowned);`(`sliding_window.zig:122`)다.
-**고정 128바이트 버퍼의 슬라이스를 그대로 넘겨도 된다.**
+고정 128바이트 버퍼의 슬라이스를 그대로 넘겨도 된다.
 
-**6. `ScreenSearch`는 `screen: *Screen`을 들고 있다**(`:42`). 대체 화면(vim
-등)으로 갈아타면 `term.screens.active`가 달라져 **그 포인터가 낡는다.**
+6. `ScreenSearch`는 `screen: *Screen`을 들고 있다(`:42`). 대체 화면(vim
+등)으로 갈아타면 `term.screens.active`가 달라져 그 포인터가 낡는다.
 `feed`에서 포인터 하나를 비교해 잡는다 — `pointFromPin`을 부르는 앵커 감시와
-달리 **비용이 없다.**
+달리 비용이 없다.
 
-**7. `searchAll()`은 정말로 블로킹이다.** `tick`을 `SearchComplete`가 날
+7. `searchAll()`은 정말로 블로킹이다. `tick`을 `SearchComplete`가 날
 때까지 돌린다(`:269`). 주석이 "for performance, it is recommended to use tick
 and feed"라고 권하지만, Enter 확정 방식에서는 한 번뿐이라 그것이 맞다
-(design 결정 5). **얼마나 걸리는지는 우리가 재서 로그에 찍는다.**
+(design 결정 5). 얼마나 걸리는지는 우리가 재서 로그에 찍는다.
 
-**8. `render()`가 `fb.present()`로 끝난다**(`main.zig:111`). 그러므로
-**오버레이는 `render` 안에서 present 앞에 그려야 한다.** 밖에서 그리면 다음
+8. `render()`가 `fb.present()`로 끝난다(`main.zig:111`). 그러므로
+오버레이는 `render` 안에서 present 앞에 그려야 한다. 밖에서 그리면 다음
 프레임까지 화면에 안 나온다. design 결정 7이 "격자를 다 그린 뒤에 덮는다"라고만
 말하고 present를 안 짚었는데, 실물에서는 이 한 줄이 그 뜻을 정한다.
 
-**9. `pointFromPin(.screen, pin).screen.y`가 절대 행 번호다.** `anchorY`
-(`vt.zig:172`)가 이미 쓰고 있다. **매치가 커서보다 위인지를 이 값으로 가른다.**
+9. `pointFromPin(.screen, pin).screen.y`가 절대 행 번호다. `anchorY`
+(`vt.zig:172`)가 이미 쓰고 있다. 매치가 커서보다 위인지를 이 값으로 가른다.
 
 ### 그리고 우리 저장소에서 확인한 것 둘
 
-**`expectCopy`가 `cmd == want`로 비교한다**(`input_test.zig:62`). **Zig에서
-union에는 `==`가 없다.** Task 1이 `std.meta.eql`로 바꾼다. 이것이 union 전환이
-깨뜨리는 **유일한** 검사 코드다.
+`expectCopy`가 `cmd == want`로 비교한다(`input_test.zig:62`). Zig에서
+union에는 `==`가 없다. Task 1이 `std.meta.eql`로 바꾼다. 이것이 union 전환이
+깨뜨리는 유일한 검사 코드다.
 
-**`n`은 `input_test`의 "모르는 키" 목록에 없다.** CN-M0이 `w`에서 겪은 함정이
-이번에는 **없다.** 대신 CN-M0이 그 자리에 남긴 예고 주석("`e`와 `n`은 아직
-모르는 키이지만 영영 그렇지는 않다")이 이제 절반만 맞게 되므로 **Task 5가 그
-주석을 갚는다.**
+`n`은 `input_test`의 "모르는 키" 목록에 없다. CN-M0이 `w`에서 겪은 함정이
+이번에는 없다. 대신 CN-M0이 그 자리에 남긴 예고 주석("`e`와 `n`은 아직
+모르는 키이지만 영영 그렇지는 않다")이 이제 절반만 맞게 되므로 Task 5가 그
+주석을 갚는다.
 
 ---
 
@@ -130,72 +130,72 @@ union에는 `==`가 없다.** Task 1이 `std.meta.eql`로 바꾼다. 이것이 u
 `input.State.mode`에 `.find`가 생기고, `vt.Screen`에 `find_open`이 생긴다.
 같은 사실이 두 곳에 있다.
 
-**중복이 아니라 서로 다른 일이다.** `input.zig`는 **키를 글자로 돌리기 위해**
+중복이 아니라 서로 다른 일이다. `input.zig`는 키를 글자로 돌리기 위해
 알아야 하고(그것을 모르면 `n`이 명령인지 글자인지 못 가른다), `vt.zig`는
-**그려야 하기 때문에** 알아야 한다. 그리고 `input.zig`는 `vt.zig`를 import하지
+그려야 하기 때문에 알아야 한다. 그리고 `input.zig`는 `vt.zig`를 import하지
 않는다(IP design 결정 6) — 물어볼 길이 아예 없다.
 
-**copy mode 자체가 이미 같은 모양이다.** `State.mode == .copy`와
+copy mode 자체가 이미 같은 모양이다. `State.mode == .copy`와
 `Screen.copy_cursor != null`이 같은 사실을 두 곳에서 들고 있고, 그것이 CM-M0
 이래 문제를 일으킨 적이 없다. 갱신 경로가 `main.zig`의 배선 하나뿐이기
-때문이다. **`.find`도 같은 규율을 따른다: `find_open`을 만지는 것은
-`findOpen`·`findCancel`·`findSubmit`·`copyExit` 넷뿐이다.**
+때문이다. `.find`도 같은 규율을 따른다: `find_open`을 만지는 것은
+`findOpen`·`findCancel`·`findSubmit`·`copyExit` 넷뿐이다.
 
 ### 결정 2. Backspace는 빈 프롬프트에서 아무 일도 안 한다
 
-vim은 빈 프롬프트에서 Backspace를 누르면 프롬프트를 닫는다. **우리는 안
-닫는다.**
+vim은 빈 프롬프트에서 Backspace를 누르면 프롬프트를 닫는다. 우리는 안
+닫는다.
 
 닫으면 Esc와 뜻이 겹치고, 검색어를 지우려고 Backspace를 연타하던 사람이 마지막
 한 번에 프롬프트를 잃는다. 그것을 되찾으려면 `/`를 다시 눌러야 하는데, 그때
-지난 검색어는 이미 없다(검색 기록은 design이 비워 둔 자리다). **닫는 길은
-Esc 하나뿐이고, 그것이 결정 9가 세운 두 겹 구조와도 맞는다.**
+지난 검색어는 이미 없다(검색 기록은 design이 비워 둔 자리다). 닫는 길은
+Esc 하나뿐이고, 그것이 결정 9가 세운 두 겹 구조와도 맞는다.
 
-### 결정 3. `/`는 커서보다 **위**에 있는 첫 매치로 가고, `n`/`N`은 안 가린다
+### 결정 3. `/`는 커서보다 위에 있는 첫 매치로 가고, `n`/`N`은 안 가린다
 
 design 결정 4가 "`/`는 위(과거)로 찾는다"로 정했다. 그런데 라이브러리의
-`select(.next)`는 **커서와 무관하게** 목록의 다음 항목을 준다 — 커서를 `k`로
-올려 둔 상태에서 `/`를 누르면 커서가 **아래로 뛴다.**
+`select(.next)`는 커서와 무관하게 목록의 다음 항목을 준다 — 커서를 `k`로
+올려 둔 상태에서 `/`를 누르면 커서가 아래로 뛴다.
 
-그래서 `/`의 첫 이동만 **매치의 screen y가 커서의 screen y보다 작을 때까지**
+그래서 `/`의 첫 이동만 매치의 screen y가 커서의 screen y보다 작을 때까지
 넘긴다. 넘기는 횟수는 `matchesLen()`으로 막는다 — 목록이 감기므로(확정 사실 4)
 상한이 없으면 영원히 돈다.
 
-**`n`/`N`은 안 가린다.** `/`는 "지금부터 위로 찾아라"이지만 `n`은 "그 목록에서
+`n`/`N`은 안 가린다. `/`는 "지금부터 위로 찾아라"이지만 `n`은 "그 목록에서
 계속"이다. `n`에도 필터를 걸면 목록의 끝에 닿았을 때 아무 일도 안 일어나고,
-사람은 "고장 났다"로 읽는다. **감기는 것이 보이는 편이 낫다.**
+사람은 "고장 났다"로 읽는다. 감기는 것이 보이는 편이 낫다.
 
 ### 결정 4. `dumpStyles`는 프롬프트가 덮은 줄을 건너뛴다
 
 `dumpStyles`는 셀마다 두 줄을 찍는다 — 파서가 본 색(`style>`)과 프레임버퍼에서
-되읽은 픽셀(`pixel>`)이다. **두 겹인 것에 뜻이 있다**(TR design 결정 7):
+되읽은 픽셀(`pixel>`)이다. 두 겹인 것에 뜻이 있다(TR design 결정 7):
 `style>`만 찍으면 파서가 옳고 렌더러가 틀렸을 때 게이트가 통과한다.
 
-프롬프트는 그 마지막 줄을 **덮는다.** 그러면 그 줄의 `pixel>`은 셀의 색이
-아니라 우리 프롬프트의 색을 말하게 되고, **두 겹 검사의 전제가 그 줄에서만
-깨진다.**
+프롬프트는 그 마지막 줄을 덮는다. 그러면 그 줄의 `pixel>`은 셀의 색이
+아니라 우리 프롬프트의 색을 말하게 되고, 두 겹 검사의 전제가 그 줄에서만
+깨진다.
 
 지금 이것을 보는 체인은 없다(`pixel>`을 쓰는 것은 `render` 체인 하나뿐이고 그
-체인은 copy mode에 안 들어간다). **그러나 게이트가 못 보는 부채를 새로 만들지
-않는다**(`project_gate_chain_composition`). 덮은 줄은 아예 건너뛰고, **몇 개를
-건너뛰었는지 한 줄로 적는다** — 조용히 자르지 않는 것이 이 파일의 기존
+체인은 copy mode에 안 들어간다). 그러나 게이트가 못 보는 부채를 새로 만들지
+않는다(`project_gate_chain_composition`). 덮은 줄은 아예 건너뛰고, 몇 개를
+건너뛰었는지 한 줄로 적는다 — 조용히 자르지 않는 것이 이 파일의 기존
 규율이다.
 
 ### 결정 5. 검색에 걸린 시간을 `find>` 줄에 찍는다
 
 design 결정 5가 "블로킹이 사람이 느낄 만한지는 CN-M1 계획에서 실측한다"고
-남겼다. **프로브를 돌리지 않고 게이트가 재게 한다.**
+남겼다. 프로브를 돌리지 않고 게이트가 재게 한다.
 
 `main.zig`는 이미 `std.Io.Clock.now(.awake, init.io)`로 첫 프레임을 재고 있다
 (`:578`). 같은 시계로 `findSubmit` 앞뒤를 감싸 `us=`를 찍는다. 게이트가 그 값을
-로그에서 뽑아 출력하므로, **1000줄 스크롤백에서의 실측값이 회차마다 남는다.**
+로그에서 뽑아 출력하므로, 1000줄 스크롤백에서의 실측값이 회차마다 남는다.
 
 값을 놓고 무엇을 할지는 그때 정한다 — 이 plan은 재는 데까지만 한다.
 
 ### 결정 6. 프롬프트는 반전하지 않고 평범한 색으로 그린다
 
 `v`가 만드는 선택도, copy 커서도 "색 둘을 맞바꾼다"로 나타난다. 프롬프트까지
-반전하면 화면 맨 아래에 흰 띠가 생겨 **선택과 구분이 안 된다.**
+반전하면 화면 맨 아래에 흰 띠가 생겨 선택과 구분이 안 된다.
 
 vim도 less도 `/` 프롬프트를 평범한 색으로 그린다. 앞의 `/` 한 글자가 그것이
 프롬프트라는 표시이고, 그 자리는 원래 셸 프롬프트가 있던 줄이라 사람이 이미
@@ -205,18 +205,18 @@ vim도 less도 `/` 프롬프트를 평범한 색으로 그린다. 앞의 `/` 한
 
 ## Task 1: `Copy`를 `union(enum)`으로 바꾼다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` (`Copy` 선언)
 - Modify: `terminal/src/input_test.zig` (`expectCopy`의 비교)
 
-**이 Task는 동작을 하나도 안 바꾼다.** variant도 안 더한다. **그것이
-요점이다** — 형태 전환과 기능 추가를 같은 Step에 두면 컴파일 에러 목록에 두
+이 Task는 동작을 하나도 안 바꾼다. variant도 안 더한다. 그것이
+요점이다 — 형태 전환과 기능 추가를 같은 Step에 두면 컴파일 에러 목록에 두
 가지가 섞여 무엇이 무엇 때문인지 안 갈린다. CN-M0이 "enum 먼저, 그다음 컴파일러가
 부르는 자리"로 배운 규율의 한 겹 위다.
 
 ### Step 1: `Copy` 선언을 바꾼다 (사용자가 편집)
 
-**지울 것** — `input.zig`의 `Copy` 주석 마지막 문단과 선언 줄.
+지울 것 — `input.zig`의 `Copy` 주석 마지막 문단과 선언 줄.
 
 ```zig
 /// **CN-M1이 이 타입을 `union(enum)`으로 바꾼다**(design 결정 6). 검색
@@ -225,7 +225,7 @@ vim도 less도 `/` 프롬프트를 평범한 색으로 그린다. 앞의 `/` 한
 pub const Copy = enum {
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
 /// **CN-M1이 이것을 `union(enum)`으로 바꿨다**(design 결정 6). 검색 프롬프트에
@@ -238,7 +238,7 @@ pub const Copy = enum {
 pub const Copy = union(enum) {
 ```
 
-**나머지는 한 글자도 안 바꾼다.** payload 없는 variant는 `union(enum)` 안에서
+나머지는 한 글자도 안 바꾼다. payload 없는 variant는 `union(enum)` 안에서
 그대로 `enter,` 형태로 쓰이고, `.{ .copy = .left }`도 `@tagName(cmd)`도
 `switch (cmd)`도 전부 그대로 동작한다.
 
@@ -249,23 +249,23 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** `input_test.zig`의 `cmd == want`에서 union 비교가 안 된다는 에러
-**하나**. 그 밖의 자리는 전부 조용해야 한다.
+기대: `input_test.zig`의 `cmd == want`에서 union 비교가 안 된다는 에러
+하나. 그 밖의 자리는 전부 조용해야 한다.
 
-**다른 자리가 함께 깨지면 그것부터 읽는다.** union 전환이 `main.zig`나
+다른 자리가 함께 깨지면 그것부터 읽는다. union 전환이 `main.zig`나
 `input.zig` 본문을 건드린다면 그것은 이 plan이 못 본 의존이므로, 고치기 전에
 무엇이었는지 적어 둔다.
 
 ### Step 3: `expectCopy`를 고친다 (사용자가 편집)
 
-**지울 것** — `input_test.zig:61-62`.
+지울 것 — `input_test.zig:61-62`.
 
 ```zig
         .copy => |cmd| {
             if (cmd == want) return;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         .copy => |cmd| {
@@ -282,8 +282,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 빌드가 조용히 끝나고, 검사가 **CN-M0까지와 글자 하나 다르지 않은
-출력**으로 `PASS`. 새 줄이 생기면 안 된다 — 이 Task는 동작을 안 바꿨다.
+기대: 빌드가 조용히 끝나고, 검사가 CN-M0까지와 글자 하나 다르지 않은
+출력으로 `PASS`. 새 줄이 생기면 안 된다 — 이 Task는 동작을 안 바꿨다.
 
 ### Step 5: 커밋 (Claude가 실행)
 
@@ -296,23 +296,23 @@ git commit -m "Turn the copy command into a tagged union"
 
 ## Task 2: 프롬프트가 글자를 받는다 (아직 안 보인다)
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` (`Mode`, `Copy`, copy 표, 새 find 분기)
 - Modify: `terminal/src/vt.zig` (needle 버퍼와 네 함수, `copyExit`)
 - Modify: `terminal/src/main.zig` (배선과 `dumpFind`)
 - Modify: `terminal/src/input_test.zig`, `terminal/src/vt_test.zig` (검사)
 
-이 Task가 끝나면 게스트에서 `/abc`를 쳐도 **화면에는 아무 일도 안 일어나지만**
+이 Task가 끝나면 게스트에서 `/abc`를 쳐도 화면에는 아무 일도 안 일어나지만
 시리얼 로그에 `terminal: find> type needle=abc len=3`이 찍힌다. 보이게 만드는
 것은 Task 3이다.
 
-**둘을 나눈 이유:** 입력 경로와 렌더 경로가 서로 다른 이유로 틀린다. 한꺼번에
+둘을 나눈 이유: 입력 경로와 렌더 경로가 서로 다른 이유로 틀린다. 한꺼번에
 넣고 화면에 아무것도 안 나오면 "글자를 못 받은 것"과 "받았는데 못 그린 것"을
-가르는 데 부팅 한 바퀴가 든다. **로그가 먼저 서면 그 갈림이 공짜다.**
+가르는 데 부팅 한 바퀴가 든다. 로그가 먼저 서면 그 갈림이 공짜다.
 
 ### Step 1: `input.zig`에 `.find` 모드와 variant 다섯을 더한다 (사용자가 편집)
 
-**넣을 것 ①** — `Copy` union에서 `paste,` 다음, 닫는 `};` 앞이다.
+넣을 것 ① — `Copy` union에서 `paste,` 다음, 닫는 `};` 앞이다.
 
 ```zig
 
@@ -336,15 +336,15 @@ git commit -m "Turn the copy command into a tagged union"
     find_submit,
 ```
 
-**편집 ②** — `Mode` 선언. 지금은 **한 줄**이라 늘려야 한다.
+편집 ② — `Mode` 선언. 지금은 한 줄이라 늘려야 한다.
 
-**지울 것**
+지울 것
 
 ```zig
     pub const Mode = enum { normal, copy };
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     pub const Mode = enum {
@@ -361,7 +361,7 @@ git commit -m "Turn the copy command into a tagged union"
     };
 ```
 
-**넣을 것 ③** — copy 분기 안, `c.KEY_B` 다음 줄이다.
+넣을 것 ③ — copy 분기 안, `c.KEY_B` 다음 줄이다.
 
 ```zig
                 // 검색 프롬프트를 연다(CN-M1). **Shift+/ 는 `?`이고 우리는
@@ -375,7 +375,7 @@ git commit -m "Turn the copy command into a tagged union"
                 },
 ```
 
-**넣을 것 ④** — copy 분기(`if (self.mode == .copy) {`) **바로 앞**에 새 분기를
+넣을 것 ④ — copy 분기(`if (self.mode == .copy) {`) 바로 앞에 새 분기를
 통째로 넣는다.
 
 ```zig
@@ -414,7 +414,7 @@ git commit -m "Turn the copy command into a tagged union"
 
 ### Step 2: `vt.zig`에 needle 버퍼와 네 함수를 넣는다 (사용자가 편집)
 
-**넣을 것 ①** — 필드. `clip: ?[:0]const u8 = null,` 다음 줄, `pub fn init` 앞이다.
+넣을 것 ① — 필드. `clip: ?[:0]const u8 = null,` 다음 줄, `pub fn init` 앞이다.
 
 ```zig
 
@@ -441,7 +441,7 @@ git commit -m "Turn the copy command into a tagged union"
     find_len: usize = 0,
 ```
 
-**넣을 것 ②** — 함수 넷. `copyExit` 바로 뒤, `copyTakePruned` 앞이다.
+넣을 것 ② — 함수 넷. `copyExit` 바로 뒤, `copyTakePruned` 앞이다.
 
 ```zig
 
@@ -495,7 +495,7 @@ git commit -m "Turn the copy command into a tagged union"
     }
 ```
 
-**넣을 것 ③** — `copyExit`에 한 줄. `self.copy_anchor_y = null;` 다음이다.
+넣을 것 ③ — `copyExit`에 한 줄. `self.copy_anchor_y = null;` 다음이다.
 
 ```zig
         // 프롬프트도 함께 닫는다(design 결정 10). 안 닫으면 모드를 나갔다
@@ -505,7 +505,7 @@ git commit -m "Turn the copy command into a tagged union"
 
 ### Step 3: `main.zig`가 배선하고 로그를 찍는다 (사용자가 편집)
 
-**넣을 것 ①** — `dumpFind`. `dumpClip` 앞이다.
+넣을 것 ① — `dumpFind`. `dumpClip` 앞이다.
 
 ```zig
 /// 검색 프롬프트의 상태를 찍는다.
@@ -530,7 +530,7 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
 }
 ```
 
-**넣을 것 ②** — copy 배선 switch에서 `.paste` 다음 줄이다.
+넣을 것 ② — copy 배선 switch에서 `.paste` 다음 줄이다.
 
 ```zig
                     // 검색 프롬프트(CN-M1). **넷 다 화면 상태를 바꾸지 않는다** —
@@ -562,7 +562,7 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
 
 ### Step 4: 검사를 더한다 (사용자가 편집)
 
-**넣을 것 ①** — `input_test.zig`, CN-M0 검사 16의 끝(`try expectCopy(&cm, K.KEY_ESC, .exit);`)과
+넣을 것 ① — `input_test.zig`, CN-M0 검사 16의 끝(`try expectCopy(&cm, K.KEY_ESC, .exit);`)과
 `copy mode OK` 사이다.
 
 ```zig
@@ -617,7 +617,7 @@ fn dumpFind(screen: *vt.Screen, what: []const u8) void {
     try expect(&cm, K.KEY_LEFTSHIFT, 0, "");
 ```
 
-**넣을 것 ②** — `vt_test.zig`, CN-M0 검사 16의 끝(`선택이 w를 따라 넓어진다 OK`)과
+넣을 것 ② — `vt_test.zig`, CN-M0 검사 16의 끝(`선택이 w를 따라 넓어진다 OK`)과
 `PASS` 사이다.
 
 ```zig
@@ -700,9 +700,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**둘 다 돌린다** — `Copy`를 건드렸으므로 HANDOFF 실측 1이 그대로 적용된다.
+둘 다 돌린다 — `Copy`를 건드렸으므로 HANDOFF 실측 1이 그대로 적용된다.
 
-**기대:** 새 `vt_test` 줄 넷과 함께 `PASS`.
+기대: 새 `vt_test` 줄 넷과 함께 `PASS`.
 
 ### Step 6: 커밋 (Claude가 실행)
 
@@ -716,17 +716,17 @@ git commit -m "Take search text in a copy mode prompt"
 
 ## Task 3: 프롬프트가 화면에 보인다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` (`render`·`dumpStyles`·`poll` 루프)
 
-**이 Task는 검사가 없다.** `vt_test`도 `input_test`도 프레임버퍼를 안 갖기
-때문이고, 이 저장소에서 픽셀을 보는 것은 게이트뿐이다. **Task 6이 게스트에서
-본다** — 그때까지는 "컴파일이 되고 기존 게이트가 안 깨진다"가 우리가 아는
+이 Task는 검사가 없다. `vt_test`도 `input_test`도 프레임버퍼를 안 갖기
+때문이고, 이 저장소에서 픽셀을 보는 것은 게이트뿐이다. Task 6이 게스트에서
+본다 — 그때까지는 "컴파일이 되고 기존 게이트가 안 깨진다"가 우리가 아는
 전부다.
 
 ### Step 1: `render`가 프롬프트를 그린다 (사용자가 편집)
 
-**넣을 것 ①** — `drawPrompt`. `render` 앞이다.
+넣을 것 ① — `drawPrompt`. `render` 앞이다.
 
 ```zig
 /// 프롬프트 오버레이(design 결정 7). **격자를 다 그린 뒤 마지막 줄만 덮는다.**
@@ -768,15 +768,15 @@ fn drawPrompt(
 }
 ```
 
-**넣을 것 ②** — `render`의 서명과 마지막 부분.
+넣을 것 ② — `render`의 서명과 마지막 부분.
 
-**지울 것**
+지울 것
 
 ```zig
 fn render(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) !void {
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
 fn render(
@@ -787,14 +787,14 @@ fn render(
 ) !void {
 ```
 
-**지울 것** — `render`의 마지막 두 줄.
+지울 것 — `render`의 마지막 두 줄.
 
 ```zig
     try fb.present();
 }
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // 격자를 다 그린 **뒤**, present **앞**이다(확정 사실 8).
@@ -820,7 +820,7 @@ const Prompt = struct {
 
 ### Step 2: `dumpStyles`가 덮인 줄을 건너뛴다 (사용자가 편집)
 
-**지울 것** — `dumpStyles`의 서명과 루프 첫머리.
+지울 것 — `dumpStyles`의 서명과 루프 첫머리.
 
 ```zig
 fn dumpStyles(
@@ -835,7 +835,7 @@ fn dumpStyles(
         if (cell.fg == default_fg and cell.bg == default_bg) continue;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
 fn dumpStyles(
@@ -867,7 +867,7 @@ fn dumpStyles(
         if (cell.fg == default_fg and cell.bg == default_bg) continue;
 ```
 
-**그리고** 함수 끝의 `skipped` 보고 뒤에 한 줄을 더한다.
+그리고 함수 끝의 `skipped` 보고 뒤에 한 줄을 더한다.
 
 ```zig
     // 조용히 건너뛰면 "그 줄에 색이 없다"와 "덮여서 안 봤다"를 가를 수 없다.
@@ -878,7 +878,7 @@ fn dumpStyles(
 
 ### Step 3: `poll` 루프가 프롬프트를 조립해 넘긴다 (사용자가 편집)
 
-**지울 것** — 렌더 부분의 두 줄.
+지울 것 — 렌더 부분의 두 줄.
 
 ```zig
         const cells = try screen.cells(cell_buf);
@@ -886,7 +886,7 @@ fn dumpStyles(
         try render(fb, &cache, cells);
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         const cells = try screen.cells(cell_buf);
@@ -915,15 +915,15 @@ fn dumpStyles(
         try render(fb, &cache, cells, prompt);
 ```
 
-**그리고** `dumpStyles` 호출에 인자 하나를 더한다.
+그리고 `dumpStyles` 호출에 인자 하나를 더한다.
 
-**지울 것**
+지울 것
 
 ```zig
         dumpStyles(fb, cells, screen.defaultFg(), screen.defaultBg());
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         dumpStyles(
@@ -935,8 +935,8 @@ fn dumpStyles(
         );
 ```
 
-> **주의:** `dumpStyles` 호출 줄의 실제 모양은 이 plan을 쓴 시점의 것이다.
-> 인자가 다르면 **지우지 말고 인자 하나만 끝에 더한다.**
+> 주의: `dumpStyles` 호출 줄의 실제 모양은 이 plan을 쓴 시점의 것이다.
+> 인자가 다르면 지우지 말고 인자 하나만 끝에 더한다.
 
 ### Step 4: 빌드하고 `copy` 체인이 안 깨졌는지 본다 (Claude가 실행, 약 4분)
 
@@ -945,9 +945,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-이어서 게스트에서 프롬프트가 실제로 그려지는지 본다. **`copy` 체인을 그대로
-돌리되, 마지막에 `/` 를 쳐 보는 것은 Task 6이 한다** — 지금은 **기존 검사 열넷이
-안 깨지는 것**만 확인한다. 오버레이가 격자를 잘못 덮으면 `screen>` 판정이
+이어서 게스트에서 프롬프트가 실제로 그려지는지 본다. `copy` 체인을 그대로
+돌리되, 마지막에 `/` 를 쳐 보는 것은 Task 6이 한다 — 지금은 기존 검사 열넷이
+안 깨지는 것만 확인한다. 오버레이가 격자를 잘못 덮으면 `screen>` 판정이
 흔들리므로, 그것이 이 Step의 진짜 목적이다.
 
 ```bash
@@ -955,10 +955,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'bash copy/check.sh' > /tmp/cn-m1-t3.out 2>&1
 ```
 
-**`run_in_background`로 돌린다.**
+`run_in_background`로 돌린다.
 
-**기대:** `CM-M2 check PASS`. **`screen>` 판정이 하나라도 깨지면 오버레이가
-`cells()`에 영향을 준 것이고, 그것은 design 결정 7을 어긴 것이다** — 코드를
+기대: `CM-M2 check PASS`. `screen>` 판정이 하나라도 깨지면 오버레이가
+`cells()`에 영향을 준 것이고, 그것은 design 결정 7을 어긴 것이다 — 코드를
 되돌아본다.
 
 ### Step 5: 커밋 (Claude가 실행)
@@ -972,7 +972,7 @@ git commit -m "Draw the search prompt over the last row"
 
 ## Task 4: Enter가 검색을 돌리고 커서를 옮긴다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (`find` 필드, `findSubmit`·`findStep`, `feed`,
   `copyExit`, `deinit`)
 - Modify: `terminal/src/main.zig` (`.find_submit` 배선과 시간 측정)
@@ -980,7 +980,7 @@ git commit -m "Draw the search prompt over the last row"
 
 ### Step 1: `vt.zig`에 검색 상태를 넣는다 (사용자가 편집)
 
-**넣을 것 ①** — 필드. `find_len: usize = 0,` 다음이다.
+넣을 것 ① — 필드. `find_len: usize = 0,` 다음이다.
 
 ```zig
 
@@ -999,7 +999,7 @@ git commit -m "Draw the search prompt over the last row"
     find: ?ghostty_vt.search.Screen = null,
 ```
 
-**넣을 것 ②** — `findSubmit`과 `findStep`. `findNeedle` 뒤다.
+넣을 것 ② — `findSubmit`과 `findStep`. `findNeedle` 뒤다.
 
 ```zig
 
@@ -1122,7 +1122,7 @@ git commit -m "Draw the search prompt over the last row"
     }
 ```
 
-**넣을 것 ③** — `copyExit`에서 `self.findCancel();` 다음 줄이다.
+넣을 것 ③ — `copyExit`에서 `self.findCancel();` 다음 줄이다.
 
 ```zig
         // 매치 목록도 함께 버린다(design 결정 10). tracked pin을 들고 있으므로
@@ -1131,7 +1131,7 @@ git commit -m "Draw the search prompt over the last row"
         self.find = null;
 ```
 
-**넣을 것 ④** — `deinit`에서 `self.state.deinit(alloc);` **앞**이다.
+넣을 것 ④ — `deinit`에서 `self.state.deinit(alloc);` 앞이다.
 
 ```zig
         // **term보다 먼저다.** ScreenSearch가 든 tracked pin은 PageList의
@@ -1139,7 +1139,7 @@ git commit -m "Draw the search prompt over the last row"
         if (self.find) |*f| f.deinit();
 ```
 
-**넣을 것 ⑤** — `feed`에서 `self.stream.nextSlice(bytes);` 다음 줄이다.
+넣을 것 ⑤ — `feed`에서 `self.stream.nextSlice(bytes);` 다음 줄이다.
 
 ```zig
         // 대체 화면으로 갈아탔으면 ScreenSearch가 든 포인터가 낡는다
@@ -1159,7 +1159,7 @@ git commit -m "Draw the search prompt over the last row"
 
 ### Step 2: `main.zig`가 확정을 배선하고 시간을 잰다 (사용자가 편집)
 
-**지울 것** — Task 2가 넣은 임시 배선.
+지울 것 — Task 2가 넣은 임시 배선.
 
 ```zig
                     // 확정은 Task 4가 채운다. **지금은 프롬프트만 닫는다** —
@@ -1171,7 +1171,7 @@ git commit -m "Draw the search prompt over the last row"
                     },
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
                     // **이 milestone에서 유일하게 시간이 걸리는 명령이다.**
@@ -1194,7 +1194,7 @@ git commit -m "Draw the search prompt over the last row"
 
 ### Step 3: `vt_test.zig`에 검사를 더한다 (사용자가 편집)
 
-**넣을 것** — Task 2가 넣은 검사 21(`copyExit이 프롬프트를 닫는다 OK`) 뒤다.
+넣을 것 — Task 2가 넣은 검사 21(`copyExit이 프롬프트를 닫는다 OK`) 뒤다.
 
 ```zig
 
@@ -1296,8 +1296,8 @@ git commit -m "Draw the search prompt over the last row"
     std.debug.print("vt_test: 매치가 없으면 커서가 안 움직인다 OK\n", .{});
 ```
 
-> **`line`과 `rowText`는 이 파일에 이미 있다.** `line`은 `pruned` 검사가 쓰는
-> 버퍼이고 `rowText`는 파일 맨 위의 헬퍼다. **이름이 다르면 그것부터 확인한다.**
+> `line`과 `rowText`는 이 파일에 이미 있다. `line`은 `pruned` 검사가 쓰는
+> 버퍼이고 `rowText`는 파일 맨 위의 헬퍼다. 이름이 다르면 그것부터 확인한다.
 
 ### Step 4: 빌드와 검사 (Claude가 실행, 약 2분)
 
@@ -1306,10 +1306,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 새 줄 셋과 함께 `PASS`.
+기대: 새 줄 셋과 함께 `PASS`.
 
-**여기서 처음으로 라이브러리 검색 API가 실제로 도는 것을 본다.** 실패하면
-**API 사용이 틀렸는지**(컴파일 에러·잘못된 인자)와 **우리 로직이 틀렸는지**
+여기서 처음으로 라이브러리 검색 API가 실제로 도는 것을 본다. 실패하면
+API 사용이 틀렸는지(컴파일 에러·잘못된 인자)와 우리 로직이 틀렸는지
 (매치 수는 맞는데 자리가 틀림)를 먼저 가른다. `matches != 2`면 전자에 가깝고,
 `matches == 2`인데 자리가 틀리면 후자다.
 
@@ -1324,17 +1324,17 @@ git commit -m "Run the search and move the copy cursor to a match"
 
 ## Task 5: `n`/`N`이 키에 붙는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` (`Copy`, copy 표)
 - Modify: `terminal/src/input_test.zig` (예고 주석과 검사)
 - Modify: `terminal/src/main.zig` (배선)
 
-`findNext`/`findPrev`는 Task 4에서 이미 만들었고 `vt_test`가 밟고 있다. **이
-Task는 그것을 키에 잇는 일만 한다.**
+`findNext`/`findPrev`는 Task 4에서 이미 만들었고 `vt_test`가 밟고 있다. 이
+Task는 그것을 키에 잇는 일만 한다.
 
 ### Step 1: `Copy`에 variant 둘 (사용자가 편집)
 
-**넣을 것** — `find_submit,` 다음이다.
+넣을 것 — `find_submit,` 다음이다.
 
 ```zig
     /// `n` — 목록의 다음(과거 방향) 매치로. **끝에서 감긴다**(CN-M1).
@@ -1345,7 +1345,7 @@ Task는 그것을 키에 잇는 일만 한다.**
 
 ### Step 2: copy 표에 한 줄 (사용자가 편집)
 
-**넣을 것** — `c.KEY_SLASH` 분기 다음이다.
+넣을 것 — `c.KEY_SLASH` 분기 다음이다.
 
 ```zig
                 // `n`/`N`(CN-M1). **Shift 하나로 방향이 갈린다** — `w`/`b`가
@@ -1362,7 +1362,7 @@ Task는 그것을 키에 잇는 일만 한다.**
 
 ### Step 3: `main.zig` 배선 (사용자가 편집)
 
-**넣을 것** — `.find_submit` 분기 다음이다.
+넣을 것 — `.find_submit` 분기 다음이다.
 
 ```zig
                     // **결과를 버리지 않고 찍는다.** 못 옮긴 것과 옮긴 것은
@@ -1380,7 +1380,7 @@ Task는 그것을 키에 잇는 일만 한다.**
 
 ### Step 4: `input_test.zig` — 예고를 갚고 검사를 더한다 (사용자가 편집)
 
-**지울 것** — CN-M0이 남긴 예고 주석 두 줄.
+지울 것 — CN-M0이 남긴 예고 주석 두 줄.
 
 ```zig
     // **`e`와 `n`은 아직 모르는 키이지만 영영 그렇지는 않다.** `e`는 CN이
@@ -1389,7 +1389,7 @@ Task는 그것을 키에 잇는 일만 한다.**
     // 예고를 여기서 갚는다.
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // **`n`은 CN-M1의 검색이 가져갔다.** CN-M0이 여기 남긴 예고가 그것이었고,
@@ -1400,7 +1400,7 @@ Task는 그것을 키에 잇는 일만 한다.**
     // (design 결정 2), 누군가 `e`를 더하면 그때 이 줄이 바뀐다.
 ```
 
-**그리고** Task 2가 넣은 검사 21 뒤에 아래를 더한다.
+그리고 Task 2가 넣은 검사 21 뒤에 아래를 더한다.
 
 ```zig
 
@@ -1447,14 +1447,14 @@ git commit -m "Bind n and N to walk the search matches"
 
 ## Task 6: 게이트와 문서
 
-**Files:**
+Files:
 - Modify: `copy/check.sh` (검사 15)
 - Modify: design doc의 `Status:`, `docs/decisions/project_copy_navigation.md`,
   `MEMORY.md`, `HANDOFF.md`
 
 ### Step 1: 게이트 검사 15 (사용자가 편집)
 
-**넣을 것** — `copy/check.sh`의 `# ── 음성 검사: 로그에 NUL이 섞이지 않았다` 앞이다.
+넣을 것 — `copy/check.sh`의 `# ── 음성 검사: 로그에 NUL이 섞이지 않았다` 앞이다.
 
 ```bash
 # ── 검사 15: 스크롤백 검색 (CN-M1) ─────────────────────────────────────
@@ -1559,9 +1559,9 @@ type_keys esc
 sleep 1
 ```
 
-> **`slash`와 `shift-v`가 QEMU monitor의 키 이름이다.** `sendkey`가 받는 이름은
+> `slash`와 `shift-v`가 QEMU monitor의 키 이름이다. `sendkey`가 받는 이름은
 > `qemu-system-x86_64`의 표에 있고, CM-M2가 `meta_l-shift-c`로 세 키 조합이
-> 도달하는 것을 이미 확인했다. **`slash`가 안 먹으면 그것부터 로그로 확인한다** —
+> 도달하는 것을 이미 확인했다. `slash`가 안 먹으면 그것부터 로그로 확인한다 —
 > `find> open`이 안 나오는 것이 그 증상이다.
 
 ### Step 2: `copy` 체인을 돌린다 (Claude가 실행, 약 4분)
@@ -1571,9 +1571,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'bash copy/check.sh' > /tmp/cn-m1-copy.out 2>&1
 ```
 
-**`run_in_background`로 돌린다.** `| tail -N`을 붙이지 않는다.
+`run_in_background`로 돌린다. `| tail -N`을 붙이지 않는다.
 
-**기대:** 마지막 줄이 `CM-M2 check PASS`이고, 그 앞에
+기대: 마지막 줄이 `CM-M2 check PASS`이고, 그 앞에
 
 ```
 search over the full scrollback: terminal: find> submit matches=2 moved=true us=…
@@ -1581,7 +1581,7 @@ the search reached scrollback and the yanked line was FINDME
 n moved the cursor from row … to row …
 ```
 
-**`us=` 값을 반드시 읽는다.** design 결정 5가 "블로킹이 느껴지는가"를 여기서
+`us=` 값을 반드시 읽는다. design 결정 5가 "블로킹이 느껴지는가"를 여기서
 재기로 한 값이다. 수만 마이크로초(수십 밀리초)면 사람이 못 느끼고, 수십만
 (수백 밀리초)이면 이월 숙제로 남긴다.
 
@@ -1592,12 +1592,12 @@ n moved the cursor from row … to row …
   bash check.sh ; } > /tmp/cn-m1-gate.out 2>&1
 ```
 
-**`--platform`을 붙이지 않는다**(`project_build_host_arch`).
-**`run_in_background`로 돌린다.**
+`--platform`을 붙이지 않는다(`project_build_host_arch`).
+`run_in_background`로 돌린다.
 
-**기대:** 여덟 체인 3/3.
+기대: 여덟 체인 3/3.
 
-**시간 해석.** 기준선은 **19분 01초**다(2026-08-27, CN-M0 이후). 이번에 더한
+시간 해석. 기준선은 19분 01초다(2026-08-27, CN-M0 이후). 이번에 더한
 타이핑을 세면:
 
 | | 키 |
@@ -1607,41 +1607,41 @@ n moved the cursor from row … to row …
 | 모드 진입 ×2 | 2 |
 | `/` + `FINDME` + Enter ×2 | 16 |
 | `shift-v` · `y` · `n` · `esc` | 4 |
-| **합** | **64** |
+| 합 | 64 |
 
-**64키 × 0.3초 ≈ 19초**, 여기에 `sleep` 합 약 26초와 `seq 100` 두 번의 출력
-시간을 더해 **회차당 약 50초**다. copy 체인은 3회 부팅이므로 **약 2분 30초
-증가**를 예상한다.
+64키 × 0.3초 ≈ 19초, 여기에 `sleep` 합 약 26초와 `seq 100` 두 번의 출력
+시간을 더해 회차당 약 50초다. copy 체인은 3회 부팅이므로 약 2분 30초
+증가를 예상한다.
 
-**이 게이트의 잡음이 ±3분이므로 2분 30초는 여전히 측정으로 갈리지 않는다.**
-값을 기록하되 "우리 코드가 2분 30초를 더했다"고 주장하지 않는다. 다만 **CN-M0의
+이 게이트의 잡음이 ±3분이므로 2분 30초는 여전히 측정으로 갈리지 않는다.
+값을 기록하되 "우리 코드가 2분 30초를 더했다"고 주장하지 않는다. 다만 CN-M0의
 53초보다는 예상이 크므로, 실측이 22분을 넘으면 `sleep 0.3` 이월 숙제의 값이
-그만큼 커진 것으로 적어 둔다.**
+그만큼 커진 것으로 적어 둔다.
 
-값이 25분을 크게 넘으면 **코드를 의심하기 전에 기계를 먼저 의심한다.**
+값이 25분을 크게 넘으면 코드를 의심하기 전에 기계를 먼저 의심한다.
 
 ### Step 4: 문서 (Claude가 편집)
 
-1. **design doc의 `Status:`** 를
+1. design doc의 `Status:` 를
    `**Status:** 설계 확정. **CN-M0·CN-M1 완료(2026-08-27)**. Copy Navigation 종료`
-   로 바꾼다. **이월 숙제의 "`Status:` 줄이 낡았다"를 새로 늘리지 않는다.**
-2. **`docs/decisions/project_copy_navigation.md`** 에 CN-M1 절을 더한다.
+   로 바꾼다. 이월 숙제의 "`Status:` 줄이 낡았다"를 새로 늘리지 않는다.
+2. `docs/decisions/project_copy_navigation.md` 에 CN-M1 절을 더한다.
    최소한 이 다섯을 적는다.
-   - `Select.next`의 주석이 코드와 다르다(**감긴다**).
+   - `Select.next`의 주석이 코드와 다르다(감긴다).
    - `ScreenSearch`는 우리 선택을 안 건드린다 — design 위험 1이 해소된 방식.
    - `ScreenSearch`가 `*Screen`을 들고 있어 대체 화면 전환에 낡는다.
    - 프롬프트 상태가 두 곳에 있는 것이 옳은 이유.
    - `searchAll`의 실측 시간(Step 2·3에서 얻은 `us=` 값).
-3. **`MEMORY.md`** 의 Copy navigation 줄을 CN-M1 완료로 고친다.
-4. **`HANDOFF.md`** 를 갱신한다. 최소한 이 다섯을 반영한다.
-   - 제목과 "지금 어디인가"를 **Copy Navigation 종료, 진행 중인 것 없음**으로.
+3. `MEMORY.md` 의 Copy navigation 줄을 CN-M1 완료로 고친다.
+4. `HANDOFF.md` 를 갱신한다. 최소한 이 다섯을 반영한다.
+   - 제목과 "지금 어디인가"를 Copy Navigation 종료, 진행 중인 것 없음으로.
      다음 후보는 이월 숙제에서 고른다.
-   - 게이트 기준선을 Step 3의 실측값으로. **잡음 범위를 함께 적는다.**
-   - 로그 문구 목록에 **`terminal: find>` 여섯 형태**를 더한다
+   - 게이트 기준선을 Step 3의 실측값으로. 잡음 범위를 함께 적는다.
+   - 로그 문구 목록에 `terminal: find>` 여섯 형태를 더한다
      (`open` · `type` · `erase` · `cancel` · `submit` · `next`/`prev`).
-   - 핵심 파일의 줄 번호를 **전부 다시 센다.** `input.zig`와 `vt.zig`와
+   - 핵심 파일의 줄 번호를 전부 다시 센다. `input.zig`와 `vt.zig`와
      `main.zig`가 크게 밀렸다.
-   - `Copy`가 **`union(enum)`이고 variant가 열아홉**이라고 고친다.
+   - `Copy`가 `union(enum)`이고 variant가 열아홉이라고 고친다.
 
 ### Step 5: 커밋 (Claude가 실행)
 
@@ -1653,23 +1653,23 @@ git add copy/check.sh \
 git commit -m "Close out CN-M1"
 ```
 
-**`git add` 전에 `git status`로 `M`과 신규를 가른다**(HANDOFF).
+`git add` 전에 `git status`로 `M`과 신규를 가른다(HANDOFF).
 
 ---
 
 ## 이 plan이 일부러 하지 않는 것
 
-- **`?`(아래로 검색)** — design 결정 4. 더하려면 "방향"이라는 상태가 하나 늘고
+- `?`(아래로 검색) — design 결정 4. 더하려면 "방향"이라는 상태가 하나 늘고
   `n`/`N`의 뜻이 그것에 따라 뒤집힌다.
-- **증분 검색** — design 결정 5. `us=` 실측이 크게 나오면 그때 옮긴다.
+- 증분 검색 — design 결정 5. `us=` 실측이 크게 나오면 그때 옮긴다.
   `ScreenSearch`가 `tick`/`feed`로 이미 지원한다.
-- **매치 하이라이트** — 화면의 모든 매치를 표시하는 것. `ViewportSearch`가 그
+- 매치 하이라이트 — 화면의 모든 매치를 표시하는 것. `ViewportSearch`가 그
   용도로 있지만 `cells()`가 넘기는 색 결정에 손을 대야 한다.
-- **검색 기록** — `/`를 다시 열었을 때 지난 needle을 되부르는 것. 그래서 빈
+- 검색 기록 — `/`를 다시 열었을 때 지난 needle을 되부르는 것. 그래서 빈
   검색어로 Enter를 눌러도 vim처럼 지난 검색어를 다시 쓰지 않는다.
-- **프롬프트 안의 커서 이동과 붙여넣기** — 프롬프트는 끝에 붙이고 끝에서
+- 프롬프트 안의 커서 이동과 붙여넣기 — 프롬프트는 끝에 붙이고 끝에서
   지우는 것만 한다. `←`로 가운데를 고치는 것은 편집기이지 프롬프트가 아니다.
-- **`n`이 커서 위쪽만 고르게 하기** — CN-M1 plan 결정 3. `/`만 가린다.
-- **매치를 못 찾았을 때 화면에 알리기** — 로그에는 `matches=0`이 남지만 사람은
+- `n`이 커서 위쪽만 고르게 하기 — CN-M1 plan 결정 3. `/`만 가린다.
+- 매치를 못 찾았을 때 화면에 알리기 — 로그에는 `matches=0`이 남지만 사람은
   프롬프트가 닫히는 것 말고 아무 신호도 못 받는다. 상태줄이 없기 때문이고,
   그것을 만드는 것은 design 결정 7이 버린 안이다.

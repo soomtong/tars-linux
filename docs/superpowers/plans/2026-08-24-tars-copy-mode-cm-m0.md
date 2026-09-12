@@ -1,19 +1,19 @@
 # TARS Copy Mode CM-M0 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 구현 파일 편집은
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 구현 파일 편집은
 > 사용자가 하고, 빌드·QEMU·게이트·조사성 명령은 Claude가 실행하며, Claude는 각
 > Step의 정확한 내용을 제시하고 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는
 > 이 저장소에 적용하지 않는다.
 
-**Goal:** `Cmd+Shift+C`로 copy mode에 들어가서 `hjkl`(과 방향키)로 커서를 옮기고
-`Esc`로 나온다. **모드 안에서는 어떤 키도 PTY로 나가지 않는다.** 게이트가 그것을
+Goal: `Cmd+Shift+C`로 copy mode에 들어가서 `hjkl`(과 방향키)로 커서를 옮기고
+`Esc`로 나온다. 모드 안에서는 어떤 키도 PTY로 나가지 않는다. 게이트가 그것을
 음성 검사로 증명하고, 나온 뒤에 다시 나간다는 대조군까지 본다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
+Design doc: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
 (결정 1·2·3·4·7·8이 이 milestone의 몫이다. 선택과 클립보드를 다루는 결정 5·6은
 CM-M1, 붙여넣기 결정 9는 CM-M2다. design은 승인되어 있으므로 다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16, libghostty-vt(`RenderState.cursor.viewport` ·
+Tech Stack: Zig 0.16, libghostty-vt(`RenderState.cursor.viewport` ·
 `Terminal.scrollViewport`), evdev, DRM dumb buffer, QEMU monitor `sendkey`,
 bash 게이트 스크립트
 
@@ -21,19 +21,19 @@ bash 게이트 스크립트
 
 ## 착수 전에 이미 확정된 사실 (2026-08-24 실측)
 
-**다시 조사하지 않는다.** 프로브는 `/tmp/probe.zig`를 `terminal/src/vt_test.zig`
+다시 조사하지 않는다. 프로브는 `/tmp/probe.zig`를 `terminal/src/vt_test.zig`
 자리에 마운트해 `zig build test`로 돌렸다(저장소는 안 건드린다).
 
-1. **`screens.active`는 이미 포인터다.** `&screen.term.screens.active`라고 쓰면
+1. `screens.active`는 이미 포인터다. `&screen.term.screens.active`라고 쓰면
    `**Screen`이 되어 `does not support field access`로 컴파일이 막힌다. CM-M0은
    이 필드를 안 쓰지만 CM-M1이 쓴다.
-2. **`RenderState.rows`·`cols`는 `u16`이다**(`size.CellCountInt = u16`,
+2. `RenderState.rows`·`cols`는 `u16`이다(`size.CellCountInt = u16`,
    `render.zig:82-83`). `cursor.viewport`도 같은 폭의 좌표다.
-3. **`main.zig:450`의 `scrollToBottom()`이 가지치기를 구조적으로 막고 있었다.**
+3. `main.zig:450`의 `scrollToBottom()`이 가지치기를 구조적으로 막고 있었다.
    그 자리의 주석이 부수 효과로 적어 둔 것이고, CM-M0이 그 호출을 억제하면서
    창이 열린다(design 위험 1).
-4. **`terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다**(`main.zig:402-409`,
-   `if (keys.bytes.len > 0)` 안에 있다). **이 성질이 CM-M0 음성 검사의 도구다** —
+4. `terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다(`main.zig:402-409`,
+   `if (keys.bytes.len > 0)` 안에 있다). 이 성질이 CM-M0 음성 검사의 도구다 —
    모드 안에서 키를 아무리 쳐도 이 줄이 안 늘어나는 것으로 "PTY로 안 샌다"를 볼
    수 있다. 화면 내용만 보는 것보다 정확하다.
 
@@ -43,14 +43,14 @@ bash 게이트 스크립트
 
 design 결정 2의 코드 조각은 `select_char`·`yank`·`paste`까지 적었지만, 지금
 넣으면 `main.zig`의 `switch`가 죽은 가지 셋을 갖거나 `else => {}`로 열려야 한다.
-**`else`로 열어 두면 CM-M1에서 variant를 더했을 때 배선을 잊어도 컴파일이
-통과한다.** 그래서 M0은 여섯 개만 만들고 switch를 닫아 둔다 — M1이 variant를
+`else`로 열어 두면 CM-M1에서 variant를 더했을 때 배선을 잊어도 컴파일이
+통과한다. 그래서 M0은 여섯 개만 만들고 switch를 닫아 둔다 — M1이 variant를
 더하는 순간 컴파일러가 배선할 자리를 알려준다.
 
 ### 2. 방향키도 `hjkl`과 같이 받는다
 
 design 결정 4의 표에는 `hjkl`만 있지만, `project_copy_mode`가 기록한 원래 요청은
-**"커서 키로 이동하고"**였다. 표 네 줄을 더하는 비용이고 검사도 같은 모양이라
+"커서 키로 이동하고"였다. 표 네 줄을 더하는 비용이고 검사도 같은 모양이라
 둘 다 받는다.
 
 ### 3. copy mode 중에는 셸 커서를 그리지 않는다
@@ -60,22 +60,22 @@ design 결정 4의 표에는 `hjkl`만 있지만, `project_copy_mode`가 기록�
 
 ### 4. `scrollToBottom` 억제는 코드만 넣고 게이트는 CM-M2에서 본다
 
-게이트가 이 분기를 밟으려면 **copy mode 중에 PTY 출력이 도착해야** 하는데, 모드
+게이트가 이 분기를 밟으려면 copy mode 중에 PTY 출력이 도착해야 하는데, 모드
 안에서는 셸에 아무것도 보낼 수 없어서 출력을 만들 방법이 없다. 백그라운드 작업을
 띄우는 방법은 게이트를 취약하게 만든다. CM-M2에서 붙여넣기가 출력을 만들므로
-그때 본다. **못 보는 것을 못 본다고 여기 적어 둔다**(`project_gate_chain_composition`).
+그때 본다. 못 보는 것을 못 본다고 여기 적어 둔다(`project_gate_chain_composition`).
 
 ---
 
 ## Task 1: `input.zig`에 모드와 `Action.copy`를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig`
 - Test: `terminal/src/input_test.zig`
 
 ### Step 1: `Action`에 variant를 더하고 `Copy`를 만든다
 
-`input.zig:160-165`의 `Action` 정의를 **지울 것**:
+`input.zig:160-165`의 `Action` 정의를 지울 것:
 
 ```zig
 pub const Action = union(enum) {
@@ -86,7 +86,7 @@ pub const Action = union(enum) {
 };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
 pub const Action = union(enum) {
@@ -116,7 +116,7 @@ pub const Copy = enum {
 
 ### Step 2: `Keys`에 `copies`를 더한다
 
-`input.zig:168-174`의 `Keys` 정의를 **지울 것**:
+`input.zig:168-174`의 `Keys` 정의를 지울 것:
 
 ```zig
 pub const Keys = struct {
@@ -128,7 +128,7 @@ pub const Keys = struct {
 };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
 pub const Keys = struct {
@@ -145,7 +145,7 @@ pub const Keys = struct {
 
 ### Step 3: `State`에 모드와 저장소를 더한다
 
-`input.zig:278`의 `scrolls` 필드 **바로 뒤에 넣을 것**(지울 것 없음):
+`input.zig:278`의 `scrolls` 필드 바로 뒤에 넣을 것(지울 것 없음):
 
 ```zig
     scrolls: [8]Scroll = undefined,
@@ -160,7 +160,7 @@ pub const Keys = struct {
     mode: Mode = .normal,
 ```
 
-그리고 `State` 정의 안, 위 필드들 아래에 **넣을 것**:
+그리고 `State` 정의 안, 위 필드들 아래에 넣을 것:
 
 ```zig
     pub const Mode = enum { normal, copy };
@@ -168,7 +168,7 @@ pub const Keys = struct {
 
 ### Step 4: `chord()`의 Meta 분기에 진입키를 넣는다
 
-`input.zig:367-381`의 Meta 분기를 **지울 것**:
+`input.zig:367-381`의 Meta 분기를 지울 것:
 
 ```zig
         if (self.metaed()) {
@@ -178,7 +178,7 @@ pub const Keys = struct {
             return switch (code) {
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
         if (self.metaed()) {
@@ -200,7 +200,7 @@ pub const Keys = struct {
 
 ### Step 5: `handleKey`에 copy 분기를 넣는다
 
-`input.zig:462`의 `if (value == 0) return nothing;` **바로 뒤에 넣을 것**(지울 것
+`input.zig:462`의 `if (value == 0) return nothing;` 바로 뒤에 넣을 것(지울 것
 없음):
 
 ```zig
@@ -235,7 +235,7 @@ pub const Keys = struct {
 
 ### Step 6: `readKeys`가 copy 명령을 모은다
 
-`input.zig:508-542`의 `readKeys` 본문에서 **지울 것**:
+`input.zig:508-542`의 `readKeys` 본문에서 지울 것:
 
 ```zig
     const n = read(fd, &raw, raw.len);
@@ -247,7 +247,7 @@ pub const Keys = struct {
     var i: usize = 0;
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     const n = read(fd, &raw, raw.len);
@@ -264,7 +264,7 @@ pub const Keys = struct {
     var i: usize = 0;
 ```
 
-같은 함수에서 **지울 것**:
+같은 함수에서 지울 것:
 
 ```zig
             .scroll => |s| if (scrolled < self.scrolls.len) {
@@ -276,7 +276,7 @@ pub const Keys = struct {
     return .{ .bytes = out[0..written], .scrolls = self.scrolls[0..scrolled] };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             .scroll => |s| if (scrolled < self.scrolls.len) {
@@ -299,10 +299,10 @@ pub const Keys = struct {
 
 ### Step 7: 검사를 먼저 깨뜨린다 — `input_test.zig`의 헬퍼를 고친다
 
-`Action`에 variant가 늘었으므로 `expectCtx`의 `switch`가 **컴파일 에러가 난다.**
+`Action`에 variant가 늘었으므로 `expectCtx`의 `switch`가 컴파일 에러가 난다.
 이것이 의도된 신호다 — 새 동작이 조용히 무시되지 않는다.
 
-`input_test.zig:31-50` 근처의 `expectCtx` 안, `.scroll` 팔 **뒤에 넣을 것**:
+`input_test.zig:31-50` 근처의 `expectCtx` 안, `.scroll` 팔 뒤에 넣을 것:
 
 ```zig
         .copy => |cmd| {
@@ -316,7 +316,7 @@ pub const Keys = struct {
 
 ### Step 8: copy mode 검사 헬퍼를 더한다
 
-`input_test.zig`의 `expectCtx` 정의 **바로 뒤에 넣을 것**:
+`input_test.zig`의 `expectCtx` 정의 바로 뒤에 넣을 것:
 
 ```zig
 /// copy 명령이 나오기를 기대한다. **바이트가 오면 실패다** — 그것이 정확히
@@ -351,8 +351,8 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
 
 ### Step 9: 검사 여섯을 더한다
 
-`input_test.zig`의 `main` 함수 **맨 끝**, 마지막 `std.debug.print`/`PASS` 출력
-**앞에 넣을 것**:
+`input_test.zig`의 `main` 함수 맨 끝, 마지막 `std.debug.print`/`PASS` 출력
+앞에 넣을 것:
 
 ```zig
     // ── CM-M0: copy mode ────────────────────────────────────────────────
@@ -432,13 +432,13 @@ git commit -m "Teach the key pipeline about a copy mode"
 
 ## Task 2: `vt.zig`에 copy 커서를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig`
 - Test: `terminal/src/vt_test.zig`
 
 ### Step 1: 커서 상태와 조작 함수를 넣는다
 
-`vt.zig`의 `Screen` 안, `state: ghostty_vt.RenderState,` **바로 뒤에 넣을 것**:
+`vt.zig`의 `Screen` 안, `state: ghostty_vt.RenderState,` 바로 뒤에 넣을 것:
 
 ```zig
     /// copy mode의 커서. null이면 copy mode가 아니다.
@@ -453,7 +453,7 @@ git commit -m "Teach the key pipeline about a copy mode"
     copy_cursor: ?Cursor = null,
 ```
 
-`Screen` 정의 안, `Scrollbar` 선언 **앞에 넣을 것**:
+`Screen` 정의 안, `Scrollbar` 선언 앞에 넣을 것:
 
 ```zig
     /// 뷰포트 좌표 한 쌍. 로그와 검사가 함께 쓴다.
@@ -518,7 +518,7 @@ git commit -m "Teach the key pipeline about a copy mode"
 
 ### Step 2: `cells()`가 copy 커서를 반전한다
 
-`vt.zig:163-171`의 커서 처리를 **지울 것**:
+`vt.zig:163-171`의 커서 처리를 지울 것:
 
 ```zig
                 // 커서는 inverse와 **같은 연산**이다(design 결정 2). 그래서
@@ -532,7 +532,7 @@ git commit -m "Teach the key pipeline about a copy mode"
                 }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
                 // 커서는 inverse와 **같은 연산**이다(design 결정 2). 그래서
@@ -555,7 +555,7 @@ git commit -m "Teach the key pipeline about a copy mode"
 
 ### Step 3: `vt_test.zig`에 검사 넷을 더한다
 
-`vt_test.zig`의 `main` 함수 **맨 끝에 넣을 것**:
+`vt_test.zig`의 `main` 함수 맨 끝에 넣을 것:
 
 ```zig
     // ── CM-M0: copy 커서 ────────────────────────────────────────────────
@@ -624,7 +624,7 @@ git commit -m "Teach the key pipeline about a copy mode"
     std.debug.print("vt_test: copy cursor OK\n", .{});
 ```
 
-**주의.** 검사 3은 앞선 스크롤백 검사가 history를 만들어 둔 상태여야 뜻이 있다.
+주의. 검사 3은 앞선 스크롤백 검사가 history를 만들어 둔 상태여야 뜻이 있다.
 `vt_test`의 기존 마지막 상태가 바닥이면 `offset`이 이미 최대라 위로 갈 자리가
 있다 — 그것이 이 검사의 전제이고, 만약 화면이 history 없이 비어 있으면
 `scrollByRows(-1)`이 아무 일도 못 해서 검사 3이 실패한다. 그때는 검사 3 앞에
@@ -651,12 +651,12 @@ git commit -m "Give the screen a copy-mode cursor of its own"
 
 ## Task 3: `main.zig`에 배선과 로그를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig`
 
 ### Step 1: `dumpCopy`를 만든다
 
-`main.zig`의 `dumpScroll` 함수 **바로 뒤에 넣을 것**:
+`main.zig`의 `dumpScroll` 함수 바로 뒤에 넣을 것:
 
 ```zig
 /// copy mode에서 무슨 일이 일어났는지를 찍는다.
@@ -679,7 +679,7 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
 
 ### Step 2: 키 루프에 copy 배선을 넣는다
 
-`main.zig:418-426`의 스크롤 루프 **바로 뒤에 넣을 것**(지울 것 없음):
+`main.zig:418-426`의 스크롤 루프 바로 뒤에 넣을 것(지울 것 없음):
 
 ```zig
             // copy mode 명령도 PTY로 나가지 않는다(design 결정 3). 스크롤과
@@ -701,13 +701,13 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
 
 ### Step 3: copy mode 중에는 바닥으로 안 내려간다
 
-`main.zig:450`을 **지울 것**:
+`main.zig:450`을 지울 것:
 
 ```zig
             screen.scrollToBottom();
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             // **copy mode 중에는 억제한다**(CM-M0). 백그라운드 출력이 한 줄만
@@ -742,13 +742,13 @@ git commit -m "Wire copy-mode commands into the terminal loop"
 
 ## Task 4: 게이트 체인 `copy/check.sh`를 만든다
 
-**Files:**
+Files:
 - Create: `copy/check.sh`
 
 ### Step 1: 스크립트를 만든다
 
 `render/check.sh`의 앞부분(빌드 단계 · `cleanup` · `type_keys` · QEMU 기동 ·
-monitor 접속)과 **같은 뼈대**를 쓴다. 100줄이 넘으므로 Claude가 `/tmp`에 원본을
+monitor 접속)과 같은 뼈대를 쓴다. 100줄이 넘으므로 Claude가 `/tmp`에 원본을
 만들어 `diff`로 보인 뒤 사용자가 `cp`로 넣는다.
 
 전체 내용:
@@ -1056,7 +1056,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `CM-M0 check PASS`.
 
-**검사 2에서 걸리면 design 위험 4다.** 그때는 세 키 조합이 도착하는지를 먼저
+검사 2에서 걸리면 design 위험 4다. 그때는 세 키 조합이 도착하는지를 먼저
 가른다 — Cmd 없이 `shift-c`만 보내서 화면에 `C`(대문자)가 나타나는지 본다.
 
 ```bash
@@ -1080,12 +1080,12 @@ git commit -m "Prove copy mode swallows every key it does not know"
 
 ## Task 5: 루트 게이트에 체인을 등록하고 3/3을 돌린다
 
-**Files:**
+Files:
 - Modify: `check.sh`
 
 ### Step 1: 체인을 더한다
 
-`check.sh:108`의 `run_chain "TR-M2" ./render/check.sh` **바로 뒤에 넣을 것**:
+`check.sh:108`의 `run_chain "TR-M2" ./render/check.sh` 바로 뒤에 넣을 것:
 
 ```bash
 run_chain "CM-M0" ./copy/check.sh
@@ -1093,7 +1093,7 @@ run_chain "CM-M0" ./copy/check.sh
 
 ### Step 2: 루트 게이트를 돌린다 (Claude가 백그라운드로 실행, 약 50분)
 
-**Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.**
+Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.
 직전 기준선은 45분 41초이고(2026-08-24, 한가한 기계) 이번에 부팅 3회가 는다.
 
 ```bash
@@ -1103,7 +1103,7 @@ run_chain "CM-M0" ./copy/check.sh
 
 기대: `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**시간을 재기 전에 기계를 비운다.** 값이 기준선에서 크게 벗어나면 코드를
+시간을 재기 전에 기계를 비운다. 값이 기준선에서 크게 벗어나면 코드를
 의심하기 전에 기계를 먼저 의심한다 — TR-M2를 끝내며 처음 잰 값이 6시간
 12분이었고, 원인은 회귀가 아니라 Chrome이 영상을 재생하고 있던 것이었다.
 
@@ -1118,7 +1118,7 @@ git commit -m "Run the copy mode chain in the root gate"
 
 ## Task 6: 문서를 고친다
 
-**Files:**
+Files:
 - Modify: `HANDOFF.md`
 - Modify: `docs/decisions/project_copy_mode.md`
 - Modify: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
@@ -1131,8 +1131,8 @@ design doc의 "milestone 구성" 절 표 아래에 CM-M0의 실측 결과(진입
 
 ### Step 2: `project_copy_mode` 기억을 고친다
 
-선행 조건 표에서 클립보드가 아직 남아 있음을 유지하되, **CM-M0이 끝났고 통로가
-실제로 뚫렸다**는 것과 `scrollToBottom` 억제가 연 창(design 위험 1)을 적는다.
+선행 조건 표에서 클립보드가 아직 남아 있음을 유지하되, CM-M0이 끝났고 통로가
+실제로 뚫렸다는 것과 `scrollToBottom` 억제가 연 창(design 위험 1)을 적는다.
 
 ### Step 3: `HANDOFF.md`를 다시 쓴다
 

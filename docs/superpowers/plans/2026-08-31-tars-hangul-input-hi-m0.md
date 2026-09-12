@@ -1,52 +1,52 @@
 # HI-M0 — 바닥을 재고 오토마타를 세운다
 
-**Date:** 2026-08-31
-**Design:** `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-**Status:** **완료(2026-08-31).** Task 열이 전부 계획대로 돌았고 게이트가
+Date: 2026-08-31
+Design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
+Status: 완료(2026-08-31). Task 열이 전부 계획대로 돌았고 게이트가
 여덟 체인 3/3(16분 37.07초)으로 통과했다. 계획과 다르게 나온 것이 둘이다 —
-**실측 1이 빨간불이고**(`sendkey lang1`이 게스트에 안 닿는다) 그 결과로
-HI-M3의 모양이 바뀌었으며, **Task 5의 검사 목록을 착수 전에 한 번 고쳤다**
+실측 1이 빨간불이고(`sendkey lang1`이 게스트에 안 닿는다) 그 결과로
+HI-M3의 모양이 바뀌었으며, Task 5의 검사 목록을 착수 전에 한 번 고쳤다
 (`rkrk`가 그 단계에서는 통과할 수 없었다). 값과 결론은 design의
 "HI-M0이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 
-- **`sendkey lang1`이 게스트의 evdev까지 닿는지 안다.** 닿으면
+- `sendkey lang1`이 게스트의 evdev까지 닿는지 안다. 닿으면
   `KEY_HANGEUL`(122)이 보이고, 안 닿으면 HI-M3의 전환 키 설계가 바뀐다.
-- **`sendkey <key> <hold_ms>`가 누른 시간을 실제로 가르는지 안다.** tap-vs-hold
+- `sendkey <key> <hold_ms>`가 누른 시간을 실제로 가르는지 안다. tap-vs-hold
   전체가 이 값에 걸려 있다.
-- **호환 자모와 완성형이 화면에 그려지는 것을 실행으로 봤다.** design 결정 3의
+- 호환 자모와 완성형이 화면에 그려지는 것을 실행으로 봤다. design 결정 3의
   근거가 굳는다.
-- **`terminal/src/hangul.zig`가 있고 두벌식으로 한글을 조합한다.**
+- `terminal/src/hangul.zig`가 있고 두벌식으로 한글을 조합한다.
   `hangul_test`가 `zig build test`에 붙어 호스트에서 돈다.
-- **게스트의 동작은 하나도 안 바뀐다.** `hangul.zig`를 부르는 코드가 아직 없다.
+- 게스트의 동작은 하나도 안 바뀐다. `hangul.zig`를 부르는 코드가 아직 없다.
   게이트 체인도 여덟 그대로다.
 
-**편집은 사용자가 한다.** CC-M0의 예외는 그 milestone으로 끝났다(`CLAUDE.md`의
+편집은 사용자가 한다. CC-M0의 예외는 그 milestone으로 끝났다(`CLAUDE.md`의
 협업 방식 표). 100줄이 넘는 덩어리는 Claude가 `/tmp`에 파일로 만들어 `cp`로
 넣는다.
 
 ## 왜 이 순서인가
 
-**Task 1과 2가 재기만 하고 저장소를 안 바꾼다.** 실측 1이 빨간불이면 HI-M3의
+Task 1과 2가 재기만 하고 저장소를 안 바꾼다. 실측 1이 빨간불이면 HI-M3의
 모양이 바뀌는데, 그것을 오토마타를 다 만든 뒤에 아는 것보다 먼저 아는 것이 낫다.
 
-**Task 3부터 8이 오토마타를 한 겹씩 쌓는다.** 표 → 조합 상태 → 자판 → 기본
+Task 3부터 8이 오토마타를 한 겹씩 쌓는다. 표 → 조합 상태 → 자판 → 기본
 전이 → 겹자모 → 지우기 → 불변식 순서다. CS-M0의 실측 9가 적어 둔 것과 같은
 이유로 가른다 — 뒤 단계가 틀렸을 때 앞 단계를 의심할 필요가 없어진다.
 
-**게이트는 Task 9 하나다.** 게스트로 가는 코드가 안 바뀌므로 게이트는 회귀만
+게이트는 Task 9 하나다. 게스트로 가는 코드가 안 바뀌므로 게이트는 회귀만
 본다. 다만 `build.zig`가 바뀌므로 안 돌릴 수는 없다.
 
 ## 착수 전에 실측으로 확정한 것 (2026-08-31)
 
-**아래 코드는 전부 컨테이너에서 컴파일하고 돌려 본 것이다.** 짐작으로 적은
+아래 코드는 전부 컨테이너에서 컴파일하고 돌려 본 것이다. 짐작으로 적은
 줄이 없다.
 
 ### 1. evdev 이벤트의 시각 필드는 `time.tv_sec` · `time.tv_usec`이다
 
 컨테이너에서 `@cImport("linux/input.h")` 뒤에 그 이름으로 읽고 쓰는 코드가
-컴파일되고 실행됐다. `@sizeOf`가 **24**로 나와서 `input.zig:786`의 주석
+컴파일되고 실행됐다. `@sizeOf`가 24로 나와서 `input.zig:786`의 주석
 ("timeval 16 + type 2 + code 2 + value 4")과 정확히 맞는다.
 
 ### 2. `sendkey`에 `hold_ms` 인자가 있다
@@ -82,17 +82,17 @@ QEMU 10.0.11 바이너리에서 확인했다. 일본어 쪽(`henkan` · `muhenka
 | `rml` | 긔 | ㅡ+ㅣ |
 | `Rk` | 까 | 쌍자음 |
 
-**위의 여덟은 Task 5의 부분 구현으로도 같은 값이 나온다.** 받침 넘기기와
+위의 여덟은 Task 5의 부분 구현으로도 같은 값이 나온다. 받침 넘기기와
 겹모음을 안 밟기 때문이고, 그래서 Task 5의 검사로 쓸 수 있다.
 
-**기대값을 두 번 틀렸고 코드는 맞았다.** `ghk`를 `과`로 적었는데 두벌식에서
-`g`는 ㄱ이 아니라 **ㅎ**이라 `화`가 맞다. `과`는 `rhk`다. **표를 옮겨 적을 때
-사람이 틀리는 자리가 정확히 여기라서**, Task 4의 자판 표에 `comptime` 앵커를
+기대값을 두 번 틀렸고 코드는 맞았다. `ghk`를 `과`로 적었는데 두벌식에서
+`g`는 ㄱ이 아니라 ㅎ이라 `화`가 맞다. `과`는 `rhk`다. 표를 옮겨 적을 때
+사람이 틀리는 자리가 정확히 여기라서, Task 4의 자판 표에 `comptime` 앵커를
 건다(design 위험 1).
 
 ### 5. 그릴 수 없는 상태를 오토마타가 한 번도 안 만든다
 
-두벌식 키 서른셋을 3-순열로 전부 먹여 매 단계를 봤다. **107,811단계에서 0번**이다
+두벌식 키 서른셋을 3-순열로 전부 먹여 매 단계를 봤다. 107,811단계에서 0번이다
 (위 실측은 키 목록에 `t`가 겹쳐 34개로 돌아 117,912단계였고 결과는 같았다).
 design 결정 3이 코드로 지켜진다는 뜻이고, Task 8이 이 검사를 저장소에 남긴다.
 
@@ -105,9 +105,9 @@ design 결정 3이 코드로 지켜진다는 뜻이고, Task 8이 이 검사를 
 
 ## Task 1 — `sendkey lang1`과 `hold_ms`를 잰다 (실측 1·2)
 
-**Files:** `terminal/src/input.zig` (프로브를 넣었다가 되돌린다)
+Files: `terminal/src/input.zig` (프로브를 넣었다가 되돌린다)
 
-프로브는 저장소에 남기지 않는다. **넣고, 재고, `git checkout`으로 되돌린다.**
+프로브는 저장소에 남기지 않는다. 넣고, 재고, `git checkout`으로 되돌린다.
 
 ### Step 1: 시작 전에 working tree가 깨끗한지 본다
 
@@ -135,7 +135,7 @@ Expected: 아무것도 안 나온다. 나오면 Task 1을 시작하지 않는다
         });
 ```
 
-**`value`가 셋이다** — 1이 누름, 0이 뗌, 2가 자동 반복이다. 셋을 다 찍어야
+`value`가 셋이다 — 1이 누름, 0이 뗌, 2가 자동 반복이다. 셋을 다 찍어야
 "눌렀다 뗀 간격"을 잴 수 있다.
 
 ### Step 3: 프로브가 들어갔는지 본다
@@ -198,23 +198,23 @@ grep -a 'probe>' "$LOG" > /workspace/out/probe/hi-m0-keys.txt || true
 cat /workspace/out/probe/hi-m0-keys.txt
 ```
 
-**`shift`로 시간을 재는 이유가 있다.** `a`처럼 문자를 만드는 키는 뗄 때
+`shift`로 시간을 재는 이유가 있다. `a`처럼 문자를 만드는 키는 뗄 때
 아무것도 안 하지만 프로브는 `value=0`도 찍으므로 어느 키든 된다. 그런데
 modifier 키가 HI-M3이 실제로 다룰 대상이라 그쪽으로 잰다.
 
-**`out/`은 gitignore다.** 그리고 **루트 게이트를 돌리면 `clean()`이 `out`을
-통째로 지운다**(`check.sh:15`). 그래서 Task 9보다 먼저 여기서 읽어 둔다.
+`out/`은 gitignore다. 그리고 루트 게이트를 돌리면 `clean()`이 `out`을
+통째로 지운다(`check.sh:15`). 그래서 Task 9보다 먼저 여기서 읽어 둔다.
 
 ### Step 5: 결과를 읽는다
 
 읽는 것 셋.
 
 1. `sendkey a`가 `code=30`(KEY_A)을 냈는가 — 프로브가 살아 있다는 대조군.
-2. `sendkey lang1`이 **`code=122`**를 냈는가. 냈으면 실측 1이 초록이다.
+2. `sendkey lang1`이 `code=122`를 냈는가. 냈으면 실측 1이 초록이다.
    아무 줄도 안 나오면 PS/2 경로에서 사라진 것이고, HI-M3은 한/영 키를
    실기용으로만 남긴다.
-3. 같은 키의 `value=1`과 `value=0` 사이의 `sec`·`usec` 차이가 **50밀리초
-   언저리와 500밀리초 언저리로 갈리는가.** 갈리면 실측 2가 초록이다.
+3. 같은 키의 `value=1`과 `value=0` 사이의 `sec`·`usec` 차이가 50밀리초
+   언저리와 500밀리초 언저리로 갈리는가. 갈리면 실측 2가 초록이다.
 
 ### Step 6: 프로브를 되돌린다
 
@@ -225,7 +225,7 @@ git status --short
 ```
 Expected: 두 번째 명령이 아무것도 안 낸다.
 
-**이 Step을 빠뜨리면 프로브가 저장소에 들어간다.** Task 9의 게이트는
+이 Step을 빠뜨리면 프로브가 저장소에 들어간다. Task 9의 게이트는
 `probe>` 줄이 늘어도 통과하므로 게이트가 안 잡아 준다.
 
 ### Step 7: 커밋할 것이 없다
@@ -237,9 +237,9 @@ Expected: 두 번째 명령이 아무것도 안 낸다.
 
 ## Task 2 — 호환 자모와 완성형이 그려지는지 본다 (실측 3)
 
-**Files:** 없음. Claude가 컨테이너에서 재고 값만 가져온다.
+Files: 없음. Claude가 컨테이너에서 재고 값만 가져온다.
 
-**게스트가 필요 없다.** 폰트 래스터라이저는 하드웨어와 무관한 순수 계산이고
+게스트가 필요 없다. 폰트 래스터라이저는 하드웨어와 무관한 순수 계산이고
 (`build.zig:134`의 주석), `font_test`가 이미 그 사실 위에 서 있다.
 
 ### Step 1: 여섯 코드포인트를 굽는다 (Claude가 실행, 약 30초)
@@ -253,17 +253,17 @@ Claude가 `font_test`와 같은 방식으로 부르는 작은 드라이버를 `/
 | U+314F `ㅏ` | 호환 자모 홀소리 | 중성만 있는 상태를 그린다 |
 | U+B2E4 `다` | 완성형, 받침 없음 | 초성+중성 |
 | U+B2E8 `단` | 완성형, 받침 있음 | 초성+중성+종성 |
-| U+1103 `ᄃ` | 첫가끝 초성 | **모아주기를 못 하는 근거다** |
+| U+1103 `ᄃ` | 첫가끝 초성 | 모아주기를 못 하는 근거다 |
 | U+11AB `ᆫ` | 첫가끝 종성 | 같은 이유 |
 
 ### Step 2: 결과를 읽는다
 
-- 앞의 넷은 **`bitmap != null`이고 `cell_width`가 나와야** 한다. 호환 자모가
+- 앞의 넷은 `bitmap != null`이고 `cell_width`가 나와야 한다. 호환 자모가
   1칸인지 2칸인지도 여기서 처음 안다 — HI-M1이 preedit을 몇 칸으로 그릴지가
   이 값에 딸린다.
-- 뒤의 둘은 **모양이 나오더라도 겹쳐 그려지지 않는다.** unifont가 첫가끝
+- 뒤의 둘은 모양이 나오더라도 겹쳐 그려지지 않는다. unifont가 첫가끝
   자모에 글리프를 갖고 있어도 우리 렌더러는 셀 하나에 글자 하나를 찍을 뿐이다.
-  **"글리프가 있다"와 "모아주기를 그릴 수 있다"가 다르다는 것**을 값으로
+  "글리프가 있다"와 "모아주기를 그릴 수 있다"가 다르다는 것을 값으로
   적어 둔다.
 
 ### Step 3: 커밋할 것이 없다
@@ -274,14 +274,14 @@ Claude가 `font_test`와 같은 방식으로 부르는 작은 드라이버를 `/
 
 ## Task 3 — `hangul.zig`의 표 셋과 조합 상태
 
-**Files:**
+Files:
 - Create: `terminal/src/hangul.zig`
 - Create: `terminal/src/hangul_test.zig`
 - Modify: `terminal/build.zig`
 
 ### Step 1: `hangul.zig`를 만든다
 
-**100줄이 넘으므로 Claude가 `/tmp/hangul_task3.zig`에 만들어 둔다.**
+100줄이 넘으므로 Claude가 `/tmp/hangul_task3.zig`에 만들어 둔다.
 
 ```bash
 cp /tmp/hangul_task3.zig terminal/src/hangul.zig
@@ -387,7 +387,7 @@ pub const Syllable = struct {
 
 ### Step 2: `hangul_test.zig`를 만든다
 
-`input_test.zig`와 같이 **`init` 인자가 없는 `main`**이다. 파일도 폰트도 안
+`input_test.zig`와 같이 `init` 인자가 없는 `main`이다. 파일도 폰트도 안
 읽는 순수 계산이기 때문이다(`vt_test`·`font_test`는 `std.process.Init`를 받는다).
 
 ```zig
@@ -492,11 +492,11 @@ git commit -m "Add the hangul jamo tables and the composing syllable"
 
 ## Task 4 — 두벌식 자판 표
 
-**Files:** Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
+Files: Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
 
 ### Step 1: `Jamo`와 두벌식 표를 더한다
 
-`hangul.zig`의 `Syllable` 정의 **뒤**에 넣는다.
+`hangul.zig`의 `Syllable` 정의 뒤에 넣는다.
 
 넣을 것:
 ```zig
@@ -584,7 +584,7 @@ comptime {
 
 ### Step 2: 검사를 더한다
 
-`hangul_test.zig`의 검사 2 **뒤**, `PASS` **앞**에 넣는다.
+`hangul_test.zig`의 검사 2 뒤, `PASS` 앞에 넣는다.
 
 넣을 것:
 ```zig
@@ -627,14 +627,14 @@ git commit -m "Add the dubeolsik layout table"
 
 ## Task 5 — `feed`의 기본 전이
 
-**Files:** Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
+Files: Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
 
-**겹자모와 받침 넘기기는 Task 6이다.** 여기서는 "초성을 놓고, 중성을 붙이고,
+겹자모와 받침 넘기기는 Task 6이다. 여기서는 "초성을 놓고, 중성을 붙이고,
 받침을 붙이고, 안 되면 확정한다"까지만 만든다.
 
 ### Step 1: `Step`과 `feed`를 더한다
 
-`hangul.zig`의 `dubeol` **뒤**에 넣는다.
+`hangul.zig`의 `dubeol` 뒤에 넣는다.
 
 넣을 것:
 ```zig
@@ -689,7 +689,7 @@ fn feedVowel(buf: Syllable, v: u5) Step {
 
 ### Step 2: 검사와 헬퍼를 더한다
 
-`hangul_test.zig`의 `main` **앞**에 헬퍼를 넣는다.
+`hangul_test.zig`의 `main` 앞에 헬퍼를 넣는다.
 
 넣을 것:
 ```zig
@@ -721,7 +721,7 @@ fn expectTyped(keys: []const u8, want: []const u8) !void {
 }
 ```
 
-검사 3 **뒤**에 넣을 것:
+검사 3 뒤에 넣을 것:
 ```zig
     // ── 4. 기본 전이 ─────────────────────────────────────────────────
     //
@@ -751,7 +751,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 ```
 Expected: 위 다섯 줄이 전부 OK로 나오고 `PASS`.
 
-**`gksrmf`가 "한글"이 되는 것에 산수가 있다.** `ㅎㅏㄴ`까지 받침이 붙어 `한`이
+`gksrmf`가 "한글"이 되는 것에 산수가 있다. `ㅎㅏㄴ`까지 받침이 붙어 `한`이
 되고, 다음 `ㄱ`은 `ㄴ`과 겹받침이 안 되므로 `한`을 확정하고 새 초성이 된다.
 `ㅡㄹ`이 붙어 `글`이 되고 마지막에 확정된다.
 
@@ -766,11 +766,11 @@ git commit -m "Compose a syllable from initial, vowel and final"
 
 ## Task 6 — 겹자모와 받침 넘기기
 
-**Files:** Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
+Files: Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
 
 ### Step 1: 합치고 가르는 표 넷을 더한다
 
-`hangul.zig`의 `Step` 정의 **앞**에 넣는다.
+`hangul.zig`의 `Step` 정의 앞에 넣는다.
 
 넣을 것:
 ```zig
@@ -928,7 +928,7 @@ fn finalToInitial(j: u5) ?u5 {
 
 ### Step 5: 검사를 더한다
 
-`hangul_test.zig`의 검사 4 **뒤**에 넣을 것:
+`hangul_test.zig`의 검사 4 뒤에 넣을 것:
 ```zig
     // ── 5. 겹자모와 받침 넘기기 ───────────────────────────────────────
     //
@@ -951,7 +951,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 ```
 Expected: 위 여섯 줄이 전부 OK로 나오고 `PASS`.
 
-**`dkswj`가 "안저"인 것이 이 Task에서 가장 볼 만한 값이다.** `ㅇㅏㄴ`이 `안`이
+`dkswj`가 "안저"인 것이 이 Task에서 가장 볼 만한 값이다. `ㅇㅏㄴ`이 `안`이
 되고, `ㅈ`이 `ㄴ`과 만나 겹받침 `ㄵ`이 되어 화면에는 `앉`이 뜬다. 그 뒤 `ㅓ`가
 오면 `ㄵ`이 갈려 `ㄴ`은 남고 `ㅈ`이 넘어가 `안` + `저`가 된다.
 
@@ -966,7 +966,7 @@ git commit -m "Join compound jamo and carry the final over to the next syllable"
 
 ## Task 7 — Backspace로 자모를 하나 뺀다
 
-**Files:** Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
+Files: Modify `terminal/src/hangul.zig`, `terminal/src/hangul_test.zig`
 
 ### Step 1: `erase`를 더한다
 
@@ -995,7 +995,7 @@ pub fn erase(buf: Syllable) ?Syllable {
 
 ### Step 2: 검사를 더한다
 
-`hangul_test.zig`의 검사 5 **뒤**에 넣을 것:
+`hangul_test.zig`의 검사 5 뒤에 넣을 것:
 ```zig
     // ── 6. Backspace ─────────────────────────────────────────────────
     //
@@ -1053,15 +1053,15 @@ git commit -m "Remove one jamo at a time on backspace"
 
 ## Task 8 — 그릴 수 없는 상태를 만들지 않는다
 
-**Files:** Modify `terminal/src/hangul_test.zig`
+Files: Modify `terminal/src/hangul_test.zig`
 
-**design 결정 3을 코드로 못 박는 검사다.** 앞의 검사 2는 "그런 상태는 그릴
-것이 없다"만 말하고, 이 검사가 **"오토마타가 그런 상태를 애초에 안 만든다"**를
+design 결정 3을 코드로 못 박는 검사다. 앞의 검사 2는 "그런 상태는 그릴
+것이 없다"만 말하고, 이 검사가 "오토마타가 그런 상태를 애초에 안 만든다"를
 말한다. 둘이 함께 있어야 모아주기를 뺀 것이 안전하다는 근거가 선다.
 
 ### Step 1: 검사를 더한다
 
-`hangul_test.zig`의 검사 6 **뒤**, `PASS` **앞**에 넣을 것:
+`hangul_test.zig`의 검사 6 뒤, `PASS` 앞에 넣을 것:
 ```zig
     // ── 7. 오토마타는 그릴 수 없는 상태를 만들지 않는다 (design 결정 3) ─
     //
@@ -1101,7 +1101,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 ```
 Expected: `3-순열 107811단계에서 그릴 수 없는 상태가 0번 OK`.
 
-**107,811은 33 × 33 × 33 × 3이다.** 이 숫자가 다르게 나오면 `keys` 문자열에
+107,811은 33 × 33 × 33 × 3이다. 이 숫자가 다르게 나오면 `keys` 문자열에
 글자가 겹치거나 빠진 것이다 — 착수 전 실측에서 실제로 `t`가 겹쳐 34개로
 돌았고 117,912가 나왔다.
 
@@ -1118,7 +1118,7 @@ git commit -m "Prove the automaton never reaches an undrawable state"
 
 ### Step 1: 돌린다 (Claude가 실행, 약 16분)
 
-**Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.**
+Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.
 
 Run:
 ```bash
@@ -1126,39 +1126,39 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash ./chec
 ```
 Expected: `TARS check PASS: all chains 3/3 consecutive runs succeeded`
 
-**게스트로 가는 코드가 하나도 안 바뀌었으므로 회귀만 본다.** 그래도 돌리는
+게스트로 가는 코드가 하나도 안 바뀌었으므로 회귀만 본다. 그래도 돌리는
 이유는 `build.zig`가 바뀌었기 때문이다 — 여섯 체인이 전부 `prepare.sh`를
 거쳐 `zig build`를 부른다.
 
 ### Step 2: 걸린 시간을 적어 둔다
 
-체인이 여덟 그대로이므로 **기준선(16분 01~11초)과 같아야 한다.** 갈리면
+체인이 여덟 그대로이므로 기준선(16분 01~11초)과 같아야 한다. 갈리면
 `hangul_test`가 `zig build test`에 붙은 값이고, 그 값을 Task 10에서 적는다.
 
 ---
 
 ## Task 10 — 문서를 맞춘다
 
-**Files:** design doc · `HANDOFF.md` · `MEMORY.md` · `docs/decisions/`
+Files: design doc · `HANDOFF.md` · `MEMORY.md` · `docs/decisions/`
 
 ### Step 1: design doc에 실측 절을 더한다
 
 `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`의 `Status:`를
-고치고 **"HI-M0이 실측한 것"** 절을 더한다. 적을 것 넷.
+고치고 "HI-M0이 실측한 것" 절을 더한다. 적을 것 넷.
 
-1. `sendkey lang1`이 evdev에 닿았는가 (Task 1). **닿지 않았으면 위험 4가
-   현실이 된 것이므로 HI-M3의 모양을 함께 고친다.**
+1. `sendkey lang1`이 evdev에 닿았는가 (Task 1). 닿지 않았으면 위험 4가
+   현실이 된 것이므로 HI-M3의 모양을 함께 고친다.
 2. `hold_ms`가 실제로 갈렸는가와 그 값 (Task 1).
-3. 호환 자모·완성형·첫가끝의 굽기 결과와 **호환 자모가 몇 칸인지** (Task 2).
+3. 호환 자모·완성형·첫가끝의 굽기 결과와 호환 자모가 몇 칸인지 (Task 2).
 4. 게이트 시간 (Task 9).
 
 ### Step 2: `HANDOFF.md`를 고친다
 
-- 맨 위를 **"HI-M0이 끝났다"**로 바꾼다.
-- **"HI-M0이 실행으로 증명한 것 — 다시 조사하지 말 것"** 절을 만든다.
+- 맨 위를 "HI-M0이 끝났다"로 바꾼다.
+- "HI-M0이 실행으로 증명한 것 — 다시 조사하지 말 것" 절을 만든다.
 - 이월 숙제에 design 비목표에서 온 항목 넷을 더한다: 기호 확장 · Patal의
   나머지 trait들 · copy mode 검색창의 한글 · 입력기 상태 표시.
-- **"핵심 파일" 절에 `hangul.zig`와 `hangul_test.zig`를 더한다.** 줄 번호는
+- "핵심 파일" 절에 `hangul.zig`와 `hangul_test.zig`를 더한다. 줄 번호는
   이 시점에 `rg`로 다시 잰다.
 
 ### Step 3: 기억을 남긴다
@@ -1167,8 +1167,8 @@ Expected: `TARS check PASS: all chains 3/3 consecutive runs succeeded`
 
 ### Step 4: `CLAUDE.md`의 완료 목록은 아직 안 고친다
 
-**서브프로젝트가 안 끝났다.** HI-M3까지 끝나는 시점에 고친다. 대신
-"진행 중인 서브프로젝트가 없다"는 문장은 **지금 틀린 말이 되므로** Hangul
+서브프로젝트가 안 끝났다. HI-M3까지 끝나는 시점에 고친다. 대신
+"진행 중인 서브프로젝트가 없다"는 문장은 지금 틀린 말이 되므로 Hangul
 Input이 진행 중이라고 고친다.
 
 ### Step 5: 커밋

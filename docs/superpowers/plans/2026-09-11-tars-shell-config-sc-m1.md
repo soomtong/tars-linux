@@ -1,45 +1,45 @@
 # SC-M1 Implementation Plan — 씨앗을 깔고, 그것이 읽혔다는 것을 본다
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** init이 `/config`를 마운트했을 때 rc 파일 셋(`bashrc`·`zshrc`·
-`fish.config`)을 **없으면 만들고**, `config/check.sh`의 부팅을 셋으로 늘려
-**rc가 실제로 읽힌다**와 **`shell_config=off`가 그것을 막는다**를 증명한다.
+Goal: init이 `/config`를 마운트했을 때 rc 파일 셋(`bashrc`·`zshrc`·
+`fish.config`)을 없으면 만들고, `config/check.sh`의 부팅을 셋으로 늘려
+rc가 실제로 읽힌다와 `shell_config=off`가 그것을 막는다를 증명한다.
 
-**Architecture:** 새 파일이 하나도 없다. SC-M0이 링크를 걸어 둔 자리에 파일을
-놓는 일이고, `config.save()`가 `tars.conf`에 대해 하는 것과 **글자 그대로 같은
-모양**이다 — 다른 점은 `O_EXCL`뿐이다(`tars.conf`는 "파일이 없다"를 `load`가
+Architecture: 새 파일이 하나도 없다. SC-M0이 링크를 걸어 둔 자리에 파일을
+놓는 일이고, `config.save()`가 `tars.conf`에 대해 하는 것과 글자 그대로 같은
+모양이다 — 다른 점은 `O_EXCL`뿐이다(`tars.conf`는 "파일이 없다"를 `load`가
 이미 답했지만 rc는 그 질문을 커널에게 직접 한다).
 
-**Tech Stack:** Zig(init) · bash(게이트 체인) · QEMU monitor `sendkey`
+Tech Stack: Zig(init) · bash(게이트 체인) · QEMU monitor `sendkey`
 
-**읽고 시작할 것:** `docs/superpowers/specs/2026-09-11-tars-shell-config-design.md`
-— 특히 **결정 7(씨앗) · 결정 10(부팅 셋)** 과 **실측 4(디스크를 붙이는 체인이
+읽고 시작할 것: `docs/superpowers/specs/2026-09-11-tars-shell-config-design.md`
+— 특히 결정 7(씨앗) · 결정 10(부팅 셋) 과 실측 4(디스크를 붙이는 체인이
 다섯이다) · 실측 9(프롬프트는 게이트의 좌표계다) · 위험 3(rc가 깨지면 고칠
-셸이 없다)**.
+셸이 없다).
 
 ---
 
 ## 이 milestone을 지배하는 사실 하나
 
-> **씨앗은 부팅할 때 한 글자도 찍으면 안 된다.**
+> 씨앗은 부팅할 때 한 글자도 찍으면 안 된다.
 
 설정 디스크를 붙이는 체인이 다섯이다(design 실측 4) — `config` · `hangul` ·
-`input` · `machine` · `power`. SC-M0 뒤로 그 다섯의 셸은 **rc를 읽으려 하고**
-지금까지는 읽을 파일이 없어서 아무 일도 안 일어났다. **M1이 그 파일을
-만드는 순간 다섯 체인의 화면이 씨앗의 내용을 따라간다.**
+`input` · `machine` · `power`. SC-M0 뒤로 그 다섯의 셸은 rc를 읽으려 하고
+지금까지는 읽을 파일이 없어서 아무 일도 안 일어났다. M1이 그 파일을
+만드는 순간 다섯 체인의 화면이 씨앗의 내용을 따라간다.
 
-`hangul`·`input`은 화면의 **셀 좌표**로 판정하고(`copy/check.sh`의 `col 20`이
-같은 종류다) `machine`은 fish 인사말의 위치를 본다. **씨앗이 배너 한 줄을
-찍으면 그 좌표가 전부 한 칸씩 밀린다.**
+`hangul`·`input`은 화면의 셀 좌표로 판정하고(`copy/check.sh`의 `col 20`이
+같은 종류다) `machine`은 fish 인사말의 위치를 본다. 씨앗이 배너 한 줄을
+찍으면 그 좌표가 전부 한 칸씩 밀린다.
 
-그래서 이 plan의 Task 1이 씨앗 텍스트에 대한 **호스트 검사**부터 만든다:
+그래서 이 plan의 Task 1이 씨앗 텍스트에 대한 호스트 검사부터 만든다:
 *"주석이 아닌 줄은 전부 `alias `로 시작한다."* 부팅 20초가 아니라 0.1초로
-답이 나오는 자리이고, **나중에 이 파일에 `echo`를 넣는 사람을 막는 것이 이
-검사의 진짜 목적이다.**
+답이 나오는 자리이고, 나중에 이 파일에 `echo`를 넣는 사람을 막는 것이 이
+검사의 진짜 목적이다.
 
-SC-M0이 배운 것(실측 19)의 다음 판이다 — 그때는 **셸이 색을 쓰기 시작해서**
-게이트가 셋 깨졌고, 이번에는 **셸이 파일을 읽기 시작한다.**
+SC-M0이 배운 것(실측 19)의 다음 판이다 — 그때는 셸이 색을 쓰기 시작해서
+게이트가 셋 깨졌고, 이번에는 셸이 파일을 읽기 시작한다.
 
 ---
 
@@ -49,35 +49,35 @@ design 결정 10의 표를 실제 명령으로 옮긴 것이다.
 
 | 부팅 | 디스크 | 셸 | 무엇을 치나 | 무엇을 증명하나 |
 |---|---|---|---|---|
-| **1차** | 빈 디스크 | fish | `tars-config` → `echo shell=zsh > …conf` → `echo echo tars-rc-alive >> …zshrc` → 되읽기 둘 | 씨앗 셋이 생겼다 · **fish가 `/config/fish.config`를 읽었다** · 사람이 고친 것이 파일에 들어갔다 |
-| **2차** | 같은 이미지 | zsh | `echo shell_config=off >> …conf` → 되읽기 | **두 셸이 다 `/config/zshrc`를 읽었다** · 씨앗을 다시 안 만든다 |
-| **3차** | 같은 이미지 | zsh | 아무것도 안 친다 | **같은 rc가 안 읽힌다** — 부정 검사 |
+| 1차 | 빈 디스크 | fish | `tars-config` → `echo shell=zsh > …conf` → `echo echo tars-rc-alive >> …zshrc` → 되읽기 둘 | 씨앗 셋이 생겼다 · fish가 `/config/fish.config`를 읽었다 · 사람이 고친 것이 파일에 들어갔다 |
+| 2차 | 같은 이미지 | zsh | `echo shell_config=off >> …conf` → 되읽기 | 두 셸이 다 `/config/zshrc`를 읽었다 · 씨앗을 다시 안 만든다 |
+| 3차 | 같은 이미지 | zsh | 아무것도 안 친다 | 같은 rc가 안 읽힌다 — 부정 검사 |
 
-**1차의 첫 명령 `tars-config`가 이 설계에서 가장 밀도가 높다.** 그것은 씨앗이
+1차의 첫 명령 `tars-config`가 이 설계에서 가장 밀도가 높다. 그것은 씨앗이
 정의한 alias이고, 그 출력은 씨앗 `tars.conf`의 마지막 줄 `shell_config=on`이다.
 한 번의 타이핑이 셋을 동시에 증명한다:
 
-1. `/config/fish.config`가 **생겼다**
-2. fish가 그것을 **읽었다**(안 읽었으면 `tars-config`는 모르는 명령이다)
-3. 씨앗 `tars.conf`가 실제로 `shell_config=on`을 **담고 있다**
-   (SC-M0의 게이트는 로그에서 기본값만 봤고 **파일의 내용은 못 봤다**)
+1. `/config/fish.config`가 생겼다
+2. fish가 그것을 읽었다(안 읽었으면 `tars-config`는 모르는 명령이다)
+3. 씨앗 `tars.conf`가 실제로 `shell_config=on`을 담고 있다
+   (SC-M0의 게이트는 로그에서 기본값만 봤고 파일의 내용은 못 봤다)
 
-**2차·3차의 판정 글자 `tars-rc-alive`는 우리가 아니라 사람이 심는다.** 씨앗에
-`echo`를 넣을 수 없기 때문이고(위의 지배적 사실), 그래서 **그 글자는 1차에서
-사람이 타이핑한 것**이다. design 결정 10이 *"사람이 `/config/zshrc`에 줄을
+2차·3차의 판정 글자 `tars-rc-alive`는 우리가 아니라 사람이 심는다. 씨앗에
+`echo`를 넣을 수 없기 때문이고(위의 지배적 사실), 그래서 그 글자는 1차에서
+사람이 타이핑한 것이다. design 결정 10이 *"사람이 `/config/zshrc`에 줄을
 더한다"*고 적은 자리가 바로 여기다.
 
-**그 글자를 어디서 보는지가 중요하다.**
+그 글자를 어디서 보는지가 중요하다.
 
 | 어디 | 누가 찍나 | 무엇을 뜻하나 |
 |---|---|---|
-| `terminal: screen>`가 **아닌** 줄 | **시리얼 콘솔 셸** | 결정 4의 절반 — init이 직접 exec한 셸이 rc를 읽었다 |
-| `terminal: screen>` 줄 | **화면 셸** | 결정 4의 나머지 절반 — terminal이 띄운 셸이 rc를 읽었다 |
+| `terminal: screen>`가 아닌 줄 | 시리얼 콘솔 셸 | 결정 4의 절반 — init이 직접 exec한 셸이 rc를 읽었다 |
+| `terminal: screen>` 줄 | 화면 셸 | 결정 4의 나머지 절반 — terminal이 띄운 셸이 rc를 읽었다 |
 
 `config/check.sh:314`가 이미 같은 모양의 구분을 쓰고 있다(*"화면 덤프 안의
-문자열은 터미널이 렌더링한 픽셀의 텍스트일 뿐이라 제외한다"*). **콘솔 셸에는
-타이핑을 못 하지만**(체인이 `-serial file:`, 쓰기 전용) **그 셸이 스스로 찍는
-것은 읽을 수 있다** — SC-M0이 "콘솔 셸의 argv를 못 본다"고 적어 둔 자리의
+문자열은 터미널이 렌더링한 픽셀의 텍스트일 뿐이라 제외한다"*). 콘솔 셸에는
+타이핑을 못 하지만(체인이 `-serial file:`, 쓰기 전용) 그 셸이 스스로 찍는
+것은 읽을 수 있다 — SC-M0이 "콘솔 셸의 argv를 못 본다"고 적어 둔 자리의
 다른 면이다.
 
 ---
@@ -86,29 +86,29 @@ design 결정 10의 표를 실제 명령으로 옮긴 것이다.
 
 | 파일 | 무엇을 맡나 | 이 milestone이 하는 일 |
 |---|---|---|
-| `init/src/config_test.zig` | 시스템 콜 없는 부분을 호스트에서 검증 | **씨앗 텍스트의 불변식 검사**(주석 아니면 alias) |
+| `init/src/config_test.zig` | 시스템 콜 없는 부분을 호스트에서 검증 | 씨앗 텍스트의 불변식 검사(주석 아니면 alias) |
 | `init/src/config.zig` | 설정 파일의 문법·기본값·쓰기 | `Shell.rcPath()` · `Shell.rcSeed()` · `seedRcFiles()` · `writeAll()` 추출 |
 | `init/src/main.zig` | PID 1 | 마운트됐으면 씨앗을 깐다(한 줄) |
-| `config/check.sh` | CP 체인 | **부팅 셋** · 타이핑 다섯 · 검사 아홉 |
+| `config/check.sh` | CP 체인 | 부팅 셋 · 타이핑 다섯 · 검사 아홉 |
 
-**새 파일이 없고, 새 체인도 없다**(design 결정 10 — 열두번째 체인은 +2분이다).
-`kernel/make_initrd.sh`는 **한 글자도 안 고친다** — 링크는 SC-M0이 이미 걸었다.
+새 파일이 없고, 새 체인도 없다(design 결정 10 — 열두번째 체인은 +2분이다).
+`kernel/make_initrd.sh`는 한 글자도 안 고친다 — 링크는 SC-M0이 이미 걸었다.
 
 ---
 
-## Task 1: 씨앗 텍스트의 불변식을 먼저 못 박는다 — **실패를 본다**
+## Task 1: 씨앗 텍스트의 불변식을 먼저 못 박는다 — 실패를 본다
 
-**Files:** Modify `init/src/config_test.zig`
+Files: Modify `init/src/config_test.zig`
 
-**왜 이것이 먼저인가.** 위 "지배적 사실"이 전부다. 씨앗이 무엇을 찍는 순간
-다섯 체인이 깨지는데, 그 실패는 **부팅 20초 뒤에 화면 좌표가 밀린 모양**으로
-온다 — 원인에서 가장 먼 증상이다. **0.1초짜리 호스트 검사가 같은 것을 코드
-모양으로 잡는다.**
+왜 이것이 먼저인가. 위 "지배적 사실"이 전부다. 씨앗이 무엇을 찍는 순간
+다섯 체인이 깨지는데, 그 실패는 부팅 20초 뒤에 화면 좌표가 밀린 모양으로
+온다 — 원인에서 가장 먼 증상이다. 0.1초짜리 호스트 검사가 같은 것을 코드
+모양으로 잡는다.
 
-- [x] **Step 1: 검사 함수와 호출 셋을 `main()` 끝의 `PASS` 앞에 더한다**
+- [x] Step 1: 검사 함수와 호출 셋을 `main()` 끝의 `PASS` 앞에 더한다
 
-`init/src/config_test.zig`의 `std.debug.print("PASS\n", .{});` **앞**에
-**넣을 것**:
+`init/src/config_test.zig`의 `std.debug.print("PASS\n", .{});` 앞에
+넣을 것:
 
 ```zig
     // ── SC-M1: 씨앗 rc의 불변식 ─────────────────────────────────────────
@@ -124,7 +124,7 @@ design 결정 10의 표를 실제 명령으로 옮긴 것이다.
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
 ```
 
-같은 파일의 `expect()` 함수 **뒤**에 **넣을 것**:
+같은 파일의 `expect()` 함수 뒤에 넣을 것:
 
 ```zig
 /// 씨앗 rc가 "아무것도 안 찍는다"를 문법으로 확인한다(SC-M1).
@@ -175,31 +175,31 @@ fn expectQuietSeed(sh: config.Shell) !void {
 }
 ```
 
-- [x] **Step 2: 컴파일 실패를 확인한다**
+- [x] Step 2: 컴파일 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-**Expected:** FAIL. `Shell`에 `rcSeed`도 `rcPath`도 없으므로 컴파일 에러다
-(`no member named 'rcSeed'`). **테스트 실패가 아니라 컴파일 실패인 것이
-정상이다** — SC-M0 Task 1과 같은 자리다.
+Expected: FAIL. `Shell`에 `rcSeed`도 `rcPath`도 없으므로 컴파일 에러다
+(`no member named 'rcSeed'`). 테스트 실패가 아니라 컴파일 실패인 것이
+정상이다 — SC-M0 Task 1과 같은 자리다.
 
-- [x] **Step 3: 아직 커밋하지 않는다**
+- [x] Step 3: 아직 커밋하지 않는다
 
 Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에 남기지 않는다.
 
 ---
 
-## Task 2: `config.zig`가 씨앗을 갖고, 없으면 만든다 — **결정 7**
+## Task 2: `config.zig`가 씨앗을 갖고, 없으면 만든다 — 결정 7
 
-**Files:** Modify `init/src/config.zig`
+Files: Modify `init/src/config.zig`
 
-- [x] **Step 1: `Shell`에 `rcPath()`와 `rcSeed()`를 더한다**
+- [x] Step 1: `Shell`에 `rcPath()`와 `rcSeed()`를 더한다
 
-`init/src/config.zig`의 `configFlag` 함수 **바로 뒤**, `Shell`의 닫는 `};`
-앞에 **넣을 것**:
+`init/src/config.zig`의 `configFlag` 함수 바로 뒤, `Shell`의 닫는 `};`
+앞에 넣을 것:
 
 ```zig
     /// 이 셸의 rc 파일이 **설정 디스크에서** 갖는 이름(SC design 결정 1).
@@ -304,9 +304,9 @@ Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에
     }
 ```
 
-- [x] **Step 2: `save`의 쓰기 루프를 `writeAll`로 뺀다**
+- [x] Step 2: `save`의 쓰기 루프를 `writeAll`로 뺀다
 
-`init/src/config.zig`의 `save` 안에서 **지울 것**:
+`init/src/config.zig`의 `save` 안에서 지울 것:
 
 ```zig
     // /config는 MS_SYNCHRONOUS로 마운트돼 있다. 그래서 이 write가 돌아온
@@ -328,7 +328,7 @@ Task 2와 함께 커밋한다. 컴파일이 안 되는 상태를 히스토리에
 }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     return writeAll(fd, text, path);
@@ -357,9 +357,9 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
 }
 ```
 
-- [x] **Step 3: `seedRcFiles`를 파일 끝에 더한다**
+- [x] Step 3: `seedRcFiles`를 파일 끝에 더한다
 
-`init/src/config.zig`의 **맨 끝**에 **넣을 것**:
+`init/src/config.zig`의 맨 끝에 넣을 것:
 
 ```zig
 /// 셸 rc 파일 셋을 "없으면 만든다"(SC design 결정 7).
@@ -412,17 +412,17 @@ fn seedRcFile(sh: Shell) void {
 }
 ```
 
-- [x] **Step 4: 호스트 검사가 통과하는지 확인한다**
+- [x] Step 4: 호스트 검사가 통과하는지 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-**Expected:** 마지막 줄이 `PASS`, 종료 코드 0. `FAIL:` 줄이 하나도 없어야
+Expected: 마지막 줄이 `PASS`, 종료 코드 0. `FAIL:` 줄이 하나도 없어야
 한다.
 
-- [x] **Step 5: 커밋**
+- [x] Step 5: 커밋
 
 ```bash
 git add init/src/config.zig init/src/config_test.zig
@@ -433,18 +433,18 @@ git commit -m "Lay down three rc files that say nothing out loud"
 
 ## Task 3: PID 1이 디스크가 있을 때만 씨앗을 깐다
 
-**Files:** Modify `init/src/main.zig`
+Files: Modify `init/src/main.zig`
 
-- [x] **Step 1: `loadConfig` 뒤에 한 줄을 더한다**
+- [x] Step 1: `loadConfig` 뒤에 한 줄을 더한다
 
-`init/src/main.zig`에서 **지울 것**:
+`init/src/main.zig`에서 지울 것:
 
 ```zig
     const storage_mounted = mountConfig();
     const cfg = loadConfig(storage_mounted);
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     const storage_mounted = mountConfig();
@@ -459,16 +459,16 @@ git commit -m "Lay down three rc files that say nothing out loud"
     if (storage_mounted) config.seedRcFiles();
 ```
 
-- [x] **Step 2: 빌드와 호스트 검사**
+- [x] Step 2: 빌드와 호스트 검사
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build && zig build test'
 ```
 
-**Expected:** 종료 코드 0.
+Expected: 종료 코드 0.
 
-- [x] **Step 3: 커밋**
+- [x] Step 3: 커밋
 
 ```bash
 git add init/src/main.zig
@@ -479,11 +479,11 @@ git commit -m "Only lay the seeds when there is a disk to keep them"
 
 ## Task 4: 1차 부팅이 씨앗을 보고, 사람이 rc에 줄을 더한다
 
-**Files:** Modify `config/check.sh`
+Files: Modify `config/check.sh`
 
-- [x] **Step 1: 타이핑 시퀀스 넷을 더한다**
+- [x] Step 1: 타이핑 시퀀스 넷을 더한다
 
-`config/check.sh`의 `READBACK_KEYS=(...)` 줄 **뒤**에 **넣을 것**:
+`config/check.sh`의 `READBACK_KEYS=(...)` 줄 뒤에 넣을 것:
 
 ```bash
 # ── SC-M1 ───────────────────────────────────────────────────────────────
@@ -509,10 +509,10 @@ APPEND_KEYS=(e c h o spc e c h o spc t a r s minus r c minus a l i v e spc
 RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c ret)
 ```
 
-- [x] **Step 2: 1차 부팅의 훅을 다시 쓴다**
+- [x] Step 2: 1차 부팅의 훅을 다시 쓴다
 
 `config/check.sh`의 `edit_config_in_guest()` 안에서, `type_keys`를 부르는
-부분을 갈아 끼운다. **지울 것**:
+부분을 갈아 끼운다. 지울 것:
 
 ```bash
   type_keys "${EDIT_KEYS[@]}"
@@ -542,7 +542,7 @@ RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c re
 }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
   # ── SC-M1: 씨앗을 먼저 묻는다 ────────────────────────────────────────
@@ -596,10 +596,10 @@ RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c re
 }
 ```
 
-- [x] **Step 3: 1차 부팅 뒤의 검사에 씨앗 셋을 더한다**
+- [x] Step 3: 1차 부팅 뒤의 검사에 씨앗 셋을 더한다
 
 `config/check.sh`에서 `echo "boot 1: init reported shell_config=on (the sixth
-key reached the log)"` 줄 **뒤**에 **넣을 것**:
+key reached the log)"` 줄 뒤에 넣을 것:
 
 ```bash
 # SC-M1 결정 7. **씨앗 셋이 로그에 한 줄씩 남는다.** 화면으로 보는 것은
@@ -613,22 +613,22 @@ done
 echo "boot 1: init seeded all three rc files on the empty disk"
 ```
 
-- [x] **Step 4: CP 체인 단독 실행**
+- [x] Step 4: CP 체인 단독 실행
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh
 ```
 
-**Expected:** 이 시점에는 2차 부팅까지만 있으므로 `PASS`가 나와야 한다. 새
+Expected: 이 시점에는 2차 부팅까지만 있으므로 `PASS`가 나와야 한다. 새
 줄 셋이 보인다.
 
-**실패하면 가장 먼저 볼 것:** `tars-config`가 `Unknown command`였는지.
+실패하면 가장 먼저 볼 것: `tars-config`가 `Unknown command`였는지.
 그러면 fish가 씨앗을 안 읽은 것이고, 원인은 (a) 링크가 안 풀렸거나 (b) 씨앗의
 fish 문법이 틀렸거나 (c) `shell_config`가 `off`로 읽힌 것이다. 셋이 화면에서
 서로 다른 모양으로 나타난다 — (b)는 fish의 문법 에러 메시지가 함께 뜬다.
 
-- [x] **Step 5: 커밋**
+- [x] Step 5: 커밋
 
 ```bash
 git add config/check.sh
@@ -639,11 +639,11 @@ git commit -m "Ask the first boot to read what it just wrote for the shell"
 
 ## Task 5: 2차 부팅이 "rc가 읽혔다"를 보고, `off`를 적는다
 
-**Files:** Modify `config/check.sh`
+Files: Modify `config/check.sh`
 
-- [x] **Step 1: 2차 부팅의 훅을 만든다**
+- [x] Step 1: 2차 부팅의 훅을 만든다
 
-`config/check.sh`의 `watch_console_shell()` 함수 **전체를 지우고** **넣을 것**:
+`config/check.sh`의 `watch_console_shell()` 함수 전체를 지우고 넣을 것:
 
 ```bash
 # 2차 부팅에서 마커를 본 뒤 하는 일. 둘이다.
@@ -705,9 +705,9 @@ watch_console_shell() {
 }
 ```
 
-- [x] **Step 2: `OFF_KEYS`를 더한다**
+- [x] Step 2: `OFF_KEYS`를 더한다
 
-`config/check.sh`의 `RC_READBACK_KEYS=(...)` **뒤**에 **넣을 것**:
+`config/check.sh`의 `RC_READBACK_KEYS=(...)` 뒤에 넣을 것:
 
 ```bash
 # echo shell_config=off >> /config/tars.conf — 2차 부팅에서 친다.
@@ -716,10 +716,10 @@ OFF_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o f f spc
           shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
 ```
 
-- [x] **Step 3: 2차 부팅 뒤의 검사에 셋을 더한다**
+- [x] Step 3: 2차 부팅 뒤의 검사에 셋을 더한다
 
 `config/check.sh`에서 `echo "boot 2: the config written inside the guest
-selected zsh for both shells"` 줄 **앞**에 **넣을 것**:
+selected zsh for both shells"` 줄 앞에 넣을 것:
 
 ```bash
 # ── SC-M1: 이 milestone이 증명하려는 것 ─────────────────────────────────
@@ -752,42 +752,42 @@ fi
 echo "boot 2: init left the existing rc files alone"
 ```
 
-- [x] **Step 4: `boot_once` 호출의 주석과 배너를 고친다**
+- [x] Step 4: `boot_once` 호출의 주석과 배너를 고친다
 
-`config/check.sh`에서 **지울 것**:
+`config/check.sh`에서 지울 것:
 
 ```bash
 echo "=== boot 2/2: same image, the guest-written config should pick the shell ==="
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 echo "=== boot 2/3: same image, the guest-written config should pick the shell and its rc ==="
 ```
 
-그리고 파일 위쪽의 **지울 것**:
+그리고 파일 위쪽의 지울 것:
 
 ```bash
 echo "=== boot 1/2: empty disk, seed the config then edit it from inside the guest ==="
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 echo "=== boot 1/3: empty disk, seed the config and the rc files, then edit them from inside ==="
 ```
 
-- [x] **Step 5: CP 체인 단독 실행**
+- [x] Step 5: CP 체인 단독 실행
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh
 ```
 
-**Expected:** `PASS`. 새 줄 셋이 보인다.
+Expected: `PASS`. 새 줄 셋이 보인다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add config/check.sh
@@ -796,23 +796,23 @@ git commit -m "Watch both shells run a line the user left on the disk"
 
 ---
 
-## Task 6: 3차 부팅 — **`off`가 그것을 막는가**
+## Task 6: 3차 부팅 — `off`가 그것을 막는가
 
-**Files:** Modify `config/check.sh`
+Files: Modify `config/check.sh`
 
-**design 결정 10이 "이 설계에서 가장 강한 검사"라고 적은 자리다.** 2차만
+design 결정 10이 "이 설계에서 가장 강한 검사"라고 적은 자리다. 2차만
 있으면 "rc를 읽는다"까지이고, `off`가 그것을 막는다는 것은 로그 수준에 머문다.
 
-- [x] **Step 1: `LOG3`을 만든다**
+- [x] Step 1: `LOG3`을 만든다
 
-`config/check.sh`에서 **지울 것**:
+`config/check.sh`에서 지울 것:
 
 ```bash
 LOG1="$(mktemp)"
 LOG2="$(mktemp)"
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 LOG1="$(mktemp)"
@@ -820,10 +820,10 @@ LOG2="$(mktemp)"
 LOG3="$(mktemp)"
 ```
 
-- [x] **Step 2: 3차 부팅을 파일 끝의 `--- init log` 절 앞에 더한다**
+- [x] Step 2: 3차 부팅을 파일 끝의 `--- init log` 절 앞에 더한다
 
-`config/check.sh`의 `# 정보성. ext2가 "not clean"이라고...` 주석 **앞**에
-**넣을 것**:
+`config/check.sh`의 `# 정보성. ext2가 "not clean"이라고...` 주석 앞에
+넣을 것:
 
 ```bash
 # ---------------------------------------------------------------- 3차 부팅
@@ -869,9 +869,9 @@ if grep -q "Attempted to kill init" "$LOG3"; then
 fi
 ```
 
-- [x] **Step 3: 조용한 관측 훅을 더한다**
+- [x] Step 3: 조용한 관측 훅을 더한다
 
-`config/check.sh`의 `watch_console_shell()` **뒤**에 **넣을 것**:
+`config/check.sh`의 `watch_console_shell()` 뒤에 넣을 것:
 
 ```bash
 # 3차 부팅의 훅. **타이핑을 안 하므로 관측 창만 있다.** 2차가 쓰는 함수를
@@ -883,16 +883,16 @@ watch_console_shell_quiet() {
 }
 ```
 
-- [x] **Step 4: 로그 덤프에 3차를 더한다**
+- [x] Step 4: 로그 덤프에 3차를 더한다
 
-`config/check.sh`에서 **지울 것**:
+`config/check.sh`에서 지울 것:
 
 ```bash
 echo "--- init log (boot 2) ---"
 grep 'tars-init:' "$LOG2" || true
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 echo "--- init log (boot 2) ---"
@@ -901,16 +901,16 @@ echo "--- init log (boot 3) ---"
 grep 'tars-init:' "$LOG3" || true
 ```
 
-- [x] **Step 5: CP 체인 단독 실행**
+- [x] Step 5: CP 체인 단독 실행
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh
 ```
 
-**Expected:** `PASS`. **부팅이 셋이라 이 체인은 약 1분 30초다.**
+Expected: `PASS`. 부팅이 셋이라 이 체인은 약 1분 30초다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add config/check.sh
@@ -919,43 +919,43 @@ git commit -m "Turn the key off and watch the same rc stay shut"
 
 ---
 
-## Task 7: 음성 확인 — **검사가 진짜인가**
+## Task 7: 음성 확인 — 검사가 진짜인가
 
-**Files:** 없음(되돌렸다가 `git checkout`으로 복구한다)
+Files: 없음(되돌렸다가 `git checkout`으로 복구한다)
 
-**왜 이 Task가 있는가.** UT-M1·M2·M3과 SC-M0이 네 번 배웠다. 특히 SC-M0의
-실측 16이 남긴 것: **"검사를 넣었으면 그것이 죽는 경우를 직접 만들어 봐야
-한다. 다른 검사가 먼저 죽으면 그 검사는 아직 아무것도 증명하지 않았다."**
+왜 이 Task가 있는가. UT-M1·M2·M3과 SC-M0이 네 번 배웠다. 특히 SC-M0의
+실측 16이 남긴 것: "검사를 넣었으면 그것이 죽는 경우를 직접 만들어 봐야
+한다. 다른 검사가 먼저 죽으면 그 검사는 아직 아무것도 증명하지 않았다."
 
-**커밋하지 않는다.** 각 Step에서 **어느 검사가 죽었는지**를 그대로 기록한다 —
+커밋하지 않는다. 각 Step에서 어느 검사가 죽었는지를 그대로 기록한다 —
 그것이 이 milestone의 실측이 된다.
 
-- [x] **Step 1: 씨앗을 안 깔면 1차가 죽는가**
+- [x] Step 1: 씨앗을 안 깔면 1차가 죽는가
 
 `init/src/main.zig`의 `if (storage_mounted) config.seedRcFiles();`를 임시로
 지운 뒤 체인을 돌린다.
 
-**Expected:** 1차 부팅의 `tars-config`가 모르는 명령이 되어 죽는다. **어느
-줄이 먼저 반응하는지 본다** — `seeded` 로그 검사(Step 3에서 더한 것)는 훅보다
-**뒤**에 있으므로, 훅 안의 화면 검사가 먼저 죽는 것이 정상이다.
+Expected: 1차 부팅의 `tars-config`가 모르는 명령이 되어 죽는다. 어느
+줄이 먼저 반응하는지 본다 — `seeded` 로그 검사(Step 3에서 더한 것)는 훅보다
+뒤에 있으므로, 훅 안의 화면 검사가 먼저 죽는 것이 정상이다.
 
 ```bash
 git checkout init/src/main.zig
 ```
 
-- [x] **Step 2: 씨앗이 있어도 `alias`가 없으면 죽는가**
+- [x] Step 2: 씨앗이 있어도 `alias`가 없으면 죽는가
 
 `init/src/config.zig`의 fish 씨앗에서 `alias tars-config=...` 한 줄을 임시로
-지운다. **`expectQuietSeed`의 "alias가 하나도 없으면" 검사가 호스트에서 먼저
-죽는지**를 본다 — fish 씨앗에는 alias가 둘이라 하나를 지워도 호스트 검사는
-통과하고, 그러면 화면 검사가 죽어야 한다. **둘 다 확인한다**(하나만 남기고,
+지운다. `expectQuietSeed`의 "alias가 하나도 없으면" 검사가 호스트에서 먼저
+죽는지를 본다 — fish 씨앗에는 alias가 둘이라 하나를 지워도 호스트 검사는
+통과하고, 그러면 화면 검사가 죽어야 한다. 둘 다 확인한다(하나만 남기고,
 그 다음 둘 다 지우고).
 
 ```bash
 git checkout init/src/config.zig
 ```
 
-- [x] **Step 3: 씨앗이 무언가를 찍으면 호스트 검사가 죽는가**
+- [x] Step 3: 씨앗이 무언가를 찍으면 호스트 검사가 죽는가
 
 `init/src/config.zig`의 zsh 씨앗에 `echo hello` 한 줄을 임시로 더한다.
 
@@ -964,73 +964,73 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-**Expected:** **부팅하기 전에** FAIL —
+Expected: 부팅하기 전에 FAIL —
 `the zsh seed has a line that is neither a comment nor an alias`.
-**이 Task에서 가장 중요한 Step이다.** 이 검사가 진짜가 아니면 M1이 남기는
+이 Task에서 가장 중요한 Step이다. 이 검사가 진짜가 아니면 M1이 남기는
 것은 "다음 사람이 다섯 체인을 깨뜨릴 자유"뿐이다.
 
 ```bash
 git checkout init/src/config.zig
 ```
 
-- [x] **Step 4: `off`가 실제로 플래그를 안 주면 3차가 죽는가**
+- [x] Step 4: `off`가 실제로 플래그를 안 주면 3차가 죽는가
 
-`init/src/main.zig`의 `console_flag`를 **조건 없이 null**로 되돌린다
+`init/src/main.zig`의 `console_flag`를 조건 없이 null로 되돌린다
 (즉 SC-M0의 결정 4를 깨뜨린다).
 
-**Expected:** **3차 부팅의 부정 검사가 죽는다** — 콘솔 zsh가 `-f` 없이 떠서
+Expected: 3차 부팅의 부정 검사가 죽는다 — 콘솔 zsh가 `-f` 없이 떠서
 `tars-rc-alive`를 찍는다. 화면 셸은 여전히 `off`를 따르므로 `screen>` 줄에는
-안 나온다. **SC-M0의 `tools/check.sh` 부정 검사가 잡은 것과 같은 결함을 이
-체인이 다른 각도에서 잡는다는 뜻이다.**
+안 나온다. SC-M0의 `tools/check.sh` 부정 검사가 잡은 것과 같은 결함을 이
+체인이 다른 각도에서 잡는다는 뜻이다.
 
 ```bash
 git checkout init/src/main.zig
 ```
 
-- [x] **Step 5: 되돌린 뒤 캐시를 지운다**
+- [x] Step 5: 되돌린 뒤 캐시를 지운다
 
 ```bash
 rm -rf init/zig-out terminal/zig-out
 ```
 
-**Zig를 되돌린 뒤에는 이것을 한 번 한다**(UT design 실측 18). **SC-M1은
-Zig를 건드리므로 이 함정이 살아 있다.**
+Zig를 되돌린 뒤에는 이것을 한 번 한다(UT design 실측 18). SC-M1은
+Zig를 건드리므로 이 함정이 살아 있다.
 
-- [x] **Step 6: 커밋하지 않는다**
+- [x] Step 6: 커밋하지 않는다
 
 ---
 
 ## Task 8: 루트 게이트 3/3
 
-**Files:** 없음
+Files: 없음
 
-- [x] **Step 1: 백그라운드로 돌린다**
+- [x] Step 1: 백그라운드로 돌린다
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 ```
 
-**약 25분이다.** Bash 도구 상한이 10분이라 **백그라운드로 돌리고 주기적으로
-`/tmp/gate.log`를 본다.**
+약 25분이다. Bash 도구 상한이 10분이라 백그라운드로 돌리고 주기적으로
+`/tmp/gate.log`를 본다.
 
-- [x] **Step 2: 결과를 본다**
+- [x] Step 2: 결과를 본다
 
 ```bash
 tail -30 /tmp/gate.log; cat /tmp/gate.time
 ```
 
-**Expected:** 열한 체인이 전부 `PASS`, 3/3. 기준선은 SC-M0의
-**24분 08.79초**이고, M1은 `config` 체인에 부팅 하나와 타이핑 다섯이 늘어
-회차마다 세 번 돈다 — **design 위험 4가 +1분으로 적었고, 실제 수를 잰다.**
+Expected: 열한 체인이 전부 `PASS`, 3/3. 기준선은 SC-M0의
+24분 08.79초이고, M1은 `config` 체인에 부팅 하나와 타이핑 다섯이 늘어
+회차마다 세 번 돈다 — design 위험 4가 +1분으로 적었고, 실제 수를 잰다.
 
-**`terminal` 쪽 `PASS`가 넷인 것이 정상이다** — 다섯 바이너리가 다 돌지만
-`status_test.zig`만 `PASS`를 안 찍는다. **세는 것으로 판정하지 말 것.**
+`terminal` 쪽 `PASS`가 넷인 것이 정상이다 — 다섯 바이너리가 다 돌지만
+`status_test.zig`만 `PASS`를 안 찍는다. 세는 것으로 판정하지 말 것.
 
-- [x] **Step 3: 씨앗이 다른 체인의 화면을 안 건드렸는지 직접 확인한다**
+- [x] Step 3: 씨앗이 다른 체인의 화면을 안 건드렸는지 직접 확인한다
 
-게이트가 초록이어도 이것을 따로 본다. **설정 디스크를 붙이는 체인이
-다섯이고, 그 다섯의 셸이 이번 milestone부터 파일을 읽는다.**
+게이트가 초록이어도 이것을 따로 본다. 설정 디스크를 붙이는 체인이
+다섯이고, 그 다섯의 셸이 이번 milestone부터 파일을 읽는다.
 
 ```bash
 grep -ac "tars-init: seeded /config/" /tmp/gate.log
@@ -1038,45 +1038,45 @@ grep -a "terminal: screen>" /tmp/gate.log | grep -c "alias"
 grep -aic "syntax error\|parse error\|command not found\|Unknown command" /tmp/gate.log
 ```
 
-**Expected:** 첫 수는 0보다 크고(다섯 체인 × 3회차 × 파일 셋 중 첫 부팅들),
-둘째는 **0**(씨앗의 내용이 화면에 뜬 적이 없다 — 1차 부팅의 `tars-config`는
-alias를 **부르지** 정의를 찍지 않는다), 셋째도 **0**이어야 한다.
+Expected: 첫 수는 0보다 크고(다섯 체인 × 3회차 × 파일 셋 중 첫 부팅들),
+둘째는 0(씨앗의 내용이 화면에 뜬 적이 없다 — 1차 부팅의 `tars-config`는
+alias를 부르지 정의를 찍지 않는다), 셋째도 0이어야 한다.
 
-**셋째 수가 0이 아니면 씨앗의 문법이 어느 셸에서 안 먹은 것이다.**
+셋째 수가 0이 아니면 씨앗의 문법이 어느 셸에서 안 먹은 것이다.
 
 ---
 
 ## Task 9: 문서
 
-**Files:**
+Files:
 - Modify `docs/superpowers/specs/2026-09-11-tars-shell-config-design.md`
 - Modify `docs/decisions/project_shell_config.md`
 - Modify `MEMORY.md`
 - Modify `CLAUDE.md`
 - Modify `HANDOFF.md`
 
-- [x] **Step 1: design의 `Status:` 줄과 실측 절을 고친다**
+- [x] Step 1: design의 `Status:` 줄과 실측 절을 고친다
 
-`Status:`를 **SC-M1 완료**로 바꾸고, Task 7의 음성 확인 결과와 Task 8의 게이트
-시간을 **"SC-M1이 실행으로 증명한 것"** 절로 더한다(실측 22부터).
+`Status:`를 SC-M1 완료로 바꾸고, Task 7의 음성 확인 결과와 Task 8의 게이트
+시간을 "SC-M1이 실행으로 증명한 것" 절로 더한다(실측 22부터).
 
-- [x] **Step 2: `docs/decisions/project_shell_config.md`에 M1의 기억을 더한다**
+- [x] Step 2: `docs/decisions/project_shell_config.md`에 M1의 기억을 더한다
 
-**다시 캐지 말 것**: 씨앗이 조용해야 하는 이유와 그것을 지키는 장치,
+다시 캐지 말 것: 씨앗이 조용해야 하는 이유와 그것을 지키는 장치,
 `tars-config` alias가 게이트의 판정으로도 쓰인다는 것, 판정 글자를 씨앗이
 아니라 사람이 심는 이유.
 
-- [x] **Step 3: `MEMORY.md`의 해당 줄을 고친다**
+- [x] Step 3: `MEMORY.md`의 해당 줄을 고친다
 
-- [x] **Step 4: `CLAUDE.md`의 Shell Config 문단을 고친다**
+- [x] Step 4: `CLAUDE.md`의 Shell Config 문단을 고친다
 
-**SC-M2가 아직 남아 있으므로 여전히 진행 중으로 적는다.**
+SC-M2가 아직 남아 있으므로 여전히 진행 중으로 적는다.
 
-- [x] **Step 5: `HANDOFF.md`를 새로 쓴다**
+- [x] Step 5: `HANDOFF.md`를 새로 쓴다
 
 맨 위가 SC-M1이고 그 아래가 SC-M0이다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add docs MEMORY.md CLAUDE.md HANDOFF.md
@@ -1085,12 +1085,12 @@ git commit -m "Write down what the shells did with the files we left them"
 
 ---
 
-## 이 milestone이 게이트로 **못 보는 것** — 알고 둔다
+## 이 milestone이 게이트로 못 보는 것 — 알고 둔다
 
 | 못 보는 것 | 왜 |
 |---|---|
-| **bash·fish의 rc가 읽히는가** | 게이트가 rc를 실제로 읽히는지 보는 것은 **zsh 하나**다(2차·3차 부팅의 셸). fish는 1차의 `tars-config`가 alias 하나로 보지만 **`off`가 그것을 막는지는 안 본다**. bash는 로그의 `seeded` 한 줄이 전부다 |
-| 씨앗의 **내용이 맞는가** | 호스트 검사가 보는 것은 **문법 범주**(주석/alias)와 자기 경로 한 줄이다. alias의 명령이 실제로 도는지는 1차의 `tars-config` 하나만 본다 |
-| `off`일 때 **씨앗을 여전히 깐다**는 것 | 코드가 `shell_config`를 안 보는 구조라 게이트가 따로 볼 것이 없다. 3차 부팅은 파일이 **이미 있는** 상태라 이 갈래를 안 지난다 |
-| rc가 **셸을 죽이면** 어떻게 되는가 | **SC-M2의 일이다**(탈출로 둘). M1까지는 design 위험 3이 열려 있고, 우리가 까는 것이 무해하다는 것만 보장한다 |
-| 사용자가 rc를 **지웠을 때** 다시 깔리는가 | 코드로는 깔린다(`O_EXCL`이 ENOENT를 안 낸다). 게이트가 그 갈래를 안 지난다 |
+| bash·fish의 rc가 읽히는가 | 게이트가 rc를 실제로 읽히는지 보는 것은 zsh 하나다(2차·3차 부팅의 셸). fish는 1차의 `tars-config`가 alias 하나로 보지만 `off`가 그것을 막는지는 안 본다. bash는 로그의 `seeded` 한 줄이 전부다 |
+| 씨앗의 내용이 맞는가 | 호스트 검사가 보는 것은 문법 범주(주석/alias)와 자기 경로 한 줄이다. alias의 명령이 실제로 도는지는 1차의 `tars-config` 하나만 본다 |
+| `off`일 때 씨앗을 여전히 깐다는 것 | 코드가 `shell_config`를 안 보는 구조라 게이트가 따로 볼 것이 없다. 3차 부팅은 파일이 이미 있는 상태라 이 갈래를 안 지난다 |
+| rc가 셸을 죽이면 어떻게 되는가 | SC-M2의 일이다(탈출로 둘). M1까지는 design 위험 3이 열려 있고, 우리가 까는 것이 무해하다는 것만 보장한다 |
+| 사용자가 rc를 지웠을 때 다시 깔리는가 | 코드로는 깔린다(`O_EXCL`이 ENOENT를 안 낸다). 게이트가 그 갈래를 안 지난다 |

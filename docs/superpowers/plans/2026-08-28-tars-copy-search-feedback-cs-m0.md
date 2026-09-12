@@ -1,32 +1,32 @@
 # TARS Copy Search Feedback CS-M0 Implementation Plan
 
-> **협업 방식(이 저장소 규칙):** 구현 파일 편집은 **사용자**가 한다. 각 Step의
+> 협업 방식(이 저장소 규칙): 구현 파일 편집은 사용자가 한다. 각 Step의
 > "넣을 것"/"지울 것"을 그대로 넣으면 된다. 빌드·검사·QEMU·게이트 실행과
-> git commit은 **Claude**가 한다.
+> git commit은 Claude가 한다.
 
-**Goal:** copy mode에서 검색한 뒤 **화면에 보이는 모든 매치를 어두운 앰버 바탕으로
-칠한다.** 지금은 커서가 옮겨지는 것 말고 아무 신호도 없다.
+Goal: copy mode에서 검색한 뒤 화면에 보이는 모든 매치를 어두운 앰버 바탕으로
+칠한다. 지금은 커서가 옮겨지는 것 말고 아무 신호도 없다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
+Design doc: `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
 
-**Architecture:** `ScreenSearch`가 이미 가진 매치 목록을 `findSubmit`에서 한 번
-받아 두고, `cells()`가 매 프레임 그것을 **행별 범위**로 풀어 `bg`를 정한다. 좌표를
+Architecture: `ScreenSearch`가 이미 가진 매치 목록을 `findSubmit`에서 한 번
+받아 두고, `cells()`가 매 프레임 그것을 행별 범위로 풀어 `bg`를 정한다. 좌표를
 푸는 방향이 이 milestone의 핵심이다 — 매치마다 `pointFromPin`을 부르는 대신 뷰포트가
 덮는 page node를 한 번만 훑고 매치 쪽은 비교만 한다.
 
-**Tech Stack:** Zig 0.16, libghostty-vt(`search.Screen`, `highlight.Flattened`,
+Tech Stack: Zig 0.16, libghostty-vt(`search.Screen`, `highlight.Flattened`,
 `PageList`), QEMU monitor
 
 ---
 
 ## 이 milestone은 CN-M1보다 작다
 
-**키를 하나도 안 더한다.** `input.zig`도 `input_test.zig`도 안 건드린다 — 검색은
-CN-M1이 이미 다 만들었고 우리는 그 결과를 **그리기만** 한다. HANDOFF의 "서브프로젝트를
+키를 하나도 안 더한다. `input.zig`도 `input_test.zig`도 안 건드린다 — 검색은
+CN-M1이 이미 다 만들었고 우리는 그 결과를 그리기만 한다. HANDOFF의 "서브프로젝트를
 넘어 유효한 실측" 1·2·3이 말하는 함정(`Action`/`Keys`/`Copy`를 건드릴 때의 것들)이
 이번에는 통째로 해당되지 않는다.
 
-**게이트에 타이핑을 한 키도 안 더한다.** 검사 16은 검사 15가 끝난 자리를 그대로
+게이트에 타이핑을 한 키도 안 더한다. 검사 16은 검사 15가 끝난 자리를 그대로
 쓴다 — copy mode가 살아 있고 `/findme`의 매치 목록도 살아 있다. 게이트 증가분이
 거의 없어야 한다는 뜻이고, 그것이 위험 4에 대한 답이다.
 
@@ -37,41 +37,41 @@ CN-M1이 이미 다 만들었고 우리는 그 결과를 **그리기만** 한다
 design doc의 "착수 전 조사로 확정한 사실" 표 열 줄이 전부 여기 해당한다. 특히
 이 넷을 다시 확인하지 않는다.
 
-**1. `ScreenSearch.matches(alloc)`이 매치 전부를 준다**(`search/screen.zig:234`).
-최신→오래된 순이고, **`@memcpy`로 구조체만 옮기는 얕은 복사**다.
+1. `ScreenSearch.matches(alloc)`이 매치 전부를 준다(`search/screen.zig:234`).
+최신→오래된 순이고, `@memcpy`로 구조체만 옮기는 얕은 복사다.
 
-**2. `Flattened`는 node를 역참조하지 않고 훑기 위한 표현이다**(`highlight.zig:107`).
+2. `Flattened`는 node를 역참조하지 않고 훑기 위한 표현이다(`highlight.zig:107`).
 `chunks`가 `{node, serial, start, end}`를 들고 `top_x`/`bot_x`가 양 끝 x다.
 
-**3. `pointFromPin`은 앞으로 훑는다**(`PageList.zig:5614~5645`). 뷰포트 위에 있는
+3. `pointFromPin`은 앞으로 훑는다(`PageList.zig:5614~5645`). 뷰포트 위에 있는
 pin은 목록 끝까지 훑은 뒤에야 null이다. `Pin.before`의 주석이 "very expensive...
 should not be called in performance critical paths"라고 직접 적어 두었다.
 
-**4. `ghostty_vt`가 `highlight`와 `PageList`를 내보낸다**(`lib_vt.zig:47`·`:66`).
+4. `ghostty_vt`가 `highlight`와 `PageList`를 내보낸다(`lib_vt.zig:47`·`:66`).
 그래서 `ghostty_vt.highlight.Flattened`와 `ghostty_vt.PageList.List.Node`를 필드
 타입으로 쓸 수 있다.
 
 ### 이 plan을 쓰면서 우리 소스에서 확인한 것 다섯
 
-**1. `Node.rows()`가 있다**(`PageList.zig:214`, `size.CellCountInt` = u16을
+1. `Node.rows()`가 있다(`PageList.zig:214`, `size.CellCountInt` = u16을
 돌려준다). `pointFromPin` 자신이 `tl.node.rows()`로 쓴다.
 
-**2. `Node.serial`이 있다**(`PageList.zig:52`). 주석이 "pointer stability is not
+2. `Node.serial`이 있다(`PageList.zig:52`). 주석이 "pointer stability is not
 guaranteed, but the serial"이라고 명시한다.
 
-**3. `copyPlace`는 뷰포트 위의 매치를 화면 맨 윗줄로 올린다**(`vt.zig:748`,
-`s.scroll(.{ .pin = pin })`). 그래서 **검색 직후 매치는 언제나 viewport row 0**이다.
+3. `copyPlace`는 뷰포트 위의 매치를 화면 맨 윗줄로 올린다(`vt.zig:748`,
+`s.scroll(.{ .pin = pin })`). 그래서 검색 직후 매치는 언제나 viewport row 0이다.
 
-**4. `dumpStyles`의 상한은 프레임당 16줄이다**(`main.zig:207`의
+4. `dumpStyles`의 상한은 프레임당 16줄이다(`main.zig:207`의
 `STYLE_DUMP_LIMIT`). 넘으면 `N more cell(s) not shown`을 찍는다 — 조용히 자르지
-않는다. **게이트가 셀 색을 셀 때 이 상한을 넘지 않게 짜야 한다.**
+않는다. 게이트가 셀 색을 셀 때 이 상한을 넘지 않게 짜야 한다.
 
-**5. `vt_test`의 `buf`는 `[100]vt.CellGlyph`이고 `line`은 `[32]u8`이다**
+5. `vt_test`의 `buf`는 `[100]vt.CellGlyph`이고 `line`은 `[32]u8`이다
 (`vt_test.zig:24`·`:154`). 20x5 화면이 정확히 100셀이라 새 검사도 그 크기를 쓴다.
 
-**6. `hs`·`hl_i`·`hhit`는 `vt_test.zig`에서 아직 안 쓰인 이름이다.** `main()` 하나가
+6. `hs`·`hl_i`·`hhit`는 `vt_test.zig`에서 아직 안 쓰인 이름이다. `main()` 하나가
 파일 전체라 지역 변수 이름이 서로 부딪치고, Zig는 shadowing을 컴파일 에러로
-막는다. **새 이름을 더 쓸 일이 생기면 `rg`로 먼저 확인한다.**
+막는다. 새 이름을 더 쓸 일이 생기면 `rg`로 먼저 확인한다.
 
 ## 이번에 정하는 것 넷 (design doc이 안 정한 자리)
 
@@ -80,7 +80,7 @@ guaranteed, but the serial"이라고 명시한다.
 design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없다. `Screen.init`이
 `io`를 받아 `Terminal.init`에 넘기고 버린다(`vt.zig:121`).
 
-**필드로 저장한다.** 대안은 `cells()`에 인자를 더하는 것인데, 그러면 `vt_test`의
+필드로 저장한다. 대안은 `cells()`에 인자를 더하는 것인데, 그러면 `vt_test`의
 호출부 열댓 곳이 전부 바뀐다 — 이 milestone과 무관한 diff가 그만큼 생긴다.
 `Terminal`이 이미 같은 값을 들고 있으므로 새로운 종류의 의존도 아니다.
 
@@ -88,7 +88,7 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
 
 "바뀔 때만 찍는다"는 상태를 하나 더 만들고, 그 판정이 틀리면 증상이 "로그가 안
 나온다"라 조사하기 나쁘다. copy mode의 프레임은 키를 누를 때만 생기므로 줄 수가
-많지 않고, `style>`는 이미 **매 프레임 최대 16줄**을 찍는다.
+많지 않고, `style>`는 이미 매 프레임 최대 16줄을 찍는다.
 
 `hlStats()`가 `find == null`이면 null을 주므로, 검색이 없을 때는 한 줄도 안 찍힌다.
 
@@ -100,27 +100,27 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
 
 ### 결정 4. 게이트의 음성 검사는 `Esc` 뒤에 둔다
 
-검사 15가 이미 끝에서 `type_keys esc`를 친다. **그 자리에서 하이라이트가 사라졌는지
-본다** — `copyExit`이 `find_matches`를 안 버렸다면 여기서 잡히고, 그 상태는 다음
+검사 15가 이미 끝에서 `type_keys esc`를 친다. 그 자리에서 하이라이트가 사라졌는지
+본다 — `copyExit`이 `find_matches`를 안 버렸다면 여기서 잡히고, 그 상태는 다음
 검색에서 이중 해제로 이어진다. 새 타이핑이 한 키도 안 든다.
 
 ---
 
 ## Task 1: 매치 목록을 보관한다 (아직 아무것도 안 칠한다)
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (필드 하나, `deinit`, `copyExit`, `findSubmit`,
   접근자 하나)
 - Modify: `terminal/src/vt_test.zig` (검사 26·27)
 
-**이 Task는 화면을 하나도 안 바꾼다.** 목록을 받아 두고, 두 번 검색해도 안 깨지는
-것만 확인한다. 이중 해제가 이 milestone에서 가장 조용한 실패 방식이라 **가장 먼저
-막는다.**
+이 Task는 화면을 하나도 안 바꾼다. 목록을 받아 두고, 두 번 검색해도 안 깨지는
+것만 확인한다. 이중 해제가 이 milestone에서 가장 조용한 실패 방식이라 가장 먼저
+막는다.
 
 ### Step 1: 필드를 더한다 (사용자가 편집)
 
-**넣을 것** — `terminal/src/vt.zig`의 `find: ?ghostty_vt.search.Screen = null,`
-(`:118`) **바로 다음 줄**, 즉 `pub fn init(` 앞이다.
+넣을 것 — `terminal/src/vt.zig`의 `find: ?ghostty_vt.search.Screen = null,`
+(`:118`) 바로 다음 줄, 즉 `pub fn init(` 앞이다.
 
 ```zig
 
@@ -145,13 +145,13 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
 
 ### Step 2: `deinit`에서 해제한다 (사용자가 편집)
 
-**지울 것** — `terminal/src/vt.zig:176`.
+지울 것 — `terminal/src/vt.zig:176`.
 
 ```zig
         if (self.find) |*f| f.deinit();
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         if (self.find) |*f| f.deinit();
@@ -162,14 +162,14 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
 
 ### Step 3: `copyExit`에서 해제한다 (사용자가 편집)
 
-**지울 것** — `terminal/src/vt.zig:377-378`.
+지울 것 — `terminal/src/vt.zig:377-378`.
 
 ```zig
         if (self.find) |*f| f.deinit();
         self.find = null;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         if (self.find) |*f| f.deinit();
@@ -182,14 +182,14 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
 
 ### Step 4: `findSubmit`이 목록을 받아 둔다 (사용자가 편집)
 
-**편집 ①** — 옛것 정리. **지울 것**은 `terminal/src/vt.zig:457-458`이다.
+편집 ① — 옛것 정리. 지울 것은 `terminal/src/vt.zig:457-458`이다.
 
 ```zig
         if (self.find) |*old| old.deinit();
         self.find = null;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         if (self.find) |*old| old.deinit();
@@ -198,13 +198,13 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
         self.find_matches = null;
 ```
 
-**편집 ②** — 새 목록 받기. **지울 것**은 `terminal/src/vt.zig:476` 한 줄이다.
+편집 ② — 새 목록 받기. 지울 것은 `terminal/src/vt.zig:476` 한 줄이다.
 
 ```zig
         self.find = fresh;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         // **매치 목록을 지금 한 번만 받는다**(design 결정 2·6). `self.find`에
@@ -221,7 +221,7 @@ design 결정 5가 `us=`를 찍으라고 했는데 `cells()`에는 `io`가 없�
         self.find_matches = found;
 ```
 
-**편집 ③** — 접근자. **넣을 것**은 `findSubmit`의 닫는 `}` **바로 다음**, 즉
+편집 ③ — 접근자. 넣을 것은 `findSubmit`의 닫는 `}` 바로 다음, 즉
 `findNext` 선언 앞이다.
 
 ```zig
@@ -244,17 +244,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 조용히 끝나고 `vt_test`가 **CN-M1까지와 글자 하나 다르지 않은 PASS**를
+기대: 조용히 끝나고 `vt_test`가 CN-M1까지와 글자 하나 다르지 않은 PASS를
 낸다. 이 Task는 아직 아무 동작도 안 바꾼다.
 
-**`zig build`와 `zig build test`를 함께 도는 이유**는 HANDOFF의 실측 1이다 —
+`zig build`와 `zig build test`를 함께 도는 이유는 HANDOFF의 실측 1이다 —
 Zig가 참조되지 않는 함수를 분석하지 않아서 `zig build test`만으로는 `main.zig`가
 깨진 것을 두 번 놓쳤다. 이번에 `main.zig`를 안 건드리더라도 습관을 지킨다.
 
 ### Step 6: 검사 26·27을 더한다 (사용자가 편집)
 
-**넣을 것** — `terminal/src/vt_test.zig`에서 `std.debug.print("PASS\n", .{});`
-**바로 앞**이다.
+넣을 것 — `terminal/src/vt_test.zig`에서 `std.debug.print("PASS\n", .{});`
+바로 앞이다.
 
 ```zig
 
@@ -328,7 +328,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 새 줄 둘이 나오고 `PASS`로 끝난다.
+기대: 새 줄 둘이 나오고 `PASS`로 끝난다.
 
 ```
 vt_test: 매치 목록을 그대로 보관한다 OK (matches=2)
@@ -336,11 +336,11 @@ vt_test: 다시 검색해도 매치 목록이 온전하다 OK (matches=...)
 PASS
 ```
 
-**`matches=2`가 아니면 그 숫자를 먼저 읽는다.** `TARGET`을 두 줄에 심었으므로 2가
-기대값이다 — CN-M1의 게이트에서 `echo findme`가 **두 줄**을 남겨 4가 나온 것과 달리,
-여기는 셸이 없어 되비추는 줄이 없다. 다르게 나오면 **plan이 아니라 실측이 답이다**.
+`matches=2`가 아니면 그 숫자를 먼저 읽는다. `TARGET`을 두 줄에 심었으므로 2가
+기대값이다 — CN-M1의 게이트에서 `echo findme`가 두 줄을 남겨 4가 나온 것과 달리,
+여기는 셸이 없어 되비추는 줄이 없다. 다르게 나오면 plan이 아니라 실측이 답이다.
 
-**크래시가 나면 그것이 곧 Step 4의 편집 ②를 잘못 넣었다는 뜻이다** — `errdefer`나
+크래시가 나면 그것이 곧 Step 4의 편집 ②를 잘못 넣었다는 뜻이다 — `errdefer`나
 해제 자리 셋 중 하나가 빠졌다.
 
 ### Step 8: 커밋 (Claude가 실행)
@@ -354,19 +354,19 @@ git commit -m "Keep the search match list alongside the search"
 
 ## Task 2: 화면에 보이는 매치를 행별 범위로 푼다 (아직 안 칠한다)
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (`io` 필드, `RowSpan`/`HlStats`, `hl_spans`,
   `findSpans`, 접근자 둘, `cells`의 첫 줄)
 - Modify: `terminal/src/vt_test.zig` (검사 28)
 
-**색은 다음 Task다.** 좌표 계산과 색 결정을 나누는 이유는 CN-M1의 실측 8과 같다 —
+색은 다음 Task다. 좌표 계산과 색 결정을 나누는 이유는 CN-M1의 실측 8과 같다 —
 한꺼번에 넣으면 "좌표를 잘못 풀었다"와 "색을 잘못 넣었다"를 가르는 데 빌드 한 바퀴가
 든다.
 
 ### Step 1: `io`를 필드로 들고 있는다 (사용자가 편집)
 
-**편집 ①** — **넣을 것**은 `terminal/src/vt.zig:37`의
-`alloc: std.mem.Allocator,` **바로 다음 줄**이다.
+편집 ① — 넣을 것은 `terminal/src/vt.zig:37`의
+`alloc: std.mem.Allocator,` 바로 다음 줄이다.
 
 ```zig
     /// 시간을 재기 위해 들고 있는다(CS-M0 plan 결정 1). `init`이 `Terminal`에
@@ -377,8 +377,8 @@ git commit -m "Keep the search match list alongside the search"
     io: std.Io,
 ```
 
-**편집 ②** — **넣을 것**은 `terminal/src/vt.zig:128`의 `.alloc = alloc,`
-**바로 다음 줄**이다.
+편집 ② — 넣을 것은 `terminal/src/vt.zig:128`의 `.alloc = alloc,`
+바로 다음 줄이다.
 
 ```zig
             .io = io,
@@ -386,7 +386,7 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 2: 타입 둘과 버퍼를 더한다 (사용자가 편집)
 
-**넣을 것** — Task 1에서 넣은 `find_matches` 선언 **바로 다음 줄**이다.
+넣을 것 — Task 1에서 넣은 `find_matches` 선언 바로 다음 줄이다.
 
 ```zig
 
@@ -420,7 +420,7 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 3: `deinit`에서 버퍼를 해제한다 (사용자가 편집)
 
-**지울 것** — Task 1의 Step 2에서 만든 두 줄이다.
+지울 것 — Task 1의 Step 2에서 만든 두 줄이다.
 
 ```zig
         if (self.find) |*f| f.deinit();
@@ -429,7 +429,7 @@ git commit -m "Keep the search match list alongside the search"
         if (self.find_matches) |m| alloc.free(m);
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         if (self.find) |*f| f.deinit();
@@ -441,8 +441,8 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 4: `copyExit`이 범위도 비운다 (사용자가 편집)
 
-**넣을 것** — Task 1의 Step 3에서 넣은 `self.find_matches = null;` **바로 다음
-줄**이다.
+넣을 것 — Task 1의 Step 3에서 넣은 `self.find_matches = null;` 바로 다음
+줄이다.
 
 ```zig
         // 좌표도 함께 비운다. 안 비우면 모드를 나간 프레임에 지난 범위가 한 번
@@ -452,7 +452,7 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 5: `findSpans`를 더한다 (사용자가 편집)
 
-**넣을 것** — Task 1에서 넣은 `findMatchCount` 함수의 닫는 `}` **바로 다음**이다.
+넣을 것 — Task 1에서 넣은 `findMatchCount` 함수의 닫는 `}` 바로 다음이다.
 
 ```zig
 
@@ -566,8 +566,8 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 6: `cells()`가 매 프레임 부른다 (사용자가 편집)
 
-**지울 것** — `terminal/src/vt.zig`의 `cells()` 첫 두 줄 뒤, 즉
-`try self.state.update(self.alloc, &self.term);` **다음 빈 줄**이다. 아래 줄을
+지울 것 — `terminal/src/vt.zig`의 `cells()` 첫 두 줄 뒤, 즉
+`try self.state.update(self.alloc, &self.term);` 다음 빈 줄이다. 아래 줄을
 찾는다.
 
 ```zig
@@ -576,7 +576,7 @@ git commit -m "Keep the search match list alongside the search"
         const colors = &self.state.colors;
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         try self.state.update(self.alloc, &self.term);
@@ -590,8 +590,8 @@ git commit -m "Keep the search match list alongside the search"
 
 ### Step 7: 검사 28을 더한다 (사용자가 편집)
 
-**넣을 것** — Task 1의 Step 6에서 넣은 마지막 줄(`_ = try hs.findSubmit();`)
-**바로 다음**이다.
+넣을 것 — Task 1의 Step 6에서 넣은 마지막 줄(`_ = try hs.findSubmit();`)
+바로 다음이다.
 
 ```zig
 
@@ -638,17 +638,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 새 줄 하나가 더 나오고 `PASS`로 끝난다.
+기대: 새 줄 하나가 더 나오고 `PASS`로 끝난다.
 
 ```
 vt_test: 보이는 매치만 범위가 된다 OK (spans=1 cells=6)
 ```
 
-**타입 에러가 나면 `@intCast`의 대상부터 본다.** `nanoseconds`의 정수 폭이 Zig
+타입 에러가 나면 `@intCast`의 대상부터 본다. `nanoseconds`의 정수 폭이 Zig
 버전에 딸린 값이라 `HlStats.us`의 `i64`가 안 맞을 수 있다 — 컴파일러가 정확한
 타입을 짚어 주므로 그것으로 맞춘다.
 
-**`spans=2`가 나오면 뷰포트 판정이 틀린 것이다.** 5줄 화면에 8번과 18번 줄이 함께
+`spans=2`가 나오면 뷰포트 판정이 틀린 것이다. 5줄 화면에 8번과 18번 줄이 함께
 보일 수 없다. `take` 계산이나 `row0 >= rows` 탈출을 다시 본다.
 
 ### Step 9: 커밋 (Claude가 실행)
@@ -662,15 +662,15 @@ git commit -m "Resolve visible matches into per-row spans"
 
 ## Task 3: `cells()`가 매치의 바탕색을 정한다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (상수 하나, `cells`의 행 루프와 셀 루프)
 - Modify: `terminal/src/vt_test.zig` (검사 29·30·31)
 
-**이 Task가 화면을 바꾸는 유일한 자리다.**
+이 Task가 화면을 바꾸는 유일한 자리다.
 
 ### Step 1: 색 상수를 더한다 (사용자가 편집)
 
-**넣을 것** — `terminal/src/vt.zig:20`의 `fn packRgb(` **바로 앞**이다(파일 위쪽,
+넣을 것 — `terminal/src/vt.zig:20`의 `fn packRgb(` 바로 앞이다(파일 위쪽,
 `Screen` 선언 밖).
 
 ```zig
@@ -694,14 +694,14 @@ pub const MATCH_BG: u32 = 0x00705000;
 
 ### Step 2: 행 루프가 범위를 잘라 준다 (사용자가 편집)
 
-**지울 것** — `cells()`의 행 루프 첫 줄. 지금은 이렇다.
+지울 것 — `cells()`의 행 루프 첫 줄. 지금은 이렇다.
 
 ```zig
         for (0..self.state.rows) |y| {
             const cells_slice = row_cells[y].slice();
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         // 정렬된 범위 목록을 **앞으로만** 미는 커서다(design 결정 4). 셀마다
@@ -726,8 +726,8 @@ pub const MATCH_BG: u32 = 0x00705000;
 
 ### Step 3: 셀 루프가 바탕색을 정한다 (사용자가 편집)
 
-**넣을 것** — `cells()`의 셀 루프에서 inverse를 푸는 블록이 닫힌 **바로 다음**,
-선택을 보는 `if (row_sels[y]) |range| {` **바로 앞**이다. 아래 두 줄 사이다.
+넣을 것 — `cells()`의 셀 루프에서 inverse를 푸는 블록이 닫힌 바로 다음,
+선택을 보는 `if (row_sels[y]) |range| {` 바로 앞이다. 아래 두 줄 사이다.
 
 ```zig
                     if (st.flags.inverse) std.mem.swap(u32, &fg, &bg);
@@ -763,7 +763,7 @@ pub const MATCH_BG: u32 = 0x00705000;
 
 ### Step 4: 검사 29·30·31을 더한다 (사용자가 편집)
 
-**넣을 것** — Task 2의 Step 7에서 넣은 마지막 `std.debug.print` **바로 다음**이다.
+넣을 것 — Task 2의 Step 7에서 넣은 마지막 `std.debug.print` 바로 다음이다.
 
 ```zig
 
@@ -834,7 +834,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 새 줄 셋이 더 나오고 `PASS`로 끝난다.
+기대: 새 줄 셋이 더 나오고 `PASS`로 끝난다.
 
 ```
 vt_test: 매치 셀의 바탕이 MATCH_BG다 OK (cells=6)
@@ -842,9 +842,9 @@ vt_test: 선택 안의 매치가 맞바뀌어 남는다 OK (cells=5)
 vt_test: copy mode를 나가면 하이라이트가 사라진다 OK
 ```
 
-**검사 30이 6으로 나오면 커서가 매치 위에 없다는 뜻이다.** 그 경우 기대값이
+검사 30이 6으로 나오면 커서가 매치 위에 없다는 뜻이다. 그 경우 기대값이
 틀린 것이지 코드가 틀린 것이 아닐 수 있다 — `copy> ` 좌표를 찍어 확인하고
-**실측을 따른다**(CN-M1 Task 6에서 `matches=2`가 실제로는 4였던 것과 같은 종류다).
+실측을 따른다(CN-M1 Task 6에서 `matches=2`가 실제로는 4였던 것과 같은 종류다).
 
 ### Step 6: 커밋 (Claude가 실행)
 
@@ -857,16 +857,16 @@ git commit -m "Paint search matches with a distinct background"
 
 ## Task 4: 하이라이트의 실측을 로그로 낸다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` (`dumpHighlight` 추가, `poll` 루프에서 호출)
 
-**게이트가 볼 창구를 만드는 Task다.** `style>`는 프레임당 16줄이 상한이라
+게이트가 볼 창구를 만드는 Task다. `style>`는 프레임당 16줄이 상한이라
 (`STYLE_DUMP_LIMIT`) 셀 수를 그것만으로 세면 잘릴 수 있다. 이 줄은 상한이 없다.
 
 ### Step 1: `dumpHighlight`를 더한다 (사용자가 편집)
 
-**넣을 것** — `terminal/src/main.zig`의 `dumpFind` 함수가 닫히는 `}` **바로
-다음**이다(`:374` 근처, `dumpClip`의 주석 앞).
+넣을 것 — `terminal/src/main.zig`의 `dumpFind` 함수가 닫히는 `}` 바로
+다음이다(`:374` 근처, `dumpClip`의 주석 앞).
 
 ```zig
 
@@ -894,8 +894,8 @@ fn dumpHighlight(screen: *vt.Screen) void {
 
 ### Step 2: 프레임마다 부른다 (사용자가 편집)
 
-**넣을 것** — `terminal/src/main.zig`에서 `dumpScreen(cells);` **바로 다음
-줄**이다(`:754` 근처, `dumpStyles` 호출 앞의 주석 앞).
+넣을 것 — `terminal/src/main.zig`에서 `dumpScreen(cells);` 바로 다음
+줄이다(`:754` 근처, `dumpStyles` 호출 앞의 주석 앞).
 
 ```zig
         dumpHighlight(screen);
@@ -908,10 +908,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 조용히 끝나고 `vt_test`가 Task 3과 같은 `PASS`를 낸다. 이 Task는
+기대: 조용히 끝나고 `vt_test`가 Task 3과 같은 `PASS`를 낸다. 이 Task는
 `vt_test`가 안 보는 자리(`main.zig`)만 바꾸므로 검사 출력이 안 변하는 것이 정상이다.
 
-**그래도 `zig build`를 함께 도는 이유**가 여기 있다 — 이 Task의 실수는 `zig build
+그래도 `zig build`를 함께 도는 이유가 여기 있다 — 이 Task의 실수는 `zig build
 test`가 영영 못 잡는다.
 
 ### Step 4: 커밋 (Claude가 실행)
@@ -925,14 +925,14 @@ git commit -m "Log what the match highlight painted each frame"
 
 ## Task 5: 게이트가 하이라이트를 본다
 
-**Files:**
+Files:
 - Modify: `copy/check.sh` (검사 16 추가, 검사 15 끝의 `esc` 자리를 늘린다)
 
-**새 부팅도 새 타이핑도 없다.** 검사 15가 `/findme`를 끝낸 자리를 그대로 쓴다.
+새 부팅도 새 타이핑도 없다. 검사 15가 `/findme`를 끝낸 자리를 그대로 쓴다.
 
 ### Step 1: 검사 16을 더한다 (사용자가 편집)
 
-**지울 것** — `copy/check.sh`에서 검사 15의 마지막 부분이다. 아래 네 줄을 찾는다
+지울 것 — `copy/check.sh`에서 검사 15의 마지막 부분이다. 아래 네 줄을 찾는다
 (`:757` 근처).
 
 ```sh
@@ -942,7 +942,7 @@ type_keys esc
 sleep 1
 ```
 
-**넣을 것**
+넣을 것
 
 ```sh
 echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND})"
@@ -1000,16 +1000,16 @@ fi
 echo "leaving copy mode cleared the highlight"
 ```
 
-### Step 2: `copy` 체인만 단독으로 돌린다 (Claude가 실행, **약 8분**)
+### Step 2: `copy` 체인만 단독으로 돌린다 (Claude가 실행, 약 8분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash copy/check.sh
 ```
 
-**8분이라 Bash 도구의 10분 상한에 가깝다** — `run_in_background`로 돌린다.
+8분이라 Bash 도구의 10분 상한에 가깝다 — `run_in_background`로 돌린다.
 
-**기대:** 검사 15까지 지금과 같고, 새 줄 셋이 더 나온 뒤 체인이 통과한다.
+기대: 검사 15까지 지금과 같고, 새 줄 셋이 더 나온 뒤 체인이 통과한다.
 
 ```
 the match highlight: terminal: find> hl spans=... cells=... us=...
@@ -1017,14 +1017,14 @@ the match highlight: terminal: find> hl spans=... cells=... us=...
 leaving copy mode cleared the highlight
 ```
 
-**`us=`를 특히 본다.** 이 값이 이 milestone이 남기는 실측이고, HANDOFF와 기억에
-그대로 옮긴다. **CN-M1의 `searchAll()`이 60~70밀리초(`us=64423` 등)였다** — 그것은
-Enter 한 번에 한 번이지만 이것은 매 프레임이므로 **두 자릿수는 작아야 한다.**
+`us=`를 특히 본다. 이 값이 이 milestone이 남기는 실측이고, HANDOFF와 기억에
+그대로 옮긴다. CN-M1의 `searchAll()`이 60~70밀리초(`us=64423` 등)였다 — 그것은
+Enter 한 번에 한 번이지만 이것은 매 프레임이므로 두 자릿수는 작아야 한다.
 
-**`cells=`가 6의 배수가 아니면 그 숫자를 먼저 읽는다.** 매치가 줄 끝에 걸려 잘렸을
+`cells=`가 6의 배수가 아니면 그 숫자를 먼저 읽는다. 매치가 줄 끝에 걸려 잘렸을
 수 있고, 그러면 plan이 아니라 실측이 답이다.
 
-**실패하면 `report_failure`가 `--- style lines in the last frame ---`를 뿜는다.**
+실패하면 `report_failure`가 `--- style lines in the last frame ---`를 뿜는다.
 그 목록에 `N more cell(s) not shown`이 섞여 있으면 `STYLE_DUMP_LIMIT`(16)에 걸린
 것이라 판정이 아니라 상한 문제다.
 
@@ -1039,24 +1039,24 @@ git commit -m "Check that the gate sees the match highlight"
 
 ## Task 6: 루트 게이트와 마무리
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
   (`Status:` 줄)
 - Modify: `HANDOFF.md`
 - Modify: `MEMORY.md` + Create: `docs/decisions/project_copy_search_feedback.md`
 
-### Step 1: 루트 게이트를 돌린다 (Claude가 실행, **약 22분**)
+### Step 1: 루트 게이트를 돌린다 (Claude가 실행, 약 22분)
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
     bash check.sh > /tmp/gate.out 2>&1 ; } 2> /tmp/gate.time
 ```
 
-**22분이라 Bash 도구의 상한을 넘는다** — `run_in_background`로 돌린다.
-**`| tail`을 붙이지 않는다**(HANDOFF: 진행 상황이 안 보이고 종료 코드가 `tail`의
+22분이라 Bash 도구의 상한을 넘는다 — `run_in_background`로 돌린다.
+`| tail`을 붙이지 않는다(HANDOFF: 진행 상황이 안 보이고 종료 코드가 `tail`의
 것이 된다).
 
-**기대:** 여덟 체인 3/3, 부팅 30회 이상.
+기대: 여덟 체인 3/3, 부팅 30회 이상.
 
 확인할 것 셋.
 
@@ -1066,33 +1066,33 @@ tail -n 30 /tmp/gate.out                 # 3/3 판정
 cat /tmp/gate.time                       # 기준선과 비교
 ```
 
-**`skipping make`가 23이어야 한다.** 24면 `clean()`이 지운 자리에서도 건너뛴
+`skipping make`가 23이어야 한다. 24면 `clean()`이 지운 자리에서도 건너뛴
 것이라 잘못이다.
 
-**기준선은 21분 38초다.** 이 milestone은 타이핑을 한 키도 안 더했으므로 **잡음
-범위(±3분) 안에 있어야 한다.** 크게 벗어나면 코드를 의심하기 전에 기계를 먼저
+기준선은 21분 38초다. 이 milestone은 타이핑을 한 키도 안 더했으므로 잡음
+범위(±3분) 안에 있어야 한다. 크게 벗어나면 코드를 의심하기 전에 기계를 먼저
 의심한다(HANDOFF: TR-M2의 6시간 12분은 Chrome이 원인이었다).
 
-### Step 2: 게이트를 세 번 돌린다 (Claude가 실행, **약 66분**)
+### Step 2: 게이트를 세 번 돌린다 (Claude가 실행, 약 66분)
 
 한 번의 통과는 판정이 아니다. 위 명령을 세 번 돌려 전부 3/3인 것을 본다.
-**`run_in_background`로 순차 실행한다.**
+`run_in_background`로 순차 실행한다.
 
 ### Step 3: design doc의 `Status:`를 갱신한다 (Claude가 편집)
 
 `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`의 3번째
 줄을 `**Status:** 설계 확정. **CS-M0 완료(2026-08-28)**. CS-M1 미착수`로 바꾼다.
 
-**이 저장소에는 `Status:` 줄이 낡은 design doc이 이미 셋 있다**(Config Persistence ·
+이 저장소에는 `Status:` 줄이 낡은 design doc이 이미 셋 있다(Config Persistence ·
 Power Management · Hardware Discovery). CN design은 그 빚을 새로 만들지 않았고,
 CS design도 만들지 않는다.
 
 ### Step 4: 기억을 만든다 (Claude가 편집)
 
 `docs/decisions/project_copy_search_feedback.md`를 새로 만들고 `MEMORY.md`에 한 줄
-더한다. **담을 것**은 실행이 증명한 것만이다.
+더한다. 담을 것은 실행이 증명한 것만이다.
 
-- `pointFromPin`이 뷰포트 **위**의 pin에 대해 목록 끝까지 훑는다는 것, 그래서
+- `pointFromPin`이 뷰포트 위의 pin에 대해 목록 끝까지 훑는다는 것, 그래서
   좌표를 푸는 방향을 뒤집었다는 것
 - `Flattened`가 node를 역참조하지 않게 만들어졌고 `serial`이 그 짝이라는 것
 - `matches()`가 얕은 복사라 바깥 슬라이스만 해제한다는 것
@@ -1105,7 +1105,7 @@ CS design도 만들지 않는다.
 - copy mode 표에 하이라이트 한 줄
 - 로그 문구 목록에 `terminal: find> hl spans=… cells=… us=…`
 - 게이트 기준선을 실측으로
-- "이월 숙제"에서 매치 하이라이트를 **끝난 숙제**로 옮긴다
+- "이월 숙제"에서 매치 하이라이트를 끝난 숙제로 옮긴다
 - 핵심 파일의 줄 번호를 CS-M0 이후로
 
 ### Step 6: 커밋 (Claude가 실행)
@@ -1116,7 +1116,7 @@ git add docs/ HANDOFF.md MEMORY.md
 git commit -m "Close out CS-M0"
 ```
 
-**`git add`로 디렉터리를 통째로 넣기 전에 `git status`를 먼저 본다**(저장소 규칙).
+`git add`로 디렉터리를 통째로 넣기 전에 `git status`를 먼저 본다(저장소 규칙).
 
 ---
 
@@ -1124,16 +1124,16 @@ git commit -m "Close out CS-M0"
 
 - [ ] `zig build && zig build test`가 통과하고 `vt_test`에 검사 26~31이 있다
 - [ ] `copy` 체인이 단독으로 통과하고 `find> hl` 줄에 `us=` 실측이 남는다
-- [ ] 루트 게이트가 **3회 연속 8체인 3/3**이고 `skipping make`가 매번 23이다
+- [ ] 루트 게이트가 3회 연속 8체인 3/3이고 `skipping make`가 매번 23이다
 - [ ] design doc의 `Status:`가 CS-M0 완료로 갱신됐다
 - [ ] `docs/decisions/project_copy_search_feedback.md`와 `MEMORY.md` 한 줄이 있다
 - [ ] `HANDOFF.md`가 CS-M0 이후 상태를 적고 있다
 
 ## 이 milestone이 안 하는 것
 
-- **키를 안 더한다.** `input.zig`·`input_test.zig`를 안 건드린다.
-- **현재 매치를 다른 색으로 하지 않는다**(design "비워 두는 자리").
-- **`[3/12]` 표시를 안 한다**(같은 자리).
-- **검색 결과를 갱신하지 않는다**(design 결정 7).
-- **검색 기록도 "못 찾음" 메시지도 안 한다** — 그것이 CS-M1이고, **plan은 CS-M0이
-  끝난 뒤에 쓴다.**
+- 키를 안 더한다. `input.zig`·`input_test.zig`를 안 건드린다.
+- 현재 매치를 다른 색으로 하지 않는다(design "비워 두는 자리").
+- `[3/12]` 표시를 안 한다(같은 자리).
+- 검색 결과를 갱신하지 않는다(design 결정 7).
+- 검색 기록도 "못 찾음" 메시지도 안 한다 — 그것이 CS-M1이고, plan은 CS-M0이
+  끝난 뒤에 쓴다.

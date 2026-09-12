@@ -1,13 +1,13 @@
 # TARS Boot Foundation — BF-M3 Bootloader + Hybrid ISO Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** BF-M3를 완료한다 — Limine(v12.5.2) bootloader와 `xorriso`로 만든
+Goal: BF-M3를 완료한다 — Limine(v12.5.2) bootloader와 `xorriso`로 만든
 BIOS El Torito ISO(`out/tars.iso`)를 QEMU `-cdrom` 하나만으로 부팅해
 BF-M2와 동일한 fish shell 배너(`Welcome to fish, the friendly interactive
 shell`)가 QEMU serial에 출력되는 지점까지 검증한다.
 
-**Architecture:** 새 최상위 디렉터리 `boot/`에 Limine binary release를
+Architecture: 새 최상위 디렉터리 `boot/`에 Limine binary release를
 다운로드하는 `build.sh`, ISO를 만드는 `make_iso.sh`, 전체 체인을
 실행하고 QEMU로 검증하는 `check.sh`를 만든다. Limine은 apt에 없으므로
 GitHub Releases의 `limine-binary.tar.gz`(v12.5.2)를 받는다 — 안에 이미
@@ -19,7 +19,7 @@ ISO는 BIOS El Torito만 포함하며(UEFI 제외, design doc 비목표 참고),
 `xorriso -as mkisofs` 뒤 반드시 `limine bios-install`을 실행해야 부팅
 가능한 이미지가 된다.
 
-**Tech Stack:** Limine v12.5.2(GitHub binary release + host 도구
+Tech Stack: Limine v12.5.2(GitHub binary release + host 도구
 `cc` 빌드), `xorriso`, Linux 6.18.42(BF-M1 산출물), Rust init + fish
 4.0.2(BF-M2 산출물), QEMU system x86_64(TCG, SeaBIOS), bash
 
@@ -33,14 +33,14 @@ ISO는 BIOS El Torito만 포함하며(UEFI 제외, design doc 비목표 참고),
 `kernel/build.sh`, `init/`, `kernel/make_initrd.sh`가 정상 동작해야
 한다(없다면 Task 5의 `check.sh`가 이들을 다시 호출한다).
 
-**Design doc과의 관계:**
+Design doc과의 관계:
 [2026-08-06-tars-boot-foundation-bf-m3-design.md](../specs/2026-08-06-tars-boot-foundation-bf-m3-design.md)
 의 결정을 그대로 따른다 — Limine v12.5.2 binary release 다운로드 +
 host 도구 make, `protocol: linux` + `limine.conf`, BIOS El Torito ISO +
 `limine bios-install`, `boot/` 디렉터리 신설, BIOS 전용 검증(SeaBIOS,
 UEFI 제외).
 
-**Limine 조달 방식의 실측 근거(2026-08-06, plan 작성 중 재검토):**
+Limine 조달 방식의 실측 근거(2026-08-06, plan 작성 중 재검토):
 처음에는 git 소스를 태그로 clone해 `./bootstrap`(autotools) →
 `./configure --enable-bios-cd` → `make`로 전체를 빌드하기로 하고
 `configure.ac`까지 읽어 필요한 패키지(`nasm`, `autoconf`, `automake`)를
@@ -59,10 +59,10 @@ devcontainer 패키지 목록은 이 재검토를 반영한다(`xorriso`만 추�
 
 ### Task 1: devcontainer에 ISO 빌드 도구 추가
 
-**Files:**
+Files:
 - Modify: `devcontainer/Dockerfile`
 
-- [x] **Step 1: Dockerfile apt 목록에 xorriso 추가**
+- [x] Step 1: Dockerfile apt 목록에 xorriso 추가
 
 `devcontainer/Dockerfile`의 `apt-get install` 목록에 `xorriso` 하나만
 추가한다(기존 목록 순서 유지, 끝에 삽입):
@@ -105,7 +105,7 @@ WORKDIR /workspace
 `autoconf`/`automake`는 필요 없다 — 이미 있는 `build-essential`의 `cc`
 만으로 host 도구(`limine`)를 빌드할 수 있다.
 
-- [x] **Step 2: 이미지 재빌드**
+- [x] Step 2: 이미지 재빌드
 
 Run:
 ```bash
@@ -115,7 +115,7 @@ docker build --platform linux/amd64 -t tars-devcontainer -f devcontainer/Dockerf
 Expected: 종료 코드 0. `Successfully tagged tars-devcontainer:latest` 또는
 `naming to docker.io/library/tars-devcontainer:latest done`.
 
-- [x] **Step 3: 새 도구 확인**
+- [x] Step 3: 새 도구 확인
 
 Run:
 ```bash
@@ -125,7 +125,7 @@ docker run --rm --platform linux/amd64 tars-devcontainer \
 
 Expected: 버전 문자열 출력, `command not found` 없음.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add devcontainer/Dockerfile
@@ -136,11 +136,11 @@ git commit -m "Add xorriso to devcontainer"
 
 ### Task 2: boot/ 디렉터리 뼈대 + limine.conf
 
-**Files:**
+Files:
 - Create: `boot/limine.conf`
 - Modify: `.gitignore`
 
-- [x] **Step 1: `.gitignore`에 boot 빌드 산출물 추가**
+- [x] Step 1: `.gitignore`에 boot 빌드 산출물 추가
 
 `.gitignore`에 다음 줄을 추가한다:
 
@@ -149,7 +149,7 @@ boot/limine-binary/
 out/
 ```
 
-- [x] **Step 2: `limine.conf` 작성**
+- [x] Step 2: `limine.conf` 작성
 
 `boot/limine.conf`:
 ```
@@ -169,7 +169,7 @@ kernel.org bzImage를 무수정 부팅, initramfs는 `module_path`로 지정,
 뜻이다(BF-M2까지 QEMU direct boot에 메뉴가 없던 것과 동일한 무인 부팅
 경험을 유지).
 
-- [x] **Step 3: 커밋**
+- [x] Step 3: 커밋
 
 ```bash
 git add .gitignore boot/limine.conf
@@ -180,10 +180,10 @@ git commit -m "Add boot directory skeleton and limine.conf"
 
 ### Task 3: Limine binary release 다운로드 + host 도구 빌드
 
-**Files:**
+Files:
 - Create: `boot/build.sh`
 
-- [x] **Step 1: `build.sh` 작성**
+- [x] Step 1: `build.sh` 작성
 
 `boot/build.sh`:
 ```bash
@@ -217,13 +217,13 @@ tarball의 최상위 디렉터리 이름이 `limine-binary/`임을 2026-08-06에
 은 tarball 안에 이미 컴파일되어 들어있어 이 스크립트가 따로 만들
 필요가 없다.
 
-- [x] **Step 2: 실행 권한 확인**
+- [x] Step 2: 실행 권한 확인
 
 ```bash
 chmod +x boot/build.sh
 ```
 
-- [x] **Step 3: 실행해서 다운로드/빌드 확인**
+- [x] Step 3: 실행해서 다운로드/빌드 확인
 
 Run:
 ```bash
@@ -234,7 +234,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 종료 코드 0. 다운로드 로그 뒤 `cc -std=c99 ... -o limine`
 컴파일 명령이 출력되고 에러 없이 끝난다.
 
-- [x] **Step 4: 산출물 확인**
+- [x] Step 4: 산출물 확인
 
 Run:
 ```bash
@@ -245,7 +245,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 세 파일 모두 존재하고 크기가 0보다 크다. `limine`은 실행
 권한(`-rwxr-xr-x` 등)을 가진다.
 
-- [x] **Step 5: 커밋**
+- [x] Step 5: 커밋
 
 ```bash
 git add boot/build.sh
@@ -258,10 +258,10 @@ git commit -m "Add Limine binary release download script"
 
 ### Task 4: ISO 생성 스크립트
 
-**Files:**
+Files:
 - Create: `boot/make_iso.sh`
 
-- [x] **Step 1: `make_iso.sh` 작성**
+- [x] Step 1: `make_iso.sh` 작성
 
 `boot/make_iso.sh`:
 
@@ -298,13 +298,13 @@ UEFI 관련 xorriso 플래그(`--efi-boot`, `-efi-boot-part`, `-hfsplus`)는
 한다 — 이 단계 없이는 El Torito boot catalog만으로 실제 부팅이 되지
 않는다(design doc에 기록된 실측 정정 사항).
 
-- [x] **Step 2: 실행 권한 확인**
+- [x] Step 2: 실행 권한 확인
 
 ```bash
 chmod +x boot/make_iso.sh
 ```
 
-- [x] **Step 3: kernel/init 산출물이 없으면 먼저 준비**
+- [x] Step 3: kernel/init 산출물이 없으면 먼저 준비
 
 Run:
 ```bash
@@ -316,7 +316,7 @@ Expected: 종료 코드 0. `kernel/build/arch/x86/boot/bzImage`와
 `kernel/initrd.cpio`가 존재한다(이미 BF-M2에서 만들어져 있다면 이
 Step은 최신 상태로 재생성만 한다).
 
-- [x] **Step 4: ISO 생성 실행**
+- [x] Step 4: ISO 생성 실행
 
 Run:
 ```bash
@@ -327,7 +327,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/workspace -w /workspace/boot \
 Expected: 종료 코드 0. `xorriso` 로그에 경고 정도는 나올 수 있으나
 에러로 중단되지 않는다.
 
-- [x] **Step 5: ISO 파일 확인**
+- [x] Step 5: ISO 파일 확인
 
 Run:
 ```bash
@@ -340,16 +340,16 @@ Expected: `out/tars.iso` 파일이 존재하고 크기가 0보다 크다.
 `El Torito boot img` 등) 정보가 보인다 — UEFI 관련 항목은 없어야
 한다(BIOS 전용이므로).
 
-**만약 `xorriso: -b` 관련 에러가 나면:** `limine-bios-cd.bin`의 스테이징
+만약 `xorriso: -b` 관련 에러가 나면: `limine-bios-cd.bin`의 스테이징
 경로가 실제와 다른 것이다 — `find "$STAGE" -iname 'limine-bios-cd.bin'`
 로 실제 경로를 확인하고 `-b` 인자를 맞춘다.
 
-**만약 `limine bios-install`이 `command not found`나 실행 권한 에러를
-내면:** Task 3 Step 4에서 확인한 `limine` CLI 경로가 실행 권한을
+만약 `limine bios-install`이 `command not found`나 실행 권한 에러를
+내면: Task 3 Step 4에서 확인한 `limine` CLI 경로가 실행 권한을
 가졌는지(`chmod +x`) 확인한다 — `make`가 만든 산출물은 보통 이미
 실행 권한이 있지만, 볼륨 마운트 방식에 따라 권한이 달라질 수 있다.
 
-- [x] **Step 6: 커밋**
+- [x] Step 6: 커밋
 
 ```bash
 git add boot/make_iso.sh
@@ -366,10 +366,10 @@ bzImage/`build/`와 동일하게 재생성 가능한 큰 바이너리이기 때�
 
 ### Task 5: check.sh + 전체 부팅 검증
 
-**Files:**
+Files:
 - Create: `boot/check.sh`
 
-- [x] **Step 1: `check.sh` 작성**
+- [x] Step 1: `check.sh` 작성
 
 `boot/check.sh`:
 ```bash
@@ -407,13 +407,13 @@ BF-M2의 `kernel/check.sh`와 동일한 패턴(전체 체인 재실행 → QEMU 
 종료 → grep → PASS/FAIL)이되, `-kernel`/`-initrd` 없이 `-cdrom`만
 쓴다는 점이 design doc이 강조하는 핵심 차이다.
 
-- [x] **Step 2: 실행 권한 확인**
+- [x] Step 2: 실행 권한 확인
 
 ```bash
 chmod +x boot/check.sh
 ```
 
-- [x] **Step 3: 실행해서 결과 확인**
+- [x] Step 3: 실행해서 결과 확인
 
 Run:
 ```bash
@@ -427,7 +427,7 @@ Expected: BF-M2 때와 동일한 mount 로그와 fish 배너
 점을 로그의 QEMU 실행 커맨드 자체(스크립트 안에 있으므로 로그에는
 안 보임 — `check.sh` 파일 내용으로 재확인)로 다시 확인한다.
 
-**만약 FAIL이거나 QEMU가 아무것도 출력하지 않으면:** BF-M1/BF-M2와
+만약 FAIL이거나 QEMU가 아무것도 출력하지 않으면: BF-M1/BF-M2와
 달리 이번엔 커널 이전 단계(bootloader)에서 멈출 수 있다. 원인 구분
 방법:
 - 화면(serial)에 아무 것도 없이 멈춤 — Limine 자체가 뜨지 않은 것.
@@ -448,7 +448,7 @@ Expected: BF-M2 때와 동일한 mount 로그와 fish 배너
 이 반복도 BF-M1/BF-M2와 같은 학습 사이클이므로 몇 차례 반복이 필요할
 수 있다. 원인을 고치면 Step 3을 다시 실행한다.
 
-- [x] **Step 4: 커밋**
+- [x] Step 4: 커밋
 
 ```bash
 git add boot/check.sh

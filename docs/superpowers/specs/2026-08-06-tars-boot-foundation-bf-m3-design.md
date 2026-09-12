@@ -1,7 +1,7 @@
 # TARS Boot Foundation — BF-M3 Design
 
-**Date:** 2026-08-06
-**Status:** Completed (2026-08-06) — `-cdrom out/tars.iso` 단독으로 QEMU
+Date: 2026-08-06
+Status: Completed (2026-08-06) — `-cdrom out/tars.iso` 단독으로 QEMU
 serial 로그에서 fish 배너 확인, `boot/check.sh` PASS
 
 ## 배경
@@ -12,8 +12,8 @@ shell prompt에 도달했다. 지금까지는 QEMU `-kernel`/`-initrd` direct
 boot(BF-M1부터 유지)로 커널과 initramfs를 QEMU가 직접 주입했다 — 이는
 실제 하드웨어에서는 통하지 않는 "편법"이라는 것이 [전체 design
 doc](2026-08-01-tars-boot-foundation-design.md)에 이미 명시돼 있다. 이
-문서는 그 편법을 걷어내는 **BF-M3 — 진짜 bootloader(Limine) + xorriso
-hybrid ISO**를 다룬다.
+문서는 그 편법을 걷어내는 BF-M3 — 진짜 bootloader(Limine) + xorriso
+hybrid ISO를 다룬다.
 
 ## 목표
 
@@ -50,7 +50,7 @@ Debian trixie apt 저장소에는 Limine 패키지가 없다(공식 확인, 2026
 WebSearch로 실측 — Debian bug tracker에 RFP(Request For Packaging)만
 존재). 따라서 GitHub에서 직접 받아야 한다.
 
-**정정(2026-08-06, 구현 시작 직전 재검토):** 처음에는 git 소스를 태그로
+정정(2026-08-06, 구현 시작 직전 재검토): 처음에는 git 소스를 태그로
 clone해 `./bootstrap`(autotools) → `./configure --enable-bios-cd` →
 `make`로 전체를 빌드하기로 했다. 그러나 실제로 GitHub Releases의
 `limine-binary.tar.gz` 자산을 받아 내용을 확인한 결과, 이 안에 이미
@@ -61,9 +61,9 @@ CLI, `bios-install`에 쓰는 그 도구) 소스 `limine.c` + 최소 `Makefile`
 배우거나 수정하려는 대상이 아니라 "설정이 단순해서" 고른 외부 도구다
 (전체 design doc 핵심 설계 결정 표 참고) — 부트섹터 어셈블리까지
 직접 조립할 학습 이득이 없는데 `nasm`/`autoconf`/`automake` 세 패키지를
-devcontainer에 추가로 들이는 비용만 크다. 그래서 **binary release를
+devcontainer에 추가로 들이는 비용만 크다. 그래서 binary release를
 받아 부트로더 바이너리는 그대로 쓰고, host 도구(`limine`)만 이미 있는
-`gcc`로 직접 빌드하는 방식**으로 바꾼다. `boot/build.sh`가 release
+`gcc`로 직접 빌드하는 방식으로 바꾼다. `boot/build.sh`가 release
 tarball URL(버전이 URL에 고정됨 — 재현성 유지)을 다운로드해 없으면
 풀고, `make -C limine-binary`로 host 도구를 빌드한다.
 
@@ -105,7 +105,7 @@ xorriso -as mkisofs -R -r -J \
 limine bios-install out/tars.iso
 ```
 
-**정정(2026-08-06, 설계 대화 중 실측으로 뒤집힘):** 처음에는 "El Torito
+정정(2026-08-06, 설계 대화 중 실측으로 뒤집힘): 처음에는 "El Torito
 CD 부팅은 파티션/디스크 설치가 필요 없다"고 가정했으나, 공식 `USAGE.md`를
 직접 읽어보니 ISO 생성 뒤에도 `limine bios-install`을 실행해야 한다는
 점이 명시돼 있었다. `-no-emul-boot`로 지정한 El Torito boot catalog는

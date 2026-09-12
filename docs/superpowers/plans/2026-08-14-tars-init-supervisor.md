@@ -1,19 +1,19 @@
 # TARS Init Supervisor (IS) Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** PID 1이 실제로 PID 1의 일을 하게 만든다. `init`은 더 이상 자신을
+Goal: PID 1이 실제로 PID 1의 일을 하게 만든다. `init`은 더 이상 자신을
 셸로 덮어쓰지 않고, 자식 둘(`/terminal`, 콘솔 셸)을 fork해 감독한다.
-`waitpid` 루프로 좀비를 거두고, 자식이 죽으면 되살리며, **절대 반환하지
-않는다.**
+`waitpid` 루프로 좀비를 거두고, 자식이 죽으면 되살리며, 절대 반환하지
+않는다.
 
-**Scope:** 서브프로젝트가 아니라 **단일 milestone**이다. 다음 서브프로젝트
+Scope: 서브프로젝트가 아니라 단일 milestone이다. 다음 서브프로젝트
 (설정 영속화 + 부팅 셸 선택)의 준비운동이며, 그쪽이 요구하는 "설정을 읽어
 셸을 고른다"가 정확히 이 구조 변경 위에 얹힌다. design doc은 만들지 않는다.
 
-**Tech Stack:** Zig 0.16.0(`std.os.linux`, `std.process.Init.Minimal`), bash,
+Tech Stack: Zig 0.16.0(`std.os.linux`, `std.process.Init.Minimal`), bash,
 Docker(`tars-devcontainer`, arm64), QEMU
 
 ---
@@ -30,18 +30,18 @@ PID 1 = fish              ← init이 execve로 자기를 덮어씀 (init/src/ma
 
 문제가 셋이다.
 
-1. **PID 1이 죽으면 커널이 패닉한다.** `execve` 이후 PID 1은 fish 그 자체다.
+1. PID 1이 죽으면 커널이 패닉한다. `execve` 이후 PID 1은 fish 그 자체다.
    fish가 끝나면 `Attempted to kill init!`이 난다.
-2. **아무도 `waitpid`를 하지 않는다.** 리눅스는 부모를 잃은 프로세스를 전부
+2. 아무도 `waitpid`를 하지 않는다. 리눅스는 부모를 잃은 프로세스를 전부
    PID 1에 재부모화하는데, 지금 PID 1은 그것을 거둘 코드가 없는 fish다.
-3. **`/terminal`이 죽지 않으려고 버틴다**(`terminal/src/main.zig:152-156`).
+3. `/terminal`이 죽지 않으려고 버틴다(`terminal/src/main.zig:152-156`).
    PTY 자식이 끝나면 `poll(fds, 0, 1000)`으로 영원히 잠든다. TF 단계에서
-   "자식이 죽어도 패닉하지 말자"고 넣은 코드인데, **되살려 줄 감독자가
-   없었기 때문에** 필요했던 임시방편이다.
+   "자식이 죽어도 패닉하지 말자"고 넣은 코드인데, 되살려 줄 감독자가
+   없었기 때문에 필요했던 임시방편이다.
 
 3번을 함께 고치는 것이 이 plan의 핵심 결정이다. 감독자가 생기면 이 버티기는
-방해가 된다 — 화면 셸을 끝내도 아무 일이 안 일어나므로 **재시작 경로를
-게이트에서 관측할 방법이 사라진다.** 반대로 `/terminal`이 정상 종료하게
+방해가 된다 — 화면 셸을 끝내도 아무 일이 안 일어나므로 재시작 경로를
+게이트에서 관측할 방법이 사라진다. 반대로 `/terminal`이 정상 종료하게
 두면, 게이트에서 `exit` 한 번으로 "죽음 → 수거 → 재시작 → 새 프롬프트"
 전 경로가 한 번에 검증된다.
 
@@ -63,11 +63,11 @@ PID 1 = tars-init         ← 절대 반환하지 않음. waitpid 루프
 무조건 재시작하면 `/terminal`이 DRM을 못 열 때 초당 수천 번 fork하는 상태가
 된다. 그래서 두 가지를 건다.
 
-- 재시작 직전 **1초 `nanosleep`**.
-- **10초를 못 채우고 죽은 것이 연속 3회**면 그 컴포넌트를 포기하고 로그만
+- 재시작 직전 1초 `nanosleep`.
+- 10초를 못 채우고 죽은 것이 연속 3회면 그 컴포넌트를 포기하고 로그만
   남긴다. 10초 이상 살았으면 카운터를 0으로 되돌린다.
 
-포기해도 **루프는 계속 돈다.** 좀비 수거는 PID 1이 지는 의무이고, 감독 대상이
+포기해도 루프는 계속 돈다. 좀비 수거는 PID 1이 지는 의무이고, 감독 대상이
 전부 포기 상태여도 그 의무는 남는다.
 
 3회로 잡은 이유는 BF 체인 때문이다. BF는 `-device virtio-gpu-pci` 없이
@@ -77,7 +77,7 @@ BF 로그의 노이즈이자 시리얼 출력 경합이 되므로 작게 잡는�
 ### 콘솔 셸의 제어 터미널
 
 지금은 PID 1이 스스로 `setsid()` + `TIOCSCTTY`를 하고 그대로 fish가 된다
-(`init/src/main.zig:79-80`). 앞으로 이 시퀀스는 **콘솔 셸 자식 안에서** 돈다 —
+(`init/src/main.zig:79-80`). 앞으로 이 시퀀스는 콘솔 셸 자식 안에서 돈다 —
 `/dev/console`을 제어 터미널로 잡고 세션 리더가 되는 것은 셸의 일이다.
 
 PID 1 자신은 커널이 열어준 fd 0/1/2(`/dev/console`)를 그대로 쓴다. 그래서
@@ -115,17 +115,17 @@ std의 vDSO 조회가 동작하고, auxv에 `AT_SYSINFO_EHDR`이 없더라도 �
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`에 `--platform`을 붙이지 않는다.** 붙이면 ZM-M3에서 없앤
+`docker run`에 `--platform`을 붙이지 않는다. 붙이면 ZM-M3에서 없앤
 에뮬레이션 층이 그대로 돌아온다(`docs/decisions/project_build_host_arch.md`).
 
 ---
 
 ## Task 1: `init`을 supervisor로 다시 쓴다
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig`
 
-- [ ] **Step 1: `init/src/main.zig` 전체 교체**
+- [ ] Step 1: `init/src/main.zig` 전체 교체
 
 앞부분(`failed`, `mountFs`, `mountDevpts`, `logDrmDevicePresence`,
 `setupControllingTerminal`)은 그대로다. 바뀌는 것은 `runTerminal`이
@@ -376,13 +376,13 @@ pub fn main(init: std.process.Init.Minimal) void {
 }
 ```
 
-**로그 문자열이 바뀌는 지점을 정리해 둔다.** 게이트가 grep하는 마운트 네 줄
-(`tars-init: mounted ...`)은 **하나도 안 바뀐다**. 없어지는 줄은
+로그 문자열이 바뀌는 지점을 정리해 둔다. 게이트가 grep하는 마운트 네 줄
+(`tars-init: mounted ...`)은 하나도 안 바뀐다. 없어지는 줄은
 `tars-init: forked terminal (pid N)`과
 `tars-init: set up /dev/console as controlling terminal` 둘이고, 어느 게이트도
 이 둘을 보지 않는다(`boot/check.sh:53-57`, `terminal/check.sh:198-202`).
 
-- [ ] **Step 2: 빌드**
+- [ ] Step 2: 빌드
 
 Run:
 ```bash
@@ -402,7 +402,7 @@ Expected: 출력 없이 종료 코드 0.
 3. `void`를 반환하는 `main`의 마지막 문장이 `noreturn` 함수 호출인 것 —
    Zig는 허용하지만 unreachable 코드 경고가 날 수 있다.
 
-- [ ] **Step 3: 정적 바이너리인지 재확인**
+- [ ] Step 3: 정적 바이너리인지 재확인
 
 Run:
 ```bash
@@ -418,7 +418,7 @@ Expected: 첫 줄이 `0`. `ldd`가 아니라 `readelf`인 이유는
 `0`이 아니면 어딘가에서 libc가 링크된 것이므로 즉시 알릴 것
 (`kernel/make_initrd.sh`가 `init`에 대해 `copy_lib_deps`를 부르지 않는다).
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다. 사용자는 Step 2·3 결과만 전달하면 된다.
 
@@ -426,10 +426,10 @@ Claude가 수행한다. 사용자는 Step 2·3 결과만 전달하면 된다.
 
 ## Task 2: `terminal`이 PTY EOF에서 정상 종료하게 한다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig:151-157`
 
-- [ ] **Step 1: 무한 sleep 제거**
+- [ ] Step 1: 무한 sleep 제거
 
 현재 파일 끝(151~157번째 줄):
 
@@ -454,12 +454,12 @@ Claude가 수행한다. 사용자는 Step 2·3 결과만 전달하면 된다.
 `main`의 반환 타입은 그대로 두고, EOF에서 `break`한 뒤 `defer`들이 정리를
 수행하며 자연스럽게 0으로 종료한다.
 
-**PTY 자식(fish)을 여기서 `waitpid`하지 않는 것은 의도적이다.** 우리가 곧
+PTY 자식(fish)을 여기서 `waitpid`하지 않는 것은 의도적이다. 우리가 곧
 종료하므로 그 좀비는 PID 1로 재부모화되고, PID 1이 거둔다 — 게이트는 그
-`tars-init: reaped orphan pid N` 줄로 **좀비 수거가 실제로 동작함을
-관측한다.** 이 milestone이 고치려는 문제 2번의 직접 증거다.
+`tars-init: reaped orphan pid N` 줄로 좀비 수거가 실제로 동작함을
+관측한다. 이 milestone이 고치려는 문제 2번의 직접 증거다.
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다. 빌드는 Task 3의 게이트 실행에서 함께 확인한다.
 
@@ -467,17 +467,17 @@ Claude가 수행한다. 빌드는 Task 3의 게이트 실행에서 함께 확인
 
 ## Task 3: TF 게이트에 재시작 경로 검증을 추가한다
 
-**Files:**
+Files:
 - Modify: `terminal/check.sh`
 
 게이트는 자기가 안 보는 것을 통과시킨다
 (`docs/decisions/project_gate_chain_composition.md`). 재시작을 코드로만
 만들고 검사를 안 넣으면, 다음 milestone에서 조용히 깨져도 PASS가 난다.
 
-- [ ] **Step 1: `exit` 주입과 검증 블록 추가**
+- [ ] Step 1: `exit` 주입과 검증 블록 추가
 
-**위치가 중요하다.** 키를 보내려면 QEMU monitor로 연결된 **fd 3이 아직 열려
-있어야** 한다. 그 구간은 141번째 줄에서 끝난다.
+위치가 중요하다. 키를 보내려면 QEMU monitor로 연결된 fd 3이 아직 열려
+있어야 한다. 그 구간은 141번째 줄에서 끝난다.
 
 ```
 138  # 3) 키를 넣은 뒤 화면
@@ -488,7 +488,7 @@ Claude가 수행한다. 빌드는 Task 3의 게이트 실행에서 함께 확인
 143  exec 3>&-
 ```
 
-즉 `AFTER` 스크린샷을 먼저 뜨고(터미널이 아직 살아 있는 화면), **그 뒤에**
+즉 `AFTER` 스크린샷을 먼저 뜨고(터미널이 아직 살아 있는 화면), 그 뒤에
 `exit`를 친다. 42 검증(182~188번째 줄)은 QEMU가 죽은 뒤 `$LOG` 파일만 보는
 구간이라 그쪽에는 넣을 수 없다.
 
@@ -552,18 +552,18 @@ if grep -q "Attempted to kill init" "$LOG"; then
 fi
 ```
 
-- [ ] **Step 2: 나머지 검사 블록은 손대지 않는다**
+- [ ] Step 2: 나머지 검사 블록은 손대지 않는다
 
 149번째 줄 이후(스크린샷 존재 확인, 픽셀 차이, 42 검증,
 `--- init log ---`와 마운트 네 줄 검사)는 전부 그대로 둔다. Step 1의 블록이
 그 앞에 들어가므로 줄 번호만 밀린다.
 
-주의할 것 하나: Step 1 블록은 `exit` 이후 **새 프롬프트가 그려진 화면**을
+주의할 것 하나: Step 1 블록은 `exit` 이후 새 프롬프트가 그려진 화면을
 만들어 놓고 끝난다. 그 뒤의 픽셀 차이 검사는 `BEFORE`(첫 프롬프트)와
 `AFTER`(42가 찍힌 화면)를 비교하므로 영향을 받지 않는다 — 두 스크린샷 모두
-`exit`를 치기 **전**에 떴기 때문이다.
+`exit`를 치기 전에 떴기 때문이다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다.
 
@@ -571,13 +571,13 @@ Claude가 수행한다.
 
 ## Task 4: 두 체인을 각각 1회 돌린다
 
-**Files:** 없음(확인만)
+Files: 없음(확인만)
 
 `init`과 `make_initrd.sh` 경로를 건드리지 않았더라도 `init` 바이너리 자체가
-바뀌었으므로 **두 체인을 모두** 돈다. BF는 initrd 로딩 경로가 다르다
+바뀌었으므로 두 체인을 모두 돈다. BF는 initrd 로딩 경로가 다르다
 (limine이 ISO9660에서 BIOS INT13h로 읽는다).
 
-- [ ] **Step 1: TF 체인**
+- [ ] Step 1: TF 체인
 
 Run:
 ```bash
@@ -592,7 +592,7 @@ init restarted the terminal after the shell exited
 init reaped the re-parented shell
 ```
 
-**여기가 이 milestone에서 가장 깨지기 쉬운 지점이다.** 재시작된 `/terminal`이
+여기가 이 milestone에서 가장 깨지기 쉬운 지점이다. 재시작된 `/terminal`이
 DRM master를 다시 잡을 수 있어야 한다. 죽은 프로세스의 fd가 닫히면 커널이
 master를 놓는 것이 정상 동작이지만, QEMU virtio-gpu에서 두 번째 modeset이
 깨끗하게 되는지는 돌려봐야 안다.
@@ -604,11 +604,11 @@ master를 놓는 것이 정상 동작이지만, QEMU virtio-gpu에서 두 번째
 - `tars-init: terminal exited`가 없다 → Task 2가 반영 안 됐다(터미널이 아직
   버티고 있다).
 - `tars-init: started terminal`은 있는데 `terminal: spawned child pid`가 안
-  늘었다 → **재시작된 터미널이 DRM/evdev를 다시 열지 못한 것이다.** 이 경우
+  늘었다 → 재시작된 터미널이 DRM/evdev를 다시 열지 못한 것이다. 이 경우
   `error: OpenFailed`나 `cannot open /dev/input/event0`이 로그에 있을 것이다.
   여기서 막히면 A안(터미널은 그대로 두고 콘솔 셸로만 검증)으로 후퇴한다.
 
-- [ ] **Step 2: BF 체인**
+- [ ] Step 2: BF 체인
 
 Run:
 ```bash
@@ -618,7 +618,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 Expected: `PASS`, 배너까지 약 4초.
 
-**BF에서는 로그가 눈에 띄게 달라진다.** GPU가 없어 `/terminal`이 매번 죽으므로
+BF에서는 로그가 눈에 띄게 달라진다. GPU가 없어 `/terminal`이 매번 죽으므로
 이런 흐름이 정상이다.
 
 ```
@@ -632,26 +632,26 @@ tars-init: restarting terminal in 1s
 tars-init: giving up on terminal after 3 fast exits
 ```
 
-그리고 fish 배너는 그대로 나와야 한다. **배너 grep이 실패하면
-`MAX_FAST_RESTARTS`를 낮추는 것을 검토한다** — 터미널의 에러 출력과 fish
+그리고 fish 배너는 그대로 나와야 한다. 배너 grep이 실패하면
+`MAX_FAST_RESTARTS`를 낮추는 것을 검토한다 — 터미널의 에러 출력과 fish
 배너가 같은 시리얼에 섞여 배너 줄이 쪼개졌을 가능성이 있다.
 
-- [ ] **Step 3: 로그 확인**
+- [ ] Step 3: 로그 확인
 
 Run:
 ```bash
 grep -E 'tars-init:|Attempted to kill init' /tmp/is-bf.log
 ```
 
-Expected: `Attempted to kill init`이 **없어야** 한다.
+Expected: `Attempted to kill init`이 없어야 한다.
 
 ---
 
 ## Task 5: 종료 게이트 3/3
 
-**Files:** 없음(확인만)
+Files: 없음(확인만)
 
-- [ ] **Step 1: 루트 게이트 전체**
+- [ ] Step 1: 루트 게이트 전체
 
 Run:
 ```bash
@@ -667,7 +667,7 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 ZM-M3 기준 전체 8분 52초. 걸린 시간을 기록할 것 — 재시작 대기(1초 backoff)와
 BF의 3회 재시도가 얼마나 더해지는지 보는 숫자다.
 
-- [ ] **Step 2: 6회 전부에서 확인**
+- [ ] Step 2: 6회 전부에서 확인
 
 Run:
 ```bash
@@ -684,25 +684,25 @@ Expected: `6`, `0`, `3`(TF 3회분).
 
 ## Task 6: 문서와 기억 갱신
 
-**Files:**
+Files:
 - Modify: `HANDOFF.md`
 - Modify: 이 plan 파일(말미에 "실제 실행에서 plan과 달라진 점" 추가)
 - Create: `docs/decisions/project_init_supervisor.md`, `MEMORY.md`에 한 줄
 
-- [ ] **Step 1: Claude가 문서를 갱신한다**
+- [ ] Step 1: Claude가 문서를 갱신한다
 
 사용자는 Task 5까지의 결과만 전달하면 된다.
 
 갱신 내용:
-- 이 plan 말미에 "실제 실행에서 plan과 달라진 점". **다음 세션이 가장 먼저
-  읽는 부분이므로 빠짐없이 적는다.**
+- 이 plan 말미에 "실제 실행에서 plan과 달라진 점". 다음 세션이 가장 먼저
+  읽는 부분이므로 빠짐없이 적는다.
 - `docs/decisions/project_init_supervisor.md` — PID 1이 지는 의무와 재시작
   정책, 그리고 "게이트가 재시작을 관측하려면 터미널이 죽어야 한다"는 결합
   관계를 남긴다. 다음 서브프로젝트가 이 구조 위에 설정 읽기를 얹는다.
 - `HANDOFF.md`를 다음 서브프로젝트(설정 영속화 + 부팅 셸 선택) 기준으로
   다시 쓴다.
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다.
 
@@ -710,36 +710,36 @@ Claude가 수행한다.
 
 ## 이번 milestone에서 하지 않는 것
 
-- **시그널 처리(SIGTERM/SIGINT/reboot).** PID 1은 기본 처리기가 없어 신호를
+- 시그널 처리(SIGTERM/SIGINT/reboot). PID 1은 기본 처리기가 없어 신호를
   무시하는 것이 기본이고, 지금 신호를 보낼 주체가 없다. 전원 관리(reboot,
   poweroff)를 다룰 때 함께 한다.
-- **설정 파일에서 감독 목록·재시작 정책 읽기.** 다음 서브프로젝트(설정
+- 설정 파일에서 감독 목록·재시작 정책 읽기. 다음 서브프로젝트(설정
   영속화)의 첫 사용 사례다. 지금은 `Kind` enum에 컴파일 타임으로 고정한다.
-- **부팅 셸 선택.** 같은 이유로 다음 서브프로젝트.
-- **`terminal`이 자기 PTY 자식을 `waitpid`하는 것.** 일부러 안 한다 — 좀비를
+- 부팅 셸 선택. 같은 이유로 다음 서브프로젝트.
+- `terminal`이 자기 PTY 자식을 `waitpid`하는 것. 일부러 안 한다 — 좀비를
   PID 1로 흘려보내야 게이트가 수거를 관측할 수 있다(Task 2 Step 1 참고).
-- **`init`을 `ReleaseSafe`로 바꾸는 것.** initrd 크기가 실제 문제가 될 때
+- `init`을 `ReleaseSafe`로 바꾸는 것. initrd 크기가 실제 문제가 될 때
   꺼낼 카드로 계속 남긴다.
 
 ---
 
 ## 실제 실행에서 plan과 달라진 점 (2026-08-14 완료)
 
-**다음 세션은 이 절부터 읽을 것.** IS는 `TARS check PASS`(BF 3/3, TF 3/3)로
+다음 세션은 이 절부터 읽을 것. IS는 `TARS check PASS`(BF 3/3, TF 3/3)로
 완료됐다. 검증 숫자는 `starting as PID 1` 6, `Attempted to kill init` 0,
 `init restarted the terminal after the shell exited` 3.
 
 ### 1. 진짜 위험은 DRM이 아니라 `POLLHUP`이었다
 
 plan은 "가장 깨지기 쉬운 지점"으로 재시작된 `/terminal`의 DRM master
-재획득을 지목했다. **그건 아무 문제가 없었다** — 프로세스가 죽으면 fd가
+재획득을 지목했다. 그건 아무 문제가 없었다 — 프로세스가 죽으면 fd가
 닫히고 커널이 master를 놓는다는 예상이 그대로 맞았다.
 
 대신 첫 TF 실행이 다른 곳에서 실패했다. `terminal/src/main.zig:139`가
-`revents & POLLIN`만 봤는데, **PTY master는 slave가 전부 닫히면 `POLLIN`이
-아니라 `POLLHUP`을 올린다.** 남은 출력이 있는 동안은 `POLLIN|POLLHUP`으로
+`revents & POLLIN`만 봤는데, PTY master는 slave가 전부 닫히면 `POLLIN`이
+아니라 `POLLHUP`을 올린다. 남은 출력이 있는 동안은 `POLLIN|POLLHUP`으로
 함께 오지만 다 읽고 나면 `POLLHUP`만 남고, 그러면 `read`를 영영 호출하지
-못한 채 `poll`이 즉시 반환하는 **바쁜 루프**에 빠진다. 로그에 아무것도 안
+못한 채 `poll`이 즉시 반환하는 바쁜 루프에 빠진다. 로그에 아무것도 안
 남아서 조용해 보이지만 CPU는 100%다.
 
 고친 뒤:
@@ -752,23 +752,23 @@ if (fds[1].revents & (c.POLLIN | c.POLLHUP | c.POLLERR) != 0) {
 `POLLHUP`에서도 일단 `read`를 시도하는 것만으로 두 경우가 다 처리된다 —
 남은 데이터를 먼저 비우고, 비면 `EIO`가 나서 기존 EOF 분기로 들어간다.
 
-**이건 IS가 만든 버그가 아니라 TF-M3부터 있던 잠복 버그다.**
-`if (out.len == 0)` EOF 처리 코드는 계속 있었지만 **한 번도 실행된 적이
-없었다** — 게이트가 셸을 죽여본 적이 없었기 때문이다. 도달 불가능한 코드를
+이건 IS가 만든 버그가 아니라 TF-M3부터 있던 잠복 버그다.
+`if (out.len == 0)` EOF 처리 코드는 계속 있었지만 한 번도 실행된 적이
+없었다 — 게이트가 셸을 죽여본 적이 없었기 때문이다. 도달 불가능한 코드를
 "동작한다"고 믿고 있었던 셈이다([[project_gate_chain_composition]]).
 
 진단은 로그 한 곳에서 갈렸다. 마지막 화면 덤프의 행이
-`@(none) ~# math 6 x 7` / `42` / `@(none) ~# exit` 셋인데 **새 프롬프트 행이
-없었다.** fish가 살아서 Enter를 처리했다면 명령을 실행했든 못 찾았든 반드시
+`@(none) ~# math 6 x 7` / `42` / `@(none) ~# exit` 셋인데 새 프롬프트 행이
+없었다. fish가 살아서 Enter를 처리했다면 명령을 실행했든 못 찾았든 반드시
 새 프롬프트를 그린다. 즉 fish는 죽었고 `terminal`이 그걸 못 본 것이다.
 
 ### 2. `boot/check.sh`에도 패닉 검사를 넣었다 (plan에 없던 Step)
 
 BF는 GPU가 없어 `/terminal`이 매번 죽는 체인이라 재시작 로직이 잘못되면
-**BF에서 먼저 터진다.** 그런데 BF는 fish 배너만 보고 PASS를 냈다.
+BF에서 먼저 터진다. 그런데 BF는 fish 배너만 보고 PASS를 냈다.
 `boot/check.sh:64-67`에 `Attempted to kill init` 검사를 추가했다.
 
-### 3. BF 게이트는 재시작·포기 경로를 **관측하지 못한다**
+### 3. BF 게이트는 재시작·포기 경로를 관측하지 못한다
 
 `boot/check.sh:37-47`은 배너가 보이는 즉시 루프를 빠져나오고 그 시점의 로그를
 찍은 뒤 QEMU를 죽인다. 배너가 4초에 나오는데 첫 `/terminal`은 `lived 2s`에
@@ -785,10 +785,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
 결과는 설계대로였다 — `started`/`exited (status 1, lived 1~2s)`/`restarting`이
 3회 반복된 뒤 `giving up on terminal after 3 fast exits`, 그리고 침묵.
 
-**이 확인을 게이트에 넣지 않은 것은 의식적인 선택이다.** 넣으려면 BF가 배너
+이 확인을 게이트에 넣지 않은 것은 의식적인 선택이다. 넣으려면 BF가 배너
 이후 최소 5초를 더 기다려야 하는데, BF의 존재 이유는 "ISO로 부팅이 되는가"이지
-"재시작 정책이 맞는가"가 아니다. 후자는 TF가 본다. 대신 **`given_up`이
-깨지면 BF에서 무한 재시작이 나는데 게이트는 그걸 못 본다**는 사각지대가
+"재시작 정책이 맞는가"가 아니다. 후자는 TF가 본다. 대신 `given_up`이
+깨지면 BF에서 무한 재시작이 나는데 게이트는 그걸 못 본다는 사각지대가
 남았다 — 재시작 정책을 건드리는 다음 사람은 위 명령을 손으로 한 번 돌릴 것.
 
 ### 4. `fast_restarts` 리셋 경로가 양쪽 다 확인됐다
@@ -805,7 +805,7 @@ BF의 `lived 2s`가 알려주는 것이 하나 더 있다. DRM 열기 실패 자
 ### 5. Task 3의 삽입 위치는 초안이 틀렸다
 
 처음 쓴 plan은 "188번째 줄(42 검증) 다음"이라고 했다가 바로 다음 Step에서
-정정하는 자기모순 상태였다. 확정된 위치는 **141번째 줄** — QEMU monitor로
+정정하는 자기모순 상태였다. 확정된 위치는 141번째 줄 — QEMU monitor로
 연결된 fd 3이 아직 열려 있는 마지막 지점이다. 42 검증 구간은 이미 QEMU를
 죽이고 `$LOG` 파일만 보는 구간이라 키를 보낼 수 없다. 커밋 전에 고쳤다.
 

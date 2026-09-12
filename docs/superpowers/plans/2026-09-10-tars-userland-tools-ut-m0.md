@@ -1,21 +1,21 @@
 # UT-M0 Implementation Plan — 통로를 연다
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 게스트 셸이 `/usr/bin/ls`가 아니라 **`ls`**로 명령을 찾게 하고, git이
+Goal: 게스트 셸이 `/usr/bin/ls`가 아니라 `ls`로 명령을 찾게 하고, git이
 딛고 설 뼈대(`/bin/sh` · `/tmp` · `/etc/passwd`)를 세운다.
 
-**Architecture:** PID 1이 커널의 envp 블록을 복사해 `PATH=/usr/bin:/bin`을 더한
+Architecture: PID 1이 커널의 envp 블록을 복사해 `PATH=/usr/bin:/bin`을 더한
 새 블록을 짓고 자식 둘에게 넘긴다(design 결정 1). 블록을 짓는 순수 함수는
-`init/src/environ.zig`에 따로 두어 **호스트에서 초 단위로** 검사한다 —
+`init/src/environ.zig`에 따로 두어 호스트에서 초 단위로 검사한다 —
 `config.zig`·`storage.zig`가 이미 그렇게 갈려 있다. `make_initrd.sh`는 뼈대
-넷과 **`ls` 하나만** 넣는다. 열한번째 게이트 체인 `tools/check.sh`가 본다.
+넷과 `ls` 하나만 넣는다. 열한번째 게이트 체인 `tools/check.sh`가 본다.
 
-**Tech Stack:** Zig 0.16(자유 서기 PID 1, 힙 없음) · bash · cpio/gzip ·
+Tech Stack: Zig 0.16(자유 서기 PID 1, 힙 없음) · bash · cpio/gzip ·
 QEMU monitor `sendkey`
 
-**읽고 시작할 것:** `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md`
-— 특히 **결정 1 · 결정 6 · 위험 1**과 "시리얼 셸은 관측하지 않는다" 절.
+읽고 시작할 것: `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md`
+— 특히 결정 1 · 결정 6 · 위험 1과 "시리얼 셸은 관측하지 않는다" 절.
 
 ---
 
@@ -23,7 +23,7 @@ QEMU monitor `sendkey`
 
 | 파일 | 책임 | 상태 |
 |---|---|---|
-| `init/src/environ.zig` | 커널 envp 블록에 `PATH` 하나를 더한 블록을 짓는다. **시스템 콜을 안 한다** | 새로 만든다 |
+| `init/src/environ.zig` | 커널 envp 블록에 `PATH` 하나를 더한 블록을 짓는다. 시스템 콜을 안 한다 | 새로 만든다 |
 | `init/src/environ_test.zig` | 위 함수의 호스트 검사 넷 | 새로 만든다 |
 | `init/build.zig` | `environ_test`를 `zig build test`에 엮는다 | 고친다 |
 | `init/src/main.zig` | `environ.withPath`를 부르고 결과를 로그에 찍는다 | 고친다(약 10줄) |
@@ -31,22 +31,22 @@ QEMU monitor `sendkey`
 | `tools/check.sh` | 열한번째 체인 | 새로 만든다 |
 | `check.sh` | `CHAINS`에 `UT-M0:./tools/check.sh` | 고친다(한 줄 + 주석) |
 
-**`environ.zig`를 따로 빼는 이유가 검사다.** `main.zig`에는 `*_test.zig`가
+`environ.zig`를 따로 빼는 이유가 검사다. `main.zig`에는 `*_test.zig`가
 없다 — PID 1의 감독 루프는 호스트에서 못 돌린다. 블록을 짓는 일은 시스템 콜이
-없는 순수 계산이므로 갈라내면 **부팅 20초가 아니라 0.1초로** 검사된다.
+없는 순수 계산이므로 갈라내면 부팅 20초가 아니라 0.1초로 검사된다.
 `devices.zig`가 `bitSet`을 그렇게 가른 것과 같은 선이다.
 
 ---
 
-## Task 0: 크기를 먼저 잰다 — **위험 1**
+## Task 0: 크기를 먼저 잰다 — 위험 1
 
-**이 Task가 첫째인 이유:** 답이 "못 뜬다"면 UT-M1~M3의 목록이 통째로 바뀐다.
-**코드를 한 줄도 안 고친다.**
+이 Task가 첫째인 이유: 답이 "못 뜬다"면 UT-M1~M3의 목록이 통째로 바뀐다.
+코드를 한 줄도 안 고친다.
 
-**Files:**
+Files:
 - Create: `/tmp/ut_m0_spike.sh` (임시. 커밋하지 않는다)
 
-- [ ] **Step 1: 지금 initrd의 기준선을 만든다**
+- [ ] Step 1: 지금 initrd의 기준선을 만든다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -61,13 +61,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ```
 
 Expected: `BASELINE gzip: 11076327` 부근, `BASELINE plain: 33371648` 부근.
-(design 실측 12와 같은 수여야 한다. 크게 다르면 **여기서 멈추고** 왜 다른지
+(design 실측 12와 같은 수여야 한다. 크게 다르면 여기서 멈추고 왜 다른지
 먼저 밝힌다 — 기준선이 틀리면 아래 비교가 전부 무의미하다.)
 
-- [ ] **Step 2: 스파이크 스크립트를 만든다**
+- [ ] Step 2: 스파이크 스크립트를 만든다
 
-`/tmp/ut_m0_spike.sh`에 넣을 것 — **진짜 바이너리를 밸러스트로 쓴다.** 난수나
-0으로 채우면 압축률이 실제와 달라서 **답이 틀린다**(난수는 안 줄고 0은 통째로
+`/tmp/ut_m0_spike.sh`에 넣을 것 — 진짜 바이너리를 밸러스트로 쓴다. 난수나
+0으로 채우면 압축률이 실제와 달라서 답이 틀린다(난수는 안 줄고 0은 통째로
 사라진다).
 
 ```bash
@@ -150,7 +150,7 @@ for algo in "gzip -6" "zstd -19 -T0 -q" "xz -9 -T0"; do
 done
 ```
 
-**`zstd`와 `xz`가 컨테이너에 없을 수 있다.** `xz-utils`는 Dockerfile에 있고
+`zstd`와 `xz`가 컨테이너에 없을 수 있다. `xz-utils`는 Dockerfile에 있고
 `zstd`는 없다. 없으면 그 줄만 건너뛰고 `gzip`으로 판정한다 — 스파이크가 그것
 때문에 죽으면 안 되므로 위 루프 앞에 한 줄을 둔다.
 
@@ -164,7 +164,7 @@ command -v zstd >/dev/null || echo "NOTE: zstd is not installed; skipping it"
   command -v "$name" >/dev/null || { echo "$name: not installed, skipped"; continue; }
 ```
 
-- [ ] **Step 3: 스파이크를 돌린다**
+- [ ] Step 3: 스파이크를 돌린다
 
 호스트의 `/tmp`는 컨테이너 안에서 안 보인다(마운트되는 것은 저장소뿐이다).
 스크립트를 저장소 안에 잠깐 두고 부른다.
@@ -176,8 +176,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 rm -f ./ut_m0_spike.sh
 ```
 
-**`git status --short`를 확인한다.** `ut_m0_spike.sh`는 지웠고 `ut-spike/`는
-Step 5에서 지운다 — **둘 다 커밋하지 않는다.**
+`git status --short`를 확인한다. `ut_m0_spike.sh`는 지웠고 `ut-spike/`는
+Step 5에서 지운다 — 둘 다 커밋하지 않는다.
 
 Expected: 세 줄이 나온다.
 
@@ -187,13 +187,13 @@ zstd     ~2x,000,000 bytes   ~x,xxx ms
 xz       ~2x,000,000 bytes   ~xx,xxx ms
 ```
 
-**숫자를 그대로 적어 둔다.** 아래 Step 5가 이것을 쓴다.
+숫자를 그대로 적어 둔다. 아래 Step 5가 이것을 쓴다.
 
-- [ ] **Step 4: 그 initrd로 실제로 부팅해 시간을 잰다**
+- [ ] Step 4: 그 initrd로 실제로 부팅해 시간을 잰다
 
-`boot/check.sh`는 자기 initrd를 다시 만들므로 못 쓴다. **직접 띄운다.**
+`boot/check.sh`는 자기 initrd를 다시 만들므로 못 쓴다. 직접 띄운다.
 
-원본 initrd를 **저장소 안에** 잠깐 치워 둔다 — 컨테이너가 매번 새로 뜨므로
+원본 initrd를 저장소 안에 잠깐 치워 둔다 — 컨테이너가 매번 새로 뜨므로
 `/tmp`에 두면 안 된다.
 
 ```bash
@@ -226,21 +226,21 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 '
 ```
 
-**마지막 줄이 원본을 되돌리는 것이 중요하다.** 안 되돌리면 다음 Task들이
+마지막 줄이 원본을 되돌리는 것이 중요하다. 안 되돌리면 다음 Task들이
 밸러스트가 든 initrd 위에서 돌고, 그 사실이 어디에도 안 적혀 있어 원인을
 찾기 어렵다.
 
 Expected: 두 줄. `RESULT orig: booted in Ns` 와 `RESULT ut: booted in Ms`.
 
-- [ ] **Step 5: 판정하고 기록한다**
+- [ ] Step 5: 판정하고 기록한다
 
 | 결과 | 무엇을 한다 |
 |---|---|
-| `ut`가 뜨고 `orig`보다 **10초 이내**로 느리다 | `gzip -6`을 유지한다. 아무것도 안 고친다 |
-| `ut`가 뜨는데 크게 느리다 | `zstd`로 바꾼다 — 압축이 작고 **푸는 것이 gzip보다 빠르다** |
-| `ut`가 **안 뜬다** | `xz`로 다시 Step 4를 돌린다. 그래도 안 뜨면 **여기서 멈추고 사용자에게 목록 축소를 묻는다** |
+| `ut`가 뜨고 `orig`보다 10초 이내로 느리다 | `gzip -6`을 유지한다. 아무것도 안 고친다 |
+| `ut`가 뜨는데 크게 느리다 | `zstd`로 바꾼다 — 압축이 작고 푸는 것이 gzip보다 빠르다 |
+| `ut`가 안 뜬다 | `xz`로 다시 Step 4를 돌린다. 그래도 안 뜨면 여기서 멈추고 사용자에게 목록 축소를 묻는다 |
 
-**`gzip -9`는 답이 아니다.** GL-M1이 이미 쟀다 — `-6`보다 1.3% 작아지자고
+`gzip -9`는 답이 아니다. GL-M1이 이미 쟀다 — `-6`보다 1.3% 작아지자고
 6.7초를 더 쓰고, 루트 게이트가 그 6.7초를 24회 치른다.
 
 치운다.
@@ -250,10 +250,10 @@ rm -rf ut-spike
 git status --short
 ```
 
-Expected: `git status --short`가 **비어 있다.** 이 Task는 저장소를 안 고친다 —
+Expected: `git status --short`가 비어 있다. 이 Task는 저장소를 안 고친다 —
 비어 있지 않으면 치우다 만 것이 있다.
 
-- [ ] **Step 6: 커밋하지 않는다**
+- [ ] Step 6: 커밋하지 않는다
 
 측정만 했다. 결과는 Task 6에서 design의 실측 절에 적는다.
 
@@ -261,12 +261,12 @@ Expected: `git status --short`가 **비어 있다.** 이 Task는 저장소를 �
 
 ## Task 1: `environ.zig` — 블록을 짓는 순수 함수
 
-**Files:**
+Files:
 - Create: `init/src/environ.zig`
 - Create: `init/src/environ_test.zig`
 - Modify: `init/build.zig`
 
-- [ ] **Step 1: 검사를 먼저 쓴다**
+- [ ] Step 1: 검사를 먼저 쓴다
 
 `init/src/environ_test.zig`:
 
@@ -367,9 +367,9 @@ pub fn main() !void {
 }
 ```
 
-- [ ] **Step 2: 검사를 build.zig에 엮는다**
+- [ ] Step 2: 검사를 build.zig에 엮는다
 
-`init/build.zig`의 `storage_test` 블록 **바로 뒤**에 넣을 것:
+`init/build.zig`의 `storage_test` 블록 바로 뒤에 넣을 것:
 
 ```zig
     // UT-M0: 커널 envp 블록에 PATH를 더하는 함수의 검사. storage_test와 같은
@@ -394,20 +394,20 @@ pub fn main() !void {
     test_step.dependOn(&b.addRunArtifact(environ_test).step);
 ```
 
-- [ ] **Step 3: 검사가 실패하는 것을 확인한다**
+- [ ] Step 3: 검사가 실패하는 것을 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
   bash -c 'zig build test' 2>&1 | tail -20
 ```
 
-Expected: **컴파일 에러**. `unable to load '.../src/environ.zig'` 또는
+Expected: 컴파일 에러. `unable to load '.../src/environ.zig'` 또는
 `import of file outside module path`. 아직 그 파일이 없다.
 
-**이것이 SH-M0 실측 2가 말한 "예측한 그 모양의 실패"다** — 부를 것이 없는
+이것이 SH-M0 실측 2가 말한 "예측한 그 모양의 실패"다 — 부를 것이 없는
 실패이지 뜻이 틀린 실패가 아니다.
 
-- [ ] **Step 4: `environ.zig`를 만든다**
+- [ ] Step 4: `environ.zig`를 만든다
 
 `init/src/environ.zig`:
 
@@ -470,7 +470,7 @@ pub fn withPath(
 }
 ```
 
-- [ ] **Step 5: 검사가 통과하는 것을 확인한다**
+- [ ] Step 5: 검사가 통과하는 것을 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
@@ -486,7 +486,7 @@ Expected: 다섯 줄이 `config_test:` · `power_test:` · `devices_test:` ·
 environ_test: PATH is appended to the kernel's block (16 slots)
 ```
 
-- [ ] **Step 6: 커밋**
+- [ ] Step 6: 커밋
 
 ```bash
 git add init/src/environ.zig init/src/environ_test.zig init/build.zig
@@ -497,10 +497,10 @@ git commit -m "Build the guest environment block instead of passing it through"
 
 ## Task 2: `main.zig`가 그 블록을 쓴다
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig:418` 부근 (envp를 잡는 자리)
 
-- [ ] **Step 1: import를 더한다**
+- [ ] Step 1: import를 더한다
 
 `init/src/main.zig`의 import 목록에서 `storage` 옆에 넣을 것:
 
@@ -511,9 +511,9 @@ const environ = @import("environ.zig");
 (`const config = @import("config.zig");` 같은 줄들이 파일 머리에 모여 있다.
 그 무리의 끝에 붙인다.)
 
-- [ ] **Step 2: envp를 잡는 두 줄을 바꾼다**
+- [ ] Step 2: envp를 잡는 두 줄을 바꾼다
 
-**지울 것** (`init/src/main.zig:416-418`):
+지울 것 (`init/src/main.zig:416-418`):
 
 ```zig
 pub fn main(init: std.process.Init.Minimal) void {
@@ -521,7 +521,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     const envp = init.environ.block.slice.ptr;
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 pub fn main(init: std.process.Init.Minimal) void {
@@ -536,13 +536,13 @@ pub fn main(init: std.process.Init.Minimal) void {
     const envp = environ.withPath(init.environ.block.slice.ptr, &env_buf);
 ```
 
-- [ ] **Step 3: 로그 한 줄을 더한다**
+- [ ] Step 3: 로그 한 줄을 더한다
 
-**시리얼 콘솔 셸은 관측할 수 없으므로**(design의 "시리얼 셸은 관측하지 않는다"
+시리얼 콘솔 셸은 관측할 수 없으므로(design의 "시리얼 셸은 관측하지 않는다"
 절) init이 무엇을 넘겼는지를 직접 찍는다. 이것이 게이트가 블록을 보는 유일한
 자리다.
 
-`std.debug.print("tars-init: starting as PID 1\n", .{});` **바로 뒤**에 넣을 것:
+`std.debug.print("tars-init: starting as PID 1\n", .{});` 바로 뒤에 넣을 것:
 
 ```zig
     // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
@@ -559,7 +559,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
 ```
 
-- [ ] **Step 4: 빌드가 되는지 확인한다**
+- [ ] Step 4: 빌드가 되는지 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
@@ -568,7 +568,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
 
 Expected: 에러 없음, 검사 다섯 통과.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add init/src/main.zig
@@ -579,19 +579,19 @@ git commit -m "Hand the children a PATH the kernel never gave us"
 
 ## Task 3: initrd에 뼈대 넷과 `ls` 하나
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh`
 
-- [ ] **Step 1: 디렉터리를 만드는 줄을 넓힌다**
+- [ ] Step 1: 디렉터리를 만드는 줄을 넓힌다
 
-**지울 것** (`kernel/make_initrd.sh:78-79`):
+지울 것 (`kernel/make_initrd.sh:78-79`):
 
 ```bash
 mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
          "$WORKDIR/config"
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 # UT-M0이 /bin · /tmp · /etc 셋을 더한다. 지금까지 없었고, 그 없음이 git에
@@ -610,9 +610,9 @@ mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
 chmod 1777 "$WORKDIR/tmp"
 ```
 
-- [ ] **Step 2: `ls`를 넣는다**
+- [ ] Step 2: `ls`를 넣는다
 
-`cp "$SYSROOT/usr/bin/sleep" ...` 줄 **바로 뒤**, `chmod 0755 ...` 줄 **앞**에
+`cp "$SYSROOT/usr/bin/sleep" ...` 줄 바로 뒤, `chmod 0755 ...` 줄 앞에
 넣을 것:
 
 ```bash
@@ -624,14 +624,14 @@ cp "$SYSROOT/usr/bin/ls" "$WORKDIR/usr/bin/ls"
 
 그리고 `chmod` 줄과 `copy_lib_deps` 줄에 `ls`를 더한다.
 
-**지울 것:**
+지울 것:
 
 ```bash
 chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
            "$WORKDIR/usr/bin/mkdir" "$WORKDIR/usr/bin/sleep"
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
@@ -639,13 +639,13 @@ chmod 0755 "$WORKDIR/usr/bin/cat" "$WORKDIR/usr/bin/uname" \
            "$WORKDIR/usr/bin/ls"
 ```
 
-**지울 것:**
+지울 것:
 
 ```bash
 copy_lib_deps "$WORKDIR/usr/bin/sleep"
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 copy_lib_deps "$WORKDIR/usr/bin/sleep"
@@ -654,9 +654,9 @@ copy_lib_deps "$WORKDIR/usr/bin/sleep"
 copy_lib_deps "$WORKDIR/usr/bin/ls"
 ```
 
-- [ ] **Step 3: `/bin/sh`와 `/etc`를 만든다**
+- [ ] Step 3: `/bin/sh`와 `/etc`를 만든다
 
-`copy_lib_deps` 무리 **바로 뒤**에 넣을 것:
+`copy_lib_deps` 무리 바로 뒤에 넣을 것:
 
 ```bash
 # /bin/sh는 **언제나 bash다.** tars.conf의 shell 설정과 무관하다 —
@@ -681,7 +681,7 @@ root:x:0:
 EOF
 ```
 
-- [ ] **Step 4: initrd를 만들고 눈으로 확인한다**
+- [ ] Step 4: initrd를 만들고 눈으로 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -706,7 +706,7 @@ Expected: 정확히 다섯 줄.
 
 (일곱 줄이다 — `./bin`과 `./etc`와 `./tmp` 디렉터리 셋이 함께 나온다.)
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add kernel/make_initrd.sh
@@ -717,11 +717,11 @@ git commit -m "Give the guest a /bin/sh, a /tmp, an /etc and one real ls"
 
 ## Task 4: 열한번째 체인 `tools/check.sh`
 
-**Files:**
+Files:
 - Create: `tools/check.sh`
 - Modify: `check.sh`
 
-- [ ] **Step 1: 체인을 만든다**
+- [ ] Step 1: 체인을 만든다
 
 `tools/check.sh`:
 
@@ -913,15 +913,15 @@ echo "PASS"
 exit 0
 ```
 
-- [ ] **Step 2: 실행 권한을 준다**
+- [ ] Step 2: 실행 권한을 준다
 
 ```bash
 chmod +x tools/check.sh
 ```
 
-- [ ] **Step 3: 체인을 단독으로 돌린다**
+- [ ] Step 3: 체인을 단독으로 돌린다
 
-**약 3~4분 걸린다**(커널 빌드가 캐시돼 있으면 1분 안).
+약 3~4분 걸린다(커널 빌드가 캐시돼 있으면 1분 안).
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -938,10 +938,10 @@ the shell resolved 'ls' through PATH
 PASS
 ```
 
-- [ ] **Step 4: 음성 확인 — 검사가 진짜인지 본다**
+- [ ] Step 4: 음성 확인 — 검사가 진짜인지 본다
 
-**초록이 "볼 것을 다 봤다"가 아니라는 것을 SH-M2가 겪었고, RM-M3은 초록이
-"내가 본 것"조차 아니었다.** 그러니 검사가 실패할 수 있는지 확인한다.
+초록이 "볼 것을 다 봤다"가 아니라는 것을 SH-M2가 겪었고, RM-M3은 초록이
+"내가 본 것"조차 아니었다. 그러니 검사가 실패할 수 있는지 확인한다.
 
 `init/src/main.zig`에서 `environ.withPath(...)` 를 잠시 옛 모양으로 되돌린다.
 
@@ -956,18 +956,18 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash tools/check.sh 2>&1 | tail -12
 ```
 
-Expected: **exit 1**, 그리고 검사 2에서 죽는다.
+Expected: exit 1, 그리고 검사 2에서 죽는다.
 
 ```
 FAIL: init never reported building an environment block with PATH
 ```
 
-**되돌린다.** `git checkout init/src/main.zig` 로 원상복구하고 Step 3을 다시
+되돌린다. `git checkout init/src/main.zig` 로 원상복구하고 Step 3을 다시
 돌려 `PASS`를 확인한 뒤에 진행한다.
 
-- [ ] **Step 5: 루트 게이트에 등록한다**
+- [ ] Step 5: 루트 게이트에 등록한다
 
-`check.sh`의 `CHAINS` 배열 **마지막 줄 뒤**에 넣을 것:
+`check.sh`의 `CHAINS` 배열 마지막 줄 뒤에 넣을 것:
 
 ```bash
   "UT-M0:./tools/check.sh"
@@ -989,14 +989,14 @@ FAIL: init never reported building an environment block with PATH
 # 회차당 부팅 1회라 총 부팅 횟수는 36회에서 39회가 된다.
 ```
 
-- [ ] **Step 6: 진입 검사가 새 체인을 받아들이는지 확인한다**
+- [ ] Step 6: 진입 검사가 새 체인을 받아들이는지 확인한다
 
 루트 게이트는 첫 부팅 전에 모든 체인이 `BUILD_STEPS` 넷을 부르는지 훑고,
-하나라도 없으면 **게이트를 시작조차 하지 않는다.** 20분을 쓰기 전에 그
+하나라도 없으면 게이트를 시작조차 하지 않는다. 20분을 쓰기 전에 그
 부분만 본다.
 
-**`check.sh`를 source하면 안 된다** — 게이트가 통째로 돌아 버린다. 진입
-검사가 보는 것과 **같은 것을 손으로** 본다(주석 줄은 세지 않는다).
+`check.sh`를 source하면 안 된다 — 게이트가 통째로 돌아 버린다. 진입
+검사가 보는 것과 같은 것을 손으로 본다(주석 줄은 세지 않는다).
 
 ```bash
 body="$(grep -vE '^[[:space:]]*#' tools/check.sh)"
@@ -1012,7 +1012,7 @@ done
 Expected: 네 줄 다 `ok`. 하나라도 `MISSING`이면 `tools/check.sh`의 빌드
 단계를 그 문자열 그대로 맞춰 고친다.
 
-- [ ] **Step 7: 커밋**
+- [ ] Step 7: 커밋
 
 ```bash
 git add tools/check.sh check.sh
@@ -1023,35 +1023,35 @@ git commit -m "Watch the guest find a command by name for the first time"
 
 ## Task 5: 루트 게이트 3/3
 
-- [ ] **Step 1: 게이트를 백그라운드로 돌린다**
+- [ ] Step 1: 게이트를 백그라운드로 돌린다
 
-**약 22~25분 걸린다.** Bash 도구의 타임아웃 상한이 10분이라 **반드시
-백그라운드로** 돌린다 — 넘겨 주면 잘려서 exit 143이 된다.
+약 22~25분 걸린다. Bash 도구의 타임아웃 상한이 10분이라 반드시
+백그라운드로 돌린다 — 넘겨 주면 잘려서 exit 143이 된다.
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 ```
 
-- [ ] **Step 2: 결과를 본다**
+- [ ] Step 2: 결과를 본다
 
 ```bash
 tail -5 /tmp/gate.log; echo "--- 시간 ---"; cat /tmp/gate.time
 grep -c '^=== .* run [0-9]/3 ===$' /tmp/gate.log
 ```
 
-Expected: `/tmp/gate.log`의 마지막이 게이트의 통과 메시지, `run` 줄이 **33개**
+Expected: `/tmp/gate.log`의 마지막이 게이트의 통과 메시지, `run` 줄이 33개
 (체인 11 × 3회).
 
-- [ ] **Step 3: 시간을 기록한다**
+- [ ] Step 3: 시간을 기록한다
 
-`real` 값을 적어 둔다. **착수 전 기준선은 20분 29.84초**(RM-M3 시점)다.
+`real` 값을 적어 둔다. 착수 전 기준선은 20분 29.84초(RM-M3 시점)다.
 차이를 Task 6에서 design과 HANDOFF에 남긴다 — design 위험 2가 "언제부터
 느려졌나를 캘 수 있게 남긴다"고 적은 자리다.
 
-- [ ] **Step 4: 실패하면**
+- [ ] Step 4: 실패하면
 
-체인 이름과 회차를 보고 **그 체인만** 단독으로 다시 돌린다. 루트 게이트를
+체인 이름과 회차를 보고 그 체인만 단독으로 다시 돌린다. 루트 게이트를
 반복해서 돌리지 않는다(회당 20분이 넘는다).
 
 ```bash
@@ -1059,7 +1059,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash <실패한 체인>/check.sh 2>&1 | tail -40
 ```
 
-**`PATH`가 생기면서 흔들릴 수 있는 것이 셸의 명령 완성과 해시**다
+`PATH`가 생기면서 흔들릴 수 있는 것이 셸의 명령 완성과 해시다
 (design 위험 4). 열 체인이 전부 절대 경로를 쓰므로 흔들릴 이유가 없지만,
 흔들렸다면 그 체인의 어느 줄이 갈렸는지를 먼저 본다.
 
@@ -1067,51 +1067,51 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 ## Task 6: 문서를 닫는다
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md`
 - Modify: `HANDOFF.md`
 - Modify: `MEMORY.md`
 - Create: `docs/decisions/project_userland_tools.md`
 - Modify: `docs/decisions/project_guest_environment.md`
 
-- [ ] **Step 1: design에 실측 절을 더한다**
+- [ ] Step 1: design에 실측 절을 더한다
 
 design 끝에 `## UT-M0이 실행으로 증명한 것 — **다시 조사하지 말 것**`을
 만들고 담을 것:
 
-1. **Task 0의 세 숫자**(gzip · zstd · xz의 크기와 시간)와 **부팅 시간
-   둘**(`orig` 대 `ut`). 위험 1이 참이었는지 거짓이었는지가 여기서 갈린다.
-2. 어느 압축기를 골랐고 **왜**인가.
+1. Task 0의 세 숫자(gzip · zstd · xz의 크기와 시간)와 부팅 시간
+   둘(`orig` 대 `ut`). 위험 1이 참이었는지 거짓이었는지가 여기서 갈린다.
+2. 어느 압축기를 골랐고 왜인가.
 3. `environ_test`가 실패한 모양(컴파일 에러였는지 런타임이었는지).
-4. Task 4 Step 4의 **음성 확인** 결과.
+4. Task 4 Step 4의 음성 확인 결과.
 5. 게이트 시간(11 체인 3/3)과 기준선 20분 29.84초와의 차이.
 
-그리고 `**Status:**` 줄을 고친다 — **"설계 완료 — 착수 전"**에서
-**"진행 중 — UT-M0 완료"**로.
+그리고 `**Status:**` 줄을 고친다 — "설계 완료 — 착수 전"에서
+"진행 중 — UT-M0 완료"로.
 
-- [ ] **Step 2: `project_guest_environment.md`의 "결과 1"을 닫는다**
+- [ ] Step 2: `project_guest_environment.md`의 "결과 1"을 닫는다
 
-그 문서의 `## 결과 1: PATH가 없다` 절이 **더 이상 참이 아니다.** 절을 지우지
+그 문서의 `## 결과 1: PATH가 없다` 절이 더 이상 참이 아니다. 절을 지우지
 말고 `## 결과 2`가 `TERM`에 대해 한 것과 같은 모양으로 닫는다 — 제목을
 `## 결과 1: PATH가 없었다 — UT-M0(2026-09-10)에 고쳤다`로 바꾸고, 아래에
-무엇이 바뀌었는지와 **`How to apply:` 줄**을 함께 고친다.
+무엇이 바뀌었는지와 `How to apply:` 줄을 함께 고친다.
 
-**이 단계를 빼먹으면 다음 세션이 "PATH가 없다"를 사실로 읽는다.** TR-M0이
+이 단계를 빼먹으면 다음 세션이 "PATH가 없다"를 사실로 읽는다. TR-M0이
 `TERM`을 바꾸고 initrd를 안 따라가게 둔 것과 같은 종류의 사고다.
 
-- [ ] **Step 3: 새 기억을 만든다**
+- [ ] Step 3: 새 기억을 만든다
 
 `docs/decisions/project_userland_tools.md`를 만들고 `MEMORY.md`에 한 줄
-더한다. 담을 것은 **다음 세션이 다시 캐지 않아야 할 것**이다 —
+더한다. 담을 것은 다음 세션이 다시 캐지 않아야 할 것이다 —
 `libgit2` 사슬 15개 11.4MB · git의 네트워크 헬퍼 일곱 · `fdfind`/`batcat`
 이름 · 셸이 무조건 no-config라 zoxide/fzf가 못 붙는다는 것.
 
-- [ ] **Step 4: HANDOFF을 갱신한다**
+- [ ] Step 4: HANDOFF을 갱신한다
 
-머리를 `# HANDOFF: Userland Tools UT-M0 — 통로가 열렸다`로 바꾸고 **지금
-어디인가 · UT-M0의 커밋들 · 바로 다음에 할 것(UT-M1) · 게이트 시간**을 적는다.
+머리를 `# HANDOFF: Userland Tools UT-M0 — 통로가 열렸다`로 바꾸고 지금
+어디인가 · UT-M0의 커밋들 · 바로 다음에 할 것(UT-M1) · 게이트 시간을 적는다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md \
@@ -1127,9 +1127,9 @@ git commit -m "Close UT-M0 with PATH standing and the size question answered"
 
 | 함정 | 어디서 잡히나 |
 |---|---|
-| fish에서 `$PATH`는 **리스트**라 `echo $PATH`가 `/usr/bin /bin`을 낸다(콜론이 아니다) | 그래서 값 검사를 셸이 아니라 `tars-init: env` 줄로 한다(검사 2) |
-| `ls`를 넣고 `copy_lib_deps`를 빼먹기 | 게스트가 `ls`를 처음 칠 때 드러난다 — 검사 3이 그 자리다. **UT-M1의 결정 7이 이 실수를 구조적으로 없앤다** |
-| Task 0의 밸러스트를 난수나 0으로 채우기 | 압축률이 실제와 달라 **답이 통째로 틀린다.** Step 2가 진짜 바이너리를 쓴다 |
+| fish에서 `$PATH`는 리스트라 `echo $PATH`가 `/usr/bin /bin`을 낸다(콜론이 아니다) | 그래서 값 검사를 셸이 아니라 `tars-init: env` 줄로 한다(검사 2) |
+| `ls`를 넣고 `copy_lib_deps`를 빼먹기 | 게스트가 `ls`를 처음 칠 때 드러난다 — 검사 3이 그 자리다. UT-M1의 결정 7이 이 실수를 구조적으로 없앤다 |
+| Task 0의 밸러스트를 난수나 0으로 채우기 | 압축률이 실제와 달라 답이 통째로 틀린다. Step 2가 진짜 바이너리를 쓴다 |
 | `git-core`의 네트워크 헬퍼를 스파이크에 넣기 | 16MB를 과대 계상한다. Step 2의 목록이 `git` 하나만 복사한다 |
 | 게이트를 포그라운드로 돌리기 | 10분에 잘려 exit 143 |
 | `project_guest_environment`를 안 고치기 | Task 6 Step 2 |

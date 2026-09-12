@@ -1,39 +1,39 @@
 # SH-M1 Implementation Plan — 칠 수 있다 (화면은 아직 깨져 보인다)
 
-> **실행 방식은 `CLAUDE.md`를 따른다.** 설명 먼저 → 명령 실행은 Claude Code가
+> 실행 방식은 `CLAUDE.md`를 따른다. 설명 먼저 → 명령 실행은 Claude Code가
 > → 결과를 상세히 설명. 승인 뒤의 `git commit`도 Claude Code가 만든다.
-> **이번 세션에 한해 편집도 Claude Code가 한다** — 사용자가 2026-09-09에
+> 이번 세션에 한해 편집도 Claude Code가 한다 — 사용자가 2026-09-09에
 > "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다. 다음 세션은 다시
 > 기본 규칙(사용자가 편집)으로 돌아간다.
 
-**Goal:** `/` 프롬프트에서 자모 키가 needle의 한글이 된다. `Enter`가 확정하고
+Goal: `/` 프롬프트에서 자모 키가 needle의 한글이 된다. `Enter`가 확정하고
 제출하며, `Esc`는 조합만 버리고, `Backspace`는 조합 중이면 자모 하나를 뺀다.
 
-**Architecture:** find 분기가 `hangulLayer`를 **부른다**(다시 적지 않는다).
-확정된 음절은 HI-M1이 만든 `commit_buf` 통로를 타고, **`readKeys`가 모드를
-보고 목적지를 가른다** — 셸이냐 needle이냐.
+Architecture: find 분기가 `hangulLayer`를 부른다(다시 적지 않는다).
+확정된 음절은 HI-M1이 만든 `commit_buf` 통로를 타고, `readKeys`가 모드를
+보고 목적지를 가른다 — 셸이냐 needle이냐.
 
-**Tech Stack:** Zig · `terminal/src/input.zig` · `terminal/src/input_test.zig` ·
+Tech Stack: Zig · `terminal/src/input.zig` · `terminal/src/input_test.zig` ·
 `terminal/src/main.zig` · `hangul/check.sh` · 컨테이너 안의 `zig build test`
 
 ---
 
-## 이 milestone이 끝난 뒤에 무엇이 보이는가 — **깨져 보인다**
+## 이 milestone이 끝난 뒤에 무엇이 보이는가 — 깨져 보인다
 
-**의도된 중간 상태다.** `drawPrompt`가 아직 바이트 하나를 글자 하나로 세므로
-(`main.zig:138`) needle의 `가`는 **글리프 셋**으로 그려지고 뒤 칸이 두 칸씩
-밀린다. 그리고 조합 중인 글자는 **아예 안 보인다** — preedit은 격자 안에
+의도된 중간 상태다. `drawPrompt`가 아직 바이트 하나를 글자 하나로 세므로
+(`main.zig:138`) needle의 `가`는 글리프 셋으로 그려지고 뒤 칸이 두 칸씩
+밀린다. 그리고 조합 중인 글자는 아예 안 보인다 — preedit은 격자 안에
 그려지는데 copy mode에서는 `cells()`가 그것을 억제하기 때문이다(`vt_test`
 검사 47).
 
-**검색은 맞는 결과를 낸다.** 게이트가 그 갈림을 정확히 밟는다 —
+검색은 맞는 결과를 낸다. 게이트가 그 갈림을 정확히 밟는다 —
 `find> submit matches=N`은 초록인데 `find> overlay text=`의 글자는 화면에서
-깨진다. **그 갈림이 SH-M2의 경계를 그린다.**
+깨진다. 그 갈림이 SH-M2의 경계를 그린다.
 
 ## SH-M0이 놓아 둔 것
 
 `findBytes`가 "통째로 받거나 거절한다"이고 `findErase`가 UTF-8 한 글자를
-지운다. **부르는 자리가 `vt_test`뿐이었고**, 이 milestone이 그 자리에
+지운다. 부르는 자리가 `vt_test`뿐이었고, 이 milestone이 그 자리에
 `main.zig`를 잇는다.
 
 ## 데이터 흐름 — 갈래가 나는 자리는 하나다
@@ -50,48 +50,48 @@
                                                   → main.zig → findBytes
 ```
 
-**`readKeys`가 모드를 앞에서 읽어야 하는 이유가 이 milestone의 함정이다.**
+`readKeys`가 모드를 앞에서 읽어야 하는 이유가 이 milestone의 함정이다.
 `Enter`가 `.find` → `.copy`로 모드를 바꾸므로, 뒤에서 읽으면 마지막 음절이
-needle이 아니라 **셸로 샌다.** 증상은 "검색어의 마지막 글자가 빠지고 셸에
+needle이 아니라 셸로 샌다. 증상은 "검색어의 마지막 글자가 빠지고 셸에
 이상한 글자가 남는다"이고 원인에서 멀다(design 위험 1).
 
 ## 파일 구조
 
 | 파일 | 무엇 |
 |---|---|
-| `terminal/src/input.zig` | `commit_buf`를 여덟 바이트로 · `pushCommit`이 **이어 붙인다** · find 분기가 `hangulLayer`를 부른다 · `Copy.find_commit` · `readKeys`의 목적지 갈래 |
-| `terminal/src/input_test.zig` | 검사 49~56. **마지막이 `readKeys`를 파이프로 직접 돌리는 검사**이고, 그것만이 결정 5를 정면으로 본다 |
+| `terminal/src/input.zig` | `commit_buf`를 여덟 바이트로 · `pushCommit`이 이어 붙인다 · find 분기가 `hangulLayer`를 부른다 · `Copy.find_commit` · `readKeys`의 목적지 갈래 |
+| `terminal/src/input_test.zig` | 검사 49~56. 마지막이 `readKeys`를 파이프로 직접 돌리는 검사이고, 그것만이 결정 5를 정면으로 본다 |
 | `terminal/src/main.zig` | `.find_commit` 배선 한 자리(`screen.findBytes`) |
 | `hangul/check.sh` | 검사 18 — 게스트에서 `/` → `kf` → `Enter` |
 
-**안 건드리는 파일.** `vt.zig`는 SH-M0이 끝냈고 이 milestone이 한 글자도 안
-바꾼다. `hangul.zig`도 그대로다 — **조합 로직은 한 벌뿐이고 우리는 그것을
-부를 뿐이다**(design 결정 4).
+안 건드리는 파일. `vt.zig`는 SH-M0이 끝냈고 이 milestone이 한 글자도 안
+바꾼다. `hangul.zig`도 그대로다 — 조합 로직은 한 벌뿐이고 우리는 그것을
+부를 뿐이다(design 결정 4).
 
 ---
 
 ## Task 1: find 분기가 `hangulLayer`를 부른다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `commit_buf`/`pushCommit`/find 분기
 - Test: `terminal/src/input_test.zig` — 검사 49~55
 
-- [ ] **Step 1: 실패하는 검사를 넣는다 (검사 49~55)**
+- [ ] Step 1: 실패하는 검사를 넣는다 (검사 49~55)
 
-`input_test.zig`의 마지막 검사(48) 뒤, `PASS` 앞에 넣는다. **새 `State`를
-따로 만든다** — 위쪽 `hg`는 두벌식이고 tap 상태가 잔뜩 묻어 있다.
+`input_test.zig`의 마지막 검사(48) 뒤, `PASS` 앞에 넣는다. 새 `State`를
+따로 만든다 — 위쪽 `hg`는 두벌식이고 tap 상태가 잔뜩 묻어 있다.
 
 검사 일곱이 보는 것.
 
 | 검사 | 무엇 | 왜 |
 |---|---|---|
-| 49 | **한글이 꺼진 프롬프트는 한 글자도 안 바뀐다** | 회귀. 이것이 없으면 아래 여섯이 "한글이 되는가"만 보고 ASCII가 깨진 것을 아무도 모른다 |
-| 50 | 프롬프트 안에서 `Shift+Space`가 한/영을 켠다 | 결정 1. 프롬프트가 상태를 물려받으므로 **안에서도 바꿀 수 있어야** 한다 |
+| 49 | 한글이 꺼진 프롬프트는 한 글자도 안 바뀐다 | 회귀. 이것이 없으면 아래 여섯이 "한글이 되는가"만 보고 ASCII가 깨진 것을 아무도 모른다 |
+| 50 | 프롬프트 안에서 `Shift+Space`가 한/영을 켠다 | 결정 1. 프롬프트가 상태를 물려받으므로 안에서도 바꿀 수 있어야 한다 |
 | 51 | 자모 키가 `.redraw`이고 조합이 자란다 | 배선. `find_char`로 새면 needle이 `gks`가 된다 |
 | 52 | `Backspace` 두 갈래 | 조합 중이면 자모 하나, 아니면 `.find_erase` |
-| 53 | `Esc`가 **조합만** 버린다 | 결정 3. 프롬프트가 살아 있고 모드가 `.find` 그대로다 |
-| 54 | `Enter`가 확정하고 제출한다 | 결정 3. `.find_submit`과 `commit`이 **함께** 나온다 |
-| 55 | 세벌식 기호 되돌림이 음절과 기호를 **둘 다** 싣는다 | 결정 6. `commit_buf`를 넓히는 유일한 이유 |
+| 53 | `Esc`가 조합만 버린다 | 결정 3. 프롬프트가 살아 있고 모드가 `.find` 그대로다 |
+| 54 | `Enter`가 확정하고 제출한다 | 결정 3. `.find_submit`과 `commit`이 함께 나온다 |
+| 55 | 세벌식 기호 되돌림이 음절과 기호를 둘 다 싣는다 | 결정 6. `commit_buf`를 넓히는 유일한 이유 |
 
 ```zig
 
@@ -209,28 +209,28 @@ needle이 아니라 **셸로 샌다.** 증상은 "검색어의 마지막 글자�
     std.debug.print("input_test: 검색 프롬프트의 한글 OK\n", .{});
 ```
 
-**`expectHangul`이 확정분까지 본다는 것이 여기서 값을 한다** — 그 헬퍼가
+`expectHangul`이 확정분까지 본다는 것이 여기서 값을 한다 — 그 헬퍼가
 `.redraw`가 아닌 것(`.bytes`·`.copy`·`.scroll`)을 전부 실패로 만들고, 이어서
 `expectCommit`·`expectPreedit`을 부른다.
 
-- [ ] **Step 2: 돌려서 실패를 확인한다**
+- [ ] Step 2: 돌려서 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'
 ```
 
-**기대: 런타임 실패다.** 부를 함수는 다 있고 동작만 없다. 첫 실패는 검사
+기대: 런타임 실패다. 부를 함수는 다 있고 동작만 없다. 첫 실패는 검사
 51에서 나야 한다 — 자모 키가 아직 `.find_char`이므로 `expectHangul`이
 "got copy .find_char, want hangul"으로 죽는다.
 
-**검사 49·50이 먼저 통과하는 것을 함께 본다.** 49는 지금 코드가 이미 하는
-일이고, 50이 통과하는 것은 **의외가 아니다** — `handleKey`의 find 분기가
+검사 49·50이 먼저 통과하는 것을 함께 본다. 49는 지금 코드가 이미 하는
+일이고, 50이 통과하는 것은 의외가 아니다 — `handleKey`의 find 분기가
 `hangulLayer`를 안 부르지만, `Shift+Space`는 `KEY_SPACE`라 find 분기의 `else`
-갈래로 가서... **가 아니다.** 지금은 `.find_char = ' '`가 되므로 50도
+갈래로 가서... 가 아니다. 지금은 `.find_char = ' '`가 되므로 50도
 실패한다. 실패 둘 중 앞의 것(50)이 먼저 보인다.
 
-- [ ] **Step 3: `commit_buf`를 넓히고 `pushCommit`을 이어 붙이게 한다**
+- [ ] Step 3: `commit_buf`를 넓히고 `pushCommit`을 이어 붙이게 한다
 
 `terminal/src/input.zig`에서 이 두 줄을 찾는다.
 
@@ -255,7 +255,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
     commit_len: usize = 0,
 ```
 
-`pushCommit`을 **이어 붙이게** 바꾼다. 지울 것:
+`pushCommit`을 이어 붙이게 바꾼다. 지울 것:
 
 ```zig
     fn pushCommit(self: *State, cp: u21) void {
@@ -289,13 +289,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
     }
 ```
 
-**`commit_len`을 0으로 되돌리는 자리는 여전히 `takeCommit` 하나다.** 한 키가
+`commit_len`을 0으로 되돌리는 자리는 여전히 `takeCommit` 하나다. 한 키가
 끝날 때마다 `readKeys`가 비우므로 키를 건너 쌓이지 않는다.
 
-- [ ] **Step 4: find 분기가 `hangulLayer`를 부르게 한다**
+- [ ] Step 4: find 분기가 `hangulLayer`를 부르게 한다
 
 `input.zig`의 find 분기(`if (self.mode == .find) {`)의 `switch` 전체를 아래로
-바꾼다. **지울 것은 `switch (code) { c.KEY_ESC => ... } }` 열여덟 줄이다**
+바꾼다. 지울 것은 `switch (code) { c.KEY_ESC => ... } }` 열여덟 줄이다
 (`c.KEY_ESC`부터 `}` 둘까지).
 
 ```zig
@@ -356,27 +356,27 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
         }
 ```
 
-**`Backspace`가 아래로 내려간 것에 뜻이 있다.** 조합 중이면 `hangulLayer`가
+`Backspace`가 아래로 내려간 것에 뜻이 있다. 조합 중이면 `hangulLayer`가
 자모를 하나 빼고 `.redraw`를 돌려주므로 여기 안 온다 — 갈래를 가르는 조건이
 find 분기에 안 생기고 `hangul.erase`의 null 하나가 그 일을 한다.
 
-- [ ] **Step 5: 돌려서 통과를 확인한다**
+- [ ] Step 5: 돌려서 통과를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'
 ```
 
-**기대: 새 줄 하나가 뜨고 마지막이 `PASS`다.**
+기대: 새 줄 하나가 뜨고 마지막이 `PASS`다.
 
 ```
 input_test: 검색 프롬프트의 한글 OK
 ```
 
-**옛 검사 17~23이 그대로 통과하는 것을 함께 본다** (`input_test: copy mode
+옛 검사 17~23이 그대로 통과하는 것을 함께 본다 (`input_test: copy mode
 OK`). 한글이 꺼진 프롬프트가 한 글자도 안 바뀌었다는 증거다.
 
-- [ ] **Step 6: commit** — Claude Code가 만든다.
+- [ ] Step 6: commit — Claude Code가 만든다.
 
 ```bash
 git add terminal/src/input.zig terminal/src/input_test.zig
@@ -387,25 +387,25 @@ git commit -m "Let the search prompt compose hangul through the one hangul layer
 
 ## Task 2: 확정된 음절이 셸이 아니라 needle로 간다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `Copy.find_commit` · `readKeys`
 - Modify: `terminal/src/main.zig` — 배선 한 자리
 - Test: `terminal/src/input_test.zig` — 검사 56
 
-- [ ] **Step 1: 실패하는 검사를 넣는다 (검사 56)**
+- [ ] Step 1: 실패하는 검사를 넣는다 (검사 56)
 
-**이 검사만이 결정 5를 정면으로 본다.** `handleKey`를 아무리 봐도 "모드를
+이 검사만이 결정 5를 정면으로 본다. `handleKey`를 아무리 봐도 "모드를
 언제 읽는가"는 안 보인다 — 그것은 `readKeys`의 두 줄 사이에 있는 사실이다.
 
-**`readKeys`는 fd를 받으므로 파이프를 판다.** 컨테이너가 리눅스이고
+`readKeys`는 fd를 받으므로 파이프를 판다. 컨테이너가 리눅스이고
 `input_test`가 이미 `link_libc`라(`@cImport("linux/input.h")` 때문) libc의
 `pipe`·`write`·`close`를 직접 선언해서 쓴다.
 
-**`std.posix.pipe`를 안 쓰는 것은 취향이 아니라 사실이다** — Zig 0.16의
-`std.posix`에는 `pipe`도 `write`도 `close`도 **없다**(컨테이너의
+`std.posix.pipe`를 안 쓰는 것은 취향이 아니라 사실이다 — Zig 0.16의
+`std.posix`에는 `pipe`도 `write`도 `close`도 없다(컨테이너의
 `lib/std/posix.zig`를 직접 확인했다). I/O가 `std.Io`로 옮겨 갔고, 남은 길이
-`std.c`이거나 직접 선언이다. **`input.zig`가 `read`와 `open`을 이미 그렇게
-선언해 두었으므로**(그 파일의 `extern "c" fn read` 주석) 같은 모양을 쓴다.
+`std.c`이거나 직접 선언이다. `input.zig`가 `read`와 `open`을 이미 그렇게
+선언해 두었으므로(그 파일의 `extern "c" fn read` 주석) 같은 모양을 쓴다.
 
 ```zig
 
@@ -562,15 +562,15 @@ fn feedEvents(evs: []const input.c.struct_input_event) ![2]c_int {
 }
 ```
 
-- [ ] **Step 2: 돌려서 실패를 확인한다**
+- [ ] Step 2: 돌려서 실패를 확인한다
 
-**기대: 컴파일 에러다.** `.find_commit`이 아직 없다.
+기대: 컴파일 에러다. `.find_commit`이 아직 없다.
 
 ```
 error: no field named 'find_commit' in union 'input.Copy'
 ```
 
-- [ ] **Step 3: `Copy.find_commit`과 `readKeys`의 갈래**
+- [ ] Step 3: `Copy.find_commit`과 `readKeys`의 갈래
 
 `input.zig`의 `Copy` union에서 `find_submit` 뒤에 넣는다.
 
@@ -668,11 +668,11 @@ error: no field named 'find_commit' in union 'input.Copy'
         }
 ```
 
-- [ ] **Step 4: `main.zig`를 배선한다**
+- [ ] Step 4: `main.zig`를 배선한다
 
-Step 3 뒤에 빌드하면 **`main.zig`가 컴파일 에러**다 — copy 명령 switch가
+Step 3 뒤에 빌드하면 `main.zig`가 컴파일 에러다 — copy 명령 switch가
 `else` 없이 닫혀 있어서 컴파일러가 배선할 자리를 알려준다(CM-M0부터의 규율).
-`.find_submit` 갈래 **앞**에 넣는다.
+`.find_submit` 갈래 앞에 넣는다.
 
 ```zig
                     // 확정된 한글이 needle로 들어간다(SH-M1). **`findChar`가
@@ -684,24 +684,24 @@ Step 3 뒤에 빌드하면 **`main.zig`가 컴파일 에러**다 — copy 명령
                     },
 ```
 
-**`dumpFind`가 `find> commit needle=... len=N`을 찍는다.** 게이트가 "확정분이
+`dumpFind`가 `find> commit needle=... len=N`을 찍는다. 게이트가 "확정분이
 needle에 닿았다"를 볼 유일한 창구이고, 문구가 `hangul/check.sh`와 중복되므로
-**한쪽을 고치면 다른 쪽도 고쳐야 한다**(그 함수의 주석과 같은 계약이다).
+한쪽을 고치면 다른 쪽도 고쳐야 한다(그 함수의 주석과 같은 계약이다).
 
-- [ ] **Step 5: 돌려서 통과를 확인한다**
+- [ ] Step 5: 돌려서 통과를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build test'
 ```
 
-**기대: 새 줄 하나가 더 뜨고 마지막이 `PASS`다.**
+기대: 새 줄 하나가 더 뜨고 마지막이 `PASS`다.
 
 ```
 input_test: 확정된 음절이 모드를 따라 갈린다 OK
 ```
 
-- [ ] **Step 6: commit**
+- [ ] Step 6: commit
 
 ```bash
 git add terminal/src/input.zig terminal/src/input_test.zig terminal/src/main.zig
@@ -712,18 +712,18 @@ git commit -m "Route a committed syllable to the needle while the prompt is open
 
 ## Task 3: 게이트가 게스트에서 한글로 검색한다
 
-**Files:**
+Files:
 - Modify: `hangul/check.sh` — 검사 18
 
-**왜 `hangul/check.sh`인가.** `copy/check.sh`가 아니라 이쪽인 이유는 **이
-체인만 `hangul_layout=sebeol_3p3`을 심은 디스크를 물기 때문이다**(design).
+왜 `hangul/check.sh`인가. `copy/check.sh`가 아니라 이쪽인 이유는 이
+체인만 `hangul_layout=sebeol_3p3`을 심은 디스크를 물기 때문이다(design).
 기본값으로 도는 체인에서 검사하면 자판에 대해 아무 말도 못 한다.
 
-**검사 17이 끝난 자리를 그대로 쓴다** — 화면에 `가 `가 있고(ctrl-l로 지운
-뒤라 깨끗하다) 한글이 **켜져 있다**(검사 15가 켰고 16이 그대로 뒀다).
-**한글이 켜진 채로 프롬프트가 열리는 것 자체가 결정 1의 검사다.**
+검사 17이 끝난 자리를 그대로 쓴다 — 화면에 `가 `가 있고(ctrl-l로 지운
+뒤라 깨끗하다) 한글이 켜져 있다(검사 15가 켰고 16이 그대로 뒀다).
+한글이 켜진 채로 프롬프트가 열리는 것 자체가 결정 1의 검사다.
 
-- [ ] **Step 1: 검사 18을 넣는다**
+- [ ] Step 1: 검사 18을 넣는다
 
 `hangul/check.sh`의 맨 끝(`echo "HI check PASS"` 앞)에 넣는다.
 
@@ -791,9 +791,9 @@ fi
 echo "the search prompt composed 가 and found ${MATCHES} match(es) without leaking to the shell"
 ```
 
-- [ ] **Step 2: 이 체인만 한 번 돌린다**
+- [ ] Step 2: 이 체인만 한 번 돌린다
 
-**게이트 전체(18분)에 가기 전에 이 체인 하나(2분쯤)를 먼저 돌린다.**
+게이트 전체(18분)에 가기 전에 이 체인 하나(2분쯤)를 먼저 돌린다.
 HI-M3 실측 2가 세운 규율이다 — 실패했을 때 의심할 것이 새 검사 하나뿐이다.
 
 ```bash
@@ -801,13 +801,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash hangul/check.sh
 ```
 
-**기대: 마지막 줄이 `HI check PASS`이고, 그 앞에 새 줄이 하나 있다.**
+기대: 마지막 줄이 `HI check PASS`이고, 그 앞에 새 줄이 하나 있다.
 
 ```
 the search prompt composed 가 and found N match(es) without leaking to the shell
 ```
 
-- [ ] **Step 3: commit**
+- [ ] Step 3: commit
 
 ```bash
 git add hangul/check.sh
@@ -818,12 +818,12 @@ git commit -m "Check that the search prompt types hangul inside the guest"
 
 ## Task 4: 루트 게이트 3/3
 
-**Files:** 없다. 확인만 한다.
+Files: 없다. 확인만 한다.
 
-- [ ] **Step 1: 게이트를 돌린다**
+- [ ] Step 1: 게이트를 돌린다
 
-**컨테이너 안에서 돌려야 한다.** SH-M0의 plan이 `time ./check.sh`라고 적어
-호스트에서 돌렸다가 **macOS의 make 3.81이 커널 Makefile에 거절당했다**
+컨테이너 안에서 돌려야 한다. SH-M0의 plan이 `time ./check.sh`라고 적어
+호스트에서 돌렸다가 macOS의 make 3.81이 커널 Makefile에 거절당했다
 (`GNU Make >= 4.0 is required`). 체인들은 `nproc`과 GNU make를 전제한다.
 
 ```bash
@@ -831,11 +831,11 @@ git commit -m "Check that the search prompt types hangul inside the guest"
   bash check.sh ; } 2> /tmp/sh-m1.time
 ```
 
-**기대: `TARS check PASS: all chains 3/3 consecutive runs succeeded`.**
-기준선은 SH-M0의 실측값이고, 이 milestone은 키 넷을 더 보내므로 **몇 초쯤
-늘어나는 것이 설명된다**(HI-M3이 검사 하나에 7~16초를 봤다).
+기대: `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
+기준선은 SH-M0의 실측값이고, 이 milestone은 키 넷을 더 보내므로 몇 초쯤
+늘어나는 것이 설명된다(HI-M3이 검사 하나에 7~16초를 봤다).
 
-- [ ] **Step 2: HANDOFF와 design을 고치고 커밋한다**
+- [ ] Step 2: HANDOFF와 design을 고치고 커밋한다
 
 design의 SH-M1 절에 "SH-M1이 실측한 것"을 더한다.
 
@@ -846,7 +846,7 @@ git commit -m "Close out SH-M1 with hangul reaching the search needle"
 
 ---
 
-## 이 milestone이 **안 하는** 것
+## 이 milestone이 안 하는 것
 
 | 안 하는 것 | 어디로 |
 |---|---|
@@ -859,8 +859,8 @@ git commit -m "Close out SH-M1 with hangul reaching the search needle"
 
 | # | 위험 | 처방 |
 |---|---|---|
-| 1 | **`readKeys`가 모드를 뒤에서 읽는다**(design 위험 1). `Enter`에서만 터지고 증상이 "마지막 글자가 빠진다"라 원인에서 멀다 | 검사 56이 `keys.bytes.len != 0`으로 정면으로 본다. **그 한 줄이 판정 전부다** |
-| 2 | ~~`std.posix.pipe()`가 Zig 0.16에 없다~~ **착수 전에 확인해서 없앴다** — 컨테이너의 `lib/std/posix.zig`에 `pipe`·`write`·`close`가 하나도 없다. 처방은 libc 직접 선언이고 `input.zig`가 이미 쓰는 방법이다 | 그래도 남는 위험은 파이프 write가 쪼개지는 것인데, 96바이트는 `PIPE_BUF` 4096 안이라 원자적이다 |
-| 3 | `Copy`에 payload가 붙어 `std.meta.eql` 비교가 쓰레기를 본다 | `Commit.buf`를 0으로 채운다. **`undefined`로 두면 `expectCopy`가 무작위로 실패한다** |
-| 4 | **`.bytes` 갈래를 `appendCommit` 대신 그대로 돌려준다.** 세벌식에서만 터지고 두벌식 검사는 전부 초록이다 | 검사 55가 `sebeol_3p3`으로 그 자리를 본다. `expectHangul`이 `.bytes`를 실패로 취급하는 것이 잡는다 |
-| 5 | 게이트의 `type_keys`가 로그가 안 자라 0.3초씩 기다린다 | 자모 키는 `.redraw`를 만들고 `dumpHangul`이 `hangul>` 줄을 찍으므로 로그가 자란다. **찍히는 조건은 `keys.redraw`이고 그것이 곧 우리가 돌려주는 값이다** |
+| 1 | `readKeys`가 모드를 뒤에서 읽는다(design 위험 1). `Enter`에서만 터지고 증상이 "마지막 글자가 빠진다"라 원인에서 멀다 | 검사 56이 `keys.bytes.len != 0`으로 정면으로 본다. 그 한 줄이 판정 전부다 |
+| 2 | ~~`std.posix.pipe()`가 Zig 0.16에 없다~~ 착수 전에 확인해서 없앴다 — 컨테이너의 `lib/std/posix.zig`에 `pipe`·`write`·`close`가 하나도 없다. 처방은 libc 직접 선언이고 `input.zig`가 이미 쓰는 방법이다 | 그래도 남는 위험은 파이프 write가 쪼개지는 것인데, 96바이트는 `PIPE_BUF` 4096 안이라 원자적이다 |
+| 3 | `Copy`에 payload가 붙어 `std.meta.eql` 비교가 쓰레기를 본다 | `Commit.buf`를 0으로 채운다. `undefined`로 두면 `expectCopy`가 무작위로 실패한다 |
+| 4 | `.bytes` 갈래를 `appendCommit` 대신 그대로 돌려준다. 세벌식에서만 터지고 두벌식 검사는 전부 초록이다 | 검사 55가 `sebeol_3p3`으로 그 자리를 본다. `expectHangul`이 `.bytes`를 실패로 취급하는 것이 잡는다 |
+| 5 | 게이트의 `type_keys`가 로그가 안 자라 0.3초씩 기다린다 | 자모 키는 `.redraw`를 만들고 `dumpHangul`이 `hangul>` 줄을 찍으므로 로그가 자란다. 찍히는 조건은 `keys.redraw`이고 그것이 곧 우리가 돌려주는 값이다 |

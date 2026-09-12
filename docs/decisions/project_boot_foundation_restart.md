@@ -14,13 +14,13 @@ M12 but accumulated many small, poorly-understood fixes (RC6–RC21: fbdev
 capture race, ptmx mknod, devpts mount point, etc.) without real forward
 progress.
 
-**Why:** User's own assessment — the old project was "vibe coded and ruined,"
+Why: User's own assessment — the old project was "vibe coded and ruined,"
 producing code without understanding how/why it worked. The restart's
 explicit goal is understanding over speed.
 
-**Decisions locked in (see
-`docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`):**
-- First sub-project = **Boot Foundation**: self-built Linux kernel
+Decisions locked in (see
+`docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`):
+- First sub-project = Boot Foundation: self-built Linux kernel
   (kernel.org source, own `.config`) + Limine bootloader + custom Rust PID 1
   init (no BusyBox) + `xorriso` hybrid El Torito ISO, booted in QEMU via
   `-cdrom` (not QEMU's `-kernel` shortcut) to a shell prompt.
@@ -35,7 +35,7 @@ explicit goal is understanding over speed.
   hybrid ISO replaces QEMU's `-kernel` shortcut) → BF-M4 (reproducibility
   gate, 3 consecutive successful runs).
 
-**How to apply:** When resuming this project, check
+How to apply: When resuming this project, check
 `docs/superpowers/plans/` for the current milestone's plan before assuming
 work status — this restart is recent (2026-08-01) and supersedes anything
 inferred from old habits/assumptions about the previous `tars.git` repo.

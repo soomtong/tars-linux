@@ -1,23 +1,23 @@
 # TARS Copy Mode CM-M2 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 구현 파일 편집은
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 구현 파일 편집은
 > 사용자가 하고, 빌드·QEMU·게이트·조사성 명령은 Claude가 실행하며, Claude는 각
 > Step의 정확한 내용을 제시하고 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는
 > 이 저장소에 적용하지 않는다.
 
-**Goal:** `Cmd+V`가 클립보드를 셸에 써 넣고, **CM-M1이 복사한 바로 그 글자가
-붙여넣기를 거쳐 셸의 실행 결과로 화면에 다시 나타나는 것**을 게이트가 본다.
+Goal: `Cmd+V`가 클립보드를 셸에 써 넣고, CM-M1이 복사한 바로 그 글자가
+붙여넣기를 거쳐 셸의 실행 결과로 화면에 다시 나타나는 것을 게이트가 본다.
 덤으로 CM-M0이 넣어 두고 아무도 밟은 적 없는 `scrollToBottom` 억제 분기를
 실제 게스트에서 밟는다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
+Design doc: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
 (결정 4의 마지막 줄과 결정 7의 시나리오 6·7·8, 그리고 결정 9가 이 milestone의
-몫이다. **design은 승인되어 있으므로 다시 논의하지 않는다.**)
+몫이다. design은 승인되어 있으므로 다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16, libghostty-vt, evdev, DRM dumb buffer,
+Tech Stack: Zig 0.16, libghostty-vt, evdev, DRM dumb buffer,
 QEMU monitor `sendkey`, bash 게이트 스크립트
 
-**이 milestone이 Copy Mode의 마지막이다.** 끝나면 서브프로젝트가 닫히므로
+이 milestone이 Copy Mode의 마지막이다. 끝나면 서브프로젝트가 닫히므로
 Task 6의 문서 작업이 CM-M0·M1 때보다 한 겹 많다.
 
 ---
@@ -26,81 +26,81 @@ Task 6의 문서 작업이 CM-M0·M1 때보다 한 겹 많다.
 
 ### CM-M0·CM-M1이 실측으로 남긴 것
 
-1. **copy 커서는 언제나 화면 맨 아랫줄에서 시작한다**(`row=46`, 화면은 47줄).
+1. copy 커서는 언제나 화면 맨 아랫줄에서 시작한다(`row=46`, 화면은 47줄).
    셸 프롬프트가 거기 있기 때문이다. 그래서 게이트는 `k`로 올라간다.
-2. **`sendkey`를 0.05초 간격으로 80번 보내도 하나도 안 떨어진다.** 커서를 46줄
-   올리고 뷰포트를 34줄 미는 데 정확히 80이 맞았다. **이번 Task 4의 검사 13이
-   그 루프를 그대로 다시 쓴다.**
-3. **`sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다.** 두 키 조합인
+2. `sendkey`를 0.05초 간격으로 80번 보내도 하나도 안 떨어진다. 커서를 46줄
+   올리고 뷰포트를 34줄 미는 데 정확히 80이 맞았다. 이번 Task 4의 검사 13이
+   그 루프를 그대로 다시 쓴다.
+3. `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다. 두 키 조합인
    `meta_l-v`는 그보다 쉬운 경우다.
-4. **`terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다.** 단, **붙여넣기는
-   이 줄을 안 만든다** — `pty.write`를 직접 부르지 `keys.bytes`를 거치지 않기
+4. `terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다. 단, 붙여넣기는
+   이 줄을 안 만든다 — `pty.write`를 직접 부르지 `keys.bytes`를 거치지 않기
    때문이다. 그래서 이번 게이트의 도구는 `key>`가 아니라 `clip>`와 `scroll>`다.
-5. **`Action`이나 `Keys`를 건드리면 `zig build test`만으로 모자란다.** Zig가
-   참조되지 않는 함수를 분석하지 않는다. **Task 3에서 `zig build`를 함께
-   돌린다.**
-6. **`RenderState`에서 격자 크기를 읽으면 조용히 no-op이 된다.** 이번 작업은
+5. `Action`이나 `Keys`를 건드리면 `zig build test`만으로 모자란다. Zig가
+   참조되지 않는 함수를 분석하지 않는다. Task 3에서 `zig build`를 함께
+   돌린다.
+6. `RenderState`에서 격자 크기를 읽으면 조용히 no-op이 된다. 이번 작업은
    `state`를 새로 읽는 자리를 만들지 않으므로 해당되지 않지만, 새 검사를 쓸
    때는 여전히 `cells()`를 한 번 부르고 시작한다.
 
 ### 이번 plan을 쓰면서 소스에서 확인한 것 넷
 
-읽은 것을 믿고 넘어가지 않는다. **넷 다 아래 Task의 검사가 실행으로 다시
-증명한다.**
+읽은 것을 믿고 넘어가지 않는다. 넷 다 아래 Task의 검사가 실행으로 다시
+증명한다.
 
-1. **`Copy`에 variant를 더해도 `input_test`는 안 깨진다.** `expectCopy`와
+1. `Copy`에 variant를 더해도 `input_test`는 안 깨진다. `expectCopy`와
    `expectCtx`는 `Action` union을 훑을 뿐 `Copy` enum을 훑지 않는다
-   (`input_test.zig:60`·`:31`). **깨지는 것은 `main.zig:469`의 switch 하나
-   뿐이다** — `HANDOFF.md`의 "`input_test`의 `expectCtx`·`expectCopy`도 같다"는
+   (`input_test.zig:60`·`:31`). 깨지는 것은 `main.zig:469`의 switch 하나
+   뿐이다 — `HANDOFF.md`의 "`input_test`의 `expectCtx`·`expectCopy`도 같다"는
    `Action`을 넓힐 때의 이야기이고 이번에는 해당되지 않는다. 의도된 신호는
    그대로 하나 남아 있으므로 계획을 바꿀 이유는 없다.
-2. **copy 표의 `KEY_V`가 이미 차 있다**(`input.zig:535`). `Cmd+V`를 모드 안에
-   넣는다는 것은 줄을 하나 더하는 일이 아니라 **있는 줄을 세 갈래로 가르는**
+2. copy 표의 `KEY_V`가 이미 차 있다(`input.zig:535`). `Cmd+V`를 모드 안에
+   넣는다는 것은 줄을 하나 더하는 일이 아니라 있는 줄을 세 갈래로 가르는
    일이다. `HANDOFF.md`는 "양쪽에 들어가야 한다"까지만 적었고 이 충돌은 안
    적었다.
-3. **`chord()`의 Meta 분기는 `switch (code)` 한 덩어리다**(`input.zig:418`).
+3. `chord()`의 Meta 분기는 `switch (code)` 한 덩어리다(`input.zig:418`).
    `Cmd+V`는 그 switch에 줄 하나로 들어간다. Shift 예외(`KEY_C`)는 그 위에
    따로 있으므로 건드리지 않는다 — design 위험 2가 "예외는 이 한 줄뿐이어야
    한다"고 못 박은 자리를 지킨다.
-4. **`selectionString`은 줄 선택에도 개행을 안 붙인다.** CM-M1의 게이트가
-   `len=11 text=echo PASTED`를 실측했다. **그래서 붙여넣기가 저절로 실행되지
-   않는다** — Enter는 게이트가 따로 친다.
+4. `selectionString`은 줄 선택에도 개행을 안 붙인다. CM-M1의 게이트가
+   `len=11 text=echo PASTED`를 실측했다. 그래서 붙여넣기가 저절로 실행되지
+   않는다 — Enter는 게이트가 따로 친다.
 
 ---
 
 ## 이번에 정하는 것 넷 (design doc이 안 정한 자리)
 
-### 1. **붙여넣기는 모드를 닫지 않는다** (`y`와 갈리는 자리)
+### 1. 붙여넣기는 모드를 닫지 않는다 (`y`와 갈리는 자리)
 
 design 결정 4의 표는 `Cmd+V`를 "어느 모드에서든 클립보드를 PTY에 쓴다"까지만
-정했다. 모드를 어떻게 하는지는 안 적었으므로 여기서 정한다. **아무것도 하지
-않는다.**
+정했다. 모드를 어떻게 하는지는 안 적었으므로 여기서 정한다. 아무것도 하지
+않는다.
 
 이유가 둘이다.
 
-- **design이 시킨 일만 한다.** `y`가 모드를 닫는 것은 결정 4의 표에 명시되어
+- design이 시킨 일만 한다. `y`가 모드를 닫는 것은 결정 4의 표에 명시되어
   있고, `Cmd+V`에는 그런 문구가 없다.
-- **게이트가 `scrollToBottom` 억제 분기를 밟을 수 있는 유일한 길이다.** 모드
+- 게이트가 `scrollToBottom` 억제 분기를 밟을 수 있는 유일한 길이다. 모드
   안에서는 셸에 아무것도 보낼 수 없어서 CM-M0·M1이 이 분기를 못 봤다
-  (`main.zig:518`). 붙여넣기가 출력을 만드는데, **그 출력이 도착하는 순간에
-  모드가 이미 닫혀 있으면 억제할 것이 없다.**
+  (`main.zig:518`). 붙여넣기가 출력을 만드는데, 그 출력이 도착하는 순간에
+  모드가 이미 닫혀 있으면 억제할 것이 없다.
 
-**대가를 감춘다면 정직하지 않다.** 뷰포트를 위로 올려 둔 채 모드 안에서
-붙여넣으면 에코가 화면 밖(활성 영역 맨 아래)에 찍히므로 **사람 눈에는 아무 일도
-안 일어난 것처럼 보인다.** Esc를 누르면 그때부터 다음 출력이 뷰포트를 바닥으로
+대가를 감춘다면 정직하지 않다. 뷰포트를 위로 올려 둔 채 모드 안에서
+붙여넣으면 에코가 화면 밖(활성 영역 맨 아래)에 찍히므로 사람 눈에는 아무 일도
+안 일어난 것처럼 보인다. Esc를 누르면 그때부터 다음 출력이 뷰포트를 바닥으로
 되돌린다. 이 어긋남을 없애는 안("붙여넣으면 모드를 닫는다" 또는 "붙여넣으면
 바닥으로 내린다")은 아래 "비워 두는 자리"에 적어 둔다.
 
-### 2. 붙여넣기 로그는 **새 접두사를 만들지 않고** `clip>`를 쓴다
+### 2. 붙여넣기 로그는 새 접두사를 만들지 않고 `clip>`를 쓴다
 
 design 결정 8이 "새 로그 줄은 `copy>`와 `clip>` 둘뿐"이라고 정했다. 그래서
 `paste>`를 만들지 않고 `terminal: clip> paste len=11`을 쓴다. 클립보드의
 내용에 관한 줄이므로 접두사의 뜻과도 맞는다.
 
-`text=`를 다시 찍지 않는 이유는 **같은 글자를 두 번 증명하지 않기 위해서다.**
+`text=`를 다시 찍지 않는 이유는 같은 글자를 두 번 증명하지 않기 위해서다.
 무엇이 담겼는지는 `y` 시점의 `clip> len=11 text=echo PASTED`가 이미 증명했고,
 붙여넣기가 증명해야 하는 것은 "그것이 셸에 닿았는가"인데 그 답은 로그가 아니라
-**화면에 있다**(검사 11·12).
+화면에 있다(검사 11·12).
 
 `len`을 찍는 이유는 CM-M1의 `dumpClip`과 같다 — 0바이트를 쓴 것과 11바이트를
 쓴 것을 게이트가 한 줄로 가를 수 있어야 한다.
@@ -110,32 +110,32 @@ design 결정 8이 "새 로그 줄은 `copy>`와 `clip>` 둘뿐"이라고 정했
 `clip`은 `pub` 필드라 `main.zig`가 그냥 읽을 수 있지만, 접근자
 `Screen.clipboard()`를 만든다. `copyCursor()`·`scrollbar()`와 같은 규율이다
 (TR design 결정 1: `main.zig`가 라이브러리 타입을 배우지 않는다). 반환 타입을
-`?[]const u8`로 좁혀서 **소유권이 `Screen`에 있다는 것을 타입으로도 드러낸다** —
+`?[]const u8`로 좁혀서 소유권이 `Screen`에 있다는 것을 타입으로도 드러낸다 —
 `clip` 자체는 `?[:0]const u8`이고, sentinel을 밖으로 내보내면 호출부가 그것을
 직접 free해도 되는 값으로 오해할 여지가 생긴다.
 
-### 4. 게이트는 왕복을 **화면에서 두 번** 센다
+### 4. 게이트는 왕복을 화면에서 두 번 센다
 
 design 결정 7의 시나리오 6·8이 짝을 이루는 대조군이라고 적어 두었다. 그것을
 그대로 짜되, 검사 11에 한 겹을 더 둔다.
 
-- **검사 10(대조군)** — 붙여넣기 전에 `| PASTED |`가 **로그 전체에 없다.**
-- **검사 11** — 붙여넣기 직후 마지막 프레임의 `echo PASTED` 횟수가 **는다.**
+- 검사 10(대조군) — 붙여넣기 전에 `| PASTED |`가 로그 전체에 없다.
+- 검사 11 — 붙여넣기 직후 마지막 프레임의 `echo PASTED` 횟수가 는다.
   절대값을 쓸 수 없는 이유는, 검사 7이 친 명령줄 `echo echo PASTED`가 부분
-  문자열로 걸려서 붙여넣기 전에 이미 둘이기 때문이다. **전후 차이를 본다.**
-- **검사 12(판정)** — Enter 뒤에 `| PASTED |`가 나타난다.
+  문자열로 걸려서 붙여넣기 전에 이미 둘이기 때문이다. 전후 차이를 본다.
+- 검사 12(판정) — Enter 뒤에 `| PASTED |`가 나타난다.
 
 ---
 
-## Task 1: `input.zig`에 `Cmd+V`를 **두 곳** 넣는다
+## Task 1: `input.zig`에 `Cmd+V`를 두 곳 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig`
 - Test: `terminal/src/input_test.zig`
 
 ### Step 1: `Copy` enum에 `paste`를 더한다
 
-`input.zig:169-188`을 **지울 것**:
+`input.zig:169-188`을 지울 것:
 
 ```zig
 /// copy mode 안에서 키가 만드는 명령.
@@ -160,7 +160,7 @@ pub const Copy = enum {
 };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
 /// copy mode 안에서 키가 만드는 명령.
@@ -193,7 +193,7 @@ pub const Copy = enum {
 
 ### Step 2: `chord()`의 Meta 분기에 한 줄을 더한다
 
-`input.zig:418-427`을 **지울 것**:
+`input.zig:418-427`을 지울 것:
 
 ```zig
             return switch (code) {
@@ -208,7 +208,7 @@ pub const Copy = enum {
             };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             return switch (code) {
@@ -233,9 +233,9 @@ pub const Copy = enum {
 
 ### Step 3: copy 표의 `KEY_V`를 세 갈래로 가른다
 
-**여기가 이 Task에서 가장 놓치기 쉬운 자리다.** `KEY_V`는 이미 차 있다.
+여기가 이 Task에서 가장 놓치기 쉬운 자리다. `KEY_V`는 이미 차 있다.
 
-`input.zig:532-537`을 **지울 것**:
+`input.zig:532-537`을 지울 것:
 
 ```zig
                 // Shift를 여기서 보는 것은 chord()의 예외와 성격이 다르다.
@@ -246,7 +246,7 @@ pub const Copy = enum {
                 },
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
                 // `v` 하나가 세 갈래다(CM-M2에서 늘었다).
@@ -278,7 +278,7 @@ pub const Copy = enum {
     std.debug.print("input_test: copy mode OK\n", .{});
 ```
 
-**바로 앞에 넣을 것**(지울 것 없음):
+바로 앞에 넣을 것(지울 것 없음):
 
 ```zig
     // ── CM-M2: 붙여넣기 ─────────────────────────────────────────────────
@@ -326,7 +326,7 @@ pub const Copy = enum {
     try expectCopy(&cm, K.KEY_ESC, .exit);
 ```
 
-**주의.** `expectCopy`는 `handleKey(code, 1, .{})`를 부르므로 **누름(1)만 본다.**
+주의. `expectCopy`는 `handleKey(code, 1, .{})`를 부르므로 누름(1)만 본다.
 modifier를 떼는 이벤트(value 0)는 언제나 `expect`로 본다.
 
 ### Step 5: 호스트 검사를 돌린다 (Claude가 실행, 약 1분)
@@ -338,9 +338,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 
 기대: `input_test: copy mode OK`가 찍히고 `PASS`.
 
-**이 시점에 `main.zig`는 아직 안 고쳤고, 그래서 `zig build`는 깨져 있다.**
+이 시점에 `main.zig`는 아직 안 고쳤고, 그래서 `zig build`는 깨져 있다.
 `Copy`에 variant가 늘어 `main.zig:469`의 switch가 더는 exhaustive하지 않기
-때문이다. **의도된 신호이고 Task 3이 끈다** — `zig build test`는 `main.zig`를
+때문이다. 의도된 신호이고 Task 3이 끈다 — `zig build test`는 `main.zig`를
 컴파일하지 않으므로 여기서는 안 걸린다.
 
 ### Step 6: 커밋 (Claude가 실행)
@@ -354,7 +354,7 @@ git commit -m "Teach both key tables what Cmd+V means"
 
 ## Task 2: `vt.zig`가 클립보드를 되읽게 한다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig`
 - Test: `terminal/src/vt_test.zig`
 
@@ -368,7 +368,7 @@ git commit -m "Teach both key tables what Cmd+V means"
     }
 ```
 
-**바로 뒤에 넣을 것**(지울 것 없음):
+바로 뒤에 넣을 것(지울 것 없음):
 
 ```zig
     /// 클립보드의 지금 내용. `y`를 한 번도 안 눌렀으면 null이다.
@@ -393,14 +393,14 @@ git commit -m "Teach both key tables what Cmd+V means"
 
 ### Step 2: `vt_test.zig`에 검사 하나를 더한다
 
-`vt_test.zig:510-511`을 **지울 것**:
+`vt_test.zig:510-511`을 지울 것:
 
 ```zig
     std.debug.print("vt_test: 가지치기가 copy mode를 끊는다 OK\n", .{});
     std.debug.print("vt_test: copy selection OK\n", .{});
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     std.debug.print("vt_test: 가지치기가 copy mode를 끊는다 OK\n", .{});
@@ -432,9 +432,9 @@ git commit -m "Teach both key tables what Cmd+V means"
     std.debug.print("vt_test: copy selection OK\n", .{});
 ```
 
-**`held`가 `"second line"`인 이유를 짚어 둔다.** `cm` 화면 위에서 `y`가 네 번
+`held`가 `"second line"`인 이유를 짚어 둔다. `cm` 화면 위에서 `y`가 네 번
 불렸다 — 검사 5가 `hello`, 검사 6이 `hello`(역방향), 검사 7이 `second line`,
-검사 8이 **선택이 풀린 뒤라 null**을 돌려줬다. `copyYank`는 선택이 없으면
+검사 8이 선택이 풀린 뒤라 null을 돌려줬다. `copyYank`는 선택이 없으면
 `self.clip`을 건드리지 않고 나가므로 검사 7의 값이 남아 있다.
 
 ### Step 3: 호스트 검사를 돌린다 (Claude가 실행, 약 1분)
@@ -461,12 +461,12 @@ git commit -m "Let the screen hand its clipboard back"
 
 ## Task 3: `main.zig`가 클립보드를 PTY에 쓴다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig`
 
 ### Step 1: `dumpPaste`를 만든다
 
-`main.zig:286-294`의 `dumpClip` **바로 뒤에 넣을 것**(지울 것 없음):
+`main.zig:286-294`의 `dumpClip` 바로 뒤에 넣을 것(지울 것 없음):
 
 ```zig
 /// `Cmd+V`가 클립보드를 셸에 쓴다.
@@ -497,7 +497,7 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
 
 ### Step 2: switch에 팔 하나를 더한다
 
-`main.zig:468-485`를 **지울 것**:
+`main.zig:468-485`를 지울 것:
 
 ```zig
             for (keys.copies) |cmd| {
@@ -520,7 +520,7 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
             }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             for (keys.copies) |cmd| {
@@ -557,7 +557,7 @@ CM-M0이 남긴 문장이 "CM-M1이 방어를 넣는다"에서 멈춰 있고, �
 다른 모양이 됐다(가지치기는 선택을 null로 만들지 않는다). 그리고 이제 이 분기를
 게이트가 실제로 밟으므로 그 사실을 적는다.
 
-`main.zig:512-517`을 **지울 것**:
+`main.zig:512-517`을 지울 것:
 
 ```zig
             // 그 대가로 위 주석이 말한 창이 열린다 — 뷰포트가 history에
@@ -567,7 +567,7 @@ CM-M0이 남긴 문장이 "CM-M1이 방어를 넣는다"에서 멈춰 있고, �
             // 넣는다.
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             // 그 대가로 위 주석이 말한 창이 열린다 — 뷰포트가 history에
@@ -589,12 +589,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**`zig build`를 반드시 함께 돌린다.** `Copy`에 variant를 더했으므로 `readKeys`와
+`zig build`를 반드시 함께 돌린다. `Copy`에 variant를 더했으므로 `readKeys`와
 `main`을 실제로 컴파일하는 쪽이 아니면 안 걸리는 실수가 생긴다 — CM-M0에서
 `State.scrolls`가 통째로 사라진 것을 `zig build test`가 두 번 놓친 자리다.
 
-기대: 빌드 성공, 호스트 검사 `PASS`. **Task 1 Step 5에서 깨져 있던 빌드가 이
-Step에서 다시 붙는다.**
+기대: 빌드 성공, 호스트 검사 `PASS`. Task 1 Step 5에서 깨져 있던 빌드가 이
+Step에서 다시 붙는다.
 
 ### Step 5: 커밋 (Claude가 실행)
 
@@ -607,12 +607,12 @@ git commit -m "Send the clipboard to the shell on Cmd+V"
 
 ## Task 4: `copy/check.sh`가 게스트에서 왕복을 본다
 
-**Files:**
+Files:
 - Modify: `copy/check.sh`
 
 ### Step 1: 헬퍼 둘을 더하고 스크롤 조회를 하나로 모은다
 
-`copy/check.sh:137-139`의 `inverted_cells` **바로 뒤에 넣을 것**(지울 것 없음):
+`copy/check.sh:137-139`의 `inverted_cells` 바로 뒤에 넣을 것(지울 것 없음):
 
 ```bash
 # scroll> 줄에서 값 하나를 뽑는다. copy_value와 같은 모양이고, **언제나 마지막
@@ -634,7 +634,7 @@ screen_count() {
 }
 ```
 
-`copy/check.sh:272-273`과 `:280-281`(검사 5의 인라인 sed 둘)을 **지울 것**:
+`copy/check.sh:272-273`과 `:280-281`(검사 5의 인라인 sed 둘)을 지울 것:
 
 ```bash
 SCROLL_BEFORE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
@@ -646,7 +646,7 @@ SCROLL_AFTER="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
   sed -E 's/.*offset=([0-9]+).*/\1/')"
 ```
 
-**넣을 것**(각각 한 줄로):
+넣을 것(각각 한 줄로):
 
 ```bash
 SCROLL_BEFORE="$(scroll_field offset)"
@@ -658,7 +658,7 @@ SCROLL_AFTER="$(scroll_field offset)"
 
 ### Step 2: 체인 머리 주석에 붙여넣기를 더한다
 
-`copy/check.sh:8-14`를 **지울 것**:
+`copy/check.sh:8-14`를 지울 것:
 
 ```bash
 # 이 게이트가 증명하는 사슬 전체:
@@ -670,7 +670,7 @@ SCROLL_AFTER="$(scroll_field offset)"
 #   → Esc로 나오면 다시 나간다
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 # 이 게이트가 증명하는 사슬 전체:
@@ -696,7 +696,7 @@ SCROLL_AFTER="$(scroll_field offset)"
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 ```
 
-**바로 앞에 넣을 것**(지울 것 없음):
+바로 앞에 넣을 것(지울 것 없음):
 
 ```bash
 # ── 검사 10: 대조군 — 붙여넣기 전에는 그 줄이 어디에도 없다 ────────────
@@ -833,13 +833,13 @@ echo "the paste inside copy mode reached the shell too (${PASTED_ROWS} 'PASTED' 
 
 ### Step 4: 마지막 줄의 이름을 고친다
 
-`copy/check.sh`의 마지막 줄을 **지울 것**:
+`copy/check.sh`의 마지막 줄을 지울 것:
 
 ```bash
 echo "CM-M1 check PASS"
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 echo "CM-M2 check PASS"
@@ -854,12 +854,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `CM-M2 check PASS`.
 
-**걸렸을 때 어디를 보는가.**
+걸렸을 때 어디를 보는가.
 
-- **검사 11의 `clip> paste len=11`이 없으면** `Cmd+V`가 모드 **밖에서** 안 먹은
+- 검사 11의 `clip> paste len=11`이 없으면 `Cmd+V`가 모드 밖에서 안 먹은
   것이다. Task 1 Step 2(`chord()`의 Meta 분기)를 확인한다. 로그에
   `terminal: key> 1 byte(s)`가 그 시각에 찍혔으면 `v`가 그냥 글자로 나간 것이다.
-- **검사 11의 에코 수가 안 늘면** 바이트는 나갔는데 셸이 안 받은 것이다. 한
+- 검사 11의 에코 수가 안 늘면 바이트는 나갔는데 셸이 안 받은 것이다. 한
   번의 `docker run` 안에서 마지막 화면을 직접 본다.
 
   ```bash
@@ -869,17 +869,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   '
   ```
 
-- **검사 13의 `copy> paste row=` 가 없으면** 모드 안의 `Cmd+V`가 안 먹었거나
+- 검사 13의 `copy> paste row=` 가 없으면 모드 안의 `Cmd+V`가 안 먹었거나
   (Task 1 Step 3의 세 갈래), 붙여넣기가 모드를 닫아 버린 것이다. 로그에
   `copy> paste`가 좌표 없이 찍혔다면 후자다.
-- **검사 13의 offset이 움직였으면** 억제 분기가 안 밟힌 것이다. `main.zig`의
-  `if (!screen.copyActive())`를 확인한다. 반대로 **위로 안 올라갔으면**(`OFFSET_UP`
+- 검사 13의 offset이 움직였으면 억제 분기가 안 밟힌 것이다. `main.zig`의
+  `if (!screen.copyActive())`를 확인한다. 반대로 위로 안 올라갔으면(`OFFSET_UP`
   검사) 앞선 검사들이 화면 상태를 예상과 다르게 남긴 것이므로 `scroll>` 줄들을
   훑어본다.
-- **`PASTED_ROWS`가 1이면** 두 번째 붙여넣기가 셸에 안 닿았거나, 두 출력줄이
+- `PASTED_ROWS`가 1이면 두 번째 붙여넣기가 셸에 안 닿았거나, 두 출력줄이
   화면에서 밀려났다. `screen>` 마지막 줄을 직접 보고 어느 쪽인지 가른다.
 
-**`grep`에 `-a`를 반드시 붙인다.** 로그에 NUL이 한 바이트라도 있으면 `grep`이
+`grep`에 `-a`를 반드시 붙인다. 로그에 NUL이 한 바이트라도 있으면 `grep`이
 파일을 binary로 취급한다.
 
 ### Step 6: 커밋 (Claude가 실행)
@@ -893,18 +893,18 @@ git commit -m "Prove the clipboard makes it back to the shell"
 
 ## Task 5: 루트 게이트를 3/3으로 돌린다
 
-**Files:**
+Files:
 - Modify: `check.sh`
 
 ### Step 1: 체인 이름을 고친다
 
-`check.sh:109`를 **지울 것**:
+`check.sh:109`를 지울 것:
 
 ```bash
 run_chain "CM-M1" ./copy/check.sh
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 run_chain "CM-M2" ./copy/check.sh
@@ -912,7 +912,7 @@ run_chain "CM-M2" ./copy/check.sh
 
 ### Step 2: 루트 게이트를 돌린다 (Claude가 백그라운드로 실행, 약 56분)
 
-**Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.**
+Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -921,7 +921,7 @@ run_chain "CM-M2" ./copy/check.sh
 
 기대: `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**시간을 어떻게 읽는가.** 직전 기준선은 **54분 40초**다(2026-08-25). 이번에 CM
+시간을 어떻게 읽는가. 직전 기준선은 54분 40초다(2026-08-25). 이번에 CM
 체인이 회차당 더 쓰는 시간은 이렇게 갈린다.
 
 | 항목 | 회차당 |
@@ -931,16 +931,16 @@ run_chain "CM-M2" ./copy/check.sh
 | 명시적 `sleep`(3+3+2+2+3+1+3) | 17.0초 |
 | 합계 | 약 23초 |
 
-체인이 3회 도므로 **약 1분 10초**가 는다. 그러니 **55분 50초 ~ 56분 30초**를
+체인이 3회 도므로 약 1분 10초가 는다. 그러니 55분 50초 ~ 56분 30초를
 기대한다.
 
-**기계를 비우고 잰다.** 값이 기준선에서 크게 벗어나면 코드를 의심하기 전에
+기계를 비우고 잰다. 값이 기준선에서 크게 벗어나면 코드를 의심하기 전에
 기계를 먼저 의심한다 — TR-M2를 끝내며 처음 잰 값이 6시간 12분이었고 원인은
 Chrome이 영상을 재생하고 있던 것이었다.
 
-**CM-M1에서 3분 20초가 늘었는데 그중 1분만 설명됐다는 것을 기억해 둔다.** 이번
+CM-M1에서 3분 20초가 늘었는데 그중 1분만 설명됐다는 것을 기억해 둔다. 이번
 값이 위 예상보다 2분 이상 크면, 그때는 배경 부하를 `pmset -g log`로 확인해서
-**갈랐다고 말할 수 있는 값을 만든다.** 확인하지 않았으면 확인하지 않았다고 적는다.
+갈랐다고 말할 수 있는 값을 만든다. 확인하지 않았으면 확인하지 않았다고 적는다.
 
 ### Step 3: 커밋 (Claude가 실행)
 
@@ -953,10 +953,10 @@ git commit -m "Rename the copy chain for CM-M2"
 
 ## Task 6: 문서를 닫는다
 
-**이 Task가 CM-M0·M1 때보다 한 겹 많다.** CM-M2가 끝나면 Copy Mode 서브프로젝트
+이 Task가 CM-M0·M1 때보다 한 겹 많다. CM-M2가 끝나면 Copy Mode 서브프로젝트
 자체가 끝나므로, "다음 milestone"이 아니라 "다음 서브프로젝트"를 가리켜야 한다.
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
 - Modify: `docs/decisions/project_copy_mode.md`
 - Modify: `CLAUDE.md`
@@ -964,62 +964,62 @@ git commit -m "Rename the copy chain for CM-M2"
 
 ### Step 1: design doc에 CM-M2의 결과를 붙인다
 
-머리의 `**Status:**` 줄을 "설계 확정. **CM-M2 완료(2026-08-26)로 서브프로젝트가
-끝났다**"로 고치고, "milestone 구성" 절의 CM-M1 인용 블록 **뒤에** CM-M2 블록을
+머리의 `**Status:**` 줄을 "설계 확정. CM-M2 완료(2026-08-26)로 서브프로젝트가
+끝났다"로 고치고, "milestone 구성" 절의 CM-M1 인용 블록 뒤에 CM-M2 블록을
 붙인다. 적을 것은 다섯이다.
 
-1. **`Cmd+V`가 두 곳에 들어갔다.** `chord()`의 Meta 분기(모드 밖)와 copy 표
-   (모드 안)이고, 후자는 **줄을 더한 것이 아니라 이미 차 있던 `KEY_V`를 세
-   갈래로 가른 것**이다. design 결정 4의 표는 이 충돌을 안 적었다.
-2. **붙여넣기는 모드를 닫지 않기로 정했다**(design이 안 정한 자리). 그 덕에
+1. `Cmd+V`가 두 곳에 들어갔다. `chord()`의 Meta 분기(모드 밖)와 copy 표
+   (모드 안)이고, 후자는 줄을 더한 것이 아니라 이미 차 있던 `KEY_V`를 세
+   갈래로 가른 것이다. design 결정 4의 표는 이 충돌을 안 적었다.
+2. 붙여넣기는 모드를 닫지 않기로 정했다(design이 안 정한 자리). 그 덕에
    게이트가 `scrollToBottom` 억제 분기를 처음으로 밟았다. 대가는 "모드 안에서
    뷰포트를 올려 둔 채 붙여넣으면 눈에 아무 일도 안 보인다"이고, 감췄다가
    나중에 발견되게 두지 않고 여기 적는다.
 
-   **그리고 이 밟기는 대역이다.** 억제 분기가 존재하는 진짜 이유는 붙여넣기
-   에코가 아니라 **백그라운드 출력**이다(`main.zig`의 그 자리 주석: "백그라운드
+   그리고 이 밟기는 대역이다. 억제 분기가 존재하는 진짜 이유는 붙여넣기
+   에코가 아니라 백그라운드 출력이다(`main.zig`의 그 자리 주석: "백그라운드
    출력이 한 줄만 도착해도 사람이 올라가서 보고 있던 자리가 화면 밖으로
-   튕기기 때문"). 게이트가 증명하는 것은 **"그 분기가 실행된다"**이지 **"그
-   기능이 막으려던 사고가 막힌다"**가 아니다. 진짜 상황으로 보려면 copy mode에
+   튕기기 때문"). 게이트가 증명하는 것은 "그 분기가 실행된다"이지 "그
+   기능이 막으려던 사고가 막힌다"가 아니다. 진짜 상황으로 보려면 copy mode에
    들어가기 전에 fish 백그라운드 잡을 띄워 두어야 하는데, 타이핑 40여 개와
    회차당 15초를 더 쓰는 일이라 이번에는 하지 않기로 했다(2026-08-26 결정).
-   **못 보는 것을 못 본다고 적어 두는 자리가 여기다.**
-3. **결정 8을 지켰다.** 붙여넣기 로그가 새 접두사를 만들지 않고
+   못 보는 것을 못 본다고 적어 두는 자리가 여기다.
+3. 결정 8을 지켰다. 붙여넣기 로그가 새 접두사를 만들지 않고
    `clip> paste len=…`으로 들어갔다.
-4. **위험 6이 이제 반쯤 보인다.** copy mode 중에 PTY 출력이 도착하는 상황을
-   게이트가 실제로 만들었다. 다만 **가지치기를 일으킬 만큼(1000줄)은 여전히 못
-   만든다** — 붙여넣기 한 번이 만드는 출력은 한 줄이다.
-5. **게이트 시간의 실측값.**
+4. 위험 6이 이제 반쯤 보인다. copy mode 중에 PTY 출력이 도착하는 상황을
+   게이트가 실제로 만들었다. 다만 가지치기를 일으킬 만큼(1000줄)은 여전히 못
+   만든다 — 붙여넣기 한 번이 만드는 출력은 한 줄이다.
+5. 게이트 시간의 실측값.
 
 ### Step 2: `project_copy_mode` 기억을 고친다
 
-**서브프로젝트가 끝났다**는 것과, 이 기억을 나중에 읽을 사람이 실제로 필요로 할
+서브프로젝트가 끝났다는 것과, 이 기억을 나중에 읽을 사람이 실제로 필요로 할
 사실 셋을 적는다.
 
-- `Cmd+V`는 표 **두 곳**에 있고 한쪽만 고치면 나머지 모드에서 조용히 안 먹는다.
+- `Cmd+V`는 표 두 곳에 있고 한쪽만 고치면 나머지 모드에서 조용히 안 먹는다.
 - 붙여넣기는 bracketed paste를 안 쓴다(결정 9). 여러 줄을 붙이면 개행이 곧
-  실행이다. **다시 논의하려면 셸이 그 모드를 받는지부터 실측한다.**
+  실행이다. 다시 논의하려면 셸이 그 모드를 받는지부터 실측한다.
 - 비워 둔 자리: 단어 이동(`w`/`b`)·검색(`/`)·마우스·OSC 52·normal 모드의
   `Cmd+C`·"붙여넣기가 모드를 닫아야 하는가".
 
 ### Step 3: `CLAUDE.md`의 "참고" 절을 고친다
 
-지금 "진행 중인 서브프로젝트: Display Foundation"이라고 적혀 있다. **완료된
-서브프로젝트 목록에 Copy Mode를 넣고, 진행 중인 것이 없다는 사실을 적는다.**
+지금 "진행 중인 서브프로젝트: Display Foundation"이라고 적혀 있다. 완료된
+서브프로젝트 목록에 Copy Mode를 넣고, 진행 중인 것이 없다는 사실을 적는다.
 다음 후보는 `HANDOFF.md`의 이월 숙제가 든다.
 
 ### Step 4: `HANDOFF.md`를 다시 쓴다
 
-- 머리: **Copy Mode가 끝났다. 다음 일은 다음 서브프로젝트를 고르는 것이다.**
+- 머리: Copy Mode가 끝났다. 다음 일은 다음 서브프로젝트를 고르는 것이다.
 - 게이트 현황: 여덟 체인 `CM-M2`, 새 기준선 시간, 다음 monitor 포트는 45462.
 - 로그 문구 목록에 `terminal: clip> paste`를 더한다.
 - "CM-M2가 실측으로 알아낸 것"으로 위 Step 1의 다섯을 옮긴다.
-- **이월 숙제를 그대로 옮기고 1순위를 명시한다.** `init`을 `ReleaseSafe`로
+- 이월 숙제를 그대로 옮기고 1순위를 명시한다. `init`을 `ReleaseSafe`로
   (initrd 73.0MB → gzip 16.76MB, 커널 부팅 1.12초 중 0.573초가 압축 해제)와
-  체인의 `sleep 0.3` 줄이기(게이트 56분의 상당 부분)가 서로 맞물린다 — **둘 다
-  게이트 시간을 줄이는 일이므로 한 서브프로젝트로 묶는 안을 적어 둔다.**
+  체인의 `sleep 0.3` 줄이기(게이트 56분의 상당 부분)가 서로 맞물린다 — 둘 다
+  게이트 시간을 줄이는 일이므로 한 서브프로젝트로 묶는 안을 적어 둔다.
 - "시도했으나 안 되는 접근"은 그대로 옮기고, 이번에 하나를 더한다:
-  **`key>` 줄로 붙여넣기를 감지하기** — 붙여넣기는 `pty.write`를 직접 부르므로
+  `key>` 줄로 붙여넣기를 감지하기 — 붙여넣기는 `pty.write`를 직접 부르므로
   그 줄을 만들지 않는다.
 
 ### Step 5: 커밋 (Claude가 실행)
@@ -1036,24 +1036,24 @@ git commit -m "Close out Copy Mode"
 
 `project_gate_chain_composition`이 "못 보는 것을 적어 두라"고 한 자리다.
 
-- **빈 클립보드로 누른 `Cmd+V`**(`clip> paste empty` 가지). 게이트는 언제나 `y`
+- 빈 클립보드로 누른 `Cmd+V`(`clip> paste empty` 가지). 게이트는 언제나 `y`
   뒤에 붙여넣으므로 이 가지를 안 밟는다. `vt_test`의 대조군이 `clipboard()`가
   null인 화면이 있다는 것까지는 보지만, `main.zig`의 분기 자체는 아무도 안
-  밟는다. **한 줄짜리 분기라 감수한다.**
-- **여러 줄 붙여넣기.** 결정 9가 감수하기로 한 자리다. 클립보드에 개행이 든
+  밟는다. 한 줄짜리 분기라 감수한다.
+- 여러 줄 붙여넣기. 결정 9가 감수하기로 한 자리다. 클립보드에 개행이 든
   경우를 아무도 안 만든다 — 게이트의 `V`는 한 줄만 잡는다.
-- **`Cmd+V`가 `swap_alt_meta`(PC 키보드)를 거치는 경로.** 다른 Cmd 조합과 같은
+- `Cmd+V`가 `swap_alt_meta`(PC 키보드)를 거치는 경로. 다른 Cmd 조합과 같은
   보정을 지나가지만, IP-M2 이후 그 보정은 `handleKey` 맨 앞 한 곳뿐이라 키마다
   따로 볼 것이 없다.
-- **억제 분기가 막으려던 진짜 상황 — 백그라운드 출력.** 검사 13이 밟는 것은
+- 억제 분기가 막으려던 진짜 상황 — 백그라운드 출력. 검사 13이 밟는 것은
   붙여넣기 에코이고, 그것은 대역이다. 분기가 실행된다는 것은 증명되지만,
   "사람이 올려다보는 중에 백그라운드 잡이 한 줄을 뱉어도 자리가 안 튕긴다"는
   증명되지 않는다. 그것을 보려면 copy mode에 들어가기 전에 fish 백그라운드 잡을
-  띄워 두어야 하고, 타이핑 40여 개와 회차당 15초가 든다. **다음에 이 자리를
-  만질 사람이 값을 다시 저울질할 수 있게 비용까지 적어 둔다.**
-- **모드 안에서 붙여넣은 뒤 그대로 `y`를 누르는 경우.** 선택이 살아 있는 채로
+  띄워 두어야 하고, 타이핑 40여 개와 회차당 15초가 든다. 다음에 이 자리를
+  만질 사람이 값을 다시 저울질할 수 있게 비용까지 적어 둔다.
+- 모드 안에서 붙여넣은 뒤 그대로 `y`를 누르는 경우. 선택이 살아 있는 채로
   에코가 도착하면 앵커 감시가 돌지만, 한 줄 출력으로는 가지치기가 안 나므로
-  아무 일도 안 일어난다. **`vt_test`의 검사 9 (1)번 대조군이 같은 성질을 본다.**
+  아무 일도 안 일어난다. `vt_test`의 검사 9 (1)번 대조군이 같은 성질을 본다.
 
 ## 완료 조건
 
@@ -1062,6 +1062,6 @@ git commit -m "Close out Copy Mode"
 - [ ] `zig build`가 통과한다 (`Copy`에 variant를 더했으므로 함께 돌린다)
 - [ ] `copy/check.sh` 단독 실행이 `CM-M2 check PASS`
 - [ ] 루트 게이트 여덟 체인이 3/3
-- [ ] 게이트 시간을 실측해 기록했고, **기준선과의 차이를 설명했거나 설명하지
-      못했다고 적었다**
+- [ ] 게이트 시간을 실측해 기록했고, 기준선과의 차이를 설명했거나 설명하지
+      못했다고 적었다
 - [ ] design doc·`project_copy_mode`·`CLAUDE.md`·`HANDOFF.md`가 최신이다

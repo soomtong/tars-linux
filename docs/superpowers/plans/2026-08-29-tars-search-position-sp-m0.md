@@ -1,44 +1,44 @@
 # SP-M0 구현 계획 — 현재 매치를 다른 색으로
 
-> **실행 방식은 이 저장소의 규칙을 따른다**(`CLAUDE.md`). 구현 파일 편집은
-> **사용자가** 하고, 빌드·QEMU·게이트 실행은 **Claude가** 한다. subagent를
+> 실행 방식은 이 저장소의 규칙을 따른다(`CLAUDE.md`). 구현 파일 편집은
+> 사용자가 하고, 빌드·QEMU·게이트 실행은 Claude가 한다. subagent를
 > 띄우지 않는다. 각 Task의 "넣을 것"을 Claude가 제시하면 사용자가 파일에
 > 넣고, Claude가 그 자리에서 검증 명령을 돌려 결과를 줄 단위로 설명한다.
 
-**목표:** 검색이 찾은 매치 중 **지금 선택된 하나**를 나머지와 다른 바탕색으로
+목표: 검색이 찾은 매치 중 지금 선택된 하나를 나머지와 다른 바탕색으로
 칠한다.
 
-**구조:** 라이브러리가 이미 들고 있는 `selected.idx`를 창구 하나로 꺼내고
+구조: 라이브러리가 이미 들고 있는 `selected.idx`를 창구 하나로 꺼내고
 (Task 1), 그 인덱스를 `findSpans`가 만드는 행별 범위에 실어 보내고(Task 3),
 `cells()`가 그 표식을 보고 색 둘 중 하나를 고른다(Task 4). 좌표 계산은 한
 벌뿐이고 색만 갈린다.
 
-**참고 문서:** `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
+참고 문서: `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
 
 ---
 
 ## 이 계획이 서 있는 실측 (2026-08-29)
 
-**1. 라이브러리의 `selected.idx`와 `matches()` 슬라이스는 같은 좌표계다.**
+1. 라이브러리의 `selected.idx`와 `matches()` 슬라이스는 같은 좌표계다.
 `selectedMatch()`(`search/screen.zig:771`)와 `matches()`(`:234`)가 같은 색인
 규칙을 쓴다 — 활성 영역은 뒤집어 담고 history는 그대로 이어 붙인다. 그래서
 `find_matches[idx]`가 곧 현재 매치다.
 
-**2. 검사 16의 자리는 `spans=1 cells=6`이다.** copy 체인을 한 번 돌려 확인했다
-(`the match highlight: terminal: find> hl spans=1 cells=6 us=56`). **화면에
+2. 검사 16의 자리는 `spans=1 cells=6`이다. copy 체인을 한 번 돌려 확인했다
+(`the match highlight: terminal: find> hl spans=1 cells=6 us=56`). 화면에
 보이는 매치가 하나이고 그것이 곧 현재 매치이므로, SP-M0은 그 자리에서
-`bg=705000`을 0개로 만든다** — Task 6이 그 검사를 고치는 이유다.
+`bg=705000`을 0개로 만든다 — Task 6이 그 검사를 고치는 이유다.
 
-**3. 체인 전체에는 `spans=2 cells=12`인 프레임도 있다**(부팅 3회에서 6번).
-그러나 **그 프레임이 어느 검색인지 못 박지 못했다** — 조사 명령의 `head`가
-`find>` 줄에 닿기 전에 잘렸다. 그래서 Task 7의 검사 19는 **그 자리를 찾아
-쓰지 않고 자기 조건을 스스로 만든다**(plan 결정 4).
+3. 체인 전체에는 `spans=2 cells=12`인 프레임도 있다(부팅 3회에서 6번).
+그러나 그 프레임이 어느 검색인지 못 박지 못했다 — 조사 명령의 `head`가
+`find>` 줄에 닿기 전에 잘렸다. 그래서 Task 7의 검사 19는 그 자리를 찾아
+쓰지 않고 자기 조건을 스스로 만든다(plan 결정 4).
 
-**4. `vt_test`의 새 이름은 안 부딪친다.** `ps`·`ps_i`·`phit`·`pspans`·
+4. `vt_test`의 새 이름은 안 부딪친다. `ps`·`ps_i`·`phit`·`pspans`·
 `pcur`·`cur_i`·`sel_i`를 `rg`로 확인했고 전부 미사용이다. `main()` 하나가 파일
 전체라 Zig가 shadowing을 컴파일 에러로 막으므로 이 확인이 필수다.
 
-**5. `HANDOFF.md`의 `main.zig` 줄 번호가 네 줄쯤 앞을 가리킨다.** 이 계획은
+5. `HANDOFF.md`의 `main.zig` 줄 번호가 네 줄쯤 앞을 가리킨다. 이 계획은
 2026-08-29에 직접 확인한 줄 번호를 쓴다.
 
 ---
@@ -48,66 +48,66 @@
 ### plan 결정 1. 인덱스 창구는 `?usize`이고 범위를 함께 본다
 
 `findCurrentIndex()`가 null을 주는 경우가 넷이다: 검색이 없다 · 선택이 없다 ·
-스냅숏이 없다 · **인덱스가 스냅숏 길이를 벗어난다.** 마지막이 design 위험 2다.
+스냅숏이 없다 · 인덱스가 스냅숏 길이를 벗어난다. 마지막이 design 위험 2다.
 라이브러리도 `selectedMatch()`에서 같은 방어를 한다(`:783`).
 
-넷을 한 함수에서 전부 null로 접는 이유는 **부르는 쪽이 "현재 매치가 없다"
-하나만 알면 되기 때문**이다. 넷을 갈라 주면 `findSpans`가 그 갈림을 다시
+넷을 한 함수에서 전부 null로 접는 이유는 부르는 쪽이 "현재 매치가 없다"
+하나만 알면 되기 때문이다. 넷을 갈라 주면 `findSpans`가 그 갈림을 다시
 합쳐야 한다.
 
 ### plan 결정 2. `RowSpan.current`에 기본값을 주지 않는다
 
 만드는 자리가 `findSpans` 한 곳뿐이다. 기본값 `= false`를 주면 나중에 두 번째
-자리가 생겼을 때 **정하는 것을 잊어도 컴파일이 통과한다.** 기본값을 안 주면
+자리가 생겼을 때 정하는 것을 잊어도 컴파일이 통과한다. 기본값을 안 주면
 Zig가 그 자리에서 막는다.
 
 ### plan 결정 3. `cells()`는 current를 만났을 때만 `break` 한다
 
-지금 코드는 **처음 걸린 span에서** `break` 한다. 색이 하나일 때는 순수한
-최적화였지만, 색이 둘이 되면 그 `break`가 **"목록 순서가 색을 정한다"**로 뜻이
+지금 코드는 처음 걸린 span에서 `break` 한다. 색이 하나일 때는 순수한
+최적화였지만, 색이 둘이 되면 그 `break`가 "목록 순서가 색을 정한다"로 뜻이
 바뀐다(design 결정 3).
 
 그래서 두 표식을 따로 세우고, `current`를 만나면 그때는 더 볼 것이 없으므로
 `break` 한다. 안 만나면 행 안의 span을 끝까지 본다 — 행마다 몇 개라 비용이
 없다.
 
-### plan 결정 4. 검사 19는 자기 조건을 스스로 만들고 needle이 **두 글자**다
+### plan 결정 4. 검사 19는 자기 조건을 스스로 만들고 needle이 두 글자다
 
 두 색을 함께 보려면 매치가 둘 이상 한 화면에 있어야 한다. 앞 검사가 남긴
-스크롤 위치에 기대면 **판정이 스크롤에 딸리게 되고**, 실측 3이 말하듯 그 자리를
+스크롤 위치에 기대면 판정이 스크롤에 딸리게 되고, 실측 3이 말하듯 그 자리를
 아직 못 박지 못했다.
 
-**needle을 한 줄에 두 번 심는다.** 같은 줄이면 뷰포트가 어디에 있든 둘이 함께
+needle을 한 줄에 두 번 심는다. 같은 줄이면 뷰포트가 어디에 있든 둘이 함께
 보인다 — 스크롤과 무관해진다.
 
-**needle을 두 글자로 두는 것에 이유가 있다.** `style>`는 프레임당 16줄이
+needle을 두 글자로 두는 것에 이유가 있다. `style>`는 프레임당 16줄이
 상한이고(`STYLE_DUMP_LIMIT`), 넘으면 조용히 잘리는 대신 "N more cell(s) not
 shown"이 뜬다. 일곱 글자 needle이면 명령줄 14칸 + 출력줄 14칸 = 28칸이라 상한을
-넘고, **그러면 뒤쪽 색이 안 찍혀 "색이 안 닿았다"로 잘못 읽힌다.** 두 글자면
+넘고, 그러면 뒤쪽 색이 안 찍혀 "색이 안 닿았다"로 잘못 읽힌다. 두 글자면
 8칸이라 넉넉하다.
 
-**`findme`를 쓰면 안 된다.** 검사 15와 17이 `matches=4`를 판정에 쓰므로 새
+`findme`를 쓰면 안 된다. 검사 15와 17이 `matches=4`를 판정에 쓰므로 새
 매치가 그 숫자를 깨뜨린다. `zq`는 이 화면 어디에도 없고 검사 18의 `zzz`와도
 안 겹친다.
 
 ### plan 결정 5. `cur=`은 `cells=` 뒤·`us=` 앞에 넣는다
 
 검사 16이 `sed -E 's/.*cells=([0-9]+).*/\1/'`로 `cells=`를 뽑는다. 그 뒤에
-필드를 더하는 것은 안전하지만 **`cells=`를 옮기거나 이름을 겹치게 만들면
-깨진다.** 새 필드 이름을 `cur`로 두는 것도 그 때문이다 — `cells`를 부분
+필드를 더하는 것은 안전하지만 `cells=`를 옮기거나 이름을 겹치게 만들면
+깨진다. 새 필드 이름을 `cur`로 두는 것도 그 때문이다 — `cells`를 부분
 문자열로 갖지 않는다.
 
 ---
 
 ## Task 1: 인덱스 창구를 만든다
 
-**Files:**
-- Modify: `terminal/src/vt.zig` — `findMatchCount`(`:706~709`) **바로 뒤**
+Files:
+- Modify: `terminal/src/vt.zig` — `findMatchCount`(`:706~709`) 바로 뒤
 
-- [ ] **Step 1: 넣을 것**
+- [ ] Step 1: 넣을 것
 
 `vt.zig`의 `findMatchCount` 함수가 끝나는 `}` 다음 줄에, `refreshMatches` 주석
-블록이 시작되기 **전에** 넣는다.
+블록이 시작되기 전에 넣는다.
 
 ```zig
     /// 지금 선택된 매치가 `find_matches`의 몇 번째인가. 없으면 null이다.
@@ -139,26 +139,26 @@ shown"이 뜬다. 일곱 글자 needle이면 명령줄 14칸 + 출력줄 14칸 =
     }
 ```
 
-- [ ] **Step 2: 빌드가 지나가는지 본다 (Claude가 실행, 약 3분)**
+- [ ] Step 2: 빌드가 지나가는지 본다 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 조용히 끝나고 `vt_test`가 CS-M1까지와 **글자 하나 다르지 않은 PASS**를
+기대: 조용히 끝나고 `vt_test`가 CS-M1까지와 글자 하나 다르지 않은 PASS를
 낸다. 이 Task는 아직 아무 동작도 안 바꾼다 — 아무도 안 부르는 함수 하나가
 늘었을 뿐이다.
 
-**`zig build`를 함께 도는 이유**는 HANDOFF의 실측 1이다. Zig가 참조되지 않는
+`zig build`를 함께 도는 이유는 HANDOFF의 실측 1이다. Zig가 참조되지 않는
 함수를 분석하지 않으므로, `zig build test`만 돌면 이 함수의 컴파일 오류를
 못 잡을 수 있다.
 
-**실패한다면 무엇을 뜻하나:** `selected`가 없는 필드라는 에러가 나면 vendor된
+실패한다면 무엇을 뜻하나: `selected`가 없는 필드라는 에러가 나면 vendor된
 ghostty가 이 계획이 읽은 것과 다른 버전이다. 그때는 `terminal/ghostty-src/src/
 terminal/search/screen.zig`의 `pub const SelectedMatch`를 다시 읽는다.
 
-- [ ] **Step 3: 커밋 (Claude가 실행)**
+- [ ] Step 3: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/vt.zig
@@ -170,13 +170,13 @@ git commit -m "Give the current match an index the terminal can read"
 ## Task 2: `vt_test`가 인덱스의 뜻을 고정한다 (검사 37·38)
 
 design 결정 1이 "뜻이 조용히 바뀌는 것은 검사로 막는다"라고 정한 자리다.
-**여기서 새 화면 `ps`를 만들고 Task 5까지 계속 쓴다.**
+여기서 새 화면 `ps`를 만들고 Task 5까지 계속 쓴다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt_test.zig` — 마지막 `std.debug.print("PASS\n", .{});`
-  (`:1119`) **바로 앞**
+  (`:1119`) 바로 앞
 
-- [ ] **Step 1: 넣을 것**
+- [ ] Step 1: 넣을 것
 
 ```zig
     // ── SP-M0: 현재 매치 ────────────────────────────────────────────────
@@ -251,14 +251,14 @@ design 결정 1이 "뜻이 조용히 바뀌는 것은 검사로 막는다"라고
     std.debug.print("vt_test: n이 현재 매치를 한 칸 옮긴다 OK (idx={d})\n", .{pcur2});
 ```
 
-- [ ] **Step 2: 검사를 돌린다 (Claude가 실행, 약 3분)**
+- [ ] Step 2: 검사를 돌린다 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** 검사 36까지의 줄이 그대로 나오고 그 뒤에 두 줄이 더 나온다.
+기대: 검사 36까지의 줄이 그대로 나오고 그 뒤에 두 줄이 더 나온다.
 
 ```
 vt_test: 검색 직후의 현재 매치는 0번이다 OK (matches=3)
@@ -266,11 +266,11 @@ vt_test: n이 현재 매치를 한 칸 옮긴다 OK (idx=1)
 PASS
 ```
 
-**`matches=3`이 아니면 화면 준비가 틀린 것이다.** 8번 줄에 둘, 18번 줄에 하나로
+`matches=3`이 아니면 화면 준비가 틀린 것이다. 8번 줄에 둘, 18번 줄에 하나로
 셋이다. 다른 숫자가 나오면 `qqzqqqzqqq`가 의도대로 안 들어간 것이므로 그
 줄부터 본다.
 
-- [ ] **Step 3: 커밋 (Claude가 실행)**
+- [ ] Step 3: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/vt_test.zig
@@ -281,13 +281,13 @@ git commit -m "Pin down what the current match index means"
 
 ## Task 3: 범위에 "현재"라는 표식을 싣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` — `RowSpan`(`:26`) · `HlStats`(`:41`) ·
   `hl_stats` 필드 기본값(`:217`) · `findSpans`(`:750~823`)
 
-- [ ] **Step 1: `RowSpan`에 필드를 더한다**
+- [ ] Step 1: `RowSpan`에 필드를 더한다
 
-**지울 것** (`vt.zig:26~29`)
+지울 것 (`vt.zig:26~29`)
 
 ```zig
 pub const RowSpan = struct {
@@ -296,7 +296,7 @@ pub const RowSpan = struct {
     x1: u16,
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
 pub const RowSpan = struct {
@@ -311,15 +311,15 @@ pub const RowSpan = struct {
     current: bool,
 ```
 
-- [ ] **Step 2: `HlStats`에 셈을 더한다**
+- [ ] Step 2: `HlStats`에 셈을 더한다
 
-**지울 것** (`vt.zig:41`)
+지울 것 (`vt.zig:41`)
 
 ```zig
 pub const HlStats = struct { spans: usize, cells: usize, us: i64 };
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
 /// `cur`은 **현재 매치가 칠한 셀 수**다(SP-M0). `cells`는 뜻을 안 바꾼다 —
@@ -328,49 +328,49 @@ pub const HlStats = struct { spans: usize, cells: usize, us: i64 };
 pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
 ```
 
-- [ ] **Step 3: 필드 기본값을 고친다**
+- [ ] Step 3: 필드 기본값을 고친다
 
-**지울 것** (`vt.zig:217`)
+지울 것 (`vt.zig:217`)
 
 ```zig
     hl_stats: HlStats = .{ .spans = 0, .cells = 0, .us = 0 },
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     hl_stats: HlStats = .{ .spans = 0, .cells = 0, .cur = 0, .us = 0 },
 ```
 
-- [ ] **Step 4: `findSpans`가 인덱스를 본다**
+- [ ] Step 4: `findSpans`가 인덱스를 본다
 
-**지울 것** (`vt.zig:751~752`, 함수 첫 두 줄)
+지울 것 (`vt.zig:751~752`, 함수 첫 두 줄)
 
 ```zig
         self.hl_spans.clearRetainingCapacity();
         self.hl_stats = .{ .spans = 0, .cells = 0, .us = 0 };
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         self.hl_spans.clearRetainingCapacity();
         self.hl_stats = .{ .spans = 0, .cells = 0, .cur = 0, .us = 0 };
 ```
 
-**지울 것** (`vt.zig:775`, 매치를 도는 루프의 머리)
+지울 것 (`vt.zig:775`, 매치를 도는 루프의 머리)
 
 ```zig
             for (matches) |m| {
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
             for (matches, 0..) |m, mi| {
 ```
 
-**지울 것** (`vt.zig:798~802`, span을 담는 자리)
+지울 것 (`vt.zig:798~802`, span을 담는 자리)
 
 ```zig
                         try self.hl_spans.append(self.alloc, .{
@@ -380,7 +380,7 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
                         });
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
                         try self.hl_spans.append(self.alloc, .{
@@ -395,15 +395,15 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
                         });
 ```
 
-- [ ] **Step 5: 인덱스를 루프 밖에서 한 번만 읽는다**
+- [ ] Step 5: 인덱스를 루프 밖에서 한 번만 읽는다
 
-**지울 것** (`vt.zig:763`, 시계를 재기 시작하는 줄의 앞뒤)
+지울 것 (`vt.zig:763`, 시계를 재기 시작하는 줄의 앞뒤)
 
 ```zig
         const t0 = std.Io.Clock.now(.awake, self.io);
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         // **루프 밖에서 한 번만 읽는다.** 매치마다 부르면 같은 값을 매치 수만큼
@@ -413,9 +413,9 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
         const t0 = std.Io.Clock.now(.awake, self.io);
 ```
 
-- [ ] **Step 6: 셀 수를 두 갈래로 센다**
+- [ ] Step 6: 셀 수를 두 갈래로 센다
 
-**지울 것** (`vt.zig:816~822`, 함수 끝)
+지울 것 (`vt.zig:816~822`, 함수 끝)
 
 ```zig
         var painted: usize = 0;
@@ -427,7 +427,7 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
         };
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
         var painted: usize = 0;
@@ -445,20 +445,20 @@ pub const HlStats = struct { spans: usize, cells: usize, cur: usize, us: i64 };
         };
 ```
 
-- [ ] **Step 7: 빌드와 검사 (Claude가 실행, 약 3분)**
+- [ ] Step 7: 빌드와 검사 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대:** `PASS`. 색은 아직 안 바뀌었으므로 CS-M0의 검사 28·29가 그대로 통과해야
-한다 — **이 Task가 색을 안 건드렸다는 것의 증명이 그것이다.**
+기대: `PASS`. 색은 아직 안 바뀌었으므로 CS-M0의 검사 28·29가 그대로 통과해야
+한다 — 이 Task가 색을 안 건드렸다는 것의 증명이 그것이다.
 
 `.current`에 기본값을 안 주었으므로, 담는 자리를 빠뜨렸다면 여기서
-`missing struct field` 에러가 난다. **그것이 plan 결정 2가 노린 것이다.**
+`missing struct field` 에러가 난다. 그것이 plan 결정 2가 노린 것이다.
 
-- [ ] **Step 8: 커밋 (Claude가 실행)**
+- [ ] Step 8: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/vt.zig
@@ -469,13 +469,13 @@ git commit -m "Mark which highlighted span is the current match"
 
 ## Task 4: 색을 둘로 가른다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` — `MATCH_BG`(`:57`) 뒤 · `cells()`의 매치
   층(`:422~427`)
 
-- [ ] **Step 1: 상수를 더한다**
+- [ ] Step 1: 상수를 더한다
 
-`MATCH_BG` 선언(`vt.zig:57`) **바로 뒤**에 넣는다.
+`MATCH_BG` 선언(`vt.zig:57`) 바로 뒤에 넣는다.
 
 ```zig
 
@@ -499,9 +499,9 @@ git commit -m "Mark which highlighted span is the current match"
 pub const CURRENT_BG: u32 = 0x00C08000;
 ```
 
-- [ ] **Step 2: `cells()`의 매치 층을 고친다**
+- [ ] Step 2: `cells()`의 매치 층을 고친다
 
-**지울 것** (`vt.zig:422~427`)
+지울 것 (`vt.zig:422~427`)
 
 ```zig
                 for (row_spans) |sp| {
@@ -512,7 +512,7 @@ pub const CURRENT_BG: u32 = 0x00C08000;
                 }
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
                 // **먼저 걸린 것에서 멈추지 않는다**(plan 결정 3). 색이 하나일
@@ -536,16 +536,16 @@ pub const CURRENT_BG: u32 = 0x00C08000;
                 if (hit_match) bg = if (hit_current) CURRENT_BG else MATCH_BG;
 ```
 
-- [ ] **Step 3: 빌드와 검사 (Claude가 실행, 약 3분)**
+- [ ] Step 3: 빌드와 검사 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**기대: `zig build`는 통과하고 `zig build test`는 실패한다.** 실패가 **의도된
-결과**다 — CS-M0의 검사 29가 `hs` 화면에서 매치 셀의 바탕이 `MATCH_BG`인 것을
-보는데, 그 화면은 매치가 **하나**만 보이고 그 하나가 곧 현재 매치라 이제
+기대: `zig build`는 통과하고 `zig build test`는 실패한다. 실패가 의도된
+결과다 — CS-M0의 검사 29가 `hs` 화면에서 매치 셀의 바탕이 `MATCH_BG`인 것을
+보는데, 그 화면은 매치가 하나만 보이고 그 하나가 곧 현재 매치라 이제
 `CURRENT_BG`가 된다.
 
 기대하는 실패 문구는 이것이다.
@@ -554,12 +554,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
 ```
 
-**이 실패가 SP-M0이 실제로 동작한다는 첫 증거다.** 이 자리에서 통과해 버리면
+이 실패가 SP-M0이 실제로 동작한다는 첫 증거다. 이 자리에서 통과해 버리면
 색이 안 바뀐 것이다.
 
-- [ ] **Step 4: CS-M0의 검사 29를 새 사실에 맞춘다**
+- [ ] Step 4: CS-M0의 검사 29를 새 사실에 맞춘다
 
-**지울 것** (`vt_test.zig:934~957` 언저리, 검사 29의 본문)
+지울 것 (`vt_test.zig:934~957` 언저리, 검사 29의 본문)
 
 ```zig
     var hcnt: usize = 0;
@@ -588,7 +588,7 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     });
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // **SP-M0이 색을 바꿨다.** 이 화면은 매치가 하나만 보이고 그 하나가 곧
@@ -621,12 +621,12 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     });
 ```
 
-- [ ] **Step 5: 검사 30을 함께 고친다**
+- [ ] Step 5: 검사 30을 함께 고친다
 
-**같은 `hs` 화면을 보므로 이 검사도 반드시 함께 깨진다.** 계획을 쓰면서 본문을
+같은 `hs` 화면을 보므로 이 검사도 반드시 함께 깨진다. 계획을 쓰면서 본문을
 읽어 확인했다(`vt_test.zig:960~977`).
 
-**지울 것**
+지울 것
 
 ```zig
     try hs.copySelect(.line);
@@ -636,7 +636,7 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     }
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // **SP-M0이 이 화면의 색을 `CURRENT_BG`로 바꿨다.** 보이는 매치가 하나이고
@@ -650,14 +650,14 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     }
 ```
 
-- [ ] **Step 6: 검사 31을 두 색으로 넓힌다**
+- [ ] Step 6: 검사 31을 두 색으로 넓힌다
 
-**이쪽은 안 고쳐도 통과한다 — 그것이 문제다.** `copyExit` 뒤에 `MATCH_BG`인
+이쪽은 안 고쳐도 통과한다 — 그것이 문제다. `copyExit` 뒤에 `MATCH_BG`인
 셀을 세어 0인지 보는데, SP-M0 뒤로는 이 화면에 `MATCH_BG`가 애초에 없으므로
-**아무것도 안 보는 검사가 된다.** 게이트의 음성 판정을 넓히는 것(Task 7 Step 2)과
+아무것도 안 보는 검사가 된다. 게이트의 음성 판정을 넓히는 것(Task 7 Step 2)과
 정확히 같은 이유다.
 
-**지울 것**
+지울 것
 
 ```zig
     var hleft: usize = 0;
@@ -666,7 +666,7 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     }
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // **두 색을 함께 센다**(SP-M0). 한 색만 보면, 이 화면처럼 그 색이 애초에
@@ -679,14 +679,14 @@ FAIL: 0 plain + 0 inverted match cell(s) (expected 5 + 1)
     }
 ```
 
-- [ ] **Step 7: 다시 돌린다 (Claude가 실행, 약 3분)**
+- [ ] Step 7: 다시 돌린다 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test' 2>&1 | tail -30
 ```
 
-**기대:** `PASS`. 검사 29·30·31 세 줄이 예전과 같은 숫자로 나온다.
+기대: `PASS`. 검사 29·30·31 세 줄이 예전과 같은 숫자로 나온다.
 
 ```
 vt_test: 현재 매치 셀의 바탕이 CURRENT_BG다 OK (plain=5 cursor=1)
@@ -694,10 +694,10 @@ vt_test: 선택 안의 매치가 맞바뀌어 남는다 OK (cells=5)
 vt_test: copy mode를 나가면 하이라이트가 사라진다 OK
 ```
 
-**숫자가 예전과 같은 것이 판정이다.** 색만 바뀌고 셈은 안 바뀌어야 한다 — 셈이
+숫자가 예전과 같은 것이 판정이다. 색만 바뀌고 셈은 안 바뀌어야 한다 — 셈이
 바뀌었다면 층 순서를 건드린 것이다.
 
-- [ ] **Step 8: 커밋 (Claude가 실행)**
+- [ ] Step 8: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/vt.zig terminal/src/vt_test.zig
@@ -708,13 +708,13 @@ git commit -m "Paint the current match in its own colour"
 
 ## Task 5: 두 색이 함께 있는 것을 `vt_test`가 본다 (검사 39)
 
-Task 4까지는 색이 **하나뿐인** 화면만 보았다. 두 색이 나란히 나오는 것은 이
+Task 4까지는 색이 하나뿐인 화면만 보았다. 두 색이 나란히 나오는 것은 이
 검사가 처음 본다.
 
-**Files:**
-- Modify: `terminal/src/vt_test.zig` — Task 2가 넣은 검사 38 **바로 뒤**
+Files:
+- Modify: `terminal/src/vt_test.zig` — Task 2가 넣은 검사 38 바로 뒤
 
-- [ ] **Step 1: 넣을 것**
+- [ ] Step 1: 넣을 것
 
 ```zig
     // 검사 39. **두 색이 한 화면에 나란히 있다.**
@@ -801,14 +801,14 @@ Task 4까지는 색이 **하나뿐인** 화면만 보았다. 두 색이 나란�
     });
 ```
 
-- [ ] **Step 2: 검사를 돌린다 (Claude가 실행, 약 3분)**
+- [ ] Step 2: 검사를 돌린다 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test' 2>&1 | tail -20
 ```
 
-**기대:**
+기대:
 
 ```
 vt_test: 현재 매치와 나머지가 다른 색이다 OK (cur=1+1 other=2)
@@ -816,12 +816,12 @@ vt_test: hlStats의 cur이 현재 매치만 센다 OK (cells=4 cur=2)
 PASS
 ```
 
-**`pspans.len`이 2가 아니면** 8번 줄이 뷰포트 맨 위로 안 올라간 것이거나 `n`이
+`pspans.len`이 2가 아니면 8번 줄이 뷰포트 맨 위로 안 올라간 것이거나 `n`이
 18번 줄 안에서 움직인 것이다. 그때는 실패 출력이 찍는 `span row= x0= x1=
-current=` 네 줄을 읽고 어느 줄의 매치인지 먼저 가른다. **`ps` 화면이 5줄이고
-8번 줄이 스크롤백에 있다는 것이 전제다.**
+current=` 네 줄을 읽고 어느 줄의 매치인지 먼저 가른다. `ps` 화면이 5줄이고
+8번 줄이 스크롤백에 있다는 것이 전제다.
 
-- [ ] **Step 3: 커밋 (Claude가 실행)**
+- [ ] Step 3: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/vt_test.zig
@@ -832,12 +832,12 @@ git commit -m "Check that the two match colours appear side by side"
 
 ## Task 6: 게이트가 볼 수 있게 로그에 숫자를 더한다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` — `dumpHighlight`(`:446~451`)
 
-- [ ] **Step 1: 넣을 것**
+- [ ] Step 1: 넣을 것
 
-**지울 것** (`main.zig:448~450`)
+지울 것 (`main.zig:448~450`)
 
 ```zig
     std.debug.print("terminal: find> hl spans={d} cells={d} us={d}\n", .{
@@ -845,7 +845,7 @@ git commit -m "Check that the two match colours appear side by side"
     });
 ```
 
-**넣을 것**
+넣을 것
 
 ```zig
     // **`cur=`을 `cells=` 뒤·`us=` 앞에 넣는다**(SP-M0 plan 결정 5).
@@ -857,16 +857,16 @@ git commit -m "Check that the two match colours appear side by side"
     });
 ```
 
-- [ ] **Step 2: 빌드 (Claude가 실행, 약 3분)**
+- [ ] Step 2: 빌드 (Claude가 실행, 약 3분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test' 2>&1 | tail -5
 ```
 
-**기대:** `PASS`. `vt_test`는 로그 문구를 안 보므로 안 흔들린다.
+기대: `PASS`. `vt_test`는 로그 문구를 안 보므로 안 흔들린다.
 
-- [ ] **Step 3: 커밋 (Claude가 실행)**
+- [ ] Step 3: 커밋 (Claude가 실행)
 
 ```bash
 git add terminal/src/main.zig
@@ -877,16 +877,16 @@ git commit -m "Report how many cells the current match painted"
 
 ## Task 7: 게이트의 검사 16을 새 색에 맞춘다
 
-**이 Task가 SP-M0에서 유일하게 "고치는" 게이트 작업이다.** CS-M0도 CS-M1도
+이 Task가 SP-M0에서 유일하게 "고치는" 게이트 작업이다. CS-M0도 CS-M1도
 더하기만 했다 — 왜 이번에는 못 그러는지는 design 결정 10에 있다.
 
-**Files:**
+Files:
 - Modify: `copy/check.sh` — 검사 16의 양성 판정(`:783~791`)과 음성
   판정(`:800~806`)
 
-- [ ] **Step 1: 양성 판정을 고친다**
+- [ ] Step 1: 양성 판정을 고친다
 
-**지울 것**
+지울 것
 
 ```bash
 # **판정.** 마지막 프레임의 셀이 정말 MATCH_BG를 받았다.
@@ -903,7 +903,7 @@ fi
 echo "${HL_STYLED} cell(s) reached the framebuffer with bg=705000"
 ```
 
-**넣을 것**
+넣을 것
 
 ```bash
 # **판정.** 마지막 프레임의 셀이 정말 CURRENT_BG를 받았다.
@@ -927,15 +927,15 @@ fi
 echo "${HL_STYLED} cell(s) reached the framebuffer with bg=C08000"
 ```
 
-- [ ] **Step 2: 음성 판정을 두 색으로 넓힌다**
+- [ ] Step 2: 음성 판정을 두 색으로 넓힌다
 
-**지울 것**
+지울 것
 
 ```bash
 if [ "$(last_frame | grep -acE 'bg=705000' || true)" -ne 0 ]; then
 ```
 
-**넣을 것**
+넣을 것
 
 ```bash
 # **두 색을 함께 본다**(SP-M0). 한 색만 보면 다른 색으로 칠해진 하이라이트가
@@ -944,8 +944,8 @@ if [ "$(last_frame | grep -acE 'bg=705000' || true)" -ne 0 ]; then
 if [ "$(last_frame | grep -acE 'bg=(705000|C08000)' || true)" -ne 0 ]; then
 ```
 
-- [ ] **Step 3: copy 체인만 돌려 확인한다 (Claude가 실행, 약 8분,
-      background process)**
+- [ ] Step 3: copy 체인만 돌려 확인한다 (Claude가 실행, 약 8분,
+      background process)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -957,20 +957,20 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ' > /tmp/sp-m0-chain.out 2>&1
 ```
 
-**기대:** `chain exit=0`, 그리고
+기대: `chain exit=0`, 그리고
 
 ```
 5 cell(s) reached the framebuffer with bg=C08000
 the match highlight: terminal: find> hl spans=1 cells=6 cur=6 us=…
 ```
 
-**`cur=6`이 판정의 핵심이다.** 이 자리는 매치가 하나이고 그것이 현재 매치이므로
-`cells`와 `cur`이 **같아야** 한다. 다르면 `findCurrentIndex()`가 null을 주고
+`cur=6`이 판정의 핵심이다. 이 자리는 매치가 하나이고 그것이 현재 매치이므로
+`cells`와 `cur`이 같아야 한다. 다르면 `findCurrentIndex()`가 null을 주고
 있다는 뜻이고, 그러면 화면도 옛 색으로 칠해졌을 것이다.
 
-**5인 것도 판정이다.** 여섯이 나오면 커서가 매치의 첫 칸에 안 선 것이다.
+5인 것도 판정이다. 여섯이 나오면 커서가 매치의 첫 칸에 안 선 것이다.
 
-- [ ] **Step 4: 커밋 (Claude가 실행)**
+- [ ] Step 4: 커밋 (Claude가 실행)
 
 ```bash
 git add copy/check.sh
@@ -981,11 +981,11 @@ git commit -m "Point check 16 at the current-match colour"
 
 ## Task 8: 두 색이 함께 있는 것을 게이트가 본다 (검사 19)
 
-**Files:**
+Files:
 - Modify: `copy/check.sh` — 검사 18이 끝난 뒤, "음성 검사: 로그에 NUL이 섞이지
-  않았다" **바로 앞**
+  않았다" 바로 앞
 
-- [ ] **Step 1: 넣을 것**
+- [ ] Step 1: 넣을 것
 
 ```bash
 # ── 검사 19: 현재 매치와 나머지가 다른 색이다 (SP-M0) ──────────────────
@@ -1057,7 +1057,7 @@ fi
 echo "both match colours reached the framebuffer (current=${CUR_CELLS} other=${OTHER_CELLS})"
 ```
 
-- [ ] **Step 2: copy 체인을 돌린다 (Claude가 실행, 약 8분, background process)**
+- [ ] Step 2: copy 체인을 돌린다 (Claude가 실행, 약 8분, background process)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -1067,7 +1067,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ' > /tmp/sp-m0-chain2.out 2>&1
 ```
 
-**기대:** `chain exit=0`, 그리고 마지막 줄들에
+기대: `chain exit=0`, 그리고 마지막 줄들에
 
 ```
 two match colours are live: terminal: find> hl spans=… cur=2 …
@@ -1075,11 +1075,11 @@ both match colours reached the framebuffer (current=1 other=…)
 CM-M2 check PASS
 ```
 
-**`current=1`이 맞는 값이다.** 현재 매치는 두 칸인데 첫 칸에 copy 커서가 서서
-맞바뀌므로, `fg=FFFFFF bg=C08000`으로 남는 것은 **하나**다. `vt_test`의 검사
+`current=1`이 맞는 값이다. 현재 매치는 두 칸인데 첫 칸에 copy 커서가 서서
+맞바뀌므로, `fg=FFFFFF bg=C08000`으로 남는 것은 하나다. `vt_test`의 검사
 39가 같은 갈림을 `cur=1+1`로 본다.
 
-**실패한다면 어디를 먼저 보나:**
+실패한다면 어디를 먼저 보나:
 
 | 증상 | 뜻 |
 |---|---|
@@ -1088,7 +1088,7 @@ CM-M2 check PASS
 | `cur=4` | 현재 매치 표식이 두 span에 붙었다. `findSpans`의 `ci == mi` 비교를 본다 |
 | `cur=0` | `findCurrentIndex()`가 null이다. `refreshMatches()`가 `select()` 뒤인지 본다 |
 
-- [ ] **Step 3: 커밋 (Claude가 실행)**
+- [ ] Step 3: 커밋 (Claude가 실행)
 
 ```bash
 git add copy/check.sh
@@ -1099,8 +1099,8 @@ git commit -m "Check both match colours on screen at once"
 
 ## Task 9: 루트 게이트와 마무리
 
-- [ ] **Step 1: 루트 게이트를 세 번 돈다 (Claude가 실행, 약 48분,
-      background process)**
+- [ ] Step 1: 루트 게이트를 세 번 돈다 (Claude가 실행, 약 48분,
+      background process)
 
 ```bash
 for i in 1 2 3; do
@@ -1109,49 +1109,49 @@ for i in 1 2 3; do
 done
 ```
 
-**기대:** 여덟 체인이 전부 3/3이고, 시간이 **16분 01초~11초** 언저리다(GL-M3
+기대: 여덟 체인이 전부 3/3이고, 시간이 16분 01초~11초 언저리다(GL-M3
 직후의 기준선).
 
-**값이 기준선에서 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다.**
+값이 기준선에서 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다.
 TR-M2 때 처음 잰 값이 6시간 12분이었고 원인은 Chrome의 영상 재생이었다.
 
-**`skipping make`가 23회인 것도 함께 본다.** 24회면 `clean()`이 지운 자리에서도
+`skipping make`가 23회인 것도 함께 본다. 24회면 `clean()`이 지운 자리에서도
 건너뛴 것이라 잘못이다.
 
 ```bash
 grep -c 'skipping make' /tmp/gate-sp-m0-1.out
 ```
 
-- [ ] **Step 2: 못 푼 것 하나를 로그에서 확인한다 (Claude가 실행)**
+- [ ] Step 2: 못 푼 것 하나를 로그에서 확인한다 (Claude가 실행)
 
-**검사 15의 주석과 실측이 어긋나 있다.** 주석은 "`/`는 표적 2의 출력줄로 가고
-`n`은 **그 위의 명령줄**로 올라간다"고 적었는데, 같은 검사가 찍는 이동 폭이
-`row 312 -> 210`으로 **102줄**이다. 명령줄과 출력줄은 붙어 있으므로 1이어야
-한다. **둘 중 하나가 틀렸고 아직 어느 쪽인지 모른다.**
+검사 15의 주석과 실측이 어긋나 있다. 주석은 "`/`는 표적 2의 출력줄로 가고
+`n`은 그 위의 명령줄로 올라간다"고 적었는데, 같은 검사가 찍는 이동 폭이
+`row 312 -> 210`으로 102줄이다. 명령줄과 출력줄은 붙어 있으므로 1이어야
+한다. 둘 중 하나가 틀렸고 아직 어느 쪽인지 모른다.
 
-SP-M0의 판정에는 영향이 없다(그 검사는 "위로 갔다"만 본다). 그러나 **SP-M1의
-`[3/12]`는 이것에 딸린다** — `n`이 정말 매치를 건너뛴다면 번호가 1에서 3으로
+SP-M0의 판정에는 영향이 없다(그 검사는 "위로 갔다"만 본다). 그러나 SP-M1의
+`[3/12]`는 이것에 딸린다 — `n`이 정말 매치를 건너뛴다면 번호가 1에서 3으로
 뛴다. 그래서 이 게이트 로그에서 값을 하나 더 읽어 둔다.
 
 ```bash
 grep -a 'n moved the cursor up the scrollback' /tmp/gate-sp-m0-1.out
 ```
 
-**읽고 나서 판단만 기록한다.** 여기서 고치지 않는다 — SP-M1의 design 질문이다.
+읽고 나서 판단만 기록한다. 여기서 고치지 않는다 — SP-M1의 design 질문이다.
 
-- [ ] **Step 3: 문서와 기억을 갱신한다 (Claude가 실행)**
+- [ ] Step 3: 문서와 기억을 갱신한다 (Claude가 실행)
 
 - `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`의
-  `Status:`를 "SP-M0 완료, SP-M1 미착수"로 바꾸고, **결정 10의 열린 질문에 답을
-  적는다**(검사 19가 자기 조건을 만드는 길로 갔다는 것).
+  `Status:`를 "SP-M0 완료, SP-M1 미착수"로 바꾸고, 결정 10의 열린 질문에 답을
+  적는다(검사 19가 자기 조건을 만드는 길로 갔다는 것).
 - `docs/decisions/project_search_position.md`를 새로 만들고 `MEMORY.md`에 한 줄
   더한다.
-- `HANDOFF.md`를 SP-M0 기준으로 다시 쓴다. **`main.zig`의 낡은 줄 번호도 이때
-  고친다**(실측 5).
+- `HANDOFF.md`를 SP-M0 기준으로 다시 쓴다. `main.zig`의 낡은 줄 번호도 이때
+  고친다(실측 5).
 - 새 로그 문구 `terminal: find> hl … cur=…`를 HANDOFF의 "로그 문구는 두 곳에
   중복된다" 목록에 더한다.
 
-- [ ] **Step 4: 커밋 (Claude가 실행)**
+- [ ] Step 4: 커밋 (Claude가 실행)
 
 ```bash
 git add docs/ MEMORY.md HANDOFF.md
@@ -1162,7 +1162,7 @@ git commit -m "Close out SP-M0"
 
 ## 자기 점검 (계획을 다 쓰고 나서)
 
-**1. design 항목이 전부 Task로 덮였나.**
+1. design 항목이 전부 Task로 덮였나.
 
 | design | Task |
 |---|---|
@@ -1177,22 +1177,22 @@ git commit -m "Close out SP-M0"
 | 위험 2(`idx`가 범위를 벗어남) | Task 1의 `sel.idx >= m.len` |
 | 위험 4(게이트 시간) | Task 9 Step 1 |
 
-**결정 5·6·7은 SP-M1의 것이라 이 계획에 없다.** 그것이 milestone을 가른 선이다.
+결정 5·6·7은 SP-M1의 것이라 이 계획에 없다. 그것이 milestone을 가른 선이다.
 
-**2. 이름이 앞뒤로 같나.** `findCurrentIndex` · `RowSpan.current` ·
+2. 이름이 앞뒤로 같나. `findCurrentIndex` · `RowSpan.current` ·
 `HlStats.cur` · `CURRENT_BG` · `cur=` 다섯이 Task 1·3·4·6과 검사들에서 같은
 철자로 쓰였다.
 
-**3. 남은 빈칸.** 없다. 처음에는 Task 4에 "검사 30이 함께 깨질 수 **있다**"라고
+3. 남은 빈칸. 없다. 처음에는 Task 4에 "검사 30이 함께 깨질 수 있다"라고
 짐작으로 적었는데, 계획을 다 쓴 뒤 `vt_test.zig:960~995`를 직접 읽어
-**확정으로 바꿨다** — 검사 30은 반드시 깨지고(Step 5), 검사 31은 안 깨지지만
-**아무것도 안 보는 검사가 되므로** 함께 넓힌다(Step 6).
+확정으로 바꿨다 — 검사 30은 반드시 깨지고(Step 5), 검사 31은 안 깨지지만
+아무것도 안 보는 검사가 되므로 함께 넓힌다(Step 6).
 
-**그래도 plan이 틀릴 수 있다.** CS-M0에서 두 번 드러났다 — 매치 셀 수가 6이
+그래도 plan이 틀릴 수 있다. CS-M0에서 두 번 드러났다 — 매치 셀 수가 6이
 아니라 5였고, `RowSpan`을 struct의 필드 사이에 둔 배치가 컴파일되지 않았다.
-**계획을 그대로 밟되 실측이 다르면 실측이 답이다.**
+계획을 그대로 밟되 실측이 다르면 실측이 답이다.
 
-**4. 이 계획이 손대는 파일은 넷이다.** `terminal/src/vt.zig`(Task 1·3·4) ·
+4. 이 계획이 손대는 파일은 넷이다. `terminal/src/vt.zig`(Task 1·3·4) ·
 `terminal/src/vt_test.zig`(Task 2·4·5) · `terminal/src/main.zig`(Task 6) ·
-`copy/check.sh`(Task 7·8). **`input.zig`도 `input_test.zig`도 안 건드린다** —
+`copy/check.sh`(Task 7·8). `input.zig`도 `input_test.zig`도 안 건드린다 —
 SP-M0은 키의 뜻을 하나도 안 바꾸기 때문이고, CS-M0·CS-M1이 그랬던 것과 같다.

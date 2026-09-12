@@ -1,19 +1,19 @@
 # TARS Power Management PM-M0 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** 게스트 안에서 시스템을 끌 수 있게 한다. 화면 터미널에
+Goal: 게스트 안에서 시스템을 끌 수 있게 한다. 화면 터미널에
 `kill -TERM 1`을 치면 PID 1이 그것을 받아, 자식들을 정리하고, 디스크를
 내려쓴 뒤, `reboot(2)`를 부른다. 이 milestone이 끝나면 TARS를 끄는 방법이
 "호스트에서 QEMU를 죽인다" 말고 하나 더 생긴다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-19-tars-power-management-design.md`
+Design doc: `docs/superpowers/specs/2026-08-19-tars-power-management-design.md`
 (결정 1의 `SIGTERM` 절반, 결정 2·3·5·6·7이 이 milestone의 몫. 결정 4·9와
 결정 8의 부팅 A는 PM-M1이다.)
 
-**Tech Stack:** Zig 0.16.0, `std.os.linux`(`sigaction`/`kill`/`waitpid`/
+Tech Stack: Zig 0.16.0, `std.os.linux`(`sigaction`/`kill`/`waitpid`/
 `sync`/`reboot`), QEMU monitor `sendkey`, `mkfs.ext2 -d`,
 Docker(`tars-devcontainer`, arm64)
 
@@ -31,30 +31,30 @@ Task 3   종료 순서 + main.zig 결선                     ← 같은 게이�
 Task 4   루트 게이트에 다섯째 체인을 등록하고 3/3
 ```
 
-**Task 1이 맨 앞인 이유**는 이 milestone에서 **부팅 없이 판정할 수 있는
-유일한 조각**이기 때문이다. libc 없이 `rt_sigaction`을 직접 부르는 것은
+Task 1이 맨 앞인 이유는 이 milestone에서 부팅 없이 판정할 수 있는
+유일한 조각이기 때문이다. libc 없이 `rt_sigaction`을 직접 부르는 것은
 구조체 하나만 어긋나도 조용히 실패하는 종류의 일인데, 그 실패를 게스트에서
 만나면 원인이 "핸들러가 안 달렸다"인지 "종료 순서가 틀렸다"인지 가릴 수 없다.
 `config_test`가 부팅 20초 앞에서 파서를 잡는 것과 같은 자리다.
 
-**Task 2가 구현보다 앞인 이유**는 이 milestone의 실패가 **관측되지 않는
-종류**이기 때문이다. 지금 게스트에서 `kill -TERM 1`을 치면 커널이 그 시그널을
+Task 2가 구현보다 앞인 이유는 이 milestone의 실패가 관측되지 않는
+종류이기 때문이다. 지금 게스트에서 `kill -TERM 1`을 치면 커널이 그 시그널을
 조용히 버린다(design doc 조사 1). 화면에는 아무 일도 일어나지 않고 에러도
 없다. 그 "아무 일도 없음"을 게이트로 한 번 보고 나서 구현에 들어가야,
 Task 3의 통과가 무엇 때문인지 분명해진다.
 
-**Task 3이 종료 순서와 결선을 한 Task에 묶는 이유**는 관측 가능성이다.
-`shutdown()`만 먼저 써 두면 아무도 그것을 부르지 않으므로 **한 줄도 실행되지
-않는다.** 호스트에서 시험 삼아 불러 볼 수도 없다 — 그 함수는 컨테이너를
+Task 3이 종료 순서와 결선을 한 Task에 묶는 이유는 관측 가능성이다.
+`shutdown()`만 먼저 써 두면 아무도 그것을 부르지 않으므로 한 줄도 실행되지
+않는다. 호스트에서 시험 삼아 불러 볼 수도 없다 — 그 함수는 컨테이너를
 정지시킨다. 부르는 자리(`supervise` 루프 머리)가 함께 생겨야 게이트가 볼 수
 있다.
 
 ## 이번에 정하는 것 넷 (design doc이 안 정한 자리)
 
-**1. 로그 문구 여덟을 여기서 확정한다.**
+1. 로그 문구 여덟을 여기서 확정한다.
 
 `project_gate_chain_composition`이 적어둔 그대로, 이 문자열들은 `init` 코드와
-check 스크립트 **두 곳에 중복된다.** 한쪽을 고치면 다른 쪽도 고쳐야 한다.
+check 스크립트 두 곳에 중복된다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 
 | 문구 | 언제 |
 |---|---|
@@ -67,33 +67,33 @@ check 스크립트 **두 곳에 중복된다.** 한쪽을 고치면 다른 쪽�
 | `tars-init: filesystems synced` | 4단계 |
 | `tars-init: calling reboot(POWER_OFF)` | 5단계 |
 
-**2. 대화형 셸은 `SIGTERM`을 무시한다 — `SIGKILL` 경로가 예외가 아니라 정상
-경로다.**
+2. 대화형 셸은 `SIGTERM`을 무시한다 — `SIGKILL` 경로가 예외가 아니라 정상
+경로다.
 
-bash·zsh·fish는 **대화형으로 떴을 때 `SIGTERM`을 무시한다.** 로그인 셸이
+bash·zsh·fish는 대화형으로 떴을 때 `SIGTERM`을 무시한다. 로그인 셸이
 지나가는 `kill`에 죽어버리면 곤란하기 때문이고, POSIX가 그렇게 하라고
 적어 둔 동작이다. 그래서 우리 종료 순서에서 1단계(`SIGTERM`)에 죽는 것은
 `/terminal`뿐이고, 셸 둘은 3초를 기다린 뒤 `SIGKILL`로 죽는다.
 
-이것을 미리 적어두는 이유는 **게이트가 무엇을 기대해야 하는지**가 여기서
+이것을 미리 적어두는 이유는 게이트가 무엇을 기대해야 하는지가 여기서
 갈리기 때문이다. `grace period expired`는 버그 신호가 아니라 매번 나오는
-줄이다. 대신 게이트는 **마지막에 `every child is gone`이 나오는 것**을
+줄이다. 대신 게이트는 마지막에 `every child is gone`이 나오는 것을
 요구한다. 유예가 끝난 뒤에도 자식이 남아 있으면 `SIGKILL`이 안 먹었다는
 뜻이고, 그건 진짜 실패다.
 
-**3. PM 게이트의 게스트 셸은 bash다.**
+3. PM 게이트의 게스트 셸은 bash다.
 
-`kill`은 initrd에 **바이너리로 들어 있지 않다**(`kernel/make_initrd.sh`가
+`kill`은 initrd에 바이너리로 들어 있지 않다(`kernel/make_initrd.sh`가
 넣는 것은 fish·bash·zsh와 cat·uname·mkdir·sleep뿐이다). bash와 zsh는
-`kill`을 빌트인으로 가지고 있어서 상관없지만, **fish에 `kill` 빌트인이 있는지
-확인되지 않았다.** 기본값이 fish이므로 그대로 두면 게이트가 "명령을 못
+`kill`을 빌트인으로 가지고 있어서 상관없지만, fish에 `kill` 빌트인이 있는지
+확인되지 않았다. 기본값이 fish이므로 그대로 두면 게이트가 "명령을 못
 찾았다"로 죽을 수 있고, 그 실패는 시그널 처리의 실패와 구분되지 않는다.
 
 IP-M2가 쓴 방법을 그대로 쓴다: `mkfs.ext2 -d`로 `shell=bash`가 이미 적힌
 디스크를 굽는다. 게스트에 `/usr/bin/bash --norc`를 타이핑할 필요도 없어지고,
 부팅 직후부터 bash 프롬프트다.
 
-**4. `power.zig`를 새 파일로 두고, 네 줄짜리 헬퍼는 복사한다.**
+4. `power.zig`를 새 파일로 두고, 네 줄짜리 헬퍼는 복사한다.
 
 `config.zig:4`에 이미 이렇게 적혀 있다.
 
@@ -101,7 +101,7 @@ IP-M2가 쓴 방법을 그대로 쓴다: `mkfs.ext2 -d`로 `shell=bash`가 이�
 > 만드는 것보다 각자 갖고 있는 편이 읽기 쉽다고 판단했다 — 이런 것이
 > 다섯 개쯤 되면 그때 sys.zig로 모은다.
 
-`power.zig`의 `failed`가 **세 벌째**다. 아직 다섯이 아니므로 그 판단을
+`power.zig`의 `failed`가 세 벌째다. 아직 다섯이 아니므로 그 판단을
 유지한다. 대신 `power.zig`의 복사본에도 같은 사정을 적어서, 다음 사람이
 "넷째를 만들지 다섯을 모을지"를 셀 수 있게 한다.
 
@@ -115,34 +115,34 @@ IP-M2가 쓴 방법을 그대로 쓴다: `mkfs.ext2 -d`로 `shell=bash`가 이�
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree가 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-**이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 둘이다** —
+이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 둘이다 —
 `init/src/power.zig`(Task 3에서 100줄을 넘는다)와 `power/check.sh`(Task 2,
 새 파일 150줄). 나머지는 전부 짧은 블록이라 인라인으로 제시한다.
 
-**인라인으로 제시하는 블록은 "넣을 것"만 적는다.** IP-M2에서 문맥 줄을
+인라인으로 제시하는 블록은 "넣을 것"만 적는다. IP-M2에서 문맥 줄을
 포함한 블록을 제시했다가 기존 줄이 복제된 사고가 있었다. "이런 모양이 된다"는
 예시가 필요하면 그것이 붙여넣기용이 아님을 명시한다.
 
-**이미지 재빌드는 필요 없다.** bash는 이미 initrd에 들어가고
+이미지 재빌드는 필요 없다. bash는 이미 initrd에 들어가고
 (`kernel/make_initrd.sh`), `mkfs.ext2 -d`도 IP-M2부터 쓰고 있다.
 
 ---
 
 ## Task 1: 시그널이 플래그가 된다
 
-이 Task가 만드는 것은 **관측 장치**다. 시스템을 끄는 코드는 아직 없다.
+이 Task가 만드는 것은 관측 장치다. 시스템을 끄는 코드는 아직 없다.
 `SIGTERM`이 도착했다는 사실이 감독 루프가 읽을 수 있는 값 하나로 남는
 것까지가 여기다.
 
-**Files:**
+Files:
 - Create: `init/src/power.zig`
 - Create: `init/src/power_test.zig`
 - Modify: `init/build.zig` (test step에 `power_test` 추가)
 
-- [ ] **Step 1: 실패할 검사를 먼저 쓴다**
+- [ ] Step 1: 실패할 검사를 먼저 쓴다
 
 `init/src/power_test.zig`를 새로 만든다.
 
@@ -190,9 +190,9 @@ pub fn main() !void {
 }
 ```
 
-- [ ] **Step 2: 아무것도 하지 않는 `power.zig`를 만든다**
+- [ ] Step 2: 아무것도 하지 않는 `power.zig`를 만든다
 
-일부러 **핸들러를 달지 않는** 판을 먼저 만든다. 이렇게 하면 다음 Step에서
+일부러 핸들러를 달지 않는 판을 먼저 만든다. 이렇게 하면 다음 Step에서
 "핸들러가 없으면 무슨 일이 일어나는가"를 눈으로 보게 된다.
 
 `init/src/power.zig`를 새로 만든다.
@@ -221,7 +221,7 @@ pub fn take() ?Action {
 }
 ```
 
-- [ ] **Step 3: `build.zig`의 test step에 검사를 등록한다**
+- [ ] Step 3: `build.zig`의 test step에 검사를 등록한다
 
 `init/build.zig`의 마지막 두 줄
 
@@ -230,7 +230,7 @@ pub fn take() ?Action {
     test_step.dependOn(&b.addRunArtifact(config_test).step);
 ```
 
-**바로 위에** 이 블록을 넣는다.
+바로 위에 이 블록을 넣는다.
 
 ```zig
     // PM-M0: 시그널이 플래그가 되는지 보는 검사. config_test와 같은 자리에
@@ -249,20 +249,20 @@ pub fn take() ?Action {
 
 ```
 
-그리고 마지막 줄 **뒤에** 한 줄을 더한다.
+그리고 마지막 줄 뒤에 한 줄을 더한다.
 
 ```zig
     test_step.dependOn(&b.addRunArtifact(power_test).step);
 ```
 
-- [ ] **Step 4: 실패를 확인한다**
+- [ ] Step 4: 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: **`power_test`가 시그널 15에 죽는다.** 종료 코드가 아니라 시그널로
+기대: `power_test`가 시그널 15에 죽는다. 종료 코드가 아니라 시그널로
 끝났다는 에러가 나온다. 대략 이런 모양이다.
 
 ```
@@ -270,16 +270,16 @@ run power_test: error: the following command terminated unexpectedly:
 ... (signal 15)
 ```
 
-**이것이 이 milestone 전체의 출발점이다.** 핸들러가 없으면 `SIGTERM`의 기본
+이것이 이 milestone 전체의 출발점이다. 핸들러가 없으면 `SIGTERM`의 기본
 동작(프로세스 종료)이 그대로 일어난다. 게스트의 PID 1에서는 커널이 그 기본
-동작을 막아주기 때문에 **아무 일도 일어나지 않고 조용히 버려지는데**, 여기
+동작을 막아주기 때문에 아무 일도 일어나지 않고 조용히 버려지는데, 여기
 호스트 프로세스에서는 같은 부재가 죽음으로 나타난다. 부재를 눈에 보이게
 만든 셈이다.
 
 `config_test`는 그대로 통과해야 한다. 그것까지 깨졌으면 `build.zig` 편집이
 틀린 것이니 알려 달라.
 
-- [ ] **Step 5: 핸들러를 단다**
+- [ ] Step 5: 핸들러를 단다
 
 `init/src/power.zig`의
 
@@ -326,7 +326,7 @@ pub fn install() void {
 }
 ```
 
-그리고 파일 맨 위 `const linux = std.os.linux;` **바로 아래**에 헬퍼를 넣는다.
+그리고 파일 맨 위 `const linux = std.os.linux;` 바로 아래에 헬퍼를 넣는다.
 
 ```zig
 
@@ -339,7 +339,7 @@ fn failed(rc: usize) ?linux.E {
 }
 ```
 
-- [ ] **Step 6: 통과를 확인한다**
+- [ ] Step 6: 통과를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
@@ -356,7 +356,7 @@ power_test: SIGTERM becomes a pending power_off action
 첫 줄이 함께 나오는 것이 정상이다. `install()`이 게스트용 로그를 그대로 찍기
 때문이며, 이 검사는 호스트에서 도는 같은 코드다.
 
-- [ ] **Step 7: 커밋**
+- [ ] Step 7: 커밋
 
 ```bash
 git add init/src/power.zig init/src/power_test.zig init/build.zig
@@ -367,15 +367,15 @@ git commit -m "Let PID 1 notice a SIGTERM"
 
 ## Task 2: 게이트를 먼저 만들고 아무 일도 안 일어나는 것을 본다
 
-새 체인 `power/`를 만든다. 이 시점에서는 **반드시 실패해야 한다.**
+새 체인 `power/`를 만든다. 이 시점에서는 반드시 실패해야 한다.
 `main.zig`가 아직 `power.install()`을 부르지 않으므로, 게스트에서 친
 `kill -TERM 1`은 커널이 버린다.
 
-**Files:**
+Files:
 - Create: `power/make_disk.sh`
 - Create: `power/check.sh`
 
-- [ ] **Step 1: 설정 디스크를 굽는 스크립트를 만든다**
+- [ ] Step 1: 설정 디스크를 굽는 스크립트를 만든다
 
 `power/make_disk.sh`를 새로 만든다.
 
@@ -425,9 +425,9 @@ echo "make_disk: created ${IMG} (${SIZE}, ext2, shell=bash)"
 chmod +x power/make_disk.sh
 ```
 
-- [ ] **Step 2: 게이트 스크립트를 만든다**
+- [ ] Step 2: 게이트 스크립트를 만든다
 
-**이 파일은 150줄이 넘으므로 `/tmp` 경로를 쓴다.** Claude가
+이 파일은 150줄이 넘으므로 `/tmp` 경로를 쓴다. Claude가
 `/tmp/tars-power-check.sh`에 만들어 두면, 다음 명령으로 제자리에 넣고
 대조한다.
 
@@ -656,31 +656,31 @@ QEMU_PID=""
 echo "PM-M0 PASS: the guest shut itself down from a shell command"
 ```
 
-- [ ] **Step 3: 문법을 먼저 본다**
+- [ ] Step 3: 문법을 먼저 본다
 
 ```bash
 bash -n power/check.sh && bash -n power/make_disk.sh && echo "syntax ok"
 ```
 
-- [ ] **Step 4: 실패를 확인한다**
+- [ ] Step 4: 실패를 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash power/check.sh
 ```
 
-기대: **`the guest never halted after kill -TERM 1`으로 실패한다.**
+기대: `the guest never halted after kill -TERM 1`으로 실패한다.
 마커 목록에서 `terminal: screen>`까지는 `found`이고, `shutdown requested`
 아래로는 전부 `MISSING`이어야 한다.
 
 이것이 지금 TARS의 상태다. 키는 게스트에 도착했고, bash는 `kill`을
-실행했고, 커널은 PID 1에게 `SIGTERM`을 배달하려 했지만 **핸들러가 없어서
-그 시그널을 버렸다.** 화면에도 로그에도 아무 흔적이 없다.
+실행했고, 커널은 PID 1에게 `SIGTERM`을 배달하려 했지만 핸들러가 없어서
+그 시그널을 버렸다. 화면에도 로그에도 아무 흔적이 없다.
 
 다른 이유로 실패하면(예: `the config disk was not read`, `bash prompt`)
 구현이 아니라 게이트가 틀린 것이니 알려 달라.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 실패하는 게이트도 커밋한다. 다음 커밋이 무엇을 고쳤는지가 히스토리에 남는다.
 
@@ -693,13 +693,13 @@ git commit -m "Add a gate that asks the guest to shut itself down"
 
 ## Task 3: 종료 순서를 구현하고 게이트를 통과시킨다
 
-**Files:**
+Files:
 - Modify: `init/src/power.zig` (`shutdown` + 헬퍼 셋 추가)
 - Modify: `init/src/main.zig:3` (import), `main()` 안(install), `supervise()` 루프 머리
 
-- [ ] **Step 1: `power.zig`에 종료 순서를 넣는다**
+- [ ] Step 1: `power.zig`에 종료 순서를 넣는다
 
-**이 편집으로 `power.zig`가 100줄을 넘으므로 `/tmp` 경로를 쓴다.** Claude가
+이 편집으로 `power.zig`가 100줄을 넘으므로 `/tmp` 경로를 쓴다. Claude가
 `/tmp/tars-power.zig`에 완성본을 만들어 두면:
 
 ```bash
@@ -807,11 +807,11 @@ pub fn shutdown(action: Action) noreturn {
 }
 ```
 
-**이 함수를 호스트에서 시험 삼아 부르지 말 것.** `reboot(2)`는 컨테이너의
+이 함수를 호스트에서 시험 삼아 부르지 말 것. `reboot(2)`는 컨테이너의
 권한에 따라 그대로 먹을 수 있고, 그러면 개발 기계가 멈춘다. `power_test`가
 이 함수를 부르지 않는 이유가 그것이다.
 
-- [ ] **Step 2: 컴파일만 먼저 확인한다**
+- [ ] Step 2: 컴파일만 먼저 확인한다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
@@ -820,7 +820,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/init \
 
 기대: 둘 다 통과. `shutdown`은 아직 아무도 부르지 않으므로 동작은 그대로다.
 
-- [ ] **Step 3: `main.zig`에 import를 더한다**
+- [ ] Step 3: `main.zig`에 import를 더한다
 
 `init/src/main.zig:3`의
 
@@ -828,13 +828,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace/init \
 const config = @import("config.zig");
 ```
 
-**바로 아래**에 한 줄을 넣는다.
+바로 아래에 한 줄을 넣는다.
 
 ```zig
 const power = @import("power.zig");
 ```
 
-- [ ] **Step 4: 부팅 초기에 시그널 처리를 켠다**
+- [ ] Step 4: 부팅 초기에 시그널 처리를 켠다
 
 `init/src/main.zig`의
 
@@ -842,7 +842,7 @@ const power = @import("power.zig");
     std.debug.print("tars-init: starting as PID 1\n", .{});
 ```
 
-**바로 아래**에 넣는다.
+바로 아래에 넣는다.
 
 ```zig
 
@@ -852,10 +852,10 @@ const power = @import("power.zig");
     power.install();
 ```
 
-- [ ] **Step 5: 감독 루프 머리에서 요청을 본다**
+- [ ] Step 5: 감독 루프 머리에서 요청을 본다
 
 자리는 `supervise()` 안의 `while (true) {`와 그 다음 줄인
-`var alive: usize = 0;` **사이**다. Step 4가 위쪽에 다섯 줄을 더했으므로 줄
+`var alive: usize = 0;` 사이다. Step 4가 위쪽에 다섯 줄을 더했으므로 줄
 번호는 밀려 있다. 아래 블록만 그 사이에 넣는다(`while`과 `var alive` 줄은
 건드리지 않는다).
 
@@ -868,7 +868,7 @@ const power = @import("power.zig");
 
 ```
 
-- [ ] **Step 6: 게이트를 통과시킨다**
+- [ ] Step 6: 게이트를 통과시킨다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -885,7 +885,7 @@ PM-M0 PASS: the guest shut itself down from a shell command
 `note:` 줄이 반대쪽("every child died from SIGTERM alone")으로 나와도 게이트는
 통과다. 다만 그건 셸이 `SIGTERM`에 죽었다는 뜻이라 예상과 다르므로 알려 달라.
 
-- [ ] **Step 7: 다른 체인이 안 깨졌는지 본다**
+- [ ] Step 7: 다른 체인이 안 깨졌는지 본다
 
 `main.zig`와 `build.zig`를 건드렸으므로 나머지 넷을 한 번씩 돌린다.
 
@@ -897,7 +897,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
 기대: 넷 다 PASS. 여기서 깨진다면 원인은 `install()`이 찍는 새 로그 한 줄이
 아니라(그 줄은 아무도 검사하지 않는다) `build.zig` 편집일 가능성이 높다.
 
-- [ ] **Step 8: 커밋**
+- [ ] Step 8: 커밋
 
 ```bash
 git add init/src/power.zig init/src/main.zig
@@ -908,11 +908,11 @@ git commit -m "Shut the system down when PID 1 gets a SIGTERM"
 
 ## Task 4: 루트 게이트에 다섯째 체인을 등록한다
 
-**Files:**
+Files:
 - Modify: `check.sh:35-66` (주석과 체인 목록)
 - Modify: `HANDOFF.md`
 
-- [ ] **Step 1: 체인을 등록한다**
+- [ ] Step 1: 체인을 등록한다
 
 `check.sh`의
 
@@ -920,13 +920,13 @@ git commit -m "Shut the system down when PID 1 gets a SIGTERM"
 run_chain "IP-M2" ./input/check.sh
 ```
 
-**바로 아래**에 한 줄을 넣는다.
+바로 아래에 한 줄을 넣는다.
 
 ```bash
 run_chain "PM-M0" ./power/check.sh
 ```
 
-- [ ] **Step 2: 부팅 횟수 주석을 갱신한다**
+- [ ] Step 2: 부팅 횟수 주석을 갱신한다
 
 `check.sh`의
 
@@ -950,7 +950,7 @@ run_chain "PM-M0" ./power/check.sh
 # PM-M1이 재부팅을 보는 부팅을 하나 더 붙이면 24회가 된다.
 ```
 
-- [ ] **Step 3: 루트 게이트를 돌린다**
+- [ ] Step 3: 루트 게이트를 돌린다
 
 이 명령은 25분쯤 걸린다.
 
@@ -966,16 +966,16 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 
 그리고 그 앞에 `PM-M0 PASS: 3/3 consecutive runs succeeded`가 있어야 한다.
 
-**실제 소요 시간을 기록해 달라.** `HANDOFF.md`와 다음 plan이 그 숫자를 쓴다.
+실제 소요 시간을 기록해 달라. `HANDOFF.md`와 다음 plan이 그 숫자를 쓴다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 ```bash
 git add check.sh
 git commit -m "Register the Power Management chain in the root gate"
 ```
 
-- [ ] **Step 5: `HANDOFF.md`를 갱신한다**
+- [ ] Step 5: `HANDOFF.md`를 갱신한다
 
 Claude가 쓴다. 담을 것: PM-M0 완료, 루트 게이트 다섯 체인과 실측 시간,
 PM-M1에 남은 것(재시작·CAD_OFF·부팅 A·BF 사각지대), 그리고 이 milestone이

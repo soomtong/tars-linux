@@ -1,7 +1,7 @@
 # TARS Terminal Foundation — Design
 
-**Date:** 2026-08-08
-**Status:** TF-M4 complete (2026-08-13); Terminal Foundation complete
+Date: 2026-08-08
+Status: TF-M4 complete (2026-08-13); Terminal Foundation complete
 
 ## 배경
 
@@ -12,7 +12,7 @@ Display Foundation(DF-M0~M3, `2026-08-07-tars-display-foundation-design.md`,
 "Compositor"가 자연스러운 다음 계층으로 보였다.
 
 그런데 실제 요구사항을 짚어보니 범위가 달랐다. TARS에서 화면에 그림을
-그릴 프로세스는 **터미널 앱 하나뿐**이다 — homebrew 스타일 패키지
+그릴 프로세스는 터미널 앱 하나뿐이다 — homebrew 스타일 패키지
 관리자로 설치하는 TUI 앱(vim, htop 등)은 PTY를 통해 텍스트(ANSI
 이스케이프)만 주고받고, 여러 탭(cmd+1~9 전환)도 터미널 프로세스 내부
 상태일 뿐이며, 터미널 대신 다른 독립 애플리케이션을 구동할 계획이
@@ -20,7 +20,7 @@ Display Foundation(DF-M0~M3, `2026-08-07-tars-display-foundation-design.md`,
 독점자가 앞으로도 하나뿐이라면 여러 독립 프로세스의 화면 점유를
 중재하는 Wayland 스타일 compositor 프로토콜은 애초에 필요 없다.
 
-그래서 이 서브프로젝트는 **Terminal Foundation**으로 이름 붙인다 —
+그래서 이 서브프로젝트는 Terminal Foundation으로 이름 붙인다 —
 Display Foundation이 이름을 "Compositor"에서 좁혔던 것과 같은 이유다.
 다루는 것은 최종 비전의 "ghostty 기반 내장 terminal" 항목이며, 실제
 compositor(여러 독립 클라이언트 간 화면 중재)는 애초에 이 프로젝트
@@ -30,7 +30,7 @@ compositor(여러 독립 클라이언트 간 화면 중재)는 애초에 이 프
 
 QEMU에서 Terminal Foundation 앱이 KMS/DRM 프레임버퍼에 폰트로 shell
 prompt 텍스트를 렌더링하고, 키보드 입력을 PTY로 전달하는 경로까지
-갖춘 상태를 **screendump 자동 검증**으로 확인한다. Display
+갖춘 상태를 screendump 자동 검증으로 확인한다. Display
 Foundation이 "단색 픽셀"까지였다면, Terminal Foundation은 "읽을 수
 있는 텍스트"가 결과물이라는 점이 핵심 차이다.
 
@@ -126,12 +126,12 @@ X11/Wayland 표준 키맵 정책을 통째로 가져오는 것도 여전히 피�
 
 macOS 스타일 조합(cmd+1~9 탭 전환 등)을 인식하려면 세 조각이 필요하다:
 
-1. **Modifier 상태 추적** — `KEY_LEFTMETA`/`KEY_RIGHTMETA`(Cmd에 대응)
+1. Modifier 상태 추적 — `KEY_LEFTMETA`/`KEY_RIGHTMETA`(Cmd에 대응)
    등 modifier 키의 up/down을 bitmask로 유지하는 작은 구조체.
-2. **키코드 → 문자 매핑** — `KEY_1`~`KEY_9` 등 evdev 코드를 실제
+2. 키코드 → 문자 매핑 — `KEY_1`~`KEY_9` 등 evdev 코드를 실제
    문자로 바꾸는 테이블(지금은 US QWERTY 레이아웃 하나만 하드코딩).
    이건 macOS 의미론과 무관하게 일반 타이핑 자체에 필요한 부분이다.
-3. **조합 → 액션 dispatch** — `(modifier bitmask, keycode)` 조합을 보고
+3. 조합 → 액션 dispatch — `(modifier bitmask, keycode)` 조합을 보고
    "탭 N 전환" 같은 액션을 찾는 테이블. 매치되면 액션을 실행하고 PTY로
    보내지 않고, 매치되지 않으면 평소처럼 문자를 PTY로 전달한다.
 
@@ -144,16 +144,16 @@ Foundation 자체 기능(탭 전환 등)을 위한 하드코딩된 작은 테이
 
 ## Milestones (초안)
 
-- **TF-M0** — 검증 파이프라인 확장: devcontainer에 Zig 툴체인 추가,
+- TF-M0 — 검증 파이프라인 확장: devcontainer에 Zig 툴체인 추가,
   `libghostty-vt` 빌드/링크 sanity check, `8x4x4-fonts` 폰트 파일
   확보, `stb_truetype` FFI 연결 확인
-- **TF-M1** — 프레임버퍼 텍스트 렌더링: glyph cache 구축 + 고정
+- TF-M1 — 프레임버퍼 텍스트 렌더링: glyph cache 구축 + 고정
   문자열을 KMS 프레임버퍼에 렌더링(아직 PTY 없음), screendump로 검증
-- **TF-M2** — PTY + `libghostty-vt` 연동: 쉘(fish)을 PTY로 실행, 출력을
+- TF-M2 — PTY + `libghostty-vt` 연동: 쉘(fish)을 PTY로 실행, 출력을
   `libghostty-vt`로 파싱해 터미널 셀 상태를 화면에 렌더링
-- **TF-M3** — 키보드 입력: evdev로 키보드 이벤트를 읽어 PTY로 전달
+- TF-M3 — 키보드 입력: evdev로 키보드 이벤트를 읽어 PTY로 전달
   (MVP 종료점)
-- **TF-M4** — 종료 게이트: 전체 체인을 스크립트로 묶어 3회 연속 검증
+- TF-M4 — 종료 게이트: 전체 체인을 스크립트로 묶어 3회 연속 검증
   (BF-M4/DF-M3와 동일한 패턴)
 
 각 milestone이 끝난 뒤에야 다음 milestone의 상세 plan을 작성한다 —

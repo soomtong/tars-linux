@@ -1,64 +1,64 @@
 # HI-M3 — 전환 키 나머지 셋과 CapsLock
 
-**Date:** 2026-09-01
-**Design:** `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
-**Status:** **완료(2026-09-01).** Task 여덟이 전부 끝났고 게이트 아홉 체인
-3/3으로 **18분 27~37초**. **이것으로 Hangul Input 서브프로젝트가 닫혔다.**
+Date: 2026-09-01
+Design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
+Status: 완료(2026-09-01). Task 여덟이 전부 끝났고 게이트 아홉 체인
+3/3으로 18분 27~37초. 이것으로 Hangul Input 서브프로젝트가 닫혔다.
 
-**Task 7에서 하나가 예상대로 깨졌고 처방만 틀렸다.** 줄 끝 앵커가 CR에 걸린 것은
+Task 7에서 하나가 예상대로 깨졌고 처방만 틀렸다. 줄 끝 앵커가 CR에 걸린 것은
 plan이 예측한 그대로인데, 적어 둔 처방 `\r\?$`가 안 통했다 — GNU grep의 BRE는
 `-P` 없이 `\r`을 리터럴 `r`로 읽는다. 듣는 처방은 `tr -d '\r'`이고 자세한 것은
 design의 "HI-M3이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 
-- **전환 키가 넷이다.** 한/영 키(evdev 122) · Shift+Space · 짧은 CapsLock ·
+- 전환 키가 넷이다. 한/영 키(evdev 122) · Shift+Space · 짧은 CapsLock ·
   짧은 왼쪽 Ctrl. 넷 다 `toggleHangul()` 하나를 지난다.
-- **`tars.conf`가 그중 무엇을 켤지 고른다.** `hangul_toggle`이 생기고 **이
-  키만 목록이다**(결정 7) — 콤마로 갈라 집합을 만든다. **기본값은 넷 다
-  켜진 것이다.**
-- **tap-vs-hold가 선다**(결정 8). 누를 때는 아무 판단도 안 하고, 누른 동안
-  다른 키가 오면 "소비됨"을 켜고, **뗄 때** 판단한다. 문턱은 0.3초다.
-- **CapsLock을 길게 누르면 대문자 잠금이 켜진다**(결정 9). **알파벳에만
-  적용되고** 숫자와 기호는 안 바뀐다.
-- **`handleKey`가 시각을 보는 함수가 된다.** 이 서브프로젝트에서 유일하게 그
+- `tars.conf`가 그중 무엇을 켤지 고른다. `hangul_toggle`이 생기고 이
+  키만 목록이다(결정 7) — 콤마로 갈라 집합을 만든다. 기본값은 넷 다
+  켜진 것이다.
+- tap-vs-hold가 선다(결정 8). 누를 때는 아무 판단도 안 하고, 누른 동안
+  다른 키가 오면 "소비됨"을 켜고, 뗄 때 판단한다. 문턱은 0.3초다.
+- CapsLock을 길게 누르면 대문자 잠금이 켜진다(결정 9). 알파벳에만
+  적용되고 숫자와 기호는 안 바뀐다.
+- `handleKey`가 시각을 보는 함수가 된다. 이 서브프로젝트에서 유일하게 그
   함수의 성질 자체를 바꾸는 변경이고, 그래서 마지막에 있다.
-- **HI-M3이 끝나면 서브프로젝트가 닫힌다.** design doc의 `Status:` 줄과
+- HI-M3이 끝나면 서브프로젝트가 닫힌다. design doc의 `Status:` 줄과
   `check.sh`의 `CHAINS` 라벨을 함께 고친다.
 
-**아직 안 하는 것.** 기호 확장과 Patal의 옵션 trait들(비목표). 입력기 상태를
+아직 안 하는 것. 기호 확장과 Patal의 옵션 trait들(비목표). 입력기 상태를
 화면에 보여 주기(비목표 — 대문자 잠금에 LED도 표시도 없다는 것을 알고 넘어간다,
 결정 9). 한/영 키를 게이트로 검증하기(HI-M0 실측 1이 막았다).
 
-**편집도 Claude Code가 한다.** 이 서브프로젝트의 예외이고 근거는 design 실측
-7이다. **CC-M0의 규율을 그대로 쓴다** — 매 편집 뒤 `git diff --stat`으로 더한
+편집도 Claude Code가 한다. 이 서브프로젝트의 예외이고 근거는 design 실측
+7이다. CC-M0의 규율을 그대로 쓴다 — 매 편집 뒤 `git diff --stat`으로 더한
 줄과 지운 줄을 따로 세고, 지우는 편집은 `git diff | grep '^-'`로 내용을 직접
-읽는다. **`input.zig`·`init/src/main.zig`·`terminal/src/main.zig`처럼 이미 있는
-파일을 건드릴 때는 diff를 사용자에게 보여 준다** — 그쪽은 한글 이야기만이
+읽는다. `input.zig`·`init/src/main.zig`·`terminal/src/main.zig`처럼 이미 있는
+파일을 건드릴 때는 diff를 사용자에게 보여 준다 — 그쪽은 한글 이야기만이
 아니기 때문이다.
 
 ## 왜 이 순서인가
 
-**Task 1이 동작을 하나도 안 바꾸는 것이 이 쪼갬의 핵심이다.** `handleKey`의
-시그니처를 바꾸는 것이 이 milestone에서 가장 넓게 번지는 변경인데, **기존 검사가
-한 글자도 안 바뀐 채 통과하는 것**이 그것이 맞았다는 증거가 된다. tap 판정을
+Task 1이 동작을 하나도 안 바꾸는 것이 이 쪼갬의 핵심이다. `handleKey`의
+시그니처를 바꾸는 것이 이 milestone에서 가장 넓게 번지는 변경인데, 기존 검사가
+한 글자도 안 바뀐 채 통과하는 것이 그것이 맞았다는 증거가 된다. tap 판정을
 함께 넣으면 실패했을 때 "시각이 안 왔나 판정이 틀렸나"를 가를 수 없다. HI-M2의
 Task 1(`Jamo` → `Cand`)이 같은 모양이었고 실측 2가 그 값을 적어 두었다.
 
-**Task 2~3이 설정을 배선한다.** `hangul_toggle`이 없으면 Task 4 이후의 갈래를
-켜고 끄는 검사를 쓸 수가 없다. **Task 2는 호스트에서만 돌고**(config 파싱),
+Task 2~3이 설정을 배선한다. `hangul_toggle`이 없으면 Task 4 이후의 갈래를
+켜고 끄는 검사를 쓸 수가 없다. Task 2는 호스트에서만 돌고(config 파싱),
 Task 3이 argv를 건넌다 — 둘을 나누는 이유는 파싱이 틀렸을 때 argv를 의심할
 필요가 없게 하기 위해서다.
 
-**Task 4가 시각을 안 쓰는 갈래를 먼저 세운다.** 한/영 키와 `shift_space` 게이트는
+Task 4가 시각을 안 쓰는 갈래를 먼저 세운다. 한/영 키와 `shift_space` 게이트는
 tap과 무관하다. 여기서 `toggleHangul()`이라는 한 자리가 생기고, Task 5·6이 그것을
 재사용한다.
 
-**Task 5가 tap 뼈대를 세우고 Task 6이 CapsLock을 얹는다.** 왼쪽 Ctrl이 먼저인
-이유는 **`Tap` struct 하나만 검증하면 되기 때문이다** — CapsLock은 거기에 대문자
+Task 5가 tap 뼈대를 세우고 Task 6이 CapsLock을 얹는다. 왼쪽 Ctrl이 먼저인
+이유는 `Tap` struct 하나만 검증하면 되기 때문이다 — CapsLock은 거기에 대문자
 잠금이라는 두 번째 축이 붙는다.
 
-**Task 7의 게이트가 마지막이다.** 호스트 검사가 전부 통과한 뒤에 부팅한다 —
+Task 7의 게이트가 마지막이다. 호스트 검사가 전부 통과한 뒤에 부팅한다 —
 18분을 쓰기 전에 몇 초로 잡을 수 있는 실패를 먼저 잡는다.
 
 ---
@@ -67,19 +67,19 @@ tap과 무관하다. 여기서 `toggleHangul()`이라는 한 자리가 생기고
 
 ### 1. `hangul_toggle`의 기본값은 넷 다 켜진 것이다
 
-**2026-09-01에 사용자가 정했다.** `keyboard=apple`·`hangul_layout=shin_pcs`와
+2026-09-01에 사용자가 정했다. `keyboard=apple`·`hangul_layout=shin_pcs`와
 같은 종류의 결정이라("이 기계를 쓰는 사람이 쓰는 것") Claude가 못 정한다.
 
 ```
 hangul_toggle = hangul_key,shift_space,capslock_tap,lctrl_tap
 ```
 
-근거는 **전환 키가 많아서 곤란한 경우는 없고 없어서 곤란한 경우는 있다**는
+근거는 전환 키가 많아서 곤란한 경우는 없고 없어서 곤란한 경우는 있다는
 것이다. 특히 `hangul_key`는 실기에서만 오는 키라 기본으로 꺼 두면 "왜 한/영
 키가 안 먹지"가 된다.
 
-**HI-M1이 적어 둔 "Shift+Space의 대가"는 기본값에서 안 사라지고, 끌 수 있게만
-된다.** 그것이 이 설정 항목의 뜻이다.
+HI-M1이 적어 둔 "Shift+Space의 대가"는 기본값에서 안 사라지고, 끌 수 있게만
+된다. 그것이 이 설정 항목의 뜻이다.
 
 ### 2. 게이트 디스크는 `hangul_key`를 뺀 셋을 심는다
 
@@ -87,20 +87,20 @@ hangul_toggle = hangul_key,shift_space,capslock_tap,lctrl_tap
 hangul_toggle = shift_space,capslock_tap,lctrl_tap
 ```
 
-**기본값과 달라야 한다** — `make_disk.sh`가 `hangul_layout`에 대해 이미 적어
+기본값과 달라야 한다 — `make_disk.sh`가 `hangul_layout`에 대해 이미 적어
 둔 규칙이고(design 결정 14), 같으면 설정을 통째로 무시하는 코드도 검사 0에서
 초록이 뜬다.
 
-**뺄 것으로 `hangul_key`를 고른 이유는 그것이 게이트가 어차피 못 보내는
-유일한 키이기 때문이다**(HI-M0 실측 1 — `sendkey lang1`이 게스트에 안 닿는다).
+뺄 것으로 `hangul_key`를 고른 이유는 그것이 게이트가 어차피 못 보내는
+유일한 키이기 때문이다(HI-M0 실측 1 — `sendkey lang1`이 게스트에 안 닿는다).
 `shift_space`를 뺐다면 기존 검사 2·9·11을 전부 다시 써야 하고, `capslock_tap`
 이나 `lctrl_tap`을 뺐다면 이 milestone이 새로 만드는 갈래를 게이트가 못 본다.
 
-**꺼짐의 판정은 로그 줄 하나로 끝난다.** `arg()`가 정규형을 만들므로 로그에
-찍히는 문자열에 `hangul_key`가 **없다는 것 자체가** "설정이 그것을 껐다"의
+꺼짐의 판정은 로그 줄 하나로 끝난다. `arg()`가 정규형을 만들므로 로그에
+찍히는 문자열에 `hangul_key`가 없다는 것 자체가 "설정이 그것을 껐다"의
 증거다. 설정을 통째로 무시하는 코드는 기본값(넷)을 찍는다.
 
-**꺼짐 갈래 넷은 전부 `input_test`가 호스트에서 본다.**
+꺼짐 갈래 넷은 전부 `input_test`가 호스트에서 본다.
 
 ### 3. `handleKey`는 인자를 하나 더 받는다 — `Context`에 안 넣는다
 
@@ -108,19 +108,19 @@ hangul_toggle = shift_space,capslock_tap,lctrl_tap
 pub fn handleKey(self: *State, raw_code: u16, value: i32, time_us: u64, ctx: Context) Action
 ```
 
-**`Context`에 넣으면 안 되는 이유가 하나 있다.** `Context`는 `readKeys` 호출
-하나에 한 번 조립돼 넘어오는데, 시각은 **이벤트마다 다르다.** 한 번의 `read`가
+`Context`에 넣으면 안 되는 이유가 하나 있다. `Context`는 `readKeys` 호출
+하나에 한 번 조립돼 넘어오는데, 시각은 이벤트마다 다르다. 한 번의 `read`가
 이벤트 64개를 담을 수 있으므로 `readKeys` 안에서 `ctx`를 이벤트마다 복사해
 고쳐야 하고, 그러면 "부팅 내내 상수"라는 `swap_alt_meta`의 성질과 같은 자리에
 매번 바뀌는 값이 섞인다.
 
-**자리는 `ctx` 앞이다.** `ctx`가 "바깥에서 들어오는 상태"로 맨 뒤에 있는 규약을
+자리는 `ctx` 앞이다. `ctx`가 "바깥에서 들어오는 상태"로 맨 뒤에 있는 규약을
 유지한다.
 
 ### 4. `input_test`의 헬퍼가 시그니처 변경을 흡수한다
 
-`expectCtx` 호출이 **26군데**다. 여기에 인자를 하나 더하면 26줄이 바뀌고, 그러면
-**"기존 검사가 한 글자도 안 바뀐 채 통과했다"는 Task 1의 증거가 사라진다.**
+`expectCtx` 호출이 26군데다. 여기에 인자를 하나 더하면 26줄이 바뀌고, 그러면
+"기존 검사가 한 글자도 안 바뀐 채 통과했다"는 Task 1의 증거가 사라진다.
 
 그래서 본체를 `expectFull`로 옮기고 기존 헬퍼 넷은 시각 0을 채우는 껍데기가
 된다.
@@ -132,34 +132,34 @@ expectAt(state, code, value, time_us, want)     → expectFull(..., time_us, ...
 expectFull(state, ctx, code, value, time_us, want)                                ← 본체
 ```
 
-**`Context`가 IP-M1에 들어왔을 때와 정확히 같은 모양이다** — 그때도 `expect`가
+`Context`가 IP-M1에 들어왔을 때와 정확히 같은 모양이다 — 그때도 `expect`가
 기본값을 채우고 DECCKM을 보는 검사만 `expectCtx`를 직접 불렀다.
 
-### 5. "소비됨"을 켜는 자리는 modifier switch **앞**이다
+### 5. "소비됨"을 켜는 자리는 modifier switch 앞이다
 
 결정 8의 2번("누른 동안 다른 키가 오면 소비됨을 켠다")을 `switch` 뒤에 두면
-**Shift·Alt·Meta가 소비로 안 세어진다** — 그 갈래들이 switch 안에서 `return`
+Shift·Alt·Meta가 소비로 안 세어진다 — 그 갈래들이 switch 안에서 `return`
 하기 때문이다. 증상은 `Ctrl+Shift+C`를 눌렀다 뗄 때마다 한/영이 뒤집히는
-것이고, **원인이 "Shift를 안 셌다"라 아주 멀다.**
+것이고, 원인이 "Shift를 안 셌다"라 아주 멀다.
 
-**자기 자신은 뺀다.** 자동 반복(value=2)이 오면 자기가 자기를 소비한 것이 된다.
+자기 자신은 뺀다. 자동 반복(value=2)이 오면 자기가 자기를 소비한 것이 된다.
 
 ### 6. 문턱은 0.3초이고 설정으로 안 뺀다
 
 design 결정 7의 설정 항목이 셋뿐이고 그중 하나가 `hangul_toggle`이다. 문턱을
-넷째 항목으로 만들면 **게이트가 못 보는 설정이 하나 는다** — `sendkey`의
+넷째 항목으로 만들면 게이트가 못 보는 설정이 하나 는다 — `sendkey`의
 `hold_ms`는 게이트가 고르는 값이지 게스트가 고르는 값이 아니다.
 
 QEMU가 `hold_ms`를 오차 4밀리초 안에 지킨다(HI-M0 실측 2). 그래서 게이트가
 0.1초와 0.5초로 문턱의 양쪽을 실제로 밟을 수 있다.
 
-### 7. CapsLock은 **뗄 때** 뒤집힌다 — 진짜 CapsLock과 다른 유일한 자리다
+### 7. CapsLock은 뗄 때 뒤집힌다 — 진짜 CapsLock과 다른 유일한 자리다
 
-진짜 키보드의 CapsLock은 **누르는 순간** 토글된다. 우리는 뗄 때로 미룬다 —
+진짜 키보드의 CapsLock은 누르는 순간 토글된다. 우리는 뗄 때로 미룬다 —
 누를 때 뒤집으면 짧게 눌렀다 뗐을 때 대문자 잠금이 한 번 켜졌다 꺼지므로 tap을
 만들 수가 없다.
 
-**`capslock_tap`이 꺼져 있어도 갈래를 안 나눈다.** 꺼져 있으면 `tapped`가
+`capslock_tap`이 꺼져 있어도 갈래를 안 나눈다. 꺼져 있으면 `tapped`가
 무엇이든 대문자 잠금으로 가므로, "언제나 뗄 때"라는 규칙이 하나로 선다.
 
 | 설정 | 짧게(<0.3초, 안 소비됨) | 그 외 |
@@ -167,20 +167,20 @@ QEMU가 `hold_ms`를 오차 4밀리초 안에 지킨다(HI-M0 실측 2). 그래�
 | `capslock_tap` 켜짐 | 한/영 | 대문자 잠금 |
 | `capslock_tap` 꺼짐 | 대문자 잠금 | 대문자 잠금 |
 
-왼쪽 Ctrl은 둘째 칸이 **아무 일도 안 일어남**이다 — Ctrl의 원래 뜻은 modifier
+왼쪽 Ctrl은 둘째 칸이 아무 일도 안 일어남이다 — Ctrl의 원래 뜻은 modifier
 이고 그것은 이미 눌릴 때 켜졌다.
 
 ### 8. `Toggles` 파서가 두 벌인 것을 받아들인다
 
-`init/src/config.zig`와 `terminal/src/input.zig`가 각각 갖는다. **`HangulLayout`
-↔ `hangul.Layout`이 이미 같은 모양이고**(둘을 잇는 것은 argv의 문자열 하나뿐이라
+`init/src/config.zig`와 `terminal/src/input.zig`가 각각 갖는다. `HangulLayout`
+↔ `hangul.Layout`이 이미 같은 모양이고(둘을 잇는 것은 argv의 문자열 하나뿐이라
 컴파일러가 못 잡는다), `failed()` 헬퍼가 두 파일에 있는 것도 같은 판단이다
 (`config.zig:4`).
 
-**문자열 문법을 못 박는 것은 `config_test`의 왕복 검사다** — `arg()`가 만든
+문자열 문법을 못 박는 것은 `config_test`의 왕복 검사다 — `arg()`가 만든
 정규형을 `parse()`가 되읽어 같은 집합을 준다.
 
-**terminal이 받는 문자열은 언제나 `arg()`가 만든 정규형이다.** 관대한 파싱은
+terminal이 받는 문자열은 언제나 `arg()`가 만든 정규형이다. 관대한 파싱은
 terminal을 손으로 띄울 때를 위한 것이다.
 
 ### 9. `none`은 왕복을 위해 파서가 받아 준다
@@ -189,31 +189,31 @@ terminal을 손으로 띄울 때를 위한 것이다.
 argv에 넣으면 terminal 쪽에서 "인자가 없다"와 구분이 안 된다.
 
 그런데 `none`은 `ToggleKey`에 없는 이름이라, 안 막으면 부팅할 때마다
-`unknown hangul_toggle 'none'`이 로그에 찍힌다. **파서가 이 이름 하나를 명시적
-으로 건너뛴다.**
+`unknown hangul_toggle 'none'`이 로그에 찍힌다. 파서가 이 이름 하나를 명시적
+으로 건너뛴다.
 
 ### 10. 한글 층은 대문자 잠금을 안 본다 — 자동으로 그렇다
 
-`hangulLayer`가 `qwerty_keymap[code][shifted]`를 **직접** 읽고 `latinChar()`를
+`hangulLayer`가 `qwerty_keymap[code][shifted]`를 직접 읽고 `latinChar()`를
 안 쓰기 때문이다(결정 13). 대문자 잠금은 `latinChar()` 안에만 있으므로 한글
 조회에 안 닿는다.
 
-**이것을 검사로 못 박는다.** 안 그러면 나중에 누가 `hangulLayer`를
+이것을 검사로 못 박는다. 안 그러면 나중에 누가 `hangulLayer`를
 `latinChar()`로 바꿔 쓰면서 조용히 깨뜨린다 — 증상은 세벌식에서 대문자 칸의
-**다른 자모**가 나오는 것이라 원인을 오토마타에서 찾게 된다.
+다른 자모가 나오는 것이라 원인을 오토마타에서 찾게 된다.
 
 ---
 
 ## Task 1: 시각을 `handleKey`까지 들여온다 (동작 0 변화)
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `handleKey` 시그니처, `readKeys`,
   `eventMicros` 새 함수
 - Modify: `terminal/src/input_test.zig` — 헬퍼 넷
 
-- [ ] **Step 1: `eventMicros`를 더한다**
+- [ ] Step 1: `eventMicros`를 더한다
 
-`terminal/src/input.zig`에서 `pub fn readKeys(` 바로 **앞**에 넣을 것:
+`terminal/src/input.zig`에서 `pub fn readKeys(` 바로 앞에 넣을 것:
 
 ```zig
 /// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
@@ -233,7 +233,7 @@ fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
 }
 ```
 
-- [ ] **Step 2: `handleKey`가 시각을 받게 한다**
+- [ ] Step 2: `handleKey`가 시각을 받게 한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -280,7 +280,7 @@ fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
         switch (code) {
 ```
 
-- [ ] **Step 3: `readKeys`가 시각을 넘기게 한다**
+- [ ] Step 3: `readKeys`가 시각을 넘기게 한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -298,7 +298,7 @@ fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
         const action = self.handleKey(ev.code, ev.value, eventMicros(ev), ctx);
 ```
 
-- [ ] **Step 4: `input_test`의 헬퍼 넷이 변경을 흡수하게 한다**
+- [ ] Step 4: `input_test`의 헬퍼 넷이 변경을 흡수하게 한다
 
 `terminal/src/input_test.zig`에서 지울 것:
 
@@ -369,7 +369,7 @@ fn expectFull(
     switch (state.handleKey(code, value, time_us, ctx)) {
 ```
 
-- [ ] **Step 5: 나머지 헬퍼 셋의 `handleKey` 호출을 고친다**
+- [ ] Step 5: 나머지 헬퍼 셋의 `handleKey` 호출을 고친다
 
 `terminal/src/input_test.zig`의 `expectCopy`에서 지울 것:
 
@@ -399,7 +399,7 @@ fn expectFull(
         .scroll => |s| {
 ```
 
-- [ ] **Step 6: `expectHangul`을 시각을 받는 형태로 나눈다**
+- [ ] Step 6: `expectHangul`을 시각을 받는 형태로 나눈다
 
 `terminal/src/input_test.zig`에서 지울 것:
 
@@ -441,17 +441,17 @@ fn expectHangulAt(
         .hangul => {},
 ```
 
-- [ ] **Step 7: 검사를 돌린다**
+- [ ] Step 7: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd terminal && ./prepare.sh >/dev/null && zig build test'
 ```
 
-기대: `input_test: ... OK` 줄들과 `PASS`가 전부 그대로. **한 줄도 안 바뀌어야
-한다** — 바뀌면 시각 배선이 동작을 건드린 것이다.
+기대: `input_test: ... OK` 줄들과 `PASS`가 전부 그대로. 한 줄도 안 바뀌어야
+한다 — 바뀌면 시각 배선이 동작을 건드린 것이다.
 
-- [ ] **Step 8: diff를 사용자에게 보여 주고 커밋한다**
+- [ ] Step 8: diff를 사용자에게 보여 주고 커밋한다
 
 ```bash
 git diff --stat
@@ -464,16 +464,16 @@ git commit -m "Give handleKey the timestamp the kernel already put on each event
 
 ## Task 2: `hangul_toggle` 설정 (호스트에서만 돈다)
 
-**Files:**
+Files:
 - Modify: `init/src/config.zig` — `ToggleKey` · `Toggles` · `TOGGLE_ARG_MAX` ·
   `appendToggleName` · `Config.hangul_toggle` · `parse` · `save`
 - Modify: `init/src/config_test.zig` — 비교 함수를 넓히고 검사 열둘을 더한다
 
-- [ ] **Step 1: `ToggleKey`와 `Toggles`를 더한다**
+- [ ] Step 1: `ToggleKey`와 `Toggles`를 더한다
 
-`init/src/config.zig`에서 지울 것(`LatinLayout`의 끝. **`Config`의 doc 주석
+`init/src/config.zig`에서 지울 것(`LatinLayout`의 끝. `Config`의 doc 주석
 바로 앞이 아니라 이 자리를 앵커로 삼는 이유는 `Config` 위에 주석 블록이 네 줄
-있어서 "앞"이 어디인지 흐리기 때문이다**):
+있어서 "앞"이 어디인지 흐리기 때문이다):
 
 ```zig
     pub fn arg(self: LatinLayout) [:0]const u8 {
@@ -609,7 +609,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
 }
 ```
 
-- [ ] **Step 2: `Config`에 필드를 더한다**
+- [ ] Step 2: `Config`에 필드를 더한다
 
 `init/src/config.zig`에서 지울 것:
 
@@ -637,7 +637,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
 };
 ```
 
-- [ ] **Step 3: `parse`에 키를 더한다**
+- [ ] Step 3: `parse`에 키를 더한다
 
 `init/src/config.zig`에서 지울 것:
 
@@ -660,7 +660,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
         }
 ```
 
-- [ ] **Step 4: `save`의 씨앗 파일에 두 줄을 더한다**
+- [ ] Step 4: `save`의 씨앗 파일에 두 줄을 더한다
 
 `init/src/config.zig`에서 지울 것:
 
@@ -717,9 +717,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     }) catch return error.FormatFailed;
 ```
 
-- [ ] **Step 5: `config_test`의 비교 함수를 넓힌다**
+- [ ] Step 5: `config_test`의 비교 함수를 넓힌다
 
-**이 Step을 빠뜨리면 아래 검사 열둘이 전부 아무것도 안 보고 초록이 뜬다.**
+이 Step을 빠뜨리면 아래 검사 열둘이 전부 아무것도 안 보고 초록이 뜬다.
 HI-M2 실측 8과 SP-M0 실측 4가 정확히 같은 자리다.
 
 `init/src/config_test.zig`에서 지울 것:
@@ -783,7 +783,7 @@ fn expect(text: []const u8, want: config.Config) !void {
 }
 ```
 
-- [ ] **Step 6: 검사를 더한다**
+- [ ] Step 6: 검사를 더한다
 
 `init/src/config_test.zig`에서 지울 것:
 
@@ -906,17 +906,17 @@ fn expect(text: []const u8, want: config.Config) !void {
 }
 ```
 
-- [ ] **Step 7: 검사를 돌린다**
+- [ ] Step 7: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build && zig build test'
 ```
 
-기대: `PASS`. **기존 검사 스물넷도 전부 그대로 통과해야 한다** — `.{}`의
+기대: `PASS`. 기존 검사 스물넷도 전부 그대로 통과해야 한다 — `.{}`의
 기본값에 `hangul_toggle`이 늘었을 뿐이고, 어느 기존 입력도 그 값을 안 건드린다.
 
-- [ ] **Step 8: 커밋**
+- [ ] Step 8: 커밋
 
 ```bash
 git diff --stat
@@ -928,13 +928,13 @@ git commit -m "Let the config file pick which keys switch between hangul and lat
 
 ## Task 3: 설정을 argv로 terminal까지 나른다
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig` — `Child.argv`를 8칸으로, 로그 줄, argv 조립
 - Modify: `terminal/src/input.zig` — `Toggles` · `parseToggles` · `togglesArg` ·
   `State.toggles`
 - Modify: `terminal/src/main.zig` — argv[7]을 읽고 로그에 찍는다
 
-- [ ] **Step 1: `input.zig`에 집합과 파서를 더한다**
+- [ ] Step 1: `input.zig`에 집합과 파서를 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1024,7 +1024,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
 }
 ```
 
-- [ ] **Step 2: `State`에 필드를 더한다**
+- [ ] Step 2: `State`에 필드를 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1053,7 +1053,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
     },
 ```
 
-- [ ] **Step 3: `init/src/main.zig`의 argv를 8칸으로 넓힌다**
+- [ ] Step 3: `init/src/main.zig`의 argv를 8칸으로 넓힌다
 
 `init/src/main.zig`에서 지울 것:
 
@@ -1076,7 +1076,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
     argv: [8:null]?[*:0]const u8,
 ```
 
-- [ ] **Step 4: 로그 줄을 넓히고 argv를 조립한다**
+- [ ] Step 4: 로그 줄을 넓히고 argv를 조립한다
 
 `init/src/main.zig`에서 지울 것:
 
@@ -1155,7 +1155,7 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
             .argv = .{ shell_path.ptr, null, null, null, null, null, null, null },
 ```
 
-- [ ] **Step 5: `terminal/src/main.zig`가 여덟째 인자를 읽게 한다**
+- [ ] Step 5: `terminal/src/main.zig`가 여덟째 인자를 읽게 한다
 
 `terminal/src/main.zig`에서 지울 것:
 
@@ -1225,17 +1225,17 @@ fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
     };
 ```
 
-- [ ] **Step 6: 다른 체인이 이 두 줄을 어떻게 읽는지 확인한다**
+- [ ] Step 6: 다른 체인이 이 두 줄을 어떻게 읽는지 확인한다
 
 ```bash
 rg -n "tars-init: config|hangul layout=" --glob 'check.sh' .
 ```
 
-기대: 전부 **앞부분으로만** grep한다(`shell=fish keyboard=apple` 등). 뒤에
-`toggles=`를 붙이는 것이 어느 체인도 안 깨뜨린다. **HI-M2가 같은 확인을 했고
-같은 결론이었다** — 그래도 매번 다시 본다.
+기대: 전부 앞부분으로만 grep한다(`shell=fish keyboard=apple` 등). 뒤에
+`toggles=`를 붙이는 것이 어느 체인도 안 깨뜨린다. HI-M2가 같은 확인을 했고
+같은 결론이었다 — 그래도 매번 다시 본다.
 
-- [ ] **Step 7: 빌드와 검사를 돌린다**
+- [ ] Step 7: 빌드와 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -1243,11 +1243,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   cd ../terminal && ./prepare.sh >/dev/null && zig build test'
 ```
 
-기대: 양쪽 `PASS`. **터미널 검사는 한 줄도 안 바뀌어야 한다** — `toggles`
+기대: 양쪽 `PASS`. 터미널 검사는 한 줄도 안 바뀌어야 한다 — `toggles`
 필드가 늘었지만 기본값이 넷 다 켜진 것이고, 기존 검사의 Ctrl 누름/뗌 쌍은
 사이에 반드시 다른 키가 있어서 아직 아무 갈래도 안 켜졌다.
 
-- [ ] **Step 8: diff를 사용자에게 보여 주고 커밋한다**
+- [ ] Step 8: diff를 사용자에게 보여 주고 커밋한다
 
 ```bash
 git diff --stat
@@ -1260,12 +1260,12 @@ git commit -m "Carry the toggle-key list from the config file to the composer"
 
 ## Task 4: 한/영 키와 Shift+Space 게이트
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `toggleHangul` 새 함수, `hangulLayer`의
   머리 두 갈래
 - Modify: `terminal/src/input_test.zig` — 검사 36·37
 
-- [ ] **Step 1: `toggleHangul`을 만든다**
+- [ ] Step 1: `toggleHangul`을 만든다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1298,7 +1298,7 @@ git commit -m "Carry the toggle-key list from the config file to the composer"
     }
 ```
 
-- [ ] **Step 2: `hangulLayer`의 머리를 고친다**
+- [ ] Step 2: `hangulLayer`의 머리를 고친다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1343,7 +1343,7 @@ git commit -m "Carry the toggle-key list from the config file to the composer"
         if (!self.hangul_on) return null;
 ```
 
-- [ ] **Step 3: 검사를 더한다**
+- [ ] Step 3: 검사를 더한다
 
 `terminal/src/input_test.zig`에서 지울 것:
 
@@ -1404,7 +1404,7 @@ git commit -m "Carry the toggle-key list from the config file to the composer"
 }
 ```
 
-- [ ] **Step 4: 검사를 돌린다**
+- [ ] Step 4: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1414,7 +1414,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 기대: `input_test: toggle keys OK`와 `PASS`. 기존 검사 서른다섯도 그대로다 —
 기본값이 `shift_space = true`이므로 HI-M1·M2의 Shift+Space 검사가 안 흔들린다.
 
-- [ ] **Step 5: diff를 사용자에게 보여 주고 커밋한다**
+- [ ] Step 5: diff를 사용자에게 보여 주고 커밋한다
 
 ```bash
 git diff --stat
@@ -1427,12 +1427,12 @@ git commit -m "Let the hangul key and a setting decide what switches to hangul"
 
 ## Task 5: tap-vs-hold 뼈대와 짧은 왼쪽 Ctrl
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `TAP_MAX_US` · `Tap` · `State`의 필드 둘 ·
   `markTapConsumed` · `handleKey`의 머리와 `KEY_LEFTCTRL` 갈래
 - Modify: `terminal/src/input_test.zig` — 검사 38~43
 
-- [ ] **Step 1: `TAP_MAX_US`와 `Tap`을 더한다**
+- [ ] Step 1: `TAP_MAX_US`와 `Tap`을 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1501,7 +1501,7 @@ const Tap = struct {
 /// modifier 상태를 들고 있는 작은 상태 머신.
 ```
 
-- [ ] **Step 2: `State`에 필드 둘과 `markTapConsumed`를 더한다**
+- [ ] Step 2: `State`에 필드 둘과 `markTapConsumed`를 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1529,7 +1529,7 @@ const Tap = struct {
     mode: Mode = .normal,
 ```
 
-이어서 `terminal/src/input.zig`의 `fn shifted(self: State) bool {` **앞**에 넣을 것:
+이어서 `terminal/src/input.zig`의 `fn shifted(self: State) bool {` 앞에 넣을 것:
 
 ```zig
     /// 결정 8의 2번 — 누른 동안 다른 키가 오면 "소비됨"을 켠다. 그 키는 조합
@@ -1551,7 +1551,7 @@ const Tap = struct {
 
 ```
 
-- [ ] **Step 3: `handleKey`가 소비를 표시하고 Ctrl tap을 판정하게 한다**
+- [ ] Step 3: `handleKey`가 소비를 표시하고 Ctrl tap을 판정하게 한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1612,7 +1612,7 @@ const Tap = struct {
             },
 ```
 
-- [ ] **Step 4: 검사를 더한다**
+- [ ] Step 4: 검사를 더한다
 
 `terminal/src/input_test.zig`에서 지울 것:
 
@@ -1719,7 +1719,7 @@ const Tap = struct {
 }
 ```
 
-- [ ] **Step 5: 검사를 돌린다**
+- [ ] Step 5: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1728,13 +1728,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `input_test: tap-vs-hold OK`와 `PASS`.
 
-**기존 검사가 안 깨지는 근거를 미리 적어 둔다.** 이 파일의 왼쪽 Ctrl 누름/뗌
-쌍은 여섯인데(263·283 / 292·296 / 543·545 / 894·897 …) **전부 사이에 다른
-키가 있어서 소비된다.** 하나라도 소비 안 된 쌍이 있으면 시각이 0-0이라 tap으로
+기존 검사가 안 깨지는 근거를 미리 적어 둔다. 이 파일의 왼쪽 Ctrl 누름/뗌
+쌍은 여섯인데(263·283 / 292·296 / 543·545 / 894·897 …) 전부 사이에 다른
+키가 있어서 소비된다. 하나라도 소비 안 된 쌍이 있으면 시각이 0-0이라 tap으로
 판정되어 `got hangul, want bytes`로 시끄럽게 실패한다 — 조용히 통과하는 길이
 없다는 것이 요점이다.
 
-- [ ] **Step 6: diff를 사용자에게 보여 주고 커밋한다**
+- [ ] Step 6: diff를 사용자에게 보여 주고 커밋한다
 
 ```bash
 git diff --stat
@@ -1747,12 +1747,12 @@ git commit -m "Turn a short left Ctrl into a hangul switch and leave Ctrl+C alon
 
 ## Task 6: CapsLock — 짧으면 한/영, 길면 대문자 잠금
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` — `State.caps_lock` · `latinChar` ·
   `handleKey`의 `KEY_CAPSLOCK` 갈래
 - Modify: `terminal/src/input_test.zig` — 검사 45~48
 
-- [ ] **Step 1: `caps_lock` 필드를 더한다**
+- [ ] Step 1: `caps_lock` 필드를 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1779,7 +1779,7 @@ git commit -m "Turn a short left Ctrl into a hangul switch and leave Ctrl+C alon
     caps_lock: bool = false,
 ```
 
-- [ ] **Step 2: `latinChar`가 대문자 잠금을 보게 한다**
+- [ ] Step 2: `latinChar`가 대문자 잠금을 보게 한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1817,7 +1817,7 @@ git commit -m "Turn a short left Ctrl into a hangul switch and leave Ctrl+C alon
     }
 ```
 
-- [ ] **Step 3: `handleKey`에 `KEY_CAPSLOCK` 갈래를 더한다**
+- [ ] Step 3: `handleKey`에 `KEY_CAPSLOCK` 갈래를 더한다
 
 `terminal/src/input.zig`에서 지울 것:
 
@@ -1867,7 +1867,7 @@ git commit -m "Turn a short left Ctrl into a hangul switch and leave Ctrl+C alon
         }
 ```
 
-- [ ] **Step 4: 검사를 더한다**
+- [ ] Step 4: 검사를 더한다
 
 `terminal/src/input_test.zig`에서 지울 것:
 
@@ -1965,7 +1965,7 @@ git commit -m "Turn a short left Ctrl into a hangul switch and leave Ctrl+C alon
 }
 ```
 
-- [ ] **Step 5: 검사를 돌린다**
+- [ ] Step 5: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1975,7 +1975,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 기대: `input_test: capslock OK`와 `PASS`. `vt_test`·`hangul_test`·`font_test`도
 그대로다 — 이 Task는 `input.zig` 밖을 안 건드린다.
 
-- [ ] **Step 6: diff를 사용자에게 보여 주고 커밋한다**
+- [ ] Step 6: diff를 사용자에게 보여 주고 커밋한다
 
 ```bash
 git diff --stat
@@ -1988,11 +1988,11 @@ git commit -m "Make a long CapsLock lock capitals and a short one switch to hang
 
 ## Task 7: 게이트가 tap 둘을 본다
 
-**Files:**
+Files:
 - Modify: `hangul/make_disk.sh` — `hangul_toggle` 한 줄
 - Modify: `hangul/check.sh` — `hold_key` 헬퍼, 검사 0의 판정 둘, 검사 12~15
 
-- [ ] **Step 1: 설정 디스크에 `hangul_toggle`을 심는다**
+- [ ] Step 1: 설정 디스크에 `hangul_toggle`을 심는다
 
 `hangul/make_disk.sh`에서 지울 것:
 
@@ -2049,7 +2049,7 @@ echo "make_disk: created ${IMG} (${SIZE}, ext2, hangul_layout=sebeol_3p3," \
      "hangul_toggle without hangul_key)"
 ```
 
-- [ ] **Step 2: `hold_key` 헬퍼를 더한다**
+- [ ] Step 2: `hold_key` 헬퍼를 더한다
 
 `hangul/check.sh`에서 지울 것:
 
@@ -2086,7 +2086,7 @@ hold_key() {
 screen_count() {
 ```
 
-- [ ] **Step 3: `report_failure`의 마커 목록을 넓힌다**
+- [ ] Step 3: `report_failure`의 마커 목록을 넓힌다
 
 `hangul/check.sh`에서 지울 것:
 
@@ -2104,7 +2104,7 @@ screen_count() {
     "terminal: hangul layout=.*toggles=" \
 ```
 
-- [ ] **Step 4: 검사 0에 전환 키 목록 판정을 더한다**
+- [ ] Step 4: 검사 0에 전환 키 목록 판정을 더한다
 
 `hangul/check.sh`에서 지울 것:
 
@@ -2143,15 +2143,15 @@ fi
 echo "three toggle keys came from the config file; hangul_key is off"
 ```
 
-**`\$`(줄 끝)를 붙이는 것이 셋째 판정의 전부다.** 안 붙이면
+`\$`(줄 끝)를 붙이는 것이 셋째 판정의 전부다. 안 붙이면
 `hangul_key,shift_space,capslock_tap,lctrl_tap`도 부분 일치로 통과한다.
 시리얼 로그가 CRLF라 `$`가 CR에 걸릴 것 같지만, `grep -a`가 보는 것은 줄 끝의
-`\n` 앞까지이고 CR이 그 자리에 있다 — **그래서 `$`가 아니라 `\r\?$`가 필요할
-수 있다.** 아래 Step 5에서 실제로 확인한다(HI-M1 실측 4가 정확히 이 함정이다).
+`\n` 앞까지이고 CR이 그 자리에 있다 — 그래서 `$`가 아니라 `\r\?$`가 필요할
+수 있다. 아래 Step 5에서 실제로 확인한다(HI-M1 실측 4가 정확히 이 함정이다).
 
-- [ ] **Step 5: 줄 끝 앵커가 CR 때문에 안 깨지는지 먼저 확인한다**
+- [ ] Step 5: 줄 끝 앵커가 CR 때문에 안 깨지는지 먼저 확인한다
 
-**이 Step을 건너뛰면 안 된다.** HI-M1 실측 4가 같은 함정을 밟았고, 증상이
+이 Step을 건너뛰면 안 된다. HI-M1 실측 4가 같은 함정을 밟았고, 증상이
 "똑같아 보이는 값으로 실패한다"였다.
 
 먼저 체인을 한 번 돌려 로그를 남긴다.
@@ -2169,10 +2169,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `--- markers ---`를 읽고 두 판정의 정규식을 `toggles=${EXPECT_TOGGLES}\r\?$`로
 바꾼다.
 
-**주의: 루트 게이트를 돌리면 `out/`이 통째로 사라진다**(`check.sh:15`의
+주의: 루트 게이트를 돌리면 `out/`이 통째로 사라진다(`check.sh:15`의
 `clean()`). 조사를 다 끝내고 Task 8로 간다.
 
-- [ ] **Step 6: 검사 12~15를 더한다**
+- [ ] Step 6: 검사 12~15를 더한다
 
 `hangul/check.sh`에서 지울 것:
 
@@ -2282,20 +2282,20 @@ echo "Ctrl+C did not flip hangul: the tap was consumed"
 echo "HI check PASS"
 ```
 
-- [ ] **Step 7: 체인 하나만 돌린다**
+- [ ] Step 7: 체인 하나만 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'bash hangul/check.sh'
 ```
 
-기대: 검사 0~16이 전부 통과하고 마지막 줄이 `HI check PASS`. **약 3~4분**이
+기대: 검사 0~16이 전부 통과하고 마지막 줄이 `HI check PASS`. 약 3~4분이
 걸린다(커널 빌드가 캐시돼 있으면 그보다 짧다).
 
 실패하면 `report_failure`가 찍는 `--- markers ---` · `--- hangul lines ---` ·
 `--- key lines ---` 셋을 먼저 읽는다.
 
-- [ ] **Step 8: 커밋**
+- [ ] Step 8: 커밋
 
 ```bash
 git diff --stat
@@ -2307,14 +2307,14 @@ git commit -m "Let the hangul gate press CapsLock and Ctrl short and long"
 
 ## Task 8: 루트 게이트 3회전과 서브프로젝트 닫기
 
-**Files:**
+Files:
 - Modify: `check.sh` — `CHAINS`의 라벨
 - Modify: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md` —
   `Status:` · HI-M3 절 · "HI-M3이 실측한 것" 절
 - Modify: `HANDOFF.md` · `MEMORY.md` · `docs/decisions/project_hangul_input.md`
 - Modify: `CLAUDE.md` — "진행 중인 서브프로젝트" 줄
 
-- [ ] **Step 1: `CHAINS`의 라벨을 고친다**
+- [ ] Step 1: `CHAINS`의 라벨을 고친다
 
 `check.sh`에서 지울 것:
 
@@ -2328,7 +2328,7 @@ git commit -m "Let the hangul gate press CapsLock and Ctrl short and long"
   "HI-M3:./hangul/check.sh"
 ```
 
-- [ ] **Step 2: 루트 게이트를 3회전 돌린다 (회차당 약 18분, 3회전이면 약 55분)**
+- [ ] Step 2: 루트 게이트를 3회전 돌린다 (회차당 약 18분, 3회전이면 약 55분)
 
 ```bash
 for i in 1 2 3; do
@@ -2338,22 +2338,22 @@ for i in 1 2 3; do
 done
 ```
 
-기대: 아홉 체인이 3/3으로 통과. **시간은 안 갈릴 것이다** — 체인이 안 늘고
+기대: 아홉 체인이 3/3으로 통과. 시간은 안 갈릴 것이다 — 체인이 안 늘고
 부팅도 안 늘었으며, 는 것은 키 몇 개와 `hold_key`의 sleep 여섯 번(9초)뿐이다.
-HI-M2의 기준선이 18분 06~08초이므로 **18분 10~20초 근처**를 예상한다.
+HI-M2의 기준선이 18분 06~08초이므로 18분 10~20초 근처를 예상한다.
 
-**같은 세션 안에서 재는 것이 요점이다**(HI-M2 실측 11). 게이트 잡음 ±3분은
+같은 세션 안에서 재는 것이 요점이다(HI-M2 실측 11). 게이트 잡음 ±3분은
 서로 다른 날의 측정에 대한 것이다.
 
-- [ ] **Step 3: 시간을 적고 design doc을 닫는다**
+- [ ] Step 3: 시간을 적고 design doc을 닫는다
 
 `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`에서:
 
-1. 맨 위 `Status:` 줄을 **완료**로 고친다.
+1. 맨 위 `Status:` 줄을 완료로 고친다.
 2. `### HI-M3 — 전환 키 나머지 셋과 CapsLock` 제목에 `(**완료, 2026-09-01**)`를
    더한다.
-3. `## HI-M2가 실측한 것` 절 **뒤에** `## HI-M3이 실측한 것` 절을 새로 만든다.
-   HI-M0·M1·M2의 절과 같은 모양으로, **실행이 답한 것만** 적는다. 최소한
+3. `## HI-M2가 실측한 것` 절 뒤에 `## HI-M3이 실측한 것` 절을 새로 만든다.
+   HI-M0·M1·M2의 절과 같은 모양으로, 실행이 답한 것만 적는다. 최소한
    다음이 들어간다.
    - 게이트 시간 삼중값과 그것이 갈렸는지
    - `hold_key`의 sleep이 실제로 필요했는지(안 기다렸을 때 무슨 일이
@@ -2362,17 +2362,17 @@ HI-M2의 기준선이 18분 06~08초이므로 **18분 10~20초 근처**를 예�
    - 기존 검사가 Task 1·3에서 한 줄도 안 바뀐 채 통과했는지
    - 예상과 달랐던 것 전부
 
-- [ ] **Step 4: `HANDOFF.md`·`MEMORY.md`·기억 파일·`CLAUDE.md`를 갱신한다**
+- [ ] Step 4: `HANDOFF.md`·`MEMORY.md`·기억 파일·`CLAUDE.md`를 갱신한다
 
-- `HANDOFF.md` — 맨 위 제목과 "지금 어디인가"를 **"Hangul Input이 끝났다"**로
+- `HANDOFF.md` — 맨 위 제목과 "지금 어디인가"를 "Hangul Input이 끝났다"로
   고치고, "다음 세션이 할 첫 일"을 새 서브프로젝트를 고르는 자리로 바꾼다.
   "HI-M3이 실행으로 증명한 것" 절을 앞에 놓는다.
 - `docs/decisions/project_hangul_input.md` — HI-M3의 내용을 더한다.
 - `MEMORY.md` — 해당 줄의 hook을 갱신한다.
-- `CLAUDE.md`의 "진행 중인 서브프로젝트: Hangul Input(HI)" 줄을 **완료된
-  서브프로젝트 목록으로 옮긴다.**
+- `CLAUDE.md`의 "진행 중인 서브프로젝트: Hangul Input(HI)" 줄을 완료된
+  서브프로젝트 목록으로 옮긴다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git diff --stat
@@ -2384,51 +2384,51 @@ git commit -m "Close out HI-M3 and the hangul input subproject"
 
 ## 이 plan을 다시 읽으면서 잡은 것
 
-**1. `expectCtx`에 인자를 더하면 Task 1의 증거가 사라진다.** 처음에는
+1. `expectCtx`에 인자를 더하면 Task 1의 증거가 사라진다. 처음에는
 `expectCtx`의 시그니처를 직접 넓히려 했는데, 호출이 26군데라 그러면 기존 검사가
-26줄 바뀐다. **"기존 검사가 한 글자도 안 바뀐 채 통과했다"가 Task 1의 유일한
-판정이므로** 본체를 `expectFull`로 옮기고 껍데기를 남기는 쪽으로 바꿨다.
+26줄 바뀐다. "기존 검사가 한 글자도 안 바뀐 채 통과했다"가 Task 1의 유일한
+판정이므로 본체를 `expectFull`로 옮기고 껍데기를 남기는 쪽으로 바꿨다.
 
-**2. Zig는 안 쓰는 함수 인자를 컴파일 에러로 막는다.** 컨테이너에서 확인했다
+2. Zig는 안 쓰는 함수 인자를 컴파일 에러로 막는다. 컨테이너에서 확인했다
 (`error: unused function parameter`, zig 0.16.0). 그래서 Task 1에 `_ = time_us;`
-한 줄이 들어가고 Task 5가 그것을 지운다 — **plan에 그 줄이 언제 사라지는지를
-적어 두지 않으면 나중에 "왜 여기 이게 있지"가 된다.**
+한 줄이 들어가고 Task 5가 그것을 지운다 — plan에 그 줄이 언제 사라지는지를
+적어 두지 않으면 나중에 "왜 여기 이게 있지"가 된다.
 
-**3. `hangul_toggle`의 기본값은 Claude가 못 정한다.** `keyboard=apple`·
+3. `hangul_toggle`의 기본값은 Claude가 못 정한다. `keyboard=apple`·
 `hangul_layout=shin_pcs`와 같은 종류의 결정("이 기계를 쓰는 사람이 쓰는 것")
-이라 착수 전에 사용자에게 물었고, 답이 **넷 다**였다.
+이라 착수 전에 사용자에게 물었고, 답이 넷 다였다.
 
-**4. 기본값이 넷이 되면서 게이트가 심을 값이 정해졌다.** "심는 값이 기본값과
+4. 기본값이 넷이 되면서 게이트가 심을 값이 정해졌다. "심는 값이 기본값과
 달라야 한다"는 규칙(design 결정 14)이 서려면 하나를 빼야 하는데, 뺄 수 있는
 것은 `hangul_key` 하나뿐이다 — 나머지 셋은 각각 기존 검사 셋과 새 검사 넷이
-쓴다. **그 키가 하필 게이트가 어차피 못 보내는 키라는 것이 우연히 잘 맞았다.**
+쓴다. 그 키가 하필 게이트가 어차피 못 보내는 키라는 것이 우연히 잘 맞았다.
 
-**5. 소비 표시를 modifier switch 뒤에 두면 Shift가 안 세어진다.** 코드를 읽다가
-잡았다 — Shift·Alt·Meta 갈래가 switch **안에서** `return`한다. 실행 중에
+5. 소비 표시를 modifier switch 뒤에 두면 Shift가 안 세어진다. 코드를 읽다가
+잡았다 — Shift·Alt·Meta 갈래가 switch 안에서 `return`한다. 실행 중에
 만났다면 증상이 "Ctrl+Shift+C를 쓸 때만 한/영이 바뀐다"라 원인을 찾기 어려웠을
 것이다. `input_test`의 검사 41이 그 자리를 보는 유일한 검사다.
 
-**6. `sendkey`의 hold를 안 기다리면 다음 키가 소비를 켠다.** QEMU의 monitor는
+6. `sendkey`의 hold를 안 기다리면 다음 키가 소비를 켠다. QEMU의 monitor는
 hold 타이머를 걸고 즉시 돌아온다(HI-M0 실측 2의 값이 그것을 말한다 —
 `shift 500`이 499,979µs였다는 것은 QEMU가 그 시간을 실제로 잡고 있었다는 뜻이다).
 `type_keys`는 로그가 자라면 바로 다음 키로 가므로 이 함정을 밟는다.
 
-**7. `screen_count 'ABC1'`이 결정 9를 통째로 본다.** 처음에는 `ABC`만 세려
+7. `screen_count 'ABC1'`이 결정 9를 통째로 본다. 처음에는 `ABC`만 세려
 했는데, 그러면 "CapsLock이 Shift를 통째로 건다"는 구현이 통과한다. 숫자 하나를
 붙이는 것으로 "알파벳에만"이라는 조건이 화면에서 갈린다.
 
-**8. 검사 48의 글자를 `k`에서 `o`로 바꿨다.** `rk`(가)로는 대문자 잠금이 한글
+8. 검사 48의 글자를 `k`에서 `o`로 바꿨다. `rk`(가)로는 대문자 잠금이 한글
 층에 새도 아무것도 안 보인다 — 두벌식에서 `K`가 따로 없기 때문이다. `o`(ㅐ)와
-`O`(ㅒ)는 갈리므로 `개`가 `걔`가 되는 것이 보인다. **plan을 쓰면서 손으로
-돌려 보다가 잡았고**, 실행 중에 만났다면 "검사가 통과하니 안전하다"고 믿었을
+`O`(ㅒ)는 갈리므로 `개`가 `걔`가 되는 것이 보인다. plan을 쓰면서 손으로
+돌려 보다가 잡았고, 실행 중에 만났다면 "검사가 통과하니 안전하다"고 믿었을
 것이다.
 
-**9. `none`을 파서가 받아 줘야 왕복이 닫힌다.** `arg()`가 빈 집합에 `none`을
+9. `none`을 파서가 받아 줘야 왕복이 닫힌다. `arg()`가 빈 집합에 `none`을
 쓰는데 그 이름이 `ToggleKey`에 없어서, 안 막으면 전환 키를 다 끈 사람의 부팅
-로그에 매번 경고가 찍힌다. **"쓰는 쪽과 읽는 쪽이 같은 문법이어야 한다"를
-검사로 못 박으니 이 구멍이 드러났다.**
+로그에 매번 경고가 찍힌다. "쓰는 쪽과 읽는 쪽이 같은 문법이어야 한다"를
+검사로 못 박으니 이 구멍이 드러났다.
 
-**10. 줄 끝 앵커가 CR에 걸릴 수 있다.** HI-M1 실측 4가 `[^ ]+`로 밟은 것과 같은
-함정이 `$`에도 있을 수 있어서, Task 7에 확인 Step을 따로 뒀다. **처방을 미리
-적어 두는 것(`\r\?$`)과 확인 Step을 두는 것이 둘 다 필요하다** — 미리 붙이면
+10. 줄 끝 앵커가 CR에 걸릴 수 있다. HI-M1 실측 4가 `[^ ]+`로 밟은 것과 같은
+함정이 `$`에도 있을 수 있어서, Task 7에 확인 Step을 따로 뒀다. 처방을 미리
+적어 두는 것(`\r\?$`)과 확인 Step을 두는 것이 둘 다 필요하다 — 미리 붙이면
 필요 없는 복잡함이고, 안 적어 두면 실패했을 때 원인을 다시 찾는다.

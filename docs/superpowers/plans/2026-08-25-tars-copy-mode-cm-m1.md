@@ -1,19 +1,19 @@
 # TARS Copy Mode CM-M1 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 구현 파일 편집은
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 구현 파일 편집은
 > 사용자가 하고, 빌드·QEMU·게이트·조사성 명령은 Claude가 실행하며, Claude는 각
 > Step의 정확한 내용을 제시하고 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는
 > 이 저장소에 적용하지 않는다.
 
-**Goal:** copy mode 안에서 `v`/`V`로 영역을 잡고, 잡힌 영역이 **화면에 반전되어
-보이고**, `y`(또는 `Cmd+C`)가 그 글자를 클립보드로 옮기면서 모드를 닫는다.
+Goal: copy mode 안에서 `v`/`V`로 영역을 잡고, 잡힌 영역이 화면에 반전되어
+보이고, `y`(또는 `Cmd+C`)가 그 글자를 클립보드로 옮기면서 모드를 닫는다.
 게이트가 `terminal: clip> len=11 text=echo PASTED`를 실제 게스트에서 본다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
+Design doc: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
 (결정 5·6이 이 milestone의 몫이다. 붙여넣기 결정 9는 CM-M2다. design은 승인되어
 있으므로 다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16, libghostty-vt(`Screen.select` · `Screen.selectionString` ·
+Tech Stack: Zig 0.16, libghostty-vt(`Screen.select` · `Screen.selectionString` ·
 `Screen.selectLine` · `Selection.order` · `RenderState.Row.selection` ·
 `PageList.pin` · `PageList.pointFromPin`), evdev, DRM dumb buffer,
 QEMU monitor `sendkey`, bash 게이트 스크립트
@@ -24,17 +24,17 @@ QEMU monitor `sendkey`, bash 게이트 스크립트
 
 ### CM-M0이 실측으로 남긴 것 (2026-08-24) — 다시 조사하지 않는다
 
-1. **`screens.active`는 이미 포인터다.** `&`를 붙이면 `**Screen`이 되어
-   `does not support field access`로 막힌다. **CM-M1이 이 필드를 실제로 쓴다.**
-2. **copy 커서는 언제나 화면 맨 아랫줄에서 시작한다.** 셸 프롬프트가 거기 있기
-   때문이다(`row=46`, 화면은 47줄). 그래서 게이트에서 **아래로 먼저 갈 수 없다** —
+1. `screens.active`는 이미 포인터다. `&`를 붙이면 `**Screen`이 되어
+   `does not support field access`로 막힌다. CM-M1이 이 필드를 실제로 쓴다.
+2. copy 커서는 언제나 화면 맨 아랫줄에서 시작한다. 셸 프롬프트가 거기 있기
+   때문이다(`row=46`, 화면은 47줄). 그래서 게이트에서 아래로 먼저 갈 수 없다 —
    CM-M1의 선택 검사도 `k`로 올라가는 것으로 시작한다.
-3. **`Action`이나 `Keys`를 건드리면 `zig build test`만으로 모자란다.** Zig가
+3. `Action`이나 `Keys`를 건드리면 `zig build test`만으로 모자란다. Zig가
    참조되지 않는 함수를 분석하지 않아서 `readKeys`가 쓰는 필드가 통째로 사라진
-   것을 호스트 검사가 두 번 놓쳤다. **`Copy`에 variant를 더하는 이번 작업에 그대로
-   해당된다** — Task 4에서 `zig build`를 함께 돌린다.
-4. **`sendkey`는 0.05초 간격으로 80번을 보내도 하나도 안 떨어진다.**
-5. **`terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다.** 이것이 "모드가
+   것을 호스트 검사가 두 번 놓쳤다. `Copy`에 variant를 더하는 이번 작업에 그대로
+   해당된다 — Task 4에서 `zig build`를 함께 돌린다.
+4. `sendkey`는 0.05초 간격으로 80번을 보내도 하나도 안 떨어진다.
+5. `terminal: key>` 줄은 PTY로 바이트가 나갈 때만 찍힌다. 이것이 "모드가
    닫혔는가"를 보는 가장 정확한 도구다. CM-M1은 `y` 뒤에 이 도구를 다시 쓴다.
 
 ### CM-M0 착수 전 프로브가 확정한 것 (2026-08-24) — 그대로 유효
@@ -49,31 +49,31 @@ QEMU monitor `sendkey`, bash 게이트 스크립트
 
 ### 이번 plan을 쓰면서 vendor 소스에서 읽어낸 것 넷
 
-프로브를 돌리는 대신 `terminal/ghostty-src/src/terminal/`을 직접 읽었다. **넷 다
-아래 Task의 검사가 실행으로 다시 증명한다** — 읽은 것을 믿고 넘어가지 않는다.
+프로브를 돌리는 대신 `terminal/ghostty-src/src/terminal/`을 직접 읽었다. 넷 다
+아래 Task의 검사가 실행으로 다시 증명한다 — 읽은 것을 믿고 넘어가지 않는다.
 
-1. **`Row.selection`은 `?[2]u16`이고 양 끝을 포함한다.**
+1. `Row.selection`은 `?[2]u16`이고 양 끝을 포함한다.
    `render.zig:704`가 `assert(start.x <= end.x)` 뒤에 `.{ start.x, end.x }`를
    넣는다. 그래서 렌더는 `x >= range[0] and x <= range[1]`이다.
-2. **역방향 선택은 라이브러리가 정렬해 준다**(design 위험 3의 답).
+2. 역방향 선택은 라이브러리가 정렬해 준다(design 위험 3의 답).
    `selectionString`은 `formatter.zig:669-671`에서 `sel.topLeft()`/
    `sel.bottomRight()`를 쓰고, 렌더도 `render.zig:667-669`에서 같은 둘을 쓴다.
-   **우리가 `ordered()`를 부를 자리는 없다.** Task 2의 검사 2가 이것을 실행으로
+   우리가 `ordered()`를 부를 자리는 없다. Task 2의 검사 2가 이것을 실행으로
    확인한다.
-3. **`select()`는 `screen.dirty.selection`을 세우고, 그 비트가 다음 프레임을
-   full redraw로 만든다**(`render.zig:377-382`). 그래서 선택이 줄어들 때 옛 행에
+3. `select()`는 `screen.dirty.selection`을 세우고, 그 비트가 다음 프레임을
+   full redraw로 만든다(`render.zig:377-382`). 그래서 선택이 줄어들 때 옛 행에
    범위가 남는 일이 구조적으로 없다 — `RowBuilder`가 매 행을 다시 지으면서
    `sels[y] = null`부터 한다(`render.zig:1042`).
-4. **가지치기는 선택을 null로 만들지 않는다.** 아래에서 따로 다룬다.
+4. 가지치기는 선택을 null로 만들지 않는다. 아래에서 따로 다룬다.
 
 ---
 
 ## 이번에 정하는 것 다섯 (design doc이 안 정했거나, 소스가 뒤집은 자리)
 
-### 1. **가지치기 방어를 "selection이 null인가"로 짜면 영영 안 걸린다**
+### 1. 가지치기 방어를 "selection이 null인가"로 짜면 영영 안 걸린다
 
 `HANDOFF.md`와 design 위험 1이 적어 둔 방어는 "매 프레임 `selection`이 null이
-됐는지 보고 그러면 모드를 나간다"였다. **그 조건은 절대 참이 되지 않는다.**
+됐는지 보고 그러면 모드를 나간다"였다. 그 조건은 절대 참이 되지 않는다.
 
 `PageList.erasePage`(`PageList.zig:5455-5470`)와 `eraseRows`
 (`PageList.zig:5409-5419`)가 하는 일은 이렇다.
@@ -88,17 +88,17 @@ for (pin_keys) |p| {
 }
 ```
 
-**pin을 무효로 만들지 않고 살아 있는 이웃 페이지의 왼쪽 위로 옮긴다.**
+pin을 무효로 만들지 않고 살아 있는 이웃 페이지의 왼쪽 위로 옮긴다.
 `Screen.selection`은 그대로 있고, tracked pin도 그대로 유효하다. 달라진 것은
-그것이 가리키는 **내용**뿐이다. 즉 이 상황의 증상은 "선택이 사라진다"가 아니라
-**"엉뚱한 자리를 조용히 복사한다"**이고, 그것이 design 위험 1이 막고 싶어 했던
+그것이 가리키는 내용뿐이다. 즉 이 상황의 증상은 "선택이 사라진다"가 아니라
+"엉뚱한 자리를 조용히 복사한다"이고, 그것이 design 위험 1이 막고 싶어 했던
 바로 그 사고다.
 
-그래서 방어를 다시 짠다. **앵커의 screen 좌표 y를 기억해 두고, 출력을 먹인 뒤에
-그 값이 달라졌으면 모드를 나간다.**
+그래서 방어를 다시 짠다. 앵커의 screen 좌표 y를 기억해 두고, 출력을 먹인 뒤에
+그 값이 달라졌으면 모드를 나간다.
 
-- screen 좌표는 전체 목록의 맨 위에서부터 세는 절대 좌표라, **아래에 줄이
-  붙는 것으로는 안 변한다.** 변하는 경우는 앞에서 줄이 지워졌을 때(가지치기)와
+- screen 좌표는 전체 목록의 맨 위에서부터 세는 절대 좌표라, 아래에 줄이
+  붙는 것으로는 안 변한다. 변하는 경우는 앞에서 줄이 지워졌을 때(가지치기)와
   pin이 옮겨졌을 때뿐이다 — 우리가 잡고 싶은 것이 정확히 그 둘이다.
 - 대체 화면(vim 등)으로 갈아타서 `selection`이 사라지는 경우도 같은 조건에
   걸린다. 그때 모드를 나가는 것도 옳다.
@@ -106,9 +106,9 @@ for (pin_keys) |p| {
 `total`(전체 행 수)이 줄었는지로 보는 안은 버렸다. 한 번의 `feed`에 한 페이지
 (약 286줄)보다 많이 들어오면 늘어난 것과 지워진 것이 상쇄되어 못 잡는다.
 
-**이 방어는 게이트가 못 본다**(copy mode 중에 1000줄을 쏟아부을 방법이 없다).
-그래서 `vt_test`가 대신 보고, **가지치기가 없을 때는 모드가 안 끊긴다는 대조군을
-같이 둔다** — 그것이 없으면 "언제나 나간다"도 통과한다.
+이 방어는 게이트가 못 본다(copy mode 중에 1000줄을 쏟아부을 방법이 없다).
+그래서 `vt_test`가 대신 보고, 가지치기가 없을 때는 모드가 안 끊긴다는 대조군을
+같이 둔다 — 그것이 없으면 "언제나 나간다"도 통과한다.
 
 ### 2. `Copy` enum은 아홉 개까지만 연다 (`paste`는 CM-M2)
 
@@ -116,37 +116,37 @@ CM-M0이 여섯으로 닫아 둔 이유가 그대로다. `main.zig`의 switch가
 닫혀 있으므로, variant를 더하는 순간 컴파일러가 배선할 자리를 알려준다.
 `paste`를 지금 넣으면 CM-M2가 그 신호를 잃는다.
 
-### 3. `v`/`V`는 **같은 것을 다시 누르면 풀고, 다른 것을 누르면 앵커를 새로 잡는다**
+### 3. `v`/`V`는 같은 것을 다시 누르면 풀고, 다른 것을 누르면 앵커를 새로 잡는다
 
 design 결정 4의 표는 "선택 시작/해제"까지만 정했다. `v`로 잡던 중에 `V`를 누르면
-vim은 앵커를 유지하지만, 우리는 **앵커를 지금 커서 자리로 새로 잡는다.** 앵커를
+vim은 앵커를 유지하지만, 우리는 앵커를 지금 커서 자리로 새로 잡는다. 앵커를
 유지하려면 "문자 앵커를 줄 앵커로 승격하는" 자리가 하나 더 생기는데, 게이트가 볼
 수 없는 표를 늘리는 일이라 지금 하지 않는다. 대신 그 선택을 여기 적어 둔다.
 
-### 4. **커서가 선택 안에 있으면 두 번 뒤집혀 원래 색으로 돌아온다**
+### 4. 커서가 선택 안에 있으면 두 번 뒤집혀 원래 색으로 돌아온다
 
 선택도 커서도 "색 둘을 맞바꾼다"는 같은 연산이므로(design 결정 6), 겹치면 상쇄된다.
 숨기지 않고 그대로 둔다 — 반전된 띠 가운데 뚫린 구멍이 곧 커서라서 오히려 잘
 보이고, 예외를 넣으면 "선택"이라는 개념이 렌더 쪽으로 새어 나간다.
-**`vt_test`가 이 성질을 못 박는다.**
+`vt_test`가 이 성질을 못 박는다.
 
 ### 5. `y` 뒤의 로그는 `copy> exit`이 아니라 `copy> yank`다
 
 design 결정 7의 시나리오는 "`clip> …`, 이어서 `copy> exit`"이라고 적었다. 실제로는
 `main.zig`가 명령 이름을 그대로 찍으므로 `copy> yank`가 된다. 줄을 하나 더
-만들지 않고 이름만 다르게 간다. **design doc의 그 문장을 Task 7에서 고친다.**
+만들지 않고 이름만 다르게 간다. design doc의 그 문장을 Task 7에서 고친다.
 
 ---
 
 ## Task 1: `input.zig`에 `v`·`V`·`y`·`Cmd+C`를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig`
 - Test: `terminal/src/input_test.zig`
 
 ### Step 1: `Copy` enum에 variant 셋을 더한다
 
-`input.zig:169-182`를 **지울 것**:
+`input.zig:169-182`를 지울 것:
 
 ```zig
 /// copy mode 안에서 키가 만드는 명령.
@@ -165,7 +165,7 @@ pub const Copy = enum {
 };
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
 /// copy mode 안에서 키가 만드는 명령.
@@ -192,7 +192,7 @@ pub const Copy = enum {
 
 ### Step 2: copy 표에 세 줄을 더한다
 
-`input.zig:516-528`을 **지울 것**:
+`input.zig:516-528`을 지울 것:
 
 ```zig
         if (self.mode == .copy) {
@@ -210,7 +210,7 @@ pub const Copy = enum {
         }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
         if (self.mode == .copy) {
@@ -253,13 +253,13 @@ pub const Copy = enum {
 
 ### Step 3: `input_test.zig`에 검사 넷을 더한다
 
-`input_test.zig`의 `main` 함수에서 **CM-M0이 남긴 마지막 줄**
+`input_test.zig`의 `main` 함수에서 CM-M0이 남긴 마지막 줄
 
 ```zig
     std.debug.print("input_test: copy mode OK\n", .{});
 ```
 
-을 찾아, 그 **바로 앞에 넣을 것**(지울 것 없음):
+을 찾아, 그 바로 앞에 넣을 것(지울 것 없음):
 
 ```zig
     // ── CM-M1: 선택과 복사 ──────────────────────────────────────────────
@@ -319,7 +319,7 @@ pub const Copy = enum {
     try expect(&cm, K.KEY_H, 1, "h");
 ```
 
-**주의.** `expectCopy`는 `handleKey(code, 1, .{})`를 부르므로 **누름(1)만 본다.**
+주의. `expectCopy`는 `handleKey(code, 1, .{})`를 부르므로 누름(1)만 본다.
 modifier를 떼는 이벤트(value 0)와 modifier 키 자체는 언제나 `expect`로 본다.
 
 ### Step 4: 호스트 검사를 돌린다 (Claude가 실행, 약 1분)
@@ -331,9 +331,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
 
 기대: `input_test: copy mode OK`가 찍히고 `PASS`.
 
-**이 시점에 `vt.zig`·`main.zig`는 아직 안 고쳤다.** `Copy`에 variant가 늘었지만
+이 시점에 `vt.zig`·`main.zig`는 아직 안 고쳤다. `Copy`에 variant가 늘었지만
 `main.zig`의 switch는 `zig build test`가 컴파일하지 않으므로 여기서는 안 걸린다 —
-Task 4의 `zig build`가 걸어 준다. **그것이 CM-M0이 배운 교훈의 자리다.**
+Task 4의 `zig build`가 걸어 준다. 그것이 CM-M0이 배운 교훈의 자리다.
 
 ### Step 5: 커밋 (Claude가 실행)
 
@@ -346,13 +346,13 @@ git commit -m "Teach copy mode the selection and yank keys"
 
 ## Task 2: `vt.zig`에 선택·클립보드·가지치기 방어를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig`
 - Test: `terminal/src/vt_test.zig`
 
 ### Step 1: 상태 넷을 더한다
 
-`vt.zig:46-55`의 `copy_cursor` 선언을 **지울 것**:
+`vt.zig:46-55`의 `copy_cursor` 선언을 지울 것:
 
 ```zig
     /// copy mode의 커서. null이면 copy mode가 아니다.
@@ -367,7 +367,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     copy_cursor: ?Cursor = null,
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     /// copy mode의 커서. null이면 copy mode가 아니다.
@@ -412,7 +412,7 @@ git commit -m "Teach copy mode the selection and yank keys"
 
 ### Step 2: `deinit`이 클립보드를 해제한다
 
-`vt.zig:108-114`를 **지울 것**:
+`vt.zig:108-114`를 지울 것:
 
 ```zig
     pub fn deinit(self: *Screen) void {
@@ -424,7 +424,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     pub fn deinit(self: *Screen) void {
@@ -439,7 +439,7 @@ git commit -m "Teach copy mode the selection and yank keys"
 
 ### Step 3: `feed`가 가지치기를 감시한다
 
-`vt.zig:116-119`를 **지울 것**:
+`vt.zig:116-119`를 지울 것:
 
 ```zig
     /// PTY에서 읽은 바이트를 ANSI 파서에 먹인다. 화면 상태가 갱신된다.
@@ -448,7 +448,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     /// PTY에서 읽은 바이트를 ANSI 파서에 먹인다. 화면 상태가 갱신된다.
@@ -487,7 +487,7 @@ git commit -m "Teach copy mode the selection and yank keys"
 
 ### Step 4: 선택을 만들고 지우고 복사하는 함수들
 
-`vt.zig`의 `copyExit`을 **지울 것**:
+`vt.zig`의 `copyExit`을 지울 것:
 
 ```zig
     /// copy mode를 나간다.
@@ -496,7 +496,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     /// copy mode를 나간다. **선택도 함께 지운다** — 안 지우면 모드를 나간 뒤에도
@@ -516,7 +516,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     }
 ```
 
-`copyMove` 정의 **바로 뒤에 넣을 것**(지울 것 없음. `copyMove` 자체는 Step 5에서
+`copyMove` 정의 바로 뒤에 넣을 것(지울 것 없음. `copyMove` 자체는 Step 5에서
 고친다):
 
 ```zig
@@ -618,14 +618,14 @@ git commit -m "Teach copy mode the selection and yank keys"
 
 ### Step 5: `copyMove`가 선택을 따라 갱신한다
 
-`vt.zig`의 `copyMove` 마지막 두 줄을 **지울 것**:
+`vt.zig`의 `copyMove` 마지막 두 줄을 지울 것:
 
 ```zig
         self.copy_cursor = .{ .x = @intCast(x), .y = @intCast(y) };
     }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
         self.copy_cursor = .{ .x = @intCast(x), .y = @intCast(y) };
@@ -641,26 +641,26 @@ git commit -m "Teach copy mode the selection and yank keys"
     }
 ```
 
-그리고 같은 함수의 시그니처를 **지울 것**:
+그리고 같은 함수의 시그니처를 지울 것:
 
 ```zig
     pub fn copyMove(self: *Screen, dx: i32, dy: i32) void {
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     pub fn copyMove(self: *Screen, dx: i32, dy: i32) !void {
 ```
 
-**왜 `!void`로 바꾸는가.** 이동할 때마다 선택을 다시 만들어야 하고 그 일이
+왜 `!void`로 바꾸는가. 이동할 때마다 선택을 다시 만들어야 하고 그 일이
 할당을 한다. 별도의 `copySync()`를 두고 호출부가 부르게 하는 안도 있었지만,
-그러면 **부르는 것을 잊어도 컴파일이 통과한다.** 반환을 넓히면 호출부가 전부
+그러면 부르는 것을 잊어도 컴파일이 통과한다. 반환을 넓히면 호출부가 전부
 컴파일 에러로 드러난다 — CM-M0이 `Copy` enum을 닫아 둔 것과 같은 규율이다.
 
 ### Step 6: `vt_test.zig`에 CM-M1 검사 여섯을 더한다
 
-`vt_test.zig:344-349`(CM-M0의 검사 4)를 **지울 것**:
+`vt_test.zig:344-349`(CM-M0의 검사 4)를 지울 것:
 
 ```zig
     // 검사 4. 나가면 커서가 사라지고 셸 커서가 돌아온다.
@@ -672,7 +672,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     std.debug.print("vt_test: copy cursor OK\n", .{});
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     // 검사 4. 나가면 커서가 사라지고 셸 커서가 돌아온다.
@@ -841,8 +841,8 @@ git commit -m "Teach copy mode the selection and yank keys"
     std.debug.print("vt_test: copy selection OK\n", .{});
 ```
 
-**CM-M0의 검사 2·3이 `copyMove`를 부르는 자리 넷도 `try`를 붙여야 한다.**
-`vt_test.zig:305-306`과 `:328`을 **지울 것**:
+CM-M0의 검사 2·3이 `copyMove`를 부르는 자리 넷도 `try`를 붙여야 한다.
+`vt_test.zig:305-306`과 `:328`을 지울 것:
 
 ```zig
     while (fresh.copyCursor().?.x > 0) fresh.copyMove(-1, 0);
@@ -853,7 +853,7 @@ git commit -m "Teach copy mode the selection and yank keys"
     fresh.copyMove(0, -1);
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
     while (fresh.copyCursor().?.x > 0) try fresh.copyMove(-1, 0);
@@ -882,27 +882,27 @@ vt_test: v를 다시 누르면 선택이 풀린다 OK
 vt_test: 가지치기가 copy mode를 끊는다 OK
 ```
 
-**검사 5의 색이 걸리면 Task 3을 아직 안 했기 때문이다.** `cells()`가 선택을
+검사 5의 색이 걸리면 Task 3을 아직 안 했기 때문이다. `cells()`가 선택을
 읽는 코드는 다음 Task에 있다 — Step 6을 넣은 직후에는 `SelectionNotInverted`가
 나는 것이 정상이다. Task 3을 끝내고 다시 돌린다.
 
-> 순서를 이렇게 잡은 것이 의도다. **검사를 먼저 깨뜨려 놓고 구현으로 통과시킨다.**
+> 순서를 이렇게 잡은 것이 의도다. 검사를 먼저 깨뜨려 놓고 구현으로 통과시킨다.
 
 ### Step 8: 커밋 (Claude가 실행)
 
-**Task 3까지 통과한 뒤에** 커밋한다(검사가 빨간 상태로 커밋하지 않는다).
+Task 3까지 통과한 뒤에 커밋한다(검사가 빨간 상태로 커밋하지 않는다).
 Task 3 Step 3에서 한 번에 커밋한다.
 
 ---
 
 ## Task 3: `cells()`가 선택 영역을 반전한다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig`
 
 ### Step 1: 행별 선택 범위를 꺼낸다
 
-`vt.zig:137-139`를 **지울 것**:
+`vt.zig:137-139`를 지울 것:
 
 ```zig
         var n: usize = 0;
@@ -910,7 +910,7 @@ Task 3 Step 3에서 한 번에 커밋한다.
         const row_cells = row_data.items(.cells);
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
         var n: usize = 0;
@@ -924,7 +924,7 @@ Task 3 Step 3에서 한 번에 커밋한다.
 
 ### Step 2: 범위 안의 셀에서 색 둘을 맞바꾼다
 
-`vt.zig:173-188`을 **지울 것**:
+`vt.zig:173-188`을 지울 것:
 
 ```zig
                 // 커서는 inverse와 **같은 연산**이다(design 결정 2). 그래서
@@ -945,7 +945,7 @@ Task 3 Step 3에서 한 번에 커밋한다.
                 }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
                 // 선택 영역도 inverse·커서와 **같은 연산**이다(design 결정 6).
@@ -1001,12 +1001,12 @@ git commit -m "Let the screen hold a selection and a clipboard"
 
 ## Task 4: `main.zig`에 배선과 `clip>` 로그를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig`
 
 ### Step 1: `dumpClip`을 만든다
 
-`main.zig:266-273`의 `dumpCopy` **바로 뒤에 넣을 것**(지울 것 없음):
+`main.zig:266-273`의 `dumpCopy` 바로 뒤에 넣을 것(지울 것 없음):
 
 ```zig
 /// `y`가 클립보드에 무엇을 담았는지를 찍는다.
@@ -1033,7 +1033,7 @@ fn dumpClip(text: ?[]const u8) void {
 
 ### Step 2: 키 루프의 switch에 세 팔을 더한다
 
-`main.zig:447-458`을 **지울 것**:
+`main.zig:447-458`을 지울 것:
 
 ```zig
             for (keys.copies) |cmd| {
@@ -1050,7 +1050,7 @@ fn dumpClip(text: ?[]const u8) void {
             }
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             for (keys.copies) |cmd| {
@@ -1075,14 +1075,14 @@ fn dumpClip(text: ?[]const u8) void {
 
 ### Step 3: 가지치기로 모드가 끊긴 것을 찍는다
 
-`main.zig:491-492`를 **지울 것**:
+`main.zig:491-492`를 지울 것:
 
 ```zig
             if (!screen.copyActive()) screen.scrollToBottom();
             needs_redraw = true;
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```zig
             if (!screen.copyActive()) screen.scrollToBottom();
@@ -1100,7 +1100,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-**`zig build`를 반드시 함께 돌린다.** `Copy`에 variant가 늘었고 `copyMove`의
+`zig build`를 반드시 함께 돌린다. `Copy`에 variant가 늘었고 `copyMove`의
 반환이 넓어졌으므로, `readKeys`와 `main`을 실제로 컴파일하는 쪽이 아니면
 안 걸리는 실수가 생긴다 — CM-M0에서 `State.scrolls`가 통째로 사라진 것을
 `zig build test`가 두 번 놓친 자리다.
@@ -1118,12 +1118,12 @@ git commit -m "Wire selection and yank into the terminal loop"
 
 ## Task 5: `copy/check.sh`가 게스트에서 복사를 본다
 
-**Files:**
+Files:
 - Modify: `copy/check.sh`
 
 ### Step 1: `clip>` 마커와 프레임 헬퍼를 더한다
 
-`copy/check.sh:83-93`의 marker 목록을 **지울 것**:
+`copy/check.sh:83-93`의 marker 목록을 지울 것:
 
 ```bash
   for marker in \
@@ -1133,7 +1133,7 @@ git commit -m "Wire selection and yank into the terminal loop"
     "terminal: key>"; do
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
   for marker in \
@@ -1144,7 +1144,7 @@ git commit -m "Wire selection and yank into the terminal loop"
     "terminal: key>"; do
 ```
 
-`copy/check.sh:114-119`의 `copy_value` **바로 뒤에 넣을 것**(지울 것 없음):
+`copy/check.sh:114-119`의 `copy_value` 바로 뒤에 넣을 것(지울 것 없음):
 
 ```bash
 # 마지막 프레임만 잘라낸다.
@@ -1175,7 +1175,7 @@ inverted_cells() {
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 ```
 
-**바로 앞에 넣을 것**(지울 것 없음):
+바로 앞에 넣을 것(지울 것 없음):
 
 ```bash
 # ── 검사 7: 복사할 줄을 만든다 ─────────────────────────────────────────
@@ -1269,13 +1269,13 @@ sleep 1
 
 ### Step 3: 마지막 줄의 이름을 고친다
 
-`copy/check.sh`의 마지막 줄을 **지울 것**:
+`copy/check.sh`의 마지막 줄을 지울 것:
 
 ```bash
 echo "CM-M0 check PASS"
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 echo "CM-M1 check PASS"
@@ -1290,7 +1290,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `CM-M1 check PASS`.
 
-**검사 9의 `clip>`이 틀린 글자를 담고 걸리면 `k` 횟수 문제다.** 실패 출력의
+검사 9의 `clip>`이 틀린 글자를 담고 걸리면 `k` 횟수 문제다. 실패 출력의
 `--- copy lines ---`와 함께 클립보드 줄을 확인한다. 프롬프트 글자가 섞여 나오면
 출력 줄이 한 칸 더 위에 있다는 뜻이므로, 검사 8의 `type_keys k`를 두 번으로
 늘리고 `ROW_TARGET` 비교식을 `$((ROW_ENTER - 2))`로 바꾼다. 실제 화면을 직접
@@ -1303,10 +1303,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 '
 ```
 
-**검사 8의 대조군(`BEFORE_SEL -ne 1`)이 걸리면** 그 줄에 우리가 모르는 색이
+검사 8의 대조군(`BEFORE_SEL -ne 1`)이 걸리면 그 줄에 우리가 모르는 색이
 있다는 뜻이다. `last_frame | grep style>`로 무엇이 찍혔는지 보고, 셸 프롬프트가
 색을 쓰기 시작한 것이라면 대상 줄을 바꾸는 대신 대조군의 기대값을 실제 값으로
-고치고 **왜 그 값인지를 주석에 적는다.**
+고치고 왜 그 값인지를 주석에 적는다.
 
 ### Step 5: 커밋 (Claude가 실행)
 
@@ -1319,18 +1319,18 @@ git commit -m "Prove a yank reaches the clipboard inside the guest"
 
 ## Task 6: 루트 게이트를 3/3으로 돌린다
 
-**Files:**
+Files:
 - Modify: `check.sh`
 
 ### Step 1: 체인 이름을 고친다
 
-`check.sh:109`를 **지울 것**:
+`check.sh:109`를 지울 것:
 
 ```bash
 run_chain "CM-M0" ./copy/check.sh
 ```
 
-**넣을 것**:
+넣을 것:
 
 ```bash
 run_chain "CM-M1" ./copy/check.sh
@@ -1338,10 +1338,10 @@ run_chain "CM-M1" ./copy/check.sh
 
 ### Step 2: 루트 게이트를 돌린다 (Claude가 백그라운드로 실행, 약 55분)
 
-**Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.**
-직전 기준선은 **51분 20초**다(2026-08-24, 한가한 기계). 이번에 부팅이 늘지는
+Bash 도구의 10분 타임아웃을 넘으므로 `run_in_background`로 돌린다.
+직전 기준선은 51분 20초다(2026-08-24, 한가한 기계). 이번에 부팅이 늘지는
 않고 CM 체인의 타이핑이 회차당 20초쯤 는다(`echo echo PASTED` 16키 + 나머지).
-그러니 **53~54분**을 기대한다.
+그러니 53~54분을 기대한다.
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1350,7 +1350,7 @@ run_chain "CM-M1" ./copy/check.sh
 
 기대: `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**시간을 재기 전에 기계를 비운다.** 값이 기준선에서 크게 벗어나면 코드를
+시간을 재기 전에 기계를 비운다. 값이 기준선에서 크게 벗어나면 코드를
 의심하기 전에 기계를 먼저 의심한다 — TR-M2를 끝내며 처음 잰 값이 6시간
 12분이었고 원인은 Chrome이 영상을 재생하고 있던 것이었다.
 
@@ -1365,30 +1365,30 @@ git commit -m "Rename the copy chain for CM-M1"
 
 ## Task 7: 문서를 고친다
 
-**Files:**
+Files:
 - Modify: `docs/superpowers/specs/2026-08-24-tars-copy-mode-design.md`
 - Modify: `docs/decisions/project_copy_mode.md`
 - Modify: `HANDOFF.md`
 
 ### Step 1: design doc에 CM-M1의 결과를 붙인다
 
-"milestone 구성" 절의 CM-M0 인용 블록 **뒤에** CM-M1 블록을 붙인다. 적을 것은
+"milestone 구성" 절의 CM-M0 인용 블록 뒤에 CM-M1 블록을 붙인다. 적을 것은
 넷이다.
 
-1. **위험 1의 방어가 바뀌었다.** "selection이 null이 됐는지 본다"는 **영영 참이
-   되지 않는 조건**이었다 — `PageList.erasePage`가 tracked pin을 무효로 만들지
+1. 위험 1의 방어가 바뀌었다. "selection이 null이 됐는지 본다"는 영영 참이
+   되지 않는 조건이었다 — `PageList.erasePage`가 tracked pin을 무효로 만들지
    않고 이웃 페이지의 왼쪽 위로 옮긴다. 앵커의 screen 좌표 y를 기억해 두고
    비교하는 것으로 바꿨고, `vt_test`가 대조군과 함께 본다.
-2. **위험 3이 해소됐다.** 역방향 선택을 라이브러리가 `topLeft`/`bottomRight`로
+2. 위험 3이 해소됐다. 역방향 선택을 라이브러리가 `topLeft`/`bottomRight`로
    정렬한다. `ordered()`를 쓰지 않았고, `vt_test`가 실행으로 확인했다.
-3. **결정 7의 시나리오에서 `copy> exit`이 `copy> yank`가 됐다.** 명령 이름을
+3. 결정 7의 시나리오에서 `copy> exit`이 `copy> yank`가 됐다. 명령 이름을
    그대로 찍기 때문이다. 줄을 하나 더 만들지 않았다.
-4. **게이트 시간의 실측값.**
+4. 게이트 시간의 실측값.
 
 ### Step 2: `project_copy_mode` 기억을 고친다
 
-CM-M1이 끝났고 클립보드 버퍼가 실제로 생겼다는 것, 그리고 **가지치기 방어의
-조건이 소스를 읽고 바뀌었다**는 것을 적는다. 두 번째가 중요하다 — 다음에 이
+CM-M1이 끝났고 클립보드 버퍼가 실제로 생겼다는 것, 그리고 가지치기 방어의
+조건이 소스를 읽고 바뀌었다는 것을 적는다. 두 번째가 중요하다 — 다음에 이
 자리를 만지는 사람이 design doc의 옛 문장만 보고 다시 null 검사를 짜지 않게
 한다.
 
@@ -1398,9 +1398,9 @@ CM-M1이 끝났고 클립보드 버퍼가 실제로 생겼다는 것, 그리고 
 - 게이트 현황: 여덟 체인, 새 기준선 시간
 - 로그 문구 목록에 `terminal: clip>` 추가
 - "CM-M1이 실측으로 알아낸 것"으로 위 Step 1의 넷을 옮긴다
-- CM-M2가 해야 하는 것: `Cmd+V`는 `chord()`가 아니라 **copy 표에 넣을 수 없다** —
-  붙여넣기는 모드 **밖에서**도 되어야 하므로(design 결정 4) `chord()`의 Meta
-  분기에 들어간다. **CM-M0/M1의 `Cmd+C`와 자리가 다르다는 것을 적어 둔다.**
+- CM-M2가 해야 하는 것: `Cmd+V`는 `chord()`가 아니라 copy 표에 넣을 수 없다 —
+  붙여넣기는 모드 밖에서도 되어야 하므로(design 결정 4) `chord()`의 Meta
+  분기에 들어간다. CM-M0/M1의 `Cmd+C`와 자리가 다르다는 것을 적어 둔다.
 - 이월 숙제는 그대로 옮긴다
 
 ### Step 4: 커밋 (Claude가 실행)
@@ -1417,12 +1417,12 @@ git commit -m "Record what CM-M1 settled"
 
 `project_gate_chain_composition`이 "못 보는 것을 적어 두라"고 한 자리다.
 
-- **문자 선택(`v`)과 역방향 선택.** 게이트는 `V`만 누른다. 게스트에서 문자
+- 문자 선택(`v`)과 역방향 선택. 게이트는 `V`만 누른다. 게스트에서 문자
   선택을 검사하려면 커서를 정확한 칸까지 옮기는 `sendkey`가 십여 개 더 필요한데,
   체인 1회가 회차당 1분 53초이고 3회 도는 것을 감안해 `vt_test`에 맡겼다.
-- **가지치기 방어.** copy mode 중에 1000줄을 쏟아부을 방법이 없다 — 모드 안에서는
+- 가지치기 방어. copy mode 중에 1000줄을 쏟아부을 방법이 없다 — 모드 안에서는
   셸에 아무것도 보낼 수 없다. `vt_test`가 대조군과 함께 본다.
-- **클립보드 버퍼의 수명.** `y`를 두 번 눌러 옛 문자열이 해제되는 경로는 게이트가
+- 클립보드 버퍼의 수명. `y`를 두 번 눌러 옛 문자열이 해제되는 경로는 게이트가
   안 밟는다. `vt_test`가 `y`를 네 번 부르므로 해제 경로 자체는 밟힌다.
 
 ## 완료 조건

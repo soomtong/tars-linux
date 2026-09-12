@@ -1,19 +1,19 @@
 # TARS Hardware Discovery HD-M2 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** QEMU monitor에서 `system_powerdown`을 보내면 게스트의 PID 1이 그것을
+Goal: QEMU monitor에서 `system_powerdown`을 보내면 게스트의 PID 1이 그것을
 전원 버튼 누름으로 받아 종료 순서를 밟고, 기계가 스스로 꺼진다. 지금은 ACPI가
-이벤트를 만들어 주지만 **받는 쪽이 없다.**
+이벤트를 만들어 주지만 받는 쪽이 없다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-20-tars-hardware-discovery-design.md`
+Design doc: `docs/superpowers/specs/2026-08-20-tars-hardware-discovery-design.md`
 (결정 4·7·8·9와 결정 11의 HD-M2 항목이 이 milestone의 몫이다. design은 이미
-승인되어 있으므로 다시 논의하지 않는다. 다만 결정 4는 **실행 방식이 하나
-바뀐다** — 아래 "이번에 정하는 것 1번"에 이유를 적었다.)
+승인되어 있으므로 다시 논의하지 않는다. 다만 결정 4는 실행 방식이 하나
+바뀐다 — 아래 "이번에 정하는 것 1번"에 이유를 적었다.)
 
-**Tech Stack:** Zig 0.16(libc 없이 `std.os.linux`만), evdev `input_event`,
+Tech Stack: Zig 0.16(libc 없이 `std.os.linux`만), evdev `input_event`,
 `poll(2)`, QEMU monitor의 `system_powerdown`, bash 게이트 스크립트
 
 ---
@@ -27,7 +27,7 @@
 > `SA_RESTART`를 켜지 않는다. 켜면 커널이 supervise의 waitpid를 안에서 자동
 > 재시작해버려서, 플래그를 세워도 루프 머리로 영영 돌아오지 못한다.
 
-**`poll`로 바꿔도 이 성질은 그대로 유지해야 한다.** `poll` 역시 `SA_RESTART`가
+`poll`로 바꿔도 이 성질은 그대로 유지해야 한다. `poll` 역시 `SA_RESTART`가
 켜져 있으면 커널이 안에서 재시작하고, 그러면 `kill -TERM 1`이 다시 먹통이
 된다. 새 코드의 `if (e == .INTR) continue;`가 기존 것과 같은 자리를 지킨다.
 
@@ -56,23 +56,23 @@ Task 8  루트 게이트에 체인을 넣고 3/3
 Task 9  문서
 ```
 
-**Task 1~3이 앞인 이유는 부팅 없이 판정할 수 있기 때문이다.** 셋 다
+Task 1~3이 앞인 이유는 부팅 없이 판정할 수 있기 때문이다. 셋 다
 `zig build test` 한 번으로 끝나고, 커널 빌드도 QEMU도 필요 없다. 20초짜리
 부팅으로 잡을 실패를 0.1초로 먼저 잡는다 — `init/build.zig:56`이 적어 둔
 원칙이 그대로 적용된다.
 
-**Task 4가 Task 5보다 앞인 이유는 중간 상태가 안전하기 때문이다.** 버튼 fd를
+Task 4가 Task 5보다 앞인 이유는 중간 상태가 안전하기 때문이다. 버튼 fd를
 열어만 두고 아무도 `poll`하지 않는 상태는 무해하다. 커널의 이벤트 큐가
 차기만 하고 그것을 기다리는 코드가 없다. 그 안전한 상태에서 "후보가 몇 개
 열렸는가"를 실물로 확인하고 나서 감독 루프에 손댄다.
 
-**Task 4가 Task 7보다 앞인 이유는 로그 문구 때문이다.** 게이트가 grep할
+Task 4가 Task 7보다 앞인 이유는 로그 문구 때문이다. 게이트가 grep할
 문자열은 실제로 찍힌 것을 보고 확정한다. 코드에 적은 문구와 게이트가 찾는
 문구가 어긋나는 사고가 이 저장소에 이미 있었다(`HANDOFF.md`의 "로그 문구는
 두 곳에 중복된다").
 
-**Task 6이 Task 7보다 앞인 이유는 위험의 성격이다.** Task 5는 다섯 체인 전부가
-딛고 선 코드를 바꾼다. 새 체인을 만들기 전에 **기존 것이 안 깨졌는지** 먼저
+Task 6이 Task 7보다 앞인 이유는 위험의 성격이다. Task 5는 다섯 체인 전부가
+딛고 선 코드를 바꾼다. 새 체인을 만들기 전에 기존 것이 안 깨졌는지 먼저
 본다. 새 체인이 통과하는데 옛 체인이 깨지는 것이 이 milestone에서 가장
 그럴듯한 실패다.
 
@@ -81,14 +81,14 @@ Task 9  문서
 ### 1. 전원 버튼 후보에서 키보드를 제외한다
 
 design 결정 4는 "`KEY_POWER`(116)가 서 있는 장치"를 후보로 정의했다. 그런데
-**QEMU의 AT 키보드도 `KEY_POWER`를 갖고 있다.** HD-M0이 실측해
+QEMU의 AT 키보드도 `KEY_POWER`를 갖고 있다. HD-M0이 실측해
 `devices_test.zig:137`에 적어 둔 비트맵을 그 기준으로 읽으면 이렇다.
 
 | 키 | 코드 | 워드 | 비트 | AT 키보드 |
 |---|---|---|---|---|
 | `KEY_ESC` | 1 | 0 | 1 | 서 있음 |
 | `KEY_A` | 30 | 0 | 30 | 서 있음 |
-| **`KEY_POWER`** | **116** | **1** | **52** | **서 있음** |
+| `KEY_POWER` | 116 | 1 | 52 | 서 있음 |
 | `KEY_SLEEP` | 142 | 2 | 14 | 서 있음 |
 
 1번 워드가 `0xfeffffdfffefffff`이고 그 52번 비트가 1이다. `atkbd`가 ACPI 확장
@@ -101,22 +101,22 @@ design 결정 4는 "`KEY_POWER`(116)가 서 있는 장치"를 후보로 정의�
 전원 버튼 = EV_KEY가 있고 + KEY_POWER가 서 있고 + 키보드가 아니다
 ```
 
-**제외하지 않으면 무슨 일이 생기는가.**
+제외하지 않으면 무슨 일이 생기는가.
 
-1. PID 1이 키보드 fd를 열고 `poll` 목록에 넣는다. 그러면 **글자 하나를 칠
-   때마다 감독 루프가 깨어난다.** 게이트가 게스트에 한 글자씩 0.3초 간격으로
+1. PID 1이 키보드 fd를 열고 `poll` 목록에 넣는다. 그러면 글자 하나를 칠
+   때마다 감독 루프가 깨어난다. 게이트가 게스트에 한 글자씩 0.3초 간격으로
    타이핑하므로 이것은 가정이 아니라 매 회차 일어나는 일이다.
 2. 깨어나서 이벤트를 안 읽으면 큐가 그대로 남아 `poll`이 즉시 다시 반환하고,
    PID 1이 CPU를 태우는 바쁜 루프가 된다. 읽어서 버리더라도 같은 키를
    `terminal`과 PID 1이 각자 해석하는 구조가 남는다.
-3. 키보드의 전원 키를 무엇으로 옮길지는 **Input Policy의 몫이다**
+3. 키보드의 전원 키를 무엇으로 옮길지는 Input Policy의 몫이다
    (`docs/decisions/project_input_policy.md`). 그 결정을 이 milestone이 몰래
    가져가면 안 된다.
 
 이 함수가 찾는 것은 "누르면 기계가 꺼지는 물리 버튼"이다. 키보드에 달린 키는
 키보드의 일이다.
 
-**결정 4의 정신은 그대로 남는다.** 후보를 하나만 고르지 않고 전부 여는 것,
+결정 4의 정신은 그대로 남는다. 후보를 하나만 고르지 않고 전부 여는 것,
 상한을 넷으로 두는 것, 몇 개를 열었는지 로그로 남기는 것은 바뀌지 않는다.
 
 ### 2. 감독 루프의 backoff 1초를 `poll` 타임아웃이 대신한다
@@ -130,18 +130,18 @@ design 결정 4는 "`KEY_POWER`(116)가 서 있는 장치"를 후보로 정의�
          → poll(버튼 fd들, 1000ms)   ← 유일하게 잠드는 자리
 ```
 
-거두기가 `poll`보다 **앞**이라, 자식이 죽으면 그 바퀴에서 거두고 곧바로
+거두기가 `poll`보다 앞이라, 자식이 죽으면 그 바퀴에서 거두고 곧바로
 `poll`에 들어가 1초를 잔다. 다음 바퀴 머리에서 재시작이 일어나므로 재시작
-간격은 여전히 1초 이상이다. **`poll` 타임아웃이 곧 backoff다.**
+간격은 여전히 1초 이상이다. `poll` 타임아웃이 곧 backoff다.
 
 이렇게 하면 `sleepOneSecond()` 호출 셋이 전부 사라지고 "PID 1이 잠드는 자리는
 `poll` 하나"가 된다. 대안으로 `Child`에 `restart_after` 필드를 더하는 길도
 있지만, 가장 민감한 코드에 상태를 하나 더 얹는 것보다 순서로 푸는 편이 낫다.
 
-`tars-init: restarting {s} in 1s` 로그 문구는 **그대로 둔다.** 여전히 참이고,
+`tars-init: restarting {s} in 1s` 로그 문구는 그대로 둔다. 여전히 참이고,
 `terminal/check.sh:178`이 진단 목록에서 이 문구를 쓰고 있다.
 
-### 3. 버튼 fd는 `O_NONBLOCK`으로 열고, 깨어나면 **전부** 읽어 비운다
+### 3. 버튼 fd는 `O_NONBLOCK`으로 열고, 깨어나면 전부 읽어 비운다
 
 `poll`이 알려 주는 것은 "읽을 것이 있다"까지다. 읽어서 비우지 않으면 다음
 `poll`이 즉시 반환하고 바쁜 루프가 된다 — `terminal/src/main.zig:216`이 PTY
@@ -164,14 +164,14 @@ design 결정 8이 정한 대로 누름만 받는다. QEMU의 `system_powerdown`
 `check.sh` 하나만 들어간다.
 
 부수 효과가 하나 있다. 디스크가 없으면 셸은 기본값 fish이고, 이 체인은
-게스트에 **한 글자도 타이핑하지 않는다** — 종료 명령이 monitor에서 오기
+게스트에 한 글자도 타이핑하지 않는다 — 종료 명령이 monitor에서 오기
 때문이다. 그래서 이 체인은 다른 것들보다 빠르다(회차당 부팅 1회, 타이핑 0회).
 
 ### 6. `-no-reboot`을 달고, 음성 검사로 리셋과 구별한다
 
 `power/check.sh`가 HD-M1에서 정한 것과 같은 이유다. "QEMU가 사라졌다"는
 `-no-reboot` 때문에 리셋으로도 성립하므로, 로그에 `Restarting system`이
-**없어야 한다**는 음성 검사로 둘을 가른다.
+없어야 한다는 음성 검사로 둘을 가른다.
 
 ## 새로 생기는 로그 문구 (두 곳에 중복된다)
 
@@ -182,7 +182,7 @@ design 결정 8이 정한 대로 누름만 받는다. QEMU의 `system_powerdown`
 |---|---|---|
 | `tars-init: power button /dev/input/event` | `devices.zig` | 있어야 한다 |
 | `tars-init: watching N power button(s)` | `devices.zig` | 개수는 Task 4에서 확정 |
-| `tars-init: no power button found` | `devices.zig` | **없어야 한다** |
+| `tars-init: no power button found` | `devices.zig` | 없어야 한다 |
 | `tars-init: power button pressed` | `main.zig` | 있어야 한다 |
 
 ## 사전 준비
@@ -190,17 +190,17 @@ design 결정 8이 정한 대로 누름만 받는다. QEMU의 `system_powerdown`
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree가 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-**이미지 재빌드는 필요 없다.** 새 외부 의존이 없다.
+이미지 재빌드는 필요 없다. 새 외부 의존이 없다.
 
-**긴 편집은 `/tmp` 경로로 한다.** Task 5(`main.zig`의 `supervise` 교체)와
+긴 편집은 `/tmp` 경로로 한다. Task 5(`main.zig`의 `supervise` 교체)와
 Task 7(`device/check.sh` 신규)이 그 대상이다. plan에 전문을 적어 두었고,
 실행할 때 Claude가 같은 내용을 `/tmp`에 파일로 만들어 준다. 사용자는 `cp`로
 제자리에 넣고, 기존 파일이면 넣기 전에 Claude가 `diff`로 대조한다.
 
-**인라인으로 제시하는 블록은 "넣을 것"만 적는다.** 지울 것이 있는 편집은
+인라인으로 제시하는 블록은 "넣을 것"만 적는다. 지울 것이 있는 편집은
 `지울 것`과 `넣을 것`을 따로 표시했다.
 
 ---
@@ -210,15 +210,15 @@ Task 7(`device/check.sh` 신규)이 그 대상이다. plan에 전문을 적어 �
 부팅 없이 끝나는 세 Task 중 첫째다. 검사를 먼저 쓰고, 실패를 확인하고,
 구현한다.
 
-**Files:**
+Files:
 - Modify: `init/src/devices_test.zig` (검사 추가)
 - Modify: `init/src/devices.zig` (`KEY_POWER`, `MAX_BUTTONS`,
   `looksLikePowerButton`, `findPowerButtons` 추가)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 넣는다**
+- [ ] Step 1: 실패하는 검사를 먼저 넣는다
 
 `init/src/devices_test.zig`의 마지막 줄(`devices_test: a missing keyboard falls
-back to event0`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` **앞**)에 아래
+back to event0`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` 앞)에 아래
 블록을 넣는다.
 
 ```zig
@@ -278,19 +278,19 @@ back to event0`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` **앞**
     std.debug.print("devices_test: picked the power button and left the keyboard alone\n", .{});
 ```
 
-- [ ] **Step 2: 검사가 실패하는지 본다**
+- [ ] Step 2: 검사가 실패하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-기대: **컴파일 에러.** `devices.looksLikePowerButton`과
+기대: 컴파일 에러. `devices.looksLikePowerButton`과
 `devices.findPowerButtons`, `devices.MAX_BUTTONS`가 아직 없으므로
 `error: root source file struct 'devices' has no member named ...` 같은 줄이
 나온다. 여기서 통과가 나오면 무언가 잘못된 것이므로 멈춘다.
 
-- [ ] **Step 3: `devices.zig`에 상수 둘을 더한다**
+- [ ] Step 3: `devices.zig`에 상수 둘을 더한다
 
 `init/src/devices.zig:45`의
 
@@ -298,7 +298,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 const KEY_D: u16 = 32;
 ```
 
-**다음**에 아래 블록을 넣는다.
+다음에 아래 블록을 넣는다.
 
 ```zig
 
@@ -314,7 +314,7 @@ const KEY_POWER: u16 = 116;
 pub const MAX_BUTTONS: usize = 4;
 ```
 
-- [ ] **Step 4: 판정 함수를 더한다**
+- [ ] Step 4: 판정 함수를 더한다
 
 같은 파일에서 `looksLikeKeyboard`가 끝나는 자리, 즉
 
@@ -330,7 +330,7 @@ pub fn looksLikeKeyboard(ev: []const u8, key: []const u8) bool {
 }
 ```
 
-**다음**에 아래 블록을 넣는다.
+다음에 아래 블록을 넣는다.
 
 ```zig
 
@@ -353,7 +353,7 @@ pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
 }
 ```
 
-- [ ] **Step 5: 탐색 함수를 더한다**
+- [ ] Step 5: 탐색 함수를 더한다
 
 같은 파일에서 `findKeyboard`가 끝나는 자리, 즉
 
@@ -364,7 +364,7 @@ pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
 }
 ```
 
-**다음**에 아래 블록을 넣는다.
+다음에 아래 블록을 넣는다.
 
 ```zig
 
@@ -391,7 +391,7 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
 }
 ```
 
-- [ ] **Step 6: 검사가 통과하는지 본다**
+- [ ] Step 6: 검사가 통과하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -409,7 +409,7 @@ devices_test: picked the power button and left the keyboard alone
 뜻이므로 멈추고 알려 줄 것 — 그 경우 이번에 정하는 것 1번의 전제가 무너지고
 `looksLikePowerButton`의 제외 조건을 다시 논의해야 한다.
 
-- [ ] **Step 7: 커밋**
+- [ ] Step 7: 커밋
 
 ```bash
 git add init/src/devices.zig init/src/devices_test.zig
@@ -423,14 +423,14 @@ git commit -m "Tell a power button apart from a keyboard that has a power key"
 fd에서 읽어 "전원 버튼이 눌렸는가"를 답하는 조각이다. 이것도 부팅 없이
 끝난다 — 검사가 `pipe(2)`로 진짜 fd를 만들어 이벤트 바이트를 흘려 넣는다.
 
-**Files:**
+Files:
 - Modify: `init/src/devices_test.zig` (검사 추가)
 - Modify: `init/src/devices.zig` (`Event`, `drainButton` 추가)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 넣는다**
+- [ ] Step 1: 실패하는 검사를 먼저 넣는다
 
 `init/src/devices_test.zig`의 마지막(Task 1이 넣은 블록 다음, 함수를 닫는 `}`
-**앞**)에 아래 블록을 넣는다.
+앞)에 아래 블록을 넣는다.
 
 ```zig
 
@@ -511,7 +511,7 @@ fd에서 읽어 "전원 버튼이 눌렸는가"를 답하는 조각이다. 이�
     std.debug.print("devices_test: only a KEY_POWER press counts, and the fd is drained\n", .{});
 ```
 
-같은 파일의 `main()` **앞**(예를 들어 `makeDevice` 함수 다음)에 헬퍼를 하나
+같은 파일의 `main()` 앞(예를 들어 `makeDevice` 함수 다음)에 헬퍼를 하나
 넣는다.
 
 ```zig
@@ -533,18 +533,18 @@ fn writeEvents(fd: i32, events: []const devices.Event) !void {
 }
 ```
 
-- [ ] **Step 2: 검사가 실패하는지 본다**
+- [ ] Step 2: 검사가 실패하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-기대: **컴파일 에러.** `devices.Event`와 `devices.drainButton`이 없다.
+기대: 컴파일 에러. `devices.Event`와 `devices.drainButton`이 없다.
 
-- [ ] **Step 3: 이벤트 구조체를 더한다**
+- [ ] Step 3: 이벤트 구조체를 더한다
 
-`init/src/devices.zig`의 `MAX_BUTTONS` 정의 **다음**에 아래 블록을 넣는다.
+`init/src/devices.zig`의 `MAX_BUTTONS` 정의 다음에 아래 블록을 넣는다.
 
 ```zig
 
@@ -574,9 +574,9 @@ pub const Event = extern struct {
 const VALUE_PRESS: i32 = 1;
 ```
 
-- [ ] **Step 4: `drainButton`을 더한다**
+- [ ] Step 4: `drainButton`을 더한다
 
-같은 파일의 **맨 끝**(`resolveKeyboard`가 끝난 다음)에 아래 블록을 넣는다.
+같은 파일의 맨 끝(`resolveKeyboard`가 끝난 다음)에 아래 블록을 넣는다.
 
 ```zig
 
@@ -620,7 +620,7 @@ pub fn drainButton(fd: i32) bool {
 }
 ```
 
-- [ ] **Step 5: 검사가 통과하는지 본다**
+- [ ] Step 5: 검사가 통과하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -634,10 +634,10 @@ devices_test: only a KEY_POWER press counts, and the fd is drained
 ```
 
 `input_event is N bytes, want 24`가 나오면 구조체 레이아웃이 틀린 것이다.
-**N을 그대로 알려 줄 것** — 정렬 문제인지 필드 크기 문제인지가 그 숫자로
+N을 그대로 알려 줄 것 — 정렬 문제인지 필드 크기 문제인지가 그 숫자로
 갈린다.
 
-- [ ] **Step 6: 커밋**
+- [ ] Step 6: 커밋
 
 ```bash
 git add init/src/devices.zig init/src/devices_test.zig
@@ -649,16 +649,16 @@ git commit -m "Read a power button press out of the evdev byte stream"
 ## Task 3: 종료 요청을 플래그 자리로 모은다
 
 design 결정 9다. 버튼을 보고 곧바로 `power.shutdown()`을 부르지 않고, 시그널이
-쓰는 것과 **같은 플래그**에 세운다.
+쓰는 것과 같은 플래그에 세운다.
 
-**Files:**
+Files:
 - Modify: `init/src/power_test.zig` (검사 추가)
 - Modify: `init/src/power.zig` (`request` 추가, `onSignal`이 그것을 쓰게)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 넣는다**
+- [ ] Step 1: 실패하는 검사를 먼저 넣는다
 
 `init/src/power_test.zig`의 마지막 줄(`power_test: SIGINT becomes a pending
-restart action`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` **앞**)에 아래
+restart action`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` 앞)에 아래
 블록을 넣는다.
 
 ```zig
@@ -687,18 +687,18 @@ restart action`을 찍는 `std.debug.print` 다음, 함수를 닫는 `}` **앞**
     std.debug.print("power_test: a button press takes the same road as a signal\n", .{});
 ```
 
-- [ ] **Step 2: 검사가 실패하는지 본다**
+- [ ] Step 2: 검사가 실패하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd init && zig build test'
 ```
 
-기대: **컴파일 에러.** `power.request`가 없다.
+기대: 컴파일 에러. `power.request`가 없다.
 
-- [ ] **Step 3: `request`를 더하고 `onSignal`이 그것을 쓰게 한다**
+- [ ] Step 3: `request`를 더하고 `onSignal`이 그것을 쓰게 한다
 
-`init/src/power.zig:25-32`의 아래 블록을 **지운다.**
+`init/src/power.zig:25-32`의 아래 블록을 지운다.
 
 ```zig
 fn onSignal(sig: linux.SIG) callconv(.c) void {
@@ -711,7 +711,7 @@ fn onSignal(sig: linux.SIG) callconv(.c) void {
 }
 ```
 
-그 자리에 아래 블록을 **넣는다.**
+그 자리에 아래 블록을 넣는다.
 
 ```zig
 fn onSignal(sig: linux.SIG) callconv(.c) void {
@@ -737,7 +737,7 @@ pub fn request(action: Action) void {
 }
 ```
 
-- [ ] **Step 4: 검사가 통과하는지 본다**
+- [ ] Step 4: 검사가 통과하는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -752,7 +752,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 power_test: a button press takes the same road as a signal
 ```
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add init/src/power.zig init/src/power_test.zig
@@ -763,20 +763,20 @@ git commit -m "Let a button ask for shutdown at the same place a signal does"
 
 ## Task 4: PID 1이 버튼을 연다
 
-여기서 처음 게스트를 띄운다. **감독 루프는 아직 안 건드린다** — fd를 열어만
+여기서 처음 게스트를 띄운다. 감독 루프는 아직 안 건드린다 — fd를 열어만
 두고 아무도 `poll`하지 않는 상태는 무해하다. 커널의 이벤트 큐가 차기만 하고
 그것을 기다리는 코드가 없기 때문이다.
 
 이 Task의 목적은 둘이다. 후보가 실물로 몇 개 열리는지 확인하는 것과, Task 7의
 게이트가 grep할 문구를 확정하는 것.
 
-**Files:**
+Files:
 - Modify: `init/src/devices.zig` (`devicePath` 헬퍼, `openPowerButtons` 추가)
 - Modify: `init/src/main.zig` (버튼 열기 호출)
 
-- [ ] **Step 1: 경로 조립을 헬퍼로 뺀다**
+- [ ] Step 1: 경로 조립을 헬퍼로 뺀다
 
-`init/src/devices.zig`의 `resolveKeyboard` 안에 있는 아래 아홉 줄을 **지운다.**
+`init/src/devices.zig`의 `resolveKeyboard` 안에 있는 아래 아홉 줄을 지운다.
 
 ```zig
     // MAX_PATH가 64인데 가장 긴 결과가 "/dev/input/event31"(18자)이라 이
@@ -791,13 +791,13 @@ git commit -m "Let a button ask for shutdown at the same place a signal does"
     out.len = text.len;
 ```
 
-그 자리에 아래 **한 줄을 넣는다.**
+그 자리에 아래 한 줄을 넣는다.
 
 ```zig
     devicePath(n, out);
 ```
 
-그리고 `resolveKeyboard` **앞**(`Path` 구조체 정의 다음, `readFile` 앞)에
+그리고 `resolveKeyboard` 앞(`Path` 구조체 정의 다음, `readFile` 앞)에
 헬퍼를 넣는다.
 
 ```zig
@@ -818,9 +818,9 @@ fn devicePath(n: u8, out: *Path) void {
 }
 ```
 
-- [ ] **Step 2: `openPowerButtons`를 더한다**
+- [ ] Step 2: `openPowerButtons`를 더한다
 
-`init/src/devices.zig`의 **맨 끝**(`drainButton` 다음)에 아래 블록을 넣는다.
+`init/src/devices.zig`의 맨 끝(`drainButton` 다음)에 아래 블록을 넣는다.
 
 ```zig
 
@@ -879,7 +879,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
 }
 ```
 
-- [ ] **Step 3: PID 1이 그것을 부르게 한다**
+- [ ] Step 3: PID 1이 그것을 부르게 한다
 
 `init/src/main.zig`의 아래 두 줄
 
@@ -888,7 +888,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
     devices.resolveKeyboard(devices.SYS_INPUT, &keyboard_path);
 ```
 
-**다음**에 아래 블록을 넣는다.
+다음에 아래 블록을 넣는다.
 
 ```zig
 
@@ -908,11 +908,11 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
     _ = button_count;
 ```
 
-`_ = button_count;`가 필요한 이유는 Zig가 쓰이지 않은 지역 변수를 **에러로**
+`_ = button_count;`가 필요한 이유는 Zig가 쓰이지 않은 지역 변수를 에러로
 막기 때문이다. 이 한 줄이 Task 4를 그 자체로 빌드되는 상태로 만들고, 그래서
 아래 Step 5에서 게스트를 띄워 볼 수 있다.
 
-- [ ] **Step 4: 빌드가 되는지 본다**
+- [ ] Step 4: 빌드가 되는지 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -921,7 +921,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: 아무 출력 없이 성공한다. 에러가 나오면 멈추고 그대로 알려 줄 것.
 
-- [ ] **Step 5: 게스트를 띄워 로그를 본다**
+- [ ] Step 5: 게스트를 띄워 로그를 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -942,14 +942,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 기대: 20초 뒤 조용히 끝난다. `timeout`이 QEMU를 끊는 것이 정상이다.
 
-- [ ] **Step 6: 무엇이 열렸는지 읽는다**
+- [ ] Step 6: 무엇이 열렸는지 읽는다
 
 ```bash
 rg -n "input:|ACPI: button|keyboard device|power button|watching|no power button" \
   out/hd-m2-observe.log
 ```
 
-기대: 아래가 보인다. **출력을 그대로 알려 줄 것.**
+기대: 아래가 보인다. 출력을 그대로 알려 줄 것.
 
 ```
 input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
@@ -962,22 +962,22 @@ tars-init: watching 1 power button(s)
 
 Claude가 다음 셋을 확인한다.
 
-1. **`watching`의 개수가 1인가.** 2가 나오면 키보드가 후보에 들어온 것이므로
+1. `watching`의 개수가 1인가. 2가 나오면 키보드가 후보에 들어온 것이므로
    이번에 정하는 것 1번이 안 먹은 것이다 — 멈추고 `event1`도 함께 열렸는지
    위의 `power button` 줄로 확인한다.
-2. **`no power button found`가 없는가.** 있으면 탐색이 실패한 것이다.
-3. **키보드는 여전히 `event1`인가.** HD-M1이 실측한 배치가 유지되어야 한다.
+2. `no power button found`가 없는가. 있으면 탐색이 실패한 것이다.
+3. 키보드는 여전히 `event1`인가. HD-M1이 실측한 배치가 유지되어야 한다.
 
-**이 개수가 Task 7의 게이트 검사 문구를 확정한다.**
+이 개수가 Task 7의 게이트 검사 문구를 확정한다.
 
-**실측 결과(2026-08-22):** 예상 그대로였다. `event0`이 `Power Button`,
+실측 결과(2026-08-22): 예상 그대로였다. `event0`이 `Power Button`,
 `event1`이 AT 키보드, `watching 1 power button(s)`. `terminal: opened
 /dev/input/event1`도 같은 번호다. `could not open`은 없었고, `failed to mount
 ext2 at /config (errno 2)`만 나왔는데 이 부팅에 `-drive`를 안 붙였기 때문이라
-정상 경로다. **키보드가 `KEY_POWER`를 갖고 있는데도 개수가 1인 것이 이번에
-정하는 것 1번의 실물 확인이다.**
+정상 경로다. 키보드가 `KEY_POWER`를 갖고 있는데도 개수가 1인 것이 이번에
+정하는 것 1번의 실물 확인이다.
 
-- [ ] **Step 7: 커밋**
+- [ ] Step 7: 커밋
 
 ```bash
 git add init/src/devices.zig init/src/main.zig
@@ -988,7 +988,7 @@ git commit -m "Open every power button PID 1 can find"
 
 ## Task 5: 감독 루프를 poll 구조로 바꾼다
 
-**이 milestone에서 가장 민감한 편집이다.** `waitpid` 블로킹이 사라지고 그
+이 milestone에서 가장 민감한 편집이다. `waitpid` 블로킹이 사라지고 그
 자리에 `poll`이 들어간다.
 
 바뀌는 것은 셋이다.
@@ -998,25 +998,25 @@ git commit -m "Open every power button PID 1 can find"
 3. `sleepOneSecond()` 호출 셋이 사라진다 — backoff를 `poll` 타임아웃이 준다
    (이번에 정하는 것 2번).
 
-**바뀌지 않아야 하는 것도 셋이다.**
+바뀌지 않아야 하는 것도 셋이다.
 
-1. **루프 머리에서 `power.take()`를 먼저 본다.** 순서가 뒤집히면 방금 SIGTERM으로
+1. 루프 머리에서 `power.take()`를 먼저 본다. 순서가 뒤집히면 방금 SIGTERM으로
    죽인 셸을 이 루프가 되살린다.
-2. **`EINTR`이 루프 머리로 돌아간다.** `SA_RESTART`를 끈 것이 살아 있는 근거가
+2. `EINTR`이 루프 머리로 돌아간다. `SA_RESTART`를 끈 것이 살아 있는 근거가
    이 분기다(`power.zig:46`).
-3. **`shutdown`은 여전히 `noreturn`이다.** 돌아갈 길을 타입으로 막아 둔 것을
+3. `shutdown`은 여전히 `noreturn`이다. 돌아갈 길을 타입으로 막아 둔 것을
    그대로 둔다.
 
-**Files:**
+Files:
 - Modify: `init/src/main.zig:192-201`(`sleepOneSecond` 삭제),
   `:242-314`(`supervise` 교체), `:388`(호출 자리)
 
-**이 편집은 `/tmp` 경로로 한다.** Claude가 `/tmp/main.zig`를 만들고, 사용자가
+이 편집은 `/tmp` 경로로 한다. Claude가 `/tmp/main.zig`를 만들고, 사용자가
 `diff`로 대조한 뒤 `cp`로 넣는다.
 
-- [ ] **Step 1: `sleepOneSecond`를 지운다**
+- [ ] Step 1: `sleepOneSecond`를 지운다
 
-`init/src/main.zig:198-201`의 아래 네 줄을 **지운다.**
+`init/src/main.zig:198-201`의 아래 네 줄을 지운다.
 
 ```zig
 fn sleepOneSecond() void {
@@ -1027,10 +1027,10 @@ fn sleepOneSecond() void {
 
 감독 루프가 유일한 호출자였고, 그 셋이 전부 `poll` 타임아웃으로 대체된다.
 
-- [ ] **Step 2: `supervise`를 통째로 바꾼다**
+- [ ] Step 2: `supervise`를 통째로 바꾼다
 
 `init/src/main.zig`의 `supervise` 함수 전체(`/// PID 1의 본체.` 주석 줄부터
-함수를 닫는 `}`까지)를 **지우고** 아래로 바꾼다.
+함수를 닫는 `}`까지)를 지우고 아래로 바꾼다.
 
 ```zig
 /// 감독 루프가 한 바퀴에 잠드는 시간. 이 값이 세 가지를 동시에 정한다.
@@ -1185,9 +1185,9 @@ fn supervise(
 }
 ```
 
-- [ ] **Step 3: 호출 자리를 고친다**
+- [ ] Step 3: 호출 자리를 고친다
 
-`init/src/main.zig`에서 Task 4가 넣은 아래 **네 줄을 지운다.**
+`init/src/main.zig`에서 Task 4가 넣은 아래 네 줄을 지운다.
 
 ```zig
     // Task 5가 이 값을 supervise에 넘기면서 이 한 줄을 지운다. 지금은 열어만
@@ -1208,7 +1208,7 @@ fn supervise(
     supervise(&children, button_fds[0..button_count], envp);
 ```
 
-- [ ] **Step 4: 빌드하고 호스트 검사를 돌린다**
+- [ ] Step 4: 빌드하고 호스트 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1216,10 +1216,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 ```
 
 기대: 빌드 성공, 그리고 호스트 검사 셋이 전부 통과한다. 이 검사들은 감독
-루프를 보지 않으므로 **여기서 통과한다고 루프가 옳다는 뜻은 아니다** —
+루프를 보지 않으므로 여기서 통과한다고 루프가 옳다는 뜻은 아니다 —
 그것은 Task 6이 본다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add init/src/main.zig
@@ -1230,13 +1230,13 @@ git commit -m "Wait on the power button and the children at the same time"
 
 ## Task 6: 기존 다섯 체인이 그대로 통과하는가
 
-**이 milestone에서 가장 그럴듯한 실패는 "새 것이 되는데 옛 것이 깨지는
-것"이다.** Task 5가 바꾼 코드를 다섯 체인 전부가 딛고 서 있다.
+이 milestone에서 가장 그럴듯한 실패는 "새 것이 되는데 옛 것이 깨지는
+것"이다. Task 5가 바꾼 코드를 다섯 체인 전부가 딛고 서 있다.
 
-**Files:**
+Files:
 - (없음. 검증만 한다.)
 
-- [ ] **Step 1: 감독 루프에 가장 민감한 두 체인을 먼저 돌린다**
+- [ ] Step 1: 감독 루프에 가장 민감한 두 체인을 먼저 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1245,12 +1245,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: 둘 다 `PASS`. 이 둘을 고른 이유가 있다.
 
-**BF 체인(`boot/check.sh:92`)은 재시작 개수를 정확히 요구한다.**
+BF 체인(`boot/check.sh:92`)은 재시작 개수를 정확히 요구한다.
 `started terminal`이 정확히 3회여야 하고, 그 뒤에 `giving up`이 나와야 한다.
 GPU가 없어 `/terminal`이 매번 죽는 체인이라 backoff 구조를 정면으로 밟는다.
 `poll` 타임아웃이 backoff를 제대로 대신하지 못하면 여기서 개수가 어긋난다.
 
-**PM 체인(`power/check.sh:213`)은 종료 중 되살리기를 금지한다.**
+PM 체인(`power/check.sh:213`)은 종료 중 되살리기를 금지한다.
 `started console shell`이 정확히 1회여야 한다. 루프 머리의 `power.take()`가
 `start()`보다 앞이라는 성질이 깨지면 여기가 잡는다. 부팅 2는 `EINTR` 경로
 전체(`ctrl-alt-delete` → SIGINT → 재시작)를 본다 — `SA_RESTART`를 끈 것이
@@ -1258,7 +1258,7 @@ GPU가 없어 `/terminal`이 매번 죽는 체인이라 backoff 구조를 정면
 
 실패하면 각 스크립트가 찍는 마커 목록과 마지막 60줄을 그대로 알려 줄 것.
 
-- [ ] **Step 2: 나머지 셋을 돌린다**
+- [ ] Step 2: 나머지 셋을 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1278,17 +1278,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 이 milestone의 완료선이다. monitor에서 `system_powerdown`을 보내 게스트가
 스스로 꺼지는 것을 본다.
 
-**Files:**
+Files:
 - Create: `device/check.sh`
 
-**이 파일은 `/tmp` 경로로 넣는다.** Claude가 `/tmp/device-check.sh`를 만들고,
+이 파일은 `/tmp` 경로로 넣는다. Claude가 `/tmp/device-check.sh`를 만들고,
 사용자가 `mkdir -p device && cp /tmp/device-check.sh device/check.sh &&
 chmod +x device/check.sh`로 제자리에 넣는다.
 
-**Task 4 Step 6의 실측으로 `watching` 개수를 확정한 뒤에 쓴다.** 아래 전문은
+Task 4 Step 6의 실측으로 `watching` 개수를 확정한 뒤에 쓴다. 아래 전문은
 개수가 1인 경우다.
 
-- [ ] **Step 1: 파일을 만든다**
+- [ ] Step 1: 파일을 만든다
 
 ```bash
 #!/usr/bin/env bash
@@ -1544,7 +1544,7 @@ grep 'tars-init:' "$LOG" || true
 echo "HD-M2 PASS: the guest switched itself off because someone pressed the power button"
 ```
 
-- [ ] **Step 2: 문법을 먼저 본다**
+- [ ] Step 2: 문법을 먼저 본다
 
 ```bash
 bash -n device/check.sh && echo "SYNTAX OK"
@@ -1553,7 +1553,7 @@ ls -l device/check.sh
 
 기대: `SYNTAX OK`, 그리고 실행 권한(`-rwxr-xr-x`)이 붙어 있다.
 
-- [ ] **Step 3: 새 체인을 돌린다**
+- [ ] Step 3: 새 체인을 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1568,10 +1568,10 @@ HD-M2 PASS: the guest switched itself off because someone pressed the power butt
 ```
 
 실패하면 `report_failure`가 찍는 마커 목록과 마지막 60줄을 그대로 알려 줄 것.
-**특히 `tars-init: power button pressed`가 `MISSING`인지가 갈림길이다** —
+특히 `tars-init: power button pressed`가 `MISSING`인지가 갈림길이다 —
 있으면 그 뒤의 종료 순서 문제이고, 없으면 `poll`이나 `drainButton`의 문제다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 ```bash
 git add device/check.sh
@@ -1582,10 +1582,10 @@ git commit -m "Prove the machine switches off when the power button is pressed"
 
 ## Task 8: 루트 게이트에 체인을 넣고 3/3
 
-**Files:**
+Files:
 - Modify: `check.sh` (체인 추가, 주석)
 
-- [ ] **Step 1: 체인을 등록한다**
+- [ ] Step 1: 체인을 등록한다
 
 `check.sh:82`의
 
@@ -1593,13 +1593,13 @@ git commit -m "Prove the machine switches off when the power button is pressed"
 run_chain "PM-M1" ./power/check.sh
 ```
 
-**다음**에 아래 한 줄을 넣는다.
+다음에 아래 한 줄을 넣는다.
 
 ```bash
 run_chain "HD-M2" ./device/check.sh
 ```
 
-- [ ] **Step 2: 주석을 더한다**
+- [ ] Step 2: 주석을 더한다
 
 같은 파일에서 PM 체인 설명이 끝나는 자리, 즉
 
@@ -1608,7 +1608,7 @@ run_chain "HD-M2" ./device/check.sh
 # 포기하는 것까지 기다리기 때문이다 — 재시작 backoff가 1초라 3초 남짓이다.
 ```
 
-**다음**에 아래 블록을 넣는다.
+다음에 아래 블록을 넣는다.
 
 ```bash
 #
@@ -1622,7 +1622,7 @@ run_chain "HD-M2" ./device/check.sh
 # 절반이 다르다.
 ```
 
-- [ ] **Step 3: 문법을 본다**
+- [ ] Step 3: 문법을 본다
 
 ```bash
 bash -n check.sh && echo "SYNTAX OK"
@@ -1631,7 +1631,7 @@ rg -n "^run_chain" check.sh
 
 기대: `SYNTAX OK`, 그리고 `run_chain` 여섯 줄(BF·TF·CP·IP·PM·HD)이 나온다.
 
-- [ ] **Step 4: 루트 게이트를 돌린다**
+- [ ] Step 4: 루트 게이트를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1644,25 +1644,25 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 TARS check PASS: all chains 3/3 consecutive runs succeeded
 ```
 
-그리고 `real` 값이 나온다. **직전 실측은 2026-08-21의 31분 30초다.** HD 체인이
+그리고 `real` 값이 나온다. 직전 실측은 2026-08-21의 31분 30초다. HD 체인이
 회차당 더하는 것은 커널 빌드 한 번(약 53초)과 나머지 빌드·부팅이고, 타이핑이
 없어 다른 체인보다 짧다. 기존 다섯 체인의 평균이 회차당 약 2분 6초이므로
-**3분에서 5분 사이가 예상 범위**(34분 30초 ~ 36분 30초)다. 그보다 훨씬 크면
+3분에서 5분 사이가 예상 범위(34분 30초 ~ 36분 30초)다. 그보다 훨씬 크면
 어딘가에서 기다리고 있다는 뜻이므로 멈추고 해석한다 — 가장 그럴듯한 후보는
 `poll` 타임아웃이 부팅마다 몇 바퀴씩 붙는 것이다.
 
-**시간이 견딜 만한지의 판단은 이 milestone 안에서 `check.sh`를 고치는 것으로
-이어지지 않는다.** design 위험 1번이 정한 대로 `clean()` 정책 변경은 별도로
+시간이 견딜 만한지의 판단은 이 milestone 안에서 `check.sh`를 고치는 것으로
+이어지지 않는다. design 위험 1번이 정한 대로 `clean()` 정책 변경은 별도로
 논의할 일이다. 판단 결과는 Task 9에서 `HANDOFF.md`에 적는다.
 
-**실측 결과(2026-08-22):** `real 36m34.135s`(`user 119m23s`, `sys 33m50s`).
-여섯 체인 전부 3/3이고 `FAIL`이 하나도 없었다. 증가분은 **5분 4초**로 예상
+실측 결과(2026-08-22): `real 36m34.135s`(`user 119m23s`, `sys 33m50s`).
+여섯 체인 전부 3/3이고 `FAIL`이 하나도 없었다. 증가분은 5분 4초로 예상
 범위(3~5분)의 상단이다. HD 체인 한 회차가 1분 41초이고 다른 체인 평균은 2분
-6초다 — 타이핑도 디스크도 없어서 짧다. 늘어난 시간의 대부분은 **커널 빌드 세
-번**(53초 × 3 ≒ 2분 39초)이고, 부팅 세 번은 그에 비하면 작다. `clean()` 정책은
+6초다 — 타이핑도 디스크도 없어서 짧다. 늘어난 시간의 대부분은 커널 빌드 세
+번(53초 × 3 ≒ 2분 39초)이고, 부팅 세 번은 그에 비하면 작다. `clean()` 정책은
 바꾸지 않았다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add check.sh
@@ -1673,29 +1673,29 @@ git commit -m "Add the power button chain to the root gate"
 
 ## Task 9: 문서
 
-**Files:**
+Files:
 - Modify: `docs/decisions/project_power_management.md`
 - Modify: `docs/decisions/project_device_discovery.md`
 - Modify: `docs/decisions/project_init_supervisor.md`
 - Modify: `MEMORY.md` (한 줄 요약 갱신)
 - Modify: `HANDOFF.md`
 
-- [ ] **Step 1: 기억 파일 셋을 고친다**
+- [ ] Step 1: 기억 파일 셋을 고친다
 
 내용은 Claude가 쓴다. 담을 것은 이렇다.
 
-**`project_device_discovery.md`** — 탐색기가 이제 둘을 찾는다는 것과, 그중
-**전원 버튼 판정에 "키보드는 아니다"가 들어간 이유**. 이것이 HD-M2가 알아낸
+`project_device_discovery.md` — 탐색기가 이제 둘을 찾는다는 것과, 그중
+전원 버튼 판정에 "키보드는 아니다"가 들어간 이유. 이것이 HD-M2가 알아낸
 것 중 가장 옮겨 적을 값어치가 있는 사실이다: `KEY_POWER`가 키보드에도 서
 있으므로 코드 하나만으로는 물리 버튼을 가려낼 수 없다. `watching N power
 button(s)`의 개수를 게이트가 요구하는 이유도 함께 적는다.
 
-**`project_init_supervisor.md`** — 감독 루프가 `poll` 구조가 됐다는 것.
+`project_init_supervisor.md` — 감독 루프가 `poll` 구조가 됐다는 것.
 `waitpid`가 `WNOHANG`이 되고 backoff를 `poll` 타임아웃이 대신한다는 것,
-그리고 **`SA_RESTART`를 끈 것이 `poll`에서도 같은 이유로 필요하다**는 것.
+그리고 `SA_RESTART`를 끈 것이 `poll`에서도 같은 이유로 필요하다는 것.
 지금 이 파일이 적고 있는 `POLLHUP` 사각지대 관련 서술도 다시 읽고 맞춘다.
 
-**`project_power_management.md`** — 종료를 시작하는 경로가 셋이 됐다는 것
+`project_power_management.md` — 종료를 시작하는 경로가 셋이 됐다는 것
 (SIGTERM · SIGINT · 전원 버튼)과, 셋이 전부 `power.zig`의 같은 플래그를
 지난다는 것. `request()`가 그 자리다.
 
@@ -1703,11 +1703,11 @@ button(s)`의 개수를 게이트가 요구하는 이유도 함께 적는다.
 `poll` 구조 전환이 별도 파일이 될 만하다고 판단되면 만들고 `MEMORY.md`에 줄을
 하나 더한다.
 
-- [ ] **Step 2: HANDOFF 갱신**
+- [ ] Step 2: HANDOFF 갱신
 
 담을 것.
 
-- HD-M2가 끝났고 **Hardware Discovery 서브프로젝트 전체가 끝났다**는 것.
+- HD-M2가 끝났고 Hardware Discovery 서브프로젝트 전체가 끝났다는 것.
   다음 서브프로젝트는 아직 정하지 않았다는 것과, 후보(`HANDOFF.md`의 "나중
   후보")를 그대로 이월한다는 것
 - Task 4 Step 6의 실측: 열린 전원 버튼의 개수와 장치 번호
@@ -1719,19 +1719,19 @@ button(s)`의 개수를 게이트가 요구하는 이유도 함께 적는다.
   `power button pressed`
 - 핵심 파일 목록 갱신: `init/src/main.zig`의 줄 번호가 전부 밀렸다.
   `supervise`의 `poll` 자리와 `POLL_TIMEOUT_MS`를 새로 가리킨다
-- **이월 숙제는 그대로 남긴다** — `CONFIG_PRINTK_TIME`, `ACPI_EC`/
+- 이월 숙제는 그대로 남긴다 — `CONFIG_PRINTK_TIME`, `ACPI_EC`/
   `PNP_DEBUG_MESSAGES` 정리, `init`을 `ReleaseSafe`로, Zig 에러 트레이스,
   `terminal/sanity/`의 도구 둘. HD-M2가 손대지 않았다
 - IP-M2가 남긴 것 넷도 그대로 이월한다
 
-- [ ] **Step 3: 커밋**
+- [ ] Step 3: 커밋
 
 ```bash
 git add docs MEMORY.md HANDOFF.md
 git commit -m "Hand off with a machine that answers its own power button"
 ```
 
-- [ ] **Step 4: push**
+- [ ] Step 4: push
 
 ```bash
 git rev-list --count origin/main..main
@@ -1746,44 +1746,44 @@ git push origin main
 
 ## 위험과 대응
 
-**1. `SA_RESTART`의 함정이 `poll`에서 재현된다.** `waitpid`가 그랬던 것처럼
+1. `SA_RESTART`의 함정이 `poll`에서 재현된다. `waitpid`가 그랬던 것처럼
 `poll`도 `SA_RESTART`가 켜져 있으면 커널이 안에서 재시작한다. 지금
 `power.zig:46`이 그것을 끄고 있으므로 구조는 그대로 유효하지만, 새 코드의
 `if (e != .INTR)` 분기가 실수로 `continue` 대신 다른 것을 하면 같은 증상이
 난다. Task 6 Step 1의 PM 체인 부팅 2(`ctrl-alt-delete` → SIGINT → 재시작)가
 이것을 정면으로 본다.
 
-**2. `poll`이 깨어났는데 안 읽으면 바쁜 루프가 된다.** `drainButton`이 fd를
+2. `poll`이 깨어났는데 안 읽으면 바쁜 루프가 된다. `drainButton`이 fd를
 비우는 것이 그 대응이고, Task 2의 검사가 "두 번째 `drainButton`은 false"를
 요구해서 붙박는다. 읽어도 해결되지 않는 종류(`POLLERR`·`POLLHUP`·`POLLNVAL`)는
-Task 5의 마지막 블록이 그 fd를 `-1`로 만들어 목록에서 뺀다. **우리 게이트는
-CPU 사용률을 보지 않으므로 이 실패는 눈에 잘 안 띈다** — 로그가 이상하게
+Task 5의 마지막 블록이 그 fd를 `-1`로 만들어 목록에서 뺀다. 우리 게이트는
+CPU 사용률을 보지 않으므로 이 실패는 눈에 잘 안 띈다 — 로그가 이상하게
 느려지는 것이 유일한 증상이고, 그래서 코드 쪽에서 미리 막아 둔다.
 
-**3. backoff가 사라져 재시작이 폭주할 수 있다.** `sleepOneSecond()`를 지웠기
+3. backoff가 사라져 재시작이 폭주할 수 있다. `sleepOneSecond()`를 지웠기
 때문이다. 거두기를 `poll`보다 앞에 두는 순서가 그 대응이고(이번에 정하는 것
 2번), BF 체인의 "정확히 3회"가 그것을 개수로 확인한다. 3회를 넘으면 backoff가
 안 먹은 것이고, 3회 미만이면 `FAST_EXIT_SECONDS` 판정이 달라진 것이다 —
 어느 쪽인지는 로그의 `lived Ns`가 말해 준다.
 
-**4. 키보드가 전원 버튼 후보로 딸려 들어온다.** 이번에 정하는 것 1번이 그
+4. 키보드가 전원 버튼 후보로 딸려 들어온다. 이번에 정하는 것 1번이 그
 대응이고, Task 1의 검사 둘과 Task 7의 `watching 1 power button` 검사가 이중으로
-막는다. 후자가 중요한 이유는, 딸려 들어와도 **종료는 여전히 되기 때문에**
+막는다. 후자가 중요한 이유는, 딸려 들어와도 종료는 여전히 되기 때문에
 개수를 안 보면 아무도 모른다는 점이다.
 
-**5. `input_event` 레이아웃을 손으로 적다가 틀린다.** libc를 안 링크하므로
+5. `input_event` 레이아웃을 손으로 적다가 틀린다. libc를 안 링크하므로
 `@cImport`가 확인해 주지 않는다(`project_zig_c_uapi_rule`). Task 2의
 `@sizeOf(devices.Event) != 24` 검사가 그 대응이다. 크기가 맞아도 필드 순서가
 틀릴 수는 있는데, 그 경우 Task 2의 나머지 검사들이 pipe로 흘려 넣은 이벤트를
 잘못 읽어서 잡는다.
 
-**6. 새 체인이 통과하는데 옛 체인이 깨진다.** 이 milestone에서 가장 그럴듯한
+6. 새 체인이 통과하는데 옛 체인이 깨진다. 이 milestone에서 가장 그럴듯한
 실패다. Task 6을 Task 7보다 앞에 둔 것이 그 대응이고, 특히 BF와 PM을 먼저
 돌리는 것이 핵심이다.
 
-**7. 부팅 도중에 버튼이 눌리는 경합.** 감독 루프가 자식을 띄우는 중에 종료
+7. 부팅 도중에 버튼이 눌리는 경합. 감독 루프가 자식을 띄우는 중에 종료
 요청이 오면 어떻게 되는지를 이 체인은 보지 않는다(`terminal: screen>`를
 기다린 뒤에 누른다). 구조상으로는 루프 머리의 `take()`가 `start()`보다 앞이라
 안전하지만, 그 사이에 이미 `fork`된 자식은 `shutdown()`의 `kill(-1, TERM)`이
-받는다. **이 경합을 게이트로 만들지 않는 것은 의도된 선택이다** — 타이밍에
+받는다. 이 경합을 게이트로 만들지 않는 것은 의도된 선택이다 — 타이밍에
 의존하는 검사는 3회 반복 게이트에서 간헐 실패의 근원이 된다.

@@ -1,18 +1,18 @@
 # TARS Config Persistence CP-M2 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** 설정 파일의 값이 **실제 동작을 바꾼다.** 게스트 안에서
+Goal: 설정 파일의 값이 실제 동작을 바꾼다. 게스트 안에서
 `echo shell=zsh > /config/tars.conf`를 타이핑하고 재부팅하면, 다음 부팅의 셸이
 fish가 아니라 zsh다. 2026-08-11의 원래 요청(`project_boot_shell_selection`)이
 여기서 완성된다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-14-tars-config-persistence-design.md`
+Design doc: `docs/superpowers/specs/2026-08-14-tars-config-persistence-design.md`
 (승인 완료 — 설계를 다시 열지 않는다)
 
-**Tech Stack:** Zig 0.16.0, Debian trixie amd64 sysroot, bash, QEMU(monitor
+Tech Stack: Zig 0.16.0, Debian trixie amd64 sysroot, bash, QEMU(monitor
 `sendkey`), Docker(`tars-devcontainer`, arm64)
 
 ---
@@ -20,16 +20,16 @@ fish가 아니라 zsh다. 2026-08-11의 원래 요청(`project_boot_shell_select
 ## design doc보다 넓힌 것 하나 (2026-08-14 사용자 승인)
 
 design doc과 CP-M1의 인수인계 문서는 CP-M2를 "`Kind.path()`가 상수 대신
-`cfg.shell`을 본다"로 적었다. 그런데 지금 TARS에는 셸이 **두 개** 뜬다.
+`cfg.shell`을 본다"로 적었다. 그런데 지금 TARS에는 셸이 두 개 뜬다.
 
 | 셸 | 누가 띄우나 | 어디에 보이나 |
 |---|---|---|
 | 콘솔 셸 | `init`이 직접 fork (`Kind.path()`) | 시리얼(`/dev/console`) — 디버그용 |
-| 터미널 셸 | `/terminal`이 PTY로 fork (`pty.spawn`) | DRM 화면 — **사용자가 실제로 보는 것** |
+| 터미널 셸 | `/terminal`이 PTY로 fork (`pty.spawn`) | DRM 화면 — 사용자가 실제로 보는 것 |
 
-`Kind.path()`만 고치면 **시리얼 콘솔의 셸만** 바뀌고 화면의 셸은 fish 상수로
+`Kind.path()`만 고치면 시리얼 콘솔의 셸만 바뀌고 화면의 셸은 fish 상수로
 남는다. 사용자가 "부팅 셸을 고른다"고 할 때 보는 것은 후자이므로, 이번에 둘 다
-바꾼다. 설계 결정을 바꾸는 것이 아니라 **같은 결정을 한 곳 더 적용하는 것**이라
+바꾼다. 설계 결정을 바꾸는 것이 아니라 같은 결정을 한 곳 더 적용하는 것이라
 design doc은 다시 열지 않는다.
 
 전달 방법은 아래 "설계 결정 2"에 있다.
@@ -49,10 +49,10 @@ CP-M1이 남긴 숙제는 "`cfg`가 `main`의 지역 변수인데 `spawn`까지 
 |---|---|---|
 | A. 모듈 전역 `var cfg` | 아무 데서나 읽는다 | 탈락 — 누가 언제 바꿀 수 있는지가 타입에 안 드러난다 |
 | B. `supervise`→`start`→`spawn`으로 인자 전달 | 감독 루프가 설정을 들고 다닌다 | 탈락 — 감독은 설정과 무관한 일인데 시그니처가 오염된다 |
-| **C. `Child`가 실행할 것을 들고 있는다** | `main`에서 한 번 정해 넣는다 | **채택** |
+| C. `Child`가 실행할 것을 들고 있는다 | `main`에서 한 번 정해 넣는다 | 채택 |
 
-C를 고르는 진짜 이유는 코드 길이가 아니라 **"설정은 부팅 시점에 한 번만
-읽는다"는 정책을 타입으로 표현하기 때문**이다. 감독 루프는 설정을 아예 모른다 —
+C를 고르는 진짜 이유는 코드 길이가 아니라 "설정은 부팅 시점에 한 번만
+읽는다"는 정책을 타입으로 표현하기 때문이다. 감독 루프는 설정을 아예 모른다 —
 자식이 죽어서 재시작할 때도 `Child`에 적힌 그것을 다시 띄운다. 그래서 "재시작할
 때 설정을 다시 읽어야 하나?"라는 질문이 성립하지 않는다. 설정 변경은 재부팅으로
 반영한다는 design doc의 결정이 코드 구조에 박힌다.
@@ -60,7 +60,7 @@ C를 고르는 진짜 이유는 코드 길이가 아니라 **"설정은 부팅 �
 ### 2. 터미널 셸은 `init`이 argv로 넘긴다
 
 `terminal`이 `/config/tars.conf`를 직접 읽게 하면 파서가 두 벌이 되고, 두
-프로세스가 서로 다른 시점에 같은 파일을 읽어 **다른 답을 얻을 수 있다.** 설정을
+프로세스가 서로 다른 시점에 같은 파일을 읽어 다른 답을 얻을 수 있다. 설정을
 읽는 것은 PID 1의 일로 두고, `init`이 `/terminal`을 exec할 때 결정을 실어
 보낸다.
 
@@ -69,14 +69,14 @@ execve("/terminal", ["/terminal", "/usr/bin/zsh", "-f"], envp)
                                    └── argv[1] 셸 경로   └── argv[2] no-config 플래그
 ```
 
-`terminal`은 그 둘을 `pty.spawn`에 그대로 넘기기만 한다 — **셸이 무엇인지 알
-필요가 없다.** 덕분에 "이름 → 경로 → 플래그" 매핑이 `init/src/config.zig` 한
+`terminal`은 그 둘을 `pty.spawn`에 그대로 넘기기만 한다 — 셸이 무엇인지 알
+필요가 없다. 덕분에 "이름 → 경로 → 플래그" 매핑이 `init/src/config.zig` 한
 곳에만 있다.
 
 플래그가 필요한 이유는 셋의 철자가 전부 다르기 때문이다:
 fish `--no-config`, bash `--norc`, zsh `-f`. initrd에는 `~/.bashrc`도
-`~/.zshrc`도 없어서 지금은 있으나 없으나 동작이 같지만, **프롬프트가 예측
-가능해야 게이트가 화면을 검사할 수 있다**(TF-M3이 fish에 `--no-config`를 준
+`~/.zshrc`도 없어서 지금은 있으나 없으나 동작이 같지만, 프롬프트가 예측
+가능해야 게이트가 화면을 검사할 수 있다(TF-M3이 fish에 `--no-config`를 준
 이유가 그것이다).
 
 ---
@@ -98,9 +98,9 @@ config/check.sh   monitor + sendkey로 게스트에서 편집 → 2차 부팅 �
 check.sh 라벨 + BF/TF 회귀 + 전체 게이트                                    ← Task 6
 ```
 
-**바이너리가 코드보다 먼저인 이유**는 CP-M1 plan이 이미 적어뒀다 — 설정에
-`shell=zsh`를 써도 지금은 아무 일이 안 일어나 안전하지만, **경로를 잇는 순간
-그 자리에 실제 파일이 있어야 한다.** 순서를 뒤집으면 "설정은 맞는데 셸이 안
+바이너리가 코드보다 먼저인 이유는 CP-M1 plan이 이미 적어뒀다 — 설정에
+`shell=zsh`를 써도 지금은 아무 일이 안 일어나 안전하지만, 경로를 잇는 순간
+그 자리에 실제 파일이 있어야 한다. 순서를 뒤집으면 "설정은 맞는데 셸이 안
 뜨는" 상태를 디버깅하게 되고, 그때 원인이 파싱인지 배선인지 패키징인지 구분이
 안 된다.
 
@@ -111,24 +111,24 @@ check.sh 라벨 + BF/TF 회귀 + 전체 게이트                               
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-이번 milestone은 **Task 1에서 딱 한 번 네트워크가 필요하다**(이미지 재빌드).
+이번 milestone은 Task 1에서 딱 한 번 네트워크가 필요하다(이미지 재빌드).
 그 뒤의 게이트 실행은 여전히 전부 오프라인이다.
 
 ---
 
 ## Task 1: 게스트용 셸 패키지를 sysroot에 굽는다
 
-**Files:**
+Files:
 - Modify: `devcontainer/Dockerfile` (아래쪽 `apt-get download` 목록)
 
-위쪽 `apt-get install`이 **아니다.** 그것은 컨테이너(arm64)가 실행할 도구이고,
-우리가 넣으려는 것은 **게스트(x86_64)가 실행할 것**이다
+위쪽 `apt-get install`이 아니다. 그것은 컨테이너(arm64)가 실행할 도구이고,
+우리가 넣으려는 것은 게스트(x86_64)가 실행할 것이다
 (`project_build_host_arch`의 규칙 3).
 
-- [ ] **Step 1: `apt-get download` 목록에 다섯 줄 추가**
+- [ ] Step 1: `apt-get download` 목록에 다섯 줄 추가
 
 `devcontainer/Dockerfile:48-56`. 바꾸기 전:
 
@@ -173,7 +173,7 @@ check.sh 라벨 + BF/TF 회귀 + 전체 게이트                               
 # download는 의존을 따라가지 않으므로 이 목록은 언제나 명시적이다.
 ```
 
-- [ ] **Step 2: 이미지 재빌드 (네트워크 필요, 몇 분)**
+- [ ] Step 2: 이미지 재빌드 (네트워크 필요, 몇 분)
 
 Run:
 ```bash
@@ -183,11 +183,11 @@ docker build -t tars-devcontainer -f devcontainer/Dockerfile . 2>&1 | tail -20
 Expected: 마지막에 `naming to docker.io/library/tars-devcontainer`. `--platform`을
 붙이지 않았는지 확인할 것.
 
-- [ ] **Step 3: sysroot 실측 — 경로·버전·의존을 눈으로 본다**
+- [ ] Step 3: sysroot 실측 — 경로·버전·의존을 눈으로 본다
 
-**이 Step이 Task 2의 입력이다.** Debian trixie는 usrmerge가 끝난 릴리스라
+이 Step이 Task 2의 입력이다. Debian trixie는 usrmerge가 끝난 릴리스라
 bash/zsh가 `/usr/bin`에 있을 것으로 보지만, 추측 대신 확인한다. zsh 모듈
-디렉터리의 **버전 번호**도 여기서만 알 수 있다.
+디렉터리의 버전 번호도 여기서만 알 수 있다.
 
 Run:
 ```bash
@@ -214,18 +214,18 @@ docker run --rm tars-devcontainer bash -c '
 Expected(예상이며, 다르면 Task 2의 해당 경로만 고친다):
 
 - `/usr/bin/bash`, `/usr/bin/zsh`가 존재하고 `/bin/...`은 없다
-- 모듈 디렉터리는 `.../zsh/5.9` 같은 **버전 이름 하나**
+- 모듈 디렉터리는 `.../zsh/5.9` 같은 버전 이름 하나
 - bash: `libtinfo.so.6`, `libc.so.6`
 - zsh: `libcap.so.2`, `libtinfo.so.6`, `libc.so.6`
 - 모듈 union: 위와 같거나 여기에 `libgdbm.so.6`, `libpcre2-8.so.0` 등이 더 붙음
 - `/usr/share/zsh` 몇 MB, 모듈 디렉터리 1~3MB
 
-**출력 전체를 붙여서 알릴 것.** 특히 모듈 union에 위 목록 밖의 SONAME이 있으면
+출력 전체를 붙여서 알릴 것. 특히 모듈 union에 위 목록 밖의 SONAME이 있으면
 Task 2에서 `make_initrd.sh`가 그 이름을 찍고 죽는다 — 그때 대응은 둘이다.
 (a) 해당 패키지를 Dockerfile 목록에 추가, (b) 그 모듈을 initrd에서 제외.
 설정 파일 하나 읽는 셸에 `zsh/db/gdbm`은 필요 없으므로 (b)가 보통 맞다.
 
-**실측 결과 (2026-08-14) — Task 2는 이 값을 쓴다:**
+실측 결과 (2026-08-14) — Task 2는 이 값을 쓴다:
 
 | 항목 | 값 |
 |---|---|
@@ -234,22 +234,22 @@ Task 2에서 `make_initrd.sh`가 그 이름을 찍고 죽는다 — 그때 대�
 | bash NEEDED | `libtinfo.so.6`, `libc.so.6` |
 | zsh NEEDED | `libcap.so.2`, `libtinfo.so.6`, `libm.so.6`, `libc.so.6` |
 | 모듈 NEEDED 합집합 | 위 + `libgdbm.so.6`, `libncursesw.so.6`, `libpcre2-8.so.0` |
-| `/usr/share/zsh` | **17MB** |
+| `/usr/share/zsh` | 17MB |
 
 두 가지가 plan의 예상과 달랐고, 둘 다 "넣지 않는다"로 정했다.
 
-1. **`libgdbm.so.6`(`zsh/db/gdbm.so`)와 `libncursesw.so.6`(`zsh/curses.so`)가
-   sysroot에 없다.** 38개 중 둘뿐이고 `zmodload`로 이름을 대고 부를 때만 열리는
+1. `libgdbm.so.6`(`zsh/db/gdbm.so`)와 `libncursesw.so.6`(`zsh/curses.so`)가
+   sysroot에 없다. 38개 중 둘뿐이고 `zmodload`로 이름을 대고 부를 때만 열리는
    선택적 모듈이다 — 위 (b)를 고른다.
-2. **`/usr/share/zsh`가 17MB다.** design doc은 fish-common과 같은 규모로 보고
+2. `/usr/share/zsh`가 17MB다. design doc은 fish-common과 같은 규모로 보고
    "함께 필요하다"고 적었지만, 실측은 initrd(gzip 11.8MB)를 흔드는 크기다.
    내용은 전부 fpath에서 autoload되는 함수이고 `~/.zshrc`가 없는 우리 게스트는
-   `compinit`도 부르지 않으므로 **없어도 zsh는 조용히 시작한다.** 패키지는
+   `compinit`도 부르지 않으므로 없어도 zsh는 조용히 시작한다. 패키지는
    sysroot에 그대로 둬서(이미 받아 놓았다) 필요해지면 네트워크 없이 한 줄로
    켤 수 있게 한다. 이 판단은 design doc "미리 알고 들어가는 위험 3"(initrd
    크기)이 예고한 그 자리다.
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다.
 
@@ -257,15 +257,15 @@ Claude가 수행한다.
 
 ## Task 2: initrd에 셸 셋을 담는다
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh`
 
-fish 하나만 복사하던 스크립트에 둘을 더한다. **zsh는 바이너리 하나가
-아니라는 것**이 이 Task의 내용 전부다.
+fish 하나만 복사하던 스크립트에 둘을 더한다. zsh는 바이너리 하나가
+아니라는 것이 이 Task의 내용 전부다.
 
-- [ ] **Step 1: 바이너리 복사 + 의존 추적**
+- [ ] Step 1: 바이너리 복사 + 의존 추적
 
-`kernel/make_initrd.sh:96-97`의 fish 복사 **바로 아래**에 넣는다.
+`kernel/make_initrd.sh:96-97`의 fish 복사 바로 아래에 넣는다.
 
 ```bash
 # CP-M2: 설정으로 고를 수 있는 셸 셋. initrd 안의 자리는 sysroot의 원래
@@ -284,10 +284,10 @@ copy_lib_deps "$WORKDIR/usr/bin/bash"
 copy_lib_deps "$WORKDIR/usr/bin/zsh"
 ```
 
-- [ ] **Step 2: zsh 모듈 트리 — 유일하게 경로를 보존해야 하는 것**
+- [ ] Step 2: zsh 모듈 트리 — 유일하게 경로를 보존해야 하는 것
 
 `/usr/share/fish` 복사 블록(`kernel/make_initrd.sh:112-116`) 아래에 넣는다.
-**버전 번호(`5.9`)를 적지 않는다** — 와일드카드로 통째로 복사하므로 패키지가
+버전 번호(`5.9`)를 적지 않는다 — 와일드카드로 통째로 복사하므로 패키지가
 올라가도 이 스크립트는 그대로다.
 
 ```bash
@@ -324,7 +324,7 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 #   cp -r "$SYSROOT/usr/share/zsh" "$WORKDIR/usr/share/"
 ```
 
-- [ ] **Step 3: initrd를 만들어 본다**
+- [ ] Step 3: initrd를 만들어 본다
 
 Run:
 ```bash
@@ -332,7 +332,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
   'cd kernel && ./make_initrd.sh && ls -l initrd.cpio'
 ```
 
-Expected: 에러 없이 끝나고 `initrd.cpio`가 **12.5~14MB**(CP-M1까지 11.8MB).
+Expected: 에러 없이 끝나고 `initrd.cpio`가 12.5~14MB(CP-M1까지 11.8MB).
 더해지는 것은 bash 1.3MB + zsh 0.9MB + 모듈 1.5MB + libtinfo/libcap ~1MB이고,
 gzip 뒤에는 그 절반 이하로 줄어든다.
 
@@ -343,12 +343,12 @@ make_initrd: cannot resolve libgdbm.so.6 (needed by .../zsh/5.9/zsh/db/gdbm.so) 
              add the package that provides it to devcontainer/Dockerfile
 ```
 
-**이건 고장이 아니라 설계된 동작이다**(`project_build_host_arch`). Step 2의 두
-`rm`이 이미 알려진 두 모듈을 빼므로 이 메시지가 나온다면 **다른 SONAME**일
+이건 고장이 아니라 설계된 동작이다(`project_build_host_arch`). Step 2의 두
+`rm`이 이미 알려진 두 모듈을 빼므로 이 메시지가 나온다면 다른 SONAME일
 것이다 — 그대로 알릴 것. 대응은 (a) 패키지를 Dockerfile 목록에 추가,
 (b) 그 모듈을 `rm` 줄에 추가. 선택적 모듈이면 (b)가 맞다.
 
-- [ ] **Step 4: 셋이 실제로 들어갔는지 목록으로 확인**
+- [ ] Step 4: 셋이 실제로 들어갔는지 목록으로 확인
 
 Run:
 ```bash
@@ -364,14 +364,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c \
 ```
 
 Expected: `usr/bin/bash`, `usr/bin/zsh`, `usr/bin/fish` 세 줄과
-`lib/x86_64-linux-gnu/libtinfo.so.6`, `libcap.so.2`. 모듈 개수는 **36**
+`lib/x86_64-linux-gnu/libtinfo.so.6`, `libcap.so.2`. 모듈 개수는 36
 (38에서 `curses.so`와 `db/gdbm.so`를 뺀 값). 마지막 두 블록은 출력이 없어야
 한다.
 
-**`usr/bin/`으로 시작하는지 확인할 것.** `./usr/bin/bash` 앞의 `.`은 cpio가
+`usr/bin/`으로 시작하는지 확인할 것. `./usr/bin/bash` 앞의 `.`은 cpio가
 붙이는 것이라 정상이다.
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 Claude가 수행한다.
 
@@ -379,11 +379,11 @@ Claude가 수행한다.
 
 ## Task 3: `init`이 설정대로 셸을 고른다
 
-**Files:**
+Files:
 - Modify: `init/src/config.zig` (`Shell`에 메서드 둘)
 - Modify: `init/src/main.zig` (`Kind.path()` 제거, `Child`에 실행 정보, 폴백 하나)
 
-- [ ] **Step 1: `config.zig`의 `Shell`에 메서드 둘을 추가**
+- [ ] Step 1: `config.zig`의 `Shell`에 메서드 둘을 추가
 
 `init/src/config.zig:16-20`. 바꾸기 전:
 
@@ -436,7 +436,7 @@ pub const Shell = enum {
 };
 ```
 
-- [ ] **Step 2: `main.zig`의 `Kind`에서 `path()`를 걷어낸다**
+- [ ] Step 2: `main.zig`의 `Kind`에서 `path()`를 걷어낸다
 
 `init/src/main.zig:129-148`. 바꾸기 전은 `Kind`에 `name()`과 `path()`가 있고
 위에 "설정 파일에서 목록을 읽는 것은 다음 서브프로젝트의 일이다"라는 주석이
@@ -462,7 +462,7 @@ const Kind = enum {
 const TERMINAL_PATH: [:0]const u8 = "/terminal";
 ```
 
-- [ ] **Step 3: `Child`가 실행할 것을 들고 있게 한다**
+- [ ] Step 3: `Child`가 실행할 것을 들고 있게 한다
 
 `init/src/main.zig:156-163`. 바꾼 뒤:
 
@@ -483,7 +483,7 @@ const Child = struct {
 };
 ```
 
-- [ ] **Step 4: `spawn`/`start`가 `Child`를 통째로 본다**
+- [ ] Step 4: `spawn`/`start`가 `Child`를 통째로 본다
 
 `init/src/main.zig:176-203`. 바꾼 뒤:
 
@@ -520,11 +520,11 @@ fn start(c: *Child, envp: [*:null]const ?[*:0]const u8) void {
 }
 ```
 
-**로그 문자열 주의:** `tars-init: started terminal`은 `terminal/check.sh:170`이
+로그 문자열 주의: `tars-init: started terminal`은 `terminal/check.sh:170`이
 grep하는 마커다. 뒤에 `, /terminal)`이 붙어도 부분 문자열이라 계속 맞는다 —
-**앞부분을 바꾸지 않는 것**이 조건이다.
+앞부분을 바꾸지 않는 것이 조건이다.
 
-- [ ] **Step 5: 없는 셸로 부팅이 막히지 않게 하는 폴백**
+- [ ] Step 5: 없는 셸로 부팅이 막히지 않게 하는 폴백
 
 `loadConfig` 바로 아래에 넣는다.
 
@@ -549,7 +549,7 @@ fn resolveShell(want: config.Shell) config.Shell {
 }
 ```
 
-- [ ] **Step 6: `main`에서 잇는다**
+- [ ] Step 6: `main`에서 잇는다
 
 `init/src/main.zig:292-302`. 바꾼 뒤:
 
@@ -587,7 +587,7 @@ fn resolveShell(want: config.Shell) config.Shell {
     supervise(&children, envp);
 ```
 
-- [ ] **Step 7: 빌드 + 정적 확인**
+- [ ] Step 7: 빌드 + 정적 확인
 
 Run:
 ```bash
@@ -606,7 +606,7 @@ Expected: `0`(동적 의존 없음), 12MB 안팎.
 
 전문을 붙여서 알릴 것.
 
-- [ ] **Step 8: Commit**
+- [ ] Step 8: Commit
 
 Claude가 수행한다.
 
@@ -614,10 +614,10 @@ Claude가 수행한다.
 
 ## Task 4: `terminal`이 받은 셸을 띄운다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig:104-109`
 
-- [ ] **Step 1: argv에서 셸을 읽는다**
+- [ ] Step 1: argv에서 셸을 읽는다
 
 바꾸기 전:
 
@@ -658,7 +658,7 @@ Claude가 수행한다.
 argv[0]이 예전에는 `"fish"`(basename)였고 이제 전체 경로다. 셸 셋 다 argv[0]을
 "앞에 `-`가 붙었으면 로그인 셸"로만 보므로 동작이 달라지지 않는다.
 
-- [ ] **Step 2: 빌드**
+- [ ] Step 2: 빌드
 
 Run:
 ```bash
@@ -673,7 +673,7 @@ Expected: 에러 없이 끝난다.
 `Args.vector`가 리눅스에서 `[]const [*:0]const u8`인 것을 확인했지만,
 `main(init: std.process.Init)` 쪽에서 필드 이름이 다르면 여기서 잡힌다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다.
 
@@ -681,17 +681,17 @@ Claude가 수행한다.
 
 ## Task 5: 게이트가 게스트 안에서 설정을 고친다
 
-**Files:**
+Files:
 - Modify: `config/check.sh`
 
-**이 Task가 CP-M2의 진짜 작업량이다.** CP-M1의 게이트는 "1차가 쓴 것을 2차가
-읽는다"였다. 이제 **쓰는 주체가 init이 아니라 사람(을 흉내낸 sendkey)**이 된다.
+이 Task가 CP-M2의 진짜 작업량이다. CP-M1의 게이트는 "1차가 쓴 것을 2차가
+읽는다"였다. 이제 쓰는 주체가 init이 아니라 사람(을 흉내낸 sendkey)이 된다.
 
 design doc 6번이 호스트에서 `debugfs`로 이미지를 편집하는 쉬운 길을 버린 이유가
 여기서 값을 한다 — 호스트 편집은 "게스트가 쓴 것이 디스크에 도달했는가"라는
 경로(파일시스템 쓰기 + `MS_SYNCHRONOUS`)를 통째로 건너뛴다.
 
-- [ ] **Step 1: `config/check.sh`를 아래 내용으로 교체**
+- [ ] Step 1: `config/check.sh`를 아래 내용으로 교체
 
 ```bash
 #!/usr/bin/env bash
@@ -1012,7 +1012,7 @@ echo "PASS"
 exit 0
 ```
 
-- [ ] **Step 2: 실행 권한 확인**
+- [ ] Step 2: 실행 권한 확인
 
 Run:
 ```bash
@@ -1021,7 +1021,7 @@ ls -l config/check.sh config/make_disk.sh
 
 Expected: 둘 다 `-rwxr-xr-x`. 아니면 `chmod +x config/check.sh`.
 
-- [ ] **Step 3: CP 체인 단독 실행**
+- [ ] Step 3: CP 체인 단독 실행
 
 Run:
 ```bash
@@ -1041,11 +1041,11 @@ boot 2: the config written inside the guest selected zsh for both shells
 PASS
 ```
 
-**이번 milestone에서 가장 깨지기 쉬운 지점이다.** 실패하면 `--- markers ---`와
+이번 milestone에서 가장 깨지기 쉬운 지점이다. 실패하면 `--- markers ---`와
 `--- tail ---`를 통째로 붙여서 알릴 것. 아래 "대비해 둔 실패 갈래"에 원인별
 대응이 있다.
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다.
 
@@ -1053,13 +1053,13 @@ Claude가 수행한다.
 
 ## Task 6: 루트 게이트와 회귀
 
-**Files:**
+Files:
 - Modify: `check.sh:44-49` (주석 + 라벨)
 
 `init`과 `terminal` 바이너리가 둘 다 바뀌었고 initrd가 커졌으므로 세 체인을 다
 돌린다.
 
-- [ ] **Step 1: 루트 게이트 라벨**
+- [ ] Step 1: 루트 게이트 라벨
 
 바꾼 뒤:
 
@@ -1075,7 +1075,7 @@ run_chain "TF-M4" ./terminal/check.sh
 run_chain "CP-M2" ./config/check.sh
 ```
 
-- [ ] **Step 2: BF 체인 — 디스크가 없어도, initrd가 커져도 통과해야 한다**
+- [ ] Step 2: BF 체인 — 디스크가 없어도, initrd가 커져도 통과해야 한다
 
 Run:
 ```bash
@@ -1085,11 +1085,11 @@ time docker run --rm -v "$PWD":/workspace -w /workspace \
 
 Expected: `PASS`, 그리고 `Boot reached the fish banner after ~Ns`.
 
-**BF에서 봐야 할 것은 두 가지다.**
+BF에서 봐야 할 것은 두 가지다.
 
 1. 여전히 fish다. 디스크가 없으니 `no config storage, using defaults` →
    `config shell=fish` → `started console shell (pid N, /usr/bin/fish)`.
-2. **`~Ns`가 CP-M1 때보다 얼마나 늘었는가.** initrd가 커졌고, BF만 limine의
+2. `~Ns`가 CP-M1 때보다 얼마나 늘었는가. initrd가 커졌고, BF만 limine의
    BIOS INT13h로 ISO에서 읽는다(`kernel/make_initrd.sh:118-122`의 주석). 이
    숫자를 알려줄 것 — 크게 늘면 `init`을 `ReleaseSafe`로 바꾸는 카드를 꺼낼
    시점이다.
@@ -1102,7 +1102,7 @@ grep -c 'tars-init: shell .* is not executable' /tmp/cp-m2-bf.log
 
 Expected: `1`, `0`.
 
-- [ ] **Step 3: TF 체인**
+- [ ] Step 3: TF 체인
 
 Run:
 ```bash
@@ -1111,10 +1111,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 ```
 
 Expected: `PASS`. TF도 `-drive`가 없으므로 전부 fish다. 이 체인이 특히 중요한
-이유는 **`terminal`의 argv 처리와 재시작 경로를 동시에 지나기 때문**이다 —
+이유는 `terminal`의 argv 처리와 재시작 경로를 동시에 지나기 때문이다 —
 `exit`로 셸을 죽이고 다시 뜨는 그 자리에서 argv가 두 번째로 쓰인다.
 
-- [ ] **Step 4: 루트 게이트 전체**
+- [ ] Step 4: 루트 게이트 전체
 
 Run:
 ```bash
@@ -1128,10 +1128,10 @@ Expected 마지막 줄:
 TARS check PASS: all chains 3/3 consecutive runs succeeded
 ```
 
-CP-M1이 **13분 14초**였다. 늘어나는 것은 회차당 타이핑 ~20초 + 관측 5초이므로
-**14분 30초 안팎**을 예상한다. 실제 시간을 알릴 것.
+CP-M1이 13분 14초였다. 늘어나는 것은 회차당 타이핑 ~20초 + 관측 5초이므로
+14분 30초 안팎을 예상한다. 실제 시간을 알릴 것.
 
-- [ ] **Step 5: 통합 로그에서 숫자 확인**
+- [ ] Step 5: 통합 로그에서 숫자 확인
 
 Run:
 ```bash
@@ -1151,17 +1151,17 @@ Expected: `12`, `9`, `3`, `9`, `3`, `3`, `3`, `0`, `0`, `0`.
 
 각 숫자의 뜻:
 
-- **12** — 부팅 12회(BF 3 + TF 3 + CP 3회차×2). CP-M1과 같다.
-- **9 / 3** — fish로 간 부팅 9회(BF 3 + TF 3 + CP 1차 3), zsh로 간 부팅 3회
-  (CP 2차). **이 두 숫자가 이 milestone의 요약이다.**
-- **9 / 3** — 위와 정확히 짝을 이뤄야 한다. 짝이 안 맞으면 파싱과 exec 사이가
+- 12 — 부팅 12회(BF 3 + TF 3 + CP 3회차×2). CP-M1과 같다.
+- 9 / 3 — fish로 간 부팅 9회(BF 3 + TF 3 + CP 1차 3), zsh로 간 부팅 3회
+  (CP 2차). 이 두 숫자가 이 milestone의 요약이다.
+- 9 / 3 — 위와 정확히 짝을 이뤄야 한다. 짝이 안 맞으면 파싱과 exec 사이가
   끊어진 것이다(설정은 읽었는데 다른 것을 띄웠다).
-- **3 / 3** — seeding은 회차당 1차에서만, load는 2차에서만.
-- **0** — 폴백이 한 번도 발동하지 않았다 = 세 셸이 다 initrd에 있다.
-- **0** — 셸이 죽어서 포기한 적이 없다 = zsh가 terminfo 없이도 살아 있다.
-- **0** — 패닉 없음.
+- 3 / 3 — seeding은 회차당 1차에서만, load는 2차에서만.
+- 0 — 폴백이 한 번도 발동하지 않았다 = 세 셸이 다 initrd에 있다.
+- 0 — 셸이 죽어서 포기한 적이 없다 = zsh가 terminfo 없이도 살아 있다.
+- 0 — 패닉 없음.
 
-- [ ] **Step 6: Commit**
+- [ ] Step 6: Commit
 
 Claude가 수행한다.
 
@@ -1169,17 +1169,17 @@ Claude가 수행한다.
 
 ## Task 7: 문서와 기억
 
-**Files:**
+Files:
 - Create: `docs/decisions/project_config_persistence.md` (CP 서브프로젝트 기억)
 - Modify: `MEMORY.md` (색인 한 줄)
 - Modify: `HANDOFF.md`
 - Modify: 이 plan 파일(말미에 "실제 실행에서 plan과 달라진 점")
 
-- [ ] **Step 1: Claude가 문서를 갱신한다**
+- [ ] Step 1: Claude가 문서를 갱신한다
 
 사용자는 Task 6까지의 결과만 전달하면 된다.
 
-기억 파일은 **CP-M0~M2가 다 실행돼 본 뒤에 쓴다**는 CP-M1의 결정에 따라
+기억 파일은 CP-M0~M2가 다 실행돼 본 뒤에 쓴다는 CP-M1의 결정에 따라
 여기서 처음 쓴다. 담을 것(후보):
 
 - 왜 동기 마운트인가, 그리고 그것이 "쓰고 바로 kill"하는 게이트와 어떻게
@@ -1187,10 +1187,10 @@ Claude가 수행한다.
 - 한 스크립트에서 QEMU를 두 번 띄우는 게이트 모양과 부정 검사(2차에 `created`가
   없어야 한다)
 - 설정이 깨져도 부팅이 막히지 않게 하는 장치들 — 화이트리스트(enum),
-  모르는 값 폴백, 마운트 실패 허용, 그리고 CP-M2가 더한 **바이너리 부재 폴백**
+  모르는 값 폴백, 마운트 실패 허용, 그리고 CP-M2가 더한 바이너리 부재 폴백
 - 설정을 읽는 것은 PID 1 하나이고, 결정은 argv로 흘러간다는 구조
 
-- [ ] **Step 2: Commit**
+- [ ] Step 2: Commit
 
 Claude가 수행한다.
 
@@ -1206,11 +1206,11 @@ CP-M0과 CP-M1은 준비한 실패가 하나도 안 났다. 이번은 셸 두 �
 증상: 2차 로그에 `zsh: can't find terminal definition for linux` 같은 줄, 또는
 `giving up on console shell`.
 
-**커널은 PID 1에게 `HOME=/`와 `TERM=linux`를 넘긴다**(`init/main.c`의
-`envp_init`). `init`은 그 envp를 자식에게 그대로 물려주므로 `TERM`은 **이미
-설정돼 있다** — `HANDOFF.md`의 숙제 "TERM이 아무 데도 설정되지 않는다"는
+커널은 PID 1에게 `HOME=/`와 `TERM=linux`를 넘긴다(`init/main.c`의
+`envp_init`). `init`은 그 envp를 자식에게 그대로 물려주므로 `TERM`은 이미
+설정돼 있다 — `HANDOFF.md`의 숙제 "TERM이 아무 데도 설정되지 않는다"는
 정확히는 "우리가 설정하지 않는다"이고, fish가 잘 돌던 이유가 여기 있을 수
-있다. 문제는 terminfo **데이터베이스**가 initrd에 없다는 것이다.
+있다. 문제는 terminfo 데이터베이스가 initrd에 없다는 것이다.
 
 대응(필요할 때만):
 
@@ -1227,7 +1227,7 @@ mkdir -p "$WORKDIR/usr/share/terminfo/l"
 cp "$SYSROOT/usr/share/terminfo/l/linux" "$WORKDIR/usr/share/terminfo/l/"
 ```
 
-**깨지는 것을 보고 나서 넣는다** — design doc이 그렇게 정했고, 안 깨지면
+깨지는 것을 보고 나서 넣는다 — design doc이 그렇게 정했고, 안 깨지면
 불필요한 짐이다.
 
 ### B. `make_initrd.sh`가 SONAME을 찍고 죽는다
@@ -1243,8 +1243,8 @@ Task 2 Step 3에서 다룬다. 설계된 동작이므로 당황하지 말 것 �
 1. `terminal: screen>` 줄이 로그에 있는가 — 없으면 sendkey 이전 문제(DRM/evdev).
 2. 있는데 화면 내용이 안 바뀌는가 — `sendkey` 이름 오타를 의심한다
    (`shift-dot`, `equal`, `slash`, `spc`, `ret`).
-3. 명령줄은 보이는데 `| shell=zsh` 행이 없는가 — **`>` 리다이렉션이 실패한
-   것**이다. `/config`가 읽기 전용으로 붙었을 때가 이 모양이고, 그러면 1차
+3. 명령줄은 보이는데 `| shell=zsh` 행이 없는가 — `>` 리다이렉션이 실패한
+   것이다. `/config`가 읽기 전용으로 붙었을 때가 이 모양이고, 그러면 1차
    로그에 `created`가 나온 것과 모순되므로 그 위를 다시 본다.
 
 ### D. initrd가 커져 BF가 느려진다
@@ -1254,8 +1254,8 @@ Task 6 Step 2에서 숫자로 본다. 대응은 `init`을 `ReleaseSafe`로 빌�
 
 ### E. zsh가 뜨긴 하는데 화면이 이상하다
 
-2차 부팅에서 화면 검사를 하지 않는 것이 의도적이다 — **CP-M2가 증명하려는 것은
-"어느 바이너리를 exec했는가"이지 "그 셸이 예쁘게 그려지는가"가 아니다.** 화면이
+2차 부팅에서 화면 검사를 하지 않는 것이 의도적이다 — CP-M2가 증명하려는 것은
+"어느 바이너리를 exec했는가"이지 "그 셸이 예쁘게 그려지는가"가 아니다. 화면이
 깨져 보인다면 그것은 `TERM`/terminfo 또는 우리 VT의 미구현 시퀀스 문제이고,
 별도 주제로 `HANDOFF.md`에 남긴다.
 
@@ -1263,74 +1263,74 @@ Task 6 Step 2에서 숫자로 본다. 대응은 `init`을 `ReleaseSafe`로 빌�
 
 ## 이번 milestone에서 하지 않는 것
 
-- **nushell.** Debian 아카이브에 없다(design doc 비목표).
-- **게스트 안에서 셸을 고르는 명령·메뉴.** `tars-config shell zsh` 같은 CLI는
+- nushell. Debian 아카이브에 없다(design doc 비목표).
+- 게스트 안에서 셸을 고르는 명령·메뉴. `tars-config shell zsh` 같은 CLI는
   design doc 비목표. 이번 종료점은 "파일을 고치고 재부팅"이다.
-- **게스트 안에서의 재부팅.** PID 1에 시그널 처리가 없다. 게이트는 QEMU를
+- 게스트 안에서의 재부팅. PID 1에 시그널 처리가 없다. 게이트는 QEMU를
   죽였다 다시 띄우는 것으로 대신한다(design doc 비목표).
-- **`parse`의 단위 테스트.** 키가 하나뿐인 상태가 유지되므로 CP-M1의 결정을
+- `parse`의 단위 테스트. 키가 하나뿐인 상태가 유지되므로 CP-M1의 결정을
   그대로 둔다 — "이 저장소에 테스트를 들일 것인가"는 별도 결정.
-- **콘솔 셸에 no-config 플래그 주기.** 터미널 쪽에만 준다. 콘솔은 사용자가 직접
+- 콘솔 셸에 no-config 플래그 주기. 터미널 쪽에만 준다. 콘솔은 사용자가 직접
   쓰는 자리이므로 나중에 설정 파일이 생기면 읽는 편이 맞다.
-- **`/etc/passwd`·`$HOME`·프롬프트 다듬기.** 셸 셋이 뜨기만 하면 이번 목표는
+- `/etc/passwd`·`$HOME`·프롬프트 다듬기. 셸 셋이 뜨기만 하면 이번 목표는
   끝이다.
 
 ---
 
 ## 실제 실행에서 plan과 달라진 점 (2026-08-15 완료)
 
-**다음 세션은 이 절부터 읽을 것.** CP-M2는 `TARS check PASS`(BF 3/3, TF 3/3,
-**CP-M2 3/3**)로 완료됐다. 루트 게이트 전체 **14분 35초**(CP-M1 13분 14초),
+다음 세션은 이 절부터 읽을 것. CP-M2는 `TARS check PASS`(BF 3/3, TF 3/3,
+CP-M2 3/3)로 완료됐다. 루트 게이트 전체 14분 35초(CP-M1 13분 14초),
 부팅 12회.
 
 ### 1. 게이트는 첫 시도에 통과했다 — 막힌 곳은 코드가 아니라 편집이었다
 
 `config/check.sh`를 새로 쓰고 처음 돌린 CP 체인이 바로 PASS였다. "대비해 둔
-실패 갈래" A~E 중 **하나도 발동하지 않았다.** CP-M0·M1에 이어 세 번째다.
+실패 갈래" A~E 중 하나도 발동하지 않았다. CP-M0·M1에 이어 세 번째다.
 
 대신 두 번 막혔는데 둘 다 파일 편집 사고였다.
 
-- **`main.zig`에 `children` 선언이 둘 남았다.** 새 블록을 넣고 옛 다섯 줄을 안
-  지웠다. Zig는 이것을 "unreachable code"가 아니라 **`redeclaration of local
-  variable`**로 막는다 — `supervise`가 `noreturn`이라 옛 블록은 실행될 수 없는
+- `main.zig`에 `children` 선언이 둘 남았다. 새 블록을 넣고 옛 다섯 줄을 안
+  지웠다. Zig는 이것을 "unreachable code"가 아니라 `redeclaration of local
+  variable`로 막는다 — `supervise`가 `noreturn`이라 옛 블록은 실행될 수 없는
   코드인데도, 같은 스코프에 이름이 두 번 나온 것부터 잡는다(섀도잉을 아예
   허용하지 않는 언어).
-- **`config/check.sh` 붙여넣기에서 48줄이 잘렸다.** 긴 줄이 일정 폭에서
-  잘리면서 `if ! kill -0 ...; the`처럼 문법이 깨진 곳과, **`EDIT_KEYS`에서
-  `spc shift-dot spc`가 사라진 곳**이 함께 생겼다. 후자가 특히 위험했다 —
+- `config/check.sh` 붙여넣기에서 48줄이 잘렸다. 긴 줄이 일정 폭에서
+  잘리면서 `if ! kill -0 ...; the`처럼 문법이 깨진 곳과, `EDIT_KEYS`에서
+  `spc shift-dot spc`가 사라진 곳이 함께 생겼다. 후자가 특히 위험했다 —
   문법은 멀쩡한 채 `echo shell=zsh/config/tars.conf`가 타이핑돼서 "왜 파일이
-  안 써지지"로 나타났을 것이다. **100줄이 넘는 파일은 `/tmp`에 원본을 만들어
-  `diff`로 대조한 뒤 복사하는 방식으로 처리했다.** 짧은 편집(Task 1~4)은 직접
+  안 써지지"로 나타났을 것이다. 100줄이 넘는 파일은 `/tmp`에 원본을 만들어
+  `diff`로 대조한 뒤 복사하는 방식으로 처리했다. 짧은 편집(Task 1~4)은 직접
   써도 전부 정확했다.
 
 ### 2. Task 1의 실측이 design doc의 예상 둘을 뒤집었다
 
-위 "Task 1 Step 3 실측 결과" 표 참고. 요약하면 **`/usr/share/zsh`가 17MB**라
-넣지 않기로 했고(없어도 zsh는 조용히 시작한다), **모듈 38개 중 둘**
+위 "Task 1 Step 3 실측 결과" 표 참고. 요약하면 `/usr/share/zsh`가 17MB라
+넣지 않기로 했고(없어도 zsh는 조용히 시작한다), 모듈 38개 중 둘
 (`zsh/curses`, `zsh/db/gdbm`)만 sysroot에 없는 라이브러리를 요구해서 그 둘을
 뺐다. 남은 36개는 그대로 들어간다.
 
 ### 3. terminfo는 필요 없었다 — 그리고 그 이유가 로그에 있다
 
 design doc과 `HANDOFF.md`가 "CP-M2에서 zsh(zle)나 bash(readline)를 띄우면
-`TERM`이 없어 깨질 가능성이 가장 높다"고 예고했지만 **zsh는 멀쩡히 떴고 5초
-관측 창을 살아남았다**(`giving up on console shell` 0회).
+`TERM`이 없어 깨질 가능성이 가장 높다"고 예고했지만 zsh는 멀쩡히 떴고 5초
+관측 창을 살아남았다(`giving up on console shell` 0회).
 
-가설은 이렇다: **커널이 PID 1에게 `HOME=/`와 `TERM=linux`를 넘긴다**
+가설은 이렇다: 커널이 PID 1에게 `HOME=/`와 `TERM=linux`를 넘긴다
 (`init/main.c`의 `envp_init`). `init`은 그 envp를 자식에게 그대로 물려주므로
 `TERM`은 원래부터 설정돼 있었다 — "TERM이 아무 데도 설정되지 않는다"는 숙제는
 정확히는 "우리가 설정하지 않는다"였다. terminfo 데이터베이스가 없어도 zsh는
-줄 편집 기능을 줄일 뿐 죽지 않는다. **터미널 화면에서 zsh를 실제로 써 보기
-전까지는 이 숙제를 완전히 닫지 말 것** — 게이트는 "죽지 않았다"까지만 봤다.
+줄 편집 기능을 줄일 뿐 죽지 않는다. 터미널 화면에서 zsh를 실제로 써 보기
+전까지는 이 숙제를 완전히 닫지 말 것 — 게이트는 "죽지 않았다"까지만 봤다.
 
 ### 4. initrd 크기 주석이 낡아 있었다 (이번 변경과 무관)
 
 `make_initrd.sh`에 "53MB → gzip 11.8MB"라고 적혀 있었는데 이것은 TF-M2 시절
-숫자다. 그 뒤 ZM-M1에서 `init`이 Rust에서 **Zig 디버그 빌드 11.6MB**로 바뀌며
-이미 60MB를 넘어 있었다. CP-M2가 셸 셋을 더한 지금은 **67.6MB → gzip
-15.5MB**이고, 주석을 그 숫자로 갱신했다.
+숫자다. 그 뒤 ZM-M1에서 `init`이 Rust에서 Zig 디버그 빌드 11.6MB로 바뀌며
+이미 60MB를 넘어 있었다. CP-M2가 셸 셋을 더한 지금은 67.6MB → gzip
+15.5MB이고, 주석을 그 숫자로 갱신했다.
 
-**BF 배너 도달 시간은 ~4초로 변하지 않았다.** limine의 BIOS INT13h 경로가
+BF 배너 도달 시간은 ~4초로 변하지 않았다. limine의 BIOS INT13h 경로가
 15.5MB에서는 아직 여유가 있다는 뜻이라, `init`을 `ReleaseSafe`로 바꾸는 카드는
 계속 숙제로 남긴다.
 
@@ -1349,7 +1349,7 @@ design doc과 `HANDOFF.md`가 "CP-M2에서 zsh(zle)나 bash(readline)를 띄우�
 | `giving up on console shell` | 0 | 셸이 죽은 적 없다 |
 | `Attempted to kill init` | 0 | 패닉 없음 |
 
-**9:3 두 쌍이 짝을 이루는 것**이 이 milestone의 증명이다 — 파싱 결과
+9:3 두 쌍이 짝을 이루는 것이 이 milestone의 증명이다 — 파싱 결과
 (`config shell=`)와 실제로 exec된 바이너리(`started console shell (… , …)`)가
 12번의 부팅 전부에서 일치했다.
 
@@ -1361,11 +1361,11 @@ boot 2:  loaded  /config/tars.conf   config shell=zsh    started console shell (
 ```
 
 앞의 여섯 줄(PID 1 시작 + 마운트 다섯)은 완전히 같다. 커널도 initrd도 두
-바이너리도 같은 상태에서 시작했는데 **exec한 프로그램이 갈렸고, 그 차이의
-유일한 원인은 사람이 게스트 안에서 타이핑한 10바이트짜리 줄**이다.
+바이너리도 같은 상태에서 시작했는데 exec한 프로그램이 갈렸고, 그 차이의
+유일한 원인은 사람이 게스트 안에서 타이핑한 10바이트짜리 줄이다.
 
 그 한 줄이 지나온 사슬은 이렇다. `sendkey shift-dot` → i8042 → evdev
 `KEY_DOT`+shift → `input.zig`의 keymap이 `>`로 변환 → PTY → fish가 리다이렉션
 으로 해석 → ext2 write → `MS_SYNCHRONOUS`라 즉시 디스크 → QEMU kill → 2차
-부팅에서 `config.load`가 파싱 → `Shell.path()` → `execve`. **어느 고리가
-끊어져도 이 게이트가 잡는다.**
+부팅에서 `config.load`가 파싱 → `Shell.path()` → `execve`. 어느 고리가
+끊어져도 이 게이트가 잡는다.

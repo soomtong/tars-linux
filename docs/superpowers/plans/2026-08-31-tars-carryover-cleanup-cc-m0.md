@@ -1,8 +1,8 @@
 # CC-M0 — 이월 숙제 셋을 실제로 없앤다
 
-**Date:** 2026-08-31
-**Design:** `docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`
-**Status:** **완료(2026-08-31).** Task 아홉이 전부 계획대로 돌았다. 계획과
+Date: 2026-08-31
+Design: `docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`
+Status: 완료(2026-08-31). Task 아홉이 전부 계획대로 돌았다. 계획과
 다르게 나온 것은 없고, 계획에 없던 것을 하나 알았다 — `PNP_DEBUG_MESSAGES`를
 꺼도 `i8042: PNP:`와 `ttyS0 at I/O` 줄은 그대로 나온다(design 실측 3).
 
@@ -13,10 +13,10 @@
 - `terminal/sanity/`가 없다. 그 도구만 쓰던 `vendor/libghostty-vt/`(98MB)도
   더는 만들어지지 않는다.
 - `terminal/vendor/fonts/Hanme_8x4x4.ttf`가 디스크에서 없어졌다.
-- `HANDOFF.md`의 이월 숙제에서 그 셋이 "끝난 숙제"로 옮겨지고, **`ACPI_EC`를
-  실머신에서 되켠다**는 새 항목이 하나 생긴다.
+- `HANDOFF.md`의 이월 숙제에서 그 셋이 "끝난 숙제"로 옮겨지고, `ACPI_EC`를
+  실머신에서 되켠다는 새 항목이 하나 생긴다.
 
-**편집은 Claude Code가 한다**(design의 "협업 범위의 예외"). 매 편집 뒤
+편집은 Claude Code가 한다(design의 "협업 범위의 예외"). 매 편집 뒤
 `git diff --stat`으로 더한 줄과 지운 줄을 따로 세고, 지우는 편집은
 `git diff | grep '^-'`로 내용을 직접 읽는다.
 
@@ -24,7 +24,7 @@
 
 ## Task 1 — 커널 `.config`에서 두 항목을 끈다
 
-**Files:** `kernel/.config`
+Files: `kernel/.config`
 
 ### Step 1: `ACPI_EC` 두 줄
 
@@ -42,7 +42,7 @@ CONFIG_ACPI_EC=y
 ```
 
 `ACPI_EC_DEBUGFS`가 함께 없어지는 이유는 그 항목이 `depends on ACPI_EC`라
-**심볼 자체가 존재하지 않게 되기** 때문이다(design 위험 2). 남겨 두면
+심볼 자체가 존재하지 않게 되기 때문이다(design 위험 2). 남겨 두면
 `olddefconfig`가 `build/.config`에서 조용히 지우고, 우리 `.config`만 낡은
 줄을 갖게 된다.
 
@@ -86,7 +86,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 Expected: `build/.config`에
 `# CONFIG_ACPI_EC is not set`과 `# CONFIG_PNP_DEBUG_MESSAGES is not set`이
-그대로 있다. **`CONFIG_ACPI_EC=y`가 다시 나타나면 거기서 멈춘다** — 그때는
+그대로 있다. `CONFIG_ACPI_EC=y`가 다시 나타나면 거기서 멈춘다 — 그때는
 `.config`가 아니라 Kconfig의 프롬프트 유무를 다시 봐야 한다.
 
 `build.sh`가 `.config`의 sha256을 스탬프로 쓰므로 이번에는 반드시 진짜로
@@ -96,7 +96,7 @@ Expected: `build/.config`에
 
 ## Task 2 — 새 커널로 부팅해서 검산 2를 본다
 
-**Files:** 없음(실행만)
+Files: 없음(실행만)
 
 ### Step 1: ISO까지 다시 만들고 부팅한다
 
@@ -151,7 +151,7 @@ Expected: `ACPI Error` 0, EC 흔적 0, fish 배너 1 이상.
 
 ## Task 3 — sanity 도구 둘을 지우기 전에 돌려 본다
 
-**Files:** 없음(실행만)
+Files: 없음(실행만)
 
 ### Step 1: `stb_truetype_check`를 컨테이너 native로 빌드해서 돌린다
 
@@ -165,7 +165,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ```
 
 Expected: 종료 코드 0. 이 도구는 `vendor/fonts/unifont.otf`를 상대 경로로 읽으므로
-`cd terminal`이 필요하다. **결과가 이상하면 지우지 않고 멈춘다**(design 결정 4).
+`cd terminal`이 필요하다. 결과가 이상하면 지우지 않고 멈춘다(design 결정 4).
 
 ### Step 2: `libghostty_vt_check`는 빌드만 시도하고 왜 못 도는지 남긴다
 
@@ -182,14 +182,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 ```
 
 Expected: 컨테이너가 `aarch64`, 라이브러리가 `x86-64`. 링크가 되든 안 되든
-**실행할 수 없다**는 것이 이 Step의 결론이고, 그 이유를 로그로 남기는 것이
+실행할 수 없다는 것이 이 Step의 결론이고, 그 이유를 로그로 남기는 것이
 목적이다.
 
 ---
 
 ## Task 4 — sanity 도구와 그 산출물 빌드를 없앤다
 
-**Files:** `terminal/sanity/` (삭제) · `.gitignore` · `terminal/vendor_libghostty_vt.sh` · `check.sh`
+Files: `terminal/sanity/` (삭제) · `.gitignore` · `terminal/vendor_libghostty_vt.sh` · `check.sh`
 
 ### Step 1: 도구 넷을 지운다
 
@@ -266,7 +266,7 @@ Expected: 지워진 줄이 위에 제시한 것과 정확히 같다.
 
 ## Task 5 — 검산 3: 빌드가 vendored 라이브러리를 안 쓴다
 
-**Files:** 없음(실행만)
+Files: 없음(실행만)
 
 ### Step 1: 산출물을 지우고 처음부터 빌드한다
 
@@ -282,13 +282,13 @@ ls terminal/vendor/
 
 Expected: `prepare.sh`가 통과하고 `zig build test`의 세 검사가 전부 초록이다.
 `terminal/vendor/`에 `fonts`와 `stb_truetype.h`만 남고 `libghostty-vt`가 다시
-생기지 않는다. **이것이 "빌드가 그것을 안 쓴다"의 증명이다.**
+생기지 않는다. 이것이 "빌드가 그것을 안 쓴다"의 증명이다.
 
 ---
 
 ## Task 6 — 옛 폰트 파일을 지운다
 
-**Files:** 없음(gitignore 아래)
+Files: 없음(gitignore 아래)
 
 Run:
 ```bash
@@ -298,13 +298,13 @@ ls -l terminal/vendor/fonts/
 ```
 
 Expected: `unifont.otf` 하나만 남는다. `git status`는 아무것도 안 보여 준다 —
-**이 항목의 증거는 커밋이 아니라 이 로그다**(design 결정 6).
+이 항목의 증거는 커밋이 아니라 이 로그다(design 결정 6).
 
 ---
 
 ## Task 7 — 기억을 고친다
 
-**Files:** `docs/decisions/project_kernel_config.md`
+Files: `docs/decisions/project_kernel_config.md`
 
 ### Step 1: `ACPI_EC` 문단을 답으로 바꾼다
 
@@ -351,17 +351,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 ```
 
 Expected: 여덟 체인 3/3. 기준선은 16분 34.78초 · 16분 42.73초 · 16분 42.35초이고
-**시간이 줄어들 것을 기대하지 않는다**(design 결정 7).
+시간이 줄어들 것을 기대하지 않는다(design 결정 7).
 
 ---
 
 ## Task 9 — 마무리
 
 1. design doc의 "CC-M0이 실측한 것" 절을 채운다.
-2. `HANDOFF.md`: 이월 숙제 셋을 "끝난 숙제"로 옮기고, **실머신에서 `ACPI_EC`를
-   되켠다**를 새 항목으로 더한다. "지금 어디인가"와 게이트 현황을 갱신한다.
+2. `HANDOFF.md`: 이월 숙제 셋을 "끝난 숙제"로 옮기고, 실머신에서 `ACPI_EC`를
+   되켠다를 새 항목으로 더한다. "지금 어디인가"와 게이트 현황을 갱신한다.
 3. `docs/decisions/project_carryover_cleanup.md`를 만들고 `MEMORY.md`에 한 줄
    더한다.
 4. `CLAUDE.md`의 완료 서브프로젝트 목록에 Carryover Cleanup을 더한다.
 5. design doc의 `Status:` 줄을 완료로 고친다.
-6. 커밋. **design과 plan을 코드보다 먼저 커밋한다.**
+6. 커밋. design과 plan을 코드보다 먼저 커밋한다.

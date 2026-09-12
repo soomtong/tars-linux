@@ -1,21 +1,21 @@
 # TARS Input Policy IP-M2 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** 이 서브프로젝트를 시작한 **원래 동기**를 채운다. `Option+←/→`로
+Goal: 이 서브프로젝트를 시작한 원래 동기를 채운다. `Option+←/→`로
 단어를 건너뛰고, `Cmd+←/→`로 줄 처음과 끝에 가고, `Option+Backspace`로 단어를
-지운다. 그리고 그 의미론이 **어느 물리 키보드를 쓰는지에 따라 자리를 바꾼다** —
+지운다. 그리고 그 의미론이 어느 물리 키보드를 쓰는지에 따라 자리를 바꾼다 —
 `/config/tars.conf`의 `keyboard=apple|pc` 한 줄이 Alt와 Meta를 맞바꾼다.
 이 milestone이 끝나면 design doc의 목표 다섯이 전부 게이트로 증명된다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
+Design doc: `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
 (결정 4의 나머지 절반, 결정 8·9가 이 milestone의 몫)
 
-**배경 자료:** `docs/study/2026-08-15-keyboard-escape-sequence-crash-course.md`
+배경 자료: `docs/study/2026-08-15-keyboard-escape-sequence-crash-course.md`
 
-**Tech Stack:** Zig 0.16.0, bash readline, QEMU monitor `sendkey`,
+Tech Stack: Zig 0.16.0, bash readline, QEMU monitor `sendkey`,
 `mkfs.ext2 -d`, Docker(`tars-devcontainer`, arm64)
 
 ---
@@ -38,96 +38,96 @@ Task 6   게이트 2차 부팅 — keyboard=pc 디스크          ← swap 증�
 Task 7   루트 게이트 4체인 3/3
 ```
 
-**Task 1이 맨 앞인 이유**는 IP-M2가 `keymap` 배열 **밖의** 코드를 처음으로
+Task 1이 맨 앞인 이유는 IP-M2가 `keymap` 배열 밖의 코드를 처음으로
 정면으로 다루기 때문이다. `KEY_LEFTMETA`는 125이고 `keymap.len`은 58이다.
-지금 그 표의 N번째 칸이 evdev 코드 N이라는 것을 지켜주는 것은 **주석뿐**이고,
-중간에 한 줄이 끼면 뒤가 전부 밀리면서 **컴파일은 통과한다.** 표를 늘리기
+지금 그 표의 N번째 칸이 evdev 코드 N이라는 것을 지켜주는 것은 주석뿐이고,
+중간에 한 줄이 끼면 뒤가 전부 밀리면서 컴파일은 통과한다. 표를 늘리기
 직전이 그 못을 박을 자리다.
 
-**Task 2가 modifier와 dispatch를 한 Task에 묶는 이유**는 관측 가능성이다.
+Task 2가 modifier와 dispatch를 한 Task에 묶는 이유는 관측 가능성이다.
 IP-M1은 "시그니처 넓히기"와 "동작 바꾸기"를 갈랐지만, 여기서 그렇게 나누면
-가른 앞쪽을 **테스트가 볼 방법이 없다.** `KEY_LEFTALT`(56)는 지금도 keymap에
+가른 앞쪽을 테스트가 볼 방법이 없다. `KEY_LEFTALT`(56)는 지금도 keymap에
 `.{ 0, 0 }`이라 `""`를 돌려주고, `KEY_LEFTMETA`(125)는 `keymap.len` 밖이라
-역시 `""`다. modifier 비트만 추가하면 `handleKey`의 반환값이 **한 글자도 안
-바뀐다.** IP-M0가 Alt/Meta 넷을 "관측 가능해지는 시점에 넣는다"며 미룬 이유가
+역시 `""`다. modifier 비트만 추가하면 `handleKey`의 반환값이 한 글자도 안
+바뀐다. IP-M0가 Alt/Meta 넷을 "관측 가능해지는 시점에 넣는다"며 미룬 이유가
 정확히 이것이고, 그 시점이 dispatch 표가 생기는 순간이다.
 
-**Task 3이 Task 2 뒤인 이유**는 반대다. swap은 dispatch가 있어야 관측된다 —
+Task 3이 Task 2 뒤인 이유는 반대다. swap은 dispatch가 있어야 관측된다 —
 `swap_alt_meta=true`에서 `Alt+←`가 `ESC b`가 아니라 `0x01`이 되는 것이
 증거인데, 그 둘이 다 존재해야 비교가 성립한다.
 
-**Task 4가 Task 3 뒤인 이유**는 CP-M2에서 배운 것이다. 설정 경로(파일 → PID 1
-→ argv → terminal)는 네 컴포넌트를 지나므로 **도착지가 이미 동작할 때** 깔아야
+Task 4가 Task 3 뒤인 이유는 CP-M2에서 배운 것이다. 설정 경로(파일 → PID 1
+→ argv → terminal)는 네 컴포넌트를 지나므로 도착지가 이미 동작할 때 깔아야
 실패를 한 곳으로 좁힐 수 있다. Task 3까지 끝나면 `Context.swap_alt_meta = true`가
 무슨 일을 하는지 호스트 테스트가 이미 다 알고 있고, Task 4의 실패는 오직
 "그 true가 도착하지 않았다"뿐이다.
 
-**Task 5와 6을 나누는 이유**는 게이트가 커지기 때문이다. 5는 기존 부팅에
+Task 5와 6을 나누는 이유는 게이트가 커지기 때문이다. 5는 기존 부팅에
 sendkey를 더하는 것이고(빠른 되먹임), 6은 부팅을 하나 더 붙이는 구조 변경이다.
 한 번에 하면 실패했을 때 "타이핑이 틀렸나, 디스크가 안 붙었나"를 못 가른다.
 
 ## 설계에서 조정한 것 둘
 
-**1. IP 체인이 디스크를 문다 — design doc 결정 11의 수정.**
+1. IP 체인이 디스크를 문다 — design doc 결정 11의 수정.
 
 결정 11은 "IP가 증명할 것은 전부 한 세션 안에 있으니 부팅 한 번, 디스크는
-물리지 않는다"고 적었다. 그런데 같은 문서의 **목표 5**는 이렇게 적었다.
+물리지 않는다"고 적었다. 그런데 같은 문서의 목표 5는 이렇게 적었다.
 
-> 5. **키보드 종류를 설정으로 고른다** — `/config/tars.conf`의
+> 5. 키보드 종류를 설정으로 고른다 — `/config/tars.conf`의
 >    `keyboard=apple|pc`가 Alt↔Meta 보정을 켜고 끈다.
 >
-> 그리고 이 다섯이 **게이트로 증명된다**
+> 그리고 이 다섯이 게이트로 증명된다
 
 디스크가 없으면 `/config` mount가 실패하고 `loadConfig`가 기본값을 돌려주므로
-**설정은 영원히 `apple`이다.** `pc` 경로는 게이트가 한 번도 밟지 않는다.
+설정은 영원히 `apple`이다. `pc` 경로는 게이트가 한 번도 밟지 않는다.
 IP-M1의 DECCKM과 정확히 같은 병 — `project_gate_chain_composition`의
-"게이트가 **구조적으로** 밟을 수 없는 경로"다.
+"게이트가 구조적으로 밟을 수 없는 경로"다.
 
 그때의 대응은 "호스트 단위 검사가 대신 본다 + 로그로 어느 쪽이었는지 남긴다"
-였다. 여기서는 그 대응을 쓰지 않는다. **DECCKM은 우리가 켤 수 없는 것(셸이
+였다. 여기서는 그 대응을 쓰지 않는다. DECCKM은 우리가 켤 수 없는 것(셸이
 `smkx`를 보내야 한다)이지만, `keyboard=pc`는 우리가 파일 한 줄로 켤 수 있기
-때문이다.** 켤 수 있는 것을 안 켜고 "게이트가 못 본다"고 적는 것은 게으름이지
+때문이다. 켤 수 있는 것을 안 켜고 "게이트가 못 본다"고 적는 것은 게으름이지
 구조적 한계가 아니다.
 
 비용은 작다. CP처럼 게스트에 타이핑해서 설정을 고칠 필요가 없다 —
-`mkfs.ext2 -d`로 **내용이 이미 든 이미지**를 구우면 2차 부팅은 그냥 읽기만
+`mkfs.ext2 -d`로 내용이 이미 든 이미지를 구우면 2차 부팅은 그냥 읽기만
 한다. 부팅 1회(~4초) + sendkey 25개(~7.5초)다.
 
-디스크 없는 부팅도 **1차로 그대로 남는다.** 결정 11이 "폴백 경로를 덤으로 한 번
+디스크 없는 부팅도 1차로 그대로 남는다. 결정 11이 "폴백 경로를 덤으로 한 번
 더 밟는다"고 적은 그 성질은 1차 부팅이 계속 지킨다.
 
-**2. `Ctrl+←`는 이번에도 안 한다.**
+2. `Ctrl+←`는 이번에도 안 한다.
 
 IP-M1 plan이 `input_test`에 남긴 주석은 "M2의 조합 dispatch가 이 위에 얹히면서
-이 줄이 바뀐다"였다. **바뀌지 않는다.** 결정 8의 표에 있는 것은 Option과 Cmd
+이 줄이 바뀐다"였다. 바뀌지 않는다. 결정 8의 표에 있는 것은 Option과 Cmd
 일곱 줄뿐이고 Ctrl+방향키(`ESC [ 1 ; 5 D`)는 거기 없다. 누를 이유가 있는 앱이
 아직 없고, design doc 비목표의 "게이트가 볼 수 없는 표를 늘리지 않는다"가 그대로
 적용된다.
 
-그래서 Task 2에서 **그 주석을 고친다.** 지금 그대로 두면 다음 세션이 "M2가
+그래서 Task 2에서 그 주석을 고친다. 지금 그대로 두면 다음 세션이 "M2가
 빼먹었나"를 의심하게 된다. `State.seq`가 8바이트인데 이번에도 가장 긴 시퀀스는
 4바이트(`ESC [ 3 ~`)이고, 6바이트는 여전히 미사용으로 남는다.
 
 ## 이번에 정하는 것 셋 (design doc이 안 정한 자리)
 
-**1. 표에 없는 Option/Cmd 조합은 modifier를 무시하고 원래 키를 보낸다.**
+1. 표에 없는 Option/Cmd 조합은 modifier를 무시하고 원래 키를 보낸다.
 
 `Option+b`는 macOS에서 `∫`를 찍고, xterm에서는 `metaSendsEscape`로 `ESC b`가
 된다. 어느 쪽도 이번 범위가 아니다. 기존 Ctrl이 마스크 대상이 아닌 문자
-(`Ctrl+1` → `1`)를 다루는 방식과 **같은 규칙**을 쓴다: 가로챌 것만 가로채고
+(`Ctrl+1` → `1`)를 다루는 방식과 같은 규칙을 쓴다: 가로챌 것만 가로채고
 나머지는 평소대로.
 
 이 규칙이 `Cmd+C`/`Cmd+V`에도 적용된다 — design doc 비목표가 "다른 용도로 쓰지
 않고 비워둔다"고 한 그 자리다. 지금은 `c`/`v`가 찍힌다.
 `project_copy_mode`가 그 자리를 가져갈 때 이 줄들이 바뀐다.
 
-**2. Cmd와 Option이 동시에 눌리면 Cmd가 이긴다.**
+2. Cmd와 Option이 동시에 눌리면 Cmd가 이긴다.
 
-임의의 선택이지만 **결정적**이어야 한다(같은 입력에 늘 같은 출력).
+임의의 선택이지만 결정적이어야 한다(같은 입력에 늘 같은 출력).
 macOS에서도 Cmd가 더 강한 modifier라는 직관과 맞는다. 코드에서는 `chord`가
 Meta를 먼저 보는 것으로 표현되고, 테스트가 그 순서를 못 박는다.
 
-**3. `terminal`은 `keyboard` 값을 파싱하지 않는다 — `"pc"`와 문자열 비교만 한다.**
+3. `terminal`은 `keyboard` 값을 파싱하지 않는다 — `"pc"`와 문자열 비교만 한다.
 
 CP가 정한 "파서는 한 벌"(PID 1만 설정을 읽는다)을 지킨다. `init`이 enum으로
 검증한 뒤 `apple`/`pc` 둘 중 하나만 argv에 넣으므로, `terminal` 쪽에서는
@@ -139,50 +139,50 @@ CP가 정한 "파서는 한 벌"(PID 1만 설정을 읽는다)을 지킨다. `in
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다**
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다
 (`docs/decisions/project_build_host_arch.md`).
 
-**이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 둘이다** —
+이번에 `/tmp` + `cp` + `diff` 경로를 쓰는 파일은 둘이다 —
 `terminal/src/input_test.zig`(Task 1, 전면 치환이라 100줄을 넘는다)와
 `input/check.sh`(Task 6, 부팅 구조가 바뀐다). 나머지는 전부 30~60줄 블록
 교체라 인라인으로 제시한다.
 
-**이미지 재빌드는 필요 없다.** bash는 이미 initrd에 들어간다
+이미지 재빌드는 필요 없다. bash는 이미 initrd에 들어간다
 (`kernel/make_initrd.sh:103`), terminfo도 IP-M1이 넣었다.
 
 ---
 
 ## Task 1: 표를 커널의 이름에 못 박는다
 
-사용자가 IP-M1 때 요청한 검토 셋 중 1번과 3번이다. **동작은 하나도 바뀌지
-않는다.**
+사용자가 IP-M1 때 요청한 검토 셋 중 1번과 3번이다. 동작은 하나도 바뀌지
+않는다.
 
 지금 `terminal/src/input.zig:19-78`의 `keymap`은 "N번째 칸이 evdev 코드 N"이라는
-규약 위에 서 있는데, 그것을 지켜주는 것이 **주석뿐**이다. 중간에 한 줄이 끼면
+규약 위에 서 있는데, 그것을 지켜주는 것이 주석뿐이다. 중간에 한 줄이 끼면
 뒤가 전부 한 칸씩 밀리고, `keymap[30]`이 더 이상 `a`가 아니게 되며,
-**컴파일은 멀쩡히 통과한다.** 주석만 거짓말이 된 채로.
+컴파일은 멀쩡히 통과한다. 주석만 거짓말이 된 채로.
 
-IP-M2는 `KEY_LEFTMETA`(125)처럼 이 표 **밖의** 코드를 처음으로 정면으로
+IP-M2는 `KEY_LEFTMETA`(125)처럼 이 표 밖의 코드를 처음으로 정면으로
 다루므로, 표를 건드리기 직전인 지금이 못을 박을 자리다.
 
 같은 한 단어(`const c` → `pub const c`)가 검토 1번도 연다. `input_test.zig`의
 숫자 리터럴이 숫자인 이유는 `linux/input.h`에 닿을 방법이 없어서였는데,
 `input.zig`가 이미 `@cImport`로 가져와 두고 private으로 잠가 뒀을 뿐이다.
 
-**"테스트가 구현과 같은 출처를 쓰면 독립성을 잃는다"는 반론은 여기서 성립하지
-않는다.** "103이 정말 ←인가"에 답하는 것은 부팅 게이트(QEMU `sendkey left` →
+"테스트가 구현과 같은 출처를 쓰면 독립성을 잃는다"는 반론은 여기서 성립하지
+않는다. "103이 정말 ←인가"에 답하는 것은 부팅 게이트(QEMU `sendkey left` →
 스캔코드 → atkbd → evdev)이고, 단위 검사가 답하는 것은 "`KEY_LEFT`가
 `ESC [ D`가 되는가"다. 두 질문은 서로 다른 층에 있다.
 
-**검토 2번(ASCII 이스케이프 바이트)은 그대로 둔다.** 테스트의 `"\x1b[A"`는
+검토 2번(ASCII 이스케이프 바이트)은 그대로 둔다. 테스트의 `"\x1b[A"`는
 와이어 포맷 자체라 쪼개면 오히려 안 보인다. 구현의 `0x1b`만 `const ESC`로 뺀
 IP-M1의 선이 적정선이다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig:3` (`pub const c`), keymap 뒤에 comptime 블록
 - Rewrite: `terminal/src/input_test.zig` (키코드 리터럴 → 심볼)
 
-- [ ] **Step 1: `c`를 공개한다**
+- [ ] Step 1: `c`를 공개한다
 
 `terminal/src/input.zig:3`의
 
@@ -205,9 +205,9 @@ const c = @cImport({
 pub const c = @cImport({
 ```
 
-- [ ] **Step 2: keymap 뒤에 comptime 앵커를 박는다**
+- [ ] Step 2: keymap 뒤에 comptime 앵커를 박는다
 
-`terminal/src/input.zig:78`의 `};`(keymap 배열 닫는 줄) **바로 뒤에** 넣는다.
+`terminal/src/input.zig:78`의 `};`(keymap 배열 닫는 줄) 바로 뒤에 넣는다.
 
 ```zig
 
@@ -230,10 +230,10 @@ comptime {
 }
 ```
 
-- [ ] **Step 3: 앵커가 실제로 무는지 확인한다 (일부러 깨뜨려 본다)**
+- [ ] Step 3: 앵커가 실제로 무는지 확인한다 (일부러 깨뜨려 본다)
 
-이 Step을 건너뛰지 말 것. **못이 박혔는지 확인하는 유일한 방법은 한 번
-때려보는 것이다.** IP-M0/M1에서 "테스트 먼저 → 실패 확인"이 두 번 잘 통한 것과
+이 Step을 건너뛰지 말 것. 못이 박혔는지 확인하는 유일한 방법은 한 번
+때려보는 것이다. IP-M0/M1에서 "테스트 먼저 → 실패 확인"이 두 번 잘 통한 것과
 같은 이유다.
 
 `terminal/src/input.zig:20`의
@@ -242,7 +242,7 @@ comptime {
     .{ 0, 0 }, //  0: (없음)
 ```
 
-바로 뒤에 한 줄을 **임시로** 끼운다.
+바로 뒤에 한 줄을 임시로 끼운다.
 
 ```zig
     .{ 0, 0 }, // (일부러 끼운 줄 — 다음 Step에서 지운다)
@@ -255,7 +255,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: **컴파일 에러 두 개.**
+기대: 컴파일 에러 두 개.
 
 ```
 error: keymap must end exactly at KEY_SPACE
@@ -263,9 +263,9 @@ error: keymap drifted at KEY_1
 ```
 
 `KEY_ENTER`/`KEY_A`/`KEY_Z` 앵커도 함께 터질 수 있다. 몇 개가 터지든 상관없고,
-**하나라도 안 터지면 앵커가 헐거운 것**이니 알려 달라.
+하나라도 안 터지면 앵커가 헐거운 것이니 알려 달라.
 
-- [ ] **Step 4: 끼운 줄을 지운다**
+- [ ] Step 4: 끼운 줄을 지운다
 
 Step 3에서 넣은 한 줄을 지우고 다시 돌린다.
 
@@ -281,9 +281,9 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-- [ ] **Step 5: `input_test.zig`의 키코드를 이름으로 바꾼다**
+- [ ] Step 5: `input_test.zig`의 키코드를 이름으로 바꾼다
 
-파일 전체에 걸친 치환이라 **`/tmp` 경로를 쓴다**(CP-M2에서 정한 100줄 규칙).
+파일 전체에 걸친 치환이라 `/tmp` 경로를 쓴다(CP-M2에서 정한 100줄 규칙).
 Claude가 `/tmp/input_test.zig`를 만들어 두면 사용자가 이렇게 한다.
 
 ```bash
@@ -308,14 +308,14 @@ try expect(&state, 35, 1, "h");   →   try expect(&state, K.KEY_H, 1, "h");
 try expect(&state, 105, 1, "\x1b[D"); → try expect(&state, K.KEY_LEFT, 1, "\x1b[D");
 ```
 
-**바이트 쪽(`"\x1b[D"`, `"\x03"`)은 한 글자도 안 건드린다.** 거기서는 그것이
+바이트 쪽(`"\x1b[D"`, `"\x03"`)은 한 글자도 안 건드린다. 거기서는 그것이
 와이어 포맷 자체이고, 쪼개는 순간 무슨 바이트가 나가는지 안 보인다(검토 2번).
 
-`try expect(&state, 200, 1, "");`("표에 없는 키코드")의 200은 **숫자로 남긴다.**
+`try expect(&state, 200, 1, "");`("표에 없는 키코드")의 200은 숫자로 남긴다.
 그 줄의 요점이 "이름이 없는 코드"라서 이름을 붙이면 뜻이 사라진다. 주석으로
 `// 이름 없는 코드 — 조용히 무시된다`를 붙인다.
 
-- [ ] **Step 6: 통과 확인**
+- [ ] Step 6: 통과 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -324,13 +324,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 
 기대: `PASS`. 검사 내용이 하나도 안 바뀌었으므로 출력도 IP-M1과 같아야 한다.
 
-**`error: root struct of file 'input' has no member named 'c'`가 나오면**
-Step 1의 `pub`이 안 들어간 것이다. **`error: 'KEY_H' is not a member`가 나오면**
+`error: root struct of file 'input' has no member named 'c'`가 나오면
+Step 1의 `pub`이 안 들어간 것이다. `error: 'KEY_H' is not a member`가 나오면
 컨테이너의 `linux-libc-dev`가 그 상수를 안 준다는 뜻이니 알려 달라 — IP-M1에서
 `KEY_UP`~`KEY_PAGEDOWN` 아홉 개는 전부 들어오는 것을 이미 확인했으므로 그럴
 가능성은 낮다.
 
-- [ ] **Step 7: Commit**
+- [ ] Step 7: Commit
 
 Claude가 수행한다. 커밋 메시지: `Anchor the keymap to the kernel's key names`
 
@@ -338,8 +338,8 @@ Claude가 수행한다. 커밋 메시지: `Anchor the keymap to the kernel's key
 
 ## Task 2: Option과 Cmd가 무슨 뜻인지 가르친다
 
-이 milestone의 본체다. design doc 결정 2가 그린 세 단계 중 **2번(조합
-dispatch)** 이 드디어 채워진다. TF design doc이 "여긴 나중에"라고 비워둔 뒤로
+이 milestone의 본체다. design doc 결정 2가 그린 세 단계 중 2번(조합
+dispatch) 이 드디어 채워진다. TF design doc이 "여긴 나중에"라고 비워둔 뒤로
 두 서브프로젝트를 건너온 자리다.
 
 ```
@@ -351,12 +351,12 @@ evdev fd ──poll──> readKeys ──> handleKey ──┐
                                             └──> []const u8 ──> pty.write
 ```
 
-**2번이 3번보다 먼저여야 한다.** 뒤에 두면 `Cmd+←`가 dispatch에 닿기 전에
+2번이 3번보다 먼저여야 한다. 뒤에 두면 `Cmd+←`가 dispatch에 닿기 전에
 3번에서 그냥 `←`(`ESC [ D`)로 번역돼 새어 나간다. IP-M1이 특수키 조회를
 `keymap` 조회보다 앞에 둔 것과 같은 규칙이고, 이번에는 그 특수키 조회보다도
-**더 앞**에 놓는다.
+더 앞에 놓는다.
 
-**결정 8의 표를 그대로 옮긴다.**
+결정 8의 표를 그대로 옮긴다.
 
 | 조합 | 보내는 바이트 | 길이 | readline에서의 뜻 |
 |---|---|---|---|
@@ -368,21 +368,21 @@ evdev fd ──poll──> readKeys ──> handleKey ──┐
 | Cmd+→ | `0x05` | 1 | end-of-line |
 | Cmd+Backspace | `0x15` | 1 | 줄 앞부분 삭제 |
 
-**길이 칸을 적어둔 이유가 있다.** `main.zig:183`이 매 키마다
-`terminal: key> {d} byte(s)`를 찍는데, 이번 범위에서 **2바이트를 만드는 것은
-Option 조합뿐**이다(맨 방향키는 3, 평문은 1). 그래서 게이트 로그의
+길이 칸을 적어둔 이유가 있다. `main.zig:183`이 매 키마다
+`terminal: key> {d} byte(s)`를 찍는데, 이번 범위에서 2바이트를 만드는 것은
+Option 조합뿐이다(맨 방향키는 3, 평문은 1). 그래서 게이트 로그의
 `2 byte(s)` 한 줄이 "Option 경로를 실제로 밟았다"의 유일무이한 증거가 된다 —
 Task 5가 이것을 쓴다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input_test.zig` (검사 추가, M1 주석 수정)
 - Modify: `terminal/src/input.zig` (modifier 넷, `chord`, `escPrefixed`, `handleKey`)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 추가**
+- [ ] Step 1: 실패하는 검사를 먼저 추가
 
 `terminal/src/input_test.zig`의 "── 아직 안 하는 것을 적어둔다 ──" 블록
 (`:161-179`)을 통째로 이것으로 바꾼다. 그 블록의 절반은 이제 사실이 아니게
-되므로 지우는 것이 아니라 **갱신**이다.
+되므로 지우는 것이 아니라 갱신이다.
 
 ```zig
     // ── modifier가 넷에서 여덟으로 (IP-M2, design doc 결정 4) ────────────
@@ -496,14 +496,14 @@ Task 5가 이것을 쓴다.
 `ckm`은 IP-M1이 만든 `const ckm = input.Context{ .cursor_keys = true };`
 (`:147`)를 그대로 쓴다.
 
-- [ ] **Step 2: 실패하는 것을 확인**
+- [ ] Step 2: 실패하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: 컴파일은 되고 **실행이 실패**한다. 첫 실패는 이것이어야 한다.
+기대: 컴파일은 되고 실행이 실패한다. 첫 실패는 이것이어야 한다.
 
 ```
 FAIL: code=105 value=1 ckm=false -> got={ 27, 91, 68 }, want={ 27, 98 }
@@ -511,16 +511,16 @@ FAIL: code=105 value=1 ckm=false -> got={ 27, 91, 68 }, want={ 27, 98 }
 
 `{27, 91, 68}`이 `ESC [ D`(맨 ←)이고 `{27, 98}`이 `ESC b`다. 지금 Alt는
 modifier로 추적되지도 않고 dispatch 표도 없으니, `Option+←`가 그냥 `←`로
-새어 나간다 — **HANDOFF의 "알아둘 것 4"가 말한 그 누수를 눈으로 보는
-자리다.**
+새어 나간다 — HANDOFF의 "알아둘 것 4"가 말한 그 누수를 눈으로 보는
+자리다.
 
-`code=56`(`KEY_LEFTALT` press)에서 먼저 실패하지 **않는** 것도 확인한다.
+`code=56`(`KEY_LEFTALT` press)에서 먼저 실패하지 않는 것도 확인한다.
 56은 keymap에 `.{ 0, 0 }`이라 이미 `""`를 돌려주기 때문이다 — 그것이 이
 Task에서 modifier와 dispatch를 한데 묶은 이유다.
 
-- [ ] **Step 3: `State`에 modifier 넷을 더한다**
+- [ ] Step 3: `State`에 modifier 넷을 더한다
 
-`terminal/src/input.zig:150-151`의 `ctrl_left`/`ctrl_right` 정의 **뒤에** 넣는다.
+`terminal/src/input.zig:150-151`의 `ctrl_left`/`ctrl_right` 정의 뒤에 넣는다.
 
 ```zig
     // Alt(Option)와 Meta(Cmd). design doc 결정 4의 여덟 중 나머지 넷이고,
@@ -538,7 +538,7 @@ Task에서 modifier와 dispatch를 한데 묶은 이유다.
     meta_right: bool = false,
 ```
 
-그리고 `:161-167`의 `shifted`/`ctrled` **뒤에** 둘을 더한다.
+그리고 `:161-167`의 `shifted`/`ctrled` 뒤에 둘을 더한다.
 
 ```zig
     fn alted(self: State) bool {
@@ -550,9 +550,9 @@ Task에서 modifier와 dispatch를 한데 묶은 이유다.
     }
 ```
 
-- [ ] **Step 4: `escPrefixed`와 `chord`를 추가**
+- [ ] Step 4: `escPrefixed`와 `chord`를 추가
 
-`input.zig`의 `escape` 함수(`:192-210`) **바로 뒤에** 넣는다.
+`input.zig`의 `escape` 함수(`:192-210`) 바로 뒤에 넣는다.
 
 ```zig
     /// `ESC <byte>` 두 바이트. 터미널에서 "Meta+그 글자"를 뜻하는 오래된
@@ -611,10 +611,10 @@ Task에서 modifier와 dispatch를 한데 묶은 이유다.
     }
 ```
 
-- [ ] **Step 5: `handleKey`가 여덟을 추적하고 dispatch를 먼저 본다**
+- [ ] Step 5: `handleKey`가 여덟을 추적하고 dispatch를 먼저 본다
 
 `input.zig:216-234`의 modifier switch에 네 갈래를 더한다.
-`c.KEY_RIGHTCTRL` 갈래 **뒤에**, `else => {}` **앞에** 넣는다.
+`c.KEY_RIGHTCTRL` 갈래 뒤에, `else => {}` 앞에 넣는다.
 
 ```zig
             c.KEY_LEFTALT => {
@@ -635,8 +635,8 @@ Task에서 modifier와 dispatch를 한데 묶은 이유다.
             },
 ```
 
-그리고 `:236`의 `if (value == 0) return none;` **뒤**, `:237`의 특수키 주석
-**앞에** 조합 dispatch를 끼운다.
+그리고 `:236`의 `if (value == 0) return none;` 뒤, `:237`의 특수키 주석
+앞에 조합 dispatch를 끼운다.
 
 ```zig
         // 2번 단계 — 조합 dispatch. 특수키 조회보다 **먼저**다.
@@ -675,7 +675,7 @@ Task에서 modifier와 dispatch를 한데 묶은 이유다.
 
 로. 29번(`KEY_LEFTCTRL`)이 이미 그렇게 적혀 있으니 맞추는 것이다.
 
-- [ ] **Step 6: 통과 확인**
+- [ ] Step 6: 통과 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -686,14 +686,14 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 
 실패하면 구분할 것이 셋이다.
 
-- **`code=105 ... got={27,91,68}, want={27,98}`이 남아 있다** → dispatch가
-  안 불리고 있다. `chord` 호출이 `specialKey` 조회 **뒤에** 들어갔는지 본다.
-- **`code=105 ckm=true`에서 `got={27,79,68}, want={27,98}`** → 같은 원인이
+- `code=105 ... got={27,91,68}, want={27,98}`이 남아 있다 → dispatch가
+  안 불리고 있다. `chord` 호출이 `specialKey` 조회 뒤에 들어갔는지 본다.
+- `code=105 ckm=true`에서 `got={27,79,68}, want={27,98}` → 같은 원인이
   DECCKM 검사에서 드러난 것이다. 순서 문제다.
-- **`code=45`(`KEY_X`) 같은 평범한 글자가 깨진다** → `chord`의 `else => null`이
+- `code=45`(`KEY_X`) 같은 평범한 글자가 깨진다 → `chord`의 `else => null`이
   빠졌거나 `one()`이 seq를 덮어쓰는 순서가 꼬인 것이다.
 
-- [ ] **Step 7: Commit**
+- [ ] Step 7: Commit
 
 Claude가 수행한다. 커밋 메시지: `Teach the terminal what Option and Command mean`
 
@@ -702,7 +702,7 @@ Claude가 수행한다. 커밋 메시지: `Teach the terminal what Option and Co
 ## Task 3: PC 키보드가 Alt와 Meta를 맞바꾼다
 
 design doc 결정 9다. `Context.swap_alt_meta`는 IP-M1에 자리만 만들어 두고
-**아무도 읽지 않는 필드**로 남아 있었다. 여기가 첫 독자다.
+아무도 읽지 않는 필드로 남아 있었다. 여기가 첫 독자다.
 
 ```
 Apple:  [Ctrl] [Option] [Cmd]    [Space]
@@ -711,21 +711,21 @@ PC:     [Ctrl] [Win]   [Alt]     [Space]
          29     125      56
 ```
 
-스페이스 옆 두 키의 **순서가 정확히 뒤집혀** 있다. 그래서 하는 일은
+스페이스 옆 두 키의 순서가 정확히 뒤집혀 있다. 그래서 하는 일은
 "modifier 상태를 기록하기 전에 56↔125, 100↔126을 맞바꾸는 것"뿐이다.
-파이프라인 맨 앞에서 한 번 교환하면 **그 뒤 로직은 어느 키보드인지 전혀 몰라도
-된다** — `chord`도, `keymap`도, `specialKey`도 고칠 것이 없다.
+파이프라인 맨 앞에서 한 번 교환하면 그 뒤 로직은 어느 키보드인지 전혀 몰라도
+된다 — `chord`도, `keymap`도, `specialKey`도 고칠 것이 없다.
 
 이 milestone에서 아직 `true`를 넣어주는 사람은 없다(Task 4가 넣는다). 지금은
 테스트가 유일한 독자다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input_test.zig` (검사 추가)
 - Modify: `terminal/src/input.zig` (`swapAltMeta`, `handleKey` 첫 줄)
 
-- [ ] **Step 1: 실패하는 검사를 먼저 추가**
+- [ ] Step 1: 실패하는 검사를 먼저 추가
 
-Task 2가 넣은 "── 여전히 안 하는 것 ──" 블록 **앞에** 넣는다.
+Task 2가 넣은 "── 여전히 안 하는 것 ──" 블록 앞에 넣는다.
 
 ```zig
     // ── keyboard=pc: Alt와 Meta를 맞바꾼다 (IP-M2, design doc 결정 9) ────
@@ -772,7 +772,7 @@ Task 2가 넣은 "── 여전히 안 하는 것 ──" 블록 **앞에** 넣�
     try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // 아무 modifier도 안 남았다
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인**
+- [ ] Step 2: 실패하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -789,13 +789,13 @@ FAIL: code=105 value=1 ckm=false -> got={ 27, 98 }, want={ 1 }
 `ESC b`(=`{27, 98}`)가 나왔다.
 
 `ckm=false`만 찍히는 것이 아쉬우면 `expectCtx`의 진단 문자열에
-`swap={}`을 덧붙여도 된다. **다만 이번 Task 안에서는 고치지 말고**, 실패를
+`swap={}`을 덧붙여도 된다. 다만 이번 Task 안에서는 고치지 말고, 실패를
 보고 나서 Step 3과 함께 넣는다(진단 출력을 바꾸면 "무엇이 실패였는지"의
 기준이 중간에 달라진다).
 
-- [ ] **Step 3: `swapAltMeta`를 추가하고 `handleKey` 맨 앞에서 부른다**
+- [ ] Step 3: `swapAltMeta`를 추가하고 `handleKey` 맨 앞에서 부른다
 
-`input.zig`의 `specialKey` 함수(`:124-137`) **뒤에** 넣는다.
+`input.zig`의 `specialKey` 함수(`:124-137`) 뒤에 넣는다.
 
 ```zig
 /// PC 키보드 보정(design doc 결정 9). 스페이스 옆 두 키의 순서가 Apple과
@@ -838,7 +838,7 @@ fn swapAltMeta(code: u16) u16 {
         switch (code) {
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [ ] Step 4: 통과 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -847,12 +847,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
 
 기대: `PASS` + 빌드 성공.
 
-**`error: unused function parameter`가 나오면** `raw_code`를 어디서도 안 쓴
+`error: unused function parameter`가 나오면 `raw_code`를 어디서도 안 쓴
 것이 아니라 반대다 — Zig는 안 쓰는 인자를 에러로 낸다는 것을 IP-M1에서 배웠고,
 여기서는 `raw_code`를 `const code` 계산에 쓰므로 걸릴 일이 없다. 그래도 나오면
 `swapAltMeta` 호출이 빠진 것이다.
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 Claude가 수행한다. 커밋 메시지: `Let a PC keyboard swap its Alt and Meta keys`
 
@@ -861,7 +861,7 @@ Claude가 수행한다. 커밋 메시지: `Let a PC keyboard swap its Alt and Me
 ## Task 4: 설정이 코드에 닿는다
 
 `keyboard=pc` 한 줄이 `/config/tars.conf`에서 `Context.swap_alt_meta`까지
-가는 길을 깐다. CP가 깔아둔 길을 **한 글자도 바꾸지 않고** 그대로 쓴다.
+가는 길을 깐다. CP가 깔아둔 길을 한 글자도 바꾸지 않고 그대로 쓴다.
 
 ```
 /config/tars.conf ──읽는 것은 PID 1 하나뿐──> init/src/config.zig
@@ -875,16 +875,16 @@ Claude가 수행한다. 커밋 메시지: `Let a PC keyboard swap its Alt and Me
                                        input.Context{ .swap_alt_meta = ... }
 ```
 
-**`terminal`은 여전히 설정 파일을 읽지 않는다.** CP가 "파서가 두 벌이 되면 두
+`terminal`은 여전히 설정 파일을 읽지 않는다. CP가 "파서가 두 벌이 되면 두
 프로세스가 같은 파일에서 서로 다른 답을 얻을 수 있다"는 이유로 정한 원칙이고,
-**이번이 그 구조가 두 번째 키에도 버티는지 보는 첫 시험이다.** 그래서
+이번이 그 구조가 두 번째 키에도 버티는지 보는 첫 시험이다. 그래서
 `terminal` 쪽에는 enum을 복사하지 않고 `"pc"` 문자열 비교 한 줄만 둔다.
 
-**그리고 여기서 HANDOFF의 오래된 숙제 하나를 닫는다** — `config.zig`의 `parse`에
+그리고 여기서 HANDOFF의 오래된 숙제 하나를 닫는다 — `config.zig`의 `parse`에
 단위 테스트가 없다. 시스템 콜이 하나도 없는 순수 함수인데도 지금은 QEMU를 띄워야
 검증된다. `keyboard` 키가 들어오면서 파서의 분기가 둘이 되는 지금이 그 기회다.
 
-**Files:**
+Files:
 - Modify: `init/src/config.zig` (`Keyboard` enum, `Config`, `parse`, `save`, `pub fn parse`)
 - Create: `init/src/config_test.zig`
 - Modify: `init/build.zig` (host 타깃 + `test` step)
@@ -892,9 +892,9 @@ Claude가 수행한다. 커밋 메시지: `Let a PC keyboard swap its Alt and Me
 - Modify: `terminal/src/main.zig` (`args[3]` 읽기, `Context`에 채우기)
 - Modify: `config/check.sh`, `input/check.sh` (`zig build test` 호출)
 
-- [ ] **Step 1: `Keyboard` enum과 `Config` 필드**
+- [ ] Step 1: `Keyboard` enum과 `Config` 필드
 
-`init/src/config.zig:46`(`Shell` enum 닫는 `};`) **뒤에** 넣는다.
+`init/src/config.zig:46`(`Shell` enum 닫는 `};`) 뒤에 넣는다.
 
 ```zig
 
@@ -936,7 +936,7 @@ pub const Config = struct {
 };
 ```
 
-- [ ] **Step 2: `parse`를 공개하고 `keyboard` 갈래를 더한다**
+- [ ] Step 2: `parse`를 공개하고 `keyboard` 갈래를 더한다
 
 `config.zig:109`의
 
@@ -977,7 +977,7 @@ pub fn parse(text: []const u8) Config {
         } else {
 ```
 
-- [ ] **Step 3: 씨앗 파일에도 keyboard를 적는다**
+- [ ] Step 3: 씨앗 파일에도 keyboard를 적는다
 
 `config.zig:160-165`의 `save` 안 템플릿을 이것으로.
 
@@ -993,16 +993,16 @@ pub fn parse(text: []const u8) Config {
     , .{ @tagName(c.shell), @tagName(c.keyboard) }) catch return error.FormatFailed;
 ```
 
-**여기서 `@tagName`을 쓰는 것은 맞다.** 파일에 적는 것은 널 종료가 필요 없는
+여기서 `@tagName`을 쓰는 것은 맞다. 파일에 적는 것은 널 종료가 필요 없는
 바이트열이고, `arg()`는 execve용이다.
 
 CP 체인이 이 변경에 걸리지 않는지 확인해 둔다. `config/check.sh`가 보는 것은
-1차 부팅에서 사람이 `echo shell=zsh > /config/tars.conf`로 **덮어쓴** 파일의
+1차 부팅에서 사람이 `echo shell=zsh > /config/tars.conf`로 덮어쓴 파일의
 되읽기(`| shell=zsh`)라, 씨앗 파일에 줄이 늘어도 그 검사는 그대로다. 2차
 부팅은 그 덮어쓴 파일(=`shell=zsh` 한 줄)을 읽으므로 keyboard는 기본값 apple로
 떨어진다 — 이것도 정상이다.
 
-- [ ] **Step 4: 파서에 저울을 놓는다**
+- [ ] Step 4: 파서에 저울을 놓는다
 
 `init/src/config_test.zig`를 새로 만든다.
 
@@ -1081,9 +1081,9 @@ pub fn main() !void {
 }
 ```
 
-- [ ] **Step 5: `init/build.zig`에 호스트 타깃을 더한다**
+- [ ] Step 5: `init/build.zig`에 호스트 타깃을 더한다
 
-`init/build.zig:31`의 `b.installArtifact(exe);` **뒤에** 넣는다.
+`init/build.zig:31`의 `b.installArtifact(exe);` 뒤에 넣는다.
 
 ```zig
 
@@ -1117,7 +1117,7 @@ pub fn main() !void {
     test_step.dependOn(&b.addRunArtifact(config_test).step);
 ```
 
-- [ ] **Step 6: 저울이 실제로 도는지 확인**
+- [ ] Step 6: 저울이 실제로 도는지 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/init \
@@ -1130,16 +1130,16 @@ docker run --rm -v "$PWD":/workspace -w /workspace/init \
 PASS
 ```
 
-**여기서 실패하면 그것이 이 Step의 값어치다.** `parse`가 처음으로 QEMU 없이
+여기서 실패하면 그것이 이 Step의 값어치다. `parse`가 처음으로 QEMU 없이
 검증받는 자리이므로, IP-M2 이전부터 있던 버그가 지금 드러날 수 있다.
 실패 줄(`got` / `want`)을 그대로 붙여 달라 — 고칠 곳이 테스트인지 파서인지
 같이 판단한다.
 
-**`error: 'parse' is not marked pub`이 나오면** Step 2가 빠진 것이다.
+`error: 'parse' is not marked pub`이 나오면 Step 2가 빠진 것이다.
 
-- [ ] **Step 7: 두 체인이 이 검사를 돌리게 한다**
+- [ ] Step 7: 두 체인이 이 검사를 돌리게 한다
 
-`config/check.sh:17`의 init 빌드 블록 **뒤에** 넣는다.
+`config/check.sh:17`의 init 빌드 블록 뒤에 넣는다.
 
 ```bash
 
@@ -1153,11 +1153,11 @@ fi
 ```
 
 같은 블록을 `input/check.sh:29`의 init 빌드 뒤에도 넣는다. 두 체인에 같은
-네 줄이 중복되지만, **각 체인이 단독으로 실행 가능해야 한다**는 이 저장소의
+네 줄이 중복되지만, 각 체인이 단독으로 실행 가능해야 한다는 이 저장소의
 설계를 따른 것이다(마커 문자열이 중복되는 것과 같은 이유). IP-M2가
 `keyboard=` 파싱을 더하므로 IP 체인도 자기 회귀를 스스로 잡아야 한다.
 
-- [ ] **Step 8: PID 1이 keyboard를 argv로 흘려보낸다**
+- [ ] Step 8: PID 1이 keyboard를 argv로 흘려보낸다
 
 `init/src/main.zig:179`의
 
@@ -1182,8 +1182,8 @@ fi
     });
 ```
 
-**CP 체인이 `grep "tars-init: config shell=fish"`와 `"...shell=zsh"`를 보는데,
-둘 다 접두사 일치라 그대로 통과한다.** 뒤에 붙는 것이라 안전하다.
+CP 체인이 `grep "tars-init: config shell=fish"`와 `"...shell=zsh"`를 보는데,
+둘 다 접두사 일치라 그대로 통과한다. 뒤에 붙는 것이라 안전하다.
 
 `:325-327` 뒤에 한 줄을 더한다.
 
@@ -1213,7 +1213,7 @@ fi
             .argv = .{ shell_path.ptr, null, null, null },
 ```
 
-- [ ] **Step 9: `terminal`이 그 값을 읽어 `Context`에 채운다**
+- [ ] Step 9: `terminal`이 그 값을 읽어 `Context`에 채운다
 
 `terminal/src/main.zig:119` 뒤(`shell_flag` 정의 뒤)에 넣는다.
 
@@ -1226,7 +1226,7 @@ fi
     const swap_alt_meta = std.mem.eql(u8, std.mem.span(keyboard), "pc");
 ```
 
-그리고 `:144-146`의 spawn 로그 **뒤에** 한 줄을 더한다.
+그리고 `:144-146`의 spawn 로그 뒤에 한 줄을 더한다.
 
 ```zig
     // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
@@ -1249,7 +1249,7 @@ fi
             };
 ```
 
-- [ ] **Step 10: 빌드와 기존 체인 확인**
+- [ ] Step 10: 빌드와 기존 체인 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -1258,7 +1258,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 
 기대: 에러 없이 끝나고 `PASS` 두 번.
 
-이어서 **CP 체인이 안 깨졌는지** 본다. argv 배열의 길이와 init의 로그 형식을
+이어서 CP 체인이 안 깨졌는지 본다. argv 배열의 길이와 init의 로그 형식을
 동시에 바꿨으므로 여기가 가장 위험한 자리다.
 
 ```bash
@@ -1269,13 +1269,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 기대: `PASS`, 그리고 `--- init log (boot 2) ---` 아래에
 `tars-init: config shell=zsh keyboard=apple`이 보인다.
 
-**깨진다면 구분할 것이 둘이다.**
+깨진다면 구분할 것이 둘이다.
 
 - `MISSING tars-init: config shell=` → 로그 형식을 잘못 고쳤다.
 - `terminal: spawned child pid` 이후가 없다 → argv 배열이 잘못됐다.
   `[4:null]`인데 원소를 셋만 넣었거나, sentinel이 빠졌다.
 
-- [ ] **Step 11: Commit**
+- [ ] Step 11: Commit
 
 Claude가 수행한다. 커밋 메시지:
 `Carry the keyboard kind from the config file to the terminal`
@@ -1284,15 +1284,15 @@ Claude가 수행한다. 커밋 메시지:
 
 ## Task 5: 게이트가 bash 프롬프트에서 Option과 Cmd를 증명한다
 
-부팅은 아직 **한 번**이다. IP-M1 게이트가 방향키 검사를 끝낸 그 자리에서
+부팅은 아직 한 번이다. IP-M1 게이트가 방향키 검사를 끝낸 그 자리에서
 이어서 친다.
 
-**bash로 들어가는 이유**는 design doc 위험 2다. 결정 8의 표는 readline과 zle의
+bash로 들어가는 이유는 design doc 위험 2다. 결정 8의 표는 readline과 zle의
 문서로 확실하지만 fish는 자체 에디터라 기본 바인딩이 어긋날 수 있다. `PATH`가
 없으므로 `/usr/bin/bash`로 쳐야 한다(`project_guest_environment`).
 
-**게이트가 헛되게 통과하지 않게 하는 장치를 이번에도 넣는다.** IP-M0의
-`notdead`, IP-M1의 `abcX`와 같은 종류이고, 이번에는 **실패 모양이 둘**이라
+게이트가 헛되게 통과하지 않게 하는 장치를 이번에도 넣는다. IP-M0의
+`notdead`, IP-M1의 `abcX`와 같은 종류이고, 이번에는 실패 모양이 둘이라
 음성 검사도 둘이다.
 
 ```
@@ -1303,11 +1303,11 @@ echo aa bb  치고 → Option+← → X → Enter
   맨 ←가 샜다    → echo aa bXb → 출력 행 "aa bXb"   ← IP-M1의 현재 동작
 ```
 
-세 번째가 특히 중요하다. **IP-M1까지 `Option+←`는 실제로 맨 `←`를 보내고
-있었다**(HANDOFF "알아둘 것 4"). 그 상태와 구분되지 않으면 이 게이트는
+세 번째가 특히 중요하다. IP-M1까지 `Option+←`는 실제로 맨 `←`를 보내고
+있었다(HANDOFF "알아둘 것 4"). 그 상태와 구분되지 않으면 이 게이트는
 아무것도 증명하지 않는다.
 
-**`Cmd+←`는 방향을 뒤집어서 검사한다.** 줄 처음으로 가는 것을 증명하려면
+`Cmd+←`는 방향을 뒤집어서 검사한다. 줄 처음으로 가는 것을 증명하려면
 "줄 처음에 무언가를 끼워 넣고 그것이 명령이 되는 것"을 보는 편이 낫다.
 
 ```
@@ -1318,16 +1318,16 @@ cc dd  치고 → Cmd+← → "echo " 치고 → Enter
 ```
 
 성공 경로가 하나뿐이다. 출력 행의 첫머리가 `cc dd`가 되려면 `echo`가 줄
-**맨 앞**에 들어가는 수밖에 없다.
+맨 앞에 들어가는 수밖에 없다.
 
-**Files:**
+Files:
 - Modify: `input/check.sh` (검사 셋 추가)
 
-- [ ] **Step 1: 방향키 검사 뒤에 bash 진입을 붙인다**
+- [ ] Step 1: 방향키 검사 뒤에 bash 진입을 붙인다
 
 `input/check.sh:274`(`echo "the arrow keys moved the cursor inside the line"`)
-**뒤에** 넣는다. 단, `:261-266`의 monitor 닫기 + QEMU 죽이기 블록을 **아래로
-미뤄야 한다** — 아직 더 칠 것이 있다. `:261-266`을 잘라내서 이 Task가 넣는
+뒤에 넣는다. 단, `:261-266`의 monitor 닫기 + QEMU 죽이기 블록을 아래로
+미뤄야 한다 — 아직 더 칠 것이 있다. `:261-266`을 잘라내서 이 Task가 넣는
 검사들 뒤로 옮긴다.
 
 ```bash
@@ -1435,7 +1435,7 @@ fi
 echo "cmd+left jumped to the beginning of the line"
 ```
 
-그리고 여기 **뒤에** 아까 잘라낸 블록을 붙인다.
+그리고 여기 뒤에 아까 잘라낸 블록을 붙인다.
 
 ```bash
 
@@ -1447,9 +1447,9 @@ wait "$QEMU_PID" 2>/dev/null
 QEMU_PID=""
 ```
 
-- [ ] **Step 2: 1차 부팅이 기본값으로 떴는지도 확인한다**
+- [ ] Step 2: 1차 부팅이 기본값으로 떴는지도 확인한다
 
-`input/check.sh`의 DECCKM 관측 블록(`:276-284`) **뒤에** 넣는다.
+`input/check.sh`의 DECCKM 관측 블록(`:276-284`) 뒤에 넣는다.
 
 ```bash
 
@@ -1470,7 +1470,7 @@ fi
     "terminal: keyboard="; do
 ```
 
-- [ ] **Step 3: IP 체인을 단독으로 돌린다**
+- [ ] Step 3: IP 체인을 단독으로 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -1490,34 +1490,34 @@ cmd+left jumped to the beginning of the line
 DECCKM ...
 ```
 
-**DECCKM 줄을 눈여겨볼 것.** HANDOFF의 "알아둘 것 1"이 적었듯이, bash의
+DECCKM 줄을 눈여겨볼 것. HANDOFF의 "알아둘 것 1"이 적었듯이, bash의
 readline은 fish와 달리 `smkx`를 보낼 수 있다. `DECCKM was on`이 처음으로
-찍히면 design doc 위험 4가 해소된 것이다 — 그 경우 **방향키 검사(6번)는
-여전히 fish 아래에서 돌았으므로 통과하고**, bash로 들어간 뒤의 검사만
+찍히면 design doc 위험 4가 해소된 것이다 — 그 경우 방향키 검사(6번)는
+여전히 fish 아래에서 돌았으므로 통과하고, bash로 들어간 뒤의 검사만
 `ESC O` 지형이 된다. Option/Cmd 조합은 dispatch가 먼저 가로채므로 DECCKM에
 흔들리지 않는다(Task 2의 테스트가 그것을 못 박았다).
 
-**실패하면 구분할 것이 다섯이다.**
+실패하면 구분할 것이 다섯이다.
 
 - `bash never drew a prompt` → 타이핑이 틀렸거나 bash가 initrd에 없다.
   화면 덤프의 명령줄 행을 보면 무엇이 찍혔는지 바로 보인다. `minus`가
   QEMU에서 다른 이름일 가능성도 여기서 드러난다.
-- `alt-left leaked a bare arrow key` → **`chord`가 안 불렸다.** dispatch가
+- `alt-left leaked a bare arrow key` → `chord`가 안 불렸다. dispatch가
   `specialKey` 뒤에 있거나, `KEY_LEFTALT` 갈래가 modifier switch에 안 들어갔다.
   `terminal: key>` 줄의 바이트 수가 3이면 확정이다.
 - `alt-left produced nothing` → Alt는 추적됐는데 `chord`가 null을 돌려줬다.
   `c.KEY_LEFT`를 `c.KEY_LEFTALT`로 잘못 적는 종류의 실수다.
-- `meta_l-left did not reach the start of the line` → **design doc 위험 1이
-  현실이 됐을 가능성이 가장 크다.** QEMU `sendkey meta_l`이 게스트에
+- `meta_l-left did not reach the start of the line` → design doc 위험 1이
+  현실이 됐을 가능성이 가장 크다. QEMU `sendkey meta_l`이 게스트에
   `KEY_LEFTMETA`로 도달하지 않는 것이다. 확인 방법: `terminal: key>` 줄에서
-  그 시점의 바이트 수가 **1**이면 도달한 것이고(0x01을 보냈다), **3**이면
+  그 시점의 바이트 수가 1이면 도달한 것이고(0x01을 보냈다), 3이면
   Meta가 통째로 사라지고 맨 ←만 온 것이다. 후자라면 우회가 있다 — 이 검사를
   Task 6(2차 부팅, `keyboard=pc`)으로 옮기고 `alt-left`로 치면 된다.
   `pc`에서는 물리 Alt가 Cmd 의미를 갖기 때문이다.
 - `the screen looks right but no 2-byte sequence` → 화면은 맞는데 우리가 안
   보냈다는 뜻이다. 셸이 스스로 뭔가 한 것이므로 검사 자체를 다시 봐야 한다.
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다. 커밋 메시지:
 `Prove Option and Command editing at a bash prompt`
@@ -1531,7 +1531,7 @@ design doc 목표 5(`keyboard=apple|pc`가 보정을 켜고 끈다)를 게이트
 밟지 못한다 — 그 이유와 결정 11을 조정한 근거는 이 문서 앞의 "설계에서 조정한
 것"에 적었다.
 
-**2차 부팅의 디스크에는 두 줄이 미리 들어 있다.**
+2차 부팅의 디스크에는 두 줄이 미리 들어 있다.
 
 ```
 shell=bash
@@ -1539,25 +1539,25 @@ keyboard=pc
 ```
 
 `shell=bash`를 함께 심는 이유가 둘이다. (1) PTY 셸이 처음부터 bash라 1차
-부팅처럼 21키를 쳐서 들어갈 필요가 없다. (2) 한 파일에서 **두 키가 함께**
+부팅처럼 21키를 쳐서 들어갈 필요가 없다. (2) 한 파일에서 두 키가 함께
 파싱되는 것이 확인된다 — `config_test`가 호스트에서 보는 것과 같은 조합을
 게스트가 실제로 밟는다.
 
-**검사 둘 다 "1차 부팅과 정반대"라는 모양이다.**
+검사 둘 다 "1차 부팅과 정반대"라는 모양이다.
 
 | | 1차 (apple) | 2차 (pc) |
 |---|---|---|
-| `alt-left` | 단어 이동(`ESC b`) | **줄 처음(`0x01`)** |
-| `meta_l-left` | 줄 처음(`0x01`) | **단어 이동(`ESC b`)** |
+| `alt-left` | 단어 이동(`ESC b`) | 줄 처음(`0x01`) |
+| `meta_l-left` | 줄 처음(`0x01`) | 단어 이동(`ESC b`) |
 
 둘을 다 검사하는 이유는 "swap이 정말 교환인가"를 보기 위해서다. 한쪽만 보면
 "Alt를 Cmd로 바꿨을 뿐 Meta는 그대로"인 구현도 통과한다.
 
-**Files:**
+Files:
 - Create: `input/make_disk.sh`
 - Rewrite: `input/check.sh` (부팅 구조가 바뀐다 — `/tmp` 경로)
 
-- [ ] **Step 1: 내용이 든 디스크를 굽는 스크립트**
+- [ ] Step 1: 내용이 든 디스크를 굽는 스크립트
 
 `input/make_disk.sh`를 새로 만든다.
 
@@ -1610,7 +1610,7 @@ echo "make_disk: created ${IMG} (${SIZE}, ext2, shell=bash keyboard=pc)"
 chmod +x input/make_disk.sh
 ```
 
-- [ ] **Step 2: 디스크가 제대로 구워지는지 먼저 본다**
+- [ ] Step 2: 디스크가 제대로 구워지는지 먼저 본다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/input \
@@ -1625,17 +1625,17 @@ shell=bash
 keyboard=pc
 ```
 
-**`mkfs.ext2: invalid option -- 'd'`가 나오면** 컨테이너의 e2fsprogs가 너무
+`mkfs.ext2: invalid option -- 'd'`가 나오면 컨테이너의 e2fsprogs가 너무
 오래된 것이다(1.43 미만). 그 경우 우회는 CP 방식 — 빈 디스크로 부팅해서
 게스트 안에서 `echo keyboard=pc > /config/tars.conf`를 치고 재부팅하는
 것인데, 부팅이 셋으로 늘어난다. 알려 달라.
 
-**`debugfs`가 없으면** 그 확인만 건너뛴다. 2차 부팅의
+`debugfs`가 없으면 그 확인만 건너뛴다. 2차 부팅의
 `tars-init: loaded /config/tars.conf` 로그가 같은 것을 말해준다.
 
-- [ ] **Step 3: `input/check.sh`를 두 부팅 구조로 바꾼다**
+- [ ] Step 3: `input/check.sh`를 두 부팅 구조로 바꾼다
 
-**`/tmp` 경로를 쓴다.** 부팅 하나를 붙이면서 QEMU 실행 블록을 함수로 뽑고
+`/tmp` 경로를 쓴다. 부팅 하나를 붙이면서 QEMU 실행 블록을 함수로 뽑고
 로그 파일이 둘이 되므로 100줄을 넘는다. Claude가 `/tmp/input_check.sh`를
 만들어 두면 사용자가 이렇게 한다.
 
@@ -1645,11 +1645,11 @@ diff /tmp/input_check.sh input/check.sh && echo "identical"
 chmod +x input/check.sh
 ```
 
-구조 변경은 셋이다. **검사 내용은 한 줄도 바뀌지 않는다.**
+구조 변경은 셋이다. 검사 내용은 한 줄도 바뀌지 않는다.
 
-1. **로그가 둘이 된다.** `LOG1`/`LOG2`를 만들고 `LOG`가 "지금 보고 있는
-   로그"를 가리킨다. `report_failure`를 비롯한 기존 호출부를 **하나도 안
-   고치고** 두 번째 부팅을 붙이는 가장 작은 변경이다.
+1. 로그가 둘이 된다. `LOG1`/`LOG2`를 만들고 `LOG`가 "지금 보고 있는
+   로그"를 가리킨다. `report_failure`를 비롯한 기존 호출부를 하나도 안
+   고치고 두 번째 부팅을 붙이는 가장 작은 변경이다.
 
    ```bash
    LOG1="$(mktemp)"
@@ -1660,7 +1660,7 @@ chmod +x input/check.sh
    LOG="$LOG1"
    ```
 
-2. **QEMU 실행 + 프롬프트 대기 + monitor 연결을 함수로 뽑는다.** 두 부팅이
+2. QEMU 실행 + 프롬프트 대기 + monitor 연결을 함수로 뽑는다. 두 부팅이
    같은 일을 하고 2차만 `-drive`가 붙기 때문이다.
 
    ```bash
@@ -1716,9 +1716,9 @@ chmod +x input/check.sh
    }
    ```
 
-3. **1차 부팅 끝에 `stop_guest`를 부르고, 2차 블록을 붙인다.**
+3. 1차 부팅 끝에 `stop_guest`를 부르고, 2차 블록을 붙인다.
 
-- [ ] **Step 4: 2차 부팅 블록의 내용**
+- [ ] Step 4: 2차 부팅 블록의 내용
 
 1차 부팅의 마지막 검사(`terminal: keyboard=apple`)와 init 로그 출력 뒤에
 붙는다.
@@ -1834,7 +1834,7 @@ grep 'tars-init:' "$LOG" || true
 REPO_ROOT="$(cd .. && pwd)"
 ```
 
-- [ ] **Step 5: IP 체인 단독 실행**
+- [ ] Step 5: IP 체인 단독 실행
 
 ```bash
 time docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -1849,10 +1849,10 @@ on a pc keyboard, alt+left means beginning-of-line
 on a pc keyboard, meta+left means backward-word
 ```
 
-**시간을 기록해 달라.** IP-M1의 이 체인은 단독으로 ~1분대였고, 2차 부팅이
+시간을 기록해 달라. IP-M1의 이 체인은 단독으로 ~1분대였고, 2차 부팅이
 붙으면서 부팅 1회(~4초) + sendkey 25개(~7.5초) + 대기가 는다.
 
-**실패하면 구분할 것이 넷이다.**
+실패하면 구분할 것이 넷이다.
 
 - `did not load /config/tars.conf` → 디스크가 안 붙었다. `-drive` 경로와
   `${REPO_ROOT}/out/input.img`가 실제로 있는지 본다. 커널 로그에 `[vda]`가
@@ -1866,7 +1866,7 @@ on a pc keyboard, meta+left means backward-word
 - `the swap is one-way, not a swap` → `KEY_LEFTMETA → KEY_LEFTALT` 방향만
   빠진 것이다. `swapAltMeta`의 네 갈래를 다시 본다.
 
-- [ ] **Step 6: Commit**
+- [ ] Step 6: Commit
 
 Claude가 수행한다. 커밋 메시지:
 `Boot the gate a second time with a PC keyboard`
@@ -1875,10 +1875,10 @@ Claude가 수행한다. 커밋 메시지:
 
 ## Task 7: 루트 게이트 전체
 
-**Files:**
+Files:
 - Modify: `check.sh:44-62`
 
-- [ ] **Step 1: 체인 이름과 주석을 갱신**
+- [ ] Step 1: 체인 이름과 주석을 갱신
 
 `check.sh:62`의
 
@@ -1909,7 +1909,7 @@ run_chain "IP-M2" ./input/check.sh
 # 이 체인에서 비싼 쪽은 부팅(~4초)이 아니라 타이핑(글자당 0.3초)이다.
 ```
 
-- [ ] **Step 2: 전체 게이트 (오래 걸린다 — 23분 안팎)**
+- [ ] Step 2: 전체 게이트 (오래 걸린다 — 23분 안팎)
 
 ```bash
 time docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -1919,12 +1919,12 @@ time docker run --rm -v "$PWD":/workspace -w /workspace \
 기대: 마지막 줄이
 `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**측정값을 기록해 달라** — IP-M1이 20분 37초였다. 늘어난 분량의 예상 내역은
+측정값을 기록해 달라 — IP-M1이 20분 37초였다. 늘어난 분량의 예상 내역은
 회차당 (부팅 1회 ≈ 4초 + 대기 ≈ 8초 + sendkey 71개 × 0.3초 ≈ 21초) ≈ 33초,
-3회면 ≈ 100초다. **22~23분이면 예상대로이고, 26분을 넘으면 따로 봐야 한다** —
+3회면 ≈ 100초다. 22~23분이면 예상대로이고, 26분을 넘으면 따로 봐야 한다 —
 그 경우 첫 손잡이는 `type_keys`의 `sleep 0.3`이다(design doc 위험 5).
 
-- [ ] **Step 3: Commit + push**
+- [ ] Step 3: Commit + push
 
 Claude가 수행한다. 커밋 메시지: `Retarget the aggregate gate at IP-M2`
 
@@ -1932,35 +1932,35 @@ Claude가 수행한다. 커밋 메시지: `Retarget the aggregate gate at IP-M2`
 
 ## 완료 조건
 
-- [ ] `keymap`이 밀리면 **컴파일이 막힌다**(일부러 깨뜨려 확인했다)
+- [ ] `keymap`이 밀리면 컴파일이 막힌다(일부러 깨뜨려 확인했다)
 - [ ] `input_test`가 evdev 코드를 커널의 이름(`K.KEY_LEFT`)으로 쓴다
 - [ ] modifier 여덟 개가 전부 좌우 독립으로 추적된다
 - [ ] `Option+←/→/BS/Del`이 `ESC b`/`ESC f`/`ESC 0x7F`/`ESC d`를 보낸다
 - [ ] `Cmd+←/→/BS`가 `0x01`/`0x05`/`0x15`를 보낸다
 - [ ] 표에 없는 조합(`Option+b`, `Cmd+C`)은 modifier를 무시하고 원래 키를 보낸다
-- [ ] 조합 dispatch가 특수키 조회보다 **먼저** 온다(DECCKM이 켜져도 `ESC b`)
-- [ ] `swap_alt_meta`가 56↔125, 100↔126을 **양방향으로** 맞바꾼다
+- [ ] 조합 dispatch가 특수키 조회보다 먼저 온다(DECCKM이 켜져도 `ESC b`)
+- [ ] `swap_alt_meta`가 56↔125, 100↔126을 양방향으로 맞바꾼다
 - [ ] `config.zig`에 `Keyboard` enum이 있고 `parse`에 단위 검사가 생겼다
 - [ ] `keyboard=`가 파일 → PID 1 → argv → `Context`까지 흐른다
 - [ ] 게이트가 bash 프롬프트에서 `echo aa bb` → `Option+←` → `X` →
-      `aa Xbb`를 증명하고, `aa bbX`와 **`aa bXb`가 없음**을 함께 확인한다
-- [ ] 게이트가 `keyboard=pc` 디스크로 한 번 더 떠서 같은 물리 키가 **반대로**
+      `aa Xbb`를 증명하고, `aa bbX`와 `aa bXb`가 없음을 함께 확인한다
+- [ ] 게이트가 `keyboard=pc` 디스크로 한 번 더 떠서 같은 물리 키가 반대로
       동작하는 것을 양방향으로 확인한다
 - [ ] 루트 게이트가 4체인 3/3으로 PASS한다
 
 ## 이 milestone이 남기는 것
 
-- **`Ctrl+←`/`Shift+←`가 여전히 맨 `ESC [ D`로 샌다.** design doc 비목표
+- `Ctrl+←`/`Shift+←`가 여전히 맨 `ESC [ D`로 샌다. design doc 비목표
   그대로이고, `State.seq`의 6바이트 자리는 이번에도 안 쓴다. TUI 앱이 생기면
   그때 `ESC [ 1 ; 5 D`를 넣는다.
-- **`Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다.** `project_copy_mode`가 그 자리를
+- `Cmd+C`/`Cmd+V`가 `c`/`v`를 찍는다. `project_copy_mode`가 그 자리를
   가져갈 때 `chord`의 Meta 갈래에 두 줄이 붙는다.
-- **`Option+글자`(`Option+b` 등)는 modifier가 무시된다.** xterm의
+- `Option+글자`(`Option+b` 등)는 modifier가 무시된다. xterm의
   `metaSendsEscape`를 켜는 것과 macOS의 특수문자 입력 중 무엇을 할지는
   키보드 레이아웃(비-US)과 함께 볼 문제다.
-- **시리얼 콘솔 셸은 이 정책을 전혀 안 받는다.** 그쪽 입력은 커널 tty
+- 시리얼 콘솔 셸은 이 정책을 전혀 안 받는다. 그쪽 입력은 커널 tty
   계층이 처리하며 우리 코드를 지나지 않는다(design doc 비목표).
-- **`keyboard`를 게스트 안에서 바꾸는 수단이 여전히 `echo ... > /config/tars.conf`
-  하나다.** `tars-config` 명령은 HANDOFF의 이월 숙제로 남는다.
-- **IP 서브프로젝트가 여기서 끝난다.** design doc의 목표 다섯이 전부 게이트로
+- `keyboard`를 게스트 안에서 바꾸는 수단이 여전히 `echo ... > /config/tars.conf`
+  하나다. `tars-config` 명령은 HANDOFF의 이월 숙제로 남는다.
+- IP 서브프로젝트가 여기서 끝난다. design doc의 목표 다섯이 전부 게이트로
   증명되면 다음 서브프로젝트를 고르는 자리다.

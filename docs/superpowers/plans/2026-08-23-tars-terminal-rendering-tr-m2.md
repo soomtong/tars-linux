@@ -1,20 +1,20 @@
 # TARS Terminal Rendering TR-M2 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 구현 파일 편집은
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 구현 파일 편집은
 > 사용자가 하고, 빌드·QEMU·게이트·조사성 명령은 Claude가 실행하며, Claude는 각
 > Step의 정확한 내용을 제시하고 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는
 > 이 저장소에 적용하지 않는다.
 
-**Goal:** 화면 밖으로 밀려난 줄을 Shift+PageUp으로 다시 볼 수 있다. 스크롤백이
+Goal: 화면 밖으로 밀려난 줄을 Shift+PageUp으로 다시 볼 수 있다. 스크롤백이
 1000줄까지 쌓이고, 스크롤 키가 PTY로 새어 나가지 않으며, Shift+End나 새 출력이
-오면 맨 아래로 돌아온다. 게이트가 **뷰포트 위치와 화면 내용 두 겹으로** 그것을
+오면 맨 아래로 돌아온다. 게이트가 뷰포트 위치와 화면 내용 두 겹으로 그것을
 증명한다.
 
-**Design doc:** `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`
+Design doc: `docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`
 (결정 10~13과 TR-M2 절이 이 milestone의 몫이다. 결정 1~9는 TR-M0·M1에서 끝났다.
 design은 승인되어 있으므로 다시 논의하지 않는다.)
 
-**Tech Stack:** Zig 0.16, libghostty-vt(`PageList` 스크롤백 · `Terminal.scrollViewport`
+Tech Stack: Zig 0.16, libghostty-vt(`PageList` 스크롤백 · `Terminal.scrollViewport`
 · `PageList.scrollbar`), evdev, DRM dumb buffer, QEMU monitor `sendkey`, bash 게이트
 스크립트
 
@@ -22,30 +22,30 @@ design은 승인되어 있으므로 다시 논의하지 않는다.)
 
 ## 착수 전에 이미 확정된 사실 (2026-08-23 실측)
 
-**vendor된 ghostty 소스를 읽고 컨테이너에서 프로브를 돌려 확인한 값들이다.
-다시 조사하지 않는다.** 프로브는 `/tmp/tr_m2_probe.zig`를 `terminal/src/vt_test.zig`
+vendor된 ghostty 소스를 읽고 컨테이너에서 프로브를 돌려 확인한 값들이다.
+다시 조사하지 않는다. 프로브는 `/tmp/tr_m2_probe.zig`를 `terminal/src/vt_test.zig`
 자리에 마운트해 `zig build test`로 돌렸다(저장소는 안 건드린다).
 
 ### 1. `max_scrollback_lines`만 주면 아무 일도 안 일어난다
 
-design 결정 10은 `max_scrollback_lines = 1000`만 말하는데, **바이트 한도가 먼저
-걸려서 그 값이 무시된다.** 155×47 격자에 2000줄을 먹여 실측한 값이다.
+design 결정 10은 `max_scrollback_lines = 1000`만 말하는데, 바이트 한도가 먼저
+걸려서 그 값이 무시된다. 155×47 격자에 2000줄을 먹여 실측한 값이다.
 
 | 설정 | 남은 history | 메모리 |
 |---|---|---|
 | `bytes=10_000, lines=null` (지금) | 454줄 | 0.77MB |
-| `bytes=10_000, lines=1000` | **454줄 (그대로)** | 0.77MB |
-| **`bytes=null, lines=1000`** | **754줄** | **1.15MB** |
+| `bytes=10_000, lines=1000` | 454줄 (그대로) | 0.77MB |
+| `bytes=null, lines=1000` | 754줄 | 1.15MB |
 | `bytes=null, lines=null` | 1954줄 | 2.68MB |
 
 효력 있는 한도는 `max(사용자가 준 값, 활성 영역을 담을 최소값)`이라
 (`PageList.Limits.max`) 10,000바이트는 최소값보다 작아서 처음부터 무시되고 있었다.
 
-**history가 1000이 아니라 754인 것은 정상이다.** 가지치기가 **페이지 통째로**
+history가 1000이 아니라 754인 것은 정상이다. 가지치기가 페이지 통째로
 일어나므로(155칸에서 한 페이지가 약 286줄) 1000을 넘는 순간 한 페이지가 사라져
 754로 떨어진다. 즉 754~1000줄 사이를 오간다.
 
-부수 사실: **지금도 스크롤백은 454줄이 쌓이고 있다.** 없는 것이 아니라 올라가는
+부수 사실: 지금도 스크롤백은 454줄이 쌓이고 있다. 없는 것이 아니라 올라가는
 길이 없을 뿐이다.
 
 ### 2. 스크롤 API는 `Terminal.scrollViewport(behavior)` 하나면 된다
@@ -62,7 +62,7 @@ pub const ScrollViewport = union(Tag) {
 `Terminal.zig:2504`에 있고 `:2541`이 그것을 `screens.active.scroll(...)`로 넘긴다.
 `Screen.scroll`이나 `PageList.Scroll`을 직접 부를 필요가 없다.
 
-> **design doc과 이름이 다르다.** design 결정 12의 표는 `.delta_row`·`.active`라고
+> design doc과 이름이 다르다. design 결정 12의 표는 `.delta_row`·`.active`라고
 > 적었는데 그것은 한 겹 아래인 `PageList.Scroll`의 이름이다. `Terminal` 쪽 이름은
 > `.delta`·`.bottom`이고, 우리가 부르는 것은 이쪽이다.
 
@@ -71,7 +71,7 @@ pub const ScrollViewport = union(Tag) {
 `PageList.zig:3763`이 `{total, offset, len}`을 준다. `total`은 스크롤 가능한 전체
 행 수, `offset`은 뷰포트 맨 윗줄이 그중 몇 번째인가, `len`은 언제나 `rows`다.
 맨 아래에서 `total=501 offset=454 len=47`, 한 화면 올리면 `offset=407`, `.top`이면
-`offset=0`이었다. **즉 "바닥에 있다"는 `offset == total - len`으로 검사한다.**
+`offset=0`이었다. 즉 "바닥에 있다"는 `offset == total - len`으로 검사한다.
 
 닿는 길은 `terminal.screens.active.pages.scrollbar()`다. `ScreenSet.active`가
 `*Screen`이라 포인터를 따로 잡을 필요가 없다(`ScreenSet.zig:28`).
@@ -79,7 +79,7 @@ pub const ScrollViewport = union(Tag) {
 ### 4. `RenderState`가 뷰포트를 따라간다 — `cells()`는 손댈 것이 없다
 
 `update()`가 `pages.getTopLeft(.viewport)`에서 시작한다(`render.zig:362`). 스크롤한
-뒤 `cells()`를 부르면 옛 줄이 그대로 나온다. **커서도 자동으로 사라진다** —
+뒤 `cells()`를 부르면 옛 줄이 그대로 나온다. 커서도 자동으로 사라진다 —
 뷰포트 밖이면 `state.cursor.viewport`가 null이다(실측 확인). design 결정 2가
 예고한 그대로다.
 
@@ -88,18 +88,18 @@ pub const ScrollViewport = union(Tag) {
 올라간 상태에서 3줄을 더 먹여도 화면 첫 줄이 그대로였다. PTY 출력이 도착하는
 자리에서 `scrollViewport(.bottom)`을 우리가 불러야 한다.
 
-부수 효과가 하나 있다: 그렇게 하면 **뷰포트가 history에 머무는 동안 가지치기가
-일어나는 상황이 구조적으로 안 생긴다.** 가지치기는 그 페이지를 가리키던 pin을
+부수 효과가 하나 있다: 그렇게 하면 뷰포트가 history에 머무는 동안 가지치기가
+일어나는 상황이 구조적으로 안 생긴다. 가지치기는 그 페이지를 가리키던 pin을
 `garbage`로 만드는데, 결정 13이 그 창을 닫는다.
 
 ### 6. 렌더 경로를 키 쪽으로도 열어야 한다
 
-지금 `main.zig`의 렌더는 **PTY 출력 분기 안에만** 있다(`main.zig:398-427`).
+지금 `main.zig`의 렌더는 PTY 출력 분기 안에만 있다(`main.zig:398-427`).
 스크롤은 키로 일어나므로 그대로 두면 화면이 안 바뀐다.
 
 ### 7. 게스트에서 47줄 넘게 찍는 방법
 
-게스트에는 `seq` 바이너리가 없지만 **fish가 `seq`를 함수로 갖고 있고**
+게스트에는 `seq` 바이너리가 없지만 fish가 `seq`를 함수로 갖고 있고
 (`/usr/share/fish/functions/seq.fish`, `make_initrd.sh:59`가 디렉터리째 복사한다)
 `PATH` 없이도 동작한다. `seq 200` 한 줄이면 된다.
 
@@ -114,22 +114,22 @@ QEMU monitor의 키 이름은 `pgup`·`pgdn`·`home`·`end`이고 `shift-` 접�
 TR-M0이 `TERM`을 `xterm-256color`로 바꿨는데 `make_initrd.sh:146`은 여전히 `xterm`
 파일 하나만 복사한다. `input/check.sh:73`의 검사가 `*terminfo/x/xterm*` 글로브라
 그대로 통과한다. 컨테이너 sysroot에 `/usr/share/terminfo/x/xterm-256color`(4071B)가
-있는 것을 확인했다 — **고치는 것은 두 줄이다.**
+있는 것을 확인했다 — 고치는 것은 두 줄이다.
 
 ## 저장소 쪽 출발 상태
 
 - `terminal/src/vt.zig:64-73` `Terminal.init`에 `.cols`·`.rows`·`.colors`만 준다.
   스크롤백 한도를 안 주므로 `max_scrollback_bytes`가 기본 10,000이다.
-- `terminal/src/vt.zig` **스크롤 API도 위치 조회도 없다.** `Screen`이 내보내는
+- `terminal/src/vt.zig` 스크롤 API도 위치 조회도 없다. `Screen`이 내보내는
   것은 `feed`·`cells`·`defaultFg`·`defaultBg` 넷뿐이다.
 - `terminal/src/input.zig:343` `handleKey`가 `[]const u8` 하나를 돌려준다.
 - `terminal/src/input.zig:312-338` `chord`가 `?[]const u8`이고 Meta·Alt 두 분기만
-  있다. **Shift는 특수키에 대해 아무 의미가 없다.**
+  있다. Shift는 특수키에 대해 아무 의미가 없다.
 - `terminal/src/input.zig:425` `readKeys`가 `[]const u8`을 돌려준다. 루프 조건이
-  `while (i < count and written < out.len)`이라 **바이트 버퍼가 차면 이벤트 처리
-  자체가 멈춘다.**
+  `while (i < count and written < out.len)`이라 바이트 버퍼가 차면 이벤트 처리
+  자체가 멈춘다.
 - `terminal/src/main.zig:398-427` 렌더·`dumpScreen`·`dumpStyles`·`dumpInk`가 전부
-  PTY 분기 **안**에 있다.
+  PTY 분기 안에 있다.
 - `terminal/src/input_test.zig:20` `expectCtx`가 반환값을 `[]const u8`로 비교한다.
   이 파일의 검사 100여 개가 전부 이 함수를 거친다.
 - `kernel/make_initrd.sh:145-146` terminfo 파일 하나(`xterm`)만 복사한다.
@@ -154,32 +154,32 @@ Task 6  루트 게이트 3/3
 Task 7  문서
 ```
 
-**Task 1과 2가 앞인 이유는 둘 다 부팅 없이 끝나기 때문이다.** 부팅 1.5초(+커널
+Task 1과 2가 앞인 이유는 둘 다 부팅 없이 끝나기 때문이다. 부팅 1.5초(+커널
 빌드 1분 30초)를 쓰기 전에 0.1초로 잡을 수 있는 실패를 먼저 잡는 것은 HD-M2가
 세우고 TR-M0·M1이 이어온 방식이다.
 
-**Task 1이 Task 2보다 앞인 이유는 "스크롤할 것이 있는가"가 "스크롤 키가
-동작하는가"보다 아래층이기 때문이다.** 한도가 안 걸려 있으면 키가 아무리
+Task 1이 Task 2보다 앞인 이유는 "스크롤할 것이 있는가"가 "스크롤 키가
+동작하는가"보다 아래층이기 때문이다. 한도가 안 걸려 있으면 키가 아무리
 정확해도 볼 것이 454줄뿐이고, 그 실패를 키 쪽에서 조사하게 된다.
 
-**Task 3이 `scroll>` 로그까지 한 번에 넣는 이유는 그것이 이 Task의 검증
-도구이기 때문이다.** TR-M1은 렌더링(Task 3)과 로그(Task 4)를 나눴는데, 그때는
+Task 3이 `scroll>` 로그까지 한 번에 넣는 이유는 그것이 이 Task의 검증
+도구이기 때문이다. TR-M1은 렌더링(Task 3)과 로그(Task 4)를 나눴는데, 그때는
 `ink>`가 "렌더러가 이미 동작한 뒤에야 의미가 있는 값"이었다. 여기서는 반대다 —
 `scroll>`이 없으면 Task 3이 잘 됐는지를 볼 방법이 없다.
 
-**Task 5(terminfo)가 Task 4 뒤인 이유는 initrd를 건드리기 때문이다.** 스크롤
+Task 5(terminfo)가 Task 4 뒤인 이유는 initrd를 건드리기 때문이다. 스크롤
 검사가 통과하는 것을 먼저 보고 나서, 부팅 환경을 바꾸는 변경을 얹는다. 순서를
 바꾸면 게이트가 실패했을 때 원인이 둘로 갈린다.
 
 ## 이번에 정하는 것 여섯 (design doc이 안 정한 자리)
 
-**1. `max_scrollback_bytes = null`을 함께 준다.**
+1. `max_scrollback_bytes = null`을 함께 준다.
 
-위 실측 1이 근거다. design 결정 10은 줄 수만 말했고, 그것만으로는 **아무것도
-바뀌지 않는다.** design 결정을 뒤집는 것이 아니라 그 결정이 실제로 효력을 갖게
+위 실측 1이 근거다. design 결정 10은 줄 수만 말했고, 그것만으로는 아무것도
+바뀌지 않는다. design 결정을 뒤집는 것이 아니라 그 결정이 실제로 효력을 갖게
 하는 데 필요한 두 번째 값을 채우는 것이다.
 
-**2. `handleKey`의 반환은 `Action` union이고, 화면 크기는 안 들어간다.**
+2. `handleKey`의 반환은 `Action` union이고, 화면 크기는 안 들어간다.
 
 ```zig
 pub const Scroll = enum { top, bottom, page_up, page_down };
@@ -191,49 +191,49 @@ pub const Action = union(enum) { bytes: []const u8, scroll: Scroll };
 "`input.zig`는 `vt.zig`를 import하지 않는다"로 세운 경계와 같은 것이고, TR-M0이
 색을 `vt.zig`에서 확정해 넘긴 것과도 같은 경계다.
 
-**3. `readKeys`는 스크롤 동작을 배열로 모아 돌려준다. 마지막 하나만 남기지
-않는다.**
+3. `readKeys`는 스크롤 동작을 배열로 모아 돌려준다. 마지막 하나만 남기지
+않는다.
 
-PageUp을 누르고 있으면 자동 반복이 **한 번의 `read`에 여러 개를 실어 온다.**
+PageUp을 누르고 있으면 자동 반복이 한 번의 `read`에 여러 개를 실어 온다.
 마지막 하나만 보면 몇 번을 눌렀든 한 화면만 올라간다. 저장소는 `State.seq`와
 같은 이유로 힙을 안 쓰는 고정 배열(여덟 칸)이다.
 
 같은 이유로 `readKeys`의 루프 조건에서 `written < out.len`을 뺀다. 지금은 바이트
-버퍼가 차면 **이벤트 처리 자체가 멈추는데**, 그러면 뒤따라온 스크롤 키가 통째로
+버퍼가 차면 이벤트 처리 자체가 멈추는데, 그러면 뒤따라온 스크롤 키가 통째로
 사라진다.
 
-**4. 스크롤 키는 Cmd·Option보다 약하다.**
+4. 스크롤 키는 Cmd·Option보다 약하다.
 
 `chord()`의 Meta·Alt 분기는 조합이 표에 없어도 `null`을 돌려주며 `chord` 전체를
-끝낸다. 그래서 Shift 분기를 맨 뒤에 두면 **Cmd+Shift+PageUp은 스크롤하지 않고 맨
-PageUp이 된다.** 임의의 선택이지만 결정적이고, Cmd는 `project_copy_mode`가
+끝낸다. 그래서 Shift 분기를 맨 뒤에 두면 Cmd+Shift+PageUp은 스크롤하지 않고 맨
+PageUp이 된다. 임의의 선택이지만 결정적이고, Cmd는 `project_copy_mode`가
 예약한 자리라 여기서 뜻을 더하지 않는다. 이 성질을 `input_test`가 못 박는다.
 
-**5. `scroll>` 로그는 매 프레임 찍는다.**
+5. `scroll>` 로그는 매 프레임 찍는다.
 
 ```
 terminal: scroll> total=N offset=M len=L
 ```
 
-`font>`처럼 "바뀌었을 때만"으로 하면 게이트가 `tail -n 1`로 **현재** 상태를 읽을
+`font>`처럼 "바뀌었을 때만"으로 하면 게이트가 `tail -n 1`로 현재 상태를 읽을
 수 없어진다. "바닥에 그대로 있다"도 검사해야 하는 사실이라(결정 13), 매번
 찍어야 마지막 줄이 곧 지금이다.
 
-**화면에는 스크롤바를 그리지 않는다.** design의 "비워 두는 자리"가
+화면에는 스크롤바를 그리지 않는다. design의 "비워 두는 자리"가
 "`PageList.scrollbar()`가 값을 주지만 화면에 그리지 않는다. TR-M2에서 로그로만
-찍을지도 그때 정한다"고 남긴 항목이고, **로그로만 찍는 쪽으로 정한다.** 그리려면
+찍을지도 그때 정한다"고 남긴 항목이고, 로그로만 찍는 쪽으로 정한다. 그리려면
 격자 바깥 여백에 픽셀을 칠하는 코드가 새로 필요한데, 그것이 증명하는 것은 이미
 `scroll>`이 증명하고 있다. 눈으로 보는 사람이 생기면 그때 더한다.
 
-**6. 게이트는 `seq 200`을 치고, 위치와 화면 내용을 따로 본다.**
+6. 게이트는 `seq 200`을 치고, 위치와 화면 내용을 따로 본다.
 
 `seq 200`은 8타에 끝나고 fish의 함수라 `PATH`가 비어 있어도 된다(실측 7). 200을
-고른 이유는 **history가 47줄(한 화면)보다 넉넉히 커야** `.top`과 `page_up`이
+고른 이유는 history가 47줄(한 화면)보다 넉넉히 커야 `.top`과 `page_up`이
 서로 다른 자리로 가기 때문이다 — 60줄이면 한 번의 `page_up`이 맨 위에 닿아
 버려서 두 키를 구분할 수 없다. 1000줄 한도에는 한참 못 미치므로 게이트에서
 가지치기가 일어나지 않는다.
 
-화면 내용은 **`| 1 |`이 한 줄 전체와 일치한다**는 성질로 본다. `dumpScreen`이
+화면 내용은 `| 1 |`이 한 줄 전체와 일치한다는 성질로 본다. `dumpScreen`이
 행 사이에 ` | `를 넣으므로 숫자 하나뿐인 줄은 이 형태로만 나타나고, `10`이나
 `21`에는 걸리지 않는다. 첫 행에는 앞쪽 구분자가 없으므로 `screen> 1 |` 형태도
 함께 본다.
@@ -242,18 +242,18 @@ terminal: scroll> total=N offset=M len=L
 
 ## Task 1: `vt.zig`에 스크롤백 한도와 스크롤 API를 넣는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (`init`의 `Terminal.init` 인자, 파일 끝에 메서드 넷)
 - Test: `terminal/src/vt_test.zig`
 
 부팅 없이 끝난다. design 결정 10과 위 "이번에 정하는 것 1".
 
-- [ ] **Step 1: 실패하는 검사를 먼저 쓴다**
+- [ ] Step 1: 실패하는 검사를 먼저 쓴다
 
-`terminal/src/vt_test.zig`의 **맨 위**(`const vt = @import("vt.zig");` 다음 줄)에
+`terminal/src/vt_test.zig`의 맨 위(`const vt = @import("vt.zig");` 다음 줄)에
 헬퍼를 하나 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -274,9 +274,9 @@ fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
 }
 ```
 
-그리고 같은 파일 맨 끝의 `std.debug.print("PASS\n", .{});` **앞에** 아래를 넣는다.
+그리고 같은 파일 맨 끝의 `std.debug.print("PASS\n", .{});` 앞에 아래를 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -422,7 +422,7 @@ fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
     std.debug.print("vt_test: 우리가 부르면 바닥으로 돌아온다 OK\n", .{});
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인한다**
+- [ ] Step 2: 실패하는 것을 확인한다
 
 Claude가 실행한다.
 
@@ -431,15 +431,15 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd terminal && zig build test' 2>&1 | tail -20
 ```
 
-기대: **컴파일 에러.** `vt.Screen`에 `scrollbar`가 없다는 내용이다
+기대: 컴파일 에러. `vt.Screen`에 `scrollbar`가 없다는 내용이다
 (`no field or member function named 'scrollbar' in 'vt.Screen'`). 이것이 옳은
 실패다.
 
-- [ ] **Step 3: `vt.zig`에 한도를 준다**
+- [ ] Step 3: `vt.zig`에 한도를 준다
 
 `terminal/src/vt.zig`의 현재 `:64-73`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
             .term = try .init(io, alloc, .{
@@ -448,7 +448,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
                 .colors = .{
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
             .term = try .init(io, alloc, .{
@@ -473,12 +473,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
                 .colors = .{
 ```
 
-- [ ] **Step 4: `vt.zig`에 스크롤 API를 넣는다**
+- [ ] Step 4: `vt.zig`에 스크롤 API를 넣는다
 
-`terminal/src/vt.zig`의 `defaultBg` 함수 **다음**, `};`(Screen 구조체를 닫는 줄)
-**앞에** 아래를 넣는다.
+`terminal/src/vt.zig`의 `defaultBg` 함수 다음, `};`(Screen 구조체를 닫는 줄)
+앞에 아래를 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -526,7 +526,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
     }
 ```
 
-- [ ] **Step 5: 검사가 통과하는지 본다**
+- [ ] Step 5: 검사가 통과하는지 본다
 
 Claude가 실행한다.
 
@@ -548,17 +548,17 @@ vt_test: 우리가 부르면 바닥으로 돌아온다 OK
 PASS
 ```
 
-**`history`가 454로 나오면 `max_scrollback_bytes = null`이 안 들어간 것이다.**
+`history`가 454로 나오면 `max_scrollback_bytes = null`이 안 들어간 것이다.
 그 값이 이 milestone의 첫 단추다.
 
-**"새 출력은 뷰포트를 안 내린다"에서 실패하면 plan을 멈추고 다시 읽는다.**
+"새 출력은 뷰포트를 안 내린다"에서 실패하면 plan을 멈추고 다시 읽는다.
 라이브러리가 저절로 내려온다는 뜻이고, 그러면 Task 3의 `scrollToBottom()` 호출과
 design 결정 13이 필요 없어진다.
 
 `input_test`와 `font_test`의 기존 출력도 함께 나와야 한다. `main.zig`는 아직
 안 고쳤지만 이 Task는 `main.zig`를 안 건드리므로 `zig build`도 통과한다.
 
-- [ ] **Step 6: 커밋**
+- [ ] Step 6: 커밋
 
 ```bash
 git add terminal/src/vt.zig terminal/src/vt_test.zig
@@ -569,18 +569,18 @@ git commit -m "Give the terminal a scrollback worth scrolling into"
 
 ## Task 2: `handleKey`의 반환을 "바이트열 또는 동작"으로 넓힌다
 
-**Files:**
+Files:
 - Modify: `terminal/src/input.zig` (타입 셋 추가, `State` 필드 하나, `chord`,
   `handleKey`, `readKeys`)
 - Test: `terminal/src/input_test.zig` (헬퍼 둘, 검사 블록 하나)
 
 design 결정 11·12와 위 "이번에 정하는 것 2·3·4". 부팅 없이 끝난다.
 
-- [ ] **Step 1: 실패하는 검사를 먼저 쓴다**
+- [ ] Step 1: 실패하는 검사를 먼저 쓴다
 
 `terminal/src/input_test.zig`의 현재 `:20-34`가 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
 fn expectCtx(
@@ -600,7 +600,7 @@ fn expectCtx(
 }
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 /// TR-M2부터 handleKey는 바이트열이 아니라 `Action`을 돌려준다. 이 파일의
@@ -662,10 +662,10 @@ fn expectScroll(
 }
 ```
 
-그리고 같은 파일의 `// ── 여전히 안 하는 것 ─...` 블록(현재 `:296`) **앞에**
+그리고 같은 파일의 `// ── 여전히 안 하는 것 ─...` 블록(현재 `:296`) 앞에
 아래를 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     // ── Shift 스크롤 (TR-M2, design 결정 11·12) ─────────────────────────
@@ -727,13 +727,13 @@ fn expectScroll(
 마지막으로 그 아래 "여전히 안 하는 것" 블록의 주석 한 줄을 고친다. Shift+방향키는
 그대로지만 Shift+Home/End는 이제 뜻이 생겼기 때문이다.
 
-**지울 것:**
+지울 것:
 
 ```zig
     // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **IP-M2도 하지 않는다.**
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     // Ctrl+방향키(`ESC [ 1 ; 5 D`)와 Shift+방향키는 **TR-M2도 하지 않는다.**
@@ -741,7 +741,7 @@ fn expectScroll(
     // 자체는 여전히 맨 시퀀스로 나간다.
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인한다**
+- [ ] Step 2: 실패하는 것을 확인한다
 
 Claude가 실행한다.
 
@@ -750,16 +750,16 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd terminal && zig build test' 2>&1 | tail -20
 ```
 
-기대: **컴파일 에러.** `input.Scroll`이 없다는 내용이거나(`no member named
+기대: 컴파일 에러. `input.Scroll`이 없다는 내용이거나(`no member named
 'Scroll'`), `handleKey`의 반환값에 `switch`를 걸 수 없다는 내용이다. 이것이 옳은
 실패다.
 
-- [ ] **Step 3: `input.zig`에 타입 셋을 넣는다**
+- [ ] Step 3: `input.zig`에 타입 셋을 넣는다
 
-`terminal/src/input.zig`의 `Context` 구조체가 끝나는 `};`(현재 `:131`) **다음**,
-`/// ESC(0x1b).` 주석 **앞에** 아래를 넣는다.
+`terminal/src/input.zig`의 `Context` 구조체가 끝나는 `};`(현재 `:131`) 다음,
+`/// ESC(0x1b).` 주석 앞에 아래를 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -807,18 +807,18 @@ pub const Keys = struct {
 };
 ```
 
-- [ ] **Step 4: `none` 옆에 `nothing`을 놓고 `State`에 배열을 더한다**
+- [ ] Step 4: `none` 옆에 `nothing`을 놓고 `State`에 배열을 더한다
 
 `terminal/src/input.zig`의 현재 `:190-191`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
 /// "보낼 것이 없다"를 뜻하는 빈 슬라이스. IP-M0 전에는 `null`이 이 자리였다.
 const none: []const u8 = &[_]u8{};
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 /// "보낼 것이 없다"를 뜻하는 빈 슬라이스. IP-M0 전에는 `null`이 이 자리였다.
@@ -828,10 +828,10 @@ const none: []const u8 = &[_]u8{};
 const nothing: Action = .{ .bytes = none };
 ```
 
-그리고 `State`의 `seq` 필드(현재 `:224`) **다음**, `fn shifted` **앞에** 아래를
+그리고 `State`의 `seq` 필드(현재 `:224`) 다음, `fn shifted` 앞에 아래를
 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -844,11 +844,11 @@ const nothing: Action = .{ .bytes = none };
     scrolls: [8]Scroll = undefined,
 ```
 
-- [ ] **Step 5: `chord`에 Shift 분기를 더한다**
+- [ ] Step 5: `chord`에 Shift 분기를 더한다
 
 `terminal/src/input.zig`의 현재 `:312-338`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
     fn chord(self: *State, code: u16) ?[]const u8 {
@@ -880,7 +880,7 @@ const nothing: Action = .{ .bytes = none };
     }
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     fn chord(self: *State, code: u16) ?Action {
@@ -931,12 +931,12 @@ const nothing: Action = .{ .bytes = none };
     }
 ```
 
-- [ ] **Step 6: `handleKey`의 반환 타입을 바꾼다**
+- [ ] Step 6: `handleKey`의 반환 타입을 바꾼다
 
-`terminal/src/input.zig`의 현재 `:340-414`가 이렇다. 바뀌는 것은 **시그니처와
-반환문뿐**이고 로직은 그대로다.
+`terminal/src/input.zig`의 현재 `:340-414`가 이렇다. 바뀌는 것은 시그니처와
+반환문뿐이고 로직은 그대로다.
 
-**지울 것:**
+지울 것:
 
 ```zig
     /// EV_KEY 이벤트 하나를 처리한다.
@@ -945,7 +945,7 @@ const nothing: Action = .{ .bytes = none };
     pub fn handleKey(self: *State, raw_code: u16, value: i32, ctx: Context) []const u8 {
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     /// EV_KEY 이벤트 하나를 처리한다.
@@ -959,7 +959,7 @@ const nothing: Action = .{ .bytes = none };
 
 그리고 같은 함수 안에서 반환문 열둘을 바꾼다.
 
-**지울 것:**
+지울 것:
 
 ```zig
         switch (code) {
@@ -1005,7 +1005,7 @@ const nothing: Action = .{ .bytes = none };
         if (self.chord(code)) |bytes| return bytes;
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
         switch (code) {
@@ -1054,7 +1054,7 @@ const nothing: Action = .{ .bytes = none };
 
 이어서 같은 함수의 나머지 반환문 넷이다.
 
-**지울 것:**
+지울 것:
 
 ```zig
         if (specialKey(code)) |key| return self.escape(key, ctx);
@@ -1073,7 +1073,7 @@ const nothing: Action = .{ .bytes = none };
     }
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
         if (specialKey(code)) |key| return .{ .bytes = self.escape(key, ctx) };
@@ -1092,11 +1092,11 @@ const nothing: Action = .{ .bytes = none };
     }
 ```
 
-- [ ] **Step 7: `readKeys`가 둘 다 돌려준다**
+- [ ] Step 7: `readKeys`가 둘 다 돌려준다
 
 `terminal/src/input.zig`의 현재 `:423-450`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
 /// fd에서 한 번 read하고(poll이 읽을 게 있다고 알려준 뒤에만 호출한다),
@@ -1129,7 +1129,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) []const u8 {
 }
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 /// fd에서 한 번 read하고(poll이 읽을 게 있다고 알려준 뒤에만 호출한다),
@@ -1177,10 +1177,10 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
 }
 ```
 
-- [ ] **Step 8: 검사가 통과하는지 본다**
+- [ ] Step 8: 검사가 통과하는지 본다
 
-Claude가 실행한다. **`main.zig`가 아직 옛 `readKeys` 시그니처를 쓰므로
-`zig build`(게스트 바이너리)는 막힌다.** `test` step은 `main.zig`를 안 만지므로
+Claude가 실행한다. `main.zig`가 아직 옛 `readKeys` 시그니처를 쓰므로
+`zig build`(게스트 바이너리)는 막힌다. `test` step은 `main.zig`를 안 만지므로
 통과한다. Task 3이 그것을 고친다.
 
 ```bash
@@ -1190,10 +1190,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `input_test`가 `PASS`로 끝나고, `vt_test`·`font_test`도 그대로 통과한다.
 
-**여기서 `UnexpectedScroll`이 나오면 `chord`의 Shift 분기가 너무 앞에 있다.**
+여기서 `UnexpectedScroll`이 나오면 `chord`의 Shift 분기가 너무 앞에 있다.
 Meta·Alt 분기보다 뒤여야 한다.
 
-- [ ] **Step 9: 커밋**
+- [ ] Step 9: 커밋
 
 ```bash
 git add terminal/src/input.zig terminal/src/input_test.zig
@@ -1204,19 +1204,19 @@ git commit -m "Let a key mean an action instead of bytes"
 
 ## Task 3: 렌더를 루프 끝으로 빼고 스크롤을 잇는다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` (`dumpInk` 아래에 함수 하나, 루프 변수 하나,
   `while (true)` 블록 전체)
 
-위 실측 5·6과 design 결정 13, "이번에 정하는 것 5". **여기서 스크롤이 처음
-동작한다.**
+위 실측 5·6과 design 결정 13, "이번에 정하는 것 5". 여기서 스크롤이 처음
+동작한다.
 
-- [ ] **Step 1: `dumpScroll`을 더한다**
+- [ ] Step 1: `dumpScroll`을 더한다
 
-`terminal/src/main.zig`의 `dumpInk` 함수가 끝나는 `}`(현재 `:238`) **다음**,
-`pub fn main` **앞에** 아래를 넣는다.
+`terminal/src/main.zig`의 `dumpInk` 함수가 끝나는 `}`(현재 `:238`) 다음,
+`pub fn main` 앞에 아래를 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```zig
 
@@ -1239,18 +1239,18 @@ fn dumpScroll(screen: *vt.Screen) void {
 }
 ```
 
-- [ ] **Step 2: 루프 변수에 `needs_redraw`를 더한다**
+- [ ] Step 2: 루프 변수에 `needs_redraw`를 더한다
 
 `terminal/src/main.zig`의 현재 `:353-356`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```zig
     var last_glyph_count: usize = 0;
     var key_state: input.State = .{};
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     var last_glyph_count: usize = 0;
@@ -1260,12 +1260,12 @@ fn dumpScroll(screen: *vt.Screen) void {
     var key_state: input.State = .{};
 ```
 
-- [ ] **Step 3: 루프 본문을 갈아 끼운다**
+- [ ] Step 3: 루프 본문을 갈아 끼운다
 
 `terminal/src/main.zig`의 현재 `:363-428`(`while (true) {`부터 그것을 닫는 `}`까지)
 전체를 바꾼다.
 
-**지울 것:**
+지울 것:
 
 ```zig
     while (true) {
@@ -1336,7 +1336,7 @@ fn dumpScroll(screen: *vt.Screen) void {
     }
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```zig
     while (true) {
@@ -1444,7 +1444,7 @@ fn dumpScroll(screen: *vt.Screen) void {
     }
 ```
 
-- [ ] **Step 4: 빌드한다**
+- [ ] Step 4: 빌드한다
 
 Claude가 실행한다.
 
@@ -1453,11 +1453,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'cd terminal && zig build && zig build test' 2>&1 | tail -20
 ```
 
-기대: 에러 없이 끝난다. **Task 2가 남겨 둔 옛 시그니처 오류가 여기서 해소된다.**
+기대: 에러 없이 끝난다. Task 2가 남겨 둔 옛 시그니처 오류가 여기서 해소된다.
 
-- [ ] **Step 5: 지금 있는 체인이 여전히 통과하는지 본다**
+- [ ] Step 5: 지금 있는 체인이 여전히 통과하는지 본다
 
-Claude가 실행한다(커널 빌드 포함 약 2분). **이것이 구조 변경의 스모크 테스트다** —
+Claude가 실행한다(커널 빌드 포함 약 2분). 이것이 구조 변경의 스모크 테스트다 —
 `render/check.sh`는 아직 스크롤을 안 치므로, 여기서 보는 것은 "렌더를 루프 끝으로
 뺐는데 색·한글 검사 일곱이 그대로인가"와 "`scroll>`이 찍히는가" 둘이다.
 
@@ -1475,18 +1475,18 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 terminal: scroll> total=47 offset=0 len=47
 ```
 
-**부팅 직후에는 `total`이 `len`과 같고 `offset`이 0이다.** 화면을 채울 만큼
+부팅 직후에는 `total`이 `len`과 같고 `offset`이 0이다. 화면을 채울 만큼
 찍지 않았으므로 밀려난 줄이 없다 — 정상이다. Task 4가 `seq 200`으로 그것을
 바꾼다.
 
-**여기서 색·한글 검사가 깨지면 원인은 하나뿐이다:** 렌더 블록을 옮기면서
-`dumpStyles`/`dumpInk`가 `render()`보다 **앞**으로 갔는지 본다. 그 셋의 순서가
+여기서 색·한글 검사가 깨지면 원인은 하나뿐이다: 렌더 블록을 옮기면서
+`dumpStyles`/`dumpInk`가 `render()`보다 앞으로 갔는지 본다. 그 셋의 순서가
 계약이다(그 전에 부르면 이전 프레임의 픽셀을 읽는다).
 
 `grep`에 `-a`를 반드시 붙인다 — 로그에 NUL이 한 바이트라도 있으면 `grep`이
 파일을 binary로 취급한다(`project_terminal_rendering`).
 
-- [ ] **Step 6: 커밋**
+- [ ] Step 6: 커밋
 
 ```bash
 git add terminal/src/main.zig
@@ -1497,19 +1497,19 @@ git commit -m "Redraw when the viewport moves, not only when output arrives"
 
 ## Task 4: `render/check.sh`에 스크롤 검사를 더한다
 
-**Files:**
+Files:
 - Modify: `render/check.sh` (검사 7 뒤, 음성 검사 앞에 스크롤 절 · `report_failure`의
   마커 목록 · 맨 끝 통과 문구)
 
-**완료선이다.** 사슬 전체를 본다: 셸이 200줄을 뱉고 → libghostty-vt가 밀려난 줄을
+완료선이다. 사슬 전체를 본다: 셸이 200줄을 뱉고 → libghostty-vt가 밀려난 줄을
 간직하고 → 우리가 Shift+PageUp을 가로채고 → 뷰포트가 움직이고 → `cells()`가
 따라가고 → 렌더러가 다시 그린다.
 
-- [ ] **Step 1: `report_failure`가 새 마커도 보게 한다**
+- [ ] Step 1: `report_failure`가 새 마커도 보게 한다
 
 `render/check.sh`의 현재 `:83-89`가 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```bash
   for marker in \
@@ -1521,7 +1521,7 @@ git commit -m "Redraw when the viewport moves, not only when output arrives"
     "terminal: key>"; do
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
   for marker in \
@@ -1534,13 +1534,13 @@ git commit -m "Redraw when the viewport moves, not only when output arrives"
     "terminal: key>"; do
 ```
 
-- [ ] **Step 2: 스크롤 절을 더한다**
+- [ ] Step 2: 스크롤 절을 더한다
 
-`render/check.sh`의 **검사 7이 끝난 뒤**(`echo "the glyph cache is ${FONT_BYTES}
-bytes, well inside the guest's memory"` 다음), **`# ── 음성 검사 ──` 앞에** 아래를
+`render/check.sh`의 검사 7이 끝난 뒤(`echo "the glyph cache is ${FONT_BYTES}
+bytes, well inside the guest's memory"` 다음), `# ── 음성 검사 ──` 앞에 아래를
 넣는다.
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 
@@ -1711,11 +1711,11 @@ type_keys backspace
 sleep 1
 ```
 
-- [ ] **Step 3: 맨 끝의 통과 문구를 고친다**
+- [ ] Step 3: 맨 끝의 통과 문구를 고친다
 
 `render/check.sh`의 현재 `:299-301`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```bash
 echo "--- ink lines ---"
@@ -1723,7 +1723,7 @@ grep -a 'terminal: ink>' "$LOG" | tail -n 10
 echo "TR-M1 PASS: colors reach the framebuffer and Hangul covers both of its cells"
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 echo "--- ink lines ---"
@@ -1733,7 +1733,7 @@ grep -a 'terminal: scroll>' "$LOG" | tail -n 10
 echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, and the viewport scrolls and comes back"
 ```
 
-- [ ] **Step 4: 체인을 돌린다**
+- [ ] Step 4: 체인을 돌린다
 
 Claude가 실행한다(약 2분 30초). TR-M1보다 `sendkey`가 열댓 번 늘어 20초쯤
 더 걸린다.
@@ -1764,18 +1764,18 @@ TR-M2 PASS: ...
 
 막혔을 때 어디를 먼저 보는지는 이렇다.
 
-- **검사 8에서 "only N rows scrolled off"** — `seq 200`이 안 돌았거나 스크롤백
+- 검사 8에서 "only N rows scrolled off" — `seq 200`이 안 돌았거나 스크롤백
   한도가 안 들어갔다. `screen>` 마지막 줄에 숫자가 있는지 먼저 본다. fish의 `seq`
   함수가 없으면 `command not found`가 화면에 남는다.
-- **검사 10에서 offset이 안 움직였다** — `chord`의 Shift 분기까지 못 갔다.
-  QEMU가 `shift-pgup`을 어떻게 보냈는지는 `key>` 줄로 알 수 있다. **스크롤이
-  제대로 가로채였으면 `key>` 줄이 안 나온다** — 나온다면 `ESC [ 5 ~`가 PTY로
+- 검사 10에서 offset이 안 움직였다 — `chord`의 Shift 분기까지 못 갔다.
+  QEMU가 `shift-pgup`을 어떻게 보냈는지는 `key>` 줄로 알 수 있다. 스크롤이
+  제대로 가로채였으면 `key>` 줄이 안 나온다 — 나온다면 `ESC [ 5 ~`가 PTY로
   샌 것이고, `chord`가 `specialKey`보다 뒤에 있다는 뜻이다.
-- **검사 11에서 화면이 그대로다** — `needs_redraw`가 안 걸렸거나 렌더 블록이
+- 검사 11에서 화면이 그대로다 — `needs_redraw`가 안 걸렸거나 렌더 블록이
   아직 PTY 분기 안에 있다.
-- **검사 14에서 안 내려왔다** — `screen.feed(out)` 뒤의 `scrollToBottom()`이 빠졌다.
+- 검사 14에서 안 내려왔다 — `screen.feed(out)` 뒤의 `scrollToBottom()`이 빠졌다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add render/check.sh
@@ -1786,21 +1786,21 @@ git commit -m "Make the gate prove the viewport moves and comes back"
 
 ## Task 5: `xterm-256color` terminfo를 initrd에 넣는다
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh` (terminfo 절)
 - Modify: `input/check.sh` (initrd 목록 검사)
 
-**이월 숙제이고 TR-M2의 주제는 아니지만, 같은 서브프로젝트가 만든 구멍이다.**
+이월 숙제이고 TR-M2의 주제는 아니지만, 같은 서브프로젝트가 만든 구멍이다.
 TR-M0이 `TERM`을 `xterm-256color`로 바꿨는데 initrd에는 `xterm`만 들어 있다.
-그리고 그 사실을 **막았어야 할 검사가 글로브라서 통과시켰다** — 조용한 실패를
+그리고 그 사실을 막았어야 할 검사가 글로브라서 통과시켰다 — 조용한 실패를
 막으려고 만든 검사가 조용히 실패한 자리라, 고치는 것은 두 줄이지만 남겨 둘
 이유가 없다.
 
-- [ ] **Step 1: initrd에 파일을 하나 더 넣는다**
+- [ ] Step 1: initrd에 파일을 하나 더 넣는다
 
 `kernel/make_initrd.sh`의 현재 `:136-146`이 이렇다.
 
-**지울 것:**
+지울 것:
 
 ```bash
 # IP-M1: terminal이 PTY 셸의 TERM을 xterm으로 바꾸므로(design doc 결정 7)
@@ -1816,7 +1816,7 @@ mkdir -p "$WORKDIR/usr/share/terminfo/x"
 cp "$SYSROOT/usr/share/terminfo/x/xterm" "$WORKDIR/usr/share/terminfo/x/xterm"
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
@@ -1842,11 +1842,11 @@ cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
   "$WORKDIR/usr/share/terminfo/x/xterm-256color"
 ```
 
-- [ ] **Step 2: 검사가 정확한 이름을 보게 한다**
+- [ ] Step 2: 검사가 정확한 이름을 보게 한다
 
 `input/check.sh`의 현재 `:63-81`에서 주석과 `case`를 고친다.
 
-**지울 것:**
+지울 것:
 
 ```bash
 # TERM=xterm이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc
@@ -1854,7 +1854,7 @@ cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
 # 부팅해서 알아내는 것보다 여기서 cpio 목록을 보는 편이 싸고 정확하다.
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 # TERM이 진실이려면 그 terminfo가 게스트 안에 있어야 한다(design doc 결정 7).
@@ -1869,7 +1869,7 @@ cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
 
 이어서 `case` 블록이다.
 
-**지울 것:**
+지울 것:
 
 ```bash
 case "$INITRD_LIST" in
@@ -1883,7 +1883,7 @@ case "$INITRD_LIST" in
 esac
 ```
 
-**넣을 것:**
+넣을 것:
 
 ```bash
 # 목록 앞뒤에 줄바꿈을 덧대고 줄 하나를 통째로 맞춘다.
@@ -1901,7 +1901,7 @@ for want in xterm xterm-256color; do
 done
 ```
 
-> **줄 하나를 통째로 맞추는 것이 요점이다.** `*.../xterm*`이면
+> 줄 하나를 통째로 맞추는 것이 요점이다. `*.../xterm*`이면
 > `usr/share/terminfo/x/xterm-256color` 줄에도 걸려서 `xterm`이 없어도 통과한다 —
 > 지금 고치는 것이 바로 그 종류의 느슨함이라, 새 검사가 같은 함정에 빠지지 않게
 > 한다. 앞뒤에 줄바꿈을 덧대는 것은 첫 줄과 마지막 줄을 특별 취급하지 않기
@@ -1909,7 +1909,7 @@ done
 > `grep -q`가 파이프라인 앞단에 SIGPIPE를 일으키고 pipefail이 그것을 실패로
 > 본다.
 
-- [ ] **Step 3: initrd에 정말 들어갔는지 본다**
+- [ ] Step 3: initrd에 정말 들어갔는지 본다
 
 Claude가 실행한다(약 40초). 부팅하지 않고 목록만 본다 — 파일이 들어갔는지는
 cpio 목록이 답한다.
@@ -1930,13 +1930,13 @@ usr/share/terminfo/x/xterm
 usr/share/terminfo/x/xterm-256color
 ```
 
-**`xterm-256color`가 없으면 sysroot에 그 파일이 없는 것이다.** 컨테이너에
+`xterm-256color`가 없으면 sysroot에 그 파일이 없는 것이다. 컨테이너에
 있다는 것은 2026-08-23에 확인했으므로(4071바이트), 없다면 `SYSROOT` 경로를
 의심한다.
 
-- [ ] **Step 4: IP 체인이 통과하는지 본다**
+- [ ] Step 4: IP 체인이 통과하는지 본다
 
-Claude가 실행한다(약 4분). 이 체인은 **부팅을 두 번** 한다.
+Claude가 실행한다(약 4분). 이 체인은 부팅을 두 번 한다.
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -1945,12 +1945,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 기대: `IP-M2 PASS`로 끝난다. terminfo 검사가 두 이름을 다 보고 통과해야 한다.
 
-**여기서 화면 검사가 달라지면 그것이 이 변경의 진짜 결과다.** 셸과 ncurses가
+여기서 화면 검사가 달라지면 그것이 이 변경의 진짜 결과다. 셸과 ncurses가
 이제 256색 terminfo를 읽으므로 프롬프트가 색 시퀀스를 쓰기 시작할 수 있다 —
 TR-M0의 위험 1이 "fish는 실제로 안 쓴다"로 닫혔지만, 그때는 terminfo가 없어서
-셸이 능력을 몰랐다. **즉 위험 1이 여기서 처음으로 진짜로 시험된다.**
+셸이 능력을 몰랐다. 즉 위험 1이 여기서 처음으로 진짜로 시험된다.
 
-- [ ] **Step 5: 커밋**
+- [ ] Step 5: 커밋
 
 ```bash
 git add kernel/make_initrd.sh input/check.sh
@@ -1961,13 +1961,13 @@ git commit -m "Put the terminfo we actually advertise into the initrd"
 
 ## Task 6: 루트 게이트 3/3
 
-**Files:** 없음(실행만 한다)
+Files: 없음(실행만 한다)
 
-- [ ] **Step 1: 일곱 체인을 3회씩 돌린다**
+- [ ] Step 1: 일곱 체인을 3회씩 돌린다
 
-Claude가 실행한다. **약 50분이 걸린다.** 직전 기준선이 46분 33초이고, TR 체인에
-스크롤 명령(약 20초 × 3회)이 더해진다. **Bash 도구의 10분 상한을 넘으므로
-백그라운드로 돌린다.**
+Claude가 실행한다. 약 50분이 걸린다. 직전 기준선이 46분 33초이고, TR 체인에
+스크롤 명령(약 20초 × 3회)이 더해진다. Bash 도구의 10분 상한을 넘으므로
+백그라운드로 돌린다.
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
@@ -1978,17 +1978,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 기대: 일곱 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2)이 전부
 3/3이다.
 
-**가장 그럴듯한 실패 둘을 미리 적어 둔다.**
+가장 그럴듯한 실패 둘을 미리 적어 둔다.
 
-1. **terminfo가 다섯 체인의 화면 검사를 흔든다.** Task 5 Step 4가 IP 체인만
+1. terminfo가 다섯 체인의 화면 검사를 흔든다. Task 5 Step 4가 IP 체인만
    봤다. 셸이 256색 terminfo를 읽고 프롬프트에 색 시퀀스를 쓰기 시작하면
-   `screen>` 줄을 grep하는 검사가 어긋날 수 있다. **터지면 Task 5의 두 줄만
-   되돌리고 나머지를 살린다** — TR-M2의 주제가 아니라 이월 숙제였다.
-2. **렌더 경로 변경이 프레임 수를 바꾼다.** `needs_redraw`를 도입하면서
+   `screen>` 줄을 grep하는 검사가 어긋날 수 있다. 터지면 Task 5의 두 줄만
+   되돌리고 나머지를 살린다 — TR-M2의 주제가 아니라 이월 숙제였다.
+2. 렌더 경로 변경이 프레임 수를 바꾼다. `needs_redraw`를 도입하면서
    modifier 키 이벤트에서 안 그리게 됐다. 화면 내용을 보는 검사는 영향이
    없지만, 특정 시점의 프레임을 기다리는 검사가 있으면 여기서 드러난다.
 
-- [ ] **Step 2: 걸린 시간을 적어 둔다**
+- [ ] Step 2: 걸린 시간을 적어 둔다
 
 Task 7의 문서에 들어간다. `project_terminal_rendering.md`의 표에 한 줄 더한다.
 
@@ -1996,7 +1996,7 @@ Task 7의 문서에 들어간다. `project_terminal_rendering.md`의 표에 한 
 
 ## Task 7: 문서
 
-**Files:**
+Files:
 - Modify: `docs/decisions/project_terminal_rendering.md`
 - Modify: `docs/decisions/project_input_policy.md` (반환 타입이 넓어진 것)
 - Modify: `docs/decisions/project_guest_environment.md` (terminfo 구멍을 닫았다)
@@ -2008,42 +2008,42 @@ Task 7의 문서에 들어간다. `project_terminal_rendering.md`의 표에 한 
 
 Claude가 쓴다. 담을 것은 다음과 같다.
 
-**`project_terminal_rendering.md`에 더할 사실:**
+`project_terminal_rendering.md`에 더할 사실:
 
-- **`max_scrollback_lines`만으로는 아무 일도 안 일어난다**는 것과 그 이유
+- `max_scrollback_lines`만으로는 아무 일도 안 일어난다는 것과 그 이유
   (`PageList.Limits.max`가 바이트 한도를 먼저 적용한다). 실측 표 넷.
-- **가지치기가 페이지 통째로** 일어나므로 history가 754~1000을 오간다는 것.
+- 가지치기가 페이지 통째로 일어나므로 history가 754~1000을 오간다는 것.
 - `Terminal.scrollViewport`의 이름이 `PageList.Scroll`과 다르다는 것
   (`.bottom`/`.delta` 대 `.active`/`.delta_row`).
-- **`RenderState`가 뷰포트를 따라가므로 `cells()`는 손댈 것이 없었다**는 것,
+- `RenderState`가 뷰포트를 따라가므로 `cells()`는 손댈 것이 없었다는 것,
   그리고 커서가 뷰포트 밖에서 저절로 사라진다는 것.
-- **새 출력이 뷰포트를 안 내리는 것은 라이브러리의 성질**이고 결정 13은 우리
+- 새 출력이 뷰포트를 안 내리는 것은 라이브러리의 성질이고 결정 13은 우리
   코드라는 것. 그 한 줄이 가지치기와 pin 무효화의 창까지 닫는다는 것.
-- **렌더가 PTY 분기 안에만 있었다**는 것과 `needs_redraw`로 뺀 것.
+- 렌더가 PTY 분기 안에만 있었다는 것과 `needs_redraw`로 뺀 것.
 - 루트 게이트에 걸린 시간(Task 6 Step 2에서 잰 값).
 
-**`project_input_policy.md`에 더할 사실:**
+`project_input_policy.md`에 더할 사실:
 
 - `handleKey`의 반환이 `[]const u8`에서 `Action` union으로 넓어졌다는 것.
-  IP design 결정 2의 dispatch 단계가 처음으로 **바이트가 아닌 것**을 돌려준다.
+  IP design 결정 2의 dispatch 단계가 처음으로 바이트가 아닌 것을 돌려준다.
 - `readKeys`가 스크롤을 배열로 모으는 이유(자동 반복), 그리고 루프 조건에서
   `written < out.len`을 뺀 이유.
-- Shift 분기가 Meta·Alt보다 뒤라서 **Cmd가 Shift를 이긴다**는 것.
+- Shift 분기가 Meta·Alt보다 뒤라서 Cmd가 Shift를 이긴다는 것.
 - `input.zig`가 여전히 격자 크기를 모른다는 것 — 경계가 유지됐다.
 
-**`project_guest_environment.md`에서 고칠 것:** `xterm-256color`가 없다고 적어
-둔 절을 "TR-M2에서 넣었다"로 바꾸고, **검사가 글로브라 통과했다**는 사실과 그
+`project_guest_environment.md`에서 고칠 것: `xterm-256color`가 없다고 적어
+둔 절을 "TR-M2에서 넣었다"로 바꾸고, 검사가 글로브라 통과했다는 사실과 그
 검사를 어떻게 조였는지를 남긴다.
 
-**`project_copy_mode.md`에서 고칠 것:** 선행 조건 1(스크롤백)과 2(셀별 속성
-렌더링)가 **둘 다 끝났다**는 것. 남은 것은 3(클립보드)뿐이고, `Action` union이
+`project_copy_mode.md`에서 고칠 것: 선행 조건 1(스크롤백)과 2(셀별 속성
+렌더링)가 둘 다 끝났다는 것. 남은 것은 3(클립보드)뿐이고, `Action` union이
 copy mode가 쓸 통로라는 것.
 
-**design doc TR-M2 절에 붙일 결과:** 완료 조건 셋을 만족했는지, 그리고 결정
+design doc TR-M2 절에 붙일 결과: 완료 조건 셋을 만족했는지, 그리고 결정
 10이 값 하나를 빠뜨렸다는 것.
 
-**`HANDOFF.md`에 적을 것:** TR 서브프로젝트가 끝났으므로 **다음 서브프로젝트를
-고르는 것이 다음 일**이라는 것(`project_copy_mode`가 유력 후보이고 남은 선행
+`HANDOFF.md`에 적을 것: TR 서브프로젝트가 끝났으므로 다음 서브프로젝트를
+고르는 것이 다음 일이라는 것(`project_copy_mode`가 유력 후보이고 남은 선행
 조건이 클립보드 하나다), plan에서 어긋난 곳, 이월 숙제(terminfo 항목은 지운다),
 그리고 게이트 현황(일곱 체인 · 새 소요 시간 · `scroll>` 마커).
 
@@ -2054,7 +2054,7 @@ copy mode가 쓸 통로라는 것.
 design의 TR-M2 절이 적어 둔 것 그대로다.
 
 - [ ] 화면보다 많은 줄을 찍고 Shift+PageUp으로 올라가면 밀려난 줄이 보인다 —
-      검사 10·11·12가 **위치와 화면 두 겹으로** 본다.
+      검사 10·11·12가 위치와 화면 두 겹으로 본다.
 - [ ] Shift+End로 맨 아래로 돌아온다 — 검사 13.
 - [ ] 새 출력으로도 맨 아래로 돌아온다 — 검사 14(design 결정 13).
 - [ ] 스크롤 키가 PTY로 새지 않는다 — `input_test`의 `expectScroll`이 호스트에서

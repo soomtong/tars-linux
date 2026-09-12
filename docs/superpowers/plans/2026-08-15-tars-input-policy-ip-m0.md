@@ -1,24 +1,24 @@
 # TARS Input Policy IP-M0 Implementation Plan
 
-> **이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`):** 파일 작성과
+> 이 저장소는 pairing 방식 고정(`CLAUDE.md`, `HANDOFF.md`): 파일 작성과
 > 명령 실행은 사용자가 직접 하고, Claude는 각 Step의 정확한 내용을 제시하고
 > 결과를 해석한다. 다른 저장소용 SUB-SKILL 문구는 이 저장소에 적용하지 않는다.
 
-**Goal:** 키보드 경로의 **바닥을 바꾼다.** `handleKey`가 바이트 하나가 아니라
-**바이트열**을 돌려주게 하고, 그 위에 첫 손님으로 **Ctrl 제어 문자**를
-올린다. 이 milestone이 끝나면 게스트 셸에서 **Ctrl+C가 실제로 프로세스를
-죽인다.** 방향키는 아직 없다(IP-M1).
+Goal: 키보드 경로의 바닥을 바꾼다. `handleKey`가 바이트 하나가 아니라
+바이트열을 돌려주게 하고, 그 위에 첫 손님으로 Ctrl 제어 문자를
+올린다. 이 milestone이 끝나면 게스트 셸에서 Ctrl+C가 실제로 프로세스를
+죽인다. 방향키는 아직 없다(IP-M1).
 
-**Design doc:** `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
+Design doc: `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
 
-**Tech Stack:** Zig 0.16.0(`@cImport(linux/input.h)`, 크로스/네이티브 타깃
+Tech Stack: Zig 0.16.0(`@cImport(linux/input.h)`, 크로스/네이티브 타깃
 분리), bash, QEMU monitor `sendkey`, Docker(`tars-devcontainer`, arm64)
 
 ---
 
 ## 왜 이 순서인가
 
-이 milestone은 **저울을 먼저 놓고** 시작한다.
+이 milestone은 저울을 먼저 놓고 시작한다.
 
 ```
 Task 1   input_test가 컨테이너에서 실제로 돈다        ← 저울 설치
@@ -36,19 +36,19 @@ Task 6   루트 게이트 등록 + 4체인 전체 통과
 
 Task 1이 먼저인 이유는 design doc 결정 10이다. IP는 이 저장소에서 가장 표가
 큰 작업이고(keymap, Ctrl 마스크 예외, 특수키 시퀀스, dispatch), 오타 하나가
-조용히 지나갈 자리가 많다. **부팅 게이트만으로 덮으려면 시간이 감당되지
-않는다.** 그런데 `terminal/build.zig`가 만드는 `input_test`는 x86_64
+조용히 지나갈 자리가 많다. 부팅 게이트만으로 덮으려면 시간이 감당되지
+않는다. 그런데 `terminal/build.zig`가 만드는 `input_test`는 x86_64
 바이너리라 ZM-M3 이후 arm64 컨테이너에서 실행 자체가 불가능하다. 새 기능을
 얹기 전에 얹을 자리에 저울부터 놓는다.
 
 ## design doc과 달라지는 것 하나 (미리 밝혀둠)
 
-design doc 결정 4는 modifier **여덟 개**(Shift/Ctrl/Alt/Meta 각 좌우)를
-추적한다고 적었고, 그것이 이 서브프로젝트의 최종 모습이다. **IP-M0는 그중
-넷(Shift 둘 + Ctrl 둘)만 넣는다.**
+design doc 결정 4는 modifier 여덟 개(Shift/Ctrl/Alt/Meta 각 좌우)를
+추적한다고 적었고, 그것이 이 서브프로젝트의 최종 모습이다. IP-M0는 그중
+넷(Shift 둘 + Ctrl 둘)만 넣는다.
 
 이유는 관측 가능성이다. Alt(56/100)와 Meta(125/126)를 지금 추가해도
-**동작이 하나도 달라지지 않는다** — 56/100은 keymap에서 `.{ 0, 0 }`이라 이미
+동작이 하나도 달라지지 않는다 — 56/100은 keymap에서 `.{ 0, 0 }`이라 이미
 아무것도 안 보내고, 125/126은 `code >= keymap.len`에 걸려 이미 무시된다.
 검증할 수 없는 코드를 미리 넣지 않는다. 넷은 IP-M2에서 dispatch 표와 함께,
 그때 처음으로 관측 가능해지면서 들어온다.
@@ -61,28 +61,28 @@ design doc 결정 4는 modifier **여덟 개**(Shift/Ctrl/Alt/Meta 각 좌우)�
 모든 명령은 저장소 루트(`/Users/dp/Repository/tars-linux`)에서 실행한다.
 `main` 브랜치, working tree 깨끗한 상태에서 시작한다.
 
-**`docker run`/`docker build`에 `--platform`을 붙이지 않는다.** 붙이면 ZM-M3에서
+`docker run`/`docker build`에 `--platform`을 붙이지 않는다. 붙이면 ZM-M3에서
 없앤 에뮬레이션 층이 그대로 돌아온다
 (`docs/decisions/project_build_host_arch.md`).
 
-**100줄이 넘는 파일은 Claude가 `/tmp`에 원본을 만들고 `diff`로 대조한 뒤
-사용자가 `cp`로 제자리에 넣는다**(CP-M2에서 48줄이 잘려 나간 뒤 정한 방식).
+100줄이 넘는 파일은 Claude가 `/tmp`에 원본을 만들고 `diff`로 대조한 뒤
+사용자가 `cp`로 제자리에 넣는다(CP-M2에서 48줄이 잘려 나간 뒤 정한 방식).
 `terminal/src/input.zig`가 여기 해당한다.
 
 ---
 
 ## Task 1: 저울을 먼저 놓는다
 
-`input_test`를 **호스트 아키텍처(arm64)** 로 빌드하고, `zig build test`로
+`input_test`를 호스트 아키텍처(arm64) 로 빌드하고, `zig build test`로
 실행할 수 있게 하고, `terminal/check.sh`가 그것을 실제로 부르게 한다. 이
-Task에서는 `input.zig`를 **한 줄도 고치지 않는다** — 지금 코드가 지금
+Task에서는 `input.zig`를 한 줄도 고치지 않는다 — 지금 코드가 지금
 테스트를 통과한다는 baseline을 확인하는 것이 목적이다.
 
-**Files:**
+Files:
 - Modify: `terminal/build.zig:61-71` (+ 뒤에 step 추가)
 - Modify: `terminal/check.sh:19-22`
 
-- [ ] **Step 1: `terminal/build.zig`의 `input_test` 블록을 교체**
+- [ ] Step 1: `terminal/build.zig`의 `input_test` 블록을 교체
 
 `terminal/build.zig:61-71`의 다음 부분을
 
@@ -142,7 +142,7 @@ Task에서는 `input.zig`를 **한 줄도 고치지 않는다** — 지금 코�
     // 둘 다 지금은 빌드만 되고 아무도 실행하지 않는다는 사실을 여기 적어둔다.
 ```
 
-- [ ] **Step 2: 지금 코드가 지금 테스트를 통과하는지 확인 (baseline)**
+- [ ] Step 2: 지금 코드가 지금 테스트를 통과하는지 확인 (baseline)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -156,19 +156,19 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-`24`가 나오는 것 자체가 확인 하나다 — `@cImport`가 **arm64 컨테이너의**
+`24`가 나오는 것 자체가 확인 하나다 — `@cImport`가 arm64 컨테이너의
 `linux/input.h`에서 읽은 `struct input_event`가 x86_64와 같은 24바이트라는
 뜻이다(`timeval` 16 + type 2 + code 2 + value 4). 두 아키텍처 모두 64비트라
 같다.
 
-**여기서 실패하면 멈추고 알린다.** 예상되는 실패 둘:
+여기서 실패하면 멈추고 알린다. 예상되는 실패 둘:
 - `error: 'linux/input.h' file not found` — 컨테이너에 arm64용
-  `linux-libc-dev`가 없다는 뜻. Dockerfile **위쪽**(컨테이너가 쓰는 도구)에
+  `linux-libc-dev`가 없다는 뜻. Dockerfile 위쪽(컨테이너가 쓰는 도구)에
   추가해야 한다.
 - `b.resolveTargetQuery` 관련 컴파일 에러 — Zig 0.16의 API가 다르다는 뜻.
   `b.graph.host`가 대안이다.
 
-- [ ] **Step 3: `terminal/check.sh`가 이 검사를 실제로 부르게 한다**
+- [ ] Step 3: `terminal/check.sh`가 이 검사를 실제로 부르게 한다
 
 `terminal/check.sh:19-22`의
 
@@ -179,7 +179,7 @@ if ! ./prepare.sh; then
 fi
 ```
 
-바로 **뒤에** 다음을 넣는다.
+바로 뒤에 다음을 넣는다.
 
 ```bash
 # 호스트에서 도는 순수 로직 검사. 부팅보다 먼저 돌린다 — keymap이나 Ctrl
@@ -192,7 +192,7 @@ if ! zig build test; then
 fi
 ```
 
-- [ ] **Step 4: TF 체인이 여전히 통과하는지 확인**
+- [ ] Step 4: TF 체인이 여전히 통과하는지 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -200,9 +200,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 ```
 
 기대: 맨 끝에 `PASS`. 중간에 `input_event size = 24` / `PASS` 줄이 QEMU
-부팅보다 **먼저** 보여야 한다.
+부팅보다 먼저 보여야 한다.
 
-- [ ] **Step 5: Commit**
+- [ ] Step 5: Commit
 
 Claude가 수행한다. 커밋 메시지: `Run the input test on the build host`
 
@@ -210,15 +210,15 @@ Claude가 수행한다. 커밋 메시지: `Run the input test on the build host`
 
 ## Task 2: `handleKey`가 바이트열을 돌려주게 한다
 
-이 Task는 **동작을 하나도 바꾸지 않는다.** 표현할 수 있는 것만 넓힌다.
+이 Task는 동작을 하나도 바꾸지 않는다. 표현할 수 있는 것만 넓힌다.
 테스트를 먼저 새 시그니처로 바꿔서 컴파일이 깨지는 것을 확인한 뒤 구현을
 따라가게 한다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input_test.zig` (전체 교체)
 - Modify: `terminal/src/input.zig:80-142`
 
-- [ ] **Step 1: 테스트를 새 시그니처로 먼저 바꾼다**
+- [ ] Step 1: 테스트를 새 시그니처로 먼저 바꾼다
 
 `terminal/src/input_test.zig`를 통째로 이 내용으로 바꾼다.
 
@@ -288,21 +288,21 @@ pub fn main() !void {
 }
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인**
+- [ ] Step 2: 실패하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: **컴파일 에러.** `handleKey`가 `?u8`을 돌려주는데 `std.mem.eql(u8, ...)`에
+기대: 컴파일 에러. `handleKey`가 `?u8`을 돌려주는데 `std.mem.eql(u8, ...)`에
 넘기고 있으므로 타입이 맞지 않는다. 대략 이런 메시지다.
 
 ```
 error: expected type '[]const u8', found '?u8'
 ```
 
-- [ ] **Step 3: `input.zig`의 `State`를 바이트열 반환으로 바꾼다**
+- [ ] Step 3: `input.zig`의 `State`를 바이트열 반환으로 바꾼다
 
 `terminal/src/input.zig:80-112`의 `State` 정의를 이것으로 바꾼다.
 
@@ -360,7 +360,7 @@ pub const State = struct {
 };
 ```
 
-- [ ] **Step 4: `readKeys`를 새 반환 타입에 맞춘다**
+- [ ] Step 4: `readKeys`를 새 반환 타입에 맞춘다
 
 `terminal/src/input.zig:132-140`의 while 루프 본문을 바꾼다. 기존
 
@@ -385,7 +385,7 @@ pub const State = struct {
         }
 ```
 
-- [ ] **Step 5: 통과하는 것을 확인**
+- [ ] Step 5: 통과하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -399,7 +399,7 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] Step 6: Commit
 
 Claude가 수행한다. 커밋 메시지: `Return a byte sequence from each key event`
 
@@ -408,19 +408,19 @@ Claude가 수행한다. 커밋 메시지: `Return a byte sequence from each key 
 ## Task 3: Ctrl 제어 문자
 
 바닥이 넓어졌으니 첫 손님을 올린다. Ctrl+C가 프로세스를 죽이는 것은
-**우리가 시그널을 보내서가 아니다** — `0x03` 한 바이트를 PTY master에 쓰면,
+우리가 시그널을 보내서가 아니다 — `0x03` 한 바이트를 PTY master에 쓰면,
 커널의 line discipline이 `ISIG`와 `VINTR == 0x03`을 보고 foreground process
 group에 SIGINT를 직접 보낸다(design doc 결정 3). 우리가 할 일은 그 바이트를
 만드는 것뿐이다.
 
-**Files:**
+Files:
 - Modify: `terminal/src/input_test.zig` (테스트 추가)
 - Modify: `terminal/src/input.zig` (`State`)
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 추가**
+- [ ] Step 1: 실패하는 테스트를 먼저 추가
 
-`terminal/src/input_test.zig`의 `try expect(&state, 200, 1, "");` **바로
-뒤에**, `std.debug.print("PASS\n", .{});` **앞에** 다음을 넣는다.
+`terminal/src/input_test.zig`의 `try expect(&state, 200, 1, "");` 바로
+뒤에, `std.debug.print("PASS\n", .{});` 앞에 다음을 넣는다.
 
 ```zig
     // ── Ctrl 제어 문자 (IP-M0) ──────────────────────────────────────────
@@ -466,19 +466,19 @@ group에 SIGINT를 직접 보낸다(design doc 결정 3). 우리가 할 일은 �
     try expect(&state, 46, 1, "c");
 ```
 
-- [ ] **Step 2: 실패하는 것을 확인**
+- [ ] Step 2: 실패하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
   tars-devcontainer bash -c "zig build test"
 ```
 
-기대: 컴파일은 되고 **실행이 실패**한다. 첫 실패는 `code=46 value=1`이며,
+기대: 컴파일은 되고 실행이 실패한다. 첫 실패는 `code=46 value=1`이며,
 `got={ 99 }`(`'c'`), `want={ 3 }`이다. `KEY_LEFTCTRL`(29)이 아직 modifier로
 인식되지 않아 keymap의 `.{ 0, 0 }`에 걸려 빈 슬라이스가 나오고, Ctrl 상태가
 없으니 `c`가 그대로 나온다.
 
-- [ ] **Step 3: `State`에 Ctrl을 추가**
+- [ ] Step 3: `State`에 Ctrl을 추가
 
 `terminal/src/input.zig`의 `State`를 이렇게 고친다. 세 곳이다.
 
@@ -562,7 +562,7 @@ pub const State = struct {
     }
 ```
 
-- [ ] **Step 4: keymap 주석 두 줄을 갱신**
+- [ ] Step 4: keymap 주석 두 줄을 갱신
 
 `terminal/src/input.zig`의 29번과 42/54번 줄 주석이 이제 사실과 다르다.
 
@@ -576,10 +576,10 @@ pub const State = struct {
     .{ 0, 0 }, // 29: KEY_LEFTCTRL — modifier로 처리한다(아래 handleKey)
 ```
 
-로 바꾼다. 56번(`KEY_LEFTALT`)의 주석은 **그대로 둔다** — Alt는 아직 정말로
+로 바꾼다. 56번(`KEY_LEFTALT`)의 주석은 그대로 둔다 — Alt는 아직 정말로
 범위 밖이다(IP-M2).
 
-- [ ] **Step 5: 통과하는 것을 확인**
+- [ ] Step 5: 통과하는 것을 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal \
@@ -593,7 +593,7 @@ input_event size = 24 (expected 24)
 PASS
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] Step 6: Commit
 
 Claude가 수행한다. 커밋 메시지: `Turn Ctrl combinations into control characters`
 
@@ -603,21 +603,21 @@ Claude가 수행한다. 커밋 메시지: `Turn Ctrl combinations into control c
 
 여기까지는 컨테이너 안의 순수 로직이다. 이제 실제 부팅에서 확인할 준비를
 한다. `main.zig`는 고칠 것이 없고(`readKeys`의 시그니처가 그대로다),
-**게이트가 쓸 `sleep`을 initrd에 넣는 것**이 이 Task의 실질이다.
+게이트가 쓸 `sleep`을 initrd에 넣는 것이 이 Task의 실질이다.
 
-`sleep`이 필요한 이유는 design doc 결정 3을 **제대로** 검사하기 위해서다.
+`sleep`이 필요한 이유는 design doc 결정 3을 제대로 검사하기 위해서다.
 프롬프트에서 Ctrl+C를 눌러 줄이 취소되는 것만 보면 "셸이 그 바이트를
-받았다"까지만 증명된다. **커널이 자식 프로세스 그룹에 SIGINT를 보냈다**는
+받았다"까지만 증명된다. 커널이 자식 프로세스 그룹에 SIGINT를 보냈다는
 주장을 검사하려면 죽일 자식이 하나 있어야 한다.
 
 `sleep`은 `cat`/`uname`/`mkdir`과 같은 coreutils 패키지에 들어 있고, 그
-패키지는 이미 sysroot에 구워져 있다. **`devcontainer/Dockerfile`은 고치지
-않는다.**
+패키지는 이미 sysroot에 구워져 있다. `devcontainer/Dockerfile`은 고치지
+않는다.
 
-**Files:**
+Files:
 - Modify: `kernel/make_initrd.sh:107-120`
 
-- [ ] **Step 1: `sleep`을 initrd에 넣는다**
+- [ ] Step 1: `sleep`을 initrd에 넣는다
 
 `kernel/make_initrd.sh:107-110`의
 
@@ -651,7 +651,7 @@ copy_lib_deps "$WORKDIR/usr/bin/mkdir"
 copy_lib_deps "$WORKDIR/usr/bin/sleep"
 ```
 
-- [ ] **Step 2: initrd가 만들어지고 `sleep`이 들어갔는지 확인**
+- [ ] Step 2: initrd가 만들어지고 `sleep`이 들어갔는지 확인
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -670,7 +670,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 요구한다는 뜻이지만, `sleep`은 `cat`과 같은 패키지·같은 의존이라 그럴
 가능성은 낮다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다. 커밋 메시지: `Put sleep into the initrd for the input gate`
 
@@ -678,20 +678,20 @@ Claude가 수행한다. 커밋 메시지: `Put sleep into the initrd for the inp
 
 ## Task 5: 네 번째 체인 `input/check.sh`
 
-부팅 **한 번**. 디스크는 물리지 않는다 — `/config` mount가 실패하면 CP가
+부팅 한 번. 디스크는 물리지 않는다 — `/config` mount가 실패하면 CP가
 만든 폴백이 fish로 떨어뜨려 주므로, 이 게이트는 그 폴백 경로도 덤으로
 밟는다(design doc 결정 11).
 
-**Files:**
+Files:
 - Create: `input/check.sh`
 
-- [ ] **Step 1: 디렉터리를 만든다**
+- [ ] Step 1: 디렉터리를 만든다
 
 ```bash
 mkdir -p input
 ```
 
-- [ ] **Step 2: `input/check.sh` 작성**
+- [ ] Step 2: `input/check.sh` 작성
 
 100줄이 넘으므로 Claude가 `/tmp/ip_check.sh`에 원본을 만들고, `diff`로
 대조한 뒤 `cp`로 옮긴다. 내용은 다음과 같다.
@@ -885,7 +885,7 @@ echo "PASS"
 exit 0
 ```
 
-- [ ] **Step 3: 실행 권한을 주고 단독으로 돌려본다**
+- [ ] Step 3: 실행 권한을 주고 단독으로 돌려본다
 
 ```bash
 chmod +x input/check.sh
@@ -896,8 +896,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
 기대: 맨 끝에 `PASS`, 그 앞에
 `ctrl-c killed the foreground child and the shell came back`.
 
-**여기서 실패하면 `report_failure`가 찍는 마커 목록과 마지막 화면 덤프
-다섯 줄을 그대로 붙여 달라.** 구분해야 할 실패가 셋이다.
+여기서 실패하면 `report_failure`가 찍는 마커 목록과 마지막 화면 덤프
+다섯 줄을 그대로 붙여 달라. 구분해야 할 실패가 셋이다.
 
 - `terminal: key>`가 없다 → `sendkey`가 게스트에 아예 안 닿았다. QEMU
   monitor 연결이나 키 이름 문제다.
@@ -906,7 +906,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace \
   틀렸다.
 - 화면 덤프에 `sleep 100`이 안 보인다 → 타이핑 자체가 실패했다.
 
-- [ ] **Step 4: Commit**
+- [ ] Step 4: Commit
 
 Claude가 수행한다. 커밋 메시지: `Add the input chain that proves Ctrl+C works`
 
@@ -914,12 +914,12 @@ Claude가 수행한다. 커밋 메시지: `Add the input chain that proves Ctrl+
 
 ## Task 6: 루트 게이트에 등록
 
-**Files:**
+Files:
 - Modify: `check.sh:35-52`
 
-- [ ] **Step 1: 네 번째 체인을 추가**
+- [ ] Step 1: 네 번째 체인을 추가
 
-`check.sh:52`의 `run_chain "CP-M2" ./config/check.sh` **뒤에** 한 줄을 넣고,
+`check.sh:52`의 `run_chain "CP-M2" ./config/check.sh` 뒤에 한 줄을 넣고,
 그 위 주석 블록 끝에 설명을 덧붙인다.
 
 ```bash
@@ -933,7 +933,7 @@ run_chain "CP-M2" ./config/check.sh
 run_chain "IP-M0" ./input/check.sh
 ```
 
-- [ ] **Step 2: 전체 게이트 (오래 걸린다 — 20분 안팎)**
+- [ ] Step 2: 전체 게이트 (오래 걸린다 — 20분 안팎)
 
 ```bash
 time docker run --rm -v "$PWD":/workspace -w /workspace \
@@ -943,10 +943,10 @@ time docker run --rm -v "$PWD":/workspace -w /workspace \
 기대: 마지막 줄이
 `TARS check PASS: all chains 3/3 consecutive runs succeeded`.
 
-**측정값을 기록해 달라** — 실제 소요 시간과, IP 체인 3회가 각각 얼마나
+측정값을 기록해 달라 — 실제 소요 시간과, IP 체인 3회가 각각 얼마나
 걸렸는지. design doc의 "+4~6분" 예상이 맞는지 여기서 확인된다.
 
-- [ ] **Step 3: Commit**
+- [ ] Step 3: Commit
 
 Claude가 수행한다. 커밋 메시지: `Point the aggregate gate at the input chain`
 

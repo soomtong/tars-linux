@@ -1,7 +1,7 @@
 # TARS Boot Foundation — BF-M1 Design
 
-**Date:** 2026-08-03
-**Status:** **완료(2026-08-04).** plan은 이 design과 같은 날 썼다
+Date: 2026-08-03
+Status: 완료(2026-08-04). plan은 이 design과 같은 날 썼다
 (`docs/superpowers/plans/2026-08-03-tars-boot-foundation-bf-m1.md`). Boot
 Foundation 전체는 2026-08-07에 BF-M0~M4로 끝났고 게이트가 `BF-M4` 체인으로
 3/3 돈다 — 상위 design은
@@ -11,7 +11,7 @@ Foundation 전체는 2026-08-07에 BF-M0~M4로 끝났고 게이트가 `BF-M4` �
 
 [BF-M0](../plans/2026-08-01-tars-boot-foundation-bf-m0.md)에서 devcontainer
 cross toolchain과 QEMU `-kernel` direct boot 경로를 sanity 바이너리로
-검증했다. 이 문서는 다음 단계인 **BF-M1 — 최소 kernel 자체 빌드**를
+검증했다. 이 문서는 다음 단계인 BF-M1 — 최소 kernel 자체 빌드를
 다룬다. 전체 milestone 구조와 배경은
 [design doc](2026-08-01-tars-boot-foundation-design.md)을 참고.
 
@@ -88,32 +88,32 @@ milestone에서도 그대로 재현할 수 있게 한다.
 
 "init을 못 찾아 panic"은 두 가지 서로 다른 실패 지점을 가리킬 수 있다.
 
-- **A. initrd 자체가 없음** → kernel이 root filesystem을 찾는 단계에서
+- A. initrd 자체가 없음 → kernel이 root filesystem을 찾는 단계에서
   실패 (`VFS: Unable to mount root fs`) — design doc의 "no init found"
   문구와 일치하지 않음
-- **B. 빈 initrd는 있지만 init 바이너리가 없음** → root는 mount되지만
+- B. 빈 initrd는 있지만 init 바이너리가 없음 → root는 mount되지만
   kernel이 `/sbin/init`, `/etc/init`, `/bin/init`, `/bin/sh` 등 후보를
   모두 못 찾아 `Kernel panic - not syncing: No working init found`
 
 design doc이 명시한 문구와 정확히 일치하는 B를 채택한다.
 
-**구현 중 발견한 정정(BF-M1 Task 5 실행 중, 2026-08-03):** 당초 "완전히 빈
+구현 중 발견한 정정(BF-M1 Task 5 실행 중, 2026-08-03): 당초 "완전히 빈
 cpio"로 계획했으나, 실제 커널(`init/main.c`의 `kernel_init_freeable()`)은
-`/init`의 **존재 여부**(`access()` 체크, `init_eaccess`)만으로 initramfs를
+`/init`의 존재 여부(`access()` 체크, `init_eaccess`)만으로 initramfs를
 채택할지 판단한다. `/init`이 아예 없으면 커널은 initramfs를 포기하고
 구식 `prepare_namespace()` 경로(`root=`로 지정된 블록 디바이스를 찾는
 경로)로 넘어가 버리며, `root=`가 없으므로 `VFS: Unable to mount root fs`
 panic이 그 안에서 먼저 발생한다 — 이는 A 시나리오이며, "init 후보
 (`/sbin/init` 등)를 순회하다 실패"하는 코드까지 도달하지 못한다.
 
-B(`No working init found`)에 도달하려면 역설적으로 **`/init`이 존재는
-하되 실행에는 실패해야** 한다. 그래야 `access()` 체크는 통과해
+B(`No working init found`)에 도달하려면 역설적으로 `/init`이 존재는
+하되 실행에는 실패해야 한다. 그래야 `access()` 체크는 통과해
 `prepare_namespace()`를 건너뛰고, 그다음 `execve("/init")` 시도가 실패한
 뒤 나머지 후보(`/sbin/init`, `/etc/init`, `/bin/init`, `/bin/sh`, 모두
 우리 cpio엔 없음)까지 순회하고 최종 panic에 도달한다.
 
-따라서 `initrd.cpio`는 완전히 빈 아카이브가 아니라, **실행 권한(mode
-0755)만 있고 내용은 빈 `/init` 파일 하나**를 담은 cpio(newc)로 만든다.
+따라서 `initrd.cpio`는 완전히 빈 아카이브가 아니라, 실행 권한(mode
+0755)만 있고 내용은 빈 `/init` 파일 하나를 담은 cpio(newc)로 만든다.
 빈 파일은 `access(X_OK)`는 통과하지만 유효한 실행 파일 포맷(ELF 매직
 넘버, `#!` 스크립트)이 아니므로 `execve()`가 `ENOEXEC`로 실패한다. 이
 `/init` 파일은 실제 init 구현이 아니라 커널의 "존재 확인 vs. 실행 성공"

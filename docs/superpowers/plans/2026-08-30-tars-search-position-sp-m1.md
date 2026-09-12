@@ -1,31 +1,31 @@
 # TARS Search Position SP-M1 — Implementation Plan
 
-**Date:** 2026-08-30
-**Design:** `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
+Date: 2026-08-30
+Design: `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
 (결정 5·6·7·8과 위험 1·2·3)
-**앞 milestone:** SP-M0(현재 매치 색, 2026-08-29) · 그것이 남긴 숙제는
+앞 milestone: SP-M0(현재 매치 색, 2026-08-29) · 그것이 남긴 숙제는
 2026-08-30에 풀었다
 
-**Goal:** 검색 오버레이에 `/needle [3/12]`를 띄워, 지금 보고 있는 매치가
+Goal: 검색 오버레이에 `/needle [3/12]`를 띄워, 지금 보고 있는 매치가
 스크롤백 전체에서 몇 번째인지 사람이 알게 만든다.
 
-**Architecture:** CS-M1이 만든 `find_missed` 플래그의 **뜻을 넓혀**
+Architecture: CS-M1이 만든 `find_missed` 플래그의 뜻을 넓혀
 `find_status`("마지막 검색 명령의 결과를 보여 주는 중")로 바꾼다. 켜는 곳은
 `findSubmit`·`findNext`·`findPrev` 셋이고, 끄는 곳은 이미 있는 두 자리
-(`main.zig`의 copy 명령 직전 · `copyExit`)를 그대로 쓴다. **새 상태도 새 로그도
-안 만든다** — `promptText`가 `findMatchCount()`로 "못 찾음"과 번호를 가르고,
+(`main.zig`의 copy 명령 직전 · `copyExit`)를 그대로 쓴다. 새 상태도 새 로그도
+안 만든다 — `promptText`가 `findMatchCount()`로 "못 찾음"과 번호를 가르고,
 `find> overlay text=`가 이미 매 프레임 그 결과를 찍는다.
 
-**Tech Stack:** Zig 0.16 · ghostty-vt(vendored) · QEMU 부팅 게이트(bash)
+Tech Stack: Zig 0.16 · ghostty-vt(vendored) · QEMU 부팅 게이트(bash)
 
 ---
 
 ## 왜 이 순서인가
 
-**창구를 먼저 맞추고 화면은 나중이다.** CS-M0의 실측 9("Task를 넷으로 가른
+창구를 먼저 맞추고 화면은 나중이다. CS-M0의 실측 9("Task를 넷으로 가른
 것이 값을 했다")와 같은 규율이다 — Task 2가 `vt.zig`의 값이 맞다는 것을
-확인해 주므로, Task 3에서 화면 글자가 틀리면 **의심할 자리가 `promptText`
-하나뿐**이다.
+확인해 주므로, Task 3에서 화면 글자가 틀리면 의심할 자리가 `promptText`
+하나뿐이다.
 
 | Task | 무엇 | 파일 |
 |---|---|---|
@@ -37,30 +37,30 @@
 
 ## 착수 전에 실측으로 확정한 것 (2026-08-30)
 
-**전부 `out/probe/serial1.log`(숙제를 풀며 뽑아 둔 copy 체인 로그)에서 읽었고,
-짐작이 하나도 없다.**
+전부 `out/probe/serial1.log`(숙제를 풀며 뽑아 둔 copy 체인 로그)에서 읽었고,
+짐작이 하나도 없다.
 
-1. **기존 게이트 검사 넷이 전부 안전하다.** SP-M1이 오버레이를 띄우면
+1. 기존 게이트 검사 넷이 전부 안전하다. SP-M1이 오버레이를 띄우면
    `dumpStyles`가 `overlaid_row`(맨 아랫줄 46)를 건너뛰는데, 색을 세는 두
    검사의 매치가 거기에 없다.
 
    | 검사 | 매치가 있는 줄 | 오버레이가 덮는 줄 | 겹치는가 |
    |---|---|---|---|
-   | 16(하이라이트) | **0** | 46 | 아니다 |
-   | 19(두 색) | **44 · 45** | 46 | 아니다 |
+   | 16(하이라이트) | 0 | 46 | 아니다 |
+   | 19(두 색) | 44 · 45 | 46 | 아니다 |
 
    검사 17은 오버레이를 안 보고, 검사 18은 매치가 0이라 문구가 그대로다.
 
-2. **검사 19가 끝난 자리의 번호는 `[1/4]`다.** 로그가
+2. 검사 19가 끝난 자리의 번호는 `[1/4]`다. 로그가
    `copy> enter row=46 col=11` → `copy> find_submit row=45 col=3`을 찍는다 —
    커서(46)보다 매치(45)가 위라 `above_only`가 첫 매치를 통과시키고, 그래서
    인덱스가 0이다. `find> submit matches=4`이므로 분모가 4다.
 
-3. **`vt_test`의 `ns`·`ns_i`·`nhit`·`ncur`·`nstat`·`nmiss`가 안 쓰였다.**
-   `main()` 하나가 파일 전체라 지역 변수가 서로 부딪치고 **Zig가 shadowing을
-   컴파일 에러로 막는다.**
+3. `vt_test`의 `ns`·`ns_i`·`nhit`·`ncur`·`nstat`·`nmiss`가 안 쓰였다.
+   `main()` 하나가 파일 전체라 지역 변수가 서로 부딪치고 Zig가 shadowing을
+   컴파일 에러로 막는다.
 
-4. **`refreshMatches`는 매치가 0이어도 슬라이스를 만든다**(`vt.zig:801`).
+4. `refreshMatches`는 매치가 0이어도 슬라이스를 만든다(`vt.zig:801`).
    그래서 `findMatchCount()`가 0을 주고, `findMissed()`가 그 0을 조건으로
    쓸 수 있다.
 
@@ -68,18 +68,18 @@
 
 ## Task 1: 플래그를 넓힌다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt.zig` (필드 · `findMissed` 둘레 · `findSubmit` ·
   `findNext`/`findPrev` · `copyExit`)
 - Modify: `terminal/src/main.zig:685` (호출 이름 하나)
 - Modify: `terminal/src/vt_test.zig:1097` (호출 이름 하나)
 
-**이름을 바꾸는 이유.** 뜻이 "못 찾았다"에서 "결과를 보여 주는 중"으로
-넓어졌으므로 `find_missed`라는 이름을 두면 **성공한 검색도 켜는데 이름은
-실패를 말하는** 상태가 된다. 이 저장소가 반복해서 부딪친 "주석과 코드가
+이름을 바꾸는 이유. 뜻이 "못 찾았다"에서 "결과를 보여 주는 중"으로
+넓어졌으므로 `find_missed`라는 이름을 두면 성공한 검색도 켜는데 이름은
+실패를 말하는 상태가 된다. 이 저장소가 반복해서 부딪친 "주석과 코드가
 어긋난다"의 같은 종류다.
 
-- [ ] **Step 1: 필드의 이름과 주석을 바꾼다** (`vt.zig:196~207`)
+- [ ] Step 1: 필드의 이름과 주석을 바꾼다 (`vt.zig:196~207`)
 
 `지울 것`
 ```zig
@@ -120,7 +120,7 @@
     find_status: bool = false,
 ```
 
-- [ ] **Step 2: 창구 셋을 만든다** (`vt.zig:635~655`)
+- [ ] Step 2: 창구 셋을 만든다 (`vt.zig:635~655`)
 
 `지울 것`
 ```zig
@@ -187,7 +187,7 @@
     }
 ```
 
-- [ ] **Step 3: `findSubmit`이 조건 없이 켜게 한다** (`vt.zig`, `findSubmit`의 끝)
+- [ ] Step 3: `findSubmit`이 조건 없이 켜게 한다 (`vt.zig`, `findSubmit`의 끝)
 
 `지울 것`
 ```zig
@@ -220,7 +220,7 @@
         return .{ .matches = count, .moved = moved };
 ```
 
-- [ ] **Step 4: `findNext`/`findPrev`도 켜게 한다** (`vt.zig`)
+- [ ] Step 4: `findNext`/`findPrev`도 켜게 한다 (`vt.zig`)
 
 `지울 것`
 ```zig
@@ -260,7 +260,7 @@
     }
 ```
 
-- [ ] **Step 5: `copyExit`의 한 줄** (`vt.zig`, `copyExit` 안)
+- [ ] Step 5: `copyExit`의 한 줄 (`vt.zig`, `copyExit` 안)
 
 `지울 것`
 ```zig
@@ -285,7 +285,7 @@
         self.find_status = false;
 ```
 
-- [ ] **Step 6: 부르는 쪽 두 자리의 이름을 맞춘다**
+- [ ] Step 6: 부르는 쪽 두 자리의 이름을 맞춘다
 
 `main.zig:685` — `지울 것`
 ```zig
@@ -307,9 +307,9 @@
     ls.findClearStatus();
 ```
 
-- [ ] **Step 7: 빌드와 기존 검사**
+- [ ] Step 7: 빌드와 기존 검사
 
-**`zig build`를 함께 돌린다.** Zig가 참조되지 않는 함수를 분석하지 않아서
+`zig build`를 함께 돌린다. Zig가 참조되지 않는 함수를 분석하지 않아서
 `zig build test`만으로는 `main.zig`의 실수를 못 잡는다(HANDOFF의 실측 1).
 
 ```bash
@@ -317,11 +317,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-기대: **`PASS`**. 검사 32~40이 전부 그대로 통과해야 한다. 특히 **검사 34·35·36이
-`findMissed()`를 그대로 보고 있으므로**, 여기서 깨지면 Step 2의 곱셈이 틀린
+기대: `PASS`. 검사 32~40이 전부 그대로 통과해야 한다. 특히 검사 34·35·36이
+`findMissed()`를 그대로 보고 있으므로, 여기서 깨지면 Step 2의 곱셈이 틀린
 것이다.
 
-- [ ] **Step 8: 커밋**
+- [ ] Step 8: 커밋
 
 ```bash
 git add terminal/src/vt.zig terminal/src/main.zig terminal/src/vt_test.zig
@@ -332,16 +332,16 @@ git commit -m "Widen the find flag to cover a successful search"
 
 ## Task 2: 창구가 맞는지 본다
 
-**Files:**
+Files:
 - Modify: `terminal/src/vt_test.zig` (검사 40 뒤, `PASS` 앞)
 
-**`promptText`는 여기서 못 부른다** — `main.zig`의 private 함수다. 그래서 이
-파일은 **번호의 재료**(`findCurrentIndex()`와 `findMatchCount()`)를 보고,
+`promptText`는 여기서 못 부른다 — `main.zig`의 private 함수다. 그래서 이
+파일은 번호의 재료(`findCurrentIndex()`와 `findMatchCount()`)를 보고,
 글자 자체는 Task 4의 게이트가 본다.
 
-- [ ] **Step 1: 새 화면과 검사 넷을 넣는다**
+- [ ] Step 1: 새 화면과 검사 넷을 넣는다
 
-`vt_test.zig`의 검사 40이 끝난 자리, `std.debug.print("PASS\n", .{});` **앞**에
+`vt_test.zig`의 검사 40이 끝난 자리, `std.debug.print("PASS\n", .{});` 앞에
 넣는다.
 
 ```zig
@@ -486,14 +486,14 @@ git commit -m "Widen the find flag to cover a successful search"
     std.debug.print("vt_test: 매치가 없으면 번호가 아니라 못 찾음이다 OK (needle={s})\n", .{nmiss});
 ```
 
-- [ ] **Step 2: 검사를 돌린다**
+- [ ] Step 2: 검사를 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-기대: 검사 41~44의 네 줄이 새로 나오고 마지막이 **`PASS`**다.
+기대: 검사 41~44의 네 줄이 새로 나오고 마지막이 `PASS`다.
 
 ```
 vt_test: 성공한 검색이 결과 표시를 켠다 OK (needle=TARGET)
@@ -503,7 +503,7 @@ vt_test: 매치가 없으면 번호가 아니라 못 찾음이다 OK (needle=NOP
 PASS
 ```
 
-- [ ] **Step 3: 커밋**
+- [ ] Step 3: 커밋
 
 ```bash
 git add terminal/src/vt_test.zig
@@ -514,10 +514,10 @@ git commit -m "Check the numbers behind the match position"
 
 ## Task 3: 오버레이 글자를 만든다
 
-**Files:**
+Files:
 - Modify: `terminal/src/main.zig` (`promptText`와 그 주석 · `prompt_buf`)
 
-- [ ] **Step 1: `promptText`를 세 갈래로 만든다** (`main.zig:177~205`)
+- [ ] Step 1: `promptText`를 세 갈래로 만든다 (`main.zig:177~205`)
 
 `지울 것`
 ```zig
@@ -612,7 +612,7 @@ fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
 }
 ```
 
-- [ ] **Step 2: 버퍼를 173바이트로 늘린다** (`main.zig:820~822`)
+- [ ] Step 2: 버퍼를 173바이트로 늘린다 (`main.zig:820~822`)
 
 `지울 것`
 ```zig
@@ -630,17 +630,17 @@ fn promptText(screen: *vt.Screen, buf: []u8) ?[]const u8 {
         var prompt_buf: [173]u8 = undefined;
 ```
 
-- [ ] **Step 3: 빌드와 검사**
+- [ ] Step 3: 빌드와 검사
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace/terminal tars-devcontainer \
   bash -c 'zig build && zig build test'
 ```
 
-기대: **`PASS`**. 이 Task는 `vt_test`가 안 보는 자리를 고치므로 검사 결과가
-Task 2와 같아야 한다 — **달라지면 그 자체가 신호다.**
+기대: `PASS`. 이 Task는 `vt_test`가 안 보는 자리를 고치므로 검사 결과가
+Task 2와 같아야 한다 — 달라지면 그 자체가 신호다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 ```bash
 git add terminal/src/main.zig
@@ -651,16 +651,16 @@ git commit -m "Number the current match on the overlay line"
 
 ## Task 4: 화면에 그렇게 쓰였는지 본다
 
-**Files:**
+Files:
 - Modify: `copy/check.sh` (검사 19 뒤, NUL 음성 검사 앞)
 
-**검사 19가 끝난 자리를 그대로 쓴다**(design 결정 9). copy mode가 살아 있고
-`/zq`의 매치 넷도 살아 있다 — **새 부팅도 새 검색도 없고 키는 둘뿐이다.**
+검사 19가 끝난 자리를 그대로 쓴다(design 결정 9). copy mode가 살아 있고
+`/zq`의 매치 넷도 살아 있다 — 새 부팅도 새 검색도 없고 키는 둘뿐이다.
 
-- [ ] **Step 1: 검사 20을 넣는다**
+- [ ] Step 1: 검사 20을 넣는다
 
 `copy/check.sh`의 `echo "both match colours reached the framebuffer ..."` 줄
-**바로 뒤**, `# ── 음성 검사: 로그에 NUL이 ...` **앞**에 넣는다.
+바로 뒤, `# ── 음성 검사: 로그에 NUL이 ...` 앞에 넣는다.
 
 ```bash
 # ── 검사 20: 현재 매치의 번호가 오버레이에 뜬다 (SP-M1) ────────────────
@@ -718,13 +718,13 @@ fi
 echo "the next key cleared the match number"
 ```
 
-- [ ] **Step 2: 문법을 먼저 본다**
+- [ ] Step 2: 문법을 먼저 본다
 
 ```bash
 bash -n copy/check.sh && echo "syntax OK"
 ```
 
-- [ ] **Step 3: copy 체인 단독으로 돌린다 — 8분 걸린다**
+- [ ] Step 3: copy 체인 단독으로 돌린다 — 8분 걸린다
 
 `run_in_background`로 돌린다. 로그를 함께 빼내면 실패했을 때 다시 안 돌려도
 된다.
@@ -749,12 +749,12 @@ n moved the number to [2/4]
 the next key cleared the match number
 ```
 
-**검사 16과 19도 그대로 통과해야 한다.** 오버레이가 새로 뜨면서
+검사 16과 19도 그대로 통과해야 한다. 오버레이가 새로 뜨면서
 `dumpStyles`가 맨 아랫줄(46)을 건너뛰는데, 착수 전 실측대로면 두 검사의
-매치가 0번과 44·45번 줄이라 안 겹친다. **거기서 깨지면 그 실측이 틀린
-것이므로, 고치기 전에 `style>` 줄의 행 번호를 먼저 읽는다.**
+매치가 0번과 44·45번 줄이라 안 겹친다. 거기서 깨지면 그 실측이 틀린
+것이므로, 고치기 전에 `style>` 줄의 행 번호를 먼저 읽는다.
 
-- [ ] **Step 4: 커밋**
+- [ ] Step 4: 커밋
 
 ```bash
 git add copy/check.sh
@@ -765,7 +765,7 @@ git commit -m "Check that the overlay numbers the current match"
 
 ## Task 5: 루트 게이트
 
-- [ ] **Step 1: 여덟 체인을 돌린다 — 16분 걸린다**
+- [ ] Step 1: 여덟 체인을 돌린다 — 16분 걸린다
 
 `run_in_background`로 돌리고 시간을 함께 잰다.
 
@@ -776,24 +776,24 @@ git commit -m "Check that the overlay numbers the current match"
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
-기대: 여덟 체인 **3/3**. 기준선은 SP-M0 뒤의 **16분 30초~45초**다.
+기대: 여덟 체인 3/3. 기준선은 SP-M0 뒤의 16분 30초~45초다.
 
-**값이 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다** — 이 게이트의
+값이 크게 벗어나면 코드를 의심하기 전에 기계를 먼저 의심한다 — 이 게이트의
 잡음은 ±3분이고, TR-M2 때 8배가 나온 원인은 Chrome의 영상 재생이었다.
 
-- [ ] **Step 2: 세 번 재서 기준선을 갱신한다**
+- [ ] Step 2: 세 번 재서 기준선을 갱신한다
 
 SP-M1이 더한 것은 키 둘(`n`·`k`)과 `sleep` 4초, 체인당 세 회차이므로
-`4×3 + 2×0.135×3 ≈ 13초`다. **잡음보다 훨씬 작으므로 "늘었다"를 증명할 수
-없고, 확인만 한다.**
+`4×3 + 2×0.135×3 ≈ 13초`다. 잡음보다 훨씬 작으므로 "늘었다"를 증명할 수
+없고, 확인만 한다.
 
-- [ ] **Step 3: 문서와 기억을 갱신하고 닫는다**
+- [ ] Step 3: 문서와 기억을 갱신하고 닫는다
 
 - `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`의
-  `Status:`를 **SP-M1 완료**로
+  `Status:`를 SP-M1 완료로
 - `docs/decisions/project_search_position.md`에 SP-M1이 실행으로 증명한 것
 - `HANDOFF.md`의 "copy mode가 지금 할 수 있는 것" 표에 번호 한 줄, 이월
-  숙제에서 SP-M1을 끝난 숙제로, **핵심 파일의 줄 번호를 다시 재서**
+  숙제에서 SP-M1을 끝난 숙제로, 핵심 파일의 줄 번호를 다시 재서
 - `MEMORY.md`는 색인이므로 새 파일이 없으면 안 건드린다
 
 ```bash
@@ -805,16 +805,16 @@ git commit -m "Close out SP-M1"
 
 ## 이 plan이 미리 답해 둔 것
 
-**1. 기존 게이트 검사가 안 깨진다** — 착수 전 실측 1·2에 표로 있다. 짐작이
+1. 기존 게이트 검사가 안 깨진다 — 착수 전 실측 1·2에 표로 있다. 짐작이
 아니라 `out/probe/serial1.log`에서 읽은 행 번호다.
 
-**2. `vt_test`의 검사 34·35·36이 안 바뀐다** — `findMissed()`의 계약을 그대로
+2. `vt_test`의 검사 34·35·36이 안 바뀐다 — `findMissed()`의 계약을 그대로
 두고 구현만 곱셈으로 바꾸기 때문이다. Task 1 Step 7이 그것을 바로 확인한다.
 
-**3. "못 찾음" 문구를 안 바꾼다** — 게이트의 검사 18이
-`find> overlay text=/zzz: not found`를 **글자 그대로** 비교한다(design 위험 3).
+3. "못 찾음" 문구를 안 바꾼다 — 게이트의 검사 18이
+`find> overlay text=/zzz: not found`를 글자 그대로 비교한다(design 위험 3).
 
-**4. 새 로그도 새 체인도 없다** — `find> overlay`가 CS-M1부터 매 프레임
+4. 새 로그도 새 체인도 없다 — `find> overlay`가 CS-M1부터 매 프레임
 오버레이 내용을 찍고 있다. monitor 포트 45462는 계속 비어 있다.
 
 ## 위험과 그것을 볼 자리
