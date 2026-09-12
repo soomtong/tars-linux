@@ -31,7 +31,7 @@ Shell Memory(SM-M0~M2)다.
 | `3488953` | design. 착수 전 실측 여섯을 컨테이너에서 재고 시작했다 |
 | `4771c8b` | BH-M0. 게스트 실측 셋(7·8·9)과 SD 실측 7의 정정(실측 10) |
 | `97db8bf` | BH-M1. `HIST_OPTIONS_BASH`와 씨앗의 한 줄, 호스트 검사 다섯 |
-| (이 커밋) | BH-M2. 7차의 중첩 bash 둘과 `linkDevFd()`, 1차의 새 검사 |
+| `b5edfc5` | BH-M2. 7차의 중첩 bash 둘과 `linkDevFd()`, 1차의 새 검사 |
 
 다음 세션이 먼저 알아야 하는 다섯이다.
 
