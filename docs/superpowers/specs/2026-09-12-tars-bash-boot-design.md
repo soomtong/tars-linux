@@ -1,7 +1,8 @@
 # TARS Bash Boot — Design
 
 Date: 2026-09-12
-Status: 진행 중 — M0(측정)부터 시작한다.
+Status: 진행 중 — M0(측정)을 끝냈다. 실측 열둘이 아래 있고, 그중 실측 6이
+결정 6을 고쳤다(인자 하나인 `z`는 DB를 안 본다). M1·M2가 남았다.
 
 BH(Bash History Durability)가 자기 결정 6에서 열어 둔 문이다. BH는 씨앗 rc의
 bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 부팅의 중첩 bash로
@@ -158,16 +159,23 @@ BH의 중첩은 `HISTFILE=/config/bash_history`를 첫 명령으로 쳤다. 9차
 
 훅이 안 걸렸을 때의 모양이 둘로 갈린다. `eval`이 아예 안 돌았으면 `z`가 없는
 명령이고, PROMPT_COMMAND가 뒤집혀 훅만 남았으면 `z`는 있는데 DB가 못 배운다.
-둘 다 `pwd`가 `/`를 찍는 것으로 끝나므로 판정은 하나로 충분하다. M0이 이
-디렉터리 선택을 게스트에서 확인한다.
+둘 다 `pwd`가 `/`를 찍는 것으로 끝나므로 판정은 하나로 충분하다.
+
+⚠ M0이 이 결정의 절반을 고쳤다(실측 6). 목표 디렉터리는 `/usr/bin`이 맞지만
+질의는 인자 하나(`z bin`)로 하면 안 된다 — zoxide가 DB를 안 보고 현재
+디렉터리 아래의 `bin`으로 그냥 `cd`해서, 훅이 안 걸려도 초록이 된다. 질의를
+`z usr bin`으로 한다(실측 7).
 
 ### 결정 7 — `Ctrl+R`은 치지 않는다
 
 SM 비목표 2가 그대로 유효하다. fzf의 위젯은 TUI라 게이트가 치면 체인이
 매달린다. 대신 7차가 zsh에 대해 했던 것처럼 셸에게 이름을 물어보는 한 줄을
-쓸 수 있으면 쓴다 — bash에서 그 이름이 무엇인지는 M0이 잰다. 이름이 없거나
-물어보는 방법이 TUI를 띄우면 이 검사는 넣지 않는다. 씨앗에 그 줄이 있다는 것은
-호스트 검사가 이미 보고 있다.
+쓴다.
+
+M0이 그 이름과 물어보는 방법을 정했다(실측 9·12). 이름은 `__fzf_history__`
+(`Ctrl+R`의 위젯)이고, 물어보는 줄은
+`echo bprodw$(type -t __fzf_history__)`다 — `declare -F <이름>`은 출력이 이름
+그 자체라서 판정 글자로 못 쓴다.
 
 ### 결정 8 — bash 프롬프트를 대기에 쓴다
 
@@ -272,6 +280,118 @@ milestone이다. 여덟 자리다.
 
 이 서브프로젝트가 그것을 찾으려고 있다. 나오면 고치고 design에 적는다 —
 BH-M2가 `linkDevFd()`를 그렇게 넣었다.
+
+## BB-M0이 실행으로 증명한 것
+
+plan: `docs/superpowers/plans/2026-09-12-tars-bash-boot-bb-m0.md`
+
+게스트를 세 번 부팅해서 쟀다. 디스크는 회차마다 새로 굽고 `tars.conf`에
+`shell=bash` 한 줄을 미리 담았다(실측 11). 시리얼 로그 셋이
+`out/bb_m0_serial.log` · `out/bb_m0b_serial.log` · `out/bb_m0c_serial.log`에
+남아 있다(git에는 안 들어간다).
+
+### 실측 1 — `shell=bash`가 셸로 선다. 폴백은 안 걸린다
+
+init 로그가 `config shell=bash …  shell_config=on`을 찍고,
+`started console shell (pid 32, /usr/bin/bash)`로 끝난다. `is not executable`이
+한 번도 안 나왔다. `resolveShell(.bash)`가 처음으로 돌아서 통과한 것이다.
+
+### 실측 2 — bash의 env는 둘이고 `SAVEHIST`가 없다
+
+```
+tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg
+tars-init: env HISTFILE=/config/bash_history
+tars-init: env HISTSIZE=5000
+```
+
+확인 4대로다. 7차·8차가 보는 셋(`SAVEHIST` 포함)과 다른 것이 이 부팅의
+대조군이 된다.
+
+### 실측 3 — 셸 둘이 각각 하나씩 서고 아무도 안 죽는다
+
+`started terminal (pid 31, /terminal)`과 `started console shell (pid 32,
+/usr/bin/bash)`이 각각 한 줄이고, `times fast`도 `giving up on`도 없다.
+씨앗 bashrc를 읽는 셸이 둘인데 둘 다 재시작 없이 섰다.
+
+### 실측 4 — 씨앗 bashrc는 production 부팅에서 조용하다
+
+시리얼 로그 전체를 `No such file` · `command not found` · `rror` · `warning`
+으로 훑어서 걸린 줄이 0이다. BH-M2가 `linkDevFd()`를 넣기 전이라면 여기에
+`/dev/fd/63` 한 줄이 있었을 자리다.
+
+### 실측 5 — 최상위 bash의 프롬프트는 `bash-5.2#`다
+
+중첩 bash에서 본 것과 같다(BH-M2). 그래서 결정 8의 대기가 그대로 선다.
+
+### 실측 6 — 인자 하나인 `z`는 DB를 안 보고 그냥 `cd`한다
+
+첫 회차의 판정이 이것 때문에 거짓이 될 수 있었다. `/`에서 `z bin`을 치면
+`pwd`가 `/usr/bin`이 아니라 `/bin`을 찍는다. 게스트에는 `/usr/bin`(도구들)과
+`/bin`(`sh` 링크 하나)이 서로 다른 실체로 있고(`make_initrd.sh:86·161`),
+zoxide는 인자가 하나이고 그것이 현재 디렉터리 아래의 실제 디렉터리면 DB를
+안 보고 그리로 간다.
+
+그러면 훅이 안 걸려도 검사가 초록이 된다. 확인 6이 경계한 함정이 다른 얼굴로
+한 번 더 나온 것이다 — "판정 글자를 만들 수 있는 것이 우리가 보려는 것
+하나뿐인가"를 디렉터리 이름에도 물어야 한다.
+
+7차의 zsh 판정은 이 함정을 안 밟았다. 인자가 둘(`z terminfo x`)이어서다.
+
+### 실측 7 — 인자 둘인 `z`는 DB를 본다. bash에서 훅이 걸린다
+
+`cd /usr/share/../bin` → `cd /` → `z usr bin` → `pwd`가 `/usr/bin`을 찍었다.
+디스크가 새것이라 DB에 그 경로를 넣을 수 있는 것은 이 부팅의 훅뿐이다.
+
+못 보는 여섯의 5번 절반이 이것으로 답이 났다 — `PROMPT_COMMAND` 합성 뒤에도
+zoxide가 살아 있다. 나머지 절반이 실측 8이다.
+
+### 실측 8 — production env에서 히스토리가 명령마다 써진다
+
+`bprodmark=1`을 치고 `echo bprod$(grep -cx bprodmark=1 /config/bash_history)`가
+`bprod1`을 찍었다. `HISTFILE`을 손으로 안 맞춘 상태다 — env로 온 값과 씨앗의
+`PROMPT_COMMAND` 줄이 함께 일한 결과이고, BH-M2의 중첩 판정이 못 보던 자리다.
+
+### 실측 9 — `declare -F <이름>`의 출력은 판정 글자가 못 된다
+
+`declare -F __fzf_history__`가 찍는 것은 `__fzf_history__` 한 줄이다. 인자
+없이 부를 때와 다르다(그때는 `declare -f <이름>`으로 찍는다). 타이핑한 줄과
+글자가 같아서 이 체인의 규칙을 어긴다.
+
+처방은 SD-M2의 수법이다. `echo bprodw$(type -t __fzf_history__)`로
+`bprodwfunction`을 만든다 — `type -t`가 `function`을 찍고, 그 앞의 `bprodw`는
+우리가 붙인 것이라 타이핑한 줄에는 `bprodw$(type` 까지만 있다.
+
+### 실측 10 — 타이핑이 프롬프트를 앞질러도 명령은 온전하다
+
+화면에 `cbash-5.2#`와 `pbash-5.2#`가 남았다. 앞 명령이 아직 도는 중에 다음
+명령의 첫 글자가 tty에 에코된 것이고, 프롬프트가 그려진 뒤 readline이 그
+글자를 다시 그려서 명령 자체는 `cd /`·`pwd`로 온전히 실행됐다.
+
+BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것은 판정 글자가
+타이핑한 줄 안에 있었기 때문이고, 판정 글자를 우리가 만드는 규칙이 이것까지
+막는다. 그래도 첫 키 앞에서는 프롬프트를 기다린다(결정 8) — 기다리는 값이
+공짜다.
+
+### 실측 11 — `mkfs.ext2 -d`가 측정을 부팅 하나로 줄인다
+
+컨테이너의 e2fsprogs가 `-d`를 받는다. `tars.conf` 한 줄을 담은 디렉터리를
+그대로 이미지에 넣으므로, 체인처럼 "1차에서 고치고 2차에서 읽는" 두 부팅이
+필요 없다. 측정이 체인의 디스크 연속성에 기대지 않는 것이 덤이다.
+
+### 실측 12 — `shift-backslash`가 `|`로 게스트에 닿는다
+
+`declare -F | grep fzf`가 게스트에서 돌았다(`terminal/src/input.zig`의 키맵
+43번이 `\`/`|` 쌍이다). 다만 판정에는 쓰지 않는다 — `screen>` 덤프의 행
+구분자가 `|`라서 패턴이 모호해진다.
+
+덤으로 fzf 통합이 정의하는 이름 28개를 봤다. `__fzf_history__`(`Ctrl+R`) ·
+`fzf-file-widget`(`Ctrl+T`) · `__fzf_cd__`(`Alt+C`)와 자동완성 함수들이다.
+
+### 9차 훅의 예행
+
+셋째 회차가 판정 넷을 위의 순서 그대로 돌려서 전부 초록이었다 — 프롬프트
+대기 · `z usr bin` · `bprod1` · `bprodwfunction`. M2는 이 키 배열을 그대로
+체인에 옮긴다.
 
 ## 참고
 
