@@ -1,4 +1,115 @@
-# HANDOFF: **SM-M1 — 훅이 걸렸고, 첫 회차를 믿을 수 없다는 것을 재서 알았다**
+# HANDOFF: **SM-M2의 plan이 섰다 — 게이트가 전원을 뽑는다는 것을 재서 알았다**
+
+## 지금 어디인가
+
+`main`, working tree 깨끗함. **이 세션이 만든 것은 plan 하나와 실측 아홉이고,
+코드는 한 줄도 안 고쳤다.**
+
+```
+628be03  Plan what the machine keeps across a power cut
+```
+
+**사용자가 plan을 승인했고("agree"), Task 2의 "넣을 것"까지 제시한 자리에서
+세션이 끝났다.** 다음 세션은 그 편집부터 시작한다.
+
+⚠ **이 세션은 기본 규칙이었다** — SM-M1까지 이어지던 세션 한정 위임은 끝났고,
+**구현 파일은 Claude가 제시하고 사용자가 직접 넣는다.** 빌드·부팅·게이트와
+조사성 명령은 Claude가 돌리고, 커밋도 Claude가 만든다.
+
+## 바로 다음에 할 것 — plan의 **Task 2**부터
+
+plan: `docs/superpowers/plans/2026-09-12-tars-shell-memory-sm-m2.md`
+(**Task마다 넣을 자리와 코드 전문이 있다. 다시 짜지 말 것.**)
+
+| Task | 무엇 | 상태 |
+|---|---|---|
+| 1 | 컨테이너 실측 34~42 | **완료**(아래 표) |
+| **2** | `config.zig` — `Shell.histEntries()` | **여기서 멈췄다.** 넣을 자리는 `init/src/config.zig:138`(`rcPath()`의 닫는 `}` 뒤) |
+| 3 | `environ.zig` — `withPath` → **`withTarsEnv`** + `XDG_ENTRY` | |
+| 4 | `environ_test.zig`·`config_test.zig` | |
+| 5 | `main.zig` — env 블록을 **`resolveShell` 뒤로** 내리고 `/config/xdg`를 만든다 | |
+| 6 | 호스트 음성 확인 셋(A·B·C) | |
+| 7 | `config/check.sh` — 7차에 `fc -W`, **8차 부팅** · `tools/check.sh` 주석 하나 | |
+| 8 | config 체인 단독(부팅 여덟) | |
+| 9 | 게스트 음성 확인 둘 + 측정 하나(D·E·F) | |
+| 10 | 루트 게이트(약 27~28분) | |
+| 11 | 문서 — **SM이 닫힌다**(design `Status:` · `MEMORY.md` · `CLAUDE.md`) | |
+
+**Task 3이 `withPath`의 이름을 바꾸므로 Task 5까지 `zig build`가 빨간 것이
+정상이다** — 부르는 자리를 반드시 지나가게 만드는 것이 그 편집의 값이다.
+
+## 이 세션이 잰 것 — **실측 34~42. 다시 재지 말 것**
+
+**아직 design에는 안 들어갔다** — plan의 Task 1에 전문이 있고, Task 11이
+design으로 옮긴다.
+
+| | 무엇 | 값 |
+|---|---|---|
+| **34** | **셸이 어떻게 끝나야 `HISTFILE`이 써지나** | `exit`·**SIGTERM**·**SIGHUP**은 써진다. **SIGKILL(=전원)은 안 써진다** |
+| 35 | `fc -W` 뒤의 파일과 `wc -l` 출력 | 평문 한 줄에 명령 하나. **GNU `wc`는 파일이 하나면 앞에 공백을 안 넣는다**(`6 /config/zsh_history`) |
+| 36 | 새 셸의 `history` 출력 모양 | `····1··cd /usr/…` — **네 칸, 번호, 공백 둘** |
+| 37 | bash의 상한 | **`HISTFILESIZE`를 안 줘도 `HISTSIZE`로 파일까지 자른다**(5로 12개 → 5줄) |
+| 38 | `XDG_DATA_HOME`과 zoxide | 없는 경로 둘을 스스로 만들고 `db.zo` 하나. 홈에는 아무것도 안 남는다 |
+| **39c** | **env 넷의 비용** | zsh 371→**371** · bash 127→**127** · fish 863→**863**. **0바이트**(위험 1) |
+| 40 | fish 히스토리 | `$XDG_DATA_HOME/fish/fish_history`로 자동으로 간다(env도 rc 줄도 필요 없다) |
+| 41 | **fish는 첫 대화형 기동에 `$HISTFILE`을 가져온다** | 우리 설계에서는 안 일어난다(fish에 `HISTFILE`을 안 준다). **문서에만 적는다** |
+| **42** | **7차→8차 예행** | `kill -9` 뒤 새 세션에서 판정 셋이 전부 나왔다 — `/usr/share/terminfo/x` · `db.zo` · `    5  whence -w fzf-history-widget` |
+
+## **design이 안 본 자리 하나 — 게이트는 전원을 뽑는다**
+
+`boot_once`는 마커를 보면 `kill "$QEMU_PID"`로 기계를 끝낸다. 게스트에게 그것은
+**전원이 끊긴 것**이고, 셸이 나갈 때 하는 일이 하나도 안 일어난다.
+
+**결정 3은 "부팅 사이에 남는다"를 적으면서 게이트가 기계를 어떻게 끝내는지를
+안 봤다** — SM-M1에서 *"design이 앞 부팅이 남긴 디스크 상태를 안 봤다"*와 같은
+종류의 빈 자리이고, 이번에는 **착수 전에 걸렸다.**
+
+처방은 **7차가 `fc -W`를 직접 치는 것**이고, 되읽기(`wc -l`)를 함께 둔다 —
+없으면 8차가 빨간 이유가 *"안 썼다"*인지 *"안 읽었다"*인지 안 갈린다.
+
+**실기는 안전하다** — 전원 버튼을 누르면 PID 1의 SIGTERM이 셸에 가고 실측 34가
+그때 저장된다고 말한다. 못 쓰는 것은 게이트뿐이다.
+
+## 실측을 다시 낼 때 쓴 방법 (컨테이너는 지웠다)
+
+```bash
+docker run -d --name tars-measure tars-devcontainer sleep 3600
+docker exec tars-measure bash -c 'apt-get update -qq && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish zoxide fzf'
+# 대화형 셸은 fifo + script로 띄운다 — 게스트의 셸은 PTY 위에 산다
+#   mkfifo in; ( env -i … script -qfc "zsh -i" /dev/null < in > out ) &
+#   exec 3> in; printf 'cmd\n' >&3
+# ⚠ 전/후를 잴 때는 반드시 `env -i` — 앞 측정의 export가 새면 실측 41처럼
+#   엉뚱한 것을 본다(그것이 fish가 남의 히스토리를 읽은 이유였다)
+docker rm -f tars-measure
+```
+
+## 다음 세션이 조심할 것 셋
+
+1. **`rm -rf init/.zig-cache init/zig-out`** — 음성 확인 앞에 매번.
+   안 지우면 5회 중 1회가 거짓 초록이고 **어느 회차인지 알려 주는 신호가 없다**
+   (`docs/decisions/project_zig_out_staleness.md`).
+2. **`shift-w`가 이 저장소의 첫 대문자다.** `fc -W`를 치는데, `sendkey`에
+   대문자 키 이름은 없지만 `shift-w`는 있고 게스트 keymap이
+   `.{ 'w', 'W' }`를 갖고 있다(`terminal/src/input.zig:47`). 안 먹으면 화면에
+   `fc: bad option`이 뜬다 — **그때는 monitor에 직접 `sendkey shift-w`를 쳐서
+   QEMU 겹과 우리 keymap 겹을 먼저 가른다.**
+3. **커밋 안 한 구현이 있는 파일에 `git checkout`을 쓰지 않는다**(SM-M1의 사고).
+
+## 이 세션의 핵심 파일
+
+| 파일 | 왜 중요한가 |
+|---|---|
+| `docs/.../plans/2026-09-12-tars-shell-memory-sm-m2.md` | **이 세션의 전부.** Task 열하나 · 실측 34~42 · 되돌림 D·E·F · self-review |
+| `docs/.../specs/2026-09-11-tars-shell-memory-design.md` | 결정 2·3·4·9가 M2다. **실측 34~42는 아직 여기 없다**(Task 11) |
+| `init/src/environ.zig` | **Task 3이 여는 파일.** 지금은 `withPath` 하나뿐이다 |
+| `init/src/main.zig:467~491` · `:540` · `:582` | env 블록이 **머리에서 `resolveShell` 뒤로** 내려간다(Task 5) |
+| `config/check.sh`의 `probe_shell_hooks` | 7차. **Task 7이 여기에 `fc -W`를 붙이고 옆에 8차를 만든다** |
+| `tools/check.sh:634` | DB 자리를 적어 둔 주석이 M2로 낡는다 |
+
+---
+
+## 그 앞의 세션 — SM-M1 (2026-09-12): 훅이 걸렸고, 첫 회차를 믿을 수 없다는 것을 재서 알았다
 
 ## 지금 어디인가
 
