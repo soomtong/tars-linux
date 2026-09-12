@@ -1,6 +1,6 @@
 ---
 name: project_zig_out_staleness
-description: "Zig 빌드 산출물이 소스보다 낡은 채로 판정에 쓰일 수 있다 — 증상이 양쪽으로 난다(깨뜨렸는데 초록 · 고쳤는데 빨강). 저장소가 여섯 번 봤고 SM-M1이 처음으로 비율을 쟀다: 따뜻한 캐시에서 편집 직후 첫 회차가 **5회 중 1회** 거짓 초록이고, `rm -rf .zig-cache zig-out` 뒤에는 **4회 중 4회** 옳다. 바인드 마운트는 범인이 아니다(10/10 새 내용). 처방은 '두 번 돌린다'가 아니라 음성 확인 전에 둘을 지우는 것 — 루트 게이트의 `clean()`이 이미 그것을 한다"
+description: "Zig 빌드 산출물이 소스보다 낡은 채로 판정에 쓰일 수 있다 — 증상이 양쪽으로 난다(깨뜨렸는데 초록 · 고쳤는데 빨강). 저장소가 여섯 번 봤고 SM-M1이 처음으로 비율을 쟀다: 따뜻한 캐시에서 편집 직후 첫 회차가 **5회 중 1회** 거짓 초록이고, `rm -rf .zig-cache zig-out` 뒤에는 **4회 중 4회** 옳다. 바인드 마운트는 범인이 아니다(10/10 새 내용). 처방은 '두 번 돌린다'가 아니라 음성 확인 전에 둘을 지우는 것 — 루트 게이트의 `clean()`이 이미 그것을 한다. **SM-M2가 그 처방을 한 글자 좁혔다: 지우는 것도 컨테이너 안에서 한다.** 호스트(macOS)에서 지우고 컨테이너에서 빌드하면 9회 중 2회 `error: FileNotFound`로 죽고, 컨테이너 안에서 지우면 6/6 정상이다"
 metadata:
   node_type: memory
   type: project
@@ -62,8 +62,17 @@ zig-out/bin/init  3,363,824 bytes   ← 제대로 된 것
 **음성 확인을 하기 전에 둘을 지운다.**
 
 ```bash
-rm -rf init/.zig-cache init/zig-out terminal/.zig-cache terminal/zig-out
+# ✓ **같은 컨테이너 안에서** 지운다
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  rm -rf init/.zig-cache init/zig-out terminal/.zig-cache terminal/zig-out
+  cd init && zig build test'
 ```
+
+⚠ **호스트(macOS)에서 지우고 컨테이너에서 빌드하면 안 된다**(SM-M2가 쟀다).
+그렇게 하면 뒤이은 `zig build`가 **9회 중 2회** `error: FileNotFound` 한 줄로
+죽는다 — 같은 삭제를 컨테이너 안에서 하면 **6/6 정상**이다. `--verbose`를 줘도
+한 줄도 더 안 나오고(빌드가 시작되기 전에 죽는다), **컴파일 에러와 구분이 안
+되는 모양**이라 더 나쁘다. 원인은 안 팠다 — 처방이 한 글자 옮기는 것이라서다.
 
 **"두 번 돌린다"는 처방이 아니다.** 두 회차가 다른 답을 낼 때 어느 쪽이
 참인지 말해 주는 것이 없고(위의 `cached` 수가 그 시도였다), 되돌리는 방향에서는
@@ -86,6 +95,7 @@ rm -rf init/.zig-cache init/zig-out terminal/.zig-cache terminal/zig-out
 것이 위의 표다.
 
 관련: [[project_userland_tools]](4번이 `zig-out` 쪽을 처음 적었다) ·
-[[project_shell_memory]](SM-M1이 비율을 쟀다) ·
+[[project_shell_memory]](SM-M1이 비율을 쟀고, **SM-M2가 어디서 지워야 하는지를
+좁혔다**) ·
 [[project_gate_latency]](`clean()`을 판당 1회로 옮긴 변경 — 그것이 이 함정을
 루트 게이트에서 막고 있다) · [[project_build_host_arch]]

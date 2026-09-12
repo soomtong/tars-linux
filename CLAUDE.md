@@ -177,11 +177,12 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   **SC-M0·M1·M2도 편집을 Claude Code가 했다** — 사용자가 2026-09-11에
   외출하며 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 세 세션 연속으로
   정했다. UT의 네 세션과 같은 종류이고 **세션 단위**다.
-  **진행 중: Shell Memory(SM, 2026-09-11 착수).** `zoxide`·`fzf`를 세우고
+  **Shell Memory(SM-M0~M2, 2026-09-11·12 완료 — 서브프로젝트가 닫혔다).**
+  `zoxide`·`fzf`를 세우고
   `/config`의 rc 셋에 훅을 걸어 **기계가 배운 것 둘**(자주 간 디렉터리 ·
   쳤던 명령)을 부팅 사이에 남긴다. design은
   `.../specs/2026-09-11-tars-shell-memory-design.md`,
-  plan은 `.../plans/2026-09-11-tars-shell-memory-sm-m0.md`, 기억은
+  plan은 `.../plans/`에 셋(`…-sm-m0.md`·`…-sm-m1.md`·`…-sm-m2.md`), 기억은
   `docs/decisions/project_shell_memory.md`.
   **SM-M0이 2026-09-11에 끝났다** — 도구 둘이 게스트에 서고 `tools/check.sh`가
   검사 둘(17·18)로 그것을 친다. **`make_initrd.sh`는 한 글자도 안 고쳤다**
@@ -200,10 +201,35 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   "깨뜨렸는데 첫 회차가 초록"이 **5회 중 1회**라는 것을 처음 쟀고, 처방은
   "두 번 돌린다"가 아니라 음성 확인 전에
   **`rm -rf init/.zig-cache init/zig-out`**이다
-  (`docs/decisions/project_zig_out_staleness.md`). **M2는 미착수다.**
+  (`docs/decisions/project_zig_out_staleness.md`).
+  **SM-M2가 2026-09-12에 끝나 서브프로젝트가 닫혔다** — `environ.zig`의
+  `withPath`가 **`withTarsEnv`**가 되어 커널 블록 뒤에 `PATH` ·
+  `XDG_DATA_HOME` · **셸마다 갈리는 히스토리 env**(zsh 셋 · bash 둘 ·
+  **fish 0**)를 붙이고, 그 블록을 짓는 자리가 `main()`의 첫 줄에서
+  **`resolveShell` 뒤로** 내려왔다(`HISTFILE`이 셸마다 다른 파일이라 셸이
+  정해져 있어야 하고, **`cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다**).
+  **씨앗 rc와 `expectQuietSeed`는 한 글자도 안 건드렸다.**
+  ⚠ **design이 안 본 자리 하나를 착수 전에 걸렀다 — 게이트는 전원을 뽑는다**
+  (`boot_once`가 `kill "$QEMU_PID"`로 끝내므로 셸이 나갈 때 하는 일이 하나도 안
+  일어난다. `exit`·SIGTERM·SIGHUP은 `HISTFILE`을 쓰고 **SIGKILL은 안 쓴다** —
+  **실기는 PID 1의 SIGTERM이 있어 안전하다.** 처방은 **7차가 `fc -W`를 직접
+  치는 것**이고, `shift-w`가 **이 저장소의 첫 대문자**였다).
+  `config/check.sh`가 **부팅 여덟**이 됐고 **8차는 아무것도 안 심는다** —
+  달라진 것은 기계가 한 번 꺼졌다 켜졌다는 것뿐이다.
+  ⚠ **M2도 새 코드와 무관한 것을 둘 좁혔다.** 하나는 `.zig-cache`를
+  **호스트에서** 지우면 뒤이은 `zig build`가 **9회 중 2회**
+  `error: FileNotFound`로 죽는다는 것(**지우는 것도 컨테이너 안에서 한다** —
+  6/6 정상). 다른 하나는 **첫 루트 게이트를 실제로 빨갛게 만든 것**인데,
+  `hangul/check.sh:326`의 `tr … | grep -aqE`가 SM-M0이 기록한 **그 SIGPIPE +
+  pipefail 병**이었다(`!` 형이라 **거짓 빨강**. 판정 글자가 로그에 멀쩡히
+  있는데 빨갛고, 같은 게이트의 run 1/3은 초록이었다 — 파이프 버퍼보다 로그가
+  커지느냐의 **경주**다). **SM-M0의 목록이 그것을 못 센 이유는 `rg` 패턴이
+  플래그 끝이 `q`인 것만 찾았고 이 자리는 `-aqE`였기 때문이다** — 다음에 세는
+  사람은 `rg '\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q'`를 쓸 것. 남은 일곱
+  (`machine/check.sh` 넷 · `config/check.sh` 셋)은 그대로 숙제다.
   **착수 세션(design + M0 plan)도 편집을 Claude Code가 했다** — 사용자가
   2026-09-11에 "이번 세션도 위임"으로 정했고 **그 세션이 고친 것은 문서
-  둘뿐이다**(코드는 한 줄도 안 건드렸다). **SM-M0 세션도, SM-M1 세션도 같은
+  둘뿐이다**(코드는 한 줄도 안 건드렸다). **SM-M0·M1·M2 세션도 같은
   위임이었다** — 사용자가 2026-09-11과 2026-09-12에 "이번 구현에 대한 모든
   결정을 위임한다"고 정했다. SH·FP·RM·UT·SC와 같은 종류이고 **세션 단위**다.
   **다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**

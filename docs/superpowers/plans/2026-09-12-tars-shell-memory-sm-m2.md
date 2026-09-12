@@ -225,7 +225,7 @@ db.zo                                     ← 그 기억이 설정 디스크에 
 - Modify: `init/src/config.zig` (`Shell` enum 안, `rcPath()`와 `hookLines()`
   사이)
 
-- [ ] **Step 1: 상수 둘과 함수 하나를 넣는다**
+- [x] **Step 1: 상수 둘과 함수 하나를 넣는다**
 
 `rcPath()`의 닫는 `}` 바로 뒤, `HOOKS_FISH` 주석 앞에 **넣을 것**:
 
@@ -267,7 +267,7 @@ db.zo                                     ← 그 기억이 설정 디스크에 
     }
 ```
 
-- [ ] **Step 2: 컴파일한다**
+- [x] **Step 2: 컴파일한다**
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -283,7 +283,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 **Files:**
 - Modify: `init/src/environ.zig`
 
-- [ ] **Step 1: 상수 둘을 더한다**
+- [x] **Step 1: 상수 둘을 더한다**
 
 `PATH_ENTRY` 선언 바로 뒤에 **넣을 것**:
 
@@ -307,7 +307,7 @@ pub const XDG_DATA_DIR = "/config/xdg";
 pub const XDG_ENTRY: [:0]const u8 = "XDG_DATA_HOME=" ++ XDG_DATA_DIR;
 ```
 
-- [ ] **Step 2: `withPath`를 통째로 `withTarsEnv`로 바꾼다**
+- [x] **Step 2: `withPath`를 통째로 `withTarsEnv`로 바꾼다**
 
 **지울 것** — `withPath`의 머리 주석부터 함수 끝까지(`init/src/environ.zig:37`
 ~ `:56`).
@@ -354,7 +354,7 @@ pub fn withTarsEnv(
 }
 ```
 
-- [ ] **Step 3: 컴파일은 아직 깨진다**
+- [x] **Step 3: 컴파일은 아직 깨진다**
 
 `main.zig`가 아직 `withPath`를 부르므로 Task 5까지는 `zig build`가 빨갛다.
 **정상이다** — 이름을 바꾼 것이 부르는 자리를 반드시 지나가게 만드는 것이
@@ -368,7 +368,7 @@ pub fn withTarsEnv(
 - Modify: `init/src/environ_test.zig`
 - Modify: `init/src/config_test.zig`
 
-- [ ] **Step 1: `environ_test.zig`를 새 계약으로 고친다**
+- [x] **Step 1: `environ_test.zig`를 새 계약으로 고친다**
 
 머리의 `const environ = @import("environ.zig");` 아래에 **넣을 것**:
 
@@ -501,7 +501,7 @@ const config = @import("config.zig");
     std.debug.print("environ_test: PATH, XDG_DATA_HOME and the shell's history env are appended to the kernel's block ({d} slots)\n", .{environ.MAX_ENTRIES});
 ```
 
-- [ ] **Step 2: `config_test.zig`에 히스토리 검사를 더한다**
+- [x] **Step 2: `config_test.zig`에 히스토리 검사를 더한다**
 
 `expectHooksCoverTheTools`의 닫는 `}` 뒤에 **넣을 것**:
 
@@ -572,7 +572,7 @@ fn expectHistEntries(sh: config.Shell) !void {
     }
 ```
 
-- [ ] **Step 3: 호스트 검사를 돌린다** (Task 5 뒤에 함께 돈다 — 지금은
+- [x] **Step 3: 호스트 검사를 돌린다** (Task 5 뒤에 함께 돈다 — 지금은
       `main.zig`가 아직 안 고쳐져 빌드가 빨갛다)
 
 ---
@@ -582,7 +582,7 @@ fn expectHistEntries(sh: config.Shell) !void {
 **Files:**
 - Modify: `init/src/main.zig`
 
-- [ ] **Step 1: `mountDevpts` 옆에 `/config/xdg`를 만드는 함수를 넣는다**
+- [x] **Step 1: `mountDevpts` 옆에 `/config/xdg`를 만드는 함수를 넣는다**
 
 `mountDevpts()`의 닫는 `}` 뒤에 **넣을 것**:
 
@@ -609,7 +609,7 @@ fn makeXdgDir() void {
 }
 ```
 
-- [ ] **Step 2: `main()` 머리의 env 블록을 지운다**
+- [x] **Step 2: `main()` 머리의 env 블록을 지운다**
 
 **지울 것** — `main.zig:467`의 `pub fn main(...) {` 바로 아래, 주석 포함
 `var env_buf` 선언부터 `tars-init: env unchanged` 블록의 닫는 `}`까지
@@ -625,7 +625,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
 ```
 
-- [ ] **Step 3: `seedRcFiles` 옆에서 `/config/xdg`를 만든다**
+- [x] **Step 3: `seedRcFiles` 옆에서 `/config/xdg`를 만든다**
 
 **지울 것**(`main.zig:540`):
 
@@ -646,7 +646,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
 ```
 
-- [ ] **Step 4: `resolveShell` 뒤에서 env 블록을 짓는다**
+- [x] **Step 4: `resolveShell` 뒤에서 env 블록을 짓는다**
 
 `const shell_path = shell.path();` 바로 뒤에 **넣을 것**:
 
@@ -697,7 +697,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
 ```
 
-- [ ] **Step 5: 빌드와 호스트 검사**
+- [x] **Step 5: 빌드와 호스트 검사**
 
 ```bash
 rm -rf init/.zig-cache init/zig-out
@@ -718,17 +718,17 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 (`docs/decisions/project_zig_out_staleness.md` — 안 지우면 5회 중 1회가
 거짓 초록이고 어느 회차인지 알려 주는 신호가 없다.)
 
-- [ ] **되돌림 A: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
+- [x] **되돌림 A: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
 
 기대: `FAIL: the zsh shell carries 2 history env entries, want 3`.
 **실측 9를 지키는 그물이 도는지 보는 것이다.**
 
-- [ ] **되돌림 B: `HIST_BASH`의 `HISTFILE`을 zsh와 같은 파일로 바꾼다**
+- [x] **되돌림 B: `HIST_BASH`의 `HISTFILE`을 zsh와 같은 파일로 바꾼다**
 
 기대: `FAIL: bash and zsh point HISTFILE at the same file`.
 (개수 검사만으로는 안 잡힌다 — 그래서 그 한 줄이 따로 있다.)
 
-- [ ] **되돌림 C: `withTarsEnv`에서 `buf[n + 1] = XDG_ENTRY.ptr;`를 지우고
+- [x] **되돌림 C: `withTarsEnv`에서 `buf[n + 1] = XDG_ENTRY.ptr;`를 지우고
       `added`를 `1 + hist.len`으로 바꾼다**
 
 기대: `FAIL: PATH and XDG_DATA_HOME are not the first two we add`.
@@ -742,11 +742,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 - Modify: `config/check.sh`
 - Modify: `tools/check.sh` (주석 한 자리)
 
-- [ ] **Step 1: 머리글 `/7` → `/8` — 일곱 자리**
+- [x] **Step 1: 머리글 `/7` → `/8` — 일곱 자리**
 
 `=== boot 1/7:` … `=== boot 7/7:` 일곱 줄을 전부 `/8`로 바꾼다.
 
-- [ ] **Step 2: 키 배열 넷을 더한다**
+- [x] **Step 2: 키 배열 넷을 더한다**
 
 `HOOK_WIDGET_KEYS` 선언 뒤에 **넣을 것**:
 
@@ -785,7 +785,7 @@ XDG_LS_KEYS=(l s spc slash c o n f i g slash x d g slash z o x i d e ret)
 HISTORY_KEYS=(h i s t o r y ret)
 ```
 
-- [ ] **Step 3: 7차의 훅에 `fc -W`와 되읽기를 붙인다**
+- [x] **Step 3: 7차의 훅에 `fc -W`와 되읽기를 붙인다**
 
 `probe_shell_hooks`의 마지막 `echo "boot 7: the fzf integration …"` **앞**에
 **넣을 것**(위젯 판정의 `if` 블록 뒤, `return 0` 앞):
@@ -822,7 +822,7 @@ HISTORY_KEYS=(h i s t o r y ret)
 그리고 위젯 판정 블록의 `exec 3<&-` / `exec 3>&-` 두 줄은 **지운다** —
 monitor를 여기서 닫으면 위의 타이핑이 못 간다.
 
-- [ ] **Step 4: 8차의 훅 함수를 더한다**
+- [x] **Step 4: 8차의 훅 함수를 더한다**
 
 `probe_shell_hooks`의 닫는 `}` 뒤, `boot_once` 앞에 **넣을 것**:
 
@@ -924,7 +924,7 @@ probe_persisted_memory() {
 }
 ```
 
-- [ ] **Step 5: 1차·7차에 env 검사를 더한다**
+- [x] **Step 5: 1차·7차에 env 검사를 더한다**
 
 1차 부팅의 `echo "boot 1: init seeded all three rc files on the empty disk"`
 뒤에 **넣을 것**:
@@ -960,7 +960,7 @@ for want in \
 done
 ```
 
-- [ ] **Step 6: 8차 부팅 블록을 더한다**
+- [x] **Step 6: 8차 부팅 블록을 더한다**
 
 7차 블록의 마지막 `echo "boot 7: the machine learned a directory …"` 뒤,
 `# 정보성. ext2가 …` 앞에 **넣을 것**:
@@ -1022,7 +1022,7 @@ echo "--- init log (boot 8) ---"
 grep 'tars-init:' "$LOG8" || true
 ```
 
-- [ ] **Step 7: `tools/check.sh`의 낡은 주석 한 자리**
+- [x] **Step 7: `tools/check.sh`의 낡은 주석 한 자리**
 
 `tools/check.sh:634` 근처의 **지울 것**:
 
@@ -1052,7 +1052,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh 2>&1 | tail -50
 ```
 
-- [ ] **Step 1: 통과할 때까지 돌린다**(부팅 여덟, 약 1분 50초)
+- [x] **Step 1: 통과할 때까지 돌린다**(부팅 여덟, 약 1분 50초)
 
 기대하는 새 줄 넷:
 
@@ -1071,7 +1071,7 @@ shift 경로를 보기 전에 **monitor에 직접 `sendkey shift-w`를 쳐서** 
 문제인지 먼저 가른다(QEMU가 안 보낸 것과 우리 keymap이 안 받은 것은 다른
 병이다).
 
-- [ ] **Step 2: 걸린 시간을 적어 둔다** (SM-M1은 부팅 일곱에 약 1분 40초였다)
+- [x] **Step 2: 걸린 시간을 적어 둔다** (SM-M1은 부팅 일곱에 약 1분 40초였다)
 
 ---
 
@@ -1081,7 +1081,7 @@ shift 경로를 보기 전에 **monitor에 직접 `sendkey shift-w`를 쳐서** 
 
 **매번 앞에 `rm -rf init/.zig-cache init/zig-out`을 친다.**
 
-- [ ] **되돌림 D: `XDG_DATA_DIR`을 `/tmp/xdg`로 바꾼다**
+- [x] **되돌림 D: `XDG_DATA_DIR`을 `/tmp/xdg`로 바꾼다**
 
 (`environ.zig` 한 줄. `environ_test`의 값 검사 둘도 함께 고쳐야 호스트를
 지난다 — **그 두 줄을 고쳐야 한다는 것 자체가 그물이 산다는 증거다.**)
@@ -1097,7 +1097,7 @@ FAIL(boot 8): the machine forgot the directory the seventh boot learned
 **이 비대칭이 이 milestone이 증명하는 것의 정확한 모양이다** — 한 부팅
 안에서는 되고, 부팅을 넘으면 안 된다. M1의 7차는 이 되돌림을 **못 잡는다.**
 
-- [ ] **되돌림 E: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
+- [x] **되돌림 E: `HIST_ZSH`에서 `SAVEHIST` 줄을 지운다**
 
 (`config_test.zig`의 `want_len`도 함께 고쳐야 호스트를 지난다.)
 
@@ -1110,7 +1110,7 @@ FAIL(boot 7): 'fc -W' left no history file for the eighth boot to read
 
 **실측 9의 재현이고, 그 실측이 없었으면 `HISTFILE`만 주고 끝냈을 자리다.**
 
-- [ ] **측정 F(음성 확인이 아니다): `makeXdgDir()` 호출을 지운다**
+- [x] **측정 F(음성 확인이 아니다): `makeXdgDir()` 호출을 지운다**
 
 기대: **초록일 것이다.** zoxide가 없는 경로를 스스로 만든다(실측 4·38).
 
@@ -1128,12 +1128,13 @@ FAIL(boot 7): 'fc -W' left no history file for the eighth boot to read
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 ```
 
-- [ ] **Step 1: 3/3, 18 PASS / 0 FAIL**
+- [x] **Step 1: 3/3, FAIL 0** — **28분 03.23초**(기준선 SM-M1 27분 05.06초,
+      +57.71초). **첫 게이트는 빨갰다** — 아래 "plan이 틀렸던 자리" 4번.
 
 기준선은 SM-M1의 **27분 05.06초**다. 부팅이 하나 늘어 회차마다 세 번 더
 켜지므로 **부팅당 약 6초 × 3 = +20초 안쪽**으로 본다.
 
-- [ ] **Step 2: 세는 것**
+- [x] **Step 2: 세는 것**
 
 ```bash
 for s in 'command not found' 'Unknown command' 'Welcome to fish' \
@@ -1158,16 +1159,60 @@ done
 
 ## Task 11: 문서 — **서브프로젝트가 닫힌다**
 
-- [ ] **Step 1: design** — 실측 34~42 · 결정 3에 **정정 블록**(게이트는 전원을
+- [x] **Step 1: design** — 실측 34~42 · 결정 3에 **정정 블록**(게이트는 전원을
       뽑으므로 7차가 `fc -W`를 친다) · **`Status:` 줄을 "완료"로**
-- [ ] **Step 2: `docs/decisions/project_shell_memory.md`** — M2가 배운 것
-- [ ] **Step 3: `MEMORY.md` · `CLAUDE.md`**(완료 목록에 SM을 넣는다) ·
+- [x] **Step 2: `docs/decisions/project_shell_memory.md`** — M2가 배운 것
+- [x] **Step 3: `MEMORY.md` · `CLAUDE.md`**(완료 목록에 SM을 넣는다) ·
       `HANDOFF.md`
-- [ ] **Step 4: 이 plan의 체크박스와 `⚠ plan이 틀렸다` 블록**(틀린 자리가
+- [x] **Step 4: 이 plan의 체크박스와 `⚠ plan이 틀렸다` 블록**(틀린 자리가
       있었다면 지우지 않고 남긴다)
-- [ ] **Step 5: 커밋** — Claude가 만든다
+- [x] **Step 5: 커밋** — Claude가 만든다
 
 ---
+
+## ⚠ plan이 틀렸던 자리 넷 — **지우지 않고 남긴다**
+
+### 1. 되돌림 C가 **다른 줄에서** 빨개졌다
+
+plan은 `FAIL: PATH and XDG_DATA_HOME are not the first two we add`를
+기대했는데 실제로는 **개수 검사가 먼저 걸렸다**.
+
+```
+FAIL: want 7 entries for zsh, got 6
+```
+
+그물은 산다(같은 블록 1이 잡는다). **판정 줄까지 예측한 것이 과했고**, 되돌림의
+기대를 적을 때는 "어느 검사가 먼저 실행되는가"까지 봐야 한다.
+
+### 2. 되돌림 D가 **`config/check.sh`도 함께 고쳐야** 게이트에 닿는다
+
+plan은 *"`environ_test`의 값 검사 둘도 함께 고쳐야 호스트를 지난다"*까지만
+적었는데, **이 milestone이 Task 7 Step 5에서 1차 부팅에 넣은 grep**
+(`tars-init: env PATH=… XDG_DATA_HOME=/config/xdg`)이 `report_failure`로
+**1차에서 즉시 죽인다** — 7차·8차에 닿지도 못한다.
+
+그 한 줄까지 함께 바꾸니 기대한 그림이 그대로 나왔다(7차 초록 · 8차 빨강).
+**그물을 새로 놓은 milestone의 되돌림은 자기가 놓은 그물에도 걸린다.**
+
+### 3. 되돌림 E는 `want_len` 하나로는 호스트를 못 지난다
+
+`expectHistEntries`의 **`SAVEHIST`는 zsh만 받는다** 검사도 함께 걸린다
+(`FAIL: SAVEHIST belongs to zsh alone`). 그 줄까지 임시로 꺼야 게스트까지
+간다 — **검사를 셋으로 나눈 것의 대가이고, 그 대가는 치를 만하다.**
+
+### 4. **게이트가 한 번 빨갰고, 그것은 이 plan이 만든 것이 아니었다**
+
+plan은 Task 10의 위험으로 *"다섯 체인이 새 env를 받는다"*만 봤다. 실제로 첫
+게이트를 죽인 것은 **`hangul/check.sh:326`의 SIGPIPE**였다 — 판정 글자가
+로그에 멀쩡히 있는데 빨갰고, **같은 게이트의 run 1/3은 초록이었다.**
+
+SM-M0이 `tools/check.sh`에서 고친 그 병이고, 그때 만든 목록이 이 자리를 못
+센 이유는 `rg` 패턴이 **플래그 끝이 `q`인 것만** 찾았기 때문이다(여기는
+`-aqE`). 그 두 줄을 고치고 HI 체인을 단독으로 돌려 확인한 뒤 게이트를 다시
+돌렸다.
+
+**plan에 "안 하는 것"으로 적혀 있던 `grep -q` 숙제가 스스로 찾아온 것이고,
+그때는 하는 수밖에 없다** — 남은 일곱은 여전히 숙제다.
 
 ## 이 milestone이 안 하는 것
 

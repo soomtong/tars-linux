@@ -51,6 +51,27 @@ fn mountDevpts() void {
     _ = mountFs("devpts", "/dev/pts", "devpts", 0);
 }
 
+/// `XDG_DATA_HOME`이 가리키는 디렉터리를 만든다(SM design 결정 9).
+/// **설정 디스크가 붙었을 때만** 부른다 — 안 붙은 기계에서는 `/config`가
+/// tmpfs의 빈 디렉터리이고, 거기에 도구가 자기 자리를 만드는 것이 정상
+/// 경로다(실측 4).
+///
+/// **도구 둘이 없는 경로를 스스로 만든다는 것을 알고도 만드는 이유**는
+/// 실패의 자리를 정하기 위해서다. 디스크가 붙었는데 여기에 못 쓰면 그것은
+/// 이상한 일이고, 그때 로그 한 줄이 남는 편이 "기억이 안 남는다"를 나중에
+/// 셸에서 조사하는 것보다 낫다. `mountDevpts`가 `/dev/pts`에 대해 하는 것과
+/// 같은 모양이다.
+fn makeXdgDir() void {
+    const rc = linux.mkdir(environ.XDG_DATA_DIR, 0o755);
+    if (failed(rc)) |e| {
+        // 이미 있다 = 두 번째 부팅부터의 정상 경로다. 조용히 둔다.
+        if (e == .EXIST) return;
+        std.debug.print("tars-init: could not create {s} (errno {d})\n", .{
+            environ.XDG_DATA_DIR, @intFromEnum(e),
+        });
+    }
+}
+
 /// 설정 저장소를 붙인다. initramfs는 tmpfs라 전원이 꺼지면 통째로 사라진다 —
 /// 재부팅을 넘어 살아남는 것은 이 디스크 하나뿐이다. 파티션 테이블 없이
 /// 디스크 전체가 ext2라서 /dev/nvme0n1p1이 아니라 /dev/nvme0n1이다.
@@ -465,30 +486,7 @@ fn supervise(
 }
 
 pub fn main(init: std.process.Init.Minimal) void {
-    // 커널이 PID 1의 스택에 올려준 환경 변수 블록. 커널은 둘만 준다
-    // (HOME=/ · TERM=linux) — PATH가 없어서 게스트 셸이 명령을 이름으로
-    // 못 찾았다.
-    //
-    // **이 버퍼가 main()의 스택에 있는 것이 중요하다.** supervise()가 영영
-    // 반환하지 않으므로 프로세스 수명 내내 유효하다 — keyboard_path·argv와
-    // 같은 근거다. 자식은 fork 뒤 execve로 이 포인터를 읽는다.
-    var env_buf: environ.Block = undefined;
-    const envp = environ.withPath(init.environ.block.slice.ptr, &env_buf);
-
     std.debug.print("tars-init: starting as PID 1\n", .{});
-
-    // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
-    // 블록을 받는다는 것은 supervise()가 start(c, envp)를 한 루프에서
-    // 부르는 코드 구조가 보장한다 — 시리얼 콘솔 셸에 타이핑한 체인이
-    // 저장소에 하나도 없어서 그쪽은 관측이 아니라 구조로 안다.
-    //
-    // withPath가 자리 부족으로 폴백했으면 이 줄이 안 나온다. 그 침묵이
-    // 곧 판정이다.
-    if (envp != init.environ.block.slice.ptr) {
-        std.debug.print("tars-init: env {s}\n", .{environ.PATH_ENTRY});
-    } else {
-        std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
-    }
 
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
@@ -537,7 +535,14 @@ pub fn main(init: std.process.Init.Minimal) void {
     //
     // **`cfg`를 안 넘긴다.** 씨앗은 `shell_config`도 `shell`도 안 본다 —
     // 그 근거는 `config.seedRcFiles`의 주석에 있다.
-    if (storage_mounted) config.seedRcFiles();
+    if (storage_mounted) {
+        config.seedRcFiles();
+        // SM-M2 결정 9. **씨앗 rc와 같은 조건이다** — 디스크가 붙은 기계에만
+        // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
+        // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그
+        // 자체다: **에러가 안 나는 것이 화면 좌표를 지키는 것이다.**
+        makeXdgDir();
+    }
     // **줄을 새로 만들지 않고 이 줄을 넓힌다**(HI-M2). 다른 체인들이
     // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
     //
@@ -581,6 +586,52 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
     const shell = resolveShell(cfg.shell);
     const shell_path = shell.path();
+
+    // ── env 블록은 여기서 짓는다(SM-M2) ──────────────────────────────────
+    //
+    // **UT-M0에서는 `main()`의 첫 줄이었다.** 내려온 이유는 `HISTFILE`이
+    // 셸마다 다른 파일이어야 하기 때문이다(결정 3) — 그 값을 알려면 설정을
+    // 읽고 `resolveShell`이 끝나 있어야 한다.
+    //
+    // **`cfg.shell`이 아니라 `shell`을 보는 것이 중요하다.** `tars.conf`가
+    // zsh라고 적어도 initrd에 zsh가 없으면 실제로 도는 것은 fish이고, 그때
+    // `HISTFILE=/config/zsh_history`를 주면 **아무도 안 읽는 파일 이름을 env에
+    // 심는 것**이 된다. 폴백 뒤의 값을 쓰면 로그의 `config shell=`과 여기가
+    // 언제나 같은 셸을 말한다.
+    //
+    // **이 버퍼가 `main()`의 스택에 있는 것이 중요하다.** `supervise()`가 영영
+    // 반환하지 않으므로 프로세스 수명 내내 유효하다 — `keyboard_path`·argv와
+    // 같은 근거다. 자식은 fork 뒤 execve로 이 포인터를 읽는다.
+    var env_buf: environ.Block = undefined;
+    const envp = environ.withTarsEnv(
+        init.environ.block.slice.ptr,
+        &env_buf,
+        shell.histEntries(),
+    );
+
+    // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
+    // 블록을 받는다는 것은 `supervise()`가 `start(c, envp)`를 한 루프에서
+    // 부르는 코드 구조가 보장한다.
+    //
+    // withTarsEnv가 자리 부족으로 폴백했으면 이 줄들이 안 나온다. 그 침묵이
+    // 곧 판정이다.
+    //
+    // **`tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
+    // grep한다** — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
+    if (envp != init.environ.block.slice.ptr) {
+        std.debug.print("tars-init: env {s} {s}\n", .{
+            environ.PATH_ENTRY, environ.XDG_ENTRY,
+        });
+        // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
+        // **그 침묵이 결정 3의 절반**(fish는 XDG 하나로 끝난다)을 로그에서
+        // 읽는 법이다.
+        for (shell.histEntries()) |entry| {
+            std.debug.print("tars-init: env {s}\n", .{entry});
+        }
+    } else {
+        std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
+    }
+
     // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
     // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
     const shell_flag = shell.configFlag(cfg.shell_config);

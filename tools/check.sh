@@ -631,10 +631,11 @@ echo "fzf filtered a file tree without taking the screen"
 # 맞지만 **둘을 치는 쪽을 골랐다**: SM-M2가 DB를 부팅 너머로 남기면 `x`로
 # 끝나는 경로가 여럿일 수 있고, 그때 이 검사가 무엇을 봤는지 애매해진다.
 #
-# DB는 `$HOME/.local/share/zoxide/db.zo`에 생긴다. 홈(/)은 tmpfs라 이 부팅과
-# 함께 사라지고 **M0에서는 그것이 맞다** — 부팅을 넘어 남게 하는 것은 SM-M2이고
-# 그때 XDG_DATA_HOME이 이 자리를 /config로 옮긴다. **이 검사의 판정 글자는
-# 그때도 안 바뀐다.**
+# DB는 **`$XDG_DATA_HOME/zoxide/db.zo`**에 생긴다(SM-M2가 옮겼다). 이 체인에는
+# 설정 디스크가 없으므로 `/config`는 tmpfs의 빈 디렉터리이고, zoxide가 거기에
+# 조용히 자기 자리를 만든다(실측 4·38) — **이 부팅과 함께 사라지고, 그것이
+# 여기서는 맞다.** 부팅을 넘어 남는 것을 보는 것은 `config/check.sh`의 8차이고,
+# **이 검사의 판정 글자는 그때도 안 바뀌었다.**
 echo "=== typing 'zoxide add /usr/bin/../share/terminfo/x' ==="
 type_keys z o x i d e spc a d d spc \
           slash u s r slash b i n slash dot dot slash s h a r e \
@@ -716,14 +717,24 @@ fi
 # `-q`를 빼면 뒤쪽 grep이 **입력을 끝까지 읽어서** 앞단이 SIGPIPE를 안 받는다.
 # 출력은 안 보고 종료 코드만 쓰므로 /dev/null로 버린다.
 #
-# **같은 모양이 저장소에 다섯 더 있다**(2026-09-11 `rg '\| *grep -[a-z]*q'`):
-#   config/check.sh:552      `if … | grep -qv …; then fail`   ← 조용한 초록 쪽
-#   config/check.sh:573·576  `if ! … | grep -q …; then fail`  ← 시끄러운 빨강 쪽
+# **같은 모양이 저장소에 더 있다**(2026-09-11 `rg '\| *grep -[a-z]*q'`):
+#   config/check.sh:894      `if … | grep -qv …; then fail`   ← 조용한 초록 쪽
+#   config/check.sh:915·918  `if ! … | grep -q …; then fail`  ← 시끄러운 빨강 쪽
 #   machine/check.sh:226·241·288·354  같은 `!` 형
 # `!` 형은 SIGPIPE가 나면 **거짓 빨강**이라 눈에 띄지만, `!`가 없는 형은
 # 이 자리처럼 조용히 죽는다. SM-M0은 자기 그물만 고치고 나머지는 안 건드렸다 —
-# 고치면 그 체인들을 다시 돌려 판정해야 하고, 그 다섯은 이 milestone이
+# 고치면 그 체인들을 다시 돌려 판정해야 하고, 그 다섯은 그 milestone이
 # 만든 것이 아니다.
+#
+# ⚠ **2026-09-12(SM-M2): 그 목록에 여덟째가 있었고, 그것이 루트 게이트를
+# 실제로 빨갛게 만들었다.** `hangul/check.sh:326`의
+# `tr -d '\r' < "$LOG" | grep -aqE …`가 `!` 형이라 **거짓 빨강**을 냈다 —
+# `tars-init: config …toggles=…`가 로그에 멀쩡히 있는데 *"설정 디스크에서 못
+# 읽었다"*고 말했고, **같은 게이트의 run 1/3은 초록이었다**(로그가 파이프
+# 버퍼보다 커지느냐의 경주다). 그 두 줄은 SM-M2가 고쳤다.
+# **위의 `rg` 한 줄이 그것을 못 찾은 이유는 플래그가 `-aqE`라 `q`가 가운데
+# 있었기 때문이다** — 다음에 세는 사람은
+# `rg '\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q'`로 볼 것.
 if grep -a "terminal: screen>" "$LOG" | grep -a "Unknown command" >/dev/null; then
   fail "the shell said it could not find one of the commands" \
     "terminal: screen>" "tars-init: env"

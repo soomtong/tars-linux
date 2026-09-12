@@ -1,8 +1,9 @@
 # TARS Shell Memory — Design
 
 **Date:** 2026-09-11
-**Status:** 진행 중 — **SM-M0 완료(2026-09-11) · SM-M1 완료(2026-09-12)**,
-M2 미착수.
+**Status:** **완료 — SM-M0(2026-09-11) · SM-M1(2026-09-12) · SM-M2(2026-09-12).**
+서브프로젝트가 닫혔다. **기계가 배운 것 둘이 전원을 끊어도 남고,
+`config/check.sh`의 8차 부팅이 그것을 본다.**
 Shell Config(SC-M0~M2)가 2026-09-11에 닫히면서
 **훅을 걸 자리**가 생겼고, 이 서브프로젝트가 그 자리에 처음으로 무언가를
 건다. `zoxide`와 `fzf`를 게스트에 세우고, 셸 셋의 씨앗 rc가 그 둘의 훅을
@@ -728,6 +729,246 @@ fish를 죽였다면 이 수가 줄어든다"*고 쓰려다 재 봤다 — **인
 **"씨앗이 셸을 안 죽였다"를 말하는 것은 다른 두 수다** — `times fast`가 6에서
 안 늘어난 것과, 7차의 `started … exactly 1`이다.
 
+## SM-M2가 실행으로 증명한 것
+
+**M2가 이 서브프로젝트를 닫았다.** 고친 파일이 일곱이고 **새 파일이 하나도
+없다.** 씨앗 rc와 `expectQuietSeed`는 **한 글자도 안 건드렸다**(결정 3이 옳았던
+것의 값이 여기서 나온다 — 히스토리 줄이 rc에 한 줄도 필요 없었다).
+
+### 실측 34 — **셸이 어떻게 끝나야 `HISTFILE`이 써지나**
+
+컨테이너에서 pty(`script -qfc` + fifo) 위의 zsh를 네 가지 방법으로 끝냈다.
+
+| 끝내는 법 | 파일 | 내용 |
+|---|---|---|
+| `exit` | **있다** | `echo marker_exit` / `exit` |
+| SIGTERM | **있다** | `echo marker_TERM` |
+| SIGHUP | **있다** | `echo marker_HUP` |
+| **SIGKILL(=전원)** | **없다** | — |
+
+**이 표가 M2의 모양을 정했다.** 위 결정 3의 정정 블록이 여기서 나왔고, 그것이
+`config/check.sh`의 7차에 `fc -W` 두 줄을 넣은 이유다.
+
+### 실측 35 — `fc -W`가 쓰고, `wc -l`은 **앞에 공백을 안 넣는다**
+
+```
+$ fc -W ; wc -l $HISTFILE
+6 /tmp/rehearse/config/zsh_history      ← 행의 첫머리가 숫자다
+```
+
+파일은 평문 한 줄에 명령 하나다(`EXTENDED_HISTORY`가 꺼져 있다 — 실측 9와
+같다). **GNU `wc`는 파일이 하나면 앞에 공백을 안 넣는다** — 그래서 게이트가
+`\| [1-9][0-9]* /config/zsh_history` 하나로 이 출력을 타이핑한 줄과 가른다.
+
+### 실측 36 — 새 셸의 `history` 출력 모양
+
+```
+    1  cd /usr/bin/../share/terminfo/x
+    2  cd /
+    3  whence -w fzf-history-widget
+    4  fc -W
+```
+
+**네 칸 들여쓰고 번호, 공백 둘, 명령이다.** 그래서 8차의 셋째 판정만 *"행의
+첫머리"* 수법을 못 쓴다 — 대신 **그 부팅에서 아무도 안 치는 명령**을 찾는다.
+
+### 실측 37 — bash는 `HISTSIZE`만으로 **파일까지** 자른다
+
+`HISTFILESIZE`를 안 주고 `HISTSIZE=5`로 열두 개를 친 뒤 나가니 파일이 5줄이다.
+**결정 4의 5,000줄 상한이 bash에서도 선다**는 뜻이고, env 항목을 하나 안 늘려도
+된다.
+
+### 실측 38 — `XDG_DATA_HOME` 하나가 DB를 옮긴다
+
+```
+XDG_DATA_HOME=…/config/xdg zoxide add /usr/bin/../share/terminfo/x
+  → …/config/xdg/zoxide/db.zo     ← 없는 경로 **둘**을 스스로 만들었다
+  → 홈에는 아무것도 없다
+  → ls $XDG_DATA_HOME/zoxide  →  db.zo
+```
+
+실측 3·4의 재확인이고, **`ls`의 출력이 `db.zo` 한 단어라는 것**이 8차 부팅의
+둘째 판정이 됐다.
+
+### 실측 39 — env 넷의 비용은 **0바이트**다
+
+`env -i` 위에서 셸 셋을 전/후로 쟀고 바이트가 같았다.
+
+| 셸 | 전 | 후 |
+|---|---|---|
+| zsh | 371 | **371** |
+| bash | 127 | **127** |
+| fish | 863 | **863** |
+
+위험 1(씨앗이 한 글자라도 찍으면 다섯 체인의 화면 좌표가 밀린다)이 이번에도
+같은 자리에 있었고, 이 표가 착수 전 근거였다. **실측 43이 그것을 게이트에서
+확인했다.**
+
+⚠ **`env -i`가 이 측정의 전부다.** 처음에는 앞 측정의 `export`가 새서
+엉뚱한 것을 봤고, 그것이 아래 실측 41이 됐다.
+
+### 실측 40 — fish 히스토리는 `XDG_DATA_HOME` 아래로 자동으로 간다
+
+```
+…/xdg/fish/fish_history
+- cmd: echo marker
+  when: 1789172042
+```
+
+실측 11이 맞았다. **fish에게는 env를 하나도 안 준다** — `XDG_DATA_HOME` 하나가
+히스토리까지 옮긴다. 그래서 `histEntries()`가 fish에 **빈 목록**을 준다.
+
+### 실측 41 — fish는 첫 대화형 기동에 `$HISTFILE`을 **가져온다**
+
+```
+HISTFILE=…/borrowed_bash_history 를 주고 fish를 처음 띄우면
+  fish_history:  - cmd: echo bash_line_one
+                 - cmd: echo bash_line_two
+```
+
+**우연히 발견한 것이고, 우리 설계에서는 안 일어난다** — `shell=fish`인 기계에는
+`HISTFILE`이 아예 없다. **`shell`을 bash에서 fish로 바꾼 사람에게는 이것이
+기능이 된다**(쳤던 명령이 따라온다). 문서에 적어 두고 코드로는 아무것도 안
+했다(비목표 8).
+
+### 실측 42 — 7차→8차를 컨테이너에서 통째로 **예행했다**
+
+씨앗과 같은 훅이 든 `.zshrc`를 놓고, 7차를 `kill -9`로 끝내고(전원), 새 세션을
+띄워 **`cd`를 한 번도 안 치고** 판정 셋을 확인했다.
+
+```
+=== 7차 (전원을 뽑는다)
+/usr/share/terminfo/x                     ← z가 돈다(M1의 판정)
+fzf-history-widget: function              ← 위젯이 있다(M1의 판정)
+6 /tmp/rehearse/config/zsh_history        ← fc -W가 썼다(M2의 새 판정)
+
+=== 8차 — 아무도 cd를 안 친다
+/usr/share/terminfo/x                     ← z가 이전 부팅의 자리로 갔다
+db.zo                                     ← 그 기억이 설정 디스크에 있다
+    5  whence -w fzf-history-widget       ← 7차만 친 명령이 목록에 있다
+```
+
+**게이트를 짜기 전에 판정이 실제로 나오는 것을 봤다.** M0·M1이 각각 한 번씩
+*"판정 글자가 안 나온다"*로 되돌아간 자리를 이번에는 앞에서 막았고,
+**`config/check.sh`가 첫 실행에 통과했다**(부팅 여덟, 1분 26초).
+
+### 실측 43 — 되돌림 셋과 측정 하나
+
+| | 무엇을 깼나 | 무엇이 빨개졌나 |
+|---|---|---|
+| **A** | `HIST_ZSH`에서 `SAVEHIST` | `FAIL: the zsh shell carries 2 history env entries, want 3` |
+| **B** | bash의 `HISTFILE`을 zsh와 같은 파일로 | `FAIL: bash and zsh point HISTFILE at the same file` |
+| **C** | `withTarsEnv`에서 `XDG_ENTRY`를 뺀다 | `FAIL: want 7 entries for zsh, got 6` |
+| **D** | `XDG_DATA_DIR` → `/tmp/xdg` | **7차 초록 · `FAIL(boot 8): the machine forgot the directory the seventh boot learned`** |
+| **E** | `HIST_ZSH`에서 `SAVEHIST`(게스트까지) | `FAIL(boot 7): 'fc -W' left no history file …` + 화면에 `wc: /config/zsh_history: No such file or directory` |
+| **F**(측정) | `makeXdgDir()` 호출을 지운다 | **초록이다** |
+
+**D의 비대칭이 이 milestone이 증명하는 것의 정확한 모양이다** — 한 부팅
+안에서는 되고, 부팅을 넘으면 안 된다. **M1의 7차는 이 되돌림을 못 잡는다.**
+
+**E가 실측 9의 게스트 재현이다.** `fc -W`는 조용히 성공했는데 파일이 아예 안
+생겼다 — `SAVEHIST`가 없으면 zsh는 `HISTFILE`이 있어도 한 줄도 안 쓴다.
+
+**F는 음성 확인이 아니라 측정이다.** `makeXdgDir()`이 없어도 zoxide가 없는
+경로를 스스로 만든다(실측 4·38이 게스트에서도 맞다). 그 `mkdir`은 기능이 아니라
+**실패의 자리를 정하는 것**이고, SM-M0이 관문에 대해 *"고친 것이 아니라 보장한
+것이다"*라고 적은 것과 같은 종류다.
+
+### 실측 44 — 호스트에서 캐시를 지우면 `zig build`가 이따금 죽는다
+
+**M2가 새 코드와 무관한 것을 하나 더 좁혔다.** `docs/decisions/
+project_zig_out_staleness.md`의 처방은 *"음성 확인 앞에
+`rm -rf init/.zig-cache init/zig-out`"*인데, **그것을 호스트(macOS)에서 치면
+바로 뒤의 `zig build`가 `error: FileNotFound` 한 줄로 죽는다 — 9회 중 2회.**
+
+```
+# 호스트에서 지운다        → 9회 중 2회 error: FileNotFound (메시지가 그 한 줄뿐)
+rm -rf init/.zig-cache init/zig-out
+docker run … 'cd init && zig build'
+
+# 같은 컨테이너 안에서 지운다 → 6/6 정상
+docker run … 'rm -rf init/.zig-cache init/zig-out; cd init && zig build'
+```
+
+`--verbose`를 줘도 한 줄도 더 안 나온다(빌드가 시작되기도 전에 죽는다).
+호스트의 `rm`과 컨테이너의 `open`이 bind mount를 사이에 두고 갈리는 것으로
+보이며, **원인을 더 파지는 않았다 — 처방이 한 글자 옮기는 것이라서다.**
+⚠ 이 실패는 **컴파일 에러와 구분이 안 되는 모양으로 나온다.** 다시 돌리면
+지나가므로 `zig build`의 실패를 만나면 **먼저 한 번 더 돌린다.**
+
+### 실측 45 — **루트 게이트가 한 번 빨갰고, 원인이 SM-M0이 센 그 함정이었다**
+
+첫 게이트가 `HI-M3 run 2/3`에서 죽었다.
+
+```
+FAIL: init did not read hangul_toggle=shift_space,capslock_tap,lctrl_tap
+      from the config disk
+--- last 40 lines ---
+terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=shift_space,capslock_tap,lctrl_tap
+```
+
+**판정 글자가 로그에 멀쩡히 있는데 빨갰고, 같은 게이트의 run 1/3은
+초록이었다.** `hangul/check.sh:326`이 이렇게 생겨 있었다.
+
+```bash
+if ! tr -d '\r' < "$LOG" | grep -aqE "tars-init: config .*toggles=…"; then
+```
+
+**SM-M0이 `tools/check.sh`에서 고친 그 병이고, 여기서는 `!` 형이라 거짓
+빨강이다.** `grep -q`가 첫 매치에서 나가면 아직 로그를 쏟던 `tr`이 SIGPIPE로
+죽고, `pipefail`이 그 **141**을 파이프라인 코드로 올린다. 호스트에서 바로
+재현했다.
+
+```
+tr -d '\r' < 200KB짜리 로그 | grep -aqE '앞쪽에 있는 글자'   → rc=141
+tr -d '\r' < 4KB짜리  로그 | grep -aqE '앞쪽에 있는 글자'   → rc=0
+```
+
+**크기가 아니라 경주다** — 파이프 버퍼(64KiB)보다 로그가 크면 터지는데,
+QEMU가 살아 있는 동안 로그가 계속 자라므로 회차마다 갈린다. 처방은 같다:
+`-q`를 빼서 뒤쪽 grep이 입력을 끝까지 읽게 한다.
+
+**SM-M0의 목록이 이것을 못 셌던 이유가 명확하다** — 그때 쓴
+`rg '\| *grep -[a-z]*q'`는 플래그 끝이 `q`인 것만 찾는데 이 자리는 **`-aqE`**로
+`q`가 가운데 있다. 다음에 세는 사람은
+`rg '\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q'`를 쓸 것.
+
+**이것은 SM-M2가 만든 병이 아니다** — 쓰인 날부터 있던 경주이고, 이 게이트가
+그것을 처음 터뜨렸을 뿐이다. 그래도 **고치지 않고는 M2를 초록으로 만들 수
+없어서 이 milestone이 고쳤다.** SM-M0이 자기 그물만 고치고 남긴 목록의
+**여덟째**이고, 남은 일곱은 그대로 숙제다.
+
+### 실측 46 — 루트 게이트(고친 뒤)
+
+```
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+체인 열하나 × 3회, FAIL 0            28분 03.23초
+```
+
+기준선은 SM-M1의 **27분 05.06초**이고 **+57.71초**다. 부팅이 하나 늘어 회차마다
+세 번 더 켜지므로 **부팅당 약 19초**인데, 위험 5가 "+20초 안쪽"으로 본 것보다
+크다. **그 차이를 부팅 하나의 값으로 읽으면 안 된다** — `config` 체인을 단독으로
+돌렸을 때는 **부팅 여덟에 1분 26초**로 SM-M1이 부팅 일곱에 적은 1분 40초보다
+오히려 빨랐다. 기계의 그날 상태가 이 수에 부팅 셋보다 크게 들어간다.
+
+| 세는 것 | 기대 | 실제 | 뜻 |
+|---|---|---|---|
+| **`command not found`** | 0 | **0** | **env 넷이 열한 체인 어디서도 한 글자도 안 찍었다** — 위험 1이 안 일어났다 |
+| `Unknown command` | 0 | **0** | fish 쪽도 같다 |
+| **`Welcome to fish`** | 6 | **6** | SC-M0~SM-M1과 같다 — **회귀 없음** |
+| `times fast` | 6 | **6** | 4차 부팅의 자식 둘 × 세 회차. **8차가 이 수를 안 늘렸다** |
+| **`boot 8: the machine remembered`** | 3 | **3** | 새 부팅 × 세 회차 |
+| `all 67 tools` | 3 | **3** | `tools` 체인은 안 건드렸다 |
+
+**`command not found`가 0인 것이 이 게이트에서 가장 중요한 수다.** 설정
+디스크를 붙이는 다섯 체인이 전부 새 env 넷을 받았고(조건이 없다 — 결정 9),
+그중 셋이 화면의 **셀 좌표**로 판정한다. 실측 39가 예측한 "0바이트"가 서른세
+번의 체인 실행에서 재현됐다.
+
+**`Welcome to fish`가 6인 것이 말하지 않는 것은 SM-M1이 적은 그대로다** —
+인사말은 rc가 `exit`로 끝나도 찍힌다. *"씨앗이 셸을 안 죽였다"*를 말하는 것은
+`times fast`가 6에서 안 늘어난 것과 7차·8차의 `started … exactly 1`이다.
+
 ## 비목표
 
 **1. `git-delta`.** UT 비목표 5가 *"다음에 후보를 찾을 때 이 문단을 먼저 읽을
@@ -758,6 +999,16 @@ TUI라 체인이 매달린다. 게이트가 보는 것은 **위젯이 정의됐�
 
 **7. 셸을 셋보다 늘리는 것 · rc를 런타임에 다시 읽는 것.** SC 비목표 7·8이
 그대로다.
+
+**8. 실측 41(fish가 첫 기동에 `$HISTFILE`을 가져온다)을 쓰는 것.** 우리
+설계에서는 안 일어난다 — `shell=fish`인 기계에는 `HISTFILE`이 아예 없다.
+`shell`을 바꾼 사람에게 히스토리가 따라오는 것은 **공짜로 얻은 기능**이고,
+코드로는 아무것도 안 했다.
+
+**9. 위험 3 — zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다.** **알고 둔다.**
+`setopt APPEND_HISTORY`는 씨앗 허용 목록(`expectQuietSeed`)을 한 줄 더 넓히는
+일이고, 이 서브프로젝트가 먼저 증명할 것은 *"남는다"*였다. **다음에 이
+서브프로젝트를 다시 여는 사람의 첫 후보가 이것이다.**
 
 ## 결정
 
@@ -816,6 +1067,22 @@ init이 `cfg.shell`을 이미 알고 있으므로 그 자리에서 정한다.
 **안 고른 쪽:** 화면 셸에만 `terminal`이 `setenv`로 다른 `HISTFILE`을 주는 것
 (`TERM`·`LANG`이 이미 그 자리에 있다). 겹쳐 쓸 일이 없어지지만 `Ctrl+R`이
 자리마다 다른 것을 보여 준다.
+
+#### ⚠ 정정(SM-M2 착수 전) — **이 결정은 게이트가 전원을 뽑는다는 것을 안 봤다**
+
+위 표는 *"부팅 사이에 남는다"*를 적으면서 **게이트가 기계를 어떻게
+끝내는지**를 안 봤다. `boot_once`는 마커를 보면 `kill "$QEMU_PID"`로 끝내고,
+게스트에게 그것은 **전원이 끊긴 것**이다 — 셸이 나갈 때 하는 일이 하나도 안
+일어난다. 실측 34가 그 경계를 정확히 그었다(`exit`·SIGTERM·SIGHUP은 써지고
+**SIGKILL은 안 써진다**).
+
+**실기는 안전하다.** 전원 버튼을 누르면 PID 1의 SIGTERM이 셸에게 가고
+(`power.zig`) 그때 zsh가 스스로 쓴다. 못 쓰는 것은 게이트뿐이고, 처방은
+**7차 부팅이 `fc -W`를 직접 치는 것**이다(되읽기 `wc -l`을 함께 둔다 — 없으면
+8차가 빨간 이유가 *"안 썼다"*인지 *"안 읽었다"*인지 안 갈린다).
+
+SM-M1에서 *"design이 앞 부팅이 남긴 디스크 상태를 안 봤다"*와 같은 종류의 빈
+자리이고, **이번에는 착수 전에 걸렸다.**
 
 ### 결정 4 — 상한은 5,000줄
 

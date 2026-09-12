@@ -137,6 +137,42 @@ pub const Shell = enum {
         };
     }
 
+    /// 이 기계가 기억하는 것 둘 중 **쳤던 명령**의 자리(SM design 결정 3).
+    ///
+    /// **셸마다 다른 파일인 이유는 형식이다** — zsh는 `: <ts>:<dur>;<cmd>`,
+    /// bash는 평문이라 한 파일에 섞으면 서로의 것을 못 읽는다. init이
+    /// `cfg.shell`을 이미 알고 있으므로 그 자리에서 정한다.
+    ///
+    /// **fish는 빈 목록이다.** fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
+    /// 따라오고(실측 11·40), 줄 수를 정하는 변수가 아예 없다(비목표 4).
+    ///
+    /// **씨앗 rc에는 히스토리 줄이 한 줄도 없다**(결정 3). 실측 9·10이
+    /// 근거다 — 셋 다 env에서 먹는다. 그래서 이 milestone은
+    /// `rcSeed()`도 `expectQuietSeed`도 한 글자 안 건드린다.
+    const HIST_BASH = [_][:0]const u8{
+        "HISTFILE=/config/bash_history",
+        // bash는 `HISTFILESIZE`를 안 줘도 이 수로 **파일까지** 자른다
+        // (실측 37). 5,000줄 = 약 250KB = 16MiB 디스크의 1.5%(결정 4).
+        "HISTSIZE=5000",
+    };
+    const HIST_ZSH = [_][:0]const u8{
+        "HISTFILE=/config/zsh_history",
+        "HISTSIZE=5000",
+        // **zsh는 이것이 없으면 한 줄도 안 쓴다**(실측 9). `HISTFILE`만 주고
+        // 끝내는 것이 이 자리에서 가장 흔한 실수이고, 증상은 "히스토리가
+        // 그냥 안 남는다"라 원인에서 멀다.
+        "SAVEHIST=5000",
+    };
+
+    /// 이 셸에게 줄 히스토리 env. `environ.zig`가 커널 블록 뒤에 그대로 붙인다.
+    pub fn histEntries(self: Shell) []const [:0]const u8 {
+        return switch (self) {
+            .fish => &[_][:0]const u8{},
+            .bash => &HIST_BASH,
+            .zsh => &HIST_ZSH,
+        };
+    }
+
     /// 씨앗 rc가 담는 훅 줄들(SM design 결정 5). 셸마다 둘이다 — `zoxide`가
     /// "어디에 갔는가"를, `fzf`가 "무엇을 쳤는가"를 이 기계에 잇는다.
     ///

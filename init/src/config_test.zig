@@ -177,6 +177,57 @@ fn expectHooksCoverTheTools(sh: config.Shell) !void {
     }
 }
 
+/// 히스토리 env가 셸의 성질과 맞는가(SM-M2 design 결정 3).
+///
+/// **`expectQuietSeed`와 짝이 아니다** — 이 milestone은 씨앗을 안 건드린다.
+/// 히스토리는 rc가 아니라 env로 세우고(실측 9·10·11), 그 결정이 옳은지는
+/// `config/check.sh`의 8차 부팅이 본다. 여기가 보는 것은 **우리가 셸마다
+/// 무엇을 주려고 했는가**까지다.
+///
+/// 보는 것 셋:
+///   1. 개수가 셸의 성질과 맞다 — fish 0 · bash 2 · **zsh 3**
+///   2. 모든 항목이 `NAME=VALUE`이고 이름이 셋 중 하나다
+///   3. **`SAVEHIST`는 zsh만 받는다** — 실측 9를 코드 모양으로 못 박는 줄이다
+fn expectHistEntries(sh: config.Shell) !void {
+    const want_len: usize = switch (sh) {
+        .fish => 0,
+        .bash => 2,
+        .zsh => 3,
+    };
+    const entries = sh.histEntries();
+    if (entries.len != want_len) {
+        std.debug.print("FAIL: the {s} shell carries {d} history env entries, want {d}\n", .{
+            @tagName(sh), entries.len, want_len,
+        });
+        return error.BadHistEnv;
+    }
+
+    var saw_savehist = false;
+    for (entries) |e| {
+        const eq = std.mem.indexOfScalar(u8, e, '=') orelse {
+            std.debug.print("FAIL: history env \"{s}\" is not NAME=VALUE\n", .{e});
+            return error.BadHistEnv;
+        };
+        const name = e[0..eq];
+        if (std.mem.eql(u8, name, "SAVEHIST")) saw_savehist = true;
+        if (!std.mem.eql(u8, name, "HISTFILE") and
+            !std.mem.eql(u8, name, "HISTSIZE") and
+            !std.mem.eql(u8, name, "SAVEHIST"))
+        {
+            std.debug.print("FAIL: the {s} shell wants an unexpected env {s}\n", .{
+                @tagName(sh), name,
+            });
+            return error.BadHistEnv;
+        }
+    }
+    if ((sh == .zsh) != saw_savehist) {
+        std.debug.print("FAIL: SAVEHIST belongs to zsh alone; the {s} shell has it: {}\n", .{
+            @tagName(sh), saw_savehist,
+        });
+        return error.BadHistEnv;
+    }
+}
+
 /// cmdline 한 줄이 rc를 끄는가(SC-M2 결정 9).
 ///
 /// **`expect`와 같은 자리에 있는 함수다** — `config.zig`에서 시스템 콜이
@@ -416,6 +467,16 @@ pub fn main() !void {
     //   덮개    씨앗과 hookLines()에서 **함께** 지우는 것
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
     for (std.enums.values(config.Shell)) |sh| try expectHooksCoverTheTools(sh);
+
+    // ── SM-M2: 히스토리 env ─────────────────────────────────────────────
+    for (std.enums.values(config.Shell)) |sh| try expectHistEntries(sh);
+    // **bash와 zsh가 같은 파일을 보면 안 된다.** 형식이 다르다 — zsh는
+    // `: <ts>:<dur>;<cmd>`, bash는 평문이라 섞이면 서로의 것을 못 읽는다.
+    // 위 함수는 항목을 하나씩만 보므로 이 한 줄이 따로 필요하다.
+    if (std.mem.eql(u8, config.Shell.bash.histEntries()[0], config.Shell.zsh.histEntries()[0])) {
+        std.debug.print("FAIL: bash and zsh point HISTFILE at the same file\n", .{});
+        return error.BadHistEnv;
+    }
 
     // ── SC-M2: cmdline 토큰 ─────────────────────────────────────────────
     //

@@ -1,6 +1,208 @@
-# HANDOFF: **SM-M2의 plan이 섰다 — 게이트가 전원을 뽑는다는 것을 재서 알았다**
+# HANDOFF: **SM-M2가 끝났다 — 기계가 전원을 끊어도 기억한다. 서브프로젝트가 닫혔다**
 
 ## 지금 어디인가
+
+`main`, **커밋 대기 중**(아래 "커밋할 것"). 루트 게이트가 **28분 03.23초에
+3/3 통과**했고 FAIL이 0이다.
+
+⚠ **이 세션은 사용자가 외출하며 "이번 세션의 구현에 대한 모든 결정을
+위임한다"고 정한 세션이었다** — 그래서 구현 파일을 Claude가 직접 편집했다.
+SH·FP·RM·UT·SC·SM-M0~M1과 같은 종류이고 **세션 단위**다.
+**다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
+
+## Shell Memory가 닫혔다
+
+| | 무엇 | 상태 |
+|---|---|---|
+| SM-M0 | 도구 둘이 선다 | 완료(09-11) |
+| SM-M1 | 훅이 걸린다 | 완료(09-12) |
+| **SM-M2** | **배운 것이 전원을 넘는다** | **완료(09-12) — 이 세션** |
+
+design의 `Status:`도, `MEMORY.md`도, `CLAUDE.md`의 완료 목록도 함께 고쳤다.
+
+## 이 세션이 만든 것
+
+고친 파일이 **여덟**이고 **새 파일이 하나도 없다.**
+
+| 파일 | 무엇 |
+|---|---|
+| `init/src/config.zig` | `Shell.histEntries()` — zsh 셋 · bash 둘 · **fish 0** |
+| `init/src/environ.zig` | `withPath` → **`withTarsEnv`**, `XDG_DATA_DIR`·`XDG_ENTRY` |
+| `init/src/main.zig` | env 블록이 **`resolveShell` 뒤로** 내려왔다 · `makeXdgDir()` |
+| `init/src/environ_test.zig` · `config_test.zig` | 호스트 검사 |
+| `config/check.sh` | 7차가 `fc -W`를 더 치고 **8차 부팅**이 섰다 |
+| `tools/check.sh` | 주석 둘(DB 자리 · SIGPIPE 목록) |
+| **`hangul/check.sh`** | **SIGPIPE 두 줄** — 아래 ⚠ |
+
+**씨앗 rc와 `expectQuietSeed`는 한 글자도 안 건드렸다** — 결정 3(히스토리는
+rc가 아니라 env)이 옳았던 값이 여기서 나온다.
+
+## ⚠ 이 세션이 게이트 자신에게서 찾은 것 — **SIGPIPE 함정의 여덟째 자리**
+
+**첫 루트 게이트가 `HI-M3 run 2/3`에서 죽었다.**
+
+```
+FAIL: init did not read hangul_toggle=shift_space,capslock_tap,lctrl_tap
+      from the config disk
+--- last 40 lines ---
+terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=shift_space,capslock_tap,lctrl_tap
+```
+
+**판정 글자가 로그에 멀쩡히 있는데 빨갰고, 같은 게이트의 run 1/3은
+초록이었다.** `hangul/check.sh:326`이 `tr -d '\r' < "$LOG" | grep -aqE …`였다 —
+SM-M0이 `tools/check.sh`에서 고친 그 병이고, 여기서는 `!` 형이라 **거짓
+빨강**이다. 호스트에서 바로 재현했다.
+
+```
+200KB 로그 | grep -aqE '앞쪽 글자'  → rc=141
+  4KB 로그 | grep -aqE '앞쪽 글자'  → rc=0
+```
+
+**크기가 아니라 경주다** — 파이프 버퍼(64KiB)보다 로그가 크면 터지는데 QEMU가
+사는 동안 로그가 계속 자란다.
+
+**SM-M0의 목록이 이것을 못 센 이유가 발견의 절반이다.** 그때 쓴
+`rg '\| *grep -[a-z]*q'`는 **플래그 끝이 `q`인 것만** 찾는데 이 자리는
+**`-aqE`**였다. 다음에 세는 사람은 이것을 쓸 것.
+
+```
+rg '\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q' --glob '*.sh' .
+```
+
+**남은 일곱은 그대로 숙제다** — `machine/check.sh:226·241·288·354` ·
+`config/check.sh:894·915·918`. 앞의 넷과 뒤의 둘은 `!` 형(거짓 빨강)이고
+`config/check.sh:894`만 조용한 쪽(거짓 초록)이다.
+
+## ⚠ 그리고 하나 더 — **캐시는 컨테이너 안에서 지운다**
+
+`docs/decisions/project_zig_out_staleness.md`의 처방을 **호스트(macOS)에서**
+치면 바로 뒤의 `zig build`가 `error: FileNotFound` 한 줄로 죽는다 —
+**9회 중 2회**. 같은 삭제를 컨테이너 안에서 하면 **6/6 정상**이다.
+
+```bash
+# ✓ 이 형태로 친다
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  rm -rf init/.zig-cache init/zig-out
+  cd init && zig build && zig build test'
+```
+
+`--verbose`를 줘도 한 줄도 더 안 나오고 **컴파일 에러와 구분이 안 되는
+모양**이라 더 나쁘다. `zig build`가 죽으면 **먼저 한 번 더 돌린다.**
+
+## 게이트가 무엇을 보는가 — 부팅 여덟
+
+`config/check.sh`가 이제 부팅 여덟이다. **8차는 아무것도 안 심는다** —
+디스크도 cmdline도 7차 그대로이고, 달라진 것은 **기계가 한 번 꺼졌다
+켜졌다**는 것뿐이다.
+
+| 부팅 | 새로 보는 것 |
+|---|---|
+| 1차 | `env … XDG_DATA_HOME=/config/xdg`가 있고 **fish에는 `HISTFILE`이 없다** |
+| 7차 | 로그에 `HISTFILE`·`HISTSIZE`·`SAVEHIST` 셋 + **`fc -W` 뒤 `wc -l`이 숫자를 찍는다** |
+| **8차** | `z`가 **이 부팅이 안 가 본 자리로** 간다 · `ls`에 **`db.zo`** · `history`에 **7차만 친 명령** |
+
+**7차가 `fc -W`를 치는 이유는 게이트가 전원을 뽑기 때문이다**(`boot_once`의
+`kill "$QEMU_PID"`). **실기는 PID 1의 SIGTERM이 있어 안전하다.**
+`shift-w`가 **이 저장소의 첫 대문자**였고 첫 실행에 먹었다.
+
+## 실측 — **다시 재지 말 것**
+
+| | 무엇 | 값 |
+|---|---|---|
+| 34 | 셸이 어떻게 끝나야 `HISTFILE`이 써지나 | `exit`·SIGTERM·SIGHUP은 **써지고** SIGKILL(=전원)은 **안 써진다** |
+| 35 | `wc -l` 출력 | 파일이 하나면 **앞에 공백이 없다**(`6 /config/zsh_history`) |
+| 36 | `history` 출력 | **네 칸, 번호, 공백 둘** |
+| 37 | bash의 상한 | `HISTFILESIZE` 없이 `HISTSIZE`만으로 **파일까지** 자른다 |
+| 38 | `XDG_DATA_HOME` | 없는 경로 둘을 스스로 만들고 `db.zo` 하나 |
+| **39** | **env 넷의 비용** | zsh·bash·fish **셋 다 0바이트** |
+| 40 | fish 히스토리 | `$XDG_DATA_HOME/fish/fish_history`로 자동으로 간다 |
+| 41 | fish가 첫 기동에 `$HISTFILE`을 가져온다 | 우리 설계에서는 안 일어난다(비목표 8) |
+| 42 | 7차→8차 예행 | 컨테이너에서 통째로 먼저 봤다 — **게이트가 첫 실행에 통과했다** |
+| 43 | 되돌림 A~F | 아래 |
+| **44** | **호스트 `rm` 뒤의 `zig build`** | **9회 중 2회 `error: FileNotFound`** |
+| **45** | **`hangul/check.sh`의 SIGPIPE** | 200KB `rc=141` · 4KB `rc=0` |
+| 46 | 루트 게이트 | **28분 03.23초, 3/3, FAIL 0** |
+
+본문은 전부 design의 "SM-M2가 실행으로 증명한 것" 절에 있다.
+
+## 되돌림 여섯이 각각 보여 준 것
+
+| | 무엇을 깼나 | 무엇이 빨개졌나 |
+|---|---|---|
+| A | `HIST_ZSH`의 `SAVEHIST` | `the zsh shell carries 2 history env entries, want 3` |
+| B | bash의 `HISTFILE`을 zsh와 같게 | `bash and zsh point HISTFILE at the same file` |
+| C | `withTarsEnv`의 `XDG_ENTRY` | `want 7 entries for zsh, got 6` (**plan이 예측한 줄과 다르다**) |
+| **D** | `XDG_DATA_DIR` → `/tmp/xdg` | **7차 초록 · 8차 첫 판정 빨강** |
+| E | `SAVEHIST`(게스트까지) | 화면에 `wc: /config/zsh_history: No such file or directory` |
+| **F**(측정) | `makeXdgDir()` 호출 | **초록이다** |
+
+**D의 비대칭이 이 milestone이 증명하는 것의 정확한 모양이다** — 한 부팅
+안에서는 되고 부팅을 넘으면 안 된다. **M1의 7차는 D를 못 잡는다.**
+
+**F는 음성 확인이 아니라 측정이다.** zoxide가 없는 경로를 스스로 만드니 그
+`mkdir`은 기능이 아니라 **실패의 자리를 정하는 것**이다.
+
+## 커밋할 것
+
+```
+config/check.sh  hangul/check.sh  tools/check.sh
+init/src/{config,config_test,environ,environ_test,main}.zig
+CLAUDE.md  MEMORY.md  HANDOFF.md
+docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md
+docs/superpowers/plans/2026-09-12-tars-shell-memory-sm-m2.md
+docs/decisions/project_shell_memory.md
+docs/decisions/project_zig_out_staleness.md
+```
+
+`git status`를 먼저 보고 add 대상을 좁혀서 지정한다(빌드 산출물이 계속
+생긴다).
+
+## 바로 다음에 할 것 — **후보를 고르는 일부터다**
+
+Shell Memory가 닫혔으므로 다음 서브프로젝트를 사용자와 정한다. design의
+비목표 절이 후보를 이미 넷 적어 뒀다.
+
+1. **위험 3 — zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다**(비목표 9).
+   `setopt APPEND_HISTORY`는 `expectQuietSeed`의 허용 목록을 **한 줄 더
+   넓히는 일**이고, SM이 먼저 증명할 것은 *"남는다"*였다. **가장 가깝다.**
+2. **`grep -q` 일곱 자리**(위 ⚠). 게이트 자신의 건강이고, 고치면 그 체인들을
+   다시 돌려 판정해야 한다.
+3. **`git-delta`**(비목표 1). `libgit2`가 이미 있어 비용이 0에 가깝고 훅도
+   `/config/gitconfig`의 `core.pager`라 인프라가 서 있다.
+4. `Ctrl+R`을 게이트가 치는 것(비목표 2) — TUI라 체인이 매달린다. **안 하는
+   쪽에 근거가 쌓여 있다.**
+
+## 이 세션의 핵심 파일
+
+| 파일 | 왜 |
+|---|---|
+| `docs/.../specs/2026-09-11-tars-shell-memory-design.md` | **`Status:` 완료.** 실측 34~46이 여기 있다 |
+| `docs/.../plans/2026-09-12-tars-shell-memory-sm-m2.md` | 체크박스 전부 · **"plan이 틀렸던 자리 넷"** |
+| `docs/decisions/project_shell_memory.md` | M2가 배운 것 셋 + 게이트에서 찾은 것 |
+| `docs/decisions/project_zig_out_staleness.md` | **처방이 한 글자 좁혀졌다** |
+| `config/check.sh`의 `probe_persisted_memory` | 8차의 판정 셋 |
+
+## 명령 모음
+
+```bash
+# 호스트 검사 (캐시 삭제도 컨테이너 안에서)
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  rm -rf init/.zig-cache init/zig-out; cd init && zig build && zig build test'
+
+# config 체인 단독 (부팅 여덟, 약 1분 26초)
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash config/check.sh 2>&1 | tail -50
+
+# 루트 게이트 (약 28분)
+{ time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
+```
+
+---
+
+## 그 앞의 세션 — SM-M2의 plan (2026-09-12): 게이트가 전원을 뽑는다는 것을 재서 알았다
+
+## 그 세션이 끝난 자리
 
 `main`, working tree 깨끗함. **이 세션이 만든 것은 plan 하나와 실측 아홉이고,
 코드는 한 줄도 안 고쳤다.**
@@ -106,6 +308,7 @@ docker rm -f tars-measure
 | `init/src/main.zig:467~491` · `:540` · `:582` | env 블록이 **머리에서 `resolveShell` 뒤로** 내려간다(Task 5) |
 | `config/check.sh`의 `probe_shell_hooks` | 7차. **Task 7이 여기에 `fc -W`를 붙이고 옆에 8차를 만든다** |
 | `tools/check.sh:634` | DB 자리를 적어 둔 주석이 M2로 낡는다 |
+
 
 ---
 
