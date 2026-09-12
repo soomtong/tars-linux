@@ -72,179 +72,52 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 - 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지, 후보 목록):
   `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
   "배경" 절
-- 완료된 서브프로젝트: Boot Foundation(BF-M0~M4) · Display Foundation(DF) ·
-  Terminal Foundation(TF) · Zig Migration(ZM) ·
-  Config Persistence(CP-M0~M2, 2026-08-15 완료 — ext2 디스크에 `key=value`
-  설정을 남기고 부팅 사이에 읽는다) · Input Policy(IP) ·
-  Power Management(PM-M0~M1, 2026-08-20 완료 — 시그널로 끄고 되살린다) ·
-  Hardware Discovery(HD-M0~M2, 2026-08-22 완료 — 키보드를 capability로 찾고
-  전원 버튼에 응답한다) ·
-  Terminal Rendering(TR) · Copy Mode(CM-M0~M2) ·
-  **Gate Latency(GL-M0~M3, 2026-08-26·29 완료 — 54분 15초 → 18분 08초 →
-  CN·CS의 타이핑으로 22분대 → 19분 11~16초(GL-M2) → 16분 01~11초(GL-M3))** ·
-  Copy Navigation(CN-M0~M1, 2026-08-27 완료 — copy mode에 단어 이동 `w`/`b`와
-  스크롤백 검색 `/`·`n`·`N`) ·
-  Copy Search Feedback(CS-M0~M1, 2026-08-28 완료 — 매치 하이라이트, 검색
-  기록, "못 찾음" 메시지) ·
-  Search Position(SP-M0~M1, 2026-08-29·30 완료 — 현재 매치를 밝은 앰버로,
-  오버레이에 `/needle [3/12]`) ·
-  **Render Cost(RC-M0, 2026-08-30 완료 — 한 프레임의 84.7%가 `fill`이라는 것을
-  재기만 했고 코드는 한 줄도 안 고쳤다)** ·
-  Carryover Cleanup(CC-M0, 2026-08-31 완료 — 이월 숙제 셋을 없앴다:
-  커널 config 둘 끄기, sanity 도구 둘과 그 도구만 쓰던 98MB 산출물, 옛 폰트
-  파일) ·
-  **Hangul Input(HI-M0~M3, 2026-08-31·09-01 완료 — 한글 자판 넷(두벌식·공세벌
-  3-P3·신세벌 P2·신세벌 PCS)과 영문 자판 둘(쿼티·드보락)을 `tars.conf`가 고르고,
-  한/영 전환 키 넷(한/영 키·Shift+Space·짧은 CapsLock·짧은 왼쪽 Ctrl)도
-  `hangul_toggle`이 고른다. 긴 CapsLock은 대문자 잠금이다)** ·
-  **Input Status(IS-M0~M1, 2026-09-02·09-09 완료 — 화면 맨 아래 여백에 상태
-  줄 하나를 그려 한/영 · 현재 자판 · 대문자 잠금을 보여 준다. HI가 남긴
-  비목표 중 하나였다)** ·
-  **Search Hangul(SH-M0~M2, 2026-09-09 완료 — copy mode 검색창에서 한글을
-  친다. 조합 중인 글자는 검색어 끝에 반전으로 뜬다. HI가 남긴 비목표 셋 중
-  하나였다)**.
-  design doc은 전부 `docs/superpowers/specs/`에 날짜순으로 있다.
-  **Search Hangul도 편집을 Claude Code가 했다** — 사용자가 2026-09-09에
-  "외출해야 하니 이번 세션의 구현 결정을 전부 위임한다"고 정했다. 아래 HI의
-  예외와 같은 종류이고 이유만 다르다. 기억은
-  `docs/decisions/project_search_hangul.md`.
-  **Find Paste(FP-M0~M1, 2026-09-09 완료 — copy mode에서 잡은 글자를 `/`
-  프롬프트에 `Cmd+V`로 붙이면 셸이 아니라 검색어로 간다. 여러 줄은 첫 줄만
-  들어간다).** SH design의 비목표 절이 다음 후보로 지목하고 근거까지 모아 둔
-  것이었다. design은 `.../specs/2026-09-09-tars-find-paste-design.md`.
-  **FP도 편집을 Claude Code가 했다** — 사용자가 외출하며 milestone 단위로 두
-  번 위임했다. SH의 예외와 같은 종류다.
-  **Real Machine(RM-M0~M3, 2026-09-09·10 완료 — 일반 x86_64 노트북에서 뜨는
-  커널. UEFI로 부팅하고 EFI GOP 프레임버퍼 위의 simpledrm에 그리고 USB
-  키보드로 받고 NVMe 디스크에서 설정을 읽는다. 설정 디스크는 `/dev/vda`라는
-  이름이 아니라 **ext2 라벨 `tars-`**로 찾고, 노트북 ACPI 다섯도 켜져 있다.
-  게이트에 열번째 체인 `machine/check.sh`가 생겼고, 실기에 꽂는 법은
-  `README.md`에 있다).** design은
-  `.../specs/2026-09-09-tars-real-machine-design.md`, 기억은
-  `docs/decisions/project_real_machine.md`.
-  **RM은 편집도 Claude Code가 했다** — 사용자가 2026-09-09에 자러 가며
-  서브프로젝트 단위로 위임했고, 2026-09-10에 외출하며 한 번 더 위임했다.
-  SH·FP의 예외와 같은 종류다.
-  **Userland Tools(UT-M0~M3, 2026-09-10·11 완료 — 게스트 셸이
-  `/usr/bin/ls`가 아니라 `ls` 세 글자로 명령을 찾고, 그 자리에 **도구 65개**가
-  서 있다 — GNU 한 벌 50 · **모던 열셋**(`eza`·`bat`·`fd`·`rg`·`sd`·`procs`·
-  `htop`·`btop`·`tree`·`duf`·`ncdu`·`jq`·`hyperfine`) · **개발 둘**(`git` ·
-  `vim.tiny`). 이름은 Debian이 아니라 **우리가 정한 것**으로 선다. PID 1이
-  커널의 envp 블록에 `PATH=/usr/bin:/bin`을 더한 새 블록을 지어 자식 둘에게
-  주고, 뼈대 넷(`/bin/sh` · `/tmp` · `/etc/passwd` · `/etc/group`)과 **링크
-  넷**(`vi`·`pager`·`editor`→`/.gitconfig`)이 섰다. **게스트에서 `git init`
-  →`add`→`commit`→`log`가 돌고 전역 설정이 `/config`에 남는다.** **M1이
-  바이너리 목록을 `kernel/guest_tools.sh` 한 파일로 뺐고**(`make_initrd.sh`와
-  `tools/check.sh`가 같은 배열을 본다) **M2는 그 배열에 줄만 더해
-  `make_initrd.sh`를 한 글자도 안 고쳤다.** 게이트에 **열한번째 체인
-  `tools/check.sh`**가 있고 검사가 열여섯이다. **M2가 게이트 자신의 것 둘도
-  고쳤다** — `gate_lib.sh`의 **`GUEST_MEM=512`**(QEMU 기본 128MiB에서는 푼
-  84MB짜리 initramfs가 tmpfs를 채워 기계가 아예 안 켜진다)와
-  **`wait_for_screen`**(명령 뒤 `sleep 2`하고 한 번 grep하던 검사가 8회 중
-  2회 틀렸다. 화면에는 찾던 글자가 있었고 검사가 먼저 본 것이었다).
-  **M3이 배운 것 둘: Debian은 프로그램이 부르는 이름(`pager`·`editor`)을
-  alternatives 링크로 두고 `dpkg -x`는 그것을 안 만든다 · 게이트가 화면에서
-  긴 출력을 판정할 때는 첫 줄이 아니라 마지막에 남는 줄을 본다.**)** design은
-  `.../specs/2026-09-10-tars-userland-tools-design.md`, 기억은
-  `docs/decisions/project_userland_tools.md`.
-  **UT-M0~M3도 편집을 Claude Code가 했다** — 사용자가 2026-09-10과 09-11에
-  세션마다 외출하며 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 정했다.
-  SH·FP·RM의 예외와 같은 종류이고 **세션 단위**다.
-  **RM이 끝났을 때 기본 규칙이 돌아왔고 UT-M0~M3은 각각 그 위의 세션 한정
-  예외였다 — 다음 세션은 다시 기본 규칙이다. 파일 편집은 사용자가 한다.**
-  **Shell Config(SC-M0~M2, 2026-09-11 완료 — 서브프로젝트가 닫혔다.
-  `tars.conf`의 여섯째 키 `shell_config`가 `{on, off}`로 셸의 no-config
-  플래그를 켜고 끄고, `/config`의 rc 셋(`bashrc`·`zshrc`·`fish.config`)이
-  링크로 홈에 이어졌다. 화면 셸에는 `"none"` 토큰이 가고 콘솔 셸은 슬롯이
-  null이다 — 둘이 같은 설정을 따른다. fish 인사말은 `terminal`의
-  `setenv("fish_greeting", "")`로 **화면 셸만** 껐다. `machine/check.sh:117`이
-  그 인사말을 UEFI 부팅의 마커로 쓰고 있어서다. **M1이 그 셋을 실제로
-  깔았다** — init이 `/config`를 마운트했을 때 `O_EXCL`로 "없으면 만든다".
-  **씨앗에 쓸 수 있는 줄은 주석과 `alias` 둘뿐이고**(부팅할 때 한 글자라도
-  찍으면 설정 디스크를 붙이는 다섯 체인의 화면 좌표가 밀린다) 그 규칙을
-  `config_test.zig`의 `expectQuietSeed`가 호스트에서 막는다.
-  **M2가 탈출로 둘을 세웠다** — 감독자가 포기하기 **직전에** rc 없이 한 번 더
-  띄우고(자식마다 argv의 플래그 슬롯 하나를 덮는다. **설정 디스크가 안 붙은
-  부팅에는 안 준다** — rc 실체가 없어 탓할 것이 없고, 조건 없이 주면
-  `boot/check.sh`의 `want exactly 3`이 6이 된다), 커널 cmdline의
-  **`tars.noconfig`**가 `tars.conf`를 이긴다(**cmdline > `tars.conf` >
-  기본값**. 여섯 키 중 이 하나만 그 예외이고 근거는 "설정을 고칠 셸이 없을 때
-  쓰는 것"이다). `config/check.sh`가 **부팅 다섯**으로 늘어 rc가 읽히는 것 ·
-  `off`가 막는 것 · **일부러 심은 `exit` 한 줄에서 살아 돌아오는 것** ·
-  **같은 디스크를 한 단어가 이기는 것**을 전부 증명한다.)** design은
-  `.../specs/2026-09-11-tars-shell-config-design.md`, 기억은
-  `docs/decisions/project_shell_config.md`.
-  **SC-M0·M1·M2도 편집을 Claude Code가 했다** — 사용자가 2026-09-11에
-  외출하며 "이번 세션의 구현에 대한 모든 결정을 위임한다"고 세 세션 연속으로
-  정했다. UT의 네 세션과 같은 종류이고 **세션 단위**다.
-  **Shell Memory(SM-M0~M2, 2026-09-11·12 완료 — 서브프로젝트가 닫혔다).**
-  `zoxide`·`fzf`를 세우고
-  `/config`의 rc 셋에 훅을 걸어 **기계가 배운 것 둘**(자주 간 디렉터리 ·
-  쳤던 명령)을 부팅 사이에 남긴다. design은
-  `.../specs/2026-09-11-tars-shell-memory-design.md`,
-  plan은 `.../plans/`에 셋(`…-sm-m0.md`·`…-sm-m1.md`·`…-sm-m2.md`), 기억은
-  `docs/decisions/project_shell_memory.md`.
-  **SM-M0이 2026-09-11에 끝났다** — 도구 둘이 게스트에 서고 `tools/check.sh`가
-  검사 둘(17·18)로 그것을 친다. **`make_initrd.sh`는 한 글자도 안 고쳤다**
-  (배열에 줄 둘을 더한 것이 전부다). **M0이 게이트 자신의 것도 하나 고쳤다** —
-  맨 뒤 음성 확인이 `grep -q`의 SIGPIPE와 `pipefail` 때문에 **매치할수록
-  초록이 되는 검사**였다(쓰인 날부터 죽어 있었고 5/5 재현). 같은 모양이 저장소에
-  다섯 더 있고 `config/check.sh:552`가 다음 후보다.
-  **SM-M1이 2026-09-12에 끝났다** — 씨앗 rc 셋이 훅 두 줄을 담고,
-  `config/check.sh`가 부팅 **둘**을 더해 **일곱**이 됐다(6차가 3차의 깨진 rc를
-  `tars.noconfig`로 떠서 지우고, **7차가 아무도 `zoxide add`를 안 쳤는데 `z`가
-  도는 것을 본다**). 훅 줄에는 **`command -v` 관문**이 붙는다 — 없으면 도구가
-  없는 기계에서 fish가 여섯 줄을 찍고 그것이 설정 디스크를 붙이는 다섯 체인의
-  화면 좌표를 밀어 버린다. 씨앗의 훅 글자와 `hookLines()`의 글자는 **두 벌로
-  두고**(조립하면 역방향 검사가 tautology가 된다) `expectQuietSeed`가 검사
-  셋으로 그 둘을 잇는다. ⚠ **M1이 새 코드와 무관한 것도 하나 좁혔다** —
-  "깨뜨렸는데 첫 회차가 초록"이 **5회 중 1회**라는 것을 처음 쟀고, 처방은
-  "두 번 돌린다"가 아니라 음성 확인 전에
-  **`rm -rf init/.zig-cache init/zig-out`**이다
-  (`docs/decisions/project_zig_out_staleness.md`).
-  **SM-M2가 2026-09-12에 끝나 서브프로젝트가 닫혔다** — `environ.zig`의
-  `withPath`가 **`withTarsEnv`**가 되어 커널 블록 뒤에 `PATH` ·
-  `XDG_DATA_HOME` · **셸마다 갈리는 히스토리 env**(zsh 셋 · bash 둘 ·
-  **fish 0**)를 붙이고, 그 블록을 짓는 자리가 `main()`의 첫 줄에서
-  **`resolveShell` 뒤로** 내려왔다(`HISTFILE`이 셸마다 다른 파일이라 셸이
-  정해져 있어야 하고, **`cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다**).
-  **씨앗 rc와 `expectQuietSeed`는 한 글자도 안 건드렸다.**
-  ⚠ **design이 안 본 자리 하나를 착수 전에 걸렀다 — 게이트는 전원을 뽑는다**
-  (`boot_once`가 `kill "$QEMU_PID"`로 끝내므로 셸이 나갈 때 하는 일이 하나도 안
-  일어난다. `exit`·SIGTERM·SIGHUP은 `HISTFILE`을 쓰고 **SIGKILL은 안 쓴다** —
-  **실기는 PID 1의 SIGTERM이 있어 안전하다.** 처방은 **7차가 `fc -W`를 직접
-  치는 것**이고, `shift-w`가 **이 저장소의 첫 대문자**였다).
-  `config/check.sh`가 **부팅 여덟**이 됐고 **8차는 아무것도 안 심는다** —
-  달라진 것은 기계가 한 번 꺼졌다 켜졌다는 것뿐이다.
-  ⚠ **M2도 새 코드와 무관한 것을 둘 좁혔다.** 하나는 `.zig-cache`를
-  **호스트에서** 지우면 뒤이은 `zig build`가 **9회 중 2회**
-  `error: FileNotFound`로 죽는다는 것(**지우는 것도 컨테이너 안에서 한다** —
-  6/6 정상). 다른 하나는 **첫 루트 게이트를 실제로 빨갛게 만든 것**인데,
-  `hangul/check.sh:326`의 `tr … | grep -aqE`가 SM-M0이 기록한 **그 SIGPIPE +
-  pipefail 병**이었다(`!` 형이라 **거짓 빨강**. 판정 글자가 로그에 멀쩡히
-  있는데 빨갛고, 같은 게이트의 run 1/3은 초록이었다 — 파이프 버퍼보다 로그가
-  커지느냐의 **경주**다). **SM-M0의 목록이 그것을 못 센 이유는 `rg` 패턴이
-  플래그 끝이 `q`인 것만 찾았고 이 자리는 `-aqE`였기 때문이다** — 다음에 세는
-  사람은 `rg '\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q'`를 쓸 것. 남은 일곱
-  (`machine/check.sh` 넷 · `config/check.sh` 셋)은 그대로 숙제다.
-  **착수 세션(design + M0 plan)도 편집을 Claude Code가 했다** — 사용자가
-  2026-09-11에 "이번 세션도 위임"으로 정했고 **그 세션이 고친 것은 문서
-  둘뿐이다**(코드는 한 줄도 안 건드렸다). **SM-M0·M1·M2 세션도 같은
-  위임이었다** — 사용자가 2026-09-11과 2026-09-12에 "이번 구현에 대한 모든
-  결정을 위임한다"고 정했다. SH·FP·RM·UT·SC와 같은 종류이고 **세션 단위**다.
-  **다음 세션은 다시 기본 규칙이다 — 파일 편집은 사용자가 한다.**
-  **Hangul Input은 편집도 Claude Code가 했다**(그 2번에 대한 예외 — 사용자가
-  macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다고
-  정했다). design은 `.../specs/2026-08-31-tars-hangul-input-design.md`, 기억은
-  `docs/decisions/project_hangul_input.md`.
-- **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**
-  2026-08-31에 낡은 것 넷(BF-M1 · Config Persistence · Power Management ·
-  Hardware Discovery)을 한꺼번에 고쳤다 — 넷 다 "중간에 멈춘 것"이 아니라
-  **계획한 milestone을 전부 끝내 놓고 표시만 안 한 것**이었다.
-  **그래도 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장
-  정확하다** — 게이트가 매번 돌리는 목록이라 낡을 수가 없다.
 - 현재 진행 상황: `HANDOFF.md`
 - 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
   한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로
   옮겼다 — 저장소 밖이 아니라 저장소 안에 두어 히스토리에 남기기 위함이다.
   새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
+- **서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.**
+  2026-08-31에 낡은 것 넷을 한꺼번에 고쳤는데, 넷 다 "중간에 멈춘 것"이 아니라
+  **계획한 milestone을 전부 끝내 놓고 표시만 안 한 것**이었다.
+- **서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장 정확하다** —
+  게이트가 매번 돌리는 목록이라 낡을 수가 없다.
+
+### 완료된 서브프로젝트
+
+design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
+`docs/decisions/`에 있다. **"무엇을 배웠나"는 그 두 곳에 있고 이 표에는 없다.**
+
+| 서브프로젝트 | 끝난 날 | 무엇이 섰나 |
+|---|---|---|
+| Boot Foundation (BF-M0~M4) | 2026-08-07 | 커널을 직접 빌드해 QEMU에서 띄우고 PID 1이 자식을 감독한다 |
+| Display Foundation (DF-M0~M3) | 2026-08-08 | 프레임버퍼에 픽셀을 직접 찍는다 |
+| Terminal Foundation (TF-M0~M4) | 2026-08-13 | PTY 위의 터미널이 글자를 그린다 |
+| Zig Migration (ZM-M1~M3) | 2026-08-13 | Rust를 Zig로 옮겼다. 이제 Rust는 없다 |
+| Config Persistence (CP-M0~M2) | 2026-08-15 | ext2 디스크의 `key=value` 설정을 부팅 사이에 읽는다 |
+| Input Policy (IP-M0~M2) | 2026-08-19 | evdev 코드를 셸이 아는 바이트로 번역한다 |
+| Power Management (PM-M0·M1) | 2026-08-20 | 시그널로 끄고 되살린다 |
+| Hardware Discovery (HD-M0~M2) | 2026-08-22 | 키보드를 capability로 찾고 전원 버튼에 응답한다 |
+| Terminal Rendering (TR-M0~M2) | 2026-08-24 | 색·스크롤·오프셋을 `vt.zig`가 확정한다 |
+| Copy Mode (CM-M0~M2) | 2026-08-26 | 스크롤백 위의 vim modal 선택과 `Cmd+V` |
+| Copy Navigation (CN-M0·M1) | 2026-08-27 | 단어 이동 `w`/`b`와 스크롤백 검색 `/`·`n`·`N` |
+| Copy Search Feedback (CS-M0·M1) | 2026-08-28 | 매치 하이라이트 · 검색 기록 · "못 찾음" 메시지 |
+| Gate Latency (GL-M0~M3) | 2026-08-29 | 루트 게이트 54분 15초 → 16분 01~11초 |
+| Search Position (SP-M0·M1) | 2026-08-30 | 현재 매치를 밝은 앰버로, 오버레이에 `/needle [3/12]` |
+| Render Cost (RC-M0) | 2026-08-30 | 한 프레임의 84.7%가 `fill`이라는 것을 **재기만 했다**(코드는 안 고쳤다) |
+| Carryover Cleanup (CC-M0) | 2026-08-31 | 이월 숙제 셋을 없앴다(커널 config 둘 · sanity 도구 둘과 98MB 산출물 · 옛 폰트) |
+| Hangul Input (HI-M0~M3) | 2026-09-01 | 한글 자판 넷과 영문 자판 둘, 한/영 전환 키 넷을 `tars.conf`가 고른다 |
+| Input Status (IS-M0·M1) | 2026-09-09 | 화면 맨 아래 여백의 상태 줄 — 한/영 · 자판 · 대문자 잠금 |
+| Search Hangul (SH-M0~M2) | 2026-09-09 | copy mode 검색창에서 한글을 친다 |
+| Find Paste (FP-M0·M1) | 2026-09-09 | copy mode에서 잡은 글자를 `/` 프롬프트에 `Cmd+V`로 붙인다 |
+| Real Machine (RM-M0~M3) | 2026-09-10 | 일반 x86_64 노트북에서 뜬다 — UEFI · simpledrm · USB 키보드 · NVMe. 설정 디스크는 ext2 라벨 `tars-`로 찾는다. 열번째 체인 `machine/check.sh` |
+| Userland Tools (UT-M0~M3) | 2026-09-11 | 게스트에 도구 65개가 서고 `PATH`로 이름이 손에 닿는다. 목록은 `kernel/guest_tools.sh` 한 파일. 열한번째 체인 `tools/check.sh` |
+| Shell Config (SC-M0~M2) | 2026-09-11 | `tars.conf`의 `shell_config`가 rc를 켜고 끄고, 탈출로 둘(rc 없이 한 번 더 · 커널 cmdline `tars.noconfig`)이 섰다 |
+| Shell Memory (SM-M0~M2) | 2026-09-12 | `zoxide`·`fzf`와 히스토리 env로 기계가 배운 것 둘이 부팅을 넘는다 |
+
+**위 표의 서브프로젝트 여럿은 "파일 편집은 사용자가"의 예외였다.** HI는
+사용자가 "macOS용 한글 입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이
+낮다"고 정해서, CC-M0은 "배우는 것이 적으니 전부 네가 써라"로, SH·FP·RM·UT·SC·SM은
+사용자가 외출하며 "이번 세션의 구현 결정을 전부 위임한다"고 정해서 Claude Code가
+편집까지 했다. **그 위임은 전부 세션(또는 milestone) 단위였고 끝나면 위의 기본
+규칙으로 돌아온다** — 새 세션의 기본값은 언제나 "파일 편집은 사용자가"다.
