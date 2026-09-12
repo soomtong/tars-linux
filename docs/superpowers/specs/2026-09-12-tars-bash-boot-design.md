@@ -1,8 +1,11 @@
 # TARS Bash Boot — Design
 
 Date: 2026-09-12
-Status: 진행 중 — M0(측정)을 끝냈다. 실측 열둘이 아래 있고, 그중 실측 6이
-결정 6을 고쳤다(인자 하나인 `z`는 DB를 안 본다). M1·M2가 남았다.
+Status: 완료(2026-09-12) — M0·M1·M2를 다 했다. `config` 체인이 부팅 아홉이
+되고 그 아홉째가 `shell=bash`로 뜬다. 로그 검사 여덟과 화면 판정 넷
+(`bash-5.2#` · `/usr/bin` · `bprod1` · `bprodwfunction`)이 선다. 실측 열둘이
+아래 있고, 그중 실측 6이 결정 6을 고쳤다 — 인자 하나인 `z`는 DB를 안 보고
+그냥 `cd`해서, 훅이 안 걸려도 초록이 되는 검사였다.
 
 BH(Bash History Durability)가 자기 결정 6에서 열어 둔 문이다. BH는 씨앗 rc의
 bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 부팅의 중첩 bash로
@@ -18,9 +21,15 @@ bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 �
 
 ## 왜 지금인가
 
-게이트의 열한 체인 중 bash로 뜨는 부팅이 하나도 없다. `config` 체인의 부팅
-여덟은 1차가 fish이고 2~8차가 zsh다. 다른 체인들은 전부 씨앗의 기본값인
-fish로 뜬다.
+⚠ 이 절의 첫 문장이 처음에는 "게이트에 bash로 뜨는 부팅이 하나도 없다"였고
+그것이 틀렸다. BB-M2를 끝낸 뒤에 `power` 체인이 `shell=bash`로 뜨는 것을
+찾았다(확인 7). 맞는 진술은 아래 문단이다 — 틀린 전제를 지우지 않고 남기는
+것은 이 문서를 읽는 다음 사람이 같은 착각을 확인 7에서 멈추게 하기 위함이다.
+
+bash로 뜬 부팅에서 그 셸 자신의 성질을 판정하는 자리가 없다. `config` 체인의
+부팅 여덟은 1차가 fish이고 2~8차가 zsh이며, `power` 체인의 첫 부팅은 bash로
+뜨지만 그 체인이 보는 것은 종료 경로다 — 히스토리 env도, 씨앗 rc가 찍는
+바이트도, `PROMPT_COMMAND`를 두고 겨루는 훅 둘도 그 체인의 판정에 없다.
 
 그런데 `tars.conf`의 `shell`은 값 셋을 받고, 그 셋 중 하나가 한 번도 부팅된
 적이 없다. `init/src/config.zig`의 bash 갈래는 일곱 군데에 있다 —
@@ -38,16 +47,21 @@ fzf 훅이 부팅마다 에러 한 줄을 찍고 있었고, 그것을 아무도 
 
 이 서브프로젝트의 본체다. 하나하나가 9차 부팅의 검사가 된다.
 
+⚠ 확인 7이 이 목록의 1·3을 절반으로 깎았다. `power` 체인이 bash로 뜨므로 그
+둘은 밟히고 있었다 — 다만 판정되지는 않았다. 나머지 넷은 그대로다.
+
 1. `resolveShell(.bash)`. `/usr/bin/bash`가 실행 가능으로 판정되는가.
-   아니면 init이 폴백 로그를 찍고 다른 셸로 뜬다(`main.zig:190`). 그 판정이
-   bash에 대해 한 번도 돈 적이 없다.
+   아니면 init이 폴백 로그를 찍고 다른 셸로 뜬다(`main.zig:190`). `power`
+   체인이 `config shell=bash` 한 줄은 보지만, 폴백이 안 걸린 것과 콘솔 셸의
+   실체가 bash인 것은 아무도 안 본다.
 2. 히스토리 env의 bash 갈래(`HIST_BASH`의 둘). 중첩 bash는 `HISTFILE`을 첫
    명령으로 손수 맞췄다 — BH 위험 4가 그래야 하는 이유를 적었고, 그 말은
    production 값이 맞는지는 아무도 안 봤다는 뜻이다.
 3. 화면 셸도 bash가 되는 자리. init이 셸 경로와 플래그를 argv로 terminal에
    넘기고(`main.zig:715~719`), terminal이 그것으로 PTY의 자식을 띄운다
-   (`terminal/src/main.zig:984·1072`). `configFlag(.on)`이 `"none"`이라
-   argv[1]이 null이 되는 갈래도 bash에 대해 안 돌았다.
+   (`terminal/src/main.zig:984·1072`). `power` 체인이 화면에서
+   `screen>.*bash-`를 기다리므로 이 경로는 이미 판정되고 있다 — 여섯 중
+   판정까지 되어 있던 것이 이것 하나다.
 4. 씨앗 bashrc가 production 부팅에서 몇 바이트를 찍는가. 0이어야 한다.
    `/dev/fd` 한 줄이 정확히 이 자리에 살아 있었다.
 5. `PROMPT_COMMAND` 합성의 결과가 둘 다 사는가. 히스토리도 쓰고 zoxide도
@@ -99,6 +113,28 @@ DB에 `/usr/share/terminfo/x`가 이미 있다. 7차가 넣고 8차가 그것을
 넘었다"를 증명했다. 9차가 같은 글자를 쓰면 bash의 훅이 안 걸려도 `z`가 그리로
 간다. 이 함정은 확인 5와 성질이 같고, 둘 다 "판정 글자를 만들 수 있는 것이
 우리가 보려는 것 하나뿐인가"를 묻는 이 체인의 오래된 규칙에서 나온다.
+
+### 확인 7 — `power` 체인이 이미 `shell=bash`로 뜬다 (착수 전에 놓쳤다)
+
+BB-M2를 끝낸 뒤에 찾았다. `power/make_disk.sh`가 `mkfs.ext2 -d`로 굽는
+`out/power.img`의 `tars.conf`에 `shell=bash` 한 줄이 들어 있다. 이유는 이
+서브프로젝트와 무관하다 — 게이트가 그 셸에 `kill -TERM 1`을 타이핑하는데
+`kill` 빌트인이 fish에 있는지 확인되지 않았기 때문이다.
+
+그 체인이 보는 것은 둘이다. 로그의 `tars-init: config shell=bash`
+(`power/check.sh:141`)와 화면의 `screen>.*bash-`(148행). 두 부팅 중 둘째는
+게스트가 설정을 zsh로 고친 뒤의 재시작이라 콘솔 셸이 zsh인 것을 본다(388행).
+
+그래서 착수 전 전제 하나가 틀렸다. "게이트에 bash로 뜨는 부팅이 없다"가
+아니라 "bash로 뜬 부팅에서 셸 자신의 성질을 판정하는 자리가 없다"가 맞다.
+못 보는 여섯 중 1은 절반만, 3은 전부 그 체인이 이미 밟고 있었다.
+
+BH가 `/dev/fd` 이야기에 쓴 문장("게이트에 bash로 뜨는 자리가 없어서 아무도
+못 봤다")도 같은 정정을 받는다. 그 줄은 `power` 체인의 화면에도 있었고,
+그 체인의 판정이 프롬프트가 나타나는 것까지라서 그 앞의 한 줄을 안 본 것이다.
+이유가 "자리가 없다"에서 "자리는 있는데 아무도 그 화면을 자세히 안 본다"로
+바뀌는데, 그 정정이 BB의 값을 깎지는 않는다 — BB가 세운 것은 자리가 아니라
+판정이다.
 
 ## 결정
 
@@ -374,9 +410,14 @@ BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것�
 
 ### 실측 11 — `mkfs.ext2 -d`가 측정을 부팅 하나로 줄인다
 
-컨테이너의 e2fsprogs가 `-d`를 받는다. `tars.conf` 한 줄을 담은 디렉터리를
-그대로 이미지에 넣으므로, 체인처럼 "1차에서 고치고 2차에서 읽는" 두 부팅이
-필요 없다. 측정이 체인의 디스크 연속성에 기대지 않는 것이 덤이다.
+`tars.conf` 한 줄을 담은 디렉터리를 그대로 이미지에 넣으므로, 체인처럼
+"1차에서 고치고 2차에서 읽는" 두 부팅이 필요 없다. 측정이 체인의 디스크
+연속성에 기대지 않는 것이 덤이다.
+
+⚠ 이것은 새로 찾은 길이 아니다. IP-M2가 열었고 `power/make_disk.sh`와
+`hangul/make_disk.sh`가 이미 그렇게 굽는다(확인 7). 착수 전에 그 파일들을
+읽었으면 확인 7도 함께 알았을 것이다 — 이 문서가 `config` 체인만 보고
+"게이트에 bash 부팅이 없다"고 적은 경로가 정확히 여기다.
 
 ### 실측 12 — `shift-backslash`가 `|`로 게스트에 닿는다
 
@@ -387,11 +428,96 @@ BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것�
 덤으로 fzf 통합이 정의하는 이름 28개를 봤다. `__fzf_history__`(`Ctrl+R`) ·
 `fzf-file-widget`(`Ctrl+T`) · `__fzf_cd__`(`Alt+C`)와 자동완성 함수들이다.
 
+### 실측 13 — `/dev/fd` 줄은 `power` 체인 화면에도 있었고 그 체인은 초록이었다
+
+확인 7의 정정을 추측으로 두지 않으려고 쟀다. `main.zig`의 `linkDevFd()` 호출을
+`if (false)`로 눕힌 사본을 마운트하고 `power/check.sh`를 돌렸다.
+
+그 체인의 화면에 `bash: /dev/fd/63: No such file or directory`가 찍혔고
+(시리얼 로그 둘에서 16회·41회), 체인은 통과했다(exit 0).
+
+그러니 BH가 적은 이유("게이트에 bash로 뜨는 자리가 없어서 아무도 못 봤다")는
+틀렸고, 맞는 이유는 "그 자리의 화면을 프롬프트가 나타나는 것까지만 본다"다.
+`power/check.sh:148`이 기다리는 것이 `screen>.*bash-`이고, 그 앞줄에 무엇이
+있어도 그 대기는 만족된다.
+
+이 실측이 BB의 값을 말하는 가장 짧은 문장이다 — 부팅은 있었고, 판정이 없었다.
+
 ### 9차 훅의 예행
 
 셋째 회차가 판정 넷을 위의 순서 그대로 돌려서 전부 초록이었다 — 프롬프트
 대기 · `z usr bin` · `bprod1` · `bprodwfunction`. M2는 이 키 배열을 그대로
 체인에 옮긴다.
+
+## BB-M1이 실행으로 증명한 것
+
+`config/check.sh`가 부팅 아홉이 됐다. 9차가 훅 없이 로그만 보고, 8차 훅의
+맨 끝이 그 부팅을 위해 `shell=bash` 한 줄을 append한다.
+
+검사는 여덟이다. 긍정 넷 — `config shell=bash …  shell_config=on` ·
+`started console shell …  /usr/bin/bash` · env의 `HISTFILE`과 `HISTSIZE`.
+부정 넷 — `is not executable` 없음 · `env SAVEHIST` 없음 ·
+`seeded /config/` 없음 · `times fast`와 `giving up on`과
+`Attempted to kill init` 없음. 그리고 셸 둘의 `started` 횟수가 각각 1이다.
+
+체인 단독이 1분 57.47초였다. BH-M2 뒤의 1분 52.64초에서 4.83초 늘었다.
+부팅 하나와 타이핑 64키를 더했는데 이 정도인 것은 이 체인의 잡음 폭 안이다 —
+게이트 전체가 ±3분이므로 체인 단독의 몇 초는 갈렸다고 말하지 않는다.
+
+8차의 셋째 판정(`posmark=1`)이 그대로 초록이었다. 위험 2가 실현되지 않았고,
+그 근거는 결정 2의 순서다 — 심기 타이핑이 판정 뒤에 있다.
+
+## BB-M2가 실행으로 증명한 것
+
+9차에 `probe_bash_production`이 붙었다. 판정이 넷이다.
+
+| 판정 | 화면 글자 | 무엇이 빨개지면 무슨 뜻인가 |
+|---|---|---|
+| 0 | `bash-5.2#` | 뜬 셸이 bash가 아니다 |
+| 1 | `/usr/bin` | zoxide 훅이 `PROMPT_COMMAND`에서 밀려났다 |
+| 2 | `bprod1` | 씨앗의 히스토리 줄이나 env의 `HISTFILE`이 일하지 않는다 |
+| 3 | `bprodwfunction` | fzf 통합이 이 셸에서 위젯을 안 만들었다 |
+
+판정 0의 패턴은 `bash-[0-9]+\.[0-9]+#`다. 버전 숫자를 고정하지 않는 이유는
+게스트의 bash가 `guest_tools.sh`가 정하는 Debian 스냅샷에서 오기 때문이다 —
+버전이 올라가는 날 체인이 조용히 깨지는 것보다 패턴이 느슨한 편이 낫다.
+
+체인 단독이 2분 06.87초가 됐다. M1의 1분 57.47초에서 9.40초 늘었고, 늘어난
+것은 타이핑 여섯(약 110키)이다.
+
+### 반사실 — 판정 1만 빨개지고 2·3은 초록으로 남는다
+
+씨앗 bashrc에서 `PROMPT_COMMAND='history -a'` 줄을 훅 두 줄 뒤로 옮긴 사본을
+마운트해서 셋을 확인했다.
+
+1. 사본 하나만 주면 부팅 앞에서 죽는다. `config_test.zig`의
+   `expectPromptCommandBeforeHooks`가
+   `FAIL: the bash seed assigns PROMPT_COMMAND on line 38, after its first hook
+   on line 36`을 찍고 `error.BadSeedOrder`로 끝난다. 마운트가 둘 필요하다는
+   SD-M2의 교훈이 여기서도 그대로다 — 그 함수의 마지막 검사에
+   `or true`를 넣은 사본을 함께 준다.
+2. 예행 하네스로 판정 셋을 따로 보면 1만 `NO`이고 2·3은 `OK`다. 화면에
+   `zoxide: no match found`가 남고 `pwd`가 `/`를 찍는다. `bprod1`과
+   `bprodwfunction`은 그대로 나온다 — BH가 말한 "증상이 조용하다"가 글자
+   그대로 재현됐다.
+3. 체인 전체는 9차에서 죽는다(exit 1). 진단이 "뒤엣것이면 아래 bprod1은
+   초록으로 남는다"를 찍는데, 위 2번이 정확히 그 예측을 확인해 준다.
+
+### 반사실이 덤으로 알려 준 것
+
+순서가 뒤집힌 씨앗에서는 zoxide가 프롬프트에 다섯 줄을 찍는다.
+
+```
+zoxide: detected a possible configuration issue.
+Please ensure that zoxide is initialized right at the end of your shell configuration file (usually ~/.bashrc).
+If the issue persists, consider filing an issue at: …
+Disable this message by setting _ZO_DOCTOR=0.
+```
+
+zoxide 자신에게 진단 기능이 있어서, 자기 훅이 덮인 것을 알아채고 말해 준다.
+그러니 이 실패는 조용한 축에서는 그나마 나은 편이다. 다만 그 다섯 줄이
+화면 좌표를 밀므로, 씨앗이 아무것도 안 찍는다는 이 저장소의 규칙은 순서가
+맞을 때만 성립한다.
 
 ## 참고
 

@@ -1,28 +1,63 @@
-# HANDOFF: BH가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
+# HANDOFF: BB가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
 
 ## 지금 어디인가
 
-Bash History Durability(BH)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다.
-SD가 zsh에 대해 한 일을 bash에 대해 했다 — 씨앗 rc의 bash 갈래가
-`PROMPT_COMMAND='history -a'` 한 줄을 훅 두 줄보다 먼저 담고, 호스트 검사
-다섯이 그 줄과 그 자리를 지키고, 게이트의 7차 부팅이 중첩 bash 둘로 그 줄이
-게스트에서 하는 일을 판정한다(`bneg0` · `baft1` · `bpos1`). 실측 열셋이
-design에 있다
-(`docs/superpowers/specs/2026-09-12-tars-bash-history-durability-design.md`).
+Bash Boot(BB)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다. `config` 체인이
+부팅 여덟에서 아홉이 되고, 그 아홉째만 `shell=bash`로 뜬다. 로그 검사 여덟과
+화면 판정 넷(`bash-5.2#` · `/usr/bin` · `bprod1` · `bprodwfunction`)이 서
+있고, 실측 열둘이 design에 있다
+(`docs/superpowers/specs/2026-09-12-tars-bash-boot-design.md`).
 
-BH가 계획에 없던 것을 하나 더 고쳤다. 게스트에 `/dev/fd`가 없어서 씨앗의
-fzf 훅이 부팅할 때마다 `bash: /dev/fd/63: No such file or directory` 한 줄을
-찍고 있었다. 씨앗은 아무것도 안 찍어야 한다는 이 저장소의 규칙을 정확히 그
-한 줄이 깨고 있었고, 게이트에 bash로 뜨는 자리가 없어서 아무도 못 봤다.
-이제 `main.zig`의 `linkDevFd()`가 그 링크를 만든다.
+BB는 BH가 자기 결정 6에서 열어 둔 문이었다. BH는 씨앗의 한 줄을 중첩 bash로
+판정했고 그것으로 부팅 하나를 아꼈는데, 중첩이 정의상 볼 수 없는 것이 여섯
+있었다 — 셸 해석(`resolveShell`) · 히스토리 env · terminal에 넘어가는 argv ·
+씨앗의 침묵 · `PROMPT_COMMAND`를 두고 겨루는 훅 둘 · 콘솔 셸. 9차가 그 여섯을
+본다. 본문은 `docs/decisions/project_bash_boot.md`에 있다.
 
-그 앞이 SD(같은 일의 zsh 판)이고, 그 앞이 Gate Accuracy(GA-M0·M1), 그 앞이
-Shell Memory(SM-M0~M2)다.
+⚠ BB가 착수할 때 쓴 전제 하나가 틀렸고 M2를 끝낸 뒤에 찾았다. "게이트에
+bash로 뜨는 부팅이 없다"고 적었는데 `power` 체인의 첫 부팅이 `shell=bash`로
+뜬다(`power/make_disk.sh`가 그 줄을 심는다. `kill` 빌트인 때문이다). 그
+체인이 보는 것은 로그의 `config shell=bash`와 화면의 `screen>.*bash-` 둘이고
+셸 자신의 성질은 안 본다. 그래서 BB가 세운 것은 자리가 아니라 판정이다.
+`/dev/fd` 한 줄이 넷을 지나도록 안 보인 이유도 "자리가 없다"가 아니라
+"그 화면을 프롬프트까지만 본다"였다.
+
+그 앞이 BH(bash 히스토리), 그 앞이 SD(같은 일의 zsh 판), 그 앞이 Gate
+Accuracy(GA-M0·M1), 그 앞이 Shell Memory(SM-M0~M2)다.
 
 다음 일은 아직 안 정해졌다. 아래 "바로 다음에 할 것"이 후보 목록이다.
 
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## BB가 한 일 (2026-09-12, 하루에 닫혔다)
+
+| 커밋 | 무엇 |
+|---|---|
+| `33352a9` | design. 중첩 bash가 못 보는 여섯을 세어서 근거로 삼았다 |
+| `8d444a1` | BB-M0 plan(측정 일곱과 하네스 전문) |
+| `ad49f88` | BB-M0. 실측 열둘. 그중 하나가 design의 결정 6을 고쳤다 |
+| `058213e` | BB-M1. 8차의 심기와 9차 부팅의 로그 검사 여덟 |
+| `cb522fb` | BB-M2. 9차의 화면 판정 넷(`probe_bash_production`) |
+
+다음 세션이 먼저 알아야 하는 다섯이다.
+
+1. 인자 하나인 `z`는 DB를 안 본다. 그 인자가 현재 디렉터리 아래의 실제
+   디렉터리면 zoxide가 그냥 `cd`한다 — `/`에서 `z bin`은 `/bin`으로 가고
+   (게스트에는 `/usr/bin`과 `/bin`이 서로 다른 실체다), 그러면 훅이 안 걸려도
+   검사가 초록이 된다. 판정 질의는 인자 둘로 한다(`z usr bin`). 7차의 zsh
+   판정이 이 함정을 안 밟은 것은 `z terminfo x`여서였다.
+2. 9차는 표적을 7차와 다르게 써야 한다. `/config/bash_history`와 zoxide DB에
+   7차가 써 둔 것이 그대로 있어서, 같은 글자를 세면 9차가 아무것도 안 해도
+   초록이 된다. 그래서 판정 글자가 `bprod` 접두사다.
+3. `shell=bash`는 8차 훅의 맨 끝에서 심는다. 판정 셋보다 앞에서 치면 8차의
+   셋째 판정(`history` 16줄 창)이 위험하다 — SD-M2와 BH-M2가 그 창을 이미
+   두 번 밀었다.
+4. 프롬프트 패턴은 `bash-[0-9]+\.[0-9]+#`다. 게스트의 bash 버전이
+   `guest_tools.sh`의 Debian 스냅샷에서 오므로 숫자를 고정하지 않았다.
+5. 씨앗의 순서가 뒤집히면 zoxide가 프롬프트마다 다섯 줄을 찍는다(자기 훅이
+   덮인 것을 알아채는 진단이 있다). 씨앗이 아무것도 안 찍는다는 이 저장소의
+   규칙은 순서가 맞을 때만 성립한다.
 
 ## BH가 한 일 (2026-09-12, 하루에 닫혔다)
 
@@ -170,7 +205,7 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 ## 바로 다음에 할 것 — 다음 서브프로젝트를 고른다
 
-BH가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
+BB가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
 고른 뒤 design부터 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
 
 무엇을 고르든 먼저 할 것 하나. 이 저장소의 서브프로젝트 스물다섯이
@@ -183,11 +218,12 @@ zsh는 SD가, bash는 BH가 했다. 그래서 이 방향으로 남은 것은 SD 
 하나다 — 종료가 늘 3초 걸리는 것이고, 그것은 PID 1의 시그널 경로를 여는
 일이라 PM·BF 체인이 보는 종료 로그와 감독 루프의 계약을 다시 여는 크기다.
 
-BH가 열어 둔 문이 하나 있다. 게이트에 bash로 뜨는 체인이 여전히 없다 —
-BH-M2가 중첩으로 갈음했고 그 선택의 근거는 design 결정 6에 있다. `/dev/fd`가
-그 자리에서 나온 것처럼, `shell=bash`로 한 부팅을 정식으로 띄우면 아직
-아무도 안 본 것이 더 나올 수 있다. 크기는 config 체인에 부팅 하나(약 10초,
-게이트로는 30초)다.
+BH가 열어 둔 문은 BB가 닫았다. 이제 게이트에 bash로 뜨는 부팅이 하나 있다.
+그 자리에서 새로 나온 것은 없었다 — 씨앗은 production 부팅에서도 조용했고
+`/dev/fd`가 이미 서 있었다. 남은 방향 하나는 `shell=bash`와
+`shell_config=off`를 함께 주는 부팅(`--norc`)인데 BB 비목표 1이 값이 낮다고
+적어 두었다. 탈출로의 값은 5차·6차가 zsh로 이미 증명했고, 열리는 것이
+"bash가 `--norc`를 받으면 rc를 안 읽는가" 하나이며 그것은 우리 코드가 아니다.
 
 ## 명령 모음
 
@@ -196,7 +232,12 @@ BH-M2가 중첩으로 갈음했고 그 선택의 근거는 design 결정 6에 �
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   rm -rf init/.zig-cache init/zig-out; cd init && zig build && zig build test'
 
-# config 체인 단독 (부팅 여덟, 약 1분 26초)
+# shell=bash로 한 부팅만 띄워서 재기 (BB-M0. 디스크를 미리 굽는다)
+# 하네스 전문은 plans/2026-09-12-tars-bash-boot-bb-m0.md의 Task 1에 있다.
+docker run --rm -v "$PWD":/workspace -v /tmp/bb_m0.sh:/tmp/bb_m0.sh:ro \
+  -w /workspace tars-devcontainer bash /tmp/bb_m0.sh > /tmp/bb_m0.log 2>&1
+
+# config 체인 단독 (부팅 아홉, 약 2분 07초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh 2>&1 | tail -50
 
@@ -225,19 +266,20 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 28분 55.53초다(2026-09-12,
-BH-M2 뒤). 그 앞이 SD-M2 뒤의 28분 14.55초이고 41초 차이인데, BH-M2가
-`config` 체인의 7차에 타이핑을 200키쯤 더해 그 체인 단독이 16.9초 길어졌고
-게이트가 그것을 세 번 돈다 — 51초가 설명되는 값이라 나머지는 잡음이다.
-그 앞이 GA-M1 뒤의 27분 35.61초, 그 앞이 주석 정리 뒤의 27분 35.11초,
-그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 24.06초다(2026-09-12,
+BB-M2 뒤). 그 앞이 BH-M2 뒤의 28분 55.53초이고 28.5초 차이인데, BB가 `config`
+체인에 부팅 하나와 타이핑 약 174키를 더해 그 체인 단독이 14.2초 길어졌고
+게이트가 그것을 세 번 돈다 — 43초가 설명되는 값이라 차이는 전부 잡음 안이다.
+그 앞이 SD-M2 뒤의 28분 14.55초, 그 앞이 GA-M1 뒤의 27분 35.61초, 그 앞이
+주석 정리 뒤의 27분 35.11초, 그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에
 있다 — 54분 15초에서 GL-M0~M3이 16분대로 내렸고, 그 뒤 체인이 둘 늘고
-`config`가 부팅 여덟이 되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라
+`config`가 부팅 아홉이 되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라
 그보다 작은 차이는 갈렸다고 말하지 않는다.
 
 `config` 체인 단독의 역사도 적어 둔다 — SD-M1 1분 26.01초 → SD-M2 1분
-36.42초 → BH-M1 1분 35.77초 → BH-M2 1분 52.64초. 7차에 타이핑을 더한
-milestone에서만 늘었다.
+36.42초 → BH-M1 1분 35.77초 → BH-M2 1분 52.64초 → BB-M1 1분 57.47초 →
+BB-M2 2분 06.87초. 타이핑을 더한 milestone에서만 늘었고, BB-M1이 부팅
+하나를 더하면서 4.83초만 늘어난 것은 이 체인의 잡음 폭 안이다.
 
 `{ time docker run ... ; } 2> /tmp/gate.time`으로 감싸면 그 파일이 docker의
 stderr도 함께 받아 200KB가 넘는다. `time`의 값은 파일 맨 끝에 있으므로
@@ -563,6 +605,11 @@ substitution(`< <(…)`)이 게스트에서만 실패했다. `main.zig`의 `link
 `/proc`과 `/dev`가 붙은 뒤 만든다. 이 링크를 지우면 씨앗의 fzf 훅이 부팅할
 때마다 한 줄을 찍는다 — `config/check.sh`의 1차 부팅이 그 로그를 본다.
 
+그 링크를 지운 사본으로 재 보면(BB 실측 13) `power` 체인의 화면에도 그 줄이
+찍히는데 그 체인은 통과한다. 그 체인의 대기가 `screen>.*bash-`(프롬프트)라
+앞줄에 무엇이 있어도 만족되기 때문이다. 그래서 "게이트가 밟는다"와 "게이트가
+판정한다"를 같은 것으로 읽으면 안 된다.
+
 28. `script -qfc "<셸> -i"`는 `sh -c` 래퍼를 하나 끼운다 (BH 실측 10).
 그래서 자식 pid로 찾은 것에 시그널을 보내면 셸이 아니라 래퍼가 받고, 래퍼가
 죽으면 `script`도 끝나 PTY가 닫히므로 결과가 전부 "SIGHUP을 받았다"로
@@ -592,7 +639,25 @@ ptyclose가 된다. 그 오류를 알려 주는 것은 SIGKILL 칸이다 — 핸
 있는데(실측 24), bash는 `PROMPT_COMMAND`에서 돌기 때문에 자기 줄이 아직 없다.
 게이트에서 파일을 세는 자리의 기대값이 이 한 칸으로 달라진다.
 
-33. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
+33. 인자 하나인 `z`는 zoxide DB를 안 본다 (BB 실측 6). 그 인자가 현재
+디렉터리 아래의 실제 디렉터리면 그냥 `cd`한다 — `/`에서 `z bin`은 `/bin`으로
+가고, 게스트에는 `/usr/bin`(도구들)과 `/bin`(`sh` 링크 하나)이 서로 다른
+실체로 있다. 판정에 쓸 질의는 인자를 둘로 만든다(`z usr bin` · `z terminfo x`).
+증상이 "훅이 안 걸려도 검사가 초록"이라 조용하다.
+
+34. `mkfs.ext2 -d`로 설정 디스크에 파일을 미리 담을 수 있다 (IP-M2가 열었고
+`power/make_disk.sh`·`hangul/make_disk.sh`가 쓴다). `tars.conf` 한 줄을 담은
+디렉터리를 주면 조사용 부팅이 하나로 끝난다 — `config` 체인처럼 "1차에서
+고치고 2차에서 읽는" 두 부팅이 필요 없다. `config` 체인 자신은 여전히 빈
+디스크로 시작해야 한다(1차의 seeding 경로가 그 전제다).
+
+그리고 그 두 파일을 읽으면 "어느 체인이 어느 셸로 뜨는가"를 알 수 있다.
+`power`가 bash이고 `hangul`이 기본값과 다른 자판을 심는다. BB가 착수 전에
+`config` 체인만 보고 "게이트에 bash 부팅이 없다"고 적었다가 끝난 뒤에
+정정했다 — 셸이나 설정으로 갈리는 일을 시작할 때는 `*/make_disk.sh`를 전부
+먼저 읽는다.
+
+35. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
 `ACPI_EC`와 `PNP_DEBUG_MESSAGES`는 둘 다 프롬프트가 있어서 CC-M0이 누른 값이
 `olddefconfig`를 견뎠다. 끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
 `.config`에서 줄이 사라진다 — `ACPI_EC_DEBUGFS`가 그랬다.
@@ -821,7 +886,7 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-SD가 닫혔으므로 아래가 다음 서브프로젝트의 후보 전부다.
+BB가 닫혔으므로 아래가 다음 서브프로젝트의 후보 전부다.
 
 SM이 남긴 것.
 
@@ -887,6 +952,9 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   7차가 중첩 bash 둘로 판정한다. 같은 기억 파일에 이어 적었다.
 - ~~게스트에 `/dev/fd`가 없어서 씨앗의 fzf 훅이 에러를 찍던 것~~ — BH-M2가
   찾아서 고쳤다. `main.zig`의 `linkDevFd()`. `project_measuring_shells`.
+- ~~게이트에 bash로 뜨는 부팅이 없던 것~~ — BB-M0~M2(2026-09-12)가
+  서브프로젝트로 했다. `config` 체인의 9차가 `shell=bash`로 뜨고, 중첩으로는
+  볼 수 없던 여섯을 본다. `project_bash_boot`.
 - ~~`grep -q` SIGPIPE 일곱 자리~~ — GA-M0·M1(2026-09-12)이 서브프로젝트로
   했다. 일곱을 고치고 `check.sh`의 진입 검사가 재발을 막는다.
   `project_gate_accuracy`.
@@ -1008,7 +1076,10 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   sleep이 아닌지, 왜 문자열이 아니라 파일 크기인지, 왜 `needs_redraw`에
   기대는지가 전부 그 파일 주석에 있다. 부르는 쪽은 fd 3과 `$LOG`를 갖춰야
   하고, 없으면 `set -u`로 그 자리에서 죽는다(일부러 안 막았다).
-- `config/check.sh` — 부팅 여덟. `probe_persisted_memory`가 8차를 본다.
+- `config/check.sh` — 부팅 아홉. 9차만 `shell=bash`로 뜨고
+  `probe_bash_production`이 그 부팅의 판정 넷을 본다(BB-M2). 8차 훅의 맨 끝이
+  그 부팅을 위해 `shell=bash` 한 줄을 append한다.
+  `probe_persisted_memory`가 8차를 본다.
   8차는 아무것도 안 심고 기계가 한 번 꺼졌다 켜졌다는 것만 다르다. 7차가
   `fc -W`를 치던 이유는 게이트가 전원을 뽑기 때문이었는데(`boot_once`의
   `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — 씨앗의 옵션이 칠 때마다 쓰므로

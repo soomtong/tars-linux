@@ -63,3 +63,4 @@
 - [Shutdown signals](docs/decisions/project_shutdown_signals.md) — 대화형 셸은 SIGTERM을 무시한다; 종료 경로에서 무엇이 저장되는지는 누가 먼저 죽어 PTY를 닫는지에 갈린다
 - [Shell history](docs/decisions/project_shell_history.md) — 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 씨앗 rc의 한 줄로 고친 층. zsh는 `setopt INC_APPEND_HISTORY`(SD-M0~M2), bash는 `PROMPT_COMMAND='history -a'`(BH-M0~M2), 둘 다 2026-09-12 종료
 - [Measuring shells](docs/decisions/project_measuring_shells.md) — 셸을 재는 환경이 실제로 돌 환경과 다르면 값이 조용히 틀린다. 게스트에 `/dev/fd`가 없는 것 · `script`가 끼우는 래퍼 · 비대화형 셸이 프롬프트 훅을 안 도는 것
+- [Bash boot](docs/decisions/project_bash_boot.md) — 게이트가 `shell=bash`로 뜨는 부팅을 하나 갖게 된 일. `config` 체인이 부팅 아홉이 됐고, 중첩 bash로는 정의상 볼 수 없던 여섯을 그 아홉째가 본다(BB-M0~M2, 2026-09-12 종료)
