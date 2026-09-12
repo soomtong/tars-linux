@@ -296,6 +296,20 @@ XDG_LS_KEYS=(l s spc slash c o n f i g slash x d g slash z o x i d e ret)
 # history — zsh는 인자 없이 부르면 최근 16개를 번호와 함께 찍는다(실측 36).
 HISTORY_KEYS=(h i s t o r y ret)
 
+# ── BB-M1 ───────────────────────────────────────────────────────────────
+#
+# 8차가 9차를 위해 심는 한 줄이다. `echo shell=bash >> /config/tars.conf`.
+#
+# append인 것이 요점이다(BB 확인 2). 이 파일은 지금 세 줄이고 마지막 줄이
+# 이기므로, 덮어쓰지 않고 넷째 줄을 더하면 9차의 셸만 bash가 된다 —
+# `shell_config=on`도 그대로 산다.
+#
+# 치는 자리가 8차 훅의 맨 끝이다(BB 결정 2). 8차의 판정 셋보다 앞에서 치면
+# 셋째 판정이 위험하다 — `history`가 최근 16개만 찍는 창이고, SD-M2와 BH-M2가
+# 그 창을 이미 두 번 밀었다.
+BASH_KEYS=(e c h o spc s h e l l equal b a s h spc
+           shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
+
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
 edit_config_in_guest() {
@@ -919,10 +933,9 @@ probe_persisted_memory() {
   local ok=0
   if wait_for_screen 'posmark=1'; then ok=1; fi
 
-  exec 3<&-
-  exec 3>&-
-
   if [ "$ok" != "1" ]; then
+    exec 3<&-
+    exec 3>&-
     echo "FAIL(boot 8): the history list has nothing the seventh boot typed"
     echo "  둘 중 하나다 — 7차가 칠 때마다 쓰는 옵션이 안 걸렸거나(그러면"
     echo "  7차의 pos1이 빨갰다), 이 부팅의 셸이 HISTFILE을 안 읽었다."
@@ -930,6 +943,32 @@ probe_persisted_memory() {
     return 1
   fi
   echo "boot 8: the history list carries a command only the seventh boot typed"
+
+  # ── 4. 9차가 읽을 것을 심는다(BB-M1) ───────────────────────────────────
+  #
+  # 여기까지 온 뒤에 치는 것이 규칙이다(BB 결정 2). 위 셋째 판정이 보는
+  # `history` 창이 최근 16개뿐이라, 이 두 명령을 앞에 두면 판정 글자가 창
+  # 밖으로 밀릴 수 있다.
+  #
+  # 되읽기의 판정 글자는 행의 첫머리 `shell=bash`다(BB 결정 3). 방금 타이핑한
+  # 줄에도 그 글자가 있지만 그 행은 프롬프트로 시작하므로, 행이 그 글자로
+  # 시작하는 것은 `cat`의 출력뿐이다 — 1차 부팅이 `shell=zsh`에 쓴 수법 그대로다.
+  type_keys "${BASH_KEYS[@]}"
+  type_keys "${READBACK_KEYS[@]}"
+  ok=0
+  if wait_for_screen '\| shell=bash'; then ok=1; fi
+
+  exec 3<&-
+  exec 3>&-
+
+  if [ "$ok" != "1" ]; then
+    echo "FAIL(boot 8): typed shell=bash but /config/tars.conf never read it back"
+    echo "  9차 부팅이 읽을 것이 없다. append가 안 됐거나 되읽기가 화면에"
+    echo "  안 남았다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 8: appended shell=bash to the config for the ninth boot"
   return 0
 }
 
@@ -1019,7 +1058,7 @@ report_failure() {
 
 # ---------------------------------------------------------------- 1차 부팅
 # 빈 디스크. init이 씨앗을 심고(fish), 그 다음 사람이 zsh로 고친다.
-echo "=== boot 1/8: empty disk, seed the config and the rc files, then edit them from inside ==="
+echo "=== boot 1/9: empty disk, seed the config and the rc files, then edit them from inside ==="
 if ! boot_once "$LOG1" "tars-init: created /config/tars.conf" edit_config_in_guest; then
   report_failure "$LOG1" "first boot did not seed and edit /config/tars.conf"
 fi
@@ -1090,7 +1129,7 @@ echo "boot 1: seeded with fish, then edited to zsh from inside the guest"
 
 # ---------------------------------------------------------------- 2차 부팅
 # 같은 이미지를 그대로 다시 물린다. make_disk.sh를 부르지 않는다.
-echo "=== boot 2/8: same image, the guest-written config should pick the shell and its rc ==="
+echo "=== boot 2/9: same image, the guest-written config should pick the shell and its rc ==="
 if ! boot_once "$LOG2" "tars-init: started console shell" watch_console_shell; then
   report_failure "$LOG2" "second boot never started a console shell"
 fi
@@ -1200,7 +1239,7 @@ echo "boot 2: the config written inside the guest selected zsh for both shells"
 # 이 부팅은 아무것도 안 친다. 볼 것이 전부 없어야 할 것이기 때문이다 —
 # 타이핑을 하면 그 글자가 화면에 남고, 판정 글자가 우연히 화면에 생기는 길이
 # 하나 늘어난다.
-echo "=== boot 3/8: same image with shell_config=off, the rc must not run ==="
+echo "=== boot 3/9: same image with shell_config=off, the rc must not run ==="
 if ! boot_once "$LOG3" "tars-init: started console shell" plant_broken_rc; then
   report_failure "$LOG3" "third boot never started a console shell"
 fi
@@ -1244,7 +1283,7 @@ fi
 # 셸이 없다."* M1까지 이 기계의 탈출로는 호스트에서 ext2 이미지를 직접 고치는
 # 것뿐이었다.
 LOG4="$(mktemp)"
-echo "=== boot 4/8: the rc kills both shells; the supervisor must bring them back without it ==="
+echo "=== boot 4/9: the rc kills both shells; the supervisor must bring them back without it ==="
 if ! boot_once "$LOG4" "tars-init: console shell died" watch_rescue; then
   report_failure "$LOG4" "the supervisor never rescued a shell from the rc that kills it"
 fi
@@ -1306,7 +1345,7 @@ echo "boot 4: the rc killed both shells three times, then the supervisor brought
 # 여섯 번 죽는 것을 봤으므로, 여기서 아무도 안 죽으면 그것은 tars.noconfig가
 # 한 일이다. M1의 3차가 2차에 기대던 구조와 같다.
 LOG5="$(mktemp)"
-echo "=== boot 5/8: same disk, same trap, but tars.noconfig on the command line ==="
+echo "=== boot 5/9: same disk, same trap, but tars.noconfig on the command line ==="
 if ! boot_once "$LOG5" "tars-init: started console shell" watch_quiet "console=ttyS0 tars.noconfig"; then
   report_failure "$LOG5" "fifth boot never started a console shell"
 fi
@@ -1364,7 +1403,7 @@ echo "boot 5: one word on the kernel command line beat the config file, and noth
 # design 결정 8은 M1이 부팅 하나를 더한다고 적었다. 그 계산에 이 수리가
 # 빠져 있었다 — 4차·5차가 쓰고 간 디스크 상태를 안 본 것이다.
 LOG6="$(mktemp)"
-echo "=== boot 6/8: same broken rc, but tars.noconfig gives us a shell that can delete it ==="
+echo "=== boot 6/9: same broken rc, but tars.noconfig gives us a shell that can delete it ==="
 if ! boot_once "$LOG6" "tars-init: started console shell" repair_broken_rc "console=ttyS0 tars.noconfig"; then
   report_failure "$LOG6" "sixth boot could not remove the rc the third boot broke"
 fi
@@ -1392,7 +1431,7 @@ fi
 #   다르다 — `tools/check.sh` 검사 18은 사람이 `zoxide add`를 쳤고, 이 부팅은
 #   아무도 안 친다. 같은 판정 글자를 보는 두 검사의 차이가 정확히 "훅"이다.
 LOG7="$(mktemp)"
-echo "=== boot 7/8: init re-seeds the rc it lost, and the hooks in that seed must run ==="
+echo "=== boot 7/9: init re-seeds the rc it lost, and the hooks in that seed must run ==="
 if ! boot_once "$LOG7" "tars-init: started console shell" probe_shell_hooks; then
   report_failure "$LOG7" "the hooks in the seeded rc did not run on the seventh boot"
 fi
@@ -1463,7 +1502,7 @@ echo "boot 7: the machine learned a directory from a cd nobody told it to rememb
 #   7차가 DB에 넣은 것은 `/usr/share/terminfo/x` 하나이고, 그 하나가
 #   `XDG_DATA_HOME` 덕분에 여기까지 살아남는다.
 LOG8="$(mktemp)"
-echo "=== boot 8/8: nothing is planted — the machine must remember the seventh boot ==="
+echo "=== boot 8/9: nothing is planted — the machine must remember the seventh boot ==="
 if ! boot_once "$LOG8" "tars-init: started console shell" probe_persisted_memory; then
   report_failure "$LOG8" "the eighth boot did not find what the seventh boot learned"
 fi
@@ -1503,6 +1542,80 @@ if grep -q "Attempted to kill init" "$LOG8"; then
 fi
 echo "boot 8: the machine remembered a directory and a command across a power cut"
 
+# ---------------------------------------------------------------- 9차 부팅
+# 8차가 심은 `shell=bash`를 읽는 부팅이다. 이 체인의 아홉 부팅 중 bash로 뜨는
+# 것이 이것 하나다 — 1차가 fish이고 2~8차가 zsh다. 게이트의 열한 체인을
+# 통틀어도 bash로 뜨는 부팅이 이것뿐이다.
+#
+# ★ BB-M1이 증명하려는 것이 여기 있다. 중첩 bash로는 정의상 볼 수 없는 것
+#   다섯이 이 부팅의 로그에 있다(BB design "중첩 bash가 못 보는 여섯"의
+#   1·2·3·4·6). BH-M2가 중첩으로 갈음한 자리이고, 그때 못 본 것 하나가
+#   게스트에 `/dev/fd`가 없다는 것이었다.
+LOG9="$(mktemp)"
+echo "=== boot 9/9: the config now says bash; init must boot that shell for real ==="
+if ! boot_once "$LOG9" "tars-init: started console shell"; then
+  report_failure "$LOG9" "the ninth boot did not reach a console shell with shell=bash"
+fi
+
+# 같은 디스크를 봤고, 8차가 더한 넷째 줄이 이겼다(BB 확인 2).
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG9"; then
+  report_failure "$LOG9" "ninth boot did not load /config/tars.conf"
+fi
+if ! grep -q "tars-init: config shell=bash.*shell_config=on" "$LOG9"; then
+  report_failure "$LOG9" "ninth boot did not read back shell=bash; the line the eighth boot appended did not win"
+fi
+
+# 폴백이 안 걸렸다(BB 실측 1). 이 검사가 진짜인 이유는 위의 `config shell=`이
+# `cfg.shell`을 찍고 실제로 exec하는 것은 `resolveShell`의 결과라는 것이다 —
+# 둘이 갈리면 로그의 두 줄이 서로 다른 셸을 말한다.
+if grep -q "tars-init: shell .* is not executable" "$LOG9"; then
+  report_failure "$LOG9" "init could not exec /usr/bin/bash and fell back to another shell"
+fi
+if ! grep -q "tars-init: started console shell.*/usr/bin/bash" "$LOG9"; then
+  report_failure "$LOG9" "the ninth boot's console shell is not /usr/bin/bash"
+fi
+echo "boot 9: init resolved shell=bash and started bash as PID 1's child"
+
+# 히스토리 env가 셸별로 갈린다(BB 실측 2 · 확인 4). 둘은 있어야 하고
+# zsh의 `SAVEHIST`는 없어야 한다 — 7차·8차가 그 셋이 있는 것을 보고 있으므로
+# 이 부정 검사가 그 셋과 대조군을 이룬다.
+for want in \
+  "tars-init: env HISTFILE=/config/bash_history" \
+  "tars-init: env HISTSIZE=5000"; do
+  if ! grep -q "$want" "$LOG9"; then
+    report_failure "$LOG9" "ninth boot did not put '${want#tars-init: env }' in the env block"
+  fi
+done
+if grep -q "tars-init: env SAVEHIST" "$LOG9"; then
+  report_failure "$LOG9" "ninth boot put SAVEHIST in the env block; that is zsh's and bash has no use for it"
+fi
+echo "boot 9: the env block carries bash's two history variables and not zsh's third"
+
+# 씨앗은 다시 안 깔린다. `/config/bashrc`는 1차가 깔고 아무도 안 지웠다 —
+# 여기서 seeded가 하나라도 나오면 디스크가 아니라 tmpfs를 보고 있는 것이다.
+if grep -q "tars-init: seeded /config/" "$LOG9"; then
+  report_failure "$LOG9" "ninth boot re-seeded an rc file; it was not looking at the same disk"
+fi
+
+# 그 씨앗을 읽는 셸이 둘인데 둘 다 안 죽는다(BB 실측 3·4). bash 갈래의 씨앗이
+# production 부팅에서 안전하다는 주장이 정확히 이 넷이다.
+if grep -q "times fast" "$LOG9"; then
+  report_failure "$LOG9" "a shell died on the ninth boot; the bash seed is not safe to read"
+fi
+if grep -q "tars-init: giving up on" "$LOG9"; then
+  report_failure "$LOG9" "the supervisor gave up on a child on the ninth boot"
+fi
+for want in "console shell" "terminal"; do
+  STARTS="$(grep -c "tars-init: started ${want}" "$LOG9" || true)"
+  if [ "$STARTS" != "1" ]; then
+    report_failure "$LOG9" "init started the ${want} ${STARTS} times on the ninth boot, want exactly 1"
+  fi
+done
+if grep -q "Attempted to kill init" "$LOG9"; then
+  report_failure "$LOG9" "kernel panicked because PID 1 exited on the ninth boot"
+fi
+echo "boot 9: both shells read the bash seed once and neither of them died"
+
 # 정보성. ext2가 "not clean"이라고 말하는 것은 예상된 결과다(1차를 kill했다).
 if grep -q "mounting unchecked fs" "$LOG2"; then
   echo "note: ext2 reported an unclean superblock on boot 2 (expected: boot 1 was killed)"
@@ -1526,6 +1639,8 @@ echo "--- init log (boot 7) ---"
 grep 'tars-init:' "$LOG7" || true
 echo "--- init log (boot 8) ---"
 grep 'tars-init:' "$LOG8" || true
+echo "--- init log (boot 9) ---"
+grep 'tars-init:' "$LOG9" || true
 
 echo "PASS"
 exit 0
