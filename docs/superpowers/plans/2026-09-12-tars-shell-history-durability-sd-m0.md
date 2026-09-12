@@ -47,7 +47,7 @@ CC-M0의 규칙이다. 쓰기 전용(`exec 4>`)으로 열면 읽는 쪽을 기�
 
 Files: 없음(측정만)
 
-- [ ] Step 1: 컨테이너를 띄우고 셸 둘을 넣는다
+- [x] Step 1: 컨테이너를 띄우고 셸 둘을 넣는다
 
 이 세션에서 이미 한 번 했고 `tars-measure`라는 이름으로 떠 있다. 끊겼으면
 다시 만든다.
@@ -71,7 +71,7 @@ devcontainer에는 zsh도 fish도 없다(bash 5.2.37만 있다). 게스트의 am
 Debian trixie 스냅샷에서 받으므로 버전이 같고, 히스토리의 성질은 아키텍처에
 안 갈리는 자리다. 그래도 게스트에서 한 번 보는 것이 실측 14다.
 
-- [ ] Step 2: 스크립트를 넣는 방법을 정해 둔다
+- [x] Step 2: 스크립트를 넣는 방법을 정해 둔다
 
 호스트에서 `Write`로 `/tmp`에 쓰고 `docker cp`로 넣는다. 셸 heredoc으로
 컨테이너에 스크립트를 만들지 않는다 — 중첩된 따옴표에서 `$HISTFILE` 같은
@@ -87,7 +87,7 @@ docker exec tars-measure bash /tmp/sd_quiet.sh
 
 Files: 없음(측정만). 호스트에 `/tmp/sd_quiet.sh`를 만든다.
 
-- [ ] Step 1: 스크립트를 쓴다
+- [x] Step 1: 스크립트를 쓴다
 
 ```bash
 #!/bin/bash
@@ -116,7 +116,7 @@ measure typo   'setopt INC_APPEND_HISTORYY
 세 번째가 오타다. 그것을 함께 재는 이유는 SD-M1에서 이 줄을 두 벌로 두기
 때문이다(결정 3) — 두 벌이 어긋났을 때 증상이 어떻게 생기는지 알아야 한다.
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 ```bash
 docker cp /tmp/sd_quiet.sh tars-measure:/tmp/ && \
@@ -126,7 +126,7 @@ docker cp /tmp/sd_quiet.sh tars-measure:/tmp/ && \
 기대: `empty`와 `good`이 둘 다 `stdout=0 stderr=0`. `typo`는 stderr에 한 줄이
 나올 것으로 본다(`setopt: no such option`).
 
-- [ ] Step 3: 판정한다
+- [x] Step 3: 판정한다
 
 `good`이 0바이트가 아니면 이 서브프로젝트의 처방이 씨앗에 들어갈 수 없다
 (씨앗의 규칙이 *"아무것도 찍지 않는다"*이고 설정 디스크를 붙이는 다섯 체인이
@@ -139,7 +139,7 @@ docker cp /tmp/sd_quiet.sh tars-measure:/tmp/ && \
 
 Files: 없음(측정만). 호스트에 `/tmp/sd_fcw.sh`를 만든다.
 
-- [ ] Step 1: 스크립트를 쓴다
+- [x] Step 1: 스크립트를 쓴다
 
 ```bash
 #!/bin/bash
@@ -176,7 +176,7 @@ wait $pidA 2>/dev/null; wait $pidB 2>/dev/null
 show "both exited"
 ```
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 ```bash
 docker cp /tmp/sd_fcw.sh tars-measure:/tmp/ && \
@@ -187,7 +187,7 @@ docker cp /tmp/sd_fcw.sh tars-measure:/tmp/ && \
 쓰고, A의 목록에는 B가 친 것이 없다. 예상이 맞든 틀리든 그것이 SD-M2의 모양을
 정한다.
 
-- [ ] Step 3: 두 갈래의 처방을 적어 둔다
+- [x] Step 3: 두 갈래의 처방을 적어 둔다
 
 | 결과 | SD-M2가 할 일 |
 |---|---|
@@ -205,7 +205,7 @@ Files: 없음(측정만). 호스트에 `/tmp/sd_neg.sh`를 만든다.
 세션을 띄운다. 둘 다 rc를 읽으므로 production과 같고, 다른 것은 `unsetopt`
 한 줄뿐이다(결정 5).
 
-- [ ] Step 1: 스크립트를 쓴다
+- [x] Step 1: 스크립트를 쓴다
 
 ```bash
 #!/bin/bash
@@ -245,14 +245,14 @@ echo "--- what the screen showed"
 tr -d '\r' < $w/out
 ```
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 ```bash
 docker cp /tmp/sd_neg.sh tars-measure:/tmp/ && \
   docker exec tars-measure bash /tmp/sd_neg.sh
 ```
 
-- [ ] Step 3: 판정한다
+- [x] Step 3: 판정한다
 
 기대는 둘이다. `nested typed neg_one`에서 줄 수가 안 늘고, `nested typed
 pos_one`에서 는다.
@@ -266,13 +266,13 @@ append하므로(design 실측 3) 그때 `neg_one`이 파일에 들어온다. 그
 
 Files: 없음(측정만). Task 3의 `$w/out`을 쓴다.
 
-- [ ] Step 1: Task 3이 찍은 화면에서 중첩 기동 부분만 본다
+- [x] Step 1: Task 3이 찍은 화면에서 중첩 기동 부분만 본다
 
 ```bash
 docker exec tars-measure bash -c "tr -d '\r' < /tmp/neg/out | sed -n '1,40p'"
 ```
 
-- [ ] Step 2: 세 가지를 적는다
+- [x] Step 2: 세 가지를 적는다
 
 1. 중첩 zsh가 기동할 때 찍는 줄이 있는가(없어야 한다 — 씨앗 rc는 조용하다).
 2. 프롬프트가 바뀌는가. 게스트의 프롬프트는 `root@(none) ~#` 모양이고,
@@ -280,7 +280,7 @@ docker exec tars-measure bash -c "tr -d '\r' < /tmp/neg/out | sed -n '1,40p'"
    셀 수 없다.
 3. `exit`으로 돌아왔을 때 화면에 무엇이 남는가.
 
-- [ ] Step 3: SD-M2가 무엇으로 판정할지 고른다
+- [x] Step 3: SD-M2가 무엇으로 판정할지 고른다
 
 2번이 *"같다"*로 나오면(그럴 것으로 본다) SD-M2의 판정은 프롬프트가 아니라
 우리가 만든 글자여야 한다. 7차가 이미 쓰는 방식이다 — 파일을 `grep -c`한
@@ -296,7 +296,7 @@ Files: 없음(측정만). 호스트에 `/tmp/sd_cost.sh`를 만든다.
 의미가 있는 것을 본다 — 한 명령이 파일에 추가되는가 파일을 다시 쓰는가,
 그리고 `SAVEHIST` 경계에서 무슨 일이 나는가.
 
-- [ ] Step 1: 스크립트를 쓴다
+- [x] Step 1: 스크립트를 쓴다
 
 ```bash
 #!/bin/bash
@@ -328,14 +328,14 @@ run at     50   50
 run over   50   60
 ```
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 ```bash
 docker cp /tmp/sd_cost.sh tars-measure:/tmp/ && \
   docker exec tars-measure bash /tmp/sd_cost.sh
 ```
 
-- [ ] Step 3: 세 줄로 판정한다
+- [x] Step 3: 세 줄로 판정한다
 
 1. `below`에서 inode가 같고 줄이 하나 늘면 추가다 — 5,000줄 위에서도 한
    명령의 비용이 한 줄이라는 뜻이고, 16MiB ext2에 얹어도 된다.
@@ -356,7 +356,7 @@ Files: 없음(측정만). 호스트에 `/tmp/sd_guest.sh`를 만든다.
 
 컨테이너가 아니라 devcontainer에서 돌린다 — QEMU와 빌드 도구가 거기 있다.
 
-- [ ] Step 1: 무엇을 보려는지 먼저 적는다
+- [x] Step 1: 무엇을 보려는지 먼저 적는다
 
 | | 기대 | 근거 |
 |---|---|---|
@@ -367,7 +367,7 @@ Files: 없음(측정만). 호스트에 `/tmp/sd_guest.sh`를 만든다.
 나오면 이 서브프로젝트의 가치가 커지고(두 셸 다 잃는다), 콘솔 셸이
 *"남는다"*로 나오면 왜 남는지를 찾아야 한다.
 
-- [ ] Step 2: 스크립트를 쓴다
+- [x] Step 2: 스크립트를 쓴다
 
 콘솔 셸에 글자를 넣는 것은 CC-M0의 방법이다 — `-serial stdio`에 fifo를 물리고
 `exec 4<>`로 연다. monitor는 tcp로 따로 둔다(`-monitor none`이 필요한 것은
@@ -474,7 +474,7 @@ say "verdict"
 grep -a "sdconsolemarker\|sdscreenmarker" $OUT/boot3.log | tail -20
 ```
 
-- [ ] Step 3: 돌린다
+- [x] Step 3: 돌린다
 
 `Write`로 호스트의 `/tmp/sd_guest.sh`를 만든 뒤 그 파일을 마운트한다
 (`docker cp`가 아니다 — 이 Task는 `tars-measure`가 아니라 새 devcontainer에서
@@ -490,7 +490,7 @@ tail -60 /tmp/sd14.log
 빌드 때문에 5분 안쪽으로 본다. 커널은 입력이 안 바뀌었으면 `skipping make`로
 지나간다(GL-M1).
 
-- [ ] Step 4: 안 돌면 어디서 막혔는지 가른다
+- [x] Step 4: 안 돌면 어디서 막혔는지 가른다
 
 이 스크립트는 이 저장소에서 처음 쓰는 모양이라(`-serial stdio` + fifo를
 `config` 쪽 부팅과 섞는다) 한 번에 안 돌 수 있다. 가르는 순서를 미리 적어 둔다.
@@ -511,25 +511,25 @@ Files:
 - Modify: `docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`
 - Modify: `HANDOFF.md`
 
-- [ ] Step 1: design의 `## SD-M0이 남겨 둔 여섯` 절을 `## SD-M0이 실행으로 증명한 것`으로 바꾸고 실측 9~14를 각각 쓴다
+- [x] Step 1: design의 `## SD-M0이 남겨 둔 여섯` 절을 `## SD-M0이 실행으로 증명한 것`으로 바꾸고 실측 9~14를 각각 쓴다
 
 표와 명령과 출력을 담는다. 숫자만 적지 않는다 — 어떤 명령이 그 숫자를
 냈는지가 다음 사람에게 필요하다. 예상과 다른 값이 나온 자리는 예상도 함께
 적는다(이 저장소의 실측 절은 전부 그 모양이다).
 
-- [ ] Step 2: 틀린 것이 있으면 design의 결정을 그 자리에서 고친다
+- [x] Step 2: 틀린 것이 있으면 design의 결정을 그 자리에서 고친다
 
 실측 10이 `fc -W`를 *"안 지운다"*로 답하면 위험 3의 처방이 바뀌고, 실측 14가
 화면 셸도 잃는다고 답하면 실측 4의 표와 한 줄 요약이 바뀐다. 고친 자리마다
 무엇이 바뀌었는지 Status 줄에 한 줄 남긴다.
 
-- [ ] Step 3: `HANDOFF.md`를 고친다
+- [x] Step 3: `HANDOFF.md`를 고친다
 
 "바로 다음에 할 것"을 SD-M1로 바꾸고, 이월 숙제에서 SM이 남긴 첫 항목(위험 3)을
 지운다 — 그 항목의 전제가 틀렸다는 것이 이미 design에 있다. 대신 새 이월
 숙제를 둘 더한다(bash의 히스토리 · 종료가 늘 3초 걸리는 것).
 
-- [ ] Step 4: 커밋한다
+- [x] Step 4: 커밋한다
 
 ```bash
 git add docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md \
@@ -546,3 +546,22 @@ git commit -m "Measure what the history option costs and what the gate can see"
 
 실측 9~14가 design에 있고, 그중 넷이 SD-M1·M2의 모양을 정한 것이 문서에
 적혀 있다. 코드는 한 줄도 안 바뀌었다(`git diff --stat`이 md만 보여 준다).
+
+## 실제로는 이렇게 됐다 (2026-09-12 기록)
+
+plan과 다른 자리 넷이다. 다음 milestone의 plan을 쓰는 사람이 읽을 것.
+
+1. Task 3이 찾은 것이 plan에 없었다. 옵션이 켜지면 판정에 쓰는 `grep`
+   명령줄이 실행 전에 파일에 써져서 패턴이 자기 자신을 센다. 스크립트를 하나
+   더 만들어(`/tmp/sd_anchor.sh`) 앵커가 그것을 피하는 것을 확인했다 —
+   `grep -c '^echo target$'`가 1, 앵커 없이는 2다. 이 발견이 SD-M2의 기대값을
+   정한다.
+2. Task 5가 둘로 갈렸다. plan의 스크립트는 `SAVEHIST` 아래와 경계만 봤는데,
+   나갈 때만 잘리는 것처럼 보여서 *"상한이 안 걸리는가"*라는 질문이 남았다.
+   스크립트를 하나 더 만들어(`/tmp/sd_grow.sh`) 한 세션에서 45개를 쳐 보니
+   26번째부터 매 명령이 전체 재작성이고 줄 수가 상한에 고정됐다. 상한은 걸린다.
+3. Task 6이 두 번 돌았다. 첫 회차는 `sendkey space`(없는 이름이다. `spc`다)로
+   글자가 붙었고, 2차 부팅의 시리얼 로그를 안 뽑아서 콘솔 명령이 실행됐는지를
+   가릴 수 없었다. 둘째 회차는 콘솔의 입력 줄과 출력을 먼저 찍어서 그것을 닫았다.
+4. Task 6의 Step 4가 미리 적어 둔 *"가르는 순서"*에서 실제로 걸린 것은
+   `sendkey` 행 하나였다. fifo와 monitor 포트는 한 번에 돌았다.

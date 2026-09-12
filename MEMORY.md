@@ -60,3 +60,4 @@
 - [Shell config](docs/decisions/project_shell_config.md) — 셸이 사용자의 rc를 읽고 그 파일이 부팅 사이에 살아남게 한 층(SC-M0~M2, 2026-09-11 종료)
 - [Shell memory](docs/decisions/project_shell_memory.md) — 기계가 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)을 부팅 너머로 남기는 층(SM-M0~M2, 2026-09-12 종료)
 - [Gate accuracy](docs/decisions/project_gate_accuracy.md) — 게이트가 거짓 판정을 내던 일곱 자리와 그것을 막는 진입 검사(GA-M0·M1, 2026-09-12 종료)
+- [Shutdown signals](docs/decisions/project_shutdown_signals.md) — 대화형 셸은 SIGTERM을 무시한다; 종료 경로에서 무엇이 저장되는지는 누가 먼저 죽어 PTY를 닫는지에 갈린다

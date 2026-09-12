@@ -1,17 +1,23 @@
-# HANDOFF: 게이트가 거짓을 말하는 자리를 없앴다 — 다음 서브프로젝트를 고를 차례다
+# HANDOFF: 히스토리가 전원 버튼에서 사라지는 것을 쟀다 — 다음은 SD-M1이다
 
 ## 지금 어디인가
 
-`main`이 깨끗하다. Gate Accuracy(GA-M0·M1)가 2026-09-12에 닫혔다. 게이트
-안에서 종료 코드가 거짓이 되던 일곱 자리가 없어졌고, 같은 모양이 다시
-들어오면 루트 게이트가 첫 부팅 전에 멈춘다. 루트 게이트가 27분 35.61초에
-3/3 통과했고 FAIL이 0이었다(기준선 27분 35.11초 — 빌드도 부팅도 하나 안
-더했으니 맞는 값이다).
+`main`이 깨끗하다. Shell History Durability(SD)의 M0이 2026-09-12에 끝났다.
+코드는 한 줄도 안 고쳤고 실측 열넷이 design에 있다
+(`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`).
 
-그 앞이 Shell Memory(SM-M0~M2)이고 그 뒤에 문서와 소스 주석의 강조를
-걷어냈다.
+이 서브프로젝트는 SM 비목표 9("zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다")를
+고치려고 열었는데, 착수 전 측정이 그 전제를 뒤집었다. 겹쳐쓰기는 안 난다 —
+`APPEND_HISTORY`가 zsh의 기본값이다. 대신 더 나쁜 것이 나왔다: 콘솔 셸에 친
+명령은 전원 버튼을 누르면 사라지고, 화면 셸에 친 것이 남는 이유는 `terminal`이
+시그널 핸들러를 하나도 안 가져서 먼저 죽는다는 우연이다. 게스트에서 세 번
+부팅해 확인했다(실측 14 — 콘솔 0, 화면 1).
 
-다음 서브프로젝트를 아직 안 골랐다 — 아래 "바로 다음에 할 것".
+다음은 SD-M1이다(코드와 호스트 검사). 아래 "바로 다음에 할 것".
+
+그 앞이 Gate Accuracy(GA-M0·M1)이고, 그 앞이 Shell Memory(SM-M0~M2), 그
+뒤에 문서와 소스 주석의 강조를 걷어냈다. 루트 게이트의 가장 최근 값은 27분
+35.61초 3/3이다.
 
 ## GA가 한 일 (2026-09-12)
 
@@ -105,24 +111,24 @@ SIGPIPE를 안 받는다.
 컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. 아래 "명령 모음"의 첫
 형태로 친다.
 
-## 바로 다음에 할 것 — 후보를 고르는 일부터다
+## 바로 다음에 할 것 — SD-M1
 
-GA가 닫혔으므로 다음 서브프로젝트를 사용자와 정한다. 2026-09-12에 후보
-넷을 함께 보았고 그중 `grep -q` 일곱 자리를 골라 GA가 했다. 남은 셋이다
-(출처는 SM design의 비목표 절,
-`docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md`).
+plan은 아직 없다. `CLAUDE.md`대로 착수 시점에 새로 쓴다. design의 결정
+2·3·4·6·7이 그 내용이고, 고칠 파일이 둘이다.
 
-1. 위험 3 — zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다(SM 비목표 9).
-   `HIST_ZSH`는 `HISTFILE`·`HISTSIZE`·`SAVEHIST` 셋뿐이고 옵션이 없다.
-   zsh의 기본은 종료할 때 자기 세션의 목록으로 파일을 통째로 덮는 것이라,
-   터미널 셸과 콘솔 셸이 함께 살아 있으면 나중에 끝난 쪽이 앞의 것을
-   지운다. `setopt APPEND_HISTORY`는 env로 줄 수 없어서 씨앗 rc에 줄을
-   더하는 일이고, 그러면 `expectQuietSeed`의 허용 목록을 한 줄 넓혀야
-   한다. SM이 먼저 증명할 것은 *"남는다"*였다. 가장 가깝다.
-2. `git-delta`(SM 비목표 1). `libgit2`가 이미 있어 비용이 0에 가깝고 훅도
-   `/config/gitconfig`의 `core.pager`라 인프라가 서 있다.
-3. `Ctrl+R`을 게이트가 치는 것(SM 비목표 2) — TUI라 체인이 매달린다. 안 하는
-   쪽에 근거가 쌓여 있다.
+1. `init/src/config.zig` — `histOptionLines()`를 `hookLines()`와 같은 모양으로
+   더한다(zsh 한 줄 `setopt INC_APPEND_HISTORY` · bash 0 · fish 0). 씨앗
+   rc(`rcSeed()`)의 zsh 갈래에 그 글자를 따로 한 벌 더 적고, 왜 있는지를 주석으로
+   그 위에 적는다(지우면 전원 버튼이 히스토리를 지운다).
+2. `init/src/config_test.zig` — `expectQuietSeed`의 허용 목록을 `hookLines()`와
+   `histOptionLines()`의 합으로 보고 역방향도 함께 넓힌다. 새 검사
+   `expectHistOptions`가 개수를 못 박는다(zsh 1 · bash 0 · fish 0).
+
+그 뒤가 SD-M2다(게이트). 실측 10·11이 그 모양을 이미 정해 두었다 — 7차에서
+`fc -W`를 빼고, 판정은 앵커 붙인 `grep -c`의 숫자로 한다.
+
+⚠ 조립하지 않는다. `rcSeed()`를 `histOptionLines()`에서 `++`로 만들면 역방향
+검사가 tautology가 된다(SM 결정 10). 두 벌을 잇는 것은 컴파일러가 아니라 검사다.
 
 ## 명령 모음
 
@@ -384,7 +390,9 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, 키의 �
 5. `sendkey meta_l-shift-c`가 세 키 조합을 게스트까지 옮긴다.
 
 6. `sendkey`의 키 이름은 전부 소문자다. `sendkey F`는 없는 이름이라 QEMU가
-조용히 버린다. 대문자를 치려면 `shift-f`처럼 앞에 붙인다.
+조용히 버린다. 대문자를 치려면 `shift-f`처럼 앞에 붙인다. 공백은 `space`가
+아니라 `spc`다 — SD-M0이 `space`로 한 회차를 버렸고, 증상은 에러가 아니라
+글자가 붙어서 나오는 것이다(`echo sdscreen…`이 `echosdscreen…`이 됐다).
 
 7. copy 커서는 셸 커서 자리에서 시작하고, 셸 커서가 화면 밖이면 `{0, 0}`이다
 (`copyEnter`, `vt.zig:545`). 뷰포트가 바닥이면 셸 커서가 맨 아랫줄이라
@@ -444,13 +452,38 @@ none`을 함께 줘야 QEMU가 stdio를 두 번 쓰려다 죽지 않는다. 게�
 fish라 `(...)`가 command substitution이다 — 글로브를 괄호로 감싸면 첫 경로가
 명령으로 실행된다.
 
-22. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
+22. 대화형 셸은 자기에게 온 SIGTERM을 무시한다 (SD-M0 실측 2). 보낸 뒤에도
+살아서 다음 명령을 실행한다. 그래서 "나갈 때 무엇을 하나"를 SIGTERM으로 재면
+아무 일도 안 나는 것을 재게 된다. 죽이면서 정리 동작을 보려면 SIGHUP을 쓰거나
+그 셸의 PTY 주인을 죽인다 — PTY가 닫히면 커널이 안쪽 셸에게 SIGHUP을 보낸다.
+이것이 TARS에서 화면 셸과 콘솔 셸의 운명을 가른다(`terminal`이 PTY 주인이고
+콘솔 셸은 닫히지 않는 `/dev/console`을 잡는다).
+
+23. 컨테이너에 zsh도 fish도 없다 (bash 5.2.37만 있다). 대화형 셸을 재려면
+`apt-get install -y zsh fish`로 넣고(zsh 5.9 · fish 4.0.2, 게스트와 같은 Debian
+trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물리고
+`exec 4<>`로 연다. `zsh -c`로는 대화형 셸의 성질을 아예 못 잰다.
+
+24. 히스토리를 증분으로 쓰는 zsh에서는 `grep` 명령줄이 실행 전에 파일에
+써진다 (SD-M0 실측 11). 그래서 판정 패턴에 앵커를 붙인다 —
+`grep -c '^echo target$'`가 1이고, 앵커를 빼면 자기 명령줄까지 세어 2가 된다.
+음성 검사에서는 그 차이가 0과 1이라 검사가 조용히 죽는다.
+
+25. `Kconfig`에 프롬프트가 없으면 눌러도 되돌아온다 (`project_kernel_config`).
 `ACPI_EC`와 `PNP_DEBUG_MESSAGES`는 둘 다 프롬프트가 있어서 CC-M0이 누른 값이
 `olddefconfig`를 견뎠다. 끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
 `.config`에서 줄이 사라진다 — `ACPI_EC_DEBUGFS`가 그랬다.
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
+- `zsh -f`를 "옵션만 없는 세션"으로 쓰기(SD-M0 실측 5) — `NO_RCS`가 히스토리
+  저장을 통째로 끈다. `exit`에서도 SIGHUP에서도 파일을 안 만들고, `fc -W`를
+  직접 치면 써진다. 그래서 `-f`는 대조군이 못 된다. 옵션 하나만 다르게 하려면
+  rc를 읽은 세션에서 `unsetopt`를 친다.
+- 셸이 실행했어야 할 명령의 흔적이 없는 것으로 "잃었다"를 판정하기(SD-M0) —
+  "애초에 안 쳐졌다"와 안 갈린다. 첫 회차가 그 상태였다. 먼저 그 명령이
+  실행된 증거(입력 줄과 출력)를 로그에서 보고, 그 다음에 기록이 없는 것을
+  판정한다.
 - `sendkey lang1`로 한/영 키를 게스트에 보내기(HI-M0) — QEMU가 이름은
   받아들이는데(에러가 없다. `sendkey hangul`은 `invalid parameter`를 내므로
   `lang1`이 유효한 QKeyCode인 것은 확실하다) PS/2 스캔코드로 옮기는 자리에서
@@ -655,11 +688,20 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 SM이 남긴 것.
 
-- [ ] zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다(SM 비목표 9).
-      `setopt APPEND_HISTORY`는 `expectQuietSeed`의 허용 목록을 한 줄 더 넓히는
-      일이다. 위 "바로 다음에 할 것"의 첫 후보다.
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(비목표 2 —
       TUI라 체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
+
+SD가 진행 중에 남긴 것 — 둘 다 SD design의 비목표다.
+
+- [ ] bash의 히스토리(SD 비목표 1). bash는 `exit` 말고는 전부 잃는다(SD 실측
+      7 — SIGTERM도 SIGHUP도). `setopt` 한 줄에 대응하는 것이 없어서
+      `PROMPT_COMMAND='history -a'` 같은 프롬프트 훅이 필요하고, 그러면
+      `expectQuietSeed`의 허용을 한 범주 더 넓힌다. 여는 사람은 게스트의
+      `/etc/bash.bashrc`를 먼저 볼 것(거기서 `histappend`가 켜져 있을 수 있다).
+- [ ] 종료가 늘 3초 걸리는 것(SD 비목표 8). 대화형 셸이 SIGTERM을 무시하므로
+      `power.zig`의 `GRACE_SECONDS = 3`을 매번 꽉 쓴다. 고치려면 SD 결정 8
+      (PID 1이 SIGHUP을 보내는 것)을 여는 일이고, PM·BF 체인이 보는 종료
+      로그와 감독 루프의 계약을 다시 여는 일이다.
 
 HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 집어서 끝냈다).
 
