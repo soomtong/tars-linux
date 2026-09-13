@@ -140,6 +140,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 없어도 돈다. .deb는 통째로 풀되 initrd에는 guest_tools.sh가 적은 둘만
 # 들어간다 — 푸는 자리(sysroot)와 넣는 자리(initrd)가 다른 것이 이 구조의
 # 값이다.
+#
+# ── NW-M2: 층 5(네트워크 넷)와 라이브러리 스물 ──────────────────────────
+#
+# 도구 넷을 더한다. 이 목록에서 도구 하나가 라이브러리를 데려오는 비율이
+# 가장 극단적으로 갈리는 층이다.
+#
+#   dhcpcd-base          주소를 받는 것 전부. 새 라이브러리 0개
+#   iproute2             ip. 사람이 주소를 눈으로 보는 도구. 새 라이브러리 셋
+#   netcat-traditional   nc. 연결이 되는지 묻는 도구. 새 라이브러리 0개
+#   curl                 밖으로 나가는 도구. 새 라이브러리 스물
+#
+# procps는 안 더한다 — 이미 있다(UT-M1이 ps·top 때문에 받았다). 층 5가
+# 쓰는 pgrep·kill이 같은 패키지에서 오므로 그 둘이 공짜다.
+#
+# dhcpcd가 0개인 것이 이 milestone이 착수 전에 배운 것이다. apt는
+# dhcpcd-base가 libssl3t64와 libudev1을 요구한다고 말하는데, 바이너리의
+# DT_NEEDED에는 libcrypto.so.3과 libc.so.6 둘뿐이고 둘 다 이미 있다.
+# libssl·libudev는 dlopen으로 열리는 udev 플러그인 몫이라 copy_lib_deps가
+# 따라오지도 않는다. 패키지 의존과 바이너리 의존이 다르다는 것이고,
+# 도구를 저울질할 때 보는 것은 apt-cache show의 Installed-Size가 아니라
+# readelf -d의 DT_NEEDED다.
+#
+# curl 하나가 이 블록이 길어진 이유 전부다. 스물 중 열여덟이 TLS와 그
+# 아래의 암호 사슬이고(gnutls → nettle·hogweed·gmp·tasn1·p11-kit·ffi ·
+# idn2 → unistring · ldap → sasl2 · brotli · nghttp2·nghttp3 · rtmp · psl),
+# 푼 것 기준 10,927,904바이트다. 사용자가 그 값을 알고 넣기로 정했다.
+#
+# ip의 셋은 libbpf·libelf·libmnl이다. libelf1t64는 컨테이너 쪽
+# libelf-dev(커널 빌드가 쓴다)와 다른 물건이다 — 이쪽은 amd64 sysroot에
+# 풀리는 런타임 라이브러리다. curl도 같은 자리에 이름이 둘이다: 위
+# apt-get install의 curl은 컨테이너(arm64)가 zig를 받는 데 쓰는 것이고,
+# 아래 curl:amd64는 게스트에 들어갈 x86_64 바이너리다.
+#
+# 이름에 버전이 박힌 것이 여섯이다(libcurl4t64 · libpsl5t64 ·
+# libgnutls30t64 · libnettle8t64 · libhogweed6t64 · libelf1t64). UT-M2의
+# 넷과 같은 성질이고, trixie가 올라가면 apt가 "없는 패키지"라고 죽는다.
+# 조용히 실패하지 않는다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -207,7 +244,31 @@ RUN dpkg --add-architecture amd64 \
         libgcc-s1:amd64 \
         libpcre2-8-0:amd64 \
         libpcre2-32-0:amd64 \
-        libselinux1:amd64) \
+        libselinux1:amd64 \
+        dhcpcd-base:amd64 \
+        iproute2:amd64 \
+        netcat-traditional:amd64 \
+        curl:amd64 \
+        libcurl4t64:amd64 \
+        libnghttp2-14:amd64 \
+        libnghttp3-9:amd64 \
+        libidn2-0:amd64 \
+        libunistring5:amd64 \
+        librtmp1:amd64 \
+        libpsl5t64:amd64 \
+        libgnutls30t64:amd64 \
+        libp11-kit0:amd64 \
+        libnettle8t64:amd64 \
+        libhogweed6t64:amd64 \
+        libgmp10:amd64 \
+        libtasn1-6:amd64 \
+        libffi8:amd64 \
+        libldap2:amd64 \
+        libsasl2-2:amd64 \
+        libbrotli1:amd64 \
+        libbpf1:amd64 \
+        libelf1t64:amd64 \
+        libmnl0:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 
