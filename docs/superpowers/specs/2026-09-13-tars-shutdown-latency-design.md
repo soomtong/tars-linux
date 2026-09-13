@@ -1,7 +1,11 @@
 # TARS Shutdown Latency — Design
 
 Date: 2026-09-13
-Status: 착수(2026-09-13)
+Status: SL-M0 끝(2026-09-13). 실측 열하나가 아래 있고, 그중 실측 3이 이
+문서의 전제 하나를 고쳤다 — "대화형 셸은 SIGTERM을 무시한다"가 fish에는
+안 맞는다. fish는 SIGTERM에 죽고, 그래서 기본 설정의 게스트는 이미 빠르다.
+고쳐지는 것은 `shell=zsh`와 `shell=bash`이고 그 둘에서 2.9초가 0.13초가
+된다. A1과 A2는 안 갈렸으므로 결정 3이 정한 대로 A2를 고른다.
 
 SD(Shell History Durability)가 자기 결정 8에서 열어 둔 문이다. SD는 PID 1의
 시그널 경로를 안 건드리기로 정하면서 다시 열릴 조건을 두 개 적었다 —
@@ -345,3 +349,190 @@ M1과 M2를 가르는 이유는 UT가 세 번 배운 것이다 — 검사 둘을
 `project_measuring_shells`가 하루에 세 번 걸린 함정이다. 이 일의 측정은
 전부 게스트에서 한다 — 컨테이너에는 `/dev/console`도 PID 1도 우리 것이
 아니고, 재려는 것이 정확히 그 둘의 관계이기 때문이다.
+
+## SL-M0이 실행으로 증명한 것
+
+하네스 전문은 `docs/superpowers/plans/2026-09-13-tars-shutdown-latency-sl-m0.md`
+의 Task 1·2·6에 있다. 저장소 파일은 한 글자도 안 바뀌었다 — 측정용
+`power.zig` 사본을 `-v`로 읽기 전용 마운트하고, 변종은 커널 cmdline의
+`tars.slsig=`로 골랐다. 부팅 열셋(셸 셋 × 변종 셋, 그리고 히스토리 넷)을
+밟았다.
+
+### 실측 1 — 지금 종료는 갈래가 둘이고 값이 열아홉 배 다르다
+
+`system_powerdown`부터 `reboot(POWER_OFF)` 직전까지다. 단위는 밀리초.
+
+| 셸 | `t_kill` | `t_reap` | `t_total` | 경로 |
+|---|---|---|---|---|
+| fish | 14 | 125 | 138 | 전부 거둠 |
+| zsh | 12 | 2506 | 2525 | 유예 만료 + SIGKILL |
+| bash | 10 | 2500 | 2516 | 유예 만료 + SIGKILL |
+
+`t_kill`이 10~14인 것은 `kill(-1, .TERM)` 자체가 거의 안 드는 비용이라는
+뜻이고, `t_sync`와 `t_total`의 차가 1 이하인 것은 `sync()`도 그렇다는
+뜻이다. 그래서 이 종료의 시간은 전부 `reapAll()` 안에 있다.
+
+### 실측 2 — 유예를 쓰는 것은 콘솔 셸 하나다
+
+`SLM0 reaped pid=` 줄을 `started` 줄의 pid와 대조했다. bash 회차다.
+
+```
+tars-init: started terminal (pid 32, /terminal)
+tars-init: started console shell (pid 33, /usr/bin/bash)
+tars-init: SLM0 reaped pid=32 t=113     ← terminal
+tars-init: SLM0 reaped pid=35 t=115     ← 화면 셸(terminal의 자식이었다)
+tars-init: SLM0 reaped pid=33 t=2495    ← 콘솔 셸. SIGKILL로 죽었다
+tars-init: grace period expired (reaped 2)
+```
+
+확인 3의 추론이 pid 단위로 맞았다. 유예 안에 거둬지는 둘은 `terminal`과
+화면 셸이고, 남는 하나가 정확히 `started console shell`의 pid다. zsh
+회차도 글자 그대로 같은 모양이었다(pid 31·34가 t=114·116, pid 32가
+t=2498).
+
+화면 셸의 pid가 `started` 줄에 없는 것은 그 셸을 `terminal`이 띄우기
+때문이다. `terminal`이 죽으면서 PID 1에게 재부모화되어 여기서 거둬진다.
+
+### 실측 3 — fish는 SIGTERM에 죽는다. 이 문서의 전제가 거기서 틀렸다
+
+design 본문이 `project_shutdown_signals`를 따라 "대화형 셸은 SIGTERM을
+무시한다(POSIX)"를 전제로 썼는데, 그 실측은 zsh로만 잰 것이었다(SD-M0
+실측 2). fish는 안 그렇다 — `t_total=138`에 `every child is gone
+(reaped 3)`이고 SIGKILL이 한 번도 안 나갔다.
+
+따라 나오는 것이 둘이다.
+
+하나. 게스트의 기본 셸이 fish이므로(`config.zig`의 `Shell.fish`가 기본값),
+설정 디스크가 없는 부팅은 이미 빠르다. 이 서브프로젝트가 고치는 것은
+`shell=zsh`와 `shell=bash`를 고른 부팅이다.
+
+둘. `project_shutdown_signals`의 첫 항목을 고쳐야 한다. "대화형 셸은
+SIGTERM을 무시한다"가 아니라 "zsh와 bash는 무시하고 fish는 안 무시한다"가
+맞다.
+
+### 실측 4 — SIGHUP이면 셋 다 유예를 안 쓴다
+
+`tars.slsig=hup`으로 같은 부팅 셋을 다시 밟았다.
+
+| 셸 | `t_total`(term) | `t_total`(hup) | 배수 |
+|---|---|---|---|
+| fish | 138 | 135 | 1.0 |
+| zsh | 2525 | 133 | 19.0 |
+| bash | 2516 | 126 | 20.0 |
+
+셋 다 `every child is gone (reaped 3)`이고 `grace period expired`와
+`sent SIGKILL to what was left`가 로그에서 사라졌다. 위험 2(콘솔 셸이
+SIGHUP을 받고도 안 죽는다)는 실현되지 않았다.
+
+### 실측 5 — `terminal`도 SIGHUP에 죽는다
+
+위험 1이 걸려 있던 자리다. `hup` 회차의 `SLM0 reaped pid=` 줄에
+`started terminal`의 pid가 매번 들어 있었다(fish 31 · zsh 32 · bash 31).
+`terminal`에 시그널 핸들러가 없으므로 기본 동작이 돈다는 추론이 맞았다.
+
+이 줄을 처음에 놓칠 뻔했다. fish 회차에서는 그 줄 앞에 fish가 죽으며 찍은
+터미널 복원 시퀀스가 붙어서, `^tars-init:` 앵커를 쓴 `grep`에 안 걸렸다.
+실측 10이 그것이다.
+
+### 실측 6 — A1(hup)과 A2(term+hup)는 안 갈린다
+
+| 셸 | `t_total`(hup) | `t_total`(both) | 차 |
+|---|---|---|---|
+| fish | 135 | 147 | 12 |
+| zsh | 133 | 138 | 5 |
+| bash | 126 | 141 | 15 |
+
+차이가 5~15밀리초이고 이것은 시스템 콜 한 번과 시리얼 로그 한 줄의
+비용이다(시리얼 한 줄이 0.6~8.8밀리초라는 RC-M0의 실측과 맞는다). 결정 3이
+"갈리지 않으면 더 넓은 쪽"이라고 정해 두었으므로 A2를 고른다.
+
+`both` 회차에서 콘솔 셸이 SIGTERM이 아니라 곧바로 온 SIGHUP에 죽는 것도
+보였다 — bash 회차에서 콘솔 셸 pid 32가 `t=21`에 거둬졌다.
+
+### 실측 7 — `GRACE_SECONDS = 3`은 실제로 2~3초다
+
+`reapAll()`의 deadline이 `monotonicSeconds() + GRACE_SECONDS`인데
+`monotonicSeconds()`가 초 단위로 자른다. 그래서 실제 유예는 종료가 시작된
+시각의 소수부만큼 짧아진다.
+
+관측값이 그것을 보여 준다. 타이핑이 없는 회차는 2495 · 2498 · 2500 ·
+2506이었고, 타이핑을 두 번 한 회차는 2895 · 2898이었다. 부팅이 길어져
+종료 시점의 소수부가 달라진 것이 유일한 차이다.
+
+고치지 않는다. 이 서브프로젝트가 그 숫자를 안 밟게 만들기 때문이다
+(비목표 2). 다만 "3초"라고 적힌 자리를 읽을 사람에게는 이 값이 상한이지
+실제값이 아니라는 것을 알려 둔다.
+
+### 실측 8 — SIGHUP 뒤에 남는 130밀리초 중 100은 폴링 간격이다
+
+`reapAll()`이 `waitpid(WNOHANG)`과 `sleepMillis(100)`을 번갈아 돈다.
+자식은 `t_kill` 직후에 죽는데 첫 `waitpid`가 그보다 먼저 돌아서 0을 받고,
+100밀리초를 잔 뒤에야 거둔다. `hup` 회차의 `reaped t=` 값이 전부
+113~122인 것이 그 증거다.
+
+더 줄이려면 폴링을 짧게 해야 하는데 안 한다. 비목표 2와 같은 부류이고,
+130밀리초는 사람이 전원 버튼에서 손을 떼는 시간보다 짧다.
+
+### 실측 9 — 히스토리는 term과 hup에서 같다
+
+`shell=zsh`와 `shell=bash`로 띄워 화면 셸에 `echo slmark1`과
+`echo slmark2`를 치고, 전원 버튼을 누른 뒤 설정 디스크를 `debugfs -R cat`
+으로 읽었다. 부팅을 다시 안 하는 이유는 `debugfs`가 컨테이너에 있기
+때문이다(e2fsprogs 1.47.2).
+
+| 셸 | 변종 | 디스크의 히스토리 |
+|---|---|---|
+| zsh | term | `echo slmark1` · `echo slmark2` |
+| zsh | hup | `echo slmark1` · `echo slmark2` |
+| bash | term | `echo slmark1` · `echo slmark2` |
+| bash | hup | `echo slmark1` · `echo slmark2` |
+
+넷이 같다. SIGHUP이 무언가를 잃게 만들지 않는다. 명령이 실제로 쳐진 것은
+화면으로 먼저 확인했다(`terminal: screen>` 줄에 `slmark1 | slmark1`이
+프롬프트와 함께 있다) — 그 증거가 없으면 "잃었다"와 "애초에 안 쳐졌다"가
+안 갈린다.
+
+bash에서 둘째 줄까지 있는 것은 `history -a`가 직전 명령까지만 쓰기
+때문이다(실측 32). `slmark2`를 친 뒤 프롬프트가 한 번 더 그려져서 그 줄이
+써졌다. 표적을 둘로 만든 이유가 이것이다.
+
+### 실측 10 — 죽으면서 콘솔에 글자를 찍는 것은 fish뿐이고, 지금도 찍는다
+
+종료 시작(`SLM0 sigchoice`) 뒤의 로그에서 ESC가 든 줄을 셌다.
+
+| 셸 | term | hup |
+|---|---|---|
+| fish | 1줄 | 1줄 |
+| zsh | 0줄 | 0줄 |
+| bash | 0줄 | 0줄 |
+
+fish가 찍는 것은 터미널 복원 시퀀스다(`ESC[?2004l` 등 bracketed paste
+끄기). term에서도 찍으므로 이 변경이 만든 것이 아니다. zsh와 bash는
+SIGKILL로 죽던 때에도, SIGHUP으로 죽는 지금도 한 글자도 안 찍는다.
+
+위험 3(화면 좌표가 밀린다)은 실현되지 않았다. 근거가 둘이다 — 이것이
+`/dev/console`로 가는 바이트라 `terminal: screen>`과 무관하고, 종료 로그를
+앵커(`^tars-init:`)로 보는 자리가 체인 열하나에 하나도 없다.
+
+다만 이 실측 자체가 조사에서 한 번 걸림돌이 됐다. 로그를 `grep`할 때
+`^tars-init:` 앵커를 쓰면 fish 회차에서 `reaped pid=31` 줄을 통째로
+놓친다.
+
+### 실측 11 — 게이트가 아끼는 것은 약 15초이고 잡음 안이다
+
+비목표 5가 요구한 기대치다. 체인 열하나에서 정상 종료를 밟는 부팅은
+셋뿐이다.
+
+| 체인 | 부팅 | 방법 | 셸 | 지금 유예 |
+|---|---|---|---|---|
+| `device` | 1/1 | `system_powerdown` | fish(디스크 없음) | 안 쓴다 |
+| `power` | 1/2 | `kill -TERM 1` | bash | 약 2.5초 |
+| `power` | 2/2 | `ctrl-alt-delete` | bash | 약 2.5초 |
+
+나머지 부팅은 전부 `kill "$QEMU_PID"`로 전원을 뽑으므로 유예를 안 쓴다.
+그래서 이론상의 절약은 2 × 2.5초 × 3회차 = 약 15초이고, 이 게이트의 잡음이
+±3분이라 갈렸다고 말할 수 없는 크기다.
+
+게이트 시간이 줄었다고 주장하지 않는다. 이 서브프로젝트가 주는 것은
+`shell=zsh`나 `shell=bash`로 쓰는 사람의 종료가 2.9초에서 0.13초가 되는
+것이고, SIGKILL에 기대던 경로가 없어지는 것이다.
