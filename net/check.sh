@@ -30,8 +30,8 @@ REPO_ROOT="$(cd .. && pwd)"
 # 연결을, 검사 10이 dhcpcd의 생존을 본다. 상대는 바깥 인터넷이 아니라
 # QEMU 자신이다(design 결정 7) — 회선이 흔들려도 이 게이트의 답은 안 바뀐다.
 #
-# 이 체인은 Task 4에서 check.sh의 CHAINS에 들어간다. 그때까지는 단독으로
-# 돌린다.
+# 이 체인은 check.sh의 CHAINS에 열두번째로 들어 있다. 단독으로도 돌아간다
+# (docker run ... bash net/check.sh).
 
 # $GUEST_MEM과 type_keys·wait_for_screen 셋 다 쓴다.
 source ../gate_lib.sh
