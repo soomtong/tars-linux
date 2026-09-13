@@ -484,6 +484,19 @@ ln -sf nc.traditional "$WORKDIR/usr/bin/nc"
 끝났다의 기준: 게스트 로그에 virtio-net이 잡히는 줄이 나온다. 주소는 아직
 없고 밖으로도 못 나간다.
 
+⚠ 위 끝 기준이 틀렸고 M1이 실행 중에 고쳤다. 이 커널은 virtio-net에 대해
+부팅 로그에 한 줄도 안 찍는다 — M0의 게스트 안에서 `dmesg | grep -i virtio`가
+아무것도 못 찾았고 호스트가 받은 직렬 로그에도 없다. 찍히는 것은
+`NET: Registered PF_*` 넷뿐인데 그 넷은 NIC가 하나도 없어도 찍힌다(실측 2가
+정확히 그 상태에서 같은 줄들을 봤다). 그래서 실제 판정은 `/sys/class/net`에
+`eth0`이 있는지다 — sysfs는 커널이 드라이버를 붙이면서 직접 만드는 것이라
+게스트에 도구가 하나도 없어도 되고 셸의 `ls` 하나로 읽힌다.
+
+⚠ "새 체인"이 M3의 `net/check.sh`와 겹쳐 보이는 것도 M1이 갈랐다. M1이 그
+파일을 만들되 `check.sh`의 `CHAINS` 배열에는 안 넣는다. M3가 그 배열에 한
+줄을 더하고 판정을 주소와 바깥 연결까지 늘린다. 이렇게 가르면 체인이 자라는
+동안 루트 게이트가 한 초도 안 늘어나서 위험 1을 M3까지 미룰 수 있다.
+
 ### NW-M2 — 주소가 붙는다
 
 `config.zig`에 `net` 키, `main.zig`에 링크를 올리는 `ioctl`과 dhcpcd를 띄우는
@@ -886,3 +899,158 @@ netcat-traditional` 넷만 받아 풀었더니 `libcurl.so.4` · `libbpf.so.1` �
 | `nc`라는 이름 | `make_initrd.sh`에 링크 한 줄(결정 11, 실측 9) |
 | 새로 만들 디렉터리 | `/var/lib/dhcpcd`와 `/run`(실측 7) |
 | Dockerfile | 도구 패키지 넷 + 라이브러리 패키지 스물 남짓(실측 10) |
+
+## NW-M1이 실행으로 증명한 것
+
+2026-09-13에 했다. M0과 달리 저장소 파일을 고쳤다 — `kernel/.config`와 새
+파일 `net/check.sh` 둘이다.
+
+### 실측 11 — 지금 `.config`는 이미 `olddefconfig`의 고정점이었다
+
+`project_kernel_config`의 규칙 넷째가 "정규화와 의도한 변경을 다른 커밋으로
+나눈다"라서 먼저 확인했다. 손대기 전의 `.config`로 한 번 빌드하고
+`diff kernel/.config kernel/build/.config`를 걸었더니 비었다.
+
+그래서 정규화 커밋이 따로 필요 없었고, NET 커밋의 diff가 곧 "이번 변경이
+커널에 들여온 것"의 완전한 목록이 된다. 그 빌드는 1분 02.60초였고 산출된
+`bzImage`가 3,642,368 바이트로 M0이 잰 baseline과 정확히 같았다.
+
+### 실측 12 — 여덟 줄이 451줄이 됐다
+
+최소 편집은 M0과 글자 그대로 같다 — 한 줄(`# CONFIG_NET is not set`)을
+지우고 여덟 줄을 더한다. 그것을 빌드하고 `build/.config`를 되접었더니
+최종 diff가 이렇다.
+
+```
+kernel/.config | 457 +++++++++++++++++++++++++++++++++++++++++++++-
+1 file changed, 451 insertions(+), 6 deletions(-)
+```
+
+더한 451줄 중 `=y`가 122개, `is not set`이 293개다. 지운 6줄은 전부 설명이
+되는 것들이다.
+
+| 지운 줄 | 왜 |
+|---|---|
+| `# CONFIG_NET is not set` | 우리가 지운 것 |
+| `# DRBD disabled because PROC_FS or INET not selected` 주석 블록(3줄) | INET이 켜져서 그 문구가 무의미해졌다. 대신 `# CONFIG_BLK_DEV_DRBD is not set`이 생겼다 |
+| `# CONFIG_PPS is not set` | 자리가 옮겨진 것이 아니라 값이 뒤집혔다 — 아래를 보라 |
+
+`CONFIG_PPS`가 `is not set`에서 `=y`가 됐다. `CONFIG_NET_PTP_CLASSIFY`가
+켜지면서 PTP가 PPS를 select한다. 우리가 고른 적 없는 하위 시스템 하나가
+NET을 켠 대가로 따라 들어온 것이고, 843,776 바이트 증가분의 일부다.
+
+되접고 다시 빌드했을 때 두 번째 빌드는 17.674초였고 `diff`가 비었다 —
+고정점에 도달했다. 최종 `bzImage`가 4,486,144 바이트로 M0의 값과 정확히
+같다.
+
+### 실측 13 — 결정 3의 격리가 설정 수준에서도 확인된다
+
+M0의 실측 2는 부팅 로그로 확인했다. 이번에는 `olddefconfig`가 만든
+`build/.config`를 직접 세어 같은 것을 설정 수준에서 확인했다.
+
+```
+CONFIG_NETDEVICES=y  CONFIG_NET_CORE=y  CONFIG_ETHERNET=y
+CONFIG_NET_VENDOR_3COM=y ... CONFIG_NET_VENDOR_XILINX=y   (벤더 게이트 60여 개)
+```
+
+벤더 줄이 전부 `=y`인 것에 놀랄 필요가 없다. 그것들은 메뉴를 여는 게이트이지
+드라이버가 아니다. 실제 드라이버 심볼을 하나씩 물어보면 이렇다.
+
+```
+# CONFIG_E1000 is not set     # CONFIG_E1000E is not set   # CONFIG_IGB is not set
+# CONFIG_8139CP is not set    # CONFIG_8139TOO is not set  # CONFIG_R8169 is not set
+# CONFIG_NE2K_PCI is not set  # CONFIG_PCNET32 is not set  # CONFIG_VMXNET3 is not set
+# CONFIG_TUN is not set       # CONFIG_VETH is not set     # CONFIG_MACVLAN is not set
+# CONFIG_BRIDGE is not set    # CONFIG_VLAN_8021Q is not set
+```
+
+`drivers/net` 아래에서 `=y`인 것은 `CONFIG_VIRTIO_NET` 하나다. 결정 3이
+"드라이버를 하나만 고르는 것으로 격리가 된다"고 적은 것이 이 상태를 말한다.
+
+`CONFIG_TUN`이 꺼진 것은 덤이 아니라 결정 4와 맞물린다 — tap을 쓰려면
+그것이 필요하고, 안 켜져 있으므로 누군가 나중에 tap으로 바꾸려면 커널부터
+고쳐야 한다. 그 마찰이 특권 없는 게이트를 지킨다.
+
+### 실측 14 — 커널 로그로는 NIC를 판정할 수 없다
+
+M1의 끝 기준을 바꾼 근거다. NIC를 물린 게스트를 띄워도 커널이 virtio-net에
+대해 찍는 줄이 없다. M0의 게스트 안에서 `dmesg | grep -i -e virtio -e eth0
+-e e1000`이 아무것도 못 찾았고, 호스트가 받은 직렬 로그를 다시 훑어도
+네트워크 관련 커널 줄은 넷뿐이다.
+
+```
+NET: Registered PF_NETLINK/PF_ROUTE protocol family
+NET: Registered PF_INET protocol family
+NET: Registered PF_UNIX/PF_LOCAL protocol family
+NET: Registered PF_PACKET protocol family
+```
+
+그 넷은 NIC가 하나도 없어도 찍힌다. 실측 2가 정확히 그 상태(스택은 서고
+NIC는 없음)에서 같은 줄들을 봤다.
+
+그래서 `net/check.sh`는 `/sys/class/net`을 본다. sysfs는 커널이 드라이버를
+붙이면서 직접 만드는 것이라 게스트에 도구가 하나도 없어도 되고, 셸의 `ls`
+하나로 읽힌다. `NET: Registered` 셋은 버리지 않고 보조 증거로 남겼다 —
+그것이 없으면 `.config`가 안 먹은 것이라 실패의 원인이 달라진다.
+
+### 실측 15 — 새 체인이 8.954초에 통과하고 반사실이 겨냥한 자리에서 죽는다
+
+`net/check.sh`는 202줄이고 부팅 하나에 타이핑 스물다섯 키다. monitor 포트는
+45464를 잡았다.
+
+| 무엇 | 결과 |
+|---|---|
+| 단독 실행 | PASS, 8.954초 |
+| 반사실(NIC 두 줄을 지운 사본) | 종료 코드 1, `FAIL: no eth0 under /sys/class/net` |
+
+반사실이 값진 것은 어디서 죽었는가다. 검사 1(`NET: Registered` 셋)은
+통과하고 검사 2에서만 죽었다 — 스택은 NIC와 무관하게 서기 때문이다. 그
+둘이 갈리는 것이 이 검사 구조가 실제로 두 가지를 따로 본다는 증거다.
+
+SD-M2와 BH-M2가 "반사실은 겨냥한 검사가 아니라 앞의 검사에 걸린다"를
+배웠는데, 이번에는 겨냥한 자리에서 죽었다. 화면이 그것을 그대로 보여 준다.
+
+```
+terminal: screen> root@(none) ~# ls /sys/class/net | lo@ | root@(none) ~#
+```
+
+`lo`만 있고 `eth0`이 없다. 명령은 정상으로 돌았고 sysfs에 그 장치가 없었을
+뿐이다.
+
+반사실은 저장소 파일을 한 글자도 안 바꿨다. `/tmp` 사본을 `-v`로 덮어씌우는
+방식이고, SD-M2가 세운 것을 그대로 썼다.
+
+### 실측 16 — 열한 체인이 NET 커널에서 3/3이다
+
+위험 4를 닫는 자리다. 이 milestone이 바꾼 커널은 열한 체인 전부가 부팅하는
+커널이라 `device` 하나로는 대변이 안 된다.
+
+| 무엇 | 값 |
+|---|---|
+| 판정 | 열한 체인 전부 3/3 |
+| 걸린 시간 | 29분 49.15초 |
+| 직전 기준선(SL-M2 뒤) | 29분 38.52초 |
+| 차이 | +10.63초 |
+| `skipping make` 횟수 | 32회 (`11 × 3 − 1`과 일치) |
+
++10.63초는 이 게이트의 잡음(±3분)의 20분의 1이라 갈렸다고 말하지 않는다.
+위험 1이 걱정한 "커널에 NET을 켜면 게이트가 길어진다"는 이 숫자로는 안
+보인다 — 실측 1이 예상한 대로다. 게이트는 커널을 회차마다 다시 굽지 않고
+입력이 같으면 건너뛴다(GL-M1).
+
+`skipping make`가 32인 것이 그 구조가 이번에도 제대로 돌았다는 증거다.
+33이면 `clean()`이 지운 자리에서도 건너뛴 것이라 잘못이고, 31 이하면 무언가가
+`.config`를 건드리고 있다는 뜻이다.
+
+`net/check.sh`는 아직 `CHAINS` 밖이라 이 29분에 안 들어간다. 체인이 열둘이
+되는 것은 M3이고, 그때 이 값이 8.954초 × 3만큼 늘어난다.
+
+### M1이 M2에 넘기는 것
+
+M0이 남긴 표(위의 "M0이 M2에 넘기는 것")가 그대로 유효하고, 여기에 둘을
+더한다.
+
+| 무엇 | 지금 아는 것 |
+|---|---|
+| 체인의 자리 | `net/check.sh`가 이미 있다. M2는 그 파일에 판정을 더하는 것이지 새로 만드는 것이 아니다 |
+| QEMU 줄 | `-netdev user,id=n0`에 M3가 `guestfwd=` 옵션을 덧붙인다(결정 7). 지금은 그 자리가 비어 있다 |

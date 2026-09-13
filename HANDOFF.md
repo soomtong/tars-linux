@@ -1,11 +1,14 @@
-# HANDOFF: Guest Network(NW)의 M0이 끝났다 — 실측 열이 섰고, 다음은 M1 plan을 쓰는 것이다
+# HANDOFF: Guest Network(NW)의 M1이 끝났다 — 커널이 NIC를 보고 열두번째 체인이 그것을 말한다
 
 ## 지금 어디인가
 
-새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸다. design · NW-M0
-plan · NW-M0 실측까지 커밋됐고 저장소의 추적되는 코드는 아직 한 줄도 안
-들어갔다(M0이 재기만 하는 milestone이라 그것이 맞다). 바로 다음 할 일은
-NW-M1의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
+새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸고 M0과 M1이 같은 날
+끝났다. 커널에 IPv4 스택과 virtio-net 드라이버가 정식으로 들어갔고, 새 체인
+`net/check.sh`가 게스트를 띄워 `/sys/class/net/eth0`을 본다. 루트 게이트는
+열한 체인 3/3이다(`net`은 아직 `CHAINS` 밖이다).
+
+주소는 아직 안 붙는다. `dhcpcd`도 `ip`도 게스트에 없다 — 그것이 M2다. 바로
+다음 할 일은 NW-M2의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
 
 무엇을 세우는 일인가. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가
 주소를 받고 밖으로 나간다. 기본값은 꺼짐이라 기존 부팅 아홉과 체인 열하나는
@@ -33,6 +36,28 @@ Gate Accuracy(GA-M0·M1)다.
 | `f7e61d1` | NW-M0 plan(측정 일곱과 하네스 전문) |
 | `6c9a5a2` | 도구 넷을 바이너리의 실제 의존으로 다시 재고 design의 틀린 비용표를 고쳤다 |
 | `c1637cc` | NW-M0. 실측 열. 그중 셋이 plan에 없던 것이고 M2가 고칠 자리를 정했다 |
+| `8f2a761` | M0의 HANDOFF와 기억 `project_measuring_tool_cost` |
+| (M1 plan) | NW-M1 plan. design의 M1 문장 둘이 틀린 것을 먼저 갈랐다 |
+| `15b0e5a` | 커널 `.config`에 NET. 여덟 줄이 되접기를 거쳐 451줄이 됐다 |
+| `d9f3801` | `net/check.sh` 202줄. 열두번째가 될 체인이지만 아직 `CHAINS` 밖이다 |
+
+### NW-M1이 알아낸 것 — 다음 세션이 먼저 읽을 넷
+
+본문은 design의 "NW-M1이 실행으로 증명한 것" 절에 실측 11~16으로 있다.
+
+1. 커널 로그로는 NIC를 판정할 수 없다. 이 커널은 virtio-net에 대해 한 줄도
+   안 찍고, 찍히는 `NET: Registered PF_*` 넷은 NIC가 없어도 찍힌다. 그래서
+   `net/check.sh`의 판정이 `/sys/class/net`에 `eth0`이 있는지다 — sysfs는
+   커널이 직접 만드는 것이라 게스트에 도구가 하나도 필요 없다. design의 M1
+   끝 기준이 틀렸고 그 자리에 `⚠` 정정을 달았다.
+2. 결정 3의 격리가 설정 수준에서도 확인됐다. `NET_VENDOR_*`가 예순 넘게
+   `=y`인데 그것들은 메뉴 게이트이고, 실제 드라이버 중 `=y`는
+   `CONFIG_VIRTIO_NET` 하나다. `E1000`·`R8169`·`TUN`·`BRIDGE` 전부 눌려 있다.
+3. NET을 켜면 `CONFIG_PPS`가 딸려 온다. `NET_PTP_CLASSIFY`가 PTP를 켜고
+   PTP가 PPS를 select한다 — 우리가 고른 적 없는 하위 시스템이고 844KB
+   증가분의 일부다.
+4. 게이트가 안 길어졌다. 29분 49.15초로 기준선(29분 38.52초)에서 +10.63초인데
+   잡음의 20분의 1이다. `skipping make`가 32회로 `11 × 3 − 1`과 맞았다.
 
 ### NW-M0이 실제로 알아낸 것 — 다음 세션이 먼저 읽을 일곱
 
@@ -308,30 +333,39 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — NW-M1의 plan을 새로 쓴다
+## 바로 다음에 할 것 — NW-M2의 plan을 새로 쓴다
 
-M0이 끝났으므로 M1 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
-M1이 하는 일은 커널 `.config`에 결정 2의 여덟 줄을 정식으로 넣고, 새 체인의
-QEMU 줄에 결정 4의 두 줄(`-netdev user` · `-device virtio-net-pci`)을 더하는
-것이다. 끝났다의 기준은 게스트 로그에 virtio-net이 잡히는 줄이 나오는 것이고
-주소는 아직 없다.
+M1이 끝났으므로 M2 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
+M2가 하는 일은 `config.zig`에 `net` 키, `main.zig`에 링크를 올리는 `ioctl`,
+`guest_tools.sh`에 도구들, 그리고 `devcontainer/Dockerfile`에 패키지 목록이다.
+끝났다의 기준은 `net=dhcp`로 뜬 게스트가 주소를 받는 것이다.
 
-M1 plan을 쓰는 사람이 M0에서 그대로 가져다 쓸 것이 셋이다.
+M2가 결정할 것이 아홉이고 M0과 M1이 전부 숫자를 붙여 두었다. design 끝의
+"M0이 M2에 넘기는 것"과 "M1이 M2에 넘기는 것" 두 표가 그 목록이다.
 
-- 실험용 `.config`를 만든 정규식과 그 검증 방법. plan의 Task 1에 있고
-  `CONFIG_UNIX98_PTYS`를 안 지운다는 것이 실행으로 확인됐다.
-- 게스트를 FIFO로 모는 하네스 전문. `/tmp/nw/guest.sh`에 있고, 그 파일이
-  사라졌으면 plan의 Task 5와 plan 끝의 "갈린 자리 다섯"을 함께 읽어 다시
-  만든다(원문 그대로 쓰면 `dhcpcd`를 이름으로 불러서 죽는다).
-- `bzImage`의 두 값. baseline 3,642,368 · NET 4,486,144.
+| 무엇 | 지금 아는 것 |
+|---|---|
+| `curl`을 넣나 | 새 라이브러리 20개에 10,927,904바이트다. 게이트 판정에는 안 쓴다 |
+| `/etc/resolv.conf` | dhcpcd hook 둘(약 14KB)을 initrd에 넣는 쪽이 낫다 |
+| dhcpcd를 감독하나 | 안 해도 안전하다. 재부모화되고 SIGTERM에 죽는다 |
+| dhcpcd의 자리 | `usr/sbin/dhcpcd:usr/bin/dhcpcd`. `PATH`에 `/usr/sbin`이 없다 |
+| `nc`라는 이름 | `make_initrd.sh`에 링크 한 줄 |
+| 새로 만들 디렉터리 | `/var/lib/dhcpcd`와 `/run` |
+| Dockerfile | 도구 패키지 넷 + 라이브러리 패키지 스물 남짓 |
+| 체인의 자리 | `net/check.sh`가 이미 있다. 새로 만드는 것이 아니라 판정을 더한다 |
+| QEMU 줄 | `-netdev user,id=n0`에 M3가 `guestfwd=`를 덧붙인다. 지금은 비어 있다 |
 
-M2가 결정할 것이 일곱이고 M0이 전부 숫자를 붙여 두었다. design 끝의
-"M0이 M2에 넘기는 것" 표가 그 목록이다 — `curl`을 넣을지 · resolv.conf를
-누가 쓸지 · dhcpcd를 감독할지 · dhcpcd의 자리 · `nc` 링크 · `/var/lib/dhcpcd`와
-`/run` · Dockerfile의 패키지 목록.
+M2 plan을 쓰는 사람이 M0·M1에서 그대로 가져다 쓸 것이 셋이다.
 
-M3(열두번째 체인 `net/check.sh`)은 그 뒤다. monitor 포트는 쓰던 대역에서 새
-번호를 잡고 `check.sh`의 `CHAINS` 배열에 더한다.
+- 게스트를 FIFO로 모는 하네스. `/tmp/nw/guest.sh`에 있고, 사라졌으면 M0
+  plan의 Task 5와 그 plan 끝의 "갈린 자리 다섯"을 함께 읽어 다시 만든다
+  (원문 그대로 쓰면 `dhcpcd`를 이름으로 불러서 죽는다).
+- 도구를 sysroot에 임시로 넣는 절차. `docs/decisions/project_measuring_tool_cost.md`
+  에 있고 `apt-cache depends --recurse` + `cp -an`이다.
+- `net/check.sh`의 반사실 방법. `/tmp` 사본을 `-v`로 덮어씌운다.
+
+M3는 그 뒤다. `check.sh`의 `CHAINS` 배열에 `net`을 더하고 판정을 `guestfwd`로
+닫는다. 체인이 열둘이 되면 게이트가 8.954초 × 3 만큼 늘어난다.
 
 ### M0을 다시 돌려야 할 때 알아야 하는 것
 
@@ -413,8 +447,15 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 38.52초다(2026-09-13,
-SL-M2 뒤). 그 앞이 BB-M2 뒤의 29분 24.06초이고 14.46초 차이인데, SL은 시간을
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 49.15초다(2026-09-13,
+NW-M1 뒤 — 커널에 NET이 켜진 첫 게이트다). 그 앞이 SL-M2 뒤의 29분 38.52초이고
+차이가 +10.63초인데 잡음의 20분의 1이라 갈렸다고 말하지 않는다. NET을 켜도
+게이트가 안 길어지는 이유는 커널을 회차마다 다시 굽지 않기 때문이다(GL-M1).
+
+⚠ `net/check.sh`는 있지만 아직 `CHAINS` 밖이다. 단독으로 8.954초에 돌고,
+게이트에 들이는 것은 NW-M3이다. 그때 열두 체인이 되고 약 27초가 는다.
+
+그 앞이 BB-M2 뒤의 29분 24.06초이고 14.46초 차이인데, SL은 시간을
 더한 것이 없고 오히려 `power` 체인의 종료 둘에서 약 5초를 아꼈어야 한다
 (SL 실측 11이 게이트 전체로 약 15초를 예상했다). 그 예상도 이 차이도 전부
 잡음 안이라 어느 쪽으로도 갈렸다고 말하지 않는다.
@@ -455,8 +496,8 @@ QEMU 기본 128MiB에서는 푼 84MB짜리 initramfs가 tmpfs를 채워 기계�
 켜진다).
 
 monitor 포트는 45455(TF) · 45456(CP) · 45457(IP) · 45458(PM) · 45459(HD) ·
-45460(TR) · 45461(CM) · 45462(HI) · 45463(UT) · 45471(RM)이다. `boot` 체인만
-monitor를 안 쓴다.
+45460(TR) · 45461(CM) · 45462(HI) · 45463(UT) · 45464(NW) · 45471(RM)이다.
+`boot` 체인만 monitor를 안 쓴다.
 
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
