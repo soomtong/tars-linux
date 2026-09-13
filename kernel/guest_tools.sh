@@ -222,4 +222,36 @@ GUEST_TOOLS=(
   # 처음으로, 대화형 도구를 비대화형 모드로 쳐서 보는 자리다.
   usr/bin/zoxide:usr/bin/zoxide
   usr/bin/fzf:usr/bin/fzf
+
+  # ── 층 5 · 네트워크 4 ──────────────────────────────────────────────────
+  # NW-M2. 이 여섯 줄이 게스트가 밖으로 나가는 데 필요한 전부다.
+  #
+  # dhcpcd의 자리가 왼쪽과 오른쪽이 다른 넷째 자리다(mawk→awk · fdfind→fd ·
+  # vim.tiny→vi에 이어). 이유는 앞의 셋과 다르다 — 이름 충돌도 alternatives도
+  # 아니고 PATH다. environ.zig의 PATH_ENTRY가 /usr/bin:/bin이라
+  # /usr/sbin에 둔 것은 이름으로 안 불린다. NW-M0의 첫 회차가 여기서 통째로
+  # 죽었다(`fish: Unknown command: dhcpcd`).
+  #
+  # 새 라이브러리 수가 도구마다 크게 다르다(M0 실측 3. 푼 것 기준).
+  #   dhcpcd          388,416   새 라이브러리 0개
+  #   nc.traditional   35,032   0개
+  #   ip              721,912   3개 (libbpf · libelf · libmnl)
+  #   curl            321,880   20개, 10,927,904바이트
+  # curl 하나가 이 층 비용의 86%다. 사용자가 그 값을 알고 넣기로 정했다
+  # (design 결정 10) — 네트워크가 생겼으므로 UT가 감수한 libgit2 사슬 열여섯이
+  # 비로소 값을 한다는 것이 근거다.
+  #
+  # nc는 traditional판이다. openbsd판은 libbsd를 더 부른다. 그리고 게스트에
+  # `nc`라는 이름을 세우는 것은 여기가 아니라 make_initrd.sh의 링크 한 줄이다
+  # (결정 11 — alternatives 링크는 dpkg -x로 푼 sysroot에 없다).
+  usr/sbin/dhcpcd:usr/bin/dhcpcd
+  usr/bin/ip:usr/bin/ip
+  usr/bin/curl:usr/bin/curl
+  usr/bin/nc.traditional:usr/bin/nc.traditional
+
+  # pgrep·kill은 procps에서 오고 libproc2가 이미 initrd에 있다(ps가 데려왔다).
+  # 둘이 62,184바이트에 새 라이브러리 0개다(M0 실측 3b). M3의 체인이
+  # "dhcpcd가 살아 있나"를 물을 때 쓴다.
+  usr/bin/pgrep:usr/bin/pgrep
+  usr/bin/kill:usr/bin/kill
 )

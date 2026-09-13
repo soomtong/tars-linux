@@ -190,6 +190,44 @@ ln -sf less "$WORKDIR/usr/bin/pager"
 # (vim · vi · editor).
 ln -sf vim "$WORKDIR/usr/bin/editor"
 
+# NW-M2 결정 11. Debian의 /usr/bin/nc는 alternatives가 만드는 링크이고 실체가
+# nc.traditional이다. alternatives 링크는 패키지의 postinst가 만드는 것이라
+# dpkg -x로 푼 sysroot에 없다 — pager·vi·editor와 글자 그대로 같은 자리다.
+# 다른 점은 이 이름을 우리가 골랐다는 것이다: 사람이 `nc`라고 친다.
+ln -sf nc.traditional "$WORKDIR/usr/bin/nc"
+
+# NW-M2. dhcpcd가 쓰는 자리 둘(M0 실측 7). 리스는 /var/lib/dhcpcd/eth0.lease에
+# 쓰고(10.x는 /var/db가 아니다), /run/dhcpcd는 /run만 있으면 자기가 만든다.
+# 지금 initrd에는 /var도 /run도 아예 없다 — UT-M0이 /bin·/tmp·/etc 셋을
+# 더한 것과 같은 자리다.
+mkdir -p "$WORKDIR/var/lib/dhcpcd" "$WORKDIR/run"
+
+# NW-M2 결정 C. dhcpcd는 주소를 받으면 hook을 부르고, 그 hook이
+# /etc/resolv.conf를 쓴다. M0의 실측 6이 이것이 없을 때 무슨 일이 생기는지
+# 봤다 —
+#
+#   eth0: executing: /usr/lib/dhcpcd/dhcpcd-run-hooks BOUND
+#   script_run: /usr/lib/dhcpcd/dhcpcd-run-hooks: No such file or directory
+#
+# 주소는 붙는데 이름만 안 풀린다. install_tool이 바이너리 하나만 복사하기
+# 때문이고, 증상이 조용해서 원인에서 멀다.
+#
+# 경로를 바꾸면 안 된다. dhcpcd가 이 자리를 컴파일 타임에 박아 두고 찾는다 —
+# zsh 모듈 트리가 sysroot와 같은 경로를 유지해야 하는 것과 같은 이유다.
+#
+# 넷 중 둘만 넣는다. 30-hostname은 hostname을 부르고(게스트에 없다),
+# 50-timesyncd.conf는 systemd가 있을 때의 것이며, 01-test는 이름대로다.
+# dhcpcd-run-hooks가 그 디렉터리를 훑어 있는 것만 돌리므로 빼는 데 비용이 없다.
+#
+# 20-resolv.conf가 이름으로 부르는 것은 sed·rm·cat·tail·head·mkdir·chmod
+# 일곱이고 전부 게스트에 있다. resolvconf도 열세 번 나오지만 그것은 있는지
+# 물어보고 없으면 직접 쓰는 갈래다.
+mkdir -p "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks"
+cp "$SYSROOT/usr/lib/dhcpcd/dhcpcd-run-hooks" "$WORKDIR/usr/lib/dhcpcd/"
+cp "$SYSROOT/usr/lib/dhcpcd/dhcpcd-hooks/20-resolv.conf" \
+   "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
+chmod 0755 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-run-hooks"
+
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
 # /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다
