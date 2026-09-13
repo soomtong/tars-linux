@@ -1,11 +1,14 @@
 # TARS Shutdown Latency — Design
 
 Date: 2026-09-13
-Status: SL-M0 끝(2026-09-13). 실측 열하나가 아래 있고, 그중 실측 3이 이
-문서의 전제 하나를 고쳤다 — "대화형 셸은 SIGTERM을 무시한다"가 fish에는
-안 맞는다. fish는 SIGTERM에 죽고, 그래서 기본 설정의 게스트는 이미 빠르다.
-고쳐지는 것은 `shell=zsh`와 `shell=bash`이고 그 둘에서 2.9초가 0.13초가
-된다. A1과 A2는 안 갈렸으므로 결정 3이 정한 대로 A2를 고른다.
+Status: 완료(2026-09-13) — M0·M1·M2를 다 했다. `shutdown()`이 SIGTERM 뒤에
+SIGHUP도 보내고, `power` 체인이 유예 만료를 실패로 판정한다. `shell=zsh`와
+`shell=bash`의 종료가 2.9초에서 0.13초가 됐다.
+
+실측 열하나가 아래 있고, 그중 실측 3이 이 문서의 전제 하나를 고쳤다 —
+"대화형 셸은 SIGTERM을 무시한다"가 fish에는 안 맞는다. fish는 SIGTERM에
+죽고, 그래서 기본 설정의 게스트는 원래부터 빨랐다. A1과 A2는 안 갈렸으므로
+결정 3이 정한 대로 A2를 골랐다.
 
 SD(Shell History Durability)가 자기 결정 8에서 열어 둔 문이다. SD는 PID 1의
 시그널 경로를 안 건드리기로 정하면서 다시 열릴 조건을 두 개 적었다 —
@@ -536,3 +539,86 @@ SIGKILL로 죽던 때에도, SIGHUP으로 죽는 지금도 한 글자도 안 찍
 게이트 시간이 줄었다고 주장하지 않는다. 이 서브프로젝트가 주는 것은
 `shell=zsh`나 `shell=bash`로 쓰는 사람의 종료가 2.9초에서 0.13초가 되는
 것이고, SIGKILL에 기대던 경로가 없어지는 것이다.
+
+## SL-M1이 넣은 것
+
+`power.zig`에 `TERMINATION_SIGNALS = [_]linux.SIG{ .TERM, .HUP }`가 서고
+`shutdown()`이 그 배열을 순서대로 돈다. 로그 문구는 `@tagName`으로 만들어서
+`sent SIGTERM to every process`가 한 글자도 안 바뀌었고, 새로 생긴 것은
+`sent SIGHUP to every process` 한 줄이다.
+
+주석 둘을 함께 고쳤다. `reapAll()` 위의 "대화형 셸은 SIGTERM을 무시한다.
+그래서 여기서 false가 나오는 것이 정상이고 SIGKILL은 정상 경로의 일부다"가
+실측 4 뒤로 틀린 문장이 됐다 — 지금 그 분기는 정상 경로가 아니라 우리가
+모르는 자식이 생겼을 때의 안전망이다. `GRACE_SECONDS` 위에는 실측 7을
+한 문단 붙였다(그 값은 상한이지 실제 대기가 아니다).
+
+`power_test.zig`에 검사 둘이 늘었다(7·8). 상수를 복사해서 비교하지 않고
+성질만 본다 — `.HUP`이 목록에 있는가, `.TERM`이 `.HUP`보다 앞인가. 복사한
+기대값은 상수와 함께 고쳐지므로 아무것도 안 막기 때문이다.
+
+반사실 둘이 그 검사들의 값을 보였다. `.HUP`을 뺀 사본은
+`FAIL: TERMINATION_SIGNALS has no SIGHUP …`에서, 순서를 뒤집은 사본은
+`FAIL: SIGHUP comes before SIGTERM (term at 1, hup at 0)`에서 죽었고,
+둘 다 앞의 검사 여섯은 통과한 뒤였다.
+
+## SL-M2가 넣은 것
+
+양성 셋과 음성 둘이다.
+
+| 어디 | 무엇 |
+|---|---|
+| `power` 부팅 1 판정 | `sent SIGHUP to every process` |
+| `power` 부팅 2 판정 | 같은 줄(★ 목록이 여섯에서 일곱이 됐다) |
+| `device` 판정 | 같은 줄 |
+| `power` 부팅 1 | `grace period expired`가 없다 |
+| `power` 부팅 1 | `sent SIGKILL to what was left`가 없다 |
+
+음성 둘이 선 자리가 확인 5의 그 자리다 — `note:`만 찍고 어느 쪽이든
+통과시키던 `if`/`else`를 `report_failure` 둘과 `note:` 한 줄로 바꿨다.
+
+`device`에는 음성을 안 넣었다. 그 체인은 설정 디스크 없이 떠서 fish이고
+fish는 SIGTERM만으로 죽으므로(실측 3), 거기 넣은 음성은 SIGHUP을 도로
+빼도 초록이다. 그 이유를 체인 파일의 주석으로 남겼다 — 다음 사람이 "왜
+여긴 없지"를 다시 조사하지 않도록.
+
+### 반사실이 가르쳐 준 것 — 예상한 검사가 아니라 앞의 검사가 죽인다
+
+처음 밟은 반사실은 `.HUP`을 뺀 `power.zig`였고, 호스트 검사가 먼저 죽이지
+않도록 `power_test.zig` 사본도 함께 마운트했다(SD-M2가 배운 "마운트 둘").
+그런데 체인이 죽은 자리가 겨냥한 음성 검사 5가 아니라 양성 검사였다 —
+`FAIL: missing shutdown log line: tars-init: sent SIGHUP to every process`.
+양성이 판정 목록에서 음성보다 앞에 있기 때문이다.
+
+그래서 음성 검사가 값을 한다는 것은 그 반사실로 증명되지 않았다. 반사실을
+하나 더 만들었다 — SIGHUP을 로그에만 찍고 실제로는 안 보내는 사본이다.
+
+```zig
+if (sig != .HUP) _ = linux.kill(-1, sig);
+```
+
+그 회차에서 marker 목록에 `found tars-init: sent SIGHUP to every process`가
+찍힌 채로 `FAIL: the grace period expired; something outlived SIGTERM and
+SIGHUP`이 나왔다. 양성은 통과하고 음성이 잡은 것이고, 이것이 검사 셋이
+서로 다른 것을 본다는 증명이다.
+
+음성 6(SIGKILL)은 따로 안 밟혔다. 음성 5와 같은 상황에서 함께 나오는 줄이고
+음성 5가 먼저 죽이기 때문이다. 둘을 따로 두는 이유는 그 상황이 아니라
+`reapAll()`이 아예 안 불린 경우에 있다(결정 5) — 그 경우를 만들려면
+`shutdown()`이 `reapAll()`을 건너뛰어야 하는데, 그러면
+`every child is gone`도 안 나와서 또 양성이 먼저 죽는다. 음성 6은 밟히지
+않는 안전망으로 남는다.
+
+### 루트 게이트
+
+3/3, 29분 38.52초(2026-09-13). 기준선이 BB-M2 뒤의 29분 24.06초이고 차이가
+14.46초다.
+
+실측 11이 게이트 전체로 약 15초의 절약을 예상했는데 실제로는 그만큼 늘었다.
+둘 다 이 게이트의 잡음(±3분) 안이라 어느 쪽으로도 갈렸다고 말하지 않는다.
+비목표 5가 이것을 미리 적어 두었다 — 이 서브프로젝트가 주는 것은 게이트
+시간이 아니라 사람이 전원 버튼 앞에서 기다리는 시간이다.
+
+`PM-M1`과 `HD-M2`가 세 회차 모두 통과했고, `note: every child died inside
+the grace period`가 세 번 다 찍혔다. 그 줄이 찍혔다는 것은 음성 검사 둘을
+지나 그 뒤까지 갔다는 뜻이다(`report_failure`는 `exit 1`로 끝난다).

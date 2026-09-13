@@ -1,34 +1,62 @@
-# HANDOFF: BB가 닫혔다 — 다음 서브프로젝트를 고르는 자리다
+# HANDOFF: SL이 닫혔다 — 다음 서브프로젝트를 고르는 자리다
 
 ## 지금 어디인가
 
-Bash Boot(BB)가 2026-09-12에 M0·M1·M2를 다 끝내고 닫혔다. `config` 체인이
-부팅 여덟에서 아홉이 되고, 그 아홉째만 `shell=bash`로 뜬다. 로그 검사 여덟과
-화면 판정 넷(`bash-5.2#` · `/usr/bin` · `bprod1` · `bprodwfunction`)이 서
-있고, 실측 열둘이 design에 있다
-(`docs/superpowers/specs/2026-09-12-tars-bash-boot-design.md`).
+Shutdown Latency(SL)가 2026-09-13에 M0·M1·M2를 다 끝내고 닫혔다. PID 1이
+종료할 때 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가
+0.13초가 됐고, 게이트가 `grace period expired`를 실패로 판정한다. 실측
+열하나가 design에 있다
+(`docs/superpowers/specs/2026-09-13-tars-shutdown-latency-design.md`).
 
-BB는 BH가 자기 결정 6에서 열어 둔 문이었다. BH는 씨앗의 한 줄을 중첩 bash로
-판정했고 그것으로 부팅 하나를 아꼈는데, 중첩이 정의상 볼 수 없는 것이 여섯
-있었다 — 셸 해석(`resolveShell`) · 히스토리 env · terminal에 넘어가는 argv ·
-씨앗의 침묵 · `PROMPT_COMMAND`를 두고 겨루는 훅 둘 · 콘솔 셸. 9차가 그 여섯을
-본다. 본문은 `docs/decisions/project_bash_boot.md`에 있다.
+SL은 SD가 자기 결정 8에서 열어 둔 문이었다. SD는 PID 1의 시그널 경로를
+안 건드리기로 정하면서 다시 열릴 조건을 둘 적었고("bash를 고치기로 하거나,
+종료가 늘 3초 걸리는 것을 고치기로 하면"), BH가 앞의 하나를 SL이 뒤의
+하나를 집었다. 본문은 `docs/decisions/project_shutdown_latency.md`에 있다.
 
-⚠ BB가 착수할 때 쓴 전제 하나가 틀렸고 M2를 끝낸 뒤에 찾았다. "게이트에
-bash로 뜨는 부팅이 없다"고 적었는데 `power` 체인의 첫 부팅이 `shell=bash`로
-뜬다(`power/make_disk.sh`가 그 줄을 심는다. `kill` 빌트인 때문이다). 그
-체인이 보는 것은 로그의 `config shell=bash`와 화면의 `screen>.*bash-` 둘이고
-셸 자신의 성질은 안 본다. 그래서 BB가 세운 것은 자리가 아니라 판정이다.
-`/dev/fd` 한 줄이 넷을 지나도록 안 보인 이유도 "자리가 없다"가 아니라
-"그 화면을 프롬프트까지만 본다"였다.
+⚠ SL이 착수할 때 쓴 전제 하나가 틀렸고 M0에서 찾았다. "대화형 셸은
+SIGTERM을 무시한다"를 셋 다에 적용했는데 fish는 SIGTERM에 죽는다. 게스트의
+기본 셸이 fish이므로 설정 디스크 없이 뜨는 부팅의 종료는 원래부터 빨랐다
+(138밀리초). SD-M0이 zsh로만 재서 생긴 일반화였고,
+`project_shutdown_signals`에 정정을 달았다. 그래서 SL이 고친 것은
+`shell=zsh`와 `shell=bash`다.
 
-그 앞이 BH(bash 히스토리), 그 앞이 SD(같은 일의 zsh 판), 그 앞이 Gate
-Accuracy(GA-M0·M1), 그 앞이 Shell Memory(SM-M0~M2)다.
+그 앞이 BB(게이트의 bash production 부팅), 그 앞이 BH(bash 히스토리), 그
+앞이 SD(같은 일의 zsh 판), 그 앞이 Gate Accuracy(GA-M0·M1)다.
 
 다음 일은 아직 안 정해졌다. 아래 "바로 다음에 할 것"이 후보 목록이다.
 
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## SL이 한 일 (2026-09-13, 하루에 닫혔다)
+
+| 커밋 | 무엇 |
+|---|---|
+| `0719caf` | design. SD 결정 8이 적어 둔 "다시 열릴 조건"을 근거로 삼았다 |
+| `8aeac59` | SL-M0 plan(측정 여섯과 하네스 전문) |
+| `487ec20` | SL-M0. 실측 열하나. 그중 실측 3이 design의 전제를 고쳤다 |
+| `6fbd7e3` | SL-M1. `TERMINATION_SIGNALS`와 호스트 검사 둘 |
+
+다음 세션이 먼저 알아야 하는 다섯이다.
+
+1. fish는 SIGTERM에 죽는다. "대화형 셸은 SIGTERM을 무시한다"가 셋 다에
+   해당하지 않는다. 게스트 기본값이 fish이므로 설정 디스크 없는 부팅은
+   원래 빨랐다 — `device` 체인에 유예 음성 검사를 안 넣은 이유가 이것이다
+   (넣어도 아무것도 안 막는다).
+2. `GRACE_SECONDS = 3`은 상한이지 실제 대기가 아니다. `reapAll()`의
+   deadline이 `monotonicSeconds() + 3`인데 그 함수가 초 단위로 잘라서 실제
+   대기가 2~3초 사이에서 흔들린다. 관측값이 2495~2898밀리초였다.
+3. 반사실은 겨냥한 검사가 아니라 앞의 검사에 걸린다. `.HUP`을 뺀 사본은
+   음성 검사가 아니라 양성 검사(`missing shutdown log line`)에서 죽었다.
+   음성을 겨냥하려면 "로그는 찍되 실제로는 안 보내는" 사본이 따로 필요했다
+   (`if (sig != .HUP) _ = linux.kill(-1, sig);`).
+4. 호스트에서 `shutdown()`을 부를 수 없다. `kill(-1)`이 컨테이너를 죽이고
+   `reboot(2)`가 개발 기계를 끈다. 그래서 `power_test`의 새 검사 둘은
+   `TERMINATION_SIGNALS`라는 데이터만 보는 얇은 것이고, 진짜 판정은 게이트에
+   있다.
+5. 게이트는 이 변경으로 안 빨라진다. 정상 종료를 밟는 부팅이 셋뿐이고
+   (`device` 하나 · `power` 둘) 그중 `device`는 fish라 원래 유예를 안 썼다.
+   나머지는 전부 전원을 뽑는다. 이론상 절약이 약 15초이고 잡음이 ±3분이다.
 
 ## BB가 한 일 (2026-09-12, 하루에 닫혔다)
 
@@ -266,12 +294,18 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 24.06초다(2026-09-12,
-BB-M2 뒤). 그 앞이 BH-M2 뒤의 28분 55.53초이고 28.5초 차이인데, BB가 `config`
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 38.52초다(2026-09-13,
+SL-M2 뒤). 그 앞이 BB-M2 뒤의 29분 24.06초이고 14.46초 차이인데, SL은 시간을
+더한 것이 없고 오히려 `power` 체인의 종료 둘에서 약 5초를 아꼈어야 한다
+(SL 실측 11이 게이트 전체로 약 15초를 예상했다). 그 예상도 이 차이도 전부
+잡음 안이라 어느 쪽으로도 갈렸다고 말하지 않는다.
+
+그 앞이 BH-M2 뒤의 28분 55.53초이고 BB와 28.5초 차이인데, BB가 `config`
 체인에 부팅 하나와 타이핑 약 174키를 더해 그 체인 단독이 14.2초 길어졌고
-게이트가 그것을 세 번 돈다 — 43초가 설명되는 값이라 차이는 전부 잡음 안이다.
-그 앞이 SD-M2 뒤의 28분 14.55초, 그 앞이 GA-M1 뒤의 27분 35.61초, 그 앞이
-주석 정리 뒤의 27분 35.11초, 그 앞이 SM-M2의 28분 03.23초다. 기준선의 역사는 `project_gate_latency`에
+게이트가 그것을 세 번 돈다 — 43초가 설명되는 값이라 그 차이도 전부 잡음
+안이다. 그 앞이 SD-M2 뒤의 28분 14.55초, 그 앞이 GA-M1 뒤의 27분 35.61초,
+그 앞이 주석 정리 뒤의 27분 35.11초, 그 앞이 SM-M2의 28분 03.23초다.
+기준선의 역사는 `project_gate_latency`에
 있다 — 54분 15초에서 GL-M0~M3이 16분대로 내렸고, 그 뒤 체인이 둘 늘고
 `config`가 부팅 아홉이 되면서 다시 올라왔다. 이 게이트의 잡음이 ±3분이라
 그보다 작은 차이는 갈렸다고 말하지 않는다.
@@ -395,7 +429,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 `linked /dev/fd to /proc/self/fd`(BH-M2. `config/check.sh`의 1차가 본다) ·
 `signal handlers installed (TERM, INT)` · `ctrl-alt-del now arrives as SIGINT` ·
 `shutdown requested (action power_off)` · `shutdown requested (action restart)` ·
-`sent SIGTERM to every process` · `every child is gone (reaped N)` ·
+`sent SIGTERM to every process` · `sent SIGHUP to every process`(SL-M1.
+`power` 부팅 둘과 `device`가 본다) · `every child is gone (reaped N)` ·
 `grace period expired (reaped N)` · `sent SIGKILL to what was left` ·
 `filesystems synced` · `calling reboot(POWER_OFF)` · `calling reboot(RESTART)` ·
 `giving up on terminal` · `started terminal`(개수 3) ·
@@ -662,6 +697,30 @@ ptyclose가 된다. 그 오류를 알려 주는 것은 SIGKILL 칸이다 — 핸
 `olddefconfig`를 견뎠다. 끈 항목에 `depends on`으로 딸린 것은 심볼째 없어져
 `.config`에서 줄이 사라진다 — `ACPI_EC_DEBUGFS`가 그랬다.
 
+36. fish는 SIGTERM에 죽는다 (SL 실측 3). "대화형 셸은 SIGTERM을 무시한다"가
+셋 다에 해당하지 않는다 — zsh와 bash만 그렇다. SD-M0이 zsh로만 재서 생긴
+일반화였고 `project_shutdown_signals`에 정정이 달려 있다. 게스트 기본값이
+fish이므로 설정 디스크 없이 뜨는 부팅의 종료는 원래부터 138밀리초였다.
+
+37. `GRACE_SECONDS = 3`은 상한이지 실제 대기가 아니다 (SL 실측 7).
+`reapAll()`의 deadline이 `monotonicSeconds() + 3`인데 그 함수가 초 단위로
+자르므로, 끝까지 가더라도 실제 대기가 2~3초 사이에서 흔들린다. 관측값이
+타이핑 없는 회차 2495~2506, 타이핑 둘 있는 회차 2895~2898이었다. 종료
+시각의 소수부가 유일한 변수다.
+
+38. `debugfs -R "cat <파일>" <이미지>`로 설정 디스크를 부팅 없이 읽는다
+(SL-M0 측정 6). 컨테이너에 e2fsprogs 1.47.2가 있어서
+`/usr/sbin/debugfs`가 선다. `config` 체인처럼 "고치고 다시 부팅해서 읽는"
+두 부팅이 필요 없다 — 끈 뒤에 호스트에서 바로 본다. `ls -l /`을 함께
+찍어 두면 파일 이름이 틀렸을 때 바로 갈린다.
+
+39. 게스트 셸에 `system_powerdown`으로 종료를 걸면 타이핑이 전혀 필요 없다
+(SL-M0). ACPI 전원 버튼이라 셸을 안 거치므로, 셸 셋을 도는 측정에서 셸마다
+다른 명령을 찾을 필요가 없다. `power` 체인이 `kill -TERM 1`을 타이핑하는
+것과 갈리는 자리이고, 그 체인이 그렇게 하는 이유는 시그널 경로 자체를
+판정하기 때문이다.
+
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `zsh -f`를 "옵션만 없는 세션"으로 쓰기(SD-M0 실측 5) — `NO_RCS`가 히스토리
@@ -680,6 +739,14 @@ ptyclose가 된다. 그 오류를 알려 주는 것은 SIGKILL 칸이다 — 핸
   통과했지만 운이었다. bash는 프롬프트가 `bash-5.2#`로 바뀌므로
   `wait_for_screen`으로 기다릴 수 있다. zsh는 프롬프트가 같아서 못 기다리고,
   그럴 때는 판정이 실패했을 때 조용하지 않은지를 대신 확인한다.
+- 반사실이 겨냥한 검사에 걸릴 것이라고 믿기(SL-M2) — 앞의 검사가 먼저
+  죽인다. `.HUP`을 뺀 사본으로 음성 검사(`grace period expired`)를 겨냥했는데
+  체인이 양성 검사(`missing shutdown log line: sent SIGHUP …`)에서 죽었다.
+  판정 목록이 음성보다 앞에 있기 때문이다. 음성을 겨냥하려면 앞의 검사를
+  통과시키는 반사실이 따로 필요하다 — 여기서는 "로그는 찍되 실제로는 안
+  보내는" 사본이었다(`if (sig != .HUP) _ = linux.kill(-1, sig);`). 그 회차에서
+  marker에 `found … sent SIGHUP …`이 찍힌 채로 음성이 잡았고, 그것이 검사
+  둘이 서로 다른 것을 본다는 증명이다.
 - 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — 씨앗에서
   `setopt` 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에 죽여서
   게이트가 그 줄을 보는 자리까지 못 간다. 그 loop 한 줄도 함께 눕힌 사본을
@@ -893,12 +960,7 @@ SM이 남긴 것.
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(비목표 2 —
       TUI라 체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
 
-SD가 남긴 것 — SD design의 비목표다.
-
-- [ ] 종료가 늘 3초 걸리는 것(SD 비목표 8). 대화형 셸이 SIGTERM을 무시하므로
-      `power.zig`의 `GRACE_SECONDS = 3`을 매번 꽉 쓴다. 고치려면 SD 결정 8
-      (PID 1이 SIGHUP을 보내는 것)을 여는 일이고, PM·BF 체인이 보는 종료
-      로그와 감독 루프의 계약을 다시 여는 일이다.
+SD가 남긴 것은 SL이 집어서 끝냈다(아래 "끝난 숙제").
 
 HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 집어서 끝냈다).
 
@@ -952,6 +1014,10 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   7차가 중첩 bash 둘로 판정한다. 같은 기억 파일에 이어 적었다.
 - ~~게스트에 `/dev/fd`가 없어서 씨앗의 fzf 훅이 에러를 찍던 것~~ — BH-M2가
   찾아서 고쳤다. `main.zig`의 `linkDevFd()`. `project_measuring_shells`.
+- ~~종료가 늘 3초 걸리던 것~~ — SL-M0~M2(2026-09-13)가 서브프로젝트로 했다.
+  `shutdown()`이 SIGTERM 뒤에 SIGHUP도 보낸다. `shell=zsh`와 `shell=bash`의
+  종료가 2.9초에서 0.13초가 됐고, `power` 체인이 유예 만료를 실패로
+  판정한다. `project_shutdown_latency`.
 - ~~게이트에 bash로 뜨는 부팅이 없던 것~~ — BB-M0~M2(2026-09-12)가
   서브프로젝트로 했다. `config` 체인의 9차가 `shell=bash`로 뜨고, 중첩으로는
   볼 수 없던 여섯을 본다. `project_bash_boot`.
@@ -1050,11 +1116,16 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   아니다, RM).
 - `devices.zig` — 입력 장치를 번호가 아니라 capability로 찾는다. 탐색은 버그
   없이도 실패한다(USB 키보드가 비동기 열거라 최대 3초까지 다시 본다).
-- `power.zig` — 시그널·ACPI·종료 경로. `kill(-1, .TERM)` → `GRACE_SECONDS = 3`
-  → `kill(-1, .KILL)`이고, 대화형 셸은 TERM을 무시하므로 유예를 매번 꽉 쓴다
-  (178줄의 주석이 그것을 적고 있다). 그 셋이 두 자식에게 다르게 닿는다 —
-  화면 셸은 `terminal`이 죽어 PTY가 닫히면서 SIGHUP을 받고, 콘솔 셸은 받을 데가
-  없어 SIGKILL에 죽는다. 저장되는 것과 사라지는 것이 거기서 갈린다
+- `power.zig` — 시그널·ACPI·종료 경로. `TERMINATION_SIGNALS`(`.TERM` 다음
+  `.HUP`) → `GRACE_SECONDS = 3` → `kill(-1, .KILL)`이다. SL-M1 전에는 TERM만
+  보냈고 콘솔 셸이 그것을 무시해 유예를 매번 꽉 썼다 — 지금은 SIGHUP이 그
+  셸도 그 자리에서 죽이므로 유예가 상한으로만 남는다. 그 상수의 순서가
+  계약이고 `power_test`의 검사 7·8이 그것을 본다
+  (`project_shutdown_latency`).
+
+  두 자식에게 시그널이 다르게 닿는 것은 그대로다 — 화면 셸은 `terminal`이
+  죽어 PTY가 닫히면서 커널의 SIGHUP도 받고, 콘솔 셸은 `/dev/console`을 잡고
+  있어 닫힐 PTY가 없다. 그 비대칭을 메운 것이 SL이다
   (`project_shutdown_signals`).
 - `config_test.zig`의 `expectQuietSeed` — 씨앗 rc가 부팅할 때 한 글자도
   안 찍는 것을 호스트에서 막는다. 쓸 수 있는 줄은 주석 · `alias` · `command -v`
@@ -1085,6 +1156,13 @@ HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 
   `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — 씨앗의 옵션이 칠 때마다 쓰므로
   필요 없고, 그 명령이 다른 세션의 줄을 지워서 7차의 새 검사를 망가뜨린다.
   7차의 중첩 zsh 둘과 판정 셋(`neg0`·`aft1`·`pos1`)이 그 자리에 있다.
+- `power/check.sh` — 부팅 둘(끄기 · 재시작). 종료 판정이 여기 모여 있다.
+  부팅 1에 음성 검사 둘이 있다(SL-M2) — `grace period expired`가 없을 것,
+  `sent SIGKILL to what was left`가 없을 것. 그 자리는 원래 `note:`만 찍고
+  어느 쪽이든 통과시키던 `if`/`else`였다. 양성 `sent SIGHUP to every process`
+  는 부팅 둘과 `device`가 본다. `device`에 음성이 없는 이유는 그 체인이
+  fish로 뜨기 때문이고(SIGHUP을 빼도 초록이다), 그 근거가 체인 파일의
+  주석에 있다.
 - `copy/check.sh` — 검사 스물. `key_lines`(절대값으로 키를 세면 안 된다 —
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은

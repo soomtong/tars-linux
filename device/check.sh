@@ -93,6 +93,7 @@ report_failure() {
     "tars-init: power button pressed" \
     "tars-init: shutdown requested (action power_off)" \
     "tars-init: sent SIGTERM to every process" \
+    "tars-init: sent SIGHUP to every process" \
     "tars-init: filesystems synced" \
     "tars-init: calling reboot(POWER_OFF)" \
     "reboot: Power down"; do
@@ -213,10 +214,17 @@ for marker in \
   "tars-init: power button pressed" \
   "tars-init: shutdown requested (action power_off)" \
   "tars-init: sent SIGTERM to every process" \
+  "tars-init: sent SIGHUP to every process" \
   "tars-init: filesystems synced" \
   "tars-init: calling reboot(POWER_OFF)"; do
   grep -q "$marker" "$LOG" || report_failure "missing shutdown log line: ${marker}"
 done
+
+# power 체인에는 유예 만료를 보는 음성 검사가 둘 있는데 여기에는 없다.
+# 이 체인은 설정 디스크 없이 떠서 셸이 fish이고, fish는 SIGTERM만으로도
+# 죽는다(SL-M0 실측 3). 그래서 여기 넣은 음성 검사는 SIGHUP을 도로 빼도
+# 초록이다 — 아무것도 안 막으면서 막는 것처럼 보이게 된다. 위의 양성 한 줄은
+# 그렇지 않다: SIGHUP을 빼면 그 줄이 사라지므로 이 체인도 함께 빨개진다.
 
 # 커널 쪽 증거(kernel/reboot.c:711).
 grep -q "reboot: Power down" "$LOG" \

@@ -88,6 +88,7 @@ report_failure() {
     "terminal: screen>" \
     "tars-init: shutdown requested" \
     "tars-init: sent SIGTERM to every process" \
+    "tars-init: sent SIGHUP to every process" \
     "tars-init: every child is gone" \
     "tars-init: filesystems synced" \
     "tars-init: calling reboot" \
@@ -188,6 +189,7 @@ for marker in \
   "tars-init: signal handlers installed (TERM, INT)" \
   "tars-init: shutdown requested (action power_off)" \
   "tars-init: sent SIGTERM to every process" \
+  "tars-init: sent SIGHUP to every process" \
   "tars-init: every child is gone" \
   "tars-init: filesystems synced" \
   "tars-init: calling reboot(POWER_OFF)"; do
@@ -229,13 +231,31 @@ fi
 grep -q "reboot: Power down" "$LOG" \
   || report_failure "the kernel never reported 'Power down'"
 
-# 관측만 하는 줄. 셸이 SIGTERM을 무시하는 것이 정상이므로 이 줄이 나오는
-# 것은 실패가 아니다. 어느 경로였는지 사람이 알 수 있게 남긴다.
+# 음성 검사 5 — 유예가 만료되면 안 된다.
+#
+# SL-M1 전에는 이 줄이 나오는 것이 정상 경로였다. 콘솔 셸이 SIGTERM을
+# 무시하고(POSIX) 3초를 버틴 뒤 SIGKILL에 죽었고, 그래서 모든 종료가
+# 2.9초였다(SL-M0 실측 1). 지금은 shutdown()이 SIGHUP도 보내므로 셸 셋이
+# 전부 그 자리에서 죽는다(실측 4. 0.13초).
+#
+# 이 줄이 다시 나오면 둘 중 하나다 — SIGHUP이 안 나갔거나, SIGHUP에도 안
+# 죽는 자식이 새로 생겼거나. 어느 쪽이든 사람이 전원 버튼 앞에서 3초를
+# 기다리게 된다.
 if grep -q "tars-init: grace period expired" "$LOG"; then
-  echo "note: the grace period expired and SIGKILL finished the job (this is the normal path)"
-else
-  echo "note: every child died from SIGTERM alone"
+  report_failure "the grace period expired; something outlived SIGTERM and SIGHUP"
 fi
+
+# 음성 검사 6 — 죽일 것이 남으면 안 된다.
+#
+# 위와 같은 말의 다른 쪽이다. 둘을 따로 보는 이유는 reapAll()이 아예 안
+# 불린 경우를 가르기 위해서다(design 결정 5) — 그 경우에는 유예도 안
+# 만료되고 SIGKILL도 안 나가지만, 그것은 "잘 끝났다"가 아니라 "종료 순서가
+# 안 돌았다"이다.
+if grep -q "tars-init: sent SIGKILL to what was left" "$LOG"; then
+  report_failure "SIGKILL was needed; the shutdown did not end on its own"
+fi
+
+echo "note: every child died inside the grace period"
 
 echo "boot 1/2 PASS: the guest shut itself down from a shell command"
 
@@ -277,6 +297,7 @@ report_failure_a() {
     "tars-init: ctrl-alt-del now arrives as SIGINT" \
     "terminal: screen>" \
     "tars-init: shutdown requested (action restart)" \
+    "tars-init: sent SIGHUP to every process" \
     "tars-init: every child is gone" \
     "tars-init: filesystems synced" \
     "tars-init: calling reboot(RESTART)" \
@@ -363,7 +384,7 @@ done
 [ "${BOOTS:-0}" -ge 2 ] \
   || report_failure_a "the guest never came back up after ctrl-alt-delete"
 
-# ★ 이 여섯 줄이 "재부팅됐다"와 "우리를 거쳐 재부팅됐다"를 가른다. 이것들
+# ★ 이 일곱 줄이 "재부팅됐다"와 "우리를 거쳐 재부팅됐다"를 가른다. 이것들
 #   없이 위의 BOOTS >= 2만 보면, reboot(CAD_OFF)를 한 줄도 안 쓴 상태에서도
 #   게이트가 통과한다 — 커널이 직접 재부팅해도 게스트는 다시 뜨기 때문이다.
 for marker in \
@@ -371,6 +392,7 @@ for marker in \
   "tars-init: ctrl-alt-del now arrives as SIGINT" \
   "tars-init: shutdown requested (action restart)" \
   "tars-init: sent SIGTERM to every process" \
+  "tars-init: sent SIGHUP to every process" \
   "tars-init: filesystems synced" \
   "tars-init: calling reboot(RESTART)"; do
   grep -q "$marker" "$LOG_A" || report_failure_a "missing restart log line: ${marker}"
