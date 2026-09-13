@@ -63,14 +63,16 @@ fn expect(text: []const u8, want: config.Config) !void {
         // 아무것도 안 보고 초록으로 지나간다 — 이 함수의 머리 주석이
         // HI-M2에 대해 적어 둔 것과 글자 그대로 같은 자리다.
         got.shell_config == want.shell_config and
+        // NW-M2: 일곱째 필드. SC-M0이 여섯째에 대해 적어 둔 것과 같은 자리다.
+        got.net == want.net and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
     var got_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     var want_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -79,12 +81,14 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(got.latin_layout),
             got.hangul_toggle.arg(&got_buf),
             @tagName(got.shell_config),
+            @tagName(got.net),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
             @tagName(want.latin_layout),
             want.hangul_toggle.arg(&want_buf),
             @tagName(want.shell_config),
+            @tagName(want.net),
         },
     );
     return error.UnexpectedConfig;
@@ -588,6 +592,16 @@ pub fn main() !void {
     // 다른 키와 섞여도 각자 선다. 깨진 줄 하나가 파일 전체를 무효로 만들지
     // 않는다는 성질이 여섯째 키에도 그대로 적용된다.
     try expect("shell=zsh\nshell_config=off\n", .{ .shell = .zsh, .shell_config = .off });
+
+    // ── NW-M2: 일곱째 키 ────────────────────────────────────────────────
+    //
+    // 여섯째와 완전히 같은 모양이다. 다른 것은 기본값이 켜짐이 아니라
+    // 꺼짐이라는 것 하나뿐이고, 그래서 둘째 줄의 기대값이 `.{}`다.
+    try expect("net=dhcp\n", .{ .net = .dhcp });
+    try expect("net=off\n", .{});
+    try expect("net=on\n", .{}); // enum에 없는 값
+    try expect("net=\n", .{}); // 값 없음
+    try expect("shell=zsh\nnet=dhcp\n", .{ .shell = .zsh, .net = .dhcp });
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //

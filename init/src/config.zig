@@ -20,6 +20,19 @@ pub const ShellConfig = enum {
     off,
 };
 
+/// 이 기계가 네트워크를 켜는가(NW design 결정 5).
+///
+/// 기본값이 `off`인 것이 게이트를 지킨다. 부팅 수십 개가 전부 DHCP 응답을
+/// 기다리면 시간이 늘고 잡음도 는다 — 기본값을 꺼짐으로 두고 네트워크 체인만
+/// 켜면 기존 부팅의 시간이 한 밀리초도 안 는다.
+///
+/// `static:...` 같은 셋째 값은 안 만든다. 만들 근거가 아직 없고, 쓸 자리가
+/// 생기면 그때 더한다.
+pub const Net = enum {
+    off,
+    dhcp,
+};
+
 /// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). `tars.conf`를 이기는
 /// 것은 이 키 하나뿐이다 — 우선순위는 cmdline > tars.conf > 기본값이고,
 /// 다른 다섯 키는 cmdline을 안 본다. 그 예외의 근거는 하나다: *"`tars.conf`를
@@ -613,6 +626,10 @@ pub const Config = struct {
     /// embedded 장비의 init 1으로 쓰는 사람은 `keyboard=pc`를 적듯 `off`를
     /// 명시적으로 적는다(design 비목표 4).
     shell_config: ShellConfig = .on,
+    /// 기본값이 `off`인 유일한 키다. 다른 여섯은 "이 기계를 쓰는 사람이
+    /// 쓰는 것"이 기본값인데(keyboard=apple · hangul_layout=shin_pcs),
+    /// 이 키는 근거가 다르다 — 켜는 비용이 부팅마다 붙기 때문이다.
+    net: Net = .off,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -740,6 +757,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "net")) {
+            // shell·keyboard·자판 둘·shell_config와 완전히 같은 모양이다.
+            c.net = std.meta.stringToEnum(Net, value) orelse {
+                std.debug.print("tars-init: unknown net '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.net),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -789,6 +814,10 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   홈에는 링크만 있다 — /config/bashrc · /config/zshrc ·
         \\#   /config/fish.config. off면 셸이 설정 없이 뜬다
         \\shell_config={s}
+        \\# net: off | dhcp
+        \\#   dhcp면 init이 eth0을 UP으로 올리고 dhcpcd를 띄운다. 주소도
+        \\#   라우트도 /etc/resolv.conf도 dhcpcd가 쓴다
+        \\net={s}
         \\
     , .{
         @tagName(c.shell),
@@ -797,6 +826,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.latin_layout),
         c.hangul_toggle.arg(&toggle_buf),
         @tagName(c.shell_config),
+        @tagName(c.net),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의
