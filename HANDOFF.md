@@ -1,32 +1,73 @@
-# HANDOFF: SL이 닫혔다 — 다음 서브프로젝트를 고르는 자리다
+# HANDOFF: Guest Network(NW)를 열었다 — design과 M0 plan이 섰고, 다음은 M0 실행이다
 
 ## 지금 어디인가
 
-Shutdown Latency(SL)가 2026-09-13에 M0·M1·M2를 다 끝내고 닫혔다. PID 1이
-종료할 때 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가
-0.13초가 됐고, 게이트가 `grace period expired`를 실패로 판정한다. 실측
-열하나가 design에 있다
-(`docs/superpowers/specs/2026-09-13-tars-shutdown-latency-design.md`).
+새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸다. design과 NW-M0
+plan까지 커밋됐고 코드는 한 줄도 안 들어갔다. 바로 다음 할 일은 NW-M0을
+Task 0부터 돌리는 것이다 (아래 "바로 다음에 할 것").
 
-SL은 SD가 자기 결정 8에서 열어 둔 문이었다. SD는 PID 1의 시그널 경로를
-안 건드리기로 정하면서 다시 열릴 조건을 둘 적었고("bash를 고치기로 하거나,
-종료가 늘 3초 걸리는 것을 고치기로 하면"), BH가 앞의 하나를 SL이 뒤의
-하나를 집었다. 본문은 `docs/decisions/project_shutdown_latency.md`에 있다.
+무엇을 세우는 일인가. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가
+주소를 받고 밖으로 나간다. 기본값은 꺼짐이라 기존 부팅 아홉과 체인 열하나는
+한 밀리초도 안 늘어난다. 커널에 `CONFIG_NET`을 켜고 virtio-net을 붙인 다음,
+인터페이스를 올리는 `ioctl` 한 조각만 우리가 쓰고 주소를 받는 일은 `dhcpcd`
+에게 맡긴다.
 
-⚠ SL이 착수할 때 쓴 전제 하나가 틀렸고 M0에서 찾았다. "대화형 셸은
-SIGTERM을 무시한다"를 셋 다에 적용했는데 fish는 SIGTERM에 죽는다. 게스트의
-기본 셸이 fish이므로 설정 디스크 없이 뜨는 부팅의 종료는 원래부터 빨랐다
-(138밀리초). SD-M0이 zsh로만 재서 생긴 일반화였고,
-`project_shutdown_signals`에 정정을 달았다. 그래서 SL이 고친 것은
-`shell=zsh`와 `shell=bash`다.
+이 방향은 사용자가 골랐다. 이월 숙제에 없던 축이고, 후보를 제시했을 때
+"한글 기호 확장은 당분간 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도
+당분간 고려 대상 아님. 네트워킹 기능관련된 영역으로 고려해 보자"고 정했다.
+그래서 아래 "이월 숙제"에서 HI 후속 둘을 뺐다.
 
-그 앞이 BB(게이트의 bash production 부팅), 그 앞이 BH(bash 히스토리), 그
-앞이 SD(같은 일의 zsh 판), 그 앞이 Gate Accuracy(GA-M0·M1)다.
-
-다음 일은 아직 안 정해졌다. 아래 "바로 다음에 할 것"이 후보 목록이다.
+그 앞이 SL(종료가 늘 3초 걸리던 것), 그 앞이 BB(게이트의 bash production
+부팅), 그 앞이 BH(bash 히스토리), 그 앞이 SD(같은 일의 zsh 판), 그 앞이
+Gate Accuracy(GA-M0·M1)다.
 
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## NW가 지금까지 한 일 (2026-09-13, 아직 열려 있다)
+
+| 커밋 | 무엇 |
+|---|---|
+| `9432ff2` | design. 그리고 기억 `project_write_or_reuse` |
+| `f7e61d1` | NW-M0 plan(측정 일곱과 하네스 전문) |
+| `6c9a5a2` | 도구 넷을 바이너리의 실제 의존으로 다시 재고 design의 틀린 비용표를 고쳤다 |
+
+착수 전에 확인한 것이 열이고 전부 design에 있다. 다음 세션이 먼저 알아야
+하는 여섯은 이것이다.
+
+1. 패키지 의존과 바이너리 의존은 다르다. 이것 하나가 design의 비용표를
+   통째로 갈아 치웠다. `dhcpcd-base`는 `libssl3t64`와 `libudev1`을 요구하지만
+   `dhcpcd` 바이너리가 실제로 부르는 것은 `libcrypto.so.3`와 `libc.so.6`
+   둘뿐이고 둘 다 게스트에 이미 있다. `libssl`·`libudev`는 `dlopen`으로
+   열리는 udev 플러그인 몫이라 `copy_lib_deps`가 따라오지도 않는다. 그래서
+   dhcpcd의 비용이 388KB에 새 라이브러리 0개다. 도구를 저울질할 때는
+   `apt-cache show`의 `Installed-Size`가 아니라 `readelf -d`의 `DT_NEEDED`를
+   본다.
+2. `copy_lib_deps`는 `ldd`가 아니라 `readelf`를 쓴다. `ldd`는 대상 바이너리를
+   실제 동적 로더에 태우는 것이라 arm64 컨테이너에서 x86_64 바이너리에 못
+   쓴다(UT-M1이 바꿨다). 그 결과 `dlopen`으로 열리는 것은 영영 안 잡히고,
+   `make_initrd.sh`가 zsh 모듈에 대해 이미 그 문제를 손으로 다루고 있다.
+3. 컨테이너에 리스너로 쓸 것이 하나도 없다. `nc`·`ncat`·`socat`·`python3`·
+   `busybox` 전부 없고 bash의 `/dev/tcp`는 거는 것만 된다. 그래서 게이트
+   판정을 QEMU의 `guestfwd`로 한다 — 게스트가 `10.0.2.100:8080`에 붙으면
+   QEMU가 지정한 명령의 출력을 흘려 넣는다. 듣는 프로세스가 없으므로 체인이
+   관리할 상태가 안 늘고, QEMU가 사라지면 함께 사라진다.
+4. `install_tool`은 sysroot에 파일이 없으면 죽는다. 그래서 도구를 넣으려면
+   `devcontainer/Dockerfile`을 고쳐 이미지를 다시 구워야 한다(RM design 위험
+   5가 같은 비용을 겪었다). NW-M0은 그 비용을 안 치른다 — 측정 컨테이너
+   안에서 `dpkg -x`로 sysroot에 임시로 풀고 `--rm`으로 버린다.
+5. Debian의 `/usr/bin/nc`는 alternatives 링크라 `dpkg -x`로 푼 sysroot에
+   없다. 실체는 `nc.traditional`이다. UT-M3이 `pager`에서 겪은 것과 같은
+   함정이고(`vi`·`editor`도 같은 자리), M2에서 `make_initrd.sh`에 링크 한
+   줄이 필요하다.
+6. 게스트 glibc가 2.41이라 `nss_dns`가 `libc.so.6` 안에 들어 있다.
+   `_nss_dns_gethostbyname2_r` 심볼을 직접 확인했다. 그래서 `libnss_dns.so.2`
+   를 따로 넣을 필요가 없다 — 만약 2.34 이전이었다면 그 파일은 `DT_NEEDED`에
+   안 나와서 `copy_lib_deps`가 절대 못 잡았을 것이다. 남은 변수는
+   `/etc/nsswitch.conf`가 없을 때의 glibc 내장 기본값 하나이고 M0의 측정 6이
+   본다.
+
+## SL이 한 일 (2026-09-13, 하루에 닫혔다)
 
 ## SL이 한 일 (2026-09-13, 하루에 닫혔다)
 
@@ -36,6 +77,8 @@ SIGTERM을 무시한다"를 셋 다에 적용했는데 fish는 SIGTERM에 죽는
 | `8aeac59` | SL-M0 plan(측정 여섯과 하네스 전문) |
 | `487ec20` | SL-M0. 실측 열하나. 그중 실측 3이 design의 전제를 고쳤다 |
 | `6fbd7e3` | SL-M1. `TERMINATION_SIGNALS`와 호스트 검사 둘 |
+| `6fb6ab5` | SL-M2. 게이트가 `grace period expired`를 실패로 판정한다 |
+| `e5d8ee6` | SL과 별개의 정리. 게스트 도구 목록과 sysroot에서 `procs`를 뺐다(층 2가 열셋에서 열둘이 됐다) |
 
 다음 세션이 먼저 알아야 하는 다섯이다.
 
@@ -231,27 +274,36 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — 다음 서브프로젝트를 고른다
+## 바로 다음에 할 것 — NW-M0을 Task 0부터 돌린다
 
-BB가 닫혔으므로 손에 든 일이 없다. 후보는 아래 "이월 숙제"이고, 사용자가
-고른 뒤 design부터 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
+plan은 `docs/superpowers/plans/2026-09-13-tars-guest-network-nw-m0.md`에 있고
+Task 일곱에 하네스 전문까지 들어 있다. 사용자가 plan을 승인했고, 남은 것은
+실행이다.
 
-무엇을 고르든 먼저 할 것 하나. 이 저장소의 서브프로젝트 스물다섯이
-`docs/superpowers/specs/`에 날짜순으로 있고, 실제로 서 있는 것의 목록은
-`check.sh`의 `CHAINS` 배열이 가장 정확하다 — 게이트가 매번 돌리는 목록이라
-낡을 수가 없다.
+M0은 추적되는 저장소 파일을 한 글자도 안 바꾼다(design 결정 8). 실험용
+`.config`와 `guest_tools.sh`를 `/tmp/nw/`에 만들어 `-v`로 읽기 전용
+마운트한다. 되돌리는 것을 잊을 수가 없는 이유는 `kernel/build.sh`가
+`.config`와 자기 자신의 sha256을 산출물 옆에 적어 두기 때문이다 — 마운트를
+풀면 해시가 원래대로 돌아가서 다음 빌드가 알아서 다시 돈다.
 
-셸의 히스토리는 셋 다 끝났다. fish는 애초에 이 문제가 없었고(SD 실측 8),
-zsh는 SD가, bash는 BH가 했다. 그래서 이 방향으로 남은 것은 SD 비목표 8
-하나다 — 종료가 늘 3초 걸리는 것이고, 그것은 PID 1의 시그널 경로를 여는
-일이라 PM·BF 체인이 보는 종료 로그와 감독 루프의 계약을 다시 여는 크기다.
+Task 순서와 무엇을 재는지는 이렇다.
 
-BH가 열어 둔 문은 BB가 닫았다. 이제 게이트에 bash로 뜨는 부팅이 하나 있다.
-그 자리에서 새로 나온 것은 없었다 — 씨앗은 production 부팅에서도 조용했고
-`/dev/fd`가 이미 서 있었다. 남은 방향 하나는 `shell=bash`와
-`shell_config=off`를 함께 주는 부팅(`--norc`)인데 BB 비목표 1이 값이 낮다고
-적어 두었다. 탈출로의 값은 5차·6차가 zsh로 이미 증명했고, 열리는 것이
-"bash가 `--norc`를 받으면 rc를 안 읽는가" 하나이며 그것은 우리 코드가 아니다.
+| Task | 무엇 | 주의 |
+|---|---|---|
+| 0·1 | `/tmp/nw/` 준비와 실험용 `.config` | 정규식이 `CONFIG_UNIX98_PTYS`를 안 지우는지 Step 2가 본다 |
+| 2 | 측정 1 — NET 커널의 빌드 시간과 크기 | 시간을 모른다. Bash 도구 10분 타임아웃을 넘길 수 있어 `run_in_background`로 돌린다 |
+| 3 | 측정 2 — `device` 체인이 NET 커널에서 안 바뀌는지 | design 결정 3이 "virtio-net만 켜면 QEMU 기본 e1000을 게스트가 못 본다"를 전제로 서 있는데 그것이 읽어서 안 것이다. 틀리면 체인 열 개에 `-net none`을 더해야 한다 |
+| 4 | 측정 3·7 — 도구 넷이 데려오는 것과 initrd 크기 | `nc`가 아니라 `nc.traditional`로 적는다(위 5번) |
+| 5·6 | 측정 4·5·6 — 게스트를 한 번 띄워 dhcpcd·TCP·이름 해석·시그널 | FIFO 경로다. `exec 4<>`로 열고 `-monitor none`을 함께 준다 |
+| 7 | design에 실측 절을 붙이고 커밋 | 전제를 고친 실측에는 `⚠` 정정을 단다(SL-M0이 그렇게 했다) |
+
+M0이 끝나면 M1(커널과 QEMU 줄) · M2(`net=` 설정과 dhcpcd와 도구) ·
+M3(열두번째 체인 `net/check.sh`)이 남는다. M1 plan은 M0이 끝난 시점에 새로
+쓴다(`CLAUDE.md`의 milestone 규칙).
+
+M0이 열어 둔 채로 M2에 넘기는 판단이 둘이다. 하나는 dhcpcd를 감독 루프에
+넣을지(design 결정 9. SIGTERM·SIGHUP 반응을 보고 정한다), 다른 하나는
+`/etc/resolv.conf`를 dhcpcd의 hook이 쓰게 둘지 init이 직접 쓸지다.
 
 ## 명령 모음
 
@@ -272,6 +324,26 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 # 루트 게이트 (약 28분)
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
+
+# NW-M0. NET 켠 커널 빌드 (시간 미상 — run_in_background로 돌린다)
+{ time docker run --rm -v "$PWD":/workspace \
+  -v /tmp/nw/config.net:/workspace/kernel/.config:ro \
+  -w /workspace tars-devcontainer bash kernel/build.sh ; } \
+  > /tmp/nw/m1.log 2> /tmp/nw/m1.time
+
+# NW-M0. 게스트를 띄워 dhcpcd·TCP·이름 해석을 한 번에 (약 5분)
+# 하네스 전문은 plans/2026-09-13-tars-guest-network-nw-m0.md의 Task 5에 있다.
+docker run --rm -v "$PWD":/workspace -v /tmp/nw:/tmp/nw \
+  -v /tmp/nw/config.net:/workspace/kernel/.config:ro \
+  -v /tmp/nw/guest_tools.sh:/workspace/kernel/guest_tools.sh:ro \
+  -w /workspace tars-devcontainer bash /tmp/nw/guest.sh > /tmp/nw/m456.log 2>&1
+
+# 도구 하나가 실제로 부르는 것을 세기 (Installed-Size가 아니라 이것을 본다)
+docker run --rm tars-devcontainer bash -c '
+  apt-get update -qq; mkdir -p /tmp/w; cd /tmp/w
+  apt-get download -qq <패키지>:amd64 >/dev/null 2>&1
+  mkdir -p root; for d in *.deb; do dpkg -x "$d" root; done
+  readelf -d root/<경로> | sed -n "s/.*(NEEDED).*\[\(.*\)\]/  \1/p"'
 
 # 대화형 셸을 재는 컨테이너 (SD-M0. devcontainer에는 zsh도 fish도 없다)
 docker run -d --name tars-measure tars-devcontainer sleep 7200
@@ -720,6 +792,36 @@ fish이므로 설정 디스크 없이 뜨는 부팅의 종료는 원래부터 13
 것과 갈리는 자리이고, 그 체인이 그렇게 하는 이유는 시그널 경로 자체를
 판정하기 때문이다.
 
+40. 도구의 무게는 `Installed-Size`가 아니라 `readelf -d`로 잰다 (NW 착수
+조사). 패키지 의존과 바이너리 의존이 크게 다르다. `dhcpcd-base`는
+`libssl3t64`(설치 8.1MB)를 요구하지만 `dhcpcd` 바이너리는 `libcrypto.so.3`와
+`libc.so.6`만 부른다 — `libssl`은 `dlopen`으로 열리는 udev 플러그인 몫이라
+`copy_lib_deps`가 안 따라온다. `iproute2`도 패키지가 3.7MB에 의존 열둘인데
+`ip` 하나는 여섯만 부르고 그중 셋이 게스트에 이미 있다. 반대로 `curl`은
+`libcurl.so.4`가 LDAP·RTMP·brotli까지 `DT_NEEDED`에 적어 두어서 안 쓰는
+것이 전부 따라온다. 판정 명령은 위 "명령 모음"에 있다.
+
+41. 컨테이너에 TCP 리스너로 쓸 것이 하나도 없다 (NW 착수 조사). `nc`·
+`ncat`·`socat`·`python3`·`busybox` 전부 없고, bash의 `/dev/tcp`는 거는 것만
+되고 듣지는 못한다. 게스트에서 컨테이너로 연결을 받아야 하면 QEMU의
+`guestfwd`를 쓴다 —
+`-netdev user,id=n0,guestfwd=tcp:10.0.2.100:8080-cmd:cat <파일>`이면 게스트가
+그 주소에 붙을 때 QEMU가 명령을 실행해 출력을 흘려 넣는다. 듣는 프로세스가
+없으므로 체인이 관리할 상태가 안 늘고 QEMU가 사라지면 함께 사라진다.
+
+42. Debian의 alternatives 링크는 `dpkg -x`로 푼 sysroot에 없다. postinst가
+만드는 것이기 때문이다. `nc`(실체 `nc.traditional`)가 그렇고, UT-M3이
+`pager`에서 같은 것을 겪었으며 `vi`·`editor`도 같은 자리다. `install_tool`은
+없는 파일에서 죽으므로 목록에는 실체 이름을 적고, 사람이 치는 이름은
+`make_initrd.sh`에 `ln -sf`로 따로 세운다.
+
+43. 게스트 glibc는 2.41이고 `nss_files`·`nss_dns`가 `libc.so.6` 안에 있다
+(NW 착수 조사. `_nss_dns_gethostbyname2_r` 심볼을 직접 확인했다). glibc
+2.34부터의 변화라 `libnss_*.so.2`를 따로 안 넣어도 된다. 만약 그 이전
+버전이었다면 그 파일들은 `DT_NEEDED`에 안 나와서 `copy_lib_deps`가 절대 못
+잡았을 것이다 — `make_initrd.sh`가 zsh 모듈에 대해 손으로 처리하고 있는
+것과 같은 종류의 구멍이다.
+
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
@@ -953,7 +1055,7 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-BB가 닫혔으므로 아래가 다음 서브프로젝트의 후보 전부다.
+지금 손에 든 일은 NW이고, 아래는 NW가 끝난 뒤의 후보다.
 
 SM이 남긴 것.
 
@@ -962,14 +1064,25 @@ SM이 남긴 것.
 
 SD가 남긴 것은 SL이 집어서 끝냈다(아래 "끝난 숙제").
 
-HI가 남긴 것 둘 (design 비목표에서 왔다. 넷 중 둘은 SH와 IS가 집어서 끝냈다).
+NW가 열어 둘 것 (NW design의 비목표에서 온다. 아직 NW가 안 끝났으므로
+목록이 확정이 아니다).
 
-- [ ] 기호 확장. Patal의 `SymbolExtensionConfig` — 신세벌의 `ㅇ`+`ㄱ`/`ㅈ`/
-      `ㅂ` 트리거와 공세벌의 오른쪽 `ㅗ`/`ㅜ` 2단 조회다. 자판 배열 자체와
-      성질이 다른 층이라 자판 넷이 먼저 서야 얹을 자리가 생긴다.
-- [ ] Patal의 나머지 trait들. `아래아` · `수정기호` · `빠른마침표` ·
-      `옵션라틴` · `ESC라틴` · `두줄숫자` · `글자단위삭제`. HI는 자판의 기본
-      배열만 옮겼다.
+- [ ] 실머신 NIC. NW의 층 5다. 유선(`e1000e`·`igc`)은 `.config`에 드라이버를
+      켜는 일에 가깝고, 무선은 firmware 파일과 `wpa_supplicant`가 새로
+      들어오는 훨씬 큰 일이다. 사용자의 실제 노트북이 무엇을 달고 있는지
+      보고 정할 일이라 NW가 안 건드린다.
+- [ ] 패키지 매니저. 최종 비전의 "Linux용 homebrew 스타일"이고 UT 비목표
+      1이 "네트워크와 git을 둘 다 요구하므로 비목표 1 뒤다"라고 적어 둔
+      그 자리다. NW가 그 전제의 절반을 세운다.
+- [ ] IPv6 · 방화벽 · 게스트가 포트를 여는 것 · NTP. 넷 다 NW 비목표이고
+      각각의 근거가 design에 있다.
+
+HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
+마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
+다시 집게 되면 `docs/superpowers/specs/2026-09-01-tars-hangul-input-design.md`
+의 비목표 절이 그 둘을 그대로 갖고 있다(기호 확장은 Patal의
+`SymbolExtensionConfig`, 나머지 trait은 `아래아`·`수정기호`·`빠른마침표` 등
+일곱).
 
 렌더 쪽 — 둘 다 미룬 것이고 근거가 있다.
 
