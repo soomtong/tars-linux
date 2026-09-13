@@ -1104,3 +1104,27 @@ git commit -m "Hand off with an address on the guest and a chain that reads it"
 
 IPv6도 netfilter도 실머신 NIC도 여전히 비목표다. 게스트가 서버 노릇을 하는
 것(`hostfwd`)도, 시간 동기화도, 패키지 매니저도 마찬가지다.
+
+## 실제로 돌린 것이 이 plan과 갈린 자리 넷
+
+2026-09-13에 이 plan을 그대로 실행했고, 네 자리가 갈렸다. M0 plan이 세운
+관행대로 적어 둔다 — 다음 사람이 이 문서를 글자 그대로 쓰면 밟을 자리다.
+
+1. 검사 다섯이 아니라 여섯이다. plan의 검사 5(화면에서 주소 확인)가 그대로
+   돌면 죽는다 — dhcpcd가 리스를 요청하기도 전에 치기 때문이다(실측 20).
+   시리얼 로그에서 `eth0: leased`를 기다리는 검사를 그 앞에 새로 세웠고,
+   화면 판정이 검사 6으로 밀렸다. 번호가 하나씩 밀려 마지막이 검사 8이다.
+2. 반사실 사본에 `chmod +x`가 필요하다. plan의 Task 7 Step 1·2에 그 줄이
+   없어서 1회차가 `FAIL: config disk build failed`로 죽었다 — 체인이
+   `./make_disk.sh`로 부르는데 호스트에서 만든 파일이 644다.
+3. `comptime` 블록에는 `///`를 못 붙인다. plan Step 3의 제안
+   (`comptime std.debug.assert(@sizeOf(ifreq) == 32)`)을 넣되 주석을 `//`로
+   쓴다. `///`로 쓰면 `documentation comments cannot be attached to comptime
+   blocks`로 컴파일이 막힌다. 그리고 `assert`가 아니라 `@compileError`를
+   쓰는 편이 메시지를 남긴다.
+4. Task 7 Step 2의 `sed`가 지우는 줄이 넷이 아니라 아홉이다. 코드 다섯 줄과
+   주석 넷인데, 주석이 지워지는 것은 반사실에 영향이 없다. 기대값만 고친다.
+
+Task 2 Step 2의 "지운 줄이 하나도 없다"도 정확히는 한 줄이 바뀐다 —
+`libselinux1:amd64) \`에서 닫는 괄호가 다음 줄로 옮겨간다. 목록 끝에 붙이는
+구조상 불가피하고, 의도한 줄만 바뀐 것을 내용으로 확인했다.

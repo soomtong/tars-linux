@@ -1,20 +1,18 @@
-# HANDOFF: Guest Network(NW)의 M1이 끝났다 — 커널이 NIC를 보고 열두번째 체인이 그것을 말한다
+# HANDOFF: Guest Network(NW)의 M2가 끝났다 — 게스트에 주소가 붙고 체인이 그것을 읽는다
 
 ## 지금 어디인가
 
-새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸고 M0과 M1이 같은 날
-끝났다. 커널에 IPv4 스택과 virtio-net 드라이버가 정식으로 들어갔고, 새 체인
-`net/check.sh`가 게스트를 띄워 `/sys/class/net/eth0`을 본다. 루트 게이트는
-열한 체인 3/3이다(`net`은 아직 `CHAINS` 밖이다).
+새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸고 M0·M1·M2가 같은 날
+끝났다. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가 `10.0.2.15`를 받고
+`/etc/resolv.conf`가 생긴다. 체인 `net/check.sh`가 검사 여덟으로 그 사슬
+전체를 본다 — 커널의 스택부터 hook이 쓴 nameserver까지.
 
-주소는 아직 안 붙는다. `dhcpcd`도 `ip`도 게스트에 없다 — 그것이 M2다. 바로
-다음 할 일은 NW-M2의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
+우리가 쓴 코드는 `init/src/net.zig` 165줄이고 그중 주석이 100줄 남짓이다.
+실제로 하는 일은 링크를 UP으로 올리는 `ioctl` 하나와 dhcpcd를 띄우는
+`fork`/`execve` 하나다. 주소도 라우트도 `/etc/resolv.conf`도 dhcpcd가 쓴다.
 
-무엇을 세우는 일인가. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가
-주소를 받고 밖으로 나간다. 기본값은 꺼짐이라 기존 부팅 아홉과 체인 열하나는
-한 밀리초도 안 늘어난다. 커널에 `CONFIG_NET`을 켜고 virtio-net을 붙인 다음,
-인터페이스를 올리는 `ioctl` 한 조각만 우리가 쓰고 주소를 받는 일은 `dhcpcd`
-에게 맡긴다.
+루트 게이트는 열한 체인 3/3이다(`net`은 아직 `CHAINS` 밖이다). 바로 다음 할
+일은 NW-M3의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
 
 이 방향은 사용자가 골랐다. 이월 숙제에 없던 축이고, 후보를 제시했을 때
 "한글 기호 확장은 당분간 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도
@@ -40,6 +38,35 @@ Gate Accuracy(GA-M0·M1)다.
 | (M1 plan) | NW-M1 plan. design의 M1 문장 둘이 틀린 것을 먼저 갈랐다 |
 | `15b0e5a` | 커널 `.config`에 NET. 여덟 줄이 되접기를 거쳐 451줄이 됐다 |
 | `d9f3801` | `net/check.sh` 202줄. 열두번째가 될 체인이지만 아직 `CHAINS` 밖이다 |
+| `f37aae0` | M1이 마지막에 알아챈 걸림돌 — 그 체인에 설정 디스크가 없다 |
+| `c793868` | NW-M2 plan |
+| `52c2d72` | sysroot에 도구 넷과 라이브러리 스물. 이미지 재빌드가 42초였다 |
+| `725f3e1` | 게스트에 층 5(도구 여섯)와 hook 둘·디렉터리 둘·`nc` 링크 |
+| `4cd4ace` | `tars.conf`의 일곱째 키 `net`. 기본값이 `off`인 유일한 키다 |
+| `1acf9f6` | `net.zig`. 우리가 쓰는 코드 전부이고 로그 두 줄이 그 경계다 |
+| `52611a2` | 체인이 검사 여덟으로 자랐다. `net/make_disk.sh`가 설정을 미리 굽는다 |
+
+### NW-M2가 알아낸 것 — 다음 세션이 먼저 읽을 다섯
+
+본문은 design의 "NW-M2가 실행으로 증명한 것" 절에 실측 17~24로 있다.
+
+1. `started dhcpcd`와 `soliciting a DHCP lease` 사이에 간격이 있다. 시리얼
+   로그에서 앞이 256번째 줄이고 뒤가 3745번째 줄이다 — 그 사이 3500줄이
+   터미널 렌더 로그다. 그래서 프롬프트를 보자마자 `ip`를 치면 언제나 너무
+   이르고, plan에 대기가 없어서 1회차가 죽었다. 체인의 검사 5가 그 대기다.
+2. `ip -4`는 주소가 없으면 빈 출력이다. iproute2가 family 필터를 걸면 그
+   family의 주소가 없는 인터페이스를 링크 줄조차 안 찍고 생략한다 — 에러가
+   아니라 침묵이라 "명령이 실패했다"와 "아직 주소가 없다"가 화면에서 안
+   갈린다. 1회차에서 라이브러리를 먼저 의심했는데 아니었다(여섯 다 있었다).
+3. `debugfs`가 design의 갈림을 없앴다. 마운트도 loop도 특권도 없이 ext2
+   이미지에 파일을 쓴다. 그래서 `net/make_disk.sh`가 `net=dhcp` 한 줄을 담은
+   디스크를 미리 굽고, 부팅 하나로 `tars.conf`의 키를 실제로 읽는다.
+4. M0이 임시로 잰 값이 정식 경로와 바이트까지 맞았다. 압축 +5,522,562 ·
+   푼 것 103,257,440 · 라이브러리 95개 셋 다 예상 그대로다. `dpkg -x` +
+   `cp -an`으로 sysroot에 임시로 넣어 재는 방법을 믿어도 된다는 뜻이다.
+5. `/tmp` 사본에 `chmod +x`를 빼먹으면 반사실이 엉뚱한 자리에서 죽는다.
+   체인이 `./make_disk.sh`로 부르므로 권한이 없으면 `FAIL: config disk build
+   failed`가 나오고, 그 증상이 우리가 보려던 것과 아무 관계가 없다.
 
 ### NW-M1이 알아낸 것 — 다음 세션이 먼저 읽을 넷
 
@@ -333,46 +360,34 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — NW-M2의 plan을 새로 쓴다
+## 바로 다음에 할 것 — NW-M3의 plan을 새로 쓴다
 
-M1이 끝났으므로 M2 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
-M2가 하는 일은 `config.zig`에 `net` 키, `main.zig`에 링크를 올리는 `ioctl`,
-`guest_tools.sh`에 도구들, 그리고 `devcontainer/Dockerfile`에 패키지 목록이다.
-끝났다의 기준은 `net=dhcp`로 뜬 게스트가 주소를 받는 것이다.
+M2가 끝났으므로 M3 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
+M3가 하는 일은 둘이다 — `check.sh`의 `CHAINS` 배열에 `net`을 더하는 것과,
+게스트가 실제로 밖으로 나가는 것을 `guestfwd`로 판정하는 것. 끝났다의 기준은
+루트 게이트가 열두 체인을 돌고 3/3인 것이다.
 
-M2가 결정할 것이 아홉이고 M0과 M1이 전부 숫자를 붙여 두었다. design 끝의
-"M0이 M2에 넘기는 것"과 "M1이 M2에 넘기는 것" 두 표가 그 목록이다.
+design 끝의 "M2가 M3에 넘기는 것" 표가 그 목록이고, 여섯 자리에 이미 숫자가
+붙어 있다.
 
 | 무엇 | 지금 아는 것 |
 |---|---|
-| `curl`을 넣나 | 새 라이브러리 20개에 10,927,904바이트다. 게이트 판정에는 안 쓴다 |
-| `/etc/resolv.conf` | dhcpcd hook 둘(약 14KB)을 initrd에 넣는 쪽이 낫다 |
-| dhcpcd를 감독하나 | 안 해도 안전하다. 재부모화되고 SIGTERM에 죽는다 |
-| dhcpcd의 자리 | `usr/sbin/dhcpcd:usr/bin/dhcpcd`. `PATH`에 `/usr/sbin`이 없다 |
-| `nc`라는 이름 | `make_initrd.sh`에 링크 한 줄 |
-| 새로 만들 디렉터리 | `/var/lib/dhcpcd`와 `/run` |
-| Dockerfile | 도구 패키지 넷 + 라이브러리 패키지 스물 남짓 |
-| 체인의 자리 | `net/check.sh`가 이미 있다. 새로 만드는 것이 아니라 판정을 더한다 |
-| QEMU 줄 | `-netdev user,id=n0`에 M3가 `guestfwd=`를 덧붙인다. 지금은 비어 있다 |
-| 설정 디스크 | `net/check.sh`에 `-drive`가 없다. `net=dhcp`를 읽히려면 M2가 줄 하나를 더해야 한다 |
+| `CHAINS` 배열 | `net`을 더하면 열둘이 된다. 게이트가 17.082초 × 3만큼 는다 |
+| `guestfwd` | M0 실측 5가 이 QEMU에서 돈다고 쟀다. `-netdev user,id=n0`에 옵션을 덧붙인다 |
+| 판정 도구 | `nc`가 게스트에 있고 이름도 선다. bash의 `/dev/tcp`도 된다 |
+| `curl` | 들어갔지만 체인이 한 번도 안 친다. M3도 안 쳐도 된다(실측 5) |
+| 리스 대기 | 검사 5가 그 자리다. 바깥 연결을 거는 판정은 그 뒤에 온다 |
+| dhcpcd 감시 | `pgrep`·`kill`이 게스트에 있다. "살아 있나"를 물을 수 있다 |
 
-⚠ 마지막 줄이 M2의 첫 걸림돌이다. 지금 `net/check.sh`는 디스크를 하나도 안
-물어서 게스트에 `/config/tars.conf`가 아예 없다(`init/src/main.zig:147`이 그
-경로를 읽는다). M1에는 문제가 아니었다 — 커널이 장치를 봤는지만 물었기
-때문이다. M2가 고를 길 둘과 그 사이의 갈림은 design의 "M1이 M2에 넘기는 것"
-절에 적어 두었다.
+M3 plan을 쓰는 사람이 M0~M2에서 그대로 가져다 쓸 것이 셋이다.
 
-M2 plan을 쓰는 사람이 M0·M1에서 그대로 가져다 쓸 것이 셋이다.
-
-- 게스트를 FIFO로 모는 하네스. `/tmp/nw/guest.sh`에 있고, 사라졌으면 M0
-  plan의 Task 5와 그 plan 끝의 "갈린 자리 다섯"을 함께 읽어 다시 만든다
-  (원문 그대로 쓰면 `dhcpcd`를 이름으로 불러서 죽는다).
+- `guestfwd`로 판정하는 방법. M0 plan의 Task 5와 design 실측 5에 있다 —
+  게스트가 `10.0.2.100:8080`에 붙으면 QEMU가 지정한 명령의 출력을 흘려 넣는다.
+  듣는 프로세스가 없으므로 체인이 관리할 상태가 안 는다.
 - 도구를 sysroot에 임시로 넣는 절차. `docs/decisions/project_measuring_tool_cost.md`
   에 있고 `apt-cache depends --recurse` + `cp -an`이다.
-- `net/check.sh`의 반사실 방법. `/tmp` 사본을 `-v`로 덮어씌운다.
-
-M3는 그 뒤다. `check.sh`의 `CHAINS` 배열에 `net`을 더하고 판정을 `guestfwd`로
-닫는다. 체인이 열둘이 되면 게이트가 8.954초 × 3 만큼 늘어난다.
+- `net/check.sh`의 반사실 방법. `/tmp` 사본을 `-v`로 덮어씌운다. 사본에
+  `chmod +x`를 함께 친다(M2 실측 22의 함정).
 
 ### M0을 다시 돌려야 할 때 알아야 하는 것
 
@@ -398,6 +413,18 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 # 하네스 전문은 plans/2026-09-12-tars-bash-boot-bb-m0.md의 Task 1에 있다.
 docker run --rm -v "$PWD":/workspace -v /tmp/bb_m0.sh:/tmp/bb_m0.sh:ro \
   -w /workspace tars-devcontainer bash /tmp/bb_m0.sh > /tmp/bb_m0.log 2>&1
+
+# net 체인 단독 (부팅 하나, 검사 여덟, 약 17초. 아직 CHAINS 밖이다)
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash net/check.sh
+
+# 그 체인이 실패했을 때 시리얼 로그를 꺼내 오기 (통과하면 --rm과 함께 사라진다)
+docker run --rm -v "$PWD":/workspace -v /tmp/nw:/tmp/nw -w /workspace \
+  tars-devcontainer bash -c '
+  bash net/check.sh > /tmp/nw/net.log 2>&1; echo "exit=$?"
+  for f in /tmp/tmp.*; do
+    if grep -aq "tars-init" "$f" 2>/dev/null; then cp "$f" /tmp/nw/serial.log; fi
+  done'
 
 # config 체인 단독 (부팅 아홉, 약 2분 07초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -454,13 +481,19 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 49.15초다(2026-09-13,
-NW-M1 뒤 — 커널에 NET이 켜진 첫 게이트다). 그 앞이 SL-M2 뒤의 29분 38.52초이고
-차이가 +10.63초인데 잡음의 20분의 1이라 갈렸다고 말하지 않는다. NET을 켜도
-게이트가 안 길어지는 이유는 커널을 회차마다 다시 굽지 않기 때문이다(GL-M1).
+HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 53.84초다(2026-09-13,
+NW-M2 뒤 — initrd가 13MB 커진 첫 게이트다). 그 앞이 NW-M1 뒤의 29분 49.15초이고
+차이가 +4.69초인데 잡음의 38분의 1이라 갈렸다고 말하지 않는다. 그 앞이 SL-M2
+뒤의 29분 38.52초다. 커널에 NET을 켜도 initrd를 13MB 키워도 게이트가 안
+길어지는 이유는 커널을 회차마다 다시 굽지 않기 때문이다(GL-M1).
 
-⚠ `net/check.sh`는 있지만 아직 `CHAINS` 밖이다. 단독으로 8.954초에 돌고,
-게이트에 들이는 것은 NW-M3이다. 그때 열두 체인이 되고 약 27초가 는다.
+`GUEST_MEM=512`에 여유가 남아 있다. 푼 initrd가 90MB에서 103MB가 됐는데 열한
+체인 어디에서도 UT-M2가 겪은 증상이 안 나왔다 — 그 실패는 "느려짐"이 아니라
+"안 켜짐"이다(`Kernel panic - System is deadlocked on memory`).
+
+⚠ `net/check.sh`는 있지만 아직 `CHAINS` 밖이다. 단독으로 17.082초에 돌고
+(M1에서는 8.954초였다 — 디스크 굽기와 리스 대기와 타이핑 마흔 키가 늘었다),
+게이트에 들이는 것은 NW-M3이다. 그때 열두 체인이 되고 약 51초가 는다.
 
 그 앞이 BB-M2 뒤의 29분 24.06초이고 14.46초 차이인데, SL은 시간을
 더한 것이 없고 오히려 `power` 체인의 종료 둘에서 약 5초를 아꼈어야 한다
@@ -479,8 +512,10 @@ NW-M1 뒤 — 커널에 NET이 켜진 첫 게이트다). 그 앞이 SL-M2 뒤의
 
 `config` 체인 단독의 역사도 적어 둔다 — SD-M1 1분 26.01초 → SD-M2 1분
 36.42초 → BH-M1 1분 35.77초 → BH-M2 1분 52.64초 → BB-M1 1분 57.47초 →
-BB-M2 2분 06.87초. 타이핑을 더한 milestone에서만 늘었고, BB-M1이 부팅
-하나를 더하면서 4.83초만 늘어난 것은 이 체인의 잡음 폭 안이다.
+BB-M2 2분 06.87초 → NW-M2 2분 10.01초. 타이핑을 더한 milestone에서만
+늘었고, BB-M1이 부팅 하나를 더하면서 4.83초만 늘어난 것은 이 체인의 잡음 폭
+안이다. NW-M2는 이 체인에 타이핑도 부팅도 안 더했다 — 씨앗 `tars.conf`에 줄
+넷이 늘었을 뿐이고 +3.14초도 잡음 안이다.
 
 `{ time docker run ... ; } 2> /tmp/gate.time`으로 감싸면 그 파일이 docker의
 stderr도 함께 받아 200KB가 넘는다. `time`의 값은 파일 맨 끝에 있으므로
@@ -594,6 +629,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 고쳐야 한다.
 
 `linked /dev/fd to /proc/self/fd`(BH-M2. `config/check.sh`의 1차가 본다) ·
+`config shell=… net=…`(NW-M2가 그 줄의 맨 뒤를 넓혔다. `net/check.sh`의
+검사 3이 `config shell=.* net=dhcp`로 본다 — 앞부분을 고치면 다른 체인들의
+grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
+부팅도 침묵하지 않는다) · `net link eth0 is up` · `started dhcpcd on eth0`
+(NW-M2. `net/check.sh`의 검사 4가 둘 다 본다) ·
+`eth0: leased 10.0.2.15`(dhcpcd 자신의 말. 검사 5가 이것을 기다린다) ·
 `signal handlers installed (TERM, INT)` · `ctrl-alt-del now arrives as SIGINT` ·
 `shutdown requested (action power_off)` · `shutdown requested (action restart)` ·
 `sent SIGTERM to every process` · `sent SIGHUP to every process`(SL-M1.
@@ -1314,7 +1355,14 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `main.zig` — 감독 루프와 자식 둘. env 블록을 짓는 자리가 `resolveShell`
   뒤에 있다(`HISTFILE`이 셸마다 다른 파일이라 셸이 정해져 있어야 하고,
   `cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다).
-- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 여섯. `rcSeed()`가 씨앗 rc를
+- `net.zig` — 네트워크를 켜는 자리(NW-M2). `bringUp()` 하나가 진입점이고
+  `main.zig`가 `envp` 블록을 지은 뒤에 부른다 — 그 순서가 계약이다(design
+  결정 F). 앞에서 부르면 dhcpcd의 hook이 `PATH` 없이 도는데, 증상이 조용하다:
+  주소는 붙고 `/etc/resolv.conf`만 안 생긴다. `IFACE`는 상수 `eth0`이고
+  (`/sys/class/net`을 순회하려면 `getdents64`를 직접 다뤄야 한다), `ifreq`의
+  크기 32바이트를 `comptime`이 못 박는다 — 틀리면 게스트에서 `ioctl`이
+  EINVAL을 내는 것으로만 드러난다. dhcpcd는 감독 목록 밖이다(결정 9의 갈래 A).
+- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 일곱. `rcSeed()`가 씨앗 rc를
   담고 `histEntries()`가 셸마다 갈린다(zsh 셋 · bash 둘 · fish 0).
   `histOptionLines()`는 env로는 못 주는 것을 담는다(zsh 한 줄 · 나머지 0) —
   `setopt`를 나르는 환경 변수가 없어서 그 줄만 파일로 간다(SD 확인 1).
