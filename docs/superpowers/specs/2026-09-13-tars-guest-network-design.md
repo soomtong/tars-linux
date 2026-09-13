@@ -85,16 +85,34 @@ netdev 백엔드:  socket stream dgram hubport tap user l2tpv3 vde bridge ...
 빌드가 실제로 존재하는데, 이 이미지에는 있다. 이것이 없었으면 설계가
 통째로 달라졌을 자리라 먼저 확인했다.
 
-### 확인 5 — initrd에 라이브러리가 이미 72개 있고, 그중 둘이 새로 들어온다
+### 확인 5 — initrd에 라이브러리가 이미 72개 있고, dhcpcd는 그중 것만 쓴다
 
-initrd를 풀어 세어 보니 `.so`가 72개다. 이 설계에 걸리는 것이 넷이다.
+initrd를 풀어 세어 보니 `.so`가 72개다. 이 설계에 걸리는 것이 셋이다.
 
 | 라이브러리 | 있나 | 이 일에 무슨 뜻인가 |
 |---|---|---|
-| `libcrypto.so.3` | 있다 | UT가 넣은 libgit2 사슬이 데려왔다 |
-| `libresolv.so.2` | 있다 | 다만 아래가 말하는 대로 이것은 DNS의 근거가 아니다 |
-| `libssl.so.3` | 없다 | dhcpcd가 요구한다. 새로 들어온다 |
-| `libudev.so.1` | 없다 | dhcpcd가 요구한다. 새로 들어온다 |
+| `libcrypto.so.3` | 있다 | UT가 넣은 libgit2 사슬이 데려왔다. dhcpcd가 부르는 둘 중 하나다 |
+| `libresolv.so.2` | 있다 | 다만 확인 6이 말하는 대로 이것은 DNS의 근거가 아니다 |
+| `libssl.so.3` | 없다 | 처음에는 dhcpcd가 요구한다고 적었는데 틀렸다. 아래를 보라 |
+
+⚠ 이 자리에 처음 적었던 것이 틀렸고 결정 10의 측정이 고쳤다. `dhcpcd-base`
+패키지가 `libssl3t64`와 `libudev1`을 요구하는 것은 맞지만, 그것은 패키지
+의존이지 바이너리 의존이 아니다. `dhcpcd` 바이너리가 실제로 부르는 것은
+둘뿐이다.
+
+```
+usr/sbin/dhcpcd (388,416 바이트)
+  libcrypto.so.3
+  libc.so.6
+```
+
+둘 다 게스트에 이미 있다. `libssl`과 `libudev`는
+`/usr/lib/x86_64-linux-gnu/dhcpcd/dev/udev.so` 플러그인이 부르는 것이고, 그
+플러그인은 `dlopen`으로 열리는 선택적 모듈이라 우리가 안 넣으면 안 쓴다.
+`copy_lib_deps`가 `DT_NEEDED`만 따라가므로 따라오지도 않는다.
+
+그래서 결정 1이 고른 길의 비용이 예상보다 훨씬 싸다 — 388KB에 새 라이브러리
+0개다.
 
 라이브러리는 손으로 적는 것이 아니라 `make_initrd.sh`의 `copy_lib_deps`가
 자동 수집한다(UT-M1이 그렇게 바꿨다). 수집 방법이 `ldd`가 아니라 `readelf`인
@@ -365,6 +383,61 @@ B. 감독 밖에 둔다. 띄우고 잊는다. 죽어도 안 되살린다.
 dhcpcd가 SIGHUP에서 안 죽는다면 A를 고르는 순간 게이트가 빨간불이 된다.
 NW-M0의 측정이 이 선택을 정한다.
 
+### 결정 10 — 게스트에 넣을 도구는 넷이다. socat은 뺀다
+
+사용자가 `nc`와 `socat`을 검토하라고 해서 후보 전부를 같은 방법으로 쟀다.
+`readelf`로 `DT_NEEDED`를 재귀로 따라가는 것이고, `copy_lib_deps`가 쓰는 것과
+같은 방법이라야 답이 맞는다. 아래는 게스트에 이미 있는 라이브러리를 뺀
+순증가분이다.
+
+| 도구 | 바이너리 | 새로 들어오는 라이브러리 | 순증가 | 넣나 |
+|---|---|---|---|---|
+| `nc.traditional` | 35 KB | 없음 | 35 KB | 넣는다 |
+| `dhcpcd` | 388 KB | 없음 | 388 KB | 넣는다 |
+| `nc.openbsd` | 44 KB | libbsd 85 | 129 KB | 안 넣는다 |
+| `socat` | 약 400 KB | libwrap 48 · libssl 1,102 | 약 1,550 KB | 안 넣는다 |
+| `ip` | 722 KB | libbpf 424 · libelf 약 1,000 · libmnl 27 | 약 2,170 KB | 넣는다 |
+| `curl` | 322 KB | libcurl 984 외 열둘 | 약 5,940 KB | 넣는다 |
+
+`nc`는 traditional판을 쓴다. openbsd판보다 싼 이유가 분명하다 — traditional은
+`libc.so.6` 하나만 부르고 openbsd는 `libbsd.so.0`을 더 부른다. 35KB에 새
+라이브러리가 0이라 사실상 공짜이고, 네트워크가 안 될 때 "포트가 열렸나,
+연결이 되나"를 가장 빨리 가르는 도구다.
+
+`socat`은 뺀다. `nc`로 되는 일에 1.5MB를 더 쓰는 것이고, socat의 진짜 값인
+양방향 릴레이와 프록시를 이번 층에서 쓸 자리가 없다. 다만 `curl`이 들어오면
+`libssl`이 어차피 따라오므로 그때 socat의 추가 비용이 약 450KB로 줄어든다 —
+쓸 자리가 생기면 그때가 싸게 넣을 시점이라는 것을 적어 둔다.
+
+`ip`는 대안이 없어서 넣는다. `iproute2` 패키지가 3.7MB에 의존 열둘이라 처음에
+비싸 보였는데, 그 대부분은 `tc`·`ss` 같은 다른 바이너리 몫이다. `ip` 하나는
+여섯만 부르고 그중 `libselinux`·`libcap`·`libc`가 이미 있다.
+
+`curl`은 5.9MB를 알고 넣기로 사용자가 정했다. 열둘 중 큰 것이 libunistring
+1,997 · libssl 1,102 · libldap 401이고, LDAP과 RTMP와 brotli를 우리가 쓸 일은
+없는데 `libcurl.so.4`가 전부 `DT_NEEDED`에 적어 두어서 따라온다. 근거는 UT가
+libgit2 사슬 열여섯을 "네트워크가 없는 기계의 TLS·Kerberos·SSH 스택"이라며
+감수했던 것과 이어진다 — 이제 네트워크가 생기므로 그 사슬이 비로소 값을
+한다.
+
+### 결정 11 — `/usr/bin/nc`는 링크를 따로 걸어야 한다
+
+Debian에서 `/usr/bin/nc`는 alternatives가 만드는 심볼릭 링크이고, 실체는
+`/usr/bin/nc.traditional`이다. alternatives 링크는 패키지의 postinst가
+만드는 것이라 `dpkg -x`로 푼 sysroot에는 없다.
+
+그래서 `make_initrd.sh`에 링크 한 줄이 필요하다.
+
+```bash
+ln -sf nc.traditional "$WORKDIR/usr/bin/nc"
+```
+
+이것은 새로운 종류의 문제가 아니다. UT-M3이 `pager`에서 글자 그대로 같은
+것을 겪었고(`git log`가 `pager`라는 이름을 컴파일 타임에 박아 두는데 그
+링크가 sysroot에 없어서 게스트에서 죽었다), `vi`와 `editor`도 같은 자리다.
+다른 점은 이번 이름은 우리가 고르는 것이라는 점이다 — 사람이 `nc`라고 칠
+것이므로 그 이름을 세운다.
+
 ## 비목표 — 이번에 명시적으로 뺄 것
 
 1. 실머신 NIC. 유선(`e1000e`·`igc`)도 무선도 이번 범위 밖이다. 무선은
@@ -454,8 +527,13 @@ NW-M0의 측정이 이 선택을 정한다.
 넣었으니 지금 여유가 넉넉하지만, 그때 겪은 실패의 증상이 "느려짐"이 아니라
 "안 켜짐"이었다는 것을 기억해 둔다.
 
-dhcpcd 388KB와 라이브러리 둘, 그리고 `ip`와 `curl`이 더해지면 얼마나 커지는지
-NW-M0의 측정 3이 잰다.
+결정 10이 도구별로 잰 순증가분을 더하면 약 8.5MB다(`curl` 5.9 · `ip` 2.2 ·
+`dhcpcd` 0.4 · `nc` 0.04). 푼 크기의 9.9%이고 그 대부분이 `curl` 하나다.
+
+다만 이 숫자는 `.deb`를 푼 자리에서 파일 크기를 더한 것이라 실제와 다를 수
+있다. initrd는 gzip으로 묶이므로 압축이 얼마나 먹는지가 빠져 있고, 이미
+있는 라이브러리를 두 번 세지 않았는지도 확인해야 한다. NW-M0의 측정 3이
+initrd를 실제로 만들어서 before와 after를 잰다.
 
 ### 위험 4 — 기본 NIC가 기존 체인에 보인다
 

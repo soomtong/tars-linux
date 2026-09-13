@@ -217,7 +217,7 @@ Dockerfile을 고치지 않는다(design 위험 7). 측정하는 컨테이너 �
 - [ ] Step 1: 실험용 `guest_tools.sh`를 만든다
 
 배열을 닫는 `)`는 이 파일에 하나뿐이고(225줄) 그것이 파일의 마지막 줄이다.
-그래서 마지막 줄을 떼고 세 줄을 더한 뒤 다시 닫으면 된다.
+그래서 마지막 줄을 떼고 네 줄을 더한 뒤 다시 닫으면 된다.
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -227,13 +227,20 @@ head -n -1 kernel/guest_tools.sh > /tmp/nw/guest_tools.sh
 cat >> /tmp/nw/guest_tools.sh <<"EOF"
 
   # NW-M0 측정용. 저장소 파일이 아니라 /tmp 사본에만 있다.
+  # 목록은 design 결정 10이 정한 넷이다. socat은 뺐다.
   usr/sbin/dhcpcd:usr/sbin/dhcpcd
   usr/bin/ip:usr/bin/ip
   usr/bin/curl:usr/bin/curl
+  usr/bin/nc.traditional:usr/bin/nc.traditional
 )
 EOF
 '
 ```
+
+`nc`가 아니라 `nc.traditional`을 적는 것이 중요하다. Debian에서 `/usr/bin/nc`는
+alternatives가 만드는 심볼릭 링크이고 `dpkg -x`로 푼 sysroot에는 없다
+(design 결정 11). `install_tool`은 없는 파일에서 죽으므로 실체 이름을 적어야
+하고, 사람이 치는 `nc`라는 이름은 M2에서 `make_initrd.sh`에 링크로 세운다.
 
 - [ ] Step 2: 끼운 자리가 맞는지 눈으로 본다
 
@@ -241,11 +248,11 @@ EOF
 tail -8 /tmp/nw/guest_tools.sh
 echo "--- 닫는 괄호가 하나여야 한다 ---"
 grep -c '^)' /tmp/nw/guest_tools.sh
-echo "--- 줄 수가 원본 + 5 여야 한다 ---"
+echo "--- 줄 수가 원본 + 7 여야 한다 ---"
 wc -l /Users/dp/Repository/tars-linux/kernel/guest_tools.sh /tmp/nw/guest_tools.sh
 ```
 
-기대: 세 줄이 `GUEST_TOOLS=(` 배열 안, 닫는 `)` 바로 앞에 있다. 닫는 괄호가
+기대: 네 줄이 `GUEST_TOOLS=(` 배열 안, 닫는 `)` 바로 앞에 있다. 닫는 괄호가
 둘이면 `head -n -1`이 마지막 줄을 안 뗀 것이고, 그러면 배열 밖에 붙어서
 `install_tool`이 그 줄을 아예 안 본다.
 
@@ -262,17 +269,17 @@ set -e
 apt-get update -qq
 mkdir -p /tmp/debs && cd /tmp/debs
 apt-get download dhcpcd-base:amd64 iproute2:amd64 curl:amd64 \
-  libssl3t64:amd64 libudev1:amd64 2>&1 | tail -3
+  netcat-traditional:amd64 2>&1 | tail -3
 for d in /tmp/debs/*.deb; do dpkg -x "$d" "$AMD64_SYSROOT"; done
 
 echo "=== 실제 경로 확인 ==="
-for p in usr/sbin/dhcpcd usr/bin/ip sbin/ip usr/bin/curl; do
+for p in usr/sbin/dhcpcd usr/bin/ip sbin/ip usr/bin/curl usr/bin/nc.traditional; do
   printf "%-20s " "$p"
   [ -f "$AMD64_SYSROOT/$p" ] && echo "있다" || echo "없다"
 done
 
 echo "=== 각 바이너리가 직접 부르는 것 (DT_NEEDED) ==="
-for p in usr/sbin/dhcpcd usr/bin/curl; do
+for p in usr/sbin/dhcpcd usr/bin/curl usr/bin/ip usr/bin/nc.traditional; do
   [ -f "$AMD64_SYSROOT/$p" ] || continue
   echo "--- $p ---"
   readelf -d "$AMD64_SYSROOT/$p" | sed -n "s/.*(NEEDED).*\[\(.*\)\]/\1/p"
@@ -297,7 +304,7 @@ set -e
 apt-get update -qq
 mkdir -p /tmp/debs && cd /tmp/debs
 apt-get download dhcpcd-base:amd64 iproute2:amd64 curl:amd64 \
-  libssl3t64:amd64 libudev1:amd64 >/dev/null 2>&1
+  netcat-traditional:amd64 >/dev/null 2>&1
 for d in /tmp/debs/*.deb; do dpkg -x "$d" "$AMD64_SYSROOT"; done
 cd /workspace
 
@@ -442,6 +449,17 @@ say 'echo ===RESOLV-ABOVE==='
 
 # ── 측정 5: guestfwd로 QEMU에 붙는다 ──────────────────────────────────
 # 이름이 아니라 주소로 건다. 이 검사는 DNS와 무관해야 한다.
+#
+# nc를 먼저 치는 것이 순서의 요점이다. nc는 TCP를 열고 바이트를 읽을 뿐이라
+# 성공하면 "IP 스택이 QEMU까지 닿았다"만 말한다. curl이 성공하면 그 위에
+# HTTP 파싱까지 된 것이고, 실패하면 둘 중 어디서 실패했는지가 nc의 결과로
+# 갈린다. 한 줄만 치면 그 구분이 사라진다.
+#
+# guestfwd가 실행하는 것은 `cat`이라 HTTP 서버가 아니다. 그래서 nc는 파일
+# 내용을 그대로 받고, curl은 "HTTP 응답이 아니다"라고 불평할 수 있다 —
+# 그 불평도 연결이 됐다는 증거이므로 로그에 그대로 남긴다.
+say 'nc -w 5 10.0.2.100 8080' 10
+say 'echo ===NC-ABOVE==='
 say 'curl -s --max-time 10 http://10.0.2.100:8080/' 12
 say 'echo ===GUESTFWD-ABOVE==='
 
@@ -526,9 +544,17 @@ resolv.conf가 없으면 dhcpcd의 hook이 안 돈 것이다. design 측정 6의
 sed -n '/===RESOLV-ABOVE===/,/===GUESTFWD-ABOVE===/p' /tmp/nw/guest.log
 ```
 
-기대: `nwm0-payload-ok`가 화면에 나온다. 이것이 측정 5의 답이다. 안 나오면
-`guestfwd`가 이 QEMU 버전에서 안 되는 것이고, design 결정 7이 적어 둔
-대로 `netcat-openbsd`를 Dockerfile에 더하는 쪽으로 돌린다.
+기대: `nwm0-payload-ok`가 두 번 나온다 — `nc`가 한 번, `curl`이 한 번. 이것이
+측정 5의 답이다.
+
+읽는 순서가 중요하다. `===NC-ABOVE===` 앞에 그 글자가 있으면 게스트의 IP
+스택이 QEMU까지 닿은 것이고, 거기서 이미 답이 나온다. `nc`는 됐는데 `curl`이
+실패했다면 그것은 네트워크 문제가 아니라 `guestfwd`가 실행하는 `cat`이 HTTP
+응답 형식이 아니어서다 — 실패가 아니라 예상된 일이고 실측에 그렇게 적는다.
+
+둘 다 안 나오면 `guestfwd`가 이 QEMU 버전에서 안 되는 것이고, design 결정 7이
+적어 둔 대로 `netcat-openbsd`를 Dockerfile에 더해 컨테이너 쪽에 리스너를
+띄우는 방식으로 돌린다.
 
 ```bash
 sed -n '/===GUESTFWD-ABOVE===/,/===DNS-ABOVE===/p' /tmp/nw/guest.log
