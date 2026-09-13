@@ -574,3 +574,315 @@ RM design의 위험 5가 같은 일을 겪고 적어 둔 것이 이 위험의 �
 NW-M0은 이 비용을 안 치른다. 측정하는 컨테이너 안에서 `apt-get download`와
 `dpkg -x`로 sysroot에 임시로 풀고, 그 컨테이너는 `--rm`으로 사라진다.
 Dockerfile을 정식으로 고치는 것은 NW-M2의 일이다.
+
+## NW-M0이 실행으로 증명한 것
+
+2026-09-13에 쟀다. 저장소의 추적되는 파일은 한 글자도 안 고쳤다 — 실험용
+`.config`와 `guest_tools.sh`를 `/tmp/nw/`에 두고 `-v`로 읽기 전용 마운트했다.
+게스트는 `-serial stdio`에 FIFO를 물려 두 번 띄웠다.
+
+### 실측 1 — NET을 켜도 커널은 844KB 커지고 빌드는 1분이다
+
+| 무엇 | 값 |
+|---|---|
+| baseline `bzImage` | 3,642,368 바이트 |
+| NET `bzImage` | 4,486,144 바이트 |
+| 차이 | +843,776 바이트 (+23.2%) |
+| NET을 켜는 재빌드 | 1분 04.79초 |
+| NET을 되돌리는 재빌드 | 1분 01.99초 |
+
+두 재빌드 시간이 거의 같은 것에 뜻이 있다. `.config`가 바뀌면 `build.sh`의
+해시가 어긋나 `make`가 다시 도는데, 그때 다시 컴파일되는 것은 바뀐 옵션이
+건드리는 파일들뿐이라 양방향의 비용이 대칭이다. 위험 1이 걱정한 "게이트가
+길어진다"는 이 값으로는 안 보인다 — 게이트는 커널을 회차마다 다시 굽지 않고
+입력이 같으면 건너뛰기 때문이다(GL-M1).
+
+`olddefconfig`가 우리 뜻을 전부 존중했다. `kernel/build/.config`에서 확인한
+것이 이것이다.
+
+```
+CONFIG_NET=y  CONFIG_PACKET=y  CONFIG_UNIX=y  CONFIG_INET=y  CONFIG_VIRTIO_NET=y
+# CONFIG_IPV6 is not set
+# CONFIG_NETFILTER is not set
+```
+
+`CONFIG_IPV6`는 기본값이 `y`라서 의존성을 채우다가 도로 켜질 것을 걱정했는데
+안 켜졌다. 결정 2를 그대로 쓸 수 있다.
+
+지우는 정규식도 의도대로 동작했다. `CONFIG_UNIX98_PTYS=y`는 살아남았다 —
+이름 뒤에 `=` 또는 ` is not set`이 바로 와야 한다는 조건이 그것을 막는다.
+
+### 실측 2 — 기존 체인은 NET 커널에서 아무것도 안 달라진다. 결정 3이 맞았다
+
+| 무엇 | baseline | NET 커널 |
+|---|---|---|
+| `device` 체인 판정 | PASS | PASS |
+| 걸린 시간(따뜻한 상태) | 11.800초 | 12.183초 |
+
+0.383초 차이는 이 체인의 잡음 안이다. 갈렸다고 말하지 않는다.
+
+중요한 것은 시간이 아니라 커널 로그다. 체인이 통과하는 것과 "커널이 그
+장치를 조용히 무시했다"는 다른 말이라 로그를 직접 훑었고, `e1000` ·
+`virtio_net` · `eth0` · `Ethernet` · `8139` · `ne2k` 어느 것도 한 줄도 없다.
+`virtio`로 걸리는 두 줄은 전부 GPU다.
+
+```
+[drm] pci: virtio-gpu-pci detected at 0000:00:03.0
+[drm] Initialized virtio_gpu 0.1.0 for 0000:00:03.0 on minor 0
+```
+
+대신 NET 스택 자체는 분명히 뜬다.
+
+```
+NET: Registered PF_NETLINK/PF_ROUTE protocol family
+NET: Registered PF_INET protocol family
+TCP established hash table entries: 4096 ...
+NET: Registered PF_UNIX/PF_LOCAL protocol family
+NET: Registered PF_PACKET protocol family
+```
+
+그러니까 결정 3의 전제가 실제로 성립한다 — 스택은 서지만 드라이버가 없어서
+QEMU가 붙여 둔 기본 `e1000`이 게스트에 안 나타난다. 기존 체인 열 개에
+`-net none`을 더할 필요가 없다.
+
+### 실측 3 — 도구의 비용은 `curl` 하나가 86%다
+
+initrd를 실제로 만들어 쟀다. 앞 넷이 결정 10이 고른 것이다.
+
+| 무엇 | before | after (도구 넷) | 차이 |
+|---|---|---|---|
+| 압축 | 35,015,430 | 40,516,166 | +5,500,736 (+15.7%) |
+| 푼 것 | 90,286,592 | 103,253,504 | +12,966,912 (+14.4%) |
+| 라이브러리 수 | 72 | 95 | +23 |
+
+도구별로 귀속하면 이렇다. 크기는 푼 것 기준이고, 라이브러리는 baseline
+initrd에 없던 것만 센다.
+
+| 도구 | 바이너리 | 새 라이브러리 | 그 크기 |
+|---|---|---|---|
+| `dhcpcd` | 388,416 | 0개 | 0 |
+| `nc.traditional` | 35,032 | 0개 | 0 |
+| `ip` | 721,912 | 3개 | 567,920 |
+| `curl` | 321,880 | 20개 | 10,927,904 |
+
+귀속의 합이 13,025,248이고 initrd의 실제 증가분이 13,029,376이다 — 4,128
+바이트 차이는 cpio의 패딩이라 귀속이 전체와 맞는다.
+
+`dhcpcd`가 0개인 것이 확인 5의 정정을 실행으로 뒷받침한다. 388KB에 새
+라이브러리가 없다.
+
+`curl`이 데려오는 스물은 이것이다.
+
+```
+libcurl.so.4      983,720     libgnutls.so.30 2,246,712    libssl.so.3    1,101,760
+libnghttp2.so.14  199,152     libp11-kit.so.0 1,705,664    libldap.so.2     400,912
+libnghttp3.so.9   173,392     libnettle.so.8    346,216    liblber.so.2      63,824
+libidn2.so.0      202,872     libhogweed.so.6   305,144    libsasl2.so.2    109,232
+libunistring.so.5 1,996,840   libgmp.so.10      566,080    libbrotlidec     51,376
+librtmp.so.1      122,256     libtasn1.so.6      88,064    libbrotlicommon  141,496
+libpsl.so.5        75,616     libffi.so.8        47,576
+```
+
+그래서 M2가 결정할 것이 하나 생겼다. `curl`을 빼면 initrd 증가분이
+13MB에서 1.7MB로 줄고 라이브러리가 23개에서 3개로 준다. 다만 게이트 판정에
+HTTP가 필요한지는 실측 5가 따로 답한다.
+
+### 실측 3b — `pgrep`과 `kill`은 공짜다
+
+측정 4가 시그널을 보내려면 이 둘이 필요해서 목록을 여섯으로 늘려 다시 쟀다.
+둘 다 procps에서 오고, 게스트에 이미 `ps`가 있어서 `libproc2.so.0`이 이미
+initrd에 있다.
+
+| 무엇 | 도구 넷 | 도구 여섯 | 차이 |
+|---|---|---|---|
+| 압축 | 40,516,166 | 40,535,041 | +18,875 |
+| 라이브러리 수 | 95 | 95 | 0 |
+
+`pgrep`이 39,344 바이트, `kill`이 22,840 바이트이고 새 라이브러리가 0개다.
+M3의 체인이 "dhcpcd가 살아 있나"를 물으려면 `pgrep`이 있는 편이 낫고, 값이
+이 정도면 넣지 않을 이유가 없다.
+
+### 실측 4 — dhcpcd는 SIGTERM에 죽고 SIGHUP에 안 죽는다
+
+| 시그널 | 결과 | 주소 |
+|---|---|---|
+| SIGTERM | 죽는다 | — |
+| SIGHUP | 안 죽는다 | `10.0.2.15/24` 그대로 |
+
+SIGTERM을 보낸 직후 init이 이렇게 찍었다.
+
+```
+tars-init: reaped orphan pid 119
+```
+
+이 한 줄이 결정 9에 직접 걸린다. dhcpcd는 주소를 받고 나면 `forked to
+background`를 찍고 배경으로 내려가는데, 그러면 부모가 죽으면서 PID 1에
+재부모화된다. 즉 우리가 감독 목록에 안 넣어도 dhcpcd는 이미 init의 자식이고,
+`reapAll()`이 그것을 센다.
+
+그래서 위험 2("dhcpcd가 종료를 붙잡는다")가 해소된다. 종료 경로가 보내는
+첫 시그널이 SIGTERM이고 dhcpcd가 거기서 죽으므로, SL-M1이 그 뒤에 더한
+SIGHUP까지 갈 일이 없고 `grace period expired`도 안 난다. 결정 9는 A(감독
+밖에 두고 재부모화에 맡긴다)로 기울어도 안전하다 — 다만 "죽으면 다시
+띄운다"를 원한다면 그것은 별개의 이유로 감독 루프에 넣는 것이다.
+
+### 실측 5 — `guestfwd`가 이 QEMU에서 돈다
+
+`-netdev user,guestfwd=tcp:10.0.2.100:8080-cmd:cat /tmp/nw/payload.txt`로
+띄우고 게스트에서 두 가지로 붙었다.
+
+| 방법 | 결과 |
+|---|---|
+| bash의 `/dev/tcp` | `nwm0-payload-ok` 받음 |
+| `nc.traditional -w 5` | `nwm0-payload-ok` 받음 |
+| `curl http://10.0.2.100:8080/` | 아무것도 안 나옴 |
+
+`curl`이 조용한 것은 실패가 아니라 예상된 일이다. `guestfwd`가 실행하는 것이
+`cat`이라 HTTP 응답 형식이 아니고, `-s`가 그 불평을 삼켰다. 그러니까 실측 3이
+남긴 질문 — 게이트 판정에 HTTP가 필요한가 — 의 답은 "필요 없다"다. 결정 7의
+판정은 `curl` 없이 선다.
+
+`nc.traditional`은 매달리지 않았다. 상대가 닫으면 바로 나오고 그 뒤의 명령이
+정상으로 이어졌다. 다만 stdin을 상대에게 흘리는 성질이 있어 하네스에서는
+맨 마지막에만 쳤다.
+
+bash의 `/dev/tcp`가 도구를 하나도 안 쓰고 같은 답을 준다는 것도 값이다 —
+M3의 체인이 `nc`조차 없이 판정할 수 있다.
+
+### 실측 6 — 이름은 풀린다. 다만 `/etc/resolv.conf`를 아무도 안 쓴다
+
+확인 6이 남긴 변수가 풀렸고, 대신 그 앞에 다른 구멍이 있었다.
+
+| 언제 | `curl http://deb.debian.org/` |
+|---|---|
+| dhcpcd가 주소를 받은 직후 | `000` (못 푼다) |
+| 손으로 `nameserver 10.0.2.3` 한 줄을 쓴 뒤 | `200 146.75.50.132` |
+
+그러니까 `/etc/nsswitch.conf`가 없어도 glibc의 내장 기본값이 DNS를 본다.
+확인 6이 "남은 변수"라고 적은 것이 이 한 줄로 닫혔고, `libnss_dns.so.2`도
+`nsswitch.conf`도 initrd에 넣을 필요가 없다.
+
+못 풀던 이유는 리졸버가 아니라 `/etc/resolv.conf`가 아예 없어서였다. 주소를
+받은 뒤에도 `/etc`에는 `group`과 `passwd` 둘뿐이었다. dhcpcd가 그 파일을 쓰려고
+hook을 부르는데 그 hook이 initrd에 없다.
+
+```
+eth0: executing: /usr/lib/dhcpcd/dhcpcd-run-hooks BOUND
+script_run: /usr/lib/dhcpcd/dhcpcd-run-hooks: No such file or directory
+```
+
+`install_tool`이 바이너리 하나만 복사하기 때문이다. `dhcpcd-base` 패키지는
+`dhcpcd-run-hooks`(8,205) · `20-resolv.conf`(6,164) · `30-hostname`(3,764) ·
+`50-timesyncd.conf`(1,370) · `/etc/dhcpcd.conf`(1,274)를 함께 담고 있는데
+우리 initrd에는 `/usr/sbin/dhcpcd` 하나만 들어간다.
+
+M2의 선택지가 둘이다.
+
+- hook을 넣는다. `dhcpcd-run-hooks`와 `20-resolv.conf` 둘이면 약 14KB다.
+  둘 다 POSIX 셸 스크립트이고 게스트에 `/bin/sh`(bash 링크)가 있으니 돈다.
+  `make_initrd.sh`가 zsh 모듈 트리에 이미 같은 일을 하고 있어 모양도 낯설지
+  않다.
+- init이 직접 쓴다. `net=dhcp`일 때 `/etc/resolv.conf`에 SLIRP의 고정
+  주소를 한 줄 적는 것이라 코드가 몇 줄이다. 대신 SLIRP 밖(실기계)에서는
+  틀린 값이 된다.
+
+지금 아는 것으로는 첫째가 낫다. 실기계에서도 맞고, 우리가 DHCP 옵션을
+파싱하지 않아도 된다.
+
+### 실측 7 — dhcpcd는 `/var/lib`에 쓰고 `/run`은 자기가 만든다
+
+| 경로 | 무엇 |
+|---|---|
+| `/var/lib/dhcpcd/eth0.lease` | 548 바이트. 리스를 여기 쓴다 |
+| `/run/dhcpcd/` | dhcpcd가 직접 만들었다 |
+| `/var/db/dhcpcd` | 안 쓴다. 10.x는 `/var/lib`다 |
+
+하네스가 `mkdir -p /var/db/dhcpcd /var/lib/dhcpcd /run`을 먼저 쳤다. 그래서
+"dhcpcd가 부모 디렉터리까지 만드는가"는 반만 답했다 — `/run`을 준 상태에서
+`/run/dhcpcd`는 자기가 만들었다.
+
+지금 initrd에는 `/var`도 `/run`도 아예 없다. 그러니 M2가 그 둘을
+`make_initrd.sh`에 더해야 한다. UT-M0이 `/bin`·`/tmp`·`/etc` 셋을 더한 것과
+같은 자리다.
+
+설정 파일이 없는 것은 문제가 아니었다. `read_config: /etc/dhcpcd.conf: No such
+file or directory`를 두 번 찍고 내장 기본값으로 그냥 진행해서 주소를 받았다.
+
+`no such user dhcpcd` 한 줄도 나왔다. dhcpcd 10.x는 권한 분리(privsep)를
+컴파일에 넣고 도는데 전용 계정이 없으면 그것을 접고 계속한다. 게스트의
+`/etc/passwd`에 root만 있으니 앞으로도 이 줄은 계속 나온다 — 실패가 아니다.
+
+### 실측 8 — `PATH`에 `/usr/sbin`이 없어서 이름으로는 못 부른다
+
+첫 회차가 여기서 한 번 죽었다.
+
+```
+fish: Unknown command: dhcpcd
+```
+
+`environ.zig`의 `PATH_ENTRY`가 `/usr/bin:/bin`이고(UT-M0 결정 1), `dhcpcd`는
+sysroot에서 `usr/sbin/dhcpcd`다. `install_tool`이 `src:dest` 쌍을 받으므로
+M2가 고칠 자리는 둘 중 하나다.
+
+- `guest_tools.sh`에 `usr/sbin/dhcpcd:usr/bin/dhcpcd`로 적는다. 그 파일의
+  주석이 "도구는 전부 `/usr/bin`에"라고 이미 말하고 있으니 이쪽이 결이 맞다.
+- `PATH`를 넓힌다. 값이 자식 전부에 퍼지므로 더 큰 변경이다.
+
+첫째를 고른다. 실측을 마저 하려고 M0의 하네스는 절대 경로로 쳤다.
+
+### 실측 9 — `ip`는 `usr/bin/ip`가 맞고 `nc`는 sysroot에 없다
+
+`dpkg -x`로 푼 sysroot에서 직접 확인했다.
+
+| 경로 | 있나 |
+|---|---|
+| `usr/sbin/dhcpcd` | 있다 |
+| `usr/bin/ip` | 있다 |
+| `sbin/ip` | 없다 |
+| `usr/bin/curl` | 있다 |
+| `usr/bin/nc.traditional` | 있다 |
+| `usr/bin/nc` | 없다 |
+
+결정 11이 읽어서 적은 것이 그대로 맞았다. `nc`는 alternatives가 만드는
+링크라 `dpkg -x`에는 안 따라온다.
+
+각 바이너리의 `DT_NEEDED`도 다시 확인했다.
+
+```
+dhcpcd          libcrypto.so.3  libc.so.6
+curl            libcurl.so.4  libz.so.1  libc.so.6
+ip              libselinux.so.1  libbpf.so.1  libelf.so.1  libmnl.so.0  libcap.so.2  libc.so.6
+nc.traditional  libc.so.6
+```
+
+`curl`의 줄이 짧은 것에 속으면 안 된다. `copy_lib_deps`는 `.so`의
+`DT_NEEDED`까지 재귀로 따라가므로(`make_initrd.sh`의 73번 줄이 자기를 다시
+부른다) 실제로 들어오는 것은 실측 3이 센 스물이다.
+
+### 실측 10 — `apt-get download`는 의존을 안 따라오므로 M2의 목록이 길다
+
+측정하는 컨테이너에서 `apt-get download dhcpcd-base curl iproute2
+netcat-traditional` 넷만 받아 풀었더니 `libcurl.so.4` · `libbpf.so.1` ·
+`libelf.so.1` · `libmnl.so.0` 넷이 sysroot에 없었다. `make_initrd.sh`는 그
+자리에서 죽는다.
+
+`apt-cache depends --recurse`로 닫힘을 구하니 패키지가 78개였고 그중 71개가
+받아졌다(나머지 일곱은 `debconf`·`adduser`처럼 받을 수 없거나 필요 없는
+것들이다). 받은 deb의 합이 19,547,036 바이트다.
+
+이것이 위험 7의 크기를 구체적으로 말해 준다. Dockerfile의 `apt-get download`
+목록은 언제나 명시적이어야 하므로(그 파일의 59번 줄이 그렇게 적고 있다), M2는
+도구 패키지 넷에 더해 라이브러리 패키지 스물 남짓을 손으로 적어야 한다.
+`curl`을 빼기로 하면 그 목록이 넷으로 준다.
+
+### M0이 M2에 넘기는 것
+
+| 무엇 | 지금 아는 것 |
+|---|---|
+| `curl`을 넣나 | 비용이 새 라이브러리 20개에 11MB다. 게이트 판정에는 안 쓴다(실측 5) |
+| `/etc/resolv.conf` | dhcpcd hook 둘(약 14KB)을 initrd에 넣는 쪽이 낫다(실측 6) |
+| dhcpcd를 감독하나 | 안 해도 안전하다. 재부모화되고 SIGTERM에 죽는다(실측 4) |
+| `dhcpcd`의 자리 | `usr/sbin/dhcpcd:usr/bin/dhcpcd`로 넣는다(실측 8) |
+| `nc`라는 이름 | `make_initrd.sh`에 링크 한 줄(결정 11, 실측 9) |
+| 새로 만들 디렉터리 | `/var/lib/dhcpcd`와 `/run`(실측 7) |
+| Dockerfile | 도구 패키지 넷 + 라이브러리 패키지 스물 남짓(실측 10) |

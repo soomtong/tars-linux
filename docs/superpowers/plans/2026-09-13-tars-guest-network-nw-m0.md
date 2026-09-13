@@ -57,7 +57,7 @@ Docker가 호스트에 0바이트 파일을 만들어 버리므로, 마운트 �
 호스트가 macOS라 `sed`가 BSD판이다. 그래서 이 파일은 컨테이너 안에서
 만든다 — 저장소 `.config`를 읽어 NET 관련 줄을 지우고 원하는 값을 덧붙인다.
 
-- [ ] Step 1: 실험용 `.config`를 만든다
+- [x] Step 1: 실험용 `.config`를 만든다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -84,7 +84,7 @@ EOF
 '
 ```
 
-- [ ] Step 2: 지운 줄과 더한 줄을 확인한다
+- [x] Step 2: 지운 줄과 더한 줄을 확인한다
 
 ```bash
 diff <(sort /Users/dp/Repository/tars-linux/kernel/.config) <(sort /tmp/nw/config.net)
@@ -100,7 +100,7 @@ Step 1을 고치고 다시 한다.
 얼마나 걸리는지가 이 측정의 답 중 하나다. Bash 도구의 10분 타임아웃을
 넘을 수 있으므로 `run_in_background`로 돌린다.
 
-- [ ] Step 1: 지금 커널의 크기를 먼저 적어 둔다 (baseline)
+- [x] Step 1: 지금 커널의 크기를 먼저 적어 둔다 (baseline)
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -110,7 +110,7 @@ ls -l kernel/build/arch/x86/boot/bzImage
 이 값이 없으면(파일이 없으면) baseline을 먼저 만들어야 하므로 Step 2 전에
 `kernel/build.sh`를 한 번 돌린다.
 
-- [ ] Step 2: NET 커널을 빌드하고 시간을 잰다
+- [x] Step 2: NET 커널을 빌드하고 시간을 잰다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -124,7 +124,7 @@ cd /Users/dp/Repository/tars-linux
 기대: `skipping make`가 안 나온다(해시가 다르므로). `make olddefconfig`가
 돌고 그 뒤 `bzImage` 빌드가 돈다.
 
-- [ ] Step 3: 결과를 읽는다
+- [x] Step 3: 결과를 읽는다
 
 ```bash
 tail -5 /tmp/nw/m1.time
@@ -139,7 +139,7 @@ grep -E "^# CONFIG_(IPV6|NETFILTER) is not set" \
 도로 켰을 수 있다 — `CONFIG_IPV6`는 기본값이 `y`라서 특히 그렇다. 켜져
 있으면 실측에 그대로 적고, 끄는 것이 가능한지도 함께 적는다.
 
-- [ ] Step 4: 실측 표에 적을 값
+- [x] Step 4: 실측 표에 적을 값
 
 baseline `bzImage` 바이트, NET `bzImage` 바이트, 차이, 빌드에 걸린 시간,
 `olddefconfig`가 우리 뜻을 존중했는지 여부.
@@ -154,7 +154,7 @@ design 결정 3이 "virtio-net만 켜면 QEMU 기본 `e1000`을 게스트가 못
 부팅이라 ISO를 안 구우며, 전원 버튼을 밟아서 SL이 방금 고친 종료 경로까지
 지나간다.
 
-- [ ] Step 1: NET 커널로 `device` 체인을 돌린다
+- [x] Step 1: NET 커널로 `device` 체인을 돌린다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -169,7 +169,7 @@ echo "exit=$?"
 기대: 통과한다. 커널은 Task 2에서 이미 빌드했으므로 `skipping make`가 나와야
 한다 — 안 나오면 마운트가 안 걸린 것이다.
 
-- [ ] Step 2: 실패했으면 무엇이 달라졌는지 본다
+- [x] Step 2: 실패했으면 무엇이 달라졌는지 본다
 
 ```bash
 tail -60 /tmp/nw/m2.log
@@ -179,7 +179,7 @@ tail -60 /tmp/nw/m2.log
 같은 글자가 보이면 결정 3의 전제가 틀린 것이고, design을 고치고 기존 체인
 열 개에 `-net none`을 더하는 쪽으로 방향을 돌린다.
 
-- [ ] Step 3: 통과했어도 게스트가 NIC를 봤는지 따로 확인한다
+- [x] Step 3: 통과했어도 게스트가 NIC를 봤는지 따로 확인한다
 
 체인이 통과하는 것과 "커널이 그 장치를 조용히 무시했다"는 다른 말이다.
 로그를 직접 본다.
@@ -202,7 +202,7 @@ docker run --rm \
 기대: "(한 줄도 없다)". 만약 `e1000` 줄이 보이면 드라이버가 어딘가에서
 켜진 것이므로 `kernel/build/.config`에서 `CONFIG_E1000`을 확인한다.
 
-- [ ] Step 4: 실측 표에 적을 값
+- [x] Step 4: 실측 표에 적을 값
 
 체인 통과 여부, 걸린 시간, 기존 값과의 차이, 커널 로그에 NIC 줄이 있는지.
 `device` 체인 단독의 기존 시간 기준선이 없으면 마운트 없이 한 번 더 돌려서
@@ -214,7 +214,7 @@ Dockerfile을 고치지 않는다(design 위험 7). 측정하는 컨테이너 �
 `apt-get download`와 `dpkg -x`로 sysroot에 임시로 풀고, 그 컨테이너는
 `--rm`으로 사라진다.
 
-- [ ] Step 1: 실험용 `guest_tools.sh`를 만든다
+- [x] Step 1: 실험용 `guest_tools.sh`를 만든다
 
 배열을 닫는 `)`는 이 파일에 하나뿐이고(225줄) 그것이 파일의 마지막 줄이다.
 그래서 마지막 줄을 떼고 네 줄을 더한 뒤 다시 닫으면 된다.
@@ -242,7 +242,7 @@ alternatives가 만드는 심볼릭 링크이고 `dpkg -x`로 푼 sysroot에는 
 (design 결정 11). `install_tool`은 없는 파일에서 죽으므로 실체 이름을 적어야
 하고, 사람이 치는 `nc`라는 이름은 M2에서 `make_initrd.sh`에 링크로 세운다.
 
-- [ ] Step 2: 끼운 자리가 맞는지 눈으로 본다
+- [x] Step 2: 끼운 자리가 맞는지 눈으로 본다
 
 ```bash
 tail -8 /tmp/nw/guest_tools.sh
@@ -259,7 +259,7 @@ wc -l /Users/dp/Repository/tars-linux/kernel/guest_tools.sh /tmp/nw/guest_tools.
 `ip`의 sysroot 경로가 `usr/bin/ip`가 맞는지도 Step 3이 확인한다. Debian의
 iproute2는 `/usr/bin/ip`이지만 `/sbin/ip`인 판도 있다.
 
-- [ ] Step 3: sysroot에 패키지를 임시로 풀고 의존을 센다
+- [x] Step 3: sysroot에 패키지를 임시로 풀고 의존을 센다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -292,7 +292,7 @@ done
 
 `ip`가 `sbin/ip`에 있으면 Step 1의 줄을 그 경로로 고친다.
 
-- [ ] Step 4: initrd를 실제로 만들어 늘어난 크기와 라이브러리 수를 센다
+- [x] Step 4: initrd를 실제로 만들어 늘어난 크기와 라이브러리 수를 센다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -335,7 +335,7 @@ zcat kernel/initrd.cpio | cpio -t 2>/dev/null | grep -iE "dhcpcd" || echo "(바�
 '
 ```
 
-- [ ] Step 5: 실측 표에 적을 값
+- [x] Step 5: 실측 표에 적을 값
 
 새로 들어온 라이브러리의 이름과 개수, 압축·푼 initrd 크기의 before/after,
 `ip`와 `curl`의 실제 sysroot 경로.
@@ -349,7 +349,7 @@ design 확인 5가 예상한 것은 `libssl.so.3`과 `libudev.so.1` 둘이다. �
 측정 셋을 부팅 한 번에 몰아서 잰다. 하나씩 재면 게스트를 세 번 띄워야 하고
 그때마다 커널이 뜨는 데 드는 시간을 세 번 치른다.
 
-- [ ] Step 1: `/tmp/nw/guest.sh`를 Write 도구로 만든다
+- [x] Step 1: `/tmp/nw/guest.sh`를 Write 도구로 만든다
 
 heredoc으로 만들지 않는다 — 중첩 따옴표에서 `$`가 호스트 bash에 먼저 먹힌다
 (SD-M0이 배운 것).
@@ -495,7 +495,7 @@ sleep 3
 echo "NWM0: done, log at ${LOG}"
 ```
 
-- [ ] Step 2: 파일이 만들어졌는지 확인한다
+- [x] Step 2: 파일이 만들어졌는지 확인한다
 
 ```bash
 ls -l /tmp/nw/guest.sh
@@ -503,7 +503,7 @@ ls -l /tmp/nw/guest.sh
 
 ## Task 6 — 하네스를 돌리고 로그를 읽는다
 
-- [ ] Step 1: 돌린다 (약 5분)
+- [x] Step 1: 돌린다 (약 5분)
 
 Task 4의 Step 4가 만든 initrd(도구 셋이 들어간 것)와 Task 2가 만든 커널(NET
 켜진 것)이 이미 `kernel/` 아래에 있어야 한다. 둘 다 `.gitignore` 대상이라
@@ -520,7 +520,7 @@ docker run --rm \
   > /tmp/nw/m456.log 2>&1
 ```
 
-- [ ] Step 2: 각 구간을 읽는다
+- [x] Step 2: 각 구간을 읽는다
 
 ```bash
 sed -n '/===NWM0-START===/,/===AFTER-DHCPCD===/p' /tmp/nw/guest.log
@@ -572,7 +572,7 @@ sed -n '/===PS-ABOVE===/,/===NWM0-END===/p' /tmp/nw/guest.log
 둘 중 하나라도 안 죽으면 design 결정 9가 B(감독 밖에 둔다)로 기울고,
 SL이 만든 유예와 어떻게 만나는지를 실측에 분명히 적는다.
 
-- [ ] Step 3: 게스트 셸이 fish라서 생기는 문제를 확인한다
+- [x] Step 3: 게스트 셸이 fish라서 생기는 문제를 확인한다
 
 `kill -TERM (pgrep dhcpcd)`의 괄호가 fish의 command substitution이다. bash라면
 `$(...)`여야 한다. 로그에 `Unknown command` 같은 것이 보이면 셸이 fish가
@@ -583,7 +583,7 @@ SL이 만든 유예와 어떻게 만나는지를 실측에 분명히 적는다.
 
 ## Task 7 — design에 실측 절을 붙이고 커밋한다
 
-- [ ] Step 1: design에 실측 절을 더한다
+- [x] Step 1: design에 실측 절을 더한다
 
 `docs/superpowers/specs/2026-09-13-tars-guest-network-design.md`의 맨 끝에
 `## NW-M0이 실행으로 증명한 것` 절을 만들고, 측정마다 `### 실측 N — <한 줄
@@ -592,7 +592,7 @@ SL이 만든 유예와 어떻게 만나는지를 실측에 분명히 적는다.
 design의 전제를 고친 실측이 있으면 그 자리에 `⚠` 정정을 함께 단다 — SL-M0의
 실측 3이 그렇게 했고, 그 표시가 다음 세션이 틀린 전제를 다시 안 쓰게 만든다.
 
-- [ ] Step 2: 마운트가 다 풀렸는지 확인한다
+- [x] Step 2: 마운트가 다 풀렸는지 확인한다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -607,7 +607,7 @@ grep -c "CONFIG_NET is not set" kernel/.config
 `.gitignore` 대상이라 `git status`에 안 나온다. 다음 빌드가 해시 불일치로
 다시 만든다.
 
-- [ ] Step 3: 실험 산출물을 지워 다음 사람이 안 헷갈리게 한다
+- [x] Step 3: 실험 산출물을 지워 다음 사람이 안 헷갈리게 한다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -619,7 +619,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 처방을 호스트(macOS)에서 치면 바로 뒤의 빌드가 `error: FileNotFound`로
 죽기 때문이다(9회 중 2회).
 
-- [ ] Step 4: 커밋한다
+- [x] Step 4: 커밋한다
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -646,3 +646,41 @@ git commit -m "Measure what happens when the kernel learns about networking"
 `Dockerfile`도 `init` 코드도 이번에는 그대로다. 그것들을 고치는 것은 M1과
 M2의 일이고, 이 milestone은 그 둘이 무엇을 만나게 될지를 숫자로 만들어 두는
 자리다.
+
+## 실제로 돌린 것이 이 plan과 갈린 자리 다섯
+
+plan을 그대로 밟되 실측이 다르면 실측이 답이라는 규칙에 따라 다섯을 고쳤다.
+다음에 이 파일을 참고하는 사람은 위의 하네스 전문이 아니라 이 절을 먼저
+읽어야 한다.
+
+1. Task 4 Step 3이 sysroot에 넷만 풀게 되어 있는데 그것으로는 모자랐다.
+   `apt-get download`가 의존을 안 따라와서 `libcurl.so.4` · `libbpf.so.1` ·
+   `libelf.so.1` · `libmnl.so.0` 넷이 없었고 `make_initrd.sh`가 그 자리에서
+   죽는다. `apt-cache depends --recurse`로 닫힘(패키지 78개)을 구해 받고,
+   `cp -an`으로 sysroot에 없는 파일만 더했다 — 기존 sysroot를 한 파일도
+   안 덮는다.
+
+2. 도구 목록을 넷이 아니라 여섯으로 했다. 게스트 기본 셸이 fish인데 fish에
+   `kill` builtin이 없어서 측정 4를 아예 못 잰다. `pgrep`과 `kill`을 더했고
+   둘 다 procps에서 오며 `libproc2.so.0`이 `ps` 때문에 이미 있어서 새
+   라이브러리가 0개다. 넷일 때의 숫자와 여섯일 때의 숫자를 따로 적었다
+   (design 실측 3과 3b).
+
+3. 하네스가 `dhcpcd`를 이름으로 부르면 안 된다. `PATH=/usr/bin:/bin`이라
+   `/usr/sbin/dhcpcd`를 못 찾고 `fish: Unknown command: dhcpcd`로 죽는다.
+   1회차를 이것으로 통째로 버렸다. 절대 경로로 고쳐 2회차를 돌렸다.
+
+4. TCP 검사를 `nc`가 아니라 bash의 `/dev/tcp`로 먼저 했다. 이유가 둘이다.
+   initrd에 든 실체가 `nc.traditional`이라 `nc`라는 이름이 아직 없고,
+   `nc.traditional`은 stdin을 상대에게 흘리므로 콘솔에 물리면 뒤따르는
+   명령을 먹을 위험이 있다. `nc.traditional`은 맨 마지막에만 쳤고 실제로는
+   안 매달렸다(design 실측 5).
+
+5. 측정 6에 구간을 하나 더 붙였다. plan은 이름으로 한 번만 걸게 되어 있는데,
+   그러면 "hook이 없어서 resolv.conf가 없는 것"과 "glibc가 nsswitch.conf
+   없이 못 푸는 것"이 안 갈린다. 손으로 `nameserver 10.0.2.3` 한 줄을 쓰고
+   한 번 더 걸어서 둘을 갈랐다 — 그 한 줄이 M2가 무엇을 고칠지를 정했다.
+
+측정 2의 baseline은 plan의 Step 4가 말한 대로 마운트 없이 두 번 돌려서
+잡았다. 첫 회차는 커널을 원래대로 되돌리는 빌드를 포함하므로 1분 01.99초이고
+비교할 값은 따뜻한 둘째 회차의 11.800초다.
