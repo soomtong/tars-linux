@@ -26,8 +26,12 @@ REPO_ROOT="$(cd .. && pwd)"
 # 대신 /sys/class/net을 본다. sysfs는 커널이 드라이버를 붙이면서 직접
 # 만드는 것이라 게스트에 도구가 하나도 없어도 되고 셸의 ls 하나로 읽힌다.
 #
-# 이 체인은 아직 check.sh의 CHAINS에 없다. 게이트에 들이는 것은 NW-M3이고
-# 그때 판정이 주소와 바깥 연결까지 늘어난다. 지금은 단독으로 돌린다.
+# M3가 판정을 연결까지 늘렸다. 검사 8이 기본 경로를, 검사 9가 실제 TCP
+# 연결을, 검사 10이 dhcpcd의 생존을 본다. 상대는 바깥 인터넷이 아니라
+# QEMU 자신이다(design 결정 7) — 회선이 흔들려도 이 게이트의 답은 안 바뀐다.
+#
+# 이 체인은 Task 4에서 check.sh의 CHAINS에 들어간다. 그때까지는 단독으로
+# 돌린다.
 
 # $GUEST_MEM과 type_keys·wait_for_screen 셋 다 쓴다.
 source ../gate_lib.sh
@@ -274,7 +278,90 @@ if ! wait_for_screen "nameserver 10\.0\.2\.3"; then
 fi
 echo "the hook wrote /etc/resolv.conf"
 
-# ── 검사 8: QEMU가 붙인 기본 NIC는 안 보인다 ──────────────────────────
+# ── 검사 8: 기본 경로가 생겼나 ────────────────────────────────────────
+# 이 검사는 아래 검사 9가 무엇을 증명하고 무엇을 증명하지 않는지를 가른다.
+#
+# guestfwd의 상대 10.0.2.100은 게스트 주소 10.0.2.15/24와 같은 서브넷이라,
+# 그 연결은 기본 경로를 한 번도 안 밟는다. 그러니까 검사 9 하나로 "밖으로
+# 나가는 길이 있다"까지 말하면 게이트가 거짓을 말하는 것이다. 그 길은
+# 여기서 따로 본다.
+#
+# 이 줄도 우리 코드가 아니라 dhcpcd가 쓴 것이다(design 결정 6의 경계).
+# 값이 고정인 이유는 SLIRP의 규칙이 고정이기 때문이다 — 게이트웨이가
+# 10.0.2.2다(design 결정 4).
+#
+# 둘을 더해도 "인터넷에 나간다"는 아니다. 그것은 이 게이트가 일부러 안
+# 보는 것이고(design 결정 7), 사람이 손으로 확인한 자리는 M0의 실측 6이다.
+echo "=== typing 'ip -4 route show' ==="
+type_keys i p spc minus 4 spc r o u t e spc s h o w ret
+
+if ! wait_for_screen "default via 10\.0\.2\.2"; then
+  fail "dhcpcd never installed a default route" "terminal: screen>"
+fi
+echo "the guest has a default route via 10.0.2.2"
+
+# ── 검사 9: 게스트가 TCP로 상대에 붙나 ────────────────────────────────
+# design 결정 7이 이 자리다. 판정을 SLIRP 경계 안에서 닫는 이유는 게이트가
+# 같은 입력에 늘 같은 답을 내야 하기 때문이다 — google.com으로 판정하면
+# 회선이 흔들리는 날마다 우리 코드가 멀쩡한데 빨간불이 되고, 그러면 이
+# 게이트가 말하는 것이 "코드가 맞나"가 아니라 "오늘 인터넷이 되나"가 된다.
+#
+# 듣는 프로세스는 없다. QEMU가 10.0.2.100:8080으로 오는 연결을 가로채
+# 우리가 만든 파일을 흘려 넣는다(위 -netdev의 guestfwd, M0 실측 5).
+#
+# 게스트 쪽 도구가 nc인 이유. 실측 5는 bash의 /dev/tcp로도 붙었지만 이
+# 부팅의 셸은 fish이고(설정 디스크에 net=dhcp 한 줄뿐이라 shell이 기본값
+# 이다) fish에는 그 경로가 없다 — 그것은 bash의 기능이지 커널의 것이 아니다.
+# nc는 M2가 넣었고 이름은 make_initrd.sh의 링크가 세운다(실체는
+# nc.traditional). 즉 이 검사는 게스트에 아무것도 새로 요구하지 않는다.
+#
+# -w 5는 상대가 끝내 안 닫는 날 여기서 매달리지 않기 위한 것이다. 실측
+# 5에서 nc.traditional은 상대가 닫자마자 나왔고 뒤 명령이 정상으로 이어졌다.
+#
+# curl은 안 친다. 실측 5에서 curl만 조용했는데 그것이 실패가 아니라 예상된
+# 일이다 — guestfwd가 실행하는 것이 cat이라 HTTP 응답 형식이 아니다. curl은
+# 게스트에 있지만(M2 결정 E) 이 게이트는 한 번도 안 친다.
+#
+# 판정 글자가 명령줄에 없는 글자여야 한다(결정 E). wait_for_screen은 마지막
+# 프레임이 아니라 로그 전체의 screen> 줄을 보므로 친 명령의 에코도 화면이다.
+# 10.0.2.100으로 판정하면 연결이 하나도 안 돼도 초록이 된다.
+echo "=== typing 'nc -w 5 10.0.2.100 8080' ==="
+type_keys n c spc minus w spc 5 spc 1 0 dot 0 dot 2 dot 1 0 0 spc 8 0 8 0 ret
+
+if ! wait_for_screen "nwm3-outbound-ok"; then
+  fail "the guest could not open a TCP connection through SLIRP" \
+    "terminal: screen>"
+fi
+echo "the guest read our payload over TCP"
+
+# ── 검사 10: dhcpcd가 아직 살아 있나 ──────────────────────────────────
+# 리스는 한 번 받고 끝이 아니다. dhcpcd가 배경에 남아 갱신을 맡는다(M0
+# 실측 4가 그 프로세스가 PID 1에 재부모화되는 것을 봤다). 받자마자 죽어도
+# 검사 5·6·7은 전부 초록이므로 그 실패는 이 자리에서만 보인다.
+#
+# 그리고 이 검사가 아래 종료 검사의 뜻을 만든다. 유예 음성 검사(grace
+# period expired)는 "SIGTERM을 안 받은 것이 없다"는 말인데, 그때 dhcpcd가
+# 이미 죽어 있었으면 그 초록이 아무것도 증명하지 않는다.
+#
+# 개수를 1로 박지 않는다(결정 F). dhcpcd 10은 특권 분리로 자식을 더 띄울
+# 수 있고 그 수는 우리가 고른 값이 아니다. 우리가 묻는 것은 "아직 있나"
+# 하나다. 2026-09-14에 잰 값이 1이었다 — 적어만 두고 박지는 않는다.
+#
+# 왜 pgrep -l이 아닌가. 친 명령의 에코가 화면이고 거기에 dhcpcd가 이미
+# 있다(결정 E). 그래서 출력에만 생기는 글자로 판정한다 — 명령 치환의
+# 결과가 붙는 dhcpcd-alive=N이다. 치환 문법은 config/check.sh의
+# NEG_COUNT_KEYS와 같은 모양이고($(가 shift-4 shift-9, )가 shift-0),
+# fish가 그것을 읽는다.
+echo "=== typing 'echo dhcpcd-alive=\$(pgrep -c dhcpcd)' ==="
+type_keys e c h o spc d h c p c d minus a l i v e equal \
+  shift-4 shift-9 p g r e p spc minus c spc d h c p c d shift-0 ret
+
+if ! wait_for_screen "dhcpcd-alive=[1-9]"; then
+  fail "dhcpcd is not running any more" "terminal: screen>"
+fi
+echo "dhcpcd is still running"
+
+# ── 검사 11: QEMU가 붙인 기본 NIC는 안 보인다 ─────────────────────────
 # 결정 3이 통째로 얹혀 있는 성질이다. 우리가 e1000 드라이버를 안 켜므로
 # 게스트가 그 PCI 장치를 보고도 그냥 넘어간다. 이 검사가 없으면 기존 체인
 # 열 개가 조용히 NIC를 하나 더 갖게 되는 날을 못 잡는다.
