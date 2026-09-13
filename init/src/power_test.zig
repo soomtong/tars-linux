@@ -91,4 +91,45 @@ pub fn main() !void {
     }
 
     std.debug.print("power_test: a button press takes the same road as a signal\n", .{});
+
+    // 7. 종료 시그널 목록에 SIGHUP이 있어야 한다.
+    //
+    //    호스트에서 shutdown()을 부를 수 없으므로(kill(-1)이 이 컨테이너를
+    //    죽이고 reboot(2)가 개발 기계를 끈다) 이 검사가 보는 것은 데이터
+    //    한 벌뿐이다. 막는 것은 하나다 — 누가 .HUP을 지우면 부팅 전에
+    //    빨개진다. 진짜 판정은 power 체인에 있다(SL-M2).
+    //
+    //    목록을 그대로 비교하지 않고 성질만 보는 이유는 tautology를 피하려는
+    //    것이다. 상수를 복사한 기대값은 상수와 함께 고쳐지므로 아무것도
+    //    안 막는다.
+    var hup_at: ?usize = null;
+    var term_at: ?usize = null;
+    for (power.TERMINATION_SIGNALS, 0..) |sig, i| {
+        if (sig == .HUP) hup_at = i;
+        if (sig == .TERM) term_at = i;
+    }
+
+    if (hup_at == null) {
+        std.debug.print("FAIL: TERMINATION_SIGNALS has no SIGHUP; the console shell will sit out the grace period\n", .{});
+        return error.NoHangupSignal;
+    }
+    if (term_at == null) {
+        std.debug.print("FAIL: TERMINATION_SIGNALS has no SIGTERM\n", .{});
+        return error.NoTermSignal;
+    }
+
+    // 8. SIGTERM이 SIGHUP보다 앞이어야 한다.
+    //
+    //    순서가 뒤집혀도 셸은 죽는다 — 그래서 이 검사가 없으면 아무도
+    //    모르게 뒤집힌다. 앞이어야 하는 이유는 의미다(design 결정 3):
+    //    정중한 요청을 먼저 보내고, SIGTERM에만 정리 코드를 단 프로그램이
+    //    나중에 생겨도 그 코드가 돌게 둔다.
+    if (term_at.? > hup_at.?) {
+        std.debug.print("FAIL: SIGHUP comes before SIGTERM (term at {d}, hup at {d})\n", .{
+            term_at.?, hup_at.?,
+        });
+        return error.SignalOrderReversed;
+    }
+
+    std.debug.print("power_test: the shutdown sends SIGTERM then SIGHUP\n", .{});
 }

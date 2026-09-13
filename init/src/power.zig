@@ -108,8 +108,35 @@ pub fn disableCtrlAltDel() void {
     std.debug.print("tars-init: ctrl-alt-del now arrives as SIGINT\n", .{});
 }
 
+/// 종료할 때 자식에게 보내는 시그널과 그 순서. `shutdown()`이 이 배열을
+/// 순서대로 돈다.
+///
+/// SIGTERM 하나로는 안 되는 이유가 SL-M0의 실측 1~4에 있다. 대화형 zsh와
+/// bash는 SIGTERM을 무시하므로 유예를 꽉 쓰고 SIGKILL에 죽었다 — 종료가
+/// 2.9초였다. SIGHUP은 "네가 붙어 있던 터미널이 사라졌다"는 뜻이고 전원이
+/// 꺼지는 자리에서 그것은 거짓이 아니라 사실이므로, 셋 다 그 자리에서
+/// 죽는다(실측 4. 0.13초).
+///
+/// 화면 셸이 전부터 빨리 죽던 것이 바로 이 SIGHUP이었다 — `terminal`이
+/// 먼저 죽으면서 PTY가 닫히면 커널이 안쪽 셸에게 보내 준다. 콘솔 셸은
+/// `/dev/console`을 잡고 있어 닫힐 PTY가 없어서 그 통지를 못 받았다.
+/// 이 배열은 커널이 한쪽에만 해 주던 일을 양쪽에 하는 것이다.
+///
+/// 순서가 계약이다. TERM이 먼저인 것은 그것이 정중한 요청이기 때문이고,
+/// SIGTERM에만 정리 코드를 다는 프로그램이 나중에 생겨도 정상 경로를 타게
+/// 하려는 것이다(design 결정 3). `power_test`가 이 순서를 본다.
+///
+/// fish는 이 배열의 첫 칸만으로 죽는다(실측 3). "대화형 셸은 SIGTERM을
+/// 무시한다"가 셋 다에 해당하는 것은 아니다.
+pub const TERMINATION_SIGNALS = [_]linux.SIG{ .TERM, .HUP };
+
 /// 자식에게 주는 유예. 감독 루프의 재시작 backoff가 1초이고 우리 자식은
 /// 터미널과 셸뿐이라 정리에 이보다 오래 걸릴 일이 없다.
+///
+/// 이 값은 상한이지 실제 대기가 아니다. 두 가지 때문이다 — 평시에는
+/// 자식이 전부 그 전에 죽어서 `reapAll()`이 일찍 나오고(실측 4),
+/// `monotonicSeconds()`가 초 단위로 자르기 때문에 끝까지 가더라도 실제
+/// 대기는 2~3초 사이에서 흔들린다(실측 7).
 const GRACE_SECONDS: isize = 3;
 
 fn monotonicSeconds() isize {
@@ -172,11 +199,19 @@ pub fn shutdown(action: Action) noreturn {
     // -1은 "자기를 제외한 모든 프로세스"다. 감독 대상 둘뿐 아니라 PTY 안에서
     // 도는 셸까지 한 번에 닿으므로 자식 목록을 순회할 필요가 없고, 리눅스가
     // 호출자를 대상에서 빼주므로 PID 1이 자기를 죽이는 일도 없다.
-    _ = linux.kill(-1, .TERM);
-    std.debug.print("tars-init: sent SIGTERM to every process\n", .{});
+    for (TERMINATION_SIGNALS) |sig| {
+        _ = linux.kill(-1, sig);
+        // 문구를 @tagName으로 만드는 이유는 체인 다섯 자리가 지금 보는
+        // 글자를 그대로 지키기 위해서다. TERM이 들어가면 이 줄은
+        // "sent SIGTERM to every process"가 된다.
+        std.debug.print("tars-init: sent SIG{s} to every process\n", .{@tagName(sig)});
+    }
 
-    // 대화형 셸은 SIGTERM을 무시한다(POSIX). 그래서 여기서 false가 나오는
-    // 것이 정상이고, SIGKILL은 예외 처리가 아니라 정상 경로의 일부다.
+    // 여기서 false가 나오면 SIGHUP에도 안 죽는 자식이 있다는 뜻이다.
+    // SL-M0 전에는 이것이 정상 경로였다 — 콘솔 셸이 SIGTERM을 무시하고
+    // 유예를 꽉 썼다. 지금은 셸 셋이 전부 유예 안에 죽으므로(실측 4)
+    // 이 분기는 우리가 모르는 자식이 생겼을 때의 안전망이다.
+    // power/check.sh가 이 분기를 밟지 않는 것을 판정한다(SL-M2).
     if (!reapAll()) {
         _ = linux.kill(-1, .KILL);
         std.debug.print("tars-init: sent SIGKILL to what was left\n", .{});
