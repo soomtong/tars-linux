@@ -5,6 +5,7 @@ const power = @import("power.zig");
 const devices = @import("devices.zig");
 const storage = @import("storage.zig");
 const environ = @import("environ.zig");
+const net = @import("net.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -584,7 +585,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -592,6 +593,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             @tagName(cfg.latin_layout),
             toggle_arg,
             @tagName(cfg.shell_config),
+            @tagName(cfg.net),
         },
     );
 
@@ -663,6 +665,15 @@ pub fn main(init: std.process.Init.Minimal) void {
     } else {
         std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
     }
+
+    // NW-M2. envp 다음인 것이 이 한 줄의 유일한 제약이다(design 결정 F) —
+    // dhcpcd의 hook이 sed·rm을 이름으로 부르므로 PATH가 필요하고, 그 값은
+    // 방금 지은 블록에 있다. 순서를 틀리면 증상이 조용하다: 주소는 붙고
+    // /etc/resolv.conf만 안 생긴다.
+    //
+    // 실패해도 부팅을 안 막는다. 네트워크가 없는 기계는 이 저장소가 지금까지
+    // 돌려 온 상태 그 자체이고, 못 켠 이유는 로그에 있다.
+    net.bringUp(cfg.net, envp);
 
     // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
     // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
