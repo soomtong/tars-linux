@@ -73,11 +73,28 @@ MONITOR_PORT=45464
 LOG="$(mktemp)"
 QEMU_PID=""
 
+# NW-M3 결정 A·B. 게스트가 10.0.2.100:8080에 붙으면 QEMU가 이 파일을 cat해서
+# 연결에 흘려 넣는다(아래 -netdev의 guestfwd). 듣는 프로세스가 없으므로
+# 체인이 관리할 상태가 안 늘고, QEMU가 사라지면 그 자리도 함께 사라진다.
+#
+# 저장소에 두지 않는 이유는 이 한 줄을 아는 것이 이 체인뿐이기 때문이다.
+# 파일로 두면 "무슨 글자가 오는가"를 두 자리에서 봐야 한다.
+#
+# 경로에 쉼표가 없다는 것에 기댄다. QEMU의 옵션 문자열은 쉼표로 갈리므로
+# 값 안의 쉼표는 두 번 적어야 하는데, mktemp가 주는 이름에는 쉼표가 없다.
+#
+# 글자의 유일한 조건은 게스트에 치는 명령줄에 없어야 한다는 것이다
+# (결정 E). wait_for_screen이 로그 전체의 screen> 줄을 보므로 명령의
+# 에코도 화면이고, 패턴이 거기 있으면 연결이 하나도 안 돼도 초록이 된다.
+PAYLOAD="$(mktemp)"
+printf 'nwm3-outbound-ok\n' > "$PAYLOAD"
+
 cleanup() {
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
+  rm -f "$PAYLOAD"
 }
 trap cleanup EXIT
 
@@ -128,7 +145,7 @@ qemu-system-x86_64 \
   -vga none \
   -device virtio-gpu-pci \
   -display none \
-  -netdev user,id=n0 \
+  -netdev "user,id=n0,guestfwd=tcp:10.0.2.100:8080-cmd:cat ${PAYLOAD}" \
   -device virtio-net-pci,netdev=n0 \
   -drive file="${REPO_ROOT}/out/net.img",if=virtio,format=raw \
   -serial file:"$LOG" \
