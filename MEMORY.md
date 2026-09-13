@@ -67,3 +67,4 @@
 - [Bash boot](docs/decisions/project_bash_boot.md) — 게이트가 `shell=bash`로 뜨는 부팅을 하나 갖게 된 일. `config` 체인이 부팅 아홉이 됐고, 중첩 bash로는 정의상 볼 수 없던 여섯을 그 아홉째가 본다(BB-M0~M2, 2026-09-12 종료)
 - [Write or reuse](docs/decisions/project_write_or_reuse.md) — "커널 다음은 전부 내 코드"는 절대 원칙이 아니다; 직접 짜는 자리는 배울 값이 있거나 원하는 모양이 남의 것과 다른 자리다(NW 설계 중 사용자가 정했다, 2026-09-13)
 - [Measuring tool cost](docs/decisions/project_measuring_tool_cost.md) — 게스트에 도구를 넣기 전에 실제 비용을 재는 절차. 패키지 의존이 아니라 재귀 `DT_NEEDED`를 본다; `curl` 하나가 13MB 중 86%였다(NW-M0, 2026-09-13)
+- [Seeding a config disk](docs/decisions/project_seeding_a_config_disk.md) — `debugfs`가 마운트도 특권도 없이 ext2 이미지에 파일을 쓴다; 체인이 부팅 하나로 `tars.conf`의 키를 시험할 수 있다(NW-M2, 2026-09-13)
