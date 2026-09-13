@@ -1,10 +1,11 @@
-# HANDOFF: Guest Network(NW)를 열었다 — design과 M0 plan이 섰고, 다음은 M0 실행이다
+# HANDOFF: Guest Network(NW)의 M0이 끝났다 — 실측 열이 섰고, 다음은 M1 plan을 쓰는 것이다
 
 ## 지금 어디인가
 
-새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸다. design과 NW-M0
-plan까지 커밋됐고 코드는 한 줄도 안 들어갔다. 바로 다음 할 일은 NW-M0을
-Task 0부터 돌리는 것이다 (아래 "바로 다음에 할 것").
+새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸다. design · NW-M0
+plan · NW-M0 실측까지 커밋됐고 저장소의 추적되는 코드는 아직 한 줄도 안
+들어갔다(M0이 재기만 하는 milestone이라 그것이 맞다). 바로 다음 할 일은
+NW-M1의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
 
 무엇을 세우는 일인가. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가
 주소를 받고 밖으로 나간다. 기본값은 꺼짐이라 기존 부팅 아홉과 체인 열하나는
@@ -31,6 +32,41 @@ Gate Accuracy(GA-M0·M1)다.
 | `9432ff2` | design. 그리고 기억 `project_write_or_reuse` |
 | `f7e61d1` | NW-M0 plan(측정 일곱과 하네스 전문) |
 | `6c9a5a2` | 도구 넷을 바이너리의 실제 의존으로 다시 재고 design의 틀린 비용표를 고쳤다 |
+| `c1637cc` | NW-M0. 실측 열. 그중 셋이 plan에 없던 것이고 M2가 고칠 자리를 정했다 |
+
+### NW-M0이 실제로 알아낸 것 — 다음 세션이 먼저 읽을 일곱
+
+본문은 design의 "NW-M0이 실행으로 증명한 것" 절에 실측 1~10으로 있다. plan
+원문과 실제 실행이 갈린 다섯은 plan 끝의 "실제로 돌린 것이 이 plan과 갈린
+자리 다섯"에 있다.
+
+1. 결정 3이 맞았다. NET 커널로 `device` 체인을 돌려도 커널 로그에 `e1000`도
+   `eth0`도 한 줄이 없다. NET 스택은 분명히 뜨는데(`PF_INET` · TCP 해시
+   테이블) 드라이버가 없어서 QEMU 기본 NIC가 안 보인다. 기존 체인 열 개에
+   `-net none`을 더할 필요가 없다. 시간도 11.800초 대 12.183초로 잡음 안이다.
+2. `curl`이 비싸다. 도구 넷을 넣으면 initrd가 압축 +5.5MB · 푼 것 +13MB이고
+   라이브러리가 23개 느는데, 그중 20개와 10,927,904바이트가 `curl` 하나
+   몫이다. `dhcpcd`는 388KB에 새 라이브러리 0개다. 그리고 게이트 판정에는
+   `curl`이 필요 없다(아래 4번) — 그래서 `curl`을 넣을지가 M2의 첫 결정이다.
+3. `PATH`가 `/usr/bin:/bin`이라 `/usr/sbin/dhcpcd`를 이름으로 못 찾는다.
+   1회차를 이것으로 통째로 버렸다(`fish: Unknown command: dhcpcd`). M2는
+   `guest_tools.sh`에 `usr/sbin/dhcpcd:usr/bin/dhcpcd`로 적는다.
+4. `guestfwd`가 돈다. 게스트가 `10.0.2.100:8080`에 붙어 우리가 정한 글자를
+   받아 왔다. bash의 `/dev/tcp`로도 되고 `nc.traditional`로도 된다 —
+   `nc.traditional`은 안 매달렸고 뒤 명령이 정상으로 이어졌다. 즉 M3의 체인은
+   도구 없이도 판정할 수 있다.
+5. 이름은 풀리는데 `/etc/resolv.conf`를 아무도 안 쓴다. `install_tool`이
+   바이너리만 복사해서 dhcpcd의 hook이 initrd에 없다. 손으로 한 줄
+   (`nameserver 10.0.2.3`)을 쓰면 `curl`이 `200`을 받는다 — `/etc/nsswitch.conf`
+   없이도 glibc 내장 기본값이 DNS를 본다(확인 6의 남은 변수가 닫혔다).
+6. dhcpcd는 SIGTERM에 죽고 SIGHUP에 안 죽는다. 그리고 배경으로 내려가면서
+   PID 1에 재부모화된다(`tars-init: reaped orphan pid 119`). 그래서 위험 2가
+   해소됐다 — 감독 목록에 안 넣어도 종료가 안 늘어진다. 결정 9는 A로 가도
+   안전하다.
+7. `apt-get download`가 의존을 안 따라온다. 넷만 받으면 `libcurl.so.4` ·
+   `libbpf.so.1` · `libelf.so.1` · `libmnl.so.0`이 없어서 `make_initrd.sh`가
+   죽는다. M0은 `apt-cache depends --recurse`로 78개 닫힘을 구해 `cp -an`으로
+   넣었고, M2는 Dockerfile에 그 목록을 손으로 적어야 한다.
 
 착수 전에 확인한 것이 열이고 전부 design에 있다. 다음 세션이 먼저 알아야
 하는 여섯은 이것이다.
@@ -66,8 +102,6 @@ Gate Accuracy(GA-M0·M1)다.
    안 나와서 `copy_lib_deps`가 절대 못 잡았을 것이다. 남은 변수는
    `/etc/nsswitch.conf`가 없을 때의 glibc 내장 기본값 하나이고 M0의 측정 6이
    본다.
-
-## SL이 한 일 (2026-09-13, 하루에 닫혔다)
 
 ## SL이 한 일 (2026-09-13, 하루에 닫혔다)
 
@@ -274,36 +308,43 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — NW-M0을 Task 0부터 돌린다
+## 바로 다음에 할 것 — NW-M1의 plan을 새로 쓴다
 
-plan은 `docs/superpowers/plans/2026-09-13-tars-guest-network-nw-m0.md`에 있고
-Task 일곱에 하네스 전문까지 들어 있다. 사용자가 plan을 승인했고, 남은 것은
-실행이다.
+M0이 끝났으므로 M1 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
+M1이 하는 일은 커널 `.config`에 결정 2의 여덟 줄을 정식으로 넣고, 새 체인의
+QEMU 줄에 결정 4의 두 줄(`-netdev user` · `-device virtio-net-pci`)을 더하는
+것이다. 끝났다의 기준은 게스트 로그에 virtio-net이 잡히는 줄이 나오는 것이고
+주소는 아직 없다.
 
-M0은 추적되는 저장소 파일을 한 글자도 안 바꾼다(design 결정 8). 실험용
-`.config`와 `guest_tools.sh`를 `/tmp/nw/`에 만들어 `-v`로 읽기 전용
-마운트한다. 되돌리는 것을 잊을 수가 없는 이유는 `kernel/build.sh`가
-`.config`와 자기 자신의 sha256을 산출물 옆에 적어 두기 때문이다 — 마운트를
-풀면 해시가 원래대로 돌아가서 다음 빌드가 알아서 다시 돈다.
+M1 plan을 쓰는 사람이 M0에서 그대로 가져다 쓸 것이 셋이다.
 
-Task 순서와 무엇을 재는지는 이렇다.
+- 실험용 `.config`를 만든 정규식과 그 검증 방법. plan의 Task 1에 있고
+  `CONFIG_UNIX98_PTYS`를 안 지운다는 것이 실행으로 확인됐다.
+- 게스트를 FIFO로 모는 하네스 전문. `/tmp/nw/guest.sh`에 있고, 그 파일이
+  사라졌으면 plan의 Task 5와 plan 끝의 "갈린 자리 다섯"을 함께 읽어 다시
+  만든다(원문 그대로 쓰면 `dhcpcd`를 이름으로 불러서 죽는다).
+- `bzImage`의 두 값. baseline 3,642,368 · NET 4,486,144.
 
-| Task | 무엇 | 주의 |
-|---|---|---|
-| 0·1 | `/tmp/nw/` 준비와 실험용 `.config` | 정규식이 `CONFIG_UNIX98_PTYS`를 안 지우는지 Step 2가 본다 |
-| 2 | 측정 1 — NET 커널의 빌드 시간과 크기 | 시간을 모른다. Bash 도구 10분 타임아웃을 넘길 수 있어 `run_in_background`로 돌린다 |
-| 3 | 측정 2 — `device` 체인이 NET 커널에서 안 바뀌는지 | design 결정 3이 "virtio-net만 켜면 QEMU 기본 e1000을 게스트가 못 본다"를 전제로 서 있는데 그것이 읽어서 안 것이다. 틀리면 체인 열 개에 `-net none`을 더해야 한다 |
-| 4 | 측정 3·7 — 도구 넷이 데려오는 것과 initrd 크기 | `nc`가 아니라 `nc.traditional`로 적는다(위 5번) |
-| 5·6 | 측정 4·5·6 — 게스트를 한 번 띄워 dhcpcd·TCP·이름 해석·시그널 | FIFO 경로다. `exec 4<>`로 열고 `-monitor none`을 함께 준다 |
-| 7 | design에 실측 절을 붙이고 커밋 | 전제를 고친 실측에는 `⚠` 정정을 단다(SL-M0이 그렇게 했다) |
+M2가 결정할 것이 일곱이고 M0이 전부 숫자를 붙여 두었다. design 끝의
+"M0이 M2에 넘기는 것" 표가 그 목록이다 — `curl`을 넣을지 · resolv.conf를
+누가 쓸지 · dhcpcd를 감독할지 · dhcpcd의 자리 · `nc` 링크 · `/var/lib/dhcpcd`와
+`/run` · Dockerfile의 패키지 목록.
 
-M0이 끝나면 M1(커널과 QEMU 줄) · M2(`net=` 설정과 dhcpcd와 도구) ·
-M3(열두번째 체인 `net/check.sh`)이 남는다. M1 plan은 M0이 끝난 시점에 새로
-쓴다(`CLAUDE.md`의 milestone 규칙).
+M3(열두번째 체인 `net/check.sh`)은 그 뒤다. monitor 포트는 쓰던 대역에서 새
+번호를 잡고 `check.sh`의 `CHAINS` 배열에 더한다.
 
-M0이 열어 둔 채로 M2에 넘기는 판단이 둘이다. 하나는 dhcpcd를 감독 루프에
-넣을지(design 결정 9. SIGTERM·SIGHUP 반응을 보고 정한다), 다른 하나는
-`/etc/resolv.conf`를 dhcpcd의 hook이 쓰게 둘지 init이 직접 쓸지다.
+### M0을 다시 돌려야 할 때 알아야 하는 것
+
+`/tmp/nw/`에 하네스와 로그가 남아 있다(`guest.sh` · `guest.clean` ·
+`guest.run1.clean` · `config.net` · `guest_tools.sh` · `initrd.before` ·
+`initrd.after` · `initrd.six`). 호스트 `/tmp`라 언젠가 사라진다.
+
+`kernel/build`와 `kernel/initrd.cpio`는 M0 끝에 지웠다. 그래서 다음 빌드가
+처음부터 다시 돈다 — 실험용 커널이 남아서 헷갈리는 일을 막으려고 일부러
+지운 것이다(plan의 Task 7 Step 3).
+
+컨테이너 sysroot에 도구를 임시로 넣는 방법은 `cp -an`이다. `dpkg -x`로
+스테이징에 풀고 없는 파일만 더하면 기존 sysroot를 한 파일도 안 덮는다.
 
 ## 명령 모음
 
@@ -325,18 +366,24 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 
-# NW-M0. NET 켠 커널 빌드 (시간 미상 — run_in_background로 돌린다)
+# NW-M0. NET 켠 커널 빌드 (증분 재빌드가 1분 04.79초였다)
 { time docker run --rm -v "$PWD":/workspace \
   -v /tmp/nw/config.net:/workspace/kernel/.config:ro \
   -w /workspace tars-devcontainer bash kernel/build.sh ; } \
   > /tmp/nw/m1.log 2> /tmp/nw/m1.time
 
-# NW-M0. 게스트를 띄워 dhcpcd·TCP·이름 해석을 한 번에 (약 5분)
-# 하네스 전문은 plans/2026-09-13-tars-guest-network-nw-m0.md의 Task 5에 있다.
+# NW-M0. 게스트를 띄워 dhcpcd·TCP·이름 해석·시그널을 한 번에 (약 4분 30초)
+# 하네스는 /tmp/nw/guest.sh다. plan의 Task 5 원문을 그대로 쓰면 안 된다 —
+# plan 끝의 "갈린 자리 다섯"이 고쳐야 할 곳을 적고 있다.
 docker run --rm -v "$PWD":/workspace -v /tmp/nw:/tmp/nw \
   -v /tmp/nw/config.net:/workspace/kernel/.config:ro \
   -v /tmp/nw/guest_tools.sh:/workspace/kernel/guest_tools.sh:ro \
   -w /workspace tars-devcontainer bash /tmp/nw/guest.sh > /tmp/nw/m456.log 2>&1
+
+# NW-M0. 직렬 로그에서 ANSI를 걷어내고 구간별로 읽기
+perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
+          s/\e[()][AB0]//g; s/\r/\n/g' /tmp/nw/guest.log > /tmp/nw/guest.clean
+sed -n '/===RESOLV-ABOVE===/,/===GUESTFWD-ABOVE===/p' /tmp/nw/guest.clean
 
 # 도구 하나가 실제로 부르는 것을 세기 (Installed-Size가 아니라 이것을 본다)
 docker run --rm tars-devcontainer bash -c '
