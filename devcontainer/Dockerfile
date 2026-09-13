@@ -168,7 +168,6 @@ RUN dpkg --add-architecture amd64 \
         fd-find:amd64 \
         ripgrep:amd64 \
         sd:amd64 \
-        procs:amd64 \
         htop:amd64 \
         btop:amd64 \
         tree:amd64 \

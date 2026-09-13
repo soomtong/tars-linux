@@ -122,9 +122,12 @@ GUEST_TOOLS=(
 
   usr/bin/dmesg:usr/bin/dmesg
 
-  # ── 층 2 · 모던 13 ─────────────────────────────────────────────────────
-  # design 최종 목록의 층 2 열둘에 btop을 더한 것이다(사용자가 2026-09-11에
-  # 요청했다). 라이브러리 열아홉이 딸려 오고, 그중 열여섯이 eza·bat 둘이
+  # ── 층 2 · 모던 12 ─────────────────────────────────────────────────────
+  # design 최종 목록의 층 2 열둘에 btop을 더하고(사용자가 2026-09-11에
+  # 요청했다) procs를 뺀 것이다(2026-09-13). procs를 뺀 자리에서 사라진
+  # 라이브러리는 없다 — libgcc_s·libm 둘을 부르는데 libgcc_s는 btop의
+  # libstdc++와 zoxide가, libm은 vim.tiny와 hyperfine이 여전히 부른다.
+  # 그래서 남은 라이브러리는 여전히 열아홉이고, 그중 열여섯이 eza·bat 둘이
   # 데려오는 libgit2 사슬이다 — 네트워크가 없는 기계의 TLS·Kerberos·SSH
   # 스택이고 design 결정 3이 그 대가를 명시적으로 감수했다.
   #
@@ -147,7 +150,6 @@ GUEST_TOOLS=(
 
   usr/bin/rg:usr/bin/rg
   usr/bin/sd:usr/bin/sd
-  usr/bin/procs:usr/bin/procs
   usr/bin/htop:usr/bin/htop
 
   # btop은 게스트에서 libstdc++.so.6의 유일한 사용자다(기존 50개와 층 2의
