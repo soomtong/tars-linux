@@ -123,6 +123,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Bash History Durability (BH-M0~M2) | 2026-09-12 | 같은 일을 bash에 했다 — `PROMPT_COMMAND='history -a'` 한 줄이 zoxide 훅보다 먼저. 덤으로 게스트에 없던 `/dev/fd`를 세웠다 |
 | Bash Boot (BB-M0~M2) | 2026-09-12 | `config` 체인이 부팅 아홉이 됐고 아홉째가 `shell=bash`로 뜬다 — 중첩으로는 볼 수 없던 여섯을 본다 |
 | Shutdown Latency (SL-M0~M2) | 2026-09-13 | PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가 0.13초가 됐다 |
+| Guest Network (NW-M0~M3) | 2026-09-14 | `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다. 우리 코드는 링크를 올리고 dhcpcd를 띄우는 것까지고 나머지는 dhcpcd다. 판정은 SLIRP 안에서 닫힌다 — 열두번째 체인 `net/check.sh` |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

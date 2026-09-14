@@ -1,18 +1,18 @@
-# HANDOFF: Guest Network(NW)의 M2가 끝났다 — 게스트에 주소가 붙고 체인이 그것을 읽는다
+# HANDOFF: Guest Network(NW)가 끝났다 — 게이트가 열두 체인을 돈다
 
 ## 지금 어디인가
 
-새 서브프로젝트 Guest Network(NW)가 2026-09-13에 열렸고 M0·M1·M2가 같은 날
-끝났다. `tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가 `10.0.2.15`를 받고
-`/etc/resolv.conf`가 생긴다. 체인 `net/check.sh`가 검사 여덟으로 그 사슬
-전체를 본다 — 커널의 스택부터 hook이 쓴 nameserver까지.
+서브프로젝트 Guest Network(NW)가 2026-09-13에 열려 2026-09-14에 닫혔다.
+`tars.conf`에 `net=dhcp`를 적은 부팅에서 게스트가 `10.0.2.15`를 받고,
+기본 경로가 깔리고, TCP로 상대에 붙어 글자를 읽는다. 체인 `net/check.sh`가
+검사 열하나로 그 사슬 전체를 보고, 이제 `CHAINS`의 열두번째다.
 
 우리가 쓴 코드는 `init/src/net.zig` 165줄이고 그중 주석이 100줄 남짓이다.
 실제로 하는 일은 링크를 UP으로 올리는 `ioctl` 하나와 dhcpcd를 띄우는
 `fork`/`execve` 하나다. 주소도 라우트도 `/etc/resolv.conf`도 dhcpcd가 쓴다.
 
-루트 게이트는 열한 체인 3/3이다(`net`은 아직 `CHAINS` 밖이다). 바로 다음 할
-일은 NW-M3의 plan을 새로 쓰는 것이다 (아래 "바로 다음에 할 것").
+루트 게이트는 열두 체인 3/3이고 30분 57.86초다. 바로 다음 할 일은 사용자가
+다음 방향을 고르는 것이다 (아래 "바로 다음에 할 것").
 
 이 방향은 사용자가 골랐다. 이월 숙제에 없던 축이고, 후보를 제시했을 때
 "한글 기호 확장은 당분간 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도
@@ -26,7 +26,7 @@ Gate Accuracy(GA-M0·M1)다.
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
 
-## NW가 지금까지 한 일 (2026-09-13, 아직 열려 있다)
+## NW가 한 일 (2026-09-13 ~ 2026-09-14, 닫혔다)
 
 | 커밋 | 무엇 |
 |---|---|
@@ -45,6 +45,31 @@ Gate Accuracy(GA-M0·M1)다.
 | `4cd4ace` | `tars.conf`의 일곱째 키 `net`. 기본값이 `off`인 유일한 키다 |
 | `1acf9f6` | `net.zig`. 우리가 쓰는 코드 전부이고 로그 두 줄이 그 경계다 |
 | `52611a2` | 체인이 검사 여덟으로 자랐다. `net/make_disk.sh`가 설정을 미리 굽는다 |
+| `ab96b71` | M2의 HANDOFF와 기억 `project_seeding_a_config_disk` |
+| `38c46e1` | NW-M3 plan |
+| `dacd81f` | QEMU가 `guestfwd`로 상대 노릇을 한다. 체인이 payload를 `mktemp`로 만든다 |
+| `772c8fa` | 검사 셋(기본 경로 · TCP 연결 · dhcpcd 생존). 체인이 검사 열하나가 됐다 |
+| `77c0a1f` | `CHAINS`에 열두번째 줄. 총 부팅이 39회에서 42회가 됐다 |
+
+### NW-M3이 알아낸 것 — 다음 세션이 먼저 읽을 넷
+
+본문은 design의 "NW-M3가 실행으로 증명한 것" 절에 실측 26~28로 있다.
+
+1. 연결 실패가 조용하다. 상대가 없으면 `nc`가 아무 말도 안 하고 프롬프트로
+   돌아온다 — SLIRP이 RST를 안 주고 그냥 버려서 `-w 5`의 타임아웃으로
+   끝나기 때문이다. 화면만 보면 "연결이 실패했다"와 "명령을 안 쳤다"가 안
+   갈린다. 그래서 판정 글자는 QEMU가 흘려 넣는 payload여야 한다.
+2. `wait_for_screen`은 우리가 친 명령의 에코도 화면으로 센다. 로그 전체의
+   `screen>` 줄을 보기 때문이다 — `pgrep -l dhcpcd`를 `dhcpcd`로 판정했다면
+   그 프로세스가 죽어 있어도 초록이었다. 처방은 출력에만 생기는 글자를
+   만드는 것이고(`echo dhcpcd-alive=$(pgrep -c dhcpcd)`), 본문은
+   `docs/decisions/project_gate_screen_echo.md`에 있다.
+3. `guestfwd` 판정은 기본 경로를 안 밟는다. 상대 `10.0.2.100`이 게스트
+   `10.0.2.15/24`와 같은 서브넷이기 때문이다. 그래서 경로를 검사 8이 따로
+   본다(`default via 10.0.2.2`). 둘을 더해도 "인터넷에 나간다"는 아니다.
+4. 타이핑 78키가 3.47초였다. 한 키에 0.3초를 쉬던 시절이라면 23초다 —
+   `type_keys`가 로그가 자라는 것을 보고 넘어가서(GL-M2) 7분의 1이 됐다.
+   게이트 증가분 +1분 04.02초도 그 체인 22.911초 × 3으로 전부 설명된다.
 
 ### NW-M2가 알아낸 것 — 다음 세션이 먼저 읽을 다섯
 
@@ -360,47 +385,38 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — NW-M3의 plan을 새로 쓴다
+## 바로 다음에 할 것 — 다음 방향을 고른다
 
-M2가 끝났으므로 M3 plan을 그 시점에 새로 쓴다(`CLAUDE.md`의 milestone 규칙).
-M3가 하는 일은 둘이다 — `check.sh`의 `CHAINS` 배열에 `net`을 더하는 것과,
-게스트가 실제로 밖으로 나가는 것을 `guestfwd`로 판정하는 것. 끝났다의 기준은
-루트 게이트가 열두 체인을 돌고 3/3인 것이다.
+NW가 닫혔으므로 손에 든 일이 없다. 다음 서브프로젝트는 사용자가 고른다
+(아래 "이월 숙제"가 후보 목록이다).
 
-design 끝의 "M2가 M3에 넘기는 것" 표가 그 목록이고, 여섯 자리에 이미 숫자가
-붙어 있다.
+NW가 방금 전제 하나를 세웠다는 것을 고를 때 같이 본다 — 패키지 매니저(최종
+비전의 "Linux용 homebrew 스타일")가 네트워크와 git을 둘 다 요구했고, 그
+둘이 이제 다 있다(UT가 git을, NW가 네트워크를 세웠다). 다만 그 문을 열면
+"바깥 인터넷에 의존하지 않는 게이트"를 어떻게 유지할 것인가가 첫 결정이
+된다 — NW design 결정 7이 그 원칙을 세웠고, 패키지 매니저는 정의상 그 선을
+넘는 물건이다.
 
-| 무엇 | 지금 아는 것 |
-|---|---|
-| `CHAINS` 배열 | `net`을 더하면 열둘이 된다. 게이트가 17.082초 × 3만큼 는다 |
-| `guestfwd` | M0 실측 5가 이 QEMU에서 돈다고 쟀다. `-netdev user,id=n0`에 옵션을 덧붙인다 |
-| 판정 도구 | `nc`가 게스트에 있고 이름도 선다. bash의 `/dev/tcp`도 된다 |
-| `curl` | 들어갔지만 체인이 한 번도 안 친다. M3도 안 쳐도 된다(실측 5) |
-| 리스 대기 | 검사 5가 그 자리다. 바깥 연결을 거는 판정은 그 뒤에 온다 |
-| dhcpcd 감시 | `pgrep`·`kill`이 게스트에 있다. "살아 있나"를 물을 수 있다 |
+NW가 남기고 간 자리 둘도 이월 숙제에 있다 — 실머신 NIC(층 5)와 IPv6 ·
+방화벽 · 포트 열기 · NTP 넷이다. 근거는 전부 design의 비목표 절에 있다.
 
-M3 plan을 쓰는 사람이 M0~M2에서 그대로 가져다 쓸 것이 셋이다.
+### NW를 다시 손대는 사람이 가져다 쓸 것
 
-- `guestfwd`로 판정하는 방법. M0 plan의 Task 5와 design 실측 5에 있다 —
-  게스트가 `10.0.2.100:8080`에 붙으면 QEMU가 지정한 명령의 출력을 흘려 넣는다.
+- `guestfwd`로 판정하는 방법. 실물이 `net/check.sh`의 QEMU 줄과 검사 9다.
+  게스트가 `10.0.2.100:8080`에 붙으면 QEMU가 체인이 만든 파일을 흘려 넣는다.
   듣는 프로세스가 없으므로 체인이 관리할 상태가 안 는다.
-- 도구를 sysroot에 임시로 넣는 절차. `docs/decisions/project_measuring_tool_cost.md`
-  에 있고 `apt-cache depends --recurse` + `cp -an`이다.
+- 도구를 재는 절차. `docs/decisions/project_measuring_tool_cost.md`에 있고
+  `apt-cache depends --recurse` + `cp -an`이다. 패키지 의존이 아니라
+  `readelf -d`의 `DT_NEEDED`를 본다.
 - `net/check.sh`의 반사실 방법. `/tmp` 사본을 `-v`로 덮어씌운다. 사본에
-  `chmod +x`를 함께 친다(M2 실측 22의 함정).
+  `chmod +x`를 함께 친다(M2 실측 22의 함정). M3은 `guestfwd`가 듣는 포트만
+  8080→18080으로 옮겨서 검사 9를 겨냥했다.
+- 설정 디스크를 미리 굽는 방법. `net/make_disk.sh`의 `debugfs`이고 본문은
+  `docs/decisions/project_seeding_a_config_disk.md`에 있다.
 
-### M0을 다시 돌려야 할 때 알아야 하는 것
-
-`/tmp/nw/`에 하네스와 로그가 남아 있다(`guest.sh` · `guest.clean` ·
-`guest.run1.clean` · `config.net` · `guest_tools.sh` · `initrd.before` ·
-`initrd.after` · `initrd.six`). 호스트 `/tmp`라 언젠가 사라진다.
-
-`kernel/build`와 `kernel/initrd.cpio`는 M0 끝에 지웠다. 그래서 다음 빌드가
-처음부터 다시 돈다 — 실험용 커널이 남아서 헷갈리는 일을 막으려고 일부러
-지운 것이다(plan의 Task 7 Step 3).
-
-컨테이너 sysroot에 도구를 임시로 넣는 방법은 `cp -an`이다. `dpkg -x`로
-스테이징에 풀고 없는 파일만 더하면 기존 sysroot를 한 파일도 안 덮는다.
+`/tmp/nw/`에 M0의 하네스와 로그가, `/tmp/nwm3/`에 M3의 로그가 남아 있을 수
+있다. 호스트 `/tmp`라 언젠가 사라지고, 다시 필요하면 각 plan의 Task에
+스크립트가 글자 그대로 있다.
 
 ## 명령 모음
 
@@ -414,7 +430,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 docker run --rm -v "$PWD":/workspace -v /tmp/bb_m0.sh:/tmp/bb_m0.sh:ro \
   -w /workspace tars-devcontainer bash /tmp/bb_m0.sh > /tmp/bb_m0.log 2>&1
 
-# net 체인 단독 (부팅 하나, 검사 여덟, 약 17초. 아직 CHAINS 밖이다)
+# net 체인 단독 (부팅 하나, 검사 열하나, 약 23초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash net/check.sh
 
@@ -430,7 +446,7 @@ docker run --rm -v "$PWD":/workspace -v /tmp/nw:/tmp/nw -w /workspace \
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash config/check.sh 2>&1 | tail -50
 
-# 루트 게이트 (약 28분)
+# 루트 게이트 (열두 체인, 약 31분)
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash check.sh ; } > /tmp/gate.log 2> /tmp/gate.time
 
@@ -480,20 +496,24 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
-열한 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3), 3/3. 가장 최근 값은 29분 53.84초다(2026-09-13,
-NW-M2 뒤 — initrd가 13MB 커진 첫 게이트다). 그 앞이 NW-M1 뒤의 29분 49.15초이고
-차이가 +4.69초인데 잡음의 38분의 1이라 갈렸다고 말하지 않는다. 그 앞이 SL-M2
-뒤의 29분 38.52초다. 커널에 NET을 켜도 initrd를 13MB 키워도 게이트가 안
-길어지는 이유는 커널을 회차마다 다시 굽지 않기 때문이다(GL-M1).
+열두 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
+HI-M3 · RM-M1 · UT-M3 · NW-M3), 3/3. 가장 최근 값은 30분 57.86초다
+(2026-09-14, NW-M3 뒤 — 체인이 열둘이 된 첫 게이트다). 그 앞이 NW-M2 뒤의
+29분 53.84초이고 차이가 +1분 04.02초인데, `net` 체인 단독이 22.911초이고
+게이트가 그것을 세 번 도니 68.7초라 전부 설명되는 값이다. 그 앞이 NW-M1 뒤의
+29분 49.15초, 그 앞이 SL-M2 뒤의 29분 38.52초다. 커널에 NET을 켜도 initrd를
+13MB 키워도 게이트가 안 길어졌던 이유는 커널을 회차마다 다시 굽지 않기
+때문이다(GL-M1) — 실제로 시간을 더한 것은 체인 하나뿐이다.
+
+`skipping make`는 35회다(`12 × 3 − 1`). 체인이 하나 늘면 이 수도 셋 는다.
 
 `GUEST_MEM=512`에 여유가 남아 있다. 푼 initrd가 90MB에서 103MB가 됐는데 열한
 체인 어디에서도 UT-M2가 겪은 증상이 안 나왔다 — 그 실패는 "느려짐"이 아니라
 "안 켜짐"이다(`Kernel panic - System is deadlocked on memory`).
 
-⚠ `net/check.sh`는 있지만 아직 `CHAINS` 밖이다. 단독으로 17.082초에 돌고
-(M1에서는 8.954초였다 — 디스크 굽기와 리스 대기와 타이핑 마흔 키가 늘었다),
-게이트에 들이는 것은 NW-M3이다. 그때 열두 체인이 되고 약 51초가 는다.
+`net/check.sh`는 단독으로 22.911초에 돈다(M1에서 8.954초 · M2에서 17.082초
+였다 — 디스크 굽기와 리스 대기, 그리고 M3의 타이핑 78키가 차례로 늘었다).
+단독 실행은 아래 "명령 모음"에 있다.
 
 그 앞이 BB-M2 뒤의 29분 24.06초이고 14.46초 차이인데, SL은 시간을
 더한 것이 없고 오히려 `power` 체인의 종료 둘에서 약 5초를 아꼈어야 한다
@@ -1191,7 +1211,7 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-지금 손에 든 일은 NW이고, 아래는 NW가 끝난 뒤의 후보다.
+NW가 닫혀서 손에 든 일이 없다. 아래가 다음 후보 전부다.
 
 SM이 남긴 것.
 
@@ -1200,8 +1220,8 @@ SM이 남긴 것.
 
 SD가 남긴 것은 SL이 집어서 끝냈다(아래 "끝난 숙제").
 
-NW가 열어 둘 것 (NW design의 비목표에서 온다. 아직 NW가 안 끝났으므로
-목록이 확정이 아니다).
+NW가 열어 둔 것 (NW design의 비목표에서 온다. NW가 닫혔으므로 이 목록이
+확정이다).
 
 - [ ] 실머신 NIC. NW의 층 5다. 유선(`e1000e`·`igc`)은 `.config`에 드라이버를
       켜는 일에 가깝고, 무선은 firmware 파일과 `wpa_supplicant`가 새로

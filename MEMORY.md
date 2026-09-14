@@ -68,3 +68,5 @@
 - [Write or reuse](docs/decisions/project_write_or_reuse.md) — "커널 다음은 전부 내 코드"는 절대 원칙이 아니다; 직접 짜는 자리는 배울 값이 있거나 원하는 모양이 남의 것과 다른 자리다(NW 설계 중 사용자가 정했다, 2026-09-13)
 - [Measuring tool cost](docs/decisions/project_measuring_tool_cost.md) — 게스트에 도구를 넣기 전에 실제 비용을 재는 절차. 패키지 의존이 아니라 재귀 `DT_NEEDED`를 본다; `curl` 하나가 13MB 중 86%였다(NW-M0, 2026-09-13)
 - [Seeding a config disk](docs/decisions/project_seeding_a_config_disk.md) — `debugfs`가 마운트도 특권도 없이 ext2 이미지에 파일을 쓴다; 체인이 부팅 하나로 `tars.conf`의 키를 시험할 수 있다(NW-M2, 2026-09-13)
+- [게이트의 화면 판정은 자기가 친 명령도 화면으로 센다](docs/decisions/project_gate_screen_echo.md) — `wait_for_screen`이 로그 전체의 `screen>` 줄을 보므로 판정 글자는 출력에만 있어야 한다(NW-M3, 2026-09-14)
+- [Guest network](docs/decisions/project_guest_network.md) — `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다; 우리 코드는 링크를 올리고 dhcpcd를 띄우는 두 줄이고 게이트 판정은 SLIRP 안에서 닫힌다(NW-M0~M3, 2026-09-14 종료)

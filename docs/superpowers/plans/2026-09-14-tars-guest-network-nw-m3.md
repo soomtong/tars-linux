@@ -200,7 +200,7 @@ grep -c ':\./' check.sh
 옵션 문자열을 받아들이는가. 문법이 틀리면 QEMU가 아예 안 뜨고, 그러면
 검사를 함께 넣었을 때 "연결이 안 된다"와 "기계가 안 켜졌다"가 안 갈린다.
 
-**Files:**
+고칠 파일:
 - Modify: `net/check.sh:73-82`(payload와 cleanup), `net/check.sh:131`(QEMU 줄)
 
 - [ ] Step 1: payload를 만드는 줄을 `$LOG` 옆에 더한다
@@ -292,7 +292,7 @@ git commit -m "Let QEMU answer the guest on a fixed address"
 
 ## Task 2 — 검사 셋을 더한다
 
-**Files:**
+고칠 파일:
 - Modify: `net/check.sh:247-274`(검사 7 뒤에 셋을 넣고 기존 8의 번호를 민다)
 
 - [ ] Step 1: 검사 7(`/etc/resolv.conf`) 바로 뒤에 검사 8·9·10을 넣는다
@@ -543,7 +543,7 @@ git status --short
 
 ## Task 4 — 체인을 `CHAINS`에 들인다
 
-**Files:**
+고칠 파일:
 - Modify: `check.sh:224-239`(주석 한 문단과 배열 한 줄)
 - Modify: `net/check.sh`(머리 주석의 "Task 4에서 들어간다"를 지운다)
 
@@ -763,6 +763,25 @@ M3에서 새로 정한 것은 결정 D(기본 경로를 따로 본다)와 결정
 git add docs CLAUDE.md MEMORY.md HANDOFF.md
 git commit -m "Close the guest network with a gate that sees it"
 ```
+
+## 실제로 돌린 것이 이 plan과 갈린 자리 넷
+
+2026-09-14에 이 plan을 그대로 밟았고 Task 순서는 안 바뀌었다. 갈린 것은
+이것들이다.
+
+1. 실측 번호가 25가 아니라 26부터다. M2가 이미 25까지 썼다(`실측 25 — initrd가
+   13MB 커졌는데 게이트는 그대로다`). Task 6 Step 3의 번호를 26·27·28로 읽는다.
+2. 기준선이 M2의 17.082초가 아니라 19.441초였다. 같은 체인 같은 코드인데
+   증분 빌드 상태가 달라서다 — 그래서 M3의 증가분을 M2의 값과 비교하지 않고
+   같은 날 같은 기계에서 잰 19.441초와 비교했다.
+3. 반사실에서 예상 못 한 것을 하나 봤다. 연결이 안 될 때 `nc`가 아무 말도 안
+   하고 프롬프트로 돌아온다(SLIRP이 RST를 안 준다). plan은 `Connection
+   refused`가 나올 것으로 적었는데 화면이 조용했다. 결론은 안 바뀐다 — 오히려
+   판정 글자를 payload로 고른 것의 근거가 하나 늘었다(실측 27).
+4. 기억 파일이 하나가 아니라 둘이다. plan은 `project_gate_screen_echo`만
+   적었는데, NW 서브프로젝트 자체의 요약 파일(`project_guest_network`)이
+   없다는 것이 Task 6에서 드러났다 — 완료된 서브프로젝트는 전부 하나씩 갖고
+   있다.
 
 ## 이 plan이 안 하는 것
 
