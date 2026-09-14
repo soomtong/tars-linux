@@ -152,7 +152,11 @@ while (1) {
         # 보려는 것이다. M1의 parseReply가 이 자리를 자기 nonce와 대조한다.
         my $orig = substr($req, 40, 8);
         my $ts = pack('NN', $FIXED_UNIX + $NTP_EPOCH, 0);
-        $reply = pack('CCcC', 0x24, 1, 4, -6)
+        # 템플릿이 CCCc다. 넷째가 부호 있는 바이트(precision -6)이고 앞의
+        # 셋이 부호 없는 것이다. CCcC로 쓰면 결과 바이트는 두 보수라 같지만
+        # perl이 `Character in 'C' format wrapped`를 찍는다 — Task 1 Step 3의
+        # self-test가 이것을 잡았다.
+        $reply = pack('CCCc', 0x24, 1, 4, -6)
                . pack('NN', 0, 0)
                . 'TSM0'
                . $ts . $orig . $ts . $ts;
@@ -472,8 +476,14 @@ probe A·B·C는 그 방법이 안 통한다. 그 명령줄에는 `%`가 없어�
 grep -E "^TSM0: serial log has|^TSM0: five seconds later" /tmp/ts/run.log
 ```
 
-기대: 둘째 숫자가 첫째보다 크다. 같으면 시계를 뛴 뒤 렌더가 멈춘 것이고,
-그것은 게이트가 `wait_for_screen`으로 판정하는 자리를 통째로 깬다.
+⚠ 이 판정은 틀렸다(실측 7이 그것을 적었다). `terminal`은 `needs_redraw`를
+문지기로 두어서 화면에 아무 일도 없으면 프레임을 안 찍는데(TR-M2), 이 하네스는
+콘솔 셸만 쓰므로 화면 셸에 입력이 없다. 그래서 숫자가 안 자라는 것이
+"렌더가 죽었다"와 "할 일이 없다" 둘 다를 뜻한다 — 갈라지지 않는다.
+
+숫자는 그냥 기록만 하고 넘어간다. 렌더가 시계 점프를 견디는지는 M1의
+부팅 A가 본다. 그 부팅은 `net/check.sh` 안에 있어서 monitor로 화면에 타이핑을
+하므로, 점프 뒤에 화면 판정이 서면 그 자체가 렌더가 살아 있다는 증거다.
 
 - [ ] Step 6: 실패한 probe가 있으면 원본 로그를 직접 본다
 
