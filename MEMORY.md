@@ -21,6 +21,7 @@
 - [Push policy](docs/decisions/feedback_push_policy.md) — push는 묻지 말고 필요할 때 하고, 미푸시 커밋 수를 보고하지 않는다
 - [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유를 일반 어휘 자리에 쓰지 않고, 조사·어미를 생략하지 않는다. 특히 제목과 첫 문장
 - [No emphasis](docs/decisions/feedback_no_emphasis.md) — 문서와 주석에 `**` 강조를 쓰지 않는다(2026-09-12). 내용인 `**`는 남긴다 — md의 코드 블록과 Zig의 배열 반복 연산자
+- [Boot never blocks](docs/decisions/feedback_boot_never_blocks.md) — 네트워크가 꺼져 있거나 안 닿아도 부팅은 평소대로 끝난다(2026-09-15). 타임아웃 위에 `fork`를 한 겹 더 덮고, 음성 검사로 증명한다
 
 ## 사용자 (user)
 
