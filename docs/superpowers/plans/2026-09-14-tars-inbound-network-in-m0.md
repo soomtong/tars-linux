@@ -39,7 +39,7 @@ dhcpcd가 리스를 받는 데 드는 시간을 여섯 번 치른다. NW-M2 실�
 
 ## Task 0 — `/tmp/in/`을 만든다
 
-- [ ] Step 1: 호스트에 디렉터리를 만든다
+- [x] Step 1: 호스트에 디렉터리를 만든다
 
 ```bash
 mkdir -p /tmp/in
@@ -48,7 +48,7 @@ mkdir -p /tmp/in
 이 디렉터리를 컨테이너에 `-v /tmp/in:/tmp/in`으로 물린다. 로그가 `--rm`과
 함께 사라지지 않게 하려는 것이고, NW-M0이 `/tmp/nw`에 같은 것을 했다.
 
-- [ ] Step 2: 만들어졌는지 확인한다
+- [x] Step 2: 만들어졌는지 확인한다
 
 ```bash
 ls -ld /tmp/in
@@ -62,7 +62,7 @@ design 결정 6이 "monitor 대역과 안 겹쳐야 하고 M0이 실제로 열�
 정한다"고 적었다. monitor가 45455~45464와 45471을 쓰므로 후보를 45465·45466
 으로 둔다. 둘인 이유는 Task 2가 리스너를 둘 띄우기 때문이다(측정 3과 3b).
 
-- [ ] Step 1: 컨테이너 안에서 두 포트가 비어 있는지 확인한다
+- [x] Step 1: 컨테이너 안에서 두 포트가 비어 있는지 확인한다
 
 ```bash
 docker run --rm tars-devcontainer bash -c '
@@ -85,14 +85,14 @@ Expected: 두 줄 다 `free`.
 컨테이너의 포트 공간을 물어야 하기 때문이다. QEMU가 `hostfwd`로 여는 자리가
 거기다.
 
-- [ ] Step 2: 결과를 적어 둔다
+- [x] Step 2: 결과를 적어 둔다
 
 두 값을 이 plan의 Task 2 스크립트에 직접 반영한다. 값이 45465·45466 그대로
 이면 고칠 것이 없다.
 
 ## Task 2 — 하네스 전문 (측정 1~5와 3b)
 
-- [ ] Step 1: `/tmp/in/guest.sh`를 Write 도구로 만든다
+- [x] Step 1: `/tmp/in/guest.sh`를 Write 도구로 만든다
 
 heredoc으로 만들지 않는다. 중첩 따옴표에서 `$`가 호스트 셸에 먼저 먹힌다
 (SD-M0이 배운 것이고 NW-M0도 같은 주의를 적었다).
@@ -333,7 +333,7 @@ sleep 2
 echo "INM0: done"
 ```
 
-- [ ] Step 2: 파일이 만들어졌는지 확인한다
+- [x] Step 2: 파일이 만들어졌는지 확인한다
 
 ```bash
 wc -l /tmp/in/guest.sh && grep -c "PROBE\[" /tmp/in/guest.sh
@@ -345,7 +345,7 @@ Expected: 줄 수가 나오고 `grep -c`가 2다. `PROBE[`를 적은 자리가 �
 
 ## Task 3 — 하네스를 돌린다
 
-- [ ] Step 1: 컨테이너에서 실행한다
+- [x] Step 1: 컨테이너에서 실행한다
 
 빌드가 최신이면 3~4분, 커널을 다시 구워야 하면 5분쯤 걸린다.
 
@@ -357,7 +357,7 @@ echo "exit=$?"
 
 Expected: `exit=0`. 0이 아니면 `/tmp/in/run.log`의 마지막 40줄에 이유가 있다.
 
-- [ ] Step 2: 하네스가 찍은 줄만 먼저 본다
+- [x] Step 2: 하네스가 찍은 줄만 먼저 본다
 
 ```bash
 grep -E "^INM0:|^PROBE\[|^=== measurement" /tmp/in/run.log
@@ -369,7 +369,7 @@ Expected: `console shell up after Ns` 한 줄, `PROBE[no-listener]` 한 줄,
 
 ## Task 4 — 게스트 로그를 구간별로 읽는다
 
-- [ ] Step 1: ANSI를 걷어낸다
+- [x] Step 1: ANSI를 걷어낸다
 
 시리얼 로그에 터미널이 그리는 escape sequence가 섞여 있어서 그대로는 못
 읽는다. NW-M0이 쓴 것과 같은 한 줄이다.
@@ -380,7 +380,7 @@ perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
 wc -l /tmp/in/guest.clean
 ```
 
-- [ ] Step 2: 구간을 하나씩 읽는다
+- [x] Step 2: 구간을 하나씩 읽는다
 
 ```bash
 sed -n '/===LEASE-ABOVE===/,/===LISTEN-BEFORE-ABOVE===/p' /tmp/in/guest.clean
@@ -397,7 +397,7 @@ sed -n '/===SECOND-LISTENER-SPAWNED===/,/===REVERSE-ABOVE===/p' /tmp/in/guest.cl
 - 셋째 — 살아 있는 리스너에 대해 `grep -c 1F91`이 1 이상이었나(측정 1),
   `/tmp/inm0-got.txt`에 `inm0-reverse-ok`가 있나(측정 3b).
 
-- [ ] Step 3: init이 한 일을 확인한다
+- [x] Step 3: init이 한 일을 확인한다
 
 ```bash
 grep -a "tars-init:" /tmp/in/guest.log | head -20
@@ -409,23 +409,23 @@ Expected: `net link eth0 is up`과 `started dhcpcd on eth0`이 있다. 없으면
 
 ## Task 5 — 실측을 design에 적는다
 
-- [ ] Step 1: design에 `## IN-M0이 실행으로 증명한 것` 절을 더한다
+- [x] Step 1: design에 `## IN-M0이 실행으로 증명한 것` 절을 더한다
 
 실측 1~6(그리고 3b)을 각각 `### 실측 N — <한 줄 결론>` 꼴로 적는다. 각
 실측에 넣을 것이 셋이다 — 무엇을 쟀나, 값이 얼마였나, 그 값이 M1·M2의
 무엇을 정하나.
 
-- [ ] Step 2: plan이 실제 실행과 갈린 자리를 이 문서 끝에 적는다
+- [x] Step 2: plan이 실제 실행과 갈린 자리를 이 문서 끝에 적는다
 
 NW-M0이 다섯 갈렸고 그 목록이 다음 세션에 값졌다. 갈린 것이 없으면 "갈린
 자리가 없다"고 한 줄 적는다.
 
-- [ ] Step 3: 위험 1과 위험 4의 상태를 갱신한다
+- [x] Step 3: 위험 1과 위험 4의 상태를 갱신한다
 
 측정 5의 값이 위험 1의 크기를 정하고, 측정 1이 위험 4를 닫거나 연다.
 design의 그 두 절에 `⚠` 정정이나 확인 결과를 단다.
 
-- [ ] Step 4: 커밋한다
+- [x] Step 4: 커밋한다
 
 저장소 파일 중 바뀌는 것은 design과 이 plan 둘뿐이다. 실제로 그런지 먼저
 본다.
@@ -452,4 +452,31 @@ git commit -m "Measure the inbound path before touching the chain"
 
 ## 실제로 돌린 것이 이 plan과 갈린 자리
 
-(IN-M0을 끝내면서 채운다.)
+넷이다.
+
+1. 부팅이 하나가 아니라 둘이었다. Task 2의 `probe_read`가 `rc`로 판정하는데
+   그 판정이 틀렸다 — 듣는 프로세스가 없어도 `rc`가 0이다(실측 4). 그래서
+   측정 5의 루프가 spawn 6밀리초 뒤의 빈 응답을 성공으로 세고 끝났고, 측정
+   3이 아예 안 일어났다. 판정을 받은 바이트 수로 바꾼 `/tmp/in/guest2.sh`가
+   2회차이고 그것이 측정 3·5를 줬다.
+
+   이 갈림이 plan의 잘못이지만 피할 수 있었는지는 분명하지 않다. 측정 4가
+   답하려던 질문이 정확히 "듣는 것이 없을 때 무엇이 보이나"였고, 그 답을
+   모르는 상태에서 판정 기준을 고를 수밖에 없었다. 다음에 같은 모양을 만나면
+   순서를 뒤집는 것이 처방이다 — 판정 기준을 정하는 측정을 먼저 단독으로
+   돌리고, 그 값으로 나머지 하네스를 쓴다.
+
+2. 1회차의 실패가 증거를 남겼다. 1회차에서 `grep -c 1F90`이 첫 연결 뒤에도
+   1이었고 2회차에서는 0이었다. 그 차이가 "바이트를 받으면 리스너가 죽는다"를
+   증명한다 — 실패한 회차를 안 버리고 읽은 것이 값을 만든 자리다.
+
+3. 측정 5가 목적한 값 말고 다른 것을 찾았다. `bind`까지의 간격은 작았는데
+   (4~104밀리초) 읽기가 10초 timeout을 다 썼다. design에 없던 위험 7이
+   여기서 나왔고, IN-M1이 다룰 실제 걸림돌은 재시도 상한이 아니라 읽기의
+   종료 조건이다.
+
+4. Task 4 Step 2의 `sed` 구간 읽기가 숫자를 못 잡았다. fish의 에코 방식
+   때문에 `grep -c`의 출력 숫자가 명령 에코와 여러 줄 떨어져 있어서,
+   `grep -A2`로는 안 잡히고 `grep -B12 "===<표지>-ABOVE==="`로 거꾸로 봐야
+   했다. 다음 milestone에서 같은 로그를 읽을 사람은 뒤에서 보는 쪽을 먼저
+   쓴다.
