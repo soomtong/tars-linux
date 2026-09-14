@@ -99,6 +99,17 @@ MONITOR_PORT=45464
 INBOUND_PORT=45465
 GUEST_LISTEN_PORT=8080
 
+# IN-M2. 반대 방향(체인 → 게스트)의 입구다. 45466은 M0의 실측 6이 45465와
+# 함께 비어 있는 것을 확인한 번호이고, 게스트 쪽 8081은 M0의 실측 3b가 실제로
+# 써 본 포트다.
+#
+# 방향을 포트로 가르는 이유는 리스너가 한 번만 살기 때문이다(design 결정 7).
+# 8080의 리스너는 검사 13이 읽는 순간 죽으므로 같은 포트를 다시 쓰려면
+# 리스너를 또 띄워야 하는데, 그러면 두 방향의 실패가 같은 포트에서 겹쳐
+# 보인다. 포트가 다르면 /proc/net/tcp의 숫자만으로도 어느 방향인지 갈린다.
+REVERSE_PORT=45466
+GUEST_REVERSE_PORT=8081
+
 LOG="$(mktemp)"
 QEMU_PID=""
 
@@ -172,6 +183,12 @@ fail() {
 # 입구가 아예 존재하지 않는다 — 검사 13의 반사실이 그것을 확인한 자리다.
 # hostfwd를 앞에 두는 것은 cmd: 값만 길이가 변하는 조각이라 그것을 끝에 두면
 # 사람이 이 줄을 읽을 때 경계가 어디인지 눈에 보이기 때문이다.
+#
+# IN-M2가 그 옆에 둘째 hostfwd를 놓았다. 앞의 것이 게스트 → 체인 방향의
+# 입구이고 뒤의 것이 체인 → 게스트 방향의 입구다. TCP는 한 연결로 양방향을
+# 다 쓸 수 있지만 여기서는 포트를 나눴다 — 리스너가 한 번만 사는 것이라
+# (결정 7) 방향마다 리스너가 따로 필요하고, 포트가 다르면 /proc/net/tcp의
+# 숫자만으로 어느 방향이 안 섰는지가 갈린다.
 qemu-system-x86_64 \
   -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
@@ -180,7 +197,7 @@ qemu-system-x86_64 \
   -vga none \
   -device virtio-gpu-pci \
   -display none \
-  -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${INBOUND_PORT}-10.0.2.15:${GUEST_LISTEN_PORT},guestfwd=tcp:10.0.2.100:8080-cmd:cat ${PAYLOAD}" \
+  -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${INBOUND_PORT}-10.0.2.15:${GUEST_LISTEN_PORT},hostfwd=tcp:127.0.0.1:${REVERSE_PORT}-10.0.2.15:${GUEST_REVERSE_PORT},guestfwd=tcp:10.0.2.100:8080-cmd:cat ${PAYLOAD}" \
   -device virtio-net-pci,netdev=n0 \
   -drive file="${REPO_ROOT}/out/net.img",if=virtio,format=raw \
   -serial file:"$LOG" \
@@ -517,6 +534,126 @@ echo "the chain read inm1-inbound-ok off the guest's listener"
 # 여기서 리스너가 죽고, 그때 fish가 `fish: Job N, '...' has ended`를 화면에
 # 찍는다(M0 실측 2). M1에는 그 뒤에 화면을 보는 검사가 하나도 없어서 아무것도
 # 안 민다 — 검사 14를 이 뒤에 놓는 IN-M2가 그 한 줄을 고려해야 한다.
+#
+# IN-M2가 그 뒤를 채웠다. 아래 검사 14의 첫 타이핑이 프롬프트를 다시 그리게
+# 만들고 그때 그 줄이 나오는데, 아래 세 검사의 패턴 어느 것도 그 줄과 안
+# 부딪친다. wait_for_screen이 마지막 프레임이 아니라 로그 전체를 보므로
+# 화면 좌표가 밀리는 것도 문제가 안 된다.
+
+# ── 검사 14: 게스트가 둘째 포트를 열었나 ──────────────────────────────
+# 반대 방향(체인 → 게스트)의 준비다. 검사 12와 같은 모양이고 같은 일을 둘
+# 한다 — 실패를 갈라 주는 것과, 이 타이핑 자체가 bind가 끝날 시간을 만드는
+# 것. 뒤의 것이 여기서는 더 중요하다(design 결정 11). 검사 13에서는 검사 12의
+# 타이핑 48키가 리스너와 체인 사이를 메웠는데, 반대 방향에는 그 여유가 없다.
+#
+# 리스너의 모양이 M0의 실측 3b가 실제로 돌린 것이다. 받는 것을 화면이 아니라
+# 파일로 떨어뜨린다 — 체인이 보낸 글자가 게스트 화면에 곧바로 나오면 그것이
+# 검사 15의 판정 글자가 되는데, 그러면 "받았다"와 "nc가 무언가를 찍었다"가
+# 안 갈린다. 파일로 받고 사람이 cat으로 꺼내면 그 글자가 확실히 게스트를
+# 한 번 지나온 것이 된다.
+#
+# fish에서 > 는 shift-dot이다(config/check.sh:68의 주석이 같은 자리를 적고
+# 있다). & 는 shift-7이고 M1의 실측 9가 그 키 이름이 실제로 도는 것을 봤다.
+#
+# 8081이 /proc/net/tcp에 1F91로 적힌다. 검사 12의 1F90과 한 글자 차이라
+# 눈으로는 헷갈리지만 게이트는 안 헷갈린다 — 두 리스너가 동시에 살아 있는
+# 구간이 없기 때문이다(8080의 것은 검사 13이 읽는 순간 죽는다).
+#
+# 왜 grep -c를 그냥 치지 않는가는 검사 12와 같다. 친 명령의 에코가 화면이므로
+# (결정 E) 출력에만 생기는 글자로 판정한다 — inm2-listen=N이다.
+echo "=== typing the reverse listener on port ${GUEST_REVERSE_PORT} ==="
+type_keys n c spc minus l spc minus p spc 8 0 8 1 spc shift-dot spc \
+  slash t m p slash i n m 2 dot t x t spc shift-7 ret
+
+echo "=== typing 'echo inm2-listen=\$(grep -c 1F91 /proc/net/tcp)' ==="
+type_keys e c h o spc i n m 2 minus l i s t e n equal \
+  shift-4 shift-9 g r e p spc minus c spc 1 shift-f 9 1 spc \
+  slash p r o c slash n e t slash t c p shift-0 ret
+
+if ! wait_for_screen "inm2-listen=[1-9]"; then
+  fail "the guest never put port ${GUEST_REVERSE_PORT} into LISTEN" \
+    "terminal: screen>"
+fi
+echo "the guest is listening on port ${GUEST_REVERSE_PORT}"
+
+# ── 검사 15: 체인이 보낸 바이트를 게스트가 받나 ───────────────────────
+# 받는 길의 반대쪽이다. TCP는 양방향이고 두 방향이 커널에서 다른 버퍼를
+# 지난다 — 한 방향만 보고 "길이 섰다"고 말하면 그 말이 실제보다 넓다
+# (design 결정 5).
+#
+# 이 방향만은 화면으로 판정한다(design 결정 3의 단서). 게스트가 받은 것을
+# 체인에게 알릴 통로가 화면뿐이기 때문이다. 다만 판정 글자를 우리가 게스트에
+# 타이핑하지 않으므로 에코 함정에 안 걸린다 — inm2-reverse-ok는 이 파일이
+# 소켓으로 흘려 넣는 글자이고, 게스트 명령줄에는 파일 이름만 나온다.
+#
+# 보내고 바로 닫는다. 게스트의 nc는 EOF를 봐야 끝나고(M0 실측 3b), 끝나야
+# 파일이 확실히 다 써진다. 닫는 것이 늦으면 아래 cat이 빈 파일을 볼 수 있다.
+#
+# fd가 6인 이유. 3은 monitor이고 5는 검사 13이 썼다(닫혔지만 검사 16이 다시
+# 쓴다). 방향마다 번호를 나눠 두면 로그에서 어느 줄이 어느 방향인지 보인다.
+#
+# 재시도가 없다. 검사 14가 LISTEN을 이미 확인했으므로 여기서 못 닿으면 그것은
+# 타이밍이 아니라 길의 문제다. 재시도를 두면 그 구별이 흐려진다.
+REVERSE_SENT=0
+if exec 6<>"/dev/tcp/127.0.0.1/${REVERSE_PORT}"; then
+  printf 'inm2-reverse-ok\n' >&6 && REVERSE_SENT=1
+  exec 6<&-
+  exec 6>&-
+fi
+
+# 실패를 둘로 가른다. 검사 13과 같은 갈래다 — 빈 로컬 포트는 즉시
+# Connection refused이고(M0 실측 6) hostfwd 포트는 게스트에 아무도 없어도
+# 붙는다(실측 4). 그래서 앞의 것이 "QEMU가 이 입구를 안 열었다"이고 뒤의
+# 화면 판정이 "열렸는데 게스트까지 안 닿았다"이다.
+[ "$REVERSE_SENT" = "1" ] || \
+  fail "nothing accepted on 127.0.0.1:${REVERSE_PORT} — QEMU never opened the second hostfwd port" \
+    "terminal: screen>"
+
+echo "=== typing 'cat /tmp/inm2.txt' ==="
+type_keys c a t spc slash t m p slash i n m 2 dot t x t ret
+
+if ! wait_for_screen "inm2-reverse-ok"; then
+  fail "the guest never received what the chain sent" "terminal: screen>"
+fi
+echo "the guest received inm2-reverse-ok from the chain"
+
+# ── 검사 16: 듣는 것이 없으면 체인이 그것을 읽어 내나 ─────────────────
+# 앞의 검사 넷이 전부 초록인 장식이 아니라는 것을 증명하는 자리다. 여기서
+# 붙는 포트가 검사 13과 같은 45465인 이유가 그것이다 — 같은 길, 같은 fd,
+# 같은 read인데 게스트 쪽 리스너만 없다. 즉 이것은 검사 13의 음성 대조군이다.
+#
+# 게스트에 아무것도 안 친다. 8080의 리스너는 한 번만 사는 것이라(결정 7)
+# 검사 13이 읽는 순간 이미 죽었고, M0의 실측 1이 그 뒤 /proc/net/tcp의
+# 1F90이 0으로 돌아가는 것을 봤다. 그래서 음성을 만들기 위해 할 일이 없다.
+#
+# 기다리지 않는다(design 결정 10). 듣는 것이 없으면 QEMU가 붙여 주고 곧바로
+# 닫으므로 read가 즉시 EOF를 보고 빈 값으로 돌아온다 — M0의 실측 4가 잰
+# 값이 3~38밀리초다. -t 2는 그 예상이 틀린 날 게이트가 여기서 매달리지
+# 않게 하는 상한이고, 이 값이 실제로 쓰이면 그 자체가 새 사실이다.
+#
+# 붙는 것에 성공했는지를 따로 본다. 이것이 이 검사에서 가장 중요한 줄이다 —
+# 안 보면 hostfwd가 통째로 사라진 날에도 이 검사가 초록이 된다(못 붙어서
+# 아무것도 못 읽은 것과 붙었는데 안 온 것이 같은 모양이 되기 때문이다).
+# 음성 검사가 거짓 초록이 되는 길은 대개 이렇게 생겼다.
+#
+# rc는 안 본다. M0의 실측 4가 음성과 양성이 rc에서 같은 값이라고 쟀다.
+echo "=== connecting with nothing listening on port ${GUEST_LISTEN_PORT} ==="
+NEG_CONNECTED=0
+NEG_GOT=""
+if exec 5<>"/dev/tcp/127.0.0.1/${INBOUND_PORT}"; then
+  NEG_CONNECTED=1
+  read -r -t 2 NEG_GOT <&5 || true
+  exec 5<&-
+  exec 5>&-
+fi
+
+[ "$NEG_CONNECTED" = "1" ] || \
+  fail "the negative check could not even connect — the hostfwd port is gone" \
+    "terminal: screen>"
+[ -z "$NEG_GOT" ] || \
+  fail "something answered on 127.0.0.1:${INBOUND_PORT} where nothing should be listening (got: [${NEG_GOT}])" \
+    "terminal: screen>"
+echo "with no listener the chain read nothing, as it should"
 
 # ── 끈다 ──────────────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the guest ==="

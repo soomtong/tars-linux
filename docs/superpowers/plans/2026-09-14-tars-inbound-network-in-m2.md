@@ -65,7 +65,7 @@ design의 M2 절이 검사 둘(14=반대 방향, 15=음성)을 그려 두었다.
 치르는 값은 타이핑 약 47키(약 2.1초)이고, 게이트가 이 체인을 세 번 도니 약
 6.3초다. 게이트 잡음이 ±3분이다.
 
-- [ ] Step 1: design의 M2 절을 셋으로 고친다
+- [x] Step 1: design의 M2 절을 셋으로 고친다
 
 `### IN-M2 — 반대 방향과 음성` 절의 검사 목록 둘을 아래 셋으로 바꾼다.
 
@@ -88,7 +88,7 @@ design의 M2 절이 검사 둘(14=반대 방향, 15=음성)을 그려 두었다.
 죽는 것, 그리고 게이트가 3/3인 것이다.
 ```
 
-- [ ] Step 2: 결정 11을 더한다
+- [x] Step 2: 결정 11을 더한다
 
 `### 결정 10 — 읽기의 종료 조건은 체인 쪽 read -r -t다 (M1이 골랐다)` 절 바로
 뒤, `## 비목표` 절 앞에 넣는다.
@@ -115,7 +115,7 @@ design이 M2를 검사 둘로 그렸는데 M2가 셋으로 갈랐다. 반대 방
 시도에서 닿았나"가 로그에 안 남는다.
 ```
 
-- [ ] Step 3: 고쳐진 자리를 확인한다
+- [x] Step 3: 고쳐진 자리를 확인한다
 
 ```bash
 grep -n "결정 11\|검사 16 —\|검사 다섯" \
@@ -127,7 +127,7 @@ Expected: 줄 셋. 결정 절의 제목 하나, M2 절의 검사 16 항목 하�
 
 ## Task 1 — QEMU 줄에 `hostfwd` 하나 더
 
-- [ ] Step 1: 포트 상수 둘을 더한다
+- [x] Step 1: 포트 상수 둘을 더한다
 
 `net/check.sh:100`의 `GUEST_LISTEN_PORT=8080` 바로 아래에 넣는다.
 
@@ -144,7 +144,7 @@ REVERSE_PORT=45466
 GUEST_REVERSE_PORT=8081
 ```
 
-- [ ] Step 2: `-netdev` 값에 둘째 `hostfwd`를 이어 붙인다
+- [x] Step 2: `-netdev` 값에 둘째 `hostfwd`를 이어 붙인다
 
 `net/check.sh:183`의 이 줄을
 
@@ -163,7 +163,7 @@ M0의 하네스가 정확히 이 형식으로 돌았고(실측 6), M1이 `hostfw
 한 값에서 함께 사는 것까지 확인했다(실측 10). `cmd:` 값을 끝에 두는 규칙은
 M1이 정한 그대로다.
 
-- [ ] Step 3: 그 줄 위의 주석에 한 문장을 더한다
+- [x] Step 3: 그 줄 위의 주석에 한 문장을 더한다
 
 `# IN-M1이 그 -netdev 값에 hostfwd를 하나 더했다.`로 시작하는 문단 끝에
 붙인다.
@@ -176,7 +176,7 @@ M1이 정한 그대로다.
 # 숫자만으로 어느 방향이 안 섰는지가 갈린다.
 ```
 
-- [ ] Step 4: 지운 줄이 의도한 줄 하나뿐인지 본다
+- [x] Step 4: 지운 줄이 의도한 줄 하나뿐인지 본다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -190,7 +190,7 @@ Expected: `-` 줄이 딱 하나이고 그것이 옛 `-netdev` 줄이다. CLAUDE.
 검사 13의 마지막 주석(`# 여기서 리스너가 죽고 …`) 뒤, `# ── 끈다 ──` 앞에
 넣는다. 아래 Task 3·4도 같은 자리에 차례로 쌓인다.
 
-- [ ] Step 1: 리스너를 띄우는 타이핑과 판정을 넣는다
+- [x] Step 1: 리스너를 띄우는 타이핑과 판정을 넣는다
 
 ```bash
 # ── 검사 14: 게스트가 둘째 포트를 열었나 ──────────────────────────────
@@ -242,7 +242,7 @@ fish: Job 2, 'echo inm1-inbound-ok | nc -l -…' has ended
 안 부딪친다. `wait_for_screen`이 마지막 프레임이 아니라 로그 전체를 보므로
 화면 좌표가 밀리는 것도 문제가 안 된다.
 
-- [ ] Step 2: 더한 줄만 들어갔는지 본다
+- [x] Step 2: 더한 줄만 들어갔는지 본다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -252,7 +252,7 @@ Expected: `-` 줄이 Task 1에서 본 그 한 줄뿐이다.
 
 ## Task 3 — 검사 15: 체인이 보낸 것을 게스트가 받나
 
-- [ ] Step 1: 보내고 닫고, 게스트에서 꺼내 본다
+- [x] Step 1: 보내고 닫고, 게스트에서 꺼내 본다
 
 ```bash
 # ── 검사 15: 체인이 보낸 바이트를 게스트가 받나 ───────────────────────
@@ -303,7 +303,7 @@ echo "the guest received inm2-reverse-ok from the chain"
 가장 먼저 의심할 것이 그 순서다 — Task 5 Step 3의 시리얼 로그에서 `cat`의
 출력 자리를 본다.
 
-- [ ] Step 2: 더한 줄만 들어갔는지 본다
+- [x] Step 2: 더한 줄만 들어갔는지 본다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -316,7 +316,7 @@ Expected: `-` 줄이 여전히 그 한 줄뿐이다.
 design 결정 5의 셋째 근거가 이 자리다. 음성이 없으면 "연결이 됐다"와 "체인이
 아무것도 안 했다"가 안 갈린다.
 
-- [ ] Step 1: 음성 검사를 넣는다
+- [x] Step 1: 음성 검사를 넣는다
 
 ```bash
 # ── 검사 16: 듣는 것이 없으면 체인이 그것을 읽어 내나 ─────────────────
@@ -358,7 +358,7 @@ fi
 echo "with no listener the chain read nothing, as it should"
 ```
 
-- [ ] Step 2: lint에 안 걸리는지 미리 본다
+- [x] Step 2: lint에 안 걸리는지 미리 본다
 
 게이트가 첫 부팅 전에 세우는 검사다(GA-M1의 `require_no_early_exit_pipe`).
 이 Task들이 더한 줄에 파이프가 하나도 없지만 확인은 매번 한다.
@@ -370,7 +370,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 Expected: 한 줄도 안 나온다.
 
-- [ ] Step 3: 더한 것과 지운 것을 센다
+- [x] Step 3: 더한 것과 지운 것을 센다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -380,7 +380,7 @@ Expected: `-` 줄이 여전히 옛 `-netdev` 한 줄뿐이다.
 
 ## Task 5 — 체인을 단독으로 돌린다
 
-- [ ] Step 1: 로그를 둘 디렉터리를 만든다
+- [x] Step 1: 로그를 둘 디렉터리를 만든다
 
 ```bash
 mkdir -p /tmp/inm2 && ls -ld /tmp/inm2
@@ -388,7 +388,7 @@ mkdir -p /tmp/inm2 && ls -ld /tmp/inm2
 
 Expected: `drwxr-xr-x` 한 줄.
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 부팅 하나에 약 32초다(M1이 27.955초였고 타이핑이 약 97키 는다). 빌드
 산출물이 낡았으면 커널·initrd 빌드가 앞에 붙는다.
@@ -407,7 +407,7 @@ the guest received inm2-reverse-ok from the chain
 with no listener the chain read nothing, as it should
 ```
 
-- [ ] Step 3: 통과했어도 시리얼 로그를 꺼내 온다
+- [x] Step 3: 통과했어도 시리얼 로그를 꺼내 온다
 
 M1의 갈린 자리 1이다. 통과하면 `--rm`과 함께 사라지는데, 실측으로 적을
 값(`inm2-listen=`의 실제 숫자 · `>`와 `&`의 에코 · fish의 job 종료 줄이
@@ -451,7 +451,7 @@ grep -n "inm2-listen\|inm2-reverse-ok\|has ended" /tmp/inm2/serial.clean
   치는 검사를 넣어 갈라야 한다(다만 TIME_WAIT가 그 숫자에 섞일 수 있다 —
   아래 Task 8 Step 1의 실측에 그 사실을 함께 적는다).
 
-- [ ] Step 4: 체인 단독 시간을 적어 둔다
+- [x] Step 4: 체인 단독 시간을 적어 둔다
 
 `/tmp/inm2/chain.time`의 `real` 값이다. 이 체인의 역사가 8.954 → 17.082 →
 22.911 → 27.955로 이어져 있고 이 값이 다섯째다.
@@ -461,7 +461,7 @@ grep -n "inm2-listen\|inm2-reverse-ok\|has ended" /tmp/inm2/serial.clean
 design의 M2 끝 기준 둘째다. 새 검사가 무언가를 실제로 보고 있다는 것을
 증명한다 — 증명 없이는 언제나 초록인 장식일 수 있다.
 
-- [ ] Step 1: 반사실 1 — 둘째 `hostfwd`만 뺀다
+- [x] Step 1: 반사실 1 — 둘째 `hostfwd`만 뺀다
 
 ```bash
 cp net/check.sh /tmp/inm2/check.sh
@@ -494,7 +494,7 @@ FAIL: nothing accepted on 127.0.0.1:45466 — QEMU never opened the second hostf
 검사 12에서 같은 것을 봤다 — 게스트가 듣는 것과 QEMU가 길을 내는 것은 서로
 안 엮여 있다. 검사 14에서 죽으면 그 사실을 Task 8의 실측에 적는다.
 
-- [ ] Step 2: 반사실 2 — 음성 자리에 리스너를 하나 심는다
+- [x] Step 2: 반사실 2 — 음성 자리에 리스너를 하나 심는다
 
 음성 검사의 반사실은 "그 조건을 깨는 것"이다. 듣는 것이 없어야 할 자리에
 듣는 것을 하나 만들면 검사 16이 빨간불이어야 한다.
@@ -532,7 +532,7 @@ FAIL: something answered on 127.0.0.1:45465 where nothing should be listening (g
 후보는 심은 리스너가 안 떴다는 것이므로 시리얼 로그에서 그 명령의 에코를
 먼저 본다.
 
-- [ ] Step 3: 사본을 지우고 저장소가 안 변한 것을 본다
+- [x] Step 3: 사본을 지우고 저장소가 안 변한 것을 본다
 
 ```bash
 rm -f /tmp/inm2/check.sh /tmp/inm2/check2.sh
@@ -547,7 +547,7 @@ Expected: `M net/check.sh` 하나. 반사실은 `/tmp` 사본을 `-v`로 덮어�
 IN이 여는 유일한 게이트다. M0은 파일을 안 바꿨고 M1은 "새 정보 없이 31분을
 쓰지 않는다"로 미뤘다.
 
-- [ ] Step 1: 돌린다
+- [x] Step 1: 돌린다
 
 약 31분이다(기준선이 30분 57.86초). 그 사이에 다른 작업을 겹치지 않는다 —
 같은 기계에서 빌드가 돌면 시간 값이 잡음에 묻힌다.
@@ -560,7 +560,7 @@ tail -30 /tmp/inm2/gate.log; cat /tmp/inm2/gate.time
 
 Expected: 열두 체인이 전부 `3/3`이고 마지막이 통과다.
 
-- [ ] Step 2: 증가분을 계산한다
+- [x] Step 2: 증가분을 계산한다
 
 ```bash
 grep -c "skipping make" /tmp/inm2/gate.log
@@ -573,7 +573,7 @@ grep -E "^(PASS|FAIL|===)" /tmp/inm2/gate.log | tail -20
 
 ## Task 8 — 실측을 적고 서브프로젝트를 닫는다
 
-- [ ] Step 1: design에 `## IN-M2가 실행으로 증명한 것` 절을 더한다
+- [x] Step 1: design에 `## IN-M2가 실행으로 증명한 것` 절을 더한다
 
 `## IN-M1이 실행으로 증명한 것` 절의 끝에 이어서 쓴다. 번호는 실측 13부터다.
 넣을 것이 여섯이다.
@@ -589,7 +589,7 @@ grep -E "^(PASS|FAIL|===)" /tmp/inm2/gate.log | tail -20
 5. 체인 단독 시간. 8.954 → 17.082 → 22.911 → 27.955에 이어지는 다섯째 값.
 6. 게이트. 열두 체인 3/3과 시간, `skipping make` 수.
 
-- [ ] Step 2: design의 M2 절과 Status 줄을 닫는다
+- [x] Step 2: design의 M2 절과 Status 줄을 닫는다
 
 M2 절 끝에 `⚠ 2026-09-14에 끝났다 …` 한 줄을 더하고, 문서 맨 위의
 
@@ -607,7 +607,7 @@ Status: 끝났다(2026-09-14). M0~M2. `net/check.sh`가 검사 열여섯이고 �
 CLAUDE.md가 "서브프로젝트를 끝내면 그 design doc의 Status 줄을 함께 고친다"고
 적어 둔 자리다. 2026-08-31에 낡은 것 넷을 한꺼번에 고친 적이 있다.
 
-- [ ] Step 3: 기억 파일과 `MEMORY.md` 한 줄
+- [x] Step 3: 기억 파일과 `MEMORY.md` 한 줄
 
 `docs/decisions/project_inbound_network.md`를 새로 만든다. 다른 project
 기억과 같은 꼴이고, 넣을 것이 이 넷이다.
@@ -627,7 +627,7 @@ CLAUDE.md가 "서브프로젝트를 끝내면 그 design doc의 Status 줄을 �
 - [Inbound network](docs/decisions/project_inbound_network.md) — 게스트가 포트를 열면 바깥에서 붙어 바이트를 읽는다; 판정은 `rc`가 아니라 받은 바이트 수이고 우리 코드는 0줄이다(IN-M0~M2, 2026-09-14 종료)
 ```
 
-- [ ] Step 4: CLAUDE.md의 완료 표에 한 줄
+- [x] Step 4: CLAUDE.md의 완료 표에 한 줄
 
 `| Guest Network (NW-M0~M3) | …` 줄 아래에 넣는다.
 
@@ -635,13 +635,13 @@ CLAUDE.md가 "서브프로젝트를 끝내면 그 design doc의 Status 줄을 �
 | Inbound Network (IN-M0~M2) | 2026-09-14 | 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다. 우리 코드는 0줄이고 `net/check.sh`가 검사 열여섯이 됐다 |
 ```
 
-- [ ] Step 5: HANDOFF.md를 다시 쓴다
+- [x] Step 5: HANDOFF.md를 다시 쓴다
 
 제목이 "IN이 끝났다"가 되고, "바로 다음에 할 것"이 다음 서브프로젝트를 고르는
 것이 된다. IN design이 비목표로 미뤄 둔 것들(UDP · 포트 여럿 · 실머신에서
 포트를 여는 것 · init이 듣는 것)과 NW가 미뤄 둔 후보들이 그 자리의 재료다.
 
-- [ ] Step 6: 무엇이 커밋에 들어가는지 먼저 본다
+- [x] Step 6: 무엇이 커밋에 들어가는지 먼저 본다
 
 ```bash
 git status --short
@@ -665,7 +665,7 @@ Step 8이 그 파일 끝에 "갈린 자리"를 더하므로 여기서 다시 나
 `out/net.img`나 빌드 산출물이 보이면 `.gitignore`부터 확인한다. 이 저장소는
 kernel/init/bootloader를 직접 빌드하므로 이 확인을 매번 한다(CLAUDE.md).
 
-- [ ] Step 7: 커밋을 둘로 나눈다
+- [x] Step 7: 커밋을 둘로 나눈다
 
 코드와 실측이 하나, 서브프로젝트를 닫는 문서가 하나다. 앞의 것만 되돌리는
 경로가 있어야 하기 때문이다.
@@ -680,7 +680,7 @@ git add CLAUDE.md MEMORY.md HANDOFF.md docs/decisions/project_inbound_network.md
 git commit -m "Close the inbound network subproject"
 ```
 
-- [ ] Step 8: 이 문서 끝에 갈린 자리를 적는다
+- [x] Step 8: 이 문서 끝에 갈린 자리를 적는다
 
 M0이 넷, M1이 셋을 적었고 둘 다 다음 세션에 값졌다. 갈린 것이 없으면 "갈린
 자리가 없다"고 한 줄 적는다.
@@ -701,3 +701,25 @@ M0이 넷, M1이 셋을 적었고 둘 다 다음 세션에 값졌다. 갈린 것
 저장소에서 바뀌는 코드 파일은 `net/check.sh` 하나다. 커널도 `guest_tools.sh`도
 `init/`도 IN 내내 한 글자도 안 바뀐다 — 이 사이클이 답한 질문이 우리 코드에
 대한 것이 아니었다는 증거다.
+
+## 실제로 돌린 것이 이 plan과 갈린 자리
+
+셋이다. 검사 셋이 첫 회에 다 서서 고친 자리는 없었다.
+
+1. Task 5의 두 부팅 순서가 뒤집혔다. plan이 Step 2(시간)를 먼저, Step 3(로그
+   추출)을 나중에 적었는데 실제로는 로그 추출 회차를 먼저 돌리고 순수 시간을
+   나중에 쟀다. 이유는 로그 추출 회차가 `for f in /tmp/tmp.*`와 `cp`를 함께
+   도는 것이라 그 값이 체인 시간이 아니기 때문이다(실제로 34.618초 대
+   33.730초로 갈렸다). 다음에 이 모양을 쓰는 사람은 "시간을 재는 회차"와
+   "로그를 꺼내는 회차"를 처음부터 나눠 적는다.
+
+2. Task 6 Step 2의 확인 명령이 애초에 맞을 수 없는 것이었다.
+   `grep -n "inm2-broken"`으로 치환을 확인하려 했는데, `type_keys`는 키 이름을
+   공백으로 나눠 적으므로 그 연속 문자열이 파일에 없다. 치환은 성공했는데
+   확인이 0줄을 내서 잠깐 실패로 읽혔다. 맞는 확인은
+   `grep -n "connecting with"`으로 그 줄 자체를 보는 것이다.
+
+3. 실측 15가 plan에 없던 것이다. 로그를 읽다가 fish의 autosuggestion이 화면에
+   남는 것을 봤고, 그것이 `project_gate_screen_echo.md`가 적은 함정의 확장판
+   이었다. Task 5 Step 3을 "통과해도 로그를 꺼낸다"로 둔 것이 그 값을 만들었다 —
+   M1의 갈린 자리 1이 없었으면 이 사실을 못 봤을 것이다.
