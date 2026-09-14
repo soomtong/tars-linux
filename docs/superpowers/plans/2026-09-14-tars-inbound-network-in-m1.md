@@ -50,7 +50,7 @@ design 위험 7이 처방 후보 둘을 열어 두었고 M1이 고르기로 돼 
 닫으므로(실측 4) `read`가 즉시 EOF를 보고 빈 값으로 돌아온다. IN-M2의 검사
 15가 기다릴 필요가 없어진다.
 
-- [ ] Step 1: design에 결정 10을 더한다
+- [x] Step 1: design에 결정 10을 더한다
 
 `### 결정 9 — 커널 .config는 안 건드린다. 다만 M0이 확인한다` 절 바로 뒤,
 `## 비목표` 절 앞에 아래를 넣는다.
@@ -76,7 +76,7 @@ design 위험 7이 처방 후보 둘을 열어 두었고 M1이 고르기로 돼 
 상한을 기다릴 필요가 없다.
 ```
 
-- [ ] Step 2: 위험 7에 처방이 정해졌다는 표시를 단다
+- [x] Step 2: 위험 7에 처방이 정해졌다는 표시를 단다
 
 `### 위험 7 — 받은 쪽이 연결을 안 닫는다 (M0이 찾았다)` 절의 마지막 문단
 뒤에 한 줄을 더한다.
@@ -86,7 +86,7 @@ design 위험 7이 처방 후보 둘을 열어 두었고 M1이 고르기로 돼 
 `read -r -t`로 한 줄만 읽는다.
 ```
 
-- [ ] Step 3: 고쳐진 자리를 확인한다
+- [x] Step 3: 고쳐진 자리를 확인한다
 
 ```bash
 grep -n "결정 10\|M1이 앞의 것을 골랐다" \
@@ -97,7 +97,7 @@ Expected: 줄 둘. 하나는 결정 절의 제목이고 하나는 위험 7의 `�
 
 ## Task 1 — QEMU 줄에 `hostfwd` 하나
 
-- [ ] Step 1: 포트 상수 둘을 `MONITOR_PORT` 옆에 둔다
+- [x] Step 1: 포트 상수 둘을 `MONITOR_PORT` 옆에 둔다
 
 `net/check.sh:75`의 `MONITOR_PORT=45464` 바로 아래에 넣는다.
 
@@ -118,7 +118,7 @@ GUEST_LISTEN_PORT=8080
 `hostfwd`가 잇는 것은 게스트 자신의 주소 `10.0.2.15`의 8080이다. 방향도
 주소도 다르다 — 그래도 이것은 아직 추론이고, Task 4의 실행이 답한다.
 
-- [ ] Step 2: `-netdev` 값에 `hostfwd`를 더한다
+- [x] Step 2: `-netdev` 값에 `hostfwd`를 더한다
 
 `net/check.sh:152`의 이 줄을
 
@@ -141,7 +141,7 @@ GUEST_LISTEN_PORT=8080
 안 들어간다(design 확인 7). M0의 하네스가 같은 형식으로 둘을 이어 붙여 돌렸다
 (실측 6).
 
-- [ ] Step 3: 그 줄 위의 주석에 한 문단을 더한다
+- [x] Step 3: 그 줄 위의 주석에 한 문단을 더한다
 
 `# 결정 4의 두 줄이 아래 -netdev과 -device다.`로 시작하는 문단 뒤에 넣는다.
 
@@ -151,7 +151,7 @@ GUEST_LISTEN_PORT=8080
 # 입구가 아예 존재하지 않는다 — 검사 13의 반사실이 그것을 확인한 자리다.
 ```
 
-- [ ] Step 4: 지운 줄이 의도한 줄 하나뿐인지 본다
+- [x] Step 4: 지운 줄이 의도한 줄 하나뿐인지 본다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -169,7 +169,7 @@ Expected: `-` 줄이 딱 하나이고 그것이 옛 `-netdev` 줄이다. 이 저
 (design 결정 7) 체인이 붙는 순간 죽고, 그 뒤에는 `/proc/net/tcp`에서 사라진다.
 M0의 실측 1이 세 자리에서 0 · 0 · 1로 갈린 것이 그 증거다.
 
-- [ ] Step 1: 리스너를 띄우는 타이핑과 판정을 넣는다
+- [x] Step 1: 리스너를 띄우는 타이핑과 판정을 넣는다
 
 ```bash
 # ── 검사 12: 게스트가 포트를 열었나 ───────────────────────────────────
@@ -220,7 +220,7 @@ echo "the guest is listening on port ${GUEST_LISTEN_PORT}"
 `sendkey`가 그 이름으로 그 evdev 코드를 보내는지는 Task 4의 실행이 답한다.
 틀리면 증상이 크다 — 화면에 엉뚱한 글자가 찍히고 명령이 통째로 안 돈다.
 
-- [ ] Step 2: 더한 줄만 들어갔는지 본다
+- [x] Step 2: 더한 줄만 들어갔는지 본다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -232,7 +232,7 @@ Expected: `-` 줄이 Task 1에서 본 그 한 줄뿐이다. 이 Task는 지우�
 
 검사 12 바로 뒤, `# ── 끈다 ──` 앞에 넣는다.
 
-- [ ] Step 1: 붙어서 한 줄을 읽는 루프를 넣는다
+- [x] Step 1: 붙어서 한 줄을 읽는 루프를 넣는다
 
 ```bash
 # ── 검사 13: 바깥에서 붙어 게스트가 보낸 바이트를 읽나 ────────────────
@@ -297,7 +297,7 @@ fi
 echo "the chain read inm1-inbound-ok off the guest's listener"
 ```
 
-- [ ] Step 2: 검사 12의 주석에 fish의 job 줄을 적는다
+- [x] Step 2: 검사 12의 주석에 fish의 job 줄을 적는다
 
 M0 실측 2가 찾은 것이다. 리스너가 응답하고 죽으면 fish가 화면에 이 줄을 찍는다.
 
@@ -315,7 +315,7 @@ IN-M2가 검사 14를 그 뒤에 놓으므로 지금 적어 둔다. 검사 13의
 # 안 민다 — 검사 14를 이 뒤에 놓는 IN-M2가 그 한 줄을 고려해야 한다.
 ```
 
-- [ ] Step 3: `require_no_early_exit_pipe`에 안 걸리는지 본다
+- [x] Step 3: `require_no_early_exit_pipe`에 안 걸리는지 본다
 
 이 Task가 더한 줄에 파이프가 하나도 없지만, 검사 12의 타이핑이 `|`를 문자로
 친다. lint가 보는 것은 셸 파이프이므로 `shift-backslash`라는 키 이름은 안
@@ -328,7 +328,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 Expected: 한 줄도 안 나온다.
 
-- [ ] Step 4: 더한 것과 지운 것을 센다
+- [x] Step 4: 더한 것과 지운 것을 센다
 
 ```bash
 git diff --stat net/check.sh && git diff net/check.sh | grep '^-'
@@ -338,7 +338,7 @@ Expected: `-` 줄이 여전히 그 한 줄(옛 `-netdev`)뿐이다.
 
 ## Task 4 — 체인을 단독으로 돌린다
 
-- [ ] Step 1: 로그를 둘 디렉터리를 만든다
+- [x] Step 1: 로그를 둘 디렉터리를 만든다
 
 호스트에 만든다. 이 Task는 컨테이너에 물리지 않고 `docker run`의 출력을
 호스트 쪽으로 흘려받기만 하므로 `-v`가 필요 없다(Step 2는 다르다).
@@ -349,7 +349,7 @@ mkdir -p /tmp/inm1 && ls -ld /tmp/inm1
 
 Expected: `drwxr-xr-x` 한 줄.
 
-- [ ] Step 2: 돌린다
+- [x] Step 2: 돌린다
 
 부팅 하나에 약 25~30초다(M3 때 22.911초였고 타이핑이 약 85키 는다). 빌드
 산출물이 낡았으면 커널·initrd 빌드가 앞에 붙는다.
@@ -367,7 +367,7 @@ the guest is listening on port 8080
 the chain read inm1-inbound-ok off the guest's listener
 ```
 
-- [ ] Step 3: 실패했으면 시리얼 로그를 꺼내 온다
+- [x] Step 3: 실패했으면 시리얼 로그를 꺼내 온다
 
 통과하면 `--rm`과 함께 사라지므로, 실패한 회차에서만 필요하다.
 
@@ -405,7 +405,7 @@ grep -n "inm1-listen" /tmp/inm1/serial.clean
   있었다는 뜻이고, 그러면 남은 후보는 `hostfwd`의 게스트 주소(`10.0.2.15`)가
   실제 주소와 다른 것이다. 검사 6의 출력이 그 자리에 있다.
 
-- [ ] Step 4: 체인 단독 시간을 적어 둔다
+- [x] Step 4: 체인 단독 시간을 적어 둔다
 
 `/tmp/inm1/chain.time`의 `real` 값이다. 이 체인의 역사가 8.954초 → 17.082초
 → 22.911초로 이어져 있고 이 값이 넷째다. design 위험 3이 "예상이 아니라
@@ -416,7 +416,7 @@ grep -n "inm1-listen" /tmp/inm1/serial.clean
 design의 M1 끝 기준 둘 중 뒤의 것이다. 검사 13이 실제로 그 한 줄을 보고
 있다는 것을 증명한다 — 증명 없이는 이 검사가 언제나 초록인 장식일 수 있다.
 
-- [ ] Step 1: 사본을 만들고 그 한 줄만 되돌린다
+- [x] Step 1: 사본을 만들고 그 한 줄만 되돌린다
 
 저장소 파일은 한 글자도 안 건드린다. `/tmp` 사본을 `-v`로 덮어씌우는 것이
 NW가 세 번 쓴 방법이다.
@@ -442,7 +442,7 @@ Expected: 마지막 `grep`이 찍는 줄에 `hostfwd`가 없고 `guestfwd`만 �
 빼먹고 엉뚱한 자리에서 죽은 적이 있어서, 사본을 만들 때 함께 치는 습관을
 유지하기 위해서다.
 
-- [ ] Step 2: 그 사본으로 체인을 돌린다
+- [x] Step 2: 그 사본으로 체인을 돌린다
 
 ```bash
 docker run --rm -v "$PWD":/workspace \
@@ -462,7 +462,7 @@ FAIL: nothing accepted on 127.0.0.1:45465 — QEMU never opened the hostfwd port
 `hostfwd`와 무관하게 통과하는 것이 맞다 — 게스트가 듣는 것과 바깥에서 길이
 있는 것은 다른 사실이고, 이 둘을 나눈 것이 검사를 둘로 쪼갠 이유다.
 
-- [ ] Step 3: 만약 검사 12에서 죽으면 그것을 적는다
+- [x] Step 3: 만약 검사 12에서 죽으면 그것을 적는다
 
 design의 M1 끝 기준이 그 경우를 미리 열어 두었다. 검사 12에서 죽으면
 "게스트가 듣는 것과 QEMU가 길을 내는 것이 서로 엮여 있다"는 뜻이고, 그것도
@@ -473,7 +473,7 @@ design의 M1 끝 기준이 그 경우를 미리 열어 두었다. 검사 12에�
 초록이라는 뜻이고, 그러면 그 검사가 무엇을 보고 있는지부터 다시 봐야 한다.
 후보는 하나다: 45465에 이 체인이 아닌 무언가가 듣고 있다.
 
-- [ ] Step 4: 사본을 지운다
+- [x] Step 4: 사본을 지운다
 
 ```bash
 rm -f /tmp/inm1/check.sh
@@ -485,7 +485,7 @@ git status --short net/check.sh
 
 ## Task 6 — 실측을 design에 적고 커밋한다
 
-- [ ] Step 1: design에 `## IN-M1이 실행으로 증명한 것` 절을 더한다
+- [x] Step 1: design에 `## IN-M1이 실행으로 증명한 것` 절을 더한다
 
 `## IN-M0이 실행으로 증명한 것` 절의 끝(`### M0이 M1에 넘기는 것` 뒤)에
 이어서 쓴다. 넣을 것이 다섯이다.
@@ -503,7 +503,7 @@ git status --short net/check.sh
 각 실측은 `### 실측 N — <한 줄 결론>` 꼴이고 M0의 번호를 이어서 실측 7부터
 쓴다.
 
-- [ ] Step 2: design의 M1 절에 끝난 표시를 단다
+- [x] Step 2: design의 M1 절에 끝난 표시를 단다
 
 `### IN-M1 — 게스트가 듣고 체인이 읽는다` 절의 끝에 한 줄을 더한다.
 
@@ -514,7 +514,7 @@ git status --short net/check.sh
 
 반사실이 검사 12에서 죽었으면 그 문장을 사실에 맞게 고친다.
 
-- [ ] Step 3: 무엇이 커밋에 들어가는지 먼저 본다
+- [x] Step 3: 무엇이 커밋에 들어가는지 먼저 본다
 
 ```bash
 git status --short
@@ -532,7 +532,7 @@ Expected: 셋이다.
 만든 것이라 나와서는 안 된다. 이 저장소는 kernel/init/bootloader를 직접
 빌드하므로 이 확인을 매번 한다(CLAUDE.md).
 
-- [ ] Step 4: 커밋한다
+- [x] Step 4: 커밋한다
 
 ```bash
 git add docs/superpowers/specs/2026-09-14-tars-inbound-network-design.md \
@@ -541,7 +541,7 @@ git add docs/superpowers/specs/2026-09-14-tars-inbound-network-design.md \
 git commit -m "Open a port in the guest and read it from outside"
 ```
 
-- [ ] Step 5: 이 문서 끝에 갈린 자리를 적는다
+- [x] Step 5: 이 문서 끝에 갈린 자리를 적는다
 
 M0이 넷을 적었고 그것이 이 세션에 값졌다. 갈린 것이 없으면 "갈린 자리가
 없다"고 한 줄 적는다.
@@ -572,3 +572,26 @@ design의 계획이고, 그 사이에 두 번 돌리면 31분을 아무 새 정�
   보고 빈 값으로 돌아온다. 판정은 `INBOUND_GOT`이 비어 있는 것이다.
 - 검사 14를 검사 13 뒤에 놓으면 그 사이에 fish의 job 종료 줄이 하나 낀다
   (M0 실측 2). `wait_for_screen`의 패턴이 그 줄과 안 부딪치는지 본다.
+  ⚠ M1에서는 그 줄이 한 번도 안 나왔다(실측 12). 사라진 것이 아니라 미뤄진
+  것이다 — fish가 job 종료를 다음 프롬프트에서 보고하는데 검사 13 뒤에
+  타이핑이 없었기 때문이고, 검사 14의 타이핑이 바로 그 프롬프트를 만든다.
+
+## 실제로 돌린 것이 이 plan과 갈린 자리
+
+셋이다. 전부 작고, plan을 고쳐야 할 만큼 틀린 자리는 없었다.
+
+1. Task 4가 부팅 하나가 아니라 둘이었다. 첫 회가 통과하면 시리얼 로그가
+   `--rm`과 함께 사라지는데, 실측으로 적을 값(`inm1-listen=`의 실제 숫자와
+   `|`·`&`의 에코)이 그 로그에만 있다. plan의 Step 3이 그 추출을 "실패했으면"
+   으로 적어 두었는데, 통과한 회차에서도 필요했다. 다음에 새 화면 판정을
+   넣는 사람은 그 추출을 실패 대비가 아니라 기본 절차로 둔다.
+
+2. Task 4 Step 3의 로그 읽기 한 줄이 잘못을 하나 만들었다.
+   `tr '|' '\n'`으로 화면 행을 복원했는데, 시리얼 로그가 행을 ` | `로 이어
+   붙이므로 명령줄 안의 `|` 문자도 함께 쪼개져서 리스너 명령이 두 줄로
+   보였다. 잠깐 "파이프가 안 들어갔나"로 읽힌다. 실측 9가 그 자리다.
+
+3. Task 5의 `sd` 패턴이 한 번에 맞았다. `-s`로 글자 그대로 찾은 것이
+   주효했고, 사본의 `-netdev` 줄이 M1 이전의 모양과 바이트까지 같았다.
+   plan이 미리 적어 둔 확인(`grep -n 'netdev "user'`)이 그것을 한눈에 보여
+   줬다.
