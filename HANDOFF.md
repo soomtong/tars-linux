@@ -1,11 +1,12 @@
-# HANDOFF: Time Sync(TS)의 M0이 끝났다
+# HANDOFF: Time Sync(TS)의 M1이 끝났다
 
 ## 지금 어디인가
 
-서브프로젝트 Time Sync(TS)가 2026-09-15에 열렸고 M0(재는 것)이 끝났다.
-저장소의 코드 파일은 아직 한 글자도 안 바뀌었다 — 지금까지 들어간 것은
-design 하나 · plan 하나 · 실측 여덟 · 기억 하나뿐이다. 다음 할 일은 TS-M1
-plan을 쓰고 `init/src/sntp.zig`를 만드는 것이다(아래 "바로 다음에 할 것").
+서브프로젝트 Time Sync(TS)가 2026-09-15에 열렸고 M0(재는 것)과 M1(우리
+코드가 시계를 뛰는 것)이 끝났다. 게스트가 부팅할 때 SNTP로 묻고
+`clock_settime`으로 시계를 뛰며, `net/check.sh`가 검사 열아홉에 부팅 둘로
+그것을 매번 확인한다. 다음 할 일은 TS-M2 plan을 쓰는 것이다(아래 "바로
+다음에 할 것").
 
 이 서브프로젝트가 답하는 질문은 "부팅할 때 네트워크에서 시각을 받아 시계를
 맞출 수 있는가" 하나다. 범위는 부팅에 한 번 뛰는 것(step)까지이고 시계를
@@ -28,9 +29,12 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 `net/check.sh`가 검사 열여섯이고 `CHAINS`의 열두번째다. TS는 그 체인과 그
 부팅을 그대로 쓴다 — M1이 부팅 하나, M2가 부팅 하나를 더한다.
 
-루트 게이트는 열두 체인 3/3이고 IN이 닫힐 때 31분 51.46초였다(기준선 30분
-57.86초에서 +53.60초). TS는 아직 게이트를 한 번도 안 돌렸다 — 코드가 안
-바뀌었으므로 그 숫자가 그대로 유효하다.
+⚠ 루트 게이트는 열두 체인 3/3이고 IN이 닫힐 때 31분 51.46초였다(기준선
+30분 57.86초에서 +53.60초). TS는 아직 게이트를 한 번도 안 돌렸다 — M1이
+`init`을 고쳤으므로 그 숫자가 이제 낡았고, 예상 증가분은 약 46초다(실측
+15의 체인 증가 15.334초 × 3). M1이 게이트를 안 돌린 근거는 `init` 변경의
+접점이 둘뿐이고(설정 로그 줄 맨 뒤의 `ntp=` · 새 키 하나) 둘 다 호스트
+검사가 보며 `net` 체인이 두 판 초록이었다는 것이다. M2나 M3이 한 판 돌린다.
 
 그 앞이 NW(게스트에 주소가 붙는 것), 그 앞이 SL(종료가 늘 3초 걸리던 것),
 그 앞이 BB(게이트의 bash production 부팅), 그 앞이 BH(bash 히스토리), 그
@@ -41,17 +45,71 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 
 ## TS가 한 일 (2026-09-15, 진행 중)
 
-문서 둘이 이 서브프로젝트의 전부다.
-
-- `docs/superpowers/specs/2026-09-15-tars-time-sync-design.md`
-- `docs/superpowers/plans/2026-09-15-tars-time-sync-ts-m0.md`
-
 | 커밋 | 무엇 |
 |---|---|
 | `813ec8a` | design. 확인 열 · 결정 열둘 · 비목표 일곱 · 위험 일곱. 그리고 기억 `feedback_boot_never_blocks` |
 | `98ca807` | TS-M0 plan(측정 여섯과 하네스 전문 둘) |
 | `9fb501d` | TS-M0. 실측 여덟. 그중 둘이 plan에 없던 것이고, 위험 넷이 닫히고 하나는 처방이 정해졌다 |
-| (다음) | TS-M1 plan |
+| `abe40c1` | M0의 HANDOFF |
+| `5bea63a` | TS-M1 plan. design에 없던 결정 넷을 먼저 정했다 |
+| `7b17389` | TS-M1. `sntp.zig` · 여덟째 키 `ntp` · perl stub · 부팅 A와 검사 17·18·19. 실측 일곱 |
+| (바로 다음 커밋) | 이 HANDOFF |
+
+### TS-M1이 알아낸 것 — 다음 세션이 먼저 읽을 다섯
+
+본문은 design의 "TS-M1이 실행으로 증명한 것" 절에 실측 9~15로 있다. 부팅 A가
+첫 회에 초록이어서 고칠 것이 하나도 없었다 — 부팅 셋(체인 두 판과 반사실 한
+판)으로 끝났다.
+
+1. 자식은 주소를 기다린다(실측 10). `sync()`가 불리는 자리가 `net.bringUp()`
+   바로 다음이라 dhcpcd가 아직 리스를 못 받았고, 첫 `sendto`들이
+   `errno 101`(ENETUNREACH)로 죽는다. 열 번 실패하고 열한 번째에 성공했다 —
+   재시도 상한을 10으로 잡았다면 한 회 모자라서 빨간불이었다. 반사실 회차에는
+   여덟 번이었으니 그 수가 회차마다 흔들린다. `MAX_TRIES = 30`을 줄이려는
+   사람은 이 실측을 먼저 본다.
+2. 같은 datagram의 양 끝이 서로 다른 주소를 본다(실측 11). 게스트는 소스를
+   `10.0.2.2`로 보고(그래서 `sntp answer came from` 줄이 안 나왔다)
+   컨테이너는 `127.0.0.1`로 본다(M0 실측 2). SLIRP가 가운데서 양쪽을
+   NAT하기 때문이다. 그래서 소스 주소를 나중에 거부 조건으로 승격할 수
+   있다 — 지금은 로그만 찍고 판단은 nonce가 한다(design 결정 12).
+3. 렌더가 시계 점프를 견딘다(실측 12). M0 실측 7이 남긴 숙제가 닫혔고 위험
+   2가 통째로 닫혔다. 부팅 A는 시계가 뛴 뒤에 화면 셸에 25키를 치고 그
+   출력을 읽으므로 검사 19가 선 것 자체가 답이다.
+4. `SO_RCVTIMEO`가 실제로 걸려 있다(실측 13). 반사실 회차의 `errno 11`
+   (EAGAIN) 스물둘이 그 증거다 — `setsockopt`이 조용히 실패했다면 자식이
+   첫 회에서 영영 매달려 그 줄이 하나도 안 나온다. 8(ENETUNREACH) +
+   22(EAGAIN) = 30으로 상한도 지켜진다.
+5. 반사실이 겨냥한 자리에서 죽었다(실측 14). 검사 17은 초록으로 지나고 검사
+   18에서만 죽는다(`clock stepped` 0회 · `tsyear` 타이핑 0회). 설정 경로와
+   시계 경로가 서로 안 엮여 있다는 뜻이라 검사를 둘로 쪼갠 값이 있다.
+
+### TS-M1이 정한 것 넷 — design에 없던 것들
+
+본문은 `docs/superpowers/plans/2026-09-15-tars-time-sync-ts-m1.md`의
+"design에 없던 결정 넷"에 있다.
+
+- M1-A. `fork`한 자식이 첫 줄에서 `power.resetToDefault()`를 부른다
+  (`init/src/power.zig`). `execve`는 다뤄진 시그널을 자동으로 기본값으로
+  되돌리는데 이 자식은 `execve`를 안 하므로 부모의 SIGTERM 핸들러를
+  물려받고, 그대로 두면 전원을 끌 때 그 자식만 안 죽어
+  `grace period expired`가 찍힌다(SL-M2의 음성 검사가 빨간불이 된다).
+  M1의 부팅 A에서는 자식이 먼저 끝나므로 이 줄이 없어도 초록일 수 있다 —
+  진짜 시험은 M2의 부팅 B다.
+- M1-B. 자식이 재시도한다(위 실측 10).
+- M1-C. `parseIpv4`가 `sntp.zig`가 아니라 `config.zig`에 산다. 저쪽에 두면
+  `config ↔ sntp` import가 순환한다 — `net.zig`가 `config.Net`을 받는 기존
+  방향을 지켰다.
+- M1-D. `ntp=dhcp`도 M1에서 돈다. `/run/tars/ntp_servers`를 한 번 열어 보고
+  없으면 로그 한 줄로 끝낸다 — 기다리는 것이 M2의 일이고, 이렇게 나눠야
+  `parseServerFile`이 죽은 코드가 아니다.
+
+### 2036년의 1초를 우리가 못 읽는다
+
+결정 11(era 1은 최상위 비트가 0)과 결정 12(transmit이 0이면 버린다)가 한
+자리에서 부딪친다. era 1의 첫 순간은 8바이트가 통째로 0이라 "서버가 아무것도
+안 채운 패킷"과 바이트가 같다. 그래서 2036-02-07T06:28:16.000000000Z 1초를
+버린다 — 버그가 아니라 선택이고, `sntp_test.zig`가 그 자리를 검사로 못 박아
+두었다. 고치려는 사람은 M1 plan의 그 절을 먼저 읽는다.
 
 ### TS-M0이 알아낸 것 — 다음 세션이 먼저 읽을 다섯
 
@@ -79,8 +137,7 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 5. 렌더가 점프를 견디는지는 못 갈랐다(plan의 판정이 틀렸다). `needs_redraw`
    문지기(TR-M2) 때문에 화면에 할 일이 없으면 프레임이 안 찍히는데, 그
    하네스는 콘솔 셸만 써서 "살아 있다"와 "할 일이 없다"가 같은 값이다.
-   M1의 부팅 A가 본다 — 그 부팅은 화면에 타이핑을 하므로 판정이 서는 것
-   자체가 증거다.
+   M1의 부팅 A가 그것을 봤고 견딘다(실측 12).
 
 부수로 둘 더. dhcpcd의 sysroot `/etc/dhcpcd.conf`에 `option ntp_servers`가
 있지만 `make_initrd.sh`가 그 파일을 안 넣는다 — 처방은 `net.zig`의 argv에
@@ -92,15 +149,27 @@ ntp_servers`)을 바이너리에서 확인했다. 그리고 stub의 self-test가
 
 ### TS를 이어받는 사람이 가져다 쓸 것
 
-- 하네스 둘이 `/tmp/ts/stub.pl`(perl SNTP stub)과 `/tmp/ts/guest.sh`에 있고
-  로그가 `/tmp/ts/run.log` · `guest.log` · `guest.clean` · `stub.log`다.
-  호스트 `/tmp`라 언젠가 사라진다. 전문은 plan의 Task 1 · 2에 글자 그대로
-  있고, plan의 것은 실행 중 고친 `CCCc`까지 반영돼 있다.
-- stub이 답하는 시각이 `2031-03-04T05:06:07Z` = unix `1930367167`이다.
-  M1의 게이트 판정이 이 값을 쓴다.
+- 우리 코드가 사는 자리 넷. `init/src/sntp.zig`(순수 함수 셋과 자식 하나) ·
+  `init/src/config.zig`의 `parseIpv4`·`Ntp`·`NTP_ARG_MAX` ·
+  `init/src/power.zig`의 `resetToDefault()` · `init/src/main.zig`의
+  `sntp.sync(cfg.net, cfg.ntp)` 한 줄(`net.bringUp` 바로 다음이어야 한다).
+- 게이트의 상대가 이제 저장소 안에 있다 — `net/sntp_stub.pl`. 인자가
+  (포트, unix 시각)이고 `net/check.sh`가 그 둘을 넘긴다.
+- `net/make_disk.sh`가 이미지를 둘 굽는다. `out/net.img`(검사 1~16,
+  라벨 `tars-net`)와 `out/net-ntp.img`(부팅 A, 라벨 `tars-ntp`)이고,
+  묻는 주소는 체인이 인자로 넘긴다 — 그 값을 아는 자리가 `net/check.sh`
+  하나다.
+- stub이 답하는 시각이 `2031-03-04T05:06:07Z` = unix `1930367167`이고 NTP
+  초로는 `4139355967`이다. `net/check.sh`의 `STUB_UNIX`·`STUB_YEAR`가 그
+  둘이고 서로 맞아야 한다.
 - stub이 요청의 40~47바이트(transmit timestamp)를 응답의 24~31바이트
   (originate timestamp)로 그대로 베낀다. design 결정 12의 마지막 항목이
   볼 자리이고, self-test에서 `NONCE123`이 그대로 돌아오는 것을 확인했다.
+- 키 이름 셋이 이 저장소에서 처음 쓰였다 — `shift-equal`이 `+`,
+  `shift-5`가 `%`, `shift-y`가 `Y`. 검사 19가 `echo tsyear=$(date -u +%Y)`를
+  친다.
+- M0의 하네스 둘은 `/tmp/ts/stub.pl`과 `/tmp/ts/guest.sh`였고 호스트
+  `/tmp`라 언젠가 사라진다. 전문은 M0 plan의 Task 1 · 2에 글자 그대로 있다.
 - 게스트에서 UDP를 셸로 다루는 법. `bash -c 'exec 3<>/dev/udp/10.0.2.2/123;
   …'`이고 읽을 때는 반드시 `-N`을 준다(위 4번). 게스트에 `bash` · `ip` ·
   `pgrep`이 다 있다(`guest_tools.sh` 52 · 248 · 255행).
@@ -583,34 +652,45 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — TS-M1 plan을 쓰고 실행한다
+## 바로 다음에 할 것 — TS-M2 plan을 쓰고 실행한다
 
-TS-M0이 끝났고 미지수가 하나뿐이라(실측 7의 렌더, M1이 본다) 바로 M1 plan을
-쓸 수 있다. design의 "TS-M1 — 우리 코드가 시계를 뛴다"가 할 일을 적어 뒀다.
+TS-M1이 끝났고 남은 미지수가 하나다 — 실기의 dhcpcd가 option 42를 실제로
+요청하는가(위험 3. 게이트는 이것을 영영 못 본다. design 결정 4의 3번).
+design의 "TS-M2 — DHCP가 알려 준 서버를 쓴다"가 할 일을 적어 뒀다.
 
-M1이 만드는 것 넷이다.
+M2가 만드는 것 넷이다.
 
-- `init/src/sntp.zig` 새 파일. 순수 함수 넷(`parseIpv4` · `buildRequest` ·
-  `parseReply` · `parseServerFile`)과 `fork`한 자식 하나. 자식은 `execve`를
-  안 하므로 우리 코드를 그대로 이어서 돈다.
-- `init/src/config.zig`에 여덟째 키 `ntp`. `off | dhcp | <IPv4>`이고 이
-  저장소의 첫 자유 문자열 값이다 — 나머지 일곱은 전부 enum 화이트리스트다.
-- `init/src/sntp_test.zig`와 `config_test.zig`의 단위 테스트. 봐야 할 것이
-  design 결정 11(1900 epoch · 2036 era rollover 경계 양쪽)과 결정 12(Mode 4 ·
-  stratum 0 · transmit 0 · origin nonce 대조)다.
-- `net/check.sh`에 perl stub과 부팅 A. 판정 둘 — init 로그의
-  `clock stepped` 줄과 화면의 `echo tsyear=$(date -u +%Y)`. `-u`를 빼면 M3의
-  시간대가 들어올 때 이 판정이 흔들린다.
+- `kernel/make_initrd.sh`에 hook `30-tars-ntp`. `$new_ntp_servers`를 받아
+  `/run/tars/ntp_servers`에 쓰는 sh 세 줄이고, `make_initrd.sh:225-229`가
+  이미 `20-resolv.conf`를 같은 자리에 넣고 있다.
+- `init/src/net.zig`의 dhcpcd argv에 `-o ntp_servers` 한 단어(M0 실측 8이
+  처방을 정했다). 지금 argv가 `net.zig:138`이다.
+- `ntp=dhcp`가 `/run/tars/ntp_servers`를 제한 시간 안에서 기다리는 것.
+  M1은 한 번 열어 보고 없으면 끝낸다(`sntp.zig`의 `serverFromFile`) —
+  기다림을 어디에 두는지가 M2의 첫 결정이다. 부모에 두면 결정 3을 어기므로
+  자식 안이어야 하고, 그러면 `sync()`의 갈래 구조가 바뀐다(지금은 부모가
+  파일을 읽고 주소를 정한 뒤에 fork한다).
+- `net/check.sh`에 부팅 B — 파일을 미리 심은 initrd와 죽은 주소.
+  증명하는 것이 둘이다: init이 그 파일을 읽었다는 것과, 안 닿는 서버가
+  부팅을 안 막는다는 것.
 
-끝 기준: 부팅 A가 초록이고, stub을 안 띄운 반사실이 그 검사에서 죽는다.
+끝 기준: 부팅 B가 초록이고 그 부팅의 셸이 뜨는 시각이 다른 부팅과 같다.
+반사실로 파일을 안 심은 사본이 그 검사에서 죽는다.
 
-M1을 시작하기 전에 볼 것 셋. (1) design 결정 3 — `recvfrom`이 부팅을 막지
-않게 `SO_RCVTIMEO` 위에 `fork`를 한 겹 더 덮는다. (2) 실측 2 — 게스트 시계가
-이미 맞으므로 "틀린 것이 맞아졌다"로 판정할 수 없고 stub의 2031년으로만
-갈린다. (3) 실측 5 — 렌더 판정을 M1이 이어받았다.
+M2를 시작하기 전에 볼 것 셋.
 
-그 뒤가 M2(DHCP 경로와 hook)와 M3(zoneinfo와 `timezone` 키)다. design의
-Milestone 절에 각각의 끝 기준이 있다.
+1. 결정 M1-A의 진짜 시험이 이 부팅이다. 부팅 B의 자식은 안 닿는 주소를
+   서른 번 물으며 약 50초를 쓰므로 전원을 끄는 순간 살아 있고, 그때
+   `power.resetToDefault()`가 없으면 `grace period expired`가 찍혀 SL-M2의
+   음성 검사가 빨간불이 된다. 즉 부팅 B가 초록인 것이 그 함수의 증명이다.
+2. 실측 10 — `MAX_TRIES = 30`이 리스 대기 약 10초를 덮는 값이다. 부팅 B는
+   답이 영영 안 오므로 자식이 30회를 다 쓴다(8 + 22를 반사실에서 봤다).
+3. 호스트 검사 하나를 더할 자리가 있다(design 결정 4의 2번). hook 세 줄을
+   `new_ntp_servers='1.2.3.4 5.6.7.8' sh 30-tars-ntp`로 직접 돌려 파일이
+   생기고 첫 주소가 들어 있는지 보는 것이고, 게스트도 QEMU도 필요 없다.
+
+그 뒤가 M3(zoneinfo와 `timezone` 키)다. design의 Milestone 절에 끝 기준이
+있다.
 
 TS가 끝난 뒤의 후보는 그대로 남아 있다 — 패키지 매니저 · 실머신 NIC, 그리고
 IN이 비목표로 미룬 넷(UDP · 포트 여럿 · init이 듣는 것 · 실머신에서 포트
@@ -790,9 +870,11 @@ IN이 `net` 체인 단독을 22.911초에서 33.730초로 키웠고 게이트가
 회차마다 다시 굽지 않기 때문이다(GL-M1) — 실제로 시간을 더한 것은 체인
 하나뿐이다.
 
-TS-M0은 이 숫자를 안 건드렸다. 코드 파일을 하나도 안 바꿨으므로 31분
-51.46초가 그대로 유효하다. TS-M1과 M2가 `net` 체인에 부팅을 하나씩 더하므로
-그때 약 25초(체인 단독) × 3이 붙을 것이고, 그 크기도 잡음 안이다.
+TS-M0은 이 숫자를 안 건드렸다(코드 파일을 하나도 안 바꿨다). TS-M1이
+건드렸고 아직 게이트를 안 돌렸으므로 31분 51.46초는 이제 낡은 값이다 —
+`net` 체인 단독이 33.889초에서 49.223초가 됐으니(실측 15) 약 46초가 붙어
+32분 반쯤일 것이고, 그 크기가 잡음(±3분) 안이라 게이트에서는 안 갈린다.
+M2의 부팅 B가 한 번 더 더한다.
 
 `skipping make`는 35회다(`12 × 3 − 1`). 체인이 하나 늘면 이 수도 셋 는다.
 
@@ -1301,6 +1383,10 @@ mtime은 새 시각을 따라간다.
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
+- `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
+  인자를 받으면 in-place로 고친다. 그래서 이 줄은 사본을 만드는 것이 아니라
+  저장소 파일을 고치고 빈 사본을 남긴다. 반사실용 `/tmp` 사본을 만들 때는
+  `cp`를 먼저 하고 사본에 대고 `sd`를 친다. `sed`의 감각으로 치면 걸린다.
 - `zsh -f`를 "옵션만 없는 세션"으로 쓰기(SD-M0 실측 5) — `NO_RCS`가 히스토리
   저장을 통째로 끈다. `exit`에서도 SIGHUP에서도 파일을 안 만들고, `fc -W`를
   직접 치면 써진다. 그래서 `-f`는 대조군이 못 된다. 옵션 하나만 다르게 하려면
@@ -1706,7 +1792,18 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   (`/sys/class/net`을 순회하려면 `getdents64`를 직접 다뤄야 한다), `ifreq`의
   크기 32바이트를 `comptime`이 못 박는다 — 틀리면 게스트에서 `ioctl`이
   EINVAL을 내는 것으로만 드러난다. dhcpcd는 감독 목록 밖이다(결정 9의 갈래 A).
-- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 일곱. `rcSeed()`가 씨앗 rc를
+- `sntp.zig` — 부팅할 때 시각을 묻는 자리(TS-M1). `sync()` 하나가 진입점이고
+  `main.zig`가 `net.bringUp()` 다음에 부른다. 파일이 둘로 갈려 있다 — 위쪽
+  셋(`buildRequest`·`parseReply`·`parseServerFile`)은 시스템 콜이 없어서
+  `sntp_test`가 호스트에서 보고, 아래쪽은 `fork`한 자식 안에서만 돈다.
+  자식이 `execve`를 안 하므로 첫 줄에서 `power.resetToDefault()`를 부른다 —
+  빼면 전원을 끌 때 그 자식만 안 죽는다. 자식은 주소가 붙기를 재시도로
+  기다린다(`MAX_TRIES = 30`. 실측 10이 열 번을 봤다). `parseReply`의 검사
+  순서가 계약이다(origin이 transmit보다 먼저 — 남의 패킷이 우연히 transmit=0일
+  때 로그가 원인을 바꿔 말하지 않게).
+- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 여덟(TS-M1이 `ntp`을
+  더했다. `Ntp`만 enum이 아니라 union이고 값 셋 중 하나가 주소다 —
+  `parseIpv4`가 여기 사는 이유는 import 방향이다). `rcSeed()`가 씨앗 rc를
   담고 `histEntries()`가 셸마다 갈린다(zsh 셋 · bash 둘 · fish 0).
   `histOptionLines()`는 env로는 못 주는 것을 담는다(zsh 한 줄 · 나머지 0) —
   `setopt`를 나르는 환경 변수가 없어서 그 줄만 파일로 간다(SD 확인 1).
