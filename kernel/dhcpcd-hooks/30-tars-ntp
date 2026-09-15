@@ -1,0 +1,32 @@
+# dhcpcd가 option 42로 받은 NTP 서버를 init이 읽을 자리에 적는다(TS design
+# 결정 4). 이 파일이 그 경로의 둘째 조각이고, 셋째가 파일이며 넷째가
+# init/src/sntp.zig다.
+#
+# 이 자리에 우리 파일을 두는 근거는 이웃들이다. make_initrd.sh가 같은
+# 디렉터리에 20-resolv.conf를 넣고 있고, 그것이 $new_domain_name_servers로
+# /etc/resolv.conf를 쓰는 것이 지금 게이트에서 매번 돈다. 우리는 글자 그대로
+# 같은 계약을 $new_ntp_servers에 대해 쓴다. initrd에 안 넣는
+# 50-timesyncd.conf도 같은 변수를 쓰는 기성 hook이다 — 우리가 지어낸 이름이
+# 아니다.
+#
+# 실행되는 것이 아니라 source된다(dhcpcd-run-hooks의 `. "$hook"`). 그래서
+# 두 가지를 지킨다 — 변수 이름에 tars_ 접두사를 붙여 남의 hook과 안 부딪치게
+# 하고, return을 안 쓴다. return은 source될 때만 맞는 문장이고 net/check.sh의
+# 호스트 검사는 이 파일을 sh로 직접 돌린다.
+#
+# 경로를 변수로 한 번 정하는 이유가 그 호스트 검사다(TS-M2 결정 M2-C).
+# 기본값이 하나뿐이라 길이 둘이 되지 않고, 덮어쓰는 자리는 그 검사 한 곳이다.
+# 이 기본값과 init/src/sntp.zig의 SERVER_FILE이 같은 글자여야 한다.
+: "${tars_ntp_file:=/run/tars/ntp_servers}"
+
+# dirname을 안 부른다. 게스트에 그것이 있는지를 이 파일 하나 때문에 확인해야
+# 하는 의존을 만들지 않으려는 것이고, 셸의 접미사 제거로 같은 값이 나온다.
+# mkdir은 20-resolv.conf가 이미 부르고 있으므로 게스트에 있다.
+#
+# 변수가 비었으면 아무것도 안 한다. 빈 파일을 만들면 init이 그것을 읽고
+# "주소를 못 읽었다"로 기다림을 다 쓴다 — 없는 것과 빈 것이 같은 뜻이어야
+# 한다.
+if [ -n "${new_ntp_servers:-}" ]; then
+	mkdir -p "${tars_ntp_file%/*}"
+	printf '%s\n' "$new_ntp_servers" > "$tars_ntp_file"
+fi

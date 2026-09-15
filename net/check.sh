@@ -53,6 +53,17 @@ REPO_ROOT="$(cd .. && pwd)"
 # 스무 줄이고, 그 둘 사이의 모든 것(SLIRP · 커널의 UDP · dhcpcd의 주소)은
 # 앞의 열여섯이 이미 따로 증명한 것들이다.
 #
+# TS-M2가 부팅을 하나 더 얹었다. 부팅 A가 "우리가 적은 주소에 묻는다"였다면
+# 이쪽은 "DHCP가 알려 준 주소를 읽어서 묻는다"이고, 덤으로 음성 하나를 판다:
+#
+#   initrd에 심은 /run/tars/ntp_servers → init이 그 주소를 읽는다
+#   그 주소가 어디에도 없다 → 자식이 답 없이 재시도만 한다
+#   → 그런데도 셸이 부팅 A와 같은 시각에 뜬다(design 결정 3)
+#
+# 그 경로의 첫 조각(dhcpcd가 option 42를 hook에 넘기는 것)만 게이트가 못
+# 본다. SLIRP가 그 옵션을 안 주기 때문이고(TS 확인 5), 대신 hook 자체는
+# 빌드 절의 호스트 검사가 직접 돌려서 본다.
+#
 # 이 체인은 check.sh의 CHAINS에 열두번째로 들어 있다. 단독으로도 돌아간다
 # (docker run ... bash net/check.sh).
 
@@ -91,6 +102,63 @@ STUBLOG="$(mktemp)"
 QEMU_PID_A=""
 STUB_PID=""
 
+# ── TS-M2 ───────────────────────────────────────────────────────────────
+#
+# 부팅 B가 쓰는 것들이다. 이 체인의 세 번째 QEMU이고 부팅 A가 꺼진 뒤에 뜬다.
+#
+# 45468은 monitor 대역(45455~45464 · 45471)과 IN의 둘(45465 · 45466)과
+# TS-M1의 하나(45467) 밖이다.
+NTP_DHCP_MONITOR_PORT=45468
+
+# 심는 주소. RFC 5737의 TEST-NET-1이라 어느 네트워크에도 실물이 없다
+# (TS-M2 결정 M2-E). 죽은 주소여야 이 부팅의 값이 두 배가 된다 — 살아 있는
+# 주소를 심으면 파일 경로만 증명되고, 죽은 주소를 심으면 design 결정 3의
+# 음성("안 닿는 서버가 부팅을 안 막는다")까지 함께 증명된다.
+#
+# SLIRP 안의 주소(10.0.2.200 같은 것)를 안 쓰는 이유는 실패의 모양이
+# 다르기 때문이다. 같은 서브넷이면 ARP가 실패하고, 바깥 주소면 기본 경로를
+# 밟아 나갔다가 답이 안 온다 — 뒤가 실기계에서 NTP 서버가 죽었을 때의
+# 모양에 가깝다.
+NTP_DEAD_SERVER=192.0.2.1
+
+# 셸이 뜨는 데 걸린 시간이 부팅 A보다 이만큼 넘게 길면 실패다(결정 M2-F).
+# 막히는 경우에 붙는 시간이 60초 이상이고(자식이 30회 × 2초) 부팅 하나가
+# TCG에서 12초 안팎이라, 10초는 그 사이가 넓게 비어 있는 자리다.
+BOOT_DELTA_MAX=10
+
+LOGB="$(mktemp)"
+INITRD_B="$(mktemp)"
+QEMU_PID_B=""
+BOOT_A_SECONDS=0
+BOOT_B_SECONDS=0
+
+# 부팅 B의 initrd를 짓는다(결정 M2-D).
+#
+# kernel/initrd.cpio를 안 건드린다. 그 파일은 열두 체인이 함께 쓰는
+# 산출물이고, 거기에 심으면 실기계용 initrd가 죽은 NTP 주소를 싣고 다닌다.
+#
+# 대신 cpio 한 조각을 뒤에 이어 붙인다. 커널의 initramfs 언패커가 버퍼를 다
+# 쓸 때까지 archive를 이어 읽고 뒤의 것이 앞의 것을 덮는다 — 마이크로코드를
+# 앞에 이어 붙이는 흔한 수법의 반대 방향이다. gzip 두 덩이를 이어 붙인 것도
+# 그 자체로 정상적인 gzip stream이라 어느 경로로 풀리든 결과가 같다.
+#
+# init에게는 우리가 심은 파일과 dhcpcd의 hook이 쓴 파일이 구별되지 않는다.
+# 그것이 design 결정 4가 경로를 자른 이유다 — SLIRP가 option 42를 영영 안
+# 줘도 "파일 → init" 조각이 게이트 안에서 초록이 된다.
+build_ntp_initrd() {
+  local extra seg
+  extra="$(mktemp -d)"
+  seg="$(mktemp)"
+
+  mkdir -p "${extra}/run/tars"
+  printf '%s\n' "$NTP_DEAD_SERVER" > "${extra}/run/tars/ntp_servers"
+
+  (cd "$extra" && find . | cpio -o -H newc --quiet) | gzip -6 > "$seg"
+  cat ../kernel/initrd.cpio "$seg" > "$INITRD_B"
+
+  rm -rf "$extra" "$seg"
+}
+
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
   exit 1
@@ -115,6 +183,50 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   echo "FAIL: initrd build failed"
   exit 1
 fi
+
+# ── 호스트 검사: hook 네 줄이 실제로 파일을 쓰는가 (TS-M2) ──────────────
+#
+# design 결정 4의 2번이다. 경로 넷 중 "hook → 파일" 조각은 게스트도 QEMU도
+# 없이 증명된다 — dhcpcd가 하는 일이 변수를 채우고 이 파일을 source하는
+# 것뿐이므로, 변수를 우리가 채우면 같은 코드가 같은 일을 한다.
+#
+# 부팅보다 앞에 두는 이유는 진단이다. 이 hook이 고장 나면 증상이 부팅 B의
+# 검사 21(init이 파일을 못 읽는다)에서 나오는데, 그 자리는 원인에서 멀다.
+#
+# tars_ntp_file을 덮어쓰는 유일한 자리다(결정 M2-C). 안 덮으면 이 검사가
+# 컨테이너의 진짜 /run/tars에 쓴다.
+HOOK=../kernel/dhcpcd-hooks/30-tars-ntp
+HOOKDIR="$(mktemp -d)"
+
+if ! new_ntp_servers='192.0.2.1 198.51.100.7' \
+     tars_ntp_file="${HOOKDIR}/ntp_servers" sh "$HOOK"; then
+  echo "FAIL: the dhcpcd hook exited non-zero"
+  rm -rf "$HOOKDIR"
+  exit 1
+fi
+HOOK_FIRST="$(awk 'NR==1 {print $1}' "${HOOKDIR}/ntp_servers" 2>/dev/null || true)"
+if [ "$HOOK_FIRST" != "192.0.2.1" ]; then
+  echo "FAIL: the dhcpcd hook wrote [${HOOK_FIRST}] where 192.0.2.1 was expected"
+  rm -rf "$HOOKDIR"
+  exit 1
+fi
+
+# 음성. 변수가 안 오는 reason(option 42가 없는 리스)에서 파일을 만들면, init이
+# 빈 파일을 읽고 "주소를 못 읽었다"로 기다림을 다 쓴다. 없는 것과 빈 것이
+# 같은 뜻이어야 하므로 아무것도 안 하는 것이 맞다.
+rm -f "${HOOKDIR}/ntp_servers"
+if ! tars_ntp_file="${HOOKDIR}/ntp_servers" sh "$HOOK"; then
+  echo "FAIL: the dhcpcd hook exited non-zero with no ntp servers"
+  rm -rf "$HOOKDIR"
+  exit 1
+fi
+if [ -e "${HOOKDIR}/ntp_servers" ]; then
+  echo "FAIL: the dhcpcd hook wrote a file with no ntp servers to write"
+  rm -rf "$HOOKDIR"
+  exit 1
+fi
+rm -rf "$HOOKDIR"
+echo "the dhcpcd hook writes the first ntp server and nothing else"
 
 # NW-M2. 설정 디스크를 굽는다. config/check.sh와 같은 자리이고 다른 것은
 # 이 디스크가 빈 것이 아니라는 것이다 — net=dhcp 한 줄을 debugfs로 미리
@@ -192,7 +304,12 @@ cleanup() {
     kill "$STUB_PID" 2>/dev/null || true
     wait "$STUB_PID" 2>/dev/null || true
   fi
-  rm -f "$PAYLOAD"
+  # TS-M2. 부팅 B의 게스트와 그 부팅만 쓰는 initrd.
+  if [ -n "$QEMU_PID_B" ] && kill -0 "$QEMU_PID_B" 2>/dev/null; then
+    kill "$QEMU_PID_B" 2>/dev/null || true
+    wait "$QEMU_PID_B" 2>/dev/null || true
+  fi
+  rm -f "$PAYLOAD" "$INITRD_B"
 }
 trap cleanup EXIT
 
@@ -481,7 +598,17 @@ echo "dhcpcd is still running"
 # 패턴을 하나씩 나눠 거는 이유는 check.sh의 require_no_early_exit_pipe가
 # 쓰는 정규식이 파이프 문자를 구분자로 읽기 때문이다. 대안을 한 줄에 몰면
 # 그 lint가 이 줄을 어떻게 읽을지가 사람 눈에 안 보인다.
-for driver in e1000 8139 ne2k r8169 pcnet32 vmxnet; do
+# 이름이 순수 숫자이면 안 된다(TS-M2가 고친 자리). 원래 이 목록에 `8139`가
+# 있었고, 그것이 드라이버가 아니라 커널 printk의 타임스탬프에 걸렸다 —
+# `[    1.381391] clocksource: tsc: ...` 한 줄이 체인을 빨갛게 만든다. 부팅
+# 시각이 그 값일 때만 걸리므로 회차마다 흔들렸고, 2026-09-15의 반복 실행
+# 열일곱 판 중 한 판이 여기서 죽었다.
+#
+# 그래서 커널이 실제로 찍는 이름을 적는다. 8139 계열의 모듈 이름이 8139cp와
+# 8139too 둘이고, 둘 다 글자를 포함하므로 숫자 사이에 우연히 나타날 수 없다.
+# `\b`를 붙이는 길은 안 골랐다 — 소수점 바로 뒤(`[    2.813900]`)에서는 그
+# 경계가 서기 때문에 같은 함정이 좁아질 뿐 안 없어진다.
+for driver in e1000 8139cp 8139too ne2k r8169 pcnet32 vmxnet; do
   if grep -ai "$driver" "$LOG" >/dev/null; then
     fail "a NIC driver we did not turn on showed up in the kernel log: ${driver}" \
       "$driver"
@@ -625,8 +752,24 @@ echo "the chain read inm1-inbound-ok off the guest's listener"
 #
 # 왜 grep -c를 그냥 치지 않는가는 검사 12와 같다. 친 명령의 에코가 화면이므로
 # (결정 E) 출력에만 생기는 글자로 판정한다 — inm2-listen=N이다.
+# stdin을 /dev/null로 돌리는 것이 이 줄에서 가장 중요한 조각이다
+# (TS-M2가 고친 자리). 그것이 없으면 이 검사가 회차마다 흔들린다 —
+# 배경 job의 stdin이 터미널인데 nc는 연결이 오면 stdin도 읽으려 하고, 배경에서
+# 터미널을 읽으면 커널이 SIGTTIN을 보내 그 job을 멈춘다. 멈춘 nc는 받은
+# 바이트를 파일에 안 쓰므로 아래 검사 15가 빈 파일을 본다.
+#
+# 화면이 그 순간을 글자로 남긴다. 실패한 회차의 화면에는
+# `fish: Job 1, 'nc -l -p 8081 > /tmp/inm2.txt &' has stopped`가 있고, 성공한
+# 회차에는 같은 자리에 `has ended`가 있다 — 멈춘 것과 끝난 것이다.
+#
+# 8080의 리스너가 이 병에 안 걸리는 이유도 같은 사실이 설명한다. 그쪽은
+# `echo … | nc -l -p 8080 &`이라 nc의 stdin이 파이프이고 터미널이 아니다.
+#
+# `<`가 shift-comma다. 이 저장소에서 처음 쓰는 키 이름이고, 틀리면 증상이
+# 바로 아래 검사 14에서 나온다(명령줄이 깨져 LISTEN이 안 선다).
 echo "=== typing the reverse listener on port ${GUEST_REVERSE_PORT} ==="
-type_keys n c spc minus l spc minus p spc 8 0 8 1 spc shift-dot spc \
+type_keys n c spc minus l spc minus p spc 8 0 8 1 spc shift-comma spc \
+  slash d e v slash n u l l spc shift-dot spc \
   slash t m p slash i n m 2 dot t x t spc shift-7 ret
 
 echo "=== typing 'echo inm2-listen=\$(grep -c 1F91 /proc/net/tcp)' ==="
@@ -781,6 +924,10 @@ LOG="$LOGA"
 
 # 앞의 QEMU 줄에서 hostfwd·guestfwd를 뺀 것이다. 이 부팅은 TCP를 하나도
 # 안 쓴다 — 나가는 UDP는 SLIRP이 아무 설정 없이 내보낸다(TS-M0 실측 2).
+#
+# TS-M2 결정 M2-F. 부팅 B가 이 시간과 비교된다 — "셸이 다른 부팅과 같은
+# 시각에 뜬다"를 재려면 같은 방법으로 잰 상대가 있어야 한다.
+BOOT_A_START="$(date +%s)"
 qemu-system-x86_64 \
   -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
@@ -803,7 +950,9 @@ for _ in $(seq 1 120); do
   if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then break; fi
   sleep 1
 done
+BOOT_A_SECONDS=$(( $(date +%s) - BOOT_A_START ))
 [ "$READY" = "1" ] || fail "the ntp guest never rendered a prompt"
+echo "the ntp guest reached a prompt in ${BOOT_A_SECONDS}s"
 
 # ── 검사 17: 설정이 읽혔고 ntp가 실효값인가 ───────────────────────────
 # 검사 3과 같은 자리를 새 키에 대해 한 번 더 본다. 이것이 없으면 아래 둘이
@@ -896,6 +1045,138 @@ kill "$STUB_PID" 2>/dev/null || true
 wait "$STUB_PID" 2>/dev/null || true
 STUB_PID=""
 echo "the sntp stub answered $(grep -ac 'sent 48 bytes' "$STUBLOG") request(s)"
+
+# ══ 부팅 B: DHCP가 알려 준 서버를 쓴다 (TS-M2) ═════════════════════════
+#
+# 여기서부터 게스트가 또 새로 뜬다. 앞의 둘과 다른 것이 둘이다 — 디스크가
+# out/net-ntp-dhcp.img(ntp=dhcp)이고, initrd에 /run/tars/ntp_servers가 미리
+# 있다.
+#
+# 이 부팅이 증명하는 것이 둘이다.
+#   1. init이 그 파일을 읽는다 — 로그가 심은 주소를 이름 대며 찍는다
+#   2. 안 닿는 서버가 부팅을 안 막는다 — 셸이 부팅 A와 같은 시각에 뜬다
+#
+# 상대가 없는 것이 이 부팅의 설계다. stub은 바로 위에서 이미 죽였고 심은
+# 주소는 어느 네트워크에도 없다. 그래서 자식은 서른 번을 다 쓰고 전원을 끄는
+# 순간까지 살아 있다 — 그것이 TS-M1 결정 M1-A의 진짜 시험이다.
+echo "=== booting again with ntp=dhcp and a planted ${NTP_DEAD_SERVER} ==="
+
+build_ntp_initrd
+echo "planted ${NTP_DEAD_SERVER} in /run/tars/ntp_servers of the boot-B initrd"
+
+LOG="$LOGB"
+BOOT_B_START="$(date +%s)"
+
+qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd "$INITRD_B" \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -netdev "user,id=n0" \
+  -device virtio-net-pci,netdev=n0 \
+  -drive file="${REPO_ROOT}/out/net-ntp-dhcp.img",if=virtio,format=raw \
+  -serial file:"$LOGB" \
+  -monitor tcp:127.0.0.1:${NTP_DHCP_MONITOR_PORT},server,nowait \
+  -no-reboot &
+QEMU_PID_B=$!
+
+READY_B=0
+for _ in $(seq 1 120); do
+  if grep -a "terminal: screen>" "$LOGB" >/dev/null; then READY_B=1; break; fi
+  if ! kill -0 "$QEMU_PID_B" 2>/dev/null; then break; fi
+  sleep 1
+done
+BOOT_B_SECONDS=$(( $(date +%s) - BOOT_B_START ))
+[ "$READY_B" = "1" ] || fail "the ntp=dhcp guest never rendered a prompt"
+echo "the ntp=dhcp guest reached a prompt in ${BOOT_B_SECONDS}s"
+
+# ── 검사 20: 설정이 읽혔고 ntp=dhcp인가 ───────────────────────────────
+# 검사 17과 같은 자리를 다른 값에 대해 한 번 더 본다. 이것이 없으면 아래 둘이
+# 실패했을 때 "엉뚱한 디스크를 물었다"와 "코드가 틀렸다"가 안 갈린다 — 세
+# 디스크의 라벨을 서로 다르게 둔 것과 같은 이유다.
+if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=dhcp" "$LOGB" >/dev/null; then
+  fail "the ntp=dhcp config disk did not reach init" "tars-init: config shell="
+fi
+echo "the guest read ntp=dhcp off the config disk"
+
+# ── 검사 21: init이 심은 파일을 읽었나 ────────────────────────────────
+# design 결정 4의 1번이다. 이 줄이 나오면 경로 넷 중 "파일 → init" 조각이
+# 게이트 안에서 닫힌 것이고, 그 조각은 SLIRP가 option 42를 주든 안 주든 같은
+# 코드다.
+#
+# 주소까지 함께 보는 것에 뜻이 있다. 만약 SLIRP가 option 42를 준다면 dhcpcd의
+# hook이 우리가 심은 파일을 덮어쓰는데, 그때 이 검사가 그 사실을 알린다 —
+# 주소가 10.0.2.x로 바뀌어 패턴이 안 맞기 때문이다.
+#
+# 기다리는 이유는 자식의 첫 일이 파일을 여는 것이 아니기 때문이다. fork 뒤에
+# 시그널 정책을 되돌리고, 파일을 열고, 그 다음이 이 줄이다 — 부팅 A의 검사
+# 18보다 훨씬 이르지만 0초는 아니다.
+READ_FILE=0
+for _ in $(seq 1 60); do
+  if grep -a "tars-init: ntp server ${NTP_DEAD_SERVER} came from /run/tars/ntp_servers" \
+       "$LOGB" >/dev/null; then
+    READ_FILE=1; break
+  fi
+  if ! kill -0 "$QEMU_PID_B" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READ_FILE" = "1" ] || \
+  fail "init never read ${NTP_DEAD_SERVER} out of /run/tars/ntp_servers" \
+    "tars-init: ntp" "tars-init: sntp"
+echo "init read ${NTP_DEAD_SERVER} out of the planted /run/tars/ntp_servers"
+
+# ── 검사 22: 안 닿는 서버가 부팅을 안 막았나 ──────────────────────────
+# design 결정 3의 음성이다. 이 사이클이 못 박으려는 제약이 "네트워크가 꺼져
+# 있거나 안 닿아도 부팅은 평소대로 끝난다"이고, 그 제약은 양성 검사로는 절대
+# 안 보인다 — 시계가 맞는 것과 부팅이 안 막히는 것은 서로 다른 사실이다.
+#
+# 이 순간 게스트 안에서는 자식이 192.0.2.1에 몇 번째로 묻고 있다. 그 자식이
+# 부모를 한 순간도 안 세웠다는 것을 두 수의 차이가 말한다.
+#
+# 이 검사가 못 보는 것도 적어 둔다 — 부팅 A와 B가 똑같이 늦어지면 차이가 0이라
+# 초록이다. 그 고장은 이 검사가 아니라 체인 단독 시간이 본다.
+BOOT_DELTA=$(( BOOT_B_SECONDS - BOOT_A_SECONDS ))
+if [ "$BOOT_DELTA" -gt "$BOOT_DELTA_MAX" ]; then
+  fail "the dead ntp server delayed the prompt by ${BOOT_DELTA}s (boot A ${BOOT_A_SECONDS}s, boot B ${BOOT_B_SECONDS}s)" \
+    "tars-init: sntp" "tars-init: started console shell"
+fi
+echo "the dead ntp server cost ${BOOT_DELTA}s of boot time (limit ${BOOT_DELTA_MAX}s)"
+
+# ── 부팅 B를 끈다 ─────────────────────────────────────────────────────
+CONNECTED_B=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${NTP_DHCP_MONITOR_PORT}"; then CONNECTED_B=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED_B" = "1" ] || \
+  fail "could not connect to the ntp=dhcp guest's QEMU monitor" "terminal: screen>"
+
+echo "=== sending system_powerdown to the ntp=dhcp guest ==="
+echo "system_powerdown" >&3
+sleep 0.3
+exec 3<&-
+exec 3>&-
+
+GONE_B=0
+for _ in $(seq 1 30); do
+  if ! kill -0 "$QEMU_PID_B" 2>/dev/null; then GONE_B=1; break; fi
+  sleep 1
+done
+[ "$GONE_B" = "1" ] || fail "the ntp=dhcp guest did not switch itself off" \
+  "tars-init: shutdown requested"
+
+# SL-M2가 세운 것. 이 부팅에서 이 검사가 셋 중 가장 크다 — 여기가 TS-M1 결정
+# M1-A가 겨냥한 바로 그 상태다. 자식이 안 닿는 주소를 묻는 중이라 전원을 끄는
+# 순간 분명히 살아 있고, power.resetToDefault()가 없으면 그 자식이 부모의
+# SIGTERM 핸들러를 물려받아 안 죽는다. 그러면 reapAll()이 유예 3초를 다 쓰고
+# `grace period expired`를 찍는다.
+if grep -a "grace period expired" "$LOGB" >/dev/null; then
+  fail "something outlived SIGTERM in the ntp=dhcp guest" "grace period expired"
+fi
+echo "nothing outlived SIGTERM — the sntp child took the default policy"
 
 echo "PASS"
 exit 0

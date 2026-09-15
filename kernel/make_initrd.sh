@@ -228,6 +228,20 @@ cp "$SYSROOT/usr/lib/dhcpcd/dhcpcd-hooks/20-resolv.conf" \
    "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
 chmod 0755 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-run-hooks"
 
+# TS-M2. 우리 hook. 위의 20-resolv.conf와 계약이 같다 — dhcpcd-run-hooks가
+# 이 디렉터리를 훑어 있는 파일을 전부 source하고, 각 hook은 new_* 변수에서
+# 자기 몫을 꺼낸다. 저쪽은 $new_domain_name_servers로 /etc/resolv.conf를,
+# 이쪽은 $new_ntp_servers로 /run/tars/ntp_servers를 쓴다.
+#
+# sysroot가 아니라 저장소에서 온다. 우리가 쓴 파일이기 때문이고, 저장소에
+# 파일로 두는 이유는 net/check.sh의 호스트 검사가 그것을 sh로 직접 돌려
+# 보기 때문이다(TS-M2 결정 M2-B) — heredoc이면 그 검사가 이 스크립트를
+# 실행하지 않고는 hook을 얻을 수 없다.
+#
+# 0644인 것도 위의 것과 같다. 실행이 아니라 source라서 실행 권한이 필요 없다.
+cp dhcpcd-hooks/30-tars-ntp "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
+chmod 0644 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/30-tars-ntp"
+
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
 # /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다

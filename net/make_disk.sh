@@ -63,3 +63,16 @@ bake ../out/net.img tars-net 'net=dhcp
 bake ../out/net-ntp.img tars-ntp "net=dhcp
 ntp=${NTP_SERVER}
 "
+
+# TS-M2. 부팅 B가 쓰는 디스크. 부팅 A와 다른 것은 ntp의 값 하나다 — 주소가
+# 설정에 없고 initrd에 심은 /run/tars/ntp_servers에서 온다.
+#
+# 이 디스크가 증명하는 문장이 부팅 A와 다르다. 저쪽은 "우리가 적은 주소에
+# 묻는다"이고 이쪽은 "DHCP가 알려 준 주소를 읽어서 묻는다"이다. 값이 같은
+# 코드를 두 번 도는 것이 아니라 sntp.zig의 갈래 둘 중 안 밟힌 쪽을 밟는다.
+#
+# 라벨이 셋 다 다르다. 같은 라벨이면 엉뚱한 이미지를 물린 회차의 게스트
+# 로그가 똑같이 생긴다.
+bake ../out/net-ntp-dhcp.img tars-ntp-dhcp 'net=dhcp
+ntp=dhcp
+'

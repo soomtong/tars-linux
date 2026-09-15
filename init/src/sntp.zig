@@ -134,6 +134,18 @@ const RECV_TIMEOUT_SECONDS: isize = 2;
 /// 약 90초를 덮는다 — `net/check.sh`의 리스 대기 상한 60초보다 길다.
 const MAX_TRIES: usize = 30;
 
+/// `ntp=dhcp`일 때 파일이 생기기를 기다리는 상한과 간격(TS-M2).
+///
+/// 30초인 근거는 `MAX_TRIES`와 같은 자리에서 온다. 이 파일을 쓰는 것은
+/// dhcpcd의 hook이고 hook은 리스를 받은 뒤에 불리므로, 기다리는 대상이 결국
+/// 리스다 — `net/check.sh`의 리스 대기 상한이 60초이고 실제 관측이 10초
+/// 안팎이다(TS-M1 실측 10).
+///
+/// 이 수가 부팅 시간에 영향을 안 준다는 것이 design 결정 3의 덤이다. 부모는
+/// 이미 다음 줄로 갔고, 이 기다림은 자식 안에서만 돈다(TS-M2 결정 M2-A).
+const FILE_WAIT_TRIES: usize = 60;
+const FILE_WAIT_SLEEP_MS: isize = 500;
+
 /// 실패한 회차 뒤에 쉬는 시간. 답이 없어서 실패한 회차는 이미 2초를
 /// 기다렸으므로 안 쉰다 — 이 쉼은 `sendto`가 즉시 실패한 회차의 것이다.
 const RETRY_SLEEP_MS: isize = 1000;
@@ -291,14 +303,19 @@ fn askAndStep(server: [4]u8) void {
     std.debug.print("tars-init: sntp gave up after {d} tries\n", .{MAX_TRIES});
 }
 
-/// `ntp=dhcp`일 때 서버를 찾는 자리. M1은 한 번만 열어 보고 없으면 끝낸다
-/// (TS-M1 plan 결정 M1-D) — 기다리는 것은 M2가 더한다.
+/// `ntp=dhcp`일 때 서버를 찾는 자리. 한 번 열어 보고 못 읽으면 null이다.
+/// 기다리는 것은 아래 `waitForServerFile`이 한다(TS-M2).
 fn serverFromFile() ?[4]u8 {
     const rc = linux.open(SERVER_FILE.ptr, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: ntp=dhcp but {s} is not there (errno {d})\n", .{
-            SERVER_FILE, @intFromEnum(e),
-        });
+        // ENOENT는 조용히 지나간다. M2부터 이 함수는 기다리는 루프 안에서
+        // 불리고 그 루프의 정상 상태가 "아직 없다"이기 때문이다 — 안 가리면
+        // 같은 줄이 예순 번 찍혀서 정말 이상한 실패(권한 · 마운트)를 덮는다.
+        if (e != .NOENT) {
+            std.debug.print("tars-init: cannot open {s} (errno {d})\n", .{
+                SERVER_FILE, @intFromEnum(e),
+            });
+        }
         return null;
     }
     const fd: i32 = @intCast(rc);
@@ -318,10 +335,35 @@ fn serverFromFile() ?[4]u8 {
         std.debug.print("tars-init: {s} has no address we can read\n", .{SERVER_FILE});
         return null;
     };
+    // net/check.sh의 부팅 B가 이 줄을 grep한다. 주소까지 함께 보므로 형식을
+    // 바꾸는 사람은 그 체인도 같이 본다.
     std.debug.print("tars-init: ntp server {d}.{d}.{d}.{d} came from {s}\n", .{
         ip[0], ip[1], ip[2], ip[3], SERVER_FILE,
     });
     return ip;
+}
+
+/// 파일이 생길 때까지 기다린다. 자식 안에서만 불린다(TS-M2 결정 M2-A).
+///
+/// 왜 inotify가 아닌가. init에 libc도 힙도 없으므로 `inotify_add_watch`를
+/// 직접 다뤄야 하고, 그러면 "디렉터리가 아직 없을 때"를 또 다뤄야 한다 —
+/// `/run/tars`를 만드는 것도 hook이다. 0.5초마다 열어 보는 쪽이 코드가
+/// 절반이고 최악의 손해가 0.5초다.
+///
+/// 기다리는 것을 먼저 알린다. 이 줄이 없으면 부모의 `will ask dhcp` 다음이
+/// 30초 침묵이라, 로그만 보는 사람이 그 침묵을 매달림으로 읽는다.
+fn waitForServerFile() ?[4]u8 {
+    std.debug.print("tars-init: ntp=dhcp, waiting for {s}\n", .{SERVER_FILE});
+    var tries: usize = 0;
+    while (tries < FILE_WAIT_TRIES) : (tries += 1) {
+        if (serverFromFile()) |ip| return ip;
+        sleepMillis(FILE_WAIT_SLEEP_MS);
+    }
+    // 실기계에서 이 줄이 뜻하는 것은 "DHCP 서버가 option 42를 안 준다"이고,
+    // 그것이 design 위험 3이 게이트로 영영 못 가리는 바로 그 상태다. 그래서
+    // 이 문장이 진단의 시작점이 되도록 파일 이름을 함께 찍는다.
+    std.debug.print("tars-init: gave up waiting for {s}\n", .{SERVER_FILE});
+    return null;
 }
 
 /// 설정이 실제 동작이 되는 자리. `main()`이 부르는 것은 이 함수 하나다.
@@ -346,12 +388,9 @@ pub fn sync(net: config.Net, want: config.Ntp) void {
         return;
     }
 
-    const server: [4]u8 = switch (want) {
-        .off => unreachable, // 위에서 돌아갔다
-        .dhcp => serverFromFile() orelse return,
-        .server => |ip| ip,
-    };
-
+    // M1에서는 부모가 주소를 정한 뒤에 fork했다. M2는 순서가 반대다
+    // (결정 M2-A) — `ntp=dhcp`의 주소는 기다려야 나오고, 기다리는 일은 부모가
+    // 할 수 없기 때문이다(design 결정 3).
     const pid = linux.fork();
     if (failed(pid)) |e| {
         std.debug.print("tars-init: cannot fork for sntp (errno {d})\n", .{
@@ -362,15 +401,25 @@ pub fn sync(net: config.Net, want: config.Ntp) void {
     if (pid == 0) {
         // 첫 줄이어야 한다(TS-M1 plan 결정 M1-A). `execve`를 안 하는 자식이라
         // 부모의 SIGTERM 핸들러를 그대로 갖고 있고, 그대로 두면 전원을 끌 때
-        // 이 자식만 안 죽는다.
+        // 이 자식만 안 죽는다. M2의 부팅 B가 그것의 진짜 시험이다 — 안 닿는
+        // 주소를 60초 동안 묻는 자식이 전원을 끄는 순간 살아 있다.
         power.resetToDefault();
+        const server: [4]u8 = switch (want) {
+            .off => unreachable, // 위에서 돌아갔다
+            .dhcp => waitForServerFile() orelse linux.exit(0),
+            .server => |ip| ip,
+        };
         askAndStep(server);
         linux.exit(0);
     }
     // net/check.sh가 이 줄을 grep하지는 않는다. `net.zig`의
     // `started dhcpcd on eth0 (pid N)`과 짝이 되는 자리이고, 자식이 아무 말도
     // 못 하고 죽은 회차에 "태어나기는 했다"를 남긴다.
-    std.debug.print("tars-init: sntp child (pid {d}) will ask {d}.{d}.{d}.{d}\n", .{
-        pid, server[0], server[1], server[2], server[3],
+    //
+    // 주소가 아니라 설정값을 찍는다. 부모는 이제 주소를 모르고(자식이
+    // 정한다), `.server` 갈래에서는 `arg()`가 점 넷을 돌려주므로 M1과 글자가
+    // 같다 — 부팅 A의 로그가 이 변경에 안 흔들린다.
+    std.debug.print("tars-init: sntp child (pid {d}) will ask {s}\n", .{
+        pid, want.arg(&ntp_buf),
     });
 }

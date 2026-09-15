@@ -135,7 +135,24 @@ fn startDhcpcd(envp: [*:null]const ?[*:0]const u8) void {
         return;
     }
     if (pid == 0) {
-        const argv = [_:null]?[*:0]const u8{ DHCPCD_PATH.ptr, "eth0", null };
+        // `-o ntp_servers`가 TS design 위험 3의 처방이다(TS-M0 실측 8).
+        // dhcpcd의 요청 목록은 /etc/dhcpcd.conf와 컴파일 타임 기본값에서
+        // 오는데, sysroot의 그 파일에 `option ntp_servers`가 있고
+        // make_initrd.sh가 그 파일을 initrd에 안 넣는다. 파일을 넣는 대신
+        // 한 단어를 여기 적는다 — 그 파일에는 우리가 고른 적 없는 줄이
+        // 서른 넘게 들어 있어서, 넣으면 무엇이 왜 켜졌는지가 흐려진다.
+        //
+        // 옵션 이름을 dhcpcd가 파일 없이 아는 것을 sysroot에서 확인했다 —
+        // /usr/share/dhcpcd에 정의 파일이 없고 바이너리 안에
+        // `define 42 array ipaddress ntp_servers`가 박혀 있다. 이것이
+        // 아니었다면 증상이 "주소가 안 붙는다"로 나와서 원인에서 멀다.
+        //
+        // 이 단어가 뜻을 갖는 것은 실기계에서뿐이다. 게이트의 SLIRP는
+        // option 42를 영영 안 주므로(TS 확인 5) 있든 없든 게이트의 답이
+        // 같고, 그래서 TS-M2는 그 간극을 hook과 파일로 잘라서 증명한다.
+        const argv = [_:null]?[*:0]const u8{
+            DHCPCD_PATH.ptr, "-o", "ntp_servers", "eth0", null,
+        };
         _ = linux.execve(DHCPCD_PATH.ptr, &argv, envp);
         // 여기 닿았다는 것은 execve가 실패했다는 뜻이다.
         std.debug.print("tars-init: cannot exec {s}\n", .{DHCPCD_PATH});
