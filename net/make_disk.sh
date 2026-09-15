@@ -18,22 +18,48 @@ cd "$(dirname "$0")"
 # 라벨 접두사가 tars- 여야 한다. init/src/storage.zig의 LABEL_PREFIX가
 # 그것이고(RM-M2), 정확히 하나로 박지 않은 이유가 게이트 디스크가 여럿이기
 # 때문이다.
+#
+# TS-M1이 이미지를 둘로 늘렸다. 검사 1~16이 쓰는 것과 부팅 A가 쓰는 것이
+# 따로다 — 한 디스크에 ntp= 를 더하면 그 열여섯이 전부 시계가 2031년인
+# 게스트에서 돌게 되고, 열여섯 중 하나가 깨지는 날 원인이 "받는 길"인지
+# "시계"인지 안 갈린다.
 SIZE=16M
-IMG=../out/net.img
-CONF="$(mktemp)"
-trap 'rm -f "$CONF"' EXIT
+
+# TS-M1. 부팅 A가 물을 주소를 체인이 정해서 넘긴다. 기본값을 두는 이유는
+# 이 스크립트를 손으로 돌리는 사람 때문이고, 게이트는 언제나 넘긴다 —
+# 그래야 이 주소를 아는 자리가 net/check.sh 한 곳이다.
+NTP_SERVER="${1:-10.0.2.2}"
 
 mkdir -p ../out
-rm -f "$IMG"
-truncate -s "$SIZE" "$IMG"
-mkfs.ext2 -F -q -m 0 -L tars-net "$IMG"
 
-# 한 줄만 적는다. 나머지 여섯 키는 기본값이고, 그래서 이 부팅의 셸이
-# fish이며 체인의 화면 좌표가 다른 체인들과 같다.
+# 이미지 하나를 굽는다. 인자가 (경로, 라벨, tars.conf 내용)이다.
+bake() {
+  local img="$1" label="$2" body="$3"
+  local conf
+  conf="$(mktemp)"
+  printf '%s' "$body" > "$conf"
+
+  rm -f "$img"
+  truncate -s "$SIZE" "$img"
+  mkfs.ext2 -F -q -m 0 -L "$label" "$img"
+  debugfs -w -R "write ${conf} tars.conf" "$img" 2>&1 | grep -v '^debugfs' || true
+  rm -f "$conf"
+
+  echo "make_disk: created ${img} (${SIZE}, ext2, label ${label})"
+}
+
+# 검사 1~16이 쓰는 디스크. 한 줄만 적는다 — 나머지 일곱 키는 기본값이고,
+# 그래서 이 부팅의 셸이 fish이며 체인의 화면 좌표가 다른 체인들과 같다.
 #
 # init이 이 파일을 읽으면 save()를 안 부른다 — load가 null이 아니기
 # 때문이다. 즉 이 디스크의 tars.conf는 부팅 뒤에도 이 한 줄 그대로다.
-printf 'net=dhcp\n' > "$CONF"
-debugfs -w -R "write ${CONF} tars.conf" "$IMG" 2>&1 | grep -v '^debugfs' || true
+bake ../out/net.img tars-net 'net=dhcp
+'
 
-echo "make_disk: created ${IMG} (${SIZE}, ext2, label tars-net, net=dhcp)"
+# TS-M1. 부팅 A가 쓰는 디스크. 위의 것과 다른 것이 ntp 한 줄뿐이다.
+#
+# 라벨을 tars-ntp로 다르게 두는 이유는 진단이다. 두 디스크가 같은 라벨이면
+# 엉뚱한 이미지를 물린 회차에 게스트 로그가 똑같이 생긴다.
+bake ../out/net-ntp.img tars-ntp "net=dhcp
+ntp=${NTP_SERVER}
+"

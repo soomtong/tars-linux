@@ -126,6 +126,24 @@ pub fn build(b: *std.Build) void {
         .root_module = environ_test_mod,
     });
 
+    // TS-M1: SNTP 패킷을 짓고 읽는 순수 함수의 검사. 위 다섯과 같은 이유로
+    // host_target이다 — sntp.zig에서 시스템 콜을 하는 부분은 sync() 아래에만
+    // 있고, 이 검사가 부르는 셋은 바이트 계산뿐이다.
+    //
+    // 이 검사가 있는 자리가 곧 design 결정 11·12다. era 경계는 10년 뒤에
+    // 한 번 오는 일이라 게이트가 영영 못 보고, 검증 넷은 게이트의 stub이
+    // 착한 서버라서 게이트가 한 번도 안 밟는다.
+    const sntp_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/sntp_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const sntp_test = b.addExecutable(.{
+        .name = "sntp_test",
+        .root_module = sntp_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -136,4 +154,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(devices_test).step);
     test_step.dependOn(&b.addRunArtifact(storage_test).step);
     test_step.dependOn(&b.addRunArtifact(environ_test).step);
+    test_step.dependOn(&b.addRunArtifact(sntp_test).step);
 }

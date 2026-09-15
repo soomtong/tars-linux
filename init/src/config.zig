@@ -33,6 +33,114 @@ pub const Net = enum {
     dhcp,
 };
 
+/// 점 넷으로 적은 IPv4 주소를 바이트 넷으로 바꾼다. 시스템 콜이 없는 순수
+/// 함수이고, 이 파일에서 `parse`·`cmdlineWantsNoConfig`와 같은 성질이다.
+///
+/// 이 저장소의 첫 자유 문자열 설정 값이라 파서가 필요해졌다(TS 확인 9).
+/// 다른 일곱 키는 전부 `stringToEnum` 화이트리스트라 "모르는 값은 기본값"이
+/// 공짜로 따라왔는데, 주소는 그 수법이 안 선다.
+///
+/// `inet_aton`과 다르게 구는 자리가 하나다 — `010`을 8이 아니라 10으로
+/// 읽는다. 8진수 해석은 사람을 놀라게 하는 쪽이고, 설정 파일은 사람이 손으로
+/// 고치는 물건이다.
+///
+/// 이 함수가 `sntp.zig`가 아니라 여기 있는 이유는 import 방향이다(TS-M1
+/// plan 결정 M1-C). `net.zig`가 `config.Net`을 받고 `config.zig`는 `net`을
+/// 모르는데, 주소 파서를 저쪽에 두면 그 방향이 순환한다.
+///
+/// 힙이 없으므로 돌려주는 것이 배열이다. optional이라 "못 읽었다"가 값으로
+/// 온다.
+pub fn parseIpv4(text: []const u8) ?[4]u8 {
+    var out: [4]u8 = undefined;
+    var i: usize = 0;
+    var it = std.mem.splitScalar(u8, text, '.');
+    while (it.next()) |part| {
+        // 다섯째 조각이 오면 주소가 아니다. `1.2.3.4.5`가 여기서 걸린다.
+        if (i == 4) return null;
+        if (part.len == 0 or part.len > 3) return null;
+        var v: u16 = 0;
+        for (part) |ch| {
+            if (ch < '0' or ch > '9') return null;
+            v = v * 10 + (ch - '0');
+        }
+        if (v > 255) return null;
+        out[i] = @intCast(v);
+        i += 1;
+    }
+    // 조각이 넷이 아니면 주소가 아니다. `1.2.3`이 여기서 걸린다.
+    if (i != 4) return null;
+    return out;
+}
+
+/// `Ntp.arg`가 만드는 문자열을 담을 버퍼의 크기. 가장 긴 것이
+/// `255.255.255.255` 15바이트이고 NUL 하나가 더 든다.
+pub const NTP_ARG_MAX = 16;
+
+comptime {
+    const longest = "255.255.255.255";
+    if (longest.len + 1 > NTP_ARG_MAX)
+        @compileError("NTP_ARG_MAX is too small for a dotted quad");
+}
+
+/// 부팅할 때 시각을 어디에 묻는가(TS design 결정 5).
+///
+/// 키 하나가 "켜고 끄는 것"과 "어디에 묻는지"를 함께 정한다. 그래서 "켰는데
+/// 어디에 물을지를 안 적은" 모순 상태가 구조적으로 없다.
+///
+/// `Net`과 달리 enum이 아니라 union인 이유는 셋째 값이 자유 문자열이기
+/// 때문이다. 이것이 이 파일에서 `stringToEnum` 화이트리스트가 아닌 두 번째
+/// 값이고(앞은 `Toggles`), 둘 다 파싱 함수를 자기가 갖는다.
+///
+/// 이름이 아니라 주소만 받는 근거는 `init`에 resolver가 없다는 것이다
+/// (design 결정 5). libc도 힙도 없으므로 `pool.ntp.org`를 풀려면 DNS
+/// 클라이언트를 직접 써야 하고, 그러면 이 사이클이 "시계 맞추기"에서
+/// "DNS 구현하기"로 넘어간다.
+pub const Ntp = union(enum) {
+    off,
+    dhcp,
+    server: [4]u8,
+
+    /// 설정 파일의 값을 이 타입으로 바꾼다. 모르는 값이면 null이고,
+    /// 호출자가 로그를 찍고 기본값에 머문다 — 다른 일곱 키와 같은 규칙이다.
+    pub fn parse(value: []const u8) ?Ntp {
+        if (std.mem.eql(u8, value, "off")) return .off;
+        if (std.mem.eql(u8, value, "dhcp")) return .dhcp;
+        const ip = parseIpv4(value) orelse return null;
+        return .{ .server = ip };
+    }
+
+    /// 로그와 씨앗 파일에 찍을 정규형. 버퍼는 호출자가 준다 —
+    /// `Toggles.arg`와 같은 이유로, 이 파일에는 힙이 없고 주소는 상수
+    /// 문자열로 돌려줄 수가 없다.
+    pub fn arg(self: Ntp, buf: []u8) [:0]const u8 {
+        switch (self) {
+            .off => return "off",
+            .dhcp => return "dhcp",
+            .server => |ip| {
+                const text = std.fmt.bufPrint(buf, "{d}.{d}.{d}.{d}", .{
+                    ip[0], ip[1], ip[2], ip[3],
+                }) catch return "off";
+                buf[text.len] = 0;
+                return buf[0..text.len :0];
+            },
+        }
+    }
+
+    /// 두 값이 같은가. `config_test`의 필드 비교가 쓴다 — union은 `==`로
+    /// 비교되지 않고, 그 자리에 `std.meta.eql`을 쓰면 검사가 무엇을 보는지가
+    /// 흐려진다.
+    pub fn eql(self: Ntp, other: Ntp) bool {
+        return switch (self) {
+            .off => other == .off,
+            .dhcp => other == .dhcp,
+            .server => |a| switch (other) {
+                .server => |b| std.mem.eql(u8, &a, &b),
+                else => false,
+            },
+        };
+    }
+};
+
 /// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). `tars.conf`를 이기는
 /// 것은 이 키 하나뿐이다 — 우선순위는 cmdline > tars.conf > 기본값이고,
 /// 다른 다섯 키는 cmdline을 안 본다. 그 예외의 근거는 하나다: *"`tars.conf`를
@@ -630,6 +738,10 @@ pub const Config = struct {
     /// 쓰는 것"이 기본값인데(keyboard=apple · hangul_layout=shin_pcs),
     /// 이 키는 근거가 다르다 — 켜는 비용이 부팅마다 붙기 때문이다.
     net: Net = .off,
+    /// 기본값이 `off`인 둘째 키다. 근거는 바로 위 `net`과 같고 하나가 더
+    /// 있다 — 이 키는 `net`이 꺼져 있으면 아무 일도 못 한다(TS design
+    /// 결정 3).
+    ntp: Ntp = .off,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -765,6 +877,17 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "ntp")) {
+            // 앞의 일곱과 모양이 다른 유일한 자리다. `stringToEnum`이 아니라
+            // `Ntp.parse`인 이유는 값의 셋째 갈래가 주소 리터럴이기
+            // 때문이다(TS design 결정 5). 모르는 값을 흘려보내는 규칙은 같다.
+            var ntp_buf: [NTP_ARG_MAX]u8 = undefined;
+            c.ntp = Ntp.parse(value) orelse {
+                std.debug.print("tars-init: unknown ntp '{s}', falling back to {s}\n", .{
+                    value, c.ntp.arg(&ntp_buf),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -792,6 +915,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     // `Toggles`만 상수 문자열이 아니라 조립해야 한다(조합이 열여섯 가지다).
     // 이 배열은 아래 bufPrint가 값을 복사할 때까지만 살아 있으면 된다.
     var toggle_buf: [TOGGLE_ARG_MAX]u8 = undefined;
+    // `Ntp`도 같은 이유로 버퍼가 필요하다 — 값 셋 중 하나가 주소라 상수
+    // 문자열이 아니다.
+    var ntp_buf: [NTP_ARG_MAX]u8 = undefined;
     const text = std.fmt.bufPrint(&buf,
         \\# TARS configuration. Edit and reboot to apply.
         \\# shell: fish | bash | zsh
@@ -818,6 +944,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   dhcp면 init이 eth0을 UP으로 올리고 dhcpcd를 띄운다. 주소도
         \\#   라우트도 /etc/resolv.conf도 dhcpcd가 쓴다
         \\net={s}
+        \\# ntp: off | dhcp | <IPv4 주소>
+        \\#   dhcp면 DHCP 서버가 알려 준 NTP 서버에 묻고, 주소를 적으면 그
+        \\#   주소에 묻는다. 부팅할 때 한 번만 묻고 시계를 그 값으로 뛴다 —
+        \\#   그 뒤로는 시계를 안 건드린다. net=off면 아무 일도 안 한다
+        \\ntp={s}
         \\
     , .{
         @tagName(c.shell),
@@ -827,6 +958,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         c.hangul_toggle.arg(&toggle_buf),
         @tagName(c.shell_config),
         @tagName(c.net),
+        c.ntp.arg(&ntp_buf),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의

@@ -6,6 +6,7 @@ const devices = @import("devices.zig");
 const storage = @import("storage.zig");
 const environ = @import("environ.zig");
 const net = @import("net.zig");
+const sntp = @import("sntp.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -584,8 +585,13 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 같은 근거다.
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
+    // TS-M1이 여덟째 키를 맨 뒤에 붙였다. 뒤여야 하는 이유는 위와 같다 —
+    // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
+    // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
+    // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
+    var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -594,6 +600,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             toggle_arg,
             @tagName(cfg.shell_config),
             @tagName(cfg.net),
+            cfg.ntp.arg(&ntp_buf),
         },
     );
 
@@ -674,6 +681,13 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 실패해도 부팅을 안 막는다. 네트워크가 없는 기계는 이 저장소가 지금까지
     // 돌려 온 상태 그 자체이고, 못 켠 이유는 로그에 있다.
     net.bringUp(cfg.net, envp);
+
+    // TS-M1. `net.bringUp` 다음인 것이 이 한 줄의 유일한 제약이다 —
+    // `ntp=dhcp`가 읽는 파일을 쓰는 것이 dhcpcd의 hook이고, `ntp=<주소>`도
+    // 링크가 올라와 있어야 나간다. 그리고 여기서 fork한 자식은 부모를 한
+    // 순간도 안 세운다(design 결정 3) — 주소가 아직 없어서 첫 `sendto`가
+    // 실패하는 것이 정상이고, 자식이 그것을 재시도로 덮는다.
+    sntp.sync(cfg.net, cfg.ntp);
 
     // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
     // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.

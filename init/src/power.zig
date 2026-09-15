@@ -75,6 +75,33 @@ pub fn install() void {
     std.debug.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
 }
 
+/// `fork`한 자식이 PID 1의 시그널 정책을 물려받지 않게 되돌린다.
+///
+/// 왜 필요한가. `install()`이 단 핸들러는 죽는 대신 정수 하나를 남기는
+/// 것이고(`onSignal` → `request`), 그 정수를 꺼내 실제로 종료를 시작하는
+/// 것은 `main.zig`의 감독 루프다. 자식에는 그 루프가 없으므로 물려받은
+/// 핸들러는 "SIGTERM을 무시한다"와 같은 뜻이 된다.
+///
+/// `net.zig`의 dhcpcd 자식은 이 함수가 필요 없다 — `execve`가 다뤄진
+/// 시그널을 전부 `SIG_DFL`로 되돌려 주기 때문이다. `execve`를 안 하는
+/// 자식만 손으로 해야 하고, 지금 그런 자식은 `sntp.zig`의 것 하나다.
+///
+/// 안 부르면 증상이 종료에서 난다. `shutdown()`의 SIGTERM에 그 자식만
+/// 안 죽고 `reapAll()`이 유예 3초를 다 써서 `grace period expired`가 찍히고,
+/// SL-M2가 세운 음성 검사가 그것을 실패로 판정한다. 원인(시계)과
+/// 증상(종료)이 멀어서 찾기 어려운 종류다.
+pub fn resetToDefault() void {
+    const act: linux.Sigaction = .{
+        .handler = .{ .handler = linux.SIG.DFL },
+        .mask = linux.sigemptyset(),
+        .flags = 0,
+    };
+    // 실패해도 할 일이 없다. 자식이고, 여기서 로그를 찍으면 부모의 로그에
+    // 섞여서 읽는 사람을 헷갈리게 한다.
+    _ = linux.sigaction(.TERM, &act, null);
+    _ = linux.sigaction(.INT, &act, null);
+}
+
 /// 밀린 요청을 꺼내면서 지운다. 감독 루프가 매 바퀴 부른다.
 pub fn take() ?Action {
     const raw = @atomicRmw(u8, &pending, .Xchg, 0, .seq_cst);

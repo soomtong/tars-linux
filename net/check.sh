@@ -40,11 +40,56 @@ REPO_ROOT="$(cd .. && pwd)"
 # 이며 잇는 것이 QEMU다 — 그래서 검사 12·13이 실패하면 원인이 커널이거나
 # QEMU이거나 게이트 자신이고, 셋이 서로 멀어서 잘 갈린다.
 #
+# TS-M1이 부팅을 하나 더 얹었다. 앞의 열여섯이 "바이트가 오간다"였다면
+# 이쪽은 "그 바이트가 시계가 된다"다:
+#
+#   컨테이너의 perl stub이 UDP 123을 듣는다
+#   설정 디스크의 ntp=10.0.2.2 → init이 fork한 자식이 48바이트를 보낸다
+#   → SLIRP가 그것을 컨테이너에 넘긴다(TS-M0 실측 2)
+#   → 자식이 답의 nonce를 대조하고 clock_settime으로 시계를 뛴다
+#   → 게스트의 date가 2031년을 찍는다
+#
+# 이 부팅에서 우리 코드는 init/src/sntp.zig 하나다. 상대는 우리가 쓴 perl
+# 스무 줄이고, 그 둘 사이의 모든 것(SLIRP · 커널의 UDP · dhcpcd의 주소)은
+# 앞의 열여섯이 이미 따로 증명한 것들이다.
+#
 # 이 체인은 check.sh의 CHAINS에 열두번째로 들어 있다. 단독으로도 돌아간다
 # (docker run ... bash net/check.sh).
 
 # $GUEST_MEM과 type_keys·wait_for_screen 셋 다 쓴다.
 source ../gate_lib.sh
+
+# ── TS-M1 ───────────────────────────────────────────────────────────────
+#
+# 부팅 A가 쓰는 것들이다. 이 체인의 두 번째 QEMU이고, 앞의 열여섯 검사가
+# 끝나고 첫 게스트가 꺼진 뒤에 뜬다.
+#
+# 이 블록이 빌드 절보다 위에 있는 이유는 아래 make_disk.sh가 $NTP_SERVER를
+# 인자로 받기 때문이다 — 그 주소를 아는 자리를 이 파일 하나로 두려는 것이고,
+# 안 그러면 같은 값이 체인과 디스크 스크립트 두 곳에 박힌다.
+#
+# 45467은 monitor 대역(45455~45464 · 45471)과 IN이 쓰는 둘(45465 · 45466)
+# 밖이다.
+NTP_MONITOR_PORT=45467
+
+# 게스트가 시각을 묻는 자리. SLIRP에서 호스트(=이 컨테이너)를 가리키는
+# 주소이고, TS-M0 실측 2가 여기로 간 UDP가 실제로 컨테이너에 닿는 것을 봤다.
+NTP_SERVER=10.0.2.2
+NTP_PORT=123
+
+# stub이 답하는 시각. 두 값이 서로 맞아야 한다 — 1930367167이
+# 2031-03-04T05:06:07Z다.
+#
+# 현실에 있을 수 없는 값이어야 한다는 것이 design 결정 6이고, 그것이 취향이
+# 아니라 필수라는 것을 TS-M0 실측 4가 만들었다 — 게스트의 벽시계는 NTP 없이도
+# 이미 호스트 시각이라 "맞아졌다"로는 아무것도 못 가린다.
+STUB_UNIX=1930367167
+STUB_YEAR=2031
+
+LOGA="$(mktemp)"
+STUBLOG="$(mktemp)"
+QEMU_PID_A=""
+STUB_PID=""
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -74,7 +119,10 @@ fi
 # NW-M2. 설정 디스크를 굽는다. config/check.sh와 같은 자리이고 다른 것은
 # 이 디스크가 빈 것이 아니라는 것이다 — net=dhcp 한 줄을 debugfs로 미리
 # 담아 굽는다. 그래서 이 체인은 게스트에 타이핑으로 설정을 쓰지 않는다.
-if ! ./make_disk.sh; then
+#
+# TS-M1이 인자를 하나 더했다. 이 스크립트는 이제 이미지를 둘 굽는다 —
+# 검사 1~16이 쓰는 out/net.img와 부팅 A가 쓰는 out/net-ntp.img다.
+if ! ./make_disk.sh "$NTP_SERVER"; then
   echo "FAIL: config disk build failed"
   exit 1
 fi
@@ -134,6 +182,16 @@ cleanup() {
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
+  # TS-M1. 부팅 A의 게스트와 stub. 게스트를 먼저 보내는 편이 stub 로그의
+  # 끝이 깔끔하다.
+  if [ -n "$QEMU_PID_A" ] && kill -0 "$QEMU_PID_A" 2>/dev/null; then
+    kill "$QEMU_PID_A" 2>/dev/null || true
+    wait "$QEMU_PID_A" 2>/dev/null || true
+  fi
+  if [ -n "$STUB_PID" ] && kill -0 "$STUB_PID" 2>/dev/null; then
+    kill "$STUB_PID" 2>/dev/null || true
+    wait "$STUB_PID" 2>/dev/null || true
+  fi
   rm -f "$PAYLOAD"
 }
 trap cleanup EXIT
@@ -164,6 +222,12 @@ fail() {
     # 종료 코드 1이고 pipefail이 그것을 파이프라인 코드로 올린다.
     grep -a "$pattern" "$LOG" | head -3 | sed 's/^/  /' || true
   done
+  # TS-M1. 부팅 A에서 죽었으면 이쪽이 진단의 절반이다 — 게스트가 보낸
+  # datagram이 여기까지 왔는지는 게스트 로그만으로는 안 갈린다.
+  if [ -s "$STUBLOG" ]; then
+    echo "--- sntp stub ---"
+    tail -n 20 "$STUBLOG"
+  fi
   echo "--- last 60 lines ---"
   tail -n 60 "$LOG"
   exit 1
@@ -682,6 +746,156 @@ if grep -a "grace period expired" "$LOG" >/dev/null; then
   fail "something outlived SIGTERM and burned the whole grace period" \
     "grace period expired"
 fi
+
+# ══ 부팅 A: 우리 코드가 시계를 뛴다 (TS-M1) ═══════════════════════════
+#
+# 여기서부터 게스트가 새로 뜬다. 앞의 열여섯과 디스크가 다르고
+# (out/net-ntp.img — net=dhcp에 ntp=10.0.2.2 한 줄이 더 있다) 상대가 하나
+# 더 있다(컨테이너에서 도는 perl stub).
+#
+# 왜 앞의 부팅에 얹지 않는가. 얹으면 검사 1~16이 전부 시계가 2031년인
+# 게스트에서 돌고, 그 열여섯이 실패하는 날 원인이 "받는 길"인지 "시계"인지
+# 안 갈린다. 부팅 하나를 더 치르고 실패를 가른다.
+#
+# 이 부팅이 design 실측 7이 남긴 숙제도 함께 답한다. TS-M0의 하네스는 콘솔
+# 셸만 써서 "렌더가 살아 있다"와 "화면에 할 일이 없다"가 같은 값이었다
+# (TR-M2의 needs_redraw 문지기). 이 부팅은 시계를 뛴 뒤에 화면에 타이핑을
+# 하므로, 검사 19가 서는 것 자체가 렌더가 점프를 견뎠다는 증거다.
+echo "=== booting again with ntp=${NTP_SERVER} ==="
+
+# stub을 먼저 띄운다. 게스트가 부팅하는 동안 이미 듣고 있어야 한다.
+perl ./sntp_stub.pl "$NTP_PORT" "$STUB_UNIX" > "$STUBLOG" 2>&1 &
+STUB_PID=$!
+sleep 1
+if ! kill -0 "$STUB_PID" 2>/dev/null; then
+  echo "FAIL: the sntp stub died at startup"
+  cat "$STUBLOG"
+  exit 1
+fi
+echo "the sntp stub is listening on udp/${NTP_PORT}"
+
+# type_keys·wait_for_screen·fail이 보는 것은 전역 $LOG다. 이 체인은 이제
+# 부팅이 둘이고, 그 둘을 잇는 자리가 이 한 줄이다(config/check.sh의
+# edit_config_in_guest가 같은 모양이다).
+LOG="$LOGA"
+
+# 앞의 QEMU 줄에서 hostfwd·guestfwd를 뺀 것이다. 이 부팅은 TCP를 하나도
+# 안 쓴다 — 나가는 UDP는 SLIRP이 아무 설정 없이 내보낸다(TS-M0 실측 2).
+qemu-system-x86_64 \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -netdev "user,id=n0" \
+  -device virtio-net-pci,netdev=n0 \
+  -drive file="${REPO_ROOT}/out/net-ntp.img",if=virtio,format=raw \
+  -serial file:"$LOGA" \
+  -monitor tcp:127.0.0.1:${NTP_MONITOR_PORT},server,nowait \
+  -no-reboot &
+QEMU_PID_A=$!
+
+READY=0
+for _ in $(seq 1 120); do
+  if grep -a "terminal: screen>" "$LOGA" >/dev/null; then READY=1; break; fi
+  if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || fail "the ntp guest never rendered a prompt"
+
+# ── 검사 17: 설정이 읽혔고 ntp가 실효값인가 ───────────────────────────
+# 검사 3과 같은 자리를 새 키에 대해 한 번 더 본다. 이것이 없으면 아래 둘이
+# 실패했을 때 "디스크를 안 물었다"와 "코드가 틀렸다"가 안 갈린다.
+if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=${NTP_SERVER}" "$LOGA" >/dev/null; then
+  fail "the ntp config disk did not reach init" "tars-init: config shell="
+fi
+echo "the guest read ntp=${NTP_SERVER} off the config disk"
+
+# ── 검사 18: 우리 코드가 시계를 뛰었나 ────────────────────────────────
+# 이 체인에서 우리 코드가 하는 일 전부가 이 한 줄이다. 숫자가 stub이 정한
+# 값과 정확히 같아야 한다 — 그래야 "시계가 움직였다"가 아니라 "이 서버가
+# 말한 값으로 움직였다"가 된다.
+#
+# 기다리는 이유. 자식은 dhcpcd가 리스를 받기 전에 태어나므로 첫 sendto가
+# ENETUNREACH로 실패하고 재시도한다(sntp.zig의 MAX_TRIES). 즉 이 줄은 리스
+# 뒤에 나오고, 그 대기가 검사 5와 같은 크기다.
+STEPPED=0
+for _ in $(seq 1 90); do
+  if grep -a "tars-init: clock stepped to ${STUB_UNIX}" "$LOGA" >/dev/null; then
+    STEPPED=1; break
+  fi
+  if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$STEPPED" = "1" ] || fail "init never stepped the clock to ${STUB_UNIX}" \
+  "tars-init: sntp" "tars-init: clock"
+echo "init stepped the clock to ${STUB_UNIX}"
+
+# ── 검사 19: 사람이 그것을 볼 수 있나 ─────────────────────────────────
+# 검사 18과 같은 사실을 다른 자리에서 묻는다. 저쪽은 우리 코드가 자기 입으로
+# 한 말이고 이쪽은 게스트의 date가 실제로 무엇을 찍는가다 — clock_settime이
+# 성공을 돌려주고도 시계가 안 움직이는 경우가 갈린다.
+#
+# 화면 판정이 서려면 먼저 monitor에 붙어야 한다.
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${NTP_MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || fail "could not connect to the ntp guest's QEMU monitor" \
+  "terminal: screen>"
+
+# 판정 글자가 명령줄에 없어야 한다(NW-M3 실측 2). wait_for_screen은 마지막
+# 프레임이 아니라 로그 전체의 screen> 줄을 보므로 친 명령의 에코도 화면이다.
+# date를 그냥 치면 그 네 글자가 화면에 남고, 연도는 출력에만 생긴다 —
+# 그래서 echo와 명령 치환으로 tsyear=NNNN을 만든다.
+#
+# -u가 중요하다(design 결정 7). TS-M3이 시간대를 넣으면 지역 시간의 연도가
+# 12월 31일 밤에 한 해 어긋날 수 있고, 그러면 이 판정이 일 년에 몇 시간
+# 흔들린다.
+#
+# 키 이름 셋이 이 저장소에서 처음 쓰인다 — +가 shift-equal, %가 shift-5,
+# Y가 shift-y다. $( 와 ) 는 검사 10·12·14가 이미 쓰는 것과 같다.
+echo "=== typing 'echo tsyear=\$(date -u +%Y)' ==="
+type_keys e c h o spc t s y e a r equal \
+  shift-4 shift-9 d a t e spc minus u spc shift-equal shift-5 shift-y shift-0 ret
+
+if ! wait_for_screen "tsyear=${STUB_YEAR}"; then
+  fail "the guest's clock does not show ${STUB_YEAR} on screen" "terminal: screen>"
+fi
+echo "the guest shows ${STUB_YEAR} — the render survived the jump too"
+
+# ── 부팅 A를 끈다 ─────────────────────────────────────────────────────
+echo "=== sending system_powerdown to the ntp guest ==="
+echo "system_powerdown" >&3
+sleep 0.3
+exec 3<&-
+exec 3>&-
+
+GONE_A=0
+for _ in $(seq 1 30); do
+  if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then GONE_A=1; break; fi
+  sleep 1
+done
+[ "$GONE_A" = "1" ] || fail "the ntp guest did not switch itself off" \
+  "tars-init: shutdown requested"
+
+# SL-M2가 세운 것을 이 부팅에도 건다. 여기서 이 검사가 갖는 뜻이 앞의
+# 부팅보다 하나 더 크다 — 이 게스트에는 SNTP 자식이 있었고, 그 자식은
+# execve를 안 해서 부모의 SIGTERM 핸들러를 물려받을 뻔했다(TS-M1 plan
+# 결정 M1-A). power.resetToDefault()를 지우면 여기가 빨간불이 된다.
+if grep -a "grace period expired" "$LOGA" >/dev/null; then
+  fail "something outlived SIGTERM in the ntp guest" "grace period expired"
+fi
+
+# stub을 보낸다. 여기서 명시적으로 죽이는 이유는 그것이 몇 번 답했는지를
+# 사람이 보게 하기 위해서다(trap도 같은 일을 하지만 그때는 출력이 끝난 뒤다).
+kill "$STUB_PID" 2>/dev/null || true
+wait "$STUB_PID" 2>/dev/null || true
+STUB_PID=""
+echo "the sntp stub answered $(grep -ac 'sent 48 bytes' "$STUBLOG") request(s)"
 
 echo "PASS"
 exit 0

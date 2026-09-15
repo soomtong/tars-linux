@@ -65,14 +65,19 @@ fn expect(text: []const u8, want: config.Config) !void {
         got.shell_config == want.shell_config and
         // NW-M2: 일곱째 필드. SC-M0이 여섯째에 대해 적어 둔 것과 같은 자리다.
         got.net == want.net and
+        // TS-M1: 여덟째 필드. `==`가 아니라 `eql`인 이유는 union이기
+        // 때문이다 — 앞의 여섯은 enum이라 `==`가 된다.
+        got.ntp.eql(want.ntp) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
     var got_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     var want_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+    var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
+    var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -82,6 +87,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             got.hangul_toggle.arg(&got_buf),
             @tagName(got.shell_config),
             @tagName(got.net),
+            got.ntp.arg(&got_ntp),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
@@ -89,9 +95,30 @@ fn expect(text: []const u8, want: config.Config) !void {
             want.hangul_toggle.arg(&want_buf),
             @tagName(want.shell_config),
             @tagName(want.net),
+            want.ntp.arg(&want_ntp),
         },
     );
     return error.UnexpectedConfig;
+}
+
+/// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. 씨앗 파일(`save`)이
+/// `arg()`로 써지고 다음 부팅이 `parse()`로 읽으므로, 이 왕복이 이 키가
+/// 부팅을 넘는 유일한 길이다.
+fn expectNtpRoundTrip(value: config.Ntp, want_text: []const u8) !void {
+    var buf: [config.NTP_ARG_MAX]u8 = undefined;
+    const text = value.arg(&buf);
+    if (!std.mem.eql(u8, text, want_text)) {
+        std.debug.print("FAIL: ntp arg is [{s}], want [{s}]\n", .{ text, want_text });
+        return error.BadNtpArg;
+    }
+    const back = config.Ntp.parse(text) orelse {
+        std.debug.print("FAIL: ntp arg [{s}] does not parse back\n", .{text});
+        return error.NtpRoundTripFailed;
+    };
+    if (!back.eql(value)) {
+        std.debug.print("FAIL: ntp round trip changed the value at [{s}]\n", .{text});
+        return error.NtpRoundTripChanged;
+    }
 }
 
 /// 씨앗 rc가 쓸 수 있는 줄을 담고 있는지 확인한다(SC-M1, SM-M1이 넓혔다).
@@ -602,6 +629,39 @@ pub fn main() !void {
     try expect("net=on\n", .{}); // enum에 없는 값
     try expect("net=\n", .{}); // 값 없음
     try expect("shell=zsh\nnet=dhcp\n", .{ .shell = .zsh, .net = .dhcp });
+
+    // ── TS-M1: 여덟째 키 ────────────────────────────────────────────────
+    //
+    // 앞의 일곱과 다른 유일한 키다(TS design 확인 9). 값 셋 중 하나가 자유
+    // 문자열이라 `stringToEnum` 화이트리스트가 안 서고, 그래서 이 저장소에
+    // 처음으로 주소 파서가 들어왔다.
+    try expect("ntp=off\n", .{});
+    try expect("ntp=dhcp\n", .{ .ntp = .dhcp });
+    try expect("ntp=10.0.2.2\n", .{ .ntp = .{ .server = .{ 10, 0, 2, 2 } } });
+    try expect("ntp=255.255.255.255\n", .{ .ntp = .{ .server = .{ 255, 255, 255, 255 } } });
+    try expect("ntp=0.0.0.0\n", .{ .ntp = .{ .server = .{ 0, 0, 0, 0 } } });
+    // 값의 양쪽 공백은 `parse`가 이미 뗐다.
+    try expect("ntp = 10.0.2.2 \n", .{ .ntp = .{ .server = .{ 10, 0, 2, 2 } } });
+    // 모르는 값은 기본값에 머문다. 다른 일곱 키와 같은 규칙이고, 여기서는
+    // 그 규칙이 enum이 아니라 파서의 실패로 선다.
+    try expect("ntp=pool.ntp.org\n", .{}); // 이름은 못 푼다(design 결정 5)
+    try expect("ntp=10.0.2\n", .{}); // 조각이 셋
+    try expect("ntp=10.0.2.2.2\n", .{}); // 조각이 다섯
+    try expect("ntp=10.0.2.256\n", .{}); // 범위 밖
+    try expect("ntp=10.0.2.-1\n", .{}); // 숫자가 아닌 글자
+    try expect("ntp=10.0.2.0002\n", .{}); // 조각이 네 글자
+    try expect("ntp=\n", .{}); // 값 없음
+    try expect("net=dhcp\nntp=10.0.2.2\n", .{
+        .net = .dhcp,
+        .ntp = .{ .server = .{ 10, 0, 2, 2 } },
+    });
+
+    // `arg()`가 왕복하는가. 씨앗 파일이 이 함수로 써지므로, 왕복이 깨지면
+    // init이 만든 tars.conf를 init 자신이 다음 부팅에 다시 못 읽는다.
+    try expectNtpRoundTrip(.off, "off");
+    try expectNtpRoundTrip(.dhcp, "dhcp");
+    try expectNtpRoundTrip(.{ .server = .{ 10, 0, 2, 2 } }, "10.0.2.2");
+    try expectNtpRoundTrip(.{ .server = .{ 255, 255, 255, 255 } }, "255.255.255.255");
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //
