@@ -13,7 +13,7 @@ design은 `docs/superpowers/specs/2026-09-19-tars-shell-tools-design.md`,
 plan 넷은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
 `-st-m1.md` · `-st-m2.md` · `-st-m3.md`, 기억은
 `docs/decisions/project_shell_tools.md`와 `project_terminal_queries.md`다.
-M0~M2는 커밋 `918cfbe`, M3은 그 뒤 커밋이다.
+M0~M2는 커밋 `918cfbe`, M3은 `c3acb74`다.
 
 ⚠ M3에서 나온 것이 하나 있다. 사용자가 "Ctrl+R이 한 번에 안 열리고 두 번에
 열린다"고 물었는데, 원인은 셸이 아니라 **터미널**이었다 — fzf는 `--height`일 때
