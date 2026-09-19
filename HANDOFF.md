@@ -1,13 +1,22 @@
-# HANDOFF: Disk Install(DI)이 열렸다 — design만 있고 plan은 아직 없다
+# HANDOFF: Disk Install(DI)의 M0 plan이 승인됐다 — 아직 한 Task도 안 밟았다
 
 ## 지금 어디인가
 
 서브프로젝트 Disk Install(DI)이 2026-09-19에 열렸다. 사용자가 물은 것은 "ISO로
 부팅한 뒤 내장 디스크에 설치해서 USB 없이 뜨게 할 수 있는가"이고, design이
 `docs/superpowers/specs/2026-09-19-tars-disk-install-design.md`에 있다(커밋
-`c9527c1` · `962672d`). 사용자가 design을 읽고 "looks good"이라고 했다. 다음
-할 일은 DI-M0의 plan을 쓰는 것이다(아래 "바로 다음에 할 것"). 코드는 한 줄도
-안 바뀌었고 부팅도 한 번도 안 했다.
+`c9527c1` · `962672d`). 같은 날 DI-M0의 plan을
+`docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`에 썼고(커밋
+`27d6861`) 사용자가 읽고 "looks good"이라고 한 뒤 다음 세션으로 넘겼다. 다음
+할 일은 그 plan의 Task 0부터 밟는 것이다(아래 "바로 다음에 할 것"). 코드는
+한 줄도 안 바뀌었고 부팅도 한 번도 안 했다.
+
+⚠ plan을 쓰면서 design이 못 본 것 둘이 나왔고 plan 앞머리("design과 달라진
+것 둘, 넓힌 것 하나")에 있다. 켤 커널 옵션이 다섯이 아니라 여섯이다 —
+`CONFIG_BLK_DEV_SR`이 없으면 `-cdrom`이 `/dev/sr0`로 안 보인다. 그리고
+`blkid`·`lsblk`는 sysroot에 바이너리만 있고 `libblkid1`·`libsmartcols1`·
+`libmount1`·`libuuid1`이 Dockerfile 목록에 없다. design 본문은 아직 안 고쳤다 —
+plan의 Task 9가 실측과 함께 고친다.
 
 ⚠ 이 design은 판정을 QEMU 안에서 닫는다. 사용자에게 아직 실기 노트북이 없다 —
 그래서 "실머신 NIC"가 아니라 이것을 골랐다. 실기 판정은 비목표다.
@@ -68,11 +77,40 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
 
-## DI가 한 일 (2026-09-19, design만)
+## DI가 한 일 (2026-09-19, design과 M0 plan)
 
-design 하나가 전부다. 확인 아홉 · 결정 열 · 비목표 아홉 · 위험 일곱 ·
-milestone 셋. 부팅은 한 번도 안 했고, 잰 것은 파일 읽기와 컨테이너의
-`apt-cache`·sysroot 목록뿐이다.
+design 하나와 M0 plan 하나다. design은 확인 아홉 · 결정 열 · 비목표 아홉 ·
+위험 일곱 · milestone 셋. 부팅은 한 번도 안 했고, 잰 것은 파일 읽기와
+컨테이너의 `apt-cache`·sysroot 목록뿐이다.
+
+M0 plan(`27d6861`)은 Task 열하나(0~10)이고 저장소에 남는 커밋이 넷이다 —
+`kernel/.config`(옵션 여섯) · `devcontainer/Dockerfile`(패키지 열하나) ·
+`kernel/guest_tools.sh`(도구 셋) · design의 실측 절. 하네스는 `/tmp/di/`에만
+산다. plan을 쓰기 전에 고칠 자리의 소스를 읽어서 나온 것 셋이 plan
+앞머리에 있다.
+
+- `CONFIG_BLK_DEV_SR is not set`(`kernel/.config`)이다. `-cdrom`은 q35의
+  AHCI에 ATAPI로 붙고 그것을 `/dev/sr0`로 만드는 것이 `sr`이다. 파일시스템
+  둘을 켜도 이것이 없으면 노드가 안 생긴다. 켤 옵션이 여섯이 됐다(손으로
+  켜는 줄은 다섯 — `FAT_FS`는 프롬프트가 없어 `VFAT_FS`가 끌고 온다).
+- design 확인 4의 "`blkid`·`lsblk`·`wipefs`가 sysroot에 있다"는 바이너리만
+  맞다. `util-linux:amd64`는 `dmesg` 하나 때문에 통째로 받았고 라이브러리
+  넷(`libblkid1`·`libsmartcols1`·`libmount1`·`libuuid1`)은 목록에 없다.
+  `sfdisk`가 어차피 부르는 것이라 Dockerfile의 열한 줄에 함께 들어간다.
+- M0의 범위를 하나 넓혔다. design은 위험 1(OVMF가 ISO와 NVMe 중 무엇을
+  먼저 고르는가)을 M1의 첫 부팅에 미뤘는데, 부팅 A에서 도구 셋을 손으로
+  돌린 뒤 `cp` 넉 줄만 더 치면 설치된 디스크가 생긴다. 그 디스크로 부팅 B
+  (`-cdrom` 없이)와 C(ISO와 함께)를 더 해서 위험 1·3을 M0에서 닫는다. C가
+  NVMe를 고르면 D(ISO 장치에 `bootindex=0`)를 조건부로 돌린다 — design이
+  적은 `-boot order=d`는 SeaBIOS 문법이라 그 대신 이것을 잰다.
+
+하네스의 모양 셋. 게스트 쪽 측정 스크립트 `di-probe.sh`는 라벨 `tars-di`의
+설정 디스크에 실어 `/config`에서 `bash /config/di-probe.sh A` 한 줄로 부른다
+(bash → fish → `bash -c` 세 겹 따옴표를 피한다). 어느 볼륨에서 떴는지는 ESP에
+복사한 `limine.conf`에만 `tars.di=esp`를 붙여 `/proc/cmdline`으로 읽는다.
+하네스 전용 `mount`·`umount`·`blkid`·`lsblk`는 `--rm` 컨테이너 안에서만
+sysroot에 풀고 bind mount한 `guest_tools.sh` 사본으로 싣는다 — 저장소 목록에는
+안 들어간다(design 결정 5).
 
 무엇을 만드나 — USB로 부팅한 기계에서 `tars-install`을 치면 내장 디스크에
 ISO와 같은 모양이 들어간다. GPT에 파티션 둘(p1 ESP 256MiB FAT32 `TARS-BOOT`
@@ -833,26 +871,49 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — DI-M0의 plan을 쓴다
+## 바로 다음에 할 것 — DI-M0의 plan을 Task 0부터 밟는다
 
-design이 승인됐고 plan이 없다. `superpowers:writing-plans`로
-`docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`를 쓴다. M0은
-재는 것이고 design의 milestone 표가 항목을 정해 두었다.
+plan이 `docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`에 있고
+승인됐다. `superpowers:executing-plans`로 이 세션에서 직접 밟는다 — 결과
+로그를 줄 단위로 해석하는 것이 이 저장소의 규칙이라 subagent에 안 넘긴다.
+Task 열하나이고 순서가 있다.
 
-- 커널 옵션 다섯을 켜고 bzImage 증가를 잰다(`.config` 커밋 메시지에 켜는
-  이유를 각각 적는다 — `project_kernel_config`).
-- Dockerfile의 amd64 목록에 `fdisk:amd64` · `dosfstools:amd64` ·
-  `e2fsprogs:amd64`를 더하고 `docker build`. 딸려 오는 라이브러리를 UT 방식
-  (`ldd`로 세고 `guest_tools.sh`에 한 줄씩)으로 세고 initrd 증가를 잰다.
-  `e2fsprogs`는 `mke2fs` 하나만 싣는다.
-- ISO 볼륨 ID의 기본값을 컨테이너에서 읽는다(design 확인 9).
-- QEMU(OVMF, `machine/check.sh`의 인자)에서 손으로: `-cdrom`이 `/dev/sr0`로
-  ISO9660 마운트되는가 · 빈 NVMe에 `sfdisk` 스크립트 세 줄 → `mkfs.vfat` →
-  `mke2fs`가 되는가 · 파티션 노드가 devtmpfs에 언제 나타나는가(위험 2).
-- 기존 열두 체인 회귀 없음. 실측을 design에 "DI-M0이 실행으로 증명한 것"
-  절로 적는다.
+| Task | 무엇 | 시간 |
+|---|---|---|
+| 0 | 기준선. 산출물 바이트 셋과 initrd 파일 목록. `.config` 고정점 확인 | 1분 |
+| 1 | `kernel/.config`에 다섯 줄(`sd`) → 빌드 → `diff` 읽기 → 되접기 → 재빌드 → 커밋 | 2분 |
+| 2 | Dockerfile에 주석 블록과 열한 줄 → `docker build` → sysroot 경로와 `readelf` → 커밋 | 2분 |
+| 3 | `guest_tools.sh`에 세 줄(주석의 괄호를 실측으로 채운다) → initrd → 새 파일 세기 → `tools` 체인 → 커밋 | 3분 |
+| 4 | ISO 볼륨 ID(`xorriso -pvd_info` · `blkid`) | 10초 |
+| 5 | `/tmp/di/`에 파일 셋. 전문이 plan에 글자 그대로 있다 | — |
+| 6 | 하네스. OVMF 부팅 셋(조건부 넷). `run_in_background` | 8~10분 |
+| 7 | 판정 표로 읽고 `verdict.txt`. initrd를 저장소 목록으로 되돌린다 | — |
+| 8 | 루트 게이트. `run_in_background` | 33분 |
+| 9 | design에 실측 절(최소 아홉 + 착수 전의 둘) · 결정 10 · 위험 · `Status:` → 커밋 | — |
+| 10 | HANDOFF | — |
 
-M0에는 `tars-install`도 `install/check.sh`도 없다. 그것은 M1이다.
+⚠ Task 1 Step 2가 `sd`로 다섯 줄을 바꾼다. `FAT_FS`는 손으로 안 적는다 —
+프롬프트가 없어 `olddefconfig`가 지우고 `VFAT_FS`의 `select`가 도로 켠다.
+Step 4의 `diff`에 예상 밖의 줄이 있으면 그것이 실측이다.
+
+⚠ Task 2 Step 1이 패키지 이름 열하나를 trixie에 먼저 묻는다.
+`libreadline8t64`처럼 버전이 박힌 이름이 틀릴 가능성이 가장 크다 — `MISSING`이
+나오면 `apt-cache search`로 찾아 Dockerfile 줄을 고친다.
+
+⚠ Task 3 Step 4의 위험 7 판단 — 새 라이브러리의 푼 크기 합이 3,000,000바이트를
+넘으면 `sgdisk`를 같은 방법으로 재고 둘의 수를 사용자에게 보인다. 넘지
+않으면 `sfdisk`로 간다.
+
+⚠ Task 6의 하네스가 `kernel/initrd.cpio`를 하네스 전용 목록(mount 등 넷이
+든 것)으로 만들어 둔다. Task 7 Step 2가 되돌린다 — 그 전에 initrd로 무엇을
+재면 넷이 섞인다.
+
+⚠ 부팅 B가 셸까지 못 오면 하네스가 거기서 멈춘다. 그것은 "손으로 만든 ESP가
+안 뜬다"이고 M1의 전제가 깨진 것이다 — `/tmp/di/guest-B.log`에서 `Shell>`(EFI
+셸로 떨어졌다)이나 limine `PANIC`을 찾는다.
+
+M0에는 `tars-install`도 `install/check.sh`도 없다. 그것은 M1이다. M1의
+plan은 M0의 실측(특히 위험 1의 답)을 보고 새로 쓴다.
 
 DI 뒤의 후보는 그대로 남아 있다 — 패키지 매니저(이번에 안 고름) · 실머신
 NIC(실기가 생기면. 실기 없이 열려면 유선 드라이버 e1000e·igc·r8169를 QEMU
