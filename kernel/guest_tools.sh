@@ -254,4 +254,29 @@ GUEST_TOOLS=(
   # "dhcpcd가 살아 있나"를 물을 때 쓴다.
   usr/bin/pgrep:usr/bin/pgrep
   usr/bin/kill:usr/bin/kill
+
+  # ── 층 7 · 디스크를 만드는 도구 3 ─────────────────────────────────────
+  # DI-M0. tars-install이 fork+execve로 부르는 셋이다(DI design 결정 3).
+  # PATH가 /usr/bin:/bin이라(environ.zig) 셋 다 오른쪽을 /usr/bin에 둔다 —
+  # dhcpcd가 층 5에서 같은 이유로 자리를 옮겼다.
+  #
+  # mkfs.vfat은 sysroot에서 mkfs.fat을 가리키는 링크다. install_tool의 cp가
+  # 링크를 따라가 실체를 복사하므로 왼쪽에 링크 이름을 써도 되지만, 실체를
+  # 적어 두는 것이 "이 파일은 어디서 왔나"에 한 번에 답한다(mawk→awk와
+  # 같은 자리). mke2fs는 실체이고 mkfs.ext2가 그것을 가리키는 링크다.
+  #
+  # 새 라이브러리 수(DI-M0 실측 3. 푼 것 기준):
+  #   sfdisk      162,184바이트   새 라이브러리 5개 — libfdisk · libsmartcols ·
+  #                               libreadline이 직접, libblkid · libuuid는
+  #                               libfdisk 뒤로. libtinfo는 fish가 이미 데려왔다
+  #   mkfs.fat     64,352바이트   0개
+  #   mke2fs      146,000바이트   새 라이브러리 2개 — libext2fs · libe2p.
+  #                               libblkid · libuuid는 sfdisk와 겹치고
+  #                               libcom_err는 이미 있었다
+  # 일곱이 2,129,864바이트, 도구 셋까지 2,502,400바이트, initrd는 1,100,550
+  # 바이트 늘었다(40,735,276 → 41,835,826). libmount는 안 온다 — libfdisk가
+  # 안 부른다. Dockerfile이 libmount1을 받는 것은 blkid·lsblk 때문이다.
+  usr/sbin/sfdisk:usr/bin/sfdisk
+  usr/sbin/mkfs.fat:usr/bin/mkfs.vfat
+  usr/sbin/mke2fs:usr/bin/mke2fs
 )
