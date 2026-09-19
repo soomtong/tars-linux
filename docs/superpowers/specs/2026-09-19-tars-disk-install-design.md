@@ -376,7 +376,24 @@ USB 키보드. 디스크는 매 회 새로 만든다.
 
 ## 비목표
 
-- legacy BIOS. `limine bios-install`과 MBR 경로. 결정 1.
+- legacy BIOS. `limine bios-install`과 MBR 경로. 결정 1. 2026-09-19에 사용자가
+  비용을 묻고 나서 "그대로 비목표"로 정했다. 잰 비용을 적어 둔다 — 나중에
+  집는 사람이 다시 재지 않도록.
+  - GPT 디스크에서 `bios-install`은 stage 2를 놓을 BIOS boot 파티션(GUID
+    `21686148-6449-6E6F-744E-656564454649`)을 요구한다(`limine.c`의
+    "no BIOS boot partition specified"). 이 설계의 배치(결정 2)에는 그것이
+    없으므로, 나중에 넣으려면 설치된 디스크를 다시 파티션해야 하고 그때
+    갱신 경로(결정 8)로는 안 된다 — 새 설치가 된다. 1MiB면 된다.
+  - `limine-bios.sys`를 ESP의 `boot/limine/`에 함께 복사해야 한다(stage 2가
+    거기서 찾는다). 복사 목록 넷이 다섯이 된다.
+  - 게스트에 `limine` 실행 파일이 필요하다. vendor된 것은 arm64 컨테이너용이다.
+    `limine.c`(1,472줄, libc만 쓴다)를 컨테이너의 `x86_64-linux-gnu-gcc`로
+    `-static` 컴파일하면 되고 딸려 오는 라이브러리는 0이다.
+  - 설치기는 `limine bios-install <disk> <p번호> --no-gpt-to-mbr-isohybrid-conversion`을
+    한 번 더 부른다. 플래그는 ISOHYBRID 감지 시 GPT를 MBR로 바꾸는 동작을
+    끄는 것이다 — 우리 디스크에는 ISO9660 서명이 없어 안 걸리지만 늘 준다.
+  - 게이트에 SeaBIOS로 그 디스크만 붙여 뜨는 부팅이 하나 더 든다(30~40초).
+    체인 하나에 펌웨어 둘이 들어오는 것이 코드보다 비싼 부분이다.
 - NVRAM 부트 항목(`efibootmgr` · efivarfs 쓰기). `\EFI\BOOT\BOOTX64.EFI`는
   펌웨어가 항목 없이 찾는 기본 경로라 필요 없다. 다른 OS가 옆에 있어 부트
   순서를 다투는 상황은 이 설계 밖이다(아래 "기존 파티션" 항목).
