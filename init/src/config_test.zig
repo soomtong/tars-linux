@@ -68,6 +68,9 @@ fn expect(text: []const u8, want: config.Config) !void {
         // TS-M1: 여덟째 필드. `==`가 아니라 `eql`인 이유는 union이기
         // 때문이다 — 앞의 여섯은 enum이라 `==`가 된다.
         got.ntp.eql(want.ntp) and
+        // TS-M3: 아홉째 필드. `Ntp`와 같이 `eql`이다 — 배열을 가진 struct라
+        // `==`가 안 된다.
+        got.timezone.eql(want.timezone) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
@@ -76,8 +79,8 @@ fn expect(text: []const u8, want: config.Config) !void {
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -88,6 +91,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(got.shell_config),
             @tagName(got.net),
             got.ntp.arg(&got_ntp),
+            got.timezone.slice(),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
@@ -96,6 +100,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(want.shell_config),
             @tagName(want.net),
             want.ntp.arg(&want_ntp),
+            want.timezone.slice(),
         },
     );
     return error.UnexpectedConfig;
@@ -662,6 +667,85 @@ pub fn main() !void {
     try expectNtpRoundTrip(.dhcp, "dhcp");
     try expectNtpRoundTrip(.{ .server = .{ 10, 0, 2, 2 } }, "10.0.2.2");
     try expectNtpRoundTrip(.{ .server = .{ 255, 255, 255, 255 } }, "255.255.255.255");
+
+    // ── TS-M3: 아홉째 키 ────────────────────────────────────────────────
+    //
+    // 둘째 자유 문자열 키다. `ntp`와 다른 것은 값을 해석하지 않는다는
+    // 것이다(design 결정 8) — 파서가 하는 일은 담을 수 있는 모양인지 보는 것
+    // 뿐이고, 그 이름이 무슨 뜻인지는 glibc가 안다.
+    const seoul = config.Timezone.parse("Asia/Seoul") orelse return error.SeoulDidNotParse;
+    try expect("timezone=Asia/Seoul\n", .{ .timezone = seoul });
+    // 기본값을 적어도 기본값이다.
+    try expect("timezone=UTC\n", .{});
+    // IANA 이름에 나오는 글자들 — 밑줄 · 붙임표 · 더하기 · 세 단.
+    try expect("timezone=America/Argentina/Buenos_Aires\n", .{
+        .timezone = config.Timezone.parse("America/Argentina/Buenos_Aires") orelse return error.NameDidNotParse,
+    });
+    try expect("timezone=America/Port-au-Prince\n", .{
+        .timezone = config.Timezone.parse("America/Port-au-Prince") orelse return error.NameDidNotParse,
+    });
+    try expect("timezone=Etc/GMT+9\n", .{
+        .timezone = config.Timezone.parse("Etc/GMT+9") orelse return error.NameDidNotParse,
+    });
+    // 값의 양쪽 공백은 `parse`가 이미 뗐다.
+    try expect("timezone = Asia/Seoul \n", .{ .timezone = seoul });
+    // 거르는 것 넷(design 결정 8의 마지막 문단). 위협 모델이 있어서가 아니라
+    // 경로를 조립하는 코드가 검증 없이 값을 먹는 것을 안 남기기 위해서다.
+    try expect("timezone=\n", .{}); // 값 없음
+    try expect("timezone=/etc/passwd\n", .{}); // 절대 경로
+    try expect("timezone=../../etc/passwd\n", .{}); // 위로 올라감
+    try expect("timezone=Asia/../Seoul\n", .{}); // 가운데서 올라감
+    // 길이 경계 양쪽. 64는 담기고 65는 안 담긴다.
+    try expect("timezone=" ++ ("a" ** 65) ++ "\n", .{});
+    try expect("timezone=" ++ ("a" ** 64) ++ "\n", .{
+        .timezone = config.Timezone.parse("a" ** 64) orelse return error.NameDidNotParse,
+    });
+    // 다른 키와 함께. 부팅 A의 디스크가 실제로 쓰는 세 줄이다.
+    try expect("net=dhcp\nntp=10.0.2.2\ntimezone=Asia/Seoul\n", .{
+        .net = .dhcp,
+        .ntp = .{ .server = .{ 10, 0, 2, 2 } },
+        .timezone = seoul,
+    });
+
+    // 왕복. `save`가 `slice()`로 쓰고 다음 부팅이 `parse`로 읽는다.
+    const seoul_back = config.Timezone.parse(seoul.slice()) orelse return error.TimezoneRoundTripFailed;
+    if (!seoul_back.eql(seoul)) {
+        std.debug.print("FAIL: timezone round trip changed the value\n", .{});
+        return error.TimezoneRoundTripChanged;
+    }
+
+    // 기본값이 UTC라는 것. 이 키를 안 적은 기계의 동작이 한 글자도 안 바뀌는
+    // 근거가 이 세 글자다(design 확인 10).
+    if (!std.mem.eql(u8, config.Timezone.UTC.slice(), "UTC")) {
+        std.debug.print("FAIL: the default timezone is '{s}'\n", .{config.Timezone.UTC.slice()});
+        return error.WrongDefaultTimezone;
+    }
+
+    // `main.zig`가 여는 경로. 순수한 조립이라 여기서 본다(결정 M3-C).
+    var path_buf: [config.ZONEINFO_PATH_MAX]u8 = undefined;
+    const path = config.zoneinfoPath(&path_buf, seoul);
+    if (!std.mem.eql(u8, path, "/usr/share/zoneinfo/Asia/Seoul")) {
+        std.debug.print("FAIL: zoneinfo path is '{s}'\n", .{path});
+        return error.WrongZoneinfoPath;
+    }
+    // 가장 긴 이름도 버퍼에 든다 — NUL 자리까지.
+    const longest = config.Timezone.parse("a" ** config.TZ_NAME_MAX) orelse return error.NameDidNotParse;
+    if (config.zoneinfoPath(&path_buf, longest).len != config.ZONEINFO_PATH_MAX - 1) {
+        std.debug.print("FAIL: the longest name does not fill ZONEINFO_PATH_MAX - 1\n", .{});
+        return error.WrongZoneinfoPath;
+    }
+
+    // 넉 자 대조(결정 M3-B). glibc의 tzfile.c가 보는 것과 같은 넉 자다.
+    if (!config.looksLikeTzif("TZif2\x00\x00\x00")) {
+        std.debug.print("FAIL: a TZif header was not recognized\n", .{});
+        return error.TzifNotRecognized;
+    }
+    if (config.looksLikeTzif("TZi") or config.looksLikeTzif("") or
+        config.looksLikeTzif("# tzdb timezone descriptions"))
+    {
+        std.debug.print("FAIL: something that is not a TZif file was accepted\n", .{});
+        return error.TzifFalsePositive;
+    }
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //

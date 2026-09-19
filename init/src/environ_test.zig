@@ -28,35 +28,40 @@ fn entryIs(block: [*:null]const ?[*:0]const u8, n: usize, want: []const u8) bool
 
 pub fn main() !void {
     var buf: environ.Block = undefined;
+    var tz_buf: [environ.TZ_ENTRY_MAX]u8 = undefined;
+    const tz = environ.tzEntry(&tz_buf, "Asia/Seoul");
 
-    // ── 1. 정상 경로(zsh): 커널의 둘 뒤에 우리 것 다섯이 순서대로 붙는다 ──
+    // ── 1. 정상 경로(zsh): 커널의 둘 뒤에 우리 것 여섯이 순서대로 붙는다 ──
     //
     // 이것이 이 파일의 심장이다. 순서까지 보는 이유는 덮어쓰는 구현
     // (buf[0]에 PATH를 넣고 나머지를 미는 것)도 개수 검사만으로는 통과하기
     // 때문이다.
     {
         const kernel = kernelBlock(&.{ "HOME=/", "TERM=linux" });
-        const got = environ.withTarsEnv(kernel, &buf, config.Shell.zsh.histEntries());
+        const got = environ.withTarsEnv(kernel, &buf, tz, config.Shell.zsh.histEntries());
 
-        if (count(got) != 7) {
-            std.debug.print("FAIL: want 7 entries for zsh, got {d}\n", .{count(got)});
+        if (count(got) != 8) {
+            std.debug.print("FAIL: want 8 entries for zsh, got {d}\n", .{count(got)});
             return error.WrongCount;
         }
         if (!entryIs(got, 0, "HOME=/") or !entryIs(got, 1, "TERM=linux")) {
             std.debug.print("FAIL: the kernel's own entries did not survive in order\n", .{});
             return error.LostKernelEntries;
         }
+        // 셸과 무관한 셋이 먼저다. TS-M3이 TZ를 XDG 뒤 · 히스토리 앞에
+        // 넣었다 — "셸마다 갈리는 것"은 맨 뒤라는 규칙을 지키기 위해서다.
         if (!entryIs(got, 2, "PATH=/usr/bin:/bin") or
-            !entryIs(got, 3, "XDG_DATA_HOME=/config/xdg"))
+            !entryIs(got, 3, "XDG_DATA_HOME=/config/xdg") or
+            !entryIs(got, 4, "TZ=Asia/Seoul"))
         {
-            std.debug.print("FAIL: PATH and XDG_DATA_HOME are not the first two we add\n", .{});
+            std.debug.print("FAIL: PATH, XDG_DATA_HOME and TZ are not the first three we add\n", .{});
             return error.NoPath;
         }
         // 히스토리 셋이 그 뒤에 순서대로 온다. zsh만 SAVEHIST를 받고,
         // 그것이 없으면 zsh는 HISTFILE이 있어도 한 줄도 안 쓴다(실측 9).
-        if (!entryIs(got, 4, "HISTFILE=/config/zsh_history") or
-            !entryIs(got, 5, "HISTSIZE=5000") or
-            !entryIs(got, 6, "SAVEHIST=5000"))
+        if (!entryIs(got, 5, "HISTFILE=/config/zsh_history") or
+            !entryIs(got, 6, "HISTSIZE=5000") or
+            !entryIs(got, 7, "SAVEHIST=5000"))
         {
             std.debug.print("FAIL: the zsh history entries are not appended in order\n", .{});
             return error.NoHistory;
@@ -70,9 +75,9 @@ pub fn main() !void {
     // 변수도 없다(비목표 4).
     {
         const kernel = kernelBlock(&.{ "HOME=/", "TERM=linux" });
-        const got = environ.withTarsEnv(kernel, &buf, config.Shell.fish.histEntries());
-        if (count(got) != 4 or !entryIs(got, 3, "XDG_DATA_HOME=/config/xdg")) {
-            std.debug.print("FAIL: fish should get exactly PATH and XDG_DATA_HOME, got {d} entries\n", .{count(got)});
+        const got = environ.withTarsEnv(kernel, &buf, tz, config.Shell.fish.histEntries());
+        if (count(got) != 5 or !entryIs(got, 4, "TZ=Asia/Seoul")) {
+            std.debug.print("FAIL: fish should get exactly PATH, XDG_DATA_HOME and TZ, got {d} entries\n", .{count(got)});
             return error.FishBlockWrong;
         }
     }
@@ -83,9 +88,9 @@ pub fn main() !void {
     // 것)을 여기서 잡는다.
     {
         const kernel = kernelBlock(&.{});
-        const got = environ.withTarsEnv(kernel, &buf, config.Shell.fish.histEntries());
-        if (count(got) != 2 or !entryIs(got, 0, "PATH=/usr/bin:/bin")) {
-            std.debug.print("FAIL: an empty kernel block did not yield exactly our two\n", .{});
+        const got = environ.withTarsEnv(kernel, &buf, tz, config.Shell.fish.histEntries());
+        if (count(got) != 3 or !entryIs(got, 0, "PATH=/usr/bin:/bin")) {
+            std.debug.print("FAIL: an empty kernel block did not yield exactly our three\n", .{});
             return error.EmptyBlockWrong;
         }
     }
@@ -95,24 +100,25 @@ pub fn main() !void {
     // PATH가 없는 것이 부팅이 안 되는 것보다 낫다. 버퍼를 넘겨 쓰면 PID 1이
     // 스택을 밟고 기계가 아예 안 켜진다 — 증상이 원인에서 가장 먼 종류다.
     //
-    // 경계가 M2에서 움직였다(하나 붙이던 것이 다섯까지 붙는다). 그래서
-    // "넘치면 통과시킨다"만 보지 않고 바로 아래는 여전히 붙는다도 본다 —
-    // 한쪽만 보면 `return kernel`을 맨 위로 올린 구현도 초록이다.
+    // 경계가 M2에서 한 번(하나 → 다섯), TS-M3에서 또 한 번(다섯 → 여섯)
+    // 움직였다. 그래서 "넘치면 통과시킨다"만 보지 않고 바로 아래는 여전히
+    // 붙는다도 본다 — 한쪽만 보면 `return kernel`을 맨 위로 올린 구현도
+    // 초록이다.
     {
         var many: [environ.MAX_ENTRIES]([:0]const u8) = undefined;
         for (&many) |*m| m.* = "X=1";
-        const hist = config.Shell.zsh.histEntries(); // 셋 → added = 5
+        const hist = config.Shell.zsh.histEntries(); // 셋 → added = 6
 
-        // n + 5 == MAX_ENTRIES → 닫는 null 자리가 없다. 그대로 돌려준다.
-        const over = kernelBlock(many[0 .. environ.MAX_ENTRIES - 5]);
-        if (environ.withTarsEnv(over, &buf, hist) != over) {
+        // n + 6 == MAX_ENTRIES → 닫는 null 자리가 없다. 그대로 돌려준다.
+        const over = kernelBlock(many[0 .. environ.MAX_ENTRIES - 6]);
+        if (environ.withTarsEnv(over, &buf, tz, hist) != over) {
             std.debug.print("FAIL: an oversized block should have been passed through untouched\n", .{});
             return error.OverflowNotPassedThrough;
         }
 
         // 한 칸 적으면 딱 들어간다.
-        const fits = kernelBlock(many[0 .. environ.MAX_ENTRIES - 6]);
-        const got = environ.withTarsEnv(fits, &buf, hist);
+        const fits = kernelBlock(many[0 .. environ.MAX_ENTRIES - 7]);
+        const got = environ.withTarsEnv(fits, &buf, tz, hist);
         if (got == fits or count(got) != environ.MAX_ENTRIES - 1) {
             std.debug.print("FAIL: a block that fits was passed through instead of extended\n", .{});
             return error.FitNotExtended;
@@ -143,5 +149,31 @@ pub fn main() !void {
         return error.WrongXdgEntry;
     }
 
-    std.debug.print("environ_test: PATH, XDG_DATA_HOME and the shell's history env are appended to the kernel's block ({d} slots)\n", .{environ.MAX_ENTRIES});
+    // ── 7. TZ 항목 — 이름이 그대로 붙고, 안 들어가면 UTC다 ──────────────
+    //
+    // `tzEntry`가 이 파일에서 유일하게 글자를 만드는 함수다(나머지는 포인터를
+    // 옮긴다). 넘칠 때 `TZ=UTC`로 떨어지는 것이 부팅을 안 막는 쪽이다 —
+    // 이름이 64를 넘는 일은 `config.Timezone.parse`가 먼저 막지만, 이 파일은
+    // 그 파일을 모르므로 자기 경계를 자기가 지킨다.
+    {
+        var b: [environ.TZ_ENTRY_MAX]u8 = undefined;
+        if (!std.mem.eql(u8, environ.tzEntry(&b, "Asia/Seoul"), "TZ=Asia/Seoul")) {
+            std.debug.print("FAIL: tzEntry gave '{s}'\n", .{environ.tzEntry(&b, "Asia/Seoul")});
+            return error.WrongTzEntry;
+        }
+        // 접두사 셋 + 이름 + NUL이 딱 맞는 길이는 들어간다.
+        const fits_name = "a" ** (environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len - 1);
+        if (environ.tzEntry(&b, fits_name).len != environ.TZ_ENTRY_MAX - 1) {
+            std.debug.print("FAIL: a name that just fits was not kept\n", .{});
+            return error.WrongTzEntry;
+        }
+        // 한 글자 더 길면 NUL 자리가 없다. UTC로 떨어진다.
+        const over_name = "a" ** (environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len);
+        if (!std.mem.eql(u8, environ.tzEntry(&b, over_name), "TZ=UTC")) {
+            std.debug.print("FAIL: an oversized name did not fall back to TZ=UTC\n", .{});
+            return error.WrongTzEntry;
+        }
+    }
+
+    std.debug.print("environ_test: PATH, XDG_DATA_HOME, TZ and the shell's history env are appended to the kernel's block ({d} slots)\n", .{environ.MAX_ENTRIES});
 }

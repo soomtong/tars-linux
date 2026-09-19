@@ -141,6 +141,90 @@ pub const Ntp = union(enum) {
     }
 };
 
+/// `timezone` 값의 최대 길이(NUL 제외). trixie의 tzdata에서 가장 긴 이름이
+/// `America/Argentina/Buenos_Aires`·`America/North_Dakota/New_Salem` 30글자이고
+/// 옛 이름(`tzdata-legacy`)까지 세면 32다. 두 배를 둔다.
+pub const TZ_NAME_MAX = 64;
+
+/// zoneinfo가 사는 자리. glibc의 `TZDIR` 기본값이고 Debian도 같다.
+/// `kernel/make_initrd.sh`가 sysroot의 같은 경로를 통째로 복사한다 — 둘이
+/// 어긋나면 증상은 "모든 시간대가 UTC"이고 원인에서 멀다.
+pub const ZONEINFO_DIR = "/usr/share/zoneinfo/";
+
+/// `zoneinfoPath`가 만드는 경로를 담을 버퍼의 크기. 디렉터리 + 가장 긴
+/// 이름 + NUL.
+pub const ZONEINFO_PATH_MAX = ZONEINFO_DIR.len + TZ_NAME_MAX + 1;
+
+/// TZif 파일의 첫 넉 자. glibc의 `tzfile.c`가 같은 넉 자를 보고 파일을
+/// 받거나 버린다. `main.zig`의 `resolveTimezone`이 파일을 열어 이만큼 읽고
+/// `looksLikeTzif`에 넘긴다(TS-M3 plan 결정 M3-B).
+pub const TZIF_MAGIC = "TZif";
+
+/// 사람이 읽는 시각의 시간대(TS design 결정 8). 값을 해석하지 않는다 —
+/// `Asia/Seoul`이 무슨 뜻인지는 glibc가 알고, 이 타입이 하는 일은 그 이름을
+/// 힙 없이 담는 것과 담을 수 있는 모양인지 보는 것뿐이다.
+///
+/// 이 저장소의 둘째 자유 문자열 설정 값이다(첫째는 `ntp`의 주소). `Ntp`가
+/// `[4]u8`을 갖는 것과 같은 모양이고 크기만 다르다 — `Config`가 값으로
+/// 돌려지고 힙이 없으므로, `parse`가 받은 텍스트를 가리키는 슬라이스를
+/// 담으면 `load`가 돌아오는 순간 댕글링이다(TS-M3 plan 결정 M3-A).
+pub const Timezone = struct {
+    name: [TZ_NAME_MAX]u8,
+    len: usize,
+
+    /// 기본값. 이 키를 안 적은 기계의 `date`가 지금과 한 글자도 안 달라지는
+    /// 근거가 이 세 글자다 — 파일도 `TZ`도 없는 지금 glibc가 이미 UTC를
+    /// 찍고, `TZ=UTC`는 파일 없이도 glibc가 이름만으로 안다.
+    pub const UTC: Timezone = Timezone.parse("UTC") orelse unreachable;
+
+    /// 설정 파일의 값을 이 타입으로 바꾼다. 모르는 값이면 null이고,
+    /// 호출자가 로그를 찍고 기본값에 머문다 — 다른 여덟 키와 같은 규칙이다.
+    ///
+    /// 거르는 것이 넷이다. 빈 값, `/`로 시작하는 것, `..`이 든 것, 버퍼보다
+    /// 긴 것. 위협 모델이 있어서가 아니라 경로를 조립하는 코드가 검증 없이
+    /// 값을 먹는 것을 이 저장소에 남기지 않기 위해서다(design 결정 8).
+    /// 글자 화이트리스트는 안 둔다 — 파일이 정말 있는지는 `main.zig`가
+    /// 열어서 보고, 그것이 진짜 판정이다.
+    pub fn parse(value: []const u8) ?Timezone {
+        if (value.len == 0 or value.len > TZ_NAME_MAX) return null;
+        if (value[0] == '/') return null;
+        if (std.mem.indexOf(u8, value, "..") != null) return null;
+        var tz = Timezone{ .name = [_]u8{0} ** TZ_NAME_MAX, .len = value.len };
+        @memcpy(tz.name[0..value.len], value);
+        return tz;
+    }
+
+    /// 담긴 이름. 로그 · 씨앗 파일 · `TZ` 항목이 전부 이것을 쓴다.
+    pub fn slice(self: *const Timezone) []const u8 {
+        return self.name[0..self.len];
+    }
+
+    /// 두 값이 같은가. `config_test`의 필드 비교가 쓴다 — `Ntp.eql`과 같은
+    /// 이유다.
+    pub fn eql(self: Timezone, other: Timezone) bool {
+        return std.mem.eql(u8, self.slice(), other.slice());
+    }
+};
+
+/// `/usr/share/zoneinfo/<이름>`을 NUL로 닫아 buf에 만든다. 시스템 콜이 없는
+/// 순수 함수라 `config_test`가 본다 — 여는 것은 `main.zig`다(TS-M3 plan
+/// 결정 M3-C).
+///
+/// `catch unreachable`인 이유는 길이가 구조로 보장되기 때문이다 —
+/// `Timezone.parse`가 `TZ_NAME_MAX`를 넘는 이름을 안 만들고 버퍼가 그만큼
+/// 크다. 그 관계가 깨지면 `config_test`의 "가장 긴 이름" 검사가 먼저 죽는다.
+pub fn zoneinfoPath(buf: *[ZONEINFO_PATH_MAX]u8, tz: Timezone) [:0]const u8 {
+    const text = std.fmt.bufPrint(buf, ZONEINFO_DIR ++ "{s}", .{tz.slice()}) catch unreachable;
+    buf[text.len] = 0;
+    return buf[0..text.len :0];
+}
+
+/// 파일의 머리가 TZif인가. `main.zig`가 읽은 넉 자를 넘긴다.
+pub fn looksLikeTzif(head: []const u8) bool {
+    return head.len >= TZIF_MAGIC.len and
+        std.mem.eql(u8, head[0..TZIF_MAGIC.len], TZIF_MAGIC);
+}
+
 /// 커널 cmdline이 rc를 끄는 토큰(SC design 결정 9). `tars.conf`를 이기는
 /// 것은 이 키 하나뿐이다 — 우선순위는 cmdline > tars.conf > 기본값이고,
 /// 다른 다섯 키는 cmdline을 안 본다. 그 예외의 근거는 하나다: *"`tars.conf`를
@@ -742,6 +826,11 @@ pub const Config = struct {
     /// 있다 — 이 키는 `net`이 꺼져 있으면 아무 일도 못 한다(TS design
     /// 결정 3).
     ntp: Ntp = .off,
+    /// 기본값이 `UTC`인 것은 "꺼짐"이 아니라 "지금과 같은 동작"이다(TS
+    /// design 확인 10). zoneinfo가 없던 게스트가 이미 UTC를 찍고 있었고,
+    /// 이 키를 안 적은 기계는 한 글자도 안 바뀐다. `net`·`ntp`와 달리 이
+    /// 키는 켜는 비용이 없다 — 파일 하나를 읽는 것이 전부다.
+    timezone: Timezone = Timezone.UTC,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -888,6 +977,17 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "timezone")) {
+            // 둘째 자유 문자열 키다. `ntp`와 다른 것은 값을 해석하지 않는다는
+            // 것이다(design 결정 8) — 담을 수 있는 모양인지만 보고, 파일이
+            // 정말 있는지는 `main.zig`가 본다. 모르는 값을 흘려보내는 규칙은
+            // 같다.
+            c.timezone = Timezone.parse(value) orelse {
+                std.debug.print("tars-init: unknown timezone '{s}', falling back to {s}\n", .{
+                    value, c.timezone.slice(),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -949,6 +1049,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   주소에 묻는다. 부팅할 때 한 번만 묻고 시계를 그 값으로 뛴다 —
         \\#   그 뒤로는 시계를 안 건드린다. net=off면 아무 일도 안 한다
         \\ntp={s}
+        \\# timezone: UTC | <IANA 이름. 예: Asia/Seoul>
+        \\#   /usr/share/zoneinfo 아래의 이름이다. 없는 이름이면 로그를 찍고
+        \\#   UTC로 떨어진다. ntp가 시계를 맞추는 것과 별개다 — 이 값은
+        \\#   그 시각을 어느 지역의 시각으로 보여 줄지만 정한다
+        \\timezone={s}
         \\
     , .{
         @tagName(c.shell),
@@ -959,6 +1064,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.shell_config),
         @tagName(c.net),
         c.ntp.arg(&ntp_buf),
+        c.timezone.slice(),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의

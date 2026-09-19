@@ -177,6 +177,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # libgnutls30t64 · libnettle8t64 · libhogweed6t64 · libelf1t64). UT-M2의
 # 넷과 같은 성질이고, trixie가 올라가면 apt가 "없는 패키지"라고 죽는다.
 # 조용히 실패하지 않는다.
+#
+# ── TS-M3: 층 6(시간대 데이터) ──────────────────────────────────────────
+#
+# tzdata 하나다. Architecture: all이라 `:amd64`를 안 붙인다 — fish-common ·
+# zsh-common · ncurses-base와 같은 줄이다. 바이너리가 아니라 데이터라 새
+# 라이브러리가 0개이고, 푼 것이 2.1MB · initrd에서 약 171KB다(TS 확인 8).
+#
+# 컨테이너 자신의 /usr/share/zoneinfo와 바이트까지 같은 파일들이다. 그래도
+# sysroot를 거치게 하는 이유가 TS design 결정 10이다 — 게스트에 들어가는
+# 파일의 출처가 하나여야 make_initrd.sh를 읽는 사람이 "이 파일은 어디서
+# 왔나"를 한 자리에서 답한다.
+#
+# trixie는 옛 이름(US/Pacific · Japan 같은 것)을 tzdata-legacy로 갈라
+# 두었다. 안 받는다 — 지역/도시 꼴의 이름이 전부 tzdata에 있다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -268,7 +282,8 @@ RUN dpkg --add-architecture amd64 \
         libbrotli1:amd64 \
         libbpf1:amd64 \
         libelf1t64:amd64 \
-        libmnl0:amd64) \
+        libmnl0:amd64 \
+        tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 

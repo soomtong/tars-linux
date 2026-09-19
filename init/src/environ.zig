@@ -42,6 +42,33 @@ pub const PATH_ENTRY: [:0]const u8 = "PATH=/usr/bin:/bin";
 pub const XDG_DATA_DIR = "/config/xdg";
 pub const XDG_ENTRY: [:0]const u8 = "XDG_DATA_HOME=" ++ XDG_DATA_DIR;
 
+/// `TZ` 항목의 접두사(TS design 결정 9). 이름은 `config.Timezone`이 갖고
+/// 있는데 이 파일은 그 파일을 모른 채 있어야 하므로, `main.zig`가 이름을
+/// 넘기고 이 파일이 접두사를 붙인다(TS-M3 plan 결정 M3-D).
+pub const TZ_PREFIX = "TZ=";
+
+/// `tzEntry`가 만드는 항목을 담을 버퍼의 크기. `config.TZ_NAME_MAX`(64)에
+/// 접두사 셋과 NUL 하나를 더한 68이 들어가고 남는다 — 그 관계를 못 박는
+/// comptime 검사가 둘을 다 아는 `main.zig`에 있다.
+pub const TZ_ENTRY_MAX: usize = 80;
+
+/// 이름이 안 들어갈 때 쓰는 항목. UTC는 파일이 없어도 glibc가 이름만으로
+/// 아는 값이라 이것으로 떨어지면 `date`가 지금과 같은 것을 찍는다.
+pub const TZ_UTC_ENTRY: [:0]const u8 = "TZ=UTC";
+
+/// `TZ=<name>`을 NUL로 닫아 buf에 만든다. 이 파일에서 유일하게 글자를
+/// 만드는 함수다 — 나머지는 포인터를 옮길 뿐이다.
+///
+/// 안 들어가면 `TZ_UTC_ENTRY`다. 잘라서 넣는 것보다 낫다 — `TZ=Asia/Seo`는
+/// glibc가 파일을 못 찾고 이름이 `Asia/Seo`인 UTC를 만드는데, 그러면 로그
+/// 없이 틀린다.
+pub fn tzEntry(buf: *[TZ_ENTRY_MAX]u8, name: []const u8) [:0]const u8 {
+    const text = std.fmt.bufPrint(buf, TZ_PREFIX ++ "{s}", .{name}) catch return TZ_UTC_ENTRY;
+    if (text.len >= buf.len) return TZ_UTC_ENTRY; // NUL 자리가 없다
+    buf[text.len] = 0;
+    return buf[0..text.len :0];
+}
+
 /// 새 블록에 들어갈 수 있는 항목 수. 커널이 주는 것은 둘이고 커널 상수
 /// MAX_INIT_ENVS까지 늘 수 있다. 여유를 크게 둔다 — 이 배열은 main()의
 /// 스택에 살고 한 항목이 포인터 8바이트라 128바이트다.
@@ -54,15 +81,20 @@ pub const Block = [MAX_ENTRIES:null]?[*:0]const u8;
 
 /// 커널이 준 블록을 buf에 복사하고 우리 것을 뒤에 붙인 뒤 buf를 돌려준다.
 ///
-/// 붙이는 것이 셋이다.
+/// 붙이는 것이 넷이다.
 ///
 ///   PATH             자식마다 갈릴 이유가 없다(UT-M0)
 ///   XDG_DATA_HOME    같다. 배운 것 둘이 여기로 간다(SM-M2 결정 2)
+///   TZ               같다. 시간대는 기계의 것이지 셸의 것이 아니다(TS-M3)
 ///   hist             셸마다 갈린다 — `config.Shell.histEntries()`가 준다
 ///
-/// 셋째가 인자인 것이 이 함수의 전부다. 이 파일은 `config.zig`를 모른 채
-/// 있어야 하고(그래야 호스트 검사가 순수 계산으로 남는다), 그래서 "어느 셸인가"
-/// 대신 "무엇을 붙일까"를 받는다. 부르는 쪽은 `main.zig` 하나다.
+/// 셋째와 넷째가 인자인 것이 이 함수의 전부다. 이 파일은 `config.zig`를
+/// 모른 채 있어야 하고(그래야 호스트 검사가 순수 계산으로 남는다), 그래서
+/// "어느 셸인가 · 어느 시간대인가" 대신 "무엇을 붙일까"를 받는다. 부르는
+/// 쪽은 `main.zig` 하나다.
+///
+/// 순서에 뜻이 있다. 셸과 무관한 셋이 앞이고 셸마다 갈리는 것이 맨 뒤다 —
+/// TS-M3이 TZ를 XDG 뒤에 넣은 이유다.
 ///
 /// 자리가 모자라면 커널 블록을 그대로 돌려준다. PATH가 없는 게스트는
 /// 불편하지만 살아 있고, 버퍼를 넘겨 쓴 PID 1은 기계를 아예 못 켠다.
@@ -70,13 +102,14 @@ pub const Block = [MAX_ENTRIES:null]?[*:0]const u8;
 pub fn withTarsEnv(
     kernel: [*:null]const ?[*:0]const u8,
     buf: *Block,
+    tz: [:0]const u8,
     hist: []const [:0]const u8,
 ) [*:null]const ?[*:0]const u8 {
     var n: usize = 0;
     while (kernel[n] != null) n += 1;
 
-    // 우리가 더하는 수. 셸마다 2(fish) · 4(bash) · 5(zsh)다.
-    const added = 2 + hist.len;
+    // 우리가 더하는 수. 셸마다 3(fish) · 5(bash) · 6(zsh)다.
+    const added = 3 + hist.len;
     // 마지막으로 쓰는 자리가 buf[n + added](닫는 null)이고, 그 자리가 배열의
     // sentinel 자리(MAX_ENTRIES)를 넘으면 안 된다.
     if (n + added >= MAX_ENTRIES) return kernel;
@@ -85,7 +118,8 @@ pub fn withTarsEnv(
     while (i < n) : (i += 1) buf[i] = kernel[i];
     buf[n] = PATH_ENTRY.ptr;
     buf[n + 1] = XDG_ENTRY.ptr;
-    for (hist, 0..) |entry, j| buf[n + 2 + j] = entry.ptr;
+    buf[n + 2] = tz.ptr;
+    for (hist, 0..) |entry, j| buf[n + 3 + j] = entry.ptr;
     buf[n + added] = null;
     return buf;
 }

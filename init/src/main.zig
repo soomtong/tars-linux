@@ -195,6 +195,47 @@ fn resolveShell(want: config.Shell) config.Shell {
     return fallback.shell;
 }
 
+/// 설정이 고른 시간대의 zoneinfo 파일이 정말 있는지 확인하고, 없으면 UTC로
+/// 내려온다. `resolveShell`과 같은 자리의 같은 선택이다 — 이름은
+/// `config.Timezone.parse`가 모양만 보고 받아 주지만, initrd에 그 파일이 없는
+/// 이름은 모양이 맞아도 glibc가 못 읽는다.
+///
+/// 존재가 아니라 첫 넉 자를 본다(TS-M3 plan 결정 M3-B). `access`로 존재만
+/// 보면 디렉터리(`timezone=Asia`)와 같은 자리에 사는 텍스트 파일
+/// (`timezone=zone.tab`)이 새고, 그때 glibc는 POSIX 문자열로 다시 해석하다
+/// 실패해서 이름만 그 글자인 UTC를 만든다 — 로그 없이 틀리는 종류다. 넉 자
+/// `TZif`는 glibc의 tzfile.c가 파일을 받는 첫 기준이라, 우리가 같은 넉 자를
+/// 보면 glibc가 물을 질문을 미리 묻는 셈이다.
+///
+/// UTC는 안 본다. glibc가 파일 없이도 이름만으로 아는 값이고, 그래서
+/// zoneinfo가 통째로 없는 initrd에서도 기본값은 로그를 안 찍는다.
+fn resolveTimezone(want: config.Timezone) config.Timezone {
+    if (want.eql(config.Timezone.UTC)) return want;
+
+    var path_buf: [config.ZONEINFO_PATH_MAX]u8 = undefined;
+    const path = config.zoneinfoPath(&path_buf, want);
+    if (zoneinfoIsTzif(path)) return want;
+
+    std.debug.print("tars-init: timezone {s} has no zoneinfo file at {s}, falling back to {s}\n", .{
+        want.slice(), path, config.Timezone.UTC.slice(),
+    });
+    return config.Timezone.UTC;
+}
+
+/// path를 열어 첫 넉 자가 TZif인지 본다. 못 열거나 못 읽거나 넉 자가 다르면
+/// 전부 거짓이다 — 셋을 안 가르는 이유는 처방이 같기 때문이다(UTC로 간다).
+fn zoneinfoIsTzif(path: [:0]const u8) bool {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
+    if (failed(rc)) |_| return false;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+
+    var head: [config.TZIF_MAGIC.len]u8 = undefined;
+    const n = linux.read(fd, &head, head.len);
+    if (failed(n)) |_| return false;
+    return config.looksLikeTzif(head[0..n]);
+}
+
 fn logDrmDevicePresence() void {
     // 열지 않고 존재만 본다. 곧 fork될 /terminal이 이 장치를 독점해서
     // 열 것이므로 여기서는 건드리지 않는 편이 안전하다.
@@ -591,7 +632,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -601,6 +642,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             @tagName(cfg.shell_config),
             @tagName(cfg.net),
             cfg.ntp.arg(&ntp_buf),
+            cfg.timezone.slice(),
         },
     );
 
@@ -628,6 +670,16 @@ pub fn main(init: std.process.Init.Minimal) void {
     const shell = resolveShell(cfg.shell);
     const shell_path = shell.path();
 
+    // TS-M3. `resolveShell`과 같은 자리의 같은 선택이다 — 설정이 고른 이름의
+    // 파일이 initrd에 정말 있는지 보고, 없으면 UTC다. 이 값이 env 블록에
+    // 들어가면 게스트의 모든 프로세스가 물려받는다(design 결정 9) — 셸도
+    // `date`도 같은 것을 본다.
+    const tz = resolveTimezone(cfg.timezone);
+    // 이 버퍼도 `main()`의 스택에 산다. 아래 env_buf가 이 안의 포인터를 담고
+    // `supervise()`가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
+    var tz_buf: [environ.TZ_ENTRY_MAX]u8 = undefined;
+    const tz_entry = environ.tzEntry(&tz_buf, tz.slice());
+
     // ── env 블록은 여기서 짓는다(SM-M2) ──────────────────────────────────
     //
     // UT-M0에서는 `main()`의 첫 줄이었다. 내려온 이유는 `HISTFILE`이
@@ -647,6 +699,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     const envp = environ.withTarsEnv(
         init.environ.block.slice.ptr,
         &env_buf,
+        tz_entry,
         shell.histEntries(),
     );
 
@@ -660,8 +713,8 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
     // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
     if (envp != init.environ.block.slice.ptr) {
-        std.debug.print("tars-init: env {s} {s}\n", .{
-            environ.PATH_ENTRY, environ.XDG_ENTRY,
+        std.debug.print("tars-init: env {s} {s} {s}\n", .{
+            environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry,
         });
         // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
         // 그 침묵이 결정 3의 절반(fish는 XDG 하나로 끝난다)을 로그에서
@@ -764,4 +817,12 @@ pub fn main(init: std.process.Init.Minimal) void {
         },
     };
     supervise(&children, button_fds[0..button_count], envp);
+}
+
+// TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의
+// 크기를 자기 수(80)로 적었다. 그 수가 가장 긴 이름 + 접두사 + NUL을 담는지는
+// 둘을 다 아는 이 파일이 못 박는다 — 어느 쪽 상수를 바꾸든 여기서 걸린다.
+comptime {
+    if (environ.TZ_PREFIX.len + config.TZ_NAME_MAX + 1 > environ.TZ_ENTRY_MAX)
+        @compileError("environ.TZ_ENTRY_MAX cannot hold the longest timezone name");
 }

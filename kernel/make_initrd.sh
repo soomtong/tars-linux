@@ -307,6 +307,24 @@ cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/config.fish" "$WORKDIR/usr/share/fish/"
 cp "$SYSROOT/usr/share/fish/__fish_build_paths.fish" "$WORKDIR/usr/share/fish/"
 
+# TS-M3 결정 8·10. 시간대 규칙 전체. tars.conf의 timezone=Asia/Seoul 같은
+# 이름을 init이 TZ 환경변수로 넘기면 glibc가 이 트리에서 그 파일을 읽는다 —
+# 로케일과 정확히 같은 종류의 항목이고, 없으면 date가 조용히 UTC를 찍는다.
+#
+# 통째로 넣는다. 도시 몇을 우리가 고르면 새 도시마다 다시 빌드해야 하고,
+# 전체가 압축 171KB라 고를 이유가 없다(TS 확인 8 — dhcpcd 바이너리 하나의
+# 절반이 안 된다). TZif 파일은 대부분이 0이라 잘 눌린다.
+#
+# cp -r은 링크를 링크로 복사한다. 이 트리의 링크 51개가 그대로 링크로
+# 남아야 크기가 확인 8의 값이다. 그중 localtime -> /etc/localtime은 게스트에
+# 대상이 없는 링크가 되는데, 아무도 그 이름을 안 연다 — glibc가 TZ 없이 보는
+# /etc/localtime은 이 링크가 아니라 그 대상이고, 그것이 없으면 UTC다.
+#
+# sysroot에서 온다(결정 10). 컨테이너 자신의 /usr/share/zoneinfo와 바이트까지
+# 같지만 게스트 파일의 출처를 하나로 유지한다.
+mkdir -p "$WORKDIR/usr/share"
+cp -r "$SYSROOT/usr/share/zoneinfo" "$WORKDIR/usr/share/"
+
 # HI-M1: UTF-8 로케일. terminal이 LANG=C.UTF-8을 넘기므로 그 데이터가
 # 게스트에 있어야 그 말이 참이 된다 — terminfo와 정확히 같은 종류의 항목이다.
 #

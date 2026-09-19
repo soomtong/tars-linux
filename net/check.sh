@@ -64,6 +64,16 @@ REPO_ROOT="$(cd .. && pwd)"
 # 본다. SLIRP가 그 옵션을 안 주기 때문이고(TS 확인 5), 대신 hook 자체는
 # 빌드 절의 호스트 검사가 직접 돌려서 본다.
 #
+# TS-M3이 부팅 A에 검사 둘을 더했다. 시계가 맞는 것과 사람이 그것을 자기
+# 시간대로 읽는 것은 다른 사실이다:
+#
+#   설정 디스크의 timezone=Asia/Seoul → init이 zoneinfo 파일의 머리를 보고
+#   → TZ=Asia/Seoul을 env 블록에 넣는다 → date가 05Z를 14KST로 찍는다
+#
+# 우리 코드는 이름을 읽고 파일을 한 번 열어 보는 것뿐이고, 아홉 시간은
+# glibc가 zoneinfo에서 읽는다. 그 파일이 initrd에 있는지는 빌드 절의 호스트
+# 검사가 부팅 전에 본다.
+#
 # 이 체인은 check.sh의 CHAINS에 열두번째로 들어 있다. 단독으로도 돌아간다
 # (docker run ... bash net/check.sh).
 
@@ -96,6 +106,21 @@ NTP_PORT=123
 # 이미 호스트 시각이라 "맞아졌다"로는 아무것도 못 가린다.
 STUB_UNIX=1930367167
 STUB_YEAR=2031
+
+# TS-M3. 부팅 A의 디스크가 적는 시간대와, 그 시간대에서 stub의 시각이
+# 어떻게 보이는가. 1930367167 = 2031-03-04T05:06:07Z이고 서울은 UTC+9라
+# 14:06:07이다. 서머타임이 없어서 연중 어느 날 돌려도 아홉 시간이다.
+#
+# 시(hour)만 보는 이유는 분·초가 타이핑 사이에 흐르기 때문이다. 시계를 뛴
+# 직후에 치므로 시가 바뀌기까지 53분이 남고, 검사 19까지의 타이핑이 그 안에
+# 끝난다.
+#
+# 약어 KST가 값을 하나 더 낸다 — 약어는 zoneinfo 파일에만 있어서, 파일을
+# 못 읽고 UTC로 떨어진 게스트는 14도 KST도 못 찍는다(05/05UTC가 된다).
+TZ_NAME=Asia/Seoul
+TZ_ABBR=KST
+STUB_HOUR_UTC=05
+STUB_HOUR_LOCAL=14
 
 LOGA="$(mktemp)"
 STUBLOG="$(mktemp)"
@@ -228,13 +253,37 @@ fi
 rm -rf "$HOOKDIR"
 echo "the dhcpcd hook writes the first ntp server and nothing else"
 
+# ── 호스트 검사: initrd에 zoneinfo가 들어갔는가 (TS-M3) ──────────────────
+#
+# 부팅보다 앞에 두는 이유는 진단이다. make_initrd.sh의 cp 한 줄이 빠지면
+# 증상이 부팅 A의 검사 24(화면이 05/05UTC를 찍는다)에서 나오고, 그 자리에서는
+# "파일이 없다"와 "init이 TZ를 안 넣었다"와 "glibc가 못 읽었다"가 안 갈린다.
+# 여기서 죽으면 셋 중 첫째다.
+#
+# 검사 24가 치는 이름과 기본값의 이름 둘을 본다. 전체를 세는 것은 판정이
+# 아니라 사람이 읽는 수다 — tzdata 판이 오르면 수가 바뀐다.
+#
+# 이름에 `./`가 없는 것과 파이프 대신 here-string인 것은 tools/check.sh의
+# 검사 1과 같은 이유다(그 주석에 있다).
+INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
+for want in "usr/share/zoneinfo/${TZ_NAME}" usr/share/zoneinfo/UTC; do
+  if ! grep -qFx "$want" <<< "$INITRD_LIST"; then
+    echo "FAIL: ${want} is missing from the initrd"
+    exit 1
+  fi
+done
+ZONEINFO_COUNT="$(grep -c '^usr/share/zoneinfo/' <<< "$INITRD_LIST")"
+echo "the initrd carries ${ZONEINFO_COUNT} zoneinfo entries, ${TZ_NAME} and UTC among them"
+
 # NW-M2. 설정 디스크를 굽는다. config/check.sh와 같은 자리이고 다른 것은
 # 이 디스크가 빈 것이 아니라는 것이다 — net=dhcp 한 줄을 debugfs로 미리
 # 담아 굽는다. 그래서 이 체인은 게스트에 타이핑으로 설정을 쓰지 않는다.
 #
 # TS-M1이 인자를 하나 더했다. 이 스크립트는 이제 이미지를 둘 굽는다 —
 # 검사 1~16이 쓰는 out/net.img와 부팅 A가 쓰는 out/net-ntp.img다.
-if ! ./make_disk.sh "$NTP_SERVER"; then
+#
+# TS-M3이 둘째 인자(시간대)를 더했다. 부팅 A의 디스크에만 들어간다.
+if ! ./make_disk.sh "$NTP_SERVER" "$TZ_NAME"; then
   echo "FAIL: config disk build failed"
   exit 1
 fi
@@ -957,10 +1006,13 @@ echo "the ntp guest reached a prompt in ${BOOT_A_SECONDS}s"
 # ── 검사 17: 설정이 읽혔고 ntp가 실효값인가 ───────────────────────────
 # 검사 3과 같은 자리를 새 키에 대해 한 번 더 본다. 이것이 없으면 아래 둘이
 # 실패했을 때 "디스크를 안 물었다"와 "코드가 틀렸다"가 안 갈린다.
-if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=${NTP_SERVER}" "$LOGA" >/dev/null; then
+#
+# TS-M3이 timezone까지 넓혔다. 설정 로그 줄의 맨 뒤가 그 키이고, 안 보면
+# 디스크에서 그 줄이 빠져도 검사 23·24 전까지 초록이다.
+if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=${NTP_SERVER} timezone=${TZ_NAME}" "$LOGA" >/dev/null; then
   fail "the ntp config disk did not reach init" "tars-init: config shell="
 fi
-echo "the guest read ntp=${NTP_SERVER} off the config disk"
+echo "the guest read ntp=${NTP_SERVER} and timezone=${TZ_NAME} off the config disk"
 
 # ── 검사 18: 우리 코드가 시계를 뛰었나 ────────────────────────────────
 # 이 체인에서 우리 코드가 하는 일 전부가 이 한 줄이다. 숫자가 stub이 정한
@@ -1015,6 +1067,41 @@ if ! wait_for_screen "tsyear=${STUB_YEAR}"; then
   fail "the guest's clock does not show ${STUB_YEAR} on screen" "terminal: screen>"
 fi
 echo "the guest shows ${STUB_YEAR} — the render survived the jump too"
+
+# ── 검사 23: init이 TZ를 env 블록에 넣었나 (TS-M3) ────────────────────
+# 번호가 자리와 어긋난다 — 20~22는 부팅 B이고 M2가 먼저 매겼다. 번호는
+# 자리가 아니라 이름이라 다시 안 매긴다(TS-M3 plan 결정 M3-F).
+#
+# 검사 24와 같은 사실을 우리 코드의 입으로 먼저 듣는다. 이것이 초록이고
+# 24가 빨강이면 원인이 우리 코드 밖(zoneinfo 파일 · glibc)이고, 이것부터
+# 빨강이면 resolveTimezone이 UTC로 떨어진 것이다 — 그때 로그에
+# `tars-init: timezone ... has no zoneinfo file` 한 줄이 있다.
+if ! grep -a "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=${TZ_NAME}" "$LOGA" >/dev/null; then
+  fail "init did not put TZ=${TZ_NAME} in the env block" \
+    "tars-init: env" "tars-init: timezone"
+fi
+echo "init put TZ=${TZ_NAME} in the env block"
+
+# ── 검사 24: 사람이 그것을 읽나 ───────────────────────────────────────
+# design의 문장 그대로다 — 같은 순간의 `date -u`와 `date`가 정해진 만큼
+# 벌어진다. 한 줄에 둘을 치고 시(hour) 둘과 약어를 한 단어로 찍는다.
+#
+# 판정 글자가 명령줄에 없어야 한다(검사 19와 같다). 친 줄에는 `tsz=$(date`가
+# 남고 `tsz=05`는 출력에만 생긴다.
+#
+# 키 이름 중 slash와 shift-z가 이 저장소에서 처음 쓰인다. 나머지는 검사
+# 19가 이미 친 것들이다.
+echo "=== typing 'echo tsz=\$(date -u +%H)/\$(date +%H%Z)' ==="
+type_keys e c h o spc t s z equal \
+  shift-4 shift-9 d a t e spc minus u spc shift-equal shift-5 shift-h shift-0 \
+  slash \
+  shift-4 shift-9 d a t e spc shift-equal shift-5 shift-h shift-5 shift-z shift-0 ret
+
+if ! wait_for_screen "tsz=${STUB_HOUR_UTC}/${STUB_HOUR_LOCAL}${TZ_ABBR}"; then
+  fail "the guest does not show ${STUB_HOUR_UTC}Z as ${STUB_HOUR_LOCAL}${TZ_ABBR} on screen" \
+    "terminal: screen>" "tars-init: timezone"
+fi
+echo "the guest shows ${STUB_HOUR_UTC}Z as ${STUB_HOUR_LOCAL}${TZ_ABBR} — nine hours, read off zoneinfo"
 
 # ── 부팅 A를 끈다 ─────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the ntp guest ==="

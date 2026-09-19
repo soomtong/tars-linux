@@ -30,6 +30,11 @@ SIZE=16M
 # 그래야 이 주소를 아는 자리가 net/check.sh 한 곳이다.
 NTP_SERVER="${1:-10.0.2.2}"
 
+# TS-M3. 부팅 A가 쓰는 시간대. 첫째 인자와 같은 이유로 체인이 넘긴다 —
+# 이 이름을 아는 자리가 net/check.sh 한 곳이어야 검사 24의 기대값과 안
+# 어긋난다.
+TZ_NAME="${2:-Asia/Seoul}"
+
 mkdir -p ../out
 
 # 이미지 하나를 굽는다. 인자가 (경로, 라벨, tars.conf 내용)이다.
@@ -56,12 +61,16 @@ bake() {
 bake ../out/net.img tars-net 'net=dhcp
 '
 
-# TS-M1. 부팅 A가 쓰는 디스크. 위의 것과 다른 것이 ntp 한 줄뿐이다.
+# TS-M1. 부팅 A가 쓰는 디스크. 위의 것과 다른 것이 ntp 한 줄이었고 TS-M3이
+# timezone 한 줄을 더했다 — 시계를 뛰는 부팅에서 그 시각을 사람이 읽는
+# 모양으로 보는 것까지가 한 부팅의 일이다. net.img와 아래 net-ntp-dhcp.img는
+# 기본값(UTC)으로 남는다 — "이 키를 안 적은 기계"가 게이트 안에 있어야 한다.
 #
 # 라벨을 tars-ntp로 다르게 두는 이유는 진단이다. 두 디스크가 같은 라벨이면
 # 엉뚱한 이미지를 물린 회차에 게스트 로그가 똑같이 생긴다.
 bake ../out/net-ntp.img tars-ntp "net=dhcp
 ntp=${NTP_SERVER}
+timezone=${TZ_NAME}
 "
 
 # TS-M2. 부팅 B가 쓰는 디스크. 부팅 A와 다른 것은 ntp의 값 하나다 — 주소가
