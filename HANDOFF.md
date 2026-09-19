@@ -1,4 +1,22 @@
-# HANDOFF: Shell Tools(ST)가 끝났다 — `ls`가 eza로 가고 `/.gitconfig`가 더 이상 끊기지 않는다
+# HANDOFF: Terminal Queries(TQ)가 열렸다 — design과 M1 plan만 있고 구현은 다음 세션
+
+## 지금 어디인가
+
+TQ가 2026-09-19에 열렸다. ST-M3이 "Ctrl+R이 첫 누름에 안 뜬다"의 원인을
+터미널에서 찾았고(자식의 질의에 답이 없다), 그 증상과 측정은
+`docs/decisions/project_terminal_queries.md`에 있다. design은
+`docs/superpowers/specs/2026-09-19-tars-terminal-queries-design.md`, M1 plan은
+`docs/superpowers/plans/2026-09-19-tars-terminal-queries-tq-m1.md`다.
+
+⚠ **구현을 한 번 시작했다가 되돌렸다.** 사용자가 "구현은 다음 세션에"라고 해서
+코드는 커밋 `be9eab3`(= ST-M3, 루트 게이트 12체인 3/3 초록) 상태로 돌려놓았다.
+되돌리기 전에 확인한 것과 게이트에서 밟은 함정 둘은 M1 plan의 "이미 밟은 함정
+둘"과 위 기억 문서에 있다 — 그 둘만 피하면 나머지는 plan대로 간다.
+
+⚠ 지금 트리에는 TQ design과 plan 두 문서만 새로 있고(untracked), 코드는 M3
+상태 그대로다. 다음 세션은 M1 plan의 Task 1부터 시작한다.
+
+## 그 앞이 Shell Tools(ST) — M0~M3까지 끝났다
 
 ## 지금 어디인가
 
