@@ -242,6 +242,17 @@ chmod 0755 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-run-hooks"
 cp dhcpcd-hooks/30-tars-ntp "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
 chmod 0644 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/30-tars-ntp"
 
+# TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
+#
+# sysroot가 아니라 저장소에서 온다 — 우리가 쓴 파일이라 게스트에 넣을 원본이
+# 여기밖에 없다. dhcpcd hook과 같은 자리이고, 다른 점은 이것을 게스트가
+# 직접 실행한다는 것이다(저쪽은 source된다). 그래서 0755다.
+#
+# /usr/bin에 두는 이유는 게스트의 PATH가 /usr/bin:/bin이라 거기서만 이름으로
+# 닿기 때문이다(NW-M0 실측 3 — /usr/sbin/dhcpcd를 못 찾은 그 자리다).
+cp tq-probe.sh "$WORKDIR/usr/bin/tq-probe"
+chmod 0755 "$WORKDIR/usr/bin/tq-probe"
+
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
 # /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다

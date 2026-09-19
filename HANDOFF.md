@@ -1,20 +1,46 @@
-# HANDOFF: Terminal Queries(TQ)가 열렸다 — design과 M1 plan만 있고 구현은 다음 세션
+# HANDOFF: Terminal Queries(TQ)가 끝났다 — M1 하나로 닫혔고 루트 게이트가 초록이다
 
 ## 지금 어디인가
 
-TQ가 2026-09-19에 열렸다. ST-M3이 "Ctrl+R이 첫 누름에 안 뜬다"의 원인을
-터미널에서 찾았고(자식의 질의에 답이 없다), 그 증상과 측정은
-`docs/decisions/project_terminal_queries.md`에 있다. design은
-`docs/superpowers/specs/2026-09-19-tars-terminal-queries-design.md`, M1 plan은
-`docs/superpowers/plans/2026-09-19-tars-terminal-queries-tq-m1.md`다.
+TQ가 2026-09-19에 열려 같은 날 M1로 닫혔다. 사용자가 물은 것은 "Ctrl+R이 두
+번 눌러야 열린다"였고, ST-M3이 원인을 셸이 아니라 터미널에서 찾았으며(자식의
+vt 질의에 답이 없다), M1이 그 자리를 고쳤다 — `effects.write_pty` 한 칸과 그
+답이 자식에게 돌아가는 길. ST-M3이 넣은 우회(`FZF_DEFAULT_OPTS --no-height`)는
+지웠다.
 
-⚠ **구현을 한 번 시작했다가 되돌렸다.** 사용자가 "구현은 다음 세션에"라고 해서
-코드는 커밋 `be9eab3`(= ST-M3, 루트 게이트 12체인 3/3 초록) 상태로 돌려놓았다.
-되돌리기 전에 확인한 것과 게이트에서 밟은 함정 둘은 M1 plan의 "이미 밟은 함정
-둘"과 위 기억 문서에 있다 — 그 둘만 피하면 나머지는 plan대로 간다.
+design은 `docs/superpowers/specs/2026-09-19-tars-terminal-queries-design.md`
+(Status: 끝났다), plan은
+`docs/superpowers/plans/2026-09-19-tars-terminal-queries-tq-m1.md`, 기억은
+`docs/decisions/project_terminal_queries.md`다.
 
-⚠ 지금 트리에는 TQ design과 plan 두 문서만 새로 있고(untracked), 코드는 M3
-상태 그대로다. 다음 세션은 M1 plan의 Task 1부터 시작한다.
+무엇이 섰나. `terminal/src/vt.zig`가 `Screen`에 고정 512바이트 답 버퍼와
+`write_pty` 콜백을 들이고, `terminal/src/main.zig`가 `feed` 바로 뒤에 그 답을
+pty로 쓴다. `kernel/tq-probe.sh`가 게스트의 `/usr/bin/tq-probe`로 들어가
+게이트가 그 이름을 치고 답의 길이(`len6`)를 본다. 씨앗 셋에서 우회 줄이
+사라지고 `config_test.zig`의 `KNOWN_SEED_ENV` 기계도 함께 사라졌다.
+
+판정: terminal 체인 초록(단위 검사 넷 + 게스트에서 `len6`), config 체인 초록
+(우회 없이 첫 Ctrl+R에 picker), 루트 게이트 12체인 3/3 통과(`TARS check PASS`,
+`FAIL` 0줄, 34분 09초 — 그 판은 `clean`으로 커널을 처음부터 다시 빌드했으므로
+기준선 16분과 견줄 수 없다).
+
+| 커밋 | 무엇 |
+|---|---|
+| (이 커밋) | TQ-M1. `write_pty` 콜백과 답 버퍼(`vt.zig`) · 답을 pty로 쓰는 자리(`main.zig`) · `vt_test` 검사 넷 · `kernel/tq-probe.sh`와 그 게이트 검사 · 씨앗 우회 제거(`config.zig`·`config_test.zig`) · `tools/check.sh`의 정적 목록 · design Status/실측 · 기억 · README · 이 HANDOFF |
+
+⚠ 다음 사람이 먼저 볼 것 셋.
+
+1. 질의 바이트를 게이트가 타이핑으로 만들 수 없다 — 이스케이프가 fish → bash →
+   printf에서 죽는다. 그래서 프로브가 initrd 안의 스크립트다(plan Task 4).
+2. 답은 tty가 되울린다(ECHOCTL). 화면에 `^[[4;1Rlen6`처럼 나오므로 판정 글자를
+   행 첫머리에 기대면 안 된다 — 계획의 `\| len[1-9]`가 그래서 틀렸고
+   `len[1-9]`로 고쳤다.
+3. DA1(`ESC[c`)은 이 한 칸으로 안 된다(0바이트). 임베더가 장치 속성을 선언해야
+   만들어진다 — design 비목표 1이고 지금도 안 한다.
+
+⚠ 이미 쓰던 설정 디스크는 씨앗의 옛 줄(`--no-height`)을 그대로 갖고 있다
+(`O_EXCL`). 그 기계에서는 picker가 전체 화면으로 뜰 뿐 동작은 같다 — 지우려면
+`/config/{fish.config,bashrc,zshrc}`를 지우고 재부팅한다.
 
 ## 그 앞이 Shell Tools(ST) — M0~M3까지 끝났다
 
@@ -34,12 +60,12 @@ plan 넷은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
 M0~M2는 커밋 `918cfbe`, M3은 `c3acb74`다.
 
 ⚠ M3에서 나온 것이 하나 있다. 사용자가 "Ctrl+R이 한 번에 안 열리고 두 번에
-열린다"고 물었는데, 원인은 셸이 아니라 **터미널**이었다 — fzf는 `--height`일 때
+열린다"고 물었는데, 원인은 셸이 아니라 터미널이었다 — fzf는 `--height`일 때
 커서 위치를 터미널에 묻고 답이 올 때까지 그리지 않는데, 우리 terminal이 vt의
 질의 콜백을 하나도 등록하지 않아 답이 없다(그래서 두 번째 키가 잠금을 푼다).
-지금은 씨앗이 `FZF_DEFAULT_OPTS --no-height`를 줘서 우회하고, 게이트 1차 부팅이
-"첫 Ctrl+R에 picker가 뜬다"로 지킨다. **진짜 수리(터미널이 질의에 답하기)가
-다음 후보 1순위다** — 잰 값은 `docs/decisions/project_terminal_queries.md`에 있다.
+그때는 씨앗이 `FZF_DEFAULT_OPTS --no-height`를 줘서 우회했고, 게이트 1차 부팅이
+"첫 Ctrl+R에 picker가 뜬다"로 지켰다. 그 우회는 TQ-M1(같은 날)이 지웠다 —
+터미널이 이제 답하고 그 검사는 "40% 상자가 뜬다"를 뜻한다.
 
 무엇이 섰나. 씨앗 rc 셋이 eza 별칭 넷을 정의한다(`ls`가 eza로 가는 것이
 유일한 셰도다 — 게이트가 치는 자리 셋을 부팅으로 재서 통과시켰다).

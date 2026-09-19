@@ -257,6 +257,11 @@ boot 1: one Ctrl+R opened the fzf picker (the seeded --no-height reached it)
 판정 글자가 15초 안에 안 나오면 실패이므로, "다른 키가 잠금을 풀어 줬다"는
 거짓 초록이 성립하지 않는다.
 
+⚠ TQ-M1(2026-09-19)이 우회를 지우면서 성공 문구가 바뀌었다 —
+`boot 1: one Ctrl+R opened the fzf picker (the terminal answered its query)`.
+검사 자체(`type_keys ctrl-r` + `wait_for_screen '\| >'`)는 그대로이고, 이제
+fzf가 `--height 40%` 상자를 그리려고 보낸 질의에 우리 terminal이 답한다.
+
 ### 2. 이 검사를 훅 끝에 둔 이유도 실측이다
 
 EDIT 되읽기 **앞**에 두었더니 그 되읽기가 깨졌다(`typed the edit but
@@ -386,6 +391,11 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 
 ### 9. fzf의 `--height`를 씨앗에서 끈다 — 우회다
 
+⚠ TQ-M1(2026-09-19)이 이 결정을 뒤집었다. 씨앗에서 그 줄을 지웠고
+`KNOWN_SEED_ENV`도 함께 사라졌다 — 터미널이 이제 질의에 답한다
+(`docs/decisions/project_terminal_queries.md`). 아래는 그때의 결정이고,
+"진짜 수리"가 그 서브프로젝트였다.
+
 씨앗 rc가 `FZF_DEFAULT_OPTS --no-height`를 준다(fish `set -gx`, bash·zsh
 `export`). 그러면 fzf가 커서 위치를 안 묻고 그 자리에서 그린다. 대가는
 picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
@@ -459,8 +469,6 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 
 M0·M1·M2·M3을 끝냈다. 다음 후보 둘.
 
-1. **터미널이 vt 질의에 답한다**(진짜 수리). `terminal`이 lib-vt의 콜백을
-   등록해 커서 위치 보고 · DA1/DA2 · 모드·색 질의에 응답을 쓴다. 그러면
-   fzf가 40% 상자로 돌아오고 결정 9의 씨앗 줄을 지울 수 있다. 잰 값과 증상은
-   `docs/decisions/project_terminal_queries.md`에 있다.
+1. 터미널이 vt 질의에 답한다(진짜 수리) — TQ-M1(2026-09-19)이 했다. 커서 위치
+   보고와 상태 보고에 답하고, 결정 9의 씨앗 줄은 지워졌다.
 2. `FZF_DEFAULT_COMMAND=fd …` 같은 나머지 fzf env(D6의 나머지).

@@ -1323,6 +1323,16 @@ pub fn main(init: std.process.Init) !void {
                 break;
             }
             screen.feed(out);
+            // 자식이 질의를 보냈으면(`ESC[6n` 커서 위치 등) 답이 여기 쌓여
+            // 있다. `feed` 바로 뒤에서 돌려주는 것이 TQ design 결정 3이다 —
+            // pty에 쓰는 자리가 여기 하나뿐이라 순서 문제가 안 생기고,
+            // 질의의 답이 그 뒤에 친 키보다 먼저 나간다(그 순서가 fzf에게
+            // 뜻이 있다: --height 상자 높이를 정하는 것이 답이다).
+            //
+            // 답의 내용은 라이브러리가 만든다. 우리가 여기서 정하는 것은
+            // "언제 어디로 보내는가"뿐이다.
+            const replies = screen.takeReplies();
+            if (replies.len > 0) pty.write(session.master_fd, replies);
             // design 결정 13. 라이브러리는 이것을 해 주지 않는다 — 올라간
             // 상태에서 출력을 먹여도 뷰포트가 그대로라는 것을 2026-08-23에
             // 실측했고, vt_test가 그 사실을 못 박고 있다. 대부분의 터미널이

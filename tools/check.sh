@@ -181,6 +181,11 @@ WANT+=(usr/bin/vi usr/bin/pager usr/bin/editor .gitconfig
 # config 체인에서 그것을 본다).
 WANT+=(.bashrc .zshrc .config/fish/config.fish)
 
+# TQ-M1: 프로브 하나. 위 셋과 같은 자리다 — 배열에 없고 make_initrd.sh가
+# 손으로 넣는 파일이라 여기 적어야 검사가 tautology가 아니다. 그 줄을 지우면
+# terminal 체인의 부팅(20초 + 빌드)이 아니라 여기서 먼저 드러난다.
+WANT+=(usr/bin/tq-probe)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 
 # 명령 치환으로 패딩을 만들면 안 된다. `$(printf '\n%s\n' ...)`은 끝의

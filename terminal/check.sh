@@ -147,6 +147,46 @@ sleep 1
 echo "screendump ${AFTER}" >&3
 sleep 1
 
+# --- TQ-M1: 터미널이 자식의 질의에 답하는가 ---------------------------
+#
+# fzf는 `--height`일 때 커서가 지금 몇 행에 있는지 터미널에 묻고(`ESC[6n`)
+# 그 답으로 자기 상자 높이를 정한다. ST-M3 전까지 우리 terminal은 vt의 질의
+# 콜백(`effects.write_pty`)을 하나도 등록하지 않아 답이 없었고, 그래서 첫
+# Ctrl+R이 멈췄다(두 번째 키가 그 잠금을 풀어 "두 번 눌러야 열린다"로 보였다).
+#
+# 질의 바이트를 게이트가 타이핑으로 만들지 않는다 — `printf '\033[6n'`을
+# type_keys로 치면 이스케이프가 fish → bash → printf 층에서 죽어 리터럴
+# `033[6n`이 나갔다(화면에 그대로 찍혀 확인했다). 그래서 ESC가 든 스크립트를
+# initrd에 실어 이름으로 친다(`kernel/tq-probe.sh`가 /usr/bin/tq-probe다).
+#
+# 그 스크립트 안에서 묻기와 읽기가 한 프로세스인 것도 같은 뿌리다. 답은 pty의
+# 입력이라, 사이에 프롬프트로 돌아온 셸의 라인 편집기가 먼저 가져가면
+# 0바이트가 된다 — fish가 묻고 bash가 읽게 했더니 실제로 그랬다.
+#
+# 판정은 길이다. 답이 오면 `len6`(CPR은 `ESC[행;열R` 6바이트), 안 오면
+# `len0`이다. 정확한 문자열을 안 박는 것은 포맷이 vendored ghostty의
+# 몫이기 때문이다(design 결정 5) — 박으면 우리가 아니라 그 코드를 검사한다.
+#
+# 행 경계(`\| `)를 안 박는 이유가 있다. tty의 line discipline이 pty로 들어온
+# 답을 되울리고(ECHOCTL이 ESC를 `^[`로 바꾼다) 우리 terminal이 그걸 글자로
+# 그리기 때문에, 화면의 그 행은 `^[[4;1Rlen6`처럼 나온다 — 길이 글자가 행
+# 첫머리에 안 온다(TQ-M1 실측). 판정 글자가 `len<숫자>`인 것 자체가 안전한
+# 이유는 우리가 치는 것에 그 글자가 없기 때문이다(autosuggestion 함정과 같은
+# 자리 — project_gate_screen_echo).
+#
+# 이 자리(재시작 경로 앞)에 두는 데도 뜻이 있다. 다음 검사가 `exit`를 쳐서
+# 셸을 죽이는데, 프로브가 남긴 그 행의 글자가 그 뒤 화면에 섞이면 재시작
+# 판정이 흔들린다.
+type_keys t q minus p r o b e ret
+if ! wait_for_screen 'len[1-9]'; then
+  echo "FAIL: the terminal did not answer the cursor-position query"
+  echo "  /usr/bin/tq-probe가 ESC[6n을 보내고 read로 답을 읽는다 — len0이면"
+  echo "  답이 안 온 것이고, 그러면 fzf의 --height 상자가 다시 멈춘다."
+  grep -a "terminal: screen>" "$LOG" | tail -1
+  exit 1
+fi
+echo "terminal answered the cursor-position query"
+
 # --- 재시작 경로 검증 (IS) ---------------------------------------------
 # 화면 셸에 exit를 쳐서 죽인다. 그러면 이 순서가 일어나야 한다:
 #   fish 종료 → terminal이 PTY EOF로 종료 → PID 1이 수거 → PID 1이 재시작

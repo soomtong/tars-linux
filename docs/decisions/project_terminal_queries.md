@@ -1,83 +1,81 @@
 ---
 name: project_terminal_queries
-description: 우리 terminal은 vt의 질의(커서 위치·DA 등)에 답하지 않는다 — fzf의 --height가 그 답을 기다리며 멈춘다(ST-M3, 2026-09-19)
+description: 터미널이 자식의 vt 질의에 답한다 — effects.write_pty 한 칸과 그 답이 pty로 돌아가는 길(TQ-M1, 2026-09-19)
 metadata:
   type: project
 ---
 
-셸 설정을 손보다가 나온 자리인데 원인은 셸이 아니라 터미널이다. 기억을 따로
+셸 설정을 손보다가 나온 자리인데 원인은 셸이 아니라 터미널이었다. 기억을 따로
 두는 이유가 그것이다 — `init/src/config.zig`를 보는 사람은 여기를 못 본다.
 
-## 병
+## 병 — 고쳐졌다
 
 fzf의 셸 통합(fish는 `fzf --fish`, bash는 `fzf --bash`)은 위젯마다
-`--height 40%`를 붙인다. fzf는 `--height`일 때 **커서가 지금 몇 행에 있는지**를
-터미널에 묻고(`ESC[6n`, 커서 위치 보고) 그 답을 받아 자기를 그 자리에 그린다.
+`--height 40%`를 붙인다. fzf는 `--height`일 때 커서가 지금 몇 행에 있는지를
+터미널에 묻고(`ESC[6n`, 커서 위치 보고) 그 답으로 자기 상자 높이를 정한다.
 
-우리 `terminal`은 그 질의에 답하지 않는다. ghostty lib-vt가 그 답을 만들
-창구(콜백)를 갖고 있지만 **우리가 하나도 등록하지 않았다** —
-`terminal/src`에 `ghostty_vt_terminal_set*`이나 콜백 등록이 0개다. 그래서
-fzf가 답을 기다리며 멈춘다.
+우리 `terminal`은 그 질의에 답하지 않았다. ghostty lib-vt가 답을 만들 창구를
+갖고 있지만(`stream_terminal.zig:78`의 `write_pty`) 그 칸이 `null`이었고,
+라이브러리는 그 칸이 비면 답을 아예 만들지 않는다(응답 갈래 여럿이 이 필드를
+문지기로 본다). 그래서 fzf가 답을 기다리며 멈췄다 — 증상이 사람에게 보이는
+모양은 "Ctrl+R을 두 번 눌러야 picker가 열린다"였다(첫 누름에 멈춰 있다가 다음
+키가 그 바이트를 답으로 읽고 그제야 그린다).
 
-증상이 사람에게 보이는 모양: **Ctrl+R을 두 번 눌러야 picker가 열린다.**
-첫 누름에 fzf는 멈춰 있고(화면에는 아무 일도 안 일어난다), 두 번째 키가
-pty로 들어오면 fzf가 그 바이트를 답으로 읽고 그제야 그린다.
+TQ-M1(2026-09-19)이 고쳤다. 답의 값은 라이브러리가 만들고, 우리가 한 일은
+그 한 칸을 채우고 받은 바이트를 pty로 돌려주는 것뿐이다.
 
-## 잰 것 (ST-M3, 2026-09-19)
+ST-M3이 그때 잰 값(첫 Ctrl+R 뒤 6~12초 관찰):
 
-| 조건 | 첫 Ctrl+R 뒤 키를 안 누르고 6~12초 |
+| 조건 | 결과 |
 |---|---|
-| 기본값(`--height 40%`) | 프레임이 **한 장도 안 늘어난다**(12초 관찰) |
-| `FZF_CTRL_R_OPTS=--no-height` | 프레임 5 → 52, picker가 첫 누름에 뜬다 |
-| `echo hi \| fzf` (통합 없이 직접) | 즉시 뜬다 — 전체 화면이라 질의가 필요 없다 |
+| 기본값(`--height 40%`) | 프레임이 한 장도 안 늘어난다 |
+| `FZF_CTRL_R_OPTS=--no-height` | 프레임 5 → 52, 첫 누름에 picker가 뜬다 |
+| `echo hi \| fzf` (통합 없이) | 즉시 뜬다 — 전체 화면이라 질의가 필요 없다 |
 
-부수 관찰: `less`는 즉시 그린다(그래서 `git log`는 멀쩡하다). `fzf --version`의
-실행 시간은 34ms다 — 느린 것이 아니라 **기다리는 것**이다.
+## 지금 어디에 있나 — 고치는 사람이 볼 자리
 
-## 지금의 처방과 진짜 수리
+- `terminal/src/vt.zig` — `Handler`(`TerminalStream`의 handler 필드 타입) ·
+  `REPLY_MAX`(512) · `onWritePty`(콜백) · `Screen.reply_buf`·`reply_len`·
+  `reply_dropped` · `pushReply`/`takeReplies`. `init`이
+  `self.stream.handler.effects.write_pty = &onWritePty`로 그 한 칸을 채운다.
+- `terminal/src/main.zig` — `screen.feed(out)` 바로 뒤에 `takeReplies()`를
+  pty로 쓴다. pty에 쓰는 자리가 거기 하나뿐이라 순서가 코드 모양으로
+  고정된다(질의의 답이 그 뒤에 친 키보다 먼저 나간다).
+- `kernel/tq-probe.sh` → 게스트의 `/usr/bin/tq-probe`(`make_initrd.sh`가 넣고
+  `tools/check.sh`의 `WANT`가 지킨다). 게이트가 그 이름을 친다.
+- `terminal/check.sh` — 프로브를 치고 `len[1-9]`를 본다(답이 오면 `len6`,
+  안 오면 `len0`).
+- `init/src/config.zig` — 씨앗 셋에 `FZF_DEFAULT_OPTS` 줄이 없다(ST-M3의
+  우회를 지웠다). `config_test.zig`의 `KNOWN_SEED_ENV`도 함께 사라졌다.
 
-처방(우회): 씨앗 rc가 `FZF_DEFAULT_OPTS --no-height`를 준다(fish는
-`set -gx`, bash·zsh는 `export`). 대가는 picker가 화면 전체를 쓰는 것이고,
-`config/check.sh`의 1차 부팅이 "첫 Ctrl+R에 picker가 뜬다"로 그것을 지킨다.
+게이트가 보는 자리 셋: terminal 체인(vt 단위 검사 넷 + 게스트의 `len6`) ·
+config 체인 1차 부팅(우회 없이 첫 Ctrl+R에 picker) · tools 체인(정적 목록).
 
-진짜 수리(TQ로 열었다 — 구현은 다음 세션): `terminal`이 lib-vt의 `write_pty`
-effect를 채워 답을 pty로 쓴다. **한 칸이면 된다** — vendored
-`stream_terminal.zig:78`의 `write_pty: ?*const fn (*Handler, [:0]const u8) void`가
-지금 `null`이고, 라이브러리는 그 칸이 비면 답을 아예 안 만든다(응답 갈래 여럿이
-이 필드를 문지기로 본다: `:186` · `:365` · `:523` · `:841` · `:928` · `:966` · `:983`).
-핸들러는 `TerminalStream`의 공개 필드이고(`stream.zig:477`), 우리 Screen은
-`handler.terminal`에서 `@fieldParentPtr`로 되찾을 수 있다.
+## 다시 밟지 말 것 다섯
 
-## 한 번 구현해 보고 되돌린 것 (2026-09-19)
+1. 질의 바이트를 게이트가 `type_keys`로 칠 수 없다. 이스케이프가 fish → bash
+   → printf 층에서 죽어 리터럴 `033[6n`이 나간다(화면에 그대로 찍혔다). ESC가
+   든 스크립트를 initrd에 실어 그 경로를 치게 한다.
+2. 묻기와 읽기가 한 프로세스 안에 있어야 한다. 답은 pty의 입력이라, 사이에
+   프롬프트로 돌아온 셸의 라인 편집기가 먼저 가져간다 — fish가 묻고 bash가
+   읽게 했더니 `len0`이었다.
+3. 답은 tty가 되울린다(ECHOCTL이 ESC를 `^[`로 바꾼다). 화면에는
+   `^[[4;1Rlen6`처럼 한 행에 붙어 나오므로 판정 글자를 행 첫머리에 기대면
+   안 된다 — `len<n>`이고, 우리가 치는 것에 `len`이 없다는 것이 그 판정이
+   안전한 근거다(`project_gate_screen_echo`의 autosuggestion 함정과 같은 자리).
+4. DA1(`ESC[c`)은 그 한 칸으로 안 된다(0바이트). 임베더가 장치 속성을
+   선언해야 만들어진다 — design 비목표 1이고 지금도 안 한다.
+5. 넘치는 답은 통째로 버린다. 반쪽을 넣으면 자식 파서가 그걸 답으로 읽어
+   커서를 엉뚱한 자리에 그린다. 6바이트 답 200개를 몰아치면 85개(510바이트)가
+   남고 115개를 버린다(510 + 6 = 516 > 512).
 
-사용자가 "다음 세션에 하려던 것"이라고 해서 코드를 검증된 M3 상태로 되돌렸다.
-그때 확인된 것 넷을 남긴다 — 다시 밟지 말 것.
+## 남은 것
 
-| 잰 것 | 결과 |
-|---|---|
-| `write_pty` 한 칸으로 CPR(`ESC[6n`) | 답이 온다 — 6바이트, `ESC[<행>;<열>R` 꼴 |
-| 같은 칸으로 DSR(`ESC[5n`) | 답이 온다 — 4바이트, `ESC[0n` 꼴 |
-| 같은 칸으로 DA1(`ESC[c`) | **0바이트** — 임베더가 장치 속성을 선언해야 만들어진다 |
-| 평범한 출력 | 답 0바이트(검사로 못 박아야 한다 — 안 그러면 모든 출력에 답을 만드는 고장이 통과한다) |
+없다 — TQ는 M1 하나로 닫혔다. 다음 후보는 씨앗의 허용 범주를 늘리는 일
+(fzf의 `FZF_DEFAULT_COMMAND` 같은 환경 변수 줄)이고 그 자리는
+`project_shell_tools`다.
 
-게이트에서 밟은 함정 둘.
-
-1. **질의 바이트를 `type_keys`로 타이핑하지 말 것.** `printf \033[6n`의
-   이스케이프가 fish → bash → printf 층에서 죽어 리터럴 `033[6n`이 나갔다(화면에
-   그대로 찍혀 확인). ESC가 든 작은 스크립트를 initrd에 실어 그 경로를 치게 한다
-   — dhcpcd hook을 싣는 것과 같은 방식.
-2. **물어보기와 읽기는 같은 프로세스 안에 있어야 한다.** fish가 묻고 bash가
-   읽으면 답이 0바이트로 나온다 — 답은 pty의 입력이고, 그 사이에 프롬프트로
-   돌아온 셸의 라인 편집기가 먼저 가져간다. `printf; read -n 20 -t 2`를 한
-   프로세스에서 해야 한다.
-
-## 이 검사를 게이트 어디에 두었나 (그리고 왜 마지막인가)
-
-`config/check.sh` 1차 부팅 훅의 **맨 끝**이다. 중간에 두었더니 picker를 닫은
-직후의 fzf가 화면을 되돌리는 동안 다음 타이핑이 fzf로 새어, 뒤따르던
-되읽기 검사(`shell=zsh`)가 깨졌다. 판정 하나가 다음 판정을 흔들지 않게
-마지막에 둔다 — 다음 부팅은 새 부팅이다.
-
-관련 기억은 [[project_shell_tools]](이 자리를 찾은 서브프로젝트) ·
-[[project_shell_memory]](훅을 건 곳) ·
-[[project_terminal_rendering]](vt와 렌더러)이다.
+관련 기억: [project_shell_tools](이 자리를 찾은 서브프로젝트) ·
+[project_shell_memory](훅을 건 곳) ·
+[project_terminal_rendering](vt와 렌더러) ·
+[project_gate_screen_echo](판정 글자를 게스트가 만드는 글자로 두는 이유).

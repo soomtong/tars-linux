@@ -487,24 +487,29 @@ edit_config_in_guest() {
   # — 이 검사를 EDIT 앞에 두었더니 되읽기(`shell=zsh`)가 깨졌다. 판정 하나가
   # 다음 판정을 흔들지 않게 마지막에 둔다. 다음 부팅은 새 부팅이다.
   #
-  # fzf는 --height일 때 터미널에 커서 위치를 묻고(ESC[6n) 답이 올 때까지
-  # 그리지 않는다. 우리 terminal은 vt의 질의 콜백을 하나도 등록하지 않아
-  # 답이 없고, 그래서 Ctrl+R이 첫 누름에 멈췄다 — 다음 키가 그 잠금을 풀어
-  # "두 번 눌러야 열린다"로 보였다(ST-M3 실측: 기본값이면 12초 동안 프레임이
-  # 한 장도 안 늘고, 씨앗이 준 --no-height가 있으면 첫 누름에 뜬다).
+  # fzf는 --height일 때 터미널에 커서 위치를 묻고(ESC[6n) 그 답으로 자기 상자
+  # 높이를 정한다. ST-M3 전까지 우리 terminal이 그 질의에 답하지 않아 첫
+  # Ctrl+R이 멈췄고(다음 키가 그 잠금을 풀어 "두 번 눌러야 열린다"로 보였다),
+  # 그때는 씨앗이 `--no-height`를 줘서 우회했다.
+  #
+  # TQ-M1이 그 우회를 지웠다. 터미널이 이제 답하므로 picker는 기본값 그대로
+  # 뜨고, 이 검사가 재는 것이 "화면 전체짜리 picker"에서 "40% 높이 상자"로
+  # 바뀐다 — 검사 자체는 안 바꾼다(그 검사가 --no-height를 전제하지 않는다).
   #
   # 판정 글자는 picker의 프롬프트 줄(`>`)이다. 히스토리는 이 시점에 몇 줄
   # 있으므로 picker가 그 줄을 그린다.
   type_keys ctrl-r
   if ! wait_for_screen '\| >'; then
     echo "FAIL(boot 1): one Ctrl+R did not open the fzf picker"
-    echo "  씨앗의 FZF_DEFAULT_OPTS 줄이 없으면 fzf가 커서 위치 질의 답을 기다리며"
-    echo "  멈춘다 — picker가 안 뜨고 프레임도 안 늘어난다(ST-M3 실측)."
+    echo "  fzf는 --height일 때 터미널에 커서 위치를 묻고 답이 올 때까지 그리지"
+    echo "  않는다. 답이 안 오면 picker가 안 뜨고 프레임도 안 늘어난다 —"
+    echo "  terminal의 effects.write_pty가 비었거나, 그 답이 pty로 안 나간다"
+    echo "  (TQ-M1. terminal/check.sh의 tq-probe 검사가 그 자리를 본다)."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
   type_keys esc
-  echo "boot 1: one Ctrl+R opened the fzf picker (the seeded --no-height reached it)"
+  echo "boot 1: one Ctrl+R opened the fzf picker (the terminal answered its query)"
 
   exec 3<&-
   exec 3>&-

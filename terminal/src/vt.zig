@@ -90,6 +90,36 @@ fn packRgb(c: ghostty_vt.color.RGB) u32 {
     return (@as(u32, c.r) << 16) | (@as(u32, c.g) << 8) | c.b;
 }
 
+/// `TerminalStream`이 들고 있는 handler의 타입. 라이브러리가 `Handler`를
+/// 공개하지 않아서(`lib_vt.zig`는 `TerminalStream`만 내보낸다) 필드에서
+/// 꺼낸다.
+const Handler = @FieldType(ghostty_vt.TerminalStream, "handler");
+
+/// 자식의 질의에 대한 답을 모아 두는 버퍼의 크기(TQ design 결정 2).
+///
+/// 답 하나는 십여 바이트다 — 커서 위치 보고가 6바이트, 상태 보고가 4바이트.
+/// 이 값이 작은 이유는 `Screen`이 힙에 있고 게스트 메모리가 512MiB이기
+/// 때문이 아니라, 답이 쌓이는 경우가 "프로그램이 질의를 몰아칠 때"뿐이고
+/// 그때도 다음 `feed` 전에 비워지기 때문이다. 넘치면 통째로 버리고
+/// `reply_dropped`를 세므로, 그 수가 0이 아니면 그때 키운다.
+pub const REPLY_MAX = 512;
+
+/// vt의 질의(`ESC[6n` 커서 위치 · `ESC[5n` 상태 보고 등)에 대한 답이
+/// 만들어질 때 라이브러리가 부르는 콜백(TQ design 결정 1).
+///
+/// 답의 내용은 라이브러리 몫이다 — 포맷도, 커서 위치를 읽는 것도 저쪽이다.
+/// 우리 몫은 받은 바이트를 자식에게 돌려주는 일뿐이고, 그 길이
+/// `Screen.reply_buf`다. 이 함수가 도는 자리는 `feed` 안이며, 버퍼에
+/// 복사만 하고 pty에는 쓰지 않는다 — `main.zig`가 `feed` 뒤에 한 번에 쓴다
+/// (design 결정 3).
+fn onWritePty(h: *Handler, bytes: [:0]const u8) void {
+    // `Screen.init`이 `handler.terminal = &self.term`으로 만들었으므로
+    // 여기서 Screen을 되찾을 수 있다. 전역 변수를 두지 않는 이유가
+    // 이것이다(design 결정 "착수 전에 읽은 것" 4).
+    const self: *Screen = @fieldParentPtr("term", h.terminal);
+    self.pushReply(bytes);
+}
+
 /// 터미널 상태를 계속 들고 있는 화면.
 ///
 /// TF-M2의 `parseToCells`는 호출할 때마다 Terminal을 새로 만들고 버렸다.
@@ -259,6 +289,22 @@ pub const Screen = struct {
     hl_spans: std.ArrayListUnmanaged(RowSpan) = .empty,
     hl_stats: HlStats = .{ .spans = 0, .cells = 0, .cur = 0, .us = 0 },
 
+    /// 자식의 질의에 대한 답이 모이는 자리(TQ design 결정 2).
+    ///
+    /// 필드명이 `reply_*`인 것은 `find_*`·`copy_*`와 같은 규율이다 —
+    /// 이 파일에서 접두사가 그 상태를 만지는 자리를 가리킨다.
+    ///
+    /// `reply_buf`에 `undefined`를 두는 것에 뜻이 있다. 답은 한 번 쓰이고
+    /// `takeReplies`가 `reply_len`을 0으로 되돌리므로 옛 바이트를 지울
+    /// 이유가 없다 — 초기화는 한 번도 안 읽히는 바이트를 만드는 일이다.
+    reply_buf: [REPLY_MAX]u8 = undefined,
+    reply_len: usize = 0,
+    /// 버퍼가 꽉 차서 통째로 버린 답의 개수(design 위험 3).
+    ///
+    /// 반쪽 답을 넣지 않는 이유: 자식의 파서는 그 반쪽을 답으로 읽고
+    /// 엉뚱한 자리에 그린다 — "답이 없다"보다 나쁘다.
+    reply_dropped: usize = 0,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -308,6 +354,17 @@ pub const Screen = struct {
         };
         // term이 최종 주소에 자리잡은 뒤에 stream을 만든다.
         self.stream = self.term.vtStream();
+
+        // 질의의 답이 나갈 창구를 채운다(TQ design 결정 1). 라이브러리는
+        // 이 칸이 비어 있으면 답을 아예 만들지 않는다 — 응답 갈래 여럿이
+        // 이 필드를 문지기로 본다(`stream_terminal.zig:186` · `:365` ·
+        // `:523` · `:841` · `:928` · `:966` · `:983`). 그래서 ST-M3 전까지
+        // fzf의 `ESC[6n`에 답이 없었다.
+        //
+        // `self.stream`이 아니라 `self.term.vtHandler()`에도 같은 것을
+        // 넣어야 하지 않나: 아니다. `vtStream()`이 handler를 값으로 복사해
+        // 들고 있고(`stream.zig:477`), `feed`가 쓰는 것은 그 사본이다.
+        self.stream.handler.effects.write_pty = &onWritePty;
         return self;
     }
 
@@ -361,6 +418,39 @@ pub const Screen = struct {
 
         self.copyExit();
         self.copy_pruned = true;
+    }
+
+    /// 자식의 질의에 대한 답을 전부 돌려주고 버퍼를 비운다(TQ design 결정 3).
+    ///
+    /// `main.zig`가 `feed` 바로 뒤에 부르고 그 바이트를 pty에 쓴다. 그 자리가
+    /// 하나뿐인 것에 뜻이 있다 — 질의의 답이 그 뒤에 친 키보다 먼저 나가고,
+    /// pty에 쓰는 주체가 늘지 않는다(design 결정 3).
+    ///
+    /// 돌려주는 슬라이스는 `reply_buf`를 가리킨다. 다음 `feed`가 덮어쓰므로
+    /// 그 사이에만 유효하다 — 답을 붙들고 있을 자리가 없다는 것이 고정
+    /// 버퍼를 고른 값이다(결정 2).
+    pub fn takeReplies(self: *Screen) []const u8 {
+        const out = self.reply_buf[0..self.reply_len];
+        self.reply_len = 0;
+        return out;
+    }
+
+    /// 콜백이 준 답 하나를 버퍼에 넣는다. 자리가 모자라면 통째로 버린다.
+    ///
+    /// 반쪽을 넣으면 자식의 파서가 그 반쪽을 답으로 읽는다. 그것이
+    /// "답이 없다"보다 나쁜 이유는 증상이 조용하기 때문이다 — 커서가 엉뚱한
+    /// 자리에 그려진다.
+    fn pushReply(self: *Screen, bytes: []const u8) void {
+        if (self.reply_len + bytes.len > self.reply_buf.len) {
+            self.reply_dropped += 1;
+            std.debug.print(
+                "terminal: dropped a {d}-byte vt reply (buffer full at {d} bytes)\n",
+                .{ bytes.len, self.reply_len },
+            );
+            return;
+        }
+        @memcpy(self.reply_buf[self.reply_len..][0..bytes.len], bytes);
+        self.reply_len += bytes.len;
     }
 
     /// 지금 선택의 앵커가 screen 좌표로 몇 번째 행에 있는가.

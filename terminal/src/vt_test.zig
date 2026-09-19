@@ -1845,5 +1845,93 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 자리가 모자라면 붙여넣기를 통째로 거절한다 OK\n", .{});
 
+    // ── TQ-M1: 터미널이 자식의 질의에 답하는가 ──────────────────────────
+    //
+    // ST-M3이 찾은 병의 자리다. fzf는 `--height`일 때 커서 위치를 묻고
+    // (`ESC[6n`) 답이 올 때까지 그리지 않는데, 우리가 `effects.write_pty`를
+    // 하나도 등록하지 않아 답이 없었다 — Ctrl+R이 첫 누름에 멈췄다.
+    //
+    // 답의 문자열을 정확히 박지 않는다. 포맷은 라이브러리 몫이라 그것을
+    // 박으면 우리가 아니라 vendored 코드를 검사하게 된다(design 결정 5).
+    // 우리 몫은 "답이 나갔는가"와 "필요 없는 출력에는 안 나가는가"다.
+    const rq = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    defer rq.deinit();
+
+    // 검사 60. 커서 위치 질의(`ESC[6n`)에 커서 위치 보고가 온다.
+    //
+    // 새 화면의 커서는 (0,0)이라 답은 `ESC[1;1R` 6바이트다 — 행·열이
+    // 1부터 세는 것은 CPR의 규약이고, 그 값이 맞는지는 커서를 옮겨
+    // 확인하지 않는다. 값의 정확성은 라이브러리의 몫이다.
+    rq.feed("\x1b[6n");
+    const cpr = rq.takeReplies();
+    if (cpr.len != 6) {
+        std.debug.print("FAIL: 커서 위치 질의의 답이 {d}바이트다(6이어야 한다)\n", .{cpr.len});
+        return error.NoCursorReply;
+    }
+    if (cpr[0] != 0x1b or cpr[1] != '[' or cpr[5] != 'R' or
+        std.mem.indexOfScalar(u8, cpr, ';') == null)
+    {
+        std.debug.print("FAIL: 커서 위치의 답이 CPR 모양이 아니다\n", .{});
+        return error.WrongReplyShape;
+    }
+    std.debug.print("vt_test: 커서 위치 질의에 답이 온다 OK\n", .{});
+
+    // 검사 61. 상태 보고(`ESC[5n`)에도 답이 온다.
+    //
+    // 이 검사가 60과 함께 있어야 "커서 위치 하나만 특별히 처리했다"가
+    // 안 통과한다 — 둘 다 같은 한 칸(`write_pty`)에서 나온다.
+    rq.feed("\x1b[5n");
+    const dsr = rq.takeReplies();
+    if (dsr.len != 4) {
+        std.debug.print("FAIL: 상태 보고의 답이 {d}바이트다(4여야 한다)\n", .{dsr.len});
+        return error.NoStatusReply;
+    }
+    if (dsr[0] != 0x1b or dsr[1] != '[' or dsr[3] != 'n') {
+        std.debug.print("FAIL: 상태 보고의 답이 `ESC[0n` 꼴이 아니다\n", .{});
+        return error.WrongReplyShape;
+    }
+    std.debug.print("vt_test: 상태 보고에도 답이 온다 OK\n", .{});
+
+    // 검사 62. 평범한 출력에는 답이 없다.
+    //
+    // 이 검사가 없으면 "모든 출력마다 답을 만든다"는 고장이 위 둘을 그대로
+    // 통과한다 — 그 고장은 자식이 출력할 때마다 자기 입력에 쓰레기가
+    // 섞이는 것이라 증상이 한참 멀리서 나타난다.
+    rq.feed("hello\r\n");
+    const plain = rq.takeReplies();
+    if (plain.len != 0) {
+        std.debug.print("FAIL: 평범한 출력에 {d}바이트의 답이 생겼다(0이어야 한다)\n", .{plain.len});
+        return error.SpuriousReply;
+    }
+    std.debug.print("vt_test: 평범한 출력에는 답이 없다 OK\n", .{});
+
+    // 검사 63. 버퍼가 꽉 차면 통째로 버린다(design 위험 3).
+    //
+    // 답을 한 번도 안 비우고 질의를 200번 몰아친다. 6바이트짜리 답이
+    // 85개 들어가면 510바이트라 다음 하나가 안 들어간다 — 그때부터는
+    // 반쪽을 넣지 않고 버린다. 반쪽을 넣으면 자식의 파서가 그것을 답으로
+    // 읽어 커서를 엉뚱한 자리에 그린다.
+    var burst: usize = 0;
+    while (burst < 200) : (burst += 1) rq.feed("\x1b[6n");
+    if (rq.reply_dropped == 0) {
+        std.debug.print("FAIL: 200개를 몰아쳤는데 버린 답이 하나도 없다(버퍼가 {d}바이트다)\n", .{vt.REPLY_MAX});
+        return error.NoReplyDrop;
+    }
+    const kept = rq.takeReplies();
+    if (kept.len > vt.REPLY_MAX) {
+        std.debug.print("FAIL: 버퍼에 {d}바이트가 남았다(상한 {d})\n", .{ kept.len, vt.REPLY_MAX });
+        return error.ReplyBufferOverflow;
+    }
+    // 버린 뒤에도 남은 것은 답이므로 남아 있어야 하고, 꺼낸 뒤에는 비어야 한다.
+    if (kept.len == 0) {
+        std.debug.print("FAIL: 몰아친 뒤 남은 답이 0바이트다\n", .{});
+        return error.NoReplyKept;
+    }
+    if (rq.takeReplies().len != 0) {
+        std.debug.print("FAIL: 꺼낸 뒤에도 답이 남아 있다\n", .{});
+        return error.ReplyNotDrained;
+    }
+    std.debug.print("vt_test: 넘치는 답은 통째로 버린다 OK (버린 개수 {d})\n", .{rq.reply_dropped});
+
     std.debug.print("PASS\n", .{});
 }
