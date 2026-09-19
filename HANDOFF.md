@@ -1,15 +1,30 @@
-# HANDOFF: Time Sync(TS)가 닫혔다
+# HANDOFF: Disk Install(DI)이 열렸다 — design만 있고 plan은 아직 없다
 
 ## 지금 어디인가
 
-서브프로젝트 Time Sync(TS)가 2026-09-15에 열려 2026-09-19에 닫혔다. M0(재는
+서브프로젝트 Disk Install(DI)이 2026-09-19에 열렸다. 사용자가 물은 것은 "ISO로
+부팅한 뒤 내장 디스크에 설치해서 USB 없이 뜨게 할 수 있는가"이고, design이
+`docs/superpowers/specs/2026-09-19-tars-disk-install-design.md`에 있다(커밋
+`c9527c1` · `962672d`). 사용자가 design을 읽고 "looks good"이라고 했다. 다음
+할 일은 DI-M0의 plan을 쓰는 것이다(아래 "바로 다음에 할 것"). 코드는 한 줄도
+안 바뀌었고 부팅도 한 번도 안 했다.
+
+⚠ 이 design은 판정을 QEMU 안에서 닫는다. 사용자에게 아직 실기 노트북이 없다 —
+그래서 "실머신 NIC"가 아니라 이것을 골랐다. 실기 판정은 비목표다.
+
+⚠ 사용자가 2026-09-19에 정한 것 셋. 패키지 매니저는 이번에 안 고른다(미룬
+것이지 막힌 것이 아니다 — 전제인 네트워크와 git은 둘 다 서 있다). legacy
+BIOS는 비용을 묻고 나서 비목표로 뒀다(design 비목표 절에 잰 비용이 있다 —
+다시 재지 말 것). 설치된 디스크에는 부트 파일만 갈고 설정은 남긴다(design
+결정 8).
+
+그 앞이 Time Sync(TS)이고 2026-09-15에 열려 2026-09-19에 닫혔다. M0(재는
 것) · M1(우리 코드가 시계를 뛰는 것) · M2(DHCP가 알려 준 서버를 쓰는 것) ·
 M3(사람이 읽는 시각이 되는 것)이다. 게스트가 부팅할 때 SNTP로 묻고
 `clock_settime`으로 시계를 뛰며, 물을 주소는 설정에 적힌 것이든 dhcpcd의
 hook이 적어 준 것이든 둘 다 되고, `tars.conf`의 `timezone=Asia/Seoul`이 그
 시각을 서울 시각으로 보여 준다. `net/check.sh`가 검사 스물넷에 부팅 셋으로
-그것을 매번 확인한다. 다음 할 일은 TS 뒤의 후보를 사용자가 고르는 것이다(아래
-"바로 다음에 할 것").
+그것을 매번 확인한다.
 
 ⚠ M3이 이미지를 다시 구웠다(tzdata). 이 저장소를 새로 받은 사람은
 `docker build -t tars-devcontainer devcontainer/`를 먼저 쳐야 `make_initrd.sh`가
@@ -52,6 +67,46 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
+
+## DI가 한 일 (2026-09-19, design만)
+
+design 하나가 전부다. 확인 아홉 · 결정 열 · 비목표 아홉 · 위험 일곱 ·
+milestone 셋. 부팅은 한 번도 안 했고, 잰 것은 파일 읽기와 컨테이너의
+`apt-cache`·sysroot 목록뿐이다.
+
+무엇을 만드나 — USB로 부팅한 기계에서 `tars-install`을 치면 내장 디스크에
+ISO와 같은 모양이 들어간다. GPT에 파티션 둘(p1 ESP 256MiB FAT32 `TARS-BOOT`
+· p2 1GiB ext2 `tars-config`), 나머지는 비운다. 시스템은 지금처럼 initramfs에서
+돈다. `limine.conf`는 바이트 그대로 복사한다(`boot():`가 ESP에서도 맞는다).
+
+사용자가 고른 것 넷: ISO와 같은 모양(root 파일시스템 없음) · 만드는 것은
+외부 도구 셋(`sfdisk` · `mkfs.vfat` · `mke2fs`) · UX는 "인자 없이 목록, 인자
+주면 계획을 보이고 `YES`"(`--yes`가 건너뛴다) · 설치된 디스크는 부트 파일만
+갱신. Claude가 정한 것 여섯: 파티션 둘에 나머지 비움 · 복사 원본은 부팅
+매체를 ISO9660으로 붙여 `boot/limine/limine.conf` 존재로 알아본다 ·
+`tars-install`은 `init/src/install.zig`의 별도 실행 파일(`storage.zig` 후보를
+같이 쓴다) · `init` 후보에 각 디스크의 p1·p2를 더한다(RM 결정 12를 바꾸고
+안전은 라벨 `tars-`가 지킨다) · 열세번째 체인 `install/check.sh`는
+`machine/check.sh`를 본뜬 OVMF 부팅 셋(설치 → `-cdrom` 없이 뜸 → 갱신 뒤
+표시 파일 생존) · 커널 옵션 다섯(`ISO9660_FS` · `FAT_FS` · `VFAT_FS` ·
+`NLS_CODEPAGE_437` · `NLS_ISO8859_1`).
+
+지금 없는 것(design 확인 3·4·5): 커널에 FAT도 ISO9660도 없다. sysroot에
+`sfdisk`(trixie의 `fdisk` 패키지) · `mke2fs`(`e2fsprogs`) · `mkfs.vfat`
+(`dosfstools`)이 없다 — Dockerfile의 amd64 다운로드 목록에 셋을 더하므로
+M0에서 `docker build`가 다시 돈다. `init`은 디스크 전체만 훑는다.
+
+⚠ 가장 큰 위험(design 위험 1)은 OVMF가 `-cdrom`과 ESP가 있는 NVMe 중 무엇을
+먼저 고르는지 모른다는 것이다. 재는 것으로 안 닫히고 M1의 첫 부팅이 닫는다.
+처방 후보가 위험 1에 셋 적혀 있다.
+
+⚠ `fdisk` 패키지가 라이브러리 여섯을 끌고 온다(위험 7). M0이 세고, 크면
+`sgdisk`와 비교한다 — "외부 도구"까지가 결정이고 어느 도구인지는 M0의
+숫자가 정한다.
+
+같은 날 README의 낡은 줄 둘을 고쳤다(`22bab00`). "네트워크 |
+`CONFIG_NET is not set`"이라 적혀 있던 것이 NW 뒤로 틀렸다 — 지금은
+`CONFIG_NET=y`이고 NIC 드라이버만 `VIRTIO_NET` 하나다.
 
 ## TS가 한 일 (2026-09-15 ~ 09-19, 닫혔다)
 
@@ -778,29 +833,32 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — TS 뒤의 후보를 사용자가 고른다
+## 바로 다음에 할 것 — DI-M0의 plan을 쓴다
 
-TS가 닫혔고 이 저장소에 열린 서브프로젝트가 없다. 후보는 그대로 남아 있다.
+design이 승인됐고 plan이 없다. `superpowers:writing-plans`로
+`docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`를 쓴다. M0은
+재는 것이고 design의 milestone 표가 항목을 정해 두었다.
 
-⚠ 2026-09-19에 사용자가 둘을 정했다. 패키지 매니저는 이번에 안 고른다(전제인
-네트워크와 git은 둘 다 서 있으니 미룬 것이지 막힌 것이 아니다). 그리고 실기
-노트북이 아직 준비되지 않았다 — "실머신 NIC"는 M0이 실기의 `lspci`라 그때까지
-열 수 없고, 열려면 유선 드라이버(e1000e·igc·r8169)를 QEMU 에뮬레이션으로
-먼저 재는 반쪽으로 시작해야 한다. `out/tars.iso`는 하이브리드 ISO라 실기가
-생기면 README의 "실기 노트북에 꽂아 보기" 절대로 `dd`하면 된다. 그날 README의
-네트워크 줄 둘(`CONFIG_NET is not set`이라 적혀 있던 것)을 지금 상태로 고쳤다.
+- 커널 옵션 다섯을 켜고 bzImage 증가를 잰다(`.config` 커밋 메시지에 켜는
+  이유를 각각 적는다 — `project_kernel_config`).
+- Dockerfile의 amd64 목록에 `fdisk:amd64` · `dosfstools:amd64` ·
+  `e2fsprogs:amd64`를 더하고 `docker build`. 딸려 오는 라이브러리를 UT 방식
+  (`ldd`로 세고 `guest_tools.sh`에 한 줄씩)으로 세고 initrd 증가를 잰다.
+  `e2fsprogs`는 `mke2fs` 하나만 싣는다.
+- ISO 볼륨 ID의 기본값을 컨테이너에서 읽는다(design 확인 9).
+- QEMU(OVMF, `machine/check.sh`의 인자)에서 손으로: `-cdrom`이 `/dev/sr0`로
+  ISO9660 마운트되는가 · 빈 NVMe에 `sfdisk` 스크립트 세 줄 → `mkfs.vfat` →
+  `mke2fs`가 되는가 · 파티션 노드가 devtmpfs에 언제 나타나는가(위험 2).
+- 기존 열두 체인 회귀 없음. 실측을 design에 "DI-M0이 실행으로 증명한 것"
+  절로 적는다.
 
-- 패키지 매니저 (2026-09-14의 후보 넷 중 하나. 아직 design이 없다)
-- 실머신 NIC (같은 목록. RM이 UEFI · simpledrm · USB 키보드 · NVMe까지 세웠고
-  NIC는 안 봤다. TS 위험 3의 남은 반쪽 — 실기계의 공유기가 option 42를 주는가 —
-  도 이것 없이는 못 본다)
-- IN이 비목표로 미룬 넷 — UDP · 포트 여럿 · init이 듣는 것 · 실머신에서 포트
-  열기
-- TS가 비목표로 미룬 것 — 시계를 길들이는 것(drift · slew · 재동기화). 그때는
-  우리 코드가 아니라 chrony를 검토한다(TS design 결정 1 · 2의 근거가 그것이다)
+M0에는 `tars-install`도 `install/check.sh`도 없다. 그것은 M1이다.
 
-사용자가 고르면 design부터 쓴다. 지금까지의 모양대로 확인(파일 읽기와 컨테이너
-측정) → 결정 → 비목표 → 위험 → milestone이고, 첫 milestone은 재는 것이다.
+DI 뒤의 후보는 그대로 남아 있다 — 패키지 매니저(이번에 안 고름) · 실머신
+NIC(실기가 생기면. 실기 없이 열려면 유선 드라이버 e1000e·igc·r8169를 QEMU
+에뮬레이션으로 재는 반쪽으로 시작한다) · IN이 미룬 넷 · TS가 미룬 시계
+길들이기(chrony). 실기가 생기면 `out/tars.iso`를 README의 "실기 노트북에
+꽂아 보기" 절대로 `dd`하면 되고, DI가 끝나면 그 뒤에 `tars-install` 한 줄이다.
 
 ## IN을 이어받는 사람이 알아야 할 경계
 
