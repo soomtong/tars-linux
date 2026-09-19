@@ -1,13 +1,19 @@
-# HANDOFF: Time Sync(TS)의 M2가 끝났다
+# HANDOFF: Time Sync(TS)가 닫혔다
 
 ## 지금 어디인가
 
-서브프로젝트 Time Sync(TS)가 2026-09-15에 열렸고 M0(재는 것) · M1(우리 코드가
-시계를 뛰는 것) · M2(DHCP가 알려 준 서버를 쓰는 것)가 끝났다. 게스트가 부팅할
-때 SNTP로 묻고 `clock_settime`으로 시계를 뛰며, 물을 주소는 설정에 적힌 것이든
-dhcpcd의 hook이 적어 준 것이든 둘 다 된다. `net/check.sh`가 검사 스물둘에 부팅
-셋으로 그것을 매번 확인한다. 다음 할 일은 TS-M3 plan을 쓰는 것이다(아래 "바로
-다음에 할 것").
+서브프로젝트 Time Sync(TS)가 2026-09-15에 열려 2026-09-19에 닫혔다. M0(재는
+것) · M1(우리 코드가 시계를 뛰는 것) · M2(DHCP가 알려 준 서버를 쓰는 것) ·
+M3(사람이 읽는 시각이 되는 것)이다. 게스트가 부팅할 때 SNTP로 묻고
+`clock_settime`으로 시계를 뛰며, 물을 주소는 설정에 적힌 것이든 dhcpcd의
+hook이 적어 준 것이든 둘 다 되고, `tars.conf`의 `timezone=Asia/Seoul`이 그
+시각을 서울 시각으로 보여 준다. `net/check.sh`가 검사 스물넷에 부팅 셋으로
+그것을 매번 확인한다. 다음 할 일은 TS 뒤의 후보를 사용자가 고르는 것이다(아래
+"바로 다음에 할 것").
+
+⚠ M3이 이미지를 다시 구웠다(tzdata). 이 저장소를 새로 받은 사람은
+`docker build -t tars-devcontainer devcontainer/`를 먼저 쳐야 `make_initrd.sh`가
+sysroot에서 zoneinfo를 찾는다 — 없으면 `cp -r`이 죽고 그 메시지가 답이다.
 
 ⚠ M2가 TS와 무관한 고장 둘을 이 체인에서 찾아 함께 고쳤다. 검사 11이 커널
 타임스탬프를 드라이버 이름으로 읽던 것과, 검사 14의 배경 리스너가 SIGTTIN으로
@@ -47,7 +53,7 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
 
-## TS가 한 일 (2026-09-15 ~ 09-16, 진행 중)
+## TS가 한 일 (2026-09-15 ~ 09-19, 닫혔다)
 
 | 커밋 | 무엇 |
 |---|---|
@@ -60,7 +66,55 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 | `5bd3ef3` | M1의 HANDOFF |
 | `a2a66db` | TS-M2 plan. design에 없던 결정 여섯을 먼저 정했다 |
 | `0aaaad1` | TS-M2. hook `30-tars-ntp` · `-o ntp_servers` · 자식의 기다림 · 부팅 B와 검사 20·21·22. 그리고 이 체인의 흔들리는 검사 둘 |
-| (이 커밋) | M2의 문서 — design 실측 16~24 · 기억 둘 · 이 HANDOFF |
+| `0e1cd5e` | M2의 문서 — design 실측 16~24 · 기억 둘 · HANDOFF |
+| `e187529` | TS-M3 plan. design에 없던 결정 여섯을 먼저 정했다 |
+| `b4bafa5` | TS-M3. Dockerfile의 tzdata · `make_initrd.sh`의 zoneinfo · 아홉째 키 `timezone` · `TZ` 항목 · 호스트 검사 하나와 검사 23·24 |
+| (이 커밋) | TS를 닫는 문서 — design 실측 25~32와 Status · CLAUDE.md의 표 · 이 HANDOFF |
+
+### TS-M3이 알아낸 것 — 다음 세션이 먼저 읽을 다섯
+
+본문은 design의 "TS-M3이 실행으로 증명한 것" 절에 실측 25~32로 있다. 체인이
+첫 회에 초록이었고 고칠 것은 컴파일 에러 하나였다.
+
+1. glibc는 못 읽는 시간대 이름을 조용히 UTC로 만든다(실측 27). `TZ=Asia/Nowhere`
+   도 디렉터리 `Asia`도 `05Asia`를 찍고 텍스트 파일 `zone.tab`은 `05zone`을
+   찍는다 — 로그 한 줄 없이 틀리는 종류다. 그래서 `resolveTimezone`이 존재가
+   아니라 파일의 첫 넉 자 `TZif`를 본다(M3-B). glibc의 `tzfile.c`가 보는 것과
+   같은 넉 자다.
+2. struct 안의 이름이 파일 최상위의 이름과 겹치면 Zig가 "ambiguous
+   reference"라고 한다(실측 29). `Timezone` 안에서 `parse("UTC")`라고 쓰면
+   `Timezone.parse`와 `config.parse`(설정 전체를 읽는 것) 둘 다에 걸린다.
+   `Timezone.parse("UTC")`로 붙인다.
+3. 같은 소스로 구운 initrd가 회차마다 몇 KB씩 다르다(실측 26). tmpfs의
+   디렉터리 순서가 `find .`의 순서를 바꾸고 gzip이 거기 반응한다. 크기 차이를
+   잴 때는 같은 컨테이너에서 연달아 굽는다 — zoneinfo의 증가분이 그렇게 잰
+   168,774바이트다.
+4. sysroot의 tzdata가 컨테이너 자신의 것과 판이 다르다(실측 25). `apt-get
+   download`는 지금의 후보(2026c)를 받고 `debian:trixie-slim`은 구울 때의
+   것(2026b)을 갖고 있어서 파일 열이 다르다. design 결정 10의 "바이트까지
+   같다"는 같은 판일 때의 말이다.
+5. trixie는 옛 시간대 이름을 `tzdata-legacy`로 갈라 두었다(실측 25).
+   `US/Pacific` · `Japan` · `America/Argentina/ComodRivadavia` 같은 것이고 우리는
+   안 받는다. 현행 이름 중 가장 긴 것이 30글자이고 `TZ_NAME_MAX`가 64다.
+
+### TS-M3이 정한 것 여섯 — design에 없던 것들
+
+본문은 `docs/superpowers/plans/2026-09-19-tars-time-sync-ts-m3.md`의
+"design에 없던 결정 여섯"에 있다.
+
+- M3-A. 값이 `Config` 안의 고정 배열 64바이트에 산다(`config.Timezone`).
+  힙이 없고 `Config`가 값으로 돌려지므로 슬라이스는 댕글링이다.
+- M3-B. "있는지 본다"가 파일의 첫 넉 자 `TZif`를 읽는 것이다(위 1번).
+- M3-C. 그 확인이 `main.zig`의 `resolveTimezone`이고 `resolveShell` 옆이다.
+  순수한 둘(`zoneinfoPath` · `looksLikeTzif`)은 `config.zig`에 있어
+  `config_test`가 본다.
+- M3-D. `environ.zig`는 만들어진 `TZ=` 항목을 인자로 받는다(`tzEntry` ·
+  `withTarsEnv`의 셋째 인자). 그 파일이 `config.zig`를 모른 채 있어야 하기
+  때문이고, 버퍼 크기(80)와 이름 최대(64)의 관계는 `main.zig`의 comptime
+  검사가 못 박는다. `TZ=UTC`도 항상 넣는다.
+- M3-E. 게이트가 `echo tsz=$(date -u +%H)/$(date +%H%Z)` 한 줄을 쳐
+  `tsz=05/14KST`를 본다. `KST`가 파일을 실제로 읽었다는 증거다.
+- M3-F. 새 검사가 부팅 A에 있으면서 번호는 23·24다(20~22는 부팅 B).
 
 ### TS-M2가 알아낸 것 — 다음 세션이 먼저 읽을 다섯
 
@@ -201,6 +255,16 @@ ntp_servers`)을 바이너리에서 확인했다. 그리고 stub의 self-test가
 
 ### TS를 이어받는 사람이 가져다 쓸 것
 
+- M3이 더한 자리 넷. `config.zig`의 `Timezone`·`TZ_NAME_MAX`·`ZONEINFO_DIR`·
+  `zoneinfoPath`·`looksLikeTzif` · `environ.zig`의 `tzEntry`·`TZ_ENTRY_MAX` ·
+  `main.zig`의 `resolveTimezone`·`zoneinfoIsTzif`와 파일 끝의 comptime 검사 ·
+  `make_initrd.sh`의 `cp -r … zoneinfo` 한 줄. 게이트 쪽은 `net/check.sh`의
+  `TZ_NAME`·`TZ_ABBR`·`STUB_HOUR_UTC`·`STUB_HOUR_LOCAL`과 `make_disk.sh`의 둘째
+  인자다.
+- 시간대를 바꾸려는 사람은 `tars.conf`에 `timezone=<IANA 이름>` 한 줄이다.
+  없는 이름이면 부팅 로그에 `tars-init: timezone X has no zoneinfo file at
+  /usr/share/zoneinfo/X, falling back to UTC`가 찍힌다. 게스트에서
+  `ls /usr/share/zoneinfo/Asia`로 이름을 볼 수 있다.
 - 우리 코드가 사는 자리 다섯. `init/src/sntp.zig`(순수 함수 셋과 자식 하나) ·
   `init/src/config.zig`의 `parseIpv4`·`Ntp`·`NTP_ARG_MAX` ·
   `init/src/power.zig`의 `resetToDefault()` · `init/src/main.zig`의
@@ -714,45 +778,21 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — TS-M3 plan을 쓰고 실행한다
+## 바로 다음에 할 것 — TS 뒤의 후보를 사용자가 고른다
 
-TS-M2가 끝났고 남은 milestone이 하나다 — 사람이 읽는 시각으로 보이게 하는
-것. 지금 게스트의 `date`는 UTC를 찍는다.
+TS가 닫혔고 이 저장소에 열린 서브프로젝트가 없다. 후보는 그대로 남아 있다.
 
-design의 "TS-M3 — 사람이 읽는 시각이 된다"가 할 일을 적어 뒀고 결정 8 · 9 ·
-10이 그 모양을 정해 두었다.
+- 패키지 매니저 (2026-09-14의 후보 넷 중 하나. 아직 design이 없다)
+- 실머신 NIC (같은 목록. RM이 UEFI · simpledrm · USB 키보드 · NVMe까지 세웠고
+  NIC는 안 봤다. TS 위험 3의 남은 반쪽 — 실기계의 공유기가 option 42를 주는가 —
+  도 이것 없이는 못 본다)
+- IN이 비목표로 미룬 넷 — UDP · 포트 여럿 · init이 듣는 것 · 실머신에서 포트
+  열기
+- TS가 비목표로 미룬 것 — 시계를 길들이는 것(drift · slew · 재동기화). 그때는
+  우리 코드가 아니라 chrony를 검토한다(TS design 결정 1 · 2의 근거가 그것이다)
 
-M3이 만드는 것 다섯이다.
-
-- `devcontainer/Dockerfile`에 tzdata. 이미지 재빌드가 필요하고 약 42초다
-  (design 위험 6. NW-M2가 같은 비용을 치렀다).
-- `kernel/make_initrd.sh`가 zoneinfo를 넣는다. 확인 8이 전체를 압축 171KB로
-  쟀다 — 도시 목록을 우리가 고르지 않는다는 것이 결정 8이다.
-- `init/src/config.zig`에 아홉째 키 `timezone`. 값을 해석하지 않고
-  `/usr/share/zoneinfo/<값>`이 있는지만 본다. 없으면 로그 한 줄을 찍고 UTC로
-  떨어지고, `..`나 `/`로 시작하는 값은 거른다.
-- `init/src/environ.zig`에 `TZ` 항목(결정 9). `/etc/localtime` 링크는 안
-  만든다 — 길이 둘이면 어긋날 자리가 생긴다.
-- 부팅 A에 검사 하나. 같은 순간의 `date -u`와 `date`가 정해진 만큼 벌어지는
-  것을 본다.
-
-끝 기준: 그 검사가 초록이고 initrd 증가분이 확인 8의 171KB와 맞는다.
-
-M3을 시작하기 전에 볼 것 셋.
-
-1. 검사 19가 `date -u`인 것이 M3을 위한 것이었다(design 결정 7). 시간대를
-   넣어도 그 판정이 안 흔들려야 하고, 그래서 새 검사는 `-u` 없는 쪽을 따로
-   친다.
-2. `environ.zig`는 이미 `PATH`·`XDG_DATA_HOME`과 셸별 히스토리 env를 넣고
-   있고 슬롯이 16개다. 항목을 더하기 전에 그 수를 본다(`environ_test`가
-   같은 수를 검사한다).
-3. 이미지 재빌드는 이 저장소에서 비싼 편에 드는 일이고 RM design 위험 5가
-   그 비용을 적어 두었다. `install_tool`이 sysroot에 파일이 없으면 죽으므로
-   순서가 Dockerfile → 이미지 → `make_initrd.sh`다.
-
-TS가 끝난 뒤의 후보는 그대로 남아 있다 — 패키지 매니저 · 실머신 NIC, 그리고
-IN이 비목표로 미룬 넷(UDP · 포트 여럿 · init이 듣는 것 · 실머신에서 포트
-열기).
+사용자가 고르면 design부터 쓴다. 지금까지의 모양대로 확인(파일 읽기와 컨테이너
+측정) → 결정 → 비목표 → 위험 → milestone이고, 첫 milestone은 재는 것이다.
 
 ## IN을 이어받는 사람이 알아야 할 경계
 
@@ -812,9 +852,34 @@ docker run --rm -v /tmp/ts:/tmp/ts tars-devcontainer bash -c '
 docker run --rm -v "$PWD":/workspace -v /tmp/bb_m0.sh:/tmp/bb_m0.sh:ro \
   -w /workspace tars-devcontainer bash /tmp/bb_m0.sh > /tmp/bb_m0.log 2>&1
 
-# net 체인 단독 (부팅 셋, 검사 스물둘, 약 56초)
+# net 체인 단독 (부팅 셋, 검사 스물넷, 약 58초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash net/check.sh
+
+# 같은 것을 게스트 시리얼 로그를 남기며 (TS-M3). 체인이 mktemp로 컨테이너 /tmp에
+# 쓰고 버리므로, 그 자리를 호스트에 마운트하면 남는다. 로그는 /tmp/tsm3/ct/tmp.*
+mkdir -p /tmp/tsm3/ct
+docker run --rm -v "$PWD":/workspace -v /tmp/tsm3/ct:/tmp -w /workspace \
+  tars-devcontainer bash net/check.sh
+grep -ahE "tars-init: (config shell=|env |timezone)" /tmp/tsm3/ct/tmp.*
+
+# TS-M3. 반사실 — make_initrd.sh에서 zoneinfo cp 줄만 뺀 사본 (부팅 전 호스트
+# 검사에서 죽어야 한다, 약 6초)
+grep -Fv 'cp -r "$SYSROOT/usr/share/zoneinfo" "$WORKDIR/usr/share/"' \
+  kernel/make_initrd.sh > /tmp/tsm3/make_initrd.sh
+chmod +x /tmp/tsm3/make_initrd.sh
+docker run --rm -v "$PWD":/workspace \
+  -v /tmp/tsm3/make_initrd.sh:/workspace/kernel/make_initrd.sh:ro \
+  -w /workspace tars-devcontainer bash net/check.sh
+# 그 뒤 kernel/initrd.cpio가 zoneinfo 없는 판이므로 체인을 한 번 더 돌리거나
+# make_initrd.sh를 다시 돌린다.
+
+# 이미지 재빌드 (Dockerfile을 고쳤을 때. TS-M3에서 49.7초)
+{ time docker build -t tars-devcontainer devcontainer/ ; } 2>&1 | tail -3
+
+# glibc가 못 읽는 시간대 이름에 무엇을 찍는지 (TS-M3 실측 27)
+docker run --rm tars-devcontainer bash -c \
+  'for z in Asia/Seoul Asia/Nowhere Asia zone.tab UTC; do echo "$z: $(TZ=$z date -d @1930367167 +%H%Z)"; done'
 
 # TS-M2. 부팅 B의 반사실 — 심는 줄만 뺀 사본 (검사 21에서 죽어야 한다, 약 2분)
 # 검사 21이 60초를 다 쓰므로 정상 실행보다 오래 걸린다.
@@ -952,8 +1017,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열두 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3 · NW-M3), 3/3. 가장 최근 값은 32분 54.90초다
-(2026-09-16, TS-M2 뒤). 그 앞이 IN-M2 뒤의 31분 51.46초이고 차이가
+HI-M3 · RM-M1 · UT-M3 · NW-M3), 3/3. 가장 최근 값은 32분 58.53초다
+(2026-09-19, TS-M3 뒤). 그 앞이 TS-M2 뒤의 32분 54.90초이고 3.63초 차이다 —
+M3이 `net` 체인에 타이핑 40키와 cpio 목록 한 번을 더했을 뿐이고 잡음 안이다.
+이 판이 `TZ=UTC`가 열한 체인의 블록에 새로 들어간 것을 봤다.
+
+그 앞이 TS-M2 뒤의 32분 54.90초
+(2026-09-16). 그 앞이 IN-M2 뒤의 31분 51.46초이고 차이가
 +1분 03.44초인데, TS가 `net` 체인에 부팅 둘을 얹어 그 체인 단독이 33.889초에서
 56.046초가 됐고 게이트가 그것을 세 번 도니 약 62초다 — 전부 설명되는 값이고
 어차피 잡음(±3분) 안이다.
@@ -973,9 +1043,9 @@ TS는 그 앞에 게이트를 한 판 더 돌렸고 그 판이 `net` 체인에�
 체인 어디에서도 UT-M2가 겪은 증상이 안 나왔다 — 그 실패는 "느려짐"이 아니라
 "안 켜짐"이다(`Kernel panic - System is deadlocked on memory`).
 
-`net/check.sh`는 단독으로 56.046초에 돈다(NW-M1에서 8.954초 · NW-M2에서
+`net/check.sh`는 단독으로 57.5~59.3초에 돈다(NW-M1에서 8.954초 · NW-M2에서
 17.082초 · NW-M3에서 22.911초 · IN-M1에서 27.955초 · IN-M2에서 33.730초 ·
-TS-M1에서 49.223초였다 — 디스크 굽기와 리스 대기, 타이핑, 그리고 TS의 부팅
+TS-M1에서 49.223초 · TS-M2에서 56.046초였다 — 디스크 굽기와 리스 대기, 타이핑, 그리고 TS의 부팅
 둘이 차례로 늘었다). 이 체인이 이제 게이트에서 가장 무거운 축에 든다. 단독
 실행은 아래 "명령 모음"에 있다.
 
@@ -1895,14 +1965,17 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   기다린다(`MAX_TRIES = 30`. 실측 10이 열 번을 봤다). `parseReply`의 검사
   순서가 계약이다(origin이 transmit보다 먼저 — 남의 패킷이 우연히 transmit=0일
   때 로그가 원인을 바꿔 말하지 않게).
-- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 여덟(TS-M1이 `ntp`을
-  더했다. `Ntp`만 enum이 아니라 union이고 값 셋 중 하나가 주소다 —
-  `parseIpv4`가 여기 사는 이유는 import 방향이다). `rcSeed()`가 씨앗 rc를
+- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 아홉(TS-M1이 `ntp`을,
+  TS-M3이 `timezone`을 더했다. `Ntp`는 union이고 값 셋 중 하나가 주소다 —
+  `parseIpv4`가 여기 사는 이유는 import 방향이다. `Timezone`은 배열 64바이트를
+  가진 struct이고 값을 해석하지 않는다 — 모양만 보고 파일은 `main.zig`가 연다). `rcSeed()`가 씨앗 rc를
   담고 `histEntries()`가 셸마다 갈린다(zsh 셋 · bash 둘 · fish 0).
   `histOptionLines()`는 env로는 못 주는 것을 담는다(zsh 한 줄 · 나머지 0) —
   `setopt`를 나르는 환경 변수가 없어서 그 줄만 파일로 간다(SD 확인 1).
 - `environ.zig` — `withTarsEnv`가 커널 envp 블록 뒤에 `PATH` ·
-  `XDG_DATA_HOME` · 히스토리 env를 붙인다.
+  `XDG_DATA_HOME` · `TZ` · 히스토리 env를 붙인다. `TZ` 항목은 `tzEntry`가
+  만들고 `main.zig`가 `resolveTimezone`(파일의 첫 넉 자 `TZif`를 본다) 뒤에
+  넘긴다.
 - `storage.zig` — 설정 디스크를 ext2 라벨 `tars-`로 찾는다(장치 이름이
   아니다, RM).
 - `devices.zig` — 입력 장치를 번호가 아니라 capability로 찾는다. 탐색은 버그

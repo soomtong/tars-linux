@@ -1296,9 +1296,33 @@ git status --short
 CLAUDE.md · HANDOFF) 하나. 구현 커밋의 메시지 첫 줄 후보는
 `Show the time in the zone the config names`.
 
-## 실제로 돌린 것이 이 plan과 갈린 자리
+## 실제로 돌린 것이 이 plan과 갈린 자리 일곱
 
-(실행하면서 채운다. plan을 그대로 밟되 실측이 다르면 실측이 답이다.)
+plan을 그대로 밟되 실측이 다르면 실측이 답이다. 갈린 곳을 적어 둔다.
+
+1. Task 3 Step 4의 `pub const UTC: Timezone = parse("UTC") …`가 컴파일
+   에러였다 — struct 안에서 `parse`가 `Timezone.parse`와 파일 최상위의
+   `parse`(설정 전체를 읽는 것) 둘 다에 걸린다("ambiguous reference").
+   `Timezone.parse("UTC")`로 붙였다(design 실측 29).
+2. Task 1 Step 4의 기대 "넷 다 있다"가 틀렸다. `America/Argentina/
+   ComodRivadavia`는 trixie가 `tzdata-legacy`로 갈라 둔 옛 이름이라 sysroot에
+   없다. 셋이 있었고, `config.zig`의 `TZ_NAME_MAX` 주석이 현행 이름 중 가장 긴
+   30글자 둘을 예로 든다.
+3. 같은 Step의 `cmp`는 `Asia/Seoul`에서 조용했지만 트리 전체는 파일 열이
+   다르다 — sysroot가 받은 tzdata가 2026c이고 컨테이너 자신은 2026b다.
+   design 결정 10의 "바이트까지 같다"가 같은 판일 때의 말이었다(실측 25).
+4. Task 2 Step 3의 initrd 차이를 다른 회차의 두 값을 빼서 재면 잡음이 섞인다 —
+   같은 소스로 구운 initrd가 회차마다 몇 KB씩 다르다. 같은 컨테이너에서
+   연달아 구운 값이 168,774바이트다(실측 26).
+5. Task 6 Step 3이 게스트 로그를 못 본다. 체인이 시리얼 로그를 컨테이너
+   `/tmp`의 mktemp에 두고 컨테이너와 함께 버린다. 컨테이너의 `/tmp`를 호스트
+   디렉터리에 마운트해 한 판 더 돌려서 봤다(실측 28) — 명령 모음에 적어 뒀다.
+6. Task 0 Step 2에서 `UTC`가 파일이 아니라 `Etc/UTC`로 가는 링크이고
+   `localtime -> /etc/localtime`이 게스트에서 끊어진 링크가 되는 것을 봤다.
+   둘 다 동작을 안 바꾸고 `make_initrd.sh`의 주석에 뒤의 것을 적었다.
+7. 실측 27을 쓰며 "파일을 못 읽은 glibc가 무엇을 찍는가"를 컨테이너에서 직접
+   확인했다 — `Asia/Nowhere`와 디렉터리 `Asia`는 `05Asia`, `zone.tab`은
+   `05zone`. 결정 M3-B가 추론이 아니라 실측이 됐다.
 
 ## 이 milestone이 증명하게 될 문장
 

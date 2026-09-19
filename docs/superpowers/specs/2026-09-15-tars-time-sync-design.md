@@ -2,9 +2,9 @@
 
 접두사: TS
 
-Status: 진행 중(2026-09-15). M0과 M1이 끝났고 실측 열다섯이 아래에 있다.
-위험 일곱 중 다섯이 닫혔고(1 · 2 · 4 · 5의 절반 · 7) 하나는 처방이 정해졌다.
-`net/check.sh`가 검사 열아홉에 부팅 둘이다. M2 착수 전.
+Status: 닫혔다(2026-09-19). M0~M3이 끝났고 실측 서른둘이 아래에 있다. 위험
+일곱 중 여섯이 닫혔고(1 · 2 · 4 · 5 · 6 · 7) 위험 3은 처방이 코드에 들어간
+채 실기계의 공유기만 남았다. `net/check.sh`가 검사 스물넷에 부팅 셋이다.
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. 게스트에 주소가 붙는
 것을 세운 문서이고, 아래에서 "NW 실측 N"이라고 부르는 것은 전부 그 문서의
@@ -541,6 +541,10 @@ M1 · M2가 각각 재서 기록한다.
 sysroot에 tzdata가 없으므로 `devcontainer/Dockerfile`을 고쳐야 한다. RM
 design 위험 5와 NW-M2가 같은 비용을 겪었고 약 42초다. M3에서 한 번 친다.
 
+⚠ M3이 쳤다(실측 25). 49.687초였고 sysroot가 받은 tzdata가 2026c라
+컨테이너 자신의 2026b와 파일 열이 다르다 — 결정 10의 "바이트까지 같다"는
+같은 판일 때의 말이고, 출처를 하나로 둔 이유가 그래서 하나 더 생겼다.
+
 ### 위험 7 — `clock_settime`이 이미 떠 있는 프로세스의 타이머를 흔든다
 
 TS-M0이 닫았다(실측 6). 5년을 뛰어도 이미 떠 있던 셸과 dhcpcd가 둘 다
@@ -1068,7 +1072,14 @@ TS는 `net` 체인에 부팅 둘을 얹었을 뿐이다.
 끝 기준: 부팅 B가 초록이고, 그 부팅의 셸이 뜨는 시각이 다른 부팅과 같다.
 반사실로 파일을 안 심은 사본이 그 검사에서 죽는다.
 
-### TS-M3 — 사람이 읽는 시각이 된다
+### TS-M3 — 사람이 읽는 시각이 된다 (끝났다)
+
+⚠ plan이 결정 여섯을 더 정했다 — 값이 `Config` 안의 고정 배열 64바이트에
+사는 것(M3-A) · "있는지 본다"가 파일의 첫 넉 자 `TZif`를 읽는 것(M3-B) · 그
+확인이 `main.zig`의 `resolveShell` 옆에 사는 것(M3-C) · `environ.zig`가
+만들어진 `TZ=` 항목을 인자로 받는 것(M3-D) · 게이트가 `date -u +%H`와
+`date +%H%Z`를 한 줄에 쳐 `05/14KST`를 보는 것(M3-E) · 새 검사가 부팅 A에
+있으면서 번호는 23·24인 것(M3-F).
 
 - `devcontainer/Dockerfile`에 tzdata. 이미지 재빌드.
 - `kernel/make_initrd.sh`가 zoneinfo를 넣는다.
@@ -1077,6 +1088,132 @@ TS는 `net` 체인에 부팅 둘을 얹었을 뿐이다.
 - 부팅 A에 검사 하나 — 같은 순간의 `date -u`와 `date`가 정해진 만큼 벌어진다.
 
 끝 기준: 그 검사가 초록이고 initrd 증가분이 확인 8의 171KB와 맞는다.
+
+## TS-M3이 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-19-tars-time-sync-ts-m3.md`이고 거기서
+design에 없던 결정 여섯(M3-A~M3-F)을 먼저 정했다. 체인이 첫 회에 초록이었고
+고칠 것은 컴파일 에러 하나(struct 안의 `parse`가 파일의 `parse`와 겹친 것)
+뿐이었다. 실측이 여덟이고 마지막이 게이트다.
+
+### 실측 25 — 이미지가 49.687초에 구워졌고 sysroot의 tzdata는 컨테이너보다 한 판 새것이다
+
+`apt-get download tzdata` 한 줄이 sysroot에 `/usr/share/zoneinfo`(2.1M)를
+만들었다. 받은 판이 2026c이고 컨테이너 자신(`debian:trixie-slim`이 구울 때
+들어온 것)은 2026b라 `diff -rq`가 열을 다르다고 말한다 — Casablanca ·
+El_Aaiun · Edmonton · Yellowknife와 `leap-seconds.list` 같은 것들이다.
+`Asia/Seoul`은 617바이트 그대로 같다.
+
+결정 10이 "바이트까지 같다"고 적은 것은 같은 판일 때의 말이었다. 출처를
+하나로 둔 이유가 그래서 하나 더 생겼다 — 게스트에 들어가는 규칙이 어느 판인지를
+`Dockerfile`이 받은 것 하나로 답할 수 있다.
+
+확인 8이 예로 든 `America/Argentina/ComodRivadavia`(32글자)는 trixie가
+`tzdata-legacy`로 갈라 둔 옛 이름이라 sysroot에 없다. 현행 이름 중 가장 긴
+것은 30글자(`America/Argentina/Buenos_Aires` · `America/North_Dakota/New_Salem`)
+이고 `TZ_NAME_MAX`가 64라 어느 쪽이든 든다.
+
+### 실측 26 — initrd가 168,774바이트 늘었다. 확인 8의 171KB와 맞는다
+
+같은 컨테이너에서 zoneinfo 없이 한 번, 있게 한 번 연달아 구운 값이다.
+
+| | 바이트 |
+|---|---|
+| zoneinfo 없이 | 40,567,512 |
+| zoneinfo 있게 | 40,736,286 |
+| 차이 | 168,774 |
+
+확인 8의 174,898은 트리만 `-9`로 눌렀을 때이고 initrd는 `-6`인데도 조금 더
+작다 — 큰 archive 안에서 사전이 이미 차 있기 때문이다. 항목은 509(파일 443 ·
+링크 51 · 디렉터리 15)이고 안 눌린 크기가 624,922바이트다.
+
+연달아 구운 이유가 있다. 같은 소스로 구운 initrd가 회차마다 몇 KB씩 다르다
+(40,735,019 · 40,753,044) — tmpfs의 디렉터리 순서가 `find .`의 순서를 바꾸고
+gzip이 그 순서에 반응한다. 그래서 다른 날 잰 둘을 빼면 잡음이 섞인다.
+
+### 실측 27 — 게스트가 `05Z`를 `14KST`로 찍는다
+
+부팅 A의 화면이다(`net/check.sh` 검사 24).
+
+```
+root@(none) ~# echo tsyear=$(date -u +%Y)
+tsyear=2031
+root@(none) ~# echo tsz=$(date -u +%H)/$(date +%H%Z)
+tsz=05/14KST
+```
+
+`KST`가 나온 것이 `TZif` 파일을 glibc가 실제로 읽었다는 증거다 — 약어는
+파일에만 있고, 파일을 못 읽은 glibc는 `Asia/Seoul`을 POSIX 문자열로 해석하다
+실패해 이름만 그 글자인 UTC를 만든다. 컨테이너에서 같은 시각을 넣어 봤다.
+
+| `TZ` | `date +%H%Z` | 무엇이 일어났나 |
+|---|---|---|
+| `Asia/Seoul` | `14KST` | 파일을 읽었다 |
+| `Asia/Nowhere` | `05Asia` | 파일이 없다. POSIX 해석이 `/`에서 멈췄다 |
+| `Asia` | `05Asia` | 디렉터리다. `access`로는 있다고 나온다 |
+| `zone.tab` | `05zone` | 같은 디렉터리의 텍스트 파일이다. 역시 있다고 나온다 |
+| `UTC` | `05UTC` | 파일 없이도 이름만으로 안다 |
+
+셋째와 넷째 줄이 결정 M3-B의 근거다. 존재만 보면 이 둘이 통과하고, 그때
+게스트는 로그 한 줄 없이 `05Asia` · `05zone`을 찍는다. 넉 자를 보면 둘 다
+`resolveTimezone`이 UTC로 떨어뜨리고 이유를 로그에 남긴다.
+
+### 실측 28 — 부팅 셋의 블록이 예상대로 갈렸다
+
+세 부팅의 로그 줄이다.
+
+```
+config … net=dhcp ntp=dhcp timezone=UTC            env … TZ=UTC          (검사 1~16)
+config … net=dhcp ntp=10.0.2.2 timezone=Asia/Seoul env … TZ=Asia/Seoul   (부팅 A)
+config … net=dhcp ntp=off timezone=UTC             env … TZ=UTC          (부팅 B)
+```
+
+`tars-init: timezone … has no zoneinfo file` 줄은 셋 어디에도 없다. UTC인
+둘은 결정 M3-B대로 파일을 안 열었고, 서울인 하나는 열어서 넉 자를 봤다.
+
+### 실측 29 — `parse`가 struct 안에서 겹친다
+
+plan의 코드가 `Timezone` 안에서 `parse("UTC")`라고 썼고 Zig가 "ambiguous
+reference"라고 했다 — struct의 `Timezone.parse`와 파일 최상위의 `parse`
+(설정 파일 전체를 읽는 것)가 같은 이름이라 struct 안에서는 둘 다 보인다.
+`Timezone.parse("UTC")`로 붙여 풀었다. `Ntp`에 같은 이름의 `parse`가 있는데
+안 걸린 이유는 `Ntp` 안에서 자기 `parse`를 부르는 자리가 없기 때문이다.
+
+### 실측 30 — 반사실이 겨냥한 자리에서 죽었다
+
+`make_initrd.sh`에서 `cp -r … zoneinfo` 한 줄을 뺀 사본을 bind mount로
+덮어 씌워 체인을 돌렸다. 5.885초 만에 부팅 전 호스트 검사에서 죽었다.
+
+```
+FAIL: usr/share/zoneinfo/Asia/Seoul is missing from the initrd
+```
+
+QEMU가 한 번도 안 떴다. 그 검사가 부팅 앞에 있는 값이 이것이다 — 같은 고장이
+검사 23까지 갔다면 1분 뒤에 `TZ=UTC`와 폴백 로그 한 줄을 보고 "파일이 없다"와
+"cp 줄이 빠졌다"와 "경로가 어긋났다" 중 무엇인지를 가려야 했다.
+
+### 실측 31 — 체인 단독이 54.682초에서 57.5~59.3초가 됐다
+
+| 시점 | 체인 단독 |
+|---|---|
+| M3 착수 시점(M2의 56.046초와 잡음 안) | 54.682초 |
+| M3 뒤, 첫 판 | 57.497초 |
+| M3 뒤, 로그를 남기려고 `/tmp`를 마운트한 판 | 59.310초 |
+
+더한 것이 타이핑 약 40키와 호스트 검사의 cpio 목록 한 번이라 3~5초가 설명되는
+값이다. 게이트가 세 번 도니 약 10~15초다.
+
+### 실측 32 — 루트 게이트가 열두 체인 3/3으로 32분 58.53초다
+
+TS-M2 뒤의 32분 54.90초와 3.63초 차이다. 실측 31이 예상한 10~15초보다 작은데
+게이트 잡음이 ±3분이라 어느 쪽으로도 갈렸다고 말하지 않는다. `skipping make`는
+35회로 `12 × 3 − 1` 그대로다.
+
+이 판이 본 것이 하나 더 있다. `TZ=UTC`가 열한 체인의 env 블록에 새로 들어갔고
+설정 로그 줄의 맨 뒤가 `timezone=UTC`가 됐는데, 화면 좌표로 판정하는 체인
+다섯과 `tars-init: env PATH=`·`config shell=`을 grep하는 열 자리가 전부
+초록이다 — "이 키를 안 적은 기계는 한 글자도 안 바뀐다"가 게이트 안에서
+증명됐다.
 
 ## 이 사이클이 증명하게 될 문장
 
