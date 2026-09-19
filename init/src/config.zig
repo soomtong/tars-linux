@@ -550,6 +550,15 @@ pub const Shell = enum {
             \\# 좌표를 밀어 버린다.
             \\type -q zoxide && zoxide init fish | source
             \\type -q fzf && fzf --fish | source
+            \\#
+            \\# 아래 한 줄이 fzf의 --height를 끈다. fzf는 --height일 때 터미널에
+            \\# 커서 위치를 묻고(ESC[6n) 답이 올 때까지 그리지 않는데, 우리
+            \\# terminal이 vt의 질의 콜백을 하나도 등록하지 않아 답이 없다 —
+            \\# 그래서 Ctrl+R이 첫 누름에 멈추고 다음 키가 와야 picker가 떴다
+            \\# (ST-M3 실측: 기본값이면 12초 동안 프레임이 한 장도 안 늘고, 이
+            \\# 줄이 있으면 첫 누름에 뜬다). 대가는 picker가 화면 전체를 쓰는
+            \\# 것이고, 진짜 수리는 terminal이 질의에 답하는 것이다.
+            \\set -gx FZF_DEFAULT_OPTS --no-height
             \\
             ,
             .bash =>
@@ -609,6 +618,15 @@ pub const Shell = enum {
             \\# 화면 좌표를 밀어 버린다.
             \\command -v zoxide >/dev/null && eval "$(zoxide init bash)"
             \\command -v fzf >/dev/null && eval "$(fzf --bash)"
+            \\#
+            \\# 아래 한 줄이 fzf의 --height를 끈다. fzf는 --height일 때 터미널에
+            \\# 커서 위치를 묻고(ESC[6n) 답이 올 때까지 그리지 않는데, 우리
+            \\# terminal이 vt의 질의 콜백을 하나도 등록하지 않아 답이 없다 —
+            \\# 그래서 Ctrl+R이 첫 누름에 멈추고 다음 키가 와야 picker가 떴다
+            \\# (ST-M3 실측: 기본값이면 12초 동안 프레임이 한 장도 안 늘고, 이
+            \\# 줄이 있으면 첫 누름에 뜬다). 대가는 picker가 화면 전체를 쓰는
+            \\# 것이고, 진짜 수리는 terminal이 질의에 답하는 것이다.
+            \\export FZF_DEFAULT_OPTS='--no-height'
             \\
             ,
             .zsh =>
@@ -655,6 +673,15 @@ pub const Shell = enum {
             \\# 화면 좌표를 밀어 버린다.
             \\command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
             \\command -v fzf >/dev/null && eval "$(fzf --zsh)"
+            \\#
+            \\# 아래 한 줄이 fzf의 --height를 끈다. fzf는 --height일 때 터미널에
+            \\# 커서 위치를 묻고(ESC[6n) 답이 올 때까지 그리지 않는데, 우리
+            \\# terminal이 vt의 질의 콜백을 하나도 등록하지 않아 답이 없다 —
+            \\# 그래서 Ctrl+R이 첫 누름에 멈추고 다음 키가 와야 picker가 떴다
+            \\# (ST-M3 실측: 기본값이면 12초 동안 프레임이 한 장도 안 늘고, 이
+            \\# 줄이 있으면 첫 누름에 뜬다). 대가는 picker가 화면 전체를 쓰는
+            \\# 것이고, 진짜 수리는 terminal이 질의에 답하는 것이다.
+            \\export FZF_DEFAULT_OPTS='--no-height'
             \\#
             \\# 아래 한 줄이 히스토리를 명령마다 그 자리에서 파일에 쓴다.
             \\# 이 줄이 없으면 zsh는 셸이 죽으면서 한 번에 쓰는데, 전원 버튼을

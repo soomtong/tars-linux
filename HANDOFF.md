@@ -10,10 +10,18 @@ bash·zsh 것은 없고 gitconfig 심볼릭 링크도 깨져 있다 — 기본�
 `/config/gitconfig` 하나다).
 
 design은 `docs/superpowers/specs/2026-09-19-tars-shell-tools-design.md`,
-plan 셋은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
-`-st-m1.md` · `-st-m2.md`, 기억은
-`docs/decisions/project_shell_tools.md`다. 코드·검사·문서가 커밋
-`918cfbe` 하나로 들어갔다.
+plan 넷은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
+`-st-m1.md` · `-st-m2.md` · `-st-m3.md`, 기억은
+`docs/decisions/project_shell_tools.md`와 `project_terminal_queries.md`다.
+M0~M2는 커밋 `918cfbe`, M3은 그 뒤 커밋이다.
+
+⚠ M3에서 나온 것이 하나 있다. 사용자가 "Ctrl+R이 한 번에 안 열리고 두 번에
+열린다"고 물었는데, 원인은 셸이 아니라 **터미널**이었다 — fzf는 `--height`일 때
+커서 위치를 터미널에 묻고 답이 올 때까지 그리지 않는데, 우리 terminal이 vt의
+질의 콜백을 하나도 등록하지 않아 답이 없다(그래서 두 번째 키가 잠금을 푼다).
+지금은 씨앗이 `FZF_DEFAULT_OPTS --no-height`를 줘서 우회하고, 게이트 1차 부팅이
+"첫 Ctrl+R에 picker가 뜬다"로 지킨다. **진짜 수리(터미널이 질의에 답하기)가
+다음 후보 1순위다** — 잰 값은 `docs/decisions/project_terminal_queries.md`에 있다.
 
 무엇이 섰나. 씨앗 rc 셋이 eza 별칭 넷을 정의한다(`ls`가 eza로 가는 것이
 유일한 셰도다 — 게이트가 치는 자리 셋을 부팅으로 재서 통과시켰다).

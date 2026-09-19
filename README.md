@@ -267,6 +267,12 @@ mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
 지우면 도구가 없는 기계에서 부팅할 때 에러 줄이 찍힌다 — rc를 고치는 사람이
 그 줄을 남겨 둘 이유다.
 
+fzf의 picker는 화면 전체를 쓴다. 우리 터미널이 아직 터미널 질의(커서 위치)에
+답하지 않아서다 — fzf는 `--height`일 때 그 답을 기다리고, 답이 없으면 첫
+Ctrl+R이 멈춘다(두 번째 키가 그 잠금을 푼다). 그래서 씨앗이
+`FZF_DEFAULT_OPTS=--no-height`를 준다. 진짜 수리는 터미널이 질의에 답하는
+것이고 다음 후보다(`docs/decisions/project_terminal_queries.md`).
+
 `tars.conf`에 `shell_config=off`를 적거나 cmdline에 `tars.noconfig`를 주면
 rc가 안 읽히고 훅도 함께 안 걸린다. 그것이 맞는 동작이다 — rc를 끄는
 탈출로가 우리가 더한 것까지 덮어야 한다.

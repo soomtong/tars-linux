@@ -39,6 +39,22 @@ const ALLOWED_ALIAS_NAMES = [_][]const u8{
 /// 역방향(`expectQuietSeed`의 "별칭이 하나도 없다")이 둘 다 만족된다.
 const ALIASED_TOOLS = [_][]const u8{"eza"};
 
+/// 씨앗이 담아도 좋은 환경 변수 줄(ST-M3).
+///
+/// 접두사(`export `)가 아니라 정확한 줄인 이유는 `alias `와 같은 문이 아니다 —
+/// `export A=$(...)` 한 줄이 명령을 숨길 수 있다. SM 결정 6이 훅 줄을 정확
+/// 허용 목록으로 둔 것과 같은 이유이고, 그래서 여기 적히지 않은 줄은 씨앗에
+/// 못 들어간다.
+///
+/// 지금 둘이 있는 이유는 문법이 다르기 때문이다(fish는 `set -gx`,
+/// bash·zsh는 `export`). 하는 일은 같다 — fzf의 `--height`를 꺼서 커서 위치
+/// 질의(`ESC[6n`)를 아예 안 하게 만든다. 우리 terminal이 그 질의에 답하지
+/// 않아서, 이 줄이 없으면 Ctrl+R이 첫 누름에 멈춘다(ST-M3 실측).
+const KNOWN_SEED_ENV = [_][]const u8{
+    "set -gx FZF_DEFAULT_OPTS --no-height",
+    "export FZF_DEFAULT_OPTS='--no-height'",
+};
+
 /// `expectQuietSeed`가 히스토리 옵션 줄을 몇 개까지 셀 수 있는가.
 /// `MAX_HOOK_LINES`와 같은 이유로 상한이 필요하다 — 힙이 없다.
 const MAX_HIST_OPTION_LINES = 4;
@@ -223,12 +239,23 @@ fn expectQuietSeed(sh: config.Shell) !void {
     }
     var lines = std.mem.splitScalar(u8, text, '\n');
     var aliases: usize = 0;
+    var envs: usize = 0;
     while (lines.next()) |raw| {
         const line = std.mem.trim(u8, raw, " \t\r");
         if (line.len == 0) continue;
         if (line[0] == '#') continue;
         if (std.mem.startsWith(u8, line, "alias ")) {
             aliases += 1;
+            continue;
+        }
+        var is_env = false;
+        for (KNOWN_SEED_ENV) |known| {
+            if (!std.mem.eql(u8, line, known)) continue;
+            is_env = true;
+            break;
+        }
+        if (is_env) {
+            envs += 1;
             continue;
         }
         // `startsWith`가 아니라 `eql`이다. 접두사로 보면
@@ -257,6 +284,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
         );
         for (hooks) |hook| std.debug.print("        {s}\n", .{hook});
         for (opts) |opt| std.debug.print("        {s}\n", .{opt});
+        for (KNOWN_SEED_ENV) |env| std.debug.print("        {s}\n", .{env});
         return error.BadSeed;
     }
     // ── 역방향 — 훅이나 옵션 줄을 지우는 것이 통과하지 않게 한다 ────────
@@ -280,6 +308,16 @@ fn expectQuietSeed(sh: config.Shell) !void {
     // 게이트는 그 alias가 있다는 것으로 "셸이 이 파일을 읽었다"를 판정한다.
     if (aliases == 0) {
         std.debug.print("FAIL: the {s} seed defines no alias for the gate to find\n", .{@tagName(sh)});
+        return error.BadSeed;
+    }
+    // ST-M3. 이 줄이 없으면 위의 허용 목록 검사는 "환경 변수 줄이 없다"를
+    // 아무것도 안 보고 통과시킨다 — 그 줄을 지우는 편집이 조용해진다.
+    if (envs == 0) {
+        std.debug.print(
+            "FAIL: the {s} seed carries no fzf option line; Ctrl+R would stall on the\n" ++
+                "      cursor-position query again (ST-M3)\n",
+            .{@tagName(sh)},
+        );
         return error.BadSeed;
     }
     // 씨앗은 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가

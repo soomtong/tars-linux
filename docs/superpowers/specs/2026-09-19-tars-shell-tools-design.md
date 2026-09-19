@@ -3,8 +3,8 @@
 접두사: ST
 
 Status: 열렸다(2026-09-19). 착수 전 프로브를 이미 돌렸고 그 결과가 아래 실측
-절에 있다. 같은 날 M0·M1·M2를 연달아 끝냈다 — "M1·M2가 실행으로 증명한 것"
-절에 있다.
+절에 있다. 같은 날 M0·M1·M2·M3을 연달아 끝냈다 — "M1·M2가 실행으로 증명한
+것"과 "M3가 실행으로 증명한 것" 절에 있다.
 
 관련 문서: `2026-09-11-tars-shell-config-design.md`(SC. 씨앗 rc와 `shell_config`
 탈출로를 세운 문서 — 아래에서 "SC 결정 N"은 그 문서의 것이다) ·
@@ -158,6 +158,31 @@ GIT_AUTHOR_IDENT=root <root@(none).(none)>
 `/tmp/probe/`에 굽는다). 저장소가 지워지면 이 스크립트는 다시 쓴다 — 이
 문서의 실측 절이 그 비용을 다시 안 치르게 하는 자리다.
 
+### 실측 8 — fzf는 커서 위치 질의 답을 기다린다 (그리고 지연이 아니다)
+
+사용자가 물었다 — *"Ctrl+R을 한 번 누르면 안 되고 두 번 누르면 zoxide picker가
+열린다. 이게 맞나"*. 재 보니 셋으로 갈렸다.
+
+1. 묶인 것은 맞다. `bind \cr`이 `bind --preset ctrl-r history-pager` +
+   `bind ctrl-r fzf-history-widget`을 내고, `zoxide init fish | grep bind`는
+   빈 출력이다 — zoxide는 키를 안 건드린다. 열리는 목록도 명령 히스토리다
+   (`1 ll` · `2 la` · `3 ll config/` …). zoxide의 디렉터리 목록이 아니다.
+2. 두 번 눌러야 하는 것은 설계가 아니다. 첫 Ctrl+R은 셸까지 온다(bash의
+   `read -n1`이 `^R`을 받았다). 문제는 그 뒤다.
+3. 원인은 fzf의 `--height`가 요구하는 **커서 위치 질의**다. 우리 terminal은
+   ghostty lib-vt의 콜백을 하나도 등록하지 않아(`terminal/src`에 콜백 등록
+   0개) 그 질의에 답하지 않는다. fzf는 답을 기다리며 멈춘다.
+
+| 조건 | 첫 Ctrl+R 뒤 키를 안 누르고 6~12초 |
+|---|---|
+| 기본값(`--height 40%`) | 프레임이 **한 장도 안 늘어난다** — 멈춰 있다 |
+| `FZF_CTRL_R_OPTS=--no-height` | 프레임 5 → 52, picker가 첫 누름에 뜬다 |
+| 통합 없이 `echo hi \| fzf` | 즉시 뜬다(전체 화면이라 질의가 없다) |
+| `less /config/tars.conf` | 즉시 뜬다 — 그래서 `git log`는 멀쩡하다 |
+| `time fzf --version` | 34ms — 느린 것이 아니라 기다리는 것이다 |
+
+다음 키가 그 잠금을 푸는 것이 "두 번째에 열린다"의 정체다.
+
 ## M1·M2가 실행으로 증명한 것 — 다시 조사하지 말 것
 
 ### 1. 별칭이 도는 것을 게이트가 본다
@@ -216,6 +241,42 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 12체인 × 3회, `FAIL` 0줄. 이번 판은 34분 걸렸는데 그 수를 기준선(16분 01~11초,
 GL-M3)과 견주지 않는다 — 같은 시간에 다른 컨테이너 몇이 함께 돌고 있었다.
 바뀐 것은 게이트 시간이 아니라 무엇을 판정하는가다.
+
+## M3가 실행으로 증명한 것
+
+### 1. 첫 Ctrl+R에 picker가 뜬다 — 그리고 게이트가 그것을 지킨다
+
+`config/check.sh` 1차 부팅 훅의 **맨 끝**이 이 판정이다.
+
+```
+boot 1: one Ctrl+R opened the fzf picker (the seeded --no-height reached it)
+```
+
+검사의 모양이 곧 증명이다 — `type_keys ctrl-r`로 한 번 누르고, **다른 키를
+보내기 전에** `wait_for_screen '\| >'`로 picker의 프롬프트 줄을 기다린다.
+판정 글자가 15초 안에 안 나오면 실패이므로, "다른 키가 잠금을 풀어 줬다"는
+거짓 초록이 성립하지 않는다.
+
+### 2. 이 검사를 훅 끝에 둔 이유도 실측이다
+
+EDIT 되읽기 **앞**에 두었더니 그 되읽기가 깨졌다(`typed the edit but
+/config/tars.conf never read back as shell=zsh`). picker를 닫는 중인 fzf가
+화면을 되돌리는 동안 넣은 키가 fzf로 새는 회차가 있다. 판정 하나가 다음
+판정을 흔들지 않게 마지막에 둔다 — 다음 부팅은 새 부팅이다.
+
+### 3. 루트 게이트
+
+```
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+```
+
+12체인 × 3회, `FAIL` 0줄, 33분. `CP-M2`(config 체인)가 세 번 다 새 검사를
+포함해 돌았고, 다른 체인은 하나도 안 흔들렸다.
+
+### 4. 씨앗의 허용 범주가 하나 늘었다
+
+`KNOWN_SEED_ENV`(정확한 줄 둘)가 `expectQuietSeed`에 들어갔고, 씨앗마다 그런
+줄이 하나도 없으면 실패한다. 그 검사가 없으면 "그 줄을 지우는 편집"이 조용해진다.
 
 ## 결정
 
@@ -323,6 +384,21 @@ GL-M3)과 견주지 않는다 — 같은 시간에 다른 컨테이너 몇이 �
 후보이지만 이 milestone의 질문("깔린 도구를 셸이 쓰는가")에 답하는 데
 필요하지 않다. 다음에 이 서브프로젝트를 여는 사람의 첫 후보로 적어 둔다.
 
+### 9. fzf의 `--height`를 씨앗에서 끈다 — 우회다
+
+씨앗 rc가 `FZF_DEFAULT_OPTS --no-height`를 준다(fish `set -gx`, bash·zsh
+`export`). 그러면 fzf가 커서 위치를 안 묻고 그 자리에서 그린다. 대가는
+picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
+
+우회라는 것을 분명히 해 둔다. 진짜 수리는 `terminal`이 lib-vt의 콜백을
+등록해 답을 pty로 쓰는 것(커서 위치 보고 · DA1/DA2 · 모드·색 질의)이고,
+그것은 이 서브프로젝트의 범위가 아니다 — 다음 후보 1순위로 적어 둔다.
+
+씨앗에 그 줄을 넣는 일은 허용 범주를 하나 늘리는 일이라 새 검사가 필요했다
+(결정 7의 짝). `config_test.zig`의 `KNOWN_SEED_ENV`가 **정확한 줄**로 그 둘을
+적고, 씨앗마다 그런 줄이 하나도 없으면 실패한다 — 접두사로 열면
+`export A=$(...)`가 명령을 숨긴다(SM 결정 6과 같은 이유).
+
 ## 비목표
 
 1. 프롬프트. SC 비목표 5 그대로다. 프롬프트는 게이트의 좌표계이고, 바꾸는
@@ -366,6 +442,7 @@ GL-M3)과 견주지 않는다 — 같은 시간에 다른 컨테이너 몇이 �
 | M0 | 새 줄의 조용함과 eza의 플래그를 잰다. 제품 코드 0줄 | 재는 것 자체가 산출물 |
 | M1 | 셋의 씨앗에 별칭 넷. `config_test.zig`의 이름 목록, `config/check.sh`에 확인 | config·net 체인 |
 | M2 | gitconfig 씨앗 + 게이트 확인 한 줄 | config·tools 체인 |
+| M3 | fzf의 `--height`를 끄고(우회), 첫 Ctrl+R에 picker가 뜨는 것을 게이트가 지킨다 | config 체인 · 루트 게이트 |
 
 ## 바뀌는 파일
 
@@ -374,11 +451,16 @@ GL-M3)과 견주지 않는다 — 같은 시간에 다른 컨테이너 몇이 �
 | `init/src/config.zig` | `rcSeed()` 세 갈래에 별칭 넷 · `GITCONFIG_PATH`/`GITCONFIG_SEED` · 씨앗 함수 일반화 |
 | `init/src/config_test.zig` | 별칭 이름 허용 목록 · gitconfig 씨앗 검사 |
 | `init/src/main.zig` | gitconfig 씨앗 호출(M2) |
-| `config/check.sh` | 별칭이 실제로 정의됐는가 · gitconfig가 깔렸는가 |
+| `config/check.sh` | 별칭이 실제로 정의됐는가 · gitconfig가 깔렸는가 · 첫 Ctrl+R에 picker가 뜨는가 |
 | `README.md` | 기존 디스크가 새 씨앗을 받는 방법 한 줄 |
 | `docs/decisions/project_shell_tools.md` | 세션을 넘는 기억 |
 
 ## 다음
 
-M0의 plan. 그 뒤 M1, M2 순서로 plan을 새로 쓴다(한 milestone이 끝나면 다음
-plan을 그 시점에 쓴다 — 이 저장소의 규칙).
+M0·M1·M2·M3을 끝냈다. 다음 후보 둘.
+
+1. **터미널이 vt 질의에 답한다**(진짜 수리). `terminal`이 lib-vt의 콜백을
+   등록해 커서 위치 보고 · DA1/DA2 · 모드·색 질의에 응답을 쓴다. 그러면
+   fzf가 40% 상자로 돌아오고 결정 9의 씨앗 줄을 지울 수 있다. 잰 값과 증상은
+   `docs/decisions/project_terminal_queries.md`에 있다.
+2. `FZF_DEFAULT_COMMAND=fd …` 같은 나머지 fzf env(D6의 나머지).

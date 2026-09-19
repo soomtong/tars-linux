@@ -452,6 +452,7 @@ edit_config_in_guest() {
   fi
   echo "boot 1: git read init.defaultBranch=main out of the seeded /config/gitconfig"
 
+
   type_keys "${EDIT_KEYS[@]}"
   type_keys "${READBACK_KEYS[@]}"
 
@@ -477,6 +478,33 @@ edit_config_in_guest() {
     return 1
   fi
   echo "boot 1: appended a marker line to the seeded /config/zshrc"
+
+
+  # ── ST-M3: Ctrl+R이 첫 누름에 picker를 여는가 ─────────────────────────
+  #
+  # 이 검사가 이 훅의 마지막인 이유가 있다. picker를 닫은 직후의 셸은 fzf가
+  # 화면을 되돌리는 중이라, 그 위에 명령을 넣으면 키가 fzf로 새는 회차가 있다
+  # — 이 검사를 EDIT 앞에 두었더니 되읽기(`shell=zsh`)가 깨졌다. 판정 하나가
+  # 다음 판정을 흔들지 않게 마지막에 둔다. 다음 부팅은 새 부팅이다.
+  #
+  # fzf는 --height일 때 터미널에 커서 위치를 묻고(ESC[6n) 답이 올 때까지
+  # 그리지 않는다. 우리 terminal은 vt의 질의 콜백을 하나도 등록하지 않아
+  # 답이 없고, 그래서 Ctrl+R이 첫 누름에 멈췄다 — 다음 키가 그 잠금을 풀어
+  # "두 번 눌러야 열린다"로 보였다(ST-M3 실측: 기본값이면 12초 동안 프레임이
+  # 한 장도 안 늘고, 씨앗이 준 --no-height가 있으면 첫 누름에 뜬다).
+  #
+  # 판정 글자는 picker의 프롬프트 줄(`>`)이다. 히스토리는 이 시점에 몇 줄
+  # 있으므로 picker가 그 줄을 그린다.
+  type_keys ctrl-r
+  if ! wait_for_screen '\| >'; then
+    echo "FAIL(boot 1): one Ctrl+R did not open the fzf picker"
+    echo "  씨앗의 FZF_DEFAULT_OPTS 줄이 없으면 fzf가 커서 위치 질의 답을 기다리며"
+    echo "  멈춘다 — picker가 안 뜨고 프레임도 안 늘어난다(ST-M3 실측)."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys esc
+  echo "boot 1: one Ctrl+R opened the fzf picker (the seeded --no-height reached it)"
 
   exec 3<&-
   exec 3>&-

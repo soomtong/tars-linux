@@ -72,4 +72,5 @@
 - [게이트의 화면 판정은 자기가 친 명령도 화면으로 센다](docs/decisions/project_gate_screen_echo.md) — `wait_for_screen`이 로그 전체의 `screen>` 줄을 보므로 판정 글자는 출력에만 있어야 한다(NW-M3, 2026-09-14). 게스트에 배경으로 심는 job은 stdin을 `< /dev/null`로 끊고, 로그에서 찾는 이름은 숫자만으로 되면 안 된다(TS-M2, 2026-09-15)
 - [Guest network](docs/decisions/project_guest_network.md) — `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다; 우리 코드는 링크를 올리고 dhcpcd를 띄우는 두 줄이고 게이트 판정은 SLIRP 안에서 닫힌다(NW-M0~M3, 2026-09-14 종료)
 - [Inbound network](docs/decisions/project_inbound_network.md) — 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다; 판정은 `rc`가 아니라 받은 바이트 수이고 우리 코드는 0줄이다(IN-M0~M2, 2026-09-14 종료)
+- [터미널 질의](docs/decisions/project_terminal_queries.md) — 우리 terminal은 vt의 질의(커서 위치·DA)에 답하지 않는다; fzf의 `--height`가 그 답을 기다리며 멈춰 Ctrl+R이 두 번 눌러야 열렸다(ST-M3, 2026-09-19. 씨앗의 `--no-height`로 우회 중)
 - [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig 씨앗, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
