@@ -12,7 +12,8 @@ bash·zsh 것은 없고 gitconfig 심볼릭 링크도 깨져 있다 — 기본�
 design은 `docs/superpowers/specs/2026-09-19-tars-shell-tools-design.md`,
 plan 셋은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
 `-st-m1.md` · `-st-m2.md`, 기억은
-`docs/decisions/project_shell_tools.md`다.
+`docs/decisions/project_shell_tools.md`다. 코드·검사·문서가 커밋
+`918cfbe` 하나로 들어갔다.
 
 무엇이 섰나. 씨앗 rc 셋이 eza 별칭 넷을 정의한다(`ls`가 eza로 가는 것이
 유일한 셰도다 — 게이트가 치는 자리 셋을 부팅으로 재서 통과시켰다).
