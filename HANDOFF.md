@@ -1,4 +1,4 @@
-# HANDOFF: Disk Install(DI)의 M0 plan이 승인됐다 — 아직 한 Task도 안 밟았다
+# HANDOFF: Disk Install(DI)의 M0이 끝났다 — 손으로 설치한 NVMe에서 USB 없이 떴다. M1은 plan부터
 
 ## 지금 어디인가
 
@@ -7,16 +7,30 @@
 `docs/superpowers/specs/2026-09-19-tars-disk-install-design.md`에 있다(커밋
 `c9527c1` · `962672d`). 같은 날 DI-M0의 plan을
 `docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`에 썼고(커밋
-`27d6861`) 사용자가 읽고 "looks good"이라고 한 뒤 다음 세션으로 넘겼다. 다음
-할 일은 그 plan의 Task 0부터 밟는 것이다(아래 "바로 다음에 할 것"). 코드는
-한 줄도 안 바뀌었고 부팅도 한 번도 안 했다.
+`27d6861`) 사용자가 읽고 "looks good"이라고 했고, 같은 날 다음 세션이 그
+plan을 Task 0부터 10까지 다 밟았다(커밋 `3c0121f` · `e96fccd` · `213a599` ·
+`44bb112`). M0의 답은 design의 "DI-M0이 실행으로 증명한 것" 절(실측 열하나)에
+있다. 다음 할 일은 M1의 plan을 쓰는 것이다(아래 "바로 다음에 할 것").
 
-⚠ plan을 쓰면서 design이 못 본 것 둘이 나왔고 plan 앞머리("design과 달라진
-것 둘, 넓힌 것 하나")에 있다. 켤 커널 옵션이 다섯이 아니라 여섯이다 —
-`CONFIG_BLK_DEV_SR`이 없으면 `-cdrom`이 `/dev/sr0`로 안 보인다. 그리고
-`blkid`·`lsblk`는 sysroot에 바이너리만 있고 `libblkid1`·`libsmartcols1`·
-`libmount1`·`libuuid1`이 Dockerfile 목록에 없다. design 본문은 아직 안 고쳤다 —
-plan의 Task 9가 실측과 함께 고친다.
+M0이 답한 것 — 커널 옵션 여섯이 bzImage를 77,824바이트, 패키지 열이 initrd를
+1,100,550바이트(새 파일 열, 라이브러리 일곱 2,129,864바이트) 키운다.
+`-cdrom`은 `/dev/sr0`로 보이고 ISO9660(Rock Ridge)으로 붙는다. `sfdisk` ·
+`mkfs.vfat` · `mke2fs`가 그대로 먹고 파티션 노드는 즉시 나타난다. 손으로
+넷을 복사한 ESP에서 `-cdrom` 없이 셸까지 4초에 왔고(위험 3 닫힘), ISO와
+설치된 NVMe를 둘 다 물리면 OVMF가 ISO를 고른다(위험 1 닫힘 — 처방이 필요
+없다). ISO 볼륨 ID 기본값은 `ISOIMAGE`다.
+
+⚠ M1이 알아야 할 것 셋. `-cdrom` 없이도 QEMU가 빈 CD 장치를 기본으로 붙여
+`/dev/sr0` 노드가 있다 — 노드 존재로 매체를 판정하면 틀리고 결정 4(파일
+존재)가 맞다(실측 9). `mkfs.vfat`이 iconv 경고 세 줄을 stderr에 찍는다 —
+gconv가 없어 내장 CP850 표를 쓴다는 것이고 결과는 같다(실측 8). `mke2fs`는
+`mke2fs.conf` 없이 조용히 4k 블록으로 만든다 — initrd에 안 실었다(실측 8).
+
+⚠ M0이 이미지를 다시 구웠다(패키지 열). 이 저장소를 새로 받은 사람은
+`docker build -t tars-devcontainer devcontainer/`를 먼저 쳐야 `make_initrd.sh`가
+sysroot에서 `libfdisk.so.1` 등을 찾는다 — 없으면 `make_initrd: cannot resolve`로
+죽고 그 메시지가 답이다. trixie에 `libe2p2`는 없다 — `libext2fs2t64`가
+`libe2p.so.2`까지 싣는다.
 
 ⚠ 이 design은 판정을 QEMU 안에서 닫는다. 사용자에게 아직 실기 노트북이 없다 —
 그래서 "실머신 NIC"가 아니라 이것을 골랐다. 실기 판정은 비목표다.
@@ -77,7 +91,18 @@ design의 결정 1 · 2 · 4 · 8이 그 넷이다.
 ⚠ 2026-09-12에 협업 규칙이 바뀌었다. 이제 구현 파일도 Claude Code가 직접
 넣는다(아래 "협업 방식"). 세션 단위 위임이 아니라 기본값이다.
 
-## DI가 한 일 (2026-09-19, design과 M0 plan)
+## DI가 한 일 (2026-09-19, design · M0 plan · M0)
+
+M0(같은 날, 커밋 넷). `kernel/.config`에 옵션 여섯(`3c0121f` — 손으로 다섯,
+`olddefconfig`가 여덟 줄을 딸려 왔고 그중 `LEGACY_DIRECT_IO`는 `FAT_FS`의
+`select`다) · `devcontainer/Dockerfile`에 패키지 열(`e96fccd`) ·
+`kernel/guest_tools.sh`에 층 7 셋(`213a599`, 목록 72→75) · design의 실측 절
+열하나와 plan의 "실행하면서 달라진 것 둘"(`44bb112`). 수 셋 — bzImage
++77,824 · initrd +1,100,550 · 새 라이브러리 일곱 2,129,864바이트(문턱
+3,000,000 아래라 `sgdisk`는 안 쟀다). 하네스는 부팅 셋(A 설치 · B NVMe만 ·
+C ISO+NVMe)으로 끝났고 D(`bootindex`)는 필요 없었다. 하네스 파일 셋과 로그는
+`/tmp/di/`에 있고 전문은 plan Task 5에 있다. 첫 실행이 `lsblk`의
+`libudev.so.1` 때문에 `make_initrd`에서 죽어 하네스 목록에서 `lsblk`를 뺐다.
 
 design 하나와 M0 plan 하나다. design은 확인 아홉 · 결정 열 · 비목표 아홉 ·
 위험 일곱 · milestone 셋. 부팅은 한 번도 안 했고, 잰 것은 파일 읽기와
@@ -135,12 +160,13 @@ ISO와 같은 모양이 들어간다. GPT에 파티션 둘(p1 ESP 256MiB FAT32 `
 M0에서 `docker build`가 다시 돈다. `init`은 디스크 전체만 훑는다.
 
 ⚠ 가장 큰 위험(design 위험 1)은 OVMF가 `-cdrom`과 ESP가 있는 NVMe 중 무엇을
-먼저 고르는지 모른다는 것이다. 재는 것으로 안 닫히고 M1의 첫 부팅이 닫는다.
-처방 후보가 위험 1에 셋 적혀 있다.
+먼저 고르는지 모른다는 것이었다. M0의 부팅 C가 닫았다 — ISO를 고른다
+(실측 10). 처방은 안 쓴다.
 
-⚠ `fdisk` 패키지가 라이브러리 여섯을 끌고 온다(위험 7). M0이 세고, 크면
-`sgdisk`와 비교한다 — "외부 도구"까지가 결정이고 어느 도구인지는 M0의
-숫자가 정한다.
+⚠ `fdisk` 패키지가 라이브러리 여섯을 끌고 온다(위험 7)고 적었는데 M0이 세니
+initrd에 새로 오는 것은 일곱(`libfdisk` · `libsmartcols` · `libreadline` ·
+`libblkid` · `libuuid` · `libext2fs` · `libe2p`)이고 `libmount`는 안 온다.
+합 2,129,864바이트, 도구는 `sfdisk`(실측 5).
 
 같은 날 README의 낡은 줄 둘을 고쳤다(`22bab00`). "네트워크 |
 `CONFIG_NET is not set`"이라 적혀 있던 것이 NW 뒤로 틀렸다 — 지금은
@@ -871,49 +897,36 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — DI-M0의 plan을 Task 0부터 밟는다
+## 바로 다음에 할 것 — DI-M1의 plan을 쓴다
 
-plan이 `docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`에 있고
-승인됐다. `superpowers:executing-plans`로 이 세션에서 직접 밟는다 — 결과
-로그를 줄 단위로 해석하는 것이 이 저장소의 규칙이라 subagent에 안 넘긴다.
-Task 열하나이고 순서가 있다.
+M0의 실측이 design에 다 있고 M1의 미지수는 없다. `superpowers:writing-plans`로
+`docs/superpowers/plans/2026-09-XX-tars-disk-install-di-m1.md`를 쓰고 사용자
+승인 뒤 밟는다. design의 milestone 표가 M1의 범위다 — `tars-install`의 목록과
+새 설치 · `storage.zig`의 파티션 후보(결정 6) · `-V TARS`(확인 9) · 새 체인
+`install/check.sh`의 부팅 1 · 2. 판정은 "`-cdrom` 없이 뜬 부팅에서 `config
+storage /dev/nvme0n1p2`를 본다"다.
 
-| Task | 무엇 | 시간 |
-|---|---|---|
-| 0 | 기준선. 산출물 바이트 셋과 initrd 파일 목록. `.config` 고정점 확인 | 1분 |
-| 1 | `kernel/.config`에 다섯 줄(`sd`) → 빌드 → `diff` 읽기 → 되접기 → 재빌드 → 커밋 | 2분 |
-| 2 | Dockerfile에 주석 블록과 열한 줄 → `docker build` → sysroot 경로와 `readelf` → 커밋 | 2분 |
-| 3 | `guest_tools.sh`에 세 줄(주석의 괄호를 실측으로 채운다) → initrd → 새 파일 세기 → `tools` 체인 → 커밋 | 3분 |
-| 4 | ISO 볼륨 ID(`xorriso -pvd_info` · `blkid`) | 10초 |
-| 5 | `/tmp/di/`에 파일 셋. 전문이 plan에 글자 그대로 있다 | — |
-| 6 | 하네스. OVMF 부팅 셋(조건부 넷). `run_in_background` | 8~10분 |
-| 7 | 판정 표로 읽고 `verdict.txt`. initrd를 저장소 목록으로 되돌린다 | — |
-| 8 | 루트 게이트. `run_in_background` | 33분 |
-| 9 | design에 실측 절(최소 아홉 + 착수 전의 둘) · 결정 10 · 위험 · `Status:` → 커밋 | — |
-| 10 | HANDOFF | — |
+M1 plan을 쓸 때 실측에서 가져올 것.
 
-⚠ Task 1 Step 2가 `sd`로 다섯 줄을 바꾼다. `FAT_FS`는 손으로 안 적는다 —
-프롬프트가 없어 `olddefconfig`가 지우고 `VFAT_FS`의 `select`가 도로 켠다.
-Step 4의 `diff`에 예상 밖의 줄이 있으면 그것이 실측이다.
+- 부팅 셋의 QEMU 줄은 `/tmp/di/guest.sh`의 `boot_guest`가 그대로 쓸 수 있다
+  (`machine/check.sh`에 NVMe 하나와 `-cdrom`을 더한 것). `-nodefaults`를 안
+  주면 빈 `/dev/sr0`가 늘 있다 — 설치기는 `mount`가 되고 `boot/limine/
+  limine.conf`가 있는가로 판정한다(결정 4). 노드 존재는 아무것도 아니다.
+- `sfdisk` 스크립트 세 줄(`label: gpt` / `size=256MiB, type=uefi, name=TARS-BOOT`
+  / `size=1GiB, type=linux, name=TARS-CONFIG`)이 그대로 먹는다. `--wipe always`
+  포함 3,546ms. 노드는 즉시 — 한정된 기다림(3초·100ms)은 그래도 둔다.
+- `mkfs.vfat -F 32 -n TARS-BOOT`가 stderr에 iconv 경고 세 줄을 찍는다. 그대로
+  보여 줄지 삼킬지는 M1이 정한다. `mke2fs -t ext2 -L tars-config`는 조용하다.
+- 복사 넷은 `cp` 866ms · `sync` 29ms · `umount` 94ms다. 설치기가 `sync`와
+  `umount`까지 하고 `done`을 찍는다(위험 3).
+- 설치 뒤 부팅에서 `init`은 `/dev/vda (label tars-di)` 같은 디스크 전체만 본다
+  — p2를 잡으려면 `storage.zig`가 파티션을 훑어야 한다. 그것이 M1의 코드다.
+- 부팅 C(ISO + 설치된 NVMe)의 게스트는 `sr0`를 `iso9660 ISOIMAGE`로, p1·p2를
+  `vfat TARS-BOOT` · `ext2 tars-config`로 본다 — `tars-install`의 목록이
+  보여 줄 것 그대로다.
 
-⚠ Task 2 Step 1이 패키지 이름 열하나를 trixie에 먼저 묻는다.
-`libreadline8t64`처럼 버전이 박힌 이름이 틀릴 가능성이 가장 크다 — `MISSING`이
-나오면 `apt-cache search`로 찾아 Dockerfile 줄을 고친다.
-
-⚠ Task 3 Step 4의 위험 7 판단 — 새 라이브러리의 푼 크기 합이 3,000,000바이트를
-넘으면 `sgdisk`를 같은 방법으로 재고 둘의 수를 사용자에게 보인다. 넘지
-않으면 `sfdisk`로 간다.
-
-⚠ Task 6의 하네스가 `kernel/initrd.cpio`를 하네스 전용 목록(mount 등 넷이
-든 것)으로 만들어 둔다. Task 7 Step 2가 되돌린다 — 그 전에 initrd로 무엇을
-재면 넷이 섞인다.
-
-⚠ 부팅 B가 셸까지 못 오면 하네스가 거기서 멈춘다. 그것은 "손으로 만든 ESP가
-안 뜬다"이고 M1의 전제가 깨진 것이다 — `/tmp/di/guest-B.log`에서 `Shell>`(EFI
-셸로 떨어졌다)이나 limine `PANIC`을 찾는다.
-
-M0에는 `tars-install`도 `install/check.sh`도 없다. 그것은 M1이다. M1의
-plan은 M0의 실측(특히 위험 1의 답)을 보고 새로 쓴다.
+M1이 `-V TARS`를 주면 실측 6의 `ISOIMAGE`가 바뀐다 — 하네스 `di-probe.sh`의
+판정에 `ISOIMAGE`가 박혀 있지는 않다.
 
 DI 뒤의 후보는 그대로 남아 있다 — 패키지 매니저(이번에 안 고름) · 실머신
 NIC(실기가 생기면. 실기 없이 열려면 유선 드라이버 e1000e·igc·r8169를 QEMU
@@ -949,6 +962,20 @@ QEMU가 그 앞에 길을 낼 수 있다"이다. 그 이상이 아니다 — 실
 ## 명령 모음
 
 ```bash
+# DI-M0. 손 설치 하네스 (OVMF 부팅 셋, 약 2분 30초). 파일 셋의 전문은
+# plans/2026-09-19-tars-disk-install-di-m0.md의 Task 5에 있다 — /tmp/di/에
+# di-probe.sh · guest_tools.sh(저장소 목록 + mount·umount·blkid) · guest.sh.
+docker run --rm -v "$PWD":/workspace -v /tmp/di:/tmp/di \
+  -v /tmp/di/guest_tools.sh:/workspace/kernel/guest_tools.sh:ro \
+  -w /workspace tars-devcontainer bash /tmp/di/guest.sh > /tmp/di/run.log 2>&1
+grep -E "^DIM0:|^=== " /tmp/di/run.log          # 컨테이너 쪽
+perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
+          s/\e[()][AB0]//g; s/\r/\n/g' /tmp/di/guest-A.log > /tmp/di/guest-A.clean
+grep -anE 'DIM0-' /tmp/di/guest-A.clean            # 게스트 쪽 (B·C도 같다)
+# ⚠ 하네스가 kernel/initrd.cpio를 하네스 목록으로 만들어 둔다. 끝나면
+#   make_initrd.sh를 한 번 다시 돌려 되돌린다. debugfs로 seed.img의
+#   di-A.log를 읽는 것은 컨테이너가 끝난 뒤에 한다(직후엔 비어 보인다).
+
 # 호스트 검사 (캐시 삭제도 컨테이너 안에서)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   rm -rf init/.zig-cache init/zig-out; cd init && zig build && zig build test'
@@ -1144,8 +1171,13 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.
 `--platform`을 붙이지 않는다(`project_build_host_arch`).
 
 열두 체인(BF-M4 · TF-M4 · CP-M2 · IP-M2 · PM-M1 · HD-M2 · TR-M2 · CM-M2 ·
-HI-M3 · RM-M1 · UT-M3 · NW-M3), 3/3. 가장 최근 값은 32분 58.53초다
-(2026-09-19, TS-M3 뒤). 그 앞이 TS-M2 뒤의 32분 54.90초이고 3.63초 차이다 —
+HI-M3 · RM-M1 · UT-M3 · NW-M3), 3/3. 가장 최근 값은 33분 13.54초다
+(2026-09-19, DI-M0 뒤). 그 앞이 TS-M3 뒤의 32분 58.53초이고 15.01초 차이다 —
+커널이 바뀌어 첫 회차가 진짜로 빌드했고(증분 20초) initrd가 1.1MB 늘었을
+뿐이며 잡음 안이다. 체인은 하나도 안 늘었다(DI의 체인은 M1).
+
+그 앞이 TS-M3 뒤의 32분 58.53초
+(2026-09-19). 그 앞이 TS-M2 뒤의 32분 54.90초이고 3.63초 차이다 —
 M3이 `net` 체인에 타이핑 40키와 cpio 목록 한 번을 더했을 뿐이고 잡음 안이다.
 이 판이 `TZ=UTC`가 열한 체인의 블록에 새로 들어간 것을 봤다.
 
