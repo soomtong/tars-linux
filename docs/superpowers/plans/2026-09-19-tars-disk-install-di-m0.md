@@ -26,6 +26,20 @@ Tech Stack: bash · QEMU 10.0.11(OVMF · q35 · NVMe · virtio-blk) · util-linu
 
 ---
 
+## 실행하면서 달라진 것 둘 (2026-09-19, 끝난 뒤 적음)
+
+1. Task 2 — trixie에 `libe2p2`가 없다. `libext2fs2t64` 하나가 `libext2fs.so.2`와
+   `libe2p.so.2`를 둘 다 싣는다. 그래서 Dockerfile에 더한 줄은 열하나가 아니라
+   열이다(`libext2fs2`→`libext2fs2t64`, `libe2p2` 삭제). `e2fsprogs`의 의존은
+   `Pre-Depends:`에 있어 Step 1의 `Depends:` 질문에 `logsave`만 나왔다.
+2. Task 5 · 6 — 하네스 전용 `lsblk`가 `libudev.so.1`을 부르고 sysroot에 없어
+   첫 실행이 `make_initrd: cannot resolve`로 죽었다. 측정 스크립트가 `lsblk`를
+   안 쓰므로 하네스 목록에서 뺐다(넷→셋). 저장소 파일은 안 건드린다.
+
+그리고 Task 6 Step 3의 `debugfs` 덤프가 QEMU를 죽인 직후에는 비어 있었다
+(컨테이너가 끝난 뒤 읽으면 있다 — bind mount의 지연). 판정은 Step 4의
+시리얼 `.clean`으로 했고 실측은 design에 있다.
+
 ## design과 달라진 것 둘, 넓힌 것 하나
 
 plan을 쓰기 전에 고칠 자리의 소스를 읽었고 design이 못 본 것이 둘 나왔다.
@@ -84,7 +98,7 @@ M1은 답을 알고 코드를 쓴다. 비용은 OVMF 부팅 둘(3분)이다.
 
 호스트(macOS)에서 친다. 이 Task가 끝나기 전에는 저장소를 한 글자도 안 고친다.
 
-- [ ] Step 1: 디렉터리를 만든다
+- [x] Step 1: 디렉터리를 만든다
 
 ```bash
 mkdir -p /tmp/di
@@ -93,7 +107,7 @@ ls -la /tmp/di
 
 기대: 비어 있다. 이전 세션의 찌꺼기가 있으면 `rm -f /tmp/di/*`로 지운다.
 
-- [ ] Step 2: 지금 HEAD의 산출물을 컨테이너에서 만든다 (약 1분)
+- [x] Step 2: 지금 HEAD의 산출물을 컨테이너에서 만든다 (약 1분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -106,7 +120,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 마지막이 xorriso와 limine의 출력이다. 커널이 실제로 빌드되면 그것도 괜찮다 —
 호스트의 `kernel/build`가 낡았던 것이다.
 
-- [ ] Step 3: 세 산출물의 바이트 수를 적는다
+- [x] Step 3: 세 산출물의 바이트 수를 적는다
 
 ```bash
 stat -f '%N %z' kernel/build/arch/x86/boot/bzImage kernel/initrd.cpio out/tars.iso \
@@ -116,7 +130,7 @@ stat -f '%N %z' kernel/build/arch/x86/boot/bzImage kernel/initrd.cpio out/tars.i
 macOS의 `stat`은 `-f '%N %z'`다(GNU의 `-c '%n %s'`가 아니다). 이 세 수가 이
 milestone의 "전"이다.
 
-- [ ] Step 4: initrd의 파일 목록을 적어 둔다
+- [x] Step 4: initrd의 파일 목록을 적어 둔다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -127,7 +141,7 @@ wc -l /tmp/di/initrd.before.txt
 Task 3이 이 목록과의 차이로 "새로 들어온 파일"을 센다. `Installed-Size`가
 아니라 이것이 우리가 치르는 비용이다(`project_measuring_tool_cost`).
 
-- [ ] Step 5: `.config`가 `olddefconfig`의 고정점인지 본다
+- [x] Step 5: `.config`가 `olddefconfig`의 고정점인지 본다
 
 ```bash
 diff kernel/.config kernel/build/.config && echo "fixed point"
@@ -148,7 +162,7 @@ git commit -m "Record the settings the kernel is actually built with"
 프롬프트가 없어서(`fs/fat/Kconfig:2-3`, `tristate` 뒤에 문자열이 없다) 우리가
 적어도 `olddefconfig`가 지우고 `VFAT_FS`의 `select`가 도로 켠다.
 
-- [ ] Step 1: 다섯 항목에 프롬프트가 있는지 Kconfig에서 본다
+- [x] Step 1: 다섯 항목에 프롬프트가 있는지 Kconfig에서 본다
 
 ```bash
 rg -n -A1 '^config (ISO9660_FS|VFAT_FS|BLK_DEV_SR)$' \
@@ -160,7 +174,7 @@ rg -n -A1 '^config (NLS_CODEPAGE_437|NLS_ISO8859_1)$' kernel/src/linux-6.18.42/f
 기대: 다섯 다 다음 줄이 `tristate "..."`로 문자열이 붙어 있다. 프롬프트가
 있는 항목만 `=y`가 남는다(`project_kernel_config`).
 
-- [ ] Step 2: 다섯 줄을 켠다
+- [x] Step 2: 다섯 줄을 켠다
 
 ```bash
 for o in ISO9660_FS VFAT_FS NLS_CODEPAGE_437 NLS_ISO8859_1 BLK_DEV_SR; do
@@ -172,7 +186,7 @@ rg -n 'CONFIG_(ISO9660_FS|VFAT_FS|NLS_CODEPAGE_437|NLS_ISO8859_1|BLK_DEV_SR)=' k
 기대: 다섯 줄이 `=y`로 나온다. 넷이나 여섯이면 `sd`의 패턴이 한 줄을 못
 찾았거나 두 번 맞은 것이다 — `git diff kernel/.config`로 본다.
 
-- [ ] Step 3: 빌드하고 시간을 잰다 (증분. NW-M0 기준 약 1분 05초)
+- [x] Step 3: 빌드하고 시간을 잰다 (증분. NW-M0 기준 약 1분 05초)
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -184,7 +198,7 @@ tail -3 /tmp/di/build1.log
 기대: `Kernel: arch/x86/boot/bzImage is ready`. 스탬프가 `.config`의 해시를
 보므로 `skipping make`가 나오면 안 된다.
 
-- [ ] Step 4: `olddefconfig`가 무엇을 딸려 왔는지 읽는다
+- [x] Step 4: `olddefconfig`가 무엇을 딸려 왔는지 읽는다
 
 ```bash
 diff kernel/.config kernel/build/.config | tee /tmp/di/config.diff
@@ -202,7 +216,7 @@ Joliet 볼륨 서술자가 있지만 커널은 그것 없이 primary 서술자�
 긴 이름을 읽는다. 부팅 A의 측정 5가 그 이름(`limine.conf`가 `LIMINE.CON;1`이
 아닌 것)을 직접 본다.
 
-- [ ] Step 5: 되접고 다시 빌드해 고정점을 확인한다 (약 20초)
+- [x] Step 5: 되접고 다시 빌드해 고정점을 확인한다 (약 20초)
 
 ```bash
 cp kernel/build/.config kernel/.config
@@ -214,7 +228,7 @@ diff kernel/.config kernel/build/.config && echo "fixed point"
 기대: 둘째 빌드는 해시가 바뀌었으므로 `make`를 다시 돌리지만 고칠 오브젝트가
 없어 빨리 끝나고, `diff`가 비어 `fixed point`가 찍힌다.
 
-- [ ] Step 6: bzImage 증가를 잰다
+- [x] Step 6: bzImage 증가를 잰다
 
 ```bash
 stat -f '%N %z' kernel/build/arch/x86/boot/bzImage | tee -a /tmp/di/after.txt
@@ -223,7 +237,7 @@ grep bzImage /tmp/di/baseline.txt
 
 두 수의 차가 측정 1이다. 바이트 그대로 적는다.
 
-- [ ] Step 7: 더한 줄과 지운 줄을 따로 센다
+- [x] Step 7: 더한 줄과 지운 줄을 따로 센다
 
 ```bash
 git diff --stat
@@ -234,7 +248,7 @@ git diff kernel/.config | grep '^-' | grep -v '^---'
 다섯과 되접기가 옮긴 줄뿐이어야 한다. 그 밖의 `-` 줄이 있으면 무엇인지
 읽고 실측에 적는다.
 
-- [ ] Step 8: 커밋한다
+- [x] Step 8: 커밋한다
 
 ```bash
 git add kernel/.config
@@ -255,7 +269,7 @@ EOF
 
 ## Task 2 — 측정 2: sysroot에 패키지 열하나
 
-- [ ] Step 1: trixie에 그 이름들이 있는지 컨테이너에서 묻는다 (약 30초)
+- [x] Step 1: trixie에 그 이름들이 있는지 컨테이너에서 묻는다 (약 30초)
 
 ```bash
 docker run --rm tars-devcontainer bash -c '
@@ -272,7 +286,7 @@ trixie에서 다른 것이다 — `apt-cache search <이름 앞부분>`으로 �
 Step 2의 그 줄을 고친다. 이름에 버전이 박힌 것(`libreadline8t64`)이 그럴
 가능성이 가장 크다.
 
-- [ ] Step 2: Dockerfile을 고친다
+- [x] Step 2: Dockerfile을 고친다
 
 `devcontainer/Dockerfile`의 두 자리다. 첫째, `ENV AMD64_SYSROOT=` 줄 바로 위
 (TS-M3의 tzdata 주석 블록 뒤)에 이 블록을 더한다.
@@ -316,7 +330,7 @@ Step 2의 그 줄을 고친다. 이름에 버전이 박힌 것(`libreadline8t64`
         libe2p2:amd64 \
 ```
 
-- [ ] Step 3: 더한 줄만 있는지 센다
+- [x] Step 3: 더한 줄만 있는지 센다
 
 ```bash
 git diff --stat
@@ -325,7 +339,7 @@ git diff devcontainer/Dockerfile | grep '^-' | grep -v '^---'
 
 기대: 지운 줄 0. 순수 추가다.
 
-- [ ] Step 4: 이미지를 다시 굽는다 (TS-M3 기준 약 50초, 다운로드가 있어 더 걸릴 수 있다)
+- [x] Step 4: 이미지를 다시 굽는다 (TS-M3 기준 약 50초, 다운로드가 있어 더 걸릴 수 있다)
 
 ```bash
 { time docker build -t tars-devcontainer devcontainer/ ; } \
@@ -336,7 +350,7 @@ grep -iE 'error|E: ' /tmp/di/image.log | head
 
 기대: 시간 세 줄이 찍히고 `grep`이 비어 있다.
 
-- [ ] Step 5: sysroot에 무엇이 어떤 경로로 풀렸는지 본다
+- [x] Step 5: sysroot에 무엇이 어떤 경로로 풀렸는지 본다
 
 ```bash
 docker run --rm tars-devcontainer bash -c '
@@ -365,7 +379,7 @@ docker run --rm tars-devcontainer bash -c '
 찾아 Step 2에 더하고 Step 4부터 다시 한다. `readelf`가 찍는 목록이
 측정 2다 — 그대로 실측에 옮긴다.
 
-- [ ] Step 6: 커밋한다
+- [x] Step 6: 커밋한다
 
 ```bash
 git add devcontainer/Dockerfile
@@ -374,7 +388,7 @@ git commit -m "Stock the sysroot with the three tools that make a disk bootable"
 
 ## Task 3 — 측정 3: 게스트 도구 셋과 initrd 증가
 
-- [ ] Step 1: `kernel/guest_tools.sh`에 층 7을 더한다
+- [x] Step 1: `kernel/guest_tools.sh`에 층 7을 더한다
 
 배열의 닫는 `)` 바로 앞, `usr/bin/kill:usr/bin/kill` 줄 뒤에 이 블록을 넣는다.
 
@@ -402,7 +416,7 @@ git commit -m "Stock the sysroot with the three tools that make a disk bootable"
 괄호 안의 `(바이트)` · `(개)`는 Step 3의 수로 이 Task 안에서 채운다 — 커밋
 전에 남아 있으면 안 된다.
 
-- [ ] Step 2: initrd를 다시 만든다 (약 15초)
+- [x] Step 2: initrd를 다시 만든다 (약 15초)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -415,7 +429,7 @@ grep initrd /tmp/di/baseline.txt
 `cannot resolve <so>`로 죽으면 Task 2 Step 5에서 `없다`였던 것이고 그리로
 돌아간다. 두 수의 차가 측정 3의 바이트다.
 
-- [ ] Step 3: 새로 들어온 파일을 센다
+- [x] Step 3: 새로 들어온 파일을 센다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -442,7 +456,7 @@ initrd를 풀어서 그 안의 파일을 재는 것은 "우리가 치르는 비�
 Task 2 Step 5의 `readelf` 목록에서 "이미 있던 것"을 뺀 수다. `libcom_err.so.2`가
 이미 있던 것이다).
 
-- [ ] Step 4: 위험 7을 판단한다
+- [x] Step 4: 위험 7을 판단한다
 
 새 라이브러리의 푼 크기 합이 3,000,000바이트를 넘으면 같은 방법으로 `sgdisk`를
 잰다.
@@ -460,7 +474,7 @@ docker run --rm tars-devcontainer bash -c '
 결정 3이 "외부 도구"까지이고 어느 도구인지는 이 수가 정한다. 3,000,000을
 안 넘으면 `sfdisk`로 가고 이 Step은 실측에 "재지 않았다, 합이 N이라"로 적는다.
 
-- [ ] Step 5: `tools` 체인만 돌린다 (부팅 하나)
+- [x] Step 5: `tools` 체인만 돌린다 (부팅 하나)
 
 ```bash
 N_BEFORE=$(git show HEAD:kernel/guest_tools.sh | grep -cE '^\s+usr/')
@@ -475,7 +489,7 @@ and all ${N_AFTER} tools the list names`와 `PASS`를 찍는다. 이 체인이
 `guest_tools.sh`를 source해서 initrd 목록을 대조하므로 세 줄이 initrd에
 실제로 들어갔는지를 여기서 본다.
 
-- [ ] Step 6: 더한 줄과 지운 줄을 센다
+- [x] Step 6: 더한 줄과 지운 줄을 센다
 
 ```bash
 git diff --stat
@@ -484,7 +498,7 @@ git diff kernel/guest_tools.sh | grep '^-' | grep -v '^---'
 
 기대: 지운 줄 0. `(바이트)` · `(개)`가 남아 있지 않은지 `rg '\(바이트\)|\(개\)' kernel/guest_tools.sh`로 본다 — 비어야 한다.
 
-- [ ] Step 7: 커밋한다
+- [x] Step 7: 커밋한다
 
 ```bash
 git add kernel/guest_tools.sh
@@ -496,7 +510,7 @@ git commit -m "Carry sfdisk, mkfs.vfat and mke2fs in the initrd"
 부팅이 필요 없다. `make_iso.sh`는 Task 0 Step 2에서 이미 돌았지만 initrd가
 바뀌었으므로 다시 굽는다.
 
-- [ ] Step 1: ISO를 다시 굽고 볼륨 ID를 두 도구로 읽는다
+- [x] Step 1: ISO를 다시 굽고 볼륨 ID를 두 도구로 읽는다
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -517,7 +531,7 @@ stat -f '%N %z' out/tars.iso | tee -a /tmp/di/after.txt
 셋을 만든다. 게스트 쪽 측정 스크립트(설정 디스크에 실린다) · 하네스 전용
 도구 목록(bind mount로 `guest_tools.sh`를 덮는다) · 컨테이너 쪽 하네스.
 
-- [ ] Step 1: `/tmp/di/di-probe.sh`를 만든다
+- [x] Step 1: `/tmp/di/di-probe.sh`를 만든다
 
 호스트에서 이 내용 그대로 쓴다. 게스트의 `/config/di-probe.sh`가 된다.
 
@@ -644,13 +658,13 @@ umount /run/di/iso; p "DIM0-ISOUMOUNT rc=$?"
 p "DIM0-A-END uptime=$(cut -d' ' -f1 /proc/uptime)"
 ```
 
-- [ ] Step 2: 문법을 본다
+- [x] Step 2: 문법을 본다
 
 ```bash
 bash -n /tmp/di/di-probe.sh && echo "syntax ok"
 ```
 
-- [ ] Step 3: 하네스 전용 도구 목록을 만든다
+- [x] Step 3: 하네스 전용 도구 목록을 만든다
 
 저장소의 `guest_tools.sh`에서 닫는 `)`를 떼고 넷을 붙인다. 저장소 파일은
 안 건드린다.
@@ -674,7 +688,7 @@ bash -n /tmp/di/guest_tools.sh && echo "syntax ok"
 것에 기대고 있다 — `tail -1 kernel/guest_tools.sh`가 `)`가 아니면 그만큼
 줄을 더 뗀다.
 
-- [ ] Step 4: `/tmp/di/guest.sh`를 만든다
+- [x] Step 4: `/tmp/di/guest.sh`를 만든다
 
 호스트에서 이 내용 그대로 쓴다. 컨테이너 안에서 돈다.
 
@@ -862,7 +876,7 @@ fi
 echo "=== done ==="
 ```
 
-- [ ] Step 5: 문법을 보고 실행 권한을 준다
+- [x] Step 5: 문법을 보고 실행 권한을 준다
 
 ```bash
 bash -n /tmp/di/guest.sh && echo "syntax ok"
@@ -871,7 +885,7 @@ chmod +x /tmp/di/guest.sh /tmp/di/di-probe.sh
 
 ## Task 6 — 하네스를 돌린다
 
-- [ ] Step 1: 돌린다 (부팅 셋이면 약 8분, 넷이면 약 10분)
+- [x] Step 1: 돌린다 (부팅 셋이면 약 8분, 넷이면 약 10분)
 
 ```bash
 docker run --rm -v "$PWD":/workspace -v /tmp/di:/tmp/di \
@@ -882,7 +896,7 @@ echo "exit=$?"
 
 10분이 Bash 도구의 한도라 `run_in_background`로 돌린다.
 
-- [ ] Step 2: 컨테이너 쪽 관찰을 본다
+- [x] Step 2: 컨테이너 쪽 관찰을 본다
 
 ```bash
 grep -E "^DIM0:|^=== " /tmp/di/run.log
@@ -891,7 +905,7 @@ grep -E "^DIM0:|^=== " /tmp/di/run.log
 기대: `harness tools in initrd: 4` · 부팅마다 `console shell up` · `probe
 finished` · 마지막에 `=== done ===`. `qemu died`나 `never`가 있으면 Step 5로.
 
-- [ ] Step 3: 게스트 쪽 관찰을 본다 — 깨끗한 쪽
+- [x] Step 3: 게스트 쪽 관찰을 본다 — 깨끗한 쪽
 
 ```bash
 sed -n '/^=== probe A/,/^=== boot B/p' /tmp/di/run.log
@@ -899,7 +913,7 @@ sed -n '/^=== probe B/,/^=== boot C/p' /tmp/di/run.log
 sed -n '/^=== probe C/,$p' /tmp/di/run.log
 ```
 
-- [ ] Step 4: 시리얼 로그도 걷어서 둔다
+- [x] Step 4: 시리얼 로그도 걷어서 둔다
 
 ```bash
 for b in A B C D; do
@@ -913,7 +927,7 @@ done
 `/config` 쪽 로그가 비어 있을 때(스크립트가 중간에 죽었을 때) 시리얼 쪽이
 어디까지 갔는지를 말해 준다.
 
-- [ ] Step 5: 실패한 자리가 있으면 원본을 직접 본다
+- [x] Step 5: 실패한 자리가 있으면 원본을 직접 본다
 
 ```bash
 grep -anE 'DIM0-|tars-init|PANIC|Kernel panic|Shell>' /tmp/di/guest-A.clean | head -60
@@ -941,7 +955,7 @@ grep -anE 'DIM0-|tars-init|PANIC|Kernel panic|Shell>' /tmp/di/guest-A.clean | he
 | `DIM0-D-BOOTED-FROM iso` | 처방은 `bootindex=0`이고 M1의 체인이 그것을 쓴다 | D도 `nvme-esp`면 처방 후보가 OVMF_VARS 쪽으로 넘어간다. 사용자에게 보고하고 M1 design을 고친다 |
 | `DIM0-C-SR0 present` · `DIM0-C-P2`에 `LABEL=tars-config` | 부팅 C의 게스트가 매체와 설치된 디스크를 둘 다 본다 — M1의 목록이 볼 것 | |
 
-- [ ] Step 1: 표대로 읽고 갈린 자리를 `/tmp/di/verdict.txt`에 적는다
+- [x] Step 1: 표대로 읽고 갈린 자리를 `/tmp/di/verdict.txt`에 적는다
 
 ```bash
 {
@@ -950,7 +964,7 @@ grep -anE 'DIM0-|tars-init|PANIC|Kernel panic|Shell>' /tmp/di/guest-A.clean | he
 } | tee /tmp/di/verdict.txt
 ```
 
-- [ ] Step 2: initrd를 저장소의 목록으로 되돌린다
+- [x] Step 2: initrd를 저장소의 목록으로 되돌린다
 
 하네스가 `kernel/initrd.cpio`를 하네스 전용 목록으로 만들어 두었다. 게이트는
 체인마다 `make_initrd.sh`를 다시 돌리므로 어차피 덮이지만, 지금 이 파일로
@@ -966,7 +980,7 @@ stat -f '%N %z' kernel/initrd.cpio
 
 ## Task 8 — 회귀 없음: 루트 게이트
 
-- [ ] Step 1: 돌린다 (열두 체인 3/3, TS-M3 뒤 32분 58초)
+- [x] Step 1: 돌린다 (열두 체인 3/3, TS-M3 뒤 32분 58초)
 
 ```bash
 { time docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
@@ -975,7 +989,7 @@ stat -f '%N %z' kernel/initrd.cpio
 
 Bash 도구의 10분 한도를 넘으므로 `run_in_background`로 돌린다.
 
-- [ ] Step 2: 결과를 본다
+- [x] Step 2: 결과를 본다
 
 ```bash
 tail -5 /tmp/di/gate.log; tail -3 /tmp/di/gate.time
@@ -988,7 +1002,7 @@ grep -c PASS /tmp/di/gate.log
 
 ## Task 9 — design에 실측을 적고 커밋한다
 
-- [ ] Step 1: design에 절을 더한다
+- [x] Step 1: design에 절을 더한다
 
 `docs/superpowers/specs/2026-09-19-tars-disk-install-design.md`의 "## Milestone"
 바로 앞에 절을 더한다.
@@ -1006,7 +1020,7 @@ grep -c PASS /tmp/di/gate.log
 실측으로 적고, 확인 3과 확인 4의 문단 끝에 `⚠ DI-M0이 고쳤다(실측 N).`을
 붙인다. TS-M0은 여섯을 재고 plan에 없던 것을 더 적었다.
 
-- [ ] Step 2: design의 결정 10과 위험 절을 고친다
+- [x] Step 2: design의 결정 10과 위험 절을 고친다
 
 결정 10의 제목을 "커널 옵션 여섯을 켠다"로 바꾸고 `BLK_DEV_SR`을 목록에
 더한다. 닫힌 위험에는 `DI-M0이 닫았다(실측 N).`을, 현실이 된 위험에는
@@ -1014,13 +1028,13 @@ grep -c PASS /tmp/di/gate.log
 답과 (D를 돌렸으면) 처방을 적고, milestone 표의 M1 판정 줄에서 "위험 1은
 M1의 첫 부팅이 닫는다"를 지운다.
 
-- [ ] Step 3: `Status:` 줄을 고친다
+- [x] Step 3: `Status:` 줄을 고친다
 
 ```
 Status: 열렸다(2026-09-19). M0이 끝났다(<날짜>) — 실측 절에 있다. M1은 plan부터.
 ```
 
-- [ ] Step 4: 더한 줄과 지운 줄을 따로 센다
+- [x] Step 4: 더한 줄과 지운 줄을 따로 센다
 
 ```bash
 git diff --stat
@@ -1030,7 +1044,7 @@ git diff | grep '^-' | grep -v '^---'
 기대: design 문서 하나. 지운 줄은 결정 10의 제목 · 위험 1의 "M1의 첫 부팅이
 닫는다" 문장 · `Status:` 줄뿐이다.
 
-- [ ] Step 5: 커밋한다
+- [x] Step 5: 커밋한다
 
 ```bash
 git add docs/superpowers/specs/2026-09-19-tars-disk-install-design.md \

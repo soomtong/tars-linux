@@ -2,7 +2,7 @@
 
 접두사: DI
 
-Status: 열렸다(2026-09-19). M0~M2 계획이 아래에 있고 아직 하나도 안 돌렸다.
+Status: 열렸다(2026-09-19). M0이 끝났다(2026-09-19) — 실측 절에 있다. M1은 plan부터.
 
 관련 문서: `2026-09-09-tars-real-machine-design.md`(RM. 하이브리드 ISO와
 `init`의 설정 디스크 훑기를 세운 문서. 아래에서 "RM 결정 N"은 그 문서의
@@ -97,6 +97,9 @@ CONFIG_BLK_DEV_NVME=y  CONFIG_SATA_AHCI=y  CONFIG_USB_STORAGE=y
   Ridge)을 주므로 `ISO9660_FS` 하나면 긴 이름과 퍼미션이 온다. `JOLIET`는
   안 켠다 — Windows용 이름표다.
 
+⚠ DI-M0이 고쳤다(실측 1 · 3). 파일시스템 둘만으로는 안 된다 — `-cdrom`이
+`/dev/sr0`로 보이려면 `BLK_DEV_SR`도 있어야 하고 이것도 꺼져 있었다.
+
 ### 확인 4 — 게스트에 파티션·포맷 도구가 없고, sysroot에도 없다
 
 amd64 sysroot(`/usr/local/amd64-sysroot`)에서 찾은 것.
@@ -125,6 +128,12 @@ initrd에 지금 있는 것은 `libcom_err.so.2` 하나다(git의 krb5 사슬이
 나머지는 M0에서 UT 방식(`ldd`로 세고 `guest_tools.sh`에 한 줄씩)으로 센다.
 `e2fsprogs`는 `mke2fs` 하나만 싣는다 — `fsck`·`debugfs`·`resize2fs`는 이번
 범위에 없다.
+
+⚠ DI-M0이 고쳤다(실측 2 · 4 · 5). 위 표의 "있다" 셋은 바이너리만 있었다 —
+`blkid`·`lsblk`가 부르는 `libblkid1`·`libmount1`·`libsmartcols1`·`libuuid1`이
+sysroot에 없어 게스트에서 돌 수 없는 상태였고, `lsblk`는 그 넷을 채워도
+`libudev1`이 또 없다. 그리고 trixie에 `libe2p2`라는 패키지는 없다 —
+`libext2fs2t64` 하나가 `libext2fs.so.2`와 `libe2p.so.2`를 둘 다 싣는다.
 
 ### 확인 5 — `init`은 디스크 전체만 훑는다 (RM 결정 12)
 
@@ -174,6 +183,8 @@ OVMF · `q35,i8042=off` · `-cdrom ../out/tars.iso` · NVMe 설정 디스크
 적는다. 매체를 이름으로 알아보려면 `-V TARS`를 주는 것이 맞고, 다만 이
 설계의 매체 탐색은 이름이 아니라 파일 존재로 판정하므로(결정 4) `-V`는
 사람이 `blkid`로 알아보기 위한 것이다.
+
+⚠ DI-M0이 읽었다(실측 6). 기본값은 `ISOIMAGE`다.
 
 ## 결정
 
@@ -367,9 +378,13 @@ USB 키보드. 디스크는 매 회 새로 만든다.
 `check.sh`의 `CHAINS`에 `"DI-M2:./install/check.sh"`로 들어간다. M1이 끝나면
 `DI-M1`로 넣고 M2가 이름을 올린다.
 
-### 결정 10 — 커널 옵션 다섯을 켠다 — Claude가 정했다
+### 결정 10 — 커널 옵션 여섯을 켠다 — Claude가 정했다
 
-`ISO9660_FS` · `FAT_FS` · `VFAT_FS` · `NLS_CODEPAGE_437` · `NLS_ISO8859_1`.
+`BLK_DEV_SR` · `ISO9660_FS` · `FAT_FS` · `VFAT_FS` · `NLS_CODEPAGE_437` ·
+`NLS_ISO8859_1`. `BLK_DEV_SR`은 M0의 plan을 쓰다가 찾은 것이다 — ATAPI
+CD-ROM을 블록 장치로 만드는 드라이버이고 이것이 없으면 파일시스템이 있어도
+붙일 노드가 없다(실측 1). 손으로 적는 줄은 다섯이고 `FAT_FS`는 프롬프트가
+없어 `VFAT_FS`의 `select`가 켠다(실측 3).
 `project_kernel_config`의 규율대로 켜는 이유를 각각 `.config`의 커밋 메시지에
 적고, bzImage 증가를 M0에서 잰다. `JOLIET`·`ZISOFS`·`MSDOS_FS`·`EXFAT_FS`는
 안 켠다 — 우리 ISO는 Rock Ridge이고 ESP는 FAT32다.
@@ -414,8 +429,11 @@ USB 키보드. 디스크는 매 회 새로 만든다.
 `tars-install`이 매체를 못 찾아(결정 4) 체인이 죽는다. 처방 후보는
 `-boot order=d`(SeaBIOS 문법이라 OVMF가 무시할 수 있다) 또는 OVMF_VARS에
 부트 순서를 심는 것, 또는 부팅 3에서 NVMe의 ESP를 잠시 다른 컨트롤러 뒤에
-두는 것. M0이 부팅 없이 못 재는 것이라 M1의 첫 실측이 이것이다. 실기에서는
-사용자가 USB를 뽑거나 펌웨어 메뉴에서 고르므로 문제가 아니다.
+두는 것. 실기에서는 사용자가 USB를 뽑거나 펌웨어 메뉴에서 고르므로 문제가
+아니다.
+
+DI-M0이 닫았다(실측 10). ISO와 설치된 NVMe를 둘 다 물린 부팅에서 OVMF는
+ISO를 골랐다 — 처방이 필요 없고 `bootindex`는 재지 않았다.
 
 ### 위험 2 — `sfdisk` 뒤 파티션 노드가 늦게 나타날 수 있다
 
@@ -424,12 +442,20 @@ USB 키보드. 디스크는 매 회 새로 만든다.
 있다. 처방은 HD-M2가 키보드에 쓴 것과 같은 한정된 기다림 — 최대 3초, 100ms
 간격으로 `stat`. 그래도 없으면 멈춘다.
 
+DI-M0이 닫았다(실측 8). `sfdisk`가 돌아온 직후 첫 확인에서 둘 다 있었다 —
+기다림 0회. 한정된 기다림은 그래도 둔다. 비용이 없고 실기의 답은 아직
+모른다.
+
 ### 위험 3 — FAT에 쓴 41MB가 `sync` 전에는 캐시에만 있다
 
 `cp`가 돌아와도 디스크에는 안 갔을 수 있고, 사용자가 전원 버튼을 누르면
 `init`의 종료 경로가 `sync`를 부르는지에 달린다. 설치기가 `umount`
 전에 `sync`를 직접 부르고 `umount`까지 하고 나서야 `done`을 찍는다. 부팅
 2가 그것을 증명한다 — 캐시에만 있었으면 커널이 `bzImage`를 못 읽는다.
+
+DI-M0이 닫았다(실측 9). 손으로 복사한 ESP에서 `-cdrom` 없이 셸까지 4초에
+왔다. `cp`가 866ms, `sync`가 29ms, `umount`가 94ms였다 — `cp`가 이미 대부분을
+디스크에 보냈고 `sync`는 나머지를 치른다.
 
 ### 위험 4 — 도구가 중간에 죽으면 디스크가 반쯤 지워진 채 남는다
 
@@ -451,12 +477,183 @@ M2가 끝나면 루트 게이트 시각을 HANDOFF의 게이트 현황에 적는
 Dockerfile의 amd64 다운로드 목록에 셋이 들어가므로 `docker build`가 다시
 돈다(TS-M3의 tzdata와 같은 종류). HANDOFF에 같은 경고를 남긴다.
 
+⚠ 현실이 됐다(실측 4). 1분 09.74초. 이 저장소를 새로 받은 사람은
+`docker build`부터다.
+
 ### 위험 7 — `fdisk` 패키지가 라이브러리 여섯을 끌고 온다
 
 `libfdisk1`·`libmount1`·`libsmartcols1`·`libncursesw6`·`libreadline8t64`·`libtinfo6`.
 초기 initrd 증가가 몇 MB일 수 있다. M0이 세고, 크면 `sgdisk`(gdisk 패키지 —
 libstdc++·libuuid·libpopt)와 비교한다. 결정 3은 "외부 도구"까지이고 어느
 도구인지는 M0의 숫자가 정한다.
+
+DI-M0이 닫았다(실측 5). 새 라이브러리는 일곱이고 푼 크기 합이 2,129,864
+바이트, initrd 증가가 1,100,550바이트다. `sgdisk`는 재지 않았다 — 합이
+plan이 둔 문턱 3,000,000을 안 넘는다. 도구는 `sfdisk`다.
+
+## DI-M0이 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-19-tars-disk-install-di-m0.md`이고
+하네스 전문이 그 Task 5에 글자 그대로 있다. 커밋 넷 — `kernel/.config`
+(`3c0121f`) · `devcontainer/Dockerfile`(`e96fccd`) · `kernel/guest_tools.sh`
+(`213a599`) · 이 문서. 숫자는 로그에서 그대로 옮겼다.
+
+### 실측 1 — `BLK_DEV_SR`이 없었다 (착수 전, plan을 쓰면서)
+
+`kernel/.config:1165`가 `# CONFIG_BLK_DEV_SR is not set`이었다. `-cdrom`은
+q35의 AHCI에 ATAPI 장치로 붙고 그것을 `/dev/sr0`로 만드는 것이 `sr`이다.
+`ATA`·`SATA_AHCI`·`SCSI`는 RM이 켰고 `sr` 하나가 빠져 있었다 — 확인 3이
+파일시스템만 보고 드라이버를 안 봤다. 그래서 결정 10이 다섯에서 여섯이 됐다.
+
+### 실측 2 — `blkid`·`lsblk`는 바이너리만 있었다 (착수 전)
+
+확인 4가 "있다"고 적은 셋이 부르는 `libblkid1`·`libmount1`·`libsmartcols1`·
+`libuuid1`이 Dockerfile 목록에 없었다. `util-linux:amd64`는 `dmesg` 하나
+때문에 받았고 `dmesg`는 libc만 부르므로 지금까지 아무도 몰랐다.
+`apt-get download`는 의존을 안 따라간다 — 라이브러리는 이름을 적어야 온다.
+
+### 실측 3 — 커널 옵션 여섯이 bzImage를 77,824바이트 키운다 (측정 1)
+
+손으로 다섯 줄을 `=y`로 바꾸고 빌드했다(20.59초 — plan이 잡은 1분 05초보다
+빨랐다). `olddefconfig`가 여덟 줄을 딸려 왔다 — 예상한 일곱(`CDROM=y` ·
+`# JOLIET` · `# ZISOFS` · `FAT_FS=y` · `FAT_DEFAULT_CODEPAGE=437` ·
+`FAT_DEFAULT_IOCHARSET="iso8859-1"` · `# FAT_DEFAULT_UTF8`)에
+`CONFIG_LEGACY_DIRECT_IO=y` 하나가 더 있다. `fs/fat/Kconfig:6`이 `FAT_FS`에
+`select LEGACY_DIRECT_IO`를 건다. 되접은 뒤 재빌드해 고정점을 확인했다.
+
+| | 바이트 |
+|---|---|
+| bzImage 전 | 4,486,144 |
+| bzImage 후 | 4,563,968 |
+| 차 | 77,824 |
+
+### 실측 4 — 패키지는 열하나가 아니라 열이다 (측정 2)
+
+trixie에 `libe2p2`가 없다. `libext2fs2t64` 하나가 `libext2fs.so.2`와
+`libe2p.so.2`를 둘 다 싣는다(`dpkg -c`로 봤다). `e2fsprogs`의 의존은
+`Depends:`가 아니라 `Pre-Depends:`에 있어 plan의 첫 질문이 `logsave` 하나만
+돌려줬다. `libss2`는 안 받았다 — `debugfs`의 것이고 `mke2fs`가 안 부른다
+(아래 `readelf`). 이미지는 1분 09.74초에 구워졌다.
+
+셋이 부르는 것(`readelf -d`, 재귀 전):
+
+| 바이너리 | 바이트 | DT_NEEDED |
+|---|---|---|
+| `usr/sbin/sfdisk` | 162,184 | libfdisk.so.1 · libsmartcols.so.1 · libtinfo.so.6 · libreadline.so.8 · libc.so.6 |
+| `usr/sbin/mkfs.fat` | 64,352 | libc.so.6 |
+| `usr/sbin/mke2fs` | 146,000 | libext2fs.so.2 · libcom_err.so.2 · libblkid.so.1 · libuuid.so.1 · libe2p.so.2 · libc.so.6 |
+
+`libfdisk.so.1`이 `libuuid.so.1`·`libblkid.so.1`을 부르고 `libmount`는 안
+부른다. `mkfs.vfat -> mkfs.fat`, `mkfs.ext2 -> mke2fs`가 심볼릭 링크다.
+sysroot에 `etc/mke2fs.conf`(813바이트)가 왔지만 initrd에는 안 싣는다 — 실측
+8이 그것 없이 어떻게 되는지를 봤다.
+
+### 실측 5 — initrd가 1,100,550바이트 늘고 새 파일이 열이다 (측정 3)
+
+| | 바이트 |
+|---|---|
+| initrd 전 | 40,735,276 |
+| initrd 후 | 41,835,826 |
+| 차 | 1,100,550 |
+
+새 파일 열 — 도구 셋과 라이브러리 일곱. 푼 크기다.
+
+| 파일 | 바이트 |
+|---|---|
+| lib/x86_64-linux-gnu/libfdisk.so.1 | 526,520 |
+| lib/x86_64-linux-gnu/libext2fs.so.2 | 446,800 |
+| lib/x86_64-linux-gnu/libblkid.so.1 | 396,256 |
+| lib/x86_64-linux-gnu/libreadline.so.8 | 362,728 |
+| lib/x86_64-linux-gnu/libsmartcols.so.1 | 313,496 |
+| lib/x86_64-linux-gnu/libe2p.so.2 | 45,016 |
+| lib/x86_64-linux-gnu/libuuid.so.1 | 39,048 |
+| usr/bin/sfdisk | 162,184 |
+| usr/bin/mke2fs | 146,000 |
+| usr/bin/mkfs.vfat | 64,352 |
+| 라이브러리 일곱 | 2,129,864 |
+| 열 전부 | 2,502,400 |
+
+`libmount`는 안 왔다(위 실측 4). `libtinfo`·`libcom_err`는 이미 있었다.
+위험 7의 문턱(3,000,000)을 안 넘어 `sgdisk`는 안 쟀다. `tools` 체인이
+목록 72→75로 PASS.
+
+하네스가 덤으로 찾은 것 — `lsblk`는 `libudev.so.1`을 부르고 그것은
+`libudev1` 패키지에 있어 sysroot에 없다. 하네스 전용 목록에서 `lsblk`를
+뺐다(측정 스크립트가 안 쓴다). 저장소에는 원래 안 들어가는 것이라 고칠
+것이 없다.
+
+### 실측 6 — ISO 볼륨 ID의 기본값은 `ISOIMAGE`다 (측정 4)
+
+`xorriso -pvd_info`의 `Volume Id`와 `blkid`의 `LABEL`이 같다. `UUID`는
+굽는 시각(`2026-09-19-03-55-02-00`)이고 `PTTYPE=dos`(하이브리드의 보호
+MBR)다. ISO는 49,463,296에서 50,640,896으로 1,177,600바이트 늘었다.
+
+### 실측 7 — `-cdrom`이 `/dev/sr0`로 보이고 ISO9660으로 붙는다 (측정 5)
+
+부팅 A(ISO + 빈 NVMe). `/proc/filesystems`에 `ext2 vfat iso9660`. dmesg에
+`sr 2:0:0:0: [sr0] scsi3-mmc drive` · `cdrom: Uniform CD-ROM driver Revision:
+3.20` · `Attached scsi CD-ROM sr0`. `blkid`가 `TYPE=iso9660 LABEL=ISOIMAGE`.
+`mount -t iso9660 -o ro`가 rc 0이고 최상위가 `EFI boot boot.catalog`, 넷의
+이름이 Rock Ridge 그대로(`boot/limine/limine.conf`, `LIMINE.CON;1`이 아니다)
+이며 크기가 하네스 ISO의 것과 같다(bzImage 4,563,968 · initrd.cpio 42,169,589
+· limine.conf 908 · BOOTX64.EFI 348,160). isofs는 dmesg에 아무 말도 안 한다.
+빈 NVMe에 `blkid -p`는 빈 문자열을 돌려준다 — 설치기의 "빈 디스크" 판정이
+기댈 수 있는 모양이다.
+
+### 실측 8 — `sfdisk` → `mkfs.vfat` → `mke2fs`가 그대로 먹는다 (측정 6 · 7)
+
+| 단계 | rc | ms |
+|---|---|---|
+| `sfdisk --wipe always` (세 줄 스크립트) | 0 | 3,546 |
+| p1·p2 노드 | 첫 확인에서 있었다 | 0회 기다림 |
+| `mkfs.vfat -F 32 -n TARS-BOOT` | 0 | 156 |
+| `mke2fs -t ext2 -L tars-config` | 0 | 4,188 |
+| `mount -t vfat` | 0 | |
+
+`sfdisk`는 `type=uefi`·`type=linux` 별칭을 알아듣고 `C12A7328-…`·
+`0FC63DAF-…`를 썼다. `sfdisk --dump`에 `name="TARS-BOOT"` ·
+`name="TARS-CONFIG"`. 3.5초는 `Syncing disks.`까지 잰 것이다.
+
+`mkfs.vfat`이 경고 셋을 찍는다 — `Cannot initialize conversion from codepage
+850 to ANSI_X3.4-1968: Invalid argument`(반대 방향 하나 더) · `Using internal
+CP850 conversion table`. 게스트에 iconv의 gconv 모듈이 없고 로캘이 C라
+라벨 변환에 내장 표를 쓴 것이다. 라벨이 ASCII라 결과는 같다. M1이
+stderr를 그대로 보여 주면 이 세 줄이 사용자 눈에 띈다.
+
+`mke2fs`는 `mke2fs.conf` 없이 조용하다 — 언급 0줄. 내장 기본값으로 4k 블록
+262,144개 · inode 65,536개를 만들었다. `blkid`가 p1을 `TYPE=vfat
+LABEL=TARS-BOOT`, p2를 `TYPE=ext2 LABEL=tars-config`로 읽는다. vfat 마운트
+뒤 dmesg에 codepage·iocharset 줄이 없다 — NLS 둘이 든 것이다.
+
+### 실측 9 — 손으로 만든 ESP에서 `-cdrom` 없이 뜬다 (측정 8)
+
+부팅 A가 넷을 복사했다 — `cp` 866ms, `sync` 29ms, `umount` 94ms.
+`limine.conf`는 표지 ` tars.di=esp`가 붙어 908에서 920바이트가 됐다.
+
+부팅 B(NVMe만). `efi: EFI v2.7 by Debian distribution of EDK II`, 콘솔 셸까지
+4초, cmdline에 `tars.di=esp` — ESP의 `limine.conf`로 떴다. 설정 저장소는
+`/dev/vda (label tars-di)`다. `init`이 아직 파티션을 안 보므로 p2를 못 잡는
+것이 맞다(결정 6은 M1).
+
+부팅 B에서 `/dev/sr0`가 `present`인데 `blkid`는 빈 문자열이다. `-cdrom`을
+안 줘도 QEMU가 빈 CD-ROM 장치를 기본으로 붙인다(`-nodefaults`를 안 준다).
+노드가 있다고 매체가 있는 것이 아니다 — 결정 4가 파일 존재로 판정하는
+것이 맞고, M1은 `sr0`가 있다는 것으로 아무것도 결론짓지 않는다.
+
+### 실측 10 — OVMF는 ISO를 먼저 고른다 (측정 9)
+
+부팅 C(ISO + 설치된 NVMe). cmdline에 `tars.di=esp`가 없다 — ISO로 떴다.
+게스트가 `sr0`를 `TYPE=iso9660 LABEL=ISOIMAGE`로, p1·p2를 실측 8과 같은
+라벨로 본다 — M1의 목록이 볼 것 그대로다. 위험 1이 닫혔고 부팅 D
+(`bootindex=0`)는 안 돌렸다. OVMF가 왜 그 순서인지는 안 캤다 — 이
+QEMU 10.0.13 · Debian OVMF 조합에서 관측한 것이다.
+
+### 실측 11 — 하네스 자체
+
+부팅 셋이 콘솔 셸까지 5 · 4 · 5초, 측정 A가 11초(`uptime` 6.26→15.76).
+설정 디스크에 쓴 로그를 QEMU를 죽인 직후 `debugfs`로 읽으면 비어 있었고
+컨테이너가 끝난 뒤 읽으면 있었다 — Docker Desktop bind mount의 지연으로
+본다. 시리얼 쪽이 완전하므로(A 79줄) 판정은 그쪽으로 했다.
 
 ## Milestone
 
@@ -466,5 +663,4 @@ libstdc++·libuuid·libpopt)와 비교한다. 결정 3은 "외부 도구"까지�
 | DI-M1 | `tars-install`의 목록과 새 설치. `storage.zig`의 파티션 후보. `-V TARS`. 새 체인의 부팅 1 · 2 | `install/check.sh`가 `-cdrom` 없이 뜬 부팅에서 `config storage /dev/nvme0n1p2`를 본다 |
 | DI-M2 | 갱신 경로(결정 8)와 부팅 3. README 실기 절에 설치 순서. `CHAINS`의 이름을 `DI-M2`로 | `di-marker`가 갱신을 넘는다. 루트 게이트 초록 |
 
-첫 milestone이 재는 것인 것은 지금까지의 모양대로다. 위험 1은 재는 것으로
-안 닫히고 M1의 첫 부팅이 닫는다.
+첫 milestone이 재는 것인 것은 지금까지의 모양대로다.
