@@ -126,6 +126,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Guest Network (NW-M0~M3) | 2026-09-14 | `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다. 우리 코드는 링크를 올리고 dhcpcd를 띄우는 것까지고 나머지는 dhcpcd다. 판정은 SLIRP 안에서 닫힌다 — 열두번째 체인 `net/check.sh` |
 | Inbound Network (IN-M0~M2) | 2026-09-14 | 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다. 우리 코드는 0줄이고 `net/check.sh`가 검사 열여섯이 됐다 |
 | Time Sync (TS-M0~M3) | 2026-09-19 | 부팅에 SNTP로 한 번 묻고 시계를 뛴다. 상대는 설정의 주소든 DHCP가 알려 준 것이든 되고, `timezone=Asia/Seoul`이 그 시각을 사람이 읽는 모양으로 만든다. 네트워크가 없어도 부팅은 평소대로 끝난다 — `net/check.sh`가 검사 스물넷에 부팅 셋 |
+| Shell Tools (ST-M0~M2) | 2026-09-19 | 깔려 있던 도구를 셸이 쓴다 — 씨앗 rc가 eza 별칭 넷을 정의하고(`ls`가 eza로 가는 것이 유일한 셰도다), `/config/gitconfig`가 생겨 `/.gitconfig` 링크가 더 이상 끊기지 않는다 |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

@@ -612,6 +612,12 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 그 근거는 `config.seedRcFiles`의 주석에 있다.
     if (storage_mounted) {
         config.seedRcFiles();
+        // ST-M2. `/.gitconfig`가 가리키는 자리를 채운다 — 그 링크는 UT-M3
+        // 결정 8이 걸어 둔 것이고, 그 실체를 만드는 코드가 여기다.
+        //
+        // 조건이 rc와 글자 그대로 같다. 디스크가 안 붙으면 `/config`는 tmpfs의
+        // 빈 디렉터리이고, 거기 만든 파일은 재부팅마다 사라진다.
+        config.seedGitconfig();
         // SM-M2 결정 9. 씨앗 rc와 같은 조건이다 — 디스크가 붙은 기계에만
         // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
         // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그

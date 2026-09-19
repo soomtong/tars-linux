@@ -524,6 +524,23 @@ pub const Shell = enum {
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/fish.config'
             \\#
+            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
+            \\# ls 자리에 앉힌다.
+            \\#
+            \\# ls가 여기서 유일한 셰도다. 설정 디스크를 붙이는 여섯 체인이 rc
+            \\# 켜진 셸에 명령을 넣으므로 별칭 하나가 게이트의 판정 글자를 바꿀
+            \\# 수 있다. ls가 돌아가는 자리 셋(/config/zshrc · /config/xdg/zoxide ·
+            \\# /sys/class/net)을 부팅으로 재서 eza가 같은 글자를 내는 것을
+            \\# 확인했다. 새 이름을 더할 때는 게이트가 치는 이름인지 먼저 볼 것.
+            \\#
+            \\# --icons는 안 붙인다 — eza의 아이콘은 유니코드 사설 영역이고 이
+            \\# 화면의 폰트에 그 글리프가 하나도 없다. 붙이면 빈 칸만 생긴다.
+            \\alias ls='eza'
+            \\alias ll='eza -l --group-directories-first'
+            \\alias la='eza -la --group-directories-first'
+            \\alias lt='eza --tree --level=2'
+            \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
             \\#   fzf     무엇을 쳤는지 — Ctrl+R(히스토리) · Ctrl+T(파일) · Alt+C(디렉터리)
@@ -552,6 +569,23 @@ pub const Shell = enum {
             \\# 기계에서 치른다.
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/bashrc'
+            \\#
+            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
+            \\# ls 자리에 앉힌다.
+            \\#
+            \\# ls가 여기서 유일한 셰도다. 설정 디스크를 붙이는 여섯 체인이 rc
+            \\# 켜진 셸에 명령을 넣으므로 별칭 하나가 게이트의 판정 글자를 바꿀
+            \\# 수 있다. ls가 돌아가는 자리 셋(/config/zshrc · /config/xdg/zoxide ·
+            \\# /sys/class/net)을 부팅으로 재서 eza가 같은 글자를 내는 것을
+            \\# 확인했다. 새 이름을 더할 때는 게이트가 치는 이름인지 먼저 볼 것.
+            \\#
+            \\# --icons는 안 붙인다 — eza의 아이콘은 유니코드 사설 영역이고 이
+            \\# 화면의 폰트에 그 글리프가 하나도 없다. 붙이면 빈 칸만 생긴다.
+            \\alias ls='eza'
+            \\alias ll='eza -l --group-directories-first'
+            \\alias la='eza -la --group-directories-first'
+            \\alias lt='eza --tree --level=2'
             \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — 프롬프트마다 배우고 z <조각>으로 간다
@@ -594,6 +628,23 @@ pub const Shell = enum {
             \\# 기계에서 치른다.
             \\alias tars-config='cat /config/tars.conf'
             \\alias tars-rc='cat /config/zshrc'
+            \\#
+            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
+            \\# ls 자리에 앉힌다.
+            \\#
+            \\# ls가 여기서 유일한 셰도다. 설정 디스크를 붙이는 여섯 체인이 rc
+            \\# 켜진 셸에 명령을 넣으므로 별칭 하나가 게이트의 판정 글자를 바꿀
+            \\# 수 있다. ls가 돌아가는 자리 셋(/config/zshrc · /config/xdg/zoxide ·
+            \\# /sys/class/net)을 부팅으로 재서 eza가 같은 글자를 내는 것을
+            \\# 확인했다. 새 이름을 더할 때는 게이트가 치는 이름인지 먼저 볼 것.
+            \\#
+            \\# --icons는 안 붙인다 — eza의 아이콘은 유니코드 사설 영역이고 이
+            \\# 화면의 폰트에 그 글리프가 하나도 없다. 붙이면 빈 칸만 생긴다.
+            \\alias ls='eza'
+            \\alias ll='eza -l --group-directories-first'
+            \\alias la='eza -la --group-directories-first'
+            \\alias lt='eza --tree --level=2'
             \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
@@ -1128,11 +1179,83 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
 /// 쓰는 것과 다른 이유는, 저쪽은 "파일이 없다"를 `load`가 이미 답했기
 /// 때문이다.
 pub fn seedRcFiles() void {
-    for (std.enums.values(Shell)) |sh| seedRcFile(sh);
+    for (std.enums.values(Shell)) |sh| seedOneFile(sh.rcPath(), sh.rcSeed());
 }
 
-fn seedRcFile(sh: Shell) void {
-    const path = sh.rcPath();
+/// git의 전역 설정 자리 — UT-M3 결정 8이 건 링크(`/.gitconfig`)가 가리키는
+/// 곳이다.
+pub const GITCONFIG_PATH: [:0]const u8 = "/config/gitconfig";
+
+/// 첫 부팅에 깔아 두는 git 설정(ST-M2 결정 5).
+///
+/// 우리가 이 파일을 만드는 이유는 링크가 끊겨 있었기 때문이다.
+/// `kernel/make_initrd.sh`가 `/.gitconfig -> config/gitconfig`를 걸어 두는데
+/// 그 실체를 만드는 코드가 저장소에 한 줄도 없었다 — `tools/check.sh`의
+/// 검사 13만 `git config --global`로 그것을 만들 뿐이고, 그래서 새 디스크의
+/// 그 링크는 영원히 댕글링이었다(design 실측 1).
+///
+/// 줄마다 근거가 있다.
+///
+///   init.defaultBranch  실측: 지금 게스트의 `GIT_DEFAULT_BRANCH=master`다.
+///                       새 저장소가 `main`으로 뜨는 것이 요즘 기본값이다
+///   core.pager          `-X`가 요점이다. less가 alternate screen을 안 쓰면
+///                       `git log`의 출력이 화면의 스크롤백에 남고, CM·CN·CS가
+///                       세운 copy mode로 그 로그를 훑을 수 있다. `-F`는 한
+///                       화면짜리 출력이면 pager를 아예 안 띄운다
+///   color.ui            지금도 `auto`가 기본이지만 적어 둔다 — 끄고 켤 자리를
+///                       `tars-config`가 가리키는 파일 안에 두는 것이 목적이다
+///   alias               자주 치는 넷. git은 alias를 자기가 직접 풀어서
+///                       셸 별칭과 달리 셸 없이도 돈다(`git st`)
+///
+/// 들여쓰기가 탭이 아니라 공백 넷인 이유가 있다. Zig의 multiline 문자열
+/// 리터럴이 탭을 거부한다(`string literal contains invalid byte`). git은 둘 다
+/// 받아들이고, `git config --global`이 이 파일을 다시 쓸 때는 자기가 탭으로
+/// 쓴다 — 그래서 이 파일은 언젠가 둘이 섞이는데, 그것이 정상이다.
+///
+/// `[user]` 절은 빠뜨린 것이 아니라 안 넣은 것이다. 신원은 git이
+/// `/etc/passwd`에서 유도한다(실측: `GIT_AUTHOR_IDENT=root <root@(none).(none)>`).
+/// 그리고 넣으면 `tools/check.sh` 검사 13의 판정 값(`email = tars`)과 겹칠 수
+/// 있다 — 그 검사는 "git이 링크를 풀어 /config에 썼다"를 보는 것이고, 씨앗에
+/// 같은 값이 있으면 검사가 거짓으로 초록이 된다(GA가 없애려는 모양).
+pub const GITCONFIG_SEED =
+    \\# TARS git config — 이 파일의 실체는 설정 디스크의 /config/gitconfig이고
+    \\# 홈의 ~/.gitconfig는 그리로 가는 링크다. 홈(/)은 tmpfs라 부팅마다
+    \\# 비워지므로 살아남는 자리는 설정 디스크 하나뿐이다.
+    \\#
+    \\# 고치는 길이 둘이다. 이 파일을 직접 고치거나
+    \\#   git config --global <키> <값>
+    \\# 을 치면 링크를 통해 여기에 쓰인다. 둘 다 재부팅이 필요 없다 — git은
+    \\# 명령마다 이 파일을 읽는다.
+    \\#
+    \\# [user]가 없는 것은 일부러다. 작성자를 git이 /etc/passwd에서 유도한다.
+    \\# 바꾸려면 여기에 [user] 절을 더한다.
+    \\[init]
+    \\    defaultBranch = main
+    \\[core]
+    \\    pager = less -FRX
+    \\[color]
+    \\    ui = auto
+    \\[alias]
+    \\    st = status -sb
+    \\    lg = log --oneline --graph --decorate
+    \\    co = checkout
+    \\    br = branch
+    \\
+;
+
+/// gitconfig 하나를 rc 셋과 같은 규칙으로 깐다(ST-M2).
+pub fn seedGitconfig() void {
+    seedOneFile(GITCONFIG_PATH, GITCONFIG_SEED);
+}
+
+/// 씨앗 파일 하나를 "없으면 만든다".
+///
+/// `O_EXCL`이 그 질문("이미 있나")을 커널에게 한 번에 묻는다 — `save`가
+/// `O_EXCL`을 안 쓰는 것과 다른 이유는, 저쪽은 "파일이 없다"를 `load`가 이미
+/// 답했기 때문이다.
+///
+/// 이미 있으면 손대지 않는다. 그때부터 그 파일은 사용자의 것이다.
+fn seedOneFile(path: [:0]const u8, text: []const u8) void {
     const rc = linux.open(path.ptr, .{
         .ACCMODE = .WRONLY,
         .CREAT = true,
@@ -1140,7 +1263,7 @@ fn seedRcFile(sh: Shell) void {
     }, 0o644);
     if (failed(rc)) |e| {
         // 이미 있다 = 사용자의 파일이다. 조용히 둔다 — 여기서 로그를 찍으면
-        // 부팅마다 세 줄이 늘고, 그 셋은 아무것도 알려주지 않는다.
+        // 부팅마다 네 줄이 늘고, 그 넷은 아무것도 알려주지 않는다.
         if (e == .EXIST) return;
         std.debug.print("tars-init: could not seed {s} (errno {d})\n", .{
             path, @intFromEnum(e),
@@ -1150,11 +1273,11 @@ fn seedRcFile(sh: Shell) void {
     const fd: i32 = @intCast(rc);
     defer _ = linux.close(fd);
 
-    writeAll(fd, sh.rcSeed(), path) catch return;
+    writeAll(fd, text, path) catch return;
 
     // `created`가 아니라 `seeded`다. `tars-init: created /config/tars.conf`
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
-    // 그 검사가 rc 세 줄까지 함께 보게 된다.
+    // 그 검사가 씨앗 몇 줄까지 함께 보게 된다.
     std.debug.print("tars-init: seeded {s}\n", .{path});
 }
 

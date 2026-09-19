@@ -15,6 +15,30 @@ const MAX_HOOK_LINES = 8;
 /// 고쳐야 한다 — 손이 한 번 멈추는 자리를 만드는 것이 이 배열의 전부다.
 const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 
+/// 씨앗에 들어와도 좋은 별칭 이름(ST-M1 · design 결정 7).
+///
+/// `expectQuietSeed`는 `alias `로 시작하는 줄을 전부 통과시킨다 — 별칭은
+/// 문법이 좁고 정의할 때 조용하므로 그 문을 넓힐 이유가 없었고, 그래서
+/// 이름을 더하는 일에는 아무 저항이 없다. 그 저항을 여기서 만든다.
+///
+/// 재는 것은 하나다: 게이트가 치는 이름을 가리는 별칭이 조용히 들어오는 것.
+/// 별칭은 그 이름을 치는 모든 자리에서 돌고, 설정 디스크를 붙이는 여섯 체인은
+/// rc 켜진 셸에 명령을 넣는다(design 실측 2·3). 그래서 이름 하나를 더하는
+/// 일은 "그 이름을 게이트가 치는가"를 먼저 보는 일이어야 한다.
+///
+/// `tars-config`·`tars-rc`는 SC-M1의 것이고, `ls`가 지금 유일한 셰도다
+/// (design 결정 2 — 걸리는 자리 셋을 부팅으로 재서 통과시켰다).
+const ALLOWED_ALIAS_NAMES = [_][]const u8{
+    "tars-config", "tars-rc",
+    "ls",          "ll",
+    "la",          "lt",
+};
+
+/// 별칭이 있어야 하는 도구들(ST-M1). `HOOKED_TOOLS`와 같은 자리이고 같은
+/// 이유다 — 별칭 넷을 다 지우고 이 배열도 함께 지우면 정방향(허용 범주)과
+/// 역방향(`expectQuietSeed`의 "별칭이 하나도 없다")이 둘 다 만족된다.
+const ALIASED_TOOLS = [_][]const u8{"eza"};
+
 /// `expectQuietSeed`가 히스토리 옵션 줄을 몇 개까지 셀 수 있는가.
 /// `MAX_HOOK_LINES`와 같은 이유로 상한이 필요하다 — 힙이 없다.
 const MAX_HIST_OPTION_LINES = 4;
@@ -290,6 +314,215 @@ fn expectHooksCoverTheTools(sh: config.Shell) !void {
         }
         if (found) continue;
         std.debug.print("FAIL: no {s} hook line for the {s} seed\n", .{ tool, @tagName(sh) });
+        return error.BadSeed;
+    }
+}
+
+/// 씨앗의 별칭 이름이 허용 목록 안인가(ST-M1 · design 결정 7).
+///
+/// 이름은 `alias `와 그 뒤 첫 `=`/공백 사이의 글자다. 셋의 문법이 같아서
+/// (`alias 이름='본문'`) 한 벌로 본다.
+fn expectAliasNames(sh: config.Shell) !void {
+    var lines = std.mem.splitScalar(u8, sh.rcSeed(), '\n');
+    var count: usize = 0;
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (!std.mem.startsWith(u8, line, "alias ")) continue;
+        const rest = line["alias ".len..];
+        const end = std.mem.indexOfAny(u8, rest, "= \t") orelse rest.len;
+        const name = rest[0..end];
+        count += 1;
+        var allowed = false;
+        for (ALLOWED_ALIAS_NAMES) |known| {
+            if (!std.mem.eql(u8, name, known)) continue;
+            allowed = true;
+            break;
+        }
+        if (allowed) continue;
+        std.debug.print(
+            "FAIL: the {s} seed defines an alias the list does not allow:\n  alias {s}\n" ++
+                "      별칭은 그 이름을 치는 모든 자리에서 돈다. 게이트가 치는 이름인지\n" ++
+                "      먼저 확인하고, 정당하면 ALLOWED_ALIAS_NAMES에 이유와 함께 더할 것.\n" ++
+                "      지금 허용된 이름은:\n",
+            .{ @tagName(sh), name },
+        );
+        for (ALLOWED_ALIAS_NAMES) |known| std.debug.print("        {s}\n", .{known});
+        return error.BadSeed;
+    }
+    // 별칭 줄이 하나도 안 보이면 위 루프는 아무것도 안 보고 지나간다 —
+    // "통과했다"와 "볼 것이 없었다"를 가르는 자리다(design 결정 7).
+    if (count == 0) {
+        std.debug.print("FAIL: the {s} seed carries no alias line for this check to read\n", .{
+            @tagName(sh),
+        });
+        return error.BadSeed;
+    }
+}
+
+/// 별칭이 있어야 하는 도구가 씨앗의 별칭 줄에 나오는가(ST-M1).
+///
+/// `expectHooksCoverTheTools`와 같은 자리다. 별칭 넷과 이 배열을 함께
+/// 지우면 위의 허용 목록 검사도 `expectQuietSeed`도 통과한다.
+fn expectAliasesCoverTheTools(sh: config.Shell) !void {
+    var lines = std.mem.splitScalar(u8, sh.rcSeed(), '\n');
+    for (ALIASED_TOOLS) |tool| {
+        var found = false;
+        lines.reset();
+        while (lines.next()) |raw| {
+            const line = std.mem.trim(u8, raw, " \t\r");
+            if (!std.mem.startsWith(u8, line, "alias ")) continue;
+            if (std.mem.indexOf(u8, line, tool) == null) continue;
+            found = true;
+            break;
+        }
+        if (found) continue;
+        std.debug.print("FAIL: no alias line for {s} in the {s} seed\n", .{ tool, @tagName(sh) });
+        return error.BadSeed;
+    }
+}
+
+/// 셋의 씨앗이 같은 별칭 줄들을 담는가(ST-M1).
+///
+/// 세 벌을 문자로 각각 적는 이유는 `hookLines()`의 주석과 같다(배열에서
+/// 조립하면 검사가 tautology가 된다). 그 대가는 셋이 갈라질 수 있다는
+/// 것이고, 갈라지면 게이트가 못 보는 자리가 생긴다 — 부팅으로 "이 별칭이
+/// 돈다"를 확인한 것은 fish의 `ls`(config 체인 1차)와 zsh의 `ls`(6·8차)
+/// 뿐이고, bash의 별칭은 그 셸이 씨앗을 읽는다는 것까지만 확인된다.
+///
+/// 그래서 셋의 도구 별칭 줄을 순서까지 견준다. 런타임에 증명된 줄이 나머지
+/// 두 셸의 같은 줄까지 덮게 하는 것이 이 검사의 값이다. 셸 문법 때문에
+/// 셋을 다르게 쓸 일이 생기면 이 검사가 먼저 멈춘다 — 그때는 차이를
+/// 허용할지 정하고 여기를 고친다.
+///
+/// `alias tars-*`는 안 견준다. 셋 다 자기 파일 이름을 가리키므로 다른 것이
+/// 정상이다(`/config/fish.config` · `/config/bashrc` · `/config/zshrc`).
+const MAX_ALIAS_LINES = 8;
+
+fn expectAliasLinesMatch() !void {
+    var ref: [MAX_ALIAS_LINES][]const u8 = undefined;
+    var ref_len: usize = 0;
+    for (std.enums.values(config.Shell)) |sh| {
+        var lines = std.mem.splitScalar(u8, sh.rcSeed(), '\n');
+        var idx: usize = 0;
+        while (lines.next()) |raw| {
+            const line = std.mem.trim(u8, raw, " \t\r");
+            if (!std.mem.startsWith(u8, line, "alias ")) continue;
+            if (std.mem.startsWith(u8, line, "alias tars-")) continue;
+            if (idx >= MAX_ALIAS_LINES) {
+                std.debug.print(
+                    "FAIL: the {s} seed has more tool alias lines than MAX_ALIAS_LINES ({d})\n",
+                    .{ @tagName(sh), MAX_ALIAS_LINES },
+                );
+                return error.BadSeed;
+            }
+            if (ref_len == 0) {
+                ref[idx] = line;
+            } else if (!std.mem.eql(u8, ref[idx], line)) {
+                std.debug.print(
+                    "FAIL: the {s} seed's alias line {d} differs from the first shell's:\n" ++
+                        "  {s}\n  {s}\n" ++
+                        "      부팅으로 도는 것을 확인한 셸은 일부뿐이다. 셋을 다르게 쓸 이유가\n" ++
+                        "      생겼다면 그 이유를 적고 이 검사를 고칠 것.\n",
+                    .{ @tagName(sh), idx, ref[idx], line },
+                );
+                return error.BadSeed;
+            }
+            idx += 1;
+        }
+        if (ref_len == 0) {
+            ref_len = idx;
+            if (ref_len == 0) {
+                std.debug.print("FAIL: the {s} seed carries no tool alias line\n", .{@tagName(sh)});
+                return error.BadSeed;
+            }
+            continue;
+        }
+        if (idx != ref_len) {
+            std.debug.print(
+                "FAIL: the {s} seed has {d} tool alias line(s); the first shell had {d}\n",
+                .{ @tagName(sh), idx, ref_len },
+            );
+            return error.BadSeed;
+        }
+    }
+}
+
+/// gitconfig 씨앗이 git이 읽을 수 있는 모양인가(ST-M2 · design 결정 5).
+///
+/// rc 씨앗의 `expectQuietSeed`와 재는 것이 다르다. gitconfig는 셸이 읽는
+/// 파일이 아니라서 "조용한가"가 뜻이 없다 — 대신 "git이 이 줄을 변수로
+/// 읽는가"가 뜻이 있다. 그 문법이 좁다: 주석(`#`), 절(`[이름]`), `키 = 값`
+/// 셋뿐이다. 그 셋 밖의 줄 하나가 부팅 뒤 모든 git 명령에
+/// `bad config line N`을 찍는다.
+///
+/// 검사가 넷인 이유는 각각 다른 실수를 막기 때문이다.
+///
+///   문법     `=` 없는 줄 · 닫히지 않은 절
+///   결정 5   `[user]` 절 — tools/check.sh 검사 13이 거짓으로 초록이 되는 자리
+///   키       `defaultBranch`가 없으면 첫 검사가 조용히 지나간다
+///   볼 것    절과 키가 하나도 없으면 위 셋은 아무것도 안 보고 지나간다
+fn expectGitconfigSeed() !void {
+    const text = config.GITCONFIG_SEED;
+    if (text.len == 0 or text[text.len - 1] != '\n') {
+        std.debug.print("FAIL: the gitconfig seed does not end with a newline\n", .{});
+        return error.BadSeed;
+    }
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var sections: usize = 0;
+    var keys: usize = 0;
+    var has_default_branch = false;
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0) continue;
+        // 주석은 안 본다. 씨앗이 사용자에게 하는 설명에 `[user]`라는 글자가
+        // 나올 수 있고(그것이 이 검사가 막으려는 바로 그 절이다), 글자로
+        // 찾으면 그 설명이 자기 검사에 걸린다 — 실제로 걸렸다.
+        if (line[0] == '#') continue;
+        if (line[0] == '[') {
+            if (line[line.len - 1] != ']') {
+                std.debug.print("FAIL: the gitconfig seed has an unclosed section:\n  {s}\n", .{
+                    line,
+                });
+                return error.BadSeed;
+            }
+            // design 결정 5.
+            if (std.ascii.eqlIgnoreCase(line, "[user]")) {
+                std.debug.print(
+                    "FAIL: the gitconfig seed carries a [user] section\n" ++
+                        "      신원은 git이 /etc/passwd에서 유도한다(design 실측 5). 그 절을 넣으면\n" ++
+                        "      tools/check.sh 검사 13의 판정 값과 겹쳐 그 검사가 거짓으로 초록이 된다.\n",
+                    .{},
+                );
+                return error.BadSeed;
+            }
+            sections += 1;
+            continue;
+        }
+        const eq = std.mem.indexOf(u8, line, "=") orelse {
+            std.debug.print(
+                "FAIL: the gitconfig seed has a line git will not read as a variable:\n  {s}\n" ++
+                    "      git은 그 줄마다 `bad config line N`을 찍는다 — 부팅 뒤 모든 명령에.\n",
+                .{line},
+            );
+            return error.BadSeed;
+        };
+        const name = std.mem.trim(u8, line[0..eq], " \t");
+        if (name.len == 0) {
+            std.debug.print("FAIL: the gitconfig seed has an empty key:\n  {s}\n", .{line});
+            return error.BadSeed;
+        }
+        if (std.mem.eql(u8, name, "defaultBranch")) has_default_branch = true;
+        keys += 1;
+    }
+    if (sections == 0 or keys == 0) {
+        std.debug.print(
+            "FAIL: the gitconfig seed has {d} section(s) and {d} key(s); nothing to read\n",
+            .{ sections, keys },
+        );
+        return error.BadSeed;
+    }
+    if (!has_default_branch) {
+        std.debug.print("FAIL: the gitconfig seed never names init.defaultBranch\n", .{});
         return error.BadSeed;
     }
 }
@@ -812,6 +1045,27 @@ pub fn main() !void {
     //   덮개    씨앗과 hookLines()에서 함께 지우는 것
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
     for (std.enums.values(config.Shell)) |sh| try expectHooksCoverTheTools(sh);
+
+    // ── ST-M1: 별칭 ─────────────────────────────────────────────────────
+    //
+    // 검사가 둘이고 막는 것이 다르다.
+    //
+    //   이름   허용 목록 밖의 이름 — 게이트가 치는 이름을 가리는 별칭
+    //   덮개   별칭 넷과 ALIASED_TOOLS를 함께 지우는 것
+    //
+    // 셋째(씨앗이 그 줄을 담았는가)는 `expectQuietSeed`의 정방향이 이미
+    // 본다 — 별칭은 허용 범주라 그 문으로 들어오므로 역방향이 필요 없다.
+    for (std.enums.values(config.Shell)) |sh| try expectAliasNames(sh);
+    for (std.enums.values(config.Shell)) |sh| try expectAliasesCoverTheTools(sh);
+    // 셋의 별칭 줄이 같은가. 위 둘이 "그 줄이 있는가"를 보고, 이 줄이 "셋이
+    // 같은가"를 본다 — 런타임 증명이 일부 셸에만 있어서 필요한 검사다.
+    try expectAliasLinesMatch();
+
+    // ── ST-M2: gitconfig 씨앗 ───────────────────────────────────────────
+    //
+    // 이 씨앗은 셸이 안 읽는다 — git이 읽는다. 그래서 위의 조용함 검사가
+    // 아니라 문법 검사를 받는다. 셸별 검사가 아니라 한 번이다.
+    try expectGitconfigSeed();
 
     // ── SD-M1: 히스토리 옵션 줄 ─────────────────────────────────────────
     //

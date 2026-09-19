@@ -1,6 +1,40 @@
-# HANDOFF: Disk Install(DI)의 M0이 끝났다 — 손으로 설치한 NVMe에서 USB 없이 떴다. M1은 plan부터
+# HANDOFF: Shell Tools(ST)가 끝났다 — `ls`가 eza로 가고 `/.gitconfig`가 더 이상 끊기지 않는다
 
 ## 지금 어디인가
+
+서브프로젝트 Shell Tools(ST)가 2026-09-19에 열려 같은 날 M0·M1·M2로 닫혔다.
+사용자가 물은 것은 *"부팅 후 점검할 수 있는 config 폴더에 fish 설정만 있고
+bash·zsh 것은 없고 gitconfig 심볼릭 링크도 깨져 있다 — 기본으로 설치하는
+추가 유틸리티를 확인해서 적당한 셸 설정을 구성하자"*였고, 재 보니 절반만
+사실이었다(design 실측 1 — 씨앗 셋은 다 깔린다. 정말 없던 것은
+`/config/gitconfig` 하나다).
+
+design은 `docs/superpowers/specs/2026-09-19-tars-shell-tools-design.md`,
+plan 셋은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
+`-st-m1.md` · `-st-m2.md`, 기억은
+`docs/decisions/project_shell_tools.md`다.
+
+무엇이 섰나. 씨앗 rc 셋이 eza 별칭 넷을 정의한다(`ls`가 eza로 가는 것이
+유일한 셰도다 — 게이트가 치는 자리 셋을 부팅으로 재서 통과시켰다).
+그리고 `init`이 `/config/gitconfig`를 깔아 `/.gitconfig` 링크가 실체를
+갖는다(`[user]` 절은 없다 — 신원은 git이 `/etc/passwd`에서 유도한다).
+
+판정: config 체인 1차 부팅이 `ls`가 eza로 가는 것과 `git config --get
+init.defaultBranch`가 `main`을 내는 것을 본다. tools·net 체인 초록.
+루트 게이트 12체인 3/3 통과(`TARS check PASS`, `FAIL` 0줄, 34분 — 그 판은
+다른 컨테이너가 함께 돌아 기준선 16분과 견줄 수 없다).
+
+⚠ 이미 쓰던 설정 디스크는 새 별칭을 못 받는다(`O_EXCL`). 받으려면
+`/config/{bashrc,zshrc,fish.config}`를 지우고 재부팅한다 —
+`/config/gitconfig`는 없던 파일이라 다음 부팅에 저절로 생긴다. README에
+적어 두었다.
+
+⚠ 다음 사람이 이 설계를 다시 열 때 먼저 볼 것: 별칭 이름은 게이트가 치는
+이름과 겹치면 안 되고, 그 목록은 `config_test.zig`의 `ALLOWED_ALIAS_NAMES`가
+지킨다. fzf의 env 줄(`FZF_DEFAULT_COMMAND` 등)이 다음 후보다(design 결정 8 —
+씨앗의 허용 범주를 하나 늘리는 일이다).
+
+## Disk Install(DI)의 상태 — M0까지 끝났고 M1의 plan이 다음이다
 
 서브프로젝트 Disk Install(DI)이 2026-09-19에 열렸다. 사용자가 물은 것은 "ISO로
 부팅한 뒤 내장 디스크에 설치해서 USB 없이 뜨게 할 수 있는가"이고, design이

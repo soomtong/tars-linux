@@ -83,6 +83,23 @@ READBACK_KEYS=(c a t spc slash c o n f i g slash t a r s dot c o n f ret)
 #   3. 씨앗 tars.conf가 실제로 shell_config=on을 담고 있다
 # SC-M0의 게이트는 로그에서 기본값만 봤고 파일의 내용은 못 봤다.
 ALIAS_KEYS=(t a r s minus c o n f i g ret)
+# ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
+# fzf 위젯에 대해 같은 구분을 했다).
+#
+# 판정 글자를 eza에서 고른 이유: eza의 긴 목록은 파일 종류를 `.`으로 찍고
+# GNU ls는 `-`으로 찍는다(`.rw-r--r--` 대 `-rw-r--r--`). 그래서 이 한 줄이
+# 둘을 동시에 본다 — ls가 살아 있다는 것과 그것이 eza로 간다는 것. 방금
+# 타이핑한 줄에는 이 글자가 없다.
+EZA_LS_KEYS=(l s spc minus l spc slash c o n f i g ret)
+# git config --get init.defaultBranch — ST-M2. 이 한 줄이 둘을 본다:
+# 파일이 깔렸다는 것과 그 값이 git에 실제로 닿는다는 것. 판정 글자는 행
+# 첫머리의 `main`이다.
+#
+# `defaultBranch`의 `B`는 shift-b다. 소문자로 쳐서 대소문자를 안 가리는
+# 것에 기대지 않는다 — 우리가 적은 키를 적은 그대로 치는 것이 이 검사의
+# 뜻이다.
+GITCONF_KEYS=(g i t spc c o n f i g spc minus minus g e t spc i n i t dot
+              d e f a u l t shift-b r a n c h ret)
 # echo echo tars-rc-alive >> /config/zshrc
 #
 # 판정 글자를 사람이 심는 자리다. 씨앗에는 echo를 넣을 수 없다 — 설정
@@ -404,6 +421,36 @@ edit_config_in_guest() {
     return 1
   fi
   echo "boot 1: the seeded fish.config defined tars-config, and it printed shell_config=on"
+
+  # ── ST-M1: 별칭이 실제로 도는가 ──────────────────────────────────────
+  #
+  # 씨앗에 별칭 줄이 있다는 것은 위 검사가 못 본다. 여기서 쳐 본다.
+  type_keys "${EZA_LS_KEYS[@]}"
+  if ! wait_for_screen '\.rw-'; then
+    echo "FAIL(boot 1): 'ls -l /config' never printed an eza-style file mode"
+    echo "  둘 중 하나다 — 씨앗의 'alias ls=eza' 줄이 없거나, eza가 initrd에"
+    echo "  없거나. 화면에 'Unknown command'가 있으면 전자이고, GNU ls의 목록"
+    echo "  (-rw-r--r--)이 남아 있으면 후자다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: the seeded 'ls' alias runs eza (file modes start with a dot)"
+
+  # ── ST-M2: gitconfig가 실제로 읽히는가 ───────────────────────────────
+  #
+  # 위의 로그 검사가 "깔렸다"를 보고, 여기서 "git이 그 값을 낸다"를 본다.
+  # 둘은 다른 일이다 — 파일이 있어도 git이 그것을 안 읽으면(링크가 다른
+  # 자리를 가리키면) 이 줄이 빨개진다.
+  type_keys "${GITCONF_KEYS[@]}"
+  if ! wait_for_screen '\| main'; then
+    echo "FAIL(boot 1): 'git config --get init.defaultBranch' did not answer main"
+    echo "  셋 중 하나다 — 씨앗이 안 깔렸거나, /.gitconfig 링크가 안 풀리거나,"
+    echo "  씨앗에 그 키가 없거나. 화면에 fatal이 있으면 git이 파일을 못 읽은"
+    echo "  것이고, 아무것도 안 남았으면 그 키가 없는 것이다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: git read init.defaultBranch=main out of the seeded /config/gitconfig"
 
   type_keys "${EDIT_KEYS[@]}"
   type_keys "${READBACK_KEYS[@]}"
@@ -1267,6 +1314,14 @@ for rc in /config/bashrc /config/zshrc /config/fish.config; do
   fi
 done
 echo "boot 1: init seeded all three rc files on the empty disk"
+
+# ST-M2. gitconfig는 rc가 아니다 — 셸이 읽는 파일이 아니라 git이 읽는
+# 파일이고, 이 줄이 보는 것은 "깔렸는가"까지다. 그 값이 git에 닿는 것은
+# 위 훅의 `git config --get`이 본다.
+if ! grep -q "tars-init: seeded /config/gitconfig" "$LOG1"; then
+  report_failure "$LOG1" "first boot did not seed /config/gitconfig"
+fi
+echo "boot 1: init seeded the gitconfig too (the .gitconfig link has a target now)"
 
 # BH-M2. devtmpfs는 /dev/fd를 안 만들고 우리는 udev를 안 쓴다. 그 링크가
 # 없으면 bash의 process substitution이 여는 /dev/fd/63이 없어서, 씨앗의
