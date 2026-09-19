@@ -191,6 +191,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #
 # trixie는 옛 이름(US/Pacific · Japan 같은 것)을 tzdata-legacy로 갈라
 # 두었다. 안 받는다 — 지역/도시 꼴의 이름이 전부 tzdata에 있다.
+#
+# ── DI-M0: 층 7(디스크를 만드는 도구 셋) ──────────────────────────────
+#
+# tars-install이 fork+execve로 부르는 셋이다(DI design 결정 3). trixie에서
+# sfdisk는 util-linux가 아니라 fdisk 패키지에 있다.
+#
+#   fdisk        sfdisk. GPT를 쓴다. 라이브러리 여섯을 끈다(design 위험 7)
+#   dosfstools   mkfs.vfat. libc뿐
+#   e2fsprogs    mke2fs 하나만 싣는다. libext2fs·libe2p·libcom-err(이미 있다)
+#
+# 아래 라이브러리 일곱은 apt가 저 셋의 Depends·Pre-Depends로 적은 것에서
+# 이미 sysroot에 있는 것(libcom-err2 · libncursesw6 · libtinfo6)과 mke2fs가
+# 안 부르는 것(libss2 — debugfs의 것이다)을 뺀 것이다. libext2fs2t64 하나가
+# libext2fs.so.2와 libe2p.so.2를 둘 다 싣는다 — trixie에 libe2p2라는
+# 패키지는 없다. 실제로 initrd에 딸려 오는 수는 copy_lib_deps가 DT_NEEDED로
+# 센 만큼이고 그 수는 guest_tools.sh 층 7 주석에 있다.
+#
+# libblkid1 · libmount1 · libsmartcols1 · libuuid1이 지금까지 없었다는 것이
+# DI-M0이 착수 전에 배운 것이다 — util-linux:amd64는 dmesg 하나 때문에
+# 통째로 받았고, 그 안의 blkid·lsblk는 바이너리만 풀려 있었지 부를
+# 라이브러리가 없어서 게스트에서 돌 수 없는 상태였다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -283,6 +304,16 @@ RUN dpkg --add-architecture amd64 \
         libbpf1:amd64 \
         libelf1t64:amd64 \
         libmnl0:amd64 \
+        fdisk:amd64 \
+        dosfstools:amd64 \
+        e2fsprogs:amd64 \
+        libfdisk1:amd64 \
+        libmount1:amd64 \
+        libsmartcols1:amd64 \
+        libblkid1:amd64 \
+        libuuid1:amd64 \
+        libreadline8t64:amd64 \
+        libext2fs2t64:amd64 \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
