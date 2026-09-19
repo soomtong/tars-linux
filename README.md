@@ -137,7 +137,7 @@ VirtualBox·VMware에서 직접 띄워 보지는 않았다.
 | 펌웨어 | BIOS · UEFI 아무거나 | El Torito 항목 둘이 한 ISO에 있다 |
 | Secure Boot | 끈다 | 아래 실기 절과 같은 이유다 |
 | 디스크 | 없어도 된다 | 붙이면 설정이 남는다(아래) |
-| 네트워크 | 안 된다 | `# CONFIG_NET is not set` |
+| 네트워크 | virtio-net이면 된다 | NIC 드라이버가 `VIRTIO_NET` 하나다. `tars.conf`에 `net=dhcp`를 적으면 `init`이 dhcpcd를 띄운다(NW). e1000 같은 다른 모델은 안 잡힌다 |
 
 키보드는 따로 줄 것이 없다. VM이 기본으로 주는 PS/2(`AT Translated Set 2
 keyboard`)를 `init`이 capability로 골라 잡는다. USB 키보드만 있는 VM도 된다 —
@@ -287,7 +287,7 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 |---|---|
 | 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
 | 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
-| 네트워크 | `CONFIG_NET is not set` |
+| 네트워크 | 실기 NIC 드라이버가 없다. `CONFIG_NET=y`이지만 NIC는 `VIRTIO_NET` 하나다(NW 비목표 "실머신 NIC"). 부팅 때의 SNTP는 타임아웃 뒤 평소대로 넘어간다 |
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
