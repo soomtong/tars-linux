@@ -40,6 +40,25 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 없으면 건너뛴다. `terminal/src`만 고쳤다면 `terminal/prepare.sh` 한 줄이면
 된다.
 
+### make로 한 줄에
+
+루트에 `Makefile`이 있다. 컨테이너가 필요한 일은 컨테이너 안에서, QEMU만
+호스트에서 돈다. 인자 없는 `make`가 목록과 각 항목의 설명을 찍는다.
+
+```bash
+make boot-qemu                 # 전부 빌드하고 설정 디스크를 붙여 QEMU로 띄운다
+make run-qemu                  # 빌드 없이 방금 만든 것으로 다시 띄운다
+make disk-fresh                # 설정 디스크를 지우고 새로 굽는다
+make check CHAIN=config        # 체인 하나만 (2~8분)
+make gate                      # 루트 게이트 12체인 × 3회 (16~35분)
+make clean                     # 빌드 산출물만 지운다 — 설정 디스크는 살린다
+```
+
+`boot-qemu`가 붙이는 것은 `out/tars-config.img`다. 게이트의 `out/config.img`와
+다른 파일인 이유가 있다 — 게이트는 매 회차 새로 굽는 것이 검증의 일부이고,
+이쪽은 부팅 사이에 남아야 한다(별칭·히스토리·`git config --global`이 그 안에
+쌓인다). `CONFIG_DISK=`로 비우면 설정 디스크 없이 띄운다.
+
 ## 로컬(macOS)에서 화면 띄워 보기
 
 게이트는 컨테이너 안에서 QEMU를 돌리므로 언제나 `-display none`이다. 눈으로
