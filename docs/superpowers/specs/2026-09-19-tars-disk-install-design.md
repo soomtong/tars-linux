@@ -2,7 +2,7 @@
 
 접두사: DI
 
-Status: 열렸다(2026-09-19). M0이 끝났다(2026-09-19). M1이 끝났다(2026-09-23) — 실측 절 둘에 있다. M2(갱신 경로 · 부팅 3)는 plan부터.
+Status: 끝났다(2026-09-23). M0 · M1 · M2 — 실측 절 셋에 있다.
 
 관련 문서: `2026-09-09-tars-real-machine-design.md`(RM. 하이브리드 ISO와
 `init`의 설정 디스크 훑기를 세운 문서. 아래에서 "RM 결정 N"은 그 문서의
@@ -66,6 +66,9 @@ ISO9660이고 ESP에서는 FAT32인데 같은 줄이 둘 다 맞는다. 그래�
 `limine.conf`를 바이트 그대로 복사하고 한 글자도 안 고친다. `serial: yes`와
 `console=ttyS0`도 그대로 간다 — 실기에서 시리얼이 없으면 커널이 조용히
 무시하고, 화면은 어차피 `terminal`이 프레임버퍼에 그린다(RM 실측).
+
+⚠ DI-M2가 바꿨다. 설치기는 `cmdline:` 줄 끝에 `tars.installed`를 붙인다 —
+ISO로 뜬 부팅이 설치된 p2를 안 붙이게 하는 표지다(실측 17).
 
 ### 확인 3 — 커널에 FAT도 ISO9660도 없다
 
@@ -296,6 +299,9 @@ RM 결정 12의 안전 효과("남의 root를 잡을 길이 없다")는 그때�
 둘씩만 보는 것은 `MAX_EVENT = 32`와 같은 종류의 상한이다. 우리가 만드는
 배치가 p2까지이고, 없는 노드를 여는 비용은 ENOENT 하나다.
 
+⚠ DI-M2가 좁혔다. 파티션 후보는 cmdline에 `tars.installed`가 있을 때만
+본다(`storage.candidates`). 없으면 디스크 열넷만 본다(실측 17).
+
 ### 결정 7 — UX는 목록 · 계획 · 확인의 셋이다 — 사용자가 요구를 적었고 Claude가 모양을 정했다
 
 사용자의 요구는 "어느 `/dev/nvme몇`인지 즉시 알기 어렵다. 인자 없이
@@ -377,6 +383,9 @@ USB 키보드. 디스크는 매 회 새로 만든다.
 
 `check.sh`의 `CHAINS`에 `"DI-M2:./install/check.sh"`로 들어간다. M1이 끝나면
 `DI-M1`로 넣고 M2가 이름을 올린다.
+
+⚠ DI-M2에서 부팅이 여섯이 됐다. 부팅 한 번이 6~7초라(실측 12) 위험 5의
+걱정이 없었고, 그래서 `--wipe`까지 부팅 둘을 더 들였다(실측 18).
 
 ### 결정 10 — 커널 옵션 여섯을 켠다 — Claude가 정했다
 
@@ -464,6 +473,11 @@ DI-M0이 닫았다(실측 9). 손으로 복사한 ESP에서 `-cdrom` 없이 셸�
 없다. 대신 그 상태의 디스크가 다음 `tars-install` 목록에 `foreign (gpt,
 no filesystem)`으로 보이고 새 설치가 다시 되게 한다. 즉 판정이 "설치
 됐음"을 p1의 `boot/bzImage` 존재로 하는 것(결정 7)이 이 위험의 처방이다.
+
+⚠ DI-M2에서 본 모양. 목록에는 `foreign (gpt, no filesystem)`이 아니라
+`foreign (gpt)`로 보인다(앞머리만 읽는다). 그리고 p2에 `tars-` 라벨이 남아
+있으면 새 설치 계획에 `the settings now on p2 are erased too`가 한 줄 더 나온다 —
+p1이 망가져 installed로 안 보이는 디스크도 설정은 살아 있을 수 있어서다(실측 19).
 
 ### 위험 5 — 부팅 넷이 게이트에 2~3분을 더한다
 
@@ -757,6 +771,83 @@ M2가 가져갈 것.
 체인 열셋이 전부 `PASS: 3/3`, `TARS check PASS`, `FAIL` 0줄, 35분 43초. 게이트는
 `clean`으로 커널부터 다시 빌드하므로 견줄 기준은 TQ-M1의 판(34분 09초, 같은
 조건)이고, 늘어난 1분 34초가 이 체인 세 회차의 몫이다.
+
+## DI-M2가 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-23-tars-disk-install-di-m2.md`다. 커밋은
+`3962929`(표지가 있을 때만 파티션) · `b09ed8f`(읽기 실패를 한 줄로) · `7cdd4fe`
+(`disk.zig`의 판정 넷과 `--wipe`) · `c1f3cf9`(`espConf`의 경계 검사) · `64c4038`
+(갱신과 `--wipe`) · `7f64977`(conf 검사를 디스크를 건드리기 전으로) · `c25682e`
+(부팅 여섯) · `1019b87`(갱신이 넷을 다 쓰는지) · `8687f78`(가이드) · `192012d`
+(설정 경고를 p2 라벨에 건다) · 루트 게이트 커밋이다. plan의 diff는 체인까지 돌린
+시제품에서 뽑았고, 그 뒤의 여섯 커밋은 Task마다 돌린 품질 검토와 최종 검토가
+찾은 것이다.
+
+### 실측 17 — ISO로 뜬 부팅은 설치된 p2를 안 붙인다, 그리고 그것이 필요했다
+
+부팅 3과 5(ISO + 설치된 NVMe)의 커널 cmdline은 `console=ttyS0`이고 `init`은
+`tars-init: no disk labelled tars-* among 14 candidates`를 찍는다. 설치된 디스크로
+뜬 부팅 2·4·6은 `console=ttyS0 tars.installed`다. ESP의 `limine.conf`는 908바이트에서
+923바이트가 됐다 — ` tars.installed` 15바이트다.
+
+반사실 둘. plan을 쓰며 `storage.candidates`가 늘 마흔둘을 주게 되돌리고 판정 10을
+경고로 낮췄더니 부팅 5의 `--wipe`가 `sfdisk`에서 `This disk is currently in use -
+repartitioning is probably a bad idea.`로 죽었다 — M1 검토가 예측한 충돌이 실물로
+나왔다. 같은 되돌림을 판정 10을 살린 채 돌린 Task 4의 판은
+`FAIL: booting the ISO, init looked at partitions or picked the installed p2`였다.
+
+### 실측 18 — 부팅 여섯의 출력
+
+체인 한 판이 빌드 포함 1분 22~23초, 부팅마다 콘솔 셸까지 6~7초다. 부팅 3의 갱신은
+이렇게 찍힌다(escape를 걷은 시리얼).
+
+```
+tars-install: /dev/nvme0n1 (2 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.
+  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine
+  p2    1 GiB  Linux       ext2   tars-config <- not opened
+  tars-install /dev/nvme0n1 --wipe erases both instead
+tars-install: copying the boot files
+  boot/bzImage 4563968 bytes
+  boot/initrd.cpio 42788426 bytes
+  boot/limine/limine.conf 923 bytes
+  EFI/BOOT/BOOTX64.EFI 348160 bytes
+tars-install: syncing
+tars-install: updated. remove the boot medium and reboot.
+```
+
+부팅 4에서 `tars-init: loaded /config/tars.conf`(새로 안 깔았다)와 `di-marker:kept`,
+부팅 6에서 `tars-init: created /config/tars.conf`와 `di-marker-gone`이 나왔다.
+설치된 디스크로 뜬 부팅 2에서 친 `tars-install`은 매체가 없다고 말하면서 자기
+디스크를 `TARS installed`로 읽는다.
+
+### 실측 19 — 검토가 찾은 것
+
+Task마다 품질 검토를 따로 돌렸고 전체를 최종 검토가 한 번 더 봤다. 막는 것은 둘이었다.
+
+- 매체의 `limine.conf`에 표지를 붙일 수 있는지를 `sfdisk`와 `mke2fs`가 디스크를
+  지운 뒤에야 알았다(`copyConf`가 복사 도중에 돌았다). `prepareConf`로 떼어 YES를
+  묻기 전에 부른다(`7f64977`).
+- 체인이 "아무것도 안 쓰는 갱신"을 못 잡았다. 부팅 4는 부팅 1이 쓴 ESP로도 똑같이
+  뜬다. 부팅 3의 로그에서 복사 줄 넷을 요구한다(`1019b87`). 그 커밋을 넣다가 raw
+  시리얼 로그의 줄 끝이 `\r\n`이라 `( |$)` 토큰 경계가 안 맞는 것을 찾았고, GNU
+  `grep -E`가 패턴의 `\r`을 안 풀어 주어 실제 CR 바이트(`CR=$(printf '\r')`)로 넣었다.
+
+그리고 최종 검토의 하나. p1이 망가진 설치 디스크는 `foreign (gpt)`로 보이는데 p2의
+설정은 살아 있을 수 있다. "설정도 지워진다" 경고를 `installed`가 아니라 p2의 `tars-`
+라벨에 건다(`192012d`). 이 수정 때문에 처음 돌린 루트 게이트를 BF-M4 1회차에서 멈추고
+다시 돌렸다 — 체인들이 저마다 `init`을 다시 빌드하므로 도중에 코드를 바꾸면 회차마다
+다른 코드를 시험하게 된다.
+
+미룬 것 — M1 실측 15의 여덟 중 다섯(4Kn GPT · 옛 ISO 서명 · 470바이트를 넘는 인자 ·
+`read` 한 번의 YES · `disk_test` 음성 둘)과 M1의 둘째 경고(부팅 때 파티션 노드가 늦게
+생기는 틈). 갱신은 파일을 제자리에서 덮는다(O_TRUNC) — 도중에 전원이 나가면 같은
+명령을 다시 친다.
+
+### 실측 20 — 루트 게이트
+
+체인 열셋이 전부 `PASS: 3/3`, `TARS check PASS`, `FAIL` 0줄, 37분 49초(2,269초).
+같은 `clean` 조건인 M1 판(35분 43초)보다 2분 06초 늘었고, 그것이 install 체인의 부팅
+넷 × 3회차의 몫이다. 세 회차 모두 부팅 여섯이 6~7초씩이었다.
 
 ## Milestone
 

@@ -1,6 +1,58 @@
-# HANDOFF: Disk Install(DI)의 M1이 끝났다 — 설치한 디스크가 ISO 없이 뜬다
+# HANDOFF: Disk Install(DI)이 M2로 닫혔다 — 갱신해도 설정이 남고 `--wipe`가 통째로 지운다
 
 ## 지금 어디인가
+
+DI가 2026-09-23~24에 M2로 닫혔다(design `Status: 끝났다`). USB(ISO)로 뜬 기계에서
+`tars-install /dev/nvme0n1 --yes`를 치면 빈 디스크에는 새로 설치하고, 이미 TARS가
+있는 디스크(`TARS installed`)에는 p1의 부트 파일 넷만 갈고 p2(설정)를 남긴다.
+`--wipe`를 주면 통째로 다시 설치한다. 다음 할 일은 새 서브프로젝트를 고르는 것이다
+(아래 "바로 다음에 할 것").
+
+plan은 `docs/superpowers/plans/2026-09-23-tars-disk-install-di-m2.md`, 실측은
+design의 "DI-M2가 실행으로 증명한 것" 절(실측 17~20), 기억은
+`docs/decisions/project_disk_install.md`다. 사용자가 이 세션에서 고른 것 둘 —
+ISO로 뜬 부팅은 파티션을 안 본다(표지 `tars.installed`), M1의 작은 것 여덟 중
+M2가 만지는 자리 셋만 넣는다.
+
+무엇이 섰나. `tars-install`이 ESP에 쓰는 `limine.conf`의 cmdline 끝에
+`tars.installed`를 붙이고(`disk.espConf`), `init`은 그 토큰이 있을 때만 파티션을
+설정 디스크 후보로 본다(`storage.candidates`: 14 또는 42). 그래서 ISO로 뜬 기계는
+설치된 p2를 `/config`에 붙이지 않고 `--wipe`의 `sfdisk`가 막히지 않는다. 설치
+여부는 GPT · p1 FAT32에 `boot/bzImage` · p2의 `tars-` 라벨로 본다(`isInstalled`).
+
+| 커밋 | 무엇 |
+|---|---|
+| `7fb5fac` | plan |
+| `3962929` · `b09ed8f` | `storage.zig` — 표지가 있을 때만 파티션 · 못 읽으면 한 줄 |
+| `7cdd4fe` · `c1f3cf9` | `disk.zig` — `isFat32` · `isTarsMedium` · `printable` · `--wipe` · `espConf` |
+| `64c4038` · `7f64977` | `install.zig` — 갱신 · `--wipe` · SIGPIPE · conf 검사를 디스크를 건드리기 전으로 |
+| `c25682e` · `1019b87` | `install/check.sh` 부팅 여섯, 판정 열여섯 · 갱신이 넷을 다 쓰는지 |
+| `8687f78` | `running-tars.md`의 설치 절 |
+| `192012d` | 최종 검토 — "설정도 지워진다" 경고를 p2 라벨에 건다 |
+| (이 커밋) | `CHAINS`의 `DI-M2` · README 게이트 시각 · design 실측 · 기억 · `CLAUDE.md` 표 · 이 HANDOFF |
+
+판정: install 체인 단독 초록(1분 22초, 부팅 여섯이 6~7초씩), 반사실(표지를 안 보는
+`init`)이 판정 10에서 빨강, plan을 쓰며 본 반사실에서 `--wipe`가 `in use`로 죽음,
+루트 게이트 13체인 3/3 통과(`TARS check PASS`, `FAIL` 0줄, 37분 49초 — M1의
+35분 43초와 같은 `clean` 조건이고 차이 2분 06초가 이 체인의 부팅 넷 × 3회차 몫).
+
+일하는 방식. plan의 코드를 `/tmp/dim2/`에 시제품으로 쓰고 체인까지 돌린 뒤 diff를
+plan에 넣었다. Task 1~4는 subagent가 `git apply`로 넣었고 시제품과 바이트가 같았다.
+Task마다 품질 검토, 끝에 전체 최종 검토를 돌렸고 고친 것이 여섯 커밋이다(실측 19).
+
+⚠ 다음 사람이 먼저 볼 것 셋.
+
+1. ISO로 뜬 설치 세션은 설정 없이 기본값으로 돈다(`among 14 candidates`). 의도다.
+   설치된 디스크로 떴을 때도 디스크 전체가 `tars-` ext2인 스틱을 꽂아 두면 p2보다
+   그 스틱이 먼저 붙는다(디스크 전체를 먼저 훑는다).
+2. 이월 — M1 실측 15의 다섯(4Kn GPT · 옛 ISO 서명 · 긴 인자 · `read` 한 번의 YES ·
+   `disk_test` 음성 둘)과 부팅 때 파티션 노드가 늦게 생기는 틈. 실기에서 설정을 못
+   찾으면 뒤의 것을 먼저 의심한다.
+3. 체인의 판정이 raw 시리얼 로그에 정규식을 걸 때 줄 끝이 `\r\n`이다. `$`를 쓰려면
+   `install/check.sh`의 `CR` 상수처럼 실제 CR 바이트를 넣는다.
+
+## 그 앞이 DI-M1 — 설치한 디스크가 ISO 없이 뜬다
+
 
 DI-M1이 2026-09-23에 plan부터 닫혔다. USB(ISO)로 뜬 기계에서
 `tars-install /dev/nvme0n1 --yes`를 치면 GPT에 p1(ESP, `TARS-BOOT`)과 p2(ext2,
@@ -1025,38 +1077,14 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — DI-M2의 plan을 쓴다
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-design의 milestone 표가 M2의 범위다 — 갱신 경로(결정 8) · 목록의 `TARS
-installed` · `--wipe` · 부팅 3과 `di-marker`(갱신을 넘어 설정이 남는가) ·
-README의 실기 절에 설치 순서 · `check.sh`의 `CHAINS` 이름을 `DI-M2`로.
-`superpowers:writing-plans`로 `docs/superpowers/plans/2026-09-XX-tars-disk-install-di-m2.md`를
-쓰고 사용자 승인 뒤 밟는다.
-
-M2 plan을 쓸 때 먼저 볼 것 — design의 "DI-M1이 실행으로 증명한 것" 절(실측
-12~16)에 다 있다.
-
-- ⚠ ISO + 설치된 NVMe로 뜨면 `init`이 p2(`tars-config`)를 `/config`에 붙인다.
-  그 디스크를 다시 파티션하면(`--wipe`) `sfdisk`가 "in use"로 거부한다. 갱신
-  경로는 재파티션 없이 p1만 쓰면 되지만, `--wipe`는 이 충돌을 풀어야 한다 —
-  `/config`를 떼고 하는가, ISO 부팅에서는 `init`이 설치된 p2를 안 잡게 하는가.
-  M1 품질 검토가 찾았다.
-- `TARS installed` 판정(p1이 vfat이고 `boot/bzImage`가 있고 p2가 `tars-`)은 p1을
-  붙여 봐야 한다. M1은 앞머리만 읽어 설치된 디스크를 `foreign (gpt)`로 보인다.
-- `install/check.sh`의 뼈대(시리얼 FIFO · `boot_guest` · `wait_log` · `clean`)를
-  부팅 3에 그대로 쓴다. 게스트 로그를 남기고 싶으면 체인 사본의 `WORK`를
-  컨테이너 안 고정 경로로 바꾸고 끝에 `/out`으로 복사한다 — 호스트 bind
-  mount 위에서는 `mkfifo`를 안 믿는다. DI-M1이 쓴 방법은 아래 "명령 모음"의
-  DI-M1 줄에 있다.
-- 코드의 작은 것 여덟(4Kn GPT · 옛 ISO 서명 · 라벨 제어 문자 · SIGPIPE · 매체
-  둘 · 긴 인자 · `read` 한 번의 YES · `disk_test` 음성 둘)이 실측 15에 있다. M2에
-  같이 넣을지는 plan을 쓸 때 정한다.
-
-DI 뒤의 후보는 그대로 남아 있다 — 패키지 매니저(이번에 안 고름) · 실머신
-NIC(실기가 생기면. 실기 없이 열려면 유선 드라이버 e1000e·igc·r8169를 QEMU
-에뮬레이션으로 재는 반쪽으로 시작한다) · IN이 미룬 넷 · TS가 미룬 시계
-길들이기(chrony). 실기가 생기면 `out/tars.iso`를 README의 "실기 노트북에
-꽂아 보기" 절대로 `dd`하고, 그 기계에서 `tars-install`을 치면 된다.
+DI가 닫혔다. 남은 후보 — 패키지 매니저(DI가 디스크에 빈 자리를 남겨 두었다 — p3으로
+root 파일시스템이나 창고가 들어올 곳) · 실머신 NIC(실기가 생기면. 실기 없이 열려면
+유선 드라이버 e1000e·igc·r8169를 QEMU 에뮬레이션으로 재는 반쪽으로 시작한다) ·
+IN이 미룬 넷 · TS가 미룬 시계 길들이기(chrony) · DI의 이월(위 ⚠ 2). 실기가 생기면
+`out/tars.iso`를 `docs/guides/running-tars.md`의 "실기 노트북에 꽂아 보기" 절대로
+`dd`하고, "내장 디스크에 설치하기" 절대로 `tars-install`을 친다.
 
 ## IN을 이어받는 사람이 알아야 할 경계
 
@@ -1086,7 +1114,7 @@ QEMU가 그 앞에 길을 낼 수 있다"이다. 그 이상이 아니다 — 실
 ## 명령 모음
 
 ```bash
-# DI-M1. install 체인 단독 (부팅 둘, 산출물이 있으면 약 35초)
+# DI-M2. install 체인 단독 (부팅 여섯, 빌드 포함 약 1분 25초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash install/check.sh
 
