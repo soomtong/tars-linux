@@ -40,13 +40,7 @@ const EXT2_MAGIC: u16 = 0xEF53;
 /// 라벨을 전부 바꿔야 하고, 그것은 체인 넷을 건드리는 일이다.
 pub const LABEL_PREFIX: []const u8 = "tars-";
 
-/// 훑어볼 블록 장치 이름들. 파티션은 안 본다 — 지금 디스크 전체가 파티션
-/// 테이블 없는 ext2 하나이고(CP design "1. virtio-blk + ext2"), 그 계약이 이
-/// milestone에서 안 바뀐다(design 결정 12).
-///
-/// 부수 효과가 안전 쪽이다. 노트북의 내장 디스크는 예외 없이 GPT라 디스크
-/// 전체를 읽으면 매직이 안 맞는다 — 그래서 남의 root 파티션을 `/config`로
-/// 잡을 길이 아예 없다.
+/// 디스크 이름들. 파티션이 아니라 장치 전체다.
 ///
 /// 순서가 판정을 바꾸는 상황은 `tars-` 라벨 디스크가 둘 이상일 때뿐이고,
 /// 게이트에도 실기에도 그런 상황이 없다. 그래서 "흔한 것부터"가 아니라
@@ -56,16 +50,54 @@ pub const LABEL_PREFIX: []const u8 = "tars-";
 /// 넷씩인 것은 devices.zig의 MAX_EVENT = 32와 같은 종류의 상한이다. 화면
 /// 하나에 셸 하나인 기계에 저장장치가 다섯 개 붙을 이유가 없고, 상한을 크게
 /// 잡으면 부팅마다 헛된 open이 는다.
-pub const CANDIDATES = [_][:0]const u8{
+///
+/// DI-M1부터 tars-install도 이 목록을 쓴다. 설치 대상으로 받는 이름과 목록에
+/// 보여 주는 이름이 이것이고, 부팅 때 찾는 것과 같은 코드여야 "설치했는데
+/// 못 찾는다"가 안 생긴다(DI design 결정 5).
+pub const DISKS = [_][:0]const u8{
     // virtio-blk. 게이트 다섯 체인이 이것이다.
     "/dev/vda",     "/dev/vdb",     "/dev/vdc", "/dev/vdd",
-    // 요즘 노트북의 내장 저장장치. machine 체인이 이것이다.
+    // 요즘 노트북의 내장 저장장치. machine·install 체인이 이것이다.
     "/dev/nvme0n1", "/dev/nvme1n1", "/dev/nvme2n1", "/dev/nvme3n1",
     // SATA(AHCI) · USB 스토리지 · SD 리더가 전부 SCSI 디스크로 나온다.
     "/dev/sda",     "/dev/sdb",     "/dev/sdc", "/dev/sdd",
     // eMMC. 저가 노트북·태블릿의 내장 저장장치다.
     "/dev/mmcblk0", "/dev/mmcblk1",
 };
+
+/// 각 디스크의 첫 두 파티션. DI-M1이 RM 결정 12("파티션은 안 본다")를
+/// 바꿨다 — tars-install이 설정을 GPT의 p2에 두기 때문이다(DI design 결정 6).
+///
+/// 손으로 적는다. partitionName으로 comptime에 지을 수도 있지만 그러면
+/// Found.path가 가리키는 문자열의 수명을 따로 따져야 하고, 목록이 눈에
+/// 안 보인다. 둘이 어긋나지 않는 것은 storage_test가 본다.
+///
+/// 둘씩인 것은 우리가 만드는 배치가 p2까지이기 때문이다. RM 결정 12가 지키던
+/// 안전("남의 root를 잡지 않는다")은 라벨 필터가 계속 지킨다 — 남의 ext2
+/// root 파티션은 매직이 맞아도 라벨이 `tars-`로 시작하지 않는다.
+const PARTITIONS = [_][:0]const u8{
+    "/dev/vda1",       "/dev/vda2",       "/dev/vdb1",       "/dev/vdb2",
+    "/dev/vdc1",       "/dev/vdc2",       "/dev/vdd1",       "/dev/vdd2",
+    "/dev/nvme0n1p1",  "/dev/nvme0n1p2",  "/dev/nvme1n1p1",  "/dev/nvme1n1p2",
+    "/dev/nvme2n1p1",  "/dev/nvme2n1p2",  "/dev/nvme3n1p1",  "/dev/nvme3n1p2",
+    "/dev/sda1",       "/dev/sda2",       "/dev/sdb1",       "/dev/sdb2",
+    "/dev/sdc1",       "/dev/sdc2",       "/dev/sdd1",       "/dev/sdd2",
+    "/dev/mmcblk0p1",  "/dev/mmcblk0p2",  "/dev/mmcblk1p1",  "/dev/mmcblk1p2",
+};
+
+/// init이 설정 디스크를 찾으며 훑는 순서. 디스크 전체가 먼저다 — 게이트의
+/// 열두 체인은 전부 파티션 없는 ext2라 그 순서에서 먼저 잡히고, 판정이
+/// 한 줄도 안 바뀐다(DI design 결정 6).
+pub const CANDIDATES = DISKS ++ PARTITIONS;
+
+/// 파티션 노드의 이름. 이름이 숫자로 끝나는 디스크(nvme0n1 · mmcblk0)는
+/// 사이에 `p`가 든다 — 커널의 block/partitions/core.c가 정하는 규칙이다.
+/// 순수 함수라 storage_test가 PARTITIONS와 어긋나지 않는지 본다.
+pub fn partitionName(buf: []u8, disk: []const u8, n: u8) ?[:0]const u8 {
+    if (disk.len == 0) return null;
+    const sep: []const u8 = if (std.ascii.isDigit(disk[disk.len - 1])) "p" else "";
+    return std.fmt.bufPrintZ(buf, "{s}{s}{d}", .{ disk, sep, n }) catch null;
+}
 
 /// 고른 디스크. 라벨을 슬라이스가 아니라 복사로 들고 있다 — 슬라이스로
 /// 돌려주면 읽기 버퍼가 스택에서 사라진 뒤를 가리킨다. devices.Path가 경로에
@@ -82,13 +114,14 @@ pub const Found = struct {
     }
 };
 
-/// head는 디스크 앞 HEAD_BYTES. 라벨이 LABEL_PREFIX로 시작하면 그 라벨을,
-/// 아니면 null. 돌려주는 슬라이스는 head 안을 가리킨다.
+/// head가 ext2/3/4 superblock을 담고 있으면 그 라벨을, 아니면 null.
+/// 라벨이 비어 있으면 null이 아니라 빈 슬라이스다 — "ext2인데 이름이 없다"와
+/// "ext2가 아니다"를 tars-install의 목록이 가른다(DI-M1).
 ///
 /// 순수 함수인 것에 뜻이 있다 — 시스템 콜이 없으므로 호스트 검사가 규칙을
 /// 그대로 본다. devices.zig가 bitSet/looksLikeKeyboard(순수)와 findKeyboard
 /// (콜)를 가른 것과 같은 선이다.
-pub fn tarsLabel(head: []const u8) ?[]const u8 {
+pub fn ext2Label(head: []const u8) ?[]const u8 {
     // 라벨의 끝이 매직보다 뒤라서 이 하나로 둘을 다 덮는다. 짧은 읽기(장치가
     // HEAD_BYTES보다 작은 경우)에서 죽지 않는 자리다.
     if (head.len < SB_OFFSET + LABEL_OFF + LABEL_LEN) return null;
@@ -105,14 +138,19 @@ pub fn tarsLabel(head: []const u8) ?[]const u8 {
     // 라벨은 NUL로 끝나지만 16바이트를 꽉 채우면 NUL이 없다. 그때는 전부가
     // 라벨이다.
     const end = std.mem.indexOfScalar(u8, raw, 0) orelse LABEL_LEN;
-    const name = raw[0..end];
+    return raw[0..end];
+}
 
+/// head는 디스크 앞 HEAD_BYTES. 라벨이 LABEL_PREFIX로 시작하면 그 라벨을,
+/// 아니면 null. 돌려주는 슬라이스는 head 안을 가리킨다.
+pub fn tarsLabel(head: []const u8) ?[]const u8 {
+    const name = ext2Label(head) orelse return null;
     if (!std.mem.startsWith(u8, name, LABEL_PREFIX)) return null;
     return name;
 }
 
 /// 장치 앞머리를 buf에 읽는다. 없는 장치는 ENOENT이고 그것이 정상 경로다 —
-/// 후보 열넷 중 이 기계에 있는 것은 보통 하나다.
+/// 후보 마흔둘 중 이 기계에 있는 것은 보통 한둘이다.
 ///
 /// O_NONBLOCK으로 여는 이유가 devices.zig의 버튼 fd와 다르다. 여기서는
 /// 매체가 없는 광학 드라이브나 빈 카드 리더에서 open(2)이 매달리는 것을
@@ -121,7 +159,7 @@ pub fn tarsLabel(head: []const u8) ?[]const u8 {
 ///
 /// read(2)가 요청한 만큼을 다 준다는 보장이 없으므로 "돌아온 만큼 더한다".
 /// devices.readFile과 같은 루프다.
-fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
+pub fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
     if (failed(rc)) |_| return null;
     const fd: i32 = @intCast(rc);
@@ -142,8 +180,8 @@ fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
 
 /// `tars-` 라벨을 가진 첫 후보를 out에 채우고 true. 하나도 없으면 false.
 ///
-/// 마운트로 시험하지 않는다(design 결정 11). 열넷을 mount로 두드리면 실패
-/// 줄이 열셋 찍히고, mount(2)는 파일시스템을 ext3/4로 잘못 잡았을 때 저널
+/// 마운트로 시험하지 않는다(design 결정 11). 마흔둘을 mount로 두드리면 실패
+/// 줄이 마흔하나 찍히고, mount(2)는 파일시스템을 ext3/4로 잘못 잡았을 때 저널
 /// 재생 같은 쓰기를 할 수 있다. 읽어서 거르면 남의 디스크를 건드릴
 /// 가능성이 0이다.
 pub fn findConfigDisk(out: *Found) bool {

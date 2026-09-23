@@ -128,6 +128,91 @@ pub fn main() !void {
         return error.WrongMagicAccepted;
     }
 
+    // ── 8. ext2Label은 남의 라벨도 돌려준다 ─────────────────────────
+    //
+    // tars-install의 목록이 "foreign (ext2 debian-root)"를 찍으려면 접두사와
+    // 무관하게 라벨을 읽어야 한다. 그리고 라벨이 빈 ext2는 null이 아니라 빈
+    // 문자열이어야 "ext2가 아니다"와 갈린다(DI-M1).
+    {
+        const got = storage.ext2Label(full(EXT2, "debian-root")) orelse {
+            std.debug.print("FAIL: ext2Label rejected an ext2 disk with a foreign label\n", .{});
+            return error.ForeignLabelUnread;
+        };
+        if (!std.mem.eql(u8, got, "debian-root")) {
+            std.debug.print("FAIL: want 'debian-root', got '{s}'\n", .{got});
+            return error.WrongForeignLabel;
+        }
+        const empty = storage.ext2Label(full(EXT2, "")) orelse {
+            std.debug.print("FAIL: an unlabelled ext2 disk read as not-ext2\n", .{});
+            return error.EmptyLabelIsNull;
+        };
+        if (empty.len != 0) {
+            std.debug.print("FAIL: want an empty label, got '{s}'\n", .{empty});
+            return error.EmptyLabelNotEmpty;
+        }
+        @memset(&head, 0);
+        if (storage.ext2Label(&head) != null) {
+            std.debug.print("FAIL: ext2Label read a label off a disk with no magic\n", .{});
+            return error.NoMagicLabelled;
+        }
+    }
+
+    // ── 9. 파티션 이름 규칙 ───────────────────────────────────────────
+    //
+    // 이름이 숫자로 끝나는 디스크만 `p`가 든다. 넷 다 게스트에 실제로 있는
+    // 모양이다 — nvme0n1p2가 틀리면 설치한 기계가 설정을 못 찾는다.
+    {
+        const cases = [_][3][]const u8{
+            .{ "/dev/nvme0n1", "2", "/dev/nvme0n1p2" },
+            .{ "/dev/mmcblk0", "1", "/dev/mmcblk0p1" },
+            .{ "/dev/sda", "1", "/dev/sda1" },
+            .{ "/dev/vdb", "2", "/dev/vdb2" },
+        };
+        for (cases) |c| {
+            var buf: [32]u8 = undefined;
+            const n = try std.fmt.parseInt(u8, c[1], 10);
+            const got = storage.partitionName(&buf, c[0], n) orelse {
+                std.debug.print("FAIL: partitionName({s}, {d}) returned null\n", .{ c[0], n });
+                return error.PartitionNameNull;
+            };
+            if (!std.mem.eql(u8, got, c[2])) {
+                std.debug.print("FAIL: partitionName({s}, {d}) = '{s}', want '{s}'\n", .{ c[0], n, got, c[2] });
+                return error.WrongPartitionName;
+            }
+        }
+    }
+
+    // ── 10. 후보 목록 = 디스크 전부 → 그 다음 파티션 둘씩 ─────────────
+    //
+    // 손으로 적은 PARTITIONS가 규칙과 어긋나지 않는지, 그리고 디스크 전체가
+    // 전부 파티션보다 앞인지 본다. 뒤의 것이 게이트 열두 체인의 판정을 지킨다
+    // — 그 디스크들은 파티션 없는 ext2라 먼저 잡혀야 한다(DI design 결정 6).
+    {
+        const disks = storage.DISKS.len;
+        if (storage.CANDIDATES.len != disks * 3) {
+            std.debug.print("FAIL: want {d} candidates (disks + two partitions each), got {d}\n", .{
+                disks * 3, storage.CANDIDATES.len,
+            });
+            return error.WrongCandidateCount;
+        }
+        for (storage.DISKS, 0..) |disk, i| {
+            if (!std.mem.eql(u8, storage.CANDIDATES[i], disk)) {
+                std.debug.print("FAIL: candidate {d} is '{s}', want the disk '{s}'\n", .{ i, storage.CANDIDATES[i], disk });
+                return error.DiskNotFirst;
+            }
+            var n: u8 = 1;
+            while (n <= 2) : (n += 1) {
+                var buf: [32]u8 = undefined;
+                const want = storage.partitionName(&buf, disk, n).?;
+                const got = storage.CANDIDATES[disks + i * 2 + (n - 1)];
+                if (!std.mem.eql(u8, got, want)) {
+                    std.debug.print("FAIL: candidate {d} is '{s}', want '{s}'\n", .{ disks + i * 2 + (n - 1), got, want });
+                    return error.PartitionListDrifted;
+                }
+            }
+        }
+    }
+
     // 후보 목록이 통째로 사라지지 않았는지만 본다. 무엇이 몇 번째인가는
     // 판정이 아니다(design 결정 13: 순서는 tars- 디스크가 둘 이상일 때만
     // 쓰인다) — 하지만 목록이 비면 부팅마다 설정이 사라지고 증상은 조용하다.
