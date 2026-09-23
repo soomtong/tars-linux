@@ -54,7 +54,8 @@ pub fn describe(head: []const u8) Seen {
 /// 라벨을 화면에 찍을 모양으로. 제어 문자(0x00~0x1f · 0x7f)는 `?`로 바꾼다 —
 /// 라벨은 디스크에 있는 바이트라 누구든 ESC를 심을 수 있고, 그대로 찍으면
 /// 목록이 터미널을 조종한다(DI-M1 실측 15). 0x80 위는 그대로 둔다. UTF-8
-/// 라벨이 깨지지 않게 하기 위해서다. buf보다 긴 부분은 자른다.
+/// 라벨이 깨지지 않게 하기 위해서다. C1 제어 문자(0x80~0x9f)는 거르지 않는다
+/// — UTF-8을 지키는 대가다. buf보다 긴 부분은 자른다.
 pub fn printable(buf: []u8, text: []const u8) []const u8 {
     const n = @min(buf.len, text.len);
     for (text[0..n], 0..) |c, i| buf[i] = if (c < 0x20 or c == 0x7f) '?' else c;
@@ -202,6 +203,8 @@ pub const MEDIUM_MARK: [:0]const u8 = LIMINE_CONF;
 /// cmdline 줄이 하나도 없거나 out이 모자라면 null이다. 표지 없이 설치하면
 /// 설치된 기계가 설정 디스크를 못 찾는다 — 그런 설치는 시작하지 않는다.
 /// 이미 표지가 있는 줄에는 다시 붙이지 않는다.
+/// LF 파일만 다룬다(boot/limine.conf가 그렇다). CRLF면 표지가 \r 뒤에 붙는다.
+/// limine의 kernel_cmdline: 별칭은 안 본다 — 그 키로 바꾸면 null이 되어 설치가 시작되지 않는다.
 pub fn espConf(out: []u8, conf: []const u8) ?[]const u8 {
     const key = "cmdline:";
     const mark = " " ++ storage.INSTALLED_TOKEN;

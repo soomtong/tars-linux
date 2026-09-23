@@ -138,6 +138,8 @@ pub fn main() !void {
         // 설치로 간다.
         const twice = [_][*:0]const u8{ "/dev/nvme0n1", "--yes", "--yes" };
         if (disk.parseArgs(&twice) != .usage) return error.TwiceAccepted;
+        const wipe_twice = [_][*:0]const u8{ "/dev/nvme0n1", "--wipe", "--wipe" };
+        if (disk.parseArgs(&wipe_twice) != .usage) return error.WipeTwiceAccepted;
         const wipe_only = [_][*:0]const u8{"--wipe"};
         if (disk.parseArgs(&wipe_only) != .usage) return error.WipeTakenAsDisk;
         const four = [_][*:0]const u8{ "/dev/nvme0n1", "--yes", "--wipe", "x" };
@@ -233,6 +235,27 @@ pub fn main() !void {
         // 모자란 버퍼는 null이지 잘린 파일이 아니다.
         var tiny: [40]u8 = undefined;
         if (disk.espConf(&tiny, iso) != null) return error.TruncatedConf;
+        // 주석 줄은 limine에게 주석이다. 표지를 받으면 안 된다.
+        {
+            var o: [64]u8 = undefined;
+            const g = disk.espConf(&o, "# cmdline: x\n    cmdline: a\n") orelse return error.CommentConfNull;
+            try expectText(g, "# cmdline: x\n    cmdline: a tars.installed\n", "comment line untouched");
+        }
+        // 마지막 줄에 개행이 없으면 결과에도 없다.
+        {
+            var o: [64]u8 = undefined;
+            const g = disk.espConf(&o, "/T\n cmdline: a") orelse return error.NoNewlineConfNull;
+            try expectText(g, "/T\n cmdline: a tars.installed", "no final newline");
+        }
+        // 버퍼 경계. 결과 길이와 딱 같으면 되고 한 바이트 모자라면 null이다.
+        {
+            const exact_want = " cmdline: a tars.installed";
+            var fit: [exact_want.len]u8 = undefined;
+            const g = disk.espConf(&fit, " cmdline: a") orelse return error.ExactFitNull;
+            try expectText(g, exact_want, "exact fit");
+            var short: [exact_want.len - 1]u8 = undefined;
+            if (disk.espConf(&short, " cmdline: a") != null) return error.OneShortAccepted;
+        }
     }
 
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
