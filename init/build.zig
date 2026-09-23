@@ -44,6 +44,22 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    // DI-M1: 설치기. init과 같은 타깃·같은 모드이고 libc를 안 쓴다 — 게스트에
+    // mount 명령이 없어서 시스템 콜로 붙이는 것까지 init과 같다(DI design
+    // 결정 5). 별도 exe인 이유는 부팅 경로에 안 들어가야 해서다.
+    // make_initrd.sh가 zig-out/bin/tars-install을 usr/bin에 싣는다.
+    const install_mod = b.createModule(.{
+        .root_source_file = b.path("src/install.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+        .single_threaded = true,
+    });
+    const install_exe = b.addExecutable(.{
+        .name = "tars-install",
+        .root_module = install_mod,
+    });
+    b.installArtifact(install_exe);
+
     // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //
     // project_build_host_arch의 4번 규칙: "이 산출물은 누가 실행하는가"를
