@@ -3,13 +3,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# DI-M1: 열세번째 체인. ISO로 부팅한 기계가 자기를 내장 디스크에 설치하고,
-# 그 디스크만으로 다시 뜨는가(DI design 결정 9).
+# DI-M1 · M2: 열세번째 체인. ISO로 부팅한 기계가 자기를 내장 디스크에
+# 설치하고, 그 디스크만으로 다시 뜨고, 새 ISO로 갱신해도 설정이 남는가
+# (DI design 결정 9).
 #
-# 부팅 둘이 같은 NVMe 이미지를 잇달아 쓴다.
-#   1  ISO + 빈 NVMe   tars-install의 목록 · 거절 · 설치
-#   2  NVMe만          -cdrom 없이 뜨고 init이 p2를 설정 디스크로 잡는다
-# 설치를 넘어 설정이 남는 것(부팅 3)은 DI-M2가 더한다.
+# 부팅 여섯이 같은 NVMe 이미지를 잇달아 쓴다.
+#   1  ISO + 빈 NVMe       tars-install의 목록 · 거절 · 설치
+#   2  NVMe만              -cdrom 없이 뜨고 init이 p2를 잡는다. 마커를 쓴다
+#   3  ISO + 설치된 NVMe   init이 p2를 안 잡는다 · TARS installed · 갱신
+#   4  NVMe만              갱신을 넘어 마커가 남았다
+#   5  ISO + 설치된 NVMe   --wipe로 통째로 다시 설치
+#   6  NVMe만              마커가 사라졌고 설정이 첫 부팅처럼 새로 깔린다
 #
 # 왜 sendkey가 아니라 시리얼 FIFO인가. 다른 체인들은 terminal의 화면
 # 줄(`terminal: screen>`)로 판정하는데 이 체인이 볼 것은 tars-install이
@@ -137,6 +141,9 @@ stop_guest() {
 # 콘솔 셸에 한 줄.
 send() { printf '%s\n' "$1" >&4; }
 
+# tars-install 목록의 마지막 줄(install.zig의 printUsage). 목록이 끝났다는 표지다.
+LIST_END="tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too"
+
 # 로그에 고정 문자열이 나타날 때까지 기다린다. 0이면 나왔다.
 wait_log() {
   local want="$1" limit="${2:-30}" i
@@ -154,7 +161,7 @@ boot_guest 1 -cdrom ../out/tars.iso
 
 # 판정 1. 목록. 쓰는 법의 마지막 줄이 목록의 끝이다.
 send "tars-install"
-wait_log "tars-install <disk> --yes  same, without asking" \
+wait_log "$LIST_END" \
   || fail "tars-install with no arguments never finished its list" "tars-install"
 
 # 판정 2. 매체를 찾았고 이름이 TARS다. 이 한 줄이 셋을 본다 — sr0을 앞머리로
@@ -234,15 +241,134 @@ echo "the config partition mounted and took the first-boot seed"
 
 # 판정 8. 설치된 기계에서 tars-install은 매체가 없다고 말한다(design 결정 4).
 # QEMU가 빈 sr0을 붙여 두므로(DI-M0 실측 9) 노드가 있어도 매체가 아니라는
-# 것을 이 줄이 본다.
+# 것을 이 줄이 본다. 그리고 자기 디스크를 TARS installed로 읽는다 — p1을
+# 붙여 bzImage를 보는 isInstalled가 진짜 FAT32에서 도는 첫 자리다.
 send "tars-install"
-wait_log "tars-install <disk> --yes  same, without asking" \
+wait_log "$LIST_END" \
   || fail "tars-install never finished its list on the installed machine" "tars-install"
 if ! grep -aqF "tars-install: no boot medium found" "$LOG"; then
   fail "on the installed machine tars-install still claimed a boot medium" \
     "tars-install: boot medium"
 fi
-echo "on the installed machine there is no boot medium to install from"
+if ! clean | grep -aE '^  /dev/nvme0n1 +[0-9]+ GB .* internal +TARS installed$' >/dev/null; then
+  fail "the installed NVMe was not listed as TARS installed" "/dev/nvme0n1"
+fi
+echo "on the installed machine there is no boot medium, and the disk reads as TARS installed"
+
+# 판정 9. 이 부팅이 표지를 달고 떴다. tars-install이 ESP의 limine.conf에
+# 붙인 것이다(disk.espConf). 커널이 부팅 때 cmdline을 찍는 줄로 본다 —
+# 타이핑한 명령의 에코가 섞일 일이 없다.
+if ! grep -aE 'Kernel command line: .*tars\.installed' "$LOG" >/dev/null; then
+  fail "the installed disk did not boot with tars.installed on its command line" \
+    "Kernel command line"
+fi
+echo "the installed disk booted with tars.installed"
+
+# 마커. 부팅 4가 이것이 갱신을 넘었는지, 부팅 6이 --wipe로 사라졌는지 본다.
+# 출력(di-marker-written)이 타이핑한 줄에 없는 모양이라 에코와 안 섞인다.
+send "echo kept > /config/di-marker && printf 'di-marker-%s\n' written"
+wait_log "di-marker-written" \
+  || fail "could not write the marker onto the config partition" "di-marker"
+echo "wrote /config/di-marker"
+
+stop_guest
+
+# ── 부팅 3: ISO + 설치된 NVMe ──────────────────────────────────────────
+echo "=== boot 3: the ISO and the installed NVMe ==="
+boot_guest 3 -cdrom ../out/tars.iso
+
+# 판정 10. ISO로 뜬 부팅은 파티션을 안 본다. 표지가 없어서다 — 설치된 p2를
+# /config에 붙이면 --wipe가 "in use"로 막힌다(DI-M2 plan의 "정한 것" 1).
+# 14는 디스크 전체의 수다. 42면 파티션까지 봤다는 뜻이다.
+if ! grep -aqF "tars-init: no disk labelled tars-* among 14 candidates" "$LOG"; then
+  fail "booting the ISO, init looked at partitions or picked the installed p2" \
+    "tars-init: config storage" "tars-init: no disk labelled"
+fi
+echo "booted from the ISO, init left the installed p2 alone"
+
+# 판정 11. 목록이 설치된 디스크를 알아본다.
+send "tars-install"
+wait_log "$LIST_END" \
+  || fail "tars-install never finished its list next to an installed disk" "tars-install"
+if ! clean | grep -aE '^  /dev/nvme0n1 +[0-9]+ GB .* internal +TARS installed$' >/dev/null; then
+  fail "the installed NVMe was not listed as TARS installed" "/dev/nvme0n1"
+fi
+echo "the installed NVMe is listed as TARS installed"
+
+# 판정 12. 갱신. 계획 문구가 update이고 updated로 끝난다(design 결정 8).
+send "tars-install /dev/nvme0n1 --yes"
+if ! wait_log "tars-install: updated. remove the boot medium and reboot." 120; then
+  fail "updating the installed NVMe never said updated" \
+    "tars-install:" "failed"
+fi
+if ! grep -aqF "already has TARS. p1 will be updated, p2 (your settings) is kept." "$LOG"; then
+  fail "the update did not say it keeps p2" "tars-install:"
+fi
+if grep -aqF "tars-install: writing the partition table" "$LOG"; then
+  fail "the update repartitioned the disk" "tars-install:"
+fi
+echo "the update rewrote p1 only"
+
+stop_guest
+
+# ── 부팅 4: NVMe만, 갱신 뒤 ────────────────────────────────────────────
+echo "=== boot 4: the NVMe alone, after the update ==="
+boot_guest 4
+
+# 판정 13. 갱신한 ESP로 떴고(표지가 다시 붙었다) p2를 다시 잡았으며,
+# 그 p2는 새것이 아니다 — 씨앗을 다시 깔지 않고 읽었다.
+if ! grep -aqF "$WANT_DISK" "$LOG"; then
+  fail "after the update init did not pick p2" \
+    "tars-init: config storage" "tars-init: no disk labelled"
+fi
+if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
+  fail "after the update tars.conf was not the one from before" \
+    "tars-init: loaded /config" "tars-init: created"
+fi
+
+# 판정 14. 이 milestone의 심장이다 — 마커가 갱신을 넘었다.
+send "printf 'di-marker:'; cat /config/di-marker"
+wait_log "di-marker:kept" \
+  || fail "the marker did not survive the update" "di-marker"
+echo "the marker survived the update"
+
+stop_guest
+
+# ── 부팅 5: ISO + 설치된 NVMe, --wipe ──────────────────────────────────
+echo "=== boot 5: the ISO and the installed NVMe, --wipe ==="
+boot_guest 5 -cdrom ../out/tars.iso
+
+# 판정 15. --wipe는 갱신 대신 통째로 지운다. 부팅 3이 p2를 안 붙인 것이
+# 여기서 쓰인다 — 붙였으면 sfdisk가 "in use"로 거부한다.
+send "tars-install /dev/nvme0n1 --wipe --yes"
+if ! wait_log "tars-install: done. remove the boot medium and reboot." 120; then
+  fail "tars-install /dev/nvme0n1 --wipe --yes never said done" \
+    "tars-install:" "failed" "in use"
+fi
+if ! grep -aqF "the settings now on p2 are erased too" "$LOG"; then
+  fail "--wipe did not warn that it erases the settings" "tars-install:"
+fi
+echo "--wipe reinstalled the disk"
+
+stop_guest
+
+# ── 부팅 6: NVMe만, --wipe 뒤 ──────────────────────────────────────────
+echo "=== boot 6: the NVMe alone, after --wipe ==="
+boot_guest 6
+
+# 판정 16. 새 p2다. 씨앗이 다시 깔렸고 마커가 없다.
+if ! grep -aqF "$WANT_DISK" "$LOG"; then
+  fail "after --wipe init did not pick p2" \
+    "tars-init: config storage" "tars-init: no disk labelled"
+fi
+if ! grep -aq "tars-init: created /config/tars.conf" "$LOG"; then
+  fail "after --wipe the config partition was not fresh" \
+    "tars-init: loaded /config" "tars-init: created"
+fi
+send "test -e /config/di-marker || printf 'di-marker-%s\n' gone"
+wait_log "di-marker-gone" \
+  || fail "the marker survived --wipe" "di-marker"
+echo "--wipe left a fresh config partition"
 
 stop_guest
 
