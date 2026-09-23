@@ -180,6 +180,19 @@ fn isInstalled(path: [:0]const u8) bool {
     return exists(kernel.ptr);
 }
 
+/// p2에 `tars-` 라벨이 있는가. 새 설치가 "설정도 지워진다"고 경고할 조건이다.
+/// isInstalled보다 넓게 본다 — 갱신 도중 전원이 나가 p1이 망가졌거나 bzImage가
+/// 없어진 디스크는 installed로 안 보이지만, p2의 설정은 살아 있을 수 있다.
+/// 그 디스크도 목록에는 `foreign (gpt)`로만 보이므로 이 한 줄이 "알고
+/// 설치한다"(design 결정 7)를 지킨다.
+fn p2HasSettings(path: [:0]const u8) bool {
+    var p2_buf: [32]u8 = undefined;
+    const p2 = storage.partitionName(&p2_buf, path, 2) orelse return false;
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
+    const head = storage.readHead(p2, &head_buf) orelse return false;
+    return storage.tarsLabel(head) != null;
+}
+
 /// 상태 칸의 두 값. install이 이 글자로 갈래를 고르므로 한 곳에 둔다.
 const STATE_MEDIUM = "boot medium";
 const STATE_INSTALLED = "TARS installed";
@@ -488,7 +501,7 @@ fn install(
         say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
         say("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
         say("  rest unallocated\n", .{});
-        if (installed) say("  the settings now on p2 are erased too\n", .{});
+        if (p2HasSettings(path)) say("  the settings now on p2 are erased too\n", .{});
     }
 
     if (!yes) {

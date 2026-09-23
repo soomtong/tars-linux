@@ -158,7 +158,8 @@ pub fn sysName(path: []const u8) []const u8 {
 }
 
 /// 확인 줄이 정확히 YES인가. 줄 끝의 개행과 공백만 벗긴다 — `yes`나 `y`는
-/// 아니다. 디스크를 통째로 지우는 질문이라 대문자 세 글자를 요구한다.
+/// 아니다. 디스크를 통째로 지우거나 부트 파일을 덮는 질문이라 대문자 세 글자를
+/// 요구한다.
 pub fn confirmed(line: []const u8) bool {
     return std.mem.eql(u8, std.mem.trim(u8, line, " \t\r\n"), "YES");
 }
