@@ -144,6 +144,11 @@ send() { printf '%s\n' "$1" >&4; }
 # tars-install 목록의 마지막 줄(install.zig의 printUsage). 목록이 끝났다는 표지다.
 LIST_END="tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too"
 
+# 판정 9 · 13이 보는 raw $LOG는 줄마다 \r\n으로 끝난다(clean은 화면 판정에만
+# 쓴다). GNU grep -E는 패턴 안의 \r을 캐리지리턴으로 안 풀어 주므로, 토큰
+# 경계 정규식의 "끝"은 $가 아니라 실제 문자로 넣는다.
+CR=$(printf '\r')
+
 # 로그에 고정 문자열이 나타날 때까지 기다린다. 0이면 나왔다.
 wait_log() {
   local want="$1" limit="${2:-30}" i
@@ -258,7 +263,7 @@ echo "on the installed machine there is no boot medium, and the disk reads as TA
 # 판정 9. 이 부팅이 표지를 달고 떴다. tars-install이 ESP의 limine.conf에
 # 붙인 것이다(disk.espConf). 커널이 부팅 때 cmdline을 찍는 줄로 본다 —
 # 타이핑한 명령의 에코가 섞일 일이 없다.
-if ! grep -aE 'Kernel command line: .*tars\.installed' "$LOG" >/dev/null; then
+if ! grep -aE "Kernel command line: .*tars\.installed( |${CR}|\$)" "$LOG" >/dev/null; then
   fail "the installed disk did not boot with tars.installed on its command line" \
     "Kernel command line"
 fi
@@ -279,7 +284,7 @@ boot_guest 3 -cdrom ../out/tars.iso
 
 # 판정 10. ISO로 뜬 부팅은 파티션을 안 본다. 표지가 없어서다 — 설치된 p2를
 # /config에 붙이면 --wipe가 "in use"로 막힌다(DI-M2 plan의 "정한 것" 1).
-# 14는 디스크 전체의 수다. 42면 파티션까지 봤다는 뜻이다.
+# 14는 storage.DISKS의 길이, 디스크 전체의 수다. 42면 파티션까지 봤다는 뜻이다.
 if ! grep -aqF "tars-init: no disk labelled tars-* among 14 candidates" "$LOG"; then
   fail "booting the ISO, init looked at partitions or picked the installed p2" \
     "tars-init: config storage" "tars-init: no disk labelled"
@@ -304,9 +309,18 @@ fi
 if ! grep -aqF "already has TARS. p1 will be updated, p2 (your settings) is kept." "$LOG"; then
   fail "the update did not say it keeps p2" "tars-install:"
 fi
+# "파티션도 다시 나누고 updated도 찍는" 퇴행 하나를 막는다. p2를 안 건드렸다는 증명은 판정 14다.
 if grep -aqF "tars-install: writing the partition table" "$LOG"; then
   fail "the update repartitioned the disk" "tars-install:"
 fi
+# 넷을 다 다시 썼다. 이것이 없으면 아무것도 안 쓰는 갱신도 부팅 4를 지난다 —
+# 부팅 1이 쓴 ESP가 그대로 뜨기 때문이다. 로그가 부팅 3의 것이라 부팅 1의
+# 복사 줄은 안 섞인다.
+for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI; do
+  if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then
+    fail "the update did not copy ${f}" "tars-install: copying"
+  fi
+done
 echo "the update rewrote p1 only"
 
 stop_guest
@@ -317,6 +331,10 @@ boot_guest 4
 
 # 판정 13. 갱신한 ESP로 떴고(표지가 다시 붙었다) p2를 다시 잡았으며,
 # 그 p2는 새것이 아니다 — 씨앗을 다시 깔지 않고 읽었다.
+if ! grep -aE "Kernel command line: .*tars\.installed( |${CR}|\$)" "$LOG" >/dev/null; then
+  fail "after the update the disk booted without tars.installed" \
+    "Kernel command line"
+fi
 if ! grep -aqF "$WANT_DISK" "$LOG"; then
   fail "after the update init did not pick p2" \
     "tars-init: config storage" "tars-init: no disk labelled"
