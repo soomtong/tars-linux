@@ -50,7 +50,7 @@ make boot-qemu                 # 전부 빌드하고 설정 디스크를 붙여 
 make run-qemu                  # 빌드 없이 방금 만든 것으로 다시 띄운다
 make disk-fresh                # 설정 디스크를 지우고 새로 굽는다
 make check CHAIN=config        # 체인 하나만 (2~8분)
-make gate                      # 루트 게이트 12체인 × 3회 (16~35분)
+make gate                      # 루트 게이트 13체인 × 3회 (약 38분)
 make clean                     # 빌드 산출물만 지운다 — 설정 디스크는 살린다
 ```
 
@@ -67,7 +67,7 @@ VM(UTM 등)에 올리거나, 실기 노트북 USB로 부팅하는 방법은 `doc
 ## 검증
 
 ```bash
-# 전체 — 열한 체인 × 3회차, 약 26분
+# 전체 — 열세 체인 × 3회차, 약 38분
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
 
 # 한 체인만
