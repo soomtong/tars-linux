@@ -93,6 +93,13 @@ chmod 1777 "$WORKDIR/tmp"
 cp ../init/zig-out/bin/init "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
+# DI-M1: 설치기. init과 같은 zig build가 만들고 같은 이유로 정적이라
+# copy_lib_deps가 필요 없다. 부르는 도구 셋(sfdisk · mkfs.vfat · mke2fs)은
+# guest_tools.sh의 층 7이 싣는다. /usr/bin인 이유는 tq-probe와 같다 — 게스트의
+# PATH가 /usr/bin:/bin이다.
+cp ../init/zig-out/bin/tars-install "$WORKDIR/usr/bin/tars-install"
+chmod 0755 "$WORKDIR/usr/bin/tars-install"
+
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의

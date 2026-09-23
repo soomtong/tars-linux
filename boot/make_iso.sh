@@ -33,7 +33,11 @@ mkdir -p ../out
 # --protective-msdos-label은 대시 둘이다. 하나로 쓰면 xorriso가
 # `Unrecognized option`으로 죽는다 — 스파이크에서 한 번 밟았다. 이 옵션이
 # 붙어야 펌웨어가 하이브리드 이미지를 MBR/GPT 혼동 없이 읽는다.
-xorriso -as mkisofs -R -r -J \
+#
+# DI-M1: -V TARS. 기본값은 ISOIMAGE였다(DI-M0 실측 6). tars-install은 이름이
+# 아니라 boot/limine/limine.conf의 존재로 매체를 알아보지만(DI design 결정 4)
+# 목록 머리 줄에 이 이름을 찍고, install 체인이 그 줄로 이 옵션을 본다.
+xorriso -as mkisofs -R -r -J -V TARS \
         -b boot/limine/limine-bios-cd.bin \
         -no-emul-boot -boot-load-size 4 -boot-info-table \
         --efi-boot boot/limine/limine-uefi-cd.bin \

@@ -186,6 +186,10 @@ WANT+=(.bashrc .zshrc .config/fish/config.fish)
 # terminal 체인의 부팅(20초 + 빌드)이 아니라 여기서 먼저 드러난다.
 WANT+=(usr/bin/tq-probe)
 
+# DI-M1: 설치기. tq-probe와 같은 자리다 — 배열에 없고 make_initrd.sh가 손으로
+# 넣는다. 빠지면 install 체인의 OVMF 부팅(1분)이 아니라 여기서 먼저 드러난다.
+WANT+=(usr/bin/tars-install)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 
 # 명령 치환으로 패딩을 만들면 안 된다. `$(printf '\n%s\n' ...)`은 끝의
