@@ -243,6 +243,13 @@ run_chain() {
 #
 # 회차당 부팅 1회라 총 부팅 횟수는 39회에서 42회가 된다.
 #
+# DI 체인은 설치를 본다. machine 체인처럼 OVMF로 ISO를 부팅하고, 빈 NVMe에
+# tars-install로 설치한 뒤 -cdrom을 떼고 그 디스크만으로 한 번 더 뜬다.
+# 콘솔 셸에 시리얼 FIFO로 치는 유일한 체인이다 — 판정이 terminal 화면이 아니라
+# tars-install이 찍는 목록이라서다(DI-M1 plan의 "정한 것" 6).
+#
+# 회차당 부팅 2회(둘 다 OVMF)라 총 부팅 횟수가 6회 는다.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -258,6 +265,7 @@ CHAINS=(
   "RM-M1:./machine/check.sh"
   "UT-M3:./tools/check.sh"
   "NW-M3:./net/check.sh"
+  "DI-M1:./install/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

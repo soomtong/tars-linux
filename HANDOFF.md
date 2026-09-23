@@ -1,4 +1,45 @@
-# HANDOFF: Terminal Queries(TQ)가 끝났다 — M1 하나로 닫혔고 루트 게이트가 초록이다
+# HANDOFF: Disk Install(DI)의 M1이 끝났다 — 설치한 디스크가 ISO 없이 뜬다
+
+## 지금 어디인가
+
+DI-M1이 2026-09-23에 plan부터 닫혔다. USB(ISO)로 뜬 기계에서
+`tars-install /dev/nvme0n1 --yes`를 치면 GPT에 p1(ESP, `TARS-BOOT`)과 p2(ext2,
+`tars-config`)가 생기고 부트 파일 넷이 복사된다. `-cdrom`을 뗀 다음 부팅에서
+`init`이 `tars-init: config storage /dev/nvme0n1p2 (label tars-config)`를 찍는다.
+다음 할 일은 DI-M2의 plan이다(아래 "바로 다음에 할 것").
+
+plan은 `docs/superpowers/plans/2026-09-23-tars-disk-install-di-m1.md`, 실측은
+design의 "DI-M1이 실행으로 증명한 것" 절(실측 12~16), 기억은
+`docs/decisions/project_disk_install.md`다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `df5dc9d` | plan |
+| `eaca272` | `storage.zig` — `DISKS` · 파티션 28 · `CANDIDATES = DISKS ++ PARTITIONS`(42) · `partitionName` · `ext2Label` |
+| `8180196` | `disk.zig` · `disk_test.zig` — 앞머리 판정 · 크기 · 인자 · YES |
+| `c800432` | `install.zig` · `tars-install` exe |
+| `d2da7a3` | initrd에 `usr/bin/tars-install` · `tools/check.sh` · ISO `-V TARS` |
+| `271fe17` | 품질 검토가 찾은 것 — 남은 ESP를 `sfdisk` 전에 뗀다 |
+| `511da87` | 열세번째 체인 `install/check.sh`(OVMF 부팅 둘, 판정 여덟) |
+| (이 커밋) | `CHAINS`에 `DI-M1` · design 실측 · 기억 · 이 HANDOFF |
+
+판정: install 체인 첫 판 초록(34.7초), 반사실(`CANDIDATES = DISKS`)이 판정 6에서
+`among 14 candidates`로 빨강, 루트 게이트 13체인 3/3 통과(`TARS check PASS`,
+`FAIL` 0줄, 35분 43초 — TQ-M1의 34분 09초와 같은 `clean` 조건이고 차이가 이 체인의 몫).
+
+일하는 방식. plan의 코드를 `/tmp/dim1/`에 시제품으로 먼저 컴파일했고(호스트
+zig 0.16.0), Task 1~5는 subagent가 그 시제품과 바이트가 같게 넣었다. Task마다
+품질 검토를 따로 돌렸고 셋 다 APPROVED, 고친 것이 하나(`271fe17`)다.
+
+⚠ 다음 사람이 먼저 볼 것 둘.
+
+1. 설치된 디스크를 ISO와 함께 물리면 `init`이 p2를 `/config`에 붙인다. 그
+   상태에서 재파티션은 막힌다 — M2의 `--wipe`가 풀어야 할 첫 문제다.
+2. `init`은 부팅 때 후보를 한 번만 훑는다. 커널이 디스크 노드 뒤에 파티션 노드를
+   만드는 틈이 이론상 있다. 게이트에서는 안 드러났고, 실기에서 설정을 못 찾으면
+   먼저 의심할 자리다.
+
+## 그 앞이 Terminal Queries(TQ) — M1 하나로 닫혔다
 
 ## 지금 어디인가
 
@@ -984,42 +1025,38 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — DI-M1의 plan을 쓴다
+## 바로 다음에 할 것 — DI-M2의 plan을 쓴다
 
-M0의 실측이 design에 다 있고 M1의 미지수는 없다. `superpowers:writing-plans`로
-`docs/superpowers/plans/2026-09-XX-tars-disk-install-di-m1.md`를 쓰고 사용자
-승인 뒤 밟는다. design의 milestone 표가 M1의 범위다 — `tars-install`의 목록과
-새 설치 · `storage.zig`의 파티션 후보(결정 6) · `-V TARS`(확인 9) · 새 체인
-`install/check.sh`의 부팅 1 · 2. 판정은 "`-cdrom` 없이 뜬 부팅에서 `config
-storage /dev/nvme0n1p2`를 본다"다.
+design의 milestone 표가 M2의 범위다 — 갱신 경로(결정 8) · 목록의 `TARS
+installed` · `--wipe` · 부팅 3과 `di-marker`(갱신을 넘어 설정이 남는가) ·
+README의 실기 절에 설치 순서 · `check.sh`의 `CHAINS` 이름을 `DI-M2`로.
+`superpowers:writing-plans`로 `docs/superpowers/plans/2026-09-XX-tars-disk-install-di-m2.md`를
+쓰고 사용자 승인 뒤 밟는다.
 
-M1 plan을 쓸 때 실측에서 가져올 것.
+M2 plan을 쓸 때 먼저 볼 것 — design의 "DI-M1이 실행으로 증명한 것" 절(실측
+12~16)에 다 있다.
 
-- 부팅 셋의 QEMU 줄은 `/tmp/di/guest.sh`의 `boot_guest`가 그대로 쓸 수 있다
-  (`machine/check.sh`에 NVMe 하나와 `-cdrom`을 더한 것). `-nodefaults`를 안
-  주면 빈 `/dev/sr0`가 늘 있다 — 설치기는 `mount`가 되고 `boot/limine/
-  limine.conf`가 있는가로 판정한다(결정 4). 노드 존재는 아무것도 아니다.
-- `sfdisk` 스크립트 세 줄(`label: gpt` / `size=256MiB, type=uefi, name=TARS-BOOT`
-  / `size=1GiB, type=linux, name=TARS-CONFIG`)이 그대로 먹는다. `--wipe always`
-  포함 3,546ms. 노드는 즉시 — 한정된 기다림(3초·100ms)은 그래도 둔다.
-- `mkfs.vfat -F 32 -n TARS-BOOT`가 stderr에 iconv 경고 세 줄을 찍는다. 그대로
-  보여 줄지 삼킬지는 M1이 정한다. `mke2fs -t ext2 -L tars-config`는 조용하다.
-- 복사 넷은 `cp` 866ms · `sync` 29ms · `umount` 94ms다. 설치기가 `sync`와
-  `umount`까지 하고 `done`을 찍는다(위험 3).
-- 설치 뒤 부팅에서 `init`은 `/dev/vda (label tars-di)` 같은 디스크 전체만 본다
-  — p2를 잡으려면 `storage.zig`가 파티션을 훑어야 한다. 그것이 M1의 코드다.
-- 부팅 C(ISO + 설치된 NVMe)의 게스트는 `sr0`를 `iso9660 ISOIMAGE`로, p1·p2를
-  `vfat TARS-BOOT` · `ext2 tars-config`로 본다 — `tars-install`의 목록이
-  보여 줄 것 그대로다.
-
-M1이 `-V TARS`를 주면 실측 6의 `ISOIMAGE`가 바뀐다 — 하네스 `di-probe.sh`의
-판정에 `ISOIMAGE`가 박혀 있지는 않다.
+- ⚠ ISO + 설치된 NVMe로 뜨면 `init`이 p2(`tars-config`)를 `/config`에 붙인다.
+  그 디스크를 다시 파티션하면(`--wipe`) `sfdisk`가 "in use"로 거부한다. 갱신
+  경로는 재파티션 없이 p1만 쓰면 되지만, `--wipe`는 이 충돌을 풀어야 한다 —
+  `/config`를 떼고 하는가, ISO 부팅에서는 `init`이 설치된 p2를 안 잡게 하는가.
+  M1 품질 검토가 찾았다.
+- `TARS installed` 판정(p1이 vfat이고 `boot/bzImage`가 있고 p2가 `tars-`)은 p1을
+  붙여 봐야 한다. M1은 앞머리만 읽어 설치된 디스크를 `foreign (gpt)`로 보인다.
+- `install/check.sh`의 뼈대(시리얼 FIFO · `boot_guest` · `wait_log` · `clean`)를
+  부팅 3에 그대로 쓴다. 게스트 로그를 남기고 싶으면 체인 사본의 `WORK`를
+  컨테이너 안 고정 경로로 바꾸고 끝에 `/out`으로 복사한다 — 호스트 bind
+  mount 위에서는 `mkfifo`를 안 믿는다. DI-M1이 쓴 방법은 아래 "명령 모음"의
+  DI-M1 줄에 있다.
+- 코드의 작은 것 여덟(4Kn GPT · 옛 ISO 서명 · 라벨 제어 문자 · SIGPIPE · 매체
+  둘 · 긴 인자 · `read` 한 번의 YES · `disk_test` 음성 둘)이 실측 15에 있다. M2에
+  같이 넣을지는 plan을 쓸 때 정한다.
 
 DI 뒤의 후보는 그대로 남아 있다 — 패키지 매니저(이번에 안 고름) · 실머신
 NIC(실기가 생기면. 실기 없이 열려면 유선 드라이버 e1000e·igc·r8169를 QEMU
 에뮬레이션으로 재는 반쪽으로 시작한다) · IN이 미룬 넷 · TS가 미룬 시계
 길들이기(chrony). 실기가 생기면 `out/tars.iso`를 README의 "실기 노트북에
-꽂아 보기" 절대로 `dd`하면 되고, DI가 끝나면 그 뒤에 `tars-install` 한 줄이다.
+꽂아 보기" 절대로 `dd`하고, 그 기계에서 `tars-install`을 치면 된다.
 
 ## IN을 이어받는 사람이 알아야 할 경계
 
@@ -1049,6 +1086,21 @@ QEMU가 그 앞에 길을 낼 수 있다"이다. 그 이상이 아니다 — 실
 ## 명령 모음
 
 ```bash
+# DI-M1. install 체인 단독 (부팅 둘, 산출물이 있으면 약 35초)
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  bash install/check.sh
+
+# 같은 것을 게스트 시리얼 로그를 남기며. 체인 사본의 WORK를 컨테이너 안
+# 고정 경로로 바꾸고 cleanup의 rm을 끈 뒤, 끝에 /out으로 복사한다.
+mkdir -p /tmp/dirun /tmp/diout
+sed -e 's|^WORK="$(mktemp -d)"|WORK=/tmp/dirun|' -e 's|^  rm -rf "\$WORK"|  : keep "$WORK"|' \
+  install/check.sh > /tmp/dirun/check.sh
+docker run --rm -v "$PWD":/workspace -v /tmp/dirun/check.sh:/workspace/install/check.sh:ro \
+  -v /tmp/diout:/out -w /workspace tars-devcontainer bash -c \
+  'mkdir -p /tmp/dirun; bash install/check.sh; rc=$?; cp /tmp/dirun/boot-*.log /out/; exit $rc'
+perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
+          s/\e[()][AB0]//g; s/\r/\n/g' /tmp/diout/boot-1.log | grep -a tars-install
+
 # DI-M0. 손 설치 하네스 (OVMF 부팅 셋, 약 2분 30초). 파일 셋의 전문은
 # plans/2026-09-19-tars-disk-install-di-m0.md의 Task 5에 있다 — /tmp/di/에
 # di-probe.sh · guest_tools.sh(저장소 목록 + mount·umount·blkid) · guest.sh.

@@ -74,3 +74,4 @@
 - [Inbound network](docs/decisions/project_inbound_network.md) — 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다; 판정은 `rc`가 아니라 받은 바이트 수이고 우리 코드는 0줄이다(IN-M0~M2, 2026-09-14 종료)
 - [터미널 질의](docs/decisions/project_terminal_queries.md) — terminal이 자식의 vt 질의(커서 위치·상태 보고)에 답한다; `effects.write_pty` 한 칸이 전부이고 답은 라이브러리가 만든다. 그래서 fzf의 `--height` 상자가 첫 Ctrl+R에 뜬다(TQ-M1, 2026-09-19 종료. ST-M3의 `--no-height` 우회는 지웠다)
 - [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig 씨앗, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
+- [Disk install](docs/decisions/project_disk_install.md) — `tars-install`이 GPT에 ESP(p1)와 `tars-config`(p2)를 만들고 USB 없이 뜬다; `init`의 후보가 디스크 다음 파티션이 됐고 안전은 라벨이 지킨다. 설치된 기계에서는 p2가 붙어 있어 재파티션이 막힌다(DI-M1, 2026-09-23)

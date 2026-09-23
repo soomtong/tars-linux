@@ -2,7 +2,7 @@
 
 접두사: DI
 
-Status: 열렸다(2026-09-19). M0이 끝났다(2026-09-19) — 실측 절에 있다. M1은 plan부터.
+Status: 열렸다(2026-09-19). M0이 끝났다(2026-09-19). M1이 끝났다(2026-09-23) — 실측 절 둘에 있다. M2(갱신 경로 · 부팅 3)는 plan부터.
 
 관련 문서: `2026-09-09-tars-real-machine-design.md`(RM. 하이브리드 ISO와
 `init`의 설정 디스크 훑기를 세운 문서. 아래에서 "RM 결정 N"은 그 문서의
@@ -654,6 +654,109 @@ QEMU 10.0.13 · Debian OVMF 조합에서 관측한 것이다.
 설정 디스크에 쓴 로그를 QEMU를 죽인 직후 `debugfs`로 읽으면 비어 있었고
 컨테이너가 끝난 뒤 읽으면 있었다 — Docker Desktop bind mount의 지연으로
 본다. 시리얼 쪽이 완전하므로(A 79줄) 판정은 그쪽으로 했다.
+
+## DI-M1이 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-23-tars-disk-install-di-m1.md`다. 커밋은
+`eaca272`(파티션 후보) · `8180196`(`disk.zig`) · `c800432`(`install.zig`) ·
+`d2da7a3`(initrd · `-V TARS`) · `271fe17`(검토가 찾은 umount 한 줄) ·
+`511da87`(체인) · 루트 게이트 커밋이다. plan의 코드는 쓰기 전에 `/tmp/dim1/`에
+시제품으로 먼저 컴파일했고, 저장소에 들어간 것은 그 시제품과 바이트가 같다
+(뒤의 umount 한 줄만 다르다).
+
+### 실측 12 — 체인이 첫 판에 초록이다
+
+`install/check.sh` 한 판이 빌드 포함 34.7초였다(산출물이 이미 있을 때).
+부팅 1이 콘솔 셸까지 7초, 부팅 2가 6초. OVMF인데도 machine 체인보다 빠른
+것은 판정이 terminal 화면을 안 기다리고 시리얼의 줄만 보기 때문이다.
+
+### 실측 13 — 목록과 설치의 실제 출력
+
+부팅 1에서 인자 없이 친 `tars-install`(시리얼, escape를 걷은 것).
+
+```
+tars-install: boot medium /dev/sr0 (iso9660 TARS, 51 MB)
+
+  /dev/nvme0n1      2 GB  QEMU NVMe Ctrl         internal   blank
+
+tars-install <disk>        install onto <disk>; everything on it is erased
+tars-install <disk> --yes  same, without asking
+```
+
+`tars-install /dev/nvme0n1 --yes`.
+
+```
+tars-install: /dev/nvme0n1 (2 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank
+  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine
+  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first
+  rest unallocated
+tars-install: writing the partition table
+[   10.111507]  nvme0n1: p1 p2
+tars-install: formatting /dev/nvme0n1p1 (FAT32, TARS-BOOT)
+tars-install: formatting /dev/nvme0n1p2 (ext2, tars-config)
+tars-install: copying the boot files
+  boot/bzImage 4563968 bytes
+  boot/initrd.cpio 42771664 bytes
+  boot/limine/limine.conf 908 bytes
+  EFI/BOOT/BOOTX64.EFI 348160 bytes
+tars-install: syncing
+tars-install: done. remove the boot medium and reboot.
+```
+
+`nvme0n1: p1 p2`는 우리 줄이 아니라 커널이 `sfdisk`의 `BLKRRPART`를 받고 찍은
+것이 콘솔에 섞인 것이다. `mkfs.vfat`의 iconv 경고 세 줄(실측 8)은 로그 파일로
+갔고 화면에 없다. `no`에는 `not confirmed; nothing was changed.`로 멈췄고, 다시
+찍은 목록이 여전히 `blank`였다.
+
+부팅 2(NVMe만).
+
+```
+efi: EFI v2.7 by Debian distribution of EDK II
+tars-init: config storage /dev/nvme0n1p2 (label tars-config)
+tars-init: mounted ext2 at /config
+tars-init: created /config/tars.conf
+```
+
+그리고 거기서 친 `tars-install`은 `no boot medium found`와 함께 그 디스크를
+`foreign (gpt)`로 보였다 — M2가 `TARS installed`로 바꿀 자리다(plan의 "정한 것" 1).
+
+### 실측 14 — 반사실: 판정 6은 파티션 후보에 기댄다
+
+`CANDIDATES`를 `DISKS`만으로 되돌린 사본을 `-v`로 덮고 체인을 돌렸다. 부팅
+2가 `tars-init: no disk labelled tars-* among 14 candidates`를 찍었고 체인이
+`FAIL: init did not pick p2 of the installed NVMe as its config disk`로 끝났다.
+`disk_test`의 반사실(iso9660과 mbr 판정 순서를 바꾼다)은 `FAIL: hybrid iso: want
+iso9660 'TARS', got mbr ''`였다.
+
+### 실측 15 — 검토가 찾은 것
+
+Task마다 코드 품질 검토를 따로 돌렸고 셋 다 막는 문제는 없었다. 고친 것이
+하나다. 복사 도중 Ctrl-C로 죽으면 p1이 `/tmp/tars-install/esp`에 붙은 채 남고,
+다음 `sfdisk`가 "in use"로 거부한다. 게스트에 `umount` 명령이 없어 사람이 풀
+길이 재부팅뿐이라, `sfdisk` 앞에서 `umount(ESP_DIR)`을 한 번 부른다(`271fe17`).
+
+M2가 가져갈 것.
+
+- 설치된 기계에서 `--wipe`로 다시 설치하면 `init`이 p2를 `/config`에 붙여 두고
+  있어 `sfdisk`가 "in use"로 거부한다. 갱신 경로는 재파티션 없이 p1만 써야 하고,
+  `--wipe`는 ISO로 부팅한 기계에서만 뜻이 있다(ISO 부팅에서도 p2가 `tars-`
+  라벨이라 `init`이 그것을 붙인다 — M2가 이 충돌을 풀어야 한다).
+- 커밋된 코드의 작은 것 넷. 4Kn 디스크의 GPT가 `foreign (mbr)`로 보인다(GPT
+  헤더가 4096에 있다) · ISO를 구웠다가 다시 GPT로 파티션한 스틱이 `foreign
+  (iso9660 TARS)`로 보일 수 있다 · 라벨의 제어 문자를 거르지 않고 찍는다 ·
+  `disk_test`에 PVD type 바이트와 꽉 찬 볼륨 ID의 음성 검사가 없다.
+- `tars-install`이 SIGPIPE를 무시하지 않는다(`sfdisk`가 입력을 읽기 전에 죽으면
+  말없이 죽을 수 있다) · 매체가 둘이면 첫 것만 대상에서 뺀다 · 470바이트를 넘는
+  인자에 대한 에러가 안 찍힌다. 전부 낮음.
+- 부팅 때 `init`은 후보를 한 번만 훑는다. 커널이 디스크 노드를 만든 뒤 파티션을
+  훑으므로 `nvme0n1`은 보이는데 `p2`가 아직 없는 틈이 이론상 있다. 게이트에서는
+  안 드러났다. 실기에서 설정을 못 찾으면 먼저 의심할 자리다.
+
+### 실측 16 — 루트 게이트
+
+체인 열셋이 전부 `PASS: 3/3`, `TARS check PASS`, `FAIL` 0줄, 35분 43초. 게이트는
+`clean`으로 커널부터 다시 빌드하므로 견줄 기준은 TQ-M1의 판(34분 09초, 같은
+조건)이고, 늘어난 1분 34초가 이 체인 세 회차의 몫이다.
 
 ## Milestone
 
