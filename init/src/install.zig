@@ -5,7 +5,8 @@ const disk = @import("disk.zig");
 
 /// tars-install — 부팅 매체의 부트 파일 넷을 내장 디스크에 옮겨 USB 없이
 /// 뜨게 한다(DI design). 인자 없이 치면 목록, 디스크를 주면 계획을 보이고
-/// YES를 받는다. `--yes`가 그 질문을 건너뛴다.
+/// YES를 받는다. `--yes`가 그 질문을 건너뛴다. 이미 TARS가 있는 디스크는
+/// p1만 갈고 p2(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).
 ///
 /// init 옆의 별도 실행 파일인 이유는 DI design 결정 5다 — 부팅 경로에 안
 /// 들어가야 게이트의 열두 체인에 닿지 않고, storage.zig를 같이 써야 목록에
@@ -140,19 +141,63 @@ fn findMedium() ?[:0]const u8 {
 
 // ── 목록 ─────────────────────────────────────────────────────────────
 
+/// 마지막 줄이 목록의 끝이다. install 체인이 그 줄을 기다린다.
 fn printUsage() void {
-    say("tars-install <disk>        install onto <disk>; everything on it is erased\n", .{});
-    say("tars-install <disk> --yes  same, without asking\n", .{});
+    say("tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n", .{});
+    say("tars-install <disk> --yes   same, without asking\n", .{});
+    say("tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", .{});
 }
 
-/// 한 디스크의 상태 칸. 매체면 그 이름, 아니면 앞머리에 보이는 것.
+/// 디스크에 TARS가 설치돼 있는가(DI design 결정 7). 셋을 다 본다.
+///
+///   디스크 앞머리가 GPT
+///   p1이 FAT32이고, 붙여 보면 boot/bzImage가 있다
+///   p2가 `tars-` 라벨의 ext2
+///
+/// bzImage를 보는 것이 design 위험 4의 처방이다. sfdisk와 mkfs까지 되고
+/// 복사 전에 죽은 디스크는 installed가 아니라 새 설치로 가야 한다. 그래서
+/// 이 판정만은 앞머리가 아니라 p1을 읽기 전용으로 붙여 본다.
+fn isInstalled(path: [:0]const u8) bool {
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
+    const head = storage.readHead(path, &head_buf) orelse return false;
+    if (disk.describe(head).kind != .gpt) return false;
+
+    var p1_buf: [32]u8 = undefined;
+    var p2_buf: [32]u8 = undefined;
+    const p1 = storage.partitionName(&p1_buf, path, 1) orelse return false;
+    const p2 = storage.partitionName(&p2_buf, path, 2) orelse return false;
+    // head_buf를 다시 쓴다. 앞의 판정이 끝났으니 앞머리는 더 필요 없다.
+    const h1 = storage.readHead(p1, &head_buf) orelse return false;
+    if (!disk.isFat32(h1)) return false;
+    const h2 = storage.readHead(p2, &head_buf) orelse return false;
+    if (storage.tarsLabel(h2) == null) return false;
+
+    if (!mkdirOk(WORK_DIR.ptr) or !mkdirOk(ESP_DIR.ptr)) return false;
+    if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", linux.MS.RDONLY, 0)) != null) return false;
+    defer _ = linux.umount(ESP_DIR.ptr);
+    var kernel_buf: [128]u8 = undefined;
+    const kernel = std.fmt.bufPrintZ(&kernel_buf, "{s}/{s}", .{ ESP_DIR, disk.BOOT_FILES[0] }) catch unreachable;
+    return exists(kernel.ptr);
+}
+
+/// 상태 칸의 두 값. install이 이 글자로 갈래를 고르므로 한 곳에 둔다.
+const STATE_MEDIUM = "boot medium";
+const STATE_INSTALLED = "TARS installed";
+
+/// 한 디스크의 상태 칸. 매체 · 설치됨 · 앞머리에 보이는 것 순이다.
+///
+/// 매체는 둘로 본다. 붙여서 확인한 것(medium)과, 볼륨 ID가 TARS인 ISO다.
+/// 스틱이 둘 꽂혀 있으면 findMedium은 첫 것만 붙인다(DI-M1 실측 15).
 fn stateOf(path: [:0]const u8, medium: ?[:0]const u8, buf: []u8) []const u8 {
     if (medium) |m| {
-        if (std.mem.eql(u8, m, path)) return "boot medium";
+        if (std.mem.eql(u8, m, path)) return STATE_MEDIUM;
     }
+    if (isInstalled(path)) return STATE_INSTALLED;
     var head_buf: [disk.HEAD_BYTES]u8 = undefined;
     const head = storage.readHead(path, &head_buf) orelse return "unreadable";
-    return disk.stateText(buf, disk.describe(head));
+    const seen = disk.describe(head);
+    if (disk.isTarsMedium(seen)) return STATE_MEDIUM;
+    return disk.stateText(buf, seen);
 }
 
 fn list(medium: ?[:0]const u8) void {
@@ -162,7 +207,8 @@ fn list(medium: ?[:0]const u8) void {
         const seen = disk.describe(head);
         var size_buf: [16]u8 = undefined;
         const size = disk.formatSize(&size_buf, sizeBytes(disk.sysName(m)) orelse 0);
-        say("tars-install: boot medium {s} (iso9660 {s}, {s})\n", .{ m, seen.label, size });
+        var label_buf: [32]u8 = undefined;
+        say("tars-install: boot medium {s} (iso9660 {s}, {s})\n", .{ m, disk.printable(&label_buf, seen.label), size });
     } else {
         say("tars-install: no boot medium found; boot from the TARS ISO or USB stick to install\n", .{});
     }
@@ -225,6 +271,15 @@ fn runTool(
         return false;
     }
     if (pid == 0) {
+        // main이 무시하게 둔 SIGPIPE를 되돌린다. 무시 상태는 execve를 넘어
+        // 남아서, 그대로 두면 도구들이 끊긴 파이프에서 죽지 않고 EPIPE를
+        // 다뤄야 한다 — 그 도구들이 기대하는 환경이 아니다.
+        const dfl: linux.Sigaction = .{
+            .handler = .{ .handler = linux.SIG.DFL },
+            .mask = linux.sigemptyset(),
+            .flags = 0,
+        };
+        _ = linux.sigaction(.PIPE, &dfl, null);
         if (input != null) {
             _ = linux.dup2(fds[0], 0);
             _ = linux.close(fds[0]);
@@ -331,11 +386,50 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
     return total;
 }
 
+/// 매체의 limine.conf를 읽어 표지를 붙여 ESP에 쓴다(disk.espConf). 원본은
+/// 1KB 아래라(DI-M0 실측 7의 908바이트) 버퍼 하나에 든다.
+fn copyConf(src: [:0]const u8, dst: [:0]const u8) ?u64 {
+    var in_buf: [8192]u8 = undefined;
+    const conf = readFile(src.ptr, &in_buf) orelse {
+        complain("cannot read {s}", .{src});
+        return null;
+    };
+    if (conf.len == in_buf.len) {
+        complain("{s} is larger than {d} bytes", .{ src, in_buf.len });
+        return null;
+    }
+    var out_buf: [8192 + 256]u8 = undefined;
+    const text = disk.espConf(&out_buf, conf) orelse {
+        complain("{s} has no cmdline line to mark with {s}", .{ src, storage.INSTALLED_TOKEN });
+        return null;
+    };
+
+    const rc = linux.open(dst.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    if (failed(rc)) |e| {
+        complain("cannot create {s} (errno {d})", .{ dst, @intFromEnum(e) });
+        return null;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var off: usize = 0;
+    while (off < text.len) {
+        const w = linux.write(fd, text[off..].ptr, text.len - off);
+        if (failed(w)) |e| {
+            if (e == .INTR) continue;
+            complain("writing {s} failed (errno {d})", .{ dst, @intFromEnum(e) });
+            return null;
+        }
+        off += w;
+    }
+    return text.len;
+}
+
 // ── 설치 ─────────────────────────────────────────────────────────────
 
 fn install(
     target: [:0]const u8,
     yes: bool,
+    wipe: bool,
     medium: ?[:0]const u8,
     envp: [*:null]const ?[*:0]const u8,
 ) u8 {
@@ -348,26 +442,41 @@ fn install(
         complain("{s} is not present on this machine", .{path});
         return 1;
     };
-    const src = medium orelse {
+    if (medium == null) {
         complain("no boot medium to copy from; boot from the TARS ISO or USB stick first", .{});
         return 1;
-    };
-    if (std.mem.eql(u8, src, path)) {
-        complain("{s} is the boot medium; pick another disk", .{path});
-        return 1;
     }
-
-    // ── 계획 ──
     var size_buf: [16]u8 = undefined;
     var model_buf: [64]u8 = undefined;
     var state_buf: [64]u8 = undefined;
     const model = sysAttr(name, "device/model", &model_buf) orelse "-";
-    say("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
-        path, disk.formatSize(&size_buf, bytes), model, stateOf(path, medium, &state_buf),
-    });
-    say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-    say("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
-    say("  rest unallocated\n", .{});
+    const state = stateOf(path, medium, &state_buf);
+    if (std.mem.eql(u8, state, STATE_MEDIUM)) {
+        complain("{s} is a TARS boot medium; pick another disk", .{path});
+        return 1;
+    }
+    const installed = std.mem.eql(u8, state, STATE_INSTALLED);
+    // 설치된 디스크에 --wipe가 없으면 갱신이다(design 결정 8). 설치 안 된
+    // 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
+    const update = installed and !wipe;
+
+    // ── 계획 ──
+    if (update) {
+        say("tars-install: {s} ({s}, {s}) already has TARS. p1 will be updated, p2 (your settings) is kept.\n", .{
+            path, disk.formatSize(&size_buf, bytes), model,
+        });
+        say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        say("  p2    1 GiB  Linux       ext2   tars-config <- not opened\n", .{});
+        say("  tars-install {s} --wipe erases both instead\n", .{path});
+    } else {
+        say("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
+            path, disk.formatSize(&size_buf, bytes), model, state,
+        });
+        say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        say("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
+        say("  rest unallocated\n", .{});
+        if (installed) say("  the settings now on p2 are erased too\n", .{});
+    }
 
     if (!yes) {
         say("type YES to continue: ", .{});
@@ -384,15 +493,16 @@ fn install(
     const p1 = storage.partitionName(&p1_buf, path, 1).?;
     const p2 = storage.partitionName(&p2_buf, path, 2).?;
 
+    if (update) {
+        if (!fillEsp(p1)) return 1;
+        say("tars-install: updated. remove the boot medium and reboot.\n", .{});
+        return 0;
+    }
+
     // ── 파티션 ──
     // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
     // TARS가 있던 디스크에 다시 설치하면 p2 자리에 옛 ext2가 그대로 있고,
     // mke2fs가 그것을 보고 머뭇거린다.
-    // 앞선 실행이 복사 도중 죽었으면(Ctrl-C) p1이 ESP_DIR에 붙은 채 남아 있고,
-    // sfdisk가 "in use"로 거부한다. 게스트에 umount 명령이 없어 사람이 뗄 길이
-    // 없으므로 여기서 뗀다. 안 붙어 있으면 EINVAL이고 그것이 보통의 경우다.
-    _ = linux.umount(ESP_DIR.ptr);
-
     say("tars-install: writing the partition table\n", .{});
     const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--wipe", "always", "--wipe-partitions", "always", path };
     if (!runTool(&sfdisk, disk.SFDISK_SCRIPT, WORK_DIR ++ "/sfdisk.log", envp)) return 1;
@@ -410,14 +520,27 @@ fn install(
     const mke2fs = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext2", "-L", disk.CONFIG_LABEL, p2 };
     if (!runTool(&mke2fs, null, WORK_DIR ++ "/mke2fs.log", envp)) return 1;
 
-    // ── 복사 ──
+    if (!fillEsp(p1)) return 1;
+    say("tars-install: done. remove the boot medium and reboot.\n", .{});
+    return 0;
+}
+
+/// p1을 붙이고 넷을 쓰고 sync하고 뗀다. 새 설치와 갱신이 같은 길이다 —
+/// 갱신은 이 앞의 sfdisk와 mkfs를 건너뛸 뿐이다.
+///
+/// 갱신은 파일을 제자리에서 덮는다(O_TRUNC). 도중에 전원이 나가면 p1의
+/// 커널이나 initrd가 반쪽이 되지만, 그 자리의 사람은 ISO를 손에 들고 있고
+/// bzImage가 이름으로는 남아 있어 목록이 여전히 `TARS installed`로 보인다 —
+/// 같은 명령을 한 번 더 치면 된다. 새 이름으로 쓰고 rename하는 길은 p1에
+/// 두 벌이 들 자리(90MB)가 있지만 이번에는 안 한다.
+fn fillEsp(p1: [:0]const u8) bool {
     if (!mkdirOk(ESP_DIR.ptr)) {
         complain("cannot create {s}", .{ESP_DIR});
-        return 1;
+        return false;
     }
     if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", 0, 0))) |e| {
         complain("cannot mount {s} as vfat (errno {d})", .{ p1, @intFromEnum(e) });
-        return 1;
+        return false;
     }
     const copied = copyAll();
     // sync가 umount보다 먼저다. 캐시에만 있는 41MB는 전원 버튼과 함께
@@ -427,12 +550,9 @@ fn install(
     linux.sync();
     if (failed(linux.umount(ESP_DIR.ptr))) |e| {
         complain("cannot unmount {s} (errno {d})", .{ ESP_DIR, @intFromEnum(e) });
-        return 1;
+        return false;
     }
-    if (!copied) return 1;
-
-    say("tars-install: done. remove the boot medium and reboot.\n", .{});
-    return 0;
+    return copied;
 }
 
 /// 매체는 findMedium이 MEDIUM_DIR에 붙여 두었고 p1은 install이 ESP_DIR에
@@ -452,7 +572,9 @@ fn copyAll() bool {
         var to_buf: [128]u8 = undefined;
         const from = std.fmt.bufPrintZ(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }) catch unreachable;
         const to = std.fmt.bufPrintZ(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }) catch unreachable;
-        const n = copyFile(from, to) orelse return false;
+        // limine.conf만 한 줄이 바뀐다(disk.espConf). 나머지 셋은 바이트 그대로다.
+        const copied = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) copyConf(from, to) else copyFile(from, to);
+        const n = copied orelse return false;
         say("  {s} {d} bytes\n", .{ rel, n });
     }
     return true;
@@ -467,6 +589,25 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         return 2;
     }
 
+    // SIGPIPE를 무시한다. sfdisk가 배치를 읽기 전에 죽으면 runTool의 write가
+    // 끊긴 파이프에 쓰고, 기본 동작이면 tars-install이 그 자리에서 말없이
+    // 죽는다(DI-M1 실측 15). 무시하면 write가 EPIPE로 돌아오고, 그 뒤의
+    // wait4가 sfdisk가 무엇으로 죽었는지를 찍는다. SIG_IGN은 execve를 넘어
+    // 자식에게 남으므로 fork한 자식에서는 기본값으로 되돌린다(runTool).
+    const ignore: linux.Sigaction = .{
+        .handler = .{ .handler = linux.SIG.IGN },
+        .mask = linux.sigemptyset(),
+        .flags = 0,
+    };
+    _ = linux.sigaction(.PIPE, &ignore, null);
+
+    // 앞선 실행이 복사 도중 죽었으면(Ctrl-C) p1이 ESP_DIR에 붙은 채 남아
+    // 있다. 게스트에 umount 명령이 없어 사람이 뗄 길이 없으므로 여기서 뗀다.
+    // 안 붙어 있으면 EINVAL이고 그것이 보통의 경우다. 목록보다 먼저인 것은
+    // isInstalled가 같은 자리에 p1을 붙여 보기 때문이고, 설치보다 먼저인 것은
+    // 남은 마운트가 있으면 sfdisk가 "in use"로 거부하기 때문이다(DI-M1 271fe17).
+    _ = linux.umount(ESP_DIR.ptr);
+
     // 매체는 목록에도 설치에도 필요하다. 붙인 채로 돌려받고 끝에서 뗀다 —
     // 읽기 전용이라 떼는 순서가 디스크에 아무것도 안 바꾼다.
     const medium = findMedium();
@@ -479,7 +620,7 @@ pub fn main(init: std.process.Init.Minimal) u8 {
             list(medium);
             break :blk 0;
         },
-        .install => |i| install(i.disk, i.yes, medium, envp),
+        .install => |i| install(i.disk, i.yes, i.wipe, medium, envp),
         .usage => unreachable,
     };
 }
