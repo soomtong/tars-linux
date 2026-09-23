@@ -213,6 +213,49 @@ pub fn main() !void {
         }
     }
 
+    // ── 11. 설치된 디스크로 떴을 때만 파티션을 본다 ─────────────────
+    //
+    // ISO로 뜬 기계가 설치된 p2를 /config에 붙이면 --wipe가 막힌다(DI-M2).
+    // 표지는 토큰이다 — 부분 문자열로 보면 `tars.installedx`에도 걸린다.
+    {
+        const yes = [_][]const u8{
+            "console=ttyS0 tars.installed",
+            "tars.installed console=ttyS0",
+            "console=ttyS0 tars.installed\n", // /proc/cmdline은 줄바꿈으로 끝난다
+        };
+        for (yes) |text| {
+            if (!storage.cmdlineInstalled(text)) {
+                std.debug.print("FAIL: '{s}' was not read as an installed boot\n", .{text});
+                return error.InstalledMissed;
+            }
+        }
+        const no = [_][]const u8{
+            "console=ttyS0",
+            "console=ttyS0 tars.installedx",
+            "console=ttyS0 nottars.installed",
+            "console=ttyS0 tars.installed=0",
+            "",
+        };
+        for (no) |text| {
+            if (storage.cmdlineInstalled(text)) {
+                std.debug.print("FAIL: '{s}' was read as an installed boot\n", .{text});
+                return error.InstalledFalsePositive;
+            }
+        }
+        if (storage.candidates(false).len != storage.DISKS.len) {
+            std.debug.print("FAIL: a boot without the mark scans {d} candidates, want {d} disks\n", .{
+                storage.candidates(false).len, storage.DISKS.len,
+            });
+            return error.PartitionsWithoutMark;
+        }
+        if (storage.candidates(true).len != storage.CANDIDATES.len) {
+            std.debug.print("FAIL: an installed boot scans {d} candidates, want {d}\n", .{
+                storage.candidates(true).len, storage.CANDIDATES.len,
+            });
+            return error.NoPartitionsWithMark;
+        }
+    }
+
     // 후보 목록이 통째로 사라지지 않았는지만 본다. 무엇이 몇 번째인가는
     // 판정이 아니다(design 결정 13: 순서는 tars- 디스크가 둘 이상일 때만
     // 쓰인다) — 하지만 목록이 비면 부팅마다 설정이 사라지고 증상은 조용하다.

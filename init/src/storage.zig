@@ -85,10 +85,46 @@ const PARTITIONS = [_][:0]const u8{
     "/dev/mmcblk0p1",  "/dev/mmcblk0p2",  "/dev/mmcblk1p1",  "/dev/mmcblk1p2",
 };
 
-/// init이 설정 디스크를 찾으며 훑는 순서. 디스크 전체가 먼저다 — 게이트의
+/// 설치된 디스크로 떴을 때 init이 훑는 순서. 디스크 전체가 먼저다 — 게이트의
 /// 열두 체인은 전부 파티션 없는 ext2라 그 순서에서 먼저 잡히고, 판정이
 /// 한 줄도 안 바뀐다(DI design 결정 6).
 pub const CANDIDATES = DISKS ++ PARTITIONS;
+
+/// 설치된 디스크로 떴다는 표지. tars-install이 ESP에 쓰는 limine.conf의
+/// cmdline 끝에 이 단어를 붙이고, ISO의 limine.conf에는 없다(DI-M2).
+///
+/// 이 표지가 있어야 init이 파티션을 본다. 없으면 디스크 전체 열넷만 본다.
+/// ISO로 뜬 기계가 설치된 디스크의 p2를 /config에 붙여 버리면, 그 디스크를
+/// --wipe로 다시 파티션할 때 sfdisk가 "in use"로 거부한다(DI-M1 실측 15).
+/// 설치기로 뜬 세션은 설정 없이 깨끗하게 돈다 — 사용자가 고른 규칙이다.
+pub const INSTALLED_TOKEN = "tars.installed";
+
+/// cmdline 문자열에 INSTALLED_TOKEN이 있는가. 부분 문자열이 아니라 토큰으로
+/// 본다 — config.cmdlineWantsNoConfig와 같은 이유다(`tars.installedx`에
+/// 걸리면 안 된다). 값은 안 받는다. tars-install이 쓰는 모양은 하나뿐이다.
+pub fn cmdlineInstalled(text: []const u8) bool {
+    var it = std.mem.tokenizeAny(u8, text, " \t\r\n");
+    while (it.next()) |token| {
+        if (std.mem.eql(u8, token, INSTALLED_TOKEN)) return true;
+    }
+    return false;
+}
+
+/// 이번 부팅이 훑을 후보. 설치된 디스크로 떴으면 파티션까지 마흔둘,
+/// 아니면 디스크 전체 열넷이다.
+pub fn candidates(installed: bool) []const [:0]const u8 {
+    return if (installed) &CANDIDATES else &DISKS;
+}
+
+/// /proc/cmdline을 읽어 INSTALLED_TOKEN이 있는지 본다. 못 읽으면 false다 —
+/// 파티션을 안 보는 쪽이 안전한 쪽이다(남의 디스크를 붙일 일이 더 적다).
+/// readHead가 "앞에서 버퍼만큼 읽는다"라서 그대로 쓴다. x86의
+/// COMMAND_LINE_SIZE가 2048이다.
+pub fn bootedInstalled(cmdline_path: [:0]const u8) bool {
+    var buf: [2048]u8 = undefined;
+    const text = readHead(cmdline_path, &buf) orelse return false;
+    return cmdlineInstalled(text);
+}
 
 /// 파티션 노드의 이름. 이름이 숫자로 끝나는 디스크(nvme0n1 · mmcblk0)는
 /// 사이에 `p`가 든다 — 커널의 block/partitions/core.c가 정하는 규칙이다.
@@ -178,14 +214,15 @@ pub fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
     return buf[0..len];
 }
 
-/// `tars-` 라벨을 가진 첫 후보를 out에 채우고 true. 하나도 없으면 false.
+/// list에서 `tars-` 라벨을 가진 첫 후보를 out에 채우고 true. 하나도 없으면
+/// false. list는 candidates()가 준다.
 ///
 /// 마운트로 시험하지 않는다(design 결정 11). 마흔둘을 mount로 두드리면 실패
 /// 줄이 마흔하나 찍히고, mount(2)는 파일시스템을 ext3/4로 잘못 잡았을 때 저널
 /// 재생 같은 쓰기를 할 수 있다. 읽어서 거르면 남의 디스크를 건드릴
 /// 가능성이 0이다.
-pub fn findConfigDisk(out: *Found) bool {
-    for (CANDIDATES) |path| {
+pub fn findConfigDisk(out: *Found, list: []const [:0]const u8) bool {
+    for (list) |path| {
         var buf: [HEAD_BYTES]u8 = undefined;
         const head = readHead(path, &buf) orelse continue;
         const name = tarsLabel(head) orelse continue;

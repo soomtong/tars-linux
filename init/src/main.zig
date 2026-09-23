@@ -110,8 +110,9 @@ fn makeXdgDir() void {
 ///
 /// RM-M2까지는 /dev/vda가 여기 박혀 있었다. 그 이름은 virtio-blk에만
 /// 있어서 노트북에서는 저장소를 영영 못 찾았다 — 부팅은 됐고 설정만 매번
-/// 사라졌다. 이제 storage.zig가 후보 마흔둘(디스크 열넷, 그 다음 각각의 첫
-/// 두 파티션)을 훑어 ext2 라벨이 `tars-`로 시작하는 첫 것을 고른다. 이름이
+/// 사라졌다. 이제 storage.zig가 후보를 훑어 ext2 라벨이 `tars-`로 시작하는
+/// 첫 것을 고른다. 후보는 디스크 열넷이고, 설치된 디스크로 떴을 때만(cmdline의
+/// `tars.installed`) 각 디스크의 첫 두 파티션까지 마흔둘이다(DI-M2). 이름이
 /// 아니라 디스크 안의 표식으로 고르는 것이라, virtio든 NVMe든 SATA든 같은
 /// 코드가 지난다.
 ///
@@ -122,13 +123,14 @@ fn makeXdgDir() void {
 /// 있다. 설정 파일은 어쩌다 한 번 쓰는 것이라 성능 대가가 사실상 없다.
 ///
 /// 디스크가 없는 부팅도 정상 경로다 — BF 체인은 ISO 부팅이라 -drive가 없다.
-/// 그때는 후보 마흔둘이 전부 ENOENT로 열리지 않아 로그 한 줄만 남으며, 부팅은
-/// 계속된다.
+/// 그때는 후보가 전부 ENOENT로 열리지 않아 로그 한 줄만 남으며, 부팅은
+/// 계속된다. 그 줄의 후보 수(14 · 42)가 이번 부팅이 파티션을 봤는지를 말한다.
 fn mountConfig() bool {
+    const list = storage.candidates(storage.bootedInstalled(config.CMDLINE_PATH));
     var found: storage.Found = .{};
-    if (!storage.findConfigDisk(&found)) {
+    if (!storage.findConfigDisk(&found, list)) {
         std.debug.print("tars-init: no disk labelled {s}* among {d} candidates\n", .{
-            storage.LABEL_PREFIX, storage.CANDIDATES.len,
+            storage.LABEL_PREFIX, list.len,
         });
         return false;
     }
