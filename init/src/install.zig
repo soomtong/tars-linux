@@ -9,7 +9,7 @@ const disk = @import("disk.zig");
 /// p1만 갈고 p2(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).
 ///
 /// init 옆의 별도 실행 파일인 이유는 DI design 결정 5다 — 부팅 경로에 안
-/// 들어가야 게이트의 열두 체인에 닿지 않고, storage.zig를 같이 써야 목록에
+/// 들어가야 게이트의 다른 체인들에 닿지 않고, storage.zig를 같이 써야 목록에
 /// 보이는 이름과 부팅 때 찾는 이름이 같은 코드에서 나온다.
 ///
 /// init처럼 libc 없이 시스템 콜만 쓴다. 게스트에 `mount` 명령이 없어서다
@@ -386,24 +386,31 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
     return total;
 }
 
-/// 매체의 limine.conf를 읽어 표지를 붙여 ESP에 쓴다(disk.espConf). 원본은
-/// 1KB 아래라(DI-M0 실측 7의 908바이트) 버퍼 하나에 든다.
-fn copyConf(src: [:0]const u8, dst: [:0]const u8) ?u64 {
-    var in_buf: [8192]u8 = undefined;
-    const conf = readFile(src.ptr, &in_buf) orelse {
+/// 매체의 limine.conf를 읽어 표지를 붙인 모양으로 돌려준다(disk.espConf).
+/// 원본은 1KB 아래라(DI-M0 실측 7의 908바이트) 버퍼 하나에 든다.
+///
+/// 디스크를 건드리기 전, YES를 묻기 전에 부른다 — espConf가 거부할 conf면
+/// 아무것도 지우지 않고 멈춰야 한다(disk.espConf의 약속).
+fn prepareConf(in_buf: []u8, out_buf: []u8) ?[]const u8 {
+    var src_buf: [128]u8 = undefined;
+    const src = std.fmt.bufPrintZ(&src_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.LIMINE_CONF }) catch unreachable;
+    const conf = readFile(src.ptr, in_buf) orelse {
         complain("cannot read {s}", .{src});
         return null;
     };
     if (conf.len == in_buf.len) {
-        complain("{s} is larger than {d} bytes", .{ src, in_buf.len });
+        complain("{s} does not fit in {d} bytes", .{ src, in_buf.len });
         return null;
     }
-    var out_buf: [8192 + 256]u8 = undefined;
-    const text = disk.espConf(&out_buf, conf) orelse {
+    return disk.espConf(out_buf, conf) orelse {
         complain("{s} has no cmdline line to mark with {s}", .{ src, storage.INSTALLED_TOKEN });
         return null;
     };
+}
 
+/// prepareConf가 지은 표지 붙은 text를 dst에 그대로 쓴다. 옛 copyConf의
+/// 쓰기 루프를 그대로 옮긴 것이다.
+fn writeConf(dst: [:0]const u8, text: []const u8) ?u64 {
     const rc = linux.open(dst.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
         complain("cannot create {s} (errno {d})", .{ dst, @intFromEnum(e) });
@@ -446,6 +453,12 @@ fn install(
         complain("no boot medium to copy from; boot from the TARS ISO or USB stick first", .{});
         return 1;
     }
+
+    // 표지를 붙일 수 있는 conf인지 먼저 본다. 디스크를 지운 뒤에 알면 늦다.
+    var conf_in: [8192]u8 = undefined;
+    var conf_out: [2 * 8192]u8 = undefined;
+    const esp_conf = prepareConf(&conf_in, &conf_out) orelse return 1;
+
     var size_buf: [16]u8 = undefined;
     var model_buf: [64]u8 = undefined;
     var state_buf: [64]u8 = undefined;
@@ -494,7 +507,7 @@ fn install(
     const p2 = storage.partitionName(&p2_buf, path, 2).?;
 
     if (update) {
-        if (!fillEsp(p1)) return 1;
+        if (!fillEsp(p1, esp_conf)) return 1;
         say("tars-install: updated. remove the boot medium and reboot.\n", .{});
         return 0;
     }
@@ -520,7 +533,7 @@ fn install(
     const mke2fs = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext2", "-L", disk.CONFIG_LABEL, p2 };
     if (!runTool(&mke2fs, null, WORK_DIR ++ "/mke2fs.log", envp)) return 1;
 
-    if (!fillEsp(p1)) return 1;
+    if (!fillEsp(p1, esp_conf)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});
     return 0;
 }
@@ -533,7 +546,7 @@ fn install(
 /// bzImage가 이름으로는 남아 있어 목록이 여전히 `TARS installed`로 보인다 —
 /// 같은 명령을 한 번 더 치면 된다. 새 이름으로 쓰고 rename하는 길은 p1에
 /// 두 벌이 들 자리(90MB)가 있지만 이번에는 안 한다.
-fn fillEsp(p1: [:0]const u8) bool {
+fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
     if (!mkdirOk(ESP_DIR.ptr)) {
         complain("cannot create {s}", .{ESP_DIR});
         return false;
@@ -542,7 +555,7 @@ fn fillEsp(p1: [:0]const u8) bool {
         complain("cannot mount {s} as vfat (errno {d})", .{ p1, @intFromEnum(e) });
         return false;
     }
-    const copied = copyAll();
+    const copied = copyAll(esp_conf);
     // sync가 umount보다 먼저다. 캐시에만 있는 41MB는 전원 버튼과 함께
     // 사라진다(design 위험 3). umount도 쓰기를 내보내지만 실패하면 안
     // 내보내므로 sync를 따로 부른다.
@@ -556,8 +569,10 @@ fn fillEsp(p1: [:0]const u8) bool {
 }
 
 /// 매체는 findMedium이 MEDIUM_DIR에 붙여 두었고 p1은 install이 ESP_DIR에
-/// 붙였다. 여기는 두 디렉터리 사이의 일만 한다.
-fn copyAll() bool {
+/// 붙였다. limine.conf는 esp_conf(디스크를 건드리기 전에 prepareConf가 이미
+/// 지어 둔 표지 붙은 text)를 그대로 쓰고, 나머지 셋만 두 디렉터리 사이에서
+/// 바이트 그대로 옮긴다.
+fn copyAll(esp_conf: []const u8) bool {
     for (disk.ESP_DIRS) |d| {
         var buf: [128]u8 = undefined;
         const p = std.fmt.bufPrintZ(&buf, "{s}/{s}", .{ ESP_DIR, d }) catch unreachable;
@@ -572,8 +587,7 @@ fn copyAll() bool {
         var to_buf: [128]u8 = undefined;
         const from = std.fmt.bufPrintZ(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }) catch unreachable;
         const to = std.fmt.bufPrintZ(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }) catch unreachable;
-        // limine.conf만 한 줄이 바뀐다(disk.espConf). 나머지 셋은 바이트 그대로다.
-        const copied = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) copyConf(from, to) else copyFile(from, to);
+        const copied = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) writeConf(to, esp_conf) else copyFile(from, to);
         const n = copied orelse return false;
         say("  {s} {d} bytes\n", .{ rel, n });
     }
@@ -606,7 +620,10 @@ pub fn main(init: std.process.Init.Minimal) u8 {
     // 안 붙어 있으면 EINVAL이고 그것이 보통의 경우다. 목록보다 먼저인 것은
     // isInstalled가 같은 자리에 p1을 붙여 보기 때문이고, 설치보다 먼저인 것은
     // 남은 마운트가 있으면 sfdisk가 "in use"로 거부하기 때문이다(DI-M1 271fe17).
+    // 매체 자리도 같은 이유로 뗀다 — 남은 매체 위에 findMedium이 한 겹 더
+    // 붙이지 않게.
     _ = linux.umount(ESP_DIR.ptr);
+    _ = linux.umount(MEDIUM_DIR.ptr);
 
     // 매체는 목록에도 설치에도 필요하다. 붙인 채로 돌려받고 끝에서 뗀다 —
     // 읽기 전용이라 떼는 순서가 디스크에 아무것도 안 바꾼다.
