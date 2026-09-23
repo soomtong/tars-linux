@@ -388,6 +388,11 @@ fn install(
     // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
     // TARS가 있던 디스크에 다시 설치하면 p2 자리에 옛 ext2가 그대로 있고,
     // mke2fs가 그것을 보고 머뭇거린다.
+    // 앞선 실행이 복사 도중 죽었으면(Ctrl-C) p1이 ESP_DIR에 붙은 채 남아 있고,
+    // sfdisk가 "in use"로 거부한다. 게스트에 umount 명령이 없어 사람이 뗄 길이
+    // 없으므로 여기서 뗀다. 안 붙어 있으면 EINVAL이고 그것이 보통의 경우다.
+    _ = linux.umount(ESP_DIR.ptr);
+
     say("tars-install: writing the partition table\n", .{});
     const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--wipe", "always", "--wipe-partitions", "always", path };
     if (!runTool(&sfdisk, disk.SFDISK_SCRIPT, WORK_DIR ++ "/sfdisk.log", envp)) return 1;
