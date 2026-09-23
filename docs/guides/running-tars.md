@@ -151,12 +151,12 @@ tars-init: no disk labelled tars-* among 14 candidates
 tars-init: no config storage, using defaults
 ```
 
-### 설치는 안 된다
+### VM의 디스크에 설치하기
 
-인스톨러가 없다. live ISO 하나뿐이고 디스크에 설치하는 경로가 없다. 게스트
-안에서 만든 파일은 `/config`에 쓴 것 말고 재부팅하면 전부 사라진다 —
-initramfs가 tmpfs이기 때문이다. `HANDOFF.md`가 다음 서브프로젝트 후보 1번으로
-올려 둔 것이 이것이다.
+실기와 같다. 빈 디스크를 하나 더 붙이고 ISO로 뜬 뒤 `tars-install`을 친다 —
+아래 "내장 디스크에 설치하기". 펌웨어가 UEFI여야 한다(legacy BIOS 설치는 DI
+design의 비목표다). 설치한 뒤에도 시스템은 initramfs에서 돈다. 재부팅을 넘어
+남는 것은 여전히 `/config`, 곧 설치된 디스크의 p2뿐이다.
 
 ## 실기 노트북에 꽂아 보기
 
@@ -184,6 +184,42 @@ Secure Boot를 꺼야 한다. 우리 커널에는 서명이 없고 shim도 안 �
 읽히는 것으로 오해하기 쉽다. 보통 전원을 켜고 F2/Del/F12로 펌웨어 설정에
 들어가 Security 아래에 있다.
 
+### 내장 디스크에 설치하기
+
+USB로 뜬 기계에서 인자 없이 치면 목록이 나온다. 무엇을 지우게 되는지는 이
+목록의 마지막 칸이 말한다.
+
+```
+$ tars-install
+tars-install: boot medium /dev/sda (iso9660 TARS, 51 MB)
+
+  /dev/nvme0n1    512 GB  Samsung SSD 980        internal   foreign (gpt)
+  /dev/sda         32 GB  SanDisk Ultra          removable  boot medium
+
+tars-install <disk>         install onto <disk>; a disk that has TARS is only updated
+tars-install <disk> --yes   same, without asking
+tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
+```
+
+`tars-install /dev/nvme0n1`은 계획을 찍고 대문자 `YES`를 기다린다. 새 설치는
+디스크 전체를 지우고 GPT에 둘을 만든다. p1은 256MiB ESP(FAT32 `TARS-BOOT`)이고
+커널·initrd·limine이 들어간다. p2는 1GiB ext2(`tars-config`)이고 설정이 산다.
+나머지는 비워 둔다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
+재부팅하지 않는다.
+
+새 ISO가 나오면 그 ISO로 떠서 같은 명령을 친다. 목록이 그 디스크를
+`TARS installed`로 보이고, p1의 파일 넷만 갈고 p2는 열지도 않는다(`updated.`).
+처음부터 다시 하려면 `--wipe`를 준다. 설정도 함께 지워진다.
+
+ISO로 뜬 동안에는 설치된 디스크의 설정이 안 붙는다(`among 14 candidates`).
+`tars-install`이 ESP의 `limine.conf`에 `tars.installed`를 붙여 두고, `init`은
+그 표지가 있을 때만 파티션을 보기 때문이다. 설치기로 뜬 세션이 그 디스크를
+붙잡고 있으면 `--wipe`가 다시 파티션할 수 없다.
+
+안 되는 것: legacy BIOS 부팅, 다른 OS 옆에 나란히 설치(새 설치는 늘 디스크
+전체를 지운다), 펌웨어의 부트 항목 등록. 펌웨어는 항목 없이도
+`\EFI\BOOT\BOOTX64.EFI`를 찾는다.
+
 ### 설정을 부팅 사이에 남기려면
 
 `init`은 ext2 라벨이 `tars-`로 시작하는 첫 블록 장치를 `/config`로 붙인다
@@ -195,9 +231,11 @@ Secure Boot를 꺼야 한다. 우리 커널에는 서명이 없고 shim도 안 �
 mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
 ```
 
-파티션이 아니라 디스크 전체를 포맷한다 — 지금 `init`은 파티션을 안 본다.
-그리고 노트북 내장 디스크는 GPT라 이 훑기에 걸리지 않는다(superblock 매직이
-안 맞는다). 남의 파일시스템을 잡을 길이 없다는 뜻이다.
+파티션이 아니라 디스크 전체를 포맷한다. `init`은 설치된 디스크로 떴을 때만
+파티션을 본다(cmdline의 `tars.installed`). 내장 디스크에 설치했다면 설정은 그
+디스크의 p2에 살고, 이 스틱은 필요 없다. 노트북 내장 디스크의 GPT 자체는 이
+훑기에 걸리지 않는다(superblock 매직이 안 맞는다). 파티션을 볼 때도 라벨이
+`tars-`로 시작하지 않으면 잡지 않는다. 남의 파일시스템을 잡을 길이 없다는 뜻이다.
 
 ### 기계가 기억하는 것 둘
 
@@ -306,6 +344,6 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
-이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열한 체인이 전부
+이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열세 체인이 전부
 QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 "켜 봤다"에서
 멈춘다. 꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.
