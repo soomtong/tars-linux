@@ -118,11 +118,16 @@ pub fn candidates(installed: bool) []const [:0]const u8 {
 
 /// /proc/cmdline을 읽어 INSTALLED_TOKEN이 있는지 본다. 못 읽으면 false다 —
 /// 파티션을 안 보는 쪽이 안전한 쪽이다(남의 디스크를 붙일 일이 더 적다).
+/// 그 사실은 한 줄로 남긴다 — 설치된 기계에서 설정이 사라지는 증상이
+/// 원인에서 멀기 때문이다.
 /// readHead가 "앞에서 버퍼만큼 읽는다"라서 그대로 쓴다. x86의
 /// COMMAND_LINE_SIZE가 2048이다.
 pub fn bootedInstalled(cmdline_path: [:0]const u8) bool {
     var buf: [2048]u8 = undefined;
-    const text = readHead(cmdline_path, &buf) orelse return false;
+    const text = readHead(cmdline_path, &buf) orelse {
+        std.debug.print("tars-init: cannot read {s}, assuming not {s}\n", .{ cmdline_path, INSTALLED_TOKEN });
+        return false;
+    };
     return cmdlineInstalled(text);
 }
 
@@ -139,8 +144,9 @@ pub fn partitionName(buf: []u8, disk: []const u8, n: u8) ?[:0]const u8 {
 /// 돌려주면 읽기 버퍼가 스택에서 사라진 뒤를 가리킨다. devices.Path가 경로에
 /// 대해 이미 쓰는 처방이다.
 pub const Found = struct {
-    /// CANDIDATES의 원소를 그대로 가리킨다. 문자열 리터럴이라 수명이 무한하고,
-    /// 그래서 execve의 argv에 넣는 것과 같은 성질이다.
+    /// candidates()가 준 목록(DISKS 또는 CANDIDATES)의 원소를 그대로
+    /// 가리킨다. 문자열 리터럴이라 수명이 무한하고, 그래서 execve의 argv에
+    /// 넣는 것과 같은 성질이다.
     path: [:0]const u8 = "",
     label_buf: [LABEL_LEN]u8 = [_]u8{0} ** LABEL_LEN,
     label_len: usize = 0,
@@ -186,7 +192,7 @@ pub fn tarsLabel(head: []const u8) ?[]const u8 {
 }
 
 /// 장치 앞머리를 buf에 읽는다. 없는 장치는 ENOENT이고 그것이 정상 경로다 —
-/// 후보 마흔둘 중 이 기계에 있는 것은 보통 한둘이다.
+/// 후보(열넷 또는 마흔둘) 중 이 기계에 있는 것은 보통 한둘이다.
 ///
 /// O_NONBLOCK으로 여는 이유가 devices.zig의 버튼 fd와 다르다. 여기서는
 /// 매체가 없는 광학 드라이브나 빈 카드 리더에서 open(2)이 매달리는 것을
@@ -195,6 +201,9 @@ pub fn tarsLabel(head: []const u8) ?[]const u8 {
 ///
 /// read(2)가 요청한 만큼을 다 준다는 보장이 없으므로 "돌아온 만큼 더한다".
 /// devices.readFile과 같은 루프다.
+///
+/// bootedInstalled가 /proc/cmdline을 읽을 때도 이 함수를 쓴다. procfs에서
+/// O_NONBLOCK은 아무 효과가 없다.
 pub fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
     if (failed(rc)) |_| return null;

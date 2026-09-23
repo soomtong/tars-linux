@@ -254,6 +254,10 @@ pub fn main() !void {
             });
             return error.NoPartitionsWithMark;
         }
+        if (storage.candidates(false).ptr != &storage.DISKS or storage.candidates(true).ptr != &storage.CANDIDATES) {
+            std.debug.print("FAIL: candidates() does not hand out DISKS and CANDIDATES themselves\n", .{});
+            return error.CandidatesNotTheLists;
+        }
     }
 
     // 후보 목록이 통째로 사라지지 않았는지만 본다. 무엇이 몇 번째인가는
