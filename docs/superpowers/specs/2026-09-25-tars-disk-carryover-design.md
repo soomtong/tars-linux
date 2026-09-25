@@ -2,7 +2,7 @@
 
 접두사: DC
 
-Status: 설계했다(2026-09-25). M0부터 한다.
+Status: M0 끝(2026-09-25). M1이 다음이다.
 
 관련 문서: `2026-09-19-tars-disk-install-design.md`(DI. 이 서브프로젝트가 받는
 이월 여섯이 그 문서의 실측 15와 19에 있다. 아래에서 "DI 결정 N"은 그 문서의
@@ -158,3 +158,43 @@ USB 부팅은 `delay_use=3` 때문에 적어도 3초를 더 쓴다. 회차 셋�
   QEMU NVMe의 `nvme0n1p2`가 PID 1 기준 몇 ms에 생기는지 잰다. 상한을 확정한다.
 - DC-M1 — 결정 1·2의 기다림과 결정 4의 부팅. 반사실을 돌린다.
 - DC-M2 — 결정 5의 다섯.
+
+## DC-M0이 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-25-tars-disk-carryover-dc-m0.md`다. 코드는
+안 고쳤다. 하네스(`/tmp/dcm0/probe.sh`, 전문은 plan에)를 시제품으로 한 번, plan대로
+한 번 돌렸고 두 판이 같은 모양이었다. 아래 수는 둘째 판이다.
+
+### 실측 1 — 틈이 재현됐다
+
+`-kernel` 부팅, cmdline에 `tars.installed`, 64MiB 디스크(MBR, p2가 라벨
+`tars-dcm0`의 ext2)를 붙였다.
+
+| 부팅 | 설정 노드 | `Run /init` | `init` |
+|---|---|---|---|
+| usb-storage, `delay_use=3` | `sda: sda1 sda2` 4.049초 | 2.327초 | `no disk labelled tars-* among 42 candidates` |
+| usb-storage, 기본값(1초) | 1.805초 | 2.197초 | `config storage /dev/sda2` |
+| nvme × 5 | `nvme0n1: p1 p2` 0.560~0.604초 | 2.272~2.328초 | `config storage /dev/nvme0n1p2` |
+
+첫 줄이 이월 1번의 실물이다. 설정 파티션이 멀쩡히 있는데 `init`이 훑은 뒤
+1.72초에 생겨서 기계가 기본값으로 떴다. 시제품 판은 1.69초였다. `Command line:`에
+`usb-storage.delay_use=3`이 그대로 있고 `sda`가 그만큼 늦었으므로 위험 1(파라미터가
+안 먹을 수 있다)은 닫혔다.
+
+### 실측 2 — 틈을 덮던 것은 NVMe의 속도가 아니라 initramfs 풀기다
+
+확인 2는 "QEMU의 NVMe가 빨라서"라고 추측했는데 틀렸다. `Run /init` 바로 앞에
+`Freeing initrd memory: 41788K`가 2.285초에 있다. 커널이 42MB initramfs를 푸는
+데 약 1.7초를 쓰고, `init`은 그 뒤에야 뜬다. NVMe(0.56초)도 기본값 USB(1.8초)도
+그 사이에 다 붙는다.
+
+게이트는 arm64 호스트 위의 x86 TCG라 이 풀기가 느리다. 실기의 네이티브 CPU에서는
+훨씬 짧을 것이므로, 1초를 쉬는 USB는 거의 늘 늦고 느린 NVMe 컨트롤러도 늦을 수
+있다. 게이트가 이 틈을 못 본 것은 틈이 없어서가 아니라 에뮬레이션이 느려서다 —
+그래서 M1의 판정은 `delay_use`로 틈을 일부러 벌려야 한다(결정 3이 맞았다).
+
+### 실측 3 — 상한은 5초로 확정한다
+
+게이트에서 벌린 틈이 1.72초다. 결정 2의 5초는 그 세 배에 가깝고, 실기의 USB
+(`delay_use` 1초 + 열거)와 느린 NVMe 리셋을 덮는다. M1의 판정이 `appeared after
+N ms`의 N으로 이 값을 다시 보여 줄 것이다.
