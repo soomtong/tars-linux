@@ -1933,5 +1933,19 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 넘치는 답은 통째로 버린다 OK (버린 개수 {d})\n", .{rq.reply_dropped});
 
+    // 검사 64. 제목 보고(`ESC[21t`)에는 답이 없다.
+    //
+    // 출력이 OSC 2로 제목을 정한 뒤 21t로 되묻는 것은 "화면에 찍힌 글자가
+    // 셸의 입력이 되는" 길이다. 답이 한 바이트라도 나가면 그 제목이 root
+    // 셸의 입력 줄에 들어간다. 60~62와 같은 화면을 쓰므로 `write_pty`는
+    // 채워진 상태다 — 이 검사는 창구가 열린 채로 제목 보고만 닫혔는지를 본다.
+    rq.feed("\x1b]2;echo pwned\x07\x1b[21t");
+    const title = rq.takeReplies();
+    if (title.len != 0) {
+        std.debug.print("FAIL: 제목 보고에 {d}바이트의 답이 나갔다(0이어야 한다)\n", .{title.len});
+        return error.TitleReported;
+    }
+    std.debug.print("vt_test: 제목 보고에는 답이 없다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

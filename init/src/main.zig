@@ -146,7 +146,11 @@ fn mountConfig() bool {
     // mountFs는 한 글자도 안 고친다. 이 함수가 찍는
     // `tars-init: mounted ext2 at /config`를 config/check.sh:206과
     // power/check.sh:85가 마커로 갖고 있다.
-    return mountFs(found.path, "/config", "ext2", linux.MS.SYNCHRONOUS);
+    //
+    // NOSUID · NODEV: 이 디스크는 라벨만 맞으면 어느 것이든 붙는다(USB도).
+    // 설정 파일만 두는 자리라 setuid 비트나 장치 노드가 쓰일 일이 없으므로,
+    // 남의 디스크에 든 그것들이 힘을 갖지 못하게 한다.
+    return mountFs(found.path, "/config", "ext2", linux.MS.SYNCHRONOUS | linux.MS.NOSUID | linux.MS.NODEV);
 }
 
 /// 설정 파일의 자리. 저장소가 붙은 뒤에만 의미가 있다.
