@@ -1,44 +1,62 @@
-# HANDOFF: Disk Install Carryover(DC) M1까지 — 설치된 부팅이 늦게 생기는 설정 파티션을 기다린다
+# HANDOFF: Disk Install Carryover(DC)가 M2로 닫혔다 — 설치된 부팅이 늦은 설정 파티션을 기다리고, DI의 작은 것 다섯이 치워졌다
 
 ## 지금 어디인가
 
-DC는 DI가 남긴 이월 여섯을 받는 서브프로젝트다(2026-09-25 착수). 사용자가 "1번부터
-순서대로"를 골랐다. M0 · M1이 끝났고 다음은 DC-M2(작은 것 다섯)의 plan이다.
-design은 `docs/superpowers/specs/2026-09-25-tars-disk-carryover-design.md`(실측 1~6),
-plan은 `plans/2026-09-25-tars-disk-carryover-dc-m0.md` · `-dc-m1.md`.
+DC가 2026-09-25~26에 M0~M2로 닫혔다(design `Status: 끝났다`). DI가 남긴 이월 여섯을
+받은 서브프로젝트이고 사용자가 "1번부터 순서대로"를 골랐다. 다음 할 일은 새
+서브프로젝트를 고르는 것이다(아래 "바로 다음에 할 것").
 
-무엇이 섰나. `tars.installed`로 뜬 부팅에서 `init`이 설정 디스크를 못 찾으면 100ms
-간격으로 최대 5초 다시 훑는다(`storage.findConfigDiskWaiting` · `CONFIG_WAIT_MS`).
-표지 없는 부팅은 지금처럼 한 번만 본다(사용자가 골랐다). 기다렸으면
-`tars-init: config storage appeared after N ms`, 끝내 없으면 `waited 5000ms for config
-storage` 한 줄이 `no disk labelled` 앞에 붙는다.
+design은 `docs/superpowers/specs/2026-09-25-tars-disk-carryover-design.md`(실측 1~10),
+plan은 `plans/2026-09-25-tars-disk-carryover-dc-m0.md` · `-dc-m1.md` ·
+`plans/2026-09-26-tars-disk-carryover-dc-m2.md`, 기억은
+`docs/decisions/project_disk_carryover.md`다.
+
+무엇이 섰나.
+
+- M1 — `tars.installed`로 뜬 부팅에서 `init`이 설정 디스크를 못 찾으면 100ms 간격으로
+  최대 5초 다시 훑는다(`storage.findConfigDiskWaiting` · `CONFIG_WAIT_MS`). 표지 없는
+  부팅은 한 번만 본다(사용자가 골랐다). 기다렸으면 `tars-init: config storage appeared
+  after N ms`, 끝내 없으면 `waited 5000ms for config storage`가 `no disk labelled` 앞에.
+- M2 — `disk.describe`가 ext2 → GPT(512 · 4096) → iso9660 → MBR 순서(앞의 구조 먼저.
+  우리 ISO에는 GPT가 없다) · `disk.clip`이 넘치는 줄을 `...`로 잘라서라도 찍는다 ·
+  `install.readLine`이 YES를 개행까지 모은다 · `disk_test` 11~13.
 
 M0이 배운 것. 커널은 PID 1 전에 디스크를 기다려 주지 않는다(NVMe namespace 스캔은
 워크큐, usb-storage는 `delay_use` 뒤). 게이트가 그 틈을 못 본 것은 TCG 위에서 42MB
 initramfs를 푸는 1.7초가 덮었기 때문이다 — 실기에서는 덮개가 없다. 그래서 판정은
 `usb-storage.delay_use=3`으로 틈을 일부러 벌린다.
 
+M2가 배운 것. 쪼개진 YES는 "거절하는 쪽"만이 아니었다 — `YES` + ` please\n`이 따로
+오면 옛 코드는 확인으로 읽고 `writing the partition table`까지 갔다(반사실 b).
+
 | 커밋 | 무엇 |
 |---|---|
 | `f3ee56e` · `22a335e` | design · M0(재기만, 틈 1.72초) |
-| `242d4a3` | M1 plan |
-| `60e96cc` | `storage.zig` 기다림 + `storage_test` 셋 |
-| `7817076` | `mountConfig`가 표지 있을 때만 5초 |
-| `77a204e` | install 체인 부팅 7 — 부팅 6의 디스크를 `-kernel` + 늦은 USB로 |
-| (이 커밋) | `CHAINS`의 `DC-M1` · design 실측 · 기억 · 이 HANDOFF |
+| `242d4a3` · `60e96cc` · `7817076` · `77a204e` · `f275af3` | M1 — plan · 기다림 · `mountConfig` · 부팅 7 · 닫기 |
+| `ade7606` | M2 plan |
+| `bce7313` | `disk.zig` — 서명 순서 · 4Kn · `clip` · `disk_test` 11~13 |
+| `0840234` | `install.zig` — `say`/`complain`이 `clip` · `readLine` |
+| `ce039b9` | install 체인 판정 4a~4c — 부팅 1에 4Kn 임시 NVMe(`nvme1n1`) |
+| (이 커밋) | `CHAINS`의 `DC-M2` · design 실측 · 기억 · `CLAUDE.md` 표 · 이 HANDOFF |
 
-판정: install 체인 부팅 7이 `init waited 1600~1700ms`, 부팅 2·4·6은 6초 그대로.
-반사실(`max_ms` 늘 0)이 판정 17에서 빨강. 루트 게이트 13체인 3/3(38분 53.53초, `FAIL`
-0줄, 2026-09-25).
+판정: install 체인이 부팅 일곱, 반사실 넷(M1 하나 · M2 셋)이 전부 자기 판정에서 빨강.
+루트 게이트 13체인 3/3(38분 38.07초, `FAIL` 0줄, 2026-09-26).
 
-⚠ 반사실은 반드시 컨테이너 안에서 `rm -rf init/.zig-cache init/zig-out` 뒤에 돌린다.
-M1의 첫 반사실 판이 낡은 바이너리로 거짓 초록이었다(design 실측 5,
-`project_zig_out_staleness` 일곱번째).
+⚠ 다음 사람이 먼저 볼 것 셋.
 
-다음 — DC-M2. design 결정 5의 순서대로: 4Kn GPT · 옛 ISO 서명(하이브리드 ISO 자신이
-GPT를 갖는지 `make_iso.sh` 출력부터 본다) · `say`/`complain`의 512바이트 버퍼에서
-사라지는 긴 줄 · YES를 개행까지 모아 읽기 · `disk_test` 음성 둘. 컨테이너에는
-`sfdisk`가 없고 `perl` · `mke2fs` · `debugfs`는 있다(M0 plan).
+1. 반사실은 반드시 컨테이너 안에서 `rm -rf init/.zig-cache init/zig-out` 뒤에 돌린다.
+   M1의 첫 반사실 판이 낡은 바이너리로 거짓 초록이었다(design 실측 5).
+2. install 체인의 부팅 1에는 NVMe가 둘이다. `nvme1n1`(64MiB, 4Kn)은 판정 4a~4c의
+   임시 디스크이고 부팅 2부터는 없다. 목록 판정의 정규식이 `nvme0n1`을 콕 집는 이유다.
+3. 컨테이너에는 `sfdisk`가 없다(`perl` · `mke2fs` · `debugfs`는 있다). 파티션 표가
+   필요한 하네스는 MBR을 `perl`로 쓰거나(DC-M0) 게스트의 `sfdisk`를 부른다(DC-M2).
+
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+DC가 닫혔다. 남은 후보 — 패키지 매니저(DI가 디스크에 비워 둔 자리 · p3) · 실머신 NIC
+(실기 없이 열려면 유선 드라이버를 QEMU 에뮬레이션으로 재는 반쪽) · IN이 미룬 넷 ·
+TS가 미룬 chrony. DC가 새로 남긴 이월은 없다 — 비목표 둘(hotplug · 표지 없는 부팅의
+USB 설정 스틱)은 design이 뺀 것이다.
 
 ## 그 앞 — PR 1
 
@@ -100,9 +118,8 @@ Task마다 품질 검토, 끝에 전체 최종 검토를 돌렸고 고친 것이
 1. ISO로 뜬 설치 세션은 설정 없이 기본값으로 돈다(`among 14 candidates`). 의도다.
    설치된 디스크로 떴을 때도 디스크 전체가 `tars-` ext2인 스틱을 꽂아 두면 p2보다
    그 스틱이 먼저 붙는다(디스크 전체를 먼저 훑는다).
-2. 이월 — M1 실측 15의 다섯(4Kn GPT · 옛 ISO 서명 · 긴 인자 · `read` 한 번의 YES ·
-   `disk_test` 음성 둘)과 부팅 때 파티션 노드가 늦게 생기는 틈. 실기에서 설정을 못
-   찾으면 뒤의 것을 먼저 의심한다.
+2. ~~이월 — M1 실측 15의 다섯과 부팅 때 파티션 노드가 늦게 생기는 틈~~ — DC-M0~M2
+   (2026-09-25~26)가 서브프로젝트로 했다. `project_disk_carryover`.
 3. 체인의 판정이 raw 시리얼 로그에 정규식을 걸 때 줄 끝이 `\r\n`이다. `$`를 쓰려면
    `install/check.sh`의 `CR` 상수처럼 실제 CR 바이트를 넣는다.
 
@@ -1132,7 +1149,7 @@ fish 0). 씨앗 `rcSeed()`가 그 글자를 따로 한 벌 더 적는다 — 조
 
 본문은 `docs/decisions/project_shell_history.md`에 있다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+## 그 앞의 후보 목록 (DI가 닫혔을 때 — 위 "바로 다음에 할 것"이 새것이다)
 
 DI가 닫혔다. 남은 후보 — 패키지 매니저(DI가 디스크에 빈 자리를 남겨 두었다 — p3으로
 root 파일시스템이나 창고가 들어올 곳) · 실머신 NIC(실기가 생기면. 실기 없이 열려면

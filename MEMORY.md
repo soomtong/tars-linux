@@ -75,3 +75,4 @@
 - [터미널 질의](docs/decisions/project_terminal_queries.md) — terminal이 자식의 vt 질의(커서 위치·상태 보고)에 답한다; `effects.write_pty` 한 칸이 전부이고 답은 라이브러리가 만든다. 그래서 fzf의 `--height` 상자가 첫 Ctrl+R에 뜬다(TQ-M1, 2026-09-19 종료. ST-M3의 `--no-height` 우회는 지웠다)
 - [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig 씨앗, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
 - [Disk install](docs/decisions/project_disk_install.md) — `tars-install`이 GPT에 ESP(p1)와 `tars-config`(p2)를 만들고 USB 없이 뜬다; `init`의 후보가 디스크 다음 파티션이 됐고 안전은 라벨이 지킨다. ISO 부팅은 표지 `tars.installed`가 없어 p2를 안 붙이고, 갱신은 설정을 남긴다(DI-M1·M2, 2026-09-23)
+- [Disk carryover](docs/decisions/project_disk_carryover.md) — 설치된 부팅이 설정 파티션을 최대 5초 기다린다(게이트의 틈은 TCG의 initramfs 풀기가 덮고 있었다 — `delay_use=3`으로 벌려 판정); 4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · YES를 줄로(DC-M0~M2, 2026-09-26 종료)

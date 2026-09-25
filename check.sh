@@ -267,7 +267,7 @@ CHAINS=(
   "RM-M1:./machine/check.sh"
   "UT-M3:./tools/check.sh"
   "NW-M3:./net/check.sh"
-  "DC-M1:./install/check.sh"
+  "DC-M2:./install/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

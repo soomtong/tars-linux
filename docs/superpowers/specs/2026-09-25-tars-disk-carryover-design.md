@@ -2,7 +2,7 @@
 
 접두사: DC
 
-Status: M1 끝(2026-09-25). M2(DI의 작은 것 다섯)가 다음이다.
+Status: 끝났다(2026-09-26). M0 · M1 · M2 — 실측 절 셋에 있다.
 
 관련 문서: `2026-09-19-tars-disk-install-design.md`(DI. 이 서브프로젝트가 받는
 이월 여섯이 그 문서의 실측 15와 19에 있다. 아래에서 "DI 결정 N"은 그 문서의
@@ -239,3 +239,53 @@ or never found it`로 멈춘다.
 기다렸고 부팅 2 · 4 · 6은 세 회차 모두 6초다. 같은 날 PR 1 뒤의 판(38분 27.90초)보다
 26초 늘었고, 그것이 부팅 7 × 3회차의 몫이다. 나머지 열둘은 `tars.installed` 없이
 뜨므로 기다림이 한 번도 안 돈다.
+
+## DC-M2가 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-26-tars-disk-carryover-dc-m2.md`다. 커밋은
+`bce7313`(`describe`의 순서와 4Kn · `clip` · `disk_test` 11~13) · `0840234`
+(`say`/`complain`이 `clip`을 쓰고 YES를 `readLine`으로) · `ce039b9`(install 체인의
+판정 4a~4c) · 루트 게이트 커밋이다.
+
+### 실측 7 — 결정 5의 열어 둔 질문이 닫혔다: 우리 ISO에는 GPT가 없다
+
+`out/tars.iso`의 512와 4096에 `EFI PART`가 없고 1080에 ext2 매직도 없다.
+`make_iso.sh`가 `--protective-msdos-label`로 MBR만 쓴다. 그래서 `describe`의 순서를
+"앞의 구조 먼저"(ext2 → GPT(512 · 4096) → iso9660 → MBR)로 바꿔도 진짜 매체는
+`iso9660 TARS`이고, 판정 2가 매 회차 그것을 본다. ext2도 ISO보다 먼저 둔 것은 이
+문서를 쓸 때 안 센 경우다 — 옛 ISO 스틱을 통째로 `mkfs.ext2`하면 32KiB의 PVD가
+inode table 자리에 남을 수 있다.
+
+옛 PVD는 `tars-install`이 만든 디스크에는 안 남는다. `sfdisk --wipe always`가
+`CD001`까지 지운다. 남의 도구로 다시 만든 스틱의 이야기다.
+
+### 실측 8 — 판정 셋과 반사실 셋
+
+부팅 1에 64MiB 4Kn NVMe(`logical_block_size=4096`)를 `nvme1n1`로 더 붙였다. 게스트가
+`dc-lbs-4096`을 찍어 QEMU가 그 속성을 받았음을 먼저 본다.
+
+| 판정 | 초록 | 반사실(하나씩 되돌림, 캐시 삭제) |
+|---|---|---|
+| 4a 4Kn GPT | 게스트의 `sfdisk`가 만든 GPT가 `foreign (gpt)` | 4096을 안 보면 `foreign (mbr)`, 빨강 |
+| 4b 쪼개진 YES | `YES` + 1초 + ` please\n`가 `not confirmed` | `read` 한 번이면 `YES`로 읽고 `writing the partition table`까지 갔다 — 64MiB라 `sfdisk failed`로 멈췄다 |
+| 4c 넘치는 줄 | 600글자 인자의 에러가 `tars-install: /dev/xxx…...`로 | 넘치면 버리는 `clip`이면 줄이 없다, 빨강 |
+
+4b가 이월 목록의 설명을 바로잡는다. DI 실측 15와 HANDOFF는 "read 한 번의 YES는
+거절하는 쪽으로 틀린다"고 적었는데, `YES`로 시작하는 줄이 쪼개 오면 확인하는 쪽으로
+틀린다. 사람이 tty에 치면 한 줄이 통째로 오므로 파이프로 넣을 때만의 일이다.
+
+4b의 확인 대상을 설치 대상이 아닌 임시 디스크로 둔 것이 반사실에서 값을 했다 —
+옛 코드가 실제로 지우러 갔다.
+
+### 실측 9 — `bufPrint`는 넘칠 때 앞을 채워 둔다
+
+Zig 0.16의 `std.fmt.bufPrint`는 `NoSpaceLeft`를 돌려주면서 buf를 앞에서부터 채워
+둔다. 16바이트 buf에 46바이트 줄을 넣으면 `tars-install: /d`가 남는다. `clip`이 이
+동작에 기대고 `disk_test` 11이 그것을 지킨다 — Zig를 올리다 바뀌면 거기서 먼저 빨개진다.
+
+### 실측 10 — 루트 게이트
+
+체인 열셋이 전부 `PASS: 3/3`, `TARS check PASS`, `FAIL` 0줄, 38분 38.07초. install
+체인의 이름이 `DC-M2`가 됐다. 판정 4a~4c가 세 회차 모두 초록이고, 부팅 7은
+`1600ms` · `1700ms` · `1700ms`, 부팅 1~7의 셸 시각은 DI-M2 · DC-M1과 같다(7 · 6 · 7 ·
+6 · 7 · 6 · 5초). M1 판보다 15초 짧은 것은 잡음이다 — 더한 것은 부팅 1의 명령 셋뿐이다.
