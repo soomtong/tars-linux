@@ -14,6 +14,7 @@ cd "$(dirname "$0")"
 #   4  NVMe만              갱신을 넘어 마커가 남았다
 #   5  ISO + 설치된 NVMe   --wipe로 통째로 다시 설치
 #   6  NVMe만              마커가 사라졌고 설정이 첫 부팅처럼 새로 깔린다
+#   7  같은 디스크를 USB로  -kernel · delay_use=3. init이 늦은 p2를 기다려 잡는다(DC-M1)
 #
 # 왜 sendkey가 아니라 시리얼 FIFO인가. 다른 체인들은 terminal의 화면
 # 줄(`terminal: screen>`)로 판정하는데 이 체인이 볼 것은 tars-install이
@@ -387,6 +388,74 @@ send "test -e /config/di-marker || printf 'di-marker-%s\n' gone"
 wait_log "di-marker-gone" \
   || fail "the marker survived --wipe" "di-marker"
 echo "--wipe left a fresh config partition"
+
+stop_guest
+
+# ── 부팅 7: 설치된 디스크를 USB로, 늦게 (DC-M1) ────────────────────────
+#
+# 커널은 PID 1을 띄우기 전에 디스크를 기다려 주지 않는다(DC 확인 2). 그런데
+# 게이트에서는 그 틈이 안 보인다 — TCG 위에서 42MB initramfs를 푸는 1.7초
+# 동안 NVMe가 다 붙어 버린다(DC-M0 실측 2). 그래서 틈을 일부러 벌린다.
+# usb-storage는 장치를 붙이고 delay_use만큼 쉰 뒤에 SCSI 스캔을 하므로, 3초를
+# 주면 sda2가 init이 처음 훑은 뒤에 생긴다(DC-M0 실측 1: 1.72초 뒤).
+#
+# 왜 -kernel인가. cmdline에 delay_use를 넣을 자리가 필요하고, tars.installed도
+# ESP의 limine.conf가 아니라 여기서 준다. init이 보는 것은 /proc/cmdline의
+# 토큰뿐이라 어디서 왔는지는 모른다. 디스크는 부팅 6이 --wipe로 막 만든 그것이다.
+boot_kernel_usb() {
+  local name="$1" cmdline="$2"
+  LOG="${WORK}/boot-${name}.log"
+  FIFO="${WORK}/boot-${name}.fifo"
+  rm -f "$FIFO"; mkfifo "$FIFO"
+  exec 4<>"$FIFO"
+  qemu-system-x86_64 \
+    -machine q35 \
+    -m "$GUEST_MEM" \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "$cmdline" \
+    -device qemu-xhci,id=xhci \
+    -drive file="$DISK",if=none,id=late,format=raw \
+    -device usb-storage,bus=xhci.0,drive=late \
+    -serial stdio \
+    -monitor none \
+    -display none \
+    -no-reboot \
+    < "$FIFO" > "$LOG" 2>&1 &
+  QEMU_PID=$!
+
+  local waited=0
+  while [ "$waited" -lt 180 ]; do
+    if grep -aq "tars-init: started console shell" "$LOG"; then break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1; waited=$((waited + 1))
+  done
+  if ! grep -aq "tars-init: started console shell" "$LOG"; then
+    fail "boot ${name}: the console shell never started (${waited}s)" \
+      "PANIC" "tars-init"
+  fi
+  echo "boot ${name}: console shell up after ${waited}s"
+}
+
+echo "=== boot 7: the installed disk over USB, three seconds late ==="
+boot_kernel_usb 7 "console=ttyS0 tars.installed usb-storage.delay_use=3"
+
+# 판정 17. 이 milestone의 심장이다. init이 처음 훑었을 때 sda2는 없었고, 기다려서
+# 잡았다. appeared after가 없으면 기다림 없이 잡은 것이라 틈이 안 벌어진
+# 판이고(판정이 아무것도 증명 안 한다), config storage가 없으면 기다림이 없거나
+# 너무 짧다 — 기다림을 뺀 init은 여기서 among 42 candidates를 찍는다.
+if ! grep -aqF "tars-init: config storage appeared after" "$LOG"; then
+  fail "init did not have to wait for the late USB disk, or never found it" \
+    "tars-init: config storage" "tars-init: waited" "tars-init: no disk labelled" "sda: sda1"
+fi
+if ! grep -aqF "tars-init: config storage /dev/sda2 (label tars-config)" "$LOG"; then
+  fail "init waited but did not pick p2 of the late USB disk" \
+    "tars-init: config storage" "tars-init: no disk labelled"
+fi
+if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
+  fail "the late config partition was picked but never mounted" "tars-init: failed to mount"
+fi
+echo "init waited $(grep -aoE 'appeared after [0-9]+ms' "$LOG" | head -1 | sed 's/appeared after //') for the late USB disk and mounted its p2"
 
 stop_guest
 
