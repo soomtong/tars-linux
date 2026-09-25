@@ -242,3 +242,48 @@ pub fn findConfigDisk(out: *Found, list: []const [:0]const u8) bool {
     }
     return false;
 }
+
+/// 설치된 디스크로 떴을 때 설정 파티션을 기다리는 상한(DC 결정 2). DC-M0이
+/// 게이트에서 벌린 틈이 1.72초였고(실측 1), 실기에서는 initramfs 풀기가 짧아
+/// 1초를 쉬는 USB나 느린 NVMe 리셋이 PID 1보다 늦는다(실측 2). 그 셋을 덮는
+/// 수다(실측 3).
+pub const CONFIG_WAIT_MS: u32 = 5000;
+
+/// 다시 훑는 간격. 한 번이 open 마흔둘이고 없는 노드는 ENOENT로 바로
+/// 돌아오므로, 상한까지 쉰 번이어도 부팅에서 안 보이는 비용이다.
+/// tars-install의 waitForNode와 같은 수다.
+const CONFIG_POLL_MS: u32 = 100;
+
+/// devices.zig·power.zig에도 같은 함수가 있다. failed와 같은 이유로 공용
+/// 모듈을 만들지 않는다.
+fn sleepMillis(ms: u32) void {
+    const req = linux.timespec{
+        .sec = @intCast(ms / 1000),
+        .nsec = @intCast(@as(u64, ms % 1000) * std.time.ns_per_ms),
+    };
+    _ = linux.nanosleep(&req, null);
+}
+
+/// findConfigDisk를 max_ms까지 CONFIG_POLL_MS 간격으로 다시 부른다. 찾으면
+/// 기다린 밀리초(바로 찾았으면 0), 끝내 없으면 null.
+///
+/// 커널은 PID 1을 띄우기 전에 디스크를 기다려 주지 않는다 — NVMe의
+/// namespace 스캔은 워크큐에서, usb-storage의 SCSI 스캔은 delay_use 뒤에
+/// 돈다(DC 확인 2). 그래서 한 번 훑고 끝내면 설정이 멀쩡히 있는데도 기본값으로
+/// 뜨는 부팅이 생긴다(DC-M0 실측 1).
+///
+/// 먼저 훑고 나서 잔다. 거꾸로면 모든 설치 부팅이 CONFIG_POLL_MS만큼 늦는다
+/// (devices.findKeyboardWaiting의 검사 7a와 같은 함정). 매번 목록 전체를 처음부터
+/// 다시 훑으므로 "먼저 찾은 것이 이긴다"는 규칙이 그대로다.
+///
+/// max_ms를 인자로 받는 것은 두 부르는 쪽 때문이다. 표지 없는 부팅은 0을 넘겨
+/// 지금처럼 한 번만 훑고(DC 결정 1), storage_test는 초 단위로 자지 않는다.
+pub fn findConfigDiskWaiting(out: *Found, list: []const [:0]const u8, max_ms: u32) ?u32 {
+    var waited: u32 = 0;
+    while (true) {
+        if (findConfigDisk(out, list)) return waited;
+        if (waited >= max_ms) return null;
+        sleepMillis(CONFIG_POLL_MS);
+        waited += CONFIG_POLL_MS;
+    }
+}

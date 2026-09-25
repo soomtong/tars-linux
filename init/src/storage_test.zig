@@ -1,4 +1,5 @@
 const std = @import("std");
+const linux = std.os.linux;
 const storage = @import("storage.zig");
 
 /// 이 검사가 보는 것은 규칙이고, 오프셋이 아니다.
@@ -37,6 +38,45 @@ fn full(magic: u16, label: []const u8) []const u8 {
 }
 
 const EXT2: u16 = 0xEF53;
+
+fn failed(rc: usize) ?linux.E {
+    const e = linux.errno(rc);
+    return if (e == .SUCCESS) null else e;
+}
+
+/// devices_test의 nowMillis와 같다. 기다림 검사가 벽시계로 잰다.
+fn nowMillis() i64 {
+    var ts: linux.timespec = undefined;
+    if (failed(linux.clock_gettime(.MONOTONIC, &ts))) |_| return 0;
+    return @as(i64, ts.sec) * 1000 + @divTrunc(@as(i64, ts.nsec), 1_000_000);
+}
+
+/// 기다림 검사가 여는 가짜 디스크. 게스트가 아니라 빌드 컨테이너의 /tmp다.
+const FAKE_DISK: [:0]const u8 = "/tmp/tars-storage-test.img";
+const NO_DISK: [:0]const u8 = "/tmp/tars-storage-test-absent.img";
+
+/// bytes를 path에 통째로 쓴다. devices_test의 writeFile과 같은 루프다.
+fn writeFile(path: [:0]const u8, bytes: []const u8) !void {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    if (failed(rc)) |e| {
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        return error.OpenFailed;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+
+    var written: usize = 0;
+    while (written < bytes.len) {
+        const n = linux.write(fd, bytes.ptr + written, bytes.len - written);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+            return error.WriteFailed;
+        }
+        if (n == 0) return error.WriteFailed;
+        written += n;
+    }
+}
 
 pub fn main() !void {
     // ── 1. 대조군: 매직이 없다 ────────────────────────────────────────
@@ -267,6 +307,74 @@ pub fn main() !void {
         std.debug.print("FAIL: the candidate list is empty\n", .{});
         return error.NoCandidates;
     }
+
+    // ── 설치된 부팅의 기다림 (DC-M1) ─────────────────────────────────
+    //
+    // 늦게 생기는 노드 자체는 여기서 못 만든다(스레드 없이는 "훑는 도중에
+    // 생긴다"가 안 된다). 그것은 install 체인의 부팅 7이 usb-storage의
+    // delay_use로 본다. 여기서 보는 것은 기다림의 모양 셋이다 — 있으면 안
+    // 자고, 상한이 0이면 한 번만 보고, 없으면 상한만큼만 잔다.
+    _ = linux.unlink(NO_DISK.ptr);
+    try writeFile(FAKE_DISK, full(EXT2, "tars-config"));
+    {
+        // 있으면 바로 돌아온다. 자고 나서 묻는 순서면 모든 설치 부팅이
+        // 100ms씩 늘고, 증상이 "부팅이 좀 느리다"뿐이라 아무도 못 잡는다
+        // (devices_test 7a와 같은 함정).
+        const list = [_][:0]const u8{ NO_DISK, FAKE_DISK };
+        var found: storage.Found = .{};
+        const started = nowMillis();
+        const waited = storage.findConfigDiskWaiting(&found, &list, storage.CONFIG_WAIT_MS);
+        const elapsed_ms = nowMillis() - started;
+        if (waited == null or waited.? != 0 or !std.mem.eql(u8, found.path, FAKE_DISK)) {
+            std.debug.print("FAIL: a config disk that is right there was not taken at once\n", .{});
+            return error.PresentDiskMissed;
+        }
+        if (elapsed_ms >= 50) {
+            std.debug.print("FAIL: finding a present config disk took {d}ms (it slept first)\n", .{elapsed_ms});
+            return error.SleptBeforeLooking;
+        }
+    }
+    {
+        // 상한이 0이면 한 번 훑고 끝난다. 표지 없는 부팅이 이 길이다 — 원래
+        // 디스크가 없는 BF 체인과 ISO 설치 세션이 여기서 헛기다리면 안 된다.
+        const list = [_][:0]const u8{NO_DISK};
+        var found: storage.Found = .{};
+        const started = nowMillis();
+        const waited = storage.findConfigDiskWaiting(&found, &list, 0);
+        const elapsed_ms = nowMillis() - started;
+        if (waited != null) {
+            std.debug.print("FAIL: an absent disk was found\n", .{});
+            return error.AbsentDiskFound;
+        }
+        if (elapsed_ms >= 50) {
+            std.debug.print("FAIL: a zero budget still waited {d}ms\n", .{elapsed_ms});
+            return error.ZeroBudgetWaited;
+        }
+    }
+    {
+        // 끝내 없으면 상한만큼만 기다리고 돌아온다. 무한히 기다리면 기계가
+        // 안 켜진다 — 설정 하나 때문에 부팅이 막히는 것이 이 저장소에서 가장
+        // 나쁜 결말이다.
+        const list = [_][:0]const u8{NO_DISK};
+        var found: storage.Found = .{};
+        const started = nowMillis();
+        const waited = storage.findConfigDiskWaiting(&found, &list, 300);
+        const elapsed_ms = nowMillis() - started;
+        if (waited != null) {
+            std.debug.print("FAIL: an absent disk was found after waiting\n", .{});
+            return error.AbsentDiskFoundAfterWait;
+        }
+        if (elapsed_ms < 300) {
+            std.debug.print("FAIL: gave up after {d}ms, want at least 300ms\n", .{elapsed_ms});
+            return error.GaveUpTooEarly;
+        }
+        if (elapsed_ms > 2000) {
+            std.debug.print("FAIL: waited {d}ms for a 300ms budget\n", .{elapsed_ms});
+            return error.WaitedTooLong;
+        }
+    }
+    _ = linux.unlink(FAKE_DISK.ptr);
+    std.debug.print("storage_test: an installed boot waits for config storage, others look once\n", .{});
 
     std.debug.print(
         "storage_test: only a tars- labelled ext2 superblock counts ({d} candidates)\n",
