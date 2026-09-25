@@ -365,6 +365,15 @@ pub const Screen = struct {
         // 넣어야 하지 않나: 아니다. `vtStream()`이 handler를 값으로 복사해
         // 들고 있고(`stream.zig:477`), `feed`가 쓰는 것은 그 사본이다.
         self.stream.handler.effects.write_pty = &onWritePty;
+
+        // 위 칸을 채우면 제목 보고(`ESC[21t`)도 이 창구로 나갈 수 있다.
+        // 답이 `ESC ] l <제목> ESC \`라서, `cat`한 파일이 OSC 2로 제목을
+        // 정하고 21t를 보내면 그 제목이 root 셸의 입력 줄에 심긴다
+        // (CVE-2003-0063과 같은 종류). 지금 고정한 커밋은 기본이 꺼짐이라
+        // 이 줄이 없어도 막히지만(`stream_terminal.zig:59-62`), 커밋을 올리다
+        // 기본값이 바뀌어도 막히도록 여기서 한 번 더 못박는다. 검사 64가 이
+        // 줄을 지킨다.
+        self.stream.handler.title_report = false;
         return self;
     }
 
