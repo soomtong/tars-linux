@@ -26,29 +26,64 @@ pub const Seen = struct {
     label: []const u8 = "",
 };
 
-/// 앞머리에 무엇이 보이는가. 순서가 뜻이 있다.
+/// 4Kn 디스크(논리 섹터 4096바이트)의 GPT 헤더 자리. GPT 헤더는 LBA 1에
+/// 있으므로 섹터 크기가 곧 오프셋이다(DC 결정 5의 1).
+const GPT_SIG_OFF_4KN: usize = 4096;
+
+/// 앞머리에 무엇이 보이는가. 순서가 뜻이 있다(DC-M2가 바꿨다).
 ///
-///   iso9660이 첫째다. 하이브리드 ISO는 MBR 서명도 갖고 있어서(make_iso.sh의
-///   --protective-msdos-label) MBR을 먼저 보면 USB 스틱의 ISO가 "mbr"로 읽힌다.
-///   ext2가 GPT보다 먼저다. 둘은 겹치지 않지만(GPT 디스크의 1080은 첫 파티션
-///   항목의 이름 자리다) 파티션 없는 ext2가 게이트 디스크의 모양이라 먼저 둔다.
+///   앞에 있는 구조를 먼저 믿는다. 파티션 도구와 mkfs는 디스크 맨 앞(512 ·
+///   1080 · 4096)을 새로 쓰지만 32KiB의 ISO PVD는 안 건드리는 일이 많다 —
+///   ISO를 구웠던 스틱을 다른 도구로 GPT나 ext2로 다시 만들면 옛 PVD가 남고,
+///   ISO를 먼저 보면 그 스틱이 `iso9660 TARS`, 곧 부팅 매체로 읽혔다(DI-M1
+///   실측 15). tars-install은 sfdisk --wipe always로 PVD까지 지우므로 이것은
+///   남의 도구로 만든 디스크의 이야기다.
+///
+///   ext2가 GPT보다 먼저다. 둘은 겹치지 않지만(512바이트 섹터 GPT의 1080은 첫
+///   파티션 항목의 이름 자리다) 파티션 없는 ext2가 게이트 디스크의 모양이다.
+///   GPT는 512와 4096 둘 다 본다. 4Kn 디스크에서 512만 보면 보호 MBR만 보여
+///   `mbr`로 읽혔고, 설치된 4Kn 디스크가 TARS installed로 안 보여 갱신 대신
+///   새 설치(설정까지 지운다)로 갔다.
+///   iso9660은 MBR보다 먼저다. 하이브리드 ISO는 MBR 서명도 갖고 있어서
+///   (make_iso.sh의 --protective-msdos-label) MBR을 먼저 보면 USB 스틱의 ISO가
+///   "mbr"로 읽힌다. 우리 ISO에는 GPT가 없다(512 · 4096에 `EFI PART`가 없다 —
+///   DC-M2 plan) — 그래서 GPT를 ISO보다 먼저 봐도 진짜 매체는 그대로다.
 ///   blank는 끝에서 둘째다. 다 0이면 어떤 서명도 안 맞았다는 뜻이다.
 pub fn describe(head: []const u8) Seen {
+    if (storage.ext2Label(head)) |label| return .{ .kind = .ext2, .label = label };
+    if (hasGptAt(head, GPT_SIG_OFF) or hasGptAt(head, GPT_SIG_OFF_4KN)) return .{ .kind = .gpt };
     if (head.len >= ISO_PVD + 40 + ISO_ID_LEN and head[ISO_PVD] == 1 and
         std.mem.eql(u8, head[ISO_PVD + 1 ..][0..5], "CD001"))
     {
         const id = head[ISO_PVD + 40 ..][0..ISO_ID_LEN];
         return .{ .kind = .iso9660, .label = std.mem.trimEnd(u8, id, " ") };
     }
-    if (storage.ext2Label(head)) |label| return .{ .kind = .ext2, .label = label };
-    if (head.len >= GPT_SIG_OFF + 8 and std.mem.eql(u8, head[GPT_SIG_OFF..][0..8], "EFI PART")) {
-        return .{ .kind = .gpt };
-    }
     if (head.len >= 512 and head[510] == 0x55 and head[511] == 0xAA) return .{ .kind = .mbr };
     for (head) |b| {
         if (b != 0) return .{ .kind = .unknown };
     }
     return .{ .kind = .blank };
+}
+
+fn hasGptAt(head: []const u8, off: usize) bool {
+    return head.len >= off + 8 and std.mem.eql(u8, head[off..][0..8], "EFI PART");
+}
+
+/// 한 줄을 buf에 짓는다. 넘치면 앞부분을 남기고 끝을 `...\n`으로 덮는다 —
+/// install.zig의 say와 complain이 쓴다(DC 결정 5의 3).
+///
+/// 전에는 넘치면 줄을 통째로 버렸다. 긴 인자를 되풀이하는 에러
+/// (`<arg> is not a disk ...`)가 그래서 아무 말 없이 종료 코드만 남겼다.
+///
+/// Zig 0.16의 bufPrint는 넘칠 때 NoSpaceLeft를 돌려주면서 buf에 들어간
+/// 만큼은 채워 둔다(DC-M2 plan에서 확인). 그 동작에 기댄다 — 바뀌면
+/// disk_test의 검사 11이 빨개진다. buf는 4바이트보다 커야 한다.
+pub fn clip(buf: []u8, comptime fmt: []const u8, args: anytype) []const u8 {
+    return std.fmt.bufPrint(buf, fmt, args) catch {
+        const tail = "...\n";
+        @memcpy(buf[buf.len - tail.len ..], tail);
+        return buf;
+    };
 }
 
 /// 라벨을 화면에 찍을 모양으로. 제어 문자(0x00~0x1f · 0x7f)는 `?`로 바꾼다 —

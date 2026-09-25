@@ -258,5 +258,82 @@ pub fn main() !void {
         }
     }
 
+    // ── 11. clip — 넘치는 줄은 앞부분과 `...\n` (DC-M2) ────────────────
+    {
+        var small: [16]u8 = undefined;
+        try expectText(disk.clip(&small, "a {s}\n", .{"b"}), "a b\n", "a line that fits");
+        // 넘치면 앞 12바이트가 남고 끝 넷이 `...\n`이다. 이 검사가 Zig의
+        // bufPrint가 넘칠 때 buf를 채워 둔다는 것까지 본다 — 안 채우면 앞
+        // 12바이트가 undefined라 글자가 안 맞는다.
+        try expectText(
+            disk.clip(&small, "tars-install: {s} end\n", .{"/dev/aaaaaaaaaaaaaaaaaaaaaaaa"}),
+            "tars-install...\n",
+            "a line that overflows",
+        );
+    }
+
+    // ── 12. 앞의 구조가 뒤의 옛 서명을 이긴다 (DC-M2) ─────────────────
+    {
+        // 4Kn 디스크의 GPT. 보호 MBR은 0에, 헤더는 LBA 1 = 4096에 있다.
+        const h = clear();
+        h[510] = 0x55;
+        h[511] = 0xAA;
+        @memcpy(h[4096..][0..8], "EFI PART");
+        try expectKind(disk.describe(h), .gpt, "", "4Kn gpt");
+    }
+    {
+        // TARS ISO를 구웠던 스틱을 남의 도구로 GPT로 다시 만든 것. PVD가 남아
+        // 있어도 GPT다 — 전에는 `iso9660 TARS`로 읽혀 부팅 매체 취급을 받았다.
+        const h = clear();
+        h[32768] = 1;
+        @memcpy(h[32769..][0..5], "CD001");
+        @memset(h[32768 + 40 ..][0..32], ' ');
+        @memcpy(h[32768 + 40 ..][0..4], "TARS");
+        h[510] = 0x55;
+        h[511] = 0xAA;
+        @memcpy(h[512..][0..8], "EFI PART");
+        try expectKind(disk.describe(h), .gpt, "", "gpt over a stale iso");
+    }
+    {
+        // 같은 스틱을 통째로 mkfs.ext2한 것. ext2 라벨이 이긴다.
+        const h = clear();
+        h[32768] = 1;
+        @memcpy(h[32769..][0..5], "CD001");
+        @memcpy(h[32768 + 40 ..][0..4], "TARS");
+        h[1024 + 56] = 0x53;
+        h[1024 + 57] = 0xEF;
+        @memcpy(h[1024 + 120 ..][0..5], "stick");
+        try expectKind(disk.describe(h), .ext2, "stick", "ext2 over a stale iso");
+    }
+
+    // ── 13. PVD의 음성 둘 (DI-M1 실측 15의 이월) ──────────────────────
+    {
+        // type 바이트가 1이 아니다. CD001 뒤의 모양이 같아도 primary volume
+        // descriptor가 아니면(2는 supplementary) ISO로 안 읽는다.
+        const h = clear();
+        h[32768] = 2;
+        @memcpy(h[32769..][0..5], "CD001");
+        @memcpy(h[32768 + 40 ..][0..4], "TARS");
+        if (disk.describe(h).kind == .iso9660) {
+            std.debug.print("FAIL: a descriptor of type 2 was read as a primary volume\n", .{});
+            return error.WrongPvdType;
+        }
+    }
+    {
+        // 볼륨 ID 32바이트를 공백 없이 꽉 채웠다. 라벨은 32글자 그대로이고,
+        // `TARS`로 시작해도 TARS 매체가 아니다 — 접두사가 아니라 같음으로 본다.
+        const h = clear();
+        h[32768] = 1;
+        @memcpy(h[32769..][0..5], "CD001");
+        const id = "TARSXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+        @memcpy(h[32768 + 40 ..][0..32], id);
+        const seen = disk.describe(h);
+        try expectKind(seen, .iso9660, id, "a full 32-byte volume id");
+        if (disk.isTarsMedium(seen)) {
+            std.debug.print("FAIL: a volume id that only starts with TARS was taken as the medium\n", .{});
+            return error.TarsPrefixTaken;
+        }
+    }
+
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
 }
