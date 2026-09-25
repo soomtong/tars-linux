@@ -125,14 +125,32 @@ fn makeXdgDir() void {
 /// 디스크가 없는 부팅도 정상 경로다 — BF 체인은 ISO 부팅이라 -drive가 없다.
 /// 그때는 후보가 전부 ENOENT로 열리지 않아 로그 한 줄만 남으며, 부팅은
 /// 계속된다. 그 줄의 후보 수(14 · 42)가 이번 부팅이 파티션을 봤는지를 말한다.
+///
+/// 설치된 디스크로 떴을 때만 기다린다(DC 결정 1). 그때는 p2가 반드시 있으니
+/// 못 찾은 것은 "없다"가 아니라 "아직 없다"다 — 커널은 NVMe와 USB 디스크를
+/// PID 1보다 늦게 만들 수 있다(DC-M0 실측 1 · 2). 표지 없는 부팅은 원래 디스크가
+/// 없을 수 있어서 기다리면 매번 상한만큼 헛돈다.
 fn mountConfig() bool {
-    const list = storage.candidates(storage.bootedInstalled(config.CMDLINE_PATH));
+    const installed = storage.bootedInstalled(config.CMDLINE_PATH);
+    const list = storage.candidates(installed);
+    const max_ms: u32 = if (installed) storage.CONFIG_WAIT_MS else 0;
     var found: storage.Found = .{};
-    if (!storage.findConfigDisk(&found, list)) {
+    const waited = storage.findConfigDiskWaiting(&found, list, max_ms) orelse {
+        // 기다린 부팅만 한 줄 더. 설치된 기계에서 설정이 사라지는 증상의
+        // 원인이 "늦었다"인지 "없다"인지를 이 줄이 가른다.
+        if (max_ms > 0) {
+            std.debug.print("tars-init: waited {d}ms for config storage\n", .{max_ms});
+        }
         std.debug.print("tars-init: no disk labelled {s}* among {d} candidates\n", .{
             storage.LABEL_PREFIX, list.len,
         });
         return false;
+    };
+
+    // 기다린 적이 있을 때만 찍는다(HD-M2의 키보드와 같은 규칙). 늘 찍으면
+    // 정상 부팅의 로그가 한 줄 늘고, 그 줄은 아무것도 안 가른다.
+    if (waited > 0) {
+        std.debug.print("tars-init: config storage appeared after {d}ms\n", .{waited});
     }
 
     // 이 줄이 RM-M2의 판정이다. 고른 이름과 고른 근거가 한 줄에 함께
