@@ -2,6 +2,21 @@
 
 ## 지금 어디인가
 
+DI 뒤에 PR 1(`8a0d240`, 2026-09-25)이 머지됐다. 서브프로젝트가 아니라 보안 두 줄이다.
+
+- `78b020a` — `vt.zig`가 `title_report = false`를 못박는다. OSC 2로 제목을 정하고
+  `ESC[21t`로 되물으면 그 제목이 pty로 돌아가 root 셸의 입력이 되는 길(CVE-2003-0063
+  종류)을 닫는다. 지금 고정한 ghostty 커밋은 기본이 꺼짐이라 커밋을 올릴 때를
+  대비한 것이다. `vt_test`의 검사 64가 지킨다.
+- `a6fbfa8` — `/config`를 `NOSUID | NODEV`로 붙인다. `tars-` 라벨만 맞으면 USB도
+  붙기 때문이다.
+
+머지 뒤 루트 게이트 13체인 3/3 통과(`TARS check PASS`, `FAIL` 0줄, 38분 27.90초,
+2026-09-25). `mounted ext2 at /config` 마커 39회 · 검사 64 OK 21회 · `skipping
+make` 38회(`13 × 3 − 1`). DI-M2 뒤의 37분 49초와 38초 차이라 잡음 안이다.
+⚠ 게이트를 돌리기 전에 OrbStack이 켜져 있는지 본다 — 꺼져 있으면 `docker.sock`이
+없다고 0.2초 만에 끝난다(`orb start`).
+
 DI가 2026-09-23~24에 M2로 닫혔다(design `Status: 끝났다`). USB(ISO)로 뜬 기계에서
 `tars-install /dev/nvme0n1 --yes`를 치면 빈 디스크에는 새로 설치하고, 이미 TARS가
 있는 디스크(`TARS installed`)에는 p1의 부트 파일 넷만 갈고 p2(설정)를 남긴다.
