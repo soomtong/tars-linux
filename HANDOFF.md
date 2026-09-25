@@ -1,6 +1,46 @@
-# HANDOFF: Disk Install(DI)이 M2로 닫혔다 — 갱신해도 설정이 남고 `--wipe`가 통째로 지운다
+# HANDOFF: Disk Install Carryover(DC) M1까지 — 설치된 부팅이 늦게 생기는 설정 파티션을 기다린다
 
 ## 지금 어디인가
+
+DC는 DI가 남긴 이월 여섯을 받는 서브프로젝트다(2026-09-25 착수). 사용자가 "1번부터
+순서대로"를 골랐다. M0 · M1이 끝났고 다음은 DC-M2(작은 것 다섯)의 plan이다.
+design은 `docs/superpowers/specs/2026-09-25-tars-disk-carryover-design.md`(실측 1~6),
+plan은 `plans/2026-09-25-tars-disk-carryover-dc-m0.md` · `-dc-m1.md`.
+
+무엇이 섰나. `tars.installed`로 뜬 부팅에서 `init`이 설정 디스크를 못 찾으면 100ms
+간격으로 최대 5초 다시 훑는다(`storage.findConfigDiskWaiting` · `CONFIG_WAIT_MS`).
+표지 없는 부팅은 지금처럼 한 번만 본다(사용자가 골랐다). 기다렸으면
+`tars-init: config storage appeared after N ms`, 끝내 없으면 `waited 5000ms for config
+storage` 한 줄이 `no disk labelled` 앞에 붙는다.
+
+M0이 배운 것. 커널은 PID 1 전에 디스크를 기다려 주지 않는다(NVMe namespace 스캔은
+워크큐, usb-storage는 `delay_use` 뒤). 게이트가 그 틈을 못 본 것은 TCG 위에서 42MB
+initramfs를 푸는 1.7초가 덮었기 때문이다 — 실기에서는 덮개가 없다. 그래서 판정은
+`usb-storage.delay_use=3`으로 틈을 일부러 벌린다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `f3ee56e` · `22a335e` | design · M0(재기만, 틈 1.72초) |
+| `242d4a3` | M1 plan |
+| `60e96cc` | `storage.zig` 기다림 + `storage_test` 셋 |
+| `7817076` | `mountConfig`가 표지 있을 때만 5초 |
+| `77a204e` | install 체인 부팅 7 — 부팅 6의 디스크를 `-kernel` + 늦은 USB로 |
+| (이 커밋) | `CHAINS`의 `DC-M1` · design 실측 · 기억 · 이 HANDOFF |
+
+판정: install 체인 부팅 7이 `init waited 1600~1700ms`, 부팅 2·4·6은 6초 그대로.
+반사실(`max_ms` 늘 0)이 판정 17에서 빨강. 루트 게이트 13체인 3/3(38분 53.53초, `FAIL`
+0줄, 2026-09-25).
+
+⚠ 반사실은 반드시 컨테이너 안에서 `rm -rf init/.zig-cache init/zig-out` 뒤에 돌린다.
+M1의 첫 반사실 판이 낡은 바이너리로 거짓 초록이었다(design 실측 5,
+`project_zig_out_staleness` 일곱번째).
+
+다음 — DC-M2. design 결정 5의 순서대로: 4Kn GPT · 옛 ISO 서명(하이브리드 ISO 자신이
+GPT를 갖는지 `make_iso.sh` 출력부터 본다) · `say`/`complain`의 512바이트 버퍼에서
+사라지는 긴 줄 · YES를 개행까지 모아 읽기 · `disk_test` 음성 둘. 컨테이너에는
+`sfdisk`가 없고 `perl` · `mke2fs` · `debugfs`는 있다(M0 plan).
+
+## 그 앞 — PR 1
 
 DI 뒤에 PR 1(`8a0d240`, 2026-09-25)이 머지됐다. 서브프로젝트가 아니라 보안 두 줄이다.
 

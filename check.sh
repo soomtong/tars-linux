@@ -249,7 +249,8 @@ run_chain() {
 # 콘솔 셸에 시리얼 FIFO로 치는 유일한 체인이다 — 판정이 terminal 화면이 아니라
 # tars-install이 찍는 목록이라서다(DI-M1 plan의 "정한 것" 6).
 #
-# 회차당 부팅 6회(전부 OVMF)라 총 부팅 횟수가 18회 는다.
+# 회차당 부팅 6회(전부 OVMF)라 총 부팅 횟수가 18회 는다. DC-M1이 부팅 7(-kernel로
+# 설치된 디스크를 늦은 USB로 붙인다)을 더해 회차당 7회가 됐다.
 #
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -266,7 +267,7 @@ CHAINS=(
   "RM-M1:./machine/check.sh"
   "UT-M3:./tools/check.sh"
   "NW-M3:./net/check.sh"
-  "DI-M2:./install/check.sh"
+  "DC-M1:./install/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

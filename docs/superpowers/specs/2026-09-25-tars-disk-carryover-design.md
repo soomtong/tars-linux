@@ -2,7 +2,7 @@
 
 접두사: DC
 
-Status: M0 끝(2026-09-25). M1이 다음이다.
+Status: M1 끝(2026-09-25). M2(DI의 작은 것 다섯)가 다음이다.
 
 관련 문서: `2026-09-19-tars-disk-install-design.md`(DI. 이 서브프로젝트가 받는
 이월 여섯이 그 문서의 실측 15와 19에 있다. 아래에서 "DI 결정 N"은 그 문서의
@@ -198,3 +198,44 @@ plan은 `docs/superpowers/plans/2026-09-25-tars-disk-carryover-dc-m0.md`다. 코
 게이트에서 벌린 틈이 1.72초다. 결정 2의 5초는 그 세 배에 가깝고, 실기의 USB
 (`delay_use` 1초 + 열거)와 느린 NVMe 리셋을 덮는다. M1의 판정이 `appeared after
 N ms`의 N으로 이 값을 다시 보여 줄 것이다.
+
+## DC-M1이 실행으로 증명한 것
+
+plan은 `docs/superpowers/plans/2026-09-25-tars-disk-carryover-dc-m1.md`다. 커밋은
+`60e96cc`(`storage.findConfigDiskWaiting`과 호스트 검사 셋) · `7817076`
+(`mountConfig`가 표지가 있을 때만 5초) · `77a204e`(install 체인의 부팅 7) · 루트 게이트
+커밋이다.
+
+### 실측 4 — 기다림이 늦은 USB의 p2를 잡는다
+
+부팅 7은 부팅 6이 `--wipe`로 막 만든 디스크를 `-kernel` + `usb-storage` +
+`delay_use=3`으로 붙인다. 세 판(시제품 둘, 캐시를 지운 판 하나)이 `init waited
+1600ms` · `1700ms` · `1700ms`였다 — M0의 틈 1.72초와 같은 크기다. 이 수는 잔 시간만
+센 것이라(`CONFIG_POLL_MS` 단위) 벽시계보다 훑는 시간만큼 작다.
+
+부팅 2 · 4 · 6(설치된 NVMe)은 DI-M2와 같은 6초이고 `appeared after` 줄이 없다 —
+첫 훑기에서 잡았다. 기다림이 정상 설치 부팅을 늦추지 않는다(위험 2가 닫혔다).
+부팅 3 · 5(ISO)의 판정 10은 그대로 `among 14 candidates`다 — 표지 없는 부팅은
+기다리지 않는다.
+
+### 실측 5 — 반사실이 빨갛다, 그리고 첫 판은 낡은 `init`이었다
+
+`max_ms`를 늘 0으로 두면 부팅 7이 `tars-init: no disk labelled tars-* among 42
+candidates`를 찍고 판정 17이 `FAIL: init did not have to wait for the late USB disk,
+or never found it`로 멈춘다.
+
+그런데 첫 반사실 판은 초록이었고 부팅 7이 `init waited 1700ms`를 찍었다. `max_ms`가
+0이면 나올 수 없는 줄이다. 체인의 `zig build`가 `sd`로 고친 소스를 다시 빌드하지
+않아 남아 있던 정상 코드의 바이너리(md5 `6b46fa32…`)로 떴다. 컨테이너 안에서
+반사실을 직접 빌드하니 `58570175…`가 됐고 그 판은 빨갛다. 캐시를 지우고 빌드한 정상
+코드의 바이너리가 다시 `6b46fa32…`라 확정이다. `project_zig_out_staleness`가 이미
+적어 둔 함정이고 처방("음성 확인 전에 컨테이너 안에서 `.zig-cache`와 `zig-out`을
+지운다")을 빠뜨린 것이다. plan의 Task 4에 그 처방을 박아 두었다.
+
+### 실측 6 — 루트 게이트
+
+체인 열셋이 전부 `PASS: 3/3`, `TARS check PASS`, `FAIL` 0줄, 38분 53.53초. install
+체인은 이름이 `DC-M1`이 됐다. 부팅 7이 세 회차에 `1600ms` · `1700ms` · `1700ms`를
+기다렸고 부팅 2 · 4 · 6은 세 회차 모두 6초다. 같은 날 PR 1 뒤의 판(38분 27.90초)보다
+26초 늘었고, 그것이 부팅 7 × 3회차의 몫이다. 나머지 열둘은 `tars.installed` 없이
+뜨므로 기다림이 한 번도 안 돈다.

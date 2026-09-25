@@ -94,6 +94,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 함정의 입구다. 내용 해시가 그렇게 동작해야 하는데 5분의 1은 안 그렇다는
 것이 위의 표다.
 
+일곱번째 (DC-M1, 2026-09-25). 기다림을 빼는 반사실을 `sd`로 넣고 install 체인을
+바로 돌렸더니 초록이었다. 부팅 7이 `init waited 1700ms`를 찍었는데, `max_ms`가
+0이면 나올 수 없는 줄이다. 남은 바이너리의 md5가 정상 코드의 것과 같았다. 처방을
+알고 있으면서 빠뜨린 경우라, 이제 plan의 반사실 Task에 캐시 삭제를 명령째 적는다.
+"반사실이 초록이면 먼저 바이너리를 의심한다"가 판정 코드를 의심하는 것보다 싸다.
+
 관련: [[project_userland_tools]](4번이 `zig-out` 쪽을 처음 적었다) ·
 [[project_shell_memory]](SM-M1이 비율을 쟀고, SM-M2가 어디서 지워야 하는지를
 좁혔다) ·
