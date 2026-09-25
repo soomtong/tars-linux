@@ -37,18 +37,18 @@ fn writeAll(fd: i32, bytes: []const u8) void {
 }
 
 /// 사람이 읽는 줄은 stdout으로. 게이트는 시리얼에서 이것을 읽는다.
+/// 넘치는 줄은 잘라서라도 찍는다(disk.clip). 그대로 버리면 긴 인자를 되풀이하는
+/// 에러가 말없이 사라진다(DC 결정 5의 3).
 fn say(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, fmt, args) catch return;
-    writeAll(1, text);
+    writeAll(1, disk.clip(&buf, fmt, args));
 }
 
 /// 실패는 stderr로. 한 줄에 무엇이 몇으로 죽었는지가 다 있어야 한다
 /// (design 결정 5).
 fn complain(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, "tars-install: " ++ fmt ++ "\n", args) catch return;
-    writeAll(2, text);
+    writeAll(2, disk.clip(&buf, "tars-install: " ++ fmt ++ "\n", args));
 }
 
 // ── 작은 파일 읽기 ───────────────────────────────────────────────────
@@ -444,6 +444,29 @@ fn writeConf(dst: [:0]const u8, text: []const u8) ?u64 {
     return text.len;
 }
 
+/// fd에서 개행까지 한 줄. 개행 없이 EOF가 오면 거기까지, 에러나 buf가 차도록
+/// 개행이 없으면 null이다(너무 긴 답은 YES가 아니다).
+///
+/// read 한 번으로 받던 때는 입력이 파이프로 쪼개져 오면 첫 조각만 봤다.
+/// `YES`와 ` please\n`로 나뉘어 오면 `YES please`를 확인으로 읽고 디스크를
+/// 지웠다(DC-M2가 찾았다 — DI의 이월 목록은 "거절하는 쪽으로 틀린다"고 적었지만
+/// 반대쪽도 있었다). 한 바이트씩 읽는 것은 개행 뒤의 입력을 삼키지 않기
+/// 위해서다. 사람이 치는 한 줄이라 비용이 없다.
+fn readLine(fd: i32, buf: []u8) ?[]const u8 {
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, 1);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            return null;
+        }
+        if (n == 0) return buf[0..len];
+        if (buf[len] == '\n') return buf[0 .. len + 1];
+        len += 1;
+    }
+    return null;
+}
+
 // ── 설치 ─────────────────────────────────────────────────────────────
 
 fn install(
@@ -507,8 +530,8 @@ fn install(
     if (!yes) {
         say("type YES to continue: ", .{});
         var line: [64]u8 = undefined;
-        const n = linux.read(0, &line, line.len);
-        if (failed(n) != null or !disk.confirmed(line[0..n])) {
+        const got = readLine(0, &line);
+        if (got == null or !disk.confirmed(got.?)) {
             say("tars-install: not confirmed; nothing was changed.\n", .{});
             return 1;
         }
