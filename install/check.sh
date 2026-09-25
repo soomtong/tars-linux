@@ -163,7 +163,14 @@ wait_log() {
 
 # ── 부팅 1: ISO + 빈 NVMe ──────────────────────────────────────────────
 echo "=== boot 1: the ISO and a blank NVMe ==="
-boot_guest 1 -cdrom ../out/tars.iso
+# 둘째 NVMe는 DC-M2의 임시 디스크다. 논리 섹터가 4096바이트(4Kn)이고 판정
+# 4a~4c만 쓴다. 설치 대상(nvme0n1)과 따로 둬서, 옛 코드가 YES를 잘못 읽어도
+# 지워지는 것이 이것뿐이게 한다. 64MiB라 배치가 안 들어가 sfdisk에서 멈춘다.
+SCRATCH="${WORK}/scratch-4kn.img"
+truncate -s 64M "$SCRATCH"
+boot_guest 1 -cdrom ../out/tars.iso \
+  -drive file="$SCRATCH",if=none,id=scratch,format=raw \
+  -device nvme,drive=scratch,serial=tarsscratch,logical_block_size=4096,physical_block_size=4096
 
 # 판정 1. 목록. 쓰는 법의 마지막 줄이 목록의 끝이다.
 send "tars-install"
@@ -202,6 +209,49 @@ if [ "$(clean | grep -acE '^  /dev/nvme0n1 .* blank$')" -lt 2 ]; then
   fail "after 'no', the NVMe was no longer blank" "/dev/nvme0n1"
 fi
 echo "answering 'no' left the disk blank"
+
+# 판정 4a (DC-M2). 4Kn 디스크의 GPT. 헤더가 512가 아니라 4096에 있어서 전에는
+# 보호 MBR만 보여 `foreign (mbr)`로 읽혔다 — 설치된 4Kn 디스크가 TARS installed로
+# 안 보여 갱신 대신 새 설치로 갈 자리다. GPT는 게스트의 진짜 sfdisk가 만든다.
+send "echo dc-lbs-\$(cat /sys/block/nvme1n1/queue/logical_block_size)"
+wait_log "dc-lbs-4096" \
+  || fail "the scratch NVMe is not 4Kn; QEMU ignored logical_block_size" "dc-lbs-"
+send "printf 'label: gpt\n' | sfdisk -q /dev/nvme1n1 && printf 'dc-4kn-%s\n' labelled"
+wait_log "dc-4kn-labelled" \
+  || fail "sfdisk could not label the 4Kn scratch disk" "sfdisk" "dc-4kn"
+send "tars-install"
+for _ in $(seq 1 300); do
+  clean | grep -aE '^  /dev/nvme1n1 .* foreign \(gpt\)$' >/dev/null && break
+  sleep 0.1
+done
+if ! clean | grep -aE '^  /dev/nvme1n1 .* foreign \(gpt\)$' >/dev/null; then
+  fail "a GPT on a 4Kn disk was not listed as foreign (gpt)" "/dev/nvme1n1"
+fi
+echo "a GPT on a 4096-byte-sector disk reads as gpt"
+
+# 판정 4b (DC-M2). YES를 줄로 읽는다. 파이프로 `YES`와 ` please\n`를 1초 사이를
+# 두고 보내면, read 한 번으로 받던 전 코드는 `YES`만 보고 확인으로 읽었다.
+# 지금은 `YES please`를 다 모아 거절한다. not confirmed가 판정 4에 이어 둘째다.
+send "sh -c '(printf YES; sleep 1; printf \" please\\n\") | tars-install /dev/nvme1n1'; printf 'dc-split-%s\n' done"
+wait_log "dc-split-done" 30 \
+  || fail "the split YES never came back to the shell" "tars-install:" "dc-split"
+if [ "$(grep -acF "tars-install: not confirmed; nothing was changed." "$LOG")" -lt 2 ]; then
+  fail "'YES' then ' please' arriving apart was taken as YES" \
+    "tars-install:" "writing the partition table"
+fi
+echo "a YES split across two writes is read as the whole line, and refused"
+
+# 판정 4c (DC-M2). 넘치는 에러 줄은 잘려서라도 나온다. 600글자 디스크 이름의
+# `is not a disk` 줄은 512바이트 버퍼를 넘어서, 전에는 통째로 사라지고 종료
+# 코드만 남았다. 타이핑한 줄의 에코는 `tars-install /dev/`(콜론 없음)라 안 섞인다.
+LONG="$(printf 'x%.0s' $(seq 1 600))"
+send "tars-install /dev/${LONG}; printf 'dc-long-%s\n' done"
+wait_log "dc-long-done" \
+  || fail "the long argument never came back to the shell" "dc-long"
+if ! clean | grep -aE '^tars-install: /dev/x+\.\.\.$' >/dev/null; then
+  fail "the error for a 600-character argument was not printed, clipped" "tars-install: /dev/x"
+fi
+echo "an error line longer than its buffer is printed clipped, not dropped"
 
 # 판정 5. 설치. mke2fs가 4초, sfdisk가 3.5초(DI-M0 실측 8)라 TCG에서
 # 넉넉히 120초를 준다.
