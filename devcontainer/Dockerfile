@@ -227,6 +227,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 넷이 푼 것 기준 547,688바이트, initrd에서 gzip으로 약 424KB다(바이너리
 # 둘 포함). 패키지에 딸려 오는 ifupdown · NetworkManager · dhclient · ppp용
 # hook은 initrd에 안 넣는다 — guest_tools.sh는 바이너리 둘만 적는다.
+#
+# ── LB-M2: 층 9(이름 풀이) ──────────────────────────────────────────────
+#
+# libnss-myhostname 하나다(LB design 결정 5). glibc가 /etc/nsswitch.conf의
+# `myhostname`을 보고 dlopen하는 NSS 모듈이고, `*.localhost`를 loopback으로
+# 답한다(RFC 6761). 174,288바이트 · NEEDED는 libcap.so.2와 libc뿐이라 새
+# 라이브러리가 0개다(LB-M0 실측 6). dlopen 대상이라 make_initrd.sh가 이름으로
+# 복사한다 — 바이너리의 DT_NEEDED를 따라가는 copy_lib_deps에는 안 잡힌다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -334,6 +342,7 @@ RUN dpkg --add-architecture amd64 \
         libedit2:amd64 \
         libbsd0:amd64 \
         libmd0:amd64 \
+        libnss-myhostname:amd64 \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*

@@ -319,6 +319,35 @@ cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
 EOF
 
+# LB-M2. 이름 풀이(LB design 결정 5). 셋이 한 묶음이다.
+#
+#   /etc/hosts          localhost 한 이름. NSS를 안 거치는 resolver(정적 Go
+#                       등)도 이 파일은 읽는다
+#   /etc/nsswitch.conf  hosts만 적는다. 파일 → *.localhost → DNS 순서다.
+#                       안 적은 데이터베이스(passwd 등)는 glibc가 files로 본다
+#   libnss_myhostname   *.localhost를 127.0.0.1로 답하는 모듈
+#
+# 이 셋이 없을 때 localhost는 net=dhcp에서만, SLIRP 너머 호스트 DNS가 답해
+# 줄 때만 풀렸다(LB-M0 실측 4). 파일은 passwd 옆이라 같은 heredoc이다.
+cat > "$WORKDIR/etc/hosts" <<'EOF'
+127.0.0.1 localhost
+EOF
+cat > "$WORKDIR/etc/nsswitch.conf" <<'EOF'
+hosts: files myhostname dns
+EOF
+
+# glibc가 nsswitch.conf의 이름을 보고 실행 중에 dlopen하는 모듈이라 어느
+# 바이너리의 DT_NEEDED에도 없다 — 이름으로 복사한다. 그 모듈의 의존은
+# copy_lib_deps로 따라간다(zsh 모듈과 같은 이유다: 빠진 것이 부팅 뒤 dlopen
+# 때가 아니라 여기서 드러나게). 지금 NEEDED는 libcap.so.2 · libc뿐이고 둘 다
+# 이미 있다(LB-M0 실측 6).
+if ! NSS_MYHOSTNAME="$(find_in_sysroot libnss_myhostname.so.2)"; then
+  echo "make_initrd: libnss_myhostname.so.2 not in the sysroot (rebuild the devcontainer)" >&2
+  exit 1
+fi
+cp "$NSS_MYHOSTNAME" "${WORKDIR}${LIB_DEST}/"
+copy_lib_deps "${WORKDIR}${LIB_DEST}/libnss_myhostname.so.2"
+
 # /usr/share/fish/*는 fish 패키지가 아니라 fish-common(arch: all)이 준다.
 mkdir -p "$WORKDIR/usr/share/fish"
 cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"

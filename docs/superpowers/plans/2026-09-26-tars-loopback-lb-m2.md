@@ -25,8 +25,9 @@ Tech Stack: Dockerfile(`apt-get download`) · bash(`make_initrd.sh`) · M0 하�
   이 둘에는 없다. 한 줄짜리 둘이라 이웃과 같은 모양이 읽기에 맞다. design에 이 수정을
   적는다.
 - M2-B `nsswitch.conf`에는 `hosts:` 한 줄만 쓴다. 없는 데이터베이스(`passwd` · `group`
-  등)는 glibc가 기본값(`files`)으로 본다. 그 가정이 틀리면 `whoami` · git 작성자가
-  깨지는데, 그것을 `tools` 체인이 본다(Task 4).
+  등)는 glibc가 기본값(`files`)으로 본다. 그 가정이 틀리면 `whoami` · `id`가
+  깨진다. 처음에는 "`tools` 체인이 본다"고 적었는데 틀렸다 — 그 체인은 `whoami`를
+  안 친다. 그래서 Task 4 Step 2가 부팅 한 번으로 직접 본다.
 - M2-C 모듈은 `find_in_sysroot`로 찾는다. 못 찾으면 빌드가 죽는다 — Dockerfile을
   안 고친 이미지로 돌리면 여기서 멈춘다. 조용히 빠진 채로 게스트가 뜨는 것보다 낫다.
 
@@ -149,8 +150,14 @@ for C in net tools; do
 done
 ```
 
-기대: 둘 다 `exit=0` · `FAIL` 0줄. `tools`가 `whoami` · git을 치므로 M2-B의 가정이
-여기서 검증된다.
+기대: 둘 다 `exit=0` · `FAIL` 0줄.
+
+- [ ] Step 2: M2-B의 가정을 직접 본다
+
+설정 디스크 A에 `who.sh`(`whoami` · `id` · `ls -ld /`의 소유자를 `LBM0-WHO` 한 줄로
+찍는다)를 더해 굽고, 하네스의 `run before`를 `bash /config/who.sh` 한 줄로 바꿔
+부팅한다. 기대: `whoami=[root] id=[uid=0(root) gid=0(root) groups=0(root)]
+ls=[root:root]`.
 
 ## Task 5 — design에 적고 커밋한다
 

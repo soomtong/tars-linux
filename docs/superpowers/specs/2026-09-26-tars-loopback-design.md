@@ -2,7 +2,7 @@
 
 접두사: LB
 
-Status: M1 끝났다(2026-09-26) — 실측 1~11. M2 착수 전.
+Status: M2 끝났다(2026-09-26) — 실측 1~14. M3 착수 전.
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. "덤 — `lo`는 `state=down`이다"가
 이 서브프로젝트의 출발점이다) · `2026-09-13-tars-guest-network-design.md`(NW) ·
@@ -109,6 +109,10 @@ alone`은 그대로 둔다 — 그 문장이 말하는 네트워크는 바깥이
 두 파일은 저장소에 두고 `make_initrd.sh`가 넣는다. dhcpcd hook(`30-tars-ntp`)과
 같은 자리다 — 우리가 쓴 파일이라 원본이 저장소에만 있다. 게스트의 `/`는 tmpfs라
 사용자가 부팅 중에 `/etc/hosts`에 줄을 더할 수는 있지만 부팅을 넘지는 않는다.
+
+M2-A가 이것을 바꿨다 — 두 파일은 `make_initrd.sh`에서 `/etc/passwd` · `/etc/group`
+바로 옆의 heredoc이다. dhcpcd hook을 파일로 둔 이유(`net/check.sh`가 호스트에서 직접
+돌린다)가 이 둘에는 없고, 한 줄짜리 둘이라 이웃과 같은 모양이 읽기에 맞다.
 
 대안은 둘이었다. 로컬 DNS stub(dnsmasq 류)은 정적 Go까지 덮지만 상주 데몬이 늘고,
 dhcpcd hook이 쓰는 `/etc/resolv.conf`와 자리를 다퉈야 한다. `tars.conf`에 이름을
@@ -288,3 +292,37 @@ M0 하네스에서 `raise` 단계를 빼고 돌렸다. A(`net=off`) · B(`net=dh
 
 `net/check.sh` 100초 · `tools/check.sh` 35초, 둘 다 `PASS` · `FAIL` 0줄. 로그에 한
 줄이 는 것이 기존 판정을 안 흔든다. 루트 게이트 전체는 M3 끝에서 돈다.
+
+## LB-M2가 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-loopback-lb-m2.md`. Dockerfile 층 9
+(`libnss-myhostname:amd64` 한 줄), `make_initrd.sh`의 heredoc 둘과 모듈 복사 ·
+`copy_lib_deps`. `init` 코드는 0줄이다.
+
+### 실측 12 — 이미지 40초, initrd에 다섯이 선다
+
+`docker build`가 40초(다운로드 층 하나만 다시), sysroot에 174,288바이트. initrd의
+`etc/`가 `passwd` · `group` · `hosts` · `nsswitch.conf`이고
+`lib/x86_64-linux-gnu/libnss_myhostname.so.2`가 있다. `copy_lib_deps`가 새로 데려온
+것은 없다(실측 6대로).
+
+### 실측 13 — 손대지 않은 부팅에서 이름이 `net`과 무관하게 풀린다
+
+```
+LBM0-ETC group hosts nsswitch.conf passwd
+LBM0-GETENT name=app.localhost rc=0 out=[127.0.0.1       STREAM localhost;...]
+LBM0-NC host=app.localhost port=7165 rc=0 got=[hello-7165] err=[]
+```
+
+A(`net=off`) · B(`net=dhcp`) 같다. M0 실측 4에서 A는 `localhost`조차 `rc=2`였고 B는
+호스트 DNS 덕에 `localhost`만 풀렸다 — 이제 둘의 답이 같다.
+
+### 실측 14 — `hosts:` 한 줄만 적어도 `passwd` 조회는 그대로다
+
+```
+LBM0-WHO whoami=[root] id=[uid=0(root) gid=0(root) groups=0(root)] ls=[root:root]
+```
+
+M2 plan 결정 M2-B의 가정이다. plan은 처음에 "`tools` 체인이 이것을 본다"고 적었는데
+그 체인은 `whoami`를 안 친다 — 부팅 한 번으로 따로 봤다. `net` 98초 · `tools` 35초,
+둘 다 `PASS` · `FAIL` 0줄.
