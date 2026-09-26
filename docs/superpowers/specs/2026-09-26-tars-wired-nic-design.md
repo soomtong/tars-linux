@@ -2,7 +2,7 @@
 
 접두사: WN
 
-Status: M1 끝났다(2026-09-26) — 실측 1~11. M2 착수 전 실측 12~14. 다음은 M2(`init`이 인터페이스를 dhcpcd에 넘긴다).
+Status: M2 끝났다(2026-09-26) — 실측 1~17. 다음은 M3(`nic/check.sh`).
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. virtio-net과 dhcpcd를
 들인 문서이고, 아래에서 "NW 결정 N" · "NW 실측 N"은 전부 그 문서의 것이다) ·
@@ -357,6 +357,31 @@ interfaces found` · `no interfaces have a carrier` · `usb0: carrier acquired` 
 
 그래서 M2의 argv는 `dhcpcd -j /dev/console -o ntp_servers`다. `-b`는 안 붙인다 —
 manager mode가 이미 곧바로 배경으로 가므로 더해 주는 것이 없다.
+
+## WN-M2가 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-wired-nic-wn-m2.md`.
+
+### 실측 15 — 판정을 먼저 바꾸면 옛 `init`이 검사 4에서 빨갛다
+
+`net/check.sh` 검사 4를 "`tars-init: started dhcpcd (pid`가 있고 `tars-init: net
+link`는 없다"로 바꾸고 옛 코드로 한 판 돌렸다. 검사 1~3을 지나 `FAIL: init did not
+start dhcpcd`에서 멈췄다. 옛 줄은 `started dhcpcd on eth0 (pid N)`이라 새 패턴에 안
+걸린다.
+
+### 실측 16 — `init`이 링크를 안 만져도 주소 · hook · 시계가 그대로 선다
+
+`net.zig`가 182줄에서 104줄이 됐다(+30 −108). 빠진 것은 `IFACE` · `SYS_IFACE` ·
+ioctl 상수 둘 · `IFF_UP` · `ifreq`와 그 `comptime` 검사 · `ifacePresent` · `linkUp`이고,
+argv가 `dhcpcd -j /dev/console -o ntp_servers`가 됐다. `net` 체인 한 판이 `PASS`다.
+검사 5(`eth0: leased 10.0.2.15`)가 `-j`로 나온 줄에서 걸리고(실측 12가 예고한
+대로 `-j`가 없었다면 여기서 멈췄다), `/etc/resolv.conf`를 쓰는 hook, 시계를 2031년으로
+뛰는 TS 부팅, drift를 `/config`에 두는 TD 부팅이 전부 초록이다. 위험 4가 닫힌다.
+
+### 실측 17 — 루트 게이트 13체인 3/3
+
+`TARS check PASS`, `FAIL` 0줄, 40분 52.90초(2026-09-26). M1의 40분 37.55초와 같다.
+`net=dhcp`로 뜨는 체인이 `net` 하나뿐이라 나머지 열둘은 바뀐 코드를 안 밟는다.
 
 ## milestone
 

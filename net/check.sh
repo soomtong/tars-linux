@@ -418,8 +418,7 @@ fail() {
     "NET: Registered PF_PACKET protocol family" \
     "NET: Registered PF_UNIX/PF_LOCAL protocol family" \
     "tars-init: loaded /config/tars.conf" \
-    "tars-init: net link eth0 is up" \
-    "tars-init: started dhcpcd on eth0" \
+    "tars-init: started dhcpcd (pid" \
     "tars-init: started console shell" \
     "terminal: screen>"; do
     if grep -a "$marker" "$LOG" >/dev/null; then
@@ -534,17 +533,22 @@ if ! grep -aE "tars-init: config shell=.* net=dhcp" "$LOG" >/dev/null; then
 fi
 echo "the guest read net=dhcp off the config disk"
 
-# ── 검사 4: init이 한 일 둘 ───────────────────────────────────────────
-# design 결정 6이 그은 경계가 이 두 줄이다. 우리 코드가 하는 일은 링크를
-# 올리는 것과 dhcpcd를 띄우는 것이고, 그 뒤는 전부 dhcpcd다.
-for marker in \
-  "tars-init: net link eth0 is up" \
-  "tars-init: started dhcpcd on eth0"; do
-  if ! grep -a "$marker" "$LOG" >/dev/null; then
-    fail "init did not do its half of the work: ${marker}" "tars-init: net"
-  fi
-done
-echo "init raised the link and started dhcpcd"
+# ── 검사 4: init이 한 일 하나 ─────────────────────────────────────────
+# design 결정 6이 그은 경계가 이 줄이다. 처음(NW-M2)에는 우리 코드가 링크를
+# 올리고 dhcpcd를 띄우는 두 가지를 했고 이 검사도 두 줄을 봤다. WN-M2가
+# 앞의 것을 dhcpcd에게 넘겼다 — 이제 인터페이스를 고르고 올리는 것까지
+# dhcpcd이고(WN design 결정 4), 우리 코드는 띄우기만 한다.
+#
+# 뒤의 음성은 init이 링크를 다시 만지는 날을 잡는다. 그 줄은 init만 찍는
+# 글자라 dhcpcd의 로그에 우연히 걸릴 일이 없다.
+if ! grep -a "tars-init: started dhcpcd (pid" "$LOG" >/dev/null; then
+  fail "init did not start dhcpcd" "tars-init: net" "tars-init: started dhcpcd"
+fi
+if grep -a "tars-init: net link" "$LOG" >/dev/null; then
+  fail "init touched the link itself; dhcpcd is supposed to do that now" \
+    "tars-init: net link"
+fi
+echo "init started dhcpcd and left the interface to it"
 
 # ── 검사 5: dhcpcd가 리스를 받았나 ────────────────────────────────────
 # SLIRP의 주소 규칙이 고정이라 값을 박을 수 있다 — 게스트 10.0.2.15/24,

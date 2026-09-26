@@ -285,7 +285,7 @@ pub fn start(net: config.Net, want: config.Ntp, keep: bool, envp: [*:null]const 
         });
         execChronyd(envp);
     }
-    // `net.zig`의 `started dhcpcd on eth0 (pid N)`과 짝이 되는 자리이고,
+    // `net.zig`의 `started dhcpcd (pid N)`과 짝이 되는 자리이고,
     // 자식이 아무 말도 못 하고 죽은 회차에 "태어나기는 했다"를 남긴다.
     std.debug.print("tars-init: clock child (pid {d}) will ask {s}\n", .{
         pid, want.arg(&ntp_buf),
