@@ -1,6 +1,73 @@
-# HANDOFF: Disk Install Carryover(DC)가 M2로 닫혔다 — 설치된 부팅이 늦은 설정 파티션을 기다리고, DI의 작은 것 다섯이 치워졌다
+# HANDOFF: Time Discipline(TD) M1이 닫혔다 — 시계는 chronyd가 만지고 init은 배관만 한다
 
 ## 지금 어디인가
+
+TD가 2026-09-26에 열려 M0 · M1이 끝났다. 사용자가 후보 넷 중 chrony를 고르고,
+목적으로 "오래 켜 둔 기계의 drift"를, 접근으로 "우리 SNTP를 전면 교체"를 골랐다.
+다음 할 일은 TD-M2의 plan이다(아래 "바로 다음에 할 것").
+
+design은 `docs/superpowers/specs/2026-09-26-tars-time-discipline-design.md`(실측 1~17),
+plan은 `plans/2026-09-26-tars-time-discipline-td-m0.md` · `-td-m1.md`, 기억은
+`docs/decisions/project_time_discipline.md`다.
+
+무엇이 섰나(M1).
+
+- `init/src/clock.zig`(옛 `sntp.zig`) — fork한 자식이 서버를 정하고(`ntp=dhcp`면 파일을
+  최대 30초), `/run/tars/chrony.conf`에 세 줄(`server … iburst` · `makestep 1 3` ·
+  `cmdport 0`)을 쓰고 `chronyd -d -u root -f …`로 execve한다. 프로토콜 코드와
+  `sntp_test`의 패킷 · era 검사는 지웠다.
+- 이미지에 chrony와 라이브러리 넷, initrd에 chronyd · chronyc(+425,905바이트).
+- `net/ntp_stub.pl`(옛 `sntp_stub.pl`)의 시계가 흐른다. 셋째 인자 ppm은 M2가 쓴다.
+- `net` 체인 검사 18이 `chronyd will ask` → `Selected source` → `System clock was
+  stepped by`를 순서대로 본다. 값은 검사 19의 2031년이 본다.
+
+M0이 배운 것. 500ppm 빠른 stub을 8초 안에 배우고(잡음은 한 자릿수 ppm), SIGTERM에
+20ms 안에 driftfile을 쓰고 끝나며, 다음 chronyd가 `Frequency … read from`으로 그 값에서
+출발한다. 커널이 주파수를 기억하고(driftfile 없이도 앞 값에서 출발), 같은 `server`가
+두 번이면 먼저 적힌 쪽이 이긴다.
+
+M1이 배운 것. plan이 "주소 전에 뜬 chronyd는 iburst를 날린다"고 보고 기본 경로를
+기다리게 했는데, 반사실로 재 보니 점프가 1초 차이였다. `ea72b85`가 걷어 냈다(실측 13).
+
+| 커밋 | 무엇 |
+|---|---|
+| `62c6c25` · `21ce55f` · `3f74c10` | design · M0 plan · M0 실측 |
+| `56c8990` | M1 plan |
+| `49d2631` · `2f4f537` | 이미지 · initrd |
+| `51807a8` · `ea72b85` | `clock.zig` · 기본 경로 기다림을 걷어 냄 |
+| `9d79185` | `net` 체인과 흐르는 stub |
+| (이 커밋) | `CHAINS`의 `TD-M1` · design 실측 · 기억 · 이 HANDOFF |
+
+판정: `net` 체인 단독 1분 02초(캐시) · 1분 23초(`init` 새 빌드), 반사실 둘
+(`makestep` 없음 → 호스트 검사가 먼저, 기대값까지 바꾸면 검사 18 셋째 줄에서 빨강 ·
+기본 경로 기다림 없음 → 초록이고 늦지 않음), 루트 게이트 13체인 3/3(39분 50.48초, `FAIL` 0줄, 2026-09-26).
+
+⚠ 다음 사람이 먼저 볼 것 셋.
+
+1. `net` 체인의 게스트 로그는 컨테이너 `/tmp`의 mktemp다. 읽으려면
+   `-v /tmp/무엇:/tmp`로 호스트 디렉터리를 문다.
+2. 코드를 바꾸는 반사실은 `net` 체인이 부팅 전에 돌리는 `zig build test`가 먼저
+   잡는다. 게이트의 판정을 보려면 `clock_test`의 기대값도 함께 바꾼다. 그리고 돌리기
+   전에 `git diff`로 편집이 들어갔는지 본다(`sd -F`가 Zig의 `\\`를 못 맞춘 판이 있었다).
+3. 부팅 B의 chronyd는 커널 3.7초에 SIGTERM을 받아 핸들러를 걸기 전에 죽는다
+   (`chronyd exiting`이 없다. 실측 15). M2의 driftfile 판정은 그 부팅이 아니라 충분히
+   오래 산 부팅에서 본다.
+
+## 바로 다음에 할 것 — TD-M2의 plan
+
+design의 "TD-M2 — drift를 배우고 부팅을 넘긴다"와 M0의 "M1 · M2가 가져다 쓸 넷"이
+재료다.
+
+- `renderConf`가 `/config`가 붙었는지를 받아 `confdir /config/chrony.d`(맨 앞)와
+  `driftfile /config/chrony.drift`를 더한다.
+- 게이트가 `/config/chrony.d/gate.conf`에 `server 10.0.2.2 iburst minpoll -2 maxpoll -2`를
+  심고(`debugfs`), stub에 500ppm을 준다. 판정 셋 — `chronyc`의 주파수가 −550~−450ppm ·
+  끈 뒤 `/config/chrony.drift`가 있다 · 다시 켠 부팅이 `read from /config/chrony.drift`.
+- 부팅이 하나 는다(배우고 끄고 다시 켠다). 같은 디스크 이미지를 두 부팅이 물려받아야
+  한다.
+
+## 그 앞 — Disk Install Carryover(DC)가 M2로 닫혔다 — 설치된 부팅이 늦은 설정 파티션을 기다리고, DI의 작은 것 다섯이 치워졌다
+
 
 DC가 2026-09-25~26에 M0~M2로 닫혔다(design `Status: 끝났다`). DI가 남긴 이월 여섯을
 받은 서브프로젝트이고 사용자가 "1번부터 순서대로"를 골랐다. 다음 할 일은 새
@@ -51,7 +118,7 @@ M2가 배운 것. 쪼개진 YES는 "거절하는 쪽"만이 아니었다 — `YE
 3. 컨테이너에는 `sfdisk`가 없다(`perl` · `mke2fs` · `debugfs`는 있다). 파티션 표가
    필요한 하네스는 MBR을 `perl`로 쓰거나(DC-M0) 게스트의 `sfdisk`를 부른다(DC-M2).
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+## (DC 당시) 다음 할 것 — 새 서브프로젝트를 고른다 → TD를 골랐다
 
 DC가 닫혔다. 남은 후보 — 패키지 매니저(DI가 디스크에 비워 둔 자리 · p3) · 실머신 NIC
 (실기 없이 열려면 유선 드라이버를 QEMU 에뮬레이션으로 재는 반쪽) · IN이 미룬 넷 ·

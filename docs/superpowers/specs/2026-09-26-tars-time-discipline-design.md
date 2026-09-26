@@ -2,7 +2,7 @@
 
 접두사: TD
 
-Status: M0이 끝났다(2026-09-26). 다음은 M1(교체)이다.
+Status: M0 · M1이 끝났다(2026-09-26). 다음은 M2(drift를 배우고 부팅을 넘긴다)다.
 
 관련 문서: `2026-09-15-tars-time-sync-design.md`(TS. 부팅에 한 번 뛰는 것을
 세운 문서이고, 아래에서 "TS 결정 N" · "TS 실측 N"은 전부 그 문서의 것이다) ·
@@ -144,6 +144,13 @@ chronyd가 필터를 걸지 못한다. 안 준다(결정 3). 라이브러리는 
 `execve`를 하므로 `power.resetToDefault()`를 부를 필요가 없어진다(확인 2).
 지운다. 그 함수의 주석이 "지금 그런 자식은 `sntp.zig`의 것 하나다"라고 말하고
 있으므로 함수 자체가 쓸 데가 없어지는지 M1 plan이 센다.
+
+⚠ M1 plan이 이 문단을 뒤집었다(결정 M1-A). 자식은 `ntp=dhcp`일 때 `execve`
+전에 우리 코드로 서버 파일을 최대 30초 기다리고, 그 창에서는 부모의 SIGTERM
+핸들러를 갖고 있다. 그래서 `resetToDefault()`는 fork 직후 첫 줄로 남았다.
+
+설정 파일의 인자에서 `/config`는 M2 몫이라 M1의 `renderConf`는 주소 하나만
+받는다.
 
 ### 결정 3 — chronyd는 `-d -u root -f /run/tars/chrony.conf`로 뜬다
 
@@ -462,6 +469,114 @@ Initial frequency 4.363 ppm
 3. `r = 500`, 판정 창 −550~−450ppm, 기동 뒤 20초.
 4. gate.conf — `server 10.0.2.2 iburst minpoll -2 maxpoll -2` 한 줄. `init`의
    설정은 `confdir /config/chrony.d`를 맨 앞에, `cmdport 0`을 더한다.
+
+## TD-M1이 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-time-discipline-td-m1.md`. 커밋은
+`49d2631`(이미지) · `2f4f537`(initrd) · `51807a8`(`clock.zig`) · `ea72b85`(기본
+경로 기다림을 걷어 냄) · `9d79185`(체인)이다.
+
+### 실측 11 — 이미지는 33초에 다시 구워지고 initrd는 425,905바이트 는다
+
+`docker build`가 33.1초였다. 앞 층이 캐시에 있어서 다운로드 층 하나만 다시
+돈다. initrd는 42,793,036 → 43,218,941바이트로, M0 실측 1의 "약 424KB"와 맞다.
+`tools` 체인이 `all 77 tools the list names`로 초록이다(36.3초).
+
+### 실측 12 — 호스트 검사가 게이트보다 먼저 `makestep`을 잡는다
+
+반사실로 `renderConf`에서 `makestep 1 3`만 지웠더니, `net` 체인이 부팅 전에
+돌리는 `zig build test`에서 `clock_test`가 `FAIL: got …`으로 죽었다(20.9초).
+원인에 가장 가까운 자리가 먼저 잡은 것이다.
+
+게이트가 그것을 잡는지 보려고 `clock_test`의 기대 문자열에서도 같은 줄을 뺐다.
+그러자 부팅 A의 검사 18이 셋째 줄에서 멈췄다.
+
+```
+FAIL: chronyd never stepped the clock
+```
+
+90초를 다 기다려 2분 46초가 걸렸다. `Selected source`까지는 나온다 — chronyd는
+stub을 믿지만, 뛸 허락이 없으면 1.4억 초를 slew로만 따라간다.
+
+첫 시도는 무효였다. `sd`의 고정 문자열 패턴이 Zig의 `\\` 두 글자와 줄바꿈을
+못 맞춰 편집이 일어나지 않았고, 멀쩡한 코드로 `PASS`가 나왔다. 그 뒤로는
+반사실을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍었다.
+
+### 실측 13 — 기본 경로를 기다릴 필요가 없었다 (plan의 결정 M1-B가 틀렸다)
+
+plan은 "주소가 붙기 전에 chronyd가 뜨면 `iburst`의 네 번이 `ENETUNREACH`로
+날아가고 64초로 물러난다"고 보고, 자식이 `/proc/net/route`의 기본 경로를
+기다린 뒤 `execve`하게 했다(`51807a8`). plan이 적어 둔 반사실로 그 한 줄을
+빼고 쟀다.
+
+| | chronyd가 뜬 때 | `Selected source`까지 | 점프한 stub 시각 |
+|---|---|---|---|
+| 기다림 있음 | 리스 뒤(`default route is up after 8500 ms`) | 뜬 지 5초 | 05:06:23 |
+| 기다림 없음 | fork 직후 | 뜬 지 14초(리스 뒤 수 초) | 05:06:24 |
+
+점프가 부팅 기준으로 1초 차이다. 기다림을 걷어 낸 최종판에서 stub이 받은
+요청이 넷이었다. 주소가 붙기 전에 보내기에 실패한 요청을 chrony가 버스트의
+네 번으로 세지 않고, 붙은 뒤의 응답 넷으로 버스트를 채운 것으로 읽는다. chrony의
+소스를 읽어 확인한 것은 아니고, 이 두 판과 맞는 설명이다.
+
+그래서 기다리는 코드(`hasDefaultRoute` · `routeIsUp` · `waitForRoute`와 그
+검사, 약 50줄)를 `ea72b85`가 걷어 냈다. 측정된 이득이 없는 코드였다.
+
+### 실측 14 — 부팅 A가 이렇게 흐른다
+
+기다림을 걷어 낸 최종판의 시리얼 로그다.
+
+```
+260 tars-init: chronyd will ask 10.0.2.2 (/run/tars/chrony.conf)
+261 tars-init: clock child (pid 35) will ask 10.0.2.2
+265 2026-09-26T00:30:20Z chronyd version 4.6.1 starting (...)
+321 eth0: adding default route via 10.0.2.2
+323 2026-09-26T00:30:32Z Selected source 10.0.2.2
+324 2026-09-26T00:30:32Z System clock wrong by 139984550.428113 seconds
+325 2031-03-04T05:06:22Z System clock was stepped by 139984550.428113 seconds
+...
+5776 2031-03-04T05:06:27Z chronyd exiting
+```
+
+자식의 `chronyd will ask`가 부모의 `clock child`보다 먼저 찍힌다. fork 뒤에
+누가 먼저 도는지는 스케줄러가 정하고, 자식은 이제 기다릴 것이 없어서 부모보다
+앞선다. 게이트는 두 줄의 순서를 안 본다.
+
+### 실측 15 — 부팅 B의 chronyd는 핸들러를 걸기 전에 SIGTERM을 받는다 (plan에 없던 것)
+
+부팅 B는 심어 둔 파일 덕에 커널 기준 3.7초 만에 전원이 내려간다.
+
+```
+tars-init: sent SIGTERM to every process
+[    3.701164] random: chronyd: uninitialized urandom read (4096 bytes read)
+[    3.960593] random: crng init done
+tars-init: every child is gone (reaped 6)
+```
+
+`chronyd exiting`이 없다. chronyd가 커널의 난수 풀이 준비되기 전에
+`/dev/urandom`을 읽으며 초기화하던 중에 SIGTERM이 왔고, 자기 핸들러를 걸기
+전이라 기본 동작으로 조용히 죽었다. `grace period expired`는 없으므로 판정은
+초록이다.
+
+M2에 뜻이 있다. driftfile은 chronyd의 핸들러가 SIGTERM을 받아야 쓰인다. 뜨자마자
+끄면 안 쓰이지만, 그때는 배운 것도 없으므로 잃는 것도 없다.
+
+기다림이 있던 판(`51807a8`)에서는 부팅 B가 우리 코드의 기다림 안에서 꺼졌다.
+그 판은 결정 M1-A의 `resetToDefault()` 창을 게이트가 밟은 유일한 판이었고
+초록이었다. 걷어 낸 뒤로는 그 창이 `ntp=dhcp`의 파일 기다림뿐이고, 게이트는
+파일을 미리 심으므로 밟지 않는다.
+
+### 실측 16 — 체인 단독 1분 02초
+
+캐시가 있을 때 1분 02.20초, `init`을 처음부터 빌드하면 1분 23초다. TS-M3의
+57.5~59.3초에서 3~5초 늘었다. 부팅 B의 차이는 0초(`cost 0s of boot time`)다.
+
+### 실측 17 — 루트 게이트
+
+13체인 3/3 통과(`TARS check PASS`, `FAIL` 0줄, 39분 50.48초, 2026-09-26). `net`
+체인의 `chronyd selected 10.0.2.2 and stepped the clock`이 3회, `skipping make`가
+38회(`13 × 3 − 1`)다. DC-M2의 38분 38.07초와 같은 `clean` 조건이고 1분 12초 길다 —
+`net` 체인의 회차당 3~5초와 이미지가 바뀐 판의 몫이 섞여 있다.
 
 ## 마일스톤
 

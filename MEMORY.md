@@ -76,3 +76,4 @@
 - [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig 씨앗, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
 - [Disk install](docs/decisions/project_disk_install.md) — `tars-install`이 GPT에 ESP(p1)와 `tars-config`(p2)를 만들고 USB 없이 뜬다; `init`의 후보가 디스크 다음 파티션이 됐고 안전은 라벨이 지킨다. ISO 부팅은 표지 `tars.installed`가 없어 p2를 안 붙이고, 갱신은 설정을 남긴다(DI-M1·M2, 2026-09-23)
 - [Disk carryover](docs/decisions/project_disk_carryover.md) — 설치된 부팅이 설정 파티션을 최대 5초 기다린다(게이트의 틈은 TCG의 initramfs 풀기가 덮고 있었다 — `delay_use=3`으로 벌려 판정); 4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · YES를 줄로(DC-M0~M2, 2026-09-26 종료)
+- [Time discipline](docs/decisions/project_time_discipline.md) — 시계를 chronyd에게 넘겼다; init은 fork · 설정 · execve 배관만. 커널이 주파수를 기억하고, 같은 server는 먼저 적힌 쪽이 이기며, chrony는 주소 전의 실패를 iburst로 안 센다(TD-M0·M1, 2026-09-26)
