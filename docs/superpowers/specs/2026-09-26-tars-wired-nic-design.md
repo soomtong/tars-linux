@@ -2,7 +2,7 @@
 
 접두사: WN
 
-Status: M1 끝났다(2026-09-26) — 실측 1~11. 다음은 M2(`init`이 인터페이스를 dhcpcd에 넘긴다).
+Status: M1 끝났다(2026-09-26) — 실측 1~11. M2 착수 전 실측 12~14. 다음은 M2(`init`이 인터페이스를 dhcpcd에 넘긴다).
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. virtio-net과 dhcpcd를
 들인 문서이고, 아래에서 "NW 결정 N" · "NW 실측 N"은 전부 그 문서의 것이다) ·
@@ -317,6 +317,46 @@ virtio-net 하나라 이름이 여전히 `eth0`이다. 검사 11은 지우고 �
 
 `TARS check PASS`, `FAIL` 0줄, 40분 37.55초(2026-09-26). TD-M2의 41분 08.74초와
 잡음 안에서 같다 — 부팅 수가 그대로이고 커널 첫 빌드만 드라이버만큼 길어진다.
+
+## WN-M2 착수 전에 잰 것
+
+2026-09-26. M0의 하네스를 고친 `/tmp/wn/boot2.sh`로 부팅 넷을 돌렸다(저장소에 안
+들어갔다). 콘솔 셸에서 `init`이 할 모양 그대로 — `-b` 없이, 인터페이스 인자 없이 —
+dhcpcd를 `&`로 띄웠다. 커널은 M1의 것이다.
+
+| 부팅 | NIC | 인자 |
+|---|---|---|
+| A-fg | `e1000e` | `-o ntp_servers` |
+| A-j | `e1000e` | `-j /dev/console -o ntp_servers` |
+| N-fg | 없음, 40초 뒤 `usb-net` | `-o ntp_servers` |
+| N-j | 없음, 40초 뒤 `usb-net` | `-j /dev/console -o ntp_servers` |
+
+### 실측 12 — manager mode는 `-b` 없이도 곧바로 배경으로 가고, 그러면 `leased` 줄이 안 보인다
+
+A-fg에서 주소는 붙었다(`eth0=10.0.2.15/24`, dhcpcd 하나가 산다). 그런데 로그에
+`leased`가 없다. 콘솔에 나온 것은 `read_config` · `no such user dhcpcd` ·
+`dhcpcd-10.1.0 starting` 셋뿐이고, 시작한 pid(77)와 살아 있는 pid(81)가 다르다.
+인터페이스를 이름으로 줬을 때는 lease까지 foreground에 머물러 그 줄을 stderr로
+찍었다(지금 `init`의 경로, `net` 검사 5가 기대는 줄). 이름을 빼면 그 성질이
+사라진다. 실측 4의 "`-b`로 뜬 dhcpcd"가 겪은 일을 `-b` 없이도 겪는다.
+
+### 실측 13 — `-j /dev/console`이면 전부 보이고, 배경으로 가기 전 세 줄만 두 번 찍힌다
+
+A-j에서 `eth0: waiting for carrier`부터 `eth0: leased 10.0.2.15 for 86400 seconds` ·
+`adding default route via 10.0.2.2`까지가 `Sep 26 11:07:33 [78]: ` 머리를 달고
+나왔다. 검사 5의 `eth0: leased 10.0.2.15`가 머리 뒤에서 그대로 걸린다. 배경으로 가기
+전의 세 줄은 stderr로 한 번, 파일로 한 번 찍힌다. 해는 없다.
+
+### 실측 14 — NIC가 없으면 `no valid interfaces found`를 찍고 살아서 기다리고, 꽂힌 것을 잡는다
+
+N-fg · N-j 둘 다 45초(dhcpcd 기본 timeout 30초를 넘긴 시각)에 dhcpcd 하나가 살아
+있다. 40초에 꽂은 `usb0`에서 약 17초 안에 주소를 받았다. N-j의 로그에 `no valid
+interfaces found` · `no interfaces have a carrier` · `usb0: carrier acquired` ·
+`usb0: leased 10.0.2.15`가 순서대로 있다. 실측 6이 `-b`로 본 것이 `-b` 없이도
+같다 — 결정 6(부팅을 안 막는다)과 결정 4의 핫플러그가 `-b` 없이 선다.
+
+그래서 M2의 argv는 `dhcpcd -j /dev/console -o ntp_servers`다. `-b`는 안 붙인다 —
+manager mode가 이미 곧바로 배경으로 가므로 더해 주는 것이 없다.
 
 ## milestone
 
