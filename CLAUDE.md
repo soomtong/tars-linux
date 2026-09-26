@@ -132,6 +132,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Disk Install Carryover (DC-M0~M2) | 2026-09-26 | 설치된 부팅이 늦게 생기는 설정 파티션을 5초까지 기다린다. DI의 작은 것 다섯(4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · 쪼개진 YES · PVD 음성)을 치웠다. install 체인이 부팅 일곱이 됐다 |
 | Time Discipline (TD-M0~M2) | 2026-09-26 | 시계를 chronyd가 만진다 — 우리 SNTP를 지우고 `init`은 fork · 설정 · execve 배관만 한다. `/config`가 붙으면 배운 drift가 `/config/chrony.drift`로 부팅을 넘고, 사람은 `/config/chrony.d/`에 서버를 적는다. `net/check.sh`가 부팅 다섯 |
 | Wired NIC (WN-M0~M3) | 2026-09-26 | 노트북형 유선 드라이버 여섯과 USB 동글 셋이 켜졌다. 모든 QEMU 호출이 `-nic none`/`-netdev`를 명시하고 진입 검사가 지킨다. `init`은 dhcpcd를 띄우기만 하고 인터페이스는 dhcpcd가 고른다 — 부팅 뒤 꽂은 USB 동글도 잡는다. 열네번째 체인 `nic/check.sh` |
+| Loopback (LB-M0~M3) | 2026-09-26 | `init`이 설정을 읽기 전에 `lo`를 올리고, `localhost`와 `아무거나.localhost`가 `net`과 무관하게 `127.0.0.1`로 풀린다 — `/etc/hosts` · `nsswitch.conf` · `libnss_myhostname`. 새 체인 없이 `tools` · `net` 체인이 이름 셋으로 게스트 안 TCP 왕복을 본다 |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

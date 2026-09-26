@@ -9,8 +9,8 @@ Goal: `net=off`(`tools` 체인)와 `net=dhcp`(`net` 체인) 두 부팅에서, �
 것을 게이트가 매번 본다.
 
 Architecture: 이름마다 한 번 응답하는 리스너를 배경에 두고(`nc -l -p P < /dev/null >
-/tmp/lb-T.txt &`), 그 이름으로 `/etc/hosts`를 흘려 보낸다(`nc -q 1 NAME P <
-/etc/hosts`). 마지막에 `grep -c localhost` 한 번으로 세 파일을 센다 — 출력이
+/tmp/lb-T.txt &`), 그 이름으로 `/etc/passwd`를 흘려 보낸다(`nc -q 1 NAME P <
+/etc/passwd`). 마지막에 `grep -c root` 한 번으로 세 파일을 센다 — 출력이
 `/tmp/lb-T.txt:N` 꼴이라 이름마다 판정이 갈린다. 타이핑은 두 체인이 같으므로
 `gate_lib.sh`의 헬퍼 하나이고, 판정은 각 체인이 한다(그 파일의 규칙 — "부르는 쪽이
 `fail()`로 진단을 찍는다").
@@ -25,9 +25,12 @@ Tech Stack: bash · QEMU monitor `sendkey` · 게스트 fish · `nc.traditional`
   오므로 `:1`이 안 붙는다 — 에코 함정(NW-M3 실측 2)에 안 걸린다. `:0`이면 받은 것이
   없다는 뜻이고, 그 모양이 M0 실측 2가 정한 "받은 글자가 없다" 판정이다(에러 문구로
   판정하지 않는다 — `net=dhcp`에서는 문구가 없다).
-- M3-B 흘려 보내는 것은 `/etc/hosts`다. 내용(`127.0.0.1 localhost`)을 타이핑하지 않고,
-  그 파일 자체가 M2가 세운 것이다. `grep -c localhost`가 1이면 그 한 줄이 게스트 안에서
-  소켓을 한 번 지나왔다.
+- M3-B 흘려 보내는 것은 `/etc/passwd`이고 `grep -c root`로 센다. 처음 plan은
+  `/etc/hosts`와 `grep -c localhost`였는데, 반사실 3(그 파일을 비움)에서 세 이름이
+  전부 `:0`으로 빨갛게 됐다 — 리스너 셋이 전부 `has ended`라 연결은 됐고, 보낼
+  내용이 사라진 것이었다. 게이트가 "loopback을 못 건넜다"고 말하면서 원인은 딴 데
+  있는 모양이라, 판정의 재료를 판정 대상과 무관한 파일로 옮겼다. 옮긴 뒤 반사실
+  셋을 전부 다시 돌렸다.
 - M3-C 리스너의 stdin은 `/dev/null`이다. 배경 job이 터미널을 읽으면 SIGTTIN으로
   멈춘다(`net/check.sh` 검사 14의 주석, TS-M2가 고친 자리).
 - M3-D 포트는 9101 · 9102 · 9103. 두 체인의 기존 포트(8080 · 8081, hostfwd 쪽
@@ -56,7 +59,7 @@ Tech Stack: bash · QEMU monitor `sendkey` · 게스트 fish · `nc.traditional`
 #   /tmp/lb-ip.txt:1   /tmp/lb-lh.txt:1   /tmp/lb-app.txt:1
 #
 # 이고, 친 명령줄에는 파일 이름 뒤에 `:`가 안 붙으므로 에코와 안 겹친다.
-# 받은 것이 없으면 `:0`이다.
+# 받은 것이 없으면 `:0`이다. 세는 것은 흘려 보낸 /etc/passwd의 `root`다.
 #
 #   ip   127.0.0.1      lo가 UP인가(init의 loopbackUp)
 #   lh   localhost      /etc/hosts 또는 myhostname
@@ -64,35 +67,41 @@ Tech Stack: bash · QEMU monitor `sendkey` · 게스트 fish · `nc.traditional`
 #
 # 리스너의 stdin을 /dev/null로 돌리는 것이 중요하다. 배경 job이 터미널을
 # 읽으면 SIGTTIN으로 멈추고 받은 것을 파일에 안 쓴다(net/check.sh 검사 14).
-# 보내는 쪽은 /etc/hosts를 흘린다 — 내용을 타이핑하지 않으므로 파일에 적힌
-# localhost는 소켓을 지나온 것뿐이다. -q 1은 stdin의 EOF 뒤 1초에 닫는다.
+# -q 1은 보내는 쪽 stdin의 EOF 뒤 1초에 닫는다.
+#
+# 흘려 보내는 것이 /etc/passwd인 데 이유가 있다. 처음에는 /etc/hosts였는데
+# 반사실(그 파일을 비움)에서 세 이름이 전부 `:0`이 됐다 — 연결은 셋 다
+# 됐는데(`has ended`) 보낼 내용이 사라진 것이다(LB design 실측). 게이트가
+# "loopback을 못 건넜다"고 말하면서 원인은 딴 데 있는 모양이라, 판정의 재료를
+# 판정 대상(이름 풀이)과 무관한 파일로 옮겼다. passwd는 늘 있고 LB가 안
+# 만진다.
 type_loopback_roundtrips() {
   # nc -l -p 9101 < /dev/null > /tmp/lb-ip.txt &
   type_keys n c spc minus l spc minus p spc 9 1 0 1 spc shift-comma spc \
     slash d e v slash n u l l spc shift-dot spc \
     slash t m p slash l b minus i p dot t x t spc shift-7 ret
-  # nc -q 1 127.0.0.1 9101 < /etc/hosts
+  # nc -q 1 127.0.0.1 9101 < /etc/passwd
   type_keys n c spc minus q spc 1 spc 1 2 7 dot 0 dot 0 dot 1 spc 9 1 0 1 spc \
-    shift-comma spc slash e t c slash h o s t s ret
+    shift-comma spc slash e t c slash p a s s w d ret
 
   # nc -l -p 9102 < /dev/null > /tmp/lb-lh.txt &
   type_keys n c spc minus l spc minus p spc 9 1 0 2 spc shift-comma spc \
     slash d e v slash n u l l spc shift-dot spc \
     slash t m p slash l b minus l h dot t x t spc shift-7 ret
-  # nc -q 1 localhost 9102 < /etc/hosts
+  # nc -q 1 localhost 9102 < /etc/passwd
   type_keys n c spc minus q spc 1 spc l o c a l h o s t spc 9 1 0 2 spc \
-    shift-comma spc slash e t c slash h o s t s ret
+    shift-comma spc slash e t c slash p a s s w d ret
 
   # nc -l -p 9103 < /dev/null > /tmp/lb-app.txt &
   type_keys n c spc minus l spc minus p spc 9 1 0 3 spc shift-comma spc \
     slash d e v slash n u l l spc shift-dot spc \
     slash t m p slash l b minus a p p dot t x t spc shift-7 ret
-  # nc -q 1 app.localhost 9103 < /etc/hosts
+  # nc -q 1 app.localhost 9103 < /etc/passwd
   type_keys n c spc minus q spc 1 spc a p p dot l o c a l h o s t spc 9 1 0 3 spc \
-    shift-comma spc slash e t c slash h o s t s ret
+    shift-comma spc slash e t c slash p a s s w d ret
 
-  # grep -c localhost /tmp/lb-ip.txt /tmp/lb-lh.txt /tmp/lb-app.txt
-  type_keys g r e p spc minus c spc l o c a l h o s t spc \
+  # grep -c root /tmp/lb-ip.txt /tmp/lb-lh.txt /tmp/lb-app.txt
+  type_keys g r e p spc minus c spc r o o t spc \
     slash t m p slash l b minus i p dot t x t spc \
     slash t m p slash l b minus l h dot t x t spc \
     slash t m p slash l b minus a p p dot t x t ret
@@ -123,7 +132,7 @@ type_loopback_roundtrips
 for tag in ip lh app; do
   if ! wait_for_screen "lb-${tag}\.txt:1"; then
     fail "nothing crossed loopback by the name behind lb-${tag}" \
-      "terminal: screen>.*lb-" "tars-init: lo" "forward host lookup failed"
+      "lb-[a-z]*\.txt:[0-9]" "tars-init: lo" "forward host lookup failed"
   fi
 done
 echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"
@@ -165,7 +174,7 @@ type_loopback_roundtrips
 for tag in ip lh app; do
   if ! wait_for_screen "lb-${tag}\.txt:1"; then
     fail "nothing crossed loopback by the name behind lb-${tag}" \
-      "terminal: screen>.*lb-" "tars-init: lo" "forward host lookup failed"
+      "lb-[a-z]*\.txt:[0-9]" "tars-init: lo" "forward host lookup failed"
   fi
 done
 echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"

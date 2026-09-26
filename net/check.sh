@@ -943,6 +943,35 @@ fi
     "terminal: screen>"
 echo "with no listener the chain read nothing, as it should"
 
+# ── 검사 29: net=dhcp에서도 기계 안의 길이 서나 (LB-M3) ──────────────────
+#
+# tools/check.sh 검사 20과 같은 것을 친다(gate_lib.sh의 헬퍼). 이 부팅에서
+# 따로 보는 이유가 LB-M0 실측 4다 — 파일이 없던 때 net=dhcp에서는 SLIRP
+# 너머 호스트 DNS가 `localhost`에 답해서 초록인 척할 수 있었고, net=off에서는
+# 못 했다. 두 부팅의 답이 같다는 것이 "이름 풀이가 네트워크에 안 기댄다"의
+# 증거다. `app.localhost`는 호스트 DNS가 답하지 않으므로(같은 실측) 여기서
+# myhostname이 빠지면 이 부팅에서도 빨갛다.
+#
+# 이 체인의 번호는 부팅 순서가 아니라 생긴 순서다(검사 23 · 24가 20 앞에
+# 있다). 이 둘은 첫 부팅의 끝에 붙는다.
+echo "=== typing three loopback round trips (127.0.0.1 · localhost · app.localhost) ==="
+type_loopback_roundtrips
+for tag in ip lh app; do
+  if ! wait_for_screen "lb-${tag}\.txt:1"; then
+    fail "nothing crossed loopback by the name behind lb-${tag}" \
+      "lb-[a-z]*\.txt:[0-9]" "tars-init: lo" "forward host lookup failed"
+  fi
+done
+echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"
+
+# ── 검사 30: init이 lo를 올렸다고 말했나 (LB-M3) ───────────────────────
+# tools/check.sh 검사 21과 같다. net=dhcp라도 lo는 dhcpcd가 아니라 init이
+# 올린다 — dhcpcd는 lo를 안 만진다(WN design 덤).
+if ! grep -a "tars-init: lo up" "$LOG" >/dev/null; then
+  fail "init never said it raised lo" "tars-init: lo" "tars-init: cannot"
+fi
+echo "init raised lo"
+
 # ── 끈다 ──────────────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the guest ==="
 echo "system_powerdown" >&3

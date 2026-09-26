@@ -661,6 +661,37 @@ if ! wait_for_screen "/usr/share/terminfo/x"; then
 fi
 echo "zoxide learned a directory and gave it back normalized"
 
+# ── 검사 20: 게스트 안의 두 프로세스가 이름 셋으로 주고받나 (LB-M3) ──────
+#
+# 번호가 19 뒤인데 자리는 19 앞이다. 19는 음성 확인이라 언제나 맨 뒤이고,
+# 앞에 무엇이 늘든 늘어난 것까지 함께 본다(그 주석의 규칙) — 여기서 nc를
+# 못 찾으면 19가 `Unknown command`로 잡는다.
+#
+# 이 체인은 설정 디스크가 없어서 net=off이고 NIC도 없다(-nic none). 그래서
+# 여기서 서는 것은 전부 기계 안의 길이다. lo를 올리는 것은 init이고(LB
+# design 결정 1 · 3), 이름은 initrd의 파일 둘과 myhostname이 푼다(결정 5).
+# 셋 중 하나만 빠져도 그 이름의 파일이 `:0`이다.
+echo "=== typing three loopback round trips (127.0.0.1 · localhost · app.localhost) ==="
+type_loopback_roundtrips
+for tag in ip lh app; do
+  if ! wait_for_screen "lb-${tag}\.txt:1"; then
+    fail "nothing crossed loopback by the name behind lb-${tag}" \
+      "lb-[a-z]*\.txt:[0-9]" "tars-init: lo" "forward host lookup failed"
+  fi
+done
+echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"
+
+# ── 검사 21: init이 lo를 올렸다고 말했나 (LB-M3) ───────────────────────
+#
+# 검사 20 뒤인 이유가 LB-M3 plan 결정 M3-E다. 앞에 두면 반사실(loopbackUp을
+# 뺌)에서 이 줄이 먼저 빨갛게 되고, 왕복 검사가 실제로 무엇을 잡는지는 안
+# 보인다. 이 줄의 값은 진단이다 — 검사 20이 빨간 날 "init이 시도는 했나"를
+# 가른다.
+if ! grep -a "tars-init: lo up" "$LOG" >/dev/null; then
+  fail "init never said it raised lo" "tars-init: lo" "tars-init: cannot"
+fi
+echo "init raised lo"
+
 # ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는

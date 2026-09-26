@@ -1,6 +1,46 @@
-# HANDOFF: Wired NIC(WN)가 M3으로 닫혔다 — 노트북형 유선 NIC가 켜졌고, 꽂은 USB 동글도 주소를 받는다
+# HANDOFF: Loopback(LB)이 M3으로 닫혔다 — `lo`가 늘 서고 `*.localhost`가 풀린다
 
 ## 지금 어디인가
+
+LB가 2026-09-26 ~ 27에 M0~M3으로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
+서브프로젝트를 고르는 것이다(아래).
+
+design은 `docs/superpowers/specs/2026-09-26-tars-loopback-design.md`(결정 6 · 실측
+1~19), plan은 `plans/2026-09-26-tars-loopback-lb-m0.md` ~ `-lb-m3.md`, 기억은
+`docs/decisions/project_loopback.md`다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `6a4d60c` · `3ef3385` · `1502a0f` | design · M0 plan · M0 실측(부팅 둘, 코드 0줄) |
+| `82d9759` · `77c6bef` | M1 — `net.loopbackUp()`, `main()`에서 설정을 읽기 전 |
+| `d0eb3b1` · `6feba08` | M2 — Dockerfile 층 9 `libnss-myhostname`, `make_initrd.sh`의 `hosts` · `nsswitch.conf` |
+| `a9b8d82` · 다음 커밋 | M3 — `gate_lib.sh`의 `type_loopback_roundtrips`, `tools` 검사 20 · 21, `net` 검사 29 · 30 |
+
+루트 게이트 14체인 3/3(44분 3초, `FAIL` 0줄, 2026-09-27). 반사실 셋 — `loopbackUp()`을
+빼면 `lb-ip`, `myhostname`을 빼면 `lb-app`에서 빨갛고, `/etc/hosts`를 비우면 초록이다.
+
+사용자가 범위에 더한 것 — "caddy 같은 웹 서버를 쓸 때 `some-domain.localhost`가
+풀리면 편하다". 결정 5(`myhostname`)가 그 답이고, NSS를 안 거치는 정적 Go · musl
+클라이언트는 비목표 1이다(caddy가 서버로서 받는 것은 무관).
+
+⚠ 다음 사람이 먼저 볼 것 셋.
+- 게스트 `curl`은 `localhost` · `*.localhost`를 resolver 없이 스스로 푼다(실측 5).
+  이름 풀이의 증거로 쓰지 말 것.
+- 게이트는 `/etc/hosts`의 `localhost` 줄을 따로 못 지킨다(실측 18) — `myhostname`이
+  같은 답을 준다.
+- 판정의 재료를 판정 대상과 같은 파일로 두지 말 것(실측 17). 첫 판이 그래서
+  거짓말을 했다.
+
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · IN이 미룬 것(UDP · 포트 여럿 · 부팅 때
+뜨는 서비스 · 방화벽) · IPv6. LB가 "부팅 때 뜨는 서비스"의 바닥(`lo` · `localhost`)을
+깔았다. IPv6가 오면 `myhostname`이 `::1`도 답하기 시작할 것이다(실측 8 — 지금은 커널에
+IPv6가 없어 안 준다).
+
+# 그 앞 — WN이 닫힌 자리 (LB 착수 전의 머리)
+
+## 그때 어디였나
 
 WN이 2026-09-26 하루에 M0~M3으로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
 서브프로젝트를 고르는 것이다(아래).

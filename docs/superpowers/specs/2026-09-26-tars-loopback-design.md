@@ -2,7 +2,7 @@
 
 접두사: LB
 
-Status: M2 끝났다(2026-09-26) — 실측 1~14. M3 착수 전.
+Status: 끝났다(2026-09-27) — M0~M3, 실측 1~19. 새 체인 없이 `tools` · `net` 체인이 본다.
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. "덤 — `lo`는 `state=down`이다"가
 이 서브프로젝트의 출발점이다) · `2026-09-13-tars-guest-network-design.md`(NW) ·
@@ -326,3 +326,46 @@ LBM0-WHO whoami=[root] id=[uid=0(root) gid=0(root) groups=0(root)] ls=[root:root
 M2 plan 결정 M2-B의 가정이다. plan은 처음에 "`tools` 체인이 이것을 본다"고 적었는데
 그 체인은 `whoami`를 안 친다 — 부팅 한 번으로 따로 봤다. `net` 98초 · `tools` 35초,
 둘 다 `PASS` · `FAIL` 0줄.
+
+## LB-M3이 실행으로 증명한 것
+
+2026-09-26 ~ 27. plan은 `plans/2026-09-26-tars-loopback-lb-m3.md`. `gate_lib.sh`의
+`type_loopback_roundtrips`(이름 셋 · 포트 9101~9103)와 `tools` 검사 20 · 21, `net` 검사
+29 · 30.
+
+### 실측 15 — 두 체인이 이름 셋으로 게스트 안 왕복을 본다
+
+`tools`(`net=off`, `-nic none`)와 `net`(`net=dhcp`의 첫 부팅) 둘 다
+`two guest processes talked over 127.0.0.1, localhost and app.localhost`와
+`init raised lo`. 판정 글자는 `grep -c root`의 출력 `/tmp/lb-T.txt:1`이다.
+
+### 실측 16 — 반사실 1 · 2는 원인 자리에서 빨갛다
+
+```
+loopbackUp() 호출을 뺌     FAIL ... behind lb-ip    lb-ip.txt:0 lb-lh.txt:0 lb-app.txt:0
+myhostname을 뺌            FAIL ... behind lb-app   lb-ip.txt:1 lb-lh.txt:1 lb-app.txt:0
+                                                    app.localhost: forward host lookup failed
+```
+
+`lo`가 없으면 이름이 풀려도 셋 다 못 건넌다. `myhostname`이 없으면 `app.localhost`만
+빠진다 — `localhost`는 `/etc/hosts`가 푼다.
+
+### 실측 17 — 첫 판의 게이트는 `/etc/hosts`를 비우자 거짓말을 했다
+
+처음 판은 `/etc/hosts`를 흘려 보내고 `grep -c localhost`로 셌다. 반사실 3(그 파일을
+비움)에서 `FAIL ... behind lb-ip`, 셋 다 `:0`. 그런데 화면에는 리스너 셋이 전부
+`has ended`였다 — 연결은 됐고 보낼 내용이 사라진 것이다. 판정의 재료가 판정
+대상과 같은 파일이었다. 재료를 `/etc/passwd` · `grep -c root`로 옮기고 반사실 셋을
+다시 돌렸다(실측 16은 옮긴 뒤의 값이다).
+
+### 실측 18 — `/etc/hosts`의 줄은 게이트가 못 지킨다
+
+옮긴 뒤의 반사실 3은 `exit=0 PASS`. `myhostname`이 `localhost`에도 답하기 때문이다.
+그 줄은 NSS를 안 거치는 resolver를 위한 것이고(결정 5) 게스트에 그런 클라이언트가
+없다 — 비목표 1이 다시 열리는 날 그 클라이언트로 검사를 세운다.
+
+### 실측 19 — 루트 게이트
+
+`TARS check PASS: all chains 3/3 consecutive runs succeeded` — 14체인, 2,643초(44분
+3초), `FAIL` 0줄(2026-09-27). WN 때의 42분 12초보다 약 2분 길다 — `tools` · `net`에 더한
+타이핑(키 약 330개)과 `nc -q 1`의 1초 셋이 3회씩 든다.

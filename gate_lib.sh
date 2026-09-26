@@ -125,3 +125,60 @@ wait_for_screen() {
   done
   return 1
 }
+
+# ── loopback 왕복 — LB-M3 ────────────────────────────────────────────
+#
+# 게스트 안의 두 프로세스가 이름 셋으로 TCP를 한 번씩 주고받게 친다.
+# tools 체인(net=off)과 net 체인(net=dhcp)이 같은 것을 치므로 여기 있다.
+# 판정은 부르는 쪽이 한다 — 마지막 줄의 출력이
+#
+#   /tmp/lb-ip.txt:1   /tmp/lb-lh.txt:1   /tmp/lb-app.txt:1
+#
+# 이고, 친 명령줄에는 파일 이름 뒤에 `:`가 안 붙으므로 에코와 안 겹친다.
+# 받은 것이 없으면 `:0`이다. 세는 것은 흘려 보낸 /etc/passwd의 `root`다.
+#
+#   ip   127.0.0.1      lo가 UP인가(init의 loopbackUp)
+#   lh   localhost      /etc/hosts 또는 myhostname
+#   app  app.localhost  myhostname만 답한다
+#
+# 리스너의 stdin을 /dev/null로 돌리는 것이 중요하다. 배경 job이 터미널을
+# 읽으면 SIGTTIN으로 멈추고 받은 것을 파일에 안 쓴다(net/check.sh 검사 14).
+# -q 1은 보내는 쪽 stdin의 EOF 뒤 1초에 닫는다.
+#
+# 흘려 보내는 것이 /etc/passwd인 데 이유가 있다. 처음에는 /etc/hosts였는데
+# 반사실(그 파일을 비움)에서 세 이름이 전부 `:0`이 됐다 — 연결은 셋 다
+# 됐는데(`has ended`) 보낼 내용이 사라진 것이다(LB design 실측). 게이트가
+# "loopback을 못 건넜다"고 말하면서 원인은 딴 데 있는 모양이라, 판정의 재료를
+# 판정 대상(이름 풀이)과 무관한 파일로 옮겼다. passwd는 늘 있고 LB가 안
+# 만진다.
+type_loopback_roundtrips() {
+  # nc -l -p 9101 < /dev/null > /tmp/lb-ip.txt &
+  type_keys n c spc minus l spc minus p spc 9 1 0 1 spc shift-comma spc \
+    slash d e v slash n u l l spc shift-dot spc \
+    slash t m p slash l b minus i p dot t x t spc shift-7 ret
+  # nc -q 1 127.0.0.1 9101 < /etc/passwd
+  type_keys n c spc minus q spc 1 spc 1 2 7 dot 0 dot 0 dot 1 spc 9 1 0 1 spc \
+    shift-comma spc slash e t c slash p a s s w d ret
+
+  # nc -l -p 9102 < /dev/null > /tmp/lb-lh.txt &
+  type_keys n c spc minus l spc minus p spc 9 1 0 2 spc shift-comma spc \
+    slash d e v slash n u l l spc shift-dot spc \
+    slash t m p slash l b minus l h dot t x t spc shift-7 ret
+  # nc -q 1 localhost 9102 < /etc/passwd
+  type_keys n c spc minus q spc 1 spc l o c a l h o s t spc 9 1 0 2 spc \
+    shift-comma spc slash e t c slash p a s s w d ret
+
+  # nc -l -p 9103 < /dev/null > /tmp/lb-app.txt &
+  type_keys n c spc minus l spc minus p spc 9 1 0 3 spc shift-comma spc \
+    slash d e v slash n u l l spc shift-dot spc \
+    slash t m p slash l b minus a p p dot t x t spc shift-7 ret
+  # nc -q 1 app.localhost 9103 < /etc/passwd
+  type_keys n c spc minus q spc 1 spc a p p dot l o c a l h o s t spc 9 1 0 3 spc \
+    shift-comma spc slash e t c slash p a s s w d ret
+
+  # grep -c root /tmp/lb-ip.txt /tmp/lb-lh.txt /tmp/lb-app.txt
+  type_keys g r e p spc minus c spc r o o t spc \
+    slash t m p slash l b minus i p dot t x t spc \
+    slash t m p slash l b minus l h dot t x t spc \
+    slash t m p slash l b minus a p p dot t x t ret
+}
