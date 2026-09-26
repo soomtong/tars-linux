@@ -18,13 +18,6 @@ fn expectConf(server: [4]u8, want: []const u8) !void {
     }
 }
 
-fn expectRoute(text: []const u8, want: bool) !void {
-    if (clock.hasDefaultRoute(text) != want) {
-        std.debug.print("FAIL: hasDefaultRoute said {} for\n{s}\n", .{ !want, text });
-        return error.WrongRoute;
-    }
-}
-
 fn expectServer(text: []const u8, want: [4]u8) !void {
     const got = clock.parseServerFile(text) orelse {
         std.debug.print("FAIL: no server found in [{s}]\n", .{text});
@@ -47,12 +40,6 @@ fn expectNoServer(text: []const u8) !void {
     }
 }
 
-/// /proc/net/route의 머리 줄. 커널이 탭으로 가르고 줄 끝에 공백을 붙인다
-/// (net/ipv4/fib_trie.c의 fib_route_seq_show). 머리와 몸이 같은 모양이라
-/// 머리 줄의 `Destination`을 주소로 읽는 실수가 쉽다.
-const ROUTE_HEAD =
-    "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT                                                       \n";
-
 pub fn main() !void {
     // ── renderConf ─────────────────────────────────────────────────────
     //
@@ -63,21 +50,6 @@ pub fn main() !void {
     // 가장 긴 주소. CONF_MAX가 모자라면 여기서 난다.
     try expectConf(.{ 255, 255, 255, 255 }, "server 255.255.255.255 iburst\nmakestep 1 3\ncmdport 0\n");
     std.debug.print("clock_test: the chrony config names the server, steps once and closes the udp command port\n", .{});
-
-    // ── hasDefaultRoute ────────────────────────────────────────────────
-    //
-    // dhcpcd가 리스를 받은 뒤의 모양이다. 첫 몸 줄이 기본 경로다.
-    try expectRoute(ROUTE_HEAD ++
-        "eth0\t00000000\t0202000A\t0003\t0\t0\t1002\t00000000\t0\t0\t0                                                                               \n" ++
-        "eth0\t0002000A\t00000000\t0001\t0\t0\t1002\t00FFFFFF\t0\t0\t0                                                                               \n", true);
-    // 링크만 올라오고 리스 전. 서브넷 줄조차 없다.
-    try expectRoute(ROUTE_HEAD, false);
-    // 서브넷 줄만 있다. 주소는 붙었는데 게이트웨이가 아직이다.
-    try expectRoute(ROUTE_HEAD ++
-        "eth0\t0002000A\t00000000\t0001\t0\t0\t1002\t00FFFFFF\t0\t0\t0                                                                               \n", false);
-    // 빈 입력. 파일을 못 읽은 경우다.
-    try expectRoute("", false);
-    std.debug.print("clock_test: a default route is a body line whose destination is 00000000\n", .{});
 
     // ── parseServerFile ────────────────────────────────────────────────
     //

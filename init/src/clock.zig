@@ -5,7 +5,7 @@ const power = @import("power.zig");
 
 // 시계에 관한 일은 chronyd가 한다(TD design 결정 1). 이 파일이 하는 것은
 // 그 chronyd를 띄우기까지의 배관이다 — 갈래를 고르고, fork하고, 서버를
-// 정하고, 기본 경로를 기다리고, 설정 파일을 쓰고, execve한다.
+// 정하고, 설정 파일을 쓰고, execve한다.
 //
 // TS의 sntp.zig였다. 패킷을 짓고 읽고 시계를 뛰던 절반을 TD-M1이 지웠고,
 // 서버 파일을 기다리는 절반이 글자 그대로 남았다.
@@ -41,22 +41,6 @@ pub fn renderConf(buf: []u8, server: [4]u8) ?[]const u8 {
     , .{ server[0], server[1], server[2], server[3] }) catch null;
 }
 
-/// `/proc/net/route`에 기본 경로가 있는가. 시스템 콜이 없는 순수 함수다.
-///
-/// 첫 줄은 머리라 건너뛴다. 몸 줄의 둘째 칸(Destination)이 `00000000`이면
-/// 기본 경로다 — 커널이 주소를 16진수 여덟 글자로 찍는다.
-pub fn hasDefaultRoute(text: []const u8) bool {
-    var lines = std.mem.splitScalar(u8, text, '\n');
-    _ = lines.next(); // 머리
-    while (lines.next()) |line| {
-        var fields = std.mem.tokenizeAny(u8, line, " \t");
-        _ = fields.next() orelse continue; // Iface
-        const dest = fields.next() orelse continue;
-        if (std.mem.eql(u8, dest, "00000000")) return true;
-    }
-    return false;
-}
-
 /// `/run/tars/ntp_servers`의 내용에서 주소 하나를 꺼낸다. 시스템 콜이 없는
 /// 순수 함수다.
 ///
@@ -70,24 +54,27 @@ pub fn parseServerFile(text: []const u8) ?[4]u8 {
     return config.parseIpv4(first);
 }
 
-// ── 여기서부터는 시스템 콜을 한다. 위의 셋만 clock_test가 본다 ───────────
+// ── 여기서부터는 시스템 콜을 한다. 위의 둘만 clock_test가 본다 ───────────
 
-/// 기다리는 상한과 간격. 서버 파일과 기본 경로가 같은 값을 쓴다.
+/// `ntp=dhcp`일 때 파일이 생기기를 기다리는 상한과 간격(TS-M2).
 ///
-/// 30초인 근거는 리스다. 서버 파일을 쓰는 것은 dhcpcd의 hook이고 기본 경로를
-/// 쓰는 것도 dhcpcd라서, 기다리는 대상이 결국 리스다 — `net/check.sh`의 리스
+/// 30초인 근거는 리스다. 이 파일을 쓰는 것은 dhcpcd의 hook이고 hook은 리스를
+/// 받은 뒤에 불리므로, 기다리는 대상이 결국 리스다 — `net/check.sh`의 리스
 /// 대기 상한이 60초이고 실제 관측이 10초 안팎이다(TS-M1 실측 10).
 ///
 /// 이 수가 부팅 시간에 영향을 안 준다. 부모는 이미 다음 줄로 갔고, 이
 /// 기다림은 자식 안에서만 돈다(TS design 결정 3).
-const WAIT_TRIES: usize = 60;
-const WAIT_SLEEP_MS: isize = 500;
+///
+/// 기본 경로는 기다리지 않는다. chrony는 주소가 붙기 전에 보내기에 실패한
+/// 요청을 `iburst`의 네 번으로 세지 않고, 붙은 뒤에 2초 간격으로 응답을
+/// 모아 뛴다 — TD-M1이 기다리는 코드를 넣었다가 반사실로 재 보니 점프가
+/// 1초 차이였다(TD design 실측 13).
+const FILE_WAIT_TRIES: usize = 60;
+const FILE_WAIT_SLEEP_MS: isize = 500;
 
 /// dhcpcd의 hook이 option 42를 적어 두는 자리(TS design 결정 4).
 /// kernel/dhcpcd-hooks/30-tars-ntp의 기본값과 같은 글자여야 한다.
 const SERVER_FILE: [:0]const u8 = "/run/tars/ntp_servers";
-
-const ROUTE_FILE: [:0]const u8 = "/proc/net/route";
 
 /// init이 부팅마다 새로 쓰는 chronyd 설정(TD design 결정 3). `/etc`가 아니라
 /// `/run`인 이유가 그것이다.
@@ -158,52 +145,14 @@ fn serverFromFile() ?[4]u8 {
 fn waitForServerFile() ?[4]u8 {
     std.debug.print("tars-init: ntp=dhcp, waiting for {s}\n", .{SERVER_FILE});
     var tries: usize = 0;
-    while (tries < WAIT_TRIES) : (tries += 1) {
+    while (tries < FILE_WAIT_TRIES) : (tries += 1) {
         if (serverFromFile()) |ip| return ip;
-        sleepMillis(WAIT_SLEEP_MS);
+        sleepMillis(FILE_WAIT_SLEEP_MS);
     }
     // 실기계에서 이 줄이 뜻하는 것은 "DHCP 서버가 option 42를 안 준다"이고,
     // 그것이 TS design 위험 3이 게이트로 영영 못 가리는 바로 그 상태다.
     std.debug.print("tars-init: gave up waiting for {s}\n", .{SERVER_FILE});
     return null;
-}
-
-/// `/proc/net/route`를 한 번 읽어 기본 경로가 있는지 본다.
-fn routeIsUp() bool {
-    const rc = linux.open(ROUTE_FILE.ptr, .{ .ACCMODE = .RDONLY }, 0);
-    if (failed(rc) != null) return false;
-    const fd: i32 = @intCast(rc);
-    defer _ = linux.close(fd);
-    // 머리 한 줄과 몸 한 줄이 각각 128바이트다. 기본 경로는 dhcpcd가 서브넷
-    // 줄보다 먼저 넣으므로 앞의 1KB 안에 있다.
-    var buf: [1024]u8 = undefined;
-    const n = linux.read(fd, &buf, buf.len);
-    if (failed(n) != null) return false;
-    return hasDefaultRoute(buf[0..n]);
-}
-
-/// 기본 경로가 생길 때까지 기다린다. 자식 안에서만 불린다(TD-M1 결정 M1-B).
-///
-/// chrony의 `iburst`는 처음 네 번만 2초 간격이고 그 뒤로는 64초로
-/// 물러난다. 주소가 붙기 전에 chronyd가 뜨면 그 넷이 전부 `ENETUNREACH`로
-/// 날아가고 첫 점프가 1분 넘게 늦어진다. 그래서 길이 난 뒤에 넘긴다.
-///
-/// 끝내 안 생겨도 false를 돌려줄 뿐 chronyd는 띄운다. 64초마다 다시 묻는
-/// 것이 네트워크가 없는 기계에서 바랄 수 있는 전부다.
-fn waitForRoute() void {
-    var tries: usize = 0;
-    while (tries < WAIT_TRIES) : (tries += 1) {
-        if (routeIsUp()) {
-            std.debug.print("tars-init: default route is up after {d} ms\n", .{
-                @as(isize, @intCast(tries)) * WAIT_SLEEP_MS,
-            });
-            return;
-        }
-        sleepMillis(WAIT_SLEEP_MS);
-    }
-    std.debug.print("tars-init: no default route after {d} ms, starting chronyd anyway\n", .{
-        @as(isize, @intCast(WAIT_TRIES)) * WAIT_SLEEP_MS,
-    });
 }
 
 /// 설정 파일을 쓴다. 자식 안에서만 불린다.
@@ -301,15 +250,15 @@ pub fn start(net: config.Net, want: config.Ntp, envp: [*:null]const ?[*:0]const 
     }
     if (pid == 0) {
         // 첫 줄이어야 한다(TD-M1 plan 결정 M1-A). execve 전까지 이 자식은
-        // 우리 코드로 최대 30초를 기다리고, 그동안은 부모의 SIGTERM 핸들러를
-        // 갖고 있다. 되돌리지 않으면 그 창에 전원을 끌 때 이 자식만 안 죽는다.
+        // 우리 코드로 서버 파일을 최대 30초 기다리고, 그동안은 부모의
+        // SIGTERM 핸들러를 갖고 있다. 되돌리지 않으면 그 창에 전원을 끌 때
+        // 이 자식만 안 죽는다.
         power.resetToDefault();
         const server: [4]u8 = switch (want) {
             .off => unreachable, // 위에서 돌아갔다
             .dhcp => waitForServerFile() orelse linux.exit(0),
             .server => |ip| ip,
         };
-        waitForRoute();
         if (!writeConf(server)) linux.exit(1);
         // net/check.sh의 검사 18이 이 줄을 grep한다.
         std.debug.print("tars-init: chronyd will ask {d}.{d}.{d}.{d} ({s})\n", .{

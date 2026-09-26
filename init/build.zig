@@ -142,9 +142,9 @@ pub fn build(b: *std.Build) void {
         .root_module = environ_test_mod,
     });
 
-    // TD-M1: 시계를 chronyd에게 넘기는 배관의 순수한 쪽 셋(설정 파일 ·
-    // 기본 경로 · 서버 파일). 위 다섯과 같은 이유로 host_target이다 —
-    // clock.zig에서 시스템 콜을 하는 부분은 이 셋 아래에만 있다.
+    // TD-M1: 시계를 chronyd에게 넘기는 배관의 순수한 쪽 둘(설정 파일 ·
+    // 서버 파일). 위 다섯과 같은 이유로 host_target이다 — clock.zig에서
+    // 시스템 콜을 하는 부분은 이 둘 아래에만 있다.
     //
     // TS-M1부터 있던 sntp_test의 자리다. 패킷과 era를 보던 검사는 그 코드와
     // 함께 지웠다(TD design 결정 1).
