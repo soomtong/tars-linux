@@ -2,7 +2,7 @@
 
 접두사: WN
 
-Status: M0 끝났다(2026-09-26) — 실측 1~7. 다음은 M1(격리).
+Status: M1 끝났다(2026-09-26) — 실측 1~11. 다음은 M2(`init`이 인터페이스를 dhcpcd에 넘긴다).
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. virtio-net과 dhcpcd를
 들인 문서이고, 아래에서 "NW 결정 N" · "NW 실측 N"은 전부 그 문서의 것이다) ·
@@ -274,6 +274,49 @@ Sep 26 10:01:51 [132]: usb0: leased 10.0.2.15 for 86400 seconds
 
 두 부팅 모두 `lo drv= state=down`. dhcpcd는 `lo`를 안 만진다. 이 서브프로젝트의
 일은 아니고, `net=off` 부팅에서 누가 `lo`를 올리는지는 따로 확인할 거리로 남긴다.
+
+## WN-M1이 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-wired-nic-wn-m1.md`. 번호는 M0에서 이어
+간다.
+
+### 실측 8 — lint를 먼저 넣자 체인 열둘의 호출 열넷이 잡혔다
+
+`require_explicit_nic`만 넣고 `-nic none`은 아직 안 단 상태에서 진입 검사를
+돌렸다. `boot` · `terminal` · `config` · `input` · `power`(114 · 325) · `device` ·
+`render` · `copy` · `hangul` · `machine` · `tools` · `install`(101 · 461)이 걸렸고,
+`net`만 안 나왔다. 확인 3의 "열셋에 열여덟 번"에서 `net`의 넷을 뺀 수와 같다.
+`-nic none` 열여섯(체인 열넷과 `CHAINS` 밖 둘)을 단 뒤에는 조용했다.
+
+`/tmp` 사본으로 한 음성 확인 셋도 기대대로 나왔다. NIC 옵션이 없는 호출은 시작
+줄 번호를 찍고, `-netdev`만 있는 호출과 주석 속 이름은 통과한다.
+
+### 실측 9 — 아홉 중 여섯을 끄면 `=y` 스물둘이 더해지고 빠지는 것은 없다
+
+사용자가 "요즘 동글만 남김"을 골랐다(`AX8817X` · `AX88179_178A` · `CDC_NCM`을
+남기고 `NET1080` · `ZAURUS` · `CDC_SUBSET`을 끔). `CDC_SUBSET`을 끄면 `BELKIN` ·
+`ARMLINUX` · `CDC_SUBSET_ENABLE`이 함께 사라진다. 해소된 `.config`의 HEAD 대비
+`CONFIG_*=y`가 `>` 스물둘, `<` 영이다.
+
+bzImage는 4,871,168바이트로 M0(여섯을 끄기 전)과 같았다. 크기로는 차이가 안
+보인다. 빠진 것은 vmlinux 심볼로 확인했다 — `net1080` · `zaurus` · `cdc_subset`이
+0이다. `belkin`이 남은 것은 `hid_belkin`(원래 있던 HID 드라이버)과
+`ax88179_178a.o`의 `belkin_info`(Belkin 상표 AX88179 동글) 때문이다.
+
+### 실측 10 — `-nic none`이 `q35`의 기본 `e1000e`를 뗀다
+
+`machine/check.sh` 한 판이 `PASS`이고 로그에 `eth0`이 0줄이다. 실측 7의
+`e1000e 0000:00:02.0 eth0: …`이 사라졌다. `e1000e`라는 글자는 둘 남는데, 드라이버가
+커널에 있으면 장치가 없어도 찍히는 등록 배너(`Intel(R) PRO/1000 Network Driver` ·
+`Copyright`)다. 장치가 붙었다는 표지는 드라이버 이름이 아니라 인터페이스 이름이다.
+
+`net/check.sh` 한 판도 `PASS`(1분 37초)다. 드라이버가 늘어도 이 체인의 장치는
+virtio-net 하나라 이름이 여전히 `eth0`이다. 검사 11은 지우고 번호는 비워 뒀다.
+
+### 실측 11 — 루트 게이트 13체인 3/3
+
+`TARS check PASS`, `FAIL` 0줄, 40분 37.55초(2026-09-26). TD-M2의 41분 08.74초와
+잡음 안에서 같다 — 부팅 수가 그대로이고 커널 첫 빌드만 드라이버만큼 길어진다.
 
 ## milestone
 

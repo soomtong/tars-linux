@@ -1,41 +1,51 @@
-# HANDOFF: Wired NIC(WN)가 열려 M0이 끝났다 — 노트북형 유선 드라이버를 켜고 dhcpcd가 인터페이스를 고른다
+# HANDOFF: Wired NIC(WN)가 M1까지 끝났다 — 드라이버가 켜졌고 기존 체인은 `-nic none`으로 NIC를 명시한다
 
 ## 지금 어디인가
 
 2026-09-26에 사용자가 후보 넷(패키지 매니저 · 실머신 NIC · IN 이월 · IPv6) 중에서
 실머신 NIC를 골랐다. 실기가 없으므로 "노트북형 드라이버를 전부 켜고 QEMU로 되는
 것(`e1000e` · `usb-net`)만 부팅으로 판정한다"는 반쪽이다. design은
-`docs/superpowers/specs/2026-09-26-tars-wired-nic-design.md`(결정 6 · 실측 1~7),
-M0 plan은 `plans/2026-09-26-tars-wired-nic-wn-m0.md`.
+`docs/superpowers/specs/2026-09-26-tars-wired-nic-design.md`(결정 6 · 실측 1~11),
+plan은 `plans/2026-09-26-tars-wired-nic-wn-m0.md` · `-wn-m1.md`.
 
-사용자가 고른 넷 — 드라이버 범위(`E1000E` · `IGC` · `R8169` · `USB_RTL8152` ·
+사용자가 고른 다섯 — 드라이버 범위(`E1000E` · `IGC` · `R8169` · `USB_RTL8152` ·
 `USB_USBNET`+`CDCETHER`) · 격리는 `-nic none` + lint(NW 결정 3 대체) · 인터페이스는
-dhcpcd manager mode · Realtek firmware는 비목표.
+dhcpcd manager mode · Realtek firmware는 비목표 · `USB_USBNET`의 `default y` 아홉 중
+요즘 동글 셋(`AX8817X` · `AX88179_178A` · `CDC_NCM`)만 남김(M1).
 
 | 커밋 | 무엇 |
 |---|---|
 | `f970efe` | design |
 | `f45dd47` | M0 plan |
-| `cd14031` | M0 실측 1~7 (코드 변경 없음, `kernel/.config`는 되돌렸다) |
+| `cd14031` | M0 실측 1~7 (코드 변경 없음) |
+| `7896580` | M1 plan |
+| `b484c6d` | M1 격리 — `require_explicit_nic` · `-nic none` 열여섯 · `net` 검사 11 삭제(번호는 비움) |
+| 다음 커밋 | M1 `.config`(드라이버 여섯 켜고 옛 USB 여섯 끔) · design 실측 8~11 · 이 HANDOFF |
 
-M0이 답한 것. `olddefconfig`가 스물둘을 더 켜고 아무것도 안 끈다 · bzImage +307,200
-바이트(6.7%) · `e1000e`는 `eth0`, `usb-net`은 `cdc_ether`의 `usb0`(RNDIS 불필요) ·
-인자 없는 dhcpcd가 링크를 스스로 올리고 부팅 뒤 꽂은 USB 장치도 udev 없이 잡는다 ·
-`-netdev`만 줘도 기본 NIC가 안 붙는다 · 드라이버를 켜면 `machine` 체인이 조용히
-`eth0`을 갖고도 초록이다.
+M1이 세운 것. `check.sh` 진입 검사가 `CHAINS`의 QEMU 호출마다 `-nic none`이나
+`-netdev`를 요구한다(여러 줄 호출을 `awk`로 하나로 읽는다). `-nic none`을 달기 전
+저장소에서 체인 열둘의 호출 열넷을 정확히 잡았다. `machine` 로그의 `eth0`이
+사라졌다. 루트 게이트 13체인 3/3(40분 37.55초, `FAIL` 0줄, 2026-09-26).
 
-⚠ 다음 사람이 먼저 볼 것 둘. `-b`로 뜬 dhcpcd는 백그라운드로 간 뒤 로그를 syslog로
-보내고 게스트에는 syslog가 없다 — `-j /dev/console`을 줘야 `leased` 줄이 보인다(실측
-4). `usb-net`을 꽂으면 `usbnet: failed control transaction` 세 줄이 나오는데 해가
-없다(실측 6).
+⚠ 다음 사람이 먼저 볼 것 넷.
+- `-b`로 뜬 dhcpcd는 로그를 syslog로 보내고 게스트에는 syslog가 없다 — `-j
+  /dev/console`을 줘야 `leased` 줄이 보인다(실측 4). M2의 `init`이 dhcpcd를 띄우는
+  방식과 `net` 체인의 로그 판정이 여기에 걸린다.
+- `usb-net`을 꽂으면 `usbnet: failed control transaction` 세 줄이 나오는데 해가
+  없다(실측 6).
+- 드라이버가 커널에 있으면 장치가 없어도 `e1000e: Intel(R) PRO/1000 …` 배너가
+  찍힌다. "장치가 붙었다"는 드라이버 이름이 아니라 인터페이스 이름으로 센다(실측 10).
+- 이 세션에서 `run_in_background`의 완료 알림이 실행 직후에 왔다(실제로는 돌고
+  있었다). 긴 명령은 `pgrep`으로 프로세스가 사라졌는지 직접 보고 판정한다.
 
-## 바로 다음에 할 것 — WN-M1(격리)의 plan
+## 바로 다음에 할 것 — WN-M2(`init`)의 plan
 
-입력은 `/tmp/wn/config.resolved`(해소된 `.config`. 없으면 design 실측 1의 목록으로
-`scripts/config` + `kernel/build.sh`를 다시 하면 된다). M1이 정할 것 — `USB_USBNET`이
-끌고 온 `default y` 아홉을 남길지(`AX88179` · `CDC_NCM`은 쓸모가 있다), QEMU 호출
-열여덟에 `-nic none`을 달고 `require_explicit_nic`("`-nic none` 또는 `-netdev`"),
-`net` 검사 11 삭제, 기존 체인 전부 초록.
+design 결정 4 · 6과 위험 4. `init/src/net.zig`에서 `IFACE` · `SYS_IFACE` · `ifreq` ·
+`SIOCGIFFLAGS` · `SIOCSIFFLAGS`와 링크를 올리는 함수를 빼고, `dhcpcd -o ntp_servers`를
+인터페이스 인자 없이 fork · `execve`한다. 정할 것 — `-b` 여부와 로그 경로(실측 4),
+`net` 체인이 보는 두 줄(`net link eth0 is up` · `started dhcpcd on eth0`)을 무엇으로
+바꾸나, dhcpcd hook의 `$interface`와 TS · TD의 `ntp_servers` 경로가 그대로인가.
+인터페이스가 없을 때 `-b` 없이도 dhcpcd가 살아 기다리는지(실측 6의 단서)도 M2가 잰다.
 
 # 그 앞 — Time Discipline(TD)이 M2로 닫혔다 — 시계는 chronyd가 만지고, 배운 drift가 부팅을 넘는다
 
