@@ -40,24 +40,24 @@ REPO_ROOT="$(cd .. && pwd)"
 # 이며 잇는 것이 QEMU다 — 그래서 검사 12·13이 실패하면 원인이 커널이거나
 # QEMU이거나 게이트 자신이고, 셋이 서로 멀어서 잘 갈린다.
 #
-# TS-M1이 부팅을 하나 더 얹었다. 앞의 열여섯이 "바이트가 오간다"였다면
-# 이쪽은 "그 바이트가 시계가 된다"다:
+# TS-M1이 부팅을 하나 더 얹었고 TD-M1이 그 안을 chronyd로 바꿨다. 앞의
+# 열여섯이 "바이트가 오간다"였다면 이쪽은 "그 바이트가 시계가 된다"다:
 #
-#   컨테이너의 perl stub이 UDP 123을 듣는다
-#   설정 디스크의 ntp=10.0.2.2 → init이 fork한 자식이 48바이트를 보낸다
-#   → SLIRP가 그것을 컨테이너에 넘긴다(TS-M0 실측 2)
-#   → 자식이 답의 nonce를 대조하고 clock_settime으로 시계를 뛴다
+#   컨테이너의 perl stub이 UDP 123을 듣는다(시계가 흐른다)
+#   설정 디스크의 ntp=10.0.2.2 → init이 fork한 자식이
+#   /run/tars/chrony.conf를 쓰고 chronyd가 된다
+#   → chronyd가 묻고, 믿고, makestep으로 시계를 뛴다
 #   → 게스트의 date가 2031년을 찍는다
 #
-# 이 부팅에서 우리 코드는 init/src/sntp.zig 하나다. 상대는 우리가 쓴 perl
-# 스무 줄이고, 그 둘 사이의 모든 것(SLIRP · 커널의 UDP · dhcpcd의 주소)은
-# 앞의 열여섯이 이미 따로 증명한 것들이다.
+# 이 부팅에서 우리 코드는 init/src/clock.zig의 배관이고 시계는 chronyd가
+# 만진다. 상대는 우리가 쓴 perl 서른 줄이고, 그 둘 사이의 모든 것(SLIRP ·
+# 커널의 UDP · dhcpcd의 주소)은 앞의 열여섯이 이미 따로 증명한 것들이다.
 #
 # TS-M2가 부팅을 하나 더 얹었다. 부팅 A가 "우리가 적은 주소에 묻는다"였다면
 # 이쪽은 "DHCP가 알려 준 주소를 읽어서 묻는다"이고, 덤으로 음성 하나를 판다:
 #
 #   initrd에 심은 /run/tars/ntp_servers → init이 그 주소를 읽는다
-#   그 주소가 어디에도 없다 → 자식이 답 없이 재시도만 한다
+#   그 주소가 어디에도 없다 → chronyd가 답 없이 묻기만 한다
 #   → 그런데도 셸이 부팅 A와 같은 시각에 뜬다(design 결정 3)
 #
 # 그 경로의 첫 조각(dhcpcd가 option 42를 hook에 넘기는 것)만 게이트가 못
@@ -391,7 +391,7 @@ fail() {
   # TS-M1. 부팅 A에서 죽었으면 이쪽이 진단의 절반이다 — 게스트가 보낸
   # datagram이 여기까지 왔는지는 게스트 로그만으로는 안 갈린다.
   if [ -s "$STUBLOG" ]; then
-    echo "--- sntp stub ---"
+    echo "--- ntp stub ---"
     tail -n 20 "$STUBLOG"
   fi
   echo "--- last 60 lines ---"
@@ -956,15 +956,15 @@ fi
 echo "=== booting again with ntp=${NTP_SERVER} ==="
 
 # stub을 먼저 띄운다. 게스트가 부팅하는 동안 이미 듣고 있어야 한다.
-perl ./sntp_stub.pl "$NTP_PORT" "$STUB_UNIX" > "$STUBLOG" 2>&1 &
+perl ./ntp_stub.pl "$NTP_PORT" "$STUB_UNIX" 0 > "$STUBLOG" 2>&1 &
 STUB_PID=$!
 sleep 1
 if ! kill -0 "$STUB_PID" 2>/dev/null; then
-  echo "FAIL: the sntp stub died at startup"
+  echo "FAIL: the ntp stub died at startup"
   cat "$STUBLOG"
   exit 1
 fi
-echo "the sntp stub is listening on udp/${NTP_PORT}"
+echo "the ntp stub is listening on udp/${NTP_PORT}"
 
 # type_keys·wait_for_screen·fail이 보는 것은 전역 $LOG다. 이 체인은 이제
 # 부팅이 둘이고, 그 둘을 잇는 자리가 이 한 줄이다(config/check.sh의
@@ -1014,25 +1014,33 @@ if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=${NTP_SERVER} timezone=${
 fi
 echo "the guest read ntp=${NTP_SERVER} and timezone=${TZ_NAME} off the config disk"
 
-# ── 검사 18: 우리 코드가 시계를 뛰었나 ────────────────────────────────
-# 이 체인에서 우리 코드가 하는 일 전부가 이 한 줄이다. 숫자가 stub이 정한
-# 값과 정확히 같아야 한다 — 그래야 "시계가 움직였다"가 아니라 "이 서버가
-# 말한 값으로 움직였다"가 된다.
+# ── 검사 18: chronyd가 시계를 뛰었나 ──────────────────────────────────
+# TD-M1 plan 결정 M1-D. 셋을 순서대로 본다 — 우리 배관이 끝까지 왔다 ·
+# chronyd가 stub을 믿었다 · 뛰었다. 앞에서 멈추면 어느 자리인지가 실패
+# 메시지에 그대로 나온다.
 #
-# 기다리는 이유. 자식은 dhcpcd가 리스를 받기 전에 태어나므로 첫 sendto가
-# ENETUNREACH로 실패하고 재시도한다(sntp.zig의 MAX_TRIES). 즉 이 줄은 리스
-# 뒤에 나오고, 그 대기가 검사 5와 같은 크기다.
-STEPPED=0
-for _ in $(seq 1 90); do
-  if grep -a "tars-init: clock stepped to ${STUB_UNIX}" "$LOGA" >/dev/null; then
-    STEPPED=1; break
-  fi
-  if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then break; fi
-  sleep 1
-done
-[ "$STEPPED" = "1" ] || fail "init never stepped the clock to ${STUB_UNIX}" \
-  "tars-init: sntp" "tars-init: clock"
-echo "init stepped the clock to ${STUB_UNIX}"
+# 값은 여기서 안 본다. stub의 시계가 흐르므로 정확한 수가 없고, 값의 검사는
+# 검사 19의 2031년이 한다 — 그 해는 stub 말고는 줄 수 없다.
+#
+# 기다리는 이유. chronyd는 주소가 붙기 전에 뜨고, 보내기에 실패한 요청을
+# 버스트로 세지 않은 채 2초마다 다시 보낸다(TD design 실측 13). 그래서 뒤의
+# 두 줄은 리스 뒤에 나오고, 그 대기가 검사 5와 같은 크기다.
+wait_log() {
+  local pattern="$1" i
+  for i in $(seq 1 90); do
+    if grep -a "$pattern" "$LOGA" >/dev/null; then return 0; fi
+    if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then return 1; fi
+    sleep 1
+  done
+  return 1
+}
+wait_log "tars-init: chronyd will ask ${NTP_SERVER}" || \
+  fail "init never handed the clock to chronyd" "tars-init: clock" "tars-init: cannot"
+wait_log "Selected source ${NTP_SERVER}" || \
+  fail "chronyd never selected ${NTP_SERVER}" "tars-init: chronyd" "chronyd"
+wait_log "System clock was stepped by" || \
+  fail "chronyd never stepped the clock" "Selected source" "System clock"
+echo "chronyd selected ${NTP_SERVER} and stepped the clock"
 
 # ── 검사 19: 사람이 그것을 볼 수 있나 ─────────────────────────────────
 # 검사 18과 같은 사실을 다른 자리에서 묻는다. 저쪽은 우리 코드가 자기 입으로
@@ -1118,10 +1126,9 @@ done
 [ "$GONE_A" = "1" ] || fail "the ntp guest did not switch itself off" \
   "tars-init: shutdown requested"
 
-# SL-M2가 세운 것을 이 부팅에도 건다. 여기서 이 검사가 갖는 뜻이 앞의
-# 부팅보다 하나 더 크다 — 이 게스트에는 SNTP 자식이 있었고, 그 자식은
-# execve를 안 해서 부모의 SIGTERM 핸들러를 물려받을 뻔했다(TS-M1 plan
-# 결정 M1-A). power.resetToDefault()를 지우면 여기가 빨간불이 된다.
+# SL-M2가 세운 것을 이 부팅에도 건다. 이 게스트에는 chronyd가 있었고, 그것이
+# SIGTERM에 끝나는지가 여기서 갈린다 — chronyd는 execve로 태어났으므로 부모의
+# 핸들러를 안 물려받는다(TD design 확인 2).
 if grep -a "grace period expired" "$LOGA" >/dev/null; then
   fail "something outlived SIGTERM in the ntp guest" "grace period expired"
 fi
@@ -1131,7 +1138,7 @@ fi
 kill "$STUB_PID" 2>/dev/null || true
 wait "$STUB_PID" 2>/dev/null || true
 STUB_PID=""
-echo "the sntp stub answered $(grep -ac 'sent 48 bytes' "$STUBLOG") request(s)"
+echo "the ntp stub answered $(grep -ac 'answer #' "$STUBLOG") request(s)"
 
 # ══ 부팅 B: DHCP가 알려 준 서버를 쓴다 (TS-M2) ═════════════════════════
 #
@@ -1144,8 +1151,8 @@ echo "the sntp stub answered $(grep -ac 'sent 48 bytes' "$STUBLOG") request(s)"
 #   2. 안 닿는 서버가 부팅을 안 막는다 — 셸이 부팅 A와 같은 시각에 뜬다
 #
 # 상대가 없는 것이 이 부팅의 설계다. stub은 바로 위에서 이미 죽였고 심은
-# 주소는 어느 네트워크에도 없다. 그래서 자식은 서른 번을 다 쓰고 전원을 끄는
-# 순간까지 살아 있다 — 그것이 TS-M1 결정 M1-A의 진짜 시험이다.
+# 주소는 어느 네트워크에도 없다. 그래서 chronyd는 답 없이 묻기만 하다가
+# 전원을 끄는 순간까지 살아 있다.
 echo "=== booting again with ntp=dhcp and a planted ${NTP_DEAD_SERVER} ==="
 
 build_ntp_initrd
@@ -1212,7 +1219,7 @@ for _ in $(seq 1 60); do
 done
 [ "$READ_FILE" = "1" ] || \
   fail "init never read ${NTP_DEAD_SERVER} out of /run/tars/ntp_servers" \
-    "tars-init: ntp" "tars-init: sntp"
+    "tars-init: ntp" "tars-init: clock"
 echo "init read ${NTP_DEAD_SERVER} out of the planted /run/tars/ntp_servers"
 
 # ── 검사 22: 안 닿는 서버가 부팅을 안 막았나 ──────────────────────────
@@ -1228,7 +1235,7 @@ echo "init read ${NTP_DEAD_SERVER} out of the planted /run/tars/ntp_servers"
 BOOT_DELTA=$(( BOOT_B_SECONDS - BOOT_A_SECONDS ))
 if [ "$BOOT_DELTA" -gt "$BOOT_DELTA_MAX" ]; then
   fail "the dead ntp server delayed the prompt by ${BOOT_DELTA}s (boot A ${BOOT_A_SECONDS}s, boot B ${BOOT_B_SECONDS}s)" \
-    "tars-init: sntp" "tars-init: started console shell"
+    "tars-init: clock" "tars-init: started console shell"
 fi
 echo "the dead ntp server cost ${BOOT_DELTA}s of boot time (limit ${BOOT_DELTA_MAX}s)"
 
@@ -1255,15 +1262,13 @@ done
 [ "$GONE_B" = "1" ] || fail "the ntp=dhcp guest did not switch itself off" \
   "tars-init: shutdown requested"
 
-# SL-M2가 세운 것. 이 부팅에서 이 검사가 셋 중 가장 크다 — 여기가 TS-M1 결정
-# M1-A가 겨냥한 바로 그 상태다. 자식이 안 닿는 주소를 묻는 중이라 전원을 끄는
-# 순간 분명히 살아 있고, power.resetToDefault()가 없으면 그 자식이 부모의
-# SIGTERM 핸들러를 물려받아 안 죽는다. 그러면 reapAll()이 유예 3초를 다 쓰고
+# SL-M2가 세운 것. 전원을 끄는 순간 chronyd가 안 닿는 주소를 묻는 중이라
+# 분명히 살아 있다. SIGTERM에 안 죽으면 reapAll()이 유예 3초를 다 쓰고
 # `grace period expired`를 찍는다.
 if grep -a "grace period expired" "$LOGB" >/dev/null; then
   fail "something outlived SIGTERM in the ntp=dhcp guest" "grace period expired"
 fi
-echo "nothing outlived SIGTERM — the sntp child took the default policy"
+echo "nothing outlived SIGTERM — chronyd went down with the rest"
 
 echo "PASS"
 exit 0
