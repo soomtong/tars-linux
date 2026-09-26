@@ -44,7 +44,7 @@ pub const Net = enum {
 /// 읽는다. 8진수 해석은 사람을 놀라게 하는 쪽이고, 설정 파일은 사람이 손으로
 /// 고치는 물건이다.
 ///
-/// 이 함수가 `sntp.zig`가 아니라 여기 있는 이유는 import 방향이다(TS-M1
+/// 이 함수가 `clock.zig`가 아니라 여기 있는 이유는 import 방향이다(TS-M1
 /// plan 결정 M1-C). `net.zig`가 `config.Net`을 받고 `config.zig`는 `net`을
 /// 모르는데, 주소 파서를 저쪽에 두면 그 방향이 순환한다.
 ///
