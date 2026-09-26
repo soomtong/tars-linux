@@ -291,6 +291,18 @@ run_chain() {
 # 회차당 부팅 6회(전부 OVMF)라 총 부팅 횟수가 18회 는다. DC-M1이 부팅 7(-kernel로
 # 설치된 디스크를 늦은 USB로 붙인다)을 더해 회차당 7회가 됐다.
 #
+# WN 체인은 노트북형 유선 NIC를 본다. net 체인이 virtio 위에서 프로토콜을
+# 본다면 이쪽은 드라이버와 장치다. device 체인처럼 게스트에 한 글자도 안 치고
+# 판정이 전부 시리얼 로그다 — dhcpcd가 -j /dev/console로 모든 줄을 콘솔에
+# 쓰므로 가능하다. machine · install처럼 q35지만 -kernel로 뜬다.
+#
+# 부팅이 둘이다. A는 처음부터 붙은 e1000e가 eth0으로 lease를 받는 것을, B는
+# NIC 없이 뜬 기계에 monitor의 device_add로 usb-net을 꽂아 부팅 때 뜬 그
+# dhcpcd가 usb0으로 lease를 받는 것을 본다. B의 판정은 -j 줄머리의 pid
+# 대조다 — 같은 dhcpcd가 잡았다는 것이 udev 없는 핫플러그의 증거다.
+#
+# 회차당 부팅 2회(각 30초 안팎)라 총 부팅 횟수가 여섯 는다.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -307,6 +319,7 @@ CHAINS=(
   "UT-M3:./tools/check.sh"
   "TD-M2:./net/check.sh"
   "DC-M2:./install/check.sh"
+  "WN-M3:./nic/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

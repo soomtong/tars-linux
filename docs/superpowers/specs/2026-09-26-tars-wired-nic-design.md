@@ -2,7 +2,7 @@
 
 접두사: WN
 
-Status: M2 끝났다(2026-09-26) — 실측 1~17. 다음은 M3(`nic/check.sh`).
+Status: 끝났다(2026-09-26) — M0~M3, 실측 1~20. 열네번째 체인 `nic/check.sh`.
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. virtio-net과 dhcpcd를
 들인 문서이고, 아래에서 "NW 결정 N" · "NW 실측 N"은 전부 그 문서의 것이다) ·
@@ -254,7 +254,9 @@ Sep 26 10:01:51 [132]: usb0: leased 10.0.2.15 for 86400 seconds
   `USB_NET_RNDIS_HOST`는 안 켠다.
 - `usbnet: failed control transaction … 0x8006` 세 줄은 QEMU의 `usb-net`이 문자열
   descriptor 요청에 답하지 않은 것이고 곧이어 등록이 성공한다. M3의 체인이
-  이 줄을 실패로 읽지 않게 한다.
+  이 줄을 실패로 읽지 않게 한다. (M3에서 정정: 이 줄은 게스트 커널이 아니라 QEMU가
+  자기 stderr에 찍는 것이다. 이 하네스가 `-serial stdio`에 stderr를 합쳐서 게스트
+  로그처럼 보였다 — 실측 18.)
 - 꽂고 lease까지 약 8초. 위험 3이 닫히고 결정 4는 되돌아가지 않는다.
 
 ### 실측 7 — 드라이버가 켜지면 `q35` 체인이 조용히 `eth0`을 갖는다
@@ -382,6 +384,34 @@ argv가 `dhcpcd -j /dev/console -o ntp_servers`가 됐다. `net` 체인 한 판�
 
 `TARS check PASS`, `FAIL` 0줄, 40분 52.90초(2026-09-26). M1의 40분 37.55초와 같다.
 `net=dhcp`로 뜨는 체인이 `net` 하나뿐이라 나머지 열둘은 바뀐 코드를 안 밟는다.
+
+## WN-M3이 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-wired-nic-wn-m3.md`. 체인은 `nic/check.sh`
+(검사 여덟, 부팅 둘, 타이핑 없음).
+
+### 실측 18 — 첫 판이 초록이고, `usbnet` 세 줄은 QEMU의 것이다
+
+한 판 약 1분. 부팅 A에서 `e1000e … eth0:` → `init`의 `started dhcpcd (pid` →
+`eth0: leased 10.0.2.15`. 부팅 B에서 NIC 없이 프롬프트까지 뜨고(`eth0` · `usb0` 없음)
+`[50]: no valid interfaces found` → `device_add` → `cdc_ether … usb0: register` →
+`[50]: usb0: leased 10.0.2.15`.
+
+`usbnet: failed control transaction` 세 줄과 `netdev n1 has no peer`가 게스트 로그가
+아니라 체인의 stdout에 나왔다. 체인이 `-serial file:`이라 QEMU의 stderr가 게스트
+로그와 갈렸기 때문이다 — 둘 다 QEMU가 찍는다. M0의 하네스는 `-serial stdio`에
+stderr를 합쳤으므로 구별되지 않았다(실측 6을 정정했다).
+
+### 실측 19 — pid 대조가 가른다
+
+체인 사본에서 검사 8의 기대 pid만 `N+1`로 바꿔 돌렸다. 로그에 `[49]: usb0: leased
+10.0.2.15`가 있는데도 검사 8에서 `FAIL`이다. 이 대조가 없으면 "장치가 생길 때 누가
+dhcpcd를 다시 띄운다"가 초록으로 지나간다.
+
+### 실측 20 — 루트 게이트 14체인 3/3
+
+`TARS check PASS`, `FAIL` 0줄, 42분 12.24초(2026-09-26). M2의 40분 52.90초보다 1분
+19초 길다 — `nic` 체인 한 판(부팅 둘, 약 25초)을 세 번 도는 몫이다.
 
 ## milestone
 

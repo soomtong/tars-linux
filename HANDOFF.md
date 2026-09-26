@@ -1,6 +1,44 @@
-# HANDOFF: Wired NIC(WN)가 M2까지 끝났다 — 드라이버가 켜졌고, 인터페이스는 dhcpcd가 고른다
+# HANDOFF: Wired NIC(WN)가 M3으로 닫혔다 — 노트북형 유선 NIC가 켜졌고, 꽂은 USB 동글도 주소를 받는다
 
 ## 지금 어디인가
+
+WN이 2026-09-26 하루에 M0~M3으로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
+서브프로젝트를 고르는 것이다(아래).
+
+design은 `docs/superpowers/specs/2026-09-26-tars-wired-nic-design.md`(결정 6 · 실측
+1~20), plan은 `plans/2026-09-26-tars-wired-nic-wn-m0.md` ~ `-wn-m3.md`, 기억은
+`docs/decisions/project_wired_nic.md`다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `f970efe` · `f45dd47` · `cd14031` | design · M0 plan · M0 실측 |
+| `7896580` · `b484c6d` · `8e11b44` | M1 — `require_explicit_nic` · `-nic none` 열여섯 · `.config` |
+| `1f959da` · `d144bfd` | M2 — `init`은 `dhcpcd -j /dev/console -o ntp_servers`를 띄우기만 한다 |
+| `32e57c7` · 다음 커밋 | M3 — `nic/check.sh`(검사 여덟 · 부팅 둘)와 `CHAINS`, 문서 |
+
+M3이 세운 것. 열네번째 체인 `nic/check.sh`. 부팅 A는 q35의 `e1000e`가 `eth0`으로
+lease를 받는 것을, 부팅 B는 NIC 없이 뜬 기계에 monitor로 `usb-net`을 꽂아 부팅 때 뜬
+그 dhcpcd(같은 pid)가 `usb0`으로 lease를 받는 것을 본다. 타이핑이 없고 한 판 약 1분.
+pid 대조는 반사실(기대 pid `N+1`)로 빨간 것을 봤다. 루트 게이트 14체인 3/3(42분 12.24초, `FAIL` 0줄, 2026-09-26).
+
+⚠ 다음 사람이 먼저 볼 것 셋.
+- `usbnet: failed control transaction` 세 줄과 `netdev n1 has no peer`는 게스트가
+  아니라 QEMU의 stderr다(실측 18, 실측 6을 정정). `nic` 체인 출력에 매번 나온다.
+- 새 체인이 QEMU를 띄우면 `-nic none`이나 `-netdev`를 줘야 진입 검사를 지난다.
+- `run_in_background`의 완료 알림이 실행 직후에 온 일이 이 세션에 여러 번 있었다.
+  긴 명령은 `pgrep -f 'tars-devcontainer bash check.sh'`가 비는 것을 보고 판정한다.
+
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+WN이 닫혔다. 남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · IN이 미룬 것(UDP · 포트
+여럿 · 부팅 때 뜨는 서비스 · 방화벽) · IPv6. WN이 남긴 작은 것 하나 — 두 부팅 모두
+`lo`가 `state=down`이었다(M0의 덤). 누가 `lo`를 올려야 하는지는 따로 확인할 거리다.
+WN의 비목표(Realtek firmware · 무선 · 실기 판정 · predictable names · 여러 NIC의
+우선순위 · `igb`/`e1000`)는 design이 다시 열릴 조건과 함께 뺀 것이다.
+
+# 그 앞 — WN-M2까지 (M3 착수 전의 머리)
+
+## 그때 어디였나
 
 2026-09-26에 사용자가 후보 넷(패키지 매니저 · 실머신 NIC · IN 이월 · IPv6) 중에서
 실머신 NIC를 골랐다. 실기가 없으므로 "노트북형 드라이버를 전부 켜고 QEMU로 되는
@@ -39,7 +77,7 @@ interface` 한 줄을 찍는다. 링크를 올리고 인터페이스를 고르�
 - `run_in_background`의 완료 알림이 실행 직후에 온 일이 이 세션에 여러 번 있었다.
   긴 명령은 `pgrep -f 'tars-devcontainer bash check.sh'`가 비는 것을 보고 판정한다.
 
-## 바로 다음에 할 것 — WN-M3(`nic/check.sh`)의 plan
+## (그때) 다음 할 것 — WN-M3(`nic/check.sh`)의 plan → 끝났다
 
 design 결정 5. 열네번째 체인 `nic/check.sh`와 `CHAINS` 등록, 루트 게이트.
 - 부팅 없이: `.config`에 결정 1의 드라이버(+ M1이 남긴 셋)가 전부 `=y`.
