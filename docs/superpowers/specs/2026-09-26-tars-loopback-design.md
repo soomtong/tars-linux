@@ -2,7 +2,7 @@
 
 접두사: LB
 
-Status: M0 끝났다(2026-09-26) — 실측 1~9. M1 착수 전.
+Status: M1 끝났다(2026-09-26) — 실측 1~11. M2 착수 전.
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. "덤 — `lo`는 `state=down`이다"가
 이 서브프로젝트의 출발점이다) · `2026-09-13-tars-guest-network-design.md`(NW) ·
@@ -262,3 +262,29 @@ A · B 같다. A에는 DNS가 없으므로 `app.localhost`의 답은 `myhostname
 첫 실행은 `NC` · `GETENT`가 전부 `rc=127`이었다. bash로 짠 타임아웃은 감시자
 서브셸의 출력을 닫아야 한다 — 안 닫으면 그 안의 `sleep`이 `$(...)`의 파이프를 붙잡아
 명령이 끝나도 타임아웃을 꽉 채운다. M3이 같은 것을 게이트에 쓸 때 그대로 적용된다.
+
+## LB-M1이 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-loopback-lb-m1.md`. `net.zig`에
+`loopbackUp()`(상수 둘과 `ifreq`는 `1acf9f6`에서 되살렸다)과 `main()`의 한 줄 —
+`linkDevFd()` 다음, `mountConfig()` 앞.
+
+### 실측 10 — 손대지 않은 부팅에서 `lo`가 설정보다 먼저 선다
+
+```
+tars-init: lo up
+tars-init: mounted ext2 at /config
+tars-init: config shell=fish ... net=off ...
+LBM0-LOFLAGS 0x9 oper=unknown
+LBM0-LOADDRN 1
+LBM0-NC host=127.0.0.1 port=7001 rc=0 got=[hello-7001] err=[]
+```
+
+M0 하네스에서 `raise` 단계를 빼고 돌렸다. A(`net=off`) · B(`net=dhcp`) 같다. M0에서
+`Network is unreachable`(A)과 무언의 `rc=1`(B)이던 첫 `before`의 `nc`가 이제 받는다.
+`lo up`이 `/config` 마운트보다 앞에 찍히는 것이 결정 3의 자리다.
+
+### 실측 11 — 가까운 체인 둘이 그대로 초록이다
+
+`net/check.sh` 100초 · `tools/check.sh` 35초, 둘 다 `PASS` · `FAIL` 0줄. 로그에 한
+줄이 는 것이 기존 판정을 안 흔든다. 루트 게이트 전체는 M3 끝에서 돈다.

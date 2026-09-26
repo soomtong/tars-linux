@@ -605,6 +605,12 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 링크가 놓일 자리가 /dev다.
     linkDevFd();
 
+    // LB-M1. 설정을 읽기 전인 것이 이 자리의 뜻이다(LB design 결정 3) — `lo`는
+    // `net=off`에도 서고, 설정 디스크가 없거나 깨진 부팅에도 선다. 커널은
+    // `lo`를 만들기만 하고 올리지 않으며(LB-M0 실측 1), 보통 리눅스에서 이
+    // 일은 PID 1(systemd)이나 init 스크립트의 몫이다.
+    net.loopbackUp();
+
     const storage_mounted = mountConfig();
     var cfg = loadConfig(storage_mounted);
     // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
