@@ -771,7 +771,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `ntp=dhcp`가 읽는 파일을 쓰는 것이 dhcpcd의 hook이고, chronyd가 묻는
     // 길도 dhcpcd가 연다. 그리고 여기서 fork한 자식은 부모를 한 순간도 안
     // 세운다(TS design 결정 3) — 기다리는 것도 chronyd가 되는 것도 자식이다.
-    clock.start(cfg.net, cfg.ntp, envp);
+    clock.start(cfg.net, cfg.ntp, storage_mounted, envp);
 
     // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
     // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.

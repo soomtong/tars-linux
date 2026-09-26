@@ -16,13 +16,17 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
-/// `renderConf`에 넘길 버퍼의 크기. 가장 긴 주소(255.255.255.255)를 넣어도
-/// 60바이트이고, `clock_test`가 그 경우를 직접 본다.
+/// `renderConf`에 넘길 버퍼의 크기. 가장 긴 모양(255.255.255.255에 `/config`의
+/// 두 줄까지)이 109바이트이고, `clock_test`가 그 경우를 직접 본다.
 pub const CONF_MAX = 128;
+
+/// `/config`가 붙은 부팅에서 chronyd가 쓰는 두 자리(TD design 결정 5 · 8).
+const CONFIG_CONFDIR = "/config/chrony.d";
+const CONFIG_DRIFT = "/config/chrony.drift";
 
 /// chronyd의 설정 파일을 짓는다. 시스템 콜이 없는 순수 함수다.
 ///
-/// 세 줄이다(TD design 결정 4).
+/// 언제나 있는 세 줄(TD design 결정 4).
 ///   server …  iburst   처음 네 번을 2초 간격으로 묻는다
 ///   makestep 1 3       첫 세 번의 갱신까지는 1초보다 틀리면 뛴다. 이것이
 ///                      TS가 하던 부팅 점프다. chrony의 기본값은 뛰지 않는
@@ -31,14 +35,19 @@ pub const CONF_MAX = 128;
 ///                      `Could not open command socket`이 찍히던 줄이고
 ///                      (TD-M0 실측 2), chronyc는 unix socket으로 붙는다
 ///
-/// `confdir`와 `driftfile`은 M2가 더한다.
-pub fn renderConf(buf: []u8, server: [4]u8) ?[]const u8 {
-    return std.fmt.bufPrint(buf,
-        \\server {d}.{d}.{d}.{d} iburst
-        \\makestep 1 3
-        \\cmdport 0
-        \\
-    , .{ server[0], server[1], server[2], server[3] }) catch null;
+/// `keep`(= `/config`가 붙었다)일 때 더하는 두 줄(TD-M2).
+///   confdir …          맨 앞이다. 같은 서버가 두 번 적히면 먼저 적힌 쪽이
+///                      이기므로(TD-M0 실측 9) 사람이 chrony.d에 적은 것이
+///                      우리 기본값보다 앞선다. 디렉터리가 없으면 chronyd가
+///                      말없이 넘어간다
+///   driftfile …        배운 주파수를 끌 때와 한 시간마다 쓰고, 다음 부팅이
+///                      그 값에서 출발한다
+pub fn renderConf(buf: []u8, server: [4]u8, keep: bool) ?[]const u8 {
+    const head: []const u8 = if (keep) "confdir " ++ CONFIG_CONFDIR ++ "\n" else "";
+    const tail: []const u8 = if (keep) "driftfile " ++ CONFIG_DRIFT ++ "\n" else "";
+    return std.fmt.bufPrint(buf, "{s}server {d}.{d}.{d}.{d} iburst\nmakestep 1 3\n{s}cmdport 0\n", .{
+        head, server[0], server[1], server[2], server[3], tail,
+    }) catch null;
 }
 
 /// `/run/tars/ntp_servers`의 내용에서 주소 하나를 꺼낸다. 시스템 콜이 없는
@@ -156,9 +165,9 @@ fn waitForServerFile() ?[4]u8 {
 }
 
 /// 설정 파일을 쓴다. 자식 안에서만 불린다.
-fn writeConf(server: [4]u8) bool {
+fn writeConf(server: [4]u8, keep: bool) bool {
     var buf: [CONF_MAX]u8 = undefined;
-    const text = renderConf(&buf, server) orelse {
+    const text = renderConf(&buf, server, keep) orelse {
         std.debug.print("tars-init: chrony config does not fit in {d} bytes\n", .{CONF_MAX});
         return false;
     };
@@ -223,9 +232,12 @@ fn execChronyd(envp: [*:null]const ?[*:0]const u8) noreturn {
 /// `net.zig`의 `bringUp`과 같은 모양이고 같은 규칙을 따른다 — `off`일 때도
 /// 로그 한 줄을 남긴다. 침묵은 "안 켰다"와 "켜려다 실패했다"를 못 가른다.
 ///
+/// `keep`은 `/config`가 붙었는가다(`main.zig`의 `storage_mounted`). 붙었을 때만
+/// chronyd가 chrony.d를 읽고 driftfile을 쓴다(TD-M2).
+///
 /// envp를 받는 이유는 execve다. chronyd가 PATH를 쓰지는 않지만 TZ를 비롯한
 /// 블록이 셸과 같아야 로그를 읽는 사람이 헷갈리지 않는다.
-pub fn start(net: config.Net, want: config.Ntp, envp: [*:null]const ?[*:0]const u8) void {
+pub fn start(net: config.Net, want: config.Ntp, keep: bool, envp: [*:null]const ?[*:0]const u8) void {
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
 
     if (want == .off) {
@@ -259,7 +271,14 @@ pub fn start(net: config.Net, want: config.Ntp, envp: [*:null]const ?[*:0]const 
             .dhcp => waitForServerFile() orelse linux.exit(0),
             .server => |ip| ip,
         };
-        if (!writeConf(server)) linux.exit(1);
+        if (!writeConf(server, keep)) linux.exit(1);
+        // net/check.sh의 검사 25가 앞의 줄을 grep한다. 뒤의 줄은 설정 디스크가
+        // 없는 부팅(ISO로 뜬 설치 세션 등)의 것이고, 침묵 대신 한 줄을 남긴다.
+        if (keep) {
+            std.debug.print("tars-init: chronyd keeps its drift in {s}\n", .{CONFIG_DRIFT});
+        } else {
+            std.debug.print("tars-init: no /config, chronyd forgets its drift at power-off\n", .{});
+        }
         // net/check.sh의 검사 18이 이 줄을 grep한다.
         std.debug.print("tars-init: chronyd will ask {d}.{d}.{d}.{d} ({s})\n", .{
             server[0], server[1], server[2], server[3], CONF_PATH,
