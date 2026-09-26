@@ -279,4 +279,15 @@ GUEST_TOOLS=(
   usr/sbin/sfdisk:usr/bin/sfdisk
   usr/sbin/mkfs.fat:usr/bin/mkfs.vfat
   usr/sbin/mke2fs:usr/bin/mke2fs
+
+  # ── 층 8 · 시계 2 ──────────────────────────────────────────────────────
+  # TD-M1. init의 clock.zig가 fork한 자식이 /usr/bin/chronyd로 execve한다.
+  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/bin:/bin). 그 상수와
+  # 여기의 오른쪽이 어긋나면 증상이 `cannot exec /usr/bin/chronyd` 하나다.
+  #
+  # 새 라이브러리(TD-M0 실측 1. 푼 것 기준):
+  #   chronyd   338,760바이트   1개 — libseccomp
+  #   chronyc   117,896바이트   3개 — libedit · libbsd · libmd
+  usr/sbin/chronyd:usr/bin/chronyd
+  usr/bin/chronyc:usr/bin/chronyc
 )
