@@ -266,7 +266,7 @@ CHAINS=(
   "HI-M3:./hangul/check.sh"
   "RM-M1:./machine/check.sh"
   "UT-M3:./tools/check.sh"
-  "TD-M1:./net/check.sh"
+  "TD-M2:./net/check.sh"
   "DC-M2:./install/check.sh"
 )
 

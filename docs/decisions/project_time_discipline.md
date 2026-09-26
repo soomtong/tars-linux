@@ -1,6 +1,6 @@
 ---
 name: project_time_discipline
-description: "시계를 chronyd에게 넘긴 서브프로젝트(TD, 2026-09-26 M0·M1). TS의 우리 SNTP를 지우고 init은 배관만 한다 — fork · 서버 결정 · /run/tars/chrony.conf · execve chronyd -d -u root. 커널이 주파수를 기억하고(driftfile 없이 다시 띄운 chronyd가 앞 값에서 출발), 같은 server가 두 번이면 먼저 적힌 쪽이 이기며, chrony는 주소가 붙기 전의 실패한 요청을 iburst로 세지 않는다"
+description: "시계를 chronyd에게 넘긴 서브프로젝트(TD-M0~M2, 2026-09-26 종료). TS의 우리 SNTP를 지우고 init은 배관만 한다 — fork · 서버 결정 · /run/tars/chrony.conf · execve chronyd -d -u root. 커널이 주파수를 기억하고(driftfile 없이 다시 띄운 chronyd가 앞 값에서 출발), 같은 server가 두 번이면 먼저 적힌 쪽이 이기며, chrony는 주소가 붙기 전의 실패한 요청을 iburst로 세지 않는다"
 metadata:
   node_type: memory
   type: project
@@ -28,12 +28,21 @@ design은 `docs/superpowers/specs/2026-09-26-tars-time-discipline-design.md`.
 - `net/ntp_stub.pl`의 시계가 흐른다(`출발 + 경과 × (1 + ppm/10^6)`). 멈춘 시계를
   상대로 chrony는 엉뚱한 주파수를 배운다.
 
+무엇이 섰나(M2).
+
+- `/config`가 붙은 부팅은 설정이 `confdir /config/chrony.d`로 시작하고
+  `driftfile /config/chrony.drift`를 갖는다. 사람이 chrony.d에 `pool …`을 적으면
+  그쪽이 이긴다(같은 서버는 먼저 적힌 쪽).
+- `net` 체인의 부팅 C · D가 같은 디스크를 이어받는다. 500ppm stub을 20초 배운
+  값(−492.58)이 끌 때 디스크에 남고(`debugfs`로 읽는다), 새 커널의 chronyd가
+  `read from /config/chrony.drift`로 그 값에서 출발한다.
+
 Why: 한 번 뛰는 것은 SNTP로 충분했지만 drift를 길들이는 것(slew · 주파수 추정 ·
 driftfile)은 chrony의 20년이다.
 
 How to apply:
 
-- chronyd의 사실 넷(TD-M0 · M1 실측). 게이트나 코드가 이것에 기댄다.
+- chronyd의 사실 다섯(TD-M0~M2 실측). 게이트나 코드가 이것에 기댄다.
   1. 커널이 주파수를 기억한다. chronyd가 죽어도 `adjtimex`로 넣은 값이 남아, 다음
      chronyd가 driftfile 없이도 `Initial frequency F ppm`에서 출발한다. driftfile의
      증거는 한 부팅 안이 아니라 부팅을 넘어서 `read from PATH` 줄로 본다.
@@ -42,6 +51,10 @@ How to apply:
   3. 주소가 붙기 전에 뜬 chronyd는 실패한 요청을 버스트로 세지 않는다 — 기본 경로를
      기다리는 코드를 넣었다가 반사실로 1초 차이를 보고 걷어 냈다.
   4. 커널에 seccomp · IPv6가 없다. `-F`를 안 주고 `cmdport 0`을 준다.
+  5. 뜨자마자 SIGTERM을 받은 chronyd는 핸들러를 걸기 전이라 driftfile을 안 쓰고
+     말없이 죽는다. driftfile 판정은 충분히 산 부팅(게이트는 점프 뒤 20초)에서 본다.
+- `confdir`의 증거는 `Could not add source`가 아니라(순서가 어느 쪽이든 찍힌다)
+  stub이 받은 요청 수다 — 0.25초 폴링이면 20초에 77번, 기본 폴링이면 1번.
 - 반사실을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍는다. `sd -F`가 Zig의 `\\`와
   줄바꿈을 못 맞춰 편집 없이 `PASS`가 나온 판이 있었다. 그리고 `net` 체인은 부팅 전에
   `zig build test`를 돌리므로, 코드를 바꾸는 반사실은 호스트 검사가 먼저 잡는다 —

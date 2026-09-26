@@ -130,6 +130,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Terminal Queries (TQ-M1)|2026-09-19|터미널이 자식의 질의(커서 위치·상태 보고)에 답한다 — `effects.write_pty` 한 칸과 그 답이 pty로 돌아가는 길. ST-M3이 넣은 `--no-height` 우회를 지웠다|
 | Disk Install (DI-M0~M2) | 2026-09-23 | USB로 뜬 기계에서 `tars-install`이 내장 디스크에 ESP와 설정 파티션을 만들고 USB 없이 뜬다. 새 ISO로 갱신해도 설정이 남고 `--wipe`가 통째로 지운다. 열세번째 체인 `install/check.sh` |
 | Disk Install Carryover (DC-M0~M2) | 2026-09-26 | 설치된 부팅이 늦게 생기는 설정 파티션을 5초까지 기다린다. DI의 작은 것 다섯(4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · 쪼개진 YES · PVD 음성)을 치웠다. install 체인이 부팅 일곱이 됐다 |
+| Time Discipline (TD-M0~M2) | 2026-09-26 | 시계를 chronyd가 만진다 — 우리 SNTP를 지우고 `init`은 fork · 설정 · execve 배관만 한다. `/config`가 붙으면 배운 drift가 `/config/chrony.drift`로 부팅을 넘고, 사람은 `/config/chrony.d/`에 서버를 적는다. `net/check.sh`가 부팅 다섯 |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

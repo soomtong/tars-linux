@@ -1,6 +1,45 @@
-# HANDOFF: Time Discipline(TD) M1이 닫혔다 — 시계는 chronyd가 만지고 init은 배관만 한다
+# HANDOFF: Time Discipline(TD)이 M2로 닫혔다 — 시계는 chronyd가 만지고, 배운 drift가 부팅을 넘는다
 
 ## 지금 어디인가
+
+TD가 2026-09-26 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
+서브프로젝트를 고르는 것이다(아래 "바로 다음에 할 것").
+
+design은 `docs/superpowers/specs/2026-09-26-tars-time-discipline-design.md`(실측 1~22),
+plan은 `plans/2026-09-26-tars-time-discipline-td-m0.md` · `-td-m1.md` · `-td-m2.md`,
+기억은 `docs/decisions/project_time_discipline.md`다.
+
+M2가 세운 것. `/config`가 붙은 부팅의 chrony 설정이 `confdir /config/chrony.d`로
+시작하고 `driftfile /config/chrony.drift`를 갖는다(`clock.renderConf`의 `keep` =
+`main.zig`의 `storage_mounted`). 사람이 `/config/chrony.d/*.conf`에 `pool pool.ntp.org
+iburst`를 적으면 그쪽이 `init`의 기본 서버보다 앞선다. `net` 체인이 부팅 다섯이 됐다 —
+부팅 C가 500ppm stub을 20초 배우고(`chrony.d/gate.conf`의 0.25초 폴링) 끌 때
+−492.58ppm을 디스크에 쓰고, 체인이 `debugfs`로 그것을 읽고, 부팅 D가
+`read from /config/chrony.drift`로 그 값에서 출발한다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `e62930d` | M2 plan |
+| `ebb0234` | `renderConf(buf, server, keep)` · 로그 한 줄 · `storage_mounted`를 넘김 |
+| `484abcd` | `make_disk.sh`가 `out/net-drift.img`에 `chrony.d/gate.conf`를 심는다 |
+| `64684bd` | `net/check.sh` 부팅 C · D, 검사 25~28 |
+| (이 커밋) | `CHAINS`의 `TD-M2` · design 실측 · 기억 · `CLAUDE.md` 표 · 이 HANDOFF |
+
+판정: 체인 단독 1분 42초(첫 판 초록), 반사실 둘(`driftfile` 없음 → 검사 27 ·
+`confdir`를 뒤로 → 검사 26, 요청 1번)이 자기 자리에서 빨강, 루트 게이트 13체인 3/3(41분 08.74초, `FAIL` 0줄, 2026-09-26). 그 뒤 판정 창을 −600~−400으로 넓혔다(design 실측 22 — 20초 배운 값이 −470까지 퍼졌다).
+
+⚠ 다음 사람이 먼저 볼 것 — 아래 M1 절의 셋이 그대로 유효하다. 하나를 더한다.
+`confdir`가 먹었는지의 증거는 `Could not add source`가 아니다(순서가 어느 쪽이든
+찍힌다). stub이 받은 요청 수다.
+
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+TD가 닫혔다. 남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · 실머신 NIC(유선 드라이버를
+QEMU 에뮬레이션으로 재는 반쪽) · IN이 미룬 것(UDP · 포트 여럿 · 부팅 때 뜨는 서비스 ·
+방화벽). TD가 새로 남긴 이월은 없다 — 비목표 여섯(감독 · 권한 분리 · `rtcsync` ·
+`allow` · NTS · 실기의 drift 측정)은 design이 다시 열릴 조건과 함께 뺀 것이다.
+
+## 그 앞 — TD-M1
 
 TD가 2026-09-26에 열려 M0 · M1이 끝났다. 사용자가 후보 넷 중 chrony를 고르고,
 목적으로 "오래 켜 둔 기계의 drift"를, 접근으로 "우리 SNTP를 전면 교체"를 골랐다.
@@ -52,19 +91,6 @@ M1이 배운 것. plan이 "주소 전에 뜬 chronyd는 iburst를 날린다"고 
 3. 부팅 B의 chronyd는 커널 3.7초에 SIGTERM을 받아 핸들러를 걸기 전에 죽는다
    (`chronyd exiting`이 없다. 실측 15). M2의 driftfile 판정은 그 부팅이 아니라 충분히
    오래 산 부팅에서 본다.
-
-## 바로 다음에 할 것 — TD-M2의 plan
-
-design의 "TD-M2 — drift를 배우고 부팅을 넘긴다"와 M0의 "M1 · M2가 가져다 쓸 넷"이
-재료다.
-
-- `renderConf`가 `/config`가 붙었는지를 받아 `confdir /config/chrony.d`(맨 앞)와
-  `driftfile /config/chrony.drift`를 더한다.
-- 게이트가 `/config/chrony.d/gate.conf`에 `server 10.0.2.2 iburst minpoll -2 maxpoll -2`를
-  심고(`debugfs`), stub에 500ppm을 준다. 판정 셋 — `chronyc`의 주파수가 −550~−450ppm ·
-  끈 뒤 `/config/chrony.drift`가 있다 · 다시 켠 부팅이 `read from /config/chrony.drift`.
-- 부팅이 하나 는다(배우고 끄고 다시 켠다). 같은 디스크 이미지를 두 부팅이 물려받아야
-  한다.
 
 ## 그 앞 — Disk Install Carryover(DC)가 M2로 닫혔다 — 설치된 부팅이 늦은 설정 파티션을 기다리고, DI의 작은 것 다섯이 치워졌다
 
