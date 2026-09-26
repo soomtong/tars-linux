@@ -2,7 +2,7 @@
 
 접두사: WN
 
-Status: 열렸다(2026-09-26). M0부터.
+Status: M0 끝났다(2026-09-26) — 실측 1~7. 다음은 M1(격리).
 
 관련 문서: `2026-09-13-tars-guest-network-design.md`(NW. virtio-net과 dhcpcd를
 들인 문서이고, 아래에서 "NW 결정 N" · "NW 실측 N"은 전부 그 문서의 것이다) ·
@@ -170,6 +170,110 @@ TD 결정 1과 같은 방향이다 — 어려운 일은 그 일을 하는 도구
 로그 줄(`net link eth0 is up` · `started dhcpcd on eth0`)이 사라지거나 바뀐다.
 dhcpcd의 hook이 받는 `$interface`, TS · TD가 쓰는 `ntp_servers` 경로도 M2가 다시
 확인한다.
+
+## WN-M0이 실행으로 증명한 것
+
+2026-09-26. 부팅 둘(A · B)과 `machine` 체인 전후 한 판씩. 하네스는 `/tmp/wn/`에
+있었고 저장소에 안 들어갔다. `kernel/.config`는 측정 동안만 바뀌었다가 되돌려졌다.
+plan은 `plans/2026-09-26-tars-wired-nic-wn-m0.md`.
+
+### 실측 1 — `olddefconfig`는 스물둘을 더 켜고 아무것도 안 끈다
+
+켠 것은 여섯(`E1000E` · `IGC` · `R8169` · `USB_RTL8152` · `USB_USBNET` ·
+`USB_NET_CDCETHER`)이고, HEAD의 `.config`와 해소된 `build/.config`의 차이는 `>`
+스물여덟(켠 여섯 + 더해진 스물둘), `<` 영이다. 더해진 것이 세 무리다.
+
+- PHY 계층 — `PHYLIB` · `PHYLINK` · `MDIO_BUS` · `FWNODE_MDIO` · `ACPI_MDIO` ·
+  `FIXED_PHY` · `SWPHY` · `REALTEK_PHY` · `AX88796B_PHY` · `MII` · `NET_SELFTESTS`.
+  `r8169` · `igc` · `usbnet`이 `select`로 끌고 온다.
+- `USB_USBNET` 아래의 `default y` 아홉 — `USB_NET_AX8817X` · `USB_NET_AX88179_178A` ·
+  `USB_NET_CDC_NCM` · `USB_NET_CDC_SUBSET`(+ `_ENABLE`) · `USB_NET_NET1080` ·
+  `USB_NET_ZAURUS` · `USB_BELKIN` · `USB_ARMLINUX`. 우리가 고르지 않았다.
+  `AX88179`(흔한 USB3 동글)와 `CDC_NCM`(요즘 폰 테더링)은 결정 1의 목적에 맞는다.
+  남길지 끌지는 M1이 정한다.
+- `E1000E_HWTS` · `USB_RTL8153_ECM` — 켠 드라이버의 `default y` 하위 옵션.
+
+HEAD의 `.config`와 해소 결과의 차이가 우리 변경분뿐이므로, 저장소는 해소된 모양을
+커밋해 왔다. M1은 `build/.config`를 `kernel/.config`로 커밋한다.
+
+### 실측 2 — bzImage가 307,200바이트(6.7%) 늘고 증분 빌드는 18.8초다
+
+4,563,968 → 4,871,168바이트. `kernel/build.sh`의 증분 빌드가 `real 18.81`.
+위험 1은 이 크기에서 닫는다.
+
+### 실측 3 — `e1000e`가 붙고 `eth0`이 되며, 인자 없는 dhcpcd가 스스로 올린다
+
+부팅 A(`q35` · `-netdev user` · `-device e1000e`, 설정에 `net=` 없음).
+
+```
+[    0.759635] e1000e 0000:00:02.0 eth0: (PCI Express:2.5GT/s:Width x1) 52:54:00:12:34:56
+dhcpcd-10.1.0 starting
+[    6.451372] e1000e 0000:00:02.0 eth0: NIC Link is Up 1000 Mbps Full Duplex, Flow Control: Rx/Tx
+Sep 26 10:01:02 [133]: eth0: carrier acquired
+Sep 26 10:01:04 [133]: eth0: soliciting a DHCP lease
+Sep 26 10:01:09 [133]: eth0: leased 10.0.2.15 for 86400 seconds
+```
+
+콘솔에서 `dhcpcd -b -j /dev/console -o ntp_servers`를 친 것이 up=5.75초, lease까지
+약 8초이고 그중 5초는 ARP probe다. `init`의 ioctl 없이 링크가 올라갔다 — 결정 4의
+앞 절반이 선다.
+
+### 실측 4 — `-b`로 뜬 dhcpcd는 로그를 syslog로 보내고, 게스트에는 syslog가 없다
+
+첫 회차는 `-j` 없이 쳤고 주소는 붙었는데 `leased` 줄이 어디에도 없었다.
+`starting` · `read_config` 까지만 stderr로 나오고 백그라운드로 간 뒤의 줄은 사라진다.
+`-j /dev/console`(로그 파일)을 주자 모든 줄이 `Sep 26 … [pid]:` 머리를 달고 시리얼에
+나왔다. 지금 `init` 경로가 `eth0: leased`를 볼 수 있는 것은 `-b` 없이 foreground로
+띄워서다. M2는 게이트가 lease 뒤의 사건(핫플러그)을 보게 하려면 로그 경로를
+정해야 한다.
+
+### 실측 5 — `-netdev`만 줘도 기본 NIC는 안 붙는다
+
+부팅 B(`q35` · `-netdev user,id=n1` · `-device qemu-xhci`, NIC 장치 없음)의 꽂기 전
+PCI 목록에 `8086:10d3`이 없다. 네트워크 쪽은 `1b36:000d drv=xhci_hcd` 하나이고
+인터페이스는 `lo`뿐이다. 위험 2가 닫힌다 — M1의 lint는 "`-nic none` 또는
+`-netdev`가 있다"로 선다.
+
+### 실측 6 — `usb-net`은 CDC로 붙고, udev 없는 dhcpcd가 꽂힌 것을 잡는다
+
+부팅 B. dhcpcd를 먼저 띄우고(up=6.63) 3초 뒤 monitor로 `device_add
+usb-net,netdev=n1,bus=xhci.0,id=u1`.
+
+```
+no valid interfaces found
+usbnet: failed control transaction: request 0x8006 value 0x600 index 0x0 length 0xa
+[   11.076163] cdc_ether 1-1:1.0 usb0: register 'cdc_ether' at usb-0000:00:02.0-1, CDC Ethernet Device, 52:54:00:12:34:56
+Sep 26 10:01:44 [132]: usb0: waiting for carrier
+Sep 26 10:01:44 [132]: usb0: carrier acquired
+Sep 26 10:01:51 [132]: usb0: leased 10.0.2.15 for 86400 seconds
+```
+
+- 인터페이스가 하나도 없을 때 dhcpcd는 `no valid interfaces found`를 찍고도
+  살아서 기다린다. 결정 6과 맞는다(`-b`일 때다. `-b` 없이도 그런지는 M2가 본다).
+- `cdc_ether`가 붙고 이름은 `usb0`이다. RNDIS는 필요 없다 — 결정 1의
+  `USB_NET_RNDIS_HOST`는 안 켠다.
+- `usbnet: failed control transaction … 0x8006` 세 줄은 QEMU의 `usb-net`이 문자열
+  descriptor 요청에 답하지 않은 것이고 곧이어 등록이 성공한다. M3의 체인이
+  이 줄을 실패로 읽지 않게 한다.
+- 꽂고 lease까지 약 8초. 위험 3이 닫히고 결정 4는 되돌아가지 않는다.
+
+### 실측 7 — 드라이버가 켜지면 `q35` 체인이 조용히 `eth0`을 갖는다
+
+`machine/check.sh`가 전 16.58초 · 후 16.98초, 둘 다 `PASS`. 후의 로그에만 이 줄이
+있다.
+
+```
+[    0.644932] e1000e 0000:00:02.0 eth0: (PCI Express:2.5GT/s:Width x1) 52:54:00:12:34:56
+```
+
+체인이 NIC 옵션을 안 주므로 QEMU가 `q35`의 기본 `e1000e`를 붙였고 커널이 잡았다.
+체인은 모른 채 초록이다 — 결정 3이 막으려는 "조용히 NIC를 갖는다"가 이것이다.
+시간 차이 0.4초는 잡음 범위다.
+
+### 덤 — `lo`는 `state=down`이다
+
+두 부팅 모두 `lo drv= state=down`. dhcpcd는 `lo`를 안 만진다. 이 서브프로젝트의
+일은 아니고, `net=off` 부팅에서 누가 `lo`를 올리는지는 따로 확인할 거리로 남긴다.
 
 ## milestone
 
