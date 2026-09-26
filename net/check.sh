@@ -177,10 +177,13 @@ DRIFT_IMG="${REPO_ROOT}/out/net-drift.img"
 
 # stub이 일부러 빠른 비율과, chronyd가 배운 값이 들어와야 할 창. 부호가 음수인
 # 것은 chronyd에게 "내 시계가 서버보다 느리다"이기 때문이다(TD design 실측 5).
-# 잡음이 한 자릿수 ppm이라 ±50은 그 열 배 넘게 넓다.
+# 창이 ±100인 이유는 20초만 배운 값의 퍼짐이다. TD-M2의 루트 게이트 세 회차가
+# −500.8 · −491.4 · −470.4였고(design 실측 22), ±50이면 셋째가 끝에서 20ppm
+# 안쪽이었다. 판정이 가르려는 것은 "500을 배웠다"와 "0 근처(안 배웠다)"이고,
+# ±100이어도 0과는 400ppm 떨어져 있다.
 DRIFT_PPM=500
-DRIFT_MIN=-550
-DRIFT_MAX=-450
+DRIFT_MIN=-600
+DRIFT_MAX=-400
 
 # 부팅 C가 `Selected source` 뒤로 배우는 시간(TD-M2 plan 결정 M2-D)과, 그동안
 # stub이 받아야 할 요청 수의 문턱(결정 M2-C). gate.conf의 폴링 0.25초면 80번
