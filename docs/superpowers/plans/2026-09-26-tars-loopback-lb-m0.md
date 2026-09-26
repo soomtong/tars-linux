@@ -110,6 +110,19 @@ cat > /tmp/lb/lbm0.sh <<'EOF'
 # 우리가 치는 줄은 "bash /config/lbm0.sh <단계>"뿐이라 그 에코에는 표지가 없다.
 mark() { printf 'LBM0-%s %s\n' "$1" "$2"; }
 
+# 게스트에 timeout도 install도 없다(첫 실행에서 rc=127로 배웠다). 명령을
+# 배경에서 돌리고 $1초 뒤에 죽인다. 죽였으면 rc는 143이다.
+tmo() {
+  local t="$1"; shift
+  "$@" & local p=$!
+  # 감시자의 출력을 닫는다. 안 닫으면 그 안의 sleep이 $(...)의 파이프를 붙잡아
+  # 명령이 끝나도 호출자가 $t초를 다 기다린다(두 번째 실행에서 배웠다).
+  ( sleep "$t"; kill "$p" 2>/dev/null ) >/dev/null 2>&1 & local k=$!
+  wait "$p"; local rc=$?
+  kill "$k" 2>/dev/null; wait "$k" 2>/dev/null
+  return "$rc"
+}
+
 lo_state() {
   mark LOFLAGS "$(cat /sys/class/net/lo/flags) oper=$(cat /sys/class/net/lo/operstate)"
   ip -o addr show dev lo | while read -r line; do mark LOADDR "$line"; done
@@ -124,7 +137,7 @@ roundtrip() {
   nc -l -p "$port" > /tmp/lbm0.got 2>/dev/null &
   local lp=$!
   sleep 0.5
-  err=$(echo "hello-$port" | timeout 5 nc -q 1 "$host" "$port" 2>&1); rc=$?
+  err=$(echo "hello-$port" | tmo 5 nc -q 1 "$host" "$port" 2>&1); rc=$?
   sleep 0.5
   kill "$lp" 2>/dev/null; wait "$lp" 2>/dev/null
   got=$(cat /tmp/lbm0.got 2>/dev/null)
@@ -133,14 +146,14 @@ roundtrip() {
 
 lookup() {  # getent ahosts는 getaddrinfo(AF_UNSPEC) — curl과 같은 호출이다
   local out rc                  # /config가 noexec일 수 있어 tmpfs로 옮겨 돈다
-  [ -x /tmp/getent ] || install -m 755 /config/getent /tmp/getent
-  out=$(timeout 10 /tmp/getent ahosts "$1" 2>&1); rc=$?
+  [ -x /tmp/getent ] || { cp /config/getent /tmp/getent; chmod 755 /tmp/getent; }
+  out=$(tmo 10 /tmp/getent ahosts "$1" 2>&1); rc=$?
   mark GETENT "name=$1 rc=$rc out=[$(echo "$out" | tr '\n' ';')]"
 }
 
 curl_try() {  # 리스너 없이 붙어 보기만 한다 — 실패 문구가 어디서 멈췄는지 말한다
-  local out rc
-  out=$(timeout 10 curl -sv -m 3 "http://$1:9/" 2>&1 | grep -E '^\*' | head -4 | tr '\n' ';'); rc=$?
+  local out
+  out=$(curl -sv -m 3 "http://$1:9/" 2>&1 | grep -E '^\*' | head -4 | tr '\n' ';')
   mark CURL "name=$1 out=[$out]"
 }
 
@@ -307,7 +320,7 @@ chmod +x /tmp/lb/boot.sh
 docker run --rm -v "$PWD":/workspace -v /tmp/lb:/tmp/lb -w /workspace \
   tars-devcontainer bash /tmp/lb/boot.sh A > /tmp/lb/run-A.log 2>&1; echo "exit=$?"
 grep '^LBM0\|^===' /tmp/lb/run-A.log
-grep -aE "LBM0-[A-Z]+ " /tmp/lb/guest-A.log | grep -v 'lbm0.sh'
+grep -aoE "LBM0-[A-Z]+ .*" /tmp/lb/guest-A.log | tr -d '\r'
 grep -aE "tars-init: (config|net)" /tmp/lb/guest-A.log
 ```
 
@@ -322,7 +335,7 @@ grep -aE "tars-init: (config|net)" /tmp/lb/guest-A.log
 docker run --rm -v "$PWD":/workspace -v /tmp/lb:/tmp/lb -w /workspace \
   tars-devcontainer bash /tmp/lb/boot.sh B > /tmp/lb/run-B.log 2>&1; echo "exit=$?"
 grep '^LBM0\|^===' /tmp/lb/run-B.log
-grep -aE "LBM0-[A-Z]+ " /tmp/lb/guest-B.log | grep -v 'lbm0.sh'
+grep -aoE "LBM0-[A-Z]+ .*" /tmp/lb/guest-B.log | tr -d '\r'
 grep -aE "tars-init: (config|net|started dhcpcd)|leased" /tmp/lb/guest-B.log
 ```
 

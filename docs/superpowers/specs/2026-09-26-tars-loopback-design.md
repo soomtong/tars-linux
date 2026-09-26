@@ -2,7 +2,7 @@
 
 접두사: LB
 
-Status: 설계(2026-09-26). M0 착수 전.
+Status: M0 끝났다(2026-09-26) — 실측 1~9. M1 착수 전.
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. "덤 — `lo`는 `state=down`이다"가
 이 서브프로젝트의 출발점이다) · `2026-09-13-tars-guest-network-design.md`(NW) ·
@@ -160,3 +160,105 @@ systemd 소스에서 빌드된 모듈이라 의존이 무엇인지 모른다. M0
 
 `getaddrinfo`가 `::1`을 먼저 주면 클라이언트가 그쪽을 먼저 시도하고 실패한 뒤
 `127.0.0.1`로 갈 수 있다. M0에서 `nc`와 `curl`로 본다.
+
+## LB-M0이 실행으로 증명한 것
+
+2026-09-26. plan은 `plans/2026-09-26-tars-loopback-lb-m0.md`. 부팅 A는 `net=off`
+(`-nic none`), 부팅 B는 `net=dhcp`(`virtio-net-pci` + SLIRP)다. 두 부팅 모두 게스트
+안에서 `lo`를 손으로 올리고, `/etc/hosts` · `/etc/nsswitch.conf` ·
+`libnss_myhostname.so.2`를 손으로 놓았다 — M1 · M2가 코드로 할 일을 먼저 손으로 한
+것이다.
+
+### 실측 1 — 부팅 직후 `lo`는 `IFF_LOOPBACK`만 있고 주소가 없다
+
+```
+LBM0-LOFLAGS 0x8 oper=down
+LBM0-LOADDRN 0
+```
+
+A · B 같다. `0x8`이 `IFF_LOOPBACK`이고 `0x1`(`IFF_UP`)이 없다. dhcpcd가 뜬 B에서도
+같으므로 WN 덤의 관찰 그대로 — 아무도 `lo`를 안 올린다.
+
+### 실측 2 — `lo`가 DOWN일 때 `127.0.0.1`의 실패 모양이 부팅마다 다르다
+
+```
+A  LBM0-NC host=127.0.0.1 port=7001 rc=1 got=[] err=[(UNKNOWN) [127.0.0.1] 7001 (?) : Network is unreachable]
+B  LBM0-NC host=127.0.0.1 port=7001 rc=1 got=[] err=[]
+```
+
+A는 경로가 하나도 없어서 커널이 `connect`를 곧바로 `ENETUNREACH`로 돌려준다. B는
+dhcpcd가 기본 경로를 깐 뒤라 `127.0.0.1`이 unreachable로 걸리지 않고, `nc`가 아무
+말 없이 `rc=1`로 끝난다. 그래서 M3의 반사실은 에러 문구가 아니라 "받은 글자가
+없다"(`got=[]`)로 판정한다.
+
+### 실측 3 — `IFF_UP` 하나로 커널이 `127.0.0.1/8`을 붙인다
+
+```
+LBM0-RAISE rc=0
+LBM0-LOFLAGS 0x9 oper=unknown
+LBM0-LOADDR 1: lo    inet 127.0.0.1/8 scope host lo ...
+LBM0-NC host=127.0.0.1 port=7002 rc=0 got=[hello-7002] err=[]
+LBM0-NC host=127.1.2.3 port=7003 rc=0 got=[hello-7003] err=[]
+```
+
+A · B 같다. 위험 1은 일어나지 않았고, 결정 2대로 M1은 `IFF_UP`만 세운다. `/8`
+전체가 로컬이라 `127.1.2.3`도 받는다. `oper=unknown`은 loopback에 carrier가 없어서
+커널이 그렇게 두는 것이고 실패가 아니다.
+
+### 실측 4 — 파일이 없으면 `localhost`는 호스트 DNS가 답할 때만 풀린다
+
+```
+A  LBM0-GETENT name=localhost rc=2 out=[;]
+A  LBM0-NC host=localhost ... err=[localhost: forward host lookup failed: Host name lookup failure : Resource temporarily unavailable]
+B  LBM0-GETENT name=localhost rc=0 out=[127.0.0.1       STREAM localhost;...]
+B  LBM0-GETENT name=app.localhost rc=2 out=[;]
+B  LBM0-NC host=app.localhost ... err=[app.localhost: forward host lookup failed: Unknown server error : Resource temporarily unavailable]
+```
+
+A에는 `/etc/resolv.conf`가 없어서 glibc가 물을 곳이 없다. B에서는 dhcpcd hook이 쓴
+`nameserver 10.0.2.3`(SLIRP)으로 물었고, SLIRP이 넘긴 호스트 resolver가 `localhost`에
+답했다. `app.localhost`에는 답하지 않았다. 즉 지금 `localhost`가 풀리는지는 "네트워크가
+켜졌고 호스트 DNS가 답해 주는가"에 달려 있다 — 결정 5의 `/etc/hosts`가 그 의존을
+끊는다.
+
+### 실측 5 — 게스트 `curl`(8.14.1)은 `*.localhost`를 resolver 없이 푼다
+
+```
+LBM0-CURL name=app.localhost out=[* Host app.localhost:9 was resolved.;* IPv6: ::1;* IPv4: 127.0.0.1;*   Trying 127.0.0.1:9...;]
+```
+
+파일도 모듈도 없고 `lo`가 DOWN인 A의 첫 `names`에서 이미 이렇다. curl은 이름 풀이의
+증거가 될 수 없다 — M3은 NSS를 거치는 `nc`로 판정한다. `getent`는 M0의 측정 도구로만
+썼고 게스트 도구 목록에 넣을지는 M3 plan이 정한다.
+
+### 실측 6 — `libnss_myhostname`은 174,288바이트이고 새로 끌고 오는 것이 없다
+
+`libnss-myhostname 257.13-1~deb13u1`. `NEEDED`는 `libcap.so.2` · `libc.so.6` ·
+`ld-linux-x86-64.so.2`이고, 셋 다 지금 initrd에 있다(`lib/x86_64-linux-gnu/libcap.so.2`
+는 다른 도구가 이미 끌고 왔다). 위험 2는 일어나지 않았다 — M2가 initrd 목록에 적을
+것은 `.so` 한 줄이다. 모듈은 `/lib/x86_64-linux-gnu/`에 놓았을 때 glibc가 찾았다.
+
+### 실측 7 — 파일 둘과 모듈을 놓으면 `.localhost` 아래가 전부 `127.0.0.1`이다
+
+```
+LBM0-GETENT name=app.localhost rc=0 out=[127.0.0.1       STREAM localhost;127.0.0.1       DGRAM  ;127.0.0.1       RAW    ;]
+LBM0-NC host=app.localhost port=7006 rc=0 got=[hello-7006] err=[]
+LBM0-NC host=a.b.localhost port=7007 rc=0 got=[hello-7007] err=[]
+LBM0-NC host=localhost.localdomain port=7008 rc=0 got=[hello-7008] err=[]
+```
+
+A · B 같다. A에는 DNS가 없으므로 `app.localhost`의 답은 `myhostname`에서 왔다.
+`myhostname`은 정식 이름(canonical)을 `localhost`로 준다. `localhost.localdomain`도
+답한다.
+
+### 실측 8 — `::1`은 나오지 않는다
+
+`getent ahosts`(`AF_UNSPEC`)의 답에 `::1`이 없다. 커널에 IPv6가 없으면 `myhostname`이
+`::1`을 빼는 것으로 보인다. 위험 3은 NSS 쪽에서 일어나지 않는다. curl은 자기가
+`::1`을 목록에 올리지만 `127.0.0.1`부터 시도한다(실측 5의 `Trying` 줄).
+
+### 실측 9 — 하네스가 배운 것: 게스트에 `timeout` · `install`이 없다
+
+첫 실행은 `NC` · `GETENT`가 전부 `rc=127`이었다. bash로 짠 타임아웃은 감시자
+서브셸의 출력을 닫아야 한다 — 안 닫으면 그 안의 `sleep`이 `$(...)`의 파이프를 붙잡아
+명령이 끝나도 타임아웃을 꽉 채운다. M3이 같은 것을 게이트에 쓸 때 그대로 적용된다.
