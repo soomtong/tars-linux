@@ -74,6 +74,13 @@ REPO_ROOT="$(cd .. && pwd)"
 # glibc가 zoneinfo에서 읽는다. 그 파일이 initrd에 있는지는 빌드 절의 호스트
 # 검사가 부팅 전에 본다.
 #
+# TD-M2가 부팅 둘(C · D)을 더했다. 시계가 한 번 맞는 것과 이 기계의 수정
+# 결정이 얼마나 빠른지를 배워 부팅 너머로 가져가는 것은 다른 사실이다:
+#
+#   500ppm 빠른 stub · 디스크의 chrony.d/gate.conf(폴링 0.25초)
+#   → 부팅 C의 chronyd가 배우고 전원과 함께 /config/chrony.drift를 쓴다
+#   → 체인이 디스크를 debugfs로 읽는다 → 부팅 D의 chronyd가 그 값을 읽는다
+#
 # 이 체인은 check.sh의 CHAINS에 열두번째로 들어 있다. 단독으로도 돌아간다
 # (docker run ... bash net/check.sh).
 
@@ -156,6 +163,35 @@ INITRD_B="$(mktemp)"
 QEMU_PID_B=""
 BOOT_A_SECONDS=0
 BOOT_B_SECONDS=0
+
+# ── TD-M2 ───────────────────────────────────────────────────────────────
+#
+# 부팅 C · D가 쓰는 것들이다. 둘이 같은 디스크(out/net-drift.img)를 이어받고,
+# 그 사이에 체인이 디스크를 debugfs로 읽는다.
+#
+# 45469 · 45470은 monitor 대역(45455~45464 · 45471)과 IN의 둘(45465 · 45466)과
+# TS의 둘(45467 · 45468) 밖이다.
+DRIFT_MONITOR_PORT_C=45469
+DRIFT_MONITOR_PORT_D=45470
+DRIFT_IMG="${REPO_ROOT}/out/net-drift.img"
+
+# stub이 일부러 빠른 비율과, chronyd가 배운 값이 들어와야 할 창. 부호가 음수인
+# 것은 chronyd에게 "내 시계가 서버보다 느리다"이기 때문이다(TD design 실측 5).
+# 잡음이 한 자릿수 ppm이라 ±50은 그 열 배 넘게 넓다.
+DRIFT_PPM=500
+DRIFT_MIN=-550
+DRIFT_MAX=-450
+
+# 부팅 C가 `Selected source` 뒤로 배우는 시간(TD-M2 plan 결정 M2-D)과, 그동안
+# stub이 받아야 할 요청 수의 문턱(결정 M2-C). gate.conf의 폴링 0.25초면 80번
+# 안팎이고 init의 기본 폴링(64초)이면 0~1번이다.
+DRIFT_LEARN_SECONDS=20
+DRIFT_MIN_ANSWERS=20
+
+LOGC="$(mktemp)"
+LOGD="$(mktemp)"
+QEMU_PID_C=""
+QEMU_PID_D=""
 
 # 부팅 B의 initrd를 짓는다(결정 M2-D).
 #
@@ -358,6 +394,13 @@ cleanup() {
     kill "$QEMU_PID_B" 2>/dev/null || true
     wait "$QEMU_PID_B" 2>/dev/null || true
   fi
+  # TD-M2. 부팅 C · D의 게스트.
+  for pid in "$QEMU_PID_C" "$QEMU_PID_D"; do
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    fi
+  done
   rm -f "$PAYLOAD" "$INITRD_B"
 }
 trap cleanup EXIT
@@ -1269,6 +1312,157 @@ if grep -a "grace period expired" "$LOGB" >/dev/null; then
   fail "something outlived SIGTERM in the ntp=dhcp guest" "grace period expired"
 fi
 echo "nothing outlived SIGTERM — chronyd went down with the rest"
+
+# ══ 부팅 C · D: drift를 배우고 부팅을 넘긴다 (TD-M2) ═══════════════════
+#
+# 게이트가 실기계의 며칠을 몇십 초로 줄여 보는 자리다. stub이 500ppm 빠르게
+# 흐르고, 디스크의 chrony.d/gate.conf가 폴링을 0.25초로 줄인다.
+#
+#   부팅 C — chronyd가 stub을 믿고 20초 동안 배운 뒤 전원을 받는다
+#            → SIGTERM에 /config/chrony.drift를 쓰고 끝난다
+#   (사이) — 체인이 디스크 이미지를 debugfs로 직접 읽는다
+#   부팅 D — 같은 디스크로 다시 떠서 chronyd가 그 값을 읽고 출발한다
+#
+# 부팅 D의 증거가 로그 줄인 이유가 있다. 커널이 주파수를 기억하므로(TD design
+# 실측 8) 한 부팅 안에서 다시 띄운 chronyd는 driftfile 없이도 배운 값에서
+# 출발한다. 새로 뜬 커널은 0에서 시작하므로, 부팅 D의 `read from` 줄은
+# 디스크 말고는 올 데가 없다.
+
+# 로그에 패턴이 나올 때까지 기다린다. 게스트가 죽으면 곧바로 포기한다.
+wait_in_log() {
+  local log="$1" pattern="$2" pid="$3" i
+  for i in $(seq 1 90); do
+    if grep -a "$pattern" "$log" >/dev/null; then return 0; fi
+    if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
+    sleep 1
+  done
+  return 1
+}
+
+# drift 디스크로 게스트를 띄우고 프롬프트까지 기다린다. DRIFT_QEMU_PID에 남긴다.
+start_drift_guest() {
+  local log="$1" port="$2" name="$3" i ready=0
+  qemu-system-x86_64 \
+    -m "$GUEST_MEM" \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "console=ttyS0" \
+    -vga none \
+    -device virtio-gpu-pci \
+    -display none \
+    -netdev "user,id=n0" \
+    -device virtio-net-pci,netdev=n0 \
+    -drive file="$DRIFT_IMG",if=virtio,format=raw \
+    -serial file:"$log" \
+    -monitor tcp:127.0.0.1:${port},server,nowait \
+    -no-reboot &
+  DRIFT_QEMU_PID=$!
+  for i in $(seq 1 120); do
+    if grep -a "terminal: screen>" "$log" >/dev/null; then ready=1; break; fi
+    if ! kill -0 "$DRIFT_QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  [ "$ready" = "1" ] || fail "the ${name} guest never rendered a prompt"
+  echo "the ${name} guest reached a prompt"
+}
+
+# 전원 버튼을 누르고, 꺼지기를 기다리고, 유예가 안 쓰였는지 본다(SL-M2).
+power_off_guest() {
+  local port="$1" pid="$2" log="$3" name="$4" i connected=0 gone=0
+  for i in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${port}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  [ "$connected" = "1" ] || fail "could not connect to the ${name} guest's QEMU monitor"
+  echo "=== sending system_powerdown to the ${name} guest ==="
+  echo "system_powerdown" >&3
+  sleep 0.3
+  exec 3<&-
+  exec 3>&-
+  for i in $(seq 1 30); do
+    if ! kill -0 "$pid" 2>/dev/null; then gone=1; break; fi
+    sleep 1
+  done
+  [ "$gone" = "1" ] || fail "the ${name} guest did not switch itself off" "tars-init: shutdown requested"
+  if grep -a "grace period expired" "$log" >/dev/null; then
+    fail "something outlived SIGTERM in the ${name} guest" "grace period expired"
+  fi
+}
+
+# 값이 창 안인가. bash에 부동소수가 없어서 awk가 판정한다.
+in_drift_window() {
+  awk -v f="$1" -v lo="$DRIFT_MIN" -v hi="$DRIFT_MAX" \
+    'BEGIN { exit !(f != "" && f + 0 >= lo && f + 0 <= hi) }'
+}
+
+echo "=== booting with a ${DRIFT_PPM} ppm stub and /config/chrony.d/gate.conf ==="
+
+# stub을 다시 띄운다. 부팅 A의 것은 부팅 B 앞에서 죽였다.
+perl ./ntp_stub.pl "$NTP_PORT" "$STUB_UNIX" "$DRIFT_PPM" > "$STUBLOG" 2>&1 &
+STUB_PID=$!
+sleep 1
+kill -0 "$STUB_PID" 2>/dev/null || { echo "FAIL: the drifting ntp stub died at startup"; cat "$STUBLOG"; exit 1; }
+echo "the ntp stub is listening on udp/${NTP_PORT}, ${DRIFT_PPM} ppm fast"
+
+LOG="$LOGC"
+start_drift_guest "$LOGC" "$DRIFT_MONITOR_PORT_C" "drift-learning"
+QEMU_PID_C="$DRIFT_QEMU_PID"
+
+# ── 검사 25: init이 chronyd에게 /config를 넘겼나 ──────────────────────
+# TD-M2 plan 결정 M2-A. 이 줄이 나오면 설정 파일에 confdir와 driftfile이
+# 들어갔다. 디스크가 안 붙은 부팅은 `no /config`를 찍는다.
+wait_in_log "$LOGC" "tars-init: chronyd keeps its drift in /config/chrony.drift" "$QEMU_PID_C" || \
+  fail "init did not hand /config to chronyd" "tars-init: clock" "tars-init: chronyd" "tars-init: no /config"
+echo "init told chronyd to keep its drift in /config/chrony.drift"
+
+wait_in_log "$LOGC" "Selected source ${NTP_SERVER}" "$QEMU_PID_C" || \
+  fail "chronyd never selected the drifting stub" "tars-init: chronyd" "chronyd"
+ANSWERS_AT_SELECT="$(grep -ac 'answer #' "$STUBLOG")"
+echo "chronyd selected ${NTP_SERVER}; letting it learn for ${DRIFT_LEARN_SECONDS}s"
+sleep "$DRIFT_LEARN_SECONDS"
+
+# ── 검사 26: gate.conf의 폴링이 이겼나 ────────────────────────────────
+# 결정 M2-C. chrony.d가 설정의 맨 앞에서 읽혔으면 같은 서버의 줄 중 gate.conf의
+# 것(minpoll -2)이 이기고, 20초에 수십 번을 묻는다. init의 줄이 이겼으면
+# 기본 폴링이라 0~1번이다. `Could not add source`는 어느 쪽이든 찍히므로
+# 증거가 못 된다.
+ANSWERS=$(( $(grep -ac 'answer #' "$STUBLOG") - ANSWERS_AT_SELECT ))
+[ "$ANSWERS" -ge "$DRIFT_MIN_ANSWERS" ] || \
+  fail "the stub answered only ${ANSWERS} request(s) in ${DRIFT_LEARN_SECONDS}s — chrony.d/gate.conf did not win" \
+    "Could not add source" "Selected source"
+echo "the stub answered ${ANSWERS} requests in ${DRIFT_LEARN_SECONDS}s — chrony.d came first"
+
+power_off_guest "$DRIFT_MONITOR_PORT_C" "$QEMU_PID_C" "$LOGC" "drift-learning"
+echo "nothing outlived SIGTERM in the drift-learning guest"
+
+# ── 검사 27: 배운 값이 디스크에 남았나 ────────────────────────────────
+# 게스트가 꺼진 뒤 이미지를 직접 읽는다(결정 M2-B). 이 한 번이 둘을 함께
+# 증명한다 — chronyd가 500ppm을 배웠다, 그리고 SIGTERM에 그것을 썼다.
+# 파일은 두 수(주파수 · skew)이고 첫 수를 본다.
+DRIFT_ON_DISK="$(debugfs -R "cat /chrony.drift" "$DRIFT_IMG" 2>/dev/null | awk 'NF { print $1; exit }')"
+in_drift_window "$DRIFT_ON_DISK" || \
+  fail "/config/chrony.drift holds '${DRIFT_ON_DISK}', not a frequency in ${DRIFT_MIN}..${DRIFT_MAX} ppm" \
+    "chronyd exiting" "System clock"
+echo "/config/chrony.drift holds ${DRIFT_ON_DISK} ppm after the power-off"
+
+# ── 검사 28: 다시 켠 부팅이 그 값에서 출발하나 ────────────────────────
+LOG="$LOGD"
+start_drift_guest "$LOGD" "$DRIFT_MONITOR_PORT_D" "drift-reading"
+QEMU_PID_D="$DRIFT_QEMU_PID"
+
+wait_in_log "$LOGD" "ppm read from /config/chrony.drift" "$QEMU_PID_D" || \
+  fail "chronyd never read /config/chrony.drift after the reboot" "tars-init: chronyd" "Frequency" "Initial frequency"
+DRIFT_READ="$(grep -ao 'Frequency [-0-9.]* +/- [0-9.]* ppm read from /config/chrony.drift' "$LOGD" | awk '{ print $2; exit }')"
+in_drift_window "$DRIFT_READ" || \
+  fail "chronyd read '${DRIFT_READ}' ppm from /config/chrony.drift, not a value in ${DRIFT_MIN}..${DRIFT_MAX}" "Frequency"
+echo "the next boot's chronyd started from ${DRIFT_READ} ppm read off /config/chrony.drift"
+
+power_off_guest "$DRIFT_MONITOR_PORT_D" "$QEMU_PID_D" "$LOGD" "drift-reading"
+echo "nothing outlived SIGTERM in the drift-reading guest"
+
+kill "$STUB_PID" 2>/dev/null || true
+wait "$STUB_PID" 2>/dev/null || true
+STUB_PID=""
 
 echo "PASS"
 exit 0
