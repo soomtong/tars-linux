@@ -100,6 +100,7 @@ boot_guest() {
   exec 4<>"$FIFO"
   qemu-system-x86_64 \
     -machine q35,i8042=off \
+    -nic none \
     -m "$GUEST_MEM" \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,unit=1,file="$vars" \
@@ -460,6 +461,7 @@ boot_kernel_usb() {
   exec 4<>"$FIFO"
   qemu-system-x86_64 \
     -machine q35 \
+    -nic none \
     -m "$GUEST_MEM" \
     -kernel ../kernel/build/arch/x86/boot/bzImage \
     -initrd ../kernel/initrd.cpio \

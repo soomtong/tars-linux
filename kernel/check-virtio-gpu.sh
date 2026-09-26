@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 
 LOG="$(mktemp)"
 timeout 15 qemu-system-x86_64 \
+  -nic none \
   -kernel build/arch/x86/boot/bzImage \
   -initrd initrd.cpio \
   -append "console=ttyS0" \

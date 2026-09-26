@@ -99,6 +99,43 @@ require_no_early_exit_pipe() {
   return 1
 }
 
+# WN-M1: QEMU 호출은 NIC를 명시해야 한다.
+#
+# QEMU는 NIC 옵션이 없으면 기본 NIC를 하나 붙인다 — pc는 e1000, q35는 e1000e다.
+# WN이 e1000e를 켜기 전까지 기존 체인들은 "드라이버가 없어서 못 본다"는 우연에
+# 기대어 NIC 없이 돌았다. 켠 뒤로 machine 체인은 모른 채 eth0을 갖고도
+# 초록이었다(WN design 실측 7). 이 검사가 그 우연을 명시로 바꾼다.
+#
+# `-netdev`도 통과다. 그것만 줘도 기본 NIC가 안 붙는다(WN design 실측 5).
+#
+# 한 호출이 백슬래시로 여러 줄에 이어지므로 줄 단위 grep으로는 못 본다.
+# qemu-system-x86_64가 나온 줄부터 백슬래시로 끝나지 않는 줄까지를 하나로 모은다.
+# 찍는 번호는 호출이 시작된 줄이다.
+require_explicit_nic() {
+  local script="$1"
+  local hits
+
+  hits="$(awk '
+    /^[[:space:]]*#/ { next }
+    !open && /qemu-system-x86_64/ { open = 1; start = NR; call = "" }
+    open {
+      call = call " " $0
+      if ($0 !~ /\\[[:space:]]*$/) {
+        if (call !~ /-nic none/ && call !~ /-netdev/) print start
+        open = 0
+      }
+    }
+  ' "$script")"
+
+  [ -z "$hits" ] && return 0
+
+  echo "check FAIL: ${script} starts QEMU without saying which NIC it gets:" >&2
+  echo "  line(s): $(echo $hits)" >&2
+  echo "  QEMU adds a default NIC (e1000 on pc, e1000e on q35) when none is named." >&2
+  echo "  add '-nic none', or '-netdev ...' if the chain wants a network (WN-M1)." >&2
+  return 1
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
@@ -223,9 +260,10 @@ run_chain() {
 # 회차당 부팅 1회라 총 부팅 횟수는 36회에서 39회가 된다.
 #
 # NW 체인은 게스트의 네트워크를 본다. 열두 체인 중 유일하게 -netdev를 달고
-# 뜬다 — 나머지 열하나는 NIC가 아예 없다. 커널에 virtio-net 하나만 켜고
-# e1000도 r8169도 안 켠 것이 그 성질을 지탱한다(NW design 결정 3). 이 체인의
-# 검사 11이 그 음성을 매번 확인한다.
+# 뜬다 — 나머지 열하나는 NIC가 아예 없다(NW design 결정 3). 처음에는 커널에
+# virtio-net 하나만 켠 것이 그 성질을 지탱했고 이 체인의 검사 11이 음성을
+# 확인했다. WN-M1이 노트북형 드라이버를 켜면서 둘 다 바뀌었다 — 이제 나머지
+# 체인이 -nic none을 명시하고 require_explicit_nic가 그것을 지킨다.
 #
 # 설정을 주는 방식도 이 체인만 다르다. 다른 체인들은 빈 디스크를 물리거나
 # 게스트에서 타이핑으로 쓰는데, 이 체인은 net=dhcp 한 줄을 미리 담아 굽는다
@@ -277,6 +315,7 @@ entry_failed=0
 for entry in "${CHAINS[@]}"; do
   require_build_steps "${entry#*:}" || entry_failed=1
   require_no_early_exit_pipe "${entry#*:}" || entry_failed=1
+  require_explicit_nic "${entry#*:}" || entry_failed=1
 done
 
 # 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를

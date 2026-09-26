@@ -6,6 +6,7 @@ make
 
 LOG="$(mktemp)"
 timeout 5 qemu-system-x86_64 \
+  -nic none \
   -kernel sanity.elf \
   -serial stdio \
   -display none \

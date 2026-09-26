@@ -94,6 +94,7 @@ trap cleanup EXIT
 # 아래층을 먼저 꺼야 한다.
 qemu-system-x86_64 \
   -machine q35,i8042=off \
+  -nic none \
   -m "$GUEST_MEM" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file="$VARS" \

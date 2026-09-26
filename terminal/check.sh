@@ -60,6 +60,7 @@ cleanup() {
 trap cleanup EXIT
 
 qemu-system-x86_64 \
+  -nic none \
   -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \

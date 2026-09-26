@@ -140,14 +140,17 @@ done
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   bash -n check.sh && echo "syntax OK"
-  sed -n "/^clean$/q;p" check.sh > /tmp/entry.sh
-  bash /tmp/entry.sh; echo "exit=$?"
+  sed -n "/^clean$/q;p" check.sh | bash -s; echo "exit=$?"
 ' 2>&1 | grep -aE 'syntax|NIC|line\(s\)|exit='
 ```
 
-기대: `syntax OK`가 나온다. 사실 2의 표에 있는 체인 스크립트 열한 개가 이름을
+기대: `syntax OK`가 나온다. 사실 2의 표에 있는 체인 스크립트 열두 개가 이름을
 찍고, 줄 번호가 열넷(`power`와 `install`은 둘씩)이다. `net/check.sh`는 안 나온다.
 마지막 줄은 `exit=1`이다.
+
+잘라낸 사본을 파일로 두지 않고 `bash -s`로 넘기는 이유가 있다. `check.sh`는 맨 위에서
+`cd "$(dirname "$0")"`를 하는데, 사본이 `/tmp`에 있으면 `/tmp`로 가서 모든 체인을
+"없다"고 한다. 실행하면서 한 번 밟았다. stdin으로 넘기면 `$0`이 `bash`라 제자리다.
 
 ## Task 2 — `-nic none`을 단다
 
@@ -182,7 +185,7 @@ Task 1이 "없으면 잡는다"를 실제 저장소로 봤다. 남은 것은 `-n
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   sed -n "/^clean$/q;p" check.sh > /tmp/entry.sh
   run() { sed "s#\./boot/check.sh#/tmp/bait.sh#" /tmp/entry.sh > /tmp/e.sh
-          bash /tmp/e.sh >/tmp/o 2>&1; echo "$1 exit=$? $(grep -a "line(s)" /tmp/o)"; }
+          bash -s < /tmp/e.sh >/tmp/o 2>&1; echo "$1 exit=$? $(grep -a "line(s)" /tmp/o)"; }
 
   cp boot/check.sh /tmp/bait.sh
   printf "qemu-system-x86_64 \\\\\n  -m 64 \\\\\n  -no-reboot\n" >> /tmp/bait.sh
@@ -253,16 +256,19 @@ git diff net/check.sh check.sh | grep '^-' | grep -v '^---'
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash machine/check.sh > /tmp/wn/m1-machine.log 2>&1; echo "machine exit=$?"
-grep -ac 'e1000e' /tmp/wn/m1-machine.log
+grep -ac 'eth0' /tmp/wn/m1-machine.log
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash net/check.sh > /tmp/wn/m1-net.log 2>&1; echo "net exit=$?"
 tail -3 /tmp/wn/m1-net.log
 ```
 
 기대:
-- `machine exit=0`이고 `e1000e` 개수가 0이다. 이 체인은 시리얼 로그를 `cat`한다
-  (`machine/check.sh:141`). M0 실측 7에서 보였던 `e1000e … eth0` 줄이 사라진 것이
-  `-nic none`의 효과다.
+- `machine exit=0`이고 `eth0` 개수가 0이다. 이 체인은 시리얼 로그를 `cat`한다
+  (`machine/check.sh:141`). M0 실측 7에서 보였던 `e1000e 0000:00:02.0 eth0: …` 줄이
+  사라진 것이 `-nic none`의 효과다. 처음에는 `e1000e`를 0으로 적었는데 실행하니
+  둘이 나왔다. 드라이버가 들어 있으면 장치가 없어도 부팅에 찍히는 등록 배너
+  (`e1000e: Intel(R) PRO/1000 Network Driver` · `Copyright`)다. 그래서 장치에
+  붙었다는 표지인 `eth0`으로 센다.
 - `net exit=0`이다. 드라이버가 늘었어도 이 체인의 장치는 virtio-net 하나라
   이름이 여전히 `eth0`이다.
 

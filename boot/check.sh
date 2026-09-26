@@ -40,6 +40,7 @@ trap cleanup EXIT
 # 그리고 이 플래그가 전제를 암묵에서 명시로 옮긴다 — 이 체인이 왜
 # 프레임버퍼 없이 부팅하는지가 QEMU 줄에 적힌다.
 qemu-system-x86_64 \
+  -nic none \
   -m "$GUEST_MEM" \
   -cdrom ../out/tars.iso \
   -vga none \
