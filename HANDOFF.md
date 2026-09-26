@@ -1,6 +1,45 @@
-# HANDOFF: Time Discipline(TD)이 M2로 닫혔다 — 시계는 chronyd가 만지고, 배운 drift가 부팅을 넘는다
+# HANDOFF: Wired NIC(WN)가 열려 M0이 끝났다 — 노트북형 유선 드라이버를 켜고 dhcpcd가 인터페이스를 고른다
 
 ## 지금 어디인가
+
+2026-09-26에 사용자가 후보 넷(패키지 매니저 · 실머신 NIC · IN 이월 · IPv6) 중에서
+실머신 NIC를 골랐다. 실기가 없으므로 "노트북형 드라이버를 전부 켜고 QEMU로 되는
+것(`e1000e` · `usb-net`)만 부팅으로 판정한다"는 반쪽이다. design은
+`docs/superpowers/specs/2026-09-26-tars-wired-nic-design.md`(결정 6 · 실측 1~7),
+M0 plan은 `plans/2026-09-26-tars-wired-nic-wn-m0.md`.
+
+사용자가 고른 넷 — 드라이버 범위(`E1000E` · `IGC` · `R8169` · `USB_RTL8152` ·
+`USB_USBNET`+`CDCETHER`) · 격리는 `-nic none` + lint(NW 결정 3 대체) · 인터페이스는
+dhcpcd manager mode · Realtek firmware는 비목표.
+
+| 커밋 | 무엇 |
+|---|---|
+| `f970efe` | design |
+| `f45dd47` | M0 plan |
+| `cd14031` | M0 실측 1~7 (코드 변경 없음, `kernel/.config`는 되돌렸다) |
+
+M0이 답한 것. `olddefconfig`가 스물둘을 더 켜고 아무것도 안 끈다 · bzImage +307,200
+바이트(6.7%) · `e1000e`는 `eth0`, `usb-net`은 `cdc_ether`의 `usb0`(RNDIS 불필요) ·
+인자 없는 dhcpcd가 링크를 스스로 올리고 부팅 뒤 꽂은 USB 장치도 udev 없이 잡는다 ·
+`-netdev`만 줘도 기본 NIC가 안 붙는다 · 드라이버를 켜면 `machine` 체인이 조용히
+`eth0`을 갖고도 초록이다.
+
+⚠ 다음 사람이 먼저 볼 것 둘. `-b`로 뜬 dhcpcd는 백그라운드로 간 뒤 로그를 syslog로
+보내고 게스트에는 syslog가 없다 — `-j /dev/console`을 줘야 `leased` 줄이 보인다(실측
+4). `usb-net`을 꽂으면 `usbnet: failed control transaction` 세 줄이 나오는데 해가
+없다(실측 6).
+
+## 바로 다음에 할 것 — WN-M1(격리)의 plan
+
+입력은 `/tmp/wn/config.resolved`(해소된 `.config`. 없으면 design 실측 1의 목록으로
+`scripts/config` + `kernel/build.sh`를 다시 하면 된다). M1이 정할 것 — `USB_USBNET`이
+끌고 온 `default y` 아홉을 남길지(`AX88179` · `CDC_NCM`은 쓸모가 있다), QEMU 호출
+열여덟에 `-nic none`을 달고 `require_explicit_nic`("`-nic none` 또는 `-netdev`"),
+`net` 검사 11 삭제, 기존 체인 전부 초록.
+
+# 그 앞 — Time Discipline(TD)이 M2로 닫혔다 — 시계는 chronyd가 만지고, 배운 drift가 부팅을 넘는다
+
+## 그때 어디였나
 
 TD가 2026-09-26 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
 서브프로젝트를 고르는 것이다(아래 "바로 다음에 할 것").
