@@ -85,3 +85,20 @@ timezone=${TZ_NAME}
 bake ../out/net-ntp-dhcp.img tars-ntp-dhcp 'net=dhcp
 ntp=dhcp
 '
+
+# TD-M2. 부팅 C · D가 이어받는 디스크. 부팅 C의 chronyd가 끌 때 여기에
+# chrony.drift를 쓰고, 부팅 D의 chronyd가 그것을 읽는다 — 체인은 두 부팅
+# 사이에 이 이미지를 다시 굽지 않는다.
+#
+# chrony.d/gate.conf가 폴링을 0.25초로 줄인다(TD design 결정 8). init이 쓰는
+# 설정의 server 줄과 주소가 같고, confdir가 맨 앞이라 이쪽이 이긴다(TD-M0
+# 실측 9). 사람이 같은 자리에 `pool pool.ntp.org iburst`를 적는 것과 같은 길이다.
+bake ../out/net-drift.img tars-drift "net=dhcp
+ntp=${NTP_SERVER}
+"
+GATE_CONF="$(mktemp)"
+printf 'server %s iburst minpoll -2 maxpoll -2\n' "$NTP_SERVER" > "$GATE_CONF"
+debugfs -w -R "mkdir chrony.d" ../out/net-drift.img 2>&1 | grep -v '^debugfs' || true
+debugfs -w -R "write ${GATE_CONF} chrony.d/gate.conf" ../out/net-drift.img 2>&1 | grep -v -e '^debugfs' -e '^Allocated inode' || true
+rm -f "$GATE_CONF"
+echo "make_disk: planted chrony.d/gate.conf in ../out/net-drift.img"
