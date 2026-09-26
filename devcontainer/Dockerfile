@@ -212,6 +212,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # DI-M0이 착수 전에 배운 것이다 — util-linux:amd64는 dmesg 하나 때문에
 # 통째로 받았고, 그 안의 blkid·lsblk는 바이너리만 풀려 있었지 부를
 # 라이브러리가 없어서 게스트에서 돌 수 없는 상태였다.
+#
+# ── TD-M1: 층 8(시계를 길들이는 것) ──────────────────────────────────────
+#
+# chrony 하나에 라이브러리 넷이다(TD-M0 실측 1). chronyd가 부르는 것 중
+# libgnutls · libnettle · libcap은 curl과 ip가 이미 데려왔고, 새로 드는 것은
+#
+#   libseccomp2   chronyd. 커널에 CONFIG_SECCOMP가 없어 필터는 안 켜지만
+#                 (-F를 안 준다) 동적 링크가 이름을 요구한다
+#   libedit2      chronyc. 사람이 drift를 보는 창이다(TD design 결정 9)
+#   libbsd0       libedit가 부른다
+#   libmd0        libbsd가 부른다
+#
+# 넷이 푼 것 기준 547,688바이트, initrd에서 gzip으로 약 424KB다(바이너리
+# 둘 포함). 패키지에 딸려 오는 ifupdown · NetworkManager · dhclient · ppp용
+# hook은 initrd에 안 넣는다 — guest_tools.sh는 바이너리 둘만 적는다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -314,6 +329,11 @@ RUN dpkg --add-architecture amd64 \
         libuuid1:amd64 \
         libreadline8t64:amd64 \
         libext2fs2t64:amd64 \
+        chrony:amd64 \
+        libseccomp2:amd64 \
+        libedit2:amd64 \
+        libbsd0:amd64 \
+        libmd0:amd64 \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
