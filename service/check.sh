@@ -18,7 +18,13 @@
 # 호스트 키를, C는 ssh.nft를 더한 같은 디스크로 떠서 키가 그대로인 것과 로그인된
 # 세션이 콘솔과 같은 것을 본다.
 #
-# 우리 코드는 init/src/services.zig(고르기)와 main.zig의 감독 루프(띄우기)다.
+# 부팅 D(CT-M2)는 C 뒤의 같은 디스크에 서비스 셋(sleeper · stubborn · flaky)을 더해
+# 뜨고, ssh ControlMaster 연결 하나 위로 tars-service를 친다. 그 연결은 제 세션을 가진
+# sshd-session이 들고 있어 sshd를 멈춰도 산다(CT-M0 실측 4) — stop sshd 뒤에 같은
+# 연결로 start sshd를 친다.
+#
+# 우리 코드는 init/src/services.zig(고르기) · main.zig의 감독 루프(띄우기)와
+# init/src/control.zig · service_cli.zig(멈추고 다시 띄우기)다.
 set -uo pipefail
 
 cd "$(dirname "$0")"
@@ -400,6 +406,160 @@ case "$OUT" in
 esac
 echo "less ran under TERM=xterm-ghostty without a warning"
 stop_ssh
+
+# ── 부팅 D: tars-service (CT-M2) ─────────────────────────────────────
+MONITOR_PORT_D=45486
+DSEED="$(mktemp -d)"
+cat > "$DSEED/sleeper" <<'EOF'
+#!/bin/sh
+# exec 없이 sleep을 자식으로 둔다. 리더에게만 보내면 sleep이 고아로 남는다(CT-M0 실측 5).
+sleep 100000
+EOF
+cat > "$DSEED/stubborn" <<'EOF'
+#!/bin/sh
+# SIGTERM을 무시한다. 무시는 exec를 넘어 sleep에도 간다.
+trap '' TERM
+while :; do sleep 1; done
+EOF
+cat > "$DSEED/flaky" <<'EOF'
+#!/bin/sh
+# 표지 파일이 없으면 곧바로 죽는다 — 셋 뜨고 포기된다. 사람이 만든 뒤 start하면 산다.
+[ -e /run/flaky-ok ] || exit 3
+exec sleep 100000
+EOF
+chmod 755 "$DSEED/sleeper" "$DSEED/stubborn" "$DSEED/flaky"
+for s in sleeper stubborn flaky; do sdbg "write $DSEED/$s services.d/$s"; done
+rm -rf "$DSEED"
+
+echo "=== boot D: the same disk plus sleeper, stubborn and flaky; tars-service over ssh ==="
+LOG="$(mktemp)"
+boot_ssh "$MONITOR_PORT_D"
+wait_for_log "Server listening on 0\.0\.0\.0 port 22\." 30 || fail "sshd never listened" "sshd:"
+
+CTL="$KEYS/ctl"
+ssh "${SSHO[@]}" -i "$KEYS/good" -o ControlMaster=yes -o ControlPath="$CTL" -o ControlPersist=yes \
+  -fN root@127.0.0.1 || fail "could not open the ssh control connection" "sshd"
+# 연결 위로 tars-service를 친다. 출력은 OUT, 종료 코드는 RC. 인자는 원격 셸이 가른다 —
+# 공백 든 이름은 따옴표째 넘긴다.
+ts() {
+  OUT="$(ssh "${SSHO[@]}" -o ControlPath="$CTL" root@127.0.0.1 "tars-service $*" 2>&1)"
+  RC=$?
+}
+on_guest() { ssh "${SSHO[@]}" -o ControlPath="$CTL" root@127.0.0.1 "$@" 2>/dev/null; }
+fresh_ssh() { ssh "${SSHO[@]}" -i "$KEYS/good" -o ControlPath=none root@127.0.0.1 true >/dev/null 2>&1; }
+# 마지막 줄(클라이언트가 기다린 끝의 status 한 줄)의 pid.
+last_pid() { tail -1 <<<"$OUT" | sed -nE 's/.* pid ([0-9]+).*/\1/p'; }
+
+# ── 검사 16: 통로가 섰다 ─────────────────────────────────────────────────
+grep -a "tars-init: control socket /run/tars/init.sock" "$LOG" >/dev/null \
+  || fail "init did not open the control socket" "control"
+echo "init opened /run/tars/init.sock"
+
+# ── 검사 17: status가 전부를 보인다 ──────────────────────────────────────
+wait_for_log "tars-init: giving up on service flaky after 3 fast exits" 30 \
+  || fail "flaky was never given up on" "flaky"
+ts status
+[ "$RC" = "0" ] || fail "status gave rc ${RC} (${OUT})"
+for want in '^terminal +running +pid [0-9]+' '^console shell +running +pid [0-9]+' \
+            '^service flaky +given up$' '^service sleeper +running +pid [0-9]+' \
+            '^service sshd +running +pid [0-9]+' '^service stubborn +running +pid [0-9]+'; do
+  grep -qE "$want" <<<"$OUT" || fail "status has no line like /${want}/ (got: [${OUT}])"
+done
+echo "status showed the terminal, the console shell and four services, flaky given up"
+
+# ── 검사 18: stop이 그룹을 멈춘다 ────────────────────────────────────────
+ts stop sleeper
+[ "$RC" = "0" ] || fail "stop sleeper gave rc ${RC} (${OUT})" "sleeper"
+tail -1 <<<"$OUT" | grep -qE '^service sleeper +stopped$' || fail "stop sleeper did not end stopped (${OUT})"
+ORPHANS="$(on_guest 'ps -eo ppid=,comm=' | grep -cE '^ *1 sleep$')"
+[ "$ORPHANS" = "0" ] || fail "stop sleeper left ${ORPHANS} sleep under pid 1" "sleeper"
+grep -a "tars-init: service sleeper stopped on request" "$LOG" >/dev/null \
+  || fail "init did not log the stop" "sleeper"
+echo "stop sleeper ended stopped and took its child sleep with it"
+
+# ── 검사 19: 멈춘 것은 되살아나지 않는다 ───────────────────────────────────
+sleep 3
+ts status sleeper
+grep -qE '^service sleeper +stopped$' <<<"$OUT" || fail "sleeper did not stay stopped (${OUT})" "sleeper"
+N="$(grep -ac "tars-init: started service sleeper " "$LOG")"
+[ "$N" = "1" ] || fail "sleeper started ${N} times, want 1" "sleeper"
+echo "sleeper stayed stopped"
+
+# ── 검사 20: start가 다시 띄운다 ────────────────────────────────────────
+ts start sleeper
+[ "$RC" = "0" ] || fail "start sleeper gave rc ${RC} (${OUT})" "sleeper"
+tail -1 <<<"$OUT" | grep -qE '^service sleeper +running +pid [0-9]+$' || fail "start sleeper did not end running (${OUT})"
+echo "start sleeper brought it back"
+
+# ── 검사 21: restart는 빨리 죽음으로 세지 않는다 ──────────────────────────
+# 넷이다 — 셋이면 세는 쪽으로 틀려도 포기 직전에서 멈춘다(CT-M0 실측 6).
+PREV=""
+for i in 1 2 3 4; do
+  ts restart sshd
+  [ "$RC" = "0" ] || fail "restart sshd #${i} gave rc ${RC} (${OUT})" "sshd"
+  P="$(last_pid)"
+  [ -n "$P" ] && [ "$P" != "$PREV" ] || fail "restart sshd #${i} did not change the pid (${OUT})" "sshd"
+  PREV="$P"
+done
+if grep -a "tars-init: giving up on service sshd" "$LOG" >/dev/null; then
+  fail "four restarts made init give up on sshd" "sshd"
+fi
+N="$(grep -ac "tars-init: restarting service sshd on request" "$LOG")"
+[ "$N" = "4" ] || fail "init logged ${N} requested restarts of sshd, want 4" "sshd"
+echo "four restarts of sshd, four new pids, no giving up"
+
+# ── 검사 22: sshd를 멈추면 새 ssh가 거절되고, 열어 둔 연결로 되살린다 ─────────
+ts stop sshd
+[ "$RC" = "0" ] || fail "stop sshd gave rc ${RC} (${OUT})" "sshd"
+fresh_ssh && fail "a new ssh got in while sshd was stopped"
+ts start sshd
+[ "$RC" = "0" ] || fail "start sshd over the kept connection gave rc ${RC} (${OUT})" "sshd"
+ok=0
+for _ in $(seq 1 10); do
+  if fresh_ssh; then ok=1; break; fi
+  sleep 0.5
+done
+[ "$ok" = "1" ] || fail "a new ssh did not get in after start sshd" "sshd"
+echo "stop sshd shut new logins out, the kept connection started it again"
+
+# ── 검사 23: SIGTERM을 무시하면 유예 뒤 SIGKILL ───────────────────────────
+ts stop stubborn
+[ "$RC" = "0" ] || fail "stop stubborn gave rc ${RC} (${OUT})" "stubborn"
+tail -1 <<<"$OUT" | grep -qE '^service stubborn +stopped$' || fail "stop stubborn did not end stopped (${OUT})"
+grep -aE "tars-init: service stubborn outlived SIGTERM by 3s, sent SIGKILL to group [0-9]+" "$LOG" >/dev/null \
+  || fail "init did not send SIGKILL to stubborn" "stubborn"
+echo "stubborn ignored SIGTERM and was stopped by SIGKILL"
+
+# ── 검사 24: 포기된 것도 start로 되살린다 ─────────────────────────────────
+on_guest 'touch /run/flaky-ok'
+ts start flaky
+[ "$RC" = "0" ] || fail "start flaky gave rc ${RC} (${OUT})" "flaky"
+tail -1 <<<"$OUT" | grep -qE '^service flaky +running +pid [0-9]+$' || fail "start flaky did not end running (${OUT})"
+echo "start flaky revived a given-up service"
+
+# ── 검사 25: 거절 다섯 ─────────────────────────────────────────────────
+LONG="$(printf 'x%.0s' $(seq 1 70))"
+expect_refused() {  # $1 = 인자, $2 = 원하는 rc, $3 = 원하는 첫 줄
+  ts "$1"
+  [ "$RC" = "$2" ] || fail "tars-service $1 gave rc ${RC}, want $2 (${OUT})"
+  [ "$(head -1 <<<"$OUT")" = "$3" ] || fail "tars-service $1 said [$(head -1 <<<"$OUT")], want [$3]"
+}
+expect_refused "stop nope" 1 "error: no service named nope"
+expect_refused "stop terminal" 1 "error: no service named terminal"
+expect_refused "stop 'a b'" 1 "error: bad request"
+expect_refused "stop ${LONG}" 1 "error: request of 75 bytes, at most 64"
+expect_refused "bogus" 64 "usage: tars-service status [NAME]"
+echo "unknown names, the terminal, a bad request, a long request and bad usage were refused"
+
+# ── 검사 26: 통로의 fd가 서비스로 새지 않는다 ──────────────────────────────
+FDS="$(on_guest 'ls -l /proc/$(pgrep -x sleep -P $(pgrep -x sleeper))/fd')"
+[ -n "$FDS" ] || fail "could not list the fds of sleeper's sleep"
+grep -q "socket:" <<<"$FDS" && fail "sleeper's sleep holds a socket (${FDS})"
+echo "sleeper's child holds no socket from init"
+
+ssh -o ControlPath="$CTL" -O exit root@127.0.0.1 2>/dev/null || true
+stop_ssh
+rm -f "$LOG"
 rm -f "$B_LOG"
 rm -rf "$KEYS"
 
