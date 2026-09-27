@@ -28,6 +28,15 @@ const SCAN_MAX: usize = 64;
 const PATH_MAX: usize = 128;
 
 pub const LABEL_PREFIX = "service ";
+
+/// DS-M1 결정 M1-A. init이 `services.d` 없이 스스로 감독 목록에 넣는 둘의 이름이다
+/// (DS design 결정 1). label은 `LABEL_PREFIX ++ 이 이름`이라 `tars-service`가 같은
+/// 이름으로 부른다.
+pub const DHCPCD = "dhcpcd";
+pub const CHRONYD = "chronyd";
+/// 같은 이름이 `services.d`에 있으면 건너뛴다(DS design 결정 5). 둘이 같은 label을
+/// 달면 `tars-service stop dhcpcd`가 무엇을 멈출지 모호하다.
+pub const RESERVED = [_][]const u8{ DHCPCD, CHRONYD };
 const LABEL_MAX: usize = LABEL_PREFIX.len + NAME_MAX;
 
 fn failed(rc: usize) ?linux.E {
@@ -63,12 +72,15 @@ pub const List = struct {
     }
 };
 
-pub const Verdict = enum { ok, hidden, too_long };
+pub const Verdict = enum { ok, hidden, too_long, reserved };
 
 /// 이름만 보고 가른다. `.`으로 시작하면 숨긴 것이다 — `.`과 `..`도 여기서 빠진다.
 pub fn judgeName(name: []const u8) Verdict {
     if (name.len == 0 or name[0] == '.') return .hidden;
     if (name.len > NAME_MAX) return .too_long;
+    for (RESERVED) |r| {
+        if (std.mem.eql(u8, name, r)) return .reserved;
+    }
     return .ok;
 }
 
@@ -148,6 +160,10 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
                 .hidden => continue,
                 .too_long => {
                     std.debug.print("tars-init: service name {s} is longer than {d} bytes, skipped\n", .{ name, NAME_MAX });
+                    continue;
+                },
+                .reserved => {
+                    std.debug.print("tars-init: service {s} is a name init keeps for itself, skipped\n", .{name});
                     continue;
                 },
                 .ok => {},

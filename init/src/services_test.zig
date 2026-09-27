@@ -71,7 +71,13 @@ pub fn main() !void {
     try expectVerdict("..", .hidden);
     try expectVerdict("a" ** services.NAME_MAX, .ok);
     try expectVerdict("a" ** (services.NAME_MAX + 1), .too_long);
-    std.debug.print("services_test: names — dot means hidden, {d} bytes is the limit\n", .{services.NAME_MAX});
+    // DS-M1 결정 M1-A. init이 스스로 띄우는 둘과 같은 이름은 services.d에서 안 받는다.
+    // 한 글자라도 다르면 받는다 — 막는 것은 tars-service가 헷갈리는 자리뿐이다.
+    try expectVerdict(services.DHCPCD, .reserved);
+    try expectVerdict(services.CHRONYD, .reserved);
+    try expectVerdict("dhcpcd2", .ok);
+    try expectVerdict("chrony", .ok);
+    std.debug.print("services_test: names — dot means hidden, {d} bytes is the limit, dhcpcd and chronyd are init's\n", .{services.NAME_MAX});
 
     // ── 정렬 ───────────────────────────────────────────────────────
     var names = [_][]const u8{ "z-last", "a-first", "m-mid", "a-fir" };
