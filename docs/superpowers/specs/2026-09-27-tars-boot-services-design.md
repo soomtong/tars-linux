@@ -2,7 +2,7 @@
 
 접두사: SV
 
-Status: M0 끝났다(2026-09-27) — 실측 1~7. 다음은 M1(메커니즘).
+Status: M1 끝났다(2026-09-27) — 실측 1~12. 열여섯번째 체인 `service/check.sh`(부팅 하나, 검사 여덟). 다음은 M2(sshd).
 
 관련 문서: `2026-08-01-tars-boot-foundation-design.md`(BF. 감독 루프의 뿌리) ·
 `2026-09-27-tars-firewall-design.md`(FW. 여는 길과 "기본 꺼짐, 켜면 닫힘") ·
@@ -403,3 +403,95 @@ SVM0-PTY xterm-ghostty out=[xterm-ghostty;WARNING: terminal is not fully functio
   `sshd-session` · `sshd-auth`는 `/usr/lib/openssh/`에, `sshd`는 `usr/sbin/sshd:usr/bin/sshd`로.
   `passwd` · `group` 두 줄과 `/run/sshd`. devcontainer에 `openssh-client`(하네스의
   `ssh` · `ssh-keyscan`). 사용자와 정할 것 둘 — terminfo(실측 7)와 ssh 세션의 셸 · env(실측 6).
+
+## SV-M1이 실행으로 증명한 것
+
+2026-09-27. plan은 `plans/2026-09-27-tars-boot-services-sv-m1.md`. 코드는 커밋 둘 —
+`4505f22`(`services.zig` · `services_test.zig` · `build.zig`)와 `f1bff34`(`main.zig`).
+
+### 실측 8 — 호스트 검사가 첫 컴파일에 초록이고, 로그 문구가 거기서 먼저 보인다
+
+`services_test`는 이름 판정 · 정렬 · 없는 디렉터리 · 실제 디렉터리 넷을 본다. 실제
+디렉터리의 열여섯 항목에서 `discover`가 찍은 줄이 plan M1-E의 문구 그대로다.
+
+```
+tars-init: service name bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb is longer than 32 bytes, skipped
+tars-init: service k-broken cannot be read (errno 2), skipped
+tars-init: service m-noexec is not an executable file, skipped
+tars-init: service n6 ignored, at most 8 services
+tars-init: service subdir is not an executable file, skipped
+tars-init: service z-last ignored, at most 8 services
+tars-init: 8 services from /tmp/tars-services-test/services.d
+```
+
+끊어진 링크는 `statx`가 `ENOENT`(2)다. 디렉터리(`subdir`)가 실행 파일로 안 잡히는 것이
+`access(X_OK)` 대신 `statx`를 쓴 이유(M1-B)의 실제 모양이다. Zig 0.16의 API는 plan에
+적은 이름(`getdents64` · `statx` · `linux.S.ISREG` · `std.sort.insertion`) 그대로였다.
+
+`init` 바이너리는 3,581,480 → 3,619,968바이트(+38,488)다.
+
+### 실측 9 — 체인의 첫 판은 체인 쪽 실수로 빨갰다. `#!/bin/bash`는 게스트에 없다
+
+```
+tars-init: started service d-link (pid 76, /config/services.d/d-link)
+tars-init: execve /config/services.d/d-link failed
+tars-init: service d-link exited (pid 76, status 127, lived 1s)
+...
+tars-init: giving up on service d-link after 3 fast exits
+```
+
+체인이 심은 `linked.sh`의 shebang이 `#!/bin/bash`였다. 게스트의 `/bin`에는 `sh` 하나만
+산다(`make_initrd.sh:81`) — 커널이 인터프리터를 못 찾아 execve가 `ENOENT`다. 사전
+확인은 링크 끝이 실행 파일인 것만 보므로 통과했다. `#!/bin/sh`로 고쳤다.
+
+이것은 사람이 서비스 스크립트를 쓸 때 그대로 밟을 수 있는 자리다. 지금 로그에는
+`execve … failed`만 있고 errno가 없어서 "무엇이 없는가"가 안 보인다 — M2의 가이드가
+`#!/bin/sh`를 쓰라고 적는다. execve 줄에 errno를 더하는 것은 M2에서 함께 본다.
+
+### 실측 10 — 체인이 검사 여덟으로 초록이다
+
+```
+init picked three services from /config/services.d
+c-noexec was skipped before it could fail
+.hidden left no trace
+a-greet, b-die, d-link started in name order after the console shell
+b-die started three times and was given up on
+d-link ran through its link, leads its own session and reads EOF on stdin
+a-greet answered from outside with init's PATH
+a-greet, d-link and the console shell stayed up
+SV chain PASS
+```
+
+`a-greet`이 바깥에 보낸 줄이 `sv-greet /config/services.d/a-greet /usr/bin:/bin`이다 —
+init의 env 블록이 서비스까지 온다. 서비스의 출력(`sv-linked …`)은 콘솔로 가서 시리얼
+로그에 남는다.
+
+### 실측 11 — 반사실 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
+
+| 반사실 | 호스트 검사 | 부팅 |
+|---|---|---|
+| `sortNames` 호출을 지운다 | `path …/z-last, want …/a-first` | 검사 4 — `shell=276 a=279 b=278 d=277` |
+| `check`가 늘 `.ok` | `path …/m-noexec, want …/n0` | 검사 1 — `4 services from`, `c-noexec exited (… status 127 …)` |
+| `.service => {}` (세션 · stdin 없음) | (해당 없음) | 검사 6 — `sid=0 pid=39 stdin-rc=142` |
+
+부팅 쪽을 보려고 앞의 둘은 체인의 `zig build test` 단계를 잠시 막았다 — 호스트
+검사와 부팅 검사가 각각 따로 선다.
+
+정렬이 없을 때의 순서 `d · b · a`는 디스크에 쓴 순서(`.hidden` · `d-link` · `c-noexec` ·
+`b-die` · `a-greet`) 그대로다. ext2의 `getdents64`가 만든 순서를 돌려준다는 실측이다.
+
+세션을 안 떼면 `sid=0`이다 — PID 1이 있는 커널의 첫 세션이다. stdin이 콘솔이면 `read -t 1`이
+1초를 채우고 142(128 + SIGALRM)다. 콘솔 셸과 콘솔 입력을 나눠 읽는 상태가 바로 이것이다.
+
+### 실측 12 — 이웃 다섯이 그대로 초록이다
+
+boot(31초) · device(14초) · machine(16초) · config(139초) · firewall(46초), 전부 PASS.
+설정 디스크가 없는 boot 체인에는 `tars-init: no /config/services.d, 0 services` 한 줄이
+늘었고, 그 체인이 세는 terminal 재시작 3은 그대로다(`label`이 `"terminal"` 글자
+그대로라서). 위험 4는 닫힌다. 루트 게이트는 M2가 끝날 때 돈다.
+
+### M1이 M2에 넘기는 것
+
+- sshd 템플릿은 `#!/bin/sh`로 쓴다(실측 9).
+- 체인은 부팅 A 하나다. M2는 같은 체인에 부팅 B · C(sshd)를 더한다 — 포트는 45483부터.
+- execve 실패 줄에 errno가 없다. 사람이 쓴 서비스가 127로 죽을 때 원인이 안 보인다.
