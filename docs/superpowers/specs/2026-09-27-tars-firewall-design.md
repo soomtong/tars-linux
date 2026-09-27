@@ -63,6 +63,12 @@ TD가 `/config/chrony.d/`를 만들었다. chronyd가 `confdir`로 읽고 `init`
 IN 실측 4. 체인이 `hostfwd` 포트에 붙으면 게스트가 버려도 체인 쪽 `connect`는
 성공한다. 그래서 판정은 IN처럼 읽은 바이트 수여야 하고 `rc`로는 못 가른다.
 
+### 확인 6 — `inet` 표는 IPv6 없이 못 만든다
+
+`net/netfilter/Kconfig`의 `NF_TABLES_INET`이 `depends on IPV6`다. `NF_CONNTRACK`은
+`NETFILTER_ADVANCED=n`이면 기본이 `m`인데 우리 커널은 `# CONFIG_MODULES is not
+set`이라 tristate가 전부 `y`로 해소될 것으로 본다(M0이 `olddefconfig` 결과로 본다).
+
 ## 결정
 
 ### 결정 1 — 기본은 꺼짐. `firewall=on`이면 켜지고, 켜지면 닫힌다
@@ -85,7 +91,7 @@ IN 실측 4. 체인이 `hostfwd` 포트에 붙으면 게스트가 버려도 체�
 ### 결정 3 — 기본 규칙 파일 하나를 initrd에 굽는다
 
 ```
-table inet tars {
+table ip tars {
   chain input {
     type filter hook input priority 0; policy drop;
     iif lo accept
@@ -99,7 +105,9 @@ table inet tars {
 - 받는 방향(input)만 거른다. 나가는 방향(output)과 forward는 안 만든다.
 - `ct state established,related`가 나간 연결의 답(dhcpcd의 lease 갱신 · chrony의
   NTP 답 · curl)과 ICMP 오류를 받는다. ping은 사람이 열어야 받는다.
-- `inet` 계열은 IPv6가 들어와도 같은 표가 그대로 걸리게 하려는 것이다.
+- 계열은 `ip`(IPv4)다. 처음에는 IPv6까지 한 표로 거르는 `inet`을 적었는데, 커널의
+  `NF_TABLES_INET`이 `depends on IPV6`이고 우리 커널은 `# CONFIG_IPV6 is not set`이다
+  (확인 6). IPv6를 켜는 것은 비목표 2라서 `ip`로 둔다. 대가는 위험 6이다.
 - 자리는 `/etc/tars/firewall.nft`. 사람이 파일 전체를 바꾸는 길은 두지 않는다 —
   바꾸고 싶은 것은 `nftables.d`에 적는다.
 
@@ -171,7 +179,7 @@ udp dport 5353 accept
 ## 비목표
 
 1. 나가는 방향 필터. 받는 것을 고르는 것과 나가는 것을 막는 것은 다른 이야기다.
-2. IPv6. 커널에 없다. 표가 `inet`이라 들어오면 같은 규칙이 걸린다.
+2. IPv6. 커널에 없다. 들어오는 사이클이 표를 `inet`으로 바꾼다(위험 6).
 3. 실머신 LAN에서의 판정. 게이트는 SLIRP 안에서 닫힌다(IN 비목표 3과 같다).
 4. NAT · forward · 라우팅.
 5. 부팅 중 규칙 다시 읽기. 사람이 셸에서 `nft -f`를 치면 된다.
@@ -206,3 +214,10 @@ UDP는 연결이 없어 체인 쪽에서 "읽은 바이트"가 없다. 게스트
 
 증명하는 문장은 "SLIRP 안에서 규칙이 받는 것과 버리는 것을 가른다"이다. 실기
 LAN에서의 동작은 같은 커널 경로를 탈 것으로 보지만 게이트가 보지는 않는다.
+
+### 위험 6 — IPv6가 들어오면 v6는 안 걸러진다
+
+표가 `ip`라 IPv4만 본다. 지금은 커널에 IPv6가 없어 구멍이 없다. IPv6를 켜는
+사이클이 `CONFIG_NF_TABLES_INET`을 켜고 표를 `inet`으로 바꿔야 한다. 그 사이클의
+design이 이 위험을 첫 확인으로 인용해야 하고, `firewall/check.sh`에 v6 음성 검사를
+더하는 것이 그 사이클의 몫이다.
