@@ -470,7 +470,7 @@ echo "status showed the terminal, the console shell and four services, flaky giv
 # ── 검사 18: stop이 그룹을 멈춘다 ────────────────────────────────────────
 ts stop sleeper
 [ "$RC" = "0" ] || fail "stop sleeper gave rc ${RC} (${OUT})" "sleeper"
-tail -1 <<<"$OUT" | grep -qE '^service sleeper +stopped$' || fail "stop sleeper did not end stopped (${OUT})"
+tail -1 <<<"$OUT" | grep -E '^service sleeper +stopped$' >/dev/null || fail "stop sleeper did not end stopped (${OUT})"
 ORPHANS="$(on_guest 'ps -eo ppid=,comm=' | grep -cE '^ *1 sleep$')"
 [ "$ORPHANS" = "0" ] || fail "stop sleeper left ${ORPHANS} sleep under pid 1" "sleeper"
 grep -a "tars-init: service sleeper stopped on request" "$LOG" >/dev/null \
@@ -488,7 +488,7 @@ echo "sleeper stayed stopped"
 # ── 검사 20: start가 다시 띄운다 ────────────────────────────────────────
 ts start sleeper
 [ "$RC" = "0" ] || fail "start sleeper gave rc ${RC} (${OUT})" "sleeper"
-tail -1 <<<"$OUT" | grep -qE '^service sleeper +running +pid [0-9]+$' || fail "start sleeper did not end running (${OUT})"
+tail -1 <<<"$OUT" | grep -E '^service sleeper +running +pid [0-9]+$' >/dev/null || fail "start sleeper did not end running (${OUT})"
 echo "start sleeper brought it back"
 
 # ── 검사 21: restart는 빨리 죽음으로 세지 않는다 ──────────────────────────
@@ -525,7 +525,7 @@ echo "stop sshd shut new logins out, the kept connection started it again"
 # ── 검사 23: SIGTERM을 무시하면 유예 뒤 SIGKILL ───────────────────────────
 ts stop stubborn
 [ "$RC" = "0" ] || fail "stop stubborn gave rc ${RC} (${OUT})" "stubborn"
-tail -1 <<<"$OUT" | grep -qE '^service stubborn +stopped$' || fail "stop stubborn did not end stopped (${OUT})"
+tail -1 <<<"$OUT" | grep -E '^service stubborn +stopped$' >/dev/null || fail "stop stubborn did not end stopped (${OUT})"
 grep -aE "tars-init: service stubborn outlived SIGTERM by 3s, sent SIGKILL to group [0-9]+" "$LOG" >/dev/null \
   || fail "init did not send SIGKILL to stubborn" "stubborn"
 echo "stubborn ignored SIGTERM and was stopped by SIGKILL"
@@ -534,7 +534,7 @@ echo "stubborn ignored SIGTERM and was stopped by SIGKILL"
 on_guest 'touch /run/flaky-ok'
 ts start flaky
 [ "$RC" = "0" ] || fail "start flaky gave rc ${RC} (${OUT})" "flaky"
-tail -1 <<<"$OUT" | grep -qE '^service flaky +running +pid [0-9]+$' || fail "start flaky did not end running (${OUT})"
+tail -1 <<<"$OUT" | grep -E '^service flaky +running +pid [0-9]+$' >/dev/null || fail "start flaky did not end running (${OUT})"
 echo "start flaky revived a given-up service"
 
 # ── 검사 25: 거절 다섯 ─────────────────────────────────────────────────
