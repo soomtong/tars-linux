@@ -10,6 +10,7 @@ const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
 const services = @import("services.zig");
 const login = @import("login.zig");
+const control = @import("control.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -379,6 +380,10 @@ const Child = struct {
     /// 상태 하나로 표현되는 자리다. 처음부터 null이면 이 자식에게는 탈출로가
     /// 없다(설정 디스크가 없거나 이미 `shell_config=off`다).
     rescue: ?Rescue = null,
+    /// CT-M1. 사람이 요청한 것과 SIGKILL의 시한. 규칙은 `control.zig`에 있고 이 두
+    /// 칸은 필드 이름으로만 만져진다 — 이름을 바꾸면 `control.zig`가 컴파일에서 막는다.
+    hold: control.Hold = .none,
+    kill_at: isize = 0,
 };
 
 fn monotonicSeconds() isize {
@@ -433,6 +438,75 @@ fn find(children: []Child, pid: linux.pid_t) ?*Child {
     return null;
 }
 
+/// CT-M1. 서비스 이름으로 자식을 찾는다. terminal과 콘솔 셸은 서비스가 아니라 안
+/// 걸린다(design 결정 5).
+fn findService(children: []Child, name: []const u8) ?*Child {
+    for (children) |*c| {
+        if (c.kind != .service) continue;
+        if (std.mem.eql(u8, c.label[services.LABEL_PREFIX.len..], name)) return c;
+    }
+    return null;
+}
+
+/// 요청 하나에 답을 짓는다. 시그널은 여기서 보낸다 — 규칙(`control.apply`)은 "보내라"를
+/// 돌려줄 뿐이다. 그룹에 보낸다(CT-M0 실측 5). 서비스는 fork 직후 `setsid`하므로 그 전의
+/// 아주 짧은 창에서는 그룹이 아직 없어 ESRCH다 — 그때는 `kill_at`의 SIGKILL이 받는다.
+fn answer(children: []Child, req: control.Request, out: *control.Out) void {
+    const now = monotonicSeconds();
+    if (req.verb == .status) {
+        for (children) |*c| {
+            if (req.name) |n| {
+                if (c.kind != .service or !std.mem.eql(u8, c.label[services.LABEL_PREFIX.len..], n)) continue;
+            }
+            control.row(out, c.label, control.stateOf(c), c.pid, now - c.started_at);
+        }
+        if (req.name != null and out.len == 0)
+            out.print(control.ERROR_PREFIX ++ "no service named {s}\n", .{req.name.?});
+        return;
+    }
+    const name = req.name.?;
+    const c = findService(children, name) orelse {
+        out.print(control.ERROR_PREFIX ++ "no service named {s}\n", .{name});
+        std.debug.print("tars-init: control: {s} {s} -> no such service\n", .{ @tagName(req.verb), name });
+        return;
+    };
+    const pid = c.pid;
+    const done = control.apply(req.verb, c, now);
+    if (done.signal) _ = linux.kill(-pid, .TERM);
+    control.outcome(out, done.outcome, c.label, pid);
+    std.debug.print("tars-init: control: {s} {s} -> {s}\n", .{ @tagName(req.verb), c.label, @tagName(done.outcome) });
+}
+
+/// listen fd가 깨웠을 때 연결 하나를 처리한다. 붙잡히는 시간은 `control.WAIT_MS`가
+/// 상한이다(design 결정 3).
+fn serveControl(children: []Child, lfd: i32) void {
+    var req_buf: [control.REQUEST_MAX]u8 = undefined;
+    const got = control.receive(lfd, &req_buf) orelse return;
+    var reply_buf: [control.REPLY_MAX]u8 = undefined;
+    var out = control.Out{ .buf = &reply_buf };
+    switch (got.what) {
+        .silent => {
+            std.debug.print("tars-init: control client sent nothing in {d}ms\n", .{control.WAIT_MS});
+            _ = linux.close(got.fd);
+            return;
+        },
+        .too_long => |n| {
+            out.print(control.ERROR_PREFIX ++ "request of {d} bytes, at most {d}\n", .{ n, control.REQUEST_MAX });
+            std.debug.print("tars-init: control: bad request ({d} bytes)\n", .{n});
+        },
+        .request => |bytes| {
+            if (control.parseRequest(bytes)) |req| {
+                answer(children, req, &out);
+            } else {
+                // 요청의 바이트는 찍지 않는다 — 누구든 ESC를 심을 수 있다.
+                out.print(control.ERROR_PREFIX ++ "bad request\n", .{});
+                std.debug.print("tars-init: control: bad request ({d} bytes)\n", .{bytes.len});
+            }
+        },
+    }
+    control.reply(got.fd, out.bytes());
+}
+
 /// 감독 루프가 한 바퀴에 잠드는 시간. 이 값이 세 가지를 동시에 정한다.
 ///
 ///   1. 전원 버튼을 눌렀을 때 최대 지각 — 사람이 못 느낀다.
@@ -452,15 +526,22 @@ const POLL_TIMEOUT_MS: i32 = 1000;
 fn supervise(
     children: []Child,
     buttons: []const i32,
+    control_fd: ?i32,
     envp: [*:null]const ?[*:0]const u8,
 ) noreturn {
     // poll에 넘길 배열. 버튼 fd는 부팅 때 한 번 정해지고 변하지 않으므로
     // 루프 밖에서 한 번만 채운다. revents만 커널이 매 호출 덮어쓴다.
-    var fds: [devices.MAX_BUTTONS]linux.pollfd = undefined;
+    // 버튼 fd들 뒤에 CT-M1의 listen fd가 한 칸 붙는다.
+    var fds: [devices.MAX_BUTTONS + 1]linux.pollfd = undefined;
     for (buttons, 0..) |fd, i| {
         fds[i] = .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 };
     }
-    const nfds: linux.nfds_t = buttons.len;
+    const control_slot = buttons.len;
+    var nfds: linux.nfds_t = buttons.len;
+    if (control_fd) |fd| {
+        fds[control_slot] = .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 };
+        nfds += 1;
+    }
 
     while (true) {
         // 자식을 다시 띄우기 전에 본다. 순서가 뒤집히면 방금 SIGTERM으로
@@ -469,7 +550,19 @@ fn supervise(
         if (power.take()) |action| power.shutdown(action);
 
         for (children) |*c| {
-            if (c.pid < 0 and !c.given_up) start(c, envp);
+            if (control.wantsRunning(c)) start(c, envp);
+        }
+
+        // CT-M1 결정 4 규칙 3. SIGTERM을 무시한 서비스에게 유예 뒤 SIGKILL을 그룹으로
+        // 보낸다(CT-M0 실측 5 — 리더에게만 보내면 자식이 고아로 남는다).
+        const now = monotonicSeconds();
+        for (children) |*c| {
+            if (control.overdue(c, now)) {
+                _ = linux.kill(-c.pid, .KILL);
+                std.debug.print("tars-init: {s} outlived SIGTERM by {d}s, sent SIGKILL to group {d}\n", .{
+                    c.label, control.GRACE_SECONDS, c.pid,
+                });
+            }
         }
 
         // ── 거둘 것을 전부 거둔다 ────────────────────────────────────
@@ -515,6 +608,20 @@ fn supervise(
                 std.debug.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
                     c.label, pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
                 });
+            }
+
+            // CT-M1 결정 4 규칙 2. 사람이 요청한 죽음은 빨리 죽음으로 세지 않는다 —
+            // 세면 restart 셋에 포기된다(CT-M0 실측 6).
+            switch (control.reaped(c)) {
+                .normal => {},
+                .stays_stopped => {
+                    std.debug.print("tars-init: {s} stopped on request\n", .{c.label});
+                    continue;
+                },
+                .restarts => {
+                    std.debug.print("tars-init: restarting {s} on request\n", .{c.label});
+                    continue;
+                },
             }
 
             if (lived < FAST_EXIT_SECONDS) {
@@ -606,6 +713,17 @@ fn supervise(
                 std.debug.print("tars-init: power button fd {d} went away (revents {d})\n", .{
                     p.fd, p.revents,
                 });
+                p.fd = -1;
+            }
+        }
+
+        // ── CT-M1. 셋째 입력 ────────────────────────────────────────
+        if (control_fd != null and fds[control_slot].revents != 0) {
+            const p = &fds[control_slot];
+            if (p.revents & linux.POLL.IN != 0) serveControl(children, p.fd);
+            const broken = linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL;
+            if (p.revents & broken != 0) {
+                std.debug.print("tars-init: control socket went away (revents {d})\n", .{p.revents});
                 p.fd = -1;
             }
         }
@@ -935,7 +1053,10 @@ pub fn main(init: std.process.Init.Minimal) void {
             .argv = .{ s.path().ptr, null, null, null, null, null, null, null },
         };
     }
-    supervise(children[0 .. 2 + service_list.len], button_fds[0..button_count], envp);
+    // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.
+    // 못 열면 로그 한 줄이고 CT 전과 같은 부팅이다.
+    const control_fd = control.open(control.DIR, control.PATH);
+    supervise(children[0 .. 2 + service_list.len], button_fds[0..button_count], control_fd, envp);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의
