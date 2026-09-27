@@ -2,7 +2,7 @@
 
 접두사: FW
 
-Status: 설계(2026-09-27). M0부터.
+Status: M0 끝났다(2026-09-27) — 실측 1~9. 다음은 M1.
 
 관련 문서: `2026-09-14-tars-inbound-network-design.md`(IN. 비목표 1 · 2 · 4가 이
 서브프로젝트의 범위다) · `2026-09-13-tars-guest-network-design.md`(NW. 비목표 3이
@@ -221,3 +221,135 @@ LAN에서의 동작은 같은 커널 경로를 탈 것으로 보지만 게이트
 사이클이 `CONFIG_NF_TABLES_INET`을 켜고 표를 `inet`으로 바꿔야 한다. 그 사이클의
 design이 이 위험을 첫 확인으로 인용해야 하고, `firewall/check.sh`에 v6 음성 검사를
 더하는 것이 그 사이클의 몫이다.
+
+## FW-M0이 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-firewall-fw-m0.md`. 부팅 하나(`net=dhcp`, SLIRP에
+`hostfwd` 넷)에서 규칙을 올리기 전(`pre`)과 후(`post`)를 같은 탐침으로 쟀다. 커널
+옵션은 작업 트리에서만 켜고 되돌렸다. 커밋되는 코드는 0줄이다.
+
+### 실측 1 — 다섯을 켜면 열이 따라오고 전부 `=y`다
+
+`scripts/config -e NETFILTER -e NF_TABLES -e NF_TABLES_IPV4 -e NF_CONNTRACK -e NFT_CT`
+뒤 `olddefconfig`가 더한 것.
+
+```
+> CONFIG_NET_CRC32C=y          > CONFIG_NETFILTER_NETLINK=y
+> CONFIG_NET_EGRESS=y          > CONFIG_NF_CT_PROTO_SCTP=y
+> CONFIG_NET_INGRESS=y         > CONFIG_NF_CT_PROTO_UDPLITE=y
+> CONFIG_NETFILTER_ADVANCED=y  > CONFIG_NF_DEFRAG_IPV4=y
+> CONFIG_NETFILTER_EGRESS=y    > CONFIG_NETFILTER_INGRESS=y
+```
+
+`=m`은 0줄이다(`# CONFIG_MODULES is not set`이라 tristate가 `y`로 해소된다 — 확인 6).
+`NETFILTER_ADVANCED`는 Kconfig 기본값이 `y`라 저절로 켜졌다. 메뉴를 넓히는 스위치라
+코드가 늘지 않는다. bzImage는 5,030,912바이트. 위험 2는 닫혔다 — M1은 이 다섯을
+켜고 해소본을 커밋한다(WN과 같은 관례).
+
+### 실측 2 — `nft`가 initrd에 더하는 것은 다섯, 1,386,600바이트다
+
+재귀 `DT_NEEDED` 열둘 중 여덟(`libc` · `ld-linux` · `libedit` · `libgmp` · `libmnl` ·
+`libtinfo` · `libbsd` · `libmd`)이 initrd에 이미 있다. 새것은 다섯이다.
+
+| 파일 | 바이트 | 패키지 |
+|---|---|---|
+| `nft` | 26,776 | `nftables 1.1.3-1` |
+| `libnftables.so.1` | 1,015,256 | `libnftables1 1.1.3-1` |
+| `libnftnl.so.11` | 217,312 | `libnftnl11 1.2.9-1` |
+| `libxtables.so.12` | 67,504 | `libxtables12 1.8.11-2` |
+| `libjansson.so.4` | 59,752 | `libjansson4 2.14-2+b3` |
+
+압축 전 initrd(111,232,000바이트)의 1.25%다. 위험 3은 닫혔다. sysroot 층에 없는
+패키지 넷(`nftables` · `libnftables1` · `libnftnl11` · `libxtables12` · `libjansson4`)을
+M1이 Dockerfile에 더한다. `libxtables`는 nft가 옛 `iptables` 확장을 해석하려고
+링크할 뿐 우리 규칙은 안 쓴다 — 그래도 `NEEDED`라 빼면 nft가 안 뜬다.
+
+plan Task 2 Step 2의 `cpio -t < initrd.cpio`는 0줄을 냈다. initrd가 gzip이다
+(`make_initrd.sh` 461행). `zcat initrd.cpio | cpio -it`로 다시 봤다.
+
+### 실측 3 — 기본 규칙이 이 커널에 그대로 올라간다
+
+```
+FWM0-LOAD file=/tmp/fw/base.nft rc=0 err=[;]
+FWM0-RULES table ip tars { chain input { type filter hook input priority filter; policy drop;
+  iif "lo" accept; ct state established,related accept; ct state invalid drop;
+  tcp dport 7070 accept; udp dport 7071 accept; }; };
+```
+
+include한 파일의 두 줄이 chain 안에 펼쳐져 있다 — 결정 4의 "파일 한 줄이 규칙 한
+줄"이 그대로다. nft는 `priority 0`을 `priority filter`라는 이름으로 되돌려 보여 준다.
+
+### 실측 4 — include glob은 디렉터리가 없어도, 비어도 에러가 아니다
+
+`/tmp/nftables.d`를 지운 채로, 빈 채로 두 번 올려 둘 다 `rc=0`이고 기본 세 줄만
+섰다. 그래서 M1의 `init`은 `/config`가 안 붙은 부팅이나 `nftables.d`가 없는 기계를
+따로 다루지 않는다 — 같은 파일 하나를 늘 올린다.
+
+### 실측 5 — `policy drop` 아래에서 DHCP가 처음부터 다시 서고, 나가는 길의 답이 온다
+
+```
+FWM0-OUTUDP rc=0 got=[ECHO-FWM0OUTU]
+FWM0-OUTTCP rc=0 got=[ECHO-FWM0OUTT]
+FWM0-FLUSHED 0
+FWM0-DHCP rc=0 secs=5 addr=[10.0.2.15/24]
+```
+
+규칙을 올린 뒤 `dhcpcd -x`로 manager를 멈추고 주소를 비운 다음 `dhcpcd -1 -4 eth0`로
+DISCOVER부터 다시 했다. 5초에 같은 주소다. 그 뒤의 나가는 UDP · TCP(컨테이너의
+perl echo)도 답을 받았다. 위험 1은 닫혔다 — 67→68 허용 줄은 필요 없다. dhcpcd가
+raw socket으로 받아 input hook 앞이라는 짐작과 맞지만, 이 측정이 가르는 것은
+결과이고 경로는 아니다.
+
+### 실측 6 — 막힌 TCP는 연결되고 0바이트이며, SLIRP은 안 끊는다
+
+```
+FWM0-PROBE pre  tcp 45472 connected rc=0   bytes=8 got=[FWM0TCPC] ms=3
+FWM0-PROBE post tcp 45470 connected rc=0   bytes=8 got=[FWM0TCPA] ms=22
+FWM0-PROBE post tcp 45472 connected rc=142 bytes=0 got=[]         ms=5012
+```
+
+`rc=142`는 bash `read -t`의 타임아웃(128+14)이다. 확인 5대로 `connect`는 늘 성공하므로
+판정은 `bytes`다. SLIRP은 게스트가 SYN을 버려도 체인 쪽 연결을 끊지 않아, 음성
+판정 하나가 읽기 타임아웃을 꽉 쓴다. M1 체인의 음성 검사는 타임아웃을 짧게(2초 —
+IN의 음성 검사와 같은 값) 두고, 양성 22ms와의 간격이 넉넉하다는 것이 근거다.
+
+### 실측 7 — UDP도 연 것만 닿는다
+
+```
+FWM0-UDPB [FWM0UDPpre45471]    FWM0-UDPD [FWM0UDPpre45473]     (규칙 전)
+FWM0-UDPB [FWM0UDPpost45471]   FWM0-UDPD []                    (규칙 후)
+```
+
+게스트의 `nc -u -l`이 파일에 받고 스크립트가 표지 뒤에 낸다. 표지 글자는 컨테이너가
+보낸 것이라 게스트에 친 명령에 없다(위험 4). M2의 UDP 판정은 이 모양이다.
+
+### 실측 8 — `nft -f`는 원자적이다. 문법 오류는 아무것도 안 바꾼다
+
+```
+FWM0-LOAD file=/tmp/fw/base.nft rc=1 err=[In file included from /tmp/fw/base.nft:9:5-36:;
+  /tmp/nftables.d/bad.nft:1:21-21: Error: syntax error, unexpected newline;tcp dport 7072 acept; ^;]
+FWM0-RULES (load 때와 같다 — tcp dport 7070 · udp dport 7071이 그대로)
+```
+
+좋은 규칙이 선 상태에서 include에 틀린 파일을 넣고 다시 올리면 `rc=1`이고 표는 그대로다.
+맨 위의 `flush ruleset`까지 한 트랜잭션이라 그것도 안 됐다. 에러는 파일 · 행 · 열을
+짚는다 — 결정 5의 "stderr를 콘솔로 흘린다"가 사람에게 그대로 쓸모 있다.
+
+결정 5의 갈래 2가 맞다. 부팅에서 첫 `nft -f`가 실패하면 "앞의 규칙"이 없으므로
+열린 상태 그대로다. 그래서 include 없는 기본 규칙 전용 파일을 한 번 더 올려야 닫힌다.
+
+### 실측 9 — 하네스가 틀린 것 둘 (판정과 무관)
+
+`FWM0-LISTEN 0 tcp, 0 udp`는 grep 패턴이 틀린 것이다 — `pre` 탐침이 넷 다 닿아
+리스너가 있었다. `COUNTERS`는 `grep -A1 '^Udp:'`가 `UdpLite:`까지 잡아 헤더 줄을
+냈다. 둘 다 가리려던 것이 없어 다시 돌리지 않았다.
+
+### M0이 M1에 넘기는 것
+
+- 커널: 실측 1의 다섯을 켜고 해소본 열다섯 줄을 커밋한다.
+- 도구: 실측 2의 다섯 파일. Dockerfile에 패키지 넷(층 10), `guest_tools.sh`에 한 줄씩.
+- 규칙 파일 둘: 결정 3 그대로(include 경로만 `/config/nftables.d/*.nft`)와 include 없는
+  것. 맨 위의 `flush ruleset`은 부팅 첫 회에는 필요 없지만 사람이 셸에서 같은 파일을
+  다시 올릴 때 표가 겹치지 않게 둔다.
+- `init`: `/config` 유무와 `nftables.d` 유무를 가리지 않고 같은 파일을 올린다(실측 4).
+- 체인: 음성 TCP는 `bytes=0`과 짧은 읽기 타임아웃(실측 6).

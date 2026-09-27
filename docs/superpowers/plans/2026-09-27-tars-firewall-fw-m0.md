@@ -151,7 +151,7 @@ ls -la /tmp/fw/seed/fw /tmp/fw/seed/fw/lib
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   cd init && zig build >/dev/null && cd ../terminal && ./prepare.sh >/dev/null &&
   cd ../kernel && ./make_initrd.sh >/dev/null &&
-  cpio -t < initrd.cpio 2>/dev/null | grep -E "lib(nft|mnl|jansson|gmp|edit|xtables|c)\." | sort'
+  zcat initrd.cpio | cpio -it 2>/dev/null | grep -E "lib(nft|mnl|jansson|gmp|edit|xtables|c)\." | sort'
 ls /tmp/fw/seed/fw/lib
 ```
 
