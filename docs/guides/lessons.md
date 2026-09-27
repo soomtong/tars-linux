@@ -655,6 +655,10 @@ root ns에는 새 인터페이스가 생긴 것과 같다 — 부팅 뒤 꽂는 
 수식어, `$s[= ]`는 배열 첨자로 읽힌다 — 셸 변수 뒤에 글자가 오면 `${r}`로 감싼다. `du`는
 `dua`의 alias라 `/usr/bin/du`로 부른다(WL-M0).
 
+70. 커널의 `scripts/config`는 심볼 이름을 대문자로 바꾼다. `MT76x0U`처럼 소문자가 섞인
+심볼은 `--keep-case` 없이 켜면 없는 이름(`MT76X0U`)이 적히고 `olddefconfig`가 조용히 버린다.
+켠 뒤에는 해소된 `build/.config`에 `=y`로 남았는지 반드시 센다(2026-09-28 USB 동글 측정).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -905,6 +909,17 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
       늦은 인터페이스를 받는다) · Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의 firmware가
       linux-firmware-20260916에 없다 — 커널을 올릴 때 같이 본다) · 보드별 변형 firmware
       (ath11k `nfa765` · ath12k `ncm865`) · WPA-Enterprise · 실칩 판정(실기가 생기면).
+      USB 동글의 비용은 2026-09-28에 쟀다(코드는 안 고쳤다). 코드는 0줄이다 — `tars-wifi`와
+      hook이 드라이버를 안 가린다. 게이트는 정적 검사뿐이다(QEMU에 USB 무선이 없다).
+      층 A(rtw88 USB 일곱 · rtw89 8851BU · 8852BU · MT7921U · MT7925U)는 커널 +98KB,
+      새 firmware 셋 127KB(`rtw88/rtw8812a` · `8814a` · `8821a`) — 나머지는 PCIe판과 같은
+      파일이다. 부작용 없음, 넣을 만하다. 층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb ·
+      ath9k_htc)는 커널 +348KB · firmware 약 0.4MB이고 `ATH9K_PCI`가 따라 켜진다.
+      `RTL8XXXU`는 +82KB · 약 0.3MB인데 `NEW_LEDS`가 있어야 붙고, 그것이 `HID_APPLE` ·
+      `INPUT_LEDS`를 끌고 온다 — 실제 Apple 키보드의 fn 키가 커널에서 바뀔 수 있어
+      `keyboard=apple`과 부딪칠 수 있고, 게이트는 못 본다. 넣으려면 `HID_APPLE`을 먼저
+      정한다. `mt7601u.bin` · `mt7662.bin` · `mt7662_rom_patch.bin`은 맨 위 이름이라
+      `WHENCE`의 `Link:`로 실체를 찾고, `rtlwifi/rtl8723bu_bt.bin`은 이 릴리스에 없다.
 - [ ] service 체인 부팅 D의 ssh 제어 연결이 한 번 `Connection timed out during banner
       exchange`로 죽었다(2026-09-28 WL 루트 게이트 1차, CT-M2 3/3회차). 평소에는 firmware가
       있든 없든 0.3초 안팎이고(각 3회, 259~377ms) 한도는 `ConnectTimeout=5`다. 한 번뿐이라
