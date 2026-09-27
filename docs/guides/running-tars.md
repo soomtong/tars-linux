@@ -362,6 +362,78 @@ tars-init: firewall up from /etc/tars/firewall-base.nft without /config/nftables
 IPv4만 거른다. 커널에 IPv6가 없어서 지금은 구멍이 아니지만, IPv6가 들어오는 날
 규칙의 표도 바뀌어야 한다(FW design 위험 6). 나가는 방향은 거르지 않는다.
 
+### 부팅 때 뜨는 서비스
+
+`/config/services.d/`에 실행 파일을 두면 `init`이 부팅 때 그것을 띄우고 지켜본다.
+죽으면 1초 뒤에 다시 띄우고, 10초를 못 버티고 세 번 연달아 죽으면 포기한다 — 화면의
+터미널과 콘솔 셸이 받는 것과 같은 규칙이다. 기본으로는 아무것도 안 뜬다.
+
+```sh
+#!/bin/sh
+# /config/services.d/hello — 8080에 붙는 사람에게 인사 한 줄
+while true; do
+  echo "hello from tars" | nc -l -p 8080
+done
+```
+
+규칙.
+
+- 파일 하나가 서비스 하나다. 인자는 없다 — 필요하면 스크립트 안에 적는다. 오래
+  도는 프로그램 하나를 띄우는 것이면 준비를 마친 뒤 `exec`로 끝낸다(sshd 템플릿이
+  그렇게 한다).
+- 실행 비트가 있어야 한다(`chmod +x`). 없으면 띄우지 않고 이유를 한 줄 찍는다.
+- shebang은 `#!/bin/sh`다. 게스트의 `/bin`에는 `sh`(bash) 하나만 있어서
+  `#!/bin/bash`는 execve가 실패한다(로그에 `errno 2`).
+- 이름순으로 여덟까지 뜬다. `.`으로 시작하는 이름은 무시한다. 링크는 따라간다.
+- 고친 것은 다음 부팅에 반영된다. 부팅 중에 다시 읽지 않는다.
+- stdin은 `/dev/null`이고 stdout · stderr는 콘솔이다. 서비스가 찍는 것은 부팅
+  로그에 섞여 나온다.
+
+콘솔에서 읽는 줄.
+
+| 줄 | 뜻 |
+|---|---|
+| `tars-init: 2 services from /config/services.d` | 고른 수. 디렉터리가 없으면 `no /config/services.d, 0 services` |
+| `tars-init: service hello is not an executable file, skipped` | 실행 비트가 없다(또는 디렉터리다) |
+| `tars-init: started service hello (pid 71, /config/services.d/hello)` | 떴다. 다시 뜰 때마다 한 줄 |
+| `tars-init: execve /config/services.d/hello failed (errno 2)` | shebang의 인터프리터나 링크 대상이 없다 |
+| `tars-init: giving up on service hello after 3 fast exits` | 셋 연달아 빨리 죽었다. 이 부팅에는 다시 안 띄운다 |
+
+### ssh로 붙기
+
+sshd는 서비스 하나로 들어 있다. 두 가지를 하면 켜진다.
+
+```sh
+ln -s /etc/tars/services/sshd /config/services.d/sshd
+cat >> /config/ssh/authorized_keys     # 당신의 공개 키 한 줄을 붙여 넣는다
+```
+
+`/config/ssh`가 없으면 먼저 `mkdir -m 700 /config/ssh`. 다음 부팅에 sshd가 뜨고, 첫
+부팅에는 호스트 키를 `/config/ssh/ssh_host_ed25519_key`에 구워 그 지문을 콘솔에
+찍는다. 키는 설정 디스크에 남으므로 재부팅해도 클라이언트가 "호스트 키가
+바뀌었다"를 보지 않는다. 그 파일을 지우면 다음 부팅에 새로 구워진다.
+
+```
+sshd: generated a host key in /config/ssh
+sshd: host key 256 SHA256:Fg4Y… tars host key (ED25519)
+Server listening on 0.0.0.0 port 22.
+```
+
+로그인은 root로, 키로만 된다. 비밀번호는 처음부터 없다. `firewall=on`이면 22번도
+열어야 한다 — `/config/nftables.d/ssh.nft`에 `tcp dport 22 accept`. LAN에 내놓는
+기계라면 방화벽을 켜고 여는 범위를 좁혀라(`ip saddr 192.168.0.0/24 tcp dport 22
+accept`). 게이트가 재는 것은 QEMU 안의 로그인까지이고, 바깥에 노출된 sshd의 안전은
+재지 않는다.
+
+ssh로 붙은 셸은 콘솔과 같다 — `tars.conf`의 `shell`, 같은 rc, 같은 히스토리 파일,
+같은 `TZ`와 `PATH`. `init`이 부팅 때 `/etc/passwd`의 root 셸 자리와
+`/etc/ssh/sshd_config.d/tars-env.conf`를 그렇게 써 둔다.
+
+터미널 이름은 `xterm` · `xterm-256color` · `xterm-ghostty` · `xterm-kitty` ·
+`alacritty` · `wezterm` · `foot` · `tmux-256color` · `screen-256color`를 안다. 그 밖의
+이름으로 붙으면 `less`가 "terminal is not fully functional"을 찍고 RETURN을
+기다린다 — `TERM=xterm-256color ssh …`로 붙으면 된다.
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
