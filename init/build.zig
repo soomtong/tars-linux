@@ -60,6 +60,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(install_exe);
 
+    // CT-M1: 서비스를 멈추고 띄우는 명령. tars-install과 같은 까닭으로 따로 된 exe이고
+    // 같은 타깃 · 모드다. make_initrd.sh가 zig-out/bin/tars-service를 usr/bin에 싣는다.
+    const service_mod = b.createModule(.{
+        .root_source_file = b.path("src/service_cli.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+        .single_threaded = true,
+    });
+    const service_exe = b.addExecutable(.{
+        .name = "tars-service",
+        .root_module = service_mod,
+    });
+    b.installArtifact(service_exe);
+
     // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //
     // project_build_host_arch의 4번 규칙: "이 산출물은 누가 실행하는가"를

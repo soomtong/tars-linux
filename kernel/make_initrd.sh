@@ -100,6 +100,10 @@ chmod 0755 "$WORKDIR/init"
 cp ../init/zig-out/bin/tars-install "$WORKDIR/usr/bin/tars-install"
 chmod 0755 "$WORKDIR/usr/bin/tars-install"
 
+# CT-M1: 서비스 제어 명령. tars-install과 같은 까닭으로 정적이고 /usr/bin이다.
+cp ../init/zig-out/bin/tars-service "$WORKDIR/usr/bin/tars-service"
+chmod 0755 "$WORKDIR/usr/bin/tars-service"
+
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
