@@ -17,7 +17,7 @@ design은 `docs/superpowers/specs/2026-09-28-tars-wireless-design.md`(결정 7 �
 | `74cc5fa` · `49fc2f8` | design · M0 실측(코드 0줄) |
 | `2d280c3` | M1 — 커널 config · firmware 목록과 받는 스크립트 · initrd 꼬리 · tools 검사 1b |
 | `4267cdf` | M2 — `wifi.zig` · `tars-wifi` · hook `10-tars-wifi` · 게스트 도구 넷 · Dockerfile 층 12 |
-| M3 커밋 | 열일곱번째 체인 `wifi/check.sh` · `wifi/ap.sh` · 가이드 · 기억 · 표 |
+| `58a25b5` | 열일곱번째 체인 `wifi/check.sh` · `wifi/ap.sh` · 가이드 · 기억 · 표 |
 
 루트 게이트 17체인 3/3(약 59분 45초, `FAIL` 0줄, 2026-09-28). 1차는 CT-M2 3회차의 ssh 배너 시간
 초과 한 번으로 멈췄다 — firmware 유무로 각 3회 재서 평소 0.3초임을 확인하고(한도 5초) 다시
