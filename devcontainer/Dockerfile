@@ -15,6 +15,10 @@ FROM debian:trixie-slim
 # 못 쟀고(design 실측 15), UT-M2가 27MB를 더하면 그 질문이 다시 살아난다.
 # 그때 재려고 이미지를 또 굽지 않으려고 지금 넣는다. 커널은 CONFIG_RD_ZSTD를
 # 이미 켜 뒀으므로 카드는 커널 재설정 없이 손에 있다.
+#
+# SV-M2가 openssh-client를 더한다. service 체인이 게스트의 sshd에 붙는 ssh ·
+# ssh-keyscan · ssh-keygen이다 — 게스트에 넣는 것(아래 층 11)과 별개로 컨테이너
+# (arm64) 자신이 쓴다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         gcc-multilib-x86-64-linux-gnu \
@@ -38,6 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         unzip \
         e2fsprogs \
         zstd \
+        openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # initrd에 들어갈 x86_64 유저랜드. 컨테이너가 arm64라서 컨테이너 자신의
@@ -242,6 +247,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # libgmp · libmnl · libtinfo · libbsd · libmd · 로더)은 앞 층들에 이미 있어서
 # 새것은 다섯, 1,386,600바이트다(FW-M0 실측 2). libxtables는 nft가 옛 iptables
 # 확장을 해석하려고 링크할 뿐 우리 규칙은 안 쓰지만, NEEDED라 빼면 nft가 안 뜬다.
+#
+# ── SV-M2: 층 11(sshd) ───────────────────────────────────────────────
+#
+# sshd와 ssh-keygen, sshd가 연결마다 exec하는 sshd-session · sshd-auth(10.0부터 셋으로
+# 갈렸다). 재귀 DT_NEEDED 스물하나 중 열넷은 앞 층들에 이미 있고(Kerberos 계열은 curl ·
+# git이 들여놓았다) 새것은 일곱, 2,124,688바이트다. 그 74%가 libsqlite3이고
+# sshd-session → libwtmpdb → sqlite로 온다(SV-M0 실측 1). ncurses-term은 게스트에
+# 넣지 않는다 — make_initrd.sh가 거기서 terminfo 다섯을 골라 굽는다(SV 결정 8).
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -355,6 +368,16 @@ RUN dpkg --add-architecture amd64 \
         libnftnl11:amd64 \
         libxtables12:amd64 \
         libjansson4:amd64 \
+        openssh-server:amd64 \
+        openssh-client:amd64 \
+        libwtmpdb0:amd64 \
+        libsqlite3-0:amd64 \
+        libcap-ng0:amd64 \
+        libwrap0:amd64 \
+        libpam0g:amd64 \
+        libaudit1:amd64 \
+        libcrypt1:amd64 \
+        ncurses-term \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*

@@ -298,4 +298,14 @@ GUEST_TOOLS=(
   #
   # 새 라이브러리(FW-M0 실측 2): libnftables · libnftnl · libxtables · libjansson
   usr/sbin/nft:usr/bin/nft
+
+  # ── 층 11 · sshd(SV-M2) ─────────────────────────────────────────────
+  # sshd는 dhcpcd처럼 /usr/sbin에 살아서 /usr/bin으로 옮긴다(PATH가 /usr/bin:/bin).
+  # sshd-session · sshd-auth는 sshd에 컴파일된 경로(/usr/lib/openssh/) 그대로여야
+  # 한다 — 옮기면 연결마다 exec가 실패한다(SV-M0 실측 1). 사람이 부르는 이름이
+  # 아니지만 install_tool이 라이브러리까지 따라가 주므로 이 목록에 둔다.
+  usr/sbin/sshd:usr/bin/sshd
+  usr/lib/openssh/sshd-session:usr/lib/openssh/sshd-session
+  usr/lib/openssh/sshd-auth:usr/lib/openssh/sshd-auth
+  usr/bin/ssh-keygen:usr/bin/ssh-keygen
 )

@@ -311,12 +311,19 @@ cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
 # 내고, git이 커밋 작성자를 유추하려다 실패한다. 한 줄이면 된다.
 #
 # 셸을 /bin/sh로 적는 것에 뜻이 있다 — 위의 링크와 같은 자리를 가리켜야
-# 하고, tars.conf가 셸을 바꿔도 이 줄은 안 바뀐다.
+# 한다. 이 파일에서는 안 바뀌지만, 부팅 때 init이 root 줄의 셸 자리를
+# tars.conf의 셸로 다시 쓴다(SV 결정 9) — ssh 세션의 셸이 그 자리에서 온다.
+#
+# SV-M2: sshd의 privilege separation 사용자와 그 그룹. 없으면 sshd가
+# "Privilege separation user sshd does not exist"로 안 뜬다(SV-M0 실측 4).
+# /usr/sbin/nologin은 게스트에 없지만 sshd는 그 자리를 실행하지 않는다.
 cat > "$WORKDIR/etc/passwd" <<'EOF'
 root:x:0:0:root:/:/bin/sh
+sshd:x:100:65534::/run/sshd:/usr/sbin/nologin
 EOF
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
+nogroup:x:65534:
 EOF
 
 # LB-M2. 이름 풀이(LB design 결정 5). 셋이 한 묶음이다.
@@ -393,6 +400,41 @@ table ip tars {
 }
 EOF
 
+# SV-M2. sshd의 자리 셋과 템플릿(SV design 결정 6).
+#   /run/sshd                        privsep 디렉터리. 비어 있어야 한다(SV-M0 실측 4)
+#   /etc/ssh/sshd_config             키는 /config/ssh에, 비밀번호는 없다
+#   /etc/ssh/sshd_config.d/          init이 부팅 때 tars-env.conf를 쓴다(SV 결정 9)
+#   /etc/tars/services/sshd          사람이 /config/services.d에 링크로 켠다
+mkdir -p "$WORKDIR/run/sshd" "$WORKDIR/etc/ssh/sshd_config.d" "$WORKDIR/etc/tars/services"
+chmod 755 "$WORKDIR/run/sshd"
+cat > "$WORKDIR/etc/ssh/sshd_config" <<'EOF'
+# TARS sshd (SV design decision 6). Do not edit; this file comes from the initrd.
+# init writes sshd_config.d/tars-env.conf at boot so sessions get the console's env.
+Include /etc/ssh/sshd_config.d/*.conf
+HostKey /config/ssh/ssh_host_ed25519_key
+AuthorizedKeysFile /config/ssh/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+UsePAM no
+EOF
+cat > "$WORKDIR/etc/tars/services/sshd" <<'EOF'
+#!/bin/sh
+# TARS sshd service (SV design decision 6). Turn it on with
+#   ln -s /etc/tars/services/sshd /config/services.d/sshd
+# and put your public key in /config/ssh/authorized_keys. With firewall=on, also
+# open port 22 in /config/nftables.d/ (for example: tcp dport 22 accept).
+key=/config/ssh/ssh_host_ed25519_key
+if [ ! -e "$key" ]; then
+  mkdir -p /config/ssh && chmod 700 /config/ssh || exit 1
+  ssh-keygen -q -t ed25519 -N '' -C 'tars host key' -f "$key" || exit 1
+  echo "sshd: generated a host key in /config/ssh"
+fi
+echo "sshd: host key $(ssh-keygen -l -f "$key.pub")"
+exec /usr/bin/sshd -D -e -f /etc/ssh/sshd_config
+EOF
+chmod 755 "$WORKDIR/etc/tars/services/sshd"
+
 # /usr/share/fish/*는 fish 패키지가 아니라 fish-common(arch: all)이 준다.
 mkdir -p "$WORKDIR/usr/share/fish"
 cp -r "$SYSROOT/usr/share/fish/functions" "$WORKDIR/usr/share/fish/"
@@ -452,6 +494,26 @@ mkdir -p "$WORKDIR/usr/share/terminfo/x"
 cp "$SYSROOT/usr/share/terminfo/x/xterm" "$WORKDIR/usr/share/terminfo/x/xterm"
 cp "$SYSROOT/usr/share/terminfo/x/xterm-256color" \
   "$WORKDIR/usr/share/terminfo/x/xterm-256color"
+
+# SV-M2 결정 8. ssh로 붙는 사람의 터미널이 보내는 이름들. 없으면 less가
+# "terminal is not fully functional"을 찍고 RETURN을 기다린다(SV-M0 실측 7).
+# ncurses-term 통째(1,802개 · 12MB)가 아니라 흔한 것만 고른다.
+#
+# xterm-ghostty · xterm-kitty는 Debian의 ncurses-term에 없다 — ghostty · kitty라는
+# 이름으로만 있다. infocmp로 풀어 첫 줄에 이름을 더하고 tic으로 다시 굽는다
+# (SV 실측 14). tic은 컨테이너(arm64)의 것이지만 terminfo는 형식이 정해진
+# 바이트라 게스트에서 그대로 읽힌다.
+TI_SRC="$SYSROOT/usr/share/terminfo"
+for pair in ghostty:xterm-ghostty kitty:xterm-kitty; do
+  base="${pair%%:*}" alias="${pair#*:}"
+  infocmp -x -A "$TI_SRC" "$base" | sed "s/^${base}|/${alias}|${base}|/" > "$WORKDIR/ti.src"
+  tic -x -o "$WORKDIR/usr/share/terminfo" "$WORKDIR/ti.src"
+done
+rm -f "$WORKDIR/ti.src"
+for t in a/alacritty w/wezterm f/foot t/tmux-256color s/screen-256color; do
+  mkdir -p "$WORKDIR/usr/share/terminfo/${t%%/*}"
+  cp "$TI_SRC/$t" "$WORKDIR/usr/share/terminfo/$t"
+done
 
 # zsh는 바이너리 하나가 아니다. zle(줄 편집), complete, parameter 같은
 # "내장처럼 보이는" 기능 대부분이 실행 중에 dlopen되는 .so 모듈이고, 그것을
