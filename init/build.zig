@@ -199,6 +199,19 @@ pub fn build(b: *std.Build) void {
         .root_module = login_test_mod,
     });
 
+    // CT-M1: 통로 · 감독 규칙 · 글자. login_test와 같은 이유로 host_target이다 —
+    // 규칙은 anytype으로 필드만 만져 가짜 구조체로 보고, 소켓은 /tmp에 연다.
+    const control_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/control_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const control_test = b.addExecutable(.{
+        .name = "control_test",
+        .root_module = control_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -213,4 +226,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(disk_test).step);
     test_step.dependOn(&b.addRunArtifact(services_test).step);
     test_step.dependOn(&b.addRunArtifact(login_test).step);
+    test_step.dependOn(&b.addRunArtifact(control_test).step);
 }

@@ -27,7 +27,7 @@ const SCAN_MAX: usize = 64;
 /// /tmp 경로가 그보다 조금 길다.
 const PATH_MAX: usize = 128;
 
-const LABEL_PREFIX = "service ";
+pub const LABEL_PREFIX = "service ";
 const LABEL_MAX: usize = LABEL_PREFIX.len + NAME_MAX;
 
 fn failed(rc: usize) ?linux.E {
