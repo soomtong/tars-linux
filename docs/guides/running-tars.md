@@ -102,7 +102,7 @@ VirtualBox·VMware에서 직접 띄워 보지는 않았다.
 | 펌웨어 | BIOS · UEFI 아무거나 | El Torito 항목 둘이 한 ISO에 있다 |
 | Secure Boot | 끈다 | 아래 실기 절과 같은 이유다 |
 | 디스크 | 없어도 된다 | 붙이면 설정이 남는다(아래) |
-| 네트워크 | virtio-net이나 e1000e면 된다 | `tars.conf`에 `net=dhcp`를 적으면 `init`이 dhcpcd를 띄운다(NW). `q35`의 기본 NIC `e1000e`는 잡히고(WN), `pc`의 기본 NIC `e1000`은 안 잡힌다 |
+| 네트워크 | virtio-net이나 e1000e면 된다 | `tars.conf`에 `net=dhcp`를 적으면 `init`이 dhcpcd를 띄우고 감독한다(NW · DS). `q35`의 기본 NIC `e1000e`는 잡히고(WN), `pc`의 기본 NIC `e1000`은 안 잡힌다 |
 
 키보드는 따로 줄 것이 없다. VM이 기본으로 주는 PS/2(`AT Translated Set 2
 keyboard`)를 `init`이 capability로 골라 잡는다. USB 키보드만 있는 VM도 된다 —
@@ -415,7 +415,9 @@ tars-service restart sshd
 ```
 terminal        running   pid 35   up 14s
 console shell   running   pid 36   up 14s
-service sshd    running   pid 38   up 14s
+service dhcpcd  running   pid 37   up 14s
+service chronyd running   pid 38   up 14s
+service sshd    running   pid 40   up 14s
 service web     stopped
 service broken  given up
 ```
@@ -428,6 +430,10 @@ service broken  given up
   "빨리 죽었다"로 세지 않는다.
 - ssh로 붙어서 `stop sshd`를 쳐도 지금 세션은 안 끊긴다. 새 접속만 막힌다.
 - terminal과 콘솔 셸은 보이기만 한다. 멈추면 명령을 칠 자리가 사라진다.
+- `service dhcpcd` · `service chronyd`는 `services.d`가 아니라 `tars.conf`에서 온다 —
+  `net=dhcp`면 dhcpcd, 거기에 `ntp`가 켜져 있으면 chronyd다. 다른 서비스와 똑같이 죽으면
+  다시 뜨고 `tars-service`로 다룬다. dhcpcd를 `restart`하면 주소가 약 6초 빠진다(SIGTERM을
+  받은 dhcpcd는 주소를 지우고 간다). `services.d`에 같은 이름을 두면 건너뛴다.
 - 명령은 원하는 상태가 될 때까지 8초까지 기다린다. 종료 코드: 0 됐다 · 1 `init`이
   거절했다(`error: …`) · 2 `init`에 닿지 못했다 · 3 시간 안에 안 됐다 · 64 사용법.
 

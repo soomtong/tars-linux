@@ -2,7 +2,7 @@
 
 접두사: DS
 
-Status: M1 끝났다(2026-09-27) — 실측 1~10. 두 데몬이 감독 목록에 있고 이웃 체인 넷이 초록이다. 새 판정은 M2.
+Status: 끝났다(2026-09-27) — M0~M2, 결정 7 · 위험 5 · 실측 1~13. 새 체인 없이 net 체인이 검사 셋(29 · 30 · 31), service 체인이 검사 둘(17 · 26)에 판정을 더했다. 루트 게이트 3/3(52분 42초).
 
 관련 문서: `2026-09-27-tars-boot-services-design.md`(SV. 이 사이클이 그 비목표 5를
 목표로 옮긴다) · `2026-09-27-tars-service-control-design.md`(CT. `tars-service`와 그
@@ -367,3 +367,59 @@ net 체인을 한 `docker run` 안에서 다시 돌려 게스트 로그 다섯�
 - `status` 표에 두 줄이 늘었다. service 체인은 흔들리지 않았다 — 그 체인의 설정 디스크가
   `net`을 안 켜는지, 켜는데 표를 줄 수로 안 세는지를 M2 plan이 읽고 적는다.
 - 반사실 둘(`-B` 빼기 · `CLOEXEC` 빼기)과 가이드 · 루트 게이트.
+
+## DS-M2가 실행으로 증명한 것
+
+2026-09-27. plan은 `plans/2026-09-27-tars-daemon-supervision-ds-m2.md`. `init` 코드는 안
+고쳤다. 판정 다섯을 net 체인(검사 29 · 30 · 31)과 service 체인(검사 17 · 26)에 더했다.
+
+### 실측 11 — 새 판정 다섯이 첫 판에 초록이다
+
+    net exit=0 fails=0 secs=166
+    service exit=0 fails=0 secs=69
+    a killed dhcpcd (pid 37) came back as pid 175 and leased 10.0.2.15 again
+    tars-service restart chronyd, and the new chronyd selected 10.0.2.2 again
+    waiting 35s so a 30s restart loop would have shown
+    after 40s the ntp=dhcp chronyd is still the one started at boot
+    status showed the terminal, the console shell, dhcpcd and four services, flaky given up, no chronyd
+    sleeper's child holds no socket and no power button fd from init
+
+검사 29는 콘솔에서 `kill -9 $(pgrep -x dhcpcd)`를 친다. SIGKILL이라 주소가 남고, 새
+dhcpcd의 lease는 `-j` 줄머리 `[175]:`로 옛 것과 갈린다. net 체인이 118초에서 166초가
+된 것은 대부분 검사 31의 대기다 — 부팅 B가 뜬 지 5초에 그 자리에 와서 35초를 잤다.
+
+### 실측 12 — 반사실 둘이 예측한 자리에서 잡혔다
+
+`-B`를 뺐다(net 체인).
+
+    FAIL: init never reaped the killed dhcpcd (pid 74)
+      tars-init: service dhcpcd exited (pid 37, status 0, lived 1s)
+      tars-init: service dhcpcd exited (pid 73, status 0, lived 1s)
+      tars-init: service dhcpcd exited (pid 74, status 0, lived 1s)
+
+쥔 pid가 1초 만에 배경으로 갈라지며 exit 0으로 끝나고, 감독자는 셋을 세고 포기한다.
+그런데 검사 1~28은 전부 초록이었다 — 갈라진 손자들이 주소를 받아 오기 때문이다. 위험 4
+("살아 있다"만 보면 넓게 읽힌다)가 실제로 일어나는 모양이고, "쥔 pid가 곧 dhcpcd인가"를
+직접 보는 검사 29만이 그것을 가른다.
+
+`CLOEXEC`를 뺐다(service 체인).
+
+    FAIL: sleeper's sleep holds a power button fd (total 0
+    lr-x------ 1 root root 64 Sep 27 11:59 3 -> /dev/input/event0)
+
+DS-M0의 기준선과 같은 fd 3이다. 둘 다 `git checkout`으로 되돌렸다.
+
+### 한계 — 검사 31에는 반사실이 없다
+
+옛 코드(30초 기다림 뒤 `exit(0)`)는 `3f56ff9`에서 로그 줄과 함께 지워졌다. 되살리면
+검사 21도 함께 빨개져서 무엇이 잡았는지 안 갈린다(plan 결정 M2-E). 검사 31이 증명하는
+것은 "지금 코드가 40초 동안 chronyd를 다시 안 띄운다"이고, "옛 루프를 잡는다"는
+짐작이다.
+
+### 실측 13 — 루트 게이트 3/3
+
+    exit=0 secs=3162
+    TARS check PASS: all chains 3/3 consecutive runs succeeded
+
+16체인 × 3, `FAIL` 0줄, 52분 42초. CT가 닫힐 때(50분 32초)보다 2분 10초 늘었다 — net 체인이
+한 판에 48초씩 는 것(주로 검사 31의 대기)이 세 판 쌓인 크기다.
