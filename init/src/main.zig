@@ -8,6 +8,7 @@ const environ = @import("environ.zig");
 const net = @import("net.zig");
 const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
+const services = @import("services.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -295,19 +296,32 @@ fn setupControllingTerminal() void {
     if (fd > 2) _ = linux.close(fd);
 }
 
+/// SV-M1 M1-C. 서비스는 콘솔을 제어 터미널로 잡지 않고, 콘솔의 입력을 안 읽는다.
+///
+/// setsid가 먼저인 이유 — 새 세션에는 제어 터미널이 없으므로 이 뒤로 서비스가
+/// 무엇을 열어도 콘솔이 제어 터미널이 되지 않는다(O_NOCTTY를 잊은 open 하나가
+/// 콘솔 셸의 SIGINT를 가로챌 수 있다). stdin을 /dev/null로 돌리는 이유 — 안
+/// 돌리면 서비스가 물려받은 fd 0(콘솔)을 읽어 사람이 콘솔 셸에 친 글자를
+/// 나눠 먹는다. stdout · stderr는 그대로다 — 서비스의 출력이 시리얼 로그에 남는
+/// 것이 로그 파일을 따로 두지 않는(비목표 3) 이 설계의 로그다.
+fn detachService() void {
+    _ = linux.setsid();
+    const rc = linux.open("/dev/null", .{ .ACCMODE = .RDONLY }, 0);
+    if (failed(rc)) |_| return;
+    const fd: i32 = @intCast(rc);
+    _ = linux.dup2(fd, 0);
+    if (fd != 0) _ = linux.close(fd);
+}
+
 /// 감독 대상의 종류. 무엇을 실행할지는 여기 없다 — 그것은 Child가
-/// 들고 있고, 설정을 읽은 뒤 main에서 한 번 정해진다. Kind는 "이 자식이
-/// 제어 터미널을 잡아야 하는가"와 로그 이름만 결정한다.
+/// 들고 있고, 설정을 읽은 뒤 main에서 한 번 정해진다. Kind는 fork한 자식이
+/// execve 전에 무엇을 준비하는가만 결정한다 — 콘솔 셸은 제어 터미널을 잡고,
+/// 서비스는 세션을 따로 갖고 stdin을 끊는다(SV-M1 M1-C). 로그 이름은
+/// `Child.label`이다(SV-M1 M1-D) — 서비스는 종류 하나에 이름이 여럿이다.
 const Kind = enum {
     terminal,
     console_shell,
-
-    fn name(self: Kind) []const u8 {
-        return switch (self) {
-            .terminal => "terminal",
-            .console_shell => "console shell",
-        };
-    }
+    service,
 };
 
 /// 탈출로 1(SC design 결정 8). 감독자가 포기하기 직전에 argv의 이 자리를
@@ -339,6 +353,11 @@ const MAX_FAST_RESTARTS: u32 = 3;
 
 const Child = struct {
     kind: Kind,
+    /// 로그에 찍는 이름. terminal과 콘솔 셸은 SV 전의 글자 그대로다 — 다른
+    /// 체인이 `started terminal` · `giving up on terminal` · `started console
+    /// shell`을 grep한다. 서비스는 `"service <이름>"`이고 `services.Entry`가
+    /// 버퍼를 든다.
+    label: []const u8,
     /// 실행할 바이너리. 로그에 찍는 것도 이 값이다.
     path: [:0]const u8,
     /// execve에 그대로 넘길 argv. argv[0]은 path와 같고 남는 자리는 null이다 —
@@ -371,13 +390,17 @@ fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
     const pid = linux.fork();
     if (failed(pid)) |e| {
         std.debug.print("tars-init: fork for {s} failed (errno {d})\n", .{
-            c.kind.name(), @intFromEnum(e),
+            c.label, @intFromEnum(e),
         });
         return -1;
     }
     if (pid == 0) {
         // 여기부터는 자식이다.
-        if (c.kind == .console_shell) setupControllingTerminal();
+        switch (c.kind) {
+            .terminal => {},
+            .console_shell => setupControllingTerminal(),
+            .service => detachService(),
+        }
         _ = linux.execve(c.path.ptr, &c.argv, envp);
         // execve가 돌아왔다는 것은 실패했다는 뜻이다.
         std.debug.print("tars-init: execve {s} failed\n", .{c.path});
@@ -394,7 +417,7 @@ fn start(c: *Child, envp: [*:null]const ?[*:0]const u8) void {
     // 경로까지 찍는다. "셸이 바뀌었는가"를 게이트가 확인할 수 있는 유일한
     // 줄이다 — 프로세스가 무엇을 exec했는지는 밖에서 볼 방법이 없다.
     std.debug.print("tars-init: started {s} (pid {d}, {s})\n", .{
-        c.kind.name(), pid, c.path,
+        c.label, pid, c.path,
     });
 }
 
@@ -481,11 +504,11 @@ fn supervise(
 
             if (linux.W.IFEXITED(status)) {
                 std.debug.print("tars-init: {s} exited (pid {d}, status {d}, lived {d}s)\n", .{
-                    c.kind.name(), pid, linux.W.EXITSTATUS(status), lived,
+                    c.label, pid, linux.W.EXITSTATUS(status), lived,
                 });
             } else {
                 std.debug.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
-                    c.kind.name(), pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
+                    c.label, pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
                 });
             }
 
@@ -514,7 +537,7 @@ fn supervise(
                     // 이 줄 둘이 이 기능의 사용자 인터페이스 전부다.
                     // "왜 내 rc가 안 먹지"가 로그 한 줄로 답이 되어야 한다.
                     std.debug.print("tars-init: {s} died {d} times fast, the rc files are the suspect; restarting it with {s}\n", .{
-                        c.kind.name(), c.fast_restarts, r.flag,
+                        c.label, c.fast_restarts, r.flag,
                     });
                     std.debug.print("tars-init: to keep it that way put shell_config=off in {s}, or {s} on the kernel command line\n", .{
                         CONFIG_PATH, config.NO_CONFIG_TOKEN,
@@ -526,14 +549,14 @@ fn supervise(
                 }
                 c.given_up = true;
                 std.debug.print("tars-init: giving up on {s} after {d} fast exits\n", .{
-                    c.kind.name(), c.fast_restarts,
+                    c.label, c.fast_restarts,
                 });
                 continue;
             }
 
             // "1s"가 여전히 참인 이유는 아래 poll이 그만큼 자기 때문이다.
             // terminal/check.sh:178이 이 문구를 진단 목록에 갖고 있다.
-            std.debug.print("tars-init: restarting {s} in 1s\n", .{c.kind.name()});
+            std.debug.print("tars-init: restarting {s} in 1s\n", .{c.label});
         }
 
         // ── 유일하게 잠드는 자리 ─────────────────────────────────────
@@ -788,6 +811,19 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 세운다(TS design 결정 3) — 기다리는 것도 chronyd가 되는 것도 자식이다.
     clock.start(cfg.net, cfg.ntp, storage_mounted, envp);
 
+    // SV-M1. `clock.start` 뒤인 것이 이 자리의 뜻이다(SV design 결정 4) — 서비스가
+    // 뜨는 시점에 방화벽 규칙과 dhcpcd가 이미 서 있다. 여기서는 읽기만 한다.
+    // 띄우는 것은 아래 `supervise`의 첫 바퀴이고, terminal · 콘솔 셸과 한 바퀴에
+    // 함께 뜬다 — 어느 서비스도 부팅 경로에서 기다리지 않는다.
+    //
+    // `/config`가 안 붙은 부팅은 tmpfs의 빈 `/config`라 "no … 0 services" 한 줄로
+    // 끝난다. 조건을 따로 두지 않는다.
+    //
+    // 이 값도 `main()`의 스택에 산다. 아래 argv가 이 안의 경로를 가리키고
+    // `supervise()`가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
+    var service_list = services.List{};
+    services.discover(services.DIR, &service_list);
+
     // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
     // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
     const shell_flag = shell.configFlag(cfg.shell_config);
@@ -827,42 +863,55 @@ pub fn main(init: std.process.Init.Minimal) void {
     const hangul_arg = cfg.hangul_layout.arg();
     const latin_arg = cfg.latin_layout.arg();
 
-    var children = [_]Child{
-        .{
-            .kind = .terminal,
-            .path = TERMINAL_PATH,
-            // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지와
-            // 어느 키보드인지를 PID 1이 정해서 인자로 넘긴다 — 파서가 두
-            // 벌이 되면 두 프로세스가 서로 다른 답을 얻을 수 있다.
-            //
-            // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
-            // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
-            // 이 인자는 셸로 새지 않는다.
-            .argv = .{
-                TERMINAL_PATH.ptr,
-                shell_path.ptr,
-                shell_flag.ptr,
-                keyboard_arg.ptr,
-                keyboard_path.cstr(),
-                hangul_arg.ptr,
-                latin_arg.ptr,
-                toggle_arg.ptr,
-            },
-            .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
+    // SV-M1. 앞 둘은 SV 전과 같고, 서비스가 이름순으로 그 뒤에 붙는다. 크기는
+    // 컴파일 타임에 정해진다(힙이 없다) — 쓰는 것은 앞에서 `2 + len`까지다.
+    var children: [2 + services.MAX]Child = undefined;
+    children[0] = .{
+        .kind = .terminal,
+        .label = "terminal",
+        .path = TERMINAL_PATH,
+        // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지와
+        // 어느 키보드인지를 PID 1이 정해서 인자로 넘긴다 — 파서가 두
+        // 벌이 되면 두 프로세스가 서로 다른 답을 얻을 수 있다.
+        //
+        // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
+        // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
+        // 이 인자는 셸로 새지 않는다.
+        .argv = .{
+            TERMINAL_PATH.ptr,
+            shell_path.ptr,
+            shell_flag.ptr,
+            keyboard_arg.ptr,
+            keyboard_path.cstr(),
+            hangul_arg.ptr,
+            latin_arg.ptr,
+            toggle_arg.ptr,
         },
-        .{
-            .kind = .console_shell,
-            .path = shell_path,
-            // 위 주석이 예고한 것을 SC-M0이 실행한 자리다. 그때 적어
-            // 둔 것은 *"나중에 설정 파일이 생기면 그것을 읽는 편이 맞다"*
-            // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
-            // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
-            // 설정을 따른다(결정 4).
-            .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
-            .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
-        },
+        .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
     };
-    supervise(&children, button_fds[0..button_count], envp);
+    children[1] = .{
+        .kind = .console_shell,
+        .label = "console shell",
+        .path = shell_path,
+        // 위 주석이 예고한 것을 SC-M0이 실행한 자리다. 그때 적어
+        // 둔 것은 *"나중에 설정 파일이 생기면 그것을 읽는 편이 맞다"*
+        // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
+        // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
+        // 설정을 따른다(결정 4).
+        .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
+        .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
+    };
+    for (service_list.slice(), 0..) |*s, i| {
+        children[2 + i] = .{
+            .kind = .service,
+            .label = s.label(),
+            .path = s.path(),
+            // 인자는 없다 — 서비스는 실행 파일 하나이고(결정 2), 준비할 것은
+            // 스크립트가 한다. 탈출로도 없다(결정 3).
+            .argv = .{ s.path().ptr, null, null, null, null, null, null, null },
+        };
+    }
+    supervise(children[0 .. 2 + service_list.len], button_fds[0..button_count], envp);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의
