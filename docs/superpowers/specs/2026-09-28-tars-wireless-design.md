@@ -2,7 +2,7 @@
 
 접두사: WL
 
-Status: 진행 중(2026-09-28) — M0~M2 끝, 실측 1~13. 결정 4를 실측 5로 고쳤다(`-M`이 없다).
+Status: 끝났다(2026-09-28) — M0~M3, 결정 7 · 위험 6 · 실측 1~14. 결정 4를 실측 5로 고쳤다(`-M`이 없다). 열일곱번째 체인 `wifi/check.sh`(부팅 셋 · 검사 열). 루트 게이트 3/3(약 59분 45초). 1차는 CT-M2의 ssh 배너 시간 초과 한 번으로 멈췄다 — firmware와 무관함을 쟀고(평소 0.3초) 2차가 초록이다.
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. 이 사이클이 그 비목표 2를 목표로
 옮긴다) · `2026-09-27-tars-daemon-supervision-design.md`(DS. 데몬을 감독 목록에 넣는
@@ -123,17 +123,24 @@ hostapd와 busybox(udhcpd · nc)는 sysroot에만 들이고 initrd에는 안 넣
 
 ### 결정 7 — 게이트는 열일곱번째 체인 `wifi/check.sh`다
 
-- 양성 부팅 — `radios=2`. 둘째 라디오를 별도 network namespace로 옮기고 그 안에서
-  hostapd(WPA2)와 DHCP 서버를 띄운다. 그러면 제품의 wpa_supplicant `-M`과 dhcpcd가 AP
-  쪽 인터페이스를 못 보고, 패킷이 커널의 로컬 지름길이 아니라 무선 경로를 탄다.
-  hostapd · netns 도구 · DHCP 서버는 설정 디스크로만 들어간다. 판정은
-  `wpa_state=COMPLETED` · `wlan0: leased` · AP 쪽으로 가는 TCP 왕복이다.
-- 음성 — 비밀번호가 틀리면 연결이 안 서고 부팅은 끝난다. 파일이 없으면 wpa_supplicant가
-  안 떴다는 줄이 나온다. 다른 체인의 부팅에는 `wlan`이 없다(결정 2).
-- 정적 — firmware 목록의 파일이 initrd에 전부 있다.
-- 반사실 — `-M`을 빼거나 `radios=0`을 빼면 예측한 검사가 빨개진다.
+(M3에서 모양을 정했다. 처음 적은 것은 라디오 둘 · 반사실 `-M` · `radios=0`이었다.)
 
-netns · hostapd · DHCP 서버를 정확히 무엇으로 하는지는 M0이 잰다.
+게스트 쪽 일은 설정 디스크의 `services.d/ap`(= `wifi/ap.sh`)가 하고 체인은 한 글자도 안
+친다. hostapd · busybox(udhcpd · nc)는 sysroot에서 디스크로 가고 initrd에는 없다.
+
+- 부팅 A — `radios=3`. `wlan0`은 부팅 때 `tars-wifi`의 argv로 넘어가는 길, `wlan1`은 netns
+  `ap` 안의 AP(WPA2-PSK) · udhcpd · nc, `wlan2`는 늦은 인터페이스의 길이다. `wlan2`는 netns
+  `park`에 숨겨 두고, 사람처럼 `tars-service restart wpa_supplicant`를 쳐서 새 wpa_supplicant가
+  그것을 모르게 한 뒤 root ns로 꺼낸다 — 넘길 수 있는 것은 hook뿐이다. 판정은 init이 dhcpcd
+  앞에 넣었다 · 감독자의 pid가 곧 wpa_supplicant다 · `wlan0` 연결과 lease · netns 너머 TCP
+  왕복 · `country KR` · 재시작 뒤 복귀 · `handed wlan2` 와 `wlan2` lease.
+- 부팅 B — `radios=2` · 틀린 비밀번호. `WRONG_KEY`, 연결도 lease도 없고 프롬프트는 뜬다.
+- 부팅 C — 파라미터 없음 · 파일 없음. `wifi stays off` 줄, wpa_supplicant도 `tars-wifi`도
+  없고, 로그에 `wlan`이 한 글자도 없다(결정 2의 음성).
+- 정적 — 스물둘 심볼과 내장 cmdline의 글자. firmware가 initrd에 있는지는 `tools` 체인
+  검사 1b가 본다(실측 11).
+- 반사실 셋 — `tars-wifi`의 `exec`을 빼면 검사 3, hook을 막으면 검사 8, 내장 cmdline을
+  비우면 부팅 C의 검사 10(실측 14).
 
 ## 위험
 
@@ -325,3 +332,23 @@ wireless-regdb의 `regulatory.db` · `.p7s`를 넣자 `failed to load regulatory
   세어 연결까지 갔다. 탐침이 global 소켓의 `interface` 목록에 `wlan1`이 나올 때까지 기다린
   뒤 옮긴 판에서는 pid 39가 그대로 살았고 목록에 `wlan1`이 남았다(위험 6). wifi 체인은 뒤의
   모양을 쓴다 — 실기에서 동글을 뽑는 것과 같은 경로다.
+
+## 실측 (M3, 2026-09-28)
+
+### 실측 14 — 체인은 첫 판에 초록이고 반사실 셋이 예측한 검사에서 잡힌다
+
+`wifi/check.sh` 단독 1분 34초, 검사 열이 전부 초록.
+
+- `tars-wifi`에서 `exec`을 뺀 사본 — 연결은 서고 검사 3이 `the running wpa_supplicant is pid
+  46, init holds 39`로 멈춘다. 감독자가 쥔 것은 셸이고 wpa_supplicant는 그 자식이다 — 그대로
+  두면 `tars-service stop`의 SIGTERM이 셸에만 간다.
+- hook의 조건을 `reason = NEVER`로 막은 사본 — 검사 7까지 초록, 검사 8이 `the dhcpcd hook did
+  not hand wlan2 to wpa_supplicant`로 멈춘다.
+- `.config`의 `CONFIG_CMDLINE=""`인 사본(검사 1의 그 줄도 막았다, 커널을 다시 빌드) — 부팅 A와
+  B는 초록이고(둘 다 `radios=`를 cmdline에 주므로) 부팅 C가 `found 'wlan' in a boot with no
+  file and no radios`로 멈춘다. 라디오 파라미터를 안 준 부팅, 즉 모든 제품 부팅에서만
+  드러나는 결함이다.
+
+체인을 쓰며 한 번 고친 것 — 판정 grep의 `^` · `$` 앵커를 전부 뺐다. 콘솔 줄에는 앞에 셸
+프롬프트의 escape가, 끝에 tty의 `\r`이 붙을 수 있다. 목록의 끝은 `ap.sh`가 `[wlan0]`처럼
+괄호로 감싸 찍는다.

@@ -482,6 +482,45 @@ ssh로 붙은 셸은 콘솔과 같다 — `tars.conf`의 `shell`, 같은 rc, 같
 이름으로 붙으면 `less`가 "terminal is not fully functional"을 찍고 RETURN을
 기다린다 — `TERM=xterm-256color ssh …`로 붙으면 된다.
 
+### 무선에 붙기
+
+SSID와 비밀번호를 wpa_supplicant의 원래 형식으로 `/config/wpa_supplicant.conf`에 적고
+재부팅한다. `tars.conf`는 `net=dhcp`여야 한다(주소는 dhcpcd가 받는다).
+
+```sh
+wpa_passphrase '집 와이파이' '비밀번호' > /config/wpa_supplicant.conf
+echo 'country=KR' >> /config/wpa_supplicant.conf     # 5GHz 채널이 열린다
+```
+
+`wpa_passphrase`는 평문 비밀번호를 `#psk="…"` 주석으로 함께 적는다. 남기기 싫으면 그
+줄을 지운다. 장소가 여럿이면 `network={ … }` 블록을 더 붙인다. 부팅 뒤에 사람이
+`wpa_cli`로 네트워크를 더하고 파일에 남기려면 파일 맨 위에 `update_config=1`을 두고
+`wpa_cli save_config`를 친다.
+
+```
+tars-init: wpa_supplicant joins the services, tars-wifi picks the interfaces
+tars-init: started service wpa_supplicant (pid 39, /usr/lib/tars/tars-wifi)
+tars-wifi: wpa_supplicant on wlan0
+wlan0: CTRL-EVENT-CONNECTED - Connection to 3c:… completed [id=0 id_str=]
+wlan0: leased 192.168.0.23 for 86400 seconds
+```
+
+- 보는 창은 셋이다. `wpa_cli -i wlan0 status`(연결 상태) · `iw dev`(라디오) ·
+  `iw reg get`(국가). 파일에 `country=`가 없으면 국가가 `00`이라 5GHz 여러 채널에서
+  AP를 찾지 못한다.
+- `service wpa_supplicant`는 `tars-service`로 다룬다. 파일을 고쳤으면
+  `tars-service restart wpa_supplicant`로 재부팅 없이 다시 읽힌다(파일이 처음 생긴
+  것이면 재부팅해야 한다 — `init`은 부팅 때 파일이 있는지만 본다).
+- 부팅 뒤에 생긴 무선 인터페이스(firmware를 늦게 올리는 칩)는 dhcpcd가 보고
+  wpa_supplicant에게 넘긴다 — 로그에 `tars-wifi: handed wlan1 to wpa_supplicant`.
+- 비밀번호가 틀리면 `CTRL-EVENT-SSID-TEMP-DISABLED … reason=WRONG_KEY`가 뜨고 부팅은
+  평소대로 끝난다.
+- 켜 둔 칩: Intel(AX200 · AX201 · AX210 · AX211 · BE200 등 iwlwifi) · Realtek(rtw88의
+  8822BE · 8822CE · 8723DE · 8821CE, rtw89의 8851BE · 8852AE · 8852BE · 8852BTE · 8852CE ·
+  8922AE) · MediaTek(MT7921 · MT7922 · MT7925) · Qualcomm(QCA6390 · WCN6855 · WCN7850).
+  USB 무선 동글과 Broadcom은 없다. Intel BE201은 커널 6.18이 받는 번호의 firmware가
+  없어 안 뜬다.
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
@@ -494,10 +533,10 @@ ssh로 붙은 셸은 콘솔과 같다 — `tars.conf`의 `shell`, 같은 rc, 같
 |---|---|
 | 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
 | 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
-| 무선 네트워크 | Wi-Fi 드라이버 · firmware · `wpa_supplicant`가 없다(WN 비목표). 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있지만, 게이트가 부팅으로 재는 것은 `e1000e`와 `usb-net` 둘이고 Realtek firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
+| USB 무선 동글 · Broadcom · Intel BE201 · WPA-Enterprise | 무선은 PCIe 네 계열만 켰다(WL design 비목표). 게이트가 무선을 부팅으로 재는 것은 mac80211_hwsim뿐이고 실칩의 firmware 로딩은 재지 않는다. 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있고 Realtek 유선 firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
-이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열다섯 체인이 전부
+이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열일곱 체인이 전부
 QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 "켜 봤다"에서
 멈춘다. 꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.

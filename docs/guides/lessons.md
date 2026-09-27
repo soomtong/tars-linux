@@ -16,7 +16,7 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (열여섯 체인 × 3, 약 53분 — 2026-09-27 DS-M2 뒤 52분 42초)
+# 루트 게이트 (열일곱 체인 × 3, 약 60분 — 2026-09-28 WL-M3 뒤 59분 45초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
@@ -612,6 +612,49 @@ mtime은 새 시각을 따라간다.
 dhcpcd에서 `-B`를 빼도 net 검사 1~28이 초록이었다). 판정은 "쥔 pid가 곧 그 데몬인가"로
 한다.
 
+62. 커널은 initrd 자리에 이어 붙인 cpio 여럿을 차례로 풀어 한 트리로 합친다 — gzip한 것끼리
+이어 붙여도 된다(WL-M0 실측 9). 그런데 `gzip -dc initrd.cpio | cpio -it`는 첫 archive의 끝
+표시에서 멈춰서 뒤의 것이 목록에 안 나온다. 무선 firmware가 initrd 꼬리에 따로 붙어 있고,
+`tools` 검사 1b가 꼬리를 바이트로 대조하는 이유가 이것이다. 게스트에 측정용 파일을 넣을 때도
+initrd를 다시 굽지 않고 cpio 하나를 이어 붙이면 된다.
+
+63. iwlwifi는 firmware 이름을 실행 중에 짓는다 — 칩의 MAC · stepping · RF로 접두사를 만들고
+커널의 최대 API 번호부터 아래로 요청하며, `c99` 다음은 `101`이다(WL-M0 실측 3). 그래서
+`modules.builtin.modinfo`의 `firmware=` 줄을 그대로 쓰면 안 되고, linux-firmware의 "가장 새
+파일"(`c101`~`c107`)은 커널 6.18이 절대 요청하지 않는다. 커널이나 linux-firmware를 올리면
+`kernel/guest_firmware.sh`의 iwlwifi 줄을 다시 고른다. tarball의 iwlwifi 파일은
+`intel/iwlwifi/`에 있고 드라이버는 `/lib/firmware/` 맨 위를 찾는다 — 둘을 잇는 `WHENCE`의
+`Link:`는 tarball에 링크로 들어 있지 않다. `regulatory.db`는 linux-firmware가 아니라
+wireless-regdb에 있다.
+
+64. x86 커널의 내장 cmdline(`CONFIG_CMDLINE`)은 부트로더 cmdline 앞에 붙고, 같은 param이 두 번
+오면 뒤의 것이 이긴다(WL-M0 실측 2). 모듈이 꺼진 커널에서 게이트 전용 드라이버(hwsim)를
+제품에 넣고 기본값만 끄는 길이 이것이다. hwsim은 라디오가 0이어도 `hwsim0`(type 803,
+radiotap)을 만든다 — `phy80211`이 없고 dhcpcd가 안 건드린다.
+
+65. Debian의 wpa_supplicant 2.10에는 이름 패턴으로 인터페이스를 고르는 `-M`이 없다(WL-M0 실측
+5). 대신 `-g`(전역 소켓)와 `interface_add`가 있다. 이미 있는 인터페이스를 다시 넣으면 `FAIL`이고
+연결은 그대로다. 명령줄 `-i`로 받은 인터페이스가 초기화 중에 사라지면 wpa_supplicant 전체가
+status 255로 죽고, 다 잡은 뒤에 사라지면 같은 pid로 산다(WL 실측 13). wpa_supplicant는
+`p2p-dev-wlan0`을 스스로 만든다(해는 없다).
+
+66. dhcpcd는 새 인터페이스마다 hook을 `reason=PREINIT`으로 부르고 무선이면 `ifwireless=1`을
+준다. 순서는 `PREINIT` → `NOCARRIER` → `CARRIER` → `BOUND`, 떠날 때 `DEPARTED`다(WL-M0 실측 7).
+무선 인터페이스는 연결 전에는 carrier가 없고, 연결되면 dhcpcd가 아무 도움 없이 lease를 받는다.
+
+67. hwsim 라디오를 `iw phy phyN set netns name X`로 다른 netns에 옮기면 게스트 안에 "다른 기계"가
+생긴다 — root ns의 wpa_supplicant · dhcpcd가 그 인터페이스를 못 보고, 두 ns 사이의 패킷은
+로컬 지름길이 아니라 hwsim의 공중을 지난다. `ip netns exec X iw phy phyN set netns 1`로 되돌리면
+root ns에는 새 인터페이스가 생긴 것과 같다 — 부팅 뒤 꽂는 장치를 흉내 내는 방법이다(WL-M3).
+
+68. 콘솔 줄에는 앞에 셸 프롬프트의 escape가, 끝에 tty의 `\r`이 붙을 수 있다. 게스트가
+`/dev/console`에 찍은 줄을 판정할 때 `^` · `$` 앵커를 쓰지 않는다. 목록의 끝을 봐야 하면 찍는
+쪽이 `[wlan0]`처럼 괄호로 감싼다(WL-M3).
+
+69. 이 기계의 호스트 셸은 zsh이고 도구 환경이 몇 개를 바꿔 둔다. `$r:lib`의 `:l`은 소문자
+수식어, `$s[= ]`는 배열 첨자로 읽힌다 — 셸 변수 뒤에 글자가 오면 `${r}`로 감싼다. `du`는
+`dua`의 alias라 `/usr/bin/du`로 부른다(WL-M0).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -850,7 +893,7 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-서브프로젝트 후보(패키지 매니저 · 부팅 때 뜨는 서비스 · IPv6)는 `HANDOFF.md`에 있다.
+서브프로젝트 후보(패키지 매니저 · IPv6)는 `HANDOFF.md`에 있다.
 여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
 서브프로젝트는 `CLAUDE.md`의 완료 표가 목록이다.
 
@@ -858,7 +901,17 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(SM 비목표 2 — TUI라
       체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
-- [ ] 무선 NIC. firmware 파일과 `wpa_supplicant`가 새로 들어오는 큰 일이다(WN 비목표).
+- [ ] 무선의 남은 것(WL 비목표). USB 무선 동글(드라이버를 안 켰다. 켜면 hook이 이미
+      늦은 인터페이스를 받는다) · Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의 firmware가
+      linux-firmware-20260916에 없다 — 커널을 올릴 때 같이 본다) · 보드별 변형 firmware
+      (ath11k `nfa765` · ath12k `ncm865`) · WPA-Enterprise · 실칩 판정(실기가 생기면).
+- [ ] service 체인 부팅 D의 ssh 제어 연결이 한 번 `Connection timed out during banner
+      exchange`로 죽었다(2026-09-28 WL 루트 게이트 1차, CT-M2 3/3회차). 평소에는 firmware가
+      있든 없든 0.3초 안팎이고(각 3회, 259~377ms) 한도는 `ConnectTimeout=5`다. 한 번뿐이라
+      한도를 안 고쳤다. 또 나면 그 회차의 시리얼 로그에서 sshd가 `Server listening` 뒤에
+      무엇을 했는지부터 본다.
+- [ ] firmware 96MB가 게스트 RAM에 늘 있다(WL 위험 5). 게이트의 512MB에서 `MemAvailable`
+      213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
       판정한다(IN 비목표 3 · FW 비목표 3).
 
@@ -950,6 +1003,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   고른다(SV-M1). `statx`로 "일반 파일이고 실행 비트가 있다"를 보고, 링크를 따라간다.
   `main.zig`가 그 목록을 `children`의 terminal · 콘솔 셸 뒤에 붙이고, 자식 쪽에서
   `detachService`(setsid · stdin `/dev/null`)를 한다.
+- `wifi.zig` — `/config/wpa_supplicant.conf`가 있고 `net`이 켜져 있고 `/config`가 붙었으면
+  wpa_supplicant를 감독 목록에 넣는다고 답한다(WL-M2). path는 wpa_supplicant가 아니라
+  `/usr/lib/tars/tars-wifi`(`kernel/wifi/tars-wifi`)다 — 그 셸이 `phy80211`로 무선
+  인터페이스를 세어 `wpa_supplicant -g -O -c -i … -N …`를 exec한다. 부팅 뒤 생긴 인터페이스는
+  `kernel/dhcpcd-hooks/10-tars-wifi`가 `interface_add`로 넣는다. `main.zig`가 그 칸을
+  dhcpcd 앞에 둔다. 예약 이름 셋째가 `wpa_supplicant`다(`services.zig`).
 - `login.zig` — 부팅 때 `/etc/passwd`의 root 셸 자리와
   `/etc/ssh/sshd_config.d/tars-env.conf`의 `SetEnv` 한 줄을 쓴다(SV-M2). ssh 세션이
   콘솔과 같은 셸 · env를 갖는 이유가 이 파일이다.
@@ -1040,10 +1099,19 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `nic/check.sh` — 부팅 둘(WN). `e1000e`와 부팅 뒤 꽂는 `usb-net`. 타이핑이 없다.
 - `firewall/check.sh` — 부팅 둘 · 검사 열일곱(FW). 게스트 쪽 판정 도구는 설정
   디스크의 `fwlisten.sh` 하나이고, 포트의 16진수는 `printf '%04X'`로 바꾼다.
+- `wifi/check.sh` — 부팅 셋 · 검사 열(WL). 게스트 쪽은 설정 디스크의 `services.d/ap`
+  (= `wifi/ap.sh`)가 hwsim 라디오를 netns로 옮겨 AP를 세우고 사람의 일(재시작 · 늦은
+  인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
+  타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
+  부팅이다 — A · B는 그것이 빠져도 초록이었다.
 - `terminal/check.sh`의 monitor 재시도 loop — `Connection refused`가 여기서
   나오고 실패가 아니다.
 - `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의
-  마지막 줄은 `gzip -6`이고 `-9`로 되돌리지 말 것.
+  `gzip -6`을 `-9`로 되돌리지 말 것. 그 뒤의 마지막 줄이 무선 firmware cpio를 이어 붙인다.
+- `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 목록(데이터만)과
+  그것을 받아 고르는 스크립트(WL-M1). linux-firmware · wireless-regdb 두 tarball을
+  `kernel/src/firmware/`에 받고(662MB, `clean()`이 안 지운다) sha256을 확인한다. 목록과
+  자기 해시로 스탬프를 찍어 바뀌지 않으면 건너뛴다.
 - `init/build.zig` — `exe_mod`만 `.ReleaseSafe`다. `terminal/build.zig`는
   `guest_optimize`(기본 `ReleaseSafe`, `-Dguest-optimize=Debug`가 문)를
   `exe_mod`와 `ghostty_dep` 둘만 쓴다. 마지막 주석이 "누가 실행하는가"의
@@ -1070,7 +1138,8 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 `project_input_policy`·`project_hangul_input`·`project_device_discovery`,
 실기면 `project_real_machine`·`project_kernel_config`·
 `project_target_hardware`, 네트워크면 `project_guest_network`·`project_inbound_network`·
-`project_wired_nic`·`project_loopback`·`project_firewall`·`project_time_discipline`,
+`project_wired_nic`·`project_loopback`·`project_firewall`·`project_time_discipline`·
+`project_wireless`,
 설치면 `project_disk_install`·`project_disk_carryover`.
 
 

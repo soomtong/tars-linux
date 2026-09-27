@@ -139,6 +139,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Boot Services (SV-M0~M2) | 2026-09-27 | `/config/services.d`에 둔 실행 파일을 `init`이 이름순으로 여덟까지 띄우고 감독한다. 첫 세입자 sshd는 템플릿 링크 하나와 공개 키 하나로 켜지고, ssh 세션은 콘솔과 같은 셸 · env다 — `init`이 부팅 때 `passwd`의 셸 자리와 sshd의 `SetEnv`를 쓴다. 열여섯번째 체인 `service/check.sh` |
 | Service Control (CT-M0~M2) | 2026-09-27 | `tars-service`의 동사 넷(status · stop · start · restart)이 `/run/tars/init.sock`으로 PID 1에게 말한다. 시그널은 서비스의 프로세스 그룹에 가고, 사람이 요청한 죽음은 빨리 죽음으로 세지 않는다. SIGTERM을 무시하면 3초 뒤 SIGKILL. 새 체인 없이 `service/check.sh`가 부팅 넷이 됐다 |
 | Daemon Supervision (DS-M0~M2) | 2026-09-27 | dhcpcd와 chronyd가 감독 목록에 들어갔다 — 죽으면 다시 뜨고 `tars-service`로 다룬다. dhcpcd는 `-B`, chronyd 앞의 30초 기다림은 chrony `sourcedir`로 바뀌었다. 덤으로 버튼 fd에 `CLOEXEC`. 새 체인 없이 net · service 체인이 본다 |
+| Wireless (WL-M0~M3) | 2026-09-28 | 노트북 내장 무선(Intel · Realtek · MediaTek · Qualcomm)이 붙는다. `/config/wpa_supplicant.conf`가 있으면 `init`이 `tars-wifi`(→ exec wpa_supplicant)를 감독하고, 늦게 생긴 인터페이스는 dhcpcd hook이 넘긴다. firmware 74개가 initrd 꼬리에 붙는다. 게이트는 mac80211_hwsim — 열일곱번째 체인 `wifi/check.sh` |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글
