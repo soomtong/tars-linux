@@ -13,7 +13,7 @@ design은 `docs/superpowers/specs/2026-09-27-tars-daemon-supervision-design.md`(
 |---|---|
 | `66d4515` · `9f122bd` | design · M0 실측(코드 0줄) |
 | `5ecad6c` · `ffa1d2e` · `3f56ff9` · `738d3b2` | M1 — 예약 이름 · 버튼 fd `CLOEXEC` · 본체 · 닫기 |
-| M2 커밋 둘 | 체인 판정 다섯 · 닫기(가이드 · 기억 · 표) |
+| `924a036` · `e64d60e` | M2 — 체인 판정 다섯 · 닫기(가이드 · 기억 · 표) |
 
 루트 게이트 16체인 3/3(52분 42초, `FAIL` 0줄, 2026-09-27). 반사실 둘(`-B` · `CLOEXEC`)이
 예측한 검사(net 29 · service 26)에서 잡혔다.
