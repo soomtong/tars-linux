@@ -1,4 +1,43 @@
-# HANDOFF: Loopback(LB)이 M3으로 닫혔다 — `lo`가 늘 서고 `*.localhost`가 풀린다
+# HANDOFF: Firewall(FW) — M0이 닫혔다. 다음은 M1 plan
+
+## 지금 어디인가
+
+2026-09-27에 사용자가 후보 중 "UDP · 포트 여럿 · 방화벽"을 골랐고, 셋을 방화벽 하나의
+이야기로 묶었다(UDP와 포트 여럿은 판정의 재료). 사용자가 정한 셋 — 중심은 방화벽,
+기본은 꺼짐이고 `firewall=on`이면 닫힘, 포트는 `/config/nftables.d/*.nft`에 nftables
+문법으로 연다. 접근은 `init`이 `nft -f`를 `fork` · `execve` · `waitpid`하는 배관.
+
+design은 `docs/superpowers/specs/2026-09-27-tars-firewall-design.md`(확인 6 · 결정 6 ·
+위험 6 · 실측 1~9), plan은 `plans/2026-09-27-tars-firewall-fw-m0.md`.
+
+| 커밋 | 무엇 |
+|---|---|
+| `82de63e` | design |
+| `690f841` | M0 plan + design의 `table inet` → `table ip`(확인 6 · 위험 6) |
+| `c26f7f3` | M0 실측(부팅 하나, 코드 0줄, `.config`는 되돌렸다) |
+
+M0이 답한 것 — 다섯 옵션(`NETFILTER` · `NF_TABLES` · `NF_TABLES_IPV4` · `NF_CONNTRACK` ·
+`NFT_CT`)이면 기본 규칙이 선다(끌려오는 열 줄, `=m` 0). `nft`가 initrd에 더하는 것은
+파일 다섯 1.39MB(1.25%). 빈 include glob은 에러가 아니다. `policy drop` 아래에서
+DHCP가 처음부터 다시 서고 나가는 길의 답이 온다(위험 1 닫힘). 막힌 TCP는 연결되고
+0바이트(SLIRP은 안 끊는다 — 음성은 타임아웃을 꽉 쓴다). UDP도 연 것만 닿는다.
+`nft -f`는 원자적이라 문법 오류는 아무것도 안 바꾼다 — 결정 5의 갈래 2(기본 규칙
+전용 파일을 다시 올린다)가 맞다.
+
+⚠ 다음 사람이 먼저 볼 것 둘.
+- `NF_TABLES_INET`은 `depends on IPV6`다. 그래서 표가 `ip`이고, IPv6를 켜는 사이클은
+  표를 `inet`으로 바꿔야 한다(design 위험 6).
+- initrd는 gzip이다. 목록은 `zcat kernel/initrd.cpio | cpio -it`로 본다.
+
+## 바로 다음에 할 것 — FW-M1 plan
+
+design "M0이 M1에 넘기는 것" 절이 입력이다. 커널 다섯 · Dockerfile 층 10(패키지 넷) ·
+`guest_tools.sh` 다섯 줄 · 규칙 파일 둘(`/etc/tars/firewall.nft` · `firewall-base.nft`) ·
+`config.zig`의 `firewall` 키 · `init`의 배관(`net.bringUp` 앞, 갈래 셋) · 새 체인
+`firewall/check.sh`의 부팅 A 중 TCP 양성 · 음성. 루트 게이트는 체인 열다섯이 된다.
+
+
+# 그 앞 — Loopback(LB)이 M3으로 닫혔다 (FW 착수 전의 머리)
 
 ## 지금 어디인가
 
