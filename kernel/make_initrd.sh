@@ -13,6 +13,10 @@ if [ ! -d "$SYSROOT" ]; then
   exit 1
 fi
 
+# WL-M1. 무선 firmware cpio. 이 파일의 끝에서 initrd 뒤에 이어 붙인다.
+# 목록이 안 바뀌었으면 곧바로 끝난다(그 스크립트의 스탬프).
+./vendor_firmware.sh
+
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -570,3 +574,12 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 # (docs/decisions/project_gate_chain_composition.md). 1.3%는 그 영향권 밖이다.
 # 53MB에서 부팅조차 못 했던 것은 선형적인 느려짐이 아니라 다른 종류의 벽이었다.
 (cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -6 > initrd.cpio
+
+# WL-M1. 무선 firmware를 뒤에 이어 붙인다. 커널은 이어 붙인 cpio를 차례로
+# 풀어 한 트리로 합친다(WL design 실측 9). 따로 두는 이유는 압축이다 — 38MB를
+# 체인마다 다시 gzip하면 게이트 한 판에 1분 가까이 든다(GL-M1이 -9를 -6으로
+# 내린 것과 같은 계산). vendor_firmware.sh가 목록이 바뀔 때만 다시 만든다.
+#
+# ⚠ `gzip -dc initrd.cpio | cpio -it`는 첫 archive의 끝 표시에서 멈춘다 —
+# firmware는 그 목록에 안 나온다. tools/check.sh가 꼬리를 따로 대조한다.
+cat src/firmware/firmware.cpio.gz >> initrd.cpio

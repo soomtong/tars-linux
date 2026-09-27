@@ -212,6 +212,34 @@ for want in "${WANT[@]}"; do
 done
 echo "the initrd carries the four bones and all ${#GUEST_TOOLS[@]} tools the list names"
 
+# ── 검사 1b: initrd 꼬리에 무선 firmware가 전부 있는가 (WL-M1, 정적) ────
+#
+# 위 INITRD_LIST에는 firmware가 없다. make_initrd.sh가 firmware cpio를 뒤에
+# 이어 붙이는데 `cpio -it`는 첫 archive의 끝 표시에서 멈추기 때문이다. 그래서
+# 둘로 나눠 본다 —
+#   (a) initrd의 마지막 N바이트가 vendor_firmware.sh가 만든 cpio와 같다.
+#       이어 붙이는 줄이 빠지거나 다른 파일이 붙으면 여기서 죽는다.
+#   (b) 그 cpio 안에 guest_firmware.sh가 말하는 initrd 경로가 전부 있다.
+# 둘을 합치면 "제품 initrd에 목록의 파일이 전부 있다"가 된다. 검사 1과 같은
+# 한계가 있다 — 목록을 되읽으므로 목록이 옳은지는 모른다(실칩이 필요하다,
+# WL design 위험 4).
+FW_CPIO=../kernel/src/firmware/firmware.cpio.gz
+FW_SIZE="$(stat -c %s "$FW_CPIO")"
+if ! cmp -s <(tail -c "$FW_SIZE" ../kernel/initrd.cpio) "$FW_CPIO"; then
+  echo "FAIL: the initrd does not end with the firmware cpio"
+  exit 1
+fi
+. ../kernel/guest_firmware.sh
+FW_LIST=$'\n'"$(gzip -dc "$FW_CPIO" | cpio -it 2>/dev/null)"$'\n'
+for entry in "${GUEST_FIRMWARE[@]}"; do
+  want="${entry#*:}"
+  case "$FW_LIST" in
+    *$'\n'"${want}"$'\n'*) ;;
+    *) echo "FAIL: ${want} is missing from the firmware cpio"; exit 1 ;;
+  esac
+done
+echo "the initrd ends with the firmware cpio and it carries all ${#GUEST_FIRMWARE[@]} files the list names"
+
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
