@@ -2,7 +2,7 @@
 
 접두사: WL
 
-Status: 설계(2026-09-28). M0 실측 전이다.
+Status: 진행 중(2026-09-28) — M0 끝, 실측 1~12. 결정 4를 실측 5로 고쳤다(`-M`이 없다).
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. 이 사이클이 그 비목표 2를 목표로
 옮긴다) · `2026-09-27-tars-daemon-supervision-design.md`(DS. 데몬을 감독 목록에 넣는
@@ -82,21 +82,37 @@ kernel.org의 linux-firmware 릴리스 tarball 하나를 받아 sha256을 확인
 `regulatory.db`(+`.p7s`)도 함께 넣는다. 없으면 규제 도메인이 world(`00`)로 남아
 5GHz 대부분에서 능동 스캔을 못 한다.
 
-### 결정 4 — `init`은 파일이 있으면 wpa_supplicant를 감독한다
+### 결정 4 — `init`은 파일이 있으면 `tars-wifi`를 감독한다. 늦은 인터페이스는 hook이 넣는다
+
+(M0 뒤에 고쳤다. 처음에는 wpa_supplicant `-M -i 'wlan*'`이었는데 Debian 빌드에 `-M`이
+없다 — 실측 5.)
 
 `/config/wpa_supplicant.conf`가 있고 `net`이 `off`가 아니면 `Kind.service`로 목록에
-넣는다. label은 `service wpa_supplicant`, 자리는 dhcpcd 앞이다. argv는
-`wpa_supplicant -M -i 'wlan*' -c /config/wpa_supplicant.conf -O /run/wpa_supplicant`의
-모양이고 M0이 확정한다. `-O`는 사람의 파일에 `ctrl_interface` 줄이 없어도 `wpa_cli`가
-닿게 하려는 것이다. 넣지 않을 때는 이유를 한 줄 남긴다(DS 결정 1). `services.d`의
-같은 이름은 건너뛴다(DS 결정 5).
+넣는다. label은 `service wpa_supplicant`, 자리는 dhcpcd 앞이다. 넣지 않을 때는 이유를
+한 줄 남긴다(DS 결정 1). `services.d`의 같은 이름은 건너뛴다(DS 결정 5).
 
-`net=off`에서 안 넣는 이유 — 주소를 받을 dhcpcd가 없는데 연결만 서는 것은 사람이 볼 때
-"붙었는데 안 된다"다.
+path는 initrd의 셸 스크립트 `/usr/lib/tars/tars-wifi`다. 이 스크립트는 뜰 때
+`/sys/class/net/*/phy80211`로 지금 있는 무선 인터페이스를 세고
+`wpa_supplicant -g /run/wpa_supplicant/global -O /run/wpa_supplicant -c <파일> -i wlan0 -N -c <파일> -i wlan1 …`을
+`exec`한다. 하나도 없으면 `-g` · `-O`만으로 뜬다(실측 7). `exec`이라서 PID 1이 쥔 pid가 곧
+wpa_supplicant다(DS 결정 2의 교훈). 재시작될 때 다시 세므로 인터페이스를 잃지 않는다.
+
+그 뒤에 생긴 인터페이스는 dhcpcd hook `10-tars-wifi`가 넣는다. dhcpcd는 새 인터페이스마다
+hook을 `reason=PREINIT`으로 부르고 무선이면 `ifwireless=1`을 준다(실측 7). hook은
+`wpa_cli -g … interface_add <iface> <파일>`을 부른다. 이미 있는 인터페이스면 `FAIL`이고
+기존 연결은 그대로다(실측 6). 부팅 직후에는 global 소켓이 아직 없을 수 있어서(실측 7),
+소켓에 못 닿았을 때만 배경에서 몇 초 다시 시도한다 — dhcpcd를 붙잡지 않는다.
+
+`-O`는 사람의 파일에 `ctrl_interface` 줄이 없어도 `wpa_cli`가 닿게 하려는 것이다.
+
+`net=off`에서 안 넣는 이유 — 주소를 받을 dhcpcd가 없고 hook도 안 돈다. 연결만 서는 것은
+사람이 볼 때 "붙었는데 안 된다"다.
 
 ### 결정 5 — 게스트 도구는 넷이다
 
-`wpa_supplicant` · `wpa_cli` · `wpa_passphrase` · `iw`. 사람의 첫 설정은
+`wpa_supplicant` · `wpa_cli` · `wpa_passphrase` · `iw`. 새 라이브러리는 다섯이다(실측 4).
+hostapd와 busybox(udhcpd · nc)는 sysroot에만 들이고 initrd에는 안 넣는다 — 게이트의
+설정 디스크가 가져간다. 사람의 첫 설정은
 `wpa_passphrase SSID 비밀번호 > /config/wpa_supplicant.conf` 다음 재부팅이다.
 `docs/guides/running-tars.md`에 적는다.
 
@@ -127,10 +143,10 @@ firmware는 파일 하나가 수백 KB에서 수 MB다. DC가 TCG에서 initramf
 것을 이미 쟀다. M0이 크기와 부팅당 시간을 잰다. 너무 크면 firmware만 ISO · ESP에 따로
 두는 길을 그때 연다.
 
-### 위험 2 — Debian 빌드에 `-M`이 없을 수 있다
+### 위험 2 — Debian 빌드에 `-M`이 없을 수 있다 (M0에서 현실이 됐다)
 
-`-M`은 `CONFIG_MATCH_IFACE`로 빌드해야 생긴다. 없으면 부팅 때 `/sys/class/net/*/wireless`를
-한 번 훑는 것으로 물러서고, 부팅 뒤 꽂는 USB 무선은 비목표가 된다.
+`-M`은 `CONFIG_MATCH_IFACE`로 빌드해야 생기고 Debian은 안 켰다(실측 5). 결정 4를 wrapper와
+hook으로 고쳤다. 부팅 뒤에 생기는 인터페이스도 hook이 잡으므로 잃은 것은 없다.
 
 ### 위험 3 — 커널 param이 두 번 오면 뒤의 것이 이긴다는 것은 짐작이다
 
@@ -140,13 +156,21 @@ M0이 잰다. 틀리면 결정 2를 다시 본다.
 
 RM · WN과 같은 반쪽 판정이다. 파일이 initrd에 있는지만 본다.
 
+### 위험 5 — firmware가 게스트 RAM에 남는다
+
+initramfs는 RAM이다. firmware 96MB(풀린 크기)가 부팅 내내 메모리에 있다. 게이트의 게스트는
+512MB다(`GUEST_MEM`). M0의 부팅 다섯은 모두 떴다. M1이 `MemAvailable`을 잰다.
+
 ## 비목표
 
 1. 실기 판정. 실기가 생기면 연다.
 2. 파일 없이 부팅 뒤에 네트워크를 고르는 UI.
 3. WPA-Enterprise(802.1X).
 4. 제품 쪽의 AP 모드.
-5. Broadcom · 그 밖의 벤더.
+5. Broadcom · 그 밖의 벤더. USB · SDIO 무선 칩(드라이버를 안 켰다).
+8. 커널 6.18이 받는 번호의 firmware가 이 릴리스에 없는 Intel 칩 둘(`bz-b0-wh-b0` = BE201,
+   `sc-a0-fm-c0`) — 실측 3. 커널을 올리는 날 같이 본다.
+9. 보드별 변형 firmware(ath11k `nfa765` · ath12k `ncm865`).
 6. 여러 NIC 사이의 route 우선순위. dhcpcd 기본값이다.
 7. IPv6.
 
@@ -158,3 +182,96 @@ RM · WN과 같은 반쪽 판정이다. 파일이 initrd에 있는지만 본다.
 - WL-M1 — 커널 config, firmware를 initrd에 넣기, 정적 검사.
 - WL-M2 — `init`과 게스트 도구.
 - WL-M3 — 체인 · 반사실 · 가이드 · 루트 게이트 · 닫기.
+
+## 실측 (M0, 2026-09-28)
+
+하네스는 `/tmp/wl/`이고 저장소에 안 들어갔다. 작업 트리의 `kernel/.config`에 심볼을 켜고
+`kernel/build.sh`로 빌드했다. 게스트에 넣을 것은 initrd 뒤에 cpio를 이어 붙여 넣었다 —
+커널은 이어 붙인 cpio를 차례로 풀고 뒤의 것이 앞의 것을 덮는다. 탐침은 설정 디스크의
+`services.d/probe`로 돌렸다(타이핑이 없다).
+
+### 실측 1 — `olddefconfig`는 115줄을 켜고 아무것도 안 끈다
+
+스물다섯 심볼이 전부 `=y`로 남았다. 끌려온 것 중 셋이 눈에 띈다. `CONFIG_CRYPTO=y` —
+이 커널에는 crypto 층이 통째로 없었다. WPA2의 CCMP와 관리 프레임 보호를 mac80211이
+소프트웨어로 하므로 `CCM` · `GCM` · `CMAC` · `AES`가 온다. `KEYS` · `X509` · `PKCS7` —
+`CFG80211_REQUIRE_SIGNED_REGDB`가 `regulatory.db.p7s`를 검증하려고 끌고 온다. `MHI_BUS` ·
+`QRTR` — ath11k/ath12k가 칩과 대화하는 버스다. 지워진 13줄은 "is not set" 주석과 머리
+주석뿐이다. bzImage는 5.0M → 7.3M.
+
+### 실측 2 — 내장 cmdline 뒤에 부트로더 cmdline이 붙고 뒤의 값이 이긴다
+
+`Kernel command line: mac80211_hwsim.radios=0 console=ttyS0 mac80211_hwsim.radios=2`에서
+라디오 둘(`phy0 phy1`, `wlan0 wlan1`)이 생겼다. `radios=0`만 있으면 없다. 위험 3은 짐작이
+맞았다. 라디오가 0이어도 `hwsim0`(type 803 = `ARPHRD_IEEE80211_RADIOTAP`)은 늘 생긴다 —
+`phy80211`이 없고 dhcpcd가 건드리지 않는다.
+
+### 실측 3 — firmware 파일은 빌드 산출물이 말해 준다. iwlwifi는 요청 순서를 따라 고른다
+
+`kernel/build/modules.builtin.modinfo`의 `firmware=` 줄이 드라이버가 찾는 이름이다(108줄,
+그중 `r8169` · `r8152` 33줄은 WN 비목표 1). iwlwifi는 실행 중에 칩의 MAC · stepping · RF로
+접두사를 만들고(`iwl_drv_get_fwname_pre`) 커널의 최대 API부터 아래로 내려가며 요청한다.
+`c99` 다음은 `101`이다(`iwl_request_firmware`). 그래서 linux-firmware의 `c101`~`c107`은
+6.18이 절대 요청하지 않는다 — "가장 새 파일"을 넣으면 안 되는 파일만 넣는다. 접두사마다
+(MAC, RF)의 최대치에서 처음 만나는 실제 파일 하나를 골랐다: 39개(`.pnvm` 포함).
+BE201(`bz-b0-wh-b0`)과 `sc-a0-fm-c0`은 받을 번호의 파일이 없다(비목표 8).
+
+iwlwifi 파일은 tarball 안에서 `intel/iwlwifi/`에 있고 드라이버는 `/lib/firmware/` 맨 위를
+찾는다. 둘을 잇는 것이 `WHENCE`의 `Link:` 줄이고 tarball에는 링크가 없다. ath11k
+`WCN6855/hw2.1`도 `hw2.0`을 가리키는 `Link:`다. 그래서 목록은 "tarball 안 경로 : initrd
+안 경로"의 쌍이다.
+
+`regulatory.db`는 linux-firmware에 없다. wireless-regdb 릴리스가 따로 있다.
+
+크기(gzip -6): Intel 18.3MB · ath11k 4.9 · rtw89 4.2 · ath12k 3.5 · MediaTek 3.4 · rtw88 0.3,
+합쳐 cpio 38.7MB. 풀면 96MB(ath11k `hw2.1` 사본 포함). 고정한 릴리스는
+`linux-firmware-20260916.tar.xz`(662MB, sha256 `f80dcb75…90ccc5`)와
+`wireless-regdb-2026.09.03.tar.xz`(sha256 `b22e0901…4cbf58d`). 둘 다 kernel.org의
+`sha256sums.asc`와 맞았다.
+
+### 실측 4 — 새 라이브러리는 다섯이다
+
+재귀 `DT_NEEDED`(`project_measuring_tool_cost`). wpa_supplicant 3.4MB가 `libnl-3` ·
+`libnl-genl-3` · `libnl-route-3` · `libpcsclite1` · `libdbus-1-3`(합 1.1MB)을 새로 부른다.
+dbus는 라이브러리뿐이고 데몬은 `-u`를 줄 때만 필요하다. `iw`는 libnl 둘, `wpa_cli`는
+readline, `wpa_passphrase`는 libcrypto. hostapd는 wpa_supplicant의 부분집합이고 busybox는
+libc와 libresolv.
+
+### 실측 5 — Debian의 wpa_supplicant 2.10에는 `-M`이 없다
+
+도움말에 `-N`(새 인터페이스 기술)과 `-O`는 있고 `-M`은 없다. 결정 4를 고쳤다.
+
+### 실측 6 — hwsim 위에서 제품 경로가 끝까지 선다
+
+`net=dhcp` 부팅. `phy1`을 netns `ap`로 옮기고(`iw phy phy1 set netns name ap`) 그 안에서
+hostapd(WPA2-PSK, 채널 1)와 busybox udhcpd를 띄웠다. wpa_supplicant를 `-g -O -c -i wlan0`로
+띄우자 시작에서 `COMPLETED`까지 4.5초, `Key negotiation completed [PTK=CCMP GTK=CCMP]`.
+PID 1이 띄운 dhcpcd가 아무 도움 없이 `wlan0: carrier acquired` → `leased 192.168.77.126`
+(carrier에서 8.5초, 대부분 ARP probe). netns 안의 `nc -l`로 가는 TCP 왕복이 답을 받았다.
+`wlan1`이 netns로 떠날 때 dhcpcd는 `removing interface`로 놓았다.
+
+`interface_add`로 이미 있는 인터페이스를 넣으면 `FAIL`이고 연결은 그대로다. SIGTERM에
+56ms에 죽으며 deauth를 보내고, dhcpcd가 `carrier lost`로 route를 지운다. wpa_supplicant는
+`p2p-dev-wlan0`을 스스로 만든다(해는 없다).
+
+### 실측 7 — 늦은 인터페이스는 hook의 `PREINIT`이 잡는다. 부팅 직후에는 소켓이 없다
+
+`phy0`을 netns `park`에 넣어 두고 wpa_supplicant를 `-g -O`만으로(인터페이스 0개) 띄웠다 —
+산다. `phy0`을 root ns로 되돌리자 dhcpcd가 hook을 `reason=PREINIT iface=wlan0 wireless=1`로
+불렀고, hook의 `interface_add`가 `OK`, 10초 뒤 `COMPLETED`, 그 뒤 `BOUND`. hook의 reason
+순서는 `PREINIT` → `NOCARRIER` → `CARRIER` → `BOUND`, 떠날 때 `DEPARTED`.
+
+부팅 직후 dhcpcd가 처음 본 `wlan0` · `wlan1`의 `PREINIT`에서는 global 소켓이 아직 없어
+`Failed to connect … No such file or directory`였다. 결정 4의 배경 재시도가 이것 때문이다.
+
+### 실측 8 — `regulatory.db`는 서명 검증을 지나 받아들여진다
+
+wireless-regdb의 `regulatory.db` · `.p7s`를 넣자 `failed to load regulatory.db` 줄이
+사라졌다. 국가는 `00`(아무도 안 정했다). 게이트는 설정에 `country=KR`을 넣고 `iw reg get`이
+`KR`이 되는 것으로 db가 있다는 것을 본다.
+
+### 실측 9 — firmware를 넣으면 부팅마다 initramfs 풀기가 0.96초 는다
+
+`Unpacking initramfs` → `Freeing initrd memory`가 1.48초(46,100K) → 2.44초(83,904K). 탐침까지의
+벽시계 5.1초 → 6.1초. 루트 게이트의 부팅이 100번 안팎이므로 한 판에 1~2분이다. 위험 1은
+받아들인다 — firmware를 ISO에만 따로 두는 길은 안 연다. 게이트가 제품과 같은 initrd로 뜬다.
