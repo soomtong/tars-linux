@@ -366,7 +366,8 @@ IPv4만 거른다. 커널에 IPv6가 없어서 지금은 구멍이 아니지만,
 
 `/config/services.d/`에 실행 파일을 두면 `init`이 부팅 때 그것을 띄우고 지켜본다.
 죽으면 1초 뒤에 다시 띄우고, 10초를 못 버티고 세 번 연달아 죽으면 포기한다 — 화면의
-터미널과 콘솔 셸이 받는 것과 같은 규칙이다. 기본으로는 아무것도 안 뜬다.
+터미널과 콘솔 셸이 받는 것과 같은 규칙이다. 기본으로는 아무것도 안 뜬다. 멈추고
+다시 띄우는 것은 아래 "서비스를 멈추고 다시 띄우기"에 있다.
 
 ```sh
 #!/bin/sh
@@ -398,6 +399,47 @@ done
 | `tars-init: started service hello (pid 71, /config/services.d/hello)` | 떴다. 다시 뜰 때마다 한 줄 |
 | `tars-init: execve /config/services.d/hello failed (errno 2)` | shebang의 인터프리터나 링크 대상이 없다 |
 | `tars-init: giving up on service hello after 3 fast exits` | 셋 연달아 빨리 죽었다. 이 부팅에는 다시 안 띄운다 |
+
+### 서비스를 멈추고 다시 띄우기
+
+`tars-service`가 `init`에게 묻고 시킨다. 콘솔에서도 ssh에서도 같다.
+
+```sh
+tars-service status            # 전부 — terminal과 콘솔 셸까지
+tars-service status sshd
+tars-service stop sshd
+tars-service start sshd
+tars-service restart sshd
+```
+
+```
+terminal        running   pid 35   up 14s
+console shell   running   pid 36   up 14s
+service sshd    running   pid 38   up 14s
+service web     stopped
+service broken  given up
+```
+
+- 멈춘 것은 이 부팅이 끝날 때까지 멈춰 있다. 다음 부팅은 `services.d` 그대로 다시
+  띄운다 — 영영 끄려면 `services.d`에서 지운다.
+- `stop`은 서비스의 프로세스 그룹 전체에 SIGTERM을 보내고, 3초 안에 안 죽으면
+  SIGKILL을 보낸다. `exec` 없이 쓴 스크립트의 자식까지 함께 멈춘다.
+- `start`는 포기된(`given up`) 서비스도 다시 띄운다. `restart`와 `stop`으로 죽은 것은
+  "빨리 죽었다"로 세지 않는다.
+- ssh로 붙어서 `stop sshd`를 쳐도 지금 세션은 안 끊긴다. 새 접속만 막힌다.
+- terminal과 콘솔 셸은 보이기만 한다. 멈추면 명령을 칠 자리가 사라진다.
+- 명령은 원하는 상태가 될 때까지 8초까지 기다린다. 종료 코드: 0 됐다 · 1 `init`이
+  거절했다(`error: …`) · 2 `init`에 닿지 못했다 · 3 시간 안에 안 됐다 · 64 사용법.
+
+부팅 로그에 남는 줄.
+
+| 줄 | 뜻 |
+|---|---|
+| `tars-init: control: stop service sshd -> stopping` | 요청 하나와 그 결과 |
+| `tars-init: service sshd stopped on request` | 사람이 멈춘 것이 거둬졌다 |
+| `tars-init: restarting service sshd on request` | 사람이 다시 띄운 것 |
+| `tars-init: service web outlived SIGTERM by 3s, sent SIGKILL to group 71` | SIGTERM을 무시했다 |
+| `tars-init: no control socket (bind errno 98)` | 통로를 못 열었다. 부팅은 평소대로고 `tars-service`만 안 된다 |
 
 ### ssh로 붙기
 
