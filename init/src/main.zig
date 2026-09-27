@@ -9,6 +9,7 @@ const net = @import("net.zig");
 const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
 const services = @import("services.zig");
+const login = @import("login.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -401,9 +402,13 @@ fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
             .console_shell => setupControllingTerminal(),
             .service => detachService(),
         }
-        _ = linux.execve(c.path.ptr, &c.argv, envp);
-        // execve가 돌아왔다는 것은 실패했다는 뜻이다.
-        std.debug.print("tars-init: execve {s} failed\n", .{c.path});
+        const exec_rc = linux.execve(c.path.ptr, &c.argv, envp);
+        // execve가 돌아왔다는 것은 실패했다는 뜻이다. errno가 원인을 가른다 —
+        // 2(ENOENT)는 파일이나 shebang의 인터프리터가 없는 것, 13(EACCES)은 실행
+        // 비트가 없는 것이다(SV-M1 실측 9).
+        std.debug.print("tars-init: execve {s} failed (errno {d})\n", .{
+            c.path, @intFromEnum(linux.errno(exec_rc)),
+        });
         linux.exit(127);
     }
     return @intCast(pid);
@@ -789,6 +794,25 @@ pub fn main(init: std.process.Init.Minimal) void {
     } else {
         std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
     }
+
+    // SV-M2 결정 9. ssh 세션이 콘솔과 같은 셸 · 같은 env를 갖게 한다. `shell`은
+    // `resolveShell` 뒤의 값이다 — 위 `HISTFILE`이 폴백 뒤의 셸을 보는 것과 같은
+    // 이유다. 서비스(sshd)가 뜨기 전이어야 하므로 `supervise`보다 앞이면 되고, env
+    // 블록과 나란히 두는 것이 "같은 목록"(M2-B)을 읽기에 맞다.
+    //
+    // 크기 `3 + 4` — 앞의 셋에 셸별 히스토리 env(가장 긴 zsh가 셋)가 붙고 한 칸이
+    // 남는다. `config.zig`의 목록을 늘려 넘치면 ReleaseSafe가 여기서 패닉한다.
+    var ssh_env: [3 + 4][]const u8 = undefined;
+    var ssh_env_len: usize = 0;
+    for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry }) |e| {
+        ssh_env[ssh_env_len] = e;
+        ssh_env_len += 1;
+    }
+    for (shell.histEntries()) |e| {
+        ssh_env[ssh_env_len] = e;
+        ssh_env_len += 1;
+    }
+    login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell_path, ssh_env[0..ssh_env_len]);
 
     // FW-M1. `net.bringUp` 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
     // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
