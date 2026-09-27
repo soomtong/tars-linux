@@ -2,7 +2,7 @@
 
 접두사: WL
 
-Status: 진행 중(2026-09-28) — M0 끝, 실측 1~12. 결정 4를 실측 5로 고쳤다(`-M`이 없다).
+Status: 진행 중(2026-09-28) — M0~M2 끝, 실측 1~13. 결정 4를 실측 5로 고쳤다(`-M`이 없다).
 
 관련 문서: `2026-09-26-tars-wired-nic-design.md`(WN. 이 사이클이 그 비목표 2를 목표로
 옮긴다) · `2026-09-27-tars-daemon-supervision-design.md`(DS. 데몬을 감독 목록에 넣는
@@ -159,7 +159,15 @@ RM · WN과 같은 반쪽 판정이다. 파일이 initrd에 있는지만 본다.
 ### 위험 5 — firmware가 게스트 RAM에 남는다
 
 initramfs는 RAM이다. firmware 96MB(풀린 크기)가 부팅 내내 메모리에 있다. 게이트의 게스트는
-512MB다(`GUEST_MEM`). M0의 부팅 다섯은 모두 떴다. M1이 `MemAvailable`을 잰다.
+512MB다(`GUEST_MEM`). M1이 쟀다 — `MemAvailable` 309MB → 213MB(실측 12). 루트 게이트가
+메모리 부족으로 흔들리면 여기로 돌아온다.
+
+### 위험 6 — 시작하는 동안 명령줄 인터페이스가 사라지면 wpa_supplicant가 죽는다
+
+`-i`로 받은 인터페이스를 초기화하는 중에 사라지면 `Failed to initialize driver interface`로
+status 255다(실측 13). 다 잡은 뒤에 사라지는 것(동글을 뽑는 것)은 같은 pid로 산다.
+앞의 경우도 감독자가 1초 뒤 되살리고 `tars-wifi`가 다시 세므로 제자리로 온다 — 다만
+빨리 죽음 하나로 센다.
 
 ## 비목표
 
@@ -275,3 +283,45 @@ wireless-regdb의 `regulatory.db` · `.p7s`를 넣자 `failed to load regulatory
 `Unpacking initramfs` → `Freeing initrd memory`가 1.48초(46,100K) → 2.44초(83,904K). 탐침까지의
 벽시계 5.1초 → 6.1초. 루트 게이트의 부팅이 100번 안팎이므로 한 판에 1~2분이다. 위험 1은
 받아들인다 — firmware를 ISO에만 따로 두는 길은 안 연다. 게이트가 제품과 같은 initrd로 뜬다.
+
+## 실측 (M1 · M2, 2026-09-28)
+
+### 실측 10 — 86MB initrd가 limine BIOS로 ISO에서 뜬다
+
+`make_initrd.sh`의 옛 주석이 "53MB에서 부팅조차 못 했다"고 적은 경로(`boot` 체인)다. 그
+벽은 gzip 전의 것이었다. firmware를 붙인 86MB가 fish 배너까지 약 11초, 체인 전체 43초(첫
+회차라 firmware를 푸는 시간 포함). `nic` 32초 · `net` 170초 · `tools` 56초도 초록이다 —
+모든 부팅에 `hwsim0`이 생겨도 dhcpcd와 판정이 그대로다.
+
+### 실측 11 — 정적 검사는 이어 붙이는 줄이 빠진 것을 잡는다
+
+`gzip -dc | cpio -it`는 첫 archive에서 멈춰서 firmware가 목록에 안 나온다. 그래서 `tools`
+체인의 검사 1b는 initrd의 꼬리가 `firmware.cpio.gz`와 바이트까지 같은지와, 그 cpio에 목록의
+경로가 전부 있는지를 따로 본다. 반사실 — `make_initrd.sh`의 `cat … >> initrd.cpio`를 뺀
+사본으로 덮으면 검사 1은 초록이고 1b가 `the initrd does not end with the firmware cpio`로
+멈춘다.
+
+### 실측 12 — firmware가 `MemAvailable`을 96MB 줄인다
+
+`services.d` 탐침이 부팅 3초 뒤 `/proc/meminfo`를 찍었다. firmware 없는 initrd(지금 initrd의
+꼬리를 잘라 만들었다) 309,200kB, 있는 것 213,368kB. 풀린 크기와 같다.
+
+### 실측 13 — 제품 경로가 hwsim에서 선다. 시작 중에 사라진 인터페이스는 wpa_supplicant를 죽인다
+
+측정용 cpio 없이 제품 initrd로 뜨고, 설정 디스크에 `wpa_supplicant.conf`(`country=KR`)와 AP를
+세우는 탐침을 두었다.
+
+- `tars-init: wpa_supplicant joins the services, tars-wifi picks the interfaces` 뒤에
+  `started service wpa_supplicant (pid 39, /usr/lib/tars/tars-wifi)`,
+  `tars-wifi: wpa_supplicant on wlan0 wlan1`. `pgrep -a`의 pid 39가
+  `/usr/bin/wpa_supplicant -g … -i wlan0 -N … -i wlan1`이다 — exec이 pid를 지켰다.
+- 제품 dhcpcd가 `wlan0: leased 192.168.77.126`. `iw reg get`이 `country KR`이다 — `regulatory.db`가
+  initrd에 있다는 양성 증거다.
+- `tars-service restart wpa_supplicant` — `restarting service wpa_supplicant on request`, 새 pid가
+  `wlan0`만 세어 다시 `COMPLETED`.
+- 탐침이 부팅 직후 곧바로 `phy1`을 옮긴 판에서는 pid 39가 status 255로 죽었다. 로그는
+  `wlan1: Failed to initialize driver interface` → `CTRL-EVENT-TERMINATING`. 명령줄로 받은
+  인터페이스의 초기화 실패는 치명적이다. 감독자가 1초 뒤 되살렸고 새 `tars-wifi`가 `wlan0`만
+  세어 연결까지 갔다. 탐침이 global 소켓의 `interface` 목록에 `wlan1`이 나올 때까지 기다린
+  뒤 옮긴 판에서는 pid 39가 그대로 살았고 목록에 `wlan1`이 남았다(위험 6). wifi 체인은 뒤의
+  모양을 쓴다 — 실기에서 동글을 뽑는 것과 같은 경로다.

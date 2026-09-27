@@ -308,4 +308,19 @@ GUEST_TOOLS=(
   usr/lib/openssh/sshd-session:usr/lib/openssh/sshd-session
   usr/lib/openssh/sshd-auth:usr/lib/openssh/sshd-auth
   usr/bin/ssh-keygen:usr/bin/ssh-keygen
+
+  # ── 층 12 · 무선(WL-M2) ─────────────────────────────────────────────
+  # init이 감독하는 kernel/wifi/tars-wifi가 /usr/bin/wpa_supplicant를 exec한다.
+  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/bin:/bin). dhcpcd의 hook
+  # 10-tars-wifi가 wpa_cli를 이름으로 부른다. 사람은 wpa_passphrase로 첫 설정
+  # 파일을 만들고(WL design 결정 5) iw로 라디오와 규제 도메인을 본다.
+  #
+  # 새 라이브러리(WL-M0 실측 4): libnl-3 · libnl-genl-3 · libnl-route-3 ·
+  # libpcsclite · libdbus-1, 합 1.1MB. dbus는 라이브러리뿐이고 데몬은 필요 없다.
+  # hostapd와 busybox도 sysroot에 있지만 여기 없다 — 게이트의 설정 디스크가
+  # 가져가는 게이트 전용이다(WL design 결정 7).
+  usr/sbin/wpa_supplicant:usr/bin/wpa_supplicant
+  usr/sbin/wpa_cli:usr/bin/wpa_cli
+  usr/bin/wpa_passphrase:usr/bin/wpa_passphrase
+  usr/sbin/iw:usr/bin/iw
 )

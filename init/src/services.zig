@@ -34,9 +34,13 @@ pub const LABEL_PREFIX = "service ";
 /// 이름으로 부른다.
 pub const DHCPCD = "dhcpcd";
 pub const CHRONYD = "chronyd";
+/// WL-M2. 셋째 데몬(WL design 결정 4). 감독 목록의 path는 wrapper `tars-wifi`지만
+/// `exec` 뒤에 남는 것은 wpa_supplicant라서 이름을 그것으로 둔다 — 사람은
+/// `tars-service restart wpa_supplicant`라고 친다.
+pub const WPA_SUPPLICANT = "wpa_supplicant";
 /// 같은 이름이 `services.d`에 있으면 건너뛴다(DS design 결정 5). 둘이 같은 label을
 /// 달면 `tars-service stop dhcpcd`가 무엇을 멈출지 모호하다.
-pub const RESERVED = [_][]const u8{ DHCPCD, CHRONYD };
+pub const RESERVED = [_][]const u8{ DHCPCD, CHRONYD, WPA_SUPPLICANT };
 const LABEL_MAX: usize = LABEL_PREFIX.len + NAME_MAX;
 
 fn failed(rc: usize) ?linux.E {

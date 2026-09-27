@@ -1,0 +1,52 @@
+# dhcpcd가 새로 본 무선 인터페이스를 wpa_supplicant에게 넘긴다(WL design 결정 4).
+#
+# wpa_supplicant는 init이 감독하고, 뜰 때 있던 인터페이스는 kernel/wifi/tars-wifi가
+# argv로 넘긴다. 그 뒤에 생긴 것 — firmware를 늦게 올리는 칩, 부팅 뒤 꽂은 동글 —
+# 은 아무도 모른다. dhcpcd는 udev 없이 새 인터페이스를 보고(WN 실측) 그때마다
+# hook을 `reason=PREINIT`으로 부르며, 무선이면 `ifwireless=1`을 준다(WL 실측 7).
+# 이 자리가 그 둘을 잇는다.
+#
+# 30-tars-ntp와 같은 규칙이다 — 실행이 아니라 source되므로 변수에 tars_ 접두사,
+# return 없음, `set --` 없음. 경로를 변수로 두는 것은 호스트에서 이 파일을 sh로
+# 돌려 보기 위해서다.
+: "${tars_wifi_conf:=/config/wpa_supplicant.conf}"
+: "${tars_wifi_global:=/run/wpa_supplicant/global}"
+: "${tars_wifi_log:=/dev/console}"
+
+# 파일이 없으면 init이 wpa_supplicant를 안 띄웠다(init/src/wifi.zig) — 할 일이 없다.
+#
+# 이미 넣은 인터페이스를 다시 넣으면 `FAIL`이고 연결은 그대로다(실측 6). 그래서
+# tars-wifi가 argv로 넘긴 것에 이 hook이 또 불려도 해가 없다.
+#
+# 부팅 직후에는 전역 소켓이 아직 없을 수 있다 — init이 wpa_supplicant와 dhcpcd를
+# 한 바퀴에 띄우고, dhcpcd가 먼저 인터페이스를 본다(실측 7). 그때만 0.5초씩
+# 스무 번 다시 해 본다. 배경으로 도는 이유는 dhcpcd가 hook이 끝나기를 기다리기
+# 때문이다 — 여기서 10초를 잡으면 그동안 다른 인터페이스의 lease가 멈춘다.
+# stdin을 끊는 것은 배경 job의 규칙이다(project_gate_screen_echo).
+if [ "$reason" = PREINIT ] && [ "$ifwireless" = 1 ] && [ -e "$tars_wifi_conf" ]; then
+  (
+    tars_wifi_try=0
+    while :; do
+      tars_wifi_out="$(wpa_cli -g "$tars_wifi_global" interface_add "$interface" "$tars_wifi_conf" 2>&1)"
+      case "$tars_wifi_out" in
+        *"Failed to connect"*)
+          tars_wifi_try=$((tars_wifi_try + 1))
+          if [ "$tars_wifi_try" -ge 20 ]; then
+            echo "tars-wifi: gave up handing $interface to wpa_supplicant" > "$tars_wifi_log"
+            break
+          fi
+          sleep 0.5
+          ;;
+        *OK*)
+          # wifi 체인이 이 줄을 grep한다.
+          echo "tars-wifi: handed $interface to wpa_supplicant" > "$tars_wifi_log"
+          break
+          ;;
+        *)
+          # FAIL — 이미 있다. tars-wifi가 argv로 넘긴 인터페이스가 여기로 온다.
+          break
+          ;;
+      esac
+    done
+  ) < /dev/null > /dev/null 2>&1 &
+fi

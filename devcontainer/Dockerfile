@@ -255,6 +255,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # git이 들여놓았다) 새것은 일곱, 2,124,688바이트다. 그 74%가 libsqlite3이고
 # sshd-session → libwtmpdb → sqlite로 온다(SV-M0 실측 1). ncurses-term은 게스트에
 # 넣지 않는다 — make_initrd.sh가 거기서 terminfo 다섯을 골라 굽는다(SV 결정 8).
+#
+# ── WL-M2: 층 12(무선) ────────────────────────────────────────────────
+#
+# wpasupplicant(wpa_supplicant · wpa_cli · wpa_passphrase)와 iw. 재귀 DT_NEEDED에서
+# 새것은 다섯, 합 1.1MB다(WL-M0 실측 4) — libnl-3 · libnl-genl-3 · libnl-route-3 ·
+# libpcsclite1 · libdbus-1-3. dbus는 라이브러리만이다. libsystemd0 · libcap2 ·
+# libreadline은 앞 층들이 이미 들여놓았다.
+#
+# hostapd와 busybox는 게이트 전용이다. initrd에 안 들어가고(guest_tools.sh에
+# 없다) wifi 체인이 설정 디스크에 싣는다 — 게스트 안에서 AP와 DHCP 서버를
+# 세우는 데 쓴다(WL design 결정 7). 둘 다 새 라이브러리가 없다(hostapd는
+# wpa_supplicant의 부분집합, busybox는 libc · libresolv).
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -377,6 +389,15 @@ RUN dpkg --add-architecture amd64 \
         libpam0g:amd64 \
         libaudit1:amd64 \
         libcrypt1:amd64 \
+        wpasupplicant:amd64 \
+        iw:amd64 \
+        libnl-3-200:amd64 \
+        libnl-genl-3-200:amd64 \
+        libnl-route-3-200:amd64 \
+        libpcsclite1:amd64 \
+        libdbus-1-3:amd64 \
+        hostapd:amd64 \
+        busybox:amd64 \
         ncurses-term \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \

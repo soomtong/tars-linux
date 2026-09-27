@@ -257,6 +257,16 @@ chmod 0755 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-run-hooks"
 cp dhcpcd-hooks/30-tars-ntp "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
 chmod 0644 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/30-tars-ntp"
 
+# WL-M2. 무선의 두 조각(WL design 결정 4). hook은 위의 30-tars-ntp와 같은
+# 계약이고(source된다, 0644), wrapper는 init이 감독 목록의 path로 exec하는
+# 실행 파일이다(0755). wrapper의 자리는 init/src/wifi.zig의 WIFI_PATH와 같은
+# 글자여야 한다 — 어긋나면 증상이 `execve … failed (errno 2)` 하나다.
+cp dhcpcd-hooks/10-tars-wifi "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/"
+chmod 0644 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-hooks/10-tars-wifi"
+mkdir -p "$WORKDIR/usr/lib/tars"
+cp wifi/tars-wifi "$WORKDIR/usr/lib/tars/tars-wifi"
+chmod 0755 "$WORKDIR/usr/lib/tars/tars-wifi"
+
 # TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
 #
 # sysroot가 아니라 저장소에서 온다 — 우리가 쓴 파일이라 게스트에 넣을 원본이

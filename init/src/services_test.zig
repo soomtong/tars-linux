@@ -75,9 +75,10 @@ pub fn main() !void {
     // 한 글자라도 다르면 받는다 — 막는 것은 tars-service가 헷갈리는 자리뿐이다.
     try expectVerdict(services.DHCPCD, .reserved);
     try expectVerdict(services.CHRONYD, .reserved);
+    try expectVerdict(services.WPA_SUPPLICANT, .reserved);
     try expectVerdict("dhcpcd2", .ok);
     try expectVerdict("chrony", .ok);
-    std.debug.print("services_test: names — dot means hidden, {d} bytes is the limit, dhcpcd and chronyd are init's\n", .{services.NAME_MAX});
+    std.debug.print("services_test: names — dot means hidden, {d} bytes is the limit, dhcpcd, chronyd and wpa_supplicant are init's\n", .{services.NAME_MAX});
 
     // ── 정렬 ───────────────────────────────────────────────────────
     var names = [_][]const u8{ "z-last", "a-first", "m-mid", "a-fir" };

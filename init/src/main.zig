@@ -6,6 +6,7 @@ const devices = @import("devices.zig");
 const storage = @import("storage.zig");
 const environ = @import("environ.zig");
 const net = @import("net.zig");
+const wifi = @import("wifi.zig");
 const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
 const services = @import("services.zig");
@@ -945,6 +946,12 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 감독자가 위 env 블록을 넘긴다.
     const want_dhcpcd = net.wantsDhcpcd(cfg.net);
 
+    // WL-M2. 무선도 답만 듣는다. `/config/wpa_supplicant.conf`가 있으면 아래
+    // `children`에서 dhcpcd 앞에 선다(WL design 결정 4). 앞인 이유는 한 바퀴 안의
+    // 순서다 — dhcpcd가 처음 본 무선 인터페이스에 hook을 부를 때 wpa_supplicant의
+    // global 소켓이 있을 확률을 높인다. 없어도 hook이 몇 초 다시 시도한다(실측 7).
+    const want_wifi = wifi.wants(cfg.net, storage_mounted, wifi.CONF_PATH);
+
     // TS-M1 · TD-M1 · DS-M1. chronyd의 설정을 쓰고 감독 목록에 넣을지를 답한다.
     // 기다리는 것이 없다 — `ntp=dhcp`의 서버는 dhcpcd의 hook이 나중에
     // `/run/tars/chrony.sources`에 쓰고 chronyc로 알린다(DS design 결정 3).
@@ -1044,6 +1051,16 @@ pub fn main(init: std.process.Init.Minimal) void {
     var n: usize = 2;
     // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
     // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
+    // WL-M2. wpa_supplicant도 같은 자리의 셋째다.
+    if (want_wifi) {
+        children[n] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.WPA_SUPPLICANT,
+            .path = wifi.WIFI_PATH,
+            .argv = wifi.WIFI_ARGV,
+        };
+        n += 1;
+    }
     if (want_dhcpcd) {
         children[n] = .{
             .kind = .service,
