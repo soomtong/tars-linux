@@ -136,6 +136,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Wired NIC (WN-M0~M3) | 2026-09-26 | 노트북형 유선 드라이버 여섯과 USB 동글 셋이 켜졌다. 모든 QEMU 호출이 `-nic none`/`-netdev`를 명시하고 진입 검사가 지킨다. `init`은 dhcpcd를 띄우기만 하고 인터페이스는 dhcpcd가 고른다 — 부팅 뒤 꽂은 USB 동글도 잡는다. 열네번째 체인 `nic/check.sh` |
 | Loopback (LB-M0~M3) | 2026-09-26 | `init`이 설정을 읽기 전에 `lo`를 올리고, `localhost`와 `아무거나.localhost`가 `net`과 무관하게 `127.0.0.1`로 풀린다 — `/etc/hosts` · `nsswitch.conf` · `libnss_myhostname`. 새 체인 없이 `tools` · `net` 체인이 이름 셋으로 게스트 안 TCP 왕복을 본다 |
 | Firewall (FW-M0~M2) | 2026-09-27 | `tars.conf`의 `firewall=on`이 들어오는 것을 기본으로 버리고, 사람은 `/config/nftables.d/*.nft`에 연다. `init`은 `net.bringUp` 앞에서 `nft -f`를 기다리고, 사람의 파일이 틀리면 기본 규칙만 올린다. 열다섯번째 체인 `firewall/check.sh` |
+| Boot Services (SV-M0~M2) | 2026-09-27 | `/config/services.d`에 둔 실행 파일을 `init`이 이름순으로 여덟까지 띄우고 감독한다. 첫 세입자 sshd는 템플릿 링크 하나와 공개 키 하나로 켜지고, ssh 세션은 콘솔과 같은 셸 · env다 — `init`이 부팅 때 `passwd`의 셸 자리와 sshd의 `SetEnv`를 쓴다. 열여섯번째 체인 `service/check.sh` |
 
 위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
 쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글

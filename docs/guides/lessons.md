@@ -589,6 +589,18 @@ mtime은 새 시각을 따라간다.
 (`among 14 candidates`)는 것이 의도다. 디스크 전체가 `tars-` ext2인 스틱을 꽂아
 두면 p2보다 그 스틱이 먼저 붙는다.
 
+56. 게스트의 `/bin`에는 `sh`(bash) 하나만 산다. `#!/bin/bash` 스크립트는 execve가
+`ENOENT`로 실패하고 셸은 127을 낸다 — 게스트에 심는 스크립트는 전부 `#!/bin/sh`로 쓴다
+(SV-M1 실측 9). `init`의 execve 실패 줄은 SV-M2부터 errno를 찍는다.
+
+57. ext2의 `getdents64`는 만든 순서를 돌려준다(SV-M1 실측 11). `debugfs`로 디스크를
+심는 체인에서 "순서가 맞다"를 판정하려면 역순으로 써야 정렬이 빠진 것이 드러난다.
+
+58. Debian의 `ncurses-term`에는 `ghostty` · `kitty`는 있어도 두 터미널이 실제로 보내는
+`xterm-ghostty` · `xterm-kitty`가 없다. `infocmp -x -A <dir> ghostty`의 첫 줄에 이름을
+더해 `tic -x -o`로 굽는다. 컨테이너(arm64)의 `tic`으로 구운 것이 게스트에서 그대로
+읽힌다(SV 실측 14).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -923,6 +935,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `execve` · `wait4`로 돌리고, 실패하면 include 없는 `firewall-base.nft`를 한 번
   더 올린다(FW 결정 5). `main.zig`가 `net.bringUp` 바로 앞에서 부른다 — 그 순서가
   계약이다. 이 저장소에서 유일하게 기다리는 외부 도구다(nft는 로컬 netlink뿐).
+- `services.zig` — `/config/services.d`를 부팅 때 한 번 읽어 이름순으로 여덟까지
+  고른다(SV-M1). `statx`로 "일반 파일이고 실행 비트가 있다"를 보고, 링크를 따라간다.
+  `main.zig`가 그 목록을 `children`의 terminal · 콘솔 셸 뒤에 붙이고, 자식 쪽에서
+  `detachService`(setsid · stdin `/dev/null`)를 한다.
+- `login.zig` — 부팅 때 `/etc/passwd`의 root 셸 자리와
+  `/etc/ssh/sshd_config.d/tars-env.conf`의 `SetEnv` 한 줄을 쓴다(SV-M2). ssh 세션이
+  콘솔과 같은 셸 · env를 갖는 이유가 이 파일이다.
 - `clock.zig` — 시계는 chronyd가 만진다(TD). `start()`가 `fork`하고 자식이
   `ntp=dhcp`면 `/run/tars/ntp_servers`를 기다린 뒤 chrony 설정을 짓고 `execve`한다.
   자식의 첫 줄이 `power.resetToDefault()`다 — `execve` 전에 우리 코드가 오래

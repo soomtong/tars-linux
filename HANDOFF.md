@@ -1,45 +1,41 @@
-# HANDOFF: Boot Services(SV)가 M1까지 왔다 — `init`이 `/config/services.d`를 감독한다
+# HANDOFF: Boot Services(SV)가 M2로 닫혔다 — `services.d`와 첫 세입자 sshd
 
 ## 지금 어디인가
 
-SV가 2026-09-27에 시작해 M0 · M1이 닫혔다. 다음은 M2(sshd)이고, 그 plan을 쓰기 전에
-사용자와 정할 것이 둘 있다(아래).
+SV가 2026-09-27 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). 다음 할 일은 새
+서브프로젝트를 고르는 것이다(아래).
 
-design은 `docs/superpowers/specs/2026-09-27-tars-boot-services-design.md`(확인 6 · 결정 7 ·
-위험 5 · 실측 1~12), plan은 `plans/2026-09-27-tars-boot-services-sv-m0.md` · `-sv-m1.md`다.
-기억(`docs/decisions/project_boot_services.md`)은 SV가 닫힐 때 쓴다.
+design은 `docs/superpowers/specs/2026-09-27-tars-boot-services-design.md`(결정 9 · 위험 5 ·
+실측 1~19), plan은 `plans/2026-09-27-tars-boot-services-sv-m0.md` ~ `-sv-m2.md`, 기억은
+`docs/decisions/project_boot_services.md`다.
 
 | 커밋 | 무엇 |
 |---|---|
-| `b541515` | 가이드의 낡은 네트워크 줄 둘(WN · TD 이후) |
-| `887507a` · `1505d47` · `cbc65b7` | design · M0 plan · M0 실측(코드 0줄) — sshd 비용 5.46MB, `/config`에서 직접 실행, sshd가 요구하는 셋 |
-| `14a3af8` · `4505f22` · `f1bff34` · `6d0bda0` | M1 — `init/src/services.zig` · `main.zig`의 `Kind.service` · `Child.label` · 체인 `service/check.sh`(열여섯번째, 검사 여덟) |
+| `887507a` · `1505d47` · `cbc65b7` | design · M0 plan · M0 실측(코드 0줄) |
+| `14a3af8` · `4505f22` · `f1bff34` · `6d0bda0` | M1 — `services.zig` · `Kind.service` · `Child.label` · 체인 `service/check.sh` |
+| `45735c7` · `45540f7` | 결정 8 · 9(사용자)와 그 방법의 실측 · M2 plan |
+| `806010b` · `fc6a5cf` · `70adb49` · `c89157d` · `a7a6cf2` | M2 — `login.zig` · execve errno · Dockerfile 층 11 · initrd의 sshd · 부팅 B · C · 가이드 |
 
-M1은 체인 · 반사실 셋 · 이웃 다섯(boot · device · machine · config · firewall)까지
-초록이다. 루트 게이트(16체인)는 아직 안 돌았다 — M2가 끝날 때 돈다.
+루트 게이트 16체인 3/3(49분 25초, `FAIL` 0줄, 2026-09-27). 반사실 여덟 — M1 셋(정렬 ·
+사전 확인 · 세션/stdin), M2 다섯(login.apply · 키 다시 굽기 둘 · B의 ssh.nft · terminfo).
 
-사용자가 정한 셋 — 범용 메커니즘과 sshd를 함께 · 서비스 하나는 실행 스크립트 하나 ·
-감독은 우리 감독자를 넓혀서(runit 아님).
+사용자가 정한 다섯 — 범용 메커니즘과 sshd를 함께 · 서비스 하나는 실행 스크립트 하나 ·
+우리 감독자를 넓힌다 · terminfo 몇 개를 게스트에 · ssh 세션은 `tars.conf`의 셸을 따른다.
 
-⚠ 다음 사람이 먼저 볼 것 셋.
-- 게스트의 `/bin`에는 `sh`만 있다. 서비스 스크립트의 shebang이 `#!/bin/bash`면 execve가
-  `ENOENT`로 127이고, 로그에 errno가 없다(실측 9).
-- ext2의 `getdents64`는 만든 순서를 돌려준다. 시작 순서는 `init`의 정렬이 정한다(실측 11).
-- Debian openssh는 root 그룹 쓰기를 StrictModes에서 봐준다(실측 5, 원인은 패치 이름으로
-  추정).
+⚠ 다음 사람이 먼저 볼 것 넷.
+- 게스트의 `/bin`에는 `sh`만 있다. 서비스 스크립트는 `#!/bin/sh`(M1 실측 9).
+- 서비스의 stdin은 `/dev/null`이다. 대화형 질문은 EOF로 "아니오"가 된다 — `ssh-keygen`이
+  있는 키를 안 덮는 것이 그 덕이다(M2 실측 18).
+- ssh 세션의 env는 `init`이 쓰는 `SetEnv`에서만 온다. env 블록에 항목을 더하면
+  `main.zig`의 `ssh_env`(크기 `3 + 4`)도 본다.
+- lastlog 소음 두 줄(`/var/log/lastlog` 없음)이 sshd 세션마다 콘솔에 찍힌다. 해는 없고
+  그대로 뒀다(M0 실측 5).
 
-## 바로 다음에 할 것 — M2 전에 사용자와 둘을 정한다
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-1. terminfo(실측 7). ssh 클라이언트의 `TERM`이 `xterm-256color`가 아니면(예: Ghostty의
-   `xterm-ghostty`) `less`가 경고를 찍고 RETURN을 기다린다. 게스트에 terminfo를 더
-   넣을지, 가이드로 풀지.
-2. ssh 세션의 셸 · env(실측 6). 지금은 `passwd`의 `/bin/sh`(bash)와 sshd의 기본 `PATH`이고
-   `init`의 env(`TZ` · 히스토리)가 없다. `tars.conf`의 `shell`을 따르게 할지.
-
-정한 뒤 M2 plan — sshd 넷과 라이브러리 일곱을 initrd에, `sshd_config` · 템플릿
-`/etc/tars/services/sshd` · `passwd`/`group` 두 줄 · `/run/sshd`, devcontainer에
-`openssh-client`, 체인에 부팅 B(로그인) · C(호스트 키 영속), `firewall=on` 조합, 가이드 절,
-execve 실패 줄의 errno. 끝에 루트 게이트.
+남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · IPv6(FW design 위험 6이 첫 확인). SV가
+남긴 작은 것 — 서비스를 멈추고 다시 띄우는 명령(SV 비목표 4) · dhcpcd · chronyd를 감독
+목록에 넣는 것(비목표 5).
 
 
 ## 어디를 보면 되는가

@@ -2,7 +2,7 @@
 
 접두사: SV
 
-Status: M1 끝났다(2026-09-27) — 실측 1~12. 열여섯번째 체인 `service/check.sh`(부팅 하나, 검사 여덟). 다음은 M2(sshd).
+Status: 끝났다(2026-09-27) — M0~M2, 결정 9 · 실측 1~19. 열여섯번째 체인 `service/check.sh`(부팅 셋, 검사 열다섯).
 
 관련 문서: `2026-08-01-tars-boot-foundation-design.md`(BF. 감독 루프의 뿌리) ·
 `2026-09-27-tars-firewall-design.md`(FW. 여는 길과 "기본 꺼짐, 켜면 닫힘") ·
@@ -576,3 +576,75 @@ SVM2-PTY alacritty rc=0 out=[...;alacritty;[?1h=x;[K[?1l>rc=0;...]
 키가 남아 있었다. 모든 연결의 앞에 `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!`가
 찍혔다(`StrictHostKeyChecking=no`라 연결은 됐다). 결정 6이 키를 `/config/ssh/`에 두는
 이유가 이 한 화면이다 — 부팅 C의 판정이 이것이 안 나오는 것이다.
+
+## SV-M2가 실행으로 증명한 것
+
+2026-09-27. plan은 `plans/2026-09-27-tars-boot-services-sv-m2.md`. 커밋 — `806010b`(`login.zig`) ·
+`fc6a5cf`(`main.zig`) · `70adb49`(Dockerfile 층 11 · `guest_tools.sh` · `make_initrd.sh`) ·
+`c89157d`(체인 부팅 B · C) · `a7a6cf2`(가이드).
+
+### 실측 16 — 이미지는 캐시로 1분 15초, initrd는 압축 2,470,635바이트가 늘었다
+
+Dockerfile 층 11(패키지 열)과 기본 apt의 `openssh-client`를 더해 이미지를 다시 구웠다.
+`initrd.cpio`가 43,799,286 → 46,269,921바이트다. 들어간 것 — 실행 파일 넷(`usr/bin/sshd` ·
+`usr/bin/ssh-keygen` · `usr/lib/openssh/sshd-session` · `sshd-auth`), 라이브러리 일곱(M0 실측
+1 그대로), `etc/ssh/sshd_config` · `sshd_config.d/` · `etc/tars/services/sshd` · `run/sshd`,
+terminfo 일곱과 링크 둘(`g/ghostty` · `k/kitty`는 `tic`이 이름 둘을 한 파일로 구운 흔적이다).
+
+`login_test`는 첫 컴파일에 초록이었다. `std.Io.Writer.fixed`는 0.16에서 그 이름 그대로다.
+
+### 실측 17 — 체인이 부팅 셋 · 검사 열다섯으로 첫 판에 섰다
+
+```
+=== boot B: sshd linked, firewall=on without ssh.nft ===
+init set root's shell to zsh and wrote sshd's env
+the linked template started sshd and generated SHA256:Fg4YxVAIU5spnfXeiAlwAYtbvowsjoNahiP03+8gpbc
+with firewall=on and no ssh.nft, port 22 stayed shut
+=== boot C: the same disk plus nftables.d/ssh.nft ===
+the host key survived the reboot and is what the client sees
+a registered key logged in to zsh with init's PATH and history
+an unregistered key was refused
+less ran under TERM=xterm-ghostty without a warning
+SV chain PASS
+```
+
+사람이 한 것은 링크 하나와 공개 키 하나, 그리고 C 앞의 `ssh.nft` 한 줄이다. `init`에
+sshd를 아는 코드는 없다 — 결정 1의 "sshd에 `init` 코드가 안 든다"가 선다(`login.zig`는
+sshd가 아니라 로그인 셸 · env를 쓴다).
+
+### 실측 18 — 반사실 다섯. 하나는 겨냥한 검사보다 앞에서 죽었다
+
+| 반사실 | 빨간 검사 |
+|---|---|
+| `login.apply` 호출을 지운다 | 검사 9 — `init did not write the login shell and the ssh env` |
+| 템플릿의 `if [ ! -e "$key" ]`를 `if true` | 부팅 C의 `sshd never listened` (검사 12보다 앞) |
+| 같은 자리를 `rm -f "$key" "$key.pub"; if true` | 검사 12 — `the host key was generated again on the second boot` |
+| 부팅 B에도 `ssh.nft` | 검사 11 — `firewall=on without ssh.nft still let an ssh login through` |
+| terminfo 굽는 루프를 지운다 | 검사 15 — `less still warns under TERM=xterm-ghostty` |
+
+둘째 줄이 plan과 달랐다. 키가 이미 있으면 `ssh-keygen`이 `Overwrite (y/n)?`를 묻는데
+서비스의 stdin이 `/dev/null`(M1-C)이라 EOF를 "아니오"로 읽고 1로 끝난다. 템플릿은
+`|| exit 1`이라 서비스가 셋 죽고 포기됐다.
+
+```
+/config/ssh/ssh_host_ed25519_key already exists.
+Overwrite (y/n)? tars-init: service sshd exited (pid 38, status 1, lived 2s)
+...
+tars-init: giving up on service sshd after 3 fast exits
+```
+
+그래서 템플릿의 `if`를 빼도 키는 덮이지 않는다 — `ssh-keygen` 자신이 두 번째 울타리다.
+검사 12를 겨냥하려면 키를 지우고 다시 굽게 해야 했고(셋째 줄), 그러면 겨냥한 검사에서
+빨갛다.
+
+### 실측 19 — 루트 게이트 16체인 3/3, 49분 25초
+
+```
+=== SV-M2 run 3/3 PASSED ===
+SV-M2 PASS: 3/3 consecutive runs succeeded
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+```
+
+`FAIL` 0줄. FW 때(15체인 46분 26초)보다 약 3분이 늘었다 — 새 체인의 부팅 셋 × 3회다.
+이웃 체인 어디에도 `services` 줄 하나 · `label` · `login shell` 줄이 판정을 흔든 자리가
+없다.
