@@ -2,7 +2,7 @@
 
 접두사: CT
 
-Status: M0 끝났다(2026-09-27) — 실측 1~7. 결정 4를 "그룹에 보낸다"로 고쳤다.
+Status: M1 끝났다(2026-09-27) — 실측 1~10. 결정 4를 "그룹에 보낸다"로(M0), 결정 5 · 6의 문구 · 시한 · exit code를(M1) 고쳤다.
 
 관련 문서: `2026-09-27-tars-boot-services-design.md`(SV. 이 사이클이 그 비목표 4를
 목표로 옮긴다) · `2026-09-13-tars-shutdown-latency-design.md`(SL. 종료 유예와
@@ -124,15 +124,22 @@ service web     stopped
 ```
 
 오류는 `error: ` 로 시작하는 한 줄이다(`error: no service named foo` ·
-`error: console shell is not a service` · `error: bad request`).
+`error: bad request` · `error: request of 75 bytes, at most 64`). terminal과 콘솔 셸을
+가리키는 거절도 `error: no service named terminal` 하나다 — `console shell`은 공백이
+있어 이름 한 개로 올 수 없다(CT-M1 plan M1-D에서 고쳤다).
 
 ### 결정 6 — 클라이언트 `tars-service`가 기다림을 진다
 
 `init/build.zig`의 세 번째 실행 파일, `/usr/bin/tars-service`. 요청을 보내고 답을
-찍고 exit code로 가른다(0 성공 · 1 PID 1이 거절 · 2 통로 없음 · 3 시한 초과).
-`stop` · `restart`는 PID 1이 즉시 답한 뒤, 클라이언트가 `status NAME`을 0.2초
-간격으로 다시 물어 원하는 상태(`stopped` / 다른 pid로 `running`)가 될 때까지 최대
-5초 기다린다.
+찍고 exit code로 가른다(0 성공 · 1 PID 1이 거절 · 2 통로 없음 · 3 시한 초과 · 64 사용법).
+`stop` · `start` · `restart`는 PID 1이 즉시 답한 뒤, 클라이언트가 `status NAME`을 0.2초
+간격으로 다시 물어 원하는 상태(`stopped` / `running` / 다른 pid로 `running`)가 될 때까지
+최대 8초 기다린다.
+
+8초인 까닭(CT-M1 plan M1-B에서 5초를 고쳤다) — SIGTERM을 무시하는 서비스는 `kill_at`이
+초 단위라 2~3초 뒤에 시한이 되고, 루프가 1초마다 깨므로 SIGKILL이 최악 4초, 거둠이 최악
+5초다. 이름은 클라이언트가 거르지 않고 보낸다 — 거르는 것은 PID 1 한 곳이고, 그래야
+게이트가 `tars-service`로 PID 1의 거절을 본다(M1-A).
 
 ### 결정 7 — 요청 해석과 답 짓기는 시스템 콜 없는 함수다
 
@@ -331,3 +338,66 @@ CT의 범위 밖이고 해도 작다(읽기 전용). 우리 listen fd는 `CLOEXE
 - 요청 길이 판정은 `MSG_TRUNC`의 반환값으로 한다. 답은 `MSG_NOSIGNAL`로 보낸다.
 - sshd의 멈춤은 `exited status 0`과 `killed signal 15` 두 모양이다.
 - 거둠은 1초 안이다. 클라이언트의 5초 기다림은 그대로 둔다.
+
+## CT-M1이 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-service-control-ct-m1.md`다. 커밋 셋 — `d2456f0`(`control.zig` ·
+호스트 검사) · `7df2d86`(`main.zig`) · `b63791d`(`tars-service` · initrd).
+
+### 실측 8 — 호스트 검사가 첫 컴파일에 초록이다
+
+`control_test`가 판정 줄 일곱을 찍었다 — 요청의 글자 · 답의 글자(`row`가 쓴 것을
+`parseRow`가 되읽는다) · stop · restart · given up의 규칙 · 클라이언트의 끝 · 소켓 왕복
+(0600 · 경계 · 100바이트 · 침묵 · 받는 쪽 없음). M0 실측 1이 재지 않은 std 함수
+(`std.mem.trimStart` · `std.meta.stringToEnum` · `std.mem.indexOfAny`)도 plan의 짐작대로였다.
+
+`control.zig`가 없을 때의 실패를 먼저 봤다(`unable to load 'control.zig'`). 그때 `zig build
+test`의 끝줄은 `PASS`였다 — 검사가 병렬로 돌아 다른 검사의 줄이 끝에 온다. 판정은 끝줄이
+아니라 종료 코드와 `error` · `FAIL`의 유무로 한다.
+
+### 실측 9 — 게스트에서 동사 넷이 기대대로 돈다
+
+```
+CTM1-RUN stop-sleeper rc=0 ms=12 out=[stopping service sleeper (pid 37);service sleeper stopped;]
+CTM1-ORPHAN sleep under pid 1: [0]
+CTM1-RUN status-stopped rc=0 ms=21 out=[service sleeper stopped;]
+CTM1-RUN start-sleeper rc=0 ms=22 out=[starting service sleeper;service sleeper running   pid 149;]
+CTM1-RUN restart-sshd rc=0 ms=632 out=[restarting service sshd (pid 38);service sshd    running   pid 159;]
+CTM1-RUN restart-sshd4 rc=0 ms=633 out=[restarting service sshd (pid 178);service sshd    running   pid 188;]
+CTM1-RUN stop-stubborn rc=0 ms=2722 out=[stopping service stubborn (pid 39);service stubborn stopped;]
+CTM1-RUN start-running rc=0 ms=14 out=[service sshd is already running (pid 188);service sshd    running   pid 188;]
+CTM1-RUN terminal rc=1 ms=7 out=[error: no service named terminal;]
+CTM1-RUN bad rc=1 ms=7 out=[error: bad request;]
+CTM1-RUN long rc=1 ms=7 out=[error: request of 75 bytes, at most 64;]
+CTM1-RUN usage rc=64 ...
+tars-init: service sshd exited (pid 159, status 0, lived 0s)
+tars-init: restarting service sshd on request
+tars-init: service stubborn outlived SIGTERM by 3s, sent SIGKILL to group 39
+tars-init: service stubborn stopped on request
+```
+
+- 그룹에 보낸 SIGTERM이 `sleeper`의 자식까지 거뒀다(`ORPHAN 0`, M0 실측 5와 반대).
+- `restart` 넷에 포기가 없다. `lived 0s` 죽음이 둘 있었는데 `on request`로 갔다(M0 실측
+  6과 반대) — 결정 4 규칙 2가 그 차이다.
+- SIGKILL 경로가 2.7초에 끝났다. `kill_at`이 초 단위라 유예가 2~3초가 된다(M1-B의 계산).
+- `stop sleeper`가 12ms에 끝났다. M0은 거둠까지 최대 1초를 예상했는데, 요청이 `poll`을
+  깨워 루프가 곧바로 머리의 `waitpid`로 돌아가기 때문이다. SIGTERM에 곧 죽는 서비스는
+  클라이언트의 첫 `status`에서 이미 `stopped`다.
+
+### 실측 10 — 이웃 체인 셋이 그대로 초록이다
+
+```
+service exit=0 0 FAIL 48s, last: SV chain PASS
+boot exit=0 0 FAIL 19s, last: ... (PASS 줄 있음)
+power exit=0 0 FAIL 46s, last: PM-M1 PASS: the guest can shut itself down and bring itself back up
+```
+
+`boot` 체인은 terminal이 GPU 없이 매번 죽는 것을 정확히 셋으로 센다. 그 수가 그대로다 —
+`hold == .none`인 자식에게 `wantsRunning`이 옛 조건(`pid < 0 and !given_up`)과 같다.
+
+### M1이 M2에 넘기는 것
+
+- 게이트가 grep할 로그 줄은 M1 plan의 M1-E와 실측 9의 줄이다.
+- 반사실 둘 — `reaped`의 `.restarts`/`.stays_stopped`를 `.normal`로 떨어뜨린다(규칙 2 →
+  `giving up on service sshd`) · `wantsRunning`에서 `hold != .stop`을 뺀다(규칙 1 →
+  stop 뒤 되살아남).
