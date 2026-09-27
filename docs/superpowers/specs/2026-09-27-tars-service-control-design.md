@@ -2,7 +2,7 @@
 
 접두사: CT
 
-Status: 설계(2026-09-27). M0 전.
+Status: M0 끝났다(2026-09-27) — 실측 1~7. 결정 4를 "그룹에 보낸다"로 고쳤다.
 
 관련 문서: `2026-09-27-tars-boot-services-design.md`(SV. 이 사이클이 그 비목표 4를
 목표로 옮긴다) · `2026-09-13-tars-shutdown-latency-design.md`(SL. 종료 유예와
@@ -100,7 +100,12 @@ PID 1은 멈추기를 기다리지 않는다. SIGTERM을 보내고 곧바로 `st
 루프로 돌아간다. 3초를 막혀 있으면 그동안 전원 버튼도 다른 자식의 죽음도 못 본다.
 
 시그널은 SIGTERM 하나다. SL이 SIGHUP을 더한 이유는 대화형 셸이었고, 서비스는
-데몬이다. M0이 sshd로 확인한다.
+데몬이다. sshd는 SIGTERM에 22ms 안에 죽었다(실측 3).
+
+SIGTERM과 SIGKILL은 리더 하나가 아니라 프로세스 그룹에 보낸다(`kill(-pid)`, M0에서
+고쳤다). 서비스는 `setsid`로 제 그룹의 리더라 그룹 번호가 곧 pid다. `exec` 없이 쓴
+스크립트에 `kill(pid)`만 보내면 셸만 죽고 일꾼은 PID 1의 고아로 남는다(실측 5). ssh
+세션은 제 세션을 따로 잡아서 그룹에 보내도 안 끊긴다(실측 4).
 
 ### 결정 5 — 대상: status는 전부, 바꾸는 동사는 서비스만
 
@@ -185,3 +190,144 @@ sshd 세션이 제 세션을 따로 잡으면 살아남는다. M0이 확인하�
 
 게이트는 서비스 셋(sshd · 일부러 죽는 것 · SIGTERM을 무시하는 것)으로만 본다.
 여러 서비스에 동시에 요청이 몰리는 경우나 오래 도는 서비스의 `up` 초는 보지 않는다.
+
+## CT-M0이 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-service-control-ct-m0.md`다. 코드는 0줄이고, 만든 것은
+`/tmp/ct/`의 probe 하나(`probe.zig`)와 하네스뿐이다. 부팅은 둘이다 — 전부를 한 번,
+측정 6을 고쳐서 한 번.
+
+### 실측 1 — Zig 0.16 std의 소켓 함수가 plan의 짐작대로다
+
+`probe.zig`가 첫 컴파일에 두 벌(컨테이너 arm64 · 게스트 `x86_64-linux-musl`)로 섰다. M1이
+그대로 쓸 모양:
+
+```zig
+linux.socket(linux.AF.UNIX, linux.SOCK.SEQPACKET | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0)
+linux.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.un))   // addr: linux.sockaddr.un
+linux.accept4(lfd, null, null, linux.SOCK.CLOEXEC)
+linux.recvfrom(fd, buf.ptr, buf.len, linux.MSG.TRUNC, null, null)
+linux.sendto(fd, bytes.ptr, bytes.len, linux.MSG.NOSIGNAL, null, 0)
+```
+
+전부 `usize`를 돌려주는 raw syscall이라 `init`의 `failed()`가 그대로 받는다.
+
+### 실측 2 — SEQPACKET이 결정 2 · 3이 기대한 대로 돈다. 컨테이너와 게스트가 같다
+
+```
+sock setup mkdir=0 fd=4 bind=0 chmod=0 listen=0 mode=140600
+sock poll idle rc=0 errno=0 revents=0 ms=201
+sock recv first n=9 head=[stop sshd]
+sock recv second n=6 head=[second]
+sock recv big-trunc n=100 head=[xxxxxxxxxxxxxxxx]
+sock recv after-big errno=11
+sock recv c1-reply n=1000 head=[yyyyyyyyyyyyyyyy]
+sock recv peer-closed n=0 head=[]
+sock send to-closed errno=32
+sock poll silent rc=0 errno=0 revents=0 ms=202
+sock connect closed-listener fd=4 errno=111
+sock connect no-file fd=5 errno=2
+```
+
+- 경계가 지켜진다. 두 번 보낸 것이 `recv` 두 번으로 온다.
+- `MSG_TRUNC`를 주면 64바이트 버퍼로도 원래 길이(100)가 돌아오고, 넘친 나머지는
+  버려진다(다음 `recv`가 EAGAIN). M1은 `n > 64`를 `error: bad request`로 읽는다.
+- 1000바이트 답이 `recv` 한 번에 간다. status 한 벌(자식 열 줄)이 넉넉히 든다.
+- 보내지 않는 상대는 200ms 시한에 끝난다(`ms=202`).
+- 닫힌 상대에게 `MSG_NOSIGNAL`로 보내면 EPIPE(32)이고 프로세스는 산다.
+- 받는 쪽이 없으면 두 가지다 — 소켓 파일은 있고 listen이 없으면 ECONNREFUSED(111),
+  파일이 없으면 ENOENT(2). 결정 6의 exit code 2가 둘을 다 받는다.
+
+### 실측 3 — sshd는 SIGTERM에 22ms에 죽고, PID 1이 거두기까지는 1초 안이다
+
+```
+CTM0-TERM sshd by=pid zombie_ms=22 reaped_ms=162
+CTM0-TERM sshd by=pgid zombie_ms=21 reaped_ms=769
+tars-init: service sshd exited (pid 38, status 0, lived 36s)
+tars-init: service sshd killed (pid 756, signal 15, lived 1s)
+```
+
+좀비까지가 sshd의 몫(20ms대)이고, 거두기까지가 PID 1의 몫이다(162 · 317 · 769 · 781ms).
+PID 1은 SIGCHLD에 깨지 않고 `poll`의 1초 시한에 깨어 거두므로(`POLL_TIMEOUT_MS`의 주석
+3) 거둠은 1초 안의 어디든 된다. 결정 6의 5초 기다림에 여유가 넉넉하다.
+
+sshd의 죽음이 두 모양으로 찍힌다. 오래 산 sshd는 SIGTERM을 받아 `status 0`으로 나가고,
+뜬 지 1초인 것은 `signal 15`로 죽는다 — 템플릿 스크립트가 아직 `ssh-keygen -l`을 돌리는
+중이거나 sshd가 핸들러를 달기 전이다. M1의 로그와 게이트는 둘 다를 "멈췄다"로 받아야
+한다.
+
+### 실측 4 — 떠 있던 ssh 세션은 리더에 보내도 그룹에 보내도 살아남는다
+
+```
+CTM0-SESS leader rc=0 out=[...;started;survived;]
+CTM0-SESS group rc=0 out=[started;survived;]
+CTM0-PS   406     1   406   406 Ss   sshd-session
+CTM0-PS   481     1   481   481 Ss   sshd
+tars-init: reaped orphan pid 406
+```
+
+`sshd-session`은 pgid · sid가 제 pid다 — sshd가 연결마다 `setsid`한다. 그래서 sshd의
+그룹에 보낸 SIGTERM이 세션에 닿지 않는다. sshd가 죽으면 세션은 PID 1의 자식이 되고,
+세션이 끝나면 PID 1이 `reaped orphan`으로 거둔다. 위험 3은 닫혔다 — `stop sshd`는 ssh로
+붙어 있는 사람을 안 끊는다.
+
+### 실측 5 — `exec` 없는 스크립트는 `kill(pid)`로 고아를 남긴다. 그룹에 보내면 안 남는다
+
+```
+CTM0-PS    37     1    37    37 Ss   sleeper
+CTM0-PS    40    37    37    37 S    sleep
+CTM0-TERM sleeper by=pid zombie_ms=20 reaped_ms=781
+CTM0-PS    40     1    37    37 S    sleep          ← 셸만 죽고 sleep이 ppid 1로 남았다
+CTM0-TERM sleeper by=pgid zombie_ms=21 reaped_ms=317
+tars-init: reaped orphan pid 288                    ← 그룹에 보내니 sleep도 함께 죽었다
+```
+
+pid 40은 측정이 끝날 때까지 남아 있었다. `stop`이 "멈췄다"를 답하고 일은 계속되는
+모양이다. 결정 4를 "그룹에 보낸다"로 고친 근거다.
+
+SIGTERM을 무시하는 서비스:
+
+```
+CTM0-ALIVE after TERM+3s state=S
+CTM0-ALIVE after KILL+0.5s state=Z
+CTM0-PS   131     1    39    39 Z    sleep
+tars-init: service stubborn killed (pid 39, signal 9, lived 19s)
+tars-init: reaped orphan pid 131
+```
+
+3초 뒤에도 살아 있고 SIGKILL에 죽는다. 결정 4의 `kill_at`이 필요하다는 것이 섰다. 여기서도
+리더에만 보낸 SIGKILL이 자식 `sleep`을 고아로 남겼다(이번에는 곧 끝나는 `sleep 1`이라
+바로 거둬졌다). SIGKILL도 그룹에 보낸다.
+
+### 실측 6 — 지금 감독자는 빨리 셋 죽이면 포기한다
+
+```
+tars-init: service sshd exited (pid 38, status 0, lived 15s)
+tars-init: service sshd exited (pid 172, status 0, lived 1s)
+tars-init: service sshd killed (pid 235, signal 15, lived 1s)
+tars-init: service sshd killed (pid 301, signal 15, lived 1s)
+tars-init: giving up on service sshd after 3 fast exits
+CTM0-AFTER sshd=[]
+```
+
+첫 부팅의 하네스는 세 번만 죽였는데 첫 번째가 오래 산 sshd라 카운터를 0으로 되돌렸다 —
+빨리 죽음이 둘에서 멈췄다. 라운드를 넷으로 고친 두 번째 부팅에서 재현됐다. 결정 4 규칙
+2가 막으려는 것이 이 줄이고, M2의 반사실은 `restart` 넷으로 이 줄을 부른다.
+
+### 실측 7 — 부수 발견: 전원 버튼 fd가 콘솔 셸의 자식에게 샌다
+
+```
+CTM0-P lr-x------ 1 root root 64 Sep 27 09:00 3 -> /dev/input/event0
+```
+
+게스트에서 probe가 exec한 `ls`의 fd 3이 `/dev/input/event0`이다. 컨테이너에서는 없던
+줄이다. PID 1이 연 버튼 fd에 `CLOEXEC`가 없어 콘솔 셸과 그 자식들, 서비스까지 물려받는다.
+CT의 범위 밖이고 해도 작다(읽기 전용). 우리 listen fd는 `CLOEXEC`로 이 길을 밟지 않는다
+(같은 줄의 fd 4가 probe의 listen fd가 아니라 `ls`의 디렉터리 fd다). 이월 숙제로 적는다.
+
+### M0이 M1에 넘기는 것
+
+- 결정 4가 바뀌었다 — SIGTERM · SIGKILL을 `kill(-pid)`로 그룹에 보낸다.
+- 요청 길이 판정은 `MSG_TRUNC`의 반환값으로 한다. 답은 `MSG_NOSIGNAL`로 보낸다.
+- sshd의 멈춤은 `exited status 0`과 `killed signal 15` 두 모양이다.
+- 거둠은 1초 안이다. 클라이언트의 5초 기다림은 그대로 둔다.
