@@ -320,7 +320,7 @@ CHAINS=(
   "TD-M2:./net/check.sh"
   "DC-M2:./install/check.sh"
   "WN-M3:./nic/check.sh"
-  "FW-M1:./firewall/check.sh"
+  "FW-M2:./firewall/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -329,6 +329,39 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 기본값). 그 한 번의 부팅에서만 rc를 안 읽으므로, 그동안 rc를 고치거나
 `tars.conf`에 `shell_config=off`를 적어 두면 된다.
 
+### 방화벽 — 받을 포트만 연다
+
+`tars.conf`에 `firewall=on`을 적으면 들어오는 연결을 기본으로 버린다. 기본값은
+`off`이고, 그때는 게스트가 연 포트를 누구에게나 받는다.
+
+켜진 기계가 받는 것은 셋뿐이다 — 기계 안(`lo`), 이 기계가 먼저 건 연결의 답(DHCP ·
+DNS · NTP · `curl`), 그리고 당신이 연 포트. 여는 것은 `/config/nftables.d/` 아래
+`.nft` 파일에 nftables 문법으로 한 줄씩 적는다. 파일은 몇 개로 나눠도 된다.
+
+```
+# /config/nftables.d/web.nft
+tcp dport 8080 accept
+udp dport 5353 accept
+ip saddr 192.168.0.0/24 tcp dport 22 accept
+```
+
+`init`은 네트워크를 올리기 전에 `nft -f /etc/tars/firewall.nft`를 돌리고, 그 파일이
+위 디렉터리를 include한다. 고친 것은 재부팅하거나 셸에서 같은 명령을 치면
+반영된다. 지금 선 규칙은 `nft list ruleset`으로 본다.
+
+파일이 틀리면 부팅은 막히지 않고 닫힌 채로 끝난다. nft는 규칙을 전부 올리거나
+하나도 안 올리므로, 당신의 파일 전부가 빠지고 기본 규칙만 선다 — 틀린 파일 옆의
+멀쩡한 파일도 함께 빠진다. 콘솔에 이런 줄이 남는다.
+
+```
+/config/nftables.d/web.nft:1:21-21: Error: syntax error, unexpected newline
+tars-init: nft -f /etc/tars/firewall.nft exited 1
+tars-init: firewall up from /etc/tars/firewall-base.nft without /config/nftables.d (nft said why above)
+```
+
+IPv4만 거른다. 커널에 IPv6가 없어서 지금은 구멍이 아니지만, IPv6가 들어오는 날
+규칙의 표도 바뀌어야 한다(FW design 위험 6). 나가는 방향은 거르지 않는다.
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
@@ -345,6 +378,6 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
-이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열세 체인이 전부
+이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열다섯 체인이 전부
 QEMU 위에 있고, `ACPI_EC`·실 GPU·배터리는 QEMU에 대상이 없어 "켜 봤다"에서
 멈춘다. 꽂아 봤는데 안 되면 그것은 새로 발견된 사실이지 회귀가 아니다.

@@ -2,7 +2,7 @@
 
 접두사: FW
 
-Status: M1 끝났다(2026-09-27) — 실측 1~14. 다음은 M2(UDP · 포트 여럿 · 갈래 2의 부팅 · 가이드).
+Status: 끝났다(2026-09-27) — M0~M2, 실측 1~19. 열다섯번째 체인 `firewall/check.sh`(부팅 둘, 검사 열일곱).
 
 관련 문서: `2026-09-14-tars-inbound-network-design.md`(IN. 비목표 1 · 2 · 4가 이
 서브프로젝트의 범위다) · `2026-09-13-tars-guest-network-design.md`(NW. 비목표 3이
@@ -426,3 +426,66 @@ bzImage는 5,030,912바이트(M0과 같다). 이미지 빌드는 28.8초.
   `firewall up from /etc/tars/firewall-base.nft`와 nft의 `Error:` 줄, 그리고 7070이
   막힌 것을 본다.
 - 포트는 45477부터 쓴다(45474 monitor · 45475 · 45476은 M1).
+
+## FW-M2가 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-firewall-fw-m2.md`. 편집은 체인 · 가이드 · 문서뿐이고
+`init` · 커널 · initrd는 M1 그대로다.
+
+### 실측 15 — 체인이 부팅 둘, 검사 열일곱으로 첫 회에 섰다 (44초)
+
+```
+the opened port 7070 let fwm2-tcp-7070-ok through
+the opened port 7074 let fwm2-tcp-7074-ok through
+the port 7072 let nothing through
+the opened udp port 7071 got fwm2-dgram-open
+the unopened udp port 7073 got nothing
+the listener on tcp 7072 never saw a connection
+the listener on udp 7073 never saw a datagram
+=== boot B: the same disk plus a broken nftables.d/broken.nft ===
+nft refused firewall.nft and named broken.nft line 1 on the console
+the firewall came up from /etc/tars/firewall-base.nft before dhcpcd started
+the boot finished and dhcpcd leased 10.0.2.15 behind the base rules
+the port 7070 let nothing through
+with broken.nft present even allow.nft's 7070 stays shut
+FW chain PASS
+```
+
+7074는 `second.nft`가 연다 — include glob이 파일 둘을 다 펼친다. UDP 7073의 음성은
+"`nc -u -l`이 아직 아무와도 안 이어졌다"(`/proc/net/udp`의 상대 주소가
+`00000000:0000`)로 받쳤다. 부팅 B의 요점은 마지막 줄이다 — `allow.nft`는 틀린 데가
+없는데도 막힌다. `nft -f`가 원자적이라(실측 8) 한 파일만 빼고 올리는 일이 없고,
+갈래 2는 사람의 파일 전부를 뺀다.
+
+### 실측 16 — 반사실 둘
+
+| 반사실 | 결과 |
+|---|---|
+| `allow.nft`에서 `udp dport 7071 accept`를 뺀다 | TCP 7070 · 7074는 초록, `FAIL: the opened udp port 7071 did not get the datagram` |
+| `firewall.zig`의 갈래 2를 `false and`로 막는다 | 검사 13(nft가 broken.nft를 짚었다)은 초록, `FAIL: init did not bring the firewall up from /etc/tars/firewall-base.nft`, 로그에 `tars-init: firewall NOT up, inbound is open` |
+
+둘째가 결정 5의 갈래 2가 없으면 무슨 일이 생기는지를 그대로 보여 준다 — 틀린 파일
+하나에 기계가 열린 채로 뜬다. 검사 14가 그것을 잡는 유일한 자리다.
+
+### 실측 17 — 가이드
+
+`docs/guides/running-tars.md`에 "방화벽 — 받을 포트만 연다" 절을 넣었다. 받는 셋(`lo` ·
+먼저 건 연결의 답 · 연 포트), `nftables.d`의 예시 셋, 틀린 파일의 콘솔 줄과 "멀쩡한
+파일도 함께 빠진다", IPv4만 거른다는 것. 같은 파일의 "열세 체인"을 "열다섯 체인"으로
+고쳤다. 같은 표의 "네트워크 — 실기 NIC 드라이버가 없다" 줄은 WN 이후 낡았지만 FW의
+범위가 아니라 그대로 두었다.
+
+### 실측 18 — 루트 게이트 15체인 3/3, 46분 26초
+
+`TARS check PASS: all chains 3/3 consecutive runs succeeded`, `FAIL`로 시작하는 줄 0,
+2,786초(2026-09-27). LB 때의 14체인 44분 3초보다 2분 23초 늘었다 — 새 체인 한 판(약
+44초) × 3과 맞는다.
+
+### 실측 19 — 게이트가 안 밟는 것 하나
+
+갈래 3(기본 규칙도 실패해서 열린 채)은 코드가 있지만 게이트가 부팅으로 밟지 않는다.
+만들려면 `nft`를 initrd에서 빼거나 커널 옵션을 끈 부팅이 필요한데, 둘 다 체인 하나를
+위해 산출물을 따로 짓는 일이다. 대신 실측 16의 둘째 반사실이 그 갈래의 로그 줄
+(`firewall NOT up, inbound is open`)을 실제로 찍는 것을 봤다. 갈래 3의 원인 둘은 부팅 전에
+막힌다 — 이 체인의 검사 1이 커널 옵션 다섯을, `tools` 체인이 `guest_tools.sh`의 배열을
+읽어 `usr/bin/nft`가 initrd에 있는지를 본다(실행되는지는 이 체인의 부팅 A가 본다).
