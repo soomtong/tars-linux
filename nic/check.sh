@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 #           → monitor의 device_add로 usb-net을 꽂는다 → cdc_ether가 붙어
 #           usb0이 된다 → 부팅 때 뜬 그 dhcpcd가 usb0을 잡아 lease를 받는다
 #
-# 우리 코드는 두 사슬에 한 줄씩이다(init의 `started dhcpcd`). 나머지는 커널과
+# 우리 코드는 두 사슬에 한 줄씩이다(init의 `started service dhcpcd`). 나머지는 커널과
 # dhcpcd다 — 그래서 이 체인의 검사는 그 경계가 어디에 그어졌는지를 본다.
 #
 # 판정은 전부 시리얼 로그다. 게스트에 한 글자도 안 친다. dhcpcd가 -j
@@ -76,7 +76,7 @@ report_failure() {
   local marker
   for marker in \
     "tars-init: loaded /config/tars.conf" \
-    "tars-init: started dhcpcd (pid" \
+    "tars-init: started service dhcpcd (pid" \
     "no valid interfaces found" \
     "terminal: screen>" \
     "cdc_ether" \
@@ -177,7 +177,7 @@ echo "e1000e bound the NIC and named it eth0"
 # ── 검사 3: init은 dhcpcd를 띄우기만 했나 ───────────────────────────────
 # net 체인 검사 4와 같은 경계다. 이 체인에서 다시 보는 이유는 NIC가 virtio가
 # 아닐 때도 init이 이름을 안 고른다는 것이 여기서만 증명되기 때문이다.
-wait_for_log 'tars-init: started dhcpcd \(pid' 60 \
+wait_for_log 'tars-init: started service dhcpcd \(pid' 60 \
   || report_failure "init did not start dhcpcd"
 if grep -a "tars-init: net link" "$LOG" >/dev/null; then
   report_failure "init touched the link itself; dhcpcd is supposed to do that"

@@ -932,29 +932,26 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
     login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell_path, ssh_env[0..ssh_env_len]);
 
-    // FW-M1. `net.bringUp` 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
+    // FW-M1. dhcpcd보다 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
     // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
     // 로컬 netlink만 쓰므로 부팅이 네트워크에 묶이지 않는다. `/config`가 안
     // 붙었어도 같은 파일을 올린다 — 빈 include는 에러가 아니다(FW-M0 실측 4).
     firewall.up(cfg.firewall, envp);
 
-    // NW-M2. envp 다음인 것이 이 한 줄의 유일한 제약이다(design 결정 F) —
-    // dhcpcd의 hook이 sed·rm을 이름으로 부르므로 PATH가 필요하고, 그 값은
-    // 방금 지은 블록에 있다. 순서를 틀리면 증상이 조용하다: 주소는 붙고
-    // /etc/resolv.conf만 안 생긴다.
-    //
-    // 실패해도 부팅을 안 막는다. 네트워크가 없는 기계는 이 저장소가 지금까지
-    // 돌려 온 상태 그 자체이고, 못 켠 이유는 로그에 있다.
-    net.bringUp(cfg.net, envp);
+    // NW-M2 · DS-M1. 여기서는 띄우지 않고 답만 듣는다 — dhcpcd를 감독 목록에
+    // 넣을지다. 띄우는 것은 아래 `supervise`의 첫 바퀴이고, 그때는 위
+    // `firewall.up`이 이미 끝나 있다(FW design 결정 5의 순서가 그대로 선다).
+    // hook이 sed·rm을 이름으로 부르므로 PATH가 필요한데(NW design 결정 F),
+    // 감독자가 위 env 블록을 넘긴다.
+    const want_dhcpcd = net.wantsDhcpcd(cfg.net);
 
-    // TS-M1 · TD-M1. `net.bringUp` 다음인 것이 이 한 줄의 유일한 제약이다 —
-    // `ntp=dhcp`가 읽는 파일을 쓰는 것이 dhcpcd의 hook이고, chronyd가 묻는
-    // 길도 dhcpcd가 연다. 그리고 여기서 fork한 자식은 부모를 한 순간도 안
-    // 세운다(TS design 결정 3) — 기다리는 것도 chronyd가 되는 것도 자식이다.
-    clock.start(cfg.net, cfg.ntp, storage_mounted, envp);
+    // TS-M1 · TD-M1 · DS-M1. chronyd의 설정을 쓰고 감독 목록에 넣을지를 답한다.
+    // 기다리는 것이 없다 — `ntp=dhcp`의 서버는 dhcpcd의 hook이 나중에
+    // `/run/tars/chrony.sources`에 쓰고 chronyc로 알린다(DS design 결정 3).
+    const want_chronyd = clock.prepare(cfg.net, cfg.ntp, storage_mounted);
 
-    // SV-M1. `clock.start` 뒤인 것이 이 자리의 뜻이다(SV design 결정 4) — 서비스가
-    // 뜨는 시점에 방화벽 규칙과 dhcpcd가 이미 서 있다. 여기서는 읽기만 한다.
+    // SV-M1. 서비스는 아래 `children`에서 dhcpcd · chronyd 뒤에 붙는다(SV design
+    // 결정 4의 순서를 DS-M1부터는 배열이 지킨다). 여기서는 읽기만 한다.
     // 띄우는 것은 아래 `supervise`의 첫 바퀴이고, terminal · 콘솔 셸과 한 바퀴에
     // 함께 뜬다 — 어느 서비스도 부팅 경로에서 기다리지 않는다.
     //
@@ -1005,9 +1002,10 @@ pub fn main(init: std.process.Init.Minimal) void {
     const hangul_arg = cfg.hangul_layout.arg();
     const latin_arg = cfg.latin_layout.arg();
 
-    // SV-M1. 앞 둘은 SV 전과 같고, 서비스가 이름순으로 그 뒤에 붙는다. 크기는
-    // 컴파일 타임에 정해진다(힙이 없다) — 쓰는 것은 앞에서 `2 + len`까지다.
-    var children: [2 + services.MAX]Child = undefined;
+    // SV-M1 · DS-M1. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 둘이
+    // (DS design 결정 1), 그 뒤에 서비스가 이름순으로 붙는다. 크기는 컴파일
+    // 타임에 정해진다(힙이 없다) — 쓰는 것은 앞에서 `n + len`까지다.
+    var children: [2 + services.RESERVED.len + services.MAX]Child = undefined;
     children[0] = .{
         .kind = .terminal,
         .label = "terminal",
@@ -1043,8 +1041,29 @@ pub fn main(init: std.process.Init.Minimal) void {
         .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
         .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
     };
+    var n: usize = 2;
+    // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
+    // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
+    if (want_dhcpcd) {
+        children[n] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.DHCPCD,
+            .path = net.DHCPCD_PATH,
+            .argv = net.DHCPCD_ARGV,
+        };
+        n += 1;
+    }
+    if (want_chronyd) {
+        children[n] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.CHRONYD,
+            .path = clock.CHRONYD_PATH,
+            .argv = clock.CHRONYD_ARGV,
+        };
+        n += 1;
+    }
     for (service_list.slice(), 0..) |*s, i| {
-        children[2 + i] = .{
+        children[n + i] = .{
             .kind = .service,
             .label = s.label(),
             .path = s.path(),
@@ -1056,7 +1075,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.
     // 못 열면 로그 한 줄이고 CT 전과 같은 부팅이다.
     const control_fd = control.open(control.DIR, control.PATH);
-    supervise(children[0 .. 2 + service_list.len], button_fds[0..button_count], control_fd, envp);
+    supervise(children[0 .. n + service_list.len], button_fds[0..button_count], control_fd, envp);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의

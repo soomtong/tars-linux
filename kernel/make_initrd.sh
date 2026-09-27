@@ -242,7 +242,7 @@ chmod 0755 "$WORKDIR/usr/lib/dhcpcd/dhcpcd-run-hooks"
 # TS-M2. 우리 hook. 위의 20-resolv.conf와 계약이 같다 — dhcpcd-run-hooks가
 # 이 디렉터리를 훑어 있는 파일을 전부 source하고, 각 hook은 new_* 변수에서
 # 자기 몫을 꺼낸다. 저쪽은 $new_domain_name_servers로 /etc/resolv.conf를,
-# 이쪽은 $new_ntp_servers로 /run/tars/ntp_servers를 쓴다.
+# 이쪽은 $new_ntp_servers로 /run/tars/chrony.sources/dhcp.sources를 쓴다(DS-M1).
 #
 # sysroot가 아니라 저장소에서 온다. 우리가 쓴 파일이기 때문이고, 저장소에
 # 파일로 두는 이유는 net/check.sh의 호스트 검사가 그것을 sh로 직접 돌려

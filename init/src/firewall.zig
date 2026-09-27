@@ -64,7 +64,8 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
 }
 
 /// 설정이 실제 동작이 되는 자리. `main()`이 부르는 것은 이 함수 하나이고,
-/// `net.bringUp` 앞이어야 한다(design 결정 5).
+/// dhcpcd가 뜨기 전이어야 한다(design 결정 5). DS-M1부터 dhcpcd는 `supervise`의
+/// 첫 바퀴에 뜨므로 `main()`에서 그보다 앞이면 된다.
 ///
 /// 갈래는 `off`까지 넷이고 각각 한 줄을 남긴다. 게이트가 grep하는 것이 이
 /// 넷의 앞머리(`tars-init: firewall`)다.

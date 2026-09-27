@@ -80,7 +80,7 @@ fail() {
     "tars-init: loaded /config/tars.conf" \
     "tars-init: firewall" \
     "tars-init: nft" \
-    "tars-init: started dhcpcd (pid" \
+    "tars-init: started service dhcpcd (pid" \
     ": leased" \
     "tars-init: started console shell" \
     "terminal: screen>"; do
@@ -199,7 +199,7 @@ expect_firewall_before_dhcpcd() {
   local file="$1" fw_line dhcpcd_line
   fw_line="$(grep -an "tars-init: firewall up from ${file}" "$LOG" | head -1 | cut -d: -f1)"
   [ -n "$fw_line" ] || fail "init did not bring the firewall up from ${file}" "tars-init: firewall" "tars-init: nft"
-  dhcpcd_line="$(grep -an "tars-init: started dhcpcd (pid" "$LOG" | head -1 | cut -d: -f1)"
+  dhcpcd_line="$(grep -an "tars-init: started service dhcpcd (pid" "$LOG" | head -1 | cut -d: -f1)"
   [ -n "$dhcpcd_line" ] || fail "init did not start dhcpcd"
   [ "$fw_line" -lt "$dhcpcd_line" ] \
     || fail "dhcpcd started (line ${dhcpcd_line}) before the firewall was up (line ${fw_line})"

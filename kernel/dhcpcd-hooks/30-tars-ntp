@@ -1,32 +1,38 @@
-# dhcpcd가 option 42로 받은 NTP 서버를 init이 읽을 자리에 적는다(TS design
-# 결정 4). 이 파일이 그 경로의 둘째 조각이고, 셋째가 파일이며 넷째가
-# init/src/clock.zig다.
+# dhcpcd가 option 42로 받은 NTP 서버를 chronyd에게 건넨다(DS design 결정 3).
+# 서버를 source 파일로 쓰고 chronyd에게 다시 읽으라고 알린다. chronyd의 설정은
+# init이 부팅 때 쓰고(init/src/clock.zig), 그 설정의 `sourcedir`가 이 디렉터리다.
 #
 # 이 자리에 우리 파일을 두는 근거는 이웃들이다. make_initrd.sh가 같은
 # 디렉터리에 20-resolv.conf를 넣고 있고, 그것이 $new_domain_name_servers로
-# /etc/resolv.conf를 쓰는 것이 지금 게이트에서 매번 돈다. 우리는 글자 그대로
-# 같은 계약을 $new_ntp_servers에 대해 쓴다. initrd에 안 넣는
-# 50-timesyncd.conf도 같은 변수를 쓰는 기성 hook이다 — 우리가 지어낸 이름이
-# 아니다.
+# /etc/resolv.conf를 쓰는 것이 지금 게이트에서 매번 돈다. 우리는 같은 계약을
+# $new_ntp_servers에 대해 쓴다. initrd에 안 넣는 50-timesyncd.conf도 같은
+# 변수를 쓰는 기성 hook이다 — 우리가 지어낸 이름이 아니다.
 #
 # 실행되는 것이 아니라 source된다(dhcpcd-run-hooks의 `. "$hook"`). 그래서
-# 두 가지를 지킨다 — 변수 이름에 tars_ 접두사를 붙여 남의 hook과 안 부딪치게
-# 하고, return을 안 쓴다. return은 source될 때만 맞는 문장이고 net/check.sh의
-# 호스트 검사는 이 파일을 sh로 직접 돌린다.
+# 세 가지를 지킨다 — 변수 이름에 tars_ 접두사를 붙여 남의 hook과 안 부딪치게
+# 하고, return을 안 쓰고(net/check.sh의 호스트 검사는 이 파일을 sh로 직접
+# 돌린다), `set --`를 안 쓴다(부르는 쪽의 위치 인자를 덮는다).
 #
 # 경로를 변수로 한 번 정하는 이유가 그 호스트 검사다(TS-M2 결정 M2-C).
-# 기본값이 하나뿐이라 길이 둘이 되지 않고, 덮어쓰는 자리는 그 검사 한 곳이다.
-# 이 기본값과 init/src/clock.zig의 SERVER_FILE이 같은 글자여야 한다.
-: "${tars_ntp_file:=/run/tars/ntp_servers}"
+# 이 기본값과 init/src/clock.zig의 SOURCES_DIR이 같은 글자여야 한다.
+: "${tars_sources_dir:=/run/tars/chrony.sources}"
 
-# dirname을 안 부른다. 게스트에 그것이 있는지를 이 파일 하나 때문에 확인해야
-# 하는 의존을 만들지 않으려는 것이고, 셸의 접미사 제거로 같은 값이 나온다.
-# mkdir은 20-resolv.conf가 이미 부르고 있으므로 게스트에 있다.
+# 변수가 비었으면 아무것도 안 한다. option 42가 없는 리스다 — chronyd는
+# 서버 0개로 계속 기다리고, 그것이 게이트의 SLIRP에서 늘 일어나는 일이다.
 #
-# 변수가 비었으면 아무것도 안 한다. 빈 파일을 만들면 init이 그것을 읽고
-# "주소를 못 읽었다"로 기다림을 다 쓴다 — 없는 것과 빈 것이 같은 뜻이어야
-# 한다.
+# 첫 주소만 쓴다(TS design 비목표 2). 셸의 접미사 제거로 꺼낸다.
+#
+# .tmp에 쓰고 mv한다. chrony는 .sources로 끝나는 파일만 읽으므로 반쯤 쓰인
+# 파일을 볼 일이 없다.
+#
+# chronyc의 실패는 삼킨다(DS-M0 실측 5). chronyd가 아직 없거나 재시작 중이면
+# `506 Cannot talk to daemon`으로 rc 1인데, chronyd는 뜰 때 이 디렉터리를
+# 읽으므로(실측 6) 알리지 못해도 잃는 것이 없다. -h로 소켓을 못 박는 것은
+# 그 실패가 UDP 재시도 없이 곧바로 오게 하려는 것이다.
 if [ -n "${new_ntp_servers:-}" ]; then
-	mkdir -p "${tars_ntp_file%/*}"
-	printf '%s\n' "$new_ntp_servers" > "$tars_ntp_file"
+	tars_ntp_first="${new_ntp_servers%% *}"
+	mkdir -p "$tars_sources_dir"
+	printf 'server %s iburst\n' "$tars_ntp_first" > "$tars_sources_dir/dhcp.sources.tmp"
+	mv "$tars_sources_dir/dhcp.sources.tmp" "$tars_sources_dir/dhcp.sources"
+	chronyc -h /run/chrony/chronyd.sock reload sources >/dev/null 2>&1 || true
 fi

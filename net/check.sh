@@ -56,7 +56,8 @@ REPO_ROOT="$(cd .. && pwd)"
 # TS-M2가 부팅을 하나 더 얹었다. 부팅 A가 "우리가 적은 주소에 묻는다"였다면
 # 이쪽은 "DHCP가 알려 준 주소를 읽어서 묻는다"이고, 덤으로 음성 하나를 판다:
 #
-#   initrd에 심은 /run/tars/ntp_servers → init이 그 주소를 읽는다
+#   initrd에 심은 /run/tars/chrony.sources/dhcp.sources → chronyd가 그 주소를
+#   읽는다(DS-M1부터. 그 전에는 init이 /run/tars/ntp_servers를 읽었다)
 #   그 주소가 어디에도 없다 → chronyd가 답 없이 묻기만 한다
 #   → 그런데도 셸이 부팅 A와 같은 시각에 뜬다(design 결정 3)
 #
@@ -206,16 +207,16 @@ QEMU_PID_D=""
 # 앞에 이어 붙이는 흔한 수법의 반대 방향이다. gzip 두 덩이를 이어 붙인 것도
 # 그 자체로 정상적인 gzip stream이라 어느 경로로 풀리든 결과가 같다.
 #
-# init에게는 우리가 심은 파일과 dhcpcd의 hook이 쓴 파일이 구별되지 않는다.
+# chronyd에게는 우리가 심은 파일과 dhcpcd의 hook이 쓴 파일이 구별되지 않는다.
 # 그것이 design 결정 4가 경로를 자른 이유다 — SLIRP가 option 42를 영영 안
-# 줘도 "파일 → init" 조각이 게이트 안에서 초록이 된다.
+# 줘도 "파일 → chronyd" 조각이 게이트 안에서 초록이 된다(DS-M1 결정 M1-E).
 build_ntp_initrd() {
   local extra seg
   extra="$(mktemp -d)"
   seg="$(mktemp)"
 
-  mkdir -p "${extra}/run/tars"
-  printf '%s\n' "$NTP_DEAD_SERVER" > "${extra}/run/tars/ntp_servers"
+  mkdir -p "${extra}/run/tars/chrony.sources"
+  printf 'server %s iburst\n' "$NTP_DEAD_SERVER" > "${extra}/run/tars/chrony.sources/dhcp.sources"
 
   (cd "$extra" && find . | cpio -o -H newc --quiet) | gzip -6 > "$seg"
   cat ../kernel/initrd.cpio "$seg" > "$INITRD_B"
@@ -248,49 +249,55 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   exit 1
 fi
 
-# ── 호스트 검사: hook 네 줄이 실제로 파일을 쓰는가 (TS-M2) ──────────────
+# ── 호스트 검사: hook이 chrony의 source 파일을 쓰는가 (TS-M2 · DS-M1) ──────
 #
-# design 결정 4의 2번이다. 경로 넷 중 "hook → 파일" 조각은 게스트도 QEMU도
-# 없이 증명된다 — dhcpcd가 하는 일이 변수를 채우고 이 파일을 source하는
-# 것뿐이므로, 변수를 우리가 채우면 같은 코드가 같은 일을 한다.
+# 경로 중 "hook → 파일" 조각은 게스트도 QEMU도 없이 증명된다 — dhcpcd가 하는
+# 일이 변수를 채우고 이 파일을 source하는 것뿐이므로, 변수를 우리가 채우면
+# 같은 코드가 같은 일을 한다. chronyc는 컨테이너에서 곧바로 실패하고 hook이
+# 그 실패를 삼킨다 — 그것도 이 검사가 함께 본다(rc 0).
 #
-# 부팅보다 앞에 두는 이유는 진단이다. 이 hook이 고장 나면 증상이 부팅 B의
-# 검사 21(init이 파일을 못 읽는다)에서 나오는데, 그 자리는 원인에서 멀다.
+# 부팅보다 앞에 두는 이유는 진단이다. 이 hook이 고장 나면 증상이 실기계의
+# "시계가 안 맞는다"로만 나오고, 게이트의 SLIRP는 option 42를 안 주므로
+# 게스트 안에서는 이 hook이 도는 것을 영영 못 본다.
 #
-# tars_ntp_file을 덮어쓰는 유일한 자리다(결정 M2-C). 안 덮으면 이 검사가
-# 컨테이너의 진짜 /run/tars에 쓴다.
+# tars_sources_dir을 덮어쓰는 유일한 자리다(TS-M2 결정 M2-C). 안 덮으면 이
+# 검사가 컨테이너의 진짜 /run/tars에 쓴다.
 HOOK=../kernel/dhcpcd-hooks/30-tars-ntp
 HOOKDIR="$(mktemp -d)"
 
 if ! new_ntp_servers='192.0.2.1 198.51.100.7' \
-     tars_ntp_file="${HOOKDIR}/ntp_servers" sh "$HOOK"; then
+     tars_sources_dir="${HOOKDIR}/src" sh "$HOOK"; then
   echo "FAIL: the dhcpcd hook exited non-zero"
   rm -rf "$HOOKDIR"
   exit 1
 fi
-HOOK_FIRST="$(awk 'NR==1 {print $1}' "${HOOKDIR}/ntp_servers" 2>/dev/null || true)"
-if [ "$HOOK_FIRST" != "192.0.2.1" ]; then
-  echo "FAIL: the dhcpcd hook wrote [${HOOK_FIRST}] where 192.0.2.1 was expected"
+HOOK_LINE="$(cat "${HOOKDIR}/src/dhcp.sources" 2>/dev/null || true)"
+if [ "$HOOK_LINE" != "server 192.0.2.1 iburst" ]; then
+  echo "FAIL: the dhcpcd hook wrote [${HOOK_LINE}] where 'server 192.0.2.1 iburst' was expected"
+  rm -rf "$HOOKDIR"
+  exit 1
+fi
+if [ -e "${HOOKDIR}/src/dhcp.sources.tmp" ]; then
+  echo "FAIL: the dhcpcd hook left its .tmp file behind"
   rm -rf "$HOOKDIR"
   exit 1
 fi
 
-# 음성. 변수가 안 오는 reason(option 42가 없는 리스)에서 파일을 만들면, init이
-# 빈 파일을 읽고 "주소를 못 읽었다"로 기다림을 다 쓴다. 없는 것과 빈 것이
-# 같은 뜻이어야 하므로 아무것도 안 하는 것이 맞다.
-rm -f "${HOOKDIR}/ntp_servers"
-if ! tars_ntp_file="${HOOKDIR}/ntp_servers" sh "$HOOK"; then
+# 음성. option 42가 없는 리스에서는 디렉터리도 안 만든다 — chronyd는 서버
+# 0개로 기다리는 것이 맞다.
+rm -rf "${HOOKDIR}/src"
+if ! tars_sources_dir="${HOOKDIR}/src" sh "$HOOK"; then
   echo "FAIL: the dhcpcd hook exited non-zero with no ntp servers"
   rm -rf "$HOOKDIR"
   exit 1
 fi
-if [ -e "${HOOKDIR}/ntp_servers" ]; then
-  echo "FAIL: the dhcpcd hook wrote a file with no ntp servers to write"
+if [ -e "${HOOKDIR}/src" ]; then
+  echo "FAIL: the dhcpcd hook made a sources directory with no ntp servers to write"
   rm -rf "$HOOKDIR"
   exit 1
 fi
 rm -rf "$HOOKDIR"
-echo "the dhcpcd hook writes the first ntp server and nothing else"
+echo "the dhcpcd hook writes the first ntp server as a chrony source and nothing else"
 
 # ── 호스트 검사: initrd에 zoneinfo가 들어갔는가 (TS-M3) ──────────────────
 #
@@ -418,7 +425,7 @@ fail() {
     "NET: Registered PF_PACKET protocol family" \
     "NET: Registered PF_UNIX/PF_LOCAL protocol family" \
     "tars-init: loaded /config/tars.conf" \
-    "tars-init: started dhcpcd (pid" \
+    "tars-init: started service dhcpcd (pid" \
     "tars-init: started console shell" \
     "terminal: screen>"; do
     if grep -a "$marker" "$LOG" >/dev/null; then
@@ -541,8 +548,8 @@ echo "the guest read net=dhcp off the config disk"
 #
 # 뒤의 음성은 init이 링크를 다시 만지는 날을 잡는다. 그 줄은 init만 찍는
 # 글자라 dhcpcd의 로그에 우연히 걸릴 일이 없다.
-if ! grep -a "tars-init: started dhcpcd (pid" "$LOG" >/dev/null; then
-  fail "init did not start dhcpcd" "tars-init: net" "tars-init: started dhcpcd"
+if ! grep -a "tars-init: started service dhcpcd (pid" "$LOG" >/dev/null; then
+  fail "init did not start dhcpcd" "tars-init: net" "tars-init: started service dhcpcd"
 fi
 if grep -a "tars-init: net link" "$LOG" >/dev/null; then
   fail "init touched the link itself; dhcpcd is supposed to do that now" \
@@ -556,7 +563,7 @@ echo "init started dhcpcd and left the interface to it"
 # 안 박는다. dhcpcd가 받아 오는 것이고, 체인만 그것이 무엇인지 안다.
 #
 # 이 대기가 plan에 없던 것이고, 없이 돌린 1회차가 아래 검사 6에서 죽었다.
-# init이 `started dhcpcd`를 찍은 시점과 dhcpcd가 실제로 DHCP를 요청하는
+# init이 `started service dhcpcd`를 찍은 시점과 dhcpcd가 실제로 DHCP를 요청하는
 # 시점 사이에 간격이 있다 — 시리얼 로그에서 `started dhcpcd`가 256번째 줄,
 # `soliciting a DHCP lease`가 3745번째 줄이었고 그 사이 전부가 터미널의
 # 렌더 로그였다. 즉 체인이 프롬프트를 보자마자 치면 언제나 너무 이르다.
@@ -990,11 +997,10 @@ done
 
 # SL-M2가 세운 것. 유예가 다 지나가면 무언가가 SIGTERM을 안 받은 것이다.
 #
-# M2부터 이 검사가 design 위험 2의 실제 시험이다. 이 부팅에는 dhcpcd가 있고
-# 그것은 감독 목록 밖에 있다(결정 9의 갈래 A) — 배경으로 내려가면서 PID 1에
-# 재부모화되므로 reapAll()이 세기는 하지만, 우리가 띄운 것 중 유일하게
-# Child 배열에 없는 프로세스다. M0의 실측 4가 "SIGTERM에 죽는다"고 쟀고,
-# 그 전제가 깨지는 날 여기가 빨간불이 된다.
+# NW-M2부터 이 검사가 NW design 위험 2의 실제 시험이다. 이 부팅에는 dhcpcd가
+# 있다. DS-M1부터 dhcpcd는 감독 목록 안이지만(DS design 결정 1), 전원 경로는
+# 그와 무관하게 kill(-1)로 모두에게 보낸다. dhcpcd는 SIGTERM에 100~150ms에
+# 죽는다(DS-M0 실측 3). 그 전제가 깨지는 날 여기가 빨간불이 된다.
 if grep -a "grace period expired" "$LOG" >/dev/null; then
   fail "something outlived SIGTERM and burned the whole grace period" \
     "grace period expired"
@@ -1204,11 +1210,11 @@ echo "the ntp stub answered $(grep -ac 'answer #' "$STUBLOG") request(s)"
 # ══ 부팅 B: DHCP가 알려 준 서버를 쓴다 (TS-M2) ═════════════════════════
 #
 # 여기서부터 게스트가 또 새로 뜬다. 앞의 둘과 다른 것이 둘이다 — 디스크가
-# out/net-ntp-dhcp.img(ntp=dhcp)이고, initrd에 /run/tars/ntp_servers가 미리
+# out/net-ntp-dhcp.img(ntp=dhcp)이고, initrd에 /run/tars/chrony.sources/dhcp.sources가 미리
 # 있다.
 #
 # 이 부팅이 증명하는 것이 둘이다.
-#   1. init이 그 파일을 읽는다 — 로그가 심은 주소를 이름 대며 찍는다
+#   1. chronyd가 그 파일을 읽는다 — `chronyc sources`가 심은 주소를 댄다
 #   2. 안 닿는 서버가 부팅을 안 막는다 — 셸이 부팅 A와 같은 시각에 뜬다
 #
 # 상대가 없는 것이 이 부팅의 설계다. stub은 바로 위에서 이미 죽였고 심은
@@ -1217,7 +1223,7 @@ echo "the ntp stub answered $(grep -ac 'answer #' "$STUBLOG") request(s)"
 echo "=== booting again with ntp=dhcp and a planted ${NTP_DEAD_SERVER} ==="
 
 build_ntp_initrd
-echo "planted ${NTP_DEAD_SERVER} in /run/tars/ntp_servers of the boot-B initrd"
+echo "planted ${NTP_DEAD_SERVER} in /run/tars/chrony.sources of the boot-B initrd"
 
 LOG="$LOGB"
 BOOT_B_START="$(date +%s)"
@@ -1257,31 +1263,31 @@ if ! grep -aE "tars-init: config shell=.* net=dhcp ntp=dhcp" "$LOGB" >/dev/null;
 fi
 echo "the guest read ntp=dhcp off the config disk"
 
-# ── 검사 21: init이 심은 파일을 읽었나 ────────────────────────────────
-# design 결정 4의 1번이다. 이 줄이 나오면 경로 넷 중 "파일 → init" 조각이
-# 게이트 안에서 닫힌 것이고, 그 조각은 SLIRP가 option 42를 주든 안 주든 같은
-# 코드다.
+# ── 검사 21: chronyd가 심은 source를 읽었나 ───────────────────────────
+# DS-M1 결정 M1-E. init은 이제 이 파일을 안 읽는다 — chronyd가 sourcedir로
+# 뜰 때 읽는다(DS design 결정 3 · DS-M0 실측 6). 그래서 chronyd에게 묻는다.
 #
-# 주소까지 함께 보는 것에 뜻이 있다. 만약 SLIRP가 option 42를 준다면 dhcpcd의
-# hook이 우리가 심은 파일을 덮어쓰는데, 그때 이 검사가 그 사실을 알린다 —
-# 주소가 10.0.2.x로 바뀌어 패턴이 안 맞기 때문이다.
+# 판정 글자(주소)가 친 명령에 없다(project_gate_screen_echo). 답의 줄머리
+# `^?`는 "아직 한 번도 못 닿았다"다 — 상대가 없는 것이 이 부팅의 설계다.
 #
-# 기다리는 이유는 자식의 첫 일이 파일을 여는 것이 아니기 때문이다. fork 뒤에
-# 시그널 정책을 되돌리고, 파일을 열고, 그 다음이 이 줄이다 — 부팅 A의 검사
-# 18보다 훨씬 이르지만 0초는 아니다.
-READ_FILE=0
-for _ in $(seq 1 60); do
-  if grep -a "tars-init: ntp server ${NTP_DEAD_SERVER} came from /run/tars/ntp_servers" \
-       "$LOGB" >/dev/null; then
-    READ_FILE=1; break
-  fi
-  if ! kill -0 "$QEMU_PID_B" 2>/dev/null; then break; fi
-  sleep 1
+# 주소까지 보는 것에 뜻이 있다. SLIRP가 option 42를 주는 날이 오면 hook이
+# 심은 파일을 10.0.2.x로 덮어쓰고 이 검사가 그것을 알린다.
+CONNECTED_B=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${NTP_DHCP_MONITOR_PORT}"; then CONNECTED_B=1; break; fi
+  sleep 0.5
 done
-[ "$READ_FILE" = "1" ] || \
-  fail "init never read ${NTP_DEAD_SERVER} out of /run/tars/ntp_servers" \
-    "tars-init: ntp" "tars-init: clock"
-echo "init read ${NTP_DEAD_SERVER} out of the planted /run/tars/ntp_servers"
+[ "$CONNECTED_B" = "1" ] || \
+  fail "could not connect to the ntp=dhcp guest's QEMU monitor" "terminal: screen>"
+echo "=== typing 'chronyc -n sources' ==="
+type_keys c h r o n y c spc minus n spc s o u r c e s ret
+if ! wait_for_screen "${NTP_DEAD_SERVER//./\\.}"; then
+  fail "chronyd did not list ${NTP_DEAD_SERVER} from the planted chrony.sources" \
+    "tars-init: chronyd" "chronyd"
+fi
+exec 3<&-
+exec 3>&-
+echo "chronyd read ${NTP_DEAD_SERVER} out of the planted chrony.sources"
 
 # ── 검사 22: 안 닿는 서버가 부팅을 안 막았나 ──────────────────────────
 # design 결정 3의 음성이다. 이 사이클이 못 박으려는 제약이 "네트워크가 꺼져

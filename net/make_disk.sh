@@ -74,7 +74,7 @@ timezone=${TZ_NAME}
 "
 
 # TS-M2. 부팅 B가 쓰는 디스크. 부팅 A와 다른 것은 ntp의 값 하나다 — 주소가
-# 설정에 없고 initrd에 심은 /run/tars/ntp_servers에서 온다.
+# 설정에 없고 initrd에 심은 /run/tars/chrony.sources/dhcp.sources에서 온다(DS-M1).
 #
 # 이 디스크가 증명하는 문장이 부팅 A와 다르다. 저쪽은 "우리가 적은 주소에
 # 묻는다"이고 이쪽은 "DHCP가 알려 준 주소를 읽어서 묻는다"이다. 값이 같은

@@ -4,12 +4,10 @@ const clock = @import("clock.zig");
 /// 기대하는 설정 파일은 글자로 한 벌 더 적는다. `renderConf`로 만든 것과
 /// 비교하면 검사가 tautology가 된다 — sntp_test의 `reply`가 stub의 바이트
 /// 배치를 손으로 한 벌 더 적었던 것과 같은 이유다.
-fn expectConf(server: [4]u8, keep: bool, want: []const u8) !void {
+fn expectConf(server: ?[4]u8, keep: bool, want: []const u8) !void {
     var buf: [clock.CONF_MAX]u8 = undefined;
     const got = clock.renderConf(&buf, server, keep) orelse {
-        std.debug.print("FAIL: the config for {d}.{d}.{d}.{d} (keep={}) did not fit\n", .{
-            server[0], server[1], server[2], server[3], keep,
-        });
+        std.debug.print("FAIL: the config (server={any}, keep={}) did not fit\n", .{ server, keep });
         return error.ConfTooLong;
     };
     if (!std.mem.eql(u8, got, want)) {
@@ -18,30 +16,8 @@ fn expectConf(server: [4]u8, keep: bool, want: []const u8) !void {
     }
 }
 
-fn expectServer(text: []const u8, want: [4]u8) !void {
-    const got = clock.parseServerFile(text) orelse {
-        std.debug.print("FAIL: no server found in [{s}]\n", .{text});
-        return error.NoServer;
-    };
-    if (!std.mem.eql(u8, &got, &want)) {
-        std.debug.print("FAIL: got {d}.{d}.{d}.{d} from [{s}]\n", .{
-            got[0], got[1], got[2], got[3], text,
-        });
-        return error.WrongServer;
-    }
-}
-
-fn expectNoServer(text: []const u8) !void {
-    if (clock.parseServerFile(text)) |got| {
-        std.debug.print("FAIL: found {d}.{d}.{d}.{d} in [{s}], expected none\n", .{
-            got[0], got[1], got[2], got[3], text,
-        });
-        return error.UnexpectedServer;
-    }
-}
-
 pub fn main() !void {
-    // ── renderConf ─────────────────────────────────────────────────────
+    // ── ntp=<주소> ─────────────────────────────────────────────────────
     //
     // 세 줄이 TD design 결정 4와 TD-M0 실측 2다. makestep이 빠지면 chrony는
     // 2031년까지 몇 달에 걸쳐 slew한다 — 게이트의 검사 18이 그것을 잡지만,
@@ -55,27 +31,18 @@ pub fn main() !void {
     // 서버가 이긴다(TD design 실측 9) — 이 순서를 바꾸는 사람은 게이트의
     // 검사 26이 빨개지는 것을 보게 된다.
     try expectConf(.{ 10, 0, 2, 2 }, true, "confdir /config/chrony.d\nserver 10.0.2.2 iburst\nmakestep 1 3\ndriftfile /config/chrony.drift\ncmdport 0\n");
-    // 가장 긴 모양. 109바이트라 CONF_MAX(128)에 든다.
     try expectConf(.{ 255, 255, 255, 255 }, true, "confdir /config/chrony.d\nserver 255.255.255.255 iburst\nmakestep 1 3\ndriftfile /config/chrony.drift\ncmdport 0\n");
     std.debug.print("clock_test: with /config it reads chrony.d first and keeps its drift there\n", .{});
 
-    // ── parseServerFile ────────────────────────────────────────────────
+    // ── ntp=dhcp ───────────────────────────────────────────────────────
     //
-    // TS-M2부터 있던 검사 그대로다. dhcpcd가 hook에 넘기는 `$new_ntp_servers`는
-    // 공백으로 갈린 목록이고, hook은 그것을 그대로 파일에 쓴다. 첫 것만 쓴다
-    // (TS design 비목표 2).
-    try expectServer("10.0.2.2\n", .{ 10, 0, 2, 2 });
-    try expectServer("192.168.0.1 192.168.0.2\n", .{ 192, 168, 0, 1 });
-    // 개행 없이 끝나도 받는다. `printf`로 쓴 파일이 그렇다.
-    try expectServer("1.2.3.4", .{ 1, 2, 3, 4 });
-    // 빈 파일. hook이 빈 값으로 불린 경우다.
-    try expectNoServer("");
-    try expectNoServer("\n");
-    // 이름은 안 받는다(TS design 결정 5 — init에 resolver가 없다).
-    try expectNoServer("pool.ntp.org\n");
-    // 첫 토큰만 본다. 그것이 주소가 아니면 뒤를 안 뒤진다.
-    try expectNoServer("garbage 10.0.2.2\n");
-    std.debug.print("clock_test: the server file gives up its first address and nothing else\n", .{});
+    // DS design 결정 3. 서버 대신 디렉터리 하나다. dhcpcd의 hook이 그 안에
+    // dhcp.sources를 쓰고 chronyc로 알린다(DS-M0 실측 5). 경로는 hook
+    // kernel/dhcpcd-hooks/30-tars-ntp의 기본값과 같은 글자여야 한다.
+    try expectConf(null, false, "sourcedir /run/tars/chrony.sources\nmakestep 1 3\ncmdport 0\n");
+    // 가장 긴 모양. 114바이트라 CONF_MAX(128)에 든다.
+    try expectConf(null, true, "confdir /config/chrony.d\nsourcedir /run/tars/chrony.sources\nmakestep 1 3\ndriftfile /config/chrony.drift\ncmdport 0\n");
+    std.debug.print("clock_test: with ntp=dhcp chronyd starts with no server and reads the directory dhcpcd writes into\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
