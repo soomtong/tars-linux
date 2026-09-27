@@ -33,6 +33,19 @@ pub const Net = enum {
     dhcp,
 };
 
+/// 방화벽을 켜는가(FW design 결정 1). 켜면 들어오는 것을 기본으로 버리고,
+/// 받을 포트는 사람이 /config/nftables.d/*.nft에 nftables 문법으로 적는다.
+/// 규칙의 의미는 전부 그 파일과 initrd의 /etc/tars/firewall.nft에 있고 이
+/// 값은 스위치 하나다 — `firewall.zig`가 이것만 본다.
+///
+/// 기본값이 `off`인 근거는 `net`과 다르다. 켜는 비용이 아니라 관례다 —
+/// 이 키를 안 적은 기계는 한 글자도 안 바뀐다(`net=dhcp`인 기계는 IN이 증명한
+/// 대로 연 포트를 누구에게나 받는다).
+pub const Firewall = enum {
+    off,
+    on,
+};
+
 /// 점 넷으로 적은 IPv4 주소를 바이트 넷으로 바꾼다. 시스템 콜이 없는 순수
 /// 함수이고, 이 파일에서 `parse`·`cmdlineWantsNoConfig`와 같은 성질이다.
 ///
@@ -882,6 +895,8 @@ pub const Config = struct {
     /// 이 키를 안 적은 기계는 한 글자도 안 바뀐다. `net`·`ntp`와 달리 이
     /// 키는 켜는 비용이 없다 — 파일 하나를 읽는 것이 전부다.
     timezone: Timezone = Timezone.UTC,
+    /// 기본값이 `off`인 넷째 키다. 근거는 위 `Firewall`의 문서 주석에 있다.
+    firewall: Firewall = .off,
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -1039,6 +1054,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "firewall")) {
+            // net과 완전히 같은 모양이다.
+            c.firewall = std.meta.stringToEnum(Firewall, value) orelse {
+                std.debug.print("tars-init: unknown firewall '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.firewall),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -1105,6 +1128,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   UTC로 떨어진다. ntp가 시계를 맞추는 것과 별개다 — 이 값은
         \\#   그 시각을 어느 지역의 시각으로 보여 줄지만 정한다
         \\timezone={s}
+        \\# firewall: off | on
+        \\#   on이면 들어오는 연결을 기본으로 버린다. 받을 포트는
+        \\#   /config/nftables.d/ 아래 .nft 파일에 nftables 문법으로 한 줄씩
+        \\#   적는다. 예: tcp dport 8080 accept
+        \\firewall={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1116,6 +1144,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.net),
         c.ntp.arg(&ntp_buf),
         c.timezone.slice(),
+        @tagName(c.firewall),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의

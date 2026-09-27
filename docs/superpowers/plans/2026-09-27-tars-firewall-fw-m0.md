@@ -304,7 +304,7 @@ EOF
 chmod 755 /tmp/fw/seed/fwm0.sh
 ```
 
-`LISTEN`의 16진수는 7070~7073이다(`0x1BAE`~`0x1BB1`). `report`가 UDP 카운터를 같이
+`LISTEN`의 16진수는 7070~7073이다(`0x1BAE`~`0x1BB1`). (실행 뒤 정정: 틀렸다. `0x1B9E`~`0x1BA1`이고, 그래서 `LISTEN`이 0을 셌다 — design 실측 9.) `report`가 UDP 카운터를 같이
 내는 이유 — UDP D가 안 닿았을 때 "커널이 받았는데 버렸다"와 "아예 안 왔다"를
 `InDatagrams`로 가를 수는 없지만(방화벽은 UDP 층 앞에서 버린다) `pre`와 `post`의
 차이로 방화벽이 버린 것이 카운터에 안 잡힌다는 것은 보인다.

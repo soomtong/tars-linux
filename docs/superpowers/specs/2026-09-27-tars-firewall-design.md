@@ -2,7 +2,7 @@
 
 접두사: FW
 
-Status: M0 끝났다(2026-09-27) — 실측 1~9. 다음은 M1.
+Status: M1 끝났다(2026-09-27) — 실측 1~14. 다음은 M2(UDP · 포트 여럿 · 갈래 2의 부팅 · 가이드).
 
 관련 문서: `2026-09-14-tars-inbound-network-design.md`(IN. 비목표 1 · 2 · 4가 이
 서브프로젝트의 범위다) · `2026-09-13-tars-guest-network-design.md`(NW. 비목표 3이
@@ -340,8 +340,10 @@ FWM0-RULES (load 때와 같다 — tcp dport 7070 · udp dport 7071이 그대로
 
 ### 실측 9 — 하네스가 틀린 것 둘 (판정과 무관)
 
-`FWM0-LISTEN 0 tcp, 0 udp`는 grep 패턴이 틀린 것이다 — `pre` 탐침이 넷 다 닿아
-리스너가 있었다. `COUNTERS`는 `grep -A1 '^Udp:'`가 `UdpLite:`까지 잡아 헤더 줄을
+`FWM0-LISTEN 0 tcp, 0 udp`는 포트의 16진수를 잘못 옮긴 것이다 — 7070은 `0x1BAE`가
+아니라 `0x1B9E`다(plan의 표와 스크립트가 둘 다 틀렸다). `pre` 탐침이 넷 다 닿아
+리스너는 있었다. 처음에는 "grep 패턴이 틀렸다"고만 적고 넘어갔는데, 같은 계산이 M1
+체인에 옮겨져 검사 5를 빨갛게 했다(실측 10). `COUNTERS`는 `grep -A1 '^Udp:'`가 `UdpLite:`까지 잡아 헤더 줄을
 냈다. 둘 다 가리려던 것이 없어 다시 돌리지 않았다.
 
 ### M0이 M1에 넘기는 것
@@ -353,3 +355,74 @@ FWM0-RULES (load 때와 같다 — tcp dport 7070 · udp dport 7071이 그대로
   다시 올릴 때 표가 겹치지 않게 둔다.
 - `init`: `/config` 유무와 `nftables.d` 유무를 가리지 않고 같은 파일을 올린다(실측 4).
 - 체인: 음성 TCP는 `bytes=0`과 짧은 읽기 타임아웃(실측 6).
+
+## FW-M1이 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-firewall-fw-m1.md`. 커널 다섯 · sysroot 층 10 · `nft` ·
+규칙 파일 둘 · `firewall` 키 · `init/src/firewall.zig` · 열다섯번째 체인
+`firewall/check.sh`(부팅 하나, 검사 여덟).
+
+### 실측 10 — 검사 5가 첫 판에 빨갰다. 원인은 M0에서 넘긴 16진수다
+
+```
+FAIL: the guest did not put both 7070 and 7072 into LISTEN
+terminal: screen> root@(none) ~# bash /config/fwlisten.sh | fwm1-listen=0 |
+```
+
+`fwlisten.sh`가 `/proc/net/tcp`에서 `:1BAE`와 `:1BB0`을 셌는데 7070은 `0x1B9E`, 7072는
+`0x1BA0`이다. M0 plan의 표가 틀렸고(실측 9) 그 계산이 그대로 옮겨졌다. M0에서 "grep
+패턴이 틀렸다"로 적고 원인을 안 봤기 때문에 두 번 치렀다. 처방은 손으로 옮기지 않는
+것이다 — `listening()`이 `printf '%04X'`로 바꾼다. 고친 뒤 체인은 첫 회에 섰다.
+
+### 실측 11 — 체인이 21초에 초록이다
+
+```
+the kernel carries the five netfilter options
+the guest read net=dhcp and firewall=on off the config disk
+the firewall came up from firewall.nft before dhcpcd started
+dhcpcd leased 10.0.2.15 under policy drop
+the guest listens on 7070 and 7072
+the opened port 7070 let fwm1-tcp-a through
+the unopened port 7072 let nothing through
+the listener on 7072 never saw a connection
+FW chain PASS
+```
+
+빌드가 끝난 뒤의 한 판이 21초다. 그중 2초가 검사 7의 읽기 타임아웃이다(실측 6).
+검사 3이 줄 번호로 `firewall up`이 `started dhcpcd`보다 앞인 것을 본다 — 결정 5의
+순서가 로그에서 읽힌다. 검사 8(`fwm1-still=1`)은 7072의 한 번만 사는 리스너가 아직
+LISTEN이라는 것이고, 검사 7의 빈 값이 "nc가 안 보냈다"가 아니라 "nc까지 안 왔다"라는
+증거다.
+
+### 실측 12 — 반사실 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
+
+| 반사실 | 결과 |
+|---|---|
+| `make_initrd.sh`의 `policy drop` → `policy accept`(두 파일) | `FAIL: the unopened port 7072 let something through (got: [fwm1-tcp-c])` — 검사 3은 초록 |
+| 체인이 `allow.nft`를 안 심는다 | `FAIL: nothing came through the opened port 7070 (got: [])` — 검사 3은 초록(빈 include, 실측 4) |
+| 디스크의 `firewall=on` → `firewall=off` | `FAIL: the config disk did not turn the firewall on` |
+
+첫째가 검사 7이 장식이 아니라는 증거이고, 둘째가 검사 6이 "방화벽이 없어서 초록"이
+아니라는 증거다.
+
+### 실측 13 — 크기
+
+압축 전 initrd가 217,250블록에서 219,962블록이 됐다(+1,388,544바이트, 실측 2의
+1,386,600에 규칙 파일 둘 · 디렉터리). 압축한 `initrd.cpio`는 43,799,596바이트다.
+bzImage는 5,030,912바이트(M0과 같다). 이미지 빌드는 28.8초.
+
+### 실측 14 — 이웃 체인 셋이 그대로 초록이고, 기본값은 한 줄만 더한다
+
+`config`(136초) · `tools`(55초) · `net`(117초) 모두 `exit=0`. 세 체인 로그에
+`tars-init: firewall=off, inbound is open`이 아홉 줄 있고 다른 `firewall` 줄은 없다.
+`net` 체인의 IN 검사(열린 포트에서 바이트를 읽는다)가 그대로 선다 — 결정 1의 "키를
+안 적은 기계는 한 글자도 안 바뀐다"가 로그 한 줄을 빼면 그대로다.
+
+### M1이 M2에 넘기는 것
+
+- UDP 판정은 실측 7의 모양 — 게스트 `nc -u -l`이 파일에 받고 표지를 화면에 낸다.
+  리스너 수는 `/proc/net/udp`를 같은 `printf '%04X'`로 센다.
+- 갈래 2의 부팅은 같은 체인의 부팅 B다. 문법 오류 파일을 `nftables.d`에 더 심고
+  `firewall up from /etc/tars/firewall-base.nft`와 nft의 `Error:` 줄, 그리고 7070이
+  막힌 것을 본다.
+- 포트는 45477부터 쓴다(45474 monitor · 45475 · 45476은 M1).

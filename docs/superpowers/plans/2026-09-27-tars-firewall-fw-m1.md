@@ -557,16 +557,18 @@ cat > "$SEED/fwlisten.sh" <<'EOF'
 #!/bin/bash
 # FW 체인이 심는다. 인자가 없으면 리스너 둘을 띄우고 센다. count면 7072가 아직
 # 듣고 있는지만 센다. 판정 글자(fwm1-…=)는 출력에만 생기고 친 명령에는 없다.
-listening() { grep -c ":$1 00000000:0000 0A" /proc/net/tcp; }
+# /proc/net/tcp는 포트를 16진수 넉 자로 적는다. 손으로 옮기지 않고 printf가
+# 바꾼다 — FW-M0과 M1 첫 판이 7070을 1BAE로 잘못 옮겨 0을 셌다(실측 9 · 10).
+listening() { grep -c ":$(printf '%04X' "$1") 00000000:0000 0A" /proc/net/tcp; }
 if [ "${1:-}" = count ]; then
-  echo "fwm1-still=$(listening 1BB0)"
+  echo "fwm1-still=$(listening 7072)"
   exit 0
 fi
 printf 'fwm1-tcp-a\n' | nc -l -p 7070 >/dev/null 2>&1 &
 printf 'fwm1-tcp-c\n' | nc -l -p 7072 >/dev/null 2>&1 &
 n=0
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  n=$(( $(listening 1BAE) + $(listening 1BB0) ))
+  n=$(( $(listening 7070) + $(listening 7072) ))
   [ "$n" -ge 2 ] && break
   sleep 0.3
 done

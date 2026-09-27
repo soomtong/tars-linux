@@ -235,6 +235,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 답한다(RFC 6761). 174,288바이트 · NEEDED는 libcap.so.2와 libc뿐이라 새
 # 라이브러리가 0개다(LB-M0 실측 6). dlopen 대상이라 make_initrd.sh가 이름으로
 # 복사한다 — 바이너리의 DT_NEEDED를 따라가는 copy_lib_deps에는 안 잡힌다.
+#
+# ── FW-M1: 층 10(방화벽) ───────────────────────────────────────────────
+#
+# nft와 그것이 끌고 오는 넷이다. 재귀 DT_NEEDED 열둘 중 여덟(libc · libedit ·
+# libgmp · libmnl · libtinfo · libbsd · libmd · 로더)은 앞 층들에 이미 있어서
+# 새것은 다섯, 1,386,600바이트다(FW-M0 실측 2). libxtables는 nft가 옛 iptables
+# 확장을 해석하려고 링크할 뿐 우리 규칙은 안 쓰지만, NEEDED라 빼면 nft가 안 뜬다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -343,6 +350,11 @@ RUN dpkg --add-architecture amd64 \
         libbsd0:amd64 \
         libmd0:amd64 \
         libnss-myhostname:amd64 \
+        nftables:amd64 \
+        libnftables1:amd64 \
+        libnftnl11:amd64 \
+        libxtables12:amd64 \
+        libjansson4:amd64 \
         tzdata) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*

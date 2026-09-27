@@ -290,4 +290,12 @@ GUEST_TOOLS=(
   #   chronyc   117,896바이트   3개 — libedit · libbsd · libmd
   usr/sbin/chronyd:usr/bin/chronyd
   usr/bin/chronyc:usr/bin/chronyc
+
+  # ── 층 10 · 방화벽 ──────────────────────────────────────────────────────
+  # FW-M1. init의 firewall.zig가 /usr/bin/nft로 execve한다. 오른쪽이 /usr/bin인
+  # 이유는 dhcpcd · chronyd와 같다(PATH가 /usr/bin:/bin). 사람도 셸에서
+  # `nft list ruleset`으로 지금 선 규칙을 본다.
+  #
+  # 새 라이브러리(FW-M0 실측 2): libnftables · libnftnl · libxtables · libjansson
+  usr/sbin/nft:usr/bin/nft
 )

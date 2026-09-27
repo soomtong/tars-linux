@@ -7,6 +7,7 @@ const storage = @import("storage.zig");
 const environ = @import("environ.zig");
 const net = @import("net.zig");
 const clock = @import("clock.zig");
+const firewall = @import("firewall.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -668,9 +669,10 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
     // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
     // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
+    // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였다.
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -681,6 +683,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             @tagName(cfg.net),
             cfg.ntp.arg(&ntp_buf),
             cfg.timezone.slice(),
+            @tagName(cfg.firewall),
         },
     );
 
@@ -763,6 +766,12 @@ pub fn main(init: std.process.Init.Minimal) void {
     } else {
         std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
     }
+
+    // FW-M1. `net.bringUp` 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
+    // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
+    // 로컬 netlink만 쓰므로 부팅이 네트워크에 묶이지 않는다. `/config`가 안
+    // 붙었어도 같은 파일을 올린다 — 빈 include는 에러가 아니다(FW-M0 실측 4).
+    firewall.up(cfg.firewall, envp);
 
     // NW-M2. envp 다음인 것이 이 한 줄의 유일한 제약이다(design 결정 F) —
     // dhcpcd의 hook이 sed·rm을 이름으로 부르므로 PATH가 필요하고, 그 값은

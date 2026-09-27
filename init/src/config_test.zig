@@ -95,6 +95,9 @@ fn expect(text: []const u8, want: config.Config) !void {
         // TS-M3: 아홉째 필드. `Ntp`와 같이 `eql`이다 — 배열을 가진 struct라
         // `==`가 안 된다.
         got.timezone.eql(want.timezone) and
+        // FW-M1: 열째 필드. SC-M0이 여섯째에 대해 적어 둔 것과 같은 자리다 —
+        // 이 줄이 없으면 아래 firewall 검사가 아무것도 안 보고 초록이다.
+        got.firewall == want.firewall and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
@@ -103,8 +106,8 @@ fn expect(text: []const u8, want: config.Config) !void {
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -116,6 +119,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(got.net),
             got.ntp.arg(&got_ntp),
             got.timezone.slice(),
+            @tagName(got.firewall),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
@@ -125,6 +129,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             @tagName(want.net),
             want.ntp.arg(&want_ntp),
             want.timezone.slice(),
+            @tagName(want.firewall),
         },
     );
     return error.UnexpectedConfig;
@@ -979,6 +984,17 @@ pub fn main() !void {
         std.debug.print("FAIL: something that is not a TZif file was accepted\n", .{});
         return error.TzifFalsePositive;
     }
+
+    // ── FW-M1: firewall ────────────────────────────────────────────────
+    //
+    // net과 같은 모양의 enum 키다. 기본값이 off인 것이 design 결정 1이다 —
+    // 이 키를 안 적은 기계는 한 글자도 안 바뀐다.
+    try expect("firewall=on\n", .{ .firewall = .on });
+    try expect("firewall=off\n", .{});
+    try expect("firewall=yes\n", .{}); // enum에 없는 값
+    try expect("firewall=\n", .{}); // 값 없음
+    // 체인의 디스크가 실제로 쓰는 두 줄이다.
+    try expect("net=dhcp\nfirewall=on\n", .{ .net = .dhcp, .firewall = .on });
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //
