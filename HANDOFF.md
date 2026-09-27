@@ -1,38 +1,40 @@
-# HANDOFF: Service Control(CT)이 M2로 닫혔다 — `tars-service`와 PID 1의 셋째 입력
+# HANDOFF: Daemon Supervision(DS) — M1까지 끝났다, 다음은 M2
 
 ## 지금 어디인가
 
-CT가 2026-09-27 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). SV 비목표 4를 목표로
-옮긴 것이다. 다음 할 일은 새 서브프로젝트를 고르는 것이다(아래).
-
-design은 `docs/superpowers/specs/2026-09-27-tars-service-control-design.md`(결정 8 · 위험 4 ·
-실측 1~13), plan은 `plans/2026-09-27-tars-service-control-ct-m0.md` ~ `-ct-m2.md`, 기억은
-`docs/decisions/project_service_control.md`다.
+DS는 dhcpcd와 chronyd를 PID 1의 감독 목록에 넣는 서브프로젝트다(SV 비목표 5를 목표로
+옮겼다). 2026-09-27에 M0(실측)과 M1(코드)이 끝났다. design은
+`docs/superpowers/specs/2026-09-27-tars-daemon-supervision-design.md`(결정 7 · 위험 5 ·
+실측 1~10)이고, plan은 `plans/2026-09-27-tars-daemon-supervision-ds-m0.md` · `-ds-m1.md`다.
 
 | 커밋 | 무엇 |
 |---|---|
-| `18ed929` · `321da7a` | design · M0 plan과 실측(코드 0줄) |
-| `d2456f0` · `7df2d86` · `b63791d` · `5e3596e` | M1 — `control.zig`와 검사 · `main.zig` · `tars-service` · 닫기 |
-| `ce1a4a3` · `601b65d` · `ddb86c7` | M2 — 부팅 D · 가이드 · 진입 검사가 잡은 `grep -q` |
+| `66d4515` · `9f122bd` | design · M0 실측(코드 0줄) |
+| `5ecad6c` · `ffa1d2e` · `3f56ff9` · `738d3b2` | M1 — 예약 이름 · 버튼 fd `CLOEXEC` · 본체 · 닫기 |
 
-루트 게이트 16체인 3/3(50분 32초, `FAIL` 0줄, 2026-09-27). 반사실 넷(규칙 2 · 규칙 1 · 그룹 · `CLOEXEC`) — 앞의 둘은
-호스트 검사가 먼저 잡아서, 호스트 검사를 건너뛴 사본으로 부팅 D가 잡는 것도 봤다.
+사용자가 정한 둘 — 이 서브프로젝트를 다음으로 · chronyd의 기다림은 chrony `sourcedir`로
+없앤다(design 결정 3).
 
-사용자가 정한 셋 — 서비스 제어를 다음으로 · 동사 넷 · 통로는 소켓.
+지금 선 것. dhcpcd는 `-B`로 배경으로 안 가서 PID 1이 쥔 pid가 곧 dhcpcd다. chronyd
+설정은 `init`이 부팅 때 곧바로 쓰고, `ntp=dhcp`면 hook이
+`/run/tars/chrony.sources/dhcp.sources`를 쓰고 `chronyc reload sources`를 부른다. 두
+데몬은 `Kind.service`로 `children`의 2 · 3번 칸이고 label은 `service dhcpcd` ·
+`service chronyd`다. 이웃 체인 넷(net · nic · firewall · service)이 초록이다. 루트
+게이트는 아직 안 돌렸다.
 
-⚠ 다음 사람이 먼저 볼 것 넷.
-- 서비스에 시그널을 보낼 때는 그룹(`kill(-pid)`)이다. 리더에게만 보내면 `exec` 없는
-  스크립트의 자식이 고아로 남는다(실측 5).
-- 체인에 `… | grep -q`를 쓰면 진입 검사가 게이트를 0.4초에 세운다. `grep … >/dev/null`.
-- `zig build test`의 끝줄은 판정이 아니다 — 병렬이라 다른 검사의 `PASS`가 끝에 온다.
-- PID 1의 전원 버튼 fd가 자식에게 샌다(`CLOEXEC` 없음, 실측 7). 이월 숙제에 적었다.
+⚠ 다음 사람이 먼저 볼 것 셋.
+- 로그 줄이 바뀌었다. `started dhcpcd (pid N), it picks the interface`는 없고
+  `started service dhcpcd (pid N, /usr/bin/dhcpcd)`다.
+- 그룹 SIGTERM은 돌고 있던 dhcpcd hook도 죽인다(design 위험 5, M0 실측 4).
+- 게이트의 SLIRP는 option 42를 안 주므로 hook의 `chronyc reload` 경로는 게스트 안에서
+  한 번도 안 돈다. M0 실측 5가 손으로 잰 것이 그 경로의 유일한 증거다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+## 바로 다음에 할 것 — DS-M2 plan
 
-남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · IPv6(FW design 위험 6이 첫 확인 — sshd가 떠
-있으니 v6 구멍의 값이 크다) · dhcpcd · chronyd를 감독 목록에 넣는 것(SV 비목표 5 — 이제
-`tars-service`로 다룰 수 있게 되는 덤이 있다). 작은 것 — 버튼 fd의 `CLOEXEC`.
-
+design의 "M1이 M2에 넘기는 것"이 목록이다 — 죽이면 다시 뜬다 · `tars-service restart
+chronyd` 뒤 시계 · `ntp=dhcp`에서 재시작 없음을 판정으로 · 버튼 fd가 안 샌다 · 반사실
+둘(`-B` · `CLOEXEC`) · 가이드(`docs/guides/`) · 루트 게이트 · design `Status:` ·
+`CLAUDE.md` 완료 표 · `docs/decisions/`의 기억 한 파일.
 
 ## 어디를 보면 되는가
 
