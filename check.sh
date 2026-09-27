@@ -305,7 +305,8 @@ run_chain() {
 #
 # SV 체인은 init이 /config/services.d의 실행 파일을 골라 띄우고 감독하는가를
 # 본다. device 체인처럼 게스트에 한 글자도 안 치고 판정이 시리얼 로그와 바깥에서
-# 붙은 TCP 한 줄이다. 회차당 부팅 1회(30초 안팎)라 총 부팅 횟수가 셋 는다.
+# 붙은 TCP 한 줄이다. SV-M2가 sshd 부팅 둘을 더해 회차당 부팅 3회(합 2분
+# 안팎)다 — 총 부팅 횟수가 아홉 는다.
 #
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -325,7 +326,7 @@ CHAINS=(
   "DC-M2:./install/check.sh"
   "WN-M3:./nic/check.sh"
   "FW-M2:./firewall/check.sh"
-  "SV-M1:./service/check.sh"
+  "SV-M2:./service/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -617,6 +617,7 @@ stop_ssh() {
 }
 
 echo "=== boot B: sshd linked, firewall=on without ssh.nft ==="
+rm -f "$LOG"   # 부팅 A의 로그. cleanup은 마지막 LOG 하나만 지운다
 LOG="$(mktemp)"
 boot_ssh "$MONITOR_PORT_B"
 

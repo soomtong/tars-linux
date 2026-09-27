@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SV 체인. init이 /config/services.d의 실행 파일을 읽어 띄우고 감독하는가를 본다.
 #
-# 부팅 하나다. 설정 디스크가 싣는 것.
+# 부팅 셋이다. 부팅 A의 설정 디스크가 싣는 것.
 #   tars.conf                   net=dhcp — a-greet에 바깥에서 붙으려고
 #   services.d/a-greet          붙는 사람에게 자기 $0과 PATH를 한 줄 보낸다
 #   services.d/b-die            곧바로 죽는다 — 셋 뜨고 포기된다
@@ -11,6 +11,12 @@
 #
 # services.d에 쓰는 순서를 이름의 역순으로 둔다. ext2의 getdents는 대개 만든
 # 순서라, init이 정렬을 안 하면 시작 순서 검사가 빨갛다.
+#
+# 부팅 B · C는 다른 디스크 하나를 같이 쓴다(SV-M2). 사람이 할 일 둘 — 템플릿으로 가는
+# 링크 services.d/sshd와 공개 키 ssh/authorized_keys — 과 tars.conf의 net=dhcp ·
+# shell=zsh · firewall=on. B는 ssh.nft 없이 떠서 방화벽이 22를 막는 것과 첫 부팅의
+# 호스트 키를, C는 ssh.nft를 더한 같은 디스크로 떠서 키가 그대로인 것과 로그인된
+# 세션이 콘솔과 같은 것을 본다.
 #
 # 우리 코드는 init/src/services.zig(고르기)와 main.zig의 감독 루프(띄우기)다.
 set -uo pipefail
@@ -261,5 +267,140 @@ wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
 exec 3<&-
 exec 3>&-
+
+# ── 부팅 B · C: sshd ──────────────────────────────────────────────────
+MONITOR_PORT_B=45483
+MONITOR_PORT_C=45484
+SSH_PORT=45485     # → 게스트 22
+SSH_DISK="${REPO_ROOT}/out/service-ssh.img"
+KEYS="$(mktemp -d)"
+ssh-keygen -q -t ed25519 -N '' -C sv-good -f "$KEYS/good"
+ssh-keygen -q -t ed25519 -N '' -C sv-bad -f "$KEYS/bad"
+SSHO=(-p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=5 -o IdentitiesOnly=yes
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile="$KEYS/known_hosts")
+
+# 사람이 할 일 둘을 그대로 한다 — 링크 하나와 공개 키 하나. authorized_keys의
+# 모드는 debugfs write가 원본을 따르므로 여기서 600으로 둔다(SV-M0 실측 2).
+SEED="$(mktemp -d)"
+printf 'net=dhcp\nshell=zsh\nfirewall=on\n' > "$SEED/tars.conf"
+cp "$KEYS/good.pub" "$SEED/authorized_keys"; chmod 600 "$SEED/authorized_keys"
+printf 'tcp dport 22 accept\n' > "$SEED/ssh.nft"
+rm -f "$SSH_DISK"; truncate -s 16M "$SSH_DISK"
+mkfs.ext2 -F -q -m 0 -L tars-sv "$SSH_DISK"
+sdbg() { debugfs -w -R "$1" "$SSH_DISK" 2>&1 | grep -v '^debugfs' || true; }
+sdbg "write $SEED/tars.conf tars.conf"
+sdbg "mkdir services.d"
+sdbg "symlink services.d/sshd /etc/tars/services/sshd"
+sdbg "mkdir ssh"
+sdbg "sif ssh mode 040700"
+sdbg "write $SEED/authorized_keys ssh/authorized_keys"
+sdbg "mkdir nftables.d"
+
+boot_ssh() {  # $1 = monitor 포트
+  qemu-system-x86_64 \
+    -m "$GUEST_MEM" \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "console=ttyS0" \
+    -vga none \
+    -device virtio-gpu-pci \
+    -display none \
+    -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-10.0.2.15:22" \
+    -device virtio-net-pci,netdev=n0 \
+    -drive file="$SSH_DISK",if=virtio,format=raw \
+    -serial file:"$LOG" \
+    -monitor tcp:127.0.0.1:$1,server,nowait \
+    -no-reboot &
+  QEMU_PID=$!
+  wait_for_log "terminal: screen>" 120 || fail "terminal never rendered a prompt"
+  local ok=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/$1"; then ok=1; break; fi
+    sleep 0.5
+  done
+  [ "$ok" = "1" ] || fail "could not connect to the QEMU monitor"
+  wait_for_log "eth0: leased 10\.0\.2\.15 " 60 || fail "dhcpcd never leased an address" ": leased"
+}
+
+stop_ssh() {
+  echo "system_powerdown" >&3
+  wait "$QEMU_PID" 2>/dev/null || true
+  QEMU_PID=""
+  exec 3<&-
+  exec 3>&-
+}
+
+echo "=== boot B: sshd linked, firewall=on without ssh.nft ==="
+rm -f "$LOG"   # 부팅 A의 로그. cleanup은 마지막 LOG 하나만 지운다
+LOG="$(mktemp)"
+boot_ssh "$MONITOR_PORT_B"
+
+# ── 검사 9: init이 로그인 셸과 ssh env를 썼다 ───────────────────────────
+grep -a "tars-init: login shell /usr/bin/zsh, ssh env in /etc/ssh/sshd_config.d/tars-env.conf" "$LOG" >/dev/null \
+  || fail "init did not write the login shell and the ssh env" "tars-init: login shell"
+echo "init set root's shell to zsh and wrote sshd's env"
+
+# ── 검사 10: 링크 하나로 sshd가 떴고, 첫 부팅이라 키를 구웠다 ──────────────
+wait_for_log "Server listening on 0\.0\.0\.0 port 22\." 30 \
+  || fail "sshd never listened" "service sshd" "sshd:"
+grep -a "sshd: generated a host key in /config/ssh" "$LOG" >/dev/null \
+  || fail "the template did not generate a host key on the first boot" "sshd:"
+FP_B="$(grep -aoE "sshd: host key 256 SHA256:[A-Za-z0-9+/]+" "$LOG" | head -1 | sed 's/.*SHA256:/SHA256:/')"
+[ -n "$FP_B" ] || fail "the template did not print the host key" "sshd:"
+echo "the linked template started sshd and generated ${FP_B}"
+
+# ── 검사 11: 방화벽이 22를 막는다 ────────────────────────────────────────
+# ssh.nft가 없으므로 등록한 키로도 아무것도 안 온다. SLIRP은 막힌 연결을 안 끊으므로
+# (FW-M0 실측 6) ssh는 배너를 기다리다 ConnectTimeout에 걸린다.
+if timeout 15 ssh "${SSHO[@]}" -i "$KEYS/good" root@127.0.0.1 true >/dev/null 2>&1; then
+  fail "firewall=on without ssh.nft still let an ssh login through"
+fi
+echo "with firewall=on and no ssh.nft, port 22 stayed shut"
+stop_ssh
+B_LOG="$LOG"
+
+sdbg "write $SEED/ssh.nft nftables.d/ssh.nft"
+rm -rf "$SEED"
+
+echo "=== boot C: the same disk plus nftables.d/ssh.nft ==="
+LOG="$(mktemp)"
+boot_ssh "$MONITOR_PORT_C"
+wait_for_log "Server listening on 0\.0\.0\.0 port 22\." 30 || fail "sshd never listened" "sshd:"
+
+# ── 검사 12: 키를 다시 안 구웠고 지문이 같다 ────────────────────────────
+if grep -a "sshd: generated a host key" "$LOG" >/dev/null; then
+  fail "the host key was generated again on the second boot" "sshd:"
+fi
+FP_C="$(grep -aoE "sshd: host key 256 SHA256:[A-Za-z0-9+/]+" "$LOG" | head -1 | sed 's/.*SHA256:/SHA256:/')"
+[ "$FP_C" = "$FP_B" ] || fail "the host key changed across boots (${FP_B} -> ${FP_C})" "sshd:"
+SCAN="$(ssh-keyscan -p "$SSH_PORT" -t ed25519 127.0.0.1 2>/dev/null | ssh-keygen -lf - | awk '{print $2}')"
+[ "$SCAN" = "$FP_B" ] || fail "ssh-keyscan saw ${SCAN}, the guest printed ${FP_B}"
+echo "the host key survived the reboot and is what the client sees"
+
+# ── 검사 13: 등록한 키로 로그인되고 세션이 콘솔과 같다 ──────────────────────
+GOT="$(ssh "${SSHO[@]}" -i "$KEYS/good" root@127.0.0.1 \
+  'printf "sv-ssh %s|%s|%s|%s\n" "$0" "$SHELL" "$PATH" "$HISTFILE"' 2>/dev/null)"
+[ "$GOT" = "sv-ssh zsh|/usr/bin/zsh|/usr/bin:/bin|/config/zsh_history" ] \
+  || fail "the ssh session does not match the console (got: [${GOT}])" "sshd" "Accepted"
+echo "a registered key logged in to zsh with init's PATH and history"
+
+# ── 검사 14: 모르는 키는 거절된다 ─────────────────────────────────────────
+ssh "${SSHO[@]}" -i "$KEYS/bad" root@127.0.0.1 true >/dev/null 2>&1
+RC=$?
+[ "$RC" = "255" ] || fail "an unregistered key got rc ${RC}, want 255"
+echo "an unregistered key was refused"
+
+# ── 검사 15: Ghostty의 TERM에서 less가 안 멈춘다 ──────────────────────────
+OUT="$(TERM=xterm-ghostty timeout 15 ssh "${SSHO[@]}" -i "$KEYS/good" -tt root@127.0.0.1 \
+  'echo x | less -FX; echo "sv-less-rc=$?"' 2>&1 < /dev/null | tr -d '\r')"
+case "$OUT" in
+  *"not fully functional"*) fail "less still warns under TERM=xterm-ghostty" ;;
+  *"sv-less-rc=0"*) ;;
+  *) fail "less under TERM=xterm-ghostty did not finish (got: [${OUT}])" ;;
+esac
+echo "less ran under TERM=xterm-ghostty without a warning"
+stop_ssh
+rm -f "$B_LOG"
+rm -rf "$KEYS"
 
 echo "SV chain PASS"
