@@ -75,7 +75,11 @@ docker run --rm -v /tmp/sv:/tmp/sv tars-devcontainer bash -c '
         | grep "^[a-z0-9]" | sed "s/:amd64$//" | sort -u)
   echo "$pk" > closure.txt; wc -l closure.txt
   mkdir -p debs stage
-  (cd debs && apt-get download $(sed "s/$/:amd64/" closure.txt) >/dev/null 2>&1 || true)
+  # 한 번에 받으면 Architecture: all인 것(runit-helper · ucf 등)이 `:amd64` 후보가
+  # 없어 목록 전체가 멈춘다(실행 중 발견). 하나씩 받고 실패하면 접미사 없이 받는다.
+  (cd debs && for p in $(cat ../closure.txt); do
+     apt-get download "$p:amd64" >/dev/null 2>&1 || apt-get download "$p" >/dev/null 2>&1 || echo "FAIL $p"
+   done)
   ls debs | wc -l
   for d in debs/*.deb; do dpkg -x "$d" stage; done
   dpkg-deb -f debs/openssh-server_*.deb Version
@@ -130,7 +134,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   cd ../kernel && ./make_initrd.sh >/dev/null &&
   zcat initrd.cpio | cpio -it 2>/dev/null | sed -n "s|^lib/x86_64-linux-gnu/||p" | sort' > /tmp/sv/initrd-libs.txt
 ls -la kernel/initrd.cpio
-ls /tmp/sv/seed/sv/lib | sort > /tmp/sv/need-libs.txt
+find /tmp/sv/seed/sv/lib -type f -exec basename {} \; | sort > /tmp/sv/need-libs.txt  # ls는 호스트에서 eza 별칭이라 색 코드가 섞인다
 comm -13 /tmp/sv/initrd-libs.txt /tmp/sv/need-libs.txt > /tmp/sv/new-libs.txt
 cat /tmp/sv/new-libs.txt
 (cd /tmp/sv/seed/sv/lib && cat ../../../new-libs.txt | xargs stat -f '%z %N') | sort -n
@@ -391,8 +395,11 @@ login good /tmp/sv/good
 login bad  /tmp/sv/bad
 # 측정 6. terminfo가 있는 TERM과 없는 TERM에서 pty를 받고 less를 한 번 돌린다.
 for term in xterm-256color xterm-ghostty; do
-  out=$(TERM=$term ssh "${SSHO[@]}" -i /tmp/sv/good -tt root@127.0.0.1 \
+  # timeout: 첫 실행에서 xterm-ghostty 쪽이 돌아오지 않았다. 매달린 것도 측정이라
+  # 잘라서 거기까지의 출력과 rc(124)를 남긴다.
+  out=$(TERM=$term timeout 15 ssh "${SSHO[@]}" -i /tmp/sv/good -tt root@127.0.0.1 \
     'echo "$TERM"; echo x | less -FX; echo "rc=$?"' 2>&1 < /dev/null)
+  echo "SVM0-PTYRC $term $?"
   echo "SVM0-PTY $term out=[$(echo "$out" | tr -d '\r' | tr '\n' ';')]"
 done
 run perm

@@ -2,7 +2,7 @@
 
 접두사: SV
 
-Status: 설계(2026-09-27). M0 착수 전.
+Status: M0 끝났다(2026-09-27) — 실측 1~7. 다음은 M1(메커니즘).
 
 관련 문서: `2026-08-01-tars-boot-foundation-design.md`(BF. 감독 루프의 뿌리) ·
 `2026-09-27-tars-firewall-design.md`(FW. 여는 길과 "기본 꺼짐, 켜면 닫힘") ·
@@ -237,3 +237,169 @@ ssh는 클라이언트의 `TERM`을 넘긴다. 게스트의 terminfo는 우리 �
 게이트가 증명하는 것은 "SLIRP 안에서 sshd에 키로 로그인된다"다. 실기 LAN에서
 노출되는 sshd의 보안(무차별 대입 · 키 관리)은 이 사이클이 판정하지 않는다. 가이드는
 `firewall=on`과 함께 쓰라고 적는다.
+
+## SV-M0이 실행으로 증명한 것
+
+2026-09-27. plan은 `plans/2026-09-27-tars-boot-services-sv-m0.md`. 코드와 커널
+설정은 한 줄도 안 바뀌었다. 부팅은 둘을 돌렸다 — 첫 회가 측정 6의 한 갈래에서
+매달려 멈췄고(실측 7), 하네스에 `timeout`을 더하고 디스크를 새로 구워 다시 돌렸다.
+아래 로그는 둘째 회의 것이고, 측정 2 ~ 5는 두 회가 지문 말고는 같다.
+
+### 실측 1 — sshd가 initrd에 더하는 것은 바이너리 넷과 라이브러리 일곱, 5,459,664바이트다
+
+패키지는 `openssh-server` 1:10.0p1-7+deb13u4다(실행하면 `OpenSSH_10.0p2
+Debian-7+deb13u4, OpenSSL 3.5.7`). 닫힘이 패키지 75개였는데, `apt-get download`에
+한 번에 넘기면 `Architecture: all`인 것(`runit-helper` · `ucf` 등)이 `:amd64` 후보가
+없어 목록 전체가 멈춘다 — 하나씩 받아야 한다.
+
+실행 파일 넷. sshd는 연결마다 `sshd-session`을, 인증에 `sshd-auth`를 exec한다(10.0부터
+셋으로 갈렸다). 둘의 경로 `/usr/lib/openssh/`는 sshd에 컴파일되어 있다.
+
+```
+SVM0-BIN sshd 568224
+SVM0-BIN ssh-keygen 567744
+SVM0-BIN sshd-session 1122368
+SVM0-BIN sshd-auth 1076640
+```
+
+재귀 `DT_NEEDED`는 21개이고 `MISSING`은 없다. 그중 14개가 이미 initrd에 있다 —
+걱정했던 Kerberos 계열(`libgssapi_krb5` · `libkrb5` · `libk5crypto` ·
+`libkrb5support` · `libcom_err` · `libkeyutils`)과 `libcrypto` · `libselinux` ·
+`libpcre2-8` · `libzstd`까지 curl과 git이 먼저 들여놓았다. 새 것은 일곱이다.
+
+```
+26616 libwtmpdb.so.0
+30632 libcap-ng.so.0
+47976 libwrap.so.0
+67584 libpam.so.0
+174008 libaudit.so.1
+206776 libcrypt.so.1
+1571096 libsqlite3.so.0
+```
+
+합이 2,124,688바이트이고 그 74%가 `libsqlite3` 하나다. `sshd-session`이
+`libwtmpdb`(로그인 기록)를 부르고 그것이 sqlite를 부른다. 바이너리 넷(3,334,976)과
+더해 5,459,664바이트, 압축 전 기준이다. 지금 `initrd.cpio`(압축)가 43,799,286바이트다.
+
+위험 1은 닫힌다 — M2가 그대로 넣는다.
+
+### 실측 2 — `debugfs`가 실행 비트와 링크를 만든다
+
+빈 이미지에서 `write`는 원본 파일의 모드를 따르고(644 → `Mode: 0644`), `sif <이름>
+mode 0100755`가 `0755`로 바꾸고, `symlink link /config/svc/execd`가 `Type: symlink`를
+만든다. 셋 다 `User: 0 Group: 0`이다. 게스트에서 본 모양이 같다.
+
+```
+SVM0-STAT execd -rwxr-xr-x root:root regular file ->
+SVM0-STAT link lrwxrwxrwx root:root symbolic link -> /config/svc/execd
+```
+
+`mkfs.ext2 -d`는 원본의 모드를 그대로 싣는다(`hello` 755 · `noexec` 644). 소유자는
+컨테이너 안에서 `chown -R 0:0`한 뒤 구웠다 — macOS 바인드 마운트의 uid를 싣지 않으려고.
+
+### 실측 3 — `/config`에서 스크립트가 직접 실행된다
+
+```
+SVM0-MOUNT /dev/vda /config ext2 rw,sync,nosuid,nodev,relatime,errors=continue 0 0
+SVM0-EXEC hello rc=0 out=[SVM0-RAN hello /config/svc/hello 94;]
+SVM0-EXEC noexec rc=126 out=[/config/svm0.sh: line 13: /config/svc/noexec: Permission denied;]
+SVM0-EXEC execd rc=0 out=[SVM0-RAN execd /config/svc/execd;]
+SVM0-EXEC link rc=0 out=[SVM0-RAN execd /config/svc/link;]
+```
+
+`noexec`가 옵션에 없다(`mountConfig`가 `NOSUID | NODEV`만 준다). shebang `#!/bin/sh`를
+커널이 풀어 bash가 돈다. 링크로 부르면 `$0`이 링크의 경로다 — 결정 6의 템플릿을
+링크로 켜도 스크립트는 자기가 어디서 불렸는지 안다. 실행 비트가 없으면 execve가
+`EACCES`이고 셸은 126을 낸다. `init`에서는 execve의 반환값이 그 errno다 — M1의
+사전 확인이 이 경우를 미리 잡고, 못 잡아도 자식이 127로 셋 죽고 포기된다.
+
+결정 2가 그대로 선다.
+
+### 실측 4 — sshd는 호스트 키 · privsep 사용자 · `/run/sshd` 셋을 요구한다
+
+`sshd -t`를 하나씩 채우며 돌렸다.
+
+```
+SVM0-TEST bare rc=1 err=[Unable to load host key: /config/ssh/ssh_host_ed25519_key;sshd: no hostkeys available -- exiting.;]
+SVM0-TEST key rc=255 err=[Privilege separation user sshd does not exist;]
+SVM0-TEST user rc=255 err=[Missing privilege separation directory: /run/sshd;]
+SVM0-TEST rundir rc=0 err=[]
+SVM0-LISTEN 1 pid=189
+```
+
+사용자 줄은 `sshd:x:100:65534::/run/sshd:/usr/sbin/nologin`, 그룹은
+`nogroup:x:65534:`를 더했다. `/usr/sbin/nologin`은 게스트에 없지만 sshd는 그 자리를
+실행하지 않으므로 상관없다. 이 셋이 전부이고, 그 뒤에는 PAM · shadow 없이
+(`UsePAM no`, `/etc/shadow` 없음) 키 로그인이 된다(실측 5).
+
+M2가 initrd에 구울 목록 — `passwd` · `group`에 두 줄, 빈 `/run/sshd`(755). 호스트 키는
+템플릿이 만든다.
+
+### 실측 5 — 키 로그인은 되고 모르는 키는 거절된다. StrictModes는 root 그룹 쓰기를 봐준다
+
+```
+SVM0-SCAN 256 SHA256:HGvcsYznQ2GeqBw0iRXqGM5oboaxtQIrtEo24g3dMWg [127.0.0.1]:45422 (ED25519)
+SVM0-FPR 256 SHA256:HGvcsYznQ2GeqBw0iRXqGM5oboaxtQIrtEo24g3dMWg root@(none) (ED25519)
+SVM0-LOGIN good rc=0 ms=265 out=[...;sh|/bin/sh|dumb|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|0;xterm;xterm-256color;]
+SVM0-LOGIN bad rc=255 ms=158 out=[root@127.0.0.1: Permission denied (publickey).;]
+SVM0-PERM 770 root:root;600 root:root;
+SVM0-LOGIN perm rc=0 ms=283 out=[...]
+```
+
+바깥의 `ssh-keyscan` 지문과 게스트의 `ssh-keygen -l` 지문이 같다 — 호스트가 붙은
+상대가 우리 sshd다. 로그인은 0.3초 안이다.
+
+`/config/ssh`를 770(그룹 쓰기)으로 열어도 로그인이 됐다. 위험 2가 예상한 거절이
+안 났다. Debian의 openssh에는 `user-group-modes` 패치가 있어서, 그룹 쓰기 비트가
+있어도 그 그룹의 구성원이 사용자 하나뿐이면 봐준다 — `root` 그룹의 구성원은 root
+하나다. 그래서 이 게스트에서 StrictModes가 막는 것은 다른 사용자 소유이거나 모두
+쓰기(`o+w`)인 경우다. M2 게이트는 StrictModes 음성 검사를 두지 않고, 가이드는
+`chmod 700`을 권한다. 위험 2는 닫힌다.
+
+sshd 로그(`-e`)에는 세션마다 두 줄의 소음이 섞인다.
+
+```
+SVM0-SSHD lastlog_openseek: Couldn't stat /var/log/lastlog: No such file or directory
+SVM0-SSHD syslogin_perform_logout: logout() returned an error
+```
+
+`/var/log`가 게스트에 없어서다. 로그인에는 영향이 없다. M2가 `sshd_config`의
+`PrintLastLog no`로 없앨 수 있는지, 아니면 그대로 둘지를 정한다.
+
+### 실측 6 — ssh 세션은 `sh`로 불린 bash이고 `PATH`는 sshd의 기본값이다
+
+`$0`이 `sh`, `$SHELL`이 `/bin/sh`(`passwd`의 그 자리), 비대화형이라 `TERM`은 `dumb`,
+uid 0. `PATH`는 `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`이다 —
+`init`이 짓는 `/usr/bin:/bin`이 아니라 sshd가 컴파일된 기본값이다. 두 PATH 모두
+게스트에서 `/usr/bin`을 포함하므로 도구는 이름으로 불린다. `TZ` · `XDG_*` ·
+`HISTFILE` 같은 `init`의 env는 ssh 세션에 없다 — sshd는 자기 env를 세션에 안 넘긴다.
+비목표 7(로그인 셸이 `tars.conf`를 따르는 것)과 같은 자리의 일이고, M2에서 사용자와
+함께 본다.
+
+### 실측 7 — terminfo가 없는 `TERM`에서 `less`가 멈춰 기다린다
+
+```
+SVM0-PTYRC xterm-256color 0
+SVM0-PTY xterm-256color out=[xterm-256color;[?1h=x;[K[?1l>rc=0;Connection to 127.0.0.1 closed.;]
+SVM0-PTYRC xterm-ghostty 124
+SVM0-PTY xterm-ghostty out=[xterm-ghostty;WARNING: terminal is not fully functional;Press RETURN to continue Connection to 127.0.0.1 closed.;]
+```
+
+`-tt`로 pty를 받으면 클라이언트의 `TERM`이 그대로 온다. 게스트의 terminfo는
+`xterm` · `xterm-256color` 둘뿐이라, 그 밖의 이름에서 `less`는 경고를 찍고 RETURN을
+기다린다. 첫 회는 여기서 하네스가 매달렸다(15초 `timeout`이 124로 잘랐다). 위험 3이
+실제로 난다. 사람이 Ghostty 같은 터미널에서 ssh로 붙으면 첫 `less` · `git log`에서
+이것을 본다.
+
+처방 후보 — 게스트에 terminfo를 더 넣는다(흔한 이름 몇 개, 또는 `ncurses-term`의 것),
+가이드에 `TERM=xterm-256color ssh …`를 적는다, 또는 클라이언트 쪽 `SetEnv`. M2 plan에서
+사용자와 정한다.
+
+### M0이 M1 · M2에 넘기는 것
+
+- M1 — 결정 2 · 4가 바뀌지 않는다. 체인의 디스크는 `mkfs.ext2 -d`로 모드를 싣고,
+  `debugfs`의 `sif` · `symlink`로 덧댈 수 있다. 실행 비트 없는 파일의 실패는 `EACCES`다.
+- M2 — sshd 넷 · 라이브러리 일곱(`make_initrd.sh`의 `copy_lib_deps`가 따라간다),
+  `sshd-session` · `sshd-auth`는 `/usr/lib/openssh/`에, `sshd`는 `usr/sbin/sshd:usr/bin/sshd`로.
+  `passwd` · `group` 두 줄과 `/run/sshd`. devcontainer에 `openssh-client`(하네스의
+  `ssh` · `ssh-keyscan`). 사용자와 정할 것 둘 — terminfo(실측 7)와 ssh 세션의 셸 · env(실측 6).
