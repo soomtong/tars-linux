@@ -77,6 +77,8 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
   "배경" 절
 - 현재 진행 상황: `HANDOFF.md`
+- 서브프로젝트를 넘어 유효한 작업 요령(게이트 운영 · 다시 조사하지 말 실측 ·
+  안 되는 접근 · 핵심 파일 지도): `docs/guides/lessons.md`
 - 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
   한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로
   옮겼다 — 저장소 밖이 아니라 저장소 안에 두어 히스토리에 남기기 위함이다.
