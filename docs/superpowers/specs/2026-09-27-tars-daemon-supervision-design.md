@@ -2,7 +2,7 @@
 
 접두사: DS
 
-Status: M0 끝났다(2026-09-27) — 실측 1~7. 결정은 하나도 안 바뀌었고 hook에 `|| true` 하나가 더해졌다(실측 5).
+Status: M1 끝났다(2026-09-27) — 실측 1~10. 두 데몬이 감독 목록에 있고 이웃 체인 넷이 초록이다. 새 판정은 M2.
 
 관련 문서: `2026-09-27-tars-boot-services-design.md`(SV. 이 사이클이 그 비목표 5를
 목표로 옮긴다) · `2026-09-27-tars-service-control-design.md`(CT. `tars-service`와 그
@@ -311,3 +311,59 @@ lease까지 10.6초, 준비 표지부터 잰 값이다). 위험 1이 닫힌다 �
   순서다(실측 5 · 6).
 - 체인이 "다시 받았다"를 볼 때 기다릴 크기 — dhcpcd 재시작 뒤 lease 약 6초, chronyd
   점프 약 4.5초(실측 3 · 6).
+
+## DS-M1이 실행으로 증명한 것
+
+2026-09-27. plan은 `plans/2026-09-27-tars-daemon-supervision-ds-m1.md`. 커밋 셋 —
+`5ecad6c`(예약 이름) · `ffa1d2e`(버튼 fd `CLOEXEC`) · `3f56ff9`(본체: `init` · hook ·
+체인). 본체는 12파일, 254줄 더하고 397줄 지웠다. 지운 쪽이 많은 것은 `clock.zig`의
+기다림 코드와 `parseServerFile` 검사다.
+
+### 실측 8 — 호스트 검사가 먼저 빨갛고 구현 뒤에 초록이다
+
+`services_test`는 `no member named 'DHCPCD'`로, `clock_test`는 `expected type '[4]u8',
+found '?[4]u8'`로 먼저 빨갰다. 구현 뒤에 두 검사의 요약 줄이 새로 나온다.
+
+    services_test: names — dot means hidden, 32 bytes is the limit, dhcpcd and chronyd are init's
+    clock_test: with ntp=dhcp chronyd starts with no server and reads the directory dhcpcd writes into
+
+첫 초록 시도는 `file contents changed during update`로 멈췄다. 편집 직후의 파일을
+빌드가 읽은 것이고 코드와 무관하다 — 다시 돌리니 초록이었다.
+
+### 실측 9 — 이웃 체인 넷이 첫 판에 초록이다
+
+    net exit=0 fails=0 secs=118
+    nic exit=0 fails=0 secs=32
+    firewall exit=0 fails=0 secs=45
+    service exit=0 fails=0 secs=69
+
+새 글자로 선 판정 — `the dhcpcd hook writes the first ntp server as a chrony source and
+nothing else`(호스트 hook 검사) · `chronyd read 192.0.2.1 out of the planted
+chrony.sources`(net 검사 21, 화면의 `chronyc -n sources`) · `the firewall came up from
+… before dhcpcd started`(FW 결정 5의 순서) · `the same dhcpcd (pid 48) caught usb0`(nic,
+M0 실측 7이 게이트 안에서 재현됐다).
+
+### 실측 10 — 부팅마다 두 데몬이 한 번씩 뜨고, `ntp=dhcp`에서도 재시작이 없다
+
+net 체인을 한 `docker run` 안에서 다시 돌려 게스트 로그 다섯을 읽었다.
+
+    tars-init: dhcpcd joins the services, it picks the interface
+    tars-init: chronyd will ask whoever dhcpcd names in /run/tars/chrony.sources
+    tars-init: started service dhcpcd (pid 37, /usr/bin/dhcpcd)
+    tars-init: started service chronyd (pid 38, /usr/bin/chronyd)
+
+다섯 부팅 어디에도 `restarting` · `giving up`이 없다. `ntp=10.0.2.2` 부팅 셋은
+`chronyd will ask 10.0.2.2 (/run/tars/chrony.conf)`가 글자 그대로라 검사 18이 안
+바뀌었다. `ntp=off` 부팅은 chronyd 칸 없이 `started service dhcpcd` 하나다. 확인 3의
+30초 루프가 없어진 것은 위의 `ntp=dhcp` 부팅이 말한다 — 게이트는 이것을 아직 판정하지
+않는다(M2).
+
+### M1이 M2에 넘기는 것
+
+- 게이트가 아직 안 보는 성질 넷 — 죽이면 다른 pid로 다시 뜬다(dhcpcd는 주소를 약 6초에
+  다시 받는다, 실측 3) · `tars-service restart chronyd` 뒤 시계가 다시 맞는다 ·
+  `ntp=dhcp`에서 chronyd가 재시작 없이 산다(실측 10을 판정으로) · 버튼 fd가 서비스에 안
+  샌다(결정 6).
+- `status` 표에 두 줄이 늘었다. service 체인은 흔들리지 않았다 — 그 체인의 설정 디스크가
+  `net`을 안 켜는지, 켜는데 표를 줄 수로 안 세는지를 M2 plan이 읽고 적는다.
+- 반사실 둘(`-B` 빼기 · `CLOEXEC` 빼기)과 가이드 · 루트 게이트.
