@@ -182,6 +182,21 @@ terminal · 콘솔 셸 뒤에 붙인다. 규칙은 그 둘과 글자 그대로 �
 - `firewall=on` 조합(22번이 `ssh.nft` 전에는 닫혀 있다)을 B나 C에 M2에서 더한다.
 - 새 QEMU 호출은 `-netdev`를 명시한다(`require_explicit_nic`).
 
+### 결정 8 — ssh로 붙는 터미널의 terminfo를 흔한 것 몇 개 더 넣는다
+
+SV-M0 실측 7 뒤에 사용자가 정했다(2026-09-27). 게스트에 없는 `TERM`에서 `less`가
+멈추는 것을 가이드가 아니라 게스트에서 푼다. `ncurses-term` 통째(1,802개 · 12MB)는
+안 넣는다 — "무엇이 왜 필요한가"가 흐려진다(`make_initrd.sh`의 terminfo 주석과 같은
+판단). 목록과 `xterm-ghostty`를 만드는 법은 M2 plan이 실측으로 정한다 — Debian의
+`ncurses-term`에는 `ghostty`는 있어도 Ghostty가 실제로 보내는 이름 `xterm-ghostty`가
+없다.
+
+### 결정 9 — ssh 세션은 `tars.conf`의 `shell`과 `init`의 env를 따른다
+
+같은 날 사용자가 정했다. 비목표 7을 목표로 옮긴다. 콘솔에서 쓰는 셸과 ssh로 붙은
+셸이 같은 셸 · 같은 rc · 같은 히스토리 · 같은 `TZ`여야 한다. 방법(`passwd`의 셸 자리 ·
+sshd의 `SetEnv`)은 M2 plan이 실측으로 정한다.
+
 ## Milestone
 
 한 milestone이 끝나면 다음 plan을 그때 쓴다.
@@ -202,8 +217,7 @@ terminal · 콘솔 셸 뒤에 붙인다. 규칙은 그 둘과 글자 그대로 �
 4. 서비스를 멈추고 다시 띄우는 명령(`sv`나 `systemctl` 같은 것).
 5. dhcpcd · chronyd를 감독 목록에 넣는 것. 그 둘은 지금처럼 목록 밖이다.
 6. 비밀번호 로그인과 root 아닌 사용자.
-7. ssh 세션의 로그인 셸이 `tars.conf`의 `shell`을 따르는 것. 지금은 `passwd`의
-   `/bin/sh`(bash)다. M0의 실측을 보고 다시 판단한다.
+7. (결정 9로 옮겼다) ssh 세션의 로그인 셸이 `tars.conf`의 `shell`을 따르는 것.
 8. 실기 LAN에서 다른 컴퓨터가 붙는 것. 게이트는 SLIRP 안에서만 판정한다(IN 비목표
    3 · FW 비목표 3과 같다).
 
@@ -495,3 +509,70 @@ boot(31초) · device(14초) · machine(16초) · config(139초) · firewall(46�
 - sshd 템플릿은 `#!/bin/sh`로 쓴다(실측 9).
 - 체인은 부팅 A 하나다. M2는 같은 체인에 부팅 B · C(sshd)를 더한다 — 포트는 45483부터.
 - execve 실패 줄에 errno가 없다. 사람이 쓴 서비스가 127로 죽을 때 원인이 안 보인다.
+
+## SV-M2 착수 전 실측 — 결정 8 · 9의 방법
+
+2026-09-27. 하네스는 M0의 것을 넓힌 `/tmp/sv/boot2.sh`와 게스트 스크립트 `svm2.sh`이고
+(커밋 안 함), 코드는 안 바뀌었다. `shell=zsh`로 떠서 M0처럼 sshd를 세운 뒤, `init`이
+M2에서 할 일을 게스트 안에서 손으로 했다.
+
+### 실측 13 — `passwd`의 셸 자리와 `SetEnv` 한 줄이면 ssh 세션이 콘솔과 같다
+
+손으로 한 것 둘. `/etc/passwd`의 root 줄 끝을 `/usr/bin/zsh`로 바꾸고, 콘솔 셸이 물려받은
+env를 sshd의 drop-in 한 줄로 옮겼다(`sshd_config` 맨 위에 `Include
+/etc/ssh/sshd_config.d/*.conf`).
+
+```
+SVM2-DROPIN SetEnv TZ="UTC" XDG_DATA_HOME="/config/xdg" HISTFILE="/config/zsh_history" HISTSIZE="5000" SAVEHIST="5000" PATH="/usr/bin:/bin"
+SVM2-PASSWD root:x:0:0:root:/:/usr/bin/zsh
+SVM2-TEST rc=0 err=[]
+```
+
+비대화형 세션(`ssh host '명령'`)의 `$0|$SHELL|TZ|PATH|HISTFILE|SAVEHIST|XDG_DATA_HOME`:
+
+```
+zsh|/usr/bin/zsh|UTC|/usr/bin:/bin|/config/zsh_history|5000|/config/xdg
+```
+
+`SetEnv`의 `PATH`가 sshd의 컴파일된 기본값(실측 6)을 이긴다. 대화형 세션(`-tt`에 줄을
+흘려 넣었다)에서는 rc가 읽혔고(`type ls` → `ls is an alias for eza` — 씨앗 rc의 별칭이다),
+친 명령이 `/config/zsh_history`에 남았다(`grep -c` → 1, 끝 줄 `echo svm2-hist-$((6*7))` ·
+`exit`). 콘솔과 ssh가 같은 히스토리 파일을 쓴다.
+
+그래서 M2에서 `init`이 할 일은 둘이다 — 부팅 때 `/etc/passwd`의 root 셸 자리를
+`resolveShell`의 결과로 쓰고, env 블록의 `TZ` · `XDG_DATA_HOME` · 셸별 히스토리 env ·
+`PATH`를 `/etc/ssh/sshd_config.d/`의 파일 하나에 `SetEnv`로 쓴다. 둘 다 initramfs의
+루트(쓸 수 있다)에 쓰고 `/config`에는 안 쓴다 — 부팅마다 설정에서 새로 나온다.
+
+### 실측 14 — `xterm-ghostty`는 `tic`으로 이름 하나를 더해 만든다
+
+Debian `ncurses-term` 6.5+20250216에는 `ghostty` · `kitty`는 있어도 두 터미널이 실제로
+보내는 `xterm-ghostty` · `xterm-kitty`가 없다. `infocmp -x`로 풀어 첫 줄에 이름을 더하고
+`tic -x`로 다시 굽는다.
+
+```
+xterm-ghostty|ghostty|Ghostty terminal emulator,
+xterm-kitty|kitty|KovId's TTY,
+-rw-r--r-- 3753 ti/x/xterm-ghostty      lrwxrwxrwx ti/g/ghostty -> ../x/xterm-ghostty
+-rw-r--r-- 3596 ti/x/xterm-kitty        lrwxrwxrwx ti/k/kitty -> ../x/xterm-kitty
+```
+
+게스트에 넣고 `-tt`로 `less`를 돌린 결과 — 셋 다 경고 없이 `rc=0`이다(M0 실측 7에서
+`xterm-ghostty`는 RETURN을 기다리며 매달렸다).
+
+```
+SVM2-PTY xterm-ghostty rc=0 out=[...;xterm-ghostty;[?1h=x;[K[?1l>rc=0;...]
+SVM2-PTY xterm-kitty rc=0 out=[...;xterm-kitty;[?1hx;[K[?1lrc=0;...]
+SVM2-PTY alacritty rc=0 out=[...;alacritty;[?1h=x;[K[?1l>rc=0;...]
+```
+
+파일 하나가 4KB 안팎이다. `tmux-256color` · `screen-256color`는 sysroot의
+`ncurses-base`에 이미 있다. `tic`은 컨테이너(arm64)의 것을 써도 결과가 아키텍처와
+무관하다(terminfo는 바이트 순서가 정해진 형식이다).
+
+### 실측 15 — 호스트 키가 바뀌면 클라이언트가 이렇게 말한다
+
+이 부팅의 디스크는 호스트 키 없이 새로 구웠고, 하네스의 `known_hosts`에는 M0 둘째 회의
+키가 남아 있었다. 모든 연결의 앞에 `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!`가
+찍혔다(`StrictHostKeyChecking=no`라 연결은 됐다). 결정 6이 키를 `/config/ssh/`에 두는
+이유가 이 한 화면이다 — 부팅 C의 판정이 이것이 안 나오는 것이다.
