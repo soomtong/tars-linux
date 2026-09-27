@@ -2,7 +2,7 @@
 
 접두사: CT
 
-Status: M1 끝났다(2026-09-27) — 실측 1~10. 결정 4를 "그룹에 보낸다"로(M0), 결정 5 · 6의 문구 · 시한 · exit code를(M1) 고쳤다.
+Status: 끝났다(2026-09-27) — M0~M2, 결정 8 · 실측 1~13. 새 체인 없이 `service/check.sh`가 부팅 넷(검사 스물여섯)이 됐다.
 
 관련 문서: `2026-09-27-tars-boot-services-design.md`(SV. 이 사이클이 그 비목표 4를
 목표로 옮긴다) · `2026-09-13-tars-shutdown-latency-design.md`(SL. 종료 유예와
@@ -401,3 +401,67 @@ power exit=0 0 FAIL 46s, last: PM-M1 PASS: the guest can shut itself down and br
 - 반사실 둘 — `reaped`의 `.restarts`/`.stays_stopped`를 `.normal`로 떨어뜨린다(규칙 2 →
   `giving up on service sshd`) · `wantsRunning`에서 `hold != .stop`을 뺀다(규칙 1 →
   stop 뒤 되살아남).
+
+## CT-M2가 실행으로 증명한 것
+
+plan은 `plans/2026-09-27-tars-service-control-ct-m2.md`다. 커밋 셋 — `ce1a4a3`(부팅 D) ·
+`601b65d`(가이드) · `ddb86c7`(진입 검사가 잡은 `grep -q`).
+
+### 실측 11 — 부팅 D가 첫 판에 초록이다. 명령은 열어 둔 ssh 연결 하나 위로 간다
+
+```
+=== boot D: the same disk plus sleeper, stubborn and flaky; tars-service over ssh ===
+init opened /run/tars/init.sock
+status showed the terminal, the console shell and four services, flaky given up
+stop sleeper ended stopped and took its child sleep with it
+sleeper stayed stopped
+start sleeper brought it back
+four restarts of sshd, four new pids, no giving up
+stop sshd shut new logins out, the kept connection started it again
+stubborn ignored SIGTERM and was stopped by SIGKILL
+start flaky revived a given-up service
+unknown names, the terminal, a bad request, a long request and bad usage were refused
+sleeper's child holds no socket from init
+SV chain PASS
+```
+
+체인 전체가 1분 8초(빌드 캐시)다. 검사 22가 이 부팅의 모양을 정했다 — `stop sshd` 뒤에는
+새 ssh가 못 들어오므로 `start sshd`를 칠 길이 따로 있어야 한다. ssh `ControlMaster`
+연결은 제 세션을 가진 `sshd-session`이 들고 있어 리스너가 멈춰도 산다(실측 4). 게스트에
+한 글자도 안 치고 판정한다는 이 체인의 성질(SV)이 그대로다.
+
+### 실측 12 — 반사실 넷. 둘은 호스트 검사가 먼저 잡았고, 부팅 D는 예측보다 앞이나 뒤에서 잡았다
+
+| 반사실 | 체인 그대로 | 호스트 검사를 건너뛴 사본 |
+|---|---|---|
+| CF1 `reaped`가 늘 `.normal`(규칙 2) | `FAIL: a stopped death did not stay stopped`(`control_test`) | 검사 18 — `init did not log the stop` |
+| CF2 `wantsRunning`에서 `hold`를 뺌(규칙 1) | `FAIL: a stopped service wants to run`(`control_test`) | 검사 19 — `sleeper did not stay stopped (service sleeper stopping  pid 100   up 3s)` |
+| CF3 `kill(pid)` | 검사 18 — `stop sleeper left 1 sleep under pid 1` | |
+| CF4 `CLOEXEC`를 뺌 | 검사 26 — `sleeper's sleep holds a socket` | |
+
+사본은 `service/check.sh`에서 `zig build test` 블록만 뺀 것을 `-v …:ro`로 덮어 돌렸다.
+
+- CF1은 plan이 검사 21(restart 넷)을 예측했는데 18에서 죽었다. `reaped` 하나가 stop과
+  restart 두 길을 다 맡아서, 규칙 2가 빠지면 stop의 거둠부터 `stopped on request`가 없다.
+- CF2는 plan이 18(rc 3)을 예측했는데 18을 통과하고 19에서 죽었다. 감독 루프는 거두는
+  바퀴와 띄우는 바퀴가 달라서, 그 사이에 클라이언트가 `stopped`를 한 번 본다. 되살아난
+  sleeper는 `hold = .stop`인 채로 돌아 `stopping`으로 보인다. "멈춘 채로 있는가"를 3초 뒤에
+  따로 보는 검사 19가 있어야 하는 까닭이다.
+- 넷 다 되돌린 뒤 `git diff`가 비었다.
+
+### 실측 13 — 루트 게이트
+
+```
+=== CT-M2 run 3/3 PASSED ===
+CT-M2 PASS: 3/3 consecutive runs succeeded
+TARS check PASS: all chains 3/3 consecutive runs succeeded
+... 50:32.33 total
+```
+
+16체인 3/3, `FAIL` 0줄, 50분 32초. SV-M2의 49분 25초보다 1분 7초 늘었다 — 부팅 D 세 번(각
+20초 안팎)의 몫이다.
+
+첫 시도는 진입 검사에서 0.4초에 멈췄다 — 부팅 D의 `tail -1 <<<"$OUT" | grep -qE …` 네
+줄이 GA-M0의 `require_no_early_exit_pipe`에 걸렸다. `grep -q`가 첫 매치에서 끝나면 앞의
+`tail`이 SIGPIPE로 죽을 수 있고, `pipefail`이 그 141을 FAIL로 올린다. 체인 단독 실행에서는
+`tail -1`이 한 줄뿐이라 드러나지 않았다. `grep -E … >/dev/null`로 고쳤다(`ddb86c7`).
