@@ -21,7 +21,8 @@
 # 부팅 D(CT-M2)는 C 뒤의 같은 디스크에 서비스 셋(sleeper · stubborn · flaky)을 더해
 # 뜨고, ssh ControlMaster 연결 하나 위로 tars-service를 친다. 그 연결은 제 세션을 가진
 # sshd-session이 들고 있어 sshd를 멈춰도 산다(CT-M0 실측 4) — stop sshd 뒤에 같은
-# 연결로 start sshd를 친다.
+# 연결로 start sshd를 친다. DS-M2부터 dhcpcd도 이 목록에 있다(ntp가 없어 chronyd는
+# 없다).
 #
 # 우리 코드는 init/src/services.zig(고르기) · main.zig의 감독 루프(띄우기)와
 # init/src/control.zig · service_cli.zig(멈추고 다시 띄우기)다.
@@ -461,11 +462,16 @@ wait_for_log "tars-init: giving up on service flaky after 3 fast exits" 30 \
 ts status
 [ "$RC" = "0" ] || fail "status gave rc ${RC} (${OUT})"
 for want in '^terminal +running +pid [0-9]+' '^console shell +running +pid [0-9]+' \
+            '^service dhcpcd +running +pid [0-9]+' \
             '^service flaky +given up$' '^service sleeper +running +pid [0-9]+' \
             '^service sshd +running +pid [0-9]+' '^service stubborn +running +pid [0-9]+'; do
   grep -qE "$want" <<<"$OUT" || fail "status has no line like /${want}/ (got: [${OUT}])"
 done
-echo "status showed the terminal, the console shell and four services, flaky given up"
+# DS-M2 결정 M2-F. 이 디스크는 ntp가 없다(기본값 off) — chronyd는 목록에 없어야 한다.
+if grep -qE '^service chronyd' <<<"$OUT"; then
+  fail "status lists chronyd although this disk leaves ntp off (got: [${OUT}])"
+fi
+echo "status showed the terminal, the console shell, dhcpcd and four services, flaky given up, no chronyd"
 
 # ── 검사 18: stop이 그룹을 멈춘다 ────────────────────────────────────────
 ts stop sleeper
@@ -555,7 +561,10 @@ echo "unknown names, the terminal, a bad request, a long request and bad usage w
 FDS="$(on_guest 'ls -l /proc/$(pgrep -x sleep -P $(pgrep -x sleeper))/fd')"
 [ -n "$FDS" ] || fail "could not list the fds of sleeper's sleep"
 grep -q "socket:" <<<"$FDS" && fail "sleeper's sleep holds a socket (${FDS})"
-echo "sleeper's child holds no socket from init"
+# DS design 결정 6. 전원 버튼 fd도 안 샌다. CLOEXEC가 빠지면 sleep의 fd 3이
+# /dev/input/event0이다(DS-M0의 기준선).
+grep -q "/dev/input/event" <<<"$FDS" && fail "sleeper's sleep holds a power button fd (${FDS})"
+echo "sleeper's child holds no socket and no power button fd from init"
 
 ssh -o ControlPath="$CTL" -O exit root@127.0.0.1 2>/dev/null || true
 stop_ssh

@@ -44,10 +44,12 @@ REPO_ROOT="$(cd .. && pwd)"
 # 검사 1~16이 "바이트가 오간다"였다면 이쪽은 "그 바이트가 시계가 된다"다:
 #
 #   컨테이너의 perl stub이 UDP 123을 듣는다(시계가 흐른다)
-#   설정 디스크의 ntp=10.0.2.2 → init이 fork한 자식이
-#   /run/tars/chrony.conf를 쓰고 chronyd가 된다
+#   설정 디스크의 ntp=10.0.2.2 → init이 /run/tars/chrony.conf를 쓰고
+#   감독자가 chronyd를 띄운다(DS-M1부터 — 그 전에는 fork한 자식이 됐다)
 #   → chronyd가 묻고, 믿고, makestep으로 시계를 뛴다
 #   → 게스트의 date가 2031년을 찍는다
+#   → (DS-M2) 사람이 dhcpcd를 죽이면 감독자가 되살리고, chronyd를
+#     tars-service로 다시 띄우면 다시 stub을 고른다
 #
 # 이 부팅에서 우리 코드는 init/src/clock.zig의 배관이고 시계는 chronyd가
 # 만진다. 상대는 우리가 쓴 perl 서른 줄이고, 그 둘 사이의 모든 것(SLIRP ·
@@ -1178,6 +1180,50 @@ if ! wait_for_screen "tsz=${STUB_HOUR_UTC}/${STUB_HOUR_LOCAL}${TZ_ABBR}"; then
 fi
 echo "the guest shows ${STUB_HOUR_UTC}Z as ${STUB_HOUR_LOCAL}${TZ_ABBR} — nine hours, read off zoneinfo"
 
+# ── 검사 29: 죽은 dhcpcd를 감독자가 되살리고, 새 것이 주소를 받나 (DS-M2) ──
+# DS design 결정 1의 한가운데다. 사람이 콘솔에서 dhcpcd를 SIGKILL로 죽인다
+# (plan 결정 M2-A — SIGTERM이면 주소를 지우고 가서 판정이 섞인다). 감독자가
+# 그 죽음을 거두고 다음 바퀴에 새 pid로 띄우고, 새 dhcpcd가 lease를 받는다.
+#
+# 새 lease는 `-j`의 줄머리 `[새 pid]:`로 가른다(M2-B). 옛 dhcpcd의 줄과 안 섞인다.
+# 이 판정이 -B의 반사실을 받는다 — -B가 없으면 쥔 pid는 배경으로 간 뒤 이미 죽어
+# 있어서 "killed (pid 옛, signal 9"가 영영 안 나온다.
+OLD_DHCPCD="$(grep -aoE 'tars-init: started service dhcpcd \(pid [0-9]+' "$LOGA" | tail -1 | grep -oE '[0-9]+$')"
+[ -n "$OLD_DHCPCD" ] || fail "init never started dhcpcd in the ntp guest" "tars-init: started service"
+echo "=== typing 'kill -9 \$(pgrep -x dhcpcd)' (dhcpcd is pid ${OLD_DHCPCD}) ==="
+type_keys k i l l spc minus 9 spc shift-4 shift-9 p g r e p spc minus x spc d h c p c d shift-0 ret
+wait_log "tars-init: service dhcpcd killed (pid ${OLD_DHCPCD}, signal 9," || \
+  fail "init never reaped the killed dhcpcd (pid ${OLD_DHCPCD})" "tars-init: service dhcpcd"
+NEW_DHCPCD=""
+for _ in $(seq 1 30); do
+  NEW_DHCPCD="$(grep -aoE 'tars-init: started service dhcpcd \(pid [0-9]+' "$LOGA" | tail -1 | grep -oE '[0-9]+$')"
+  [ "$NEW_DHCPCD" != "$OLD_DHCPCD" ] && break
+  sleep 1
+done
+[ "$NEW_DHCPCD" != "$OLD_DHCPCD" ] || \
+  fail "init did not start a new dhcpcd after pid ${OLD_DHCPCD} died" "tars-init: service dhcpcd"
+wait_log "\[${NEW_DHCPCD}\]: eth0: leased 10\.0\.2\.15 " || \
+  fail "the new dhcpcd (pid ${NEW_DHCPCD}) never leased 10.0.2.15" "\[${NEW_DHCPCD}\]"
+echo "a killed dhcpcd (pid ${OLD_DHCPCD}) came back as pid ${NEW_DHCPCD} and leased 10.0.2.15 again"
+
+# ── 검사 30: tars-service restart chronyd 뒤에 chronyd가 다시 서버를 고르나 (DS-M2) ──
+# chronyd가 서비스라서 CT의 동사가 그대로 닿는다(DS design 결정 1). 다시 뜬
+# chronyd가 설정을 읽고 stub을 다시 믿는 것이 `Selected source` 한 줄 더다(M2-C).
+# 판정은 시리얼 로그라서 친 명령이 화면에 남아도 섞이지 않는다.
+SELECTED_BEFORE="$(grep -ac "Selected source ${NTP_SERVER}" "$LOGA")"
+echo "=== typing 'tars-service restart chronyd' ==="
+type_keys t a r s minus s e r v i c e spc r e s t a r t spc c h r o n y d ret
+wait_log "tars-init: restarting service chronyd on request" || \
+  fail "init did not restart chronyd on request" "tars-init: control" "tars-init: service chronyd"
+RESELECTED=0
+for _ in $(seq 1 30); do
+  if [ "$(grep -ac "Selected source ${NTP_SERVER}" "$LOGA")" -gt "$SELECTED_BEFORE" ]; then RESELECTED=1; break; fi
+  sleep 1
+done
+[ "$RESELECTED" = "1" ] || fail "the restarted chronyd never selected ${NTP_SERVER} again" \
+  "Selected source" "tars-init: service chronyd"
+echo "tars-service restart chronyd, and the new chronyd selected ${NTP_SERVER} again"
+
 # ── 부팅 A를 끈다 ─────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the ntp guest ==="
 echo "system_powerdown" >&3
@@ -1305,6 +1351,28 @@ if [ "$BOOT_DELTA" -gt "$BOOT_DELTA_MAX" ]; then
     "tars-init: clock" "tars-init: started console shell"
 fi
 echo "the dead ntp server cost ${BOOT_DELTA}s of boot time (limit ${BOOT_DELTA_MAX}s)"
+
+# ── 검사 31: ntp=dhcp의 chronyd가 서버 없이 산다 (DS-M2) ─────────────────
+# DS design 확인 3이 막으려던 것. 옛 코드는 chronyd 앞에서 서버 파일을 30초
+# 기다리고 없으면 exit(0)했다 — 감독 목록에 그대로 넣었으면 30초마다 다시
+# 떴다. 지금 chronyd는 sourcedir만 들고 서버 0개로 떠서 산다(결정 3).
+#
+# 40초를 채우고 본다(plan 결정 M2-D). 옛 주기가 30초이므로 그 안에 적어도
+# 한 번은 다시 떴을 시간이다. 이 부팅이 그보다 일찍 여기 오면 남은 만큼 잔다.
+#
+# 반사실이 없다(M2-E). 옛 코드는 로그 줄과 함께 지워졌다.
+B_ELAPSED=$(( $(date +%s) - BOOT_B_START ))
+if [ "$B_ELAPSED" -lt 40 ]; then
+  echo "waiting $(( 40 - B_ELAPSED ))s so a 30s restart loop would have shown"
+  sleep $(( 40 - B_ELAPSED ))
+fi
+N_CHRONYD="$(grep -ac "tars-init: started service chronyd " "$LOGB")"
+[ "$N_CHRONYD" = "1" ] || fail "chronyd started ${N_CHRONYD} times in the ntp=dhcp guest, want 1" \
+  "tars-init: service chronyd" "tars-init: started service chronyd"
+if grep -aE "tars-init: service chronyd (exited|killed)" "$LOGB" >/dev/null; then
+  fail "chronyd died in the ntp=dhcp guest" "tars-init: service chronyd"
+fi
+echo "after 40s the ntp=dhcp chronyd is still the one started at boot"
 
 # ── 부팅 B를 끈다 ─────────────────────────────────────────────────────
 CONNECTED_B=0
