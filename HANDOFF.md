@@ -1,4 +1,4 @@
-# HANDOFF: Firewall(FW) — M0이 닫혔다. 다음은 M1 plan
+# HANDOFF: Firewall(FW) — M1이 닫혔다. 다음은 M2 plan
 
 ## 지금 어디인가
 
@@ -8,13 +8,20 @@
 문법으로 연다. 접근은 `init`이 `nft -f`를 `fork` · `execve` · `waitpid`하는 배관.
 
 design은 `docs/superpowers/specs/2026-09-27-tars-firewall-design.md`(확인 6 · 결정 6 ·
-위험 6 · 실측 1~9), plan은 `plans/2026-09-27-tars-firewall-fw-m0.md`.
+위험 6 · 실측 1~14), plan은 `plans/2026-09-27-tars-firewall-fw-m0.md` · `-fw-m1.md`.
 
 | 커밋 | 무엇 |
 |---|---|
 | `82de63e` | design |
 | `690f841` | M0 plan + design의 `table inet` → `table ip`(확인 6 · 위험 6) |
 | `c26f7f3` | M0 실측(부팅 하나, 코드 0줄, `.config`는 되돌렸다) |
+| `ca0025d` · `c92d681` | M1 — 커널 다섯 · Dockerfile 층 10 · `nft` · `/etc/tars/firewall{,-base}.nft` · `firewall` 키 · `init/src/firewall.zig` · 체인 `firewall/check.sh`(열다섯번째) |
+
+M1 — `firewall=on`인 기계가 `net.bringUp` 앞에서 `nft -f`로 규칙을 올리고, 새 체인이
+21초에 검사 여덟으로 "연 TCP 7070은 오고 안 연 7072는 안 온다"를 본다. 반사실 셋(`policy
+accept` · `allow.nft` 없음 · `firewall=off`)이 각각 검사 7 · 6 · 2에서 죽었다. 이웃
+`config` · `tools` · `net`이 한 번씩 초록이고 로그에 `firewall=off, inbound is open`만
+더해졌다. 루트 게이트는 아직 안 돌렸다(M2 끝에).
 
 M0이 답한 것 — 다섯 옵션(`NETFILTER` · `NF_TABLES` · `NF_TABLES_IPV4` · `NF_CONNTRACK` ·
 `NFT_CT`)이면 기본 규칙이 선다(끌려오는 열 줄, `=m` 0). `nft`가 initrd에 더하는 것은
@@ -29,7 +36,15 @@ DHCP가 처음부터 다시 서고 나가는 길의 답이 온다(위험 1 닫�
   표를 `inet`으로 바꿔야 한다(design 위험 6).
 - initrd는 gzip이다. 목록은 `zcat kernel/initrd.cpio | cpio -it`로 본다.
 
-## 바로 다음에 할 것 — FW-M1 plan
+## 바로 다음에 할 것 — FW-M2 plan
+
+design "M1이 M2에 넘기는 것" 절이 입력이다. UDP(실측 7의 모양) · 포트 여럿 · 부팅 B(문법
+오류 파일 → 갈래 2) · `docs/guides/running-tars.md`의 방화벽 절 · 루트 게이트 15체인 3/3 ·
+CLAUDE.md 완료 표 · design `Status: 끝났다` · `docs/decisions/project_firewall.md`.
+
+⚠ `/proc/net/tcp`의 포트 16진수는 손으로 옮기지 말 것 — `printf '%04X'`(실측 10).
+
+## (지난) FW-M1 plan의 입력
 
 design "M0이 M1에 넘기는 것" 절이 입력이다. 커널 다섯 · Dockerfile 층 10(패키지 넷) ·
 `guest_tools.sh` 다섯 줄 · 규칙 파일 둘(`/etc/tars/firewall.nft` · `firewall-base.nft`) ·
