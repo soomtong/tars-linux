@@ -102,7 +102,7 @@ VirtualBox·VMware에서 직접 띄워 보지는 않았다.
 | 펌웨어 | BIOS · UEFI 아무거나 | El Torito 항목 둘이 한 ISO에 있다 |
 | Secure Boot | 끈다 | 아래 실기 절과 같은 이유다 |
 | 디스크 | 없어도 된다 | 붙이면 설정이 남는다(아래) |
-| 네트워크 | virtio-net이면 된다 | NIC 드라이버가 `VIRTIO_NET` 하나다. `tars.conf`에 `net=dhcp`를 적으면 `init`이 dhcpcd를 띄운다(NW). e1000 같은 다른 모델은 안 잡힌다 |
+| 네트워크 | virtio-net이나 e1000e면 된다 | `tars.conf`에 `net=dhcp`를 적으면 `init`이 dhcpcd를 띄운다(NW). `q35`의 기본 NIC `e1000e`는 잡히고(WN), `pc`의 기본 NIC `e1000`은 안 잡힌다 |
 
 키보드는 따로 줄 것이 없다. VM이 기본으로 주는 PS/2(`AT Translated Set 2
 keyboard`)를 `init`이 capability로 골라 잡는다. USB 키보드만 있는 VM도 된다 —
@@ -374,7 +374,7 @@ IPv4만 거른다. 커널에 IPv6가 없어서 지금은 구멍이 아니지만,
 |---|---|
 | 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
 | 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
-| 네트워크 | 실기 NIC 드라이버가 없다. `CONFIG_NET=y`이지만 NIC는 `VIRTIO_NET` 하나다(NW 비목표 "실머신 NIC"). 부팅 때의 SNTP는 타임아웃 뒤 평소대로 넘어간다 |
+| 무선 네트워크 | Wi-Fi 드라이버 · firmware · `wpa_supplicant`가 없다(WN 비목표). 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있지만, 게이트가 부팅으로 재는 것은 `e1000e`와 `usb-net` 둘이고 Realtek firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
 | 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
