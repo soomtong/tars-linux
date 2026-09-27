@@ -393,7 +393,9 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
         var path = Path{};
         devicePath(candidates[i], &path);
 
-        const rc = linux.open(path.cstr(), .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
+        // DS design 결정 6. CLOEXEC가 없으면 콘솔 셸 · 서비스와 그 자식이 이 fd를
+        // 물려받는다(CT design 실측 7 · DS-M0의 기준선 `3 -> /dev/input/event0`).
+        const rc = linux.open(path.cstr(), .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true }, 0);
         if (failed(rc)) |e| {
             std.debug.print("tars-init: could not open {s} (errno {d})\n", .{
                 path.slice(), @intFromEnum(e),
