@@ -14,7 +14,7 @@ design은 `docs/superpowers/specs/2026-09-28-tars-usb-wireless-design.md`(결정
 |---|---|
 | `ff67042` · `82d2cde` | design · M0 실측(코드 0줄) |
 | `1ad272b` | M1 — 커널 config 열하나 · firmware 셋(74→77) · wifi 검사 1 · 11 |
-| (이 커밋) | M2 — 반사실 · 루트 게이트 · 문서 |
+| `ba0e085` | M2 — 반사실 · 루트 게이트 · 문서 |
 
 우리 게스트 코드는 0줄이다. `tars-wifi`와 hook이 드라이버를 안 가린다. 게이트는 심볼 ·
 modinfo alias · 부팅 C 로그의 `usbcore: registered new interface driver` 줄까지 본다 — QEMU에
