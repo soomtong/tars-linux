@@ -2,7 +2,7 @@
 
 접두사: UW
 
-Status: 설계(2026-09-28). M0부터 시작한다.
+Status: M0 끝(2026-09-28, 실측 1~4). 결정은 그대로다. 다음은 M1.
 
 관련 문서: `2026-09-28-tars-wireless-design.md`(WL. 이 사이클은 그 비목표 5의 USB 절반을
 목표로 옮긴다) · `docs/decisions/project_wireless.md` · `docs/guides/lessons.md`의
@@ -88,3 +88,48 @@ firmware를 올리고 인터페이스를 만드는지는 게이트 밖이다(비
   `firmware=` 줄, 계열마다 대표 alias.
 - UW-M1 — 커널 config, firmware 목록, 체인 검사 셋.
 - UW-M2 — 반사실, 루트 게이트(17체인, 약 60분), 문서, 닫기.
+
+## 실측 (M0, 2026-09-28)
+
+하네스는 `/tmp/uw/`에 있었다. 기준선은 WL 커밋 `58a25b5`의 빌드다(`build.sh`가 "skipping
+make"를 말한 산출물). 열하나를 켠 빌드는 증분이라 20.6초 걸렸다.
+
+### 실측 1 — `olddefconfig`는 여덟을 따라 켜고 아무것도 안 끈다
+
+해소된 `build/.config`에 열하나가 전부 `=y`로 남았다. 따라 켜진 것은 버스 층 넷(`MT76_USB` ·
+`MT792x_USB` · `RTW88_USB` · `RTW89_USB`)과 칩 코어 넷(`RTW88_88XXA` · `RTW88_8821A` ·
+`RTW88_8812A` · `RTW88_8814A`)뿐이다. `RTW88_88XXA`는 나머지 칩 코어 셋이 함께 쓰는 층이다.
+`HID_*` · `NEW_LEDS` · `LEDS_*`는 없다. 위험 2는 현실이 되지 않았다. diff에 `RTW88_8822BE`가 `<`와 `>`로 한 번씩
+나오는 것은 줄 위치가 밀린 것이고 값은 그대로다. bzImage는 7,336,960 → 7,435,264바이트
+(+98,304).
+
+### 실측 2 — 새 firmware는 예상한 셋이고 전부 실제 파일이다
+
+`firmware=` 줄이 107 → 110. 새 셋은 `rtw88/rtw8812a_fw.bin`(27,030바이트) ·
+`rtw88/rtw8814a_fw.bin`(68,320) · `rtw88/rtw8821a_fw.bin`(31,898), 합 127,248바이트다.
+셋 다 linux-firmware-20260916 tarball 안에 링크가 아닌 파일로 있다 — `WHENCE`를 볼 필요가
+없고, 목록의 두 경로가 같다.
+
+### 실측 3 — 등록 이름은 modinfo의 모듈 이름과 같다
+
+부팅 한 번(`-usb` · 탐침 `services.d/probe`)에서 `/sys/bus/usb/drivers/`에 열하나가 전부
+있었다: `rtw88_8822bu` · `rtw88_8822cu` · `rtw88_8723du` · `rtw88_8821cu` · `rtw88_8821au` ·
+`rtw88_8812au` · `rtw88_8814au` · `rtw89_8851bu` · `rtw89_8852bu` · `mt7921u` · `mt7925u`.
+목록에는 WN의 USB 유선(`r8152` · `asix` · `cdc_ether` …)과 RM의 `usbhid` · `usb-storage` ·
+`hub`도 있다. 탐침은 두 번 찍혔다 — 끝나고 나간 서비스를 `init`이 다시 띄운 것이다. M1의
+판정은 "줄이 한 번 이상 있다"로 센다.
+
+### 실측 4 — alias는 열하나에 157줄이고, 대표는 넷이다
+
+모듈마다 alias 줄: `rtw88_8822bu` 35 · `rtw88_8812au` 34 · `rtw88_8821au` 26 ·
+`rtw88_8821cu` 15 · `rtw88_8814au` 14 · `rtw89_8852bu` 14 · `rtw88_8822cu` 6 · `mt7921u` 5 ·
+`rtw89_8851bu` 4 · `rtw88_8723du` 2 · `mt7925u` 2. 계열마다 하나를 대표로 고른다.
+
+| 계열 | modinfo 줄의 앞부분 | 무엇 |
+|---|---|---|
+| rtw88 | `rtw88_8822bu.alias=usb:v2357p012Dd*` | TP-Link Archer T3U v1(소스 주석) |
+| rtw89 | `rtw89_8852bu.alias=usb:v0BDApB832d*` | id 표 첫 줄(주석 없음) |
+| mt7921u | `mt7921u.alias=usb:v0E8Dp7961d*` | 칩 제조사 기본 ID |
+| mt7925u | `mt7925u.alias=usb:v0E8Dp7925d*` | 칩 제조사 기본 ID |
+
+VID:PID는 대문자 16진이다. 결정 1~3은 그대로 간다.
