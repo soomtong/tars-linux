@@ -17,7 +17,8 @@
 #
 # ── 무엇을 넣었나 ───────────────────────────────────────────────────────
 #
-# kernel/.config가 켠 PCIe 무선 드라이버가 찾는 것(WL design 결정 1).
+# kernel/.config가 켠 PCIe 무선 드라이버(WL design 결정 1)와 USB 동글(UW design
+# 결정 1)이 찾는 것. USB 동글이 새로 찾는 것은 rtw88의 `…a_fw.bin` 셋뿐이다.
 # 드라이버가 찾는 이름은 빌드 산출물 kernel/build/modules.builtin.modinfo의
 # `firmware=` 줄이다. 짐작하지 않고 거기서 센다.
 #
@@ -85,6 +86,9 @@ GUEST_FIRMWARE=(
 
   # Realtek — rtw88 · rtw89
   linux-firmware/rtw88/rtw8723d_fw.bin:lib/firmware/rtw88/rtw8723d_fw.bin
+  linux-firmware/rtw88/rtw8812a_fw.bin:lib/firmware/rtw88/rtw8812a_fw.bin
+  linux-firmware/rtw88/rtw8814a_fw.bin:lib/firmware/rtw88/rtw8814a_fw.bin
+  linux-firmware/rtw88/rtw8821a_fw.bin:lib/firmware/rtw88/rtw8821a_fw.bin
   linux-firmware/rtw88/rtw8821c_fw.bin:lib/firmware/rtw88/rtw8821c_fw.bin
   linux-firmware/rtw88/rtw8822b_fw.bin:lib/firmware/rtw88/rtw8822b_fw.bin
   linux-firmware/rtw88/rtw8822c_fw.bin:lib/firmware/rtw88/rtw8822c_fw.bin

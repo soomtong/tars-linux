@@ -130,7 +130,9 @@ CONFIG=../kernel/.config
 for sym in CFG80211 MAC80211 RFKILL MAC80211_HWSIM IWLWIFI IWLMVM IWLMLD \
   RTW88_8822BE RTW88_8822CE RTW88_8723DE RTW88_8821CE \
   RTW89_8851BE RTW89_8852AE RTW89_8852BE RTW89_8852BTE RTW89_8852CE RTW89_8922AE \
-  MT7921E MT7925E ATH11K_PCI ATH12K CMDLINE_BOOL; do
+  MT7921E MT7925E ATH11K_PCI ATH12K CMDLINE_BOOL \
+  RTW88_8822BU RTW88_8822CU RTW88_8723DU RTW88_8821CU RTW88_8821AU RTW88_8812AU RTW88_8814AU \
+  RTW89_8851BU RTW89_8852BU MT7921U MT7925U; do
   if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
     echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
     exit 1
@@ -140,7 +142,18 @@ if ! grep -x 'CONFIG_CMDLINE="mac80211_hwsim.radios=0"' "$CONFIG" >/dev/null; th
   echo "FAIL: the built-in cmdline no longer turns hwsim's radios off"
   exit 1
 fi
-echo "the kernel carries the wireless stack, sixteen laptop chips and hwsim with no radios"
+# USB 동글은 QEMU에 없어서 꽂아 볼 수 없다(UW 결정 3). 대신 커널이 VID:PID를 드라이버에
+# 잇는 표를 갖고 있는지 계열마다 하나씩 본다 — 그 줄이 있어야 꽂힌 동글이 잡힌다.
+# modinfo는 NUL로 나뉜 파일이다. 대표는 UW design 실측 4의 표다.
+MODINFO=../kernel/build/modules.builtin.modinfo
+for alias in rtw88_8822bu.alias=usb:v2357p012Dd rtw89_8852bu.alias=usb:v0BDApB832d \
+  mt7921u.alias=usb:v0E8Dp7961d mt7925u.alias=usb:v0E8Dp7925d; do
+  if ! tr '\0' '\n' < "$MODINFO" | grep -F "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*usb:}"
+    exit 1
+  fi
+done
+echo "the kernel carries the wireless stack, sixteen laptop chips, eleven USB dongles and hwsim with no radios"
 
 # 설정 디스크 셋. 게이트 전용 둘(hostapd · busybox)은 sysroot에서 온다 — initrd에는
 # 없다(Dockerfile 층 12). 라이브러리는 wpa_supplicant가 initrd에 이미 데려왔다.
@@ -289,6 +302,17 @@ for bad in 'started service wpa_supplicant' 'tars-wifi:' 'wlan'; do
   fi
 done
 echo "no file means no wpa_supplicant, and hwsim makes no radios by default"
+
+# ── 검사 11: usbcore가 USB 동글 드라이버 열하나를 등록했다 (UW-M1) ──────
+# 검사 1은 "켜기로 했다"까지다. 이 줄은 usb_register_driver가 찍으므로 커널이 드라이버를
+# USB 코어에 실제로 올렸다는 뜻이다(UW design 실측 5). 장치와 무관하게 일어나서 이
+# 부팅에는 USB 컨트롤러가 없어도 된다. 꽂힌 동글의 probe와 firmware는 게이트 밖이다.
+for drv in rtw88_8822bu rtw88_8822cu rtw88_8723du rtw88_8821cu rtw88_8821au \
+  rtw88_8812au rtw88_8814au rtw89_8851bu rtw89_8852bu mt7921u mt7925u; do
+  grep -a "usbcore: registered new interface driver ${drv}\b" "$LOG" >/dev/null \
+    || report_failure "usbcore never registered ${drv}"
+done
+echo "usbcore registered all eleven USB dongle drivers"
 
 stop_guest
 
