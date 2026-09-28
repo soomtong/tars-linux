@@ -2,7 +2,7 @@
 
 접두사: UW
 
-Status: M0 끝(2026-09-28, 실측 1~4). 결정은 그대로다. 다음은 M1.
+Status: 끝났다(2026-09-28) — M0~M2, 결정 3 · 위험 2 · 실측 1~6. 결정 3의 층 3을 실측 5로 고쳤다(탐침 대신 usbcore의 로그 줄). 우리 코드 0줄, 새 체인 없음. 루트 게이트 17체인 3/3(1시간 1분 25초).
 
 관련 문서: `2026-09-28-tars-wireless-design.md`(WL. 이 사이클은 그 비목표 5의 USB 절반을
 목표로 옮긴다) · `docs/decisions/project_wireless.md` · `docs/guides/lessons.md`의
@@ -142,3 +142,12 @@ M0의 부팅 로그에 `usbcore: registered new interface driver <이름>`이 �
 (0.632 ~ 0.637초). `usb_register_driver`가 찍는 줄이라 `/sys/bus/usb/drivers/<이름>`이
 생기는 것과 같은 사실이다. 결정 3의 층 3은 탐침 대신 이 줄을 센다. 이 발견은 M1 plan을
 쓰면서 했다.
+
+## 실측 (M2, 2026-09-28)
+
+### 실측 6 — 반사실은 예측한 검사에서 잡히고, 루트 게이트는 첫 판에 초록이다
+
+작업 트리의 `kernel/.config`에서 `RTW88_8812AU`만 끄고 wifi 체인을 돌렸다. 검사 1이 부팅 전에
+`FAIL: CONFIG_RTW88_8812AU is not =y in kernel/.config`로 멈췄다(rc=1). 루트 게이트는 17체인
+3/3, `FAIL` 0줄, 1시간 1분 25초다. WL(59분 45초)보다 약 1분 40초 긴 것에는 반사실 뒤에 되돌린
+`.config`의 커널 재빌드가 들어 있다.

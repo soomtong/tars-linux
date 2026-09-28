@@ -182,7 +182,7 @@ status 255다(실측 13). 다 잡은 뒤에 사라지는 것(동글을 뽑는 �
 2. 파일 없이 부팅 뒤에 네트워크를 고르는 UI.
 3. WPA-Enterprise(802.1X).
 4. 제품 쪽의 AP 모드.
-5. Broadcom · 그 밖의 벤더. USB · SDIO 무선 칩(드라이버를 안 켰다).
+5. Broadcom · 그 밖의 벤더. USB · SDIO 무선 칩(드라이버를 안 켰다). USB의 층 A는 UW가 켰다(`2026-09-28-tars-usb-wireless-design.md`).
 8. 커널 6.18이 받는 번호의 firmware가 이 릴리스에 없는 Intel 칩 둘(`bz-b0-wh-b0` = BE201,
    `sc-a0-fm-c0`) — 실측 3. 커널을 올리는 날 같이 본다.
 9. 보드별 변형 firmware(ath11k `nfa765` · ath12k `ncm865`).

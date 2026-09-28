@@ -905,15 +905,13 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(SM 비목표 2 — TUI라
       체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
-- [ ] 무선의 남은 것(WL 비목표). USB 무선 동글(드라이버를 안 켰다. 켜면 hook이 이미
-      늦은 인터페이스를 받는다) · Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의 firmware가
-      linux-firmware-20260916에 없다 — 커널을 올릴 때 같이 본다) · 보드별 변형 firmware
-      (ath11k `nfa765` · ath12k `ncm865`) · WPA-Enterprise · 실칩 판정(실기가 생기면).
-      USB 동글의 비용은 2026-09-28에 쟀다(코드는 안 고쳤다). 코드는 0줄이다 — `tars-wifi`와
-      hook이 드라이버를 안 가린다. 게이트는 정적 검사뿐이다(QEMU에 USB 무선이 없다).
-      층 A(rtw88 USB 일곱 · rtw89 8851BU · 8852BU · MT7921U · MT7925U)는 커널 +98KB,
-      새 firmware 셋 127KB(`rtw88/rtw8812a` · `8814a` · `8821a`) — 나머지는 PCIe판과 같은
-      파일이다. 부작용 없음, 넣을 만하다. 층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb ·
+- [ ] 무선의 남은 것(WL 비목표). Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의
+      firmware가 linux-firmware-20260916에 없다 — 커널을 올릴 때 같이 본다) · 보드별 변형
+      firmware(ath11k `nfa765` · ath12k `ncm865`) · WPA-Enterprise · 실칩 판정(실기가 생기면).
+- [ ] USB 무선 동글의 나머지(UW 비목표 1). 층 A(rtw88 USB 일곱 · rtw89 둘 · MT7921U ·
+      MT7925U)는 UW가 켰다(2026-09-28). 남은 것은 층 B와 `RTL8XXXU`다. 코드는 0줄이고
+      게이트는 UW의 세 층(심볼 · modinfo alias · usbcore 등록 줄)을 그대로 늘리면 된다.
+      층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb ·
       ath9k_htc)는 커널 +348KB · firmware 약 0.4MB이고 `ATH9K_PCI`가 따라 켜진다.
       `RTL8XXXU`는 +82KB · 약 0.3MB인데 `NEW_LEDS`가 있어야 붙고, 그것이 `HID_APPLE` ·
       `INPUT_LEDS`를 끌고 온다 — 실제 Apple 키보드의 fn 키가 커널에서 바뀔 수 있어
