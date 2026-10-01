@@ -86,3 +86,4 @@
 - [Wireless](docs/decisions/project_wireless.md) — `/config/wpa_supplicant.conf`가 있으면 init이 `tars-wifi`(→ exec wpa_supplicant)를 감독하고 늦은 인터페이스는 dhcpcd hook이 `interface_add`로 넘긴다; PCIe 네 계열 firmware 74개가 initrd 꼬리에 붙는다(iwlwifi는 요청 순서로 고른다). 게이트는 mac80211_hwsim, 내장 cmdline이 라디오를 0으로 둔다(WL-M0~M3, 2026-09-28 종료). 열일곱번째 체인 `wifi/check.sh`
 - [USB wireless](docs/decisions/project_usb_wireless.md) — 같은 칩 계열의 USB 동글 열하나를 켰다; 코드 0줄, firmware 셋. 드라이버 등록은 장치와 무관하게 usbcore가 로그에 찍으므로 게이트는 그 줄을 센다(UW-M0~M2, 2026-09-28 종료)
 - [latticedb survey](docs/decisions/project_latticedb_survey.md) — Zig 임베디드 그래프 DB를 조사만 했다; x86_64 빌드는 되지만 FTS 토크나이저가 한글을 토큰 0개로 버려 한글이 풀리기 전까지 안 쓴다(2026-10-01, 코드 0줄)
+- [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium 브라우저를 조사만 했다; 게스트가 root이고 USER_NS · PID_NS · SECCOMP가 없어 설치에서 막힌다. 그 아래 층인 터미널 그래픽(kitty graphics를 우리 렌더러가 그린다)을 후보로 남겼다(2026-10-01, 코드 0줄)

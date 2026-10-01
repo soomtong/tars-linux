@@ -29,7 +29,8 @@ USB 무선이 없어서 실제 동글의 probe와 firmware 로딩은 못 본다.
 
 ## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-남은 후보 — 패키지 매니저(DI가 비워 둔 p3) · IPv6(커널에 아직 없다. 켜는 사이클이 방화벽
+남은 후보 — 터미널 그래픽(우리 렌더러가 kitty graphics 이미지를 그린다. 2026-10-01 termium
+조사에서 나왔다 — `docs/decisions/project_termium_survey.md`) · 패키지 매니저(DI가 비워 둔 p3) · IPv6(커널에 아직 없다. 켜는 사이클이 방화벽
 표를 `inet`으로 바꿔야 한다 — FW design 위험 6. sshd가 떠 있으니 그 조건이 무겁다). USB 동글의
 층 B · `RTL8XXXU`와 무선의 나머지, 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
 
