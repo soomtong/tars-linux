@@ -140,6 +140,25 @@ pub const Tree = struct {
         return order[(i + order.len - 1) % order.len];
     }
 
+    /// 잎 `leaf`를 지우면 그 자리를 넘겨받는 잎(WP-M2). 패널을 닫은 뒤
+    /// 포커스가 갈 곳이다.
+    ///
+    /// `remove`는 형제 서브트리를 부모 자리로 올린다. 그 서브트리 안에서
+    /// 닫힌 잎에 가장 가까운 잎이 받는다 — 잎이 부모의 `second`면 형제는
+    /// 왼쪽(위)이라 순회의 `prev`가 그 마지막 잎이고, `first`면 `next`가
+    /// 오른쪽(아래) 서브트리의 첫 잎이다. 형제가 있으면 둘 다 감기지 않는다.
+    ///
+    /// 순회의 `next`를 쓰던 M1은 0 | (1 / 2)에서 2를 닫으면 0으로 감겼다.
+    /// 사람에게는 화면에서 커진 쪽(1)으로 가는 것이 맞다(iTerm2와 같다).
+    ///
+    /// 부모가 없으면(잎 하나) 자기 자신이다. `remove` 앞에 불러야 한다 —
+    /// 지운 뒤에는 그 잎이 트리에 없다.
+    pub fn heir(self: *const Tree, leaf: u4) u4 {
+        const at = self.findLeaf(leaf) orelse return leaf;
+        const parent = self.findParent(at) orelse return leaf;
+        return if (self.nodes[parent].split.second == at) self.prev(leaf) else self.next(leaf);
+    }
+
     /// 잎의 수.
     pub fn count(self: *const Tree) usize {
         var n: usize = 0;

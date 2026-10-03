@@ -13,7 +13,7 @@ const status = @import("status.zig");
 /// 상태이고 `input.State`는 그것을 모른다. 검사 1~12는 전부 `false`다.
 fn expectText(state: input.State, copy: bool, want: []const u8) !void {
     var buf: [status.MAX_LEN]u8 = undefined;
-    const got = status.statusText(&state, copy, &buf);
+    const got = status.statusText(&state, copy, null, &buf);
     if (std.mem.eql(u8, got, want)) {
         std.debug.print("status_test: \"{s}\" OK\n", .{got});
         return;
@@ -53,7 +53,7 @@ pub fn main() !void {
     // 게이트도 매번 다른 자리를 봐야 한다. 두 칸 공백으로 갈라 센다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{ .hangul_on = true }, false, &buf);
+        const line = status.statusText(&input.State{ .hangul_on = true }, false, null, &buf);
         var it = std.mem.splitSequence(u8, line, "  ");
         var fields: usize = 0;
         while (it.next()) |f| {
@@ -77,7 +77,7 @@ pub fn main() !void {
     // 뜻이다 — 버퍼가 남아도는 것도 사고의 신호다.
     //
     // 가장 긴 조합은 `한`(3, `EN`보다 길다) + `공세벌 3-P3`(14) +
-    // `드보락`(9) + `CAPS`(4) + `COPY`(4) + 공백 여덟 = 42이다.
+    // `드보락`(9) + `CAPS`(4) + `W9`(2) + `COPY`(4) + 공백 열 = 46이다.
     //
     // IS-M1에서 이 값이 30에서 36으로 저절로 늘었다. `statusText`에
     // `GAP + CAPS`를 더하면서 `MAX_LEN`의 산수도 함께 고쳤을 뿐, 버퍼를
@@ -85,13 +85,16 @@ pub fn main() !void {
     // 세게 한 값이고, IS-M0 실측 1이 "아직 오지 않았다"고 적어 둔 자리다.
     // CI-M0이 `COPY_TAIL`로 같은 일을 한 번 더 했다 — 36이 42가 됐고,
     // 이 검사는 `copy=true`로 바꾸기 전까지 36 ≠ 42로 빨갰다.
+    // WP-M2가 `WS_TAIL_LEN`으로 한 번 더 했다 — 가장 긴 줄은 워크스페이스
+    // 칸(`  W9`, 넷)까지 붙은 46이고, `statusText`가 칸을 쓰기 전까지 이
+    // 검사는 42 ≠ 46으로 빨갰다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
         const line = status.statusText(&input.State{
             .hangul_on = true,
             .hangul_layout = .sebeol_3p3,
             .latin_layout = .dvorak,
-        }, true, &buf);
+        }, true, 9, &buf);
         if (line.len != status.MAX_LEN) {
             std.debug.print("FAIL: longest line is {d} byte(s), MAX_LEN is {d}\n", .{
                 line.len, status.MAX_LEN,
@@ -145,12 +148,48 @@ pub fn main() !void {
     // 쪽(검사 13)만 보면 "영영 붙어 있는" 코드도 통과한다(IS-M1 plan 확정 7).
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{}, false, &buf);
+        const line = status.statusText(&input.State{}, false, null, &buf);
         if (std.mem.indexOf(u8, line, status.COPY) != null) {
             std.debug.print("FAIL: \"{s}\" has COPY outside copy mode\n", .{line});
             return error.CopyFieldLeaked;
         }
         std.debug.print("status_test: no COPY outside copy mode OK\n", .{});
+    }
+
+    // ── 검사 15: 워크스페이스 칸은 `CAPS` 뒤 · `COPY` 앞이다 (WP-M2) ──────
+    //
+    // WP design 결정 8. `COPY`는 모드라 맨 끝이고 워크스페이스는 자리라 그
+    // 앞이다. `drawStatus`가 꼬리에서 `COPY_TAIL` · `WS_TAIL_LEN`만큼 물러나
+    // `CAPS`의 시작을 세므로, 순서가 뒤집히면 색이 칸째 밀린다.
+    {
+        var buf: [status.MAX_LEN]u8 = undefined;
+        const want = "EN  신세벌 PCS  쿼티  CAPS  W2  COPY";
+        const got = status.statusText(&input.State{}, true, 2, &buf);
+        if (!std.mem.eql(u8, got, want)) {
+            std.debug.print("FAIL: got \"{s}\", want \"{s}\"\n", .{ got, want });
+            return error.WrongWorkspaceOrder;
+        }
+        const plain = status.statusText(&input.State{}, false, 2, &buf);
+        if (!std.mem.eql(u8, plain, "EN  신세벌 PCS  쿼티  CAPS  W2")) {
+            std.debug.print("FAIL: got \"{s}\"\n", .{plain});
+            return error.WrongWorkspaceField;
+        }
+        std.debug.print("status_test: \"{s}\" OK\n", .{got});
+    }
+
+    // ── 검사 16: 워크스페이스가 하나면(null) 칸이 어디에도 없다 ──────────
+    //
+    // 검사 1~14가 전부 null로 통과한 것이 이미 그 증명이지만, 검사 14와
+    // 같은 이유로 "어디에도 없다"를 한 줄로 못 박는다 — 켜지는 쪽(15)만
+    // 보면 "영영 붙어 있는" 코드도 통과한다.
+    {
+        var buf: [status.MAX_LEN]u8 = undefined;
+        const line = status.statusText(&input.State{}, true, null, &buf);
+        if (std.mem.indexOf(u8, line, "  " ++ status.WS_PREFIX) != null) {
+            std.debug.print("FAIL: \"{s}\" has a workspace field with one workspace\n", .{line});
+            return error.WorkspaceFieldLeaked;
+        }
+        std.debug.print("status_test: no workspace field with one workspace OK\n", .{});
     }
 
     std.debug.print("status_test: all checks passed\n", .{});

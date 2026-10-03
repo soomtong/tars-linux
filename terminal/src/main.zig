@@ -258,12 +258,19 @@ fn drawStatus(
     // 회색으로, `COPY`가 `CAPS`의 색으로 그려진다 — 색이 한 칸 밀리는데
     // 글자는 맞아서 `text=`로는 안 보인다(CI design 위험 2). 그것을 잡는
     // 것이 copy 체인의 `copy ink>0`이다.
-    const tail_len = if (st.copy) status.COPY_TAIL.len else 0;
-    if (st.text.len < status.CAPS.len + tail_len) return;
-    const copy_at = st.text.len - tail_len;
-    const caps_at = copy_at - status.CAPS.len;
+    //
+    // WP-M2부터 꼬리가 둘이다 — `… CAPS[  W2][  COPY]`(WP-M2 plan 확정 1).
+    // 워크스페이스 칸도 같은 이유로 `st.workspace`를 보고 물러난다. 안 보면
+    // 워크스페이스가 둘일 때 `CAPS`가 `STATUS_FG`로, `  W2`의 앞 두 글자가
+    // `CAPS`의 색으로 그려지고 hangul 체인의 `caps ink`가 틀린다.
+    const copy_len = if (st.copy) status.COPY_TAIL.len else 0;
+    const ws_len: usize = if (st.workspace != null) status.WS_TAIL_LEN else 0;
+    if (st.text.len < status.CAPS.len + ws_len + copy_len) return;
+    const copy_at = st.text.len - copy_len;
+    const ws_at = copy_at - ws_len;
+    const caps_at = ws_at - status.CAPS.len;
 
-    // 세 번 나눠 그린다. 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
+    // 네 번 나눠 그린다(WP-M2 전에는 셋). 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
     // 그리면 바이트 위치와 col을 동시에 굴려야 하고, 폭 2 글자에서 어긋나기
     // 쉽다 — 그 어긋남은 "글자가 겹쳐 보인다"로 나타나 원인에서 멀다.
     // 상태 줄의 경계는 화면 끝이다. 격자 바깥의 여백에 그리므로 격자
@@ -272,12 +279,16 @@ fn drawStatus(
     col = try drawRun(
         fb,
         cache,
-        st.text[caps_at..copy_at],
+        st.text[caps_at..ws_at],
         y,
         if (st.caps) STATUS_ON else STATUS_OFF,
         col,
         fb.width,
     );
+    // 워크스페이스 칸은 앞 세 칸과 같은 색이다(WP design 결정 8). 켜고
+    // 꺼지는 것이 아니라 자리를 말하는 칸이라 모드의 색(`STATUS_COPY`)이나
+    // 잠금의 색(`STATUS_ON`)을 안 쓴다. 하나뿐이면 빈 슬라이스다.
+    col = try drawRun(fb, cache, st.text[ws_at..copy_at], y, STATUS_FG, col, fb.width);
     // copy mode가 아니면 빈 슬라이스라 아무것도 안 그리고 col만 돌려준다.
     _ = try drawRun(fb, cache, st.text[copy_at..], y, STATUS_COPY, col, fb.width);
 }
@@ -505,6 +516,11 @@ const Status = struct {
     /// 꼬리에서 세기 때문이다. 문자열을 되읽어 `COPY`로 끝나는지 보는
     /// 쪽은 자판 이름에 그 넉 자가 들어오는 날 조용히 틀린다.
     copy: bool,
+    /// 지금 워크스페이스의 번호(1~9). 하나뿐이면 null이다(WP-M2).
+    ///
+    /// `copy`와 같은 이유로 따로 나른다 — `text`에 이미 들어 있지만
+    /// `drawStatus`가 꼬리에서 `CAPS`를 셀 때 이 칸의 길이를 알아야 한다.
+    workspace: ?u8,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
@@ -1175,6 +1191,17 @@ fn spawnPane(
 /// 트리에서 지울 때 필요한 두 번호.
 const PaneRef = struct { pane: *Pane, ws: usize, leaf: u4 };
 
+/// 워크스페이스의 수(WP-M2). 번호가 자리라 배열의 앞에서부터 빈틈없이
+/// 차 있다 — 지울 때 뒤를 당긴다(EOF 경로). 그래서 이 수가 곧 첫 빈 칸이고
+/// `Cmd+T`가 새 워크스페이스를 놓는 자리다.
+fn workspaceCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
+    var n: usize = 0;
+    for (workspaces) |slot| {
+        if (slot != null) n += 1;
+    }
+    return n;
+}
+
 /// 모든 워크스페이스의 패널 수. 0이 되면 terminal이 끝난다(결정 5).
 fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
     var n: usize = 0;
@@ -1210,13 +1237,19 @@ fn applyLayout(ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Re
     return rs;
 }
 
-/// `pane>` 줄을 찍을지 가르는 값(WP design 결정 7). 이 셋 중 하나가 바뀐
+/// `pane>` 줄을 찍을지 가르는 값(WP design 결정 7). 이 중 하나가 바뀐
 /// 프레임에만 찍는다.
+///
+/// 워크스페이스 둘(`ws` · `total`)은 WP-M2가 더했다. 없으면 `Cmd+1`로 같은
+/// 모양(패널 하나 · 격자 전체)의 워크스페이스로 옮겨도 줄이 안 찍히고,
+/// 다른 워크스페이스가 사라져 `ws=1/2`가 `ws=1/1`이 돼도 안 찍힌다.
 ///
 /// `dumpStatus`가 매 프레임 찍지 않는 이유와 같다(RC-M0 실측 7 — 시리얼 한
 /// 줄이 밀리초 단위다). 셸 출력으로 다시 그리는 프레임이 대부분이고 그때
 /// 패널 배치는 안 바뀐다.
 const PaneSig = struct {
+    ws: usize,
+    total: usize,
     panes: usize,
     focus: u4,
     rect: layout.Rect,
@@ -1246,6 +1279,8 @@ fn dumpPane(
 ) void {
     const ws = workspaces[current].?;
     const sig: PaneSig = .{
+        .ws = current,
+        .total = workspaceCount(workspaces),
         .panes = ws.tree.count(),
         .focus = ws.focus,
         .rect = ws.panes[ws.focus].?.rect,
@@ -1255,10 +1290,6 @@ fn dumpPane(
     }
     last.* = sig;
 
-    var total: usize = 0;
-    for (workspaces) |slot| {
-        if (slot != null) total += 1;
-    }
     var ink: usize = 0;
     var y: u32 = 0;
     while (y < fb.height) : (y += 1) {
@@ -1268,7 +1299,7 @@ fn dumpPane(
         }
     }
     std.debug.print("terminal: pane> ws={d}/{d} panes={d} focus={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
-        current + 1,  total,        sig.panes,     sig.focus,
+        current + 1,  sig.total,    sig.panes,     sig.focus,
         sig.rect.col, sig.rect.row, sig.rect.cols, sig.rect.rows,
         ink,
     });
@@ -1437,10 +1468,11 @@ pub fn main(init: std.process.Init) !void {
     // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
     // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
     //
-    // `current`는 M2의 Cmd+1~9가 바꾼다. 그때까지는 언제나 0이다.
+    // `current`는 `Cmd+T` · `Cmd+1`~`9`가 바꾸고, 워크스페이스가 사라지면
+    // EOF 경로가 맞춘다(WP-M2).
     const whole: layout.Rect = .{ .col = 0, .row = 0, .cols = cols, .rows = rows };
     var workspaces: [MAX_WORKSPACES]?Workspace = @splat(null);
-    const current: usize = 0;
+    var current: usize = 0;
     workspaces[current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
     var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
     workspaces[current].?.tree.rects(whole, &boot_rects);
@@ -1553,7 +1585,7 @@ pub fn main(init: std.process.Init) !void {
         //
         // `var`인 이유는 포커스가 바퀴 안에서 바뀌기 때문이다(WP-M1). 패널
         // 명령이 옮기고, EOF가 포커스 패널을 닫는다. 렌더 앞에서 다시 구한다.
-        const ws = &workspaces[current].?;
+        var ws = &workspaces[current].?;
         var focus = &ws.panes[ws.focus].?;
 
         if (fds[0].revents & c.POLLIN != 0) {
@@ -1767,6 +1799,34 @@ pub fn main(init: std.process.Init) !void {
                     },
                     .focus_next => ws.focus = ws.tree.next(ws.focus),
                     .focus_prev => ws.focus = ws.tree.prev(ws.focus),
+                    // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
+                    // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
+                    .new_workspace => {
+                        const n = workspaceCount(&workspaces);
+                        // 아홉이 찼다. `split refused`와 같은 이유로 찍는다 —
+                        // 조용하면 "키가 안 왔다"와 안 갈린다.
+                        if (n == MAX_WORKSPACES) {
+                            std.debug.print("terminal: pane> workspace refused\n", .{});
+                            continue;
+                        }
+                        // 패널 하나짜리 트리의 사각형은 격자 전체다
+                        // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
+                        workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+                        workspaces[n].?.panes[0] = try spawnPane(init.io, allocator, shell_path, &argv, whole);
+                        current = n;
+                        // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
+                        // 워크스페이스에 가도록 여기서 다시 구한다.
+                        ws = &workspaces[current].?;
+                    },
+                    // 없는 번호와 지금 번호는 아무 일도 안 한다 — 로그도 다시
+                    // 그리기도 없다(`continue`가 아래 `needs_redraw`를 건너뛴다).
+                    // 게이트가 `pane>` 줄 수가 안 는 것으로 그것을 본다.
+                    .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => {
+                        const target: usize = @intFromEnum(cmd) - @intFromEnum(input.Pane.workspace_1);
+                        if (target >= workspaceCount(&workspaces) or target == current) continue;
+                        current = target;
+                        ws = &workspaces[current].?;
+                    },
                 }
                 needs_redraw = true;
             }
@@ -1796,12 +1856,38 @@ pub fn main(init: std.process.Init) !void {
                 pty.close(pane.session);
                 pane.screen.deinit();
                 w.panes[ref.leaf] = null;
-                // 포커스를 먼저 옮긴다. `next`는 그 잎이 트리에 있어야 다음을
-                // 안다 — 지운 뒤에 물으면 제자리를 돌려준다.
-                if (w.focus == ref.leaf) w.focus = w.tree.next(ref.leaf);
+                // 포커스를 먼저 옮긴다. 자리를 넘겨받는 형제로 간다(WP-M2,
+                // 사용자가 2026-10-03에 골랐다 — M1은 순회의 다음이었다).
+                // `heir`는 그 잎이 트리에 있어야 형제를 안다 — 지운 뒤에
+                // 물으면 제자리를 돌려준다.
+                if (w.focus == ref.leaf) w.focus = w.tree.heir(ref.leaf);
                 w.tree.remove(ref.leaf);
-                _ = try applyLayout(w, whole);
                 needs_redraw = true;
+                // 워크스페이스의 마지막 패널이었다(WP-M2). 워크스페이스가
+                // 사라지고 뒤의 것들이 한 자리씩 앞으로 온다 — 번호는 자리다
+                // (design "모델" 절). 전체의 마지막 패널이었다면 위에서 이미
+                // 루프를 나갔다.
+                if (w.tree.count() == 0) {
+                    std.debug.print("terminal: pane> workspace closed ws={d}\n", .{ref.ws + 1});
+                    var i = ref.ws;
+                    while (i + 1 < MAX_WORKSPACES) : (i += 1) workspaces[i] = workspaces[i + 1];
+                    workspaces[MAX_WORKSPACES - 1] = null;
+                    const left = workspaceCount(&workspaces);
+                    // 지금 보던 워크스페이스가 사라졌으면 같은 자리(이제 뒤의
+                    // 것이 왔다)로, 그것이 끝이었으면 한 칸 앞으로. 뒤의 것을
+                    // 보던 중이었으면 번호가 하나 당겨진다.
+                    if (current == ref.ws) {
+                        current = @min(ref.ws, left - 1);
+                    } else if (current > ref.ws) {
+                        current -= 1;
+                    }
+                    // `fd_panes`의 남은 항목은 이 바퀴에 지은 것이라 `ws`
+                    // 번호와 패널 포인터가 당기기 전의 자리를 가리킨다
+                    // (WP-M2 plan 확정 4). 여기서 PTY 루프를 끝낸다. 안 읽은
+                    // 출력은 다음 `poll`이 다시 알린다.
+                    break;
+                }
+                _ = try applyLayout(w, whole);
                 // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
                 // 가리키므로 이 바퀴에서 더 안 만진다.
                 continue;
@@ -1859,7 +1945,9 @@ pub fn main(init: std.process.Init) !void {
 
         // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
         // 포커스 패널을 닫았을 수 있다 — 그때 위의 `focus`는 빈 슬롯을
-        // 가리킨다.
+        // 가리킨다. 워크스페이스도 다시 구한다(WP-M2) — EOF가 워크스페이스를
+        // 지워 배열을 당겼으면 위의 `ws`는 다른 워크스페이스를 가리킨다.
+        ws = &workspaces[current].?;
         focus = &ws.panes[ws.focus].?;
 
         // 포커스 아닌 패널을 먼저 그린다(WP-M1). 포커스 패널이 마지막이어야
@@ -1918,13 +2006,18 @@ pub fn main(init: std.process.Init) !void {
         // 새로 없다 — copy 명령은 전부 위의 copy 루프에서 `needs_redraw`를
         // 켜고, 이 자리는 그 프레임 안이다.
         const copy_active = focus.screen.copyActive();
+        // 워크스페이스가 둘 이상일 때만 번호를 단다(WP design 결정 8). 하나뿐인
+        // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
+        // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
+        const ws_number: ?u8 = if (workspaceCount(&workspaces) > 1) @intCast(current + 1) else null;
         const status_line: Status = .{
-            .text = status.statusText(&key_state, copy_active, &status_buf),
+            .text = status.statusText(&key_state, copy_active, ws_number, &status_buf),
             .rows = rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
             .caps = key_state.caps_lock,
             .copy = copy_active,
+            .workspace = ws_number,
         };
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와

@@ -1,10 +1,13 @@
 # TARS Workspace Panes — Design
 
 Date: 2026-10-03
-Status: 진행 중. WP-M0(구조) · WP-M1(분할 · 닫기 · 순환)이 2026-10-03에
-끝났다 — plan `docs/plans/2026-10-03-tars-workspace-panes-wp-m0.md` ·
-`-wp-m1.md`의 "실측한 것" 절. 열여덟번째 체인 `pane/check.sh`가 섰고 루트
-게이트 18체인 3/3. 다음은 WP-M2(워크스페이스).
+Status: 끝났다(WP-M0~M2, 2026-10-04). 패널 분할 · 닫기 · 순환과 워크스페이스
+아홉, 상태 줄 `W2` 칸이 섰다. 열여덟번째 체인 `pane/check.sh`(검사 열여섯)와
+루트 게이트 18체인 3/3. plan은 `docs/plans/2026-10-03-tars-workspace-panes-wp-m0.md`
+· `-wp-m1.md` · `-wp-m2.md`이고 값은 각 plan의 "실측한 것" 절에 있다. M3(방향
+포커스)은 열지 않았다 — 사용자가 고른다. 사용자의 결정 둘(2026-10-03):
+닫은 뒤 포커스는 자리를 넘겨받는 형제로, `Cmd+Shift+화살표`는 M1이 바꾼 모양
+그대로.
 
 사용자의 요청(2026-10-03)에서 시작한다. "Cmd+1~9 workspace 전환, Cmd+D ·
 Cmd+Shift+D pane split" — 같은 날 "열린 패널을 닫는 것은 Cmd+W", "패널

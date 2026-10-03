@@ -260,5 +260,23 @@ pub fn main() !void {
         std.debug.print("layout_test: 8 panes + 7 separators cover the grid exactly once OK\n", .{});
     }
 
+    // ── 검사 11: 지운 잎의 자리를 넘겨받는 잎 (WP-M2) ────────────────────
+    //
+    // 닫은 뒤 포커스는 자리를 넘겨받는 형제로 간다(WP-M1 실측 6, 사용자가
+    // 2026-10-03에 골랐다). 0 | (1 / 2)에서 2를 닫으면 1이 그 자리를
+    // 받는다 — 순회의 다음(0으로 감긴다)이 아니다. 둘을 가르는 것이 이 검사다.
+    {
+        var t = layout.Tree.init();
+        try expectLeaf("heir on one leaf", t.heir(0), 0);
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        try expectLeaf("heir(2) is its sibling above", t.heir(2), 1);
+        try expectLeaf("heir(1) is its sibling below", t.heir(1), 2);
+        // 0의 형제는 1과 2를 담은 서브트리다. 그 서브트리의 첫 잎이 받는다.
+        try expectLeaf("heir(0) is the first leaf of the right half", t.heir(0), 1);
+        // 순회의 next와 갈리는 자리를 직접 본다.
+        try expectLeaf("next(2) wraps instead", t.next(2), 0);
+    }
+
     std.debug.print("layout_test: all checks passed\n", .{});
 }

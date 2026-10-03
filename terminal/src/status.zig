@@ -58,6 +58,19 @@ pub const COPY = "COPY";
 /// 이것이다. 둘이 같은 이름을 보게 하면 하나만 고치는 사고가 없다.
 pub const COPY_TAIL = GAP ++ COPY;
 
+/// 워크스페이스 칸의 머리글자(WP design 결정 8). 칸은 `W2`처럼 이 글자 뒤에
+/// 숫자 한 자리다.
+pub const WS_PREFIX = "W";
+
+/// 워크스페이스 칸이 줄에 더하는 바이트. `GAP` + `W` + 숫자 한 자리다.
+///
+/// 숫자가 한 자리인 것은 워크스페이스가 아홉까지이기 때문이다(`Cmd+1`~`9`가
+/// 번호다). 두 자리를 만들 길이 없으므로 여기서도 셈하지 않는다.
+///
+/// `main.zig`가 이 이름을 쓴다 — `drawStatus`가 꼬리에서 `CAPS`의 시작을
+/// 셀 때 이 길이만큼 더 물러난다. `COPY_TAIL`과 같은 이유다.
+pub const WS_TAIL_LEN = GAP.len + WS_PREFIX.len + 1;
+
 /// 상태 줄이 쓸 수 있는 가장 긴 바이트 수.
 ///
 /// 이름 표에서 직접 센다(design 결정 5). `promptText`가 173을 주석의
@@ -69,8 +82,8 @@ pub const COPY_TAIL = GAP ++ COPY;
 /// 한/영 칸은 `한`(3)과 `EN`(2) 중 긴 쪽인 3이다. `CAPS` 칸은 길이가 하나뿐
 /// 이라 그대로 더한다.
 ///
-/// IS-M1에서 30이 36이 됐고, CI-M0에서 36이 42가 됐다. 버퍼를 손으로
-/// 늘린 자리는 둘 다 없다.
+/// IS-M1에서 30이 36이 됐고, CI-M0에서 36이 42가 됐고, WP-M2에서 42가 46이
+/// 됐다. 버퍼를 손으로 늘린 자리는 셋 다 없다.
 pub const MAX_LEN: usize = blk: {
     var hl: usize = 0;
     for (std.enums.values(hangul.Layout)) |t| {
@@ -80,7 +93,7 @@ pub const MAX_LEN: usize = blk: {
     for (std.enums.values(input.LatinLayout)) |t| {
         if (latinName(t).len > ll) ll = latinName(t).len;
     }
-    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + COPY_TAIL.len;
+    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + WS_TAIL_LEN + COPY_TAIL.len;
 };
 
 /// `buf`의 `at`부터 `s`를 쓰고 쓴 길이를 돌려준다.
@@ -101,8 +114,15 @@ fn put(buf: []u8, at: usize, s: []const u8) usize {
 /// 패키지를 링크해야 하고 순수 계산이 아니게 된다. 값을 읽는 것은
 /// `main.zig`의 `screen.copyActive()`다.
 ///
+/// `workspace`는 지금 워크스페이스의 번호(1~9)이고, 하나뿐이면 null이다
+/// (WP design 결정 8). 둘 이상일 때만 칸이 뜨는 것은 `COPY`가 copy mode일
+/// 때만 뜨는 것과 같은 규칙이다 — 하나뿐인 화면이 한 글자도 안 바뀌어야
+/// hangul 체인의 `text=` 비교와 `ink fg=` 기준값이 그대로 선다. null로
+/// 고르는 것은 부르는 쪽(`main.zig`)이다 — 이 파일은 워크스페이스가 몇인지
+/// 모른다.
+///
 /// `buf`는 최소 `MAX_LEN`바이트여야 한다.
-pub fn statusText(state: *const input.State, copy: bool, buf: []u8) []const u8 {
+pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, buf: []u8) []const u8 {
     var len: usize = 0;
     len += put(buf, len, if (state.hangul_on) "한" else "EN");
     len += put(buf, len, GAP);
@@ -116,6 +136,16 @@ pub fn statusText(state: *const input.State, copy: bool, buf: []u8) []const u8 {
     len += put(buf, len, CAPS);
     // 꼬리다. `CAPS` 뒤여야 한다 — `drawStatus`가 `CAPS`의 시작을 꼬리에서
     // `COPY_TAIL.len`만큼 물러나 세므로, 순서를 바꾸면 색이 한 칸 밀린다.
+    // 워크스페이스 칸이 `COPY` 앞이다(WP design 결정 8). 둘 다 꼬리라
+    // `drawStatus`가 둘의 길이를 모두 물러나 `CAPS`를 찾는다.
+    if (workspace) |n| {
+        len += put(buf, len, GAP);
+        len += put(buf, len, WS_PREFIX);
+        // 1~9만 온다(`WS_TAIL_LEN`의 주석). 0이나 10이 오면 숫자 대신 `?`를
+        // 써서 칸의 길이를 지킨다 — 길이가 어긋나면 색이 칸째 밀린다.
+        buf[len] = if (n >= 1 and n <= 9) '0' + n else '?';
+        len += 1;
+    }
     if (copy) len += put(buf, len, COPY_TAIL);
     return buf[0..len];
 }

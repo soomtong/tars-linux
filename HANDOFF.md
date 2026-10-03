@@ -1,28 +1,30 @@
-# HANDOFF: Workspace Panes(WP)가 M1까지 왔다 — 다음은 M2(워크스페이스)
+# HANDOFF: Workspace Panes(WP)가 M0~M2로 닫혔다 — 다음 서브프로젝트를 고른다
 
 ## 지금 어디인가
 
-2026-10-03 사용자의 요청으로 열었다 — "Cmd+1~9 workspace 전환, Cmd+D · Cmd+Shift+D pane
-split", 이어서 "Cmd+W로 닫기", "포커스 이동", "Cmd+T 새 탭". 모델은 iTerm2 그대로다:
-워크스페이스가 탭(아홉까지), 각 워크스페이스는 패널을 이진 분할로 여덟까지, 패널 하나가
-셸 하나(PTY · `vt.Screen` · 격자 안 사각형). design은
-`docs/specs/2026-10-03-tars-workspace-panes-design.md`(결정 9 · 위험 6 · milestone 4),
-키 표와 체인 검사 아홉이 그 안에 있다.
+2026-10-03 사용자의 요청으로 열어 2026-10-04에 닫았다 — "Cmd+1~9 workspace 전환, Cmd+D ·
+Cmd+Shift+D pane split", 이어서 "Cmd+W로 닫기", "포커스 이동", "Cmd+T 새 탭". 모델은 iTerm2
+그대로다: 워크스페이스가 탭(아홉까지), 각 워크스페이스는 패널을 이진 분할로 여덟까지, 패널
+하나가 셸 하나(PTY · `vt.Screen` · 격자 안 사각형). design은
+`docs/specs/2026-10-03-tars-workspace-panes-design.md`(`Status: 끝났다`), 기억은
+`docs/decisions/project_workspace_panes.md`, plan은 `-wp-m0.md` · `-wp-m1.md` · `-wp-m2.md`이고
+각 plan의 "실측한 것" 절이 값이다.
 
-이 서브프로젝트는 설계를 Fable이, 구현을 Opus 서브에이전트가 한다(사용자의 지시). 서브에이전트는
-commit하지 않고 diff · 로그만 보고하며, Fable이 파일을 직접 대조한 뒤 사용자 승인으로 commit한다.
+이 서브프로젝트는 설계를 Fable이, 구현을 Opus 서브에이전트가 했다(사용자의 지시). 서브에이전트는
+commit하지 않고 diff · 로그만 보고했고, Fable이 파일 · 로그를 직접 대조한 뒤 commit했다. 세
+milestone 모두 보고와 파일이 어긋난 자리는 없었다. 관찰: 서브에이전트가 반사실에서 plan의 구멍을
+둘 찾아 검사를 스스로 더했다(`$COLUMNS` · `caps ink off=`) — 그것이 이 방식의 값이었다.
 
-| milestone | 상태 | 무엇 |
-|---|---|---|
-| WP-M0 | 끝났다(`37798ad`) | `layout.zig`(순수 트리, `layout_test`) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 — 체인 넷(terminal · render · copy · hangul)과 기준값(`ink fg=383` · `caps ink off=87` · `copy ink=80`)이 그대로 |
-| WP-M1 | 끝났다(2026-10-03, 승인 대기) | `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[`. `Screen.resize` · `pty.resize`(TIOCSWINSZ) · 구분선 `SEPARATOR` · `focused` · `pane>` 줄. 열여덟번째 체인 `pane/check.sh`(검사 열하나 — 폭은 `$COLUMNS`로 증명한다) · 루트 게이트 18체인 3/3(1시간 3분 30초) |
-| WP-M2 | 다음 | `Cmd+T` · `Cmd+1~9`(있는 것만) · 상태 줄 `W2` 칸(둘 이상일 때만) · 워크스페이스의 마지막 패널이 닫히면 워크스페이스를 지운다 · 닫은 뒤 포커스를 형제로(M1 실측 6, 사용자가 고른다) |
-| WP-M3 | 사용자가 고른다 | `Cmd+Option+화살표` 방향 포커스 |
+| 커밋 | 무엇 |
+|---|---|
+| `37798ad` | M0 — `layout.zig`(순수 트리) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 |
+| `ef0f0c3` | M1 — `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[` · `Screen.resize` · `pty.resize` · 구분선 · `pane>` 줄 · 열여덟번째 체인 `pane/check.sh` |
+| (M2) | `Cmd+T` · `Cmd+1~9` · 상태 줄 `W2` 칸 · 워크스페이스 삭제 · 닫은 뒤 포커스를 형제로(`Tree.heir`). `pane/check.sh` 검사 열여섯 · 루트 게이트 18체인 3/3(1시간 4분 30초) |
 
-M2를 열 때 plan을 새로 쓴다. M1이 남긴 자리(`current`가 `const` · `PaneRef.ws` · 빈 트리가 남는
-갈래 · `input.Pane`에 variant를 더하면 switch가 배선 자리를 알려 주는 것)는 M1 plan의 "M1이
-실측한 것" 끝에 있다. M1의 교훈 하나는 체인에 바로 들어갔다 — 크기를 바꿨다는 것은 셀 수가
-아니라 셸이 아는 폭(`$COLUMNS`)으로만 증명된다(반사실이 plan의 검사만으로는 통과했다).
+열지 않은 것: WP-M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor` — design Milestone 절에
+모양이 있다. 순환만으로 네 패널을 다니는 것이 불편해지면 연다) · 패널 간 클립보드 · 비율 조절.
+사용자가 그대로 두기로 한 것: M1이 바꾼 `Cmd+Shift+←·→·Backspace`(Shift를 무시하던 것이 맨
+키로 나간다).
 
 ### 그 앞 — Zig Upgrade(ZU)가 M1까지 왔다, M2는 ghostty의 Zig 0.17 전환을 기다린다
 
@@ -83,9 +85,9 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`
 끝에 있다 — plugin이 막았을 누락은 못 봤다.
 
-## 바로 다음에 할 것 — WP-M1 plan을 쓰고 연다 (ZU-M2는 ghostty 대기)
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다 (ZU-M2는 ghostty 대기)
 
-WP-M1의 범위는 맨 위 표에 있다. 아래는 ZU-M2와 그 밖의 후보에 대한 옛 메모다.
+WP-M3(방향 포커스)은 맨 위 절에 있다. 아래는 ZU-M2와 그 밖의 후보에 대한 메모다.
 
 ZU-M2를 여는 신호는 ghostty main의 `build.zig.zon`이 `minimum_zig_version = "0.17.0"`이 되는 것이다
 (`curl -sSL https://raw.githubusercontent.com/ghostty-org/ghostty/main/build.zig.zon | rg minimum_zig`).
@@ -136,7 +138,7 @@ FW design 위험 6) · USB 동글 층 B. 작은 것은 `docs/guides/lessons.md`�
 | 세션을 넘는 기억(색인) | `MEMORY.md` → `docs/decisions/` |
 | 게이트를 돌리고 읽는 법 · 범용 명령 · 다시 조사하지 말 실측 · 안 되는 접근 · 이월 숙제 · 핵심 파일 지도 | `docs/guides/lessons.md` |
 | 사람이 TARS를 띄우는 법 | `docs/guides/running-tars.md` |
-| 서브프로젝트의 실제 상태 | `check.sh`의 `CHAINS` 배열(열일곱) |
+| 서브프로젝트의 실제 상태 | `check.sh`의 `CHAINS` 배열(열여덟) |
 
 새 세션은 `CLAUDE.md`와 `MEMORY.md`의 feedback 다섯, 그리고 이 파일의 위 절을
 읽고 시작한다. 새 서브프로젝트가 닫히면 이 파일은 맨 위 절만 갈아 끼운다 — 옛

@@ -1701,5 +1701,41 @@ pub fn main() !void {
 
     std.debug.print("input_test: 패널 키 다섯이 명령이 되고 copy mode 안에서는 삼켜진다 OK\n", .{});
 
+    // ── WP-M2: 워크스페이스 ──────────────────────────────────────────────
+    //
+    // 검사 62. `Cmd+T`와 `Cmd+1`~`9`가 패널 명령이 된다. 처음 · 가운데 · 끝을
+    // 본다 — 아홉 줄을 손으로 적은 표라 한 줄이 엇갈리면(`KEY_5 =>
+    // .workspace_6`) 가운데가 잡는다.
+    {
+        var ws: input.State = .{};
+        try expect(&ws, K.KEY_LEFTMETA, 1, "");
+        try expectPane(&ws, K.KEY_T, .new_workspace);
+        try expectPane(&ws, K.KEY_1, .workspace_1);
+        try expectPane(&ws, K.KEY_5, .workspace_5);
+        try expectPane(&ws, K.KEY_9, .workspace_9);
+        // 음성. `Cmd+0`은 표에 없다 — 워크스페이스는 아홉이고 번호가 1부터다.
+        // 표에 없는 Cmd 조합은 modifier가 없었던 것처럼 흘러가므로 `0`이
+        // 나간다(`Cmd+Delete`가 맨 Delete인 것과 같은 규칙).
+        try expect(&ws, K.KEY_0, 1, "0");
+        try expect(&ws, K.KEY_LEFTMETA, 0, "");
+        // 대조군. Meta를 떼면 `t`와 `1`은 글자다.
+        try expect(&ws, K.KEY_T, 1, "t");
+        try expect(&ws, K.KEY_1, 1, "1");
+    }
+
+    // 검사 63(음성). copy mode 안의 `Cmd+T` · `Cmd+1`은 아무 일도 안 한다
+    // (결정 4). 검사 61과 같은 이유로 copy 표의 `else`가 삼킨다.
+    {
+        var wc: input.State = .{};
+        wc.mode = .copy;
+        try expect(&wc, K.KEY_LEFTMETA, 1, "");
+        try expect(&wc, K.KEY_T, 1, "");
+        try expect(&wc, K.KEY_1, 1, "");
+        try expect(&wc, K.KEY_LEFTMETA, 0, "");
+        if (wc.mode != .copy) return error.ModeLeft;
+    }
+
+    std.debug.print("input_test: Cmd+T와 Cmd+1~9가 워크스페이스 명령이 되고 copy mode 안에서는 삼켜진다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

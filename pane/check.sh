@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
-# WP 체인 — 패널 분할 · 닫기 · 순환(WP-M1, 열여덟번째 체인).
+# WP 체인 — 패널 분할 · 닫기 · 순환(WP-M1)과 워크스페이스(WP-M2). 열여덟번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   게스트에서 Cmd+D를 누른다
@@ -331,8 +331,11 @@ echo "split below: $(last_pane_line)"
 echo "=== Cmd+W closes one pane, terminal stays ==="
 EXITS_BEFORE="$(exit_lines)"
 type_keys meta_l-w
-wait_for_pane 'panes=2 ' ||
-  report_failure "Cmd+W did not bring the panes back to 2"
+# 포커스는 닫힌 패널의 자리를 넘겨받는 형제로 간다(WP-M2, 사용자가 고른
+# 것). 2는 오른쪽 절반의 아래였으니 위의 1이 커져 그 자리를 받는다. M1은
+# 순회의 다음이라 끝에서 감겨 focus=0(왼쪽)이었다.
+wait_for_pane 'panes=2 focus=1 rect=78,0 ' ||
+  report_failure "Cmd+W did not leave 'panes=2 focus=1 rect=78,0' (the focus should go to the sibling that took the place)"
 grep -aE 'terminal: pane> hangup leaf=2 pid=[0-9]+' "$LOG" >/dev/null ||
   report_failure "no 'pane> hangup leaf=2' line, Cmd+W never sent SIGHUP"
 grep -aE 'terminal: pane> closed leaf=2' "$LOG" >/dev/null ||
@@ -382,6 +385,127 @@ done
   report_failure "the restarted terminal never printed its boot pane> line"
 echo "init restarted the terminal: spawned child pid ${BOOT_SPAWNS} -> $(spawn_lines)"
 
+# ── 워크스페이스(WP-M2) ───────────────────────────────────────────────
+#
+# 9b가 되살린 terminal에서 시작한다 — 워크스페이스 하나 · 패널 하나.
+# 검사 번호는 design 결정 9의 표를 따른다(7 · 8이 워크스페이스).
+#
+# 상태 줄의 `W` 칸은 워크스페이스가 둘 이상일 때만 뜬다(결정 8). 그 판정은
+# 마지막 `status> text=` 줄로 본다.
+status_text() {
+  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*text=//'
+}
+
+# 마지막 `status> caps ink` 줄의 `off=` 값. `CAPS` 칸이 꺼진 색으로 그려진
+# 픽셀 수다(IS-M1). hangul 체인의 같은 헬퍼와 같은 모양이다.
+caps_off() {
+  grep -a 'terminal: status> caps ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*off=([0-9]+).*/\1/'
+}
+
+RESTART_SPAWNS="$(spawn_lines)"
+CAPS_OFF_ONE="$(caps_off)"
+
+# ── 검사 7: Cmd+T가 새 워크스페이스를 끝에 만들고 그리로 간다 ─────────
+echo "=== Cmd+T opens a second workspace ==="
+type_keys meta_l-t
+wait_for_pane 'ws=2/2 panes=1 focus=0 rect=0,0 155x47 ' ||
+  report_failure "Cmd+T did not give 'ws=2/2 panes=1 focus=0 rect=0,0 155x47'"
+TEXT="$(status_text)"
+case "$TEXT" in
+  *"  W2") ;;
+  *) report_failure "with two workspaces the status line reads \"${TEXT}\", expected it to end with \"  W2\"" ;;
+esac
+case "$TEXT" in
+  *COPY*) report_failure "the status line reads \"${TEXT}\" — COPY outside copy mode" ;;
+esac
+[ "$(spawn_lines)" -eq "$RESTART_SPAWNS" ] ||
+  report_failure "Cmd+T printed 'spawned child pid' (${RESTART_SPAWNS} -> $(spawn_lines)), that line is for the boot shell only"
+# `CAPS` 칸의 픽셀이 워크스페이스 하나일 때와 같아야 한다. `drawStatus`가
+# 꼬리에서 `W2` 칸만큼 물러나지 않으면 `CAPS`가 회색으로, `  W2`의 앞이
+# `CAPS`의 색으로 그려진다 — 글자는 맞아서 `text=`로는 안 보인다(CI design
+# 위험 2와 같은 병). 그것을 픽셀로 본다.
+for _ in $(seq 1 30); do
+  [ "$(grep -ac 'terminal: status> caps ink ' "$LOG" || true)" -gt 0 ] && break
+  sleep 0.1
+done
+[ "$(caps_off)" -eq "$CAPS_OFF_ONE" ] ||
+  report_failure "with two workspaces the CAPS field has off=$(caps_off) pixels, with one it had ${CAPS_OFF_ONE} (the W2 field shifted the colours)"
+echo "second workspace: $(last_pane_line), status \"${TEXT}\", CAPS off=$(caps_off) (one workspace: ${CAPS_OFF_ONE})"
+
+# ── 검사 7a: 키가 새 워크스페이스의 셸에 간다 ─────────────────────────
+echo "=== typing in the second workspace ==="
+type_keys e c h o spc w s minus t w o ret
+wait_for_screen '\| ws-two \|' ||
+  report_failure "the second workspace's shell did not run 'echo ws-two'"
+echo "the second workspace's shell answered: ws-two"
+
+# ── 검사 7b(음성): 없는 번호의 Cmd+5는 아무 일도 안 한다 ──────────────
+#
+# 로그도 안 찍는다. pane> 줄이 안 늘어나야 하고(배치가 그대로) key> 줄도
+# 안 늘어나야 한다(`5`가 셸로 새지 않았다). 아무것도 안 찍으므로 type_keys가
+# 로그 증가를 못 보고 0.3초 뒤 돌아온다 — 그 뒤 1초를 더 기다린다.
+echo "=== Cmd+5 with two workspaces does nothing ==="
+PANES_BEFORE_5="$(pane_lines)"
+KEYS_BEFORE_5="$(key_lines)"
+type_keys meta_l-5
+sleep 1
+[ "$(pane_lines)" -eq "$PANES_BEFORE_5" ] ||
+  report_failure "Cmd+5 with two workspaces changed something (pane> ${PANES_BEFORE_5} -> $(pane_lines))"
+[ "$(key_lines)" -eq "$KEYS_BEFORE_5" ] ||
+  report_failure "Cmd+5 leaked bytes to the PTY (key> ${KEYS_BEFORE_5} -> $(key_lines))"
+echo "Cmd+5 changed nothing: still $(pane_value ws)"
+
+# ── 검사 8: Cmd+1이 첫 워크스페이스로 간다 ────────────────────────────
+#
+# 첫 워크스페이스도 패널 하나 · 격자 전체라 배치 서명에 워크스페이스 번호가
+# 없으면 pane> 줄이 안 찍힌다(WP-M2 plan Task 4). 마지막 screen> 줄에
+# ws-two가 없어야 한다 — 화면이 정말 바뀌었다는 음성 판정이다.
+echo "=== Cmd+1 goes back to the first workspace ==="
+type_keys meta_l-1
+wait_for_pane 'ws=1/2 panes=1 ' ||
+  report_failure "Cmd+1 did not give 'ws=1/2 panes=1'"
+TEXT="$(status_text)"
+case "$TEXT" in
+  *"  W1") ;;
+  *) report_failure "on the first workspace the status line reads \"${TEXT}\", expected it to end with \"  W1\"" ;;
+esac
+case "$(last_screen)" in
+  *ws-two*) report_failure "the first workspace's screen shows ws-two" ;;
+esac
+echo "first workspace: $(last_pane_line), status \"${TEXT}\""
+
+# ── 검사 8a: Cmd+2가 되돌아오고 그 셸의 화면이 그대로다 ───────────────
+echo "=== Cmd+2 comes back ==="
+type_keys meta_l-2
+wait_for_pane 'ws=2/2 panes=1 ' ||
+  report_failure "Cmd+2 did not give 'ws=2/2 panes=1'"
+case "$(last_screen)" in
+  *ws-two*) ;;
+  *) report_failure "back on the second workspace but ws-two is not on the last screen" ;;
+esac
+echo "second workspace kept its screen: ws-two"
+
+# ── 검사 8b: 워크스페이스의 마지막 패널을 닫으면 그 워크스페이스가 사라진다 ─
+#
+# terminal은 산다 — 다른 워크스페이스에 패널이 남아 있다. 검사 6과 같은
+# 짝의 판정이다: spawned child pid가 그대로다.
+echo "=== Cmd+W on the second workspace's only pane ==="
+type_keys meta_l-w
+wait_for_pane 'ws=1/1 panes=1 ' ||
+  report_failure "closing the second workspace's last pane did not bring 'ws=1/1 panes=1'"
+grep -aE 'terminal: pane> workspace closed ws=2' "$LOG" >/dev/null ||
+  report_failure "no 'pane> workspace closed ws=2' line"
+TEXT="$(status_text)"
+case "$TEXT" in
+  *"  W"[0-9]*) report_failure "one workspace left but the status line still reads \"${TEXT}\"" ;;
+esac
+sleep 2
+[ "$(spawn_lines)" -eq "$RESTART_SPAWNS" ] ||
+  report_failure "closing a workspace restarted the terminal (spawned child pid ${RESTART_SPAWNS} -> $(spawn_lines))"
+echo "workspace 2 closed, terminal alive: $(last_pane_line), status \"${TEXT}\""
+
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
   report_failure "the serial log contains NUL bytes"
@@ -389,4 +513,6 @@ fi
 
 echo "pane> lines:"
 grep -a 'terminal: pane>' "$LOG" | tr -d '\r'
-echo "WP-M1 check PASS"
+echo "status> text lines:"
+grep -a 'terminal: status> text=' "$LOG" | tr -d '\r'
+echo "WP-M2 check PASS"

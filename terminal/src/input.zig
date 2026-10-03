@@ -372,6 +372,26 @@ pub const Pane = enum {
     focus_next,
     /// `Cmd+[` — 이전 패널로 포커스.
     focus_prev,
+    /// `Cmd+T` — 새 워크스페이스를 끝에 만들고 그리로 간다(WP-M2). 만드는
+    /// 자리는 이것 하나다 — `Cmd+5`가 없는 워크스페이스를 만들면 "셸이 하나
+    /// 더 떴다"가 실수인지 의도인지 사람이 모른다(design "모델" 절).
+    new_workspace,
+    /// `Cmd+1`~`Cmd+9` — 그 번호의 워크스페이스로. 없으면 아무 일도 안 한다.
+    ///
+    /// payload(`workspace: u8`)가 아니라 variant 아홉인 이유는 결정 4다 —
+    /// payload를 두면 이 타입이 `union`이 되고 `==` 대신 `std.meta.eql`이
+    /// 필요해진다. 아홉은 적을 수 있는 수다. 순서가 번호와 같아야 한다 —
+    /// `main.zig`가 `@intFromEnum(cmd) - @intFromEnum(.workspace_1)`로 번호를
+    /// 센다.
+    workspace_1,
+    workspace_2,
+    workspace_3,
+    workspace_4,
+    workspace_5,
+    workspace_6,
+    workspace_7,
+    workspace_8,
+    workspace_9,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -1106,6 +1126,19 @@ pub const State = struct {
                 c.KEY_W => .{ .pane = .close },
                 c.KEY_RIGHTBRACE => .{ .pane = .focus_next },
                 c.KEY_LEFTBRACE => .{ .pane = .focus_prev },
+                // 워크스페이스(WP-M2). 숫자는 물리 키 자리다 — evdev의
+                // `KEY_1`(2)~`KEY_9`(10)이고 자판(드보락)과 무관하다. `KEY_0`은
+                // 표에 없다: 번호가 1부터 아홉이다.
+                c.KEY_T => .{ .pane = .new_workspace },
+                c.KEY_1 => .{ .pane = .workspace_1 },
+                c.KEY_2 => .{ .pane = .workspace_2 },
+                c.KEY_3 => .{ .pane = .workspace_3 },
+                c.KEY_4 => .{ .pane = .workspace_4 },
+                c.KEY_5 => .{ .pane = .workspace_5 },
+                c.KEY_6 => .{ .pane = .workspace_6 },
+                c.KEY_7 => .{ .pane = .workspace_7 },
+                c.KEY_8 => .{ .pane = .workspace_8 },
+                c.KEY_9 => .{ .pane = .workspace_9 },
                 c.KEY_LEFT => .{ .bytes = self.one(0x01) }, // beginning-of-line
                 c.KEY_RIGHT => .{ .bytes = self.one(0x05) }, // end-of-line
                 // 0x15는 bash에서 커서 앞까지, zsh에서는 줄 전체를 지운다.

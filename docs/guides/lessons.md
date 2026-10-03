@@ -1151,11 +1151,16 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
   타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
   부팅이다 — A · B는 그것이 빠져도 초록이었다.
-- `pane/check.sh` — 부팅 하나 · 검사 열(WP-M1). `pane>` 배치 줄은 서명이 바뀐
-  프레임에만 찍히므로 `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의
-  음성 판정은 `last_screen`(마지막 `screen>` 줄 하나)으로 본다. 셸이 아는 폭은
-  fish의 `$COLUMNS`로 묻는다 — `echo`의 짧은 출력만 보면 `pty.resize`를 빼도
-  초록이었다(WP-M1 반사실).
+- `pane/check.sh` — 부팅 하나(9b의 되살림까지 치면 terminal 둘) · 검사 열여섯(WP-M1
+  열 + WP-M2 여섯). `pane>` 배치 줄은 서명이 바뀐 프레임에만 찍히므로
+  `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의 음성 판정은
+  `last_screen`(마지막 `screen>` 줄 하나)으로 본다. 셸이 아는 폭은 fish의
+  `$COLUMNS`로 묻는다 — `echo`의 짧은 출력만 보면 `pty.resize`를 빼도 초록이었다
+  (WP-M1 반사실). "terminal이 살았다"는 `pane>` 줄로 보면 안 된다 — 죽고
+  되살아난 terminal도 `ws=1/1 panes=1`을 찍는다(WP-M2 반사실). `spawned child pid`
+  개수나 그 동작만 찍는 줄(`workspace closed`)로 본다. 워크스페이스가 둘일 때
+  `caps ink off=`가 하나일 때와 같은지도 본다 — `drawStatus`의 꼬리 산수가
+  틀리면 글자는 맞고 색만 밀린다.
 - `terminal/check.sh`의 monitor 재시도 loop — `Connection refused`가 여기서
   나오고 실패가 아니다.
 - `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의
