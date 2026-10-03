@@ -69,6 +69,10 @@ translate-c URL · hash(codeberg `875969d`) · 0.17 `zig fmt`(원래 있던 fmt 
 `std.builtin` → `std.lang` · "0.16"을 적은 문서들. 첫 일은 ghostty `src/terminal`의 API 변화 읽기(위험 2).
 호스트 macOS의 0.17은 `~/.local/zig/zig-aarch64-macos-0.17.0/zig`에 있다(빌드는 컨테이너가 한다).
 
+2026-10-03 다시 봤을 때도 신호는 없었다 — ghostty main은 `"0.16.0"`, PR #14519는 draft에 CI 실패
+(`test` · `test-lib-vt`). 그 사이 호스트 `PATH`의 첫 `zig`가 `/opt/homebrew/bin/zig` 0.17이 됐다.
+호스트에서 `terminal` · `init`을 직접 `zig build`하면 깨질 수 있으니 빌드는 계속 컨테이너에서 한다.
+
 TG를 닫은 뒤 이미지 뷰어를 다음으로 열려 했다가 2026-10-03에 사용자가 접었다. 재 보니 Debian
 `chafa`(1.14.5)는 바이너리가 190KB인데 재귀 `DT_NEEDED`가 sysroot에 없는 `.so` 69개, 44.6MB를
 끌고 온다 — `libSvtAv1Enc` 7.8MB · `librsvg-2` 6.1MB · `libaom` 5.5MB · `librav1e` 3.2MB(AVIF ·
