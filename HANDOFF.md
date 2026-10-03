@@ -19,7 +19,7 @@ milestone 모두 보고와 파일이 어긋난 자리는 없었다. 관찰: 서�
 |---|---|
 | `37798ad` | M0 — `layout.zig`(순수 트리) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 |
 | `ef0f0c3` | M1 — `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[` · `Screen.resize` · `pty.resize` · 구분선 · `pane>` 줄 · 열여덟번째 체인 `pane/check.sh` |
-| (M2) | `Cmd+T` · `Cmd+1~9` · 상태 줄 `W2` 칸 · 워크스페이스 삭제 · 닫은 뒤 포커스를 형제로(`Tree.heir`). `pane/check.sh` 검사 열여섯 · 루트 게이트 18체인 3/3(1시간 4분 30초) |
+| `778f5bb` | M2 — `Cmd+T` · `Cmd+1~9` · 상태 줄 `W2` 칸 · 워크스페이스 삭제 · 닫은 뒤 포커스를 형제로(`Tree.heir`). `pane/check.sh` 검사 열여섯 · 루트 게이트 18체인 3/3(1시간 4분 30초) |
 
 열지 않은 것: WP-M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor` — design Milestone 절에
 모양이 있다. 순환만으로 네 패널을 다니는 것이 불편해지면 연다) · 패널 간 클립보드 · 비율 조절.
