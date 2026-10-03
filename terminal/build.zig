@@ -119,6 +119,21 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(vt_test);
 
+    // image_test도 호스트에서 돈다(TG-M2). `image.zig` 자체는 라이브러리를
+    // 안 부르지만 `vt.ImagePlacement`를 받으므로 vt.zig를 통해 ghostty-vt가
+    // 따라온다.
+    const image_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/image_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    image_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    const image_test = b.addExecutable(.{
+        .name = "image_test",
+        .root_module = image_test_mod,
+    });
+    b.installArtifact(image_test);
+
     const input_test_mod = b.createModule(.{
         .root_source_file = b.path("src/input_test.zig"),
         .target = host_target,
@@ -199,6 +214,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(input_test).step);
     test_step.dependOn(&b.addRunArtifact(vt_test).step);
+    test_step.dependOn(&b.addRunArtifact(image_test).step);
     test_step.dependOn(&b.addRunArtifact(font_test).step);
     test_step.dependOn(&b.addRunArtifact(hangul_test).step);
     test_step.dependOn(&b.addRunArtifact(status_test).step);

@@ -2,6 +2,7 @@ const std = @import("std");
 const drm = @import("drm.zig");
 const font = @import("font.zig");
 const hangul = @import("hangul.zig");
+const image = @import("image.zig");
 const input = @import("input.zig");
 const pty = @import("pty.zig");
 const status = @import("status.zig");
@@ -300,6 +301,11 @@ fn render(
     fb: drm.Framebuffer,
     cache: *font.Cache,
     cells: []const vt.CellGlyph,
+    // kitty 이미지(TG-M2). z 순이고 격자 기준 좌표다. `default_bg`는 아래
+    // 투명 배경 규칙에 쓰고, `clip`은 격자 사각형이다.
+    imgs: []const vt.ImagePlacement,
+    default_bg: u32,
+    clip: image.Clip,
     prompt: ?Prompt,
     // 이름이 `status`가 아니다. 이 파일이 `status.zig`를 그 이름으로
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
@@ -309,6 +315,10 @@ fn render(
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
 
+    // 층 순서는 TG design 결정 4다 — 배경 아래 · 셀 배경 · 글자 아래 · 글리프 ·
+    // 글자 위. 이미지가 없는 프레임에서 세 호출은 빈 슬라이스를 돌고 끝난다.
+    drawImages(fb, imgs, .below_bg, clip);
+
     // x를 글리프 폭으로 누적하지 않고 col로 계산하는 것이 중요하다.
     // libghostty-vt는 한글 같은 폭 2칸 문자 뒤에 spacer 셀을 넣어 col을
     // 이미 맞춰두기 때문에(TF-M2에서 '이'의 col이 6이 아니라 7이었던
@@ -316,8 +326,14 @@ fn render(
     for (cells) |cell| {
         const x = GRID_X + @as(u32, cell.col) * CELL_W;
         const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        // 기본 배경은 `below_bg` 이미지 위에서 투명하다(TG-M2 plan 정한 것 2).
+        // `cells()`는 글자가 있는 셀을 기본 배경이어도 내보내므로, 그대로
+        // 칠하면 배경 아래 이미지가 글자 셀마다 덮인다.
+        if (cell.bg == default_bg and overBelowBg(imgs, x, y)) continue;
         drawCellBackground(fb, x, y, cell.bg);
     }
+
+    drawImages(fb, imgs, .below_text, clip);
 
     for (cells) |cell| {
         // 빈 셀은 배경만 칠하고 끝난다. 캐시에 codepoint 0을 넣지 않기
@@ -328,6 +344,8 @@ fn render(
         const glyph = try cache.find(cell.codepoint);
         drawGlyph(fb, glyph, x, y, cell.fg);
     }
+
+    drawImages(fb, imgs, .above_text, clip);
 
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
@@ -341,6 +359,25 @@ fn render(
 
     try fb.present();
     return ink;
+}
+
+/// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
+fn drawImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, layer: vt.ImageLayer, clip: image.Clip) void {
+    for (imgs) |p| {
+        if (p.layer == layer) image.draw(fb, p, GRID_X, GRID_Y, clip);
+    }
+}
+
+/// 셀 `(x, y)`(프레임버퍼 좌표)가 `below_bg` 이미지 하나와라도 겹치는가.
+fn overBelowBg(imgs: []const vt.ImagePlacement, x: u32, y: u32) bool {
+    for (imgs) |p| {
+        if (p.layer != .below_bg) continue;
+        const left = @as(i64, GRID_X) + p.dst_x;
+        const top = @as(i64, GRID_Y) + p.dst_y;
+        if (x + CELL_W > left and x < left + p.dst_w and
+            y + ROW_HEIGHT > top and y < top + p.dst_h) return true;
+    }
+    return false;
 }
 
 /// 오버레이 한 줄에 필요한 것 전부.
@@ -596,6 +633,48 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
             cell.row, cell.col, cell.codepoint, left, right,
         });
     }
+}
+
+/// 그린 kitty 이미지를 두 겹으로 찍는다(TG-M2 plan 정한 것 6).
+///
+///   terminal: image> id=1 layer=above_text dst=20,52 32x32 src=0,0 2x2 frame=1234us
+///   terminal: imgpx> id=1 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF
+///
+/// 앞 줄은 `vt.zig`가 낸 사각형이고(dst는 격자 원점을 더한 프레임버퍼
+/// 좌표), 뒷 줄은 그 사각형의 네 사분면 중심에서 실제로 읽은 픽셀이다.
+/// `style>` / `pixel>`과 같은 구조다 — 앞의 것만 보면 "계산은 맞는데 안
+/// 칠했다"를 못 잡는다. 사분면 중심이 격자 밖이면 `--`다.
+///
+/// `frame`은 그 프레임의 `render()` 전체 시간이다(TG design 위험 1). 이미지가
+/// 없는 프레임에는 아무것도 안 찍는다.
+///
+/// 반드시 render() 뒤에 부른다 — 그 전에 부르면 이전 프레임을 읽는다.
+fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usize, frame_us: i96, clip: image.Clip) void {
+    for (imgs, 0..) |p, i| {
+        if (i >= 4) break;
+        const left = @as(i64, GRID_X) + p.dst_x;
+        const top = @as(i64, GRID_Y) + p.dst_y;
+        std.debug.print("terminal: image> id={d} layer={s} dst={d},{d} {d}x{d} src={d},{d} {d}x{d} frame={d}us\n", .{
+            p.image_id, @tagName(p.layer), left,  top,   p.dst_w, p.dst_h,
+            p.src_x,    p.src_y,           p.src_w, p.src_h, frame_us,
+        });
+        var hex: [4][6]u8 = undefined;
+        const corners = [4][2]i64{ .{ 1, 1 }, .{ 3, 1 }, .{ 1, 3 }, .{ 3, 3 } };
+        for (corners, 0..) |q, k| {
+            const x = left + @divTrunc(@as(i64, p.dst_w) * q[0], 4);
+            const y = top + @divTrunc(@as(i64, p.dst_h) * q[1], 4);
+            if (x < clip.x0 or x >= clip.x1 or y < clip.y0 or y >= clip.y1) {
+                hex[k] = "------".*;
+                continue;
+            }
+            const px = fb.getPixel(@intCast(x), @intCast(y)) & 0x00FFFFFF;
+            _ = std.fmt.bufPrint(&hex[k], "{X:0>6}", .{px}) catch unreachable;
+        }
+        std.debug.print("terminal: imgpx> id={d} tl={s} tr={s} bl={s} br={s}\n", .{
+            p.image_id, hex[0], hex[1], hex[2], hex[3],
+        });
+    }
+    if (dropped > 0) std.debug.print("terminal: image> {d} placement(s) not drawn (buffer full)\n", .{dropped});
 }
 
 /// 뷰포트가 스크롤백의 어디에 있는지를 찍는다.
@@ -1108,6 +1187,16 @@ pub fn main(init: std.process.Init) !void {
     // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
     // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
     var first_frame_timed = false;
+    // kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
+    // `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
+    var img_buf: [16]vt.ImagePlacement = undefined;
+    // 이미지를 그려도 되는 사각형은 격자다. 여백과 상태 줄에는 안 그린다.
+    const grid_clip: image.Clip = .{
+        .x0 = GRID_X,
+        .y0 = GRID_Y,
+        .x1 = @intCast(GRID_X + @as(u32, cols) * CELL_W),
+        .y1 = @intCast(GRID_Y + @as(u32, rows) * ROW_HEIGHT),
+    };
     // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     var last_glyph_count: usize = 0;
@@ -1414,13 +1503,16 @@ pub fn main(init: std.process.Init) !void {
         };
 
         const frame_start = std.Io.Clock.now(.awake, init.io);
-        const prompt_ink = try render(fb, &cache, cells, prompt, status_line);
+        // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
+        // render 사이라 안전하다.
+        const imgs = screen.images(&img_buf);
+        const prompt_ink = try render(fb, &cache, cells, imgs, screen.defaultBg(), grid_clip, prompt, status_line);
+        const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
             first_frame_timed = true;
-            std.debug.print("terminal: render> first frame {d}us\n", .{
-                @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000),
-            });
+            std.debug.print("terminal: render> first frame {d}us\n", .{frame_us});
         }
+        dumpImages(fb, imgs, screen.images_dropped, frame_us, grid_clip);
 
         dumpScreen(cells);
         dumpHighlight(screen);

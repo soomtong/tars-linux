@@ -441,6 +441,97 @@ echo "output snapped the viewport back to the bottom (offset ${AWAY_OFFSET} -> $
 type_keys backspace
 sleep 1
 
+# ── kitty 이미지 — TG-M2 ────────────────────────────────────────────────
+#
+# 셸이 printf로 이미지 둘을 보낸다.
+#
+#   1. 2×2 RGB(빨강 · 초록 · 파랑 · 흰색)를 c=4,r=2로 → 32×32, 사분면마다 한 색
+#   2. 반투명 흰색(a=0x80) 1×1 RGBA를 c=2,r=1로 → 16×16, 바탕 102030 위에서 889098
+#
+# 끝의 `ESC \`를 `\033\134`로 쓴다. 이 부팅의 셸은 fish(설정 디스크가 없다)이고
+# fish는 작은따옴표 안에서도 `\\`를 `\` 하나로 바꾼다 — 8진수면 printf만
+# 해석한다. `q=2`는 답을 끈다. 답이 나가면 셸의 입력 줄에 글자가 찍힌다
+# (TG 실측 3).
+#
+# 문자 하나를 sendkey 이름 하나로 바꾼다. 이 체인에서만 쓰므로 여기 둔다.
+type_text() {
+  local s="$1" ch keys=() i
+  for ((i = 0; i < ${#s}; i++)); do
+    ch="${s:i:1}"
+    case "$ch" in
+      [a-z0-9]) keys+=("$ch") ;;
+      [A-Z]) keys+=("shift-${ch,,}") ;;
+      ' ') keys+=(spc) ;;
+      "'") keys+=(apostrophe) ;;
+      '\') keys+=(backslash) ;;
+      '_') keys+=(shift-minus) ;;
+      '=') keys+=(equal) ;;
+      ',') keys+=(comma) ;;
+      ';') keys+=(semicolon) ;;
+      '/') keys+=(slash) ;;
+      '-') keys+=(minus) ;;
+      *) report_failure "type_text has no key for '${ch}'" ;;
+    esac
+  done
+  type_keys "${keys[@]}"
+}
+
+# 이 앞까지의 로그 크기. 아래 style 상한 음성 검사가 이 앞만 본다 — 이미지
+# 명령 줄은 fish가 문자열 전체에 구문 강조 색(F0C674)을 입혀 16셀 상한을
+# 넘긴다(TG-M2에서 처음 봤다). 그 검사가 지키는 것은 검사 1~14가 읽은
+# 덤프이고, 이미지 검사는 style> 줄을 안 읽는다.
+IMG_LOG_START="$(wc -c < "$LOG")"
+IMG1_PAYLOAD='/wAAAP8AAAD/////'
+echo "=== typing two kitty image commands ==="
+type_text "printf '\\033_Ga=T,f=24,s=2,v=2,i=1,c=4,r=2,q=2;${IMG1_PAYLOAD}\\033\\134\\n'"
+type_keys ret
+sleep 3
+type_text "printf '\\033_Ga=T,f=32,s=1,v=1,i=2,c=2,r=1,q=2;////gA==\\033\\134\\n'"
+type_keys ret
+sleep 3
+
+# ── 검사 15: vt.zig가 셀 크기를 알고 사각형을 냈는가 ───────────────────
+#
+# 셀 크기가 비어 있으면 c=4,r=2가 0×0이 된다(TG 실측 2).
+if ! grep -aqE 'terminal: image> id=1 layer=above_text dst=[0-9]+,[0-9]+ 32x32 src=0,0 2x2 ' "$LOG"; then
+  grep -a 'terminal: image>' "$LOG" | tail -n 5
+  report_failure "no 32x32 image> line for image 1 (did vt.zig get the cell pixel size?)"
+fi
+echo "image 1 was placed as a 32x32 rectangle"
+
+# ── 검사 16: 렌더러가 사분면을 정확히 칠했는가 ─────────────────────────
+#
+# 사분면 중심 픽셀을 프레임버퍼에서 되읽은 값이다. 최근접 이웃이라 배율 16에서
+# 경계가 정확히 떨어진다(image_test 검사 1이 호스트에서 같은 것을 본다).
+if ! grep -aq 'terminal: imgpx> id=1 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF' "$LOG"; then
+  grep -a 'terminal: imgpx> id=1' "$LOG" | tail -n 5
+  report_failure "image 1 did not reach the framebuffer as red/green/blue/white quadrants"
+fi
+echo "image 1 reached the framebuffer: red, green, blue, white"
+
+# ── 검사 17: 알파 합성 ──────────────────────────────────────────────────
+#
+# 889098은 (s·a + d·(255−a) + 127)/255를 채널마다 미리 셈한 값이다.
+if ! grep -aq 'terminal: imgpx> id=2 tl=889098 tr=889098 bl=889098 br=889098' "$LOG"; then
+  grep -a 'terminal: imgpx> id=2' "$LOG" | tail -n 5
+  report_failure "image 2 was not alpha-blended to 889098 over the background"
+fi
+echo "image 2 was alpha-blended to 889098"
+
+# ── 검사 18: 명령이 글자로 새어 나오지 않았다 ──────────────────────────
+#
+# 화면에는 친 명령 줄이 되울려 찍히므로 "_G가 없다"로는 볼 수 없다
+# (project_gate_screen_echo). 대신 페이로드를 센다 — 마지막 화면에서 정확히
+# 한 번(되울린 명령 줄)이어야 한다. 파서가 명령을 삼키지 못했다면 출력으로
+# 한 번 더 찍혀 둘이 된다.
+LAST_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+PAYLOAD_SEEN="$(grep -o -- "$IMG1_PAYLOAD" <<<"$LAST_SCREEN" | wc -l)"
+if [ "$PAYLOAD_SEEN" -ne 1 ]; then
+  echo "$LAST_SCREEN"
+  report_failure "the image payload appears ${PAYLOAD_SEEN} time(s) on screen (1 expected: the echoed command)"
+fi
+echo "the image command did not leak onto the screen as text"
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로
@@ -455,8 +546,9 @@ fi
 echo "no NUL bytes in the log"
 
 # 상한에 걸렸다면 게이트가 보는 셀이 잘려나갔을 수 있다. 지금 화면에서
-# 16셀을 넘길 일은 없으므로, 넘겼다면 무언가 예상과 다르다.
-if grep -aq "terminal: style> .* more cell(s) not shown" "$LOG"; then
+# 16셀을 넘길 일은 없으므로, 넘겼다면 무언가 예상과 다르다. 이미지 구간
+# 앞(`IMG_LOG_START`)만 본다 — 이유는 그 변수 자리에 있다.
+if grep -aq "terminal: style> .* more cell(s) not shown" <<<"$(head -c "$IMG_LOG_START" "$LOG")"; then
   report_failure "the style dump hit its limit, so the gate may be reading a truncated view"
 fi
 
@@ -470,4 +562,4 @@ echo "--- ink lines ---"
 grep -a 'terminal: ink>' "$LOG" | tail -n 10
 echo "--- scroll lines ---"
 grep -a 'terminal: scroll>' "$LOG" | tail -n 10
-echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, and the viewport scrolls and comes back"
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer"
