@@ -31,7 +31,7 @@
 
 - [Boot Foundation restart](docs/decisions/project_boot_foundation_restart.md) — 새 저장소에서 재시작한 이유와 첫 서브프로젝트 범위
 - [Zig rewrite intent](docs/decisions/project_zig_rewrite_intent.md) — Rust를 Zig로 옮긴 의도와 결말(2026-08-13 완료, 이제 Rust는 없다)
-- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰면 libc를 링크하지 않는다; fortify를 끌 자리는 한 파일이 아니라 glibc를 읽는 블록 전부다
+- [Zig ↔ C UAPI rule](docs/decisions/project_zig_c_uapi_rule.md) — 시스템 콜만 쓰면 libc를 링크하지 않는다; fortify를 끌 자리는 한 파일이 아니라 glibc를 읽는 블록 전부다(ZU-M1 뒤로는 `c_poll` 번역 하나, stub 헤더의 `#undef`)
 - [Build host arch](docs/decisions/project_build_host_arch.md) — 호스트는 arm64, 게스트 산출물은 x86_64 크로스; `--platform` 금지
 - [Zig 산출물 staleness](docs/decisions/project_zig_out_staleness.md) — 빌드 산출물이 소스보다 낡은 채로 판정에 쓰인다(증상이 양쪽으로 난다); 처방은 음성 확인 전에 캐시를 컨테이너 안에서 지우는 것이다
 - [Init supervisor](docs/decisions/project_init_supervisor.md) — PID 1은 셸이 되지 않고 자식 둘을 감독한다; 감독 루프의 순서가 backoff를 만든다

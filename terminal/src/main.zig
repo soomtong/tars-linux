@@ -8,15 +8,12 @@ const pty = @import("pty.zig");
 const status = @import("status.zig");
 const vt = @import("vt.zig");
 
-// fortify를 끄는 이유는 drm.zig의 @cImport 위에 적혀 있다. 이 파일이 걸리는
-// 자리는 헤더가 아니라 `c.poll` 호출이다 — fortify가 켜지면 poll이 함수가
-// 아니라 매크로가 되고, 그 번역이 c_int 자리에 bool을 놓는다.
-const c = @cImport({
-    @cDefine("_FORTIFY_SOURCE", "0"); // GL-M3
-    @cInclude("poll.h");
-});
+// C 헤더는 build.zig가 번역해 `c_poll`로 넘긴다(ZU-M1). fortify를 끄는 유일한
+// 번역이다 — 켜지면 `c.poll`이 인라인 래퍼가 되고 그 번역이 c_int 자리에
+// bool을 놓는다. 자세한 것은 build.zig의 `c_poll` 위에 있다.
+const c = @import("c_poll");
 
-/// libc의 setenv를 직접 선언한다. 이 파일의 @cImport는 poll.h 하나뿐이고,
+/// libc의 setenv를 직접 선언한다. 이 파일이 받는 번역은 poll.h 하나뿐이고,
 /// setenv 하나 때문에 stdlib.h를 통째로 끌어오면 이름 충돌 가능성만 는다.
 /// `input.zig`가 open/read를, `pty.zig`가 execv를 이렇게 선언한 것과 같다.
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;

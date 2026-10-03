@@ -2,7 +2,7 @@ const std = @import("std");
 const input = @import("input.zig");
 
 /// evdev 키코드를 커널이 정한 이름으로 쓴다. `input.c`는 input.zig가
-/// `@cImport("linux/input.h")`한 것을 그대로 공개한 것이다(IP-M2).
+/// `linux/input.h`를 번역한 `c_input`을 그대로 공개한 것이다(IP-M2).
 /// 숫자를 남겨두면 "105가 ←였나 →였나"를 매번 헤아려야 하는데, 이 파일은
 /// IP-M2에서 검사가 두 배로 는다.
 const K = input.c;
@@ -300,7 +300,7 @@ fn expectPreedit(state: *input.State, code: u16, want: ?u21) !void {
 }
 
 pub fn main() !void {
-    // struct input_event가 @cImport로 제대로 넘어왔는지부터 확인한다.
+    // struct input_event가 번역으로 제대로 넘어왔는지부터 확인한다.
     std.debug.print("input_event size = {d} (expected 24)\n", .{input.eventSize()});
     if (input.eventSize() != 24) {
         std.debug.print("FAIL: unexpected struct input_event size\n", .{});

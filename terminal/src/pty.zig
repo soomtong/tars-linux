@@ -1,14 +1,9 @@
 const std = @import("std");
 
-// fortify를 끄는 이유는 drm.zig의 @cImport 위에 적혀 있다.
-const c = @cImport({
-    @cDefine("_FORTIFY_SOURCE", "0"); // GL-M3
-    @cInclude("pty.h");
-    @cInclude("sys/ioctl.h");
-    @cInclude("unistd.h");
-});
+// C 헤더는 build.zig가 번역해 `c_pty`로 넘긴다(ZU-M1). fortify는 켜져 있다.
+const c = @import("c_pty");
 
-/// libc의 execv를 직접 선언한다. @cImport가 만들어주는 `c.execv`는
+/// libc의 execv를 직접 선언한다. 번역이 만들어주는 `c.execv`는
 /// `char *const argv[]`를 `[*c]const [*c]u8`(비-const u8 포인터의 배열)로
 /// 옮기기 때문에 Zig의 `?[*:0]const u8` 배열을 그대로 넘길 수 없다.
 /// const를 벗기는 캐스팅을 하느니 처음부터 맞는 시그니처로 선언한다.

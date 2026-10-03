@@ -1,4 +1,5 @@
 const std = @import("std");
+const Translator = @import("translate_c").Translator;
 
 pub fn build(b: *std.Build) void {
     const target = b.resolveTargetQuery(.{
@@ -39,12 +40,52 @@ pub fn build(b: *std.Build) void {
         "게스트로 가는 terminal 바이너리의 최적화 모드 (기본 ReleaseSafe)",
     ) orelse .ReleaseSafe;
 
+    // ZU-M1: C 헤더 번역. 0.17이 `@cImport`를 없애서 번역이 Zig 소스에서
+    // 여기로 왔다. 파일마다 모듈 하나다 — `@cImport` 하나가 한 파일의
+    // 이름공간이던 것을 그대로 지킨다(main.zig가 poll.h 하나만 끌어오는
+    // 이유가 이름 충돌이다). 번역은 대상마다 따로다. 같은 헤더라도
+    // x86_64 게스트와 arm64 호스트의 glibc · 커널 헤더가 다르다.
+    const c_drm = translateC(b, "c_drm",
+        \\#include <fcntl.h>
+        \\#include <sys/ioctl.h>
+        \\#include <sys/mman.h>
+        \\
+    , target, guest_optimize);
+    const c_pty = translateC(b, "c_pty",
+        \\#include <pty.h>
+        \\#include <sys/ioctl.h>
+        \\#include <unistd.h>
+        \\
+    , target, guest_optimize);
+    // fortify를 끄는 것은 이 번역 하나다. 패키지는 ReleaseSafe 번역에
+    // `-D_FORTIFY_SOURCE=2`를 붙이고(우리의 명령줄 define보다 뒤에 온다)
+    // 그러면 poll.h의 `poll`이 인라인 래퍼가 되는데, 번역된 래퍼가
+    // `__builtin.object_size`의 c_int 자리에 bool을 놓아 컴파일이 안 된다.
+    // 그래서 헤더 안에서 끈다 — 소스의 지시문은 명령줄 define 뒤에 처리된다.
+    // c_drm · c_pty는 fortify가 켜진 채로 번역된다. GL-M3이 `@cImport` 시절에
+    // 세 자리에서 껐던 것 중 둘은 패키지에서 필요 없어졌다(ZU-M1 실측).
+    const c_poll = translateC(b, "c_poll",
+        \\#undef _FORTIFY_SOURCE
+        \\#include <poll.h>
+        \\
+    , target, guest_optimize);
+    const c_stb_truetype = translateC(b, "c_stb_truetype",
+        \\#include <stb_truetype.h>
+        \\
+    , target, guest_optimize);
+    c_stb_truetype.addIncludePath(b.path("vendor"));
+    const c_input = translateC(b, "c_input",
+        \\#include <linux/input.h>
+        \\
+    , target, guest_optimize);
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         // GL-M3: Debug 49,373,160 → ReleaseSafe 10,577,200바이트(78.6% 감소).
         // initrd는 16,199,658 → 10,988,958바이트가 된다. 이 길이 열린 것은
         // fortify를 세 자리에서 껐기 때문이다(drm.zig · main.zig · pty.zig).
+        // ZU-M1부터 끄는 자리는 위의 `c_poll` 번역 하나다.
         .optimize = guest_optimize,
     });
     exe_mod.addIncludePath(b.path("vendor"));
@@ -54,6 +95,11 @@ pub fn build(b: *std.Build) void {
     });
     exe_mod.link_libc = true;
     exe_mod.linkSystemLibrary("m", .{});
+    exe_mod.addImport("c_drm", c_drm.mod);
+    exe_mod.addImport("c_pty", c_pty.mod);
+    exe_mod.addImport("c_poll", c_poll.mod);
+    exe_mod.addImport("c_stb_truetype", c_stb_truetype.mod);
+    exe_mod.addImport("c_input", c_input.mod);
 
     // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
     // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
@@ -81,6 +127,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     pty_test_mod.link_libc = true;
+    pty_test_mod.addImport("c_pty", c_pty.mod);
     const pty_test = b.addExecutable(.{
         .name = "pty_test",
         .root_module = pty_test_mod,
@@ -98,6 +145,18 @@ pub fn build(b: *std.Build) void {
     //
     // 빈 쿼리 `.{}`가 네이티브다.
     const host_target = b.resolveTargetQuery(.{});
+
+    // ZU-M1: 호스트 검사가 쓰는 번역 둘. 위의 게스트 번역과 헤더는 같고
+    // 대상만 다르다.
+    const c_stb_truetype_host = translateC(b, "c_stb_truetype",
+        \\#include <stb_truetype.h>
+        \\
+    , host_target, optimize);
+    c_stb_truetype_host.addIncludePath(b.path("vendor"));
+    const c_input_host = translateC(b, "c_input",
+        \\#include <linux/input.h>
+        \\
+    , host_target, optimize);
 
     // vt_test도 호스트에서 돈다. 2026-08-23에 libghostty-vt를 aarch64로
     // 빌드해 실행되는 것을 확인했다 — 그전까지 "검증된 적이 없다"는 이유로
@@ -143,6 +202,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     input_test_mod.link_libc = true;
+    input_test_mod.addImport("c_input", c_input_host.mod);
     const input_test = b.addExecutable(.{
         .name = "input_test",
         .root_module = input_test_mod,
@@ -171,6 +231,7 @@ pub fn build(b: *std.Build) void {
     });
     font_test_mod.link_libc = true;
     font_test_mod.linkSystemLibrary("m", .{});
+    font_test_mod.addImport("c_stb_truetype", c_stb_truetype_host.mod);
     const font_test = b.addExecutable(.{
         .name = "font_test",
         .root_module = font_test_mod,
@@ -179,7 +240,7 @@ pub fn build(b: *std.Build) void {
 
     // hangul_test도 호스트에서 돈다. input_test와 같은 자리다 — 자모를
     // 넣고 코드포인트를 받는 순수 계산이라 파일도 폰트도 안 읽는다.
-    // libc도 필요 없다(input_test는 `@cImport("linux/input.h")` 때문에
+    // libc도 필요 없다(input_test는 `c_input`(linux/input.h 번역) 때문에
     // link_libc를 켠다).
     const hangul_test_mod = b.createModule(.{
         .root_source_file = b.path("src/hangul_test.zig"),
@@ -194,13 +255,14 @@ pub fn build(b: *std.Build) void {
 
     // status_test도 호스트에서 돈다. `link_libc`가 필요한 것이
     // `hangul_test`와 다른 자리다(IS-M0) — `status.zig`가 `input.State`를
-    // 받으므로 `input.zig`의 `@cImport("linux/input.h")`가 따라온다.
+    // 받으므로 `input.zig`의 `c_input`(linux/input.h 번역)이 따라온다.
     const status_test_mod = b.createModule(.{
         .root_source_file = b.path("src/status_test.zig"),
         .target = host_target,
         .optimize = optimize,
     });
     status_test_mod.link_libc = true;
+    status_test_mod.addImport("c_input", c_input_host.mod);
     const status_test = b.addExecutable(.{
         .name = "status_test",
         .root_module = status_test_mod,
@@ -234,4 +296,22 @@ fn addStbImage(b: *std.Build, m: *std.Build.Module) void {
     m.addIncludePath(b.path("vendor"));
     m.addCSourceFile(.{ .file = b.path("src/stb_image_impl.c"), .flags = &.{} });
     m.link_libc = true;
+}
+
+/// C 헤더를 번역한다(ZU-M1). `header`는 stub 헤더의 본문이고, 그것을
+/// translate-c 패키지가 Zig로 옮긴 결과가 `.mod`다. include 경로가 더 필요한
+/// 번역은 돌려받은 `Translator`에 `addIncludePath`를 부른다.
+fn translateC(
+    b: *std.Build,
+    name: []const u8,
+    header: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) Translator {
+    return .init(b.dependency("translate_c", .{}), .{
+        .name = name,
+        .c_source_file = b.addWriteFiles().add(b.fmt("{s}.h", .{name}), header),
+        .target = target,
+        .optimize = optimize,
+    });
 }

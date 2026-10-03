@@ -4,9 +4,9 @@
 //! lib 빌드에서는 null이라 PNG를 `EINVAL`로 거절한다(TG 실측 3). 이 파일이 그
 //! 자리를 `stb_image`로 채운다. 넣는 것은 `vt.Screen.init`이다.
 //!
-//! `@cImport`로 헤더를 읽지 않고 쓰는 함수 셋만 선언한다. 헤더를 번역하면
-//! glibc 헤더까지 따라 읽어 fortify를 끌 자리가 하나 늘어난다
-//! (`docs/decisions/project_zig_c_uapi_rule.md`). 구현은 `stb_image_impl.c`가
+//! 헤더를 번역하지 않고 쓰는 함수 셋만 선언한다. 번역하면 glibc 헤더까지
+//! 따라 읽고, fortify가 켜진 번역이 통하는지를 헤더마다 따로 재야 한다
+//! (`docs/decisions/project_zig_c_uapi_rule.md`, ZU-M1에서 poll.h는 안 통했다). 구현은 `stb_image_impl.c`가
 //! PNG만 켜서 컴파일한다.
 
 const std = @import("std");

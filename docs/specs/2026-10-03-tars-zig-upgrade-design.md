@@ -2,7 +2,7 @@
 
 접두사: ZU
 
-Status: 진행 중(2026-10-03) — M0 끝(`**` 25줄 → `@splat`, 실측 1 · 2). M1은 0.16에서 한다. M2는 ghostty의 0.17 전환이 업스트림에 들어간 뒤에 연다.
+Status: 진행 중(2026-10-03) — M0 · M1 끝(`**` → `@splat`, `@cImport` → translate-c 패키지, 실측 1~5, 루트 게이트 17체인 3/3). M2는 ghostty의 0.17 전환이 업스트림에 들어간 뒤에 연다.
 
 관련 문서: `docs/specs/2026-08-13-tars-zig-migration-design.md`(Rust를 Zig 0.16으로 옮긴 ZM) ·
 `docs/decisions/project_zig_c_uapi_rule.md`(translate-c가 fortify 헤더를 못 넘는 일) ·
@@ -80,6 +80,10 @@ ghostty를 직접 0.17로 고치지 않는다. ghostty `src`에만 `**`가 57곳
 M1이 fortify를 끄는 줄 없이 ReleaseSafe로 지어 본다. 번역이 통하면 세 자리를 지우고, 통하지 않으면
 남기되 `drm.zig`의 설명을 새 사실로 고친다.
 
+M1 plan을 쓰며 패키지 소스를 읽어 보니(2026-10-03) 패키지도 ReleaseSafe 번역에 `-D_FORTIFY_SOURCE=2`를
+붙이고, 그 인자가 우리의 명령줄 define보다 뒤에 온다. 그래서 "통하면 지운다"는 기대보다 "자리를
+`@cDefine`에서 stub 헤더의 `#undef`로 옮긴다"가 될 공산이 크다. 판정은 M1 Task 3이다.
+
 ## 위험
 
 ### 위험 1 — ghostty 전환이 길어진다
@@ -129,3 +133,28 @@ M0 plan의 "셋"은 가려진 출력을 읽은 것이었다.
 `storage.zig` 9줄 · `devices_test.zig` 8줄 등, 빈 줄 같은 것). 이 저장소에는 fmt 게이트가 없다. M0은
 건드리지 않았다. M2가 0.17 `zig fmt`를 돌리면 이 61줄이 `@backingInt` 고침과 섞여 함께 바뀐다 — 그
 diff를 읽을 때 둘을 나눠 본다.
+
+## 실측 (M1, 2026-10-03)
+
+### 실측 3 — 패키지 번역에서 fortify를 꺼야 하는 것은 `poll.h` 하나다
+
+우회 없이 ReleaseSafe로 지으면(반사실) 에러는 하나다 — `c_poll.zig`의 `expected type 'c_int', found
+'bool'`. glibc의 fortify `poll` 래퍼가 `__builtin.object_size`의 `c_int` 자리에 `__USE_FORTIFY_LEVEL > 1`을
+놓는다. GL-M3이 `@cImport`에서 본 `drm` · `pty`의 `C import failed`(`bits/fcntl2.h`의
+`__attribute__((error))`)는 패키지의 번역기에서 나지 않는다. 결정 5대로 통하는 둘은 지웠고, `c_poll`
+stub 헤더 하나에 `#undef _FORTIFY_SOURCE`를 뒀다 — 명령줄 define은 패키지가 맨 뒤에 붙이는
+`-D_FORTIFY_SOURCE=2`에 진다.
+
+동작 변화는 `nm -D`로 본 `__read_chk@GLIBC_2.4` 하나다(`pty.zig`의 `c.read`). 경위와 표는
+`docs/decisions/project_zig_c_uapi_rule.md`의 ZU-M1 절에 있다.
+
+### 실측 4 — 패키지의 첫 빌드 비용은 측정 편차 안이다
+
+`terminal/.zig-cache`를 지운 `zig build`가 M1 전 74.2초, M1 뒤 67.9초다(translate-c 실행 파일 컴파일
+포함, 패키지는 이미 `zig-pkg/`에 받은 뒤). 위험으로 본 "게이트마다 첫 체인이 내는 비용"은 잴 수 있는
+크기가 아니었다. 게스트 바이너리는 10,963,008 → 10,963,352바이트(+344, fortify 래퍼).
+
+### 실측 5 — 루트 게이트는 첫 판에 초록이다
+
+17체인 3/3, `FAIL` 0줄, 1시간 1분 50초. `__read_chk`를 지나는 `pty`의 읽기와 fortify를 켠 `drm`이
+부팅하는 모든 체인에서 섰다.

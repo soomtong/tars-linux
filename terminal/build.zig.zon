@@ -5,6 +5,13 @@
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .ghostty = .{ .path = "ghostty-src" },
+        // ZU-M1: `@cImport` 대신 C 헤더를 번역한다. ghostty가 0.16에서 쓰는
+        // 판(`ghostty-src/build.zig.zon`의 `translate_c`)과 같다. 0.17로 갈 때는
+        // codeberg.org/ziglang/translate-c의 0.17 판으로 이 두 줄만 바꾼다.
+        .translate_c = .{
+            .url = "https://deps.files.ghostty.org/translate_c-80f8b6e4f45a303268717d8e5f4f91d7837138bb.tar.gz",
+            .hash = "translate_c-0.0.0-Q_BUWmU6BwB_9JKG2l2W7i_mhmYWeRseTGBEHi_YlV5f",
+        },
     },
     .paths = .{
         "build.zig",

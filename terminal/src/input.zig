@@ -10,9 +10,7 @@ const hangul = @import("hangul.zig");
 /// 성립하지 않는다. "103이 정말 ←인가"에 답하는 것은 부팅 게이트이고
 /// (sendkey → 스캔코드 → atkbd → evdev), 단위 검사가 답하는 것은
 /// "KEY_LEFT가 ESC [ D가 되는가"다.
-pub const c = @cImport({
-    @cInclude("linux/input.h");
-});
+pub const c = @import("c_input");
 
 /// libc의 open을 직접 선언한다. glibc의 `open`은 가변 인자
 /// (`int open(const char *, int, ...)`)라 translate-c가 만든 래퍼를 그대로

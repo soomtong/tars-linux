@@ -1,8 +1,6 @@
 const std = @import("std");
 
-const stb = @cImport({
-    @cInclude("stb_truetype.h");
-});
+const stb = @import("c_stb_truetype");
 
 /// 구워 놓은 글자 하나.
 ///

@@ -1,6 +1,6 @@
 ---
 name: project_zig_c_uapi_rule
-description: "Zig에서 커널을 부를 때의 규칙 — 시스템 콜만 쓰면 libc를 링크하지 말고 std.os.linux로; libc가 필요할 때만 @cImport(구조체는 되고 ioctl 매크로는 안 되며 최적화 모드에서 fortify로 깨진다); 그 fortify는 @cDefine(\"_FORTIFY_SOURCE\", \"0\")으로 끌 수 있고 GL-M3이 2026-08-29에 실제로 껐다 — Debug에 묶이지 않는다; 벽은 한 파일이 아니라 glibc 헤더를 읽는 @cImport 블록 전부이고 파일마다 에러 문구가 달라서 같은 원인으로 안 보인다(drm.zig는 'C import failed', main.zig는 poll 호출에서 'expected c_int, found bool')"
+description: "Zig에서 커널을 부를 때의 규칙 — 시스템 콜만 쓰면 libc를 링크하지 말고 std.os.linux로; libc가 필요할 때만 @cImport(구조체는 되고 ioctl 매크로는 안 되며 최적화 모드에서 fortify로 깨진다); 그 fortify는 @cDefine(\"_FORTIFY_SOURCE\", \"0\")으로 끌 수 있고 GL-M3이 2026-08-29에 실제로 껐다 — Debug에 묶이지 않는다; ZU-M1(2026-10-03)이 translate-c 패키지로 옮기자 끌 자리는 c_poll 번역 하나가 됐고 그것도 명령줄이 아니라 stub 헤더의 #undef로 끈다(패키지가 -D_FORTIFY_SOURCE=2를 맨 뒤에 붙인다); 벽은 한 파일이 아니라 glibc 헤더를 읽는 @cImport 블록 전부이고 파일마다 에러 문구가 달라서 같은 원인으로 안 보인다(drm.zig는 'C import failed', main.zig는 poll 호출에서 'expected c_int, found bool')"
 metadata:
   node_type: memory
   type: project
@@ -80,6 +80,33 @@ translate-c가 번역하지 못한다.
 `@cImport`를 `b.addTranslateC`로 옮기게 되면(0.16 권장 경로) 이 우회는 필요
 없어질 수 있다. 그때 지울 자리를 찾도록 세 줄에 `GL-M3`을 똑같이 적어 두었다 —
 `rg 'GL-M3' terminal/src`로 셋이 한 번에 나온다.
+
+## translate-c 패키지로 옮겼더니 셋이 하나가 됐다 (2026-10-03, ZU-M1)
+
+Zig 0.17이 `@cImport`를 없애서, 0.16에서 미리 translate-c 패키지(ghostty가 0.16에서
+쓰는 `80f8b6e` 판)로 옮겼다. 번역은 이제 `terminal/build.zig`의 `translateC`가 stub
+헤더로 하고, 파일은 `@import("c_drm")`처럼 받는다.
+
+패키지도 fortify를 켠다 — ReleaseSafe 번역에 `-D_FORTIFY_SOURCE=2`를 붙이고
+(패키지 `src/main.zig:233`), 그 인자가 우리의 `defineCMacro` · `extra_args`보다 뒤에
+온다. 명령줄로 `_FORTIFY_SOURCE=0`을 줘도 진다. 그래서 끄려면 stub 헤더 안에
+`#undef _FORTIFY_SOURCE`를 둔다(소스 안의 지시문이 명령줄 define 뒤에 처리된다).
+
+그런데 우회 없이 지어 보니(반사실) 에러는 `c_poll` 하나였다 — 위 표의 `poll`
+문제(`expected type 'c_int', found 'bool'`)는 그대로고, `drm` · `pty`의
+`C import failed`는 사라졌다. 패키지의 번역기(aro)는 `__attribute__((error))`
+선언을 넘긴다. 그래서 `#undef`는 `c_poll` 하나에만 두고 `c_drm` · `c_pty`는
+fortify를 켠 채로 둔다.
+
+| 번역 | fortify | 근거 |
+|---|---|---|
+| `c_drm` | 켜짐 | 반사실에서 번역 · 컴파일이 섰다 |
+| `c_pty` | 켜짐 | 같다. `nm -D`에 `__read_chk@GLIBC_2.4`가 새로 생겼다 — `c.read`가 검사 래퍼를 지난다 |
+| `c_poll` | 꺼짐 | 켜면 `c.poll`의 번역이 컴파일되지 않는다 |
+| `c_input` · `c_stb_truetype` | 해당 없음 | glibc가 아니다 |
+
+동작 변화는 그 `__read_chk` 하나다(M1 전후 `nm -D` 비교). 게스트 바이너리는
+10,963,008 → 10,963,352바이트.
 
 Zig 라이브러리 타입을 구조체 필드로 쓸 때 주의: 이건 C 상호운용이
 아니라 Zig 쪽 함정인데 같은 세션에서 겪었다. 재수출된 이름이 제네릭
