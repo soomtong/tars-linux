@@ -1,5 +1,6 @@
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
+const png = @import("png.zig");
 
 /// 렌더러에게 넘기는 셀 하나.
 ///
@@ -419,6 +420,12 @@ pub const Screen = struct {
         // (`Terminal.zig:3800`). 같은 값이 `CSI 14t`(창 픽셀 크기)의 답이 된다.
         self.term.width_px = @as(u32, cols) * cell.w;
         self.term.height_px = @as(u32, rows) * cell.h;
+
+        // PNG 디코더를 넣는다(TG design 결정 6). 프로세스 전역 변수라
+        // `main.zig`에서 한 번 넣어도 되지만, 그러면 `vt_test`가 게스트와 다른
+        // 디코더(없음)로 돈다. 화면을 만드는 쪽이 전부 같은 것을 쓰게 하는
+        // 자리가 여기다. 같은 값을 여러 번 넣는 것은 무해하다.
+        ghostty_vt.sys.decode_png = &png.decode;
 
         // term이 최종 주소에 자리잡은 뒤에 stream을 만든다.
         self.stream = self.term.vtStream();

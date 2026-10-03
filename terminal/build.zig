@@ -67,6 +67,7 @@ pub fn build(b: *std.Build) void {
         .optimize = guest_optimize,
     });
     exe_mod.addImport("ghostty-vt", ghostty_dep.module("ghostty-vt"));
+    addStbImage(b, exe_mod);
 
     const exe = b.addExecutable(.{
         .name = "terminal",
@@ -113,6 +114,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     vt_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    addStbImage(b, vt_test_mod);
     const vt_test = b.addExecutable(.{
         .name = "vt_test",
         .root_module = vt_test_mod,
@@ -128,6 +130,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     image_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    addStbImage(b, image_test_mod);
     const image_test = b.addExecutable(.{
         .name = "image_test",
         .root_module = image_test_mod,
@@ -222,4 +225,13 @@ pub fn build(b: *std.Build) void {
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도
     // 실행하지 않는다. vt_test는 TR-M0에서 호스트로 옮겨 이제 돈다.
+}
+
+/// PNG 디코더(TG-M3). `vt.zig`가 `png.zig`를 통해 `stb_image`를 부르므로,
+/// `vt.zig`를 import하는 모듈은 전부 이것이 있어야 링크된다. 셋이라 한
+/// 자리에 둔다 — 하나를 빠뜨리면 그 검사만 링크 에러로 멈춘다.
+fn addStbImage(b: *std.Build, m: *std.Build.Module) void {
+    m.addIncludePath(b.path("vendor"));
+    m.addCSourceFile(.{ .file = b.path("src/stb_image_impl.c"), .flags = &.{} });
+    m.link_libc = true;
 }

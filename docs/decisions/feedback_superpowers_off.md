@@ -40,3 +40,16 @@ How to apply:
   먼저 본다.
 
 관련: [[feedback-execution-scope]]
+
+## 첫 검증 — TG(2026-10-03)
+
+plugin 없이 연 첫 서브프로젝트가 TG다(`project_terminal_graphics`). 본 것은 사실만 적는다.
+
+- design 하나와 plan 넷(M0~M3)을 기존 형식대로 썼다. "REQUIRED SUB-SKILL" 줄은 없다.
+- plan의 결함 둘이 실행 전에 잡혔다 — M2의 음성 검사 18(되울린 명령 줄 때문에 늘 실패),
+  M3의 검사 76(머리만 고친 PNG는 선의 증거가 못 됨).
+  실행 중에 잡힌 것은 하나다 — fish 구문 강조가 기존 style 상한 검사를 넘긴 것(게이트가 잡았다).
+- 검사의 기대값을 매번 실행 전에 계산해 적었고, 고친 값은 0이다. "항상 TDD" skill 없이도
+  기대값을 먼저 쓰는 습관은 유지됐다.
+- 편집마다 `git diff --stat`과 지운 줄 읽기를 했다(CLAUDE.md의 규칙).
+- plugin이 있었다면 막았을 누락은 보지 못했다. `.claude/skills/`에 되살릴 skill은 아직 없다.

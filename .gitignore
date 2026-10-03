@@ -23,3 +23,5 @@ terminal/.zig-cache/
 
 *.ppm
 *.png
+# 위 둘은 게이트의 screendump 산출물을 막는다. 검사 입력은 예외다(TG-M3).
+!terminal/src/testdata/*.png

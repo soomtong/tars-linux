@@ -532,6 +532,21 @@ if [ "$PAYLOAD_SEEN" -ne 1 ]; then
 fi
 echo "the image command did not leak onto the screen as text"
 
+# ── 검사 19: PNG가 게스트에서 풀린다 — TG-M3 ───────────────────────────
+#
+# 이미지 1과 같은 네 색의 2×2 PNG(75바이트)를 `f=100`으로 보낸다. 디코더가
+# 없으면 라이브러리가 `EINVAL`로 거절해 image> 줄이 아예 안 생긴다(TG 실측 3).
+# 사분면이 이미지 1과 같으면 stb_image가 게스트 바이너리 안에서 돈 것이다.
+echo "=== typing a PNG kitty image command ==="
+type_text "printf '\\033_Ga=T,f=100,i=4,c=4,r=2,q=2;iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR42mP4z8DAAMIM/4EAAB/uBfvxq7p3AAAAAElFTkSuQmCC\\033\\134\\n'"
+type_keys ret
+sleep 3
+if ! grep -aq 'terminal: imgpx> id=4 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF' "$LOG"; then
+  grep -a 'terminal: imgpx> id=4' "$LOG" | tail -n 5
+  report_failure "the PNG image did not reach the framebuffer as red/green/blue/white quadrants"
+fi
+echo "the PNG image was decoded in the guest: red, green, blue, white"
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로

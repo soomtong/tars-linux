@@ -1,5 +1,6 @@
 const std = @import("std");
 const vt = @import("vt.zig");
+const png = @import("png.zig");
 
 /// 모든 화면이 `main.zig`와 같은 셀 크기로 뜬다(`CELL_W` · `ROW_HEIGHT`).
 /// 다르게 두면 kitty 이미지의 픽셀 기대값이 게스트와 갈린다.
@@ -9,6 +10,8 @@ const CELL: vt.CellPx = .{ .w = 8, .h = 16 };
 const KG_RGBA = "/wAA/wD/AP8AAP//////gA==";
 /// 같은 넷의 RGB(12바이트). 넷째는 불투명 흰색이 된다.
 const KG_RGB = "/wAAAP8AAAD/////";
+/// 같은 넷의 2×2 PNG(75바이트, RGB 8비트). `render` 체인 검사 19가 같은 것을 친다.
+const KG_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR42mP4z8DAAMIM/4EAAB/uBfvxq7p3AAAAAElFTkSuQmCC";
 
 fn findImage(list: []const vt.ImagePlacement, id: u32) ?vt.ImagePlacement {
     for (list) |p| if (p.image_id == id) return p;
@@ -2126,6 +2129,50 @@ pub fn main(init: std.process.Init) !void {
         return error.AltScreenImages;
     }
     std.debug.print("vt_test: 대체 화면은 이미지를 따로 든다 OK\n", .{});
+
+    // ── TG-M3: PNG ─────────────────────────────────────────────────────
+
+    // 검사 75. PNG(`f=100`)가 RGBA로 풀려 저장된다.
+    //
+    // TG 실측 3에서 이것은 `EINVAL: unsupported format`이었다. 원본이 RGB
+    // PNG여도 결과는 rgba다 — `png.decode`가 채널 4를 요청한다.
+    const pg = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pg.deinit();
+    pg.feed("\x1b_Ga=T,f=100,i=1;" ++ KG_PNG ++ "\x1b\\");
+    const pg_reply = pg.takeReplies();
+    const pg_list = pg.images(&kg_buf);
+    const want_px = [_]u8{ 0xFF, 0, 0, 0xFF, 0, 0xFF, 0, 0xFF, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    if (pg_list.len != 1 or pg_list[0].format != .rgba or pg_list[0].width != 2 or
+        pg_list[0].height != 2 or !std.mem.eql(u8, pg_list[0].data, &want_px))
+    {
+        std.debug.print("FAIL: PNG가 저장되지 않았거나 픽셀이 다르다(이미지 {d}개, 답 {s})\n", .{ pg_list.len, pg_reply });
+        return error.PngNotDecoded;
+    }
+    std.debug.print("vt_test: PNG가 RGBA로 풀린다 OK\n", .{});
+
+    // 검사 76. 풀면 10MB를 넘는 PNG는 풀기 전에 거절한다.
+    //
+    // 1600×1600×4 = 10,240,000. 온전한 PNG라 우리 선이 없으면 디코드가
+    // 성공한다 — 그래서 InvalidData가 곧 선의 증거다(TG-M3 plan 정한 것 2).
+    if (png.decode(init.gpa, @embedFile("testdata/solid-1600.png"))) |huge| {
+        init.gpa.free(huge.data);
+        std.debug.print("FAIL: 1600x1600 PNG가 풀렸다({d}바이트, 상한 {d})\n", .{ huge.data.len, png.MAX_BYTES });
+        return error.PngLimitMissing;
+    } else |err| if (err != error.InvalidData) return err;
+    std.debug.print("vt_test: 10MB를 넘는 PNG는 풀기 전에 거절한다 OK\n", .{});
+
+    // 검사 77. 선 바로 아래(1580×1580 = 9,985,600바이트)는 풀린다.
+    //
+    // 76만 있으면 "PNG를 전부 거절한다"가 통과한다.
+    const near = try png.decode(init.gpa, @embedFile("testdata/solid-1580.png"));
+    defer init.gpa.free(near.data);
+    if (near.width != 1580 or near.data.len != 9_985_600 or
+        !std.mem.eql(u8, near.data[0..4], &.{ 0x40, 0x80, 0xC0, 0xFF }))
+    {
+        std.debug.print("FAIL: 1580x1580 PNG가 {d}x{d} {d}바이트로 풀렸다\n", .{ near.width, near.height, near.data.len });
+        return error.PngNearLimit;
+    }
+    std.debug.print("vt_test: 선 바로 아래 PNG는 풀린다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

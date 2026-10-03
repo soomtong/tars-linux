@@ -9,12 +9,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# 세 vendor 스크립트는 산출물이 이미 있으면 아무것도 하지 않는다.
+# vendor 스크립트들은 산출물이 이미 있으면 아무것도 하지 않는다.
 # ghostty-src는 다운로드에 더해 lib-vt 빌드까지 하므로 트리가 없을 때만 부른다.
 if [ ! -d ghostty-src ]; then
   ./vendor_libghostty_vt.sh
 fi
 ./vendor_stb_truetype.sh
+./vendor_stb_image.sh
 ./vendor_fonts.sh
 
 zig build

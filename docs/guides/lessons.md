@@ -16,7 +16,7 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (열일곱 체인 × 3, 약 60분 — 2026-09-28 WL-M3 뒤 59분 45초)
+# 루트 게이트 (열일곱 체인 × 3, 약 60분 — 2026-10-03 TG-M3 뒤 1시간 1분 25초)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
@@ -659,6 +659,17 @@ root ns에는 새 인터페이스가 생긴 것과 같다 — 부팅 뒤 꽂는 
 심볼은 `--keep-case` 없이 켜면 없는 이름(`MT76X0U`)이 적히고 `olddefconfig`가 조용히 버린다.
 켠 뒤에는 해소된 `build/.config`에 `=y`로 남았는지 반드시 센다(2026-09-28 USB 동글 측정).
 
+71. 게스트의 기본 셸 fish는 작은따옴표 안에서도 `\\`를 `\` 하나로 접는다. `printf`에 백슬래시를
+넘기려면 8진수 `\134`로 쓴다 — `\033`처럼 printf만 해석한다. 그리고 fish는 따옴표 문자열 전체에
+구문 강조 색(`F0C674`)을 입혀서, 긴 `printf` 명령 줄 하나가 `style>` 덤프의 16셀 상한을 넘긴다.
+상한을 보는 음성 검사가 있는 체인에 긴 명령을 치면 그 검사의 범위를 명령 앞으로 좁힌다
+(TG-M2 · `render/check.sh`의 `IMG_LOG_START`).
+
+72. vendor된 ghostty의 `src/terminal/c/*.zig`(C API)는 Zig 쪽에서 직접 못 쓰는 계산의 정답지다.
+C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 없지만, ghostty 앱 렌더러보다 작고
+라이브러리가 스스로 검사하는 모양이다. kitty placement의 viewport 좌표는
+`placement_render_info`를 옮겨 적었다(TG-M1).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -941,6 +952,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
       집게 되면 게이트의 `style>` · `ink>` 덤프가 매 프레임 화면 전체를 전제로
       하고 있어서 게이트까지 함께 건드려야 한다 — 이것이 이 일의 진짜 크기다.
 - [ ] `present`의 매 프레임 모드셋. 같은 결정에 딸린다(RC-M0이 4%로 쟀다).
+- [ ] 큰 kitty 이미지의 그리기 비용. 화면 가득한 이미지가 게이트에서 프레임을 9.6 → 69.7ms로
+      늘린다(TG 실측 7). `image.draw`가 픽셀마다 64비트 나눗셈 둘로 원본 좌표를 구하는 것이
+      원인으로 보이고, 줄마다 열 대응표를 한 번 만들면 줄일 자리다. 다시 집을 신호는 위와 같다.
 
 닫아 둔 결정들 — 다시 열려면 근거가 필요하다.
 
@@ -977,12 +991,19 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   해소해 `CellGlyph`로 넘긴다. 매치 층은 `break`를 안 한다(목록 순서가 색을
   정한다). `copyApply`는 모든 이동 수단이 통과하는 문이고,
   `findCurrentIndex`가 라이브러리 내부 필드 `selected.idx`를 읽는 유일한
-  자리다. `copyExit`은 뷰포트도 preedit도 안 되돌린다.
+  자리다. `copyExit`은 뷰포트도 preedit도 안 되돌린다. `init`이 셀 픽셀 크기를
+  라이브러리에 알리고(0이면 kitty 이미지가 안 놓인다), `images()`가 저장소를 직접 읽어
+  placement를 z 순 픽셀 사각형으로 낸다(TG-M1).
 - `main.zig` — `drawGlyph`·`render`·`dump*`와 `poll` 루프. 렌더는 루프 끝에
   있고 `needs_redraw`가 문지기다. `promptText`의 갈래가 셋(프롬프트 ·
   `[3/12]` · "못 찾음")이고 두 갈래를 가르는 것은 `findMatchCount()`
   하나다. `dumpStyles`는 프레임당 16줄 상한(`STYLE_DUMP_LIMIT`)이고 덮인 줄을
   건너뛴다. copy 배선 switch에 `else`가 없는 규율이 매번 값을 한다.
+- `image.zig` — kitty 이미지 하나를 그린다(TG-M2). 순수 모듈이고 대상이 `anytype`이라
+  `image_test`가 `u32` 배열로 같은 산수를 본다. 자르기 사각형이 곧 프레임버퍼 밖 쓰기를
+  막는 자리다(`setPixel`에 범위 검사가 없다).
+- `png.zig` — `sys.decode_png`를 `stb_image`로 채운다(TG-M3). 헤더를 `@cImport`하지 않고
+  함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
 - `drm.zig` · `pty.zig` — 프레임버퍼와 PTY. `drm.zig`·`main.zig`·`pty.zig`
@@ -991,7 +1012,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `getPixel`에 범위 검사가 없고 고치지 않고 호출부에서 막는다.
 - `font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. 코드는 폰트에 무관하다.
 - 검사 파일들 — `input_test.zig`(모드 밖 대조군 검사들이 여기 있다) ·
-  `vt_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` ·
+  `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` ·
   `font_test.zig` · `pty_test.zig`. `vt_test.zig`는 `main()` 하나가 파일
   전체라 모든 지역 변수 이름이 서로 부딪치고 Zig가 shadowing을 컴파일 에러로
   막는다 — 새 검사는 이름을 `rg`로 먼저 확인하고, 자기 화면을 새로 만든다
