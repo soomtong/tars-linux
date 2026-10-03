@@ -269,6 +269,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(status_test);
 
+    // layout_test도 호스트에서 돈다(WP-M0). `hangul_test`와 같은 자리다 —
+    // 트리를 만들고 사각형을 받는 순수 계산이라 libc도 번역도 필요 없다.
+    const layout_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/layout_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const layout_test = b.addExecutable(.{
+        .name = "layout_test",
+        .root_module = layout_test_mod,
+    });
+    b.installArtifact(layout_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
     // 기본 `zig build`와 분리하는 이유는 속도였는데, 그 이유가 이제 거의
@@ -283,6 +296,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(font_test).step);
     test_step.dependOn(&b.addRunArtifact(hangul_test).step);
     test_step.dependOn(&b.addRunArtifact(status_test).step);
+    test_step.dependOn(&b.addRunArtifact(layout_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

@@ -4,6 +4,7 @@ const font = @import("font.zig");
 const hangul = @import("hangul.zig");
 const image = @import("image.zig");
 const input = @import("input.zig");
+const layout = @import("layout.zig");
 const pty = @import("pty.zig");
 const status = @import("status.zig");
 const vt = @import("vt.zig");
@@ -161,18 +162,23 @@ fn drawPrompt(
     cache: *font.Cache,
     p: Prompt,
 ) !PromptInk {
-    if (p.rows == 0) return .{ .cols = 0, .x0 = 0, .x1 = 0, .y = 0 };
-    const y = GRID_Y + @as(u32, p.rows - 1) * ROW_HEIGHT;
+    if (p.rect.rows == 0) return .{ .cols = 0, .x0 = 0, .x1 = 0, .y = 0 };
+    const o = paneOrigin(p.rect);
+    const y = o.y + @as(u32, p.rect.rows - 1) * ROW_HEIGHT;
 
     var col: u32 = 0;
-    while (col < p.cols) : (col += 1) {
-        drawCellBackground(fb, GRID_X + col * CELL_W, y, p.bg);
+    while (col < p.rect.cols) : (col += 1) {
+        drawCellBackground(fb, o.x + col * CELL_W, y, p.bg);
     }
 
-    // 격자 오른쪽 끝에서 끊는다. needle은 128바이트까지 자라는데 격자는
+    // 패널 오른쪽 끝에서 끊는다. needle은 128바이트까지 자라는데 격자는
     // 100칸 남짓이라, 안 끊으면 검색어가 여백으로 삐져나온다.
-    const max_x = GRID_X + @as(u32, p.cols) * CELL_W;
-    col = try drawRun(fb, cache, p.text, y, p.fg, 0, max_x);
+    //
+    // `drawRun`의 col은 격자 기준이라 패널의 `rect.col`에서 시작하고, 돌아온
+    // 값에서 그것을 빼 패널 기준으로 되돌린다(WP design 결정 6). `cols=`
+    // 로그가 패널 기준이어야 패널 하나일 때 지금과 같은 값이다.
+    const max_x = o.x + @as(u32, p.rect.cols) * CELL_W;
+    col = try drawRun(fb, cache, p.text, y, p.fg, p.rect.col, max_x) - p.rect.col;
 
     const cp = p.edit orelse return .{ .cols = col, .x0 = 0, .x1 = 0, .y = y };
 
@@ -185,10 +191,10 @@ fn drawPrompt(
     // 메커니즘이다).
     const glyph = try cache.find(cp);
     const span = @max(1, glyph.cell_width / CELL_W);
-    const x0 = GRID_X + col * CELL_W;
+    const x0 = o.x + col * CELL_W;
     var i: u32 = 0;
-    while (i < span and col + i < p.cols) : (i += 1) {
-        drawCellBackground(fb, GRID_X + (col + i) * CELL_W, y, p.fg);
+    while (i < span and col + i < p.rect.cols) : (i += 1) {
+        drawCellBackground(fb, o.x + (col + i) * CELL_W, y, p.fg);
     }
     drawGlyph(fb, glyph, x0, y, p.bg);
     // `span`이 아니라 `i`로 x1을 센다. 칸이 모자라 덜 칠했으면 덜 칠한
@@ -321,11 +327,15 @@ fn render(
     fb: drm.Framebuffer,
     cache: *font.Cache,
     cells: []const vt.CellGlyph,
-    // kitty 이미지(TG-M2). z 순이고 격자 기준 좌표다. `default_bg`는 아래
-    // 투명 배경 규칙에 쓰고, `clip`은 격자 사각형이다.
+    // kitty 이미지(TG-M2). z 순이고 패널 기준 좌표다. `default_bg`는 아래
+    // 투명 배경 규칙에 쓴다.
     imgs: []const vt.ImagePlacement,
     default_bg: u32,
-    clip: image.Clip,
+    // 이 패널이 격자 안에서 차지하는 사각형(WP design 결정 6). 셀 좌표에
+    // 이 원점을 더해 그리고, 이미지는 이 사각형 밖에 안 그린다 — 그래서
+    // `clip`을 따로 받지 않고 여기서 계산한다. 패널 하나면 격자 전체라
+    // 산수 결과가 WP 전과 같다.
+    rect: layout.Rect,
     prompt: ?Prompt,
     // 이름이 `status`가 아니다. 이 파일이 `status.zig`를 그 이름으로
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
@@ -335,37 +345,40 @@ fn render(
     // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
     fb.fill(MARGIN_COLOR);
 
+    const o = paneOrigin(rect);
+    const clip = paneClip(rect);
+
     // 층 순서는 TG design 결정 4다 — 배경 아래 · 셀 배경 · 글자 아래 · 글리프 ·
     // 글자 위. 이미지가 없는 프레임에서 세 호출은 빈 슬라이스를 돌고 끝난다.
-    drawImages(fb, imgs, .below_bg, clip);
+    drawImages(fb, imgs, .below_bg, o, clip);
 
     // x를 글리프 폭으로 누적하지 않고 col로 계산하는 것이 중요하다.
     // libghostty-vt는 한글 같은 폭 2칸 문자 뒤에 spacer 셀을 넣어 col을
     // 이미 맞춰두기 때문에(TF-M2에서 '이'의 col이 6이 아니라 7이었던
     // 그 성질), col*CELL_W가 곧 정확한 픽셀 위치다.
     for (cells) |cell| {
-        const x = GRID_X + @as(u32, cell.col) * CELL_W;
-        const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        const x = o.x + @as(u32, cell.col) * CELL_W;
+        const y = o.y + @as(u32, cell.row) * ROW_HEIGHT;
         // 기본 배경은 `below_bg` 이미지 위에서 투명하다(TG-M2 plan 정한 것 2).
         // `cells()`는 글자가 있는 셀을 기본 배경이어도 내보내므로, 그대로
         // 칠하면 배경 아래 이미지가 글자 셀마다 덮인다.
-        if (cell.bg == default_bg and overBelowBg(imgs, x, y)) continue;
+        if (cell.bg == default_bg and overBelowBg(imgs, o, x, y)) continue;
         drawCellBackground(fb, x, y, cell.bg);
     }
 
-    drawImages(fb, imgs, .below_text, clip);
+    drawImages(fb, imgs, .below_text, o, clip);
 
     for (cells) |cell| {
         // 빈 셀은 배경만 칠하고 끝난다. 캐시에 codepoint 0을 넣지 않기
         // 위해서이기도 하다 — 커서 자리와 색 띠가 전부 이쪽이라 흔하다.
         if (cell.codepoint == 0) continue;
-        const x = GRID_X + @as(u32, cell.col) * CELL_W;
-        const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        const x = o.x + @as(u32, cell.col) * CELL_W;
+        const y = o.y + @as(u32, cell.row) * ROW_HEIGHT;
         const glyph = try cache.find(cell.codepoint);
         drawGlyph(fb, glyph, x, y, cell.fg);
     }
 
-    drawImages(fb, imgs, .above_text, clip);
+    drawImages(fb, imgs, .above_text, o, clip);
 
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
@@ -382,18 +395,20 @@ fn render(
 }
 
 /// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
-fn drawImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, layer: vt.ImageLayer, clip: image.Clip) void {
+/// placement의 좌표는 패널 기준이라 패널 원점 `o`를 더한다.
+fn drawImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, layer: vt.ImageLayer, o: Origin, clip: image.Clip) void {
     for (imgs) |p| {
-        if (p.layer == layer) image.draw(fb, p, GRID_X, GRID_Y, clip);
+        if (p.layer == layer) image.draw(fb, p, @intCast(o.x), @intCast(o.y), clip);
     }
 }
 
 /// 셀 `(x, y)`(프레임버퍼 좌표)가 `below_bg` 이미지 하나와라도 겹치는가.
-fn overBelowBg(imgs: []const vt.ImagePlacement, x: u32, y: u32) bool {
+/// 이미지 좌표는 패널 기준이라 패널 원점 `o`를 더한다.
+fn overBelowBg(imgs: []const vt.ImagePlacement, o: Origin, x: u32, y: u32) bool {
     for (imgs) |p| {
         if (p.layer != .below_bg) continue;
-        const left = @as(i64, GRID_X) + p.dst_x;
-        const top = @as(i64, GRID_Y) + p.dst_y;
+        const left = @as(i64, o.x) + p.dst_x;
+        const top = @as(i64, o.y) + p.dst_y;
         if (x + CELL_W > left and x < left + p.dst_w and
             y + ROW_HEIGHT > top and y < top + p.dst_h) return true;
     }
@@ -414,8 +429,9 @@ const Prompt = struct {
     /// 반전이 한 글자 밀린다. 조합 중인 글자는 언제나 하나라 코드포인트
     /// 하나면 충분하다.
     edit: ?u21,
-    rows: u16,
-    cols: u16,
+    /// 포커스 패널의 사각형(WP design 결정 6). 오버레이는 격자가 아니라
+    /// 이 패널의 마지막 줄이고, 폭도 이 패널의 것이다.
+    rect: layout.Rect,
     fg: u32,
     bg: u32,
 };
@@ -562,7 +578,12 @@ fn dumpStyles(
     default_bg: u32,
     /// 프롬프트가 덮은 행. 없으면 null이다(CN-M1 plan 결정 4).
     overlaid_row: ?u16,
+    /// 셀이 그려진 패널(WP design 결정 6). `render`와 같은 원점에서 읽어야
+    /// 한다 — 안 받으면 패널 하나일 때만 맞는 값이 나온다. 찍는 좌표는
+    /// 패널 기준 그대로다.
+    rect: layout.Rect,
 ) void {
+    const o = paneOrigin(rect);
     var shown: usize = 0;
     var skipped: usize = 0;
     var hidden: usize = 0;
@@ -592,8 +613,8 @@ fn dumpStyles(
         });
         // 셀의 중앙을 읽는다. 모서리는 이웃 셀과의 경계라 off-by-one에
         // 취약하다.
-        const px = GRID_X + @as(u32, cell.col) * CELL_W + CELL_W / 2;
-        const py = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT + ROW_HEIGHT / 2;
+        const px = o.x + @as(u32, cell.col) * CELL_W + CELL_W / 2;
+        const py = o.y + @as(u32, cell.row) * ROW_HEIGHT + ROW_HEIGHT / 2;
         std.debug.print("terminal: pixel> {d},{d} = {X:0>6}\n", .{
             cell.row, cell.col, fb.getPixel(px, py) & 0x00FFFFFF,
         });
@@ -624,7 +645,10 @@ const INK_DUMP_LIMIT: usize = 8;
 ///
 /// 반드시 render() 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의
 /// 픽셀을 읽는다.
-fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph) void {
+/// `rect`는 셀이 그려진 패널이다 — `dumpStyles`와 같은 이유로 받는다
+/// (WP design 결정 6).
+fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph, rect: layout.Rect) void {
+    const o = paneOrigin(rect);
     var shown: usize = 0;
     for (cells) |cell| {
         if (shown >= INK_DUMP_LIMIT) break;
@@ -637,8 +661,8 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
         const glyph = cache.find(cell.codepoint) catch continue;
         if (glyph.cell_width <= CELL_W) continue;
 
-        const x = GRID_X + @as(u32, cell.col) * CELL_W;
-        const y = GRID_Y + @as(u32, cell.row) * ROW_HEIGHT;
+        const x = o.x + @as(u32, cell.col) * CELL_W;
+        const y = o.y + @as(u32, cell.row) * ROW_HEIGHT;
         // 마지막 칸에 폭 2칸 글자가 있으면 오른쪽 칸이 프레임버퍼 밖이다.
         // libghostty-vt가 그런 배치를 만들지 않지만, getPixel도 범위 검사를
         // 하지 않으므로 여기서 막는다.
@@ -667,8 +691,8 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
 ///   terminal: image> id=1 layer=above_text dst=20,52 32x32 src=0,0 2x2 frame=1234us
 ///   terminal: imgpx> id=1 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF
 ///
-/// 앞 줄은 `vt.zig`가 낸 사각형이고(dst는 격자 원점을 더한 프레임버퍼
-/// 좌표), 뒷 줄은 그 사각형의 네 사분면 중심에서 실제로 읽은 픽셀이다.
+/// 앞 줄은 `vt.zig`가 낸 사각형이고(dst는 패널 원점을 더한 프레임버퍼
+/// 좌표 — 패널 하나면 격자 원점이다), 뒷 줄은 그 사각형의 네 사분면 중심에서 실제로 읽은 픽셀이다.
 /// `style>` / `pixel>`과 같은 구조다 — 앞의 것만 보면 "계산은 맞는데 안
 /// 칠했다"를 못 잡는다. 사분면 중심이 격자 밖이면 `--`다.
 ///
@@ -676,11 +700,13 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph)
 /// 없는 프레임에는 아무것도 안 찍는다.
 ///
 /// 반드시 render() 뒤에 부른다 — 그 전에 부르면 이전 프레임을 읽는다.
-fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usize, frame_us: i96, clip: image.Clip) void {
+fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usize, frame_us: i96, rect: layout.Rect) void {
+    const o = paneOrigin(rect);
+    const clip = paneClip(rect);
     for (imgs, 0..) |p, i| {
         if (i >= 4) break;
-        const left = @as(i64, GRID_X) + p.dst_x;
-        const top = @as(i64, GRID_Y) + p.dst_y;
+        const left = @as(i64, o.x) + p.dst_x;
+        const top = @as(i64, o.y) + p.dst_y;
         std.debug.print("terminal: image> id={d} layer={s} dst={d},{d} {d}x{d} src={d},{d} {d}x{d} frame={d}us\n", .{
             p.image_id, @tagName(p.layer), left,  top,   p.dst_w, p.dst_h,
             p.src_x,    p.src_y,           p.src_w, p.src_h, frame_us,
@@ -1031,6 +1057,81 @@ fn dumpFindPaste(screen: *vt.Screen) void {
     std.debug.print("terminal: find> paste clip={d} put={d}\n", .{ clip_len, put });
 }
 
+/// 셸 하나(WP design 결정 1). WP 전에 `main`이 변수로 들던 `screen` ·
+/// `session`이 그대로 필드가 되고, 격자 안의 자리가 하나 더해진다.
+const Pane = struct {
+    screen: *vt.Screen,
+    session: pty.Session,
+    /// 격자 안의 자리(셀 단위). 하나뿐이면 격자 전체다.
+    rect: layout.Rect,
+};
+
+/// iTerm2의 탭 하나. 패널의 트리와 포커스 하나씩(WP design "모델" 절).
+///
+/// `panes`는 잎 번호로 바로 인덱싱한다 — `layout.Tree`가 잎 번호를 0..7로
+/// 주는 이유다. null인 칸은 그 번호의 잎이 없다는 뜻이다.
+const Workspace = struct {
+    tree: layout.Tree,
+    panes: [layout.MAX_LEAVES]?Pane,
+    /// 키보드가 가는 패널의 잎 번호(결정 4).
+    focus: u4,
+};
+
+/// 워크스페이스 수의 상한. Cmd+1~9가 번호라 아홉이다(WP design "모델" 절).
+const MAX_WORKSPACES = 9;
+
+/// 패널 왼쪽 위 셀의 프레임버퍼 좌표.
+const Origin = struct { x: u32, y: u32 };
+
+/// 셀 좌표를 픽셀로 옮기는 원점(WP design 결정 6). WP 전의
+/// `GRID_X + col * CELL_W`가 `GRID_X + (rect.col + col) * CELL_W`가 되는
+/// 자리다 — 그리는 함수와 프레임버퍼를 되읽는 덤프가 전부 이것을 부르므로
+/// 둘이 다른 원점을 볼 수 없다.
+fn paneOrigin(rect: layout.Rect) Origin {
+    return .{
+        .x = GRID_X + @as(u32, rect.col) * CELL_W,
+        .y = GRID_Y + @as(u32, rect.row) * ROW_HEIGHT,
+    };
+}
+
+/// 이미지를 그려도 되는 사각형은 그 패널이다(결정 6). 여백 · 상태 줄 ·
+/// 이웃 패널에는 안 그린다. WP 전에는 격자 전체를 상수(`grid_clip`)로 들었다.
+fn paneClip(rect: layout.Rect) image.Clip {
+    const o = paneOrigin(rect);
+    return .{
+        .x0 = @intCast(o.x),
+        .y0 = @intCast(o.y),
+        .x1 = @intCast(o.x + @as(u32, rect.cols) * CELL_W),
+        .y1 = @intCast(o.y + @as(u32, rect.rows) * ROW_HEIGHT),
+    };
+}
+
+/// 패널 하나를 띄운다 — PTY와 그 위의 셸, 그리고 그 출력을 해석할
+/// `vt.Screen`. 둘의 크기가 `rect`에서 함께 나오므로 셸이 아는 폭과 우리가
+/// 그리는 폭이 어긋날 수 없다.
+///
+/// 부팅의 첫 패널이 이것을 부르고, WP-M1의 분할이 같은 함수를 부른다.
+fn spawnPane(
+    io: std.Io,
+    alloc: std.mem.Allocator,
+    path: [*:0]const u8,
+    argv: [*:null]const ?[*:0]const u8,
+    rect: layout.Rect,
+) !Pane {
+    const session = try pty.spawn(path, argv, rect.cols, rect.rows);
+    const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
+    return .{ .screen = screen, .session = session, .rect = rect };
+}
+
+/// 모든 워크스페이스의 패널 수. 0이 되면 terminal이 끝난다(결정 5).
+fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
+    var n: usize = 0;
+    for (workspaces) |slot| {
+        if (slot) |w| n += w.tree.count();
+    }
+    return n;
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -1041,6 +1142,9 @@ pub fn main(init: std.process.Init) !void {
     // 화면 크기를 여기서 한 번만 계산해 렌더러·Terminal·PTY winsize
     // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
     // 그리는 폭이 달라져 줄바꿈이 엉킨다.
+    //
+    // WP-M0부터 이것은 격자 전체이고, Terminal·PTY가 받는 것은 그 안의
+    // 패널 사각형이다(`spawnPane`). 패널 하나면 둘이 같다.
     const cols: u16 = @intCast((fb.width - 2 * GRID_X) / CELL_W);
     const rows: u16 = @intCast((fb.height - 2 * GRID_Y) / ROW_HEIGHT);
     std.debug.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ cols, rows, fb.width, fb.height });
@@ -1186,12 +1290,31 @@ pub fn main(init: std.process.Init) !void {
     // 갈려 있어서 "인자가 없다"를 포인터로 못 보낸다.
     var argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
     if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) argv[1] = null;
-    const session = try pty.spawn(shell_path, &argv, cols, rows);
+
+    // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
+    // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
+    // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
+    //
+    // `current`는 M2의 Cmd+1~9가 바꾼다. 그때까지는 언제나 0이다.
+    const whole: layout.Rect = .{ .col = 0, .row = 0, .cols = cols, .rows = rows };
+    var workspaces: [MAX_WORKSPACES]?Workspace = @splat(null);
+    const current: usize = 0;
+    workspaces[current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+    var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
+    workspaces[current].?.tree.rects(whole, &boot_rects);
+    const first = try spawnPane(init.io, allocator, shell_path, &argv, boot_rects[0]);
+    workspaces[current].?.panes[0] = first;
+    defer for (workspaces) |slot| {
+        const w = slot orelse continue;
+        for (w.panes) |maybe| {
+            if (maybe) |pane| pane.screen.deinit();
+        }
+    };
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
     // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
     // 개수를 세는 마커라 그대로 둔다.
     std.debug.print("terminal: spawned child pid {d} ({s})\n", .{
-        session.child_pid, shell_path,
+        first.session.child_pid, shell_path,
     });
     // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
     // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
@@ -1214,9 +1337,6 @@ pub fn main(init: std.process.Init) !void {
         input.togglesArg(toggles, &toggle_buf),
     });
 
-    const screen = try vt.Screen.init(init.io, allocator, cols, rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
-    defer screen.deinit();
-
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
 
@@ -1226,13 +1346,6 @@ pub fn main(init: std.process.Init) !void {
     // kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
     // `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
     var img_buf: [16]vt.ImagePlacement = undefined;
-    // 이미지를 그려도 되는 사각형은 격자다. 여백과 상태 줄에는 안 그린다.
-    const grid_clip: image.Clip = .{
-        .x0 = GRID_X,
-        .y0 = GRID_Y,
-        .x1 = @intCast(GRID_X + @as(u32, cols) * CELL_W),
-        .y1 = @intCast(GRID_Y + @as(u32, rows) * ROW_HEIGHT),
-    };
     // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     var last_glyph_count: usize = 0;
@@ -1256,15 +1369,41 @@ pub fn main(init: std.process.Init) !void {
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
 
-    var fds = [_]c.struct_pollfd{
-        .{ .fd = keyboard_fd, .events = c.POLLIN, .revents = 0 },
-        .{ .fd = session.master_fd, .events = c.POLLIN, .revents = 0 },
-    };
+    // poll이 보는 fd. 키보드 하나와 모든 워크스페이스의 모든 패널이다
+    // (WP design 위험 1). 포커스 없는 워크스페이스의 PTY도 읽어야 한다 —
+    // 안 읽으면 그 셸이 출력 버퍼에 막혀 멈춘다.
+    //
+    // 크기는 상한(1 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수가
+    // 분할 · 닫기로 바뀌므로 매 바퀴 다시 짓는다 — 73칸을 채우는 비용은 없고,
+    // "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
+    var fds: [1 + MAX_WORKSPACES * layout.MAX_LEAVES]c.struct_pollfd = undefined;
+    // `fds[i + 1]`이 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
+    // 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
+    var fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]*Pane = undefined;
 
-    while (true) {
+    main_loop: while (true) {
+        fds[0] = .{ .fd = keyboard_fd, .events = c.POLLIN, .revents = 0 };
+        var nfds: usize = 1;
+        for (&workspaces) |*slot| {
+            const w = if (slot.*) |*w| w else continue;
+            for (&w.panes) |*pane_slot| {
+                const pane = if (pane_slot.*) |*pane| pane else continue;
+                fds[nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
+                fd_panes[nfds - 1] = pane;
+                nfds += 1;
+            }
+        }
+
         // -1 = 무한 대기. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
-        const ready = c.poll(&fds, fds.len, -1);
+        const ready = c.poll(&fds, @intCast(nfds), -1);
         if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
+
+        // 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
+        // 포커스 패널이다(WP design 결정 1). 그래서 그 코드는 WP 전의
+        // `screen` · `session`이 `focus.screen` · `focus.session`으로 이름만
+        // 바뀌었다.
+        const ws = &workspaces[current].?;
+        const focus = &ws.panes[ws.focus].?;
 
         if (fds[0].revents & c.POLLIN != 0) {
             // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
@@ -1273,7 +1412,7 @@ pub fn main(init: std.process.Init) !void {
             // 비트 읽기 한 번이라 비용이 없다 — design doc 결정 6이 "값으로
             // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
             const ctx = input.Context{
-                .cursor_keys = screen.term.modes.get(.cursor_keys),
+                .cursor_keys = focus.screen.term.modes.get(.cursor_keys),
                 // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
                 // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
                 .swap_alt_meta = swap_alt_meta,
@@ -1287,20 +1426,21 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("terminal: key> {d} byte(s) decckm={}\n", .{
                     keys.bytes.len, ctx.cursor_keys,
                 });
-                pty.write(session.master_fd, keys.bytes);
+                pty.write(focus.session.master_fd, keys.bytes);
             }
             // 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
             // 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
             // delta로 바꾸는 것도 여기서 한다 — input.zig는 격자 크기를 모른다.
+            // 한 화면은 포커스 패널의 줄 수다(WP design 결정 1).
             //
             // 순서대로 도는 이유는 자동 반복 때문이다. PageUp을 누르고 있으면
             // 한 번의 read에 여러 개가 실려 오고, 그만큼 올라가야 한다.
             for (keys.scrolls) |s| {
                 switch (s) {
-                    .top => screen.scrollToTop(),
-                    .bottom => screen.scrollToBottom(),
-                    .page_up => screen.scrollByRows(-@as(isize, rows)),
-                    .page_down => screen.scrollByRows(@as(isize, rows)),
+                    .top => focus.screen.scrollToTop(),
+                    .bottom => focus.screen.scrollToBottom(),
+                    .page_up => focus.screen.scrollByRows(-@as(isize, focus.rect.rows)),
+                    .page_down => focus.screen.scrollByRows(@as(isize, focus.rect.rows)),
                 }
                 needs_redraw = true;
             }
@@ -1317,24 +1457,24 @@ pub fn main(init: std.process.Init) !void {
                 // 그리고 `switch`보다 앞이라, 모든 명령이 예외 없이 지우고
                 // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
                 // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
-                screen.findClearStatus();
+                focus.screen.findClearStatus();
                 switch (cmd) {
-                    .enter => screen.copyEnter(),
-                    .exit => screen.copyExit(),
-                    .left => try screen.copyMove(-1, 0),
-                    .down => try screen.copyMove(0, 1),
-                    .up => try screen.copyMove(0, -1),
-                    .right => try screen.copyMove(1, 0),
+                    .enter => focus.screen.copyEnter(),
+                    .exit => focus.screen.copyExit(),
+                    .left => try focus.screen.copyMove(-1, 0),
+                    .down => try focus.screen.copyMove(0, 1),
+                    .up => try focus.screen.copyMove(0, -1),
+                    .right => try focus.screen.copyMove(1, 0),
                     // 단어 이동(CN-M0). copyMove와 형제이고 선택 갱신도 같은
                     // copyApply를 통과한다 — 그래서 여기 배선은 한 줄이다.
-                    .word_next => try screen.copyMoveWord(.next),
-                    .word_prev => try screen.copyMoveWord(.prev),
-                    .select_char => try screen.copySelect(.char),
-                    .select_line => try screen.copySelect(.line),
+                    .word_next => try focus.screen.copyMoveWord(.next),
+                    .word_prev => try focus.screen.copyMoveWord(.prev),
+                    .select_char => try focus.screen.copySelect(.char),
+                    .select_line => try focus.screen.copySelect(.line),
                     // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
                     // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
                     // 때문이다.
-                    .yank => dumpClip(try screen.copyYank()),
+                    .yank => dumpClip(try focus.screen.copyYank()),
                     // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
                     // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
                     // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
@@ -1351,27 +1491,27 @@ pub fn main(init: std.process.Init) !void {
                     //
                     // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
                     // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
-                    .paste => if (screen.findNeedle() != null)
-                        dumpFindPaste(screen)
+                    .paste => if (focus.screen.findNeedle() != null)
+                        dumpFindPaste(focus.screen)
                     else
-                        dumpPaste(screen, session.master_fd),
+                        dumpPaste(focus.screen, focus.session.master_fd),
                     // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
                     // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
                     .find_open => {
-                        screen.findOpen();
-                        dumpFind(screen, "open");
+                        focus.screen.findOpen();
+                        dumpFind(focus.screen, "open");
                     },
                     .find_char => |ch| {
-                        screen.findChar(ch);
-                        dumpFind(screen, "type");
+                        focus.screen.findChar(ch);
+                        dumpFind(focus.screen, "type");
                     },
                     .find_erase => {
-                        screen.findErase();
-                        dumpFind(screen, "erase");
+                        focus.screen.findErase();
+                        dumpFind(focus.screen, "erase");
                     },
                     .find_cancel => {
-                        screen.findCancel();
-                        dumpFind(screen, "cancel");
+                        focus.screen.findCancel();
+                        dumpFind(focus.screen, "cancel");
                     },
                     // 확정된 한글이 needle로 들어간다(SH-M1). `findChar`가
                     // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다 —
@@ -1381,8 +1521,8 @@ pub fn main(init: std.process.Init) !void {
                     // `readKeys`다(design 결정 4·5). 그 함수가 모드를
                     // `handleKey` 앞에서 읽어 목적지를 가른다.
                     .find_commit => |cmt| {
-                        screen.findBytes(cmt.buf[0..cmt.len]);
-                        dumpFind(screen, "commit");
+                        focus.screen.findBytes(cmt.buf[0..cmt.len]);
+                        dumpFind(focus.screen, "commit");
                     },
                     // 이 milestone에서 유일하게 시간이 걸리는 명령이다.
                     // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
@@ -1390,7 +1530,7 @@ pub fn main(init: std.process.Init) !void {
                     // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
                     .find_submit => {
                         const t0 = std.Io.Clock.now(.awake, init.io);
-                        const r = try screen.findSubmit();
+                        const r = try focus.screen.findSubmit();
                         std.debug.print(
                             "terminal: find> submit matches={d} moved={} us={d}\n",
                             .{
@@ -1405,14 +1545,14 @@ pub fn main(init: std.process.Init) !void {
                     // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
                     .find_next => std.debug.print(
                         "terminal: find> next moved={}\n",
-                        .{try screen.findNext()},
+                        .{try focus.screen.findNext()},
                     ),
                     .find_prev => std.debug.print(
                         "terminal: find> prev moved={}\n",
-                        .{try screen.findPrev()},
+                        .{try focus.screen.findPrev()},
                     ),
                 }
-                dumpCopy(screen, @tagName(cmd));
+                dumpCopy(focus.screen, @tagName(cmd));
                 needs_redraw = true;
             }
             // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). 값을 만드는
@@ -1430,7 +1570,7 @@ pub fn main(init: std.process.Init) !void {
             // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
             // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
             if (keys.redraw) {
-                screen.setPreedit(key_state.preedit());
+                focus.screen.setPreedit(key_state.preedit());
                 dumpHangul(&key_state);
                 needs_redraw = true;
             }
@@ -1441,13 +1581,22 @@ pub fn main(init: std.process.Init) !void {
         // 남으므로, POLLIN만 보면 read를 영영 호출하지 못하고 poll이 즉시
         // 반환하는 바쁜 루프에 빠진다. POLLHUP에서도 read를 시도하면 남은
         // 데이터를 먼저 비우고, 비고 나면 read가 EIO를 내 EOF 경로로 간다.
-        if (fds[1].revents & (c.POLLIN | c.POLLHUP | c.POLLERR) != 0) {
-            const out = pty.readSome(session.master_fd, &pty_buf);
+        //
+        // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
+        // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
+        for (fds[1..nfds], fd_panes[0 .. nfds - 1]) |pfd, pane| {
+            if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
+            const out = pty.readSome(pane.session.master_fd, &pty_buf);
             if (out.len == 0) {
                 std.debug.print("terminal: child exited (pty EOF)\n", .{});
-                break;
+                // 마지막 패널이면 WP 전처럼 terminal이 끝나고 init이 되살린다
+                // (WP design 결정 5).
+                if (paneCount(&workspaces) == 1) break :main_loop;
+                // 패널이 둘 이상인 부팅은 M0에 없다. 그 패널을 닫는 것
+                // (waitpid · `tree.remove`)이 M1에서 이 자리에 선다.
+                unreachable;
             }
-            screen.feed(out);
+            pane.screen.feed(out);
             // 자식이 질의를 보냈으면(`ESC[6n` 커서 위치 등) 답이 여기 쌓여
             // 있다. `feed` 바로 뒤에서 돌려주는 것이 TQ design 결정 3이다 —
             // pty에 쓰는 자리가 여기 하나뿐이라 순서 문제가 안 생기고,
@@ -1456,8 +1605,8 @@ pub fn main(init: std.process.Init) !void {
             //
             // 답의 내용은 라이브러리가 만든다. 우리가 여기서 정하는 것은
             // "언제 어디로 보내는가"뿐이다.
-            const replies = screen.takeReplies();
-            if (replies.len > 0) pty.write(session.master_fd, replies);
+            const replies = pane.screen.takeReplies();
+            if (replies.len > 0) pty.write(pane.session.master_fd, replies);
             // design 결정 13. 라이브러리는 이것을 해 주지 않는다 — 올라간
             // 상태에서 출력을 먹여도 뷰포트가 그대로라는 것을 2026-08-23에
             // 실측했고, vt_test가 그 사실을 못 박고 있다. 대부분의 터미널이
@@ -1481,11 +1630,11 @@ pub fn main(init: std.process.Init) !void {
             // 셸에 아무것도 보낼 수 없어 출력을 만들 방법이 없었는데,
             // Cmd+V가 그 방법이 됐다 — 붙여넣은 글자를 셸이 되울리는 것이
             // 곧 "모드 중에 도착한 PTY 출력"이다.
-            if (!screen.copyActive()) screen.scrollToBottom();
+            if (!pane.screen.copyActive()) pane.screen.scrollToBottom();
             // 위 feed가 가지치기를 만났으면 vt.zig가 모드를 이미 닫았다
             // (design 위험 1). 로그를 안 남기면 사람이 "왜 갑자기 모드가
             // 풀렸지"를 영영 모른다.
-            if (screen.copyTakePruned()) dumpCopy(screen, "pruned");
+            if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
             needs_redraw = true;
         }
 
@@ -1498,7 +1647,7 @@ pub fn main(init: std.process.Init) !void {
         if (!needs_redraw) continue;
         needs_redraw = false;
 
-        const cells = try screen.cells(cell_buf);
+        const cells = try focus.screen.cells(cell_buf);
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
@@ -1509,7 +1658,7 @@ pub fn main(init: std.process.Init) !void {
         // 최대 스무 자리라 숫자 둘이 마흔이고, ` [`·`/`·`]`가 넷이다.
         // `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
         var prompt_buf: [173]u8 = undefined;
-        const prompt: ?Prompt = if (promptText(screen, &prompt_buf)) |t| .{
+        const prompt: ?Prompt = if (promptText(focus.screen, &prompt_buf)) |t| .{
             .text = t,
             // 프롬프트가 열려 있을 때만 조합을 붙인다(SH-M2). 닫힌 뒤의
             // 오버레이는 지난 검색의 결과 표시이고, 그 위에 조합을 그리면
@@ -1517,13 +1666,12 @@ pub fn main(init: std.process.Init) !void {
             //
             // `findNeedle()`이 열림의 진실이다 — `promptText`가 갈래를 가를
             // 때 보는 값과 같은 것이라 둘이 어긋날 수 없다.
-            .edit = if (screen.findNeedle() != null) key_state.preedit() else null,
-            .rows = rows,
-            .cols = cols,
+            .edit = if (focus.screen.findNeedle() != null) key_state.preedit() else null,
+            .rect = focus.rect,
             // `cells()` 뒤에 읽어야 한다 — `state.colors`는 update()가
             // 채운다(vt.zig의 defaultFg 주석).
-            .fg = screen.defaultFg(),
-            .bg = screen.defaultBg(),
+            .fg = focus.screen.defaultFg(),
+            .bg = focus.screen.defaultBg(),
         } else null;
 
         // 상태 줄을 여기서 만든다. `prompt`와 같은 자리이고 같은 이유다 —
@@ -1534,7 +1682,7 @@ pub fn main(init: std.process.Init) !void {
         // 않으므로(CI design 결정 4) 여기서 bool 하나로 넘긴다. 갱신 경로는
         // 새로 없다 — copy 명령은 전부 위의 copy 루프에서 `needs_redraw`를
         // 켜고, 이 자리는 그 프레임 안이다.
-        const copy_active = screen.copyActive();
+        const copy_active = focus.screen.copyActive();
         const status_line: Status = .{
             .text = status.statusText(&key_state, copy_active, &status_buf),
             .rows = rows,
@@ -1547,31 +1695,33 @@ pub fn main(init: std.process.Init) !void {
         const frame_start = std.Io.Clock.now(.awake, init.io);
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
-        const imgs = screen.images(&img_buf);
-        const prompt_ink = try render(fb, &cache, cells, imgs, screen.defaultBg(), grid_clip, prompt, status_line);
+        const imgs = focus.screen.images(&img_buf);
+        const prompt_ink = try render(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect, prompt, status_line);
         const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
             first_frame_timed = true;
             std.debug.print("terminal: render> first frame {d}us\n", .{frame_us});
         }
-        dumpImages(fb, imgs, screen.images_dropped, frame_us, grid_clip);
+        dumpImages(fb, imgs, focus.screen.images_dropped, frame_us, focus.rect);
 
         dumpScreen(cells);
-        dumpHighlight(screen);
+        dumpHighlight(focus.screen);
         dumpOverlay(prompt);
         dumpPromptInk(fb, prompt_ink, prompt);
         dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
-        // 기본 색을 여기 상수로 다시 적지 않고 screen에서 얻는 이유는
+        // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
         dumpStyles(
             fb,
             cells,
-            screen.defaultFg(),
-            screen.defaultBg(),
-            if (prompt != null) rows - 1 else null,
-        );        dumpInk(fb, &cache, cells);
-        dumpScroll(screen);
+            focus.screen.defaultFg(),
+            focus.screen.defaultBg(),
+            if (prompt != null) focus.rect.rows - 1 else null,
+            focus.rect,
+        );
+        dumpInk(fb, &cache, cells, focus.rect);
+        dumpScroll(focus.screen);
         if (cache.count() != last_glyph_count) {
             last_glyph_count = cache.count();
             std.debug.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
@@ -1580,7 +1730,8 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    // 셸이 끝나면 터미널도 끝난다. PID 1(tars-init)이 우리를 다시 띄우고,
-    // 새 프로세스가 DRM을 다시 열어 새 프롬프트를 그린다. TF 시절의 무한
-    // sleep은 되살려 줄 감독자가 없어서 필요했던 것이라 이제 지운다.
+    // 마지막 패널의 셸이 끝나면 터미널도 끝난다(WP design 결정 5). PID
+    // 1(tars-init)이 우리를 다시 띄우고, 새 프로세스가 DRM을 다시 열어 새
+    // 프롬프트를 그린다. TF 시절의 무한 sleep은 되살려 줄 감독자가 없어서
+    // 필요했던 것이라 이제 지운다.
 }

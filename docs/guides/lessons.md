@@ -1011,13 +1011,17 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
+- `layout.zig` — 패널 트리와 사각형 산수(WP-M0). 순수 모듈이고 `layout_test`가
+  호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
+  `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가
+  안 바뀐다. `split`은 크기를 보려고 격자 전체(`whole`)를 받는다.
 - `drm.zig` · `pty.zig` — 프레임버퍼와 PTY. `drm.zig`·`main.zig`·`pty.zig`
   세 자리에서 fortify를 끈다(`_FORTIFY_SOURCE=0`, `// GL-M3` 표식). 이유는
   `drm.zig`에만 길게 적혀 있고 나머지 둘은 그 자리를 가리킨다. `setPixel`·
   `getPixel`에 범위 검사가 없고 고치지 않고 호출부에서 막는다.
 - `font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. 코드는 폰트에 무관하다.
 - 검사 파일들 — `input_test.zig`(모드 밖 대조군 검사들이 여기 있다) ·
-  `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` ·
+  `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` · `layout_test.zig` ·
   `font_test.zig` · `pty_test.zig`. `vt_test.zig`는 `main()` 하나가 파일
   전체라 모든 지역 변수 이름이 서로 부딪치고 Zig가 shadowing을 컴파일 에러로
   막는다 — 새 검사는 이름을 `rg`로 먼저 확인하고, 자기 화면을 새로 만든다

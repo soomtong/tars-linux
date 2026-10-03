@@ -1,6 +1,31 @@
-# HANDOFF: Zig Upgrade(ZU)가 M1까지 왔다 — M2는 ghostty의 Zig 0.17 전환을 기다린다
+# HANDOFF: Workspace Panes(WP)가 M0까지 왔다 — 다음은 M1(분할 · 닫기 · 순환)
 
 ## 지금 어디인가
+
+2026-10-03 사용자의 요청으로 열었다 — "Cmd+1~9 workspace 전환, Cmd+D · Cmd+Shift+D pane
+split", 이어서 "Cmd+W로 닫기", "포커스 이동", "Cmd+T 새 탭". 모델은 iTerm2 그대로다:
+워크스페이스가 탭(아홉까지), 각 워크스페이스는 패널을 이진 분할로 여덟까지, 패널 하나가
+셸 하나(PTY · `vt.Screen` · 격자 안 사각형). design은
+`docs/specs/2026-10-03-tars-workspace-panes-design.md`(결정 9 · 위험 6 · milestone 4),
+키 표와 체인 검사 아홉이 그 안에 있다.
+
+이 서브프로젝트는 설계를 Fable이, 구현을 Opus 서브에이전트가 한다(사용자의 지시). 서브에이전트는
+commit하지 않고 diff · 로그만 보고하며, Fable이 파일을 직접 대조한 뒤 사용자 승인으로 commit한다.
+
+| milestone | 상태 | 무엇 |
+|---|---|---|
+| WP-M0 | 끝났다(2026-10-03, 승인 대기) | `layout.zig`(순수 트리, `layout_test` 검사 여덟) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 — 체인 넷(terminal · render · copy · hangul)과 기준값(`ink fg=383` · `caps ink off=87` · `copy ink=80`)이 그대로 |
+| WP-M1 | 다음 | `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[`. `Screen.resize` · `pty.resize`(TIOCSWINSZ) · 구분선 `SEPARATOR` · `focused` · `pane>` 줄. 새 체인 `pane/check.sh`(열여덟번째) |
+| WP-M2 | | `Cmd+T` · `Cmd+1~9`(있는 것만) · 상태 줄 `W2` 칸(둘 이상일 때만) |
+| WP-M3 | 사용자가 고른다 | `Cmd+Option+화살표` 방향 포커스 |
+
+M1을 열 때 plan을 새로 쓴다. M0이 남긴 자리(`spawnPane` 시그니처 · EOF 경로의 `unreachable` ·
+`render`가 아직 포커스 패널 하나만 받는 것 · `focus`를 poll 직후 한 번만 구하는 것)는 M0 plan의
+"M0이 실측한 것" 끝에 있다. ghostty `Terminal.resize(alloc, .{ .cols, .rows, .cell_size_px })`는
+`terminal/ghostty-src/src/terminal/Terminal.zig:3775`에 있고, `c_pty` 번역에 `sys/ioctl.h`가
+이미 들어 있다.
+
+### 그 앞 — Zig Upgrade(ZU)가 M1까지 왔다, M2는 ghostty의 Zig 0.17 전환을 기다린다
 
 Zig 0.17.0이 나왔다(2026-10-03). 사용자의 다른 저장소(`_a-book/monorepo`, `3aad8cc`)는 같은 날
 올렸지만 이 저장소는 ghostty가 막는다. `terminal`이 ghostty 소스를 패키지로 물고, ghostty의
@@ -59,7 +84,9 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`
 끝에 있다 — plugin이 막았을 누락은 못 봤다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다 (ZU-M2는 ghostty 대기)
+## 바로 다음에 할 것 — WP-M1 plan을 쓰고 연다 (ZU-M2는 ghostty 대기)
+
+WP-M1의 범위는 맨 위 표에 있다. 아래는 ZU-M2와 그 밖의 후보에 대한 옛 메모다.
 
 ZU-M2를 여는 신호는 ghostty main의 `build.zig.zon`이 `minimum_zig_version = "0.17.0"`이 되는 것이다
 (`curl -sSL https://raw.githubusercontent.com/ghostty-org/ghostty/main/build.zig.zon | rg minimum_zig`).
