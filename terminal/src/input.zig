@@ -440,7 +440,7 @@ pub const Copy = union(enum) {
     /// `input_test`의 `expectCopy`가 union을 그것으로 비교하는데,
     /// `undefined`로 두면 `len` 뒤의 쓰레기가 비교에 들어간다.
     pub const Commit = struct {
-        buf: [8]u8 = [_]u8{0} ** 8,
+        buf: [8]u8 = @splat(0),
         len: u8 = 0,
 
         pub fn init(bytes: []const u8) Commit {

@@ -57,7 +57,7 @@ const DrmModeModeinfo = extern struct {
     vrefresh: u32 = 0,
     flags: u32 = 0,
     mode_type: u32 = 0,
-    name: [32]u8 = [_]u8{0} ** 32,
+    name: [32]u8 = @splat(0),
 };
 
 const DrmModeGetConnector = extern struct {

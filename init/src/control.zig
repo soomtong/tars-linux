@@ -290,7 +290,7 @@ pub fn parseRow(line: []const u8, label: []const u8) ?Seen {
 const ALEN: linux.socklen_t = @sizeOf(linux.sockaddr.un);
 
 fn addrOf(path: []const u8) ?linux.sockaddr.un {
-    var a: linux.sockaddr.un = .{ .path = [_]u8{0} ** 108 };
+    var a: linux.sockaddr.un = .{ .path = @splat(0) };
     if (path.len >= a.path.len) return null;
     @memcpy(a.path[0..path.len], path);
     return a;

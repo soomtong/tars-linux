@@ -148,7 +148,7 @@ pub const Found = struct {
     /// 가리킨다. 문자열 리터럴이라 수명이 무한하고, 그래서 execve의 argv에
     /// 넣는 것과 같은 성질이다.
     path: [:0]const u8 = "",
-    label_buf: [LABEL_LEN]u8 = [_]u8{0} ** LABEL_LEN,
+    label_buf: [LABEL_LEN]u8 = @splat(0),
     label_len: usize = 0,
 
     pub fn label(self: *const Found) []const u8 {

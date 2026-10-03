@@ -69,8 +69,8 @@ pub fn main() !void {
     try expectVerdict(".hidden", .hidden);
     try expectVerdict(".", .hidden);
     try expectVerdict("..", .hidden);
-    try expectVerdict("a" ** services.NAME_MAX, .ok);
-    try expectVerdict("a" ** (services.NAME_MAX + 1), .too_long);
+    try expectVerdict(&@as([services.NAME_MAX]u8, @splat('a')), .ok);
+    try expectVerdict(&@as([services.NAME_MAX + 1]u8, @splat('a')), .too_long);
     // DS-M1 결정 M1-A. init이 스스로 띄우는 둘과 같은 이름은 services.d에서 안 받는다.
     // 한 글자라도 다르면 받는다 — 막는 것은 tars-service가 헷갈리는 자리뿐이다.
     try expectVerdict(services.DHCPCD, .reserved);
@@ -118,7 +118,7 @@ pub fn main() !void {
         const name = [_]u8{ 'n', '0' + i };
         try touch(&name, 0o755);
     }
-    try touch("b" ** (services.NAME_MAX + 1), 0o755);
+    try touch(&@as([services.NAME_MAX + 1]u8, @splat('b')), 0o755);
 
     // 실행 파일은 a-first · l-link · n0..n6 · z-last 열 개다. 앞의 여덟이 뽑힌다.
     services.discover(DIR, &list);

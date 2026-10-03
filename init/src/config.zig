@@ -202,7 +202,7 @@ pub const Timezone = struct {
         if (value.len == 0 or value.len > TZ_NAME_MAX) return null;
         if (value[0] == '/') return null;
         if (std.mem.indexOf(u8, value, "..") != null) return null;
-        var tz = Timezone{ .name = [_]u8{0} ** TZ_NAME_MAX, .len = value.len };
+        var tz = Timezone{ .name = @splat(0), .len = value.len };
         @memcpy(tz.name[0..value.len], value);
         return tz;
     }

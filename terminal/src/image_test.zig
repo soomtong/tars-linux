@@ -10,7 +10,7 @@ const BG: u32 = 0x00102030;
 
 /// 64×64 화면 하나. 프레임버퍼 대신 들어간다.
 const Fake = struct {
-    px: [64 * 64]u32 = [_]u32{BG} ** (64 * 64),
+    px: [64 * 64]u32 = @splat(BG),
 
     pub fn getPixel(self: *const Fake, x: u32, y: u32) u32 {
         return self.px[y * 64 + x];

@@ -66,7 +66,7 @@ pub fn loopbackUp() void {
     const fd: i32 = @intCast(srv);
     defer _ = linux.close(fd);
 
-    var req = ifreq{ .name = [_]u8{0} ** 16, .flags = 0, ._pad = [_]u8{0} ** 14 };
+    var req = ifreq{ .name = @splat(0), .flags = 0, ._pad = @splat(0) };
     @memcpy(req.name[0..2], "lo");
 
     if (failed(linux.ioctl(fd, SIOCGIFFLAGS, @intFromPtr(&req)))) |e| {

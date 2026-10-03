@@ -211,8 +211,8 @@ fn expectQuietSeed(sh: config.Shell) !void {
     const opts = sh.histOptionLines();
     // 훅과 옵션 줄이 씨앗에서 보였는가. 힙이 없으므로 상한이 둘 다
     // 필요하고, 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
-    var seen = [_]bool{false} ** MAX_HOOK_LINES;
-    var seen_opt = [_]bool{false} ** MAX_HIST_OPTION_LINES;
+    var seen: [MAX_HOOK_LINES]bool = @splat(false);
+    var seen_opt: [MAX_HIST_OPTION_LINES]bool = @splat(false);
     if (hooks.len > seen.len) {
         std.debug.print("FAIL: the {s} shell has {d} hook lines; raise MAX_HOOK_LINES\n", .{
             @tagName(sh), hooks.len,
@@ -934,9 +934,9 @@ pub fn main() !void {
     try expect("timezone=../../etc/passwd\n", .{}); // 위로 올라감
     try expect("timezone=Asia/../Seoul\n", .{}); // 가운데서 올라감
     // 길이 경계 양쪽. 64는 담기고 65는 안 담긴다.
-    try expect("timezone=" ++ ("a" ** 65) ++ "\n", .{});
-    try expect("timezone=" ++ ("a" ** 64) ++ "\n", .{
-        .timezone = config.Timezone.parse("a" ** 64) orelse return error.NameDidNotParse,
+    try expect("timezone=" ++ &@as([65]u8, @splat('a')) ++ "\n", .{});
+    try expect("timezone=" ++ &@as([64]u8, @splat('a')) ++ "\n", .{
+        .timezone = config.Timezone.parse(&@as([64]u8, @splat('a'))) orelse return error.NameDidNotParse,
     });
     // 다른 키와 함께. 부팅 A의 디스크가 실제로 쓰는 세 줄이다.
     try expect("net=dhcp\nntp=10.0.2.2\ntimezone=Asia/Seoul\n", .{
@@ -967,7 +967,7 @@ pub fn main() !void {
         return error.WrongZoneinfoPath;
     }
     // 가장 긴 이름도 버퍼에 든다 — NUL 자리까지.
-    const longest = config.Timezone.parse("a" ** config.TZ_NAME_MAX) orelse return error.NameDidNotParse;
+    const longest = config.Timezone.parse(&@as([config.TZ_NAME_MAX]u8, @splat('a'))) orelse return error.NameDidNotParse;
     if (config.zoneinfoPath(&path_buf, longest).len != config.ZONEINFO_PATH_MAX - 1) {
         std.debug.print("FAIL: the longest name does not fill ZONEINFO_PATH_MAX - 1\n", .{});
         return error.WrongZoneinfoPath;

@@ -162,13 +162,13 @@ pub fn main() !void {
             return error.WrongTzEntry;
         }
         // 접두사 셋 + 이름 + NUL이 딱 맞는 길이는 들어간다.
-        const fits_name = "a" ** (environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len - 1);
+        const fits_name = &@as([environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len - 1]u8, @splat('a'));
         if (environ.tzEntry(&b, fits_name).len != environ.TZ_ENTRY_MAX - 1) {
             std.debug.print("FAIL: a name that just fits was not kept\n", .{});
             return error.WrongTzEntry;
         }
         // 한 글자 더 길면 NUL 자리가 없다. UTC로 떨어진다.
-        const over_name = "a" ** (environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len);
+        const over_name = &@as([environ.TZ_ENTRY_MAX - environ.TZ_PREFIX.len]u8, @splat('a'));
         if (!std.mem.eql(u8, environ.tzEntry(&b, over_name), "TZ=UTC")) {
             std.debug.print("FAIL: an oversized name did not fall back to TZ=UTC\n", .{});
             return error.WrongTzEntry;

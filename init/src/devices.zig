@@ -144,7 +144,7 @@ pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
 /// 반환하지 않으므로 프로세스 수명 내내 살아 있다 — 지금 argv에 들어가는
 /// 문자열 리터럴과 수명이 같아진다.
 pub const Path = struct {
-    buf: [MAX_PATH]u8 = [_]u8{0} ** MAX_PATH,
+    buf: [MAX_PATH]u8 = @splat(0),
     len: usize = 0,
 
     /// execve의 argv에 그대로 넣을 수 있는 포인터. 슬라이스에 :0을 붙이면

@@ -60,7 +60,7 @@ fn rawConnect() !i32 {
     const rc = linux.socket(linux.AF.UNIX, linux.SOCK.SEQPACKET | linux.SOCK.CLOEXEC, 0);
     if (failed(rc)) |e| return fail("socket errno {d}", .{@intFromEnum(e)});
     const fd: i32 = @intCast(rc);
-    var a: linux.sockaddr.un = .{ .path = [_]u8{0} ** 108 };
+    var a: linux.sockaddr.un = .{ .path = @splat(0) };
     @memcpy(a.path[0..PATH.len], PATH);
     if (failed(linux.connect(fd, &a, @sizeOf(linux.sockaddr.un)))) |e| return fail("connect errno {d}", .{@intFromEnum(e)});
     return fd;
@@ -73,14 +73,14 @@ pub fn main() !void {
     try expectParse("stop sshd", .stop, "sshd");
     try expectParse("start web-1.x", .start, "web-1.x");
     try expectParse("restart sshd", .restart, "sshd");
-    try expectParse("a" ** 0, null, null);
+    try expectParse("", null, null);
     try expectParse("stop", null, null);
     try expectParse("fly sshd", null, null);
     try expectParse("stop a b", null, null);
     try expectParse("stop  sshd", null, null);
     try expectParse("stop sshd\n", null, null);
-    try expectParse("stop " ++ "n" ** 32, .stop, "n" ** 32);
-    try expectParse("stop " ++ "n" ** 33, null, null);
+    try expectParse("stop " ++ &@as([32]u8, @splat('n')), .stop, &@as([32]u8, @splat('n')));
+    try expectParse("stop " ++ &@as([33]u8, @splat('n')), null, null);
     try expectParse("stop \x1b[2J", null, null);
     var req_buf: [control.REQUEST_MAX]u8 = undefined;
     const req = control.formatRequest(&req_buf, .restart, "sshd") orelse return fail("formatRequest failed", .{});
@@ -95,7 +95,7 @@ pub fn main() !void {
     try expectRow("service web", .stopping, 70, 3, "service web     stopping  pid 70   up 3s\n");
     try expectRow("service web", .restarting, 70, 3, "service web     restarting pid 70   up 3s\n");
     try expectRow("service web", .starting, -1, 0, "service web     starting\n");
-    const long = "service " ++ "l" ** 32;
+    const long = "service " ++ &@as([32]u8, @splat('l'));
     try expectRow(long, .running, 9, 1, long ++ " running   pid 9   up 1s\n");
     if (control.parseRow("service sshd2   running   pid 5   up 1s\n", "service sshd") != null)
         return fail("parseRow matched service sshd2 for service sshd", .{});
@@ -185,7 +185,7 @@ pub fn main() !void {
     const answer = control.awaitReply(cfd, &out_buf, 1000) orelse return fail("awaitReply got nothing", .{});
     if (!std.mem.eql(u8, answer, "stopping service sshd (pid 51)\n")) return fail("awaitReply got [{s}]", .{answer});
 
-    const big = [_]u8{'x'} ** 100;
+    const big: [100]u8 = @splat('x');
     const bfd = switch (control.dial(PATH, &big)) {
         .fd => |fd| fd,
         .failed => |e| return fail("dial big errno {d}", .{@intFromEnum(e)}),
