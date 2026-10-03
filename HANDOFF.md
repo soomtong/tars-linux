@@ -16,7 +16,7 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 | `b90a7d0` | design · M0 실측(코드 0줄) |
 | `4cda837` | M1 — `CellPx` · `Screen.images()` · `vt_test` 65~74 |
 | `a8a68d0` | M2 — `image.zig` · `render()`의 층 셋 · `render` 체인 검사 15~18 |
-| (이 커밋) | M3 — PNG(`stb_image`) · `vt_test` 75~77 · 검사 19 · 반사실 · 루트 게이트 · 문서 |
+| `cc934d9` | M3 — PNG(`stb_image`) · `vt_test` 75~77 · 검사 19 · 반사실 · 루트 게이트 · 문서 |
 
 새 체인은 없다. 루트 게이트 17체인 3/3(1시간 1분 25초, `FAIL` 0줄, 2026-10-03). 반사실(PNG
 디코더 설치 줄 빼기)은 `vt_test` 75가 부팅 전에 잡았다.
