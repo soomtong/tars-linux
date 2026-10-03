@@ -50,6 +50,19 @@ const STATUS_ON: u32 = 0x00C08000;
 /// 세면서 픽셀 수만 개를 돌려준다.
 const STATUS_OFF: u32 = 0x00303840;
 
+/// copy mode일 때 꼬리에 붙는 `COPY` 칸의 색(CI design 결정 3).
+///
+/// 앰버(`STATUS_ON`)를 재사용하지 않는다. `dumpStatus`가 띠 전체의
+/// `STATUS_ON` · `STATUS_OFF` 픽셀을 `CAPS` 칸의 값으로 읽는데(IS-M1 plan
+/// 확정 3), 여백 안에 앰버를 쓰는 둘째 칸이 생기면 그 전제가 조용히
+/// 거짓이 된다 — copy mode 안에서 `CAPS`가 꺼져 있어도 `on`이 0이 아니게
+/// 된다. 전용 색이면 `copy ink` 줄이 `COPY` 칸만 센다.
+///
+/// 여백과 `STATUS_FG`보다 밝다. 모드는 창틀이 아니라 지금 봐야 할 것이다.
+/// 셀의 기본 전경(`0xFFFFFF`)과는 다른 값이다 — 상태 줄은 격자 밖이라
+/// 섞일 일이 없지만, 같은 값을 피하는 쪽이 조사할 때 덜 헷갈린다.
+const STATUS_COPY: u32 = 0x00E0E8F0;
+
 /// 한 셀의 배경을 칠한다. 글리프보다 먼저 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
 /// 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
@@ -218,27 +231,37 @@ fn drawStatus(
     if (fb.height < grid_bottom + ROW_HEIGHT) return;
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
-    // 꼬리 넉 자가 `CAPS` 칸이다. 길이를 4로 여기 다시 적지 않고
-    // `status.CAPS`에서 얻는다 — 이름을 고치는 사람이 이 파일을 안 고쳐도
-    // 되게. `statusText`가 언제나 그것으로 끝내므로 이 자름은 항상 맞는다.
-    if (st.text.len < status.CAPS.len) return;
-    const caps_at = st.text.len - status.CAPS.len;
+    // 꼬리가 `CAPS` 칸이고, copy mode면 그 뒤에 `COPY_TAIL`이 더 붙어
+    // 있다(CI-M0). 길이를 4나 6으로 여기 다시 적지 않고 `status`의 이름에서
+    // 얻는다 — 이름을 고치는 사람이 이 파일을 안 고쳐도 되게.
+    // `statusText`가 언제나 그 순서로 끝내므로 이 자름은 항상 맞는다.
+    //
+    // `st.copy`를 안 보고 `CAPS.len`만 물러나면 copy mode 안에서 `CAPS`가
+    // 회색으로, `COPY`가 `CAPS`의 색으로 그려진다 — 색이 한 칸 밀리는데
+    // 글자는 맞아서 `text=`로는 안 보인다(CI design 위험 2). 그것을 잡는
+    // 것이 copy 체인의 `copy ink>0`이다.
+    const tail_len = if (st.copy) status.COPY_TAIL.len else 0;
+    if (st.text.len < status.CAPS.len + tail_len) return;
+    const copy_at = st.text.len - tail_len;
+    const caps_at = copy_at - status.CAPS.len;
 
-    // 두 번 나눠 그린다. 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
+    // 세 번 나눠 그린다. 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
     // 그리면 바이트 위치와 col을 동시에 굴려야 하고, 폭 2 글자에서 어긋나기
     // 쉽다 — 그 어긋남은 "글자가 겹쳐 보인다"로 나타나 원인에서 멀다.
     // 상태 줄의 경계는 화면 끝이다. 격자 바깥의 여백에 그리므로 격자
     // 오른쪽 끝에 맞출 이유가 없다 — 프롬프트와 갈리는 자리다.
-    const col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0, fb.width);
-    _ = try drawRun(
+    var col = try drawRun(fb, cache, st.text[0..caps_at], y, STATUS_FG, 0, fb.width);
+    col = try drawRun(
         fb,
         cache,
-        st.text[caps_at..],
+        st.text[caps_at..copy_at],
         y,
         if (st.caps) STATUS_ON else STATUS_OFF,
         col,
         fb.width,
     );
+    // copy mode가 아니면 빈 슬라이스라 아무것도 안 그리고 col만 돌려준다.
+    _ = try drawRun(fb, cache, st.text[copy_at..], y, STATUS_COPY, col, fb.width);
 }
 
 /// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, 다음 칸의 col을
@@ -411,6 +434,13 @@ const Status = struct {
     /// 색만 고른다(design 결정 3) — 그래서 `statusText`가 아니라 여기서
     /// 따로 나른다.
     caps: bool,
+    /// copy mode에 있는가(CI-M0).
+    ///
+    /// `text`에 이미 들어 있다 — `statusText`가 이 값으로 꼬리에 `COPY`를
+    /// 붙인다. 그래도 따로 나르는 이유는 `drawStatus`가 `CAPS` 칸의 시작을
+    /// 꼬리에서 세기 때문이다. 문자열을 되읽어 `COPY`로 끝나는지 보는
+    /// 쪽은 자판 이름에 그 넉 자가 들어오는 날 조용히 틀린다.
+    copy: bool,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
@@ -877,14 +907,16 @@ fn dumpStatus(
     if (fb.height < grid_bottom + ROW_HEIGHT) {
         std.debug.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
         std.debug.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
+        std.debug.print("terminal: status> copy ink=0 (no room)\n", .{});
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
-    // 한 번 훑으며 셋을 함께 센다. 띠를 세 번 훑을 이유가 없다.
+    // 한 번 훑으며 넷을 함께 센다. 띠를 네 번 훑을 이유가 없다.
     var fg: usize = 0;
     var on: usize = 0;
     var off: usize = 0;
+    var copy: usize = 0;
     var row: u32 = 0;
     while (row < ROW_HEIGHT) : (row += 1) {
         var col: u32 = 0;
@@ -893,12 +925,19 @@ fn dumpStatus(
             if (px == STATUS_FG) fg += 1;
             if (px == STATUS_ON) on += 1;
             if (px == STATUS_OFF) off += 1;
+            if (px == STATUS_COPY) copy += 1;
         }
     }
     std.debug.print("terminal: status> ink fg={d}\n", .{fg});
     // `on`과 `off`를 한 줄에 함께 찍는다. 하나만 보면 "아예 안 그렸다"와
     // "반대 색으로 그렸다"가 안 갈린다 — 게이트가 언제나 둘을 같이 읽는다.
     std.debug.print("terminal: status> caps ink on={d} off={d}\n", .{ on, off });
+    // `COPY` 칸의 픽셀(CI design 결정 6). `text=`만 보면 `drawStatus`가
+    // 꼬리를 안 그려도, 색을 한 칸 밀려 그려도 초록이다 — 이 수가 그 둘을
+    // 잡는다. copy 체인이 들어간 뒤 `>0`, Esc 뒤 `=0`을 짝으로 본다. 메모를
+    // 넓힐 일은 없다 — `CAPS`와 달리 `COPY`는 글자 자체가 생기고 사라져서
+    // `text`가 바뀐다.
+    std.debug.print("terminal: status> copy ink={d}\n", .{copy});
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -1491,12 +1530,18 @@ pub fn main(init: std.process.Init) !void {
         // 모양은 `main.zig`가 정하고 그리는 함수는 "한 줄을 준 색으로 쓴다"
         // 하나만 안다.
         var status_buf: [status.MAX_LEN]u8 = undefined;
+        // copy mode는 `vt.Screen`의 상태다. `status.zig`가 `vt.zig`를 import하지
+        // 않으므로(CI design 결정 4) 여기서 bool 하나로 넘긴다. 갱신 경로는
+        // 새로 없다 — copy 명령은 전부 위의 copy 루프에서 `needs_redraw`를
+        // 켜고, 이 자리는 그 프레임 안이다.
+        const copy_active = screen.copyActive();
         const status_line: Status = .{
-            .text = status.statusText(&key_state, &status_buf),
+            .text = status.statusText(&key_state, copy_active, &status_buf),
             .rows = rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
             .caps = key_state.caps_lock,
+            .copy = copy_active,
         };
 
         const frame_start = std.Io.Clock.now(.awake, init.io);

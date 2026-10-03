@@ -138,3 +138,4 @@ design doc은 전부 `docs/specs/`에 날짜순으로, 기억은
 | Wireless (WL-M0~M3) | 2026-09-28 | 노트북 내장 무선(Intel · Realtek · MediaTek · Qualcomm)이 붙는다. `/config/wpa_supplicant.conf`가 있으면 `init`이 `tars-wifi`(→ exec wpa_supplicant)를 감독하고, 늦게 생긴 인터페이스는 dhcpcd hook이 넘긴다. firmware 74개가 initrd 꼬리에 붙는다. 게이트는 mac80211_hwsim — 열일곱번째 체인 `wifi/check.sh` |
 | USB Wireless (UW-M0~M2) | 2026-09-28 | 같은 칩 계열의 USB 동글 열하나(rtw88 일곱 · rtw89 둘 · MT7921U · MT7925U)가 켜졌다. 우리 코드는 0줄, firmware는 77개. QEMU에 USB 무선이 없어서 `wifi/check.sh`가 심볼 · modinfo alias · 부팅 로그의 usbcore 등록 줄을 본다 |
 | Terminal Graphics (TG-M0~M3) | 2026-10-03 | 자식이 kitty graphics로 보낸 이미지를 우리 렌더러가 그린다 — 해석과 저장은 ghostty vt, 우리 몫은 셀 픽셀 크기 · 픽셀 사각형(`vt.zig`) · 그리기(`image.zig`) · PNG(`stb_image`). 새 체인 없이 `render` 체인이 사분면 픽셀로 본다 |
+| Copy Indicator (CI-M0) | 2026-10-03 | copy mode에 있는 동안 상태 줄 꼬리에 `COPY`가 뜬다. 앞 넷은 안 움직이고 색은 전용이다. 새 체인 없이 `copy` 체인이 글자와 픽셀을 짝으로 본다 |

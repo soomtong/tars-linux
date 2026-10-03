@@ -119,6 +119,23 @@ copy_value() {
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
+# 마지막 `status> text=` 줄의 값(CI-M0). `hangul/check.sh`의 같은 함수와
+# 같은 모양이다 — `tr -d '\r'`는 값이 줄 끝이라 안 지우면 똑같아 보이는
+# 값으로 실패하기 때문이고(HI-M1 실측 4), `s/.*text=//`는 값에 공백이 들어
+# 있어 `([^ ]+)`로는 첫 칸에서 멈추기 때문이다.
+status_text() {
+  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*text=//'
+}
+
+# 마지막 `status> copy ink=` 줄의 개수(CI-M0). `COPY` 칸의 색은 여백 안에서
+# 그 칸에만 쓰이므로 띠 전체를 센 값이 곧 그 칸의 값이다(IS-M1의 `caps
+# ink`와 같은 논리).
+status_copy_ink() {
+  grep -a 'terminal: status> copy ink=' "$LOG" | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*ink=([0-9]+).*/\1/'
+}
+
 # 마지막 프레임만 잘라낸다.
 #
 # 누적으로 세면 안 되는 이유가 있다. style> 줄은 매 프레임 다시 찍히므로,
@@ -237,6 +254,32 @@ if [ -z "$ENTER_LINE" ]; then
 fi
 echo "entered copy mode: ${ENTER_LINE}"
 
+# ── 검사 2a: 상태 줄 꼬리에 `COPY`가 떴다 ───────────────────────────────
+#
+# CI-M0. 모드가 키를 전부 삼키므로(검사 3) 사람에게 "셸이 멈췄다"로 보이지
+# 않게 아래 여백의 상태 줄이 `COPY`를 단다. 둘을 본다 — `text=`는 글자를
+# 만들었다, `copy ink`는 그 글자가 그 색으로 프레임버퍼에 닿았다. 앞의
+# 것만 보면 `drawStatus`가 꼬리를 안 그려도, `CAPS`의 색으로 한 칸 밀려
+# 그려도 초록이다(IS-M0의 검증 구조 · CI design 위험 2).
+#
+# 앞 넷은 안 본다. 이 체인은 디스크를 안 물어 자판이 기본값인데, 그 값은
+# hangul 체인이 본다 — 여기서 다시 적으면 자판 이름을 고칠 때 두 체인이
+# 함께 깨진다. 꼬리만 본다.
+echo "=== the status line should end with COPY inside copy mode ==="
+TEXT="$(status_text)"
+case "$TEXT" in
+  *"  COPY") ;;
+  *) report_failure "inside copy mode the status line reads \"${TEXT}\", expected it to end with \"  COPY\"" ;;
+esac
+COPY_INK="$(status_copy_ink)"
+if [ -z "$COPY_INK" ]; then
+  report_failure "no 'status> copy ink=' line at all, so dumpStatus never measured the COPY field"
+fi
+if [ "$COPY_INK" -le 0 ]; then
+  report_failure "the COPY field has no STATUS_COPY pixels (ink=${COPY_INK}), so it was never drawn in its colour"
+fi
+echo "the status line reads \"${TEXT}\" with ${COPY_INK} COPY pixel(s)"
+
 # ── 검사 3: 음성 검사 — 모드 안에서 친 키가 PTY로 안 샌다 ──────────────
 #
 # 이 체인에서 CM-M0이 더하는 가장 값진 검사다. q w e r t는 copy mode의
@@ -322,6 +365,23 @@ sleep 2
 if ! grep -aq 'terminal: copy> exit' "$LOG"; then
   report_failure "Esc did not leave copy mode (no 'copy> exit' line)"
 fi
+
+# ── 검사 6a: 나오면 `COPY`가 사라진다 ───────────────────────────────────
+#
+# 검사 2a의 짝이다. 켜지는 것만 보면 "영영 붙어 있는" 코드도 통과한다
+# (IS-M1 plan 확정 7). `copy ink=0`을 함께 보는 이유도 같다 — 글자는
+# 지웠는데 지난 프레임의 픽셀이 남는 길은 `fill`이 매 프레임 여백을 덮으므로
+# 없지만, 그것을 믿는 대신 센다.
+echo "=== the status line should drop COPY after Esc ==="
+TEXT="$(status_text)"
+case "$TEXT" in
+  *COPY*) report_failure "after Esc the status line still reads \"${TEXT}\"" ;;
+esac
+COPY_INK="$(status_copy_ink)"
+if [ "$COPY_INK" -ne 0 ]; then
+  report_failure "after Esc the band still has ${COPY_INK} STATUS_COPY pixel(s)"
+fi
+echo "the status line reads \"${TEXT}\" again, 0 COPY pixels"
 
 BEFORE_AGAIN="$(key_lines)"
 type_keys z

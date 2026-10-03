@@ -41,6 +41,23 @@ fn latinName(l: input.LatinLayout) []const u8 {
 /// 저쪽을 안 고쳐도 컴파일이 통과한다.
 pub const CAPS = "CAPS";
 
+/// copy mode에 있을 때만 꼬리에 붙는 다섯째 칸(CI design 결정 2).
+///
+/// `CAPS`와 달리 자리를 남기지 않는다. 대문자 잠금은 켜 둔 것을 잊어도
+/// 다른 흔적이 없어서 자리를 남겼지만, copy mode는 켜졌을 때만 뜻이 있는
+/// 모드다 — vim이 normal에서 모드 이름을 안 적는 것과 같다. 그리고 꺼진
+/// 화면이 한 픽셀도 안 바뀌어야 hangul 체인의 `text=` 비교가 그대로 선다.
+///
+/// `main.zig`가 이 이름을 쓴다. `drawStatus`가 꼬리에서 `CAPS`의 시작을
+/// 셀 때 이 길이만큼 더 물러나야 하기 때문이다 — 길이를 저쪽에 다시 적지
+/// 않는 이유는 `CAPS`와 같다.
+pub const COPY = "COPY";
+
+/// `COPY` 칸이 줄에 더하는 바이트. 칸을 가르는 `GAP`을 포함한다 —
+/// `drawStatus`가 물러나야 하는 길이가 이것이고, `MAX_LEN`이 더하는 것도
+/// 이것이다. 둘이 같은 이름을 보게 하면 하나만 고치는 사고가 없다.
+pub const COPY_TAIL = GAP ++ COPY;
+
 /// 상태 줄이 쓸 수 있는 가장 긴 바이트 수.
 ///
 /// 이름 표에서 직접 센다(design 결정 5). `promptText`가 173을 주석의
@@ -52,7 +69,8 @@ pub const CAPS = "CAPS";
 /// 한/영 칸은 `한`(3)과 `EN`(2) 중 긴 쪽인 3이다. `CAPS` 칸은 길이가 하나뿐
 /// 이라 그대로 더한다.
 ///
-/// IS-M1에서 30이 36이 됐고, 버퍼를 손으로 늘린 자리는 없다.
+/// IS-M1에서 30이 36이 됐고, CI-M0에서 36이 42가 됐다. 버퍼를 손으로
+/// 늘린 자리는 둘 다 없다.
 pub const MAX_LEN: usize = blk: {
     var hl: usize = 0;
     for (std.enums.values(hangul.Layout)) |t| {
@@ -62,7 +80,7 @@ pub const MAX_LEN: usize = blk: {
     for (std.enums.values(input.LatinLayout)) |t| {
         if (latinName(t).len > ll) ll = latinName(t).len;
     }
-    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len;
+    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + COPY_TAIL.len;
 };
 
 /// `buf`의 `at`부터 `s`를 쓰고 쓴 길이를 돌려준다.
@@ -78,8 +96,13 @@ fn put(buf: []u8, at: usize, s: []const u8) usize {
 /// 둘을 전부 호스트에서 돈다. `promptText`가 `main.zig`의 private이라
 /// `vt_test`가 못 부른 것(SP-M1 실측 5)이 이 파일이 따로 있는 이유다.
 ///
+/// `copy`는 copy mode에 있는가다(CI design 결정 4). `*vt.Screen`을 받지
+/// 않는 이유가 이 파일의 존재 이유와 같다 — 받으면 `status_test`가 ghostty
+/// 패키지를 링크해야 하고 순수 계산이 아니게 된다. 값을 읽는 것은
+/// `main.zig`의 `screen.copyActive()`다.
+///
 /// `buf`는 최소 `MAX_LEN`바이트여야 한다.
-pub fn statusText(state: *const input.State, buf: []u8) []const u8 {
+pub fn statusText(state: *const input.State, copy: bool, buf: []u8) []const u8 {
     var len: usize = 0;
     len += put(buf, len, if (state.hangul_on) "한" else "EN");
     len += put(buf, len, GAP);
@@ -91,5 +114,8 @@ pub fn statusText(state: *const input.State, buf: []u8) []const u8 {
     // 아니라 색으로 갈리며, 색을 고르는 것은 `main.zig`다. `status_test`의
     // 검사 12가 이 사실을 못 박는다.
     len += put(buf, len, CAPS);
+    // 꼬리다. `CAPS` 뒤여야 한다 — `drawStatus`가 `CAPS`의 시작을 꼬리에서
+    // `COPY_TAIL.len`만큼 물러나 세므로, 순서를 바꾸면 색이 한 칸 밀린다.
+    if (copy) len += put(buf, len, COPY_TAIL);
     return buf[0..len];
 }
