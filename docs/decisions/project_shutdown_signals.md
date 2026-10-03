@@ -51,7 +51,7 @@ TARS의 종료 경로는 `init/src/power.zig`의 셋이다 — `kill(-1, .TERM)`
   쓰는가"가 더 이상 걸림돌이 아니다. 그래서 SIGHUP을 보내는 목적이 저장이
   아니라 "안 기다리는 것" 하나가 됐다. SL-M0의 실측 9가 term과 hup에서
   히스토리가 같다는 것을 zsh·bash 넷으로 확인했다. 본문은
-  `docs/superpowers/specs/2026-09-13-tars-shutdown-latency-design.md`.
+  `docs/specs/2026-09-13-tars-shutdown-latency-design.md`.
 
 SM design이 이 자리를 *"실기는 안전하다. 전원 버튼을 누르면 PID 1의 SIGTERM이
 셸에게 가고 그때 zsh가 스스로 쓴다"*로 적었고 세 군데가 틀렸다. 그 문서의

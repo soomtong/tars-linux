@@ -36,7 +36,7 @@ metadata:
 ## 2026-09-12에 걷어낸 규모
 
 md 파일 142개에서 13,083쌍(26,166개, 52,332바이트)을 지웠다. 파일별로는
-`docs/superpowers/specs/`의 shell-memory design이 443쌍, userland-tools design이
+`docs/specs/`의 shell-memory design이 443쌍, userland-tools design이
 394쌍, `HANDOFF.md`가 339쌍이었다.
 
 ## 지울 때 남겨야 하는 자리

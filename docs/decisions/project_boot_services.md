@@ -8,7 +8,7 @@ metadata:
 
 # Boot Services (SV)
 
-design은 `docs/superpowers/specs/2026-09-27-tars-boot-services-design.md`(결정 9 · 실측 1~18).
+design은 `docs/specs/2026-09-27-tars-boot-services-design.md`(결정 9 · 실측 1~18).
 사용자가 후보 셋(패키지 매니저 · 부팅 서비스 · IPv6) 중 이것을 골랐고, 다섯을 정했다 —
 범용 메커니즘과 sshd를 함께 · 서비스 하나는 실행 스크립트 하나 · 감독은 우리 감독자를
 넓혀서(runit 아님) · 터미널 이름은 흔한 것 몇 개를 게스트에 · ssh 세션은 `tars.conf`의

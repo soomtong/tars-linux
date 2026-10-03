@@ -12,8 +12,8 @@ metadata:
 RC-M0이 2026-08-30에 그것을 쟀고 같은 날 끝났다. 재기만 하는
 milestone이라 저장소의 코드는 한 줄도 안 바뀌었다.
 
-- design: `docs/superpowers/specs/2026-08-30-tars-render-cost-design.md`
-- plan: `docs/superpowers/plans/2026-08-30-tars-render-cost-rc-m0.md`
+- design: `docs/specs/2026-08-30-tars-render-cost-design.md`
+- plan: `docs/plans/2026-08-30-tars-render-cost-rc-m0.md`
 
 ## 답 — `fill`이다
 

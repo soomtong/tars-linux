@@ -72,7 +72,7 @@ pub const TERMINATION_SIGNALS = [_]linux.SIG{ .TERM, .HUP };
 앞이다). 음성을 겨냥하려면 "로그는 찍되 실제로는 안 보내는" 사본이 따로
 필요했다.
 
-본문은 `docs/superpowers/specs/2026-09-13-tars-shutdown-latency-design.md`.
+본문은 `docs/specs/2026-09-13-tars-shutdown-latency-design.md`.
 
 관련: [[project_shutdown_signals]] · [[project_power_management]] ·
 [[project_init_supervisor]] · [[project_shell_history]]

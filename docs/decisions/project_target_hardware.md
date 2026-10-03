@@ -53,7 +53,7 @@ EC는 ECDT 테이블로 아주 이른 시점에 잡히는 경로도 있는데 �
 > 필요 없다 — TARS가 `/dev/dri/card0`에 KMS ioctl을 직접 쏘는데
 > simpledrm이 EFI GOP 프레임버퍼 위에 그 card0을 그대로 내놓는다.
 > 펌웨어가 잡아 둔 모드가 실기에서는 패널의 네이티브 해상도다. 전문은
-> `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
+> `docs/specs/2026-09-09-tars-real-machine-design.md`.
 >
 > 위 표의 `ACPI_BUTTON`을 뺀 나머지 중 켜진 것. `EFI` · `USB_SUPPORT` ·
 > `BLK_DEV_NVME` · AHCI · `PCI_MSI`는 RM-M0·M1이 켰다. `ACPI_EC` ·

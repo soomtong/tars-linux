@@ -89,5 +89,5 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/c
 | `MEMORY.md` | 세션을 넘어 유지되는 기억의 색인 (본문은 `docs/decisions/`) |
 | `docs/guides/running-tars.md` | 로컬 화면·VM·실기 노트북에서 띄워 보는 방법 |
 | `docs/study/` | 용어집과 개념 학습 노트 |
-| `docs/superpowers/specs/` | 서브프로젝트별 design doc |
-| `docs/superpowers/plans/` | milestone별 실행 plan |
+| `docs/specs/` | 서브프로젝트별 design doc |
+| `docs/plans/` | milestone별 실행 plan |

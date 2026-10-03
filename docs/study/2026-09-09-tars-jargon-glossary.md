@@ -61,9 +61,9 @@ FP가 왜 `SP`가 아니라 `FP`인가. `SP`는 이미 Search Position(2026-08-2
 ## 2. 프로젝트 운영 용어
 
 - design doc — 서브프로젝트를 시작하기 전에 왜 필요한지·어떻게 나눌지
-  적는 문서. `docs/superpowers/specs/`에 날짜순으로 쌓인다.
-- plan — design doc을 milestone 단위로 쪼갠 실행 순서. `docs/
-  superpowers/plans/`에 있고, 한 milestone이 끝나야 다음 milestone의 plan을
+  적는 문서. `docs/specs/`에 날짜순으로 쌓인다.
+- plan — design doc을 milestone 단위로 쪼갠 실행 순서. `docs/plans/`에
+  있고, 한 milestone이 끝나야 다음 milestone의 plan을
   새로 쓴다(전체를 미리 다 설계하지 않는다).
 - HANDOFF.md — 지금 세션이 끝나는 시점에 어디까지 했고 다음에 뭘 하면
   되는지를 적어 두는 파일. 다음 세션은 여기서부터 이어받는다.

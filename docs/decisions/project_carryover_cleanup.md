@@ -2,8 +2,8 @@
 
 `HANDOFF.md`의 이월 숙제 가운데 "미룬다"로 결정이 나지 않은 셋을 실제로
 없앤 서브프로젝트다. design은
-`docs/superpowers/specs/2026-08-31-tars-carryover-cleanup-design.md`,
-plan은 `docs/superpowers/plans/2026-08-31-tars-carryover-cleanup-cc-m0.md`.
+`docs/specs/2026-08-31-tars-carryover-cleanup-design.md`,
+plan은 `docs/plans/2026-08-31-tars-carryover-cleanup-cc-m0.md`.
 
 ## 1. 게스트에게 직접 물으면 커널 config 결정이 끝난다
 

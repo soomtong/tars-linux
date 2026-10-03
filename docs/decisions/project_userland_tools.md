@@ -12,7 +12,7 @@ metadata:
 탑재되면 좋겠다"* · *"tars-linux는 거의 개발용으로 사용되기 때문에
 git은 필수 도구가 될 것"*.
 
-design은 `docs/superpowers/specs/2026-09-10-tars-userland-tools-design.md`,
+design은 `docs/specs/2026-09-10-tars-userland-tools-design.md`,
 milestone 넷(UT-M0~M3)이고 UT-M0이 2026-09-10에, UT-M1이 2026-09-11에
 끝났다.
 

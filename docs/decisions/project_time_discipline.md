@@ -8,7 +8,7 @@ metadata:
 
 # 시계를 chronyd에게 (TD)
 
-design은 `docs/superpowers/specs/2026-09-26-tars-time-discipline-design.md`.
+design은 `docs/specs/2026-09-26-tars-time-discipline-design.md`.
 사용자가 2026-09-26에 chrony를 고르고, 목적으로 "오래 켜 둔 기계의 drift"를,
 접근으로 "우리 SNTP를 전면 교체"를 골랐다. TS 결정 2("묻는 주체는 우리 코드")의
 첫째 근거가 "어려운 부분(drift)을 뺐으니 누가 해도 같다"였고, 목적이 그 어려운

@@ -44,4 +44,4 @@ TS의 SNTP 자식이 같은 모양을 쓴다. 차이는 `execve`를 안 해서 �
 - [[project_guest_network]] — `net=off`일 때도 로그 한 줄을 남기는 규칙이 선 자리
 - [[project_shutdown_signals]] — 반대 방향의 같은 이야기. 종료가 늘어지지
   않게 하는 것도 "기다리지 않는다"가 처방이었다
-- 본문 설계: `docs/superpowers/specs/2026-09-15-tars-time-sync-design.md`의 결정 3
+- 본문 설계: `docs/specs/2026-09-15-tars-time-sync-design.md`의 결정 3

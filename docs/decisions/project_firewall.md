@@ -8,7 +8,7 @@ metadata:
 
 # Firewall (FW)
 
-design은 `docs/superpowers/specs/2026-09-27-tars-firewall-design.md`. IN이 미룬 셋(UDP ·
+design은 `docs/specs/2026-09-27-tars-firewall-design.md`. IN이 미룬 셋(UDP ·
 포트 여럿 · 방화벽)을 사용자가 골랐고, 방화벽 하나의 이야기로 묶었다 — UDP와 포트
 여럿은 "연 것은 닿고 안 연 것은 안 닿는다"를 판정하는 재료가 됐다.
 

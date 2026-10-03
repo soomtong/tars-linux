@@ -9,7 +9,7 @@ metadata:
 `docs/decisions/project_target_hardware.md`가 2026-08-31에 "서브프로젝트 하나"로
 지목한 것을 2026-09-09에 집었다. 일의 이름은 "`ACPI_EC`를 되켠다"가 아니라
 "실머신용 `.config`를 만든다"이고, 저장소 어휘로 Real Machine (RM)이다.
-design은 `docs/superpowers/specs/2026-09-09-tars-real-machine-design.md`.
+design은 `docs/specs/2026-09-09-tars-real-machine-design.md`.
 
 사용자가 고른 것은 넷이다 — `.config`를 하나로 유지하고(둘로 안 나눔),
 게이트에 열번째 체인을 하나 더하고(기존 아홉을 안 옮김), RM-M2에서

@@ -8,7 +8,7 @@ metadata:
 
 # Service Control (CT)
 
-design은 `docs/superpowers/specs/2026-09-27-tars-service-control-design.md`(결정 8 · 실측
+design은 `docs/specs/2026-09-27-tars-service-control-design.md`(결정 8 · 실측
 1~13). SV 비목표 4를 목표로 옮긴 것이다. 사용자가 후보 넷(패키지 매니저 · IPv6 · 서비스
 제어 · dhcpcd/chronyd 감독) 중 이것을 골랐고, 동사 넷(`status` · `stop` · `start` ·
 `restart`)과 통로(소켓)를 정했다.

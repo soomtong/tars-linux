@@ -9,8 +9,8 @@ metadata:
 판정하는 도구 안에서 종료 코드가 거짓이 되는 자리 일곱을 없앴다. 그리고
 네 번째가 들어오지 못하게 루트 게이트의 진입 검사가 막게 했다.
 
-design은 `docs/superpowers/specs/2026-09-12-tars-gate-accuracy-design.md`,
-plan 둘은 `docs/superpowers/plans/`에 있다.
+design은 `docs/specs/2026-09-12-tars-gate-accuracy-design.md`,
+plan 둘은 `docs/plans/`에 있다.
 
 ## 병
 

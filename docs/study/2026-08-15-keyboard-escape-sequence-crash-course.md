@@ -12,7 +12,7 @@ tags:
 
 > 대상: `terminal/src/input.zig`가 왜 지금 방향키를 못 보내는지, IP-M0~M2가
 > 무엇을 고치는 것인지 바닥부터 이해하기.
-> 근거 문서: `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`
+> 근거 문서: `docs/specs/2026-08-15-tars-input-policy-design.md`
 > 예제는 이 저장소의 실제 코드에서 가져왔다 — 파일명:줄번호로 표기했다.
 
 ---
@@ -484,7 +484,7 @@ A: 버그가 아니라 Ctrl 규칙(`& 0x1F`)의 필연적 귀결이다.
 
 ### 이 저장소 안에서
 
-- `docs/superpowers/specs/2026-08-15-tars-input-policy-design.md` — 결정 11개.
+- `docs/specs/2026-08-15-tars-input-policy-design.md` — 결정 11개.
   특히 결정 3(Ctrl), 5(DECCKM), 6(Context), 7(TERM), 8(macOS 의미론)
 - `terminal/src/input.zig:19-78` keymap, `:82-112` `State`, `:122-142` `readKeys`
 - `terminal/src/pty.zig:23-47` `forkpty` — line discipline이 살아나는 지점

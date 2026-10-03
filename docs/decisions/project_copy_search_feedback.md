@@ -5,9 +5,9 @@ CS-M0(2026-08-28)이 화면에 보이는 모든 매치를 어두운 앰버 바�
 CS-M1(2026-08-28)이 지난 검색어를 기억하고 못 찾았을 때 화면에 알린다.
 서브프로젝트가 끝났다.
 
-design: `docs/superpowers/specs/2026-08-28-tars-copy-search-feedback-design.md`
-plan(M0): `docs/superpowers/plans/2026-08-28-tars-copy-search-feedback-cs-m0.md`
-plan(M1): `docs/superpowers/plans/2026-08-28-tars-copy-search-feedback-cs-m1.md`
+design: `docs/specs/2026-08-28-tars-copy-search-feedback-design.md`
+plan(M0): `docs/plans/2026-08-28-tars-copy-search-feedback-cs-m0.md`
+plan(M1): `docs/plans/2026-08-28-tars-copy-search-feedback-cs-m1.md`
 
 ## CS-M0이 실행으로 증명한 것
 

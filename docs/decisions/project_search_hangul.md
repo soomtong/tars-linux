@@ -4,7 +4,7 @@
 입력"을 골랐다. Input Status(IS)가 끝나 진행 중인 서브프로젝트가 없던
 시점이다.
 
-design: `docs/superpowers/specs/2026-09-09-tars-search-hangul-design.md`
+design: `docs/specs/2026-09-09-tars-search-hangul-design.md`
 plan: `.../plans/2026-09-09-tars-search-hangul-sh-m0.md` · `...-sh-m1.md` ·
 `...-sh-m2.md`
 

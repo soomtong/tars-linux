@@ -7,8 +7,8 @@ Hangul Input(HI-M0~M3)이 비목표로 남긴 넷 중 하나를 집었다. HI의
 잊으면 대문자가 나오는 것으로만 안다." 한/영도 자판도 같은 성질이다 —
 상태가 몸 밖에 하나도 안 드러나 있었다.
 
-- design: `docs/superpowers/specs/2026-09-02-tars-input-status-design.md`
-- plan: `docs/superpowers/plans/2026-09-02-tars-input-status-is-m0.md` ·
+- design: `docs/specs/2026-09-02-tars-input-status-design.md`
+- plan: `docs/plans/2026-09-02-tars-input-status-is-m0.md` ·
   `.../2026-09-08-tars-input-status-is-m1.md`
 
 ## 왜 아래 여백인가

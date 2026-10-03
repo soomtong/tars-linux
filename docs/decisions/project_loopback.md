@@ -8,7 +8,7 @@ metadata:
 
 # Loopback (LB)
 
-design은 `docs/superpowers/specs/2026-09-26-tars-loopback-design.md`. WN-M0이 덤으로
+design은 `docs/specs/2026-09-26-tars-loopback-design.md`. WN-M0이 덤으로
 본 `lo state=down`에서 시작했고, 사용자가 이름 풀이를 범위에 더했다 — "caddy 같은 웹
 서버를 쓸 때 `some-domain.localhost`가 풀리면 편하다".
 

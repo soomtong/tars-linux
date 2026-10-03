@@ -10,7 +10,7 @@ Input Policy(IP-M0~M2)가 2026-08-19에 끝났다. 시작 시점의 TARS 키보�
 Shift 하나만 아는 상태였고, 끝난 시점에는 Ctrl 제어 문자 · 특수키 ·
 `TERM=xterm` · macOS 편집 의미론 · `keyboard=apple|pc`가 전부 게이트로
 증명된다. 설계 전문은
-`docs/superpowers/specs/2026-08-15-tars-input-policy-design.md`.
+`docs/specs/2026-08-15-tars-input-policy-design.md`.
 
 ## 번역의 기준은 "셸이 이미 아는 언어"다
 

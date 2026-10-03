@@ -4,7 +4,7 @@ Inbound Network(IN-M0~M2, 2026-09-14 하루에 열고 닫았다)가 세운 것�
 그 앞의 NW가 "게스트가 나갈 수 있다"를 세웠고, IN이 답한 질문은 그 반대
 방향 하나다 — 받는 길이 실제로 서는가.
 
-본문 전체는 `docs/superpowers/specs/2026-09-14-tars-inbound-network-design.md`
+본문 전체는 `docs/specs/2026-09-14-tars-inbound-network-design.md`
 에 있다. 여기 적는 것은 다른 자리에서 다시 쓸 넷이다.
 
 ## 1. 우리 코드가 0줄인 사이클이 있다

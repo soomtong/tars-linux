@@ -3,7 +3,7 @@
 사용자가 2026-08-31에 이월 숙제에서 CJK 입력기를 골랐다. Carryover
 Cleanup(CC-M0)이 끝나 진행 중인 서브프로젝트가 없던 시점이다.
 
-design: `docs/superpowers/specs/2026-08-31-tars-hangul-input-design.md`
+design: `docs/specs/2026-08-31-tars-hangul-input-design.md`
 
 ## 무엇을 만드는가
 

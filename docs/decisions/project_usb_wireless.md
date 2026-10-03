@@ -8,7 +8,7 @@ metadata:
 
 # USB 무선 동글 (UW)
 
-design은 `docs/superpowers/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험 2 ·
+design은 `docs/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험 2 ·
 실측 1~6). 2026-09-28에 사용자가 후보(IPv6 · 패키지 매니저 · USB 동글 층 A) 중 이것을
 골랐다. 비용은 같은 날 아침에 lessons의 이월 숙제로 재 두었다.
 

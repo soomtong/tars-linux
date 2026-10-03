@@ -58,8 +58,8 @@ kernel/init/bootloader를 직접 빌드하므로 바이너리 산출물이 계�
 
 ## Milestone 단위 작업
 
-각 서브프로젝트는 `docs/superpowers/specs/`에 design doc, `docs/
-superpowers/plans/`에 milestone별 plan을 작성한다 (예:
+각 서브프로젝트는 `docs/specs/`에 design doc, `docs/plans/`에
+milestone별 plan을 작성한다 (예:
 `2026-08-01-tars-boot-foundation-design.md`,
 `2026-08-01-tars-boot-foundation-bf-m0.md`). 한 milestone이 끝나면 다음
 milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 한 번에
@@ -69,7 +69,7 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 ## 참고
 
 - 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지, 후보 목록):
-  `docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`의
+  `docs/specs/2026-08-01-tars-boot-foundation-design.md`의
   "배경" 절
 - 현재 진행 상황: `HANDOFF.md`
 - 서브프로젝트를 넘어 유효한 작업 요령(게이트 운영 · 다시 조사하지 말 실측 ·
@@ -85,7 +85,7 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 
 ### 완료된 서브프로젝트
 
-design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
+design doc은 전부 `docs/specs/`에 날짜순으로, 기억은
 `docs/decisions/`에 있다. "무엇을 배웠나"는 그 두 곳에 있고 이 표에는 없다.
 각 행은 끝난 날의 상태다. 숫자(게이트 시간 · 검사 수 등)는 뒤 서브프로젝트가
 바꿨을 수 있으니, 지금 값은 `check.sh`의 `CHAINS`와 최신 design doc의 `Status:`에서 본다.

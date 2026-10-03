@@ -6,7 +6,7 @@ UW가 2026-09-28 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). 사�
 패키지 매니저 · USB 무선 동글 층 A) 중 이것을 골랐다. WL 비목표 5의 USB 절반 중 층 A다.
 다음 할 일은 새 서브프로젝트를 고르는 것이다(아래).
 
-design은 `docs/superpowers/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험 2 ·
+design은 `docs/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험 2 ·
 실측 1~6), plan은 `plans/2026-09-28-tars-usb-wireless-uw-m0.md` ~ `-uw-m2.md`, 기억은
 `docs/decisions/project_usb_wireless.md`다.
 

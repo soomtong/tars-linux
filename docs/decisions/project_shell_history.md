@@ -8,7 +8,7 @@ metadata:
 
 사용자가 2026-09-12에 SM이 닫히자마자 골랐다. SM 비목표 9를 고치려고 열었고,
 착수 전 측정이 그 비목표의 전제를 뒤집었다. design은
-`docs/superpowers/specs/2026-09-12-tars-shell-history-durability-design.md`,
+`docs/specs/2026-09-12-tars-shell-history-durability-design.md`,
 milestone 셋(SD-M0·M1·M2)이 2026-09-12 하루에 다 끝났다.
 
 ## 무엇이 고쳐졌나
@@ -35,7 +35,7 @@ SD는 zsh만 고쳤다. fish는 이 문제를 애초에 안 갖고 있고(`exit`
 
 ## bash도 같은 날 섰다 (BH-M0~M2, 2026-09-12)
 
-design은 `docs/superpowers/specs/2026-09-12-tars-bash-history-durability-design.md`.
+design은 `docs/specs/2026-09-12-tars-bash-history-durability-design.md`.
 처방이 zsh의 `setopt` 한 줄에 대응하는 한 줄이다.
 
 ```

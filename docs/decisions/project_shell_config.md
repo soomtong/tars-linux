@@ -11,7 +11,7 @@ metadata:
 `fzf`도 걸 자리가 없다"*고 적고, 비목표 6이 "셸 설정을 다루는
 서브프로젝트가 생기면 그때 함께 온다"고 남긴 그 문이다.
 
-design은 `docs/superpowers/specs/2026-09-11-tars-shell-config-design.md`,
+design은 `docs/specs/2026-09-11-tars-shell-config-design.md`,
 milestone 셋(SC-M0·M1·M2)이고 셋 다 2026-09-11에 끝났다 — 서브프로젝트가
 닫혔다.
 

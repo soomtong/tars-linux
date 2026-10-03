@@ -27,4 +27,4 @@ How to apply:
 - 매체의 `limine.conf`에 표지를 붙일 수 있는지는 YES를 묻기 전에 본다
   (`prepareConf`). 디스크를 지운 뒤에 알면 늦다.
 
-관련: `project_seeding_a_config_disk.md` · `project_gate_screen_echo.md` · design `docs/superpowers/specs/2026-09-19-tars-disk-install-design.md`
+관련: `project_seeding_a_config_disk.md` · `project_gate_screen_echo.md` · design `docs/specs/2026-09-19-tars-disk-install-design.md`

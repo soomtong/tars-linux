@@ -3,7 +3,7 @@
 TR-M0·TR-M1·TR-M2(2026-08-23)에서 화면이 색·한글·스크롤백을 갖게 만들면서
 알아낸 것들이다.
 설계 전체는
-`docs/superpowers/specs/2026-08-23-tars-terminal-rendering-design.md`에 있고,
+`docs/specs/2026-08-23-tars-terminal-rendering-design.md`에 있고,
 이 파일은 다시 조사하면 시간이 드는 사실과 모르면 같은 함정에 다시
 빠지는 것만 담는다.
 

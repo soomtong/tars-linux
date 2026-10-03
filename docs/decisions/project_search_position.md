@@ -12,9 +12,9 @@ CS-M0이 화면의 모든 매치를 한 색으로 칠했지만, 그중 어느 �
 만든다. SP-M0(색)이 2026-08-29에, SP-M1(`[3/12]` 번호)이 2026-08-30에
 끝나면서 서브프로젝트가 완료됐다.
 
-design: `docs/superpowers/specs/2026-08-29-tars-search-position-design.md`
-plan: `docs/superpowers/plans/2026-08-29-tars-search-position-sp-m0.md` ·
-`docs/superpowers/plans/2026-08-30-tars-search-position-sp-m1.md`
+design: `docs/specs/2026-08-29-tars-search-position-design.md`
+plan: `docs/plans/2026-08-29-tars-search-position-sp-m0.md` ·
+`docs/plans/2026-08-30-tars-search-position-sp-m1.md`
 
 ## 1. 라이브러리의 `selected.idx`와 `matches()` 슬라이스는 같은 좌표계다
 

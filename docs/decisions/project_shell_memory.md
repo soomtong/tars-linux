@@ -10,7 +10,7 @@ metadata:
 *"셸 설정을 다루는 서브프로젝트가 생기면 그때 함께 온다"*고 `zoxide`·`fzf`를
 미뤄 둔 그 자리를 SC가 열었고, SM이 그리로 들어간다.
 
-design은 `docs/superpowers/specs/2026-09-11-tars-shell-memory-design.md`,
+design은 `docs/specs/2026-09-11-tars-shell-memory-design.md`,
 milestone 셋(SM-M0·M1·M2)이고 2026-09-12에 셋이 다 끝나 서브프로젝트가
 닫혔다.
 

@@ -30,7 +30,8 @@ Why: `/claude-api prompt-audit`로 `CLAUDE.md`를 감사한 뒤 사용자가 "Op
 
 How to apply:
 
-- `docs/superpowers/` 경로는 그대로 쓴다. 이름일 뿐 plugin이 없어도 된다.
+- 같은 날 `docs/superpowers/`의 `specs/` · `plans/`를 `docs/` 바로 아래로 올렸다.
+  plugin 이름이 경로에 남을 이유가 없어서다.
 - 새 plan 머리말에 "REQUIRED SUB-SKILL" 줄을 넣지 않는다. 기존 plan은 기록이니
   고치지 않는다.
 - 끈 것은 가설이다. 다음 서브프로젝트의 첫 milestone을 plugin 없이 진행하고

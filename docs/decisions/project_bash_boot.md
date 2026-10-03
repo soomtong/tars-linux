@@ -1,6 +1,6 @@
 # 게이트가 bash로 뜨는 부팅을 하나 갖게 된 일 (BB-M0~M2, 2026-09-12)
 
-design: `docs/superpowers/specs/2026-09-12-tars-bash-boot-design.md`
+design: `docs/specs/2026-09-12-tars-bash-boot-design.md`
 
 ## 무엇이 섰나
 

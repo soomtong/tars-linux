@@ -2,7 +2,7 @@
 
 서브프로젝트를 넘어 유효한 것만 모은 문서다. 2026-09-27에 `HANDOFF.md`가
 193KB까지 자라 거기서 떼어 냈다 — 지금 상태와 다음 할 일은 `HANDOFF.md`에,
-서브프로젝트 하나의 경과는 그 design(`docs/superpowers/specs/`)과 기억
+서브프로젝트 하나의 경과는 그 design(`docs/specs/`)과 기억
 (`docs/decisions/`)에 있고, 이 문서에는 "다음 사람이 같은 벽에 부딪치지 않게"
 하는 것만 둔다.
 
@@ -930,7 +930,7 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
-다시 집게 되면 `docs/superpowers/specs/2026-09-01-tars-hangul-input-design.md`
+다시 집게 되면 `docs/specs/2026-08-31-tars-hangul-input-design.md`
 의 비목표 절이 그 둘을 그대로 갖고 있다.
 
 렌더 쪽 — 둘 다 미룬 것이고 근거가 있다.

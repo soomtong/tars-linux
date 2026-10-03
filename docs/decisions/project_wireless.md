@@ -8,7 +8,7 @@ metadata:
 
 # 무선 (WL)
 
-design은 `docs/superpowers/specs/2026-09-28-tars-wireless-design.md`(결정 7 · 위험 6 · 실측
+design은 `docs/specs/2026-09-28-tars-wireless-design.md`(결정 7 · 위험 6 · 실측
 1~14). 사용자가 2026-09-27에 후보 넷 중 무선을 골랐고, 드라이버는 "노트북형으로 넓게",
 자격 증명은 "wpa_supplicant 원래 형식 파일", 데몬은 "init이 감독"을 골랐다. 2026-09-28에
 나머지 결정을 전부 위임하고 자러 갔다 — M0 이후의 결정은 Claude가 했다.

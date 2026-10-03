@@ -10,8 +10,8 @@ UT가 게스트에 도구 65개를 세웠지만 그중 대부분은 이름으로
 `/config/gitconfig`를 씨앗으로 채웠다. 그 결과 `/.gitconfig` 링크가 새
 디스크·실기에서 더 이상 댕글링이 아니다.
 
-design은 `docs/superpowers/specs/2026-09-19-tars-shell-tools-design.md`,
-plan 셋은 `docs/superpowers/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
+design은 `docs/specs/2026-09-19-tars-shell-tools-design.md`,
+plan 셋은 `docs/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
 `-st-m1.md` · `-st-m2.md`다.
 
 ## 씨앗 셋은 다 깔려 있었다 — 없던 것은 gitconfig 하나다

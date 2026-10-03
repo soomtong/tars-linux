@@ -15,9 +15,9 @@ mode 자체는 [[project_copy_mode]]가 CM-M2로 닫았고, 여기는 그 커서
 | CN-M0 | 단어 이동 `w`/`b` | 완료(2026-08-27) |
 | CN-M1 | 검색 `/`·`n`·`N`과 프롬프트 오버레이 | 완료(2026-08-27) |
 
-design은 `docs/superpowers/specs/2026-08-26-tars-copy-navigation-design.md`,
-CN-M0 plan은 `docs/superpowers/plans/2026-08-26-tars-copy-navigation-cn-m0.md`,
-CN-M1 plan은 `docs/superpowers/plans/2026-08-27-tars-copy-navigation-cn-m1.md`.
+design은 `docs/specs/2026-08-26-tars-copy-navigation-design.md`,
+CN-M0 plan은 `docs/plans/2026-08-26-tars-copy-navigation-cn-m0.md`,
+CN-M1 plan은 `docs/plans/2026-08-27-tars-copy-navigation-cn-m1.md`.
 둘 다 끝났으므로 이 서브프로젝트는 닫혔다.
 
 ## 라이브러리의 "단어"는 vim의 단어가 아니다

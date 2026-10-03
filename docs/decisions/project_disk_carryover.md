@@ -8,7 +8,7 @@ metadata:
 
 # 설치된 부팅의 기다림과 DI의 작은 것들 (DC)
 
-design은 `docs/superpowers/specs/2026-09-25-tars-disk-carryover-design.md`(실측 1~10).
+design은 `docs/specs/2026-09-25-tars-disk-carryover-design.md`(실측 1~10).
 
 무엇이 섰나.
 

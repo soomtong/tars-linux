@@ -8,7 +8,7 @@ metadata:
 
 # 노트북형 유선 NIC (WN)
 
-design은 `docs/superpowers/specs/2026-09-26-tars-wired-nic-design.md`(실측 1~18).
+design은 `docs/specs/2026-09-26-tars-wired-nic-design.md`(실측 1~18).
 사용자가 2026-09-26에 후보 넷 중 "실머신 NIC"를 골랐다. 실기가 없어서 "노트북형
 드라이버를 전부 켜고 QEMU로 되는 둘(`e1000e` · `usb-net`)만 부팅으로 판정한다"는
 반쪽이다.

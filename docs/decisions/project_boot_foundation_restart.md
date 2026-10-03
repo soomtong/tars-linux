@@ -19,7 +19,7 @@ producing code without understanding how/why it worked. The restart's
 explicit goal is understanding over speed.
 
 Decisions locked in (see
-`docs/superpowers/specs/2026-08-01-tars-boot-foundation-design.md`):
+`docs/specs/2026-08-01-tars-boot-foundation-design.md`):
 - First sub-project = Boot Foundation: self-built Linux kernel
   (kernel.org source, own `.config`) + Limine bootloader + custom Rust PID 1
   init (no BusyBox) + `xorriso` hybrid El Torito ISO, booted in QEMU via
@@ -36,7 +36,7 @@ Decisions locked in (see
   gate, 3 consecutive successful runs).
 
 How to apply: When resuming this project, check
-`docs/superpowers/plans/` for the current milestone's plan before assuming
+`docs/plans/` for the current milestone's plan before assuming
 work status — this restart is recent (2026-08-01) and supersedes anything
 inferred from old habits/assumptions about the previous `tars.git` repo.
 Also see [[feedback-commit-delegation]] for the collaboration workflow in
