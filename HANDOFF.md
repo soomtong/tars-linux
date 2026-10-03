@@ -19,6 +19,22 @@ design은 `docs/specs/2026-10-03-tars-zig-upgrade-design.md`(결정 5 · 위험 
 0.17 컴파일러로 `ast-check`하면 `init` · `terminal/src` 오류가 0줄이다. 남은 것은 0.16에 없는 이름
 (`@backingInt` · `std.lang`)과 버전 줄뿐이다.
 
+### 그 사이 — Copy Indicator(CI)가 M0 하나로 닫혔다
+
+2026-10-03 사용자의 요청 한 줄("copy mode에 있을 때 맨 아랫줄에 표시를")로 열고 같은 날
+닫았다. copy mode에 있는 동안 상태 줄(IS) 꼬리에 다섯째 칸 `COPY`가 뜨고 Esc로 나가면
+사라진다. 앞 넷은 안 움직이고, 색은 전용 `STATUS_COPY`라 `caps ink` 판정이 그대로 산다.
+`status.zig`는 `vt.zig`를 모른 채 `copy: bool` 하나를 더 받는다.
+
+design은 `docs/specs/2026-10-03-tars-copy-indicator-design.md`(결정 6 · 위험 3 · 실측 1~6),
+plan은 `-ci-m0.md`, 기억은 `docs/decisions/project_copy_indicator.md`다. 새 체인은 없고
+`copy/check.sh`가 검사 2a · 6a(글자와 픽셀을 짝으로)를 더했다. 반사실(`st.copy` 무시)은
+`text=`가 맞는데 `ink=0`으로 잡혔다 — 글자만 보는 판정이었으면 통과했을 고장이다.
+루트 게이트 17체인 3/3 PASS, 약 1시간 2분(2026-10-03). 커밋 `362e36d`.
+
+사용자가 요청에 적은 진입 키는 `Cmd+Shift+V`였지만 실제 진입 키는 `Cmd+Shift+C`다
+(`Cmd+V`는 붙이기). 코드 기준으로 진행했다.
+
 ### 그 앞 — Terminal Graphics(TG)가 M3로 닫혔다
 
 TG가 2026-10-03 하루에 M0~M3로 닫혔다(design `Status: 끝났다`). 자식이 kitty graphics로 보낸
