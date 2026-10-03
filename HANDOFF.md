@@ -1,45 +1,40 @@
-# HANDOFF: USB Wireless(UW)가 M2로 닫혔다 — 같은 칩 계열의 USB 동글이 붙는다
+# HANDOFF: Terminal Graphics(TG) M0이 끝났다 — 다음은 M1(`vt.zig`)
 
 ## 지금 어디인가
 
-UW가 2026-09-28 하루에 M0~M2로 닫혔다(design `Status: 끝났다`). 사용자가 후보 셋(IPv6 ·
-패키지 매니저 · USB 무선 동글 층 A) 중 이것을 골랐다. WL 비목표 5의 USB 절반 중 층 A다.
-다음 할 일은 새 서브프로젝트를 고르는 것이다(아래).
+2026-10-03에 사용자가 후보 넷(터미널 그래픽 · USB 동글 층 B · IPv6 · 패키지 매니저) 중
+터미널 그래픽을 골랐다. 자식이 kitty graphics로 보낸 이미지를 우리 렌더러가 그린다.
+명령 해석과 저장은 ghostty vt가 이미 하고, 우리 몫은 셀 픽셀 크기 알리기 · placement를 화면
+픽셀 사각형으로 바꾸기(`vt.zig`) · 그리기(`main.zig`)다.
 
-design은 `docs/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험 2 ·
-실측 1~6), plan은 `plans/2026-09-28-tars-usb-wireless-uw-m0.md` ~ `-uw-m2.md`, 기억은
-`docs/decisions/project_usb_wireless.md`다.
+design은 `docs/specs/2026-10-03-tars-terminal-graphics-design.md`(결정 7 · 위험 3 · 실측 1~5),
+plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md`다.
 
-| 커밋 | 무엇 |
-|---|---|
-| `ff67042` · `82d2cde` | design · M0 실측(코드 0줄) |
-| `1ad272b` | M1 — 커널 config 열하나 · firmware 셋(74→77) · wifi 검사 1 · 11 |
-| `ba0e085` | M2 — 반사실 · 루트 게이트 · 문서 |
+M0(제품 코드 0줄)이 잰 것:
+- 저장은 된다. 한도는 320MB가 아니라 lib 기본 10MB라 결정 5를 "그대로 둔다"로 고쳤다.
+- `width_px`가 0이면 이미지가 저장만 되고 안 놓인다. 커서 이동이 전송 순간에 정해지므로
+  px는 `Screen.init`에서 채워야 한다(실측 2).
+- 질의 답은 `\x1b_Gi=N;OK\x1b\` 모양으로 기존 `takeReplies` 길로 나간다. PNG는 `EINVAL`.
+- 스크롤하면 viewport 기준 y가 음수로 나간다 — 잘라 그리거나 건너뛰어야 한다. 대체 화면은
+  저장소가 따로다.
 
-우리 게스트 코드는 0줄이다. `tars-wifi`와 hook이 드라이버를 안 가린다. 게이트는 심볼 ·
-modinfo alias · 부팅 C 로그의 `usbcore: registered new interface driver` 줄까지 본다 — QEMU에
-USB 무선이 없어서 실제 동글의 probe와 firmware 로딩은 못 본다. 루트 게이트 17체인 3/3
-(1시간 1분 25초, `FAIL` 0줄, 2026-09-28). 반사실(`RTW88_8812AU` 끄기)은 검사 1에서 잡혔다.
+이 서브프로젝트는 superpowers 없이 진행하는 첫 번째다(`docs/decisions/feedback_superpowers_off.md`).
+M0 plan · design은 plugin 없이 기존 형식대로 썼다. 빠진 것이 보이면 그 기억에 적는다.
 
-⚠ 다음 사람이 먼저 볼 것 — WL이 남긴 넷은 그대로다.
-- Dockerfile 층 12(WL). 새로 받은 저장소면 이미지부터 굽는다.
-- 첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받는다. `clean()`이 안 지운다.
+## 바로 다음에 할 것 — TG-M1 plan을 쓰고 `vt.zig`를 고친다
+
+design 결정 2 · 3: `Screen.init`이 셀 픽셀 크기(`CELL_W` · `ROW_HEIGHT`, 지금 `main.zig`에
+있다)를 받아 `width_px` · `height_px`를 채우고, 화면에 보이는 placement를 "RGBA · 원본
+사각형 · 목적지 픽셀 사각형 · 층(셋)"으로 내놓는 함수를 만든다. 모양은 ghostty
+`renderer/image.zig`의 `kittyUpdate` · `prepKittyPlacement` 축소판이고 virtual placement는
+뺀다. `vt_test`에 검사를 더한다.
+
+⚠ 이어받는 사람이 볼 것:
+- Docker는 OrbStack이다. 소켓이 없다고 나오면 `orb start`.
+- 새로 받은 저장소면 이미지부터 굽는다(Dockerfile 층 12, WL). 첫 빌드가 linux-firmware
+  662MB를 `kernel/src/firmware/`에 받고 `clean()`이 안 지운다.
 - initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(lessons 62).
-- 실칩은 PCIe도 USB도 한 번도 안 떴다 — 실기와 실제 동글이 생기면 그것이 새 사실이다.
-
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
-
-남은 후보 — 터미널 그래픽(우리 렌더러가 kitty graphics 이미지를 그린다. 2026-10-01 termium
-조사에서 나왔다 — `docs/decisions/project_termium_survey.md`) · 패키지 매니저(DI가 비워 둔 p3) · IPv6(커널에 아직 없다. 켜는 사이클이 방화벽
-표를 `inet`으로 바꿔야 한다 — FW design 위험 6. sshd가 떠 있으니 그 조건이 무겁다). USB 동글의
-층 B · `RTL8XXXU`와 무선의 나머지, 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
-
-2026-09-30에 이월 숙제(`docs/guides/lessons.md`)를 다시 읽었다. CC처럼 한 번에 치울 작은
-것은 없다 — 남은 항목은 실기나 실제 동글이 필요하거나, 안 하기로 근거가 쌓였거나
-(dirty 추적 · `Ctrl+R` 게이트), 커널을 올릴 때 같이 볼 것이거나(BE201 · `sc-a0-fm-c0`),
-한 번 나고 재현 안 된 것(ssh 배너 타임아웃)이다. 다시 조사하지 않는다. 사용자가 새
-서브프로젝트를 열지 않고 멈췄다. 이어 간다면 가장 작은 출발점은 USB 동글 층 B(우리 코드
-0줄, UW 패턴 그대로)이고, `RTL8XXXU`는 `HID_APPLE`을 먼저 정해야 한다.
+- 실칩 무선은 PCIe도 USB도 한 번도 안 떴다 — 실기와 실제 동글이 생기면 그것이 새 사실이다.
 
 ## 어디를 보면 되는가
 
