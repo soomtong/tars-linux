@@ -18,19 +18,15 @@ TARS는 이전 저장소(`tars.git`)에서 "이해 없이 코드만 쌓이는" �
 
 1. 설명 먼저 — 지금 무엇을 만들고 왜 필요한지 사용자가 이해할 수 있게
    먼저 설명한다. 코드를 던지기 전에 "이게 왜 이렇게 생겼는지"를 말한다.
-2. 파일 편집은 Claude가 (2026-09-12 변경) — 구현 파일도 Claude Code가 직접
-   넣는다. 그 전까지는 Claude가 "넣을 것"을 제시하고 사용자가 넣었는데,
-   사용자가 "리눅스 시스템 빌드를 직접 해 보면서 감을 잡았고 타이핑도 충분히
-   해 봤으니 이제는 만들어진 코드를 보면서 진행하겠다"고 정해서 바꿨다
-   (`docs/decisions/feedback_execution_scope.md`). 검토 지점이 없어진 것이
-   아니라 타이핑에서 읽기로 옮겨졌다 — 그래서 Claude는 매 편집 뒤
+2. 파일 편집은 Claude가 — 구현 파일도 Claude Code가 직접 넣고, 사용자는
+   만들어진 코드를 읽으며 따라간다(`docs/decisions/feedback_execution_scope.md`).
+   검토 지점은 타이핑이 아니라 읽기에 있다 — 그래서 Claude는 매 편집 뒤
    `git diff --stat`으로 더한 줄과 지운 줄을 따로 세고, 지우는 편집은
-   `git diff | grep '^-'`로 내용을 직접 읽어 의도한 줄만 지워졌는지 본다.
+   `git diff | rg '^-'`로 내용을 직접 읽어 의도한 줄만 지워졌는지 본다.
    그리고 큰 편집은 무엇이 어떤 모양으로 들어가는지 먼저 설명한다.
-3. 명령 실행은 Claude가 (2026-08-22 변경) — 빌드·QEMU 부팅·게이트·조사성
-   명령은 Claude Code가 직접 실행한다. 그 전까지는 사용자가 직접 쳤는데,
-   같은 `docker run` 한 줄을 옮겨 치는 데서 오는 이해가 없다는 판단으로
-   바꿨다. 이해는 설명을 읽고 결과 해석을 따라가는 데서 온다
+3. 명령 실행은 Claude가 — 빌드·QEMU 부팅·게이트·조사성 명령은 Claude Code가
+   직접 실행한다. 같은 명령을 옮겨 치는 데서 오는 이해는 없고, 이해는 설명을
+   읽고 결과 해석을 따라가는 데서 온다
    (`docs/decisions/feedback_execution_scope.md`). 긴 명령(루트 게이트 등)은
    실행 전에 얼마나 걸리는지 알린다.
 4. 결과를 상세히 설명 — 실행 결과(로그, 에러, 경고)가 왜 그렇게
@@ -46,11 +42,10 @@ TARS는 이전 저장소(`tars.git`)에서 "이해 없이 코드만 쌓이는" �
 
 ## 진행 전 검증은 Claude Code 책임
 
-사용자가 "done"이라고 답해도, 다음 단계로 넘어가기 전에 반드시
-`find`/`Read`로 실제 파일이 만들어졌는지, 내용이 맞는지 확인한다. BF-M0
-진행 중 `check.sh`만 만들어지고 `Makefile`은 안 만들어졌는데도 "done"이라고
-답한 적이 있었다 — 이후 매번 파일 존재를 먼저 확인하고 나서 다음 명령을
-안내한다.
+다음 단계로 넘어가기 전에 `Read`로 실제 파일이 만들어졌는지, 내용이 맞는지
+확인한다 — 내가 편집했든, subagent가 했든, 사용자가 "done"이라고 했든 같다.
+"만들었다"는 보고와 실제 파일이 어긋난 적이 있기 때문이다(BF-M0에서
+`check.sh`만 있고 `Makefile`은 없었다).
 
 ## Commit 전 git status 확인
 
@@ -84,8 +79,7 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   옮겼다 — 저장소 밖이 아니라 저장소 안에 두어 히스토리에 남기기 위함이다.
   새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
 - 서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.
-  2026-08-31에 낡은 것 넷을 한꺼번에 고쳤는데, 넷 다 "중간에 멈춘 것"이 아니라
-  계획한 milestone을 전부 끝내 놓고 표시만 안 한 것이었다.
+  milestone을 다 끝내 놓고 표시만 빠뜨리기 쉽다.
 - 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장 정확하다 —
   게이트가 매번 돌리는 목록이라 낡을 수가 없다.
 
@@ -93,6 +87,8 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
 
 design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 `docs/decisions/`에 있다. "무엇을 배웠나"는 그 두 곳에 있고 이 표에는 없다.
+각 행은 끝난 날의 상태다. 숫자(게이트 시간 · 검사 수 등)는 뒤 서브프로젝트가
+바꿨을 수 있으니, 지금 값은 `check.sh`의 `CHAINS`와 최신 design doc의 `Status:`에서 본다.
 
 | 서브프로젝트 | 끝난 날 | 무엇이 섰나 |
 |---|---|---|
@@ -127,7 +123,7 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Shutdown Latency (SL-M0~M2) | 2026-09-13 | PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가 0.13초가 됐다 |
 | Guest Network (NW-M0~M3) | 2026-09-14 | `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다. 우리 코드는 링크를 올리고 dhcpcd를 띄우는 것까지고 나머지는 dhcpcd다. 판정은 SLIRP 안에서 닫힌다 — 열두번째 체인 `net/check.sh` |
 | Inbound Network (IN-M0~M2) | 2026-09-14 | 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다. 우리 코드는 0줄이고 `net/check.sh`가 검사 열여섯이 됐다 |
-| Time Sync (TS-M0~M3) | 2026-09-19 | 부팅에 SNTP로 한 번 묻고 시계를 뛴다. 상대는 설정의 주소든 DHCP가 알려 준 것이든 되고, `timezone=Asia/Seoul`이 그 시각을 사람이 읽는 모양으로 만든다. 네트워크가 없어도 부팅은 평소대로 끝난다 — `net/check.sh`가 검사 스물넷에 부팅 셋 |
+| Time Sync (TS-M0~M3) | 2026-09-19 | 부팅에 SNTP로 한 번 묻고 시계를 뛰었다(우리 SNTP는 TD가 chronyd로 바꿨다). 상대는 설정의 주소든 DHCP가 알려 준 것이든 되고, `timezone=Asia/Seoul`이 그 시각을 사람이 읽는 모양으로 만든다. 네트워크가 없어도 부팅은 평소대로 끝난다 — `net/check.sh`가 검사 스물넷에 부팅 셋 |
 | Shell Tools (ST-M0~M2)|2026-09-19|깔려 있던 도구를 셸이 쓴다 — 씨앗 rc가 eza 별칭 넷을 정의하고(`ls`가 eza로 가는 것이 유일한 셰도다), `/config/gitconfig`가 생겨 `/.gitconfig` 링크가 더 이상 끊기지 않는다|
 | Terminal Queries (TQ-M1)|2026-09-19|터미널이 자식의 질의(커서 위치·상태 보고)에 답한다 — `effects.write_pty` 한 칸과 그 답이 pty로 돌아가는 길. ST-M3이 넣은 `--no-height` 우회를 지웠다|
 | Disk Install (DI-M0~M2) | 2026-09-23 | USB로 뜬 기계에서 `tars-install`이 내장 디스크에 ESP와 설정 파티션을 만들고 USB 없이 뜬다. 새 ISO로 갱신해도 설정이 남고 `--wipe`가 통째로 지운다. 열세번째 체인 `install/check.sh` |
@@ -141,11 +137,3 @@ design doc은 전부 `docs/superpowers/specs/`에 날짜순으로, 기억은
 | Daemon Supervision (DS-M0~M2) | 2026-09-27 | dhcpcd와 chronyd가 감독 목록에 들어갔다 — 죽으면 다시 뜨고 `tars-service`로 다룬다. dhcpcd는 `-B`, chronyd 앞의 30초 기다림은 chrony `sourcedir`로 바뀌었다. 덤으로 버튼 fd에 `CLOEXEC`. 새 체인 없이 net · service 체인이 본다 |
 | Wireless (WL-M0~M3) | 2026-09-28 | 노트북 내장 무선(Intel · Realtek · MediaTek · Qualcomm)이 붙는다. `/config/wpa_supplicant.conf`가 있으면 `init`이 `tars-wifi`(→ exec wpa_supplicant)를 감독하고, 늦게 생긴 인터페이스는 dhcpcd hook이 넘긴다. firmware 74개가 initrd 꼬리에 붙는다. 게이트는 mac80211_hwsim — 열일곱번째 체인 `wifi/check.sh` |
 | USB Wireless (UW-M0~M2) | 2026-09-28 | 같은 칩 계열의 USB 동글 열하나(rtw88 일곱 · rtw89 둘 · MT7921U · MT7925U)가 켜졌다. 우리 코드는 0줄, firmware는 77개. QEMU에 USB 무선이 없어서 `wifi/check.sh`가 심볼 · modinfo alias · 부팅 로그의 usbcore 등록 줄을 본다 |
-
-위 표의 서브프로젝트 여럿이 "파일 편집은 사용자가"의 예외였고, 그 예외가
-쌓이다가 2026-09-12에 규칙 자체가 바뀌었다. HI는 사용자가 "macOS용 한글
-입력기를 직접 만들어 본 영역이라 코드를 읽는 자리의 값이 낮다"고 정해서,
-CC-M0은 "배우는 것이 적으니 전부 네가 써라"로, SH·FP·RM·UT·SC·SM은 사용자가
-외출하며 "이번 세션의 구현 결정을 전부 위임한다"고 정해서 Claude Code가
-편집까지 했다. 그 위임들은 전부 세션(또는 milestone) 단위였다. SD-M2부터는
-세션 단위가 아니라 기본값이다(위 진행 방식 2번).
