@@ -1,6 +1,20 @@
 const std = @import("std");
 const vt = @import("vt.zig");
 
+/// 모든 화면이 `main.zig`와 같은 셀 크기로 뜬다(`CELL_W` · `ROW_HEIGHT`).
+/// 다르게 두면 kitty 이미지의 픽셀 기대값이 게스트와 갈린다.
+const CELL: vt.CellPx = .{ .w = 8, .h = 16 };
+
+/// 2×2 RGBA — 빨강 · 초록 · 파랑 · 반투명 흰색, 16바이트의 base64.
+const KG_RGBA = "/wAA/wD/AP8AAP//////gA==";
+/// 같은 넷의 RGB(12바이트). 넷째는 불투명 흰색이 된다.
+const KG_RGB = "/wAAAP8AAAD/////";
+
+fn findImage(list: []const vt.ImagePlacement, id: u32) ?vt.ImagePlacement {
+    for (list) |p| if (p.image_id == id) return p;
+    return null;
+}
+
 /// 한 행의 글자만 이어 붙인다. "화면이 정말 달라졌는가"를 비교하는 데 쓴다.
 ///
 /// 위치 숫자(`scrollbar()`)만 보면 뷰포트는 움직였는데 화면은 그대로인
@@ -18,7 +32,7 @@ fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const screen = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const screen = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer screen.deinit();
 
     var buf: [100]vt.CellGlyph = undefined;
@@ -148,7 +162,7 @@ pub fn main(init: std.process.Init) !void {
     // (프레임버퍼 1280x800, 여백 20, 셀 8x16). 가지치기가 페이지 통째로
     // 일어나므로 한 페이지에 몇 줄이 들어가는지가 cols에 달려 있고, 다른
     // 크기로 재면 아래 단언의 여유폭이 뜻을 잃는다.
-    const big = try vt.Screen.init(init.io, init.gpa, 155, 47);
+    const big = try vt.Screen.init(init.io, init.gpa, 155, 47, CELL);
     defer big.deinit();
 
     var line: [32]u8 = undefined;
@@ -246,7 +260,7 @@ pub fn main(init: std.process.Init) !void {
     // 200줄만 먹인 새 화면을 쓰는 이유는 위 big이 이미 한도에 걸려 있어서다.
     // 한도에 걸린 상태로 더 먹이면 가지치기가 일어나 행 번호 자체가 밀리고,
     // 그러면 이 검사가 무엇을 보는지 흐려진다.
-    const fresh = try vt.Screen.init(init.io, init.gpa, 155, 47);
+    const fresh = try vt.Screen.init(init.io, init.gpa, 155, 47, CELL);
     defer fresh.deinit();
     var more: usize = 1;
     while (more <= 200) : (more += 1) {
@@ -353,7 +367,7 @@ pub fn main(init: std.process.Init) !void {
     // 작은 화면을 새로 만든다. 앞의 화면들은 스크롤백 검사가 지나간 뒤라
     // 몇 번째 줄에 무엇이 있는지가 검사마다 달라지고, 그러면 아래 단언들이
     // 무엇을 보는지 흐려진다.
-    const cm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const cm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer cm.deinit();
     cm.feed("hello world\r\nsecond line\r\n");
     // 한 프레임을 먼저 그린다. copyEnter는 셸 커서 자리를 RenderState에서
@@ -468,7 +482,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("vt_test: v를 다시 누르면 선택이 풀린다 OK\n", .{});
 
     // 검사 9. 가지치기 방어(design 위험 1). 두 겹으로 본다.
-    const pruned = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const pruned = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pruned.deinit();
     var pl: usize = 1;
     while (pl <= 200) : (pl += 1) {
@@ -548,7 +562,7 @@ pub fn main(init: std.process.Init) !void {
     // 공백 둘(col 5, col 10)이 이 검사의 핵심이다. 라이브러리는 그것도
     // 한 단어로 세므로(plan의 확정 사실 2), 우리 w가 한 번 더 건너뛰지
     // 않으면 아래 첫 단언에서 6이 아니라 5가 나온다.
-    const wm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const wm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer wm.deinit();
     wm.feed("alpha beta gamma\r\n");
     // 한 프레임을 먼저 그린다 — copyEnter가 셸 커서 자리를 RenderState에서
@@ -661,7 +675,7 @@ pub fn main(init: std.process.Init) !void {
     // ── CN-M1: 검색 프롬프트 ────────────────────────────────────────────
     //
     // 화면을 따로 만든다(CM-M1 이래의 규율). 여기서는 버퍼만 보므로 작아도 된다.
-    const fm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const fm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer fm.deinit();
     fm.feed("hello\r\n");
     _ = try fm.cells(&buf);
@@ -738,7 +752,7 @@ pub fn main(init: std.process.Init) !void {
     //
     // MARK가 둘인 것이 요점이다. 하나면 `n`이 감기는지 옮기는지 갈리지
     // 않는다.
-    const fs = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const fs = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer fs.deinit();
     var fl: usize = 1;
     while (fl <= 60) : (fl += 1) {
@@ -834,7 +848,7 @@ pub fn main(init: std.process.Init) !void {
     //
     // 표적을 두 줄(8번·18번)에 심는다. 5줄짜리 화면이라 한 번에 하나만
     // 보이고, 그래서 "화면에 보이는 것만 칠한다"를 검사가 가를 수 있다.
-    const hs = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const hs = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer hs.deinit();
     var hl_i: usize = 1;
     while (hl_i <= 20) : (hl_i += 1) {
@@ -1015,7 +1029,7 @@ pub fn main(init: std.process.Init) !void {
     // 화면 모양은 `hs`와 같다(20x5, 8번과 18번 줄이 표적). 같은 모양을 쓰는
     // 것은 게으름이 아니라 기대값을 옮겨 쓸 수 있게 하려는 것이다 —
     // 검사 26이 확정한 `matches=2`를 여기서 다시 세지 않아도 된다.
-    const ls = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const ls = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer ls.deinit();
     var ls_i: usize = 1;
     while (ls_i <= 20) : (ls_i += 1) {
@@ -1137,7 +1151,7 @@ pub fn main(init: std.process.Init) !void {
     // 이름이 `ps`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
     // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
     // `cm`·`painted`·`pruned`·`wm`·`fm`·`fs`·`hs`·`ls`가 이미 쓰여 있다.
-    const ps = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const ps = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer ps.deinit();
     var ps_i: usize = 1;
     while (ps_i <= 20) : (ps_i += 1) {
@@ -1290,7 +1304,7 @@ pub fn main(init: std.process.Init) !void {
     // 이름이 `ns`인 이유: `main()` 하나가 파일 전체라 이 파일의 모든 지역
     // 변수가 서로 부딪치고 Zig가 shadowing을 컴파일 에러로 막는다.
     // `cm`·`painted`·`pruned`·`wm`·`fm`·`fs`·`hs`·`ls`·`ps`가 이미 쓰여 있다.
-    const ns = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const ns = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer ns.deinit();
     var ns_i: usize = 1;
     while (ns_i <= 20) : (ns_i += 1) {
@@ -1426,7 +1440,7 @@ pub fn main(init: std.process.Init) !void {
     // 반전된 셀은 기본 색이 뒤집힌 것이다(fg=102030 bg=FFFFFF). 선택도
     // 커서도 같은 연산이라 같은 모양으로 나타나므로, 전후를 비교해야
     // 뜻이 생긴다 — 게이트의 `inverted_cells`가 쓰는 것과 같은 판정이다.
-    const pre = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const pre = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pre.deinit();
     pre.feed("ab");
 
@@ -1523,7 +1537,7 @@ pub fn main(init: std.process.Init) !void {
     // inverse와 매치 하이라이트는 이미 맞다. 앞의 것은 라이브러리가
     // spacer 셀에도 같은 `style_id`를 붙이기 때문이고, 뒤의 것은 매치 범위가
     // spacer까지 덮기 때문이다. 구멍은 커서 둘뿐이었다.
-    const wide = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const wide = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer wide.deinit();
     wide.feed("한글");
 
@@ -1577,7 +1591,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 검사 51. copy 커서도 같다. 셸 커서와 다른 코드 경로라 따로 본다 —
     // 그쪽만 고치고 이쪽을 두면 copy mode에서 같은 증상이 남는다.
-    const wcopy = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const wcopy = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer wcopy.deinit();
     wcopy.feed("한글 abc\r\n");
     wcopy.copyEnter();
@@ -1602,7 +1616,7 @@ pub fn main(init: std.process.Init) !void {
     // 화면을 따로 만든다(CM-M1 이래의 규율). 여기서 보는 것은 버퍼뿐이라
     // 20×5로 충분하다. `copyEnter` 앞에 feed·cells가 있는 것은 검사 18과 같은
     // 이유다 — `findOpen()`은 copy mode 안에서만 열린다.
-    const um = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const um = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer um.deinit();
     um.feed("hello\r\n");
     _ = try um.cells(&buf);
@@ -1732,7 +1746,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 화면을 새로 만든다. 두 줄이 필요하고 `um`은 "hello" 한 줄뿐이다.
     // `가나`·`다라`가 각각 폭 2 글자 둘이라 col 0~3을 먹는다.
-    const pm = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const pm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pm.deinit();
     pm.feed("가나\r\n다라\r\n");
     _ = try pm.cells(&buf);
@@ -1854,7 +1868,7 @@ pub fn main(init: std.process.Init) !void {
     // 답의 문자열을 정확히 박지 않는다. 포맷은 라이브러리 몫이라 그것을
     // 박으면 우리가 아니라 vendored 코드를 검사하게 된다(design 결정 5).
     // 우리 몫은 "답이 나갔는가"와 "필요 없는 출력에는 안 나가는가"다.
-    const rq = try vt.Screen.init(init.io, init.gpa, 20, 5);
+    const rq = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer rq.deinit();
 
     // 검사 60. 커서 위치 질의(`ESC[6n`)에 커서 위치 보고가 온다.
@@ -1946,6 +1960,172 @@ pub fn main(init: std.process.Init) !void {
         return error.TitleReported;
     }
     std.debug.print("vt_test: 제목 보고에는 답이 없다 OK\n", .{});
+
+    // ── TG-M1: kitty 이미지를 픽셀 사각형으로 꺼낸다 ───────────────────
+    //
+    // 프로토콜 해석은 라이브러리 몫이라 여기서 안 본다(TG design 결정 1).
+    // 보는 것은 우리가 옮겨 적은 계산 — 셀 크기 · viewport 기준 행 · 층 ·
+    // 정렬 · 원본 사각형 — 이다. 기대값은 셀 8×16과 커서 이동 규칙(이미지
+    // 뒤로 열 수만큼 오른쪽, 행 수 −1만큼 아래)에서 미리 계산했다.
+    const kg = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer kg.deinit();
+    var kg_buf: [16]vt.ImagePlacement = undefined;
+
+    // 검사 65. 크기를 안 준 2×2 RGBA 하나가 (0,0)에 원래 크기로 놓인다.
+    //
+    // TG 실측 2에서 셀 픽셀 크기가 비어 있으면 이것이 `rect=null`로 사라졌다.
+    // `init`이 크기를 채우므로 이제 놓이고, 커서가 한 칸 간다.
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=1,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    const kg_a = kg.images(&kg_buf);
+    if (kg_a.len != 1) {
+        std.debug.print("FAIL: 이미지 하나를 보냈는데 {d}개가 나왔다\n", .{kg_a.len});
+        return error.ImageNotPlaced;
+    }
+    const a0 = kg_a[0];
+    if (a0.layer != .above_text or a0.format != .rgba or a0.data.len != 16 or
+        a0.dst_x != 0 or a0.dst_y != 0 or a0.dst_w != 2 or a0.dst_h != 2 or
+        a0.src_x != 0 or a0.src_y != 0 or a0.src_w != 2 or a0.src_h != 2)
+    {
+        std.debug.print("FAIL: 첫 이미지가 {any}\n", .{a0});
+        return error.WrongPlacement;
+    }
+    const kg_cur = &kg.term.screens.active.cursor;
+    if (kg_cur.x != 1 or kg_cur.y != 0) {
+        std.debug.print("FAIL: 이미지 뒤 커서가 ({d},{d})다((1,0)이어야 한다)\n", .{ kg_cur.x, kg_cur.y });
+        return error.WrongCursorAfterImage;
+    }
+    std.debug.print("vt_test: kitty 이미지가 원래 크기로 놓인다 OK\n", .{});
+
+    // 검사 66. 셀 수로 크기를 주면 셀 크기를 곱한 픽셀이 된다.
+    //
+    // 커서 (1,0)에 `c=4,r=2` → 목적지 (8,0)에 4×8 · 2×16 = 32×32. 실측 2에서
+    // 셀 크기가 비어 있을 때 이것이 0×0이었다. 커서는 (5,1)로 간다.
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=2,c=4,r=2,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    const b2 = findImage(kg.images(&kg_buf), 2) orelse {
+        std.debug.print("FAIL: c=4,r=2 이미지가 안 나왔다\n", .{});
+        return error.ImageNotPlaced;
+    };
+    if (b2.dst_x != 8 or b2.dst_y != 0 or b2.dst_w != 32 or b2.dst_h != 32) {
+        std.debug.print("FAIL: c=4,r=2 이미지가 ({d},{d}) {d}×{d}다((8,0) 32×32여야 한다)\n", .{ b2.dst_x, b2.dst_y, b2.dst_w, b2.dst_h });
+        return error.WrongPlacement;
+    }
+    std.debug.print("vt_test: 셀 수로 준 크기가 픽셀로 바뀐다 OK\n", .{});
+
+    // 검사 67. 음수 z는 글자 아래, 아주 작은 z는 배경 아래이고, 결과는 z 순이다.
+    //
+    // 경계는 ghostty 렌더러와 같은 `minInt(i32)/2` = −1073741824다. 그보다
+    // 하나 작은 값을 써서 경계의 바른 쪽을 본다. 같은 z(0)인 1 · 2는 id 순.
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=3,z=-1,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=4,z=-1073741825,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    const kg_c = kg.images(&kg_buf);
+    const want_order = [_]u32{ 4, 3, 1, 2 };
+    const want_layer = [_]vt.ImageLayer{ .below_bg, .below_text, .above_text, .above_text };
+    if (kg_c.len != 4) {
+        std.debug.print("FAIL: 넷을 놓았는데 {d}개가 나왔다\n", .{kg_c.len});
+        return error.WrongImageCount;
+    }
+    for (kg_c, want_order, want_layer) |got, id, layer| {
+        if (got.image_id != id or got.layer != layer) {
+            std.debug.print("FAIL: 순서·층이 다르다 — id {d} {s}(기대 id {d} {s})\n", .{ got.image_id, @tagName(got.layer), id, @tagName(layer) });
+            return error.WrongImageOrder;
+        }
+    }
+    std.debug.print("vt_test: z가 층과 순서를 정한다 OK\n", .{});
+
+    // 검사 68. 셀 안 오프셋(`X` · `Y`)만큼 목적지가 밀린다.
+    //
+    // 커서는 (7,1)이다(5→6→7). 목적지 = (7×8+3, 1×16+5) = (59,21).
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=5,X=3,Y=5,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    const d5 = findImage(kg.images(&kg_buf), 5) orelse return error.ImageNotPlaced;
+    if (d5.dst_x != 59 or d5.dst_y != 21) {
+        std.debug.print("FAIL: 오프셋 이미지가 ({d},{d})다((59,21)이어야 한다)\n", .{ d5.dst_x, d5.dst_y });
+        return error.WrongPlacement;
+    }
+    std.debug.print("vt_test: 셀 안 오프셋이 목적지를 민다 OK\n", .{});
+
+    // 검사 69. 원본 사각형(`x,y,w,h`)이 그대로 나오고, 목적지는 그 크기다.
+    kg.feed("\x1b_Ga=T,f=32,s=2,v=2,i=6,x=1,y=0,w=1,h=2,q=2;" ++ KG_RGBA ++ "\x1b\\");
+    const e6 = findImage(kg.images(&kg_buf), 6) orelse return error.ImageNotPlaced;
+    if (e6.src_x != 1 or e6.src_y != 0 or e6.src_w != 1 or e6.src_h != 2 or
+        e6.dst_w != 1 or e6.dst_h != 2)
+    {
+        std.debug.print("FAIL: 원본 사각형이 {d},{d} {d}×{d} → {d}×{d}다\n", .{ e6.src_x, e6.src_y, e6.src_w, e6.src_h, e6.dst_w, e6.dst_h });
+        return error.WrongSourceRect;
+    }
+    std.debug.print("vt_test: 원본 사각형이 나온다 OK\n", .{});
+
+    // 검사 70. RGB(`f=24`)는 형식이 rgb이고 픽셀당 3바이트다.
+    kg.feed("\x1b_Ga=T,f=24,s=2,v=2,i=7,q=2;" ++ KG_RGB ++ "\x1b\\");
+    const h7 = findImage(kg.images(&kg_buf), 7) orelse return error.ImageNotPlaced;
+    if (h7.format != .rgb or h7.data.len != 12) {
+        std.debug.print("FAIL: RGB 이미지가 {s} {d}바이트다\n", .{ @tagName(h7.format), h7.data.len });
+        return error.WrongFormat;
+    }
+    std.debug.print("vt_test: RGB 이미지가 나온다 OK\n", .{});
+
+    // 검사 71. 위로 한 줄 밀리면 두 줄짜리는 음수 y로 남고 한 줄짜리는 빠진다.
+    //
+    // 커서는 1행이다. 줄바꿈 셋이면 4행(맨 아래)이고 넷째가 화면을 한 줄
+    // 올린다. 그러면 0행의 id 1(한 줄)은 −1행이라 안 보이고, id 2(두 줄)는
+    // −1행에서 시작해 0행에 걸치므로 dst_y = −16으로 나온다(TG 실측 4).
+    kg.feed("\r\n\r\n\r\n\r\n");
+    const kg_f = kg.images(&kg_buf);
+    if (findImage(kg_f, 1) != null) {
+        std.debug.print("FAIL: 화면 위로 나간 id 1이 아직 나온다\n", .{});
+        return error.OffscreenImageShown;
+    }
+    const f2 = findImage(kg_f, 2) orelse {
+        std.debug.print("FAIL: 한 줄 걸친 id 2가 빠졌다\n", .{});
+        return error.PartialImageDropped;
+    };
+    if (f2.dst_y != -16) {
+        std.debug.print("FAIL: 걸친 id 2의 y가 {d}다(−16이어야 한다)\n", .{f2.dst_y});
+        return error.WrongPlacement;
+    }
+    std.debug.print("vt_test: 걸친 이미지는 음수 y로 남는다 OK\n", .{});
+
+    // 검사 72. 한 줄 더 밀면 전부 빠지고, 맨 위로 스크롤하면 원래 자리로 온다.
+    //
+    // 기준이 active가 아니라 viewport라는 것을 이것이 본다 — copy mode로
+    // 스크롤백을 볼 때 이미지가 글자와 함께 움직여야 한다.
+    kg.feed("\r\n");
+    if (kg.images(&kg_buf).len != 0) {
+        std.debug.print("FAIL: 전부 위로 나갔는데 {d}개가 나온다\n", .{kg.images(&kg_buf).len});
+        return error.OffscreenImageShown;
+    }
+    kg.scrollToTop();
+    const kg_g = kg.images(&kg_buf);
+    const g2 = findImage(kg_g, 2) orelse return error.ImageNotPlaced;
+    if (kg_g.len != 7 or g2.dst_y != 0) {
+        std.debug.print("FAIL: 맨 위에서 {d}개, id 2의 y {d}(7개, 0이어야 한다)\n", .{ kg_g.len, g2.dst_y });
+        return error.WrongPlacement;
+    }
+    std.debug.print("vt_test: 이미지가 viewport를 따라 움직인다 OK\n", .{});
+
+    // 검사 73. 버퍼가 차면 나머지를 세고 버린다.
+    var kg_one: [1]vt.ImagePlacement = undefined;
+    const kg_i = kg.images(&kg_one);
+    if (kg_i.len != 1 or kg.images_dropped != 6) {
+        std.debug.print("FAIL: 한 칸 버퍼에 {d}개, 버린 수 {d}(1개 · 6이어야 한다)\n", .{ kg_i.len, kg.images_dropped });
+        return error.WrongImageDrop;
+    }
+    std.debug.print("vt_test: 넘치는 이미지는 세고 버린다 OK\n", .{});
+
+    // 검사 74. 대체 화면은 저장소가 따로다(TG design 위험 3).
+    //
+    // `vim` 같은 전체 화면 프로그램 안에서는 셸이 놓은 이미지가 안 보이고,
+    // 나오면 돌아와야 한다.
+    kg.scrollToBottom();
+    kg.feed("\x1b[?1049h");
+    const kg_alt = kg.images(&kg_buf).len;
+    kg.feed("\x1b[?1049l");
+    kg.scrollToTop();
+    const kg_back = kg.images(&kg_buf).len;
+    if (kg_alt != 0 or kg_back != 7) {
+        std.debug.print("FAIL: 대체 화면에서 {d}개, 돌아와서 {d}개(0 · 7이어야 한다)\n", .{ kg_alt, kg_back });
+        return error.AltScreenImages;
+    }
+    std.debug.print("vt_test: 대체 화면은 이미지를 따로 든다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

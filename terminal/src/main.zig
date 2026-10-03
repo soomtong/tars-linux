@@ -1099,7 +1099,7 @@ pub fn main(init: std.process.Init) !void {
         input.togglesArg(toggles, &toggle_buf),
     });
 
-    const screen = try vt.Screen.init(init.io, allocator, cols, rows);
+    const screen = try vt.Screen.init(init.io, allocator, cols, rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
     defer screen.deinit();
 
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);

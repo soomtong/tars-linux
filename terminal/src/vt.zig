@@ -120,6 +120,54 @@ fn onWritePty(h: *Handler, bytes: [:0]const u8) void {
     self.pushReply(bytes);
 }
 
+/// 셀 하나의 픽셀 크기. 값은 렌더러가 정한다(`main.zig`의 `CELL_W` ·
+/// `ROW_HEIGHT`) — 폰트를 아는 쪽이 저쪽이다.
+pub const CellPx = struct { w: u32, h: u32 };
+
+/// kitty 이미지가 글자와 어떤 순서로 겹치는가(TG design 결정 3 · 4).
+/// 경계는 ghostty 렌더러와 같다(`renderer/image.zig:384`).
+pub const ImageLayer = enum {
+    /// `z < minInt(i32)/2` — 셀 배경보다도 아래.
+    below_bg,
+    /// `z < 0` — 배경 위, 글자 아래.
+    below_text,
+    /// 나머지 — 글자 위. kitty의 기본 z가 0이라 대부분 여기다.
+    above_text,
+};
+
+/// 저장된 픽셀의 모양. 프로토콜이 보낼 수 있는 둘만 있다. `gray` ·
+/// `gray_alpha`는 PNG 디코드에서만 생기므로 결정 6(M3) 전에는 안 나온다.
+pub const ImageFormat = enum { rgb, rgba };
+
+/// 렌더러가 그대로 그릴 수 있는 placement 하나(TG design 결정 3).
+///
+/// 좌표는 격자 왼쪽 위 기준 픽셀이고 `dst_x` · `dst_y`는 음수일 수 있다 —
+/// 위로 스크롤돼 일부만 보이는 이미지가 그렇다(TG 실측 4). 격자 밖을 자르는
+/// 것은 렌더러다. 잘린 부분의 원본 좌표는 확대 비율에 딸려 있어서 여기서
+/// 미리 자르면 최근접 이웃의 대응이 두 곳에 나뉜다.
+pub const ImagePlacement = struct {
+    layer: ImageLayer,
+    /// 정렬의 열쇠. 렌더러는 쓰지 않는다 — 결과가 이미 z 순이다.
+    z: i32,
+    image_id: u32,
+    format: ImageFormat,
+    /// 라이브러리 저장소의 바이트다. 다음 `feed`까지만 유효하다.
+    data: []const u8,
+    /// 이미지 전체의 픽셀 크기. `data`의 한 줄 폭을 셀 때 쓴다.
+    width: u32,
+    height: u32,
+    /// 이미지에서 가져올 사각형.
+    src_x: u32,
+    src_y: u32,
+    src_w: u32,
+    src_h: u32,
+    /// 화면에 그릴 사각형. 원본과 크기가 다르면 렌더러가 늘이거나 줄인다.
+    dst_x: i32,
+    dst_y: i32,
+    dst_w: u32,
+    dst_h: u32,
+};
+
 /// 터미널 상태를 계속 들고 있는 화면.
 ///
 /// TF-M2의 `parseToCells`는 호출할 때마다 Terminal을 새로 만들고 버렸다.
@@ -305,11 +353,16 @@ pub const Screen = struct {
     /// 엉뚱한 자리에 그린다 — "답이 없다"보다 나쁘다.
     reply_dropped: usize = 0,
 
+    /// 마지막 `images()`에서 `out`이 차서 못 내보낸 placement 수.
+    /// 0이 아니면 렌더러의 버퍼를 키운다.
+    images_dropped: usize = 0,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
         cols: u16,
         rows: u16,
+        cell: CellPx,
     ) !*Screen {
         const self = try alloc.create(Screen);
         self.* = .{
@@ -352,6 +405,21 @@ pub const Screen = struct {
             .stream = undefined,
             .state = .empty,
         };
+        // 셀의 픽셀 크기를 라이브러리에 알린다(TG design 결정 2). 비어 있으면
+        // kitty 이미지가 저장만 되고 아무 데도 안 놓인다 — 크기를 안 준
+        // placement는 `gridSize`가 0으로 나누기를 `catch 0`으로 삼켜 사각형이
+        // 없고, 셀 수로 준 것은 픽셀 크기가 0이다(TG 실측 2).
+        //
+        // 첫 `feed` 전이어야 한다. 이미지 뒤로 커서가 얼마나 움직일지는 전송
+        // 순간에 한 번 정해지므로, 나중에 채우면 그 사이에 보낸 이미지 위로
+        // 글자가 겹친다. setter가 아니라 인자인 이유다.
+        //
+        // 라이브러리의 정식 경로는 `resize(.., .{ .cell_size_px = .. })`지만
+        // 우리는 크기를 안 바꾸고, 그 함수도 이 두 필드에 같은 곱셈을 쓴다
+        // (`Terminal.zig:3800`). 같은 값이 `CSI 14t`(창 픽셀 크기)의 답이 된다.
+        self.term.width_px = @as(u32, cols) * cell.w;
+        self.term.height_px = @as(u32, rows) * cell.h;
+
         // term이 최종 주소에 자리잡은 뒤에 stream을 만든다.
         self.stream = self.term.vtStream();
 
@@ -709,6 +777,106 @@ pub const Screen = struct {
 
     pub fn defaultBg(self: *const Screen) u32 {
         return packRgb(self.state.colors.background);
+    }
+
+    /// 화면에 한 픽셀이라도 걸리는 kitty placement를 out에 채우고, z 오름차순
+    /// (같으면 image id 순)으로 정렬해 돌려준다(TG design 결정 3).
+    ///
+    /// `RenderState`는 이미지를 안 담는다 — 그래서 `cells()`와 달리 활성
+    /// 화면의 저장소를 직접 읽고, `cells()`와 무관하게 부를 수 있다. 대체
+    /// 화면은 저장소가 따로라 `screens.active`를 보면 저절로 맞다(TG 실측 4).
+    ///
+    /// 계산의 정답지는 라이브러리 C API의 `placement_render_info`와
+    /// `computeViewportPos`다(`c/kitty_graphics.zig:549` · `:603`). 둘 다 C
+    /// 래퍼 타입을 받거나 `pub`이 아니라 Zig에서 부를 수 없어서 옮겨 적었다.
+    /// 빼는 것도 같다 — virtual placement(비목표 3), 다 안 온 이미지, 크기 0.
+    pub fn images(self: *Screen, out: []ImagePlacement) []ImagePlacement {
+        const t = &self.term;
+        const s = t.screens.active;
+        const storage = &s.kitty_images;
+        self.images_dropped = 0;
+
+        // 셀 크기를 따로 들고 있지 않고 되찾는다. 라이브러리가 placement
+        // 크기를 셀 때 쓰는 식과 같아서 둘이 어긋날 수 없다.
+        const cell_w = t.width_px / t.cols;
+        const cell_h = t.height_px / t.rows;
+
+        const vp_top = s.pages.pointFromPin(.screen, s.pages.getTopLeft(.viewport)) orelse
+            return out[0..0];
+        const top_y: i64 = @intCast(vp_top.screen.y);
+        const bg_limit = std.math.minInt(i32) / 2;
+
+        var n: usize = 0;
+        var it = storage.placements.iterator();
+        while (it.next()) |kv| {
+            const p = kv.value_ptr;
+            const pin = switch (p.location) {
+                .pin => |pin| pin,
+                .virtual => continue,
+            };
+            // 스크롤백 가지치기로 붙어 있던 페이지가 사라진 placement.
+            if (pin.garbage) continue;
+
+            const img = storage.imageById(kv.key_ptr.image_id) orelse continue;
+            const data = switch (img.data) {
+                .complete => |d| d,
+                .pending => continue,
+            };
+            const format: ImageFormat = switch (img.format) {
+                .rgb => .rgb,
+                .rgba => .rgba,
+                else => continue,
+            };
+
+            const size = p.pixelSize(img, t);
+            if (size.width == 0 or size.height == 0) continue;
+
+            // viewport 기준 행. 위로 밀려난 이미지는 음수다(TG 실측 4).
+            const pt = s.pages.pointFromPin(.screen, pin.*) orelse continue;
+            const row: i64 = @as(i64, @intCast(pt.screen.y)) - top_y;
+            const grid = p.gridSize(img, t);
+            if (row + grid.rows <= 0 or row >= t.rows) continue;
+
+            if (n == out.len) {
+                self.images_dropped += 1;
+                continue;
+            }
+
+            // 원본 사각형. 0은 "이미지 끝까지"이고 이미지 밖은 잘라 낸다.
+            const src_x = @min(p.source_x, img.width);
+            const src_y = @min(p.source_y, img.height);
+            const src_w = @min(if (p.source_width > 0) p.source_width else img.width, img.width - src_x);
+            const src_h = @min(if (p.source_height > 0) p.source_height else img.height, img.height - src_y);
+
+            out[n] = .{
+                .layer = if (p.z < bg_limit) .below_bg else if (p.z < 0) .below_text else .above_text,
+                .z = p.z,
+                .image_id = img.id,
+                .format = format,
+                .data = data,
+                .width = img.width,
+                .height = img.height,
+                .src_x = src_x,
+                .src_y = src_y,
+                .src_w = src_w,
+                .src_h = src_h,
+                .dst_x = @intCast(@as(i64, pt.screen.x) * cell_w + p.x_offset),
+                .dst_y = @intCast(row * cell_h + p.y_offset),
+                .dst_w = size.width,
+                .dst_h = size.height,
+            };
+            n += 1;
+        }
+
+        // 해시 맵의 순서는 뜻이 없다. 렌더러가 층마다 앞에서부터 그리면 되게
+        // z 순으로 놓는다. 같은 z는 id로 — ghostty 렌더러의 `zLessThan`이
+        // kitty 이미지끼리는 id를 비교한다.
+        std.mem.sort(ImagePlacement, out[0..n], {}, struct {
+            fn lessThan(_: void, a: ImagePlacement, b: ImagePlacement) bool {
+                return a.z < b.z or (a.z == b.z and a.image_id < b.image_id);
+            }
+        }.lessThan);
+        return out[0..n];
     }
 
     /// 조합 중인 글자를 정한다. null이면 조합 중이 아니다.

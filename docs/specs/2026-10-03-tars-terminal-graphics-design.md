@@ -2,7 +2,7 @@
 
 접두사: TG
 
-Status: 진행 중(2026-10-03) — M0 끝(실측 1~5). 결정 5를 실측 1로 고쳤다.
+Status: 진행 중(2026-10-03) — M1 끝(`vt.zig`의 `CellPx` · `images()`, `vt_test` 검사 65~74). 결정 5를 실측 1로 고쳤다.
 
 관련 문서: `docs/decisions/project_termium_survey.md`(이 후보가 나온 조사) ·
 `docs/decisions/project_terminal_rendering.md`(색·오프셋을 `vt.zig`가 확정하는 경계) ·
