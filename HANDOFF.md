@@ -1,6 +1,25 @@
-# HANDOFF: Terminal Graphics(TG)가 M3로 닫혔다 — 이미지 뷰어는 패키지 매니저로 넘겼다
+# HANDOFF: Zig Upgrade(ZU)가 M1까지 왔다 — M2는 ghostty의 Zig 0.17 전환을 기다린다
 
 ## 지금 어디인가
+
+Zig 0.17.0이 나왔다(2026-10-03). 사용자의 다른 저장소(`_a-book/monorepo`, `3aad8cc`)는 같은 날
+올렸지만 이 저장소는 ghostty가 막는다. `terminal`이 ghostty 소스를 패키지로 물고, ghostty의
+`requireZig`가 major · minor 정확 일치를 요구한다. 업스트림 0.17 전환은 draft PR #14519 · 이슈
+#14518에 있다(2026-10-02 개설, 0.16 때는 석 달 반 걸렸다).
+
+사용자의 결정: 0.16에서 고쳐도 되는 것만 지금 고치고, ghostty가 0.17로 가면 그때 마무리한다.
+design은 `docs/specs/2026-10-03-tars-zig-upgrade-design.md`(결정 5 · 위험 3 · 실측 1~5), plan은
+`-zu-m0.md` · `-zu-m1.md`다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `a4953c0` | M0 — 배열 곱 `**` 25줄 → `@splat`(0.17이 문법을 없앴다) |
+| `1a71c6c` | M1 — `@cImport` 다섯 → translate-c 패키지(ghostty가 0.16에서 쓰는 `80f8b6e` 판). fortify를 끄는 자리가 셋에서 `c_poll` stub 헤더의 `#undef` 하나로 줄었다 · 루트 게이트 17체인 3/3(1시간 1분 50초) |
+
+0.17 컴파일러로 `ast-check`하면 `init` · `terminal/src` 오류가 0줄이다. 남은 것은 0.16에 없는 이름
+(`@backingInt` · `std.lang`)과 버전 줄뿐이다.
+
+### 그 앞 — Terminal Graphics(TG)가 M3로 닫혔다
 
 TG가 2026-10-03 하루에 M0~M3로 닫혔다(design `Status: 끝났다`). 자식이 kitty graphics로 보낸
 이미지를 우리 렌더러가 그린다. 해석과 저장은 ghostty vt가 하고, 우리 몫은 셀 픽셀 크기 알리기 ·
@@ -24,7 +43,15 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`
 끝에 있다 — plugin이 막았을 누락은 못 봤다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다 (ZU-M2는 ghostty 대기)
+
+ZU-M2를 여는 신호는 ghostty main의 `build.zig.zon`이 `minimum_zig_version = "0.17.0"`이 되는 것이다
+(`curl -sSL https://raw.githubusercontent.com/ghostty-org/ghostty/main/build.zig.zon | rg minimum_zig`).
+태그 릴리즈는 기다리지 않는다 — SHA로 고정한다. M2가 할 것은 design의 Milestone 절에 있다:
+`Dockerfile`의 `ZIG_VERSION` · `vendor_libghostty_vt.sh`의 `GHOSTTY_SHA` · zon의 `minimum_zig_version`과
+translate-c URL · hash(codeberg `875969d`) · 0.17 `zig fmt`(원래 있던 fmt 차이 61줄이 섞인다, 실측 2) ·
+`std.builtin` → `std.lang` · "0.16"을 적은 문서들. 첫 일은 ghostty `src/terminal`의 API 변화 읽기(위험 2).
+호스트 macOS의 0.17은 `~/.local/zig/zig-aarch64-macos-0.17.0/zig`에 있다(빌드는 컨테이너가 한다).
 
 TG를 닫은 뒤 이미지 뷰어를 다음으로 열려 했다가 2026-10-03에 사용자가 접었다. 재 보니 Debian
 `chafa`(1.14.5)는 바이너리가 190KB인데 재귀 `DT_NEEDED`가 sysroot에 없는 `.so` 69개, 44.6MB를
