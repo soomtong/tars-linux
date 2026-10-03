@@ -1,16 +1,18 @@
 ---
 name: feedback-superpowers-off
-description: "superpowers plugin is disabled for tars-linux (2026-10-03) because its session-start injection is pressure language written for older models and its workflows duplicate or contradict CLAUDE.md; the next milestone is the test"
+description: "superpowers plugin was uninstalled from the user scope (2026-10-03) because its session-start injection is pressure language written for older models and its workflows duplicate or contradict CLAUDE.md; the next milestone is the test"
 metadata:
   type: feedback
   modified: 2026-10-03T00:00:00.000Z
 ---
 
-2026-10-03에 이 저장소에서만 superpowers plugin을 껐다. 설정은
-`.claude/settings.json`의 `"superpowers@claude-plugins-official": false` 한 줄이다.
-`.gitignore`가 `.claude/`를 통째로 빼므로 그 파일은 이 기계에만 있고, 이
-기록이 결정의 유일한 사본이다. 다른 기계에서 일하면 같은 줄을 다시 넣는다.
-전역 `~/.claude/settings.json`에서는 여전히 켜져 있다.
+2026-10-03에 superpowers plugin을 user scope에서 지웠다
+(`claude plugin uninstall superpowers@claude-plugins-official --scope user`).
+모든 프로젝트에서 사라졌으므로 이 저장소에 따로 끄는 설정은 없다. 처음에는
+이 저장소에서만 껐다가, 필요할 때만 켜는 길(`--settings`로 세션마다 켜기)을
+보고 나서 사용자가 아예 지우기로 정했다 — 켜면 시작 주입도 함께 돌아와서,
+원하는 "필요할 때 skill만"을 plugin 단위로는 얻을 수 없었다. 다른 기계에
+설치돼 있다면 같은 명령으로 지운다.
 
 Why: `/claude-api prompt-audit`로 `CLAUDE.md`를 감사한 뒤 사용자가 "Opus 5.5를
 중점적으로 쓰면 superpowers가 계속 필요한가"를 물었고, 끄는 쪽으로 정했다.
