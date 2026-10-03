@@ -1,4 +1,4 @@
-# HANDOFF: Terminal Graphics(TG)가 M3로 닫혔다 — 다음은 이미지 뷰어
+# HANDOFF: Terminal Graphics(TG)가 M3로 닫혔다 — 이미지 뷰어는 패키지 매니저로 넘겼다
 
 ## 지금 어디인가
 
@@ -24,23 +24,24 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`
 끝에 있다 — plugin이 막았을 누락은 못 봤다.
 
-## 바로 다음에 할 것 — 이미지 뷰어 서브프로젝트를 연다
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-2026-10-03에 사용자가 정했다. 프로토콜만 있고 사람이 파일 이름 하나로 그림을 볼 도구가 없다.
-추천은 `chafa`(Debian trixie에 있다, 스스로 JPEG · PNG · GIF · WebP를 풀고 `-f kitty`로 보낸다,
-그래픽이 없는 곳에서는 블록 문자로 내려간다). 다른 후보는 `kitten icat`(kitty 전체를 끌고
-온다) · `timg`(무겁다) · `viu`(trixie 패키지 여부 미확인).
+TG를 닫은 뒤 이미지 뷰어를 다음으로 열려 했다가 2026-10-03에 사용자가 접었다. 재 보니 Debian
+`chafa`(1.14.5)는 바이너리가 190KB인데 재귀 `DT_NEEDED`가 sysroot에 없는 `.so` 69개, 44.6MB를
+끌고 온다 — `libSvtAv1Enc` 7.8MB · `librsvg-2` 6.1MB · `libaom` 5.5MB · `librav1e` 3.2MB(AVIF ·
+SVG 로더 때문) · glib · cairo · X11 · harfbuzz. RAM 위 initrd에 늘 얹기에는 크다.
 
-넣기 전에 볼 것 둘:
-- 비용 — `project_measuring_tool_cost`의 절차(재귀 `DT_NEEDED`). glib과 이미지 라이브러리가
-  따라온다.
-- `pty.zig`가 창 크기를 `ws_xpixel = 0`, `ws_ypixel = 0`으로 알린다. 뷰어는 `TIOCGWINSZ`의
-  픽셀로 셀 크기를 셈하므로 `cols × CELL_W`로 채워야 제 크기로 나온다. TG-M1이 라이브러리에
-  한 일을 pty 쪽에도 하는 것이다.
+사용자의 결정: 뷰어는 기본 이미지에 넣지 않고, 필요한 사람이 패키지 관리자(brew)로 설치하게
+남긴다. 그래서 이 일은 후보 "패키지 매니저"의 본론이 된다. brew 쪽에서 확인한 사실:
+- Homebrew `install.sh`의 `check_run_command_as_root`가 root이면 `Don't run this as root!`로
+  멈춘다. 예외는 컨테이너 표지(`/.dockerenv` · `/run/.containerenv` · cgroup 이름)뿐이다.
+  게스트는 전부 root다 — termium이 막힌 자리와 같다. non-root 사용자가 먼저다.
+- 설치물은 디스크의 prefix(`/home/linuxbrew/.linuxbrew`)에 놓여야 한다. DI의 설치 디스크 위다.
 
-그 밖의 후보 — 패키지 매니저(DI가 비워 둔 p3) · IPv6(방화벽 표를 `inet`으로, FW design 위험 6) ·
-USB 동글 층 B. 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다(TG가 큰 이미지의 그리기
-비용 하나를 더했다).
+어느 뷰어든 `pty.zig`의 `ws_xpixel` · `ws_ypixel`(지금 0)은 우리가 채워야 한다 — 이월 숙제에 있다.
+
+남은 후보 — 패키지 매니저(위의 brew · non-root · 디스크 prefix) · IPv6(방화벽 표를 `inet`으로,
+FW design 위험 6) · USB 동글 층 B. 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
 
 ⚠ 이어받는 사람이 볼 것:
 - Docker는 OrbStack이다. 소켓이 없다고 나오면 `orb start`.
