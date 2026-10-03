@@ -201,5 +201,64 @@ pub fn main() !void {
         std.debug.print("layout_test: last leaf removed, root=null OK\n", .{});
     }
 
+    // ── 검사 9: 구분선은 내부 노드마다 하나다 (WP-M1) ───────────────────
+    //
+    // `cells()`가 빈 셀을 안 내보내므로 격자를 통째로 구분선 색으로 칠하고
+    // 패널이 덮게 둘 수 없다(WP-M1 plan 확정 4). 그래서 구분선을 사각형으로
+    // 따로 꺼낸다. 오른쪽 분할 하나면 77번 열 한 칸 폭, 높이 전체다.
+    {
+        var seps: [layout.MAX_LEAVES - 1]Rect = undefined;
+        const one = layout.Tree.init();
+        if (one.separators(WHOLE, &seps).len != 0) return error.SeparatorOnOneLeaf;
+
+        var t = layout.Tree.init();
+        _ = t.split(0, .right, WHOLE);
+        const s1 = t.separators(WHOLE, &seps);
+        if (s1.len != 1) return error.WrongSeparatorCount;
+        try expectRect("separator", s1[0], .{ .col = 77, .row = 0, .cols = 1, .rows = 47 });
+
+        // 오른쪽을 다시 아래로 가르면 둘. 둘째는 오른쪽 절반 안의 가로선이다.
+        _ = t.split(1, .below, WHOLE);
+        const s2 = t.separators(WHOLE, &seps);
+        if (s2.len != 2) return error.WrongSeparatorCount;
+        try expectRect("separator 2", s2[1], .{ .col = 78, .row = 23, .cols = 77, .rows = 1 });
+    }
+
+    // ── 검사 10: 패널 넓이 + 구분선 넓이 = 격자 넓이 ──────────────────────
+    //
+    // 검사 5는 "안 겹친다"만 봤다. 여기서 빈 칸이 없다는 것까지 본다 —
+    // 구분선을 한 칸 어긋나게 그리면 패널과 겹치거나 틈이 생기고, 둘 다
+    // 이 합이 어긋난다. 여덟 잎 트리와 구분선 일곱을 칸 단위로 칠해
+    // 모든 칸이 정확히 한 번 덮이는지 본다.
+    {
+        var t = layout.Tree.init();
+        var last: u4 = 0;
+        var i: usize = 1;
+        while (i < layout.MAX_LEAVES) : (i += 1) {
+            const dir: layout.Dir = if (i % 2 == 1) .right else .below;
+            last = t.split(last, dir, WHOLE) orelse return error.SplitFailed;
+        }
+        t.rects(WHOLE, &rs);
+        var seps: [layout.MAX_LEAVES - 1]Rect = undefined;
+        const ss = t.separators(WHOLE, &seps);
+        if (ss.len != 7) return error.WrongSeparatorCount;
+
+        var cover = [_][155]u8{[_]u8{0} ** 155} ** 47;
+        for (rs ++ seps) |r| {
+            var y = r.row;
+            while (y < r.row + r.rows) : (y += 1) {
+                var x = r.col;
+                while (x < r.col + r.cols) : (x += 1) cover[y][x] += 1;
+            }
+        }
+        for (cover) |row| for (row) |n| {
+            if (n != 1) {
+                std.debug.print("FAIL: a cell is covered {d} time(s)\n", .{n});
+                return error.CoverNotExact;
+            }
+        };
+        std.debug.print("layout_test: 8 panes + 7 separators cover the grid exactly once OK\n", .{});
+    }
+
     std.debug.print("layout_test: all checks passed\n", .{});
 }

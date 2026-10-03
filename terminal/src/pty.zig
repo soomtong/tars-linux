@@ -9,6 +9,16 @@ const c = @import("c_pty");
 /// const를 벗기는 캐스팅을 하느니 처음부터 맞는 시그니처로 선언한다.
 extern "c" fn execv(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8) c_int;
 
+/// `kill` · `waitpid`도 같은 모양으로 직접 선언한다(WP-M1 plan 확정 5).
+/// `c_pty` 번역에 `signal.h` · `sys/wait.h`를 더하면 fortify가 번역을 깨뜨릴
+/// 자리가 는다(`project_zig_c_uapi_rule`) — 함수 둘 때문에 치를 값이 아니다.
+extern "c" fn kill(pid: c.pid_t, sig: c_int) c_int;
+extern "c" fn waitpid(pid: c.pid_t, status: ?*c_int, options: c_int) c.pid_t;
+
+/// 리눅스의 SIGHUP. 값은 `asm-generic/signal.h`의 것이고 x86_64도 같다.
+/// 헤더를 안 끌어오므로 여기 적는다.
+const SIGHUP: c_int = 1;
+
 pub const Session = struct {
     master_fd: c_int,
     child_pid: c.pid_t,
@@ -41,6 +51,46 @@ pub fn spawn(
     }
 
     return Session{ .master_fd = master_fd, .child_pid = pid };
+}
+
+/// 자식이 보는 창 크기를 바꾼다(WP design 결정 3). 패널이 갈리거나
+/// 닫혀 크기가 바뀔 때 `vt.Screen.resize`와 짝으로 부른다 — 한쪽만 바꾸면
+/// 셸이 아는 폭과 우리가 그리는 폭이 어긋나 줄바꿈이 엉킨다(`spawn`의
+/// 주석과 같은 병).
+///
+/// SIGWINCH는 우리가 안 보낸다. `TIOCSWINSZ`가 크기가 바뀌었으면 커널이
+/// 전경 프로세스 그룹에 보낸다.
+pub fn resize(fd: c_int, cols: u16, rows: u16) void {
+    var ws: c.struct_winsize = .{
+        .ws_row = rows,
+        .ws_col = cols,
+        .ws_xpixel = 0,
+        .ws_ypixel = 0,
+    };
+    _ = c.ioctl(fd, c.TIOCSWINSZ, &ws);
+}
+
+/// 셸에게 끝내라고 한다(WP design 결정 5). 보내기만 하고 기다리지 않는다 —
+/// 셸이 끝나면 PTY가 EOF를 내고, 그 길(`close`)이 패널을 닫는다. 셸에
+/// `exit`를 친 것과 같은 길을 지나게 하려는 것이다.
+///
+/// SIGHUP인 이유는 zsh · bash가 SIGTERM을 무시하고 SIGHUP에는 끝나기
+/// 때문이다(`project_shutdown_signals`).
+pub fn hangup(s: Session) void {
+    _ = kill(s.child_pid, SIGHUP);
+}
+
+/// 패널의 PTY를 닫고 자식을 거둔다(WP design 결정 5).
+///
+/// WP 전에는 셸이 끝나면 terminal도 끝나서 좀비가 문제가 안 됐다. 이제
+/// 패널이 닫혀도 terminal이 살아 있으므로 거둬야 한다.
+///
+/// `waitpid`가 막을 수 있는데 짧다. 여기 오는 것은 EOF 뒤이고, EOF는 slave
+/// fd가 전부 닫혔다는 뜻이라 자식은 이미 끝났거나 끝나는 중이다. 배경 job이
+/// slave를 쥐고 있으면 EOF 자체가 안 오므로 여기 안 온다.
+pub fn close(s: Session) void {
+    _ = c.close(s.master_fd);
+    _ = waitpid(s.child_pid, null, 0);
 }
 
 /// fish를 `-c <command>`로 비대화형 실행한다(프롬프트/설정 파일 없음).

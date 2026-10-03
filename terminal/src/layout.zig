@@ -108,6 +108,22 @@ pub const Tree = struct {
         self.fill(root, whole, out);
     }
 
+    /// 구분선 사각형을 `out`에 담고 그 앞부분을 돌려준다. 내부 노드마다
+    /// 하나이고 순서는 트리의 앞 순회다. `out`은 `MAX_LEAVES - 1`칸이면
+    /// 언제나 넉넉하다.
+    ///
+    /// 패널 사각형과 따로 꺼내는 이유가 WP-M1 plan 확정 4다. `cells()`는
+    /// 글자도 색도 없는 셀을 안 내보내므로, 격자를 통째로 구분선 색으로
+    /// 칠하고 패널이 덮게 두면 패널 안의 빈 칸이 구분선 색으로 남는다.
+    ///
+    /// 세로 분할이면 `first`의 바로 오른쪽 한 칸 폭에 부모 높이 전체,
+    /// 가로 분할이면 `first`의 바로 아래 한 줄에 부모 폭 전체다.
+    pub fn separators(self: *const Tree, whole: Rect, out: []Rect) []Rect {
+        var n: usize = 0;
+        if (self.root) |root| self.collectSeparators(root, whole, out, &n);
+        return out[0..n];
+    }
+
     /// 다음 잎. 트리의 왼쪽→오른쪽(위→아래) 순이고 끝에서 처음으로 감긴다.
     pub fn next(self: *const Tree, leaf: u4) u4 {
         var buf: [MAX_LEAVES]u4 = undefined;
@@ -138,22 +154,22 @@ pub const Tree = struct {
             .free => {},
             .leaf => |leaf| out[leaf] = r,
             .split => |s| {
-                var a = r;
-                var b = r;
-                switch (s.dir) {
-                    .right => {
-                        a.cols = (r.cols - 1) / 2;
-                        b.cols = r.cols - 1 - a.cols;
-                        b.col = r.col + a.cols + 1;
-                    },
-                    .below => {
-                        a.rows = (r.rows - 1) / 2;
-                        b.rows = r.rows - 1 - a.rows;
-                        b.row = r.row + a.rows + 1;
-                    },
-                }
-                self.fill(s.first, a, out);
-                self.fill(s.second, b, out);
+                const h = halves(r, s.dir);
+                self.fill(s.first, h.first, out);
+                self.fill(s.second, h.second, out);
+            },
+        }
+    }
+
+    fn collectSeparators(self: *const Tree, at: u4, r: Rect, out: []Rect, n: *usize) void {
+        switch (self.nodes[at]) {
+            .free, .leaf => {},
+            .split => |s| {
+                const h = halves(r, s.dir);
+                out[n.*] = h.separator;
+                n.* += 1;
+                self.collectSeparators(s.first, h.first, out, n);
+                self.collectSeparators(s.second, h.second, out, n);
             },
         }
     }
@@ -217,6 +233,32 @@ pub const Tree = struct {
         unreachable;
     }
 };
+
+/// 사각형 하나를 둘과 구분선으로 가른다. `fill`과 `separators`가 같은
+/// 산수를 따로 하면 언젠가 한 칸 어긋난다 — 그 어긋남은 "구분선이 패널
+/// 위에 그려진다"로 나타나고 `layout_test`의 검사 10이 본다.
+fn halves(r: Rect, dir: Dir) struct { first: Rect, second: Rect, separator: Rect } {
+    var a = r;
+    var b = r;
+    var sep = r;
+    switch (dir) {
+        .right => {
+            a.cols = (r.cols - 1) / 2;
+            b.cols = r.cols - 1 - a.cols;
+            b.col = r.col + a.cols + 1;
+            sep.col = r.col + a.cols;
+            sep.cols = 1;
+        },
+        .below => {
+            a.rows = (r.rows - 1) / 2;
+            b.rows = r.rows - 1 - a.rows;
+            b.row = r.row + a.rows + 1;
+            sep.row = r.row + a.rows;
+            sep.rows = 1;
+        },
+    }
+    return .{ .first = a, .second = b, .separator = sep };
+}
 
 fn indexOf(order: []const u4, leaf: u4) ?usize {
     for (order, 0..) |l, i| {

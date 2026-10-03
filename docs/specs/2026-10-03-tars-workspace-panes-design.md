@@ -1,9 +1,10 @@
 # TARS Workspace Panes — Design
 
 Date: 2026-10-03
-Status: 진행 중. WP-M0(구조)이 2026-10-03에 끝났다 — plan
-`docs/plans/2026-10-03-tars-workspace-panes-wp-m0.md`의 "M0이 실측한 것"
-절. 다음은 WP-M1(분할 · 닫기 · 순환).
+Status: 진행 중. WP-M0(구조) · WP-M1(분할 · 닫기 · 순환)이 2026-10-03에
+끝났다 — plan `docs/plans/2026-10-03-tars-workspace-panes-wp-m0.md` ·
+`-wp-m1.md`의 "실측한 것" 절. 열여덟번째 체인 `pane/check.sh`가 섰고 루트
+게이트 18체인 3/3. 다음은 WP-M2(워크스페이스).
 
 사용자의 요청(2026-10-03)에서 시작한다. "Cmd+1~9 workspace 전환, Cmd+D ·
 Cmd+Shift+D pane split" — 같은 날 "열린 패널을 닫는 것은 Cmd+W", "패널
@@ -225,8 +226,10 @@ SIGHUP에는 끝난다(`project_shutdown_signals`). 자식이 SIGHUP까지 막�
 새 줄 하나가 패널 명령마다 찍힌다.
 
 ```
-terminal: pane> ws=1/2 panes=2 focus=1 rect=78,0 77x47 sep ink=752
+terminal: pane> ws=1/2 panes=2 focus=1 rect=78,0 77x47 sep ink=6016
 ```
+
+(`sep ink`는 셀 단위라 세로 구분선 하나가 47줄 × 128픽셀이다 — M1 실측 1.)
 
 `ws=현재/전체` · `panes=이 워크스페이스의 패널 수` · `focus=잎 번호` · `rect=`
 포커스 패널의 사각형 · `sep ink=` 프레임버퍼의 `SEPARATOR` 픽셀 수. 마지막

@@ -358,6 +358,22 @@ pub const Screen = struct {
     /// 0이 아니면 렌더러의 버퍼를 키운다.
     images_dropped: usize = 0,
 
+    /// 셀 하나의 픽셀 크기. `init`이 받은 값을 그대로 든다(WP-M1 plan 확정 3).
+    ///
+    /// `resize`가 라이브러리에 같은 값을 다시 줘야 한다 — 안 주면
+    /// `width_px` · `height_px`가 옛 크기로 남고 kitty 이미지와 `CSI 14t`의
+    /// 답이 그 값을 본다(TG 결정 2).
+    cell: CellPx,
+
+    /// 이 화면이 포커스 패널인가(WP design 결정 6). 거짓이면 `cells()`가 셸
+    /// 커서를 반전하지 않는다 — 커서가 여럿 보이면 사람이 어디에 치고 있는지
+    /// 모른다.
+    ///
+    /// 기본이 참이라 패널이 하나뿐인 세상(과 `vt_test`의 화면들)이 안
+    /// 바뀐다. `main.zig`가 그리기 전에 매 프레임 맞춘다 — 포커스의 진실은
+    /// `Workspace.focus` 하나이고 이것은 그 사본이다.
+    focused: bool = true,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -369,6 +385,7 @@ pub const Screen = struct {
         self.* = .{
             .alloc = alloc,
             .io = io,
+            .cell = cell,
             // 기본 색을 여기서 준다(design 결정 5). 값은 main.zig가 쓰던
             // 상수와 같게 유지한다 — 이번 변경이 화면의 색을 바꾸는 일이 되면
             // 게이트의 회귀와 우리 변경을 가르기 어려워진다.
@@ -416,8 +433,10 @@ pub const Screen = struct {
         // 글자가 겹친다. setter가 아니라 인자인 이유다.
         //
         // 라이브러리의 정식 경로는 `resize(.., .{ .cell_size_px = .. })`지만
-        // 우리는 크기를 안 바꾸고, 그 함수도 이 두 필드에 같은 곱셈을 쓴다
-        // (`Terminal.zig:3800`). 같은 값이 `CSI 14t`(창 픽셀 크기)의 답이 된다.
+        // 여기는 크기를 안 바꾸는 자리이고, 그 함수도 이 두 필드에 같은
+        // 곱셈을 쓴다(`Terminal.zig:3800`). 같은 값이 `CSI 14t`(창 픽셀
+        // 크기)의 답이 된다. 크기를 바꾸는 자리(WP-M1의 `resize`)는 그
+        // 정식 경로를 쓴다.
         self.term.width_px = @as(u32, cols) * cell.w;
         self.term.height_px = @as(u32, rows) * cell.h;
 
@@ -450,6 +469,26 @@ pub const Screen = struct {
         // 줄을 지킨다.
         self.stream.handler.title_report = false;
         return self;
+    }
+
+    /// 화면의 크기를 바꾼다(WP design 결정 3). 분할로 작아질 때와 닫기로
+    /// 커질 때 둘 다 이것이다. 줄을 다시 접는 것(reflow)은 라이브러리가
+    /// 한다.
+    ///
+    /// copy mode면 먼저 닫는다. 접기가 tracked pin을 옮기면 선택과 검색
+    /// 매치가 조용히 다른 자리를 가리키는데, 그것을 감시하느니 모드를 닫는
+    /// 쪽이 사람에게도 분명하다 — `copyExit`이 `find`까지 함께 버린다.
+    ///
+    /// `cell_size_px`를 함께 주는 이유는 `cell` 필드의 주석에 있다.
+    /// 라이브러리는 `cols` · `rows`가 그대로여도 픽셀 값은 다시 쓴다
+    /// (`Terminal.zig:3800` · `:3815`).
+    pub fn resize(self: *Screen, cols: u16, rows: u16) !void {
+        if (self.copyActive()) self.copyExit();
+        try self.term.resize(self.alloc, .{
+            .cols = cols,
+            .rows = rows,
+            .cell_size_px = .{ .width = self.cell.w, .height = self.cell.h },
+        });
     }
 
     pub fn deinit(self: *Screen) void {
@@ -715,8 +754,12 @@ pub const Screen = struct {
                     // 검사하므로 게스트가 죽지는 않는다. 줄바꿈을 하지
                     // 않는 것이 의도다 — 조합 중인 글자는 아직 화면의
                     // 내용이 아니다.
+                    //
+                    // 포커스 없는 패널은 반전하지 않는다(WP design 결정 6).
+                    // 위의 preedit 치환은 그대로 둔다 — 조합은 포커스
+                    // 패널에서만 생기고, 포커스를 옮기는 키가 먼저 확정시킨다.
                     const span: usize = if (self.preedit == null) 1 else 2;
-                    if (@as(usize, vp.y) == y and
+                    if (self.focused and @as(usize, vp.y) == y and
                         x >= @as(usize, vp.x) and x < @as(usize, vp.x) + span)
                     {
                         std.mem.swap(u32, &fg, &bg);

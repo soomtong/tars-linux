@@ -64,6 +64,18 @@ const STATUS_OFF: u32 = 0x00303840;
 /// 섞일 일이 없지만, 같은 값을 피하는 쪽이 조사할 때 덜 헷갈린다.
 const STATUS_COPY: u32 = 0x00E0E8F0;
 
+/// 패널 사이 구분선의 색(WP design 결정 2).
+///
+/// 전용 색인 이유는 CI 결정 3과 같다. `dumpPane`이 프레임버퍼 전체에서 이
+/// 색의 픽셀을 세어 `sep ink=`로 찍는데, 다른 무엇이 같은 색을 쓰면 "구분선이
+/// 그 자리에 그려졌다"는 판정이 조용히 거짓이 된다. 여백(`MARGIN_COLOR`
+/// 0x102030)보다 밝아 눈에 보이되 상태 줄 색 셋(`STATUS_FG` · `STATUS_ON` ·
+/// `STATUS_OFF`)과 다르다.
+///
+/// 픽셀 한 줄이 아니라 셀 한 칸이다. 폭 2 글자의 spacer 규칙과 셀 격자를
+/// 흐리지 않으려면 구분선도 격자의 한 칸이어야 한다.
+const SEPARATOR: u32 = 0x00405060;
+
 /// 한 셀의 배경을 칠한다. 글리프보다 먼저 전부 칠해야 한다
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
 /// 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
@@ -318,12 +330,45 @@ fn drawRun(
 /// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
 /// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
 ///
+/// 한 프레임이 세 단계다(WP-M1). `renderBackdrop` → 패널마다 `renderPane`
+/// → `renderFinish`. 패널 하나를 그리는 일이 둘째이고, WP 전의 `render`
+/// 본문이 거의 그대로 그 안에 있다.
+///
+/// 하나의 함수로 안 묶은 이유는 그리는 순서와 계산하는 순서가 엇갈리기
+/// 때문이다. 포커스 패널을 마지막에 그려야 덤프 넷이 읽는 `cell_buf` ·
+/// `img_buf`가 포커스 패널의 것으로 남는데, 프롬프트는 포커스 패널의
+/// `cells()` 뒤에야 만들 수 있다(`defaultFg`가 그 갱신을 본다). 그래서
+/// 순서는 `main`의 루프가 잡는다.
+///
+/// 이 단계는 여백을 칠하고 구분선을 긋는다. 패널 안은 다음 단계가 셀마다
+/// 덮는다.
+///
+/// 구분선을 따로 긋는 이유는 WP-M1 plan 확정 4다 — `cells()`가 빈 셀을 안
+/// 내보내므로 격자를 통째로 구분선 색으로 칠하면 패널 안 빈 칸이 그 색으로
+/// 남는다.
+fn renderBackdrop(fb: drm.Framebuffer, tree: *const layout.Tree, whole: layout.Rect) void {
+    fb.fill(MARGIN_COLOR);
+    var buf: [layout.MAX_LEAVES - 1]layout.Rect = undefined;
+    for (tree.separators(whole, &buf)) |sep| {
+        const o = paneOrigin(sep);
+        var row: u32 = 0;
+        while (row < sep.rows) : (row += 1) {
+            var col: u32 = 0;
+            while (col < sep.cols) : (col += 1) {
+                drawCellBackground(fb, o.x + col * CELL_W, o.y + row * ROW_HEIGHT, SEPARATOR);
+            }
+        }
+    }
+}
+
+/// 패널 하나를 그린다. 배경 · 이미지 · 글리프의 층 순서가 여기 있다.
+///
 /// 두 벌로 나눠 그린다(design 결정 6). 배경을 전부 칠하고 나서 글리프를
 /// 전부 그린다. 섞으면 다음 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
 /// `cache`가 `*font.Cache`인 이유는 TR-M1부터 그리는 도중에 글자를 굽기
 /// 때문이다. 캐시에 없는 글자가 화면에 나타나면 그 자리에서 래스터라이징이
 /// 일어난다 — 한 자당 밀리초 이하이고 같은 글자는 한 번뿐이다.
-fn render(
+fn renderPane(
     fb: drm.Framebuffer,
     cache: *font.Cache,
     cells: []const vt.CellGlyph,
@@ -336,15 +381,7 @@ fn render(
     // `clip`을 따로 받지 않고 여기서 계산한다. 패널 하나면 격자 전체라
     // 산수 결과가 WP 전과 같다.
     rect: layout.Rect,
-    prompt: ?Prompt,
-    // 이름이 `status`가 아니다. 이 파일이 `status.zig`를 그 이름으로
-    // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
-    // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
-    st: Status,
-) !?PromptInk {
-    // 여백(격자 바깥)만 상수로 칠한다. 격자 안은 아래에서 셀마다 덮는다.
-    fb.fill(MARGIN_COLOR);
-
+) !void {
     const o = paneOrigin(rect);
     const clip = paneClip(rect);
 
@@ -379,7 +416,18 @@ fn render(
     }
 
     drawImages(fb, imgs, .above_text, o, clip);
+}
 
+/// 프레임을 끝낸다 — 포커스 패널의 프롬프트와 상태 줄을 얹고 내보낸다.
+fn renderFinish(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    prompt: ?Prompt,
+    // 이름이 `status`가 아니다. 이 파일이 `status.zig`를 그 이름으로
+    // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
+    // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
+    st: Status,
+) !?PromptInk {
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
     // 같은 산수를 다시 하지 않는다.
@@ -1123,6 +1171,10 @@ fn spawnPane(
     return .{ .screen = screen, .session = session, .rect = rect };
 }
 
+/// `poll`의 fd 하나가 누구의 것인가(WP-M1). 패널 포인터와, 그 패널을
+/// 트리에서 지울 때 필요한 두 번호.
+const PaneRef = struct { pane: *Pane, ws: usize, leaf: u4 };
+
 /// 모든 워크스페이스의 패널 수. 0이 되면 terminal이 끝난다(결정 5).
 fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
     var n: usize = 0;
@@ -1130,6 +1182,96 @@ fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
         if (slot) |w| n += w.tree.count();
     }
     return n;
+}
+
+/// 트리가 바뀐 뒤 패널들의 크기를 맞춘다(WP design 결정 3). 분할 뒤와
+/// 닫기 뒤 둘 다 이것을 부른다.
+///
+/// 규칙이 하나다 — `rect`가 바뀐 패널만 다시 잰다. 분할이면 갈린 패널
+/// 하나가 작아지고, 닫기면 올라간 형제(와 그 아래 패널들)가 커진다. 어느
+/// 경우인지를 여기서 가르지 않아도 사각형을 비교하면 저절로 그 패널들만 남는다.
+///
+/// `vt.Screen.resize`와 `pty.resize`가 짝이다. 한쪽만 바꾸면 셸이 아는 폭과
+/// 우리가 그리는 폭이 어긋나 줄바꿈이 엉킨다(`spawnPane`의 주석과 같은 병).
+///
+/// 새 잎의 칸은 아직 null이라 건너뛴다. 부르는 쪽이 돌려받은 사각형으로
+/// 그 칸에 `spawnPane`한다.
+fn applyLayout(ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Rect {
+    var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+    ws.tree.rects(whole, &rs);
+    for (&ws.panes, 0..) |*slot, leaf| {
+        const p = if (slot.*) |*p| p else continue;
+        const r = rs[leaf];
+        if (std.meta.eql(p.rect, r)) continue;
+        try p.screen.resize(r.cols, r.rows);
+        pty.resize(p.session.master_fd, r.cols, r.rows);
+        p.rect = r;
+    }
+    return rs;
+}
+
+/// `pane>` 줄을 찍을지 가르는 값(WP design 결정 7). 이 셋 중 하나가 바뀐
+/// 프레임에만 찍는다.
+///
+/// `dumpStatus`가 매 프레임 찍지 않는 이유와 같다(RC-M0 실측 7 — 시리얼 한
+/// 줄이 밀리초 단위다). 셸 출력으로 다시 그리는 프레임이 대부분이고 그때
+/// 패널 배치는 안 바뀐다.
+const PaneSig = struct {
+    panes: usize,
+    focus: u4,
+    rect: layout.Rect,
+};
+
+/// 패널 배치를 한 줄로 찍는다(WP design 결정 7).
+///
+///   terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 sep ink=752
+///
+/// `sep ink`는 프레임버퍼 전체에서 `SEPARATOR` 픽셀 수다. CI의 `copy ink`와
+/// 같은 자리다 — 트리가 맞아도 구분선을 안 그리면 0이고, 글자만 보는 판정은
+/// 그것을 못 잡는다. 전체를 세는 것은 그 색이 구분선에만 쓰이기 때문이다
+/// (`dumpStatus`가 띠 전체에서 `STATUS_COPY`를 세는 것과 같은 논리).
+///
+/// 첫 프레임에는 반드시 찍힌다(`last`가 null). 기준선이 없으면 게이트가
+/// 부팅 직후의 배치를 볼 창구가 없다.
+///
+/// 문구가 이 파일과 `pane/check.sh` 양쪽에 있다. 한쪽을 고치면 다른 쪽도
+/// 고쳐야 한다.
+///
+/// `render` 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 센다.
+fn dumpPane(
+    fb: drm.Framebuffer,
+    workspaces: *const [MAX_WORKSPACES]?Workspace,
+    current: usize,
+    last: *?PaneSig,
+) void {
+    const ws = workspaces[current].?;
+    const sig: PaneSig = .{
+        .panes = ws.tree.count(),
+        .focus = ws.focus,
+        .rect = ws.panes[ws.focus].?.rect,
+    };
+    if (last.*) |l| {
+        if (std.meta.eql(l, sig)) return;
+    }
+    last.* = sig;
+
+    var total: usize = 0;
+    for (workspaces) |slot| {
+        if (slot != null) total += 1;
+    }
+    var ink: usize = 0;
+    var y: u32 = 0;
+    while (y < fb.height) : (y += 1) {
+        var x: u32 = 0;
+        while (x < fb.width) : (x += 1) {
+            if (fb.getPixel(x, y) & 0x00FFFFFF == SEPARATOR) ink += 1;
+        }
+    }
+    std.debug.print("terminal: pane> ws={d}/{d} panes={d} focus={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
+        current + 1,  total,        sig.panes,     sig.focus,
+        sig.rect.col, sig.rect.row, sig.rect.cols, sig.rect.rows,
+        ink,
+    });
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -1379,17 +1521,23 @@ pub fn main(init: std.process.Init) !void {
     var fds: [1 + MAX_WORKSPACES * layout.MAX_LEAVES]c.struct_pollfd = undefined;
     // `fds[i + 1]`이 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
     // 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
-    var fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]*Pane = undefined;
+    //
+    // 워크스페이스 번호와 잎 번호를 함께 드는 이유는 EOF다(WP-M1). 그
+    // 패널을 닫으려면 트리에서 지워야 하고, 트리는 잎 번호만 안다.
+    var fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]PaneRef = undefined;
+    // 마지막으로 찍은 `pane>` 줄의 서명(WP design 결정 7). null이면 아직 한
+    // 번도 안 찍었다 — 첫 프레임이 반드시 찍힌다.
+    var last_pane: ?PaneSig = null;
 
     main_loop: while (true) {
         fds[0] = .{ .fd = keyboard_fd, .events = c.POLLIN, .revents = 0 };
         var nfds: usize = 1;
-        for (&workspaces) |*slot| {
+        for (&workspaces, 0..) |*slot, wi| {
             const w = if (slot.*) |*w| w else continue;
-            for (&w.panes) |*pane_slot| {
+            for (&w.panes, 0..) |*pane_slot, leaf| {
                 const pane = if (pane_slot.*) |*pane| pane else continue;
                 fds[nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
-                fd_panes[nfds - 1] = pane;
+                fd_panes[nfds - 1] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
                 nfds += 1;
             }
         }
@@ -1402,8 +1550,11 @@ pub fn main(init: std.process.Init) !void {
         // 포커스 패널이다(WP design 결정 1). 그래서 그 코드는 WP 전의
         // `screen` · `session`이 `focus.screen` · `focus.session`으로 이름만
         // 바뀌었다.
+        //
+        // `var`인 이유는 포커스가 바퀴 안에서 바뀌기 때문이다(WP-M1). 패널
+        // 명령이 옮기고, EOF가 포커스 패널을 닫는다. 렌더 앞에서 다시 구한다.
         const ws = &workspaces[current].?;
-        const focus = &ws.panes[ws.focus].?;
+        var focus = &ws.panes[ws.focus].?;
 
         if (fds[0].revents & c.POLLIN != 0) {
             // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
@@ -1574,6 +1725,51 @@ pub fn main(init: std.process.Init) !void {
                 dumpHangul(&key_state);
                 needs_redraw = true;
             }
+            // 패널 명령(WP-M1). PTY로 나가지 않는다 — 스크롤 · copy와 같이
+            // 순서대로 돈다.
+            //
+            // `keys.redraw` 뒤인 것에 뜻이 있다. 포커스를 옮기는 키는 조합
+            // 중인 한글을 먼저 확정시키고(HI 결정 6) 그 확정이 `redraw`를
+            // 켠다. 위 블록이 떠나기 전 패널의 조합 글자를 지워야 하므로, 포커스가
+            // 바뀌기 전에 돌아야 한다. 순서를 뒤집으면 지우는 일이 새 패널에
+            // 가고 떠난 패널에 확정된 글자가 조합 중인 모양으로 남는다.
+            //
+            // 바이트(확정된 `한` 포함)는 이 블록보다 먼저 옛 패널의 셸에
+            // 갔다(WP design 결정 4).
+            for (keys.panes) |cmd| {
+                switch (cmd) {
+                    .split_right, .split_below => {
+                        const dir: layout.Dir = if (cmd == .split_right) .right else .below;
+                        // 꽉 찼거나 가를 수 없을 만큼 작다(`Tree.split`).
+                        // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
+                        // 구별을 못 한다.
+                        const leaf = ws.tree.split(ws.focus, dir, whole) orelse {
+                            std.debug.print("terminal: pane> split refused\n", .{});
+                            continue;
+                        };
+                        const rs = try applyLayout(ws, whole);
+                        // 새 셸은 부팅의 것과 같은 셸이다. `spawned child pid`
+                        // 줄은 안 찍는다(WP-M1 plan 확정 1) — terminal/check.sh가
+                        // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
+                        // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
+                        // `pane>` 줄이 대신한다.
+                        ws.panes[leaf] = try spawnPane(init.io, allocator, shell_path, &argv, rs[leaf]);
+                        ws.focus = leaf;
+                    },
+                    // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
+                    // 닫는다 — `exit`를 친 것과 같은 길이다.
+                    .close => {
+                        const fp = &ws.panes[ws.focus].?;
+                        pty.hangup(fp.session);
+                        std.debug.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
+                            ws.focus, fp.session.child_pid,
+                        });
+                    },
+                    .focus_next => ws.focus = ws.tree.next(ws.focus),
+                    .focus_prev => ws.focus = ws.tree.prev(ws.focus),
+                }
+                needs_redraw = true;
+            }
         }
 
         // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
@@ -1584,17 +1780,31 @@ pub fn main(init: std.process.Init) !void {
         //
         // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
         // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
-        for (fds[1..nfds], fd_panes[0 .. nfds - 1]) |pfd, pane| {
+        for (fds[1..nfds], fd_panes[0 .. nfds - 1]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
+            const pane = ref.pane;
             const out = pty.readSome(pane.session.master_fd, &pty_buf);
             if (out.len == 0) {
                 std.debug.print("terminal: child exited (pty EOF)\n", .{});
                 // 마지막 패널이면 WP 전처럼 terminal이 끝나고 init이 되살린다
                 // (WP design 결정 5).
                 if (paneCount(&workspaces) == 1) break :main_loop;
-                // 패널이 둘 이상인 부팅은 M0에 없다. 그 패널을 닫는 것
-                // (waitpid · `tree.remove`)이 M1에서 이 자리에 선다.
-                unreachable;
+                // 아니면 그 패널만 닫는다. 닫는 자리는 여기 하나다 — `exit`도
+                // `Cmd+W`(SIGHUP)도 셸을 끝내고, 셸이 끝나면 여기로 온다.
+                const w = &workspaces[ref.ws].?;
+                std.debug.print("terminal: pane> closed leaf={d}\n", .{ref.leaf});
+                pty.close(pane.session);
+                pane.screen.deinit();
+                w.panes[ref.leaf] = null;
+                // 포커스를 먼저 옮긴다. `next`는 그 잎이 트리에 있어야 다음을
+                // 안다 — 지운 뒤에 물으면 제자리를 돌려준다.
+                if (w.focus == ref.leaf) w.focus = w.tree.next(ref.leaf);
+                w.tree.remove(ref.leaf);
+                _ = try applyLayout(w, whole);
+                needs_redraw = true;
+                // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
+                // 가리키므로 이 바퀴에서 더 안 만진다.
+                continue;
             }
             pane.screen.feed(out);
             // 자식이 질의를 보냈으면(`ESC[6n` 커서 위치 등) 답이 여기 쌓여
@@ -1647,6 +1857,31 @@ pub fn main(init: std.process.Init) !void {
         if (!needs_redraw) continue;
         needs_redraw = false;
 
+        // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
+        // 포커스 패널을 닫았을 수 있다 — 그때 위의 `focus`는 빈 슬롯을
+        // 가리킨다.
+        focus = &ws.panes[ws.focus].?;
+
+        // 포커스 아닌 패널을 먼저 그린다(WP-M1). 포커스 패널이 마지막이어야
+        // 아래 덤프 넷이 읽는 `cell_buf` · `img_buf`가 그 패널의 것으로
+        // 남는다. 두 버퍼를 패널마다 다시 쓰는 것은 design 위험 4다 —
+        // `cell_buf`가 격자 전체 크기라 어느 패널에도 충분하다.
+        //
+        // `focused`를 매 프레임 여기서 맞춘다(결정 6). 포커스의 진실은
+        // `ws.focus` 하나이고, 화면 쪽 값은 그리기 직전의 사본이다 —
+        // 포커스를 옮기는 자리마다 그 값을 고치게 하면 하나를 빠뜨린다.
+        const frame_start = std.Io.Clock.now(.awake, init.io);
+        renderBackdrop(fb, &ws.tree, whole);
+        for (&ws.panes, 0..) |*slot, leaf| {
+            const p = if (slot.*) |*p| p else continue;
+            if (leaf == ws.focus) continue;
+            p.screen.focused = false;
+            const p_cells = try p.screen.cells(cell_buf);
+            const p_bg = p.screen.defaultBg();
+            try renderPane(fb, &cache, p_cells, p.screen.images(&img_buf), p_bg, p.rect);
+        }
+        focus.screen.focused = true;
+
         const cells = try focus.screen.cells(cell_buf);
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
@@ -1692,11 +1927,11 @@ pub fn main(init: std.process.Init) !void {
             .copy = copy_active,
         };
 
-        const frame_start = std.Io.Clock.now(.awake, init.io);
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
         const imgs = focus.screen.images(&img_buf);
-        const prompt_ink = try render(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect, prompt, status_line);
+        try renderPane(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect);
+        const prompt_ink = try renderFinish(fb, &cache, prompt, status_line);
         const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
             first_frame_timed = true;
@@ -1709,6 +1944,7 @@ pub fn main(init: std.process.Init) !void {
         dumpOverlay(prompt);
         dumpPromptInk(fb, prompt_ink, prompt);
         dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps);
+        dumpPane(fb, &workspaces, current, &last_pane);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.

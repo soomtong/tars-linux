@@ -1019,6 +1019,10 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   세 자리에서 fortify를 끈다(`_FORTIFY_SOURCE=0`, `// GL-M3` 표식). 이유는
   `drm.zig`에만 길게 적혀 있고 나머지 둘은 그 자리를 가리킨다. `setPixel`·
   `getPixel`에 범위 검사가 없고 고치지 않고 호출부에서 막는다.
+  `pty.zig`의 패널 함수 셋(WP-M1): `resize`(`TIOCSWINSZ` — SIGWINCH는 커널이
+  보낸다) · `hangup`(SIGHUP만 보내고 안 기다린다, 닫힘은 EOF 경로) · `close`(master
+  fd를 닫고 `waitpid`로 거둔다). `kill` · `waitpid`는 `extern "c"` 선언이다 —
+  `c_pty` 번역에 헤더를 더하지 않는다.
 - `font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. 코드는 폰트에 무관하다.
 - 검사 파일들 — `input_test.zig`(모드 밖 대조군 검사들이 여기 있다) ·
   `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` · `layout_test.zig` ·
@@ -1147,6 +1151,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
   타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
   부팅이다 — A · B는 그것이 빠져도 초록이었다.
+- `pane/check.sh` — 부팅 하나 · 검사 열(WP-M1). `pane>` 배치 줄은 서명이 바뀐
+  프레임에만 찍히므로 `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의
+  음성 판정은 `last_screen`(마지막 `screen>` 줄 하나)으로 본다. 셸이 아는 폭은
+  fish의 `$COLUMNS`로 묻는다 — `echo`의 짧은 출력만 보면 `pty.resize`를 빼도
+  초록이었다(WP-M1 반사실).
 - `terminal/check.sh`의 monitor 재시도 loop — `Connection refused`가 여기서
   나오고 실패가 아니다.
 - `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의

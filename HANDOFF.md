@@ -1,4 +1,4 @@
-# HANDOFF: Workspace Panes(WP)가 M0까지 왔다 — 다음은 M1(분할 · 닫기 · 순환)
+# HANDOFF: Workspace Panes(WP)가 M1까지 왔다 — 다음은 M2(워크스페이스)
 
 ## 지금 어디인가
 
@@ -14,16 +14,15 @@ commit하지 않고 diff · 로그만 보고하며, Fable이 파일을 직접 �
 
 | milestone | 상태 | 무엇 |
 |---|---|---|
-| WP-M0 | 끝났다(2026-10-03, 승인 대기) | `layout.zig`(순수 트리, `layout_test` 검사 여덟) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 — 체인 넷(terminal · render · copy · hangul)과 기준값(`ink fg=383` · `caps ink off=87` · `copy ink=80`)이 그대로 |
-| WP-M1 | 다음 | `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[`. `Screen.resize` · `pty.resize`(TIOCSWINSZ) · 구분선 `SEPARATOR` · `focused` · `pane>` 줄. 새 체인 `pane/check.sh`(열여덟번째) |
-| WP-M2 | | `Cmd+T` · `Cmd+1~9`(있는 것만) · 상태 줄 `W2` 칸(둘 이상일 때만) |
+| WP-M0 | 끝났다(`37798ad`) | `layout.zig`(순수 트리, `layout_test`) · `Pane` · `Workspace` · `spawnPane` · `paneOrigin`. 눈에 보이는 변화 0 — 체인 넷(terminal · render · copy · hangul)과 기준값(`ink fg=383` · `caps ink off=87` · `copy ink=80`)이 그대로 |
+| WP-M1 | 끝났다(2026-10-03, 승인 대기) | `Cmd+D` · `Cmd+Shift+D` · `Cmd+W`(SIGHUP, 닫힘은 EOF 경로 하나) · `Cmd+]` · `Cmd+[`. `Screen.resize` · `pty.resize`(TIOCSWINSZ) · 구분선 `SEPARATOR` · `focused` · `pane>` 줄. 열여덟번째 체인 `pane/check.sh`(검사 열하나 — 폭은 `$COLUMNS`로 증명한다) · 루트 게이트 18체인 3/3(1시간 3분 30초) |
+| WP-M2 | 다음 | `Cmd+T` · `Cmd+1~9`(있는 것만) · 상태 줄 `W2` 칸(둘 이상일 때만) · 워크스페이스의 마지막 패널이 닫히면 워크스페이스를 지운다 · 닫은 뒤 포커스를 형제로(M1 실측 6, 사용자가 고른다) |
 | WP-M3 | 사용자가 고른다 | `Cmd+Option+화살표` 방향 포커스 |
 
-M1을 열 때 plan을 새로 쓴다. M0이 남긴 자리(`spawnPane` 시그니처 · EOF 경로의 `unreachable` ·
-`render`가 아직 포커스 패널 하나만 받는 것 · `focus`를 poll 직후 한 번만 구하는 것)는 M0 plan의
-"M0이 실측한 것" 끝에 있다. ghostty `Terminal.resize(alloc, .{ .cols, .rows, .cell_size_px })`는
-`terminal/ghostty-src/src/terminal/Terminal.zig:3775`에 있고, `c_pty` 번역에 `sys/ioctl.h`가
-이미 들어 있다.
+M2를 열 때 plan을 새로 쓴다. M1이 남긴 자리(`current`가 `const` · `PaneRef.ws` · 빈 트리가 남는
+갈래 · `input.Pane`에 variant를 더하면 switch가 배선 자리를 알려 주는 것)는 M1 plan의 "M1이
+실측한 것" 끝에 있다. M1의 교훈 하나는 체인에 바로 들어갔다 — 크기를 바꿨다는 것은 셀 수가
+아니라 셸이 아는 폭(`$COLUMNS`)으로만 증명된다(반사실이 plan의 검사만으로는 통과했다).
 
 ### 그 앞 — Zig Upgrade(ZU)가 M1까지 왔다, M2는 ghostty의 Zig 0.17 전환을 기다린다
 

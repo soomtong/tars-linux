@@ -329,6 +329,7 @@ CHAINS=(
   "FW-M2:./firewall/check.sh"
   "CT-M2:./service/check.sh"
   "WL-M3:./wifi/check.sh"
+  "WP-M1:./pane/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

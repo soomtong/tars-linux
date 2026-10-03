@@ -2174,5 +2174,78 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 선 바로 아래 PNG는 풀린다 OK\n", .{});
 
+    // ── WP-M1: 크기 바꾸기와 포커스 ─────────────────────────────────────
+    //
+    // 검사 78. `resize` 뒤 `cells()`가 새 크기 안에 있다(WP design 결정 3).
+    // 분할로 패널이 작아졌는데 옛 크기의 셀이 나오면 `main.zig`가 이웃
+    // 패널 위에 그린다. 글자를 줄마다 꽉 채워 두어 옛 크기 밖에 셀이
+    // 남아 있으면 반드시 보이게 한다.
+    const wp_rs = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer wp_rs.deinit();
+    wp_rs.feed("abcdefghijklmnopqrst\r\nabcdefghijklmnopqrst\r\nabcdefghijklmnopqrst");
+    try wp_rs.resize(10, 3);
+    const wp_cells = try wp_rs.cells(&buf);
+    for (wp_cells) |cell| {
+        if (cell.col >= 10 or cell.row >= 3) {
+            std.debug.print("FAIL: resize(10, 3) 뒤에 {d},{d} 셀이 나왔다\n", .{ cell.row, cell.col });
+            return error.CellOutsideResize;
+        }
+    }
+    if (wp_cells.len == 0) return error.NoCellsAfterResize;
+    std.debug.print("vt_test: resize(10, 3) 뒤 셀 {d}개가 전부 10x3 안이다 OK\n", .{wp_cells.len});
+
+    // 검사 79. `resize`가 셀 픽셀 크기를 다시 준다(WP-M1 plan 확정 3).
+    //
+    // `cell_size_px`를 빼먹으면 `width_px`가 옛 160으로 남고, kitty 이미지와
+    // `CSI 14t`의 답이 옛 패널 크기를 말한다. 라이브러리는 그 필드가 null이면
+    // 픽셀 값을 안 건드린다(`Terminal.zig:3800`의 `if (opts.cell_size_px)`).
+    if (wp_rs.term.width_px != 10 * CELL.w or wp_rs.term.height_px != 3 * CELL.h) {
+        std.debug.print("FAIL: resize 뒤 width_px={d} height_px={d} (want {d} {d})\n", .{
+            wp_rs.term.width_px, wp_rs.term.height_px, 10 * CELL.w, 3 * CELL.h,
+        });
+        return error.PixelSizeNotResized;
+    }
+    std.debug.print("vt_test: resize가 width_px · height_px를 다시 잰다 OK\n", .{});
+
+    // 검사 80. copy mode에서 `resize`하면 모드가 닫힌다(결정 3).
+    //
+    // 접기가 tracked pin을 옮기면 선택이 조용히 다른 자리를 가리킨다 —
+    // CM-M1이 가지치기에서 배운 병이다. 감시하느니 닫는다.
+    wp_rs.copyEnter();
+    if (!wp_rs.copyActive()) return error.CopyNotEntered;
+    try wp_rs.resize(8, 3);
+    if (wp_rs.copyActive()) {
+        std.debug.print("FAIL: copy mode가 resize 뒤에도 살아 있다\n", .{});
+        return error.CopySurvivedResize;
+    }
+    std.debug.print("vt_test: resize가 copy mode를 닫는다 OK\n", .{});
+
+    // 검사 81. 포커스 없는 패널은 셸 커서를 반전하지 않는다(결정 6).
+    //
+    // 커서를 글자 위에 세워 둔다. 빈 칸이면 반전이 없을 때 셀이 아예 안
+    // 나와서 "반전 안 함"과 "셀 없음"이 안 갈린다. 같은 화면을 `focused`만
+    // 바꿔 두 번 본다 — 대조군(참)이 반전을 보여야 거짓 쪽이 뜻을 갖는다.
+    const wp_fc = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer wp_fc.deinit();
+    wp_fc.feed("XY\x1b[1;2H");
+    var wp_seen: [2]?vt.CellGlyph = .{ null, null };
+    for ([_]bool{ true, false }, 0..) |f, k| {
+        wp_fc.focused = f;
+        for (try wp_fc.cells(&buf)) |cell| {
+            if (cell.row == 0 and cell.col == 1) wp_seen[k] = cell;
+        }
+    }
+    const wp_on = wp_seen[0] orelse return error.CursorCellMissing;
+    const wp_off = wp_seen[1] orelse return error.CursorCellMissing;
+    if (wp_on.fg != 0x102030 or wp_on.bg != 0xFFFFFF) {
+        std.debug.print("FAIL: focused=true인데 커서 셀이 fg=#{X:0>6} bg=#{X:0>6}\n", .{ wp_on.fg, wp_on.bg });
+        return error.FocusedCursorNotInverted;
+    }
+    if (wp_off.fg != 0xFFFFFF or wp_off.bg != 0x102030) {
+        std.debug.print("FAIL: focused=false인데 커서 셀이 fg=#{X:0>6} bg=#{X:0>6}\n", .{ wp_off.fg, wp_off.bg });
+        return error.UnfocusedCursorInverted;
+    }
+    std.debug.print("vt_test: 포커스 없는 화면은 셸 커서를 반전하지 않는다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

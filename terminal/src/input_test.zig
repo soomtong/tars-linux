@@ -85,6 +85,10 @@ fn expectFull(
             );
             return error.UnexpectedRedraw;
         },
+        .pane => |cmd| {
+            std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedPane;
+        },
     }
 }
 
@@ -122,6 +126,44 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
                 "FAIL: code={d} -> got redraw, want copy .{s}\n",
                 .{ code, @tagName(want) },
             );
+            return error.UnexpectedRedraw;
+        },
+        .pane => |cmd| {
+            std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedPane;
+        },
+    }
+}
+
+/// 패널 명령이 나오기를 기대한다(WP-M1). 바이트가 오면 실패다 — 그것이
+/// "Cmd+D가 셸에 `d`로 샜다"이고, 패널 명령의 가장 흔한 실패 방식이다.
+fn expectPane(state: *input.State, code: u16, want: input.Pane) !void {
+    switch (state.handleKey(code, 1, 0, .{})) {
+        .pane => |cmd| {
+            if (cmd == want) return;
+            std.debug.print(
+                "FAIL: code={d} -> got pane .{s}, want pane .{s}\n",
+                .{ code, @tagName(cmd), @tagName(want) },
+            );
+            return error.WrongPane;
+        },
+        .bytes => |bytes| {
+            std.debug.print(
+                "FAIL: code={d} -> got {d} byte(s) {any}, want pane .{s}\n",
+                .{ code, bytes.len, bytes, @tagName(want) },
+            );
+            return error.LeakedToPty;
+        },
+        .scroll => |sc| {
+            std.debug.print("FAIL: code={d} -> got scroll .{s}, want pane .{s}\n", .{ code, @tagName(sc), @tagName(want) });
+            return error.UnexpectedScroll;
+        },
+        .copy => |cmd| {
+            std.debug.print("FAIL: code={d} -> got copy .{s}, want pane .{s}\n", .{ code, @tagName(cmd), @tagName(want) });
+            return error.UnexpectedCopy;
+        },
+        .redraw => {
+            std.debug.print("FAIL: code={d} -> got redraw, want pane .{s}\n", .{ code, @tagName(want) });
             return error.UnexpectedRedraw;
         },
     }
@@ -165,6 +207,10 @@ fn expectScroll(
                 .{ code, @tagName(want) },
             );
             return error.UnexpectedRedraw;
+        },
+        .pane => |cmd| {
+            std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedPane;
         },
     }
 }
@@ -218,6 +264,10 @@ fn expectHangulAt(
                 .{ code, @tagName(cmd) },
             );
             return error.UnexpectedCopy;
+        },
+        .pane => |cmd| {
+            std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedPane;
         },
     }
     try expectCommit(state, code, want_commit);
@@ -1600,6 +1650,56 @@ pub fn main() !void {
     }
 
     std.debug.print("input_test: 프롬프트의 Cmd+V가 붙여넣기다 OK\n", .{});
+
+    // ── WP-M1: 패널 명령 ─────────────────────────────────────────────────
+    //
+    // 검사 60. 다섯 키 각각이 패널 명령이 된다(WP design 키 표). 바이트가
+    // 오면 실패다 — `expectPane`이 그것을 `LeakedToPty`로 본다.
+    {
+        var wp: input.State = .{};
+        try expect(&wp, K.KEY_LEFTMETA, 1, "");
+        try expectPane(&wp, K.KEY_D, .split_right);
+        try expectPane(&wp, K.KEY_W, .close);
+        try expectPane(&wp, K.KEY_RIGHTBRACE, .focus_next);
+        try expectPane(&wp, K.KEY_LEFTBRACE, .focus_prev);
+        // `Cmd+Shift+D`는 `.split_below`이지 `.split_right`가 아니다. Shift를
+        // 보는 switch가 Meta 분기 첫머리에 있는 것이 이 줄의 근거다(결정 4).
+        try expect(&wp, K.KEY_LEFTSHIFT, 1, "");
+        try expectPane(&wp, K.KEY_D, .split_below);
+        // 같은 switch에 있는 `Cmd+Shift+C`는 여전히 copy 진입이다. 모양을
+        // 바꾼 자리라 옛 손님을 다시 본다.
+        try expectCopy(&wp, K.KEY_C, .enter);
+        if (wp.mode != .copy) {
+            std.debug.print("FAIL: Cmd+Shift+C no longer opens copy mode\n", .{});
+            return error.ModeNotEntered;
+        }
+        try expect(&wp, K.KEY_LEFTSHIFT, 0, "");
+        try expect(&wp, K.KEY_LEFTMETA, 0, "");
+        // 대조군. Meta를 떼면 `d`는 글자다.
+        wp.mode = .normal;
+        try expect(&wp, K.KEY_D, 1, "d");
+    }
+
+    // 검사 61(음성). copy mode 안의 `Cmd+D`는 아무 일도 안 한다(결정 4).
+    //
+    // copy 분기가 `chord()`보다 앞이라 copy 표의 `else`가 삼킨다. 코드를
+    // 고치지 않고 이 줄로 못 박는다(WP-M1 plan 확정 6) — 누가 패널 명령을
+    // `handleKey` 앞쪽으로 끌어올리면 copy mode 안에서 패널이 갈리고, 그때
+    // "그 패널의 copy mode는 어떻게 되는가"라는 물음이 다시 생긴다.
+    {
+        var wc: input.State = .{};
+        wc.mode = .copy;
+        try expect(&wc, K.KEY_LEFTMETA, 1, "");
+        try expect(&wc, K.KEY_D, 1, "");
+        try expect(&wc, K.KEY_RIGHTBRACE, 1, "");
+        try expect(&wc, K.KEY_LEFTSHIFT, 1, "");
+        try expect(&wc, K.KEY_D, 1, "");
+        try expect(&wc, K.KEY_LEFTSHIFT, 0, "");
+        try expect(&wc, K.KEY_LEFTMETA, 0, "");
+        if (wc.mode != .copy) return error.ModeLeft;
+    }
+
+    std.debug.print("input_test: 패널 키 다섯이 명령이 되고 copy mode 안에서는 삼켜진다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

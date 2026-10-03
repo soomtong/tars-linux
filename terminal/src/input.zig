@@ -347,6 +347,31 @@ pub const Action = union(enum) {
     /// 생기면 `main.zig`가 `if (keys.hangul or keys.caps)`가 되고, 그
     /// 조건에 넷째를 빼먹는 것이 다음 사고다.
     redraw,
+    /// 패널 명령(WP design 결정 4). PTY로 보내지 않는다 — 스크롤 · copy와
+    /// 같은 이유로 `main.zig`가 순서대로 처리한다.
+    pane: Pane,
+};
+
+/// 패널을 가르고 닫고 옮기는 명령(WP design 키 표).
+///
+/// `union`이 아니라 `enum`이다(결정 4). payload가 필요한 명령이 없고,
+/// enum이면 `==`로 비교된다 — `Copy`가 `std.meta.eql`을 부르는 이유가
+/// payload였다.
+///
+/// 워크스페이스 명령(`Cmd+T` · `Cmd+1`~`9`)은 WP-M2가 여기 더한다. 미리
+/// 만들지 않는다 — `main.zig`의 switch가 `else` 없이 닫혀 있어서, variant를
+/// 더하는 순간 컴파일러가 배선할 자리를 알려 준다(`Copy`의 규율과 같다).
+pub const Pane = enum {
+    /// `Cmd+D` — 포커스 패널을 세로로 갈라 오른쪽에 새 셸.
+    split_right,
+    /// `Cmd+Shift+D` — 가로로 갈라 아래에 새 셸.
+    split_below,
+    /// `Cmd+W` — 포커스 패널의 셸에 SIGHUP. 닫힘은 EOF가 한다(결정 5).
+    close,
+    /// `Cmd+]` — 다음 패널로 포커스.
+    focus_next,
+    /// `Cmd+[` — 이전 패널로 포커스.
+    focus_prev,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -461,6 +486,9 @@ pub const Keys = struct {
     /// copy mode 명령도 같은 이유로 순서대로 모은다. `j`를 누르고 있으면
     /// 자동 반복이 여러 개를 실어 오고, 그만큼 내려가야 한다.
     copies: []const Copy,
+    /// 패널 명령도 같은 이유로 순서대로 모은다(WP-M1). `Cmd+]`를 누르고
+    /// 있으면 자동 반복이 여러 개를 실어 오고, 그만큼 포커스가 돌아야 한다.
+    panes: []const Pane,
     /// 이 배치가 화면을 바꿨는가(HI-M1 · IS-M1에서 이름이 넓어졌다).
     ///
     /// 값이 아니라 사실만 나른다. 무엇이 바뀌었는지는 상태를 읽어
@@ -632,6 +660,10 @@ pub const State = struct {
     /// 한 번의 read에서 나온 copy 명령의 저장소. `seq`·`scrolls`와 같은
     /// 이유로 힙을 쓰지 않는다.
     copies: [8]Copy = undefined,
+
+    /// 한 번의 read에서 나온 패널 명령의 저장소(WP-M1). 같은 이유로 힙을
+    /// 안 쓰고, 넘치면 버린다.
+    panes: [8]Pane = undefined,
 
     /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
@@ -1041,20 +1073,39 @@ pub const State = struct {
     /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
     fn chord(self: *State, code: u16) ?Action {
         if (self.metaed()) {
-            // copy mode 진입(CM-M0). Meta 분기 안에서 Shift를 한 번 더 보는
-            // 예외가 여기 하나뿐이어야 한다(design 위험 2). iTerm2의 copy
-            // mode 진입키와 같은 자리를 고른 대가다.
+            // Meta 분기 안에서 Shift를 한 번 더 보는 자리는 이 switch
+            // 하나뿐이어야 한다(CM design 위험 2 · WP design 결정 4).
+            // 예외를 if로 하나씩 늘리지 않고 switch 하나에 나란히 적는다 —
+            // 셋째가 오면 여기 한 줄이다. 둘 다 iTerm2의 키를 고른 대가다.
             //
-            // 모드를 여기서 바로 세우고 나가는 이유는, 이 뒤에 오는 키들이
-            // handleKey 앞쪽의 copy 분기로 빠져야 하기 때문이다.
-            if (self.shifted() and code == c.KEY_C) {
-                self.mode = .copy;
-                return .{ .copy = .enter };
-            }
+            // 표에 없는 Cmd+Shift 조합은 null이다. 아래 Shift 없는 표로
+            // 떨어지지 않는다 — 떨어지면 Cmd+Shift+W가 Cmd+W(패널 닫기)가
+            // 되는 식으로 Shift가 조용히 무시된다. 대가가 하나 있다: WP 전에는
+            // Cmd+Shift+←·→·Backspace가 Shift를 무시하고 0x01·0x05·0x15가
+            // 됐는데, 이제 null이라 맨 ←·→·Backspace로 나간다(WP-M1).
+            if (self.shifted()) return switch (code) {
+                // copy mode 진입(CM-M0). 모드를 여기서 바로 세우고 나가는
+                // 이유는, 이 뒤에 오는 키들이 handleKey 앞쪽의 copy 분기로
+                // 빠져야 하기 때문이다.
+                c.KEY_C => blk: {
+                    self.mode = .copy;
+                    break :blk .{ .copy = .enter };
+                },
+                c.KEY_D => .{ .pane = .split_below },
+                else => null,
+            };
             // Cmd 계열은 제어 문자 한 바이트다. 0x01이 beginning-of-line인
             // 이유는 그것이 readline의 기본 바인딩이기 때문이지 Cmd와 A
             // 사이에 무슨 관계가 있어서가 아니다.
+            //
+            // 패널 명령 넷(WP-M1)은 바이트가 아니라 동작이다. copy mode
+            // 안에서는 이 줄에 안 닿는다 — copy 분기가 chord()보다 앞이라
+            // copy 표가 삼킨다(결정 4, `input_test` 검사 61).
             return switch (code) {
+                c.KEY_D => .{ .pane = .split_right },
+                c.KEY_W => .{ .pane = .close },
+                c.KEY_RIGHTBRACE => .{ .pane = .focus_next },
+                c.KEY_LEFTBRACE => .{ .pane = .focus_prev },
                 c.KEY_LEFT => .{ .bytes = self.one(0x01) }, // beginning-of-line
                 c.KEY_RIGHT => .{ .bytes = self.one(0x05) }, // end-of-line
                 // 0x15는 bash에서 커서 앞까지, zsh에서는 줄 전체를 지운다.
@@ -1469,6 +1520,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .bytes = out[0..0],
         .scrolls = self.scrolls[0..0],
         .copies = self.copies[0..0],
+        .panes = self.panes[0..0],
         .redraw = false,
     };
 
@@ -1476,6 +1528,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
     var written: usize = 0;
     var scrolled: usize = 0;
     var copied: usize = 0;
+    var paned: usize = 0;
     var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
@@ -1544,12 +1597,18 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
             // 조합만 바뀐 키다. PTY로 나갈 것도 모을 것도 없고, `main.zig`가
             // 다시 그리기만 하면 된다.
             .redraw => redraw = true,
+            // 스크롤 · copy와 같은 모양이다(WP-M1).
+            .pane => |cmd| if (paned < self.panes.len) {
+                self.panes[paned] = cmd;
+                paned += 1;
+            },
         }
     }
     return .{
         .bytes = out[0..written],
         .scrolls = self.scrolls[0..scrolled],
         .copies = self.copies[0..copied],
+        .panes = self.panes[0..paned],
         .redraw = redraw,
     };
 }

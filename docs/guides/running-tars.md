@@ -40,6 +40,11 @@ qemu-system-x86_64 -cdrom out/tars.iso \
 - 창이 포커스를 가지면 키가 PS/2 → evdev → `input.zig`로 들어간다. copy
   mode도 그대로 된다 — `Cmd+Shift+C`로 진입, `/`로 검색, `n`·`N`으로 왕복,
   `y`로 복사.
+- 화면을 가르는 키(WP). 모양은 iTerm2와 같다 — `Cmd+D`가 오른쪽에,
+  `Cmd+Shift+D`가 아래에 새 셸을 띄우고, `Cmd+]`·`Cmd+[`가 패널 사이를
+  순환하며, `Cmd+W`가 포커스 패널의 셸에 SIGHUP을 보내 닫는다. 마지막
+  패널을 닫으면 terminal이 끝나고 init이 새로 띄운다. copy mode 안에서는
+  이 키들이 안 먹는다 — Esc로 나온 뒤 누른다.
 - 키보드·마우스 grab을 놓는 것은 `Ctrl+Alt+G`, 끝내는 것은 창을 닫거나
   `Ctrl+C`.
 
