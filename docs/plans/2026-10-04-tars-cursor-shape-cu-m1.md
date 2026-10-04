@@ -2,7 +2,7 @@
 
 Date: 2026-10-04
 Design: `docs/specs/2026-10-04-tars-cursor-shape-design.md`
-Status: 끝났다(2026-10-04). `tools` · `render` 체인과 반사실 둘이 끝났고, 루트 게이트 18체인
+Status: 끝났다(2026-10-04). `tools` · `render` 체인과 mutation 둘이 끝났고, 루트 게이트 18체인
 3/3 PASS, 1시간 5분 31초, `FAIL` 0줄. 실측은 맨 아래 "CU-M1이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
@@ -121,8 +121,8 @@ Status: 끝났다(2026-10-04). `tools` · `render` 체인과 반사실 둘이 �
     파일이다. "왜"의 긴 설명은 `make_initrd.sh`의 한국어 주석에 둔다. vimrc에는
     줄 이음(`\`)을 쓰지 않는다. `compatible`의 `cpoptions`에 `C`가 있어 이어 쓴
     줄이 안 읽힌다.
-13. 반사실은 `make_initrd.sh` 사본을 `-v`로 덮어서 한다. 그 스크립트는
-    `cd "$(dirname "$0")"`라 덮어쓴 파일도 `/workspace/kernel`에서 돈다. 반사실을
+13. mutation은 `make_initrd.sh` 사본을 `-v`로 덮어서 한다. 그 스크립트는
+    `cd "$(dirname "$0")"`라 덮어쓴 파일도 `/workspace/kernel`에서 돈다. mutation을
     돌리면 저장소의 `kernel/initrd.cpio`가 망가진 판으로 남지만, 다음 체인이 언제나
     `make_initrd.sh`를 다시 부르므로 따로 지울 것은 없다.
 
@@ -235,7 +235,7 @@ install -m 0644 vim/vimrc "$WORKDIR/etc/vim/vimrc"
 install -m 0644 vim/defaults.vim "$WORKDIR/usr/share/vim/vim91/defaults.vim"
 ```
 
-`cp` · `chmod` 두 줄 대신 `install -m 0644` 한 줄인 이유는 Task 6의 반사실이다. 파일
+`cp` · `chmod` 두 줄 대신 `install -m 0644` 한 줄인 이유는 Task 6의 mutation이다. 파일
 하나를 빼는 것이 줄 하나를 지우는 것이 된다. 0644인 이유는 `30-tars-ntp`와 같다 —
 실행이 아니라 읽히는 파일이다.
 
@@ -364,7 +364,7 @@ modes"를 붙인다.
    memory`)의 타임스탬프와 initrd 크기 둘(`ls -l` · `gzip -dc | wc -c`)도 함께
    적는다. 기준값과 비교하는 것이 design 위험 5의 답이다. 체인은 CU-M0의 1분
    36초~1분 59초보다 vim 구간만큼(약 30~60초) 길어질 것이다.
-4. 반사실 둘. 저장소 파일은 안 고치고 `make_initrd.sh` 사본을 `-v`로 덮는다
+4. mutation 둘. 저장소 파일은 안 고치고 `make_initrd.sh` 사본을 `-v`로 덮는다
    (lessons "범용 명령"). 돌리기 전에 사본에 편집이 실제로 들어갔는지 `diff`로
    본다(lessons 실측 52).
 
@@ -385,7 +385,7 @@ modes"를 붙인다.
    - (b) stub `defaults.vim`을 뺀다. 기대: 검사 25가 `E1187`(과 `Press ENTER`)으로
      빨갛다.
 
-   반사실이 예상과 다른 검사에서 죽거나 통과하면 그대로 적는다. 같은 사본으로
+   mutation이 예상과 다른 검사에서 죽거나 통과하면 그대로 적는다. 같은 사본으로
    `tools/check.sh`를 돌리면 부팅 전의 검사 1에서 `… is missing from the initrd`로
    죽어야 한다 — (b) 하나로 한 번만 본다(약 1분).
 5. regression은 루트 게이트가 맡는다. initrd가 바뀌므로 열여덟 체인이 전부 새
@@ -397,7 +397,7 @@ modes"를 붙인다.
 ## Task 7: 문서
 
 - 이 plan의 `Status:`와 맨 아래 "CU-M1이 실측한 것" 절. 검사 25~32의 실제 줄,
-  반사실 둘, 이미지 재빌드 시간, initrd 크기와 풀기 시간의 전후, 체인 시간, 루트
+  mutation 둘, 이미지 재빌드 시간, initrd 크기와 풀기 시간의 전후, 체인 시간, 루트
   게이트 시간을 적는다.
 - design의 `Status:`를 `끝났다(날짜)`로 고친다. 실측 절 끝에 이 plan의 확정 7에서
   design과 다르게 드러난 것을 짧게 더한다 — `showmode`가 꺼져 `-- INSERT --`가 없다는
@@ -472,7 +472,7 @@ modes"를 붙인다.
    커서 칸이 빠져 `6879`다. 확정 7이 컨테이너에서 센 것은 `ESC[94m` 바이트의 수였고, 칸의
    수는 터미널에 그려 봐야 나온다. 고친 것은 아래 "plan과 다르게 한 것" 1이다.
 
-6. 고친 뒤 `render/check.sh`가 1분 47.51초에 통과했다(반사실 뒤 다시 돌린 판은
+6. 고친 뒤 `render/check.sh`가 1분 47.51초에 통과했다(mutation 뒤 다시 돌린 판은
    1분 47.49초). 기준값(실측 1)의 1분 23.39초보다 약 24초 길고, 그것이 vim 구간이다.
    CU-M0 실측 2의 1분 36초~1분 59초 범위 안이다. 검사 25~32의 실제 줄은 다음과 같다(체인 출력의 줄 그대로).
 
@@ -512,7 +512,7 @@ modes"를 붙인다.
      `terminal/src/`가 아예 안 읽는다 — 그 플래그를 보는 코드가 vendor된 라이브러리의
      formatter에만 있다. vim이 그것을 켰는지는 로그로 안 보인다(pty 바이트를 찍지 않는다).
 
-8. 반사실 (a) — 시스템 vimrc를 뺐다(`make_initrd.sh` 사본에서 `install … vim/vimrc` 줄을
+8. mutation (a) — 시스템 vimrc를 뺐다(`make_initrd.sh` 사본에서 `install … vim/vimrc` 줄을
    지웠고, `diff`가 234행 하나를 보였다). 예상대로 검사 25는 초록이고 검사 26의 기다림이
    15초를 다 쓰고 죽었다(1분 46.35초).
 
@@ -521,7 +521,7 @@ modes"를 붙인다.
    FAIL: insert (i): the cursor line never matched /vt=bar drawn=bar row=0 col=0 /: terminal: cursor> vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0
    ```
 
-9. 반사실 (b) — stub `defaults.vim`을 뺐다(`diff`가 235행 하나). 예상대로 검사 25가 빨갛고,
+9. mutation (b) — stub `defaults.vim`을 뺐다(`diff`가 235행 하나). 예상대로 검사 25가 빨갛고,
    메시지가 `E1187`과 `Press ENTER`를 둘 다 말한다(1분 27.09초).
 
    ```
@@ -536,7 +536,7 @@ modes"를 붙인다.
    FAIL: usr/share/vim/vim91/defaults.vim is missing from the initrd
    ```
 
-   두 반사실 모두 예상과 다른 검사에서 죽지 않았다.
+   두 mutation 모두 예상과 다른 검사에서 죽지 않았다.
 
 10. 루트 게이트 18체인 × 3이 전부 통과했다(2026-10-04). 1시간 5분 31초, `FAIL` 0줄. CU-M0
     뒤의 1시간 4분 5초보다 1분 26초 길다 — `render` 체인의 vim 구간(약 24초) × 3이 그

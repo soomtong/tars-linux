@@ -1,7 +1,7 @@
 # SV-M1 — `init`이 `/config/services.d`를 읽고 감독한다
 
 > 이 plan을 실행하는 사람에게: 순서는 Task 1(순수한 쪽과 그 검사) → Task 2(`main.zig`
-> 배선) → Task 3(체인) → Task 4(반사실) → Task 5(이웃 체인) → Task 6(기록)이다.
+> 배선) → Task 3(체인) → Task 4(mutation) → Task 5(이웃 체인) → Task 6(기록)이다.
 > Task 1은 TDD다 — 검사를 먼저 쓰고 빨간 것을 본 뒤 구현한다. 코드 편집은 Claude가
 > 하고, 편집마다 `git diff --stat`으로 더한 줄 · 지운 줄을 세고 지운 줄은 직접 읽는다
 > (`CLAUDE.md` 진행 방식 2).
@@ -965,7 +965,7 @@ bash -c 'source <(sed -n "/^require_build_steps()/,/^}/p;/^BUILD_STEPS=/,/^)/p;/
 
 기대: `entry-ok`.
 
-## Task 4 — 체인을 돌리고 반사실 셋
+## Task 4 — 체인을 돌리고 mutation 셋
 
 - [ ] Step 1: 체인 (빌드 캐시가 있으면 약 1~2분)
 
@@ -976,25 +976,25 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer ./service/c
 기대: 검사 1 ~ 8의 줄과 `SV chain PASS`. 빨간 것이 있으면 `fail`이 찍는 `tars-init`
 줄들을 읽고 원인을 고친 뒤 다시 돈다 — 체인을 느슨하게 고쳐 초록을 만들지 않는다.
 
-- [ ] Step 2: 반사실 셋
+- [ ] Step 2: mutation 셋
 
 각각 한 자리를 되돌려 체인을 돌리고, 겨냥한 검사가 겨냥한 문구로 빨간 것을 본 뒤
 `git checkout init/src/services.zig init/src/main.zig`로 되돌린다. 캐시 문제
-(`project_zig_out_staleness`)를 피하려고 각 반사실 전에 컨테이너 안에서
+(`project_zig_out_staleness`)를 피하려고 각 mutation 전에 컨테이너 안에서
 `rm -rf init/.zig-cache init/zig-out`를 한다.
 
-| 반사실 | 고치는 자리 | 빨개야 하는 검사 |
+| mutation | 고치는 자리 | 빨개야 하는 검사 |
 |---|---|---|
 | 정렬 없음 | `services.zig`의 `sortNames(names[0..count]);` 줄을 지운다 | 검사 4(`did not start in name order`) — 그 전에 `zig build test`의 sort 검사가 먼저 빨갛다면 그것도 적는다 |
 | 사전 확인 없음 | `check`의 `not_executable` 분기가 `.ok`를 돌려주게 | 검사 1(`exactly three`) 또는 2 |
 | 세션 · stdin 없음 | `spawn`의 `.service => detachService(),`를 `.service => {},`로 | 검사 6 |
 
-정렬 반사실은 호스트 검사가 먼저 잡으므로 체인까지 안 간다. 그 경우 체인의
+정렬 mutation은 호스트 검사가 먼저 잡으므로 체인까지 안 간다. 그 경우 체인의
 `zig build test` 단계를 잠시 주석으로 막아 부팅 쪽 검사 4도 빨간지를 따로 본다 —
-두 겹이 각각 서 있는지가 궁금한 것이다. 막은 주석은 반사실 뒤 되돌린다.
+두 겹이 각각 서 있는지가 궁금한 것이다. 막은 주석은 mutation 뒤 되돌린다.
 
 ```bash
-# 한 반사실의 모양 (정렬 없음의 예)
+# 한 mutation의 모양 (정렬 없음의 예)
 sd -F '    sortNames(names[0..count]);' '' init/src/services.zig
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
   bash -c 'rm -rf init/.zig-cache init/zig-out && ./service/check.sh' 2>&1 | tail -15
@@ -1025,7 +1025,7 @@ M1에서 돌지 않는 것은 M2가 initrd와 체인을 다시 바꾸기 때문�
 - [ ] Step 1: design에 "SV-M1이 실행으로 증명한 것" 절을 더한다
 
 M0 절 뒤에 실측 8부터 이어 번호를 매긴다. 체인 출력(검사 1 ~ 8의 줄)과 걸린 시간,
-반사실 셋의 결과, 이웃 다섯의 결과, `init` 바이너리 크기 변화(`zig-out/bin/init`,
+mutation 셋의 결과, 이웃 다섯의 결과, `init` 바이너리 크기 변화(`zig-out/bin/init`,
 M1 전후), Task 1 Step 5에서 Zig API를 고친 것이 있으면 그것. `Status:` 줄을 "M1
 끝났다 — 다음은 M2(sshd)"로 고친다.
 

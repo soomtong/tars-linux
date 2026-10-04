@@ -2,7 +2,7 @@
 
 Date: 2026-10-03
 Design: `docs/specs/2026-10-03-tars-workspace-panes-design.md`
-Status: 구현과 검증이 끝났다(2026-10-03). 호스트 검사 일곱 · 체인 넷(terminal 60초 · render 67초 · copy 150초 · hangul 63초) · 반사실 하나가 초록이고, `ink fg=383` · `caps ink off=87` · `copy ink=80`이 착수 전과 같다. 설계와 달리 한 것은 아래 "M0이 실측한 것" 절에 있다.
+Status: 구현과 검증이 끝났다(2026-10-03). 호스트 검사 일곱 · 체인 넷(terminal 60초 · render 67초 · copy 150초 · hangul 63초) · mutation 하나가 초록이고, `ink fg=383` · `caps ink off=87` · `copy ink=80`이 착수 전과 같다. 설계와 달리 한 것은 아래 "M0이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 
@@ -72,7 +72,7 @@ Status: 구현과 검증이 끝났다(2026-10-03). 호스트 검사 일곱 · �
 - `terminal/check.sh` · `render/check.sh` · `copy/check.sh` ·
   `hangul/check.sh` 각 한 번. 네 체인의 `screen>` · `ink` · `status>` 값이
   착수 전과 같다.
-- 반사실 하나: `render`의 원점에 `rect.col`을 안 더하게 박고 render 체인을
+- mutation 하나: `render`의 원점에 `rect.col`을 안 더하게 박고 render 체인을
   돌린다 — 패널 하나면 `rect.col == 0`이라 통과해야 한다. 이것은 "M0이
   아무것도 안 바꿨다"의 확인이고, 원점 산수가 맞는지는 M1의 `sep ink`와
   `screen>` 음성 검사가 본다.
@@ -106,7 +106,7 @@ plan `Status:` · `HANDOFF.md` 맨 위 절 · `docs/guides/lessons.md`의 핵심
    격자 아래 여백이다. PageUp · PageDown의 delta는 `focus.rect.rows`다.
 5. `layout_test`는 첫 회에 초록이라 일부러 빨강을 봤다 — `b.col`의 구분선
    `+1`을 빼면 `right = 77,0 77x47, want 78,0`으로 잡힌다.
-6. 반사실(render 원점의 `rect.col`을 0으로 박음)은 예상대로 render 체인
+6. mutation(render 원점의 `rect.col`을 0으로 박음)은 예상대로 render 체인
    PASS였다. 패널 하나면 `rect.col == 0`이라 M0은 아무것도 안 바꿨다는
    확인이고, 원점 산수 자체는 M1의 `sep ink`와 `screen>` 음성 검사가 본다.
 7. `zig fmt --check terminal/src`는 착수 전부터 여섯 파일이 빨갛다(ZU design

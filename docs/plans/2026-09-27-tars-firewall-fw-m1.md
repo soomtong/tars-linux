@@ -729,9 +729,9 @@ grep -E "^(FAIL|the |FW chain|===)" /tmp/fw-chain.log
 
 기대: `exit=0`, 초록 줄 여덟과 `FW chain PASS`.
 
-## Task 7 — 반사실 셋 (각 약 1분, 커밋하지 않는다)
+## Task 7 — mutation 셋 (각 약 1분, 커밋하지 않는다)
 
-각 반사실은 고친 뒤 체인을 돌리고, 겨냥한 검사가 겨냥한 문구로 빨간지 본 다음
+각 mutation은 고친 뒤 체인을 돌리고, 겨냥한 검사가 겨냥한 문구로 빨간지 본 다음
 `git checkout`으로 되돌린다.
 
 - [ ] Step 1: 기본 규칙이 받아들이면 검사 7이 빨갛다
@@ -795,7 +795,7 @@ grep -a "tars-init: firewall" /tmp/fw-net.log | sort | uniq -c
 
 - [ ] Step 1: design의 "FW-M0이 실행으로 증명한 것" 절 뒤에 "FW-M1이 실행으로 증명한
   것"을 실측 10부터 적는다 — 이미지 · initrd의 실제 바이트, 체인 첫 회의 초록 줄과
-  걸린 시간, 반사실 셋의 FAIL 줄, 이웃 체인 셋. `Status:`를 "M1 끝났다"로.
+  걸린 시간, mutation 셋의 FAIL 줄, 이웃 체인 셋. `Status:`를 "M1 끝났다"로.
 
 - [ ] Step 2: 확인하고 커밋한다
 

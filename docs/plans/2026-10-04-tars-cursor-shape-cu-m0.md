@@ -3,7 +3,7 @@
 Date: 2026-10-04
 Design: `docs/specs/2026-10-04-tars-cursor-shape-design.md`
 Status: 끝났다(2026-10-04). `vt_test` 82~92 · `render` 검사 20~24가 초록이고,
-regression 체인 셋과 반사실 둘을 돌렸다. 루트 게이트 18체인 3/3 PASS, 1시간 4분 5초,
+regression 체인 셋과 mutation 둘을 돌렸다. 루트 게이트 18체인 3/3 PASS, 1시간 4분 5초,
 `FAIL` 0줄. 값은 아래 "CU-M0이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
@@ -191,7 +191,7 @@ shell_cursor: ?CursorMark = null,
 
 먼저 82 · 83만 넣고 Task 1 전의 `vt.zig`로 돌려 83이 컴파일 에러(`cursorMark`가
 없다)로 막히는 것을 본다. 그다음 Task 1을 넣고 82~92가 전부 초록인지 본다.
-음성 쪽 빨강은 Task 5의 반사실 C가 맡는다.
+음성 쪽 빨강은 Task 5의 mutation C가 맡는다.
 
 ## Task 3: `terminal/src/main.zig`
 
@@ -305,7 +305,7 @@ shell_cursor: ?CursorMark = null,
 3. regression — 하나씩, 겹치지 않게(WP-M0 실측 8): `hangul/check.sh` ·
    `copy/check.sh` · `pane/check.sh`. 셋 다 셸 커서와 copy 커서의 반전을
    센다(확정 3). 판정이 안 바뀌어야 한다.
-4. 반사실 둘. 각각 저장소 파일은 안 고치고 사본을 `-v`로 덮는다(lessons
+4. mutation 둘. 각각 저장소 파일은 안 고치고 사본을 `-v`로 덮는다(lessons
    "범용 명령"). 돌리기 전에 사본에 편집이 실제로 들어갔는지 `diff`로 본다
    (lessons 실측 52).
    - A — 띠를 안 칠한다: `main.zig` 사본에서 `renderPane`의 `fillRect` 줄을
@@ -317,7 +317,7 @@ shell_cursor: ?CursorMark = null,
      `vt_test.zig` 사본에서 검사 83~92를 지운 것을 둘째 마운트로 주고 체인을
      돌린다. 기대: 검사 21의 `wait_for_cursor`가 15초를 다 쓰고 마지막 줄이
      `vt=block drawn=block`이다.
-   반사실이 예상과 다른 검사에서 죽거나 통과하면 그대로 적는다 — WP-M1처럼
+   mutation이 예상과 다른 검사에서 죽거나 통과하면 그대로 적는다 — WP-M1처럼
    plan의 구멍이 거기서 나온다.
 5. 루트 게이트 3/3. 18체인, 약 1시간 5분(WP-M2 뒤 1시간 4분 30초)이다.
    `run_in_background`로 돌리고 `{ time …; }`으로 감싼다. 완료 알림이 오면
@@ -326,7 +326,7 @@ shell_cursor: ?CursorMark = null,
 ## Task 6: 문서
 
 - 이 plan의 `Status:`와 맨 아래 "CU-M0이 실측한 것" 절(검사 20~24의 실제
-  `cursor>` 줄 · 반사실 둘의 결과 · 루트 게이트 시간).
+  `cursor>` 줄 · mutation 둘의 결과 · 루트 게이트 시간).
 - design의 `Status:` — "CU-M0 끝, CU-M1 남음".
 - `docs/guides/lessons.md` — "로그 문구는 두 곳에 중복된다"의 목록에
   `terminal: cursor>`, "핵심 파일"의 `vt.zig` 항목에 `shell_cursor` ·
@@ -354,7 +354,7 @@ shell_cursor: ?CursorMark = null,
    Task 1을 넣은 뒤에는 `./prepare.sh`가 0으로 끝났고 `zig build test`의 다섯
    실행 파일이 전부 `PASS`, `vt_test`의 82~92가 전부 `OK`다.
 
-2. `render/check.sh` 한 번이 1분 36초에 통과했다(반사실 뒤 다시 돌린 판은 1분
+2. `render/check.sh` 한 번이 1분 36초에 통과했다(mutation 뒤 다시 돌린 판은 1분
    59초). plan이 어림한 6~7분은 커널 빌드를 포함한 값이다. 검사 20~24 자리의
    실제 줄은 다음과 같다. fish의 프롬프트가 `root@(none) ~# ` 열다섯 칸이라 커서가
    `0,15`에 있다.
@@ -389,7 +389,7 @@ shell_cursor: ?CursorMark = null,
    | `copy` | 2분 31초 | `CM-M2 check PASS` |
    | `pane` | 32초 | `WP-M2 check PASS` |
 
-5. 반사실 A(띠를 안 칠한다). `main.zig` 사본에서 `fillRect` 줄을 지우고
+5. mutation A(띠를 안 칠한다). `main.zig` 사본에서 `fillRect` 줄을 지우고
    `_ = cursor;`를 더했다 — Zig가 안 쓰는 인자를 컴파일 에러로 막기 때문이다.
    예상대로 검사 21에서 죽었다(1분 48초).
 
@@ -400,7 +400,7 @@ shell_cursor: ?CursorMark = null,
    `vt=` · `drawn=`은 맞고 `ink=` · `box=`만 틀렸다. design 결정 6의 고장 표에서
    "`main.zig`가 띠를 안 칠한다"의 칸이다.
 
-6. 반사실 C(모양을 무시한다). `vt.zig` 사본의 `askedShape` 첫 줄에
+6. mutation C(모양을 무시한다). `vt.zig` 사본의 `askedShape` 첫 줄에
    `if (true) return .block;`을 넣었다. 그 사본만 주면 체인이 부팅 전의
    `zig build test`에서 죽는다. 82는 통과하고 83이 빨갛다.
 
@@ -419,7 +419,7 @@ shell_cursor: ?CursorMark = null,
    FAIL: after CSI 6 SP q the cursor line never said vt=bar drawn=bar at 0,15: terminal: cursor> vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0
    ```
 
-   두 반사실 모두 예상과 다른 검사에서 죽지 않았고, plan의 구멍은 드러나지 않았다.
+   두 mutation 모두 예상과 다른 검사에서 죽지 않았고, plan의 구멍은 드러나지 않았다.
 
 7. 루트 게이트 18체인 × 3이 전부 통과했다(2026-10-04). 1시간 4분 5초, `FAIL` 0줄.
    WP-M2 뒤의 1시간 4분 30초와 같은 자리다 — `render` 체인에 검사 다섯이 늘었지만

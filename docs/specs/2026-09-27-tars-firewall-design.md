@@ -162,7 +162,7 @@ udp dport 5353 accept
   그대로 지킨다.
 
 판정의 재료(연 포트 목록)를 판정 대상(규칙 파일)과 따로 둔다(LB 실측 17).
-반사실 — 기본 규칙에서 `policy drop`을 빼면 TCP C · UDP D가 빨개지고,
+mutation — 기본 규칙에서 `policy drop`을 빼면 TCP C · UDP D가 빨개지고,
 `allow.nft`를 빼면 TCP A · UDP B가 빨개지는 것을 M1 · M2가 본다.
 
 ## Milestone
@@ -394,9 +394,9 @@ FW chain PASS
 LISTEN이라는 것이고, 검사 7의 빈 값이 "nc가 안 보냈다"가 아니라 "nc까지 안 왔다"라는
 증거다.
 
-### 실측 12 — 반사실 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
+### 실측 12 — mutation 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
 
-| 반사실 | 결과 |
+| mutation | 결과 |
 |---|---|
 | `make_initrd.sh`의 `policy drop` → `policy accept`(두 파일) | `FAIL: the unopened port 7072 let something through (got: [fwm1-tcp-c])` — 검사 3은 초록 |
 | 체인이 `allow.nft`를 안 심는다 | `FAIL: nothing came through the opened port 7070 (got: [])` — 검사 3은 초록(빈 include, 실측 4) |
@@ -457,9 +457,9 @@ FW chain PASS
 없는데도 막힌다. `nft -f`가 원자적이라(실측 8) 한 파일만 빼고 올리는 일이 없고,
 갈래 2는 사람의 파일 전부를 뺀다.
 
-### 실측 16 — 반사실 둘
+### 실측 16 — mutation 둘
 
-| 반사실 | 결과 |
+| mutation | 결과 |
 |---|---|
 | `allow.nft`에서 `udp dport 7071 accept`를 뺀다 | TCP 7070 · 7074는 초록, `FAIL: the opened udp port 7071 did not get the datagram` |
 | `firewall.zig`의 갈래 2를 `false and`로 막는다 | 검사 13(nft가 broken.nft를 짚었다)은 초록, `FAIL: init did not bring the firewall up from /etc/tars/firewall-base.nft`, 로그에 `tars-init: firewall NOT up, inbound is open` |
@@ -485,7 +485,7 @@ FW chain PASS
 
 갈래 3(기본 규칙도 실패해서 열린 채)은 코드가 있지만 게이트가 부팅으로 밟지 않는다.
 만들려면 `nft`를 initrd에서 빼거나 커널 옵션을 끈 부팅이 필요한데, 둘 다 체인 하나를
-위해 산출물을 따로 짓는 일이다. 대신 실측 16의 둘째 반사실이 그 갈래의 로그 줄
+위해 산출물을 따로 짓는 일이다. 대신 실측 16의 둘째 mutation이 그 갈래의 로그 줄
 (`firewall NOT up, inbound is open`)을 실제로 찍는 것을 봤다. 갈래 3의 원인 둘은 부팅 전에
 막힌다 — 이 체인의 검사 1이 커널 옵션 다섯을, `tools` 체인이 `guest_tools.sh`의 배열을
 읽어 `usr/bin/nft`가 initrd에 있는지를 본다(실행되는지는 이 체인의 부팅 A가 본다).

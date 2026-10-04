@@ -13,7 +13,7 @@ plan은 `-cu-m0.md` · `-cu-m1.md`이고 각 끝의 "실측한 것" 절이 값�
 사용자의 지시로 설계와 plan은 Opus 서브에이전트가, 구현도 Opus 서브에이전트가 했고 Fable이
 대조 · 게이트 · commit을 맡았다(WP와 같은 방식). 사용자는 외출 중이었고 "마일스톤 끝까지 직접
 완료"를 지시했다. lead가 대조에서 고친 것은 M0에서 둘(`defaultFg` doc 주석 한가운데에 끼어든 새
-함수 넷 · `vt_test.zig`의 `zig fmt`), M1에서는 없다. 서브에이전트가 반사실 전에 스스로 잡은 plan의
+함수 넷 · `vt_test.zig`의 `zig fmt`), M1에서는 없다. 서브에이전트가 mutation 전에 스스로 잡은 plan의
 구멍이 하나 있다 — vim 화면은 `style>` 덤프 상한 96에 언제나 닿는다(NonText 색 공백으로 셀
 6,976개). "잘리지 않았다" 대신 "덤프가 커서 칸을 지났다"(`style_covers`)로 판정을 바꿨다.
 
@@ -52,7 +52,7 @@ Cmd+Shift+D pane split", 이어서 "Cmd+W로 닫기", "포커스 이동", "Cmd+T
 
 이 서브프로젝트는 설계를 Fable이, 구현을 Opus 서브에이전트가 했다(사용자의 지시). 서브에이전트는
 commit하지 않고 diff · 로그만 보고했고, Fable이 파일 · 로그를 직접 대조한 뒤 commit했다. 세
-milestone 모두 보고와 파일이 어긋난 자리는 없었다. 관찰: 서브에이전트가 반사실에서 plan의 구멍을
+milestone 모두 보고와 파일이 어긋난 자리는 없었다. 관찰: 서브에이전트가 mutation에서 plan의 구멍을
 둘 찾아 검사를 스스로 더했다(`$COLUMNS` · `caps ink off=`) — 그것이 이 방식의 값이었다.
 
 | 커밋 | 무엇 |
@@ -94,7 +94,7 @@ design은 `docs/specs/2026-10-03-tars-zig-upgrade-design.md`(결정 5 · 위험 
 
 design은 `docs/specs/2026-10-03-tars-copy-indicator-design.md`(결정 6 · 위험 3 · 실측 1~6),
 plan은 `-ci-m0.md`, 기억은 `docs/decisions/project_copy_indicator.md`다. 새 체인은 없고
-`copy/check.sh`가 검사 2a · 6a(글자와 픽셀을 짝으로)를 더했다. 반사실(`st.copy` 무시)은
+`copy/check.sh`가 검사 2a · 6a(글자와 픽셀을 짝으로)를 더했다. mutation(`st.copy` 무시)은
 `text=`가 맞는데 `ink=0`으로 잡혔다 — 글자만 보는 판정이었으면 통과했을 고장이다.
 루트 게이트 17체인 3/3 PASS, 약 1시간 2분(2026-10-03). 커밋 `362e36d`.
 
@@ -117,9 +117,9 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 | `b90a7d0` | design · M0 실측(코드 0줄) |
 | `4cda837` | M1 — `CellPx` · `Screen.images()` · `vt_test` 65~74 |
 | `a8a68d0` | M2 — `image.zig` · `render()`의 층 셋 · `render` 체인 검사 15~18 |
-| `cc934d9` | M3 — PNG(`stb_image`) · `vt_test` 75~77 · 검사 19 · 반사실 · 루트 게이트 · 문서 |
+| `cc934d9` | M3 — PNG(`stb_image`) · `vt_test` 75~77 · 검사 19 · mutation · 루트 게이트 · 문서 |
 
-새 체인은 없다. 루트 게이트 17체인 3/3(1시간 1분 25초, `FAIL` 0줄, 2026-10-03). 반사실(PNG
+새 체인은 없다. 루트 게이트 17체인 3/3(1시간 1분 25초, `FAIL` 0줄, 2026-10-03). mutation(PNG
 디코더 설치 줄 빼기)은 `vt_test` 75가 부팅 전에 잡았다.
 
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`

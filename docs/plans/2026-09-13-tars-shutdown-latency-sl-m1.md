@@ -215,9 +215,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer \
 ### Step 3 — 되돌림으로 검사가 정말 무언가를 보는지 확인한다
 
 검사가 통과하는 것만으로는 그 검사가 값을 한다는 증거가 안 된다.
-반사실 둘을 `/tmp`에 만들어 마운트한다. 저장소 파일은 안 바꾼다.
+mutation 둘을 `/tmp`에 만들어 마운트한다. 저장소 파일은 안 바꾼다.
 
-반사실 A — `.HUP`을 뺀다. `/tmp/sl/power_no_hup.zig`는 Task 1을 끝낸
+mutation A — `.HUP`을 뺀다. `/tmp/sl/power_no_hup.zig`는 Task 1을 끝낸
 `power.zig`의 사본이고 그 한 줄만 다르다.
 
 ```zig
@@ -233,7 +233,7 @@ docker run --rm -v "$PWD":/workspace \
 기대: `FAIL: TERMINATION_SIGNALS has no SIGHUP …`이 나오고 종료 코드가
 0이 아니다.
 
-반사실 B — 순서를 뒤집는다. `/tmp/sl/power_wrong_order.zig`는 그 한 줄이
+mutation B — 순서를 뒤집는다. `/tmp/sl/power_wrong_order.zig`는 그 한 줄이
 이렇다.
 
 ```zig
@@ -248,7 +248,7 @@ docker run --rm -v "$PWD":/workspace \
 
 기대: `FAIL: SIGHUP comes before SIGTERM (term at 1, hup at 0)`이 나온다.
 
-반사실을 돌린 뒤 `.zig-cache`가 반사실의 산출물을 들고 있을 수 있다.
+mutation을 돌린 뒤 `.zig-cache`가 mutation의 산출물을 들고 있을 수 있다.
 실측 30이 그 함정이다 — 다음 명령 전에 컨테이너 안에서 지운다(호스트에서
 지우면 바로 뒤의 `zig build`가 `error: FileNotFound`로 죽는다).
 

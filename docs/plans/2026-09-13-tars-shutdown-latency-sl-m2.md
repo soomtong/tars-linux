@@ -186,7 +186,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 2. `note: every child died inside the grace period`
 3. `HD-M2 PASS`(device 체인의 통과 문구)
 
-## Task 6 — 반사실. 마운트가 둘 필요하다
+## Task 6 — mutation. 마운트가 둘 필요하다
 
 SIGHUP을 빼면 `power_test`의 검사 7이 부팅 전에 죽인다. 그러면 게이트가
 새 판정을 보는 자리까지 못 간다 — SD-M2가 같은 자리에서 배운 것이다.
@@ -201,7 +201,7 @@ SIGHUP을 빼면 `power_test`의 검사 7이 부팅 전에 죽인다. 그러면 
 ```zig
     if (hup_at == null) {
         std.debug.print("FAIL: TERMINATION_SIGNALS has no SIGHUP; the console shell will sit out the grace period\n", .{});
-        // SL-M2 반사실 전용. 호스트 검사가 먼저 죽이면 게이트가 무엇을
+        // SL-M2 mutation 전용. 호스트 검사가 먼저 죽이면 게이트가 무엇을
         // 보는지 확인할 수 없다.
         // return error.NoHangupSignal;
     }
@@ -227,7 +227,7 @@ docker run --rm -v "$PWD":/workspace \
 SIGHUP`이 나오고 종료 코드가 0이 아니다. 그 앞에 marker 목록이 찍히는데
 거기 `MISSING tars-init: sent SIGHUP to every process`가 함께 있어야 한다.
 
-반사실 뒤에 캐시를 컨테이너 안에서 지운다(실측 30 · `project_zig_out_staleness`).
+mutation 뒤에 캐시를 컨테이너 안에서 지운다(실측 30 · `project_zig_out_staleness`).
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -261,7 +261,7 @@ git commit -m "Make the gate fail when the grace period expires"
 
 - 체인이 `MISSING tars-init: sent SIGHUP to every process`로 죽으면 initrd가
   옛 `init`을 담고 있을 수 있다. 캐시를 컨테이너 안에서 지우고 다시 빌드한다.
-- 반사실이 새 판정이 아니라 `power_test`에서 죽으면 사본 B의 눕히기가
+- mutation이 새 판정이 아니라 `power_test`에서 죽으면 사본 B의 눕히기가
   덜 된 것이다. `zig build test`를 따로 돌려 어느 검사가 죽이는지 본다.
 - `note:` 줄이 아예 안 나오면 그 앞의 음성 검사 둘 중 하나가 `report_failure`
   로 빠져나간 것이다. 그 함수는 `exit 1`로 끝난다.

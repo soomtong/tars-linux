@@ -47,7 +47,7 @@ lead가 파일을 직접 대조한 뒤 commit했다 — "만들었다"는 보고
 
 - "크기를 바꿨다"는 셀 수가 아니라 셸이 아는 폭으로만 증명된다. `pty.resize`
   (`TIOCSWINSZ`)를 빼도 짧은 `echo`는 77칸 안에서 똑같이 보여 plan의
-  검사만으로는 초록이었다. fish의 `$COLUMNS`를 화면에 찍게 하자 반사실이
+  검사만으로는 초록이었다. fish의 `$COLUMNS`를 화면에 찍게 하자 mutation이
   `left-side 155`로 빨개졌다(M1 실측 2).
 - "terminal이 살았다"를 `pane>` 줄로 보면 안 된다. 죽은 terminal을 init이
   되살리면 새 첫 프레임이 같은 줄을 찍는다. `spawned child pid` 수로 본다

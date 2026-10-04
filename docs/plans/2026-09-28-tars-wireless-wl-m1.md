@@ -19,7 +19,7 @@ Goal: WL design 결정 1~3을 커밋한다 — 무선 스택과 네 계열의 PC
 ## 확인
 
 - `boot` 체인 — 86MB initrd가 ISO · limine BIOS로 뜬다(실측 10).
-- `tools` 체인 — 검사 1b가 "74 files". 반사실: 이어 붙이는 줄을 뺀 사본으로 덮으면 1b만
+- `tools` 체인 — 검사 1b가 "74 files". mutation: 이어 붙이는 줄을 뺀 사본으로 덮으면 1b만
   빨갛다(실측 11).
 - `nic` · `net` 체인 — 모든 부팅에 생기는 `hwsim0`이 판정을 안 바꾼다.
 - 위험 5 — `MemAvailable` 309MB → 213MB(실측 12).

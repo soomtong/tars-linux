@@ -2,7 +2,7 @@
 
 > 이 plan을 실행하는 사람에게: 고치는 것은 `gate_lib.sh`(타이핑 헬퍼 하나) ·
 > `tools/check.sh`(검사 20 · 21) · `net/check.sh`(검사 29 · 30)다. 새 체인은 없고
-> QEMU 호출도 안 는다(design 결정 6). 반사실 둘은 작업 트리에서만 하고 되돌린다.
+> QEMU 호출도 안 는다(design 결정 6). mutation 둘은 작업 트리에서만 하고 되돌린다.
 
 Goal: `net=off`(`tools` 체인)와 `net=dhcp`(`net` 체인) 두 부팅에서, 게스트 안의 두
 프로세스가 `127.0.0.1` · `localhost` · `app.localhost` 세 이름으로 TCP를 주고받는
@@ -26,21 +26,21 @@ Tech Stack: bash · QEMU monitor `sendkey` · 게스트 fish · `nc.traditional`
   없다는 뜻이고, 그 모양이 M0 실측 2가 정한 "받은 글자가 없다" 판정이다(에러 문구로
   판정하지 않는다 — `net=dhcp`에서는 문구가 없다).
 - M3-B 흘려 보내는 것은 `/etc/passwd`이고 `grep -c root`로 센다. 처음 plan은
-  `/etc/hosts`와 `grep -c localhost`였는데, 반사실 3(그 파일을 비움)에서 세 이름이
+  `/etc/hosts`와 `grep -c localhost`였는데, mutation 3(그 파일을 비움)에서 세 이름이
   전부 `:0`으로 빨갛게 됐다 — 리스너 셋이 전부 `has ended`라 연결은 됐고, 보낼
   내용이 사라진 것이었다. 게이트가 "loopback을 못 건넜다"고 말하면서 원인은 딴 데
-  있는 모양이라, 판정의 재료를 판정 대상과 무관한 파일로 옮겼다. 옮긴 뒤 반사실
+  있는 모양이라, 판정의 재료를 판정 대상과 무관한 파일로 옮겼다. 옮긴 뒤 mutation
   셋을 전부 다시 돌렸다.
 - M3-C 리스너의 stdin은 `/dev/null`이다. 배경 job이 터미널을 읽으면 SIGTTIN으로
   멈춘다(`net/check.sh` 검사 14의 주석, TS-M2가 고친 자리).
 - M3-D 포트는 9101 · 9102 · 9103. 두 체인의 기존 포트(8080 · 8081, hostfwd 쪽
   45465 등)와 안 겹친다. 이름마다 포트가 달라 앞 연결의 흔적이 다음 리스너를 안 막는다.
-- M3-E 왕복 검사가 로그 줄 검사보다 앞이다. 반사실 1(`loopbackUp()`을 뺌)에서 빨간
+- M3-E 왕복 검사가 로그 줄 검사보다 앞이다. mutation 1(`loopbackUp()`을 뺌)에서 빨간
   것이 로그 줄이 아니라 왕복이어야 이 검사가 장식이 아니라는 증거가 된다.
 - M3-F `/etc/hosts`의 `localhost` 줄은 게이트가 따로 못 지킨다. `myhostname`도
   `localhost`에 답하므로 그 줄을 지워도 `localhost` 왕복이 초록이다. 그 줄이 필요한
   것은 NSS를 안 거치는 resolver 때문인데 게스트에 그런 클라이언트가 없다(design
-  비목표 1). 반사실 3으로 그 사실을 한 번 재서 design에 적는다.
+  비목표 1). mutation 3으로 그 사실을 한 번 재서 design에 적는다.
 
 ## Task 1 — `gate_lib.sh`에 타이핑 헬퍼
 
@@ -70,7 +70,7 @@ Tech Stack: bash · QEMU monitor `sendkey` · 게스트 fish · `nc.traditional`
 # -q 1은 보내는 쪽 stdin의 EOF 뒤 1초에 닫는다.
 #
 # 흘려 보내는 것이 /etc/passwd인 데 이유가 있다. 처음에는 /etc/hosts였는데
-# 반사실(그 파일을 비움)에서 세 이름이 전부 `:0`이 됐다 — 연결은 셋 다
+# mutation(그 파일을 비움)에서 세 이름이 전부 `:0`이 됐다 — 연결은 셋 다
 # 됐는데(`has ended`) 보낼 내용이 사라진 것이다(LB design 실측). 게이트가
 # "loopback을 못 건넜다"고 말하면서 원인은 딴 데 있는 모양이라, 판정의 재료를
 # 판정 대상(이름 풀이)과 무관한 파일로 옮겼다. passwd는 늘 있고 LB가 안
@@ -139,7 +139,7 @@ echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"
 
 # ── 검사 21: init이 lo를 올렸다고 말했나 (LB-M3) ───────────────────────
 #
-# 검사 20 뒤인 이유가 LB-M3 plan 결정 M3-E다. 앞에 두면 반사실(loopbackUp을
+# 검사 20 뒤인 이유가 LB-M3 plan 결정 M3-E다. 앞에 두면 mutation(loopbackUp을
 # 뺌)에서 이 줄이 먼저 빨갛게 되고, 왕복 검사가 실제로 무엇을 잡는지는 안
 # 보인다. 이 줄의 값은 진단이다 — 검사 20이 빨간 날 "init이 시도는 했나"를
 # 가른다.
@@ -200,7 +200,7 @@ done
 
 기대: 둘 다 `exit=0`, 검사 20/29의 성공 줄과 21/30의 `init raised lo`, `PASS`.
 
-## Task 4 — 반사실 셋 (각 약 1분, `tools` 체인)
+## Task 4 — mutation 셋 (각 약 1분, `tools` 체인)
 
 작업 트리에서만 고치고 매번 되돌린다. 되돌린 뒤 `git diff --stat`이 Task 1~3의 것만
 보여야 한다.
@@ -268,7 +268,7 @@ grep -c '^FAIL' /tmp/lb/gate.log; tail -3 /tmp/lb/gate.log
 
 ## Task 6 — 문서와 커밋
 
-- [ ] Step 1: design에 "LB-M3이 실행으로 증명한 것"(실측 15부터 — 체인 결과, 반사실
+- [ ] Step 1: design에 "LB-M3이 실행으로 증명한 것"(실측 15부터 — 체인 결과, mutation
   셋, 루트 게이트)을 더하고 `Status:`를 `끝났다(2026-09-26) — M0~M3, 실측 1~N.`으로.
 - [ ] Step 2: `docs/decisions/project_loopback.md`를 만들고 `MEMORY.md`에 한 줄.
 - [ ] Step 3: `CLAUDE.md`의 완료 표에 한 줄. `HANDOFF.md`를 새 머리로.

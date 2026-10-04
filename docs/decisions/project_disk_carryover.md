@@ -31,8 +31,8 @@ How to apply:
   (키보드 HD-M2 · 설치기의 파티션 노드 DI · 설정 디스크 DC). 게이트가 초록이어도
   TCG의 느림이 틈을 덮고 있을 수 있다 — 틈을 일부러 벌리는 수단(`delay_use`)을 찾는다.
 - 이월 목록의 "어느 쪽으로 틀리는가" 설명은 검증 전까지 가설이다. YES는 "거절하는
-  쪽"이라 적혀 있었는데 반사실 b가 `writing the partition table`까지 갔다.
-- 반사실이 초록이면 판정보다 바이너리를 먼저 의심한다([[project_zig_out_staleness]]
+  쪽"이라 적혀 있었는데 mutation b가 `writing the partition table`까지 갔다.
+- mutation이 초록이면 판정보다 바이너리를 먼저 의심한다([[project_zig_out_staleness]]
   일곱번째가 M1에서 났다).
 
 관련: [[project_disk_install]] · [[project_real_machine]] · [[project_zig_out_staleness]]

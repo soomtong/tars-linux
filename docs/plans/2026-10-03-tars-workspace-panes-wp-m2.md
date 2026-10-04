@@ -110,7 +110,7 @@ Status: 끝났다(2026-10-04). 호스트 검사 다섯이 새로 섰고, `pane/c
 - `zig build test` — `status_test` 검사 10이 먼저 빨갛다(`MAX_LEN`이 늘었다).
   음성 검사(`Cmd+0` · copy mode의 `Cmd+T`)는 빨강을 먼저 본다.
 - `pane/check.sh` 한 번 → hangul · copy · terminal · render 각 한 번(하나씩).
-- 반사실 하나: EOF 경로에서 워크스페이스를 지우는 갈래를 빼고 pane 체인 —
+- mutation 하나: EOF 경로에서 워크스페이스를 지우는 갈래를 빼고 pane 체인 —
   검사 8b가 `ws=1/1`을 못 보고 빨갛다(빈 트리의 워크스페이스가 남는다).
   되돌리고 캐시를 컨테이너 안에서 지운다.
 - 루트 게이트 3/3(배경, 약 1시간 5분).
@@ -125,16 +125,16 @@ plan · design `Status: 끝났다` · `docs/decisions/project_workspace_panes.md
 
 2026-10-04. Opus 서브에이전트가 구현했고 Fable이 diff · 로그를 대조했다.
 
-1. 반사실 1(워크스페이스를 지우는 갈래를 끔)은 plan이 예상한 자리(8b의
+1. mutation 1(워크스페이스를 지우는 갈래를 끔)은 plan이 예상한 자리(8b의
    `ws=1/1`)가 아니라 그 앞에서 잡혔다 — `FAIL: no 'pane> workspace closed
    ws=2' line`. 빈 트리의 워크스페이스가 남아 렌더 앞 `ws.panes[ws.focus].?`
    에서 terminal이 죽었고, init이 되살린 새 terminal이 `ws=1/1 panes=1`을
    찍어 `wait_for_pane`은 통과했다. "terminal이 살았다"는 `pane>` 줄로
    보면 안 되고 `spawned child pid` 수로 본다(lessons에 적었다).
-2. 반사실 2(`drawStatus`의 `ws_len = 0`)는 글자가 맞고 색만 밀리는 고장이다
+2. mutation 2(`drawStatus`의 `ws_len = 0`)는 글자가 맞고 색만 밀리는 고장이다
    (CI 위험 2와 같은 병). 검사 7의 `caps ink off=` 판정이 `off=49`로
    잡았다 — 49는 `W2` 두 글자의 픽셀이고, 정상은 워크스페이스 하나일 때와
-   같은 87이다. 이 판정은 반사실을 보고 더한 것이다.
+   같은 87이다. 이 판정은 mutation을 보고 더한 것이다.
 3. `PaneSig`에 `current`뿐 아니라 `total`도 들어갔다. 1번에 있는데 2번이
    닫히면 `ws=1/2`가 `ws=1/1`이 되는데 `current`만 보면 그 줄이 안 찍힌다.
 4. 루프의 `ws`가 `var`가 됐고, 워크스페이스를 바꾸는 명령 직후와 렌더

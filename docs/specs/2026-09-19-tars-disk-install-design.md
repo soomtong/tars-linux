@@ -734,12 +734,12 @@ tars-init: created /config/tars.conf
 그리고 거기서 친 `tars-install`은 `no boot medium found`와 함께 그 디스크를
 `foreign (gpt)`로 보였다 — M2가 `TARS installed`로 바꿀 자리다(plan의 "정한 것" 1).
 
-### 실측 14 — 반사실: 판정 6은 파티션 후보에 기댄다
+### 실측 14 — mutation: 판정 6은 파티션 후보에 기댄다
 
 `CANDIDATES`를 `DISKS`만으로 되돌린 사본을 `-v`로 덮고 체인을 돌렸다. 부팅
 2가 `tars-init: no disk labelled tars-* among 14 candidates`를 찍었고 체인이
 `FAIL: init did not pick p2 of the installed NVMe as its config disk`로 끝났다.
-`disk_test`의 반사실(iso9660과 mbr 판정 순서를 바꾼다)은 `FAIL: hybrid iso: want
+`disk_test`의 mutation(iso9660과 mbr 판정 순서를 바꾼다)은 `FAIL: hybrid iso: want
 iso9660 'TARS', got mbr ''`였다.
 
 ### 실측 15 — 검토가 찾은 것
@@ -790,7 +790,7 @@ plan은 `docs/plans/2026-09-23-tars-disk-install-di-m2.md`다. 커밋은
 뜬 부팅 2·4·6은 `console=ttyS0 tars.installed`다. ESP의 `limine.conf`는 908바이트에서
 923바이트가 됐다 — ` tars.installed` 15바이트다.
 
-반사실 둘. plan을 쓰며 `storage.candidates`가 늘 마흔둘을 주게 되돌리고 판정 10을
+mutation 둘. plan을 쓰며 `storage.candidates`가 늘 마흔둘을 주게 되돌리고 판정 10을
 경고로 낮췄더니 부팅 5의 `--wipe`가 `sfdisk`에서 `This disk is currently in use -
 repartitioning is probably a bad idea.`로 죽었다 — M1 검토가 예측한 충돌이 실물로
 나왔다. 같은 되돌림을 판정 10을 살린 채 돌린 Task 4의 판은

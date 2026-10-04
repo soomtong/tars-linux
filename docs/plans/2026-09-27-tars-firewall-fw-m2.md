@@ -490,7 +490,7 @@ grep -E "^(FAIL|the |dhcpcd|nft|with|FW chain|=== )" /tmp/fw-chain.log
 
 기대: `exit=0`, 검사 17개의 초록 줄과 `FW chain PASS`.
 
-## Task 2 — 반사실 둘 (각 약 1분, 커밋하지 않는다)
+## Task 2 — mutation 둘 (각 약 1분, 커밋하지 않는다)
 
 - [ ] Step 1: `allow.nft`에서 UDP 줄을 빼면 검사 9가 빨갛다
 
@@ -515,7 +515,7 @@ cmp firewall/check.sh /tmp/fw-check.keep && cmp init/src/firewall.zig /tmp/fw-fi
 ```
 
 기대: `nft refused …`는 초록이고(검사 13) 그 뒤
-`FAIL: init did not bring the firewall up from /etc/tars/firewall-base.nft`. 이 반사실의
+`FAIL: init did not bring the firewall up from /etc/tars/firewall-base.nft`. 이 mutation의
 기계는 갈래 3(열린 채)이다 — 검사 14가 없으면 게이트가 그것을 못 본다.
 
 ## Task 3 — 사용자 가이드

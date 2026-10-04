@@ -1,7 +1,7 @@
 # SV-M2 — sshd가 첫 서비스로 선다
 
 > 이 plan을 실행하는 사람에게: 순서는 Task 1(이미지 · initrd) → Task 2(`init`의 로그인
-> 셸과 ssh env, TDD) → Task 3(execve errno) → Task 4(체인 부팅 B · C) → Task 5(반사실) →
+> 셸과 ssh env, TDD) → Task 3(execve errno) → Task 4(체인 부팅 B · C) → Task 5(mutation) →
 > Task 6(가이드) → Task 7(루트 게이트) → Task 8(닫기)이다. 코드 편집은 Claude가 하고,
 > 편집마다 `git diff --stat`으로 더한 줄 · 지운 줄을 세고 지운 줄은 직접 읽는다.
 
@@ -699,12 +699,12 @@ cleanup이 `rm -f "$LOG"`만 하므로 부팅 B의 로그는 위에서 지운다
   "회차당 부팅 1회"를 "3회(합 2분 안팎)"로.
 - [ ] Step 5: 커밋 `Add sshd boots to the service chain: firewall, key persistence, session env`
 
-## Task 5 — 반사실 넷
+## Task 5 — mutation 넷
 
 각각 한 자리를 되돌려 체인을 돌리고(`rm -rf init/.zig-cache init/zig-out` 먼저) 겨냥한
 검사가 빨간 것을 본 뒤 되돌린다.
 
-| 반사실 | 자리 | 빨개야 하는 검사 |
+| mutation | 자리 | 빨개야 하는 검사 |
 |---|---|---|
 | `login.apply` 호출을 지운다 | `main.zig` | 검사 9 (그리고 13) |
 | 템플릿이 매번 키를 굽는다 | `make_initrd.sh` 템플릿의 `if [ ! -e "$key" ]`를 `if true` | 검사 12 |

@@ -367,7 +367,7 @@ A: 닫는 길을 하나로 두기 위해서다. 셸에 `exit`를 치면 PTY가 E
 
 A: `Screen.resize`만 하고 `pty.resize`(TIOCSWINSZ)를 빼면 셸은 여전히 155칸이라
 믿고 프롬프트와 긴 줄을 그 폭으로 그린다 — 우리 화면은 77칸에서 접는다.
-짧은 `echo` 출력은 똑같이 보여서 M1의 반사실이 plan의 검사를 통과했고, fish의
+짧은 `echo` 출력은 똑같이 보여서 M1의 mutation이 plan의 검사를 통과했고, fish의
 `$COLUMNS`를 찍게 하자 `left-side 155`로 잡혔다. 반대로 `pty.resize`만 하고
 `Screen.resize`를 빼면 셸은 77칸으로 그리는데 우리 Screen은 155칸이라 셀이
 패널 사각형 밖으로 넘친다.
@@ -404,7 +404,7 @@ A: 구조 변경과 기능 추가를 한 번에 하면 체인이 빨개졌을 �
 ### Q8. "terminal이 살아 있다"를 `pane> ws=1/1 panes=1` 줄로 판정하면 왜 틀리는가?
 
 A: terminal이 죽으면 init이 되살리고, 되살아난 terminal의 첫 프레임이 정확히
-그 줄을 찍는다. M2의 반사실(워크스페이스를 지우는 갈래를 끔)에서 빈 트리의
+그 줄을 찍는다. M2의 mutation(워크스페이스를 지우는 갈래를 끔)에서 빈 트리의
 워크스페이스가 남아 렌더 앞 `ws.panes[ws.focus].?`에서 죽었는데, plan이
 기대한 `wait_for_pane 'ws=1/1 panes=1'`은 새 terminal의 줄로 통과했다. 생존은
 `spawned child pid` 줄의 개수로 본다 — 부팅의 첫 패널만 그 줄을 찍고 분할은
@@ -415,7 +415,7 @@ A: terminal이 죽으면 init이 되살리고, 되살아난 terminal의 첫 프�
 A: `drawStatus`가 꼬리에서 `CAPS`의 시작을 세는데, `W2` 칸의 길이만큼 안
 물러나면 `CAPS` 넉 자가 앞 세 칸의 색으로, `W2`가 `CAPS`의 색으로 그려진다.
 `text=`는 맞다. 게이트는 `CAPS` 칸의 켜짐/꺼짐 색 픽셀 수(`caps ink off=`)가
-워크스페이스 하나일 때(87)와 같은지 본다 — 반사실에서 49(`W2` 두 글자의
+워크스페이스 하나일 때(87)와 같은지 본다 — mutation에서 49(`W2` 두 글자의
 픽셀)로 잡혔다. CI가 `copy ink`로 같은 병을 잡은 것과 같은 모양이다.
 
 ---
@@ -427,7 +427,7 @@ A: `drawStatus`가 꼬리에서 `CAPS`의 시작을 세는데, `W2` 칸의 길�
 - `docs/specs/2026-10-03-tars-workspace-panes-design.md` — 결정 아홉 · 위험
   여섯 · 체인 검사 표. 2.x 절의 "왜"가 전부 여기서 왔다.
 - `docs/plans/2026-10-03-tars-workspace-panes-wp-m1.md` "M1이 실측한 것" —
-  `$COLUMNS` 반사실, 렌더를 셋으로 가른 이유, 패널 명령 루프가 `keys.redraw`
+  `$COLUMNS` mutation, 렌더를 셋으로 가른 이유, 패널 명령 루프가 `keys.redraw`
   뒤인 이유(조합 중인 한글이 떠나는 패널에 남지 않게).
 - `docs/plans/2026-10-03-tars-workspace-panes-wp-m2.md` "M2가 실측한 것" —
   되살아난 terminal의 `pane>` 함정, `PaneSig`에 `total`이 든 이유.

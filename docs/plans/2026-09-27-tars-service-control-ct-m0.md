@@ -517,8 +517,8 @@ grep -aE "tars-init: .*(service|orphan)|sleeper:|stubborn:" /tmp/ct/guest.log | 
 - 측정 5 — `by=pid`가 고아를 남기고 `by=pgid`가 안 남기면 결정 4를 "프로세스 그룹에
   보낸다"로 고친다(SIGTERM도 SIGKILL도). 그 판단은 이 실측을 근거로 design의 결정
   4에 적는다. `stubborn`이 3초 뒤에 살아 있으면 SIGKILL 경로가 필요하다는 것이 선다.
-- 측정 6 — 포기가 재현되면 결정 4 규칙 2("hold 죽음을 세지 않는다")의 반사실이 무엇을
-  볼지가 정해진다. M2의 반사실은 `restart` 셋으로 이 줄을 부른다.
+- 측정 6 — 포기가 재현되면 결정 4 규칙 2("hold 죽음을 세지 않는다")의 mutation이 무엇을
+  볼지가 정해진다. M2의 mutation은 `restart` 셋으로 이 줄을 부른다.
 
 ## Task 6 — design에 실측을 적고 커밋한다
 

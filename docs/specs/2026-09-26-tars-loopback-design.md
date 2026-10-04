@@ -121,7 +121,7 @@ dhcpcd hook이 쓰는 `/etc/resolv.conf`와 자리를 다퉈야 한다. `tars.co
 ### 결정 6 — 판정은 기존 체인 둘에 더한다. 새 체인은 없다
 
 `tools` 체인(기본 설정이라 `net=off`, 이미 타이핑한다)과 `net` 체인(`net=dhcp`)에서
-`127.0.0.1` · `localhost` · `app.localhost` 셋으로 `nc` 왕복을 본다. 반사실은
+`127.0.0.1` · `localhost` · `app.localhost` 셋으로 `nc` 왕복을 본다. mutation은
 둘이다 — `loopbackUp()` 호출을 뺐을 때와 `nsswitch.conf`에서 `myhostname`을 뺐을 때
 각각 해당 검사가 빨갛게 되는 것. 판정의 구체적 모양(화면 글자인지 파일인지)은
 M3 plan이 정한다.
@@ -192,7 +192,7 @@ B  LBM0-NC host=127.0.0.1 port=7001 rc=1 got=[] err=[]
 
 A는 경로가 하나도 없어서 커널이 `connect`를 곧바로 `ENETUNREACH`로 돌려준다. B는
 dhcpcd가 기본 경로를 깐 뒤라 `127.0.0.1`이 unreachable로 걸리지 않고, `nc`가 아무
-말 없이 `rc=1`로 끝난다. 그래서 M3의 반사실은 에러 문구가 아니라 "받은 글자가
+말 없이 `rc=1`로 끝난다. 그래서 M3의 mutation은 에러 문구가 아니라 "받은 글자가
 없다"(`got=[]`)로 판정한다.
 
 ### 실측 3 — `IFF_UP` 하나로 커널이 `127.0.0.1/8`을 붙인다
@@ -339,7 +339,7 @@ M2 plan 결정 M2-B의 가정이다. plan은 처음에 "`tools` 체인이 이것
 `two guest processes talked over 127.0.0.1, localhost and app.localhost`와
 `init raised lo`. 판정 글자는 `grep -c root`의 출력 `/tmp/lb-T.txt:1`이다.
 
-### 실측 16 — 반사실 1 · 2는 원인 자리에서 빨갛다
+### 실측 16 — mutation 1 · 2는 원인 자리에서 빨갛다
 
 ```
 loopbackUp() 호출을 뺌     FAIL ... behind lb-ip    lb-ip.txt:0 lb-lh.txt:0 lb-app.txt:0
@@ -352,15 +352,15 @@ myhostname을 뺌            FAIL ... behind lb-app   lb-ip.txt:1 lb-lh.txt:1 lb
 
 ### 실측 17 — 첫 판의 게이트는 `/etc/hosts`를 비우자 거짓말을 했다
 
-처음 판은 `/etc/hosts`를 흘려 보내고 `grep -c localhost`로 셌다. 반사실 3(그 파일을
+처음 판은 `/etc/hosts`를 흘려 보내고 `grep -c localhost`로 셌다. mutation 3(그 파일을
 비움)에서 `FAIL ... behind lb-ip`, 셋 다 `:0`. 그런데 화면에는 리스너 셋이 전부
 `has ended`였다 — 연결은 됐고 보낼 내용이 사라진 것이다. 판정의 재료가 판정
-대상과 같은 파일이었다. 재료를 `/etc/passwd` · `grep -c root`로 옮기고 반사실 셋을
+대상과 같은 파일이었다. 재료를 `/etc/passwd` · `grep -c root`로 옮기고 mutation 셋을
 다시 돌렸다(실측 16은 옮긴 뒤의 값이다).
 
 ### 실측 18 — `/etc/hosts`의 줄은 게이트가 못 지킨다
 
-옮긴 뒤의 반사실 3은 `exit=0 PASS`. `myhostname`이 `localhost`에도 답하기 때문이다.
+옮긴 뒤의 mutation 3은 `exit=0 PASS`. `myhostname`이 `localhost`에도 답하기 때문이다.
 그 줄은 NSS를 안 거치는 resolver를 위한 것이고(결정 5) 게스트에 그런 클라이언트가
 없다 — 비목표 1이 다시 열리는 날 그 클라이언트로 검사를 세운다.
 

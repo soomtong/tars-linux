@@ -1,7 +1,7 @@
 # DC-M2 — DI가 남긴 작은 것 다섯
 
 > 이 plan을 실행하는 사람에게: 아래 diff는 작업 트리에서 시제품으로 쓰고 install
-> 체인과 반사실 셋까지 돌린 것이다(M1과 같은 방식). 반사실은 컨테이너 안에서
+> 체인과 mutation 셋까지 돌린 것이다(M1과 같은 방식). mutation은 컨테이너 안에서
 > `.zig-cache`와 `zig-out`을 지우고 돌린다(`project_zig_out_staleness`).
 
 Goal: DC design 결정 5의 다섯 — 4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · YES를 줄로 ·
@@ -27,7 +27,7 @@ Tech Stack: Zig 0.16 · bash · QEMU(`nvme` · `logical_block_size=4096`) · 게
 3. 옛 PVD는 `tars-install`이 만든 디스크에는 안 남는다(`sfdisk --wipe always`가
    `CD001`을 지운다). 남의 도구로 다시 만든 스틱의 이야기다.
 4. YES의 버그는 이월 목록이 적은 것보다 나빴다. `YES` + ` please\n`로 쪼개 오면 전
-   코드는 `YES`만 보고 확인으로 읽는다 — 반사실 b에서 `writing the partition table`
+   코드는 `YES`만 보고 확인으로 읽는다 — mutation b에서 `writing the partition table`
    까지 가고 64MiB라 `sfdisk`가 멈췄다.
 5. Zig 0.16의 `bufPrint`는 넘칠 때 `NoSpaceLeft`를 돌려주며 buf를 앞에서부터 채워
    둔다(`/tmp/dcm2/clip.zig`: `buf=[tars-install: /d]`). `clip`이 거기에 기대고
@@ -371,7 +371,7 @@ index 9952f65..5e0bd24 100755
   `PASS`.
 - [ ] **Step 3: 커밋** — `Check 4Kn GPT, a split YES and a clipped error in the install chain`
 
-## Task 4: 반사실 셋 (하나씩, 매번 캐시 삭제)
+## Task 4: mutation 셋 (하나씩, 매번 캐시 삭제)
 
 | | 되돌림 | Expected |
 |---|---|---|

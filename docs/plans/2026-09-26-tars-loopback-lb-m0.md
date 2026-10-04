@@ -28,7 +28,7 @@ build` · `terminal/prepare.sh` · `kernel/make_initrd.sh`)
 | 측정 | 무엇 | design의 자리 | 어디서 |
 |---|---|---|---|
 | 1 | 부팅 직후 `lo`의 플래그 · 주소 | 왜 지금인가 | 부팅 A · B의 `before` |
-| 2 | `lo`가 DOWN일 때 `nc 127.0.0.1`이 어떻게 실패하나 | 결정 6(반사실의 모양) | `before` |
+| 2 | `lo`가 DOWN일 때 `nc 127.0.0.1`이 어떻게 실패하나 | 결정 6(mutation의 모양) | `before` |
 | 3 | `ip link set lo up`만으로 `127.0.0.1/8`이 붙나, 그 뒤 `nc` 왕복 | 결정 2 · 위험 1 | `raise` · `after` |
 | 4 | 파일이 없을 때 `localhost` · `app.localhost`가 어떻게 실패하나(`net=off` · `net=dhcp`) | 결정 5 | `names` 단계, 모듈 넣기 전 |
 | 5 | 게스트 `curl`이 `localhost` · `app.localhost`를 resolver 없이 푸나 | 결정 5 | `names` |
@@ -351,7 +351,7 @@ grep -aE "tars-init: (config|net|started dhcpcd)|leased" /tmp/lb/guest-B.log
 - 측정 3에서 `RAISE` 뒤에 `inet 127.0.0.1/8`이 있고 `after`의 두 `NC`가 `got`을
   받았다 → 결정 2대로 M1은 `IFF_UP` 하나만 세운다. 주소가 없다 → 위험 1이다. M1이
   `SIOCSIFADDR`까지 하고, design 결정 2를 고친다.
-- 측정 2의 `err` 문구가 M3 반사실의 기대값이 된다(아마 `Network is unreachable`).
+- 측정 2의 `err` 문구가 M3 mutation의 기대값이 된다(아마 `Network is unreachable`).
 - 측정 4 · 5 — `CURL`이 첫 `names`에서 이미 `Trying 127.0.0.1`이면 curl은 resolver를
   안 거친다. 그러면 M3의 이름 판정에 curl을 쓸 수 없고 `getent`나 `nc`를 써야 한다.
   `getent`를 게스트에 넣을지(도구 목록에 한 줄)가 그때 M3 plan의 결정이 된다.

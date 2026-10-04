@@ -1152,7 +1152,7 @@ TS-M2 문단 뒤, "이 체인은 check.sh의 CHAINS에 열두번째로" 앞에 �
 bash -n net/check.sh && bash -n net/make_disk.sh && bash -n kernel/make_initrd.sh && echo ok
 ```
 
-## Task 6 — 체인을 돌리고 반사실을 본다
+## Task 6 — 체인을 돌리고 mutation을 본다
 
 - [ ] Step 1: `net` 체인을 돌린다 (약 1분)
 
@@ -1189,7 +1189,7 @@ grep -aE "tars-init: (config shell=|env |timezone)" /tmp/tsm3/net.log | head -6
 `timezone=UTC`로 끝나고, `env` 줄이 `TZ=UTC` · `TZ=Asia/Seoul` · `TZ=UTC`다.
 `tars-init: timezone ... has no zoneinfo` 줄은 하나도 없다.
 
-- [ ] Step 4: 반사실 — zoneinfo를 안 넣은 initrd는 호스트 검사에서 죽는가
+- [ ] Step 4: mutation — zoneinfo를 안 넣은 initrd는 호스트 검사에서 죽는가
 
 `make_initrd.sh`의 cp 한 줄을 뺀 사본으로 체인을 돌린다. 저장소 파일은
 안 건드린다 — `-v`로 덮어 씌운다.
@@ -1207,9 +1207,9 @@ grep -E "^FAIL|zoneinfo" /tmp/tsm3/cf.log | head
 기대: `exit=1`이고 `FAIL: usr/share/zoneinfo/Asia/Seoul is missing from the initrd`.
 부팅 전에 죽는다 — 겨냥한 자리다.
 
-- [ ] Step 5: 반사실 뒤에 initrd를 원래대로 다시 굽는다
+- [ ] Step 5: mutation 뒤에 initrd를 원래대로 다시 굽는다
 
-반사실이 `kernel/initrd.cpio`를 zoneinfo 없이 덮어썼다. 그대로 두면 다음
+mutation이 `kernel/initrd.cpio`를 zoneinfo 없이 덮어썼다. 그대로 두면 다음
 체인이 그 파일로 뜬다.
 
 ```bash
@@ -1258,7 +1258,7 @@ Bash 도구의 10분 한도를 넘으므로 `run_in_background`로 돌린다. �
 3. `TZif` 넉 자 확인이 실제로 도는가 — 부팅 A의 로그에 UTC 폴백 줄이 없고
    화면에 `KST`가 찍혔다는 것이 그 증명이다
 4. 검사 24의 실제 화면 줄
-5. 반사실이 겨냥한 자리에서 죽었는가
+5. mutation이 겨냥한 자리에서 죽었는가
 6. 체인 단독 시간 · initrd 크기 · 게이트 시간
 
 그리고 세 자리를 고친다 — `Status:` 줄을 "닫혔다(2026-09-19)"로, "TS-M3 —
@@ -1281,7 +1281,7 @@ IN 줄 아래다.
 - "바로 다음에 할 것"을 TS 뒤의 후보(패키지 매니저 · 실머신 NIC · IN이 미룬
   넷)를 사용자가 고르는 것으로
 - 게이트 현황의 숫자와 `net` 체인 단독 시간 · initrd 크기
-- 명령 모음에 반사실 한 덩이(Task 6 Step 4)와 이미지 재빌드 한 줄
+- 명령 모음에 mutation 한 덩이(Task 6 Step 4)와 이미지 재빌드 한 줄
 
 - [ ] Step 6: 커밋
 

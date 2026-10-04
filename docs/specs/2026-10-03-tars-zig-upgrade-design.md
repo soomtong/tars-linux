@@ -138,7 +138,7 @@ diff를 읽을 때 둘을 나눠 본다.
 
 ### 실측 3 — 패키지 번역에서 fortify를 꺼야 하는 것은 `poll.h` 하나다
 
-우회 없이 ReleaseSafe로 지으면(반사실) 에러는 하나다 — `c_poll.zig`의 `expected type 'c_int', found
+우회 없이 ReleaseSafe로 지으면(mutation) 에러는 하나다 — `c_poll.zig`의 `expected type 'c_int', found
 'bool'`. glibc의 fortify `poll` 래퍼가 `__builtin.object_size`의 `c_int` 자리에 `__USE_FORTIFY_LEVEL > 1`을
 놓는다. GL-M3이 `@cImport`에서 본 `drm` · `pty`의 `C import failed`(`bits/fcntl2.h`의
 `__attribute__((error))`)는 패키지의 번역기에서 나지 않는다. 결정 5대로 통하는 둘은 지웠고, `c_poll`

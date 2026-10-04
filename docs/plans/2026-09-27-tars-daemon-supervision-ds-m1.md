@@ -5,7 +5,7 @@
 > 커밋은 넷이다(Task 1 · Task 5 · Task 7 뒤 · Task 9).
 
 Goal: DS design 결정 1~6을 코드로 넣고, 로그 줄이 바뀌어 흔들리는 이웃 체인 셋(net ·
-nic · firewall)을 초록으로 되돌린다. 새 판정(재시작 · `status` · 버튼 fd · 반사실)은
+nic · firewall)을 초록으로 되돌린다. 새 판정(재시작 · `status` · 버튼 fd · mutation)은
 M2다.
 
 Architecture: `net.zig`와 `clock.zig`는 더 이상 fork하지 않는다. 각자 "띄울 것인가"를

@@ -173,7 +173,7 @@ OLD_RENDER = """fn render(
     fb.fill(MARGIN_COLOR);
 """
 
-NEW_RENDER = """/// RC-M0 프로브. 여백만 칠하는 반사실을 fill **앞**에 둔다(design 결정 3) —
+NEW_RENDER = """/// RC-M0 프로브. 여백만 칠하는 what-if를 fill **앞**에 둔다(design 결정 3) —
 /// 뒤에 두면 fill이 데워 놓은 write-combining 버퍼 위에서 재게 된다.
 fn fillMargin(fb: drm.Framebuffer, cols: u32, rows: u32, color: u32) u32 {
     const grid_w = cols * CELL_W;
@@ -463,7 +463,7 @@ grep -ao 'margin_px=[0-9]*' out/probe/run1.log | sort -u
 ```
 
 기대: `margin_px=91520` 하나만 나온다. 다르면 `fillMargin`의 경계가 틀린
-것이고, 그러면 반사실 값이 여백이 아닌 것을 재고 있다.
+것이고, 그러면 what-if 값이 여백이 아닌 것을 재고 있다.
 
 ## Task 4: 검산 — `total`과 구간 합이 맞는가
 

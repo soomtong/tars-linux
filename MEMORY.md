@@ -22,7 +22,7 @@
 - [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유를 일반 어휘 자리에 쓰지 않고, 조사·어미를 생략하지 않는다. 특히 제목과 첫 문장
 - [No emphasis](docs/decisions/feedback_no_emphasis.md) — 문서와 주석에 `**` 강조를 쓰지 않는다(2026-09-12). 내용인 `**`는 남긴다 — md의 코드 블록과 Zig의 배열 반복 연산자
 - [Boot never blocks](docs/decisions/feedback_boot_never_blocks.md) — 네트워크가 꺼져 있거나 안 닿아도 부팅은 평소대로 끝난다(2026-09-15). 타임아웃 위에 `fork`를 한 겹 더 덮고, 음성 검사로 증명한다
-- [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 바깥에 정착한 영어 jargon은 번역하지 않고 원문에 조사를 붙인다(2026-10-04). 첫 사례 seed — '씨앗' 652자리를 되돌렸고 조사는 소리로 고른다(seed가/를/는/로/와)
+- [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 바깥에 정착한 영어 jargon은 번역하지 않고 원문에 조사를 붙인다(2026-10-04). 사례 둘 — seed('씨앗' 652자리)와 mutation('반사실' 356자리, counterfactual은 통계 용어라 mutation testing의 말로). 조사는 소리로 고른다(seed가 · mutation이)
 
 ## 사용자 (user)
 

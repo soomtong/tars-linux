@@ -153,7 +153,7 @@ service web     stopped
 5초 뒤에도 안 되살아남 · start 뒤 ssh 성공 · restart 뒤 pid가 바뀜과 세 번 연달아도
 포기 안 됨 · 일부러 죽는 서비스가 given up 뒤 start로 다시 뜸 · SIGTERM을 무시하는
 서비스가 3초 유예 뒤 SIGKILL로 멈춤. 음성 셋 — 없는 이름 ·
-콘솔 셸 stop · 망가진 요청. 반사실 둘 — "hold 죽음을 세지 않기"를 뺀다 · "띄우는
+콘솔 셸 stop · 망가진 요청. mutation 둘 — "hold 죽음을 세지 않기"를 뺀다 · "띄우는
 조건의 hold"를 뺀다.
 
 ## Milestone
@@ -164,7 +164,7 @@ service web     stopped
   `bind` · `accept4` 모양. sshd가 SIGTERM에 몇 초에 죽는가. sshd를 멈춘 뒤 떠 있던 ssh
   세션이 살아남는가.
 - CT-M1 — `control.zig` · `Child` 확장 · `tars-service` · 호스트 검사.
-- CT-M2 — `service/check.sh` 부팅 · 반사실 · 가이드.
+- CT-M2 — `service/check.sh` 부팅 · mutation · 가이드.
 
 ## 비목표
 
@@ -319,7 +319,7 @@ CTM0-AFTER sshd=[]
 
 첫 부팅의 하네스는 세 번만 죽였는데 첫 번째가 오래 산 sshd라 카운터를 0으로 되돌렸다 —
 빨리 죽음이 둘에서 멈췄다. 라운드를 넷으로 고친 두 번째 부팅에서 재현됐다. 결정 4 규칙
-2가 막으려는 것이 이 줄이고, M2의 반사실은 `restart` 넷으로 이 줄을 부른다.
+2가 막으려는 것이 이 줄이고, M2의 mutation은 `restart` 넷으로 이 줄을 부른다.
 
 ### 실측 7 — 부수 발견: 전원 버튼 fd가 콘솔 셸의 자식에게 샌다
 
@@ -398,7 +398,7 @@ power exit=0 0 FAIL 46s, last: PM-M1 PASS: the guest can shut itself down and br
 ### M1이 M2에 넘기는 것
 
 - 게이트가 grep할 로그 줄은 M1 plan의 M1-E와 실측 9의 줄이다.
-- 반사실 둘 — `reaped`의 `.restarts`/`.stays_stopped`를 `.normal`로 떨어뜨린다(규칙 2 →
+- mutation 둘 — `reaped`의 `.restarts`/`.stays_stopped`를 `.normal`로 떨어뜨린다(규칙 2 →
   `giving up on service sshd`) · `wantsRunning`에서 `hold != .stop`을 뺀다(규칙 1 →
   stop 뒤 되살아남).
 
@@ -430,9 +430,9 @@ SV chain PASS
 연결은 제 세션을 가진 `sshd-session`이 들고 있어 리스너가 멈춰도 산다(실측 4). 게스트에
 한 글자도 안 치고 판정한다는 이 체인의 성질(SV)이 그대로다.
 
-### 실측 12 — 반사실 넷. 둘은 호스트 검사가 먼저 잡았고, 부팅 D는 예측보다 앞이나 뒤에서 잡았다
+### 실측 12 — mutation 넷. 둘은 호스트 검사가 먼저 잡았고, 부팅 D는 예측보다 앞이나 뒤에서 잡았다
 
-| 반사실 | 체인 그대로 | 호스트 검사를 건너뛴 사본 |
+| mutation | 체인 그대로 | 호스트 검사를 건너뛴 사본 |
 |---|---|---|
 | CF1 `reaped`가 늘 `.normal`(규칙 2) | `FAIL: a stopped death did not stay stopped`(`control_test`) | 검사 18 — `init did not log the stop` |
 | CF2 `wantsRunning`에서 `hold`를 뺌(규칙 1) | `FAIL: a stopped service wants to run`(`control_test`) | 검사 19 — `sleeper did not stay stopped (service sleeper stopping  pid 100   up 3s)` |

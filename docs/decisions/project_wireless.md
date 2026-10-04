@@ -35,13 +35,13 @@ How to apply:
   우리가 새로 쓴 것은 "파일이 있으면 감독 목록에 넣는다"와 "늦은 인터페이스를 넘긴다"
   둘이다.
 - argv를 init이 못 짓는 데몬은 wrapper 셸이 짓고 `exec`한다. exec을 빼면 연결은 똑같이
-  서고 pid 대조만 틀린다(M3 반사실) — DS의 `-B`와 같은 교훈이다(lessons 61).
+  서고 pid 대조만 틀린다(M3 mutation) — DS의 `-B`와 같은 교훈이다(lessons 61).
 - Debian 빌드에 무엇이 켜져 있는지는 짐작하지 말고 도움말 문자열로 본다 — `-M`이 없었다.
 - firmware 이름은 `modules.builtin.modinfo`가 말한다. 단 iwlwifi는 요청 순서를 따라
   고른다(lessons 63). 커널이나 linux-firmware를 올리면 iwlwifi 줄을 다시 고른다.
 - 게이트 전용 커널 드라이버는 모듈이 없어도 넣을 수 있다 — 내장 cmdline으로 기본값을
   끄고 체인이 뒤에 덮는다. 그리고 "파라미터를 안 준 부팅"을 반드시 하나 둔다. 그 부팅만이
-  기본값을 지킨다(M3 반사실 3에서 부팅 A · B는 초록이었다).
+  기본값을 지킨다(M3 mutation 3에서 부팅 A · B는 초록이었다).
 - 판정에 쓸 줄은 콘솔에 앵커 없이 grep한다(lessons 68).
 
 관련: [[project_wired_nic]] · [[project_daemon_supervision]] · [[project_service_control]] ·

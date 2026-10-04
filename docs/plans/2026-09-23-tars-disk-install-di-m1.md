@@ -795,7 +795,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 기대: `disk_test: signatures, sizes, arguments and the YES gate hold`와
 `storage_test: … (42 candidates)`, `error` 없음.
 
-- [ ] Step 6: 반사실 하나 — 순서 검사가 진짜인가
+- [ ] Step 6: mutation 하나 — 순서 검사가 진짜인가
 
 `describe`에서 iso9660 검사와 mbr 검사의 순서를 바꾸면 `hybrid iso` 검사가
 빨개져야 한다. 컨테이너 안의 사본으로 한다(저장소는 안 건드린다).
@@ -1743,7 +1743,7 @@ grep -E "^(=== |boot |the |answering|tars-install wrote|booted|on the|FAIL|PASS)
 - 판정 6이 `/dev/nvme0n1 (label …)` 없이 `no disk labelled tars-* among 42
   candidates`면 p2가 ext2가 아니거나 라벨이 다르다 — 부팅 1의 `mke2fs` 줄을 본다.
 
-- [ ] Step 2: 반사실 — 판정 6이 파티션 후보에 기대는가
+- [ ] Step 2: mutation — 판정 6이 파티션 후보에 기대는가
 
 `CANDIDATES`를 `DISKS`만으로 되돌린 사본으로 한 번 더 돌린다. 판정 6이
 `no disk labelled tars-* among 14 candidates`로 빨개져야 한다. 저장소는
@@ -1765,7 +1765,7 @@ installed NVMe as its config disk`와 `among 14 candidates`. (`PARTITIONS`는
 
 - [ ] Step 3: 끝나고 나서 산출물을 되돌린다
 
-반사실 판이 `init/zig-out`과 `kernel/initrd.cpio`와 `out/tars.iso`를 사본의
+mutation 판이 `init/zig-out`과 `kernel/initrd.cpio`와 `out/tars.iso`를 사본의
 코드로 남겼다. 다음 판이 다시 빌드하지만 사람이 그 산출물을 손으로 쓰기 전에
 되돌린다.
 
@@ -1842,7 +1842,7 @@ Files: Modify `docs/specs/2026-09-19-tars-disk-install-design.md` ·
 "DI-M0이 실행으로 증명한 것" 절 뒤에 "DI-M1이 실행으로 증명한 것" 절을 더한다.
 넣을 것 — 체인 한 판의 시간과 부팅 둘의 셸까지 걸린 초 · 부팅 1의 목록 전문
 (`clean`한 것, 두 번째 목록 포함) · 설치의 진행 줄과 넷의 바이트 · 부팅 2의
-`config storage` 줄 · 반사실 판의 빨강 · 루트 게이트 시각. 숫자는
+`config storage` 줄 · mutation 판의 빨강 · 루트 게이트 시각. 숫자는
 `/tmp/dim1-*.log`에서 그대로 옮긴다. 위 "정한 것" 여섯도 이 절에 옮긴다.
 
 - [ ] Step 2: 기억

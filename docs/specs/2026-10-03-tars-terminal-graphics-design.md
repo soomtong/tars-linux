@@ -141,7 +141,7 @@ screen)은 저장소를 따로 갖는다. 결정 3이 viewport 기준으로 바�
   깨지는가, 질의의 답, placement를 viewport 좌표로 꺼내는 API, 게스트의 여유 메모리.
 - TG-M1 — `vt.zig`(결정 2 · 3 · 5)와 `vt_test`.
 - TG-M2 — `main.zig`의 그리기(결정 4), `image>` 덤프, 부팅 게이트.
-- TG-M3 — PNG(결정 6), 반사실, 루트 게이트, 문서, 닫기.
+- TG-M3 — PNG(결정 6), mutation, 루트 게이트, 문서, 닫기.
 
 ## 실측 (M0, 2026-10-03)
 
@@ -248,7 +248,7 @@ fish가 작은따옴표 문자열 전체에 입히는 구문 강조 색이다. 7
 
 ## 실측 (M3, 2026-10-03)
 
-### 실측 8 — PNG는 `Screen.init`이 넣은 디코더로 풀리고, 반사실은 부팅 전에 잡힌다
+### 실측 8 — PNG는 `Screen.init`이 넣은 디코더로 풀리고, mutation은 부팅 전에 잡힌다
 
 `png.zig`가 `stb_image`(v2.30, `stb_truetype`과 같은 고정 SHA, PNG만)로 `sys.decode_png`를
 채운다. 디코드 전에 `stbi_info_from_memory`로 머리만 읽어 RGBA가 10,000,000바이트를 넘으면
@@ -256,7 +256,7 @@ fish가 작은따옴표 문자열 전체에 입히는 구문 강조 색이다. 7
 상한(한 변 10000 · 400MB)은 데스크톱 기준이라서다. `vt_test` 76(1600×1600, 10,240,000바이트)이
 거절되고 77(1580×1580, 9,985,600바이트)이 풀린다. 둘 다 온전한 PNG라 선이 없으면 76도 풀린다.
 
-반사실은 `Screen.init`의 설치 줄 하나를 주석으로 막은 것이다. 예측대로 `vt_test` 75가 부팅
+mutation은 `Screen.init`의 설치 줄 하나를 주석으로 막은 것이다. 예측대로 `vt_test` 75가 부팅
 전에 `이미지 0개, 답 _Gi=1;EINVAL: unsupported format`으로 멈췄다(rc=1) — 실측 3의 그 답이다.
 게스트에서는 `render` 체인 검사 19가 같은 PNG의 사분면을 `FF0000/00FF00/0000FF/FFFFFF`로 읽는다.
 

@@ -49,15 +49,15 @@ How to apply:
   2. 같은 `server`가 두 번이면 먼저 적힌 것이 이기고 뒤는 `Could not add source`.
      그래서 `confdir`를 맨 앞에 둔다(M2).
   3. 주소가 붙기 전에 뜬 chronyd는 실패한 요청을 버스트로 세지 않는다 — 기본 경로를
-     기다리는 코드를 넣었다가 반사실로 1초 차이를 보고 걷어 냈다.
+     기다리는 코드를 넣었다가 mutation으로 1초 차이를 보고 걷어 냈다.
   4. 커널에 seccomp · IPv6가 없다. `-F`를 안 주고 `cmdport 0`을 준다.
   5. 뜨자마자 SIGTERM을 받은 chronyd는 핸들러를 걸기 전이라 driftfile을 안 쓰고
      말없이 죽는다. driftfile 판정은 충분히 산 부팅(게이트는 점프 뒤 20초)에서 본다.
 - `confdir`의 증거는 `Could not add source`가 아니라(순서가 어느 쪽이든 찍힌다)
   stub이 받은 요청 수다 — 0.25초 폴링이면 20초에 77번, 기본 폴링이면 1번.
-- 반사실을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍는다. `sd -F`가 Zig의 `\\`와
+- mutation을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍는다. `sd -F`가 Zig의 `\\`와
   줄바꿈을 못 맞춰 편집 없이 `PASS`가 나온 판이 있었다. 그리고 `net` 체인은 부팅 전에
-  `zig build test`를 돌리므로, 코드를 바꾸는 반사실은 호스트 검사가 먼저 잡는다 —
+  `zig build test`를 돌리므로, 코드를 바꾸는 mutation은 호스트 검사가 먼저 잡는다 —
   게이트 판정을 보려면 검사의 기대값도 함께 바꾼다.
 - 체인의 게스트 로그는 컨테이너 `/tmp`의 mktemp다. 읽으려면 `-v 호스트:/tmp`로 문다.
 

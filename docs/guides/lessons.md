@@ -265,7 +265,7 @@ perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
           s/\e[()][AB0]//g; s/\r/\n/g' /tmp/run/serial_1.log > /tmp/run/serial.clean
 grep -a "terminal: screen>" /tmp/run/serial.clean | tail -1 | tr '|' '\n' | tail -12
 
-# 반사실은 사본을 만들어 -v로 덮는다. sd는 파일 인자를 in-place로 고치므로
+# mutation은 사본을 만들어 -v로 덮는다. sd는 파일 인자를 in-place로 고치므로
 # cp를 먼저 하고 사본에 친다. 사본에 chmod +x를 잊지 않는다.
 cp net/check.sh /tmp/run/check.sh && sd -F '<뺄 것>' '' /tmp/run/check.sh && chmod +x /tmp/run/check.sh
 docker run --rm -v "$PWD":/workspace -v /tmp/run/check.sh:/workspace/net/check.sh:ro \
@@ -571,7 +571,7 @@ mtime은 새 시각을 따라간다.
 51. raw 시리얼 로그의 줄 끝은 `\r\n`이다. 정규식에 `$`를 쓰려면 실제 CR 바이트를
 넣는다(`install/check.sh`의 `CR` 상수).
 
-52. 코드를 바꾸는 반사실은 체인이 부팅 전에 돌리는 `zig build test`가 먼저 잡을 수
+52. 코드를 바꾸는 mutation은 체인이 부팅 전에 돌리는 `zig build test`가 먼저 잡을 수
 있다. 게이트의 판정을 보려면 그 검사의 기대값도 함께 바꾼다. 그리고 돌리기 전에
 `git diff`로 편집이 실제로 들어갔는지 본다 — `sd -F`가 Zig의 `\\`를 못 맞춘 판이
 있었고(TD), 여러 줄 문자열을 조용히 못 맞춘 판도 있었다(FW-M2). 빗나가도 에러가
@@ -611,7 +611,7 @@ mtime은 새 시각을 따라간다.
 빌드가 읽은 것이다(DS-M1). 코드와 무관하고 다시 돌리면 된다.
 
 61. 감독 목록에 넣은 데몬이 갈라지면 감독자는 "1초 만에 exit 0"을 세 번 보고 포기하는데,
-갈라진 손자가 일을 계속해서 "일이 됐다"만 보는 검사는 전부 초록이다(DS-M2 반사실 —
+갈라진 손자가 일을 계속해서 "일이 됐다"만 보는 검사는 전부 초록이다(DS-M2 mutation —
 dhcpcd에서 `-B`를 빼도 net 검사 1~28이 초록이었다). 판정은 "쥔 pid가 곧 그 데몬인가"로
 한다.
 
@@ -677,7 +677,7 @@ C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 �
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
   인자를 받으면 in-place로 고친다. 그래서 이 줄은 사본을 만드는 것이 아니라
-  저장소 파일을 고치고 빈 사본을 남긴다. 반사실용 `/tmp` 사본을 만들 때는
+  저장소 파일을 고치고 빈 사본을 남긴다. mutation용 `/tmp` 사본을 만들 때는
   `cp`를 먼저 하고 사본에 대고 `sd`를 친다. `sed`의 감각으로 치면 걸린다.
 - `zsh -f`를 "옵션만 없는 세션"으로 쓰기(SD-M0 실측 5) — `NO_RCS`가 히스토리
   저장을 통째로 끈다. `exit`에서도 SIGHUP에서도 파일을 안 만들고, `fc -W`를
@@ -695,15 +695,15 @@ C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 �
   통과했지만 운이었다. bash는 프롬프트가 `bash-5.2#`로 바뀌므로
   `wait_for_screen`으로 기다릴 수 있다. zsh는 프롬프트가 같아서 못 기다리고,
   그럴 때는 판정이 실패했을 때 조용하지 않은지를 대신 확인한다.
-- 반사실이 겨냥한 검사에 걸릴 것이라고 믿기(SL-M2) — 앞의 검사가 먼저
+- mutation이 겨냥한 검사에 걸릴 것이라고 믿기(SL-M2) — 앞의 검사가 먼저
   죽인다. `.HUP`을 뺀 사본으로 음성 검사(`grace period expired`)를 겨냥했는데
   체인이 양성 검사(`missing shutdown log line: sent SIGHUP …`)에서 죽었다.
   판정 목록이 음성보다 앞에 있기 때문이다. 음성을 겨냥하려면 앞의 검사를
-  통과시키는 반사실이 따로 필요하다 — 여기서는 "로그는 찍되 실제로는 안
+  통과시키는 mutation이 따로 필요하다 — 여기서는 "로그는 찍되 실제로는 안
   보내는" 사본이었다(`if (sig != .HUP) _ = linux.kill(-1, sig);`). 그 회차에서
   marker에 `found … sent SIGHUP …`이 찍힌 채로 음성이 잡았고, 그것이 검사
   둘이 서로 다른 것을 본다는 증명이다.
-- 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — seed에서
+- 호스트 검사가 지키는 줄을 뺀 mutation을 마운트 하나로 보기(SD-M2) — seed에서
   `setopt` 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에 죽여서
   게이트가 그 줄을 보는 자리까지 못 간다. 그 loop 한 줄도 함께 눕힌 사본을
   둘째 마운트로 준다. M1이 값을 한다는 증거이기도 하다.
@@ -741,7 +741,7 @@ C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 �
   배경도 기본인 셀을 뺀다. `ls` 뒤 화면이 7,285개가 아니라 911개다.
   화면 전체를 전제로 픽셀 수를 세면 여덟 배가 틀린다.
 - 어떤 구간을 건너뛰는 것을 `continue`로 흉내 내고 "그 구간을 뺐다"고
-  읽기(RC-M0) — 쓰기는 줄어도 루프는 그대로 돈다. 여백만 칠하는 반사실을
+  읽기(RC-M0) — 쓰기는 줄어도 루프는 그대로 돈다. 여백만 칠하는 what-if를
   그렇게 썼다가 "프레임버퍼 전체를 훑는 비용"을 쟀다. 재려는 것을 실제로
   안 하는 형태로 써야 한다(사각형 넷만 돌기).
 - 구간 합이 `total`과 맞는 것으로 "제대로 쟀다"고 읽기(RC-M0) — 그 검산은
@@ -1175,8 +1175,8 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의 음성 판정은
   `last_screen`(마지막 `screen>` 줄 하나)으로 본다. 셸이 아는 폭은 fish의
   `$COLUMNS`로 묻는다 — `echo`의 짧은 출력만 보면 `pty.resize`를 빼도 초록이었다
-  (WP-M1 반사실). "terminal이 살았다"는 `pane>` 줄로 보면 안 된다 — 죽고
-  되살아난 terminal도 `ws=1/1 panes=1`을 찍는다(WP-M2 반사실). `spawned child pid`
+  (WP-M1 mutation). "terminal이 살았다"는 `pane>` 줄로 보면 안 된다 — 죽고
+  되살아난 terminal도 `ws=1/1 panes=1`을 찍는다(WP-M2 mutation). `spawned child pid`
   개수나 그 동작만 찍는 줄(`workspace closed`)로 본다. 워크스페이스가 둘일 때
   `caps ink off=`가 하나일 때와 같은지도 본다 — `drawStatus`의 꼬리 산수가
   틀리면 글자는 맞고 색만 밀린다.
@@ -1209,10 +1209,14 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 `feedback_plain_korean` · `feedback_no_emphasis` · `feedback_jargon_translation`)과
 `user_learning_goal`.
 
-옛 이름 하나. 2026-10-04 전의 문서와 커밋은 seed(첫 부팅에 `init`이
+옛 이름 둘. 2026-10-04 전의 문서와 커밋은 seed(첫 부팅에 `init`이
 `/config`에 쓰는 기본 파일)를 "씨앗"이라 불렀다. 지금 트리에는 그 말이
 없고, 옛 커밋에서 찾으려면 `git log -S씨앗 --oneline`이다
 (`feedback_jargon_translation`).
+
+같은 날 mutation(일부러 고장을 하나 심어 게이트 검사가 빨개지는지 보는
+절차)을 "반사실"이라 부르던 것도 바꿨다. 옛 커밋에서 찾으려면
+`git log -S반사실 --oneline`이다.
 
 그다음은 손에 든 일에 따라 고른다. 게이트를 건드리면
 `project_gate_chain_composition`·`project_gate_latency`·

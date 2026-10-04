@@ -905,17 +905,17 @@ git diff --cached --stat
 git commit -m "Ask the guest what address it got"
 ```
 
-## Task 7 — 반사실 둘
+## Task 7 — mutation 둘
 
 검사가 실제로 무엇에 걸려 있는지 확인한다. 저장소 파일은 한 글자도 안
 바꾼다 — `/tmp` 사본을 `-v`로 덮어씌우는 SD-M2의 방법이다.
 
-SD-M2와 BH-M2가 "반사실은 겨냥한 검사가 아니라 앞의 검사에 걸린다"를
+SD-M2와 BH-M2가 "mutation은 겨냥한 검사가 아니라 앞의 검사에 걸린다"를
 배웠다. 어디서 죽는지를 매번 적는다.
 
 - [ ] Step 1: `net=dhcp`를 `net=off`로 바꾼 디스크로 돌린다
 
-우리 코드가 설정을 실제로 보는지 묻는 반사실이다.
+우리 코드가 설정을 실제로 보는지 묻는 mutation이다.
 
 ```bash
 cd /Users/dp/Repository/tars-linux
@@ -953,7 +953,7 @@ grep -aE '^(FAIL|PASS|the |init )' /tmp/nw/m2_counter_hook.log
 
 기대: 종료 코드 1이고 `FAIL: the dhcpcd hook never wrote /etc/resolv.conf`.
 검사 5(주소)까지는 통과해야 한다 — hook이 없어도 주소는 붙는다는 것이 M0의
-실측 6이 본 것이다. 그 둘이 갈리는 것이 이 반사실의 값 전부다.
+실측 6이 본 것이다. 그 둘이 갈리는 것이 이 mutation의 값 전부다.
 
 검사 5에서 죽으면 hook이 주소 획득 자체에 관여한다는 뜻이므로, 그 사실을
 design에 적고 결정 C를 다시 본다.
@@ -1046,7 +1046,7 @@ memory`).
 - Dockerfile에 실제로 더한 패키지 수와 이미지 재빌드 시간
 - initrd의 before/after(압축·푼 것·라이브러리 수). M0의 예상(실측 3)과 맞았나
 - 게스트가 받은 주소와 `/etc/resolv.conf`의 내용
-- 반사실 둘이 각각 어느 검사에서 죽었나
+- mutation 둘이 각각 어느 검사에서 죽었나
 - `net/check.sh` 단독 시간(M1의 8.954초와 비교)
 - `config`·`tools` 체인 단독 시간
 - 루트 게이트 시간과 판정, `skipping make` 횟수
@@ -1114,7 +1114,7 @@ IPv6도 netfilter도 실머신 NIC도 여전히 비목표다. 게스트가 서�
    돌면 죽는다 — dhcpcd가 리스를 요청하기도 전에 치기 때문이다(실측 20).
    시리얼 로그에서 `eth0: leased`를 기다리는 검사를 그 앞에 새로 세웠고,
    화면 판정이 검사 6으로 밀렸다. 번호가 하나씩 밀려 마지막이 검사 8이다.
-2. 반사실 사본에 `chmod +x`가 필요하다. plan의 Task 7 Step 1·2에 그 줄이
+2. mutation 사본에 `chmod +x`가 필요하다. plan의 Task 7 Step 1·2에 그 줄이
    없어서 1회차가 `FAIL: config disk build failed`로 죽었다 — 체인이
    `./make_disk.sh`로 부르는데 호스트에서 만든 파일이 644다.
 3. `comptime` 블록에는 `///`를 못 붙인다. plan Step 3의 제안
@@ -1123,7 +1123,7 @@ IPv6도 netfilter도 실머신 NIC도 여전히 비목표다. 게스트가 서�
    blocks`로 컴파일이 막힌다. 그리고 `assert`가 아니라 `@compileError`를
    쓰는 편이 메시지를 남긴다.
 4. Task 7 Step 2의 `sed`가 지우는 줄이 넷이 아니라 아홉이다. 코드 다섯 줄과
-   주석 넷인데, 주석이 지워지는 것은 반사실에 영향이 없다. 기대값만 고친다.
+   주석 넷인데, 주석이 지워지는 것은 mutation에 영향이 없다. 기대값만 고친다.
 
 Task 2 Step 2의 "지운 줄이 하나도 없다"도 정확히는 한 줄이 바뀐다 —
 `libselinux1:amd64) \`에서 닫는 괄호가 다음 줄로 옮겨간다. 목록 끝에 붙이는

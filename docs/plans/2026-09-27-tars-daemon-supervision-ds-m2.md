@@ -1,11 +1,11 @@
 # DS-M2 — 게이트가 감독을 판정하고 DS를 닫는다
 
 > 이 plan을 실행하는 사람에게: 코드(`init`)는 안 고친다. 고치는 것은 체인 둘(net ·
-> service)과 가이드 · 기억 · 표다. 반사실은 커밋하지 않는 임시 편집이고, 끝나면
+> service)과 가이드 · 기억 · 표다. mutation은 커밋하지 않는 임시 편집이고, 끝나면
 > `git diff`가 비었는지 본다.
 
 Goal: DS design 결정 7이 남긴 판정 넷(죽으면 다시 뜬다 · `tars-service`가 다룬다 ·
-`ntp=dhcp`에서 재시작이 없다 · 버튼 fd가 안 샌다)을 게이트에 넣고, 반사실 둘로 그
+`ntp=dhcp`에서 재시작이 없다 · 버튼 fd가 안 샌다)을 게이트에 넣고, mutation 둘로 그
 판정이 거짓 초록이 아닌지 보고, 루트 게이트로 닫는다.
 
 Architecture: 새 체인은 없다. net 체인 부팅 A(chronyd가 stub 10.0.2.2를 믿는
@@ -31,7 +31,7 @@ Tech Stack: bash(체인) · QEMU monitor의 `sendkey`(`type_keys`) · ssh Contro
 - M2-D — 검사 31(`ntp=dhcp`에서 재시작 없음)은 부팅 B가 뜬 지 40초가 지나서 본다. 옛
   코드의 루프 주기가 30초(60 × 0.5초)였으므로 40초면 옛 코드는 적어도 한 번 다시 떴다.
   부팅 B가 그보다 일찍 끝나면 남은 만큼 잔다 — 체인에 최대 약 30초가 는다.
-- M2-E — 검사 31의 반사실은 안 돌린다. 되살릴 옛 코드가 `3f56ff9`에서 로그 줄과 함께
+- M2-E — 검사 31의 mutation은 안 돌린다. 되살릴 옛 코드가 `3f56ff9`에서 로그 줄과 함께
   지워졌고, 되살리면 검사 21도 함께 빨개져서 무엇이 잡았는지 안 갈린다. 이 한계는
   design에 적는다.
 - M2-F — service 체인 부팅 D의 `tars.conf`는 `ntp`가 없다(기본값 `off`). 그래서 `status`에
@@ -61,7 +61,7 @@ File: `net/check.sh` — "검사 24"의 `echo "the guest shows …"` 다음, `# 
 # 그 죽음을 거두고 다음 바퀴에 새 pid로 띄우고, 새 dhcpcd가 lease를 받는다.
 #
 # 새 lease는 `-j`의 줄머리 `[새 pid]:`로 가른다(M2-B). 옛 dhcpcd의 줄과 안 섞인다.
-# 이 판정이 -B의 반사실을 받는다 — -B가 없으면 쥔 pid는 배경으로 간 뒤 이미 죽어
+# 이 판정이 -B의 mutation을 받는다 — -B가 없으면 쥔 pid는 배경으로 간 뒤 이미 죽어
 # 있어서 "killed (pid 옛, signal 9"가 영영 안 나온다.
 OLD_DHCPCD="$(grep -aoE 'tars-init: started service dhcpcd \(pid [0-9]+' "$LOGA" | tail -1 | grep -oE '[0-9]+$')"
 [ -n "$OLD_DHCPCD" ] || fail "init never started dhcpcd in the ntp guest" "tars-init: started service"
@@ -124,7 +124,7 @@ File: `net/check.sh` — 검사 22의 `echo "the dead ntp server cost …"` 다�
 # 40초를 채우고 본다(plan 결정 M2-D). 옛 주기가 30초이므로 그 안에 적어도
 # 한 번은 다시 떴을 시간이다. 이 부팅이 그보다 일찍 여기 오면 남은 만큼 잔다.
 #
-# 반사실이 없다(M2-E). 옛 코드는 로그 줄과 함께 지워졌다.
+# mutation이 없다(M2-E). 옛 코드는 로그 줄과 함께 지워졌다.
 B_ELAPSED=$(( $(date +%s) - BOOT_B_START ))
 if [ "$B_ELAPSED" -lt 40 ]; then
   echo "waiting $(( 40 - B_ELAPSED ))s so a 30s restart loop would have shown"
@@ -191,7 +191,7 @@ grep -E "killed dhcpcd|restart chronyd|after 40s|dhcpcd and four|power button" /
 
 기대: 둘 다 exit 0. net의 시간이 앞 판(118초)보다 최대 30초쯤 는다(M2-D).
 
-## Task 5 — 반사실 둘 (각 약 2분, 커밋하지 않는다)
+## Task 5 — mutation 둘 (각 약 2분, 커밋하지 않는다)
 
 - [ ] Step 1: `-B`를 뺀다
 
@@ -221,7 +221,7 @@ git status --short
 예측: 검사 26의 `holds a power button fd`. 끝에 `git status`에 체인 둘과 plan만 있어야 한다.
 
 - [ ] Step 3: 산출물을 되돌린 소스로 다시 빌드한다(`project_zig_out_staleness`) — Task 7의
-  루트 게이트가 빌드부터 하므로 따로 안 한다. 반사실 뒤에 체인 하나를 초록으로 다시
+  루트 게이트가 빌드부터 하므로 따로 안 한다. mutation 뒤에 체인 하나를 초록으로 다시
   보는 것은 루트 게이트가 겸한다.
 
 ## Task 6 — 가이드 · 기억 · 표
@@ -312,7 +312,7 @@ grep -c '^FAIL' /tmp/ds2-gate.log; tail -5 /tmp/ds2-gate.log
 
 ## Task 8 — 닫기
 
-- [ ] Step 1: design에 "DS-M2가 실행으로 증명한 것"(실측 11부터 — 두 체인 · 반사실 둘 ·
+- [ ] Step 1: design에 "DS-M2가 실행으로 증명한 것"(실측 11부터 — 두 체인 · mutation 둘 ·
   루트 게이트)을 적고, M2-E의 한계를 적고, `Status:`를 "끝났다(2026-09-27) — M0~M2"로.
 - [ ] Step 2: `HANDOFF.md`의 맨 위 절을 갈아 끼운다 — DS가 닫혔다 · 다음은 새 서브프로젝트
   (남은 후보: 패키지 매니저 · IPv6).

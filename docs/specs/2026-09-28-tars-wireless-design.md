@@ -123,7 +123,7 @@ hostapd와 busybox(udhcpd · nc)는 sysroot에만 들이고 initrd에는 안 넣
 
 ### 결정 7 — 게이트는 열일곱번째 체인 `wifi/check.sh`다
 
-(M3에서 모양을 정했다. 처음 적은 것은 라디오 둘 · 반사실 `-M` · `radios=0`이었다.)
+(M3에서 모양을 정했다. 처음 적은 것은 라디오 둘 · mutation `-M` · `radios=0`이었다.)
 
 게스트 쪽 일은 설정 디스크의 `services.d/ap`(= `wifi/ap.sh`)가 하고 체인은 한 글자도 안
 친다. hostapd · busybox(udhcpd · nc)는 sysroot에서 디스크로 가고 initrd에는 없다.
@@ -139,7 +139,7 @@ hostapd와 busybox(udhcpd · nc)는 sysroot에만 들이고 initrd에는 안 넣
   없고, 로그에 `wlan`이 한 글자도 없다(결정 2의 음성).
 - 정적 — 스물둘 심볼과 내장 cmdline의 글자. firmware가 initrd에 있는지는 `tools` 체인
   검사 1b가 본다(실측 11).
-- 반사실 셋 — `tars-wifi`의 `exec`을 빼면 검사 3, hook을 막으면 검사 8, 내장 cmdline을
+- mutation 셋 — `tars-wifi`의 `exec`을 빼면 검사 3, hook을 막으면 검사 8, 내장 cmdline을
   비우면 부팅 C의 검사 10(실측 14).
 
 ## 위험
@@ -196,7 +196,7 @@ status 255다(실측 13). 다 잡은 뒤에 사라지는 것(동글을 뽑는 �
 - WL-M0 — 실측, 코드 0줄. 위험 1~3, firmware 파일 목록, netns · hostapd 게이트가 서는가.
 - WL-M1 — 커널 config, firmware를 initrd에 넣기, 정적 검사.
 - WL-M2 — `init`과 게스트 도구.
-- WL-M3 — 체인 · 반사실 · 가이드 · 루트 게이트 · 닫기.
+- WL-M3 — 체인 · mutation · 가이드 · 루트 게이트 · 닫기.
 
 ## 실측 (M0, 2026-09-28)
 
@@ -304,7 +304,7 @@ wireless-regdb의 `regulatory.db` · `.p7s`를 넣자 `failed to load regulatory
 
 `gzip -dc | cpio -it`는 첫 archive에서 멈춰서 firmware가 목록에 안 나온다. 그래서 `tools`
 체인의 검사 1b는 initrd의 꼬리가 `firmware.cpio.gz`와 바이트까지 같은지와, 그 cpio에 목록의
-경로가 전부 있는지를 따로 본다. 반사실 — `make_initrd.sh`의 `cat … >> initrd.cpio`를 뺀
+경로가 전부 있는지를 따로 본다. mutation — `make_initrd.sh`의 `cat … >> initrd.cpio`를 뺀
 사본으로 덮으면 검사 1은 초록이고 1b가 `the initrd does not end with the firmware cpio`로
 멈춘다.
 
@@ -335,7 +335,7 @@ wireless-regdb의 `regulatory.db` · `.p7s`를 넣자 `failed to load regulatory
 
 ## 실측 (M3, 2026-09-28)
 
-### 실측 14 — 체인은 첫 판에 초록이고 반사실 셋이 예측한 검사에서 잡힌다
+### 실측 14 — 체인은 첫 판에 초록이고 mutation 셋이 예측한 검사에서 잡힌다
 
 `wifi/check.sh` 단독 1분 34초, 검사 열이 전부 초록.
 

@@ -1,4 +1,4 @@
-# SL-M0 — 종료 한 번을 밀리초로 재고 SIGHUP 반사실을 밟는다
+# SL-M0 — 종료 한 번을 밀리초로 재고 SIGHUP mutation을 밟는다
 
 Date: 2026-09-13
 design: `docs/specs/2026-09-13-tars-shutdown-latency-design.md`

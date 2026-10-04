@@ -480,9 +480,9 @@ SV chain PASS
 init의 env 블록이 서비스까지 온다. 서비스의 출력(`sv-linked …`)은 콘솔로 가서 시리얼
 로그에 남는다.
 
-### 실측 11 — 반사실 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
+### 실측 11 — mutation 셋이 겨냥한 검사에서 겨냥한 문구로 죽었다
 
-| 반사실 | 호스트 검사 | 부팅 |
+| mutation | 호스트 검사 | 부팅 |
 |---|---|---|
 | `sortNames` 호출을 지운다 | `path …/z-last, want …/a-first` | 검사 4 — `shell=276 a=279 b=278 d=277` |
 | `check`가 늘 `.ok` | `path …/m-noexec, want …/n0` | 검사 1 — `4 services from`, `c-noexec exited (… status 127 …)` |
@@ -612,9 +612,9 @@ SV chain PASS
 sshd를 아는 코드는 없다 — 결정 1의 "sshd에 `init` 코드가 안 든다"가 선다(`login.zig`는
 sshd가 아니라 로그인 셸 · env를 쓴다).
 
-### 실측 18 — 반사실 다섯. 하나는 겨냥한 검사보다 앞에서 죽었다
+### 실측 18 — mutation 다섯. 하나는 겨냥한 검사보다 앞에서 죽었다
 
-| 반사실 | 빨간 검사 |
+| mutation | 빨간 검사 |
 |---|---|
 | `login.apply` 호출을 지운다 | 검사 9 — `init did not write the login shell and the ssh env` |
 | 템플릿의 `if [ ! -e "$key" ]`를 `if true` | 부팅 C의 `sshd never listened` (검사 12보다 앞) |

@@ -35,7 +35,7 @@ M1처럼 plan의 코드를 먼저 `/tmp/dim2/`에 시제품으로 썼다. 이번
   돌렸다. 여섯 부팅이 전부 초록이었고, 빌드를 포함해 1분 35초였다(부팅마다
   콘솔 셸까지 6~7초). 주석과 상수 이름을 고친 뒤 한 판 더 돌렸고, 그것도
   초록이었다.
-- 반사실 하나를 먼저 확인했다. `storage.candidates`가 표지와 상관없이 늘
+- mutation 하나를 먼저 확인했다. `storage.candidates`가 표지와 상관없이 늘
   마흔둘을 주게 되돌리고 판정 10을 경고로 낮췄더니, 부팅 5의 `--wipe`가
   이렇게 죽었다.
 
@@ -1287,7 +1287,7 @@ grep -E "^(===|boot [0-9]|PASS|FAIL)|^the |^--wipe|^booted|^on the|^wrote|^answe
 
 기대: `exit=0`. `=== boot 1`부터 `=== boot 6`까지 있고 마지막 줄이 `PASS`다.
 
-- [ ] Step 3: 반사실. 표지를 안 보는 `init`은 판정 10에서 빨강이다
+- [ ] Step 3: mutation. 표지를 안 보는 `init`은 판정 10에서 빨강이다
 
 ```bash
 mkdir -p /tmp/dim2cf
@@ -1302,11 +1302,11 @@ grep -E "^FAIL" /tmp/dim2cf/run.log
 
 기대: `exit=1`, `FAIL: booting the ISO, init looked at partitions or picked the
 installed p2`. `grep -n`이 한 줄을 찍지 않으면 치환이 안 먹은 것이다. 그때는
-반사실을 믿지 말고 사본을 손으로 고친다. 판정 10을 끄면 그 뒤에 부팅 5가 `in use`로
+mutation을 믿지 말고 사본을 손으로 고친다. 판정 10을 끄면 그 뒤에 부팅 5가 `in use`로
 죽는다는 것은 plan을 쓰며 이미 봤다("이 plan을 쓰기 전에 한 것").
 
-끝나면 반사실이 남긴 산출물을 되돌린다. 다음 Task의 게이트가 어차피 지우지만,
-그 사이에 누가 `out/tars.iso`를 쓰면 반사실 코드로 뜬다.
+끝나면 mutation이 남긴 산출물을 되돌린다. 다음 Task의 게이트가 어차피 지우지만,
+그 사이에 누가 `out/tars.iso`를 쓰면 mutation 코드로 뜬다.
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
@@ -1492,7 +1492,7 @@ Files: Modify design · `docs/decisions/project_disk_install.md` · `MEMORY.md` 
   6~7초라 --wipe까지 둘을 더 들였다.`
 - "DI-M1이 실행으로 증명한 것" 뒤에 "## DI-M2가 실행으로 증명한 것" 절을 새로
   넣는다. 실측 17부터 번호를 이어서, 이 plan의 커밋 목록, Task 4의 체인 시각과
-  여섯 부팅의 콘솔 셸 시각, 부팅 3의 출력(이 plan 머리의 것과 같은지), 반사실 둘
+  여섯 부팅의 콘솔 셸 시각, 부팅 3의 출력(이 plan 머리의 것과 같은지), mutation 둘
   (plan을 쓰며 본 `in use`와 Task 4 Step 3의 판정 10), 루트 게이트 시각과 M1 판과의
   차이를 적는다. 숫자는 로그에서 그대로 옮긴다.
 
@@ -1504,7 +1504,7 @@ Files: Modify design · `docs/decisions/project_disk_install.md` · `MEMORY.md` 
 tars.installed가 있을 때만이다 — 설치기가 ESP의 limine.conf에 붙이는 표지다. ISO로
 뜬 부팅은 디스크 열넷만 본다.`를 더한다. 마지막 항목("설치된 기계에서는 … DI-M2")은
 이렇게 바꾼다. `갱신은 p1만 쓰고 p2를 안 연다. --wipe는 ISO로 뜬 부팅에서만 되고,
-그 부팅이 p2를 안 붙이는 것이 표지의 이유다(DI-M2 반사실: 붙이면 sfdisk가 in use).`
+그 부팅이 p2를 안 붙이는 것이 표지의 이유다(DI-M2 mutation: 붙이면 sfdisk가 in use).`
 
 `MEMORY.md`의 Disk install 줄 끝의 `설치된 기계에서는 p2가 붙어 있어 재파티션이
 막힌다(DI-M1, 2026-09-23)`를 `ISO 부팅은 표지 tars.installed가 없어 p2를 안 붙이고,
@@ -1521,7 +1521,7 @@ tars.installed가 있을 때만이다 — 설치기가 ESP의 limine.conf에 붙
 - [ ] Step 4: HANDOFF
 
 맨 위 절을 "DI가 M2로 닫혔다"로 새로 쓰고, 지금의 DI-M1 절은 그 아래로 내린다.
-담을 것은 커밋 표, 판정(체인·반사실·루트 게이트 시각), 미룬 다섯("정한 것" 6)과
+담을 것은 커밋 표, 판정(체인·mutation·루트 게이트 시각), 미룬 다섯("정한 것" 6)과
 M1의 둘째 경고(파티션 노드의 틈) 이월이다. "바로 다음에 할 것"은 DI 뒤의 후보
 목록으로 바꾼다(패키지 매니저 · 실머신 NIC · IN이 미룬 넷 · TS의 chrony). "명령
 모음"의 DI-M1 줄은 부팅 여섯의 로그를 남기는 모양으로 고친다(`boot-*.log`는 그대로

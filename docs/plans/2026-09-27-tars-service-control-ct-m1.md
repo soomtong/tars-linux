@@ -1264,5 +1264,5 @@ git commit -m "Close CT-M1: control socket, hold rules, tars-service"
 ## 이 milestone이 끝난 자리
 
 통로 · 규칙 · 명령이 서고 호스트 검사가 본다. 게스트의 판정은 눈으로만 했다 — M2가
-`service/check.sh`에 부팅을 더해 그 판정을 게이트로 옮기고, 반사실 둘(규칙 2 · 규칙 1)과
+`service/check.sh`에 부팅을 더해 그 판정을 게이트로 옮기고, mutation 둘(규칙 2 · 규칙 1)과
 가이드를 더한다.

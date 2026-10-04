@@ -92,7 +92,7 @@ Zig 0.17이 `@cImport`를 없애서, 0.16에서 미리 translate-c 패키지(gho
 온다. 명령줄로 `_FORTIFY_SOURCE=0`을 줘도 진다. 그래서 끄려면 stub 헤더 안에
 `#undef _FORTIFY_SOURCE`를 둔다(소스 안의 지시문이 명령줄 define 뒤에 처리된다).
 
-그런데 우회 없이 지어 보니(반사실) 에러는 `c_poll` 하나였다 — 위 표의 `poll`
+그런데 우회 없이 지어 보니(mutation) 에러는 `c_poll` 하나였다 — 위 표의 `poll`
 문제(`expected type 'c_int', found 'bool'`)는 그대로고, `drm` · `pty`의
 `C import failed`는 사라졌다. 패키지의 번역기(aro)는 `__attribute__((error))`
 선언을 넘긴다. 그래서 `#undef`는 `c_poll` 하나에만 두고 `c_drm` · `c_pty`는
@@ -100,7 +100,7 @@ fortify를 켠 채로 둔다.
 
 | 번역 | fortify | 근거 |
 |---|---|---|
-| `c_drm` | 켜짐 | 반사실에서 번역 · 컴파일이 섰다 |
+| `c_drm` | 켜짐 | mutation에서 번역 · 컴파일이 섰다 |
 | `c_pty` | 켜짐 | 같다. `nm -D`에 `__read_chk@GLIBC_2.4`가 새로 생겼다 — `c.read`가 검사 래퍼를 지난다 |
 | `c_poll` | 꺼짐 | 켜면 `c.poll`의 번역이 컴파일되지 않는다 |
 | `c_input` · `c_stb_truetype` | 해당 없음 | glibc가 아니다 |

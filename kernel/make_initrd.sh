@@ -229,7 +229,7 @@ ln -sf vim "$WORKDIR/usr/bin/editor"
 # 두 파일은 sysroot가 아니라 저장소(kernel/vim/)에서 온다. 우리가 쓴 파일이라
 # 30-tars-ntp와 같은 자리다. 0644인 이유도 같다 — 실행이 아니라 읽히는 파일이다.
 # cp · chmod 두 줄 대신 install 한 줄로 쓴 것은 파일 하나를 빼는 것이 줄 하나를
-# 지우는 것이 되게 하려는 것이다(CU-M1 plan의 반사실).
+# 지우는 것이 되게 하려는 것이다(CU-M1 plan의 mutation).
 mkdir -p "$WORKDIR/etc/vim" "$WORKDIR/usr/share/vim/vim91"
 install -m 0644 vim/vimrc "$WORKDIR/etc/vim/vimrc"
 install -m 0644 vim/defaults.vim "$WORKDIR/usr/share/vim/vim91/defaults.vim"

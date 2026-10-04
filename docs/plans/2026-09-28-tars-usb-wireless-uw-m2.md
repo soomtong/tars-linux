@@ -1,4 +1,4 @@
-# UW-M2 — 반사실 하나, 루트 게이트, 닫기
+# UW-M2 — mutation 하나, 루트 게이트, 닫기
 
 > 실행 기록으로 쓴다. 코드는 안 바뀐다.
 
@@ -6,7 +6,7 @@ Goal: M1의 검사가 예측한 자리에서 잡히는지 보고, 17체인 전�
 
 ---
 
-## Task 1: 반사실 — `RTW88_8812AU`를 끈다
+## Task 1: mutation — `RTW88_8812AU`를 끈다
 
 `scripts/config --disable RTW88_8812AU`로 작업 트리의 `kernel/.config`만 바꾸고 wifi 체인을
 돌린다. 예측은 검사 1의 심볼 루프가 부팅 전에 멈추는 것이다. 결과는 design 실측 6. 끝나면

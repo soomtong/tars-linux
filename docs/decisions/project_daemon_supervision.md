@@ -10,7 +10,7 @@ label은 `service dhcpcd` · `service chronyd`이고 `services.d`의 같은 이�
 
 - dhcpcd는 `-B`다. manager mode는 lease 전에 배경으로 가서 PID 1이 쥔 pid가 곧 죽는다.
   `-B`를 빼면 감독자가 "1초 만에 exit 0"을 세 번 보고 포기하는데, 배경으로 간 손자들이
-  주소를 받아 와서 "주소가 붙었다"만 보는 검사는 전부 초록이다(DS-M2 반사실). `-B`여도
+  주소를 받아 와서 "주소가 붙었다"만 보는 검사는 전부 초록이다(DS-M2 mutation). `-B`여도
   나중에 꽂힌 동글을 같은 pid로 잡는다(DS-M0 실측 7).
 - `-j /dev/console`은 남겼다. `-B`에서는 줄이 두 벌이 되지만 `[pid]` 줄머리가 체인의 판정
   근거다.

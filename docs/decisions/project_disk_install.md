@@ -22,7 +22,7 @@ How to apply:
   판정 대상이 terminal 화면이 아니라 `tars-install`의 출력 줄이기 때문이다.
 - 설치 여부는 셋으로 본다 — GPT · p1이 FAT32이고 붙여 보면 `boot/bzImage`가 있다 ·
   p2가 `tars-` 라벨. 갱신은 p1만 쓰고 p2를 안 연다. `--wipe`는 ISO로 뜬 부팅에서만
-  되고, 그 부팅이 p2를 안 붙이는 것이 표지의 이유다(DI-M2 반사실: 붙이면 `sfdisk`가
+  되고, 그 부팅이 p2를 안 붙이는 것이 표지의 이유다(DI-M2 mutation: 붙이면 `sfdisk`가
   "in use"로 거부한다).
 - 매체의 `limine.conf`에 표지를 붙일 수 있는지는 YES를 묻기 전에 본다
   (`prepareConf`). 디스크를 지운 뒤에 알면 늦다.

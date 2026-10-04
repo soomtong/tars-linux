@@ -475,7 +475,7 @@ git add net/check.sh
 git commit -m "Ask the guest to open a connection and read what comes back"
 ```
 
-## Task 3 — 반사실 하나로 검사 9가 진짜 보는지 확인한다
+## Task 3 — mutation 하나로 검사 9가 진짜 보는지 확인한다
 
 이 저장소의 규칙이다. 검사를 더하면 그 검사가 없을 때 빨간불이 되는 것을
 한 번 본다. 안 보면 "늘 초록인 검사"를 하나 더 만든 것과 구별이 안 된다.
@@ -518,7 +518,7 @@ FAIL: the guest could not open a TCP connection through SLIRP
 앞의 검사 여덟은 전부 초록이어야 한다. 만약 검사 8(기본 경로)에서 먼저
 죽으면 사본이 포트 말고 다른 것도 건드린 것이므로 `sed` 결과를 다시 본다.
 
-- [ ] Step 3: 왜 검사 8·10의 반사실은 안 하는지 적어 둔다
+- [ ] Step 3: 왜 검사 8·10의 mutation은 안 하는지 적어 둔다
 
 검사 8(기본 경로)을 겨냥하려면 SLIRP의 게이트웨이를 옮겨야 하는데
 (`-netdev user,net=10.0.3.0/24`), 그러면 게스트 주소도 함께 바뀌어 검사
@@ -527,10 +527,10 @@ FAIL: the guest could not open a TCP connection through SLIRP
 
 검사 10(dhcpcd 생존)을 겨냥하려면 게스트에서 dhcpcd를 죽여야 하는데, 그
 타이핑을 체인 사본에 넣는 것은 검사를 바꾸는 것이 아니라 게스트를 바꾸는
-것이라 반사실의 모양이 아니다.
+것이라 mutation의 모양이 아니다.
 
 둘 다 안 하는 대신 그 이유를 plan의 이 자리와 design의 실측 절에 남긴다.
-새 검사 셋 중 반사실을 본 것은 검사 9 하나다.
+새 검사 셋 중 mutation을 본 것은 검사 9 하나다.
 
 - [ ] Step 4: 사본을 지운다
 
@@ -715,7 +715,7 @@ M3에서 새로 정한 것은 결정 D(기본 경로를 따로 본다)와 결정
 ### 실측 25 — guestfwd 판정이 체인 안에서 선다
 (Task 2 Step 4의 실제 출력 셋과 체인 단독 시간을 적는다)
 
-### 실측 26 — 반사실이 검사 9에서 정확히 죽는다
+### 실측 26 — mutation이 검사 9에서 정확히 죽는다
 (Task 3 Step 2의 FAIL 줄과, 앞 검사 여덟이 초록이었다는 것을 적는다)
 
 ### 실측 27 — 게이트가 열둘이 되고 시간이 얼마가 됐다
@@ -774,7 +774,7 @@ git commit -m "Close the guest network with a gate that sees it"
 2. 기준선이 M2의 17.082초가 아니라 19.441초였다. 같은 체인 같은 코드인데
    증분 빌드 상태가 달라서다 — 그래서 M3의 증가분을 M2의 값과 비교하지 않고
    같은 날 같은 기계에서 잰 19.441초와 비교했다.
-3. 반사실에서 예상 못 한 것을 하나 봤다. 연결이 안 될 때 `nc`가 아무 말도 안
+3. mutation에서 예상 못 한 것을 하나 봤다. 연결이 안 될 때 `nc`가 아무 말도 안
    하고 프롬프트로 돌아온다(SLIRP이 RST를 안 준다). plan은 `Connection
    refused`가 나올 것으로 적었는데 화면이 조용했다. 결론은 안 바뀐다 — 오히려
    판정 글자를 payload로 고른 것의 근거가 하나 늘었다(실측 27).

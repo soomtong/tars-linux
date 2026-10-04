@@ -1,7 +1,7 @@
 # TG-M3 — PNG를 받고 서브프로젝트를 닫는다
 
 Goal: design 결정 6. `sys.decode_png`를 `stb_image`로 채워 `f=100`(PNG)이 `EINVAL` 대신
-그려지게 한다. 반사실 하나, 루트 게이트, 문서로 TG를 닫는다.
+그려지게 한다. mutation 하나, 루트 게이트, 문서로 TG를 닫는다.
 
 Architecture: `stb_truetype`과 같은 모양이다. `vendor_stb_image.sh`가 같은 고정 SHA에서
 `stb_image.h`(v2.30)를 `terminal/vendor/`(커밋 안 함)에 받고, `src/stb_image_impl.c`가
@@ -54,7 +54,7 @@ image_test)에 include 경로와 C 파일을 더한다.
 `render` 체인 검사 19: 같은 PNG를 `f=100,i=4,c=4,r=2`로 보내 `imgpx> id=4`가 이미지 1과 같은
 `FF0000/00FF00/0000FF/FFFFFF`.
 
-## Task 4: 반사실
+## Task 4: mutation
 
 `Screen.init`의 설치 줄을 지운다. 예측: `vt_test` 75가 부팅 전에 잡는다(PNG가 `EINVAL`로
 저장되지 않는다). 되돌린다.

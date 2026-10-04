@@ -105,7 +105,7 @@ usb-storage.delay_use=3`을 주고, p2에 `tars-` 라벨이 있는 GPT 디스크
 
 DI의 체인이고, 이미 GPT에 p2를 가진 디스크를 만드는 코드가 있다. 새 체인을
 세우지 않는다. 판정은 `config storage /dev/sda2 (label tars-…)`와 `appeared
-after`가 있는 것이다. 반사실은 기다림을 뺀 `init`이 `among 42 candidates`로
+after`가 있는 것이다. mutation은 기다림을 뺀 `init`이 `among 42 candidates`로
 빨강이 되는 것이다.
 
 ### 결정 5 — 나머지 다섯은 M2 하나에서 순서대로 한다 — 사용자가 골랐다
@@ -156,7 +156,7 @@ USB 부팅은 `delay_use=3` 때문에 적어도 3초를 더 쓴다. 회차 셋�
 
 - DC-M0 — 재기만 한다. 위 하네스로 틈을 재현하고, 늦춘 USB의 `sda2`와 지연 없는
   QEMU NVMe의 `nvme0n1p2`가 PID 1 기준 몇 ms에 생기는지 잰다. 상한을 확정한다.
-- DC-M1 — 결정 1·2의 기다림과 결정 4의 부팅. 반사실을 돌린다.
+- DC-M1 — 결정 1·2의 기다림과 결정 4의 부팅. mutation을 돌린다.
 - DC-M2 — 결정 5의 다섯.
 
 ## DC-M0이 실행으로 증명한 것
@@ -218,16 +218,16 @@ plan은 `docs/plans/2026-09-25-tars-disk-carryover-dc-m1.md`다. 커밋은
 부팅 3 · 5(ISO)의 판정 10은 그대로 `among 14 candidates`다 — 표지 없는 부팅은
 기다리지 않는다.
 
-### 실측 5 — 반사실이 빨갛다, 그리고 첫 판은 낡은 `init`이었다
+### 실측 5 — mutation이 빨갛다, 그리고 첫 판은 낡은 `init`이었다
 
 `max_ms`를 늘 0으로 두면 부팅 7이 `tars-init: no disk labelled tars-* among 42
 candidates`를 찍고 판정 17이 `FAIL: init did not have to wait for the late USB disk,
 or never found it`로 멈춘다.
 
-그런데 첫 반사실 판은 초록이었고 부팅 7이 `init waited 1700ms`를 찍었다. `max_ms`가
+그런데 첫 mutation 판은 초록이었고 부팅 7이 `init waited 1700ms`를 찍었다. `max_ms`가
 0이면 나올 수 없는 줄이다. 체인의 `zig build`가 `sd`로 고친 소스를 다시 빌드하지
 않아 남아 있던 정상 코드의 바이너리(md5 `6b46fa32…`)로 떴다. 컨테이너 안에서
-반사실을 직접 빌드하니 `58570175…`가 됐고 그 판은 빨갛다. 캐시를 지우고 빌드한 정상
+mutation을 직접 빌드하니 `58570175…`가 됐고 그 판은 빨갛다. 캐시를 지우고 빌드한 정상
 코드의 바이너리가 다시 `6b46fa32…`라 확정이다. `project_zig_out_staleness`가 이미
 적어 둔 함정이고 처방("음성 확인 전에 컨테이너 안에서 `.zig-cache`와 `zig-out`을
 지운다")을 빠뜨린 것이다. plan의 Task 4에 그 처방을 박아 두었다.
@@ -259,12 +259,12 @@ inode table 자리에 남을 수 있다.
 옛 PVD는 `tars-install`이 만든 디스크에는 안 남는다. `sfdisk --wipe always`가
 `CD001`까지 지운다. 남의 도구로 다시 만든 스틱의 이야기다.
 
-### 실측 8 — 판정 셋과 반사실 셋
+### 실측 8 — 판정 셋과 mutation 셋
 
 부팅 1에 64MiB 4Kn NVMe(`logical_block_size=4096`)를 `nvme1n1`로 더 붙였다. 게스트가
 `dc-lbs-4096`을 찍어 QEMU가 그 속성을 받았음을 먼저 본다.
 
-| 판정 | 초록 | 반사실(하나씩 되돌림, 캐시 삭제) |
+| 판정 | 초록 | mutation(하나씩 되돌림, 캐시 삭제) |
 |---|---|---|
 | 4a 4Kn GPT | 게스트의 `sfdisk`가 만든 GPT가 `foreign (gpt)` | 4096을 안 보면 `foreign (mbr)`, 빨강 |
 | 4b 쪼개진 YES | `YES` + 1초 + ` please\n`가 `not confirmed` | `read` 한 번이면 `YES`로 읽고 `writing the partition table`까지 갔다 — 64MiB라 `sfdisk failed`로 멈췄다 |
@@ -274,7 +274,7 @@ inode table 자리에 남을 수 있다.
 거절하는 쪽으로 틀린다"고 적었는데, `YES`로 시작하는 줄이 쪼개 오면 확인하는 쪽으로
 틀린다. 사람이 tty에 치면 한 줄이 통째로 오므로 파이프로 넣을 때만의 일이다.
 
-4b의 확인 대상을 설치 대상이 아닌 임시 디스크로 둔 것이 반사실에서 값을 했다 —
+4b의 확인 대상을 설치 대상이 아닌 임시 디스크로 둔 것이 mutation에서 값을 했다 —
 옛 코드가 실제로 지우러 갔다.
 
 ### 실측 9 — `bufPrint`는 넘칠 때 앞을 채워 둔다

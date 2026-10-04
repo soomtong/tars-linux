@@ -167,7 +167,7 @@ Status: 구현과 검증이 끝났다(2026-10-03). 호스트 검사 아홉이 �
   더하기 전에 한 번 빨간 것을 보는 것이 좋다 — 음성 검사는 특히.
 - `pane/check.sh` 한 번. 그다음 regression으로 terminal · render · copy ·
   hangul 각 한 번(하나씩).
-- 반사실 하나: `applyLayout`에서 `pty.resize`를 빼고 pane 체인을 돌린다 —
+- mutation 하나: `applyLayout`에서 `pty.resize`를 빼고 pane 체인을 돌린다 —
   검사 3의 `right-side`가 틀린 폭으로 접혀 `last_screen`의 모양이 달라지거나
   셸이 155칸으로 프롬프트를 그려 오른쪽 패널 밖으로 넘친다. 어느 쪽이든
   어느 검사가 잡는지(또는 못 잡는지)를 적는다. 되돌리고 캐시를 컨테이너
@@ -189,12 +189,12 @@ plan `Status:` · design `Status:` · `HANDOFF.md` 맨 위 표 · `lessons.md`
    거기에 가로 구분선(77칸 × 128)이 더해지면 15872. design 결정 7의 예시
    752는 1픽셀 선을 짐작한 값이었다 — 구분선이 셀 한 칸이라는 결정 2와
    어긋난 숫자였고, 실측이 바로잡았다.
-2. 반사실(`applyLayout`에서 `pty.resize`를 뺌)이 plan의 검사만으로는 통과했다
+2. mutation(`applyLayout`에서 `pty.resize`를 뺌)이 plan의 검사만으로는 통과했다
    (91초, 구멍). 셸이 155칸이라 믿어도 `echo`의 짧은 출력은 77칸 안에서
    똑같이 보인다. 그래서 판정 셋을 더했다 — fish의 `$COLUMNS`를 화면에
    찍게 한다: 검사 3 `right-side 77`(대조군, `spawnPane`이 처음부터 77로
    띄운다) · 4b `left-side 77`(분할로 줄어든 패널) · 9a 뒤 `whole 155`(닫기로
-   커진 패널). 같은 반사실이 4b에서 `left-side 155`로 빨갰다. "크기를
+   커진 패널). 같은 mutation이 4b에서 `left-side 155`로 빨갰다. "크기를
    바꿨다"는 셀 수가 아니라 셸이 아는 폭으로만 증명된다.
 3. `render`를 셋으로 갈랐다 — `renderBackdrop`(fill + 구분선) ·
    `renderPane` · `renderFinish`(프롬프트 + 상태 줄 + present). 포커스

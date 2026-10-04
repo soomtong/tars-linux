@@ -464,7 +464,7 @@ fail() {
 #
 # IN-M1이 그 -netdev 값에 hostfwd를 하나 더했다. guestfwd가 게스트 → 바깥
 # 방향이고 hostfwd가 그 반대다. 이 한 줄이 없으면 바깥에서 게스트로 들어오는
-# 입구가 아예 존재하지 않는다 — 검사 13의 반사실이 그것을 확인한 자리다.
+# 입구가 아예 존재하지 않는다 — 검사 13의 mutation이 그것을 확인한 자리다.
 # hostfwd를 앞에 두는 것은 cmd: 값만 길이가 변하는 조각이라 그것을 끝에 두면
 # 사람이 이 줄을 읽을 때 경계가 어디인지 눈에 보이기 때문이다.
 #
@@ -1186,7 +1186,7 @@ echo "the guest shows ${STUB_HOUR_UTC}Z as ${STUB_HOUR_LOCAL}${TZ_ABBR} — nine
 # 그 죽음을 거두고 다음 바퀴에 새 pid로 띄우고, 새 dhcpcd가 lease를 받는다.
 #
 # 새 lease는 `-j`의 줄머리 `[새 pid]:`로 가른다(M2-B). 옛 dhcpcd의 줄과 안 섞인다.
-# 이 판정이 -B의 반사실을 받는다 — -B가 없으면 쥔 pid는 배경으로 간 뒤 이미 죽어
+# 이 판정이 -B의 mutation을 받는다 — -B가 없으면 쥔 pid는 배경으로 간 뒤 이미 죽어
 # 있어서 "killed (pid 옛, signal 9"가 영영 안 나온다.
 OLD_DHCPCD="$(grep -aoE 'tars-init: started service dhcpcd \(pid [0-9]+' "$LOGA" | tail -1 | grep -oE '[0-9]+$')"
 [ -n "$OLD_DHCPCD" ] || fail "init never started dhcpcd in the ntp guest" "tars-init: started service"
@@ -1360,7 +1360,7 @@ echo "the dead ntp server cost ${BOOT_DELTA}s of boot time (limit ${BOOT_DELTA_M
 # 40초를 채우고 본다(plan 결정 M2-D). 옛 주기가 30초이므로 그 안에 적어도
 # 한 번은 다시 떴을 시간이다. 이 부팅이 그보다 일찍 여기 오면 남은 만큼 잔다.
 #
-# 반사실이 없다(M2-E). 옛 코드는 로그 줄과 함께 지워졌다.
+# mutation이 없다(M2-E). 옛 코드는 로그 줄과 함께 지워졌다.
 B_ELAPSED=$(( $(date +%s) - BOOT_B_START ))
 if [ "$B_ELAPSED" -lt 40 ]; then
   echo "waiting $(( 40 - B_ELAPSED ))s so a 30s restart loop would have shown"

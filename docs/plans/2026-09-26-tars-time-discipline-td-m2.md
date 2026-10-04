@@ -1,7 +1,7 @@
 # TD-M2 — drift를 배우고 부팅을 넘긴다
 
 > 이 plan을 실행하는 사람에게: Task마다 `git diff --stat`으로 더한 줄과 지운
-> 줄을 세고, 지우는 편집은 `git diff | grep '^-'`로 내용을 읽는다. 반사실은
+> 줄을 세고, 지우는 편집은 `git diff | grep '^-'`로 내용을 읽는다. mutation은
 > 돌리기 전에 `git diff`로 편집이 들어갔는지 먼저 찍는다(TD design 실측 12).
 
 Goal: `/config`가 붙은 부팅에서 chronyd가 `confdir /config/chrony.d`와
@@ -174,7 +174,7 @@ Files: Modify `net/check.sh`
 - [ ] Step 4: 체인 단독, 게스트 로그를 `-v /tmp/tdm2:/tmp`로 남겨 읽는다. 커밋
   `Learn a 500 ppm drift and carry it across a power-off in the network chain`
 
-## Task 4 — 반사실 둘
+## Task 4 — mutation 둘
 
 1. `driftfile` 줄을 뺀다(`clock_test` 기대값도) → 검사 27 빨강
 2. `confdir`를 `server` 뒤로 옮긴다(`clock_test` 기대값도) → 검사 26 빨강

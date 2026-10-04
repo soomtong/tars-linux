@@ -1,11 +1,11 @@
-# CT-M2 — `service/check.sh`의 부팅 D · 반사실 · 가이드
+# CT-M2 — `service/check.sh`의 부팅 D · mutation · 가이드
 
 > 이 plan을 실행하는 사람에게: 코드는 Claude Code가 넣는다. 매 편집 뒤 `git diff
-> --stat`, 지우는 편집은 `git diff | grep '^-'`. 반사실은 커밋하지 않는다 — 고치고,
+> --stat`, 지우는 편집은 `git diff | grep '^-'`. mutation은 커밋하지 않는다 — 고치고,
 > 체인을 돌리고, 되돌리고, `git diff`가 비었는지 본다.
 
 Goal: CT-M1이 눈으로 본 판정(design 실측 9)을 게이트로 옮긴다. `service/check.sh`에 부팅
-D를 더하고, 결정 4의 규칙과 위험 2를 겨냥한 반사실 넷이 각각 겨냥한 검사에서 빨개지는
+D를 더하고, 결정 4의 규칙과 위험 2를 겨냥한 mutation 넷이 각각 겨냥한 검사에서 빨개지는
 것을 보고, 사람이 읽는 가이드를 쓰고, 루트 게이트 3/3으로 CT를 닫는다.
 
 Architecture: 부팅 D는 부팅 C가 쓴 디스크(키 · `ssh.nft`가 있다)에 서비스 셋을 더해
@@ -31,7 +31,7 @@ Tech Stack: bash · `ssh -o ControlMaster` · `debugfs` · QEMU
 
 ## 검사 (16~26)
 
-| # | 무엇 | 반사실이 겨냥하는가 |
+| # | 무엇 | mutation이 겨냥하는가 |
 |---|---|---|
 | 16 | `tars-init: control socket /run/tars/init.sock` | |
 | 17 | `status`가 여섯 줄 — terminal · console shell · 서비스 넷, `flaky`는 `given up` | |
@@ -45,7 +45,7 @@ Tech Stack: bash · `ssh -o ControlMaster` · `debugfs` · QEMU
 | 25 | 음성 다섯 — `nope` · `terminal` · `'a b'` · 70바이트 이름 · `bogus` | |
 | 26 | `sleeper`의 `sleep`이 든 fd에 `socket:`이 없다 | CF4 |
 
-반사실 넷(커밋 안 함):
+mutation 넷(커밋 안 함):
 
 - CF1 `control.reaped`가 늘 `.normal` — 규칙 2를 뺀다. 기대: 21.
 - CF2 `control.wantsRunning`에서 `c.hold != .stop`을 뺀다 — 규칙 1을 뺀다. 기대: 18(`stopped`에
@@ -269,7 +269,7 @@ git add service/check.sh check.sh
 git commit -m "Add boot D to the service chain: tars-service over a kept ssh connection"
 ```
 
-## Task 2 — 반사실 넷 (각 약 3분)
+## Task 2 — mutation 넷 (각 약 3분)
 
 각각: 고친다 → 체인을 돌린다 → `FAIL:` 줄과 그 검사 번호를 적는다 → `git checkout`으로
 되돌린다 → `git diff --stat`이 빈 것을 본다.
@@ -320,8 +320,8 @@ sd -F 'linux.SOCK.SEQPACKET | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0);
 
 기대: 검사 26 — `sleeper's sleep holds a socket`.
 
-반사실이 겨냥한 검사보다 앞에서 죽으면(SV-M2 실측 18처럼) 그 사실과 까닭을 적는다.
-겨냥한 검사를 못 밟은 것이지 반사실이 무효인 것은 아니다 — 앞의 검사가 같은 결함을
+mutation이 겨냥한 검사보다 앞에서 죽으면(SV-M2 실측 18처럼) 그 사실과 까닭을 적는다.
+겨냥한 검사를 못 밟은 것이지 mutation이 무효인 것은 아니다 — 앞의 검사가 같은 결함을
 먼저 잡은 것인지를 본다.
 
 ## Task 3 — 가이드
@@ -397,7 +397,7 @@ echo "exit=$?"; grep -c '^FAIL' /tmp/gate.log; tail -3 /tmp/gate.log; cat /tmp/g
 
 ## Task 5 — 닫는다
 
-- [ ] design: "CT-M2가 실행으로 증명한 것" 절(체인의 첫 판 · 반사실 넷 · 루트 게이트),
+- [ ] design: "CT-M2가 실행으로 증명한 것" 절(체인의 첫 판 · mutation 넷 · 루트 게이트),
   `Status: 끝났다(2026-09-27) — M0~M2 …`.
 - [ ] `docs/decisions/project_service_control.md` 새 기억 — 통로 · 규칙 · 그룹 · 예측과
   달랐던 것(12ms 멈춤 · `zig build test`의 끝줄). `MEMORY.md`에 한 줄.

@@ -49,7 +49,7 @@ TS 때는 자식이 끝까지 우리 코드였으므로 부팅 B가 이 줄의 �
 
 ### 결정 M1-B — 자식은 기본 경로가 생길 때까지 기다린 뒤 chronyd가 된다
 
-⚠ Task 6 Step 2의 반사실이 이 결정의 전제를 뒤집었다(design 실측 13). 기다림이
+⚠ Task 6 Step 2의 mutation이 이 결정의 전제를 뒤집었다(design 실측 13). 기다림이
 없어도 점프가 1초 차이로 같은 자리에 왔고, `ea72b85`가 기다리는 코드를 걷어
 냈다. 아래는 그 전의 판단이다.
 
@@ -968,10 +968,10 @@ git add net/check.sh net/ntp_stub.pl net/make_disk.sh kernel/dhcpcd-hooks/30-tar
 git commit -m "Read chronyd's own lines in the network chain"
 ```
 
-## Task 6 — 반사실
+## Task 6 — mutation
 
 컨테이너 안에서 `rm -rf init/.zig-cache init/zig-out` 뒤에 돌린다(HANDOFF의
-경고 1 — DC-M1의 첫 반사실이 낡은 바이너리로 거짓 초록이었다).
+경고 1 — DC-M1의 첫 mutation이 낡은 바이너리로 거짓 초록이었다).
 
 - [ ] Step 1: `makestep`을 빼면 검사 18의 셋째 줄에서 빨강
 
@@ -985,7 +985,7 @@ git checkout init/src/clock.zig
 기대: `FAIL: chronyd never stepped the clock`. `Selected source`는 나온다 —
 chronyd는 서버를 믿지만 1초 넘게 틀린 시계를 뛰지 않고 slew만 한다.
 
-- [ ] Step 2: 기본 경로를 안 기다리면 늦는가 (결정 M1-B의 반사실)
+- [ ] Step 2: 기본 경로를 안 기다리면 늦는가 (결정 M1-B의 mutation)
 
 `start`의 `waitForRoute();` 한 줄을 지우고 같은 명령으로 돌린다. 결과가 둘 중
 하나다.

@@ -294,7 +294,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 아무것도 안 나와야 한다. 통과한 체인은 시리얼 로그를 안 뿜으므로 한 번의
 `docker run` 안에서 `/tmp/tmp.*`를 뒤져야 한다.
 
-## Task 4: 반사실로 값을 증명한다
+## Task 4: mutation으로 값을 증명한다
 
 seed에서 그 줄만 뺀 사본을 마운트하면 체인이 7차에서 죽어야 한다.
 

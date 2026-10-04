@@ -718,7 +718,7 @@ echo "two guest processes talked over 127.0.0.1, localhost and app.localhost"
 
 # ── 검사 21: init이 lo를 올렸다고 말했나 (LB-M3) ───────────────────────
 #
-# 검사 20 뒤인 이유가 LB-M3 plan 결정 M3-E다. 앞에 두면 반사실(loopbackUp을
+# 검사 20 뒤인 이유가 LB-M3 plan 결정 M3-E다. 앞에 두면 mutation(loopbackUp을
 # 뺌)에서 이 줄이 먼저 빨갛게 되고, 왕복 검사가 실제로 무엇을 잡는지는 안
 # 보인다. 이 줄의 값은 진단이다 — 검사 20이 빨간 날 "init이 시도는 했나"를
 # 가른다.

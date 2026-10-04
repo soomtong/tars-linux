@@ -515,7 +515,7 @@ echo "exit=$?"; tail -3 /tmp/nw/m1_net.time; tail -20 /tmp/nw/m1_net.log
 
 실패했을 때 먼저 볼 곳은 아래 "실패했을 때 어디를 보는가" 표다.
 
-## Task 4 — 반사실. NIC를 빼면 이 체인이 죽는가
+## Task 4 — mutation. NIC를 빼면 이 체인이 죽는가
 
 검사가 실제로 NIC에 걸려 있는지 확인한다. SD-M2와 BH-M2가 같은 일을 했고,
 둘 다 "겨냥한 검사가 아니라 앞의 검사에 걸린다"를 배웠다 — 그 구분을 여기서도
@@ -551,7 +551,7 @@ grep -aE '^(FAIL|PASS|the kernel|no driver)' /tmp/nw/m1_counter.log
 
 기대: 종료 코드가 1이고 `FAIL: no eth0 under /sys/class/net`이 나온다.
 그 앞의 검사 1(`the kernel registered PF_INET…`)은 통과해야 한다 — 스택은
-NIC와 무관하게 서기 때문이다. 그 둘이 갈리는 것이 이 반사실의 값이다.
+NIC와 무관하게 서기 때문이다. 그 둘이 갈리는 것이 이 mutation의 값이다.
 
 `PASS`가 나오면 검사가 NIC에 안 걸려 있는 것이므로 Task 3 Step 2로 돌아간다.
 검사 1에서 죽으면 겨냥한 자리가 아니라 앞에서 죽은 것이므로 왜인지 먼저
@@ -641,7 +641,7 @@ grep -anE '^(PASS|FAIL|=== )' /tmp/nw/m1_gate.log | tail -40
   `CONFIG_E1000` 계열이 하나도 안 켜진 것
 - `bzImage`의 최종 크기
 - `net/check.sh` 단독 시간
-- 반사실이 어느 검사에서 죽었나
+- mutation이 어느 검사에서 죽었나
 - 루트 게이트 시간과 판정, `skipping make` 횟수
 
 - [x] Step 3: HANDOFF를 갱신한다
@@ -707,7 +707,7 @@ for driver in e1000 8139 ne2k r8169 pcnet32 vmxnet; do
 실패 메시지에 담는다 — 한 줄짜리는 "무언가 걸렸다"까지만 말한다.
 
 나머지는 plan대로 돌았다. 특히 Task 0의 `diff`가 비어서 정규화 커밋이
-따로 필요 없었고, Task 4의 반사실이 겨냥한 검사에서 정확히 죽었다.
+따로 필요 없었고, Task 4의 mutation이 겨냥한 검사에서 정확히 죽었다.
 
 측정한 값은 전부 design의 "NW-M1이 실행으로 증명한 것" 절(실측 11~16)에
 있다.

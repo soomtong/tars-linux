@@ -35,7 +35,7 @@ Tech Stack: Zig 0.16(`detach` 하나) · bash · `mkfs.ext2 -d` · QEMU(`virtio-
 | 6 | NIC 없이 뜬 `-B` dhcpcd가 나중에 꽂힌 usb-net을 같은 pid로 잡나 | 위험 1 | B `usb` |
 
 부팅 A가 `fd` 단계에서 콘솔 셸의 fd 목록을 한 번 찍는다. CT design 실측 7(버튼 fd가
-샌다)의 기준선이고 결정 6의 반사실이 비교할 값이다.
+샌다)의 기준선이고 결정 6의 mutation이 비교할 값이다.
 
 기준값. TD design 실측 13이 지금 경로(설정에 `server`가 처음부터 있다)의 점프 시간을
 갖고 있다. 측정 4 · 5의 ms를 그 값과 나란히 적는다.

@@ -484,7 +484,7 @@ Initial frequency 4.363 ppm
 
 ### 실측 12 — 호스트 검사가 게이트보다 먼저 `makestep`을 잡는다
 
-반사실로 `renderConf`에서 `makestep 1 3`만 지웠더니, `net` 체인이 부팅 전에
+mutation으로 `renderConf`에서 `makestep 1 3`만 지웠더니, `net` 체인이 부팅 전에
 돌리는 `zig build test`에서 `clock_test`가 `FAIL: got …`으로 죽었다(20.9초).
 원인에 가장 가까운 자리가 먼저 잡은 것이다.
 
@@ -500,13 +500,13 @@ stub을 믿지만, 뛸 허락이 없으면 1.4억 초를 slew로만 따라간다
 
 첫 시도는 무효였다. `sd`의 고정 문자열 패턴이 Zig의 `\\` 두 글자와 줄바꿈을
 못 맞춰 편집이 일어나지 않았고, 멀쩡한 코드로 `PASS`가 나왔다. 그 뒤로는
-반사실을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍었다.
+mutation을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍었다.
 
 ### 실측 13 — 기본 경로를 기다릴 필요가 없었다 (plan의 결정 M1-B가 틀렸다)
 
 plan은 "주소가 붙기 전에 chronyd가 뜨면 `iburst`의 네 번이 `ENETUNREACH`로
 날아가고 64초로 물러난다"고 보고, 자식이 `/proc/net/route`의 기본 경로를
-기다린 뒤 `execve`하게 했다(`51807a8`). plan이 적어 둔 반사실로 그 한 줄을
+기다린 뒤 `execve`하게 했다(`51807a8`). plan이 적어 둔 mutation으로 그 한 줄을
 빼고 쟀다.
 
 | | chronyd가 뜬 때 | `Selected source`까지 | 점프한 stub 시각 |
@@ -609,12 +609,12 @@ the next boot's chronyd started from -492.584 ppm read off /config/chrony.drift
 두 부팅도 설정 디스크를 물므로 `keeps its drift`를 찍는다. 그 디스크는 회차마다
 `make_disk.sh`가 새로 굽기 때문에 다음 회차로 넘어가는 것이 없다.
 
-### 실측 20 — 반사실 둘이 겨냥한 자리에서 죽었다
+### 실측 20 — mutation 둘이 겨냥한 자리에서 죽었다
 
 코드와 `clock_test`의 기대값을 함께 바꾸고, `git diff`로 편집이 들어간 것을
 먼저 확인했다(실측 12의 교훈).
 
-| 반사실 | 결과 |
+| mutation | 결과 |
 |---|---|
 | `driftfile` 줄을 뺀다 | 검사 26까지 초록(`77 requests`), 검사 27에서 `/config/chrony.drift holds ''` |
 | `confdir`를 `server` 뒤로 | 검사 26에서 `the stub answered only 1 request(s) in 20s` |
@@ -625,7 +625,7 @@ the next boot's chronyd started from -492.584 ppm read off /config/chrony.drift
 ### 실측 21 — 체인 단독 1분 42초
 
 M1의 1분 02초에서 40초 늘었다. 부팅 C가 리스 · 선택 · 20초 배움 · 종료를, 부팅
-D가 기동 · 읽기 · 종료를 치른다. `init`을 새로 빌드하는 반사실 판은 1분 57초다.
+D가 기동 · 읽기 · 종료를 치른다. `init`을 새로 빌드하는 mutation 판은 1분 57초다.
 
 ### 실측 22 — 루트 게이트, 그리고 창을 넓혔다
 

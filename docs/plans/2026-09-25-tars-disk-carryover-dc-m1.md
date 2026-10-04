@@ -2,8 +2,8 @@
 
 > 이 plan을 실행하는 사람에게: 아래 diff는 작업 트리에서 시제품으로 쓰고 install
 > 체인까지 돌린 것이다(DI-M2와 같은 방식). Task마다 diff를 넣고, 검사를 돌리고,
-> 커밋한다. 반사실(Task 4)은 반드시 컨테이너 안에서 `.zig-cache`와 `zig-out`을
-> 지우고 돌린다 — 이 plan을 쓰며 그것을 빠뜨린 첫 반사실 판이 낡은 `init`으로
+> 커밋한다. mutation(Task 4)은 반드시 컨테이너 안에서 `.zig-cache`와 `zig-out`을
+> 지우고 돌린다 — 이 plan을 쓰며 그것을 빠뜨린 첫 mutation 판이 낡은 `init`으로
 > 초록이 났다(`project_zig_out_staleness`).
 
 Goal: `tars.installed`로 뜬 부팅에서 `init`이 설정 파티션을 최대 5초 기다려, 커널이
@@ -25,8 +25,8 @@ Tech Stack: Zig 0.16(`std.os.linux`) · bash · QEMU(`-kernel` · qemu-xhci · u
   storage, others look once`.
 - install 체인 초록 두 판(1분 28초). 부팅 7이 `init waited 1600ms`·`1700ms`. 부팅
   2·4·6은 DI-M2와 같은 6초 — 첫 훑기에서 잡아 기다림 줄이 없다.
-- 반사실(`max_ms`를 늘 0)은 부팅 7에서 `among 42 candidates`, 판정 17 빨강. 다만 첫
-  반사실 판은 초록이었다 — 체인의 `zig build`가 `sd`로 고친 소스를 안 다시 빌드해서
+- mutation(`max_ms`를 늘 0)은 부팅 7에서 `among 42 candidates`, 판정 17 빨강. 다만 첫
+  mutation 판은 초록이었다 — 체인의 `zig build`가 `sd`로 고친 소스를 안 다시 빌드해서
   남아 있던 바이너리(md5 `6b46…`, 정상 코드의 것)로 떴다. 캐시를 지운 정상 판의
   바이너리가 같은 `6b46…`이라 확정이다.
 
@@ -392,7 +392,7 @@ Expected: `init waited N ms for the late USB disk and mounted its p2`(N은 1500~
 
 - [ ] **Step 3: 커밋** — `Boot the installed disk over late USB in the install chain`
 
-## Task 4: 반사실
+## Task 4: mutation
 
 - [ ] **Step 1:** `main.zig`의 `const max_ms: u32 = if (installed) storage.CONFIG_WAIT_MS else 0;`를
   `const max_ms: u32 = 0;`로 바꾸고 Task 3 Step 2의 명령(캐시 삭제 포함)을 돌린다.

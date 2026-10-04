@@ -1660,7 +1660,7 @@ grep -a "tars-init: sntp\|tars-init: clock\|tars-init: ntp" /tmp/<부팅 A 로�
 design 위험 5가 예상한 것이 부팅 하나에 12~13초다. 증가분이 그보다 크면
 자식의 재시도가 리스를 오래 기다린 것이고, 그 값이 M2의 대기 설계에 쓰인다.
 
-## Task 9 — 반사실: stub이 없으면 죽는가
+## Task 9 — mutation: stub이 없으면 죽는가
 
 - [ ] Step 1: stub을 안 띄우는 사본을 만든다
 
@@ -1675,7 +1675,7 @@ grep -n "skip-stub" /tmp/ts/check_nostub.sh
 
 기대: 한 줄이 잡힌다. `perl ... &`가 `true skip-stub ... &`가 되어 배경
 프로세스가 즉시 끝난다 — `kill -0` 검사가 그것을 잡을 수도 있으므로, 잡히면
-증상이 "stub이 startup에서 죽었다"이고 그것도 유효한 반사실이다. 검사 18까지
+증상이 "stub이 startup에서 죽었다"이고 그것도 유효한 mutation이다. 검사 18까지
 가게 하려면 `true` 대신 `sleep 600`으로 바꾼다.
 
 ```bash
@@ -1702,8 +1702,8 @@ errno 11이 EAGAIN이고 그것이 `SO_RCVTIMEO`가 실제로 걸려 있다는 �
 
 - [ ] Step 3: 겨냥한 자리에서 죽었는지 확인한다
 
-검사 17보다 앞에서 죽었으면 이 반사실이 아무것도 증명하지 못한 것이다
-(SL-M2가 `.HUP` 반사실에서 겪은 것과 같은 함정 — 겨냥한 검사가 아니라 앞의
+검사 17보다 앞에서 죽었으면 이 mutation이 아무것도 증명하지 못한 것이다
+(SL-M2가 `.HUP` mutation에서 겪은 것과 같은 함정 — 겨냥한 검사가 아니라 앞의
 검사에 걸렸다). 그러면 사본을 다시 만들어 stub만 정확히 없앤다.
 
 - [ ] Step 4: 저장소가 안 바뀐 것을 확인한다
@@ -1737,7 +1737,7 @@ git status --short net/check.sh
 4. 실측 7이 남긴 렌더 숙제의 답(검사 19가 섰는가).
 5. 체인 단독 시간의 증가분(위험 5).
 
-반사실의 결과도 함께 적는다 — 죽은 자리와 errno.
+mutation의 결과도 함께 적는다 — 죽은 자리와 errno.
 
 - [ ] Step 2: design의 위험 절을 고친다
 
@@ -1787,7 +1787,7 @@ git commit -m "Ask the network what time it is and step the clock"
 - `net/check.sh`가 검사 열아홉이 되고 부팅이 둘이 된다.
 - `net/make_disk.sh`가 이미지 둘을 굽는다.
 
-끝 기준: 부팅 A가 초록이고, stub을 안 띄운 반사실이 검사 18에서 죽는다.
+끝 기준: 부팅 A가 초록이고, stub을 안 띄운 mutation이 검사 18에서 죽는다.
 호스트 검사가 era 경계 양쪽과 검증 넷을 본다.
 
 ## M2가 이어받을 것
