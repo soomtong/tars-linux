@@ -15,6 +15,8 @@ cd "$(dirname "$0")"
 #   → Cmd+V가 그 글자를 셸에 써 넣고, Enter를 치면 셸이 그것을 실행한다
 #   → 복사한 글자가 실행 결과로 화면에 다시 나타난다
 #   → Esc로 나오면 다시 나간다
+#   → 자식이 모드 2004를 켰으면 붙인 글자를 ESC[200~ · ESC[201~로 감싸고,
+#     꺼져 있으면 그대로 쓴다(PE-M1, 검사 21 · 22)
 #
 # 마지막 줄이 CM-M2가 더하는 값이다. 클립보드에 글자가 담겼다는 것까지는
 # CM-M1이 로그로 증명했지만, 그것이 셸에 닿는다는 것은 왕복으로만 증명된다.
@@ -1134,6 +1136,190 @@ if [ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -ne 0 ]; then
   report_failure "the match number survived the next key"
 fi
 echo "the next key cleared the match number"
+
+# ── 검사 21: 모드 2004가 켜진 자식에게는 감싸서 붙인다 (PE-M1) ─────────
+#
+# fish는 프롬프트에서 `ESC[?2004h`를 보내고(PE design 실측 1), 우리 터미널은
+# 그 모드가 켜져 있으면 클립보드를 `ESC[200~` · `ESC[201~`로 감싸 쓴다(PE
+# design 결정 2). fish는 감싼 두 줄을 개행째 입력줄에 넣고 Enter를 기다린다.
+# 감싸지 않으면 첫 줄의 개행을 Enter로 읽어 그 줄을 곧바로 실행한다.
+#
+# 판정은 화면이 한다(PE design 결정 5). `clip> paste`의 `bracketed=`는 우리
+# 코드가 자기 판단을 찍은 것이라서, 그 필드는 화면 판정이 다 끝난 뒤 맨
+# 끝에 본다. 앞에 두면 "감싸지 않았다"는 고장이 화면에 닿기 전에 필드에서
+# 먼저 잡혀, 화면 판정이 실제로 그 고장을 잡는지를 mutation으로 볼 수 없다.
+#
+# 검사 20이 copy mode 안에서 끝났으므로 먼저 나간다. ctrl-l은 fish가 화면을
+# 지우고 프롬프트를 맨 윗줄에 다시 그리게 한다 — 출력이 생기므로 뷰포트도
+# 바닥으로 돌아온다(hangul 체인 검사 17이 같은 키를 쓴다).
+type_keys esc
+sleep 1
+type_keys ctrl-l
+sleep 1
+
+# 붙여넣을 두 줄을 만든다. 검사 7과 같은 요령이다 — `echo echo PEONE`의
+# 출력은 `echo PEONE`만 있는 줄이다. 판정 글자 `| PEONE |`는 친 줄과 안
+# 겹친다(project_gate_screen_echo). 친 줄에서 PEONE 앞은 `| `가 아니라 `o `다.
+echo "=== typing 'echo echo PEONE; echo echo PETWO' ==="
+type_keys e c h o spc e c h o spc shift-p shift-e shift-o shift-n shift-e semicolon spc \
+  e c h o spc e c h o spc shift-p shift-e shift-t shift-w shift-o ret
+if ! wait_for_screen '\| echo PEONE \| echo PETWO \|'; then
+  report_failure "the shell did not print the two lines 'echo PEONE' and 'echo PETWO'"
+fi
+
+# 두 줄을 잡는다. 커서는 셸 커서 자리(프롬프트 줄)에서 시작하므로 k 둘이
+# `echo PEONE` 줄이다(검사 8과 같은 셈). V로 그 줄을, j로 다음 줄까지 잡는다.
+echo "=== entering copy mode and yanking the two lines (k k V j y) ==="
+type_keys meta_l-shift-c
+sleep 2
+PE_ROW_ENTER="$(copy_value row)"
+type_keys k k
+sleep 1
+PE_ROW="$(copy_value row)"
+if [ "$PE_ROW" -ne "$((PE_ROW_ENTER - 2))" ]; then
+  report_failure "k k moved the copy cursor from row ${PE_ROW_ENTER} to ${PE_ROW} (expected $((PE_ROW_ENTER - 2)))"
+fi
+type_keys shift-v
+sleep 1
+type_keys j
+sleep 1
+type_keys y
+sleep 2
+
+# `echo PEONE` + 개행 + `echo PETWO`, 21바이트다. dumpClip이 text= 뒤에
+# 개행째 찍으므로 둘째 줄은 다음 로그 줄로 넘어간다(FP design 결정 5의
+# 실측). 그래서 첫 줄까지만 글자로 보고, 둘째 줄이 잡힌 것은 길이로 본다.
+if ! grep -aq 'terminal: clip> len=21 text=echo PEONE' "$LOG"; then
+  report_failure "y did not put the two lines (21 bytes) on the clipboard: $(grep -a 'terminal: clip> len=' "$LOG" | tail -n 1)"
+fi
+echo "the clipboard holds the two lines (21 bytes)"
+
+# 대조군. 지금까지 `PEONE`만 있는 줄은 한 번도 없었다 — 검사 10과 같은
+# "지금까지 한 번도"의 대조군이다. 이것이 없으면 아래 음성 판정이 원래부터
+# 그랬던 화면을 보고, 양성 판정이 원래부터 있던 줄을 볼 수 있다.
+if grep -aqF '| PEONE |' "$LOG"; then
+  report_failure "a line containing only 'PEONE' was on the screen before the paste"
+fi
+echo "control: nothing has printed 'PEONE' on a line of its own yet"
+
+# 붙인다. 먼저 `clip> paste len=21 `로 붙여넣기가 도착한 것만 본다(뒤의 공백은
+# `len=210` 같은 값과 안 겹치게 하려는 것이다). 감쌌는지는 여기서 안 본다.
+PE_ECHO_BEFORE="$(screen_count 'echo PETWO')"
+echo "=== pasting the two lines at the fish prompt (Cmd+V) ==="
+type_keys meta_l-v
+PE_OK=0
+for _ in $(seq 1 50); do
+  if grep -aq 'terminal: clip> paste len=21 ' "$LOG"; then PE_OK=1; break; fi
+  sleep 0.1
+done
+[ "$PE_OK" = "1" ] || report_failure "Cmd+V did not write the 21-byte clipboard (no 'clip> paste len=21' line)"
+
+# 붙인 둘째 줄이 fish의 입력줄에 나타난다. fish는 감싼 두 줄을 입력줄 두 행으로
+# 그리고 둘째 행을 커서 이동으로 첫 행의 명령 자리에 맞춘다 — 띄운 칸에는
+# 글자가 없어 screen>에는 `| echo PETWO |`로 나온다(PE-M1 plan 확정 2). 그래서
+# 마지막 프레임의 `echo PETWO`가 하나 는다. 절대값을 못 쓰는 이유는 검사 11과
+# 같다 — 친 명령줄과 출력줄에 이미 둘이다.
+#
+# fish는 꼬리(`ESC[201~`)가 올 때까지 붙인 글자를 하나도 안 그리고, 그동안
+# 오는 키(Enter · ctrl-c 포함)를 전부 붙여넣기의 일부로 삼킨다(plan 확정 1).
+# 꼬리를 빠뜨리면 여기서 약 15초를 다 쓰고 빨개진다.
+PE_ECHO_AFTER="$PE_ECHO_BEFORE"
+for _ in $(seq 1 150); do
+  PE_ECHO_AFTER="$(screen_count 'echo PETWO')"
+  if [ "$PE_ECHO_AFTER" -gt "$PE_ECHO_BEFORE" ]; then break; fi
+  sleep 0.1
+done
+if [ "$PE_ECHO_AFTER" -le "$PE_ECHO_BEFORE" ]; then
+  report_failure "the pasted lines never showed up on the fish command line ('echo PETWO' stayed at ${PE_ECHO_BEFORE})"
+fi
+echo "the paste reached the fish command line (echo PETWO ${PE_ECHO_BEFORE} -> ${PE_ECHO_AFTER})"
+
+# 판정(음성). 3초 뒤에도 `PEONE`만 있는 줄이 없다. 감싸지 않았다면 fish가
+# 첫 줄의 개행을 Enter로 읽어 `PEONE`을 곧바로 찍는다(plan 확정 1의 mutation 1).
+sleep 3
+if grep -aqF '| PEONE |' "$LOG"; then
+  report_failure "the first line ran before Enter: the paste at the fish prompt was not bracketed"
+fi
+echo "nothing ran before Enter"
+
+# 판정(양성). Enter를 치면 두 줄이 함께 실행되어 `PEONE`만 있는 줄과 `PETWO`만
+# 있는 줄이 연달아 생긴다. 위의 음성 판정만 있으면 "붙여넣기가 아예 안
+# 갔다"도 통과하므로 이 판정이 짝이다.
+echo "=== running the pasted lines (Enter) ==="
+type_keys ret
+if ! wait_for_screen '\| PEONE \| PETWO \|'; then
+  report_failure "Enter did not run both pasted lines (no 'PEONE' row followed by a 'PETWO' row)"
+fi
+echo "Enter ran both pasted lines together"
+
+# 갈래의 표지. 화면 판정이 다 끝난 뒤에 본다(이 검사의 머리 주석). 시리얼
+# 로그의 줄 끝은 \r\n이라 \r를 지우고 꼬리를 맞춘다.
+PE_LINE="$(grep -a 'terminal: clip> paste' "$LOG" | tail -n 1 | tr -d '\r')"
+case "$PE_LINE" in
+  *"terminal: clip> paste len=21 bracketed=1") ;;
+  *) report_failure "the paste at the fish prompt was logged as '${PE_LINE}', expected 'clip> paste len=21 bracketed=1'" ;;
+esac
+echo "check 21: the paste at the fish prompt was bracketed (${PE_LINE##*clip> })"
+
+# ── 검사 22: 모드가 꺼진 자식에게는 그대로 붙인다 (PE-M1) ───────────────
+#
+# fish는 `cat`을 띄우기 전에 `ESC[?2004l`을 보낸다(plan 확정 3). 그러면 우리는
+# 감싸지 않고 PE-M1 전처럼 본문만 쓴다. `cat` 아래에서 감쌌다면 tty가 ESC를
+# `^[`로 되울려(ECHOCTL) 화면에 `^[[200~`가 찍힌다(PE design 실측 4).
+#
+# 클립보드는 검사 21의 두 줄 그대로다. 화면을 지우는 것은 아래 셈을 짧은
+# 화면에서 하려는 것이다.
+type_keys ctrl-l
+sleep 1
+echo "=== typing 'cat' ==="
+type_keys c a t ret
+sleep 2
+PE_CAT_BEFORE="$(screen_count 'echo PEONE')"
+echo "=== pasting the two lines into cat (Cmd+V) ==="
+type_keys meta_l-v
+PE_OK=0
+for _ in $(seq 1 50); do
+  if [ "$(grep -ac 'terminal: clip> paste len=21 ' "$LOG" || true)" -ge 2 ]; then PE_OK=1; break; fi
+  sleep 0.1
+done
+[ "$PE_OK" = "1" ] || report_failure "Cmd+V under cat did not write the clipboard (no second 'clip> paste len=21' line)"
+
+# 판정(양성). `echo PEONE`이 마지막 프레임에 둘 는다 — tty의 에코 하나와,
+# `cat`이 그 줄을 읽어 다시 쓴 것 하나다. 둘째 줄은 개행이 없으므로 에코만
+# 되고 `cat`에게 안 간다.
+#
+# 화면의 모양은 셈하지 않는다. plan 확정 3에서는 tty가 21바이트를 한꺼번에
+# 되울린 뒤에 `cat`의 출력이 와서 `| echo PEONE | echo PETWOecho PEONE`이었다.
+# 에코와 `cat`의 출력 사이의 순서는 커널의 스케줄이 정하므로 그 모양에
+# 기대지 않고 개수만 센다(`echo PETWOecho PEONE`에도 `echo PEONE`은 하나다).
+PE_CAT_AFTER="$PE_CAT_BEFORE"
+for _ in $(seq 1 150); do
+  PE_CAT_AFTER="$(screen_count 'echo PEONE')"
+  if [ "$PE_CAT_AFTER" -ge "$((PE_CAT_BEFORE + 2))" ]; then break; fi
+  sleep 0.1
+done
+if [ "$PE_CAT_AFTER" -lt "$((PE_CAT_BEFORE + 2))" ]; then
+  report_failure "cat did not echo and repeat the first pasted line ('echo PEONE' ${PE_CAT_BEFORE} -> ${PE_CAT_AFTER}, expected +2)"
+fi
+
+# 판정(음성). 화면 어디에도 `[200~`가 없었다. 이 체인의 어떤 키도 그 글자를
+# 만들지 않으므로 마지막 프레임이 아니라 로그의 screen> 줄 전부를 본다.
+if [ "$(grep -acF '[200~' <<<"$(grep -a 'terminal: screen>' "$LOG")" || true)" -ne 0 ]; then
+  report_failure "the paste under cat was bracketed: '[200~' showed up on the screen"
+fi
+echo "cat got the two lines as they are (echo PEONE ${PE_CAT_BEFORE} -> ${PE_CAT_AFTER}, no [200~ on screen)"
+
+# cat을 끝낸다. 둘째 줄은 cat의 줄 버퍼에 남은 채 버려진다.
+type_keys ctrl-c
+sleep 1
+
+# 갈래의 표지. 검사 21과 같은 이유로 맨 끝에 본다.
+PE_LINE="$(grep -a 'terminal: clip> paste' "$LOG" | tail -n 1 | tr -d '\r')"
+case "$PE_LINE" in
+  *"terminal: clip> paste len=21 bracketed=0") ;;
+  *) report_failure "the paste under cat was logged as '${PE_LINE}', expected 'clip> paste len=21 bracketed=0'" ;;
+esac
+echo "check 22: the paste under cat went unwrapped (${PE_LINE##*clip> })"
 
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #

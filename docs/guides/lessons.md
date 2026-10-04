@@ -209,7 +209,8 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 `terminal: style>` · `terminal: pixel>` · `terminal: render> first frame` ·
 `terminal: ink>` · `terminal: font>` · `terminal: scroll>` · `terminal: key>` ·
 `terminal: copy>` · `terminal: copy> word_next` · `terminal: copy> word_prev`
-(CN-M0) · `terminal: clip>` · `terminal: clip> paste` ·
+(CN-M0) · `terminal: clip>` · `terminal: clip> paste len=… bracketed=…`(`bracketed=`는 PE-M1, 맨
+뒤에 붙였으므로 `clip> paste len=11`을 접두로 보는 판정이 그대로 맞는다) ·
 `terminal: find> open` · `terminal: find> type needle=… len=…` ·
 `terminal: find> erase` · `terminal: find> cancel` ·
 `terminal: find> submit matches=… moved=… us=…` ·
@@ -1148,10 +1149,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   는 부팅 둘과 `device`가 본다. `device`에 음성이 없는 이유는 그 체인이
   fish로 뜨기 때문이고(SIGHUP을 빼도 초록이다), 그 근거가 체인 파일의
   주석에 있다.
-- `copy/check.sh` — 검사 스물. `key_lines`(절대값으로 키를 세면 안 된다 —
+- `copy/check.sh` — 검사 스물둘. `key_lines`(절대값으로 키를 세면 안 된다 —
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은
-  검사 19의 자리를 이어받는다 — 순서를 바꾸면 판정이 무너진다.
+  검사 19의 자리를 이어받는다 — 순서를 바꾸면 판정이 무너진다. 검사 21 · 22(PE-M1)는
+  클립보드를 두 줄짜리로 바꾸므로 그 뒤에 클립보드를 보는 검사를 두지 않는다. 판정은
+  화면이 하고 `bracketed=` 필드는 각 검사의 맨 끝에서 본다 — 앞에서 보면 mutation이 화면
+  판정에 닿기 전에 필드에서 잡혀, 화면 판정이 고장을 실제로 잡는지를 아무도 확인하지 못한다.
 - `render/check.sh` — 검사 서른다섯. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
   bar · underline · bar로 바꿨다가 마지막에 `\033[0 q`로 block을 되돌린다 — 이 뒤에 검사를
   더하는 사람이 bar를 물려받지 않게 하려는 것이고, 그 순서를 바꾸면 뒤 검사가 반전 셀을

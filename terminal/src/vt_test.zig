@@ -70,6 +70,17 @@ fn cuExpectMark(label: []const u8, got: ?vt.CursorMark, want: ?vt.CursorMark) !v
     return error.CursorMarkMismatch;
 }
 
+/// `pasteParts`의 세 조각이 기대와 같은가(PE-M1). 조각마다 비교해서, 머리가
+/// 틀렸는지 본문이 바뀌었는지를 실패 메시지가 바로 말하게 한다. 바이트를
+/// 숫자로 찍는다(`{any}`) — 머리와 꼬리의 ESC가 터미널에 먹혀 사라지지 않게.
+fn peExpectParts(label: []const u8, got: [3][]const u8, want: [3][]const u8) !void {
+    for (got, want, 0..) |g, w, i| {
+        if (std.mem.eql(u8, g, w)) continue;
+        std.debug.print("FAIL: {s} — 조각 {d}\n  got  {any}\n  want {any}\n", .{ label, i, g, w });
+        return error.PastePartsWrong;
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const screen = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer screen.deinit();
@@ -2541,6 +2552,54 @@ pub fn main(init: std.process.Init) !void {
         return error.ScrolledShapeWrong;
     }
     std.debug.print("vt_test: 뷰포트 밖의 셸 커서는 안 그린다 OK\n", .{});
+
+    // 검사 93. 새 화면은 모드 2004가 꺼져 있다 — 머리와 꼬리가 비고 본문은
+    // 그대로다(PE design 결정 2). 기본값이 꺼짐이라는 것은 ghostty의
+    // `modes.zig` 표가 정하고, 이 검사가 그것을 우리 함수로 다시 본다.
+    const pe_plain = [3][]const u8{ "", "ab", "" };
+    const pe_wrapped = [3][]const u8{ "\x1b[200~", "ab", "\x1b[201~" };
+    const pe_new = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pe_new.deinit();
+    try peExpectParts("검사 93 새 화면", pe_new.pasteParts("ab"), pe_plain);
+    std.debug.print("vt_test: 새 화면의 붙여넣기는 감싸지 않는다 OK\n", .{});
+
+    // 검사 94. `ESC[?2004h`를 먹이면 감싼다. 시퀀스를 `ESC[?20`과 `04h`로
+    // 나눠 먹여도 같다 — 파서 상태가 `feed` 사이에 남는다(`Screen`의 doc
+    // 주석). 셸의 출력이 pty read 경계에서 잘리는 것은 흔한 일이다. 반쪽만
+    // 먹인 순간에는 아직 꺼져 있어야 한다.
+    const pe_on = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pe_on.deinit();
+    pe_on.feed("\x1b[?2004h");
+    try peExpectParts("검사 94 ESC[?2004h 뒤", pe_on.pasteParts("ab"), pe_wrapped);
+    const pe_split = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pe_split.deinit();
+    pe_split.feed("\x1b[?20");
+    try peExpectParts("검사 94 반쪽만 먹인 뒤", pe_split.pasteParts("ab"), pe_plain);
+    pe_split.feed("04h");
+    try peExpectParts("검사 94 나머지를 먹인 뒤", pe_split.pasteParts("ab"), pe_wrapped);
+    std.debug.print("vt_test: 모드 2004가 켜지면 머리와 꼬리로 감싼다 OK\n", .{});
+
+    // 검사 95. 모드는 화면별이 아니다(PE design 실측 2). 켠 채로 대체 화면에
+    // 들어가도 켜져 있고, 대체 화면에서 끄고 나와도 꺼져 있다. 검사 91의 커서
+    // 모양(화면마다 따로)과 반대다 — 두 성질을 같은 것으로 짐작하면 틀린다.
+    const pe_alt = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pe_alt.deinit();
+    pe_alt.feed("\x1b[?2004h\x1b[?1049h");
+    try peExpectParts("검사 95 켠 채로 대체 화면에 들어간 뒤", pe_alt.pasteParts("ab"), pe_wrapped);
+    pe_alt.feed("\x1b[?2004l\x1b[?1049l");
+    try peExpectParts("검사 95 대체 화면에서 끄고 나온 뒤", pe_alt.pasteParts("ab"), pe_plain);
+    std.debug.print("vt_test: 모드 2004는 화면별이 아니다 OK\n", .{});
+
+    // 검사 96. RIS(`ESC c`)가 모드를 끈다 — 모드를 켠 채 죽은 자식 뒤에
+    // 사람이 `reset`을 치면 풀린다(PE design 위험 2). 그리고 본문의 개행은
+    // 그대로다 — 감싸든 안 감싸든 `\n`을 `\r`로 바꾸지 않는다(결정 2).
+    const pe_ris = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pe_ris.deinit();
+    pe_ris.feed("\x1b[?2004h");
+    try peExpectParts("검사 96 RIS 전", pe_ris.pasteParts("a\nb"), .{ "\x1b[200~", "a\nb", "\x1b[201~" });
+    pe_ris.feed("\x1bc");
+    try peExpectParts("검사 96 RIS 뒤", pe_ris.pasteParts("a\nb"), .{ "", "a\nb", "" });
+    std.debug.print("vt_test: RIS가 모드를 끄고, 본문의 개행은 그대로다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

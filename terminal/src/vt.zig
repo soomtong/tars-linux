@@ -1222,9 +1222,9 @@ pub const Screen = struct {
     ///
     /// 개행에서 자르는 것이 이 함수의 본체다. 화면 셀에는 개행이 없으므로
     /// 개행이 든 needle은 영영 안 맞는다 — 증상이 "붙여넣었는데 못 찾음이
-    /// 뜬다"라 조용하다. 셸 쪽 `dumpPaste`는 개행이 곧 실행이 되는 것을
-    /// 감수했지만(CM design 결정 9), 검색은 감수할 수 있는 종류가 아니다.
-    /// 셸에서는 잘못 붙은 것이 화면에 보이고 검색에서는 안 보인다.
+    /// 뜬다"라 조용하다. 셸 쪽 `dumpPaste`는 자식이 모드 2004를 켰으면
+    /// bracketed paste로 감싸서 개행을 자식에게 맡긴다(PE design 결정 2).
+    /// 검색 프롬프트는 우리 것이라 감쌀 상대가 없어서 개행을 여기서 다룬다.
     ///
     /// 줄 끝 공백은 여기서 안 다룬다. `copyYank`가 이미 트림한다 —
     /// 두 줄을 잡으면 `가나\n다라` 열세 바이트가 나오고 `가나` 뒤에 바로
@@ -1968,6 +1968,31 @@ pub const Screen = struct {
     pub fn clipboard(self: *const Screen) ?[]const u8 {
         const text = self.clip orelse return null;
         return text;
+    }
+
+    /// 붙여넣기가 pty에 쓸 세 조각 — 머리 · 본문 · 꼬리(PE design 결정 2 · 4).
+    ///
+    /// 자식이 모드 2004(bracketed paste)를 켰으면 머리와 꼬리가 `ESC[200~` ·
+    /// `ESC[201~`이고, 꺼져 있으면 둘 다 빈 조각이다. 본문은 언제나 `text`
+    /// 그대로다 — 개행도 제어 바이트도 안 바꾼다. 라이브러리의 `encodePaste`를
+    /// 안 쓰는 이유가 이것이다. 그 함수는 모드가 꺼진 갈래에서 `\n`을 `\r`로
+    /// 바꾸고 제어 바이트를 공백으로 바꾼다(PE design 결정 2의 후보 표).
+    ///
+    /// 모드는 화면별이 아니라 `Terminal` 하나에 하나다(PE design 실측 2).
+    /// 대체 화면에서 켜고 끈 것도 같은 값을 바꾸고, RIS가 끈다(`vt_test`
+    /// 검사 95 · 96). 패널마다 `Screen`이 따로이므로 모드도 패널마다 따로다.
+    ///
+    /// `main.zig`가 `self.term.modes`를 직접 읽지 않게 하려고 함수로 낸다 —
+    /// `clipboard`·`findNeedle`과 같은 규율이다(TR design 결정 1). 판단과
+    /// 머리 · 꼬리의 글자가 여기 있어서 호스트의 `vt_test`가 실제로 나갈
+    /// 바이트를 본다.
+    ///
+    /// 할당하지 않는다. 돌려주는 조각은 `text`와 정적 문자열을 가리킨다 —
+    /// 클립보드에는 상한이 없어서, 이어 붙이려면 매번 본문 길이만큼 할당해야
+    /// 한다(PE design 결정 3).
+    pub fn pasteParts(self: *const Screen, text: []const u8) [3][]const u8 {
+        if (!self.term.modes.get(.bracketed_paste)) return .{ "", text, "" };
+        return .{ "\x1b[200~", text, "\x1b[201~" };
     }
 
     /// 뷰포트가 스크롤백의 어디에 있는지.

@@ -1175,10 +1175,21 @@ fn dumpClip(text: ?[]const u8) void {
 /// 하기 위해서다. 게이트가 `len=11`을 보고 "11바이트가 나갔다"로 읽는데, 쓰기와
 /// 로그가 떨어져 있으면 그 둘이 다른 슬라이스를 볼 여지가 생긴다.
 ///
-/// bracketed paste로 감싸지 않는다(design 결정 9). 여러 줄을 붙이면 개행이
-/// 곧 실행이 되는 것을 감수한다 — 셸이 그 모드를 받는지 확인한 적이 없고,
-/// 확인 없이 넣으면 게이트가 못 보는 코드가 느는 것이
-/// `project_gate_chain_composition`이 경고한 부채 그대로다.
+/// 자식이 모드 2004를 켰으면 bracketed paste로 감싼다(PE design 결정 2).
+/// 감쌀지와 무엇으로 감쌀지는 `vt.zig`의 `pasteParts`가 정하고, 여기는 그
+/// 세 조각을 차례로 쓰기만 한다. 게스트의 셸 셋(zsh · bash · fish)과 vim이
+/// 전부 그 모드를 켜므로(PE design 실측 1), 여러 줄을 붙여도 Enter 전에는
+/// 실행되지 않고 vim의 `autoindent`가 계단을 만들지 않는다. 모드가 꺼져
+/// 있으면(`cat`처럼 모드를 모르는 프로그램) 머리와 꼬리가 비어서 본문만
+/// 나간다 — PE-M1 전과 같은 바이트다.
+///
+/// 이어 붙여 한 번에 쓰지 않는다(PE design 결정 3). 클립보드에 상한이 없어서
+/// 매번 할당이 들고, 한 번에 써도 자식이 한 번에 읽는다는 보장이 없다.
+///
+/// `len=`은 본문의 길이이고 `bracketed=`는 감쌌는지(1 또는 0)다. 머리와
+/// 꼬리의 12바이트를 `len=`에 더하지 않는 것은 그 숫자가 계속 "클립보드에
+/// 무엇이 들었나"를 말하게 하기 위해서다. 새 필드를 맨 뒤에 붙였으므로
+/// `clip> paste len=11`을 접두로 보는 판정이 그대로 맞는다(PE design 결정 4).
 ///
 /// 새 접두사를 만들지 않고 `clip>`를 쓰는 것은 design 결정 8이다. 문구가 이
 /// 파일과 `copy/check.sh` 양쪽에 중복된다 — 한쪽을 고치면 다른 쪽도 고쳐야
@@ -1190,8 +1201,14 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
         std.debug.print("terminal: clip> paste empty\n", .{});
         return;
     };
-    pty.write(master_fd, text);
-    std.debug.print("terminal: clip> paste len={d}\n", .{text.len});
+    const parts = screen.pasteParts(text);
+    for (parts) |p| {
+        if (p.len > 0) pty.write(master_fd, p);
+    }
+    std.debug.print("terminal: clip> paste len={d} bracketed={d}\n", .{
+        parts[1].len,
+        @intFromBool(parts[0].len > 0),
+    });
 }
 
 /// `Cmd+V`가 클립보드의 첫 줄을 검색어에 붙인다(FP design 결정 3·6).
