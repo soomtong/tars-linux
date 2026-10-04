@@ -7,8 +7,10 @@ const png = @import("png.zig");
 /// `fg`·`bg`는 프레임버퍼와 같은 `0x00RRGGBB` 형식으로 이미 해소된 값이다.
 /// `Style`을 그대로 흘려보내지 않는 이유가 design 결정 1이다 — 색을 푸는 데
 /// 필요한 것(팔레트, 기본 fg/bg, bold 옵션)이 전부 여기 `RenderState`에 있고,
-/// 렌더러는 팔레트도 SGR도 몰라야 한다. inverse와 커서도 여기서 두 색을
+/// 렌더러는 팔레트도 SGR도 몰라야 한다. inverse와 block 커서도 여기서 두 색을
 /// 맞바꿔 해소하므로 `main.zig`는 "반전"이라는 개념 자체를 배우지 않는다.
+/// bar · underline 커서는 셀에 안 섞인다 — `Screen.cursorMark()`의 사각형으로
+/// `main.zig`가 칠한다(CU design 결정 3).
 pub const CellGlyph = struct {
     codepoint: u32,
     col: u16,
@@ -124,6 +126,47 @@ fn onWritePty(h: *Handler, bytes: [:0]const u8) void {
 /// 셀 하나의 픽셀 크기. 값은 렌더러가 정한다(`main.zig`의 `CELL_W` ·
 /// `ROW_HEIGHT`) — 폰트를 아는 쪽이 저쪽이다.
 pub const CellPx = struct { w: u32, h: u32 };
+
+/// bar · underline 커서의 색(CU design 결정 1). 이 색은 커서 띠만 쓴다.
+///
+/// 기본 팔레트 256색에 없는 값이라(design 실측 9) 셀 안에서 이 색의 픽셀을
+/// 세면 그것이 곧 띠다 — `main.zig`의 `SEPARATOR` · `STATUS_COPY`와 같은
+/// 이유다. 셀의 `fg`나 기본 전경(`0xFFFFFF`)을 쓰면 커서 칸의 글자와 같은
+/// 색이라 게이트가 띠의 픽셀과 글리프의 픽셀을 못 가른다. 사람 눈에는
+/// 흰색과 구별이 안 된다.
+pub const CURSOR_COLOR: u32 = 0x00F0F0F0;
+
+/// bar의 폭과 underline의 높이(픽셀). 1이면 ink 값이 bar 16 · underline 16으로
+/// 같아져 게이트가 숫자로 못 가르고, 3 이상이면 셀(8픽셀)의 절반에 가까워져
+/// block과 bar의 차이가 흐려진다(결정 1의 후보 표).
+pub const CURSOR_BAR_W: u32 = 2;
+pub const CURSOR_UNDERLINE_H: u32 = 2;
+
+/// 셸 커서의 모양 셋(CU design 결정 1). 라이브러리의 `cursor.Style`에는
+/// 넷째 `block_hollow`가 있지만 DECSCUSR로는 만들 수 없는 값이라 block으로
+/// 접는다 — 그 대응은 `Screen.askedShape` 한 자리다.
+pub const CursorShape = enum { block, bar, underline };
+
+/// 픽셀 사각형 하나. 좌표는 패널 원점 기준이다 — `main.zig`가 원점을 더한다.
+pub const PxRect = struct { x: u32, y: u32, w: u32, h: u32 };
+
+/// 이 프레임에 그리는 셸 커서(CU design 결정 3). `cells()`가 한 번 만들고
+/// `main.zig`는 `Screen.cursorMark()`로 받아 칠하기만 한다.
+pub const CursorMark = struct {
+    /// 뷰포트 좌표. 커서가 뷰포트 밖이면 이 값 자체가 안 생긴다.
+    row: u16,
+    col: u16,
+    /// 라이브러리가 든 모양 — DECSCUSR이 정한 것이다. 게이트의 `vt=` 칸.
+    asked: CursorShape,
+    /// 실제로 그리는 모양. preedit이 `asked`를 block으로 덮을 수 있다
+    /// (결정 4). 게이트의 `drawn=` 칸.
+    shape: CursorShape,
+    /// 덮는 칸 수. preedit이나 폭 2 글자 위면 2이고, 격자 밖으로는 안 넘는다.
+    cols: u8,
+    /// 칠할 픽셀 사각형. block이면 null이다 — block은 `cells()`가 이미
+    /// 반전으로 그렸다.
+    px: ?PxRect,
+};
 
 /// kitty 이미지가 글자와 어떤 순서로 겹치는가(TG design 결정 3 · 4).
 /// 경계는 ghostty 렌더러와 같다(`renderer/image.zig:384`).
@@ -374,6 +417,16 @@ pub const Screen = struct {
     /// `Workspace.focus` 하나이고 이것은 그 사본이다.
     focused: bool = true,
 
+    /// 이 프레임에 그리는 셸 커서(CU design 결정 3). `cells()`가 매번 다시
+    /// 정한다. null이면 셸 커서가 없다 — copy mode · 포커스 없음 · 뷰포트 밖.
+    ///
+    /// 이름이 `shell_cursor`인 이유는 copy 커서(`copy_cursor`)와 짝을 이루게
+    /// 하려는 것이고, `cells()` 안의 지역 상수 `cursor`(라이브러리의 뷰포트
+    /// 좌표)와 헷갈리지 않게 하려는 것이다. 반전할지(block) 띠를 칠할지
+    /// (bar · underline)를 이 값 하나가 정한다 — 계산이 두 자리에 있으면
+    /// 언젠가 갈려서 반전과 띠가 함께 그려진다.
+    shell_cursor: ?CursorMark = null,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -602,6 +655,14 @@ pub const Screen = struct {
         // 돌아온다.
         try self.findSpans();
 
+        // 셸 커서를 여기서 한 번 정한다(CU design 결정 3). 아래 반전과
+        // `main.zig`의 띠가 같은 값을 본다. `state.update` 뒤라야
+        // `visual_style` · `viewport`가 이 프레임의 것이다.
+        self.shell_cursor = self.computeShellCursor();
+        // 반전은 block일 때만이다. bar · underline은 `main.zig`가 띠로
+        // 칠한다. 포커스 없음은 `shell_cursor`가 이미 null로 담고 있다.
+        const invert_cursor = self.shell_cursor != null and self.shell_cursor.?.shape == .block;
+
         const colors = &self.state.colors;
         const default_fg = packRgb(colors.foreground);
         const default_bg = packRgb(colors.background);
@@ -725,6 +786,12 @@ pub const Screen = struct {
                 // 맞바뀌어 원래 색으로 돌아온다(CM-M1). 예외를 두지 않는다 —
                 // 반전된 띠 가운데 뚫린 구멍이 곧 커서라 오히려 잘 보이고,
                 // 예외를 넣으면 "선택"이 렌더 쪽으로 새어 나간다.
+                //
+                // CU-M0부터 이 연산은 block 커서만의 것이다. DECSCUSR이 bar나
+                // underline을 정하면 셀은 반전되지 않고, `main.zig`가
+                // `cursorMark()`의 사각형을 그 위에 칠한다(CU design 결정 3).
+                // 어느 쪽인지는 함수 첫머리의 `shell_cursor` 하나가 정한다.
+                // copy 커서는 언제나 block이고(결정 4) 아래 첫 갈래가 그것이다.
                 if (self.copy_cursor) |cc| {
                     if (@as(usize, cc.x) == x and @as(usize, cc.y) == y) {
                         std.mem.swap(u32, &fg, &bg);
@@ -758,8 +825,14 @@ pub const Screen = struct {
                     // 포커스 없는 패널은 반전하지 않는다(WP design 결정 6).
                     // 위의 preedit 치환은 그대로 둔다 — 조합은 포커스
                     // 패널에서만 생기고, 포커스를 옮기는 키가 먼저 확정시킨다.
+                    //
+                    // 모양이 bar · underline이어도 반전하지 않는다(CU design
+                    // 결정 3). 그 판단은 `invert_cursor` 하나가 담고 있고,
+                    // 포커스 조건도 그 안에 있다 — `shell_cursor`가 포커스
+                    // 없음을 null로 담는다. preedit은 모양을 덮어 block이므로
+                    // 조합 중인 두 칸은 지금처럼 반전된다(결정 4).
                     const span: usize = if (self.preedit == null) 1 else 2;
-                    if (self.focused and @as(usize, vp.y) == y and
+                    if (invert_cursor and @as(usize, vp.y) == y and
                         x >= @as(usize, vp.x) and x < @as(usize, vp.x) + span)
                     {
                         std.mem.swap(u32, &fg, &bg);
@@ -810,6 +883,97 @@ pub const Screen = struct {
             }
         }
         return out[0..n];
+    }
+
+    /// 라이브러리가 든 커서 모양을 우리 셋으로 옮긴다(CU design 결정 1).
+    ///
+    /// `visual_style`은 `RenderState.update`가 매번 채운다(design 실측 9).
+    /// `else`를 안 두는 것에 뜻이 있다 — 업스트림이 모양을 더하면 여기서
+    /// 컴파일이 막혀야 그 모양을 어떻게 그릴지 정하게 된다.
+    fn askedShape(self: *const Screen) CursorShape {
+        return switch (self.state.cursor.visual_style) {
+            // `block_hollow`는 DECSCUSR로 못 만드는 값이다. 라이브러리 설정의
+            // 기본 모양으로만 생기고 우리는 그 값을 안 준다.
+            .block, .block_hollow => .block,
+            .bar => .bar,
+            .underline => .underline,
+        };
+    }
+
+    /// 이 프레임의 셸 커서를 정한다. `cells()`만 부른다(design 결정 3).
+    ///
+    /// 우선순위가 design 결정 4 그대로다. 위의 것이 아래 것을 덮는다.
+    ///
+    ///   copy mode인가        → 없다(copy 커서가 대신 반전된다)
+    ///   포커스 없는 패널인가 → 없다(WP design 결정 6)
+    ///   뷰포트 밖인가        → 없다
+    ///   조합 중인가          → 두 칸 block. DECSCUSR 모양을 무시한다
+    ///   그 밖                → DECSCUSR 모양
+    ///
+    /// preedit이 모양을 무시하는 이유는 두 칸 반전이 커서이기 전에 "아직 확정
+    /// 안 된 글자"의 표시이기 때문이다(HI design 결정 4). bar로 그리면 조합
+    /// 중인 글자가 바탕과 구별이 안 된다.
+    fn computeShellCursor(self: *const Screen) ?CursorMark {
+        if (self.copy_cursor != null) return null;
+        if (!self.focused) return null;
+        const vp = self.state.cursor.viewport orelse return null;
+        const asked = self.askedShape();
+
+        var shape = asked;
+        var cols: u16 = 1;
+        if (self.preedit != null) {
+            shape = .block;
+            cols = 2;
+        } else {
+            // 폭 2 글자 위면 두 칸이다. underline이 글자 전체 아래에 그어져야
+            // 한다. 셀을 얻는 길은 `cells()` 본문의 `raws`와 같다.
+            const row_cells = self.state.row_data.slice().items(.cells);
+            const raw = row_cells[vp.y].slice().items(.raw)[vp.x];
+            if (raw.wide == .wide) cols = 2;
+        }
+        // 마지막 열에서 두 칸이면 오른쪽이 격자 밖이다. 사각형이 이웃 패널이나
+        // 여백을 칠하지 않게 여기서 자른다 — `main.zig`의 `fillRect`는 범위를
+        // 안 본다.
+        cols = @min(cols, self.state.cols - vp.x);
+
+        const cw = self.cell.w;
+        const ch = self.cell.h;
+        const x = @as(u32, vp.x) * cw;
+        const y = @as(u32, vp.y) * ch;
+        const px: ?PxRect = switch (shape) {
+            .block => null,
+            .bar => .{ .x = x, .y = y, .w = CURSOR_BAR_W, .h = ch },
+            .underline => .{
+                .x = x,
+                .y = y + ch - CURSOR_UNDERLINE_H,
+                .w = @as(u32, cols) * cw,
+                .h = CURSOR_UNDERLINE_H,
+            },
+        };
+        return .{
+            .row = vp.y,
+            .col = vp.x,
+            .asked = asked,
+            .shape = shape,
+            .cols = @intCast(cols),
+            .px = px,
+        };
+    }
+
+    /// 이 프레임에 그리는 셸 커서. null이면 그릴 셸 커서가 없다.
+    ///
+    /// `cells()` 뒤에 부를 것. 계산은 `cells()`가 한 번만 한다 — 반전과 띠를
+    /// 같은 값이 정해야 둘이 함께 그려지는 일이 없다(CU design 결정 3).
+    pub fn cursorMark(self: *const Screen) ?CursorMark {
+        return self.shell_cursor;
+    }
+
+    /// 라이브러리가 든 모양. 셸 커서가 없어도(copy mode · 포커스 없음) 답한다
+    /// — 게이트의 `vt=` 칸이 "DECSCUSR이 해석됐는가"를 따로 보려면 그래야 한다.
+    ///
+    /// `cells()` 뒤에 부를 것. `visual_style`은 `update()`가 채운다.
+    pub fn cursorAsked(self: *const Screen) CursorShape {
+        return self.askedShape();
     }
 
     /// 기본 전경/배경을 프레임버퍼 형식으로 돌려준다.

@@ -87,7 +87,8 @@ report_failure() {
     "terminal: ink>" \
     "terminal: font>" \
     "terminal: scroll>" \
-    "terminal: key>"; do
+    "terminal: key>" \
+    "terminal: cursor>"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
     else
@@ -96,6 +97,8 @@ report_failure() {
   done
   echo "--- style/pixel lines ---"
   grep -aE 'terminal: (style|pixel)>' "$LOG" | tail -n 40
+  echo "--- cursor lines ---"
+  grep -a 'terminal: cursor>' "$LOG" | tail -n 5
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -470,6 +473,7 @@ type_text() {
       ';') keys+=(semicolon) ;;
       '/') keys+=(slash) ;;
       '-') keys+=(minus) ;;
+      '[') keys+=(bracket_left) ;;
       *) report_failure "type_text has no key for '${ch}'" ;;
     esac
   done
@@ -547,6 +551,146 @@ if ! grep -aq 'terminal: imgpx> id=4 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF' "$
 fi
 echo "the PNG image was decoded in the guest: red, green, blue, white"
 
+# ── 커서 모양 — CU-M0 ───────────────────────────────────────────────────
+#
+# 셸이 printf로 DECSCUSR(`CSI Ps SP q`)을 보내고, `cursor>` 줄의 세 층을 본다
+# (CU design 결정 6).
+#
+#   vt=      라이브러리가 든 모양 — DECSCUSR이 해석됐다
+#   drawn=   우리 우선순위가 정한 모양
+#   ink= box= 프레임버퍼에서 되읽은 커서 색 픽셀 — 렌더러가 실제로 칠했다
+#
+# 그리고 마지막 프레임의 반전 셀 수를 함께 본다. bar · underline이면 0이어야
+# 한다 — 띠와 반전이 함께 그려지면 둘 다 커서처럼 보인다.
+#
+# 모양을 바꾸는 명령은 전부 화면 지우기(`\033[H\033[2J`)와 한 줄이다. 검사
+# 19 뒤의 화면에는 fish가 구문 강조 색을 입힌 긴 PNG 명령 줄이 있어서 style
+# 덤프의 상한(96셀)을 넘기기 쉽고, 넘기면 맨 아래 커서 셀의 `style>` 줄이
+# 잘려 "반전 셀 0"이 거짓으로 나온다(CU-M0 plan 확정 12). 지운 뒤의 프레임에는
+# 프롬프트 한 줄과 커서뿐이다.
+
+# 마지막으로 끝난 프레임. `screen>`에서 시작해 `cursor>`에서 끝난 것만 센다.
+#
+# `copy/check.sh`의 `last_frame`은 마지막 `screen>`부터 파일 끝까지다. 여기서
+# 끝을 `cursor>`로 바꾼 이유는 렌더 도중에 읽는 경우다 — 다음 프레임의
+# `screen>`만 찍히고 `style>`가 아직이면 반전 셀이 0으로 보인다. bar ·
+# underline 검사는 0을 기대하므로 그 경우 조용히 초록이 된다. `cursor>`는
+# `dumpStyles` 뒤에 찍히므로 그 줄까지 온 프레임은 `style>`가 다 찍혀 있다.
+last_frame() {
+  awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } /terminal: cursor>/ { done = buf } END { printf "%s", done }' "$LOG"
+}
+# 마지막 `cursor>` 줄. 위 `last_frame`의 마지막 줄과 같은 줄이다.
+last_cursor() { grep -a 'terminal: cursor>' "$LOG" | tail -n 1 || true; }
+# 마지막 cursor> 줄이 패턴과 맞을 때까지 기다린다(15초). wait_for_screen과
+# 같은 이유로 고정 sleep을 안 쓴다. 파이프가 아니라 here-string인 것도 같은
+# 이유다(gate_lib.sh의 그 함수 주석).
+wait_for_cursor() {
+  local pattern="$1" i
+  for i in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(last_cursor)"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+# 마지막 프레임의 반전 셀 수. 표식은 `hangul/check.sh`의 `inverted_cells`와
+# 같다 — 반전된 셀은 `fg`가 기본 배경색(102030)이다.
+inverted_now() { last_frame | grep -acE 'terminal: style> [0-9]+,[0-9]+ fg=102030 ' || true; }
+# 마지막 프레임에서 style 덤프가 잘렸는가. 잘렸으면 반전 셀 수가 뜻을 잃는다.
+truncated_now() { last_frame | grep -ac 'more cell(s) not shown' || true; }
+# 로그가 1초 동안 안 자랄 때까지 기다린다(15초). fish가 지운 화면에 프롬프트를
+# 다 그린 뒤를 보려는 것이다 — 렌더는 needs_redraw가 문지기라 할 일이 없으면
+# 프레임이 안 찍힌다(gate_lib.sh의 type_keys 주석).
+settle() {
+  local i before
+  for i in $(seq 1 15); do
+    before="$(wc -c < "$LOG")"
+    sleep 1
+    if [ "$(wc -c < "$LOG")" -eq "$before" ]; then return 0; fi
+  done
+  return 1
+}
+
+# ── 검사 20: 대조군 — 셸은 block으로 시작하고 cursor>가 반전 셀을 가리킨다
+#
+# 모양은 안 건드리고 화면만 지운다. 지금까지 이 체인과 hangul 체인이 믿어 온
+# 커서는 반전 셀 하나였다(검사 3). `cursor>`의 row · col이 그 셀의 좌표와 같아야
+# 뒤의 bar · underline 검사가 보는 자리를 믿을 수 있다. 그리고 이 검사가
+# "셸은 DECSCUSR을 안 보낸다"(CU design 위험 1)의 판정이다 — 셸이 언젠가
+# 모양을 바꾸기 시작하면 여기가 먼저 빨개진다.
+echo "=== typing printf '\\033[H\\033[2J' ==="
+type_text "printf '\\033[H\\033[2J'"
+type_keys ret
+if ! settle; then
+  report_failure "the log never went quiet after clearing the screen"
+fi
+CU_SCREEN="$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)"
+case "$CU_SCREEN" in
+  *printf*) report_failure "the screen was not cleared before the cursor checks: ${CU_SCREEN}" ;;
+esac
+if [ "$(truncated_now)" -ne 0 ]; then
+  report_failure "the style dump of the cleared screen was truncated, so inverted cells cannot be counted"
+fi
+CU_INV="$(last_frame | grep -aE 'terminal: style> [0-9]+,[0-9]+ fg=102030 ' || true)"
+if [ "$(inverted_now)" -ne 1 ]; then
+  echo "$CU_INV"
+  report_failure "the cleared screen has $(inverted_now) inverted cell(s), 1 expected (the block cursor)"
+fi
+CU_RC="$(sed -E 's/.*style> ([0-9]+),([0-9]+) .*/\1 \2/' <<<"$CU_INV")"
+CU_ROW="${CU_RC% *}"
+CU_COL="${CU_RC#* }"
+CU_WANT="vt=block drawn=block row=${CU_ROW} col=${CU_COL} cols=1 ink=0 box=0x0"
+case "$(last_cursor)" in
+  *"cursor> ${CU_WANT}"*) ;;
+  *) report_failure "the inverted cell is at ${CU_ROW},${CU_COL} but the cursor line says: $(last_cursor) (want ${CU_WANT})" ;;
+esac
+echo "control: the shell starts with a block cursor and cursor> points at the inverted cell (${CU_ROW},${CU_COL})"
+
+# 모양 하나를 보내고 세 층과 반전 셀 수를 본다. 검사 21~24가 같은 모양이다.
+#
+#   $1 DECSCUSR 번호   $2 기대 모양   $3 기대 "ink=N box=WxH"   $4 기대 반전 셀 수
+#
+# 기다림의 패턴에 검사 20의 row · col을 넣는다. fish가 지운 화면에 프롬프트를
+# 다 그린 뒤의 프레임을 기다리는 것이고(그 전 프레임의 커서는 0,0이다), 띠가
+# 지금까지 반전 셀이 있던 바로 그 자리에 칠해졌다는 것도 함께 본다.
+cursor_shape_check() {
+  local n="$1" shape="$2" want_ink="$3" want_inv="$4" line got_ink
+  echo "=== typing printf '\\033[H\\033[2J\\033[${n} q' ==="
+  type_text "printf '\\033[H\\033[2J\\033[${n} q'"
+  type_keys ret
+  if ! wait_for_cursor "vt=${shape} drawn=${shape} row=${CU_ROW} col=${CU_COL} "; then
+    report_failure "after CSI ${n} SP q the cursor line never said vt=${shape} drawn=${shape} at ${CU_ROW},${CU_COL}: $(last_cursor)"
+  fi
+  # 같은 모양으로 그린 프레임이 더 오면 그것까지 본다.
+  settle || true
+  line="$(last_cursor)"
+  if [ "$(truncated_now)" -ne 0 ]; then
+    report_failure "after CSI ${n} SP q the style dump was truncated, so inverted cells cannot be counted"
+  fi
+  got_ink="$(grep -oE 'ink=[0-9]+ box=[0-9]+x[0-9]+' <<<"$line" || true)"
+  if [ "$got_ink" != "$want_ink" ]; then
+    report_failure "after CSI ${n} SP q the renderer painted ${got_ink:-nothing} (want ${want_ink}): ${line}"
+  fi
+  if [ "$(inverted_now)" -ne "$want_inv" ]; then
+    report_failure "after CSI ${n} SP q the last frame has $(inverted_now) inverted cell(s), ${want_inv} expected: ${line}"
+  fi
+  echo "CSI ${n} SP q: ${line#*cursor> }, $(inverted_now) inverted cell(s)"
+}
+
+# ── 검사 21: bar — 왼쪽 2×16을 커서 색으로 칠하고 반전은 없다 ─────────────
+cursor_shape_check 6 bar "ink=32 box=2x16" 0
+
+# ── 검사 22: underline — 아래 8×2 ─────────────────────────────────────────
+cursor_shape_check 4 underline "ink=16 box=8x2" 0
+
+# ── 검사 23: 깜빡임 번호는 같은 띠를 가만히 그린다(design 결정 2) ──────────
+cursor_shape_check 5 bar "ink=32 box=2x16" 0
+
+# ── 검사 24: 0은 기본값 block — 반전이 돌아오고 띠는 없다 ─────────────────
+#
+# 모양을 기본값으로 되돌려 두는 검사이기도 하다. 이 뒤에 검사를 더하는
+# 사람이 bar를 물려받지 않게 한다.
+cursor_shape_check 0 block "ink=0 box=0x0" 1
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로
@@ -577,4 +721,4 @@ echo "--- ink lines ---"
 grep -a 'terminal: ink>' "$LOG" | tail -n 10
 echo "--- scroll lines ---"
 grep -a 'terminal: scroll>' "$LOG" | tail -n 10
-echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer"
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for"

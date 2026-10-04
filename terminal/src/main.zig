@@ -89,6 +89,22 @@ fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
     }
 }
 
+/// 사각형 하나를 한 색으로 칠한다. bar · underline 커서의 띠가 이것이다
+/// (CU design 결정 3).
+///
+/// `setPixel`에 범위 검사가 없다. 여기서도 안 본다 — 부르는 자리가 넘기는
+/// 사각형은 `vt.Screen.cursorMark()`의 것이고, 그쪽이 칸 수(`cols`)를 격자
+/// 안으로 자르므로 패널 밖으로 안 나간다.
+fn fillRect(fb: drm.Framebuffer, x: u32, y: u32, w: u32, h: u32, color: u32) void {
+    var row: u32 = 0;
+    while (row < h) : (row += 1) {
+        var col: u32 = 0;
+        while (col < w) : (col += 1) {
+            fb.setPixel(x + col, y + row, color);
+        }
+    }
+}
+
 /// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4).
 ///
 /// TR-M1에서 이 선택의 근거가 짐작에서 실측으로 바뀌었다. 이 폰트의
@@ -392,6 +408,11 @@ fn renderPane(
     // `clip`을 따로 받지 않고 여기서 계산한다. 패널 하나면 격자 전체라
     // 산수 결과가 WP 전과 같다.
     rect: layout.Rect,
+    // 이 패널의 셸 커서(CU design 결정 3). 그 화면의 `cells()` 뒤에
+    // `cursorMark()`로 얻은 값이다. null이면 띠를 안 칠한다 — copy mode ·
+    // 포커스 없음 · 뷰포트 밖이고, block도 `px`가 null이라 여기서는 아무
+    // 일도 안 한다(반전은 `cells()`가 이미 했다).
+    cursor: ?vt.CursorMark,
 ) !void {
     const o = paneOrigin(rect);
     const clip = paneClip(rect);
@@ -427,6 +448,12 @@ fn renderPane(
     }
 
     drawImages(fb, imgs, .above_text, o, clip);
+
+    // 커서는 무엇에도 안 가려진다(CU design 결정 3). 그래서 글자 위 이미지
+    // 뒤, 이 함수의 맨 끝이다. 띠는 그 칸의 글리프 위에 그려져 글자의
+    // 왼쪽(bar) 또는 아래(underline) 2픽셀을 덮는다 — ghostty 앱 렌더러도
+    // 같다. block은 `cells()`가 이미 반전으로 그렸고 `px`가 null이다.
+    if (cursor) |cm| if (cm.px) |cr| fillRect(fb, o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
 /// 프레임을 끝낸다 — 포커스 패널의 프롬프트와 상태 줄을 얹고 내보낸다.
@@ -748,6 +775,72 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph,
             cell.row, cell.col, cell.codepoint, left, right,
         });
     }
+}
+
+/// 셸 커서를 세 겹으로 찍는다(CU design 결정 6).
+///
+///   terminal: cursor> vt=bar drawn=bar row=46 col=14 cols=1 ink=32 box=2x16
+///   terminal: cursor> vt=bar drawn=none
+///
+/// | 칸 | 어디서 오는가 | 무엇을 증명하나 |
+/// |---|---|---|
+/// | `vt=` | `cursorAsked()` — 라이브러리의 모양 | DECSCUSR이 해석됐다 |
+/// | `drawn=` | `cursorMark().shape`, 없으면 `none` | 우리 우선순위(결정 4)가 그렇게 정했다 |
+/// | `row=` `col=` `cols=` | `cursorMark()` | 띠가 칠해질 자리 |
+/// | `ink=` `box=` | 프레임버퍼를 되읽은 값 | 렌더러가 그 모양을 실제로 칠했다 |
+///
+/// `ink`는 커서 칸들 안에서 `CURSOR_COLOR`인 픽셀의 수이고 `box`는 그
+/// 픽셀들의 경계 사각형이다(없으면 `0x0`). 사각형을 `cursorMark()`의 `px`에서
+/// 그대로 찍지 않고 픽셀을 되읽는 이유가 이 줄의 값이다 — `px`는 "칠하려던
+/// 것"이지 "칠한 것"이 아니다. `style>`만 보면 렌더러가 틀려도 통과하는
+/// 것과 같은 구멍이다(TR design 결정 7).
+///
+/// 매 프레임 찍는다. `find> hl`과 같은 이유다(CS-M0) — "바뀔 때만"이면 상태가
+/// 하나 늘고, 그 판정이 틀렸을 때 증상이 "로그가 안 나온다"라 조사하기
+/// 나쁘다. 되읽는 것은 커서 칸(최대 2 × 128픽셀)뿐이다.
+///
+/// 반드시 render() 뒤에 부른다. 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
+/// `screen`의 `cells()` 뒤이기도 해야 한다 — 두 접근자가 그 결과를 읽는다.
+fn dumpCursor(fb: drm.Framebuffer, screen: *vt.Screen, rect: layout.Rect) void {
+    const asked = @tagName(screen.cursorAsked());
+    const cm = screen.cursorMark() orelse {
+        std.debug.print("terminal: cursor> vt={s} drawn=none\n", .{asked});
+        return;
+    };
+    const o = paneOrigin(rect);
+    const x0 = o.x + @as(u32, cm.col) * CELL_W;
+    const y0 = o.y + @as(u32, cm.row) * ROW_HEIGHT;
+    const span_w = @as(u32, cm.cols) * CELL_W;
+
+    var ink: u32 = 0;
+    // 경계 사각형. 픽셀이 하나도 없으면 `ink`가 0이고 `0x0`을 찍는다.
+    var min_x: u32 = std.math.maxInt(u32);
+    var min_y: u32 = std.math.maxInt(u32);
+    var max_x: u32 = 0;
+    var max_y: u32 = 0;
+    // `getPixel`도 범위 검사를 안 한다. `dumpInk`처럼 여기서 막는다. 그런
+    // 배치는 `cursorMark()`가 안 만들지만, 조용히 건너뛰지 않고 줄에 적는다.
+    const outside = x0 + span_w > fb.width or y0 + ROW_HEIGHT > fb.height;
+    if (!outside) {
+        var row: u32 = 0;
+        while (row < ROW_HEIGHT) : (row += 1) {
+            var col: u32 = 0;
+            while (col < span_w) : (col += 1) {
+                if (fb.getPixel(x0 + col, y0 + row) & 0x00FFFFFF != vt.CURSOR_COLOR) continue;
+                ink += 1;
+                min_x = @min(min_x, col);
+                min_y = @min(min_y, row);
+                max_x = @max(max_x, col);
+                max_y = @max(max_y, row);
+            }
+        }
+    }
+    const box_w: u32 = if (ink == 0) 0 else max_x - min_x + 1;
+    const box_h: u32 = if (ink == 0) 0 else max_y - min_y + 1;
+    std.debug.print("terminal: cursor> vt={s} drawn={s} row={d} col={d} cols={d} ink={d} box={d}x{d}{s}\n", .{
+        asked, @tagName(cm.shape), cm.row, cm.col, cm.cols, ink, box_w, box_h,
+        if (outside) " (outside the framebuffer)" else "",
+    });
 }
 
 /// 그린 kitty 이미지를 두 겹으로 찍는다(TG-M2 plan 정한 것 6).
@@ -1966,7 +2059,9 @@ pub fn main(init: std.process.Init) !void {
             p.screen.focused = false;
             const p_cells = try p.screen.cells(cell_buf);
             const p_bg = p.screen.defaultBg();
-            try renderPane(fb, &cache, p_cells, p.screen.images(&img_buf), p_bg, p.rect);
+            // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
+            // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
+            try renderPane(fb, &cache, p_cells, p.screen.images(&img_buf), p_bg, p.rect, p.screen.cursorMark());
         }
         focus.screen.focused = true;
 
@@ -2023,7 +2118,7 @@ pub fn main(init: std.process.Init) !void {
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
         const imgs = focus.screen.images(&img_buf);
-        try renderPane(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect);
+        try renderPane(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
         const prompt_ink = try renderFinish(fb, &cache, prompt, status_line);
         const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
@@ -2050,6 +2145,10 @@ pub fn main(init: std.process.Init) !void {
             focus.rect,
         );
         dumpInk(fb, &cache, cells, focus.rect);
+        // `dumpInk` 뒤 · `dumpScroll` 앞이다(CU-M0 plan 확정 7). 마지막
+        // `screen>`부터 파일 끝까지를 한 프레임으로 자르는 게이트의
+        // `last_frame`이 이 줄을 담으려면 `screen>` 뒤여야 한다.
+        dumpCursor(fb, focus.screen, focus.rect);
         dumpScroll(focus.screen);
         if (cache.count() != last_glyph_count) {
             last_glyph_count = cache.count();

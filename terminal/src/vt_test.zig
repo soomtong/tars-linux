@@ -34,6 +34,42 @@ fn rowText(cells: []const vt.CellGlyph, row: u16, buf: []u8) []const u8 {
     return buf[0..n];
 }
 
+/// 셀 목록에서 (row, col) 칸을 찾는다. 없으면 null — 글자도 색도 없는 칸은
+/// `cells()`가 안 내보낸다(CU 검사들).
+fn cuCellAt(cells: []const vt.CellGlyph, row: u16, col: u16) ?vt.CellGlyph {
+    for (cells) |cell| if (cell.row == row and cell.col == col) return cell;
+    return null;
+}
+
+/// 반전된 셀의 수. 표식은 `fg`가 기본 배경색(102030)이라는 것이다 — 게이트의
+/// `inverted_cells`와 같은 표식을 쓴다(CU-M0 plan Task 2).
+fn cuInverted(cells: []const vt.CellGlyph) usize {
+    var n: usize = 0;
+    for (cells) |cell| {
+        if (cell.fg == 0x102030) n += 1;
+    }
+    return n;
+}
+
+/// `CursorMark` 둘이 같은가. 필드를 하나씩 본다 — `px`가 optional struct라
+/// 어느 칸이 틀렸는지를 실패 메시지가 바로 말하게 하려는 것이다.
+fn cuMarkEql(got: ?vt.CursorMark, want: ?vt.CursorMark) bool {
+    const g = got orelse return want == null;
+    const w = want orelse return false;
+    if (g.row != w.row or g.col != w.col or g.asked != w.asked or
+        g.shape != w.shape or g.cols != w.cols) return false;
+    const gp = g.px orelse return w.px == null;
+    const wp = w.px orelse return false;
+    return gp.x == wp.x and gp.y == wp.y and gp.w == wp.w and gp.h == wp.h;
+}
+
+/// `cuMarkEql`이 거짓이면 둘을 찍고 error를 돌려준다.
+fn cuExpectMark(label: []const u8, got: ?vt.CursorMark, want: ?vt.CursorMark) !void {
+    if (cuMarkEql(got, want)) return;
+    std.debug.print("FAIL: {s}\n  got  {any}\n  want {any}\n", .{ label, got, want });
+    return error.CursorMarkMismatch;
+}
+
 pub fn main(init: std.process.Init) !void {
     const screen = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer screen.deinit();
@@ -2246,6 +2282,265 @@ pub fn main(init: std.process.Init) !void {
         return error.UnfocusedCursorInverted;
     }
     std.debug.print("vt_test: 포커스 없는 화면은 셸 커서를 반전하지 않는다 OK\n", .{});
+
+    // ── CU-M0: 커서 모양 ───────────────────────────────────────────────
+    //
+    // 검사 82. 대조군 — 아무 DECSCUSR도 없으면 커서는 block이고 지금처럼
+    // 반전이다(CU design 결정 1). 이것이 먼저 초록이어야 뒤의 bar · underline
+    // 검사가 보는 "반전이 사라졌다"가 뜻을 갖는다. 커서를 글자 위에 세우는
+    // 이유는 검사 81과 같다 — 빈 칸이면 반전이 없을 때 셀이 아예 안 나와서
+    // "반전 안 함"과 "셀 없음"이 안 갈린다.
+    const cu_bk = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_bk.deinit();
+    cu_bk.feed("XY\x1b[1;2H");
+    const cu_bk0 = try cu_bk.cells(&buf);
+    try cuExpectMark("검사 82 기본 커서", cu_bk.cursorMark(), .{
+        .row = 0,
+        .col = 1,
+        .asked = .block,
+        .shape = .block,
+        .cols = 1,
+        .px = null,
+    });
+    const cu_bk0_c = cuCellAt(cu_bk0, 0, 1) orelse return error.CursorCellMissing;
+    if (cu_bk0_c.fg != 0x102030 or cu_bk0_c.bg != 0xFFFFFF) {
+        std.debug.print("FAIL: 기본 커서 셀이 fg=#{X:0>6} bg=#{X:0>6}\n", .{ cu_bk0_c.fg, cu_bk0_c.bg });
+        return error.BlockCursorNotInverted;
+    }
+    std.debug.print("vt_test: DECSCUSR 없는 커서는 block 반전이다 OK\n", .{});
+
+    // 검사 83. `CSI 6 SP q`가 bar를 만들고 반전이 사라진다(결정 1 · 3).
+    //
+    // bar는 셀 왼쪽 2×16이고 사각형은 패널 원점 기준 픽셀이다 — (0,1)이면
+    // x = 1 × 8. 셀은 글자 'Y'를 기본 색으로 그대로 담는다. 띠는 `main.zig`가
+    // 그 위에 칠한다.
+    cu_bk.feed("\x1b[6 q");
+    const cu_bk1 = try cu_bk.cells(&buf);
+    try cuExpectMark("검사 83 bar", cu_bk.cursorMark(), .{
+        .row = 0,
+        .col = 1,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 1,
+        .px = .{ .x = 8, .y = 0, .w = 2, .h = 16 },
+    });
+    const cu_bk1_c = cuCellAt(cu_bk1, 0, 1) orelse return error.CursorCellMissing;
+    if (cu_bk1_c.codepoint != 'Y' or cu_bk1_c.fg != 0xFFFFFF or cu_bk1_c.bg != 0x102030) {
+        std.debug.print("FAIL: bar 커서 칸이 U+{X} fg=#{X:0>6} bg=#{X:0>6}\n", .{ cu_bk1_c.codepoint, cu_bk1_c.fg, cu_bk1_c.bg });
+        return error.BarCursorInverted;
+    }
+    std.debug.print("vt_test: CSI 6 SP q가 bar를 만들고 반전을 지운다 OK\n", .{});
+
+    // 검사 84. `CSI 4 SP q`가 underline을 만든다. 셀 아래 2픽셀이라 y가
+    // 16 - 2 = 14이고 폭은 한 칸(8)이다.
+    cu_bk.feed("\x1b[4 q");
+    const cu_bk2 = try cu_bk.cells(&buf);
+    try cuExpectMark("검사 84 underline", cu_bk.cursorMark(), .{
+        .row = 0,
+        .col = 1,
+        .asked = .underline,
+        .shape = .underline,
+        .cols = 1,
+        .px = .{ .x = 8, .y = 14, .w = 8, .h = 2 },
+    });
+    if (cuInverted(cu_bk2) != 0) {
+        std.debug.print("FAIL: underline인데 반전 셀이 {d}개\n", .{cuInverted(cu_bk2)});
+        return error.UnderlineCursorInverted;
+    }
+    std.debug.print("vt_test: CSI 4 SP q가 underline을 만들고 반전을 지운다 OK\n", .{});
+
+    // 검사 85. 깜빡임 번호(5 · 3 · 1)는 깜빡이지 않는 짝(6 · 4 · 2)과 같은
+    // 모양이다(결정 2). 마지막의 1에서 반전이 돌아와야 한다 — bar ·
+    // underline에서 꺼진 반전이 block으로 오면 다시 켜지는 것까지 본다.
+    const cu_blink = [_]struct { seq: []const u8, shape: vt.CursorShape }{
+        .{ .seq = "\x1b[5 q", .shape = .bar },
+        .{ .seq = "\x1b[3 q", .shape = .underline },
+        .{ .seq = "\x1b[1 q", .shape = .block },
+    };
+    for (cu_blink) |cb| {
+        cu_bk.feed(cb.seq);
+        const cu_bl_cells = try cu_bk.cells(&buf);
+        const cu_bl_mark = cu_bk.cursorMark() orelse return error.CursorMarkMissing;
+        const cu_bl_inv = cuInverted(cu_bl_cells);
+        const cu_bl_want_inv: usize = if (cb.shape == .block) 1 else 0;
+        if (cu_bl_mark.asked != cb.shape or cu_bl_mark.shape != cb.shape or cu_bl_inv != cu_bl_want_inv) {
+            std.debug.print("FAIL: {any} 뒤 asked={s} shape={s} 반전 {d}개 (want {s}, {d})\n", .{
+                cb.seq,             @tagName(cu_bl_mark.asked), @tagName(cu_bl_mark.shape), cu_bl_inv,
+                @tagName(cb.shape), cu_bl_want_inv,
+            });
+            return error.BlinkingShapeWrong;
+        }
+    }
+    std.debug.print("vt_test: 깜빡임 번호는 같은 모양을 가만히 그린다 OK\n", .{});
+
+    // 검사 86. `0`과 빈 인자는 기본값 block이다. 각각 bar에서 출발한다 —
+    // 이미 block인 화면에 먹이면 "아무 일도 안 했다"와 안 갈린다.
+    for ([_][]const u8{ "\x1b[6 q\x1b[0 q", "\x1b[6 q\x1b[ q" }) |cu_def_seq| {
+        cu_bk.feed(cu_def_seq);
+        const cu_def_cells = try cu_bk.cells(&buf);
+        try cuExpectMark("검사 86 기본값", cu_bk.cursorMark(), .{
+            .row = 0,
+            .col = 1,
+            .asked = .block,
+            .shape = .block,
+            .cols = 1,
+            .px = null,
+        });
+        if (cuInverted(cu_def_cells) != 1) {
+            std.debug.print("FAIL: {any} 뒤 반전 셀이 {d}개\n", .{ cu_def_seq, cuInverted(cu_def_cells) });
+            return error.DefaultCursorNotInverted;
+        }
+    }
+    std.debug.print("vt_test: 0과 빈 인자는 block으로 돌아온다 OK\n", .{});
+
+    // 검사 87. preedit은 모양을 덮어 두 칸 block이다(결정 4). `asked`는 여전히
+    // bar다 — 라이브러리는 그대로이고 우리가 덮었다는 것이 두 칸으로 갈린다.
+    // 조합을 끝내면 bar로 돌아온다.
+    const cu_pe = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_pe.deinit();
+    cu_pe.feed("\x1b[6 q");
+    cu_pe.setPreedit(0xAC00);
+    const cu_pe0 = try cu_pe.cells(&buf);
+    try cuExpectMark("검사 87 preedit", cu_pe.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .bar,
+        .shape = .block,
+        .cols = 2,
+        .px = null,
+    });
+    const cu_pe_a = cuCellAt(cu_pe0, 0, 0) orelse return error.PreeditCellMissing;
+    const cu_pe_b = cuCellAt(cu_pe0, 0, 1) orelse return error.PreeditCellMissing;
+    if (cu_pe_a.fg != 0x102030 or cu_pe_b.fg != 0x102030) {
+        std.debug.print("FAIL: preedit 두 칸이 fg=#{X:0>6} · #{X:0>6}\n", .{ cu_pe_a.fg, cu_pe_b.fg });
+        return error.PreeditNotInverted;
+    }
+    cu_pe.setPreedit(null);
+    _ = try cu_pe.cells(&buf);
+    try cuExpectMark("검사 87 조합 끝", cu_pe.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 1,
+        .px = .{ .x = 0, .y = 0, .w = 2, .h = 16 },
+    });
+    std.debug.print("vt_test: preedit은 bar를 덮어 두 칸 block이다 OK\n", .{});
+
+    // 검사 88. copy mode에서는 셸 커서가 없고 copy 커서 하나만 반전된다
+    // (결정 4). `copyEnter`는 `state.cursor.viewport`를 읽으므로 `cells()`를
+    // 먼저 한 번 부른다(lessons "`vt.Screen`을 새로 만들고 곧바로 `copyMove`").
+    const cu_cp = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_cp.deinit();
+    cu_cp.feed("XY\x1b[1;2H\x1b[6 q");
+    _ = try cu_cp.cells(&buf);
+    cu_cp.copyEnter();
+    const cu_cp0 = try cu_cp.cells(&buf);
+    try cuExpectMark("검사 88 copy mode", cu_cp.cursorMark(), null);
+    const cu_cp_c = cuCellAt(cu_cp0, 0, 1) orelse return error.CopyCursorCellMissing;
+    if (cuInverted(cu_cp0) != 1 or cu_cp_c.fg != 0x102030) {
+        std.debug.print("FAIL: copy mode에서 반전 셀 {d}개, (0,1) fg=#{X:0>6}\n", .{ cuInverted(cu_cp0), cu_cp_c.fg });
+        return error.CopyCursorWrong;
+    }
+    cu_cp.copyExit();
+    _ = try cu_cp.cells(&buf);
+    try cuExpectMark("검사 88 copy mode 뒤", cu_cp.cursorMark(), .{
+        .row = 0,
+        .col = 1,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 1,
+        .px = .{ .x = 8, .y = 0, .w = 2, .h = 16 },
+    });
+    std.debug.print("vt_test: copy mode는 셸 커서를 지우고 copy 커서만 반전한다 OK\n", .{});
+
+    // 검사 89. 포커스 없는 패널은 반전도 띠도 없다(결정 5). 끝에서 되돌린다 —
+    // 같은 화면을 뒤에서 쓰는 사람이 포커스 없는 화면을 물려받지 않게.
+    cu_bk.feed("\x1b[6 q");
+    cu_bk.focused = false;
+    const cu_nf = try cu_bk.cells(&buf);
+    try cuExpectMark("검사 89 포커스 없음", cu_bk.cursorMark(), null);
+    const cu_nf_c = cuCellAt(cu_nf, 0, 1) orelse return error.CursorCellMissing;
+    if (cu_nf_c.fg != 0xFFFFFF or cu_nf_c.bg != 0x102030) {
+        std.debug.print("FAIL: 포커스 없는 화면의 커서 칸이 fg=#{X:0>6} bg=#{X:0>6}\n", .{ cu_nf_c.fg, cu_nf_c.bg });
+        return error.UnfocusedCursorDrawn;
+    }
+    cu_bk.focused = true;
+    std.debug.print("vt_test: 포커스 없는 화면은 bar도 안 그린다 OK\n", .{});
+
+    // 검사 90. 폭 2 글자 위의 커서는 두 칸이다. underline은 16픽셀로 글자
+    // 전체 아래에 그어지고, bar는 칸 수와 무관하게 왼쪽 2픽셀이다.
+    const cu_wd = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_wd.deinit();
+    cu_wd.feed("\xea\xb0\x80\x1b[1;1H\x1b[4 q");
+    _ = try cu_wd.cells(&buf);
+    try cuExpectMark("검사 90 폭 2 underline", cu_wd.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .underline,
+        .shape = .underline,
+        .cols = 2,
+        .px = .{ .x = 0, .y = 14, .w = 16, .h = 2 },
+    });
+    cu_wd.feed("\x1b[6 q");
+    _ = try cu_wd.cells(&buf);
+    try cuExpectMark("검사 90 폭 2 bar", cu_wd.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 2,
+        .px = .{ .x = 0, .y = 0, .w = 2, .h = 16 },
+    });
+    std.debug.print("vt_test: 폭 2 글자 위의 커서는 두 칸이다 OK\n", .{});
+
+    // 검사 91. 모양은 화면마다 따로다(design 실측 10). 대체 화면에서 정한
+    // bar가 기본 화면으로 안 샌다 — vim이 bar를 남기고 끝나도 셸 프롬프트는
+    // block이다. 소스로 읽은 사실을 실행으로 다시 본다.
+    const cu_alt = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_alt.deinit();
+    cu_alt.feed("\x1b[?1049h\x1b[6 q");
+    _ = try cu_alt.cells(&buf);
+    const cu_alt_in = cu_alt.cursorMark() orelse return error.CursorMarkMissing;
+    if (cu_alt_in.asked != .bar) {
+        std.debug.print("FAIL: 대체 화면에서 asked={s}\n", .{@tagName(cu_alt_in.asked)});
+        return error.AltScreenShapeWrong;
+    }
+    cu_alt.feed("\x1b[?1049l");
+    const cu_alt_out = try cu_alt.cells(&buf);
+    try cuExpectMark("검사 91 기본 화면으로 돌아온 뒤", cu_alt.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .block,
+        .shape = .block,
+        .cols = 1,
+        .px = null,
+    });
+    if (cuInverted(cu_alt_out) != 1) {
+        std.debug.print("FAIL: 기본 화면으로 돌아온 뒤 반전 셀이 {d}개\n", .{cuInverted(cu_alt_out)});
+        return error.AltScreenLeakedShape;
+    }
+    std.debug.print("vt_test: 대체 화면의 모양이 기본 화면으로 안 샌다 OK\n", .{});
+
+    // 검사 92. 뷰포트를 올려 셸 커서가 화면 밖이면 셸 커서가 없다. 바닥으로
+    // 돌아오면 bar가 다시 나온다 — 모양은 라이브러리가 들고 있고 우리는
+    // 매 프레임 다시 읽기만 한다.
+    const cu_sc = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer cu_sc.deinit();
+    for (0..30) |_| cu_sc.feed("line\r\n");
+    cu_sc.feed("\x1b[6 q");
+    _ = try cu_sc.cells(&buf);
+    cu_sc.scrollByRows(-3);
+    _ = try cu_sc.cells(&buf);
+    try cuExpectMark("검사 92 뷰포트 위", cu_sc.cursorMark(), null);
+    cu_sc.scrollToBottom();
+    _ = try cu_sc.cells(&buf);
+    const cu_sc_back = cu_sc.cursorMark() orelse return error.CursorMarkMissing;
+    if (cu_sc_back.shape != .bar) {
+        std.debug.print("FAIL: 바닥으로 돌아온 뒤 shape={s}\n", .{@tagName(cu_sc_back.shape)});
+        return error.ScrolledShapeWrong;
+    }
+    std.debug.print("vt_test: 뷰포트 밖의 셸 커서는 안 그린다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

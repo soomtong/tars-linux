@@ -217,7 +217,10 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 `terminal: style> N cell(s) hidden by the find prompt`(CN-M1) ·
 `terminal: find> hl spans=… cells=… **cur=…** us=…`(CS-M0, `cur=`은 SP-M0) ·
 `terminal: find> overlay text=…`(CS-M1. SP-M1 뒤로 `/needle [3/12]`도
-이 줄로 나온다 — 새 로그를 하나도 안 만들었다)
+이 줄로 나온다 — 새 로그를 하나도 안 만들었다) ·
+`terminal: cursor> vt=… drawn=… row=… col=… cols=… ink=… box=…`(CU-M0. 매
+프레임 `dumpInk` 뒤에 찍힌다. 셸 커서가 없으면 `vt=… drawn=none`으로 끝난다.
+`render` 검사 20~24가 본다)
 
 새 copy 명령의 로그는 공짜다 — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. `find>`는 그와
@@ -998,7 +1001,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `findCurrentIndex`가 라이브러리 내부 필드 `selected.idx`를 읽는 유일한
   자리다. `copyExit`은 뷰포트도 preedit도 안 되돌린다. `init`이 셀 픽셀 크기를
   라이브러리에 알리고(0이면 kitty 이미지가 안 놓인다), `images()`가 저장소를 직접 읽어
-  placement를 z 순 픽셀 사각형으로 낸다(TG-M1).
+  placement를 z 순 픽셀 사각형으로 낸다(TG-M1). 셸 커서는 `cells()`가 첫머리에서 한 번
+  정해 `shell_cursor`에 둔다(CU-M0). 반전할지(block)와 `main.zig`가 띠를 칠할지(bar ·
+  underline)를 그 값 하나가 정하고, `main.zig`는 `cursorMark()`로 받기만 한다 — 같은
+  판단을 두 자리에서 하면 언젠가 갈려 반전과 띠가 함께 그려진다. 우선순위는 copy mode ·
+  포커스 없음 · 뷰포트 밖(셋 다 null) · preedit(두 칸 block) · DECSCUSR 모양 순이다.
 - `main.zig` — `drawGlyph`·`render`·`dump*`와 `poll` 루프. 렌더는 루프 끝에
   있고 `needs_redraw`가 문지기다. `promptText`의 갈래가 셋(프롬프트 ·
   `[3/12]` · "못 찾음")이고 두 갈래를 가르는 것은 `findMatchCount()`
@@ -1134,6 +1141,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은
   검사 19의 자리를 이어받는다 — 순서를 바꾸면 판정이 무너진다.
+- `render/check.sh` — 검사 스물넷. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
+  bar · underline · bar로 바꿨다가 마지막에 `\033[0 q`로 block을 되돌린다 — 이 뒤에 검사를
+  더하는 사람이 bar를 물려받지 않게 하려는 것이고, 그 순서를 바꾸면 뒤 검사가 반전 셀을
+  못 센다. 이 체인의 `last_frame`은 `copy/check.sh`의 것과 끝이 다르다 — 파일 끝이 아니라
+  마지막 `cursor>` 줄에서 자른다. 렌더 도중에 읽으면 `style>`가 덜 찍힌 프레임이 "반전
+  셀 0"으로 보이고, bar 검사가 0을 기대하므로 그때 조용히 초록이 되기 때문이다.
 - `tools/check.sh` — 검사 열여섯(UT·SM). 바이너리 목록은
   `kernel/guest_tools.sh` 한 파일에 있고 `make_initrd.sh`와 이 체인이 같은
   배열을 본다.

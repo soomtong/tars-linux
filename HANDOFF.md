@@ -1,6 +1,37 @@
-# HANDOFF: Workspace Panes(WP)가 M0~M2로 닫혔다 — 다음 서브프로젝트를 고른다
+# HANDOFF: Cursor Shape(CU)가 M0까지 왔다 — M1(게스트 vi 교체)이 다음이다
 
 ## 지금 어디인가
+
+2026-10-04 사용자의 요청 한 줄("vi에서 입력 모드에 따른 커서 모양이 항상 동일해서 불편함이
+있다")로 열었다. 원인이 둘이라 milestone도 둘이다. 우리 렌더러가 DECSCUSR(`CSI Ps SP q`)이
+정한 모양을 안 읽고 늘 한 칸 반전했고(M0), 게스트의 vi인 Debian `vim-tiny`가
+`-cursorshape` 빌드라 어떤 vimrc로도 그 시퀀스를 안 보낸다(M1). design은
+`docs/specs/2026-10-04-tars-cursor-shape-design.md`(결정 7 · 위험 5 · 실측 12, `Status: CU-M0
+끝, CU-M1 남음`), plan은 `-cu-m0.md`(끝났다)와 `-cu-m1.md`(구현 전)다.
+
+사용자의 지시로 설계와 plan은 Opus 서브에이전트가, 구현도 Opus 서브에이전트가 했고 Fable이
+대조 · 게이트 · commit을 맡았다(WP와 같은 방식). M0에서 lead가 고친 것은 둘 — `defaultFg`
+doc 주석 한가운데에 끼어든 새 함수 넷, `vt_test.zig`의 `zig fmt`.
+
+| 커밋 | 무엇 |
+|---|---|
+| (이 커밋) | M0 — `vt.zig`의 `shell_cursor` · `cursorMark()` · `cursorAsked()`(copy mode · 포커스 · 뷰포트 · preedit · DECSCUSR 순), `main.zig`의 `fillRect` · `dumpCursor`(`terminal: cursor>` 매 프레임), `vt_test` 82~92, `render/check.sh` 검사 20~24(`printf '\033[N q'`로 bar · underline · 깜빡임 · 되돌림). 루트 게이트 18체인 3/3(1시간 4분 5초) |
+
+M0이 끝난 지금 셸에서 `printf '\033[6 q'`를 치면 프롬프트 커서가 왼쪽 2픽셀 bar가 된다.
+vi는 아직 안 바뀐다.
+
+## 바로 다음에 할 것 — CU-M1
+
+plan `docs/plans/2026-10-04-tars-cursor-shape-cu-m1.md`가 Task 0~7로 서 있다. 요지: Dockerfile의
+sysroot에서 `vim-tiny` → `vim` + `libsodium23` + `libgpm2`(이미지 재빌드, 돌고 있는 게이트가
+없을 때만), `kernel/guest_tools.sh`가 `usr/bin/vim.basic:usr/bin/vim`, 새 `kernel/vim/vimrc`(세 줄
+`t_SI` · `t_SR` · `t_EI`)와 `kernel/vim/defaults.vim`(주석만 — 없으면 `E1187` · `Press ENTER`)을
+`make_initrd.sh`가 `/etc/vim/vimrc` · `/usr/share/vim/vim91/defaults.vim`으로, `tools` 검사 1에 그
+둘, `render` 검사 25~32(vim 기동 · i · Esc · R · Esc · `:q!` · `-u NONE` 대조군 · 1049 누수).
+무게는 바이너리 +2.16MB, gzip 약 +1.26MB. 탈출로는 `vim -u NONE`과 `/.vimrc`의
+`set t_SI= t_SR= t_EI=`.
+
+### 그 앞 — Workspace Panes(WP)가 M0~M2로 닫혔다
 
 2026-10-03 사용자의 요청으로 열어 2026-10-04에 닫았다 — "Cmd+1~9 workspace 전환, Cmd+D ·
 Cmd+Shift+D pane split", 이어서 "Cmd+W로 닫기", "포커스 이동", "Cmd+T 새 탭". 모델은 iTerm2
@@ -85,7 +116,7 @@ plan은 `docs/plans/2026-10-03-tars-terminal-graphics-tg-m0.md` ~ `-tg-m3.md`, �
 superpowers 없이 연 첫 서브프로젝트였다. 관찰은 `docs/decisions/feedback_superpowers_off.md`
 끝에 있다 — plugin이 막았을 누락은 못 봤다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다 (ZU-M2는 ghostty 대기)
+### 그 다음 후보 — 새 서브프로젝트를 고른다 (ZU-M2는 ghostty 대기)
 
 WP-M3(방향 포커스)은 맨 위 절에 있다. 아래는 ZU-M2와 그 밖의 후보에 대한 메모다.
 
