@@ -798,6 +798,10 @@ pub fn main(init: std.process.Init.Minimal) void {
         // 조건이 rc와 글자 그대로 같다. 디스크가 안 붙으면 `/config`는 tmpfs의
         // 빈 디렉터리이고, 거기 만든 파일은 재부팅마다 사라진다.
         config.seedGitconfig();
+        // PE-M2. `/.vimrc`가 가리키는 자리를 채운다 — 위 gitconfig와 같은 모양이고
+        // 조건도 같다. seed는 주석뿐이라 vim이 읽어도 아무것도 안 바뀐다(PE
+        // design 결정 7). 있으면 안 건드리므로 사람이 고친 vimrc가 재부팅을 넘는다.
+        config.seedVimrc();
         // SM-M2 결정 9. seed rc와 같은 조건이다 — 디스크가 붙은 기계에만
         // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
         // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그

@@ -1,7 +1,10 @@
 # TARS Paste Ergonomics — Design
 
 Date: 2026-10-04
-Status: 진행 중(2026-10-04 시작). plan은 milestone마다 그때 쓴다.
+Status: 끝났다(2026-10-04, PE-M0 · M1 · M2 — M2의 루트 게이트는 10-05 새벽에 끝났다). plan은
+`docs/plans/2026-10-04-tars-paste-ergonomics-pe-m0.md` · `-pe-m1.md` · `-pe-m2.md`이고 각 끝에 실측이 있다.
+착수 전에 잰 값은 아래 "착수 전에 실측한 것" 절에 있고, plan들이 바로잡은 전제는 결정 7 · 8 · 검증 ·
+위험 4 · 실측 6에 덧붙여 두었다.
 
 GE(Guest Ergonomics)가 남긴 것 둘과 루트 게이트를 흔든 체인 경합 하나에서 시작한다.
 
@@ -263,7 +266,9 @@ ST-M2가 gitconfig에 세운 모양을 그대로 따른다. 다섯 자리다.
 | `config/check.sh` | 1차 · 2차 부팅의 검사(결정 8) |
 
 그리고 `kernel/vim/vimrc` 머리 주석의 `/.vimrc` 세 자리와 `make_initrd.sh` 235줄의 같은 언급을
-"`/.vimrc`(설정 디스크의 `/config/vimrc`로 가는 링크)"로 맞춘다.
+"`/.vimrc`(설정 디스크의 `/config/vimrc`로 가는 링크)"로 맞춘다. (PE-M2 plan 확정 8 — 그 파일의
+`/.vimrc`는 세 자리가 아니라 두 자리였고, 사람이 칠 경로인 8줄은 그대로 두어 5줄 하나만 고쳤다.
+plan은 다섯 자리에 `tools/check.sh`의 `WANT`를 하나 더했다 — 손으로 거는 링크를 전부 거기 적는 관습이다.)
 
 GE 결정 4의 후보 표는 seed vimrc를 "사용자 vimrc는 사람의 것이다 — 우리가 거기 쓰기 시작하면 사람이
 고친 것과 우리가 고친 것이 섞인다"로 뺐다. 이 결정은 그 판단과 부딪치지 않는다. 그때 뺀 것은 모던
@@ -323,6 +328,14 @@ seed의 내용은 원칙 넷으로 정하고 전문은 M2 plan에 둔다.
 있으므로 stdin이 터미널이고, 그때는 vimrc를 읽은 뒤의 값을 Ex 모드의 출력으로 화면에 찍는다. 대체
 화면에 들어가지 않고 줄 단위로 찍으므로 `screen>`에 그대로 남는다.
 
+PE-M2 plan이 이 단락의 전제 둘을 바로잡았다(plan 확정 1 · 2). 첫째, `vim -e`는 `TERM=xterm-256color`에서
+Ex 모드여도 terminfo의 smcup(`ESC[?1049h`)을 보내 대체 화면에 들어가고 나가면서 출력이 사라진다 — 실측 6의
+pyte가 1049를 구현하지 않아 못 본 것이다. 그래서 두 vim 명령에 `-T dumb`을 붙인다(게스트에 `dumb`
+terminfo가 없어도 vim이 내장 항목으로 조용히 넘어간다). 둘째, 게스트의 `HOME`은 `/`라서 `scriptnames`가
+`~/.vimrc`가 아니라 `  2: /.vimrc`를 찍는다 — 위 표의 `~/\.vimrc`는 `HOME`을 빈 디렉터리로 두고 잰 값이다.
+그리고 vimrc에 틀린 줄이 있어도 `scriptnames`는 2 자리에 `/.vimrc`를 그대로 찍으므로(plan 확정 3), 1차에
+`Error detected while processing`이 화면에 없다는 음성 검사를 더했다.
+
 이미 있는 검사가 고치지 않아도 덮는 것이 둘이다. 2차 · 8차 · 9차의 `tars-init: seeded /config/` 음성
 검사(1485 · 1776 · 1853줄)는 접두로 보므로 vimrc를 다시 깔면 빨개진다. 7차의 검사는 이름을 하나씩
 보므로 영향이 없다. 다른 체인에 `seeded` 줄 수를 세는 검사는 없다(실측 9).
@@ -376,7 +389,10 @@ M1이 Opus인 이유는 그 milestone만 우리 코드의 판단(어느 갈래�
   3. seed에 `set tabstop=3` 한 줄을 넣는다 → `config_test`가 부팅 전에 빨개진다. 이 검사가 없으면 2차의
      `tabstop=3`이 사람의 줄이 아니라 seed에서 와도 초록이다 — 검사가 막는 것이 그 거짓 초록이다.
   4. `seedOneFile`의 `O_EXCL`을 지운다(매 부팅 덮어쓴다) → 2차의 `seeded /config/` 음성 검사와
-     `tabstop=3` 기다림이 함께 빨개진다.
+     `tabstop=3` 기다림이 함께 빨개진다. (PE-M2 plan 확정 6 — 절반만 맞다. `seedOneFile`에 `O_TRUNC`가
+     없어서 `.EXCL`만 지우면 seed가 파일 앞부분을 같은 글자로 덮을 뿐이고 사람의 줄이 남아 `tabstop=3`은
+     초록이다. plan의 mutation 4는 `.EXCL = true`를 `.TRUNC = true`로 바꾼다. plan은 mutation 5(seed에 vim이
+     거부하는 줄)도 더했다 — 1차의 음성 검사가 실제로 잡는지를 `config_test`를 끈 체인으로 본다.)
 
 ### 셋 다
 
@@ -515,6 +531,9 @@ vim `2:9.1.1230-2`, bash `5.2.37-2+b10`(arm64). pty는 python의 `pty.fork`에 4
    댕글링 링크는 "없음"과 같다. 링크로 쓴 `echo … >> ~/.vimrc`는 링크의 대상에 들어갔다. stdin이
    `/dev/null`이면 `vim -e` · `-E` · `-es`가 전부 vimrc를 건너뛰어 `tabstop=8`을 찍었다 — 게이트는 pty
    위의 셸에서 치므로 그 조건이 아니다.
+   (이 표의 `~/.vimrc`는 `HOME`을 빈 디렉터리로 둔 값이다. 게스트처럼 `HOME=/`이면 `/.vimrc`로 찍힌다 —
+   PE-M2 plan 확정 2. 그리고 이 측정의 pyte는 대체 화면을 구현하지 않아 `vim -e`가 `ESC[?1049h`를
+   보내는 것을 못 봤다 — plan 확정 1.)
 
 7. service 체인의 기다림. `wait_for_log "eth0: leased 10\.0\.2\.15 " 60`은 329줄의 `boot_ssh()` 함수
    (306~330줄) 안에 있고, 부팅 B · C · D가 343 · 374 · 437줄에서 그 함수를 부른다. `git log -S`로 그

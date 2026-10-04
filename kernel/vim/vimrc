@@ -2,8 +2,10 @@
 " edits made in the guest are lost on reboot. Why each line is here: CU design
 " decision 7 (cursor shape) and GE design decisions 5 and 6 (everything else).
 "
-" vim reads this file first and the user vimrc (/.vimrc) after it, so any line
-" here can be undone there. To start vim without this file:
+" vim reads this file first and the user vimrc after it, so any line here can
+" be undone there. The user vimrc is /.vimrc, a link to /config/vimrc on the
+" config disk; with a config disk attached, edits there survive a reboot. To
+" start vim without this file:
 "   vim -u NONE
 " To turn off only the cursor shapes, put this in /.vimrc:
 "   set t_SI= t_SR= t_EI=

@@ -232,9 +232,10 @@ ln -sf vim "$WORKDIR/usr/bin/editor"
 # 컴파일된 옵션과 :highlight만 쓴다(GE design 결정 5 · 6). /config가
 # 아니라 initrd에 두는 이유는 모든 부팅에서 되게 하려는 것이다 — ISO로 뜬
 # 세션에도, 설정 디스크 없이 뜨는 render 체인에도 /config가 없다. vim은
-# 사용자 vimrc(/.vimrc)를 이 파일 뒤에 읽으므로 사람이 `set t_SI= t_SR= t_EI=`로
-# 끌 수 있다. 다른 후보(seed vimrc · VIMINIT · EXINIT)가 왜 안 되는지는 CU
-# design 결정 7의 후보 표에 있다.
+# 사용자 vimrc(/.vimrc — 설정 디스크의 /config/vimrc로 가는 링크, 아래 PE-M2
+# 블록)를 이 파일 뒤에 읽으므로 사람이 `set t_SI= t_SR= t_EI=`로 끌 수 있다.
+# 다른 후보(seed vimrc · VIMINIT · EXINIT)가 왜 안 되는지는 CU design 결정 7의
+# 후보 표에 있다. PE-M2가 까는 seed vimrc는 주석뿐이라 그 판단과 안 부딪친다.
 #
 # /usr/share/vim/vim91/defaults.vim은 주석뿐인 stub이다. vim.basic은 사용자
 # vimrc가 없으면 $VIMRUNTIME/defaults.vim을 읽으려 하고, 게스트에는 런타임이
@@ -365,6 +366,19 @@ mkdir -p "$WORKDIR/.config/fish"
 ln -sf ../../config/fish.config "$WORKDIR/.config/fish/config.fish"
 ln -sf config/bashrc "$WORKDIR/.bashrc"
 ln -sf config/zshrc "$WORKDIR/.zshrc"
+
+# PE-M2. vim의 사용자 vimrc도 위 .gitconfig · rc 셋과 같은 문제에 같은 답이다 —
+# vim은 $HOME/.vimrc를 읽고(vim --version의 `user vimrc file`) 게스트의 HOME은
+# / 이며 /는 tmpfs다. 위 CU-M1 블록의 시스템 vimrc(/etc/vim/vimrc)는 initrd에서
+# 와서 부팅마다 같고, 사람이 고쳐서 재부팅 뒤에도 남기는 자리는 이 링크가
+# 가리키는 /config/vimrc다.
+#
+# 파일은 여기서 안 만든다. 주석뿐인 seed를 init이 /config를 마운트한 뒤에
+# 깐다(init/src/config.zig의 VIMRC_SEED). 설정 디스크를 못 찾으면 링크가
+# initrd 안의 빈 /config를 가리켜 댕글링이고, vim은 그것을 "사용자 vimrc
+# 없음"으로 보고 지금처럼 stub defaults.vim을 읽는다(PE design 실측 6) —
+# render 체인이 그 부팅이다. 부팅을 안 막는 것도 rc와 같다.
+ln -sf config/vimrc "$WORKDIR/.vimrc"
 
 # git init이 새 저장소에 복사하는 템플릿(hooks 샘플 13 · info/exclude ·
 # description). 26,140바이트이고, 없으면 git init이 매번 경고를 찍는다 —

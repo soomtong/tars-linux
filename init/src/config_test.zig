@@ -532,6 +532,64 @@ fn expectGitconfigSeed() !void {
     }
 }
 
+/// vimrc seed가 vim에게 아무것도 시키지 않는가(PE-M2 · design 결정 7).
+///
+/// gitconfig seed와 재는 것이 반대다. 저쪽은 git이 읽을 변수가 있어야 하고,
+/// 이쪽은 vim이 실행할 줄이 하나도 없어야 한다 — 설정은 시스템 vimrc의 몫이고
+/// 이 파일은 사람의 것이다(GE design 결정 4).
+///
+/// 검사가 다섯인 이유는 각각 다른 실수를 막기 때문이다.
+///
+///   개행     끝 줄에 개행이 없으면 사람이 `echo … >> /.vimrc`로 더한 줄이
+///            seed의 마지막 주석 줄에 붙어 주석이 된다
+///   ASCII    `kernel/vim/vimrc`와 같은 원칙(GE design 결정 6 원칙 5)
+///   주석     `"`로 시작하지 않는 줄은 vim이 실행한다. 그 줄이 설정이면
+///            config 체인 2차의 `tabstop=3`이 사람의 줄 없이도 초록이 될 수
+///            있고, 틀린 줄이면 vim이 뜰 때마다 에러를 찍는다
+///   볼 것    `/etc/vim/vimrc`가 없으면 줄이 하나도 없는 seed가 위 셋을
+///            아무것도 안 보고 지나간다 — gitconfig의 `defaultBranch` 자리다
+///   낱말     `tabstop` — config 체인 1차의 `grep tabstop` 되읽기가 한 줄이어야
+///            한다(design 결정 7 원칙 4)
+fn expectVimrcSeed() !void {
+    const text = config.VIMRC_SEED;
+    if (text.len == 0 or text[text.len - 1] != '\n') {
+        std.debug.print("FAIL: the vimrc seed does not end with a newline\n", .{});
+        return error.BadSeed;
+    }
+    for (text, 0..) |b, i| {
+        if (b >= 0x80) {
+            std.debug.print("FAIL: the vimrc seed has a non-ASCII byte {d} at offset {d}\n", .{ b, i });
+            return error.BadSeed;
+        }
+    }
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0) continue;
+        if (line[0] != '"') {
+            std.debug.print(
+                "FAIL: the vimrc seed has a line vim will run:\n  {s}\n" ++
+                    "      seed는 주석뿐이어야 한다(PE design 결정 7). 설정이면 config 체인\n" ++
+                    "      2차의 tabstop 검사가 사람의 줄 없이도 초록이 될 수 있다.\n",
+                .{line},
+            );
+            return error.BadSeed;
+        }
+    }
+    if (std.mem.indexOf(u8, text, "/etc/vim/vimrc") == null) {
+        std.debug.print("FAIL: the vimrc seed never names /etc/vim/vimrc\n", .{});
+        return error.BadSeed;
+    }
+    if (std.mem.indexOf(u8, text, "tabstop") != null) {
+        std.debug.print(
+            "FAIL: the vimrc seed mentions tabstop\n" ++
+                "      config 체인 1차가 사람이 더한 줄을 grep tabstop으로 되읽는다 — 출력이 한 줄이어야 한다.\n",
+            .{},
+        );
+        return error.BadSeed;
+    }
+}
+
 /// 히스토리 env가 셸의 성질과 맞는가(SM-M2 design 결정 3).
 ///
 /// 이 함수는 env만 본다. 히스토리를 rc가 아니라 env로 세운 것이 SM의
@@ -1082,6 +1140,12 @@ pub fn main() !void {
     // 이 seed는 셸이 안 읽는다 — git이 읽는다. 그래서 위의 조용함 검사가
     // 아니라 문법 검사를 받는다. 셸별 검사가 아니라 한 번이다.
     try expectGitconfigSeed();
+
+    // ── PE-M2: vimrc seed ───────────────────────────────────────────────
+    //
+    // gitconfig처럼 셸이 안 읽는 파일이다 — vim이 읽는다. 그래서 조용함 검사가
+    // 아니라 "vim에게 아무것도 안 시킨다"는 검사를 받는다. 한 번이다.
+    try expectVimrcSeed();
 
     // ── SD-M1: 히스토리 옵션 줄 ─────────────────────────────────────────
     //

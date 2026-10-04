@@ -1,41 +1,56 @@
-# HANDOFF: Guest Ergonomics(GE)가 M0 · M1로 닫혔다 — 다음 서브프로젝트를 고른다
+# HANDOFF: Paste Ergonomics(PE)가 M0~M2로 닫혔다 — 다음 서브프로젝트를 고른다
 
 ## 지금 어디인가
 
-2026-10-04 사용자의 요청 둘("기본 탑재되는 유틸리티에 which를 추가하자" · "vimrc 파일을 플러그인
-없이 모던한 config 설정을")로 열어 같은 날 닫았다. 서로 무관한 작은 둘이라 서브프로젝트 하나에
-milestone 둘로 묶었다(CC-M0이 숙제 셋을 묶은 것과 같은 모양). design은
-`docs/specs/2026-10-04-tars-guest-ergonomics-design.md`(결정 8 · 위험 7 · 실측 12, `Status: 끝났다`),
-plan은 `-ge-m0.md` · `-ge-m1.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은
-`docs/decisions/project_guest_ergonomics.md`.
+2026-10-04 GE를 닫은 직후 열어 같은 날 닫았다. GE가 남긴 둘(터미널의 bracketed paste · 사용자 vimrc
+영속)에 루트 게이트를 흔들던 `service` 체인 경합 하나를 M0으로 묶었다. design은
+`docs/specs/2026-10-04-tars-paste-ergonomics-design.md`(결정 9 · 위험 7 · 실측 10, `Status: 끝났다`),
+plan은 `-pe-m0.md` · `-pe-m1.md` · `-pe-m2.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은
+`docs/decisions/project_paste_ergonomics.md`.
 
-사용자의 지시("계획 수립과 구현 방법 그리고 구현 작업에 목적에 맞는 모델을 사용하는 서브
-에이전트를 할당")로 설계와 plan은 Opus 서브에이전트가, 구현은 M0(기계적)을 Sonnet · M1(판단이
-많다)을 Opus 서브에이전트가 했고 Fable이 사실 조사 · 대조 · mutation · 루트 게이트 · commit을
-맡았다. planner가 lead의 전제를 셋 바로잡았다 — `nocompatible`이면 `[New File]`이 `[New]`가 된다 ·
-vim이 터미널에 새 질의 다섯 종류를 보낸다 · `autoindent`가 `Cmd+V`(bracketed paste 아님)와 계단을
-만든다. lead가 바로잡은 것은 initrd 크기 하나(planner에게 준 "42MB"는 DI-M0 때 값, 지금 본체는
-약 130MB). M1 구현자는 M0의 루트 게이트가 도는 동안 별도 worktree에서 편집만 했고, 그 diff를
-lead가 `git apply -3`으로 main에 옮겼다 — 격리 훅이 main 편집을 막아 2단계 편집은 patch로 받았다.
-mutation은 M0 둘 · M1 셋이 전부 기대한 검사에서 기대한 문구로 빨개졌다.
+사용자의 지시("계획 수립과 구현을 목적에 맞는 model을 선택하고 sub agents를 사용하여")로 design과
+plan 셋은 Opus 서브에이전트가, 구현은 M0 · M2(이미 있는 모양을 옮긴다)를 Sonnet · M1(판단과 화면
+판정을 새로 만든다)을 Opus 서브에이전트가 했고 Fable이 사실 조사 · 대조 · 루트 게이트 · commit을
+맡았다. 이번에는 mutation도 구현자가 돌리고 Fable은 로그를 읽었다. 구현자는 전부 main 작업 트리에서
+편집했다(루트 게이트와 겹치지 않게 순서를 두었다 — M2 planner만 M1의 게이트가 도는 동안 썼고, 그때
+빌드 · QEMU · 저장소 편집을 금지했다).
+
+planner들이 lead · design의 전제를 여럿 바로잡았다. 이것이 이 방식의 값이었다.
+- M0: "부팅 C · D가 임대를 안 기다린다"가 아니라 셋 다 `boot_ssh`에서 기다리고 있었고, 원인은 dhcpcd가
+  `leased`를 주소를 붙이기 전에 찍는 것이었다(lessons 실측 73). 이월 숙제의 진단이 틀렸던 것이다.
+- M1: 꼬리 `ESC[201~`를 빠뜨리면 fish가 그 뒤의 키를 전부 삼킨다(mutation 3이 새 검사가 아니라 기존
+  검사 11에서 잡혔다) · fish 4.0.2는 인자를 치는 중에 모드 2004를 끈다(design 위험 4에 덧붙였다) ·
+  `cat` 아래의 에코와 출력 순서는 스케줄이 정한다(화면 모양 대신 개수로 판정).
+- M2: `vim -e`가 `xterm-256color`에서 대체 화면에 찍어 출력이 사라진다(`-T dumb`, lessons 실측 74) ·
+  `HOME=/`에서는 `~/.vimrc`가 아니라 `/.vimrc`로 찍힌다 · `seedOneFile`에 `O_TRUNC`가 없어 `.EXCL`만
+  빼는 mutation은 잡히지 않는다(`.TRUNC`로 바꿨다). design 실측의 pyte가 대체 화면을 구현하지 않아
+  첫째를 놓쳤다 — pyte로 잰 화면은 대체 화면에 대해 믿지 않는다.
 
 | 커밋 | 무엇 |
 |---|---|
-| `a53f57b` | M0 — Dockerfile에 `debianutils:amd64`, `guest_tools.sh` 층 13 `usr/bin/which.debianutils:usr/bin/which`(목록의 첫 비ELF), `copy_lib_deps` 맨 앞의 ELF magic 검사, `tools/check.sh` 검사 1c(빌드 stderr에 `readelf: Error` 없음) · 22(`which which` → `/usr/bin/which`, 못 찾으면 1). 루트 게이트 18체인 3/3(1시간 5분 52초) |
-| (이 커밋) | M1 — `kernel/vim/vimrc` 세 줄 → 144줄(첫 줄 `set nocompatible` · 커서 세 줄 그대로 · 줄 번호 · 상태 줄 · `ttimeoutlen=50` · 공백 넷 · 검색 강조 · `cterm` 강조 아홉). `render/check.sh` 검사 25~30의 커서 열 0 → 4(`VIM_COL`) · `[New File]` → `[New]`, 새 검사 33(상태 줄) · 34(`-- INSERT --`) · 35(`vim -u NONE` 대조군). 루트 게이트는 아래 실측 절 |
+| `d237fb2` | M0 — `service/check.sh`의 `boot_ssh`가 `leased` 뒤에 `eth0: adding default route via 10.0.2.2`를 30초까지 더 기다린다. 코드 0줄. 루트 게이트 대신 `service` 체인 5/5(1분 11~15초), 스무 로그 중 순서가 뒤바뀐 것 0 |
+| `2c0443e` | M1 — `vt.Screen.pasteParts`(모드 2004를 보고 머리 · 본문 · 꼬리 셋) · `dumpPaste`가 `pty.write` 세 번, 로그 `clip> paste len=N bracketed=0\|1`(`len=`은 본문 그대로라 기존 판정 안 바뀜) · `vt_test` 93~96 · `copy/check.sh` 검사 21(fish 프롬프트에 두 줄 — Enter 전에 안 돌고 뒤에 둘 다 돈다) · 22(`cat` 아래 — 화면에 `[200~` 없음). mutation 넷 전부 빨감. 루트 게이트 18체인 3/3(1시간 7분 14초, M0의 기록도 됨) |
+| (이 커밋) | M2 — initrd 링크 `/.vimrc -> config/vimrc` · `init`의 `VIMRC_SEED`(주석 21줄 843바이트) · `seedVimrc()` · `config_test`의 `expectVimrcSeed`(규칙 다섯) · `kernel/vim/vimrc` 주석 · `config/check.sh` 1차 셋(`vim -T dumb -e +scriptnames +qa` → `2: /.vimrc` · 에러 없음 · `>> /.vimrc` 되읽기) + 2차 하나(`+'set ts?'` → `tabstop=3`) · `tools/check.sh` `WANT`에 `.vimrc`. mutation 다섯 전부 빨감. 루트 게이트는 M2 plan 실측 7 |
 
-열지 않은 것(design 비목표): `vim-runtime`(38MB — 문법 색 · filetype을 원하면 syntax 파일 몇 개만
-고르는 길과 함께 따로 연다) · 사용자 vimrc를 `/config`로 seed · 스크립트 인터프리터 추적 ·
-터미널의 bracketed paste(위험 2 — `autoindent`와 붙여넣기의 계단, 우회는 `:set paste`) · zsh의
-`which` builtin · debianutils의 다른 도구 · `tars.conf`로 vim 설정 고르기.
+열지 않은 것(design 비목표): 모드가 꺼진 갈래의 `\n` → `\r`과 제어 바이트 치환(`encodePaste`로 옮길
+자리 — 클립보드가 화면 밖에서 오게 되면) · 감싸지 않는 여러 줄 붙여넣기를 막거나 묻는 것 · OSC 52 ·
+`/.viminfo`를 `/config`로 · 큰 붙여넣기에서 `pty.write`가 멈추는 것(non-blocking 쓰기와 큐) · SLIRP의
+SYN 재전송 시각 · vim의 계단을 게이트에서 보는 것 · fish의 확장 키 모드 · `tars.conf`로 bracketed
+paste를 끄고 켜는 것.
 
 ## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
 후보는 아래 "그 다음 후보" 절(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB
-동글 층 B)과 WP-M3(방향 포커스), GE가 남긴 둘 — 사용자 vimrc를 부팅 사이에 남기기(`/.vimrc` →
-`/config/vimrc`, gitconfig와 같은 모양)와 터미널의 bracketed paste(`Cmd+V`를 `ESC[200~` · `ESC[201~`로
-감싸면 vim의 `autoindent` 계단이 사라진다; CM 결정 9 · FP를 다시 연다)다. 작은 것은
-`docs/guides/lessons.md`의 "이월 숙제"에 있다.
+동글 층 B)과 WP-M3(방향 포커스), GE가 남긴 `vim-runtime`(38MB — 문법 색 · filetype, syntax 파일 몇
+개만 고르는 길과 함께)이다. 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다 — PE-M0이
+service 두 항목을 지워서 지금 그 목록에 체인 경합은 없다.
+
+### 그 앞 — Guest Ergonomics(GE)가 M0 · M1로 닫혔다
+
+2026-10-04 같은 날 PE 바로 앞에 닫았다. `which`(debianutils의 sh 스크립트, `copy_lib_deps`의 ELF magic
+검사, M0 `a53f57b`)와 plugin · 런타임 없는 모던 시스템 vimrc(M1 `48431e7`). design은
+`docs/specs/2026-10-04-tars-guest-ergonomics-design.md`, 기억은 `docs/decisions/project_guest_ergonomics.md`.
+GE가 비워 둔 위험 2(autoindent 계단)와 비목표 2(사용자 vimrc) · 4(bracketed paste)를 PE가 채웠다.
 
 ### 그 앞 — Cursor Shape(CU)가 M0 · M1로 닫혔다
 

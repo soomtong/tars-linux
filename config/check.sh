@@ -368,6 +368,39 @@ BPROD_WIDGET_KEYS=(e c h o spc b p r o d w shift-4 shift-9
                    shift-minus shift-minus f z f shift-minus h i s t o r y
                    shift-minus shift-minus shift-0 ret)
 
+# ── PE-M2 ───────────────────────────────────────────────────────────────
+#
+# 1차 훅이 치는 셋과 2차 훅이 치는 하나. 사람이 고친 vim 설정이 재부팅을
+# 넘는지를 본다(PE design 결정 8).
+#
+# vim -T dumb -e +scriptnames +qa — vim이 읽은 스크립트를 읽은 순서대로 찍고
+# 나간다. +는 shift-equal이고(net/check.sh가 date +%Y에 쓴다) -T의 T는
+# shift-t다.
+#
+# -T dumb이 빠지면 안 된다. 터미널이 주는 TERM=xterm-256color에서는 vim이 Ex
+# 모드(-e)에서도 terminfo의 smcup을 보내 대체 화면(ESC[?1049h)에 들어가 거기에
+# 찍고, 나가면서 원래 화면으로 돌아간다 — 출력이 screen> 프레임에 남을지가
+# 렌더 시점에 달린다(PE-M2 plan 확정 1). 게스트에는 dumb의 terminfo가 없고
+# vim은 내장 항목으로 조용히 넘어간다. vimrc를 읽는 것과 그 순서는 터미널
+# 이름과 무관하다.
+VIM_SCRIPTNAMES_KEYS=(v i m spc minus shift-t spc d u m b spc minus e spc
+                      shift-equal s c r i p t n a m e s spc shift-equal q a ret)
+# echo set tabstop=3 >> /.vimrc — 사람이 하는 일이다. 링크로 쓰므로 설정
+# 디스크의 /config/vimrc에 들어간다. >>는 APPEND_KEYS와 같이 shift-dot 둘이다.
+VIM_APPEND_KEYS=(e c h o spc s e t spc t a b s t o p equal 3 spc
+                 shift-dot shift-dot spc slash dot v i m r c ret)
+# grep tabstop /config/vimrc — 되읽기. 링크가 아니라 실체를 읽는다. seed에는
+# tabstop이라는 낱말이 없으므로(config_test가 지킨다) 출력이 한 줄이다.
+VIM_READBACK_KEYS=(g r e p spc t a b s t o p spc
+                   slash c o n f i g slash v i m r c ret)
+# vim -T dumb -e +'set ts?' +qa — 2차(zsh)에서 친다. 작은따옴표는 apostrophe,
+# ?는 shift-slash다(render/check.sh의 type_text와 같은 이름). 따옴표가 필요한
+# 이유는 zsh다 — 따옴표 없는 ?를 glob으로 펴고, 맞는 파일이 없으면 명령을
+# 안 돌리고 `zsh: no matches found: +set ts?`를 찍는다(PE-M2 plan 확정 4).
+VIM_TS_KEYS=(v i m spc minus shift-t spc d u m b spc minus e spc
+             shift-equal apostrophe s e t spc t s shift-slash apostrophe spc
+             shift-equal q a ret)
+
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
 edit_config_in_guest() {
@@ -451,6 +484,49 @@ edit_config_in_guest() {
     return 1
   fi
   echo "boot 1: git read init.defaultBranch=main out of the seeded /config/gitconfig"
+
+  # ── PE-M2: vim이 링크를 따라 seed를 사용자 vimrc로 읽는가 ─────────────
+  #
+  # 아래 로그 검사가 "깔렸다"를 보고, 여기서 "vim이 그것을 읽는다"를 본다.
+  # scriptnames의 1이 시스템 vimrc(/etc/vim/vimrc), 2가 사용자 vimrc다. 링크가
+  # 없거나 댕글링이면 vim은 사용자 vimrc가 없다고 보고 2 자리에 stub
+  # defaults.vim을 찍는다(PE design 실측 6).
+  #
+  # 판정 글자는 `2: /.vimrc`다. 게스트의 HOME이 /라서 vim이 그 경로를 ~로
+  # 줄이지 않는다(PE-M2 plan 확정 2). 행 첫머리가 그 글자인 줄은 scriptnames의
+  # 출력뿐이고, 친 줄은 프롬프트로 시작한다.
+  type_keys "${VIM_SCRIPTNAMES_KEYS[@]}"
+  if ! wait_for_screen '\| +2: /\.vimrc'; then
+    echo "FAIL(boot 1): vim did not list /.vimrc as its user vimrc"
+    echo "  셋 중 하나다 — initrd에 /.vimrc 링크가 없거나, init이 /config/vimrc를"
+    echo "  안 깔았거나(둘 다 2 자리에 defaults.vim이 찍힌다), vim이 대체 화면에"
+    echo "  찍고 나갔다(-T dumb이 빠지면 화면에 아무것도 안 남을 수 있다)."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  # 위 양성만으로는 vimrc의 에러를 못 본다. vimrc에 틀린 줄이 있어도
+  # scriptnames는 2 자리에 /.vimrc를 그대로 찍고, 그 위에 에러 줄이 붙는다
+  # (PE-M2 plan 확정 3). 이 체인에서 vim을 띄우는 것은 여기가 처음이다.
+  local vim_screen
+  vim_screen="$(grep -a "terminal: screen>" "$log")"
+  if grep -aF "Error detected while processing" <<<"$vim_screen" >/dev/null; then
+    echo "FAIL(boot 1): vim reported an error while reading its vimrc files"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: vim read /etc/vim/vimrc, then the seeded /config/vimrc through /.vimrc, with no error"
+
+  # 사람이 하는 일을 한다. 링크로 쓴 줄이 설정 디스크에 들어가야 2차가 읽는다.
+  # 판정 글자 `| set tabstop=3`은 행 머리가 set인 줄이고, 친 줄은 프롬프트와
+  # echo로 시작한다.
+  type_keys "${VIM_APPEND_KEYS[@]}"
+  type_keys "${VIM_READBACK_KEYS[@]}"
+  if ! wait_for_screen '\| set tabstop=3'; then
+    echo "FAIL(boot 1): the line appended to /.vimrc did not read back from /config/vimrc"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: a line appended to /.vimrc landed in /config/vimrc"
 
 
   type_keys "${EDIT_KEYS[@]}"
@@ -556,6 +632,28 @@ watch_console_shell() {
     echo "FAIL(boot 2): could not connect to QEMU monitor on port ${MONITOR_PORT}"
     return 1
   fi
+
+  # ── PE-M2: 1차가 /.vimrc에 더한 줄이 재부팅을 넘었는가 ────────────────
+  #
+  # 이 부팅의 셸은 zsh다. VIM_TS_KEYS가 set ts?를 작은따옴표로 감싸는 이유다.
+  #
+  # 판정 글자 `tabstop=3`은 vim의 출력에만 생긴다. 친 줄에는 `ts?`만 있다.
+  # 시스템 vimrc가 tabstop=8을 명시하므로, 3이 나오면 vim이 사용자 vimrc를 그
+  # 뒤에 읽었다는 순서까지 함께 보인다(PE design 결정 8). seed에는 tabstop이
+  # 없으므로(config_test가 지킨다) 이 3은 사람이 1차에 더한 줄에서만 온다.
+  #
+  # 아래 OFF_KEYS보다 앞이다. 실패하면 3차가 읽을 설정을 심지 않고 나간다.
+  type_keys "${VIM_TS_KEYS[@]}"
+  if ! wait_for_screen '\| +tabstop=3'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 2): vim did not see tabstop=3 from /.vimrc after the reboot"
+    echo "  화면에 tabstop=8이 있으면 사람의 줄이 사라졌다(seed가 그 파일을 다시"
+    echo "  썼거나 다른 디스크다). no matches found가 있으면 ?가 따옴표 밖으로 나갔다."
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 2: vim read tabstop=3 from /.vimrc, the line the first boot appended"
 
   type_keys "${OFF_KEYS[@]}"
   type_keys "${READBACK_KEYS[@]}"
@@ -1356,6 +1454,15 @@ if ! grep -q "tars-init: seeded /config/gitconfig" "$LOG1"; then
   report_failure "$LOG1" "first boot did not seed /config/gitconfig"
 fi
 echo "boot 1: init seeded the gitconfig too (the .gitconfig link has a target now)"
+
+# PE-M2. vimrc도 rc가 아니다 — vim이 읽는 파일이고, 이 줄이 보는 것은
+# "깔렸는가"까지다. vim이 그것을 읽는 것은 위 훅의 scriptnames가 본다.
+# 2 · 8 · 9차의 `seeded /config/` 음성 검사는 접두로 보므로 vimrc를 다시 깔면
+# 그쪽이 빨개진다. 7차는 이름을 하나씩 보므로 영향이 없다.
+if ! grep -q "tars-init: seeded /config/vimrc" "$LOG1"; then
+  report_failure "$LOG1" "first boot did not seed /config/vimrc"
+fi
+echo "boot 1: init seeded the vimrc too (the /.vimrc link has a target now)"
 
 # BH-M2. devtmpfs는 /dev/fd를 안 만들고 우리는 udev를 안 쓴다. 그 링크가
 # 없으면 bash의 process substitution이 여는 /dev/fd/63이 없어서, seed의

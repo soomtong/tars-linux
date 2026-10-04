@@ -1277,6 +1277,63 @@ pub fn seedGitconfig() void {
     seedOneFile(GITCONFIG_PATH, GITCONFIG_SEED);
 }
 
+/// vim의 사용자 vimrc 자리 — `kernel/make_initrd.sh`가 건 링크(`/.vimrc`)가
+/// 가리키는 곳이다(PE-M2).
+pub const VIMRC_PATH: [:0]const u8 = "/config/vimrc";
+
+/// 첫 부팅에 깔아 두는 사용자 vimrc(PE design 결정 7).
+///
+/// 설정이 한 줄도 없다. 모든 줄이 `"` 주석이거나 빈 줄이다. 모던 설정은
+/// 시스템 vimrc(`kernel/vim/vimrc` → `/etc/vim/vimrc`)의 몫이고 이 파일은
+/// 사람의 것이다(GE design 결정 4). 우리가 쓰는 것은 처음 한 번의 안내뿐이고,
+/// `O_EXCL` 때문에 그 뒤로는 손대지 않는다.
+///
+/// 그런데도 까는 이유는 둘이다. 사람이 이 파일을 열었을 때 실체가 어디이고
+/// 무엇이 먼저 읽히는지를 알려 줄 자리가 여기뿐이다. 그리고 `/.gitconfig`가
+/// 댕글링이던 모양(ST-M2가 고쳤다)을 새로 만들지 않는다.
+///
+/// 영어 · ASCII다. 같은 vim이 `kernel/vim/vimrc`와 나란히 읽는 파일이라 그쪽과
+/// 맞춘다(GE design 결정 6 원칙 5). 한국어인 gitconfig seed와 다른 이유다.
+///
+/// `tabstop`이라는 낱말을 안 쓴다. `config/check.sh` 1차가 사람이 더한
+/// `set tabstop=3`을 `grep tabstop`으로 되읽고 2차가 vim에게 그 값을 묻는다 —
+/// seed에 그 낱말이 있으면 되읽기의 출력이 두 줄이 되고, 설정으로 있으면
+/// 2차가 사람의 줄 없이도 초록이 된다. `config_test`가 둘 다 막는다.
+///
+/// 예시는 앞의 `"` 하나를 지우면 그대로 쓸 수 있는 모양이다(PE-M2 plan 확정 5 —
+/// 셋 다 지우고 읽혀도 에러가 없었다). seed가 생기면 vim은
+/// `$VIMRUNTIME/defaults.vim`을 안 읽는다(PE design 실측 6). 게스트의 그 파일은
+/// 주석뿐인 stub이라 차이가 없다.
+pub const VIMRC_SEED =
+    \\" TARS user vimrc. This file lives on the config disk as /config/vimrc, and
+    \\" /.vimrc is a link to it (the home directory is /). The home directory is
+    \\" tmpfs and is rebuilt from the initrd on every boot; the config disk keeps
+    \\" this file, so what you write here is still here after a reboot.
+    \\"
+    \\" vim reads the system vimrc /etc/vim/vimrc first and this file after it,
+    \\" so a line here can undo any line there. To see what that file sets:
+    \\"   vim -R /etc/vim/vimrc
+    \\"
+    \\" init writes this file only when it is missing and never touches it after
+    \\" that. Every line is a comment, so it changes nothing yet. To use one of
+    \\" the examples below, delete its leading double quote.
+    \\
+    \\" Line numbers off:
+    \\"set nonumber norelativenumber
+    \\
+    \\" Cursor shape off (a block in every mode):
+    \\"set t_SI= t_SR= t_EI=
+    \\
+    \\" Tabs and trailing spaces not marked:
+    \\"set nolist
+    \\
+;
+
+/// 사용자 vimrc 하나를 rc 셋 · gitconfig와 같은 규칙으로 깐다(PE-M2).
+pub fn seedVimrc() void {
+    seedOneFile(VIMRC_PATH, VIMRC_SEED);
+}
+
 /// seed 파일 하나를 "없으면 만든다".
 ///
 /// `O_EXCL`이 그 질문("이미 있나")을 커널에게 한 번에 묻는다 — `save`가

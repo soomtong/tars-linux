@@ -330,7 +330,8 @@ Dockerfile에 `debianutils:amd64`(이미지 재빌드 30~50초), `guest_tools.sh
    글자와 구별되지 않는다. 그래서 insert 모드에서 들여쓴 여러 줄을 붙이면 `autoindent`가 줄마다
    들여쓰기를 더해 계단이 된다. GE-M1 전에는 `compatible`이라 `autoindent`가 꺼져 있어서 이
    증상이 없었다. 우회는 붙이기 전에 `:set paste`, 붙인 뒤에 `:set nopaste`다. 고치는 일은 비목표
-   4다.
+   4다. (PE-M1이 고쳤다 — 2026-10-04. vim이 켠 모드 2004를 터미널이 따라 감싸므로 계단이 없고 우회가
+   필요 없다. [[project_paste_ergonomics]])
 3. `expandtab`. 탭이 뜻을 갖는 파일 중 Makefile만 autocmd로 막는다. Go 소스처럼 탭을 쓰는 다른
    형식에서는 공백이 들어간다(gofmt가 고치기는 한다).
 4. `/usr/share/vim/vim91`의 판 번호(CU 위험 4)는 그대로다. 이 서브프로젝트가 새로 만드는 위험은
@@ -436,6 +437,7 @@ Dockerfile에 `debianutils:amd64`(이미지 재빌드 30~50초), `guest_tools.sh
    `/config`). CU 비목표 7과 같은 일이다.
 3. `copy_lib_deps`가 스크립트의 인터프리터(`#!` 줄)까지 따라가는 것(결정 2).
 4. 터미널의 bracketed paste(위험 2). `Cmd+V`의 모양을 바꾸는 일이라 CM 결정 9와 FP의 결정을 다시 연다.
+   (PE-M1이 열어 닫았다 — 2026-10-04, [[project_paste_ergonomics]].)
 5. zsh의 `which` builtin을 우리 스크립트로 바꾸는 것(결정 1).
 6. debianutils의 다른 도구(`run-parts` 등).
 7. `tars.conf`로 vim 설정을 고르게 하는 것.

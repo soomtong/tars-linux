@@ -53,6 +53,8 @@ Guest Ergonomics(GE)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청
   당긴다.
 - `autoindent`와 붙여넣기. `Cmd+V`는 bracketed paste가 아니라서(CM 결정 9) 들여쓴 여러 줄을
   insert에서 붙이면 계단이 된다. 우회는 `:set paste` · `:set nopaste`. 고치는 일은 design 비목표 4.
+  (PE-M1이 고쳤다 — 2026-10-04, [[project_paste_ergonomics]]. 이제 vim이 켠 모드 2004를 터미널이 따라
+  감싸서 계단이 없다.)
 - `readelf -d`를 ELF가 아닌 파일에 주면 메시지가 크기에 따라 다르다 — 헤더 64바이트보다 작으면
   `Failed to read file header`, 크면 `Not an ELF file - it has the wrong magic bytes at the start`.
   검사 1c의 패턴 `readelf: Error`는 둘 다 잡는다.
@@ -64,6 +66,8 @@ Guest Ergonomics(GE)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청
 - `vim -u NONE` — 시스템 vimrc를 안 읽는다. `render` 검사 31 · 35가 이 길을 대조군으로 쓴다.
 - 사람은 `/.vimrc`에서 어느 줄이든 되돌린다(시스템 vimrc가 먼저, 사용자 vimrc가 뒤에 읽힌다).
   다만 `/.vimrc`는 tmpfs라 재부팅에 사라진다 — `/config`로 seed하는 일은 design 비목표 2다.
+  (PE-M2가 했다 — 2026-10-04, [[project_paste_ergonomics]]. 이제 `/.vimrc`는 `/config/vimrc`로 가는
+  링크이고 설정 디스크가 붙은 기계에서 재부팅을 넘는다.)
 - zsh에서 우리 `which` 스크립트를 쓰려면 `command which`나 `/usr/bin/which`다.
 
 ## 관련

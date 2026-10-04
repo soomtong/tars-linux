@@ -690,6 +690,25 @@ SYN을 언제 다시 보내는지는 재지 않았다. PE-M0 뒤에 같은 증�
 그 회차의 시리얼 로그에서 `adding default route` 줄과 ssh 사이에 sshd가 무엇을 찍었는지부터 본다
 (PE 위험 1).
 
+74. `vim -e`(Ex 모드)는 `TERM=xterm-256color`에서도 terminfo의 smcup(`ESC[?1049h`)을 보내 대체 화면에
+들어가 거기에 찍고, 나가면서(`ESC[?1049l`) 출력이 화면에서 사라진다. 게이트가 vim의 Ex 출력
+(`+scriptnames` · `+'set ts?'`)을 `screen>`으로 보려면 `vim -T dumb -e …`다 — 게스트에 `dumb` terminfo가
+없어도 vim은 내장 항목으로 조용히 넘어가고 맨 아래 행부터 찍는다(PE-M2 plan 확정 1, 2026-10-04). 이것을
+design 단계에서 놓친 이유는 측정에 쓴 pyte가 1049를 구현하지 않아 출력이 남아 보였기 때문이다 — pyte로
+잰 화면은 대체 화면에 대해 믿지 않는다. 덤으로 둘. 게스트의 `HOME=/`에서는 `scriptnames`가 `~/.vimrc`가
+아니라 `  2: /.vimrc`를 찍는다(`HOME`을 빈 디렉터리로 두고 재면 `~`로 축약된다). zsh에서 `?`를 따옴표
+없이 치면(`+set\ ts?`) glob으로 펴려다 `zsh: no matches found`로 명령을 안 돌린다 — `+'set ts?'`로 감싼다.
+게이트 키 이름은 `+` `shift-equal` · `'` `apostrophe` · `?` `shift-slash`.
+
+75. 게스트의 셸 셋(zsh 5.9 · bash 5.2 · fish 4.0.2)과 vim 9.1은 전부 `ESC[?2004h`(bracketed paste)를
+보내고, 셸 셋은 명령을 띄우기 전에 `ESC[?2004l`을 보낸다(PE design 실측 1, 2026-10-04). bash는
+`libreadline`을 링크하지 않고 자기 안의 readline을 쓴다 — 그 문자열은 `/usr/bin/bash` 본체에 있다. zsh의
+것은 본체가 아니라 ZLE 모듈 `zle.so`에 있다. fish 4.0.2는 프롬프트 내내 켜 두지 않는다 — 인자를 치기
+시작하면 끄고 다음 키까지 꺼진 채이고, 감싼 두 줄을 받은 직후에도 꺼진다(PE-M1 plan 확정 2). 그리고
+fish는 꼬리 `ESC[201~`가 올 때까지 붙인 글자를 하나도 그리지 않고 그동안 오는 키(Enter · ctrl-c 포함)를
+전부 삼킨다(PE-M1 plan 확정 1). ghostty vt의 모드 2004는 화면별이 아니라 `Terminal.modes` 하나이고
+RIS가 끈다(`vt_test` 95 · 96).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -1142,6 +1161,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — seed의 옵션이 칠 때마다 쓰므로
   필요 없고, 그 명령이 다른 세션의 줄을 지워서 7차의 새 검사를 망가뜨린다.
   7차의 중첩 zsh 둘과 판정 셋(`neg0`·`aft1`·`pos1`)이 그 자리에 있다.
+  1차 훅(`edit_config_in_guest`)의 gitconfig 검사 뒤에 PE-M2의 vim 검사 셋이 있다 —
+  `vim -T dumb -e +scriptnames +qa`가 `2: /.vimrc`를 찍는 것(양성) · 화면에 `Error detected
+  while processing`이 없는 것(음성) · `echo set tabstop=3 >> /.vimrc`를 `/config/vimrc`에서
+  되읽는 것. 2차 훅(`watch_console_shell`)은 `OFF_KEYS` 앞에서 `vim -T dumb -e +'set ts?' +qa`가
+  `tabstop=3`을 찍는 것을 본다(zsh라 따옴표가 필요하다). seed에 `tabstop`이라는 낱말이 있으면
+  되읽기가 두 줄이 되므로 `config_test`가 그 낱말을 막는다. `-T dumb`이 빠지면 vim이 대체 화면에
+  찍고 나가서 화면에 아무것도 안 남는다(실측 74).
 - `power/check.sh` — 부팅 둘(끄기 · 재시작). 종료 판정이 여기 모여 있다.
   부팅 1에 음성 검사 둘이 있다(SL-M2) — `grace period expired`가 없을 것,
   `sent SIGKILL to what was left`가 없을 것. 그 자리는 원래 `note:`만 찍고
@@ -1213,7 +1239,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   stub이 안 읽히고 `render` 검사 25가 빨개진다. 두 파일의 주석은 게스트에서 사람이 여는
   것이라 영어 ASCII다. 런타임이 없으므로 그 vimrc는 컴파일된 옵션과 `:highlight`만 쓴다.
   `syntax on`을 넣으면 vim이 뜰 때마다 `E484`와 `Press ENTER`를 띄우고 `render` 검사 25가
-  빨개진다.
+  빨개진다. 사용자 vimrc는 initrd의 링크 `/.vimrc -> config/vimrc`이고(PE-M2, `make_initrd.sh`의
+  `.gitconfig` · rc 링크 옆), 실체는 `init`이 `storage_mounted`일 때 `seedVimrc()`로 까는 주석
+  21줄짜리 seed(`init/src/config.zig`의 `VIMRC_SEED`, 843바이트)다. 설정 디스크가 없으면 링크가
+  댕글링이고 vim은 그것을 "사용자 vimrc 없음"으로 보고 stub `defaults.vim`을 읽는다. 사용자 vimrc가
+  있으면 `defaults.vim`은 안 읽는다. seed의 규칙 다섯(끝 개행 · ASCII · 전부 `"` 주석 ·
+  `/etc/vim/vimrc` 언급 · `tabstop` 금지)은 `config_test`의 `expectVimrcSeed`가 지킨다.
 - `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 목록(데이터만)과
   그것을 받아 고르는 스크립트(WL-M1). linux-firmware · wireless-regdb 두 tarball을
   `kernel/src/firmware/`에 받고(662MB, `clean()`이 안 지운다) sha256을 확인한다. 목록과

@@ -206,6 +206,12 @@ WANT+=(usr/bin/tars-install)
 # 빠지면 render 체인의 vim 검사(부팅 뒤)가 아니라 여기서 먼저 드러난다.
 WANT+=(etc/vim/vimrc usr/share/vim/vim91/defaults.vim)
 
+# PE-M2: vim의 사용자 vimrc 링크. 위 .bashrc · .zshrc와 같은 자리이고 같은
+# 이유다 — make_initrd.sh가 손으로 거는 링크라 여기 적어야 검사 1이 tautology가
+# 아니다. 가리키는 /config/vimrc는 이 체인에 디스크가 없어서 안 보고, config
+# 체인이 본다.
+WANT+=(.vimrc)
+
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 
 # 명령 치환으로 패딩을 만들면 안 된다. `$(printf '\n%s\n' ...)`은 끝의
