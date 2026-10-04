@@ -1156,6 +1156,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `tools/check.sh` — 검사 열여섯(UT·SM). 바이너리 목록은
   `kernel/guest_tools.sh` 한 파일에 있고 `make_initrd.sh`와 이 체인이 같은
   배열을 본다.
+  GE-M0이 검사 1c(부팅 전, `make_initrd.sh`의 stderr에 `readelf: Error`가 없다)와
+  22(`which`)를 더했다. `copy_lib_deps`는 ELF magic이 아닌 파일을 건너뛰므로
+  스크립트도 `GUEST_TOOLS`에 넣을 수 있다 — 인터프리터는 따라가지 않는다.
 - `machine/check.sh` — 실기 경로(RM). fish 인사말을 UEFI 부팅의 마커로 쓴다
   — 그래서 인사말을 끄는 것은 화면 셸에만 한다.
 - `net/check.sh` — 부팅 다섯(NW · IN · TS · TD · LB). 나가는 길(`guestfwd`),

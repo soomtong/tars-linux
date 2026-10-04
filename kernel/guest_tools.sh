@@ -24,6 +24,7 @@
 # /usr/bin/mawk만 담고 /usr/bin/awk는 Debian의 alternatives가 postinst에서
 # 만든다. .deb를 dpkg -x로 푼 sysroot에는 그 링크가 없다. UT-M2의
 # `fdfind`→`fd`, `batcat`→`bat`도 같은 자리를 쓴다.
+# GE-M0의 `which.debianutils`→`which`는 mawk와 이유까지 같다(alternatives).
 #
 # ── 지울 때 보아야 할 것 ────────────────────────────────────────────────
 #
@@ -329,4 +330,19 @@ GUEST_TOOLS=(
   usr/sbin/wpa_cli:usr/bin/wpa_cli
   usr/bin/wpa_passphrase:usr/bin/wpa_passphrase
   usr/sbin/iw:usr/bin/iw
+
+  # ── 층 13 · 셸 편의(GE-M0) ─────────────────────────────────────────────
+  # 사용자가 2026-10-04에 요청했다. debianutils의 which.debianutils를 /usr/bin/which로
+  # 싣는다. 왼쪽과 오른쪽이 다른 다섯째 자리다(mawk→awk · fdfind→fd · vim.basic→vim ·
+  # dhcpcd에 이어). 이유는 mawk와 같다 — /usr/bin/which는 postinst가 alternatives로
+  # 만드는 링크라 dpkg -x로 푼 sysroot에 없다.
+  #
+  # 이 목록에서 ELF가 아닌 첫 줄이다. 1,080바이트짜리 #! /bin/sh 스크립트라 라이브러리가
+  # 0개이고, 인터프리터 /bin/sh는 뼈대다(bash 링크, 결정 6). install_tool이 부르는
+  # copy_lib_deps는 ELF magic을 보고 이것을 건너뛴다(GE design 결정 2).
+  #
+  # fish와 bash에는 which builtin이 없어서 이 스크립트가 돈다. zsh에서는 zsh의 builtin이
+  # 이것을 가린다 — `command which`나 /usr/bin/which로 부른다(GE design 결정 1).
+  # tools/check.sh 검사 22가 fish에서 친다.
+  usr/bin/which.debianutils:usr/bin/which
 )

@@ -48,6 +48,25 @@ find_in_sysroot() {
 copy_lib_deps() {
   local bin="$1" interp src soname dest
 
+  # GE-M0. ELF가 아닌 파일은 따라갈 DT_NEEDED가 없다. guest_tools.sh의 which는
+  # #! /bin/sh 스크립트라서, 이 검사 없이 들어오면 빌드는 살지만 아래 readelf -d가
+  # `readelf: Error: Not an ELF file - it has the wrong magic bytes at the start`를
+  # stderr에 찍는다(ELF 헤더 64바이트보다 작은 파일이면 `Failed to read file header`다 —
+  # GE-M0 실측 4). 빌드가 사는
+  # 것은 우연이다 — .interp 줄은 2>/dev/null || true로 막혀 있고, readelf -d는
+  # for의 단어 목록 안이라 set -e가 그 실패를 안 본다. 실패가 아닌데 실패처럼 생긴
+  # 줄이 빌드 로그에 남으면 진짜 에러가 그 사이에 묻힌다.
+  #
+  # magic 4바이트(7f 45 4c 46)만 본다. readelf -h로 묻지 않는 이유는 망가진
+  # ELF(복사가 끊긴 바이너리)까지 조용히 건너뛰기 때문이다 — 그런 파일은 지금처럼
+  # 아래 readelf까지 가서 에러를 내야 한다. od를 거치는 이유는 첫 4바이트에 NUL이
+  # 있는 파일이면 bash가 명령 치환에서 `ignored null byte` 경고를 찍기 때문이다.
+  # 스크립트의 인터프리터(#! 줄)는 따라가지 않는다(GE design 결정 2 · 비목표 3).
+  # tools/check.sh 검사 1c가 이 검사를 지킨다.
+  if [ "$(head -c 4 "$bin" | od -An -tx1 | tr -d ' \n')" != 7f454c46 ]; then
+    return 0
+  fi
+
   interp="$(readelf -p .interp "$bin" 2>/dev/null | grep -oE '/[^ ]*ld-linux[^ ]*' || true)"
   if [ -n "$interp" ] && [ ! -e "${WORKDIR}${interp}" ]; then
     if ! src="$(find_in_sysroot "$(basename "$interp")")"; then

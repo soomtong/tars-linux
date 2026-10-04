@@ -36,6 +36,10 @@ cd "$(dirname "$0")"
 # 전부다: fzf는 검색어(`descr`)와 판정(`templates/description`)을 다르게
 # 하고, zoxide는 `..`를 지나는 경로를 쳐서 정규화된 답만 판정으로 쓴다.
 #
+# GE-M0이 which를 더하고 검사 둘을 더한다 — 1c는 부팅 전에 make_initrd.sh의
+# stderr에 readelf 에러가 없는 것을, 22는 부팅 뒤에 which가 PATH를 훑고 못 찾으면
+# 1로 끝나는 것을 본다. which는 이 목록에서 ELF가 아닌 첫 도구다.
+#
 # 열 체인 중 어느 것도 이것을 못 본다. 나머지는 전부 게스트 명령을 절대
 # 경로로 친다 — docs/decisions/project_guest_environment.md가 IP-M0에서
 # 그렇게 고치라고 적어 둔 그대로다. 그 문서의 "결과 1"을 닫는 체인이다.
@@ -67,10 +71,15 @@ if ! (cd ../terminal && ./prepare.sh); then
   exit 1
 fi
 
-if ! (cd ../kernel && ./make_initrd.sh); then
+# GE-M0: stderr를 파일에 담아 검사 1c가 읽는다. 사람이 보던 출력은 그대로
+# 보이도록 끝에 다시 뿜는다. 실패했을 때도 먼저 뿜어야 원인이 보인다.
+INITRD_ERR="$(mktemp)"
+if ! (cd ../kernel && ./make_initrd.sh) 2> "$INITRD_ERR"; then
+  cat "$INITRD_ERR"
   echo "FAIL: initrd build failed"
   exit 1
 fi
+cat "$INITRD_ERR" >&2
 
 . ../gate_lib.sh
 
@@ -246,6 +255,22 @@ for entry in "${GUEST_FIRMWARE[@]}"; do
   esac
 done
 echo "the initrd ends with the firmware cpio and it carries all ${#GUEST_FIRMWARE[@]} files the list names"
+
+# ── 검사 1c: make_initrd.sh가 readelf 에러를 안 냈다 (GE-M0, 정적) ──────
+#
+# copy_lib_deps는 ELF가 아닌 파일(which 스크립트)을 맨 앞에서 건너뛴다(GE design
+# 결정 2). 그 검사를 누가 지우면 빌드는 여전히 초록이다 — readelf -d가 for의 단어
+# 목록 안에 있어서 set -e가 실패를 안 보기 때문이다. 그래서 여기서 본다. 덤으로
+# 망가진 ELF가 내는 같은 에러도 여기서 빨개진다. 지금까지는 그 경우에도 빌드가
+# 초록이었다.
+#
+# -q를 쓰지 않는다. 파이프가 아니라 파일을 읽으므로 SIGPIPE는 없지만, 찾은 줄이
+# 실패 메시지와 함께 보이는 것이 진단이다.
+if grep -a "readelf: Error" "$INITRD_ERR"; then
+  echo "FAIL: make_initrd.sh printed a readelf error (copy_lib_deps read a file it should have skipped, or an ELF is broken)"
+  exit 1
+fi
+echo "make_initrd.sh printed no readelf error"
 
 qemu-system-x86_64 \
   -nic none \
@@ -727,12 +752,46 @@ if ! grep -a "tars-init: lo up" "$LOG" >/dev/null; then
 fi
 echo "init raised lo"
 
+# ── 검사 22: which가 PATH를 훑는다 (GE-M0) ──────────────────────────────
+#
+# 번호가 21 뒤이고 자리는 19 앞이다. 19는 음성 확인이라 언제나 맨 뒤다 — 여기서
+# which를 못 찾으면 19가 `Unknown command`로 함께 잡는다.
+#
+# 이 체인의 셸은 fish이고 fish에는 which builtin이 없다. 그래서 여기서 도는 것은
+# debianutils의 스크립트다(GE design 결정 1). zsh였다면 builtin이 가렸다.
+#
+# 판정 글자는 출력에만 생긴다(docs/decisions/project_gate_screen_echo.md).
+#   which which                      친 줄에 슬래시가 없다. 출력은 /usr/bin/which
+#   which ge-none; echo ge-rc=$status 친 줄에는 $status가 있다. 출력은 ge-rc=1
+# 둘째 줄은 종료 코드의 약속을 본다 — 못 찾으면 아무것도 안 찍고 1. 스크립트가
+# `if which foo >/dev/null`로 쓰는 것이 그 약속이다. fish가 which 자체를 못
+# 찾았다면 127이므로 패턴이 1 뒤에 공백이나 줄 끝을 요구한다. fish의 종료 코드
+# 변수는 $status다($?를 치면 fish가 에러를 낸다).
+echo "=== typing 'which which' ==="
+type_keys w h i c h spc w h i c h ret
+
+if ! wait_for_screen "/usr/bin/which"; then
+  fail "which did not find itself on PATH" \
+    "terminal: screen>" "Unknown command"
+fi
+
+echo "=== typing 'which ge-none; echo ge-rc=\$status' ==="
+type_keys w h i c h spc g e minus n o n e semicolon spc \
+          e c h o spc g e minus r c equal shift-4 s t a t u s ret
+
+if ! wait_for_screen 'ge-rc=1( |$)'; then
+  fail "which did not exit 1 for a name that is not on PATH" \
+    "terminal: screen>" "ge-rc=" "Unknown command"
+fi
+echo "which found itself on PATH and exited 1 for a name it could not find"
+
 # ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
 # 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi · fzf ·
 # zoxide 열하나를 다 친 뒤에 한 번 보면 열하나 전부의 음성 확인이 된다.
 # UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
+# 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which)도 같은 그물에 걸린다.
 #
 # 번호가 11 → 17 → 19로 뛴 것은 앞에 검사가 끼워졌기 때문이다(UT-M3이
 # 다섯, SM-M0이 둘). 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는

@@ -286,6 +286,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 주석대로 apt-get download는 의존을 안 따라가고, 게스트는 바이너리 하나로
 # 돈다. 런타임이 없어서 생기는 문제(E1187)와 그것을 막는 stub defaults.vim은
 # kernel/make_initrd.sh의 CU-M1 주석이 설명한다.
+#
+# ── GE-M0: 층 13(which) ───────────────────────────────────────────────
+#
+# debianutils는 which를 /usr/bin/which.debianutils라는 1,080바이트짜리 #! /bin/sh
+# 스크립트로 담는다. /usr/bin/which는 postinst가 alternatives로 만드는 링크라서
+# dpkg -x로 푼 여기에는 없다 — guest_tools.sh가 실체를 /usr/bin/which로 싣는다
+# (mawk→awk와 같은 자리). 패키지의 나머지(run-parts · savelog · ischroot ·
+# add-shell · remove-shell · update-shells · installkernel)는 sysroot에만 풀리고
+# initrd에는 안 들어간다. 라이브러리는 0개다 — 스크립트다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -301,6 +310,7 @@ RUN dpkg --add-architecture amd64 \
         libtinfo6:amd64 \
         libcap2:amd64 \
         coreutils:amd64 \
+        debianutils:amd64 \
         grep:amd64 \
         findutils:amd64 \
         sed:amd64 \
