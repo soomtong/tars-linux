@@ -77,10 +77,10 @@ EDIT_KEYS=(e c h o spc s h e l l equal z s h spc shift-dot spc
 READBACK_KEYS=(c a t spc slash c o n f i g slash t a r s dot c o n f ret)
 
 # ── SC-M1 ───────────────────────────────────────────────────────────────
-# tars-config — 씨앗이 정의한 alias다. 이 한 명령이 셋을 동시에 본다:
+# tars-config — seed가 정의한 alias다. 이 한 명령이 셋을 동시에 본다:
 #   1. /config/fish.config가 생겼다
 #   2. fish가 그것을 읽었다(안 읽었으면 모르는 명령이다)
-#   3. 씨앗 tars.conf가 실제로 shell_config=on을 담고 있다
+#   3. seed tars.conf가 실제로 shell_config=on을 담고 있다
 # SC-M0의 게이트는 로그에서 기본값만 봤고 파일의 내용은 못 봤다.
 ALIAS_KEYS=(t a r s minus c o n f i g ret)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
@@ -102,16 +102,16 @@ GITCONF_KEYS=(g i t spc c o n f i g spc minus minus g e t spc i n i t dot
               d e f a u l t shift-b r a n c h ret)
 # echo echo tars-rc-alive >> /config/zshrc
 #
-# 판정 글자를 사람이 심는 자리다. 씨앗에는 echo를 넣을 수 없다 — 설정
+# 판정 글자를 사람이 심는 자리다. seed에는 echo를 넣을 수 없다 — 설정
 # 디스크를 붙이는 다섯 체인의 화면 좌표가 밀린다. 그래서 "rc가 읽혔다"를
 # 말해 줄 글자는 게이트가 타이핑한다(design 결정 10의 "사람이 줄을 더한다").
 #
-# >> 는 shift-dot 둘이다. 씨앗을 덮어쓰지 않는 것이 요점이다 — 2차 부팅이
-# 읽는 파일은 씨앗 + 사람이 더한 줄이어야 한다.
+# >> 는 shift-dot 둘이다. seed를 덮어쓰지 않는 것이 요점이다 — 2차 부팅이
+# 읽는 파일은 seed + 사람이 더한 줄이어야 한다.
 APPEND_KEYS=(e c h o spc e c h o spc t a r s minus r c minus a l i v e spc
              shift-dot shift-dot spc slash c o n f i g slash z s h r c ret)
 # grep alive /config/zshrc — 더한 줄이 파일에 들어갔는지 되읽는다.
-# cat이 아니라 grep인 이유는 출력이 한 줄이어야 하기 때문이다. 씨앗은
+# cat이 아니라 grep인 이유는 출력이 한 줄이어야 하기 때문이다. seed는
 # 열몇 줄이고, UT-M3이 배운 대로 긴 출력의 첫 줄은 프레임에 안 남는다.
 RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c ret)
 # echo shell_config=off >> /config/tars.conf — 2차 부팅에서 친다.
@@ -126,7 +126,7 @@ BREAK_KEYS=(e c h o spc e x i t spc shift-dot shift-dot spc
             slash c o n f i g slash z s h r c ret)
 # grep exit /config/zshrc — 되읽기.
 #
-# cat이 아니라 grep인 이유가 둘이다. 하나는 M1의 이유 그대로(씨앗이 열몇
+# cat이 아니라 grep인 이유가 둘이다. 하나는 M1의 이유 그대로(seed가 열몇
 # 줄이라 긴 출력의 첫 줄이 프레임에 안 남는다), 다른 하나는 이 부팅이 부정
 # 검사를 갖고 있다는 것이다 — cat하면 `echo tars-rc-alive`가 화면에 뜨고
 # 3차의 판정이 그것을 보게 된다. 화면에 안 띄우는 것이 요점이다.
@@ -143,7 +143,7 @@ ON_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o n spc
 # 훅도 함께 안 걸린다. 훅을 보려면 먼저 그 줄을 없애야 한다.
 #
 # 한 줄만 지우지 않고 파일을 통째로 지운다. 이유가 셋이다.
-#   1. 7차의 rc가 정확히 우리 씨앗이 된다 — 1차에서 사람이 더한
+#   1. 7차의 rc가 정확히 우리 seed가 된다 — 1차에서 사람이 더한
 #      `echo tars-rc-alive`도 없다. 증명 대상이 `rcSeed()`의 내용 그 자체다.
 #   2. `seedRcFiles`의 `O_EXCL`이 "없으면 만든다"를 빈 디스크가 아닌
 #      자리에서 다시 증명한다. 셋 중 하나만 지웠으니 7차의 `seeded`도
@@ -191,7 +191,7 @@ HOOK_WIDGET_KEYS=(w h e n c e spc minus w spc
 #
 # 그 줄이 이제 없다. 이유가 둘이다.
 #
-#   1. 필요 없다. 씨앗 rc의 `setopt INC_APPEND_HISTORY`가 명령을 칠 때마다
+#   1. 필요 없다. seed rc의 `setopt INC_APPEND_HISTORY`가 명령을 칠 때마다
 #      그 자리에서 파일에 쓴다(SD 실측 6). 전원을 뽑는 시점에 8차가 읽을
 #      것이 이미 디스크에 있다.
 #   2. 해롭다. `fc -W`는 메모리의 목록으로 파일을 통째로 덮어쓰므로 다른
@@ -199,7 +199,7 @@ HOOK_WIDGET_KEYS=(w h e n c e spc minus w spc
 #      둘을 만드는 검사라, 그 명령을 남겨 두면 검사가 자기 재료를 지운다.
 #
 # 대신 이 부팅이 중첩 zsh 둘로 음성·양성 대조군을 만든다(SD 결정 5). 둘 다
-# 같은 씨앗 rc를 읽으므로 production과 같은 모양이고, 다른 것은 첫 명령
+# 같은 seed rc를 읽으므로 production과 같은 모양이고, 다른 것은 첫 명령
 # 한 줄뿐이다. 콘솔 셸을 끌어오지 않는 이유는 SD 확인 3에 있다 — 중첩이
 # 같은 경합을 만들고, FIFO는 이 체인의 골격을 바꾼다.
 NEST_KEYS=(z s h ret)
@@ -254,7 +254,7 @@ EXIT_KEYS=(e x i t ret)
 # 같은 실험을 bash로 한 번 더 한다. SD-M2가 zsh에 대해 세운 구조를 그대로
 # 쓰되 셋이 다르다.
 #
-#   1. 중첩이 bash다. 씨앗은 `~/.bashrc` 링크로 그대로 읽힌다.
+#   1. 중첩이 bash다. seed는 `~/.bashrc` 링크로 그대로 읽힌다.
 #   2. 첫 명령이 HISTFILE 대입이다. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
 #      /config/zsh_history이고, 안 맞추면 이 검사가 zsh 파일에 섞인 평문을
 #      센다 — 양성이 우연히 통과할 수 있다(BH 위험 4).
@@ -403,10 +403,10 @@ edit_config_in_guest() {
     return 1
   fi
 
-  # ── SC-M1: 씨앗을 먼저 묻는다 ────────────────────────────────────────
+  # ── SC-M1: seed를 먼저 묻는다 ────────────────────────────────────────
   #
   # 고치기 전에 묻는 것이 순서다. 아래 EDIT_KEYS가 tars.conf를 한 줄로
-  # 덮어쓰므로, 씨앗 파일의 내용을 볼 수 있는 것은 지금뿐이다.
+  # 덮어쓰므로, seed 파일의 내용을 볼 수 있는 것은 지금뿐이다.
   #
   # dumpScreen은 화면 전체를 한 줄에 찍고 행을 " | "로 나눈다. 그래서
   # 행의 첫머리를 보는 것이 출력이고, 방금 타이핑한 명령줄은 프롬프트로
@@ -414,7 +414,7 @@ edit_config_in_guest() {
   type_keys "${ALIAS_KEYS[@]}"
   if ! wait_for_screen '\| shell_config=on'; then
     echo "FAIL(boot 1): 'tars-config' never printed the seeded config"
-    echo "  둘 중 하나다 — 씨앗 /config/fish.config가 안 생겼거나, 생겼는데"
+    echo "  둘 중 하나다 — seed /config/fish.config가 안 생겼거나, 생겼는데"
     echo "  fish가 그것을 안 읽었다. 아래 마지막 화면에 'Unknown command'가"
     echo "  있으면 후자다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -424,11 +424,11 @@ edit_config_in_guest() {
 
   # ── ST-M1: 별칭이 실제로 도는가 ──────────────────────────────────────
   #
-  # 씨앗에 별칭 줄이 있다는 것은 위 검사가 못 본다. 여기서 쳐 본다.
+  # seed에 별칭 줄이 있다는 것은 위 검사가 못 본다. 여기서 쳐 본다.
   type_keys "${EZA_LS_KEYS[@]}"
   if ! wait_for_screen '\.rw-'; then
     echo "FAIL(boot 1): 'ls -l /config' never printed an eza-style file mode"
-    echo "  둘 중 하나다 — 씨앗의 'alias ls=eza' 줄이 없거나, eza가 initrd에"
+    echo "  둘 중 하나다 — seed의 'alias ls=eza' 줄이 없거나, eza가 initrd에"
     echo "  없거나. 화면에 'Unknown command'가 있으면 전자이고, GNU ls의 목록"
     echo "  (-rw-r--r--)이 남아 있으면 후자다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -444,8 +444,8 @@ edit_config_in_guest() {
   type_keys "${GITCONF_KEYS[@]}"
   if ! wait_for_screen '\| main'; then
     echo "FAIL(boot 1): 'git config --get init.defaultBranch' did not answer main"
-    echo "  셋 중 하나다 — 씨앗이 안 깔렸거나, /.gitconfig 링크가 안 풀리거나,"
-    echo "  씨앗에 그 키가 없거나. 화면에 fatal이 있으면 git이 파일을 못 읽은"
+    echo "  셋 중 하나다 — seed가 안 깔렸거나, /.gitconfig 링크가 안 풀리거나,"
+    echo "  seed에 그 키가 없거나. 화면에 fatal이 있으면 git이 파일을 못 읽은"
     echo "  것이고, 아무것도 안 남았으면 그 키가 없는 것이다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -490,7 +490,7 @@ edit_config_in_guest() {
   # fzf는 --height일 때 터미널에 커서 위치를 묻고(ESC[6n) 그 답으로 자기 상자
   # 높이를 정한다. ST-M3 전까지 우리 terminal이 그 질의에 답하지 않아 첫
   # Ctrl+R이 멈췄고(다음 키가 그 잠금을 풀어 "두 번 눌러야 열린다"로 보였다),
-  # 그때는 씨앗이 `--no-height`를 줘서 우회했다.
+  # 그때는 seed가 `--no-height`를 줘서 우회했다.
   #
   # TQ-M1이 그 우회를 지웠다. 터미널이 이제 답하므로 picker는 기본값 그대로
   # 뜨고, 이 검사가 재는 것이 "화면 전체짜리 picker"에서 "40% 높이 상자"로
@@ -736,7 +736,7 @@ repair_broken_rc() {
 
 # 7차 부팅의 훅. 이 milestone이 증명하려는 것 전부가 여기 있다(SM-M1).
 #
-# 이 부팅의 `/config/zshrc`는 init이 방금 다시 깐 씨앗이다(6차가 지웠다).
+# 이 부팅의 `/config/zshrc`는 init이 방금 다시 깐 seed다(6차가 지웠다).
 # 사람이 손댄 줄이 한 줄도 없으므로 증명 대상이 `rcSeed()`의 내용 그
 # 자체다.
 #
@@ -784,7 +784,7 @@ probe_shell_hooks() {
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 7): nobody typed 'zoxide add', and z did not walk back to the directory the cd should have taught"
-    echo "  셋 중 하나다 — 씨앗의 훅 줄이 안 돌았거나(rc를 안 읽었다),"
+    echo "  셋 중 하나다 — seed의 훅 줄이 안 돌았거나(rc를 안 읽었다),"
     echo "  zoxide가 없거나, cd가 실패했다. 아래 마지막 화면에 'command not"
     echo "  found'가 있으면 둘째다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -805,14 +805,14 @@ probe_shell_hooks() {
   fi
   echo "boot 7: the fzf integration defined its Ctrl+R widget without the gate pressing Ctrl+R"
 
-  # ── BH-M2: bash 씨앗의 한 줄이 게스트에서 하는 일을 본다 ──────────────
+  # ── BH-M2: bash seed의 한 줄이 게스트에서 하는 일을 본다 ──────────────
   #
-  # 구조가 아래 SD-M2의 것과 같다. 중첩 둘이 음성·양성이고 둘 다 같은 씨앗
+  # 구조가 아래 SD-M2의 것과 같다. 중첩 둘이 음성·양성이고 둘 다 같은 seed
   # rc를 읽으며, 다른 것은 음성이 훅을 끄는 한 줄뿐이다.
   #
   #   bneg0  훅을 끈 세션이 친 명령은 살아 있는 동안 파일에 없다
   #   baft1  그 세션이 나가면서 썼다 — 그러니 그 명령은 분명히 쳐졌다
-  #   bpos1  씨앗의 훅이 살아 있는 세션은 치는 그 자리에서 파일에 쓴다
+  #   bpos1  seed의 훅이 살아 있는 세션은 치는 그 자리에서 파일에 쓴다
   #
   # ⚠ HISTFILE 대입을 지우지 말 것. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
   #   /config/zsh_history이고, 그것을 안 맞추면 아래 grep이 zsh 형식 파일에
@@ -828,7 +828,7 @@ probe_shell_hooks() {
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 7): the nested bash never drew its prompt"
-    echo "  /usr/bin/bash가 게스트에 없거나, 씨앗 rc가 셸을 매달리게 한 것이다."
+    echo "  /usr/bin/bash가 게스트에 없거나, seed rc가 셸을 매달리게 한 것이다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
@@ -845,7 +845,7 @@ probe_shell_hooks() {
     echo "FAIL(boot 7): the bash session with its prompt hook cleared still wrote its command to the history file"
     echo "  화면에 bneg1이 있으면 PROMPT_COMMAND= 가 안 먹은 것이다."
     echo "  bneg라는 글자가 숫자 없이 있으면 /config/bash_history가 아직 없어서"
-    echo "  grep이 에러를 낸 것이고, 그것은 씨앗의 그 줄이 안 걸렸다는 뜻이다."
+    echo "  grep이 에러를 낸 것이고, 그것은 seed의 그 줄이 안 걸렸다는 뜻이다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
@@ -861,7 +861,7 @@ probe_shell_hooks() {
     exec 3>&-
     echo "FAIL(boot 7): the negative bash session's command never reached the file, so the check above saw nothing"
     echo "  화면에 baft0이 있으면 그 명령이 애초에 안 쳐진 것이고, 그러면"
-    echo "  위의 bneg0은 씨앗의 줄과 아무 상관이 없다. 중첩 bash가 떴는지부터"
+    echo "  위의 bneg0은 seed의 줄과 아무 상관이 없다. 중첩 bash가 떴는지부터"
     echo "  본다 — 프롬프트가 bash-5.2#로 바뀌었어야 한다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -879,7 +879,7 @@ probe_shell_hooks() {
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 7): with the seeded prompt hook on, a typed command was not in the bash history file yet"
-    echo "  화면에 bpos0이 있으면 씨앗의 PROMPT_COMMAND 줄이 안 걸린 것이다 —"
+    echo "  화면에 bpos0이 있으면 seed의 PROMPT_COMMAND 줄이 안 걸린 것이다 —"
     echo "  그 줄이 없거나(rcSeed의 bash 갈래), bash가 /config/bashrc를 안"
     echo "  읽었거나, 뒤에 오는 zoxide 훅이 그 변수를 덮어쓴 것이다."
     echo "  bpos만 숫자 없이 있으면 둘째 중첩의 HISTFILE 대입이 rc 읽기 중에"
@@ -895,7 +895,7 @@ probe_shell_hooks() {
 
   # ── SD-M2: 그 한 줄이 게스트에서 실제로 하는 일을 본다 ────────────────
   #
-  # 중첩 zsh 둘이 음성·양성 대조군이다(SD 결정 5). 둘 다 같은 씨앗 rc를
+  # 중첩 zsh 둘이 음성·양성 대조군이다(SD 결정 5). 둘 다 같은 seed rc를
   # 읽고, 다른 것은 음성이 첫 명령으로 옵션을 끄는 것 하나뿐이다. 그래서
   # 이 셋이 증명하는 것이 "우리가 넣은 그 줄이 차이를 만든다"가 된다.
   #
@@ -955,7 +955,7 @@ probe_shell_hooks() {
 
   if [ "$ok" != "1" ]; then
     echo "FAIL(boot 7): with the seeded option on, a typed command was not in the history file yet"
-    echo "  화면에 pos0이 있으면 씨앗의 setopt 줄이 안 걸린 것이다 — 그 줄이"
+    echo "  화면에 pos0이 있으면 seed의 setopt 줄이 안 걸린 것이다 — 그 줄이"
     echo "  없거나(rcSeed), 셸이 rc를 안 읽었거나, 옵션 이름이 틀렸다."
     echo "  이 줄이 SD가 넣은 그 한 줄을 게이트가 보는 유일한 자리다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -1048,7 +1048,7 @@ probe_persisted_memory() {
   # 이유가 둘이다. 하나는 `history`가 최근 16개만 찍는데(실측 36) 7차가
   # 중첩 세션 둘을 돌면서 그 뒤로 줄이 아홉쯤 더 붙어 옛 글자가 창 밖으로
   # 밀려난 것이고, 다른 하나는 이쪽이 더 정확하다는 것이다 — 옛 글자는
-  # `fc -W`가 쓴 것이었고 이 글자는 씨앗의 옵션이 칠 때마다 쓴 것이라,
+  # `fc -W`가 쓴 것이었고 이 글자는 seed의 옵션이 칠 때마다 쓴 것이라,
   # 이 검사가 판정하는 대상이 SD가 넣은 그 한 줄이 된다.
   type_keys "${HISTORY_KEYS[@]}"
   local ok=0
@@ -1103,13 +1103,13 @@ probe_persisted_memory() {
 # 판정 셋이 서로 다른 실패를 본다.
 #
 #   1. /usr/bin으로 간다      → zoxide 훅이 bash의 PROMPT_COMMAND에 살아 있다
-#   2. bprod1                 → 씨앗의 `history -a` 줄이 env가 준 파일에 쓴다
+#   2. bprod1                 → seed의 `history -a` 줄이 env가 준 파일에 쓴다
 #   3. bprodwfunction         → fzf 통합이 이 셸에서 위젯을 정의했다
 #
 # 1과 2가 한 변수를 두고 겨루는 둘이라는 것이 이 부팅의 요점이다(BH design
-# 결정 3). `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이기는데, 씨앗이
+# 결정 3). `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이기는데, seed가
 # 히스토리 줄을 훅보다 먼저 두어 둘이 함께 산다. 뒤집히면 2는 초록이고 1이
-# 빨개진다 — 호스트 검사(`expectPromptCommandBeforeHooks`)가 씨앗의 순서를
+# 빨개진다 — 호스트 검사(`expectPromptCommandBeforeHooks`)가 seed의 순서를
 # 보고 있고, 이 둘이 그 순서의 결과를 게스트에서 본다.
 probe_bash_production() {
   local log="$1"
@@ -1170,7 +1170,7 @@ probe_bash_production() {
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 9): z did not walk back into the directory this boot just visited"
-    echo "  둘 중 하나다 — 씨앗의 zoxide 훅이 eval되지 않았거나(그러면 z가"
+    echo "  둘 중 하나다 — seed의 zoxide 훅이 eval되지 않았거나(그러면 z가"
     echo "  없는 명령이다), PROMPT_COMMAND의 마지막 대입이 히스토리 줄이 되어"
     echo "  훅을 밀어냈다. 뒤엣것이면 아래 bprod1은 초록으로 남는다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -1178,7 +1178,7 @@ probe_bash_production() {
   fi
   echo "boot 9: the zoxide hook survived the PROMPT_COMMAND it shares with history"
 
-  # ── 2. 씨앗의 히스토리 줄이 env가 준 파일에 쓰는가 ─────────────────────
+  # ── 2. seed의 히스토리 줄이 env가 준 파일에 쓰는가 ─────────────────────
   #
   # BH-M2가 중첩으로 본 것과 판정 글자의 모양이 같고 조건이 다르다. 여기는
   # `HISTFILE`을 손으로 안 맞춘다(BB 결정 5) — 그 값이 env로 오는 것까지
@@ -1189,7 +1189,7 @@ probe_bash_production() {
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 9): the typed line is not in /config/bash_history while this session lives"
-    echo "  셋 중 하나다 — 씨앗의 PROMPT_COMMAND 줄이 없거나, env의 HISTFILE이"
+    echo "  셋 중 하나다 — seed의 PROMPT_COMMAND 줄이 없거나, env의 HISTFILE이"
     echo "  다른 파일을 가리키거나, 그 파일에 쓸 수 없다. 화면에 bprod0이"
     echo "  남았으면 앞의 둘이고, 숫자 없는 글자가 남았으면 파일이 없다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -1210,7 +1210,7 @@ probe_bash_production() {
 
   if [ "$ok" != "1" ]; then
     echo "FAIL(boot 9): the fzf integration did not define its Ctrl+R widget in bash"
-    echo "  화면에 bprodw만 남았으면 그 이름의 함수가 없는 것이고(씨앗의 fzf"
+    echo "  화면에 bprodw만 남았으면 그 이름의 함수가 없는 것이고(seed의 fzf"
     echo "  줄이 안 돌았다), 아무것도 안 남았으면 명령이 화면에 안 닿았다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -1305,7 +1305,7 @@ report_failure() {
 }
 
 # ---------------------------------------------------------------- 1차 부팅
-# 빈 디스크. init이 씨앗을 심고(fish), 그 다음 사람이 zsh로 고친다.
+# 빈 디스크. init이 seed를 심고(fish), 그 다음 사람이 zsh로 고친다.
 echo "=== boot 1/9: empty disk, seed the config and the rc files, then edit them from inside ==="
 if ! boot_once "$LOG1" "tars-init: created /config/tars.conf" edit_config_in_guest; then
   report_failure "$LOG1" "first boot did not seed and edit /config/tars.conf"
@@ -1321,7 +1321,7 @@ if grep -q "tars-init: loaded /config/tars.conf" "$LOG1"; then
   report_failure "$LOG1" "first boot loaded an existing config; the disk was not empty"
 fi
 
-# 씨앗은 언제나 기본값이다. 1차 부팅의 셸은 아직 fish여야 한다 — 여기가
+# seed는 언제나 기본값이다. 1차 부팅의 셸은 아직 fish여야 한다 — 여기가
 # zsh였다면 디스크가 비어 있지 않았다는 뜻이다.
 if ! grep -q "tars-init: config shell=fish" "$LOG1"; then
   report_failure "$LOG1" "first boot did not start from the default (fish)"
@@ -1331,7 +1331,7 @@ fi
 # 다른 체인들이 `tars-init: config shell=`을 앞부분으로 grep하고 있기
 # 때문이다(main.zig의 그 자리 주석이 HI-M2에 대해 같은 것을 적고 있다).
 #
-# 여기가 게이트에서 기본값을 보는 유일한 자리다. 씨앗 파일이 실제로
+# 여기가 게이트에서 기본값을 보는 유일한 자리다. seed 파일이 실제로
 # `shell_config=on`을 담았다는 것은 SC-M1이 2차 부팅으로 본다 — 이 검사가
 # 보는 것은 파서가 그 키를 알고, 기본값이 on이라는 것까지다.
 if ! grep -q "tars-init: config shell=fish.*shell_config=on" "$LOG1"; then
@@ -1339,9 +1339,9 @@ if ! grep -q "tars-init: config shell=fish.*shell_config=on" "$LOG1"; then
 fi
 echo "boot 1: init reported shell_config=on (the sixth key reached the log)"
 
-# SC-M1 결정 7. 씨앗 셋이 로그에 한 줄씩 남는다. 화면으로 보는 것은
+# SC-M1 결정 7. seed 셋이 로그에 한 줄씩 남는다. 화면으로 보는 것은
 # fish의 것 하나뿐이고(1차 부팅의 셸이 fish다) 나머지 둘은 이 줄이 전부다 —
-# bash·zsh의 씨앗이 읽히는지는 이 milestone이 zsh에 대해서만 본다.
+# bash·zsh의 seed가 읽히는지는 이 milestone이 zsh에 대해서만 본다.
 for rc in /config/bashrc /config/zshrc /config/fish.config; do
   if ! grep -q "tars-init: seeded ${rc}" "$LOG1"; then
     report_failure "$LOG1" "first boot did not seed ${rc}"
@@ -1358,15 +1358,15 @@ fi
 echo "boot 1: init seeded the gitconfig too (the .gitconfig link has a target now)"
 
 # BH-M2. devtmpfs는 /dev/fd를 안 만들고 우리는 udev를 안 쓴다. 그 링크가
-# 없으면 bash의 process substitution이 여는 /dev/fd/63이 없어서, 씨앗의
+# 없으면 bash의 process substitution이 여는 /dev/fd/63이 없어서, seed의
 # fzf 훅이 rc를 읽는 자리에서 `No such file or directory` 한 줄을 찍는다 —
-# 씨앗이 아무것도 안 찍어야 한다는 규칙을 정확히 그 한 줄이 깬다.
+# seed가 아무것도 안 찍어야 한다는 규칙을 정확히 그 한 줄이 깬다.
 if ! grep -q "tars-init: linked /dev/fd to /proc/self/fd" "$LOG1"; then
   report_failure "$LOG1" "first boot did not link /dev/fd; bash process substitution will fail in the seeded rc"
 fi
 echo "boot 1: /dev/fd is linked, so process substitution works in the shells we seed"
 
-# SM-M2. 이 부팅의 셸은 fish다(씨앗이 기본값이다). fish의 히스토리는
+# SM-M2. 이 부팅의 셸은 fish다(seed가 기본값이다). fish의 히스토리는
 # XDG_DATA_HOME 아래로 통째로 따라오므로(실측 11·40) HISTFILE이 한 줄도
 # 안 나와야 한다 — 그 침묵이 결정 3의 절반이고, 값이 폴백 뒤의 셸을
 # 따른다는 증거이기도 하다.
@@ -1455,8 +1455,8 @@ fi
 # ── SC-M1: 이 milestone이 증명하려는 것 ─────────────────────────────────
 #
 # 1차에서 사람이 /config/zshrc에 더한 `echo tars-rc-alive` 한 줄이 이 부팅의
-# 셸에서 실행됐는가. 씨앗을 덮어쓰지 않고 더한 줄이므로, 이 글자가 보이면
-# 씨앗 파일 자체가 읽혔다는 뜻이기도 하다.
+# 셸에서 실행됐는가. seed를 덮어쓰지 않고 더한 줄이므로, 이 글자가 보이면
+# seed 파일 자체가 읽혔다는 뜻이기도 하다.
 #
 # 두 자리를 따로 본다(결정 4).
 #
@@ -1479,7 +1479,7 @@ if ! grep -a "terminal: screen>" "$LOG2" | grep -a "tars-rc-alive" >/dev/null; t
 fi
 echo "boot 2: both shells read /config/zshrc (the user's line ran twice)"
 
-# 씨앗은 한 번만 깐다. 이 부정 검사가 없으면 "매 부팅 덮어쓴다"와 구분이
+# seed는 한 번만 깐다. 이 부정 검사가 없으면 "매 부팅 덮어쓴다"와 구분이
 # 안 되고, 그러면 사용자가 rc에 쓴 것이 조용히 사라진다 — 위에서 tars.conf에
 # 대해 CP-M1부터 갖고 있는 검사와 같은 자리다.
 if grep -q "tars-init: seeded /config/" "$LOG2"; then
@@ -1681,7 +1681,7 @@ fi
 
 # ---------------------------------------------------------------- 7차 부팅
 # 같은 이미지, 기본 cmdline. 6차가 `/config/zshrc`를 지웠으므로 init이
-# 그것만 다시 깔고(`O_EXCL`), 셸이 그 씨앗을 읽는다.
+# 그것만 다시 깔고(`O_EXCL`), 셸이 그 seed를 읽는다.
 #
 # ★ SM-M1이 증명하려는 것이 여기 있다. 그리고 그 증명의 성질이 M0과
 #   다르다 — `tools/check.sh` 검사 18은 사람이 `zoxide add`를 쳤고, 이 부팅은
@@ -1724,14 +1724,14 @@ for want in \
   fi
 done
 
-# 7차의 rc는 사람이 손댄 적이 없는 씨앗이다. 1차에서 사람이 더한 줄은
+# 7차의 rc는 사람이 손댄 적이 없는 seed다. 1차에서 사람이 더한 줄은
 # 6차가 파일과 함께 지웠다 — 이 부정 검사가 그것을 말한다. 이 글자가 보이면
 # 6차의 `rm`이 안 먹었거나 init이 다른 파일을 깐 것이다.
 if grep -q "tars-rc-alive" "$LOG7"; then
   report_failure "$LOG7" "the seventh boot's rc still carries the line a human typed; it is not the seed"
 fi
 
-# 그리고 그 씨앗은 셸을 안 죽인다. 훅 두 줄이 늘어난 파일이라 이 검사가
+# 그리고 그 seed는 셸을 안 죽인다. 훅 두 줄이 늘어난 파일이라 이 검사가
 # 전보다 중요해졌다 — design 위험 1이 말하는 실패가 여기로도 온다.
 if grep -q "times fast" "$LOG7"; then
   report_failure "$LOG7" "a shell died on the seventh boot; the hooks in the seed are not safe to read"
@@ -1771,7 +1771,7 @@ if ! grep -q "tars-init: config shell=zsh.*shell_config=on" "$LOG8"; then
   report_failure "$LOG8" "eighth boot did not read back shell_config=on"
 fi
 
-# 씨앗은 다시 안 깔린다. 7차가 zshrc를 되깔았으므로 셋이 다 있다 —
+# seed는 다시 안 깔린다. 7차가 zshrc를 되깔았으므로 셋이 다 있다 —
 # 여기서 seeded가 하나라도 나오면 디스크가 아니라 tmpfs를 보고 있는 것이다.
 if grep -q "tars-init: seeded /config/" "$LOG8"; then
   report_failure "$LOG8" "eighth boot re-seeded an rc file; it was not looking at the same disk"
@@ -1848,13 +1848,13 @@ if grep -q "tars-init: env SAVEHIST" "$LOG9"; then
 fi
 echo "boot 9: the env block carries bash's two history variables and not zsh's third"
 
-# 씨앗은 다시 안 깔린다. `/config/bashrc`는 1차가 깔고 아무도 안 지웠다 —
+# seed는 다시 안 깔린다. `/config/bashrc`는 1차가 깔고 아무도 안 지웠다 —
 # 여기서 seeded가 하나라도 나오면 디스크가 아니라 tmpfs를 보고 있는 것이다.
 if grep -q "tars-init: seeded /config/" "$LOG9"; then
   report_failure "$LOG9" "ninth boot re-seeded an rc file; it was not looking at the same disk"
 fi
 
-# 그 씨앗을 읽는 셸이 둘인데 둘 다 안 죽는다(BB 실측 3·4). bash 갈래의 씨앗이
+# 그 seed를 읽는 셸이 둘인데 둘 다 안 죽는다(BB 실측 3·4). bash 갈래의 seed가
 # production 부팅에서 안전하다는 주장이 정확히 이 넷이다.
 if grep -q "times fast" "$LOG9"; then
   report_failure "$LOG9" "a shell died on the ninth boot; the bash seed is not safe to read"

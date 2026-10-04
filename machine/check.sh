@@ -287,7 +287,7 @@ if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
 fi
 
 # 판정 10. 붙었다는 것과 읽었다는 것이 또 다르다. mkfs.ext2의 -d가 안 먹었으면
-# 여기서 created(씨앗 심기)로 갈린다.
+# 여기서 created(seed 심기)로 갈린다.
 if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
   fail "the config disk mounted but tars.conf was not read" \
     "tars-init: created /config" "tars-init: loaded /config"

@@ -307,7 +307,7 @@ ln -sf config/gitconfig "$WORKDIR/.gitconfig"
 #
 # 파일은 여기서 안 만든다. initrd에 넣으면 tmpfs에 생겨서 부팅마다
 # 초기화되고, 그러면 링크가 가리키는 자리와 파일이 있는 자리가 갈린다.
-# 씨앗은 init이 /config를 마운트한 뒤에 깐다(SC-M1).
+# seed는 init이 /config를 마운트한 뒤에 깐다(SC-M1).
 #
 # 설정 디스크를 못 찾으면? .gitconfig과 같다 — 링크가 initrd 안의 빈
 # /config를 가리키고 셸은 rc가 없는 채로 뜬다. 부팅을 안 막는다.

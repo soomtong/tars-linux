@@ -1,6 +1,6 @@
-# ST-M2 — gitconfig를 씨앗으로 만들어 댕글링 링크를 채운다
+# ST-M2 — gitconfig를 seed로 만들어 댕글링 링크를 채운다
 
-> 이 plan을 실행하는 사람에게: 씨앗 하나와 검사 셋이 늘어난다. TDD가 아니라
+> 이 plan을 실행하는 사람에게: seed 하나와 검사 셋이 늘어난다. TDD가 아니라
 > 기존 검사(config_test · config 체인 · tools 체인)를 다시 돌리는 구조다.
 
 Goal: `/.gitconfig -> config/gitconfig`가 가리키는 자리를 채운다(design 결정
@@ -8,14 +8,14 @@ Goal: `/.gitconfig -> config/gitconfig`가 가리키는 자리를 채운다(desi
 그 링크는 영원히 댕글링이다.
 
 Architecture: rc 셋을 깔던 자리를 파일 하나짜리 함수로 좁히고(`seedOneFile`),
-gitconfig를 그 위에 얹는다. 씨앗은 `rcSeed()`처럼 문자열 리터럴이다 — 실체는
+gitconfig를 그 위에 얹는다. seed는 `rcSeed()`처럼 문자열 리터럴이다 — 실체는
 설정 디스크의 `/config/gitconfig`이고 `O_EXCL`이라 이미 있으면 안 건드린다.
 
 Tech Stack: Zig 0.16 · bash · git(게이트가 친다)
 
 ---
 
-## Task 1 — 씨앗 함수를 일반화하고 gitconfig를 더한다
+## Task 1 — seed 함수를 일반화하고 gitconfig를 더한다
 
 `init/src/config.zig`:
 
@@ -77,11 +77,11 @@ GITCONF_KEYS=(g i t spc c o n f i g spc minus minus g e t spc i n i t dot d e f 
 | 순서 | 명령 | 무엇을 보는가 |
 |---|---|---|
 | 1 | `zig build test` (컨테이너) | 새 단위 검사 |
-| 2 | `./tools/check.sh` | 검사 13이 그대로 초록인가(이 체인엔 설정 디스크가 없어 씨앗이 안 깔린다) |
+| 2 | `./tools/check.sh` | 검사 13이 그대로 초록인가(이 체인엔 설정 디스크가 없어 seed가 안 깔린다) |
 | 3 | `./config/check.sh` | `main`과 `seeded /config/gitconfig` |
 | 4 | `./check.sh` | 루트 게이트 12체인 |
 
-2가 초록이라는 것이 "씨앗이 검사 13을 거짓으로 만들지 않는다"의 증거다.
+2가 초록이라는 것이 "seed가 검사 13을 거짓으로 만들지 않는다"의 증거다.
 
 ## 다음
 

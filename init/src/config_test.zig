@@ -7,7 +7,7 @@ const config = @import("config.zig");
 const MAX_HOOK_LINES = 8;
 
 /// 이 기계가 훅을 걸어야 하는 도구들. `hookLines()`가 이 둘을 전부 덮는지
-/// 보는 것이 `expectHooksCoverTheTools`이고, 그것이 없으면 "씨앗과
+/// 보는 것이 `expectHooksCoverTheTools`이고, 그것이 없으면 "seed와
 /// `hookLines()`에서 함께 지우기"가 조용히 통과한다 — 정방향도 역방향도
 /// 만족되기 때문이다.
 ///
@@ -15,7 +15,7 @@ const MAX_HOOK_LINES = 8;
 /// 고쳐야 한다 — 손이 한 번 멈추는 자리를 만드는 것이 이 배열의 전부다.
 const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 
-/// 씨앗에 들어와도 좋은 별칭 이름(ST-M1 · design 결정 7).
+/// seed에 들어와도 좋은 별칭 이름(ST-M1 · design 결정 7).
 ///
 /// `expectQuietSeed`는 `alias `로 시작하는 줄을 전부 통과시킨다 — 별칭은
 /// 문법이 좁고 정의할 때 조용하므로 그 문을 넓힐 이유가 없었고, 그래서
@@ -43,13 +43,13 @@ const ALIASED_TOOLS = [_][]const u8{"eza"};
 /// `MAX_HOOK_LINES`와 같은 이유로 상한이 필요하다 — 힙이 없다.
 const MAX_HIST_OPTION_LINES = 4;
 
-/// 씨앗에 들어와도 좋다고 우리가 직접 재 본 옵션 줄(SD design 결정 4).
+/// seed에 들어와도 좋다고 우리가 직접 재 본 옵션 줄(SD design 결정 4).
 ///
 /// `HOOKED_TOOLS`와 같은 자리다 — 손이 한 번 멈추는 자리를 만드는 것이
-/// 전부다. `histOptionLines()`와 씨앗은 두 벌이라 함께 고치면 검사가
+/// 전부다. `histOptionLines()`와 seed는 두 벌이라 함께 고치면 검사가
 /// 통과하는데, 그 구멍을 이 셋째 벌이 막는다.
 ///
-/// 새 줄을 씨앗에 넣으려면 먼저 그 줄이 조용한 것을 재고 여기 적어야
+/// 새 줄을 seed에 넣으려면 먼저 그 줄이 조용한 것을 재고 여기 적어야
 /// 한다. 재는 방법이 셸마다 다르다는 것이 BH-M1이 배운 것이다.
 ///
 /// zsh의 `setopt`는 rc를 읽는 그 자리에서 돌므로 `zsh -c '<줄>'`로 잰다.
@@ -135,7 +135,7 @@ fn expect(text: []const u8, want: config.Config) !void {
     return error.UnexpectedConfig;
 }
 
-/// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. 씨앗 파일(`save`)이
+/// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. seed 파일(`save`)이
 /// `arg()`로 써지고 다음 부팅이 `parse()`로 읽으므로, 이 왕복이 이 키가
 /// 부팅을 넘는 유일한 길이다.
 fn expectNtpRoundTrip(value: config.Ntp, want_text: []const u8) !void {
@@ -155,7 +155,7 @@ fn expectNtpRoundTrip(value: config.Ntp, want_text: []const u8) !void {
     }
 }
 
-/// 씨앗 rc가 쓸 수 있는 줄을 담고 있는지 확인한다(SC-M1, SM-M1이 넓혔다).
+/// seed rc가 쓸 수 있는 줄을 담고 있는지 확인한다(SC-M1, SM-M1이 넓혔다).
 ///
 /// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 우리가
 /// 쓸 수 있는 줄의 종류를 제한한다.
@@ -175,7 +175,7 @@ fn expectNtpRoundTrip(value: config.Ntp, want_text: []const u8) !void {
 ///
 /// 위험 3의 반쪽이 여기 있다. design이 *"우리가 까는 것은 절대로 셸을
 /// 죽이지 않아야 한다"*고 적었고, 그 "절대로"를 지키는 장치가 이 함수다.
-/// 씨앗 rc가 쓸 수 있는 줄만 담고 있는지 확인한다(SC-M1이 세우고 SM-M1과
+/// seed rc가 쓸 수 있는 줄만 담고 있는지 확인한다(SC-M1이 세우고 SM-M1과
 /// SD-M1이 한 줄씩 넓혔다).
 ///
 /// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 우리가
@@ -209,7 +209,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
     }
     const hooks = sh.hookLines();
     const opts = sh.histOptionLines();
-    // 훅과 옵션 줄이 씨앗에서 보였는가. 힙이 없으므로 상한이 둘 다
+    // 훅과 옵션 줄이 seed에서 보였는가. 힙이 없으므로 상한이 둘 다
     // 필요하고, 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
     var seen: [MAX_HOOK_LINES]bool = @splat(false);
     var seen_opt: [MAX_HIST_OPTION_LINES]bool = @splat(false);
@@ -287,7 +287,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
         std.debug.print("FAIL: the {s} seed defines no alias for the gate to find\n", .{@tagName(sh)});
         return error.BadSeed;
     }
-    // 씨앗은 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
+    // seed는 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
     // `tars-rc`를 쳤을 때 없는 파일을 cat한다 — 문서가 아니라 실행되는
     // 문장이라 틀린 것이 드러난다.
     if (std.mem.indexOf(u8, text, sh.rcPath()) == null) {
@@ -300,7 +300,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
 
 /// 훅 목록이 도구 둘 다에 훅을 거는가(SM-M1).
 ///
-/// `expectQuietSeed`의 양방향으로는 안 닫히는 길이 하나 있다 — 씨앗과
+/// `expectQuietSeed`의 양방향으로는 안 닫히는 길이 하나 있다 — seed와
 /// `hookLines()`에서 함께 지우면 정방향(위반할 줄이 없다)도
 /// 역방향(찾을 훅이 없다)도 만족된다. 그 길을 닫는 것이 이 함수다.
 ///
@@ -323,7 +323,7 @@ fn expectHooksCoverTheTools(sh: config.Shell) !void {
     }
 }
 
-/// 씨앗의 별칭 이름이 허용 목록 안인가(ST-M1 · design 결정 7).
+/// seed의 별칭 이름이 허용 목록 안인가(ST-M1 · design 결정 7).
 ///
 /// 이름은 `alias `와 그 뒤 첫 `=`/공백 사이의 글자다. 셋의 문법이 같아서
 /// (`alias 이름='본문'`) 한 벌로 본다.
@@ -364,7 +364,7 @@ fn expectAliasNames(sh: config.Shell) !void {
     }
 }
 
-/// 별칭이 있어야 하는 도구가 씨앗의 별칭 줄에 나오는가(ST-M1).
+/// 별칭이 있어야 하는 도구가 seed의 별칭 줄에 나오는가(ST-M1).
 ///
 /// `expectHooksCoverTheTools`와 같은 자리다. 별칭 넷과 이 배열을 함께
 /// 지우면 위의 허용 목록 검사도 `expectQuietSeed`도 통과한다.
@@ -386,13 +386,13 @@ fn expectAliasesCoverTheTools(sh: config.Shell) !void {
     }
 }
 
-/// 셋의 씨앗이 같은 별칭 줄들을 담는가(ST-M1).
+/// 셋의 seed가 같은 별칭 줄들을 담는가(ST-M1).
 ///
 /// 세 벌을 문자로 각각 적는 이유는 `hookLines()`의 주석과 같다(배열에서
 /// 조립하면 검사가 tautology가 된다). 그 대가는 셋이 갈라질 수 있다는
 /// 것이고, 갈라지면 게이트가 못 보는 자리가 생긴다 — 부팅으로 "이 별칭이
 /// 돈다"를 확인한 것은 fish의 `ls`(config 체인 1차)와 zsh의 `ls`(6·8차)
-/// 뿐이고, bash의 별칭은 그 셸이 씨앗을 읽는다는 것까지만 확인된다.
+/// 뿐이고, bash의 별칭은 그 셸이 seed를 읽는다는 것까지만 확인된다.
 ///
 /// 그래서 셋의 도구 별칭 줄을 순서까지 견준다. 런타임에 증명된 줄이 나머지
 /// 두 셸의 같은 줄까지 덮게 하는 것이 이 검사의 값이다. 셸 문법 때문에
@@ -452,9 +452,9 @@ fn expectAliasLinesMatch() !void {
     }
 }
 
-/// gitconfig 씨앗이 git이 읽을 수 있는 모양인가(ST-M2 · design 결정 5).
+/// gitconfig seed가 git이 읽을 수 있는 모양인가(ST-M2 · design 결정 5).
 ///
-/// rc 씨앗의 `expectQuietSeed`와 재는 것이 다르다. gitconfig는 셸이 읽는
+/// rc seed의 `expectQuietSeed`와 재는 것이 다르다. gitconfig는 셸이 읽는
 /// 파일이 아니라서 "조용한가"가 뜻이 없다 — 대신 "git이 이 줄을 변수로
 /// 읽는가"가 뜻이 있다. 그 문법이 좁다: 주석(`#`), 절(`[이름]`), `키 = 값`
 /// 셋뿐이다. 그 셋 밖의 줄 하나가 부팅 뒤 모든 git 명령에
@@ -479,7 +479,7 @@ fn expectGitconfigSeed() !void {
     while (lines.next()) |raw| {
         const line = std.mem.trim(u8, raw, " \t\r");
         if (line.len == 0) continue;
-        // 주석은 안 본다. 씨앗이 사용자에게 하는 설명에 `[user]`라는 글자가
+        // 주석은 안 본다. seed가 사용자에게 하는 설명에 `[user]`라는 글자가
         // 나올 수 있고(그것이 이 검사가 막으려는 바로 그 절이다), 글자로
         // 찾으면 그 설명이 자기 검사에 걸린다 — 실제로 걸렸다.
         if (line[0] == '#') continue;
@@ -538,7 +538,7 @@ fn expectGitconfigSeed() !void {
 /// 결정이고(SM 실측 9·10·11), 그 결정이 옳은지는 `config/check.sh`의 8차
 /// 부팅이 본다. 여기가 보는 것은 우리가 셸마다 무엇을 주려고 했는가까지다.
 ///
-/// 씨앗 쪽의 짝은 아래 `expectHistOptions`다. SD-M1이 그것을 더했다 —
+/// seed 쪽의 짝은 아래 `expectHistOptions`다. SD-M1이 그것을 더했다 —
 /// env로 되는 것(`HISTFILE`·`HISTSIZE`·`SAVEHIST`)과 파일로만 되는 것
 /// (`setopt`)이 갈리므로 검사도 둘이다.
 ///
@@ -601,7 +601,7 @@ fn expectHistEntries(sh: config.Shell) !void {
 ///   2. 모든 줄이 `KNOWN_HIST_OPTIONS`에 있다 — 우리가 직접 재 본 글자다
 ///
 /// 둘째가 없으면 `INC_APPEND_HISTORYY`로 오타를 낸 것이 호스트를 통과한다.
-/// 개수는 여전히 1이고, 씨앗과 `histOptionLines()`를 함께 틀리게 고치면
+/// 개수는 여전히 1이고, seed와 `histOptionLines()`를 함께 틀리게 고치면
 /// `expectQuietSeed`의 양방향도 만족되기 때문이다. 그 오타의 대가는
 /// stderr 65바이트이고 다섯 체인의 화면 좌표다(SD 실측 9).
 fn expectHistOptions(sh: config.Shell) !void {
@@ -634,7 +634,7 @@ fn expectHistOptions(sh: config.Shell) !void {
     }
 }
 
-/// 씨앗에서 `PROMPT_COMMAND`를 건드리는 줄이 훅 줄보다 앞에 있는가
+/// seed에서 `PROMPT_COMMAND`를 건드리는 줄이 훅 줄보다 앞에 있는가
 /// (BH design 결정 4).
 ///
 /// `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이긴다. zoxide의 bash
@@ -646,7 +646,7 @@ fn expectHistOptions(sh: config.Shell) !void {
 /// 디렉터리도 안 배운다 — 게이트가 그것을 보는 자리는 8차 부팅 하나뿐이다.
 ///
 /// 보는 대상이 `histOptionLines()` 전체가 아니라 `PROMPT_COMMAND`를 건드리는
-/// 줄인 이유가 있다. zsh 씨앗의 `setopt INC_APPEND_HISTORY`는 훅 두 줄보다
+/// 줄인 이유가 있다. zsh seed의 `setopt INC_APPEND_HISTORY`는 훅 두 줄보다
 /// 뒤에 있고 그것이 맞다 — `setopt`는 다른 줄과 안 부딪치므로 순서를 요구할
 /// 근거가 없다. 규칙과 근거를 맞춰 둔다.
 fn expectPromptCommandBeforeHooks(sh: config.Shell) !void {
@@ -854,7 +854,7 @@ pub fn main() !void {
     // 앞의 다섯과 완전히 같은 모양이다(hangul_toggle만 다르다).
     // enum이 화이트리스트이고, 모르는 값은 기본값에 머문다.
     try expect("shell_config=off\n", .{ .shell_config = .off });
-    // 기본값을 명시적으로 적는 것도 통과한다. 씨앗 파일이 실제로 그렇게
+    // 기본값을 명시적으로 적는 것도 통과한다. seed 파일이 실제로 그렇게
     // 생겼으므로 이 왕복이 참이어야 한다.
     try expect("shell_config=on\n", .{});
     try expect("shell_config=yes\n", .{}); // enum에 없는 값
@@ -899,7 +899,7 @@ pub fn main() !void {
         .ntp = .{ .server = .{ 10, 0, 2, 2 } },
     });
 
-    // `arg()`가 왕복하는가. 씨앗 파일이 이 함수로 써지므로, 왕복이 깨지면
+    // `arg()`가 왕복하는가. seed 파일이 이 함수로 써지므로, 왕복이 깨지면
     // init이 만든 tars.conf를 init 자신이 다음 부팅에 다시 못 읽는다.
     try expectNtpRoundTrip(.off, "off");
     try expectNtpRoundTrip(.dhcp, "dhcp");
@@ -1041,11 +1041,11 @@ pub fn main() !void {
         return error.ToggleRoundTripFailed;
     }
 
-    // ── SC-M1: 씨앗 rc의 불변식 ─────────────────────────────────────────
+    // ── SC-M1: seed rc의 불변식 ─────────────────────────────────────────
     //
     // 이 검사의 목적은 지금 통과하는 것이 아니라 나중에 막는 것이다.
     // 설정 디스크를 붙이는 체인이 다섯이고(design 실측 4) 그중 셋이 화면의
-    // 셀 좌표로 판정한다. 씨앗이 부팅할 때 한 글자라도 찍으면 그 좌표가
+    // 셀 좌표로 판정한다. seed가 부팅할 때 한 글자라도 찍으면 그 좌표가
     // 통째로 밀리고, 증상은 부팅 20초 뒤에 엉뚱한 체인이 깨지는 것이다.
     //
     // 그래서 규칙을 코드 모양으로 못 박는다: 주석이 아닌 줄은 `alias `로
@@ -1056,9 +1056,9 @@ pub fn main() !void {
     // 넓히는 방법이 정확 허용 목록인 이유가 design 결정 6이고, 검사가
     // 셋인 이유는 각각 다른 실수를 막기 때문이다.
     //
-    //   정방향  씨앗에 아무 문장이나 들어오는 것
+    //   정방향  seed에 아무 문장이나 들어오는 것
     //   역방향  훅을 지우는 것이 통과하는 것
-    //   덮개    씨앗과 hookLines()에서 함께 지우는 것
+    //   덮개    seed와 hookLines()에서 함께 지우는 것
     for (std.enums.values(config.Shell)) |sh| try expectQuietSeed(sh);
     for (std.enums.values(config.Shell)) |sh| try expectHooksCoverTheTools(sh);
 
@@ -1069,7 +1069,7 @@ pub fn main() !void {
     //   이름   허용 목록 밖의 이름 — 게이트가 치는 이름을 가리는 별칭
     //   덮개   별칭 넷과 ALIASED_TOOLS를 함께 지우는 것
     //
-    // 셋째(씨앗이 그 줄을 담았는가)는 `expectQuietSeed`의 정방향이 이미
+    // 셋째(seed가 그 줄을 담았는가)는 `expectQuietSeed`의 정방향이 이미
     // 본다 — 별칭은 허용 범주라 그 문으로 들어오므로 역방향이 필요 없다.
     for (std.enums.values(config.Shell)) |sh| try expectAliasNames(sh);
     for (std.enums.values(config.Shell)) |sh| try expectAliasesCoverTheTools(sh);
@@ -1077,16 +1077,16 @@ pub fn main() !void {
     // 같은가"를 본다 — 런타임 증명이 일부 셸에만 있어서 필요한 검사다.
     try expectAliasLinesMatch();
 
-    // ── ST-M2: gitconfig 씨앗 ───────────────────────────────────────────
+    // ── ST-M2: gitconfig seed ───────────────────────────────────────────
     //
-    // 이 씨앗은 셸이 안 읽는다 — git이 읽는다. 그래서 위의 조용함 검사가
+    // 이 seed는 셸이 안 읽는다 — git이 읽는다. 그래서 위의 조용함 검사가
     // 아니라 문법 검사를 받는다. 셸별 검사가 아니라 한 번이다.
     try expectGitconfigSeed();
 
     // ── SD-M1: 히스토리 옵션 줄 ─────────────────────────────────────────
     //
     // 검사가 셋인 구조가 SM-M1과 같다. 정방향과 역방향은 위
-    // `expectQuietSeed`가 함께 보고, 셋째(씨앗과 `histOptionLines()`에서
+    // `expectQuietSeed`가 함께 보고, 셋째(seed와 `histOptionLines()`에서
     // 함께 지우는 것)를 이 줄이 막는다 — zsh의 개수를 1로 못 박으므로
     // 목록이 비면 그 자리에서 빨개진다.
     for (std.enums.values(config.Shell)) |sh| try expectHistOptions(sh);

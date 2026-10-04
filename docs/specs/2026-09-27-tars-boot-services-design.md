@@ -137,7 +137,7 @@ terminal · 콘솔 셸 뒤에 붙인다. 규칙은 그 둘과 글자 그대로 �
 
 ### 결정 5 — 기본은 아무것도 안 뜬다
 
-`services.d`가 비면 아무것도 안 뜬다. `init`은 `services.d`에 파일을 씨앗으로
+`services.d`가 비면 아무것도 안 뜬다. `init`은 `services.d`에 파일을 seed로
 심지 않는다 — 심으면 모든 기계에서 그 서비스가 켜진다. FW 결정 1의 "기본 꺼짐,
 켜면 닫힘"과 같은 방향이다. `tars.conf`에 켜고 끄는 키도 두지 않는다 — 디렉터리가
 곧 스위치다.
@@ -535,7 +535,7 @@ zsh|/usr/bin/zsh|UTC|/usr/bin:/bin|/config/zsh_history|5000|/config/xdg
 ```
 
 `SetEnv`의 `PATH`가 sshd의 컴파일된 기본값(실측 6)을 이긴다. 대화형 세션(`-tt`에 줄을
-흘려 넣었다)에서는 rc가 읽혔고(`type ls` → `ls is an alias for eza` — 씨앗 rc의 별칭이다),
+흘려 넣었다)에서는 rc가 읽혔고(`type ls` → `ls is an alias for eza` — seed rc의 별칭이다),
 친 명령이 `/config/zsh_history`에 남았다(`grep -c` → 1, 끝 줄 `echo svm2-hist-$((6*7))` ·
 `exit`). 콘솔과 ssh가 같은 히스토리 파일을 쓴다.
 

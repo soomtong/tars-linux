@@ -16,7 +16,7 @@
 
 > For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Goal: `zoxide`와 `fzf`를 게스트에 세운다. 훅은 안 건다 — 씨앗 rc는 한
+Goal: `zoxide`와 `fzf`를 게스트에 세운다. 훅은 안 건다 — seed rc는 한
 글자도 안 바뀌고, 사람이 `zoxide`·`fzf`를 직접 이름으로 불러서 둘이 도는
 것까지가 이 milestone이다.
 

@@ -264,7 +264,7 @@ mkfs.ext2 -F -m 0 -L tars-config /dev/sdX
 fzf의 picker는 `--height 40%` 상자로 뜬다. fzf는 그 높이를 정하려고 터미널에
 커서 위치를 묻고(`ESC[6n`) 답이 올 때까지 그리지 않는데, 답하는 것은 우리
 `terminal`의 몫이다(`effects.write_pty` — `terminal/src/vt.zig`). 2026-09-19
-TQ-M1 전에는 그 칸이 비어 있어 첫 `Ctrl+R`이 멈췄고 씨앗이
+TQ-M1 전에는 그 칸이 비어 있어 첫 `Ctrl+R`이 멈췄고 seed가
 `FZF_DEFAULT_OPTS=--no-height`로 우회했다 — 그 줄은 이제 없다.
 
 `tars.conf`에 `shell_config=off`를 적거나 cmdline에 `tars.noconfig`를 주면
@@ -307,12 +307,12 @@ rc가 안 읽히고 훅도 함께 안 걸린다. 그것이 맞는 동작이다 �
 (`root <root@(none).(none)>`). 바꾸려면 그 절을 더한다. rc 셋과 달리 이
 파일은 재부팅이 필요 없다 — git은 명령마다 읽는다.
 
-### 씨앗은 한 번만 깔린다
+### seed는 한 번만 깔린다
 
-`init`은 없는 씨앗만 깐다(`O_EXCL`). 그래서 이 저장소가 별칭을 늘려도 예전에
-쓰던 설정 디스크는 새 씨앗을 못 받는다 — 받으려면 그 파일을 지우고
+`init`은 없는 seed만 깐다(`O_EXCL`). 그래서 이 저장소가 별칭을 늘려도 예전에
+쓰던 설정 디스크는 새 seed를 못 받는다 — 받으려면 그 파일을 지우고
 재부팅한다(`/config/bashrc` · `/config/zshrc` · `/config/fish.config`).
-지운 자리에 새 씨앗이 깔린다. 그 경로는 `config/check.sh`의 6·7차 부팅이
+지운 자리에 새 seed가 깔린다. 그 경로는 `config/check.sh`의 6·7차 부팅이
 매번 밟는다. 그때 그 파일에 직접 더해 둔 줄은 함께 사라진다.
 
 ### 셸 설정을 고쳤는데 셸이 안 뜨면

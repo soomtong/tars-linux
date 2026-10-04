@@ -14,16 +14,16 @@
 >    "두 번 돌린다"에서 "돌리기 전에 `rm -rf init/zig-out`"으로 바뀌었다.
 >    바뀐 뒤에는 첫 회차부터 빨강이다(넷 중 넷).
 >
-> 그리고 plan에 없던 것을 하나 했다 — 씨앗의 실제 바이트를 꺼내
+> 그리고 plan에 없던 것을 하나 했다 — seed의 실제 바이트를 꺼내
 > (`zig run`으로 `rcSeed()`를 찍어서) 그것으로 셸 셋을 띄워 봤다. 실측 23의
-> 마지막 문단이 그것이고, 상수 문자열로 잰 것과 씨앗 1,382바이트로 잰 것이
+> 마지막 문단이 그것이고, 상수 문자열로 잰 것과 seed 1,382바이트로 잰 것이
 > 같다는 확인이다.
 
 > For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan
 > task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Goal: 씨앗 rc 셋이 `zoxide`와 `fzf`의 훅을 담는다. 그리고 게이트가
+Goal: seed rc 셋이 `zoxide`와 `fzf`의 훅을 담는다. 그리고 게이트가
 아무도 `zoxide add`를 안 쳤는데 DB에 디렉터리가 들어가 있는 것을 본다 —
 `cd` 한 번이 그것을 했다는 뜻이고, 그것이 "훅이 걸렸다"의 유일한 증거다.
 
@@ -40,8 +40,8 @@ Tech Stack: Zig 0.16(init) · bash(게이트 체인) · QEMU monitor `sendkey`
 
 읽고 시작할 것:
 `docs/specs/2026-09-11-tars-shell-memory-design.md` — 특히
-실측 5·6(훅의 출력이 0바이트) · 실측 13(씨앗 문법이 둘로 막혀 있다) ·
-결정 5(훅은 씨앗에 들어가고 기본이 켜짐) · 결정 6(정확 허용 목록) ·
+실측 5·6(훅의 출력이 0바이트) · 실측 13(seed 문법이 둘로 막혀 있다) ·
+결정 5(훅은 seed에 들어가고 기본이 켜짐) · 결정 6(정확 허용 목록) ·
 결정 8(게이트는 둘로 나눠 보고 `config/check.sh`가 부팅을 더한다).
 
 그리고 `init/src/config.zig`의 `rcSeed()` 머리 주석과
@@ -52,10 +52,10 @@ Tech Stack: Zig 0.16(init) · bash(게이트 체인) · QEMU monitor `sendkey`
 
 ## 이 milestone을 지배하는 사실 둘
 
-### 1. 씨앗이 한 글자라도 찍으면 다른 다섯 체인이 깨진다
+### 1. seed가 한 글자라도 찍으면 다른 다섯 체인이 깨진다
 
 설정 디스크를 붙이는 체인이 다섯이고(`config`·`input`·`power`·`hangul`·
-`machine`) 그중 셋이 화면의 셀 좌표로 판정한다. 씨앗은 그 다섯 전부에서
+`machine`) 그중 셋이 화면의 셀 좌표로 판정한다. seed는 그 다섯 전부에서
 읽히므로, 이 milestone의 가장 큰 위험은 "훅이 안 돈다"가 아니라 "훅이 한
 줄 찍어서 엉뚱한 체인이 깨진다"다.
 
@@ -101,11 +101,11 @@ design 결정 8은 M1이 6차 부팅 하나를 더한다고 적었다. 그럴 �
 | 부팅 | cmdline | 하는 일 |
 |---|---|---|
 | 6차 | `tars.noconfig` | `rm /config/zshrc` — 깨진 rc를 지운다 |
-| 7차 | 기본 | init이 다시 씨앗을 깐다(`O_EXCL`). 그 씨앗의 훅이 돈다 |
+| 7차 | 기본 | init이 다시 seed를 깐다(`O_EXCL`). 그 seed의 훅이 돈다 |
 
 `sed`로 `exit` 한 줄만 지우지 않고 파일을 통째로 지우는 이유가 셋이다.
 
-1. 7차의 rc가 정확히 우리 씨앗이다 — 게이트가 1차에서 손으로 더한
+1. 7차의 rc가 정확히 우리 seed다 — 게이트가 1차에서 손으로 더한
    `echo tars-rc-alive`도 없다. 증명 대상이 `rcSeed()`의 내용 그 자체가
    된다.
 2. `seedRcFiles`의 `O_EXCL`이 "없으면 만든다"라는 것을 다시, 빈 디스크가
@@ -191,7 +191,7 @@ zsh -i -c 'cd /usr/bin/../share/terminfo/x; cd /; z terminfo x; pwd'
 | bash | 0바이트 | 38바이트 |
 | fish | 0바이트 | 191바이트 / 6줄 |
 
-이 표가 관문의 전부다. 씨앗이 한 줄 찍으면 다섯 체인의 셀 좌표가 밀린다.
+이 표가 관문의 전부다. seed가 한 줄 찍으면 다섯 체인의 셀 좌표가 밀린다.
 
 - [x] Step 7: 실측 28 — 훅의 비용은 arm64에서 2ms다
 
@@ -216,7 +216,7 @@ fzf가 바인드하는 것: ^I(Tab) · ^T · ^R · \ec(Alt+C)   ← zsh·fish �
 
 ---
 
-## Task 2: `config.zig` — `hookLines()`와 씨앗 셋
+## Task 2: `config.zig` — `hookLines()`와 seed 셋
 
 Files:
 - Modify: `init/src/config.zig` (`Shell` enum 안, `rcPath()`와 `rcSeed()`
@@ -227,13 +227,13 @@ Files:
 `Shell.rcPath()` 바로 뒤, `rcSeed()` 앞에 `hookLines()`를 넣는다. 문자열은
 컨테이너 상수 셋(`HOOKS_FISH`·`HOOKS_BASH`·`HOOKS_ZSH`)에 둔다.
 
-씨앗의 글자와 여기 글자를 일부러 두 벌로 둔다. `rcSeed()`를 이 목록에서
+seed의 글자와 여기 글자를 일부러 두 벌로 둔다. `rcSeed()`를 이 목록에서
 `++`로 조립하면 두 벌이 하나가 되고 design 결정 6의 역방향 검사가
 tautology가 된다 — 이 저장소가 반복해서 부딪친 "통과했다와 볼 것이 없었다를
 가르는" 자리다(UT-M1의 정적 목록 검사가 같은 이유로 가짜였다). 두 벌을 잇는
 것은 `config_test.zig`이고, 그것이 결정 6의 목적이다.
 
-- [x] Step 2: 씨앗 셋에 훅 두 줄과 그 설명을 더한다
+- [x] Step 2: seed 셋에 훅 두 줄과 그 설명을 더한다
 
 alias 둘 뒤에 붙인다. 머리 주석의 *"여기 있는 것이 주석과 alias뿐"*도
 함께 고친다 — 그 문장이 틀린 채로 남으면 다음 사람이 이 규칙을 잘못
@@ -257,11 +257,11 @@ Files:
 
 | | 무엇 | 무엇을 막나 |
 |---|---|---|
-| 정방향 | 비주석·비`alias` 줄은 `hookLines()`의 한 줄과 글자 그대로 같아야 한다 | 씨앗에 아무 문장이나 들어오는 것 |
-| 역방향 | `hookLines()`의 전부가 씨앗에 있어야 한다 | 훅을 지우는 것이 통과하는 것 |
+| 정방향 | 비주석·비`alias` 줄은 `hookLines()`의 한 줄과 글자 그대로 같아야 한다 | seed에 아무 문장이나 들어오는 것 |
+| 역방향 | `hookLines()`의 전부가 seed에 있어야 한다 | 훅을 지우는 것이 통과하는 것 |
 | 덮개 | 훅 목록이 `zoxide`와 `fzf` 둘을 다 덮어야 한다 | 두 자리에서 함께 지우는 것 |
 
-셋째가 없으면 "둘 다 없애기"가 조용히 통과한다 — 씨앗과 `hookLines()`를
+셋째가 없으면 "둘 다 없애기"가 조용히 통과한다 — seed와 `hookLines()`를
 같이 고치면 정·역방향이 둘 다 만족되기 때문이다. 그 편집이 정당할 수도 있지만,
 그때는 이 줄을 먼저 지워야 한다 — 손이 한 번 멈추는 자리를 만드는 것이
 목적이다.
@@ -282,9 +282,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 Files: 없음(되돌렸다 복구)
 
-- [x] 되돌림 A: 씨앗에 `echo` 한 줄 → 정방향이 잡는다
-- [x] 되돌림 B: 씨앗에서 훅 한 줄을 지운다 → 역방향이 잡는다
-- [x] 되돌림 B2: 훅을 `hookLines()`와 씨앗에서 함께 지운다 → 덮개가
+- [x] 되돌림 A: seed에 `echo` 한 줄 → 정방향이 잡는다
+- [x] 되돌림 B: seed에서 훅 한 줄을 지운다 → 역방향이 잡는다
+- [x] 되돌림 B2: 훅을 `hookLines()`와 seed에서 함께 지운다 → 덮개가
       잡는다(`FAIL: no fzf hook line for the zsh seed`)
 
 B가 이 milestone의 새 그물이고, B2는 plan에 없던 것을 더한 것이다 — 검사를
@@ -319,7 +319,7 @@ Files:
 |---|---|
 | `seeded /config/zshrc`가 있다 | `O_EXCL`이 없는 것을 다시 만들었다 |
 | `seeded /config/bashrc`가 없다 | 있는 것은 안 건드렸다 |
-| `tars-rc-alive`가 없다 | 7차의 rc는 사람이 손댄 적 없는 우리 씨앗이다 |
+| `tars-rc-alive`가 없다 | 7차의 rc는 사람이 손댄 적 없는 우리 seed다 |
 | `times fast`가 없다 | 훅이 셸을 안 죽였다 |
 
 ---
@@ -341,7 +341,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 나머지 하나의 검사는 초록이어야 한다 — 그것이 두 판정이 서로 독립이라는 뜻이다.
 
 - [x] 되돌림 C: zoxide 훅의 관문을 없는 이름으로(`command -v zoxide-nope`).
-      `hookLines()`와 씨앗을 함께 고친다.
+      `hookLines()`와 seed를 함께 고친다.
       기대: `z`가 못 돌고 7차가 빨강. `whence` 검사는 초록.
 
 ⚠ plan이 틀렸다 — 셋.
@@ -355,8 +355,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 되돌림 D 하나다.
 
 (다) 첫 시도의 편집이 한쪽만 고쳤다. `perl -pi`의 정규식이 상수 쪽
-(`eval \"…\"` — 백슬래시가 있다)과 씨앗 쪽(`eval "…"`)을 같은 패턴으로 잡으려
-했다. 그래서 씨앗만 바뀌고 `hookLines()`는 안 바뀌었고, 호스트 검사가 그것을
+(`eval \"…\"` — 백슬래시가 있다)과 seed 쪽(`eval "…"`)을 같은 패턴으로 잡으려
+했다. 그래서 seed만 바뀌고 `hookLines()`는 안 바뀌었고, 호스트 검사가 그것을
 잡았다 — 내가 만들려던 실패가 아니라 정방향 검사가 자기 일을 한 것이다.
 고친 뒤 다시 했다.
 
@@ -390,7 +390,7 @@ FAIL(boot 7): nobody typed 'zoxide add', and z did not walk back to …
 - [x] Step 2: 세는 것 — `Welcome to fish`가 6(회귀 없음) ·
       `command not found`가 0 · 새 `echo` 줄 셋이 각 3
 
-⚠ 다섯 체인 전부가 씨앗을 새로 받는다. 훅이 한 줄이라도 찍으면
+⚠ 다섯 체인 전부가 seed를 새로 받는다. 훅이 한 줄이라도 찍으면
 `input`·`power`·`hangul`·`machine` 중 하나가 깨진다 — 그것이 이 게이트가
 보는 가장 중요한 것이고, 실측 23이 예측하는 것은 "안 깨진다"다.
 

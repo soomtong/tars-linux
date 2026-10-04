@@ -14,7 +14,7 @@ design: `docs/specs/2026-09-12-tars-bash-boot-design.md`
 하나를 그대로 이미지에 담아 주므로, `shell=bash` 한 줄이 든 `tars.conf`를
 미리 넣고 한 번만 부팅한다.
 
-씨앗 rc는 이 부팅의 init이 깐다(`O_EXCL`). 그래서 읽히는 bashrc가
+seed rc는 이 부팅의 init이 깐다(`O_EXCL`). 그래서 읽히는 bashrc가
 `rcSeed()`의 내용 그 자체이고, 사람이 손댄 줄이 한 줄도 없다.
 
 디스크가 새것이라 얻는 것이 하나 더 있다. `/config/bash_history`와 zoxide DB가
@@ -131,7 +131,7 @@ wait "$QEMU_PID" 2>/dev/null
 
 echo "=== 측정 1~4: init 로그 전문 ==="
 grep -a 'tars-init:' "$LOG"
-echo "=== 씨앗이 조용한가 — 의심스러운 줄 ==="
+echo "=== seed가 조용한가 — 의심스러운 줄 ==="
 grep -anE 'No such file|command not found|rror|warning' "$LOG" | head -20
 cp "$LOG" /workspace/out/bb_m0_serial.log
 echo "serial log copied to out/bb_m0_serial.log"
@@ -144,7 +144,7 @@ echo "serial log copied to out/bb_m0_serial.log"
    `SAVEHIST`가 없는가.
 3. `started console shell`과 `started terminal`이 각각 하나이고 `times fast`와
    `giving up on`이 없는가.
-4. 씨앗 bashrc가 화면과 로그에 아무것도 안 찍는가.
+4. seed bashrc가 화면과 로그에 아무것도 안 찍는가.
 5. 최상위 bash의 프롬프트가 화면에 어떤 글자로 나오는가(9차의 대기에 쓴다).
 6. `cd /usr/share/../bin` → `cd /` → `z bin` → `pwd`가 `/usr/bin`을 찍는가.
 7. `declare -F | grep fzf`가 무엇을 찍는가. 겸해서 `shift-backslash`가

@@ -5,8 +5,8 @@
 > 것은 design 문서의 실측 절 하나다. TDD 구조가 아니다 — TS-M0 · NW-M0 ·
 > IN-M0의 plan과 같은 형식이다.
 
-Goal: ST design의 결정 4(별칭 넷)와 위험 2(씨앗이 찍으면 좌표가 밀린다)를
-부팅 한 번으로 닫는다. 그러면 M1이 씨앗을 고칠 때 미지수가 남지 않는다.
+Goal: ST design의 결정 4(별칭 넷)와 위험 2(seed가 찍으면 좌표가 밀린다)를
+부팅 한 번으로 닫는다. 그러면 M1이 seed를 고칠 때 미지수가 남지 않는다.
 
 Architecture: 호스트에서 후보 줄을 담은 파일 넷을 만들어 `mkfs.ext2 -d`로
 설정 디스크에 싣고, 게스트 콘솔 셸에서 그 파일을 셸 셋에 각각 먹여 출력
@@ -60,7 +60,7 @@ docker run --rm -v /tmp/probe/m0:/m0 tars-devcontainer bash -c '
 ```
 
 `-d`가 파일 넷을 이미지 루트에 넣는다. 게스트는 이 이미지를 `/config`에
-붙이므로 `/config/cand.fish`가 된다. init은 없는 씨앗 셋을 함께 깐다 —
+붙이므로 `/config/cand.fish`가 된다. init은 없는 seed 셋을 함께 깐다 —
 그것은 이 측정에 영향이 없다.
 
 Acceptance: `debugfs` 목록에 `cand.fish` · `cand.bash` · `cand.zsh` · `empty.sh`
@@ -99,7 +99,7 @@ Acceptance: 화면에 `wc -c`의 답이 여섯 나오고, 측정 1의 셋과 측
 design의 실측 절에 절 하나("실측 7 — 후보 별칭 넷은 셸 셋에서 0바이트다")를
 더한다. 수치와 함께 비대화형이라는 한계를 적는다.
 
-측정 1이 0이 아니면 M1을 시작하지 않는다 — 그 줄은 씨앗에 못 들어간다.
+측정 1이 0이 아니면 M1을 시작하지 않는다 — 그 줄은 seed에 못 들어간다.
 그때는 원인을 재는 것이 다음 일이고, 이 plan은 여기서 멈춘다.
 
 ## 지우는 것

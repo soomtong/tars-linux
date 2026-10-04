@@ -9,7 +9,7 @@ Goal: 기계가 배운 것 둘(자주 간 디렉터리 · 쳤던 명령)이 전�
 치는데 `z`가 7차에서 배운 자리로 걸어 들어가고, `history`가 7차만 친 명령을
 갖고 있다.
 
-Architecture: 새 파일이 하나도 없다. 고치는 파일이 다섯이고, 씨앗 rc와
+Architecture: 새 파일이 하나도 없다. 고치는 파일이 다섯이고, seed rc와
 `expectQuietSeed`는 한 글자도 안 건드린다(design 결정 3 — 히스토리 줄이 rc에
 한 줄도 필요 없다).
 
@@ -85,7 +85,7 @@ PID 1이 자식에게 SIGTERM을 보내므로(`power.zig`) 히스토리는 저�
 | bash | 127 | 127 |
 | fish | 863 | 863 |
 
-위험 1(씨앗이 한 글자라도 찍으면 다섯 체인의 화면 좌표가 밀린다)이 이번에도
+위험 1(seed가 한 글자라도 찍으면 다섯 체인의 화면 좌표가 밀린다)이 이번에도
 같은 자리에 있고, 이 표가 착수 전 근거다. 그래도 게이트의 첫 회차가 진짜
 검사다.
 
@@ -194,7 +194,7 @@ fish에 빈 목록을 주므로 `shell=fish`인 기계에는 `HISTFILE`이 아�
 
 - [x] Step 9: 실측 42 — 7차→8차를 컨테이너에서 통째로 예행했다
 
-씨앗과 같은 훅이 든 `.zshrc`를 놓고, 7차를 `kill -9`로 끝내고(전원), 새
+seed와 같은 훅이 든 `.zshrc`를 놓고, 7차를 `kill -9`로 끝내고(전원), 새
 세션을 띄워 `cd`를 한 번도 안 치고 판정 셋을 확인했다.
 
 ```
@@ -239,7 +239,7 @@ Files:
     /// **fish는 빈 목록이다.** fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
     /// 따라오고(실측 11·40), 줄 수를 정하는 변수가 아예 없다(비목표 4).
     ///
-    /// **씨앗 rc에는 히스토리 줄이 한 줄도 없다**(결정 3). 실측 9·10이
+    /// **seed rc에는 히스토리 줄이 한 줄도 없다**(결정 3). 실측 9·10이
     /// 근거다 — 셋 다 env에서 먹는다. 그래서 이 milestone은
     /// `rcSeed()`도 `expectQuietSeed`도 한 글자 안 건드린다.
     const HIST_BASH = [_][:0]const u8{
@@ -508,7 +508,7 @@ const config = @import("config.zig");
 ```zig
 /// 히스토리 env가 셸의 성질과 맞는가(SM-M2 design 결정 3).
 ///
-/// **`expectQuietSeed`와 짝이 아니다** — 이 milestone은 씨앗을 안 건드린다.
+/// **`expectQuietSeed`와 짝이 아니다** — 이 milestone은 seed를 안 건드린다.
 /// 히스토리는 rc가 아니라 env로 세우고(실측 9·10·11), 그 결정이 옳은지는
 /// `config/check.sh`의 8차 부팅이 본다. 여기가 보는 것은 **우리가 셸마다
 /// 무엇을 주려고 했는가**까지다.
@@ -638,7 +638,7 @@ pub fn main(init: std.process.Init.Minimal) void {
 ```zig
     if (storage_mounted) {
         config.seedRcFiles();
-        // SM-M2 결정 9. **씨앗 rc와 같은 조건이다** — 디스크가 붙은 기계에만
+        // SM-M2 결정 9. **seed rc와 같은 조건이다** — 디스크가 붙은 기계에만
         // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
         // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그
         // 자체다: **에러가 안 나는 것이 화면 좌표를 지키는 것이다.**
@@ -930,7 +930,7 @@ probe_persisted_memory() {
 뒤에 넣을 것:
 
 ```bash
-# SM-M2. **이 부팅의 셸은 fish다**(씨앗이 기본값이다). fish의 히스토리는
+# SM-M2. **이 부팅의 셸은 fish다**(seed가 기본값이다). fish의 히스토리는
 # XDG_DATA_HOME 아래로 통째로 따라오므로(실측 11·40) HISTFILE이 한 줄도
 # 안 나와야 한다 — **그 침묵이 결정 3의 절반이고, 값이 폴백 뒤의 셸을
 # 따른다는 증거이기도 하다.**
@@ -987,7 +987,7 @@ if ! grep -q "tars-init: config shell=zsh.*shell_config=on" "$LOG8"; then
   report_failure "$LOG8" "eighth boot did not read back shell_config=on"
 fi
 
-# **씨앗은 다시 안 깔린다.** 7차가 zshrc를 되깔았으므로 셋이 다 있다 —
+# **seed는 다시 안 깔린다.** 7차가 zshrc를 되깔았으므로 셋이 다 있다 —
 # 여기서 seeded가 하나라도 나오면 디스크가 아니라 tmpfs를 보고 있는 것이다.
 if grep -q "tars-init: seeded /config/" "$LOG8"; then
   report_failure "$LOG8" "eighth boot re-seeded an rc file; it was not looking at the same disk"
@@ -1218,7 +1218,7 @@ plan에 "안 하는 것"으로 적혀 있던 `grep -q` 숙제가 스스로 찾�
 
 | | 왜 |
 |---|---|
-| 위험 3(zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다) | 알고 둔다. `setopt APPEND_HISTORY`는 씨앗 허용 목록을 한 줄 더 넓히는 일이고, 이 서브프로젝트가 먼저 증명할 것은 "남는다"다 |
+| 위험 3(zsh 두 세션이 같은 `HISTFILE`을 겹쳐 쓴다) | 알고 둔다. `setopt APPEND_HISTORY`는 seed 허용 목록을 한 줄 더 넓히는 일이고, 이 서브프로젝트가 먼저 증명할 것은 "남는다"다 |
 | `Ctrl+R`을 게이트가 치는 것 | 비목표 2. TUI라 체인이 매달린다 — 보는 것은 위젯이 정의됐다는 것까지다 |
 | `/config`가 찼을 때의 정책 | 비목표 3. 상한 5,000줄(=1.5%)까지가 이 서브프로젝트다 |
 | fish 히스토리의 줄 수 상한 | 비목표 4. fish에 그 변수가 없다 |

@@ -34,7 +34,7 @@ UDP · 포트 여럿(셋 이상) · 문법 오류 부팅(갈래 2의 판정) · 
 | `devcontainer/Dockerfile` | 층 10 — 패키지 다섯 |
 | `kernel/guest_tools.sh` | 층 10 — `nft` 한 줄(라이브러리는 `copy_lib_deps`가 따라간다) |
 | `kernel/make_initrd.sh` | `/etc/tars/firewall.nft` · `/etc/tars/firewall-base.nft` |
-| `init/src/config.zig` | `Firewall` enum · `firewall` 필드 · 파싱 · 씨앗 템플릿 |
+| `init/src/config.zig` | `Firewall` enum · `firewall` 필드 · 파싱 · seed 템플릿 |
 | `init/src/config_test.zig` | 비교 필드 하나 · 예시 다섯 |
 | `init/src/firewall.zig` (새) | `up()` — 갈래 셋과 `off` |
 | `init/src/main.zig` | `config` 로그 줄 끝에 `firewall=` · `net.bringUp` 앞의 한 줄 |
@@ -775,7 +775,7 @@ git diff --stat
 
 ## Task 8 — 이웃 체인 셋 (합 약 10분)
 
-`config` 로그 줄과 씨앗 템플릿이 바뀌었고(`config`), 게스트 도구 목록이
+`config` 로그 줄과 seed 템플릿이 바뀌었고(`config`), 게스트 도구 목록이
 바뀌었고(`tools`), 기본값 `off`가 IN의 검사를 그대로 두는지(`net`) 본다.
 
 - [ ] Step 1: 셋을 한 번씩

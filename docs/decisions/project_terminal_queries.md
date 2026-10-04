@@ -45,7 +45,7 @@ ST-M3이 그때 잰 값(첫 Ctrl+R 뒤 6~12초 관찰):
   `tools/check.sh`의 `WANT`가 지킨다). 게이트가 그 이름을 친다.
 - `terminal/check.sh` — 프로브를 치고 `len[1-9]`를 본다(답이 오면 `len6`,
   안 오면 `len0`).
-- `init/src/config.zig` — 씨앗 셋에 `FZF_DEFAULT_OPTS` 줄이 없다(ST-M3의
+- `init/src/config.zig` — seed 셋에 `FZF_DEFAULT_OPTS` 줄이 없다(ST-M3의
   우회를 지웠다). `config_test.zig`의 `KNOWN_SEED_ENV`도 함께 사라졌다.
 
 게이트가 보는 자리 셋: terminal 체인(vt 단위 검사 넷 + 게스트의 `len6`) ·
@@ -71,7 +71,7 @@ config 체인 1차 부팅(우회 없이 첫 Ctrl+R에 picker) · tools 체인(�
 
 ## 남은 것
 
-없다 — TQ는 M1 하나로 닫혔다. 다음 후보는 씨앗의 허용 범주를 늘리는 일
+없다 — TQ는 M1 하나로 닫혔다. 다음 후보는 seed의 허용 범주를 늘리는 일
 (fzf의 `FZF_DEFAULT_COMMAND` 같은 환경 변수 줄)이고 그 자리는
 `project_shell_tools`다.
 

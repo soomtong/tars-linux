@@ -1,13 +1,13 @@
 # TARS Bash History Durability — Design
 
 Date: 2026-09-12
-Status: 완료(2026-09-12) — M0·M1·M2를 다 했다. 씨앗 rc의 bash 갈래가
+Status: 완료(2026-09-12) — M0·M1·M2를 다 했다. seed rc의 bash 갈래가
 `PROMPT_COMMAND='history -a'` 한 줄을 훅보다 먼저 담고, 호스트 검사 다섯이
 그 줄과 그 자리를 지키고, 게이트의 7차 부팅이 중첩 bash 둘로 그 줄이
 게스트에서 하는 일을 판정한다(`bneg0` · `baft1` · `bpos1`). 실측 열셋이 아래
 있다.
 
-M2가 계획에 없던 것을 하나 고쳤다 — 게스트에 `/dev/fd`가 없어서 씨앗의 fzf
+M2가 계획에 없던 것을 하나 고쳤다 — 게스트에 `/dev/fd`가 없어서 seed의 fzf
 훅이 부팅할 때 에러 한 줄을 찍고 있었다(실측 13 · 결정 9).
 
 SD(Shell History Durability)가 zsh에 대해 한 일을 bash에 대해 한다. SD가
@@ -18,7 +18,7 @@ SD(Shell History Durability)가 zsh에 대해 한 일을 bash에 대해 한다. 
 ## 한 줄 요약
 
 `shell=bash`인 기계에서 콘솔 셸에 친 명령은 전원 버튼과 함께 사라진다.
-씨앗 rc의 bash 갈래에 `PROMPT_COMMAND='history -a'` 한 줄을 넣어, 히스토리
+seed rc의 bash 갈래에 `PROMPT_COMMAND='history -a'` 한 줄을 넣어, 히스토리
 파일에 글자가 닿는 시점을 종료 경로에서 떼어 낸다.
 
 ## 왜 지금인가
@@ -60,7 +60,7 @@ SD가 자기 값에 유보를 하나 달아 두었다. "Debian의 `/etc/bash.bas
 `/etc/bash.bashrc`이고(바이너리 안에 그 문자열이 있다), 게스트에 그 파일이
 없으므로 bash는 그냥 건너뛴다.
 
-그래서 게스트 bash의 동작은 컴파일 기본값과 우리 씨앗 rc뿐이다. 컨테이너에서
+그래서 게스트 bash의 동작은 컴파일 기본값과 우리 seed rc뿐이다. 컨테이너에서
 잰 값을 게스트에 옮기려면 `/etc/bash.bashrc`를 비우고 재야 한다 — 아래 측정이
 전부 그 조건이다.
 
@@ -77,7 +77,7 @@ Debian이 `histappend`를 켜는 자리는 `/etc/skel/.bashrc`이고, 그것은 
 
 ### 실측 3 — `PROMPT_COMMAND='history -a'`는 명령마다 쓴다
 
-중첩 세션 둘로 쟀다. 씨앗을 흉내 낸 rc(주석 · alias · 그 한 줄)를 읽는
+중첩 세션 둘로 쟀다. seed를 흉내 낸 rc(주석 · alias · 그 한 줄)를 읽는
 세션 안에서 `bash`를 쳐서 자식 세션을 띄우고, 하나는 `PROMPT_COMMAND=`로
 훅을 끄고 다른 하나는 그대로 둔다.
 
@@ -159,9 +159,9 @@ if [[ ${PROMPT_COMMAND:=} != *'__zoxide_hook'* ]]; then
 fi
 ```
 
-기존 값을 보존하며 앞에 붙인다. 그래서 씨앗에서 줄의 순서가 결과를 가른다.
+기존 값을 보존하며 앞에 붙인다. 그래서 seed에서 줄의 순서가 결과를 가른다.
 
-| 씨앗의 순서 | 최종 `PROMPT_COMMAND` | 결과 |
+| seed의 순서 | 최종 `PROMPT_COMMAND` | 결과 |
 |---|---|---|
 | 우리 줄이 먼저, 훅이 나중 | `__zoxide_hook;history -a` | 둘 다 산다 |
 | 훅이 먼저, 우리 줄이 나중 | `history -a` | zoxide 훅이 죽는다 |
@@ -196,15 +196,15 @@ SD 비목표 1이 "허용 목록을 한 범주 더 넓히는 일"이라고 적�
 
 ### 확인 3 — 순서를 보는 검사가 없다
 
-`expectQuietSeed`는 씨앗을 줄 단위로 훑으며 "이 줄이 허용되는가"만 본다.
+`expectQuietSeed`는 seed를 줄 단위로 훑으며 "이 줄이 허용되는가"만 본다.
 어느 줄이 어느 줄보다 먼저 오는지는 안 본다. 실측 6이 순서를 요구하므로
 검사가 하나 더 필요하다. 결정 4다.
 
-### 확인 4 — 게이트가 bash 씨앗을 보는 자리는 로그 한 줄뿐이다
+### 확인 4 — 게이트가 bash seed를 보는 자리는 로그 한 줄뿐이다
 
 `config/check.sh:918`이 1차 부팅 로그에서 `tars-init: seeded /config/bashrc`를
 찾는 것이 전부다. 열한 체인 중 bash로 부팅하는 것이 하나도 없다 —
-`input/check.sh`가 `/usr/bin/bash --norc`를 타이핑하는데 `--norc`라서 씨앗을
+`input/check.sh`가 `/usr/bin/bash --norc`를 타이핑하는데 `--norc`라서 seed를
 안 읽는다.
 
 그래서 "이 줄이 게스트에서 일한다"를 게이트가 보게 하려면 부팅을 더하거나
@@ -234,13 +234,13 @@ SD 비목표 1이 "허용 목록을 한 범주 더 넓히는 일"이라고 적�
 `history -a`가 쓰는 것은 "이번 세션에서 아직 안 쓴 줄"이고, 쓴 뒤에는 그
 표시를 옮긴다. 그래서 매번 전체를 다시 쓰지 않는다.
 
-### 결정 2 — 그 줄은 씨앗 rc에 둔다
+### 결정 2 — 그 줄은 seed rc에 둔다
 
 `setopt`와 같은 자리다. `PROMPT_COMMAND`를 나르는 환경 변수가 없으므로
 `environ.zig`로는 못 준다. 독립 파일로 빼는 것은 확인 5가 지운다 —
 `shell_config=off`이면 `--norc`라서 어느 rc도 안 읽힌다.
 
-### 결정 3 — 씨앗에서 그 줄은 훅 줄보다 먼저 온다
+### 결정 3 — seed에서 그 줄은 훅 줄보다 먼저 온다
 
 실측 6이 근거다. 우리 줄이 뒤에 오면 `zoxide init bash`가 건 `__zoxide_hook`을
 통째로 지우고, 증상은 "히스토리는 남는데 `z`가 아무 디렉터리도 안 배운다"가
@@ -255,30 +255,30 @@ SD 비목표 1이 "허용 목록을 한 범주 더 넓히는 일"이라고 적�
 
 ### 결정 4 — 그 순서를 검사가 못 박는다
 
-확인 3이 근거다. 순서는 코드를 보면 맞는데, 씨앗을 고치는 사람이 줄을
+확인 3이 근거다. 순서는 코드를 보면 맞는데, seed를 고치는 사람이 줄을
 옮기면 조용히 깨진다. `config_test.zig`에 검사를 하나 더 둔다.
 
 검사가 보는 것을 고를 때 한 번 틀렸다가 고쳤다. 처음에는 "`histOptionLines()`의
 모든 줄이 `hookLines()`의 모든 줄보다 앞선다"로 적었는데, 소스를 읽으니 zsh
-씨앗의 `setopt INC_APPEND_HISTORY`가 훅 두 줄보다 뒤에 있다
+seed의 `setopt INC_APPEND_HISTORY`가 훅 두 줄보다 뒤에 있다
 (`config.zig:369~377`). 셸 셋에 그대로 걸면 zsh가 그 자리에서 빨개진다.
 
-zsh 씨앗을 옮기는 것은 안 한다. 순서를 요구하는 근거는 "옵션 줄이라서"가
+zsh seed를 옮기는 것은 안 한다. 순서를 요구하는 근거는 "옵션 줄이라서"가
 아니라 "`PROMPT_COMMAND`가 하나뿐인 변수라서"이고, `setopt`는 다른 줄과 안
 부딪친다. 옮기면 규칙과 근거가 어긋난 채로 남는다.
 
-그래서 검사는 이렇게 읽는다 — 씨앗에서 `PROMPT_COMMAND`를 건드리는 줄이
+그래서 검사는 이렇게 읽는다 — seed에서 `PROMPT_COMMAND`를 건드리는 줄이
 있으면, 그 줄은 그 셸의 모든 훅 줄보다 앞선 줄 번호에 있어야 한다.
 
 셸 셋 전부에 건다. 지금 대상이 있는 것은 bash 하나지만, 이 모양이면 나중에
-누가 zsh나 fish 씨앗에 `PROMPT_COMMAND`를 넣어도 같은 못에 걸린다 —
+누가 zsh나 fish seed에 `PROMPT_COMMAND`를 넣어도 같은 못에 걸린다 —
 위험 3이 말하는 것이 정확히 그 경우다.
 
 ### 결정 5 — 새 줄을 들이는 검증 절차를 고친다
 
 SD 결정 4가 `KNOWN_HIST_OPTIONS`의 머리 주석에 이렇게 적어 두었다.
 
-> 새 `setopt` 줄을 씨앗에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
+> 새 `setopt` 줄을 seed에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
 > 줄의 stdout·stderr가 0바이트인 것을 재고 여기 적어야 한다.
 
 실측 5가 그 절차를 무력화한다. `bash -c`로 재면 오타 난 `PROMPT_COMMAND`도
@@ -299,14 +299,14 @@ production과 같다. 대신 체인이 부팅 하나만큼 길어지고, 게이�
 
 중첩 bash를 쓰는 쪽이 싸다. 7차 부팅은 이미 zsh로 떠 있고 중첩 zsh 둘을
 띄우고 있다. 거기에 `bash`를 한 번 더 치면 그 셸이 `~/.bashrc`를 읽는다 —
-그 링크의 실체가 `/config/bashrc`이므로 씨앗 그대로다.
+그 링크의 실체가 `/config/bashrc`이므로 seed 그대로다.
 
 production과 다른 것이 하나다. env의 `HISTFILE`이 zsh용
 (`/config/zsh_history`)이라 중첩 bash가 그 파일에 평문을 섞는다. 중첩 세션의
 첫 명령으로 `HISTFILE=/config/bash_history`를 치면 production과 같아진다.
 한 줄 더 치는 값으로 부팅 하나를 아낀다.
 
-중첩 쪽을 고른다. 대신 "이 판정이 보는 것은 씨앗 rc이지 `shell=bash`인
+중첩 쪽을 고른다. 대신 "이 판정이 보는 것은 seed rc이지 `shell=bash`인
 기계의 env가 아니다"를 체인 주석에 적는다. env 쪽은 SM-M2가 이미 보고
 있다(`tars-init: env HISTFILE=`).
 
@@ -335,15 +335,15 @@ SD 결정 8과 같다. 대화형 셸이 SIGTERM을 무시하는 것을 고치는
 3. 배열 형태의 `PROMPT_COMMAND`(bash 5.1+). 게스트 bash가 5.2라 쓸 수는
    있지만, zoxide가 `${PROMPT_COMMAND:=}`로 문자열 확장을 하므로 섞으면
    첫 원소만 보게 된다. 문자열 하나로 둔다.
-4. bash 프롬프트를 꾸미는 것. SD 비목표 5와 같은 이유다 — 씨앗은 아무것도
+4. bash 프롬프트를 꾸미는 것. SD 비목표 5와 같은 이유다 — seed는 아무것도
    찍지 않는다.
-5. 이미 설정 디스크를 가진 기계에 새 줄을 밀어 넣는 것. 씨앗은 파일이 없을
+5. 이미 설정 디스크를 가진 기계에 새 줄을 밀어 넣는 것. seed는 파일이 없을
    때만 깔린다(SD 확인 5). 게이트는 7차를 위해 rc를 지우므로 영향이 없다.
 6. `shell=bash`로 게이트를 한 회차 더 도는 것. 결정 6이 중첩으로 갈음한다.
 
 ## Milestone 셋
 
-SD와 같은 모양이다. 측정 · 씨앗과 호스트 검사 · 게이트 판정.
+SD와 같은 모양이다. 측정 · seed와 호스트 검사 · 게이트 판정.
 
 ### BH-M0 — 게스트에서 재고 컨테이너 값을 옮겨도 되는지 본다
 
@@ -357,18 +357,18 @@ SD와 같은 모양이다. 측정 · 씨앗과 호스트 검사 · 게이트 판
 3. 게스트의 zoxide(amd64 0.9.7)가 실측 6과 같은 `PROMPT_COMMAND` 취급을
    하는가.
 
-### BH-M1 — 씨앗 한 줄과 호스트 검사
+### BH-M1 — seed 한 줄과 호스트 검사
 
 `config.zig`에 `HIST_OPTIONS_BASH`를 두고 `histOptionLines()`의 bash 갈래가
-그것을 돌려준다. 씨앗 `rcSeed()`의 bash 갈래가 그 글자를 따로 한 벌 더 적되
+그것을 돌려준다. seed `rcSeed()`의 bash 갈래가 그 글자를 따로 한 벌 더 적되
 훅 두 줄보다 먼저 적는다(결정 3).
 
 `config_test.zig`에 `KNOWN_HIST_OPTIONS`의 원소를 더하고, 순서를 보는 검사를
 새로 둔다(결정 4). `KNOWN_HIST_OPTIONS`의 머리 주석을 결정 5대로 고친다.
 
-되돌림 다섯으로 검사가 일하는 것을 확인한다 — 씨앗의 그 줄을 다른 글자로 ·
-씨앗에서만 지우기 · 씨앗과 목록에서 함께 지우기 · 둘을 함께 오타로 ·
-씨앗에서 순서를 뒤집기. 다섯이 각각 다른 줄에서 죽어야 한다.
+되돌림 다섯으로 검사가 일하는 것을 확인한다 — seed의 그 줄을 다른 글자로 ·
+seed에서만 지우기 · seed와 목록에서 함께 지우기 · 둘을 함께 오타로 ·
+seed에서 순서를 뒤집기. 다섯이 각각 다른 줄에서 죽어야 한다.
 
 ### BH-M2 — 게이트가 그 줄을 본다
 
@@ -380,7 +380,7 @@ SD와 같은 모양이다. 측정 · 씨앗과 호스트 검사 · 게이트 판
 `history`가 최근 16개만 찍는 것이었다. 7차에 중첩 셸이 둘 더 붙으면 그 창이
 또 밀린다. M2는 이 수를 먼저 세고 시작한다.
 
-반사실로 값을 증명한다. 씨앗에서 그 줄만 뺀 사본을 마운트하면 체인이 7차에서
+반사실로 값을 증명한다. seed에서 그 줄만 뺀 사본을 마운트하면 체인이 7차에서
 죽어야 한다. 호스트 검사가 먼저 죽이므로 마운트가 둘 필요하다는 것은 SD-M2가
 배운 것이고(`config_test.zig`의 역방향 loop 한 줄도 함께 눕힌다), 여기서는
 순서 검사까지 있으므로 눕힐 자리가 하나 더 있을 수 있다.
@@ -488,8 +488,8 @@ SD 실측 7이 틀린 것도 같은 함정으로 보인다. 그 하네스가 `ex
 plan: `docs/plans/2026-09-12-tars-bash-history-durability-bh-m1.md`
 
 `config.zig`에 `HIST_OPTIONS_BASH`가 섰고 `histOptionLines()`의 bash 갈래가
-그것을 돌려준다(zsh 1 · bash 1 · fish 0). 씨앗 `rcSeed()`의 bash 갈래가 그
-글자를 따로 한 벌 더 적되 훅 두 줄보다 먼저 적는다 — 씨앗에서 그 줄이
+그것을 돌려준다(zsh 1 · bash 1 · fish 0). seed `rcSeed()`의 bash 갈래가 그
+글자를 따로 한 벌 더 적되 훅 두 줄보다 먼저 적는다 — seed에서 그 줄이
 366번, zoxide 훅이 371번이다.
 
 `config_test.zig`는 `KNOWN_HIST_OPTIONS`에 원소를 하나 더 받았고,
@@ -506,11 +506,11 @@ plan: `docs/plans/2026-09-12-tars-bash-history-durability-bh-m1.md`
 
 | | 무엇을 망가뜨렸나 | 죽은 자리 | 에러 |
 |---|---|---|---|
-| 1 | 씨앗의 그 줄만 오타로 | `expectQuietSeed` 정방향 | `BadSeed` |
-| 2 | 씨앗에서만 지우기 | `expectQuietSeed` 역방향 | `BadSeed` |
-| 3 | 씨앗과 `HIST_OPTIONS_BASH`에서 함께 지우기 | `expectHistOptions` 개수 | `BadHistOption` |
+| 1 | seed의 그 줄만 오타로 | `expectQuietSeed` 정방향 | `BadSeed` |
+| 2 | seed에서만 지우기 | `expectQuietSeed` 역방향 | `BadSeed` |
+| 3 | seed와 `HIST_OPTIONS_BASH`에서 함께 지우기 | `expectHistOptions` 개수 | `BadHistOption` |
 | 4 | 둘을 함께 오타로 | `KNOWN_HIST_OPTIONS` | `BadHistOption` |
-| 5 | 씨앗에서 훅 두 줄 아래로 옮기기 | `expectPromptCommandBeforeHooks` | `BadSeedOrder` |
+| 5 | seed에서 훅 두 줄 아래로 옮기기 | `expectPromptCommandBeforeHooks` | `BadSeedOrder` |
 
 5번의 메시지가 이 milestone이 새로 얻은 것이다.
 
@@ -544,7 +544,7 @@ FAIL: the bash seed assigns PROMPT_COMMAND on line 38, after its first hook on l
 ### config 체인은 안 길어졌다
 
 부팅 여덟이 1분 35.77초에 `FAIL` 없이 끝났다. SD-M2의 1분 36.42초와 같다 —
-M1이 타이핑을 안 더했으므로 안 늘어야 맞다. 씨앗이 열한 줄 커졌는데 화면
+M1이 타이핑을 안 더했으므로 안 늘어야 맞다. seed가 열한 줄 커졌는데 화면
 좌표를 보는 검사가 하나도 안 밀렸다.
 
 그 초록이 "그 줄이 게스트에서 일한다"를 뜻하지는 않는다. 게이트에는 아직
@@ -554,7 +554,7 @@ bash로 뜨는 자리가 없다(확인 4). 그것을 세우는 것이 BH-M2다.
 
 plan: `docs/plans/2026-09-12-tars-bash-history-durability-bh-m2.md`
 
-`config/check.sh` 7차 부팅이 중첩 bash 둘을 띄운다. 둘 다 같은 씨앗 rc를
+`config/check.sh` 7차 부팅이 중첩 bash 둘을 띄운다. 둘 다 같은 seed rc를
 읽고, 다른 것은 음성이 첫 명령으로 `PROMPT_COMMAND=`를 치는 것 하나뿐이다.
 판정 셋이 화면의 글자다.
 
@@ -572,7 +572,7 @@ baft1                                   ← 그 명령은 분명히 쳐졌다
 bash-5.2# HISTFILE=/config/bash_history
 bash-5.2# bposmark=1
 bash-5.2# echo bpos$(grep -cx bposmark=1 /config/bash_history)
-bpos1                                   ← 씨앗의 훅이 그 자리에서 쓴다
+bpos1                                   ← seed의 훅이 그 자리에서 쓴다
 ```
 
 bash 판정이 zsh 판정보다 앞에 있다. bash 중첩 안에서 친 것은 zsh 히스토리에
@@ -600,7 +600,7 @@ M2에 들어가기 전에 결정 1을 한 번 의심했다. bash는 `histappend`
 안 지운다. `history -a`가 이미 append해 두면 bash가 종료 시 다시 쓸 것이
 없기 때문이다. 결정 1("`histappend`는 안 쓴다")이 그대로 선다.
 
-### 실측 13 — 게스트에 `/dev/fd`가 없었다. 씨앗이 그래서 한 줄을 찍고 있었다
+### 실측 13 — 게스트에 `/dev/fd`가 없었다. seed가 그래서 한 줄을 찍고 있었다
 
 M2가 계획에 없이 찾은 것이고, 이 milestone에서 가장 값진 발견이다.
 
@@ -610,7 +610,7 @@ M2가 계획에 없이 찾은 것이고, 이 milestone에서 가장 값진 발�
 (none)# bash | HISbash: /dev/fd/63: No such file or directory | TF...bash-5.2# HISTFI
 ```
 
-`bash`를 친 직후 씨앗의 fzf 훅이 에러 한 줄을 찍고, 그 사이에 `HISTFILE=`
+`bash`를 친 직후 seed의 fzf 훅이 에러 한 줄을 찍고, 그 사이에 `HISTFILE=`
 타이핑이 끼어들어 `HIS` · `TF` · `HISTFI`로 쪼개졌다. 그 회차는 결국
 통과했지만 운이었다.
 
@@ -623,7 +623,7 @@ M2가 계획에 없이 찾은 것이고, 이 milestone에서 가장 값진 발�
 3. 게스트에 `/dev/fd`가 없다. devtmpfs는 드라이버가 등록한 장치 노드만
    담고, 보통 그 링크를 만들어 주는 udev나 init 스크립트를 우리는 안 쓴다.
 
-이 한 줄이 씨앗의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
+이 한 줄이 seed의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
 찍어야 하고, 그 규칙을 지키려고 `expectQuietSeed`가 있다. 그런데 그 검사는
 글자를 보지 실행을 안 해 본다.
 
@@ -633,7 +633,7 @@ SM-M1이 그 훅을 넣을 때 잰 "관문이 있으면 셋 다 0바이트"(SM �
 
 게이트가 이것을 오래 못 본 이유는 열한 체인 중 bash로 뜨는 것이 하나도
 없었기 때문이다(확인 4). `input/check.sh`가 bash를 치기는 하는데 `--norc`라
-씨앗을 안 읽는다.
+seed를 안 읽는다.
 
 ### 결정 9 — `/dev/fd` 링크는 init이 만든다 (M2에서 더했다)
 
@@ -662,9 +662,9 @@ milestone이 세운 판정 셋이 타이밍에 따라 흔들린다.
 전체를 보므로(HANDOFF 실측 26) 같은 글자가 앞선 프레임에 이미 있다. 대신
 둘째가 흔들리면 `bpos`가 숫자 없이 나와 검사가 죽으므로 조용하지는 않다.
 
-### 반사실 — 씨앗에서 그 줄만 빼면 7차가 죽는다
+### 반사실 — seed에서 그 줄만 빼면 7차가 죽는다
 
-마운트가 둘 필요하다. 씨앗에서 그 줄을 빼면 `config_test.zig`의 역방향
+마운트가 둘 필요하다. seed에서 그 줄을 빼면 `config_test.zig`의 역방향
 검사가 부팅 전에 막으므로, 그 loop 한 줄(`if (seen_opt[i] or true) continue;`)도
 함께 눕힌 사본을 둘째 마운트로 준다. SD-M2가 배운 것과 같다.
 
@@ -676,7 +676,7 @@ grep: /config/bash_history: No such file or directory
 bneg
 ```
 
-씨앗의 훅이 없으면 `HISTFILE=` 대입 뒤에도 파일이 안 생긴다 — 파일을 만드는
+seed의 훅이 없으면 `HISTFILE=` 대입 뒤에도 파일이 안 생긴다 — 파일을 만드는
 것이 그 훅이기 때문이다. 고친 것의 크기가 "늦게 쓴다"가 아니라 "파일이
 없다"이고, SD-M2가 zsh에서 본 것과 글자 그대로 같은 모양이다.
 
@@ -713,7 +713,7 @@ note: the zsh seed touches PROMPT_COMMAND on no line; nothing to order
 ```
 
 bash에 대해서는 이 줄이 없다 — 볼 것이 있었고 실제로 봤다는 뜻이다. 그
-줄이 셋으로 늘면 bash의 씨앗에서 그 줄이 사라진 것이므로, 다른 검사가
+줄이 셋으로 늘면 bash의 seed에서 그 줄이 사라진 것이므로, 다른 검사가
 죽기 전에 이 줄 수가 먼저 말해 준다.
 
 ### 위험 2 — 7차 부팅이 길어지고 8차의 화면 좌표가 밀린다
@@ -727,13 +727,13 @@ BH-M2가 비슷한 크기를 더하면 게이트에 다시 30초가 붙는다. �
 
 ### 위험 3 — `PROMPT_COMMAND`는 하나뿐인 변수라 다음 사람이 덮어쓴다
 
-실측 6이 zoxide에 대해 본 것이 일반적인 위험이다. 씨앗에 `PROMPT_COMMAND`를
+실측 6이 zoxide에 대해 본 것이 일반적인 위험이다. seed에 `PROMPT_COMMAND`를
 쓰는 줄이 나중에 하나 더 들어오면 순서 검사만으로는 부족하다 — 검사가 보는
 것은 옵션 줄과 훅 줄의 상대 순서이지 "누가 누구를 덮어쓰는가"가 아니다.
 
-지금 넣을 방어는 주석이다. 씨앗의 그 줄 위에 "이 변수는 하나뿐이고 마지막
+지금 넣을 방어는 주석이다. seed의 그 줄 위에 "이 변수는 하나뿐이고 마지막
 대입이 이긴다. 아래 훅보다 먼저 있어야 한다"를 적는다. 코드로 막는 것은
-`PROMPT_COMMAND` 문법을 파싱하는 일이 되어 씨앗 검사의 성격(문법을 안
+`PROMPT_COMMAND` 문법을 파싱하는 일이 되어 seed 검사의 성격(문법을 안
 파싱한다)과 어긋난다.
 
 ### 위험 4 — 중첩 bash의 판정이 production과 다른 것을 본다
@@ -753,5 +753,5 @@ BH-M2가 비슷한 크기를 더하면 게이트에 다시 30초가 붙는다. �
 - SD 본문 요약: `docs/decisions/project_shell_history.md`
 - SM design(히스토리 env와 훅 두 벌의 구조):
   `docs/specs/2026-09-11-tars-shell-memory-design.md`
-- SC design(씨앗 rc와 `shell_config`):
+- SC design(seed rc와 `shell_config`):
   `docs/specs/2026-09-11-tars-shell-config-design.md`

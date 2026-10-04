@@ -217,7 +217,7 @@ pub const SaveError = error{
 /// 되고, "쓰기" 코드가 아무도 부르지 않는 죽은 코드가 되지 않는다.
 ///
 /// 파일 내용을 상수 문자열로 박지 않고 Config에서 만들어 내는 이유는 진실의
-/// 출처를 하나로 두기 위해서다. Config의 기본값을 바꾸면 씨앗 파일도 따라
+/// 출처를 하나로 두기 위해서다. Config의 기본값을 바꾸면 seed 파일도 따라
 /// 바뀐다.
 pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     var buf: [MAX_FILE]u8 = undefined;
@@ -418,7 +418,7 @@ fn loadConfig(storage_mounted: bool) config.Config {
     }
 
     // load가 null을 준다는 것은 파일이 없다는 뜻뿐이다 = 이 디스크로 처음
-    // 부팅했다. 씨앗을 심는다.
+    // 부팅했다. seed를 심는다.
     const defaults = config.Config{};
     config.save(CONFIG_PATH, defaults) catch {
         std.debug.print("tars-init: could not seed {s}, using defaults\n", .{CONFIG_PATH});
@@ -685,7 +685,7 @@ if grep -q "tars-init: created /config/tars.conf" "$LOG2"; then
   report_failure "$LOG2" "second boot re-created the config file; nothing persisted"
 fi
 
-# 파일을 열었다는 것과 내용이 파싱됐다는 것은 다르다. 기본 씨앗은 fish다.
+# 파일을 열었다는 것과 내용이 파싱됐다는 것은 다르다. 기본 seed는 fish다.
 if ! grep -q "tars-init: config shell=fish" "$LOG2"; then
   report_failure "$LOG2" "second boot did not parse shell=fish out of the config file"
 fi
@@ -949,7 +949,7 @@ Claude가 수행한다.
   `shell=zsh`를 써도 지금은 아무 일도 안 일어나므로 위험하지 않지만, M2에서
   경로를 잇는 순간 바이너리가 먼저 있어야 한다.
 - 게스트에서 sendkey로 설정 파일을 고치는 것. CP-M2. 이번 2차 부팅이 읽는
-  것은 1차 부팅이 스스로 쓴 씨앗 파일이다.
+  것은 1차 부팅이 스스로 쓴 seed 파일이다.
 - 설정 갱신 API. `save`의 호출자는 seeding 하나뿐이다. "게스트에서 설정을
   바꾸는 명령"은 design doc의 비목표.
 - `parse`에 대한 단위 테스트. `parse`는 시스템 콜이 없는 순수 함수라
@@ -1008,7 +1008,7 @@ BF 3 + TF 3 = 6이 되고, 그쪽 숫자는 맞았다.
 | `Attempted to kill init` | 0 | 패닉 없음 |
 | `unknown config key` / `unknown shell` / `could not seed` | 0 / 0 / 0 | 폴백 경로 미발동 |
 
-마지막 줄이 덤으로 알려주는 것이 있다 — 씨앗 파일이 파서 자신의 규칙을
+마지막 줄이 덤으로 알려주는 것이 있다 — seed 파일이 파서 자신의 규칙을
 정확히 만족한다. `save`가 쓴 텍스트를 `load`가 경고 하나 없이 되읽었으므로
 쓰기와 읽기가 어긋나지 않았다.
 

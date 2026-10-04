@@ -977,7 +977,7 @@ pub fn parse(text: []const u8) Config {
         } else {
 ```
 
-- [ ] Step 3: 씨앗 파일에도 keyboard를 적는다
+- [ ] Step 3: seed 파일에도 keyboard를 적는다
 
 `config.zig:160-165`의 `save` 안 템플릿을 이것으로.
 
@@ -998,7 +998,7 @@ pub fn parse(text: []const u8) Config {
 
 CP 체인이 이 변경에 걸리지 않는지 확인해 둔다. `config/check.sh`가 보는 것은
 1차 부팅에서 사람이 `echo shell=zsh > /config/tars.conf`로 덮어쓴 파일의
-되읽기(`| shell=zsh`)라, 씨앗 파일에 줄이 늘어도 그 검사는 그대로다. 2차
+되읽기(`| shell=zsh`)라, seed 파일에 줄이 늘어도 그 검사는 그대로다. 2차
 부팅은 그 덮어쓴 파일(=`shell=zsh` 한 줄)을 읽으므로 keyboard는 기본값 apple로
 떨어진다 — 이것도 정상이다.
 
@@ -1570,7 +1570,7 @@ cd "$(dirname "$0")"
 # IP 체인 2차 부팅용 설정 디스크.
 #
 # CP의 make_disk.sh와 다른 점은 **빈 파일시스템이 아니라 내용이 든 것을
-# 굽는다**는 것뿐이다. CP는 "빈 디스크로 첫 부팅 → init이 씨앗을 심는다 →
+# 굽는다**는 것뿐이다. CP는 "빈 디스크로 첫 부팅 → init이 seed를 심는다 →
 # 사람이 게스트 안에서 고친다 → 다시 부팅해서 읽는다"를 증명해야 해서 그
 # 네 단계를 다 밟아야 했지만, IP가 증명할 것은 "이 값이 키 해석을 바꾸는가"
 # 하나다. 이미 든 파일을 읽기만 하면 되므로 부팅 한 번과 sendkey 25개로 끝난다.

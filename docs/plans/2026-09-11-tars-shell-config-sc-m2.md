@@ -66,10 +66,10 @@ M1의 셋에 둘이 붙는다. 새 체인을 안 만든다(design 결정 10 — 
 
 | 부팅 | cmdline | `tars.conf` | `/config/zshrc` | 치는 것 | 증명하는 것 |
 |---|---|---|---|---|---|
-| 1차 | 기본 | 없음 → 씨앗 | 없음 → 씨앗 | `tars-config` · `shell=zsh` · 마커 한 줄 | M1 그대로 |
-| 2차 | 기본 | `shell=zsh` | 씨앗+마커 | `shell_config=off` | M1 그대로 |
-| 3차 | 기본 | `+shell_config=off` | 씨앗+마커 | `exit`를 rc에 심고 `shell_config=on`을 되돌린다 | M1의 부정 검사 그대로 + 4차가 쓸 함정을 판다 |
-| 4차 | 기본 | `+shell_config=on` | 씨앗+마커+`exit` | 없음 | 결정 8 — 셋 죽고 나서 rc 없이 살아난다 |
+| 1차 | 기본 | 없음 → seed | 없음 → seed | `tars-config` · `shell=zsh` · 마커 한 줄 | M1 그대로 |
+| 2차 | 기본 | `shell=zsh` | seed+마커 | `shell_config=off` | M1 그대로 |
+| 3차 | 기본 | `+shell_config=off` | seed+마커 | `exit`를 rc에 심고 `shell_config=on`을 되돌린다 | M1의 부정 검사 그대로 + 4차가 쓸 함정을 판다 |
+| 4차 | 기본 | `+shell_config=on` | seed+마커+`exit` | 없음 | 결정 8 — 셋 죽고 나서 rc 없이 살아난다 |
 | 5차 | `tars.noconfig` | 같음(`on`) | 같음(`exit`) | 없음 | 결정 9 — cmdline이 `on`을 이겨서 함정을 아예 안 밟는다 |
 
 4차와 5차가 같은 디스크를 보는 것이 이 설계의 핵심이다. 4차는 그 디스크로
@@ -82,7 +82,7 @@ tautology가 아니라는 증거를 4차가 만들어 준다. M1의 3차가 2차
 아무것도 안 친다 — 판정 글자가 우연히 화면에 생기는 길이 하나 늘어난다"*고
 적었고 그 이유는 그대로 산다. 그래서 3차가 치는 두 줄에 `tars-rc-alive`가
 한 글자도 안 들어간다: 되읽기를 `cat /config/zshrc`가 아니라
-`grep exit /config/zshrc`로 하는 것이 그래서다(씨앗에도 그 줄에도 `exit`는
+`grep exit /config/zshrc`로 하는 것이 그래서다(seed에도 그 줄에도 `exit`는
 우리가 방금 심은 한 줄뿐이다).
 
 ---
@@ -628,7 +628,7 @@ BREAK_KEYS=(e c h o spc e x i t spc shift-dot shift-dot spc
             slash c o n f i g slash z s h r c ret)
 # grep exit /config/zshrc — 되읽기.
 #
-# **cat이 아니라 grep인 이유가 둘이다.** 하나는 M1의 이유 그대로(씨앗이
+# **cat이 아니라 grep인 이유가 둘이다.** 하나는 M1의 이유 그대로(seed가
 # 열몇 줄이라 첫 줄이 프레임에 안 남는다), 다른 하나는 이 부팅이 **부정
 # 검사를 갖고 있다는 것**이다 — cat하면 `echo tars-rc-alive`가 화면에 뜨고
 # 그것을 3차의 판정이 보게 된다. 화면에 안 띄우는 것이 요점이다.
@@ -867,7 +867,7 @@ git status --short     # 비어 있어야 한다
 Expected: 열한 체인 3/3. 기준선은 SC-M1의 24분 36.55초이고, 부팅 둘이
 늘었으니 +1분 안쪽이면 예상대로다(M1의 부팅 하나가 +27.76초였다).
 
-- [x] Step 2: 씨앗·탈출로가 다른 체인을 안 건드렸다는 것을 따로 본다
+- [x] Step 2: seed·탈출로가 다른 체인을 안 건드렸다는 것을 따로 본다
 
 ```bash
 grep -c "tars-init: giving up on" /tmp/gate.log        # BF 3회 + ... 세어 본다

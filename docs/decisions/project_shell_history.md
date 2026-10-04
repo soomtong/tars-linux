@@ -1,6 +1,6 @@
 ---
 name: project_shell_history
-description: "콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 고친 층(SD와 BH) — 둘 다 2026-09-12에 열고 같은 날 닫았다. zsh는 씨앗 rc의 `setopt INC_APPEND_HISTORY` 한 줄(SD), bash는 `PROMPT_COMMAND='history -a'` 한 줄(BH)이고, bash 쪽은 그 줄이 zoxide 훅보다 먼저 있어야 한다 — `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이기고, 뒤집히면 히스토리는 남는데 `z`가 아무것도 안 배운다. 게이트 판정은 7차 부팅의 중첩 셸 넷이다(zsh `neg0`·`aft1`·`pos1`, bash `bneg0`·`baft1`·`bpos1`). 처방은 씨앗 rc의 zsh 갈래에 넣은 `setopt INC_APPEND_HISTORY` 한 줄이고, 그 줄이 쓰는 시점을 종료 경로에서 떼어 낸다. 착수 전 측정이 이 서브프로젝트의 전제를 뒤집었다 — 고치려던 SM 비목표 9(`두 세션이 서로를 지운다`)는 애초에 안 나는 일이고(`APPEND_HISTORY`가 zsh 기본값이다) 대신 더 나쁜 것이 나왔다. 게이트에서 다시 조사하지 말 것 넷: `fc -W`는 메모리 목록으로 파일을 덮어써 다른 세션의 줄을 지우므로 되살리지 말 것 · 히스토리를 증분으로 쓰는 zsh에서는 판정에 쓰는 `grep` 명령줄이 실행 전에 파일에 써지므로 앵커(`grep -x`)가 필수다 · 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같아서 프롬프트로는 아무것도 못 가른다 · 옵션을 끈 세션도 나갈 때는 자기 목록을 append하므로 음성 판정은 그 세션이 살아 있는 동안 해야 한다. 상수가 세 벌인 이유(`HIST_OPTIONS_ZSH` · 씨앗 · `KNOWN_HIST_OPTIONS`)와 게이트의 판정 셋(`neg0`·`aft1`·`pos1`)이 본문에 있다"
+description: "콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 고친 층(SD와 BH) — 둘 다 2026-09-12에 열고 같은 날 닫았다. zsh는 seed rc의 `setopt INC_APPEND_HISTORY` 한 줄(SD), bash는 `PROMPT_COMMAND='history -a'` 한 줄(BH)이고, bash 쪽은 그 줄이 zoxide 훅보다 먼저 있어야 한다 — `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이기고, 뒤집히면 히스토리는 남는데 `z`가 아무것도 안 배운다. 게이트 판정은 7차 부팅의 중첩 셸 넷이다(zsh `neg0`·`aft1`·`pos1`, bash `bneg0`·`baft1`·`bpos1`). 처방은 seed rc의 zsh 갈래에 넣은 `setopt INC_APPEND_HISTORY` 한 줄이고, 그 줄이 쓰는 시점을 종료 경로에서 떼어 낸다. 착수 전 측정이 이 서브프로젝트의 전제를 뒤집었다 — 고치려던 SM 비목표 9(`두 세션이 서로를 지운다`)는 애초에 안 나는 일이고(`APPEND_HISTORY`가 zsh 기본값이다) 대신 더 나쁜 것이 나왔다. 게이트에서 다시 조사하지 말 것 넷: `fc -W`는 메모리 목록으로 파일을 덮어써 다른 세션의 줄을 지우므로 되살리지 말 것 · 히스토리를 증분으로 쓰는 zsh에서는 판정에 쓰는 `grep` 명령줄이 실행 전에 파일에 써지므로 앵커(`grep -x`)가 필수다 · 중첩 zsh는 한 글자도 안 찍고 프롬프트가 바깥과 같아서 프롬프트로는 아무것도 못 가른다 · 옵션을 끈 세션도 나갈 때는 자기 목록을 append하므로 음성 판정은 그 세션이 살아 있는 동안 해야 한다. 상수가 세 벌인 이유(`HIST_OPTIONS_ZSH` · seed · `KNOWN_HIST_OPTIONS`)와 게이트의 판정 셋(`neg0`·`aft1`·`pos1`)이 본문에 있다"
 metadata:
   node_type: memory
   type: project
@@ -20,7 +20,7 @@ milestone 셋(SD-M0·M1·M2)이 2026-09-12 하루에 다 끝났다.
 대화형 셸은 SIGTERM을 무시하므로 3초 뒤 SIGKILL에 죽는다. 자세한 것은
 [[project_shutdown_signals]]에 있다.
 
-처방은 씨앗 rc의 zsh 갈래에 넣은 한 줄이다.
+처방은 seed rc의 zsh 갈래에 넣은 한 줄이다.
 
 ```
 setopt INC_APPEND_HISTORY
@@ -44,7 +44,7 @@ PROMPT_COMMAND='history -a'
 
 크기는 같은데 성질이 셋 다르다.
 
-1. 그 줄은 씨앗에서 훅 두 줄보다 먼저 와야 한다. `PROMPT_COMMAND`는 변수가
+1. 그 줄은 seed에서 훅 두 줄보다 먼저 와야 한다. `PROMPT_COMMAND`는 변수가
    하나뿐이라 마지막 대입이 이기는데 `zoxide init bash`가 같은 변수를 쓴다.
    zoxide는 기존 값을 보존하며 앞에 붙이므로(`__zoxide_hook;${PROMPT_COMMAND#;}`)
    우리가 먼저면 둘 다 돌고, 나중이면 우리 대입이 zoxide를 통째로 지운다.
@@ -79,7 +79,7 @@ bash 판정이 zsh 판정보다 앞에 있다. bash 중첩 안에서 친 것은 
 이유가 이것이고, 안 기다리면 rc를 읽는 중에 타이핑이 끼어들어 글자가
 쪼개진다.
 
-BH가 계획에 없던 것을 하나 고쳤다. 게스트에 `/dev/fd`가 없어서 씨앗의 fzf
+BH가 계획에 없던 것을 하나 고쳤다. 게스트에 `/dev/fd`가 없어서 seed의 fzf
 훅이 부팅할 때 에러 한 줄을 찍고 있었다 — 자세한 것은
 [[project_measuring_shells]]에 있다.
 
@@ -134,7 +134,7 @@ grep -c '^echo nothinghere$' …  → 0
 
 ## 게이트의 판정이 셋인 이유
 
-7차 부팅이 중첩 zsh 둘을 띄운다. 둘 다 같은 씨앗 rc를 읽고, 다른 것은 음성이
+7차 부팅이 중첩 zsh 둘을 띄운다. 둘 다 같은 seed rc를 읽고, 다른 것은 음성이
 첫 명령으로 옵션을 끄는 것 하나뿐이다.
 
 | 판정 글자 | 언제 | 무엇을 말하나 |
@@ -154,7 +154,7 @@ SD-M0이 첫 회차를 정확히 그것으로 버렸다.
 
 ## 상수가 세 벌인 이유
 
-`init/src/config.zig`의 `HIST_OPTIONS_ZSH` · 씨앗 `rcSeed()`의 글자 ·
+`init/src/config.zig`의 `HIST_OPTIONS_ZSH` · seed `rcSeed()`의 글자 ·
 `config_test.zig`의 `KNOWN_HIST_OPTIONS`. 앞의 둘을 조립하지 않는 이유는
 `hookLines()`와 같다 — 조립하면 역방향 검사가 tautology가 된다. 셋째 벌이
 있는 이유는 앞의 둘을 함께 고치면 양방향이 둘 다 만족되기 때문이고, 그것이
@@ -166,17 +166,17 @@ SD-M0이 첫 회차를 정확히 그것으로 버렸다.
 
 그 65바이트가 설정 디스크를 붙이는 다섯 체인의 화면 좌표를 민다. 게이트가
 아니라 호스트 검사가 먼저 잡아야 하는 종류의 사고다. 되돌림 넷이 각각 다른
-줄에서 죽는 것을 확인했다 — 씨앗 줄을 `echo hi`로(정방향) · 씨앗에서만
-지우기(역방향) · 씨앗과 목록에서 함께 지우기(개수) · 둘을 함께 오타로
+줄에서 죽는 것을 확인했다 — seed 줄을 `echo hi`로(정방향) · seed에서만
+지우기(역방향) · seed와 목록에서 함께 지우기(개수) · 둘을 함께 오타로
 (`KNOWN_HIST_OPTIONS`).
 
-M1의 그 검사들이 M2의 반사실을 막기도 했다. 씨앗에서 그 줄을 빼면 부팅 전에
+M1의 그 검사들이 M2의 반사실을 막기도 했다. seed에서 그 줄을 빼면 부팅 전에
 죽으므로, 게이트가 무엇을 보는지 확인하려면 `config_test.zig`의 역방향 loop도
 함께 눕혀야 한다.
 
 ## 이미 설정 디스크를 가진 기계
 
-씨앗 rc는 파일이 없을 때만 깔린다(`O_EXCL`). 그래서 이미 디스크를 가진
+seed rc는 파일이 없을 때만 깔린다(`O_EXCL`). 그래서 이미 디스크를 가진
 기계는 이 줄을 저절로 받지 못하고, 마이그레이션을 만들지 않는다.
 
 만들지 않는 이유는 비용이 아니라 성질이다. 우리가 사용자 파일에 줄을 넣기

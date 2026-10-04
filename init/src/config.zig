@@ -122,7 +122,7 @@ pub const Ntp = union(enum) {
         return .{ .server = ip };
     }
 
-    /// 로그와 씨앗 파일에 찍을 정규형. 버퍼는 호출자가 준다 —
+    /// 로그와 seed 파일에 찍을 정규형. 버퍼는 호출자가 준다 —
     /// `Toggles.arg`와 같은 이유로, 이 파일에는 힙이 없고 주소는 상수
     /// 문자열로 돌려줄 수가 없다.
     pub fn arg(self: Ntp, buf: []u8) [:0]const u8 {
@@ -207,7 +207,7 @@ pub const Timezone = struct {
         return tz;
     }
 
-    /// 담긴 이름. 로그 · 씨앗 파일 · `TZ` 항목이 전부 이것을 쓴다.
+    /// 담긴 이름. 로그 · seed 파일 · `TZ` 항목이 전부 이것을 쓴다.
     pub fn slice(self: *const Timezone) []const u8 {
         return self.name[0..self.len];
     }
@@ -364,12 +364,12 @@ pub const Shell = enum {
     /// fish는 빈 목록이다. fish의 히스토리는 `XDG_DATA_HOME` 아래로 통째로
     /// 따라오고(실측 11·40), 줄 수를 정하는 변수가 아예 없다(비목표 4).
     ///
-    /// 히스토리 env는 씨앗 rc를 한 글자도 안 건드린다(SM 결정 3). 실측
+    /// 히스토리 env는 seed rc를 한 글자도 안 건드린다(SM 결정 3). 실측
     /// 9·10이 근거다 — 셋 다 env에서 먹는다.
     ///
     /// 그 문장을 옵션까지 덮는 것으로 읽으면 안 된다. `setopt`를 zsh에
     /// 나르는 환경 변수는 없어서 옵션은 파일로만 줄 수 있다(SD 확인 1).
-    /// 그래서 SD-M1이 씨앗의 zsh 갈래에 한 줄을 더했고, 그 줄의 목록이
+    /// 그래서 SD-M1이 seed의 zsh 갈래에 한 줄을 더했고, 그 줄의 목록이
     /// 아래 `histOptionLines()`다. env로 되는 것과 파일로만 되는 것이
     /// 갈리는 자리가 여기다.
     const HIST_BASH = [_][:0]const u8{
@@ -396,7 +396,7 @@ pub const Shell = enum {
         };
     }
 
-    /// 씨앗 rc가 담는 훅 줄들(SM design 결정 5). 셸마다 둘이다 — `zoxide`가
+    /// seed rc가 담는 훅 줄들(SM design 결정 5). 셸마다 둘이다 — `zoxide`가
     /// "어디에 갔는가"를, `fzf`가 "무엇을 쳤는가"를 이 기계에 잇는다.
     ///
     /// `command -v`/`type -q` 관문을 지우면 안 된다. 도구가 없을 때 관문
@@ -425,7 +425,7 @@ pub const Shell = enum {
     /// 실수가 아니다(SM design 결정 10).
     ///
     /// `rcSeed()`를 이 목록에서 `++`로 조립하면 두 벌이 하나가 되고, 그 순간
-    /// `config_test.zig`의 역방향 검사가 tautology가 된다 — "훅이 씨앗에
+    /// `config_test.zig`의 역방향 검사가 tautology가 된다 — "훅이 seed에
     /// 있는가"를 묻는데 답이 언제나 참이 되기 때문이다. 이 저장소가 반복해서
     /// 부딪친 자리다(UT-M1의 정적 목록 검사가 같은 이유로 가짜였다).
     ///
@@ -440,7 +440,7 @@ pub const Shell = enum {
         };
     }
 
-    /// 씨앗 rc가 담는 히스토리 옵션 줄(SD design 결정 1·3). zsh만 하나이고
+    /// seed rc가 담는 히스토리 옵션 줄(SD design 결정 1·3). zsh만 하나이고
     /// bash와 fish는 빈 목록이다.
     ///
     /// 이 한 줄이 하는 일은 쓰는 시점을 옮기는 것이다. 이 줄이 없으면 zsh는
@@ -495,7 +495,7 @@ pub const Shell = enum {
     /// 첫 부팅에 깔아 두는 내용(결정 7).
     ///
     /// 규칙이 하나뿐이다: 아무것도 찍지 않는다. 설정 디스크를 붙이는
-    /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — 씨앗이 배너
+    /// 체인이 다섯이고 그중 셋이 화면의 셀 좌표로 판정한다 — seed가 배너
     /// 한 줄을 찍으면 그 좌표가 통째로 밀린다. 그래서 여기 쓸 수 있는 줄은
     /// 주석 · alias · 위 `hookLines()`와 `histOptionLines()`에 글자 그대로
     /// 있는 줄뿐이고,
@@ -1082,7 +1082,7 @@ pub const SaveError = error{
 /// 되고, "쓰기" 코드가 아무도 부르지 않는 죽은 코드가 되지 않는다.
 ///
 /// 파일 내용을 상수 문자열로 박지 않고 Config에서 만들어 내는 이유는 진실의
-/// 출처를 하나로 두기 위해서다. Config의 기본값을 바꾸면 씨앗 파일도 따라
+/// 출처를 하나로 두기 위해서다. Config의 기본값을 바꾸면 seed 파일도 따라
 /// 바뀐다.
 pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     var buf: [MAX_FILE]u8 = undefined;
@@ -1200,7 +1200,7 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
 /// `shell_config`를 안 본다. `off`여도 깐다 — 셸이 안 읽을 뿐 파일은
 /// 있는 것이 맞고, 나중에 `on`으로 바꾼 사람이 빈 디렉터리를 안 만난다.
 /// `shell`도 안 본다: 셋 다 깐다는 결정 7의 근거가 같다 — `tars.conf`의
-/// `shell`은 언제든 바뀔 수 있고, 바뀐 뒤에야 씨앗이 생기면 "고치고
+/// `shell`은 언제든 바뀔 수 있고, 바뀐 뒤에야 seed가 생기면 "고치고
 /// 재부팅했는데 rc가 없다"가 된다. 비용은 부팅마다 `open()` 셋이다.
 ///
 /// 이미 있으면 손대지 않는다. 그때부터 그 파일은 사용자의 것이다.
@@ -1244,7 +1244,7 @@ pub const GITCONFIG_PATH: [:0]const u8 = "/config/gitconfig";
 /// `[user]` 절은 빠뜨린 것이 아니라 안 넣은 것이다. 신원은 git이
 /// `/etc/passwd`에서 유도한다(실측: `GIT_AUTHOR_IDENT=root <root@(none).(none)>`).
 /// 그리고 넣으면 `tools/check.sh` 검사 13의 판정 값(`email = tars`)과 겹칠 수
-/// 있다 — 그 검사는 "git이 링크를 풀어 /config에 썼다"를 보는 것이고, 씨앗에
+/// 있다 — 그 검사는 "git이 링크를 풀어 /config에 썼다"를 보는 것이고, seed에
 /// 같은 값이 있으면 검사가 거짓으로 초록이 된다(GA가 없애려는 모양).
 pub const GITCONFIG_SEED =
     \\# TARS git config — 이 파일의 실체는 설정 디스크의 /config/gitconfig이고
@@ -1277,7 +1277,7 @@ pub fn seedGitconfig() void {
     seedOneFile(GITCONFIG_PATH, GITCONFIG_SEED);
 }
 
-/// 씨앗 파일 하나를 "없으면 만든다".
+/// seed 파일 하나를 "없으면 만든다".
 ///
 /// `O_EXCL`이 그 질문("이미 있나")을 커널에게 한 번에 묻는다 — `save`가
 /// `O_EXCL`을 안 쓰는 것과 다른 이유는, 저쪽은 "파일이 없다"를 `load`가 이미
@@ -1306,7 +1306,7 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
 
     // `created`가 아니라 `seeded`다. `tars-init: created /config/tars.conf`
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
-    // 그 검사가 씨앗 몇 줄까지 함께 보게 된다.
+    // 그 검사가 seed 몇 줄까지 함께 보게 된다.
     std.debug.print("tars-init: seeded {s}\n", .{path});
 }
 

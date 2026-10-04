@@ -520,7 +520,7 @@ pub const Timezone = struct {
         return tz;
     }
 
-    /// 담긴 이름. 로그 · 씨앗 파일 · `TZ` 항목이 전부 이것을 쓴다.
+    /// 담긴 이름. 로그 · seed 파일 · `TZ` 항목이 전부 이것을 쓴다.
     pub fn slice(self: *const Timezone) []const u8 {
         return self.name[0..self.len];
     }

@@ -1719,7 +1719,7 @@ pub const Config = struct {
         }
 ```
 
-- [ ] Step 4: `save`의 씨앗 파일에 두 줄을 더한다
+- [ ] Step 4: `save`의 seed 파일에 두 줄을 더한다
 
 지울 것:
 

@@ -1,4 +1,4 @@
-# SD-M1 Implementation Plan — 그 한 줄이 씨앗에 선다
+# SD-M1 Implementation Plan — 그 한 줄이 seed에 선다
 
 > 완료: 2026-09-12. Task 다섯 전부. 호스트 검사 `PASS`, 되돌림 넷이 각각
 > 다른 줄에서 죽었고, config 체인 단독이 1분 26.01초에 `FAIL` 없이 끝났다.
@@ -9,7 +9,7 @@
 > 번도 안 바뀌므로 되돌리는 것을 잊는 경로가 아예 없다. 되돌림을 쓰는 다음
 > plan은 이쪽을 기본으로 적을 것.
 >
-> 그리고 plan에 없던 사고가 하나 있었다. Task 1 Step 4에서 씨앗 끝의 빈
+> 그리고 plan에 없던 사고가 하나 있었다. Task 1 Step 4에서 seed 끝의 빈
 > 줄(`\\`)이 함께 지워졌다. plan이 "지우면 안 된다"고 적어 두었는데도
 > 일어났고, 잡은 것은 `git diff | grep '^-'`로 지운 줄을 직접 읽은
 > 것이었다 — `git diff --stat`의 숫자만 봤으면 못 봤다.
@@ -18,17 +18,17 @@
 > (recommended) or superpowers:executing-plans to implement this plan
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Goal: 씨앗 rc의 zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담는다. 그
+Goal: seed rc의 zsh 갈래가 `setopt INC_APPEND_HISTORY` 한 줄을 담는다. 그
 줄이 있으면 zsh가 명령을 칠 때마다 그 자리에서 `HISTFILE`에 쓰므로, 쓰는
 시점이 종료 경로에서 떨어져 나온다(design 실측 6). 그리고 호스트 검사가
-그 줄을 지우는 것도, 오타를 내는 것도, 목록과 씨앗에서 함께 지우는 것도
+그 줄을 지우는 것도, 오타를 내는 것도, 목록과 seed에서 함께 지우는 것도
 0.1초에 빨갛게 만든다.
 
 Architecture: 새 파일이 하나도 없다. 고치는 파일이 둘이다.
 
 | 파일 | 이 milestone에서 하는 일 |
 |---|---|
-| `init/src/config.zig` | `Shell.histOptionLines()`가 새로 서고, 씨앗의 zsh 갈래가 그 글자를 따로 한 벌 더 적는다 |
+| `init/src/config.zig` | `Shell.histOptionLines()`가 새로 서고, seed의 zsh 갈래가 그 글자를 따로 한 벌 더 적는다 |
 | `init/src/config_test.zig` | `expectQuietSeed`의 허용 목록을 양방향으로 넓히고, 새 검사 `expectHistOptions`가 개수를 못 박는다 |
 | `config/check.sh` | 안 고친다. 그것이 SD-M2다(`fc -W`를 빼는 일과 음성·양성 대조군) |
 | `kernel/` · `terminal/` · `init/src/main.zig` · `environ.zig` | 안 고친다 |
@@ -39,7 +39,7 @@ bash(config 체인 단독 실행 한 번)
 읽고 시작할 것:
 `docs/specs/2026-09-12-tars-shell-history-durability-design.md` —
 특히 확인 1(zsh에 옵션을 나르는 env가 없다) · 확인 4(`shell_config=off`는
-zsh에 `-f`를 준다) · 확인 5(씨앗은 파일이 없을 때만 깔린다) · 확인 6(허용
+zsh에 `-f`를 준다) · 확인 5(seed는 파일이 없을 때만 깔린다) · 확인 6(허용
 목록의 구조) · 결정 2·3·4·6·7 · 실측 9(그 줄은 0바이트, 오타는 65바이트).
 
 그리고 고칠 자리의 소스 넷. `config.zig`의 `histEntries()` 머리 주석 ·
@@ -60,7 +60,7 @@ zsh에 `-f`를 준다) · 확인 5(씨앗은 파일이 없을 때만 깔린다) 
 /tmp/q_typo/.zshrc:setopt:1: no such option: INC_APPEND_HISTORYY
 ```
 
-씨앗은 설정 디스크를 붙이는 다섯 체인 전부에서 읽히고 그중 셋이 화면의 셀
+seed는 설정 디스크를 붙이는 다섯 체인 전부에서 읽히고 그중 셋이 화면의 셀
 좌표로 판정한다. 그래서 이 milestone의 가장 큰 위험은 "옵션이 안 먹는다"가
 아니라 "옵션 이름을 잘못 적어서 엉뚱한 체인이 20초 뒤에 깨진다"다. 그 사고를
 게이트가 아니라 호스트 검사가 먼저 잡아야 하고, 그것을 하는 것이 Task 2의
@@ -71,7 +71,7 @@ zsh에 `-f`를 준다) · 확인 5(씨앗은 파일이 없을 때만 깔린다) 
 `rcSeed()`의 zsh 갈래에 적는 글자와 `histOptionLines()`가 주는 글자는 두
 벌이다. 조립하지 않는다 — `rcSeed()`를 목록에서 `++`로 만들면 역방향 검사가
 tautology가 된다(SM 결정 10, SD 결정 3). 이 파일은 같은 종류의 이음매를 이미
-셋 갖고 있다(`hookLines()` ↔ 씨앗 · `HangulLayout` ↔ `hangul.Layout` ·
+셋 갖고 있다(`hookLines()` ↔ seed · `HangulLayout` ↔ `hangul.Layout` ·
 `rcPath()` ↔ `make_initrd.sh`).
 
 두 벌이면 구멍이 하나 생긴다 — 두 벌을 함께 고치면 검사가 통과한다. SM-M1이
@@ -81,7 +81,7 @@ tautology가 된다(SM 결정 10, SD 결정 3). 이 파일은 같은 종류의 �
 
 ### 3. M1은 게이트를 안 고치는데 게이트가 그 줄을 이미 읽는다
 
-씨앗이 다시 깔리는 자리가 `config/check.sh`의 6차 부팅이고(그 체인 주석
+seed가 다시 깔리는 자리가 `config/check.sh`의 6차 부팅이고(그 체인 주석
 129~132줄), 7차가 그 rc를 읽은 zsh다. 그러니 M2 전에도 그 줄은 게이트에서
 실제로 동작한다.
 
@@ -93,18 +93,18 @@ tautology가 된다(SM 결정 10, SD 결정 3). 이 파일은 같은 종류의 �
 `fc -W`가 이제 불필요해진 것은 맞고, 그것을 빼는 것이 M2다.
 
 그래도 확인은 한다. Task 4가 config 체인을 단독으로 한 번 돌린다(약 1분
-26초). 근거가 추론이면 재는 것이 이 저장소의 규율이고, 씨앗의 바이트가
+26초). 근거가 추론이면 재는 것이 이 저장소의 규율이고, seed의 바이트가
 커진 것은 사실이기 때문이다.
 
 ---
 
-## Task 1: `config.zig` — `histOptionLines()`와 씨앗의 한 줄
+## Task 1: `config.zig` — `histOptionLines()`와 seed의 한 줄
 
 Files:
 - Modify: `init/src/config.zig`
 
 편집이 넷이다. 셋이 주석을 고치는 것이고 하나가 코드를 더하는 것이다.
-주석 셋을 함께 고치는 이유는 그 셋이 지금 "씨앗에는 히스토리 줄이 한 줄도
+주석 셋을 함께 고치는 이유는 그 셋이 지금 "seed에는 히스토리 줄이 한 줄도
 없다"를 말하고 있어서, 코드만 고치면 저장소 안에 답과 틀린 문장이 같이
 남기 때문이다 — 이 서브프로젝트가 열린 이유가 정확히 그것이었다.
 
@@ -113,7 +113,7 @@ Files:
 지울 것 (`init/src/config.zig`, `const HIST_BASH` 바로 위):
 
 ```zig
-    /// 씨앗 rc에는 히스토리 줄이 한 줄도 없다(결정 3). 실측 9·10이
+    /// seed rc에는 히스토리 줄이 한 줄도 없다(결정 3). 실측 9·10이
     /// 근거다 — 셋 다 env에서 먹는다. 그래서 이 milestone은
     /// `rcSeed()`도 `expectQuietSeed`도 한 글자 안 건드린다.
 ```
@@ -121,12 +121,12 @@ Files:
 넣을 것:
 
 ```zig
-    /// 히스토리 env는 씨앗 rc를 한 글자도 안 건드린다(SM 결정 3). 실측
+    /// 히스토리 env는 seed rc를 한 글자도 안 건드린다(SM 결정 3). 실측
     /// 9·10이 근거다 — 셋 다 env에서 먹는다.
     ///
     /// 그 문장을 옵션까지 덮는 것으로 읽으면 안 된다. `setopt`를 zsh에
     /// 나르는 환경 변수는 없어서 옵션은 파일로만 줄 수 있다(SD 확인 1).
-    /// 그래서 SD-M1이 씨앗의 zsh 갈래에 한 줄을 더했고, 그 줄의 목록이
+    /// 그래서 SD-M1이 seed의 zsh 갈래에 한 줄을 더했고, 그 줄의 목록이
     /// 아래 `histOptionLines()`다. env로 되는 것과 파일로만 되는 것이
     /// 갈리는 자리가 여기다.
 ```
@@ -137,7 +137,7 @@ Files:
 
 ```zig
 
-    /// 씨앗 rc가 담는 히스토리 옵션 줄(SD design 결정 1·3). zsh만 하나이고
+    /// seed rc가 담는 히스토리 옵션 줄(SD design 결정 1·3). zsh만 하나이고
     /// bash와 fish는 빈 목록이다.
     ///
     /// 이 한 줄이 하는 일은 쓰는 시점을 옮기는 것이다. 이 줄이 없으면 zsh는
@@ -198,7 +198,7 @@ Files:
     /// 오타는 stderr 65바이트).
 ```
 
-- [x] Step 4: 씨앗의 zsh 갈래에 그 글자를 한 벌 더 적는다
+- [x] Step 4: seed의 zsh 갈래에 그 글자를 한 벌 더 적는다
 
 `.zsh =>` 갈래의 마지막 훅 줄(`command -v fzf ... fzf --zsh ...`) 다음에
 넣을 것:
@@ -228,7 +228,7 @@ Files:
     }
 ```
 
-마지막 `\\`(빈 줄)를 지우면 안 된다. 씨앗이 개행으로 끝나는 것을
+마지막 `\\`(빈 줄)를 지우면 안 된다. seed가 개행으로 끝나는 것을
 `expectQuietSeed`의 첫 검사가 본다.
 
 - [x] Step 5: 컴파일만 먼저 본다
@@ -273,13 +273,13 @@ Files:
 /// `MAX_HOOK_LINES`와 같은 이유로 상한이 필요하다 — 힙이 없다.
 const MAX_HIST_OPTION_LINES = 4;
 
-/// 씨앗에 들어와도 좋다고 우리가 직접 재 본 옵션 줄(SD design 결정 4).
+/// seed에 들어와도 좋다고 우리가 직접 재 본 옵션 줄(SD design 결정 4).
 ///
 /// `HOOKED_TOOLS`와 같은 자리다 — 손이 한 번 멈추는 자리를 만드는 것이
-/// 전부다. `histOptionLines()`와 씨앗은 두 벌이라 함께 고치면 검사가
+/// 전부다. `histOptionLines()`와 seed는 두 벌이라 함께 고치면 검사가
 /// 통과하는데, 그 구멍을 이 셋째 벌이 막는다.
 ///
-/// 새 `setopt` 줄을 씨앗에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
+/// 새 `setopt` 줄을 seed에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
 /// 줄의 stdout·stderr가 0바이트인 것을 재고 여기 적어야 한다. 없는 옵션
 /// 이름은 stderr 65바이트이고, 그 65바이트가 설정 디스크를 붙이는 다섯
 /// 체인의 화면 좌표를 민다.
@@ -294,7 +294,7 @@ const KNOWN_HIST_OPTIONS = [_][]const u8{"setopt INC_APPEND_HISTORY"};
 넣을 것:
 
 ```zig
-/// 씨앗 rc가 쓸 수 있는 줄만 담고 있는지 확인한다(SC-M1이 세우고 SM-M1과
+/// seed rc가 쓸 수 있는 줄만 담고 있는지 확인한다(SC-M1이 세우고 SM-M1과
 /// SD-M1이 한 줄씩 넓혔다).
 ///
 /// 셋 다 문법이 다른 셸의 파일이라 우리가 파싱할 수는 없다. 대신 우리가
@@ -328,7 +328,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
     }
     const hooks = sh.hookLines();
     const opts = sh.histOptionLines();
-    // 훅과 옵션 줄이 씨앗에서 보였는가. 힙이 없으므로 상한이 둘 다
+    // 훅과 옵션 줄이 seed에서 보였는가. 힙이 없으므로 상한이 둘 다
     // 필요하고, 넘치면 조용히 덜 검사하지 말고 여기서 죽는다.
     var seen = [_]bool{false} ** MAX_HOOK_LINES;
     var seen_opt = [_]bool{false} ** MAX_HIST_OPTION_LINES;
@@ -406,7 +406,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
         std.debug.print("FAIL: the {s} seed defines no alias for the gate to find\n", .{@tagName(sh)});
         return error.BadSeed;
     }
-    // 씨앗은 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
+    // seed는 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
     // `tars-rc`를 쳤을 때 없는 파일을 cat한다 — 문서가 아니라 실행되는
     // 문장이라 틀린 것이 드러난다.
     if (std.mem.indexOf(u8, text, sh.rcPath()) == null) {
@@ -423,7 +423,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
 지울 것:
 
 ```zig
-/// `expectQuietSeed`와 짝이 아니다 — 이 milestone은 씨앗을 안 건드린다.
+/// `expectQuietSeed`와 짝이 아니다 — 이 milestone은 seed를 안 건드린다.
 /// 히스토리는 rc가 아니라 env로 세우고(실측 9·10·11), 그 결정이 옳은지는
 /// `config/check.sh`의 8차 부팅이 본다. 여기가 보는 것은 우리가 셸마다
 /// 무엇을 주려고 했는가까지다.
@@ -436,7 +436,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
 /// 결정이고(SM 실측 9·10·11), 그 결정이 옳은지는 `config/check.sh`의 8차
 /// 부팅이 본다. 여기가 보는 것은 우리가 셸마다 무엇을 주려고 했는가까지다.
 ///
-/// 씨앗 쪽의 짝은 아래 `expectHistOptions`다. SD-M1이 그것을 더했다 —
+/// seed 쪽의 짝은 아래 `expectHistOptions`다. SD-M1이 그것을 더했다 —
 /// env로 되는 것(`HISTFILE`·`HISTSIZE`·`SAVEHIST`)과 파일로만 되는 것
 /// (`setopt`)이 갈리므로 검사도 둘이다.
 ```
@@ -463,7 +463,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
 ///   2. 모든 줄이 `KNOWN_HIST_OPTIONS`에 있다 — 우리가 직접 재 본 글자다
 ///
 /// 둘째가 없으면 `INC_APPEND_HISTORYY`로 오타를 낸 것이 호스트를 통과한다.
-/// 개수는 여전히 1이고, 씨앗과 `histOptionLines()`를 함께 틀리게 고치면
+/// 개수는 여전히 1이고, seed와 `histOptionLines()`를 함께 틀리게 고치면
 /// `expectQuietSeed`의 양방향도 만족되기 때문이다. 그 오타의 대가는
 /// stderr 65바이트이고 다섯 체인의 화면 좌표다(SD 실측 9).
 fn expectHistOptions(sh: config.Shell) !void {
@@ -507,7 +507,7 @@ fn expectHistOptions(sh: config.Shell) !void {
     // ── SD-M1: 히스토리 옵션 줄 ─────────────────────────────────────────
     //
     // 검사가 셋인 구조가 SM-M1과 같다. 정방향과 역방향은 위
-    // `expectQuietSeed`가 함께 보고, 셋째(씨앗과 `histOptionLines()`에서
+    // `expectQuietSeed`가 함께 보고, 셋째(seed와 `histOptionLines()`에서
     // 함께 지우는 것)를 이 줄이 막는다 — zsh의 개수를 1로 못 박으므로
     // 목록이 비면 그 자리에서 빨개진다.
     for (std.enums.values(config.Shell)) |sh| try expectHistOptions(sh);
@@ -537,10 +537,10 @@ Files:
 
 | | 되돌림 | 누가 잡아야 하나 |
 |---|---|---|
-| A | 씨앗의 `setopt` 줄을 `echo hi`로 바꾼다 | `expectQuietSeed` 정방향 |
-| B | 씨앗에서 그 줄만 지운다 | `expectQuietSeed` 역방향 |
-| C | 씨앗과 `HIST_OPTIONS_ZSH`에서 함께 지운다 | `expectHistOptions`의 개수 |
-| D | 씨앗과 `HIST_OPTIONS_ZSH`를 함께 `INC_APPEND_HISTORYY`로 | `KNOWN_HIST_OPTIONS` |
+| A | seed의 `setopt` 줄을 `echo hi`로 바꾼다 | `expectQuietSeed` 정방향 |
+| B | seed에서 그 줄만 지운다 | `expectQuietSeed` 역방향 |
+| C | seed와 `HIST_OPTIONS_ZSH`에서 함께 지운다 | `expectHistOptions`의 개수 |
+| D | seed와 `HIST_OPTIONS_ZSH`를 함께 `INC_APPEND_HISTORYY`로 | `KNOWN_HIST_OPTIONS` |
 
 C와 D가 이 표의 요점이다. 두 벌만 있으면 둘 다 통과하고, 그 둘을 막는 것이
 셋째 벌(`KNOWN_HIST_OPTIONS`)과 개수를 못 박는 `switch`다.
@@ -551,7 +551,7 @@ C와 D가 이 표의 요점이다. 두 벌만 있으면 둘 다 통과하고, �
 
 ```bash
 cp init/src/config.zig /tmp/config.zig.orig
-# 씨앗의 `setopt INC_APPEND_HISTORY` 줄을 `echo hi`로 고친 뒤
+# seed의 `setopt INC_APPEND_HISTORY` 줄을 `echo hi`로 고친 뒤
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   rm -rf init/.zig-cache init/zig-out; cd init && zig build test' 2>&1 | tail -12
 cp /tmp/config.zig.orig init/src/config.zig
@@ -560,21 +560,21 @@ cp /tmp/config.zig.orig init/src/config.zig
 기대: `FAIL: the zsh seed has a line that is not a comment, not an alias,` ·
 종료 코드가 0이 아니다.
 
-- [x] 되돌림 B — 씨앗에서 그 줄만 지운다
+- [x] 되돌림 B — seed에서 그 줄만 지운다
 
 기대: `FAIL: the zsh seed does not carry its history option line:` 와
 그 아래 `setopt INC_APPEND_HISTORY`.
 
-- [x] 되돌림 C — 씨앗과 `HIST_OPTIONS_ZSH`에서 함께 지운다
+- [x] 되돌림 C — seed와 `HIST_OPTIONS_ZSH`에서 함께 지운다
 
-`HIST_OPTIONS_ZSH`를 빈 배열(`[_][]const u8{}`)로 만들고 씨앗의 그 줄도
+`HIST_OPTIONS_ZSH`를 빈 배열(`[_][]const u8{}`)로 만들고 seed의 그 줄도
 지운다.
 
 기대: `FAIL: the zsh shell carries 0 history option lines, want 1`.
 
 - [x] 되돌림 D — 둘을 함께 오타로 고친다
 
-씨앗과 `HIST_OPTIONS_ZSH` 둘 다 `setopt INC_APPEND_HISTORYY`로 고친다
+seed와 `HIST_OPTIONS_ZSH` 둘 다 `setopt INC_APPEND_HISTORYY`로 고친다
 (양방향 검사는 통과하는 상태다).
 
 기대: `FAIL: the zsh shell wants an option line nobody measured:` 와
@@ -587,7 +587,7 @@ git diff --stat init/src/config.zig
 rg -n 'INC_APPEND_HISTORY' init/src/config.zig
 ```
 
-기대: `rg`가 두 줄을 준다(씨앗 한 줄 · `HIST_OPTIONS_ZSH` 한 줄). 둘째
+기대: `rg`가 두 줄을 준다(seed 한 줄 · `HIST_OPTIONS_ZSH` 한 줄). 둘째
 숫자가 아니라 정확히 둘인 것이 "두 벌"의 증명이다.
 
 ---
@@ -596,8 +596,8 @@ rg -n 'INC_APPEND_HISTORY' init/src/config.zig
 
 Files: 없음. 확인만 한다.
 
-호스트 검사가 보는 것은 "우리가 그 줄을 씨앗에 넣으려고 했고 그 줄이 조용한
-종류다"까지다. 씨앗의 바이트가 실제로 커졌으므로, 그 커진 파일을 읽은
+호스트 검사가 보는 것은 "우리가 그 줄을 seed에 넣으려고 했고 그 줄이 조용한
+종류다"까지다. seed의 바이트가 실제로 커졌으므로, 그 커진 파일을 읽은
 게스트가 화면을 안 밀었다는 것은 부팅으로만 볼 수 있다.
 
 SD-M2가 이 체인을 고칠 것이므로 여기서 판정을 더하지는 않는다. 이 Task가
@@ -621,7 +621,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
 
 | 증상 | 원인 |
 |---|---|
-| 화면 좌표를 보는 검사가 밀렸다 | 씨앗이 무언가를 찍었다. `setopt` 줄의 철자를 먼저 본다 |
+| 화면 좌표를 보는 검사가 밀렸다 | seed가 무언가를 찍었다. `setopt` 줄의 철자를 먼저 본다 |
 | 7차나 8차의 히스토리 판정이 깨졌다 | 옵션이 `fc -W`와 섞인 것이다. 그러면 SD-M2를 앞당겨 `fc -W`를 뺀다 |
 
 둘째가 나오면 plan보다 실측이 답이다 — M2의 첫 일을 여기서 한다.

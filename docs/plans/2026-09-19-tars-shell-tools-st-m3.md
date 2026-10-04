@@ -8,12 +8,12 @@ Goal: Ctrl+R이 **첫 누름에** picker를 열게 한다. 지금은 첫 누름�
 두 번째 키가 와야 뜬다 — fzf가 `--height`일 때 터미널에 커서 위치를 묻고,
 우리 terminal이 그 질의에 답하지 않기 때문이다.
 
-Architecture: 씨앗 rc에 fzf 옵션 줄 하나를 더한다(fish `set -gx`,
-bash·zsh `export`). `config_test.zig`의 씨앗 허용 목록에 그 줄을 **정확한
+Architecture: seed rc에 fzf 옵션 줄 하나를 더한다(fish `set -gx`,
+bash·zsh `export`). `config_test.zig`의 seed 허용 목록에 그 줄을 **정확한
 줄**로 넣고(접두사로 열지 않는다 — `export A=$(...)`가 명령을 숨긴다),
 `config/check.sh` 1차 부팅이 "첫 Ctrl+R에 picker가 뜬다"를 판정한다.
 
-Tech Stack: Zig(씨앗·단위 검사) · bash(config 체인) · QEMU(sendkey ctrl-r)
+Tech Stack: Zig(seed·단위 검사) · bash(config 체인) · QEMU(sendkey ctrl-r)
 
 ---
 
@@ -29,10 +29,10 @@ Tech Stack: Zig(씨앗·단위 검사) · bash(config 체인) · QEMU(sendkey ct
 
 `FZF_DEFAULT_OPTS=--no-height` 형태는 **안 먹는다**(같은 껍데기로 재 봤더니
 picker가 여전히 늦게 떴다) — fzf의 fish 통합이 위젯 옵션에 `--height`를
-앞세우기 때문이다. 그래서 씨앗은 `FZF_DEFAULT_OPTS`가 아니라 **위젯이 마지막에
+앞세우기 때문이다. 그래서 seed는 `FZF_DEFAULT_OPTS`가 아니라 **위젯이 마지막에
 읽는 자리**… 를 노린 한 줄이 아니라, 실측으로 통과한 형태를 쓴다.
 
-## Task 2 — 씨앗 셋에 한 줄
+## Task 2 — seed 셋에 한 줄
 
 ```
 set -gx FZF_DEFAULT_OPTS --no-height          (fish)
@@ -45,7 +45,7 @@ export FZF_DEFAULT_OPTS='--no-height'         (bash · zsh)
 ## Task 3 — 검사 둘
 
 1. `config_test.zig`: `KNOWN_SEED_ENV`에 두 줄을 적고, `expectQuietSeed`가
-   그 줄을 허용하며, 씨앗마다 그런 줄이 **하나도 없으면 실패**한다(볼 것이
+   그 줄을 허용하며, seed마다 그런 줄이 **하나도 없으면 실패**한다(볼 것이
    없었다를 가른다). 접두사가 아니라 정확한 줄인 이유를 주석에 적는다.
 2. `config/check.sh` 1차 부팅 훅의 **맨 끝**: `type_keys ctrl-r` →
    `wait_for_screen '\| >'` → `type_keys esc`.
@@ -63,5 +63,5 @@ export FZF_DEFAULT_OPTS='--no-height'         (bash · zsh)
 ## 다음
 
 진짜 수리 — `terminal`이 lib-vt의 콜백(커서 위치 보고 · DA1/DA2 · 모드·색
-질의)을 등록해 pty로 답을 쓴다. 그러면 fzf가 40% 상자로 돌아오고, 이 씨앗
+질의)을 등록해 pty로 답을 쓴다. 그러면 fzf가 40% 상자로 돌아오고, 이 seed
 줄은 지울 수 있다.

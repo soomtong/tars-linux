@@ -913,7 +913,7 @@ report_failure() {
 }
 
 # ---------------------------------------------------------------- 1차 부팅
-# 빈 디스크. init이 씨앗을 심고(fish), 그 다음 사람이 zsh로 고친다.
+# 빈 디스크. init이 seed를 심고(fish), 그 다음 사람이 zsh로 고친다.
 echo "=== boot 1/2: empty disk, seed the config then edit it from inside the guest ==="
 if ! boot_once "$LOG1" "tars-init: created /config/tars.conf" edit_config_in_guest; then
   report_failure "$LOG1" "first boot did not seed and edit /config/tars.conf"
@@ -929,7 +929,7 @@ if grep -q "tars-init: loaded /config/tars.conf" "$LOG1"; then
   report_failure "$LOG1" "first boot loaded an existing config; the disk was not empty"
 fi
 
-# 씨앗은 언제나 기본값이다. 1차 부팅의 셸은 아직 fish여야 한다 — 여기가
+# seed는 언제나 기본값이다. 1차 부팅의 셸은 아직 fish여야 한다 — 여기가
 # zsh였다면 디스크가 비어 있지 않았다는 뜻이다.
 if ! grep -q "tars-init: config shell=fish" "$LOG1"; then
   report_failure "$LOG1" "first boot did not start from the default (fish)"

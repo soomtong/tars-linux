@@ -1,6 +1,6 @@
 ---
 name: project_measuring_shells
-description: "셸의 동작을 재는 환경이 실제로 돌 환경과 다르면 값이 조용히 틀린다는 것 — 2026-09-12에 BH가 하루에 세 번 걸리고 정리했다. 사례 셋이 서로 다른 축이다. (1) 컨테이너에는 `/dev/fd`가 있고 게스트에는 없다 — 그래서 씨앗의 fzf 훅이 게스트에서만 `bash: /dev/fd/63: No such file or directory`를 찍었고, SM-M1이 잰 `관문이 있으면 0바이트`가 게스트에서는 거짓이었다. (2) `script -qfc \"bash -i\"`는 `sh -c` 래퍼를 하나 끼우므로 자식 pid로 찾은 것에 시그널을 보내면 셸이 아니라 래퍼가 받는다 — SD 실측 7의 `bash는 SIGHUP에서 안 쓴다`가 이것 때문에 틀렸다. 처방은 `exec`를 넣는 것과 `/proc/<pid>/cmdline`을 함께 찍는 것이다. (3) 비대화형 bash는 `PROMPT_COMMAND`를 아예 실행하지 않으므로 `bash -c '<줄>'`로는 오타 난 프롬프트 훅도 0바이트로 보인다 — 대화형 세션의 화면 바이트를 재야 한다. 공통 처방은 재는 환경의 차이를 먼저 적고 그 차이가 재려는 값을 바꾸는지 묻는 것이다"
+description: "셸의 동작을 재는 환경이 실제로 돌 환경과 다르면 값이 조용히 틀린다는 것 — 2026-09-12에 BH가 하루에 세 번 걸리고 정리했다. 사례 셋이 서로 다른 축이다. (1) 컨테이너에는 `/dev/fd`가 있고 게스트에는 없다 — 그래서 seed의 fzf 훅이 게스트에서만 `bash: /dev/fd/63: No such file or directory`를 찍었고, SM-M1이 잰 `관문이 있으면 0바이트`가 게스트에서는 거짓이었다. (2) `script -qfc \"bash -i\"`는 `sh -c` 래퍼를 하나 끼우므로 자식 pid로 찾은 것에 시그널을 보내면 셸이 아니라 래퍼가 받는다 — SD 실측 7의 `bash는 SIGHUP에서 안 쓴다`가 이것 때문에 틀렸다. 처방은 `exec`를 넣는 것과 `/proc/<pid>/cmdline`을 함께 찍는 것이다. (3) 비대화형 bash는 `PROMPT_COMMAND`를 아예 실행하지 않으므로 `bash -c '<줄>'`로는 오타 난 프롬프트 훅도 0바이트로 보인다 — 대화형 세션의 화면 바이트를 재야 한다. 공통 처방은 재는 환경의 차이를 먼저 적고 그 차이가 재려는 값을 바꾸는지 묻는 것이다"
 metadata:
   node_type: memory
   type: project
@@ -22,7 +22,7 @@ BH(Bash History Durability)가 2026-09-12 하루에 같은 종류의 함정에 �
 
 그래서 bash의 process substitution(`< <(…)`)이 게스트에서만 실패한다.
 `fzf --bash` 출력의 마지막 줄이 최상위에서 그것을 쓰므로
-(`__fzf_orig_completion < <(complete -p …)`), 씨앗 rc를 읽는 bash가 부팅할
+(`__fzf_orig_completion < <(complete -p …)`), seed rc를 읽는 bash가 부팅할
 때마다 `bash: /dev/fd/63: No such file or directory` 한 줄을 찍고 있었다.
 
 그 한 줄이 이 저장소가 가장 엄격히 지키는 규칙을 깬다 — 우리가 까는 rc는
@@ -60,7 +60,7 @@ SIGKILL 칸이 "써진다"로 나온 것이었다 — 핸들러가 없는 시그
 
 ## 3. 비대화형 셸은 프롬프트 훅을 안 돈다
 
-씨앗 rc에 새 줄을 들일 때 이 저장소의 절차는 "그 줄이 조용한 것을 먼저
+seed rc에 새 줄을 들일 때 이 저장소의 절차는 "그 줄이 조용한 것을 먼저
 재라"이다. SD가 zsh에 대해 `zsh -c '<줄>'`로 stdout·stderr를 세는 방법을
 `KNOWN_HIST_OPTIONS`의 주석에 못 박아 두었다.
 

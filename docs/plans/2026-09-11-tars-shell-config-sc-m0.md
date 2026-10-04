@@ -94,7 +94,7 @@ Task 6의 `WANT` 항목을 `.bashrc`로 적지 `./` 를 붙이지 않는다.
 
 | 파일 | 무엇을 맡나 | 이 milestone이 하는 일 |
 |---|---|---|
-| `init/src/config.zig` | 설정 파일의 문법과 기본값. 파서는 여기 한 벌뿐이다 | `ShellConfig` enum · `Config`의 여섯째 필드 · `parse` 분기 · `save` 씨앗 텍스트 · `Shell.configFlag()` |
+| `init/src/config.zig` | 설정 파일의 문법과 기본값. 파서는 여기 한 벌뿐이다 | `ShellConfig` enum · `Config`의 여섯째 필드 · `parse` 분기 · `save` seed 텍스트 · `Shell.configFlag()` |
 | `init/src/config_test.zig` | 위 파일에서 시스템 콜이 없는 `parse`를 호스트에서 검증 | `expect()`를 여섯 필드로 넓히고 검사 다섯을 더한다 |
 | `init/src/main.zig` | PID 1. 설정을 읽어 argv로 옮기고 자식 둘을 감독 | 로그 줄 넓히기 · 자식 둘의 플래그 슬롯 |
 | `terminal/src/main.zig` | 화면 셸을 PTY에 띄운다 | `"none"`을 받으면 셸 argv에 안 붙인다 · `fish_greeting` |
@@ -184,7 +184,7 @@ Files: Modify `init/src/config_test.zig`
     // **앞의 다섯과 완전히 같은 모양이다**(hangul_toggle만 다르다).
     // enum이 화이트리스트이고, 모르는 값은 기본값에 머문다.
     try expect("shell_config=off\n", .{ .shell_config = .off });
-    // 기본값을 명시적으로 적는 것도 통과한다. 씨앗 파일이 실제로 그렇게
+    // 기본값을 명시적으로 적는 것도 통과한다. seed 파일이 실제로 그렇게
     // 생겼으므로 이 왕복이 참이어야 한다.
     try expect("shell_config=on\n", .{});
     try expect("shell_config=yes\n", .{}); // enum에 없는 값
@@ -298,7 +298,7 @@ pub const ShellConfig = enum {
         }
 ```
 
-- [x] Step 5: `save`의 씨앗 텍스트에 두 줄을 더한다
+- [x] Step 5: `save`의 seed 텍스트에 두 줄을 더한다
 
 `init/src/config.zig`의 `save` 안 `bufPrint` 템플릿에서 지울 것:
 
@@ -566,7 +566,7 @@ Files: Modify `kernel/make_initrd.sh`
 #
 # **파일은 여기서 안 만든다.** initrd에 넣으면 tmpfs에 생겨서 부팅마다
 # 초기화되고, 그러면 링크가 가리키는 자리와 파일이 있는 자리가 갈린다.
-# 씨앗은 init이 /config를 마운트한 뒤에 깐다(SC-M1).
+# seed는 init이 /config를 마운트한 뒤에 깐다(SC-M1).
 #
 # **설정 디스크를 못 찾으면?** .gitconfig과 같다 — 링크가 initrd 안의 빈
 # /config를 가리키고 셸은 rc가 없는 채로 뜬다. **부팅을 안 막는다.**
@@ -718,7 +718,7 @@ if ! grep -q "tars-init: config shell=fish" "$LOG1"; then
 # 다른 체인들이 `tars-init: config shell=`을 앞부분으로 grep하고 있기
 # 때문이다(main.zig의 그 자리 주석이 HI-M2에 대해 같은 것을 적고 있다).
 #
-# **여기가 게이트에서 기본값을 보는 유일한 자리다.** 씨앗 파일이 실제로
+# **여기가 게이트에서 기본값을 보는 유일한 자리다.** seed 파일이 실제로
 # `shell_config=on`을 담았다는 것은 SC-M1이 2차 부팅으로 본다 — 이 검사가
 # 보는 것은 **파서가 그 키를 알고, 기본값이 on이라는 것**까지다.
 if ! grep -q "tars-init: config shell=fish.*shell_config=on" "$LOG1"; then

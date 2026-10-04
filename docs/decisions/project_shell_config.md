@@ -69,7 +69,7 @@ UT-M3 실측 9가 *"이 저장소의 체인은 shift 조합을 쓴 적이 없다
 | 잇는 방법 | 링크 셋 — `/config` 아래 평평하게 | `HOME=/config`(프롬프트가 바뀐다) · 셸별 환경변수(bash가 구멍) |
 | 설정 키 | `shell_config` enum `{on, off}`, 기본 `on` | `bool` · 기본 `off` |
 | 왜 끌 수 있어야 하나 | embedded 장비의 init 1으로 쓸 때 — 앱 하나가 도는 기계에서는 설정이 없는 쪽이 안전하다 | 언제나 켜기 |
-| 씨앗 | 셋 다, 프롬프트를 안 건드린다 | 현재 셸만 · 주석만 · 프롬프트를 우리가 정하기 |
+| seed | 셋 다, 프롬프트를 안 건드린다 | 현재 셸만 · 주석만 · 프롬프트를 우리가 정하기 |
 | 탈출로 | 둘 다 — 감독자의 마지막 한 번 + `tars.noconfig` | 하나만 |
 | 게이트 | `config/check.sh`를 세 부팅으로 | 열두번째 체인 |
 
@@ -184,14 +184,14 @@ UT-M3의 23분 43.15초에서 +25.64초(잡음 ±3분 안). 두 번째 회차다
 
 # ─────────────────────────  SC-M1  ─────────────────────────
 
-## 씨앗은 한 글자도 찍으면 안 된다 — M1을 지배한 사실
+## seed는 한 글자도 찍으면 안 된다 — M1을 지배한 사실
 
 설정 디스크를 붙이는 체인이 다섯이고(design 실측 4) 그중 셋이 화면의 셀
 좌표로 판정한다. M0까지는 그 다섯의 셸이 rc를 읽으려 해도 읽을 파일이
 없어서 아무 일도 안 일어났는데, M1이 그 파일을 만드는 순간 다섯 체인의
-화면이 씨앗의 내용을 따라간다.
+화면이 seed의 내용을 따라간다.
 
-그래서 씨앗에 쓸 수 있는 줄이 주석과 `alias` 둘뿐이고, 그 규칙을
+그래서 seed에 쓸 수 있는 줄이 주석과 `alias` 둘뿐이고, 그 규칙을
 `init/src/config_test.zig`의 `expectQuietSeed`가 호스트에서 0.1초에
 확인한다.
 
@@ -200,29 +200,29 @@ FAIL: the zsh seed has a line that is neither a comment nor an alias:
   echo hello
 ```
 
-이 검사의 목적은 지금 통과하는 것이 아니라 나중에 막는 것이다. 씨앗을
+이 검사의 목적은 지금 통과하는 것이 아니라 나중에 막는 것이다. seed를
 늘리는 사람이 보는 것은 부팅 20초 뒤에 밀린 화면 좌표가 아니라 이 줄이다.
 design 위험 3의 절반이 이것으로 닫혔다 — "우리가 까는 것"은 이제 장치가
 있고, "사용자가 쓰는 것"이 SC-M2다.
 
 검사가 보는 것 셋: 줄의 종류 · alias 최소 하나(없으면 아래 `tars-config`
-판정이 무의미해진다) · 씨앗이 자기 경로를 자기 안에 적었는가.
+판정이 무의미해진다) · seed가 자기 경로를 자기 안에 적었는가.
 
-## `tars-config` — 씨앗이 게이트의 판정 도구이기도 하다
+## `tars-config` — seed가 게이트의 판정 도구이기도 하다
 
-1차 부팅이 `tars.conf`를 고치기 전에 치는 첫 명령이고, 씨앗이 정의한
+1차 부팅이 `tars.conf`를 고치기 전에 치는 첫 명령이고, seed가 정의한
 alias(`cat /config/tars.conf`)다. 화면에 `shell_config=on` 한 줄이 뜨면 셋이
-한꺼번에 참이 된다 — 파일이 생겼다 · fish가 그것을 읽었다 · 씨앗
+한꺼번에 참이 된다 — 파일이 생겼다 · fish가 그것을 읽었다 · seed
 `tars.conf`가 실제로 `shell_config=on`을 담고 있다(SC-M0의 게이트는 로그의
 기본값만 봤고 파일의 내용은 못 봤다).
 
-출력의 마지막 줄로 판정한다 — 씨앗 `tars.conf`는 스무 줄쯤이고
+출력의 마지막 줄로 판정한다 — seed `tars.conf`는 스무 줄쯤이고
 `shell_config=on`이 그 끝이다. UT-M3의 *"긴 출력의 첫 줄은 프레임에 안
 남는다"*가 그대로 적용된다.
 
-판정 글자 `tars-rc-alive`는 씨앗이 아니라 사람이 심는다. 씨앗에 `echo`를
+판정 글자 `tars-rc-alive`는 seed가 아니라 사람이 심는다. seed에 `echo`를
 넣을 수 없으니(위) 1차 부팅에서 게이트가 `/config/zshrc`에 한 줄을 더한다
-(덮어쓰지 않는다 — 2차가 읽는 것이 씨앗 + 그 줄이어야 한다).
+(덮어쓰지 않는다 — 2차가 읽는 것이 seed + 그 줄이어야 한다).
 
 ## 결정 4의 두 절반 — `terminal: screen>`가 그 경계다
 
@@ -251,7 +251,7 @@ alias(`cat /config/tars.conf`)다. 화면에 `shell_config=on` 한 줄이 뜨면
 1차와 2차가 전부 통과하는 결함이 실제로 있고 3차만 그것을 본다는 것이
 관측으로 확인됐다. `off`가 tautology가 아니다.
 
-씨앗을 아예 안 깔면 1차가 이렇게 죽는다:
+seed를 아예 안 깔면 1차가 이렇게 죽는다:
 
 ```
 FAIL(boot 1): 'tars-config' never printed the seeded config
@@ -262,8 +262,8 @@ FAIL(boot 1): 'tars-config' never printed the seeded config
 
 | 파일의 상태 | 첫 실행이 보고한 것 |
 |---|---|
-| zsh 씨앗에 `echo hello` | `PASS` — 직전(깨끗한 상태)의 결과 |
-| fish 씨앗의 alias 둘을 지움 | zsh에 대한 FAIL — 직전(zsh를 깨뜨렸던 상태)의 결과 |
+| zsh seed에 `echo hello` | `PASS` — 직전(깨끗한 상태)의 결과 |
+| fish seed의 alias 둘을 지움 | zsh에 대한 FAIL — 직전(zsh를 깨뜨렸던 상태)의 결과 |
 
 두 번 다 두 번째 실행은 옳았다. 재현을 열여덟 번 시도했고(같은 파일로
 여섯 · `.zig-cache`를 지운 것 포함, zsh와 fish를 번갈아 열둘) 한 번도 안
@@ -283,17 +283,17 @@ SC-M0의 24분 08.79초에서 +27.76초. design 위험 4가 +1분으로 적었�
 회차마다 세 번 도는데도 그렇다. 1차 부팅의 타이핑이 `wait_for_screen`으로
 찾는 즉시 돌아오기 때문이기도 하다.
 
-씨앗이 다른 체인의 화면을 안 건드렸다는 것을 따로 봤다 — 어느 체인도
-이것을 판정으로 안 갖는다. 씨앗의 내용(`alias`·`TARS shell config`)이
+seed가 다른 체인의 화면을 안 건드렸다는 것을 따로 봤다 — 어느 체인도
+이것을 판정으로 안 갖는다. seed의 내용(`alias`·`TARS shell config`)이
 `terminal: screen>`에 뜬 횟수 0, 셸의 문법·명령 에러 0,
 `Welcome to fish`는 M0과 같은 6회 / 화면 줄 0회.
 
 ## `debugfs`로 이미지에 직접 물을 수 있다 — 이 저장소에서 처음 쓴 도구
 
 게이트 로그에 `tars-init: seeded`가 CP·IP·RM에서만 보이고 `power`·
-`hangul`에는 없다. 씨앗이 안 깔린 것이 아니라 그 두 체인이 성공했을 때 첫
+`hangul`에는 없다. seed가 안 깔린 것이 아니라 그 두 체인이 성공했을 때 첫
 부팅의 시리얼 로그를 안 찍는 것이다(`power/check.sh:424`가 찍는 것은 재시작
-쌍의 `$LOG_A`이고, 씨앗이 깔리는 첫 부팅의 `$LOG`는 실패했을 때만 나온다).
+쌍의 `$LOG_A`이고, seed가 깔리는 첫 부팅의 `$LOG`는 실패했을 때만 나온다).
 로그에 없는 것과 안 일어난 것이 다르다.
 
 게이트가 남긴 이미지에 직접 물어서 확인했다 — 컨테이너에 `debugfs`가 있다.
@@ -302,7 +302,7 @@ SC-M0의 24분 08.79초에서 +27.76초. design 위험 4가 +1분으로 적었�
 $ debugfs -R 'ls /' out/power.img
 .  ..  lost+found  tars.conf  fish.config  bashrc  zshrc      ← 넷 다 그렇다
 $ debugfs -R 'cat /zshrc' out/config.img | tail -1
-echo tars-rc-alive        ← 1차에서 사람이 **더한** 줄. 씨앗이 안 덮였다
+echo tars-rc-alive        ← 1차에서 사람이 **더한** 줄. seed가 안 덮였다
 $ debugfs -R 'cat /tars.conf' out/config.img
 shell=zsh                 ← 1차가 쓴 것
 shell_config=off          ← 2차가 더한 것
@@ -316,8 +316,8 @@ shell_config=off          ← 2차가 더한 것
 | 못 보는 것 | 왜 |
 |---|---|
 | bash·fish의 rc가 읽히는가 | rc가 실제로 읽히는 것을 보는 셸은 zsh 하나다(2차·3차의 셸). fish는 1차의 `tars-config`가 alias 하나로 보지만 `off`가 그것을 막는지는 안 본다. bash는 로그의 `seeded` 한 줄이 전부다 |
-| 씨앗의 내용이 맞는가 | 호스트 검사가 보는 것은 문법 범주(주석/alias)와 자기 경로다. alias의 명령이 실제로 도는지는 `tars-config` 하나만 본다 |
-| `off`일 때도 씨앗을 깐다는 것 | 코드가 `shell_config`를 안 보는 구조라 볼 것이 없다. 3차 부팅은 파일이 이미 있는 상태라 이 갈래를 안 지난다 |
+| seed의 내용이 맞는가 | 호스트 검사가 보는 것은 문법 범주(주석/alias)와 자기 경로다. alias의 명령이 실제로 도는지는 `tars-config` 하나만 본다 |
+| `off`일 때도 seed를 깐다는 것 | 코드가 `shell_config`를 안 보는 구조라 볼 것이 없다. 3차 부팅은 파일이 이미 있는 상태라 이 갈래를 안 지난다 |
 | 사용자가 rc를 지웠을 때 다시 깔리는가 | 코드로는 깔린다(`O_EXCL`). 게이트가 그 갈래를 안 지난다 |
 
 ## 위험 — rc가 깨지면 그것을 고칠 셸이 없다. M0~M2가 다 닫았다
@@ -328,7 +328,7 @@ CP가 `tars.conf`에 대해 만든 세 장치(화이트리스트 · 모르는 �
 
 | 누가 쓴 rc | 장치 | 어디서 |
 |---|---|---|
-| 우리(씨앗) | `expectQuietSeed` — 주석과 alias 말고는 못 들어간다 | M1, 호스트 0.1초 |
+| 우리(seed) | `expectQuietSeed` — 주석과 alias 말고는 못 들어간다 | M1, 호스트 0.1초 |
 | 사용자, 죽는 rc | 감독자가 포기 직전에 rc 없이 한 번 더 띄운다 | M2 결정 8 |
 | 사용자, 매달리는 rc | 부팅 순간에 `tars.noconfig` | M2 결정 9 |
 

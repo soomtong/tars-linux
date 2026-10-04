@@ -117,14 +117,14 @@ design doc은 전부 `docs/specs/`에 날짜순으로, 기억은
 | Shell Config (SC-M0~M2) | 2026-09-11 | `tars.conf`의 `shell_config`가 rc를 켜고 끄고, 탈출로 둘(rc 없이 한 번 더 · 커널 cmdline `tars.noconfig`)이 섰다 |
 | Shell Memory (SM-M0~M2) | 2026-09-12 | `zoxide`·`fzf`와 히스토리 env로 기계가 배운 것 둘이 부팅을 넘는다 |
 | Gate Accuracy (GA-M0·M1) | 2026-09-12 | 게이트가 거짓을 말하던 일곱 자리를 없애고 `check.sh`의 진입 검사가 재발을 막는다 |
-| Shell History Durability (SD-M0~M2) | 2026-09-12 | 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지지 않는다 — 씨앗 rc의 `setopt INC_APPEND_HISTORY` 한 줄 |
+| Shell History Durability (SD-M0~M2) | 2026-09-12 | 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지지 않는다 — seed rc의 `setopt INC_APPEND_HISTORY` 한 줄 |
 | Bash History Durability (BH-M0~M2) | 2026-09-12 | 같은 일을 bash에 했다 — `PROMPT_COMMAND='history -a'` 한 줄이 zoxide 훅보다 먼저. 덤으로 게스트에 없던 `/dev/fd`를 세웠다 |
 | Bash Boot (BB-M0~M2) | 2026-09-12 | `config` 체인이 부팅 아홉이 됐고 아홉째가 `shell=bash`로 뜬다 — 중첩으로는 볼 수 없던 여섯을 본다 |
 | Shutdown Latency (SL-M0~M2) | 2026-09-13 | PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가 0.13초가 됐다 |
 | Guest Network (NW-M0~M3) | 2026-09-14 | `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다. 우리 코드는 링크를 올리고 dhcpcd를 띄우는 것까지고 나머지는 dhcpcd다. 판정은 SLIRP 안에서 닫힌다 — 열두번째 체인 `net/check.sh` |
 | Inbound Network (IN-M0~M2) | 2026-09-14 | 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다. 우리 코드는 0줄이고 `net/check.sh`가 검사 열여섯이 됐다 |
 | Time Sync (TS-M0~M3) | 2026-09-19 | 부팅에 SNTP로 한 번 묻고 시계를 뛰었다(우리 SNTP는 TD가 chronyd로 바꿨다). 상대는 설정의 주소든 DHCP가 알려 준 것이든 되고, `timezone=Asia/Seoul`이 그 시각을 사람이 읽는 모양으로 만든다. 네트워크가 없어도 부팅은 평소대로 끝난다 — `net/check.sh`가 검사 스물넷에 부팅 셋 |
-| Shell Tools (ST-M0~M2)|2026-09-19|깔려 있던 도구를 셸이 쓴다 — 씨앗 rc가 eza 별칭 넷을 정의하고(`ls`가 eza로 가는 것이 유일한 셰도다), `/config/gitconfig`가 생겨 `/.gitconfig` 링크가 더 이상 끊기지 않는다|
+| Shell Tools (ST-M0~M2)|2026-09-19|깔려 있던 도구를 셸이 쓴다 — seed rc가 eza 별칭 넷을 정의하고(`ls`가 eza로 가는 것이 유일한 셰도다), `/config/gitconfig`가 생겨 `/.gitconfig` 링크가 더 이상 끊기지 않는다|
 | Terminal Queries (TQ-M1)|2026-09-19|터미널이 자식의 질의(커서 위치·상태 보고)에 답한다 — `effects.write_pty` 한 칸과 그 답이 pty로 돌아가는 길. ST-M3이 넣은 `--no-height` 우회를 지웠다|
 | Disk Install (DI-M0~M2) | 2026-09-23 | USB로 뜬 기계에서 `tars-install`이 내장 디스크에 ESP와 설정 파티션을 만들고 USB 없이 뜬다. 새 ISO로 갱신해도 설정이 남고 `--wipe`가 통째로 지운다. 열세번째 체인 `install/check.sh` |
 | Disk Install Carryover (DC-M0~M2) | 2026-09-26 | 설치된 부팅이 늦게 생기는 설정 파티션을 5초까지 기다린다. DI의 작은 것 다섯(4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · 쪼개진 YES · PVD 음성)을 치웠다. install 체인이 부팅 일곱이 됐다 |

@@ -13,7 +13,7 @@ design의 실측 1~8은 착수 전에 이미 쟀다(그 측정이 이 서브프�
 
 | | 무엇 | 무엇이 걸려 있나 |
 |---|---|---|
-| 실측 9 | 씨앗 줄이 부팅할 때 0바이트인가 | `expectQuietSeed` 허용 목록에 넣을 근거(SD-M1) |
+| 실측 9 | seed 줄이 부팅할 때 0바이트인가 | `expectQuietSeed` 허용 목록에 넣을 근거(SD-M1) |
 | 실측 10 | `fc -W`가 다른 세션이 써 둔 줄을 지우는가 | 7차의 그 명령을 남길지 뺄지(SD-M2) |
 | 실측 11 | `unsetopt` 음성 대조군이 성립하는가 | 결정 5의 검사 모양(SD-M2) |
 | 실측 12 | 중첩 zsh가 화면에 무엇을 찍는가 | `wait_for_screen`이 볼 글자(SD-M2, 위험 2) |
@@ -83,7 +83,7 @@ docker cp /tmp/sd_quiet.sh tars-measure:/tmp/
 docker exec tars-measure bash /tmp/sd_quiet.sh
 ```
 
-## Task 1: 실측 9 — 씨앗 줄이 조용한가
+## Task 1: 실측 9 — seed 줄이 조용한가
 
 Files: 없음(측정만). 호스트에 `/tmp/sd_quiet.sh`를 만든다.
 
@@ -128,8 +128,8 @@ docker cp /tmp/sd_quiet.sh tars-measure:/tmp/ && \
 
 - [x] Step 3: 판정한다
 
-`good`이 0바이트가 아니면 이 서브프로젝트의 처방이 씨앗에 들어갈 수 없다
-(씨앗의 규칙이 *"아무것도 찍지 않는다"*이고 설정 디스크를 붙이는 다섯 체인이
+`good`이 0바이트가 아니면 이 서브프로젝트의 처방이 seed에 들어갈 수 없다
+(seed의 규칙이 *"아무것도 찍지 않는다"*이고 설정 디스크를 붙이는 다섯 체인이
 화면 좌표로 판정한다). 그때는 design 결정 2를 다시 열어야 하므로 그 자리에서
 멈추고 사용자에게 알린다.
 
@@ -274,7 +274,7 @@ docker exec tars-measure bash -c "tr -d '\r' < /tmp/neg/out | sed -n '1,40p'"
 
 - [x] Step 2: 세 가지를 적는다
 
-1. 중첩 zsh가 기동할 때 찍는 줄이 있는가(없어야 한다 — 씨앗 rc는 조용하다).
+1. 중첩 zsh가 기동할 때 찍는 줄이 있는가(없어야 한다 — seed rc는 조용하다).
 2. 프롬프트가 바뀌는가. 게스트의 프롬프트는 `root@(none) ~#` 모양이고,
    중첩 세션의 프롬프트가 그것과 같으면 게이트는 *"몇 번째 프롬프트인가"*를
    셀 수 없다.

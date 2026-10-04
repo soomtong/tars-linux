@@ -2,14 +2,14 @@
 
 Design: `docs/specs/2026-09-12-tars-bash-history-durability-design.md`
 
-M1의 초록은 "그 줄이 씨앗에 있다"까지만 말한다. 게이트에는 bash로 뜨는
+M1의 초록은 "그 줄이 seed에 있다"까지만 말한다. 게이트에는 bash로 뜨는
 자리가 하나도 없어서(확인 4) 그 줄이 게스트에서 무엇을 하는지 아무도 안 본다.
 이 milestone이 그 자리를 만든다.
 
 방법은 SD-M2와 같다 — 7차 부팅에 중첩 셸 둘을 띄워 음성·양성 대조군을
 만들고, 우리가 만든 글자로 판정한다. 다른 것은 셋이다.
 
-1. 중첩이 zsh가 아니라 bash다. 씨앗 rc는 `~/.bashrc` 링크를 통해 그대로
+1. 중첩이 zsh가 아니라 bash다. seed rc는 `~/.bashrc` 링크를 통해 그대로
    읽힌다(`make_initrd.sh:228`).
 2. 첫 명령이 `HISTFILE=/config/bash_history`다. 7차는 zsh로 떴으므로 env의
    `HISTFILE`이 zsh 것이고, 그것을 안 맞추면 검사가 zsh 히스토리 파일에 섞인
@@ -32,7 +32,7 @@ baft1                                     ← 그 명령은 분명히 쳐졌다
 bash-5.2# HISTFILE=/config/bash_history
 bash-5.2# bposmark=1
 bash-5.2# echo bpos$(grep -cx bposmark=1 /config/bash_history)
-bpos1                                     ← 씨앗의 훅이 그 자리에서 쓴다
+bpos1                                     ← seed의 훅이 그 자리에서 쓴다
 ```
 
 앞에 `b`를 붙이는 것은 7차가 이미 `neg0`·`aft1`·`pos1`을 쓰고 있기 때문이다.
@@ -77,7 +77,7 @@ Files: `config/check.sh`
 # 같은 실험을 bash로 한 번 더 한다. SD-M2가 zsh에 대해 세운 구조를 그대로
 # 쓰되 셋이 다르다.
 #
-#   1. 중첩이 bash다. 씨앗은 `~/.bashrc` 링크로 그대로 읽힌다.
+#   1. 중첩이 bash다. seed는 `~/.bashrc` 링크로 그대로 읽힌다.
 #   2. 첫 명령이 HISTFILE 대입이다. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
 #      zsh 것이고, 안 맞추면 이 검사가 zsh 파일에 섞인 평문을 센다.
 #   3. 옵션을 끄는 방법이 `PROMPT_COMMAND=`다. bash에는 `unsetopt`가 없다.
@@ -135,14 +135,14 @@ Ctrl+R widget without the gate pressing Ctrl+R"`) 바로 뒤, `# ── SD-M2:` 
 - [x] Step 1: 판정 셋을 쓴다
 
 ```bash
-  # ── BH-M2: bash 씨앗의 한 줄이 게스트에서 하는 일을 본다 ──────────────
+  # ── BH-M2: bash seed의 한 줄이 게스트에서 하는 일을 본다 ──────────────
   #
-  # 구조가 아래 SD-M2의 것과 같다. 중첩 둘이 음성·양성이고 둘 다 같은 씨앗
+  # 구조가 아래 SD-M2의 것과 같다. 중첩 둘이 음성·양성이고 둘 다 같은 seed
   # rc를 읽으며, 다른 것은 음성이 훅을 끄는 한 줄뿐이다.
   #
   #   bneg0  훅을 끈 세션이 친 명령은 살아 있는 동안 파일에 없다
   #   baft1  그 세션이 나가면서 썼다 — 그러니 그 명령은 분명히 쳐졌다
-  #   bpos1  씨앗의 훅이 살아 있는 세션은 치는 그 자리에서 파일에 쓴다
+  #   bpos1  seed의 훅이 살아 있는 세션은 치는 그 자리에서 파일에 쓴다
   #
   # ⚠ HISTFILE 대입을 지우지 말 것. 이 부팅은 zsh로 떴으므로 env의 HISTFILE이
   #   /config/zsh_history이고, 그것을 안 맞추면 아래 grep이 zsh 형식 파일에
@@ -161,7 +161,7 @@ Ctrl+R widget without the gate pressing Ctrl+R"`) 바로 뒤, `# ── SD-M2:` 
     echo "FAIL(boot 7): the bash session with its prompt hook cleared still wrote its command to the history file"
     echo "  화면에 bneg1이 있으면 PROMPT_COMMAND= 가 안 먹은 것이다."
     echo "  bneg라는 글자가 숫자 없이 있으면 /config/bash_history가 아직 없어서"
-    echo "  grep이 에러를 낸 것이고, 그것은 씨앗의 그 줄이 안 걸렸다는 뜻이다."
+    echo "  grep이 에러를 낸 것이고, 그것은 seed의 그 줄이 안 걸렸다는 뜻이다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
@@ -177,7 +177,7 @@ Ctrl+R widget without the gate pressing Ctrl+R"`) 바로 뒤, `# ── SD-M2:` 
     exec 3>&-
     echo "FAIL(boot 7): the negative bash session's command never reached the file, so the check above saw nothing"
     echo "  화면에 baft0이 있으면 그 명령이 애초에 안 쳐진 것이고, 그러면"
-    echo "  위의 bneg0은 씨앗의 줄과 아무 상관이 없다. 중첩 bash가 떴는지부터"
+    echo "  위의 bneg0은 seed의 줄과 아무 상관이 없다. 중첩 bash가 떴는지부터"
     echo "  본다 — 프롬프트가 bash-5.2#로 바뀌었어야 한다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -195,7 +195,7 @@ Ctrl+R widget without the gate pressing Ctrl+R"`) 바로 뒤, `# ── SD-M2:` 
     exec 3<&-
     exec 3>&-
     echo "FAIL(boot 7): with the seeded prompt hook on, a typed command was not in the bash history file yet"
-    echo "  화면에 bpos0이 있으면 씨앗의 PROMPT_COMMAND 줄이 안 걸린 것이다 —"
+    echo "  화면에 bpos0이 있으면 seed의 PROMPT_COMMAND 줄이 안 걸린 것이다 —"
     echo "  그 줄이 없거나(rcSeed의 bash 갈래), bash가 /config/bashrc를 안"
     echo "  읽었거나, 뒤에 오는 zoxide 훅이 그 변수를 덮어쓴 것이다."
     echo "  이 줄이 BH가 넣은 그 한 줄을 게이트가 보는 유일한 자리다."
@@ -253,7 +253,7 @@ Task 3의 첫 회차가 통과했는데, 화면에 예상하지 않은 것이 �
 (none)# bash | HISbash: /dev/fd/63: No such file or directory | TF...bash-5.2# HISTFI
 ```
 
-`bash`를 친 직후 씨앗의 fzf 훅이 에러 한 줄을 찍고, 그 사이에 `HISTFILE=`
+`bash`를 친 직후 seed의 fzf 훅이 에러 한 줄을 찍고, 그 사이에 `HISTFILE=`
 타이핑이 끼어들어 글자가 쪼개졌다. 그 회차는 결국 통과했지만 운이다.
 
 design 실측 13과 결정 9가 이 내용이다. 요약하면 `fzf --bash` 출력의 마지막
@@ -296,15 +296,15 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 
 ## Task 4: 반사실로 값을 증명한다
 
-씨앗에서 그 줄만 뺀 사본을 마운트하면 체인이 7차에서 죽어야 한다.
+seed에서 그 줄만 뺀 사본을 마운트하면 체인이 7차에서 죽어야 한다.
 
 SD-M2가 배운 것이 여기서도 필요하다 — 호스트 검사가 부팅 전에 먼저 죽이므로
-마운트가 둘이다. 씨앗에서 그 줄을 빼면 `config_test.zig`의 역방향 검사가
+마운트가 둘이다. seed에서 그 줄을 빼면 `config_test.zig`의 역방향 검사가
 막고, BH는 순서 검사도 있으므로 눕힐 자리가 더 있을 수 있다.
 
 - [x] Step 1: 사본 둘을 만든다
 
-`config.zig`는 씨앗의 그 줄만 뺀다. `config_test.zig`는 그 줄이 없어도
+`config.zig`는 seed의 그 줄만 뺀다. `config_test.zig`는 그 줄이 없어도
 통과하게 만든다 — 역방향 loop 한 줄(`if (seen_opt[i] or true) continue;`)과
 `expectHistOptions`의 bash 개수(1 → 0), 그리고 순서 검사의 이른 반환이다.
 
@@ -326,7 +326,7 @@ tail -20 /tmp/bh_cf.log
 `neg0`에서 죽었는데, 그 이유는 옵션이 없으면 그 시점에 파일이 아예 없어서
 `grep`이 에러를 냈기 때문이었다.
 
-BH는 다르게 나올 수 있다. 음성 세션의 첫 명령이 `HISTFILE=` 대입이고, 씨앗의
+BH는 다르게 나올 수 있다. 음성 세션의 첫 명령이 `HISTFILE=` 대입이고, seed의
 훅이 있으면 그 대입 직후에 파일이 생긴다 — 훅이 없으면 그 시점에도 파일이
 없으므로 SD-M2와 같은 모양이 된다. 실제로 어느 쪽인지 보고 적는다.
 

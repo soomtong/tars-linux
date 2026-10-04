@@ -66,7 +66,7 @@ fn mountDevpts() void {
 /// `/dev/fd/63`이 게스트에 없고, 증상은 셸이 rc를 읽으면서
 /// `bash: /dev/fd/63: No such file or directory`를 찍는 것이다.
 ///
-/// 그 한 줄이 씨앗의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
+/// 그 한 줄이 seed의 규칙을 깬다 — 우리가 까는 rc는 부팅할 때 아무것도 안
 /// 찍어야 한다. 찍는 것이 `fzf --bash` 출력의 마지막 줄
 /// (`__fzf_orig_completion < <(complete -p …)`)이고, SM-M1이 그 훅을 넣을 때
 /// 잰 "셋 다 0바이트"(SM 실측 23)는 컨테이너에서 잰 값이었다. 컨테이너에는
@@ -197,7 +197,7 @@ fn loadConfig(storage_mounted: bool) config.Config {
     }
 
     // load가 null을 준다는 것은 파일이 없다는 뜻뿐이다 = 이 디스크로 처음
-    // 부팅했다. 씨앗을 심는다.
+    // 부팅했다. seed를 심는다.
     const defaults = config.Config{};
     config.save(CONFIG_PATH, defaults) catch {
         std.debug.print("tars-init: could not seed {s}, using defaults\n", .{CONFIG_PATH});
@@ -785,10 +785,10 @@ pub fn main(init: std.process.Init.Minimal) void {
     }
     // SC-M1 결정 7. `loadConfig`보다 뒤이고 자식을 띄우기보다 앞이다 —
     // 앞이어야 하는 이유는 이 부팅의 셸이 곧바로 이 파일을 읽기 때문이고,
-    // `loadConfig` 뒤인 이유는 `tars.conf`의 씨앗이 먼저 생기는 편이 로그의
+    // `loadConfig` 뒤인 이유는 `tars.conf`의 seed가 먼저 생기는 편이 로그의
     // 순서로 읽기에 맞기 때문이다(둘 사이에 의존은 없다).
     //
-    // `cfg`를 안 넘긴다. 씨앗은 `shell_config`도 `shell`도 안 본다 —
+    // `cfg`를 안 넘긴다. seed는 `shell_config`도 `shell`도 안 본다 —
     // 그 근거는 `config.seedRcFiles`의 주석에 있다.
     if (storage_mounted) {
         config.seedRcFiles();
@@ -798,7 +798,7 @@ pub fn main(init: std.process.Init.Minimal) void {
         // 조건이 rc와 글자 그대로 같다. 디스크가 안 붙으면 `/config`는 tmpfs의
         // 빈 디렉터리이고, 거기 만든 파일은 재부팅마다 사라진다.
         config.seedGitconfig();
-        // SM-M2 결정 9. 씨앗 rc와 같은 조건이다 — 디스크가 붙은 기계에만
+        // SM-M2 결정 9. seed rc와 같은 조건이다 — 디스크가 붙은 기계에만
         // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
         // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그
         // 자체다: 에러가 안 나는 것이 화면 좌표를 지키는 것이다.

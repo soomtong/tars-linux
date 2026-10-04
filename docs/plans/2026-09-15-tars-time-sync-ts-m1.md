@@ -171,7 +171,7 @@ const config = @import("config.zig");
 ///
 /// 이 헬퍼가 stub의 pack 템플릿과 같은 바이트 배치를 손으로 한 벌 더 적는
 /// 것이라는 점이 중요하다. `buildRequest`로 조립해서 검사하면 검사가
-/// tautology가 된다 — SD-M1이 씨앗과 목록을 두 벌로 나눈 것과 같은 이유다.
+/// tautology가 된다 — SD-M1이 seed와 목록을 두 벌로 나눈 것과 같은 이유다.
 fn reply(mode: u8, stratum: u8, origin: u64, transmit: u64) [48]u8 {
     var buf = [_]u8{0} ** 48;
     buf[0] = (4 << 3) | mode; // LI 0, VN 4, Mode는 인자
@@ -624,7 +624,7 @@ pub const Ntp = union(enum) {
         return .{ .server = ip };
     }
 
-    /// 로그와 씨앗 파일에 찍을 정규형. 버퍼는 호출자가 준다 —
+    /// 로그와 seed 파일에 찍을 정규형. 버퍼는 호출자가 준다 —
     /// `Toggles.arg`와 같은 이유로, 이 파일에는 힙이 없고 주소는 상수
     /// 문자열로 돌려줄 수가 없다.
     pub fn arg(self: Ntp, buf: []u8) [:0]const u8 {
@@ -758,7 +758,7 @@ pub const Ntp = union(enum) {
     // 다른 키와 함께 있어도 서로 안 흔든다.
     try expect("net=dhcp\nntp=10.0.2.2\n", .{ .net = .dhcp, .ntp = .{ .server = .{ 10, 0, 2, 2 } } });
 
-    // arg()가 왕복하는가. 씨앗 파일이 이 함수로 써지므로, 왕복이 깨지면
+    // arg()가 왕복하는가. seed 파일이 이 함수로 써지므로, 왕복이 깨지면
     // init이 만든 tars.conf를 init 자신이 다시 못 읽는다.
     try expectNtpRoundTrip(.off, "off");
     try expectNtpRoundTrip(.dhcp, "dhcp");
@@ -769,7 +769,7 @@ pub const Ntp = union(enum) {
 그 헬퍼는 파일 끝에 둔다.
 
 ```zig
-/// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. 씨앗 파일(`save`)이
+/// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. seed 파일(`save`)이
 /// `arg()`로 써지고 다음 부팅이 `parse()`로 읽으므로, 이 왕복이 이 키가
 /// 부팅을 넘는 유일한 길이다.
 fn expectNtpRoundTrip(value: config.Ntp, want_text: []const u8) !void {

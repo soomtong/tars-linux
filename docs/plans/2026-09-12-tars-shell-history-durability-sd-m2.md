@@ -9,7 +9,7 @@
 >
 > plan이 두 군데에서 틀렸고 지우지 않고 남긴다.
 >
-> 1. Task 5가 마운트 하나로 된다고 적었는데 둘이 필요했다. 씨앗에서 그 줄을
+> 1. Task 5가 마운트 하나로 된다고 적었는데 둘이 필요했다. seed에서 그 줄을
 >    빼면 SD-M1의 역방향 검사가 부팅 전에 죽여서 게이트가 7차까지 못 간다.
 >    `config_test.zig`의 그 loop 한 줄(`if (seen_opt[i] or true) continue;`)도
 >    함께 눕혀야 반사실이 게이트에 닿는다. M1이 값을 한다는 증거다.
@@ -23,7 +23,7 @@
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Goal: `config/check.sh` 7차 부팅이 중첩 zsh 둘로 음성·양성 대조군을 만들어,
-씨앗 rc의 `setopt INC_APPEND_HISTORY` 한 줄이 게스트에서 실제로 하는 일을
+seed rc의 `setopt INC_APPEND_HISTORY` 한 줄이 게스트에서 실제로 하는 일을
 판정한다. 그리고 SM-M2가 우회로 넣은 `fc -W`를 뺀다 — 옵션이 켜지면 필요
 없고(실측 6), 다른 세션이 써 둔 줄을 지우므로 이 검사 자신을 망가뜨린다
 (실측 10).
@@ -187,7 +187,7 @@ HIST_COUNT_KEYS=(w c spc minus l spc slash c o n f i g slash
 #
 # 그 줄이 이제 없다. 이유가 둘이다.
 #
-#   1. 필요 없다. 씨앗 rc의 `setopt INC_APPEND_HISTORY`가 명령을 칠 때마다
+#   1. 필요 없다. seed rc의 `setopt INC_APPEND_HISTORY`가 명령을 칠 때마다
 #      그 자리에서 파일에 쓴다(SD 실측 6). 전원을 뽑는 시점에 8차가 읽을
 #      것이 이미 디스크에 있다.
 #   2. 해롭다. `fc -W`는 메모리의 목록으로 파일을 통째로 덮어쓰므로 다른
@@ -195,7 +195,7 @@ HIST_COUNT_KEYS=(w c spc minus l spc slash c o n f i g slash
 #      둘을 만드는 검사라, 그 명령을 남겨 두면 검사가 자기 재료를 지운다.
 #
 # 대신 이 부팅이 중첩 zsh 둘로 음성·양성 대조군을 만든다(SD 결정 5). 둘 다
-# 같은 씨앗 rc를 읽으므로 production과 같은 모양이고, 다른 것은 첫 명령
+# 같은 seed rc를 읽으므로 production과 같은 모양이고, 다른 것은 첫 명령
 # 한 줄뿐이다. 콘솔 셸을 끌어오지 않는 이유는 SD 확인 3에 있다 — 중첩이
 # 같은 경합을 만들고, FIFO는 이 체인의 골격을 바꾼다.
 NEST_KEYS=(z s h ret)
@@ -303,7 +303,7 @@ Files:
 ```bash
   # ── SD-M2: 그 한 줄이 게스트에서 실제로 하는 일을 본다 ────────────────
   #
-  # 중첩 zsh 둘이 음성·양성 대조군이다(SD 결정 5). 둘 다 같은 씨앗 rc를
+  # 중첩 zsh 둘이 음성·양성 대조군이다(SD 결정 5). 둘 다 같은 seed rc를
   # 읽고, 다른 것은 음성이 첫 명령으로 옵션을 끄는 것 하나뿐이다. 그래서
   # 이 셋이 증명하는 것이 "우리가 넣은 그 줄이 차이를 만든다"가 된다.
   #
@@ -363,7 +363,7 @@ Files:
 
   if [ "$ok" != "1" ]; then
     echo "FAIL(boot 7): with the seeded option on, a typed command was not in the history file yet"
-    echo "  화면에 pos0이 있으면 씨앗의 setopt 줄이 안 걸린 것이다 — 그 줄이"
+    echo "  화면에 pos0이 있으면 seed의 setopt 줄이 안 걸린 것이다 — 그 줄이"
     echo "  없거나(rcSeed), 셸이 rc를 안 읽었거나, 옵션 이름이 틀렸다."
     echo "  이 줄이 SD가 넣은 그 한 줄을 게이트가 보는 유일한 자리다."
     grep -a "terminal: screen>" "$log" | tail -1
@@ -432,7 +432,7 @@ Files:
   # 이유가 둘이다. 하나는 `history`가 최근 16개만 찍는데(실측 36) 7차가
   # 중첩 세션 둘을 돌면서 그 뒤로 줄이 아홉쯤 더 붙어 옛 글자가 창 밖으로
   # 밀려난 것이고, 다른 하나는 이쪽이 더 정확하다는 것이다 — 옛 글자는
-  # `fc -W`가 쓴 것이었고 이 글자는 씨앗의 옵션이 칠 때마다 쓴 것이라,
+  # `fc -W`가 쓴 것이었고 이 글자는 seed의 옵션이 칠 때마다 쓴 것이라,
   # 이 검사가 판정하는 대상이 SD가 넣은 그 한 줄이 된다.
   type_keys "${HISTORY_KEYS[@]}"
   local ok=0
@@ -509,7 +509,7 @@ grep -ao "terminal: screen>.*" /tmp/sd_m2_config.log | tail -1 | tr '|' '\n' | t
 ```
 
 읽는 법. `neg1`이면 `unsetopt`가 안 먹었다. `aft0`이면 음성 세션의 명령이
-애초에 안 쳐졌다. `pos0`이면 씨앗의 옵션이 안 걸렸다. 셋 중 아무 글자도
+애초에 안 쳐졌다. `pos0`이면 seed의 옵션이 안 걸렸다. 셋 중 아무 글자도
 없으면 타이핑이 셸에 안 닿은 것이고, 그때는 `sendkey` 이름부터 의심한다
 (`shift-4`·`shift-9`·`shift-0`이 이 저장소가 처음 치는 키다).
 
@@ -522,7 +522,7 @@ git commit -m "Let the gate watch the history option do its work"
 
 ---
 
-## Task 5: 되돌림 — 씨앗에서 그 줄을 빼면 게이트가 빨개지는가
+## Task 5: 되돌림 — seed에서 그 줄을 빼면 게이트가 빨개지는가
 
 이 milestone의 핵심 증명이다. Task 4의 초록은 "검사가 돈다"까지이고, 그
 검사가 정말로 그 한 줄을 보고 있는지는 그 줄을 없애 봐야 안다.
@@ -648,7 +648,7 @@ Files:
   - `setopt INC_APPEND_HISTORY` 한 줄이 그 갈림을 없앤다
   - `fc -W`는 다른 세션의 줄을 지운다 — 되살리지 말 것
   - 게이트의 판정 셋(`neg0`·`aft1`·`pos1`)과 왜 셋인가
-  - 상수가 세 벌인 이유(`HIST_OPTIONS_ZSH` · 씨앗 · `KNOWN_HIST_OPTIONS`)
+  - 상수가 세 벌인 이유(`HIST_OPTIONS_ZSH` · seed · `KNOWN_HIST_OPTIONS`)
   - 이미 설정 디스크를 가진 기계의 처방(결정 6)
 
 - [ ] Step 4: `MEMORY.md`에 한 줄을 더한다.

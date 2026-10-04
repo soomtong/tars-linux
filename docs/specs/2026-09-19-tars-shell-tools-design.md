@@ -6,7 +6,7 @@ Status: 끝났다(2026-09-19). 착수 전 프로브를 이미 돌렸고 그 결�
 절에 있다. 같은 날 M0·M1·M2·M3을 연달아 끝냈다 — "M1·M2가 실행으로 증명한
 것"과 "M3가 실행으로 증명한 것" 절에 있다.
 
-관련 문서: `2026-09-11-tars-shell-config-design.md`(SC. 씨앗 rc와 `shell_config`
+관련 문서: `2026-09-11-tars-shell-config-design.md`(SC. seed rc와 `shell_config`
 탈출로를 세운 문서 — 아래에서 "SC 결정 N"은 그 문서의 것이다) ·
 `2026-09-11-tars-shell-memory-design.md`(SM. 훅 둘과 히스토리 env) ·
 `2026-09-12-tars-shell-history-durability-design.md`(SD) ·
@@ -17,7 +17,7 @@ Status: 끝났다(2026-09-19). 착수 전 프로브를 이미 돌렸고 그 결�
 
 ## 한 줄 요약
 
-깔려 있는데 아무도 안 부르는 도구를 셸이 쓰게 만든다 — 셋의 씨앗 rc에 eza
+깔려 있는데 아무도 안 부르는 도구를 셸이 쓰게 만든다 — 셋의 seed rc에 eza
 별칭을 넣고(`ls`를 eza로 가리는 것이 그 하나), `gitconfig`를 심어서
 `/.gitconfig`가 가리키는 자리를 실체로 채운다.
 
@@ -25,13 +25,13 @@ Status: 끝났다(2026-09-19). 착수 전 프로브를 이미 돌렸고 그 결�
 
 UT가 유저랜드 도구 65개를 세웠고 SM이 그중 둘(zoxide·fzf)에 훅을 걸었다.
 그런데 eza·bat·fd·rg·sd·jq·tree·duf·ncdu·htop·btop·hyperfine은 여전히
-이름으로 직접 부르는 것까지다. 씨앗이 정의한 별칭은 둘(`tars-config` ·
+이름으로 직접 부르는 것까지다. seed가 정의한 별칭은 둘(`tars-config` ·
 `tars-rc`)뿐이고, 그 둘은 설정 파일을 여는 도구지 일상 도구가 아니다.
 
 사용자가 2026-09-19에 물었다 — *"부팅 후 점검할 수 있는 config 폴더에 fish의
 설정만 있고 bash·zsh의 설정 정보가 없고 gitconfig 심볼릭 링크도 깨져 있다.
 기본으로 설치하는 추가 유틸리티를 확인해서 적당한 셸 설정을 구성하자."*
-재 보니 절반은 사실이 아니고 절반은 사실이다(실측 1). 씨앗 셋은 다 깔린다.
+재 보니 절반은 사실이 아니고 절반은 사실이다(실측 1). seed 셋은 다 깔린다.
 `gitconfig`는 정말로 없고, 그것을 만드는 코드가 저장소에 한 줄도 없다.
 
 이 서브프로젝트가 답하는 질문은 "이 기계의 셸이 깔린 도구를 쓰는가" 하나다.
@@ -45,7 +45,7 @@ UT가 유저랜드 도구 65개를 세웠고 SM이 그중 둘(zoxide·fzf)에 �
 `sendkey`로 게스트 셸에 명령을 넣는다(`gate_lib.sh`의 `type_keys`를 그대로
 쓴다). 부팅 한 번이 약 30초다.
 
-### 실측 1 — 씨앗 셋은 다 깔린다. 없는 것은 gitconfig 하나다
+### 실측 1 — seed 셋은 다 깔린다. 없는 것은 gitconfig 하나다
 
 빈 디스크로 첫 부팅:
 
@@ -72,7 +72,7 @@ tars-init: seeded /config/zshrc
 
 설정 디스크를 붙이는 체인은 여섯이다(`-drive file=` 개수로 셌다):
 config · input · power · hangul · net · machine. 나머지 여섯(boot · terminal ·
-device · render · copy · tools)은 디스크를 안 붙이므로 셸이 씨앗을 안 읽는다 —
+device · render · copy · tools)은 디스크를 안 붙이므로 셸이 seed를 안 읽는다 —
 그 체인들에서는 어떤 별칭도 안 돌아간다.
 
 그 여섯이 `type_keys`로 치는 명령의 첫 낱말:
@@ -206,19 +206,19 @@ GNU ls는 `-`으로 찍는다. 그래서 이 줄이 "별칭이 정의됐다"가 
 /config/zshrc` → `No such file`)와 8차(`ls /config/xdg/zoxide` → `db.zo`),
 그리고 net 체인의 `ls /sys/class/net`(→ `eth0`). 설계할 때 잰 그대로였다.
 
-### 3. 씨앗 단위 검사가 양방향으로 돈다
+### 3. seed 단위 검사가 양방향으로 돈다
 
-- gitconfig 씨앗에 `=` 없는 줄을 심으면 그 자리에서 빨개진다(직접 심어 봤다).
+- gitconfig seed에 `=` 없는 줄을 심으면 그 자리에서 빨개진다(직접 심어 봤다).
 - 별칭 이름을 `alias cat='bat'`으로 바꾸면 `ALLOWED_ALIAS_NAMES`가 잡는다
   (직접 바꿔 봤다).
 - "볼 것이 없었다"로 통과하지 않는 것도 확인했다 — 절과 키가 0이면 실패다.
-- 검사가 씨앗의 주석에 걸린 적이 한 번 있다. `[user]`를 글자로 찾는 검사가
-  씨앗의 설명문에 있는 같은 글자를 잡아서, 지금은 주석 줄을 건너뛰고 절과
+- 검사가 seed의 주석에 걸린 적이 한 번 있다. `[user]`를 글자로 찾는 검사가
+  seed의 설명문에 있는 같은 글자를 잡아서, 지금은 주석 줄을 건너뛰고 절과
   키를 파싱한다.
 
 ### 4. tools 검사 13은 그대로다
 
-그 체인에는 설정 디스크가 없어 씨앗이 안 깔린다. 그래서 검사 13이 증명하는
+그 체인에는 설정 디스크가 없어 seed가 안 깔린다. 그래서 검사 13이 증명하는
 경로("git이 링크를 풀어 /config에 썼다")가 안 바뀌고, tools 체인이 초록이다.
 `[user]` 절을 안 넣은 결정 5가 그 초록을 값싸게 만든다.
 
@@ -228,7 +228,7 @@ GNU ls는 `-`으로 찍는다. 그래서 이 줄이 "별칭이 정의됐다"가 
 src/config.zig:1228:7: error: string literal contains invalid byte: '\t'
 ```
 
-gitconfig 씨앗의 들여쓰기가 공백 넷인 이유다. git은 둘 다 받고,
+gitconfig seed의 들여쓰기가 공백 넷인 이유다. git은 둘 다 받고,
 `git config --global`이 이 파일을 다시 쓸 때는 자기가 탭으로 쓴다 — 언젠가
 둘이 섞이는 것이 정상이다.
 
@@ -278,21 +278,21 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 12체인 × 3회, `FAIL` 0줄, 33분. `CP-M2`(config 체인)가 세 번 다 새 검사를
 포함해 돌았고, 다른 체인은 하나도 안 흔들렸다.
 
-### 4. 씨앗의 허용 범주가 하나 늘었다
+### 4. seed의 허용 범주가 하나 늘었다
 
-`KNOWN_SEED_ENV`(정확한 줄 둘)가 `expectQuietSeed`에 들어갔고, 씨앗마다 그런
+`KNOWN_SEED_ENV`(정확한 줄 둘)가 `expectQuietSeed`에 들어갔고, seed마다 그런
 줄이 하나도 없으면 실패한다. 그 검사가 없으면 "그 줄을 지우는 편집"이 조용해진다.
 
 ## 결정
 
 ### 1. 셰도 규칙 — 게이트가 치는 이름과 겹치지 않는다
 
-별칭은 그 이름을 치는 모든 곳에서 돈다. 씨앗 rc를 읽는 셸에 게이트가 명령을
+별칭은 그 이름을 치는 모든 곳에서 돈다. seed rc를 읽는 셸에 게이트가 명령을
 넣으므로(실측 2), 별칭 하나가 게이트의 판정 글자를 바꿀 수 있다. 그래서
 기본값은 "안 가린다"이고, 예외는 재서 통과한 것만이다. 실측 3의 표가 그
 예외의 후보 목록이다.
 
-이 규칙이 SC·SM이 세운 것과 같은 종류다. 저쪽은 씨앗이 무언가를 찍으면
+이 규칙이 SC·SM이 세운 것과 같은 종류다. 저쪽은 seed가 무언가를 찍으면
 화면 좌표가 밀린다고 정했고, 이쪽은 이름을 가리면 판정 글자가 바뀐다고
 정한다. 둘 다 대가를 재고 나서 정한 것이다.
 
@@ -331,7 +331,7 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 `--icons`는 안 붙인다(실측 4 — 폰트에 글리프가 없어 빈 칸이 된다). 실측 4가
 확인한 플래그만 쓴다.
 
-### 5. gitconfig는 씨앗으로 만든다 — 링크를 실체로 채운다
+### 5. gitconfig는 seed로 만든다 — 링크를 실체로 채운다
 
 `/.gitconfig` → `/config/gitconfig` 링크는 UT-M3 결정 8이 세운 것이고 그대로
 둔다. 우리가 안 세운 것은 그 자리에 들어갈 파일이다. init이 rc 셋을 깔 때
@@ -361,16 +361,16 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 - `[user]`는 안 넣는다. 실측 5가 신원이 이미 `/etc/passwd`에서 나오는 것을
   보여준다. 그리고 넣으면 `tools/check.sh` 검사 13의 판정 값(`email = tars`)과
   겹칠 수 있다 — 그 검사는 "git이 링크를 풀어 /config에 썼다"를 보는 것이고,
-  씨앗에 같은 값이 있으면 검사가 거짓으로 초록이 된다(GA가 없애려는 모양).
+  seed에 같은 값이 있으면 검사가 거짓으로 초록이 된다(GA가 없애려는 모양).
 
-### 6. 배포는 씨앗 리터럴이다. 기존 디스크는 지우고 재부팅이 이전 경로다
+### 6. 배포는 seed 리터럴이다. 기존 디스크는 지우고 재부팅이 이전 경로다
 
-씨앗은 `init/src/config.zig`의 문자열 리터럴로 남는다. `O_EXCL`이라 이미
+seed는 `init/src/config.zig`의 문자열 리터럴로 남는다. `O_EXCL`이라 이미
 있는 파일은 안 덮으므로, 이 변경은 새 디스크와 rc를 지운 디스크에만 간다.
 그 경로는 이미 검증돼 있다 — `config/check.sh`의 6차가 `/config/zshrc`를
-지우고 7차가 새 씨앗을 받는다.
+지우고 7차가 새 seed를 받는다.
 
-대안(씨앗이 managed 파일을 `source`)은 안 쓴다. 파일이 둘로 늘고, 그 파일도
+대안(seed가 managed 파일을 `source`)은 안 쓴다. 파일이 둘로 늘고, 그 파일도
 "한 글자도 안 찍는다"를 새로 재야 하며, 얻는 것은 기존 디스크로의 자동
 업그레이드 하나다. 셸 설정이 자주 바뀌기 시작하면 그때 이 결정을 다시 본다.
 
@@ -385,18 +385,18 @@ TARS check PASS: all chains 3/3 consecutive runs succeeded
 ### 8. fzf의 env 줄은 이번에 안 넣는다
 
 `FZF_DEFAULT_COMMAND`(fd로 파일 찾기) · `FZF_DEFAULT_OPTS`(높이와 테두리)는
-씨앗의 허용 범주를 하나 늘리는 일이다(`export` 줄은 지금 셋 다 거부된다).
+seed의 허용 범주를 하나 늘리는 일이다(`export` 줄은 지금 셋 다 거부된다).
 후보이지만 이 milestone의 질문("깔린 도구를 셸이 쓰는가")에 답하는 데
 필요하지 않다. 다음에 이 서브프로젝트를 여는 사람의 첫 후보로 적어 둔다.
 
-### 9. fzf의 `--height`를 씨앗에서 끈다 — 우회다
+### 9. fzf의 `--height`를 seed에서 끈다 — 우회다
 
-⚠ TQ-M1(2026-09-19)이 이 결정을 뒤집었다. 씨앗에서 그 줄을 지웠고
+⚠ TQ-M1(2026-09-19)이 이 결정을 뒤집었다. seed에서 그 줄을 지웠고
 `KNOWN_SEED_ENV`도 함께 사라졌다 — 터미널이 이제 질의에 답한다
 (`docs/decisions/project_terminal_queries.md`). 아래는 그때의 결정이고,
 "진짜 수리"가 그 서브프로젝트였다.
 
-씨앗 rc가 `FZF_DEFAULT_OPTS --no-height`를 준다(fish `set -gx`, bash·zsh
+seed rc가 `FZF_DEFAULT_OPTS --no-height`를 준다(fish `set -gx`, bash·zsh
 `export`). 그러면 fzf가 커서 위치를 안 묻고 그 자리에서 그린다. 대가는
 picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 
@@ -404,9 +404,9 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 등록해 답을 pty로 쓰는 것(커서 위치 보고 · DA1/DA2 · 모드·색 질의)이고,
 그것은 이 서브프로젝트의 범위가 아니다 — 다음 후보 1순위로 적어 둔다.
 
-씨앗에 그 줄을 넣는 일은 허용 범주를 하나 늘리는 일이라 새 검사가 필요했다
+seed에 그 줄을 넣는 일은 허용 범주를 하나 늘리는 일이라 새 검사가 필요했다
 (결정 7의 짝). `config_test.zig`의 `KNOWN_SEED_ENV`가 **정확한 줄**로 그 둘을
-적고, 씨앗마다 그런 줄이 하나도 없으면 실패한다 — 접두사로 열면
+적고, seed마다 그런 줄이 하나도 없으면 실패한다 — 접두사로 열면
 `export A=$(...)`가 명령을 숨긴다(SM 결정 6과 같은 이유).
 
 ## 비목표
@@ -414,7 +414,7 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 1. 프롬프트. SC 비목표 5 그대로다. 프롬프트는 게이트의 좌표계이고, 바꾸는
    값은 사용자가 자기 기계에서 치른다.
 2. zsh 자동완성. `/usr/share/zsh` 트리를 initrd에 안 실었다. 넣으려면
-   `make_initrd.sh`의 주석에 적힌 한 줄을 살리고 `compinit`을 씨앗에 더하는
+   `make_initrd.sh`의 주석에 적힌 한 줄을 살리고 `compinit`을 seed에 더하는
    일인데, 그 두 줄이 initrd 크기와 기동 시간을 함께 바꾼다. 이번 질문과
    무관하다.
 3. 셸을 셋보다 늘리는 것 · 새 패키지를 싣는 것. UT의 목록이 그대로다 —
@@ -427,11 +427,11 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 
 1. 별칭이 게이트 판정을 흔든다. 방어는 실측 3의 표와 결정 1이고, 최종
    판정은 루트 게이트 한 판이다. `ls` 하나가 걸리는 자리는 셋뿐이다.
-2. 씨앗이 한 글자라도 찍으면 설정 디스크를 붙이는 여섯 체인의 화면 좌표가
+2. seed가 한 글자라도 찍으면 설정 디스크를 붙이는 여섯 체인의 화면 좌표가
    밀린다. 별칭 정의는 정의할 때 아무것도 안 찍지만, 그것을 가정하지 않고
    M0가 줄마다 0바이트를 잰다(SM 실측 23의 방식).
-3. gitconfig 씨앗이 `tools/check.sh` 검사 13을 거짓으로 만든다. 그 체인에는
-   설정 디스크가 없어 씨앗이 안 깔리므로 검사의 전제가 안 바뀐다. 그래도
+3. gitconfig seed가 `tools/check.sh` 검사 13을 거짓으로 만든다. 그 체인에는
+   설정 디스크가 없어 seed가 안 깔리므로 검사의 전제가 안 바뀐다. 그래도
    `[user]` 절을 안 넣어(결정 5) 겹칠 값을 아예 안 만든다.
 4. eza의 색이 화면 스타일 예산(`STYLE_DUMP_LIMIT=96`)을 먹는다. 색을 세는
    체인은 render와 copy인데 둘 다 설정 디스크를 안 붙인다(실측 2) — 별칭이
@@ -450,19 +450,19 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 | | 무엇 | 판정 |
 |---|---|---|
 | M0 | 새 줄의 조용함과 eza의 플래그를 잰다. 제품 코드 0줄 | 재는 것 자체가 산출물 |
-| M1 | 셋의 씨앗에 별칭 넷. `config_test.zig`의 이름 목록, `config/check.sh`에 확인 | config·net 체인 |
-| M2 | gitconfig 씨앗 + 게이트 확인 한 줄 | config·tools 체인 |
+| M1 | 셋의 seed에 별칭 넷. `config_test.zig`의 이름 목록, `config/check.sh`에 확인 | config·net 체인 |
+| M2 | gitconfig seed + 게이트 확인 한 줄 | config·tools 체인 |
 | M3 | fzf의 `--height`를 끄고(우회), 첫 Ctrl+R에 picker가 뜨는 것을 게이트가 지킨다 | config 체인 · 루트 게이트 |
 
 ## 바뀌는 파일
 
 | 파일 | 무엇 |
 |---|---|
-| `init/src/config.zig` | `rcSeed()` 세 갈래에 별칭 넷 · `GITCONFIG_PATH`/`GITCONFIG_SEED` · 씨앗 함수 일반화 |
-| `init/src/config_test.zig` | 별칭 이름 허용 목록 · gitconfig 씨앗 검사 |
-| `init/src/main.zig` | gitconfig 씨앗 호출(M2) |
+| `init/src/config.zig` | `rcSeed()` 세 갈래에 별칭 넷 · `GITCONFIG_PATH`/`GITCONFIG_SEED` · seed 함수 일반화 |
+| `init/src/config_test.zig` | 별칭 이름 허용 목록 · gitconfig seed 검사 |
+| `init/src/main.zig` | gitconfig seed 호출(M2) |
 | `config/check.sh` | 별칭이 실제로 정의됐는가 · gitconfig가 깔렸는가 · 첫 Ctrl+R에 picker가 뜨는가 |
-| `README.md` | 기존 디스크가 새 씨앗을 받는 방법 한 줄 |
+| `README.md` | 기존 디스크가 새 seed를 받는 방법 한 줄 |
 | `docs/decisions/project_shell_tools.md` | 세션을 넘는 기억 |
 
 ## 다음
@@ -470,5 +470,5 @@ picker가 40% 상자가 아니라 화면 전체를 쓰는 것이다.
 M0·M1·M2·M3을 끝냈다. 다음 후보 둘.
 
 1. 터미널이 vt 질의에 답한다(진짜 수리) — TQ-M1(2026-09-19)이 했다. 커서 위치
-   보고와 상태 보고에 답하고, 결정 9의 씨앗 줄은 지워졌다.
+   보고와 상태 보고에 답하고, 결정 9의 seed 줄은 지워졌다.
 2. `FZF_DEFAULT_COMMAND=fd …` 같은 나머지 fzf env(D6의 나머지).

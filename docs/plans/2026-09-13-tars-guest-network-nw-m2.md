@@ -463,7 +463,7 @@ pub const Net = enum {
 ```
 
 `Config`에 필드를 더한다. 위치는 `shell_config` 다음이다 — `save()`가 필드
-순서대로 쓰므로 씨앗 파일에서도 맨 뒤가 되고, 그러면 `config/check.sh`가
+순서대로 쓰므로 seed 파일에서도 맨 뒤가 되고, 그러면 `config/check.sh`가
 화면에서 보는 `shell_config=on` 줄이 위로 안 밀린다.
 
 ```zig
@@ -970,12 +970,12 @@ git status --short
 ## Task 8 — 회귀. 기존 체인이 그대로인가
 
 이 milestone은 커널을 안 고쳤지만 initrd를 13MB 키웠고, `main.zig`의 로그
-줄을 넓혔고, 씨앗 `tars.conf`에 줄 셋을 더했다. 셋 다 다른 체인에 닿을 수
+줄을 넓혔고, seed `tars.conf`에 줄 셋을 더했다. 셋 다 다른 체인에 닿을 수
 있는 변경이다.
 
 - [ ] Step 1: `config` 체인을 단독으로 돌린다 (약 2분 07초)
 
-가장 예민한 체인이다. 부팅 아홉에 화면 판정이 수십이고, 씨앗 `tars.conf`가
+가장 예민한 체인이다. 부팅 아홉에 화면 판정이 수십이고, seed `tars.conf`가
 길어지면 1차 부팅의 `tars-config` 판정이 화면 밖으로 밀릴 수 있다 — SD-M2와
 BH-M2가 정확히 그 자리를 두 번 밀었다.
 
@@ -989,7 +989,7 @@ echo "exit=$?"; tail -3 /tmp/nw/m2_config.time; tail -20 /tmp/nw/m2_config.log
 
 기대: `PASS`. 시간이 2분 07초 근처다(BB-M2 뒤의 값이 2분 06.87초).
 
-`shell_config=on`을 화면에서 못 찾아 죽으면 씨앗이 화면보다 길어진 것이다.
+`shell_config=on`을 화면에서 못 찾아 죽으면 seed가 화면보다 길어진 것이다.
 그때는 `save()`의 `net` 블록에서 주석 줄을 줄인다 — 키는 남기고 설명을
 design으로 옮긴다.
 
@@ -1090,7 +1090,7 @@ git commit -m "Hand off with an address on the guest and a chain that reads it"
 | `started dhcpcd`는 나오는데 주소가 안 붙는다 | 직렬 로그에서 dhcpcd 자신의 줄을 찾는다. `no such user dhcpcd`와 `read_config: /etc/dhcpcd.conf: No such file`는 실패가 아니다(M0 실측 7) |
 | 주소는 붙는데 `/etc/resolv.conf`가 없다 | 둘 중 하나다. hook 둘이 initrd에 없거나(Task 3 Step 3이 확인한다), `envp`를 안 넘겨 hook이 `sed`를 못 찾았거나(결정 F) |
 | `grace period expired`로 죽는다 | 이제 이 게스트에는 dhcpcd가 있다. design 위험 2의 자리이고, M0 실측 4가 "SIGTERM에 죽는다"고 했으니 그 전제가 깨진 것이다 — 그러면 결정 9를 다시 본다 |
-| `config` 체인이 1차 부팅에서 죽는다 | 씨앗 `tars.conf`가 화면보다 길어졌다. `save()`의 `net` 주석을 줄인다 |
+| `config` 체인이 1차 부팅에서 죽는다 | seed `tars.conf`가 화면보다 길어졌다. `save()`의 `net` 주석을 줄인다 |
 | 게이트가 크게 길어졌다 | 코드보다 기계를 먼저 의심한다(HANDOFF의 "이 게이트의 시간은 ±3분 수준의 잡음을 가진다") |
 
 ## 이 milestone이 안 하는 것

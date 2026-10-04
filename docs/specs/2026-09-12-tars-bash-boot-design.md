@@ -7,7 +7,7 @@ Status: 완료(2026-09-12) — M0·M1·M2를 다 했다. `config` 체인이 부�
 아래 있고, 그중 실측 6이 결정 6을 고쳤다 — 인자 하나인 `z`는 DB를 안 보고
 그냥 `cd`해서, 훅이 안 걸려도 초록이 되는 검사였다.
 
-BH(Bash History Durability)가 자기 결정 6에서 열어 둔 문이다. BH는 씨앗 rc의
+BH(Bash History Durability)가 자기 결정 6에서 열어 둔 문이다. BH는 seed rc의
 bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 부팅의 중첩 bash로
 판정했다. 그 선택은 부팅 하나를 아끼는 값이 있었고 지금도 유효하지만, 중첩이
 볼 수 없는 자리를 여섯 남겼다. 이 문서는 그 여섯이 무엇인지 적고, 게이트에
@@ -17,7 +17,7 @@ bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 �
 
 `config` 체인에 9차 부팅을 더한다. 그 부팅만 `shell=bash`로 떠서, 지금까지
 어느 부팅도 밟은 적이 없는 bash의 production 경로 — 셸 해석 · 히스토리 env ·
-씨앗 rc · 훅 둘 · 콘솔 셸 — 를 게이트가 판정한다.
+seed rc · 훅 둘 · 콘솔 셸 — 를 게이트가 판정한다.
 
 ## 왜 지금인가
 
@@ -28,19 +28,19 @@ bash 갈래에 한 줄을 넣고 그 줄이 게스트에서 하는 일을 7차 �
 
 bash로 뜬 부팅에서 그 셸 자신의 성질을 판정하는 자리가 없다. `config` 체인의
 부팅 여덟은 1차가 fish이고 2~8차가 zsh이며, `power` 체인의 첫 부팅은 bash로
-뜨지만 그 체인이 보는 것은 종료 경로다 — 히스토리 env도, 씨앗 rc가 찍는
+뜨지만 그 체인이 보는 것은 종료 경로다 — 히스토리 env도, seed rc가 찍는
 바이트도, `PROMPT_COMMAND`를 두고 겨루는 훅 둘도 그 체인의 판정에 없다.
 
 그런데 `tars.conf`의 `shell`은 값 셋을 받고, 그 셋 중 하나가 한 번도 부팅된
 적이 없다. `init/src/config.zig`의 bash 갈래는 일곱 군데에 있다 —
 `path()` · `noConfigFlag()` · `rcPath()` · `histEntries()` · `hooks()` ·
-`histOptionLines()` · `rcSeed()`. 이 중 씨앗 rc의 내용만 중첩 bash가 읽었고,
+`histOptionLines()` · `rcSeed()`. 이 중 seed rc의 내용만 중첩 bash가 읽었고,
 나머지는 호스트 검사가 글자를 대조하는 것으로 끝나 있다. 글자가 맞는 것과
 그 글자를 받은 기계가 뜨는 것은 다른 주장이다.
 
-BH가 그 차이의 값을 이미 한 번 보여 주었다. 게스트에 `/dev/fd`가 없어서 씨앗의
+BH가 그 차이의 값을 이미 한 번 보여 주었다. 게스트에 `/dev/fd`가 없어서 seed의
 fzf 훅이 부팅마다 에러 한 줄을 찍고 있었고, 그것을 아무도 못 본 이유가 정확히
-"게이트에 bash로 뜨는 자리가 없다"였다. 씨앗은 아무것도 안 찍어야 한다는 이
+"게이트에 bash로 뜨는 자리가 없다"였다. seed는 아무것도 안 찍어야 한다는 이
 저장소의 규칙을 깨고 있던 한 줄이 서브프로젝트 넷을 지나며 살아 있었다.
 
 ## 중첩 bash가 못 보는 여섯
@@ -62,20 +62,20 @@ fzf 훅이 부팅마다 에러 한 줄을 찍고 있었고, 그것을 아무도 
    (`terminal/src/main.zig:984·1072`). `power` 체인이 화면에서
    `screen>.*bash-`를 기다리므로 이 경로는 이미 판정되고 있다 — 여섯 중
    판정까지 되어 있던 것이 이것 하나다.
-4. 씨앗 bashrc가 production 부팅에서 몇 바이트를 찍는가. 0이어야 한다.
+4. seed bashrc가 production 부팅에서 몇 바이트를 찍는가. 0이어야 한다.
    `/dev/fd` 한 줄이 정확히 이 자리에 살아 있었다.
 5. `PROMPT_COMMAND` 합성의 결과가 둘 다 사는가. 히스토리도 쓰고 zoxide도
-   배우는가. 호스트 검사는 씨앗의 줄 순서를 보고 중첩 bash는 히스토리만 봤다 —
+   배우는가. 호스트 검사는 seed의 줄 순서를 보고 중첩 bash는 히스토리만 봤다 —
    bash에서 `z`가 실제로 도는 것을 본 부팅이 없다. 뒤집혔을 때의 증상이
    조용하다는 것은 BH가 이미 적었다(히스토리는 남고 `z`만 아무것도 안 배운다).
 6. 콘솔 셸도 bash로 서는가. `started console shell`이 하나이고 `times fast`가
-   없어야 한다. 씨앗을 읽는 셸이 둘인데 중첩은 화면 셸 안에서만 일어났다.
+   없어야 한다. seed를 읽는 셸이 둘인데 중첩은 화면 셸 안에서만 일어났다.
 
 ## 착수 전에 읽어 둔 것 — 소스 확인이고 실측이 아니다
 
 ### 확인 1 — `config` 체인의 부팅 여덟은 fish 하나와 zsh 일곱이다
 
-1차가 빈 디스크에서 씨앗의 기본값(fish)으로 뜨고, 그 부팅에서 사람이
+1차가 빈 디스크에서 seed의 기본값(fish)으로 뜨고, 그 부팅에서 사람이
 `echo shell=zsh > /config/tars.conf`를 쳐서 2차부터 zsh가 된다
 (`config/check.sh:73~75`). 이후 여섯 부팅은 `shell=zsh`를 로그에서 확인하는
 검사를 각각 갖고 있다.
@@ -141,7 +141,7 @@ BH가 `/dev/fd` 이야기에 쓴 문장("게이트에 bash로 뜨는 자리가 �
 ### 결정 1 — 중첩을 늘리지 않고 부팅을 더한다
 
 BH 결정 6이 저울질한 그 둘이다. 그때는 중첩이 이겼고 여기서는 부팅이 이긴다 —
-보려는 것이 바뀌었기 때문이다. BH가 보려던 것은 씨앗 rc의 한 줄이 하는 일이고
+보려는 것이 바뀌었기 때문이다. BH가 보려던 것은 seed rc의 한 줄이 하는 일이고
 그것은 중첩으로 볼 수 있었다. 이번에 보려는 것은 위의 여섯이고, 그중 다섯은
 "init이 bash를 셸로 골라 띄우는 경로" 자체라서 중첩으로는 정의상 볼 수 없다.
 
@@ -235,7 +235,7 @@ BH-M2가 중첩 bash에서 배운 것이다. bash는 프롬프트가 `bash-5.2#`
 2. `Ctrl+R`을 게이트가 치는 것(결정 7).
 3. fish로 뜨는 히스토리 부팅. fish는 이 문제가 애초에 없고(SD 실측 8) 1차
    부팅이 이미 fish다.
-4. 기본 셸을 bash로 바꾸는 것. 씨앗은 fish 그대로다.
+4. 기본 셸을 bash로 바꾸는 것. seed는 fish 그대로다.
 5. 다른 체인에 bash를 들이는 것. 다섯 체인이 화면 좌표로 판정하고 있어서
    프롬프트가 바뀌면 그 좌표가 전부 밀린다.
 6. 종료가 3초 걸리는 것(SD 비목표 8). 그대로 이월한다.
@@ -260,7 +260,7 @@ SD·BH와 같은 모양이다. 측정 · 부팅 세우기 · 화면 판정.
 2. env 블록이 `HISTFILE=/config/bash_history`와 `HISTSIZE=5000` 둘이고
    `SAVEHIST`가 없는가(2).
 3. 화면 셸과 콘솔 셸이 각각 하나씩 서고 아무도 안 죽는가(3·6).
-4. 씨앗 bashrc가 화면과 로그에 몇 바이트를 찍는가. 0이어야 한다(4).
+4. seed bashrc가 화면과 로그에 몇 바이트를 찍는가. 0이어야 한다(4).
 5. 최상위 bash의 프롬프트가 화면에 어떤 글자로 나오는가(결정 8).
 6. `cd /usr/share/../bin` → `cd /` → `z bin` → `pwd`가 `/usr/bin`을 찍는가
    (5 · 결정 6).
@@ -282,7 +282,7 @@ milestone이다. 여덟 자리다.
 
 9차에 훅을 붙여 M0의 5·6·7을 게이트가 보게 한다. 판정 글자는 `bprod` 접두사다.
 
-반사실로 값을 증명한다. 씨앗 bashrc에서 `PROMPT_COMMAND` 줄을 빼거나 훅
+반사실로 값을 증명한다. seed bashrc에서 `PROMPT_COMMAND` 줄을 빼거나 훅
 뒤로 옮긴 사본을 마운트하면 9차가 죽어야 하고, 어느 검사에서 죽는지를 눈으로
 본다. SD-M2와 BH-M2가 배운 것이 여기에도 온다 — 호스트 검사가 먼저 죽이므로
 마운트가 둘 필요하고, 순서 검사까지 있으므로 눕힐 자리가 하나 더 있다.
@@ -306,7 +306,7 @@ milestone이다. 여덟 자리다.
 확인 5·6이 이 위험의 두 얼굴이다. 표적을 새로 만드는 것으로 막고, M0이 그
 표적이 게스트에서 실제로 비어 있는 것을 확인한다.
 
-### 위험 4 — 9차가 씨앗을 다시 깐다
+### 위험 4 — 9차가 seed를 다시 깐다
 
 그럴 이유가 없다. `/config/bashrc`는 1차가 깔고 아무도 안 지웠다. 9차에서
 `seeded`가 하나라도 나오면 디스크가 아니라 tmpfs를 보고 있는 것이고, 8차가
@@ -347,9 +347,9 @@ tars-init: env HISTSIZE=5000
 
 `started terminal (pid 31, /terminal)`과 `started console shell (pid 32,
 /usr/bin/bash)`이 각각 한 줄이고, `times fast`도 `giving up on`도 없다.
-씨앗 bashrc를 읽는 셸이 둘인데 둘 다 재시작 없이 섰다.
+seed bashrc를 읽는 셸이 둘인데 둘 다 재시작 없이 섰다.
 
-### 실측 4 — 씨앗 bashrc는 production 부팅에서 조용하다
+### 실측 4 — seed bashrc는 production 부팅에서 조용하다
 
 시리얼 로그 전체를 `No such file` · `command not found` · `rror` · `warning`
 으로 훑어서 걸린 줄이 0이다. BH-M2가 `linkDevFd()`를 넣기 전이라면 여기에
@@ -384,7 +384,7 @@ zoxide가 살아 있다. 나머지 절반이 실측 8이다.
 ### 실측 8 — production env에서 히스토리가 명령마다 써진다
 
 `bprodmark=1`을 치고 `echo bprod$(grep -cx bprodmark=1 /config/bash_history)`가
-`bprod1`을 찍었다. `HISTFILE`을 손으로 안 맞춘 상태다 — env로 온 값과 씨앗의
+`bprod1`을 찍었다. `HISTFILE`을 손으로 안 맞춘 상태다 — env로 온 값과 seed의
 `PROMPT_COMMAND` 줄이 함께 일한 결과이고, BH-M2의 중첩 판정이 못 보던 자리다.
 
 ### 실측 9 — `declare -F <이름>`의 출력은 판정 글자가 못 된다
@@ -475,7 +475,7 @@ BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것�
 |---|---|---|
 | 0 | `bash-5.2#` | 뜬 셸이 bash가 아니다 |
 | 1 | `/usr/bin` | zoxide 훅이 `PROMPT_COMMAND`에서 밀려났다 |
-| 2 | `bprod1` | 씨앗의 히스토리 줄이나 env의 `HISTFILE`이 일하지 않는다 |
+| 2 | `bprod1` | seed의 히스토리 줄이나 env의 `HISTFILE`이 일하지 않는다 |
 | 3 | `bprodwfunction` | fzf 통합이 이 셸에서 위젯을 안 만들었다 |
 
 판정 0의 패턴은 `bash-[0-9]+\.[0-9]+#`다. 버전 숫자를 고정하지 않는 이유는
@@ -487,7 +487,7 @@ BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것�
 
 ### 반사실 — 판정 1만 빨개지고 2·3은 초록으로 남는다
 
-씨앗 bashrc에서 `PROMPT_COMMAND='history -a'` 줄을 훅 두 줄 뒤로 옮긴 사본을
+seed bashrc에서 `PROMPT_COMMAND='history -a'` 줄을 훅 두 줄 뒤로 옮긴 사본을
 마운트해서 셋을 확인했다.
 
 1. 사본 하나만 주면 부팅 앞에서 죽는다. `config_test.zig`의
@@ -505,7 +505,7 @@ BH-M2가 본 "글자가 쪼개진다"와 다른 현상이다. 그때 깨진 것�
 
 ### 반사실이 덤으로 알려 준 것
 
-순서가 뒤집힌 씨앗에서는 zoxide가 프롬프트에 다섯 줄을 찍는다.
+순서가 뒤집힌 seed에서는 zoxide가 프롬프트에 다섯 줄을 찍는다.
 
 ```
 zoxide: detected a possible configuration issue.
@@ -516,7 +516,7 @@ Disable this message by setting _ZO_DOCTOR=0.
 
 zoxide 자신에게 진단 기능이 있어서, 자기 훅이 덮인 것을 알아채고 말해 준다.
 그러니 이 실패는 조용한 축에서는 그나마 나은 편이다. 다만 그 다섯 줄이
-화면 좌표를 밀므로, 씨앗이 아무것도 안 찍는다는 이 저장소의 규칙은 순서가
+화면 좌표를 밀므로, seed가 아무것도 안 찍는다는 이 저장소의 규칙은 순서가
 맞을 때만 성립한다.
 
 ## 참고
@@ -527,6 +527,6 @@ zoxide 자신에게 진단 기능이 있어서, 자기 훅이 덮인 것을 알�
   `docs/specs/2026-09-12-tars-shell-history-durability-design.md`
 - SM design(히스토리 env와 훅 두 벌):
   `docs/specs/2026-09-11-tars-shell-memory-design.md`
-- SC design(씨앗 rc와 `shell_config`, 탈출로 둘):
+- SC design(seed rc와 `shell_config`, 탈출로 둘):
   `docs/specs/2026-09-11-tars-shell-config-design.md`
 - 셸 측정의 함정 셋: `docs/decisions/project_measuring_shells.md`

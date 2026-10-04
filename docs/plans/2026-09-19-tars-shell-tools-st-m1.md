@@ -1,16 +1,16 @@
-# ST-M1 — 셋의 씨앗에 eza 별칭 넷을 넣는다
+# ST-M1 — 셋의 seed에 eza 별칭 넷을 넣는다
 
-> 이 plan을 실행하는 사람에게: 이 milestone은 코드가 씨앗 문자열과 검사 하나에
+> 이 plan을 실행하는 사람에게: 이 milestone은 코드가 seed 문자열과 검사 하나에
 > 들어간다. TDD가 아니라 기존 검사(config_test · config 체인 · net 체인)를
 > 다시 돌리는 구조다.
 
-Goal: ST design 결정 2·3·4의 별칭 넷을 셋의 씨앗에 넣고, 그 넷이 게이트가
+Goal: ST design 결정 2·3·4의 별칭 넷을 셋의 seed에 넣고, 그 넷이 게이트가
 치는 이름을 가리는 유일한 자리(`ls`)가 게이트를 안 깨뜨린다는 것을 부팅으로
 확인한다.
 
-Architecture: 씨앗은 `init/src/config.zig`의 `rcSeed()` 문자열 리터럴이다
+Architecture: seed는 `init/src/config.zig`의 `rcSeed()` 문자열 리터럴이다
 (SC 결정 7). 별칭 줄은 셸 셋에 각각 문자로 들어간다 — 훅 줄과 달리 배열로
-조립하지 않는다. 조립하면 `config_test.zig`의 새 검사("씨앗에 있는 별칭
+조립하지 않는다. 조립하면 `config_test.zig`의 새 검사("seed에 있는 별칭
 이름이 허용 목록 안인가")가 tautology가 된다(`hookLines()`의 주석이 적어 둔
 자리와 같다).
 
@@ -19,7 +19,7 @@ QEMU(게이트가 띄운다)
 
 ---
 
-## Task 1 — 씨앗 셋에 별칭 넷
+## Task 1 — seed 셋에 별칭 넷
 
 `init/src/config.zig`의 `rcSeed()` 세 갈래에서 `alias tars-rc=...` 바로 뒤에
 같은 넷을 넣는다. 셋의 문법이 같다(`alias 이름='본문'`).
@@ -54,11 +54,11 @@ const ALLOWED_ALIAS_NAMES = [_][]const u8{
 const ALIASED_TOOLS = [_][]const u8{"eza"};
 ```
 
-- `expectAliasNames(sh)`: 씨앗의 모든 `alias` 줄에서 이름을 뽑아 허용 목록과
+- `expectAliasNames(sh)`: seed의 모든 `alias` 줄에서 이름을 뽑아 허용 목록과
   맞춘다. 목록 밖이면 실패하고 허용 목록을 찍는다. 이것이 design 결정 7이다 —
   `expectQuietSeed`는 `alias `로 시작하는 줄을 전부 통과시키므로 이름을
   더하는 일에 저항이 없다.
-- `expectAliasesCoverTheTools(sh)`: `ALIASED_TOOLS`의 도구가 씨앗의 별칭 줄
+- `expectAliasesCoverTheTools(sh)`: `ALIASED_TOOLS`의 도구가 seed의 별칭 줄
   어딘가에 나오는지 본다. `expectHooksCoverTheTools`와 같은 자리다 — 별칭
   넷을 다 지우고 이 배열도 함께 지우면 정방향·역방향이 다 만족되므로.
 
@@ -88,7 +88,7 @@ Acceptance: config 체인 1차 부팅이 이 줄에서 초록.
 
 `### 기계가 기억하는 것 둘` 절에 별칭 넷과 `ls` 셰도를 한 문단으로 적고,
 `### 셸 설정을 고쳤는데 셸이 안 뜨면` 절 앞이나 뒤에 한 줄을 더한다 —
-씨앗은 이미 있는 파일을 안 덮으므로, 이미 쓰던 기계가 새 별칭을 받으려면
+seed는 이미 있는 파일을 안 덮으므로, 이미 쓰던 기계가 새 별칭을 받으려면
 `/config/{bashrc,zshrc,fish.config}`를 지우고 재부팅한다(그 경로는
 `config/check.sh`의 6·7차가 매번 밟는다).
 
@@ -106,4 +106,4 @@ Acceptance: config 체인 1차 부팅이 이 줄에서 초록.
 
 ## 다음
 
-M2 — gitconfig 씨앗.
+M2 — gitconfig seed.

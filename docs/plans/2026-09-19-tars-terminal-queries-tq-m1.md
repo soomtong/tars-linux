@@ -1,4 +1,4 @@
-# TQ-M1 — 터미널이 질의에 답하게 하고, 씨앗의 우회를 지운다
+# TQ-M1 — 터미널이 질의에 답하게 하고, seed의 우회를 지운다
 
 > 이 plan을 실행하는 사람에게: 이 milestone은 **한 번 시작했다가 되돌린** 것이다
 > (2026-09-19, 사용자가 "구현은 다음 세션에"라고 해서 코드를 커밋 `be9eab3`
@@ -105,7 +105,7 @@ bash가 읽게 했더니 `len0`이 나왔다. 답은 pty의 **입력**이고, �
 
 ## Task 5 — 우회를 지운다
 
-- `init/src/config.zig`: 씨앗 셋에서 `set -gx FZF_DEFAULT_OPTS --no-height` ·
+- `init/src/config.zig`: seed 셋에서 `set -gx FZF_DEFAULT_OPTS --no-height` ·
   `export FZF_DEFAULT_OPTS='--no-height'`와 그 주석 블록을 지운다.
 - `init/src/config_test.zig`: `KNOWN_SEED_ENV`와 `envs` 계상·검사를 지운다
   (그 줄이 없으면 `envs == 0`이 실패하게 되어 있다).

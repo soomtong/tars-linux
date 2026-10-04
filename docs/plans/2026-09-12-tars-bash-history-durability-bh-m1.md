@@ -1,9 +1,9 @@
-# BH-M1 — 씨앗 한 줄과 호스트 검사
+# BH-M1 — seed 한 줄과 호스트 검사
 
 Design: `docs/specs/2026-09-12-tars-bash-history-durability-design.md`
 
 M0이 잰 것 위에 선다. bash는 SIGTERM을 무시하고 3초 뒤 SIGKILL에 죽으므로
-콘솔 셸에 친 명령을 통째로 잃는다(실측 8·10). 고치는 것은 씨앗 rc의 bash
+콘솔 셸에 친 명령을 통째로 잃는다(실측 8·10). 고치는 것은 seed rc의 bash
 갈래에 넣는 한 줄이고, 그 줄이 쓰는 시점을 종료 경로에서 떼어 낸다.
 
 zsh와 다른 것이 둘이다. 하나는 그 줄이 훅 두 줄보다 먼저 와야 한다는 것
@@ -86,7 +86,7 @@ Files: `init/src/config.zig`
 rg -n 'HIST_OPTIONS_BASH|PROMPT_COMMAND' init/src/config.zig
 ```
 
-## Task 2: 씨앗 rc의 bash 갈래에 그 줄을 넣는다
+## Task 2: seed rc의 bash 갈래에 그 줄을 넣는다
 
 Files: `init/src/config.zig`
 
@@ -124,7 +124,7 @@ Files: `init/src/config.zig`
 \\# command -v 관문을 지우지 말 것. …
 ```
 
-- [x] Step 2: 씨앗이 늘어난 줄 수를 센다
+- [x] Step 2: seed가 늘어난 줄 수를 센다
 
 ```bash
 git diff --stat init/src/config.zig
@@ -132,7 +132,7 @@ git diff init/src/config.zig | grep '^-' | grep -v '^---'
 ```
 
 지우는 줄은 `histOptionLines()`의 bash 갈래 한 줄과 Step 1에서 고친 주석
-문단뿐이어야 한다. 씨앗 쪽은 순수 추가다.
+문단뿐이어야 한다. seed 쪽은 순수 추가다.
 
 - [x] Step 3: 순서를 눈으로 확인한다
 
@@ -151,7 +151,7 @@ Files: `init/src/config_test.zig`
 머리 주석의 마지막 문단이 지금 이렇다.
 
 ```
-/// 새 `setopt` 줄을 씨앗에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
+/// 새 `setopt` 줄을 seed에 넣으려면 먼저 SD 실측 9와 같은 방법으로 그
 /// 줄의 stdout·stderr가 0바이트인 것을 재고 여기 적어야 한다. 없는 옵션
 /// 이름은 stderr 65바이트이고, 그 65바이트가 설정 디스크를 붙이는 다섯
 /// 체인의 화면 좌표를 민다.
@@ -160,7 +160,7 @@ Files: `init/src/config_test.zig`
 BH 실측 5가 이 절차를 무력화했다(결정 5). 이렇게 바꾼다.
 
 ```zig
-/// 새 줄을 씨앗에 넣으려면 먼저 그 줄이 조용한 것을 재고 여기 적어야
+/// 새 줄을 seed에 넣으려면 먼저 그 줄이 조용한 것을 재고 여기 적어야
 /// 한다. 재는 방법이 셸마다 다르다는 것이 BH-M1이 배운 것이다.
 ///
 /// zsh의 `setopt`는 rc를 읽는 그 자리에서 돌므로 `zsh -c '<줄>'`로 잰다.
@@ -210,7 +210,7 @@ const KNOWN_HIST_OPTIONS = [_][]const u8{
 적는다)이 함수 안에 있다.
 
 ```zig
-/// 씨앗에서 `PROMPT_COMMAND`를 건드리는 줄이 훅 줄보다 앞에 있는가
+/// seed에서 `PROMPT_COMMAND`를 건드리는 줄이 훅 줄보다 앞에 있는가
 /// (BH design 결정 4).
 ///
 /// `PROMPT_COMMAND`는 변수가 하나뿐이라 마지막 대입이 이긴다. zoxide의 bash
@@ -222,7 +222,7 @@ const KNOWN_HIST_OPTIONS = [_][]const u8{
 /// 디렉터리도 안 배운다 — 게이트가 그것을 보는 자리는 8차 부팅 하나뿐이다.
 ///
 /// 보는 대상이 `histOptionLines()` 전체가 아니라 `PROMPT_COMMAND`를 건드리는
-/// 줄인 이유가 있다. zsh 씨앗의 `setopt INC_APPEND_HISTORY`는 훅 두 줄보다
+/// 줄인 이유가 있다. zsh seed의 `setopt INC_APPEND_HISTORY`는 훅 두 줄보다
 /// 뒤에 있고 그것이 맞다 — `setopt`는 다른 줄과 안 부딪치므로 순서를 요구할
 /// 근거가 없다. 규칙과 근거를 맞춰 둔다.
 fn expectPromptCommandBeforeHooks(sh: config.Shell) !void {
@@ -301,11 +301,11 @@ Files: 없음(전부 `/tmp` 사본을 `-v`로 마운트한다. 저장소 파일�
 
 | | 무엇을 망가뜨리나 | 어느 검사가 죽여야 하나 |
 |---|---|---|
-| 1 | 씨앗의 그 줄을 `PROMPT_COMMAND='histori -a'`로 | `expectQuietSeed` 정방향 |
-| 2 | 씨앗에서만 그 줄을 지우기 | `expectQuietSeed` 역방향 |
-| 3 | 씨앗과 `HIST_OPTIONS_BASH`에서 함께 지우기 | `expectHistOptions` 개수 |
+| 1 | seed의 그 줄을 `PROMPT_COMMAND='histori -a'`로 | `expectQuietSeed` 정방향 |
+| 2 | seed에서만 그 줄을 지우기 | `expectQuietSeed` 역방향 |
+| 3 | seed와 `HIST_OPTIONS_BASH`에서 함께 지우기 | `expectHistOptions` 개수 |
 | 4 | 둘을 함께 오타로 고치기 | `KNOWN_HIST_OPTIONS` |
-| 5 | 씨앗에서 그 줄을 훅 두 줄 아래로 옮기기 | `expectPromptCommandBeforeHooks` |
+| 5 | seed에서 그 줄을 훅 두 줄 아래로 옮기기 | `expectPromptCommandBeforeHooks` |
 
 다섯이 각각 다른 줄에서 죽어야 한다. 같은 줄에서 죽으면 그 검사 중 하나가
 값을 안 하고 있다는 뜻이다.
@@ -329,10 +329,10 @@ docker run --rm -v "$PWD":/workspace \
 
 ## Task 5: config 체인으로 회귀를 본다
 
-씨앗이 열 줄 남짓 커진다. 설정 디스크를 붙이는 체인이 화면 좌표로 판정하는
-자리가 셋이므로, 씨앗이 커진 것이 그 좌표를 밀지 않는지 본다.
+seed가 열 줄 남짓 커진다. 설정 디스크를 붙이는 체인이 화면 좌표로 판정하는
+자리가 셋이므로, seed가 커진 것이 그 좌표를 밀지 않는지 본다.
 
-씨앗은 파일이지 화면이 아니므로 밀 이유가 없다 — SD-M1에서도 여섯 줄이
+seed는 파일이지 화면이 아니므로 밀 이유가 없다 — SD-M1에서도 여섯 줄이
 커졌는데 하나도 안 밀렸다. 그래도 확인한다.
 
 - [x] Step 1: config 체인 단독으로 돌린다 (부팅 여덟, 약 1분 36초)

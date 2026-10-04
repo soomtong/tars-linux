@@ -285,7 +285,7 @@ if ! grep -aqF "$WANT_DISK" "$LOG"; then
 fi
 echo "booted without the ISO; init found its config on /dev/nvme0n1p2"
 
-# 판정 7. 붙었고, 빈 p2에 첫 부팅의 씨앗을 심었다. mke2fs가 만든 것이 init이
+# 판정 7. 붙었고, 빈 p2에 첫 부팅의 seed를 심었다. mke2fs가 만든 것이 init이
 # 쓸 수 있는 ext2라는 것까지다.
 if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
   fail "p2 was picked but never mounted" "tars-init: failed to mount"
@@ -382,7 +382,7 @@ echo "=== boot 4: the NVMe alone, after the update ==="
 boot_guest 4
 
 # 판정 13. 갱신한 ESP로 떴고(표지가 다시 붙었다) p2를 다시 잡았으며,
-# 그 p2는 새것이 아니다 — 씨앗을 다시 깔지 않고 읽었다.
+# 그 p2는 새것이 아니다 — seed를 다시 깔지 않고 읽었다.
 if ! grep -aE "Kernel command line: .*tars\.installed( |${CR}|\$)" "$LOG" >/dev/null; then
   fail "after the update the disk booted without tars.installed" \
     "Kernel command line"
@@ -426,7 +426,7 @@ stop_guest
 echo "=== boot 6: the NVMe alone, after --wipe ==="
 boot_guest 6
 
-# 판정 16. 새 p2다. 씨앗이 다시 깔렸고 마커가 없다.
+# 판정 16. 새 p2다. seed가 다시 깔렸고 마커가 없다.
 if ! grep -aqF "$WANT_DISK" "$LOG"; then
   fail "after --wipe init did not pick p2" \
     "tars-init: config storage" "tars-init: no disk labelled"

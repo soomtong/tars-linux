@@ -1678,7 +1678,7 @@ if ! grep -aqF "$WANT_DISK" "$LOG"; then
 fi
 echo "booted without the ISO; init found its config on /dev/nvme0n1p2"
 
-# 판정 7. 붙었고, 빈 p2에 첫 부팅의 씨앗을 심었다. mke2fs가 만든 것이 init이
+# 판정 7. 붙었고, 빈 p2에 첫 부팅의 seed를 심었다. mke2fs가 만든 것이 init이
 # 쓸 수 있는 ext2라는 것까지다.
 if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
   fail "p2 was picked but never mounted" "tars-init: failed to mount"

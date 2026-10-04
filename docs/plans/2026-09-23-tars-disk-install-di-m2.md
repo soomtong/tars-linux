@@ -1196,7 +1196,7 @@ Files: Modify `install/check.sh`
 +boot_guest 4
 +
 +# 판정 13. 갱신한 ESP로 떴고(표지가 다시 붙었다) p2를 다시 잡았으며,
-+# 그 p2는 새것이 아니다 — 씨앗을 다시 깔지 않고 읽었다.
++# 그 p2는 새것이 아니다 — seed를 다시 깔지 않고 읽었다.
 +if ! grep -aqF "$WANT_DISK" "$LOG"; then
 +  fail "after the update init did not pick p2" \
 +    "tars-init: config storage" "tars-init: no disk labelled"
@@ -1236,7 +1236,7 @@ Files: Modify `install/check.sh`
 +echo "=== boot 6: the NVMe alone, after --wipe ==="
 +boot_guest 6
 +
-+# 판정 16. 새 p2다. 씨앗이 다시 깔렸고 마커가 없다.
++# 판정 16. 새 p2다. seed가 다시 깔렸고 마커가 없다.
 +if ! grep -aqF "$WANT_DISK" "$LOG"; then
 +  fail "after --wipe init did not pick p2" \
 +    "tars-init: config storage" "tars-init: no disk labelled"
@@ -1261,7 +1261,7 @@ Files: Modify `install/check.sh`
 | 부팅 | 판정 | 보는 것 |
 |---|---|---|
 | 1 | 1~5 | M1 그대로. 목록의 끝을 기다리는 줄만 `LIST_END`로 바뀌었다 |
-| 2 | 6 · 7 | M1 그대로(p2를 잡고 씨앗을 깐다) |
+| 2 | 6 · 7 | M1 그대로(p2를 잡고 seed를 깐다) |
 | 2 | 8 | 매체가 없다 + 자기 디스크가 `TARS installed`. `isInstalled`가 진짜 FAT32에서 도는 첫 자리다 |
 | 2 | 9 | `Kernel command line: … tars.installed`. `espConf`가 실물 `limine.conf`에 표지를 붙였다 |
 | 2 | (마커) | `/config/di-marker`를 쓴다 |

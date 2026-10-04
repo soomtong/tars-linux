@@ -44,7 +44,7 @@ QEMU_SERIAL ?= -serial stdio
 
 # 설정 디스크를 안 붙이려면 CONFIG_DISK= (빈 값)으로 둔다. 그 부팅은
 # `tars-init: no disk labelled tars-*`를 찍고 /config가 initrd 안의 빈
-# 디렉터리로 남는다 — 씨앗이 하나도 안 깔리는 경로이고, 그 경로도 볼 때가
+# 디렉터리로 남는다 — seed가 하나도 안 깔리는 경로이고, 그 경로도 볼 때가
 # 있다(README의 "디스크가 없으면 시리얼에 이렇게 나오고"가 그것이다).
 #
 # 콤마가 든 값이라 $(if)에 직접 못 넣는다 — 함수 인자는 콤마로 갈리므로
@@ -52,7 +52,7 @@ QEMU_SERIAL ?= -serial stdio
 DISK_ARGS = -drive file=$(CONFIG_DISK),if=virtio,format=raw
 ifeq ($(strip $(CONFIG_DISK)),)
 DISK_ARGS =
-DISK_GUARD = @echo "설정 디스크 없이 띄운다 (CONFIG_DISK가 비어 있다) — 씨앗이 안 깔린다"
+DISK_GUARD = @echo "설정 디스크 없이 띄운다 (CONFIG_DISK가 비어 있다) — seed가 안 깔린다"
 else
 DISK_GUARD = @test -f $(CONFIG_DISK) || { echo "$(CONFIG_DISK)가 없다 — make disk"; exit 1; }
 endif
@@ -101,7 +101,7 @@ help:
 	@echo "      게이트의 out/config.img와 이름을 나눈 이유가 이것이다(게이트는 매 회차 새로 굽는다)"
 	@echo
 	@echo "  make disk-fresh"
-	@echo "      지우고 다시 굽는다. 첫 부팅이 tars.conf와 씨앗 넷(rc 셋 + gitconfig)을 깐다."
+	@echo "      지우고 다시 굽는다. 첫 부팅이 tars.conf와 seed 넷(rc 셋 + gitconfig)을 깐다."
 	@echo "      그 파일들에 직접 더해 둔 줄은 함께 사라진다"
 	@echo
 	@echo "실행"
@@ -163,7 +163,7 @@ help:
 	@echo
 	@echo "  CONFIG_DISK=$(CONFIG_DISK)"
 	@echo "      붙일 설정 디스크. 게스트가 기억하는 자리다. 빈 값(CONFIG_DISK=)이면"
-	@echo "      안 붙인다 — 그 부팅은 씨앗 없이 뜨고 /config가 빈 채로 남는다."
+	@echo "      안 붙인다 — 그 부팅은 seed 없이 뜨고 /config가 빈 채로 남는다."
 	@echo "      이미지를 컨테이너가 굽기 때문에 저장소 안 경로여야 한다(예: out/tars-verify.img)"
 	@echo
 	@echo "  ISO=$(ISO)"
@@ -203,7 +203,7 @@ iso: initrd
 
 $(CONFIG_DISK):
 	$(IN_CONTAINER) 'mkdir -p out && truncate -s 16M $(CONFIG_DISK) && mkfs.ext2 -F -q -m 0 -L tars-config $(CONFIG_DISK)'
-	@echo "$(CONFIG_DISK)를 만들었다 (16MiB, ext2, 라벨 tars-config) — 첫 부팅이 tars.conf와 씨앗 넷(rc 셋 + gitconfig)을 깐다"
+	@echo "$(CONFIG_DISK)를 만들었다 (16MiB, ext2, 라벨 tars-config) — 첫 부팅이 tars.conf와 seed 넷(rc 셋 + gitconfig)을 깐다"
 
 # 붙일 디스크가 없으면(CONFIG_DISK=) 둘 다 할 일이 없다. recipe 줄마다 셸이
 # 갈리므로 한 줄 안에서 `exit 0`을 써야 다음 줄이 안 돈다 — 그 대신

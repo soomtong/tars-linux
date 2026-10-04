@@ -22,6 +22,7 @@
 - [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유를 일반 어휘 자리에 쓰지 않고, 조사·어미를 생략하지 않는다. 특히 제목과 첫 문장
 - [No emphasis](docs/decisions/feedback_no_emphasis.md) — 문서와 주석에 `**` 강조를 쓰지 않는다(2026-09-12). 내용인 `**`는 남긴다 — md의 코드 블록과 Zig의 배열 반복 연산자
 - [Boot never blocks](docs/decisions/feedback_boot_never_blocks.md) — 네트워크가 꺼져 있거나 안 닿아도 부팅은 평소대로 끝난다(2026-09-15). 타임아웃 위에 `fork`를 한 겹 더 덮고, 음성 검사로 증명한다
+- [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 바깥에 정착한 영어 jargon은 번역하지 않고 원문에 조사를 붙인다(2026-10-04). 첫 사례 seed — '씨앗' 652자리를 되돌렸고 조사는 소리로 고른다(seed가/를/는/로/와)
 
 ## 사용자 (user)
 
@@ -63,7 +64,7 @@
 - [Gate accuracy](docs/decisions/project_gate_accuracy.md) — 게이트가 거짓 판정을 내던 일곱 자리와 그것을 막는 진입 검사(GA-M0·M1, 2026-09-12 종료)
 - [Shutdown signals](docs/decisions/project_shutdown_signals.md) — zsh와 bash는 SIGTERM을 무시하고 fish는 안 무시한다; 종료 경로에서 무엇이 저장되는지는 누가 먼저 죽어 PTY를 닫는지에 갈린다
 - [Shutdown latency](docs/decisions/project_shutdown_latency.md) — PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다; 콘솔 셸이 유예를 꽉 쓰던 2.9초가 0.13초가 됐다
-- [Shell history](docs/decisions/project_shell_history.md) — 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 씨앗 rc의 한 줄로 고친 층. zsh는 `setopt INC_APPEND_HISTORY`(SD-M0~M2), bash는 `PROMPT_COMMAND='history -a'`(BH-M0~M2), 둘 다 2026-09-12 종료
+- [Shell history](docs/decisions/project_shell_history.md) — 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지던 것을 seed rc의 한 줄로 고친 층. zsh는 `setopt INC_APPEND_HISTORY`(SD-M0~M2), bash는 `PROMPT_COMMAND='history -a'`(BH-M0~M2), 둘 다 2026-09-12 종료
 - [Measuring shells](docs/decisions/project_measuring_shells.md) — 셸을 재는 환경이 실제로 돌 환경과 다르면 값이 조용히 틀린다. 게스트에 `/dev/fd`가 없는 것 · `script`가 끼우는 래퍼 · 비대화형 셸이 프롬프트 훅을 안 도는 것
 - [Bash boot](docs/decisions/project_bash_boot.md) — 게이트가 `shell=bash`로 뜨는 부팅을 하나 갖게 된 일. `config` 체인이 부팅 아홉이 됐고, 중첩 bash로는 정의상 볼 수 없던 여섯을 그 아홉째가 본다(BB-M0~M2, 2026-09-12 종료)
 - [Write or reuse](docs/decisions/project_write_or_reuse.md) — "커널 다음은 전부 내 코드"는 절대 원칙이 아니다; 직접 짜는 자리는 배울 값이 있거나 원하는 모양이 남의 것과 다른 자리다(NW 설계 중 사용자가 정했다, 2026-09-13)
@@ -73,7 +74,7 @@
 - [Guest network](docs/decisions/project_guest_network.md) — `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다; 우리 코드는 링크를 올리고 dhcpcd를 띄우는 두 줄이고 게이트 판정은 SLIRP 안에서 닫힌다(NW-M0~M3, 2026-09-14 종료)
 - [Inbound network](docs/decisions/project_inbound_network.md) — 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다; 판정은 `rc`가 아니라 받은 바이트 수이고 우리 코드는 0줄이다(IN-M0~M2, 2026-09-14 종료)
 - [터미널 질의](docs/decisions/project_terminal_queries.md) — terminal이 자식의 vt 질의(커서 위치·상태 보고)에 답한다; `effects.write_pty` 한 칸이 전부이고 답은 라이브러리가 만든다. 그래서 fzf의 `--height` 상자가 첫 Ctrl+R에 뜬다(TQ-M1, 2026-09-19 종료. ST-M3의 `--no-height` 우회는 지웠다)
-- [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig 씨앗, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
+- [Shell tools](docs/decisions/project_shell_tools.md) — 깔려 있던 도구를 셸이 쓴다 — eza 별칭 넷(`ls` 셰도)과 `[user]` 없는 gitconfig seed, 그리고 그 둘을 재는 검사 둘(ST-M0~M2, 2026-09-19 종료)
 - [Disk install](docs/decisions/project_disk_install.md) — `tars-install`이 GPT에 ESP(p1)와 `tars-config`(p2)를 만들고 USB 없이 뜬다; `init`의 후보가 디스크 다음 파티션이 됐고 안전은 라벨이 지킨다. ISO 부팅은 표지 `tars.installed`가 없어 p2를 안 붙이고, 갱신은 설정을 남긴다(DI-M1·M2, 2026-09-23)
 - [Disk carryover](docs/decisions/project_disk_carryover.md) — 설치된 부팅이 설정 파티션을 최대 5초 기다린다(게이트의 틈은 TCG의 initramfs 풀기가 덮고 있었다 — `delay_use=3`으로 벌려 판정); 4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · YES를 줄로(DC-M0~M2, 2026-09-26 종료)
 - [Time discipline](docs/decisions/project_time_discipline.md) — 시계를 chronyd에게 넘겼다; init은 fork · 설정 · execve 배관만. 커널이 주파수를 기억하고, 같은 server는 먼저 적힌 쪽이 이기며, chrony는 주소 전의 실패를 iburst로 안 센다(TD-M0~M2, 2026-09-26 종료). 배운 drift는 /config/chrony.drift로 부팅을 넘는다

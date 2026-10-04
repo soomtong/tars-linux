@@ -408,7 +408,7 @@ trixie 스냅샷) PTY를 줘야 한다 — `script -qfc "zsh -i"`에 fifo를 물
 27. 게스트에 `/dev/fd`가 있다 (BH-M2가 세웠다). devtmpfs는 그 링크를 안
 만들고 우리는 udev를 안 쓰므로 원래 없었고, bash의 process
 substitution(`< <(…)`)이 게스트에서만 실패했다. `main.zig`의 `linkDevFd()`가
-`/proc`과 `/dev`가 붙은 뒤 만든다. 이 링크를 지우면 씨앗의 fzf 훅이 부팅할
+`/proc`과 `/dev`가 붙은 뒤 만든다. 이 링크를 지우면 seed의 fzf 훅이 부팅할
 때마다 한 줄을 찍는다 — `config/check.sh`의 1차 부팅이 그 로그를 본다.
 
 그 링크를 지운 사본으로 재 보면(BB 실측 13) `power` 체인의 화면에도 그 줄이
@@ -700,7 +700,7 @@ C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 �
   보내는" 사본이었다(`if (sig != .HUP) _ = linux.kill(-1, sig);`). 그 회차에서
   marker에 `found … sent SIGHUP …`이 찍힌 채로 음성이 잡았고, 그것이 검사
   둘이 서로 다른 것을 본다는 증명이다.
-- 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — 씨앗에서
+- 호스트 검사가 지키는 줄을 뺀 반사실을 마운트 하나로 보기(SD-M2) — seed에서
   `setopt` 줄을 빼면 `config_test.zig`의 역방향 검사가 부팅 전에 죽여서
   게이트가 그 줄을 보는 자리까지 못 간다. 그 loop 한 줄도 함께 눕힌 사본을
   둘째 마운트로 준다. M1이 값을 한다는 증거이기도 하다.
@@ -1070,7 +1070,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `config.zig` — `/config/tars.conf` 파서 한 벌. 키 열(TS-M1이 `ntp`을,
   TS-M3이 `timezone`을, FW-M1이 `firewall`을 더했다. `Ntp`는 union이고 값 셋 중 하나가 주소다 —
   `parseIpv4`가 여기 사는 이유는 import 방향이다. `Timezone`은 배열 64바이트를
-  가진 struct이고 값을 해석하지 않는다 — 모양만 보고 파일은 `main.zig`가 연다). `rcSeed()`가 씨앗 rc를
+  가진 struct이고 값을 해석하지 않는다 — 모양만 보고 파일은 `main.zig`가 연다). `rcSeed()`가 seed rc를
   담고 `histEntries()`가 셸마다 갈린다(zsh 셋 · bash 둘 · fish 0).
   `histOptionLines()`는 env로는 못 주는 것을 담는다(zsh 한 줄 · 나머지 0) —
   `setopt`를 나르는 환경 변수가 없어서 그 줄만 파일로 간다(SD 확인 1).
@@ -1093,9 +1093,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   죽어 PTY가 닫히면서 커널의 SIGHUP도 받고, 콘솔 셸은 `/dev/console`을 잡고
   있어 닫힐 PTY가 없다. 그 비대칭을 메운 것이 SL이다
   (`project_shutdown_signals`).
-- `config_test.zig`의 `expectQuietSeed` — 씨앗 rc가 부팅할 때 한 글자도
+- `config_test.zig`의 `expectQuietSeed` — seed rc가 부팅할 때 한 글자도
   안 찍는 것을 호스트에서 막는다. 쓸 수 있는 줄은 주석 · `alias` · `command -v`
-  관문이 붙은 훅 · `histOptionLines()`의 줄뿐이다. 씨앗의 글자와 목록의
+  관문이 붙은 훅 · `histOptionLines()`의 줄뿐이다. seed의 글자와 목록의
   글자는 두 벌로 둔다 — 조립하면 역방향 검사가 tautology가 된다. 두 벌을
   함께 고치는 구멍은 셋째 벌이 막는다(훅은 `HOOKED_TOOLS`, 옵션은
   `KNOWN_HIST_OPTIONS`). 상수를 늘리기 전에 그 줄의 stdout·stderr를 먼저
@@ -1120,7 +1120,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `probe_persisted_memory`가 8차를 본다.
   8차는 아무것도 안 심고 기계가 한 번 꺼졌다 켜졌다는 것만 다르다. 7차가
   `fc -W`를 치던 이유는 게이트가 전원을 뽑기 때문이었는데(`boot_once`의
-  `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — 씨앗의 옵션이 칠 때마다 쓰므로
+  `kill "$QEMU_PID"`), SD-M2가 그 줄을 뺐다 — seed의 옵션이 칠 때마다 쓰므로
   필요 없고, 그 명령이 다른 세션의 줄을 지워서 7차의 새 검사를 망가뜨린다.
   7차의 중첩 zsh 둘과 판정 셋(`neg0`·`aft1`·`pos1`)이 그 자리에 있다.
 - `power/check.sh` — 부팅 둘(끄기 · 재시작). 종료 판정이 여기 모여 있다.
@@ -1178,10 +1178,16 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 ### 기억
 
 `MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 새 세션이 먼저
-읽을 것은 여섯이고 그중 `feedback_execution_scope`가 2026-09-12에 바뀌었다
-(구현 파일 편집이 Claude에게 왔다) — 협업 방식 feedback 다섯(`feedback_execution_scope` ·
+읽을 것은 일곱이고 그중 `feedback_execution_scope`가 2026-09-12에 바뀌었다
+(구현 파일 편집이 Claude에게 왔다) — 협업 방식 feedback 여섯(`feedback_execution_scope` ·
 `feedback_commit_delegation` · `feedback_design_question_load` ·
-`feedback_plain_korean` · `feedback_no_emphasis`)과 `user_learning_goal`.
+`feedback_plain_korean` · `feedback_no_emphasis` · `feedback_jargon_translation`)과
+`user_learning_goal`.
+
+옛 이름 하나. 2026-10-04 전의 문서와 커밋은 seed(첫 부팅에 `init`이
+`/config`에 쓰는 기본 파일)를 "씨앗"이라 불렀다. 지금 트리에는 그 말이
+없고, 옛 커밋에서 찾으려면 `git log -S씨앗 --oneline`이다
+(`feedback_jargon_translation`).
 
 그다음은 손에 든 일에 따라 고른다. 게이트를 건드리면
 `project_gate_chain_composition`·`project_gate_latency`·
