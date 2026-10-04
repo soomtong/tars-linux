@@ -70,6 +70,8 @@ initrd 안의 이름은 우리가 `bat`·`fd`로 정한다.
 release로만 받을 수 있어 조달 경로 하나 규칙을 깨는 유일한 항목이다.
 편집기는 `vim.tiny`로 정했다(`neovim`은 라이브러리 9 + 런타임 24MB로 UT
 전체보다 무겁다).
+CU-M1(2026-10-04)이 커서 모양 때문에 실체를 `vim.basic`으로 바꿨다 — vim.tiny는
+`-cursorshape`라 모드가 바뀌어도 DECSCUSR을 못 보낸다([[project_cursor_shape]]).
 
 10. 패키지 매니저는 안 만든다. 사용자가 `herdr`(https://herdr.dev)를
 언급하며 "Homebrew for Linux로 관리된다, 지금은 건너뛴다"고 정했다.

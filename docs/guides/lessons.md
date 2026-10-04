@@ -220,7 +220,7 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 이 줄로 나온다 — 새 로그를 하나도 안 만들었다) ·
 `terminal: cursor> vt=… drawn=… row=… col=… cols=… ink=… box=…`(CU-M0. 매
 프레임 `dumpInk` 뒤에 찍힌다. 셸 커서가 없으면 `vt=… drawn=none`으로 끝난다.
-`render` 검사 20~24가 본다)
+`render` 검사 20~32가 본다. 25~32는 CU-M1이 vim으로 더했다)
 
 새 copy 명령의 로그는 공짜다 — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. `find>`는 그와
@@ -1141,12 +1141,18 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은
   검사 19의 자리를 이어받는다 — 순서를 바꾸면 판정이 무너진다.
-- `render/check.sh` — 검사 스물넷. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
+- `render/check.sh` — 검사 서른둘. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
   bar · underline · bar로 바꿨다가 마지막에 `\033[0 q`로 block을 되돌린다 — 이 뒤에 검사를
   더하는 사람이 bar를 물려받지 않게 하려는 것이고, 그 순서를 바꾸면 뒤 검사가 반전 셀을
   못 센다. 이 체인의 `last_frame`은 `copy/check.sh`의 것과 끝이 다르다 — 파일 끝이 아니라
   마지막 `cursor>` 줄에서 자른다. 렌더 도중에 읽으면 `style>`가 덜 찍힌 프레임이 "반전
   셀 0"으로 보이고, bar 검사가 0을 기대하므로 그때 조용히 초록이 되기 때문이다.
+  검사 25~31(CU-M1)이 게스트 vim을 띄워 `i` · Esc · `R` ·
+  Esc · `:q!`의 모양을 보고, `vim -u NONE`이 대조군이다. 검사 32는 printf로 1049 안에서
+  정한 모양이 안 새는 것을 본다. 검사 25는 `i`를 치기 전, 기동 직후의 화면에서 `E1187` ·
+  `Press ENTER` · `E숫자:`를 찾는다 — stub이 없을 때의 프롬프트는 다음 키가 닫아 버린다.
+  vim 화면은 `style>` 덤프가 언제나 잘리므로(NonText 색의 공백으로 셀이 6,976개) vim
+  검사는 "잘리지 않았다" 대신 "덤프가 커서 칸을 지났다"(`style_covers`)를 본다.
 - `tools/check.sh` — 검사 열여섯(UT·SM). 바이너리 목록은
   `kernel/guest_tools.sh` 한 파일에 있고 `make_initrd.sh`와 이 체인이 같은
   배열을 본다.
@@ -1178,6 +1184,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   나오고 실패가 아니다.
 - `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의
   `gzip -6`을 `-9`로 되돌리지 말 것. 그 뒤의 마지막 줄이 무선 firmware cpio를 이어 붙인다.
+- `kernel/vim/` — 게스트 vim의 시스템 vimrc(`vimrc` → `/etc/vim/vimrc`, 커서 세 줄)와
+  stub(`defaults.vim` → `/usr/share/vim/vim91/defaults.vim`, 주석뿐). `make_initrd.sh`가
+  `install -m 0644`로 넣는다(CU-M1). stub을 지우면 vim이 뜰 때마다 `E1187`과
+  `Press ENTER`를 띄운다. 경로의 `vim91`은 vim 판에 묶여 있어서 Debian이 vim을 올리면
+  stub이 안 읽히고 `render` 검사 25가 빨개진다. 두 파일의 주석은 게스트에서 사람이 여는
+  것이라 영어 ASCII다.
 - `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 목록(데이터만)과
   그것을 받아 고르는 스크립트(WL-M1). linux-firmware · wireless-regdb 두 tarball을
   `kernel/src/firmware/`에 받고(662MB, `clean()`이 안 지운다) sha256을 확인한다. 목록과

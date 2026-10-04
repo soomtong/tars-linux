@@ -2,7 +2,8 @@
 
 Date: 2026-10-04
 Design: `docs/specs/2026-10-04-tars-cursor-shape-design.md`
-Status: plan을 썼다(2026-10-04). 구현 전이다.
+Status: 끝났다(2026-10-04). `tools` · `render` 체인과 반사실 둘이 끝났고, 루트 게이트 18체인
+3/3 PASS, 1시간 5분 31초, `FAIL` 0줄. 실측은 맨 아래 "CU-M1이 실측한 것" 절에 있다.
 
 ## 이 milestone이 끝나면
 
@@ -424,4 +425,142 @@ modes"를 붙인다.
 
 ## CU-M1이 실측한 것
 
-(구현 뒤에 채운다.)
+2026-10-04, devcontainer에서 쟀다. 시간은 `{ time docker run … ; }`의 값이고, 커널이
+스탬프로 빌드를 건너뛴 증분 실행이다(GL-M1).
+
+1. 기준값(Task 0, vim.tiny 판). `render` 체인이 1분 23.39초에 통과했다. 커널의 initramfs
+   풀기 두 줄과 initrd 크기는 아래와 같다.
+
+   ```
+   [    0.366748] Unpacking initramfs...
+   [    2.869310] Freeing initrd memory: 86244K
+   ```
+
+2. 이미지 재빌드는 27.1초였다(`docker build`의 `time`). 끝난 뒤 sysroot에 `vim.basic`
+   (3,921,984바이트) · `libsodium.so.23`(→ `libsodium.so.23.3.0`, 375,496) ·
+   `libgpm.so.2`(26,552)가 있고 `vim.tiny`는 `No such file or directory`다.
+   `/usr/share/vim`과 `/etc/vim`도 sysroot에 없다 — 패키지 `vim`은 런타임을 안 담는다.
+
+3. initrd의 전후. 늘어난 압축 전 바이트(+2,576,384)는 확정 4의 셈(+2,562,328)에 파일 둘
+   (515 · 420바이트)과 디렉터리 넷의 cpio 머리가 더해진 값이다. 풀기 시간은 0.04초
+   늘었고, WL이 잰 한 번의 잡음보다 작다. design 위험 5의 답은 "부팅 시간에 보이지
+   않는다"다.
+
+   | 값 | vim.tiny | vim.basic | 차이 |
+   |---|---|---|---|
+   | `initrd.cpio`(gzip) | 88,310,595 | 89,583,399 | +1,272,804 |
+   | `gzip -dc \| wc -c` | 227,868,672 | 230,445,056 | +2,576,384 |
+   | 풀기(두 줄의 차) | 2.50초 | 2.54초 | +0.04초 |
+   | `Freeing initrd memory` | 86,244K | 87,484K | +1,240K |
+
+4. `tools/check.sh`가 57.0초에 통과했다. 검사 1의 끝 줄은
+   `the initrd carries the four bones and all 86 tools the list names`다. 도구 수는 plan이
+   적은 65가 아니라 86이고, HEAD의 `guest_tools.sh`를 따로 source해 세어도 86이다 — 65는
+   UT 때의 숫자이고 그 뒤 서브프로젝트들이 늘렸다. 한 줄을 바꿨을 뿐이라 86은 그대로다.
+   검사 16은 `vi ran under the name we gave it`로 통과했다.
+
+5. `render/check.sh`의 첫 회차는 검사 25에서 죽었다.
+
+   ```
+   FAIL: vim started: the style dump was truncated, so inverted cells cannot be counted: terminal: cursor> vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0
+   ```
+
+   확정 7의 셈(`~` 45줄이라 `style>` 45셀)이 틀렸다. vim은 `~` 한 글자만 색을 입히는
+   것이 아니라 그 줄의 나머지를 NonText 색(`fg=7AA6DA`)의 공백으로 채운다. 그래서 1~45행의
+   155칸이 전부 기본 색과 다르고, block 프레임에서 셀이 6,976개(커서 1 + 6,975)다. 덤프는
+   96개를 찍고 `style> 6880 more cell(s) not shown`으로 끝난다. bar · underline 프레임은
+   커서 칸이 빠져 `6879`다. 확정 7이 컨테이너에서 센 것은 `ESC[94m` 바이트의 수였고, 칸의
+   수는 터미널에 그려 봐야 나온다. 고친 것은 아래 "plan과 다르게 한 것" 1이다.
+
+6. 고친 뒤 `render/check.sh`가 1분 47.51초에 통과했다(반사실 뒤 다시 돌린 판은
+   1분 47.49초). 기준값(실측 1)의 1분 23.39초보다 약 24초 길고, 그것이 vim 구간이다.
+   CU-M0 실측 2의 1분 36초~1분 59초 범위 안이다. 검사 25~32의 실제 줄은 다음과 같다(체인 출력의 줄 그대로).
+
+   ```
+   검사 25  vim started: vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   검사 26  insert (i): vt=bar drawn=bar row=0 col=0 cols=1 ink=32 box=2x16, 0 inverted cell(s)
+   검사 27  normal (Esc): vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   검사 28  replace (R): vt=underline drawn=underline row=0 col=0 cols=1 ink=16 box=8x2, 0 inverted cell(s)
+   검사 29  normal again (Esc): vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   검사 30  after :q!: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   검사 31  vim -u NONE insert (i a b): vt=block drawn=block row=0 col=2 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+            after vim -u NONE :q!: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+            no vim error line in either session
+   검사 32  bar set inside 1049: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   ```
+
+   검사 25가 판정한 프레임의 `screen>` 줄은 0행이 비어 있고(커서 자리), 1~45행이 `~`,
+   46행이 `"/tmp/cu.txt" [New File]`이다. 행으로 풀면 이렇다.
+
+   ```
+   0:
+   1:  ~
+   …
+   45:  ~
+   46:  "/tmp/cu.txt" [New File]
+   ```
+
+7. plan 설계자가 게스트에서 재지 않은 셋.
+   - `style>` 셀 수는 상한 96에 닿는다(위 5). vim이 떠 있는 모든 프레임에서 잘린다.
+   - vim은 TCG 위에서 2초 안에 뜬다. `wait_for_screen`은 2초를 넘게 기다리면
+     `(the screen took about Ns …)`를 찍는데, vim 두 세션 어디에도 그 줄이 없다.
+     기동 중의 커서는 `row=46 col=24`(메시지) → `row=26 col=41` → `row=0 col=0`을 지난다.
+   - vim이 켜는 키 모드는 우리 키 입력에 영향이 없다. vim 구간의 `key>` 줄은 `i` · Esc ·
+     `R` · Esc · `:` · `q`가 전부 `1 byte(s)`이고, `!`와 Enter가 한 번의 `read()`에 실려
+     `2 byte(s)`다. Esc가 0x1b 한 바이트로 갔다는 뜻이다. vim이 켜는 것이 보이는 모드는
+     DECCKM 하나다(vim 안에서 `decckm=true`, 나온 뒤 `false`). modifyOtherKeys는 우리
+     `terminal/src/`가 아예 안 읽는다 — 그 플래그를 보는 코드가 vendor된 라이브러리의
+     formatter에만 있다. vim이 그것을 켰는지는 로그로 안 보인다(pty 바이트를 찍지 않는다).
+
+8. 반사실 (a) — 시스템 vimrc를 뺐다(`make_initrd.sh` 사본에서 `install … vim/vimrc` 줄을
+   지웠고, `diff`가 234행 하나를 보였다). 예상대로 검사 25는 초록이고 검사 26의 기다림이
+   15초를 다 쓰고 죽었다(1분 46.35초).
+
+   ```
+   vim started: vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   FAIL: insert (i): the cursor line never matched /vt=bar drawn=bar row=0 col=0 /: terminal: cursor> vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0
+   ```
+
+9. 반사실 (b) — stub `defaults.vim`을 뺐다(`diff`가 235행 하나). 예상대로 검사 25가 빨갛고,
+   메시지가 `E1187`과 `Press ENTER`를 둘 다 말한다(1분 27.09초).
+
+   ```
+   FAIL: vim showed an error when it started: E1187: Failed to source defaults.vim
+   E1187: Failed to source defaults.vim
+   Press ENTER or type command to continue
+   ```
+
+   같은 사본으로 돌린 `tools/check.sh`는 부팅 전의 검사 1에서 7.6초 만에 죽었다.
+
+   ```
+   FAIL: usr/share/vim/vim91/defaults.vim is missing from the initrd
+   ```
+
+   두 반사실 모두 예상과 다른 검사에서 죽지 않았다.
+
+10. 루트 게이트 18체인 × 3이 전부 통과했다(2026-10-04). 1시간 5분 31초, `FAIL` 0줄. CU-M0
+    뒤의 1시간 4분 5초보다 1분 26초 길다 — `render` 체인의 vim 구간(약 24초) × 3이 그
+    대부분이다. 열여덟 체인이 전부 새 initrd(`vim.basic`)로 부팅했고 바뀐 판정은 없다.
+    lead가 서브에이전트의 구현을 대조하며 고친 자리는 없다.
+
+### plan과 다르게 한 것
+
+1. `vim_shape_check`가 "style 덤프가 잘리지 않았다"(`truncated_now`가 0)를 보지 않는다.
+   대신 새 헬퍼 `style_covers`로 "잘렸더라도 덤프가 커서 칸을 지났다"를 본다. vim 화면은
+   언제나 잘리므로(실측 5) plan의 판정으로는 검사 25가 매번 빨갛다. 덤프는 `cells()`의
+   순서, 곧 행 순서다. 마지막으로 찍힌 칸이 커서 칸보다 뒤면 커서 칸의 반전 여부는
+   빠짐없이 찍혀 있다. vim 검사의 커서는 언제나 0행이라 이 조건은 늘 맞는다. 반전 셀
+   수는 찍힌 칸 안에서만 센다 — 잘린 6,880칸 안의 반전은 못 보지만, design 결정 6의
+   고장("모양과 무관하게 반전한다")은 커서 칸 자체의 반전이라 찍힌 쪽에 있다.
+   `style_covers`는 앞 회차의 로그에 대 보았다 — 마지막으로 찍힌 칸이 `1,94`일 때
+   `0,0` · `0,2` · `1,93`은 0, `1,94`는 1이다. 다른 길(vim에 `hi NonText` 같은 설정을
+   더해 셀을 줄인다)은 커서 말고 다른 동작을 바꾸므로 design 결정 7과 어긋난다.
+   `cursor_shape_check`(CU-M0)는 안 고쳤다.
+2. `vim_shape_check`가 `settle` 뒤의 마지막 `cursor>` 줄이 기다린 패턴과 여전히 맞는지
+   한 번 더 본다. 기다림이 맞은 뒤 vim이 커서를 맨 아래 줄로 옮겼으면 그 프레임으로
+   판정하지 않으려는 것이다. plan의 본문 목록에는 없다.
+3. 검사 32는 마지막 프레임의 `screen>` 줄에 `printf`가 없는 것을 함께 본다. 치기 전에도
+   커서가 이미 프롬프트 자리의 block이라 기다림이 곧바로 맞는다. 그래서 `settle`이
+   printf보다 먼저 끝나면 엉뚱한 프레임으로 초록이 될 수 있다. 화면 줄을 보면 그 경우가
+   빨개진다(CU-M0의 검사 20이 같은 방법을 쓴다).
+4. 도구 수는 65가 아니라 86이다(실측 4). plan 본문의 65는 고치지 않고 여기 적는다.

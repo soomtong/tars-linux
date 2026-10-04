@@ -176,7 +176,7 @@ done
 ln -sf ../usr/bin/bash "$WORKDIR/bin/sh"
 
 # UT-M3. vi와 vim은 한 실체다(design 결정 4). guest_tools.sh에 줄을 둘
-# 적으면 install_tool이 cp를 두 번 해서 1.76MB짜리 사본이 두 벌 생긴다 —
+# 적으면 install_tool이 cp를 두 번 해서 3.9MB짜리 사본이 두 벌 생긴다 —
 # 같은 파일에 이름이 둘 있는 것을 파일 둘로 만드는 것은 파일 시스템에
 # 대한 거짓말이다. 위 /bin/sh가 이미 그 모양을 세워 뒀다.
 ln -sf vim "$WORKDIR/usr/bin/vi"
@@ -191,7 +191,7 @@ ln -sf vim "$WORKDIR/usr/bin/vi"
 #
 # 매달리는 것이 아니라 죽는다. 그래서 게이트는 안 깨지고 사람만 깨진다 —
 # `git log`·`git diff`·`git branch -a`가 전부 이 경로다. mawk→awk ·
-# fdfind→fd · vim.tiny→vi와 같은 종류(결정 4)이고, 다른 것은 이 이름을
+# fdfind→fd · vim.basic→vim과 같은 종류(결정 4)이고, 다른 것은 이 이름을
 # 우리가 고른 것이 아니라 git 바이너리가 컴파일 타임에 박아 뒀다는 점이다.
 ln -sf less "$WORKDIR/usr/bin/pager"
 
@@ -204,6 +204,35 @@ ln -sf less "$WORKDIR/usr/bin/pager"
 # 전부 이 이름을 부른다. vim은 이제 이름이 셋이고 실체는 하나다
 # (vim · vi · editor).
 ln -sf vim "$WORKDIR/usr/bin/editor"
+
+# CU-M1. vim에 딸린 파일 둘. 위의 링크 셋과 같이 vim에 딸린 것을 여기 모은다.
+#
+# /etc/vim/vimrc는 시스템 vimrc다. 커서 세 줄(t_SI · t_SR · t_EI)이라 vim이
+# insert에서 bar, replace에서 underline, normal에서 block을 보낸다. /config가
+# 아니라 initrd에 두는 이유는 모든 부팅에서 되게 하려는 것이다 — ISO로 뜬
+# 세션에도, 설정 디스크 없이 뜨는 render 체인에도 /config가 없다. vim은
+# 사용자 vimrc(/.vimrc)를 이 파일 뒤에 읽으므로 사람이 `set t_SI= t_SR= t_EI=`로
+# 끌 수 있다. 다른 후보(seed vimrc · VIMINIT · EXINIT)가 왜 안 되는지는 CU
+# design 결정 7의 후보 표에 있다.
+#
+# /usr/share/vim/vim91/defaults.vim은 주석뿐인 stub이다. vim.basic은 사용자
+# vimrc가 없으면 $VIMRUNTIME/defaults.vim을 읽으려 하고, 게스트에는 런타임이
+# 없어서 `E1187: Failed to source defaults.vim`과 `Press ENTER`를 띄운 채 키를
+# 기다린다. 시스템 vimrc에 skip_defaults_vim을 두는 것으로는 못 막는다 — 그
+# 변수를 보는 코드가 defaults.vim 안에 있다(CU design 실측 6). vim.tiny에는
+# 없던 증상이다.
+#
+# 경로에 vim 판이 박혀 있다. $VIM이 없으면 /usr/share/vim이고 그 아래 vim91이
+# $VIMRUNTIME이다. Debian이 vim 9.2로 올리면 vim92가 되어 이 stub이 안 읽힌다
+# (CU design 위험 4). 그날은 render 체인 검사 25가 E1187로 빨개진다.
+#
+# 두 파일은 sysroot가 아니라 저장소(kernel/vim/)에서 온다. 우리가 쓴 파일이라
+# 30-tars-ntp와 같은 자리다. 0644인 이유도 같다 — 실행이 아니라 읽히는 파일이다.
+# cp · chmod 두 줄 대신 install 한 줄로 쓴 것은 파일 하나를 빼는 것이 줄 하나를
+# 지우는 것이 되게 하려는 것이다(CU-M1 plan의 반사실).
+mkdir -p "$WORKDIR/etc/vim" "$WORKDIR/usr/share/vim/vim91"
+install -m 0644 vim/vimrc "$WORKDIR/etc/vim/vimrc"
+install -m 0644 vim/defaults.vim "$WORKDIR/usr/share/vim/vim91/defaults.vim"
 
 # NW-M2 결정 11. Debian의 /usr/bin/nc는 alternatives가 만드는 링크이고 실체가
 # nc.traditional이다. alternatives 링크는 패키지의 postinst가 만드는 것이라

@@ -132,6 +132,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #              (libz는 eza·bat의 libgit2 사슬이 데려와 있다)
 #   vim.tiny   libm · libtinfo · libselinux · libacl   넷 다 이미 있다
 #              (libacl은 sed가, libselinux는 fish가 데려왔다)
+#   (CU-M1이 vim.basic으로 바꿨다. 아래 CU-M1 블록)
 #
 # design의 "층 3은 새 라이브러리가 없다"가 M1·M2에서는 두 번 다 틀렸고
 # 여기서 처음 맞았다. 그래도 재고 나서 알았다는 것이 이 주석의 요지다 —
@@ -267,6 +268,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 없다) wifi 체인이 설정 디스크에 싣는다 — 게스트 안에서 AP와 DHCP 서버를
 # 세우는 데 쓴다(WL design 결정 7). 둘 다 새 라이브러리가 없다(hostapd는
 # wpa_supplicant의 부분집합, busybox는 libc · libresolv).
+#
+# ── CU-M1: 층 3의 편집기를 vim.basic으로 ──────────────────────────────
+#
+# vim-tiny를 vim으로 바꿨다. 이유는 커서 모양 하나다. vim-tiny는
+# -cursorshape로 빌드돼 있어서 t_SI · t_SR · t_EI를 어떻게 설정해도 한
+# 바이트도 안 보낸다(CU design 실측 2). 컴파일 시점의 기능이라 설정으로는
+# 못 켠다. vim(바이너리 vim.basic)은 +cursorshape이다.
+#
+#   vim.tiny    1,761,704바이트   libm · libtinfo · libselinux · libacl · libc
+#   vim.basic   3,921,984바이트   위 다섯 + libsodium.so.23 · libgpm.so.2
+#
+# 새 SONAME은 둘이고(libsodium 375,496 · libgpm 26,552바이트) 둘 다 libc만
+# 부른다. 사슬이 더 안 늘어난다. 압축 전 합계로 initrd가 약 2.56MB 커진다.
+#
+# 패키지 vim의 Depends에 있는 vim-common · vim-runtime은 안 받는다. 위 UT-M1
+# 주석대로 apt-get download는 의존을 안 따라가고, 게스트는 바이너리 하나로
+# 돈다. 런타임이 없어서 생기는 문제(E1187)와 그것을 막는 stub defaults.vim은
+# kernel/make_initrd.sh의 CU-M1 주석이 설명한다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -303,7 +322,7 @@ RUN dpkg --add-architecture amd64 \
         jq:amd64 \
         hyperfine:amd64 \
         git:amd64 \
-        vim-tiny:amd64 \
+        vim:amd64 \
         zoxide:amd64 \
         fzf:amd64 \
         libgit2-1.9:amd64 \
@@ -335,6 +354,8 @@ RUN dpkg --add-architecture amd64 \
         libpcre2-8-0:amd64 \
         libpcre2-32-0:amd64 \
         libselinux1:amd64 \
+        libsodium23:amd64 \
+        libgpm2:amd64 \
         dhcpcd-base:amd64 \
         iproute2:amd64 \
         netcat-traditional:amd64 \

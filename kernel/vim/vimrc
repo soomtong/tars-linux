@@ -1,0 +1,10 @@
+" TARS system vimrc (CU design decision 7). It comes from the initrd; do not edit.
+" vim reads this before any user vimrc. Without a user vimrc vim stays in
+" 'compatible' mode, so these three lines are the only change from plain vim.
+" They make vim send DECSCUSR on mode changes: bar in insert, underline in
+" replace, block in normal. To turn them off, put this in /.vimrc:
+"   set t_SI= t_SR= t_EI=
+" To start vim with no vimrc at all: vim -u NONE
+let &t_SI = "\e[6 q"
+let &t_SR = "\e[4 q"
+let &t_EI = "\e[2 q"

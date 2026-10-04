@@ -1,9 +1,9 @@
 # TARS Cursor Shape — Design
 
 Date: 2026-10-04
-Status: CU-M0 끝, CU-M1 남음(2026-10-04). CU-M0 plan은
-`docs/plans/2026-10-04-tars-cursor-shape-cu-m0.md`이고 그 끝에 실측이 있다. 착수 전에 잰 값은
-아래 "착수 전에 실측한 것" 절에 있다.
+Status: 끝났다(2026-10-04, CU-M0 · CU-M1). plan은
+`docs/plans/2026-10-04-tars-cursor-shape-cu-m0.md` · `docs/plans/2026-10-04-tars-cursor-shape-cu-m1.md`이고
+각 끝에 실측이 있다. 착수 전에 잰 값은 아래 "착수 전에 실측한 것" 절에 있다.
 
 사용자의 요청에서 시작한다(2026-10-04): "vi에서 입력 모드에 따른 커서
 모양이 항상 동일해서 불편함이 있다. normal mode/insert mode에 따라 변경
@@ -401,6 +401,24 @@ Dockerfile의 sysroot 목록에서 `vim-tiny`를 `vim` · `libsodium23` ·
 12. `dumpStyles`는 기본 색과 다른 셀만 찍고, `pixel>`은 셀 가운데
     (`+CELL_W / 2`, `+ROW_HEIGHT / 2`)를 읽는다. bar(왼쪽 두 열)와
     underline(아래 두 줄)는 가운데에 안 닿는다.
+
+13. CU-M1 plan이 착수 전에 컨테이너에서 vim.basic을 쳐 보고 드러난 것 넷(그 plan의 확정 7).
+    - 사용자 vimrc가 없으면 vim은 `compatible`이고 `showmode`가 꺼져 있다. 화면에
+      `-- INSERT --`가 안 나온다. 실측 4의 바이트 순서에 그 글자가 있는 것은 사용자 vimrc가
+      있어서 vim이 `nocompatible`로 뜬 경우다. 그래서
+      insert에 들어간 증거는 `cursor>`의 `vt=bar`이고, 대조군(`-u NONE`)에서는 친 글자의
+      수(`col=2`)다.
+    - 새 파일 메시지는 `"/tmp/cu.txt" [New File]`이다.
+    - stub이 없을 때의 `E1187`과 `Press ENTER`는 대체 화면에 들어가기 전, 기본 화면에 찍힌다.
+      다음 키가 그 프롬프트를 닫고 명령으로도 쓰이므로 에러 판정은 기동 직후에 한다.
+    - vim은 Esc로 나가든 Ctrl-O로 나가든 `t_EI`(block)를 보내고 대체 화면을 나간다. 그래서
+      vim으로는 실측 10(대체 화면의 모양이 기본 화면으로 안 샌다)을 판정할 수 없고, CU-M1의
+      검사 32가 printf로 판정한다.
+
+14. 게스트에서 잰 것 하나가 위의 셈과 달랐다(CU-M1 실측 5). vim은 `~` 줄의 나머지를 NonText
+    색의 공백으로 채워서, vim 화면의 `style>` 셀은 45개가 아니라 6,976개다. 덤프 상한 96에
+    언제나 닿는다. 게이트는 "덤프가 커서 칸을 지났다"로 판정한다(`render/check.sh`의
+    `style_covers`).
 
 ## 비목표
 

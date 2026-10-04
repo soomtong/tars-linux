@@ -27,6 +27,8 @@ cd "$(dirname "$0")"
 # 처음으로 게이트가 게스트에 무언가를 쓴다 — 지금까지 열한 체인이 친 것은
 # 전부 읽거나 찍는 명령이었다. `/tmp`(UT-M0이 놓고 아무도 안 쓰던 뼈대)와
 # `/config`(CP가 만든 마운트)가 그 쓰기를 받는다.
+# CU-M1이 vim의 실체를 vim.basic으로 바꿨다. 검사 16은 그대로다 —
+# --version의 마지막 줄이 여전히 Linking: gcc다.
 #
 # SM-M0이 도구 둘(zoxide · fzf)을 더하고 검사 둘을 더 친다 — 훅은 아직
 # 없으므로 사람이 이름으로 직접 부르는 것까지다. 둘 다 경로를 찍는 도구라
@@ -189,6 +191,11 @@ WANT+=(usr/bin/tq-probe)
 # DI-M1: 설치기. tq-probe와 같은 자리다 — 배열에 없고 make_initrd.sh가 손으로
 # 넣는다. 빠지면 install 체인의 OVMF 부팅(1분)이 아니라 여기서 먼저 드러난다.
 WANT+=(usr/bin/tars-install)
+
+# CU-M1: vim의 시스템 vimrc와 stub defaults.vim. tq-probe와 같은 자리다 — 배열에
+# 없고 make_initrd.sh가 손으로 넣는 파일이라 여기 적어야 tautology가 아니다.
+# 빠지면 render 체인의 vim 검사(부팅 뒤)가 아니라 여기서 먼저 드러난다.
+WANT+=(etc/vim/vimrc usr/share/vim/vim91/defaults.vim)
 
 INITRD_LIST="$(gzip -dc ../kernel/initrd.cpio | cpio -it 2>/dev/null)"
 

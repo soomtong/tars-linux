@@ -474,6 +474,10 @@ type_text() {
       '/') keys+=(slash) ;;
       '-') keys+=(minus) ;;
       '[') keys+=(bracket_left) ;;
+      '.') keys+=(dot) ;;
+      ':') keys+=(shift-semicolon) ;;
+      '!') keys+=(shift-1) ;;
+      '?') keys+=(shift-slash) ;;
       *) report_failure "type_text has no key for '${ch}'" ;;
     esac
   done
@@ -609,6 +613,63 @@ settle() {
   done
   return 1
 }
+# 로그의 한 지점 뒤에 찍힌 screen> 줄들. vim을 띄운 뒤의 화면만 보려는 것이다.
+# 파이프 끝이 -q 없는 grep이라 진입 검사에 안 걸린다. 0줄이면 1이라 || true.
+screens_since() { tail -c +"$(($1 + 1))" "$LOG" | grep -a 'terminal: screen>' || true; }
+# 마지막 프레임의 style 덤프가 칸 ($1,$2)까지 빠짐없이 찍었는가. 잘리지 않았으면
+# 0이다. 잘렸으면 마지막으로 찍힌 칸이 ($1,$2)보다 행 순서로 뒤여야 0이다.
+style_covers() {
+  local last r c
+  if [ "$(truncated_now)" -eq 0 ]; then return 0; fi
+  last="$(last_frame | grep -aoE 'terminal: style> [0-9]+,[0-9]+ ' | tail -n 1 || true)"
+  if [ -z "$last" ]; then return 1; fi
+  last="${last#terminal: style> }"
+  r="${last%,*}"
+  c="${last#*,}"
+  c="${c% }"
+  if [ "$r" -gt "$1" ]; then return 0; fi
+  if [ "$r" -eq "$1" ] && [ "$c" -gt "$2" ]; then return 0; fi
+  return 1
+}
+# 모양 하나를 기다리고 세 층과 반전 셀 수를 본다. 아래 cursor_shape_check와 같은
+# 판정을 키를 친 뒤에 한다(그 함수는 printf를 스스로 친다). CU-M1의 검사
+# 25~32가 쓴다.
+#
+#   $1 설명   $2 기다릴 cursor> 패턴   $3 기대 "ink=N box=WxH"   $4 기대 반전 셀 수
+#
+# settle 뒤의 마지막 줄이 패턴과 여전히 맞는지도 본다. 기다림이 맞은 뒤 vim이
+# 커서를 다른 데로 옮겼으면 그 프레임으로 판정하지 않으려는 것이다.
+#
+# cursor_shape_check와 다른 자리가 하나 있다. vim 화면에서는 style 덤프가 언제나
+# 잘린다. vim이 `~` 줄의 나머지를 NonText 색(fg=7AA6DA)의 공백으로 채워서 커서
+# 줄 아래의 거의 모든 칸이 기본 색과 다르기 때문이다(CU-M1 실측 — 셀 6,976개 중
+# 96개만 찍힌다). 그래서 "잘리지 않았다" 대신 "잘렸더라도 덤프가 커서 칸을
+# 지났다"를 본다(style_covers). 덤프는 cells()의 순서, 곧 행 순서이므로 마지막으로
+# 찍힌 칸이 커서 칸보다 뒤면 커서 칸의 반전 여부는 빠짐없이 찍혀 있다. 커서는
+# 언제나 0행이라 이 조건은 늘 맞는다. 반전 셀 수는 찍힌 칸 안에서만 센다.
+vim_shape_check() {
+  local what="$1" pattern="$2" want_ink="$3" want_inv="$4" line got_ink rc
+  if ! wait_for_cursor "$pattern"; then
+    report_failure "${what}: the cursor line never matched /${pattern}/: $(last_cursor)"
+  fi
+  settle || true
+  line="$(last_cursor)"
+  if ! grep -aqE -- "$pattern" <<<"$line"; then
+    report_failure "${what}: the cursor moved away from /${pattern}/ after the log went quiet: ${line}"
+  fi
+  rc="$(sed -E 's/.* row=([0-9]+) col=([0-9]+) .*/\1 \2/' <<<"$line")"
+  if ! style_covers "${rc% *}" "${rc#* }"; then
+    report_failure "${what}: the style dump was cut before the cursor cell, so inverted cells cannot be counted: ${line} / $(last_frame | grep -a 'terminal: style> [0-9]' | tail -n 1 || true)"
+  fi
+  got_ink="$(grep -oE 'ink=[0-9]+ box=[0-9]+x[0-9]+' <<<"$line" || true)"
+  if [ "$got_ink" != "$want_ink" ]; then
+    report_failure "${what}: the renderer painted ${got_ink:-nothing} (want ${want_ink}): ${line}"
+  fi
+  if [ "$(inverted_now)" -ne "$want_inv" ]; then
+    report_failure "${what}: the last frame has $(inverted_now) inverted cell(s), ${want_inv} expected: ${line}"
+  fi
+  echo "${what}: ${line#*cursor> }, $(inverted_now) inverted cell(s)"
+}
 
 # ── 검사 20: 대조군 — 셸은 block으로 시작하고 cursor>가 반전 셀을 가리킨다
 #
@@ -691,6 +752,127 @@ cursor_shape_check 5 bar "ink=32 box=2x16" 0
 # 사람이 bar를 물려받지 않게 한다.
 cursor_shape_check 0 block "ink=0 box=0x0" 1
 
+# ── vim — CU-M1 ────────────────────────────────────────────────────────
+#
+# 게스트의 vim은 vim.basic이고, initrd의 시스템 vimrc(/etc/vim/vimrc) 세 줄이
+# 모드가 바뀔 때 DECSCUSR을 보내게 한다 — insert는 6(bar), replace는
+# 4(underline), normal은 2(block). 이 부팅에는 설정 디스크가 없으므로 사용자
+# vimrc도 없다. 그래서 vim은 compatible이고 showmode가 꺼져 `-- INSERT --`가
+# 안 나온다. insert에 들어갔다는 증거는 cursor>의 vt=bar다(CU-M1 plan 확정 7).
+#
+# 명령 줄은 검사 20~24처럼 화면 지우기로 시작한다. 커서가 (0,0)에서 vim으로
+# 들어가고, vim이 1049로 그 자리를 저장했다가 나올 때 되돌리며, fish가 거기에
+# 프롬프트를 그린다. 그래서 vim을 나온 뒤의 커서는 검사 20의 CU_ROW · CU_COL이다.
+# 파일 인자를 주는 것은 인트로 화면을 피하려는 것이다 — 인트로는 글자에 색을
+# 입혀 style> 셀을 늘린다. 파일을 주면 `~` 45줄(색 하나)과 커서뿐이다.
+#
+# vim은 빈 버퍼의 (0,0)에 커서를 두지만 메시지를 쓰려고 맨 아래 줄에 갔다가
+# 돌아온다. 그래서 기다림 패턴에 row=0 col=0을 넣는다(CU-M0 실측 3과 같은 이유).
+
+# ── 검사 25: vim이 에러 없이 뜨고 아직 모양을 안 바꿨다 ──────────────────
+#
+# 기다림에 Press ENTER를 함께 넣는다. stub defaults.vim이 없으면 vim은 E1187과
+# Press ENTER를 대체 화면에 들어가기 전, 기본 화면에 찍고 키를 기다린다 —
+# [New File]만 기다리면 15초를 다 쓰고 "vim이 안 떴다"로 죽어서 원인을 못
+# 말한다. 둘 중 하나를 기다린 뒤 에러 줄을 보면 실패 메시지가 E1187을 직접
+# 말한다. 그 판정은 i를 치기 전에 해야 한다 — 다음 키가 프롬프트를 닫고 명령으로도
+# 쓰여서, i를 치면 insert로 들어가 bar가 된다.
+#
+# 기동 직후의 모양은 셸에서 물려받은 block이다. vim은 기동할 때 t_EI를 미리
+# 보내지 않는다(CU design 실측 4). 그래서 이 검사가 26의 bar에 대한 대조군이다.
+VIM_LOG_START="$(wc -c < "$LOG")"
+echo "=== typing printf '\\033[H\\033[2J'; vim /tmp/cu.txt ==="
+type_text "printf '\\033[H\\033[2J'; vim /tmp/cu.txt"
+type_keys ret
+if ! wait_for_screen '\[New File\]|Press ENTER'; then
+  report_failure "vim never drew its first screen (no [New File] and no Press ENTER)"
+fi
+settle || true
+VIM_ERRORS="$(grep -aoE 'E1187[^|]*|Press ENTER[^|]*|E[0-9]{2,4}:[^|]*' <<<"$(screens_since "$VIM_LOG_START")" | sort -u || true)"
+if [ -n "$VIM_ERRORS" ]; then
+  report_failure "vim showed an error when it started: ${VIM_ERRORS}"
+fi
+vim_shape_check "vim started" 'vt=block drawn=block row=0 col=0 cols=1 ' "ink=0 box=0x0" 1
+
+# ── 검사 26: i — insert는 bar ─────────────────────────────────────────────
+type_keys i
+vim_shape_check "insert (i)" 'vt=bar drawn=bar row=0 col=0 ' "ink=32 box=2x16" 0
+
+# ── 검사 27: Esc — normal은 block ─────────────────────────────────────────
+type_keys esc
+vim_shape_check "normal (Esc)" 'vt=block drawn=block row=0 col=0 ' "ink=0 box=0x0" 1
+
+# ── 검사 28: R — replace는 underline ──────────────────────────────────────
+type_keys shift-r
+vim_shape_check "replace (R)" 'vt=underline drawn=underline row=0 col=0 ' "ink=16 box=8x2" 0
+
+# ── 검사 29: Esc — 다시 block ─────────────────────────────────────────────
+type_keys esc
+vim_shape_check "normal again (Esc)" 'vt=block drawn=block row=0 col=0 ' "ink=0 box=0x0" 1
+
+# ── 검사 30: :q! — vim을 나오면 프롬프트 자리의 block ────────────────────
+#
+# 패턴이 CU_ROW · CU_COL이라 vim이 아직 떠 있으면(커서가 0,0이나 맨 아래 줄)
+# 안 맞는다. vim은 어떤 길로 나가든 마지막 DECSCUSR이 2(block)라서, 이 검사는
+# "대체 화면의 모양이 기본 화면으로 안 샌다"의 판정이 못 된다. 그것은 검사 32다.
+type_text ':q!'
+type_keys ret
+vim_shape_check "after :q!" "vt=block drawn=block row=${CU_ROW} col=${CU_COL} " "ink=0 box=0x0" 1
+case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
+  *"New File"*) report_failure "the last frame after :q! still shows vim's [New File] line" ;;
+esac
+
+# ── 검사 31: 탈출로 vim -u NONE — insert에 들어가도 block ─────────────────
+#
+# 시스템 vimrc를 안 읽은 vim이다. ab를 쳐서 col=2가 되면 insert에 들어갔다는
+# 증거이고(showmode가 꺼져 있어 화면 글자로는 못 본다), 그런데도 block이다 —
+# 검사 26의 bar가 우리 시스템 vimrc에서 왔다는 증명이다.
+#
+# 파일 이름을 다르게 한다. wait_for_screen은 로그 전체를 보므로(lessons 실측
+# 26) 같은 이름이면 검사 25의 [New File]에 곧바로 걸린다. 이름이 다르면 swap
+# 파일도 안 부딪친다.
+VIM_NONE_START="$(wc -c < "$LOG")"
+echo "=== typing printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt ==="
+type_text "printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt"
+type_keys ret
+if ! wait_for_screen 'cunone\.txt" \[New File\]'; then
+  report_failure "vim -u NONE never drew its first screen: $(screens_since "$VIM_NONE_START" | tail -n 1)"
+fi
+settle || true
+type_keys i a b
+vim_shape_check "vim -u NONE insert (i a b)" 'vt=block drawn=block row=0 col=2 ' "ink=0 box=0x0" 1
+type_keys esc
+type_text ':q!'
+type_keys ret
+vim_shape_check "after vim -u NONE :q!" "vt=block drawn=block row=${CU_ROW} col=${CU_COL} " "ink=0 box=0x0" 1
+case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
+  *"New File"*) report_failure "the last frame after vim -u NONE :q! still shows vim's [New File] line" ;;
+esac
+
+# 두 vim 세션 전체에 에러 줄이 없다. 검사 25는 기동 직후만 보았다.
+VIM_ERRORS="$(grep -aoE 'Press ENTER[^|]*|E[0-9]{2,4}:[^|]*' <<<"$(screens_since "$VIM_LOG_START")" | sort -u || true)"
+if [ -n "$VIM_ERRORS" ]; then
+  report_failure "a vim session showed an error: ${VIM_ERRORS}"
+fi
+echo "no vim error line in either session"
+
+# ── 검사 32: 대체 화면에서 정한 모양은 기본 화면으로 안 샌다(design 실측 10) ─
+#
+# 1049로 대체 화면에 들어가 bar를 정하고 나온다. 같은 printf에서 1049 둘만 뺀
+# 것이 검사 21이고 그쪽은 bar다 — 그것이 이 검사의 양성 대조다. vim은 언제나
+# block을 보내고 나가므로 이 판정을 못 한다(검사 30).
+#
+# 치기 전에도 커서가 이미 프롬프트 자리의 block이라 기다림은 곧바로 맞는다.
+# 그래서 마지막 프레임의 화면 줄에 printf가 없는 것(지운 뒤의 프레임인 것)을
+# 따로 본다. 그 전에 판정했다면 여기서 빨개진다.
+echo "=== typing printf '\\033[H\\033[2J\\033[?1049h\\033[6 q\\033[?1049l' ==="
+type_text "printf '\\033[H\\033[2J\\033[?1049h\\033[6 q\\033[?1049l'"
+type_keys ret
+vim_shape_check "bar set inside 1049" "vt=block drawn=block row=${CU_ROW} col=${CU_COL} " "ink=0 box=0x0" 1
+case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
+  *printf*) report_failure "the 1049 check judged a frame from before the screen was cleared" ;;
+esac
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로
@@ -721,4 +903,4 @@ echo "--- ink lines ---"
 grep -a 'terminal: ink>' "$LOG" | tail -n 10
 echo "--- scroll lines ---"
 grep -a 'terminal: scroll>' "$LOG" | tail -n 10
-echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for"
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for, and vim switches the cursor shape between modes"

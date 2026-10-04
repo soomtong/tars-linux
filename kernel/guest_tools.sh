@@ -126,7 +126,7 @@ GUEST_TOOLS=(
   # design 최종 목록의 층 2 열둘에 btop을 더하고(사용자가 2026-09-11에
   # 요청했다) procs를 뺀 것이다(2026-09-13). procs를 뺀 자리에서 사라진
   # 라이브러리는 없다 — libgcc_s·libm 둘을 부르는데 libgcc_s는 btop의
-  # libstdc++와 zoxide가, libm은 vim.tiny와 hyperfine이 여전히 부른다.
+  # libstdc++와 zoxide가, libm은 vim과 hyperfine이 여전히 부른다.
   # 그래서 남은 라이브러리는 여전히 열아홉이고, 그중 열여섯이 eza·bat 둘이
   # 데려오는 libgit2 사슬이다 — 네트워크가 없는 기계의 TLS·Kerberos·SSH
   # 스택이고 design 결정 3이 그 대가를 명시적으로 감수했다.
@@ -177,6 +177,12 @@ GUEST_TOOLS=(
   # libselinux는 fish가 데려왔다). M1·M2에서 두 번 틀렸던 예측이 여기서
   # 처음 맞았고, 그래도 재고 나서 알았다.
   #
+  # CU-M1이 vim의 실체를 vim.tiny에서 vim.basic으로 바꿨다. 이유는 커서
+  # 모양이다 — vim.tiny는 -cursorshape로 빌드돼 모드가 바뀌어도 DECSCUSR을
+  # 못 보낸다(CU design 결정 7). vim.basic은 libsodium · libgpm 둘을 더
+  # 데려오고, 둘 다 libc만 부른다. 그래서 위 문단의 "새 라이브러리 0"은
+  # UT-M3 때의 기록이고, 지금 이 층의 새 라이브러리는 둘이다.
+  #
   # /usr/lib/git-core는 안 넣는다. init·add·commit·log·diff·branch가
   # 전부 git 바이너리 안의 builtin이라 그 트리 없이 돈다. 거기 있는 실체
   # 26개 중 큰 것 일곱이 네트워크 헬퍼이고(design 결정 5), 이 기계는
@@ -190,10 +196,10 @@ GUEST_TOOLS=(
 
   # 이름을 바꾸는 셋째 — 결정 4. mawk→awk · fdfind→fd와 같은 자리다.
   # 실체는 vim 하나이고 `/usr/bin/vi`는 make_initrd.sh가 심볼릭 링크로
-  # 건다 — 여기 줄을 둘 적으면 1.76MB짜리 사본이 두 벌 생긴다. 링크를
+  # 건다 — 여기 줄을 둘 적으면 3.9MB짜리 사본이 두 벌 생긴다. 링크를
   # 거는 자리가 /bin/sh와 같고, 그래서 tools/check.sh의 검사 1이 `usr/bin/vi`
   # 를 뼈대 쪽 literal로 본다.
-  usr/bin/vim.tiny:usr/bin/vim
+  usr/bin/vim.basic:usr/bin/vim
 
   # ── 층 4 · 셸 메모리 2 ─────────────────────────────────────────────────
   # SM-M0. 기계가 사용자에게서 배운 것을 뒤지는 도구 둘이다 — zoxide는 어느
@@ -205,7 +211,7 @@ GUEST_TOOLS=(
   # 없다 — 사람이 이름으로 직접 부르는 것까지다.
   #
   # 새 라이브러리가 0이다. zoxide는 libgcc_s·libm·libc를, fzf는 libc만
-  # 부른다. libgcc_s는 btop의 libstdc++가, libm은 vim.tiny가 이미 데려왔다
+  # 부른다. libgcc_s는 btop의 libstdc++가, libm은 vim이 이미 데려왔다
   # (2026-09-11 amd64 .deb의 DT_NEEDED로 확인). 그래서 이 둘에 대해서는
   # copy_lib_deps를 빼도 게스트가 멀쩡하다 — design 위험이 하나 없는
   # milestone이고, 그것을 아는 것이 모르는 것보다 낫다.
@@ -227,7 +233,7 @@ GUEST_TOOLS=(
   # NW-M2. 이 여섯 줄이 게스트가 밖으로 나가는 데 필요한 전부다.
   #
   # dhcpcd의 자리가 왼쪽과 오른쪽이 다른 넷째 자리다(mawk→awk · fdfind→fd ·
-  # vim.tiny→vi에 이어). 이유는 앞의 셋과 다르다 — 이름 충돌도 alternatives도
+  # vim.basic→vim에 이어). 이유는 앞의 셋과 다르다 — 이름 충돌도 alternatives도
   # 아니고 PATH다. environ.zig의 PATH_ENTRY가 /usr/bin:/bin이라
   # /usr/sbin에 둔 것은 이름으로 안 불린다. NW-M0의 첫 회차가 여기서 통째로
   # 죽었다(`fish: Unknown command: dhcpcd`).

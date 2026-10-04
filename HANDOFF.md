@@ -1,35 +1,44 @@
-# HANDOFF: Cursor Shape(CU)가 M0까지 왔다 — M1(게스트 vi 교체)이 다음이다
+# HANDOFF: Cursor Shape(CU)가 M0 · M1로 닫혔다 — 다음 서브프로젝트를 고른다
 
 ## 지금 어디인가
 
 2026-10-04 사용자의 요청 한 줄("vi에서 입력 모드에 따른 커서 모양이 항상 동일해서 불편함이
-있다")로 열었다. 원인이 둘이라 milestone도 둘이다. 우리 렌더러가 DECSCUSR(`CSI Ps SP q`)이
-정한 모양을 안 읽고 늘 한 칸 반전했고(M0), 게스트의 vi인 Debian `vim-tiny`가
-`-cursorshape` 빌드라 어떤 vimrc로도 그 시퀀스를 안 보낸다(M1). design은
-`docs/specs/2026-10-04-tars-cursor-shape-design.md`(결정 7 · 위험 5 · 실측 12, `Status: CU-M0
-끝, CU-M1 남음`), plan은 `-cu-m0.md`(끝났다)와 `-cu-m1.md`(구현 전)다.
+있다")로 열어 같은 날 닫았다. 원인이 둘이라 milestone도 둘이었다. 우리 렌더러가
+DECSCUSR(`CSI Ps SP q`)이 정한 모양을 안 읽고 늘 한 칸 반전했고(M0), 게스트의 vi인 Debian
+`vim-tiny`가 `-cursorshape` 빌드라 어떤 vimrc로도 그 시퀀스를 안 보냈다(M1). design은
+`docs/specs/2026-10-04-tars-cursor-shape-design.md`(결정 7 · 위험 5 · 실측 14, `Status: 끝났다`),
+plan은 `-cu-m0.md` · `-cu-m1.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은
+`docs/decisions/project_cursor_shape.md`.
 
 사용자의 지시로 설계와 plan은 Opus 서브에이전트가, 구현도 Opus 서브에이전트가 했고 Fable이
-대조 · 게이트 · commit을 맡았다(WP와 같은 방식). M0에서 lead가 고친 것은 둘 — `defaultFg`
-doc 주석 한가운데에 끼어든 새 함수 넷, `vt_test.zig`의 `zig fmt`.
+대조 · 게이트 · commit을 맡았다(WP와 같은 방식). 사용자는 외출 중이었고 "마일스톤 끝까지 직접
+완료"를 지시했다. lead가 대조에서 고친 것은 M0에서 둘(`defaultFg` doc 주석 한가운데에 끼어든 새
+함수 넷 · `vt_test.zig`의 `zig fmt`), M1에서는 없다. 서브에이전트가 반사실 전에 스스로 잡은 plan의
+구멍이 하나 있다 — vim 화면은 `style>` 덤프 상한 96에 언제나 닿는다(NonText 색 공백으로 셀
+6,976개). "잘리지 않았다" 대신 "덤프가 커서 칸을 지났다"(`style_covers`)로 판정을 바꿨다.
 
 | 커밋 | 무엇 |
 |---|---|
-| (이 커밋) | M0 — `vt.zig`의 `shell_cursor` · `cursorMark()` · `cursorAsked()`(copy mode · 포커스 · 뷰포트 · preedit · DECSCUSR 순), `main.zig`의 `fillRect` · `dumpCursor`(`terminal: cursor>` 매 프레임), `vt_test` 82~92, `render/check.sh` 검사 20~24(`printf '\033[N q'`로 bar · underline · 깜빡임 · 되돌림). 루트 게이트 18체인 3/3(1시간 4분 5초) |
+| `8d65077` | M0 — `vt.zig`의 `shell_cursor` · `cursorMark()` · `cursorAsked()`(copy mode · 포커스 · 뷰포트 · preedit · DECSCUSR 순), `main.zig`의 `fillRect` · `dumpCursor`(`terminal: cursor>` 매 프레임), `vt_test` 82~92, `render/check.sh` 검사 20~24. 루트 게이트 18체인 3/3(1시간 4분 5초) |
+| (이 커밋) | M1 — sysroot `vim-tiny` → `vim` + `libsodium23` + `libgpm2`, `guest_tools.sh`의 `usr/bin/vim.basic:usr/bin/vim`, 새 `kernel/vim/vimrc`(세 줄) · `kernel/vim/defaults.vim`(stub)을 `make_initrd.sh`가 `/etc/vim/vimrc` · `/usr/share/vim/vim91/defaults.vim`으로, `tools` 검사 1에 그 둘, `render` 검사 25~32. initrd 압축 전 +2.58MB · 풀기 +0.04초. 루트 게이트 18체인 3/3(1시간 5분 31초) |
 
-M0이 끝난 지금 셸에서 `printf '\033[6 q'`를 치면 프롬프트 커서가 왼쪽 2픽셀 bar가 된다.
-vi는 아직 안 바뀐다.
+사용자가 확인할 것 하나. M1은 게스트 도구 구성을 바꿨다 — vi의 실체가 `vim.tiny`(1.76MB)에서
+`vim.basic`(3.92MB)으로, 라이브러리 둘(`libsodium` · `libgpm`)이 늘었다. plan 설계자가 "사용자
+확인이 필요하다"고 적었던 자리인데, 사용자의 "명백한 목적이 있으니 마일스톤 끝까지"를 vi에서의
+커서 모양으로 읽고 진행했다. 되돌리려면 Dockerfile 세 줄 · `guest_tools.sh` 한 줄 · `make_initrd.sh`의
+CU-M1 블록 · `tools/check.sh`의 `WANT` 한 줄 · `render` 검사 25~32를 지운다.
 
-## 바로 다음에 할 것 — CU-M1
+열지 않은 것(design 비목표): 깜빡임 · `block_hollow` · OSC 12 커서 색 · DECTCEM 숨기기 · 포커스
+없는 패널의 속 빈 커서 · 사용자 vimrc를 부팅 사이에 남기기(`/.vimrc` → `/config/vimrc`,
+gitconfig와 같은 모양) · 모양을 `tars.conf`로 빼기. 위험 4 — Debian이 vim 9.2로 올리면 stub 경로의
+`vim91`이 안 맞아 `render` 검사 25가 `E1187`로 빨개진다. 그때 `make_initrd.sh`와 `tools/check.sh`의
+경로 하나씩을 고친다.
 
-plan `docs/plans/2026-10-04-tars-cursor-shape-cu-m1.md`가 Task 0~7로 서 있다. 요지: Dockerfile의
-sysroot에서 `vim-tiny` → `vim` + `libsodium23` + `libgpm2`(이미지 재빌드, 돌고 있는 게이트가
-없을 때만), `kernel/guest_tools.sh`가 `usr/bin/vim.basic:usr/bin/vim`, 새 `kernel/vim/vimrc`(세 줄
-`t_SI` · `t_SR` · `t_EI`)와 `kernel/vim/defaults.vim`(주석만 — 없으면 `E1187` · `Press ENTER`)을
-`make_initrd.sh`가 `/etc/vim/vimrc` · `/usr/share/vim/vim91/defaults.vim`으로, `tools` 검사 1에 그
-둘, `render` 검사 25~32(vim 기동 · i · Esc · R · Esc · `:q!` · `-u NONE` 대조군 · 1049 누수).
-무게는 바이너리 +2.16MB, gzip 약 +1.26MB. 탈출로는 `vim -u NONE`과 `/.vimrc`의
-`set t_SI= t_SR= t_EI=`.
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+후보는 아래 "그 다음 후보" 절(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB
+동글 층 B)과 WP-M3(방향 포커스), CU가 남긴 "사용자 vimrc를 부팅 사이에 남기기"다. 작은 것은
+`docs/guides/lessons.md`의 "이월 숙제"에 있다.
 
 ### 그 앞 — Workspace Panes(WP)가 M0~M2로 닫혔다
 
