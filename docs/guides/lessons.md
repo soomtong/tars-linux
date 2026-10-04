@@ -673,6 +673,22 @@ C 래퍼 타입을 받거나 안쪽 함수가 `pub`이 아니라 부를 수는 �
 라이브러리가 스스로 검사하는 모양이다. kitty placement의 viewport 좌표는
 `placement_render_info`를 옮겨 적었다(TG-M1).
 
+73. dhcpcd는 `eth0: leased 10.0.2.15 for … seconds`를 찍은 다음에 주소를 인터페이스에 붙이고,
+경로를 만들며 `eth0: adding route to 10.0.2.0/24`와 `eth0: adding default route via 10.0.2.2`를
+찍는다(PE design 실측 8 — `dhcp_bind`가 로그를 먼저 찍고 `ipv4_applyaddr`를 뒤에 부른다). 그래서
+`leased` 줄을 본 순간의 게스트는 아직 10.0.2.15가 아닐 수 있다. 그 사이에 hostfwd로 붙으면 SLIRP은
+호스트 쪽 연결을 받아 주지만 게스트가 SYN을 버려서, `ssh-keyscan`은 빈 값을 내고 ssh는
+`Connection timed out during banner exchange`로 죽는다. hostfwd로 게스트에 붙는 체인은
+`eth0: adding default route via 10\.0\.2\.2` 줄까지 기다린다 — `service/check.sh`의 `boot_ssh`가
+그 모양이다(PE-M0, 2026-10-04). 2026-09-28과 2026-10-04의 service 실패 둘을 처음에는 "검사가
+`Server listening`만 기다리고 바로 keyscan을 친다"로 진단했는데, 그 진단이 틀렸다. `boot_ssh`는
+2026-09-27(`c89157d`)부터 `leased`를 기다리고 있었고, 두 실패 다 그 기다림 뒤에 났다. 같은
+모양(임대를 기다린 뒤 hostfwd)이 `firewall/check.sh`에도 있지만, 그쪽은 붙기 전에 게스트에 타이핑을
+먼저 해서 그 시간 차가 지나가고 실패가 관측된 적이 없어 그대로 두었다(PE 비목표 6). SLIRP이 버려진
+SYN을 언제 다시 보내는지는 재지 않았다. PE-M0 뒤에 같은 증상이 다시 나면 이 판단이 틀린 것이다 —
+그 회차의 시리얼 로그에서 `adding default route` 줄과 ssh 사이에 sshd가 무엇을 찍었는지부터 본다
+(PE 위험 1).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -932,20 +948,6 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
       `keyboard=apple`과 부딪칠 수 있고, 게이트는 못 본다. 넣으려면 `HID_APPLE`을 먼저
       정한다. `mt7601u.bin` · `mt7662.bin` · `mt7662_rom_patch.bin`은 맨 위 이름이라
       `WHENCE`의 `Link:`로 실체를 찾고, `rtlwifi/rtl8723bu_bt.bin`은 이 릴리스에 없다.
-- [ ] service 체인 부팅 D의 ssh 제어 연결이 한 번 `Connection timed out during banner
-      exchange`로 죽었다(2026-09-28 WL 루트 게이트 1차, CT-M2 3/3회차). 평소에는 firmware가
-      있든 없든 0.3초 안팎이고(각 3회, 259~377ms) 한도는 `ConnectTimeout=5`다. 한 번뿐이라
-      한도를 안 고쳤다. 또 나면 그 회차의 시리얼 로그에서 sshd가 `Server listening` 뒤에
-      무엇을 했는지부터 본다.
-- [ ] service 체인 부팅 C의 검사 12(`ssh-keyscan`)가 한 번 빈 값으로 죽었다(2026-10-04 GE-M1
-      루트 게이트, CT-M2 3/3회차 — `FAIL: ssh-keyscan saw , the guest printed SHA256:…`). 그
-      회차의 시리얼 로그에서 `Server listening`은 08:17:21, dhcpcd의 `eth0: leased 10.0.2.15`는
-      08:17:26이었다. 검사가 `Server listening`만 기다리고 바로 keyscan을 치는데, hostfwd는
-      게스트가 그 주소를 갖기 전에는 안 닿는다. 그래서 sshd가 임대보다 5초 이상 앞서면 빈
-      값이다 — 코드와 무관한 체인의 경합이다. 고치는 자리는 `service/check.sh` 검사 12 앞에
-      `wait_for_log "eth0: leased"`(부팅 D의 ssh 제어 연결에도 같은 기다림이 맞다 — 위 항목의
-      banner exchange 타임아웃도 같은 경합일 수 있다). 그날은 `service` 체인만 따로 세 번 돌려
-      3/3을 봤다(GE-M1 plan 실측 11).
 - [ ] firmware 96MB가 게스트 RAM에 늘 있다(WL 위험 5). 게이트의 512MB에서 `MemAvailable`
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만

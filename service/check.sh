@@ -327,6 +327,13 @@ boot_ssh() {  # $1 = monitor 포트
   done
   [ "$ok" = "1" ] || fail "could not connect to the QEMU monitor"
   wait_for_log "eth0: leased 10\.0\.2\.15 " 60 || fail "dhcpcd never leased an address" ": leased"
+  # PE-M0. dhcpcd는 leased를 찍은 다음에 주소를 붙이고(ipv4_applyaddr) 경로 줄을 찍는다.
+  # 그 사이에 hostfwd로 붙으면 SLIRP은 호스트 쪽 연결을 받아 주지만, 아직 10.0.2.15가 아닌
+  # 게스트가 SYN을 버린다 — 부팅 C의 keyscan이 빈 값으로, 부팅 D의 제어 연결이 banner exchange
+  # 타임아웃으로 한 번씩 죽은 경합이다. 경로 줄은 주소가 붙은 뒤에만 나온다. leased 기다림을
+  # 남기는 것은 "DHCP가 안 됐다"와 "주소를 붙이다 실패했다"를 다른 FAIL로 가르기 위해서다.
+  wait_for_log "eth0: adding default route via 10\.0\.2\.2" 30 \
+    || fail "dhcpcd leased but never added the default route" ": leased" "adding"
 }
 
 stop_ssh() {
