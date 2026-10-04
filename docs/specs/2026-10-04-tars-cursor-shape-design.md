@@ -214,6 +214,12 @@ let &t_SR = "\e[4 q"
 let &t_EI = "\e[2 q"
 ```
 
+GE-M1(2026-10-04)이 이 파일을 모던 설정 한 벌로 넓혔다. 첫 줄이 `set nocompatible`이라
+vim은 이제 사용자 vimrc 없이도 `nocompatible`로 뜨고, 위 후보 표의 "사용자 vimrc가 없으면
+vim은 지금처럼 `compatible`로 뜬다 — 커서 말고는 안 바뀐다"는 더 이상 맞지 않는다. 커서
+세 줄은 그대로다. 내용과 이유는 `docs/specs/2026-10-04-tars-guest-ergonomics-design.md`의
+결정 5 · 6이다.
+
 같이 해야 하는 것이 하나 있다. `vim.basic`은 사용자 vimrc가 없으면
 `$VIMRUNTIME/defaults.vim`을 읽으려 하고, 런타임이 없는 게스트에서는
 `E1187: Failed to source defaults.vim`와 `Press ENTER` 프롬프트를 띄운다

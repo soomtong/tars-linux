@@ -226,8 +226,10 @@ ln -sf vim "$WORKDIR/usr/bin/editor"
 
 # CU-M1. vim에 딸린 파일 둘. 위의 링크 셋과 같이 vim에 딸린 것을 여기 모은다.
 #
-# /etc/vim/vimrc는 시스템 vimrc다. 커서 세 줄(t_SI · t_SR · t_EI)이라 vim이
-# insert에서 bar, replace에서 underline, normal에서 block을 보낸다. /config가
+# /etc/vim/vimrc는 시스템 vimrc다. CU-M1이 커서 세 줄(t_SI · t_SR · t_EI — insert는
+# bar, replace는 underline, normal은 block)을 두었고, GE-M1이 모던 설정 한 벌
+# (nocompatible · 줄 번호 · 상태 줄 · 빠른 Esc 등)을 더했다. 런타임 없이 vim에
+# 컴파일된 옵션과 :highlight만 쓴다(GE design 결정 5 · 6). /config가
 # 아니라 initrd에 두는 이유는 모든 부팅에서 되게 하려는 것이다 — ISO로 뜬
 # 세션에도, 설정 디스크 없이 뜨는 render 체인에도 /config가 없다. vim은
 # 사용자 vimrc(/.vimrc)를 이 파일 뒤에 읽으므로 사람이 `set t_SI= t_SR= t_EI=`로

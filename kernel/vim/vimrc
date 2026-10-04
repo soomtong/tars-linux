@@ -1,10 +1,144 @@
-" TARS system vimrc (CU design decision 7). It comes from the initrd; do not edit.
-" vim reads this before any user vimrc. Without a user vimrc vim stays in
-" 'compatible' mode, so these three lines are the only change from plain vim.
-" They make vim send DECSCUSR on mode changes: bar in insert, underline in
-" replace, block in normal. To turn them off, put this in /.vimrc:
+" TARS system vimrc. It comes from the initrd (kernel/vim/vimrc in the repo);
+" edits made in the guest are lost on reboot. Why each line is here: CU design
+" decision 7 (cursor shape) and GE design decisions 5 and 6 (everything else).
+"
+" vim reads this file first and the user vimrc (/.vimrc) after it, so any line
+" here can be undone there. To start vim without this file:
+"   vim -u NONE
+" To turn off only the cursor shapes, put this in /.vimrc:
 "   set t_SI= t_SR= t_EI=
-" To start vim with no vimrc at all: vim -u NONE
+"
+" The guest has no vim runtime: $VIMRUNTIME holds only a stub defaults.vim.
+" So there is no syntax highlighting, no filetype detection, no colorscheme and
+" no plugin (matchparen, netrw). ':syntax on' fails with E484. Everything below
+" is a built-in option or an explicit ':highlight'. The file stays plain ASCII
+" and uses no line continuation.
+
+" First line on purpose. A system vimrc does not switch 'compatible' off (only
+" a user vimrc does), and switching it off resets many options, so it must come
+" before them.
+set nocompatible
+
+" ---- Cursor shape (CU design decision 7) ------------------------------------
+" DECSCUSR on mode changes: bar in insert, underline in replace, block in normal.
 let &t_SI = "\e[6 q"
 let &t_SR = "\e[4 q"
 let &t_EI = "\e[2 q"
+
+" ---- Encoding ----------------------------------------------------------------
+" The terminal passes LANG=C.UTF-8, which already means utf-8. Saying it here
+" keeps Hangul intact when vim starts without LANG (env -i, a bare script).
+set encoding=utf-8
+
+" ---- Keys and timing ---------------------------------------------------------
+" Backspace may delete indent, line breaks and text from before this insert.
+set backspace=indent,eol,start
+" Wait at most 50 ms for the rest of a terminal key code. Without this, Esc in
+" insert mode waits for 'timeoutlen' and the cursor stays a bar that long.
+set ttimeout
+set ttimeoutlen=50
+" Wait half a second for the rest of a mapping.
+set timeoutlen=500
+" Y yanks to the end of the line, like D and C (Neovim does the same).
+nnoremap Y y$
+" Ctrl-L also clears the search highlight, then redraws as it always did.
+nnoremap <silent> <C-L> :nohlsearch<CR><C-L>
+
+" ---- Editing -----------------------------------------------------------------
+" Switch buffers without writing the current one first.
+set hidden
+" A new line keeps the indent of the line before it. No 'smartindent': without
+" filetype rules it pulls every line starting with '#' to column 0.
+set autoindent
+" Tab inserts four spaces and Backspace removes four. A real tab in a file
+" still shows as 8 columns, as most tools assume.
+set expandtab
+set shiftwidth=4
+set softtabstop=4
+set tabstop=8
+" Makefiles need real tabs. There is no filetype plugin to say so, so say it
+" here by file name.
+augroup tars_vimrc
+  autocmd!
+  autocmd BufNewFile,BufRead Makefile,makefile,GNUmakefile,*.mk setlocal noexpandtab
+augroup END
+" Ctrl-A on 007 gives 008, not 010.
+set nrformats-=octal
+" J drops the comment leader of the line it joins.
+set formatoptions+=j
+
+" ---- Search ------------------------------------------------------------------
+" Show matches while typing, keep them lit, and ignore case unless the pattern
+" has a capital letter.
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+
+" ---- Screen ------------------------------------------------------------------
+" Absolute number on the cursor line, distance to it on the others.
+set number
+set relativenumber
+" Light up the cursor line's number only. Lighting the whole line would also
+" recolor the cell under the block cursor.
+set cursorline
+set cursorlineopt=number
+" Keep five lines and columns of context around the cursor.
+set scrolloff=5
+set sidescrolloff=5
+" Show as much of a long last line as fits, with '@@@' at the end.
+set display=truncate
+" Make tabs, trailing spaces and no-break spaces visible, in ASCII.
+set list
+set listchars=tab:>-,trail:-,nbsp:+
+" Show a half-typed command and the current mode on the last line.
+set showcmd
+set showmode
+" Every window gets a status line: name, flags, encoding, format, position.
+" It replaces 'ruler'.
+set laststatus=2
+let &statusline = ' %f%m%r%h%w%= %{&fileencoding !=# "" ? &fileencoding : &encoding} %{&fileformat}  %l:%c  %p%% '
+" Command-line completion: complete the common part, then show a menu.
+set wildmenu
+set wildmode=longest:full,full
+" No intro screen when vim starts without a file.
+set shortmess+=I
+" No beep and no screen flash.
+set belloff=all
+" New splits open below and to the right.
+set splitbelow
+set splitright
+" Our terminal has no mouse reporting and ignores the window title.
+set mouse=
+set notitle
+
+" ---- Files -------------------------------------------------------------------
+set history=1000
+" No swap file. The guest has one user, and a swap file in /config or in a git
+" work tree is litter.
+set noswapfile
+set nobackup
+" Undo history survives closing a file, until the next boot (/tmp is tmpfs).
+set undofile
+set undodir=/tmp/vim-undo
+if !isdirectory(&undodir)
+  call mkdir(&undodir, 'p', 0700)
+endif
+" The user is root, so modelines stay off (this is also vim's default for root).
+set nomodeline
+
+" ---- Colors ------------------------------------------------------------------
+" Our terminal background is dark. Setting it here also stops vim from changing
+" it later, which would reset the highlight groups below.
+set background=dark
+" 256-color cterm values: grays from the 232-255 ramp, accents from the first
+" 16 colors so they follow the terminal palette. No 'termguicolors'.
+highlight LineNr       cterm=NONE ctermfg=243  ctermbg=NONE
+highlight CursorLineNr cterm=NONE ctermfg=11   ctermbg=NONE
+highlight StatusLine   cterm=NONE ctermfg=252  ctermbg=238
+highlight StatusLineNC cterm=NONE ctermfg=245  ctermbg=236
+highlight VertSplit    cterm=NONE ctermfg=238  ctermbg=238
+highlight Visual       cterm=NONE ctermfg=NONE ctermbg=239
+highlight Search       cterm=NONE ctermfg=234  ctermbg=11
+highlight IncSearch    cterm=NONE ctermfg=234  ctermbg=214
+highlight SpecialKey   cterm=NONE ctermfg=239  ctermbg=NONE

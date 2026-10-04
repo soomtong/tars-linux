@@ -589,4 +589,117 @@ grep -a 'terminal: style>' /tmp/run/serial.clean | grep -aE 'style> 0,[0-9]+ |st
 
 ## GE-M1이 실측한 것
 
-(구현자와 lead가 채운다.)
+구현자(Opus 서브에이전트)가 2026-10-04에 쟀다. GE-M0(`a53f57b`) 위에서 돌렸다.
+
+1. Task 2(컨테이너). 기대와 같다. `E숫자:`도 `Press ENTER`도 없다.
+
+   ```
+   ii  vim            2:9.1.1230-2 arm64        Vi IMproved - enhanced vi editor
+   == sys: vim /tmp/cu.txt ==
+   DECSCUSR: [6 q [2 q [4 q [2 q
+         1 -- INSERT --
+         1 -- REPLACE --
+         1 [New]
+         1 utf-8 unix  0:0  100%
+   == none: vim -u NONE /tmp/cu.txt ==
+   DECSCUSR:
+         1 [New File]
+   == make: vim /tmp/Makefile ==
+   DECSCUSR: [2 q
+         1 [New]
+         1 utf-8 unix  0:0  100%
+         1 noexpandtab
+   -rw------- 1 root root 972 Oct  4 07:07 /tmp/h/.viminfo
+   drwx------ 1 root root   0 Oct  4 07:06 /tmp/vim-undo
+   ```
+
+   plan의 기대가 비워 둔 자리 하나가 채워졌다. Makefile 경우의 DECSCUSR은 `[2 q` 하나다 — insert에
+   안 들어가고 `:q!`로 나가는 길의 t_EI다. `/.viminfo`는 design 실측 10과 같은 972바이트다.
+2. Task 5(`render` 체인 한 번). `exit=0`, `real 1m47.752s`(CU-M1 실측 6은 1분 47.51초). 검사 셋을
+   더했어도 시간은 거의 같다. vim 구간의 줄은 기대와 글자까지 같다.
+
+   ```
+   control: the shell starts with a block cursor and cursor> points at the inverted cell (0,15)
+   vim started: vt=block drawn=block row=0 col=4 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   the system vimrc gave vim a status line
+   insert (i): vt=bar drawn=bar row=0 col=4 cols=1 ink=32 box=2x16, 0 inverted cell(s)
+   vim shows -- INSERT -- in insert mode
+   normal (Esc): vt=block drawn=block row=0 col=4 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   replace (R): vt=underline drawn=underline row=0 col=4 cols=1 ink=16 box=8x2, 0 inverted cell(s)
+   normal again (Esc): vt=block drawn=block row=0 col=4 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   after :q!: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   vim -u NONE insert (i a b): vt=block drawn=block row=0 col=2 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   after vim -u NONE :q!: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   control: vim -u NONE shows neither the status line nor -- INSERT --
+   no vim error line in either session
+   bar set inside 1049: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)
+   TR-M2 PASS: …, and vim switches the cursor shape between modes, and the system vimrc turns on line numbers, a status line and showmode
+   ```
+
+3. `VIM_COL`은 셈(확정 3)과 같은 4다. 0행에는 `1`이 0열에 왼쪽으로 붙어 찍힌다 — `number`와
+   `relativenumber`를 함께 켜면 커서 줄의 절대 번호는 왼쪽 정렬이다. 칸 폭은 그래도 넷이다.
+4. 화면 행. Task 5의 추출 명령(`grep … '\[New\]' | head -1`)이 고른 첫 줄은 vim이 그리던 도중의
+   프레임이다(`  |    |             | "/tmp/cu.txt" [New]` — 셀이 아직 몇 개 없다). 그다음 줄은
+   시리얼에서 28행으로 끊겨 있었다. 그래서 그 뒤의 첫 완전한 프레임(47행)을 옮긴다. 각 행 앞의
+   공백 하나는 `screen>` 덤프의 행 구분자에서 온다.
+
+   ```
+   0:  1
+   1:  ~
+   44: ~
+   45:  /tmp/cu.txt <공백> utf-8 unix  0:0  100%
+   46: "/tmp/cu.txt" [New]
+   ```
+
+   상태 줄은 45행, 메시지 줄은 46행이다. `i`를 친 직후의 프레임에서는 46행이 `"/tmp/cu.txt" [New]i`
+   (`showcmd`)였고, 다음 프레임에서 `-- INSERT --`가 되며 상태 줄 위치가 `0:1`로 바뀐다.
+5. 그 프레임(vim이 뜬 뒤, 커서 `row=0 col=4`)의 `style>` 줄 앞머리:
+
+   ```
+   terminal: style> 0,0 fg=E7C547 bg=102030
+   terminal: style> 0,1 fg=E7C547 bg=102030
+   terminal: style> 0,2 fg=E7C547 bg=102030
+   terminal: style> 0,3 fg=E7C547 bg=102030
+   terminal: style> 0,4 fg=102030 bg=FFFFFF
+   terminal: style> 1,0 fg=7AA6DA bg=102030
+   ```
+
+   - 줄 번호 칸 넷은 `CursorLineNr`(`ctermfg=11`)이고 우리 팔레트의 11번이 `E7C547`이다.
+     커서 줄 하나뿐인 버퍼라 `LineNr`(243)의 칸은 안 나왔다.
+   - `0,4`가 block 커서의 반전 칸이다. `fg=102030`인 칸은 이것 하나다.
+   - NonText(`1,0`)는 `fg=7AA6DA`로 CU-M1과 같다(확정 5). `background=dark`가 색을 안 바꿨다.
+     그래서 `vim_shape_check` 주석의 색은 그대로 둔다.
+6. `inverted_now`는 기대(확정 4)와 같다. 25~29가 1 · 0 · 1 · 0 · 1이다.
+7. `style>` 덤프는 그 프레임에서 97줄이다(찍힌 칸 96 + `6884 more cell(s) not shown`). 기본 색과
+   다른 칸이 모두 6,980개다. CU-M1의 6,976개에서 넷 늘었다. `vim_shape_check` 주석과 lessons의
+   `render/check.sh` 항목에 이 값을 적었다.
+8. `render.log`에 grep의 `stray \` 경고가 없다. 그래서 검사 25의 기다림은 `\[New\]|Press ENTER`
+   그대로다. `the screen took about` 줄도 없다 — 기다림이 2초 안에 맞았다.
+9. 측정을 보고 낡은 주석 둘을 고쳤다. 검사 30의 "(커서가 0,0이나 맨 아래 줄)" → `0,VIM_COL`.
+   검사 31의 "검사 25의 [New File]에 곧바로 걸린다" → 지금은 25가 `[New]`라서 안 맞지만
+   `nocompatible`이 빠지면 다시 걸린다는 문장.
+
+10. Task 6의 mutation 셋(lead, 2026-10-04). 사본을 `-v`로 덮었고 `diff`가 각각 두 줄 · 한 줄 · 한 줄이었다.
+    셋 다 검사 25에서, 기대한 문구로 빨개졌다.
+
+    | mutation | 시간 | `FAIL` 줄 |
+    |---|---|---|
+    | (a) `number` · `relativenumber` 없음 | 1분 45.88초 | `vim started: the cursor line never matched /vt=block drawn=block row=0 col=4 cols=1 /: terminal: cursor> vt=block drawn=block row=0 col=0 cols=1 ink=0 box=0x0` |
+    | (b) `set nosuchoption` 한 줄 | 1분 25.56초 | `vim showed an error when it started: E518: Unknown option: nosuchoption` |
+    | (c) `set nocompatible` 없음 | 1분 43.43초 | `vim said [New File], not [New]: the system vimrc did not turn off compatible` |
+
+    (a)는 기다림이 15초를 다 쓴 뒤 마지막 커서 줄이 `col=0`인 것을 보여 주고, (c)는 `[New]`가
+    `nocompatible`의 증거라는 확정 2의 셈이 게스트에서도 맞는다는 것을 보여 준다.
+11. 루트 게이트(lead, 2026-10-04). 18체인 × 3에서 17체인이 3/3을 통과하고 `service`(CT-M2)가 3회차에서
+    빨개져 59분 3.95초에 `exit=1`로 끝났다. `render`는 3/3이고 새 검사 33 · 34 · 35의 초록 줄이 회차마다
+    있다(`the system vimrc gave vim a status line` · `control: vim -u NONE shows neither …` 각 3회).
+    `skipping make`는 47회 — 18 × 3 − 1 = 53에서 `service` 3회차가 끊긴 뒤의 체인 둘(`wifi` · `pane`)
+    × 3이 빠진 수다.
+
+    `service`의 실패는 부팅 C 검사 12 — `FAIL: ssh-keyscan saw , the guest printed SHA256:xQkz…`.
+    그 회차의 시리얼 로그에서 sshd의 `Server listening`은 08:17:21, dhcpcd의 `eth0: leased
+    10.0.2.15`는 08:17:26이다. 검사가 `Server listening`만 기다리고 keyscan을 치는데 hostfwd는 게스트가
+    주소를 갖기 전에는 안 닿는다. 이 milestone이 바꾼 것(vimrc · `render/check.sh`)은 그 체인이
+    읽지 않는다 — 체인 자체의 경합이고 `docs/guides/lessons.md` "이월 숙제"에 고칠 자리와 함께
+    적었다. 그래서 루트 게이트를 다시 돌리지 않고 `service` 체인만 따로 세 번 연속 돌렸다 —
+    1분 10.93초 · 1분 12.86초 · 1분 9.93초, 셋 다 `SV chain PASS`, `FAIL` 0줄.

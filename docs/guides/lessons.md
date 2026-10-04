@@ -937,6 +937,15 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
       있든 없든 0.3초 안팎이고(각 3회, 259~377ms) 한도는 `ConnectTimeout=5`다. 한 번뿐이라
       한도를 안 고쳤다. 또 나면 그 회차의 시리얼 로그에서 sshd가 `Server listening` 뒤에
       무엇을 했는지부터 본다.
+- [ ] service 체인 부팅 C의 검사 12(`ssh-keyscan`)가 한 번 빈 값으로 죽었다(2026-10-04 GE-M1
+      루트 게이트, CT-M2 3/3회차 — `FAIL: ssh-keyscan saw , the guest printed SHA256:…`). 그
+      회차의 시리얼 로그에서 `Server listening`은 08:17:21, dhcpcd의 `eth0: leased 10.0.2.15`는
+      08:17:26이었다. 검사가 `Server listening`만 기다리고 바로 keyscan을 치는데, hostfwd는
+      게스트가 그 주소를 갖기 전에는 안 닿는다. 그래서 sshd가 임대보다 5초 이상 앞서면 빈
+      값이다 — 코드와 무관한 체인의 경합이다. 고치는 자리는 `service/check.sh` 검사 12 앞에
+      `wait_for_log "eth0: leased"`(부팅 D의 ssh 제어 연결에도 같은 기다림이 맞다 — 위 항목의
+      banner exchange 타임아웃도 같은 경합일 수 있다). 그날은 `service` 체인만 따로 세 번 돌려
+      3/3을 봤다(GE-M1 plan 실측 11).
 - [ ] firmware 96MB가 게스트 RAM에 늘 있다(WL 위험 5). 게이트의 512MB에서 `MemAvailable`
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
@@ -1141,17 +1150,20 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   배칭) · `copy_value`·`scroll_field`(서로 다른 줄을 본다) · `last_frame` ·
   `screen_count`. 검사 16·17·18이 검사 15가 끝난 자리를 이어받고 검사 20은
   검사 19의 자리를 이어받는다 — 순서를 바꾸면 판정이 무너진다.
-- `render/check.sh` — 검사 서른둘. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
+- `render/check.sh` — 검사 서른다섯. 검사 20~24(CU-M0)가 화면을 지우며 커서 모양을
   bar · underline · bar로 바꿨다가 마지막에 `\033[0 q`로 block을 되돌린다 — 이 뒤에 검사를
   더하는 사람이 bar를 물려받지 않게 하려는 것이고, 그 순서를 바꾸면 뒤 검사가 반전 셀을
   못 센다. 이 체인의 `last_frame`은 `copy/check.sh`의 것과 끝이 다르다 — 파일 끝이 아니라
   마지막 `cursor>` 줄에서 자른다. 렌더 도중에 읽으면 `style>`가 덜 찍힌 프레임이 "반전
   셀 0"으로 보이고, bar 검사가 0을 기대하므로 그때 조용히 초록이 되기 때문이다.
   검사 25~31(CU-M1)이 게스트 vim을 띄워 `i` · Esc · `R` ·
-  Esc · `:q!`의 모양을 보고, `vim -u NONE`이 대조군이다. 검사 32는 printf로 1049 안에서
+  Esc · `:q!`의 모양을 보고, `vim -u NONE`이 대조군이다. GE-M1 뒤로 vim 커서는 줄
+  번호 칸 때문에 0행 4열(`VIM_COL`)이고 새 파일 메시지는 `[New]`다. 검사 33~35가 상태 줄과
+  `-- INSERT --`로 시스템 vimrc가 읽혔다는 것을, `vim -u NONE`에서 둘 다 없는 것을 본다.
+  검사 32는 printf로 1049 안에서
   정한 모양이 안 새는 것을 본다. 검사 25는 `i`를 치기 전, 기동 직후의 화면에서 `E1187` ·
   `Press ENTER` · `E숫자:`를 찾는다 — stub이 없을 때의 프롬프트는 다음 키가 닫아 버린다.
-  vim 화면은 `style>` 덤프가 언제나 잘리므로(NonText 색의 공백으로 셀이 6,976개) vim
+  vim 화면은 `style>` 덤프가 언제나 잘리므로(NonText 색의 공백으로 셀이 6,980개, GE-M1 실측) vim
   검사는 "잘리지 않았다" 대신 "덤프가 커서 칸을 지났다"(`style_covers`)를 본다.
 - `tools/check.sh` — 검사 열여섯(UT·SM). 바이너리 목록은
   `kernel/guest_tools.sh` 한 파일에 있고 `make_initrd.sh`와 이 체인이 같은
@@ -1187,12 +1199,15 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   나오고 실패가 아니다.
 - `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의
   `gzip -6`을 `-9`로 되돌리지 말 것. 그 뒤의 마지막 줄이 무선 firmware cpio를 이어 붙인다.
-- `kernel/vim/` — 게스트 vim의 시스템 vimrc(`vimrc` → `/etc/vim/vimrc`, 커서 세 줄)와
+- `kernel/vim/` — 게스트 vim의 시스템 vimrc(`vimrc` →
+  `/etc/vim/vimrc`, 커서 세 줄과 GE-M1의 모던 설정 — 첫 줄이 `set nocompatible`이다)와
   stub(`defaults.vim` → `/usr/share/vim/vim91/defaults.vim`, 주석뿐). `make_initrd.sh`가
   `install -m 0644`로 넣는다(CU-M1). stub을 지우면 vim이 뜰 때마다 `E1187`과
   `Press ENTER`를 띄운다. 경로의 `vim91`은 vim 판에 묶여 있어서 Debian이 vim을 올리면
   stub이 안 읽히고 `render` 검사 25가 빨개진다. 두 파일의 주석은 게스트에서 사람이 여는
-  것이라 영어 ASCII다.
+  것이라 영어 ASCII다. 런타임이 없으므로 그 vimrc는 컴파일된 옵션과 `:highlight`만 쓴다.
+  `syntax on`을 넣으면 vim이 뜰 때마다 `E484`와 `Press ENTER`를 띄우고 `render` 검사 25가
+  빨개진다.
 - `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 목록(데이터만)과
   그것을 받아 고르는 스크립트(WL-M1). linux-firmware · wireless-regdb 두 tarball을
   `kernel/src/firmware/`에 받고(662MB, `clean()`이 안 지운다) sha256을 확인한다. 목록과

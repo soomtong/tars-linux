@@ -21,9 +21,11 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
 - 게스트 vi(CU-M1). sysroot의 `vim-tiny`를 `vim`(바이너리 `vim.basic`)으로 바꿨고
   `libsodium.so.23` · `libgpm.so.2`가 따라온다. `kernel/guest_tools.sh`의 한 줄이
   `usr/bin/vim.basic:usr/bin/vim`이고, `vi` · `editor`는 여전히 링크다.
-- 시스템 vimrc. 저장소의 `kernel/vim/vimrc`가 initrd의 `/etc/vim/vimrc`가 된다. 내용은
-  `t_SI`(6) · `t_SR`(4) · `t_EI`(2) 세 줄이다. 사용자 vimrc가 없으면 vim은 그대로
-  `compatible`이라 커서 말고는 안 바뀐다.
+- 시스템 vimrc. 저장소의 `kernel/vim/vimrc`가 initrd의 `/etc/vim/vimrc`가 된다. CU-M1 때의
+  내용은 `t_SI`(6) · `t_SR`(4) · `t_EI`(2) 세 줄이었고, 사용자 vimrc가 없으면 vim은 그대로
+  `compatible`이라 커서 말고는 안 바뀌었다. 같은 날 GE-M1이 이 파일을 모던 설정 한 벌로
+  넓혔다 — 첫 줄이 `set nocompatible`이라 이제 사용자 vimrc 없이도 `nocompatible`로 뜨고,
+  새 파일 메시지는 `[New File]`이 아니라 `[New]`다([[project_guest_ergonomics]]).
 - stub. `kernel/vim/defaults.vim`(주석뿐)이 `/usr/share/vim/vim91/defaults.vim`이 된다.
 
 ## 다시 조사하지 말 것
@@ -41,7 +43,7 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
   안 읽히고, 그날 `render` 검사 25가 `E1187`로 빨개진다. 그때는 `make_initrd.sh`의
   경로 하나와 `tools/check.sh` 검사 1의 literal 하나를 고친다.
 - vim 화면의 `style>` 덤프는 언제나 잘린다. vim이 `~` 줄의 나머지를 NonText 색의
-  공백으로 채워서 셀이 6,976개다. 게이트는 "덤프가 커서 칸을 지났다"로 판정한다
+  공백으로 채워서 셀이 6,976개다(GE-M1의 줄 번호 칸 뒤로는 6,980개). 게이트는 "덤프가 커서 칸을 지났다"로 판정한다
   (`render/check.sh`의 `style_covers`).
 - vim은 어떤 길로 나가든 마지막에 block을 보낸다. "대체 화면의 모양이 기본 화면으로
   안 샌다"는 vim으로 판정할 수 없고, `render` 검사 32가 printf로 판정한다.
@@ -62,4 +64,5 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
 [[project_userland_tools]](vim이 게스트에 들어온 자리) ·
 [[project_terminal_rendering]](색과 커서를 `vt.zig`가 해소한다) ·
 [[project_hangul_input]](preedit 두 칸 반전은 모양보다 앞선다) ·
-[[project_workspace_panes]](포커스 없는 패널에는 커서가 없다)
+[[project_workspace_panes]](포커스 없는 패널에는 커서가 없다) ·
+[[project_guest_ergonomics]](같은 vimrc를 모던 설정으로 넓혔다)

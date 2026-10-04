@@ -643,9 +643,10 @@ style_covers() {
 # cursor_shape_check와 다른 자리가 하나 있다. vim 화면에서는 style 덤프가 언제나
 # 잘린다. vim이 `~` 줄의 나머지를 NonText 색(fg=7AA6DA)의 공백으로 채워서 커서
 # 줄 아래의 거의 모든 칸이 기본 색과 다르기 때문이다(CU-M1 실측 — 셀 6,976개 중
-# 96개만 찍힌다). 그래서 "잘리지 않았다" 대신 "잘렸더라도 덤프가 커서 칸을
-# 지났다"를 본다(style_covers). 덤프는 cells()의 순서, 곧 행 순서이므로 마지막으로
-# 찍힌 칸이 커서 칸보다 뒤면 커서 칸의 반전 여부는 빠짐없이 찍혀 있다. 커서는
+# 96개만 찍힌다. GE-M1의 줄 번호 칸과 상태 줄로 6,980개 중 96개가 됐다).
+# 그래서 "잘리지 않았다" 대신 "잘렸더라도 덤프가 커서 칸을 지났다"를
+# 본다(style_covers). 덤프는 cells()의 순서, 곧 행 순서이므로 마지막으로 찍힌
+# 칸이 커서 칸보다 뒤면 커서 칸의 반전 여부는 빠짐없이 찍혀 있다. 커서는
 # 언제나 0행이라 이 조건은 늘 맞는다. 반전 셀 수는 찍힌 칸 안에서만 센다.
 vim_shape_check() {
   local what="$1" pattern="$2" want_ink="$3" want_inv="$4" line got_ink rc
@@ -756,24 +757,33 @@ cursor_shape_check 0 block "ink=0 box=0x0" 1
 #
 # 게스트의 vim은 vim.basic이고, initrd의 시스템 vimrc(/etc/vim/vimrc) 세 줄이
 # 모드가 바뀔 때 DECSCUSR을 보내게 한다 — insert는 6(bar), replace는
-# 4(underline), normal은 2(block). 이 부팅에는 설정 디스크가 없으므로 사용자
-# vimrc도 없다. 그래서 vim은 compatible이고 showmode가 꺼져 `-- INSERT --`가
-# 안 나온다. insert에 들어갔다는 증거는 cursor>의 vt=bar다(CU-M1 plan 확정 7).
+# 4(underline), normal은 2(block).
+# 이 부팅에는 설정 디스크가 없으므로 사용자 vimrc도 없다. GE-M1 뒤로 시스템 vimrc의
+# 첫 줄이 set nocompatible이라 vim은 그래도 nocompatible로 뜬다. 그래서 showmode가
+# 켜져 `-- INSERT --`가 나오고(검사 34), 새 파일 메시지는 shortmess의 n 때문에
+# `[New File]`이 아니라 `[New]`다. insert에 들어갔다는 첫 증거는 여전히 cursor>의
+# vt=bar다.
 #
 # 명령 줄은 검사 20~24처럼 화면 지우기로 시작한다. 커서가 (0,0)에서 vim으로
 # 들어가고, vim이 1049로 그 자리를 저장했다가 나올 때 되돌리며, fish가 거기에
 # 프롬프트를 그린다. 그래서 vim을 나온 뒤의 커서는 검사 20의 CU_ROW · CU_COL이다.
 # 파일 인자를 주는 것은 인트로 화면을 피하려는 것이다 — 인트로는 글자에 색을
-# 입혀 style> 셀을 늘린다. 파일을 주면 `~` 45줄(색 하나)과 커서뿐이다.
+# 입혀 style> 셀을 늘린다. 파일을 주면 `~` 줄과 상태 줄(GE-M1의
+# laststatus=2)과 커서뿐이다.
 #
-# vim은 빈 버퍼의 (0,0)에 커서를 두지만 메시지를 쓰려고 맨 아래 줄에 갔다가
-# 돌아온다. 그래서 기다림 패턴에 row=0 col=0을 넣는다(CU-M0 실측 3과 같은 이유).
+# vim은 빈 버퍼의 (0,VIM_COL)에 커서를 두지만 메시지를 쓰려고 맨 아래 줄에 갔다가
+# 돌아온다. 그래서 기다림 패턴에 row=0 col=${VIM_COL}을 넣는다(CU-M0 실측 3과 같은 이유).
+
+# 빈 버퍼에서 vim 커서의 열(GE-M1). 시스템 vimrc의 number가 줄 번호 칸을 연다 —
+# numberwidth 기본값 4(숫자 셋 + 공백 하나)이고 relativenumber는 폭을 안 바꾼다.
+# vim -u NONE(검사 31)은 줄 번호가 없어서 이 값을 안 쓴다.
+VIM_COL=4
 
 # ── 검사 25: vim이 에러 없이 뜨고 아직 모양을 안 바꿨다 ──────────────────
 #
 # 기다림에 Press ENTER를 함께 넣는다. stub defaults.vim이 없으면 vim은 E1187과
 # Press ENTER를 대체 화면에 들어가기 전, 기본 화면에 찍고 키를 기다린다 —
-# [New File]만 기다리면 15초를 다 쓰고 "vim이 안 떴다"로 죽어서 원인을 못
+# [New]만 기다리면 15초를 다 쓰고 "vim이 안 떴다"로 죽어서 원인을 못
 # 말한다. 둘 중 하나를 기다린 뒤 에러 줄을 보면 실패 메시지가 E1187을 직접
 # 말한다. 그 판정은 i를 치기 전에 해야 한다 — 다음 키가 프롬프트를 닫고 명령으로도
 # 쓰여서, i를 치면 insert로 들어가 bar가 된다.
@@ -784,42 +794,73 @@ VIM_LOG_START="$(wc -c < "$LOG")"
 echo "=== typing printf '\\033[H\\033[2J'; vim /tmp/cu.txt ==="
 type_text "printf '\\033[H\\033[2J'; vim /tmp/cu.txt"
 type_keys ret
-if ! wait_for_screen '\[New File\]|Press ENTER'; then
-  report_failure "vim never drew its first screen (no [New File] and no Press ENTER)"
+# GE-M1: [New]는 set nocompatible의 증거이기도 하다. vimrc는 shortmess에 n을
+# 넣지 않으므로, 그 줄이 안 돌면 vim은 compatible의 shortmess=S로 [New File]을
+# 쓰고 이 기다림이 15초를 다 쓴다. 그 경우를 따로 말한다.
+if ! wait_for_screen '\[New\]|Press ENTER'; then
+  case "$(screens_since "$VIM_LOG_START")" in
+    *"[New File]"*) report_failure "vim said [New File], not [New]: the system vimrc did not turn off compatible" ;;
+  esac
+  report_failure "vim never drew its first screen (no [New] and no Press ENTER)"
 fi
 settle || true
 VIM_ERRORS="$(grep -aoE 'E1187[^|]*|Press ENTER[^|]*|E[0-9]{2,4}:[^|]*' <<<"$(screens_since "$VIM_LOG_START")" | sort -u || true)"
 if [ -n "$VIM_ERRORS" ]; then
   report_failure "vim showed an error when it started: ${VIM_ERRORS}"
 fi
-vim_shape_check "vim started" 'vt=block drawn=block row=0 col=0 cols=1 ' "ink=0 box=0x0" 1
+vim_shape_check "vim started" "vt=block drawn=block row=0 col=${VIM_COL} cols=1 " "ink=0 box=0x0" 1
+
+# ── 검사 33: 시스템 vimrc가 읽혔다 — 상태 줄 (GE-M1) ──────────────────────
+#
+# 번호가 32 뒤이고 자리는 25 뒤다. vim이 뜬 화면을 25가 이미 기다렸으므로 여기서
+# 바로 본다.
+#
+# `utf-8 unix`는 우리 statusline의 오른쪽(%{&fileencoding …} %{&fileformat})이
+# 만든다. vim의 기본 상태(laststatus=1, 창 하나)에는 상태 줄이 없다. 친 줄에도
+# vim 전의 화면에도 이 글자가 없고, screens_since로 vim을 띄운 뒤의 화면만 본다.
+# 검사 35가 vim -u NONE에서 이 글자가 없는 것을 본다 — 그것이 대조다.
+if ! grep -aq 'utf-8 unix' <<<"$(screens_since "$VIM_LOG_START")"; then
+  report_failure "vim has no status line from the system vimrc (no 'utf-8 unix' on screen): $(screens_since "$VIM_LOG_START" | tail -n 1)"
+fi
+echo "the system vimrc gave vim a status line"
 
 # ── 검사 26: i — insert는 bar ─────────────────────────────────────────────
+VIM_I_START="$(wc -c < "$LOG")"
 type_keys i
-vim_shape_check "insert (i)" 'vt=bar drawn=bar row=0 col=0 ' "ink=32 box=2x16" 0
+vim_shape_check "insert (i)" "vt=bar drawn=bar row=0 col=${VIM_COL} " "ink=32 box=2x16" 0
+
+# ── 검사 34: showmode — insert에서 -- INSERT -- (GE-M1) ───────────────────
+#
+# 번호가 33 뒤이고 자리는 26 뒤다. compatible이면 showmode가 꺼져 이 글자가 없다
+# (CU-M1 plan 확정 7). 게이트는 i 하나를 칠 뿐 이 글자를 치지 않고, i를 치기
+# 직전의 로그부터 본다. 검사 35가 vim -u NONE에서 이 글자가 없는 것을 본다.
+if ! grep -aq -- '-- INSERT --' <<<"$(screens_since "$VIM_I_START")"; then
+  report_failure "vim did not show -- INSERT -- after i (showmode is off): $(screens_since "$VIM_I_START" | tail -n 1)"
+fi
+echo "vim shows -- INSERT -- in insert mode"
 
 # ── 검사 27: Esc — normal은 block ─────────────────────────────────────────
 type_keys esc
-vim_shape_check "normal (Esc)" 'vt=block drawn=block row=0 col=0 ' "ink=0 box=0x0" 1
+vim_shape_check "normal (Esc)" "vt=block drawn=block row=0 col=${VIM_COL} " "ink=0 box=0x0" 1
 
 # ── 검사 28: R — replace는 underline ──────────────────────────────────────
 type_keys shift-r
-vim_shape_check "replace (R)" 'vt=underline drawn=underline row=0 col=0 ' "ink=16 box=8x2" 0
+vim_shape_check "replace (R)" "vt=underline drawn=underline row=0 col=${VIM_COL} " "ink=16 box=8x2" 0
 
 # ── 검사 29: Esc — 다시 block ─────────────────────────────────────────────
 type_keys esc
-vim_shape_check "normal again (Esc)" 'vt=block drawn=block row=0 col=0 ' "ink=0 box=0x0" 1
+vim_shape_check "normal again (Esc)" "vt=block drawn=block row=0 col=${VIM_COL} " "ink=0 box=0x0" 1
 
 # ── 검사 30: :q! — vim을 나오면 프롬프트 자리의 block ────────────────────
 #
-# 패턴이 CU_ROW · CU_COL이라 vim이 아직 떠 있으면(커서가 0,0이나 맨 아래 줄)
+# 패턴이 CU_ROW · CU_COL이라 vim이 아직 떠 있으면(커서가 0,VIM_COL이나 맨 아래 줄)
 # 안 맞는다. vim은 어떤 길로 나가든 마지막 DECSCUSR이 2(block)라서, 이 검사는
 # "대체 화면의 모양이 기본 화면으로 안 샌다"의 판정이 못 된다. 그것은 검사 32다.
 type_text ':q!'
 type_keys ret
 vim_shape_check "after :q!" "vt=block drawn=block row=${CU_ROW} col=${CU_COL} " "ink=0 box=0x0" 1
 case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
-  *"New File"*) report_failure "the last frame after :q! still shows vim's [New File] line" ;;
+  *"[New]"*) report_failure "the last frame after :q! still shows vim's [New] line" ;;
 esac
 
 # ── 검사 31: 탈출로 vim -u NONE — insert에 들어가도 block ─────────────────
@@ -829,8 +870,9 @@ esac
 # 검사 26의 bar가 우리 시스템 vimrc에서 왔다는 증명이다.
 #
 # 파일 이름을 다르게 한다. wait_for_screen은 로그 전체를 보므로(lessons 실측
-# 26) 같은 이름이면 검사 25의 [New File]에 곧바로 걸린다. 이름이 다르면 swap
-# 파일도 안 부딪친다.
+# 26) 같은 이름이면 검사 25의 메시지 줄에 곧바로 걸릴 수 있다. GE-M1 뒤로 25는
+# [New]라서 이 패턴(`[New File]`)과 안 맞지만, 시스템 vimrc의 nocompatible이
+# 빠지면 25도 [New File]이 되어 다시 걸린다. 이름이 다르면 swap 파일도 안 부딪친다.
 VIM_NONE_START="$(wc -c < "$LOG")"
 echo "=== typing printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt ==="
 type_text "printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt"
@@ -848,6 +890,19 @@ vim_shape_check "after vim -u NONE :q!" "vt=block drawn=block row=${CU_ROW} col=
 case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
   *"New File"*) report_failure "the last frame after vim -u NONE :q! still shows vim's [New File] line" ;;
 esac
+
+# ── 검사 35: 대조군 — vim -u NONE에는 상태 줄도 -- INSERT --도 없다 (GE-M1)
+#
+# 번호가 34 뒤이고 자리는 31 안이다. 검사 33 · 34가 본 글자가 우리 시스템 vimrc에서
+# 왔다는 증명이다 — 같은 바이너리, 같은 터미널, 같은 키(i)인데 vimrc 하나만 없다.
+NONE_SCREENS="$(screens_since "$VIM_NONE_START")"
+if grep -aq -- '-- INSERT --' <<<"$NONE_SCREENS"; then
+  report_failure "vim -u NONE showed -- INSERT --, so showmode is not coming from the system vimrc"
+fi
+if grep -aq 'utf-8 unix' <<<"$NONE_SCREENS"; then
+  report_failure "vim -u NONE showed our status line, so it is not coming from the system vimrc"
+fi
+echo "control: vim -u NONE shows neither the status line nor -- INSERT --"
 
 # 두 vim 세션 전체에 에러 줄이 없다. 검사 25는 기동 직후만 보았다.
 VIM_ERRORS="$(grep -aoE 'Press ENTER[^|]*|E[0-9]{2,4}:[^|]*' <<<"$(screens_since "$VIM_LOG_START")" | sort -u || true)"
@@ -903,4 +958,4 @@ echo "--- ink lines ---"
 grep -a 'terminal: ink>' "$LOG" | tail -n 10
 echo "--- scroll lines ---"
 grep -a 'terminal: scroll>' "$LOG" | tail -n 10
-echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for, and vim switches the cursor shape between modes"
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for, and vim switches the cursor shape between modes, and the system vimrc turns on line numbers, a status line and showmode"

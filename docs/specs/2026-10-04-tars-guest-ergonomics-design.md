@@ -1,9 +1,9 @@
 # TARS Guest Ergonomics — Design
 
 Date: 2026-10-04
-Status: 진행 중(2026-10-04) — design과 plan 둘(`docs/plans/2026-10-04-tars-guest-ergonomics-ge-m0.md` ·
-`docs/plans/2026-10-04-tars-guest-ergonomics-ge-m1.md`)을 썼고 아직 착수 전이다. 착수 전에 잰
-값은 아래 "착수 전에 실측한 것" 절에 있다.
+Status: 끝났다(2026-10-04, GE-M0 · GE-M1). plan은
+`docs/plans/2026-10-04-tars-guest-ergonomics-ge-m0.md` · `docs/plans/2026-10-04-tars-guest-ergonomics-ge-m1.md`이고
+각 끝에 실측이 있다. 착수 전에 잰 값은 아래 "착수 전에 실측한 것" 절에 있다.
 
 사용자의 요청에서 시작한다(2026-10-04). 두 가지다.
 
