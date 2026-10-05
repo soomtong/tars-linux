@@ -24,6 +24,7 @@
 - [Boot never blocks](docs/decisions/feedback_boot_never_blocks.md) — 네트워크가 꺼져 있거나 안 닿아도 부팅은 평소대로 끝난다(2026-09-15). 타임아웃 위에 `fork`를 한 겹 더 덮고, 음성 검사로 증명한다
 - [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 바깥에 정착한 영어 jargon은 번역하지 않고 원문에 조사를 붙인다(2026-10-04). 사례 둘 — seed('씨앗' 652자리)와 mutation('반사실' 356자리, counterfactual은 통계 용어라 mutation testing의 말로). 조사는 소리로 고른다(seed가 · mutation이)
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복을 3회에서 2회로(2026-10-05, PD-M2부터). 3은 관례였고 회귀는 늘 1회차가 잡았다
+- [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 컨테이너에 스크립팅 런타임을 들일 때는 python3 · lua · nodejs(bun) · ruby 한 묶음으로(2026-10-05). 지금은 안 들이고 perl로 간다
 
 ## 사용자 (user)
 
