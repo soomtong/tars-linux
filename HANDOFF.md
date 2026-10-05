@@ -12,7 +12,7 @@ lead가 `ink` 정의 하나를 고쳤다, commit `0c2e6f5`, 결정 11 · 위험 
 | `0c2e6f5` | design |
 | `8f8a030` | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
 | `8dcf6f1` | PD-M1 — `pointer.zig` 화살표 절(12 × 19, `POINTER_FILL` · `POINTER_EDGE`, `Sprite` save-under, `ink` 118) · `layout.Tree.hit` · `main.zig` 편집 열둘(보이는 조건 셋 · 움직임만 있는 회차는 restore → show → present · 휠 `WHEEL_ROWS=3` 포인터 아래 패널) · `pointer/check.sh` 검사 8~12 · `pointer_test` OK 75 · `layout_test` hit 22 · 루트 게이트 19체인 3/3(1시간 8분 41초, 마지막 3회 게이트). 구현은 Sonnet |
-| (M2 커밋) | PD-M2 — `pointer.Gesture`(idle · pressed · dragging · ignored, `Intent` 여섯) · `vt.copyEnterAt` · `copyPointTo` · `input.State.pointerMode` · `layout.clampInto` · `main.zig`의 `PointerWire.run`(else 없는 switch) · 클릭 포커스 · 첫 칸 이동에 copy mode · 뗌 = `copyYank` · 누른 패널 밖 clamp · 누른 채 휠 · `pointer/check.sh` 검사 13~18(+셋) · 호스트 검사 OK 107 · 30 · 110 · 15 · 루트 게이트 19체인 2/2(47분 46초, 첫 2회 게이트). 구현은 Opus. 사용자의 요청 1이 끝났다 |
+| `e937b92` | PD-M2 — `pointer.Gesture`(idle · pressed · dragging · ignored, `Intent` 여섯) · `vt.copyEnterAt` · `copyPointTo` · `input.State.pointerMode` · `layout.clampInto` · `main.zig`의 `PointerWire.run`(else 없는 switch) · 클릭 포커스 · 첫 칸 이동에 copy mode · 뗌 = `copyYank` · 누른 패널 밖 clamp · 누른 채 휠 · `pointer/check.sh` 검사 13~18(+셋) · 호스트 검사 OK 107 · 30 · 110 · 15 · 루트 게이트 19체인 2/2(47분 46초, 첫 2회 게이트). 구현은 Opus. 사용자의 요청 1이 끝났다 |
 
 M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inotify로 받았고 게스트 커널에 `INOTIFY_USER`가 없어 한 줄을
 켰는데, 그것이 `FSNOTIFY`를 끌어와 initramfs 풀기를 TCG에서 2.6초 → 3.8초로 늦췄고 `install` 체인 부팅 7
