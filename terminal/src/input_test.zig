@@ -1817,5 +1817,23 @@ pub fn main() !void {
     }
     std.debug.print("input_test: 키보드 fd로 온 BTN_LEFT는 아무것도 안 만든다 OK\n", .{});
 
+    // 검사 68. 포인터 경로가 읽는 수정키(PD-M4). 좌우를 합치고, 누른 동안만
+    // 서 있다. Shift는 자식이 마우스를 원해도 누름을 우리 것으로 돌린다.
+    {
+        var md: input.State = .{};
+        if (md.modifiers().shift or md.modifiers().ctrl or md.modifiers().alt) return error.ModifierAtStart;
+        try expect(&md, K.KEY_RIGHTSHIFT, 1, "");
+        if (!md.modifiers().shift) return error.RightShiftNotSeen;
+        try expect(&md, K.KEY_LEFTCTRL, 1, "");
+        try expect(&md, K.KEY_LEFTALT, 1, "");
+        const both = md.modifiers();
+        if (!both.shift or !both.ctrl or !both.alt) return error.ModifiersMissing;
+        try expect(&md, K.KEY_RIGHTSHIFT, 0, "");
+        try expect(&md, K.KEY_LEFTCTRL, 0, "");
+        try expect(&md, K.KEY_LEFTALT, 0, "");
+        if (md.modifiers().shift or md.modifiers().ctrl or md.modifiers().alt) return error.ModifierStuck;
+    }
+    std.debug.print("input_test: 포인터 경로가 읽는 수정키 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

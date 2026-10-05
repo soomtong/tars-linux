@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
-# PD 체인 — 포인터 장치(PD-M0~M3). 열아홉번째 체인.
+# PD 체인 — 포인터 장치(PD-M0~M4). 열아홉번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   QEMU가 USB 마우스를 하나 붙인 채 뜬다(-usb -device usb-mouse)
@@ -26,6 +26,9 @@ cd "$(dirname "$0")"
 #   → 설정 디스크의 tp-replay가 uinput으로 터치패드를 만들면 terminal이 터치패드로
 #     열고, 한 손가락 이동 · 탭 · 두 손가락 세로가 포인터 이동 · 클릭 · 휠이 된다
 #     (부팅 B)
+#   → 자식이 마우스 모드를 켜면 누름 · 끎 · 뗌 · 휠이 우리 선택 대신 그 자식의
+#     PTY에 보고로 간다. Shift를 누르면 우리 것이고, 대체 화면의 휠은 화살표
+#     키가 된다. vim이 시스템 vimrc의 mouse=a로 클릭을 받는다(PD-M4, 부팅 B)
 #
 # 부팅이 둘이다. 부팅 A(PD-M0~M2)는 USB 마우스 하나만 보도록 커널 cmdline에
 # i8042.noaux를 준다 — PD-M3부터 커널이 PS/2 마우스를 알아서, 그것이 없으면
@@ -51,6 +54,10 @@ cd "$(dirname "$0")"
 #                들어갔는지, 포커스가 어디인지(검사 13~18). copy> · clip>은
 #                키보드의 copy mode가 찍는 것과 같은 줄이라 copy 체인의 수법을
 #                그대로 쓴다.
+#   report 줄과 프로브의 화면 줄 — terminal이 자식에게 보낸 바이트(report 줄,
+#                cat -v 모양)와 자식이 실제로 읽은 바이트(설정 디스크의
+#                /config/pd/mouse가 cat -v로 찍은 화면 줄)를 같은 글자로 본다
+#                (검사 26~32).
 #
 # HMP의 대상 마우스. info mice의 별표가 HMP mouse_move가 가는 장치다.
 # device_add로 꽂은 마우스가 대상이 되고 device_del 뒤에는 원래 마우스로
@@ -161,7 +168,10 @@ report_failure() {
     "terminal: pointer> uevent failed" \
     "terminal: pointer> scan failed" \
     "kind=touchpad" \
-    "tp-replay:"; do
+    "tp-replay:" \
+    "terminal: pointer> report" \
+    "pd-mouse-ready" \
+    "pd-mouse-got"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
     else
@@ -1134,6 +1144,32 @@ if [ -c /dev/uinput ]; then ok=$((ok + 1)); else echo "pd-drv-no /dev/uinput"; f
 echo "pd-drivers ${ok}/${n}"
 DRIVERS
 chmod 0755 "$SEED/pd/drivers"
+# PD-M4의 프로브. 마우스 모드를 켜고, terminal이 보낸 보고를 정해진 바이트 수만큼
+# 읽어 cat -v로 찍는다. 이스케이프 바이트는 게이트가 타이핑으로 만들 수 없어서
+# (lessons 실측 53, tq-probe와 같은 이유) 파일로 싣는다.
+#
+#   /config/pd/mouse <표지> <바이트 수> <초> <DECSET 번호…>
+#
+# 표지는 화면 줄을 이 호출의 것으로 가른다 — 친 명령줄(pd/mouse)과 판정 글자
+# (pd-mouse-ready-표지 · pd-mouse-got-표지)가 안 겹친다(project_gate_screen_echo).
+# 켜기 · 읽기 · 끄기가 한 프로세스 안에 있어야 한다. 보고는 pty의 입력이고,
+# 프롬프트로 돌아온 셸이 먼저 읽으면 그 셸의 키가 된다(tq-probe와 같다).
+# read -N은 정해진 글자 수를 읽고 -s가 에코를 끈다. 시간이 다 되면 그때까지
+# 읽은 것을 남긴다 — 보고가 없으면 0이다. 게스트에 stty가 없어서 bash의 read가
+# 터미널을 raw로 바꾸는 유일한 길이다.
+cat > "$SEED/pd/mouse" <<'MOUSE'
+#!/usr/bin/bash
+tag=$1 len=$2 secs=$3
+shift 3
+for m in "$@"; do printf '\033[?%sh' "$m"; done
+echo "pd-mouse-ready-${tag}"
+IFS= read -rs -N "$len" -t "$secs" got
+for m in "$@"; do printf '\033[?%sl' "$m"; done
+printf 'pd-mouse-got-%s %d [%s]\n' "$tag" "${#got}" "$(printf '%s' "$got" | cat -v)"
+MOUSE
+chmod 0755 "$SEED/pd/mouse"
+# vim이 클릭을 받는지 볼 파일(검사 31). 서른 줄이라 한 화면에 다 든다.
+for i in $(seq -w 1 30); do echo "pd-line-${i}"; done > "$SEED/pd/lines"
 DISK_B="${REPO_ROOT}/out/pd-touchpad.img"
 rm -f "$DISK_B"
 truncate -s 16M "$DISK_B"
@@ -1325,6 +1361,288 @@ wait_for_screen '\| pd-tp-gone \|' ||
   report_failure "the shell did not answer after the touchpad went away"
 echo "closed: $(grep -a 'terminal: pointer> close ' "$LOG" | tail -n 1 | tr -d '\r')"
 
+# ══ PD-M4: 마우스 보고 (부팅 B) ══════════════════════════════════════════
+#
+# 자식이 마우스 모드를 켜면 누름 · 끎 · 뗌 · 휠이 그 자식의 PTY에 보고로 간다
+# (design 결정 12). 판정은 둘을 같은 글자로 맞춘다 — terminal이 보낸 것(report
+# 줄)과 자식이 읽은 것(/config/pd/mouse가 찍은 화면 줄). report 줄만 보면 PTY에
+# 안 쓴 고장이 안 보이고, 화면 줄만 보면 어느 패널에 보냈는지가 안 보인다.
+#
+# 포인터는 PS/2 마우스로 움직인다. 부팅 B의 HMP 대상은 그것 하나이고 이동이
+# 1:1이다(PD-M4 plan 확정 7). 터치패드가 닫힌 뒤라 at 줄의 자리가 그대로 이어진다.
+#
+# 누르는 칸은 1행 10열이고 끄는 칸은 1행 12열이다. 칸의 가운데 픽셀(+3, +7)을
+# 쓴다 — 칸 경계는 vt_test 검사 103이 본다. 1행에 무엇이 있든 상관없다. 보고는
+# 글자를 안 보고, 프로브가 도는 동안 셸은 그 줄을 안 다시 그린다.
+
+# ── PD-M4의 도구 ──────────────────────────────────────────────────────
+
+# report 줄의 개수와 마지막 줄.
+report_count() {
+  grep -ac 'terminal: pointer> report ' "$LOG" || true
+}
+
+last_report() {
+  grep -a 'terminal: pointer> report ' "$LOG" | tail -n 1 | tr -d '\r'
+}
+
+# 글자열 하나를 sendkey 이름으로 바꿔 치고 Enter를 친다. 영소문자 · 숫자 ·
+# 공백 · / · - 만 쓴다.
+type_cmd() {
+  local s="$1" keys=() ch i
+  for ((i = 0; i < ${#s}; i++)); do
+    ch="${s:i:1}"
+    case "$ch" in
+      ' ') keys+=(spc) ;;
+      /) keys+=(slash) ;;
+      -) keys+=(minus) ;;
+      *) keys+=("$ch") ;;
+    esac
+  done
+  type_keys "${keys[@]}" ret
+}
+
+# 화면 줄에 글자 그대로($1)가 나타날 때까지 기다린다. 15초. 프로브의 줄에는
+# ERE의 특수 문자(^ [ ])가 가득해서 wait_for_screen에 못 넘긴다.
+wait_for_screen_text() {
+  local text="$1" i
+  for i in $(seq 1 150); do
+    if grep -aqF -- "$text" <<<"$(grep -a 'terminal: screen>' "$LOG")"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 화면 줄 중 N번째 뒤의 것에 패턴(ERE)이 나타날 때까지 기다린다. 15초.
+# wait_for_screen은 로그 전체를 보므로 옛 화면에 바로 맞는 자리에 쓴다.
+wait_for_new_screen() {
+  local n="$1" pattern="$2" i
+  for i in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(grep -a 'terminal: screen>' "$LOG" | tail -n "+$((n + 1))")"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 프로브를 띄우고 모드가 켜질 때까지 기다린다. 인자는 표지 · 바이트 수 · 초 ·
+# DECSET 번호들이다. ready 줄은 모드를 켠 printf 뒤에 찍히므로, 그 줄을 그린
+# 프레임이 보이면 terminal은 모드 바이트를 이미 먹었다.
+probe_start() {
+  type_cmd "/config/pd/mouse $*"
+  wait_for_screen_text "pd-mouse-ready-$1"
+}
+
+# 프로브가 찍은 결과 줄(마지막 screen>에서 pd-mouse-got-표지로 시작하는 행).
+# 나올 때까지 기다린 뒤 그 행을 낸다. 20초 — 프로브가 시간이 다 되어 끝나는
+# 검사(29)가 있다.
+probe_result() {
+  local tag="$1" i
+  for i in $(seq 1 200); do
+    if grep -aqF -- "pd-mouse-got-${tag} " <<<"$(grep -a 'terminal: screen>' "$LOG")"; then break; fi
+    sleep 0.1
+  done
+  grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' |
+    TAG="$tag" perl -ne 's/^.*?terminal: screen> //; chomp;
+      for my $r (split / \| /, $_, -1) { print "$r\n" if index($r, "pd-mouse-got-$ENV{TAG} ") == 0 }' | tail -n 1
+}
+
+# HMP mouse_button 하나를 보내고 report 줄이 하나 늘 때까지 기다린다.
+report_button() {
+  local n
+  n="$(report_count)"
+  hmp "mouse_button $1"
+  wait_for_count report_count '' "$((n + 1))"
+}
+
+CX=$(( $(cell_x 10) + 3 ))
+CY=$(( $(cell_y 1) + 7 ))
+DX=$(( $(cell_x 12) + 3 ))
+
+# ── 검사 26: 모드 1000은 누름과 뗌만 받는다 ───────────────────────────
+#
+# 1000 · 1006(SGR)을 켜고 10열을 눌러 12열까지 끌어 뗀다. 자식이 받는 것은
+# 누름(ESC[<0;11;2M)과 뗌(ESC[<0;13;2m)이고 끎은 없다 — 좌표는 1부터 세고 뗌은
+# 소문자 m이다. 우리 제스처는 안 돈다(press 줄 · copy> enter가 안 는다).
+# 모드를 무시하고 언제나 우리 것으로 다루면(mutation 1) report 줄이 안 나온다.
+echo "=== boot B: mode 1000 gets the press and the release, not the drag ==="
+move_to "$CX" "$CY" || report_failure "the PS/2 mouse did not bring the pointer to ${CX},${CY} (last at: '$(last_at)')"
+PRESSES_BEFORE="$(pointer_count 'press ')"
+ENTERS_BEFORE="$(copy_lines enter)"
+REPORTS_BEFORE="$(report_count)"
+probe_start a 20 8 1000 1006 || report_failure "the probe never printed pd-mouse-ready-a"
+report_button 1 || report_failure "a press in a pane with mode 1000 printed no 'pointer> report' line (last press: '$(last_press)')"
+[ "$(last_report)" = 'terminal: pointer> report leaf=0 n=1 text=^[[<0;11;2M' ] ||
+  report_failure "the press was reported as '$(last_report)', expected 'report leaf=0 n=1 text=^[[<0;11;2M'"
+move_to "$DX" "$CY" || report_failure "the drag did not reach ${DX},${CY} (last at: '$(last_at)')"
+report_button 0 || report_failure "the release in mode 1000 printed no 'pointer> report' line"
+[ "$(last_report)" = 'terminal: pointer> report leaf=0 n=1 text=^[[<0;13;2m' ] ||
+  report_failure "the release was reported as '$(last_report)', expected 'report leaf=0 n=1 text=^[[<0;13;2m'"
+GOT="$(probe_result a)"
+[ "$GOT" = 'pd-mouse-got-a 20 [^[[<0;11;2M^[[<0;13;2m]' ] ||
+  report_failure "the child read '${GOT}', expected 'pd-mouse-got-a 20 [^[[<0;11;2M^[[<0;13;2m]'"
+[ "$(report_count)" -eq "$((REPORTS_BEFORE + 2))" ] ||
+  report_failure "mode 1000 reported more than the press and the release ($((REPORTS_BEFORE)) -> $(report_count), last '$(last_report)')"
+[ "$(pointer_count 'press ')" -eq "$PRESSES_BEFORE" ] && [ "$(copy_lines enter)" -eq "$ENTERS_BEFORE" ] ||
+  report_failure "a reported press also ran our gesture (press lines ${PRESSES_BEFORE} -> $(pointer_count 'press '), copy> enter ${ENTERS_BEFORE} -> $(copy_lines enter))"
+echo "1000: ${GOT}"
+
+# ── 검사 27: 모드 1002는 누른 채 움직임도 받는다 ───────────────────────
+#
+# 같은 손동작에 끎 하나가 더해진다. 끎은 버튼 0에 32를 더한 32다. 끄는 보고에
+# 버튼을 안 실으면 인코더가 1002에서 그것을 버린다.
+echo "=== boot B: mode 1002 also gets the drag ==="
+move_to "$CX" "$CY" || report_failure "the pointer did not come back to ${CX},${CY} (last at: '$(last_at)')"
+probe_start b 31 8 1002 1006 || report_failure "the probe never printed pd-mouse-ready-b"
+report_button 1 || report_failure "a press in mode 1002 printed no 'pointer> report' line"
+N="$(report_count)"
+move_to "$DX" "$CY" || report_failure "the drag did not reach ${DX},${CY} (last at: '$(last_at)')"
+wait_for_count report_count '' "$((N + 1))" ||
+  report_failure "a drag in mode 1002 printed no 'pointer> report' line"
+[ "$(last_report)" = 'terminal: pointer> report leaf=0 n=1 text=^[[<32;13;2M' ] ||
+  report_failure "the drag was reported as '$(last_report)', expected 'report leaf=0 n=1 text=^[[<32;13;2M'"
+report_button 0 || report_failure "the release in mode 1002 printed no 'pointer> report' line"
+GOT="$(probe_result b)"
+[ "$GOT" = 'pd-mouse-got-b 31 [^[[<0;11;2M^[[<32;13;2M^[[<0;13;2m]' ] ||
+  report_failure "the child read '${GOT}', expected 'pd-mouse-got-b 31 [^[[<0;11;2M^[[<32;13;2M^[[<0;13;2m]'"
+echo "1002: ${GOT}"
+
+# ── 검사 28: 마우스를 원하는 패널의 휠은 버튼 4 · 5다 ─────────────────
+#
+# 포인터는 12열에 있다. 위로 한 눈금 · 아래로 한 눈금이 64 · 65이고, 우리
+# 스크롤백은 안 움직인다. scroll> 줄은 프로브의 출력으로도 찍히므로 줄 수가 아니라
+# 값을 본다 — 이 검사 동안 찍힌 scroll> 줄이 전부 바닥(offset = total - len)이다.
+echo "=== boot B: the wheel over a pane in mode 1000 is buttons 4 and 5 ==="
+SCROLLS_N="$(grep -ac 'terminal: scroll>' "$LOG" || true)"
+probe_start c 22 8 1000 1006 || report_failure "the probe never printed pd-mouse-ready-c"
+N="$(report_count)"
+hmp "mouse_move 0 0 1"
+wait_for_count report_count '' "$((N + 1))" || report_failure "a wheel notch up in mode 1000 printed no 'pointer> report' line"
+hmp "mouse_move 0 0 -1"
+wait_for_count report_count '' "$((N + 2))" || report_failure "a wheel notch down in mode 1000 printed no 'pointer> report' line"
+GOT="$(probe_result c)"
+[ "$GOT" = 'pd-mouse-got-c 22 [^[[<64;13;2M^[[<65;13;2M]' ] ||
+  report_failure "the child read '${GOT}', expected 'pd-mouse-got-c 22 [^[[<64;13;2M^[[<65;13;2M]'"
+LIFTED="$(grep -a 'terminal: scroll>' "$LOG" | tail -n "+$((SCROLLS_N + 1))" | tr -d '\r' |
+  perl -ne 'print if /total=(\d+) offset=(\d+) len=(\d+)/ and $1 - $3 != $2')"
+[ -z "$LIFTED" ] ||
+  report_failure "a reported wheel also moved our scrollback: $(sed -n 1p <<<"$LIFTED")"
+echo "wheel: ${GOT}"
+
+# ── 검사 29: Shift를 누르면 자식이 원해도 우리 선택이다 ──────────────────
+#
+# 프로브의 ready 줄(pd-mouse-ready-s)의 0열에서 7열까지 Shift를 누른 채 끈다.
+# 우리 제스처가 돌아 pd-mouse 여덟 글자가 클립보드에 들어가고, 자식은 아무것도
+# 못 받는다 — 프로브가 6초를 기다려 0을 찍는다. Shift를 안 보면(mutation 2)
+# 자식이 그 누름을 받고 클립보드는 그대로다.
+#
+# HMP sendkey의 마지막 수는 누르고 있는 시간(ms)이다. QEMU는 키를 뗄 때까지 다음
+# 키를 큐에 두지만 마우스는 큐를 안 거친다 — 그 3초 안에 누르고 끌고 뗀다. 뒤의
+# type_keys는 그 큐 뒤에 서므로 Shift가 떨어진 다음에 간다.
+echo "=== boot B: Shift takes the drag back from a child that wants the mouse ==="
+CLIPS_BEFORE="$(clip_lines)"
+REPORTS_BEFORE="$(report_count)"
+probe_start s 10 6 1000 1006 || report_failure "the probe never printed pd-mouse-ready-s"
+ROW="$(screen_row pd-mouse-ready-s)"
+[ "$ROW" -ge 0 ] || report_failure "no screen row is exactly pd-mouse-ready-s"
+move_to "$(( $(cell_x 0) + 3 ))" "$(( $(cell_y "$ROW") + 7 ))" ||
+  report_failure "the pointer did not reach the ready line (last at: '$(last_at)')"
+echo "sendkey shift 3000" >&3
+sleep 0.3
+button_down || report_failure "a Shift-press in mode 1000 printed no 'pointer> press' line (last report: '$(last_report)')"
+[ "$(last_press)" = "terminal: pointer> press leaf=0 row=${ROW} col=0" ] ||
+  report_failure "the Shift-press printed '$(last_press)', expected 'press leaf=0 row=${ROW} col=0'"
+move_to "$(( $(cell_x 7) + 3 ))" "$(( $(cell_y "$ROW") + 7 ))" ||
+  report_failure "the Shift-drag did not reach column 7 (last at: '$(last_at)')"
+button_up || report_failure "the Shift-release printed no 'pointer> release' line"
+wait_for_count clip_lines '' "$((CLIPS_BEFORE + 1))" ||
+  report_failure "a Shift-drag over a child in mode 1000 put nothing on the clipboard (last report: '$(last_report)')"
+[ "$(last_clip)" = "terminal: clip> len=8 text=pd-mouse" ] ||
+  report_failure "the Shift-drag copied '$(last_clip)', expected 'clip> len=8 text=pd-mouse'"
+GOT="$(probe_result s)"
+[ "$GOT" = 'pd-mouse-got-s 0 []' ] ||
+  report_failure "the child read '${GOT}' during a Shift-drag, expected 'pd-mouse-got-s 0 []'"
+[ "$(report_count)" -eq "$REPORTS_BEFORE" ] ||
+  report_failure "a Shift-drag was reported to the child: '$(last_report)'"
+echo "shift: $(last_clip), ${GOT}"
+
+# ── 검사 30: 대체 화면의 휠은 화살표 키다(모드 1007) ────────────────────
+#
+# 프로브가 1049로 대체 화면에 들어간다. 마우스 모드는 안 켠다. 1007은 기본이
+# 켜짐이라 휠 위로 한 눈금이 ESC[A 세 번이다(WHEEL_ROWS). report 줄은 n=3으로
+# 한 줄이다. 1007을 안 보면(mutation 4) 우리 스크롤이 되고 대체 화면에는
+# 스크롤백이 없어 아무 일도 없다 — 프로브는 0을 찍는다.
+echo "=== boot B: the wheel on the alternate screen is arrow keys ==="
+probe_start k 9 8 1049 || report_failure "the probe never printed pd-mouse-ready-k"
+N="$(report_count)"
+hmp "mouse_move 0 0 1"
+wait_for_count report_count '' "$((N + 1))" ||
+  report_failure "a wheel notch on the alternate screen printed no 'pointer> report' line"
+[ "$(last_report)" = 'terminal: pointer> report leaf=0 n=3 text=^[[A' ] ||
+  report_failure "the wheel on the alternate screen was sent as '$(last_report)', expected 'report leaf=0 n=3 text=^[[A'"
+GOT="$(probe_result k)"
+[ "$GOT" = 'pd-mouse-got-k 9 [^[[A^[[A^[[A]' ] ||
+  report_failure "the child read '${GOT}', expected 'pd-mouse-got-k 9 [^[[A^[[A^[[A]'"
+echo "alternate: ${GOT}"
+
+# ── 검사 31: vim이 시스템 vimrc의 mouse=a로 클릭을 받는다 ───────────────
+#
+# 서른 줄 파일을 열고 4행 9열을 누른다. 줄 번호 칸이 넷(numberwidth)이라 9열은
+# 글자로 5열이고 4행은 5번째 줄이다 — vim의 상태 줄 위치가 1:1에서 5:6이 된다.
+# 이 검사가 vimrc의 두 줄(mouse=a · ttymouse=sgr)과 실제 프로그램을 본다.
+# vim이 무슨 모드를 켜는지(1000이냐 1002냐)는 안 본다. report 줄의 SGR 모양만
+# 본다.
+echo "=== boot B: vim takes a click through mouse=a ==="
+type_cmd "vim /config/pd/lines"
+wait_for_screen 'unix  1:1 ' || report_failure "vim did not open /config/pd/lines at 1:1"
+move_to "$(( $(cell_x 9) + 3 ))" "$(( $(cell_y 4) + 7 ))" ||
+  report_failure "the pointer did not reach row 4 column 9 (last at: '$(last_at)')"
+report_button 1 || report_failure "vim did not turn on mouse reporting (a press printed no 'pointer> report' line, last press: '$(last_press)')"
+[ "$(last_report)" = 'terminal: pointer> report leaf=0 n=1 text=^[[<0;10;5M' ] ||
+  report_failure "the press in vim was reported as '$(last_report)', expected 'report leaf=0 n=1 text=^[[<0;10;5M' (ttymouse=sgr)"
+report_button 0 || report_failure "the release in vim printed no 'pointer> report' line"
+wait_for_screen 'unix  5:6 ' || report_failure "vim did not move its cursor to 5:6 after the click"
+# vim이 끝나기 전에 친 글자는 vim이 먹는다. 주 화면이 돌아와 vim을 친 명령줄이
+# 다시 보이면 끝난 것이다 — 그 줄은 vim이 도는 동안(대체 화면)에는 안 보인다.
+SCREENS_N="$(screen_lines)"
+type_keys shift-semicolon q ret
+wait_for_new_screen "$SCREENS_N" '\| root@\(none\) ~# vim /config/pd/lines \|' ||
+  report_failure "vim did not quit back to the shell after :q"
+echo "vim: clicked to 5:6"
+
+# ── 검사 32: 포커스가 아닌 패널을 누르면 포커스가 옮겨 간 뒤 그 패널이 받는다 ──
+#
+# Cmd+D로 가르면 포커스가 새 패널(1)에 있다. 거기서 프로브를 띄우고 Cmd+[로
+# 포커스를 0에 돌린 뒤, 1의 1행 2열(격자 80열)을 누르고 뗀다. 포커스가 1로
+# 옮겨 가고(tmux의 기본과 같다), 보고의 좌표는 그 패널 안의 칸 3;2다. 격자의
+# 원점으로 재면(mutation 3) 80열이 77열 패널의 오른쪽 밖이 되고, 인코더가 밖에서의
+# 누름을 버려 report 줄이 안 나온다.
+echo "=== boot B: a press on another pane moves the focus, then reports to it ==="
+SCREENS_N="$(screen_lines)"
+type_keys meta_l-d
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 ' ||
+  report_failure "Cmd+D did not give 'panes=2 focus=1 rect=78,0 77x47' (last pane> line: '$(last_pane_line)')"
+# 새 셸의 프롬프트가 그 패널의 첫 줄에 보일 때까지. 그 전에 친 글자는 fish가
+# 시작하며 버릴 수 있다. wait_for_screen은 로그 전체를 보므로 옛 프롬프트에
+# 맞는다 — Cmd+D 뒤의 screen> 줄만 본다.
+wait_for_new_screen "$SCREENS_N" 'terminal: screen> root@\(none\) ~#' ||
+  report_failure "the new pane never showed a prompt on its first row"
+probe_start p 18 10 1000 1006 || report_failure "the probe never printed pd-mouse-ready-p in the right pane"
+type_keys meta_l-bracket_left
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=0 rect=0,0 77x47 ' ||
+  report_failure "Cmd+[ did not move the focus to the left pane (last pane> line: '$(last_pane_line)')"
+move_to "$(( $(cell_x 80) + 3 ))" "$CY" ||
+  report_failure "the pointer did not reach the right pane's row 1 column 2 (last at: '$(last_at)')"
+report_button 1 || report_failure "a press on the unfocused pane with mode 1000 printed no 'pointer> report' line"
+[ "$(last_report)" = 'terminal: pointer> report leaf=1 n=1 text=^[[<0;3;2M' ] ||
+  report_failure "the press was reported as '$(last_report)', expected 'report leaf=1 n=1 text=^[[<0;3;2M' (cells count from the pane, not the grid)"
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 ' ||
+  report_failure "the press did not move the focus to the right pane (last pane> line: '$(last_pane_line)')"
+report_button 0 || report_failure "the release on the right pane printed no 'pointer> report' line"
+GOT="$(probe_result p)"
+[ "$GOT" = 'pd-mouse-got-p 18 [^[[<0;3;2M^[[<0;3;2m]' ] ||
+  report_failure "the child in the right pane read '${GOT}', expected 'pd-mouse-got-p 18 [^[[<0;3;2M^[[<0;3;2m]'"
+echo "panes: ${GOT}, $(last_pane_line)"
+
 if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
   report_failure "the boot B serial log contains NUL bytes"
 fi
@@ -1332,4 +1650,4 @@ fi
 echo "boot B pointer> lines:"
 grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
 rm -f "$LOG_A" "$LOG"
-echo "PD-M3 check PASS"
+echo "PD-M4 check PASS"

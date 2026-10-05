@@ -110,8 +110,17 @@ set belloff=all
 " New splits open below and to the right.
 set splitbelow
 set splitright
-" Our terminal has no mouse reporting and ignores the window title.
-set mouse=
+" Our terminal reports clicks, drags and the wheel to a program that asks
+" (PD design decision 12), so vim takes the mouse in every mode: a click moves
+" the cursor, a drag makes a Visual selection, the wheel scrolls. Hold Shift to
+" select text for the terminal's own clipboard instead. To give the mouse back
+" to the terminal, put this in /.vimrc:
+"   set mouse=
+set mouse=a
+" SGR reports have no column limit. The older xterm format stops at column 223,
+" which a wide laptop screen passes.
+set ttymouse=sgr
+" Our terminal ignores the window title.
 set notitle
 
 " ---- Files -------------------------------------------------------------------

@@ -427,6 +427,11 @@ pub const Screen = struct {
     /// 언젠가 갈려서 반전과 띠가 함께 그려진다.
     shell_cursor: ?CursorMark = null,
 
+    /// 마지막으로 보고한 칸(PD-M4). ghostty의 인코더가 움직임 보고를 칸이
+    /// 바뀔 때만 내려고 들고 다니는 값이다(`MouseEncodeOptions.last_cell`).
+    /// 패널마다 따로다 — 보고가 가는 자식이 패널마다 따로이기 때문이다.
+    mouse_last: ?ghostty_vt.Coordinate = null,
+
     pub fn init(
         io: std.Io,
         alloc: std.mem.Allocator,
@@ -2039,6 +2044,96 @@ pub const Screen = struct {
     pub fn pasteParts(self: *const Screen, text: []const u8) [3][]const u8 {
         if (!self.term.modes.get(.bracketed_paste)) return .{ "", text, "" };
         return .{ "\x1b[200~", text, "\x1b[201~" };
+    }
+
+    /// 마우스 사건의 종류 · 버튼 · 수정키(PD-M4). 라이브러리의 타입을 그대로
+    /// 넘기지 않고 우리 것으로 둔다 — `main.zig`가 `ghostty-vt`의 타입을 배우지
+    /// 않게 하는 규율이다(TR design 결정 1, `Scrollbar`와 같다).
+    pub const MouseAction = enum { press, release, motion };
+    pub const MouseButton = enum { left, middle, right, wheel_up, wheel_down };
+    /// Shift는 없다. Shift를 누른 사건은 보고하지 않고 우리가 갖는다(PD design
+    /// 결정 12).
+    pub const MouseMods = struct { alt: bool = false, ctrl: bool = false };
+
+    /// 자식이 마우스 보고를 켰는가 — 모드 9 · 1000 · 1002 · 1003 중 하나(PD-M4).
+    ///
+    /// 형식(1005 · 1006 · 1015 · 1016)은 여기서 안 본다. 형식만 켜고 모드를
+    /// 안 켠 자식은 보고를 원하지 않는다. 모드는 `Terminal` 하나에 하나라
+    /// 대체 화면에서 켠 것과 주 화면에서 켠 것이 같은 값이다.
+    pub fn mouseWanted(self: *const Screen) bool {
+        return self.term.flags.mouse_event != .none;
+    }
+
+    /// 휠을 화살표 키로 바꿀 자리인가 — 대체 화면이고 모드 1007(alternate
+    /// scroll)이 켜져 있다(PD-M4). 자식이 마우스 보고를 켰는지는 안 본다 —
+    /// 그것은 `pointer.wheelRoute`가 먼저 가른다.
+    ///
+    /// 1007의 기본값은 켜짐이다(ghostty `modes.zig`, xterm의 기본값은 꺼짐).
+    /// 그래서 `less` · `man`처럼 마우스를 안 켜는 대체 화면 프로그램에서 휠이
+    /// 줄을 움직인다. 끄려는 프로그램은 `ESC[?1007l`을 보낸다.
+    pub fn wheelKeys(self: *const Screen) bool {
+        return self.term.screens.active_key == .alternate and
+            self.term.modes.get(.mouse_alternate_scroll);
+    }
+
+    /// 휠 한 줄의 화살표 키. 자식이 DECCKM(모드 1)을 켰으면 `ESC O A`, 아니면
+    /// `ESC [ A`다 — 키보드의 화살표(`input.zig`)와 같은 규칙이다.
+    pub fn wheelKey(self: *const Screen, up: bool) []const u8 {
+        if (self.term.modes.get(.cursor_keys)) return if (up) "\x1bOA" else "\x1bOB";
+        return if (up) "\x1b[A" else "\x1b[B";
+    }
+
+    /// 마우스 사건 하나를 자식이 고른 형식으로 `out`에 짠다(PD-M4). 보고할
+    /// 사건이 아니면 빈 조각이다.
+    ///
+    /// 판단과 바이트는 ghostty의 인코더(`input.encodeMouse`)가 한다. 모드가
+    /// 무엇을 보고하나(1000은 누름 · 뗌, 1002는 누른 채 움직임도, 1003은 모든
+    /// 움직임, 9는 누름만), 형식(X10 · UTF-8 · SGR · urxvt · SGR-Pixels), 칸이
+    /// 안 바뀐 움직임 거르기, 1부터 세는 좌표가 그 안에 있다.
+    ///
+    /// `x` · `y`는 이 패널의 왼쪽 위 끝에서 잰 픽셀이다. 음수나 패널보다 큰 수도
+    /// 된다 — 패널 밖으로 끈 것이고, 인코더가 가장자리 칸으로 붙이거나(뗌 ·
+    /// 누른 채 움직임) 버린다(누름 · 버튼 없는 움직임). `held`는 지금 버튼이
+    /// 하나라도 눌렸는가다. 크기는 `init`이 라이브러리에 준 값(`width_px` ·
+    /// `height_px` · `cell`)을 그대로 쓴다 — 칸을 세는 산수가 `cells()`와 같다.
+    pub fn mouseEncode(
+        self: *Screen,
+        out: []u8,
+        action: MouseAction,
+        button: ?MouseButton,
+        mods: MouseMods,
+        x: i32,
+        y: i32,
+        held: bool,
+    ) []const u8 {
+        var w: std.Io.Writer = .fixed(out);
+        ghostty_vt.input.encodeMouse(&w, .{
+            .action = switch (action) {
+                .press => .press,
+                .release => .release,
+                .motion => .motion,
+            },
+            .button = if (button) |b| switch (b) {
+                .left => .left,
+                .middle => .middle,
+                .right => .right,
+                .wheel_up => .four,
+                .wheel_down => .five,
+            } else null,
+            .mods = .{ .alt = mods.alt, .ctrl = mods.ctrl },
+            .pos = .{ .x = @floatFromInt(x), .y = @floatFromInt(y) },
+        }, .{
+            .event = self.term.flags.mouse_event,
+            .format = self.term.flags.mouse_format,
+            .size = .{
+                .screen = .{ .width = self.term.width_px, .height = self.term.height_px },
+                .cell = .{ .width = self.cell.w, .height = self.cell.h },
+                .padding = .{},
+            },
+            .any_button_pressed = held,
+            .last_cell = &self.mouse_last,
+        }) catch return out[0..0];
+        return w.buffered();
     }
 
     /// 뷰포트가 스크롤백의 어디에 있는지.

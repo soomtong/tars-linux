@@ -170,6 +170,9 @@ vimrc는 vim 바이너리에 컴파일된 옵션과 명시적인 `:highlight` �
 3. 우리 터미널이 안 하는 것을 켜지 않는다. 마우스 보고가 없으므로 `mouse=`, 창 제목 OSC를
    무시하므로 `notitle`이다. 둘 다 vim 기본값과 같지만, 명시해 두면 그 줄의 주석이 이유를
    남긴다.
+   > PD-M4가 마우스 쪽 전제를 바꿨다(2026-10-05). 터미널이 자식에게 마우스를 보고하게 되어 vimrc가
+   > `mouse=a` · `ttymouse=sgr`이 됐다. 원칙은 그대로이고 그 원칙이 고른 값이 바뀐 것이다 — 이제 우리
+   > 터미널이 하는 일이다. 우리 선택은 Shift를 누른 끌기다. PD design 결정 12, [[project_pointer_devices]].
 4. 색은 256색 `cterm` 값이다. 회색은 232~255 회색 단계에서, 강조색은 앞의 16색에서 고른다.
    앞의 16색은 우리 터미널의 팔레트이므로 vim의 강조색이 터미널 테마를 따라간다.
    `termguicolors`를 켜면 vim이 24비트 색을 직접 보내서 팔레트와 무관해지고, 기본 강조 그룹의
@@ -206,7 +209,7 @@ vimrc는 vim 바이너리에 컴파일된 옵션과 명시적인 `:highlight` �
 | 화면 | `shortmess+=I` | 파일 없이 띄울 때 인트로 화면이 없다 |
 | 화면 | `belloff=all` | 벨도 화면 깜빡임(`t_vb`)도 없다 |
 | 화면 | `splitbelow` `splitright` | 새 창이 아래와 오른쪽에 열린다 |
-| 화면 | `mouse=` `notitle` | 원칙 3 |
+| 화면 | `mouse=` `notitle` | 원칙 3. PD-M4가 `mouse=`를 `mouse=a` · `ttymouse=sgr`로 바꿨다(PD design 결정 12) |
 | 파일 | `history=1000` | 명령 줄 기록을 길게 남긴다 |
 | 파일 | `noswapfile` `nobackup` | 게스트는 사용자가 한 명이다. swap 파일이 `/config`나 git 작업 트리에 생기면 지울 것만 는다 |
 | 파일 | `undofile` `undodir=/tmp/vim-undo`(없으면 `mkdir()`로 0700) | 파일을 닫았다 열어도 되돌리기가 남는다. `/tmp`가 tmpfs라 다음 부팅까지다 |
@@ -224,7 +227,7 @@ vimrc는 vim 바이너리에 컴파일된 옵션과 명시적인 `:highlight` �
 | `cursorline`만(줄 전체) | 커서 줄의 배경이 바뀌면 block 커서가 반전하는 칸의 색이 바뀐다. 결정 7 |
 | `let mapleader = " "` | 사용자의 `/.vimrc`와 사람이 가져다 붙이는 설정 조각의 모든 `<leader>` 뜻이 바뀐다. 시스템 vimrc가 정할 취향이 아니다. 그래서 `<leader>` 매핑도 두지 않는다 |
 | `termguicolors` | 원칙 4 |
-| `mouse=a` | 우리 터미널에 마우스 보고가 없다 |
+| `mouse=a` | 우리 터미널에 마우스 보고가 없다. PD-M4가 보고를 더해 이 줄이 vimrc에 들어갔다(PD design 결정 12) |
 | `ruler` | `laststatus=2`와 `statusline`이 있으면 `ruler`는 안 보인다 |
 | swap 파일을 `/tmp`로(`directory=/tmp//`) | 지울 것은 줄지만, 사용자가 한 명이고 tmpfs가 전원과 함께 사라지는 기계에서 복구 가치가 작다. 끄는 쪽이 단순하다 |
 

@@ -798,6 +798,23 @@ pub const State = struct {
         return self.shift_left or self.shift_right;
     }
 
+    /// 지금 눌린 수정키 셋(PD-M4). 포인터 경로가 읽는다 — Shift는 자식이
+    /// 마우스를 원해도 누름을 우리 것으로 돌리고, Alt · Ctrl은 마우스 보고에
+    /// 실린다(PD design 결정 12). Meta(Cmd)는 안 싣는다. 보고 형식에 그 비트가
+    /// 없다.
+    ///
+    /// 좌우를 합친다. `keyboard=apple`의 맞바꿈은 `handleKey` 맨 앞에서 이미
+    /// 끝났으므로 `alt`는 Option 자리의 키다(결정 9).
+    pub fn modifiers(self: State) Modifiers {
+        return .{
+            .shift = self.shifted(),
+            .ctrl = self.ctrl_left or self.ctrl_right,
+            .alt = self.alt_left or self.alt_right,
+        };
+    }
+
+    pub const Modifiers = struct { shift: bool, ctrl: bool, alt: bool };
+
     /// 이 키가 만드는 라틴 문자. 영문 자판이 정한다.
     ///
     /// 한글 조회는 이 함수를 안 쓴다(HI design 결정 13) — 한글 자판은 물리

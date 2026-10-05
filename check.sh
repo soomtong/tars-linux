@@ -326,6 +326,8 @@ run_chain() {
 # PD-M3이 부팅 하나를 더했다 — 설정 디스크의 tp-replay가 uinput으로 터치패드를
 # 만들어 이동 · 탭 · 두 손가락 스크롤을 되감고, 같은 부팅에서 psmouse가 QEMU의
 # PS/2 마우스를 잡는다. 부팅 전에 커널의 터치패드 심볼과 장치 표를 본다.
+# PD-M4가 부팅 B에 마우스 보고를 더했다 — 설정 디스크의 프로브가 마우스 모드를
+# 켜고 terminal이 보낸 바이트를 cat -v로 찍고, vim이 mouse=a로 클릭을 받는다.
 # 회차당 부팅 2회.
 #
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
@@ -349,7 +351,7 @@ CHAINS=(
   "CT-M2:./service/check.sh"
   "WL-M3:./wifi/check.sh"
   "WP-M2:./pane/check.sh"
-  "PD-M3:./pointer/check.sh"
+  "PD-M4:./pointer/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -6,7 +6,8 @@
 //!
 //! 층은 넷이다. `classify`(이 장치를 열 것인가) → `Mouse`(raw `input_event`를
 //! `SYN_REPORT` 단위의 `Frame`으로) → `Pointer`(화면에 하나인 좌표와 버튼) →
-//! `Gesture`(누름 · 끎 · 뗌 · 휠을 의도로, PD-M2).
+//! `Gesture`(누름 · 끎 · 뗌 · 휠을 의도로, PD-M2). 자식이 마우스를 원하면
+//! `Grab`이 그 누름을 자식의 것으로 정하고 `Gesture`를 건너뛴다(PD-M4).
 const std = @import("std");
 
 /// `input.zig`의 `c`와 같은 번역(`linux/input.h`)이다. `pub`인 이유도 같다 —
@@ -134,7 +135,30 @@ pub const Buttons = packed struct(u3) {
     pub fn bits(self: Buttons) u3 {
         return @bitCast(self);
     }
+
+    /// 버튼 `b`가 서 있는가(PD-M4).
+    pub fn has(self: Buttons, b: Button) bool {
+        return switch (b) {
+            .left => self.left,
+            .right => self.right,
+            .middle => self.middle,
+        };
+    }
+
+    /// 버튼 `b` 하나를 세우거나 내린 값(PD-M4).
+    pub fn with(self: Buttons, b: Button, down: bool) Buttons {
+        var out = self;
+        switch (b) {
+            .left => out.left = down,
+            .right => out.right = down,
+            .middle => out.middle = down,
+        }
+        return out;
+    }
 };
+
+/// 버튼 하나의 이름(PD-M4). 보고는 셋을 다 보낸다 — 우리 제스처는 왼쪽만 쓴다.
+pub const Button = enum { left, right, middle };
 
 /// 디코더의 출력(PD design 결정 3). 마우스든 터치패드든 이 모양이다.
 ///
@@ -605,6 +629,20 @@ pub const Gesture = struct {
         return out;
     }
 
+    /// 이 누름은 자식의 것이다(PD-M4, design 결정 12). 누름처럼 `cancel`과
+    /// (다른 패널이면) `focus`를 내고, 뗄 때까지 아무것도 안 한다 — 끎과
+    /// 뗌은 자식에게 보고로 간다.
+    ///
+    /// 포커스를 먼저 옮기는 것은 tmux의 기본 바인딩(`select-pane` 뒤에
+    /// `send-keys -M`)과 같다. 확정한 한글이 보고보다 먼저 PTY에 간다.
+    pub fn handOff(self: *Gesture, leaf: u4, focus: u4) Intents {
+        var out: Intents = .{};
+        self.phase = .ignored;
+        out.push(.cancel);
+        if (leaf != focus) out.push(.{ .focus = leaf });
+        return out;
+    }
+
     /// 휠을 굴렸다. 버튼이 패널 칸 위에서 눌린 채면 누른 패널을 움직이고
     /// 선택 끝을 다시 맞춘다(design 결정 7의 "끄는 중"). 한 화면보다 긴
     /// 선택을 만드는 길이다.
@@ -643,4 +681,122 @@ pub const Gesture = struct {
 /// 두 칸이 같은가.
 pub fn sameCell(a: Cell, b: Cell) bool {
     return a.leaf == b.leaf and a.col == b.col and a.row == b.row;
+}
+
+// ── 마우스 보고(PD-M4) ────────────────────────────────────────────────
+//
+// 자식이 마우스를 원하면(모드 9 · 1000 · 1002 · 1003) 누름 · 끎 · 뗌 · 휠을
+// 우리 제스처 대신 그 자식에게 보낸다(PD design 결정 12). 여기는 "누구의
+// 것인가"만 정한다. 바이트를 짜는 것은 `vt.Screen.mouseEncode`(ghostty의
+// 인코더)이고, 쓰는 것은 `main.zig`다.
+
+/// 누름의 주인.
+pub const Owner = enum {
+    /// 우리 것이다 — 왼쪽 버튼은 `Gesture`로 가고 휠은 스크롤백을 움직인다.
+    ours,
+    /// 자식의 것이다 — 그 패널의 PTY에 보고로 간다.
+    child,
+};
+
+/// 포인터 아래 패널의 지금 상태. `main.zig`가 그 패널의 `vt.Screen`에서
+/// 읽어 채운다 — 이 파일은 `vt.zig`를 import하지 않는다(머리 주석).
+pub const Pane = struct {
+    leaf: u4,
+    /// 자식이 마우스 보고를 켰다(모드 9 · 1000 · 1002 · 1003 중 하나).
+    wants: bool,
+    /// 키보드 copy mode다.
+    copy: bool,
+    /// 휠을 화살표 키로 바꿀 자리다 — 대체 화면이고 모드 1007이 켜져 있다.
+    alt_keys: bool,
+};
+
+/// 이 패널 위의 누름 · 움직임이 누구의 것인가(design 결정 12).
+///
+/// 자식이 원하고, 그 패널이 키보드 copy mode가 아니고, Shift가 안 눌렸으면
+/// 자식의 것이다. 여백 · 구분선 · 상태 줄(null)은 언제나 우리 것이다 — 우리
+/// 것이어도 거기서는 아무 일도 없다(design 결정 5).
+///
+/// Shift가 우리에게 돌려준다. xterm 이래의 관례이고 ghostty · kitty · tmux가
+/// 같다. copy mode는 사람이 `Cmd+Shift+C`로 "우리 선택"을 고른 상태라 거기서의
+/// 누름도 우리 것이다.
+pub fn ownerOf(under: ?Pane, shift: bool) Owner {
+    const p = under orelse return .ours;
+    return if (p.wants and !p.copy and !shift) .child else .ours;
+}
+
+/// 버튼이 눌린 동안의 주인(design 결정 12). 버튼이 하나도 안 눌렸을 때의
+/// 첫 누름이 주인과 패널을 정하고, 마지막 버튼을 뗄 때까지 간다.
+///
+/// 붙어 있는 이유는 짝을 맞추기 위해서다. 자식이 누름을 받았으면 뗌도 받아야
+/// 하고(vim은 뗌이 올 때까지 Visual을 늘린다), 우리 제스처가 누름을 받았으면
+/// 뗌도 받아야 한다(복사가 뗌에 있다). 누른 뒤 자식이 모드를 켜고 끄거나
+/// Shift를 떼도 주인은 안 바뀐다.
+pub const Grab = struct {
+    held: Buttons = .{},
+    owner: Owner = .ours,
+    /// 첫 누름의 잎. `owner`가 `child`일 때 보고가 가는 패널이다.
+    leaf: u4 = 0,
+
+    pub fn active(self: *const Grab) bool {
+        return self.held.bits() != 0;
+    }
+
+    /// 버튼 `b`가 눌렸다. `under`는 누른 자리의 패널이다. 돌려주는 것이 이
+    /// 누름의 주인이다.
+    pub fn press(self: *Grab, b: Button, under: ?Pane, shift: bool) Owner {
+        if (!self.active()) {
+            self.owner = ownerOf(under, shift);
+            self.leaf = if (under) |p| p.leaf else 0;
+        }
+        self.held = self.held.with(b, true);
+        return self.owner;
+    }
+
+    /// 버튼 `b`를 뗐다. 돌려주는 것이 이 뗌의 주인이다 — 마지막 버튼이어도
+    /// 그 버튼의 주인을 돌려준 뒤에 풀린다.
+    pub fn release(self: *Grab, b: Button) Owner {
+        self.held = self.held.with(b, false);
+        return self.owner;
+    }
+
+    /// 포인터가 아는 버튼 상태에 맞춘다. 장치가 누른 채 빠졌거나(`Pointer.forget`)
+    /// 한 회차의 전이가 넘쳐 뗌을 잃으면 `held`가 영영 눌린 채로 남고, 그
+    /// 뒤의 모든 누름이 옛 주인에게 간다. 회차마다 끝에서 부른다.
+    pub fn settle(self: *Grab, now: Buttons) void {
+        self.held = @bitCast(self.held.bits() & now.bits());
+    }
+
+    /// 끄는 보고에 실을 버튼. 여럿이 눌렸으면 왼쪽 · 가운데 · 오른쪽 순이다.
+    /// 아무것도 안 눌렸으면 null — 버튼 없는 움직임이다.
+    pub fn dragButton(self: *const Grab) ?Button {
+        if (self.held.left) return .left;
+        if (self.held.middle) return .middle;
+        if (self.held.right) return .right;
+        return null;
+    }
+};
+
+/// 휠 한 회차가 어디로 가나(design 결정 12의 휠 표).
+pub const WheelRoute = enum {
+    /// 아무 일도 없다 — 키보드 copy mode인 패널(design 결정 7).
+    ignore,
+    /// 버튼 4 · 5의 누름으로 자식에게 보고한다.
+    report,
+    /// 화살표 키(위 · 아래)로 자식에게 보낸다. 한 눈금이 세 번이다.
+    keys,
+    /// 우리 스크롤백을 움직인다(PD-M1).
+    scroll,
+};
+
+/// 포인터 아래 패널 `p`에서 굴린 휠의 갈 곳. 끄는 중의 휠(`Gesture.wheel`)은
+/// 이것보다 먼저 본다.
+///
+/// Shift는 누름과 같이 우리에게 돌려준다. 대체 화면에서 우리 스크롤은 움직일
+/// 스크롤백이 없으므로 아무 일도 없다.
+pub fn wheelRoute(p: Pane, shift: bool) WheelRoute {
+    if (p.copy) return .ignore;
+    if (shift) return .scroll;
+    if (p.wants) return .report;
+    if (p.alt_keys) return .keys;
+    return .scroll;
 }

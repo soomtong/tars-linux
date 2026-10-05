@@ -581,5 +581,103 @@ pub fn main() !void {
         _ = g.release(.normal);
     }
 
+    // ── 검사 23: 누름의 주인(PD-M4) ──────────────────────────────────────
+    //
+    // 자식이 원하고, copy mode가 아니고, Shift가 없을 때만 자식의 것이다
+    // (design 결정 12). 여백(null)은 언제나 우리 것이다.
+    {
+        const wants: pointer.Pane = .{ .leaf = 1, .wants = true, .copy = false, .alt_keys = false };
+        try expectTrue("a pane that wants the mouse owns a plain press", pointer.ownerOf(wants, false) == .child);
+        try expectTrue("Shift takes the press back from a pane that wants the mouse", pointer.ownerOf(wants, true) == .ours);
+        var in_copy = wants;
+        in_copy.copy = true;
+        try expectTrue("a press in keyboard copy mode is ours even if the child wants the mouse", pointer.ownerOf(in_copy, false) == .ours);
+        var quiet = wants;
+        quiet.wants = false;
+        try expectTrue("a pane that does not want the mouse leaves the press to us", pointer.ownerOf(quiet, false) == .ours);
+        try expectTrue("a press on the margin is ours", pointer.ownerOf(null, false) == .ours);
+    }
+
+    // ── 검사 24: 주인은 첫 누름이 정하고 마지막 뗌까지 간다 ─────────────
+    //
+    // 누른 채 자식이 모드를 끄거나 Shift를 눌러도 그 뗌은 누름의 주인에게 간다
+    // (design 결정 12의 "모드가 바뀌면"). 다른 버튼을 더 눌러도 같은 주인이다.
+    {
+        const wants: pointer.Pane = .{ .leaf = 1, .wants = true, .copy = false, .alt_keys = false };
+        const quiet: pointer.Pane = .{ .leaf = 0, .wants = false, .copy = false, .alt_keys = false };
+        var g: pointer.Grab = .{};
+        try expectTrue("the first press on a wanting pane goes to the child", g.press(.left, wants, false) == .child);
+        try expectTrue("the grab remembers the pane of the first press", g.leaf == 1 and g.active());
+        try expectTrue("a second button pressed over a quiet pane with Shift stays with the child", g.press(.right, quiet, true) == .child);
+        try expectTrue("the drag button is the left one while both are held", g.dragButton().? == .left);
+        try expectTrue("releasing one of two buttons keeps the grab", g.release(.left) == .child and g.active());
+        try expectTrue("with only the right one held the drag button is the right one", g.dragButton().? == .right);
+        try expectTrue("the last release still belongs to the child", g.release(.right) == .child);
+        try expectTrue("after the last release nothing is held", !g.active() and g.dragButton() == null);
+        try expectTrue("the next press decides again (a quiet pane is ours)", g.press(.left, quiet, false) == .ours);
+        try expectTrue("a press on a wanting pane while ours is held stays ours", g.press(.middle, wants, false) == .ours);
+        try expectTrue("the grab still names the first pane", g.leaf == 0);
+    }
+
+    // ── 검사 25: 놓친 뗌은 포인터의 버튼에 맞춰 풀린다 ─────────────────
+    //
+    // 장치가 누른 채 빠지면 `Pointer.forget`이 버튼을 놓지만 전이 칸에는 안
+    // 담긴다. `settle`이 없으면 다음 누름이 옛 주인에게 간다.
+    {
+        const wants: pointer.Pane = .{ .leaf = 2, .wants = true, .copy = false, .alt_keys = false };
+        const quiet: pointer.Pane = .{ .leaf = 0, .wants = false, .copy = false, .alt_keys = false };
+        var g: pointer.Grab = .{};
+        _ = g.press(.left, wants, false);
+        g.settle(.{ .left = true });
+        try expectTrue("settle keeps a button the pointer still holds", g.active());
+        g.settle(.{});
+        try expectTrue("settle drops a button the pointer no longer holds", !g.active());
+        try expectTrue("so the next press decides its owner again", g.press(.left, quiet, false) == .ours);
+    }
+
+    // ── 검사 26: 자식에게 넘기는 누름은 포커스만 옮긴다 ─────────────────
+    //
+    // `cancel`(조합 확정 · 옛 포커스의 copy mode 닫기)과 다른 패널이면 `focus`를
+    // 낸다. 그 뒤로 제스처는 아무것도 안 한다 — 움직임도 뗌도 휠도 자식의 것이다.
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("handing a press on another pane to its child moves the focus", g.handOff(1, 0), &.{
+            .cancel,
+            .{ .focus = 1 },
+        });
+        try expectTrue("the gesture holds nothing after a hand-off", g.held() == null);
+        try expectIntents("a drag after a hand-off makes no selection", g.motion(.{ .leaf = 1, .col = 4, .row = 2 }, .normal), &.{});
+        try expectTrue("a wheel after a hand-off is not the gesture's", g.wheel(1, .normal) == null);
+        try expectIntents("the release after a hand-off copies nothing", g.release(.normal), &.{});
+        try expectIntents("handing a press on the focused pane only cancels", g.handOff(0, 0), &.{.cancel});
+    }
+
+    // ── 검사 27: 휠의 갈 곳 ───────────────────────────────────────────────
+    //
+    // copy mode는 무시(PD-M1) · Shift는 우리 스크롤 · 자식이 원하면 보고 ·
+    // 대체 화면의 1007이면 화살표 키 · 나머지는 우리 스크롤이다. 보고가 화살표
+    // 키보다 먼저다 — 마우스를 켠 대체 화면 프로그램(vim `mouse=a`)은 휠을
+    // 버튼 4 · 5로 받는다.
+    {
+        const base: pointer.Pane = .{ .leaf = 0, .wants = false, .copy = false, .alt_keys = false };
+        var p = base;
+        try expectTrue("a plain pane scrolls its scrollback", pointer.wheelRoute(p, false) == .scroll);
+        p.alt_keys = true;
+        try expectTrue("the alternate screen with mode 1007 gets arrow keys", pointer.wheelRoute(p, false) == .keys);
+        p.wants = true;
+        try expectTrue("a pane that wants the mouse gets the wheel as a report, before arrow keys", pointer.wheelRoute(p, false) == .report);
+        try expectTrue("Shift turns the wheel back into our scroll", pointer.wheelRoute(p, true) == .scroll);
+        p.copy = true;
+        try expectTrue("keyboard copy mode ignores the wheel", pointer.wheelRoute(p, false) == .ignore);
+        try expectTrue("keyboard copy mode ignores the wheel with Shift too", pointer.wheelRoute(p, true) == .ignore);
+    }
+
+    // ── 검사 28: 버튼 하나를 세우고 읽는다 ───────────────────────────────
+    {
+        const b = (pointer.Buttons{}).with(.middle, true).with(.left, true).with(.left, false);
+        try expectTrue("with() sets and clears one button", b.has(.middle) and !b.has(.left) and !b.has(.right));
+        try expectNum("the middle button alone is bit 4 (HMP mouse_button)", b.bits(), 4);
+    }
+
     std.debug.print("pointer_test: all checks passed\n", .{});
 }

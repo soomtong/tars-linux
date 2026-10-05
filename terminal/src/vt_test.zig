@@ -2715,5 +2715,78 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 끄는 중의 휠이 선택 끝을 세 줄 위 글자로 다시 맞춘다 OK\n", .{});
 
+    // 검사 102. 마우스 보고(PD-M4). 자식이 모드를 안 켰으면 아무것도 안 짠다.
+    // 칸 (10, 5)의 가운데 픽셀은 (10 × 8 + 3, 5 × 16 + 7)이다.
+    const ms = try vt.Screen.init(init.io, init.gpa, 20, 8, CELL);
+    defer ms.deinit();
+    var mbuf: [32]u8 = undefined;
+    const mx: i32 = 10 * 8 + 3;
+    const my: i32 = 5 * 16 + 7;
+    if (ms.mouseWanted()) return error.MouseWantedAtStart;
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, mx, my, true), "", "a press before any mode");
+
+    // 검사 103. 1000 + 1006(SGR). 좌표는 1부터 세고, 뗌은 소문자 m이다.
+    // 1000은 누른 채 움직여도 보고하지 않는다. 버튼 4 · 5가 64 · 65,
+    // Alt가 +8 · Ctrl이 +16이다.
+    ms.feed("\x1b[?1000h\x1b[?1006h");
+    if (!ms.mouseWanted()) return error.MouseNotWanted;
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, mx, my, true), "\x1b[<0;11;6M", "1000 · 1006 press");
+    try expectMouse(ms.mouseEncode(&mbuf, .motion, .left, .{}, mx + 16, my, true), "", "1000 does not report a drag");
+    try expectMouse(ms.mouseEncode(&mbuf, .release, .left, .{}, mx + 16, my, false), "\x1b[<0;13;6m", "1000 · 1006 release");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .right, .{}, mx, my, true), "\x1b[<2;11;6M", "the right button is 2");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .wheel_up, .{}, mx, my, false), "\x1b[<64;11;6M", "wheel up is button 4");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .wheel_down, .{}, mx, my, false), "\x1b[<65;11;6M", "wheel down is button 5");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{ .ctrl = true, .alt = true }, mx, my, true), "\x1b[<24;11;6M", "Ctrl and Alt add 16 and 8");
+    // 칸의 왼쪽 위 끝 픽셀은 그 칸이고, 한 픽셀 왼쪽 위는 이웃 칸이다.
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, 80, 80, true), "\x1b[<0;11;6M", "the top-left pixel of a cell is that cell");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, 79, 79, true), "\x1b[<0;10;5M", "one pixel up-left is the neighbour cell");
+    // 패널 밖으로 끌고 뗀 것은 가장자리 칸으로 붙는다. 밖에서의 누름은 버린다.
+    try expectMouse(ms.mouseEncode(&mbuf, .release, .left, .{}, -50, -50, false), "\x1b[<0;1;1m", "a release off the top-left edge clamps to 1;1");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, 20 * 8 + 40, my, true), "", "a press right of the pane is dropped");
+    std.debug.print("vt_test: 1000 · 1006 보고의 바이트 OK\n", .{});
+
+    // 검사 104. 1002는 누른 채 움직임을 +32로 보고하고, 같은 칸의 움직임은
+    // 거른다. 버튼 없는 움직임은 1003만 보고한다(버튼 칸이 3).
+    ms.feed("\x1b[?1002h");
+    try expectMouse(ms.mouseEncode(&mbuf, .motion, .left, .{}, mx + 16, my, true), "\x1b[<32;13;6M", "1002 reports a drag");
+    try expectMouse(ms.mouseEncode(&mbuf, .motion, .left, .{}, mx + 17, my, true), "", "1002 skips a motion inside the same cell");
+    try expectMouse(ms.mouseEncode(&mbuf, .motion, null, .{}, mx, my, false), "", "1002 does not report a hover");
+    ms.feed("\x1b[?1003h");
+    try expectMouse(ms.mouseEncode(&mbuf, .motion, null, .{}, mx, my, false), "\x1b[<35;11;6M", "1003 reports a hover");
+    std.debug.print("vt_test: 1002 · 1003 움직임 보고 OK\n", .{});
+
+    // 검사 105. 형식을 끄면 X10이다(라이브러리가 공짜로 준다). `ESC [ M` 뒤 세
+    // 바이트가 32 + 버튼 · 32 + 열 · 32 + 행이다. 모드를 끄면 다시 아무것도
+    // 안 짠다.
+    ms.feed("\x1b[?1006l");
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, mx, my, true), "\x1b[M +&", "1003 without 1006 is X10");
+    ms.feed("\x1b[?1003l\x1b[?1002l\x1b[?1000l");
+    if (ms.mouseWanted()) return error.MouseStillWanted;
+    try expectMouse(ms.mouseEncode(&mbuf, .press, .left, .{}, mx, my, true), "", "a press after the modes are off");
+    std.debug.print("vt_test: X10 형식과 모드 끄기 OK\n", .{});
+
+    // 검사 106. 휠을 화살표 키로(모드 1007). 주 화면에서는 아니고, 대체
+    // 화면에서는 기본값이 켜짐이다. DECCKM이면 `ESC O`다. 1007을 끄면 아니다.
+    if (ms.wheelKeys()) return error.WheelKeysOnPrimary;
+    ms.feed("\x1b[?1049h");
+    if (!ms.wheelKeys()) return error.NoWheelKeysOnAlternate;
+    try expectMouse(ms.wheelKey(true), "\x1b[A", "wheel up on the alternate screen");
+    try expectMouse(ms.wheelKey(false), "\x1b[B", "wheel down on the alternate screen");
+    ms.feed("\x1b[?1h");
+    try expectMouse(ms.wheelKey(true), "\x1bOA", "wheel up under DECCKM");
+    ms.feed("\x1b[?1007l");
+    if (ms.wheelKeys()) return error.WheelKeysAfter1007Off;
+    ms.feed("\x1b[?1007h\x1b[?1049l");
+    if (ms.wheelKeys()) return error.WheelKeysBackOnPrimary;
+    std.debug.print("vt_test: 대체 화면의 휠은 화살표 키 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
+}
+
+/// 마우스 보고 하나가 기대한 바이트인가(PD-M4). 다르면 둘 다 `{any}`로 찍는다 —
+/// 이스케이프 바이트가 그대로 터미널에 나가지 않게.
+fn expectMouse(got: []const u8, want: []const u8, what: []const u8) !void {
+    if (std.mem.eql(u8, got, want)) return;
+    std.debug.print("FAIL: {s}: got {any}, want {any}\n", .{ what, got, want });
+    return error.WrongMouseBytes;
 }

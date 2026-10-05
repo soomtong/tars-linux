@@ -1482,9 +1482,11 @@ const PointerDev = struct {
 /// 여는 자리(처음 훑기 · 핫플러그)가 여럿이라 인자로 나르지 않는다.
 var touchpad_screen: touchpad.Screen = .{ .w = 1, .notch_px = 1 };
 
-/// 한 회차의 왼쪽 버튼 전이 하나(PD-M2). 그 순간의 포인터 자리와 함께 든다 —
+/// 한 회차의 버튼 전이 하나(PD-M2). 그 순간의 포인터 자리와 함께 든다 —
 /// 회차가 끝난 뒤의 자리 하나로는 "누르고 끌고 뗐다"의 순서를 되살릴 수 없다.
-const PointerEdge = struct { down: bool, x: u32, y: u32 };
+/// PD-M2는 왼쪽만 담았고, PD-M4부터 셋을 다 담는다 — 오른쪽 · 가운데도
+/// 자식에게 보고로 간다.
+const PointerEdge = struct { down: bool, button: pointer.Button, x: u32, y: u32 };
 
 /// 한 회차에 담는 전이의 수. 사람의 손으로는 한 회차(밀리초 단위)에 둘을
 /// 넘기 어렵다. 넘치면 뒤를 버린다 — 뗌을 잃어도 다음 누름이 제스처를 새로
@@ -1498,7 +1500,8 @@ const PointerRound = struct {
     /// 이 회차에 포인터가 움직였거나 버튼이 눌렸다. 화살표가 보이는 조건
     /// 2다(PD design 결정 4). 휠만 굴린 회차는 아니다.
     woke: bool = false,
-    /// 왼쪽 버튼의 눌림 · 뗌(PD-M2). 회차 안의 순서대로, 그 순간의 자리와 함께.
+    /// 버튼의 눌림 · 뗌(PD-M2, PD-M4부터 셋 다). 회차 안의 순서대로, 그 순간의
+    /// 자리와 함께.
     edges: [MAX_EDGES]PointerEdge = undefined,
     edge_count: usize = 0,
 };
@@ -1759,10 +1762,13 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
                 round.frames += 1;
                 round.wheel +|= e.wheel;
                 if (e.moved or e.pressed.bits() != 0) round.woke = true;
-                // 왼쪽 버튼의 전이는 그 순간의 자리와 함께 순서대로 담는다(PD-M2).
+                // 버튼의 전이는 그 순간의 자리와 함께 순서대로 담는다(PD-M2).
                 // 한 회차에 누르고 끌고 떼는 보고가 다 들어와도 순서가 남는다.
-                if ((e.pressed.left or e.released.left) and round.edge_count < MAX_EDGES) {
-                    round.edges[round.edge_count] = .{ .down = e.pressed.left, .x = state.x, .y = state.y };
+                for ([_]pointer.Button{ .left, .right, .middle }) |b| {
+                    const down = e.pressed.has(b);
+                    if (!down and !e.released.has(b)) continue;
+                    if (round.edge_count == MAX_EDGES) break;
+                    round.edges[round.edge_count] = .{ .down = down, .button = b, .x = state.x, .y = state.y };
                     round.edge_count += 1;
                 }
             }
@@ -1778,6 +1784,38 @@ fn closePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, slot: usize, state: *po
     _ = std.c.close(d.fd);
     _ = state.forget(@intCast(slot));
     devs[slot] = null;
+}
+
+/// 자식에게 보낸 보고 한 줄(PD-M4). `n`은 같은 바이트를 몇 번 보냈는가다 —
+/// 마우스 보고는 1, 휠을 바꾼 화살표 키는 눈금 × `WHEEL_ROWS`다.
+///
+///   terminal: pointer> report leaf=0 n=1 text=^[[<0;11;6M
+///
+/// 바이트는 `cat -v`의 모양으로 찍는다 — 제어 바이트는 `^` 뒤에 64를 더한
+/// 글자, 0x7F는 `^?`, 0x80 이상은 `M-` 뒤에 아래 7비트다. 게이트가 게스트의
+/// `cat -v`가 찍은 화면 줄과 이 줄을 같은 글자로 맞춘다.
+fn dumpReport(leaf: u4, n: usize, bytes: []const u8) void {
+    var buf: [128]u8 = undefined;
+    var len: usize = 0;
+    for (bytes) |raw| {
+        if (len + 4 > buf.len) break;
+        var b = raw;
+        if (b >= 0x80) {
+            buf[len] = 'M';
+            buf[len + 1] = '-';
+            len += 2;
+            b -= 0x80;
+        }
+        if (b < 0x20 or b == 0x7F) {
+            buf[len] = '^';
+            buf[len + 1] = if (b == 0x7F) '?' else b + 0x40;
+            len += 2;
+        } else {
+            buf[len] = b;
+            len += 1;
+        }
+    }
+    std.debug.print("terminal: pointer> report leaf={d} n={d} text={s}\n", .{ leaf, n, buf[0..len] });
 }
 
 /// 픽셀을 격자 칸으로 바꾸되, 격자 밖이면 가장 가까운 가장자리 칸으로
@@ -1805,6 +1843,14 @@ const PointerWire = struct {
     whole: layout.Rect,
     cols: u16,
     rows: u16,
+    /// 버튼이 눌린 동안의 주인(PD-M4, `pointer.Grab`).
+    grab: *pointer.Grab,
+    /// 주인을 정한 누름의 워크스페이스 번호. 다른 워크스페이스로 옮긴 뒤의
+    /// 보고는 버린다 — 그 패널은 지금 `ws`에 없다.
+    grab_ws: *usize,
+    /// 이 회차의 수정키(`input.State.modifiers`). 키보드 분기가 포인터 분기
+    /// 앞이라 같은 회차에 친 Shift도 들어 있다.
+    mods: input.State.Modifiers,
     /// 의도가 화면을 바꿨다. 부르는 쪽이 `needs_redraw`로 옮긴다.
     redraw: bool = false,
 
@@ -1819,6 +1865,97 @@ const PointerWire = struct {
         if (self.gesture_ws.* != self.current or self.ws.focus != leaf) return .gone;
         const p = self.ws.panes[leaf] orelse return .gone;
         return if (p.screen.copyActive()) .copy else .normal;
+    }
+
+    /// 포인터 아래 패널과 그 상태(PD-M4). 여백 · 구분선 · 상태 줄이면 null이다.
+    fn paneAt(self: *const PointerWire, x: u32, y: u32) ?pointer.Pane {
+        const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
+        const h = self.ws.tree.hit(self.whole, gc.col, gc.row) orelse return null;
+        const p = &self.ws.panes[h.leaf].?;
+        return .{
+            .leaf = h.leaf,
+            .wants = p.screen.mouseWanted(),
+            .copy = p.screen.copyActive(),
+            .alt_keys = p.screen.wheelKeys(),
+        };
+    }
+
+    /// 버튼 하나의 전이(PD-M4). 버튼이 하나도 안 눌렸을 때의 첫 누름이 주인을
+    /// 정하고(`pointer.Grab`), 그 주인이 마지막 뗌까지 간다(design 결정 12).
+    ///
+    /// 우리 것이면 PD-M2 그대로다 — 왼쪽만 `Gesture`로 가고 오른쪽 · 가운데는
+    /// 아무 일도 없다. 자식의 것이면 첫 누름이 포커스를 옮긴 뒤 보고하고,
+    /// 나머지 누름 · 뗌은 보고만 한다.
+    fn edge(self: *PointerWire, e: PointerEdge) !void {
+        if (!e.down) {
+            switch (self.grab.release(e.button)) {
+                .child => self.report(.release, e.button, e.x, e.y),
+                .ours => if (e.button == .left) try self.release(),
+            }
+            return;
+        }
+        const fresh = !self.grab.active();
+        const owner = self.grab.press(e.button, self.paneAt(e.x, e.y), self.mods.shift);
+        if (fresh) self.grab_ws.* = self.current;
+        switch (owner) {
+            .child => {
+                if (fresh) try self.run(self.gesture.handOff(self.grab.leaf, self.ws.focus));
+                self.report(.press, e.button, e.x, e.y);
+            },
+            .ours => if (e.button == .left) try self.press(e.x, e.y),
+        }
+    }
+
+    /// 포인터가 움직였다(PD-M4). 버튼이 눌린 채면 그 주인에게 — 자식이면 누른
+    /// 채 움직임으로 보고하고, 우리면 `Gesture`의 끎이다. 안 눌렸으면 포인터
+    /// 아래 패널의 자식에게 버튼 없는 움직임으로 보고한다. 그것을 실제로
+    /// 보내는 것은 모드 1003뿐이다(인코더가 거른다).
+    fn moved(self: *PointerWire, x: u32, y: u32) !void {
+        if (!self.grab.active()) {
+            const p = self.paneAt(x, y) orelse return;
+            if (pointer.ownerOf(p, self.mods.shift) == .child) self.reportTo(p.leaf, .motion, null, x, y);
+            return;
+        }
+        switch (self.grab.owner) {
+            .child => self.report(.motion, self.grab.dragButton(), x, y),
+            .ours => try self.motion(x, y),
+        }
+    }
+
+    /// 주인을 정한 패널에 보고한다. 그 워크스페이스를 떠났으면 버린다 —
+    /// 자식은 뗌을 못 받지만 다음 누름이 고친다.
+    fn report(self: *PointerWire, action: vt.Screen.MouseAction, b: ?pointer.Button, x: u32, y: u32) void {
+        if (self.grab_ws.* != self.current) return;
+        const button: ?vt.Screen.MouseButton = if (b) |v| switch (v) {
+            .left => .left,
+            .right => .right,
+            .middle => .middle,
+        } else null;
+        self.reportTo(self.grab.leaf, action, button, x, y);
+    }
+
+    /// 패널 `leaf`의 자식에게 마우스 사건 하나를 보낸다(PD-M4). 좌표는 그
+    /// 패널의 왼쪽 위 끝에서 잰 픽셀이다 — `paneOrigin`이 렌더러와 `gridCell`이
+    /// 쓰는 상수 넷으로 그 끝을 구한다(design 결정 5와 같은 이유). 인코더가
+    /// 보낼 것이 없다고 하면(모드가 그 사건을 원하지 않는다) 아무것도 안 한다.
+    fn reportTo(self: *PointerWire, leaf: u4, action: vt.Screen.MouseAction, button: ?vt.Screen.MouseButton, x: u32, y: u32) void {
+        const p = if (self.ws.panes[leaf]) |*pane| pane else return;
+        var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+        self.ws.tree.rects(self.whole, &rs);
+        const o = paneOrigin(rs[leaf]);
+        var buf: [32]u8 = undefined;
+        const bytes = p.screen.mouseEncode(
+            &buf,
+            action,
+            button,
+            .{ .alt = self.mods.alt, .ctrl = self.mods.ctrl },
+            @as(i32, @intCast(x)) - @as(i32, @intCast(o.x)),
+            @as(i32, @intCast(y)) - @as(i32, @intCast(o.y)),
+            self.grab.active(),
+        );
+        if (bytes.len == 0) return;
+        pty.write(p.session.master_fd, bytes);
+        dumpReport(leaf, 1, bytes);
     }
 
     /// 왼쪽 버튼이 눌렸다. `pointer> press` 줄을 찍는다 — 패널 칸이면 그
@@ -1870,14 +2007,31 @@ const PointerWire = struct {
     /// 구분선 위면 아무 일도 없다. 키보드 copy mode인 패널도 무시한다 — copy
     /// 커서는 뷰포트 좌표라 밖에서 뷰포트를 밀면 커서가 다른 글자를 가리키는데
     /// 선택은 안 따라온다. 양수가 휠을 앞으로 민 것이고 위로 간다.
+    ///
+    /// PD-M4부터 그 패널의 자식이 마우스를 원하면 눈금마다 버튼 4(위) · 5(아래)의
+    /// 누름으로 보고하고, 대체 화면이고 모드 1007이면 화살표 키를 눈금마다
+    /// `WHEEL_ROWS`번 보낸다(`pointer.wheelRoute`). 포커스는 어느 쪽이든 안
+    /// 바뀐다.
     fn wheel(self: *PointerWire, notches: i32, x: u32, y: u32) !void {
         if (self.gesture.wheel(notches, self.target())) |its| return self.run(its);
-        const cell = gridCell(x, y, self.cols, self.rows) orelse return;
-        const h = self.ws.tree.hit(self.whole, cell.col, cell.row) orelse return;
-        const p = &self.ws.panes[h.leaf].?;
-        if (p.screen.copyActive()) return;
-        p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, notches));
-        self.redraw = true;
+        const pane = self.paneAt(x, y) orelse return;
+        const p = &self.ws.panes[pane.leaf].?;
+        switch (pointer.wheelRoute(pane, self.mods.shift)) {
+            .ignore => {},
+            .scroll => {
+                p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, notches));
+                self.redraw = true;
+            },
+            .report => for (0..@abs(notches)) |_| {
+                self.reportTo(pane.leaf, .press, if (notches > 0) .wheel_up else .wheel_down, x, y);
+            },
+            .keys => {
+                const key = p.screen.wheelKey(notches > 0);
+                const n = @as(usize, @intCast(WHEEL_ROWS)) * @abs(notches);
+                for (0..n) |_| pty.write(p.session.master_fd, key);
+                dumpReport(pane.leaf, n, key);
+            },
+        }
     }
 
     /// 의도를 차례로 실행한다. switch에 `else`가 없다 — `pointer.Intent`에
@@ -2221,6 +2375,10 @@ pub fn main(init: std.process.Init) !void {
     // 이 번호로 알아채고 제스처를 버린다.
     var gesture: pointer.Gesture = .{};
     var gesture_ws: usize = 0;
+    // 버튼이 눌린 동안의 주인과 그 워크스페이스(PD-M4). 자식이 마우스를
+    // 원하면 누름이 `gesture` 대신 그 자식에게 보고로 간다.
+    var grab: pointer.Grab = .{};
+    var grab_ws: usize = 0;
     const uevent_fd: c_int = uevent: {
         const linux = std.os.linux;
         const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
@@ -2580,10 +2738,15 @@ pub fn main(init: std.process.Init) !void {
         // 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
         // `PointerWire`다(design 결정 3).
         //
-        // 왼쪽 버튼의 전이를 회차 안의 순서대로 먼저 돈다. 전이마다 그 순간의
+        // 버튼의 전이를 회차 안의 순서대로 먼저 돈다. 전이마다 그 순간의
         // 자리로 움직임을 먼저 주고 그다음 누름이나 뗌을 준다 — 끌다가 뗀 보고
         // 하나는 마지막 칸까지 선택을 늘린 뒤에 복사해야 한다. 그다음 회차
         // 끝의 자리로 움직임 한 번, 마지막이 휠이다.
+        //
+        // PD-M4부터 전이마다 주인을 가른다(`pointer.Grab`, design 결정 12).
+        // 자식이 마우스를 원하는 패널의 누름은 `Gesture`를 건너뛰고 그 PTY에
+        // 보고로 간다. 회차 끝에 `settle`이 주인의 버튼을 포인터의 버튼에
+        // 맞춘다 — 누른 채 빠진 장치의 버튼이 영영 눌린 채로 남지 않게.
         //
         // 휠이 맨 뒤라 한 회차 안의 누름 · 휠 · 뗌의 순서는 안 남는다. 사람의
         // 손으로 한 회차(밀리초 단위)에 그 셋이 함께 오는 일은 드물다.
@@ -2600,12 +2763,16 @@ pub fn main(init: std.process.Init) !void {
                 .whole = whole,
                 .cols = cols,
                 .rows = rows,
+                .grab = &grab,
+                .grab_ws = &grab_ws,
+                .mods = key_state.modifiers(),
             };
             for (round.edges[0..round.edge_count]) |e| {
-                try wire.motion(e.x, e.y);
-                if (e.down) try wire.press(e.x, e.y) else try wire.release();
+                try wire.moved(e.x, e.y);
+                try wire.edge(e);
             }
-            if (round.woke) try wire.motion(pointer_state.x, pointer_state.y);
+            grab.settle(pointer_state.buttons);
+            if (round.woke) try wire.moved(pointer_state.x, pointer_state.y);
             if (round.wheel != 0) try wire.wheel(round.wheel, pointer_state.x, pointer_state.y);
             if (wire.redraw) needs_redraw = true;
         }
