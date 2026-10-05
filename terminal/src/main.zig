@@ -474,6 +474,12 @@ fn renderFinish(
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
     // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
     st: Status,
+    // 화살표(PD-M1). `want`이 null이면 안 그린다. 화면 전체를 방금 다시
+    // 칠했으므로 옛 화살표는 이미 지워졌고 저장한 픽셀은 낡았다 — 되돌리지
+    // 않고 잊는다(`forget`). 그리고 `present` 바로 앞에서 새로 저장하고 그린다
+    // (PD design 결정 4).
+    sprite: *pointer.Sprite,
+    want: ?pointer.Spot,
 ) !?PromptInk {
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
@@ -485,6 +491,11 @@ fn renderFinish(
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try drawStatus(fb, cache, st);
 
+    // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
+    // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
+    // 보이는 것은 사람이 포인터를 움직인 뒤뿐이라 다른 체인의 덤프는 안 바뀐다.
+    sprite.forget();
+    if (want) |s| sprite.show(fb, s);
     try fb.present();
     return ink;
 }
@@ -1453,7 +1464,74 @@ const PointerDev = struct {
 const PointerRound = struct {
     frames: usize = 0,
     wheel: i32 = 0,
+    /// 이 회차에 포인터가 움직였거나 버튼이 눌렸다. 화살표가 보이는 조건
+    /// 2다(PD design 결정 4). 휠만 굴린 회차는 아니다.
+    woke: bool = false,
 };
+
+/// 이 회차 앞에 화면에 화살표가 그려져 있었는가(PD-M1). `open` 줄의 `shown=`이
+/// 이것을 찍는다. 장치를 여는 자리(처음 훑기 · 핫플러그)가 여럿이라 인자로
+/// 나르지 않고 파일 하나의 값으로 둔다 — 쓰는 자리는 `main`의 포인터 분기
+/// 하나다.
+var pointer_drawn = false;
+
+/// 휠 한 눈금이 움직이는 줄 수(PD design 결정 7). xterm 계열이 흔히 쓰는
+/// 값이다. 설정은 비목표 7이다.
+const WHEEL_ROWS: isize = 3;
+
+/// 격자의 칸 하나. 패널이 아니라 격자 전체의 좌표다.
+const GridCell = struct { col: u16, row: u16 };
+
+/// 프레임버퍼 픽셀을 격자 칸으로 바꾼다(PD design 결정 5). 여백 · 상태 줄
+/// 위면 null이다.
+///
+/// `paneOrigin`의 역이고 같은 상수 넷(`GRID_X` · `GRID_Y` · `CELL_W` ·
+/// `ROW_HEIGHT`)을 쓴다. 다른 상수를 쓰면 화살표 끝과 고른 칸이 한 칸
+/// 어긋나고, 그 어긋남은 글자만 보는 판정으로는 안 보인다.
+fn gridCell(x: u32, y: u32, cols: u16, rows: u16) ?GridCell {
+    if (x < GRID_X or y < GRID_Y) return null;
+    const col = (x - GRID_X) / CELL_W;
+    const row = (y - GRID_Y) / ROW_HEIGHT;
+    if (col >= cols or row >= rows) return null;
+    return .{ .col = @intCast(col), .row = @intCast(row) };
+}
+
+/// 열린 포인터 장치의 수. 0이면 화살표가 안 보인다(보이는 조건 1).
+fn pointerCount(devs: *const [pointer.MAX_DEVICES]?PointerDev) usize {
+    var n: usize = 0;
+    for (devs) |slot| {
+        if (slot != null) n += 1;
+    }
+    return n;
+}
+
+/// 이 회차의 `pointer> at` 줄(PD design 결정 10). 그린 뒤에 부른다 —
+/// `ink`가 프레임버퍼를 되읽는다.
+///
+/// 이벤트마다가 아니라 회차마다 한 줄이다. 이벤트마다 찍으면 마우스의 보고
+/// 빈도(수백 Hz)가 그대로 줄 수가 된다(design 결정 3).
+///
+/// 찍는 회차가 둘이다. 포인터 이벤트가 있던 회차, 그리고 화살표가 숨은
+/// 회차(키를 쳤다 · 장치가 다 빠졌다). 뒤의 것이 없으면 키를 친 회차에는
+/// 포인터 이벤트가 없어 줄이 안 나오고, 다음 움직임은 화살표를 다시
+/// 보이게 하므로 "숨었다"를 볼 창구가 없다.
+///
+/// `shown`은 지금 화면에 화살표가 그려져 있는가다. `ink`는 직전 자리와 지금
+/// 자리의 사각형 둘에서 센 화살표 색 픽셀 수다(`Sprite.ink`).
+fn dumpPointerAt(
+    fb: drm.Framebuffer,
+    state: *const pointer.Pointer,
+    round: PointerRound,
+    sprite: *const pointer.Sprite,
+    before: ?pointer.Spot,
+) void {
+    const hid = before != null and sprite.at == null;
+    if (round.frames == 0 and !hid) return;
+    std.debug.print("terminal: pointer> at x={d} y={d} buttons={d} wheel={d} shown={d} ink={d}\n", .{
+        state.x,                         state.y,                state.buttons.bits(), round.wheel,
+        @intFromBool(sprite.at != null), sprite.ink(fb, before),
+    });
+}
 
 /// 연 fd에 성질을 묻는다. 하나라도 실패하면 null이다 — 분류할 수 없는
 /// 장치라 열지 않는다. sysfs가 아니라 ioctl인 이유는 design 결정 1이다.
@@ -1517,9 +1595,10 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     };
     devs[free] = .{ .fd = fd, .path = undefined, .path_len = path.len };
     @memcpy(devs[free].?.path[0..path.len], path);
-    // `shown=0`은 화살표가 아직 안 보인다는 뜻이다. 열린 뒤 움직여야 보인다
-    // (design 결정 4의 보이는 조건 2). PD-M0은 아예 안 그리므로 언제나 0이다.
-    std.debug.print("terminal: pointer> open {s} kind=mouse shown=0 name={s}\n", .{ path, dev_name });
+    // `shown`은 지금 화면에 화살표가 있는가다(PD-M1, `pointer_drawn`). 첫
+    // 장치면 0이다 — 열린 뒤 움직여야 보인다(design 결정 4의 보이는 조건 2).
+    // 화살표가 보이는 동안 둘째 장치를 꽂으면 1이다.
+    std.debug.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
 }
 
 /// 부팅 때 이미 있던 장치를 훑는다. uevent 소켓을 연 뒤에 부른다 — 반대면
@@ -1585,6 +1664,7 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
             const e = state.apply(slot, frame);
             round.frames += 1;
             round.wheel +|= e.wheel;
+            if (e.moved or e.pressed.bits() != 0) round.woke = true;
         }
     }
     return .open;
@@ -1848,6 +1928,12 @@ pub fn main(init: std.process.Init) !void {
     // 잃는다. 그때 `uevent_fd`는 -1이고 poll은 음수 fd를 건너뛴다.
     var pointer_devs: [pointer.MAX_DEVICES]?PointerDev = @splat(null);
     var pointer_state = pointer.Pointer.init(fb.width, fb.height);
+    // 화살표와 그 밑의 픽셀(PD-M1, design 결정 4).
+    var sprite = pointer.Sprite.init(fb.width, fb.height);
+    // 보이는 조건 2 · 3(design 결정 4). 움직이거나 누르면 켜지고, 키보드가
+    // PTY에 바이트를 보내면 꺼진다. 장치가 다 빠져도 꺼진다 — 다시 꽂은
+    // 장치는 움직여야 보인다. 조건 1(장치가 하나 이상)은 `pointerCount`가 본다.
+    var pointer_shown = false;
     const uevent_fd: c_int = uevent: {
         const linux = std.os.linux;
         const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
@@ -1950,6 +2036,10 @@ pub fn main(init: std.process.Init) !void {
                     keys.bytes.len, ctx.cursor_keys,
                 });
                 pty.write(focus.session.master_fd, keys.bytes);
+                // 치는 동안 화살표가 그 줄의 글자를 가리지 않게 숨긴다(보이는
+                // 조건 3). 다음 움직임에 다시 보인다. 바이트가 나간 키만이다 —
+                // 수정 키 · copy mode 명령 · 스크롤 · 패널 명령은 안 숨긴다.
+                pointer_shown = false;
             }
             // 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
             // 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
@@ -2181,6 +2271,10 @@ pub fn main(init: std.process.Init) !void {
         // 그 fd에 대해 매 바퀴 즉시 돌아와 terminal이 CPU를 다 쓴다(design
         // 결정 1).
         var round: PointerRound = .{};
+        // 이 회차 앞의 화살표 자리. `at` 줄의 `ink`가 이 사각형도 센다 — 옛
+        // 자리를 못 지웠으면 그 자국이 여기 남는다(design 결정 10).
+        const before_spot = sprite.at;
+        pointer_drawn = before_spot != null;
         for (fds[2..pty_base], fd_devs[0 .. pty_base - 2]) |pfd, di| {
             if (pfd.revents == 0) continue;
             var gone = pfd.revents & (c.POLLERR | c.POLLHUP) != 0;
@@ -2190,15 +2284,24 @@ pub fn main(init: std.process.Init) !void {
             if (gone) closePointer(&pointer_devs, di, &pointer_state);
         }
         if (fds[1].revents & c.POLLIN != 0) drainUevents(uevent_fd, init.io, &pointer_devs);
-        // 회차마다 한 줄이다. 이벤트마다 찍으면 마우스의 보고 빈도(수백 Hz)가
-        // 그대로 줄 수가 된다(design 결정 3). PD-M0은 그리지 않으므로
-        // `needs_redraw`를 안 켠다 — 화면이 한 픽셀도 안 바뀐다. 그래서
-        // `shown`과 `ink`는 상수 0이다. PD-M1이 둘을 채운다(design 결정 10).
-        if (round.frames > 0) {
-            std.debug.print("terminal: pointer> at x={d} y={d} buttons={d} wheel={d} shown=0 ink=0\n", .{
-                pointer_state.x, pointer_state.y, pointer_state.buttons.bits(), round.wheel,
-            });
+        if (pointerCount(&pointer_devs) == 0) pointer_shown = false;
+        if (round.woke) pointer_shown = true;
+        // 휠(PD design 결정 7). 포인터 아래 패널이 움직이고 포커스는 안 바뀐다.
+        // 여백 · 구분선 위면 아무 일도 없다. 키보드 copy mode인 패널도 무시한다 —
+        // copy 커서는 뷰포트 좌표라 밖에서 뷰포트를 밀면 커서가 다른 글자를
+        // 가리키는데 선택은 안 따라온다.
+        //
+        // 양수가 휠을 앞으로 민 것이고 위로 간다. 뷰포트가 바뀌었으므로 화면
+        // 전체를 다시 그린다(`scroll>` 줄도 그 프레임에 찍힌다).
+        if (round.wheel != 0) wheel: {
+            const cell = gridCell(pointer_state.x, pointer_state.y, cols, rows) orelse break :wheel;
+            const h = ws.tree.hit(whole, cell.col, cell.row) orelse break :wheel;
+            const p = &ws.panes[h.leaf].?;
+            if (p.screen.copyActive()) break :wheel;
+            p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, round.wheel));
+            needs_redraw = true;
         }
+        // `at` 줄은 그린 뒤에 찍는다(`dumpPointerAt`) — `ink`가 그린 결과를 센다.
 
         // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
         // 남은 출력이 있으면 POLLIN과 함께 오지만 다 읽고 나면 POLLHUP만
@@ -2308,7 +2411,24 @@ pub fn main(init: std.process.Init) !void {
         //
         // 플래그를 두는 이유는 그리는 횟수를 늘리지 않기 위해서다. modifier
         // 키처럼 아무것도 바꾸지 않는 이벤트에서는 그리지 않는다.
-        if (!needs_redraw) continue;
+        // 화살표가 있어야 할 자리(PD design 결정 4). 보이는 조건 셋이 다
+        // 맞아야 한다 — 장치가 있고, 움직였고, 그 뒤로 키를 안 쳤다.
+        const want: ?pointer.Spot = if (pointer_shown and pointerCount(&pointer_devs) > 0)
+            .{ .x = pointer_state.x, .y = pointer_state.y }
+        else
+            null;
+        // 화면 전체를 다시 그릴 일이 없는 회차. 화살표만 고친다 — 저장한
+        // 픽셀을 되돌리고, 새 자리 밑을 저장하고, 그리고, 내보낸다. 렌더도
+        // 덤프도 없다(design 결정 4). 자리가 그대로면 아무것도 안 한다.
+        if (!needs_redraw) {
+            if (!pointer.sameSpot(sprite.at, want)) {
+                sprite.restore(fb);
+                if (want) |s| sprite.show(fb, s);
+                try fb.present();
+            }
+            dumpPointerAt(fb, &pointer_state, round, &sprite, before_spot);
+            continue;
+        }
         needs_redraw = false;
 
         // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
@@ -2394,7 +2514,7 @@ pub fn main(init: std.process.Init) !void {
         // render 사이라 안전하다.
         const imgs = focus.screen.images(&img_buf);
         try renderPane(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
-        const prompt_ink = try renderFinish(fb, &cache, prompt, status_line);
+        const prompt_ink = try renderFinish(fb, &cache, prompt, status_line, &sprite, want);
         const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
             first_frame_timed = true;
@@ -2431,6 +2551,9 @@ pub fn main(init: std.process.Init) !void {
                 last_glyph_count, cache.bitmap_bytes,
             });
         }
+        // 덤프들 뒤다. 게이트는 이 줄이 보이면 같은 프레임의 `scroll>`이 이미
+        // 찍혔다고 읽는다(pointer/check.sh 검사 11).
+        dumpPointerAt(fb, &pointer_state, round, &sprite, before_spot);
     }
 
     // 마지막 패널의 셸이 끝나면 터미널도 끝난다(WP design 결정 5). PID

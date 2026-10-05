@@ -91,6 +91,35 @@ fn expectAt(what: []const u8, p: *const pointer.Pointer, x: u32, y: u32) !void {
     return error.WrongPosition;
 }
 
+/// 64 × 48 화면 하나. 프레임버퍼 대신 들어간다(`image_test`의 `Fake`와 같은
+/// 모양). 범위 밖을 읽거나 쓰면 `oob`를 세우고 아무것도 안 한다 —
+/// `drm.Framebuffer`는 그때 게스트를 죽이므로 검사가 그것을 봐야 한다.
+const Fake = struct {
+    const W: u32 = 64;
+    const H: u32 = 48;
+    px: [W * H]u32 = @splat(0x00102030),
+    oob: bool = false,
+
+    pub fn getPixel(self: *Fake, x: u32, y: u32) u32 {
+        if (x >= W or y >= H) {
+            self.oob = true;
+            return 0;
+        }
+        return self.px[y * W + x];
+    }
+    pub fn setPixel(self: *Fake, x: u32, y: u32, color: u32) void {
+        if (x >= W or y >= H) {
+            self.oob = true;
+            return;
+        }
+        self.px[y * W + x] = color;
+    }
+    /// 픽셀마다 다른 값. 화살표 색 둘과는 안 겹친다(위 바이트가 0이 아니다).
+    fn pattern(self: *Fake) void {
+        for (&self.px, 0..) |*p, i| p.* = 0x01000000 | @as(u32, @intCast(i));
+    }
+};
+
 /// 마우스 디코더에 이벤트 하나를 먹이고 결과를 돌려준다. 검사를 이벤트
 /// 목록처럼 읽히게 하려는 것이다.
 fn feed(m: *pointer.Mouse, ev_type: anytype, code: anytype, value: i32) ?pointer.Frame {
@@ -299,6 +328,108 @@ pub fn main() !void {
         try expectTrue("uevent of a usb device node is ignored", pointer.ueventAddedNode(bind_usb) == null);
         try expectTrue("uevent add of inputN (no DEVNAME) is ignored", pointer.ueventAddedNode(add_input4) == null);
         try expectTrue("uevent add of input/mouse0 is ignored", pointer.ueventAddedNode(add_mouse0) == null);
+    }
+
+    // ── 검사 11: 화살표 모양과 그 ink 상수(PD-M1) ──────────────────────
+    //
+    // `ARROW_INK`는 게이트가 `at` 줄에서 보는 글자다. 모양을 고치고 상수를
+    // 안 고치면 여기서 먼저 빨개진다. 끝(hotspot)이 테두리 색인 것도 본다 —
+    // 오른쪽 아래 끝에서 화살표가 한 픽셀만 남을 때 그 픽셀이 이것이다.
+    {
+        var n: u32 = 0;
+        var dy: u32 = 0;
+        while (dy < pointer.ARROW_H) : (dy += 1) {
+            var dx: u32 = 0;
+            while (dx < pointer.ARROW_W) : (dx += 1) {
+                if (pointer.arrowColor(dx, dy) != null) n += 1;
+            }
+        }
+        try expectNum("pixels in the arrow bitmap", n, pointer.ARROW_INK);
+        try expectTrue("the hotspot (0,0) is an edge pixel", pointer.arrowColor(0, 0) == pointer.POINTER_EDGE);
+        try expectTrue("fill and edge are different colors", pointer.POINTER_FILL != pointer.POINTER_EDGE);
+    }
+
+    // ── 검사 12: save-under 왕복 — 되돌리면 처음과 같다 ──────────────────
+    //
+    // 바탕을 픽셀마다 다른 값으로 채운다. 한 칸 어긋나게 저장하거나 되돌리면
+    // 같은 값이 안 돌아오므로 여기서 보인다.
+    {
+        var f: Fake = .{};
+        f.pattern();
+        const orig = f.px;
+        var s = pointer.Sprite.init(Fake.W, Fake.H);
+        s.show(&f, .{ .x = 10, .y = 7 });
+        try expectNum("ink after show at 10,7", s.ink(&f, null), pointer.ARROW_INK);
+        try expectTrue("show changed the pixels under the arrow", !std.mem.eql(u32, &f.px, &orig));
+        s.restore(&f);
+        try expectTrue("restore brings back every pixel", std.mem.eql(u32, &f.px, &orig));
+        try expectTrue("after restore no arrow is drawn", s.at == null and s.ink(&f, .{ .x = 10, .y = 7 }) == 0);
+
+        // 움직임 한 번 = restore 뒤 show. 옛 자리는 처음 값으로 돌아오고 ink는
+        // 두 사각형을 합쳐도 상수 하나다.
+        s.show(&f, .{ .x = 10, .y = 7 });
+        s.restore(&f);
+        s.show(&f, .{ .x = 40, .y = 20 });
+        try expectNum("ink over the old and the new spot after a move", s.ink(&f, .{ .x = 10, .y = 7 }), pointer.ARROW_INK);
+        s.restore(&f);
+        try expectTrue("a move then restore leaves no trace", std.mem.eql(u32, &f.px, &orig));
+        try expectTrue("no write fell outside", !f.oob);
+    }
+
+    // ── 검사 13: 되돌리기를 빠뜨리면 ink가 상수보다 크다 ─────────────────
+    //
+    // 게이트 검사 8이 잡는 고장(save-under의 되돌리기를 뺀다)을 여기서 먼저
+    // 재현한다. 두 자리가 겹치면 겹친 픽셀은 한 번만 센다.
+    {
+        var f: Fake = .{};
+        var s = pointer.Sprite.init(Fake.W, Fake.H);
+        s.show(&f, .{ .x = 0, .y = 0 });
+        s.show(&f, .{ .x = 30, .y = 25 }); // restore 없이
+        try expectNum("ink with a trace left behind (apart)", s.ink(&f, .{ .x = 0, .y = 0 }), 2 * pointer.ARROW_INK);
+
+        var g: Fake = .{};
+        var t = pointer.Sprite.init(Fake.W, Fake.H);
+        t.show(&g, .{ .x = 5, .y = 5 });
+        t.restore(&g);
+        t.show(&g, .{ .x = 8, .y = 9 });
+        try expectNum("overlapping spots are counted once", t.ink(&g, .{ .x = 5, .y = 5 }), pointer.ARROW_INK);
+        t.forget();
+        try expectTrue("forget drops the spot without touching pixels", t.at == null and t.ink(&g, null) == 0 and
+            t.ink(&g, .{ .x = 8, .y = 9 }) == pointer.ARROW_INK);
+    }
+
+    // ── 검사 14: 가장자리에서 잘린다 — 범위 밖 쓰기가 없다 ───────────────
+    //
+    // 게이트 검사 10의 자리(오른쪽 아래 끝)다. 끝에 붙이면 hotspot 한 픽셀만
+    // 남는다. 오른쪽 아래 11 × 11만 남는 자리는 게이트 검사 6이 핫플러그한
+    // 마우스로 가는 자리(1269, 789)와 같은 모양이다.
+    {
+        var f: Fake = .{};
+        f.pattern();
+        const orig = f.px;
+        var s = pointer.Sprite.init(Fake.W, Fake.H);
+        s.show(&f, .{ .x = Fake.W - 1, .y = Fake.H - 1 });
+        try expectNum("ink at the bottom right corner", s.ink(&f, null), 1);
+        s.restore(&f);
+        s.show(&f, .{ .x = Fake.W - 11, .y = Fake.H - 11 });
+        try expectNum("ink with 11 x 11 left on screen", s.ink(&f, null), 66);
+        s.restore(&f);
+        s.show(&f, .{ .x = Fake.W + 5, .y = 0 });
+        try expectNum("ink when the spot is past the right edge", s.ink(&f, null), 0);
+        s.restore(&f);
+        try expectTrue("no write fell outside at the edges", !f.oob);
+        try expectTrue("clipped draws restore cleanly", std.mem.eql(u32, &f.px, &orig));
+    }
+
+    // ── 검사 15: 자리 비교 ────────────────────────────────────────────────
+    //
+    // `main.zig`가 "움직임만 있는 회차에 다시 그릴까"를 이것으로 가른다.
+    {
+        try expectTrue("null and null are the same spot", pointer.sameSpot(null, null));
+        try expectTrue("null and a spot differ", !pointer.sameSpot(null, .{ .x = 0, .y = 0 }) and
+            !pointer.sameSpot(.{ .x = 0, .y = 0 }, null));
+        try expectTrue("equal spots are the same", pointer.sameSpot(.{ .x = 3, .y = 4 }, .{ .x = 3, .y = 4 }));
+        try expectTrue("different spots differ", !pointer.sameSpot(.{ .x = 3, .y = 4 }, .{ .x = 4, .y = 3 }));
     }
 
     std.debug.print("pointer_test: all checks passed\n", .{});

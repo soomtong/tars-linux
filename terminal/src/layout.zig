@@ -9,6 +9,10 @@
 /// 격자 안의 사각형. 셀 단위이고 `col` · `row`가 왼쪽 위다.
 pub const Rect = struct { col: u16, row: u16, cols: u16, rows: u16 };
 
+/// 격자 칸 하나가 어느 잎의 어느 칸인가(PD design 결정 5). `col` · `row`는
+/// 그 잎의 사각형 안의 상대 칸이다 — 패널의 `vt.Screen`이 아는 좌표다.
+pub const Hit = struct { leaf: u4, col: u16, row: u16 };
+
 /// 새 패널이 어느 쪽에 서는가. 오른쪽(세로 구분선) 또는 아래(가로 구분선).
 pub const Dir = enum { right, below };
 
@@ -157,6 +161,29 @@ pub const Tree = struct {
         const at = self.findLeaf(leaf) orelse return leaf;
         const parent = self.findParent(at) orelse return leaf;
         return if (self.nodes[parent].split.second == at) self.prev(leaf) else self.next(leaf);
+    }
+
+    /// 격자 칸 `(col, row)`가 든 잎과 그 안의 상대 칸(PD design 결정 5).
+    /// 포인터가 가리키는 패널을 고르는 자리다.
+    ///
+    /// null이 둘이다. 구분선 칸은 어느 잎의 사각형에도 안 들어가고(`halves`가
+    /// 구분선을 두 잎 사이에 따로 둔다), 격자 밖 칸은 `whole` 밖이다. 픽셀을
+    /// 격자 칸으로 바꾸는 것은 `main.zig`다 — 이 파일은 셀 단위만 안다.
+    ///
+    /// 사각형은 `rects`로 얻는다. 같은 산수를 여기서 다시 하면 언젠가 한 칸
+    /// 어긋나고, 그 어긋남은 "구분선 위를 가리켰는데 왼쪽 패널이 움직인다"로
+    /// 나타난다.
+    pub fn hit(self: *const Tree, whole: Rect, col: u16, row: u16) ?Hit {
+        var rs: [MAX_LEAVES]Rect = undefined;
+        self.rects(whole, &rs);
+        var buf: [MAX_LEAVES]u4 = undefined;
+        for (self.leaves(&buf)) |leaf| {
+            const r = rs[leaf];
+            if (col < r.col or col >= r.col + r.cols) continue;
+            if (row < r.row or row >= r.row + r.rows) continue;
+            return .{ .leaf = leaf, .col = col - r.col, .row = row - r.row };
+        }
+        return null;
     }
 
     /// 잎의 수.

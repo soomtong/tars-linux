@@ -1,4 +1,4 @@
-# HANDOFF: Pointer Devices(PD)가 열렸다 — M0이 닫혔고 M1 plan이 저장소에 있다
+# HANDOFF: Pointer Devices(PD)가 열렸다 — M0 · M1이 닫혔고 M2 plan이 측정 대기 중
 
 ## 지금 어디인가(2026-10-05, 진행 중)
 
@@ -11,18 +11,20 @@ lead가 `ink` 정의 하나를 고쳤다, commit `0c2e6f5`, 결정 11 · 위험 
 |---|---|
 | `0c2e6f5` | design |
 | `8f8a030` | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
+| (M1 커밋) | PD-M1 — `pointer.zig` 화살표 절(12 × 19, `POINTER_FILL` · `POINTER_EDGE`, `Sprite` save-under, `ink` 118) · `layout.Tree.hit` · `main.zig` 편집 열둘(보이는 조건 셋 · 움직임만 있는 회차는 restore → show → present · 휠 `WHEEL_ROWS=3` 포인터 아래 패널) · `pointer/check.sh` 검사 8~12 · `pointer_test` OK 75 · `layout_test` hit 22 · 루트 게이트 19체인 3/3(1시간 8분 41초, 마지막 3회 게이트). 구현은 Sonnet |
 
 M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inotify로 받았고 게스트 커널에 `INOTIFY_USER`가 없어 한 줄을
 켰는데, 그것이 `FSNOTIFY`를 끌어와 initramfs 풀기를 TCG에서 2.6초 → 3.8초로 늦췄고 `install` 체인 부팅 7
 (`usb-storage.delay_use=3`)의 창이 닫혀 루트 게이트가 두 번 빨갰다. lead의 결정으로 netlink uevent(`NETLINK_KOBJECT_UEVENT`,
 커널 config 불필요)로 바꿨다. 과정과 표는 M0 plan "착수 전에 확정한 것" 7과 "PD-M0이 실측한 것" 7~10에 있다.
 
-바로 다음: PD-M1(화살표 · 휠, Sonnet 구현). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m1.md`(Opus planner,
-2,161줄, 아직 commit 전)이고, 측정은 inotify 판 M0 위에서 한 것이라 M0 commit 뒤 planner가 앵커 · `pointer/check.sh`의 M0
-부분 · 체인 · regression을 재대조한다(plan 확정 13). 그 뒤 Sonnet 구현자 → 체인 · mutation 다섯 → 루트 게이트 → commit.
-사용자의 결정(2026-10-05): 루트 게이트는 M1까지 3회, M2부터 2회(`docs/decisions/feedback_gate_runs.md` — M1 commit 뒤 별도 commit으로 `check.sh`를 고친다).
-lead가 M1에서 정한 것 둘: 화살표를 숨기는 자리는 `keys.bytes` 하나(`Cmd+V` · 질의 답은 안 숨긴다) · 마지막 장치가 빠지면
-"움직였다" 조건도 꺼진다(design 결정 4에 닫을 때 덧붙인다).
+바로 다음: PD-M2(클릭 포커스 · 드래그 선택 · 뗌 = 복사, Opus 구현). plan 초안은 `/tmp/run/pdm2/plan.md`(Opus planner,
+2,383줄, 측정 대기)이고 M1 commit 뒤 planner가 사본 컴파일 · 체인 · regression · mutation 넷을 돌려 `docs/plans/
+2026-10-05-tars-pointer-devices-pd-m2.md`로 옮긴다. lead가 M2에서 정한 것 다섯은 그 plan "design과 다르게 적은 것"에
+"lead가 정했다(2026-10-05)"로 있다. M1에서 정한 것 둘: 화살표를 숨기는 자리는 `keys.bytes` 하나(`Cmd+V` · 질의 답은 안
+숨긴다) · 마지막 장치가 빠지면 "움직였다" 조건도 꺼진다(design 결정 4에 닫을 때 덧붙인다).
+사용자의 결정(2026-10-05): 루트 게이트는 M1까지 3회, M2부터 2회(`docs/decisions/feedback_gate_runs.md`) — M1 commit 바로
+뒤의 별도 commit이 `check.sh`를 고친다.
 
 측정 파일: `/tmp/run/mp0`(lead 실측) · `/tmp/run/pdm0`(M0 planner · 구현자 · `inst/`에 install 재현 로그) ·
 `/tmp/run/pdm1`(M1 planner, 저장소 사본 `repo/`).

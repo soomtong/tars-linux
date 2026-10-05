@@ -30,6 +30,19 @@ fn expectLeaf(what: []const u8, got: ?u4, want: ?u4) !void {
     return error.WrongLeaf;
 }
 
+fn expectHit(what: []const u8, got: ?layout.Hit, want: ?layout.Hit) !void {
+    if (std.meta.eql(got, want)) {
+        if (got) |h| {
+            std.debug.print("layout_test: hit {s} = leaf {d} at {d},{d} OK\n", .{ what, h.leaf, h.col, h.row });
+        } else {
+            std.debug.print("layout_test: hit {s} = none OK\n", .{what});
+        }
+        return;
+    }
+    std.debug.print("FAIL: hit {s} = {any}, want {any}\n", .{ what, got, want });
+    return error.WrongHit;
+}
+
 fn expectCount(t: *const layout.Tree, want: usize) !void {
     if (t.count() == want) return;
     std.debug.print("FAIL: count = {d}, want {d}\n", .{ t.count(), want });
@@ -276,6 +289,47 @@ pub fn main() !void {
         try expectLeaf("heir(0) is the first leaf of the right half", t.heir(0), 1);
         // 순회의 next와 갈리는 자리를 직접 본다.
         try expectLeaf("next(2) wraps instead", t.next(2), 0);
+    }
+
+    // ── 검사 12: 격자 칸 → 잎 (PD-M1) ──────────────────────────────────
+    //
+    // 포인터 아래 패널을 고르는 자리다(PD design 결정 5). 0 | (1 / 2)에서
+    // 각 잎의 네 모서리 칸이 그 잎의 상대 칸 네 모서리가 되고, 구분선 칸과
+    // 격자 밖은 null이다. 왼쪽은 0,0 77x47, 세로 구분선이 77열, 오른쪽 위가
+    // 78,0 77x23, 가로 구분선이 23줄, 오른쪽 아래가 78,24 77x23이다(검사 9).
+    {
+        const one = layout.Tree.init();
+        try expectHit("one leaf, top left", one.hit(WHOLE, 0, 0), .{ .leaf = 0, .col = 0, .row = 0 });
+        try expectHit("one leaf, bottom right", one.hit(WHOLE, 154, 46), .{ .leaf = 0, .col = 154, .row = 46 });
+        try expectHit("one leaf, past the right edge", one.hit(WHOLE, 155, 0), null);
+        try expectHit("one leaf, past the bottom", one.hit(WHOLE, 0, 47), null);
+
+        var t = layout.Tree.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        // 왼쪽 잎 0의 네 모서리.
+        try expectHit("leaf 0 top left", t.hit(WHOLE, 0, 0), .{ .leaf = 0, .col = 0, .row = 0 });
+        try expectHit("leaf 0 top right", t.hit(WHOLE, 76, 0), .{ .leaf = 0, .col = 76, .row = 0 });
+        try expectHit("leaf 0 bottom left", t.hit(WHOLE, 0, 46), .{ .leaf = 0, .col = 0, .row = 46 });
+        try expectHit("leaf 0 bottom right", t.hit(WHOLE, 76, 46), .{ .leaf = 0, .col = 76, .row = 46 });
+        // 오른쪽 위 잎 1의 네 모서리.
+        try expectHit("leaf 1 top left", t.hit(WHOLE, 78, 0), .{ .leaf = 1, .col = 0, .row = 0 });
+        try expectHit("leaf 1 top right", t.hit(WHOLE, 154, 0), .{ .leaf = 1, .col = 76, .row = 0 });
+        try expectHit("leaf 1 bottom left", t.hit(WHOLE, 78, 22), .{ .leaf = 1, .col = 0, .row = 22 });
+        try expectHit("leaf 1 bottom right", t.hit(WHOLE, 154, 22), .{ .leaf = 1, .col = 76, .row = 22 });
+        // 오른쪽 아래 잎 2의 네 모서리.
+        try expectHit("leaf 2 top left", t.hit(WHOLE, 78, 24), .{ .leaf = 2, .col = 0, .row = 0 });
+        try expectHit("leaf 2 top right", t.hit(WHOLE, 154, 24), .{ .leaf = 2, .col = 76, .row = 0 });
+        try expectHit("leaf 2 bottom left", t.hit(WHOLE, 78, 46), .{ .leaf = 2, .col = 0, .row = 22 });
+        try expectHit("leaf 2 bottom right", t.hit(WHOLE, 154, 46), .{ .leaf = 2, .col = 76, .row = 22 });
+        // 구분선 칸.
+        try expectHit("vertical separator, top", t.hit(WHOLE, 77, 0), null);
+        try expectHit("vertical separator, bottom", t.hit(WHOLE, 77, 46), null);
+        try expectHit("horizontal separator, left end", t.hit(WHOLE, 78, 23), null);
+        try expectHit("horizontal separator, right end", t.hit(WHOLE, 154, 23), null);
+        // 격자 밖.
+        try expectHit("past the right edge", t.hit(WHOLE, 155, 10), null);
+        try expectHit("past the bottom", t.hit(WHOLE, 10, 47), null);
     }
 
     std.debug.print("layout_test: all checks passed\n", .{});

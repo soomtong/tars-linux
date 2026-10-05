@@ -269,3 +269,177 @@ fn clampAdd(pos: u32, delta: i32, limit: u32) u32 {
     if (next >= limit) return limit - 1;
     return @intCast(next);
 }
+
+// ── 화살표(PD-M1) ─────────────────────────────────────────────────────
+//
+// 화면에 그리는 쪽의 산수다. 대상은 `anytype` — `getPixel(x, y) u32`와
+// `setPixel(x, y, color)`가 있는 것 — 이라 게스트에서는 `drm.Framebuffer`가,
+// `pointer_test`에서는 `u32` 배열이 들어온다. `image.zig`와 같은 모양이다.
+
+/// 화살표의 크기(PD design 결정 4). hotspot은 왼쪽 위 끝 (0, 0)이다.
+pub const ARROW_W: u32 = 12;
+pub const ARROW_H: u32 = 19;
+
+/// 화살표 안쪽의 색(PD design 결정 4). 전용 색이다 — 게이트가 이 색과
+/// `POINTER_EDGE`만 세어 "그 자리에 그렸는가"를 본다(CI 결정 3 · WP의
+/// `SEPARATOR`와 같은 이유). 지금의 색 상수와 xterm 256색 팔레트에 없다.
+pub const POINTER_FILL: u32 = 0x00FCFCF4;
+
+/// 화살표 테두리 한 픽셀의 색. 밝은 글자 위에서도 화살표가 보이게 한다.
+pub const POINTER_EDGE: u32 = 0x00040810;
+
+/// 화살표 모양. `E`는 테두리, `F`는 안쪽, `.`은 그리지 않는 자리다. 줄이
+/// y, 글자가 x다. 고전적인 12 × 19 화살표를 그대로 옮겼다.
+const ARROW = [ARROW_H]*const [ARROW_W]u8{
+    "E...........",
+    "EE..........",
+    "EFE.........",
+    "EFFE........",
+    "EFFFE.......",
+    "EFFFFE......",
+    "EFFFFFE.....",
+    "EFFFFFFE....",
+    "EFFFFFFFE...",
+    "EFFFFFFFFE..",
+    "EFFFFFFFFFE.",
+    "EFFFFFFEEEEE",
+    "EFFFEFFE....",
+    "EFFEEFFE....",
+    "EFE..EFFE...",
+    "EE...EFFE...",
+    "E.....EFFE..",
+    "......EFFE..",
+    ".......EE...",
+};
+
+/// 화살표가 다 보일 때의 `ink`(테두리 49 + 안쪽 69). `pointer> at` 줄이 이
+/// 수를 찍고 `pointer/check.sh`가 이 글자를 본다. `pointer_test`가 `ARROW`에서
+/// 다시 세어 대조한다 — 모양을 고치면 이 수와 게이트를 함께 고친다.
+pub const ARROW_INK: u32 = 118;
+
+/// 화살표 안의 한 자리 `(dx, dy)`의 색. 그리지 않는 자리면 null이다.
+pub fn arrowColor(dx: u32, dy: u32) ?u32 {
+    return switch (ARROW[dy][dx]) {
+        'E' => POINTER_EDGE,
+        'F' => POINTER_FILL,
+        else => null,
+    };
+}
+
+/// 화살표의 자리. 대상의 픽셀 좌표이고 hotspot(왼쪽 위 끝)의 자리다.
+pub const Spot = struct { x: u32, y: u32 };
+
+/// 두 자리가 같은가. 둘 다 null이면 같다.
+pub fn sameSpot(a: ?Spot, b: ?Spot) bool {
+    const p = a orelse return b == null;
+    const q = b orelse return false;
+    return p.x == q.x and p.y == q.y;
+}
+
+/// 화면의 화살표 하나와 그 밑의 픽셀(save-under, PD design 결정 4).
+///
+/// 움직임만 있는 회차는 화면 전체를 다시 그리지 않는다. 저장해 둔 픽셀을
+/// 되돌리고(`restore`), 새 자리 밑을 저장하고 그린다(`show`). 셀이 바뀐
+/// 회차는 화면 전체를 다시 칠하므로 저장한 픽셀이 낡는다 — 그때는 되돌리지
+/// 않고 잊는다(`forget`). 되돌리면 새 프레임 위에 지난 프레임의 조각을 붙인다.
+///
+/// 화살표가 덮는 픽셀(`arrowColor`가 null이 아닌 자리)만 저장하고 되돌린다.
+/// 나머지는 화살표가 안 건드리므로 그대로다. 실기의 프레임버퍼는 캐시가 없는
+/// 메모리라 되읽기가 비싸다(design 결정 10) — 읽는 수를 줄인다.
+///
+/// 대상의 가장자리에서 화살표가 잘린다. `drm.Framebuffer.setPixel`에 범위
+/// 검사가 없으므로 이 자르기가 곧 프레임버퍼 밖 쓰기를 막는 자리다.
+pub const Sprite = struct {
+    /// 대상의 크기. 자르기에 쓴다.
+    w: u32,
+    h: u32,
+    /// 지금 화살표가 그려진 자리. null이면 화면에 화살표가 없다.
+    at: ?Spot = null,
+    /// `at`에 그리기 전에 저장한 픽셀. `[dy * ARROW_W + dx]`다.
+    saved: [ARROW_H * ARROW_W]u32 = @splat(0),
+
+    pub fn init(w: u32, h: u32) Sprite {
+        return .{ .w = w, .h = h };
+    }
+
+    /// `s`에서 대상 안에 남는 폭과 높이. 대상 밖이면 0이다.
+    fn span(self: *const Sprite, s: Spot) struct { w: u32, h: u32 } {
+        return .{
+            .w = if (s.x >= self.w) 0 else @min(ARROW_W, self.w - s.x),
+            .h = if (s.y >= self.h) 0 else @min(ARROW_H, self.h - s.y),
+        };
+    }
+
+    /// `s`에 화살표를 그린다. 그리기 전에 그 밑을 저장한다. 이미 그려진
+    /// 화살표가 있으면 먼저 `restore`나 `forget`을 불러야 한다 — 이 함수는
+    /// 옛 자리를 모른다.
+    pub fn show(self: *Sprite, target: anytype, s: Spot) void {
+        const sp = self.span(s);
+        var dy: u32 = 0;
+        while (dy < sp.h) : (dy += 1) {
+            var dx: u32 = 0;
+            while (dx < sp.w) : (dx += 1) {
+                const color = arrowColor(dx, dy) orelse continue;
+                self.saved[dy * ARROW_W + dx] = target.getPixel(s.x + dx, s.y + dy);
+                target.setPixel(s.x + dx, s.y + dy, color);
+            }
+        }
+        self.at = s;
+    }
+
+    /// 저장한 픽셀을 되돌린다. 화살표가 없으면 아무 일도 안 한다.
+    pub fn restore(self: *Sprite, target: anytype) void {
+        const s = self.at orelse return;
+        const sp = self.span(s);
+        var dy: u32 = 0;
+        while (dy < sp.h) : (dy += 1) {
+            var dx: u32 = 0;
+            while (dx < sp.w) : (dx += 1) {
+                if (arrowColor(dx, dy) == null) continue;
+                target.setPixel(s.x + dx, s.y + dy, self.saved[dy * ARROW_W + dx]);
+            }
+        }
+        self.at = null;
+    }
+
+    /// 화면 전체가 새로 칠해졌다. 화살표는 이미 지워졌고 저장한 픽셀은 낡았다.
+    pub fn forget(self: *Sprite) void {
+        self.at = null;
+    }
+
+    /// 두 사각형(직전 자리 `before`와 지금 자리 `at`, 각 12 × 19) 안에서
+    /// `POINTER_FILL` · `POINTER_EDGE` 픽셀을 센다(PD design 결정 10).
+    ///
+    /// 화살표가 다 보이면 `ARROW_INK`이고, 숨었으면 0이고, 가장자리에서
+    /// 잘리면 그 사이다. 옛 자리를 못 지웠으면 `ARROW_INK`보다 크다 — 자국은
+    /// 되돌리지 못한 옛 자리에 남으므로 이 두 사각형 안에서 잡힌다. 두
+    /// 사각형이 겹치면 겹친 픽셀은 한 번만 센다.
+    ///
+    /// 화면 전체를 세지 않는 이유는 이 수가 움직임 회차마다 찍히기 때문이다.
+    pub fn ink(self: *const Sprite, target: anytype, before: ?Spot) u32 {
+        var n: u32 = 0;
+        if (before) |b| n += self.countRect(target, b, null);
+        if (self.at) |a| n += self.countRect(target, a, before);
+        return n;
+    }
+
+    /// 사각형 `s` 안의 화살표 색 픽셀 수. `skip` 사각형 안의 픽셀은 안 센다.
+    fn countRect(self: *const Sprite, target: anytype, s: Spot, skip: ?Spot) u32 {
+        const sp = self.span(s);
+        var n: u32 = 0;
+        var dy: u32 = 0;
+        while (dy < sp.h) : (dy += 1) {
+            var dx: u32 = 0;
+            while (dx < sp.w) : (dx += 1) {
+                const x = s.x + dx;
+                const y = s.y + dy;
+                if (skip) |k| {
+                    if (x >= k.x and x < k.x + ARROW_W and y >= k.y and y < k.y + ARROW_H) continue;
+                }
+                const p = target.getPixel(x, y) & 0x00FFFFFF;
+                if (p == POINTER_FILL or p == POINTER_EDGE) n += 1;
+            }
+        }
+        return n;
+    }
+};
