@@ -1,4 +1,5 @@
 const std = @import("std");
+const clipboard = @import("clipboard.zig");
 const drm = @import("drm.zig");
 const font = @import("font.zig");
 const hangul = @import("hangul.zig");
@@ -1215,8 +1216,13 @@ fn dumpClip(text: ?[]const u8) void {
 /// 새 접두사를 만들지 않고 `clip>`를 쓰는 것은 design 결정 8이다. 문구가 이
 /// 파일과 `copy/check.sh` 양쪽에 중복된다 — 한쪽을 고치면 다른 쪽도 고쳐야
 /// 한다.
-fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
-    const text = screen.clipboard() orelse {
+///
+/// 클립보드는 인자로 받는다(CB design 결정 1). 어느 칸인지는 `Clips.of`가
+/// 범위에 따라 고르고, 여기는 받은 글자를 쓰기만 한다. 그래서 `clip> paste
+/// empty`는 "고른 칸이 비었다"다 — `clipboard=pane`에서 다른 패널이 복사한
+/// 것은 여기 안 온다.
+fn dumpPaste(screen: *vt.Screen, master_fd: c_int, clip: ?[]const u8) void {
+    const text = clip orelse {
         // 아직 아무것도 복사하지 않았는데 Cmd+V를 눌렀다. 조용히 넘어가면
         // 게이트가 "클립보드가 비었다"와 "Cmd+V가 아예 안 도착했다"를 못 가른다.
         std.debug.print("terminal: clip> paste empty\n", .{});
@@ -1246,9 +1252,11 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int) void {
 ///
 /// 문구가 이 파일과 `hangul/check.sh` 양쪽에 있다 — 한쪽을 고치면 다른
 /// 쪽도 고쳐야 한다(`clip>`가 이미 그런 자리다).
-fn dumpFindPaste(screen: *vt.Screen) void {
-    const clip_len = if (screen.clipboard()) |t| t.len else 0;
-    const put = screen.findPaste();
+///
+/// 클립보드를 인자로 받는 것은 `dumpPaste`와 같다(CB design 결정 1).
+fn dumpFindPaste(screen: *vt.Screen, clip: ?[]const u8) void {
+    const clip_len = if (clip) |t| t.len else 0;
+    const put = screen.findPaste(clip);
     std.debug.print("terminal: find> paste clip={d} put={d}\n", .{ clip_len, put });
 }
 
@@ -1259,6 +1267,42 @@ const Pane = struct {
     session: pty.Session,
     /// 격자 안의 자리(셀 단위). 하나뿐이면 격자 전체다.
     rect: layout.Rect,
+    /// 이 패널만의 클립보드(CB design 결정 1). `clipboard=pane`일 때만 쓰이고,
+    /// `shared`면 비어 있다. 패널을 닫는 자리가 `screen`과 함께 해제한다.
+    clip: clipboard.Clipboard,
+};
+
+/// 클립보드 둘과 그중 무엇을 쓸지(CB design 결정 1 · 2).
+///
+/// 공유 칸 하나는 여기 있고 패널의 칸은 `Pane.clip`에 있다. 범위는 부팅에
+/// argv로 한 번 정해지고 바뀌지 않는다.
+///
+/// 클립보드를 만지는 네 자리(`y` · 포인터 뗌 · `Cmd+V` · 검색창의 `Cmd+V`)가
+/// 전부 이 구조의 `yank` · `paste`를 지난다. 그래서 칸을 고르는 판단이 `of`
+/// 한 자리에만 있고, 키보드와 포인터가 다른 칸을 볼 수 없다.
+const Clips = struct {
+    scope: clipboard.Scope,
+    shared: clipboard.Clipboard,
+
+    fn of(self: *Clips, pane: *Pane) *clipboard.Clipboard {
+        return clipboard.pick(self.scope, &self.shared, &pane.clip);
+    }
+
+    /// `y`와 포인터 뗌. 선택을 고른 칸에 넣고 `clip>` 줄을 찍는다.
+    fn yank(self: *Clips, pane: *Pane) !void {
+        dumpClip(try pane.screen.copyYank(self.of(pane)));
+    }
+
+    /// `Cmd+V`. 목적지가 여기서 갈린다(FP design 결정 3) — 검색 프롬프트가
+    /// 열려 있으면 needle에, 아니면 셸에 쓴다. 판단 근거가 `input.State`의
+    /// 모드가 아니라 `findNeedle()`인 이유는 키 분기의 `.paste` 주석에 있다.
+    fn paste(self: *Clips, pane: *Pane) void {
+        const text = self.of(pane).text();
+        if (pane.screen.findNeedle() != null)
+            dumpFindPaste(pane.screen, text)
+        else
+            dumpPaste(pane.screen, pane.session.master_fd, text);
+    }
 };
 
 /// iTerm2의 탭 하나. 패널의 트리와 포커스 하나씩(WP design "모델" 절).
@@ -1315,7 +1359,7 @@ fn spawnPane(
 ) !Pane {
     const session = try pty.spawn(path, argv, rect.cols, rect.rows);
     const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
-    return .{ .screen = screen, .session = session, .rect = rect };
+    return .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc) };
 }
 
 /// `poll`의 fd 하나가 누구의 것인가(WP-M1). 패널 포인터와, 그 패널을
@@ -1851,6 +1895,8 @@ const PointerWire = struct {
     /// 이 회차의 수정키(`input.State.modifiers`). 키보드 분기가 포인터 분기
     /// 앞이라 같은 회차에 친 Shift도 들어 있다.
     mods: input.State.Modifiers,
+    /// 뗌이 복사할 칸을 고른다(CB design 결정 1). 키보드의 `y`와 같은 길이다.
+    clips: *Clips,
     /// 의도가 화면을 바꿨다. 부르는 쪽이 `needs_redraw`로 옮긴다.
     redraw: bool = false,
 
@@ -2105,7 +2151,7 @@ const PointerWire = struct {
                 // 삼켜진다(pointer/check.sh 검사 18).
                 .copy => |leaf| {
                     const p = &self.ws.panes[leaf].?;
-                    dumpClip(try p.screen.copyYank());
+                    try self.clips.yank(p);
                     dumpCopy(p.screen, "yank");
                     _ = self.key_state.pointerMode(.normal);
                     self.redraw = true;
@@ -2217,6 +2263,13 @@ pub fn main(init: std.process.Init) !void {
         "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin";
     const toggles = input.parseToggles(toggle_arg);
 
+    // 아홉째가 클립보드의 범위다(CB-M0, design 결정 3). 자판 둘과 같은
+    // 모양이다 — init이 `tars.conf`의 화이트리스트를 이미 거쳤으므로 여기
+    // 도착하는 값은 언제나 맞고, fallback은 terminal을 손으로 띄울 때를 위한
+    // 것이다. 기본값이 `shared`인 것은 사용자가 정했다(2026-10-05).
+    const clip_arg: []const u8 = if (args.len > 8) std.mem.span(args[8]) else "shared";
+    const clip_scope = std.meta.stringToEnum(clipboard.Scope, clip_arg) orelse .shared;
+
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
     // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
     // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
@@ -2276,6 +2329,12 @@ pub fn main(init: std.process.Init) !void {
     var argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
     if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) argv[1] = null;
 
+    // 공유 칸은 패널보다 오래 산다 — 마지막 패널이 닫히면 terminal이 끝나므로
+    // 프로세스와 같은 수명이다(CB design 비목표 2: terminal이 되살아나면 빈
+    // 칸으로 시작한다).
+    var clips: Clips = .{ .scope = clip_scope, .shared = .init(allocator) };
+    defer clips.shared.deinit();
+
     // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
     // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
     // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
@@ -2293,7 +2352,10 @@ pub fn main(init: std.process.Init) !void {
     defer for (workspaces) |slot| {
         const w = slot orelse continue;
         for (w.panes) |maybe| {
-            if (maybe) |pane| pane.screen.deinit();
+            if (maybe) |pane| {
+                pane.screen.deinit();
+                pane.clip.deinit();
+            }
         }
     };
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
@@ -2322,6 +2384,10 @@ pub fn main(init: std.process.Init) !void {
         @tagName(latin_layout),
         input.togglesArg(toggles, &toggle_buf),
     });
+    // 같은 이유의 줄이 클립보드에도 하나 필요하다(CB-M0). `tars-init: config`
+    // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너
+    // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
+    std.debug.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
 
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
@@ -2538,15 +2604,15 @@ pub fn main(init: std.process.Init) !void {
                     // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
                     // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
                     // 때문이다.
-                    .yank => dumpClip(try focus.screen.copyYank()),
+                    .yank => try clips.yank(focus),
                     // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
                     // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
                     // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
                     // 살아 있는가"를 본다.
                     //
-                    // 목적지가 여기서 갈린다(FP design 결정 3). `input.zig`는
+                    // 목적지가 `Clips.paste`에서 갈린다(FP design 결정 3). `input.zig`는
                     // `vt.zig`를 import하지 않으므로(IP design 결정 6) 이 갈래는
-                    // 여기에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
+                    // 이 파일에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
                     // 알고, 클립보드도 프롬프트도 이 파일이 본다.
                     //
                     // 판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
@@ -2555,10 +2621,7 @@ pub fn main(init: std.process.Init) !void {
                     //
                     // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
                     // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
-                    .paste => if (focus.screen.findNeedle() != null)
-                        dumpFindPaste(focus.screen)
-                    else
-                        dumpPaste(focus.screen, focus.session.master_fd),
+                    .paste => clips.paste(focus),
                     // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
                     // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
                     .find_open => {
@@ -2768,6 +2831,7 @@ pub fn main(init: std.process.Init) !void {
                 .grab = &grab,
                 .grab_ws = &grab_ws,
                 .mods = key_state.modifiers(),
+                .clips = &clips,
             };
             for (round.edges[0..round.edge_count]) |e| {
                 try wire.moved(e.x, e.y);
@@ -2803,6 +2867,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("terminal: pane> closed leaf={d}\n", .{ref.leaf});
                 pty.close(pane.session);
                 pane.screen.deinit();
+                pane.clip.deinit();
                 w.panes[ref.leaf] = null;
                 // 포커스를 먼저 옮긴다. 자리를 넘겨받는 형제로 간다(WP-M2,
                 // 사용자가 2026-10-03에 골랐다 — M1은 순회의 다음이었다).

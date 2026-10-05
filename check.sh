@@ -330,6 +330,11 @@ run_chain() {
 # 켜고 terminal이 보낸 바이트를 cat -v로 찍고, vim이 mouse=a로 클릭을 받는다.
 # 회차당 부팅 2회.
 #
+# WP 체인은 패널 분할 · 닫기 · 순환과 워크스페이스를 본다. CB-M0이 클립보드의
+# 범위를 더했다 — 부팅 A(디스크 없음, shared)에서 한 패널 · 워크스페이스에서
+# 잡은 줄을 다른 곳에 붙여 실행하고, 부팅 B(설정 디스크의 clipboard=pane)에서
+# 다른 패널의 Cmd+V가 비는 것을 본다. 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -350,7 +355,7 @@ CHAINS=(
   "FW-M2:./firewall/check.sh"
   "CT-M2:./service/check.sh"
   "WL-M3:./wifi/check.sh"
-  "WP-M2:./pane/check.sh"
+  "CB-M0:./pane/check.sh"
   "PD-M4:./pointer/check.sh"
 )
 

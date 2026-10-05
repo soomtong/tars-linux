@@ -31,7 +31,19 @@ cd "$(dirname "$0")"
 # 산다", 9는 "마지막까지 닫으면 끝난다". 하나만 보면 "닫기가 늘 terminal을
 # 죽인다"도 "영영 안 죽는다"도 통과한다.
 #
-# 디스크를 물지 않는다. 패널은 설정과 무관하다.
+# 부팅 A는 디스크를 물지 않는다. 패널은 설정과 무관하다.
+#
+# CB-M0이 클립보드를 더했다(CB design 결정 4). 클립보드의 범위는 패널과
+# 워크스페이스 사이의 일이라 이 체인에 둔다.
+#   검사 10 — 부팅 A의 범위가 기본값 shared다(init 줄과 terminal 줄 둘).
+#   검사 11 — 한 패널에서 y로 잡은 줄을 다른 패널에서 Cmd+V로 붙여 실행한다.
+#   검사 12 — 같은 일을 워크스페이스를 건너서 한다.
+#   부팅 B — 설정 디스크의 clipboard=pane. 검사 13이 범위를 보고, 14가
+#            다른 패널의 Cmd+V가 빈 것을(음성), 15가 같은 패널의 Cmd+V가
+#            그 글자를 붙이는 것을(대조군) 본다.
+# 판정은 clip> 줄과 마지막 screen> 줄이다. clip> 줄은 어느 패널의 것인지
+# 말하지 않으므로, 붙인 글자가 실행되어 포커스 패널의 화면에 나오는 것을
+# 함께 본다.
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -66,8 +78,12 @@ if ! (cd ../kernel && ./make_initrd.sh); then
 fi
 
 # 열일곱 체인이 45455~45486을 쓴다. 겹치지 않는 번호를 쓰는 이유는 죽다 만
-# QEMU가 남았을 때 엉뚱한 게스트에 명령을 보내지 않기 위해서다.
+# QEMU가 남았을 때 엉뚱한 게스트에 명령을 보내지 않기 위해서다. 45488 ·
+# 45489는 pointer 체인의 것이고, 부팅 B(CB-M0)가 45490을 쓴다.
 MONITOR_PORT=45487
+MONITOR_PORT_B=45490
+
+REPO_ROOT="$(cd .. && pwd)"
 
 LOG="$(mktemp)"
 QEMU_PID=""
@@ -91,6 +107,8 @@ report_failure() {
     "terminal: pane>" \
     "terminal: key>" \
     "terminal: child exited (pty EOF)" \
+    "terminal: clipboard scope=" \
+    "terminal: clip>" \
     "terminal: spawned child pid"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
@@ -100,6 +118,8 @@ report_failure() {
   done
   echo "--- pane lines ---"
   grep -a 'terminal: pane>' "$LOG" | tail -n 20
+  echo "--- clip lines ---"
+  grep -a -e 'terminal: clip' -e 'tars-init: config shell=' "$LOG" | tail -n 10
   echo "--- last screen ---"
   last_screen
   echo "--- last 40 lines ---"
@@ -166,6 +186,51 @@ wait_for_pane() {
   return 1
 }
 
+# 클립보드 줄의 개수(CB-M0). 패턴은 고정 문자열이다. 붙여넣기는 key> 줄을
+# 안 만들므로(copy 체인 검사 11) 이 개수가 "Cmd+V가 닿았다"의 증거다.
+clip_count() {
+  grep -acF "terminal: clip> $1" "$LOG" || true
+}
+
+# clip_count가 기준보다 커질 때까지 기다린다. 있으면 0, 15초가 지나면 1.
+wait_for_clip() {
+  local what="$1" before="$2" i
+  for i in $(seq 1 150); do
+    if [ "$(clip_count "$what")" -gt "$before" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 마지막 screen> 줄(포커스 패널)이 패턴에 맞을 때까지 기다린다. 있으면 0,
+# 15초가 지나면 1. wait_for_screen은 로그 전체를 보므로 "어느 패널에
+# 나왔는가"를 못 가른다(project_gate_screen_echo).
+wait_for_last_screen() {
+  local pattern="$1" i
+  for i in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(last_screen)"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# copy mode에 들어가 프롬프트 바로 위 줄을 V로 잡고 y로 복사한다(CB-M0).
+# copy 커서는 셸 커서(프롬프트 줄)에서 시작하므로 k 한 번이 바로 위의
+# 출력 줄이다(copy 체인 검사 8과 같은 키). 들어간 것을 copy> enter 줄 수로
+# 기다린다 — 안 들어갔는데 k를 치면 셸이 k를 받는다.
+yank_line_above_prompt() {
+  local enters i
+  enters="$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)"
+  type_keys meta_l-shift-c
+  for i in $(seq 1 150); do
+    [ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$enters" ] && break
+    sleep 0.1
+  done
+  type_keys k
+  type_keys shift-v
+  type_keys y
+}
+
 # 어떤 줄의 개수가 기준보다 커질 때까지 기다린다. 60초 — init이 terminal을
 # 되살리는 데 걸리는 시간을 terminal/check.sh가 같은 한도로 본다.
 wait_for_more() {
@@ -218,6 +283,19 @@ wait_for_pane 'ws=1/1 panes=1 focus=0 rect=0,0 ' ||
   report_failure "one pane but sep ink=$(pane_value ink), a separator was drawn with nothing to separate"
 BOOT_SPAWNS="$(spawn_lines)"
 echo "boot: $(last_pane_line)"
+
+# ── 검사 10: 디스크가 없으면 클립보드는 shared다(CB-M0) ────────────────
+#
+# 줄 둘을 짝으로 본다(CB design 결정 3). init 줄은 "설정을 읽었다"를,
+# terminal 줄은 "그 값이 argv를 건너 닿았다"를 말한다. 기본값이 그대로
+# 닿는 것은 부팅 B의 pane이 함께 있어야 뜻이 있다 — 여기만 보면 argv를
+# 안 읽는 terminal도 초록이다.
+echo "=== boot: the clipboard is shared ==="
+grep -aE 'tars-init: config shell=.* clipboard=shared' "$LOG" >/dev/null ||
+  report_failure "the tars-init: config line does not end with clipboard=shared"
+grep -aF 'terminal: clipboard scope=shared' "$LOG" >/dev/null ||
+  report_failure "no 'terminal: clipboard scope=shared' line"
+echo "boot: clipboard=shared reached the terminal"
 
 # ── 검사 2: Cmd+D가 오른쪽에 새 패널을 연다 ───────────────────────────
 #
@@ -312,6 +390,42 @@ sleep 1
 [ "$(pane_value panes)" -eq 2 ] ||
   report_failure "after Cmd+D in copy mode there are $(pane_value panes) panes, expected 2"
 echo "copy mode swallowed Cmd+D: still $(pane_value panes) panes"
+
+# ── 검사 11: 오른쪽 패널에서 잡은 줄을 왼쪽 패널에 붙인다(CB-M0) ──────
+#
+# copy 체인의 검사 7~12와 같은 왕복을 패널 둘에 걸친다. 셋을 본다.
+#   1. y가 그 줄을 잡았다(clip> len=12 text=echo cb-pane).
+#   2. 왼쪽의 Cmd+V가 같은 12바이트를 썼다(clip> paste len=12). CB 전에는
+#      여기서 clip> paste empty였다 — 클립보드가 패널마다 하나였다.
+#   3. 붙인 줄이 왼쪽 셸에서 실행되어 cb-pane만 있는 줄이 왼쪽 화면에
+#      나온다. 2만 보면 "썼는데 다른 패널의 PTY에 갔다"가 통과한다.
+# 대조군은 붙이기 전의 왼쪽 화면이다. cb-pane만 있는 줄이 없어야 한다.
+echo "=== CB: a line yanked in the right pane pastes in the left pane ==="
+type_keys e c h o spc e c h o spc c b minus p a n e ret
+wait_for_last_screen '\| echo cb-pane \|' ||
+  report_failure "the right pane's shell did not print 'echo cb-pane'"
+YANKS_BEFORE="$(clip_count 'len=12 text=echo cb-pane')"
+yank_line_above_prompt
+wait_for_clip 'len=12 text=echo cb-pane' "$YANKS_BEFORE" ||
+  report_failure "V then y in the right pane did not put 'echo cb-pane' on the clipboard"
+type_keys meta_l-bracket_left
+wait_for_pane 'panes=2 focus=0 rect=0,0 ' ||
+  report_failure "Cmd+[ did not move the focus to the left pane"
+case "$(last_screen)" in
+  *"| cb-pane |"*) report_failure "the left pane already shows a cb-pane line before any paste" ;;
+esac
+PASTES_BEFORE="$(clip_count 'paste len=12 bracketed=1')"
+EMPTY_BEFORE="$(clip_count 'paste empty')"
+type_keys meta_l-v
+wait_for_clip 'paste len=12 bracketed=1' "$PASTES_BEFORE" ||
+  report_failure "Cmd+V in the left pane did not write the 12 bytes the right pane yanked (paste empty ${EMPTY_BEFORE} -> $(clip_count 'paste empty'))"
+type_keys ret
+wait_for_last_screen '\| cb-pane \|' ||
+  report_failure "the pasted line did not run in the left pane (no cb-pane line on the left pane's screen)"
+type_keys meta_l-bracket_right
+wait_for_pane 'panes=2 focus=1 ' ||
+  report_failure "Cmd+] did not move the focus back to the right pane"
+echo "a line yanked on the right ran on the left"
 
 # ── 검사 5: Cmd+Shift+D가 아래에 새 패널을 연다 ───────────────────────
 echo "=== Cmd+Shift+D splits below ==="
@@ -457,6 +571,21 @@ sleep 1
   report_failure "Cmd+5 leaked bytes to the PTY (key> ${KEYS_BEFORE_5} -> $(key_lines))"
 echo "Cmd+5 changed nothing: still $(pane_value ws)"
 
+# ── 검사 12의 앞: 둘째 워크스페이스에서 줄 하나를 잡는다(CB-M0) ───────
+#
+# 9b가 terminal을 되살렸으므로 검사 11의 클립보드는 이미 없다. 새 글자로
+# 잡는다 — 검사 11의 글자가 남아 있었다면 검사 12가 무엇을 붙였는지 안
+# 갈린다.
+echo "=== CB: yank a line in the second workspace ==="
+type_keys e c h o spc e c h o spc c b minus w s ret
+wait_for_last_screen '\| echo cb-ws \|' ||
+  report_failure "the second workspace's shell did not print 'echo cb-ws'"
+YANKS_BEFORE="$(clip_count 'len=10 text=echo cb-ws')"
+yank_line_above_prompt
+wait_for_clip 'len=10 text=echo cb-ws' "$YANKS_BEFORE" ||
+  report_failure "V then y in the second workspace did not put 'echo cb-ws' on the clipboard"
+echo "the second workspace yanked: echo cb-ws"
+
 # ── 검사 8: Cmd+1이 첫 워크스페이스로 간다 ────────────────────────────
 #
 # 첫 워크스페이스도 패널 하나 · 격자 전체라 배치 서명에 워크스페이스 번호가
@@ -475,6 +604,25 @@ case "$(last_screen)" in
   *ws-two*) report_failure "the first workspace's screen shows ws-two" ;;
 esac
 echo "first workspace: $(last_pane_line), status \"${TEXT}\""
+
+# ── 검사 12: 둘째 워크스페이스에서 잡은 줄을 첫째에 붙인다(CB-M0) ─────
+#
+# 검사 11과 같은 셋을 워크스페이스를 건너 본다. 워크스페이스마다의
+# 클립보드는 두지 않았으므로(CB design 비목표 1) 이것이 통과하면 패널 칸이
+# 아니라 공유 칸을 썼다는 것이다.
+echo "=== CB: the line pastes in the first workspace ==="
+case "$(last_screen)" in
+  *"| cb-ws |"*) report_failure "the first workspace already shows a cb-ws line before any paste" ;;
+esac
+PASTES_BEFORE="$(clip_count 'paste len=10 bracketed=1')"
+EMPTY_BEFORE="$(clip_count 'paste empty')"
+type_keys meta_l-v
+wait_for_clip 'paste len=10 bracketed=1' "$PASTES_BEFORE" ||
+  report_failure "Cmd+V in the first workspace did not write the 10 bytes the second yanked (paste empty ${EMPTY_BEFORE} -> $(clip_count 'paste empty'))"
+type_keys ret
+wait_for_last_screen '\| cb-ws \|' ||
+  report_failure "the pasted line did not run in the first workspace (no cb-ws line on its screen)"
+echo "a line yanked in workspace 2 ran in workspace 1"
 
 # ── 검사 8a: Cmd+2가 되돌아오고 그 셸의 화면이 그대로다 ───────────────
 echo "=== Cmd+2 comes back ==="
@@ -515,4 +663,128 @@ echo "pane> lines:"
 grep -a 'terminal: pane>' "$LOG" | tr -d '\r'
 echo "status> text lines:"
 grep -a 'terminal: status> text=' "$LOG" | tr -d '\r'
-echo "WP-M2 check PASS"
+echo "clip> lines:"
+grep -a 'terminal: clip>' "$LOG" | tr -d '\r'
+
+# ══ 부팅 B: clipboard=pane (CB-M0) ═══════════════════════════════════════
+#
+# 부팅 A를 끄고 설정 디스크 하나를 물려 다시 뜬다. 디스크는 debugfs 없이
+# mkfs.ext2 -d로 굽는다(pointer 체인 부팅 B와 같은 길). 심는 값이 기본값과
+# 달라야 한다 — 설정이 통째로 무시되는 코드도 shared로는 초록이 된다(HI-M2).
+exec 3<&- 2>/dev/null
+exec 3>&- 2>/dev/null
+kill "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
+QEMU_PID=""
+
+SEED="$(mktemp -d)"
+printf 'shell=fish\nclipboard=pane\n' > "$SEED/tars.conf"
+mkdir -p "${REPO_ROOT}/out"
+DISK_B="${REPO_ROOT}/out/cb-pane.img"
+rm -f "$DISK_B"
+truncate -s 16M "$DISK_B"
+mkfs.ext2 -F -q -m 0 -L tars-cb -d "$SEED" "$DISK_B"
+rm -rf "$SEED"
+
+LOG_A="$LOG"
+LOG="$(mktemp)"
+echo "=== boot B: clipboard=pane ==="
+qemu-system-x86_64 \
+  -nic none \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -drive file="$DISK_B",if=virtio,format=raw \
+  -serial file:"$LOG" \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT_B},server,nowait \
+  -no-reboot &
+QEMU_PID=$!
+
+READY=0
+for _ in $(seq 1 120); do
+  if grep -aq "terminal: screen>" "$LOG"; then READY=1; break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || report_failure "boot B: terminal never rendered a prompt"
+wait_for_screen 'root@\(none\) ~#' ||
+  report_failure "boot B: the shell prompt never showed up"
+grep -a 'tars-init: mounted ext2 at /config' "$LOG" >/dev/null ||
+  report_failure "boot B: the config disk was not mounted at /config"
+sleep 1
+
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT_B}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure "boot B: could not connect to the QEMU monitor"
+
+# ── 검사 13: 디스크의 clipboard=pane이 terminal까지 닿는다 ─────────────
+#
+# 검사 10의 짝이다. 둘이 함께 있어야 "argv를 읽는다"가 판정된다 — terminal이
+# 아홉째 인자를 안 읽으면 여기서 scope=shared가 찍힌다.
+echo "=== boot B: the clipboard is per pane ==="
+grep -aE 'tars-init: config shell=.* clipboard=pane' "$LOG" >/dev/null ||
+  report_failure "boot B: the tars-init: config line does not end with clipboard=pane"
+grep -aF 'terminal: clipboard scope=pane' "$LOG" >/dev/null ||
+  report_failure "boot B: init read clipboard=pane but terminal says '$(grep -a 'terminal: clipboard scope=' "$LOG" | tail -n 1 | tr -d '\r')'"
+echo "boot B: clipboard=pane reached the terminal"
+
+# ── 검사 14(음성): 다른 패널의 Cmd+V는 빈 클립보드다 ───────────────────
+#
+# 음성 판정에 양성 신호를 붙인다. "paste len 줄이 안 늘었다"만 보면 Cmd+V가
+# 아예 안 왔어도 통과하므로, clip> paste empty 줄이 하나 느는 것을 본다.
+echo "=== boot B: Cmd+V in the other pane finds nothing ==="
+type_keys meta_l-d
+wait_for_pane 'panes=2 focus=1 ' ||
+  report_failure "boot B: Cmd+D did not give 'panes=2 focus=1'"
+type_keys e c h o spc e c h o spc c b minus o w n ret
+wait_for_last_screen '\| echo cb-own \|' ||
+  report_failure "boot B: the right pane's shell did not print 'echo cb-own'"
+YANKS_BEFORE="$(clip_count 'len=11 text=echo cb-own')"
+yank_line_above_prompt
+wait_for_clip 'len=11 text=echo cb-own' "$YANKS_BEFORE" ||
+  report_failure "boot B: V then y did not put 'echo cb-own' on the right pane's clipboard"
+type_keys meta_l-bracket_left
+wait_for_pane 'panes=2 focus=0 rect=0,0 ' ||
+  report_failure "boot B: Cmd+[ did not move the focus to the left pane"
+EMPTY_BEFORE="$(clip_count 'paste empty')"
+PASTES_BEFORE="$(clip_count 'paste len=')"
+type_keys meta_l-v
+wait_for_clip 'paste empty' "$EMPTY_BEFORE" ||
+  report_failure "boot B: Cmd+V in the left pane did not report an empty clipboard (paste len= ${PASTES_BEFORE} -> $(clip_count 'paste len='))"
+[ "$(clip_count 'paste len=')" -eq "$PASTES_BEFORE" ] ||
+  report_failure "boot B: Cmd+V in the left pane wrote the right pane's clipboard"
+echo "boot B: the left pane's clipboard is empty"
+
+# ── 검사 15: 같은 패널의 Cmd+V는 그 글자를 붙인다 ──────────────────────
+#
+# 검사 14의 대조군이다. 이것이 없으면 "y가 아무 데도 안 넣었다"나 "pane이면
+# 붙이기가 늘 비었다"도 14를 통과한다.
+echo "=== boot B: Cmd+V in the pane that yanked pastes it ==="
+type_keys meta_l-bracket_right
+wait_for_pane 'panes=2 focus=1 ' ||
+  report_failure "boot B: Cmd+] did not move the focus back to the right pane"
+PASTES_BEFORE="$(clip_count 'paste len=11 bracketed=1')"
+type_keys meta_l-v
+wait_for_clip 'paste len=11 bracketed=1' "$PASTES_BEFORE" ||
+  report_failure "boot B: Cmd+V in the right pane did not write its own 11 bytes"
+type_keys ret
+wait_for_last_screen '\| cb-own \|' ||
+  report_failure "boot B: the pasted line did not run in the right pane (no cb-own line)"
+echo "boot B: the right pane pasted its own line"
+
+# NUL 바이트를 한 번의 읽기로 센다. 부팅 A의 검사처럼 크기를 두 번 재면
+# 그 사이에 게스트가 쓴 줄(방금 친 Enter의 프레임)이 차이로 잡힌다.
+if [ "$(tr -cd '\000' < "$LOG" | wc -c)" -ne 0 ]; then
+  report_failure "boot B: the serial log contains NUL bytes"
+fi
+
+echo "boot B clip> lines:"
+grep -a 'terminal: clip>' "$LOG" | tr -d '\r'
+echo "CB-M0 check PASS"

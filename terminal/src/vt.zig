@@ -1,6 +1,7 @@
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
 const png = @import("png.zig");
+const clipboard = @import("clipboard.zig");
 
 /// 렌더러에게 넘기는 셀 하나.
 ///
@@ -287,12 +288,6 @@ pub const Screen = struct {
     /// 읽은 직후에 넘긴다.
     preedit: ?u21 = null,
 
-    /// 클립보드. `y`가 만든 문자열을 소유한다.
-    ///
-    /// 프로세스 하나가 디스플레이를 독점하는 구조(TF design 결정 1)에서는
-    /// 버퍼 하나로 충분하다(`project_copy_mode`). 다음 `y`가 옛것을 해제한다.
-    clip: ?[:0]const u8 = null,
-
     /// 검색 프롬프트가 열려 있는가.
     ///
     /// `input.State.mode`에도 같은 사실이 있다. 중복처럼 보이지만 각자 다른
@@ -310,7 +305,7 @@ pub const Screen = struct {
     ///
     /// 스크롤백이 1000줄인 시스템에서 128자짜리 검색어를 칠 일이 없고, 동적
     /// 할당은 "언제 해제하는가"를 copyExit·재검색·모드 재진입 세 자리에
-    /// 나눠 놓는다. `clip`이 할당을 쓰는 것과 갈리는 자리인데, 그쪽은 길이를
+    /// 나눠 놓는다. 클립보드(`clipboard.zig`)가 할당을 쓰는 것과 갈리는 자리인데, 그쪽은 길이를
     /// 우리가 못 정하고(선택한 만큼이다) 이쪽은 정할 수 있다.
     find_buf: [128]u8 = undefined,
     find_len: usize = 0,
@@ -551,7 +546,6 @@ pub const Screen = struct {
 
     pub fn deinit(self: *Screen) void {
         const alloc = self.alloc;
-        if (self.clip) |text| alloc.free(text);
         // term보다 먼저다. ScreenSearch가 든 tracked pin은 PageList의
         // 풀에서 왔으므로, term을 먼저 버리면 이미 없는 풀을 건드린다.
         if (self.find) |*f| f.deinit();
@@ -1288,8 +1282,12 @@ pub const Screen = struct {
     /// 돌려주는 수를 `main.zig`가 `put=`으로 찍는다. `clip=`과 함께 한 줄에
     /// 찍는 것이 판정을 만든다(FP design 결정 6) — 0 하나만으로는 "클립보드가
     /// 비었다"와 "너무 길어 거절됐다"가 안 갈린다.
-    pub fn findPaste(self: *Screen) usize {
-        const text = self.clip orelse return 0;
+    ///
+    /// 클립보드를 인자로 받는다(CB design 결정 1). 화면은 클립보드를 갖지
+    /// 않는다 — 어느 클립보드인지는 범위에 따라 `main.zig`가 고른다. null이면
+    /// 빈 클립보드이고 0을 돌려준다.
+    pub fn findPaste(self: *Screen, clip: ?[]const u8) usize {
+        const text = clip orelse return 0;
         const end = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
         const before = self.find_len;
         self.findBytes(text[0..end]);
@@ -1305,7 +1303,7 @@ pub const Screen = struct {
     /// 지금 프롬프트에 무엇이 쳐져 있는가. 닫혀 있으면 null이다.
     ///
     /// `main.zig`가 `find_buf`를 직접 읽지 않게 하려고 함수로 낸다 —
-    /// `clipboard`·`copyCursor`·`scrollbar`와 같은 규율이다(design 결정 8).
+    /// `copyCursor`·`scrollbar`와 같은 규율이다(design 결정 8).
     pub fn findNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_open) return null;
         return self.find_buf[0..self.find_len];
@@ -1317,7 +1315,7 @@ pub const Screen = struct {
     /// 것"이고, 오버레이 한 줄을 가르는 것이 이 둘이다.
     ///
     /// `main.zig`가 `find_last`를 직접 읽지 않게 하려고 함수로 낸다 —
-    /// `findNeedle`·`clipboard`·`copyCursor`와 같은 규율이다.
+    /// `findNeedle`·`copyCursor`와 같은 규율이다.
     pub fn findStatusNeedle(self: *const Screen) ?[]const u8 {
         if (!self.find_status) return null;
         return self.find_last[0..self.find_last_len];
@@ -1984,40 +1982,27 @@ pub const Screen = struct {
         };
     }
 
-    /// `y`. 선택을 클립보드로 옮기고 모드를 나간다.
+    /// `y`. 선택을 `clip`으로 옮기고 모드를 나간다.
     ///
-    /// 돌려주는 슬라이스는 `self.clip`이 소유한다 — 다음 `y`까지만 유효하다.
-    /// 선택이 없으면 null을 돌려주고 클립보드는 그대로 둔다(모드는 나간다).
-    pub fn copyYank(self: *Screen) !?[]const u8 {
+    /// 클립보드는 화면 밖에 산다(CB design 결정 1). CB 전에는 `Screen`의 칸
+    /// 하나였고, 패널마다 `Screen`이 따로라 클립보드도 패널마다 따로였다.
+    /// 어느 클립보드에 넣을지는 범위에 따라 `main.zig`가 고른다 — 여기는 선택을
+    /// 문자열로 만드는 일까지다.
+    ///
+    /// 문자열은 `clip.alloc`으로 만든다. 해제하는 쪽이 `clip`이므로 할당자가
+    /// 같아야 한다. 돌려주는 슬라이스는 `clip`이 소유한다 — 다음 `set`까지만
+    /// 유효하다. 선택이 없으면 null을 돌려주고 클립보드는 그대로 둔다(모드는
+    /// 나간다).
+    pub fn copyYank(self: *Screen, clip: *clipboard.Clipboard) !?[]const u8 {
         const s = self.term.screens.active;
         const sel = s.selection orelse {
             self.copyExit();
             return null;
         };
-        const text = try s.selectionString(self.alloc, .{ .sel = sel });
-        if (self.clip) |old| self.alloc.free(old);
-        self.clip = text;
+        const text = try s.selectionString(clip.alloc, .{ .sel = sel });
+        clip.set(text);
         // copyExit이 선택을 지우므로 문자열을 먼저 뽑아 둔 뒤에 부른다.
         self.copyExit();
-        return text;
-    }
-
-    /// 클립보드의 지금 내용. `y`를 한 번도 안 눌렀으면 null이다.
-    ///
-    /// `main.zig`가 `self.clip`을 직접 읽지 않게 하려고 함수로 낸다 —
-    /// `copyCursor`·`scrollbar`와 같은 규율이다(TR design 결정 1).
-    ///
-    /// 반환 타입이 `?[]const u8`인 것에 뜻이 있다. `clip`은 실제로
-    /// `?[:0]const u8`인데, sentinel을 밖으로 내보내면 호출부가 그것을 직접
-    /// free해도 되는 값으로 오해할 여지가 생긴다. 소유권은 `Screen`에 있고
-    /// 다음 `y`가 옛것을 해제한다.
-    ///
-    /// `return self.clip;` 한 줄로 줄이지 않는다. 그렇게 쓰면 `?[:0]const u8`을
-    /// `?[]const u8`로 바꾸는 일을 optional 껍질을 쓴 채 요구하게 된다.
-    /// 먼저 풀고 나서 돌려주면 sentinel을 떼는 평범한 슬라이스 coercion이 되고,
-    /// 그 형태는 바로 위 `copyYank`가 이미 쓰고 있는 것이다.
-    pub fn clipboard(self: *const Screen) ?[]const u8 {
-        const text = self.clip orelse return null;
         return text;
     }
 
@@ -2034,7 +2019,7 @@ pub const Screen = struct {
     /// 검사 95 · 96). 패널마다 `Screen`이 따로이므로 모드도 패널마다 따로다.
     ///
     /// `main.zig`가 `self.term.modes`를 직접 읽지 않게 하려고 함수로 낸다 —
-    /// `clipboard`·`findNeedle`과 같은 규율이다(TR design 결정 1). 판단과
+    /// `findNeedle`과 같은 규율이다(TR design 결정 1). 판단과
     /// 머리 · 꼬리의 글자가 여기 있어서 호스트의 `vt_test`가 실제로 나갈
     /// 바이트를 본다.
     ///

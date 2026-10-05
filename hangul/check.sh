@@ -380,9 +380,11 @@ fi
 # 만든 설정 파일이 모두 그렇게 생겼고, 그런 파일에서도 기본값 `on`이 산다는
 # 것이 EL design 결정 1이다. init은 그 값을 줄 끝에 따로 찍고, terminal에는
 # 목록 끝에 이름을 붙여 넘긴다(`Config.terminalToggles`). 그래서 init의
-# `toggles=`는 셋 그대로이고 terminal의 목록만 넷이 된다.
+# `toggles=`는 셋 그대로이고 terminal의 목록만 넷이 된다. 줄 끝에 고정하지
+# 않는다 — 뒤에 키가 더 붙는다(CB-M0의 `clipboard=`가 그렇게 붙어 이 판정이
+# 한 번 빨갰다). 위 `toggles=`와 같은 `( |$)` 경계다.
 if ! tr -d '\r' < "$LOG" |
-  grep -aE "tars-init: config .* esc_latin=on\$" >/dev/null; then
+  grep -aE "tars-init: config .* esc_latin=on( |\$)" >/dev/null; then
   report_failure "init did not report esc_latin=on (the disk has no esc_latin line, so this is the default)"
 fi
 if ! tr -d '\r' < "$LOG" |

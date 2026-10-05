@@ -367,11 +367,13 @@ const Child = struct {
     /// execve는 첫 null에서 멈추므로 인자가 하나인 자식도 같은 배열 타입을
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
     /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로, HI-M2에서
-    /// 다섯에서 일곱으로, HI-M3에서 일곱에서 여덟으로 늘었다. terminal이
-    /// 받는 넷째가 keyboard, 다섯째가 키보드 장치 경로, 여섯째가 한글 자판,
-    /// 일곱째가 영문 자판, 여덟째가 한/영 전환 키 목록이고, 콘솔 셸은 그
-    /// 자리를 전부 null로 둔다.
-    argv: [8:null]?[*:0]const u8,
+    /// 다섯에서 일곱으로, HI-M3에서 일곱에서 여덟으로, CB-M0에서 여덟에서
+    /// 아홉으로 늘었다. terminal이 받는 넷째가 keyboard, 다섯째가 키보드 장치
+    /// 경로, 여섯째가 한글 자판, 일곱째가 영문 자판, 여덟째가 한/영 전환 키
+    /// 목록, 아홉째가 클립보드 범위이고, 콘솔 셸은 그 자리를 전부 null로 둔다.
+    /// 같은 타입을 쓰는 상수가 셋 더 있다(`clock.CHRONYD_ARGV` ·
+    /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV`). 늘릴 때 함께 늘린다.
+    argv: [9:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -826,10 +828,10 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
     // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
     // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
-    // 그 뒤에 붙였다.
+    // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다.
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -842,6 +844,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             cfg.timezone.slice(),
             @tagName(cfg.firewall),
             @tagName(cfg.esc_latin),
+            @tagName(cfg.clipboard),
         },
     );
 
@@ -1019,6 +1022,8 @@ pub fn main(init: std.process.Init.Minimal) void {
     // (HI design 결정 7). 런타임 전환이 없으므로 여기서 한 번 정해진다.
     const hangul_arg = cfg.hangul_layout.arg();
     const latin_arg = cfg.latin_layout.arg();
+    // 클립보드 범위도 같은 성질이다(CB-M0).
+    const clipboard_arg = cfg.clipboard.arg();
 
     // SV-M1 · DS-M1. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 둘이
     // (DS design 결정 1), 그 뒤에 서비스가 이름순으로 붙는다. 크기는 컴파일
@@ -1044,6 +1049,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             hangul_arg.ptr,
             latin_arg.ptr,
             terminal_toggle_arg.ptr,
+            clipboard_arg.ptr,
         },
         .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
     };
@@ -1056,7 +1062,7 @@ pub fn main(init: std.process.Init.Minimal) void {
         // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
         // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
         // 설정을 따른다(결정 4).
-        .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null },
+        .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null, null },
         .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
     };
     var n: usize = 2;
@@ -1097,7 +1103,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             .path = s.path(),
             // 인자는 없다 — 서비스는 실행 파일 하나이고(결정 2), 준비할 것은
             // 스크립트가 한다. 탈출로도 없다(결정 3).
-            .argv = .{ s.path().ptr, null, null, null, null, null, null, null },
+            .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
         };
     }
     // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.

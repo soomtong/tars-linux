@@ -100,6 +100,9 @@ fn expect(text: []const u8, want: config.Config) !void {
         got.firewall == want.firewall and
         // EL-M0: 열한째 필드. FW-M1이 열째에 대해 적어 둔 것과 같은 자리다.
         got.esc_latin == want.esc_latin and
+        // CB-M0: 열두째 필드. 이 줄이 없으면 아래 clipboard 검사가 아무것도
+        // 안 보고 초록이다.
+        got.clipboard == want.clipboard and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
@@ -108,8 +111,8 @@ fn expect(text: []const u8, want: config.Config) !void {
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -123,6 +126,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             got.timezone.slice(),
             @tagName(got.firewall),
             @tagName(got.esc_latin),
+            @tagName(got.clipboard),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
@@ -134,6 +138,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             want.timezone.slice(),
             @tagName(want.firewall),
             @tagName(want.esc_latin),
+            @tagName(want.clipboard),
         },
     );
     return error.UnexpectedConfig;
@@ -1057,6 +1062,26 @@ pub fn main() !void {
     try expect("firewall=\n", .{}); // 값 없음
     // 체인의 디스크가 실제로 쓰는 두 줄이다.
     try expect("net=dhcp\nfirewall=on\n", .{ .net = .dhcp, .firewall = .on });
+
+    // ── CB-M0: clipboard ───────────────────────────────────────────────
+    //
+    // firewall과 같은 모양의 enum 키다. 기본값이 shared인 것은 사용자가
+    // 정했다(CB design 결정 2). `workspace`는 이름이 없다(CB design 비목표 1).
+    try expect("clipboard=pane\n", .{ .clipboard = .pane });
+    try expect("clipboard=shared\n", .{});
+    try expect("clipboard=workspace\n", .{}); // enum에 없는 값
+    try expect("clipboard=\n", .{}); // 값 없음
+    // 이름이 argv로 그대로 간다. terminal의 `clipboard.Scope`가 같은 이름을
+    // `stringToEnum`으로 되돌리므로, `arg()`가 enum 이름과 다르면 설정이
+    // 조용히 기본값으로 떨어진다.
+    for (std.enums.values(config.ClipboardScope)) |scope| {
+        if (!std.mem.eql(u8, scope.arg(), @tagName(scope))) {
+            std.debug.print("FAIL: ClipboardScope.arg gave \"{s}\" for {s}\n", .{ scope.arg(), @tagName(scope) });
+            return error.UnexpectedClipboardArg;
+        }
+    }
+    // pane 체인의 부팅 B가 쓰는 줄이다.
+    try expect("shell=fish\nclipboard=pane\n", .{ .clipboard = .pane });
 
     // ── EL-M0: esc_latin ────────────────────────────────────────────────
     //

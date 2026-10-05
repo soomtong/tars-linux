@@ -1,6 +1,7 @@
 const std = @import("std");
 const vt = @import("vt.zig");
 const png = @import("png.zig");
+const clipboard = @import("clipboard.zig");
 
 /// 모든 화면이 `main.zig`와 같은 셀 크기로 뜬다(`CELL_W` · `ROW_HEIGHT`).
 /// 다르게 두면 kitty 이미지의 픽셀 기대값이 게스트와 갈린다.
@@ -419,6 +420,10 @@ pub fn main(init: std.process.Init) !void {
     // 무엇을 보는지 흐려진다.
     const cm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer cm.deinit();
+    // 클립보드는 화면 밖에 산다(CB design 결정 1). 검사마다 화면 하나에 칸
+    // 하나를 둔다 — CB 전에 화면이 칸을 하나씩 갖던 것과 같은 모양이다.
+    var cm_clip = clipboard.Clipboard.init(init.gpa);
+    defer cm_clip.deinit();
     cm.feed("hello world\r\nsecond line\r\n");
     // 한 프레임을 먼저 그린다. copyEnter는 셸 커서 자리를 RenderState에서
     // 읽는데(`state.cursor.viewport`), 한 번도 그리지 않은 화면에서는 그 값이
@@ -479,7 +484,7 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print("vt_test: 선택이 셀의 색을 맞바꾼다 OK\n", .{});
 
-    const yanked = (try cm.copyYank()) orelse return error.NothingYanked;
+    const yanked = (try cm.copyYank(&cm_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, yanked, "hello")) {
         std.debug.print("FAIL: yanked '{s}' (expected 'hello')\n", .{yanked});
         return error.WrongClipText;
@@ -501,7 +506,7 @@ pub fn main(init: std.process.Init) !void {
     try cm.copySelect(.char);
     moved = 0;
     while (moved < 4) : (moved += 1) try cm.copyMove(-1, 0);
-    const backward = (try cm.copyYank()) orelse return error.NothingYanked;
+    const backward = (try cm.copyYank(&cm_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, backward, "hello")) {
         std.debug.print("FAIL: backward selection yanked '{s}' (expected 'hello')\n", .{backward});
         return error.BackwardSelectionWrong;
@@ -513,7 +518,7 @@ pub fn main(init: std.process.Init) !void {
     cm.copyEnter();
     try cm.copyMove(0, -1);
     try cm.copySelect(.line);
-    const whole_line = (try cm.copyYank()) orelse return error.NothingYanked;
+    const whole_line = (try cm.copyYank(&cm_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, whole_line, "second line")) {
         std.debug.print("FAIL: line selection yanked '{s}' (expected 'second line')\n", .{whole_line});
         return error.LineSelectionWrong;
@@ -525,7 +530,7 @@ pub fn main(init: std.process.Init) !void {
     cm.copyEnter();
     try cm.copySelect(.char);
     try cm.copySelect(.char);
-    if ((try cm.copyYank()) != null) {
+    if ((try cm.copyYank(&cm_clip)) != null) {
         std.debug.print("FAIL: yank found a selection after v toggled it off\n", .{});
         return error.SelectionNotCleared;
     }
@@ -575,12 +580,12 @@ pub fn main(init: std.process.Init) !void {
 
     // ── CM-M2: 클립보드를 되읽는다 ──────────────────────────────────────
     //
-    // 검사 10. `clipboard()`가 마지막 y의 결과를 그대로 들고 있다.
+    // 검사 10. 클립보드가 마지막 y의 결과를 그대로 들고 있다.
     //
     // 검사 8이 아무것도 못 담은 y를 불렀는데도 값이 남아 있어야 한다.
     // 빈 yank가 클립보드를 지우면 붙여넣기가 조용히 사라지는데, 그 사고는
     // 게이트가 못 본다 — 게이트는 y를 한 번만 누른다.
-    const held = cm.clipboard() orelse {
+    const held = cm_clip.text() orelse {
         std.debug.print("FAIL: the clipboard is empty after four yanks\n", .{});
         return error.ClipboardEmpty;
     };
@@ -589,10 +594,14 @@ pub fn main(init: std.process.Init) !void {
         return error.WrongClipboard;
     }
 
-    // 대조군. y를 한 번도 안 부른 화면의 클립보드는 null이다. 이것이 없으면
-    // "clipboard()가 언제나 무언가를 준다"도 통과한다.
-    if (pruned.clipboard() != null) {
-        std.debug.print("FAIL: a screen that never yanked already has a clipboard\n", .{});
+    // 대조군. 선택 없는 y는 빈 클립보드를 채우지 않는다. 이것이 없으면
+    // "y가 언제나 무언가를 넣는다"도 통과한다. CB 전에는 y를 한 번도 안 부른
+    // 화면을 봤는데, 클립보드가 화면 밖으로 나가서 칸 하나를 새로 만들어 본다.
+    var never = clipboard.Clipboard.init(init.gpa);
+    defer never.deinit();
+    pruned.copyEnter();
+    if ((try pruned.copyYank(&never)) != null or never.text() != null) {
+        std.debug.print("FAIL: a yank without a selection filled an empty clipboard\n", .{});
         return error.ClipboardNotEmpty;
     }
     std.debug.print("vt_test: 클립보드를 되읽는다 OK ('{s}')\n", .{held});
@@ -614,6 +623,8 @@ pub fn main(init: std.process.Init) !void {
     // 않으면 아래 첫 단언에서 6이 아니라 5가 나온다.
     const wm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer wm.deinit();
+    var wm_clip = clipboard.Clipboard.init(init.gpa);
+    defer wm_clip.deinit();
     wm.feed("alpha beta gamma\r\n");
     // 한 프레임을 먼저 그린다 — copyEnter가 셸 커서 자리를 RenderState에서
     // 읽는다(CM-M1이 배운 것).
@@ -712,7 +723,7 @@ pub fn main(init: std.process.Init) !void {
     // 게이트는 이 왕복을 안 본다(plan 결정 3). 여기가 유일한 자리다.
     try wm.copySelect(.char);
     try wm.copyMoveWord(.next);
-    const grabbed = (try wm.copyYank()) orelse return error.NothingYanked;
+    const grabbed = (try wm.copyYank(&wm_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, grabbed, "beta g")) {
         std.debug.print(
             "FAIL: v then w yanked '{s}' (expected 'beta g')\n",
@@ -1775,13 +1786,13 @@ pub fn main(init: std.process.Init) !void {
 
     // ── FP-M0: 클립보드의 첫 줄이 needle로 간다 ─────────────────────────
 
-    // 검사 55. 대조군. `um`은 한 번도 y를 안 눌렀다. 빈 클립보드에
-    // 붙여넣기를 하면 0을 돌려주고 needle이 안 자란다.
+    // 검사 55. 대조군. 빈 클립보드(null)를 붙여넣으면 0을 돌려주고 needle이
+    // 안 자란다.
     //
     // 이 검사가 대조군인 것에 뜻이 있다. 아래 56~59가 전부 "무언가
     // 들어갔다"를 보므로, "아무것도 없을 때 아무 일도 안 한다"를 따로 안
     // 보면 `findPaste`가 늘 무언가를 넣는 구현도 전부 통과한다.
-    if (um.findPaste() != 0) {
+    if (um.findPaste(null) != 0) {
         std.debug.print("FAIL: 빈 클립보드가 needle에 무언가를 넣었다\n", .{});
         return error.FindPasteFromEmptyClip;
     }
@@ -1798,6 +1809,8 @@ pub fn main(init: std.process.Init) !void {
     // `가나`·`다라`가 각각 폭 2 글자 둘이라 col 0~3을 먹는다.
     const pm = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pm.deinit();
+    var pm_clip = clipboard.Clipboard.init(init.gpa);
+    defer pm_clip.deinit();
     pm.feed("가나\r\n다라\r\n");
     _ = try pm.cells(&buf);
 
@@ -1809,14 +1822,14 @@ pub fn main(init: std.process.Init) !void {
     pm.copyEnter();
     try pm.copyMove(0, -1); // row 2(셸 커서) → row 1 = `다라`
     try pm.copySelect(.line);
-    const one = (try pm.copyYank()) orelse return error.NothingYanked;
+    const one = (try pm.copyYank(&pm_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, one, "다라")) {
         std.debug.print("FAIL: 한 줄 yank가 '{s}'를 줬다(다라여야 한다)\n", .{one});
         return error.WrongClipText;
     }
     pm.copyEnter();
     pm.findOpen();
-    var put = pm.findPaste();
+    var put = pm.findPaste(pm_clip.text());
     if (put != 6) {
         std.debug.print("FAIL: 붙여넣기가 {d}바이트를 넣었다(6이어야 한다)\n", .{put});
         return error.FindPasteWrong;
@@ -1833,7 +1846,7 @@ pub fn main(init: std.process.Init) !void {
     // `findOpen()`이 `find_len`을 0으로 되돌리므로 여기서 다시 열어 비운다.
     pm.findOpen();
     pm.findBytes("가");
-    put = pm.findPaste();
+    put = pm.findPaste(pm_clip.text());
     if (put != 6) {
         std.debug.print("FAIL: 이어 붙일 때 {d}바이트를 넣었다(6이어야 한다)\n", .{put});
         return error.FindPasteWrong;
@@ -1863,7 +1876,7 @@ pub fn main(init: std.process.Init) !void {
     try pm.copyMove(0, 1); // row 1 = `다라`
     var mv: usize = 0;
     while (mv < 3) : (mv += 1) try pm.copyMove(1, 0);
-    const many = (try pm.copyYank()) orelse return error.NothingYanked;
+    const many = (try pm.copyYank(&pm_clip)) orelse return error.NothingYanked;
     // 클립보드 쪽을 먼저 못 박는다(plan 실측 1). 여기가 초록이어야
     // 아래 판정이 "첫 줄만 넣었다"를 뜻한다 — 클립보드에 애초에 개행이
     // 없었다면 "잘랐다"와 "자를 것이 없었다"가 안 갈린다.
@@ -1877,7 +1890,7 @@ pub fn main(init: std.process.Init) !void {
     }
     pm.copyEnter();
     pm.findOpen();
-    put = pm.findPaste();
+    put = pm.findPaste(pm_clip.text());
     if (put != 6) {
         std.debug.print("FAIL: 두 줄에서 {d}바이트를 넣었다(첫 줄 6이어야 한다)\n", .{put});
         return error.FindPasteMultiline;
@@ -1897,7 +1910,7 @@ pub fn main(init: std.process.Init) !void {
     pm.findOpen();
     var pad2: usize = 0;
     while (pad2 < 126) : (pad2 += 1) pm.findChar('z');
-    put = pm.findPaste();
+    put = pm.findPaste(pm_clip.text());
     if (put != 0) {
         std.debug.print("FAIL: 자리가 둘뿐인데 {d}바이트를 넣었다(0이어야 한다)\n", .{put});
         return error.FindPasteOverflow;
@@ -2612,6 +2625,12 @@ pub fn main(init: std.process.Init) !void {
     defer pd_kb.deinit();
     const pd_pt = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pd_pt.deinit();
+    // 칸이 둘이다. 아래에서 두 화면의 글자를 함께 들고 비교하므로, 한 칸에
+    // 넣으면 둘째 y가 첫째 글자를 해제한다.
+    var pd_kb_clip = clipboard.Clipboard.init(init.gpa);
+    defer pd_kb_clip.deinit();
+    var pd_pt_clip = clipboard.Clipboard.init(init.gpa);
+    defer pd_pt_clip.deinit();
     pd_kb.feed("hello world\r\nsecond line\r\n");
     pd_pt.feed("hello world\r\nsecond line\r\n");
     _ = try pd_kb.cells(&buf);
@@ -2625,7 +2644,7 @@ pub fn main(init: std.process.Init) !void {
     try pd_kb.copySelect(.char);
     try pd_kb.copyMove(0, 1);
     try pd_kb.copyMove(-1, 0);
-    const pd_kb_text = (try pd_kb.copyYank()) orelse return error.NothingYanked;
+    const pd_kb_text = (try pd_kb.copyYank(&pd_kb_clip)) orelse return error.NothingYanked;
     try pd_pt.copyEnterAt(6, 0);
     const pd_at = pd_pt.copyCursor() orelse return error.NoCopyCursor;
     if (pd_at.x != 6 or pd_at.y != 0) {
@@ -2633,7 +2652,7 @@ pub fn main(init: std.process.Init) !void {
         return error.WrongCopyCursor;
     }
     try pd_pt.copyPointTo(5, 1);
-    const pd_pt_text = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    const pd_pt_text = (try pd_pt.copyYank(&pd_pt_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, pd_kb_text, "world\nsecond") or !std.mem.eql(u8, pd_pt_text, pd_kb_text)) {
         std.debug.print("FAIL: the keyboard yanked '{s}', the pointer yanked '{s}' (both should be 'world\\nsecond')\n", .{ pd_kb_text, pd_pt_text });
         return error.PointerSelectionDiffers;
@@ -2647,7 +2666,7 @@ pub fn main(init: std.process.Init) !void {
     // 검사 98. 거꾸로 끌어도 같다 — 앵커가 오른쪽, 끝이 왼쪽(검사 6과 같은 성질).
     try pd_pt.copyEnterAt(4, 0);
     try pd_pt.copyPointTo(0, 0);
-    const pd_back = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    const pd_back = (try pd_pt.copyYank(&pd_pt_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, pd_back, "hello")) {
         std.debug.print("FAIL: a backward pointer selection yanked '{s}' (expected 'hello')\n", .{pd_back});
         return error.BackwardSelectionWrong;
@@ -2662,7 +2681,7 @@ pub fn main(init: std.process.Init) !void {
     try pd_pt.copySelect(.char);
     try pd_pt.copyEnterAt(0, 1);
     try pd_pt.copyPointTo(5, 1);
-    const pd_over = (try pd_pt.copyYank()) orelse {
+    const pd_over = (try pd_pt.copyYank(&pd_pt_clip)) orelse {
         std.debug.print("FAIL: a drag that started inside keyboard copy mode (v on) left no selection\n", .{});
         return error.SelectionToggledOff;
     };
@@ -2681,7 +2700,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: copyPointTo(99, 1) put the copy cursor at {d},{d} (expected 19,1)\n", .{ pd_edge.x, pd_edge.y });
         return error.WrongCopyCursor;
     }
-    const pd_wide = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    const pd_wide = (try pd_pt.copyYank(&pd_pt_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, pd_wide, "second line")) {
         std.debug.print("FAIL: a selection to the clamped edge yanked '{s}' (expected 'second line')\n", .{pd_wide});
         return error.WrongClipText;
@@ -2697,6 +2716,8 @@ pub fn main(init: std.process.Init) !void {
     // 앵커에 남아 `A` 한 글자가 나온다.
     const pd_sc = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
     defer pd_sc.deinit();
+    var pd_sc_clip = clipboard.Clipboard.init(init.gpa);
+    defer pd_sc_clip.deinit();
     var pd_line: [16]u8 = undefined;
     var pd_n: usize = 1;
     while (pd_n <= 30) : (pd_n += 1) {
@@ -2708,7 +2729,7 @@ pub fn main(init: std.process.Init) !void {
     try pd_sc.copyPointTo(0, 3);
     pd_sc.scrollByRows(-3);
     try pd_sc.copyPointTo(0, 3);
-    const pd_long = (try pd_sc.copyYank()) orelse return error.NothingYanked;
+    const pd_long = (try pd_sc.copyYank(&pd_sc_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, pd_long, "A27\nA28\nA29\nA")) {
         std.debug.print("FAIL: the selection after a wheel yanked '{s}' (expected 'A27\\nA28\\nA29\\nA')\n", .{pd_long});
         return error.WheelSelectionWrong;

@@ -64,6 +64,30 @@ pub const EscLatin = enum {
     off,
 };
 
+/// terminal의 클립보드를 누구와 나누는가(CB design 결정 2). `shared`면 모든
+/// 패널과 워크스페이스가 하나를 쓰고, `pane`이면 패널마다 따로다.
+///
+/// 기본값이 `shared`인 것은 사용자가 정했다(2026-10-05). `net`·`firewall`과
+/// 달리 켜는 비용이 없고, `keyboard`·`hangul_layout`처럼 이 기계를 쓰는
+/// 사람이 쓰는 것이 기본값이다.
+///
+/// 이름이 `terminal/src/clipboard.zig`의 `Scope`와 짝이어야 한다. 둘을 잇는
+/// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과 같은
+/// 자리이고, 부팅 로그의 `terminal: clipboard scope=` 줄이 그것을 보인다.
+pub const ClipboardScope = enum {
+    shared,
+    pane,
+
+    /// terminal에 argv로 넘길 문자열. `HangulLayout.arg`와 같은 이유로
+    /// sentinel이 있는 리터럴을 돌려준다.
+    pub fn arg(self: ClipboardScope) [:0]const u8 {
+        return switch (self) {
+            .shared => "shared",
+            .pane => "pane",
+        };
+    }
+};
+
 /// 점 넷으로 적은 IPv4 주소를 바이트 넷으로 바꾼다. 시스템 콜이 없는 순수
 /// 함수이고, 이 파일에서 `parse`·`cmdlineWantsNoConfig`와 같은 성질이다.
 ///
@@ -927,6 +951,8 @@ pub const Config = struct {
     /// 이 키가 없는 파일에서도 켜진다. 그것이 이 값이 `hangul_toggle` 목록이
     /// 아니라 따로 있는 키인 이유다(위 `EscLatin`).
     esc_latin: EscLatin = .on,
+    /// 근거는 위 `ClipboardScope`의 문서 주석에 있다(CB-M0).
+    clipboard: ClipboardScope = .shared,
 
     /// terminal의 argv로 넘기는 목록(EL design 결정 1). `hangul_toggle`의
     /// 정규형에 `esc_latin`을 더한다 — 켜져 있으면 맨 뒤에 그 이름이 붙는다.
@@ -1113,6 +1139,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "clipboard")) {
+            // firewall · esc_latin과 완전히 같은 모양이다(CB-M0).
+            c.clipboard = std.meta.stringToEnum(ClipboardScope, value) orelse {
+                std.debug.print("tars-init: unknown clipboard '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.clipboard),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -1188,6 +1222,10 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   /config/nftables.d/ 아래 .nft 파일에 nftables 문법으로 한 줄씩
         \\#   적는다. 예: tcp dport 8080 accept
         \\firewall={s}
+        \\# clipboard: shared | pane
+        \\#   shared면 모든 패널과 워크스페이스가 클립보드 하나를 쓰고,
+        \\#   pane이면 패널마다 따로다
+        \\clipboard={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1201,6 +1239,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         c.ntp.arg(&ntp_buf),
         c.timezone.slice(),
         @tagName(c.firewall),
+        @tagName(c.clipboard),
     }) catch return error.FormatFailed;
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의

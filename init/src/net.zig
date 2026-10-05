@@ -120,8 +120,8 @@ pub const DHCPCD_PATH: [:0]const u8 = "/usr/bin/dhcpcd";
 /// 42를 영영 안 주므로(TS 확인 5) 이 단어가 뜻을 갖는 것은 실기계에서뿐이다.
 ///
 /// `-b`는 안 붙인다(WN 실측 14).
-pub const DHCPCD_ARGV = [8:null]?[*:0]const u8{
-    DHCPCD_PATH.ptr, "-B", "-j", "/dev/console", "-o", "ntp_servers", null, null,
+pub const DHCPCD_ARGV = [9:null]?[*:0]const u8{
+    DHCPCD_PATH.ptr, "-B", "-j", "/dev/console", "-o", "ntp_servers", null, null, null,
 };
 
 /// 설정이 실제 동작이 되는 자리. `main()`이 부르는 것은 이 함수 하나다.

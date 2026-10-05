@@ -21,7 +21,7 @@ pub const CONF_PATH: [:0]const u8 = "/config/wpa_supplicant.conf";
 /// hook이 `interface_add`로 넣는다.
 pub const WIFI_PATH: [:0]const u8 = "/usr/lib/tars/tars-wifi";
 
-pub const WIFI_ARGV = [8:null]?[*:0]const u8{ WIFI_PATH.ptr, null, null, null, null, null, null, null };
+pub const WIFI_ARGV = [9:null]?[*:0]const u8{ WIFI_PATH.ptr, null, null, null, null, null, null, null, null };
 
 /// wpa_supplicant를 감독 목록에 넣을지 답한다. 넣지 않을 때도 이유를 한 줄
 /// 남긴다 — 침묵은 "안 켰다"와 "켜려다 실패했다"를 못 가른다(DS 결정 1).
