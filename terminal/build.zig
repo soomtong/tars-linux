@@ -298,6 +298,22 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(pointer_test);
 
+    // touchpad_test도 호스트에서 돈다(PD-M3). `pointer_test`와 같은 자리다 —
+    // `touchpad.zig`가 `pointer.zig`를 통해 `c_input`을 쓰므로 libc가 따라온다.
+    // 슬롯 · 배율 · 탭 · 두 손가락 스크롤의 판단만 보고 fd는 안 연다.
+    const touchpad_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/touchpad_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    touchpad_test_mod.link_libc = true;
+    touchpad_test_mod.addImport("c_input", c_input_host.mod);
+    const touchpad_test = b.addExecutable(.{
+        .name = "touchpad_test",
+        .root_module = touchpad_test_mod,
+    });
+    b.installArtifact(touchpad_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
     // 기본 `zig build`와 분리하는 이유는 속도였는데, 그 이유가 이제 거의
@@ -314,6 +330,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(status_test).step);
     test_step.dependOn(&b.addRunArtifact(layout_test).step);
     test_step.dependOn(&b.addRunArtifact(pointer_test).step);
+    test_step.dependOn(&b.addRunArtifact(touchpad_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 #   4  NVMe만              갱신을 넘어 마커가 남았다
 #   5  ISO + 설치된 NVMe   --wipe로 통째로 다시 설치
 #   6  NVMe만              마커가 사라졌고 설정이 첫 부팅처럼 새로 깔린다
-#   7  같은 디스크를 USB로  -kernel · delay_use=3. init이 늦은 p2를 기다려 잡는다(DC-M1)
+#   7  같은 디스크를 USB로  -kernel · delay_use=4. init이 늦은 p2를 기다려 잡는다(DC-M1)
 #
 # 왜 sendkey가 아니라 시리얼 FIFO인가. 다른 체인들은 terminal의 화면
 # 줄(`terminal: screen>`)로 판정하는데 이 체인이 볼 것은 tars-install이
@@ -450,6 +450,12 @@ stop_guest
 # usb-storage는 장치를 붙이고 delay_use만큼 쉰 뒤에 SCSI 스캔을 하므로, 3초를
 # 주면 sda2가 init이 처음 훑은 뒤에 생긴다(DC-M0 실측 1: 1.72초 뒤).
 #
+# PD-M3이 4초로 올렸다. 커널에 노트북 터치패드의 드라이버가 들어가며 코드 배치가
+# 밀렸고, initramfs를 푸는 inflate_fast가 페이지 경계에 걸려 TCG에서 풀기가 0.8초
+# 늦어졌다. 3초의 기다림이 900ms에서 100ms로 줄었다(PD-M3 plan 확정 6). 이 늦어짐은
+# 코드의 자리에 달려 있어서 뒤의 커널 변경이 또 움직일 수 있다 — 그래서 1초를 더
+# 벌린다. 4초도 init의 상한(storage.zig의 CONFIG_WAIT_MS 5000)과는 2초 넘게 떨어져 있다.
+#
 # 왜 -kernel인가. cmdline에 delay_use를 넣을 자리가 필요하고, tars.installed도
 # ESP의 limine.conf가 아니라 여기서 준다. init이 보는 것은 /proc/cmdline의
 # 토큰뿐이라 어디서 왔는지는 모른다. 디스크는 부팅 6이 --wipe로 막 만든 그것이다.
@@ -489,8 +495,8 @@ boot_kernel_usb() {
   echo "boot ${name}: console shell up after ${waited}s"
 }
 
-echo "=== boot 7: the installed disk over USB, three seconds late ==="
-boot_kernel_usb 7 "console=ttyS0 tars.installed usb-storage.delay_use=3"
+echo "=== boot 7: the installed disk over USB, four seconds late ==="
+boot_kernel_usb 7 "console=ttyS0 tars.installed usb-storage.delay_use=4"
 
 # 판정 17. 이 milestone의 심장이다. init이 처음 훑었을 때 sda2는 없었고, 기다려서
 # 잡았다. appeared after가 없으면 기다림 없이 잡은 것이라 틈이 안 벌어진

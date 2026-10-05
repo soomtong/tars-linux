@@ -8,6 +8,7 @@ const layout = @import("layout.zig");
 const pointer = @import("pointer.zig");
 const pty = @import("pty.zig");
 const status = @import("status.zig");
+const touchpad = @import("touchpad.zig");
 const vt = @import("vt.zig");
 
 // C 헤더는 build.zig가 번역해 `c_poll`로 넘긴다(ZU-M1). fortify를 끄는 유일한
@@ -1453,12 +1454,33 @@ const PointerDev = struct {
     fd: c_int,
     path: [POINTER_PATH_MAX]u8,
     path_len: usize,
-    mouse: pointer.Mouse = .{},
+    /// 분류가 고른 디코더(PD-M3). 둘의 출력이 같은 `Frame`이라 이 칸 아래의
+    /// `Pointer` · `Gesture`는 어느 쪽인지 모른다(design 결정 8).
+    decoder: union(pointer.Kind) {
+        mouse: pointer.Mouse,
+        touchpad: touchpad.Touchpad,
+        none: void,
+    },
 
     fn pathSlice(self: *const PointerDev) []const u8 {
         return self.path[0..self.path_len];
     }
+
+    /// 이벤트 하나를 디코더에 먹인다. 마우스는 `SYN_REPORT`에 `Frame` 하나,
+    /// 터치패드는 탭이 끝난 `SYN_REPORT`에만 둘(누름 · 뗌)이다.
+    fn feed(self: *PointerDev, ev: *align(1) const pointer.c.struct_input_event) touchpad.Frames {
+        return switch (self.decoder) {
+            .mouse => |*m| if (m.feed(ev.type, ev.code, ev.value)) |f| touchpad.Frames.one(f) else touchpad.Frames{},
+            .touchpad => |*t| t.feed(ev.type, ev.code, ev.value, @as(i64, ev.time.tv_sec) * 1_000_000 + @as(i64, ev.time.tv_usec)),
+            .none => touchpad.Frames{},
+        };
+    }
 };
+
+/// 터치패드 디코더가 쓰는 화면 값(PD-M3). 프레임버퍼를 연 뒤 처음 훑기 전에
+/// 한 번 정한다. `pointer_drawn`과 같은 이유로 파일 하나의 값이다 — 장치를
+/// 여는 자리(처음 훑기 · 핫플러그)가 여럿이라 인자로 나르지 않는다.
+var touchpad_screen: touchpad.Screen = .{ .w = 1, .notch_px = 1 };
 
 /// 한 회차의 왼쪽 버튼 전이 하나(PD-M2). 그 순간의 포인터 자리와 함께 든다 —
 /// 회차가 끝난 뒤의 자리 하나로는 "누르고 끌고 뗐다"의 순서를 되살릴 수 없다.
@@ -1567,8 +1589,9 @@ fn readCaps(fd: c_int) ?pointer.Caps {
 ///
 /// 줄의 `name=`은 언제나 맨 끝이다. 이름에 공백이 들어 있어서다.
 ///
-/// PD-M0은 마우스만 연다. 분류가 `touchpad`를 내도 `skip`이다 — 터치패드
-/// 디코더는 PD-M3이 더한다.
+/// 터치패드면 축 범위를 `EVIOCGABS`로 읽어 디코더를 만들고(PD-M3), `open`
+/// 줄에 칸 수 · 축 · resolution을 함께 찍는다. 실기에서 배율이 손에 안 맞을 때
+/// 그 줄이 첫 단서다(design "실기에서 같은 코드로 가는가").
 fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) void {
     var path_buf: [POINTER_PATH_MAX]u8 = undefined;
     const path = std.fmt.bufPrintZ(&path_buf, POINTER_DIR ++ "/{s}", .{name}) catch return;
@@ -1593,10 +1616,18 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     const dev_name = std.mem.sliceTo(&name_buf, 0);
 
     const kind = pointer.classify(&caps);
-    if (kind != .mouse) {
+    if (kind == .none) {
         std.debug.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
         _ = std.c.close(fd);
         return;
+    }
+    var pad: ?touchpad.Setup = null;
+    if (kind == .touchpad) {
+        pad = readPad(fd, &caps) orelse {
+            std.debug.print("terminal: pointer> skip {s} kind=touchpad error=axes name={s}\n", .{ path, dev_name });
+            _ = std.c.close(fd);
+            return;
+        };
     }
     const free = for (devs, 0..) |slot, i| {
         if (slot == null) break i;
@@ -1605,12 +1636,60 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
         _ = std.c.close(fd);
         return;
     };
-    devs[free] = .{ .fd = fd, .path = undefined, .path_len = path.len };
+    devs[free] = .{
+        .fd = fd,
+        .path = undefined,
+        .path_len = path.len,
+        .decoder = if (pad) |setup| .{ .touchpad = touchpad.Touchpad.init(setup, touchpad_screen) } else .{ .mouse = .{} },
+    };
     @memcpy(devs[free].?.path[0..path.len], path);
     // `shown`은 지금 화면에 화살표가 있는가다(PD-M1, `pointer_drawn`). 첫
     // 장치면 0이다 — 열린 뒤 움직여야 보인다(design 결정 4의 보이는 조건 2).
     // 화살표가 보이는 동안 둘째 장치를 꽂으면 1이다.
-    std.debug.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
+    if (pad) |setup| {
+        std.debug.print("terminal: pointer> open {s} kind=touchpad slots={d} x={d}..{d} y={d}..{d} res={d},{d} shown={d} name={s}\n", .{
+            path,        setup.slots, setup.x.min,                 setup.x.max, setup.y.min, setup.y.max,
+            setup.x.res, setup.y.res, @intFromBool(pointer_drawn), dev_name,
+        });
+    } else {
+        std.debug.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
+    }
+}
+
+/// 터치패드의 축 범위를 읽는다(PD-M3). MT 프로토콜 B면 `ABS_MT_POSITION_X/Y`와
+/// `ABS_MT_SLOT`(max + 1이 칸 수, value가 지금 칸), 아니면 `ABS_X/Y`다. 하나라도
+/// 실패하거나 읽을 축이 없으면 null이다 — 배율을 모르는 패드는 열지 않는다.
+fn readPad(fd: c_int, caps: *const pointer.Caps) ?touchpad.Setup {
+    const mode = touchpad.modeOf(caps) orelse return null;
+    return switch (mode) {
+        .mt => blk: {
+            const x = readAbs(fd, pointer.c.ABS_MT_POSITION_X) orelse return null;
+            const y = readAbs(fd, pointer.c.ABS_MT_POSITION_Y) orelse return null;
+            const s = readAbs(fd, pointer.c.ABS_MT_SLOT) orelse return null;
+            break :blk .{
+                .mode = .mt,
+                .x = .{ .min = x.minimum, .max = x.maximum, .res = x.resolution },
+                .y = .{ .min = y.minimum, .max = y.maximum, .res = y.resolution },
+                .slots = @intCast(@min(@max(s.maximum, 0), touchpad.MAX_SLOTS - 1) + 1),
+                .slot = @intCast(@max(s.value, 0)),
+            };
+        },
+        .st => blk: {
+            const x = readAbs(fd, pointer.c.ABS_X) orelse return null;
+            const y = readAbs(fd, pointer.c.ABS_Y) orelse return null;
+            break :blk .{
+                .mode = .st,
+                .x = .{ .min = x.minimum, .max = x.maximum, .res = x.resolution },
+                .y = .{ .min = y.minimum, .max = y.maximum, .res = y.resolution },
+            };
+        },
+    };
+}
+
+fn readAbs(fd: c_int, comptime code: u16) ?pointer.c.struct_input_absinfo {
+    var info: pointer.c.struct_input_absinfo = undefined;
+    if (ioctl(fd, pointer.eviocgabs(code), &info) < 0) return null;
+    return info;
 }
 
 /// 부팅 때 이미 있던 장치를 훑는다. uevent 소켓을 연 뒤에 부른다 — 반대면
@@ -1672,16 +1751,20 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
         const count = @as(usize, @intCast(n)) / ev_size;
         for (0..count) |i| {
             const ev: *align(1) const pointer.c.struct_input_event = @ptrCast(&raw[i * ev_size]);
-            const frame = dev.mouse.feed(ev.type, ev.code, ev.value) orelse continue;
-            const e = state.apply(slot, frame);
-            round.frames += 1;
-            round.wheel +|= e.wheel;
-            if (e.moved or e.pressed.bits() != 0) round.woke = true;
-            // 왼쪽 버튼의 전이는 그 순간의 자리와 함께 순서대로 담는다(PD-M2).
-            // 한 회차에 누르고 끌고 떼는 보고가 다 들어와도 순서가 남는다.
-            if ((e.pressed.left or e.released.left) and round.edge_count < MAX_EDGES) {
-                round.edges[round.edge_count] = .{ .down = e.pressed.left, .x = state.x, .y = state.y };
-                round.edge_count += 1;
+            // 터치패드의 탭은 한 이벤트에 `Frame` 둘(누름 · 뗌)이다(PD-M3).
+            // 둘 다 아래를 차례로 지나므로 전이 칸에 누름과 뗌이 함께 담긴다.
+            const frames = dev.feed(ev);
+            for (frames.slice()) |frame| {
+                const e = state.apply(slot, frame);
+                round.frames += 1;
+                round.wheel +|= e.wheel;
+                if (e.moved or e.pressed.bits() != 0) round.woke = true;
+                // 왼쪽 버튼의 전이는 그 순간의 자리와 함께 순서대로 담는다(PD-M2).
+                // 한 회차에 누르고 끌고 떼는 보고가 다 들어와도 순서가 남는다.
+                if ((e.pressed.left or e.released.left) and round.edge_count < MAX_EDGES) {
+                    round.edges[round.edge_count] = .{ .down = e.pressed.left, .x = state.x, .y = state.y };
+                    round.edge_count += 1;
+                }
             }
         }
     }
@@ -2156,6 +2239,10 @@ pub fn main(init: std.process.Init) !void {
         }
         break :uevent fd;
     };
+    // 터치패드의 배율과 휠 눈금(PD-M3). 패드 가로 전체가 프레임버퍼 가로이고,
+    // 두 손가락이 휠 한 눈금의 줄 수만큼 움직이면 한 눈금이다 — 손가락과 글자가
+    // 같은 거리를 간다. 처음 훑기보다 먼저 정해야 부팅 때 있던 패드도 이 값을 쓴다.
+    touchpad_screen = .{ .w = fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
     scanPointers(init.io, &pointer_devs);
 
     // poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,

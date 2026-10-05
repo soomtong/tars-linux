@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
-# PD 체인 — 포인터 장치(PD-M0~M2). 열아홉번째 체인.
+# PD 체인 — 포인터 장치(PD-M0~M3). 열아홉번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   QEMU가 USB 마우스를 하나 붙인 채 뜬다(-usb -device usb-mouse)
@@ -20,6 +20,18 @@ cd "$(dirname "$0")"
 #   → 다른 패널을 누르면 포커스가 그리로 간다. 여백 · 구분선은 아무 일도 없다(PD-M2)
 #   → 글자 위를 누르고 끌면 copy mode의 선택이 늘어나고, 떼면 클립보드에
 #     들어간다. 입력 모드도 함께 돌아와 그다음 친 글자가 셸에 간다(PD-M2)
+#   → 커널에 노트북 터치패드의 세 경로(PS/2 · SMBus · I2C-HID)와 uinput이
+#     켜져 있고 드라이버가 등록됐다(PD-M3, 부팅 전과 부팅 B)
+#   → psmouse가 QEMU의 PS/2 마우스를 잡고 terminal이 그것을 마우스로 연다(부팅 B)
+#   → 설정 디스크의 tp-replay가 uinput으로 터치패드를 만들면 terminal이 터치패드로
+#     열고, 한 손가락 이동 · 탭 · 두 손가락 세로가 포인터 이동 · 클릭 · 휠이 된다
+#     (부팅 B)
+#
+# 부팅이 둘이다. 부팅 A(PD-M0~M2)는 USB 마우스 하나만 보도록 커널 cmdline에
+# i8042.noaux를 준다 — PD-M3부터 커널이 PS/2 마우스를 알아서, 그것이 없으면
+# 검사 1의 "정확히 하나"와 검사 9의 둘째("마지막 장치가 빠지면 숨는다")가 PS/2
+# 마우스 때문에 성립하지 않는다(PD-M3 plan 확정 9). 부팅 B(PD-M3)는 cmdline을
+# 그대로 두고 설정 디스크를 물린다.
 #
 # copy · pane 체인에 끼우지 않은 이유는 PD design 결정 10이다. 그 체인들의
 # 판정은 포인터가 없는 화면을 전제하고, 이 체인은 PD-M1부터 화살표가 보이는
@@ -86,10 +98,21 @@ if ! (cd ../kernel && ./make_initrd.sh); then
   exit 1
 fi
 
-# 열여덟 체인이 45455~45487을 쓴다. 45489는 PD-M3의 부팅 B 몫이다(design 결정 10).
+# 열여덟 체인이 45455~45487을 쓴다. 45489는 부팅 B의 몫이다(design 결정 10).
 MONITOR_PORT=45488
+MONITOR_PORT_B=45489
 
 REPO_ROOT="$(cd .. && pwd)"
+
+# 부팅 B의 되감기 도구(PD-M3). 제품이 아니라 게이트 전용이라 initrd가 아니라
+# 설정 디스크에 싣는다(design 결정 10, wifi 체인의 hostapd와 같은 이유). 산출물과
+# 캐시를 out/ 아래에 두므로 .gitignore도 clean()도 고칠 일이 없다.
+REPLAY_OUT="${REPO_ROOT}/out/pd-replay"
+if ! (cd replay && zig build --prefix "$REPLAY_OUT" --cache-dir "${REPLAY_OUT}/cache"); then
+  echo "FAIL: tp-replay build failed"
+  exit 1
+fi
+REPLAY="${REPLAY_OUT}/bin/tp-replay"
 # screendump는 QEMU 프로세스의 작업 디렉터리를 기준으로 삼으므로 절대 경로로
 # 넘긴다. out/은 .gitignore 대상이고 루트 check.sh의 clean()이 지운다
 # (terminal/check.sh와 같은 자리).
@@ -136,7 +159,9 @@ report_failure() {
     "terminal: clip> len=" \
     "terminal: pane> ws=1/1 panes=2" \
     "terminal: pointer> uevent failed" \
-    "terminal: pointer> scan failed"; do
+    "terminal: pointer> scan failed" \
+    "kind=touchpad" \
+    "tp-replay:"; do
     if grep -aq "$marker" "$LOG"; then
       echo "  found   ${marker}"
     else
@@ -402,12 +427,57 @@ screendump() {
   return 1
 }
 
+# ── 검사 19: 커널이 노트북 터치패드의 세 경로를 안다 (부팅 없음) ────────
+#
+# QEMU에는 터치패드가 없다(design 실측 7). 그래서 실칩 드라이버는 세 겹으로
+# 본다(design 결정 9) — 여기서 심볼과 커널의 장치 표(modinfo alias)를, 부팅 B에서
+# 드라이버가 실제로 등록됐는지를. 심볼은 켜졌는데 의존 관계로 빌드에서 빠진
+# 경우를 셋째 겹이 잡는다. 켜지 않기로 한 것(Apple 쪽 · mousedev)도 본다.
+CONFIG=../kernel/.config
+for sym in INPUT_MOUSE MOUSE_PS2 MOUSE_PS2_SYNAPTICS MOUSE_PS2_SYNAPTICS_SMBUS MOUSE_PS2_ELANTECH \
+  MOUSE_PS2_ELANTECH_SMBUS MOUSE_PS2_ALPS MOUSE_PS2_FOCALTECH MOUSE_PS2_TRACKPOINT \
+  RMI4_CORE RMI4_SMB RMI4_F03 RMI4_F11 RMI4_F12 RMI4_F30 RMI4_F3A I2C_I801 \
+  MOUSE_ELAN_I2C MOUSE_ELAN_I2C_I2C MOUSE_ELAN_I2C_SMBUS \
+  I2C_HID_ACPI HID_MULTITOUCH I2C_DESIGNWARE_CORE I2C_DESIGNWARE_PLATFORM \
+  MFD_INTEL_LPSS_PCI MFD_INTEL_LPSS_ACPI X86_INTEL_LPSS X86_AMD_PLATFORM_DEVICE \
+  PINCTRL_AMD PINCTRL_INTEL_PLATFORM PINCTRL_SUNRISEPOINT PINCTRL_CANNONLAKE PINCTRL_ICELAKE \
+  PINCTRL_TIGERLAKE PINCTRL_ALDERLAKE PINCTRL_METEORLAKE PINCTRL_JASPERLAKE PINCTRL_GEMINILAKE \
+  PINCTRL_BROXTON PINCTRL_BAYTRAIL PINCTRL_CHERRYVIEW PINCTRL_LYNXPOINT \
+  INTEL_THC_HID INTEL_QUICKI2C INPUT_MISC INPUT_UINPUT; do
+  if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
+    exit 1
+  fi
+done
+for sym in HID_APPLE HID_MAGICMOUSE MOUSE_BCM5974 KEYBOARD_APPLESPI INPUT_MOUSEDEV; do
+  if grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is =y in kernel/.config, PD design 결정 9 leaves it off"
+    exit 1
+  fi
+done
+# 커널이 장치 ID를 드라이버에 잇는 표. 경로마다 대표 하나다(PD-M3 plan 확정 4가
+# modules.builtin.modinfo에서 뽑은 글자). modinfo는 NUL로 나뉜 파일이다.
+MODINFO=../kernel/build/modules.builtin.modinfo
+for alias in i2c_hid_acpi.alias=acpi*:PNP0C50:* hid_multitouch.alias=hid:b*g0004v*p* \
+  elan_i2c.alias=acpi*:ELAN0000:* rmi_smbus.alias=i2c:rmi4_smbus \
+  intel_lpss_pci.alias=pci:v00008086d00009D60sv*sd*bc*sc*i* pinctrl_tigerlake.alias=acpi*:INT34C5:* \
+  pinctrl_amd.alias=acpi*:AMD0030:* intel_quicki2c.alias=pci:v00008086d0000A848sv*sd*bc*sc*i*; do
+  if ! tr '\0' '\n' < "$MODINFO" | grep -xF "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no '${alias}' entry in modules.builtin.modinfo"
+    exit 1
+  fi
+done
+echo "the kernel carries the PS/2, SMBus and I2C-HID touchpad paths and uinput, and no Apple input drivers"
+
+# 부팅 A — USB 마우스 하나(PD-M0~M2). i8042.noaux가 PS/2 마우스 포트를 끈다 —
+# 위의 머리 주석과 PD-M3 plan 확정 9. 검사 1의 "정확히 하나"가 그것이 먹혔다는 것도
+# 함께 본다(PS/2 마우스가 생기면 open이 둘이다).
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
   -kernel ../kernel/build/arch/x86/boot/bzImage \
   -initrd ../kernel/initrd.cpio \
-  -append "console=ttyS0" \
+  -append "console=ttyS0 i8042.noaux" \
   -vga none \
   -device virtio-gpu-pci \
   -display none \
@@ -1026,4 +1096,240 @@ fi
 
 echo "pointer> lines:"
 grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
-echo "PD-M2 check PASS"
+
+# ══ 부팅 B: PS/2 마우스와 uinput 터치패드 (PD-M3) ═══════════════════════
+#
+# 부팅 A를 끄고 설정 디스크 하나를 물려 다시 뜬다. cmdline은 기본 그대로라
+# psmouse가 QEMU pc의 PS/2 마우스를 잡는다(design 실측 4). 디스크에는 되감기
+# 도구와 드라이버 목록 스크립트가 있다. 라벨 접두사 tars-가 init이 설정
+# 디스크를 알아보는 표지다(RM-M2).
+exec 3<&- 2>/dev/null
+exec 3>&- 2>/dev/null
+kill "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
+QEMU_PID=""
+
+# 검사 19의 둘째 겹 — 게스트에서 드라이버가 실제로 등록됐는가. 없는 것만 한 줄씩
+# 찍고 마지막에 개수를 찍는다. 화면 한 장에 들어가야 screen> 줄로 판정할 수 있어서
+# 있는 것은 안 찍는다. 이름은 PD-M3 plan 확정 4가 커널 소스에서 뽑았다.
+SEED="$(mktemp -d)"
+mkdir -p "$SEED/pd"
+printf 'shell=fish\n' > "$SEED/tars.conf"
+cp "$REPLAY" "$SEED/pd/tp-replay"
+chmod 0755 "$SEED/pd/tp-replay"
+cat > "$SEED/pd/drivers" <<'DRIVERS'
+#!/usr/bin/bash
+n=0
+ok=0
+for d in /sys/bus/serio/drivers/psmouse /sys/bus/hid/drivers/hid-multitouch \
+    /sys/bus/i2c/drivers/i2c_hid_acpi /sys/bus/i2c/drivers/elan_i2c /sys/bus/i2c/drivers/rmi4_smbus \
+    /sys/bus/rmi4/drivers/rmi4_physical /sys/bus/pci/drivers/i801_smbus /sys/bus/pci/drivers/intel-lpss \
+    /sys/bus/platform/drivers/i2c_designware /sys/bus/platform/drivers/amd_gpio \
+    /sys/bus/platform/drivers/tigerlake-pinctrl /sys/bus/pci/drivers/intel_quicki2c; do
+  n=$((n + 1))
+  if [ -e "$d" ]; then ok=$((ok + 1)); else echo "pd-drv-no $d"; fi
+done
+n=$((n + 1))
+if [ -c /dev/uinput ]; then ok=$((ok + 1)); else echo "pd-drv-no /dev/uinput"; fi
+echo "pd-drivers ${ok}/${n}"
+DRIVERS
+chmod 0755 "$SEED/pd/drivers"
+DISK_B="${REPO_ROOT}/out/pd-touchpad.img"
+rm -f "$DISK_B"
+truncate -s 16M "$DISK_B"
+mkfs.ext2 -F -q -m 0 -L tars-pd -d "$SEED" "$DISK_B"
+rm -rf "$SEED"
+
+LOG_A="$LOG"
+LOG="$(mktemp)"
+echo "=== boot B: the PS/2 mouse and a uinput touchpad ==="
+qemu-system-x86_64 \
+  -nic none \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -drive file="$DISK_B",if=virtio,format=raw \
+  -serial file:"$LOG" \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT_B},server,nowait \
+  -no-reboot &
+QEMU_PID=$!
+
+READY=0
+for _ in $(seq 1 120); do
+  if grep -aq "terminal: screen>" "$LOG"; then READY=1; break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || report_failure "boot B: terminal never rendered a prompt"
+wait_for_screen 'root@\(none\) ~#' ||
+  report_failure "boot B: the shell prompt never showed up"
+grep -a 'tars-init: mounted ext2 at /config' "$LOG" >/dev/null ||
+  report_failure "boot B: the config disk was not mounted at /config"
+sleep 1
+
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT_B}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure "boot B: could not connect to the QEMU monitor"
+
+# ── 검사 20: psmouse가 PS/2 마우스를 잡고 terminal이 마우스로 연다 ────────
+#
+# 커널 줄과 terminal 줄을 따로 본다. 커널 줄이 없으면 psmouse가 i8042 AUX를 못
+# 잡은 것이고(MOUSE_PS2가 빠졌거나 i8042가 AUX를 안 열었다), 커널 줄만 있으면
+# terminal의 분류나 핫플러그가 틀린 것이다. psmouse의 탐지는 비동기라서 terminal보다
+# 늦게 끝날 수 있다 — 그러면 처음 훑기가 아니라 uevent가 연다. 어느 쪽이든 같은 줄이다.
+# synaptics 프로토콜은 QEMU에 없으므로 이 부팅이 보는 것은 "psmouse가 i8042 AUX를
+# 잡는다"까지다(design 결정 9).
+echo "=== boot B: psmouse registers the PS/2 mouse and terminal opens it ==="
+PS2_NAME='ImExPS/2 Generic Explorer Mouse'
+wait_for_log "input: ${PS2_NAME} as /devices/platform/i8042/serio1/input/input[0-9]+" ||
+  report_failure "psmouse never registered the PS/2 mouse (no 'input: ${PS2_NAME} as …/i8042/serio1/…')"
+wait_for_log "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse shown=0 name=${PS2_NAME}" ||
+  report_failure "the kernel registered the PS/2 mouse but terminal never opened it as kind=mouse"
+PS2_PATH="$(grep -a "terminal: pointer> open .* name=${PS2_NAME}" "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*open ([^ ]+) .*/\1/')"
+echo "ps/2 mouse: ${PS2_PATH}"
+
+# ── 검사 19의 둘째: 드라이버가 게스트에 등록됐다 ──────────────────────────
+echo "=== boot B: the touchpad drivers are registered ==="
+type_keys slash c o n f i g slash p d slash d r i v e r s ret
+wait_for_screen '\| pd-drivers [0-9]+/[0-9]+ \|' ||
+  report_failure "the driver list script printed no summary"
+DRV_LINE="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' | grep -oE 'pd-drivers [0-9]+/[0-9]+' | tail -n 1)"
+DRV_MISSING="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' | grep -oE 'pd-drv-no [^ |]+' | sort -u | tr '\n' ' ')"
+[ "$DRV_LINE" = "pd-drivers 13/13" ] ||
+  report_failure "the guest is missing touchpad drivers: '${DRV_LINE}' ${DRV_MISSING}"
+echo "drivers: ${DRV_LINE}"
+
+# 스크롤백을 만들어 둔다(검사 24). 도구는 패널 안에서 돌고 찍지 않으므로 그동안
+# 이 스크롤백이 그대로다.
+type_keys s e q spc 2 0 0 ret
+wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+  report_failure "boot B: seq 200 did not finish"
+
+# ── 검사 21: 도구가 만든 터치패드를 터치패드로 연다 ─────────────────────
+#
+# 부팅 뒤에 생긴 장치라 uevent가 알리고(PD-M0의 배관), classify가 INPUT_PROP_POINTER와
+# ABS_MT로 터치패드라 하고, EVIOCGABS로 읽은 축이 open 줄에 찍힌다. 축은 도구가
+# 만든 그대로다 — 가로 0..1000 · 세로 0..600, resolution 10 · 12, 칸 둘.
+echo "=== boot B: tp-replay makes a touchpad and terminal opens it ==="
+type_keys slash c o n f i g slash p d slash t p minus r e p l a y ret
+wait_for_log 'terminal: pointer> (open|skip) /dev/input/event[0-9]+ kind=touchpad.* name=TARS Replay Touchpad' ||
+  report_failure "terminal never saw the replay touchpad (no 'pointer> open … kind=touchpad … name=TARS Replay Touchpad')"
+TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> ' | tail -n 1 | tr -d '\r')"
+case "$TP_LINE" in
+  *"> open /dev/input/event"*" kind=touchpad slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad") ;;
+  *) report_failure "the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad'" ;;
+esac
+TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
+echo "touchpad: ${TP_LINE}"
+
+# 명령 한 줄을 도구의 stdin에 친다. 친 글자는 키라서 화살표를 숨기지만(보이는
+# 조건 3), 다음 손가락 이동이 다시 보이게 한다.
+replay() {
+  local word keys=()
+  for word in $1; do
+    [ "${#keys[@]}" -gt 0 ] && keys+=(spc)
+    keys+=($(sed -e 's/./& /g' -e 's/-/minus/g' <<<"$word"))
+  done
+  type_keys "${keys[@]}" ret
+}
+
+# ── 검사 22: 한 손가락 이동이 배율대로 포인터를 옮긴다 ───────────────────
+#
+# 출발은 가운데(640, 400)다. 가로 100단위는 128픽셀이다 — 패드 가로 1000이 화면
+# 가로 1280이다. 세로 60단위는 64픽셀이다 — 세로 resolution이 12라서 같은 mm당
+# 픽셀로 맞추면 단위당 1.28 × 10 / 12다. resolution을 안 보고 가로와 같은 단위당
+# 픽셀을 쓰면 76이 된다(mutation 4). 이동은 탭이 아니다 — press 줄이 없다.
+echo "=== boot B: one finger moves the pointer by the pad's scale ==="
+replay "move 100 0"
+wait_for_at "^terminal: pointer> at x=768 y=400 buttons=0 wheel=0 shown=1 ink=${ARROW_INK}\$" ||
+  report_failure "after 'move 100 0' the last at line is '$(last_at)', expected 'at x=768 y=400 … shown=1 ink=${ARROW_INK}' (100 of 1000 units is 128 of 1280 pixels)"
+replay "move 0 60"
+wait_for_at '^terminal: pointer> at x=768 y=464 ' ||
+  report_failure "after 'move 0 60' the last at line is '$(last_at)', expected x=768 y=464 (60 units at resolution 12 against 10 is 64 pixels)"
+[ "$(pointer_count 'press ')" -eq 0 ] ||
+  report_failure "a one-finger move pressed a button: $(last_press)"
+echo "moved: $(last_at)"
+
+# ── 검사 23: 탭은 클릭이고, 긴 누름은 아무것도 아니다 ─────────────────────
+#
+# 탭(40ms)은 press · release 한 쌍이다. 768, 464는 27행 93열의 칸이다. 긴 누름(500ms)은
+# 아무것도 안 낸다. 그것을 "아직 안 왔다"와 가르려고 뒤에 이동을 하나 보낸다 —
+# 같은 장치의 이벤트는 순서대로 읽히므로 그 이동의 at 줄이 보이면 긴 누름은 이미
+# 디코더를 지났다. 탭의 시간 조건이 빠지면 여기서 press가 하나 더 는다(mutation 1).
+# 그 이동은 40단위다. 탭이 움직여도 되는 거리가 가로 20단위(축의 2%)라서 그보다
+# 짧고 빠른 이동은 그 자체가 탭이 된다 — 10단위로 했을 때 실제로 클릭이 났다.
+echo "=== boot B: a tap clicks, a hold does nothing ==="
+replay "tap"
+wait_for_count pointer_count 'release ' 1 ||
+  report_failure "a tap printed no 'pointer> release' line (last press: '$(last_press)')"
+[ "$(last_press)" = "terminal: pointer> press leaf=0 row=27 col=93" ] ||
+  report_failure "the tap pressed '$(last_press)', expected 'press leaf=0 row=27 col=93'"
+[ "$(last_release)" = "terminal: pointer> release drag=0" ] ||
+  report_failure "the tap released '$(last_release)', expected 'release drag=0'"
+replay "hold"
+replay "move 40 0"
+wait_for_at '^terminal: pointer> at x=819 y=464 ' ||
+  report_failure "after 'hold' and 'move 40 0' the last at line is '$(last_at)', expected x=819 y=464"
+[ "$(pointer_count 'press ')" -eq 1 ] ||
+  report_failure "a 500ms hold clicked (press lines: $(pointer_count 'press '), last '$(last_press)'); a tap must be shorter than 180ms"
+echo "tap: $(last_press) / $(last_release), hold: nothing"
+
+# ── 검사 24: 두 손가락 세로는 휠이고, 포인터는 안 움직인다 ────────────────
+#
+# 90단위는 96픽셀이고 휠 한 눈금이 3줄 × 16픽셀이라 두 눈금, 여섯 줄이다. 손가락을
+# 아래로 밀면 휠을 앞으로 민 것과 같다 — 위의 글이 보이도록 offset이 준다. 패널은
+# 바닥에 있었으므로(친 글자의 에코가 내린다) offset은 total - len - 6이 된다.
+# 두 손가락을 이동으로 보내면 at의 y가 바뀌고 offset은 그대로다(mutation 2).
+echo "=== boot B: two fingers scroll the pane under the pointer ==="
+ATS="$(pointer_count 'at ')"
+replay "scroll 90"
+SCROLLED=0
+for _ in $(seq 1 150); do
+  LINE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | tr -d '\r')"
+  T="$(sed -E 's/.*total=([0-9]+).*/\1/' <<<"$LINE")"
+  O="$(sed -E 's/.*offset=([0-9]+).*/\1/' <<<"$LINE")"
+  L="$(sed -E 's/.*len=([0-9]+).*/\1/' <<<"$LINE")"
+  if [ "$((T - L - O))" -eq 6 ]; then SCROLLED=1; break; fi
+  sleep 0.1
+done
+[ "$SCROLLED" = "1" ] ||
+  report_failure "two fingers 90 units down left the viewport at '${LINE}', expected six rows above the bottom"
+NEW_ATS="$(grep -a 'terminal: pointer> at ' "$LOG" | tail -n "+$((ATS + 1))" | tr -d '\r')"
+grep -avE ' x=819 y=464 ' <<<"$NEW_ATS" >/dev/null &&
+  report_failure "two fingers moved the pointer: $(grep -avE ' x=819 y=464 ' <<<"$NEW_ATS" | sed -n 1p)"
+WHEEL=0
+while read -r w; do WHEEL=$((WHEEL + w)); done < <(sed -nE 's/.* wheel=(-?[0-9]+) .*/\1/p' <<<"$NEW_ATS")
+[ "$WHEEL" = "2" ] ||
+  report_failure "two fingers 90 units down added up to wheel=${WHEEL} on the at lines, expected 2"
+echo "scrolled: ${LINE}, wheel ${WHEEL}"
+
+# ── 검사 25: 도구가 끝나면 터치패드를 닫는다 ─────────────────────────────
+#
+# quit이 UI_DEV_DESTROY로 장치를 없앤다. 그 fd가 POLLHUP을 올리고 terminal이 닫는다.
+# PS/2 마우스는 그대로 열려 있다. 그 뒤에 친 echo가 오면 poll이 막히지 않은 것이다.
+echo "=== boot B: quitting the tool closes the touchpad ==="
+replay "quit"
+wait_for_log "terminal: pointer> close ${TP_PATH}" ||
+  report_failure "the replay touchpad was never closed (no 'pointer> close ${TP_PATH}')"
+[ "$(pointer_count 'close ')" -eq 1 ] ||
+  report_failure "expected one 'pointer> close' in boot B, got $(pointer_count 'close ')"
+type_keys e c h o spc p d minus t p minus g o n e ret
+wait_for_screen '\| pd-tp-gone \|' ||
+  report_failure "the shell did not answer after the touchpad went away"
+echo "closed: $(grep -a 'terminal: pointer> close ' "$LOG" | tail -n 1 | tr -d '\r')"
+
+if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
+  report_failure "the boot B serial log contains NUL bytes"
+fi
+
+echo "boot B pointer> lines:"
+grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
+rm -f "$LOG_A" "$LOG"
+echo "PD-M3 check PASS"
