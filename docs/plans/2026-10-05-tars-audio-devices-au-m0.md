@@ -2,7 +2,7 @@
 
 Date: 2026-10-05
 Design: `docs/specs/2026-10-05-tars-audio-devices-design.md`
-Status: 구현 전. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에 있고, 맨 아래 "AU-M0이 실측한 것" 절은 구현 뒤에 lead가 채운다.
+Status: 끝났다(2026-10-06). plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "AU-M0이 실측한 것"에 있다. 다음은 AU-M1(`-au-m1.md`).
 
 ## 누가 무엇을 하나
 
@@ -1147,4 +1147,22 @@ git status --short
 
 ## AU-M0이 실측한 것
 
-(구현과 루트 게이트 뒤에 lead가 채운다.)
+구현은 Sonnet 서브에이전트가 2026-10-06에 main 작업 트리에서 했고, lead가 일곱 파일을 `/tmp/run/au0/new/`와 `cmp`해 전부
+같은 것을 봤다. plan의 기대와 글자나 수가 다른 것은 없었다. 로그는 `/tmp/run/au0/impl/`(`audio.log` · `reg_*.log` · `mut/`),
+루트 게이트는 `/tmp/gate_au0.log`.
+
+1. 커널. `build 1` · `build 2` 둘 다 exit 0, `FOLDED`, bzImage 7,955,456바이트, `inflate_fast`가 `ffffffff8147ab40` — 확정 1 · 6의
+   값 그대로다. 두 빌드를 합한 `real`이 2분 6초. `.config`의 diff는 +147 −2이고 지운 줄은 `SYSVIPC` · `SOUND`의 `is not set` 둘이다.
+2. 이미지. 굽기가 1분 51초가 아니라 2.7초였다 — 모든 층이 `CACHED`였고, 구운 뒤의 `tars-devcontainer`가 planner의
+   `tars-devcontainer-au0`와 같은 이미지 ID(`c13e9834eb62`)였다. Dockerfile이 사본과 바이트까지 같아서 Docker가 같은 층을 돌려준
+   것이다. sysroot의 `aplay` · `libasound.so.2` · `alsa.conf`를 lead가 다시 확인했다.
+3. `audio` 체인. 캐시를 지운 판이 1분 40초(plan의 기대 2~5분 안), `tap: tone=48000 left=53060 right=71059 other=0` ·
+   `cap: frames=96000 match=96000`으로 사본과 같다. `frames` · `zero` · `first_*`만 판마다 다르다(확정 4가 적은 대로).
+4. regression. `install` 102초(`init waited 1800ms`) · `tools` 65초(`all 91 tools`) · `boot` 23초 · `machine` 19초, 넷 다 exit 0.
+5. mutation. 열 판이 전부 겨냥한 검사에서 빨갰고 `FAIL` 줄이 확정 7의 표와 글자까지 같다. 시간은 m3 계열 18초 · m4 8 · 12초 ·
+   m5 7 · 11초 · m1 23 · 67초 · m2_boot 127초. 되돌린 뒤 `kernel/build`의 스탬프와 `.config` · `build.sh`의 해시가 같았고
+   체인이 다시 `AU check PASS`였다.
+6. 루트 게이트. 스무 체인 × 2회, 50분 34초, `PASS: 2/2` 스물 · `AU check PASS` 둘 · `skipping make` 39. `audio` 체인의 두 회차가
+   `tap: frames=199424 … tone=48000 left=53060 right=71059 other=0`와 `frames=198417 … tone=48000 left=53060 right=71059 other=0`,
+   `cap: frames=96000 match=96000` 둘이었다. CB-M0의 19체인 51분 15초에서 1분 안쪽이 줄었다 — 확정 9가 본 대로 새 체인의
+   비용은 1분 안쪽이고, 커널이 0.7초 빨라진 것(확정 6)이 부팅 마흔 번 남짓에 걸쳐 그것을 되돌려 준 것으로 본다.

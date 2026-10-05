@@ -335,6 +335,12 @@ run_chain() {
 # 잡은 줄을 다른 곳에 붙여 실행하고, 부팅 B(설정 디스크의 clipboard=pane)에서
 # 다른 패널의 Cmd+V가 비는 것을 본다. 회차당 부팅 2회.
 #
+# AU 체인은 소리를 본다. q35에 HDA 컨트롤러와 스피커 · 마이크 코덱(hda-micro)을 붙여
+# 뜨고, 설정 디스크의 services.d/probe가 aplay · speaker-test · arecord를 사람이 치는
+# 그대로 친다. QEMU의 오디오 백엔드가 컨테이너의 alsa-lib이고 그 file 플러그인이
+# 스피커로 나온 샘플을 파일에 받고 파일의 샘플을 마이크로 넣으므로, 판정이 값까지
+# 같은지로 닫힌다. 게스트에 한 글자도 안 친다. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -357,6 +363,7 @@ CHAINS=(
   "WL-M3:./wifi/check.sh"
   "CB-M0:./pane/check.sh"
   "PD-M4:./pointer/check.sh"
+  "AU-M0:./audio/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

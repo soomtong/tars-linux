@@ -1,8 +1,9 @@
 # TARS Audio Devices — Design
 
 Date: 2026-10-05
-Status: 쓰는 중. M0 plan(`docs/plans/2026-10-05-tars-audio-devices-au-m0.md`)까지 썼고 구현 전이다. 사본에서의 측정은
-2026-10-05~06에 했다.
+Status: 진행 중. M0이 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`.
+소리는 아직 사람이 `amixer`로 켠다. 다음은 M1(부팅이 믹서를 켜고 기억한다, `docs/plans/2026-10-05-tars-audio-devices-au-m1.md`).
+M0 plan은 `-au-m0.md`이고 그 끝의 "실측한 것" 절이 값이다.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 

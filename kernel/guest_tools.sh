@@ -345,4 +345,29 @@ GUEST_TOOLS=(
   # 이것을 가린다 — `command which`나 /usr/bin/which로 부른다(GE design 결정 1).
   # tools/check.sh 검사 22가 fish에서 친다.
   usr/bin/which.debianutils:usr/bin/which
+
+  # ── 층 14 · 소리(AU-M0) ────────────────────────────────────────────────
+  # 사용자가 2026-10-05에 요청했다("오디오(마이크/이어폰/스피커) 기기 활성화").
+  # 커널의 ALSA가 /dev/snd에 내놓은 장치를 사람이 이름으로 부르는 넷이다.
+  #
+  #   aplay         재생. 녹음(arecord)은 같은 바이너리의 두 번째 이름이라
+  #                 여기 없고 make_initrd.sh가 링크로 건다(vi와 같은 자리)
+  #   amixer        믹서. 커널이 소리를 꺼 둔 채 뜨므로(AU design 결정 4) 사람이
+  #                 처음 치는 것이 `amixer sset Master unmute`다. AU-M1이 그 일을
+  #                 부팅으로 옮길 때까지는 이것이 유일한 길이다
+  #   alsamixer     같은 일의 화면판. 화면을 통째로 가져가는 대화형이라 게이트가
+  #                 못 친다(htop · btop과 같다) — 목록 검사가 전부다
+  #   speaker-test  왼쪽 · 오른쪽 스피커를 목소리로 확인한다. 그 목소리 파일 둘은
+  #                 make_initrd.sh가 넣는다
+  #
+  # 새 라이브러리는 libasound 하나다(1,178,192바이트). alsamixer가 부르는
+  # libformw · libmenuw · libpanelw는 sysroot의 libncursesw6 패키지에 이미 있던
+  # 것이고 initrd에는 이번에 처음 들어간다. alsactl은 안 싣는다 — 부팅에 믹서를
+  # 되살리는 일은 AU-M1이고, 어떻게 할지는 그 milestone이 정한다.
+  # audio/check.sh가 넷 중 aplay · arecord · amixer · speaker-test를 게스트에서
+  # 실제로 돌린다.
+  usr/bin/aplay:usr/bin/aplay
+  usr/bin/amixer:usr/bin/amixer
+  usr/bin/alsamixer:usr/bin/alsamixer
+  usr/bin/speaker-test:usr/bin/speaker-test
 )

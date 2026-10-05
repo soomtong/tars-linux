@@ -262,6 +262,30 @@ install -m 0644 vim/defaults.vim "$WORKDIR/usr/share/vim/vim91/defaults.vim"
 # 다른 점은 이 이름을 우리가 골랐다는 것이다: 사람이 `nc`라고 친다.
 ln -sf nc.traditional "$WORKDIR/usr/bin/nc"
 
+# AU-M0. 소리에 딸린 것 셋. 바이너리 넷은 guest_tools.sh의 층 14에 있다.
+#
+# arecord는 aplay의 두 번째 이름이다. 바이너리 하나가 argv[0]을 보고 재생과 녹음을
+# 가른다 — .deb 안에서도 arecord -> aplay 링크다. vi -> vim과 같은 이유로 링크를
+# 건다(guest_tools.sh에 두 줄을 적으면 install_tool이 링크를 따라가 같은 실체를 두
+# 벌 복사한다).
+ln -sf aplay "$WORKDIR/usr/bin/arecord"
+
+# /usr/share/alsa는 libasound가 컴파일 타임에 박아 둔 설정 트리다. alsa.conf가
+# 없으면 aplay -l부터 `Cannot access file /usr/share/alsa/alsa.conf`로 죽는다.
+# cards/HDA-Intel.conf · pcm/dmix.conf 등 파일 86개가 182,416바이트라 고르지 않고
+# 통째로 넣는다(zoneinfo와 같은 판단). init/ 아래는 alsactl init의 규칙이라 지금은
+# 아무도 안 읽지만 같은 트리의 일부다.
+mkdir -p "$WORKDIR/usr/share"
+cp -r "$SYSROOT/usr/share/alsa" "$WORKDIR/usr/share/"
+
+# speaker-test -t wav가 채널마다 읽는 목소리 파일. 2채널(-c 2)이 읽는 둘만
+# 넣는다 — 나머지 일곱(Center · Rear · Side · Noise)은 노트북에 없는 채널이다.
+# 둘이 289,118바이트다. 사람이 왼쪽에서 "Front Left"를 듣는 것이 스피커 배선을
+# 확인하는 가장 빠른 길이다.
+mkdir -p "$WORKDIR/usr/share/sounds/alsa"
+cp "$SYSROOT/usr/share/sounds/alsa/Front_Left.wav" \
+  "$SYSROOT/usr/share/sounds/alsa/Front_Right.wav" "$WORKDIR/usr/share/sounds/alsa/"
+
 # NW-M2. dhcpcd가 쓰는 자리 둘(M0 실측 7). 리스는 /var/lib/dhcpcd/eth0.lease에
 # 쓰고(10.x는 /var/db가 아니다), /run/dhcpcd는 /run만 있으면 자기가 만든다.
 # 지금 initrd에는 /var도 /run도 아예 없다 — UT-M0이 /bin·/tmp·/etc 셋을
@@ -399,12 +423,19 @@ cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
 # SV-M2: sshd의 privilege separation 사용자와 그 그룹. 없으면 sshd가
 # "Privilege separation user sshd does not exist"로 안 뜬다(SV-M0 실측 4).
 # /usr/sbin/nologin은 게스트에 없지만 sshd는 그 자리를 실행하지 않는다.
+#
+# AU-M0: audio 그룹. alsa-lib의 기본 장치(dmix · dsnoop)가 공유 메모리를 그
+# 그룹의 것으로 만들려고 이름을 찾는다. 없으면 `aplay x.wav`가 `The field ipc_gid
+# must be a valid group (create group audio)`로 죽는다 — -D hw:0으로 장치를 직접
+# 고르면 돌아서, 사람은 "가끔만 안 된다"로 겪는다(AU design 결정 3). 29는 Debian의
+# 번호다. 우리는 root로 돌므로 구성원을 안 적는다.
 cat > "$WORKDIR/etc/passwd" <<'EOF'
 root:x:0:0:root:/:/bin/sh
 sshd:x:100:65534::/run/sshd:/usr/sbin/nologin
 EOF
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
+audio:x:29:
 nogroup:x:65534:
 EOF
 

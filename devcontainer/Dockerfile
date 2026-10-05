@@ -295,6 +295,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (mawk→awk와 같은 자리). 패키지의 나머지(run-parts · savelog · ischroot ·
 # add-shell · remove-shell · update-shells · installkernel)는 sysroot에만 풀리고
 # initrd에는 안 들어간다. 라이브러리는 0개다 — 스크립트다.
+#
+# ── AU-M0: 층 14(소리) ────────────────────────────────────────────────
+#
+# alsa-utils의 바이너리 넷(aplay · amixer · alsamixer · speaker-test)과 그것이
+# 부르는 libasound, 그리고 libasound가 여는 설정 트리다. 넷 다 NEEDED가
+# libasound.so.2 · libm · libc뿐이고, alsamixer만 ncurses의 form · menu ·
+# panel을 더 부른다 — 셋 다 libncursesw6 안에 이미 있다(AU design 실측 5).
+# 그래서 새 라이브러리는 libasound 하나다.
+#
+#   alsa-utils        바이너리. 나머지(alsactl · alsaloop · alsabat · aseq*
+#                     · amidi 등)는 sysroot에만 풀린다
+#   libasound2t64     libasound.so.2, 1,178,192바이트
+#   libasound2-data   /usr/share/alsa(alsa.conf · cards · pcm). libasound가
+#                     컴파일 타임에 박아 둔 경로라 없으면 aplay -l부터 죽는다.
+#                     Architecture: all이라 :amd64를 안 붙인다
+#
+# alsa-utils의 Depends 중 libatopology · libfftw3 · libsamplerate는 안 받는다 —
+# alsatplg · alsabat · alsaloop의 것이고 우리는 그 셋을 안 싣는다. kmod도
+# 안 받는다(커널에 모듈이 없다).
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -427,6 +446,9 @@ RUN dpkg --add-architecture amd64 \
         libnl-route-3-200:amd64 \
         libpcsclite1:amd64 \
         libdbus-1-3:amd64 \
+        alsa-utils:amd64 \
+        libasound2t64:amd64 \
+        libasound2-data \
         hostapd:amd64 \
         busybox:amd64 \
         ncurses-term \
