@@ -1,5 +1,6 @@
 const std = @import("std");
 const linux = std.os.linux;
+const audio = @import("audio.zig");
 
 /// main.zig와 config.zig에도 같은 함수가 있다. 이것이 세 벌째다.
 /// config.zig:4가 "다섯 개쯤 되면 sys.zig로 모은다"고 적어 뒀고, 아직
@@ -245,6 +246,11 @@ pub fn shutdown(action: Action) noreturn {
         std.debug.print("tars-init: sent SIGKILL to what was left\n", .{});
         _ = reapAll();
     }
+
+    // AU-M1. 믹서를 /config/asound.state에 적는다(AU design 결정 4). 모든 프로세스가
+    // 거둬진 뒤인 이유는 그 뒤로 믹서를 만질 것이 아무도 없어서이고, sync 앞인 이유는
+    // 적은 것이 디스크에 닿아야 해서다. 적을지 말지와 기다리는 상한은 audio.zig가 정한다.
+    audio.store();
 
     // 커널은 reboot(2)에서 sync를 대신 해주지 않는다. 리눅스 소스의
     // kernel/reboot.c:726이 "reboot doesn't sync: do that yourself before

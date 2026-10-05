@@ -1,9 +1,9 @@
 # TARS Audio Devices — Design
 
 Date: 2026-10-05
-Status: 진행 중. M0이 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`.
-소리는 아직 사람이 `amixer`로 켠다. 다음은 M1(부팅이 믹서를 켜고 기억한다, `docs/plans/2026-10-05-tars-audio-devices-au-m1.md`).
-M0 plan은 `-au-m0.md`이고 그 끝의 "실측한 것" 절이 값이다.
+Status: 진행 중. M0 · M1이 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`(M0), 부팅이
+믹서를 켜고 볼륨을 `/config/asound.state`에 기억한다(M1). 다음은 M2(실기 HDA 코덱 · USB 오디오 · 기본 카드,
+`docs/plans/2026-10-05-tars-audio-devices-au-m2.md`). plan은 `-au-m0.md` · `-au-m1.md`이고 각 끝의 "실측한 것" 절이 값이다.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -174,6 +174,16 @@ M1이 알고 시작할 사실(실측 10). `alsactl init`은 QEMU 코덱에서 Ma
 SIGUSR2다(`alsactl/daemon.c`). 우리의 종료 경로는 SIGTERM 뒤에 SIGHUP을 보낸다(SL) — 그대로 감독 목록에 넣으면 끄기
 직전의 변경을 잃는다.
 
+> M1이 정한 것(2026-10-06, `-au-m1.md` 확정 1). 셋의 답은 이렇다. (1) `init`이 일꾼 하나를 `fork`하고 기다리지 않는다 — 일꾼이
+> `/dev/snd/controlC0`를 5초까지 기다렸다가 `alsactl`이 된다. `/config/asound.state`가 있으면 `alsactl -U -f … restore`, 없으면
+> `alsactl -U init`이다(restore 하나로 안 합치는 이유 — 파일이 없으면 init을 하고도 exit 2라 "켰다"와 "실패"가 안 갈린다).
+> 종료 코드 99는 성공이다(규칙 표에 없는 카드를 범용 규칙으로 켰다 — QEMU의 코덱이 이 길이다). 일꾼의 끝은 감독 루프가 거둘 때
+> `audio.reaped`가 읽고 `reaped orphan`으로 찍지 않는다(`terminal/check.sh`가 그 줄을 재부모화의 증거로 본다). (2) `/config/asound.state`
+> 하나. 끄는 길의 `reapAll` 뒤 · `sync` 앞에서 `alsactl store`(상한 2초, 실측 50ms 남짓). 이 부팅에 믹서를 세웠고 `/config`가 붙었을
+> 때만 적는다 — 아니면 커널의 꺼진 기본값이 사람의 파일을 덮는다. (3) 늦게 오는 카드는 HDA의 시각만 쟀다(QEMU에서 카드가 PID 1보다
+> 2.5초 먼저 선다). 부팅 뒤에 꽂힌 USB 카드를 켜는 것은 M2다. 곁의 둘 — UCM은 `-U`로 끈다(M3에서 다시 본다), `tars.conf` 키는 없다
+> (사람이 `amixer`로 맞춘 값이 곧 설정이다).
+
 ### 결정 5 — 게이트는 새 체인 `audio/check.sh`(스무번째) 하나, 부팅 하나, 판정은 바이트
 
 QEMU에 노트북의 HDA를 흉내 내는 장치를 붙인다 — q35 · `ich9-intel-hda` · `hda-micro`(스피커 하나와 마이크 하나를 가진
@@ -217,6 +227,11 @@ pcm.tarsfeed { type file  slave.pcm "null"  file "/dev/null"  infile "$WORK/feed
 | 6 | `speaker-test -c 2 -t wav`의 목소리가 왼쪽만 · 오른쪽만인 프레임으로 각각 10,000 이상, 왼쪽이 먼저 |
 | 7 | `arecord`(기본 장치) 2초가 96,000프레임 전부 (3000, -5000) |
 
+M1이 바꾼 것. 부팅이 셋이 됐다 — A(새 디스크) · B(같은 디스크로 다시) · C(디스크 없음). 검사 4가 뒤집혀 "부팅이 Master -20dB ·
+Capture 0dB로 켰고 `amixer`가 Master를 0dB로 올렸다"를 보고, 검사 8(게스트가 스스로 꺼지며 `/config/asound.state`에 Master 74가
+남는다) · 9(B에서 restore가 그 값을 되살린다) · 10(B에서 `amixer` 없이 사각파가 값까지 같다) · 11(C에서 init으로 켠다)이 더해졌다.
+전원은 프로브의 `kill -TERM 1`로 끈다 — 여전히 monitor도 포트도 없다. 검사 5의 판정은 lead가 M1 뒤에 고쳤다(아래 실측 17).
+
 mutation(M0 plan이 사본에서 다 돌렸다 — plan 확정 7).
 
 | 심는 고장 | 잡은 자리 |
@@ -247,6 +262,9 @@ PD 결정 11 · EL · CB와 같다. plan은 milestone마다 그 시점에 Opus �
 4. milestone이 셋이 아니라 넷이다. lead의 M2(SOF · ACP · USB Audio)를 firmware가 없는 것(M2: 실기 HDA 코덱 · USB Audio
    Class)과 있는 것(M3: SOF · ACP)으로 나눴다. 아래 Milestone 절이 근거다.
 5. 포트를 안 쓴다. 이 체인은 monitor가 필요 없다(타이핑도 `device_add`도 없다). 45491은 다음 새 체인의 몫으로 남는다.
+6. (M1 planner) `init`이 firewall의 `nft -f`처럼 `alsactl`을 기다리는 모양이 아니다. 카드는 PID 1보다 늦을 수 있고(HDA 코덱 탐색은
+   커널의 일 큐), 기다리는 모양이면 소리 장치가 없는 기계가 매번 상한만큼 선다. 부팅 경로의 누구도 믹서를 안 기다린다
+   (`feedback_boot_never_blocks`). 그래서 일꾼을 fork하고 안 기다린다.
 
 ## 검증
 
@@ -282,6 +300,8 @@ Senarytech 등)는 노트북의 스피커 · 헤드폰 잭 · 아날로그 마�
 `SND_USB_AUDIO`는 USB 헤드셋 · 이어폰 동글이다. 정할 것 하나가 기본 카드다 — libasound의 `default`는 카드 0이라 USB 헤드셋이
 카드 1로 오면 안 쓰인다(`ALSA_CARD` env · `/etc/asound.conf` · `tars.conf` 키 중 무엇으로 고를지). 게이트는 심볼 · modinfo alias
 (UW의 방식)와 QEMU `usb-audio`(재생만 있다)로 본다. HDMI · DisplayPort 오디오는 GPU 드라이버와 짝이라 비목표 6이다.
+M1이 넘긴 것 하나 더 — 부팅 뒤에 꽂힌 카드. M1의 restore와 store는 카드 인자 없이 그 순간 있는 카드 전부를 다루므로, 부팅 때
+꽂혀 있던 USB 카드는 되살고 부팅 뒤에 꽂은 카드는 꺼진 채다. 꽂는 순간 켜는 자리는 M2가 정한다.
 
 ### AU-M3 — DSP를 거치는 노트북의 내장 마이크(Intel SOF · AMD ACP)
 
@@ -308,6 +328,10 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
    그 모듈을 다른 패키지로 떼면 체인이 부팅에서 `audio: Unknown audio driver`로 빨개진다. 조용히 초록이 되지는 않는다.
 5. 게이트의 판정 글자 일부가 alsa-utils의 출력 형식이다(`aplay -l`의 `card 0: Intel [HDA Intel], device 0: Generic Analog`,
    `speaker-test`의 ` 0 - Front Left`, `amixer`의 `Playback 0 [0%] [-74.00dB] [off]`). Debian이 alsa-utils를 올리면 함께 본다.
+6. (M1) 프로브가 일꾼과 나란히 돌아 부팅이 켠 믹서를 10초까지 기다린다. 사본에서는 1초 안이었다. 체인이 느린 판에서 10초를 넘기면
+   검사 4가 꺼진 값으로 빨개진다.
+7. (M1 뒤) 호스트 부하 아래 dmix의 xrun이 사각파 프레임을 떨어뜨린다(실측 17). 하한 40,000 아래로 떨어질 만큼의 부하는 아직 못 봤다
+   — 루트 게이트가 `tone`으로 빨개지면 이것부터 본다.
 
 ## 비목표
 
@@ -376,6 +400,17 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
     갈렸다(`ALC260` · `ALC262` · `ALC268` · `ALC269` 등).
 15. 서비스 스크립트의 첫 줄은 `#!/usr/bin/bash`여야 한다. 게스트에 `/bin/bash`가 없어서 `#!/bin/bash`이면 `init`이
     `execve … failed (errno 2)`를 세 번 찍고 포기한다. `#!/bin/sh`(bash 링크)도 되지만 프로브는 bash의 기능을 쓴다.
+16. (M1 planner, alsa-utils 1.2.14 소스) `alsactl init`은 규칙 표에 없는 카드를 범용 규칙으로 켜고 99로 끝난다(`init_parse.c`가
+    `err <= -99`를 non-fatal로 센다). `restore`는 파일이 없으면 init을 하고도 exit 2다(`state.c`의 `load_state`). `-f`로 기본 경로가
+    아닌 파일을 주면 잠금 파일을 안 만든다(게스트에 `/var/lock`이 없어도 된다). `save_state`는 기존 파일을 읽고 지금 있는 카드의
+    항목만 바꿔 `.new`에 쓴 뒤 `rename`한다. QEMU에서 코덱 줄이 0.55초, `Run /init`이 3.07초 — 카드가 PID 1보다 2.5초 먼저 선다.
+    상태 파일은 134줄이고 store가 종료에 더하는 몫은 50ms 남짓(0.14초 → 0.19초).
+17. (lead, M1 뒤) 검사 5가 간헐적으로 빨갰다 — `other` 16 · 19프레임. 부하 없이 열다섯 판은 전부 0이었고, 컨테이너에 CPU 부하 여섯을
+    걸면 다섯 판 중 둘이 그랬다. 남긴 `tap.raw`를 읽으니 그 프레임은 찢어진 것이 아니라 정확히 두 배(±16000)였고, 49프레임이 한
+    덩어리로 있고 그 뒤가 0이었다 — dmix가 xrun 구간을 하드웨어 버퍼에 두 번 더한 것이다(8000 + 8000). 호스트 부하로 TCG 게스트의
+    하드웨어 포인터가 밀린 것이고 우리 코드도 볼륨도 아니다. 그래서 `count_tap`이 `doubled`를 따로 세어 판정에 안 쓰고, 사각파 하한을
+    47,000에서 40,000으로 내렸다(부하 아래 최소가 47,425였다 — 하한의 일은 음소거 · 틀린 볼륨을 잡는 것이고 둘 다 `tone`이 0이다).
+    고친 뒤 부하 아래 다섯 판이 초록이었고, -20dB mutation은 `tone=0 · other=48000`(값 ±800)으로 여전히 빨갛다.
 
 ## 닫을 때(lead의 몫)
 
@@ -394,8 +429,7 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
   ```
   cat /proc/asound/cards               # 카드가 올라왔나
   aplay -l ; arecord -l                # 스피커 · 마이크 장치
-  amixer sset Master unmute 80%        # M1 전에는 부팅마다(소리가 꺼진 채 뜬다)
-  amixer sset Capture cap 80%
+  amixer sset Master 80%               # M1부터는 부팅이 켠다. 바꾼 볼륨은 끌 때 /config/asound.state에 남는다
   speaker-test -c 2 -t wav -l 1        # 왼쪽 "Front Left", 오른쪽 "Front Right"
   arecord -d 3 -f cd /tmp/m.wav && aplay /tmp/m.wav   # 마이크 → 스피커
   alsamixer                            # 화면으로 볼륨 · 음소거(M 키)

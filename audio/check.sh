@@ -22,9 +22,17 @@ cd "$(dirname "$0")"
 # 됐다"는 FEED의 상수가 게스트가 쓴 cap.wav에 값까지 같게 있는 것이다. QEMU의 wav
 # 백엔드는 녹음 쪽이 없어서(`Could not create a backend for voice 'adc'`) 마이크를 못 본다.
 #
+# 부팅이 셋이다(AU-M1).
+#
+#   A  새 디스크. init이 alsactl init으로 소리를 켠다(검사 4). 프로브가 사람처럼 Master를
+#      0dB로 올리고, 소리를 내고 받고(검사 5~7), 전원을 끈다. init이 끄는 길에서
+#      alsactl store로 그 0dB를 디스크의 asound.state에 적는다(검사 8)
+#   B  같은 디스크. init이 alsactl restore로 0dB를 되살리고, 프로브는 믹서를 안 만진 채
+#      재생한다 — 사각파가 값까지 같으면 A의 0dB가 남은 것이다(검사 9 · 10)
+#   C  설정 디스크 없이(ISO와 같은 모양). init이 alsactl init으로 켜기만 한다(검사 11)
+#
 # 이 체인이 못 보는 것 — 실기의 코덱(Realtek 등) · DSP(SOF · ACP) · USB 오디오 · 헤드폰
-# 잭의 꽂힘(AU-M2 · M3), 부팅이 믹서를 되살리는 것(AU-M1). 검사 4가 지금은 "부팅이 소리를
-# 꺼 둔 채 둔다"를 보고, M1이 그 검사를 뒤집는다.
+# 잭의 꽂힘 · 부팅 뒤에 꽂힌 카드(AU-M2 · M3).
 
 # $GUEST_MEM 하나 때문에 source한다. nic · wifi 체인처럼 타이핑을 안 한다.
 source ../gate_lib.sh
@@ -69,22 +77,26 @@ report_failure() {
   local marker
   for marker in \
     "snd_hda_codec_generic hdaudioC0D0: autoconfig" \
+    "tars-init: audio: alsactl" \
     "tars-init: started service probe (pid" \
+    "audio-probe: boot " \
     "audio-probe: card [" \
     "audio-probe: aplay -l [card 0" \
     "audio-probe: master now [" \
     "audio-probe: aplay exit 0" \
     "audio-probe: speaker-test exit 0" \
     "audio-probe: arecord exit 0" \
-    "audio-probe: done"; do
+    "audio-probe: done" \
+    "tars-init: audio: stored the mixer" \
+    "tars-init: calling reboot"; do
     if grep -aF "$marker" "$LOG" >/dev/null; then
       echo "  found   ${marker}"
     else
       echo "  MISSING ${marker}"
     fi
   done
-  echo "--- audio-probe lines ---"
-  grep -a "audio-probe:" "$LOG" | tail -n 20
+  echo "--- audio lines ---"
+  grep -aE "audio-probe:|tars-init: audio:" "$LOG" | tail -n 24
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -104,6 +116,21 @@ stop_guest() {
   kill "$QEMU_PID" 2>/dev/null || true
   wait "$QEMU_PID" 2>/dev/null || true
   QEMU_PID=""
+}
+
+# 게스트가 스스로 꺼지기를 기다린다(power 체인과 같은 판정 — 로그의 글자가 아니라
+# 프로세스가 사라졌는가). 꺼졌으면 거두고 0이다.
+wait_for_exit() {
+  local seconds="$1" i
+  for i in $(seq 1 "$seconds"); do
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+      wait "$QEMU_PID" 2>/dev/null || true
+      QEMU_PID=""
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 # ── 검사 1: 커널과 initrd가 소리를 안다 (부팅 없음) ─────────────────────
@@ -189,39 +216,52 @@ pcm.tarsfeed {
 }
 EOF
 
-# ══ 부팅 하나 ═══════════════════════════════════════════════════════════
 # q35인 이유는 nic · machine 체인과 같다 — 노트북에 가까운 칩셋이고, ich9-intel-hda가
 # 노트북의 HDA 컨트롤러와 같은 계열이다. hda-micro는 스피커 하나와 마이크 하나를 가진
 # 코덱이다(노트북의 내장 스피커 · 마이크와 같은 모양). 백엔드의 속도와 형식을 48kHz
 # 스테레오 16비트로 박아 QEMU가 샘플을 바꾸지 않게 한다. try-poll=off는 null 장치에
 # 기다릴 fd가 없어서다.
-echo "=== boot: q35 with an HDA controller and a speaker + microphone codec ==="
-HOME="$WORK" qemu-system-x86_64 \
-  -machine q35 \
-  -nic none \
-  -m "$GUEST_MEM" \
-  -kernel ../kernel/build/arch/x86/boot/bzImage \
-  -initrd ../kernel/initrd.cpio \
-  -append "console=ttyS0" \
-  -vga none \
-  -device virtio-gpu-pci \
-  -display none \
-  -drive file="$DISK",if=virtio,format=raw \
-  -audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off \
-  -device ich9-intel-hda \
-  -device hda-micro,audiodev=snd0 \
-  -serial file:"$LOG" \
-  -no-reboot &
-QEMU_PID=$!
+#
+# 인자 하나가 설정 디스크를 붙일지를 고른다(부팅 C는 안 붙인다). 로그는 부팅마다 비운다.
+start_guest() {
+  local drive=()
+  [ "$1" = with-disk ] && drive=(-drive file="$DISK",if=virtio,format=raw)
+  : > "$LOG"
+  HOME="$WORK" qemu-system-x86_64 \
+    -machine q35 \
+    -nic none \
+    -m "$GUEST_MEM" \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "console=ttyS0" \
+    -vga none \
+    -device virtio-gpu-pci \
+    -display none \
+    "${drive[@]}" \
+    -audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off \
+    -device ich9-intel-hda \
+    -device hda-micro,audiodev=snd0 \
+    -serial file:"$LOG" \
+    -no-reboot &
+  QEMU_PID=$!
+}
+
+# ══ 부팅 A: 새 디스크 ═══════════════════════════════════════════════════
+echo "=== boot A: q35 with an HDA controller and a speaker + microphone codec, a fresh config disk ==="
+start_guest with-disk
 
 # ── 검사 2: 커널이 코덱을 찾아 카드 0을 만들었나 ────────────────────────
 # 코덱 줄은 커널의 것이고 카드 줄은 /proc/asound/cards의 첫 줄이다. 노드 셋은 사람이
 # 여는 파일이다 — 제어(controlC0) · 재생(pcmC0D0p) · 녹음(pcmC0D0c).
+#
+# 프로브는 일을 마치면 kill -TERM 1로 전원을 끈다. 그래서 여기서는 QEMU를 죽이지 않고
+# 스스로 사라지기를 기다린다 — 그 길에서 init이 믹서를 적는다(검사 8).
 wait_for_log 'snd_hda_codec_generic hdaudioC0D0: autoconfig for Generic' 60 \
   || report_failure "the HDA codec was never configured (no snd_hda_codec_generic autoconfig line)"
 wait_for_log 'audio-probe: done' 90 \
   || report_failure "the probe did not finish"
-stop_guest
+wait_for_exit 30 \
+  || report_failure "the guest never switched itself off after the probe's kill -TERM 1"
 if ! grep -aE 'audio-probe: card \[ ?0 \[.*\]: HDA-Intel - ' "$LOG" >/dev/null; then
   report_failure "card 0 is not the HDA controller"
 fi
@@ -241,43 +281,66 @@ if ! grep -aF 'audio-probe: arecord -l [card 0: Intel [HDA Intel], device 0: Gen
 fi
 echo "aplay -l and arecord -l both see card 0 device 0"
 
-# ── 검사 4: 부팅은 소리를 꺼 둔 채 둔다 (AU-M1이 뒤집는다) ─────────────
-# 아래 검사 5 · 7의 대조군이다. 프로브가 켜기 전의 믹서가 꺼져 있으므로, 5 · 7이
-# 초록이면 그것은 프로브의 amixer 두 줄이 한 일이다 — 그 두 줄을 지우면 5가 무음으로
-# 빨개진다(AU-M0 plan의 mutation 3). M1이 부팅에서 소리를 켜면 이 검사가 그 일을 본다.
-if ! grep -aE 'audio-probe: master at boot \[.*Playback 0 \[0%\].*\[off\]\]' "$LOG" >/dev/null; then
-  report_failure "Master was not muted at boot; if something now unmutes it, AU-M1 owns this check"
+# ── 검사 4: 부팅이 소리를 켠다 (AU-M1) ──────────────────────────────────
+# 커널은 Master와 Capture를 0에 꺼 둔 채 카드를 올린다(AU-M0의 이 검사가 그것을 봤다).
+# 새 디스크에는 asound.state가 없으므로 init이 alsactl init을 부르고, 그 기본값이
+# Master -20dB · Capture 0dB, 둘 다 켜짐이다. 프로브는 Capture를 안 만지므로 아래
+# 검사 7의 녹음이 값까지 같으면 그것은 부팅이 켠 Capture가 한 일이다.
+if ! grep -aF 'tars-init: audio: alsactl init turned the mixer on' "$LOG" >/dev/null; then
+  report_failure "init did not turn the mixer on with alsactl init"
 fi
-if ! grep -aE 'audio-probe: capture at boot \[.*Capture 0 \[0%\].*\[off\]\]' "$LOG" >/dev/null; then
-  report_failure "Capture was not off at boot; if something now turns it on, AU-M1 owns this check"
+if ! grep -aF 'audio-probe: boot first' "$LOG" >/dev/null; then
+  report_failure "the probe found an asound.state on a fresh disk"
+fi
+if ! grep -aE 'audio-probe: master at boot \[.*Playback 54 \[73%\] \[-20\.00dB\] \[on\]\]' "$LOG" >/dev/null; then
+  report_failure "Master was not at alsactl init's -20dB and on at boot"
+fi
+if ! grep -aE 'audio-probe: capture at boot \[.*Capture 74 \[100%\] \[0\.00dB\] \[on\]\]' "$LOG" >/dev/null; then
+  report_failure "Capture was not at alsactl init's 0dB and on at boot"
 fi
 if ! grep -aE 'audio-probe: master now \[.*Playback 74 \[100%\] \[0\.00dB\] \[on\]\]' "$LOG" >/dev/null; then
-  report_failure "amixer could not set Master to 0dB and unmute it"
+  report_failure "amixer could not set Master to 0dB"
 fi
-echo "the boot leaves Master and Capture muted, and amixer turns them on"
+# 음성. init은 alsactl에 -U를 준다 — 빠지면 alsactl이 initrd에 없는 UCM 설정을 찾다가
+# 부팅마다 경고 두 줄을 찍는다(AU design 실측 10). UCM은 AU-M3의 질문이다.
+if grep -aF 'ucm2/ucm.conf' "$LOG" >/dev/null; then
+  report_failure "alsactl looked for UCM; init must pass -U until AU-M3 ships alsa-ucm-conf"
+fi
+echo "the boot turned Master and Capture on with alsactl init, and amixer raised Master to 0dB"
 
 # TAP의 프레임을 갈래로 센다. tone은 사각파의 두 값, left · right는 한쪽만 소리가 있는
-# 것(speaker-test의 목소리), other는 두 채널이 다 0이 아니면서 사각파도 아닌 것이다.
+# 것(speaker-test의 목소리), doubled는 사각파의 정확히 두 배(±16000), other는 두 채널이
+# 다 0이 아니면서 그 셋 다 아닌 것이다.
+#
+# doubled가 있는 이유(AU-M1 lead 실측). 호스트에 부하가 있으면 TCG 게스트의 하드웨어
+# 포인터가 밀려 xrun이 나고, dmix는 그 구간의 샘플을 하드웨어 버퍼에 두 번 더한 뒤
+# 나머지를 비운다 — 8000 + 8000 = 16000인 프레임 49개가 한 덩어리로 나오고 그 뒤가 0이다.
+# 부하 없이 열다섯 판은 전부 0이었고, 부하를 걸면 다섯 판 중 둘이 그랬다. 우리 코드도
+# 볼륨도 아닌 QEMU 쪽의 시간 문제라 세기만 하고 판정에 안 쓴다. 볼륨이 틀리면 값이
+# ±800 같은 것이 되어 tone이 0이 된다 — 그것은 other가 아니라 tone의 하한이 잡는다.
 # first_*는 그 갈래가 처음 나온 프레임 번호다.
 count_tap() {
   perl -e '
     open(my $f, "<:raw", $ARGV[0]) or die "cannot open $ARGV[0]\n"; local $/; my $d = <$f>;
-    my ($i, $tone, $l, $r, $o, $z, $fl, $fr) = (0, 0, 0, 0, 0, 0, -1, -1);
+    my ($i, $tone, $l, $r, $o, $z, $dbl, $fl, $fr) = (0, 0, 0, 0, 0, 0, 0, -1, -1);
     for (my $p = 0; $p + 4 <= length $d; $p += 4, $i++) {
       my ($a, $b) = unpack("s<s<", substr($d, $p, 4));
       if (($a == 8000 && $b == 8000) || ($a == -8000 && $b == -8000)) { $tone++ }
+      elsif (($a == 16000 && $b == 16000) || ($a == -16000 && $b == -16000)) { $dbl++ }
       elsif ($a == 0 && $b == 0) { $z++ }
       elsif ($b == 0) { $l++; $fl = $i if $fl < 0 }
       elsif ($a == 0) { $r++; $fr = $i if $fr < 0 }
       else { $o++ }
     }
-    print "frames=$i tone=$tone left=$l right=$r other=$o zero=$z first_left=$fl first_right=$fr\n";' "$1"
+    print "frames=$i tone=$tone left=$l right=$r other=$o doubled=$dbl zero=$z first_left=$fl first_right=$fr\n";' "$1"
 }
 field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p"; }
 
 # ── 검사 5: 재생 — 게스트의 사각파가 값까지 같게 스피커에 닿았나 ───────
-# 48,000프레임 중 47,000 이상을 요구한다. 기본 장치(dmix)는 한 프로그램만 쓸 때 샘플을
-# 안 바꾸고, 사본에서 세 판 다 48,000이었다. 여유 1,000은 스트림 끝의 자투리 몫이다.
+# 48,000프레임 중 40,000 이상을 요구한다. 기본 장치(dmix)는 한 프로그램만 쓸 때 샘플을
+# 안 바꾸고, 부하 없는 판은 48,000이다. 하한의 일은 음소거와 틀린 볼륨을 잡는 것이고
+# 둘 다 tone이 0이다. 부하가 있으면 xrun이 프레임을 떨어뜨린다(위 doubled) — 부하를 건
+# 다섯 판의 최소가 47,425였고, 하한을 47,000에 두면 그 판이 하한에 400 남짓으로 붙는다.
 # other가 0인 것은 섞이거나 깎인 샘플이 없다는 뜻이다.
 if ! grep -aF 'audio-probe: aplay exit 0 []' "$LOG" >/dev/null; then
   report_failure "aplay through the default device failed"
@@ -285,7 +348,7 @@ fi
 [ -f "$WORK/tap.raw" ] || report_failure "QEMU never opened the speaker side (no tap file)"
 TAP="$(count_tap "$WORK/tap.raw")"
 echo "tap: ${TAP}"
-if [ "$(field "$TAP" tone)" -lt 47000 ]; then
+if [ "$(field "$TAP" tone)" -lt 40000 ]; then
   report_failure "the square wave did not reach the speaker (tone frames $(field "$TAP" tone) of ${TONE_FRAMES}); silence means the mixer was muted"
 fi
 if [ "$(field "$TAP" other)" -ne 0 ]; then
@@ -324,5 +387,77 @@ if [ "$(field "$CAP" frames)" -ne 96000 ] || [ "$(field "$CAP" match)" -ne 96000
   report_failure "the microphone did not deliver the fed constant (${CAP}, want 96000 of each); zeros mean Capture was off"
 fi
 echo "arecord got the microphone's constant on both channels, 96000 frames of 96000"
+
+# ── 검사 8: 끄는 길에서 init이 믹서를 디스크에 적었나 ──────────────────
+# store는 모든 프로세스를 거둔 뒤, sync 앞이다. 디스크의 asound.state에서 Master의
+# 볼륨 줄을 읽어 프로브가 올린 74(0dB)인지 본다 — 부팅 B가 되살리는 것이 이 값이다.
+if ! grep -aF 'tars-init: audio: stored the mixer in /config/asound.state' "$LOG" >/dev/null; then
+  report_failure "init did not store the mixer on the way down"
+fi
+debugfs -R "dump asound.state $WORK/asound.state" "$DISK" >/dev/null 2>&1
+[ -s "$WORK/asound.state" ] || report_failure "the config disk holds no asound.state after the power-off"
+STATE_MASTER="$(perl -0777 -ne "print \$1 if /name 'Master Playback Volume'\s+value\.0 (\d+)/" "$WORK/asound.state")"
+if [ "$STATE_MASTER" != 74 ]; then
+  report_failure "asound.state keeps Master Playback Volume at '${STATE_MASTER}', want 74 (0dB)"
+fi
+echo "the power-off stored the mixer, and asound.state keeps Master at 74 (0dB)"
+# 판정이 아니라 기록이다. 프로브가 kill -TERM 1을 친 uptime부터 커널이 전원을 내린
+# 시각까지 — store가 종료 경로에 더한 몫이 이 안에 있다(상한 STORE_WAIT_MS 2초).
+ASKED="$(grep -aoE 'audio-probe: powering off at uptime [0-9.]+' "$LOG" | grep -oE '[0-9.]+$')"
+DOWN="$(grep -aoE '\[ *[0-9.]+\] reboot: Power down' "$LOG" | grep -oE '[0-9]+\.[0-9]+')"
+echo "shutdown: asked at ${ASKED:-?}s, powered down at ${DOWN:-?}s"
+
+# ══ 부팅 B: 같은 디스크 ════════════════════════════════════════════════
+# 같은 tap 파일 이름을 QEMU가 다시 연다. A의 것은 옆으로 치운다.
+mv "$WORK/tap.raw" "$WORK/tap_a.raw"
+echo "=== boot B: the same disk again ==="
+start_guest with-disk
+wait_for_log 'audio-probe: done' 90 \
+  || report_failure "the probe did not finish on the second boot"
+stop_guest
+
+# ── 검사 9: 부팅이 사람이 남긴 볼륨을 되살렸나 ─────────────────────────
+# alsactl init이었다면 Master가 -20dB다. 0dB이면 A의 store를 B의 restore가 읽은 것이다.
+if ! grep -aF 'tars-init: audio: alsactl restore set the mixer from /config/asound.state' "$LOG" >/dev/null; then
+  report_failure "init did not restore the mixer from /config/asound.state"
+fi
+if ! grep -aF 'audio-probe: boot again' "$LOG" >/dev/null; then
+  report_failure "the probe did not find the asound.state the first boot stored"
+fi
+if ! grep -aE 'audio-probe: master at boot \[.*Playback 74 \[100%\] \[0\.00dB\] \[on\]\]' "$LOG" >/dev/null; then
+  report_failure "Master was not back at the 0dB the first boot left"
+fi
+if ! grep -aE 'audio-probe: capture at boot \[.*Capture 74 \[100%\] \[0\.00dB\] \[on\]\]' "$LOG" >/dev/null; then
+  report_failure "Capture was not back at 0dB and on"
+fi
+echo "the second boot restored Master at 0dB and Capture on from the disk"
+
+# ── 검사 10: 되살린 믹서로 사각파가 값까지 나가나 ─────────────────────
+# 프로브는 이 부팅에서 amixer를 안 친다. 그래서 값이 같으면 그것은 되살린 0dB의 일이다.
+if ! grep -aF 'audio-probe: aplay exit 0 []' "$LOG" >/dev/null; then
+  report_failure "aplay failed on the second boot"
+fi
+[ -f "$WORK/tap.raw" ] || report_failure "QEMU never opened the speaker side on the second boot"
+TAP_B="$(count_tap "$WORK/tap.raw")"
+echo "tap B: ${TAP_B}"
+if [ "$(field "$TAP_B" tone)" -lt 40000 ] || [ "$(field "$TAP_B" other)" -ne 0 ]; then
+  report_failure "the restored mixer did not carry the square wave sample for sample (${TAP_B})"
+fi
+echo "with no amixer, aplay's square wave reached the speaker sample for sample"
+
+# ══ 부팅 C: 설정 디스크 없이 ═══════════════════════════════════════════
+# ISO만 꽂은 노트북과 같은 모양이다. 기억할 자리가 없으니 init만 한다. 프로브도 없으므로
+# init의 줄 하나를 기다리고 끈다.
+echo "=== boot C: no config disk ==="
+start_guest no-disk
+
+# ── 검사 11: 디스크가 없어도 소리가 켜진다 ─────────────────────────────
+wait_for_log 'tars-init: audio: alsactl init turned the mixer on' 60 \
+  || report_failure "without a config disk init did not turn the mixer on"
+stop_guest
+if ! grep -aF 'tars-init: no disk labelled tars-* among' "$LOG" >/dev/null; then
+  report_failure "boot C found a config disk; it must boot without one"
+fi
+echo "without a config disk the boot still turned the mixer on with alsactl init"
 
 echo "AU check PASS"

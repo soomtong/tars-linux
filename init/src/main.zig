@@ -12,6 +12,7 @@ const firewall = @import("firewall.zig");
 const services = @import("services.zig");
 const login = @import("login.zig");
 const control = @import("control.zig");
+const audio = @import("audio.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -596,6 +597,9 @@ fn supervise(
             // -1은 "아무 자식이나"라서 내 자식뿐 아니라 부모를 잃고 PID 1에
             // 재부모화된 프로세스까지 함께 거둔다. 그것이 PID 1의 의무다.
             const c = find(children, pid) orelse {
+                // AU-M1. 소리 일꾼은 감독 목록에 없지만 고아도 아니다 — 그 끝을
+                // audio.zig가 읽는다(믹서를 세웠는지가 끌 때 적을지를 정한다).
+                if (audio.reaped(pid, status)) continue;
                 std.debug.print("tars-init: reaped orphan pid {d}\n", .{pid});
                 continue;
             };
@@ -946,6 +950,12 @@ pub fn main(init: std.process.Init.Minimal) void {
         ssh_env_len += 1;
     }
     login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell_path, ssh_env[0..ssh_env_len]);
+
+    // AU-M1. 믹서를 켠다(AU design 결정 4). 기다리지 않는다 — 일꾼 하나를 fork하고
+    // 곧장 다음 줄로 간다. 일꾼이 카드를 기다렸다가 alsactl이 되고, 그 끝은 감독
+    // 루프가 거둘 때 audio.zig가 읽는다. 아래 nft를 기다리는 동안 함께 돈다.
+    // `/config`가 붙었는지가 restore와 init을 가르고, 끌 때 적을지도 정한다.
+    audio.start(storage_mounted, envp);
 
     // FW-M1. dhcpcd보다 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
     // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
