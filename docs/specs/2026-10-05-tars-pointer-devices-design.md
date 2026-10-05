@@ -1,7 +1,9 @@
 # TARS Pointer Devices — Design
 
 Date: 2026-10-05
-Status: 끝났다(2026-10-05, PD-M0~M3 같은 날). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m0.md` · `-pd-m1.md` ·
+Status: 다시 열었다(2026-10-05) — PD-M0~M3은 같은 날 끝났고(아래 원래 Status), 사용자의 결정으로 비목표 1(마우스 보고)을
+PD-M4로 이어 한다. M4의 결정은 "결정 12" 절에, plan은 `-pd-m4.md`에.
+원래 Status: 끝났다(2026-10-05, PD-M0~M3 같은 날). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m0.md` · `-pd-m1.md` ·
 `-pd-m2.md` · `-pd-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. plan들이 바로잡은 전제는 결정 1 · 2 · 4 · 6 · 8 · 9 · 10과
 위험 7 · 8에 덧붙여 두었다. 기억은 `docs/decisions/project_pointer_devices.md`.
 
@@ -616,7 +618,7 @@ save-under 그리기 · 전용 색 둘 · 보이는 조건 셋 · 휠(`WHEEL_ROW
 
 다시 열 조건을 함께 적는다.
 
-1. 마우스 보고(자식에게 SGR 1006으로 클릭 · 휠을 보내는 것). ghostty vt가 모드(9 · 1000 · 1002 · 1003 · 1006)를 이미 해석하고
+1. (사용자의 결정으로 PD-M4가 됐다, 2026-10-05 — 결정 12.) 마우스 보고(자식에게 SGR 1006으로 클릭 · 휠을 보내는 것). ghostty vt가 모드(9 · 1000 · 1002 · 1003 · 1006)를 이미 해석하고
    `encodeMouse`가 있다. 우리는 안 쓴다. 다음 서브프로젝트의 첫 후보다 — vim `mouse=a`, fzf, lazygit, htop의 클릭이 이것으로
    된다. 열면 "자식이 마우스를 원할 때 우리의 드래그 선택을 언제 하나"(관례는 Shift를 누른 끌기)와, 대체 화면에서 휠을
    화살표 키로 바꾸는 모드 1007이 함께 온다. 게스트 vimrc의 `set mouse=`도 그때 다시 본다.
