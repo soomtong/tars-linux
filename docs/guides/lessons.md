@@ -970,9 +970,9 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 PD(2026-10-05)가 남긴 것.
 
-- [ ] 마우스 보고(자식에게 SGR 1006). ghostty vt가 모드와 `encodeMouse`를 갖고 있고 우리는 안 쓴다. vim `mouse=a` · fzf ·
-      lazygit의 클릭이 이것으로 된다 — 다음 서브프로젝트의 첫 후보(PD design 비목표 1). 열면 Shift 드래그와 모드 1007이
-      함께 온다.
+- [x] 마우스 보고 — PD-M4가 같은 날 했다(design 결정 12). 자식이 마우스 모드를 켰으면 ghostty의 `encodeMouse`로 보고하고 우리
+      선택은 Shift 끌기, 대체 화면의 휠은 모드 1007로 화살표 키. 남은 것은 design 비목표 14~18(1004 포커스 보고 · XTSHIFTESCAPE ·
+      OSC 52 · 가로 휠과 포인터 모양 · 보고 끄기 설정).
 - [ ] 터치패드 출발값 셋(180ms · 2% · 배율)을 실기에서 손으로 본다(PD design 위험 3). 고친 값은 `touchpad_test`에도.
 - [ ] 누름과 첫 칸 이동 사이에 출력이 오면 선택이 한 줄 어긋날 수 있다(PD design 위험 2). 겪으면 tracked pin으로.
 - [ ] 가지치기가 copy mode를 닫을 때 `input.State.mode`가 `.copy`에 남는다(PD design 위험 5, PD 전부터 있던 자리).
@@ -1081,7 +1081,8 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
-- `pointer.zig` — 포인터 장치의 순수한 층(PD). `classify`(mouse · touchpad · none, capability로) · `Mouse` 디코더
+- `pointer.zig` — 포인터 장치의 순수한 층(PD). `Owner` · `Grab`(첫 누름이 주인을 정해 마지막 뗌까지 — 자식의 것인지 우리
+  제스처인지, PD-M4) · `wheelRoute` · `classify`(mouse · touchpad · none, capability로) · `Mouse` 디코더
   (`SYN_REPORT`마다 `Frame`) · `Pointer`(clamp · 장치별 버튼 합) · `Sprite`(화살표 save-under, `ink` 118) · `Gesture`
   (idle · pressed · dragging · ignored → `Intent` 여섯) · `ueventAddedNode`. 시스템 콜은 전부 `main.zig`의 포인터 절
   (`tryOpenPointer` · `drainUevents` · `drainPointer` · `PointerWire.run`)에 있다. `main.zig`의 의도 switch에 `else`가 없다.

@@ -1,6 +1,6 @@
 ---
 name: project_pointer_devices
-description: 마우스와 터치패드가 화면의 화살표 하나를 움직이고, 끌어 뗀 글자가 클립보드에 들어가는 층(PD-M0~M3, 2026-10-05). 탐색은 terminal이 uevent로 하고, 커서는 save-under, 선택은 copy mode의 기계 그대로다. inotify를 켰다가 install 체인이 깨진 일과 그 진짜 원인(TCG의 코드 배치)이 여기 있다.
+description: 마우스와 터치패드가 화면의 화살표 하나를 움직이고, 끌어 뗀 글자가 클립보드에 들어가며, 자식이 원하면 마우스를 보고하는 층(PD-M0~M4, 2026-10-05). 탐색은 terminal이 uevent로 하고, 커서는 save-under, 선택은 copy mode의 기계 그대로다. inotify를 켰다가 install 체인이 깨진 일과 그 진짜 원인(TCG의 코드 배치)이 여기 있다.
 metadata:
   node_type: memory
   type: project
@@ -62,9 +62,22 @@ M1을 Sonnet 서브에이전트가 plan만 보고 했다. lead는 실측 · 대�
    colon`은 없는 이름이고 `:`는 `shift-semicolon`이다.
 6. 루트 게이트 반복을 3에서 2로 줄였다(`feedback_gate_runs`). 3회 1시간 8분이 2회 47분
    46초가 됐다.
+7. 자식이 받는 이스케이프 바이트를 게이트가 보는 법 — 설정 디스크에 bash 스크립트를 싣고
+   `read -N`으로 받아 `cat -v` 모양으로 화면에 찍게 한 뒤, 우리 로그 줄과 같은 글자로 맞춘다
+   (PD-M4 검사 26~32). Shift는 HMP `sendkey shift 3000`으로 누른 채 두고 그 사이에 마우스를
+   움직인다 — 마우스 사건은 키 큐를 안 거친다.
 
-열지 않은 것(design 비목표): 마우스 보고(SGR 1006 — 다음 서브프로젝트의 첫 후보, vim
-`mouse=a` · fzf · lazygit) · 더블클릭 단어 선택 · 가장자리 자동 스크롤 · 절대 좌표 장치
+- 마우스 보고(M4, 같은 날 사용자의 결정 "같은 맥락이라 새 마일스톤으로 빼는 것이 합리적이지
+  않다"로 비목표 1을 열었다 — design 결정 12). 누른 패널의 자식이 모드 9 · 1000 · 1002 · 1003을
+  켰고 copy mode가 아니고 Shift가 없으면 그 누름은 자식의 것이다 — 첫 누름이 주인(`Grab`)을
+  정해 마지막 뗌까지 간다. 바이트는 ghostty의 `encodeMouse`가 짠다(형식 다섯이 공짜). 포커스가
+  아닌 패널이면 포커스를 먼저 옮기고 그 패널에 보고한다(tmux 순서). 휠은 copy mode면 무시 ·
+  Shift면 우리 스크롤 · 자식이 원하면 버튼 4 · 5 · 대체 화면에 1007이면 화살표 키 세 번 · 그 밖은
+  우리 스크롤. 게스트 vimrc가 `mouse=a ttymouse=sgr`이 됐고 GE 원칙 3("우리가 안 하는 것을
+  켜지 않는다")의 전제가 바뀌었다. 게이트는 설정 디스크의 bash `read -N` 프로브가 받은 바이트와
+  우리 `pointer> report` 줄을 같은 글자로 맞춘다.
+
+열지 않은 것(design 비목표): 더블클릭 단어 선택 · 가장자리 자동 스크롤 · 절대 좌표 장치
 (usb-tablet · 터치스크린) · 뗀 뒤 반전 남기기 · 포인터 가속과 터치패드의 나머지(손바닥
 거부 · 세 손가락 · 관성) · `tars.conf` 항목(휠 방향이 첫 후보) · 왼손잡이 · 키보드 핫플러그 ·
 Apple 트랙패드 · 패널 비율 드래그 · 시간 기반 숨김 · THC QuickSPI.

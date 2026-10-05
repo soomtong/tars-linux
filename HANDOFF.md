@@ -1,4 +1,4 @@
-# HANDOFF: Pointer Devices(PD)가 M4(마우스 보고)로 다시 열렸다
+# HANDOFF: Pointer Devices(PD)가 M0~M4로 닫혔다 — 다음 서브프로젝트를 고른다
 
 ## 지금 어디인가
 
@@ -35,13 +35,29 @@ PD가 남긴 가장 큰 사실은 커널이 아니라 게이트의 것이다. M0
 키보드 핫플러그 · Apple 트랙패드 · 패널 비율 드래그 · 시간 기반 숨김 · THC QuickSPI. 실기에서 볼 것 셋은 `running-tars.md`에
 있다(`kind=` · 터치패드 출발값 셋 · 두 손가락 방향).
 
-## 바로 다음에 할 것 — PD-M4 마우스 보고
+## PD-M4 — 마우스 보고(같은 날 덧붙인 milestone)
 
-사용자의 결정(2026-10-05): "마우스 보고 기능은 지금 마일스톤에 이어서 M4 태스크로 진행하자. 같은 맥락이라 새로운
-마일스톤으로 빼는 것이 합리적이지 않은 것 같아." design 비목표 1이 결정 12 · PD-M4가 된다. 자식이 마우스 모드(9 · 1000 ·
-1002 · 1003, 형식 1006)를 켰으면 클릭 · 끎 · 휠을 ghostty vt의 `encodeMouse`로 PTY에 보내고, 그동안 우리 드래그 선택은
-Shift를 누른 끌기로만 한다. 대체 화면의 휠을 화살표 키로 바꾸는 모드 1007, 게스트 vimrc의 `set mouse=`도 함께 본다. plan은
-Opus planner가 design 절(결정 12)과 함께 쓰고, 구현은 Opus, 루트 게이트 2회.
+M0~M3을 닫은 직후 사용자의 결정("마우스 보고 기능은 지금 마일스톤에 이어서 M4 태스크로 진행하자. 같은 맥락이라 새로운
+마일스톤으로 빼는 것이 합리적이지 않은 것 같아")으로 비목표 1을 결정 12 · PD-M4로 열어 같은 날 닫았다. design 절과 plan은
+Opus planner가, 구현은 Opus가 했다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `1050b6f` | 다시 열기(design Status · HANDOFF) |
+| `c29f3eb` | M4 — `pointer.Owner` · `Grab`(첫 누름이 주인) · `wheelRoute` · `Gesture.handOff` · `vt.mouseEncode`(ghostty `encodeMouse` 감싸개, 형식 다섯) · `wheelKeys`(모드 1007) · `input.State.modifiers` · `main.zig` 편집 열 · 게스트 vimrc `mouse=a ttymouse=sgr` · GE design 덧붙임 셋 · `pointer/check.sh` 검사 26~32(설정 디스크의 bash `read -N` 프로브 · vim 클릭) · 호스트 검사 OK 140 · 82 · 16 · 루트 게이트 19체인 2/2, 49분 56초 |
+| (이 커밋) | 다시 닫기 — design Status · CLAUDE.md 표 `PD-M0~M4` · 기억 · MEMORY.md · lessons 이월 숙제 · HANDOFF |
+
+규칙 하나로 가른다: 누른 패널의 자식이 모드 9 · 1000 · 1002 · 1003을 켰고 copy mode가 아니고 Shift가 없으면 자식의 것이다.
+포커스가 아닌 패널이면 포커스를 먼저 옮기고 그 패널에 보고한다(tmux 순서). 휠은 copy mode면 무시 · Shift면 우리 스크롤 ·
+자식이 원하면 버튼 4 · 5 · 대체 화면에 1007이면 화살표 키 세 번 · 그 밖은 우리 스크롤. 비목표로 남은 것은 design 14~18(1004
+포커스 보고 · XTSHIFTESCAPE · OSC 52 · 가로 휠과 포인터 모양 · 보고 끄기 설정).
+
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+
+후보는 아래 PE 절의 "그 다음 후보"(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB 동글 층 B · WP-M3 방향
+포커스 · vim-runtime)와 PD의 비목표(더블클릭 단어 선택 · `tars.conf`의 휠 방향 · 포인터 가속)다. 작은 것은
+`docs/guides/lessons.md`의 "이월 숙제"에 있다. 실기에서 볼 것 셋(`pointer> open`의 `kind=` · 터치패드 출발값 셋 · 두 손가락
+방향)과 넷째(vim에서 클릭이 커서를 옮기나)는 `running-tars.md`에 있다.
 
 ### PD-M0~M3을 닫을 때의 "다음 후보"(M4 뒤에 유효)
 
