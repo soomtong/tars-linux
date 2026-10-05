@@ -1,7 +1,9 @@
 # TARS Pointer Devices — Design
 
 Date: 2026-10-05
-Status: 시작한다(2026-10-05). plan은 milestone마다 그때 쓴다.
+Status: 끝났다(2026-10-05, PD-M0~M3 같은 날). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m0.md` · `-pd-m1.md` ·
+`-pd-m2.md` · `-pd-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. plan들이 바로잡은 전제는 결정 1 · 2 · 4 · 6 · 8 · 9 · 10과
+위험 7 · 8에 덧붙여 두었다. 기억은 `docs/decisions/project_pointer_devices.md`.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -64,6 +66,12 @@ PD-M3   노트북 터치패드                 →  한 손가락 이동 · 탭 
 ## 결정
 
 ### 결정 1 — 포인터 장치는 terminal이 찾고, 부팅 뒤에 꽂힌 것도 inotify로 잡는다
+
+> PD-M0이 바꾼 것 둘(2026-10-05). (1) inotify가 아니라 netlink uevent(`NETLINK_KOBJECT_UEVENT` 그룹 1)다. 게스트 커널에
+> `INOTIFY_USER`가 없어 켰더니 `FSNOTIFY`가 따라 켜진 커널이 TCG에서 initramfs 풀기를 1.2초 늦춰 `install` 체인 부팅 7의
+> 창을 닫았고 루트 게이트가 두 번 빨갰다(M0 plan 확정 7 · 실측 7~10). uevent는 커널 config가 필요 없고, 노드는 uevent가 올
+> 때 이미 있다. (2) ioctl 넷을 손으로 짓지 않는다 — ZU-M1의 translate-c가 `EVIOCGBIT` 등을 inline fn으로 넘긴다(아래 실측
+> 15는 `@cImport` 시절의 사실). `pointer_test`가 그 값을 C 헤더와 대조한다.
 
 키보드는 PID 1이 부팅 때 찾아 `argv[4]`로 넘긴다(HD 결정 3). 포인터 장치도 그 모양을 따를지가 첫
 물음이다.
@@ -170,6 +178,10 @@ PTY 분기 앞이다. 한 poll 회차에 들어온 포인터 이벤트는 전부
 나온다. 마우스로 누른 채 터치패드를 두드려도 뗌이 두 번 나오지 않는다.
 
 ### 결정 4 — 커서는 작은 화살표이고, 움직임만 있는 프레임은 다시 그리지 않고 그 자리만 고친다
+
+> PD-M1이 정한 것 둘(lead, 2026-10-05). 보이는 조건 3을 끄는 자리는 `keys.bytes`가 PTY에 나가는 블록 하나다 — `Cmd+V`와
+> 터미널 질의의 답은 숨기지 않는다. 그리고 마지막 장치가 빠지면 조건 2(움직였다)도 꺼져, 다시 꽂은 마우스는 움직여야 보인다.
+> 전체 프레임에서는 저장한 픽셀을 되돌리지 않고 버린다(`fill`이 이미 지웠다). 화살표는 테두리 49 + 안쪽 69 = `ink` 118.
 
 모양은 12 × 19 픽셀 안의 왼쪽 위 끝이 뾰족한 화살표이고, 끝이 포인터 좌표(hotspot)다. 색은 전용 상수
 둘이다.
@@ -330,6 +342,12 @@ resolution)이고 출력은 결정 3의 `Frame`이다. 마우스 디코더와 �
 
 ### 결정 9 — 커널은 노트북 터치패드의 세 경로를 켜고, 심볼 · 드라이버 등록 · 실제 부팅 하나로 본다
 
+> PD-M3이 바꾼 것(2026-10-05, M3 plan "design과 다르게 적은 것"). `MOUSE_PS2_ELANTECH`와 RMI4 하위(F03 · F3A)는 기본값이
+> 없어 명시로 켠다 · AMD(`X86_AMD_PLATFORM_DEVICE`)와 옛 Intel(`X86_INTEL_LPSS`) 플랫폼 심볼을 더했다 · Intel THC는 6.18에
+> 있어 QuickI2C만 켠다(QuickSPI는 비목표) · `HID_RMI` · `I2C_PIIX4`는 켜지 않는다 · 심볼은 41개, bzImage +323,584바이트.
+> 검증 셋째 겹의 psmouse alias는 modinfo에 마지막 serio 표만 남아 판정 글자로 못 쓴다(pinctrl의 ACPI id로 대신). 검사 20은
+> 부팅 A에 두면 M0 · M1의 판정 셋이 깨져 부팅 B로 옮기고 부팅 A는 `i8042.noaux`로 띄운다.
+
 실제 노트북 터치패드는 지금 커널에서 노드조차 안 생긴다(실측 6). 경로가 셋이고 셋 다 켠다.
 
 | 경로 | 기계 | 켜는 심볼 |
@@ -372,6 +390,11 @@ root는 이미 무엇이든 할 수 있다.
 시간을 전후로 잰다.
 
 ### 결정 10 — 게이트는 새 체인 `pointer/check.sh` 하나(열아홉번째), 부팅 둘
+
+> 끝난 모양(2026-10-05): 부팅 A(`-usb -device usb-mouse,id=pdboot`, `i8042.noaux`, 포트 45488)와 부팅 B(설정 디스크 `tars-pd`에
+> `tp-replay`, 포트 45489). 검사는 M0 7 · M1 5 · M2 9 · M3 7이고 mutation은 4 · 5 · 4 · 4였다. M0 mutation "REL_Y 부호"는
+> 그대로, M3의 "`INPUT_PROP_POINTER`를 안 본다"는 잡히지 않는 mutant라(`BTN_TOOL_FINGER`로도 터치패드다) "터치패드를 디코더에
+> 잇지 않는다"와 "세로 resolution 보정 제거"로 바꿨다.
 
 기존 체인에 끼우지 않는다. `copy` · `pane` 체인의 판정은 포인터가 없는 화면을 전제하고, 이 체인은 화살표가 보이는
 프레임을 일부러 만든다.
@@ -580,7 +603,13 @@ save-under 그리기 · 전용 색 둘 · 보이는 조건 셋 · 휠(`WHEEL_ROW
    `style>` · `cursor>`를 판정에 쓰는 검사는 화살표가 숨은 뒤(글자를 친 뒤)에 둔다.
 7. psmouse(PD-M3)가 실기에서 i8042의 탐지로 부팅을 늦추거나, 터치패드가 없는 기계에서 엉뚱한 AUX 장치를 잡을 수 있다.
    QEMU에서의 시간만 plan이 잰다.
-8. QEMU의 HMP가 `device_add`로 붙인 두 번째 USB 마우스를 대상으로 바꾸는지, `device_del` 뒤에 원래 마우스로 돌아가는지
+   > M3 실측(2026-10-05): QEMU에서 `Run /init`이 3.0초 → 3.9~4.2초로 늦어졌는데 psmouse도 새 드라이버의 초기화도 아니었다
+   > (전부 5ms 아래, `i8042.noaux`로도 같다). 늦어진 것은 initramfs 풀기이고 원인은 코드 배치다 — gzip `inflate_fast`가 앞쪽
+   > 코드에 밀려 페이지 경계를 넘으면 QEMU TCG가 그 번역 블록을 직접 잇지 못한다(HEAD 설정에 `X86_INTEL_LPSS` 하나만 켠
+   > 커널로 확인). 게이트만의 비용이고 실기와 무관하다. M0의 FSNOTIFY(결정 1의 덧붙임)도 같은 것이었을 가능성이 크지만 그때
+   > System.map을 안 봐서 재지 않았다. `install` 부팅 7의 `delay_use`를 3에서 4로 올려 여유를 0 → 900ms로 되돌렸다.
+8. (M0 plan 확정 1이 실측으로 풀었다 — 꽂으면 새 마우스로 가고 뽑으면 원래 것으로 돌아온다. 검사 6이 그 성질을 판정에 쓴다.)
+   QEMU의 HMP가 `device_add`로 붙인 두 번째 USB 마우스를 대상으로 바꾸는지, `device_del` 뒤에 원래 마우스로 돌아가는지
    (결정 10). 안 돌아가면 검사 6 뒤의 검사가 움직임을 못 보낸다 — 그때는 검사 6을 부팅 A의 맨 끝으로 옮긴다.
 
 ## 비목표

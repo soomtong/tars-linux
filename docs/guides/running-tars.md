@@ -543,7 +543,7 @@ wlan0: leased 192.168.0.23 for 86400 seconds
 | 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
 | 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
 | USB 무선 동글 · Broadcom · Intel BE201 · WPA-Enterprise | 무선은 PCIe 네 계열만 켰다(WL design 비목표). 게이트가 무선을 부팅으로 재는 것은 mac80211_hwsim뿐이고 실칩의 firmware 로딩은 재지 않는다. 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있고 Realtek 유선 firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
-| 터치패드 | 커널에 드라이버는 있지만 `terminal`이 포인터를 안 읽는다 |
+| 터치패드 · 마우스 | PD(2026-10-05)가 켰다 — 한 손가락 이동 · 탭 · 두 손가락 스크롤 · 클릭 포커스 · 드래그 선택. 실기에서 볼 것 셋: 로그 `pointer> open … kind=`(mouse 또는 touchpad) · 탭 180ms · 2% · 배율의 출발값이 손에 맞는지 · 두 손가락 스크롤 방향. 2026-10-05 전에는 커널에 터치패드 드라이버조차 없었다(`I2C_HID_ACPI` · `HID_MULTITOUCH` · `MOUSE_PS2` 꺼짐) |
 | 배터리 잔량 표시 | 커널은 읽지만 그것을 보여 주는 화면이 아직 없다 |
 
 이 저장소의 어떤 게이트도 실기 부팅을 검증하지 않는다. 열일곱 체인이 전부

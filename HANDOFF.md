@@ -1,44 +1,47 @@
-# HANDOFF: Pointer Devices(PD) — M0~M2가 닫혔다(마우스 끝), M3 터치패드 plan이 측정 대기 중
+# HANDOFF: Pointer Devices(PD)가 M0~M3으로 닫혔다 — 다음 서브프로젝트를 고른다
 
-## 지금 어디인가(2026-10-05, 진행 중)
+## 지금 어디인가
 
-사용자의 요청("마우스 포인터 · 드래그 선택 · 터치패드")으로 2026-10-05에 열었다. 사용자는 결정권을 lead(Fable)에게
-위임하고 자리를 비웠다. design은 `docs/specs/2026-10-05-tars-pointer-devices-design.md`(Opus 서브에이전트가 썼고
-lead가 `ink` 정의 하나를 고쳤다, commit `0c2e6f5`, 결정 11 · 위험 8 · 비목표 13 · 실측 15). Milestone은 M0 탐색 ·
-읽기 · 로그 / M1 화살표 · 휠 / M2 클릭 · 드래그 · 복사 / M3 터치패드(커널 + 상태 기계 + uinput 게이트).
+2026-10-05 사용자의 요청("마우스 장치 지원: 마우스 포인터 및 인터렉션(드래그 선택). 터치패드 역시 지원")으로 열어 같은 날
+닫았다. 사용자는 결정권을 lead(Fable)에게 위임하고 자리를 비웠다. design은
+`docs/specs/2026-10-05-tars-pointer-devices-design.md`(결정 11 · 위험 8 · 비목표 13 · 실측 15, `Status: 끝났다`), plan은
+`-pd-m0.md` ~ `-pd-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은 `docs/decisions/project_pointer_devices.md`.
+
+사용자의 지시("계획 수립과 구현 방법 그리고 구현 작업에 목적에 맞는 모델을 사용하는 서브 에이전트를 할당")로 design과
+plan 넷은 Opus 서브에이전트가, 구현은 M0 · M2 · M3을 Opus, M1(정해진 모양을 옮긴다)을 Sonnet 서브에이전트가 했다. Fable은
+착수 전 실측 · 대조 · 루트 게이트 · commit · 결정을 맡았다. planner들이 plan 코드를 저장소 밖 사본에서 컴파일 · 체인 ·
+mutation까지 돌린 뒤 `old_string` · `new_string`을 기계로 뽑아 넘기고(`anchors.py`), 구현자는 그것을 글자 그대로 넣었다 —
+네 milestone 모두 plan 코드를 고친 곳이 없고 보고와 파일이 어긋난 자리도 없었다. 다음 milestone의 plan은 앞 milestone의
+루트 게이트가 도는 동안 docker 금지 조건으로 미리 썼다.
 
 | 커밋 | 무엇 |
 |---|---|
 | `0c2e6f5` | design |
-| `8f8a030` | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
-| `8dcf6f1` | PD-M1 — `pointer.zig` 화살표 절(12 × 19, `POINTER_FILL` · `POINTER_EDGE`, `Sprite` save-under, `ink` 118) · `layout.Tree.hit` · `main.zig` 편집 열둘(보이는 조건 셋 · 움직임만 있는 회차는 restore → show → present · 휠 `WHEEL_ROWS=3` 포인터 아래 패널) · `pointer/check.sh` 검사 8~12 · `pointer_test` OK 75 · `layout_test` hit 22 · 루트 게이트 19체인 3/3(1시간 8분 41초, 마지막 3회 게이트). 구현은 Sonnet |
-| `e937b92` | PD-M2 — `pointer.Gesture`(idle · pressed · dragging · ignored, `Intent` 여섯) · `vt.copyEnterAt` · `copyPointTo` · `input.State.pointerMode` · `layout.clampInto` · `main.zig`의 `PointerWire.run`(else 없는 switch) · 클릭 포커스 · 첫 칸 이동에 copy mode · 뗌 = `copyYank` · 누른 패널 밖 clamp · 누른 채 휠 · `pointer/check.sh` 검사 13~18(+셋) · 호스트 검사 OK 107 · 30 · 110 · 15 · 루트 게이트 19체인 2/2(47분 46초, 첫 2회 게이트). 구현은 Opus. 사용자의 요청 1이 끝났다 |
+| `8f8a030` | M0 — `pointer.zig`(`classify` · `Mouse` · `Pointer` · `ueventAddedNode`) · netlink uevent 핫플러그 · 장치 칸 여덟 · poll `pty_base` · `pointer>` 줄 · 열아홉번째 체인 `pointer/check.sh`(45488). 커널은 안 바뀌었다. 루트 게이트 19체인 3/3, 1시간 8분 39초 |
+| `3b57b66` · `6f4dfb2` | 사용자의 결정 — 루트 게이트 반복 3 → 2(`feedback_gate_runs`), `check.sh`의 `RUNS=2` |
+| `8dcf6f1` | M1 — 화살표(save-under, `ink` 118) · 보이는 조건 셋 · 휠 세 줄 · `layout.Tree.hit`. 구현 Sonnet. 19체인 3/3(마지막 3회), 1시간 8분 41초 |
+| `e937b92` · `1ecb973` | M2 — `Gesture` · `copyEnterAt` · `copyPointTo` · `pointerMode` · 클릭 포커스 · 드래그 = copy mode · 뗌 = `copyYank` · clamp · 누른 채 휠(사용자 요청 1 끝). 19체인 2/2, 47분 46초. 그리고 `kernel/.config` 되접기(UW의 USB 무선 select 여덟) |
+| `38bb649` | M3 — `touchpad.zig`(MT B · 탭 · 두 손가락 휠 · 물리 버튼) · 커널 심볼 41개(PS/2 · SMBus · I2C-HID · THC QuickI2C · uinput, +323,584바이트) · `pointer/replay/tp-replay`(uinput 가짜 패드) · 부팅 B(45489) 검사 19~25 · `install` 부팅 7 `delay_use=4`. 19체인 2/2, 49분 29초 |
+| (이 커밋) | design Status · CLAUDE.md 표 · 기억 · MEMORY.md · HD/WP/CM/IP/TF 비목표에 한 줄 · running-tars.md · lessons(PD-1~7 · 이월 숙제 · 핵심 파일 · 포트) |
 
-M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inotify로 받았고 게스트 커널에 `INOTIFY_USER`가 없어 한 줄을
-켰는데, 그것이 `FSNOTIFY`를 끌어와 initramfs 풀기를 TCG에서 2.6초 → 3.8초로 늦췄고 `install` 체인 부팅 7
-(`usb-storage.delay_use=3`)의 창이 닫혀 루트 게이트가 두 번 빨갰다. lead의 결정으로 netlink uevent(`NETLINK_KOBJECT_UEVENT`,
-커널 config 불필요)로 바꿨다. 과정과 표는 M0 plan "착수 전에 확정한 것" 7과 "PD-M0이 실측한 것" 7~10에 있다.
+PD가 남긴 가장 큰 사실은 커널이 아니라 게이트의 것이다. M0에서 `CONFIG_INOTIFY_USER=y`를 켰더니 `FSNOTIFY`가 따라 켜진
+커널이 TCG에서 initramfs 풀기를 1.2초 늦춰 `install` 체인 부팅 7의 창(`usb-storage.delay_use=3`)을 닫았고 루트 게이트가 두 번
+빨갰다 — inotify를 버리고 netlink uevent로 갔다. M3이 커널 심볼 41개를 켜며 같은 증상을 다시 겪고 진짜 원인을 찾았다:
+드라이버가 아니라 코드 배치다(gzip `inflate_fast`가 페이지 경계를 넘으면 QEMU TCG가 번역 블록을 직접 잇지 못한다, `X86_INTEL_LPSS`
+하나로 재현). 실기와 무관한 게이트 비용이고, 부팅 7의 `delay_use`를 4로 올려 여유를 900ms로 되돌렸다(lessons PD-3 · 이월 숙제).
 
-바로 다음: PD-M3(터치패드 — 커널 심볼 41개 · `touchpad.zig` · uinput 되감기 도구 `pointer/replay/tp-replay` · 부팅 B 포트 45489,
-Opus 구현). plan 초안은 `/tmp/run/pdm3/plan.md`(Opus planner, 2,787줄, 측정 대기)이고 M2 commit과 `kernel/.config` 되접기
-commit 뒤 planner가 사본에서 커널 빌드 · 크기 · 부팅 시간 · install 부팅 7 여유 · 체인 · regression · mutation 넷을 재어
-`docs/plans/2026-10-05-tars-pointer-devices-pd-m3.md`로 옮긴다. lead가 M3에서 정한 것: install 부팅 7의 기다림이 500ms
-아래로 내려가면 `usb-storage.delay_use`를 4로 · THC는 QuickI2C만 · 부팅 A에 `i8042.noaux` · 되접기는 별도 commit. M3이
-끝나면 서브프로젝트를 닫는다(design Status · CLAUDE.md 표 · `docs/decisions/project_pointer_devices.md` · MEMORY.md ·
-다시 연 결정들(HD 결정 3 · WP · CM · IP · TF 비목표)에 한 줄 · running-tars.md의 터치패드 줄 · lessons · HANDOFF).
-M1에서 정한 것 둘: 화살표를 숨기는 자리는 `keys.bytes` 하나 · 마지막 장치가 빠지면 "움직였다" 조건도 꺼진다(design 결정 4에
-닫을 때 덧붙인다). M2에서 정한 것 다섯은 M2 plan "design과 다르게 적은 것"에 있다.
-사용자의 결정(2026-10-05): 루트 게이트는 M2부터 2회(`6f4dfb2`, `docs/decisions/feedback_gate_runs.md`).
+열지 않은 것(design 비목표 13): 마우스 보고(SGR 1006 — 다음 서브프로젝트의 첫 후보, vim `mouse=a` · fzf · lazygit) · 더블클릭 ·
+가장자리 자동 스크롤 · 절대 좌표 장치 · 뗀 뒤 반전 남기기 · 가속과 터치패드의 나머지 · `tars.conf` 항목(휠 방향 먼저) · 왼손잡이 ·
+키보드 핫플러그 · Apple 트랙패드 · 패널 비율 드래그 · 시간 기반 숨김 · THC QuickSPI. 실기에서 볼 것 셋은 `running-tars.md`에
+있다(`kind=` · 터치패드 출발값 셋 · 두 손가락 방향).
 
-측정 파일: `/tmp/run/mp0`(lead 실측) · `/tmp/run/pdm0`(M0 planner · 구현자 · `inst/`에 install 재현 로그) ·
-`/tmp/run/pdm1`(M1 planner, 저장소 사본 `repo/`).
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-lessons에 남길 것(닫을 때): `INOTIFY_USER`를 켜면 `FSNOTIFY`가 initramfs 풀기를 1.2초 늦춰 `install` 부팅 7의 창이 닫힌다 ·
-OrbStack VM 4GB에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU가 겹치면 OOM(exit 137)이나 VM 재시작 — docker 작업은
-한 번에 하나 · `sendkey colon`은 없는 이름(`shift-semicolon`) · 게스트에 `od` · `xxd` · `timeout`이 없어 바이트는
-`head -c N | cat -v` · `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다 · 새 체인 포트는
-45488부터(45481~45487은 service · pane이 쓴다) · ioctl 매크로(`EVIOCGBIT` 등)는 ZU-M1의 translate-c가 inline fn으로
-넘긴다(HD 조사 6은 `@cImport` 시절의 사실).
+후보는 마우스 보고(위), 그리고 아래 PE 절의 "그 다음 후보"(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB
+동글 층 B · WP-M3 방향 포커스 · vim-runtime)다. 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
+
+측정 파일(저장소 밖, 지워도 된다): `/tmp/run/mp0`(lead 실측) · `/tmp/run/pdm0` ~ `pdm3`(planner · 구현자 사본과 로그) ·
+`/tmp/gate_pd0.log` ~ `gate_pd3.log`(루트 게이트 로그).
 
 ### 그 앞 — Paste Ergonomics(PE)가 M0~M2로 닫혔다
 
@@ -79,7 +82,7 @@ planner들이 lead · design의 전제를 여럿 바로잡았다. 이것이 이 
 SYN 재전송 시각 · vim의 계단을 게이트에서 보는 것 · fish의 확장 키 모드 · `tars.conf`로 bracketed
 paste를 끄고 켜는 것.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+### PE를 닫을 때 적어 둔 다음 후보(그대로 유효)
 
 후보는 아래 "그 다음 후보" 절(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB
 동글 층 B)과 WP-M3(방향 포커스), GE가 남긴 `vim-runtime`(38MB — 문법 색 · filetype, syntax 파일 몇

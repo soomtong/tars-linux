@@ -36,6 +36,7 @@ Foundation이 "단색 픽셀"까지였다면, Terminal Foundation은 "읽을 수
 
 ## 비목표
 
+- (마우스 입력은 PD가 2026-10-05에, 탭 전환은 WP가 2026-10-04에 열었다. [[project_pointer_devices]])
 - 마우스 입력, 탭 전환(cmd+1~9), 여러 TUI 앱 동시 실행 — 이번
   서브프로젝트가 다루는 기능이지만 MVP의 자동 검증 게이트에는 넣지
   않는다(수동 확인만). MVP 이후 milestone에서 다룬다.

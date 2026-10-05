@@ -62,7 +62,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-새 체인은 45481부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487). 새 체인은 45490부터 쓴다.
 
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
@@ -709,6 +709,27 @@ fish는 꼬리 `ESC[201~`가 올 때까지 붙인 글자를 하나도 그리지 
 전부 삼킨다(PE-M1 plan 확정 1). ghostty vt의 모드 2004는 화면별이 아니라 `Terminal.modes` 하나이고
 RIS가 끈다(`vt_test` 95 · 96).
 
+### PD(Pointer Devices, 2026-10-05)가 잰 것
+
+- PD-1. `CONFIG_INOTIFY_USER=y`는 `FSNOTIFY`를 끌어오고, 그 커널은 TCG에서 initramfs 풀기가 2.6초 → 3.8초였다. `install`
+  체인 부팅 7(`usb-storage.delay_use`)의 창이 닫혀 루트 게이트가 두 번 빨갰다. 핫플러그는 netlink uevent로 받는다 — 커널
+  config 불필요, 노드는 uevent가 올 때 이미 있다.
+- PD-2. ioctl 매크로(`EVIOCGBIT` · `EVIOCGPROP` · `EVIOCGNAME` · `EVIOCGABS`)는 translate-c 패키지가 inline fn으로 넘긴다.
+  HD 조사 6은 `@cImport` 시절의 사실이다.
+- PD-3. 부팅이 0.8초 늦어진 진짜 원인은 코드 배치였다. gzip `inflate_fast`가 커널 이미지 안에서 페이지 경계를 넘게 밀리면
+  QEMU TCG가 그 번역 블록을 직접 잇지 못해 풀기가 느려진다(`X86_INTEL_LPSS` 하나로 재현). 드라이버 초기화는 전부 5ms 아래.
+  실기와 무관한 게이트의 비용이고 어느 커널 변경이든 다시 움직일 수 있다. System.map의 `inflate_fast` 주소 끝 세 자리를
+  본다.
+- PD-4. QEMU HMP `mouse_move dx dy [dz]` · `mouse_button N`은 `-display none`에서도 usb-mouse로 간다. `device_add
+  usb-mouse,id=X` · `device_del X`가 핫플러그다(별표 대상은 새 것으로 가고 뽑으면 돌아온다). 127을 넘는 이동은 보고 셋으로
+  쪼개지고 합이 보존된다. 휠 한 눈금에 `REL_WHEEL_HI_RES` ±120이 함께 온다. pc 머신은 PS/2 마우스를 늘 갖고 있어
+  `MOUSE_PS2`를 켠 뒤 모든 pc 체인에 `ImExPS/2 Generic Explorer Mouse`가 생긴다(`i8042.noaux`로 끈다).
+- PD-5. 게스트에 `od` · `xxd` · `hexdump` · `timeout`이 없다 — 바이트는 `head -c N … | cat -v`. `sendkey colon`은 없는 이름이고
+  `:`는 `shift-semicolon`이다.
+- PD-6. OrbStack VM(4GB)에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU(512MB)가 겹치면 OOM(exit 137)이나 VM 재시작이
+  난다. docker 작업은 한 번에 하나만. `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
+- PD-7. 루트 게이트 반복 3 → 2(`feedback_gate_runs`): 19체인 3회 1시간 8분 → 2회 47분 46초.
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -947,6 +968,17 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
+PD(2026-10-05)가 남긴 것.
+
+- [ ] 마우스 보고(자식에게 SGR 1006). ghostty vt가 모드와 `encodeMouse`를 갖고 있고 우리는 안 쓴다. vim `mouse=a` · fzf ·
+      lazygit의 클릭이 이것으로 된다 — 다음 서브프로젝트의 첫 후보(PD design 비목표 1). 열면 Shift 드래그와 모드 1007이
+      함께 온다.
+- [ ] 터치패드 출발값 셋(180ms · 2% · 배율)을 실기에서 손으로 본다(PD design 위험 3). 고친 값은 `touchpad_test`에도.
+- [ ] 누름과 첫 칸 이동 사이에 출력이 오면 선택이 한 줄 어긋날 수 있다(PD design 위험 2). 겪으면 tracked pin으로.
+- [ ] 가지치기가 copy mode를 닫을 때 `input.State.mode`가 `.copy`에 남는다(PD design 위험 5, PD 전부터 있던 자리).
+- [ ] 커널 코드 배치가 TCG의 initramfs 풀기 시간을 움직인다. 커널을 바꾼 뒤 `install` 부팅 7의 `init waited`가 500ms 아래로
+      내려가면 그 신호다(지금 `delay_use=4`에 900ms). 아래 실측 PD-3.
+
 서브프로젝트 후보(패키지 매니저 · IPv6)는 `HANDOFF.md`에 있다.
 여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
 서브프로젝트는 `CLAUDE.md`의 완료 표가 목록이다.
@@ -1049,6 +1081,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
+- `pointer.zig` — 포인터 장치의 순수한 층(PD). `classify`(mouse · touchpad · none, capability로) · `Mouse` 디코더
+  (`SYN_REPORT`마다 `Frame`) · `Pointer`(clamp · 장치별 버튼 합) · `Sprite`(화살표 save-under, `ink` 118) · `Gesture`
+  (idle · pressed · dragging · ignored → `Intent` 여섯) · `ueventAddedNode`. 시스템 콜은 전부 `main.zig`의 포인터 절
+  (`tryOpenPointer` · `drainUevents` · `drainPointer` · `PointerWire.run`)에 있다. `main.zig`의 의도 switch에 `else`가 없다.
+- `touchpad.zig` — MT 프로토콜 B를 `pointer.Frame`으로(PD-M3). 상수 셋(탭 180ms · 2% · 배율)은 실기 없이 정한 출발값이다 —
+  손에 안 맞으면 여기와 `touchpad_test`를 함께 고친다. 게이트는 `pointer/replay/tp-replay`(uinput)로 본다.
 - `layout.zig` — 패널 트리와 사각형 산수(WP-M0). 순수 모듈이고 `layout_test`가
   호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
   `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가

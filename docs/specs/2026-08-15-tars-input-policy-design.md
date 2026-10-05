@@ -105,7 +105,8 @@ Terminal Foundation design doc(2026-08-08)의 6번 결정이 입력 처리에 �
   없다. keymap 테이블에 넣는 비용 자체는 싸지만, 게이트가 볼 수 없는 표를
   늘리는 것은 `project_gate_chain_composition`이 경고한 것과 같은 종류의
   부채다.
-- 마우스 입력. TF design doc에서도 비목표였다.
+- 마우스 입력. TF design doc에서도 비목표였다. (PD가 열었다, 2026-10-05 — `input.zig`가 아니라 `pointer.zig` · `touchpad.zig`에서.
+  [[project_pointer_devices]])
 - CapsLock 재배치. macOS 사용자가 흔히 Ctrl로 바꿔 쓰는 키지만, 그건
   "임의 재배치"의 문이다.
 - CSI u / modifyOtherKeys. modifier를 명시적으로 인코딩해 넘기는 현대적
