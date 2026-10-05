@@ -280,3 +280,175 @@ pub fn store() void {
         .killed => |sig| std.debug.print("tars-init: audio: alsactl store was killed (signal {d})\n", .{sig}),
     }
 }
+
+// ── AU-M2. 기본 카드 ─────────────────────────────────────────────────────
+//
+// libasound의 `default`는 카드 0이다. 내장 HDA가 부팅 때 0번을 잡고 USB 헤드셋은 그
+// 뒤 번호로 오므로, 아무것도 안 하면 사람이 치는 `aplay x.wav`가 헤드셋이 아니라
+// 내장 스피커로 간다. 그래서 PID 1이 /dev/snd의 이름을 보고 /etc/asound.conf를
+// 쓴다 — 재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것이 기본이다.
+//
+// 둘을 따로 고르는 이유. 마이크 없는 USB 스피커 · DAC가 꽂혀도 녹음은 내장 마이크에
+// 남아야 한다. 한 번호로 묶으면 그 카드에 녹음 장치가 없어 `arecord`가 죽는다.
+// 장치 0만 보는 이유. HDMI 코덱만 가진 카드(AMD 노트북의 GPU 쪽 HDA)는 범용 파서가
+// 장치 1(디지털)로만 내놓는다 — 소리가 안 나는 그 카드가 기본이 되지 않는다.
+//
+// 듣지 않고 본다. 감독 루프는 이미 1초마다 깨므로, 깰 때마다 이름을 읽고 지난번과
+// 다를 때만 파일을 쓴다. uevent 소켓도 일꾼도 없다(AU-M2 plan 확정 4).
+
+pub const ASOUND_CONF_PATH: [:0]const u8 = "/etc/asound.conf";
+/// 다 쓴 뒤 rename한다. 반쯤 쓴 파일을 aplay가 읽지 않게.
+const ASOUND_CONF_TMP: [:0]const u8 = "/etc/asound.conf.tars";
+const SND_DIR: [:0]const u8 = "/dev/snd";
+
+/// 카드 번호의 상한. 커널의 SNDRV_CARDS(`CONFIG_SND_MAX_CARDS`의 기본 32)와 같다.
+pub const MAX_CARDS = 32;
+
+/// 장치 0에 재생 · 녹음이 있는 카드의 집합. 비트 하나가 카드 하나다.
+pub const Cards = struct {
+    playback: u32 = 0,
+    capture: u32 = 0,
+};
+
+/// /dev/snd의 이름 하나를 `cards`에 더한다. `pcmC<카드>D0p` · `pcmC<카드>D0c`만
+/// 세고 나머지(control · timer · 장치 1 이상)는 버린다. 순수 함수다.
+pub fn addNode(cards: *Cards, name: []const u8) void {
+    const prefix = "pcmC";
+    if (!std.mem.startsWith(u8, name, prefix)) return;
+    const rest = name[prefix.len..];
+    const d = std.mem.indexOfScalar(u8, rest, 'D') orelse return;
+    if (d == 0 or !std.ascii.isDigit(rest[0])) return;
+    const card = std.fmt.parseInt(u8, rest[0..d], 10) catch return;
+    if (card >= MAX_CARDS) return;
+    const bit = @as(u32, 1) << @intCast(card);
+    if (std.mem.eql(u8, rest[d..], "D0p")) {
+        cards.playback |= bit;
+    } else if (std.mem.eql(u8, rest[d..], "D0c")) {
+        cards.capture |= bit;
+    }
+}
+
+pub const Defaults = struct {
+    playback: ?u8 = null,
+    capture: ?u8 = null,
+
+    pub fn eql(a: Defaults, b: Defaults) bool {
+        return a.playback == b.playback and a.capture == b.capture;
+    }
+};
+
+fn highest(mask: u32) ?u8 {
+    if (mask == 0) return null;
+    return @intCast(31 - @clz(mask));
+}
+
+/// 재생과 녹음 각각 번호가 가장 큰 카드. 순수 함수다.
+pub fn defaultsFor(cards: Cards) Defaults {
+    return .{ .playback = highest(cards.playback), .capture = highest(cards.capture) };
+}
+
+/// /etc/asound.conf의 글자. 둘 다 없으면 null이다(파일을 지운다). 순수 함수다.
+///
+/// `sysdefault:CARD=N`은 alsa.conf가 그 카드의 원래 `default`(plug → dmix · dsnoop)에
+/// 붙여 둔 이름이다. `pcm.!default`를 덮은 뒤에도 그 길이 그대로 남으므로 섞기 ·
+/// 형식 변환은 카드 0일 때와 같다. 믹서(`amixer` · `alsamixer`)의 기본은 재생 쪽
+/// 카드다 — 사람이 볼륨을 만지는 것은 소리가 나는 카드이기 때문이다.
+///
+/// 카드 번호를 글자로 박지 않고 `getenv`의 기본값으로 둔다. alsa-lib의 원래
+/// `default`는 `ALSA_PCM_CARD` · `ALSA_CARD`를 먼저 보는데(pcm/default.conf),
+/// `pcm.!default`를 덮으면 그 길이 사라져 `ALSA_CARD=0 aplay`가 env를 무시한다
+/// (AU-M2 plan 확정 4). 믹서 쪽(`ctl.!default`)은 안 덮으므로 env가 그대로 먹는다.
+pub fn render(buf: []u8, d: Defaults) ?[]const u8 {
+    const ctl = d.playback orelse d.capture orelse return null;
+    var w: std.Io.Writer = .fixed(buf);
+    w.writeAll("# tars-init이 쓴다(AU-M2). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
+        "# 재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것이 기본이다.\n" ++
+        "# ALSA_CARD(또는 ALSA_PCM_CARD)를 주면 그 카드가 두 방향 다 기본이다.\n" ++
+        "pcm.!default {\n\ttype asym\n") catch return null;
+    if (d.playback) |n| w.print(DIRECTION, .{ "playback", n }) catch return null;
+    if (d.capture) |n| w.print(DIRECTION, .{ "capture", n }) catch return null;
+    w.print("}}\ndefaults.ctl.card {d}\n", .{ctl}) catch return null;
+    return w.buffered();
+}
+
+/// 한 방향. `{s}`가 playback · capture이고 `{d}`가 env가 없을 때의 카드다.
+const DIRECTION =
+    "\t{s}.pcm {{\n" ++
+    "\t\t@func concat\n" ++
+    "\t\tstrings [ \"sysdefault:CARD=\" {{ @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"{d}\" }} ]\n" ++
+    "\t}}\n";
+
+/// 지금 /dev/snd에 있는 카드. 디렉터리가 없으면(소리 장치가 없는 기계) 빈 집합이다.
+fn scanCards() Cards {
+    var cards: Cards = .{};
+    const rc = linux.open(SND_DIR.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (failed(rc) != null) return cards;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var buf: [2048]u8 align(8) = undefined;
+    while (true) {
+        const n = linux.getdents64(fd, &buf, buf.len);
+        if (failed(n) != null or n == 0) break;
+        var off: usize = 0;
+        while (off < n) {
+            const ent: *align(1) const linux.dirent64 = @ptrCast(&buf[off]);
+            off += ent.reclen;
+            addNode(&cards, std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&ent.name)), 0));
+        }
+    }
+    return cards;
+}
+
+fn writeConf(text: []const u8) ?linux.E {
+    const rc = linux.open(ASOUND_CONF_TMP.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644);
+    if (failed(rc)) |e| return e;
+    const fd: i32 = @intCast(rc);
+    var done: usize = 0;
+    while (done < text.len) {
+        const n = linux.write(fd, text[done..].ptr, text.len - done);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            _ = linux.close(fd);
+            return e;
+        }
+        done += n;
+    }
+    _ = linux.close(fd);
+    return failed(linux.rename(ASOUND_CONF_TMP.ptr, ASOUND_CONF_PATH.ptr));
+}
+
+/// 지난번에 쓴 기본. 처음은 "카드 없음"이라 소리 장치가 없는 기계에서는 한 번도
+/// 안 쓰고 한 줄도 안 찍는다.
+var defaults_now: Defaults = .{};
+
+/// 감독 루프가 깰 때마다 부른다. 카드가 오거나 갔으면 /etc/asound.conf를 다시 쓴다.
+///
+/// 쓰기가 실패해도 기억은 새 값으로 바꾼다 — 안 바꾸면 매 초 같은 실패를 찍는다.
+/// 다음 변화가 다시 쓴다.
+pub fn follow() void {
+    const want = defaultsFor(scanCards());
+    if (want.eql(defaults_now)) return;
+    defaults_now = want;
+
+    var buf: [1024]u8 = undefined;
+    const text = render(&buf, want) orelse {
+        _ = linux.unlink(ASOUND_CONF_PATH.ptr);
+        std.debug.print("tars-init: audio: no sound card left, removed {s}\n", .{ASOUND_CONF_PATH});
+        return;
+    };
+    if (writeConf(text)) |e| {
+        std.debug.print("tars-init: audio: cannot write {s} (errno {d})\n", .{ ASOUND_CONF_PATH, @intFromEnum(e) });
+        return;
+    }
+    var pb: [3]u8 = undefined;
+    var cb: [3]u8 = undefined;
+    std.debug.print("tars-init: audio: default card is {s} for playback, {s} for capture\n", .{
+        cardText(&pb, want.playback), cardText(&cb, want.capture),
+    });
+}
+
+/// 로그용. 카드 번호를 글자로, 없으면 "none". 번호는 32 아래라 두 자리면 된다.
+fn cardText(buf: *[3]u8, n: ?u8) []const u8 {
+    const v = n orelse return "none";
+    return std.fmt.bufPrint(buf, "{d}", .{v}) catch unreachable;
+}

@@ -111,10 +111,34 @@ type_keys() {
 # 다른 체인들은 아직 고정 sleep이다. UT 체인만 고친 것은 깨지는 것을 이
 # 자리에서 봤기 때문이고, 나머지 열은 3/3을 여러 판 지나왔다. 다음에 깨지는
 # 체인이 있으면 그 체인이 이 함수를 쓰면 된다.
+# 화면 줄을 읽는다(AU-M2 뒤, lead). 커널의 콘솔 출력(printk)은 UART에 직접 쓰므로
+# terminal이 쓴 한 줄을 어디서든 자른다 —
+#
+#   terminal: screen> … | 196 | [    7.359211] random: crng init done\r\n
+#   197 | 198 | 199 | 200 | root@(none) ~# \r\n
+#
+# 뒤 조각에는 머리가 없어 `grep "terminal: screen>"`이 못 보고, 기다리던 글자가
+# 거기 있으면 15초 뒤에 빨개진다(AU-M2 루트 게이트의 pointer 체인 부팅 B가 그랬다).
+# 그래서 screen> 줄의 꼬리가 커널 시각 표식(`CONFIG_PRINTK_TIME`)이 붙은 조각이면
+# 그 조각을 떼고 다음 줄을 이어 붙인다. 다음 줄이 또 커널 줄이면 건너뛰고,
+# terminal · kms의 줄이면(조각이 줄 끝에 떨어진 경우) 잇지 않는다.
+joined_screen_dump() {
+  perl -ne '
+    if (defined $cur) {
+      next if /^\[ *\d+\.\d+\] /;
+      if (/^(terminal|kms): /) { print $cur, "\n"; undef $cur; redo }
+      $cur .= $_;
+    } elsif (/^terminal: screen>/) { $cur = $_ } else { next }
+    next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
+    print $cur; undef $cur;
+    END { print $cur, "\n" if defined $cur }
+  ' "$LOG"
+}
+
 wait_for_screen() {
   local pattern="$1" i screen
   for i in $(seq 1 150); do
-    screen="$(grep -a "terminal: screen>" "$LOG")"
+    screen="$(joined_screen_dump)"
     if grep -aqE -- "$pattern" <<<"$screen"; then
       if [ "$i" -gt 20 ]; then
         echo "  (the screen took about $((i / 10))s to show /${pattern}/)"

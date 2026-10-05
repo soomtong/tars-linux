@@ -30,12 +30,20 @@ cd "$(dirname "$0")"
 #   B  같은 디스크. init이 alsactl restore로 0dB를 되살리고, 프로브는 믹서를 안 만진 채
 #      재생한다 — 사각파가 값까지 같으면 A의 0dB가 남은 것이다(검사 9 · 10)
 #   C  설정 디스크 없이(ISO와 같은 모양). init이 alsactl init으로 켜기만 한다(검사 11)
+#   D  다른 디스크로 떠서 부팅 뒤에 monitor로 USB 스피커(QEMU usb-audio)를 꽂는다.
+#      init이 기본 재생 카드를 USB로 옮기고(검사 12 · 13), 녹음은 HDA에 남고(검사 14),
+#      뽑으면 기본이 HDA로 돌아온다(검사 15). 판정은 여전히 샘플의 값이다 — USB 쪽
+#      소리는 QEMU의 둘째 오디오 백엔드가 또 하나의 file 플러그인으로 받는다
 #
-# 이 체인이 못 보는 것 — 실기의 코덱(Realtek 등) · DSP(SOF · ACP) · USB 오디오 · 헤드폰
-# 잭의 꽂힘 · 부팅 뒤에 꽂힌 카드(AU-M2 · M3).
+# 이 체인이 못 보는 것 — 실기의 코덱(Realtek 등, 검사 1이 심볼과 표로만 본다) ·
+# DSP(SOF · ACP, AU-M3) · 헤드폰 잭의 꽂힘(QEMU 코덱에 잭 감지가 없다) · 마이크 달린
+# USB 헤드셋(QEMU usb-audio는 재생뿐이다).
 
 # $GUEST_MEM 하나 때문에 source한다. nic · wifi 체인처럼 타이핑을 안 한다.
 source ../gate_lib.sh
+
+# 부팅 D만 monitor를 쓴다 — USB 스피커를 뽑고 꽂는 device_del · device_add(AU-M2).
+MONITOR_PORT=45491
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -58,6 +66,7 @@ if ! (cd ../kernel && ./make_initrd.sh); then
 fi
 
 DISK=../out/audio.img
+DISK_USB=../out/audio-usb.img
 LOG="$(mktemp)"
 WORK="$(mktemp -d)"
 QEMU_PID=""
@@ -88,6 +97,9 @@ report_failure() {
     "audio-probe: arecord exit 0" \
     "audio-probe: done" \
     "tars-init: audio: stored the mixer" \
+    "tars-init: audio: default card is" \
+    "audio-probe: unplug now" \
+    "audio-probe: plug now" \
     "tars-init: calling reboot"; do
     if grep -aF "$marker" "$LOG" >/dev/null; then
       echo "  found   ${marker}"
@@ -145,6 +157,40 @@ for sym in SOUND SND SND_HDA_INTEL SND_HDA_GENERIC SYSVIPC; do
   fi
 done
 
+# AU-M2. 노트북의 코덱 드라이버와 USB 오디오. QEMU의 코덱은 범용 파서가 받으므로 코덱
+# 드라이버는 부팅으로 못 본다 — 심볼과, 커널이 코덱의 번호(벤더 · 장치)를 드라이버에
+# 잇는 표(modinfo alias)를 드라이버마다 하나씩 본다(UW의 방식). Realtek은 6.18에서 계열
+# 열로 갈렸고 EXPERT 없이는 하나씩 못 끈다 — 노트북의 거의 전부인 ALC2xx는 ALC269 계열이다.
+for sym in SND_HDA_CODEC_REALTEK SND_HDA_CODEC_ALC269 SND_HDA_CODEC_CONEXANT \
+  SND_HDA_CODEC_SENARYTECH SND_HDA_CODEC_CIRRUS SND_HDA_CODEC_CS420X SND_HDA_CODEC_CS8409 SND_HDA_CODEC_ANALOG \
+  SND_HDA_CODEC_SIGMATEL SND_HDA_CODEC_VIA SND_USB_AUDIO; do
+  if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
+    exit 1
+  fi
+done
+# 코덱 드라이버 넷이 SND_CTL_LED를 거쳐 NEW_LEDS를 켜고, 그러면 기본값이 y인 입력 쪽
+# 둘이 따라 켜진다. HID_APPLE은 Apple 키보드의 fn 키를 커널이 바꿔 keyboard=apple과
+# 부딪칠 수 있고, INPUT_LEDS는 키보드 LED를 LED 클래스로 내놓는다 — 둘 다 소리와
+# 무관하므로 끈 채 둔다(AU-M2 plan 확정 1).
+for sym in HID_APPLE INPUT_LEDS; do
+  if grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} came on with the LED class; the sound drivers must not touch input"
+    exit 1
+  fi
+done
+MODINFO=../kernel/build/modules.builtin.modinfo
+for alias in snd_hda_codec_alc269.alias=hdaudio:v10EC0256r snd_hda_codec_conexant.alias=hdaudio:v14F11F86r \
+  snd_hda_codec_senarytech.alias=hdaudio:v1FA86186r snd_hda_codec_cs420x.alias=hdaudio:v10134208r \
+  snd_hda_codec_cs8409.alias=hdaudio:v10138409r \
+  snd_hda_codec_analog.alias=hdaudio:v11D41984r snd_hda_codec_idt.alias=hdaudio:v111D76E5r \
+  snd_hda_codec_via.alias=hdaudio:v11060440r 'snd_usb_audio.alias=usb:v*p*d*dc*dsc*dp*ic01isc01ip*in*'; do
+  if ! tr '\0' '\n' < "$MODINFO" | grep -F "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*alias=}"
+    exit 1
+  fi
+done
+
 # 바이너리 넷(guest_tools.sh 층 14)은 tools 체인의 검사 1이 목록을 되읽어 본다. 여기는
 # 목록에 없고 make_initrd.sh가 손으로 넣는 것만 literal로 적는다 — 그래야 이 검사가
 # tautology가 아니다(tools 체인의 WANT와 같은 이유).
@@ -170,7 +216,7 @@ case $'\n'"${GROUPS_FILE}" in
     exit 1
     ;;
 esac
-echo "the kernel carries ALSA and HDA, and the initrd carries arecord, libasound, its config, two voices and the audio group"
+echo "the kernel carries ALSA, HDA, seven laptop codec drivers and USB audio, and the initrd carries arecord, libasound, its config, two voices and the audio group"
 
 # ── 재료: 사각파 · 마이크에 넣을 상수 · 설정 디스크 · .asoundrc ─────────
 # 컨테이너에 python이 없어서 perl로 짓는다(lessons).
@@ -196,6 +242,11 @@ printf 'shell=fish\n' > "$WORK/seed/tars.conf"
 rm -f "$DISK"
 truncate -s 16M "$DISK"
 mkfs.ext2 -F -q -m 0 -L tars-audio -d "$WORK/seed" "$DISK"
+# 부팅 D의 디스크. 같은 씨앗에 표지 파일 하나가 더 있어 프로브가 usb 갈래로 간다.
+touch "$WORK/seed/audio/usb"
+rm -f "$DISK_USB"
+truncate -s 16M "$DISK_USB"
+mkfs.ext2 -F -q -m 0 -L tars-audio -d "$WORK/seed" "$DISK_USB"
 
 # null이 시간을 내고 file이 바이트를 바꿔치기한다. 녹음 쪽은 null이 준 무음을 infile의
 # 바이트로 덮고, 재생 쪽은 받은 바이트를 file에 쓴다. 둘 다 alsa-lib에 들어 있는
@@ -214,6 +265,12 @@ pcm.tarsfeed {
   infile "$WORK/feed.raw"
   format "raw"
 }
+pcm.tarsusb {
+  type file
+  slave.pcm "null"
+  file "$WORK/usb.raw"
+  format "raw"
+}
 EOF
 
 # q35인 이유는 nic · machine 체인과 같다 — 노트북에 가까운 칩셋이고, ich9-intel-hda가
@@ -223,9 +280,22 @@ EOF
 # 기다릴 fd가 없어서다.
 #
 # 인자 하나가 설정 디스크를 붙일지를 고른다(부팅 C는 안 붙인다). 로그는 부팅마다 비운다.
+# usb는 부팅 D다 — 자기 디스크에, xHCI 컨트롤러와 USB 스피커가 쓸 둘째 오디오 백엔드
+# (tarsusb), 꽂고 뽑을 monitor가 붙는다. 스피커 자체는 부팅 뒤에 device_add로 꽂는다 —
+# 부팅 때 꽂아 둔 usb-audio는 다섯 판 중 한 판에서 커널이 아예 못 봤다(AU-M2 plan 확정 4).
+# usb-audio는 48kHz 스테레오 16비트 재생 하나뿐인 장치라 백엔드를 HDA 쪽과 같은
+# 모양으로 박는다.
 start_guest() {
-  local drive=()
-  [ "$1" = with-disk ] && drive=(-drive file="$DISK",if=virtio,format=raw)
+  local drive=() usb=()
+  case "$1" in
+    with-disk) drive=(-drive file="$DISK",if=virtio,format=raw) ;;
+    usb)
+      drive=(-drive file="$DISK_USB",if=virtio,format=raw)
+      usb=(-audiodev alsa,id=snd1,out.dev=tarsusb,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off
+        -device qemu-xhci,id=xhci
+        -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait)
+      ;;
+  esac
   : > "$LOG"
   HOME="$WORK" qemu-system-x86_64 \
     -machine q35 \
@@ -241,6 +311,7 @@ start_guest() {
     -audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off \
     -device ich9-intel-hda \
     -device hda-micro,audiodev=snd0 \
+    "${usb[@]}" \
     -serial file:"$LOG" \
     -no-reboot &
   QEMU_PID=$!
@@ -459,5 +530,107 @@ if ! grep -aF 'tars-init: no disk labelled tars-* among' "$LOG" >/dev/null; then
   report_failure "boot C found a config disk; it must boot without one"
 fi
 echo "without a config disk the boot still turned the mixer on with alsactl init"
+
+# ══ 부팅 D: 부팅 뒤에 꽂는 USB 스피커 (AU-M2) ═══════════════════════════
+# HDA(카드 0)로 떠서 USB 스피커를 꽂으면 카드 1이 생긴다. init은 /dev/snd를 1초마다
+# 보고 /etc/asound.conf에 기본 카드를 적는다 — 재생과 녹음 각각, 장치 0을 가진 카드 중
+# 번호가 가장 큰 것. 그래서 재생은 USB로, 녹음은 마이크 없는 USB 대신 HDA로 간다.
+# 프로브가 "plug now" · "unplug now"를 찍으면 이 스크립트가 monitor로 꽂고 뽑는다.
+#
+# 소리가 어디로 갔는지는 두 파일로 본다. HDA 쪽 TAP은 QEMU가 부팅 때 한 번 열고, USB
+# 쪽 USB_TAP은 스피커를 꽂을 때 연다. 뽑기 전에 둘 다 옆으로 떠 두고 센다.
+echo "=== boot D: an HDA card, then a USB speaker plugged and unplugged with the monitor ==="
+rm -f "$WORK/tap.raw" "$WORK/usb.raw"
+start_guest usb
+wait_for_log 'audio-probe: plug now' 90 \
+  || report_failure "boot D: the probe never asked for the USB speaker"
+# QEMU가 monitor 포트를 연 지 오래인 시점이라 첫 번에 붙는다.
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure "boot D: could not connect to the QEMU monitor"
+echo "device_add usb-audio,id=usbspk,audiodev=snd1,bus=xhci.0" >&3
+wait_for_log 'audio-probe: unplug now' 60 \
+  || report_failure "boot D: the probe never got to unplugging the USB speaker"
+
+# ── 검사 12: 꽂힌 USB 스피커가 카드 1이 되고 init이 기본 재생을 그리로 옮겼다 ──
+# usbcore 줄은 커널이 snd-usb-audio를 USB 코어에 올렸다는 뜻이고(장치와 무관하게
+# 찍힌다), 카드 줄은 그 드라이버가 꽂힌 장치를 실제로 받았다는 뜻이다. init의 줄
+# 둘은 부팅 때(HDA뿐)와 꽂은 뒤다.
+grep -a 'usbcore: registered new interface driver snd-usb-audio' "$LOG" >/dev/null \
+  || report_failure "usbcore never registered snd-usb-audio"
+grep -aE 'audio-probe: usb card \[ ?1 \[.*\]: USB-Audio - ' "$LOG" >/dev/null \
+  || report_failure "the plugged USB speaker did not become card 1"
+grep -aF 'audio-probe: default before plug [default "0"|default "0"|ctl.card 0]' "$LOG" >/dev/null \
+  || report_failure "before the plug /etc/asound.conf did not point both ways at card 0"
+grep -aF 'tars-init: audio: default card is 1 for playback, 0 for capture' "$LOG" >/dev/null \
+  || report_failure "init did not move the default playback card to the plugged USB speaker"
+grep -aF 'audio-probe: default after plug [default "1"|default "0"|ctl.card 1]' "$LOG" >/dev/null \
+  || report_failure "/etc/asound.conf does not send playback to card 1 and capture to card 0"
+echo "the plugged USB speaker came up as card 1 and init made it the default for playback"
+
+# ── 검사 13: 사람이 친 amixer · aplay가 USB 스피커로 갔다 ────────────────
+# amixer에 -c가 없으므로 그 100%는 믹서의 기본 카드(defaults.ctl.card)가 받은 것이다.
+# 사각파는 값까지 같게 USB 쪽에 있고 HDA 쪽에는 한 프레임도 없다.
+grep -aE "audio-probe: usb volume \[.*Playback 256 \[100%\]" "$LOG" >/dev/null \
+  || report_failure "amixer without -c did not reach the USB speaker's volume"
+grep -aF 'audio-probe: plugged aplay exit 0 []' "$LOG" >/dev/null \
+  || report_failure "aplay through the default device failed with the USB speaker in"
+cp "$WORK/usb.raw" "$WORK/usb_1.raw" 2>/dev/null || report_failure "QEMU never opened the USB speaker's side (no usb tap file)"
+cp "$WORK/tap.raw" "$WORK/tap_1.raw" 2>/dev/null || : > "$WORK/tap_1.raw"
+USB_1="$(count_tap "$WORK/usb_1.raw")"
+HDA_1="$(count_tap "$WORK/tap_1.raw")"
+echo "usb tap: ${USB_1}"
+echo "hda tap: ${HDA_1}"
+if [ "$(field "$USB_1" tone)" -lt 40000 ] || [ "$(field "$USB_1" other)" -ne 0 ]; then
+  report_failure "the square wave did not reach the USB speaker sample for sample (${USB_1})"
+fi
+if [ "$(field "$HDA_1" tone)" -ne 0 ]; then
+  report_failure "the square wave also reached the HDA speaker (${HDA_1})"
+fi
+echo "amixer and aplay went to the USB speaker, and the HDA speaker stayed silent"
+
+# ── 검사 14: 녹음은 HDA의 마이크에 남았다 (판정은 아래, 끈 뒤에 파일로) ──
+# USB 스피커에는 녹음 장치가 없다. 기본을 한 카드로 묶었다면 arecord가 여기서 죽는다.
+grep -aF 'audio-probe: plugged arecord exit 0 []' "$LOG" >/dev/null \
+  || report_failure "arecord through the default device failed with the USB speaker in"
+
+# ── 뽑는다 ─────────────────────────────────────────────────────────────
+echo "device_del usbspk" >&3
+wait_for_log 'audio-probe: done' 30 \
+  || report_failure "boot D: the probe did not finish after the USB speaker went"
+
+# ── 검사 15: 뽑으면 기본이 HDA로 돌아온다 ─────────────────────────────
+# init의 "0 for playback, 0 for capture"가 두 번이다 — 부팅 때와 뽑은 뒤.
+if [ "$(grep -acF 'tars-init: audio: default card is 0 for playback, 0 for capture' "$LOG")" -ne 2 ]; then
+  report_failure "init did not move the default back to card 0 after the USB speaker went"
+fi
+grep -aF 'audio-probe: default after unplug [default "0"|default "0"|ctl.card 0]' "$LOG" >/dev/null \
+  || report_failure "after the unplug /etc/asound.conf still points away from card 0"
+grep -aF 'audio-probe: unplugged aplay exit 0 []' "$LOG" >/dev/null \
+  || report_failure "aplay failed after the USB speaker went"
+sleep 0.5
+HDA_2="$(count_tap "$WORK/tap.raw")"
+echo "hda tap after unplug: ${HDA_2}"
+if [ "$(field "$HDA_2" tone)" -lt 40000 ] || [ "$(field "$HDA_2" other)" -ne 0 ]; then
+  report_failure "after the unplug the square wave did not reach the HDA speaker sample for sample (${HDA_2})"
+fi
+stop_guest
+echo "unplugged, the default went back to the HDA card and aplay played there"
+
+debugfs -R "dump audio/cap.wav $WORK/cap_d.wav" "$DISK_USB" >/dev/null 2>&1
+[ -s "$WORK/cap_d.wav" ] || report_failure "boot D left no cap.wav on its config disk"
+CAP_D="$(perl -e '
+  open(my $f, "<:raw", $ARGV[0]) or die; local $/; my $d = <$f>;
+  my ($n, $m) = (0, 0);
+  for (my $p = 44; $p + 4 <= length $d; $p += 4) { $n++; $m++ if substr($d, $p, 4) eq pack("s<s<", 3000, -5000) }
+  print "frames=$n match=$m\n";' "$WORK/cap_d.wav")"
+echo "cap D: ${CAP_D}"
+if [ "$(field "$CAP_D" frames)" -ne 48000 ] || [ "$(field "$CAP_D" match)" -ne 48000 ]; then
+  report_failure "with the USB speaker in, arecord did not record the HDA microphone (${CAP_D}, want 48000 of each)"
+fi
+echo "with the USB speaker in, arecord still recorded the HDA microphone, 48000 frames of 48000"
 
 echo "AU check PASS"

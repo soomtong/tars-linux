@@ -1,9 +1,10 @@
 # TARS Audio Devices — Design
 
 Date: 2026-10-05
-Status: 진행 중. M0 · M1이 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`(M0), 부팅이
-믹서를 켜고 볼륨을 `/config/asound.state`에 기억한다(M1). 다음은 M2(실기 HDA 코덱 · USB 오디오 · 기본 카드,
-`docs/plans/2026-10-05-tars-audio-devices-au-m2.md`). plan은 `-au-m0.md` · `-au-m1.md`이고 각 끝의 "실측한 것" 절이 값이다.
+Status: 진행 중. M0 · M1 · M2가 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`(M0), 부팅이
+믹서를 켜고 볼륨을 `/config/asound.state`에 기억한다(M1), 실기 HDA 코덱 여덟 · USB 오디오 · 기본 카드(`/etc/asound.conf`, 결정 7)(M2).
+다음은 M3(Intel SOF · AMD ACP · firmware, `docs/plans/2026-10-05-tars-audio-devices-au-m3.md`). plan은 `-au-m0.md` ~ `-au-m2.md`이고
+각 끝의 "실측한 것" 절이 값이다.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -81,7 +82,7 @@ HDA로 간다(커널 소스 `sound/hda/core/intel-dsp-config.c`). DSP를 쓰는 
 | 후보 | 왜 아닌가 |
 |---|---|
 | (a) HDA 컨트롤러 + 범용 코덱 | 고른 것. QEMU가 흉내 내는 노트북 모양이 이것이고, 게이트가 바이트로 볼 수 있는 길이 이것뿐이다 |
-| (b) 여기에 실기 코덱(Realtek · Conexant · Cirrus 등)까지 | M2. 코덱 드라이버는 노트북마다의 quirk 표이고 QEMU에 그 코덱이 없다. 게이트가 심볼과 표로만 보는 덩어리라 QEMU 경로와 섞지 않는다 |
+| (b) 여기에 실기 코덱(Realtek · Conexant · Cirrus 등)까지 | M2가 했다. 코덱 드라이버는 노트북마다의 quirk 표이고 QEMU에 그 코덱이 없다. 게이트가 심볼과 표로만 보는 덩어리라 QEMU 경로와 섞지 않는다 |
 | (c) 여기에 DSP(Intel SOF · AMD ACP)까지 | M3. firmware · topology가 붙고 QEMU에 없다 |
 | (d) `virtio-sound` | QEMU에는 있지만 노트북에는 없다. TARS는 일반 x86_64 노트북에서 돈다(`project_target_hardware`) |
 | (e) QEMU의 옛 장치(AC97 · ES1370 · SB16) | 같은 이유. 노트북에 없다 |
@@ -89,6 +90,16 @@ HDA로 간다(커널 소스 `sound/hda/core/intel-dsp-config.c`). DSP를 쓰는 
 크기와 시간(실측 11). bzImage가 7,758,848 → 7,955,456바이트(+196,608, 2.5%)이고 커널 증분 빌드가 125초였다. `Run /init`은
 늦어지지 않고 오히려 0.7초 빨라졌다 — PD 실측 3(lessons PD-3)이 적은 코드 배치의 몫이다. 그래서 `install` 체인 부팅 7의
 여유가 1,100 · 1,200ms에서 1,800 · 1,900ms로 늘었다. 다음 커널 변경이 그것을 다시 움직일 수 있다.
+
+> M2가 켠 것(2026-10-06, `-au-m2.md` 확정 1). `scripts/config`로 `-e` 아홉 — `SND_HDA_CODEC_REALTEK` · `CONEXANT` · `CIRRUS` ·
+> `SENARYTECH` · `ANALOG` · `SIGMATEL` · `VIA` · `CS8409`(Dell · Apple의 HDA 다리, `default`가 없어 따로, lead가 정했다) ·
+> `SND_USB_AUDIO` — 와 `-d` 둘. Realtek은 계열을 고를 수 없다 — 계열 심볼 열의 프롬프트가 `if EXPERT`라 메뉴를 켜면 열이 다 켜지고
+> `-d`를 적어도 `olddefconfig`가 되돌린다(노트북의 ALC2xx는 `ALC269` 하나가 받는다). 코덱 넷이 `SND_HDA_GENERIC_LEDS`(음소거 LED)를
+> 고르며 `NEW_LEDS`를 끌고 오고, 그때 숨어 있던 심볼 일곱이 기본값으로 켜진다 — 입력 쪽 둘(`HID_APPLE` · `INPUT_LEDS`)은 끄고 무선
+> LED 트리거 다섯은 프롬프트가 없어 못 끈다(그래서 regression에 `wifi`). 켜지 않는 코덱 — HDMI(비목표 6) · Creative · C-Media ·
+> SI3054 모뎀, 그리고 side-codec 앰프(CS35L41 · CS35L56 · TAS2781)는 `SND_SOC` · firmware가 있어야 붙으므로 M3의 층이다. 크기는
+> bzImage +258,048바이트(3.2%)인데 `inflate_fast`가 페이지 안 같은 자리(`0xb40`)라 `Run /init`과 `install` 부팅 7의 `init waited`가
+> HEAD와 같다.
 
 ### 결정 2 — 유저랜드는 alsa-utils를 그대로 쓴다. 넣는 것은 바이너리 넷과 링크 하나, 설정 트리, 목소리 파일 둘이다
 
@@ -232,6 +243,13 @@ Capture 0dB로 켰고 `amixer`가 Master를 0dB로 올렸다"를 보고, 검사 
 남는다) · 9(B에서 restore가 그 값을 되살린다) · 10(B에서 `amixer` 없이 사각파가 값까지 같다) · 11(C에서 init으로 켠다)이 더해졌다.
 전원은 프로브의 `kill -TERM 1`로 끈다 — 여전히 monitor도 포트도 없다. 검사 5의 판정은 lead가 M1 뒤에 고쳤다(아래 실측 17).
 
+M2가 바꾼 것. 검사 1이 코덱 여덟 · USB 오디오의 심볼과 modinfo alias 아홉, `HID_APPLE` · `INPUT_LEDS`가 꺼진 것을 더 본다. 부팅
+D(자기 디스크, 표지 `audio/usb`)가 더해져 monitor(포트 45491, 첫 사용)로 QEMU `usb-audio`를 `device_add` · `device_del`한다 —
+검사 12(`snd-usb-audio` 등록 · 카드 1 · 파일이 0/0에서 1/0으로) · 13(`-c` 없는 `amixer`가 USB 볼륨을 올리고 사각파가 USB 쪽 tap에
+값까지, HDA 쪽은 0) · 14(`arecord`는 HDA에 남는다) · 15(뽑으면 0/0으로 돌아오고 사각파가 HDA로). QEMU `usb-audio`의 볼륨이
+샘플을 줄이므로(240/255) 프로브가 100%로 올린다. 부팅 때 꽂아 둔 판은 열 판 중 넷이 안 됐다(열거 누락 하나 · 시리얼 없이 선 셋) —
+그래서 게이트는 부팅 뒤에 꽂는다.
+
 mutation(M0 plan이 사본에서 다 돌렸다 — plan 확정 7).
 
 | 심는 고장 | 잡은 자리 |
@@ -250,6 +268,29 @@ PD 결정 11 · EL · CB와 같다. plan은 milestone마다 그 시점에 Opus �
 이미지 굽기 · 커널 빌드 · 체인 · mutation을 정해진 순서로 돌리는 것이다. M1은 `init`에 코드가 들어가고 결정 4의 셋을 정해야
 하므로 Opus다.
 
+### 결정 7 — 기본 카드는 `init`의 감독 루프가 `/dev/snd`를 1초마다 보고 `/etc/asound.conf`에 적는다(M2)
+
+libasound의 `default`는 `defaults.pcm.card`(0)이고 그것을 덮는 자리는 env(`ALSA_CARD`)와 설정 파일 둘뿐이다. 프로그램이 장치를
+열 때마다 파일을 새로 읽으므로 파일을 고쳐 쓰면 다음 `aplay`부터 따라간다(M2 plan 확정 4).
+
+| 후보 | 왜 아닌가 |
+|---|---|
+| (a) 감독 루프의 1초 바퀴에 `/dev/snd`를 읽고 바뀌었으면 파일을 쓴다 | 고른 것. 바퀴마다 `open` · `getdents64` · `close` 셋, 쓰기와 로그는 바뀔 때만. 소리 장치 없는 기계는 한 줄도 안 찍는다 |
+| (b) alsa-lib 설정만으로 "나중 카드" | `confmisc.c`의 함수에 "있는 카드 중 가장 큰 번호"가 없다 |
+| (c) `tars.conf`의 `audio_card=` | 꽂을 때마다 사람이 고쳐야 하고 번호는 꽂는 순서로 바뀐다. seed가 늘어 `config` 체인 25번째 줄 검사를 함께 본다 |
+| (d) `ALSA_CARD` env | 프로세스가 태어날 때 정해진다 — 떠 있는 셸이 꽂은 헤드셋을 못 따라간다 |
+| (e) 커널 인자로 USB가 0번을 잡게 | 뽑으면 0번이 사라져 `default`가 아무것도 못 연다 |
+| (f) netlink uevent(PD의 terminal과 같은 것) | 된다. 그러나 감독 루프는 이미 1초마다 깨고, 1초는 사람에게 안 보인다 |
+| (g) 커널 uevent helper | 커널 설정 하나 더, uevent마다 셸이 뜬다 |
+
+규칙은 "재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것". 내장 HDA가 0번을 잡고 USB는 열거 뒤의 번호를 받으므로
+"USB가 꽂혀 있으면 USB"가 된다. 둘을 따로 두는 이유 — 마이크 없는 USB 스피커를 꽂아도 `arecord`는 내장 마이크에 남는다. 장치 0인
+이유 — HDMI만 가진 HDA 카드는 범용 파서가 장치 1로 내놓으므로 소리 안 나는 카드가 기본이 되지 않는다. 파일은 `pcm.!default`를
+`asym`으로 덮고 두 방향에 `sysdefault:CARD=N`을 다는데, N은 글자로 박지 않고 `@func getenv vars [ ALSA_PCM_CARD ALSA_CARD ]
+default "N"`의 기본값 자리에 둔다 — 글자로 박으면 `ALSA_CARD=0 aplay`가 env를 무시하고 USB로 간다(사본에서 잰 것). 믹서의 기본
+(`defaults.ctl.card`)은 재생 쪽 카드다. `/etc/asound.conf.tars`에 쓰고 `rename`한다. `tars.conf` 키는 없다 — 다른 카드를 원하면
+`ALSA_CARD=N` 또는 `-D sysdefault:CARD=N`.
+
 ## lead의 전제를 바로잡은 것
 
 1. 마이크 증명에 게스트 안 루프백(`snd-aloop`)이 필요하지 않다. 컨테이너 alsa-lib의 `file` 플러그인이 QEMU의 HDA
@@ -265,6 +306,10 @@ PD 결정 11 · EL · CB와 같다. plan은 milestone마다 그 시점에 Opus �
 6. (M1 planner) `init`이 firewall의 `nft -f`처럼 `alsactl`을 기다리는 모양이 아니다. 카드는 PID 1보다 늦을 수 있고(HDA 코덱 탐색은
    커널의 일 큐), 기다리는 모양이면 소리 장치가 없는 기계가 매번 상한만큼 선다. 부팅 경로의 누구도 믹서를 안 기다린다
    (`feedback_boot_never_blocks`). 그래서 일꾼을 fork하고 안 기다린다.
+7. (M2 planner) "부팅 뒤에 꽂은 카드는 꺼진 채다"(결정 4의 셋째, M1이 넘긴 것)는 USB에는 틀렸다. 커널의 `snd-usb-audio`는 장치에게
+   지금 볼륨을 물어 그대로 내놓는다 — QEMU `usb-audio`는 꽂을 때마다 `240 [-0.50dB] [on]`이었다. 꺼진 채 뜨는 것은 HDA 드라이버가
+   가상 Master를 0에 두기 때문이고(실측 7) USB에는 그런 자리가 없다. 그래서 꽂을 때 `alsactl`을 부르는 자리가 없다.
+8. (M2) "monitor를 안 쓴다"(5)는 M2에서 바뀐다 — 부팅 D가 QEMU `usb-audio`를 `device_add`로 꽂고 뽑으므로 포트 45491을 처음 쓴다.
 
 ## 검증
 
@@ -294,6 +339,8 @@ regression 셋이다. 사본에서 돈 값(실측 11 · 12 · 13).
 붙일 수 있는지는 재지 않았다)는 M1 plan이 잰다.
 
 ### AU-M2 — 실기의 HDA 코덱 · 헤드폰 잭 · USB 오디오
+
+했다(2026-10-06, `-au-m2.md`). 결정 1의 M2 문단 · 결정 7 · 전제 7 · 8 · 위험 8 ~ 10이 결과다. 아래는 쓸 때의 글이다.
 
 firmware가 없는 실기 드라이버다. HDA 코덱 드라이버(Realtek — 6.18에서 계열마다 심볼이 갈렸다 — · Conexant · Cirrus ·
 Senarytech 등)는 노트북의 스피커 · 헤드폰 잭 · 아날로그 마이크와 헤드폰을 꽂으면 스피커가 꺼지는 것(auto-mute)을 맡는다.
@@ -332,6 +379,13 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
    검사 4가 꺼진 값으로 빨개진다.
 7. (M1 뒤) 호스트 부하 아래 dmix의 xrun이 사각파 프레임을 떨어뜨린다(실측 17). 하한 40,000 아래로 떨어질 만큼의 부하는 아직 못 봤다
    — 루트 게이트가 `tone`으로 빨개지면 이것부터 본다.
+8. (M2) 카드 번호는 빈 번호를 다시 쓴다. USB 둘을 꽂았다 하나를 뽑고 셋째를 꽂으면 "가장 큰"이 "가장 나중"과 어긋난다. 상태 없는 규칙을
+   고르고 이 경우를 둔다.
+9. (M2) 스피커 앰프가 side codec(CS35L41 · CS35L56 · TAS2781)인 노트북(2022년 이후 ASUS · Lenovo · HP 일부)은 M2 뒤에도 내장 스피커가
+   조용하고 헤드폰 잭은 된다 — `SND_SOC` · firmware가 있어야 붙으므로 M3의 층이다.
+10. (M2) USB를 꽂은 동안 `amixer sset Master …`는 `Unable to find simple control 'Master',0`으로 실패한다 — 믹서의 기본이 USB 카드이고
+    거기에 `Master`가 없다. 내장 카드는 `amixer -c 0`. 그리고 위험 2(잭 입력 장치)가 M2부터 실기에서 현실이 된다 — `init`의 키보드
+    판정과 terminal의 포인터 판정이 잭 장치(`EV_SW`, 헤드셋 버튼의 `KEY_PLAYPAUSE`)를 안 고른다는 것을 M2 planner가 코드로 읽었다.
 
 ## 비목표
 
@@ -344,6 +398,8 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
 6. HDMI · DisplayPort 오디오. HDA의 HDMI 코덱은 GPU 드라이버(i915 · amdgpu)와 짝으로 붙는데 TARS는 GPU 드라이버를 안 켠다(RM).
 7. MIDI · 시퀀서 · OSS 에뮬레이션.
 8. 코덱 절전(`SND_HDA_POWER_SAVE_DEFAULT`). 기본값 0(끔) 그대로다.
+9. (M2) 꽂을 때 그 카드의 지난 볼륨을 되살리는 것(`alsactl restore N`). 사람이 그 카드를 꽂은 채 꺼야 파일에 남고 감독 루프가 일꾼을
+   하나 더 거둬야 한다 — 얻는 것이 작다.
 
 ## 착수 전에 실측한 것
 
@@ -435,7 +491,8 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
   alsamixer                            # 화면으로 볼륨 · 음소거(M 키)
   ```
 
-  이어폰은 M2부터다. HDA 헤드폰 잭은 꽂으면 스피커가 꺼지고, USB 헤드셋은 카드 1로 온다(기본 카드를 고르는 법은 M2가 정한다).
+  이어폰은 M2부터다. HDA 헤드폰 잭은 꽂으면 스피커가 꺼지고, USB 헤드셋은 꽂은 지 1초 안에 기본 카드가 된다(`cat /etc/asound.conf`로
+  보인다, 결정 7). 내장 카드의 믹서는 USB가 꽂힌 동안 `amixer -c 0 sset Master …`다.
 - `HANDOFF.md`. VD를 열 사람에게 경계(비목표 4)와 `arecord -f S16_LE -r 16000 -c 1`이 기본 장치(`plug` → `dsnoop`)로 도는지는
   안 쟀다는 것을 넘긴다.
 

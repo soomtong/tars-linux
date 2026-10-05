@@ -4,6 +4,9 @@ const audio = @import("audio.zig");
 // AU-M1. 믹서를 켜고 적는 배관의 순수한 쪽 넷. 게스트에서 alsactl이 실제로 믹서를
 // 바꾸는 것은 audio 체인이 샘플의 값으로 본다 — 여기는 그 앞에서 "어느 동사로 ·
 // 어떤 인자로 · 끝을 어떻게 읽고 · 끌 때 적을지"를 0.1초로 본다.
+//
+// AU-M2. 기본 카드를 고르는 순수한 쪽 셋(`addNode` · `defaultsFor` · `render`). 꽂고 뽑을
+// 때 소리가 실제로 그 카드로 가는 것은 audio 체인의 부팅 D가 본다.
 
 fn fail(comptime fmt: []const u8, args: anytype) error{Mismatch} {
     std.debug.print("FAIL: " ++ fmt ++ "\n", args);
@@ -77,4 +80,51 @@ pub fn main() !void {
     if (audio.storeDecision(false, true) != .not_set) return fail("not set must not store", .{});
     if (audio.storeDecision(false, false) != .not_set) return fail("not set without /config must not store", .{});
     std.debug.print("audio_test: the mixer is stored only when it was set this boot and /config is there\n", .{});
+
+    // ── 어느 카드가 기본인가(AU-M2) ────────────────────────────────────
+    //
+    // /dev/snd의 이름에서 장치 0의 재생 · 녹음만 센다. 아래 목록은 게스트의 실제
+    // 모양이다 — HDA(카드 0, 재생과 녹음)에 USB 스피커(카드 1, 재생만)가 꽂힌 것.
+    var cards: audio.Cards = .{};
+    for ([_][]const u8{ "controlC0", "controlC1", "pcmC0D0c", "pcmC0D0p", "pcmC1D0p", "timer", "seq" }) |name| audio.addNode(&cards, name);
+    if (cards.playback != 0b11 or cards.capture != 0b01) return fail("HDA plus a USB speaker reads as playback 0x{x} capture 0x{x}, want 0x3 0x1", .{ cards.playback, cards.capture });
+    // 장치 0이 아닌 것 · 모양이 다른 것은 안 센다. HDMI 코덱만 가진 카드는 장치 1(디지털)이다.
+    var none: audio.Cards = .{};
+    for ([_][]const u8{ "pcmC2D1p", "pcmC2D3p", "pcmC0D0", "pcmCD0p", "pcmC32D0p", "pcmCxD0p", "pcmC1D0px", "hwC0D0", "midiC1D0" }) |name| audio.addNode(&none, name);
+    if (none.playback != 0 or none.capture != 0) return fail("names that are not device 0 counted as playback 0x{x} capture 0x{x}", .{ none.playback, none.capture });
+    std.debug.print("audio_test: only pcmC<card>D0p and pcmC<card>D0c count\n", .{});
+
+    // 재생과 녹음 각각 번호가 가장 큰 카드. 마이크 없는 USB 스피커가 꽂혀도 녹음은 0에 남는다.
+    const split = audio.defaultsFor(cards);
+    if (split.playback != 1 or split.capture != 0) return fail("HDA plus a USB speaker picks playback {?d} capture {?d}, want 1 and 0", .{ split.playback, split.capture });
+    const headset = audio.defaultsFor(.{ .playback = 0b101, .capture = 0b101 });
+    if (headset.playback != 2 or headset.capture != 2) return fail("a headset on card 2 picks playback {?d} capture {?d}, want 2 and 2", .{ headset.playback, headset.capture });
+    const empty = audio.defaultsFor(.{});
+    if (empty.playback != null or empty.capture != null) return fail("no card picks playback {?d} capture {?d}, want none", .{ empty.playback, empty.capture });
+    const top = audio.defaultsFor(.{ .playback = 0x8000_0001, .capture = 0 });
+    if (top.playback != 31 or top.capture != null) return fail("card 31 picks playback {?d} capture {?d}", .{ top.playback, top.capture });
+    std.debug.print("audio_test: the highest card wins, for playback and capture apart\n", .{});
+
+    // 파일의 글자. 손으로 적은 글자와 비교한다(tautology가 아니게). 카드 번호는 getenv의
+    // 기본값 자리에 들어간다 — ALSA_CARD가 있으면 그것이 이긴다.
+    var buf: [1024]u8 = undefined;
+    const head = "# tars-init이 쓴다(AU-M2). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
+        "# 재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것이 기본이다.\n" ++
+        "# ALSA_CARD(또는 ALSA_PCM_CARD)를 주면 그 카드가 두 방향 다 기본이다.\n" ++
+        "pcm.!default {\n\ttype asym\n";
+    const play1 = "\tplayback.pcm {\n\t\t@func concat\n" ++
+        "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"1\" } ]\n\t}\n";
+    const cap0 = "\tcapture.pcm {\n\t\t@func concat\n" ++
+        "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"0\" } ]\n\t}\n";
+    const cap3 = "\tcapture.pcm {\n\t\t@func concat\n" ++
+        "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"3\" } ]\n\t}\n";
+    try expectText("split", audio.render(&buf, split), head ++ play1 ++ cap0 ++ "}\ndefaults.ctl.card 1\n");
+    try expectText("capture only", audio.render(&buf, .{ .capture = 3 }), head ++ cap3 ++ "}\ndefaults.ctl.card 3\n");
+    if (audio.render(&buf, .{}) != null) return fail("no card must render no file", .{});
+    std.debug.print("audio_test: /etc/asound.conf points default at sysdefault:CARD=N unless ALSA_CARD says otherwise, and no card means no file\n", .{});
+}
+
+fn expectText(what: []const u8, got: ?[]const u8, want: []const u8) !void {
+    const g = got orelse return fail("{s} rendered nothing", .{what});
+    if (!std.mem.eql(u8, g, want)) return fail("{s} rendered\n{s}\nwant\n{s}", .{ what, g, want });
 }

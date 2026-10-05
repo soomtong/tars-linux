@@ -553,6 +553,12 @@ fn supervise(
         // 시작되는 자리는 여기 하나다(design 결정 9).
         if (power.take()) |action| power.shutdown(action);
 
+        // AU-M2. 사운드 카드가 오거나 갔으면 /etc/asound.conf의 기본 카드를 다시
+        // 쓴다. 이 루프가 1초마다 깨는 것에 얹혀 있다 — 부팅 뒤에 꽂은 USB 헤드셋도
+        // 1초 안에 기본이 된다. 아이들을 띄우기 전이라 첫 바퀴에서는 파일이 서비스 ·
+        // 셸보다 먼저 선다.
+        audio.follow();
+
         for (children) |*c| {
             if (control.wantsRunning(c)) start(c, envp);
         }

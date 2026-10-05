@@ -242,6 +242,35 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 화면을 판정한다. CN-M1의 검색 프롬프트가 오버레이인 이유가 이것이다.
 
 
+### 커널 printk가 terminal의 화면 줄을 가운데서 자른다 (AU-M2)
+
+커널의 콘솔 출력은 UART에 직접 쓰고(console write), terminal이 `/dev/console`에 쓴 것은 tty 버퍼를 거쳐 IRQ로 한 글자씩 나간다.
+그래서 printk 한 줄이 terminal의 `screen>` 덤프 한가운데에 떨어질 수 있다 —
+
+```
+terminal: screen> … | 196 | [    7.359211] random: crng init done\r\n
+197 | 198 | 199 | 200 | root@(none) ~# \r\n
+```
+
+뒤 조각에는 머리가 없어 `grep "terminal: screen>"`이 못 보고, 기다리던 글자가 거기 있으면 `wait_for_screen`이 15초 뒤에 빨개진다.
+AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게 죽었다(1회차는 초록, 2회차만 — crng 초기화 시각이 판마다 다르다).
+`gate_lib.sh`의 `joined_screen_dump`가 꼬리에 커널 시각 표식(`CONFIG_PRINTK_TIME`)이 붙은 `screen>` 줄을 다음 줄과 이어 붙이고,
+`wait_for_screen`은 그것을 읽는다. 체인이 `grep -a 'terminal: screen>' "$LOG" | tail -n 1`로 직접 읽는 자리 67곳은 그대로다 —
+기다림이 성공한 뒤의 같은 덤프를 읽으므로 드물지만, 그 자리가 이상한 값으로 빨개지면 로그에서 `[ *[0-9]*\.[0-9]*\]`가 `screen>`
+줄 안에 있는지 먼저 본다. 한 write()로 쓴다고 안 잘리는 것이 아니다 — 자르는 것은 전송이지 write가 아니다.
+덤으로 하나 — `gate_lib.sh`에 함수를 더할 때는 체인들이 같은 이름을 이미 정의하고 있는지 `rg`로 먼저 본다. 처음 이름이
+`screen_lines`였는데 `pointer/check.sh`가 같은 이름으로 화면 줄 개수를 세고 있어서(source 뒤에 정의되어 덮는다) `wait_for_screen`이
+화면 대신 숫자 "3"을 받아 세 판 내리 "프롬프트가 안 떴다"로 빨갰다. 증상은 결정적이었고 `set -x`가 한 번에 보여 줬다.
+
+### 호스트 부하 아래 dmix가 xrun 구간을 두 번 더한다 (AU-M1)
+
+`audio` 체인의 사각파 판정이 간헐적으로 `other` 16~19프레임으로 빨갰다. 부하 없이 열다섯 판은 전부 0이고, 컨테이너에 CPU 부하
+여섯(`perl -e '1 while 1'`)을 걸면 다섯 판 중 둘이 그랬다. 그 프레임은 정확히 두 배(±16000) 49프레임이 한 덩어리로 있고 뒤가
+0이다 — TCG 게스트의 하드웨어 포인터가 밀려 xrun이 나면 dmix가 그 구간을 하드웨어 버퍼에 두 번 더하고 나머지를 비운다. 우리 코드도
+볼륨도 아니다(볼륨이 틀리면 값이 ±800이 되어 `tone`이 0이다). `count_tap`이 `doubled`를 따로 세어 판정에 안 쓰고, 사각파 하한은
+48,000 중 40,000이다(하한의 일은 음소거 · 틀린 볼륨을 잡는 것이고 둘 다 `tone`이 0이다). 부하 없는 루트 게이트에서도 47,9xx가
+나온다 — xrun은 늘 조금 있다.
+
 ## 범용 명령
 
 끝난 milestone의 측정 하네스는 여기 없다 — 각 plan의 Task에 글자 그대로 있다.
