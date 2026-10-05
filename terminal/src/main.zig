@@ -5,6 +5,7 @@ const hangul = @import("hangul.zig");
 const image = @import("image.zig");
 const input = @import("input.zig");
 const layout = @import("layout.zig");
+const pointer = @import("pointer.zig");
 const pty = @import("pty.zig");
 const status = @import("status.zig");
 const vt = @import("vt.zig");
@@ -18,6 +19,14 @@ const c = @import("c_poll");
 /// setenv 하나 때문에 stdlib.h를 통째로 끌어오면 이름 충돌 가능성만 는다.
 /// `input.zig`가 open/read를, `pty.zig`가 execv를 이렇게 선언한 것과 같다.
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
+
+/// ioctl도 같은 이유로 직접 선언한다(PD-M0). 시그니처는 `drm.zig`가 받는
+/// `c_drm` 번역의 것과 같다. 요청 번호는 `pointer.zig`가 번역된 매크로로 짓는다.
+extern "c" fn ioctl(fd: c_int, request: c_ulong, ...) c_int;
+
+/// socket도 직접 선언한다. `std.c`에 있지만 공개가 아니다(PD-M0 plan 확정 4).
+/// 부팅 뒤에 꽂힌 포인터 장치를 커널의 uevent netlink 소켓으로 안다.
+extern "c" fn socket(domain: c_uint, sock_type: c_uint, protocol: c_uint) c_int;
 
 // 화면 여백을 칠할 색. 셀의 배경색은 이제 상수가 아니라 vt.zig가 셀마다
 // 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 바깥에만 쓴다.
@@ -1415,6 +1424,181 @@ fn dumpPane(
     });
 }
 
+// ── 포인터 장치(PD-M0) ───────────────────────────────────────────────
+//
+// 찾고 열고 읽고 닫는 시스템 콜 쪽이다. 판단(분류 · 디코딩 · 좌표)은 전부
+// `pointer.zig`에 있고 여기는 fd와 로그만 다룬다(PD design 결정 3).
+
+/// 포인터 장치를 찾는 디렉터리. 처음 훑기가 이것을 읽는다(design 결정 1).
+const POINTER_DIR = "/dev/input";
+/// `/dev/input/eventN`의 경로 버퍼. `event` 뒤 번호가 몇 자리여도 넉넉하다.
+const POINTER_PATH_MAX = 64;
+/// 장치 이름(`EVIOCGNAME`)의 버퍼. 로그에 찍기만 한다 — 판정은 이름을 안 본다.
+const POINTER_NAME_MAX = 64;
+
+/// 장치 칸 하나. 경로를 드는 이유는 둘이다 — 처음 훑기와 uevent가 겹쳐
+/// 같은 경로가 두 번 오면 건너뛰려고, 그리고 `close` 줄에 찍으려고.
+const PointerDev = struct {
+    fd: c_int,
+    path: [POINTER_PATH_MAX]u8,
+    path_len: usize,
+    mouse: pointer.Mouse = .{},
+
+    fn pathSlice(self: *const PointerDev) []const u8 {
+        return self.path[0..self.path_len];
+    }
+};
+
+/// 한 poll 회차의 포인터 이벤트 요약. 회차가 끝나면 `at` 줄 하나가 된다.
+const PointerRound = struct {
+    frames: usize = 0,
+    wheel: i32 = 0,
+};
+
+/// 연 fd에 성질을 묻는다. 하나라도 실패하면 null이다 — 분류할 수 없는
+/// 장치라 열지 않는다. sysfs가 아니라 ioctl인 이유는 design 결정 1이다.
+fn readCaps(fd: c_int) ?pointer.Caps {
+    var caps: pointer.Caps = .{};
+    if (ioctl(fd, pointer.eviocgbit(0, caps.ev.len), &caps.ev) < 0) return null;
+    if (ioctl(fd, pointer.eviocgbit(pointer.c.EV_KEY, caps.key.len), &caps.key) < 0) return null;
+    if (ioctl(fd, pointer.eviocgbit(pointer.c.EV_REL, caps.rel.len), &caps.rel) < 0) return null;
+    if (ioctl(fd, pointer.eviocgbit(pointer.c.EV_ABS, caps.abs.len), &caps.abs) < 0) return null;
+    if (ioctl(fd, pointer.eviocgprop(caps.prop.len), &caps.prop) < 0) return null;
+    return caps;
+}
+
+/// `/dev/input/<name>`을 열어 보고 마우스면 빈 칸에 넣는다(design 결정 1 · 2).
+/// 처음 훑기와 uevent의 `add`가 이 함수 하나를 지난다.
+///
+/// `O_NONBLOCK`인 이유. 키보드(`input.openDevice`)는 블로킹이고 poll이 깨운
+/// 뒤 한 번만 읽는다. 포인터는 한 회차에 쌓인 것을 다 읽고 `EAGAIN`에서
+/// 멈춰야 회차마다 `at` 줄이 하나다(design 결정 3). `O_CLOEXEC`는 패널의
+/// 셸이 이 fd를 물려받지 않게 한다.
+///
+/// 줄의 `name=`은 언제나 맨 끝이다. 이름에 공백이 들어 있어서다.
+///
+/// PD-M0은 마우스만 연다. 분류가 `touchpad`를 내도 `skip`이다 — 터치패드
+/// 디코더는 PD-M3이 더한다.
+fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) void {
+    var path_buf: [POINTER_PATH_MAX]u8 = undefined;
+    const path = std.fmt.bufPrintZ(&path_buf, POINTER_DIR ++ "/{s}", .{name}) catch return;
+    for (devs) |slot| {
+        const d = slot orelse continue;
+        if (std.mem.eql(u8, d.pathSlice(), path)) return;
+    }
+    const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true });
+    if (fd < 0) {
+        std.debug.print("terminal: pointer> skip {s} error={s}\n", .{ path, @tagName(std.c.errno(fd)) });
+        return;
+    }
+    const caps = readCaps(fd) orelse {
+        std.debug.print("terminal: pointer> skip {s} error=ioctl\n", .{path});
+        _ = std.c.close(fd);
+        return;
+    };
+    var name_buf: [POINTER_NAME_MAX]u8 = @splat(0);
+    _ = ioctl(fd, pointer.eviocgname(name_buf.len), &name_buf);
+    // 커널은 NUL까지 쓰지만, 이름이 버퍼보다 길면 잘린 채 NUL이 없다.
+    name_buf[name_buf.len - 1] = 0;
+    const dev_name = std.mem.sliceTo(&name_buf, 0);
+
+    const kind = pointer.classify(&caps);
+    if (kind != .mouse) {
+        std.debug.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
+        _ = std.c.close(fd);
+        return;
+    }
+    const free = for (devs, 0..) |slot, i| {
+        if (slot == null) break i;
+    } else {
+        std.debug.print("terminal: pointer> skip {s} full name={s}\n", .{ path, dev_name });
+        _ = std.c.close(fd);
+        return;
+    };
+    devs[free] = .{ .fd = fd, .path = undefined, .path_len = path.len };
+    @memcpy(devs[free].?.path[0..path.len], path);
+    // `shown=0`은 화살표가 아직 안 보인다는 뜻이다. 열린 뒤 움직여야 보인다
+    // (design 결정 4의 보이는 조건 2). PD-M0은 아예 안 그리므로 언제나 0이다.
+    std.debug.print("terminal: pointer> open {s} kind=mouse shown=0 name={s}\n", .{ path, dev_name });
+}
+
+/// 부팅 때 이미 있던 장치를 훑는다. uevent 소켓을 연 뒤에 부른다 — 반대면
+/// 훑은 뒤 소켓을 열기 전에 생긴 장치를 놓친다(design 결정 1). 실패해도 terminal은
+/// 산다. 포인터 없이 키보드만으로 지금처럼 쓴다.
+fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
+    var dir = std.Io.Dir.openDirAbsolute(io, POINTER_DIR, .{ .iterate = true }) catch |err| {
+        std.debug.print("terminal: pointer> scan failed error={s}\n", .{@errorName(err)});
+        return;
+    };
+    defer dir.close(io);
+    var it = dir.iterate();
+    // `event`로 시작하는 이름만 본다. `mice` · `mouseN`은 evdev 이전의
+    // 통로이고 `INPUT_MOUSEDEV`가 꺼져 있어 생기지도 않는다(design 실측 6).
+    while (it.next(io) catch null) |entry| {
+        if (std.mem.startsWith(u8, entry.name, "event")) tryOpenPointer(devs, entry.name);
+    }
+}
+
+/// uevent 소켓에 쌓인 것을 다 읽는다. 부팅 뒤에 꽂힌 장치가 여기로 온다.
+///
+/// datagram 하나가 uevent 하나다. 무엇을 열지는 `pointer.ueventAddedNode`가
+/// 가른다(`ACTION=add` · `SUBSYSTEM=input` · `DEVNAME=input/eventN`).
+/// devtmpfs는 노드를 만든 뒤에 uevent를 보내므로 그때 노드가 이미 있다
+/// (PD-M0 plan 확정 7).
+///
+/// `remove`는 안 본다. 빠진 장치는 그 fd의 `POLLERR` · `POLLHUP` · `ENODEV`로
+/// 안다(design 결정 1). read가 `ENOBUFS`면 소켓 버퍼가 넘쳐 커널이 메시지를
+/// 버린 것이다 — 놓친 장치가 있을 수 있으므로 디렉터리를 다시 훑는다. 이미
+/// 연 경로는 건너뛴다.
+fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
+    // 커널 uevent 하나는 `UEVENT_BUFFER_SIZE`(2048바이트) 안이다.
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = std.c.read(fd, &buf, buf.len);
+        if (n < 0) {
+            if (std.c.errno(n) != .NOBUFS) return; // EAGAIN — 다 읽었다
+            scanPointers(io, devs);
+            continue;
+        }
+        if (n == 0) return;
+        const name = pointer.ueventAddedNode(buf[0..@intCast(n)]) orelse continue;
+        tryOpenPointer(devs, name);
+    }
+}
+
+/// 열린 장치에서 읽을 것을 다 읽어 `Pointer`에 적용한다. `EAGAIN`에서 멈춘다.
+/// 장치가 사라졌으면(`ENODEV` 등) `.gone`이다.
+///
+/// read를 열여섯 번까지만 한다. 장치가 쉬지 않고 이벤트를 내도 이 회차가
+/// 끝나야 키보드와 PTY가 돈다 — 남은 것은 다음 poll이 다시 알린다.
+fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *PointerRound) enum { open, gone } {
+    const ev_size = @sizeOf(pointer.c.struct_input_event);
+    var raw: [ev_size * 64]u8 = undefined;
+    for (0..16) |_| {
+        const n = std.c.read(dev.fd, &raw, raw.len);
+        if (n < 0) return if (std.c.errno(n) == .AGAIN) .open else .gone;
+        if (n == 0) return .gone;
+        const count = @as(usize, @intCast(n)) / ev_size;
+        for (0..count) |i| {
+            const ev: *align(1) const pointer.c.struct_input_event = @ptrCast(&raw[i * ev_size]);
+            const frame = dev.mouse.feed(ev.type, ev.code, ev.value) orelse continue;
+            const e = state.apply(slot, frame);
+            round.frames += 1;
+            round.wheel +|= e.wheel;
+        }
+    }
+    return .open;
+}
+
+/// 장치 칸을 비운다. 그 장치가 누르고 있던 버튼도 놓는다(`Pointer.forget`).
+fn closePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, slot: usize, state: *pointer.Pointer) void {
+    const d = &devs[slot].?;
+    std.debug.print("terminal: pointer> close {s}\n", .{d.pathSlice()});
+    _ = std.c.close(d.fd);
+    _ = state.forget(@intCast(slot));
+    devs[slot] = null;
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -1653,15 +1837,53 @@ pub fn main(init: std.process.Init) !void {
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
 
-    // poll이 보는 fd. 키보드 하나와 모든 워크스페이스의 모든 패널이다
-    // (WP design 위험 1). 포커스 없는 워크스페이스의 PTY도 읽어야 한다 —
-    // 안 읽으면 그 셸이 출력 버퍼에 막혀 멈춘다.
+    // 포인터 장치(PD-M0). 키보드와 달리 terminal이 스스로 찾고, 부팅 뒤에
+    // 꽂힌 것도 잡는다(PD design 결정 1). init의 `argv[4]`는 그대로다.
     //
-    // 크기는 상한(1 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수가
-    // 분할 · 닫기로 바뀌므로 매 바퀴 다시 짓는다 — 73칸을 채우는 비용은 없고,
+    // 부팅 뒤의 장치는 커널의 uevent로 안다. udev가 듣는 것과 같은 netlink
+    // 소켓이고 커널 config가 더 필요 없다 — inotify를 켜면 initramfs 풀기가
+    // 느려진다(PD-M0 plan 확정 7). 소켓을 먼저 열고 그다음에 훑는다.
+    //
+    // 소켓이 실패해도 terminal은 산다 — 부팅 때 있던 장치만 쓰고 핫플러그를
+    // 잃는다. 그때 `uevent_fd`는 -1이고 poll은 음수 fd를 건너뛴다.
+    var pointer_devs: [pointer.MAX_DEVICES]?PointerDev = @splat(null);
+    var pointer_state = pointer.Pointer.init(fb.width, fb.height);
+    const uevent_fd: c_int = uevent: {
+        const linux = std.os.linux;
+        const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
+        if (fd < 0) {
+            std.debug.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(fd))});
+            break :uevent -1;
+        }
+        // 그룹 1이 커널이 보내는 uevent다(그룹 2는 udevd가 다시 보내는 것). pid
+        // 0은 소켓의 주소를 커널이 고르게 한다.
+        const addr: linux.sockaddr.nl = .{ .pid = 0, .groups = 1 };
+        const rc = std.c.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.nl));
+        if (rc < 0) {
+            std.debug.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(rc))});
+            _ = std.c.close(fd);
+            break :uevent -1;
+        }
+        break :uevent fd;
+    };
+    scanPointers(init.io, &pointer_devs);
+
+    // poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,
+    // 그리고 모든 워크스페이스의 모든 패널이다(WP design 위험 1). 포커스 없는
+    // 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
+    // 멈춘다.
+    //
+    // 크기는 상한(1 + 1 + 8 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
+    // 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
     // "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
-    var fds: [1 + MAX_WORKSPACES * layout.MAX_LEAVES]c.struct_pollfd = undefined;
-    // `fds[i + 1]`이 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
+    //
+    // 자리는 `[0]` 키보드 · `[1]` uevent 소켓 · `[2..pty_base]` 포인터 장치 ·
+    // `[pty_base..nfds]` PTY다. PD 전에는 PTY가 `[1..]`이었다 — 그 오프셋이
+    // 이제 바퀴마다 다르므로 `pty_base`로 든다.
+    var fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES]c.struct_pollfd = undefined;
+    // `fds[2 + k]`가 어느 장치 칸의 것인지.
+    var fd_devs: [pointer.MAX_DEVICES]usize = undefined;
+    // `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
     // 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
     //
     // 워크스페이스 번호와 잎 번호를 함께 드는 이유는 EOF다(WP-M1). 그
@@ -1673,13 +1895,21 @@ pub fn main(init: std.process.Init) !void {
 
     main_loop: while (true) {
         fds[0] = .{ .fd = keyboard_fd, .events = c.POLLIN, .revents = 0 };
-        var nfds: usize = 1;
+        fds[1] = .{ .fd = uevent_fd, .events = c.POLLIN, .revents = 0 };
+        var nfds: usize = 2;
+        for (&pointer_devs, 0..) |*slot, di| {
+            const d = if (slot.*) |*d| d else continue;
+            fds[nfds] = .{ .fd = d.fd, .events = c.POLLIN, .revents = 0 };
+            fd_devs[nfds - 2] = di;
+            nfds += 1;
+        }
+        const pty_base = nfds;
         for (&workspaces, 0..) |*slot, wi| {
             const w = if (slot.*) |*w| w else continue;
             for (&w.panes, 0..) |*pane_slot, leaf| {
                 const pane = if (pane_slot.*) |*pane| pane else continue;
                 fds[nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
-                fd_panes[nfds - 1] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
+                fd_panes[nfds - pty_base] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
                 nfds += 1;
             }
         }
@@ -1942,6 +2172,34 @@ pub fn main(init: std.process.Init) !void {
             }
         }
 
+        // 포인터 장치(PD-M0). 키보드 뒤 · PTY 앞이다(design 결정 3).
+        //
+        // 빠진 장치를 uevent보다 먼저 닫는다. 빠진 번호가 곧바로 다시 쓰이면
+        // 옛 칸의 경로가 남아 새 장치를 "이미 열었다"로 건너뛰기 때문이다.
+        //
+        // `POLLERR` · `POLLHUP`이면 읽지 않고 닫는다. 이것을 빠뜨리면 poll이
+        // 그 fd에 대해 매 바퀴 즉시 돌아와 terminal이 CPU를 다 쓴다(design
+        // 결정 1).
+        var round: PointerRound = .{};
+        for (fds[2..pty_base], fd_devs[0 .. pty_base - 2]) |pfd, di| {
+            if (pfd.revents == 0) continue;
+            var gone = pfd.revents & (c.POLLERR | c.POLLHUP) != 0;
+            if (!gone and pfd.revents & c.POLLIN != 0) {
+                gone = drainPointer(&pointer_devs[di].?, @intCast(di), &pointer_state, &round) == .gone;
+            }
+            if (gone) closePointer(&pointer_devs, di, &pointer_state);
+        }
+        if (fds[1].revents & c.POLLIN != 0) drainUevents(uevent_fd, init.io, &pointer_devs);
+        // 회차마다 한 줄이다. 이벤트마다 찍으면 마우스의 보고 빈도(수백 Hz)가
+        // 그대로 줄 수가 된다(design 결정 3). PD-M0은 그리지 않으므로
+        // `needs_redraw`를 안 켠다 — 화면이 한 픽셀도 안 바뀐다. 그래서
+        // `shown`과 `ink`는 상수 0이다. PD-M1이 둘을 채운다(design 결정 10).
+        if (round.frames > 0) {
+            std.debug.print("terminal: pointer> at x={d} y={d} buttons={d} wheel={d} shown=0 ink=0\n", .{
+                pointer_state.x, pointer_state.y, pointer_state.buttons.bits(), round.wheel,
+            });
+        }
+
         // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
         // 남은 출력이 있으면 POLLIN과 함께 오지만 다 읽고 나면 POLLHUP만
         // 남으므로, POLLIN만 보면 read를 영영 호출하지 못하고 poll이 즉시
@@ -1950,7 +2208,7 @@ pub fn main(init: std.process.Init) !void {
         //
         // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
         // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
-        for (fds[1..nfds], fd_panes[0 .. nfds - 1]) |pfd, ref| {
+        for (fds[pty_base..nfds], fd_panes[0 .. nfds - pty_base]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
             const pane = ref.pane;
             const out = pty.readSome(pane.session.master_fd, &pty_buf);

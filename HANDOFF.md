@@ -1,6 +1,40 @@
-# HANDOFF: Paste Ergonomics(PE)가 M0~M2로 닫혔다 — 다음 서브프로젝트를 고른다
+# HANDOFF: Pointer Devices(PD)가 열렸다 — M0이 닫혔고 M1 plan이 저장소에 있다
 
-## 지금 어디인가
+## 지금 어디인가(2026-10-05, 진행 중)
+
+사용자의 요청("마우스 포인터 · 드래그 선택 · 터치패드")으로 2026-10-05에 열었다. 사용자는 결정권을 lead(Fable)에게
+위임하고 자리를 비웠다. design은 `docs/specs/2026-10-05-tars-pointer-devices-design.md`(Opus 서브에이전트가 썼고
+lead가 `ink` 정의 하나를 고쳤다, commit `0c2e6f5`, 결정 11 · 위험 8 · 비목표 13 · 실측 15). Milestone은 M0 탐색 ·
+읽기 · 로그 / M1 화살표 · 휠 / M2 클릭 · 드래그 · 복사 / M3 터치패드(커널 + 상태 기계 + uinput 게이트).
+
+| 커밋 | 무엇 |
+|---|---|
+| `0c2e6f5` | design |
+| (M0 커밋) | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
+
+M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inotify로 받았고 게스트 커널에 `INOTIFY_USER`가 없어 한 줄을
+켰는데, 그것이 `FSNOTIFY`를 끌어와 initramfs 풀기를 TCG에서 2.6초 → 3.8초로 늦췄고 `install` 체인 부팅 7
+(`usb-storage.delay_use=3`)의 창이 닫혀 루트 게이트가 두 번 빨갰다. lead의 결정으로 netlink uevent(`NETLINK_KOBJECT_UEVENT`,
+커널 config 불필요)로 바꿨다. 과정과 표는 M0 plan "착수 전에 확정한 것" 7과 "PD-M0이 실측한 것" 7~10에 있다.
+
+바로 다음: PD-M1(화살표 · 휠, Sonnet 구현). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m1.md`(Opus planner,
+2,161줄, 아직 commit 전)이고, 측정은 inotify 판 M0 위에서 한 것이라 M0 commit 뒤 planner가 앵커 · `pointer/check.sh`의 M0
+부분 · 체인 · regression을 재대조한다(plan 확정 13). 그 뒤 Sonnet 구현자 → 체인 · mutation 다섯 → 루트 게이트 → commit.
+lead가 M1에서 정한 것 둘: 화살표를 숨기는 자리는 `keys.bytes` 하나(`Cmd+V` · 질의 답은 안 숨긴다) · 마지막 장치가 빠지면
+"움직였다" 조건도 꺼진다(design 결정 4에 닫을 때 덧붙인다).
+
+측정 파일: `/tmp/run/mp0`(lead 실측) · `/tmp/run/pdm0`(M0 planner · 구현자 · `inst/`에 install 재현 로그) ·
+`/tmp/run/pdm1`(M1 planner, 저장소 사본 `repo/`).
+
+lessons에 남길 것(닫을 때): `INOTIFY_USER`를 켜면 `FSNOTIFY`가 initramfs 풀기를 1.2초 늦춰 `install` 부팅 7의 창이 닫힌다 ·
+OrbStack VM 4GB에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU가 겹치면 OOM(exit 137)이나 VM 재시작 — docker 작업은
+한 번에 하나 · `sendkey colon`은 없는 이름(`shift-semicolon`) · 게스트에 `od` · `xxd` · `timeout`이 없어 바이트는
+`head -c N | cat -v` · `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다 · 새 체인 포트는
+45488부터(45481~45487은 service · pane이 쓴다) · ioctl 매크로(`EVIOCGBIT` 등)는 ZU-M1의 translate-c가 inline fn으로
+넘긴다(HD 조사 6은 `@cImport` 시절의 사실).
+
+### 그 앞 — Paste Ergonomics(PE)가 M0~M2로 닫혔다
+
 
 2026-10-04 GE를 닫은 직후 열어 같은 날 닫았다. GE가 남긴 둘(터미널의 bracketed paste · 사용자 vimrc
 영속)에 루트 게이트를 흔들던 `service` 체인 경합 하나를 M0으로 묶었다. design은
