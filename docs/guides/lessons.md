@@ -184,7 +184,7 @@ SIGPIPE를 안 받는다.
 고쳐야 한다.
 
 `linked /dev/fd to /proc/self/fd`(BH-M2. `config/check.sh`의 1차가 본다) ·
-`config shell=… net=… ntp=… timezone=… firewall=…`(키를 더할 때는 맨 뒤에 붙인다. `net/check.sh`의
+`config shell=… net=… ntp=… timezone=… firewall=… esc_latin=…`(키를 더할 때는 맨 뒤에 붙인다 — EL-M0이 `esc_latin=`을 그렇게 붙였다. `net/check.sh`의
 검사 3이 `config shell=.* net=dhcp`로 본다 — 앞부분을 고치면 다른 체인들의
 grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 부팅도 침묵하지 않는다) · `started dhcpcd (pid N), it picks the interface`(WN-M2. `net` · `nic`가 보고,
@@ -1008,7 +1008,8 @@ PD(2026-10-05)가 남긴 것.
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
 다시 집게 되면 `docs/specs/2026-08-31-tars-hangul-input-design.md`
-의 비목표 절이 그 둘을 그대로 갖고 있다.
+의 비목표 절이 그 둘을 그대로 갖고 있다. 그중 `ESC라틴` trait은 2026-10-05에
+사용자가 다시 집어 EL-M0이 했다(`esc_latin=on|off`, [[project_escape_latin]]).
 
 렌더 쪽 — 둘 다 미룬 것이고 근거가 있다.
 

@@ -274,6 +274,11 @@ hangul_toggle = hangul_key,shift_space,capslock_tap,lctrl_tap   # 콤마로 여�
 
 런타임 전환은 안 한다. 한 부팅 동안 자판은 고정이다.
 
+> 2026-10-05 덧붙임(EL-M0). Esc가 한글을 끄는 한 방향 전환이 더해졌는데 이 목록의 다섯째 이름이
+> 아니라 따로 있는 키 `esc_latin=on|off`다. `save()`가 쓰는 seed에 위 네 이름이 글자 그대로 있어서,
+> 목록에 이름을 더하면 이미 있는 설정 파일에서는 꺼진 채로 뜨기 때문이다. terminal에는 이 목록
+> 문자열 끝에 `esc_latin`을 붙여 넘긴다(`Config.terminalToggles`). [[project_escape_latin]].
+
 ### 8. tap-vs-hold는 뗄 때 판단한다
 
 CapsLock과 왼쪽 Ctrl이 짧게 누르면 한/영, 길게 누르면 원래 뜻이다. 규칙은 셋이다.

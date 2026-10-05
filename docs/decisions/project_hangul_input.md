@@ -290,6 +290,13 @@ HI-M0의 Task 5부터 편집도 Claude Code가 했다. 사용자가 이 영역�
 CC-M0의 규율을 그대로 썼다 — 매 편집 뒤 `git diff --stat`으로 줄 수를 세고
 지우는 편집은 `git diff | grep '^-'`로 내용을 직접 읽었다.
 
+## 2026-10-05 — EL이 전환 키 다섯째를 따로 있는 키로 더했다
+
+Esc가 한글을 끄는 한 방향 전환(Patal의 `ESC라틴`)이 [[project_escape_latin]]으로
+들어왔다. `hangul_toggle` 목록에 넣지 않은 이유가 이 기억의 HI-M3 절과 맞닿는다 —
+기본값 넷을 seed가 글자 그대로 적어 두므로, 목록에 이름을 더하면 이미 있는
+설정 파일에서는 꺼진 채로 뜬다.
+
 관련: [[project_input_policy]] · [[project_terminal_rendering]] ·
 [[project_config_persistence]] · [[project_target_hardware]] ·
-[[project_gate_chain_composition]]
+[[project_gate_chain_composition]] · [[project_escape_latin]]
