@@ -10,7 +10,7 @@ lead가 `ink` 정의 하나를 고쳤다, commit `0c2e6f5`, 결정 11 · 위험 
 | 커밋 | 무엇 |
 |---|---|
 | `0c2e6f5` | design |
-| (M0 커밋) | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
+| `8f8a030` | PD-M0 — `pointer.zig`(`classify` · `Mouse` 디코더 · `Pointer` clamp · `ueventAddedNode`) · `pointer_test`(OK 53) · `main.zig`의 netlink uevent 소켓 · 장치 칸 여덟 · poll 배열 `pty_base` · `pointer>` 줄 넷 · 열아홉번째 체인 `pointer/check.sh`(포트 45488, 검사 1~7) · 루트 게이트 19체인 3/3(1시간 8분 39초). 커널은 안 바뀌었다 |
 
 M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inotify로 받았고 게스트 커널에 `INOTIFY_USER`가 없어 한 줄을
 켰는데, 그것이 `FSNOTIFY`를 끌어와 initramfs 풀기를 TCG에서 2.6초 → 3.8초로 늦췄고 `install` 체인 부팅 7
@@ -20,6 +20,7 @@ M0에서 배운 것 하나가 크다. plan의 처음 판은 핫플러그를 inot
 바로 다음: PD-M1(화살표 · 휠, Sonnet 구현). plan은 `docs/plans/2026-10-05-tars-pointer-devices-pd-m1.md`(Opus planner,
 2,161줄, 아직 commit 전)이고, 측정은 inotify 판 M0 위에서 한 것이라 M0 commit 뒤 planner가 앵커 · `pointer/check.sh`의 M0
 부분 · 체인 · regression을 재대조한다(plan 확정 13). 그 뒤 Sonnet 구현자 → 체인 · mutation 다섯 → 루트 게이트 → commit.
+사용자의 결정(2026-10-05): 루트 게이트는 M1까지 3회, M2부터 2회(`docs/decisions/feedback_gate_runs.md` — M1 commit 뒤 별도 commit으로 `check.sh`를 고친다).
 lead가 M1에서 정한 것 둘: 화살표를 숨기는 자리는 `keys.bytes` 하나(`Cmd+V` · 질의 답은 안 숨긴다) · 마지막 장치가 빠지면
 "움직였다" 조건도 꺼진다(design 결정 4에 닫을 때 덧붙인다).
 
