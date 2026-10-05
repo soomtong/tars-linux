@@ -152,6 +152,12 @@ Meta 분기 안에서 `shifted()`를 한 번 더 보는 예외가 생기는데, 
 단일 프로세스가 디스플레이를 독점하는 구조(TF design 결정 1)에서는 이것으로
 충분하다.
 
+> 2026-10-05 덧붙임(CB-M0). 뒤 절반이 바뀌었다 — WP가 패널마다 `Screen`을 두면서 클립보드가
+> 패널 수만큼 생겨서, 클립보드의 주인을 `main.zig`로 옮겼다(`clipboard.zig`의 `Clipboard`, `Clips.of`가
+> 칸을 고른다). 선택은 그대로 `vt.zig`에 있고 `copyYank`는 글자를 뽑아 받은 칸에 넣기만 한다.
+> 기본은 terminal 전체에 하나(`shared`)이고 `tars.conf`의 `clipboard=pane`이 옛 동작이다.
+> [[project_clipboard_scope]].
+
 ### 결정 6. 선택 렌더는 `RenderState.Row.selection`을 읽는 것으로 끝낸다
 
 `cells()`가 `row_data.items(.selection)`에서 그 행의 `[start, end]`를 읽고,

@@ -62,7 +62,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487). 새 체인은 45490부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). 새 체인은 45491부터 쓴다.
 
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
@@ -184,7 +184,7 @@ SIGPIPE를 안 받는다.
 고쳐야 한다.
 
 `linked /dev/fd to /proc/self/fd`(BH-M2. `config/check.sh`의 1차가 본다) ·
-`config shell=… net=… ntp=… timezone=… firewall=… esc_latin=…`(키를 더할 때는 맨 뒤에 붙인다 — EL-M0이 `esc_latin=`을 그렇게 붙였다. `net/check.sh`의
+`config shell=… net=… ntp=… timezone=… firewall=… esc_latin=… clipboard=…`(키를 더할 때는 맨 뒤에 붙인다 — EL-M0이 `esc_latin=`을, 같은 날 CB-M0이 `clipboard=`를 그렇게 붙였다. 그리고 이 줄의 판정을 줄 끝 `$`에 고정하지 않는다 — EL이 `esc_latin=on$`로 고정했다가 CB가 뒤에 키를 붙이자 hangul 체인이 깨졌다. 경계는 `( |$)`다, `hangul/check.sh`의 `toggles=` 판정처럼. `terminal: clipboard scope=`는 짝인 terminal 줄이다. `net/check.sh`의
 검사 3이 `config shell=.* net=dhcp`로 본다 — 앞부분을 고치면 다른 체인들의
 grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 부팅도 침묵하지 않는다) · `started dhcpcd (pid N), it picks the interface`(WN-M2. `net` · `nic`가 보고,
@@ -1004,6 +1004,10 @@ PD(2026-10-05)가 남긴 것.
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
       판정한다(IN 비목표 3 · FW 비목표 3).
+- [ ] seed `tars.conf`의 `ntp:` 주석이 TD 전의 설명("부팅할 때 한 번만 묻고")으로 남아
+      있다(EL-M0 planner가 찾았다). 고치면 seed의 글자가 바뀌어 `config` 체인을 함께 본다.
+      seed는 EL · CB 뒤 48줄이라 게스트 화면 47줄을 넘는다 — 키를 더하는 사람은 `config`
+      1차의 `| shell_config=on`(25번째 줄)이 화면에 남는지 함께 본다.
 
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
@@ -1093,6 +1097,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
   `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가
   안 바뀐다. `split`은 크기를 보려고 격자 전체(`whole`)를 받는다.
+- `clipboard.zig` — 클립보드 칸과 범위(CB-M0). 순수 모듈이고 `clipboard_test`가
+  호스트에서 본다(누수는 `DebugAllocator`). `Clipboard.set`이 옛것을 해제하므로
+  `text()`가 준 슬라이스는 다음 `set`까지만 유효하다. 칸을 고르는 판단은
+  `pick(scope, shared, own)` 한 줄이고 `main.zig`의 `Clips.of`가 그것을 부른다 —
+  `y` · 포인터 뗌 · `Cmd+V` · 검색창 붙여넣기 넷이 전부 `Clips`를 지난다.
+  `vt.Screen`에는 클립보드가 없다(`copyYank(clip)`이 받은 칸에 넣는다).
 - `drm.zig` · `pty.zig` — 프레임버퍼와 PTY. `drm.zig`·`main.zig`·`pty.zig`
   세 자리에서 fortify를 끈다(`_FORTIFY_SOURCE=0`, `// GL-M3` 표식). 이유는
   `drm.zig`에만 길게 적혀 있고 나머지 둘은 그 자리를 가리킨다. `setPixel`·

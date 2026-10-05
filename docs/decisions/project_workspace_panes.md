@@ -61,6 +61,7 @@ lead가 파일을 직접 대조한 뒤 commit했다 — "만들었다"는 보고
   ([[project_gate_screen_echo]]).
 
 열지 않은 것: M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor`), 패널 간
-클립보드(지금은 `vt.Screen`마다 하나), 비율 조절, 세션 복원. M1이 바꾼
+클립보드(지금은 `vt.Screen`마다 하나 — CB가 2026-10-05에 `main.zig`로 올렸다,
+[[project_clipboard_scope]]), 비율 조절, 세션 복원. M1이 바꾼
 `Cmd+Shift+←·→·Backspace`(Shift를 무시하던 것이 맨 키로)는 사용자가 그대로
 두기로 했다.

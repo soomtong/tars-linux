@@ -1,43 +1,49 @@
-# HANDOFF: Escape Latin(EL)이 닫혔고 Clipboard Scope(CB)가 구현 전이다
+# HANDOFF: Escape Latin(EL)과 Clipboard Scope(CB)가 같은 날 닫혔다 — 다음 서브프로젝트를 고른다
 
 ## 지금 어디인가
 
 2026-10-05 사용자의 요청 둘("터미널 패널이나 워크스페이스 사이 clipboard를 공유해서 사용하는 옵션; 기본적으로 전체
-공유 활성화" · "esc키 누르면 한글 자판인 경우 영문자판으로 전환; vim 사용할 때 큰 도움이 됨")을 서브프로젝트 둘로
-열었다. 사용자는 "별도 도메인"이라 했고 "안전하게 순차 진행해도 좋다"고 정했다. 지시는 PD와 같다 — "계획 수립과 구현
-방법 그리고 구현 작업에 목적에 맞는 모델을 사용하는 서브 에이전트를 할당".
+공유 활성화" · "esc키 누르면 한글 자판인 경우 영문자판으로 전환; vim 사용할 때 큰 도움이 됨")을 서브프로젝트 둘로 열어
+같은 날 닫았다. 사용자는 "별도 도메인"이라 했고 "안전하게 순차 진행해도 좋다"고 정했다. 지시는 PD와 같다 — "계획
+수립과 구현 방법 그리고 구현 작업에 목적에 맞는 모델을 사용하는 서브 에이전트를 할당".
 
-- Escape Latin(EL) — 끝났다. design `docs/specs/2026-10-05-tars-escape-latin-design.md`(결정 4 · 위험 4 · 비목표 6 ·
-  실측 8), plan `-el-m0.md`(끝의 "실측한 것"이 값). 기억 `docs/decisions/project_escape_latin.md`. commit `dfd761a`(M0) ·
-  이 commit(닫기). planner가 lead의 권고(전환 키 목록의 다섯째 이름)를 seed를 읽고 뒤집었다 — 따로 있는 키 `esc_latin`.
-  루트 게이트 19체인 2/2, 50분 58초.
-- Clipboard Scope(CB) — design과 plan이 있고 구현 전이다. design `docs/specs/2026-10-05-tars-clipboard-scope-design.md`
-  (결정 6 · 위험 5 · 비목표 7 · 실측 10), plan `-cb-m0.md`(편집 88과 새 파일 둘). 둘 다 commit 전이다. 요청의 전제를
-  바로잡았다 — 지금 클립보드는 워크스페이스가 아니라 패널마다 따로다(`vt.Screen.clip`). 모양은 새 순수 모듈
-  `clipboard.zig` · `main.zig`의 `Clips` · `tars.conf`의 `clipboard=shared|pane`(기본 `shared`) · argv 아홉째 칸
-  (`[8:null]` → `[9:null]`, 자리 여섯) · pane 체인 검사 10~15와 부팅 B(설정 디스크 `clipboard=pane`, 포트 45490).
-  plan은 HEAD `5acc735` 기준으로 썼고, EL-M0 commit 뒤 planner가 새 HEAD로 앵커를 다시 뽑는 중이다(겹치는 블록 셋 —
-  config 로그 줄 끝 · terminal argv · `config_test`의 expect).
+| 커밋 | 무엇 |
+|---|---|
+| `dfd761a` | EL-M0 — `hangulLayer`의 Esc 갈래(확정 · 끄기 · null) · `readKeys`의 `hangul_on` 앞뒤 비교 · `tars.conf`의 `esc_latin=on\|off`(따로 있는 키, argv는 전환 키 목록 끝에 이름을 붙여) · hangul 검사 21~24(24는 실제 vim). 구현 Sonnet. 루트 게이트 19체인 2/2, 50분 58초 |
+| `a541411` | EL 닫기 — design Status · CLAUDE.md 표 · `project_escape_latin.md` · HI design 결정 7 덧붙임 · lessons · running-tars의 한/영 절 |
+| `1db4602` | CB-M0 — 순수 `clipboard.zig`(`Scope` · `Clipboard` · `pick`) · `vt.Screen`의 `clip`과 `clipboard()`를 지우고 `copyYank(clip)` · `findPaste(text)` · `main.zig`의 `Clips`(`of` · `yank` · `paste`) · `tars.conf`의 `clipboard=shared\|pane` · argv 아홉째 칸(`[8:null]` → `[9:null]` 여섯 자리) · pane 검사 10~15와 부팅 B(45490). 덤으로 EL의 `esc_latin=on$` 판정을 `( \|$)`로. 구현 Opus. 루트 게이트 19체인 2/2, 51분 15초 |
+| (이 커밋) | CB 닫기 — design Status · CLAUDE.md 표 · `project_clipboard_scope.md` · MEMORY.md · CM 결정 1과 WP 비목표 덧붙임 · 기억 둘 · running-tars의 클립보드 절 · lessons(포트 45490 · 로그 문구 · 줄 끝 앵커 · `clipboard.zig`) · HANDOFF |
 
-방식은 PD-M4와 같다. planner(Opus)가 저장소 밖 사본(`/tmp/run/el0` · `/tmp/run/cb0`)에서 컴파일 · 체인 · mutation까지
-돌린 뒤 `old_string` · `new_string`을 기계로 뽑고, 구현자가 글자 그대로 넣는다. 이번에는 서브에이전트 둘이 같은 시간에
-돌았으므로 컨테이너를 `/tmp/run/docker.lock`(mkdir로 잡고 rmdir로 푼다)으로 하나씩만 썼다 — `Killed`는 한 번도 안 났다.
-루트 게이트가 도는 동안은 작업 트리 편집도 컨테이너도 금지다.
+design은 `docs/specs/2026-10-05-tars-escape-latin-design.md`(결정 4 · 위험 4 · 비목표 6 · 실측 8)와
+`-clipboard-scope-design.md`(결정 6 · 위험 5 · 비목표 7 · 실측 10), plan은 `-el-m0.md` · `-cb-m0.md`이고 각 끝의 "실측한 것"
+절이 값이다. 기억은 `docs/decisions/project_escape_latin.md` · `project_clipboard_scope.md`.
 
-## 바로 다음에 할 것 — CB-M0
+planner 둘이 lead의 전제를 하나씩 바로잡았다. EL — `hangul_toggle` 목록의 다섯째 이름이 아니라 따로 있는 키여야 한다
+(seed가 목록 넷을 글자 그대로 적어 두어 옛 설정 파일에서 꺼진 채로 뜬다). CB — 사용자의 "워크스페이스마다 독립"은 실제로
+패널마다였고, 그래서 옛 동작의 이름이 `pane`이다. 그리고 CB 구현자가 regression에서 EL의 판정 하나(`esc_latin=on$`,
+줄 끝 고정)가 다음 키에 깨지는 것을 잡았다 — lessons "로그 문구는 두 곳에 중복된다"에 적었다.
 
-1. planner-cb0의 재추출 보고를 받아 `python3 /tmp/run/cb0/anchors.py pre "$PWD"`가 `88 edits, 0 bad`인지 본다.
-2. 구현자(Opus)를 띄운다. plan의 Task 0~6. lock 규칙 그대로.
-3. 파일을 `/tmp/run/cb0/new/`와 `cmp`, 지운 줄을 읽고, 루트 게이트 2회(약 51분 + pane 부팅 하나 × 2).
-4. plan의 "CB-M0이 실측한 것"을 채우고 commit(경로를 하나씩 `git add`). 그다음 닫기 commit — design의 "닫을 때" 목록
-   (`Status:` · CLAUDE.md 표 · `project_clipboard_scope.md` · MEMORY.md · CM 결정 1과 WP 비목표에 한 줄 ·
-   `project_copy_mode.md` 선행 조건 3 · `project_workspace_panes.md` · running-tars의 `clipboard=` · lessons의 포트 45490과
-   로그 문구 둘과 핵심 파일 `clipboard.zig` · HANDOFF).
+방식은 PD-M4와 같되 서브에이전트 둘이 같은 시간에 돌았다. planner 둘(Opus)이 저장소 밖 사본(`/tmp/run/el0` · `/tmp/run/cb0`)
+에서 컴파일 · 체인 · mutation까지 돌리고 `old_string` · `new_string`을 기계로 뽑았고, 컨테이너는 `/tmp/run/docker.lock`
+(mkdir로 잡고 rmdir로 푼다)으로 하나씩만 썼다 — `Killed`는 한 번도 안 났다. 구현은 사용자의 결정으로 순차(EL → 루트 게이트
+→ commit → CB 앵커 재추출 → CB → 루트 게이트 → commit)였다. 두 구현자 모두 Edit 대신 plan 본문에서 블록을 기계로 뽑아
+넣었고(`/tmp/run/*/impl/apply.py`), 파일은 planner의 사본과 바이트까지 같았다.
 
-열어 둔 물음 하나: 범위 `workspace`(같은 워크스페이스 안에서만 나눈다)는 두지 않았다(CB design 비목표 1). 사용자의
-말 "워크스페이스가 독립"이 그 동작을 원한 것이면 그때 `Workspace`의 칸 · 닫을 때 해제 · `pick`의 셋째 갈래를 더한다.
+## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
 
-EL이 남긴 것: seed `tars.conf`의 `ntp:` 주석이 TD 전의 설명으로 남아 있다(고치면 `config` 체인을 함께 본다).
+후보는 아래 PD 절의 것들(더블클릭 단어 선택 · `tars.conf`의 휠 방향 · 포인터 가속 · ZU-M2 · 패키지 매니저 · IPv6 · USB 동글
+층 B · WP-M3 방향 포커스 · vim-runtime)에 이번에 열어 둔 둘이 더해진다.
+
+- CB 범위 `workspace`(같은 워크스페이스 안에서만 나눈다, design 비목표 1). 사용자가 "워크스페이스가 독립"이라 한 것이 그
+  동작을 원한 것이면 `Workspace`의 칸 · 닫을 때 해제 · `pick`의 셋째 갈래 셋을 더한다.
+- EL 비목표 — Shift+Esc와 `Ctrl+[`, 반대 방향(insert로 돌아갈 때 한글 되살리기), 패널마다 한/영.
+
+작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다. EL이 하나 더했다 — seed `tars.conf`의 `ntp:` 주석이 TD 전의
+설명으로 남아 있다(고치면 seed의 글자가 바뀌어 `config` 체인을 함께 본다). seed는 이제 48줄이라 게스트 화면 47줄을 넘는다 —
+다음에 키를 더하는 사람은 `config` 체인 1차의 `| shell_config=on`(25번째 줄) 검사를 함께 본다.
+
+측정 파일(저장소 밖, 지워도 된다): `/tmp/run/el0` · `/tmp/run/cb0`(planner · 구현자 사본과 로그) · `/tmp/gate_el0.log` ·
+`/tmp/gate_cb0.log`(루트 게이트 로그).
 
 ### 그 앞 — Pointer Devices(PD)가 M0~M4로 닫혔다
 

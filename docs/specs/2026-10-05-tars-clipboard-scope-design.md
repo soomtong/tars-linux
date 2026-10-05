@@ -1,7 +1,8 @@
 # TARS Clipboard Scope — Design
 
 Date: 2026-10-05
-Status: 설계 확정(2026-10-05). CB-M0 plan을 썼다. 구현 전이다.
+Status: 끝났다(2026-10-05, CB-M0). plan은 `docs/plans/2026-10-05-tars-clipboard-scope-cb-m0.md`이고 끝의 "실측한 것" 절이
+값이다. 루트 게이트 19체인 2/2, 51분 15초. 기억은 `docs/decisions/project_clipboard_scope.md`.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
