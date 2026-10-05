@@ -1122,6 +1122,52 @@ pub const Screen = struct {
             .{ .x = 0, .y = 0 };
     }
 
+    /// 포인터가 copy mode에 들어간다(PD design 결정 6). 커서를 `(x, y)`에 두고
+    /// 그 칸에서 문자 단위 선택을 시작한다. 좌표는 뷰포트 좌표이고 화면
+    /// 밖이면 가장자리 칸으로 붙인다(`copyMove`와 같은 규칙).
+    ///
+    /// 이미 copy mode면 먼저 나간다. 키보드로 들어가 `v`를 눌러 둔 상태에서
+    /// `copySelect(.char)`를 부르면 선택이 풀려 버린다(같은 방식을 다시 누르면
+    /// 푼다). 선택의 주인은 한 번에 하나이고, 끌기가 시작되면 끌기의 것이다.
+    ///
+    /// `copyEnter`를 부르지 않는다. 그 함수가 하는 일은 커서를 셸 커서 자리에
+    /// 두는 것뿐이고 여기서는 곧바로 덮어쓴다.
+    pub fn copyEnterAt(self: *Screen, x: u16, y: u16) !void {
+        if (self.copy_cursor != null) self.copyExit();
+        self.copy_cursor = self.copyClamp(x, y) orelse return;
+        try self.copySelect(.char);
+    }
+
+    /// 포인터가 선택 끝을 `(x, y)`로 옮긴다(PD design 결정 6). 화면 밖이면
+    /// 가장자리 칸으로 붙인다. copy mode가 아니면 아무 일도 안 한다.
+    ///
+    /// 칸이 같아도 다시 맞춘다. 끄는 중의 휠이 뷰포트를 밀면 같은 뷰포트
+    /// 칸이 다른 글자이고(design 결정 7), 그때 선택 끝이 따라가야 한다. 같은
+    /// 칸으로 여러 번 부르지 않는 것은 `pointer.Gesture`가 한다.
+    ///
+    /// 끝이 `copyMove`와 같은 모양이다 — 지금 선택의 start가 곧 앵커다(design
+    /// 결정 5). 그래서 끌어 만든 선택에서 `y`를 쳐도, 키보드로 만든 선택과
+    /// 같은 문자열이 나온다(`vt_test` 검사 97).
+    pub fn copyPointTo(self: *Screen, x: u16, y: u16) !void {
+        if (self.copy_cursor == null) return;
+        self.copy_cursor = self.copyClamp(x, y) orelse return;
+        if (self.copy_kind == null) return;
+        const sel = self.term.screens.active.selection orelse return;
+        const cursor = self.copyPin() orelse return;
+        try self.copyApply(sel.start(), cursor);
+    }
+
+    /// 뷰포트 좌표를 화면 안으로 붙인다. 화면 크기가 아직 0이면 null이다.
+    /// 격자 크기를 `pages`에서 읽는 이유는 `copyMove`의 주석에 있다.
+    fn copyClamp(self: *Screen, x: u16, y: u16) ?Cursor {
+        const pages = &self.term.screens.active.pages;
+        if (pages.cols == 0 or pages.rows == 0) return null;
+        return .{
+            .x = @min(x, @as(u16, @intCast(pages.cols - 1))),
+            .y = @min(y, @as(u16, @intCast(pages.rows - 1))),
+        };
+    }
+
     /// copy mode를 나간다. 선택도 함께 지운다 — 안 지우면 모드를 나간 뒤에도
     /// 반전된 띠가 화면에 남는다.
     pub fn copyExit(self: *Screen) void {

@@ -4,9 +4,9 @@
 //! 열고 읽는 것은 `main.zig`이고, 이 파일은 그 바이트를 받아 판단만 한다 —
 //! 그래서 `pointer_test`가 부팅 없이 같은 판단을 본다.
 //!
-//! 층은 셋이다. `classify`(이 장치를 열 것인가) → `Mouse`(raw `input_event`를
-//! `SYN_REPORT` 단위의 `Frame`으로) → `Pointer`(화면에 하나인 좌표와 버튼).
-//! 누름 · 끎 · 뗌을 의도로 바꾸는 `Gesture`는 PD-M2가 여기에 더한다.
+//! 층은 넷이다. `classify`(이 장치를 열 것인가) → `Mouse`(raw `input_event`를
+//! `SYN_REPORT` 단위의 `Frame`으로) → `Pointer`(화면에 하나인 좌표와 버튼) →
+//! `Gesture`(누름 · 끎 · 뗌 · 휠을 의도로, PD-M2).
 const std = @import("std");
 
 /// `input.zig`의 `c`와 같은 번역(`linux/input.h`)이다. `pub`인 이유도 같다 —
@@ -443,3 +443,204 @@ pub const Sprite = struct {
         return n;
     }
 };
+
+// ── 제스처(PD-M2) ─────────────────────────────────────────────────────
+//
+// 누름 · 끎 · 뗌 · 휠을 "포커스 옮김 · 선택 시작 · 선택 늘림 · 복사 · 스크롤"
+// 의도로 바꾼다(PD design 결정 3 · 6). 판단만 한다 — 패널도 화면도 모른다.
+// 의도를 실행하는 것은 `main.zig`이고, 그 실행이 바꾼 것(포커스가 옮겨졌다,
+// 키보드가 copy mode를 닫았다)은 `main.zig`가 다음 단계에 `Target`으로
+// 알려 준다.
+
+/// 패널 안의 칸 하나. `layout.Hit`과 같은 모양이다 — 이 파일은 `layout.zig`를
+/// import하지 않으므로(머리 주석) `main.zig`가 옮겨 담는다. `col` · `row`는
+/// 그 잎의 사각형 안의 상대 칸이고 `vt.Screen`이 아는 뷰포트 좌표다.
+pub const Cell = struct { leaf: u4, col: u16, row: u16 };
+
+/// 누른 패널이 지금 어떤 상태인가. `main.zig`가 단계마다 알려 준다.
+pub const Target = enum {
+    /// 누른 패널이 더는 포커스가 아니다. 누른 뒤 키보드가 포커스나
+    /// 워크스페이스를 옮겼거나, 그 패널이 닫혔다.
+    gone,
+    /// 포커스이고 copy mode가 아니다.
+    normal,
+    /// 포커스이고 copy mode다.
+    copy,
+};
+
+/// 끄는 중의 휠(design 결정 7). 누른 패널을 `notches` 눈금만큼 움직인다.
+/// 양수가 휠을 앞으로 민 것이고 위로 간다 — `Frame.wheel`과 같다.
+pub const Scroll = struct { leaf: u4, notches: i32 };
+
+/// `Gesture`가 내는 의도. `main.zig`의 switch가 `else` 없이 닫는다 —
+/// variant를 하나 더하면 컴파일러가 배선할 자리를 알려 준다(design 결정 3).
+pub const Intent = union(enum) {
+    /// 키보드 쪽 모드를 끝낸다. 조합 중인 한글을 확정하거나 버리고, 지금
+    /// 포커스 패널의 copy mode와 검색 프롬프트를 복사 없이 닫는다.
+    cancel,
+    /// 포커스를 이 잎으로 옮긴다.
+    focus: u4,
+    /// copy mode에 들어가며 이 칸에서 문자 단위 선택을 시작한다.
+    select_start: Cell,
+    /// 선택 끝을 이 칸으로 옮긴다. 칸이 같아도 다시 맞춘다 — 휠이 뷰포트를
+    /// 밀었으면 같은 칸이 다른 글자다.
+    select_to: Cell,
+    /// 누른 패널을 휠 눈금만큼 움직인다.
+    scroll: Scroll,
+    /// 이 잎의 선택을 클립보드에 넣고 copy mode를 나간다(`Cmd+C`와 같다).
+    copy: u4,
+};
+
+/// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `focus`,
+/// 첫 이동이 `select_start` · `select_to`, 누른 채 첫 휠이 `select_start` ·
+/// `scroll` · `select_to`다. 순서대로 실행한다.
+pub const Intents = struct {
+    buf: [3]Intent = undefined,
+    len: usize = 0,
+
+    fn push(self: *Intents, it: Intent) void {
+        self.buf[self.len] = it;
+        self.len += 1;
+    }
+
+    pub fn items(self: *const Intents) []const Intent {
+        return self.buf[0..self.len];
+    }
+};
+
+/// 왼쪽 버튼 하나의 누름 · 끎 · 뗌(PD design 결정 6).
+///
+/// | phase | 뜻 |
+/// |---|---|
+/// | `idle` | 버튼이 안 눌렸다 |
+/// | `pressed` | 패널 칸 위에서 눌렀고 아직 다른 칸에 안 닿았다. copy mode에 아직 안 들어갔다 |
+/// | `dragging` | 다른 칸에 닿아 선택 중이다 |
+/// | `ignored` | 뗄 때까지 아무것도 안 한다 — 여백 · 구분선을 눌렀거나, 키보드가 모드를 닫았거나, 누른 패널이 포커스를 잃었다 |
+///
+/// copy mode에 누름이 아니라 첫 칸 이동에 들어가는 이유는 클릭이다(design
+/// 결정 6). 누름에 들어가면 모든 클릭이 한 프레임 동안 `COPY`를 띄우고,
+/// 떼는 순간 앵커와 끝이 같은 한 칸 선택이 남는다.
+///
+/// 누른 잎을 기억하는 것이 가장자리 처리의 절반이다(design 결정 5). 선택
+/// 끝의 잎은 언제나 누른 잎이다 — `motion`이 받은 칸의 잎은 안 본다.
+/// 나머지 절반(끄는 칸을 누른 패널의 사각형으로 자르는 것)은 사각형을
+/// 아는 `main.zig`가 한다.
+pub const Gesture = struct {
+    phase: Phase = .idle,
+    /// 누른 칸. `phase`가 `pressed` · `dragging`일 때만 뜻이 있다.
+    start: Cell = .{ .leaf = 0, .col = 0, .row = 0 },
+    /// 마지막으로 선택 끝을 맞춘 칸. `pressed`에서는 `start`와 같다.
+    cur: Cell = .{ .leaf = 0, .col = 0, .row = 0 },
+
+    pub const Phase = enum { idle, pressed, dragging, ignored };
+
+    /// 누른 잎. 버튼이 패널 칸 위에서 눌린 채이면 그 잎이고, 아니면 null이다.
+    /// `main.zig`가 끄는 칸을 자를 사각형과 `Target`을 이것으로 고른다.
+    pub fn held(self: *const Gesture) ?u4 {
+        return switch (self.phase) {
+            .pressed, .dragging => self.start.leaf,
+            .idle, .ignored => null,
+        };
+    }
+
+    /// 왼쪽 버튼이 눌렸다. `hit`은 누른 자리의 칸이고 여백 · 구분선 ·
+    /// 상태 줄이면 null이다. `focus`는 지금 포커스 잎이다.
+    ///
+    /// 패널 칸이면 언제나 `cancel`을 낸다 — 그 패널이 키보드 copy mode였으면
+    /// 닫히고(선택의 주인은 한 번에 하나다), 다른 패널이면 옛 포커스 패널의
+    /// copy mode가 닫힌다. 키보드 copy mode는 포커스 패널에만 있다(copy 표가
+    /// `Cmd+]`를 삼킨다). 그리고 다른 패널이면 `focus`를 낸다. 순서가
+    /// 계약이다 — 조합 중인 한글은 옛 포커스의 PTY로 가야 한다(WP 결정 4).
+    pub fn press(self: *Gesture, hit: ?Cell, focus: u4) Intents {
+        var out: Intents = .{};
+        const h = hit orelse {
+            self.phase = .ignored;
+            return out;
+        };
+        self.phase = .pressed;
+        self.start = h;
+        self.cur = h;
+        out.push(.cancel);
+        if (h.leaf != focus) out.push(.{ .focus = h.leaf });
+        return out;
+    }
+
+    /// 포인터가 움직였다. `cell`은 누른 패널의 사각형으로 이미 자른 칸이다
+    /// (`target`이 `gone`이면 무엇이든 된다).
+    pub fn motion(self: *Gesture, cell: Cell, target: Target) Intents {
+        var out: Intents = .{};
+        const at: Cell = .{ .leaf = self.start.leaf, .col = cell.col, .row = cell.row };
+        switch (self.phase) {
+            .idle, .ignored => {},
+            .pressed => {
+                if (target == .gone) {
+                    self.phase = .ignored;
+                } else if (!sameCell(at, self.start)) {
+                    self.phase = .dragging;
+                    out.push(.{ .select_start = self.start });
+                    out.push(.{ .select_to = at });
+                    self.cur = at;
+                }
+            },
+            .dragging => {
+                // 키보드가 모드를 닫았다(`Esc` · `y` · `Cmd+C`, design 결정 6의
+                // 표). 뗄 때까지의 움직임은 무시한다.
+                if (target != .copy) {
+                    self.phase = .ignored;
+                } else if (!sameCell(at, self.cur)) {
+                    out.push(.{ .select_to = at });
+                    self.cur = at;
+                }
+            },
+        }
+        return out;
+    }
+
+    /// 왼쪽 버튼을 뗐다. 끈 뒤이고 copy mode가 살아 있으면 `copy`를 낸다.
+    /// 안 끈 채(클릭)면 아무 일도 없다 — 클릭의 일은 누름이 이미 했다.
+    pub fn release(self: *Gesture, target: Target) Intents {
+        var out: Intents = .{};
+        if (self.phase == .dragging and target == .copy) out.push(.{ .copy = self.start.leaf });
+        self.phase = .idle;
+        return out;
+    }
+
+    /// 휠을 굴렸다. 버튼이 패널 칸 위에서 눌린 채면 누른 패널을 움직이고
+    /// 선택 끝을 다시 맞춘다(design 결정 7의 "끄는 중"). 한 화면보다 긴
+    /// 선택을 만드는 길이다.
+    ///
+    /// null이면 이 휠은 제스처의 것이 아니다 — `main.zig`가 평소의 휠(포인터
+    /// 아래 패널)로 다룬다.
+    ///
+    /// 아직 안 끌었으면(`pressed`) 여기서 선택을 시작한다. 시작이 스크롤보다
+    /// 먼저인 것이 요점이다 — 앵커가 누른 글자에 붙은 뒤에 뷰포트가 움직여야
+    /// 한다. 순서가 뒤집히면 누른 칸의 뷰포트 좌표가 다른 글자를 가리킨다.
+    pub fn wheel(self: *Gesture, notches: i32, target: Target) ?Intents {
+        var out: Intents = .{};
+        switch (self.phase) {
+            .idle, .ignored => return null,
+            .pressed => {
+                if (target == .gone) {
+                    self.phase = .ignored;
+                    return null;
+                }
+                self.phase = .dragging;
+                out.push(.{ .select_start = self.start });
+            },
+            .dragging => {
+                if (target != .copy) {
+                    self.phase = .ignored;
+                    return null;
+                }
+            },
+        }
+        out.push(.{ .scroll = .{ .leaf = self.start.leaf, .notches = notches } });
+        out.push(.{ .select_to = self.cur });
+        return out;
+    }
+};
+
+/// 두 칸이 같은가.
+pub fn sameCell(a: Cell, b: Cell) bool {
+    return a.leaf == b.leaf and a.col == b.col and a.row == b.row;
+}

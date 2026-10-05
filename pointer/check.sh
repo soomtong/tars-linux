@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")"
 
-# PD 체인 — 포인터 장치(PD-M0 · M1). 열아홉번째 체인.
+# PD 체인 — 포인터 장치(PD-M0~M2). 열아홉번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   QEMU가 USB 마우스를 하나 붙인 채 뜬다(-usb -device usb-mouse)
@@ -17,6 +17,9 @@ cd "$(dirname "$0")"
 #   → 움직이면 화살표가 따라온다. 움직임만 있는 회차는 화면 전체를 다시
 #     그리지 않고 화살표 자리만 고친다(save-under, PD-M1)
 #   → 키를 치면 숨고, 휠은 포인터 아래 패널을 세 줄씩 움직인다(PD-M1)
+#   → 다른 패널을 누르면 포커스가 그리로 간다. 여백 · 구분선은 아무 일도 없다(PD-M2)
+#   → 글자 위를 누르고 끌면 copy mode의 선택이 늘어나고, 떼면 클립보드에
+#     들어간다. 입력 모드도 함께 돌아와 그다음 친 글자가 셸에 간다(PD-M2)
 #
 # copy · pane 체인에 끼우지 않은 이유는 PD design 결정 10이다. 그 체인들의
 # 판정은 포인터가 없는 화면을 전제하고, 이 체인은 PD-M1부터 화살표가 보이는
@@ -30,7 +33,12 @@ cd "$(dirname "$0")"
 #   screendump — QEMU가 내보낸 화면이다. at 줄은 terminal이 프레임버퍼에서
 #                되읽은 것이라 present가 빠져도 맞는다. 여기는 present가
 #                있어야 바뀐다. perl로 화살표 색을 세거나 두 장을 비교한다.
-#   scroll> 줄 — 휠이 움직인 뷰포트(검사 11 · 12).
+#   scroll> 줄 — 휠이 움직인 뷰포트(검사 11 · 12 · 16의 둘째).
+#   press · release 줄과 copy> · clip> · pane> 줄 — 누름이 어느 잎의 어느 칸에
+#                닿았는지, 선택이 어디서 어디까지인지, 클립보드에 무엇이
+#                들어갔는지, 포커스가 어디인지(검사 13~18). copy> · clip>은
+#                키보드의 copy mode가 찍는 것과 같은 줄이라 copy 체인의 수법을
+#                그대로 쓴다.
 #
 # HMP의 대상 마우스. info mice의 별표가 HMP mouse_move가 가는 장치다.
 # device_add로 꽂은 마우스가 대상이 되고 device_del 뒤에는 원래 마우스로
@@ -123,6 +131,10 @@ report_failure() {
     "terminal: pointer> close" \
     "terminal: scroll>" \
     "terminal: copy> enter" \
+    "terminal: pointer> press" \
+    "terminal: pointer> release" \
+    "terminal: clip> len=" \
+    "terminal: pane> ws=1/1 panes=2" \
     "terminal: pointer> uevent failed" \
     "terminal: pointer> scan failed"; do
     if grep -aq "$marker" "$LOG"; then
@@ -242,6 +254,135 @@ wait_for_count() {
   done
   return 1
 }
+
+# ── PD-M2의 도구 ──────────────────────────────────────────────────────
+
+# 마지막 press · release 줄.
+last_press() {
+  grep -a 'terminal: pointer> press ' "$LOG" | tail -n 1 | tr -d '\r'
+}
+
+last_release() {
+  grep -a 'terminal: pointer> release ' "$LOG" | tail -n 1 | tr -d '\r'
+}
+
+# copy> 줄 중 동사가 맞는 것의 개수(`enter` · `point` · `exit` · `yank`).
+copy_lines() {
+  grep -ac "terminal: copy> $1" "$LOG" || true
+}
+
+# 클립보드에 넣은 횟수와 마지막 줄. 붙여넣기 줄(`clip> paste`)은 안 센다.
+clip_lines() {
+  grep -ac 'terminal: clip> len=' "$LOG" || true
+}
+
+last_clip() {
+  grep -a 'terminal: clip> len=' "$LOG" | tail -n 1 | tr -d '\r'
+}
+
+# 12바이트 붙여넣기의 횟수(검사 15의 둘째). 클립보드는 pd-drag-word다.
+paste_lines() {
+  grep -ac 'terminal: clip> paste len=12 ' "$LOG" || true
+}
+
+# 마지막 배치 줄과 그 개수(pane/check.sh의 last_pane_line과 같다).
+last_pane_line() {
+  grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r'
+}
+
+pane_lines() {
+  grep -ac 'terminal: pane> ws=' "$LOG" || true
+}
+
+# 마지막 배치 줄이 패턴(ERE)에 맞을 때까지 기다린다. 15초.
+wait_for_pane() {
+  local pattern="$1" i
+  for i in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(last_pane_line)"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 마지막 상태 줄의 글자(copy/check.sh의 status_text와 같다).
+status_text() {
+  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'
+}
+
+# 상태 줄 꼬리가 `  COPY`가 될 때까지(인자 on) 또는 아닐 때까지(off) 기다린다.
+wait_for_status_copy() {
+  local want="$1" i text
+  for i in $(seq 1 150); do
+    text="$(status_text)"
+    case "$text" in
+      *"  COPY") [ "$want" = on ] && return 0 ;;
+      *) [ "$want" = off ] && return 0 ;;
+    esac
+    sleep 0.1
+  done
+  return 1
+}
+
+# 마지막 프레임(마지막 screen>부터 끝까지, copy/check.sh의 last_frame과 같다).
+last_frame() {
+  awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$LOG"
+}
+
+# 마지막 screen> 줄에서 글자가 정확히 $1인 행의 번호(0부터). 여럿이면 가장
+# 아래 것, 없으면 -1이다. screen>은 포커스 패널의 행을 ' | '로 잇고(main.zig의
+# dumpScreen) 행이 바뀔 때마다 구분자가 하나씩 붙으므로 구간의 번호가 곧 행
+# 번호다. 행은 패널 안의 상대 행이다 — 세로 분할의 두 패널은 격자의 0행에서
+# 시작하므로 격자의 행과 같다.
+screen_row() {
+  grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' |
+    WANT="$1" perl -ne 's/^.*?terminal: screen> //; chomp; my @r = split / \| /, $_, -1;
+      my $i = -1; for my $k (0 .. $#r) { $i = $k if $r[$k] eq $ENV{WANT} } print "$i\n";'
+}
+
+# 포인터를 (X, Y)로 옮긴다. 마지막 at 줄의 자리에서 상대 이동을 100 이하씩
+# 나눠 보내고 그 자리의 at 줄을 기다린다. 버튼을 누른 채 부르면 그것이 곧
+# 끌기다 — 나눈 이동마다 선택 끝이 따라온다.
+move_to() {
+  local tx="$1" ty="$2" line cx cy dx dy sx sy
+  line="$(last_at)"
+  cx="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$line")"
+  cy="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$line")"
+  dx=$((tx - cx))
+  dy=$((ty - cy))
+  while [ "$dx" -ne 0 ] || [ "$dy" -ne 0 ]; do
+    sx=$dx; [ "$sx" -gt 100 ] && sx=100; [ "$sx" -lt -100 ] && sx=-100
+    sy=$dy; [ "$sy" -gt 100 ] && sy=100; [ "$sy" -lt -100 ] && sy=-100
+    hmp "mouse_move $sx $sy"
+    dx=$((dx - sx))
+    dy=$((dy - sy))
+  done
+  wait_for_at "^terminal: pointer> at x=${tx} y=${ty} "
+}
+
+# 왼쪽 버튼을 누른다 · 뗀다. 그 줄(press · release)이 하나 늘 때까지 기다린다.
+#
+# 누름의 일(포커스 옮김 · copy mode 닫기)은 그 줄을 찍은 회차 안에서 끝나고,
+# 화면이 바뀌었으면 같은 회차 끝에 프레임(pane> 등)이 찍힌다. 그래서 뗌의 줄이
+# 보이면 누름 회차의 프레임은 이미 로그에 있다.
+button_down() {
+  local n
+  n="$(pointer_count 'press ')"
+  hmp "mouse_button 1"
+  wait_for_count pointer_count 'press ' "$((n + 1))"
+}
+
+button_up() {
+  local n
+  n="$(pointer_count 'release ')"
+  hmp "mouse_button 0"
+  wait_for_count pointer_count 'release ' "$((n + 1))"
+}
+
+# 격자 칸의 왼쪽 위 끝 픽셀(PD design 결정 5). 격자는 (20, 20)에서 시작하고
+# 칸은 8 × 16이다(main.zig의 GRID_X · GRID_Y · CELL_W · ROW_HEIGHT). 오른쪽 아래
+# 끝 픽셀은 여기에 7 · 15를 더한다.
+cell_x() { echo $((20 + 8 * $1)); }
+cell_y() { echo $((20 + 16 * $1)); }
 
 # HMP 명령 하나. 키와 달리 로그가 자라기를 기다리지 않는다 — 결과는 부르는
 # 쪽이 wait_for_at으로 본다.
@@ -579,6 +720,289 @@ wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
   report_failure "a wheel notch over the margin rendered a frame (screen> ${SCREENS_M} -> $(screen_lines))"
 echo "margin: offset stayed at ${OFF_M}"
 
+# ── PD-M2: 누름 · 끎 · 뗌 ──────────────────────────────────────────────
+#
+# 패널을 둘로 가르고 시작한다. 0 | 1이고 왼쪽은 0,0 77x47, 구분선이 77열,
+# 오른쪽은 78,0 77x47이다(WP). 칸의 픽셀은 cell_x · cell_y로 셈한다 — 77열은
+# x 636~643, 76열은 628~635, 78열은 644~651이다. 행 10은 y 180~195다.
+#
+# 포커스는 새 패널(1)에 있다. 검사 14를 먼저 하는 이유는 mutation 1이다 — hit이
+# 구분선 칸을 왼쪽 잎에 넣으면 포커스가 0으로 간다. 포커스가 이미 0이면 그
+# 고장이 안 보인다.
+echo "=== Cmd+D: two panes for the click checks ==="
+type_keys meta_l-d
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 ' ||
+  report_failure "Cmd+D did not give 'panes=2 focus=1 rect=78,0 77x47' (last pane> line: '$(last_pane_line)')"
+CLIPS_BEFORE="$(clip_lines)"
+ENTERS_BEFORE="$(copy_lines enter)"
+
+# ── 검사 14: 구분선 칸을 누르면 아무 일도 없다 ────────────────────────
+#
+# 구분선 칸은 어느 잎의 사각형에도 안 든다(layout.Tree.hit의 null). 칸의 왼쪽
+# 위 끝 픽셀과 오른쪽 아래 끝 픽셀을 둘 다 누른다 — 픽셀 → 칸 변환이 한 칸
+# 어긋나면 한쪽 끝이 이웃 패널의 칸이 된다(PD design 결정 5). 포커스도
+# 안 바뀌고 pane> 줄도 안 는다.
+echo "=== a press on the separator does nothing ==="
+PANES_N="$(pane_lines)"
+for spot in "$(cell_x 77) $(cell_y 10)" "$(( $(cell_x 77) + 7 )) $(( $(cell_y 10) + 15 ))"; do
+  read -r SX SY <<<"$spot"
+  move_to "$SX" "$SY" ||
+    report_failure "the pointer did not reach ${SX},${SY} (last at: '$(last_at)')"
+  button_down || report_failure "mouse_button 1 at ${SX},${SY} printed no 'pointer> press' line"
+  [ "$(last_press)" = "terminal: pointer> press none" ] ||
+    report_failure "a press on the separator pixel ${SX},${SY} printed '$(last_press)', expected 'pointer> press none'"
+  button_up || report_failure "mouse_button 0 at ${SX},${SY} printed no 'pointer> release' line"
+  [ "$(last_release)" = "terminal: pointer> release drag=0" ] ||
+    report_failure "the release on the separator printed '$(last_release)', expected 'release drag=0'"
+done
+[ "$(pane_lines)" -eq "$PANES_N" ] ||
+  report_failure "a press on the separator changed the panes (pane> ${PANES_N} -> $(pane_lines) lines, last: '$(last_pane_line)')"
+echo "separator: two presses, $(last_pane_line)"
+
+# ── 검사 13: 다른 패널을 누르면 포커스가 그리로 간다 ───────────────────
+#
+# 왼쪽 패널의 마지막 열(76) 칸의 오른쪽 아래 끝 픽셀(635, 195), 그다음 오른쪽
+# 패널의 첫 열(78) 칸의 왼쪽 위 끝 픽셀(644, 180). 구분선을 사이에 둔 두 픽셀이
+# 서로 다른 잎의 경계 칸이 된다. 클릭이라 클립보드도 copy mode도 안 움직인다.
+echo "=== a press on another pane moves the focus there ==="
+move_to "$(( $(cell_x 76) + 7 ))" "$(( $(cell_y 10) + 15 ))" ||
+  report_failure "the pointer did not reach the left pane's last cell (last at: '$(last_at)')"
+button_down || report_failure "mouse_button 1 on the left pane printed no 'pointer> press' line"
+[ "$(last_press)" = "terminal: pointer> press leaf=0 row=10 col=76" ] ||
+  report_failure "a press on pixel 635,195 printed '$(last_press)', expected 'press leaf=0 row=10 col=76'"
+button_up || report_failure "mouse_button 0 on the left pane printed no 'pointer> release' line"
+[ "$(last_release)" = "terminal: pointer> release drag=0" ] ||
+  report_failure "the click on the left pane released as '$(last_release)', expected 'release drag=0'"
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=0 rect=0,0 77x47 ' ||
+  report_failure "a click on the left pane did not move the focus (last pane> line: '$(last_pane_line)')"
+echo "focus left: $(last_pane_line)"
+
+move_to "$(cell_x 78)" "$(cell_y 10)" ||
+  report_failure "the pointer did not reach the right pane's first cell (last at: '$(last_at)')"
+button_down || report_failure "mouse_button 1 on the right pane printed no 'pointer> press' line"
+[ "$(last_press)" = "terminal: pointer> press leaf=1 row=10 col=0" ] ||
+  report_failure "a press on pixel 644,180 printed '$(last_press)', expected 'press leaf=1 row=10 col=0'"
+button_up || report_failure "mouse_button 0 on the right pane printed no 'pointer> release' line"
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 ' ||
+  report_failure "a click on the right pane did not move the focus back (last pane> line: '$(last_pane_line)')"
+[ "$(clip_lines)" -eq "$CLIPS_BEFORE" ] ||
+  report_failure "a click put something on the clipboard: '$(last_clip)'"
+[ "$(copy_lines enter)" -eq "$ENTERS_BEFORE" ] ||
+  report_failure "a click entered copy mode (copy> enter ${ENTERS_BEFORE} -> $(copy_lines enter))"
+echo "focus right: $(last_pane_line)"
+
+# ── 검사 15: 글자 위를 누르고 끌어 떼면 그 글자가 클립보드에 들어간다 ──
+#
+# 오른쪽 패널(포커스)에 pd-drag-word를 찍고 그 줄의 0열을 누른다. 누름에서는
+# copy mode에 안 들어간다(design 결정 6). 0.5초를 기다려 copy> enter가 안 는
+# 것을 본다 — 누름의 일은 press 줄과 같은 회차에 끝나므로 그 사이에 찍혔다면
+# 이미 로그에 있다.
+#
+# 11열(d) 칸의 오른쪽 아래 끝 픽셀로 한 번에 끈다. 첫 칸 이동에 들어가므로
+# copy> enter(누른 칸)와 copy> point(지금 칸)가 함께 찍히고, 상태 줄 꼬리에
+# COPY가 뜬다. 떼면 clip> 줄이 키보드의 y와 같은 모양으로 찍힌다.
+#
+# 판정은 clip> 줄이라 화면 에코와 상관없다(project_gate_screen_echo).
+echo "=== press, drag, release copies the word ==="
+type_keys e c h o spc p d minus d r a g minus w o r d ret
+wait_for_screen '\| pd-drag-word \|' ||
+  report_failure "the right pane's shell did not print pd-drag-word"
+ROW="$(screen_row pd-drag-word)"
+[ "$ROW" -ge 0 ] ||
+  report_failure "pd-drag-word is not a row of its own on the last screen: $(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+PX="$(cell_x 78)"
+PY="$(cell_y "$ROW")"
+move_to "$PX" "$PY" ||
+  report_failure "the pointer did not reach the p of pd-drag-word at ${PX},${PY} (last at: '$(last_at)')"
+ENTERS="$(copy_lines enter)"
+CLIPS="$(clip_lines)"
+button_down || report_failure "mouse_button 1 on pd-drag-word printed no 'pointer> press' line"
+[ "$(last_press)" = "terminal: pointer> press leaf=1 row=${ROW} col=0" ] ||
+  report_failure "the press on pd-drag-word printed '$(last_press)', expected 'press leaf=1 row=${ROW} col=0'"
+sleep 0.5
+[ "$(copy_lines enter)" -eq "$ENTERS" ] ||
+  report_failure "the press alone entered copy mode; it must wait for the first move to another cell"
+hmp "mouse_move 95 15"
+wait_for_count copy_lines enter "$((ENTERS + 1))" ||
+  report_failure "dragging to the next cells did not enter copy mode (no new 'copy> enter')"
+wait_for_log "terminal: copy> point row=${ROW} col=11" ||
+  report_failure "the drag did not move the selection end to row ${ROW} col 11 (last copy> line: '$(grep -a 'terminal: copy>' "$LOG" | tail -n 1 | tr -d '\r')')"
+[ "$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
+  report_failure "the drag entered copy mode at '$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')', expected the pressed cell row=${ROW} col=0"
+wait_for_status_copy on ||
+  report_failure "while dragging the status line reads '$(status_text)', expected it to end with '  COPY'"
+button_up || report_failure "mouse_button 0 after the drag printed no 'pointer> release' line"
+[ "$(last_release)" = "terminal: pointer> release drag=1" ] ||
+  report_failure "the release after the drag printed '$(last_release)', expected 'release drag=1'"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the release after the drag put nothing on the clipboard (no new 'clip> len=' line)"
+[ "$(last_clip)" = "terminal: clip> len=12 text=pd-drag-word" ] ||
+  report_failure "the drag copied '$(last_clip)', expected 'clip> len=12 text=pd-drag-word'"
+wait_for_status_copy off ||
+  report_failure "after the release the status line still reads '$(status_text)'; the release leaves copy mode"
+echo "dragged: $(last_clip)"
+
+# ── 검사 18: 끌어 복사한 직후 친 글자가 셸에 간다 ──────────────────────
+#
+# 모드의 두 사본(input.State.mode와 vt.Screen.copy_cursor)이 함께 돌아왔다는
+# 것이다. 화면 쪽만 돌아오면 입력 모드가 copy에 남아 이 글자들이 copy 표에
+# 삼켜진다(mutation 3). 출력 줄만 보는 패턴이라 친 명령줄과 안 겹친다.
+echo "=== typing right after a drag copy reaches the shell ==="
+type_keys e c h o spc p d minus a f t e r minus d r a g ret
+wait_for_screen '\| pd-after-drag \|' ||
+  report_failure "the keys typed right after the drag copy never reached the shell (no 'pd-after-drag' output line); the input mode must come back to normal with the screen"
+echo "typed after the drag: pd-after-drag"
+
+# ── 검사 15의 둘째: 끌어 넣은 클립보드를 Cmd+V로 붙인다 ────────────────
+#
+# 클립보드가 셸까지 왕복한다. 붙일 자리 앞에 got-을 쳐 두므로 출력 줄은
+# got-pd-drag-word 하나뿐이다 — 명령줄(echo got-pd-drag-word)과 안 겹친다.
+echo "=== Cmd+V pastes what the drag copied ==="
+PASTES="$(paste_lines)"
+type_keys e c h o spc g o t minus
+type_keys meta_l-v
+wait_for_count paste_lines '' "$((PASTES + 1))" ||
+  report_failure "Cmd+V did not write the 12-byte clipboard (no new 'clip> paste len=12' line)"
+type_keys ret
+wait_for_screen '\| got-pd-drag-word \|' ||
+  report_failure "the pasted word never ran in the shell (no 'got-pd-drag-word' output line)"
+echo "pasted: got-pd-drag-word"
+
+# ── 검사 17: 키보드 copy mode 중 클릭은 복사 없이 모드를 닫는다 ─────────
+#
+# 선택의 주인은 한 번에 하나다(design 결정 6의 표). 누름이 그 패널의 copy
+# mode를 닫고(copy> exit) 입력 모드를 normal로 되돌린다 — 그다음 친 글자가
+# 셸에 온다. 클립보드는 그대로다.
+#
+# 둘째는 검색 프롬프트가 열린 채다. copyExit이 findCancel까지 하므로 프롬프트도
+# 닫히고, 입력 모드가 find에서 normal로 온다. 안 오면 친 글자가 검색어로 간다.
+echo "=== a click in keyboard copy mode leaves it without copying ==="
+CLIPS="$(clip_lines)"
+ENTERS="$(copy_lines enter)"
+EXITS="$(copy_lines exit)"
+type_keys meta_l-shift-c
+wait_for_count copy_lines enter "$((ENTERS + 1))" ||
+  report_failure "Cmd+Shift+C did not enter copy mode (no new 'copy> enter')"
+button_down || report_failure "mouse_button 1 in keyboard copy mode printed no 'pointer> press' line"
+wait_for_count copy_lines exit "$((EXITS + 1))" ||
+  report_failure "a click on a pane in keyboard copy mode did not leave copy mode (no new 'copy> exit')"
+button_up || report_failure "mouse_button 0 in keyboard copy mode printed no 'pointer> release' line"
+[ "$(clip_lines)" -eq "$CLIPS" ] ||
+  report_failure "a click that left keyboard copy mode copied '$(last_clip)'; it must close the mode without copying"
+type_keys e c h o spc p d minus c l i c k minus o u t ret
+wait_for_screen '\| pd-click-out \|' ||
+  report_failure "after the click left copy mode the typed keys never reached the shell (no 'pd-click-out' output line)"
+echo "copy mode click: closed without copying, typing reaches the shell"
+
+echo "=== a click with the find prompt open closes the prompt and the mode ==="
+ENTERS="$(copy_lines enter)"
+EXITS="$(copy_lines exit)"
+type_keys meta_l-shift-c
+wait_for_count copy_lines enter "$((ENTERS + 1))" ||
+  report_failure "Cmd+Shift+C did not enter copy mode the second time"
+type_keys slash
+wait_for_log 'terminal: find> open' ||
+  report_failure "/ did not open the find prompt (no 'find> open')"
+type_keys q
+wait_for_log 'terminal: find> type needle=q len=1' ||
+  report_failure "q did not reach the find prompt (no 'find> type needle=q len=1')"
+button_down || report_failure "mouse_button 1 with the find prompt open printed no 'pointer> press' line"
+wait_for_count copy_lines exit "$((EXITS + 1))" ||
+  report_failure "a click with the find prompt open did not leave copy mode (no new 'copy> exit')"
+button_up || report_failure "mouse_button 0 with the find prompt open printed no 'pointer> release' line"
+type_keys e c h o spc p d minus f i n d minus o u t ret
+wait_for_screen '\| pd-find-out \|' ||
+  report_failure "after the click closed the find prompt the typed keys never reached the shell (no 'pd-find-out' output line); the input mode stayed in find"
+[ "$(last_frame | grep -ac 'terminal: find> overlay' || true)" -eq 0 ] ||
+  report_failure "the find prompt is still drawn after the click: $(last_frame | grep -a 'terminal: find> overlay' | tr -d '\r')"
+echo "find prompt click: closed, typing reaches the shell"
+
+# ── 검사 16: 이웃 패널 위까지 끌어도 누른 패널의 마지막 열에서 멈춘다 ──
+#
+# 왼쪽 패널로 포커스를 옮기고 seq -s , 40을 친다. 출력은 110자라 77칸에서
+# 접히고, 첫 줄이 정확히 1,2,…,28,29(77자)다 — 그 줄의 마지막 글자가 76열이다.
+# 그 줄의 0열을 누르고 오른쪽 패널(x 720 = 87열) 위까지 끈다. 끄는 칸이 누른
+# 패널로 잘리면 선택 끝이 76열이라 77자가 다 들어간다. 안 잘리면(mutation 4)
+# 오른쪽 패널의 상대 칸(9열)이 왼쪽 패널에 적용돼 1,2,3,4,5, 열 자만 들어간다.
+#
+# 줄 끝 공백 트림 때문에 줄이 짧으면 76열에서 끝났는지가 안 보인다. 그래서
+# 마지막 열까지 글자가 찬 줄을 쓴다.
+echo "=== dragging over the neighbor pane stops at the pressed pane's last column ==="
+move_to "$(cell_x 40)" "$(cell_y 20)" ||
+  report_failure "the pointer did not reach the left pane (last at: '$(last_at)')"
+button_down || report_failure "mouse_button 1 on the left pane printed no 'pointer> press' line"
+button_up || report_failure "mouse_button 0 on the left pane printed no 'pointer> release' line"
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=0 rect=0,0 77x47 ' ||
+  report_failure "a click on the left pane did not move the focus (last pane> line: '$(last_pane_line)')"
+LONG="$(seq -s , 29)"
+type_keys s e q spc minus s spc comma spc 4 0 ret
+wait_for_screen "\\| ${LONG} \\|" ||
+  report_failure "seq -s , 40 did not fold into a 77-column row '${LONG}'"
+ROW="$(screen_row "$LONG")"
+[ "$ROW" -ge 0 ] || report_failure "the 77-column row is not on the last screen"
+PY="$(cell_y "$ROW")"
+move_to "$(cell_x 0)" "$PY" ||
+  report_failure "the pointer did not reach the start of the long row (last at: '$(last_at)')"
+CLIPS="$(clip_lines)"
+button_down || report_failure "mouse_button 1 on the long row printed no 'pointer> press' line"
+[ "$(last_press)" = "terminal: pointer> press leaf=0 row=${ROW} col=0" ] ||
+  report_failure "the press on the long row printed '$(last_press)', expected 'press leaf=0 row=${ROW} col=0'"
+move_to 720 "$PY" ||
+  report_failure "the drag did not reach x=720 over the right pane (last at: '$(last_at)')"
+wait_for_log "terminal: copy> point row=${ROW} col=76" ||
+  report_failure "over the right pane the selection end is '$(grep -a 'terminal: copy> point' "$LOG" | tail -n 1 | tr -d '\r')', expected row=${ROW} col=76 (the pressed pane's last column)"
+button_up || report_failure "mouse_button 0 over the right pane printed no 'pointer> release' line"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the release over the right pane put nothing on the clipboard"
+[ "$(last_clip)" = "terminal: clip> len=77 text=${LONG}" ] ||
+  report_failure "dragging over the neighbor copied '$(last_clip)', expected the whole 77-column row (len=77 text=${LONG})"
+wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=0 ' ||
+  report_failure "dragging over the right pane moved the focus (last pane> line: '$(last_pane_line)')"
+echo "clamped drag: $(last_clip)"
+
+# ── 검사 16의 둘째: 누른 채 굴린 휠은 누른 패널을 움직이고 선택 끝을 맞춘다 ──
+#
+# design 결정 7의 "끄는 중" 행. seq 120 160을 찍고 150의 0열을 누른 채(끌지
+# 않고) 휠을 앞으로 한 눈금 민다. 선택이 먼저 시작되고(앵커가 150에 붙는다)
+# 그다음 뷰포트가 세 줄 올라가며, 선택 끝은 같은 뷰포트 칸 — 이제 147 — 으로
+# 다시 맞춰진다. 떼면 147부터 150의 첫 글자까지 열세 바이트다.
+#
+# 순서가 뒤집히면(스크롤 뒤에 선택 시작) 앵커가 147에 붙어 한 글자짜리
+# 선택이 된다. 그것은 pointer_test 검사 22가 부팅 전에 잡는다.
+echo "=== a wheel notch while pressed scrolls the pressed pane and moves the end ==="
+type_keys s e q spc 1 2 0 spc 1 6 0 ret
+wait_for_screen '\| 160 \| root@\(none\) ~#' ||
+  report_failure "seq 120 160 did not finish (no '| 160 | root@(none) ~#' on the screen)"
+ROW="$(screen_row 150)"
+[ "$ROW" -ge 3 ] || report_failure "150 is not on the last screen with three rows above it (row ${ROW})"
+move_to "$(cell_x 0)" "$(cell_y "$ROW")" ||
+  report_failure "the pointer did not reach 150 (last at: '$(last_at)')"
+OFF_A="$(scroll_field offset)"
+CLIPS="$(clip_lines)"
+button_down || report_failure "mouse_button 1 on 150 printed no 'pointer> press' line"
+[ "$(last_press)" = "terminal: pointer> press leaf=0 row=${ROW} col=0" ] ||
+  report_failure "the press on 150 printed '$(last_press)', expected 'press leaf=0 row=${ROW} col=0'"
+ATS="$(pointer_count 'at ')"
+hmp "mouse_move 0 0 1"
+wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
+  report_failure "a wheel notch while pressed printed no at line"
+OFF_B="$(scroll_field offset)"
+[ "$OFF_B" -eq "$((OFF_A - 3))" ] ||
+  report_failure "a wheel notch while pressed moved the pressed pane from offset ${OFF_A} to ${OFF_B}, expected $((OFF_A - 3))"
+[ "$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
+  report_failure "the wheel while pressed did not start the selection at the pressed cell (last copy> enter: '$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')')"
+button_up || report_failure "mouse_button 0 after the wheel printed no 'pointer> release' line"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the release after the wheel put nothing on the clipboard"
+[ "$(last_clip)" = "terminal: clip> len=13 text=147" ] ||
+  report_failure "the wheel drag copied '$(last_clip)', expected 'clip> len=13 text=147' (147 to the first byte of 150)"
+echo "wheel while pressed: offset ${OFF_A} -> ${OFF_B}, $(last_clip)"
+
+# 마지막 검사(부팅 마우스를 뺀다)는 M1의 자리(679, 0)를 본다. 그리로 되돌린다.
+# 움직이면 화살표가 다시 보이므로, 뺄 때 숨는 at 줄이 찍힌다.
+move_to 679 0 ||
+  report_failure "the pointer did not get back to 679,0 (last at: '$(last_at)')"
+
 # ── 검사 9의 둘째: 마지막 장치가 빠지면 숨는다 ────────────────────────
 #
 # 보이는 조건 1. 부팅 마우스를 뺀다. 그 회차에는 포인터 이벤트가 없지만
@@ -602,4 +1026,4 @@ fi
 
 echo "pointer> lines:"
 grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
-echo "PD-M1 check PASS"
+echo "PD-M2 check PASS"

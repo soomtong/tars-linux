@@ -962,6 +962,31 @@ pub const State = struct {
         return out;
     }
 
+    /// 포인터가 모드를 바꾼다(PD design 결정 6). 조합 중인 한글은 normal이었으면
+    /// 확정해 돌려주고(호출부가 옛 포커스의 PTY에 쓴다), find였으면 버린다
+    /// (`Esc`와 같은 뜻 — 검색 프롬프트의 조합은 검색어지 셸 입력이 아니다).
+    /// 그리고 `mode`를 `to`로 둔다.
+    ///
+    /// 왜 이것이 필요한가. 입력 모드는 두 곳에 있다 — 여기의 `mode`(키를 어떻게
+    /// 해석하나)와 `vt.Screen.copy_cursor`(화면이 모드인가). 키보드 경로는 둘을
+    /// 같은 키에서 함께 바꾼다. 포인터 경로가 화면 쪽만 바꾸면, 끌어서 copy
+    /// mode에 들어간 뒤 친 `j`가 셸로 가고 복사한 뒤 친 글자가 copy 표에
+    /// 삼켜진다(PD design 결정 6).
+    ///
+    /// copy였으면 버린다. copy mode에 들어가는 키가 이미 확정했으므로 조합이
+    /// 남아 있을 수 없지만, 남아 있다면 그것은 셸에 갈 글자가 아니다.
+    ///
+    /// 돌려주는 슬라이스는 `commit_buf`를 가리킨다. 다음 키가 덮어쓰므로
+    /// 호출부가 바로 쓴다 — `takeCommit`과 같은 계약이다.
+    pub fn pointerMode(self: *State, to: Mode) []const u8 {
+        switch (self.mode) {
+            .normal => self.commitHangul(),
+            .copy, .find => self.hangul_buf = .{},
+        }
+        self.mode = to;
+        return self.takeCommit();
+    }
+
     /// 지금 조합 중인 글자. 없으면 null.
     ///
     /// `main.zig`가 이것을 `vt.zig`에 넘긴다. `input.zig`는 `vt.zig`를

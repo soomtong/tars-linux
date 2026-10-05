@@ -2601,5 +2601,119 @@ pub fn main(init: std.process.Init) !void {
     try peExpectParts("검사 96 RIS 뒤", pe_ris.pasteParts("a\nb"), .{ "", "a\nb", "" });
     std.debug.print("vt_test: RIS가 모드를 끄고, 본문의 개행은 그대로다 OK\n", .{});
 
+    // ── PD-M2: 포인터의 선택 ─────────────────────────────────────────────
+    //
+    // 검사 97. `copyEnterAt` · `copyPointTo`가 키보드의 `copySelect` ·
+    // `copyMove`와 같은 선택 문자열을 낸다(PD design "검증"). 화면 둘을 같은
+    // 글자로 채우고 한쪽은 키보드로, 한쪽은 포인터로 같은 두 칸을 고른다.
+    // 두 줄에 걸친 선택이라 줄바꿈이 든 문자열을 비교한다 — (6, 0)의 `w`에서
+    // (5, 1)의 `d`까지가 `world\nsecond`다.
+    const pd_kb = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pd_kb.deinit();
+    const pd_pt = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pd_pt.deinit();
+    pd_kb.feed("hello world\r\nsecond line\r\n");
+    pd_pt.feed("hello world\r\nsecond line\r\n");
+    _ = try pd_kb.cells(&buf);
+    _ = try pd_pt.cells(&buf);
+    // 키보드는 셸 커서(row 2, col 0)에서 출발한다.
+    pd_kb.copyEnter();
+    try pd_kb.copyMove(0, -1);
+    try pd_kb.copyMove(0, -1);
+    var pd_step: usize = 0;
+    while (pd_step < 6) : (pd_step += 1) try pd_kb.copyMove(1, 0);
+    try pd_kb.copySelect(.char);
+    try pd_kb.copyMove(0, 1);
+    try pd_kb.copyMove(-1, 0);
+    const pd_kb_text = (try pd_kb.copyYank()) orelse return error.NothingYanked;
+    try pd_pt.copyEnterAt(6, 0);
+    const pd_at = pd_pt.copyCursor() orelse return error.NoCopyCursor;
+    if (pd_at.x != 6 or pd_at.y != 0) {
+        std.debug.print("FAIL: copyEnterAt(6, 0) put the copy cursor at {d},{d}\n", .{ pd_at.x, pd_at.y });
+        return error.WrongCopyCursor;
+    }
+    try pd_pt.copyPointTo(5, 1);
+    const pd_pt_text = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, pd_kb_text, "world\nsecond") or !std.mem.eql(u8, pd_pt_text, pd_kb_text)) {
+        std.debug.print("FAIL: the keyboard yanked '{s}', the pointer yanked '{s}' (both should be 'world\\nsecond')\n", .{ pd_kb_text, pd_pt_text });
+        return error.PointerSelectionDiffers;
+    }
+    if (pd_pt.copyActive()) {
+        std.debug.print("FAIL: y after a pointer selection did not leave copy mode\n", .{});
+        return error.YankDidNotLeave;
+    }
+    std.debug.print("vt_test: 포인터로 고른 선택이 키보드로 고른 것과 같은 글자를 준다 OK\n", .{});
+
+    // 검사 98. 거꾸로 끌어도 같다 — 앵커가 오른쪽, 끝이 왼쪽(검사 6과 같은 성질).
+    try pd_pt.copyEnterAt(4, 0);
+    try pd_pt.copyPointTo(0, 0);
+    const pd_back = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, pd_back, "hello")) {
+        std.debug.print("FAIL: a backward pointer selection yanked '{s}' (expected 'hello')\n", .{pd_back});
+        return error.BackwardSelectionWrong;
+    }
+    std.debug.print("vt_test: 거꾸로 끈 포인터 선택도 같은 글자를 준다 OK\n", .{});
+
+    // 검사 99. 키보드 copy mode에서 `v`를 눌러 둔 채 끌기가 시작돼도 선택이 산다.
+    // `copyEnterAt`이 먼저 모드를 나가지 않으면 `copySelect(.char)`가 같은
+    // 방식을 다시 누른 것이 되어 선택을 푼다(design 결정 6의 "선택의 주인은
+    // 한 번에 하나").
+    pd_pt.copyEnter();
+    try pd_pt.copySelect(.char);
+    try pd_pt.copyEnterAt(0, 1);
+    try pd_pt.copyPointTo(5, 1);
+    const pd_over = (try pd_pt.copyYank()) orelse {
+        std.debug.print("FAIL: a drag that started inside keyboard copy mode (v on) left no selection\n", .{});
+        return error.SelectionToggledOff;
+    };
+    if (!std.mem.eql(u8, pd_over, "second")) {
+        std.debug.print("FAIL: the drag over keyboard copy mode yanked '{s}' (expected 'second')\n", .{pd_over});
+        return error.WrongClipText;
+    }
+    std.debug.print("vt_test: 키보드 copy mode 위에서 시작한 끌기가 선택을 새로 잡는다 OK\n", .{});
+
+    // 검사 100. 화면 밖 좌표는 가장자리 칸으로 붙는다. 20칸 화면에 99를 주면
+    // 19다. 줄 끝 공백은 트림되므로 문자열은 `second line`이다.
+    try pd_pt.copyEnterAt(0, 1);
+    try pd_pt.copyPointTo(99, 1);
+    const pd_edge = pd_pt.copyCursor() orelse return error.NoCopyCursor;
+    if (pd_edge.x != 19 or pd_edge.y != 1) {
+        std.debug.print("FAIL: copyPointTo(99, 1) put the copy cursor at {d},{d} (expected 19,1)\n", .{ pd_edge.x, pd_edge.y });
+        return error.WrongCopyCursor;
+    }
+    const pd_wide = (try pd_pt.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, pd_wide, "second line")) {
+        std.debug.print("FAIL: a selection to the clamped edge yanked '{s}' (expected 'second line')\n", .{pd_wide});
+        return error.WrongClipText;
+    }
+    std.debug.print("vt_test: 화면 밖 좌표는 가장자리 칸으로 붙는다 OK\n", .{});
+
+    // 검사 101. 끄는 중의 휠(design 결정 7). 앵커를 잡은 뒤 뷰포트를 세 줄
+    // 올리고 같은 뷰포트 칸으로 끝을 다시 맞추면, 끝은 세 줄 위의 글자다.
+    // 앵커는 tracked selection이라 글자에 붙어 있다(CM 결정 5).
+    //
+    // 같은 칸으로 두 번 부르는 것이 요점이다. 휠 앞의 `copyPointTo(0, 3)`과
+    // 뒤의 그것은 좌표가 같다 — "칸이 같으면 아무것도 안 한다"로 만들면 끝이
+    // 앵커에 남아 `A` 한 글자가 나온다.
+    const pd_sc = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer pd_sc.deinit();
+    var pd_line: [16]u8 = undefined;
+    var pd_n: usize = 1;
+    while (pd_n <= 30) : (pd_n += 1) {
+        pd_sc.feed(std.fmt.bufPrint(&pd_line, "A{d:0>2}\r\n", .{pd_n}) catch unreachable);
+    }
+    _ = try pd_sc.cells(&buf);
+    // 바닥의 뷰포트는 A27 · A28 · A29 · A30 · 빈 줄(셸 커서)이다. row 3이 A30이다.
+    try pd_sc.copyEnterAt(0, 3);
+    try pd_sc.copyPointTo(0, 3);
+    pd_sc.scrollByRows(-3);
+    try pd_sc.copyPointTo(0, 3);
+    const pd_long = (try pd_sc.copyYank()) orelse return error.NothingYanked;
+    if (!std.mem.eql(u8, pd_long, "A27\nA28\nA29\nA")) {
+        std.debug.print("FAIL: the selection after a wheel yanked '{s}' (expected 'A27\\nA28\\nA29\\nA')\n", .{pd_long});
+        return error.WheelSelectionWrong;
+    }
+    std.debug.print("vt_test: 끄는 중의 휠이 선택 끝을 세 줄 위 글자로 다시 맞춘다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

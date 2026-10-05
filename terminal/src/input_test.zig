@@ -1737,5 +1737,85 @@ pub fn main() !void {
 
     std.debug.print("input_test: Cmd+T와 Cmd+1~9가 워크스페이스 명령이 되고 copy mode 안에서는 삼켜진다 OK\n", .{});
 
+    // ── PD-M2: 포인터가 모드를 바꾼다 ────────────────────────────────────
+    //
+    // 검사 64. normal에서 조합 중이면 확정해 돌려준다 — 호출부가 옛 포커스의
+    // PTY에 쓴다(PD design 결정 6 · WP 결정 4). 모드도 바뀐다. 확정분은 한 번만
+    // 나온다 — 돌려준 뒤 `takeCommit`은 비었다.
+    {
+        var pk_n: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expectHangul(&pk_n, K.KEY_G, "", 'ㅎ');
+        try expectHangul(&pk_n, K.KEY_K, "", '하');
+        const pk_out = pk_n.pointerMode(.copy);
+        if (!std.mem.eql(u8, pk_out, "하")) {
+            std.debug.print("FAIL: pointerMode from normal returned \"{s}\", want \"하\"\n", .{pk_out});
+            return error.PointerModeCommit;
+        }
+        if (pk_n.mode != .copy or pk_n.preedit() != null) {
+            std.debug.print("FAIL: after pointerMode(.copy) mode={s} preedit={?d}\n", .{ @tagName(pk_n.mode), pk_n.preedit() });
+            return error.PointerModeState;
+        }
+        try expectCommit(&pk_n, 0, "");
+        // 검사 66의 앞 절반. 이제 키는 copy 표로 간다 — 끌어서 들어간 뒤 친
+        // `j`가 셸로 새지 않는다.
+        try expectCopy(&pk_n, K.KEY_J, .down);
+        const pk_back = pk_n.pointerMode(.normal);
+        if (pk_back.len != 0 or pk_n.mode != .normal) {
+            std.debug.print("FAIL: pointerMode(.normal) from copy returned {d} byte(s), mode={s}\n", .{ pk_back.len, @tagName(pk_n.mode) });
+            return error.PointerModeState;
+        }
+        // 검사 66의 뒤 절반. 복사한 뒤 친 글자는 셸로 간다. 한글이 켜져 있으니
+        // 자모가 조합으로 간다 — copy 표에 삼켜지지 않았다는 것이 요점이다.
+        try expectHangul(&pk_n, K.KEY_J, "", 'ㅓ');
+    }
+    std.debug.print("input_test: 포인터가 normal에서 조합을 확정해 돌려주고 모드를 옮긴다 OK\n", .{});
+
+    // 검사 65. find에서는 조합을 버린다 — 검색 프롬프트의 조합은 검색어지 셸
+    // 입력이 아니다(`Esc`와 같은 뜻). 한/영은 그대로다 — 포인터는 조합만
+    // 끝내고 입력기 상태를 안 바꾼다.
+    {
+        var pk_f: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        pk_f.mode = .find;
+        try expectHangul(&pk_f, K.KEY_G, "", 'ㅎ');
+        try expectHangul(&pk_f, K.KEY_K, "", '하');
+        const pk_drop = pk_f.pointerMode(.normal);
+        if (pk_drop.len != 0) {
+            std.debug.print("FAIL: pointerMode from find returned \"{s}\"; the composing syllable belongs to the needle, not the shell\n", .{pk_drop});
+            return error.PointerModeLeak;
+        }
+        if (pk_f.mode != .normal or pk_f.preedit() != null or !pk_f.hangul_on) {
+            std.debug.print("FAIL: after pointerMode from find mode={s} preedit={?d} hangul_on={}\n", .{ @tagName(pk_f.mode), pk_f.preedit(), pk_f.hangul_on });
+            return error.PointerModeState;
+        }
+        try expectCommit(&pk_f, 0, "");
+    }
+    std.debug.print("input_test: 포인터가 find에서는 조합을 버린다 OK\n", .{});
+
+    // 검사 67. 키보드 fd로 온 `BTN_LEFT`는 아무것도 안 만든다(PD design 결정 2).
+    // 키보드와 마우스를 한 노드로 내는 장치는 init이 키보드로 열고 terminal이
+    // 마우스로 또 연다. `BTN_*`도 `EV_KEY`라 `handleKey`에 닿는데, 키맵 밖의
+    // 코드라 바이트도 모드 변화도 없다(PD-M0 plan이 이 검사를 M2로 미뤘다).
+    //
+    // 조합 중이면 확정한다. 방향키 · PageUp 같은 키맵 밖의 키와 같은 갈래다
+    // (HI 결정 6) — 같은 누름이 포인터 경로에서도 확정을 부르므로(`cancel`)
+    // 결과가 어긋나지 않는다.
+    {
+        var pk_b: input.State = .{};
+        try expect(&pk_b, K.BTN_LEFT, 1, "");
+        try expect(&pk_b, K.BTN_LEFT, 0, "");
+        try expect(&pk_b, K.BTN_RIGHT, 1, "");
+        try expect(&pk_b, K.BTN_RIGHT, 0, "");
+        try expectCommit(&pk_b, K.BTN_LEFT, "");
+        if (pk_b.mode != .normal) return error.ModeLeft;
+
+        var pk_bh: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expectHangul(&pk_bh, K.KEY_G, "", 'ㅎ');
+        try expectHangul(&pk_bh, K.KEY_K, "", '하');
+        try expect(&pk_bh, K.BTN_LEFT, 1, "");
+        try expectCommit(&pk_bh, K.BTN_LEFT, "하");
+        try expectPreedit(&pk_bh, K.BTN_LEFT, null);
+    }
+    std.debug.print("input_test: 키보드 fd로 온 BTN_LEFT는 아무것도 안 만든다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

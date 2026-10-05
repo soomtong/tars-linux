@@ -82,6 +82,24 @@ fn expectFrame(what: []const u8, got: ?pointer.Frame, want: ?pointer.Frame) !voi
     return error.WrongFrame;
 }
 
+/// 의도 목록이 기대와 같은가. 순서까지 본다 — `cancel`이 `focus`보다 먼저,
+/// `select_start`가 `scroll`보다 먼저인 것이 design 결정 6 · 7의 계약이다.
+fn expectIntents(what: []const u8, got: pointer.Intents, want: []const pointer.Intent) !void {
+    const items = got.items();
+    var same = items.len == want.len;
+    if (same) {
+        for (items, want) |g, w| {
+            if (!std.meta.eql(g, w)) same = false;
+        }
+    }
+    if (same) {
+        std.debug.print("pointer_test: {s} OK\n", .{what});
+        return;
+    }
+    std.debug.print("FAIL: {s}: got {any}, want {any}\n", .{ what, items, want });
+    return error.WrongIntents;
+}
+
 fn expectAt(what: []const u8, p: *const pointer.Pointer, x: u32, y: u32) !void {
     if (p.x == x and p.y == y) {
         std.debug.print("pointer_test: {s} at {d},{d} OK\n", .{ what, x, y });
@@ -430,6 +448,137 @@ pub fn main() !void {
             !pointer.sameSpot(.{ .x = 0, .y = 0 }, null));
         try expectTrue("equal spots are the same", pointer.sameSpot(.{ .x = 3, .y = 4 }, .{ .x = 3, .y = 4 }));
         try expectTrue("different spots differ", !pointer.sameSpot(.{ .x = 3, .y = 4 }, .{ .x = 4, .y = 3 }));
+    }
+
+    // ── 검사 16: 클릭(PD-M2) ───────────────────────────────────────────────
+    //
+    // 누름은 위치를 기억하고 키보드 쪽 모드를 닫는다(`cancel`). copy mode에는
+    // 아직 안 들어간다 — 끌지 않고 떼면 아무 일도 없다(design 결정 6).
+    const a: pointer.Cell = .{ .leaf = 0, .col = 3, .row = 2 };
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("a click on the focused pane only cancels", g.press(a, 0), &.{.cancel});
+        try expectTrue("the press remembers the leaf", g.held() != null and g.held().? == 0);
+        try expectIntents("a move inside the same cell does nothing", g.motion(a, .normal), &.{});
+        try expectIntents("releasing a click copies nothing", g.release(.normal), &.{});
+        try expectTrue("after the release nothing is held", g.held() == null and g.phase == .idle);
+
+        // 다른 패널을 누르면 포커스가 그리로 간다. `cancel`이 먼저다 — 조합
+        // 중인 한글이 옛 포커스의 PTY로 가야 한다(WP 결정 4).
+        const b: pointer.Cell = .{ .leaf = 1, .col = 0, .row = 5 };
+        try expectIntents("a click on another pane cancels, then moves the focus", g.press(b, 0), &.{ .cancel, .{ .focus = 1 } });
+        try expectIntents("its release copies nothing", g.release(.normal), &.{});
+    }
+
+    // ── 검사 17: 여백 · 구분선 · 상태 줄을 누른다 ─────────────────────────
+    //
+    // 아무 일도 없다 — 포커스도 안 바뀌고 키보드 copy mode도 안 닫힌다. 뗄
+    // 때까지의 움직임과 휠도 제스처의 것이 아니다(휠은 평소의 휠로 간다).
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("a press off any pane does nothing", g.press(null, 0), &.{});
+        try expectTrue("a press off any pane holds nothing", g.held() == null);
+        try expectIntents("dragging from the margin does nothing", g.motion(a, .normal), &.{});
+        try expectTrue("a wheel after a margin press is the plain wheel", g.wheel(1, .normal) == null);
+        try expectIntents("releasing it does nothing", g.release(.normal), &.{});
+    }
+
+    // ── 검사 18: 끌어서 고르고 떼면 복사한다 ───────────────────────────────
+    //
+    // 처음으로 다른 칸에 닿을 때 들어간다 — `select_start`(누른 칸)와
+    // `select_to`(지금 칸)가 함께 나온다. 그 뒤로는 칸이 바뀔 때만 `select_to`다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(a, 0);
+        try expectIntents("the first move to another cell starts the selection", g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal), &.{
+            .{ .select_start = a },
+            .{ .select_to = .{ .leaf = 0, .col = 5, .row = 2 } },
+        });
+        try expectTrue("the gesture is dragging", g.phase == .dragging);
+        try expectIntents("the same cell again does nothing", g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .copy), &.{});
+        try expectIntents("a new cell moves the end", g.motion(.{ .leaf = 0, .col = 7, .row = 4 }, .copy), &.{
+            .{ .select_to = .{ .leaf = 0, .col = 7, .row = 4 } },
+        });
+        try expectIntents("the release after a drag copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectTrue("after the copy nothing is held", g.held() == null);
+    }
+
+    // ── 검사 19: 선택 끝의 잎은 언제나 누른 잎이다 ─────────────────────────
+    //
+    // 가장자리 처리의 절반(design 결정 5). `main.zig`가 칸을 누른 패널로
+    // 자르지만, 이웃 잎의 칸이 들어와도 잎은 누른 잎이다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(a, 0);
+        try expectIntents("a cell from another leaf still ends in the pressed leaf", g.motion(.{ .leaf = 1, .col = 9, .row = 2 }, .normal), &.{
+            .{ .select_start = a },
+            .{ .select_to = .{ .leaf = 0, .col = 9, .row = 2 } },
+        });
+    }
+
+    // ── 검사 20: 키보드가 모드를 닫았거나 패널이 포커스를 잃었다 ─────────
+    //
+    // 끄는 중에 `Esc` · `y` · `Cmd+C`가 오면 키보드 경로가 모드를 닫는다. 뗄
+    // 때까지의 움직임은 무시하고 뗌도 아무것도 안 한다(design 결정 6의 표).
+    // 누른 패널이 포커스를 잃어도(`gone`) 같다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(a, 0);
+        _ = g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal);
+        try expectIntents("a move after the keyboard closed the mode does nothing", g.motion(.{ .leaf = 0, .col = 6, .row = 2 }, .normal), &.{});
+        try expectTrue("the gesture now ignores the rest", g.phase == .ignored);
+        try expectIntents("even if copy mode comes back, moves stay ignored", g.motion(.{ .leaf = 0, .col = 7, .row = 2 }, .copy), &.{});
+        try expectIntents("the release copies nothing", g.release(.copy), &.{});
+
+        _ = g.press(a, 0);
+        try expectIntents("a move after the pressed pane lost the focus does nothing", g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .gone), &.{});
+        try expectIntents("and its release copies nothing", g.release(.normal), &.{});
+    }
+
+    // ── 검사 21: 누른 뒤 키보드가 copy mode에 들어갔다 ───────────────────
+    //
+    // 첫 이동 전에 `Cmd+Shift+C`를 쳤다. 끌기가 시작되면 끌기의 것이다 —
+    // `select_start`를 그대로 내고, `vt.Screen.copyEnterAt`이 키보드 copy mode를
+    // 먼저 닫는다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(a, 0);
+        try expectIntents("a drag still starts when the keyboard entered copy mode first", g.motion(.{ .leaf = 0, .col = 4, .row = 2 }, .copy), &.{
+            .{ .select_start = a },
+            .{ .select_to = .{ .leaf = 0, .col = 4, .row = 2 } },
+        });
+    }
+
+    // ── 검사 22: 끄는 중의 휠 ─────────────────────────────────────────────
+    //
+    // 누른 채 굴리면 누른 패널을 움직이고 선택 끝을 지금 칸으로 다시 맞춘다
+    // (design 결정 7). 아직 안 끌었으면 선택을 먼저 시작한다 — 앵커가 누른
+    // 글자에 붙은 뒤에 뷰포트가 움직여야 한다. 칸이 같아도 `select_to`를 낸다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(a, 0);
+        try expectIntents("a wheel while pressed starts the selection before it scrolls", g.wheel(1, .normal).?, &.{
+            .{ .select_start = a },
+            .{ .scroll = .{ .leaf = 0, .notches = 1 } },
+            .{ .select_to = a },
+        });
+        try expectIntents("a wheel while dragging scrolls and re-points the same cell", g.wheel(-1, .copy).?, &.{
+            .{ .scroll = .{ .leaf = 0, .notches = -1 } },
+            .{ .select_to = a },
+        });
+        _ = g.motion(.{ .leaf = 0, .col = 4, .row = 2 }, .copy);
+        try expectIntents("the wheel re-points the cell the pointer is on now", g.wheel(2, .copy).?, &.{
+            .{ .scroll = .{ .leaf = 0, .notches = 2 } },
+            .{ .select_to = .{ .leaf = 0, .col = 4, .row = 2 } },
+        });
+        try expectIntents("the release after a wheel copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectTrue("a wheel with nothing held is the plain wheel", g.wheel(1, .normal) == null);
+
+        // 키보드가 모드를 닫은 뒤의 휠은 제스처의 것이 아니다.
+        _ = g.press(a, 0);
+        _ = g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal);
+        try expectTrue("a wheel after the keyboard closed the mode is the plain wheel", g.wheel(1, .normal) == null);
+        _ = g.release(.normal);
     }
 
     std.debug.print("pointer_test: all checks passed\n", .{});

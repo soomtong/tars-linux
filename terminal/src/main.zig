@@ -1460,6 +1460,15 @@ const PointerDev = struct {
     }
 };
 
+/// 한 회차의 왼쪽 버튼 전이 하나(PD-M2). 그 순간의 포인터 자리와 함께 든다 —
+/// 회차가 끝난 뒤의 자리 하나로는 "누르고 끌고 뗐다"의 순서를 되살릴 수 없다.
+const PointerEdge = struct { down: bool, x: u32, y: u32 };
+
+/// 한 회차에 담는 전이의 수. 사람의 손으로는 한 회차(밀리초 단위)에 둘을
+/// 넘기 어렵다. 넘치면 뒤를 버린다 — 뗌을 잃어도 다음 누름이 제스처를 새로
+/// 잡는다(`Gesture.press`).
+const MAX_EDGES = 8;
+
 /// 한 poll 회차의 포인터 이벤트 요약. 회차가 끝나면 `at` 줄 하나가 된다.
 const PointerRound = struct {
     frames: usize = 0,
@@ -1467,6 +1476,9 @@ const PointerRound = struct {
     /// 이 회차에 포인터가 움직였거나 버튼이 눌렸다. 화살표가 보이는 조건
     /// 2다(PD design 결정 4). 휠만 굴린 회차는 아니다.
     woke: bool = false,
+    /// 왼쪽 버튼의 눌림 · 뗌(PD-M2). 회차 안의 순서대로, 그 순간의 자리와 함께.
+    edges: [MAX_EDGES]PointerEdge = undefined,
+    edge_count: usize = 0,
 };
 
 /// 이 회차 앞에 화면에 화살표가 그려져 있었는가(PD-M1). `open` 줄의 `shown=`이
@@ -1665,6 +1677,12 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
             round.frames += 1;
             round.wheel +|= e.wheel;
             if (e.moved or e.pressed.bits() != 0) round.woke = true;
+            // 왼쪽 버튼의 전이는 그 순간의 자리와 함께 순서대로 담는다(PD-M2).
+            // 한 회차에 누르고 끌고 떼는 보고가 다 들어와도 순서가 남는다.
+            if ((e.pressed.left or e.released.left) and round.edge_count < MAX_EDGES) {
+                round.edges[round.edge_count] = .{ .down = e.pressed.left, .x = state.x, .y = state.y };
+                round.edge_count += 1;
+            }
         }
     }
     return .open;
@@ -1678,6 +1696,187 @@ fn closePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, slot: usize, state: *po
     _ = state.forget(@intCast(slot));
     devs[slot] = null;
 }
+
+/// 픽셀을 격자 칸으로 바꾸되, 격자 밖이면 가장 가까운 가장자리 칸으로
+/// 붙인다(PD-M2). 끄는 중에는 포인터가 여백 위에 있어도 선택 끝이 있어야
+/// 한다. `gridCell`과 같은 상수 넷을 쓴다 — 다른 상수를 쓰면 화살표 끝과
+/// 선택 끝이 한 칸 어긋난다(design 결정 5).
+fn gridCellClamped(x: u32, y: u32, cols: u16, rows: u16) GridCell {
+    const col: u32 = if (x < GRID_X) 0 else @min((x - GRID_X) / CELL_W, @as(u32, cols) - 1);
+    const row: u32 = if (y < GRID_Y) 0 else @min((y - GRID_Y) / ROW_HEIGHT, @as(u32, rows) - 1);
+    return .{ .col = @intCast(col), .row = @intCast(row) };
+}
+
+/// 포인터의 누름 · 끎 · 뗌 · 휠을 패널과 copy mode에 잇는다(PD-M2).
+///
+/// 판단은 `pointer.Gesture`가 하고(순수), 여기는 픽셀을 칸으로 바꿔 넘기고
+/// 돌아온 의도를 실행한다(design 결정 3). 회차마다 새로 짓는다 — 필드가
+/// `main`의 변수를 가리키므로 회차를 넘는 상태가 여기 없다.
+const PointerWire = struct {
+    gesture: *pointer.Gesture,
+    /// 누른 패널의 워크스페이스 번호. 누름이 쓰고 `target`이 읽는다.
+    gesture_ws: *usize,
+    ws: *Workspace,
+    current: usize,
+    key_state: *input.State,
+    whole: layout.Rect,
+    cols: u16,
+    rows: u16,
+    /// 의도가 화면을 바꿨다. 부르는 쪽이 `needs_redraw`로 옮긴다.
+    redraw: bool = false,
+
+    /// 누른 패널이 지금 어떤 상태인가(`pointer.Target`). 누른 뒤 키보드가
+    /// 포커스나 워크스페이스를 옮겼거나 그 패널이 닫혔으면 `gone`이다.
+    ///
+    /// 키보드 copy mode는 포커스 패널에만 있다(copy 표가 `Cmd+]`를 삼킨다).
+    /// 그래서 "누른 패널이 포커스인가"와 "그 패널이 copy mode인가" 둘이면
+    /// 키보드와 포인터가 섞이는 경우(design 결정 6의 표)가 다 갈린다.
+    fn target(self: *const PointerWire) pointer.Target {
+        const leaf = self.gesture.held() orelse return .gone;
+        if (self.gesture_ws.* != self.current or self.ws.focus != leaf) return .gone;
+        const p = self.ws.panes[leaf] orelse return .gone;
+        return if (p.screen.copyActive()) .copy else .normal;
+    }
+
+    /// 왼쪽 버튼이 눌렸다. `pointer> press` 줄을 찍는다 — 패널 칸이면 그
+    /// 잎과 상대 칸이고, 여백 · 구분선 · 상태 줄이면 `none`이다.
+    fn press(self: *PointerWire, x: u32, y: u32) !void {
+        const hit: ?pointer.Cell = cell: {
+            const gc = gridCell(x, y, self.cols, self.rows) orelse break :cell null;
+            const h = self.ws.tree.hit(self.whole, gc.col, gc.row) orelse break :cell null;
+            break :cell .{ .leaf = h.leaf, .col = h.col, .row = h.row };
+        };
+        if (hit) |h| {
+            std.debug.print("terminal: pointer> press leaf={d} row={d} col={d}\n", .{ h.leaf, h.row, h.col });
+        } else {
+            std.debug.print("terminal: pointer> press none\n", .{});
+        }
+        self.gesture_ws.* = self.current;
+        try self.run(self.gesture.press(hit, self.ws.focus));
+    }
+
+    /// 포인터가 움직였다. 버튼이 패널 칸 위에서 눌린 채일 때만 일이 있다.
+    ///
+    /// 끄는 칸은 누른 패널의 사각형으로 자른다(design 결정 5). 이웃 패널이나
+    /// 여백 위로 끌어도 선택 끝은 누른 패널의 가장자리 칸이다.
+    fn motion(self: *PointerWire, x: u32, y: u32) !void {
+        const leaf = self.gesture.held() orelse return;
+        const t = self.target();
+        // 누른 패널이 포커스를 잃었으면 칸을 셀 사각형이 없을 수 있다(지금
+        // 트리에 그 잎이 없다). `Gesture`는 `gone`이면 칸을 안 본다.
+        if (t == .gone) return self.run(self.gesture.motion(self.gesture.start, t));
+        var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
+        self.ws.tree.rects(self.whole, &rs);
+        const gc = gridCellClamped(x, y, self.cols, self.rows);
+        const h = layout.clampInto(rs[leaf], leaf, gc.col, gc.row);
+        try self.run(self.gesture.motion(.{ .leaf = h.leaf, .col = h.col, .row = h.row }, t));
+    }
+
+    /// 왼쪽 버튼을 뗐다. `pointer> release drag=` 줄을 찍는다 — 1이면 끈
+    /// 뒤의 뗌이다. 복사했는지는 뒤따르는 `clip>` 줄이 말한다.
+    fn release(self: *PointerWire) !void {
+        const dragged = self.gesture.phase == .dragging;
+        std.debug.print("terminal: pointer> release drag={d}\n", .{@intFromBool(dragged)});
+        try self.run(self.gesture.release(self.target()));
+    }
+
+    /// 휠(PD design 결정 7). 버튼이 패널 위에서 눌린 채면 제스처의 것이다 —
+    /// 누른 패널을 움직이고 선택 끝을 다시 맞춘다. 아니면 PD-M1의 휠이다.
+    ///
+    /// PD-M1의 휠. 포인터 아래 패널이 움직이고 포커스는 안 바뀐다. 여백 ·
+    /// 구분선 위면 아무 일도 없다. 키보드 copy mode인 패널도 무시한다 — copy
+    /// 커서는 뷰포트 좌표라 밖에서 뷰포트를 밀면 커서가 다른 글자를 가리키는데
+    /// 선택은 안 따라온다. 양수가 휠을 앞으로 민 것이고 위로 간다.
+    fn wheel(self: *PointerWire, notches: i32, x: u32, y: u32) !void {
+        if (self.gesture.wheel(notches, self.target())) |its| return self.run(its);
+        const cell = gridCell(x, y, self.cols, self.rows) orelse return;
+        const h = self.ws.tree.hit(self.whole, cell.col, cell.row) orelse return;
+        const p = &self.ws.panes[h.leaf].?;
+        if (p.screen.copyActive()) return;
+        p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, notches));
+        self.redraw = true;
+    }
+
+    /// 의도를 차례로 실행한다. switch에 `else`가 없다 — `pointer.Intent`에
+    /// variant가 늘면 여기서 컴파일이 멈춘다(design 결정 3).
+    ///
+    /// 화면이 바뀐 의도만 `redraw`를 켠다. 아무것도 안 바꾼 클릭이 프레임을
+    /// 그리면 클릭마다 `screen>` 등 덤프가 찍힌다.
+    ///
+    /// `select_start` · `select_to` · `scroll` · `copy`의 잎은 언제나 포커스
+    /// 패널이다. `Gesture`는 `target`이 `gone`이 아닐 때만 그것들을 내고,
+    /// `gone`이 아니라는 것은 누른 잎이 지금 포커스이고 그 패널이 있다는 뜻이다.
+    fn run(self: *PointerWire, intents: pointer.Intents) !void {
+        for (intents.items()) |it| {
+            switch (it) {
+                // 옛 포커스 패널을 정리한다. 확정된 한글을 그 PTY에 먼저 쓰고,
+                // 그 패널의 copy mode와 검색 프롬프트를 복사 없이 닫는다
+                // (`copyExit`이 `findCancel`까지 한다). 이 의도가 `focus`보다
+                // 먼저 온다 — 확정 → 포커스 이동 → 선택이 design 결정 6의
+                // 순서다.
+                .cancel => {
+                    const fp = &self.ws.panes[self.ws.focus].?;
+                    const composing = self.key_state.preedit() != null;
+                    const bytes = self.key_state.pointerMode(.normal);
+                    if (bytes.len > 0) pty.write(fp.session.master_fd, bytes);
+                    if (composing) {
+                        fp.screen.setPreedit(null);
+                        dumpHangul(self.key_state);
+                        self.redraw = true;
+                    }
+                    if (fp.screen.copyActive()) {
+                        fp.screen.copyExit();
+                        dumpCopy(fp.screen, "exit");
+                        self.redraw = true;
+                    }
+                },
+                // 포커스만 옮긴다. `pane>` 줄은 이 프레임의 덤프가 찍는다.
+                .focus => |leaf| {
+                    self.ws.focus = leaf;
+                    self.redraw = true;
+                },
+                // 처음으로 다른 칸에 닿았다. 입력 모드와 화면 모드를 함께
+                // 옮긴다(design 결정 6). 누른 뒤 첫 이동 전에 친 한글이 조합
+                // 중일 수 있고, 그 글자는 이 패널의 셸로 간다 — 누름이 포커스를
+                // 이미 이리로 옮겼다.
+                .select_start => |at| {
+                    const p = &self.ws.panes[at.leaf].?;
+                    const composing = self.key_state.preedit() != null;
+                    const bytes = self.key_state.pointerMode(.copy);
+                    if (bytes.len > 0) pty.write(p.session.master_fd, bytes);
+                    if (composing) {
+                        p.screen.setPreedit(null);
+                        dumpHangul(self.key_state);
+                    }
+                    try p.screen.copyEnterAt(at.col, at.row);
+                    dumpCopy(p.screen, "enter");
+                    self.redraw = true;
+                },
+                .select_to => |at| {
+                    const p = &self.ws.panes[at.leaf].?;
+                    try p.screen.copyPointTo(at.col, at.row);
+                    dumpCopy(p.screen, "point");
+                    self.redraw = true;
+                },
+                .scroll => |s| {
+                    self.ws.panes[s.leaf].?.screen.scrollByRows(-WHEEL_ROWS * @as(isize, s.notches));
+                    self.redraw = true;
+                },
+                // 뗌 = 복사(design 결정 6). 키보드의 `y`와 같은 줄 둘이 같은
+                // 순서로 찍힌다 — `clip>` 다음 `copy> yank`. 그리고 입력 모드를
+                // normal로 되돌린다. 안 되돌리면 복사한 뒤 친 글자가 copy 표에
+                // 삼켜진다(pointer/check.sh 검사 18).
+                .copy => |leaf| {
+                    const p = &self.ws.panes[leaf].?;
+                    dumpClip(try p.screen.copyYank());
+                    dumpCopy(p.screen, "yank");
+                    _ = self.key_state.pointerMode(.normal);
+                    self.redraw = true;
+                },
+            }
+        }
+    }
+};
 
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
@@ -1934,6 +2133,11 @@ pub fn main(init: std.process.Init) !void {
     // PTY에 바이트를 보내면 꺼진다. 장치가 다 빠져도 꺼진다 — 다시 꽂은
     // 장치는 움직여야 보인다. 조건 1(장치가 하나 이상)은 `pointerCount`가 본다.
     var pointer_shown = false;
+    // 누름 · 끎 · 뗌의 상태(PD-M2, design 결정 6)와, 누른 패널이 있던
+    // 워크스페이스 번호. 누른 채 키보드가 워크스페이스를 바꾸면 `PointerWire`가
+    // 이 번호로 알아채고 제스처를 버린다.
+    var gesture: pointer.Gesture = .{};
+    var gesture_ws: usize = 0;
     const uevent_fd: c_int = uevent: {
         const linux = std.os.linux;
         const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
@@ -2286,20 +2490,37 @@ pub fn main(init: std.process.Init) !void {
         if (fds[1].revents & c.POLLIN != 0) drainUevents(uevent_fd, init.io, &pointer_devs);
         if (pointerCount(&pointer_devs) == 0) pointer_shown = false;
         if (round.woke) pointer_shown = true;
-        // 휠(PD design 결정 7). 포인터 아래 패널이 움직이고 포커스는 안 바뀐다.
-        // 여백 · 구분선 위면 아무 일도 없다. 키보드 copy mode인 패널도 무시한다 —
-        // copy 커서는 뷰포트 좌표라 밖에서 뷰포트를 밀면 커서가 다른 글자를
-        // 가리키는데 선택은 안 따라온다.
+        // 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
+        // `PointerWire`다(design 결정 3).
         //
-        // 양수가 휠을 앞으로 민 것이고 위로 간다. 뷰포트가 바뀌었으므로 화면
-        // 전체를 다시 그린다(`scroll>` 줄도 그 프레임에 찍힌다).
-        if (round.wheel != 0) wheel: {
-            const cell = gridCell(pointer_state.x, pointer_state.y, cols, rows) orelse break :wheel;
-            const h = ws.tree.hit(whole, cell.col, cell.row) orelse break :wheel;
-            const p = &ws.panes[h.leaf].?;
-            if (p.screen.copyActive()) break :wheel;
-            p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, round.wheel));
-            needs_redraw = true;
+        // 왼쪽 버튼의 전이를 회차 안의 순서대로 먼저 돈다. 전이마다 그 순간의
+        // 자리로 움직임을 먼저 주고 그다음 누름이나 뗌을 준다 — 끌다가 뗀 보고
+        // 하나는 마지막 칸까지 선택을 늘린 뒤에 복사해야 한다. 그다음 회차
+        // 끝의 자리로 움직임 한 번, 마지막이 휠이다.
+        //
+        // 휠이 맨 뒤라 한 회차 안의 누름 · 휠 · 뗌의 순서는 안 남는다. 사람의
+        // 손으로 한 회차(밀리초 단위)에 그 셋이 함께 오는 일은 드물다.
+        //
+        // 뷰포트가 바뀌었거나 선택이 바뀌었으면 화면 전체를 다시 그린다
+        // (`scroll>` · `copy>` 줄도 그 프레임 앞뒤에 찍힌다).
+        {
+            var wire: PointerWire = .{
+                .gesture = &gesture,
+                .gesture_ws = &gesture_ws,
+                .ws = ws,
+                .current = current,
+                .key_state = &key_state,
+                .whole = whole,
+                .cols = cols,
+                .rows = rows,
+            };
+            for (round.edges[0..round.edge_count]) |e| {
+                try wire.motion(e.x, e.y);
+                if (e.down) try wire.press(e.x, e.y) else try wire.release();
+            }
+            if (round.woke) try wire.motion(pointer_state.x, pointer_state.y);
+            if (round.wheel != 0) try wire.wheel(round.wheel, pointer_state.x, pointer_state.y);
+            if (wire.redraw) needs_redraw = true;
         }
         // `at` 줄은 그린 뒤에 찍는다(`dumpPointerAt`) — `ink`가 그린 결과를 센다.
 

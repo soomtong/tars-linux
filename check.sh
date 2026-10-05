@@ -320,8 +320,10 @@ run_chain() {
 # PD 체인은 terminal이 포인터 장치를 스스로 찾아 열고 닫는가를 본다. USB 마우스를
 # 하나 붙여 뜨고(-usb -device usb-mouse) monitor의 mouse_move · mouse_button으로
 # 움직이며, device_add · device_del로 부팅 뒤에 꽂고 뺀다. PD-M1부터 화살표가
-# 포인터를 따라오고 휠이 패널을 움직인다. 판정은 terminal의 pointer> · scroll>
-# 줄과 screendump 넷(perl로 화살표 색을 센다)이다. 회차당 부팅 1회.
+# 포인터를 따라오고 휠이 패널을 움직인다. PD-M2부터 누르면 포커스가 옮겨 가고,
+# 끌어 고른 글자가 뗄 때 클립보드에 들어간다. 판정은 terminal의 pointer> ·
+# scroll> · copy> · clip> · pane> 줄과 screendump 넷(perl로 화살표 색을 센다)이다.
+# 회차당 부팅 1회.
 #
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -344,7 +346,7 @@ CHAINS=(
   "CT-M2:./service/check.sh"
   "WL-M3:./wifi/check.sh"
   "WP-M2:./pane/check.sh"
-  "PD-M1:./pointer/check.sh"
+  "PD-M2:./pointer/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

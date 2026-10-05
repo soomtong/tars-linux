@@ -332,5 +332,26 @@ pub fn main() !void {
         try expectHit("past the bottom", t.hit(WHOLE, 10, 47), null);
     }
 
+    // ── 검사 13: 끄는 칸을 누른 패널 안으로 붙인다 (PD-M2) ────────────────
+    //
+    // 끄는 동안 선택 끝이 이웃 패널로 넘어가지 않는 자리다(PD design 결정 5).
+    // 0 | 1에서 왼쪽은 0,0 77x47, 오른쪽은 78,0 77x47이다. 안의 칸은 `hit`과
+    // 같은 상대 칸이 되고, 밖의 칸은 가장 가까운 가장자리 칸이 된다. 구분선
+    // 칸(77열)은 왼쪽 잎에서는 마지막 열, 오른쪽 잎에서는 첫 열이다.
+    {
+        const left: Rect = .{ .col = 0, .row = 0, .cols = 77, .rows = 47 };
+        const right: Rect = .{ .col = 78, .row = 0, .cols = 77, .rows = 47 };
+        try expectHit("clamp inside the left leaf", layout.clampInto(left, 0, 10, 5), .{ .leaf = 0, .col = 10, .row = 5 });
+        try expectHit("clamp the separator into the left leaf", layout.clampInto(left, 0, 77, 5), .{ .leaf = 0, .col = 76, .row = 5 });
+        try expectHit("clamp the right leaf into the left leaf", layout.clampInto(left, 0, 120, 5), .{ .leaf = 0, .col = 76, .row = 5 });
+        try expectHit("clamp past the bottom into the left leaf", layout.clampInto(left, 0, 3, 60), .{ .leaf = 0, .col = 3, .row = 46 });
+        try expectHit("clamp the separator into the right leaf", layout.clampInto(right, 1, 77, 5), .{ .leaf = 1, .col = 0, .row = 5 });
+        try expectHit("clamp the left leaf into the right leaf", layout.clampInto(right, 1, 10, 0), .{ .leaf = 1, .col = 0, .row = 0 });
+        try expectHit("clamp inside the right leaf", layout.clampInto(right, 1, 154, 46), .{ .leaf = 1, .col = 76, .row = 46 });
+        // 가로 분할의 아래 잎(78,24 77x23, 검사 12). 위로 끌어 나가면 첫 줄이다.
+        const lower: Rect = .{ .col = 78, .row = 24, .cols = 77, .rows = 23 };
+        try expectHit("clamp above the lower leaf", layout.clampInto(lower, 2, 100, 3), .{ .leaf = 2, .col = 22, .row = 0 });
+    }
+
     std.debug.print("layout_test: all checks passed\n", .{});
 }

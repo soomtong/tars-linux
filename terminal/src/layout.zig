@@ -280,6 +280,21 @@ pub const Tree = struct {
     }
 };
 
+/// 격자 칸 `(col, row)`를 사각형 `r` 안으로 붙이고 그 안의 상대 칸으로
+/// 돌려준다(PD design 결정 5). 끄는 동안 선택 끝이 누른 패널 밖으로 안
+/// 나가게 하는 자리다 — 이웃 패널이나 구분선 위로 끌어도 누른 패널의
+/// 가장자리 칸에서 멈춘다.
+///
+/// `hit`과 달리 null이 없다. 끄는 중에는 포인터가 어디에 있든 선택 끝이
+/// 있어야 하기 때문이다. 격자 밖의 픽셀을 격자 칸으로 붙이는 것은
+/// `main.zig`의 몫이다(이 파일은 셀 단위만 안다). `r`은 넓이가 1 이상이어야
+/// 한다 — `split`이 그보다 작은 잎을 안 만든다.
+pub fn clampInto(r: Rect, leaf: u4, col: u16, row: u16) Hit {
+    const c = @min(@max(col, r.col), r.col + r.cols - 1);
+    const w = @min(@max(row, r.row), r.row + r.rows - 1);
+    return .{ .leaf = leaf, .col = c - r.col, .row = w - r.row };
+}
+
 /// 사각형 하나를 둘과 구분선으로 가른다. `fill`과 `separators`가 같은
 /// 산수를 따로 하면 언젠가 한 칸 어긋난다 — 그 어긋남은 "구분선이 패널
 /// 위에 그려진다"로 나타나고 `layout_test`의 검사 10이 본다.
