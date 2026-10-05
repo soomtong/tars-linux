@@ -136,20 +136,28 @@ require_explicit_nic() {
   return 1
 }
 
+# 체인마다 연속으로 도는 회차 수. BF-M4부터 3이었고 2026-10-05에 사용자의 결정으로
+# 2가 됐다(docs/decisions/feedback_gate_runs.md). 3은 BF design의 관례였고 왜 3인지 잰
+# 기록이 없다. 회귀는 늘 1회차가 잡았고(PD-M0의 install 실패도 두 번 다 1회차), 2 · 3회차가
+# 잡은 것은 경합이었는데 그때마다 게이트가 빨개져 원인을 가르는 데 한 시간이 들었다.
+# 1회차에 빌드가 들어 있어 3회차의 몫은 약 20분(1시간 8분 중)이었다. 경합이 의심되는
+# 체인은 그 체인만 따로 여러 번 돌린다(GE-M1 · PE-M0의 방식).
+RUNS=2
+
 run_chain() {
   local name="$1"
   local script="$2"
 
-  for i in 1 2 3; do
-    echo "=== ${name} run ${i}/3 ==="
+  for i in $(seq 1 "$RUNS"); do
+    echo "=== ${name} run ${i}/${RUNS} ==="
     if ! "$script"; then
-      echo "${name} FAIL: run ${i}/3 failed"
+      echo "${name} FAIL: run ${i}/${RUNS} failed"
       exit 1
     fi
-    echo "=== ${name} run ${i}/3 PASSED ==="
+    echo "=== ${name} run ${i}/${RUNS} PASSED ==="
   done
 
-  echo "${name} PASS: 3/3 consecutive runs succeeded"
+  echo "${name} PASS: ${RUNS}/${RUNS} consecutive runs succeeded"
 }
 
 # BF 체인은 limine ISO 부팅 경로를, TF 체인은 부팅 이후의 전체 런타임
@@ -368,14 +376,14 @@ fi
 # GL-M0: clean은 여기서 한 번만 부른다. 예전에는 run_chain이 회차마다 불렀고
 # 그것이 게이트 54분 중 약 45분을 만들었다(같은 산출물을 24번 빌드했다).
 #
-# 3회 반복이 잡는 것은 부팅과 게스트 입력의 flakiness이지 빌드 재현성이
+# 반복이 잡는 것은 부팅과 게스트 입력의 flakiness이지 빌드 재현성이
 # 아니다 — 같은 소스를 같은 컨테이너에서 다시 빌드하는 것이라 1회차가 통과한
-# 것을 2·3회차가 실패시킬 경로가 사실상 없다. 반복의 목적을 부팅에 돌려주는
-# 변경이지 반복을 줄이는 변경이 아니다.
+# 것을 뒤 회차가 실패시킬 경로가 사실상 없다. 반복의 목적을 부팅에 돌려주는
+# 변경이지 반복을 줄이는 변경이 아니다(반복을 3에서 2로 줄인 것은 RUNS의 주석).
 clean
 
 for entry in "${CHAINS[@]}"; do
   run_chain "${entry%%:*}" "${entry#*:}"
 done
 
-echo "TARS check PASS: all chains 3/3 consecutive runs succeeded"
+echo "TARS check PASS: all chains ${RUNS}/${RUNS} consecutive runs succeeded"

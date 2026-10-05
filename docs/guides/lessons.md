@@ -16,7 +16,7 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (열일곱 체인 × 3, 약 60분 — 2026-10-03 TG-M3 뒤 1시간 1분 25초)
+# 루트 게이트 (열아홉 체인 × 2 — 2026-10-05 PD-M2부터 2회, feedback_gate_runs. 3회였을 때 1시간 8분(PD-M1), 2회는 약 50분으로 본다)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
@@ -67,7 +67,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
 `clean()`은 `run_chain` 안이 아니라 게이트 시작에서 한 번만 불린다. 그래서
-회차 시간이 1회차와 2·3회차에서 크게 다른 것이 정상이다.
+회차 시간이 1회차와 뒤 회차에서 크게 다른 것이 정상이다.
 
 빌드 스텝을 빠뜨린 체인은 진입 검사가 막는다. `check.sh`가 첫 부팅 전에
 체인 스크립트를 전부 훑어 `kernel/build.sh` · `init`의 `zig build` ·
@@ -76,7 +76,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 
 커널은 입력이 안 바뀌면 아예 빌드하지 않는다 (GL-M1). `kernel/build.sh`가
 `.config`와 자기 자신의 sha256을 `build/.tars-build-stamp`에 적어 두고 대조한다.
-게이트 로그의 `skipping make` 횟수는 `체인 수 × 3 − 1`이어야 한다 — 첫
+게이트 로그의 `skipping make` 횟수는 `체인 수 × 회차 수 − 1`이어야 한다(회차 수는 `check.sh`의 `RUNS`, 지금 2) — 첫
 회차만 clean에서 지운 자리를 다시 빌드한다. 그 수보다 하나 많으면 `clean()`이
 지운 자리에서도 건너뛴 것이라 잘못이다. `build.sh`가 해시에 들어가는 이유는
 `KERNEL_VERSION`이 그 안에 있기 때문이고, 커널 버전을 올릴 사람은 이것을 알아야
