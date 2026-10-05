@@ -816,14 +816,20 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 같은 근거다.
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
+    // terminal에 가는 것은 위 목록에 `esc_latin`을 더한 것이다(EL design
+    // 결정 1). 로그는 파일에 적힌 두 키를 따로 찍고, argv는 합친 것을 쓴다.
+    // 수명은 `toggle_buf`와 같다.
+    var terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+    const terminal_toggle_arg = cfg.terminalToggles(&terminal_toggle_buf);
     // TS-M1이 여덟째 키를 맨 뒤에 붙였다. 뒤여야 하는 이유는 위와 같다 —
     // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
     // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
     // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
-    // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였다.
+    // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
+    // 그 뒤에 붙였다.
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n",
+        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n",
         .{
             @tagName(cfg.shell),
             @tagName(cfg.keyboard),
@@ -835,6 +841,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             cfg.ntp.arg(&ntp_buf),
             cfg.timezone.slice(),
             @tagName(cfg.firewall),
+            @tagName(cfg.esc_latin),
         },
     );
 
@@ -1036,7 +1043,7 @@ pub fn main(init: std.process.Init.Minimal) void {
             keyboard_path.cstr(),
             hangul_arg.ptr,
             latin_arg.ptr,
-            toggle_arg.ptr,
+            terminal_toggle_arg.ptr,
         },
         .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
     };

@@ -28,6 +28,11 @@ cd "$(dirname "$0")"
 #
 # 꺼짐의 판정은 로그 줄 하나로 끝난다. `arg()`가 정규형을 만들므로 찍히는
 # 문자열에 `hangul_key`가 없다는 것 자체가 "설정이 그것을 껐다"의 증거다.
+#
+# `esc_latin=` 줄은 일부러 없다(EL-M0). EL 전의 seed가 만든 파일이 전부 그렇게
+# 생겼고(`hangul_toggle`에 목록을 적고 `esc_latin`은 모른다), 그런 파일에서도
+# Esc가 한글을 끄는지가 EL design 결정 1의 질문이다. 체인의 검사 0이
+# `esc_latin=on`을, 검사 22~24가 그 동작을 본다.
 SIZE=16M
 IMG=../out/hangul.img
 

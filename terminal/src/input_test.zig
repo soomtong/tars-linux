@@ -1835,5 +1835,185 @@ pub fn main() !void {
     }
     std.debug.print("input_test: 포인터 경로가 읽는 수정키 OK\n", .{});
 
+    // ── EL-M0: Esc가 한글을 끈다 ─────────────────────────────────────────
+    //
+    // 검사 69. 조합 중에 Esc를 치면 확정하고, Esc 바이트가 나가고, 한글이
+    // 꺼진다(EL design 결정 2). 셋을 한 자리에서 본다 — 바이트가 `\x1b`
+    // 하나이고, 확정분이 그보다 먼저 나갈 통로(`commit_buf`)에 있고, 그 뒤의
+    // `r`이 라틴 글자다. `readKeys`가 확정분을 바이트보다 먼저 쓰므로(검사
+    // 27) vim은 `가`를 받은 뒤에 Esc를 받는다.
+    {
+        var el_c: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expectHangul(&el_c, K.KEY_R, "", 'ㄱ');
+        try expectHangul(&el_c, K.KEY_K, "", '가');
+        try expect(&el_c, K.KEY_ESC, 1, "\x1b");
+        try expectCommit(&el_c, K.KEY_ESC, "가");
+        try expectPreedit(&el_c, K.KEY_ESC, null);
+        if (el_c.hangul_on) {
+            std.debug.print("FAIL: Esc while composing left hangul on\n", .{});
+            return error.EscLatinFailed;
+        }
+        try expect(&el_c, K.KEY_R, 1, "r");
+
+        // 검사 70. 조합 중이 아니어도 끈다. 확정분은 없다.
+        el_c.hangul_on = true;
+        try expect(&el_c, K.KEY_ESC, 1, "\x1b");
+        try expectCommit(&el_c, K.KEY_ESC, "");
+        if (el_c.hangul_on) {
+            std.debug.print("FAIL: Esc with nothing composing left hangul on\n", .{});
+            return error.EscLatinFailed;
+        }
+
+        // 검사 71. 한글이 꺼져 있으면 Esc는 EL 전과 같다 — 한 바이트이고
+        // 아무것도 안 켠다. 한 방향이라는 것이 이 줄이다.
+        try expect(&el_c, K.KEY_ESC, 1, "\x1b");
+        if (el_c.hangul_on) {
+            std.debug.print("FAIL: Esc turned hangul on\n", .{});
+            return error.EscLatinFailed;
+        }
+    }
+    std.debug.print("input_test: Esc가 조합을 확정하고 한글을 끈다 OK\n", .{});
+
+    // 검사 72. 수정키가 있거나 설정이 끄면 Esc는 한글을 안 끈다. Shift+Esc는
+    // Patal을 따른 것이고(EL design 결정 2), Ctrl+Esc는 `hangulLayer`의 Ctrl
+    // 갈래가 먼저 가져간다. 셋 다 Esc 바이트는 그대로 나가고 조합은 확정된다 —
+    // EL 전과 같은 동작이다.
+    {
+        var el_s: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expectHangul(&el_s, K.KEY_R, "", 'ㄱ');
+        try expect(&el_s, K.KEY_LEFTSHIFT, 1, "");
+        try expect(&el_s, K.KEY_ESC, 1, "\x1b");
+        try expectCommit(&el_s, K.KEY_ESC, "ㄱ");
+        try expect(&el_s, K.KEY_LEFTSHIFT, 0, "");
+        if (!el_s.hangul_on) {
+            std.debug.print("FAIL: Shift+Esc turned hangul off\n", .{});
+            return error.EscLatinModifier;
+        }
+        try expect(&el_s, K.KEY_LEFTCTRL, 1, "");
+        try expect(&el_s, K.KEY_ESC, 1, "\x1b");
+        try expect(&el_s, K.KEY_LEFTCTRL, 0, "");
+        if (!el_s.hangul_on) {
+            std.debug.print("FAIL: Ctrl+Esc turned hangul off\n", .{});
+            return error.EscLatinModifier;
+        }
+
+        // 설정에서 껐다(`esc_latin=off` → argv 목록에 이름이 없다). 전환 키
+        // 넷은 켜 둔다 — 이 검사가 보는 것은 `esc_latin` 하나다.
+        var el_o: input.State = .{
+            .hangul_layout = .dubeol,
+            .hangul_on = true,
+            .toggles = .{
+                .hangul_key = true,
+                .shift_space = true,
+                .capslock_tap = true,
+                .lctrl_tap = true,
+            },
+        };
+        try expectHangul(&el_o, K.KEY_R, "", 'ㄱ');
+        try expect(&el_o, K.KEY_ESC, 1, "\x1b");
+        try expectCommit(&el_o, K.KEY_ESC, "ㄱ");
+        if (!el_o.hangul_on) {
+            std.debug.print("FAIL: Esc turned hangul off with esc_latin off\n", .{});
+            return error.EscLatinIgnoredSetting;
+        }
+    }
+    std.debug.print("input_test: 수정키가 있거나 설정이 끄면 Esc는 한글을 안 끈다 OK\n", .{});
+
+    // 검사 73. copy mode와 검색 프롬프트의 Esc는 한글을 안 끈다(EL design
+    // 결정 2). 두 모드의 Esc는 한 겹을 벗기는 명령이고, 한/영은 그 모드에
+    // 들어가기 전의 상태로 남는다 — 검색어를 한글로 치던 사람이 프롬프트를
+    // 닫았다 다시 열면 한글이다. 검사 29가 copy mode 쪽을 HI 때부터 보고
+    // 있고, 여기서는 둘을 나란히 본 뒤 셸로 돌아온 Esc가 끄는 것까지 본다.
+    {
+        var el_m: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expect(&el_m, K.KEY_LEFTMETA, 1, "");
+        try expect(&el_m, K.KEY_LEFTSHIFT, 1, "");
+        try expectCopy(&el_m, K.KEY_C, .enter);
+        try expect(&el_m, K.KEY_LEFTSHIFT, 0, "");
+        try expect(&el_m, K.KEY_LEFTMETA, 0, "");
+        try expectCopy(&el_m, K.KEY_SLASH, .find_open);
+        try expectCopy(&el_m, K.KEY_ESC, .find_cancel);
+        if (!el_m.hangul_on) {
+            std.debug.print("FAIL: the Esc that closed the find prompt turned hangul off\n", .{});
+            return error.EscLatinInMode;
+        }
+        try expectCopy(&el_m, K.KEY_ESC, .exit);
+        if (!el_m.hangul_on) {
+            std.debug.print("FAIL: the Esc that left copy mode turned hangul off\n", .{});
+            return error.EscLatinInMode;
+        }
+        // 셸로 돌아온 뒤의 Esc는 끈다. 모드가 갈래를 가른다는 것의 짝이다.
+        try expect(&el_m, K.KEY_ESC, 1, "\x1b");
+        if (el_m.hangul_on) {
+            std.debug.print("FAIL: Esc back in the shell left hangul on\n", .{});
+            return error.EscLatinFailed;
+        }
+    }
+    std.debug.print("input_test: copy mode와 검색 프롬프트의 Esc는 한글을 안 끈다 OK\n", .{});
+
+    // 검사 74. `readKeys`가 `redraw`를 켠다(EL design 결정 3).
+    //
+    // 첫째가 심장이다. 조합 중이 아니면 확정분이 없어서 `takeCommit` 갈래가
+    // `redraw`를 안 켜고, Esc는 `.bytes`라 `.redraw` 갈래도 안 탄다. 남은 것은
+    // `hangul_on`의 앞뒤 비교 한 줄뿐이다 — 그 줄이 없으면 상태 줄의 `한`이
+    // 다음 키를 칠 때까지 남는다(IS design 결정 8과 같은 종류의 구멍).
+    {
+        var el_r: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        const evs = [_]input.c.struct_input_event{
+            keyEvent(K.KEY_ESC, 1), keyEvent(K.KEY_ESC, 0),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+        var out: [64]u8 = undefined;
+        const keys = input.readKeys(&el_r, fds[0], &out, .{});
+        if (!std.mem.eql(u8, keys.bytes, "\x1b") or !keys.redraw or el_r.hangul_on) {
+            std.debug.print(
+                "FAIL: Esc with hangul on gave {d} byte(s), redraw={}, hangul_on={}; want 1, true, false\n",
+                .{ keys.bytes.len, keys.redraw, el_r.hangul_on },
+            );
+            return error.EscLatinRedraw;
+        }
+    }
+    // 대조군 — 한글이 꺼져 있으면 Esc는 `redraw`를 안 켠다. 이것이 없으면
+    // "Esc는 언제나 다시 그린다"도 위 검사를 통과하고, 그 구현은 vim에서
+    // Esc를 칠 때마다 화면 전체를 다시 그린다.
+    {
+        var el_q: input.State = .{};
+        const evs = [_]input.c.struct_input_event{
+            keyEvent(K.KEY_ESC, 1), keyEvent(K.KEY_ESC, 0),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+        var out: [64]u8 = undefined;
+        const keys = input.readKeys(&el_q, fds[0], &out, .{});
+        if (!std.mem.eql(u8, keys.bytes, "\x1b") or keys.redraw) {
+            std.debug.print(
+                "FAIL: Esc with hangul off gave {d} byte(s), redraw={}; want 1, false\n",
+                .{ keys.bytes.len, keys.redraw },
+            );
+            return error.EscLatinRedraw;
+        }
+    }
+    // 조합 중이면 확정분이 Esc보다 먼저 한 write에 실린다. vim이 받는 순서이고,
+    // 게이트의 `key> 4 byte(s)`가 보는 것이 이 넷이다.
+    {
+        var el_p: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        const evs = [_]input.c.struct_input_event{
+            keyEvent(K.KEY_R, 1), keyEvent(K.KEY_K, 1), keyEvent(K.KEY_ESC, 1),
+        };
+        const fds = try feedEvents(&evs);
+        defer _ = close(fds[0]);
+        var out: [64]u8 = undefined;
+        const keys = input.readKeys(&el_p, fds[0], &out, .{});
+        if (!std.mem.eql(u8, keys.bytes, "가\x1b") or !keys.redraw or el_p.hangul_on) {
+            std.debug.print(
+                "FAIL: 가 then Esc gave {any}, redraw={}, hangul_on={}; want 가 then 0x1b, true, false\n",
+                .{ keys.bytes, keys.redraw, el_p.hangul_on },
+            );
+            return error.EscLatinOrder;
+        }
+    }
+    std.debug.print("input_test: Esc가 한글을 끄면 readKeys가 다시 그리게 한다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

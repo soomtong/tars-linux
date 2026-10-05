@@ -2208,11 +2208,13 @@ pub fn main(init: std.process.Init) !void {
     // fallback을 문자열로 두는 것에 뜻이 있다. 집합 리터럴로 쓰면 기본값이
     // 이 파일에도 한 벌 생기는데, 그 값은 `init/src/config.zig`의 `Config`와
     // 같아야 하고 컴파일러가 그것을 못 잡는다. 문자열로 두면 적어도 눈으로
-    // 대조할 형태가 설정 파일과 같아진다.
+    // 대조할 형태가 설정 파일과 같아진다. 끝의 `esc_latin`은 설정 파일의
+    // `hangul_toggle`이 아니라 `esc_latin=on`에서 온다 — init이 둘을 합쳐 이
+    // 자리에 넣는다(EL design 결정 1).
     const toggle_arg: []const u8 = if (args.len > 7)
         std.mem.span(args[7])
     else
-        "hangul_key,shift_space,capslock_tap,lctrl_tap";
+        "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin";
     const toggles = input.parseToggles(toggle_arg);
 
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준

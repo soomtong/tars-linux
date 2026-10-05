@@ -46,6 +46,24 @@ pub const Firewall = enum {
     on,
 };
 
+/// 한글을 치다가 Esc를 누르면 영문으로 돌아오는가(EL design 결정 1).
+///
+/// `hangul_toggle` 목록의 다섯째 이름이 아니라 따로 있는 키인 이유가 둘이다.
+/// 하나는 성질이다 — 그 목록은 한/영을 뒤집는 키의 집합인데 Esc는 끄기만
+/// 한다. 다른 하나는 이미 만들어진 설정 파일이다. seed가 `hangul_toggle=`에
+/// 넷을 글자 그대로 적어 두었으므로(`save`), 목록에 이름을 더하면 EL 전에
+/// 만든 모든 `/config/tars.conf`에서 이 기능이 꺼진 채로 뜬다. 따로 있는
+/// 키는 그 줄이 없는 파일에서 기본값(`on`)이 된다.
+///
+/// terminal에는 argv 한 칸을 따로 쓰지 않는다. 여덟 칸이 이미 다
+/// 찼고(`main.zig`의 `Child.argv`), terminal은 이 값을 전환 키와 같은
+/// 자리(`hangulLayer`)에서 읽으므로 `Config.terminalToggles`가 목록 문자열
+/// 끝에 이름을 붙인다.
+pub const EscLatin = enum {
+    on,
+    off,
+};
+
 /// 점 넷으로 적은 IPv4 주소를 바이트 넷으로 바꾼다. 시스템 콜이 없는 순수
 /// 함수이고, 이 파일에서 `parse`·`cmdlineWantsNoConfig`와 같은 성질이다.
 ///
@@ -765,11 +783,12 @@ pub const ToggleKey = enum {
 };
 
 /// `Toggles.arg`가 만드는 문자열을 담을 버퍼의 크기. 넷을 전부 켠 목록이
-/// 45바이트이고 NUL 하나가 더 든다.
+/// 45바이트이고, `Config.terminalToggles`가 `,esc_latin` 열 바이트를 붙이면
+/// 55바이트다. NUL 하나가 더 든다.
 pub const TOGGLE_ARG_MAX = 64;
 
 comptime {
-    const longest = "hangul_key,shift_space,capslock_tap,lctrl_tap";
+    const longest = "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin";
     if (longest.len + 1 > TOGGLE_ARG_MAX)
         @compileError("TOGGLE_ARG_MAX is too small for the full toggle list");
 }
@@ -780,6 +799,11 @@ pub const Toggles = struct {
     shift_space: bool = false,
     capslock_tap: bool = false,
     lctrl_tap: bool = false,
+    /// `hangul_toggle` 목록으로는 못 켠다 — `ToggleKey`에 이 이름이 없다.
+    /// 켜는 것은 `Config.terminalToggles` 하나이고, 그 값은 설정 파일의
+    /// `esc_latin=` 줄에서 온다(EL design 결정 1). `parse`가 만드는 값에서는
+    /// 언제나 거짓이므로 `arg` → `parse` 왕복이 그대로 맞는다.
+    esc_latin: bool = false,
 
     /// 콤마 목록을 집합으로 바꾼다.
     ///
@@ -816,7 +840,7 @@ pub const Toggles = struct {
 
     /// argv로 넘기고 로그에 찍을 정규형 콤마 목록. 버퍼는 호출자가 준다 —
     /// 이 파일에는 힙이 없고, `Keyboard.arg()`처럼 상수 문자열을 돌려줄 수도
-    /// 없다(조합이 열여섯 가지다).
+    /// 없다(조합이 서른두 가지다).
     ///
     /// 정규화가 이 함수의 값이다. 설정 파일에 어떤 순서로 적었든 enum 선언
     /// 순서로 나오므로, 로그에 찍힌 문자열 하나가 곧 집합 전체다. HI 게이트가
@@ -830,6 +854,7 @@ pub const Toggles = struct {
         if (self.shift_space) appendToggleName(buf, &len, "shift_space");
         if (self.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
         if (self.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
+        if (self.esc_latin) appendToggleName(buf, &len, "esc_latin");
         if (len == 0) appendToggleName(buf, &len, "none");
         buf[len] = 0;
         return buf[0..len :0];
@@ -897,6 +922,24 @@ pub const Config = struct {
     timezone: Timezone = Timezone.UTC,
     /// 기본값이 `off`인 넷째 키다. 근거는 위 `Firewall`의 문서 주석에 있다.
     firewall: Firewall = .off,
+    /// 기본값이 `on`인 근거는 `keyboard`·`hangul_layout`과 같다 — 이 기계를
+    /// 쓰는 사람이 쓰는 것이 기본값이다(2026-10-05에 사용자가 요청했다).
+    /// 이 키가 없는 파일에서도 켜진다. 그것이 이 값이 `hangul_toggle` 목록이
+    /// 아니라 따로 있는 키인 이유다(위 `EscLatin`).
+    esc_latin: EscLatin = .on,
+
+    /// terminal의 argv로 넘기는 목록(EL design 결정 1). `hangul_toggle`의
+    /// 정규형에 `esc_latin`을 더한다 — 켜져 있으면 맨 뒤에 그 이름이 붙는다.
+    ///
+    /// 로그의 `toggles=`는 이것이 아니라 `hangul_toggle.arg()`를 찍는다. 그
+    /// 자리는 "파일의 `hangul_toggle`에 무엇이 적혔나"이고 `esc_latin=`은 줄
+    /// 끝에 따로 찍힌다. 둘을 합친 모양은 terminal의 `hangul layout=… toggles=`
+    /// 줄이 보여 준다.
+    pub fn terminalToggles(self: Config, buf: []u8) [:0]const u8 {
+        var t = self.hangul_toggle;
+        t.esc_latin = self.esc_latin == .on;
+        return t.arg(buf);
+    }
 };
 
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
@@ -1062,6 +1105,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "esc_latin")) {
+            // shell_config와 완전히 같은 모양이다(EL design 결정 1).
+            c.esc_latin = std.meta.stringToEnum(EscLatin, value) orelse {
+                std.debug.print("tars-init: unknown esc_latin '{s}', falling back to {s}\n", .{
+                    value, @tagName(c.esc_latin),
+                });
+                continue;
+            };
         } else {
             std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
         }
@@ -1109,6 +1160,10 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   CapsLock과 왼쪽 Ctrl은 0.3초보다 짧게 눌렀다 뗐을 때만 한/영이고,
         \\#   길게 누르면 CapsLock은 대문자 잠금, Ctrl은 평소의 Ctrl이다
         \\hangul_toggle={s}
+        \\# esc_latin: on | off
+        \\#   on이면 한글을 치다가 Esc를 눌렀을 때 영문으로 돌아온다. Esc는
+        \\#   그대로 프로그램에 간다 — vim의 insert에서 나오면 다음 키가 명령이다
+        \\esc_latin={s}
         \\# shell_config: on | off
         \\#   on이면 셸이 홈의 rc 파일을 읽는다. 그 파일들은 /config에 있고
         \\#   홈에는 링크만 있다 — /config/bashrc · /config/zshrc ·
@@ -1140,6 +1195,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.hangul_layout),
         @tagName(c.latin_layout),
         c.hangul_toggle.arg(&toggle_buf),
+        @tagName(c.esc_latin),
         @tagName(c.shell_config),
         @tagName(c.net),
         c.ntp.arg(&ntp_buf),

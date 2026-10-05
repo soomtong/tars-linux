@@ -14,6 +14,8 @@ cd "$(dirname "$0")"
 #   → Enter가 조합을 확정시켜 UTF-8 세 바이트와 CR을 한 번에 내보낸다
 #   → 셸이 그 한글을 되울리고 실행한다
 #   → Shift+Space를 다시 누르면 영문으로 돌아온다
+#   → 한글을 치다가 Esc를 누르면 조합이 확정되고 Esc가 셸(vim)에 가고
+#     영문으로 돌아온다(EL-M0, 검사 21~24)
 #
 # 음성 검사가 이 체인의 값이다. "한글이 조합된다"만 보면 조합 중인 자모가
 # PTY로 새는지는 아무것도 증명되지 않는다 — 그리고 그것이 이 기능의 가장 흔한
@@ -240,6 +242,36 @@ screen_count() {
   last_frame | grep -a 'terminal: screen>' | grep -oaF "$1" | wc -l
 }
 
+# 바이트 수가 정확히 N인 `key>` 줄이 지금까지 몇 개인가(EL-M0). 한 write의
+# 크기가 판정이다 — 확정된 음절과 Esc가 함께 나가면 4, Esc만이면 1이다.
+key_lines_of() {
+  grep -ac "terminal: key> $1 byte(s)" "$LOG" || true
+}
+
+# `hangul>` 줄이 지금까지 몇 개인가(EL-M0). 그 줄은 `keys.redraw`일 때만
+# 찍히므로(main.zig), 개수가 늘었다는 것이 "다시 그리는 길을 탔다"이다.
+hangul_lines() {
+  grep -ac 'terminal: hangul>' "$LOG" || true
+}
+
+# `screen>` 줄이 지금까지 몇 개인가. 아래 `wait_for_new_screen`의 기준점이다.
+screen_lines() {
+  grep -ac 'terminal: screen>' "$LOG" || true
+}
+
+# N번째 뒤의 `screen>`에 패턴이 나타날 때까지 기다린다(EL-M0, pointer 체인의
+# 것과 같다). `wait_for_screen`은 로그의 모든 `screen>`을 보므로, 옛 화면에
+# 있던 글자가 바로 맞는다 — vim이 끝나고 돌아온 화면만 보려면 기준점이
+# 필요하다. 있으면 0, 15초가 지나면 1.
+wait_for_new_screen() {
+  local n="$1" pattern="$2" i
+  for i in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(grep -a 'terminal: screen>' "$LOG" | tail -n "+$((n + 1))")"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
@@ -319,6 +351,8 @@ echo "=== the config disk should have selected three toggle keys ==="
 # 앞과 뒤를 동시에 건드린다.
 #
 # 그래서 끝 대신 경계를 본다: 목록 다음에 공백이 오거나 줄이 끝난다.
+# EL-M0이 그 줄 끝에 `esc_latin=on`을 붙였을 때 이 판정은 한 글자도 안
+# 바뀌었다 — 이 처방이 값을 한 자리다.
 # `$` 하나만 쓰던 이유(짧은 목록이 긴 목록의 접두사로 맞는 것을 막는다)가
 # 이 모양에서도 그대로 산다 — 정규형에서 `hangul_key`는 맨 앞에 오므로
 # `shift_space,...` 뒤에 또 이름이 붙는 일이 없고, 붙었다면 공백이 아니라
@@ -342,11 +376,20 @@ if ! tr -d '\r' < "$LOG" |
   grep -aE "tars-init: config .*toggles=${EXPECT_TOGGLES}( |\$)" >/dev/null; then
   report_failure "init did not read hangul_toggle=${EXPECT_TOGGLES} from the config disk"
 fi
+# EL-M0. 디스크의 `tars.conf`에는 `esc_latin=` 줄이 없다(make_disk.sh). EL 전에
+# 만든 설정 파일이 모두 그렇게 생겼고, 그런 파일에서도 기본값 `on`이 산다는
+# 것이 EL design 결정 1이다. init은 그 값을 줄 끝에 따로 찍고, terminal에는
+# 목록 끝에 이름을 붙여 넘긴다(`Config.terminalToggles`). 그래서 init의
+# `toggles=`는 셋 그대로이고 terminal의 목록만 넷이 된다.
 if ! tr -d '\r' < "$LOG" |
-  grep -a "terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=${EXPECT_TOGGLES}\$" >/dev/null; then
-  report_failure "the toggle list did not reach terminal through argv"
+  grep -aE "tars-init: config .* esc_latin=on\$" >/dev/null; then
+  report_failure "init did not report esc_latin=on (the disk has no esc_latin line, so this is the default)"
 fi
-echo "three toggle keys came from the config file; hangul_key is off"
+if ! tr -d '\r' < "$LOG" |
+  grep -a "terminal: hangul layout=sebeol_3p3 latin=qwerty toggles=${EXPECT_TOGGLES},esc_latin\$" >/dev/null; then
+  report_failure "the toggle list did not reach terminal through argv (expected ${EXPECT_TOGGLES},esc_latin)"
+fi
+echo "three toggle keys came from the config file; hangul_key is off; esc_latin is on by default"
 
 # ── 검사 0a: 부팅 직후의 상태 줄 ───────────────────────────────────────
 #
@@ -1015,5 +1058,160 @@ if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
   report_failure "the pasted needle found ${MATCHES:-no} match(es): ${SUBMIT}"
 fi
 echo "yanked 가 went into the needle (${PUT}/${CLIP_LEN} bytes) and found ${MATCHES} match(es)"
+
+# ── 검사 21: copy mode의 Esc는 한/영을 안 바꾼다 (EL-M0) ──────────────
+#
+# 검사 20이 copy mode 안에서 끝났다(제출한 뒤 프롬프트만 닫혔다). 한글은
+# 검사 15가 켠 그대로다. 이 Esc는 copy mode를 닫는 명령이고 한글을 끄면 안
+# 된다(EL design 결정 2) — 검색어를 한글로 치던 사람이 셸로 돌아와도 한글이다.
+#
+# 판정은 마지막 `hangul>` 줄이다. 끄는 코드가 이 갈래로 새면 `readKeys`가
+# 앞뒤 비교로 `redraw`를 켜고 `on=false` 줄을 새로 찍는다. 상태 줄은 `COPY`가
+# 빠지면서 새로 찍히므로, 첫 칸이 `한`인 것을 함께 본다.
+echo "=== Esc leaves copy mode and keeps hangul on ==="
+EXITS_BEFORE="$(grep -ac 'terminal: copy> exit' "$LOG" || true)"
+type_keys esc
+sleep 1
+EXITS_AFTER="$(grep -ac 'terminal: copy> exit' "$LOG" || true)"
+if [ "$EXITS_AFTER" -le "$EXITS_BEFORE" ]; then
+  report_failure "Esc did not leave copy mode (copy> exit ${EXITS_BEFORE} -> ${EXITS_AFTER}), so this check saw nothing"
+fi
+ON="$(hangul_field on)"
+if [ "$ON" != "true" ]; then
+  report_failure "the Esc that left copy mode turned hangul off (on=${ON})"
+fi
+TEXT="$(status_text)"
+if [ "$TEXT" != "한  공세벌 3-P3  쿼티  CAPS" ]; then
+  report_failure "after leaving copy mode the status line reads \"${TEXT}\", expected \"한  공세벌 3-P3  쿼티  CAPS\""
+fi
+echo "copy mode closed and hangul stayed on: \"${TEXT}\""
+
+# ── 검사 22: 조합 중의 Esc — 확정하고, Esc가 나가고, 영문이 된다 ────────
+#
+# `key> 4 byte(s)`가 판정의 심장이다. 확정된 `ㄱ`(UTF-8 세 바이트)과 Esc
+# 하나가 같은 write로 나갔다는 뜻이고, 그 순서가 vim이 글자를 받은 뒤에
+# normal로 나가는 순서다. 검사 6이 Enter에 대해 본 것과 같은 계약이다.
+#
+# 그리고 뒤에 친 글자가 영문으로 셸에 닿아야 한다. 3-P3에서 `e c h o`는
+# 자모라, 한글이 안 꺼졌으면 `el-ok`가 화면에 안 나온다.
+echo "=== compose ㄱ, then Esc ==="
+type_keys ctrl-c
+sleep 1
+type_keys k
+sleep 1
+PRE="$(hangul_field preedit)"
+if [ "$PRE" != "ㄱ" ]; then
+  report_failure "typing 'k' composed preedit=${PRE}, expected ㄱ"
+fi
+FOURS_BEFORE="$(key_lines_of 4)"
+type_keys esc
+sleep 1
+FOURS_AFTER="$(key_lines_of 4)"
+if [ "$FOURS_AFTER" -ne $((FOURS_BEFORE + 1)) ]; then
+  report_failure "Esc did not send the committed ㄱ and ESC as one 4-byte write (key> 4 byte(s) ${FOURS_BEFORE} -> ${FOURS_AFTER})"
+fi
+ON="$(hangul_field on)"
+PRE="$(hangul_field preedit)"
+if [ "$ON" != "false" ] || [ "$PRE" != "(none)" ]; then
+  report_failure "Esc while composing left hangul on=${ON} preedit=${PRE}, expected on=false preedit=(none)"
+fi
+TEXT="$(status_text)"
+if [ "$TEXT" != "EN  공세벌 3-P3  쿼티  CAPS" ]; then
+  report_failure "after Esc the status line reads \"${TEXT}\", expected \"EN  공세벌 3-P3  쿼티  CAPS\""
+fi
+# 셸에 남은 `ㄱ`을 지우고 영문을 친다. fish는 혼자 온 Esc를 명령줄에 안 쓴다.
+type_keys ctrl-c
+sleep 1
+type_keys e c h o spc e l minus o k ret
+sleep 2
+if [ "$(screen_count 'el-ok')" -lt 2 ]; then
+  report_failure "after Esc the keys did not reach the shell as latin (el-ok is not on the command line and in the output)"
+fi
+echo "Esc committed ㄱ with ESC in one 4-byte write, turned hangul off, and latin is back"
+
+# ── 검사 23: 조합 중이 아닌 Esc도 끄고, 상태 줄이 바로 따라온다 ────────
+#
+# 이 검사가 EL design 결정 3을 보는 자리다. 확정할 글자가 없으면
+# `takeCommit`이 `redraw`를 안 켜고, Esc는 `.bytes`라 `.redraw`도 아니다.
+# `readKeys`의 앞뒤 비교가 없으면 `hangul>` 줄이 안 찍히고 상태 줄의 `한`이
+# 다음 키를 칠 때까지 남는다 — 그래서 판정이 둘 다 다른 키를 치기 전이다.
+echo "=== Shift+Space, then Esc with nothing composing ==="
+type_keys shift-spc
+sleep 1
+ON="$(hangul_field on)"
+if [ "$ON" != "true" ]; then
+  report_failure "Shift+Space left hangul on=${ON}, expected true"
+fi
+ONES_BEFORE="$(key_lines_of 1)"
+HANGUL_BEFORE="$(hangul_lines)"
+type_keys esc
+sleep 1
+ONES_AFTER="$(key_lines_of 1)"
+HANGUL_AFTER="$(hangul_lines)"
+if [ "$ONES_AFTER" -ne $((ONES_BEFORE + 1)) ]; then
+  report_failure "Esc with nothing composing did not send exactly one byte (key> 1 byte(s) ${ONES_BEFORE} -> ${ONES_AFTER})"
+fi
+if [ "$HANGUL_AFTER" -le "$HANGUL_BEFORE" ]; then
+  report_failure "Esc turned hangul off without a redraw (no new hangul> line); readKeys did not compare hangul_on"
+fi
+ON="$(hangul_field on)"
+if [ "$ON" != "false" ]; then
+  report_failure "Esc with nothing composing left hangul on=${ON}, expected false"
+fi
+TEXT="$(status_text)"
+if [ "$TEXT" != "EN  공세벌 3-P3  쿼티  CAPS" ]; then
+  report_failure "after a bare Esc the status line reads \"${TEXT}\", expected \"EN  공세벌 3-P3  쿼티  CAPS\""
+fi
+echo "a bare Esc sent one byte, turned hangul off, and the status line followed at once"
+
+# ── 검사 24: vim — insert에서 한글을 치고 Esc, 그 뒤 :wq가 영문이다 ──────
+#
+# 사용자의 요청 그대로다(2026-10-05). insert에서 `닷`을 조합하다가 Esc를
+# 치면, vim은 `닷`을 받고 normal로 나가고, 우리는 영문으로 돌아온다. 그래서
+# 바로 친 `:wq`가 명령이 되어 파일을 쓰고 나간다. 셋 중 하나라도 어긋나면
+# 셸 화면이 안 돌아오거나 파일에 `닷`이 없다.
+#
+# 3-P3에서 `u`가 초성 ㄷ, `f`가 중성 ㅏ, `q`가 종성 ㅅ이다. 이 체인의 앞
+# 검사들이 안 쓴 글자를 고른 것은 화면에 남은 옛 글자와 안 섞이게 하려는
+# 것이다.
+echo "=== vim: type 닷 in insert mode, Esc, then :wq ==="
+type_keys ctrl-l
+sleep 1
+SCREENS_N="$(screen_lines)"
+type_keys v i m spc slash t m p slash e l dot t x t ret
+wait_for_new_screen "$SCREENS_N" 'unix  ' || report_failure "vim did not open /tmp/el.txt"
+type_keys i
+wait_for_new_screen "$SCREENS_N" 'INSERT' || report_failure "vim did not enter insert mode"
+type_keys shift-spc
+sleep 1
+type_keys u f q
+sleep 1
+PRE="$(hangul_field preedit)"
+if [ "$PRE" != "닷" ]; then
+  report_failure "typing 'ufq' in vim composed preedit=${PRE}, expected 닷"
+fi
+FOURS_BEFORE="$(key_lines_of 4)"
+type_keys esc
+sleep 1
+FOURS_AFTER="$(key_lines_of 4)"
+if [ "$FOURS_AFTER" -ne $((FOURS_BEFORE + 1)) ]; then
+  report_failure "Esc in vim did not send 닷 and ESC as one 4-byte write (key> 4 byte(s) ${FOURS_BEFORE} -> ${FOURS_AFTER})"
+fi
+ON="$(hangul_field on)"
+if [ "$ON" != "false" ]; then
+  report_failure "Esc in vim left hangul on=${ON}, expected false"
+fi
+# vim이 끝나기 전에 친 글자는 vim이 먹는다(PD-M4 실측). 돌아온 셸이 vim을 친
+# 명령줄 다음에 새 프롬프트를 그릴 때까지 기다린다 — 그 화면은 vim이 도는
+# 동안(대체 화면)에는 안 보인다.
+SCREENS_N="$(screen_lines)"
+type_keys shift-semicolon w q ret
+wait_for_new_screen "$SCREENS_N" '~# vim /tmp/el\.txt \| root@' ||
+  report_failure "vim did not write and quit after Esc and :wq (the keys after Esc were not latin, or Esc did not reach vim)"
+SCREENS_N="$(screen_lines)"
+type_keys c a t spc slash t m p slash e l dot t x t ret
+wait_for_new_screen "$SCREENS_N" '~# cat /tmp/el\.txt \| 닷 \| root@' ||
+  report_failure "/tmp/el.txt does not hold 닷 (vim did not get the committed syllable before ESC)"
+echo "vim got 닷 before ESC, left insert mode, and took :wq in latin"
 
 echo "HI check PASS"

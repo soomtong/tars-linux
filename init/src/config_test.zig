@@ -98,6 +98,8 @@ fn expect(text: []const u8, want: config.Config) !void {
         // FW-M1: 열째 필드. SC-M0이 여섯째에 대해 적어 둔 것과 같은 자리다 —
         // 이 줄이 없으면 아래 firewall 검사가 아무것도 안 보고 초록이다.
         got.firewall == want.firewall and
+        // EL-M0: 열한째 필드. FW-M1이 열째에 대해 적어 둔 것과 같은 자리다.
+        got.esc_latin == want.esc_latin and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
@@ -106,8 +108,8 @@ fn expect(text: []const u8, want: config.Config) !void {
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -120,6 +122,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             got.ntp.arg(&got_ntp),
             got.timezone.slice(),
             @tagName(got.firewall),
+            @tagName(got.esc_latin),
             @tagName(want.shell),
             @tagName(want.keyboard),
             @tagName(want.hangul_layout),
@@ -130,6 +133,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             want.ntp.arg(&want_ntp),
             want.timezone.slice(),
             @tagName(want.firewall),
+            @tagName(want.esc_latin),
         },
     );
     return error.UnexpectedConfig;
@@ -1053,6 +1057,54 @@ pub fn main() !void {
     try expect("firewall=\n", .{}); // 값 없음
     // 체인의 디스크가 실제로 쓰는 두 줄이다.
     try expect("net=dhcp\nfirewall=on\n", .{ .net = .dhcp, .firewall = .on });
+
+    // ── EL-M0: esc_latin ────────────────────────────────────────────────
+    //
+    // shell_config와 같은 모양이다. 기본값이 `on`이라 끄는 쪽을 적어야 값이
+    // 갈린다.
+    try expect("esc_latin=off\n", .{ .esc_latin = .off });
+    try expect("esc_latin=on\n", .{});
+    try expect("esc_latin=yes\n", .{}); // enum에 없는 값
+    try expect("esc_latin=\n", .{}); // 값 없음
+    // 목록의 이름으로는 못 켜고 못 끈다(EL design 결정 1). `esc_latin`은
+    // `hangul_toggle`에서 모르는 이름이라 버려지고, 나머지 이름은 산다.
+    try expect("hangul_toggle=shift_space,esc_latin\n", .{
+        .hangul_toggle = .{ .shift_space = true },
+    });
+    // EL 전의 seed가 적어 둔 줄 그대로다. 이 파일에는 `esc_latin=` 줄이 없고,
+    // 그래서 켜진 채로 읽힌다 — 이 키를 목록이 아니라 따로 둔 이유가 이 한
+    // 줄이다.
+    try expect("hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n", .{
+        .esc_latin = .on,
+    });
+
+    // `terminalToggles` — terminal의 argv로 가는 목록. 이 문자열이 init과
+    // terminal을 잇는 유일한 것이라(`arg` → `parse` 왕복과 같은 자리) 넷을 다
+    // 본다: 기본값, HI 게이트의 디스크, 끈 것, 목록이 빈 것.
+    {
+        const Case = struct { text: []const u8, want: []const u8 };
+        const cases = [_]Case{
+            .{ .text = "", .want = "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin" },
+            .{ .text = "hangul_toggle=shift_space,capslock_tap,lctrl_tap\n", .want = "shift_space,capslock_tap,lctrl_tap,esc_latin" },
+            .{ .text = "esc_latin=off\n", .want = "hangul_key,shift_space,capslock_tap,lctrl_tap" },
+            .{ .text = "hangul_toggle=\n", .want = "esc_latin" },
+            .{ .text = "hangul_toggle=\nesc_latin=off\n", .want = "none" },
+        };
+        for (cases) |tc| {
+            const cfg = config.parse(tc.text);
+            var tbuf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+            const got = cfg.terminalToggles(&tbuf);
+            if (!std.mem.eql(u8, got, tc.want)) {
+                std.debug.print("FAIL: terminalToggles for [{s}] gave \"{s}\", want \"{s}\"\n", .{ tc.text, got, tc.want });
+                return error.UnexpectedToggleArg;
+            }
+            // 파일의 `hangul_toggle`은 그대로다 — 이 함수가 `Config`를 안 바꾼다.
+            if (cfg.hangul_toggle.esc_latin) {
+                std.debug.print("FAIL: parse put esc_latin into hangul_toggle for [{s}]\n", .{tc.text});
+                return error.UnexpectedToggleArg;
+            }
+        }
+    }
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //

@@ -163,20 +163,30 @@ pub const LatinLayout = enum { qwerty, dvorak };
 /// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과
 /// `hangul.Layout`이 이미 정확히 같은 모양이다. 문자열 문법을 못 박는 것은
 /// `config_test`의 `arg` → `parse` 왕복 검사다.
+///
+/// 다섯째 `esc_latin`(EL-M0)은 설정 파일에서 오는 길이 다르다. 앞의 넷은
+/// `hangul_toggle` 목록의 이름이고 `esc_latin`은 따로 있는 키(`esc_latin=on`)인데,
+/// init이 둘을 argv 문자열 하나로 합쳐 넘긴다(`Config.terminalToggles`, EL design
+/// 결정 1). 그래서 이 구조체가 담는 것은 "설정 파일의 한 줄"이 아니라 "argv로 온
+/// 목록"이다.
 pub const Toggles = struct {
     hangul_key: bool = false,
     shift_space: bool = false,
     capslock_tap: bool = false,
     lctrl_tap: bool = false,
+    /// 한글을 치다가 수정키 없는 Esc를 누르면 영문으로 돌아온다(EL design
+    /// 결정 2). 앞의 넷과 달리 한 방향이다 — 끄기만 하고 켜지는 않는다.
+    esc_latin: bool = false,
 };
 
 /// `togglesArg`가 만드는 문자열을 담을 버퍼의 크기. `config.zig`의
 /// `TOGGLE_ARG_MAX`와 같은 값이다.
 pub const TOGGLE_ARG_MAX = 64;
 
-/// `parseToggles`가 이름을 거르는 화이트리스트. `config.zig`의 `ToggleKey`와
-/// 이름이 같아야 한다.
-const ToggleKey = enum { hangul_key, shift_space, capslock_tap, lctrl_tap };
+/// `parseToggles`가 이름을 거르는 화이트리스트. 앞의 넷은 `config.zig`의
+/// `ToggleKey`와 이름이 같아야 한다. `esc_latin`은 그쪽 목록에 없고
+/// `Config.terminalToggles`가 붙인다(EL design 결정 1).
+const ToggleKey = enum { hangul_key, shift_space, capslock_tap, lctrl_tap, esc_latin };
 
 /// 콤마 목록을 집합으로 바꾼다.
 ///
@@ -196,6 +206,7 @@ pub fn parseToggles(text: []const u8) Toggles {
             .shift_space => t.shift_space = true,
             .capslock_tap => t.capslock_tap = true,
             .lctrl_tap => t.lctrl_tap = true,
+            .esc_latin => t.esc_latin = true,
         }
     }
     return t;
@@ -214,6 +225,7 @@ pub fn togglesArg(t: Toggles, buf: []u8) [:0]const u8 {
     if (t.shift_space) appendToggleName(buf, &len, "shift_space");
     if (t.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
     if (t.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
+    if (t.esc_latin) appendToggleName(buf, &len, "esc_latin");
     if (len == 0) appendToggleName(buf, &len, "none");
     buf[len] = 0;
     return buf[0..len :0];
@@ -515,6 +527,10 @@ pub const Keys = struct {
     /// 알아내며, 스크롤·copy처럼 순서대로 모을 것이 없다 — 자동 반복으로
     /// 자모가 여럿 실려 와도 그려야 할 글자는 마지막 하나이고, 대문자 잠금을
     /// 두 번 뒤집으면 마지막 값 하나만 그리면 된다.
+    ///
+    /// 켜는 자리가 셋이다. 키가 `.redraw`를 돌려줬을 때, 확정된 글자가
+    /// 있을 때, 그리고 키가 `hangul_on`을 바꿨을 때다(EL-M0). 셋째는 바이트를
+    /// 함께 내보내는 키(Esc)를 위한 것이다 — `readKeys`의 주석에 있다.
     redraw: bool,
 };
 
@@ -712,12 +728,14 @@ pub const State = struct {
     ///
     /// 기본값은 `config.zig`의 `Config`와 같아야 한다. 진실은 그쪽에 있고
     /// 여기 값은 `main.zig`가 argv로 매번 덮어쓰지만, 둘이 어긋나 있으면 읽는
-    /// 사람이 어느 쪽이 기본인지 알 수 없다.
+    /// 사람이 어느 쪽이 기본인지 알 수 없다. `esc_latin`의 짝은 `hangul_toggle`이
+    /// 아니라 `Config.esc_latin`(기본 `on`)이다.
     toggles: Toggles = .{
         .hangul_key = true,
         .shift_space = true,
         .capslock_tap = true,
         .lctrl_tap = true,
+        .esc_latin = true,
     },
 
     /// 확정됐지만 아직 PTY로 못 간 글자의 UTF-8(HI design 결정 6).
@@ -1066,6 +1084,33 @@ pub const State = struct {
         // 흘려보낸다 — Cmd+Shift+C(copy mode 진입)도 이 갈래로 온다.
         if (self.ctrled() or self.alted() or self.metaed()) {
             self.commitHangul();
+            return null;
+        }
+
+        // Esc가 한글을 끈다(EL design 결정 2). vim의 insert에서 한글을 치다가
+        // Esc로 normal에 나오면 다음 키는 명령이고, 명령은 라틴 글자다 — 이
+        // 갈래가 없으면 `j`가 자모가 된다. 사용자의 macOS 입력기 Patal의
+        // `ESC라틴`과 같은 동작이다.
+        //
+        // 확정하고, 끄고, null을 돌려준다. null이므로 Esc는 평소의 길
+        // (`keymap`)로 0x1b 한 바이트가 되어 PTY로 나가고, 확정된 글자는
+        // `readKeys`가 그 바이트보다 먼저 쓴다 — vim은 글자를 받은 뒤에 Esc를
+        // 받는다. 확정이 끄기보다 먼저인 것은 `toggleHangul`과 같은 불변식
+        // ("`hangul_buf`가 비지 않았으면 `hangul_on`이 참") 때문이다.
+        //
+        // `Action`은 하나만 나르므로 여기서 `.redraw`를 함께 돌려줄 수 없다.
+        // 상태 줄을 다시 그려야 한다는 사실은 `readKeys`가 `hangul_on`의 앞뒤를
+        // 비교해서 안다(EL design 결정 3).
+        //
+        // Shift+Esc는 안 끈다. Patal이 수정키 없는 Esc만 보는 것을 따른다.
+        // Ctrl · Alt · Meta는 바로 위 갈래가 이미 가져갔다.
+        //
+        // copy mode와 검색 프롬프트의 Esc는 여기 안 온다. 두 분기가 `handleKey`에서
+        // 이 함수보다 앞에 있고 Esc를 먼저 가로챈다(CM design 결정 3 · SH design
+        // 결정 3). 그래서 이 갈래가 도는 것은 normal 모드뿐이다.
+        if (code == c.KEY_ESC and self.toggles.esc_latin and !self.shifted()) {
+            self.commitHangul();
+            self.hangul_on = false;
             return null;
         }
 
@@ -1618,7 +1663,15 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         // 마지막 글자가 빠지고 셸에 이상한 글자가 남는다"라 원인에서 멀다.
         // `input_test`의 검사 56이 이 두 줄의 순서를 정면으로 본다.
         const to_needle = self.mode == .find;
+        // 한/영도 `handleKey` 앞에서 읽는다(EL design 결정 3). Esc가 한글을 끄는
+        // 키는 바이트(0x1b)를 내보내야 해서 `.redraw`를 돌려줄 수 없다 —
+        // `Action`은 하나만 나른다. 그래서 바뀌었는지를 여기서 앞뒤로 비교한다.
+        // 비교하지 않으면 조합 중이 아닐 때의 Esc가 `redraw`를 안 켜고, 상태
+        // 줄의 `한`이 다음 프레임까지 남는다. `Action`에 variant를 더하지 않는
+        // 것은 IS-M1이 `Action.caps`를 안 만든 것과 같은 판단이다.
+        const was_on = self.hangul_on;
         const action = self.handleKey(ev.code, ev.value, eventMicros(ev), ctx);
+        if (self.hangul_on != was_on) redraw = true;
         // 그 키의 결과보다 먼저 확정된 글자를 옮긴다(HI design 결정 6).
         //
         // 순서가 뒤집히면 `한` 뒤에 친 Enter가 셸에 먼저 도착해서 빈 줄이
