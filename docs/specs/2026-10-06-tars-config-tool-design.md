@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Status: TC-M0이 끝났다(2026-10-07, plan `docs/plans/2026-10-06-tars-config-tool-tc-m0.md`의 실측 절이 값이다 — 루트 게이트 21체인
-2/2 두 번). 사용자가 M1 · M2를 승인했다(2026-10-06 "끝까지 진행해줘"). M1 plan은 `-tc-m1.md`, M2는 따로 design을 쓴다.
+2/2 두 번). 사용자가 M1 · M2를 승인했다(2026-10-06 "끝까지 진행해줘"). M1 plan은 `-tc-m1.md`(결정 12 ~ 17, 구현 전), M2는 따로 design을 쓴다.
 
 사용자의 요청(2026-10-06)에서 시작한다.
 
@@ -25,7 +25,8 @@ lead(Fable)가 검토해 답했고 사용자가 이어서 정했다.
 ```
 TC-M0   tars-config [get KEY | set KEY=VALUE… | reset KEY… | check | list | help]  →  tars.conf 하나를 보고 고친다. 고친 것은 다음 부팅부터
         게이트: config 체인 1차가 보기 · 거절 · set · get · check를 치고, 2차가 3차를 위해 줄을 더하는 것도 이 명령이다
-TC-M1   다른 표면의 앞문 — wifi · ssh 키 · 방화벽 포트 · 받아쓰기. 남의 문법은 다시 짓지 않고 "어느 파일에 어떤 한 줄"까지
+TC-M1   tars-config [wifi … | ssh … | ssh-key … | firewall … | dictation …]  →  남의 문법 파일의 앞문 넷. 짓는 것은 그 문법의 주인
+        (wpa_passphrase · ssh-keygen · nft)이고 이 명령은 옮기고 다음 걸음을 말한다. 게이트: 그 표면의 체인 넷에 검사 하나씩
 TC-M2   reload — init이 부팅 없이 tars.conf를 다시 읽는다(init.sock에 동사 하나). 따로 design을 쓴다
 ```
 
@@ -304,6 +305,113 @@ chrony · nft · wpa_supplicant · sshd의 문법을 이 명령이 파싱하거�
 
 AU 결정 6 · VD 결정 12와 같다. M0의 구현자는 Sonnet을 권한다(plan "누가 무엇을 하나"에 근거). M1 · M2의 plan은 그때 Opus가 쓴다.
 
+### 결정 12 — M1은 앞문 넷을 다 한다, 동사는 표면마다 하나
+
+사용자가 M1 · M2를 승인했다(2026-10-06 — "이게 진정한 user experience 개선이지"). 넷 다 한다. 넷 다 지금 사람이 running-tars.md를 보고
+손으로 치는 두세 줄이고(아래 표의 "지금"), 그 두세 줄에는 저마다 틀리기 쉬운 자리가 있다. 넷의 크기가 고르게 작아서 하나를 미룰
+이유가 없다.
+
+| 동사 | 쓰는 파일 | 지금 사람이 하는 것 | 이 명령이 더하는 것 |
+|---|---|---|---|
+| `wifi [SSID [--country CC]]` | `/config/wpa_supplicant.conf` | `wpa_passphrase 'ssid' 'pw' > …` · `echo country=KR >> …` | 비밀번호를 echo 없이 묻는다(인자 · 히스토리에 안 남는다), 같은 SSID의 덩어리를 바꿔 끼운다(`>`가 다른 망을 지우던 것), 평문 `#psk` 줄을 버린다, 0600, `net=off`면 말한다, 재시작인지 재부팅인지 말한다 |
+| `ssh [on\|off]` | `/config/services.d/sshd`(링크) | `ln -s /etc/tars/services/sshd …` | 링크의 대상을 틀릴 수 없다, 사람의 다른 `sshd` 파일은 안 건드린다 |
+| `ssh-key add [KEY] \| list` | `/config/ssh/authorized_keys` | `mkdir -m 700 …` · `cat >> …` | `ssh-keygen`이 키인지 읽어 보고 지문을 보인다, 같은 키를 두 번 안 넣는다, 0700 · 0600, sshd가 꺼져 있거나 `firewall=on`이면 말한다 |
+| `firewall [allow\|deny PORT[/udp]]` | `/config/nftables.d/tars-config.nft` | `.nft` 파일에 `tcp dport N accept` · 재부팅 또는 `nft -f …` | 문법을 틀릴 수 없다, 중복을 안 넣는다, `firewall=on`이면 그 자리에서 `nft -f`, `off`면 그 사실을 말한다 |
+| `dictation [key [KEY] \| set KEY=VALUE…]` | `/config/groq.key` · `/config/dictation.conf` | `printf '%s\n' 'gsk_…' > …` · 편집기 | 키를 echo 없이 묻고 0600, 이름이 여덟 중 하나인지 본다 |
+
+인자 없이 치면 그 표면의 지금 상태를 보인다(무선은 SSID와 country만 — psk는 안 찍는다, 받아쓰기는 키가 있는지만). 동사를 `set`의
+키(`tars-config set wifi.ssid=…`)로 안 만드는 이유는 그 파일들이 `key=value`가 아니기 때문이다 — `tars.conf`의 키처럼 보이게 하면
+`list` · `reset`이 그것도 다룰 것처럼 읽힌다. 동사는 `help`와 USAGE의 둘째 묶음("other files under /config")에 있고 `list`는
+`tars.conf`의 열둘만 보인 뒤 한 줄로 그 묶음을 가리킨다.
+
+### 결정 13 — 남의 도구가 짓고, 이 명령은 옮긴다
+
+결정 10의 적용이다. 넷 중 남의 문법을 짓는 자리가 셋이고, 셋 다 그 문법의 주인을 부른다.
+
+| 자리 | 짓는 것 | 이 명령이 하는 것 |
+|---|---|---|
+| 무선 덩어리 | `wpa_passphrase SSID`(비밀번호는 표준 입력 — 인자로 주면 `ps`에 보인다) | `#`로 시작하는 줄(`# reading passphrase from stdin` · 평문 `#psk="…"`)을 버리고, 남은 것이 `network={`로 시작해 `}`로 끝나는지만 본다. 아니면 쓰지 않는다 |
+| ssh 키 | `ssh-keygen -l -f -`가 읽어 본다(0이 아니면 거절, 그 말이 이유) | 지문을 사람에게 보인다. 같은 키는 몸통(`AAAA…`)으로 가른다 — 설명 · 옵션이 달라도 같은 키다 |
+| 방화벽 | 우리 한 줄 `tcp dport N accept` — 사람이 손으로 적는 그 모양(FW 결정 3) | 올리는 것은 `nft -f /etc/tars/firewall.nft`(init이 부팅에 하는 그 명령, FW 결정 5) |
+
+무선 파일 안에서 하는 일은 같은 SSID의 덩어리를 찾는 것 하나다. 경계는 양 끝 공백을 뗀 글자가 `network={`인 줄과 그 뒤 처음 나오는
+`}`인 줄이고, 그 안의 `ssid=…` 줄이 새 덩어리의 것과 글자로 같으면 바꾼다. `wpa_passphrase`가 내는 모양이고 running-tars.md가 사람에게
+시킨 모양이다. 그 밖의 모양(한 줄에 쓴 덩어리 · 주석 안의 `network={`)은 못 찾고 끝에 더한다 — 지우는 쪽으로 틀리지 않는다.
+`country=`는 덩어리 밖의 첫 그 줄을 바꾸거나 맨 앞에 더한다.
+
+| 후보 | 왜 아닌가 |
+|---|---|
+| (a) 주인을 부른다 | 고른 것 |
+| (b) PSK를 우리가 계산한다(PBKDF2-SHA1, Zig std에 있다) | 계산은 되지만 덩어리의 모양 · SSID의 따옴표 규칙을 우리가 짓게 된다. `wpa_passphrase`는 이미 게스트에 있다 |
+| (c) 키를 우리가 파싱한다(형식 · base64 길이) | 형식이 넷이 넘고(ed25519 · ecdsa · rsa · sk-…) 다음 판에 또 는다. `ssh-keygen`이 sshd와 같은 코드로 읽는다 |
+| (d) 방화벽 줄을 `nft -c`로 미리 검사 | 우리가 짓는 한 줄은 틀릴 수가 없다. 틀릴 수 있는 것은 사람의 다른 파일이고, 그것은 `nft -f`가 말한다 |
+
+### 결정 14 — 이 명령이 쓰는 파일과 사람의 파일을 가르는 것은 방화벽 하나다
+
+design이 정하라고 남긴 것의 답이다. 갈라야 하는 것은 이 명령이 줄을 지우는 동사를 가진 표면뿐이고, 그것이 `firewall deny`다.
+
+| 표면 | 가르나 | 왜 |
+|---|---|---|
+| 방화벽 | 가른다 — `nftables.d/tars-config.nft`(머리 주석에 그렇게 적는다) | `deny`가 사람의 줄을 지울 길이 없어야 한다. nft는 include glob으로 그 디렉터리의 `.nft`를 다 읽으므로 파일이 하나 더는 것이 공짜다. `deny`는 이 명령이 연 줄만 닫고, 사람이 연 포트면 "this command does not touch them"이라 말한다 |
+| 무선 | 안 가른다 — 한 파일 | `wpa_supplicant`가 `-c` 하나를 읽는다(`tars-wifi`). 이 명령은 같은 SSID의 덩어리 하나만 바꾸고 나머지(사람의 덩어리 · `update_config` · 주석)는 바이트 하나 안 건드린다 |
+| ssh 키 | 안 가른다 — 한 파일 | sshd의 `AuthorizedKeysFile`이 하나다. 이 명령은 더하기만 하고 지우지 않는다(비목표 9) |
+| 받아쓰기 | 안 가른다 | `tars-dictate`가 읽는 파일이 하나씩이다. `set`은 M0의 `setLine`으로 그 키의 이기는 줄 하나만 바꾼다(문법이 `tars.conf`와 같다) |
+| sshd 링크 | — | 링크 하나다. 그 이름의 파일이 템플릿으로 가는 링크가 아니면(사람의 sshd 스크립트) `on` · `off` 둘 다 손대지 않는다 |
+
+방화벽은 `firewall=on`이면 쓰고 나서 `nft -f /etc/tars/firewall.nft`를 그 자리에서 돈다. 재부팅을 안 기다리는 유일한 앞문이다 —
+init이 방화벽에 대해 들고 있는 상태가 없고(부팅에 nft를 한 번 돌릴 뿐, FW 결정 5), nft는 전부 올리거나 하나도 안 올리므로 실패해도
+지금 선 규칙이 그대로다. 실패하면 nft의 말(파일 · 행)을 그대로 보이고 "다음 부팅도 기본 규칙으로 떨어진다"고 말한다. `firewall=off`면
+돌리지 않는다 — 돌리면 꺼 둔 방화벽이 켜진다.
+
+다른 셋은 다음 걸음을 말하기만 한다. 무선은 파일이 이미 있었으면 `tars-service restart wpa_supplicant`, 처음 생겼으면 재부팅(init이 부팅에
+파일이 있는지만 본다, WL 결정 4). ssh 키 · 받아쓰기는 읽는 쪽이 매번 읽으므로 할 것이 없다. sshd 링크는 재부팅(services.d는 부팅에
+한 번 읽힌다). 재시작을 이 명령이 대신 하지 않는 것은 M2(`reload`)와 같은 자리의 결정이라서다.
+
+### 결정 15 — 받아쓰기는 이름만 안다
+
+`dictation.conf`의 파서는 `kernel/dictation/tars-dictate`(bash)다. 이 명령은 키 이름 여덟(`DICTATION_KEYS`)만 알고 값은 거르지
+않는다 — `max_seconds`의 범위 · `cleanup`의 on/off는 tars-dictate가 실행마다 보고 틀리면 경고한다(VD 결정 3). 이름을 거르는 이유는 틀린
+이름이 tars-dictate에서 "unknown key"로 버려지는 것을 쓰기 전에 막기 위해서다. 그 여덟이 tars-dictate의 `case`와 같다는 것은
+`config_front_edit_test`가 그 파일의 `case "$key" in` ~ `esac`에서 이름을 읽어 본다 — 두 벌의 이음매를 셋째 벌 없이 원본에 묶는다.
+
+API 키는 앞뒤 공백 · 개행을 떼고, 비었거나 그 안에 공백 · 제어 문자가 있으면 거절한다. 글자의 종류를 더 좁히는 것(`[A-Za-z0-9._~+/=-]`)은
+tars-dictate의 몫이다. 키 · 비밀번호는 인자보다 표준 입력이 먼저다 — tty면 echo를 끄고 묻고, 파이프면 끝까지 읽는다. 인자로도
+받는다(스크립트에서 쓰려고). 그때 `/proc/<pid>/cmdline`에 보인다는 것은 사람의 선택이다.
+
+### 결정 16 — `check`는 파일이 있는지 · 모드 · `tars.conf`와 맞는지만 본다
+
+남의 문법은 안 읽는다(결정 10). `check`가 더 보는 것은 다섯이고, 넷이 문제(exit 1), 하나가 알림이다.
+
+| 무엇 | 문제인가 | 왜 |
+|---|---|---|
+| `wpa_supplicant.conf`가 있는데 `net=off` | 문제 | init이 wpa_supplicant를 안 띄운다(`wifi.wants`) |
+| sshd 링크가 템플릿인데 `authorized_keys`에 키가 없다 | 문제 | 아무도 로그인 못 한다(비밀번호가 없다) |
+| `authorized_keys` · `groq.key` · `wpa_supplicant.conf`가 남에게 열려 있다(`& 077`) | 문제 | 비밀이다. `authorized_keys`가 남이 쓸 수 있으면 sshd가 그 파일을 버린다(StrictModes) |
+| `dictation.conf`에 tars-dictate가 모르는 키 | 문제 | 그 줄은 버려진다 |
+| `firewall=off`인데 `tars-config.nft`에 규칙이 있다 | 알림 | 틀린 것은 아니다 — 켜면 그 포트가 열린 채로 뜬다 |
+
+| 후보 | 왜 아닌가 |
+|---|---|
+| (a) 위 다섯 | 고른 것 |
+| (b) `nft -c -f`로 규칙 파일 검사 | nft의 일이고 부팅이 이미 그 말을 콘솔에 찍는다. 그리고 `check`가 방화벽을 건드리는 명령을 부르게 된다 |
+| (c) `wpa_supplicant -c … -C`류의 검사 | 그런 검사 모드가 없다. 문법은 wpa_supplicant가 시작할 때 말한다 |
+
+### 결정 17 — 게이트는 그 표면의 체인에 하나씩, 판정은 "읽는 쪽이 읽었다"
+
+새 체인은 없다. 넷 다 그 표면을 이미 부팅으로 보는 체인이 있고, 거기에 사람이 할 일 하나를 이 명령으로 바꿔 넣으면 그 체인의 기존
+판정이 "읽는 쪽이 이 명령이 쓴 것을 읽었다"를 본다. 덧붙이는 자리는 각 체인의 마지막 검사 번호 뒤다.
+
+| 체인 | 자리 | 이 명령이 하는 것 | 판정 |
+|---|---|---|---|
+| `wifi` 부팅 B | 프로브(`ap.sh`)가 틀린 비밀번호로 연결이 안 서는 것(`TEMP-DISABLED`)을 본 뒤 | `printf 'tars-secret\n' \| tars-config wifi tars-wl`, 그 말대로 `tars-service restart wpa_supplicant` | 검사 9의 음성은 고친 줄 앞의 로그로만 보고, 검사 12가 바꿈 · 파일(`#psk` 0 · 해시 psk 1 · SSID 1 · 사람의 `country` 1 · 600) · CONNECTED · lease |
+| `service` 부팅 D | ssh 제어 연결 위로 | `ssh-key add`(검사 14가 거절된 것을 본 bad 키) · 같은 키 다시 · 키 아닌 줄 · `list` · `ssh off` · `ssh on` | 검사 27 — 그 키로 로그인된다(sshd가 로그인마다 읽는다), 600, 한 줄, 거절, 링크가 지워졌다 되걸린다 |
+| `firewall` 부팅 A | 검사 8 · 11이 닫혀 있음을 본 7072를 | `tars-config firewall allow 7072`(타이핑 31키) | 검사 18 — `applied now`와 7072로 바이트가 온다(재부팅 없이) |
+| `dictation` 부팅 A | 프로브가 s21 뒤에 | `printf 'tc1-key\n' \| tars-config dictation key`, `dictation set transcribe_url=…/fail/s22 max_seconds=1`, 모르는 키 `colour` | 검사 30 — 다음 tars-dictate(s22)의 요청이 그 주소로 그 키를 싣고 왔다, 600, 거절된 키는 파일에 없다. 검사 12의 요청 수가 19 → 20 |
+
+`/fail`(429)로 보낸 것은 기록(`dictation.jsonl`)에 한 줄도 안 더하려고다 — 검사 13의 열여섯이 그대로다. 게이트가 못 보는 것 —
+tty에서 echo를 끄고 묻는 길(전부 표준 입력이 파이프다), `wifi --country`, `firewall deny`, `firewall=off`의 말, 처음 생긴 무선 파일의
+"재부팅" 안내. 앞의 넷은 호스트 검사가 글자 쪽을 보고, tty 길은 사람이 실기에서 친다.
+
 ## lead의 전제를 바로잡은 것
 
 1. 설정 표면의 목록에 기계가 쓰는 것이 더 있다 — `bash_history` · `zsh_history` · `xdg/`(zoxide DB · fish 히스토리) ·
@@ -350,12 +458,17 @@ mutation 다섯은 plan 확정 7.
 
 ### TC-M1 — 다른 표면의 앞문
 
-`/config` 아래 남의 문법 파일에 사람이 처음 적는 한 줄을 이 명령이 써 준다. 후보 — `tars-config wifi <SSID>`(비밀번호를 물어
-`wpa_passphrase`의 출력을 `wpa_supplicant.conf`에), `tars-config ssh-key add <공개 키>`(`ssh/authorized_keys`에 한 줄, 디렉터리 0700 ·
-파일 0600, sshd 링크가 없으면 걸지 묻는다), `tars-config firewall allow <포트>`(`nftables.d/tars-config.nft`에 `tcp dport N accept` 한 줄 —
-이 명령이 쓰는 파일을 사람의 파일과 가른다), `tars-config dictation key`(`groq.key` · 0600)와 `dictation set`(`dictation.conf`. 그 파서가
-`tars-dictate`의 bash라 이 명령은 키 이름만 안다). 원칙은 결정 10이다. 정할 것 — 표면마다 "이 명령이 쓰는 파일"과 "사람의 파일"을
-가를지, 게이트를 어느 체인에 얹을지(wifi · service · firewall · dictation 체인에 하나씩일 것이다).
+결정 12 ~ 17. 고치는 파일 열(`init/src/config_cli.zig` · `init/build.zig` · 체인 넷의 파일 여섯 · …)과 새 파일 셋(`init/src/config_front.zig` ·
+`config_front_edit.zig` · `config_front_edit_test.zig`). plan은 `docs/plans/2026-10-06-tars-config-tool-tc-m1.md`.
+
+아래는 M0 때 쓴 글이다. 정할 것으로 남긴 둘의 답은 결정 14(가르는 것은 방화벽 하나)와 결정 17(체인 넷에 하나씩)이다. "sshd 링크가
+없으면 걸지 묻는다"는 묻지 않고 `ssh on`이라는 동사가 됐다(결정 12) — 묻는 명령은 게이트가 못 친다.
+
+> `/config` 아래 남의 문법 파일에 사람이 처음 적는 한 줄을 이 명령이 써 준다. 후보 — `tars-config wifi <SSID>`(비밀번호를 물어
+> `wpa_passphrase`의 출력을 `wpa_supplicant.conf`에), `tars-config ssh-key add <공개 키>`(`ssh/authorized_keys`에 한 줄, 디렉터리 0700 ·
+> 파일 0600, sshd 링크가 없으면 걸지 묻는다), `tars-config firewall allow <포트>`(`nftables.d/tars-config.nft`에 `tcp dport N accept` 한 줄 —
+> 이 명령이 쓰는 파일을 사람의 파일과 가른다), `tars-config dictation key`(`groq.key` · 0600)와 `dictation set`(`dictation.conf`. 그 파서가
+> `tars-dictate`의 bash라 이 명령은 키 이름만 안다). 원칙은 결정 10이다.
 
 ### TC-M2 — `reload`
 
@@ -378,13 +491,17 @@ terminal의 argv라 terminal을 다시 띄워야 하고, `shell`은 떠 있는 �
 ## 비목표
 
 1. `reload` · "지금 쓰는 값" 묻기(M2).
-2. 남의 문법 파일(M1, 결정 10).
+2. 남의 문법을 파싱 · 검증하는 것(결정 10 · 13). M1은 그 문법의 주인을 부른다.
 3. `dictation.conf`를 init의 파서로 읽기. 그 파일의 주인은 `tars-dictate`(bash)다 — 문법이 같아도 키와 판정이 다르다.
 4. rc 파일을 고치는 것(결정 6).
 5. 대화형 화면 · 편집기 띄우기(결정 1).
 6. 잠금 · 동시 편집(위험 4).
 7. 값의 주석(`net=dhcp  # 집`). init의 `parse`가 줄 끝 주석을 모른다 — 값이 `dhcp  # 집`이 되어 버려진다. 이 명령도 그대로 따른다.
 8. seed의 `ntp:` 주석이 TD 전의 설명으로 남은 것(lessons 이월 숙제). seed 글자를 고치는 일이라 따로 한다.
+9. (M1) ssh 키 지우기 · 무선 망 지우기. 지우는 것은 편집기다 — 이 명령이 사람의 줄을 지우는 길은 방화벽의 자기 파일뿐이다(결정 14).
+10. (M1) 열린 망 · WPA-EAP · 숨긴 SSID. `wpa_passphrase`가 짓는 것(WPA-PSK)만 한다. 그 밖은 사람이 `wpa_supplicant.conf`에 적는다.
+11. (M1) 재시작을 대신 하는 것. 방화벽만 `nft -f`를 그 자리에서 돈다(결정 14). 무선의 `tars-service restart` · 재부팅은 말하기만 한다 — M2의 자리다.
+12. (M1) IPv6 방화벽 규칙. FW가 IPv4만 거른다(FW 위험 6).
 
 ## 착수 전에 실측한 것
 
