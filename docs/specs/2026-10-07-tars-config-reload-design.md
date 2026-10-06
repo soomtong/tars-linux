@@ -309,6 +309,22 @@ argv의 글자를 새 버퍼로 바꿔 두면 감독 루프가 다시 띄운다.
 상태를 새 argv에서 어떻게 잇는지. M2와 나눈 이유는 사람의 것을 죽이는 유일한 길이라서다 — M2만으로 `net` · `firewall` · `ntp`(이 기능을 원한
 자리)가 다 된다.
 
+> TC-M3 plan이 정한 것(2026-10-07, `docs/plans/2026-10-07-tars-config-reload-tc-m3.md`).
+>
+> 1. `reload terminal`은 대기가 없으면 아무것도 안 한다(`nothing pending; the screen already uses what init uses`). 있으면 대기 키를
+>    `key: 화면의 값 -> init의 값`으로 찍고, terminal argv의 1 · 2 · 3 · 5 · 6 · 7 · 8을 init이 지금 쓰는 값으로 바꾼 뒤(4번 키보드 장치는
+>    설정이 아니라 그대로), `control.apply(.restart)`로 hold를 세우고 SIGTERM을 보낸다. 대기가 빈다(`screen = cfg`). 파일은 다시 안 읽는다 —
+>    `reload`가 읽은 것을 화면에 준다.
+> 2. SIGTERM은 그룹이 아니라 terminal의 pid다. terminal은 setsid를 안 해서 제 그룹이 없다. CT-M1 결정 4 규칙 3의 SIGKILL 시한(`overdue`)이
+>    `kill(-pid)`로 모든 자식을 돌던 것을 서비스만 그룹, 나머지는 pid로 고쳤다 — 그 전에는 비서비스에 시한이 선 적이 없어 드러나지 않았다
+>    (plan 확정 2).
+> 3. 탈출로는 부팅의 판정(`storage_mounted and shell_config == on`)으로 다시 선다. 이미 한 번 쓴 탈출로도 다시 선다.
+> 4. 콘솔 셸은 같은 동사로 안 다룬다(비목표 4). M2의 reload가 콘솔 셸 칸의 argv를 이미 바꿔 두므로 그 셸이 끝나면 새 셸로 뜬다 — config
+>    체인 1차가 `kill -9 $(pgrep -t ttyS0)`로 그것을 본다.
+> 5. `tars-config reload terminal`은 먼저 `config`로 대기를 묻고, 있으면 "the screen restarts now — every pane, its shell and the clipboard go
+>    away"를 먼저 찍고 보낸다. M2의 문구 둘(`reload` 키 줄의 꼬리 · 보기의 screen 줄)의 "until the next boot"가 "until tars-config reload
+>    terminal"이 됐다.
+
 ## 위험
 
 1. PID 1의 버그는 기계를 멈춘다. ReleaseSafe의 패닉이 커널 패닉이다. 처방은 결정 8 — 셈은 순수한 쪽에, 호스트 검사가 경계까지. 그리고 reload는
