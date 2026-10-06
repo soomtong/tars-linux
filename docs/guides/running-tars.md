@@ -553,6 +553,37 @@ wlan0: leased 192.168.0.23 for 86400 seconds
   USB 무선 동글과 Broadcom은 없다. Intel BE201은 커널 6.18이 받는 번호의 firmware가
   없어 안 뜬다.
 
+### 소리 — 스피커 · 마이크 · 이어폰
+
+부팅이 믹서를 켠다(AU-M1). 처음에는 Master -20dB · Capture 0dB이고, `amixer`나 `alsamixer`로 바꾼 볼륨은 끌 때
+`/config/asound.state`에 남아 다음 부팅에 되산다. `tars.conf`에 소리 키는 없다.
+
+```
+cat /proc/asound/cards               # 카드가 올라왔나
+aplay -l ; arecord -l                # 스피커 · 마이크 장치. DMIC가 든 장치가 기본 녹음이다(SOF는 장치 6)
+cat /etc/asound.conf                 # init이 고른 기본 카드(재생 · 녹음 따로)
+amixer sset Master 80%               # 볼륨. 끌 때 저장된다
+speaker-test -c 2 -t wav -l 1        # 왼쪽 "Front Left", 오른쪽 "Front Right"
+arecord -d 3 -f cd /tmp/m.wav && aplay /tmp/m.wav   # 마이크 → 스피커
+alsamixer                            # 화면으로 볼륨 · 음소거(M 키)
+```
+
+이어폰 · 헤드셋. HDA 헤드폰 잭은 꽂으면 코덱 드라이버가 스피커를 끈다(auto-mute). USB 헤드셋 · 이어폰 동글은 꽂은 지
+1초 안에 기본 카드가 되고 뽑으면 내장으로 돌아온다 — `cat /etc/asound.conf`로 보인다. USB가 꽂힌 동안 내장 카드의 믹서는
+`amixer -c 0 sset Master …`다(기본 믹서가 USB 카드라 `Master`가 없다고 한다). 다른 카드를 쓰려면 `ALSA_CARD=N aplay x.wav`
+또는 `aplay -D sysdefault:CARD=N`. 잭에 꽂은 헤드셋 마이크는 자동으로 고르지 않는다 — `arecord -D plughw:0,0`.
+
+DSP 뒤의 내장 마이크(2019년 이후 Intel · Ryzen 노트북, AU-M3). `dmesg | grep -i sof`에 `Firmware file:` · `Topology file:`
+두 줄이 보이면 SOF가 선 것이다. `SOF firmware and/or topology file not found.`가 보이면 그 이름을 적어 알린다(firmware
+목록은 `kernel/guest_firmware.sh`). 그 기계에서는 스피커까지 SOF를 지나므로 소리가 아예 없으면 커널 인자
+`snd_intel_dspcfg.dsp_driver=1`로 HDA 경로로 되돌려 볼 수 있다. 내장 마이크의 스위치는 `amixer -c 0 sget 'Dmic0 Capture Switch'`
+(부팅이 켠다). AMD는 ACP 카드가 따로 선다 — `arecord -l`에서 보인다.
+
+기대하지 않는 것 — Bluetooth 오디오, HDMI 오디오, SoundWire 코덱 노트북과 side-codec 스피커 앰프(CS35L41 · CS35L56 ·
+TAS2781 — 2022년 이후 ASUS · Lenovo · HP 일부, 헤드폰 잭은 되고 내장 스피커만 조용하다), 두 프로그램이 동시에 내장 DMIC를
+여는 것. 카드가 여럿이거나 firmware가 늦게 오는 기계에서 일부 카드가 꺼진 채 남으면 `amixer -c N sset … unmute`로 켜고
+그 사실을 알린다(AU design 위험 14).
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그

@@ -1,6 +1,68 @@
-# HANDOFF: Escape Latin(EL)과 Clipboard Scope(CB)가 같은 날 닫혔다 — 다음 서브프로젝트를 고른다
+# HANDOFF: Audio Devices(AU)가 M0~M3으로 닫혔다 — 다음은 Voice Dictation(VD, Voxio 포팅)
 
 ## 지금 어디인가
+
+2026-10-05 사용자의 요청 둘("1. 오디오(마이크/이어폰/스피커) 기기 활성화. 2. 마이크로 음성 전사 (Voxio 포팅).
+/Users/dp/Repository/Voxio")을 받았다. "별도 도메인이니 개발 과정은 병렬로 진행하지 말고 순차 진행", "계획 수립과 구현 방법 그리고
+구현 작업에 목적에 맞는 모델을 사용하는 서브 에이전트를 할당"이 지시다. 1번을 AU로 열어 2026-10-06에 닫았고, 2번 VD는 아직 안 열었다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `6e179c1` | AU design · M0 plan · 기억 `feedback_scripting_runtimes`(컨테이너에 런타임을 들일 때는 python3 · lua · nodejs(bun) · ruby 한 묶음으로 — 지금은 perl) |
+| `c855ae3` | M0 — 커널 `SOUND` · `SND` · `SND_HDA_INTEL` · `SND_HDA_GENERIC` · `SYSVIPC`, 게스트 alsa-utils 넷 + `arecord` 링크 · libasound · `/usr/share/alsa` · 목소리 둘 · `/etc/group`의 `audio`, 스무번째 체인 `audio/check.sh`(QEMU `alsa` 백엔드 + 컨테이너 alsa-lib `file` 플러그인으로 샘플을 값까지). 우리 코드 0줄. 구현 Sonnet. 루트 게이트 20체인 2/2, 50분 34초 |
+| `9eee60f` | M1 — `init/src/audio.zig`(일꾼 fork · `alsactl -U restore|init` · 99는 성공 · 끄는 길의 `store` · `/config/asound.state`) · `alsactl` 싣기 · 체인 부팅 셋 검사 열하나. 간헐 실패 하나를 lead가 추적 — dmix xrun의 두 배 프레임(`doubled` 갈래 · 하한 40,000). 구현 Sonnet. 20체인 2/2, 50분 54초 |
+| `cd9c12e` | M2 — 커널 HDA 코덱 여덟(Realtek 계열 전부 · Conexant · Senarytech · Cirrus · CS8409 · Analog · IDT · VIA) · `SND_USB_AUDIO` · `HID_APPLE` · `INPUT_LEDS` 끔, `audio.follow`(1초마다 `/dev/snd` → `/etc/asound.conf`, 재생 · 녹음 각각 가장 큰 번호), 체인 부팅 D(monitor 45491, `usb-audio` 꽂고 뽑기) 검사 열다섯. 첫 루트 게이트가 `pointer`에서 빨갰다 — 커널 printk가 화면 줄을 자른 것, `gate_lib.sh`의 `joined_screen_dump`. 구현 Sonnet. 20체인 2/2, 51분 10초 |
+| (M3 commit) | M3 — 커널 Intel SOF 열한 세대 · AMD ACP PDM 셋 + 범용, sof-bin v2026.09.1 firmware · topology 42개(`vendor_firmware.sh`가 받는다, firmware 목록 77 → 119), 녹음의 세 단(USB 마이크 · 내장 DMIC(`/proc/asound/pcm`) · 장치 0), postinit 규칙 한 줄(`Dmic0 Capture Switch`), 검사 열일곱. 구현 Sonnet. 루트 게이트는 M3 plan의 실측 절 |
+| (닫기 commit) | design `Status:` · CLAUDE.md 표 · `project_audio_devices.md` · MEMORY.md · target_hardware · lessons(포트 · 로그 문구 · AU 실측 일곱 · 이월 숙제 다섯 · 핵심 파일) · running-tars 소리 절 · HANDOFF |
+
+design은 `docs/specs/2026-10-05-tars-audio-devices-design.md`(결정 8 · 전제 정정 12 · 위험 16 · 비목표 10 · 실측 19), plan은
+`-au-m0.md` ~ `-au-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은 `docs/decisions/project_audio_devices.md`.
+
+방식은 PD · EL · CB와 같다 — planner(Opus)가 저장소 밖 사본(`/tmp/run/au0` ~ `au3`)에서 컴파일 · 체인 · mutation까지 돌리고
+`old_string` · `new_string`을 기계로 뽑아 넘기고, 구현자(Sonnet 넷)가 글자 그대로 넣었다. 네 milestone 모두 plan 코드를 고친 곳이 없고
+보고와 파일이 어긋난 자리도 없었다. 다음 milestone의 plan은 앞 milestone의 루트 게이트가 도는 동안 docker 금지(lock) 조건으로 미리
+썼다. planner들이 lead의 전제를 열둘 바로잡았다(design "lead의 전제를 바로잡은 것") — 게스트 안 루프백 불필요 · `wav` 백엔드는 녹음
+없음 · `SYSVIPC` · `audio` 그룹 · milestone 넷 · 포트 · 일꾼은 기다리지 않는다 · USB 카드는 켜진 채 온다 · firmware는 sof-bin ·
+AMD는 PDM · UCM 안 싣는다 · SoundWire 제외. 게이트가 빨개진 둘(dmix xrun · printk 자름)은 lead가 재현해 원인을 잡았고 둘 다
+우리 코드가 아니었다(lessons).
+
+## 바로 다음에 할 것 — Voice Dictation(VD): Voxio를 TARS로 옮긴다
+
+사용자의 요청 2번. Voxio(`/Users/dp/Repository/Voxio`, Swift, macOS 메뉴바 앱 1.0.1)는 "오른쪽 ⌘ 두 번 → 마이크 → Groq Whisper API로
+전사 → LLM으로 군더더기 정리 → 커서 자리에 붙여넣기"다. 기록은 로컬 SQLite에 남고 원본 오디오는 안 남긴다. 읽을 것은 `README.md` ·
+`docs/ARCHITECTURE.md`(결정 D1~D16 · 파이프라인 3절 · Groq 무료 티어 7절) · `Sources/VoxioCore/`(플랫폼 독립 코어 —
+`DictationPipeline.swift` · `GroqClient.swift` · `TranscriptText.swift` · `DoubleTapDetector.swift` · `AudioPolicy.swift`).
+
+lead(Fable)가 AU를 열 때 재 둔 것 —
+- 게스트에 TLS가 붙은 `curl`과 `jq` · `bash`가 이미 있다(`kernel/guest_tools.sh`). Groq 호출은 `curl`로 그대로 옮길 수 있다.
+- 게이트는 바깥에 못 나간다 — `net/check.sh`의 `guestfwd=tcp:10.0.2.100:8080-cmd:…` 방식으로 Groq 흉내 서버를 세운다. 컨테이너에
+  python3이 없고 perl이 있다(`feedback_scripting_runtimes`). 전사 API의 주소는 `tars.conf` 키(예: `dictation_url=`)로 바꿀 수 있어야
+  게이트가 stub을 가리킨다.
+- 삽입은 terminal이 PTY를 쥐고 있으므로 `Cmd+V` 붙여넣기 경로(`dumpPaste` · `pasteParts`, bracketed paste)와 같은 자리다. 트리거는
+  terminal이 evdev를 직접 읽으니 오른쪽 Cmd 두 번(`KEY_RIGHTMETA`)을 `input.zig`에서 잡을 수 있다 — `capslock_tap` · `lctrl_tap`의
+  탭 판정이 선례다. 녹음 중 표시는 상태 줄(`status.zig`, `COPY`와 같은 자리)이다.
+- 녹음은 AU가 세운 `arecord`다. `arecord -f S16_LE -r 16000 -c 1`(Whisper가 받는 모양)이 기본 장치(`plug` → `dsnoop`)로 도는지는
+  안 쟀다 — VD의 첫 실측. 게이트의 마이크는 `audio/check.sh`의 `file` 플러그인 `infile`로 넣는다(값까지 안다).
+- API 키는 `/config`에 파일 하나(Voxio의 Keychain 자리). 기록은 `/config`에 텍스트로(Voxio D9 — 오디오는 안 남긴다).
+- 틀(바꿔도 된다) — terminal이 트리거 · 상태 · 삽입을 쥐고, 게스트 쪽 스크립트 하나(`tars-dictate`: `arecord` → `curl` 전사 → `curl` 정리
+  → stdout)를 terminal이 fork해 stdout을 읽고 EOF에 붙여넣는다. 두 번째 트리거는 시그널로 녹음을 끝내고, Esc는 취소. 우리 코드는
+  파이프라인의 상태 기계와 삽입이고 HTTP · 오디오는 남의 것(`project_write_or_reuse`).
+
+AU가 VD에 넘긴 경계 — AU는 "`arecord`가 마이크의 바이트를 WAV로 쓰고 `aplay`가 WAV를 스피커로 낸다"까지(design 비목표 4).
+
+### AU가 남긴 것
+
+- 비목표 10 — SoundWire 코덱 노트북(`sof_sdw`)과 side-codec 스피커 앰프(CS35L41 · CS35L56 · TAS2781). 실기가 요구하면 새
+  서브프로젝트. 크기는 design 비목표 10에.
+- lessons 이월 숙제 다섯 — 늦은 내장 카드(위험 14) · firmware의 RAM(위험 16) · 사각파 하한 · 화면 줄을 직접 읽는 자리 67곳 · 실기에서
+  볼 것.
+- 실기에서 볼 것은 `running-tars.md`의 소리 절.
+
+측정 파일(저장소 밖, 지워도 된다): `/tmp/run/au0` ~ `au3`(planner · 구현자 사본과 로그, `au1/impl/flaky`에 dmix xrun의 tap) ·
+`/tmp/gate_au0.log` ~ `gate_au3.log`(루트 게이트 — `gate_au2.log`는 빨간 첫 판). 이미지 `tars-devcontainer-au0`는 지워도 된다.
+
+### 그 앞 — Escape Latin(EL)과 Clipboard Scope(CB)가 같은 날 닫혔다
+
 
 2026-10-05 사용자의 요청 둘("터미널 패널이나 워크스페이스 사이 clipboard를 공유해서 사용하는 옵션; 기본적으로 전체
 공유 활성화" · "esc키 누르면 한글 자판인 경우 영문자판으로 전환; vim 사용할 때 큰 도움이 됨")을 서브프로젝트 둘로 열어
@@ -29,7 +91,7 @@ planner 둘이 lead의 전제를 하나씩 바로잡았다. EL — `hangul_toggl
 → commit → CB 앵커 재추출 → CB → 루트 게이트 → commit)였다. 두 구현자 모두 Edit 대신 plan 본문에서 블록을 기계로 뽑아
 넣었고(`/tmp/run/*/impl/apply.py`), 파일은 planner의 사본과 바이트까지 같았다.
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+#### (EL · CB를 닫을 때의) 바로 다음에 할 것
 
 후보는 아래 PD 절의 것들(더블클릭 단어 선택 · `tars.conf`의 휠 방향 · 포인터 가속 · ZU-M2 · 패키지 매니저 · IPv6 · USB 동글
 층 B · WP-M3 방향 포커스 · vim-runtime)에 이번에 열어 둔 둘이 더해진다.
@@ -81,7 +143,7 @@ PD가 남긴 가장 큰 사실은 커널이 아니라 게이트의 것이다. M0
 키보드 핫플러그 · Apple 트랙패드 · 패널 비율 드래그 · 시간 기반 숨김 · THC QuickSPI. 실기에서 볼 것 셋은 `running-tars.md`에
 있다(`kind=` · 터치패드 출발값 셋 · 두 손가락 방향).
 
-## PD-M4 — 마우스 보고(같은 날 덧붙인 milestone)
+#### PD-M4 — 마우스 보고(같은 날 덧붙인 milestone)
 
 M0~M3을 닫은 직후 사용자의 결정("마우스 보고 기능은 지금 마일스톤에 이어서 M4 태스크로 진행하자. 같은 맥락이라 새로운
 마일스톤으로 빼는 것이 합리적이지 않은 것 같아")으로 비목표 1을 결정 12 · PD-M4로 열어 같은 날 닫았다. design 절과 plan은
@@ -98,7 +160,7 @@ Opus planner가, 구현은 Opus가 했다.
 자식이 원하면 버튼 4 · 5 · 대체 화면에 1007이면 화살표 키 세 번 · 그 밖은 우리 스크롤. 비목표로 남은 것은 design 14~18(1004
 포커스 보고 · XTSHIFTESCAPE · OSC 52 · 가로 휠과 포인터 모양 · 보고 끄기 설정).
 
-## 바로 다음에 할 것 — 새 서브프로젝트를 고른다
+#### (PD를 닫을 때의) 바로 다음에 할 것
 
 후보는 아래 PE 절의 "그 다음 후보"(ZU-M2는 ghostty의 Zig 0.17 전환 대기 · 패키지 매니저 · IPv6 · USB 동글 층 B · WP-M3 방향
 포커스 · vim-runtime)와 PD의 비목표(더블클릭 단어 선택 · `tars.conf`의 휠 방향 · 포인터 가속)다. 작은 것은

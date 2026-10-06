@@ -59,6 +59,7 @@
 - [Hangul input](docs/decisions/project_hangul_input.md) — 한글을 치는 층 — 자판 여섯과 전환 키 넷(HI-M0~M3, 2026-09-01 종료)
 - [Input status](docs/decisions/project_input_status.md) — 화면 맨 아래 여백의 상태 줄 한 줄(IS-M0·M1, 2026-09-09 종료)
 - [Search hangul](docs/decisions/project_search_hangul.md) — copy mode 검색창에서 한글을 치는 층(SH-M0~M2, 2026-09-09 종료)
+- [Audio devices](docs/decisions/project_audio_devices.md) — 스피커 · 마이크 · 헤드폰 잭 · USB 헤드셋 · DSP 뒤 DMIC에 `aplay` · `arecord`가 닿는다. 우리 코드는 부팅의 믹서와 기본 카드와 게이트(AU-M0~M3, 2026-10-06 종료). 기본 장치의 두 겹 · 꺼진 채 뜨는 커널 · QEMU alsa + file 플러그인 · dmix xrun · printk가 화면 줄을 자른다
 - [Pointer devices](docs/decisions/project_pointer_devices.md) — 마우스 · 터치패드 — uevent 탐색 · save-under 화살표 · 드래그 = copy mode(PD-M0~M4, 2026-10-05 종료 — M4가 마우스 보고). inotify가 install 체인을 깨뜨린 일과 그 진짜 원인(TCG 코드 배치)
 - [Real machine](docs/decisions/project_real_machine.md) — 일반 x86_64 노트북에서 뜨는 커널 — UEFI·simpledrm·USB 키보드·NVMe(RM-M0~M3, 2026-09-10 종료)
 - [Userland tools](docs/decisions/project_userland_tools.md) — 게스트 도구 65개와 그 이름이 손에 닿게 한 `PATH`(UT-M0~M3, 2026-09-11 종료)

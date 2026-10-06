@@ -62,7 +62,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). 새 체인은 45491부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). 새 체인은 45492부터 쓴다.
 
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
@@ -221,7 +221,13 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 이 줄로 나온다 — 새 로그를 하나도 안 만들었다) ·
 `terminal: cursor> vt=… drawn=… row=… col=… cols=… ink=… box=…`(CU-M0. 매
 프레임 `dumpInk` 뒤에 찍힌다. 셸 커서가 없으면 `vt=… drawn=none`으로 끝난다.
-`render` 검사 20~32가 본다. 25~32는 CU-M1이 vim으로 더했다)
+`render` 검사 20~32가 본다. 25~32는 CU-M1이 vim으로 더했다) ·
+`tars-init: audio: alsactl init once a sound card shows up (pid N)` · `alsactl init turned the mixer on (generic rules, exit 99)` ·
+`alsactl restore set the mixer from /config/asound.state` · `stored the mixer in /config/asound.state` · `mixer not stored, it was not
+set this boot` · `no sound card within 5000ms, the mixer is left alone`(AU-M1, `init/src/audio.zig`) · `default card is N for playback, N
+for capture` · `… N (device 6) for capture`(AU-M2 · M3, 바뀔 때만) · `audio-probe: …` 줄들(`audio/probe.sh`가 찍고 `audio/check.sh`가
+본다 — 끝을 봐야 하는 값은 대괄호로 감싼다) · `snd_hda_codec_generic hdaudioC0D0: autoconfig for Generic`(커널) ·
+`usbcore: registered new interface driver snd-usb-audio`(커널, 부팅 D)
 
 새 copy 명령의 로그는 공짜다 — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. `find>`는 그와
@@ -759,6 +765,23 @@ RIS가 끈다(`vt_test` 95 · 96).
   난다. docker 작업은 한 번에 하나만. `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
 - PD-7. 루트 게이트 반복 3 → 2(`feedback_gate_runs`): 19체인 3회 1시간 8분 → 2회 47분 46초.
 
+### AU(Audio Devices, 2026-10-06)가 잰 것
+
+- AU-1. QEMU 오디오를 게이트가 값까지 보는 수법 — `-audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,…`에 48kHz · 2채널 · s16을
+  박고, `HOME="$WORK"`로 컨테이너 libasound가 `$WORK/.asoundrc`를 읽게 해 `file` 플러그인 둘(`slave.pcm "null"`, 스피커는 `file`,
+  마이크는 `infile`)을 단다. `try-poll=off`. `wav` 백엔드는 녹음 쪽이 없다(`Could not create a backend for voice 'adc'`). 기본 속도
+  44100으로 두면 QEMU가 리샘플해 값이 바뀐다.
+- AU-2. 설정 디스크의 `services.d/` 스크립트 첫 줄은 `#!/usr/bin/bash`다. 게스트에 `/bin/bash`가 없어서 `#!/bin/bash`이면 `init`이
+  `execve … failed (errno 2)`를 세 번 찍고 포기한다.
+- AU-3. `alsactl init`의 exit 99는 성공이다(규칙 표에 없는 카드를 범용 규칙으로 켰다). `restore`는 파일이 없으면 init을 하고도 exit 2.
+  `-f`로 기본 경로가 아닌 파일을 주면 잠금 파일을 안 만든다. daemon 모드는 SIGTERM에 저장 없이 끝나고 SIGUSR2가 저장한다.
+- AU-4. QEMU에 없는 믹서 컨트롤에 alsactl 규칙을 시험하는 법 — `alsactl -I restore`로 같은 이름의 사용자 컨트롤을 만들고, `init`의
+  일꾼과 같은 argv로 `alsactl -U init`을 돌려 postinit 규칙이 그것을 켜는지 본다(`audio` 검사 17, `Dmic0 Capture Switch`).
+- AU-5. `scripts/config`는 `-k` 없이는 심볼 이름을 대문자로 바꾼다 — `ACP6x`가 `ACP6X`가 되어 조용히 사라진다.
+- AU-6. 부팅 때 `-device usb-audio`를 꽂아 둔 QEMU는 열 판 중 넷이 안 떴다(열거 누락 하나 · 시리얼 없이 선 셋). `device_add`로 부팅
+  뒤에 꽂은 판은 스무 번 남짓 다 0.2초 안에 열거됐다.
+- AU-7. `snd_pci_acp6x` · `snd_pci_ps`는 PCI 표가 `modules.builtin.modinfo`의 alias로 안 나온다. 게이트는 심볼로 본다.
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -997,6 +1020,21 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
+AU(2026-10-06)가 남긴 것.
+
+- [ ] 늦은 내장 카드(AU design 위험 14). M1의 일꾼은 `controlC0`이 서는 순간 있는 카드만 `alsactl init`한다. 카드가 여럿인 AMD
+      노트북이나 SOF가 firmware를 늦게 올리는 Intel 노트북에서 늦은 카드가 꺼진 채 남으면 — 일꾼이 `/dev/snd`가 잠잠해질 때까지
+      기다리거나 `follow`가 새 카드에 `alsactl -U init N`을 부른다. 실기에서 겪은 뒤 정한다.
+- [ ] firmware가 게스트 RAM에 늘 있다. 무선 77 + 소리 42 = 119개, 원본 약 14MB가 더 늘어 512MB 게스트의 `MemAvailable`이 약 183MB다
+      (AU design 위험 16). 다음에 firmware를 더하는 일은 이것을 함께 본다 — 초기 ramfs에서 빼서 늦게 붙이는 길이 있는지.
+- [ ] `audio` 검사 5의 사각파 하한 40,000은 부하 아래 최소 47,425에서 정했다(AU design 실측 17). 루트 게이트가 `tone`으로 빨개지면
+      dmix xrun이 더 커진 것이다 — `doubled` · `zero`를 먼저 본다.
+- [ ] 체인이 `grep -a 'terminal: screen>' "$LOG" | tail -n 1`로 화면 줄을 직접 읽는 자리 67곳은 printk에 잘린 줄을 못 잇는다
+      (`joined_screen_dump`는 `wait_for_screen`만 쓴다). 그 자리가 이상한 값으로 빨개지면 로그의 `screen>` 줄 안에 커널 시각 표식이 있는지
+      먼저 본다.
+- [ ] 실기에서 볼 것 — `running-tars.md`의 소리 절. SOF 노트북에서 `Firmware file:` · `Topology file:` 두 줄, IPC4 `-3ch` topology 없음
+      (위험 12), 잭 입력 장치가 키보드 · 포인터 판정에 안 걸리는지(위험 2).
+
 PD(2026-10-05)가 남긴 것.
 
 - [x] 마우스 보고 — PD-M4가 같은 날 했다(design 결정 12). 자식이 마우스 모드를 켰으면 ghostty의 `encodeMouse`로 보고하고 우리
@@ -1153,6 +1191,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `main.zig` — 감독 루프와 자식 둘. env 블록을 짓는 자리가 `resolveShell`
   뒤에 있다(`HISTFILE`이 셸마다 다른 파일이라 셸이 정해져 있어야 하고,
   `cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다).
+- `audio.zig` — 소리의 세 자리(AU-M1 ~ M3). 위 절반이 순수(`verbFor` · `argvFor` · `outcome` · `storeDecision`, M2 · M3의
+  `defaultsFor` · `render` — `audio_test`가 본다)이고 아래가 시스템 콜(`start` — 일꾼을 fork하고 안 기다린다, `reaped` — 감독 루프가
+  거둘 때 먼저 묻는다(일꾼을 `reaped orphan`으로 찍으면 `terminal/check.sh`가 그 줄을 재부모화의 증거로 본다), `store` — 끄는 길의
+  `reapAll` 뒤 `sync` 앞, `follow` — 감독 루프 머리에서 1초마다 `/dev/snd` · `/proc/asound/pcm`을 읽고 바뀌면 `/etc/asound.conf`를
+  `.tars`에 쓰고 `rename`). `power.zig`와 서로 import한다. 전역 넷과 env 포인터 하나가 PID 1의 기억이다.
 - `net.zig` — 네트워크의 두 자리. `loopbackUp()`(LB-M1)은 설정을 읽기 전에
   ioctl로 `lo`에 `IFF_UP`을 세운다 — 커널이 `127.0.0.1/8`을 스스로 붙인다.
   `bringUp()`은 `net=dhcp`면 dhcpcd를 `-j /dev/console`로 인자 없이 띄운다
@@ -1296,6 +1339,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
   타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
   부팅이다 — A · B는 그것이 빠져도 초록이었다.
+- `audio/check.sh` · `audio/probe.sh` — 부팅 넷(A 새 디스크 · B 같은 디스크 · C 디스크 없음 · D USB 꽂고 뽑기) · 검사 열일곱(AU).
+  게스트에 한 글자도 안 친다 — 설정 디스크의 `services.d/probe`(= `probe.sh`)가 사람이 치는 명령 그대로 치고 `audio-probe:` 줄로
+  찍는다. 판정은 샘플 값이다(`count_tap`의 `tone` · `left` · `right` · `other` · `doubled`). 녹음 파일은 디스크에 남기고 QEMU를 끈 뒤
+  `debugfs`로 꺼낸다. 전원은 프로브의 `kill -TERM 1`. 부팅 D만 monitor 45491. 검사 1이 커널 심볼 · alias · firmware 이름 대조 ·
+  initrd 파일을 본다. `tap:`의 `frames` · `zero` · `first_*`는 판마다 다르고 `tone` · `left` · `right`는 같아야 한다.
 - `pane/check.sh` — 부팅 하나(9b의 되살림까지 치면 terminal 둘) · 검사 열여섯(WP-M1
   열 + WP-M2 여섯). `pane>` 배치 줄은 서명이 바뀐 프레임에만 찍히므로
   `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의 음성 판정은
@@ -1324,7 +1372,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   댕글링이고 vim은 그것을 "사용자 vimrc 없음"으로 보고 stub `defaults.vim`을 읽는다. 사용자 vimrc가
   있으면 `defaults.vim`은 안 읽는다. seed의 규칙 다섯(끝 개행 · ASCII · 전부 `"` 주석 ·
   `/etc/vim/vimrc` 언급 · `tabstop` 금지)은 `config_test`의 `expectVimrcSeed`가 지킨다.
-- `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 목록(데이터만)과
+- `kernel/guest_firmware.sh` · `kernel/vendor_firmware.sh` — 무선 firmware 77과 소리 firmware 42(sof-bin v2026.09.1, AU-M3)의 목록(데이터만)과
   그것을 받아 고르는 스크립트(WL-M1). linux-firmware · wireless-regdb 두 tarball을
   `kernel/src/firmware/`에 받고(662MB, `clean()`이 안 지운다) sha256을 확인한다. 목록과
   자기 해시로 스탬프를 찍어 바뀌지 않으면 건너뛴다.

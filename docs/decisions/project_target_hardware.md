@@ -82,5 +82,15 @@ DSDT를 덤프해서 게스트에 물리는 길이 있을 수 있다. 확인해 
 바이너리가 곧 제품이다"를 근거로 최적화 기본값을 정했다. 커널 config가 둘로
 갈리면 그 문장이 커널에 대해서는 더 안 맞게 된다.
 
+## 소리(AU, 2026-10-06)
+
+켜진 것 — ALSA · HDA 컨트롤러 · 범용 코덱(M0), HDA 코덱 드라이버 여덟(Realtek 계열 전부 ·
+Conexant · Senarytech · Cirrus · CS8409 · Analog · IDT · VIA)과 USB Audio Class(M2),
+Intel SOF 열한 세대(Cannon Lake ~ Panther Lake · Wildcat Lake)와 AMD ACP의 PDM
+드라이버(Renoir · Yellow Carp · ACP6.3 · 7.x)와 sof-bin firmware · topology 42개(M3).
+안 켠 것 — SoundWire 코덱(`sof_sdw`) · side-codec 스피커 앰프(CS35L41 · CS35L56 ·
+TAS2781) · HDMI 오디오(GPU 드라이버 없음) · I2S 코덱 machine · Bluetooth. 자세한 것은
+[[project_audio_devices]].
+
 관련: [[project_kernel_config]] · [[project_carryover_cleanup]] ·
 [[project_device_discovery]] · [[project_gate_latency]]
