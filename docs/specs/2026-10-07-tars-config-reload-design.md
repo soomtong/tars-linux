@@ -92,6 +92,18 @@ net=dhcp                        # now off — tars-config reload
 | (c) init이 `tars.conf`를 inotify로 지켜보고 저절로 | 사람이 반쯤 고친 파일을 init이 읽는다. 그리고 terminal을 다시 띄우는 일은 사람이 정해야 한다 |
 | (d) 지금 쓰는 값을 파일(`/run/tars/config`)로 남기기 | 쓰는 쪽이 PID 1 하나라 소켓으로 묻는 것이 같은 일을 하고, 파일은 낡을 수 있다(reload 뒤 다시 써야 한다) |
 
+> TC-M2 plan이 정한 것(2026-10-07, 코드를 사본에서 돌린 뒤). 위 글과 다른 셋.
+>
+> 1. `config`의 답은 열두 줄 `key=value`(init이 지금 쓰는 값) 뒤에, 화면이 대기 중이면 `screen keyboard=apple clipboard=shared` 한 줄이다 —
+>    `pending terminal: …`이 아니라 화면이 지금 쓰는 값을 싣는다(`tars-config`가 그 값을 보여야 해서다). `reload`의 답은 바뀐 키마다
+>    `keyboard: apple -> pc (the screen keeps the old value until the next boot)`, 데몬 · 서비스마다 `service dhcpcd: stops`, 방화벽은
+>    `firewall: down (nft flush ruleset)`, 바뀐 것이 없으면 `nothing changed`, 거절이면 `error: /config/tars.conf: <init의 말>; nothing changed
+>    (tars-config check)`다.
+> 2. 보기의 "지금 값"은 같은 줄 끝이 아니라 그 줄 밑의 주석 한 줄이다 — `#   init uses net=off now; tars-config reload applies the line above`.
+>    같은 줄 끝에 적으면 출력이 더는 그대로 쓸 수 있는 `tars.conf`가 아니다(TC 결정 8 — `parse`는 줄 끝 주석을 모른다). 화면의 대기는
+>    `# the screen keeps keyboard=apple clipboard=shared until the next boot` 한 줄이다(M3 전이라 "다음 부팅"이다).
+> 3. 게이트의 자리는 결정 9의 덧붙임.
+
 ### 결정 2 — 키를 넷으로 가른다: 지금 · 다음에 뜰 때부터 · 화면을 다시 띄워야 · 안 한다
 
 모델 표의 셋째 · 넷째 칸이 이 결정이다. 원칙은 하나다 — reload는 떠 있는 사람의 것(셸 세션 · 패널 · 클립보드)을 죽이지 않는다. 죽여야만
@@ -221,6 +233,15 @@ ReleaseSafe의 init에서 정수 넘침 · 범위 밖 인덱스는 패닉이고 
 
 음성이 반을 차지하는 이유는 reload의 위험이 "안 바뀌어야 할 것이 바뀌는 것"이기 때문이다. 어느 체인이 어느 부팅에 얹을지와 포트는 plan이
 정한다.
+
+> TC-M2 plan이 정한 것. 새 부팅 · 새 포트는 없다 — 넷 다 이미 있는 부팅의 끝에 타이핑(또는 ssh)으로 붙는다.
+>
+> | 체인 | 자리 | 판정 |
+> |---|---|---|
+> | `net` | 첫 부팅(net=dhcp)의 끝, 검사 31 — 위 표의 반대 순서다. 그 부팅은 이미 dhcp라 `net=off` · reload를 먼저 치고 다시 `dhcp` · reload | `service dhcpcd: stops` · 주소가 빠짐(`nw0`) · `service dhcpcd: starts` · 이 부팅의 둘째 lease와 둘째 `started service dhcpcd`. chronyd는 이 부팅에 ntp가 없어 안 본다 |
+> | `firewall` | 부팅 A의 끝, 검사 19 | 포트의 바이트가 아니라 규칙의 수다 — `nft list ruleset | wc -l`이 0(`fwn0`), 다시 켜면 drop이 선다(`fwp…`). 7072의 리스너는 검사 18이 이미 썼다 |
+> | `config` | 1차의 `list` 뒤 | `keyboard: apple -> pc (the screen keeps …)` · dhcpcd를 안 건드림 · 보기의 `# the screen keeps keyboard=apple clipboard=shared …` · `shell=fsh`를 심은 파일의 reload가 `error: …; nothing changed` |
+> | `service` | 부팅 D의 끝, 검사 28(결정 11) | `ssh off` · reload → `service sshd: stops` · 새 로그인 막힘, `ssh on` · reload → `service sshd: starts` · 새 로그인, 나머지 셋의 줄 없음 · 멈춘 stubborn은 그대로 |
 
 ### 결정 10 — 구현은 서브에이전트가, 검증 · 게이트 · commit은 lead가
 
