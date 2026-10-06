@@ -29,7 +29,7 @@ M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
 찍혔다. 바깥에 안 나갔고 지웠으며 `/tmp/run/vd2` 전체에 키 모양이 0개인 것을 다시 확인했다. plan에 "호스트에서 `tars-dictate`를
 돌리지 말 것"을 적었다. 키를 바꿀지는 사용자의 판단이다.
 
-## 2026-10-07 새벽 — Config Tool(TC) 진행 중. M0 끝, M1 plan 작성 중, M2는 design부터
+## 2026-10-07 — Config Tool(TC) 진행 중. M0 · M1 끝, M2(reload) plan 작성 중
 
 사용자의 요청("tars-config 실행 파일을 만들어서 시스템 전체 세팅을 할 수 있게 … 쉘 스크립트가 아니라면 어떤 언어로")에서 열었다.
 design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임, 전제 정정 7+), plan `-tc-m0.md`. 사용자 결정 셋 — seed의 별칭
@@ -38,6 +38,9 @@ design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임,
 | 커밋 | 무엇 |
 |---|---|
 | `6968026` | TC design · M0 plan(Opus planner `tc-design`, 사본 `/tmp/run/tc0`) |
+| `5d58520` · `0758b4a` | M1 plan · design 결정 12 ~ 17(앞문 넷 · 남의 문법은 주인이 짓는다 · 가르는 것은 방화벽 하나 · 방화벽만 그 자리에서 `nft -f`) |
+| `e493bfd` | M1 — `init/src/config_front.zig` · `config_front_edit.zig` · `config_front_edit_test.zig`, 동사 `wifi` · `ssh on|off` · `ssh-key add|list` · `firewall allow|deny` · `dictation key|set`, `check`에 다섯 더. 새 체인 없이 wifi · service · firewall · dictation 체인에 검사 하나씩. 구현 Sonnet, plan 코드 고친 곳 0. 루트 게이트 21체인 2/2 두 번(56:36 · 56:42) |
+| `76ef474` · `5621281` | M2 reload design(결정 11 — `init.sock`에 `config` · `reload`, 키를 넷으로 가른다, 원자성 · 순서, 감독 루프를 안 막는다, `services.d` 다시 읽기) |
 | `8671f56` | M0 — `init/src/config_cli.zig`(root · 시스템 콜) · `config_edit.zig`(순수) · `config_edit_test.zig`(호스트), `config.zig`의 로그 24줄 → `log()`(root의 `configLog`가 가로챈다), seed 별칭 둘 제거, config 체인 1차에 동사 다섯 + `list`, 2차의 `echo`가 `set`으로. 구현 Sonnet `tc-m0-impl`, plan 코드 고친 곳 0. 루트 게이트 21체인 2/2 두 번(56:01 · 55:52) |
 
 동사는 여섯 — 인자 없음(보기) · `get` · `set` · `reset` · `check` · `list`(+ `help`). `unset`은 안 받고 `reset`을 가리킨다(design 결정 1 덧붙임).
@@ -46,7 +49,7 @@ design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임,
 알릴 것 — 쓰던 설정 디스크(`out/tars-config.img` · 실기 p2)의 rc에는 `alias tars-config='cat …'`가 남아 있어 그 셸에서 실행 파일이 가려진다.
 처방은 design 결정 6의 세 줄(`sd 'alias tars-(config|rc)=.*' '' /config/fish.config /config/bashrc /config/zshrc` 또는 `command tars-config`).
 
-다음: planner가 M1 plan(`-tc-m1.md`, 사본 `/tmp/run/tc1`)을 쓰는 중 — 표면 넷의 앞문(`wifi` · `ssh-key add` · `firewall allow` · `dictation
+다음: planner가 M2 plan(`docs/plans/2026-10-07-tars-config-reload-tc-m2.md`, 사본 `/tmp/run/tc2`)을 쓰는 중 — PID 1을 고치는 첫 일. 그 뒤 M3 `reload terminal`. (M1 때의 메모: planner가 M1 plan — 표면 넷의 앞문(`wifi` · `ssh-key add` · `firewall allow` · `dictation
 key/set`), 원칙은 결정 10(남의 문법을 다시 짓지 않는다). 그 뒤 Sonnet 구현 → 루트 게이트 2회 → commit. M2(`reload`)는 따로 design을 쓴다.
 서브프로젝트를 닫을 때 lead가 할 것은 design "닫을 때" 절(CLAUDE.md 표 · `project_config_tool.md` · lessons · running-tars의 `tars-config` 절 ·
 "네트워크와 시계" 절의 `sd` 세 줄을 `tars-config set`으로).
