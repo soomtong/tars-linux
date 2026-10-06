@@ -9,6 +9,26 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
+/// 이 파일의 로그 한 줄이 가는 자리(TC design 결정 3). 줄마다 `std.debug.print`를
+/// 부르던 것을 TC-M0이 여기 하나로 모았다.
+///
+/// init에서는 그 전과 바이트 하나 다르지 않다 — `tars-init: ` 접두사와 개행을
+/// 붙여 표준 에러에 찍는다. 달라지는 것은 이 파일을 import하는 다른 실행
+/// 파일이다. 그 root가 `configLog`를 선언하면 줄이 그리로 간다 — `tars-config`가
+/// 사람이 적으려는 값을 `parse`에 넣고, init이 부팅에 그 값에 대해 무엇이라고
+/// 말할지를 그 자리에서 듣는다(`config_edit.judge`). 그 말이 곧 거절의 이유다.
+///
+/// 고르는 것이 컴파일 타임이다. `std`가 `std_options`를 root에서 찾는 것과 같은
+/// 수법이고, init과 `config_test`의 root에는 그 이름이 없으므로 둘의
+/// 바이너리에는 가로채는 갈래가 아예 안 들어간다.
+///
+/// fmt는 접두사와 끝의 개행이 없는 글자다.
+fn log(comptime fmt: []const u8, args: anytype) void {
+    const root = @import("root");
+    if (@hasDecl(root, "configLog")) return root.configLog(fmt, args);
+    std.debug.print("tars-init: " ++ fmt ++ "\n", args);
+}
+
 /// 셸이 사용자의 rc 파일을 읽을 것인가(SC design 결정 2).
 ///
 /// `bool`이 아니라 enum인 데 뜻이 있다. 이 파일의 다른 키가 전부
@@ -307,7 +327,7 @@ pub fn cmdlineWantsNoConfig(text: []const u8) bool {
         const eq = std.mem.indexOfScalar(u8, token, '=') orelse token.len;
         if (!std.mem.eql(u8, token[0..eq], NO_CONFIG_TOKEN)) continue;
         if (eq != token.len) {
-            std.debug.print("tars-init: {s} takes no value, '{s}' means the same thing\n", .{
+            log("{s} takes no value, '{s}' means the same thing", .{
                 NO_CONFIG_TOKEN, token,
             });
         }
@@ -576,8 +596,6 @@ pub const Shell = enum {
             \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
-            \\alias tars-config='cat /config/tars.conf'
-            \\alias tars-rc='cat /config/fish.config'
             \\#
             \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
@@ -622,8 +640,6 @@ pub const Shell = enum {
             \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
-            \\alias tars-config='cat /config/tars.conf'
-            \\alias tars-rc='cat /config/bashrc'
             \\#
             \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
@@ -681,8 +697,6 @@ pub const Shell = enum {
             \\# 파일이 부팅할 때 무언가를 찍으면 게이트가 화면에서 세는 좌표가
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
-            \\alias tars-config='cat /config/tars.conf'
-            \\alias tars-rc='cat /config/zshrc'
             \\#
             \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
@@ -849,7 +863,7 @@ pub const Toggles = struct {
             // "모르는 이름 none"이 찍힌다.
             if (std.mem.eql(u8, name, "none")) continue;
             const key = std.meta.stringToEnum(ToggleKey, name) orelse {
-                std.debug.print("tars-init: unknown hangul_toggle '{s}', ignored\n", .{name});
+                log("unknown hangul_toggle '{s}', ignored", .{name});
                 continue;
             };
             switch (key) {
@@ -971,7 +985,11 @@ pub const Config = struct {
 /// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
 /// 키가 수십 개가 되어도 4KB를 넘길 일은 없다. 넘치면 잘라서 파싱하고
 /// 경고를 찍는다(조용히 무시하지 않는다).
-const MAX_FILE = 4096;
+///
+/// pub인 이유는 `tars-config`다(TC-M0). 고친 결과가 이 수를 넘으면 쓰지
+/// 않는다 — 넘는 꼬리는 init이 안 읽으므로, 쓰는 순간 사람이 적은 줄이
+/// 조용히 무시되는 파일이 된다.
+pub const MAX_FILE = 4096;
 
 /// 설정 파일을 읽어 파싱한다.
 ///
@@ -984,7 +1002,7 @@ pub fn load(path: [:0]const u8) ?Config {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(rc)) |e| {
         if (e == .NOENT) return null;
-        std.debug.print("tars-init: failed to open {s} (errno {d})\n", .{
+        log("failed to open {s} (errno {d})", .{
             path, @intFromEnum(e),
         });
         return Config{};
@@ -1000,7 +1018,7 @@ pub fn load(path: [:0]const u8) ?Config {
         const n = linux.read(fd, buf[len..].ptr, buf.len - len);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("tars-init: failed to read {s} (errno {d})\n", .{
+            log("failed to read {s} (errno {d})", .{
                 path, @intFromEnum(e),
             });
             return Config{};
@@ -1009,7 +1027,7 @@ pub fn load(path: [:0]const u8) ?Config {
         len += n;
     }
     if (len == buf.len) {
-        std.debug.print("tars-init: {s} is at least {d} bytes, parsing that much only\n", .{
+        log("{s} is at least {d} bytes, parsing that much only", .{
             path, buf.len,
         });
     }
@@ -1039,7 +1057,7 @@ pub fn parse(text: []const u8) Config {
         if (line[0] == '#') continue;
 
         const eq = std.mem.indexOfScalar(u8, line, '=') orelse {
-            std.debug.print("tars-init: config line without '=' ignored: {s}\n", .{line});
+            log("config line without '=' ignored: {s}", .{line});
             continue;
         };
         const key = std.mem.trim(u8, line[0..eq], " \t");
@@ -1049,7 +1067,7 @@ pub fn parse(text: []const u8) Config {
             // stringToEnum이 곧 화이트리스트다. enum에 없는 이름은 통과할 수
             // 없으므로 검사 목록을 따로 유지할 필요가 없다.
             c.shell = std.meta.stringToEnum(Shell, value) orelse {
-                std.debug.print("tars-init: unknown shell '{s}', falling back to {s}\n", .{
+                log("unknown shell '{s}', falling back to {s}", .{
                     value, @tagName(c.shell),
                 });
                 continue;
@@ -1059,7 +1077,7 @@ pub fn parse(text: []const u8) Config {
             // 기본값(apple)에 머문다 — 설정 파일은 사용자가 손으로 고치는
             // 물건이라 깨진 입력이 예외가 아니라 규칙이다.
             c.keyboard = std.meta.stringToEnum(Keyboard, value) orelse {
-                std.debug.print("tars-init: unknown keyboard '{s}', falling back to {s}\n", .{
+                log("unknown keyboard '{s}', falling back to {s}", .{
                     value, @tagName(c.keyboard),
                 });
                 continue;
@@ -1067,14 +1085,14 @@ pub fn parse(text: []const u8) Config {
         } else if (std.mem.eql(u8, key, "hangul_layout")) {
             // shell·keyboard와 완전히 같은 모양이다.
             c.hangul_layout = std.meta.stringToEnum(HangulLayout, value) orelse {
-                std.debug.print("tars-init: unknown hangul_layout '{s}', falling back to {s}\n", .{
+                log("unknown hangul_layout '{s}', falling back to {s}", .{
                     value, @tagName(c.hangul_layout),
                 });
                 continue;
             };
         } else if (std.mem.eql(u8, key, "latin_layout")) {
             c.latin_layout = std.meta.stringToEnum(LatinLayout, value) orelse {
-                std.debug.print("tars-init: unknown latin_layout '{s}', falling back to {s}\n", .{
+                log("unknown latin_layout '{s}', falling back to {s}", .{
                     value, @tagName(c.latin_layout),
                 });
                 continue;
@@ -1088,7 +1106,7 @@ pub fn parse(text: []const u8) Config {
             // shell·keyboard·자판 둘과 완전히 같은 모양이다. `hangul_toggle`만
             // 집합이라 다르고, 여섯째 키는 다시 enum 하나다.
             c.shell_config = std.meta.stringToEnum(ShellConfig, value) orelse {
-                std.debug.print("tars-init: unknown shell_config '{s}', falling back to {s}\n", .{
+                log("unknown shell_config '{s}', falling back to {s}", .{
                     value, @tagName(c.shell_config),
                 });
                 continue;
@@ -1096,7 +1114,7 @@ pub fn parse(text: []const u8) Config {
         } else if (std.mem.eql(u8, key, "net")) {
             // shell·keyboard·자판 둘·shell_config와 완전히 같은 모양이다.
             c.net = std.meta.stringToEnum(Net, value) orelse {
-                std.debug.print("tars-init: unknown net '{s}', falling back to {s}\n", .{
+                log("unknown net '{s}', falling back to {s}", .{
                     value, @tagName(c.net),
                 });
                 continue;
@@ -1107,7 +1125,7 @@ pub fn parse(text: []const u8) Config {
             // 때문이다(TS design 결정 5). 모르는 값을 흘려보내는 규칙은 같다.
             var ntp_buf: [NTP_ARG_MAX]u8 = undefined;
             c.ntp = Ntp.parse(value) orelse {
-                std.debug.print("tars-init: unknown ntp '{s}', falling back to {s}\n", .{
+                log("unknown ntp '{s}', falling back to {s}", .{
                     value, c.ntp.arg(&ntp_buf),
                 });
                 continue;
@@ -1118,7 +1136,7 @@ pub fn parse(text: []const u8) Config {
             // 정말 있는지는 `main.zig`가 본다. 모르는 값을 흘려보내는 규칙은
             // 같다.
             c.timezone = Timezone.parse(value) orelse {
-                std.debug.print("tars-init: unknown timezone '{s}', falling back to {s}\n", .{
+                log("unknown timezone '{s}', falling back to {s}", .{
                     value, c.timezone.slice(),
                 });
                 continue;
@@ -1126,7 +1144,7 @@ pub fn parse(text: []const u8) Config {
         } else if (std.mem.eql(u8, key, "firewall")) {
             // net과 완전히 같은 모양이다.
             c.firewall = std.meta.stringToEnum(Firewall, value) orelse {
-                std.debug.print("tars-init: unknown firewall '{s}', falling back to {s}\n", .{
+                log("unknown firewall '{s}', falling back to {s}", .{
                     value, @tagName(c.firewall),
                 });
                 continue;
@@ -1134,7 +1152,7 @@ pub fn parse(text: []const u8) Config {
         } else if (std.mem.eql(u8, key, "esc_latin")) {
             // shell_config와 완전히 같은 모양이다(EL design 결정 1).
             c.esc_latin = std.meta.stringToEnum(EscLatin, value) orelse {
-                std.debug.print("tars-init: unknown esc_latin '{s}', falling back to {s}\n", .{
+                log("unknown esc_latin '{s}', falling back to {s}", .{
                     value, @tagName(c.esc_latin),
                 });
                 continue;
@@ -1142,13 +1160,13 @@ pub fn parse(text: []const u8) Config {
         } else if (std.mem.eql(u8, key, "clipboard")) {
             // firewall · esc_latin과 완전히 같은 모양이다(CB-M0).
             c.clipboard = std.meta.stringToEnum(ClipboardScope, value) orelse {
-                std.debug.print("tars-init: unknown clipboard '{s}', falling back to {s}\n", .{
+                log("unknown clipboard '{s}', falling back to {s}", .{
                     value, @tagName(c.clipboard),
                 });
                 continue;
             };
         } else {
-            std.debug.print("tars-init: unknown config key '{s}'\n", .{key});
+            log("unknown config key '{s}'", .{key});
         }
     }
 
@@ -1251,7 +1269,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         .TRUNC = true,
     }, 0o644);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: failed to create {s} (errno {d})\n", .{
+        log("failed to create {s} (errno {d})", .{
             path, @intFromEnum(e),
         });
         return error.OpenFailed;
@@ -1274,7 +1292,7 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
         const n = linux.write(fd, text.ptr + written, text.len - written);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("tars-init: failed to write {s} (errno {d})\n", .{
+            log("failed to write {s} (errno {d})", .{
                 path, @intFromEnum(e),
             });
             return error.WriteFailed;
@@ -1327,7 +1345,7 @@ pub const GITCONFIG_PATH: [:0]const u8 = "/config/gitconfig";
 ///                       세운 copy mode로 그 로그를 훑을 수 있다. `-F`는 한
 ///                       화면짜리 출력이면 pager를 아예 안 띄운다
 ///   color.ui            지금도 `auto`가 기본이지만 적어 둔다 — 끄고 켤 자리를
-///                       `tars-config`가 가리키는 파일 안에 두는 것이 목적이다
+///                       이 파일 안에 두는 것이 목적이다
 ///   alias               자주 치는 넷. git은 alias를 자기가 직접 풀어서
 ///                       셸 별칭과 달리 셸 없이도 돈다(`git st`)
 ///
@@ -1446,7 +1464,7 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
         // 이미 있다 = 사용자의 파일이다. 조용히 둔다 — 여기서 로그를 찍으면
         // 부팅마다 네 줄이 늘고, 그 넷은 아무것도 알려주지 않는다.
         if (e == .EXIST) return;
-        std.debug.print("tars-init: could not seed {s} (errno {d})\n", .{
+        log("could not seed {s} (errno {d})", .{
             path, @intFromEnum(e),
         });
         return;
@@ -1459,7 +1477,7 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
     // `created`가 아니라 `seeded`다. `tars-init: created /config/tars.conf`
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
     // 그 검사가 seed 몇 줄까지 함께 보게 된다.
-    std.debug.print("tars-init: seeded {s}\n", .{path});
+    log("seeded {s}", .{path});
 }
 
 /// `/proc/cmdline`을 읽어 `NO_CONFIG_TOKEN`이 있는지 본다(SC-M2 결정 9).
@@ -1476,7 +1494,7 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
 pub fn cmdlineNoConfig(path: [:0]const u8) bool {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: cannot read {s} (errno {d}), assuming no {s}\n", .{
+        log("cannot read {s} (errno {d}), assuming no {s}", .{
             path, @intFromEnum(e), NO_CONFIG_TOKEN,
         });
         return false;
@@ -1491,7 +1509,7 @@ pub fn cmdlineNoConfig(path: [:0]const u8) bool {
         const n = linux.read(fd, buf[len..].ptr, buf.len - len);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("tars-init: failed to read {s} (errno {d})\n", .{
+            log("failed to read {s} (errno {d})", .{
                 path, @intFromEnum(e),
             });
             return false;

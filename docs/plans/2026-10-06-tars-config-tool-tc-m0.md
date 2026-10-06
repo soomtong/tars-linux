@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Design: `docs/specs/2026-10-06-tars-config-tool-design.md`
-Status: plan을 썼다. 구현 전이다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "TC-M0이 실측한 것"에 들어간다.
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 5와 5b를 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 21체인 2/2가 두 번 초록이다. 값은 맨 아래 "TC-M0이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -34,13 +34,14 @@ E1부터 차례로 넣는다.
 | `init/build.zig` | 편집 셋 — `tars-config` exe, `config_edit_test`, test step 한 줄 | +30 |
 | `kernel/make_initrd.sh` | 편집 하나 — `tars-service` 뒤에 `tars-config` | +5 |
 | `tools/check.sh` | 편집 하나 — `WANT+=(usr/bin/tars-config)` | +6 |
-| `config/check.sh` | 편집 다섯 — 1차의 키 배열 넷과 검사 다섯, 2차의 `OFF_KEYS`가 `tars-config set` | +88 −16 |
+| `config/check.sh` | 편집 다섯 — 1차의 키 배열 넷과 검사 다섯, 2차의 `OFF_KEYS`가 `tars-config set`. Task 5b가 둘 더(`list`의 키 배열 · 검사) | +88 −16, 5b 뒤 +111 −16 |
 | `check.sh` | 편집 하나 — config 체인 설명 문단 | +5 |
 | `init/src/config_edit.zig` | 새 파일 — 순수한 쪽 | +299 |
-| `init/src/config_cli.zig` | 새 파일 — `tars-config`의 root | +492 |
+| `init/src/config_cli.zig` | 새 파일 — `tars-config`의 root. Task 5b가 편집 넷(`list` · `keyTable` · `unset` 안내) | +492, 5b 뒤 +519 |
 | `init/src/config_edit_test.zig` | 새 파일 — 호스트 검사 | +268 |
 
-`git diff --stat`은 7 files, +199 −62이고(새 파일 셋은 밖), `git add -N` 뒤에는 10 files다. 커널(`kernel/.config`)도 Dockerfile도 안 바뀐다 —
+`git diff --stat`은 7 files, +199 −62이고(새 파일 셋은 밖), `git add -N` 뒤에는 10 files다. Task 5b(수정 1) 뒤에는 7 files, +222 −62다
+(`config_cli.zig`는 새 파일이라 그 +30 −3은 `git add -N` 뒤에만 보인다). 커널(`kernel/.config`)도 Dockerfile도 안 바뀐다 —
 이미지를 다시 굽지 않는다. `kernel/guest_tools.sh`도 안 고친다 — `all 92 tools`가 그대로다. `.gitignore`도 그대로다(`init/zig-out/`이 이미 있다).
 
 design의 `Status:` · `CLAUDE.md` · `MEMORY.md` · `docs/decisions/` · `docs/guides/` · `HANDOFF.md`는 구현자가 안 고친다.
@@ -2083,6 +2084,241 @@ for f in init/src/config.zig init/src/config_cli.zig init/src/config_edit.zig co
 - Task 5의 `diff` 수 다섯 · 판마다 `mounted:` · `exit=` · 시간 · `FAIL` 줄, 5-2의 출력.
 - plan의 기대와 글자나 수가 다른 것이 있으면 그 줄을 그대로.
 
+## Task 5b: 수정 1 — `list`
+
+2026-10-06, Task 0 ~ 5를 넣고 lead의 루트 게이트 1회차(21체인 PASS 2/2, 55분 51초)가 끝난 뒤에 더했다. 사용자의 말: "tars-config need a
+available list command. 어떤 설정 정보를 쓸 수 있는지 알아야 세팅을 하거나 언세팅을 할 수 있지 않을까?" design 결정 1의 덧붙임이 근거다.
+
+| 무엇 | 자리 |
+|---|---|
+| `tars-config list` — 열두 키를 `key=기본값`과 받는 값으로 한 줄씩. `help`가 사용법 뒤에 찍던 표를 함수 `keyTable` 하나로 빼서 `help` · `list`가 함께 부른다 | `config_cli.zig` L2 · L3 · L4 |
+| USAGE에 `list` 한 줄, `help`의 설명이 "this text and the list" | `config_cli.zig` L1 |
+| `tars-config unset …`은 받지 않고 `reset`을 가리키는 한 줄 + 쓰는 법(exit 64) — design 결정 1 덧붙임의 둘째 문단 | `config_cli.zig` L4 |
+| config 체인 1차의 `check` 뒤에 `tars-config list`와 검사 하나(열두 키) | `config/check.sh` L1 · L2 |
+
+기준은 Task 0 ~ 5를 넣은 지금의 main 트리 파일(= `/tmp/run/tc0/new/`)이고, 편집 뒤는 `/tmp/run/tc0/new2/`다. 두 파일만 바뀐다 —
+`config_cli.zig` +30 −3, `config/check.sh` +23. 다른 파일은 안 바뀐다.
+
+### 5b-0. 기준을 본다
+
+```bash
+for f in init/src/config_cli.zig config/check.sh; do cmp $f /tmp/run/tc0/new/$f && echo "BASE $f"; done
+```
+
+기대: `BASE` 둘. 다르면 멈추고 보고한다.
+
+### 5b-1. `init/src/config_cli.zig` — 편집 넷
+
+L1 — `old_string`(지금 파일 78줄부터):
+
+```zig
+    \\       tars-config help                keys and the values they take
+```
+
+`new_string`:
+
+```zig
+    \\       tars-config list                every key with its default and the values it takes
+    \\       tars-config help                this text and the list
+```
+
+L2 — `old_string`(지금 파일 89줄부터):
+
+```zig
+    say("\nkeys (with their defaults):\n", .{});
+```
+
+`new_string`:
+
+```zig
+    say("\nkeys (with their defaults):\n", .{});
+    keyTable();
+    say("\ninit reads /config/tars.conf only at boot. To reboot: kill -INT 1\n", .{});
+    return EXIT_OK;
+}
+
+/// 무엇을 적을 수 있는가(TC-M0 수정 1 — 사용자: "어떤 설정 정보를 쓸 수 있는지 알아야
+/// 세팅을 하거나 언세팅을 할 수 있지 않을까"). `help`의 표만 찍는다. 파일도 디스크도 안
+/// 본다 — 지금 값은 인자 없는 `tars-config`가 보여 준다.
+fn list() u8 {
+    keyTable();
+    return EXIT_OK;
+}
+
+/// 열두 키를 `key=기본값`과 받는 값으로 한 줄씩. `help`와 `list`가 함께 쓴다. 왼쪽 칸은
+/// 그대로 `set`에 줄 수 있는 모양이고(`reset`이 적는 값이 그것이다), 오른쪽은
+/// `config_edit.hint` — enum이면 config.zig의 이름에서 컴파일 타임에 나온다.
+fn keyTable() void {
+```
+
+L3 — `old_string`(지금 파일 96줄부터):
+
+```zig
+    }
+    say("\ninit reads /config/tars.conf only at boot. To reboot: kill -INT 1\n", .{});
+    return EXIT_OK;
+```
+
+`new_string`:
+
+```zig
+    }
+```
+
+L4 — `old_string`(지금 파일 458줄부터):
+
+```zig
+    if (std.mem.eql(u8, verb, "check")) {
+```
+
+`new_string`:
+
+```zig
+    if (std.mem.eql(u8, verb, "list")) {
+        if (rest.len != 0) return usage();
+        return list();
+    }
+    // "언세팅"은 reset이다. unset이라는 이름은 받지 않는다 — 그 낱말은 "줄을 지운다"로
+    // 읽히는데 reset은 줄을 지우지 않고 기본값을 적는다(design 결정 1의 덧붙임).
+    // 친 사람이 길을 잃지 않게 그 차이를 말하고 쓰는 법으로 끝낸다.
+    if (std.mem.eql(u8, verb, "unset")) {
+        complain("there is no unset; reset KEY writes the default value into that key's line (the line stays)", .{});
+        return usage();
+    }
+    if (std.mem.eql(u8, verb, "check")) {
+```
+
+### 5b-2. `config/check.sh` — 편집 둘
+
+판정 글자는 열두 키 하나하나의 `\| +key=기본값 +[A-Za-z<]`다 — `list`의 줄은 들여쓰기 두 칸 뒤에 `key=기본값`, 공백, 받는 값이 온다. 인자 없는
+`tars-config`의 `clipboard=shared`는 행 머리에 공백이 없고 뒤가 줄 끝이라 이 모양에 안 걸린다. 기대하는 열둘은 `TC_LIST_WANT`에 글자로
+있다(config.zig의 기본값에서 짓지 않는 셋째 벌). `timezone`의 받는 값이 `UTC`로 시작해서 대문자를 받는다. 타이핑은 열일곱 키다.
+
+L1 — `old_string`(지금 파일 112줄부터):
+
+```bash
+TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
+```
+
+`new_string`:
+
+```bash
+TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
+# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열두 키가 `key=기본값`과
+# 받는 값으로 한 줄씩 나온다. 기대하는 열둘은 아래 TC_LIST_WANT에 글자로 있다 —
+# config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
+# 여기서 멈춘다.
+TC_LIST_KEYS=(t a r s minus c o n f i g spc l i s t ret)
+TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
+              hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
+              shell_config=on net=off ntp=off timezone=UTC firewall=off esc_latin=on
+              clipboard=shared)
+```
+
+L2 — `old_string`(지금 파일 527줄부터):
+
+```bash
+  echo "boot 1: tars-config check found nothing init would complain about (the refused shell=fsh never landed), and no rc aliases tars-config"
+```
+
+`new_string`:
+
+```bash
+  echo "boot 1: tars-config check found nothing init would complain about (the refused shell=fsh never landed), and no rc aliases tars-config"
+
+  # list의 줄은 들여쓰기 뒤의 `key=기본값`, 공백, 받는 값이다. 행 머리가 공백이고 뒤에
+  # 글자가 이어지는 것을 본다 — 인자 없는 tars-config의 `clipboard=shared`는 행 머리에
+  # 공백이 없고 뒤가 줄 끝이라 이 모양에 안 걸린다.
+  type_keys "${TC_LIST_KEYS[@]}"
+  local want
+  for want in "${TC_LIST_WANT[@]}"; do
+    if ! wait_for_screen "\\| +${want} +[A-Za-z<]"; then
+      echo "FAIL(boot 1): 'tars-config list' did not print ${want} with the values it takes"
+      grep -a "terminal: screen>" "$log" | tail -1
+      return 1
+    fi
+  done
+  echo "boot 1: tars-config list printed all ${#TC_LIST_WANT[@]} keys with their defaults and the values they take"
+```
+
+### 5b-3. 확인 · 체인 · mutation
+
+```bash
+for f in init/src/config_cli.zig config/check.sh; do cmp $f /tmp/run/tc0/new2/$f && echo "SAME $f"; done
+bash -n config/check.sh && echo SYNTAX-OK
+until mkdir /tmp/run/docker.lock 2>/dev/null; do sleep 15; done
+docker run --rm -v "$PWD":/workspace -v /tmp/run/tc0/impl:/impl -w /workspace tars-devcontainer bash -c '
+  (cd init && zig build && zig build test > /tmp/t.log 2>&1; echo "test exit=$?")
+  s=$(date +%s); bash config/check.sh > /impl/config_5b.log 2>&1; echo "exit=$? $(( $(date +%s) - s ))s"'
+rmdir /tmp/run/docker.lock
+rg -a '^boot 1: tars-config|^FAIL' /tmp/run/tc0/impl/config_5b.log; tail -n 1 /tmp/run/tc0/impl/config_5b.log
+```
+
+기대: `SAME` 둘, `SYNTAX-OK`, `test exit=0`, `exit=0`, 그리고 `boot 1: tars-config` 넷째 줄로
+
+```
+boot 1: tars-config list printed all 12 keys with their defaults and the values they take
+```
+
+와 마지막 줄 `PASS`. 사본에서 167초(데운 판)였다.
+
+mutation 하나와 되돌림 — `list`가 표를 안 찍게 한다(`help`는 그대로).
+
+```bash
+python3 /tmp/run/tc0/make_mut2.py "$PWD" /tmp/run/tc0/impl/mut2
+diff init/src/config_cli.zig /tmp/run/tc0/impl/mut2/cli_m5.zig
+R="$PWD"; M=/tmp/run/tc0/impl/mut2; X=/tmp/run/tc0/run_mut.sh
+{ $X $R tars-devcontainer $M m5 cli_m5.zig:init/src/config_cli.zig
+  $X $R tars-devcontainer $M back; } > $M/run.out 2>&1
+cat $M/run.out
+```
+
+기대: `diff`가 `<     keyTable();` 한 줄. `m5`가 `mounted: 11110` · `exit=1` · `FAIL(boot 1): 'tars-config list' did not print shell=fish with the values it
+takes`(사본 53초), `back`이 `exit=0` · `last line: PASS`. `run_mut.sh`는 Task 5의 것 그대로이고 `mounted:`의 다섯 자리는 이 mutation을 안 센다 —
+`diff`가 그 자리다.
+
+`make_mut2.py`:
+
+```python
+"""TC-M0 수정 1(list)의 mutation 사본을 만든다.
+
+사용: python3 make_mut2.py <저장소 루트> <출력 디렉터리>
+"""
+import os
+import sys
+
+root, out = sys.argv[1], sys.argv[2]
+os.makedirs(out, exist_ok=True)
+s = open(os.path.join(root, 'init/src/config_cli.zig')).read()
+old = 'fn list() u8 {\n    keyTable();\n'
+assert s.count(old) == 1
+# mutation 5 — list가 표를 안 찍는다(help는 그대로 찍는다)
+open(os.path.join(out, 'cli_m5.zig'), 'w').write(s.replace(old, 'fn list() u8 {\n'))
+print('mutation copies:', len(os.listdir(out)))
+```
+
+보고는 Task 5-3과 같은 모양으로 — `git diff --stat`, 위 출력 전부, plan과 다른 글자.
+
+사본에서 `list`가 찍은 화면(시리얼에서 복원).
+
+```
+root@(none) ~# tars-config list
+  shell=fish                 fish | bash | zsh
+  keyboard=apple             apple | pc
+  hangul_layout=shin_pcs     dubeol | sebeol_3p3 | shin_p2 | shin_pcs
+  latin_layout=qwerty        qwerty | dvorak
+  hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap a comma list of hangul_key, shift_space, capslock_tap, lctrl_tap; empty turns them all off
+  shell_config=on            on | off
+  net=off                    off | dhcp
+  ntp=off                    off | dhcp | <IPv4 address>
+  timezone=UTC               UTC | <a name under /usr/share/zoneinfo, e.g. Asia/Seoul>
+  firewall=off               off | on
+  esc_latin=on               on | off
+  clipboard=shared           shared | pane
+```
+
+`hangul_toggle`의 줄이 145열이라 화면(155열) 안이다.
+
 ## Task 6: lead가 하는 것
 
 1. 보고를 받아 diff를 직접 읽고, 열 파일을 `/tmp/run/tc0/new/`와 `cmp`한다. Task 4의 로그를 대조한다.
@@ -2116,4 +2352,23 @@ design 본문은 이 plan과 같은 날 같은 사람이 썼으므로 어긋난 
 
 ## TC-M0이 실측한 것
 
-(구현과 루트 게이트 뒤에 lead가 채운다.)
+lead가 2026-10-06 저녁 ~ 2026-10-07 새벽에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열 파일 전부 사본(`new/`,
+Task 5b 뒤는 `new2/`)과 `cmp`가 같았고, 지운 줄 62개는 plan이 말한 것뿐이었다(로그 24 · 별칭 6 · config 체인의 옛 `echo` 경로 · `MAX_FILE`의
+`pub` 승격 · 주석).
+
+1. 구현자의 체인. `zig build test` 초록(`PASS` 셋 — plan은 둘이라 했는데 셋째는 `clock_test`의 것이다). config 체인 230초(처음 짓는 판),
+   Task 5b 뒤 170초. regression `tools` 60초(`all 92 tools`) · `boot` 30초 · `install` 112초(`init waited 1600ms`, plan의 사본 값은 1,400ms,
+   기준은 1,000ms 이상). mutation 여덟 판(m0 · m1 · m2 · m2_noset · m3 · m4 · back, 5b 뒤 m5 · back) 전부 plan의 표와 같은 자리에서 잡혔다.
+2. 루트 게이트. Task 5b 전의 트리로 한 번(55분 51초, 21체인 2/2 — `list` 수정 때문에 2회차를 멈췄다), 5b 뒤의 트리로 두 번 —
+   56분 01초 · 55분 52초, 둘 다 21체인 `PASS: 2/2`, 빨간 줄 0. VD-M1 때 54분 48초였으니 initrd 1MB와 config 1차의 타이핑 아흔 글자가
+   1분쯤이다.
+3. 크기. `tars-config` 3,417,176바이트(plan의 사본 값 3,414,368 — `list` 편집 넷), `init` 3,843,696(변함없음), initrd 97,993,911바이트.
+4. 게이트가 본 TC 줄 다섯(1차 넷 · 2차 하나)이 두 회차의 로그에 그대로 있다 — `showed the seeded config` · `refused shell=fsh in init's own
+   words and wrote nothing` · `check found nothing … and no rc aliases tars-config` · `list printed all 12 keys` · `set shell_config=off for the
+   third boot`.
+5. 수정 1(`list`)은 구현 뒤 사용자의 말("어떤 설정 정보를 쓸 수 있는지 알아야 세팅을 하거나 언세팅을 할 수 있지 않을까?")로 들어왔다.
+   `help`가 이미 그 표를 찍고 있었지만 사람이 처음 찾는 동사가 아니었다. 그 김에 "언세팅"의 뜻을 design 결정 1 덧붙임에 못 박았다 —
+   `reset`이고 `unset`은 안 받는다.
+6. lead의 실수 하나. 첫 루트 게이트를 멈출 때 커널 컴파일 중이어서 `kernel/build`가 반쯤 쓰인 채 남았고, 다음 증분 빌드가
+   `unterminated call to function 'wildcard'`로 죽을 상태였다(planner가 사본에서 먼저 맞았다). 입력 sha가 같은 vd2 사본의 빌드를 복사해
+   고쳤다. 루트 게이트는 `clean()`이 매번 지우고 새로 지어 영향이 없었다 — 게이트를 멈출 때는 `kernel: ` 줄이 지나갔는지 먼저 본다.

@@ -76,13 +76,49 @@ EDIT_KEYS=(e c h o spc s h e l l equal z s h spc shift-dot spc
 # cat /config/tars.conf
 READBACK_KEYS=(c a t spc slash c o n f i g slash t a r s dot c o n f ret)
 
-# ── SC-M1 ───────────────────────────────────────────────────────────────
-# tars-config — seed가 정의한 alias다. 이 한 명령이 셋을 동시에 본다:
-#   1. /config/fish.config가 생겼다
-#   2. fish가 그것을 읽었다(안 읽었으면 모르는 명령이다)
-#   3. seed tars.conf가 실제로 shell_config=on을 담고 있다
-# SC-M0의 게이트는 로그에서 기본값만 봤고 파일의 내용은 못 봤다.
+# ── SC-M1 · TC-M0 ───────────────────────────────────────────────────────
+# tars-config — SC-M1에는 seed가 정의한 alias(cat /config/tars.conf)였고 TC-M0부터
+# /usr/bin의 실행 파일이다. 인자 없이 치면 init이 읽을 모양으로 보여 준다. 이 한
+# 명령이 지금 보는 것은 둘이다:
+#   1. initrd에 그 명령이 있고 PATH로 닿는다
+#   2. seed tars.conf가 실제로 shell_config=on을 담고 있다 — 파일이 정하지 않은
+#      키는 줄 앞에 #가 붙으므로 행 머리의 shell_config=on은 파일에서만 온다
+# SC-M1이 이 명령으로 보던 셋째("fish가 seed rc를 읽었다")는 바로 아래 ls -l의
+# eza 판정이 이어받았다 — 그것도 seed의 alias가 있어야만 초록이다.
 ALIAS_KEYS=(t a r s minus c o n f i g ret)
+# tars-config set shell=fsh — init이 버릴 값이다. 이 명령은 init의 parse에 그
+# 줄을 넣어 보고, parse가 한 말을 이유로 거절한다(TC design 결정 3). 판정 글자는
+# 그 말이 `tars-config:`로 시작한다는 것이다 — 가로채기(configLog)가 빠지면 말이
+# `tars-init:`로 새고 거절도 안 된다(TC-M0 plan mutation 2).
+TC_REFUSE_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal f s h ret)
+# tars-config set clipboard=pane — seed에 이미 있는 줄 하나를 바꾸는 길이다.
+TC_SET_KEYS=(t a r s minus c o n f i g spc s e t spc
+             c l i p b o a r d equal p a n e ret)
+# echo tc$(tars-config get clipboard) — 쓴 값을 파일에서 되읽는다. get은 파일을
+# init과 같은 길(parse)로 읽는다.
+#
+# 판정 글자를 우리가 만든다(BH-M2의 수법). `get`의 출력 pane만 보면 행 머리의
+# `pane`이 다른 데서 올 수 있다 — 화면 줄은 " | "로 이어지므로 거절의 둘째 줄
+# (`shell takes fish | bash | zsh`) 같은 글자가 그 모양을 만든다. 이 부팅의 셸은
+# fish이고 fish 4.0은 $(…)를 받는다.
+TC_READBACK_KEYS=(e c h o spc t c shift-4 shift-9 t a r s minus c o n f i g spc
+                  g e t spc c l i p b o a r d shift-0 ret)
+# tars-config check — 고친 파일을 init이 말없이 읽는가(거절한 shell=fsh가 파일에
+# 들어갔으면 여기서 그 줄을 말한다), 그리고 새 seed rc에 이 명령을 가리는 alias가
+# 없는가(TC design 결정 6).
+#
+# 줄 하나만 바꿨는지(더하지 않았는지)는 여기서 안 본다. 호스트의 config_edit_test가
+# 진짜 seed에서 열두 키를 하나씩 바꿔 "한 줄만 다르다"를 본다.
+TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
+# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열두 키가 `key=기본값`과
+# 받는 값으로 한 줄씩 나온다. 기대하는 열둘은 아래 TC_LIST_WANT에 글자로 있다 —
+# config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
+# 여기서 멈춘다.
+TC_LIST_KEYS=(t a r s minus c o n f i g spc l i s t ret)
+TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
+              hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
+              shell_config=on net=off ntp=off timezone=UTC firewall=off esc_latin=on
+              clipboard=shared)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
 # fzf 위젯에 대해 같은 구분을 했다).
 #
@@ -114,10 +150,15 @@ APPEND_KEYS=(e c h o spc e c h o spc t a r s minus r c minus a l i v e spc
 # cat이 아니라 grep인 이유는 출력이 한 줄이어야 하기 때문이다. seed는
 # 열몇 줄이고, UT-M3이 배운 대로 긴 출력의 첫 줄은 프레임에 안 남는다.
 RC_READBACK_KEYS=(g r e p spc a l i v e spc slash c o n f i g slash z s h r c ret)
-# echo shell_config=off >> /config/tars.conf — 2차 부팅에서 친다.
+# tars-config set shell_config=off — 2차 부팅에서 친다. SC-M1부터 TC-M0 전까지는
+# `echo shell_config=off >> /config/tars.conf`였다. 이 부팅의 파일은 1차가 덮어쓴
+# `shell=zsh` 한 줄이라 set은 끝에 한 줄을 더하고, 파일은 echo가 만들던 것과
+# 바이트까지 같다 — 3차부터의 부팅이 보는 것이 안 바뀐다. 3차의
+# `config shell=zsh.*shell_config=off`가 "이 명령이 쓴 값을 다음 부팅이 읽었다"는
+# 판정이 된다(TC design 결정 9).
 # 밑줄은 shift-minus다(design 실측 14(f)에서 게스트에 닿는 것을 확인했다).
-OFF_KEYS=(e c h o spc s h e l l shift-minus c o n f i g equal o f f spc
-          shift-dot shift-dot spc slash c o n f i g slash t a r s dot c o n f ret)
+OFF_KEYS=(t a r s minus c o n f i g spc s e t spc
+          s h e l l shift-minus c o n f i g equal o f f ret)
 
 # ── SC-M2 ───────────────────────────────────────────────────────────────
 # echo exit >> /config/zshrc — 3차 부팅에서 친다. 일부러 죽는 rc다.
@@ -447,13 +488,66 @@ edit_config_in_guest() {
   type_keys "${ALIAS_KEYS[@]}"
   if ! wait_for_screen '\| shell_config=on'; then
     echo "FAIL(boot 1): 'tars-config' never printed the seeded config"
-    echo "  둘 중 하나다 — seed /config/fish.config가 안 생겼거나, 생겼는데"
-    echo "  fish가 그것을 안 읽었다. 아래 마지막 화면에 'Unknown command'가"
-    echo "  있으면 후자다."
+    echo "  셋 중 하나다 — initrd에 /usr/bin/tars-config가 없거나(화면에"
+    echo "  'Unknown command'), seed tars.conf에 그 줄이 없거나(화면에"
+    echo "  '#shell_config=on'), 명령이 /config를 설정 디스크로 못 봤다."
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
-  echo "boot 1: the seeded fish.config defined tars-config, and it printed shell_config=on"
+  echo "boot 1: tars-config showed the seeded config, and the file sets shell_config=on"
+
+  # ── TC-M0: 거절 · 한 줄 바꾸기 · 되읽기 · check ────────────────────────
+  #
+  # 아래 EDIT_KEYS가 이 파일을 한 줄로 덮어쓰므로 여기서 바꾼 clipboard는 2차로
+  # 안 넘어간다. 다음 부팅이 읽는 것은 2차의 OFF_KEYS가 본다.
+  type_keys "${TC_REFUSE_KEYS[@]}"
+  if ! wait_for_screen '\| tars-config: nothing was written'; then
+    echo "FAIL(boot 1): 'tars-config set shell=fsh' was not refused"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  if ! wait_for_screen "\\| tars-config: shell=fsh: init would say \"unknown shell 'fsh', falling back to fish\""; then
+    echo "FAIL(boot 1): the refusal did not quote init's own words under the tars-config: prefix"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: tars-config refused shell=fsh in init's own words and wrote nothing"
+
+  type_keys "${TC_SET_KEYS[@]}"
+  if ! wait_for_screen '\| clipboard: shared -> pane'; then
+    echo "FAIL(boot 1): 'tars-config set clipboard=pane' did not report shared -> pane"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${TC_READBACK_KEYS[@]}"
+  if ! wait_for_screen '\| tcpane'; then
+    echo "FAIL(boot 1): 'tars-config get clipboard' did not read pane back from /config/tars.conf"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: set wrote clipboard=pane into the seed, and get read it back"
+
+  type_keys "${TC_CHECK_KEYS[@]}"
+  if ! wait_for_screen '\| /config/tars\.conf: init reads every line without a complaint'; then
+    echo "FAIL(boot 1): 'tars-config check' found a problem in the seeded files"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: tars-config check found nothing init would complain about (the refused shell=fsh never landed), and no rc aliases tars-config"
+
+  # list의 줄은 들여쓰기 뒤의 `key=기본값`, 공백, 받는 값이다. 행 머리가 공백이고 뒤에
+  # 글자가 이어지는 것을 본다 — 인자 없는 tars-config의 `clipboard=shared`는 행 머리에
+  # 공백이 없고 뒤가 줄 끝이라 이 모양에 안 걸린다.
+  type_keys "${TC_LIST_KEYS[@]}"
+  local want
+  for want in "${TC_LIST_WANT[@]}"; do
+    if ! wait_for_screen "\\| +${want} +[A-Za-z<]"; then
+      echo "FAIL(boot 1): 'tars-config list' did not print ${want} with the values it takes"
+      grep -a "terminal: screen>" "$log" | tail -1
+      return 1
+    fi
+  done
+  echo "boot 1: tars-config list printed all ${#TC_LIST_WANT[@]} keys with their defaults and the values they take"
 
   # ── ST-M1: 별칭이 실제로 도는가 ──────────────────────────────────────
   #
@@ -599,7 +693,8 @@ edit_config_in_guest() {
 #      5초만 고정 대기다 — 재시작 backoff가 1초이므로 세 번 죽고 포기하는
 #      데 3초면 충분하다.
 #   2. 3차 부팅이 읽을 설정을 심는다(SC-M1) — tars.conf에
-#      shell_config=off 한 줄을 더한다. 1차에서 사람이 친 shell=zsh는
+#      shell_config=off 한 줄을 더한다. TC-M0부터 그 줄을 쓰는 것은
+#      `tars-config set`이다. 1차에서 사람이 친 shell=zsh는
 #      그대로 남아야 한다: 3차의 부정 검사는 "같은 셸이 같은 rc를 안 읽는다"
 #      여야 하고, 셸까지 바뀌면 무엇 때문에 안 읽혔는지 갈리지 않는다.
 #
@@ -665,11 +760,11 @@ watch_console_shell() {
   exec 3>&-
 
   if [ "$ok" != "1" ]; then
-    echo "FAIL(boot 2): typed shell_config=off but /config/tars.conf never read it back"
+    echo "FAIL(boot 2): 'tars-config set shell_config=off' did not land in /config/tars.conf"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
-  echo "boot 2: appended shell_config=off to the config for the third boot"
+  echo "boot 2: tars-config set shell_config=off for the third boot"
   return 0
 }
 

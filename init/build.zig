@@ -74,6 +74,22 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(service_exe);
 
+    // TC-M0: /config/tars.conf를 보고 고치는 명령. tars-service와 같은 까닭으로 따로 된
+    // exe이고 같은 타깃 · 모드다. config.zig를 init과 함께 쓰는 것이 요점이다 — 값을
+    // 받을지는 init이 부팅에 쓰는 그 parse가 정한다(TC design 결정 3).
+    // make_initrd.sh가 zig-out/bin/tars-config를 usr/bin에 싣는다.
+    const config_cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/config_cli.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+        .single_threaded = true,
+    });
+    const config_cli_exe = b.addExecutable(.{
+        .name = "tars-config",
+        .root_module = config_cli_mod,
+    });
+    b.installArtifact(config_cli_exe);
+
     // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //
     // project_build_host_arch의 4번 규칙: "이 산출물은 누가 실행하는가"를
@@ -253,6 +269,19 @@ pub fn build(b: *std.Build) void {
         .root_module = audio_test_mod,
     });
 
+    // TC-M0: tars-config의 글자 쪽(줄 고르기 · 줄 바꾸기 · 값의 글자 · 듣기). config_test와
+    // 같은 이유로 host_target이다 — config_edit.zig에는 시스템 콜이 없다.
+    const config_edit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/config_edit_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const config_edit_test = b.addExecutable(.{
+        .name = "config_edit_test",
+        .root_module = config_edit_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -270,4 +299,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(control_test).step);
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
     test_step.dependOn(&b.addRunArtifact(audio_test).step);
+    test_step.dependOn(&b.addRunArtifact(config_edit_test).step);
 }

@@ -201,6 +201,12 @@ WANT+=(usr/bin/tq-probe)
 # 넣는다. 빠지면 install 체인의 OVMF 부팅(1분)이 아니라 여기서 먼저 드러난다.
 WANT+=(usr/bin/tars-install)
 
+# TC-M0: 설정 명령. tars-install과 같은 자리다 — 배열에 없고 make_initrd.sh가 손으로
+# 넣는다. 빠지면 config 체인의 1차 부팅(그 이름을 친다)이 아니라 여기서 먼저 드러난다.
+# 배열의 수(all N tools)는 안 바뀐다 — 그 수는 guest_tools.sh가 sysroot에서 고르는
+# 바이너리의 수이고 우리 실행 파일은 거기 없다.
+WANT+=(usr/bin/tars-config)
+
 # CU-M1: vim의 시스템 vimrc와 stub defaults.vim. tq-probe와 같은 자리다 — 배열에
 # 없고 make_initrd.sh가 손으로 넣는 파일이라 여기 적어야 tautology가 아니다.
 # 빠지면 render 체인의 vim 검사(부팅 뒤)가 아니라 여기서 먼저 드러난다.

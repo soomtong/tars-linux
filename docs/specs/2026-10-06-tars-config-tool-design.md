@@ -1,8 +1,8 @@
 # TARS Config Tool — Design
 
 Date: 2026-10-06
-Status: TC-M0 plan을 썼다(`docs/plans/2026-10-06-tars-config-tool-tc-m0.md`). 구현 전이다. M1 · M2는 아래 한 문단씩이고 그
-milestone의 plan을 쓸 때 다시 정한다.
+Status: TC-M0이 끝났다(2026-10-07, plan `docs/plans/2026-10-06-tars-config-tool-tc-m0.md`의 실측 절이 값이다 — 루트 게이트 21체인
+2/2 두 번). 사용자가 M1 · M2를 승인했다(2026-10-06 "끝까지 진행해줘"). M1 plan은 `-tc-m1.md`, M2는 따로 design을 쓴다.
 
 사용자의 요청(2026-10-06)에서 시작한다.
 
@@ -23,7 +23,7 @@ lead(Fable)가 검토해 답했고 사용자가 이어서 정했다.
 바꾼다. 값이 맞는지는 init이 부팅에 쓰는 바로 그 `config.parse`가 정한다 — 이 명령이 받은 값을 init이 거절하는 일이 구조로 없다.
 
 ```
-TC-M0   tars-config [get KEY | set KEY=VALUE… | reset KEY… | check | help]  →  tars.conf 하나를 보고 고친다. 고친 것은 다음 부팅부터
+TC-M0   tars-config [get KEY | set KEY=VALUE… | reset KEY… | check | list | help]  →  tars.conf 하나를 보고 고친다. 고친 것은 다음 부팅부터
         게이트: config 체인 1차가 보기 · 거절 · set · get · check를 치고, 2차가 3차를 위해 줄을 더하는 것도 이 명령이다
 TC-M1   다른 표면의 앞문 — wifi · ssh 키 · 방화벽 포트 · 받아쓰기. 남의 문법은 다시 짓지 않고 "어느 파일에 어떤 한 줄"까지
 TC-M2   reload — init이 부팅 없이 tars.conf를 다시 읽는다(init.sock에 동사 하나). 따로 design을 쓴다
@@ -85,9 +85,10 @@ clipboard=shared
 
 ## 결정
 
-### 결정 1 — 이름 하나, 동사 다섯
+### 결정 1 — 이름 하나, 동사 여섯
 
-`tars-config` 하나가 인자 없음(보기) · `get` · `set` · `reset` · `check` · `help`를 받는다. `tars-service`(동사 넷)와 같은 모양이다.
+`tars-config` 하나가 인자 없음(보기) · `get` · `set` · `reset` · `check` · `list` · `help`를 받는다. `tars-service`(동사 넷)와 같은 모양이다.
+`list`는 수정 1로 더했다(아래 덧붙임).
 
 | 동사 | 하는 일 | 종료 코드 |
 |---|---|---|
@@ -96,9 +97,21 @@ clipboard=shared
 | `set KEY=VALUE…` | 위 "모델"의 여덟 단계. 쌍 열여섯까지, 하나라도 거절이면 아무것도 안 쓴다 | 0 · 1 · 2 · 64 |
 | `reset KEY…` | `set KEY=<기본값>`과 같다. 줄을 지우지 않고 기본값을 적는다 — seed가 열두 키를 다 적어 두는 모양을 지킨다 | 0 · 1 · 2 · 64 |
 | `check` | init이 불평할 줄(줄 번호와 init의 말) · 4096 넘음 · 없는 zoneinfo · rc의 옛 별칭을 문제로, 같은 키가 여러 줄인 것을 알림으로 | 0 · 1 · 2 |
-| `help` | 쓰는 법과 열두 키의 기본값 · 받는 값 | 0 |
+| `list` | 열두 키를 `key=기본값`과 받는 값으로 한 줄씩. 파일도 디스크도 안 본다 — 무엇을 적을 수 있는지만 | 0 · 64 |
+| `help` | 쓰는 법 + `list`의 표(같은 함수 `keyTable`) | 0 |
 
 종료 코드는 0 성공 · 1 거절(값 · 문제) · 2 설정 디스크가 없거나 파일을 못 읽고 못 씀 · 64 쓰는 법이 틀림이다.
+
+> 수정 1(2026-10-06, 구현과 루트 게이트 1회차 뒤) — `list`. 사용자의 말: "tars-config need a available list command. 어떤 설정 정보를
+> 쓸 수 있는지 알아야 세팅을 하거나 언세팅을 할 수 있지 않을까?" 그 표는 이미 `help`의 뒤쪽에 있었다. `list`는 그 표만 찍고, 두 동사가
+> 같은 함수(`config_cli.keyTable`)를 부른다. 왼쪽 칸 `key=기본값`이 그대로 `set`에 줄 수 있는 모양이고 `reset`이 적는 값이다. 지금 값은
+> `list`가 아니라 인자 없는 `tars-config`가 보인다 — 둘을 한 화면에 섞으면 "기본값"과 "지금 값"을 못 가른다.
+>
+> "언세팅"은 `reset`이다. 줄을 지우지 않고 그 키의 줄에 기본값을 적는다(이 표의 `reset` 행 · 전제 정정 7). `unset`을 동의어로 받지
+> 않는다 — 그 낱말은 "줄을 지운다"로 읽히고, 받으면 같은 일에 이름이 둘이 되며 출력이 늘 "기본값을 적었다"고 변명해야 한다. 대신
+> `tars-config unset …`을 친 사람에게 한 줄로 길을 알려 준다(`tars-config: there is no unset; reset KEY writes the default value into
+> that key's line (the line stays)`, 그리고 쓰는 법, exit 64). 줄을 정말 지우는 동사는 만들지 않는다 — seed가 열두 키를 다 적어 두는
+> 모양이 사람이 "무엇을 바꿀 수 있나"를 파일에서 읽는 자리이고, 지운 키는 다음 기본값 변경을 따라가는데 그 차이를 사람이 볼 길이 없다.
 
 | 후보 | 왜 아닌가 |
 |---|---|
@@ -269,7 +282,7 @@ config 체인이 이미 설정 디스크 · 게스트 타이핑 · "1차가 쓴 
 
 | 자리 | 무엇 | 사본 |
 |---|---|---|
-| config 1차(fish) | `tars-config` → `\| shell_config=on`(seed가 그 줄을 정한다), `set shell=fsh` → `tars-config: shell=fsh: init would say "unknown shell 'fsh', …"` · `nothing was written`, `set clipboard=pane` → `clipboard: shared -> pane`, `echo tc$(tars-config get clipboard)` → `tcpane`, `check` → `init reads every line without a complaint` | 초록 |
+| config 1차(fish) | `tars-config` → `\| shell_config=on`(seed가 그 줄을 정한다), `set shell=fsh` → `tars-config: shell=fsh: init would say "unknown shell 'fsh', …"` · `nothing was written`, `set clipboard=pane` → `clipboard: shared -> pane`, `echo tc$(tars-config get clipboard)` → `tcpane`, `check` → `init reads every line without a complaint`, (수정 1) `list` → 열두 줄 `key=기본값 받는 값` | 초록 |
 | config 2차(zsh) | `echo shell_config=off >> /config/tars.conf`가 `tars-config set shell_config=off`가 됐다. 파일은 1차가 덮어쓴 `shell=zsh` 한 줄이라 set이 끝에 더하고, 결과가 echo의 것과 바이트까지 같다 — 3 ~ 9차가 보는 것이 안 바뀐다 | 초록 |
 | config 3차 | 그대로의 `tars-init: config shell=zsh.*shell_config=off`가 "이 명령이 쓴 값을 다음 부팅이 읽었다"는 판정이 된다 | 초록 |
 | `zig build test` | `config_edit_test` 다섯 묶음(키 열둘 · `judge` · 줄 가르기 · 진짜 seed에서 `setLine` · 마운트 표와 옛 별칭), `config_test`의 별칭 허용 목록 | 초록 |
@@ -306,7 +319,8 @@ AU 결정 6 · VD 결정 12와 같다. M0의 구현자는 Sonnet을 권한다(pl
    4096바이트 상한이 있다(결정 5). `MS_SYNCHRONOUS`는 맞고, 그 위에 `rename`을 둔다.
 5. 그대로다. `reboot`는 게스트에 없고 `kill -INT 1`이다. `reload`는 M2(따로 design)다.
 6. 그대로다(결정 10).
-7. 범위는 그대로이고 둘을 더했다 — `help`, 그리고 `show`의 모양(결정 8). `reset`은 줄을 지우지 않고 기본값을 적는다.
+7. 범위는 그대로이고 둘을 더했다 — `help`, 그리고 `show`의 모양(결정 8). `reset`은 줄을 지우지 않고 기본값을 적는다. 수정 1이 `list`를
+   더했다(결정 1의 덧붙임).
 8. 그대로다. 이 명령은 게스트 런타임을 하나도 안 부른다.
 9. 새 바이너리는 `all 92 tools`를 안 바꾼다. 그 수는 `guest_tools.sh`의 배열 길이이고 `tars-install`은 `tools/check.sh`의 literal
    `WANT`로 따로 본다. `tars-service`는 그 `WANT`에도 없다 — service 체인이 ssh로 쳐서 볼 뿐이다(이 milestone은 안 고친다).

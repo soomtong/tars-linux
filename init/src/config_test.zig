@@ -26,12 +26,16 @@ const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 /// rc 켜진 셸에 명령을 넣는다(design 실측 2·3). 그래서 이름 하나를 더하는
 /// 일은 "그 이름을 게이트가 치는가"를 먼저 보는 일이어야 한다.
 ///
-/// `tars-config`·`tars-rc`는 SC-M1의 것이고, `ls`가 지금 유일한 셰도다
-/// (design 결정 2 — 걸리는 자리 셋을 부팅으로 재서 통과시켰다).
+/// `ls`가 지금 유일한 셰도다(design 결정 2 — 걸리는 자리 셋을 부팅으로 재서
+/// 통과시켰다).
+///
+/// SC-M1의 `tars-config`·`tars-rc`는 TC-M0이 지웠다(TC design 결정 6). 앞의
+/// 것은 이제 `/usr/bin/tars-config`라는 실행 파일의 이름이고, 같은 이름의 별칭은
+/// 대화형 셸에서 그 명령을 가린다 — 이 목록에 다시 넣으면 seed가 우리 명령을
+/// 가리는 줄을 깐다. 뒤의 것은 사용자가 쓸모없다고 했다(2026-10-06).
 const ALLOWED_ALIAS_NAMES = [_][]const u8{
-    "tars-config", "tars-rc",
-    "ls",          "ll",
-    "la",          "lt",
+    "ls", "ll",
+    "la", "lt",
 };
 
 /// 별칭이 있어야 하는 도구들(ST-M1). `HOOKED_TOOLS`와 같은 자리이고 같은
@@ -290,15 +294,16 @@ fn expectQuietSeed(sh: config.Shell) !void {
         );
         return error.BadSeed;
     }
-    // alias가 하나도 없으면 1차 부팅의 `tars-config`가 무의미해진다.
-    // 게이트는 그 alias가 있다는 것으로 "셸이 이 파일을 읽었다"를 판정한다.
+    // alias가 하나도 없으면 1차 부팅의 `ls -l /config`가 무의미해진다.
+    // 게이트는 그 alias가 eza로 간다는 것으로 "셸이 이 파일을 읽었다"를
+    // 판정한다(SC-M1에는 `tars-config` 별칭이 그 일을 했고 TC-M0이 지웠다).
     if (aliases == 0) {
         std.debug.print("FAIL: the {s} seed defines no alias for the gate to find\n", .{@tagName(sh)});
         return error.BadSeed;
     }
-    // seed는 자기 파일의 이름을 자기 안에 적는다. 그 이름이 틀리면 사용자가
-    // `tars-rc`를 쳤을 때 없는 파일을 cat한다 — 문서가 아니라 실행되는
-    // 문장이라 틀린 것이 드러난다.
+    // seed는 자기 파일의 이름을 자기 안에 적는다(머리 주석의 "실체는 …").
+    // 그 이름이 틀리면 파일을 연 사람이 엉뚱한 자리를 고친다. SC-M1에는
+    // `tars-rc` 별칭이 그 이름을 실행했는데 TC-M0이 지웠고, 이제 주석만 남았다.
     if (std.mem.indexOf(u8, text, sh.rcPath()) == null) {
         std.debug.print("FAIL: the {s} seed never names its own path {s}\n", .{
             @tagName(sh), sh.rcPath(),
@@ -407,9 +412,6 @@ fn expectAliasesCoverTheTools(sh: config.Shell) !void {
 /// 두 셸의 같은 줄까지 덮게 하는 것이 이 검사의 값이다. 셸 문법 때문에
 /// 셋을 다르게 쓸 일이 생기면 이 검사가 먼저 멈춘다 — 그때는 차이를
 /// 허용할지 정하고 여기를 고친다.
-///
-/// `alias tars-*`는 안 견준다. 셋 다 자기 파일 이름을 가리키므로 다른 것이
-/// 정상이다(`/config/fish.config` · `/config/bashrc` · `/config/zshrc`).
 const MAX_ALIAS_LINES = 8;
 
 fn expectAliasLinesMatch() !void {
@@ -421,7 +423,6 @@ fn expectAliasLinesMatch() !void {
         while (lines.next()) |raw| {
             const line = std.mem.trim(u8, raw, " \t\r");
             if (!std.mem.startsWith(u8, line, "alias ")) continue;
-            if (std.mem.startsWith(u8, line, "alias tars-")) continue;
             if (idx >= MAX_ALIAS_LINES) {
                 std.debug.print(
                     "FAIL: the {s} seed has more tool alias lines than MAX_ALIAS_LINES ({d})\n",

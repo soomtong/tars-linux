@@ -127,6 +127,11 @@ chmod 0755 "$WORKDIR/usr/bin/tars-install"
 cp ../init/zig-out/bin/tars-service "$WORKDIR/usr/bin/tars-service"
 chmod 0755 "$WORKDIR/usr/bin/tars-service"
 
+# TC-M0: /config/tars.conf를 보고 고치는 명령. tars-service와 같은 까닭으로 정적이고
+# /usr/bin이다. 옛 seed rc의 alias tars-config가 이 이름을 가리던 자리다(TC design 결정 6).
+cp ../init/zig-out/bin/tars-config "$WORKDIR/usr/bin/tars-config"
+chmod 0755 "$WORKDIR/usr/bin/tars-config"
+
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
