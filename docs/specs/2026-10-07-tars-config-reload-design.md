@@ -1,7 +1,8 @@
 # TARS Config Reload — Design
 
 Date: 2026-10-07
-Status: design을 썼다(lead 검토 전). plan은 lead가 이 design을 검토한 뒤 milestone마다 따로 쓴다. 코드 실측은 TC-M1이 main 트리에 들어간 뒤
+Status: lead가 검토했다(2026-10-07 — milestone 둘 · nft 기다림을 받고, `services.d` 다시 읽기를 재서 정하라고 했다 → 결정 11). TC-M2 plan은
+`docs/plans/2026-10-07-tars-config-reload-tc-m2.md`. plan은 lead가 이 design을 검토한 뒤 milestone마다 따로 쓴다. 코드 실측은 TC-M1이 main 트리에 들어간 뒤
 `/tmp/run/tc2/`에서 한다 — 이 design의 실측은 소스와 앞 서브프로젝트의 기록으로 한 것이다(아래 "착수 전에 실측한 것").
 
 TC design(`docs/specs/2026-10-06-tars-config-tool-design.md`)의 M2 절이 "따로 design을 쓴다"고 남긴 것이다.
@@ -226,6 +227,28 @@ ReleaseSafe의 init에서 정수 넘침 · 범위 밖 인덱스는 패닉이고 
 TC 결정 11과 같다. 이 design의 milestone은 PID 1을 고치는 첫 일이라 plan은 Opus가 쓰고, 구현자 모델은 plan이 정한다 — 붙여 넣기만 하는
 일이면 Sonnet, plan을 넘는 판단(감독 루프의 순서)이 남으면 Opus.
 
+### 결정 11 — reload는 `services.d`도 다시 읽는다(lead 검토 뒤 올렸다)
+
+lead가 비목표 2를 "비용을 재서 정하라"고 돌려보냈다(2026-10-07) — M1의 앞문 넷 가운데 `tars-config ssh on`만 재부팅이 남으면 사용자가
+바란 경험과 어긋난다. 재 보니 유한하다. 새 상태도 새 상태 기계도 없다.
+
+| 무엇 | 이미 있는 것 | 더하는 것 |
+|---|---|---|
+| 다시 읽기 | `services.discover`(이름순 · 여덟까지 · 실행 비트 · 숨긴 이름) — 부팅의 그 함수 | 없다. reload가 한 번 더 부른다 |
+| 칸 | 서비스 칸 여덟(`children[5..13)`, 결정 5가 늘 두기로 한 자리) | 없다 |
+| 멈추기 · 되살리기 | CT의 `control.apply(.stop | .start)`와 결정 5의 `config_off` | 없다 |
+| 칸의 글자 | 지금은 `main()`의 `service_list` | `Live.services`(여덟 칸 × 경로 128 + 라벨 40바이트) — 결정 5의 `Live`에 한 칸 |
+| 판정 | — | `reload.serviceActions` — 칸 여덟과 새 이름(최대 여덟)을 견줘 `stop` · `revive` · `add` · `no_room` |
+
+규칙은 넷이다. 이미 있는 이름의 칸은 안 건드린다(사람이 `tars-service stop`한 것은 멈춘 그대로). 사라진 이름은 `config_off`로 멈춘다.
+다시 나타난 이름은 그 칸을 되살린다. 새 이름은 빈 칸에 넣는다 — 빈 칸은 한 번도 안 쓴 칸이거나, 꺼졌고 이미 거둬진 칸이다. 멈추는
+중인 칸(꺼졌지만 살아 있다)은 빈 칸이 아니다 — 거두기 전에 넘기면 그 pid가 새 서비스의 것이 된다. 칸이 없으면(여덟이 다 차고
+멈추는 중이 남았다) 그 이름은 다음 부팅이고 답이 그렇게 말한다.
+
+그래서 `tars-config ssh on`(M1)의 끝 줄이 "reboot"이 아니라 `tars-config reload`를 가리킨다. 같은 까닭으로 M1의 `tars-config wifi`가 처음
+만든 무선 파일도 reload가 띄운다 — 무선의 판정(`wifi.wants`)은 키가 안 바뀌어도 reload마다 다시 묻는다(파일이 있는지는 키가 아니다).
+이미 떠 있는 wpa_supplicant의 재시작은 여전히 `tars-service restart wpa_supplicant`다(비목표 6).
+
 ## lead의 전제를 바로잡은 것
 
 1. "init은 설정을 부팅에 한 번만 읽고 어디에도 안 남긴다" — 한 번 읽는 것은 맞다. 남기는 자리는 있다 — 시리얼의 `tars-init: config …` 한 줄,
@@ -254,7 +277,7 @@ status`의 출력이 그대로다(service 체인), reload 전후의 감독 루�
 
 ### TC-M2 — init의 reload와 `config`, `tars-config`의 두 칸
 
-결정 1 ~ 9(화면 쪽은 대기 표시까지). 고칠 것 — `init/src/main.zig`(상태 `Live` · 데몬 셋의 자리 · `answer`의 동사 둘 · `configLog`),
+결정 1 ~ 9 · 11(화면 쪽은 대기 표시까지). 고칠 것 — `init/src/main.zig`(상태 `Live` · 데몬 셋의 자리 · `answer`의 동사 둘 · `configLog`),
 `control.zig`(동사 둘 · `config_off`), 새 `reload.zig` · `reload_test.zig`, `firewall.zig`(`down` — `nft flush ruleset`), `config_cli.zig`
 (보기의 두 칸 · `reload` 동사 · `set`의 끝 줄), 체인 셋. 정할 것 — `Live`의 버퍼 크기, `config` 답의 정확한 글자, 체인의 자리와 포트.
 
@@ -282,13 +305,13 @@ argv의 글자를 새 버퍼로 바꿔 두면 감독 루프가 다시 띄운다.
 ## 비목표
 
 1. terminal이 argv 대신 설정을 다시 받는 것(결정 2의 (d)).
-2. `services.d`를 다시 읽는 것. 서비스를 더하고 빼는 것은 다음 부팅이다(SV). `tars-config ssh on` 뒤의 재부팅이 그대로다 — 필요해지면 같은
-   `reload`에 `services` 갈래를 더하는 따로의 일이다.
+2. (결정 11로 올렸다 — `services.d` 다시 읽기는 reload가 한다.) 남는 비목표는 서비스 파일의 내용이 바뀐 것을 보고 다시 띄우는 것이다 —
+   이름이 같으면 안 건드린다. 그것은 `tars-service restart`다.
 3. 커널 cmdline(`tars.noconfig`)의 다시 읽기. 부팅의 것이 이 부팅 내내 이긴다.
 4. 콘솔 셸을 다시 띄우는 동사.
 5. 설정 디스크가 늦게 붙은 경우의 reload(디스크 없이 뜬 부팅에서 디스크를 꽂고 reload). 그 부팅의 `/config`는 마운트가 아니라 tmpfs다 —
    reload는 "설정 디스크가 없다"로 거절한다.
-6. 무선의 망을 더한 뒤 wpa_supplicant 재시작을 reload가 대신 하는 것. TC-M1의 `tars-config wifi`가 말하는 `tars-service restart wpa_supplicant`가
+6. 무선의 망을 더한 뒤 떠 있는 wpa_supplicant의 재시작을 reload가 대신 하는 것(파일이 처음 생긴 것은 결정 11대로 reload가 띄운다). TC-M1의 `tars-config wifi`가 말하는 `tars-service restart wpa_supplicant`가
    그대로다(`net`이 바뀌지 않는 한 reload는 wpa_supplicant를 안 건드린다).
 
 ## 착수 전에 실측한 것
