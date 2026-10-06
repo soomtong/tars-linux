@@ -11,6 +11,10 @@
 # 컨테이너의 stub.pl이다 — 경로의 첫 마디가 답을 고르고 둘째 마디가 이 갈래의 이름이다.
 #
 # 끝나면 kill -TERM 1로 전원을 끈다. 체인이 그 뒤에 설정 디스크의 dictation.jsonl을 꺼낸다.
+#
+# 정리 단계(VD-M2)도 같은 stub이다 — 경로가 /chat/<답>/<갈래>면 stub이 chat completions로 답한다.
+# 갈래 s11 ~ s21이 그것을 보고, 정리를 켠 채 cleanup_url을 안 적은 M0의 갈래는 기본 주소(진짜
+# Groq)로 간다. 그 이름을 아래에서 127.0.0.1로 돌려 둔다 — 게이트는 Groq를 절대 부르지 않는다.
 
 say() { echo "dictate-probe: $*"; }
 flat() { tr '\n' '|' | sed 's/|$//'; }
@@ -45,6 +49,13 @@ dictate() {
 say "start"
 say "tars-dictate is [$(command -v tars-dictate)]"
 say "jq [$(jq --version)]"
+
+# Groq 막기. 정리의 기본 주소 api.groq.com을 게스트 안에서 127.0.0.1로 돌린다 — 그곳의 443에는
+# 듣는 것이 없어 연결이 곧바로 거절된다(curl exit 7). /etc/hosts가 DNS보다 먼저다(LB의
+# nsswitch.conf). 이 줄이 없으면 cleanup_url을 안 적은 갈래가 SLIRP을 지나 진짜 Groq에 가짜 키로
+# 닿는다. 체인 검사 24가 그 거절을 본다.
+echo '127.0.0.1 api.groq.com' >> /etc/hosts
+say "hosts [$(grep groq /etc/hosts)]"
 
 # 네트워크. stub(10.0.2.100)과 TLS 상대(10.0.2.2)에 닿으려면 dhcpcd가 주소를 붙이고
 # 경로를 만들어야 한다. leased 줄은 주소보다 먼저 찍히므로(lessons 73) 경로를 본다.
@@ -113,6 +124,41 @@ dictate s9 int
 # 10. 설정 파일의 모르는 키와 틀린 값은 경고만 하고 기본값으로 돈다.
 conf "transcribe_url=${STUB}/ok/s10" "max_seconds=1" "colour=blue" "max_seconds=0"
 dictate s10 cap
+
+# ── 정리 단계(VD-M2) ──────────────────────────────────────────────────
+# 전사는 모두 /ok(원문 "안녕하세요 vd0-dictated", 18글자)이고 정리 stub의 답이 갈래마다 다르다.
+# 1초 상한으로 스스로 끝난다.
+# 11. 기본값 — cleanup 키를 안 적었다. 켜짐이 기본인지, 요청이 Voxio의 모양인지 본다.
+conf "transcribe_url=${STUB}/ok/s11" "cleanup_url=${STUB}/chat/ok/s11" "max_seconds=1"
+dictate s11 cap
+# 12. 끈다 — 정리 요청이 없다.
+conf "transcribe_url=${STUB}/ok/s12" "cleanup_url=${STUB}/chat/ok/s12" "cleanup=off" "max_seconds=1"
+dictate s12 cap
+# 13. 원문과 같은 답(바꿀 것이 없었다). 틀린 값은 경고만 하고 켜짐에 머문다.
+conf "transcribe_url=${STUB}/ok/s13" "cleanup_url=${STUB}/chat/same/s13" "cleanup=maybe" "max_seconds=1"
+dictate s13 cap
+# 14. 바깥 따옴표와 공백에 싼 답 · 모델 바꾸기.
+conf "transcribe_url=${STUB}/ok/s14" "cleanup_url=${STUB}/chat/quoted/s14" "cleanup_model=vd2-model" "max_seconds=1"
+dictate s14 cap
+# 15. 답에 제어 문자 — 넣는 것은 거르고, 기록의 정리본은 받은 그대로다.
+conf "transcribe_url=${STUB}/ok/s15" "cleanup_url=${STUB}/chat/ctrl/s15" "max_seconds=1"
+dictate s15 cap
+# 16 ~ 20. 원문으로 돌아가는 다섯 — 짧은 답(길이 가드) · 빈 답 · 느린 답(1.5초 상한) · 500 ·
+# choices 없음. 어느 것도 실패가 아니다(exit 0).
+conf "transcribe_url=${STUB}/ok/s16" "cleanup_url=${STUB}/chat/short/s16" "max_seconds=1"
+dictate s16 cap
+conf "transcribe_url=${STUB}/ok/s17" "cleanup_url=${STUB}/chat/empty/s17" "max_seconds=1"
+dictate s17 cap
+conf "transcribe_url=${STUB}/ok/s18" "cleanup_url=${STUB}/chat/slow/s18" "max_seconds=1"
+dictate s18 cap
+conf "transcribe_url=${STUB}/ok/s19" "cleanup_url=${STUB}/chat/fail/s19" "max_seconds=1"
+dictate s19 cap
+conf "transcribe_url=${STUB}/ok/s20" "cleanup_url=${STUB}/chat/nochoice/s20" "max_seconds=1"
+dictate s20 cap
+# 21. cleanup_timeout — 0.5초로 줄이면 1초 뒤의 답(wait)도 시간 초과다. 기본 1.5초였다면 받았을
+# 답이다. 그 앞의 틀린 값(20)은 경고만 하고 1.5에 머문다.
+conf "transcribe_url=${STUB}/ok/s21" "cleanup_url=${STUB}/chat/wait/s21" "cleanup_timeout=20" "cleanup_timeout=0.5" "max_seconds=1"
+dictate s21 cap
 
 sync
 say "history lines [$(wc -l < /config/dictation.jsonl 2>/dev/null || echo none)]"

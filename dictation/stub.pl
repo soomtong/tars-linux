@@ -14,10 +14,25 @@
 #        /blank/…   200 {"text":" ."}                         Whisper가 무음에 주는 답
 #        /notext/…  200 {"error":null}                        text 칸이 없다
 #        /fail/…    429                                       무료 티어의 분당 한도
+#   3. 경로가 /chat/<답>/<갈래>면 정리 API(chat completions, VD-M2)다. 받은 JSON의 칸을
+#      `stub-chat:` 줄로 남기고(전사의 `stub:` 줄과 섞이지 않게) <답>으로 고른 content를 준다
+#        /chat/ok/…        "안녕하세요 vd2-cleaned"                 군더더기를 지운 정해진 답
+#        /chat/same/…      받은 사용자 메시지 그대로                 바꿀 것이 없었다
+#        /chat/quoted/…    "\n “안녕하세요 vd2-cleaned” \n"           바깥 따옴표와 공백
+#        /chat/ctrl/…      "안녕하세요ESC[201~ vd2CR-cleaned"        LLM이 만든 제어 문자
+#        /chat/short/…     "안녕"                                    요약 — 길이 가드에 걸린다
+#        /chat/empty/…     " \n "                                    빈 답
+#        /chat/slow/…      3초 뒤에 ok                               tars-dictate의 1.5초 상한
+#        /chat/wait/…      1초 뒤에 ok                               cleanup_timeout=0.5면 넘고 1.5면 안 넘는다
+#        /chat/fail/…      500
+#        /chat/nochoice/…  {"choices":[]}                            200인데 답이 없다
 #
 # 컨테이너에 python이 없어서 perl로 쓴다(feedback_scripting_runtimes). 코어 모듈만 쓴다.
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
+use Encode qw(decode_utf8 encode_utf8);
+use JSON::PP;
 
 my $log = shift or die "usage: stub.pl <log>\n";
 binmode STDIN;
@@ -49,6 +64,69 @@ while (length($body) < $len) {
   my $n = read(STDIN, my $chunk, $len - length($body));
   last unless $n;
   $body .= $chunk;
+}
+
+# 답 하나를 쓴다. 본문은 바이트다.
+sub respond {
+  my ($status, $json) = @_;
+  my $reason = { 200 => 'OK', 404 => 'Not Found', 429 => 'Too Many Requests', 500 => 'Internal Server Error' }->{$status};
+  print "HTTP/1.1 $status $reason\r\nContent-Type: application/json\r\nContent-Length: " . length($json)
+    . "\r\nConnection: close\r\n\r\n$json";
+}
+
+# ── 정리 API(VD-M2) ──────────────────────────────────────────────────
+# 시스템 프롬프트는 글자 수 · sha256 · 첫 문장으로 남긴다(1038글자를 줄에 다 싣지 않는다). 사용자
+# 메시지는 그대로 남긴다 — 체인이 "원문이 사용자 메시지로 갔다"를 글자로 본다. 제어 문자는
+# \x{1b}처럼 보이게 바꾼다(콘솔 줄과 같은 이유).
+if (($path // '') =~ m{\A/chat/([a-z]+)/}) {
+  my $kind = $1;
+  my $req = eval { JSON::PP->new->utf8->decode($body) };
+  my $show = sub { my $s = shift; return '-' unless defined $s; $s =~ s/([\x00-\x1f\x7f-\x9f])/sprintf("\\x{%x}", ord $1)/ge; $s };
+  my $scalar = sub { my $v = shift; !defined $v ? '-' : JSON::PP::is_bool($v) ? ($v ? 'true' : 'false') : ref $v ? '?' : $v };
+  my (%f, $user);
+  $f{$_} = '-' for qw(keys model roles system user temperature max_tokens stream);
+  if (ref $req eq 'HASH') {
+    my @m = ref $req->{messages} eq 'ARRAY' ? grep { ref $_ eq 'HASH' } @{$req->{messages}} : ();
+    my ($sys) = map { $_->{content} } grep { ($_->{role} // '') eq 'system' } @m;
+    ($user) = map { $_->{content} } grep { ($_->{role} // '') eq 'user' } @m;
+    $f{keys} = join ',', sort keys %$req;
+    $f{model} = $scalar->($req->{model});
+    $f{roles} = join ',', map { $_->{role} // '-' } @m;
+    $f{system} = sprintf 'chars=%d sha256=%s head=%s', length $sys, sha256_hex(encode_utf8($sys)), substr($sys, 0, 54)
+      if defined $sys && !ref $sys;
+    $f{user} = $show->($user) if defined $user && !ref $user;
+    $f{temperature} = $scalar->($req->{temperature});
+    $f{max_tokens} = $scalar->($req->{max_tokens});
+    $f{stream} = $scalar->($req->{stream});
+  }
+  open(my $lf, '>>:encoding(UTF-8)', $log) or die "cannot open $log\n";
+  printf $lf "stub-chat: %s %s auth=[%s] type=[%s] keys=[%s] model=[%s] roles=[%s] system=[%s] user=[%s] user_chars=[%s] temperature=[%s] max_tokens=[%s] stream=[%s]\n",
+    $method // '-', $path, $h{authorization} // '-', $h{'content-type'} // '-', $f{keys}, $f{model}, $f{roles}, $f{system},
+    $f{user}, defined $user && !ref $user ? length $user : '-', $f{temperature}, $f{max_tokens}, $f{stream};
+  close $lf;
+
+  my $cleaned = decode_utf8('안녕하세요 vd2-cleaned');
+  my %content = (
+    ok     => $cleaned,
+    same   => $user // '',
+    quoted => "\n " . decode_utf8('“') . $cleaned . decode_utf8('”') . " \n",
+    ctrl   => decode_utf8("안녕하세요\e[201~ vd2\r-cleaned"),
+    short  => decode_utf8('안녕'),
+    empty  => " \n ",
+    slow   => $cleaned,
+    wait  => $cleaned,
+  );
+  if ($kind eq 'slow') { sleep 3 }
+  if ($kind eq 'wait') { sleep 1 }
+  if ($kind eq 'fail') { respond(500, '{"error":{"message":"internal server error"}}') }
+  elsif ($kind eq 'nochoice') { respond(200, '{"id":"stub","object":"chat.completion","choices":[]}') }
+  elsif (exists $content{$kind}) {
+    respond(200, JSON::PP->new->utf8->canonical->encode({
+      id => 'stub', object => 'chat.completion',
+      choices => [{ index => 0, message => { role => 'assistant', content => $content{$kind} }, finish_reason => 'stop' }] }));
+  }
+  else { respond(404, '{"error":"no such path"}') }
+  exit 0;
 }
 
 # multipart의 칸을 이름으로 모은다.
@@ -109,7 +187,5 @@ elsif ($kind eq 'notext') { $json = '{"error":null}' }
 elsif ($kind eq 'fail') { ($status, $json) = (429, '{"error":{"message":"Rate limit reached"}}') }
 else { ($status, $json) = (404, '{"error":"no such path"}') }
 
-my $reason = { 200 => 'OK', 404 => 'Not Found', 429 => 'Too Many Requests' }->{$status};
 # 본문의 한글은 UTF-8 바이트 그대로다(이 파일이 UTF-8이고 use utf8이 없다).
-print "HTTP/1.1 $status $reason\r\nContent-Type: application/json\r\nContent-Length: " . length($json)
-  . "\r\nConnection: close\r\n\r\n$json";
+respond($status, $json);

@@ -29,8 +29,15 @@ cd "$(dirname "$0")"
 # 다른 패널 · 닫힌 패널 · 상한으로 스스로 멈춘 녹음 · 키 없음을 차례로 친다. 판정은 terminal의
 # `dictate>` · `status>` 줄과 화면 줄, stub이 받은 요청, 끈 뒤의 dictation.jsonl이다.
 #
+# 정리 단계(VD-M2)도 같은 stub이다 — 경로가 /chat/<답>/<갈래>면 chat completions로 답하고
+# `stub-chat:` 줄을 남긴다. 부팅 A의 갈래 s11 ~ s21이 켜짐 · 꺼짐 · 정리본 · 원문으로 돌아가는 여섯을
+# 친다(검사 24 ~ 29). 정리를 켠 채 cleanup_url을 안 적은 M0의 갈래는 기본 주소(api.groq.com)로
+# 가는데, 프로브가 게스트의 /etc/hosts로 그 이름을 127.0.0.1로 돌려 둔다 — 검사 24가 그 거절을
+# 본다. 부팅 B는 정리를 켠 채 돌아 terminal이 넣는 글자가 정리본이다.
+#
 # 이 체인이 못 보는 것 — 진짜 Groq의 답(사람이 키를 넣고 실기에서 본다, running-tars.md) ·
-# 실기 마이크의 소리 · 실기 자판의 오른쪽 Cmd(PC 자판은 오른쪽 Alt — input_test 검사 78).
+# 진짜 정리 모델이 뜻을 바꾸는지 · 실기 마이크의 소리 · 실기 자판의 오른쪽 Cmd(PC 자판은 오른쪽
+# Alt — input_test 검사 78).
 
 # 부팅 A는 $GUEST_MEM 하나 때문에, 부팅 B는 타이핑(type_keys · joined_screen_dump)
 # 때문에 source한다.
@@ -99,11 +106,13 @@ report_failure() {
   for marker in \
     "tars-init: started service probe (pid" \
     "dictate-probe: start" \
+    "dictate-probe: hosts [127.0.0.1 api.groq.com]" \
     "dictate-probe: route [default via 10.0.2.2" \
     "dictate-probe: capture [" \
     "dictate-probe: tls default exit" \
     "dictate-probe: s1 exit" \
     "dictate-probe: s10 exit" \
+    "dictate-probe: s21 exit" \
     "dictate-probe: done" \
     "tars-init: calling reboot"; do
     if grep -aF "$marker" "$LOG" >/dev/null; then
@@ -115,7 +124,7 @@ report_failure() {
   echo "--- probe lines ---"
   grep -a "dictate-probe:" "$LOG" | tail -n 30
   echo "--- stub log ---"
-  cat "$STUBLOG" 2>/dev/null
+  cut -c 1-400 "$STUBLOG" 2>/dev/null
   echo "--- last 30 lines ---"
   tail -n 30 "$LOG"
   exit 1
@@ -267,7 +276,11 @@ stub_line() { grep -aE "^stub: POST /[a-z]+/$1 " "$STUBLOG" | head -n 1; }
 stub_count() { grep -acE "^stub: POST /[a-z]+/$1 " "$STUBLOG"; }
 # stub 줄에서 key=값 하나(대괄호 안의 낱말 하나)를 꺼낸다.
 stub_field() { printf '%s\n' "$1" | grep -oE "(^| |\[)$2=[^] ]*" | head -n 1 | sed "s/^.*$2=//"; }
+# 정리 stub이 받은 요청(`stub-chat: POST /chat/<답>/<갈래> …`).
+chat_line() { grep -aE "^stub-chat: POST /chat/[a-z]+/$1 " "$STUBLOG" | head -n 1; }
+chat_count() { grep -acE "^stub-chat: POST /chat/[a-z]+/$1 " "$STUBLOG"; }
 OK_OUT='"안녕하세요 vd0-dictated"'
+CLEAN_OUT='"안녕하세요 vd2-cleaned"'
 
 # ── 검사 2: TLS — curl이 인증 기관 목록을 읽고, TLS 라이브러리가 돈다 ──────
 # 상대는 컨테이너의 openssl s_server(자기 서명)다. 목록을 읽었으면 그 상대를 못 믿어 60이고,
@@ -352,20 +365,96 @@ expect_run s10 0 "$OK_OUT" "max_seconds '0' is not 1..600, keeping 1"
 case "$(stub_line s10)" in *'data=32000 header_data=32000'*) ;; *) report_failure "s10: the bad max_seconds was not ignored ($(stub_line s10))" ;; esac
 echo "an unknown key and a bad value only warned, and the run kept the earlier max_seconds"
 
-# ── 검사 12: stub이 받은 요청은 여덟이고, 어느 WAV의 머리도 거짓말을 안 한다 ──
-# 취소(s3)와 키 없음(s4)만 API에 안 간다. 머리의 길이는 SIGINT로 멈춘 셋(s1 · s7 · s9)이
-# 본다 — arecord가 고치지 못한 머리를 tars-dictate가 다시 쓴다(검사 3의 주석).
+# ── 검사 24: 게이트는 Groq를 안 부른다 — M0의 갈래는 정리의 기본 주소에서 거절됐다 ──
+# 정리를 켠 채 cleanup_url을 안 적은 다섯(s1 · s2 · s5 · s8 · s10)은 기본 주소 api.groq.com으로
+# 간다. 프로브가 그 이름을 127.0.0.1로 돌렸으므로 연결이 거절되고(curl exit 7) 원문이 들어간다 —
+# 위 검사 3 ~ 11의 표준 출력이 M0 그대로인 것이 "정리 실패는 원문"의 첫 증거다. 거절 줄이 없으면
+# 그 요청이 어딘가에 닿았다는 뜻이다.
+grep -aF 'dictate-probe: hosts [127.0.0.1 api.groq.com]' "$LOG" >/dev/null \
+  || report_failure "the probe did not point api.groq.com at 127.0.0.1; the gate may reach the real Groq"
+for s in s1 s2 s5 s8 s10; do
+  case "$(probe_line "$s")" in
+    *'tars-dictate: cleanup failed (curl exit 7): curl: (7) Failed to connect to api.groq.com port 443'*) ;;
+    *) report_failure "$s: the cleanup did not stop at 127.0.0.1 ($(probe_line "$s"))" ;;
+  esac
+done
+echo "the M0 runs kept the cleanup on, their default address was refused inside the guest, and the raw text went out"
+
+# ── 검사 25: 정리 켜짐(기본값) — 요청이 Voxio의 모양이고 정리본이 나온다 ──────
+# s11은 cleanup 키를 안 적었다. 요청은 Voxio GroqClient.clean과 같다 — 시스템 프롬프트는 Voxio
+# defaultSystemPrompt 그대로(1038글자, sha256은 Voxio의 Swift 글자를 찍어 잰 값), 사용자 메시지는
+# 원문 그대로, temperature 0, stream false, max_tokens는 max(64, 18 × 2) = 64.
+expect_run s11 0 "$CLEAN_OUT" 'tars-dictate: cleaned 18 characters into 17 in'
+case "$(probe_line s11)" in *'(changed=true)'*) ;; *) report_failure "s11: the cleanup did not say changed=true ($(probe_line s11))" ;; esac
+C11="$(chat_line s11)"
+[ -n "$C11" ] || report_failure "s11: the cleanup stub got no request"
+for want in 'auth=[Bearer vd0-test-key]' 'type=[application/json]' 'keys=[max_tokens,messages,model,stream,temperature]' \
+  'model=[qwen/qwen3.8-27b]' 'roles=[system,user]' \
+  'system=[chars=1038 sha256=c139824ce41a5cee0c8f0a4561d99ada5e005f2d2a416dddef5ab67d56b2d14e head=You are a transcript cleanup filter, not an assistant.]' \
+  'user=[안녕하세요 vd0-dictated] user_chars=[18]' 'temperature=[0]' 'max_tokens=[64]' 'stream=[false]'; do
+  case "$C11" in *"$want"*) ;; *) report_failure "s11: the cleanup request lacks ${want} (${C11})" ;; esac
+done
+echo "the cleanup is on by default, sent Voxio's request with the raw text as the user message, and its answer went out"
+
+# ── 검사 26: 정리 꺼짐 — 요청이 없다 ──────────────────────────────────
+expect_run s12 0 "$OK_OUT" 'transcribed 1000ms of audio into 18 characters'
+[ "$(chat_count s12)" -eq 0 ] || report_failure "s12: cleanup=off still sent a cleanup request"
+case "$(probe_line s12)" in *'tars-dictate: clean'*) report_failure "s12: cleanup=off still said something about the cleanup ($(probe_line s12))" ;; esac
+echo "cleanup=off sent no cleanup request and the raw text went out"
+
+# ── 검사 27: 정리본을 어떻게 받나 — 같은 답 · 따옴표 · 제어 문자 ──────────
+# 같은 답은 바뀐 것이 없다(changed=false)는 것뿐 정리본이다 — 기록에 남는다(검사 13). 틀린 값
+# (cleanup=maybe)은 경고만 하고 켜짐에 머문다. 바깥 따옴표 “ ”와 앞뒤 공백은 벗긴다. 답의 제어
+# 문자는 넣기 전에 지운다 — 원문의 것과 같은 거르기다(검사 10).
+expect_run s13 0 "$OK_OUT" 'tars-dictate: cleaned 18 characters into 18 in'
+case "$(probe_line s13)" in *'(changed=false)'*) ;; *) report_failure "s13: an unchanged answer did not say changed=false ($(probe_line s13))" ;; esac
+expect_run s13 0 "$OK_OUT" "cleanup 'maybe' is not on or off, keeping on"
+expect_run s14 0 "$CLEAN_OUT" 'tars-dictate: cleaned 18 characters into 17 in'
+case "$(chat_line s14)" in *'model=[vd2-model]'*) ;; *) report_failure "s14: cleanup_model did not reach the request ($(chat_line s14))" ;; esac
+expect_run s15 0 '"안녕하세요[201~ vd2-cleaned"' 'tars-dictate: cleaned 18 characters into 24 in'
+echo "an unchanged answer was kept, a quoted answer lost its quotes, cleanup_model reached the request, and control characters in an answer were stripped"
+
+# ── 검사 28: 원문으로 돌아가는 여섯 — 어느 것도 실패가 아니다 ────────────────
+# 짧은 답(2글자 × 2 < 18)과 빈 답은 길이 가드, 느린 답(stub이 3초 뒤에 답한다)은 1.5초 상한,
+# 500과 choices 없는 200은 정리 실패다. 여섯 다 exit 0이고 표준 출력이 원문이다.
+expect_run s16 0 "$OK_OUT" 'tars-dictate: cleanup rejected: 2 characters is under half of 18; inserting the transcript as is'
+expect_run s17 0 "$OK_OUT" 'tars-dictate: cleanup rejected: 0 characters is under half of 18; inserting the transcript as is'
+expect_run s18 0 "$OK_OUT" 'tars-dictate: cleanup timed out after 1.5s; inserting the transcript as is'
+expect_run s19 0 "$OK_OUT" 'tars-dictate: cleanup failed: HTTP 500'
+expect_run s20 0 "$OK_OUT" 'tars-dictate: cleanup failed: the reply has no content; inserting the transcript as is'
+# s21 — cleanup_timeout=0.5면 1초 뒤의 답도 시간 초과다(기본 1.5초면 받았을 답). 그 앞의 틀린 값은
+# 경고만 하고 1.5에 머문다.
+expect_run s21 0 "$OK_OUT" 'tars-dictate: cleanup timed out after 0.5s; inserting the transcript as is'
+expect_run s21 0 "$OK_OUT" "cleanup_timeout '20' is not 0.5..10 seconds, keeping 1.5"
+echo "a summary, an empty answer, a slow answer, a 500, a reply without choices and an answer past cleanup_timeout all fell back to the raw text with exit 0"
+
+# ── 검사 29: 정리 stub이 받은 요청은 열이다 ────────────────────────────────
+# s11 · s13 ~ s21 하나씩. 꺼진 s12와, 막힌 기본 주소로 간 M0의 다섯은 stub에 없다.
+CHATS="$(grep -ac '^stub-chat: POST ' "$STUBLOG")"
+[ "$CHATS" -eq 10 ] || report_failure "the cleanup stub got ${CHATS} request(s), want 10"
+for s in s11 s13 s14 s15 s16 s17 s18 s19 s20 s21; do
+  [ "$(chat_count "$s")" -eq 1 ] || report_failure "$s: the cleanup stub got $(chat_count "$s") request(s), want 1"
+done
+echo "the cleanup stub got ten requests, one for each run that had the cleanup on and pointed at it"
+
+# ── 검사 12: stub이 받은 전사 요청은 열아홉이고, 어느 WAV의 머리도 거짓말을 안 한다 ──
+# 취소(s3)와 키 없음(s4)만 API에 안 간다 — M0의 여덟과 정리 갈래(s11 ~ s21)의 열하나다. 머리의
+# 길이는 SIGINT로 멈춘 셋(s1 · s7 · s9)이 본다 — arecord가 고치지 못한 머리를 tars-dictate가 다시
+# 쓴다(검사 3의 주석).
 REQUESTS="$(grep -ac '^stub: POST ' "$STUBLOG")"
-[ "$REQUESTS" -eq 8 ] || report_failure "the stub got ${REQUESTS} request(s), want 8 (s3 and s4 must not call it)"
+[ "$REQUESTS" -eq 19 ] || report_failure "the stub got ${REQUESTS} request(s), want 19 (s3 and s4 must not call it)"
 while IFS= read -r req; do
   [ "$(stub_field "$req" header_data)" = "$(stub_field "$req" data)" ] \
     || report_failure "a WAV reached the API with a header that does not match its length (${req})"
 done < <(grep -a '^stub: POST ' "$STUBLOG")
-echo "the stub got eight requests, and every WAV's header matched its length"
+echo "the stub got nineteen requests, and every WAV's header matched its length"
 
-# ── 검사 13: 기록 — 전사가 성공한 다섯만 원문과 함께 남는다 ───────────────
+# ── 검사 13: 기록 — 전사가 성공한 열여섯만 원문 · 정리본과 함께 남는다 ─────────
 # 끈 뒤 디스크에서 꺼낸다. 원문(raw)은 받은 그대로라 s8의 제어 문자가 JSON 이스케이프로
-# 남고, inserted는 지운 것이다. 실패 · 무음 · 취소 · 키 없음은 한 줄도 안 남는다.
+# 남고, inserted는 지운 것이다. 실패 · 무음 · 취소 · 키 없음은 한 줄도 안 남는다. 정리본
+# (cleaned)은 정리가 받아들여진 넷(s11 · s13 · s14 · s15)에만 있다 — 같은 답(s13)도 글자로
+# 남고, 제어 문자가 든 답(s15)은 받은 그대로다. 꺼짐 · 실패 · 가드는 null이다(Voxio의
+# cleaned_text와 같다). 정리가 실패한 여섯(s16 ~ s21)도 원문으로 남는다.
 debugfs -R "dump dictation.jsonl $WORK/dictation.jsonl" "$DISK" >/dev/null 2>&1
 [ -s "$WORK/dictation.jsonl" ] || report_failure "the config disk holds no dictation.jsonl"
 HISTORY="$(perl -MJSON::PP -e '
@@ -376,20 +465,32 @@ HISTORY="$(perl -MJSON::PP -e '
   open(my $f, "<:raw", $ARGV[0]) or die;
   while (my $l = <$f>) {
     my $r = $j->decode($l);
-    my $ok = ($r->{at} =~ /\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\z/ && !defined $r->{cleaned}
+    my $ok = ($r->{at} =~ /\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\z/ && exists $r->{cleaned}
               && $r->{latency_ms} =~ /\A\d+\z/) ? "ok" : "bad";
-    printf "raw=%s|inserted=%s|%d|%s\n", show($r->{raw}), show($r->{inserted}), $r->{audio_ms}, $ok;
+    printf "raw=%s|cleaned=%s|inserted=%s|%d|%s\n", show($r->{raw}),
+      defined $r->{cleaned} ? show($r->{cleaned}) : "(null)", show($r->{inserted}), $r->{audio_ms}, $ok;
   }' "$WORK/dictation.jsonl")" || report_failure "dictation.jsonl is not JSON lines"
 echo "--- history ---"
 printf '%s\n' "$HISTORY"
-EXPECT_HISTORY='raw=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|S1|ok
-raw=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|1000|ok
-raw=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|1000|ok
-raw=vd0-ctrl a\x{1b}[201~b\x{d}c\x{9}d\x{a}e\x{85}f\x{1b}|inserted=vd0-ctrl a[201~bc\x{9}d\x{a}ef|1000|ok
-raw=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|1000|ok'
+EXPECT_HISTORY='raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|S1|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=vd0-ctrl a\x{1b}[201~b\x{d}c\x{9}d\x{a}e\x{85}f\x{1b}|cleaned=(null)|inserted=vd0-ctrl a[201~bc\x{9}d\x{a}ef|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=안녕하세요 vd2-cleaned|inserted=안녕하세요 vd2-cleaned|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=안녕하세요 vd2-cleaned|inserted=안녕하세요 vd2-cleaned|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=안녕하세요\x{1b}[201~ vd2\x{d}-cleaned|inserted=안녕하세요[201~ vd2-cleaned|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok
+raw=안녕하세요 vd0-dictated|cleaned=(null)|inserted=안녕하세요 vd0-dictated|1000|ok'
 EXPECT_HISTORY="${EXPECT_HISTORY/S1/$(( S1_DATA * 1000 / 32000 ))}"
-[ "$HISTORY" = "$EXPECT_HISTORY" ] || report_failure "dictation.jsonl does not hold the five successful runs as expected"
-echo "dictation.jsonl keeps the five successful runs with the raw text next to what was inserted, and nothing else"
+[ "$HISTORY" = "$EXPECT_HISTORY" ] || report_failure "dictation.jsonl does not hold the sixteen successful runs as expected"
+echo "dictation.jsonl keeps the sixteen successful runs with the raw text, the cleaned text and what was inserted, and nothing else"
 
 # ════════════════════════════════════════════════════════════════════════
 # 부팅 B — terminal의 트리거 · 상태 · 삽입 (VD-M1)
@@ -406,16 +507,19 @@ echo "dictation.jsonl keeps the five successful runs with the raw text next to w
 #
 # 화면은 마지막 프레임만 본다(`last_screen`). wait_for_screen은 로그의 모든 프레임을 훑으므로
 # 지운 줄이나 다른 패널의 지난 프레임에 걸린다.
+#
+# 정리는 켠 채 돈다(VD-M2). cleanup_url이 정리 stub의 /chat/ok라 terminal이 넣는 글자는 정리본
+# `안녕하세요 vd2-cleaned`이고, 기록에는 원문과 정리본이 함께 남는다(검사 23).
 DISK_B=../out/dictation-b.img
 STUBLOG_B="$WORK/stub_b.log"
 rm -f "$LOG"
 LOG="$(mktemp)"
 
-mkdir -p "$WORK/seed_b"
+mkdir -p "$WORK/seed_b/services.d"
 printf 'net=dhcp\n' > "$WORK/seed_b/tars.conf"
 printf 'vd1-test-key\n' > "$WORK/seed_b/groq.key"
 printf '%s\n' '# written by the VD chain, boot B' 'transcribe_url = http://10.0.2.100:8080/ok/b' \
-  > "$WORK/seed_b/dictation.conf"
+  'cleanup_url = http://10.0.2.100:8080/chat/ok/b' > "$WORK/seed_b/dictation.conf"
 # 사람이 셸에서 칠 것을 짧게 줄인 셋이다 — 타이핑 한 글자가 sendkey 하나라서다.
 #   vd-pw     비밀번호 프롬프트. bash의 read -s는 줄 단위로 읽으며 안 보여 준다
 #             (ICANON 켜짐 · ECHO 꺼짐). 받은 것을 대괄호 안에 되보여 준다
@@ -423,10 +527,15 @@ printf '%s\n' '# written by the VD chain, boot B' 'transcribe_url = http://10.0.
 #   vd-nokey  키 파일을 치운다
 printf '%s\n' '#!/usr/bin/bash' "read -rsp 'pw> ' x" 'echo' 'echo "got[$x]"' > "$WORK/seed_b/vd-pw"
 printf '%s\n' '#!/usr/bin/bash' \
-  "printf '%s\\n' 'transcribe_url = http://10.0.2.100:8080/ok/cap' 'max_seconds = 1' > /config/dictation.conf" \
+  "printf '%s\\n' 'transcribe_url = http://10.0.2.100:8080/ok/cap' 'cleanup_url = http://10.0.2.100:8080/chat/ok/cap' 'max_seconds = 1' > /config/dictation.conf" \
   > "$WORK/seed_b/vd-cap"
 printf '%s\n' '#!/usr/bin/bash' 'mv /config/groq.key /config/groq.key.off' > "$WORK/seed_b/vd-nokey"
 chmod 0755 "$WORK/seed_b/vd-pw" "$WORK/seed_b/vd-cap" "$WORK/seed_b/vd-nokey"
+# Groq 막기(부팅 A의 프로브와 같은 줄). 부팅 B에는 프로브가 없으므로 서비스 하나가 부팅 때
+# api.groq.com을 127.0.0.1로 돌리고 잠든다 — 위 설정에서 cleanup_url이 빠져도 Groq에 안 닿는다.
+printf '%s\n' '#!/usr/bin/bash' "echo '127.0.0.1 api.groq.com' >> /etc/hosts" \
+  'echo "groq-off: hosts [$(grep groq /etc/hosts)]"' 'exec sleep 100000' > "$WORK/seed_b/services.d/groq-off"
+chmod 0755 "$WORK/seed_b/services.d/groq-off"
 rm -f "$DISK_B"
 truncate -s 16M "$DISK_B"
 mkfs.ext2 -F -q -m 0 -L tars-dictate -d "$WORK/seed_b" "$DISK_B"
@@ -498,6 +607,7 @@ wait_last_screen() {
 # 마지막 프레임에 그 글자가 몇 번 있는가.
 last_screen_count() { last_screen | grep -oaF -- "$1" | wc -l; }
 stub_b_count() { local n; n="$(grep -ac '^stub: POST ' "$STUBLOG_B" 2>/dev/null)"; echo "${n:-0}"; }
+chat_b_count() { local n; n="$(grep -ac '^stub-chat: POST ' "$STUBLOG_B" 2>/dev/null)"; echo "${n:-0}"; }
 double_tap() {
   echo "sendkey meta_r 80" >&3
   echo "sendkey meta_r 80" >&3
@@ -509,7 +619,7 @@ expect_recording() {
   wait_count 'terminal: dictate> phase recording' "$1" 15 || report_b "$2: tars-dictate never said it was recording"
 }
 PROMPT='root@\(none\) ~#'
-TEXT='안녕하세요 vd0-dictated'
+TEXT='안녕하세요 vd2-cleaned'
 
 echo "=== boot B: the terminal triggers, shows and inserts (monitor ${MONITOR_PORT_B}) ==="
 HOME="$WORK" qemu-system-x86_64 \
@@ -537,6 +647,7 @@ wait_last_screen "$PROMPT" 30 || report_b "the fish prompt never showed up"
 # 전사 API(stub)에 닿는 길과 켜진 마이크. 부팅 A의 프로브가 기다린 것과 같다.
 wait_for_log 'eth0: adding default route via 10\.0\.2\.2' 60 || report_b "dhcpcd never added the default route"
 wait_for_log 'tars-init: audio: alsactl init turned the mixer on' 60 || report_b "the boot never turned the mixer on"
+wait_for_log 'groq-off: hosts \[127\.0\.0\.1 api\.groq\.com\]' 30 || report_b "api.groq.com was not pointed at 127.0.0.1; the gate may reach the real Groq"
 CONNECTED=0
 for _ in $(seq 1 20); do
   if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT_B}"; then CONNECTED=1; break; fi
@@ -576,7 +687,9 @@ grep -aF 'tars-dictate: recording stopped by SIGINT after' "$LOG" >/dev/null \
   || report_b "B1: tars-dictate did not stop on SIGINT (did the signal reach the process group?)"
 grep -aE 'terminal: status> text=.*  WAIT' "$LOG" >/dev/null || report_b "B1: the status line never showed WAIT"
 INSERT1="$(grep -a 'terminal: dictate> insert len=' "$LOG" | head -n 1 | tr -d '\r' | sed -E 's/.*dictate> //')"
-[ "$INSERT1" = "insert len=28 bracketed=1 ws=1 leaf=0" ] || report_b "B1: the insert line is '${INSERT1}'"
+[ "$INSERT1" = "insert len=27 bracketed=1 ws=1 leaf=0" ] || report_b "B1: the insert line is '${INSERT1}'"
+grep -aF 'tars-dictate: cleaned 18 characters into 17 in' "$LOG" >/dev/null || report_b "B1: tars-dictate did not clean the transcript"
+[ "$(chat_b_count)" -eq 1 ] || report_b "B1: the cleanup stub got $(chat_b_count) request(s), want 1"
 grep -aF 'terminal: dictate> exit code=0' "$LOG" >/dev/null || report_b "B1: tars-dictate did not exit 0"
 wait_last_screen "${PROMPT} ${TEXT}" 15 || report_b "B1: the text never showed up on the prompt line"
 wait_status 'CAPS$' 10 || report_b "B1: the dictation field stayed after the insert ($(last_status))"
@@ -584,7 +697,7 @@ wait_dict_ink off || report_b "B1: dictation pixels remain after the insert"
 case "$(last_screen)" in *"Unknown command"*) report_b "B1: fish ran the inserted text" ;; esac
 [ "$(stub_b_count)" -eq 1 ] || report_b "B1: the stub got $(stub_b_count) request(s), want 1"
 type_keys ctrl-u
-echo "two double taps recorded, stopped with SIGINT, showed REC then WAIT, and put the text on the prompt without running it"
+echo "two double taps recorded, stopped with SIGINT, showed REC then WAIT, and put the cleaned text on the prompt without running it"
 
 # ── 검사 16: 녹음 중의 Esc는 취소이고 PTY로 안 간다 ──────────────────────
 # 그룹에 SIGTERM — API를 안 부르고(stub 그대로) 143으로 끝나 조용하다. `key>` 줄은 PTY로
@@ -728,12 +841,18 @@ while IFS= read -r req; do
 done < <(grep -a '^stub: POST ' "$STUBLOG_B")
 [ "$(grep -acE '^stub: POST /ok/b ' "$STUBLOG_B")" -eq 4 ] && [ "$(grep -acE '^stub: POST /ok/cap ' "$STUBLOG_B")" -eq 2 ] \
   || report_b "the boot B requests are not four /ok/b and two /ok/cap"
+# 정리도 여섯이다 — 전사된 여섯마다 하나, 원문이 사용자 메시지로 갔고 실패한 것이 없다.
+[ "$(grep -acE '^stub-chat: POST /chat/ok/b .*user=\[안녕하세요 vd0-dictated\]' "$STUBLOG_B")" -eq 4 ] \
+  && [ "$(grep -acE '^stub-chat: POST /chat/ok/cap .*user=\[안녕하세요 vd0-dictated\]' "$STUBLOG_B")" -eq 2 ] \
+  || report_b "the boot B cleanup requests are not four /chat/ok/b and two /chat/ok/cap with the raw text"
+[ "$(count_b 'tars-dictate: cleaned 18 characters into 17 in')" -eq 6 ] && [ "$(count_b 'tars-dictate: cleanup ')" -eq 0 ] \
+  || report_b "not every boot B transcript was cleaned ($(grep -aE 'tars-dictate: clean' "$LOG" | tr -d '\r' | tail -n 3))"
 echo "system_powerdown" >&3
 wait_for_exit 60 || report_b "the guest did not power off after system_powerdown"
 debugfs -R "dump dictation.jsonl $WORK/dictation_b.jsonl" "$DISK_B" >/dev/null 2>&1
-HISTORY_B="$(grep -c '"raw":"안녕하세요 vd0-dictated"' "$WORK/dictation_b.jsonl" 2>/dev/null || true)"
+HISTORY_B="$(grep -c '"raw":"안녕하세요 vd0-dictated","cleaned":"안녕하세요 vd2-cleaned","inserted":"안녕하세요 vd2-cleaned"' "$WORK/dictation_b.jsonl" 2>/dev/null || true)"
 [ "${HISTORY_B:-0}" -eq 6 ] && [ "$(wc -l < "$WORK/dictation_b.jsonl")" -eq 6 ] \
-  || report_b "dictation.jsonl holds ${HISTORY_B:-0} of the six transcripts (the refused and the lost ones must stay)"
-echo "the stub got six recordings of the microphone, and dictation.jsonl kept all six, inserted or not"
+  || report_b "dictation.jsonl holds ${HISTORY_B:-0} of the six transcripts with their cleaned text (the refused and the lost ones must stay)"
+echo "the stub got six recordings of the microphone and six cleanups, and dictation.jsonl kept all six with both texts, inserted or not"
 
 echo "VD check PASS"

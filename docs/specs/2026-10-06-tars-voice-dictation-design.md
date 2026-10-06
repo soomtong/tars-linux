@@ -1,7 +1,11 @@
 # TARS Voice Dictation — Design
 
 Date: 2026-10-06
-Status: 진행 중. M0 · M1이 끝났다(2026-10-06) — 게스트 파이프라인 `tars-dictate` · 인증 기관 목록 · 스물한번째 체인(M0), terminal의 오른쪽 Cmd 더블 탭 · `tars-dictate` 자식 · 상태 줄 · 붙여넣기 경로 삽입 · 비밀번호 거절(M1). 다음은 M2(정리 단계 · 실기 안내, `docs/plans/2026-10-06-tars-voice-dictation-vd-m2.md`). plan은 `-vd-m0.md` · `-vd-m1.md`이고 각 끝의 "실측한 것" 절이 값이다.
+Status: 끝났다(2026-10-06, VD-M0~M2 — 셋 다 같은 날). milestone은 쓸 때의 셋 그대로다. plan은
+`docs/plans/2026-10-06-tars-voice-dictation-vd-m0.md` ~ `-vd-m2.md`이고 각 끝의 "실측한 것" 절이 값이다. plan들이 바로잡은 전제는 "lead의
+전제를 바로잡은 것" 1 ~ 9와 위험 2(M1의 `ICANON && !ECHO`) · 결정 9의 M2 항목에, 각 milestone의 결과는 결정 3 · 5 · 6 · 10 · 11의
+덧붙임에 있다. 기억은 `docs/decisions/project_voice_dictation.md`, 실기 안내는 `docs/guides/running-tars.md`의 받아쓰기 절. 남긴 것은
+비목표 14와 lessons 이월 숙제(render 검사 28의 간헐 · `cleanup_timeout`의 실기 확인 · 비밀번호 판정이 못 보는 자리).
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -118,6 +122,10 @@ running-tars.md가 말한다.
 | `cleanup` | `on` | `cleanup.enabled` | M2 |
 | `cleanup_url` | `https://api.groq.com/openai/v1/chat/completions` | `cleanup.endpoint` | M2 |
 | `cleanup_model` | `qwen/qwen3.8-27b` | `cleanup.model`(Voxio V7이 정했다) | M2 |
+| `cleanup_timeout` | `1.5`(초, 0.5 ~ 10) | `cleanup.timeoutMs` — lead가 M2에서 키로 열었다(위험 5) | M2 |
+
+틀린 `cleanup` · `cleanup_timeout` 값은 한 줄 경고하고 지금 값에 머문다(`max_seconds`와 같은 규칙). 정리 프롬프트 · 길이 비율의 키는
+없다(비목표 14).
 
 게이트에는 이 파일이 결정적이다 — `transcribe_url`로 stub을 가리키고, 경로로 stub의 답을 고른다.
 
@@ -144,7 +152,7 @@ Voxio D9 그대로 원문과 넣은 것을 나란히 남기고 오디오는 안 
 |---|---|---|
 | `at` | UTC ISO 8601(`jq`의 `now \| todate`) | `created_at` |
 | `raw` | 받은 그대로(앞뒤 공백만 뗀) — 제어 문자도 JSON 이스케이프로 남는다 | `raw_text` |
-| `cleaned` | M2의 정리본. 끄거나 실패하면 null | `cleaned_text` |
+| `cleaned` | M2의 정리본 — 받아들여졌으면 원문과 같아도 그 글자, 끄거나 실패하면 null(M2 확정 4) | `cleaned_text` |
 | `inserted` | 표준 출력으로 낸 것(제어 문자를 지운 것) | `inserted_text` |
 | `audio_ms` · `latency_ms` | 녹음 길이, 녹음이 끝나서 출력까지 | 같다 |
 
@@ -169,7 +177,7 @@ lead의 틀은 기록을 M2에 두었다. M0으로 옮긴다(전제 3) — 불�
 
 | 종료 코드 | 뜻 | M1의 terminal이 할 일(제안) |
 |---|---|---|
-| 0 | 표준 출력에 넣을 글자가 있다 | 그 패널에 붙여 넣는다 |
+| 0 | 표준 출력에 넣을 글자가 있다(M2 — 정리가 실패해도 0, 원문) | 그 패널에 붙여 넣는다 |
 | 1 | 녹음을 못 했다(장치) | 상태 줄에 알린다 |
 | 2 | 넣을 것이 없다(0바이트 · 무음 전사) | 조용히 끝 |
 | 3 | API 키가 없다 | 상태 줄에 알린다(설정 문제) |
@@ -230,6 +238,10 @@ AU 체인의 마이크 수법과 net 체인의 guestfwd를 합친다.
 - 마이크의 상수는 두 채널이 같다(1234). `plug`가 스테레오를 모노로 접을 때 왼쪽만 가져가는데(실측 3) 그 규칙은 alsa-lib의 것이라
   체인이 기대지 않는다.
 - 기록은 끈 뒤에 `debugfs`로 꺼낸다(`project_seeding_a_config_disk`).
+- (M2) 두 부팅 모두 게스트의 `/etc/hosts`로 `api.groq.com`을 127.0.0.1로 돌린다(부팅 A는 프로브, 부팅 B는 `services.d/groq-off`). 정리의
+  기본 주소가 진짜 Groq라, 갈래 하나가 `cleanup_url`을 빠뜨리면 SLIRP을 지나 진짜 Groq에 가짜 키로 닿을 수 있었다. 막은 덕에 M0의 갈래
+  다섯이 "연결 실패 → 원문"을 덤으로 친다(검사 24). 정리 stub은 `/chat/<답>/<갈래>`(답 열)이고 줄 머리가 `stub-chat:`이라 `^stub: POST `
+  판정이 그대로 선다. 부팅 B 전체가 정리를 켠 채 돈다(기본값이 그것이다).
 
 검사 열셋이다. 표는 M0 plan 확정 5에 있다. 요지 — 녹음이 마이크를 지나 API에 닿는다(샘플이 전부 1234, 16kHz 모노, 머리가 길이와 같다) ·
 설정 셋이 요청에 실린다 · SIGTERM은 API를 안 부른다 · 키가 없으면 2초 안에 녹음 없이 끝난다 · 429 · 무음 · 제어 문자 · text 없음 ·
@@ -371,6 +383,9 @@ plan은 `docs/plans/2026-10-06-tars-voice-dictation-vd-m0.md`.
 
 ### VD-M2 — 정리 단계 · 실기 안내
 
+했다(2026-10-06, `-vd-m2.md`). 결과는 결정 3의 `cleanup_timeout` · 결정 5 · 6의 M2 문구 · 결정 9의 M2 항목 · 위험 5 · 비목표 14 · 실측 14와
+running-tars.md의 받아쓰기 절이다. 아래는 쓸 때의 글이다.
+
 결정 3의 `cleanup*` 키 셋과 Voxio D12. 전사 뒤에 chat/completions를 한 번(`curl --max-time 1.5`), 응답의 첫 choice, 바깥 따옴표 벗기기
 (Voxio `stripWrappingQuotes`), 길이 가드(앞뒤 공백을 뗀 글자 수가 원문의 0.5 미만이면 버린다), 실패 · 시간 초과 · 가드면 원문. 기록의
 `cleaned`가 채워진다. 프롬프트는 Voxio의 `defaultSystemPrompt` 그대로이고 요청 본문은 `jq --arg`로 짓는다(전사문이 사용자 메시지에
@@ -396,7 +411,9 @@ M0와 M2를 나눈 이유. M0만으로 사람이 셸에서 쓸 수 있다(정리
 3. bracketed paste가 꺼진 프로그램(`cat`, `read`)에서 Whisper가 준 글자 안의 개행은 줄 입력이다. 끝의 개행은 `tars-dictate`가 지운다.
 4. Groq 무료 티어 — 분당 20 · 일 2,000 요청, 요청마다 최소 10초로 센다(Voxio 7절). 짧게 자주 쓰면 요청 수가 먼저 닿는다. 429는 exit 4와
    "too many requests"다. 게이트는 Groq를 절대 안 부른다(키도 바깥 길도 없다).
-5. 첫 요청 지연. Voxio V12는 프로세스의 첫 요청(TLS 핸드셰이크 포함)이 4초, 그다음이 0.4초대였다. `tars-dictate`는 실행마다 새 `curl`이라
+5. 첫 요청 지연(M2가 덧붙임 — 정리의 상한 `curl --max-time`은 DNS · TCP · TLS까지 센다. Voxio의 1500ms는 연결이 데워진 앱의 값이었다.
+   실기에서 정리가 늘 `cleanup timed out`이면 원문만 들어가고 그 초가 늘 더해진다 — 사람은 `cleanup_timeout`을 늘리거나 `cleanup = off`로
+   끈다). Voxio V12는 프로세스의 첫 요청(TLS 핸드셰이크 포함)이 4초, 그다음이 0.4초대였다. `tars-dictate`는 실행마다 새 `curl`이라
    매번 첫 요청이다 — DNS와 TLS를 매번 치른다. 실기에서 잰다. 크면 연결을 붙잡아 두는 상주 프로세스가 필요하다(결정 1의 (d)를 다시 연다).
 6. 키가 평문이다. `/config`는 ext2 파티션(설치된 디스크의 p2 또는 USB 스틱)이고 그 스틱을 잃으면 키가 샌다. 키를 바꾸는 것이 처방이다.
 7. TLS는 시계에 기댄다. 시계가 틀리면 인증서가 "아직 유효하지 않음"으로 60이 난다. TARS는 부팅에 RTC를 읽고 `net=dhcp`면 chronyd가 맞춘다.
@@ -422,6 +439,8 @@ M0와 M2를 나눈 이유. M0만으로 사람이 셸에서 쓸 수 있다(정리
 11. 기록을 고르는 UI · 최근 5건 다시 넣기(Voxio 메뉴의 ⌘1~⌘5). `tail` · `jq`로 본다.
 12. `transcription.prompt`(고유명사 철자 힌트). 필요해지면 `dictation.conf`의 키 하나와 `--form-string` 한 줄이다.
 13. 기록 보존 기간 · 회전. 설정 파티션이 1GiB이고 한 줄이 200바이트 남짓이다.
+14. (M2) 정리 프롬프트 · 길이 비율을 바꾸는 키(Voxio `cleanup.systemPrompt` · `minLengthRatio`). 프롬프트는 Voxio가 V7 · V12로 다듬은
+    글자이고 길이 가드와 짝이다. 스트리밍 · 연결을 붙잡아 두는 상주 프로세스(위험 5) · 원문과 정리본을 나란히 보는 화면(기록과 `jq`로).
 
 ## 착수 전에 실측한 것
 
@@ -466,6 +485,11 @@ perl 5.40이 있다, 게이트는 `guestfwd=tcp:10.0.2.100:8080-cmd:…`로 바�
     QEMU가 뗌을 지연과 함께 입력 큐에 넣고 다음 `sendkey`가 그 뒤에 줄을 선다. master의 `tcgetattr`가 slave의 termios를 준다
     (`tty_mode_ioctl`이 master면 `tty->link`). 부팅 B가 monitor 45493을 쓴다(M0의 45492는 TLS 상대) — 새 체인은 45494부터.
 
+14. (M2 planner) jq의 정규식은 Perl 문법이라 `^` · `$`가 문자열의 처음 · 끝이다 — `strip`이 여러 줄 정리본의 가운데를 안 건드린다(게스트
+    jq 1.7). 길이 가드의 셈은 코드 포인트(jq `length`)이고 Voxio는 grapheme(`String.count`)이다 — 완성형 한글 · 영문에서 같다. M0의 SIGINT
+    틈(`arecord` 전의 SIGINT를 기억만 하고 상한까지 녹음)은 M2가 닫았다 — `arecord` 직전에 `stopped`를 보고 `nothing was recorded`로
+    exit 2(틈을 0.5초로 넓힌 측정판에서 고치기 전 세 번 다 상한까지, 고친 뒤 55 ~ 64ms). 정리의 시스템 프롬프트는 Voxio의 Swift 리터럴을
+    그대로 찍은 1,038글자이고 체인 검사 25가 stub에서 그 sha256을 본다.
 ## 닫을 때(lead의 몫)
 
 - 이 design의 `Status:`를 `끝났다(날짜, VD-M0~M2)`로 고친다. milestone이 줄거나 늘면 그 사실을 한 줄로.

@@ -77,6 +77,9 @@ cleanup() {
 trap cleanup EXIT
 
 report_failure() {
+  # 실패한 판의 시리얼 로그를 남긴다 — 검사 28(vim의 R)이 VD-M2 루트 게이트에서 한 번 빨갰는데 로그가 mktemp라 원인을 못 봤다.
+  # 루트 check.sh의 clean()이 out/을 지우므로 다음 판이 덮어쓴다.
+  mkdir -p ../out && cp "$LOG" ../out/render-failed-serial.log 2>/dev/null
   echo "FAIL: $1"
   echo "--- markers ---"
   local marker
