@@ -1,5 +1,6 @@
 const std = @import("std");
 const hangul = @import("hangul.zig");
+const dictation = @import("dictation.zig");
 
 /// `pub`인 이유는 `input_test.zig`가 `input.c.KEY_LEFT`처럼 커널이 정한
 /// 이름으로 검사를 쓰기 위해서다. IP-M1까지 테스트는 103/105 같은 숫자
@@ -301,6 +302,15 @@ pub const Context = struct {
     /// 동안 바뀌지 않는다 — 누를 때와 뗄 때 값이 달라져 modifier가 눌린
     /// 채로 남는 일이 구조적으로 없다는 뜻이다.
     swap_alt_meta: bool = false,
+
+    /// 받아쓰기가 마이크를 열었거나 여는 중인가(VD-M1). 참이면 수정키 없는 Esc가
+    /// 받아쓰기의 취소이고 PTY로 안 간다(VD design 결정 11, Voxio D11a).
+    ///
+    /// 자식 프로세스의 단계는 `main.zig`만 안다 — 이 파일은 fork도 파이프도 모른다.
+    /// DECCKM처럼 `readKeys`를 부를 때의 값을 받는다(`dictation.escCancels`). 한 번의
+    /// read 안에서 더블 탭과 Esc가 함께 와도 Esc는 그 앞의 단계로 읽힌다 — 띄운 직후
+    /// 같은 read의 Esc는 PTY로 간다. 사람의 손으로는 생기지 않는 순서다.
+    dictating: bool = false,
 };
 
 /// 스크롤백을 움직이는 동작(design 결정 12).
@@ -362,6 +372,21 @@ pub const Action = union(enum) {
     /// 패널 명령(WP design 결정 4). PTY로 보내지 않는다 — 스크롤 · copy와
     /// 같은 이유로 `main.zig`가 순서대로 처리한다.
     pane: Pane,
+    /// 받아쓰기 명령(VD-M1). PTY로 보내지 않는다. 자식을 띄우고 시그널을 보내는
+    /// 것은 `main.zig`다.
+    dictate: Dictate,
+};
+
+/// 받아쓰기의 키 명령(VD design 결정 10 · 11). 둘이다.
+///
+/// `toggle`이 시작인지 끝인지를 여기서 안 가른다. 그것은 자식의 단계로 정해지고
+/// (`dictation.onTap`), 단계는 `main.zig`가 든다 — 이 파일이 "녹음 중"을 들면
+/// 자식이 스스로 끝났을 때 그 값을 맞출 길이 없다(design 결정 10의 함정 3).
+pub const Dictate = enum {
+    /// 오른쪽 Cmd 자리의 더블 탭.
+    toggle,
+    /// 녹음 중의 수정키 없는 Esc. `Context.dictating`이 참일 때만 나온다.
+    cancel,
 };
 
 /// 패널을 가르고 닫고 옮기는 명령(WP design 키 표).
@@ -521,6 +546,8 @@ pub const Keys = struct {
     /// 패널 명령도 같은 이유로 순서대로 모은다(WP-M1). `Cmd+]`를 누르고
     /// 있으면 자동 반복이 여러 개를 실어 오고, 그만큼 포커스가 돌아야 한다.
     panes: []const Pane,
+    /// 받아쓰기 명령도 같은 모양으로 순서대로 모은다(VD-M1).
+    dictates: []const Dictate,
     /// 이 배치가 화면을 바꿨는가(HI-M1 · IS-M1에서 이름이 넓어졌다).
     ///
     /// 값이 아니라 사실만 나른다. 무엇이 바뀌었는지는 상태를 읽어
@@ -701,6 +728,10 @@ pub const State = struct {
     /// 안 쓰고, 넘치면 버린다.
     panes: [8]Pane = undefined,
 
+    /// 한 번의 read에서 나온 받아쓰기 명령의 저장소(VD-M1). 같은 이유로 힙을
+    /// 안 쓰고, 넘치면 버린다.
+    dictates: [8]Dictate = undefined,
+
     /// 한글을 치는 중인가(HI design 결정 5). `Mode`에 넣지 않는다 —
     /// `Mode`는 normal·copy·find인데 한/영은 그것과 독립이고, copy mode에
     /// 들어갔다 나와도 이 값은 그대로여야 한다.
@@ -765,6 +796,10 @@ pub const State = struct {
     /// 남거나 거짓으로 남는 경계가 생기고, 그 경계는 게이트가 못 본다.
     caps_tap: Tap = .{},
     lctrl_tap: Tap = .{},
+
+    /// 오른쪽 Cmd 자리의 더블 탭(VD design 결정 10). `Tap`과 다른 판정이다 —
+    /// 그쪽은 한 번 누른 길이를, 이쪽은 두 누름 사이를 잰다(`dictation.DoubleTap`).
+    dictate_tap: dictation.DoubleTap = .{},
 
     /// 대문자 잠금(HI design 결정 9). CapsLock을 길게 누르면 뒤집힌다.
     ///
@@ -1300,6 +1335,12 @@ pub const State = struct {
         // 뗌(0)은 소비가 아니다. Ctrl을 누르기 전부터 눌려 있던 키를 떼는 것일
         // 수 있고, 그것은 이 Ctrl을 조합 키로 쓴 것이 아니다.
         if (value != 0) self.markTapConsumed(code);
+        // 0.6번 단계 — 받아쓰기의 더블 탭(VD design 결정 10). 다른 키가 눌리면
+        // 진행 중이던 판정을 버린다(Voxio D6 — 중간에 다른 키가 끼면 리셋). 다른
+        // 수정키의 누름도 여기서 버린다: Shift를 잡은 채 한 번, 놓고 한 번이 더블
+        // 탭이 되지 않게(Voxio `foreignModifierPressDiscardsPendingSequence`).
+        // 뗌은 안 버린다 — 누르기 전부터 눌려 있던 키를 떼는 것은 조합이 아니다.
+        if (value != 0 and code != c.KEY_RIGHTMETA) self.dictate_tap.reset();
 
         switch (code) {
             c.KEY_LEFTSHIFT => {
@@ -1348,6 +1389,26 @@ pub const State = struct {
             },
             c.KEY_RIGHTMETA => {
                 self.meta_right = value != 0;
+                // 받아쓰기의 트리거(VD design 결정 10). 맞바꿈 뒤의 코드라 Apple
+                // 자판은 오른쪽 Cmd, `keyboard=pc`는 오른쪽 Alt다 — 둘 다 스페이스
+                // 오른쪽의 Cmd 자리다.
+                //
+                // 자동 반복(2)은 안 넣는다(design 결정 10의 함정 1). 넣으면 길게 누른
+                // 키가 스스로 더블 탭이 된다.
+                //
+                // 다른 수정키가 눌려 있으면 발동하지 않는다. 왼쪽 Cmd도 다른
+                // 수정키다 — 양쪽 Cmd를 함께 잡은 것은 조합이다(Voxio
+                // `siblingModifierCountsAsCombo`). CapsLock의 잠금은 수정키가
+                // 아니다(Voxio `capsLockAndNumericPadAreNotCombos`).
+                //
+                // 발동은 둘째 누름에서다. Meta를 누른 채라 아래 1.35번 이후의 갈래는
+                // 이 키에 안 닿는다 — 여기서 바로 돌려준다.
+                if (value == 1) {
+                    const combined = self.shifted() or self.ctrled() or self.alted() or self.meta_left;
+                    if (self.dictate_tap.down(time_us, combined)) return .{ .dictate = .toggle };
+                } else if (value == 0) {
+                    self.dictate_tap.up();
+                }
                 return nothing;
             },
             // CapsLock(58)은 `keymap` 표 밖이다 — 표가 `KEY_SPACE`(57)에서
@@ -1390,6 +1451,23 @@ pub const State = struct {
         }
         // 뗄 때는 아무것도 보내지 않는다. 누름(1)과 자동 반복(2)만 문자를 만든다.
         if (value == 0) return nothing;
+
+        // 1.3번 단계 — 받아쓰기의 취소(VD design 결정 11). 모드 분기 셋과 한글
+        // 층보다 앞이다.
+        //
+        // 녹음 중의 Esc는 받아쓰기의 것이다. 그 Esc가 뒤의 프로그램까지 가면 취소한
+        // 손이 vim의 insert도 끝낸다(Voxio D11a — 탭이 키를 삼키는 유일한 예외). copy
+        // mode · 검색 프롬프트 · 한글 조합 어느 것도 그 Esc를 못 본다: copy mode는 그대로
+        // 남고, 조합 중이던 글자도 그대로이고, `esc_latin`도 안 돈다 — 사람은 받아쓰기를
+        // 그만둔 것이지 입력을 고른 것이 아니다.
+        //
+        // 수정키 없는 Esc만이다. EL의 `esc_latin`과 같은 선이고, Shift+Esc 같은 조합은
+        // 평소의 길로 간다.
+        if (ctx.dictating and code == c.KEY_ESC and
+            !self.shifted() and !self.ctrled() and !self.alted() and !self.metaed())
+        {
+            return .{ .dictate = .cancel };
+        }
 
         // 1.35번 단계 — 붙여넣기(FP design 결정 1·2). 모드 분기 셋보다
         // 앞이고, 그 자리가 이 단계의 전부다.
@@ -1641,6 +1719,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .scrolls = self.scrolls[0..0],
         .copies = self.copies[0..0],
         .panes = self.panes[0..0],
+        .dictates = self.dictates[0..0],
         .redraw = false,
     };
 
@@ -1649,11 +1728,20 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
     var scrolled: usize = 0;
     var copied: usize = 0;
     var paned: usize = 0;
+    var dictated: usize = 0;
     var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const ev: *align(1) const c.struct_input_event =
             @ptrCast(&raw[i * ev_size]);
+        // 커널의 이벤트 버퍼가 넘쳤다(VD design 결정 10의 함정 2). 그 사이의 이벤트는
+        // 사라졌고, 사라진 것이 트리거의 뗌이면 판정이 "첫 누름"에 멈춰 있다 —
+        // 버린다(Voxio `recoverFromDroppedEvents`의 toggle 갈래). 수정키 비트가 눌린
+        // 채로 남을 수 있는 오래된 구멍(design 실측 12)은 이 milestone의 것이 아니다.
+        if (ev.@"type" == c.EV_SYN and ev.code == c.SYN_DROPPED) {
+            self.dictate_tap.reset();
+            continue;
+        }
         if (ev.@"type" != c.EV_KEY) continue;
         // 이 값은 이미 손에 있었다(HI-M0 실측 3). `readKeys`가
         // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
@@ -1730,6 +1818,11 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
                 self.panes[paned] = cmd;
                 paned += 1;
             },
+            // 패널과 같은 모양이다(VD-M1).
+            .dictate => |cmd| if (dictated < self.dictates.len) {
+                self.dictates[dictated] = cmd;
+                dictated += 1;
+            },
         }
     }
     return .{
@@ -1737,6 +1830,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .scrolls = self.scrolls[0..scrolled],
         .copies = self.copies[0..copied],
         .panes = self.panes[0..paned],
+        .dictates = self.dictates[0..dictated],
         .redraw = redraw,
     };
 }

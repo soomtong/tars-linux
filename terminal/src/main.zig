@@ -1,5 +1,6 @@
 const std = @import("std");
 const clipboard = @import("clipboard.zig");
+const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
 const font = @import("font.zig");
 const hangul = @import("hangul.zig");
@@ -74,6 +75,14 @@ const STATUS_OFF: u32 = 0x00303840;
 /// 셀의 기본 전경(`0xFFFFFF`)과는 다른 값이다 — 상태 줄은 격자 밖이라
 /// 섞일 일이 없지만, 같은 값을 피하는 쪽이 조사할 때 덜 헷갈린다.
 const STATUS_COPY: u32 = 0x00E0E8F0;
+
+/// 받아쓰기 칸의 색(VD-M1). `REC` · `WAIT`와 알림 다섯이 같은 색이다.
+///
+/// 전용 색인 이유는 `STATUS_COPY`와 같다(CI design 결정 3) — `dumpStatus`가 띠 전체에서
+/// 이 색의 픽셀을 세어 `dict ink=`로 찍는데, 다른 칸이 같은 색을 쓰면 그 수가 이 칸만
+/// 세지 않는다. 붉은 쪽인 것은 마이크가 열려 있다는 뜻이라서다. 여백 · 상태 줄 색
+/// 넷 · 구분선 · 매치 색 둘 · 커서 · 화살표 어느 것과도 다르다.
+const STATUS_DICT: u32 = 0x00F07070;
 
 /// 패널 사이 구분선의 색(WP design 결정 2).
 ///
@@ -290,10 +299,16 @@ fn drawStatus(
     // 워크스페이스 칸도 같은 이유로 `st.workspace`를 보고 물러난다. 안 보면
     // 워크스페이스가 둘일 때 `CAPS`가 `STATUS_FG`로, `  W2`의 앞 두 글자가
     // `CAPS`의 색으로 그려지고 hangul 체인의 `caps ink`가 틀린다.
+    //
+    // VD-M1부터 맨 끝에 받아쓰기 칸이 하나 더 있다 — `… CAPS[  W2][  COPY][  REC]`.
+    // 같은 이유로 `st.dict`를 보고 그 길이부터 물러난다. 이 칸만 글자마다 길이가
+    // 다르므로(`REC` · `PASSWORD`) 길이를 `status.dictTailLen`에서 받는다.
+    const dict_len: usize = if (st.dict) |s| status.dictTailLen(s) else 0;
     const copy_len = if (st.copy) status.COPY_TAIL.len else 0;
     const ws_len: usize = if (st.workspace != null) status.WS_TAIL_LEN else 0;
-    if (st.text.len < status.CAPS.len + ws_len + copy_len) return;
-    const copy_at = st.text.len - copy_len;
+    if (st.text.len < status.CAPS.len + ws_len + copy_len + dict_len) return;
+    const dict_at = st.text.len - dict_len;
+    const copy_at = dict_at - copy_len;
     const ws_at = copy_at - ws_len;
     const caps_at = ws_at - status.CAPS.len;
 
@@ -317,7 +332,9 @@ fn drawStatus(
     // 잠금의 색(`STATUS_ON`)을 안 쓴다. 하나뿐이면 빈 슬라이스다.
     col = try drawRun(fb, cache, st.text[ws_at..copy_at], y, STATUS_FG, col, fb.width);
     // copy mode가 아니면 빈 슬라이스라 아무것도 안 그리고 col만 돌려준다.
-    _ = try drawRun(fb, cache, st.text[copy_at..], y, STATUS_COPY, col, fb.width);
+    col = try drawRun(fb, cache, st.text[copy_at..dict_at], y, STATUS_COPY, col, fb.width);
+    // 받아쓰기 칸(VD-M1). 받아쓰기가 없으면 빈 슬라이스다.
+    _ = try drawRun(fb, cache, st.text[dict_at..], y, STATUS_DICT, col, fb.width);
 }
 
 /// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, 다음 칸의 col을
@@ -570,6 +587,8 @@ const Status = struct {
     /// `copy`와 같은 이유로 따로 나른다 — `text`에 이미 들어 있지만
     /// `drawStatus`가 꼬리에서 `CAPS`를 셀 때 이 칸의 길이를 알아야 한다.
     workspace: ?u8,
+    /// 받아쓰기 칸(VD-M1). 없으면 null이다. `workspace`와 같은 이유로 따로 나른다.
+    dict: ?dictation.Show,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
@@ -1113,6 +1132,7 @@ fn dumpStatus(
         std.debug.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
         std.debug.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
         std.debug.print("terminal: status> copy ink=0 (no room)\n", .{});
+        std.debug.print("terminal: status> dict ink=0 (no room)\n", .{});
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
@@ -1122,6 +1142,7 @@ fn dumpStatus(
     var on: usize = 0;
     var off: usize = 0;
     var copy: usize = 0;
+    var dict: usize = 0;
     var row: u32 = 0;
     while (row < ROW_HEIGHT) : (row += 1) {
         var col: u32 = 0;
@@ -1131,6 +1152,7 @@ fn dumpStatus(
             if (px == STATUS_ON) on += 1;
             if (px == STATUS_OFF) off += 1;
             if (px == STATUS_COPY) copy += 1;
+            if (px == STATUS_DICT) dict += 1;
         }
     }
     std.debug.print("terminal: status> ink fg={d}\n", .{fg});
@@ -1143,6 +1165,9 @@ fn dumpStatus(
     // 넓힐 일은 없다 — `CAPS`와 달리 `COPY`는 글자 자체가 생기고 사라져서
     // `text`가 바뀐다.
     std.debug.print("terminal: status> copy ink={d}\n", .{copy});
+    // 받아쓰기 칸의 픽셀(VD-M1). `copy ink`와 같은 짝이다 — 녹음 중에 `>0`, 끝난 뒤
+    // `=0`을 dictation 체인이 본다. `text=`만 보면 칸을 안 그려도 초록이다.
+    std.debug.print("terminal: status> dict ink={d}\n", .{dict});
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -1477,6 +1502,293 @@ fn dumpPane(
         current + 1,  sig.total,    sig.panes,     sig.focus,
         sig.rect.col, sig.rect.row, sig.rect.cols, sig.rect.rows,
         ink,
+    });
+}
+
+// ── 받아쓰기(VD-M1) ───────────────────────────────────────────────────
+//
+// 게스트의 `tars-dictate`(VD-M0) 하나를 띄우고, 표준 출력과 표준 에러를 poll로 읽고,
+// 끝나면 거둬서 트리거를 누른 패널에 넣는다(VD design 결정 1 · 11). 판단(더블 탭의
+// 뜻 · 단계 · 종료 코드 · 비밀번호 · 거르기)은 전부 `dictation.zig`에 있고 여기는
+// 시스템 콜과 로그만 다룬다 — 아래 포인터 절과 같은 경계다.
+//
+// 자식은 언제나 하나다. 둘째 더블 탭은 "하나 더"가 아니라 "끝내라"다
+// (`dictation.onTap`). terminal이 녹음 시간을 안 센다 — 상한은 `tars-dictate`의
+// `max_seconds`가 지키고, 그렇게 끝나면 자식이 표준 에러로 알린다.
+//
+// 로그 줄(`terminal: dictate> …`)의 문구가 이 파일과 `dictation/check.sh` 양쪽에 있다.
+// 한쪽을 고치면 다른 쪽도 고쳐야 한다. 자식의 표준 에러는 받은 그대로 다시 찍는다 —
+// 그 줄(`tars-dictate: …`)의 정본은 M0 plan이고, 받아 적은 글자는 거기 없다.
+
+/// 띄울 프로그램(VD-M0, `make_initrd.sh`가 넣는다). PATH를 안 거친다.
+const DICTATE_PATH = "/usr/bin/tars-dictate";
+
+/// 표준 출력을 모으는 상한. `max_seconds`의 상한(600초)을 쉬지 않고 말해도 한글
+/// 3,000자 남짓 · 9KB 안팎이다. 넘으면 넣지 않는다 — 잘린 UTF-8을 셸에 쓰지 않는다.
+/// 글자는 `/config/dictation.jsonl`에 있다(M0가 표준 출력보다 먼저 쓴다).
+const DICTATE_TEXT_MAX = 64 * 1024;
+
+/// 표준 에러 한 줄의 상한. `tars-dictate`의 가장 긴 줄은 HTTP 본문 앞 200바이트를
+/// 싣는 실패 줄이다. 넘치면 그 자리에서 끊어 한 줄로 친다.
+const DICTATE_LINE_MAX = 512;
+
+/// 받아쓰기 하나의 상태. 자식이 없을 때도 `notice`는 남는다.
+const Dictation = struct {
+    pid: std.c.pid_t = 0,
+    /// null이면 자식이 없다. "녹음 중인가"의 유일한 진실이다(design 결정 10의 함정 3).
+    /// 앞으로는 자식의 표준 에러가 옮기고(`dictation.phaseAfter`), null로는 자식의
+    /// 끝(두 파이프의 EOF) 하나만 되돌린다. 키가 하는 것은 SIGINT · SIGTERM을 보낸
+    /// 사실을 적는 것뿐이다(`transcribing` · `cancelling`).
+    phase: ?dictation.Phase = null,
+    /// 표준 출력 · 표준 에러의 읽는 쪽. EOF에서 닫고 -1이 된다. poll은 음수 fd를
+    /// 건너뛴다.
+    out_fd: c_int = -1,
+    err_fd: c_int = -1,
+    /// 트리거를 누른 순간의 포커스 패널(Voxio D8 1번) — 그 패널 셸의 pid로 든다.
+    ///
+    /// 패널 포인터나 master fd로 들지 않는다. 워크스페이스가 닫히면 배열이 당겨져
+    /// 포인터가 다른 패널을 가리키고(WP-M2 plan 확정 4), 닫힌 패널의 fd 번호는 다음
+    /// `open`이 곧바로 다시 쓴다. pid는 커널이 `pid_max`를 한 바퀴 돌기 전에는 다시
+    /// 안 준다.
+    target: std.c.pid_t = 0,
+    text: [DICTATE_TEXT_MAX]u8 = undefined,
+    text_len: usize = 0,
+    overflow: bool = false,
+    line: [DICTATE_LINE_MAX]u8 = undefined,
+    line_len: usize = 0,
+    /// 끝난 실행이 남긴 알림. 다음 키에 사라진다 — copy mode의 "못 찾음"과 같은
+    /// 규칙이고(CS design 결정 9), 시간으로 지우지 않는다(시간 기반 숨김은 PD가 비목표로
+    /// 둔 자리다).
+    notice: ?dictation.Show = null,
+
+    /// 상태 줄의 받아쓰기 칸. 자식이 있으면 단계가, 없으면 알림이 보인다.
+    fn show(self: *const Dictation) ?dictation.Show {
+        if (self.phase) |p| return dictation.showOf(p);
+        return self.notice;
+    }
+
+    fn setNotice(self: *Dictation, s: dictation.Show) void {
+        self.notice = s;
+        std.debug.print("terminal: dictate> notice {s}\n", .{@tagName(s)});
+    }
+};
+
+/// 셸의 pid로 패널을 찾는다. 그사이 닫혔으면 null이다.
+fn paneByShell(workspaces: *[MAX_WORKSPACES]?Workspace, pid: std.c.pid_t) ?PaneRef {
+    for (workspaces, 0..) |*slot, wi| {
+        const w = if (slot.*) |*w| w else continue;
+        for (&w.panes, 0..) |*pane_slot, leaf| {
+            const p = if (pane_slot.*) |*p| p else continue;
+            if (p.session.child_pid == pid) return .{ .pane = p, .ws = wi, .leaf = @intCast(leaf) };
+        }
+    }
+    return null;
+}
+
+/// 그 패널의 셸 쪽이 비밀번호를 받고 있는가(design 위험 2, `dictation.isPasswordPrompt`).
+///
+/// master에 `tcgetattr`를 하면 커널이 짝인 slave의 termios를 준다(`tty_mode_ioctl`이
+/// master면 `tty->link`를 본다) — ghostty가 같은 자리에서 같은 호출을 한다. 읽기에
+/// 실패하면 비밀번호가 아닌 쪽으로 간다. 살아 있는 master에서 실패할 길이 없고,
+/// 실패를 막음으로 읽으면 사람이 이유를 모르는 채 받아쓰기가 안 된다.
+fn passwordPrompt(master_fd: c_int) bool {
+    var t: std.c.termios = undefined;
+    if (std.c.tcgetattr(master_fd, &t) != 0) return false;
+    return dictation.isPasswordPrompt(t.lflag.ICANON, t.lflag.ECHO);
+}
+
+/// 자식을 띄운다(design 결정 1). 실패하면 알림 `failed`이고 terminal은 산다.
+///
+/// 자식은 제 프로세스 그룹의 우두머리다(`setpgid(0, 0)`, design 결정 6). 시그널을 그룹에
+/// 보내야 앞에서 도는 `arecord`가 직접 받는다 — 셸의 Ctrl+C와 같은 모양이다. 부모도
+/// 같은 `setpgid`를 부른다. 자식이 그 줄에 닿기 전에 부모가 그룹에 보내면 `ESRCH`로
+/// 사라지는 틈을 양쪽에서 닫는 교과서의 모양이다.
+///
+/// 표준 입력은 `/dev/null`이다. 표준 출력과 표준 에러는 파이프 둘이다 — 출력은 넣을
+/// 글자이고(design 결정 6), 에러는 사람이 읽는 줄이자 단계의 재료다. 3번 위의 fd는
+/// 전부 닫는다. terminal의 fd(DRM · 키보드 · PTY master)가 자식과 그 손자(`arecord` ·
+/// `curl`)에게 새면, terminal이 끝나고 init이 되살린 새 terminal이 여는 DRM을 그 손자가
+/// 쥐고 있을 수 있다.
+///
+/// 환경은 terminal의 것 그대로다(`PATH` · `TERM` · `LANG`, 있으면 `GROQ_API_KEY`).
+/// 작업 디렉터리도 그대로다 — `tars-dictate`는 절대 경로만 쓴다.
+fn startDictation(d: *Dictation, pane: *const Pane, ws: usize, leaf: u4) void {
+    var out_pipe: [2]c_int = undefined;
+    var err_pipe: [2]c_int = undefined;
+    if (std.c.pipe2(&out_pipe, .{ .CLOEXEC = true }) != 0) return spawnFailed(d, "pipe2");
+    if (std.c.pipe2(&err_pipe, .{ .CLOEXEC = true }) != 0) {
+        _ = std.c.close(out_pipe[0]);
+        _ = std.c.close(out_pipe[1]);
+        return spawnFailed(d, "pipe2");
+    }
+    const pid = std.c.fork();
+    if (pid < 0) {
+        for ([_]c_int{ out_pipe[0], out_pipe[1], err_pipe[0], err_pipe[1] }) |fd| _ = std.c.close(fd);
+        return spawnFailed(d, "fork");
+    }
+    if (pid == 0) {
+        // 자식. `execve`까지 시스템 콜만 부른다 — fork한 프로세스가 안전하게 할 수 있는
+        // 것이 그것뿐이다.
+        _ = std.c.setpgid(0, 0);
+        _ = std.c.dup2(out_pipe[1], 1);
+        _ = std.c.dup2(err_pipe[1], 2);
+        const devnull = std.c.open("/dev/null", .{ .ACCMODE = .RDONLY });
+        if (devnull >= 0) _ = std.c.dup2(devnull, 0);
+        _ = std.os.linux.close_range(3, std.math.maxInt(std.os.linux.fd_t), .{ .UNSHARE = false, .CLOEXEC = false });
+        const argv = [_:null]?[*:0]const u8{"tars-dictate"};
+        _ = std.c.execve(DICTATE_PATH, &argv, std.c.environ);
+        std.c._exit(127);
+    }
+    _ = std.c.setpgid(pid, pid);
+    _ = std.c.close(out_pipe[1]);
+    _ = std.c.close(err_pipe[1]);
+    d.pid = pid;
+    d.phase = .starting;
+    d.out_fd = out_pipe[0];
+    d.err_fd = err_pipe[0];
+    d.target = pane.session.child_pid;
+    d.text_len = 0;
+    d.overflow = false;
+    d.line_len = 0;
+    d.notice = null;
+    std.debug.print("terminal: dictate> start pid={d} ws={d} leaf={d}\n", .{ pid, ws + 1, leaf });
+}
+
+fn spawnFailed(d: *Dictation, what: []const u8) void {
+    std.debug.print("terminal: dictate> spawn failed at {s} error={s}\n", .{ what, @tagName(std.c.errno(-1)) });
+    d.setNotice(.failed);
+}
+
+/// 자식의 프로세스 그룹에 시그널을 보낸다(design 결정 6).
+fn signalDictation(d: *const Dictation, sig: std.c.SIG) void {
+    _ = std.c.kill(-d.pid, sig);
+}
+
+/// 표준 출력에서 한 번 읽는다. poll이 읽을 것이 있다고 알린 뒤에만 부른다. EOF면 닫는다.
+fn drainDictOut(d: *Dictation) void {
+    var scratch: [4096]u8 = undefined;
+    const room = d.text[d.text_len..];
+    const dst = if (room.len > 0) room else scratch[0..];
+    const n = std.c.read(d.out_fd, dst.ptr, dst.len);
+    if (n <= 0) {
+        _ = std.c.close(d.out_fd);
+        d.out_fd = -1;
+        return;
+    }
+    if (room.len > 0) d.text_len += @intCast(n) else d.overflow = true;
+}
+
+/// 표준 에러에서 한 번 읽어 줄로 나눈다. EOF면 남은 조각을 한 줄로 치고 닫는다.
+fn drainDictErr(d: *Dictation) void {
+    var buf: [1024]u8 = undefined;
+    const n = std.c.read(d.err_fd, &buf, buf.len);
+    if (n <= 0) {
+        if (d.line_len > 0) dictLine(d);
+        _ = std.c.close(d.err_fd);
+        d.err_fd = -1;
+        return;
+    }
+    for (buf[0..@intCast(n)]) |b| {
+        if (b == '\n') {
+            dictLine(d);
+            continue;
+        }
+        if (d.line_len == d.line.len) dictLine(d);
+        d.line[d.line_len] = b;
+        d.line_len += 1;
+    }
+}
+
+/// 자식의 한 줄. 받은 그대로 시리얼에 다시 찍고, 단계를 옮긴다.
+fn dictLine(d: *Dictation) void {
+    const line = d.line[0..d.line_len];
+    d.line_len = 0;
+    std.debug.print("{s}\n", .{line});
+    const p = d.phase orelse return;
+    const next = dictation.phaseAfter(p, line);
+    if (next == p) return;
+    d.phase = next;
+    std.debug.print("terminal: dictate> phase {s}\n", .{@tagName(next)});
+}
+
+/// 두 파이프가 다 닫혔다 — 자식이 끝났다. 거두고 종료 코드대로 한다.
+///
+/// `waitpid`가 막을 수 있는데 짧다. 두 파이프의 EOF는 자식과 그 손자가 쥐던 쓰는 쪽이
+/// 전부 닫혔다는 뜻이라 자식은 이미 끝났거나 끝나는 중이다(`pty.close`와 같은 판단).
+fn finishDictation(
+    d: *Dictation,
+    workspaces: *[MAX_WORKSPACES]?Workspace,
+    current: usize,
+    key_state: *input.State,
+) void {
+    var status_word: c_int = 0;
+    _ = std.c.waitpid(d.pid, &status_word, 0);
+    const w: u32 = @bitCast(status_word);
+    const code: ?u8 = if (std.c.W.IFEXITED(w)) std.c.W.EXITSTATUS(w) else null;
+    if (code) |c_| {
+        std.debug.print("terminal: dictate> exit code={d}\n", .{c_});
+    } else {
+        std.debug.print("terminal: dictate> exit signal={d}\n", .{std.c.W.TERMSIG(w)});
+    }
+    const phase = d.phase.?;
+    d.phase = null;
+    d.pid = 0;
+    switch (dictation.outcome(phase, code)) {
+        .quiet => {},
+        .notice => |s| d.setNotice(s),
+        .insert => {
+            if (d.overflow) {
+                std.debug.print("terminal: dictate> text over {d} bytes, not inserted\n", .{DICTATE_TEXT_MAX});
+                return d.setNotice(.failed);
+            }
+            insertDictation(d, workspaces, current, key_state);
+        },
+    }
+}
+
+/// 받아 적은 글자를 트리거를 누른 패널에 넣는다(design 결정 11).
+///
+/// 순서가 판단이다. 패널이 남아 있는가 → 그 패널이 비밀번호를 받고 있는가 → 거르고
+/// 남은 것이 있는가 → 넣는다. 앞의 둘에 걸리면 넣지 않고 알린다. 글자는 버려지지
+/// 않는다 — `tars-dictate`가 이미 `/config/dictation.jsonl`에 남겼다(Voxio 불변식 1).
+///
+/// 넣는 길은 `Cmd+V`와 같다(`pasteParts`, PE design 결정 2). 자식이 모드 2004를 켰으면
+/// bracketed paste라 Enter 전에는 안 돈다. 클립보드는 안 만진다(design 결정 11).
+///
+/// 그 패널이 포커스이고 한글을 조합 중이면 그 글자를 먼저 확정해 보낸다. 조합은 사람이
+/// 넣기 전에 친 것이므로 셸에도 먼저 가야 한다 — `Cmd+V`가 1.35번 단계에서 하는 일과
+/// 같다. `pointerMode(.normal)`은 normal에서 normal로 가며 확정만 한다.
+fn insertDictation(
+    d: *Dictation,
+    workspaces: *[MAX_WORKSPACES]?Workspace,
+    current: usize,
+    key_state: *input.State,
+) void {
+    const ref = paneByShell(workspaces, d.target) orelse {
+        std.debug.print("terminal: dictate> no pane shell={d}\n", .{d.target});
+        return d.setNotice(.no_pane);
+    };
+    const fd = ref.pane.session.master_fd;
+    if (passwordPrompt(fd)) {
+        std.debug.print("terminal: dictate> refused password at=insert ws={d} leaf={d}\n", .{ ref.ws + 1, ref.leaf });
+        return d.setNotice(.password);
+    }
+    const text = dictation.sanitize(d.text[0..d.text_len]);
+    if (text.len == 0) {
+        std.debug.print("terminal: dictate> nothing left to insert\n", .{});
+        return;
+    }
+    const w = &workspaces[current].?;
+    if (ref.ws == current and ref.leaf == w.focus and key_state.mode == .normal and key_state.preedit() != null) {
+        pty.write(fd, key_state.pointerMode(.normal));
+        ref.pane.screen.setPreedit(null);
+    }
+    const parts = ref.pane.screen.pasteParts(text);
+    for (parts) |p| {
+        if (p.len > 0) pty.write(fd, p);
+    }
+    std.debug.print("terminal: dictate> insert len={d} bracketed={d} ws={d} leaf={d}\n", .{
+        text.len, @intFromBool(parts[0].len > 0), ref.ws + 1, ref.leaf,
     });
 }
 
@@ -2421,6 +2733,12 @@ pub fn main(init: std.process.Init) !void {
     var key_buf: [64]u8 = undefined;
     var pty_buf: [4096]u8 = undefined;
 
+    // 받아쓰기(VD-M1). 자식이 없으면 `phase`가 null이다.
+    var dict: Dictation = .{};
+    // terminal이 끝나면(마지막 패널이 닫혔다) 자식도 끝낸다. 안 그러면 녹음이 상한까지
+    // 돌고 그동안 마이크가 열려 있다. 거두지는 않는다 — 고아는 init이 거둔다.
+    defer if (dict.phase != null) signalDictation(&dict, .TERM);
+
     // 포인터 장치(PD-M0). 키보드와 달리 terminal이 스스로 찾고, 부팅 뒤에
     // 꽂힌 것도 잡는다(PD design 결정 1). init의 `argv[4]`는 그대로다.
     //
@@ -2483,7 +2801,9 @@ pub fn main(init: std.process.Init) !void {
     // 자리는 `[0]` 키보드 · `[1]` uevent 소켓 · `[2..pty_base]` 포인터 장치 ·
     // `[pty_base..nfds]` PTY다. PD 전에는 PTY가 `[1..]`이었다 — 그 오프셋이
     // 이제 바퀴마다 다르므로 `pty_base`로 든다.
-    var fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES]c.struct_pollfd = undefined;
+    //
+    // 맨 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
+    var fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined;
     // `fds[2 + k]`가 어느 장치 칸의 것인지.
     var fd_devs: [pointer.MAX_DEVICES]usize = undefined;
     // `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
@@ -2516,6 +2836,10 @@ pub fn main(init: std.process.Init) !void {
                 nfds += 1;
             }
         }
+        const pty_end = nfds;
+        fds[nfds] = .{ .fd = dict.out_fd, .events = c.POLLIN, .revents = 0 };
+        fds[nfds + 1] = .{ .fd = dict.err_fd, .events = c.POLLIN, .revents = 0 };
+        nfds += 2;
 
         // -1 = 무한 대기. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
         const ready = c.poll(&fds, @intCast(nfds), -1);
@@ -2542,8 +2866,19 @@ pub fn main(init: std.process.Init) !void {
                 // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
                 // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
                 .swap_alt_meta = swap_alt_meta,
+                // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
+                .dictating = dictation.escCancels(dict.phase),
             };
             const keys = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
+            // 받아쓰기의 알림은 다음 키에 사라진다(VD-M1). "키"는 무언가를 한 키다 —
+            // 수정키를 누르고 떼기만 한 배치는 안 센다. 그렇지 않으면 더블 탭의 마지막
+            // 뗌이 방금 뜬 `PASSWORD`를 바로 지운다.
+            if (dict.notice != null and (keys.bytes.len > 0 or keys.scrolls.len > 0 or
+                keys.copies.len > 0 or keys.panes.len > 0 or keys.dictates.len > 0 or keys.redraw))
+            {
+                dict.notice = null;
+                needs_redraw = true;
+            }
             if (keys.bytes.len > 0) {
                 // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
                 // 마커라 그대로 둔다. 뒤에 decckm을 덧붙이는 이유는
@@ -2774,6 +3109,44 @@ pub fn main(init: std.process.Init) !void {
                 }
                 needs_redraw = true;
             }
+            // 받아쓰기 명령(VD-M1). 패널 명령 뒤다 — 같은 배치에서 포커스가 옮겨졌으면
+            // 옮긴 뒤의 패널이 대상이다. 그래서 `focus` 변수가 아니라 `ws.focus`로 다시
+            // 구한다(패널 명령이 `ws`는 고치고 `focus`는 안 고친다).
+            //
+            // 시작하기 전에 그 패널이 비밀번호를 받고 있는지 본다(design 위험 2). 그렇다면
+            // 마이크를 안 연다 — Voxio가 비밀번호 칸에서 녹음을 안 시작한 것과 같다(V10).
+            // 넣을 때 한 번 더 본다(`insertDictation`). 말하는 사이에 `sudo`가 뜰 수 있다.
+            for (keys.dictates) |cmd| {
+                switch (cmd) {
+                    .toggle => switch (dictation.onTap(dict.phase)) {
+                        .start => {
+                            const tp = &ws.panes[ws.focus].?;
+                            if (passwordPrompt(tp.session.master_fd)) {
+                                std.debug.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ current + 1, ws.focus });
+                                dict.setNotice(.password);
+                            } else {
+                                startDictation(&dict, tp, current, ws.focus);
+                            }
+                        },
+                        .stop => {
+                            signalDictation(&dict, .INT);
+                            dict.phase = .transcribing;
+                            std.debug.print("terminal: dictate> stop pid={d}\n", .{dict.pid});
+                        },
+                        .ignore => std.debug.print("terminal: dictate> ignored phase={s}\n", .{
+                            if (dict.phase) |p| @tagName(p) else "none",
+                        }),
+                    },
+                    // 녹음 중의 Esc(design 결정 11). `ctx.dictating`이 참일 때만 오지만,
+                    // 같은 배치의 앞 키가 단계를 바꿨을 수 있어 한 번 더 본다.
+                    .cancel => if (dictation.escCancels(dict.phase)) {
+                        signalDictation(&dict, .TERM);
+                        dict.phase = .cancelling;
+                        std.debug.print("terminal: dictate> cancel pid={d}\n", .{dict.pid});
+                    },
+                }
+                needs_redraw = true;
+            }
         }
 
         // 포인터 장치(PD-M0). 키보드 뒤 · PTY 앞이다(design 결정 3).
@@ -2852,7 +3225,7 @@ pub fn main(init: std.process.Init) !void {
         //
         // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
         // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
-        for (fds[pty_base..nfds], fd_panes[0 .. nfds - pty_base]) |pfd, ref| {
+        for (fds[pty_base..pty_end], fd_panes[0 .. pty_end - pty_base]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
             const pane = ref.pane;
             const out = pty.readSome(pane.session.master_fd, &pty_buf);
@@ -2945,6 +3318,21 @@ pub fn main(init: std.process.Init) !void {
             // 풀렸지"를 영영 모른다.
             if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
             needs_redraw = true;
+        }
+
+        // 받아쓰기의 파이프 둘(VD-M1). PTY 뒤 · 렌더 앞이다 — 위 PTY 루프가 대상 패널을
+        // 닫았으면 그것을 본 뒤에 넣을지 정한다. 두 파이프가 다 닫히면 자식이 끝난
+        // 것이고, 거두고 넣는다.
+        //
+        // 다시 그리는 것은 상태 줄의 칸이 바뀌었을 때뿐이다. 표준 출력을 읽을 때마다
+        // 그리면 `screen>` 덤프가 그만큼 는다. 넣은 글자는 셸이 되울리고, 그 출력이 다음
+        // 바퀴의 PTY 루프에서 다시 그리게 한다.
+        if (dict.phase != null) {
+            const shown = dict.show();
+            if (dict.out_fd >= 0 and fds[pty_end].revents != 0) drainDictOut(&dict);
+            if (dict.err_fd >= 0 and fds[pty_end + 1].revents != 0) drainDictErr(&dict);
+            if (dict.out_fd < 0 and dict.err_fd < 0) finishDictation(&dict, &workspaces, current, &key_state);
+            if (!std.meta.eql(shown, dict.show())) needs_redraw = true;
         }
 
         // 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
@@ -3043,13 +3431,14 @@ pub fn main(init: std.process.Init) !void {
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
         const ws_number: ?u8 = if (workspaceCount(&workspaces) > 1) @intCast(current + 1) else null;
         const status_line: Status = .{
-            .text = status.statusText(&key_state, copy_active, ws_number, &status_buf),
+            .text = status.statusText(&key_state, copy_active, ws_number, dict.show(), &status_buf),
             .rows = rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
             .caps = key_state.caps_lock,
             .copy = copy_active,
             .workspace = ws_number,
+            .dict = dict.show(),
         };
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와

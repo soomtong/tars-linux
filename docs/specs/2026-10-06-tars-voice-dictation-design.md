@@ -1,7 +1,7 @@
 # TARS Voice Dictation — Design
 
 Date: 2026-10-06
-Status: 진행 중. M0이 끝났다(2026-10-06) — 게스트 파이프라인 `tars-dictate`(녹음 · Groq 전사 · 기록) · 인증 기관 목록 · 스물한번째 체인 `dictation/check.sh`. 다음은 M1(terminal의 트리거 · 상태 · 삽입, `docs/plans/2026-10-06-tars-voice-dictation-vd-m1.md`). plan은 `-vd-m0.md`이고 그 끝의 "실측한 것" 절이 값이다.
+Status: 진행 중. M0 · M1이 끝났다(2026-10-06) — 게스트 파이프라인 `tars-dictate` · 인증 기관 목록 · 스물한번째 체인(M0), terminal의 오른쪽 Cmd 더블 탭 · `tars-dictate` 자식 · 상태 줄 · 붙여넣기 경로 삽입 · 비밀번호 거절(M1). 다음은 M2(정리 단계 · 실기 안내, `docs/plans/2026-10-06-tars-voice-dictation-vd-m2.md`). plan은 `-vd-m0.md` · `-vd-m1.md`이고 각 끝의 "실측한 것" 절이 값이다.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -177,6 +177,11 @@ lead의 틀은 기록을 M2에 두었다. M0으로 옮긴다(전제 3) — 불�
 | 64 | 인자가 틀렸다 | — |
 | 130 · 143 | 취소됐다 | 조용히 끝 |
 
+M1이 정한 실제 값 — 0 넣는다(`insert` 줄), 1 `NO MIC`, 2 · 130 · 143 조용, 3 `NO KEY`, 4 · 64 · 127(`execve` 실패) · 시그널 · 64KB 넘음
+`FAILED`. 취소 중(`cancelling`)이었으면 무엇으로 끝났든 조용하다. 그리고 M0의 표준 에러 두 줄(`tars-dictate: recording; ` ·
+`tars-dictate: recording stopped `)이 terminal과의 계약이 됐다 — M1이 파이프로 받아 단계를 옮기고 시리얼에 그대로 다시 찍는다. M0의
+`tars-dictate`를 고치는 사람은 그 두 줄의 글자를 안 바꾼다.
+
 표준 에러는 사람이 읽는 줄(`tars-dictate: …`)이고 받아 적은 글자는 안 찍는다 — 길이와 시간만 찍는다(Voxio `69aebc9`의 "로그에 말한
 내용을 평문으로 남기지 않는다"). 표준 출력은 글자만이고 끝에 개행을 안 붙인다(끝의 개행은 Enter다). 표준 출력이 tty면(사람이 셸에서
 쳤다) 개행을 하나 준다.
@@ -249,6 +254,16 @@ Voxio D6의 함정 셋이 evdev에서는 이렇다(M1 plan이 코드로 못 박�
 Voxio의 나머지 규칙도 옮긴다 — 다른 키가 끼면 판정을 버리고(`Tap.consumed`가 이미 그 일을 한다), 다른 수정 키가 눌려 있으면 발동하지
 않는다(`State`의 수정 키 비트로 본다).
 
+> M1이 정한 것(2026-10-06, `-vd-m1.md` 확정 1 ~ 3). 판정기는 순수 모듈 `dictation.zig`의 `DoubleTap`이고 "녹음 중"을 들지 않는다 — 두 번
+> 눌렸다는 사실만 말하고, 시작인지 끝인지는 자식의 단계가 정한다(`onTap`). 단계는 넷 — `starting`(띄움) · `recording`(자식의 표준 에러
+> `recording; …`) · `transcribing`(둘째 더블 탭의 SIGINT, 또는 자식의 `recording stopped …`) · `cancelling`(Esc의 SIGTERM). `starting` ·
+> `transcribing` · `cancelling`의 더블 탭은 무시한다(`ignored` 줄) — `starting`을 무시하는 근거는 M0의 틈이다: `tars-dictate`가 `arecord`
+> 전에 받은 SIGINT를 기억만 하고 상한까지 녹음한다(M2가 함께 본다). 함정 2는 `readKeys`가 `SYN_DROPPED`에서 판정을 비운다. 자리는
+> `handleKey` 0번 단계의 수정키 `switch`(`KEY_RIGHTMETA` 갈래)라 모든 모드 · 한글 조합 중에도 같다. `tars.conf` 키는 없다. 자식은
+> `pipe2` 둘(표준 출력 · 표준 에러) → `fork` → `setpgid`(양쪽) → `execve`이고, terminal이 이미 libc를 링크하므로 `std.c`로 부른다
+> (`project_zig_c_uapi_rule`의 "libc 없이"는 `init`의 길이다 — `close_range` 하나만 `std.os.linux`). poll에 두 칸, 두 파이프의 EOF에
+> `waitpid`. terminal은 녹음 시간을 안 센다 — 상한은 `max_seconds`가 지키고 그 줄로 안다.
+
 ### 결정 11 — 상태는 상태 줄의 꼬리, 삽입은 붙여 넣기 경로(M1)
 
 - 상태 줄 꼬리에 녹음 중과 처리 중을 가르는 칸 하나(`COPY` · 워크스페이스 칸과 같은 자리). 글자와 색은 M1 plan이 정한다. 오버레이
@@ -259,6 +274,14 @@ Voxio의 나머지 규칙도 옮긴다 — 다른 키가 끼면 판정을 버리
   걸었다.
 - Esc는 녹음 중에만 취소이고 그때는 PTY로 안 보낸다(Voxio D11a — 취소한 Esc가 뒤의 프로그램까지 가면 안 된다). EL의 `esc_latin`과의
   순서는 M1 plan이 정한다.
+
+> M1이 정한 것(2026-10-06, 확정 3 ~ 5). 상태 줄 꼬리의 맨 끝 칸 — `REC`(`starting` · `recording`) · `WAIT`(`transcribing`) · `NO MIC` ·
+> `NO KEY` · `FAILED` · `PASSWORD` · `NO PANE`, 색은 전용 `STATUS_DICT` = `0xF07070`(`status> dict ink=`로 센다), `MAX_LEN` 46 → 56. 알림은
+> 무언가를 한 다음 키에 사라진다(수정키만 누르고 뗀 배치는 안 센다 — 세면 더블 탭의 마지막 뗌이 방금 뜬 `PASSWORD`를 지운다). 시간으로
+> 지우지 않는다. 대상은 두 번을 누른 순간의 포커스 패널 — 그 패널 셸의 pid로 든다(닫히면 `NO PANE`). 넣는 순서 — 패널 → 비밀번호(위험 2)
+> → `dictation.sanitize`(terminal이 PTY 앞에서 한 번 더 거른다 — 돌이킬 수 없는 유일한 자리) → 그 패널이 포커스이고 한글 조합 중이면
+> 먼저 확정 → `pasteParts`. Esc는 `handleKey` 1.3번 단계 — `Cmd+V` · find · copy 표 · 한글 층보다 앞이라 copy mode · 조합 중인 글자 ·
+> `esc_latin`이 그대로다. 수정키가 있는 Esc는 평소의 길이다.
 
 ### 결정 12 — 구현은 서브에이전트가, 검증 · 게이트 · commit은 lead가 한다
 
@@ -332,6 +355,8 @@ plan은 `docs/plans/2026-10-06-tars-voice-dictation-vd-m0.md`.
 
 ### VD-M1 — terminal의 트리거 · 상태 · 삽입
 
+했다(2026-10-06, `-vd-m1.md`). 정할 것 여섯의 답은 결정 10 · 11의 M1 문단과 위험 2 · 실측 11에 있다. 아래는 쓸 때의 글이다.
+
 결정 10 · 11. terminal에 Zig가 들어가는 유일한 milestone이다. 정할 것.
 
 1. 판정의 자리. 탭 판정은 순수 상태 기계로 `input.zig`(또는 새 파일)에 두고 호스트 검사로 Voxio의 검사(더블 탭 창 · 늦은 둘째 탭 · 다른 키 ·
@@ -361,9 +386,13 @@ M0와 M2를 나눈 이유. M0만으로 사람이 셸에서 쓸 수 있다(정리
    QEMU의 HDA에서 첫 샘플부터 상수였다. 실기의 HDA · DMIC도 같을 것으로 보지만 재지 않았다. SOF DMIC가 첫 몇백 ms를 0으로 내는 기계가
    있으면 첫 단어를 잃는다 — 실기에서 `arecord` 앞부분이 0인지 본다(running-tars.md).
 2. 비밀번호 프롬프트. terminal이 PTY에 직접 넣으므로 `sudo` · `ssh`가 echo를 끈 프롬프트에도 글자가 들어간다(Enter는 안 붙는다). Voxio는
-   AX로 비밀번호 칸을 보고 마이크를 안 열었다(V10). TARS에서 그 판정은 tty의 `ECHO`가 꺼졌는지(`tcgetattr`)로 할 수 있다 — M1 plan이
-   정한다. lead의 결정(2026-10-06): M1이 그 판정으로 넣지 않고 상태 줄에 알린다. 그리고 "lead가 정할 것" 넷의 답 — 결정 3 · 5를
-   받는다, 21체인을 받는다, 위험 5의 연결 비용은 실기에서 잰다.
+   AX로 비밀번호 칸을 보고 마이크를 안 열었다(V10). TARS에서 그 판정은 tty의 termios다 — M1이 정했다: `ECHO`가 꺼졌는가가 아니라
+   `ICANON`이 켜지고 `ECHO`가 꺼졌는가다. 셸의 줄 편집기(readline · zle · fish)와 vim은 둘을 함께 끄므로 `ECHO`만 보면 모든 셸
+   프롬프트가 비밀번호다(사본의 fish 프롬프트가 `icanon=false echo=false`, `read -s`가 `icanon=true echo=false` — M1 plan 확정 9).
+   vendored ghostty가 같은 판정을 쓴다. master에 `tcgetattr`를 하면 slave의 termios를 준다. 보는 때는 시작(마이크를 안 연다)과 넣기
+   (말하는 사이에 `sudo`가 뜰 수 있다) 둘이고 상태 줄이 `PASSWORD`라 말한다. 못 보는 것 — 자기 편집기로 가리는 프롬프트(fish의
+   `read -s`)에는 글자가 들어간다(Enter는 안 붙는다). lead의 "lead가 정할 것" 넷의 답 — 결정 3 · 5를 받는다, 21체인을 받는다, 위험 5의
+   연결 비용은 실기에서 잰다.
 3. bracketed paste가 꺼진 프로그램(`cat`, `read`)에서 Whisper가 준 글자 안의 개행은 줄 입력이다. 끝의 개행은 `tars-dictate`가 지운다.
 4. Groq 무료 티어 — 분당 20 · 일 2,000 요청, 요청마다 최소 10초로 센다(Voxio 7절). 짧게 자주 쓰면 요청 수가 먼저 닿는다. 429는 exit 4와
    "too many requests"다. 게이트는 Groq를 절대 안 부른다(키도 바깥 길도 없다).
@@ -431,6 +460,11 @@ perl 5.40이 있다, 게이트는 `guestfwd=tcp:10.0.2.100:8080-cmd:…`로 바�
 11. 설정 파티션. `tars-install`이 만드는 p2가 1GiB다(`init/src/disk.zig`의 `SFDISK_SCRIPT`).
 12. 키보드의 `SYN_DROPPED`. terminal의 `readKeys`는 `EV_KEY`가 아니면 건너뛴다 — 포인터(`pointer.zig`)와 터치패드(`touchpad.zig`)만
     `SYN_DROPPED`를 다룬다(결정 10의 함정 2).
+
+13. (M1 planner) QEMU의 `sendkey meta_r`가 게스트의 `KEY_RIGHTMETA`(126)다. hold를 안 적으면 누른 시간이 7 ~ 23ms · 두 누름 사이가
+    19 ~ 22ms로 사람 손과 다르다. `sendkey meta_r 80` 둘이면 누른 시간 78 ~ 83ms · 두 누름 사이 159 ~ 163ms(판 열넷) — 체인은 이쪽을 쓴다.
+    QEMU가 뗌을 지연과 함께 입력 큐에 넣고 다음 `sendkey`가 그 뒤에 줄을 선다. master의 `tcgetattr`가 slave의 termios를 준다
+    (`tty_mode_ioctl`이 master면 `tty->link`). 부팅 B가 monitor 45493을 쓴다(M0의 45492는 TLS 상대) — 새 체인은 45494부터.
 
 ## 닫을 때(lead의 몫)
 

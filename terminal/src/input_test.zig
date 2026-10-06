@@ -89,6 +89,10 @@ fn expectFull(
             std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedPane;
         },
+        .dictate => |cmd| {
+            std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedDictate;
+        },
     }
 }
 
@@ -132,6 +136,10 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
             std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedPane;
         },
+        .dictate => |cmd| {
+            std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedDictate;
+        },
     }
 }
 
@@ -165,6 +173,10 @@ fn expectPane(state: *input.State, code: u16, want: input.Pane) !void {
         .redraw => {
             std.debug.print("FAIL: code={d} -> got redraw, want pane .{s}\n", .{ code, @tagName(want) });
             return error.UnexpectedRedraw;
+        },
+        .dictate => |cmd| {
+            std.debug.print("FAIL: code={d} -> got dictate .{s}, want pane .{s}\n", .{ code, @tagName(cmd), @tagName(want) });
+            return error.UnexpectedDictate;
         },
     }
 }
@@ -211,6 +223,10 @@ fn expectScroll(
         .pane => |cmd| {
             std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedPane;
+        },
+        .dictate => |cmd| {
+            std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedDictate;
         },
     }
 }
@@ -269,6 +285,10 @@ fn expectHangulAt(
             std.debug.print("FAIL: code={d} -> got pane .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedPane;
         },
+        .dictate => |cmd| {
+            std.debug.print("FAIL: code={d} -> got dictate .{s}, want hangul\n", .{ code, @tagName(cmd) });
+            return error.UnexpectedDictate;
+        },
     }
     try expectCommit(state, code, want_commit);
     try expectPreedit(state, code, want_preedit);
@@ -320,6 +340,53 @@ fn keyEvent(code: u16, value: i32) input.c.struct_input_event {
     ev.code = code;
     ev.value = value;
     return ev;
+}
+
+/// 시각이 있는 키 이벤트(VD-M1). 더블 탭은 시각으로 판정하므로 `keyEvent`의
+/// 0초로는 `readKeys`를 지나는 검사를 못 쓴다. `eventMicros`가 읽는 두 칸이다.
+fn keyEventAt(code: u16, value: i32, us: u64) input.c.struct_input_event {
+    var ev = keyEvent(code, value);
+    ev.time.tv_sec = @intCast(us / 1_000_000);
+    ev.time.tv_usec = @intCast(us % 1_000_000);
+    return ev;
+}
+
+/// 커널의 이벤트 버퍼가 넘쳤다는 표시(`EV_SYN` · `SYN_DROPPED`).
+fn synDropped() input.c.struct_input_event {
+    var ev = std.mem.zeroes(input.c.struct_input_event);
+    ev.@"type" = input.c.EV_SYN;
+    ev.code = input.c.SYN_DROPPED;
+    return ev;
+}
+
+/// 키 하나가 받아쓰기 명령을 만들기를(또는 아무것도 안 만들기를) 기대한다(VD-M1).
+///
+/// `want`가 null이면 "받아쓰기의 것이 아니다"이고, 그때는 그 키의 평소 결과(바이트 ·
+/// 다시 그리기)를 따지지 않는다 — 트리거 키는 수정키라 평소에 빈 바이트이고, Esc는
+/// 0x1b다. 그 둘을 보는 것은 `expect`의 일이다.
+fn expectDictate(
+    state: *input.State,
+    ctx: input.Context,
+    code: u16,
+    value: i32,
+    time_us: u64,
+    want: ?input.Dictate,
+) !void {
+    const got: ?input.Dictate = switch (state.handleKey(code, value, time_us, ctx)) {
+        .dictate => |cmd| cmd,
+        else => null,
+    };
+    if (got == want) return;
+    std.debug.print("FAIL: code={d} value={d} t={d}us -> dictate {any}, want {any}\n", .{
+        code, value, time_us, got, want,
+    });
+    return error.WrongDictate;
+}
+
+/// 트리거 키를 `down_ms`에 누르고 `up_ms`에 뗀다. 둘째 탭은 부르는 쪽이 따로 본다.
+fn tap(state: *input.State, ctx: input.Context, code: u16, down_ms: u64, up_ms: u64) !void {
+    try expectDictate(state, ctx, code, 1, down_ms * 1000, null);
+    try expectDictate(state, ctx, code, 0, up_ms * 1000, null);
 }
 
 /// 이벤트들을 파이프에 통째로 넣고 fd 짝을 돌려준다. 쓰는 쪽은 여기서
@@ -2014,6 +2081,189 @@ pub fn main() !void {
         }
     }
     std.debug.print("input_test: Esc가 한글을 끄면 readKeys가 다시 그리게 한다 OK\n", .{});
+
+    // ── VD-M1: 받아쓰기의 트리거와 Esc ──────────────────────────────────
+    //
+    // 판정기 자체(창 · 늦은 탭 · 거꾸로 가는 시각)는 `dictation_test`가 본다. 여기는
+    // 그 판정기가 키보드 경로에 붙은 자리 — 어느 키가 트리거이고, 무엇이 판정을
+    // 버리고, Esc가 언제 누구의 것인가(design 결정 10의 함정 셋 중 1 · 2).
+
+    // 검사 75. 오른쪽 Cmd의 누름 → 뗌 → 누름이 300ms 안이면 `toggle`이다. 수정키라
+    // 바이트는 하나도 안 나간다. 발동은 둘째 누름이고 그 뒤의 뗌은 아무것도 안 한다.
+    {
+        var vd_s: input.State = .{};
+        try tap(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 80);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 200_000, .toggle);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 260_000, null);
+        try expectAt(&vd_s, K.KEY_A, 1, 300_000, "a");
+    }
+    std.debug.print("input_test: 오른쪽 Cmd 더블 탭이 toggle이다 OK\n", .{});
+
+    // 검사 76. 자동 반복(value 2)은 판정에 안 들어간다(함정 1). 길게 누른 키가
+    // 스스로 더블 탭이 되지 않고, 길게 누른 뒤 뗀 것은 첫 탭이다 — 창은 첫 누름부터
+    // 재므로 그 뒤 300ms를 넘긴 누름은 새 판정의 시작이다.
+    {
+        var vd_s: input.State = .{};
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 0, null);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 2, 100_000, null);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 2, 150_000, null);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 180_000, null);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 250_000, .toggle);
+        var vd_r: input.State = .{};
+        try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 1, 0, null);
+        try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 2, 500_000, null);
+        try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 0, 900_000, null);
+        try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 1, 1_000_000, null);
+    }
+    std.debug.print("input_test: 자동 반복은 더블 탭을 안 만든다 OK\n", .{});
+
+    // 검사 77. 왼쪽 Cmd는 트리거가 아니다(Voxio V2). 오른쪽 Alt도 Apple 자판에서는
+    // 아니다.
+    {
+        var vd_s: input.State = .{};
+        try tap(&vd_s, .{}, K.KEY_LEFTMETA, 0, 80);
+        try expectDictate(&vd_s, .{}, K.KEY_LEFTMETA, 1, 200_000, null);
+        try expectDictate(&vd_s, .{}, K.KEY_LEFTMETA, 0, 260_000, null);
+        try tap(&vd_s, .{}, K.KEY_RIGHTALT, 1000, 1080);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTALT, 1, 1_200_000, null);
+    }
+    std.debug.print("input_test: 왼쪽 Cmd와 Apple 자판의 오른쪽 Alt는 트리거가 아니다 OK\n", .{});
+
+    // 검사 78. `keyboard=pc`면 트리거가 오른쪽 Alt다(design 결정 10 — 맞바꿈 뒤의
+    // 코드). PC 자판의 스페이스 오른쪽 첫 키가 그것이다. 맞바꿈이 오른쪽 Win(126)을
+    // 오른쪽 Alt로 바꾸므로 그 키는 트리거가 아니다.
+    {
+        const vd_pc: input.Context = .{ .swap_alt_meta = true };
+        var vd_s: input.State = .{};
+        try tap(&vd_s, vd_pc, K.KEY_RIGHTALT, 0, 80);
+        try expectDictate(&vd_s, vd_pc, K.KEY_RIGHTALT, 1, 200_000, .toggle);
+        try expectDictate(&vd_s, vd_pc, K.KEY_RIGHTALT, 0, 260_000, null);
+        try tap(&vd_s, vd_pc, K.KEY_RIGHTMETA, 1000, 1080);
+        try expectDictate(&vd_s, vd_pc, K.KEY_RIGHTMETA, 1, 1_200_000, null);
+    }
+    std.debug.print("input_test: keyboard=pc의 트리거는 오른쪽 Alt다 OK\n", .{});
+
+    // 검사 79. 다른 수정키가 눌려 있으면 발동하지 않는다(Voxio D6). Shift · Ctrl ·
+    // 왼쪽 Cmd 셋을 하나씩 잡은 채 둘째 누름을 넣는다. 왼쪽 Cmd는 "같은 키의 반대쪽"
+    // 이라 공통 비트로는 못 가린다(Voxio `siblingModifierCountsAsCombo`) — 여기서는
+    // `meta_left`를 따로 본다.
+    for ([_]u16{ K.KEY_LEFTSHIFT, K.KEY_RIGHTCTRL, K.KEY_LEFTMETA }) |vd_held| {
+        var vd_s: input.State = .{};
+        try tap(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 80);
+        try expect(&vd_s, vd_held, 1, "");
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 200_000, null);
+    }
+    std.debug.print("input_test: 다른 수정키를 잡은 둘째 누름은 발동하지 않는다 OK\n", .{});
+
+    // 검사 80. 다른 키의 누름이 끼면 판정을 버린다. 글자 키도, 수정키의 누름도 같다
+    // (Voxio `otherKeyDownDiscardsPendingSequence` · `foreignModifierPressDiscardsPendingSequence`).
+    // 수정키의 뗌은 안 버린다 — 첫 탭 전부터 잡고 있던 Shift를 놓는 것은 조합이
+    // 아니다(Voxio `foreignModifierReleaseKeepsSequence`).
+    {
+        var vd_s: input.State = .{};
+        try tap(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 80);
+        try expectAt(&vd_s, K.KEY_A, 1, 120_000, "a");
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 200_000, null);
+        var vd_m: input.State = .{};
+        try tap(&vd_m, .{}, K.KEY_RIGHTMETA, 0, 80);
+        try expectAt(&vd_m, K.KEY_LEFTSHIFT, 1, 100_000, "");
+        try expectAt(&vd_m, K.KEY_LEFTSHIFT, 0, 120_000, "");
+        try expectDictate(&vd_m, .{}, K.KEY_RIGHTMETA, 1, 200_000, null);
+        var vd_r: input.State = .{ .shift_left = true };
+        try expectAt(&vd_r, K.KEY_LEFTSHIFT, 0, 0, "");
+        try tap(&vd_r, .{}, K.KEY_RIGHTMETA, 40, 100);
+        try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 1, 200_000, .toggle);
+    }
+    std.debug.print("input_test: 다른 키의 누름은 판정을 버리고 수정키의 뗌은 안 버린다 OK\n", .{});
+
+    // 검사 81. 대문자 잠금은 수정키가 아니다(Voxio `capsLockAndNumericPadAreNotCombos`).
+    // 잠금을 켠 사람에게 트리거가 영영 안 듣는 일이 없어야 한다.
+    {
+        var vd_s: input.State = .{ .caps_lock = true };
+        try tap(&vd_s, .{}, K.KEY_RIGHTMETA, 0, 80);
+        try expectDictate(&vd_s, .{}, K.KEY_RIGHTMETA, 1, 200_000, .toggle);
+    }
+    std.debug.print("input_test: 대문자 잠금을 켜도 트리거가 듣는다 OK\n", .{});
+
+    // 검사 82. Esc는 녹음 중(`Context.dictating`)에만 받아쓰기의 것이다(design 결정 11).
+    // 그때는 PTY로 안 가고, copy mode · 한글 조합 · `esc_latin` 어느 것도 그 Esc를 못
+    // 본다 — 모드가 그대로이고 조합 중인 글자도 그대로다. 녹음 중이 아니면 Esc는
+    // VD 전과 같다. 수정키가 있는 Esc는 녹음 중에도 평소의 길이다.
+    {
+        const vd_rec: input.Context = .{ .dictating = true };
+        var vd_s: input.State = .{};
+        try expectDictate(&vd_s, vd_rec, K.KEY_ESC, 1, 0, .cancel);
+        try expectDictate(&vd_s, vd_rec, K.KEY_ESC, 0, 50_000, null);
+        try expectCtx(&vd_s, .{}, K.KEY_ESC, 1, "\x1b");
+        try expect(&vd_s, K.KEY_LEFTSHIFT, 1, "");
+        try expectCtx(&vd_s, vd_rec, K.KEY_ESC, 1, "\x1b");
+        try expect(&vd_s, K.KEY_LEFTSHIFT, 0, "");
+
+        var vd_cm: input.State = .{ .mode = .copy };
+        try expectDictate(&vd_cm, vd_rec, K.KEY_ESC, 1, 0, .cancel);
+        if (vd_cm.mode != .copy) {
+            std.debug.print("FAIL: the dictation Esc left copy mode (mode=.{s})\n", .{@tagName(vd_cm.mode)});
+            return error.DictateEscLeftCopy;
+        }
+        var vd_hg: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
+        try expectHangul(&vd_hg, K.KEY_R, "", 'ㄱ');
+        try expectDictate(&vd_hg, vd_rec, K.KEY_ESC, 1, 0, .cancel);
+        try expectCommit(&vd_hg, K.KEY_ESC, "");
+        try expectPreedit(&vd_hg, K.KEY_ESC, 'ㄱ');
+        if (!vd_hg.hangul_on) {
+            std.debug.print("FAIL: the dictation Esc turned hangul off\n", .{});
+            return error.DictateEscLatin;
+        }
+    }
+    std.debug.print("input_test: 녹음 중의 Esc는 취소이고 아무것도 안 건드린다 OK\n", .{});
+
+    // 검사 83. `readKeys`가 받아쓰기 명령을 모으고, `SYN_DROPPED`가 판정을 버린다
+    // (함정 2). 사라진 이벤트 안에 다른 키의 누름이 있었을 수 있다 — 버리지 않으면
+    // 사람이 그 사이에 친 글자가 있는데도 더블 탭이 된다. 대조군은 같은 이벤트에서
+    // `SYN_DROPPED`만 뺀 것이다.
+    {
+        var vd_s: input.State = .{};
+        const vd_evs = [_]input.c.struct_input_event{
+            keyEventAt(K.KEY_RIGHTMETA, 1, 0),       keyEventAt(K.KEY_RIGHTMETA, 0, 80_000),
+            keyEventAt(K.KEY_RIGHTMETA, 1, 200_000), keyEventAt(K.KEY_RIGHTMETA, 0, 260_000),
+        };
+        const vd_fds = try feedEvents(&vd_evs);
+        defer _ = close(vd_fds[0]);
+        var vd_out: [64]u8 = undefined;
+        const vd_keys = input.readKeys(&vd_s, vd_fds[0], &vd_out, .{});
+        if (vd_keys.dictates.len != 1 or vd_keys.dictates[0] != .toggle or vd_keys.bytes.len != 0) {
+            std.debug.print("FAIL: a double tap through readKeys gave {d} dictate(vd_s), {d} byte(vd_s); want 1 toggle, 0\n", .{
+                vd_keys.dictates.len, vd_keys.bytes.len,
+            });
+            return error.ReadKeysDictate;
+        }
+        var vd_d: input.State = .{};
+        const vd_dropped = [_]input.c.struct_input_event{
+            keyEventAt(K.KEY_RIGHTMETA, 1, 0), keyEventAt(K.KEY_RIGHTMETA, 0, 80_000),
+            synDropped(),                      keyEventAt(K.KEY_RIGHTMETA, 1, 200_000),
+        };
+        const vd_dfds = try feedEvents(&vd_dropped);
+        defer _ = close(vd_dfds[0]);
+        const vd_dkeys = input.readKeys(&vd_d, vd_dfds[0], &vd_out, .{});
+        if (vd_dkeys.dictates.len != 0) {
+            std.debug.print("FAIL: SYN_DROPPED did not discard the pending double tap\n", .{});
+            return error.SynDroppedKept;
+        }
+        var vd_e: input.State = .{};
+        const vd_esc = [_]input.c.struct_input_event{
+            keyEventAt(K.KEY_ESC, 1, 0), keyEventAt(K.KEY_ESC, 0, 50_000),
+        };
+        const vd_efds = try feedEvents(&vd_esc);
+        defer _ = close(vd_efds[0]);
+        const vd_ekeys = input.readKeys(&vd_e, vd_efds[0], &vd_out, .{ .dictating = true });
+        if (vd_ekeys.dictates.len != 1 or vd_ekeys.dictates[0] != .cancel or vd_ekeys.bytes.len != 0) {
+            std.debug.print("FAIL: Esc while dictating gave {d} dictate(vd_s), {d} byte(vd_s); want 1 cancel, 0\n", .{
+                vd_ekeys.dictates.len, vd_ekeys.bytes.len,
+            });
+            return error.ReadKeysCancel;
+        }
+    }
+    std.debug.print("input_test: readKeys가 받아쓰기 명령을 모으고 SYN_DROPPED가 판정을 버린다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

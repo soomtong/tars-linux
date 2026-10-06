@@ -1,6 +1,7 @@
 const std = @import("std");
 const hangul = @import("hangul.zig");
 const input = @import("input.zig");
+const dictation = @import("dictation.zig");
 
 /// 칸 사이를 벌리는 두 칸. 한 칸이 아닌 이유는 자판 이름 안에 이미 공백이
 /// 있기 때문이다(`공세벌 3-P3`) — 한 칸으로 벌리면 칸 경계와 이름 안의 공백이
@@ -71,6 +72,37 @@ pub const WS_PREFIX = "W";
 /// 셀 때 이 길이만큼 더 물러난다. `COPY_TAIL`과 같은 이유다.
 pub const WS_TAIL_LEN = GAP.len + WS_PREFIX.len + 1;
 
+/// 받아쓰기 칸의 글자(VD-M1, design 결정 11). 꼬리의 맨 끝이고, 받아쓰기가 무엇을
+/// 하고 있거나 방금 무엇으로 끝났을 때만 뜬다 — `COPY`와 같은 규칙이다. 받아쓰기를
+/// 안 쓰는 화면은 한 글자도 안 바뀐다.
+///
+/// 영어 대문자인 것은 `CAPS` · `COPY`와 같은 줄에 서기 때문이다. 알림 다섯은 사람이
+/// 고칠 것을 말한다 — `NO KEY`는 `/config/groq.key`, `NO MIC`는 장치, `PASSWORD`는
+/// 비밀번호 프롬프트라 안 넣었다는 것, `NO PANE`은 말을 시작한 패널이 닫혔다는 것이다
+/// (글자는 `/config/dictation.jsonl`에 있다). `FAILED`의 까닭은 시리얼의
+/// `tars-dictate:` 줄에 있다.
+///
+/// `else`를 안 단다. `hangulName`과 같은 이유다 — `dictation.Show`에 여섯째 알림을
+/// 더하는 사람이 글자를 빼먹으면 그 순간 컴파일 에러가 난다.
+fn dictWord(s: dictation.Show) []const u8 {
+    return switch (s) {
+        .rec => "REC",
+        .wait => "WAIT",
+        .no_mic => "NO MIC",
+        .no_key => "NO KEY",
+        .failed => "FAILED",
+        .password => "PASSWORD",
+        .no_pane => "NO PANE",
+    };
+}
+
+/// 받아쓰기 칸이 줄에 더하는 바이트. `GAP`을 포함한다. `main.zig`의 `drawStatus`가
+/// 꼬리에서 이만큼 물러나 `COPY` · 워크스페이스 · `CAPS`의 자리를 센다 —
+/// `COPY_TAIL`과 같은 이유로 길이를 저쪽에 다시 적지 않는다.
+pub fn dictTailLen(s: dictation.Show) usize {
+    return GAP.len + dictWord(s).len;
+}
+
 /// 상태 줄이 쓸 수 있는 가장 긴 바이트 수.
 ///
 /// 이름 표에서 직접 센다(design 결정 5). `promptText`가 173을 주석의
@@ -83,7 +115,8 @@ pub const WS_TAIL_LEN = GAP.len + WS_PREFIX.len + 1;
 /// 이라 그대로 더한다.
 ///
 /// IS-M1에서 30이 36이 됐고, CI-M0에서 36이 42가 됐고, WP-M2에서 42가 46이
-/// 됐다. 버퍼를 손으로 늘린 자리는 셋 다 없다.
+/// 됐고, VD-M1에서 46이 56이 됐다(받아쓰기 칸의 가장 긴 글자 `PASSWORD`). 버퍼를
+/// 손으로 늘린 자리는 넷 다 없다.
 pub const MAX_LEN: usize = blk: {
     var hl: usize = 0;
     for (std.enums.values(hangul.Layout)) |t| {
@@ -93,7 +126,11 @@ pub const MAX_LEN: usize = blk: {
     for (std.enums.values(input.LatinLayout)) |t| {
         if (latinName(t).len > ll) ll = latinName(t).len;
     }
-    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + WS_TAIL_LEN + COPY_TAIL.len;
+    var dl: usize = 0;
+    for (std.enums.values(dictation.Show)) |s| {
+        if (dictTailLen(s) > dl) dl = dictTailLen(s);
+    }
+    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + WS_TAIL_LEN + COPY_TAIL.len + dl;
 };
 
 /// `buf`의 `at`부터 `s`를 쓰고 쓴 길이를 돌려준다.
@@ -121,8 +158,11 @@ fn put(buf: []u8, at: usize, s: []const u8) usize {
 /// 고르는 것은 부르는 쪽(`main.zig`)이다 — 이 파일은 워크스페이스가 몇인지
 /// 모른다.
 ///
+/// `dict`는 받아쓰기 칸이다(VD-M1). null이면 칸이 없다. 무엇을 보일지(단계인지
+/// 알림인지)는 부르는 쪽(`main.zig`)이 고른다 — 이 파일은 자식 프로세스를 모른다.
+///
 /// `buf`는 최소 `MAX_LEN`바이트여야 한다.
-pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, buf: []u8) []const u8 {
+pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, dict: ?dictation.Show, buf: []u8) []const u8 {
     var len: usize = 0;
     len += put(buf, len, if (state.hangul_on) "한" else "EN");
     len += put(buf, len, GAP);
@@ -147,5 +187,11 @@ pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, buf: []
         len += 1;
     }
     if (copy) len += put(buf, len, COPY_TAIL);
+    // 받아쓰기 칸이 맨 끝이다(VD-M1). 모드(`COPY`)보다도 뒤인 것은 이 칸만 글자의
+    // 길이가 바뀌기 때문이다 — 맨 끝이면 그 길이가 앞 칸들의 자리를 안 흔든다.
+    if (dict) |s| {
+        len += put(buf, len, GAP);
+        len += put(buf, len, dictWord(s));
+    }
     return buf[0..len];
 }

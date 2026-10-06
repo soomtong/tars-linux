@@ -23,15 +23,24 @@ cd "$(dirname "$0")"
 # 하나 더 — TLS. 게스트의 curl이 인증 기관 목록(/etc/ssl/certs/ca-certificates.crt)을
 # 읽는지를 컨테이너의 openssl s_server로 본다(검사 2). Groq는 https다.
 #
+# 부팅 B(VD-M1)는 terminal이 하는 일을 본다 — 오른쪽 Cmd 두 번(monitor의 sendkey meta_r 둘)이
+# tars-dictate를 띄우고, 상태 줄 꼬리에 REC가 뜨고, 다시 두 번이 녹음을 끝내고, 받은 글자가
+# 그 패널의 셸 프롬프트에 들어간다(bracketed paste, Enter 없음). Esc 취소 · 비밀번호 프롬프트 ·
+# 다른 패널 · 닫힌 패널 · 상한으로 스스로 멈춘 녹음 · 키 없음을 차례로 친다. 판정은 terminal의
+# `dictate>` · `status>` 줄과 화면 줄, stub이 받은 요청, 끈 뒤의 dictation.jsonl이다.
+#
 # 이 체인이 못 보는 것 — 진짜 Groq의 답(사람이 키를 넣고 실기에서 본다, running-tars.md) ·
-# 실기 마이크의 소리 · 터미널이 글자를 커서 자리에 넣는 것(VD-M1).
+# 실기 마이크의 소리 · 실기 자판의 오른쪽 Cmd(PC 자판은 오른쪽 Alt — input_test 검사 78).
 
-# $GUEST_MEM 하나 때문에 source한다. audio 체인처럼 타이핑을 안 한다.
+# 부팅 A는 $GUEST_MEM 하나 때문에, 부팅 B는 타이핑(type_keys · joined_screen_dump)
+# 때문에 source한다.
 source ../gate_lib.sh
 
 # openssl s_server가 듣는 컨테이너의 포트. 게스트는 10.0.2.2:이 번호로 붙는다 — SLIRP이
 # 그것을 컨테이너의 127.0.0.1로 잇는다(lessons 45). 45492는 VD의 첫 번호다(lessons 포트 절).
 TLS_PORT=45492
+# 부팅 B의 QEMU monitor(VD-M1). 45492가 TLS 상대라 그다음 번호다.
+MONITOR_PORT_B=45493
 
 if ! (cd ../kernel && ./build.sh); then
   echo "FAIL: kernel build failed"
@@ -48,6 +57,14 @@ if ! (cd ../terminal && ./prepare.sh); then
   exit 1
 fi
 
+# 받아쓰기의 판정기 · 단계 · 종료 코드 · 비밀번호 · 거르기(dictation_test)와 트리거 ·
+# Esc의 키 경로(input_test)는 여기서 먼저 걸러진다 — 부팅 둘을 쓰기 전에 잡을 수 있는
+# 실패다.
+if ! (cd ../terminal && zig build test); then
+  echo "FAIL: terminal host tests failed (dictation_test, input_test or status_test)"
+  exit 1
+fi
+
 if ! (cd ../kernel && ./make_initrd.sh); then
   echo "FAIL: initrd build failed"
   exit 1
@@ -61,6 +78,8 @@ QEMU_PID=""
 TLS_PID=""
 
 cleanup() {
+  exec 3<&- 2>/dev/null
+  exec 3>&- 2>/dev/null
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
@@ -371,5 +390,350 @@ raw=안녕하세요 vd0-dictated|inserted=안녕하세요 vd0-dictated|1000|ok'
 EXPECT_HISTORY="${EXPECT_HISTORY/S1/$(( S1_DATA * 1000 / 32000 ))}"
 [ "$HISTORY" = "$EXPECT_HISTORY" ] || report_failure "dictation.jsonl does not hold the five successful runs as expected"
 echo "dictation.jsonl keeps the five successful runs with the raw text next to what was inserted, and nothing else"
+
+# ════════════════════════════════════════════════════════════════════════
+# 부팅 B — terminal의 트리거 · 상태 · 삽입 (VD-M1)
+# ════════════════════════════════════════════════════════════════════════
+#
+# 사람이 하는 일을 monitor로 한다. 셸은 기본값 fish다(프롬프트 `root@(none) ~#`).
+#
+# 더블 탭은 `sendkey meta_r 80` 둘을 잇달아 보내는 것이다. sendkey는 누르고 hold(80ms) 뒤에
+# 떼고, QEMU는 그 뗌을 입력 큐에 지연과 함께 넣는다 — 둘째 sendkey의 누름은 그 뒤에 줄을
+# 선다. 그래서 둘째 누름이 첫 누름 뒤 90ms 남짓에 온다(창 300ms 안, VD-M1 plan 확정 9가 evdev
+# 시각으로 쟀다). hold를 적는 것은 사람의 손에 가깝게 하려는 것이다 — 안 적으면 누른 시간이
+# 10ms 안팎이고 두 누름 사이가 20ms 남짓이었다. type_keys를 안 쓴다 — 수정키 하나는 로그를 한
+# 줄도 안 만들어 type_keys가 키마다 0.3초를 기다리고, 그러면 둘째 누름이 창 밖이다.
+#
+# 화면은 마지막 프레임만 본다(`last_screen`). wait_for_screen은 로그의 모든 프레임을 훑으므로
+# 지운 줄이나 다른 패널의 지난 프레임에 걸린다.
+DISK_B=../out/dictation-b.img
+STUBLOG_B="$WORK/stub_b.log"
+rm -f "$LOG"
+LOG="$(mktemp)"
+
+mkdir -p "$WORK/seed_b"
+printf 'net=dhcp\n' > "$WORK/seed_b/tars.conf"
+printf 'vd1-test-key\n' > "$WORK/seed_b/groq.key"
+printf '%s\n' '# written by the VD chain, boot B' 'transcribe_url = http://10.0.2.100:8080/ok/b' \
+  > "$WORK/seed_b/dictation.conf"
+# 사람이 셸에서 칠 것을 짧게 줄인 셋이다 — 타이핑 한 글자가 sendkey 하나라서다.
+#   vd-pw     비밀번호 프롬프트. bash의 read -s는 줄 단위로 읽으며 안 보여 준다
+#             (ICANON 켜짐 · ECHO 꺼짐). 받은 것을 대괄호 안에 되보여 준다
+#   vd-cap    설정을 고친다 — 1초에서 스스로 멈추는 녹음(키 없이 끝나는 길)
+#   vd-nokey  키 파일을 치운다
+printf '%s\n' '#!/usr/bin/bash' "read -rsp 'pw> ' x" 'echo' 'echo "got[$x]"' > "$WORK/seed_b/vd-pw"
+printf '%s\n' '#!/usr/bin/bash' \
+  "printf '%s\\n' 'transcribe_url = http://10.0.2.100:8080/ok/cap' 'max_seconds = 1' > /config/dictation.conf" \
+  > "$WORK/seed_b/vd-cap"
+printf '%s\n' '#!/usr/bin/bash' 'mv /config/groq.key /config/groq.key.off' > "$WORK/seed_b/vd-nokey"
+chmod 0755 "$WORK/seed_b/vd-pw" "$WORK/seed_b/vd-cap" "$WORK/seed_b/vd-nokey"
+rm -f "$DISK_B"
+truncate -s 16M "$DISK_B"
+mkfs.ext2 -F -q -m 0 -L tars-dictate -d "$WORK/seed_b" "$DISK_B"
+
+report_b() {
+  echo "FAIL(boot B): $1"
+  echo "--- dictation lines ---"
+  grep -aE 'terminal: dictate>|tars-dictate:' "$LOG" | tr -d '\r' | tail -n 40
+  echo "--- status lines ---"
+  grep -aE 'terminal: status> (text=|dict ink)' "$LOG" | tr -d '\r' | tail -n 12
+  echo "--- stub (boot B) ---"
+  cat "$STUBLOG_B" 2>/dev/null
+  echo "--- last screen ---"
+  last_screen | tr -d '\r' | tr '|' '\n' | tail -n 15
+  echo "--- last 30 lines ---"
+  tail -n 30 "$LOG"
+  exit 1
+}
+
+# 패턴에 맞는 줄의 수.
+count_b() { grep -acE -- "$1" "$LOG" || true; }
+# 그 수가 want가 될 때까지 0.1초 간격으로 기다린다. 상한은 초.
+wait_count() {
+  local pattern="$1" want="$2" secs="$3" i
+  for i in $(seq 1 $((secs * 10))); do
+    [ "$(count_b "$pattern")" -ge "$want" ] && return 0
+    kill -0 "$QEMU_PID" 2>/dev/null || return 1
+    sleep 0.1
+  done
+  return 1
+}
+# 상태 줄의 마지막 글자와 받아쓰기 칸의 마지막 픽셀 수.
+last_status() { grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'; }
+last_dict_ink() { grep -a 'terminal: status> dict ink=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*ink=([0-9]+).*/\1/'; }
+# 상태 줄이 패턴(ERE, 줄 끝까지)과 맞을 때까지 기다린다.
+wait_status() {
+  local pattern="$1" secs="$2" i
+  for i in $(seq 1 $((secs * 10))); do
+    grep -aE -- "$pattern" <<<"$(last_status)" >/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# 받아쓰기 칸의 픽셀이 켜지거나(on, >0) 꺼질(off, =0) 때까지 기다린다. `dumpStatus`가
+# `text=` 줄 뒤에 `dict ink=` 줄을 찍으므로, `text=`를 본 순간의 마지막 `dict ink`는 앞
+# 프레임의 것일 수 있다.
+wait_dict_ink() {
+  local want="$1" i v
+  for i in $(seq 1 50); do
+    v="$(last_dict_ink)"
+    if [ -n "$v" ]; then
+      [ "$want" = on ] && [ "$v" -gt 0 ] && return 0
+      [ "$want" = off ] && [ "$v" -eq 0 ] && return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+# 마지막 프레임의 화면 줄(포커스 패널).
+last_screen() { joined_screen_dump | tail -n 1; }
+wait_last_screen() {
+  local pattern="$1" secs="$2" i
+  for i in $(seq 1 $((secs * 10))); do
+    grep -aE -- "$pattern" <<<"$(last_screen)" >/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# 마지막 프레임에 그 글자가 몇 번 있는가.
+last_screen_count() { last_screen | grep -oaF -- "$1" | wc -l; }
+stub_b_count() { local n; n="$(grep -ac '^stub: POST ' "$STUBLOG_B" 2>/dev/null)"; echo "${n:-0}"; }
+double_tap() {
+  echo "sendkey meta_r 80" >&3
+  echo "sendkey meta_r 80" >&3
+  sleep 0.6
+}
+# 녹음이 시작됐다(n번째 start와 n번째 recording 줄).
+expect_recording() {
+  wait_count 'terminal: dictate> start pid=' "$1" 15 || report_b "$2: the double tap started no dictation (want start #$1)"
+  wait_count 'terminal: dictate> phase recording' "$1" 15 || report_b "$2: tars-dictate never said it was recording"
+}
+PROMPT='root@\(none\) ~#'
+TEXT='안녕하세요 vd0-dictated'
+
+echo "=== boot B: the terminal triggers, shows and inserts (monitor ${MONITOR_PORT_B}) ==="
+HOME="$WORK" qemu-system-x86_64 \
+  -machine q35 \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -drive file="$DISK_B",if=virtio,format=raw \
+  -netdev "user,id=n0,guestfwd=tcp:10.0.2.100:8080-cmd:perl $PWD/stub.pl $STUBLOG_B" \
+  -device virtio-net-pci,netdev=n0 \
+  -audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off \
+  -device ich9-intel-hda \
+  -device hda-micro,audiodev=snd0 \
+  -serial file:"$LOG" \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT_B},server,nowait \
+  -no-reboot &
+QEMU_PID=$!
+
+wait_for_log 'terminal: screen>' 120 || report_b "terminal never rendered"
+wait_last_screen "$PROMPT" 30 || report_b "the fish prompt never showed up"
+# 전사 API(stub)에 닿는 길과 켜진 마이크. 부팅 A의 프로브가 기다린 것과 같다.
+wait_for_log 'eth0: adding default route via 10\.0\.2\.2' 60 || report_b "dhcpcd never added the default route"
+wait_for_log 'tars-init: audio: alsactl init turned the mixer on' 60 || report_b "the boot never turned the mixer on"
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT_B}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = 1 ] || report_b "could not connect to the QEMU monitor"
+case "$(last_status)" in
+  *"  REC"|*"  WAIT"|*"  NO "*|*"  FAILED"|*"  PASSWORD") report_b "the status line has a dictation field before any dictation ($(last_status))" ;;
+esac
+
+# ── 검사 14: 한 번 탭과 늦은 둘째 탭은 아무것도 안 한다 ─────────────────
+# 판정 창의 바깥쪽이다(dictation_test 검사 3 · 4 · 5의 게스트 판). 0.6초 떨어진 두 탭은
+# 첫 누름부터 700ms 남짓이다.
+echo "sendkey meta_r 80" >&3
+sleep 0.8
+echo "sendkey meta_r 80" >&3
+sleep 0.6
+echo "sendkey meta_r 80" >&3
+sleep 1
+[ "$(count_b 'terminal: dictate>')" -eq 0 ] \
+  || report_b "a single tap or two taps 0.6s apart started something ($(grep -a 'terminal: dictate>' "$LOG" | head -n 1))"
+echo "a single tap and two taps 0.6s apart did nothing"
+
+# ── 검사 15: 두 번 → REC → 두 번 → 글자가 프롬프트에 들어간다 ──────────────
+# 둘째 더블 탭이 그룹에 SIGINT를 보내고(stop), 상태 줄은 그 자리에서 WAIT가 된다. 자식이
+# 끝나면 받은 글자가 bracketed paste로 그 패널에 간다 — fish가 줄에 올려 두고 실행하지
+# 않는다(Enter가 없다).
+double_tap
+expect_recording 1 "B1"
+wait_status '  REC$' 10 || report_b "B1: the status line never showed REC ($(last_status))"
+wait_dict_ink on || report_b "B1: REC is in the text but no pixel has the dictation color"
+sleep 1.5
+double_tap
+wait_count 'terminal: dictate> stop pid=' 1 10 || report_b "B1: the second double tap did not stop the recording"
+wait_count 'terminal: dictate> insert len=' 1 20 || report_b "B1: nothing was inserted"
+grep -aF 'tars-dictate: recording stopped by SIGINT after' "$LOG" >/dev/null \
+  || report_b "B1: tars-dictate did not stop on SIGINT (did the signal reach the process group?)"
+grep -aE 'terminal: status> text=.*  WAIT' "$LOG" >/dev/null || report_b "B1: the status line never showed WAIT"
+INSERT1="$(grep -a 'terminal: dictate> insert len=' "$LOG" | head -n 1 | tr -d '\r' | sed -E 's/.*dictate> //')"
+[ "$INSERT1" = "insert len=28 bracketed=1 ws=1 leaf=0" ] || report_b "B1: the insert line is '${INSERT1}'"
+grep -aF 'terminal: dictate> exit code=0' "$LOG" >/dev/null || report_b "B1: tars-dictate did not exit 0"
+wait_last_screen "${PROMPT} ${TEXT}" 15 || report_b "B1: the text never showed up on the prompt line"
+wait_status 'CAPS$' 10 || report_b "B1: the dictation field stayed after the insert ($(last_status))"
+wait_dict_ink off || report_b "B1: dictation pixels remain after the insert"
+case "$(last_screen)" in *"Unknown command"*) report_b "B1: fish ran the inserted text" ;; esac
+[ "$(stub_b_count)" -eq 1 ] || report_b "B1: the stub got $(stub_b_count) request(s), want 1"
+type_keys ctrl-u
+echo "two double taps recorded, stopped with SIGINT, showed REC then WAIT, and put the text on the prompt without running it"
+
+# ── 검사 16: 녹음 중의 Esc는 취소이고 PTY로 안 간다 ──────────────────────
+# 그룹에 SIGTERM — API를 안 부르고(stub 그대로) 143으로 끝나 조용하다. `key>` 줄은 PTY로
+# 바이트가 나갈 때만 찍히므로, 그 수가 그대로인 것이 "Esc가 셸에 안 갔다"이다.
+double_tap
+expect_recording 2 "B2"
+KEYS_BEFORE="$(count_b 'terminal: key>')"
+echo "sendkey esc" >&3
+wait_count 'terminal: dictate> cancel pid=' 1 10 || report_b "B2: Esc did not cancel"
+wait_count 'terminal: dictate> exit code=143' 1 10 || report_b "B2: tars-dictate did not exit 143 after Esc"
+[ "$(count_b 'terminal: key>')" -eq "$KEYS_BEFORE" ] || report_b "B2: the cancelling Esc also went to the shell"
+wait_status 'CAPS$' 10 || report_b "B2: the dictation field stayed after the cancel ($(last_status))"
+[ "$(stub_b_count)" -eq 1 ] || report_b "B2: a cancelled recording reached the API"
+echo "Esc while recording cancelled it with SIGTERM, never reached the shell, and called no API"
+
+# ── 검사 17: 비밀번호 프롬프트에서는 마이크를 안 연다 ─────────────────────
+# bash의 read -s가 기다리는 동안(ICANON 켜짐 · ECHO 꺼짐) 더블 탭은 시작이 아니라 알림이다.
+type_keys slash c o n f i g slash v d minus p w ret
+wait_last_screen 'pw> ' 10 || report_b "B3: the password prompt never showed up"
+sleep 0.5
+double_tap
+wait_count 'terminal: dictate> refused password at=start ws=1 leaf=0' 1 10 \
+  || report_b "B3: a double tap on a password prompt was not refused"
+wait_status '  PASSWORD$' 10 || report_b "B3: the status line did not say PASSWORD ($(last_status))"
+[ "$(count_b 'terminal: dictate> start pid=')" -eq 2 ] || report_b "B3: a dictation started on a password prompt"
+type_keys ret
+wait_last_screen 'got\[\]' 10 || report_b "B3: read -s did not end with an empty answer"
+wait_status 'CAPS$' 10 || report_b "B3: PASSWORD stayed after the next key ($(last_status))"
+echo "a double tap on a password prompt did not open the microphone, said PASSWORD, and the next key cleared it"
+
+# ── 검사 18: 말하는 사이에 비밀번호 프롬프트가 뜨면 넣지 않는다 ─────────────
+# 시작할 때는 프롬프트였다. 녹음 중에 vd-pw를 치고, 그 read -s가 기다리는 동안 끝낸다.
+# 전사는 됐고(stub에 간다) 기록에도 남지만(검사 22) 그 프롬프트에는 한 글자도 안 간다 —
+# read가 받은 것이 빈 문자열이다.
+double_tap
+expect_recording 3 "B4"
+type_keys slash c o n f i g slash v d minus p w ret
+for _ in $(seq 1 100); do [ "$(last_screen_count 'pw> ')" -ge 2 ] && break; sleep 0.1; done
+[ "$(last_screen_count 'pw> ')" -ge 2 ] || report_b "B4: the second password prompt never showed up"
+sleep 0.5
+double_tap
+wait_count 'terminal: dictate> stop pid=' 2 10 || report_b "B4: the double tap did not stop the recording"
+wait_count 'terminal: dictate> refused password at=insert ws=1 leaf=0' 1 20 \
+  || report_b "B4: the text was not refused at the password prompt"
+wait_status '  PASSWORD$' 10 || report_b "B4: the status line did not say PASSWORD ($(last_status))"
+type_keys ret
+for _ in $(seq 1 100); do [ "$(last_screen_count 'got[]')" -ge 2 ] && break; sleep 0.1; done
+[ "$(last_screen_count 'got[]')" -ge 2 ] || report_b "B4: read -s got something (the text went into the password prompt)"
+[ "$(count_b 'terminal: dictate> insert len=')" -eq 1 ] || report_b "B4: an insert line appeared"
+[ "$(stub_b_count)" -eq 2 ] || report_b "B4: the stub got $(stub_b_count) request(s), want 2"
+echo "a password prompt that appeared while speaking got nothing, and the status line said PASSWORD"
+
+# ── 검사 19: 글자는 트리거를 누른 패널에 간다 ───────────────────────────
+# Voxio D8 1번. 오른쪽에 패널을 가르고(포커스가 새 패널) 거기서 시작한 뒤, 왼쪽으로 포커스를
+# 옮겨서 끝낸다. 글자는 오른쪽 패널(leaf 1)에 가고, 왼쪽의 마지막 프레임에는 없다.
+type_keys meta_l-d
+wait_count 'terminal: pane> ws=1/1 panes=2 focus=1' 1 10 || report_b "B5: Cmd+D did not split"
+sleep 1
+wait_last_screen "$PROMPT" 15 || report_b "B5: the new pane's prompt never showed up"
+double_tap
+expect_recording 4 "B5"
+grep -aF 'terminal: dictate> start pid=' "$LOG" | tail -n 1 | grep -aF 'ws=1 leaf=1' >/dev/null \
+  || report_b "B5: the dictation did not start in leaf 1"
+type_keys meta_l-bracket_left
+wait_count 'terminal: pane> ws=1/1 panes=2 focus=0' 1 10 || report_b "B5: Cmd+[ did not move the focus"
+double_tap
+wait_count 'terminal: dictate> insert len=' 2 20 || report_b "B5: nothing was inserted"
+grep -a 'terminal: dictate> insert len=' "$LOG" | tail -n 1 | grep -aF 'ws=1 leaf=1' >/dev/null \
+  || report_b "B5: the text went to $(grep -a 'terminal: dictate> insert len=' "$LOG" | tail -n 1 | tr -d '\r')"
+sleep 1
+[ "$(last_screen_count "$TEXT")" -eq 0 ] || report_b "B5: the focused pane (leaf 0) shows the text"
+type_keys meta_l-bracket_right
+wait_last_screen "${PROMPT} ${TEXT}" 15 || report_b "B5: leaf 1 does not show the text on its prompt"
+[ "$(stub_b_count)" -eq 3 ] || report_b "B5: the stub got $(stub_b_count) request(s), want 3"
+echo "the text went to the pane where the double tap started, not to the pane that had the focus"
+
+# ── 검사 20: 그 패널이 닫혔으면 넣지 않고 알린다 ─────────────────────────
+# leaf 1에서 시작하고 Cmd+W로 닫는다. 자식은 제 그룹이라 셸의 SIGHUP을 안 받고 계속 녹음한다.
+# 끝내면 전사는 되지만 넣을 곳이 없다 — NO PANE. 글자는 기록에 남는다(검사 22).
+type_keys ctrl-u
+double_tap
+expect_recording 5 "B6"
+type_keys meta_l-w
+wait_count 'terminal: pane> closed leaf=1' 1 10 || report_b "B6: Cmd+W did not close leaf 1"
+double_tap
+wait_count 'terminal: dictate> stop pid=' 4 10 || report_b "B6: the double tap did not stop the recording"
+wait_count 'terminal: dictate> no pane shell=' 1 20 || report_b "B6: the closed pane was not noticed"
+wait_status '  NO PANE$' 10 || report_b "B6: the status line did not say NO PANE ($(last_status))"
+[ "$(count_b 'terminal: dictate> insert len=')" -eq 2 ] || report_b "B6: something was inserted"
+[ "$(last_screen_count "$TEXT")" -eq 0 ] || report_b "B6: the text landed in the remaining pane"
+[ "$(stub_b_count)" -eq 4 ] || report_b "B6: the stub got $(stub_b_count) request(s), want 4"
+type_keys ctrl-u
+wait_status 'CAPS$' 10 || report_b "B6: NO PANE stayed after the next key ($(last_status))"
+echo "a dictation whose pane closed was transcribed but not inserted anywhere, and said NO PANE"
+
+# ── 검사 21: 키 없이 끝난 녹음 뒤의 더블 탭은 시작이다 ─────────────────────
+# design 결정 10의 함정 3(Voxio V17). max_seconds=1이면 자식이 스스로 멈추고(`stopped at the
+# 1s limit`) 그 줄이 단계를 transcribing으로 옮긴다. 그 뒤의 더블 탭은 "끝내라"가 아니라 새
+# 시작이어야 한다 — 두 번째 실행도 스스로 멈추고 글자를 넣는다.
+type_keys slash c o n f i g slash v d minus c a p ret
+sleep 1
+double_tap
+expect_recording 6 "B7"
+wait_count 'terminal: dictate> phase transcribing' 1 15 \
+  || report_b "B7: the 1s limit did not move the phase (tars-dictate's line was not read)"
+wait_count 'terminal: dictate> insert len=' 3 20 || report_b "B7: the self-stopped recording inserted nothing"
+wait_last_screen "${PROMPT} ${TEXT}" 15 || report_b "B7: the text never showed up"
+type_keys ctrl-u
+double_tap
+expect_recording 7 "B7 again"
+wait_count 'terminal: dictate> insert len=' 4 20 || report_b "B7: the double tap after a keyless end did not start a new dictation"
+[ "$(count_b 'terminal: dictate> (stop|ignored)')" -eq 4 ] || report_b "B7: a double tap after a keyless end was read as stop or ignored"
+[ "$(count_b 'tars-dictate: recording stopped at the 1s limit')" -eq 2 ] || report_b "B7: the two runs did not stop at the limit"
+wait_last_screen "${PROMPT} ${TEXT}" 15 || report_b "B7: the second text never showed up"
+type_keys ctrl-u
+[ "$(stub_b_count)" -eq 6 ] || report_b "B7: the stub got $(stub_b_count) request(s), want 6"
+echo "a recording that stopped at its limit inserted its text, and the next double tap started again"
+
+# ── 검사 22: 키가 없으면 마이크를 안 열고 NO KEY ──────────────────────────
+type_keys slash c o n f i g slash v d minus n o k e y ret
+sleep 1
+double_tap
+wait_count 'terminal: dictate> start pid=' 8 15 || report_b "B8: the double tap started no dictation"
+wait_count 'terminal: dictate> exit code=3' 1 15 || report_b "B8: tars-dictate did not exit 3 without a key"
+wait_status '  NO KEY$' 10 || report_b "B8: the status line did not say NO KEY ($(last_status))"
+[ "$(count_b 'terminal: dictate> phase recording')" -eq 7 ] || report_b "B8: a run without a key reached the microphone"
+[ "$(stub_b_count)" -eq 6 ] || report_b "B8: a run without a key reached the API"
+type_keys ctrl-u
+wait_status 'CAPS$' 10 || report_b "B8: NO KEY stayed after the next key ($(last_status))"
+echo "without a key the dictation never recorded, said NO KEY, and the next key cleared it"
+
+# ── 검사 23: stub이 받은 여섯과 기록 여섯 ──────────────────────────────────
+# 요청은 B1 · B4 · B5 · B6 · B7 둘이다. 전부 마이크의 상수다 — terminal이 띄운 자식도 같은
+# 마이크를 지났다. 기록도 여섯이다. 넣지 않은 둘(B4 비밀번호 · B6 닫힌 패널)도 남는다 —
+# 전사가 된 순간부터 말한 것은 사라지지 않는다(Voxio 불변식 1).
+while IFS= read -r req; do
+  case "$req" in *'auth=[Bearer vd1-test-key]'*) ;; *) report_b "a boot B request lacks the key (${req})" ;; esac
+  N="$(stub_field "$req" n)"
+  [ "$(stub_field "$req" mode)" = "$FEED_VALUE" ] && [ "$(stub_field "$req" mode_count)" = "$N" ] \
+    || report_b "a boot B recording is not the microphone's constant (${req})"
+done < <(grep -a '^stub: POST ' "$STUBLOG_B")
+[ "$(grep -acE '^stub: POST /ok/b ' "$STUBLOG_B")" -eq 4 ] && [ "$(grep -acE '^stub: POST /ok/cap ' "$STUBLOG_B")" -eq 2 ] \
+  || report_b "the boot B requests are not four /ok/b and two /ok/cap"
+echo "system_powerdown" >&3
+wait_for_exit 60 || report_b "the guest did not power off after system_powerdown"
+debugfs -R "dump dictation.jsonl $WORK/dictation_b.jsonl" "$DISK_B" >/dev/null 2>&1
+HISTORY_B="$(grep -c '"raw":"안녕하세요 vd0-dictated"' "$WORK/dictation_b.jsonl" 2>/dev/null || true)"
+[ "${HISTORY_B:-0}" -eq 6 ] && [ "$(wc -l < "$WORK/dictation_b.jsonl")" -eq 6 ] \
+  || report_b "dictation.jsonl holds ${HISTORY_B:-0} of the six transcripts (the refused and the lost ones must stay)"
+echo "the stub got six recordings of the microphone, and dictation.jsonl kept all six, inserted or not"
 
 echo "VD check PASS"

@@ -327,6 +327,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(clipboard_test);
 
+    // dictation_test도 호스트에서 돈다(VD-M1). `clipboard_test`와 같은 자리다 —
+    // 더블 탭 판정 · 단계 · 종료 코드 · 비밀번호 판정 · 거르기의 순수 계산이라
+    // libc도 번역도 필요 없다. fork · 파이프는 `main.zig`에 있고 게이트가 본다.
+    const dictation_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/dictation_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const dictation_test = b.addExecutable(.{
+        .name = "dictation_test",
+        .root_module = dictation_test_mod,
+    });
+    b.installArtifact(dictation_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
     // 기본 `zig build`와 분리하는 이유는 속도였는데, 그 이유가 이제 거의
@@ -345,6 +359,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(pointer_test).step);
     test_step.dependOn(&b.addRunArtifact(touchpad_test).step);
     test_step.dependOn(&b.addRunArtifact(clipboard_test).step);
+    test_step.dependOn(&b.addRunArtifact(dictation_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도
