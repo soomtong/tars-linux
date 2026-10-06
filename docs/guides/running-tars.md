@@ -271,6 +271,59 @@ TQ-M1 전에는 그 칸이 비어 있어 첫 `Ctrl+R`이 멈췄고 seed가
 rc가 안 읽히고 훅도 함께 안 걸린다. 그것이 맞는 동작이다 — rc를 끄는
 탈출로가 우리가 더한 것까지 덮어야 한다.
 
+### 네트워크와 시계 — 기본은 꺼져 있다
+
+첫 부팅이 까는 `tars.conf`는 `net=off` · `ntp=off` · `timezone=UTC`다. 이 셋만
+"쓰는 사람이 쓰는 것"이 아니라 꺼짐이 기본값이다(NW design 결정 5 · TS 확인 10).
+다른 키는 켜도 부팅에 비용이 없는데 `net`은 켜면 부팅마다 dhcpcd가 뜨고 — 게이트의
+부팅 수십 개가 그 비용을 같이 내고 — `ntp`는 `net`이 꺼져 있으면 할 수 있는 일이
+없다. 그래서 켜는 쪽을 사람이 적는다. 켜 두고 네트워크가 없어도 부팅은 같은 시각에
+끝난다(`docs/decisions/feedback_boot_never_blocks.md`) — dhcpcd는 인터페이스를
+기다리고 chronyd는 서버 없이 산다.
+
+켜는 법은 `/config/tars.conf`의 세 줄이다. 게스트에서 고치고 재부팅한다.
+
+```sh
+sd 'net=off' 'net=dhcp' /config/tars.conf
+sd 'ntp=off' 'ntp=dhcp' /config/tars.conf
+sd 'timezone=UTC' 'timezone=Asia/Seoul' /config/tars.conf
+kill -INT 1        # 재부팅(Ctrl+Alt+Del과 같다). QEMU는 -no-reboot라 창이 닫힌다 — make boot-qemu를 다시
+```
+
+| 키 | 값 | 무엇이 일어나나 |
+|---|---|---|
+| `net` | `off` \| `dhcp` | `dhcp`면 `init`이 dhcpcd를 띄우고 감독한다. 인터페이스를 고르는 것도 주소 · 라우트 · `/etc/resolv.conf`를 쓰는 것도 dhcpcd다. 나중에 꽂은 USB 동글도 잡는다 |
+| `ntp` | `off` \| `dhcp` \| `<IPv4>` | `dhcp`면 DHCP 서버가 알려 준 NTP 서버에, 주소를 적으면 그 주소에 chronyd가 묻는다. 이름은 못 적는다(TS design 결정 5) — 이름을 쓰려면 아래 `chrony.d` |
+| `timezone` | `UTC` \| IANA 이름 | 시계가 맞는 것과 별개로 그 시각을 어느 지역으로 보여 줄지. 없는 이름이면 로그를 찍고 UTC |
+
+처음 뜨기 전에 호스트에서 미리 적어 둘 수도 있다 — 위 "VM에 설정 디스크
+붙이기"의 seed 디렉터리에 `tars.conf`를 두면 그 파일이 이긴다(seed는 "없으면
+만든다"). 쓰던 디스크는 안 바뀐다 — `make disk-fresh`로 새로 굽거나 게스트에서
+고친다.
+
+QEMU(`make boot-qemu`)에서 알아 둘 것 둘. `-nic`을 안 주므로 QEMU 기본 SLIRP
+카드가 붙고 `net=dhcp`면 10.0.2.15를 받아 호스트 NAT로 바깥에 나간다. 그런데
+SLIRP의 DHCP는 NTP 서버를 안 알려 준다 — `ntp=dhcp`로 두면 chronyd가 소스
+없이 살기만 한다. 주소를 적거나(`ntp=216.239.35.0` — time.google.com) 이름을
+쓰려면 `/config/chrony.d/`에 chrony 문법으로 적는다. `init`이 chronyd 설정의
+맨 앞에 `confdir /config/chrony.d`를 두므로 거기 적은 것이 이긴다(TD).
+
+```sh
+mkdir -p /config/chrony.d && printf 'pool pool.ntp.org iburst\n' > /config/chrony.d/pool.conf
+```
+
+켜졌는지는 시리얼 로그와 게스트 안에서 본다.
+
+| 어디 | 꺼짐 | 켜짐 |
+|---|---|---|
+| 시리얼 | `tars-init: net=off, leaving the network alone` · `ntp=off, leaving the clock alone` | `started service dhcpcd` · `started service chronyd` · `chronyd will ask …` |
+| 게스트 | `ip -4 addr`에 `lo`뿐 | `ip -4 route`에 `default via …`, `/etc/resolv.conf`에 nameserver |
+| 시계 | chronyd가 없다 — `chronyc`가 데몬에 못 붙는다 | `chronyc tracking`의 `Leap status : Normal`, `chronyc sources`에 `^*` 한 줄 |
+
+둘 다 `tars-service status`에 `service dhcpcd` · `service chronyd`로 나오고
+다른 서비스처럼 멈추고 다시 띄운다(아래 "서비스를 멈추고 다시 띄우기").
+방화벽은 이것과 별개로 꺼져 있다 — 바깥에서 붙는 포트를 열었다면 "방화벽" 절.
+
 ### 한/영 전환 — 켜는 키 넷과 끄는 키 하나
 
 한/영을 뒤집는 키는 넷이고 기본으로 전부 켜져 있다. 한/영 키 · Shift+Space ·
@@ -587,7 +640,8 @@ TAS2781 — 2022년 이후 ASUS · Lenovo · HP 일부, 헤드폰 잭은 되고 
 ### 받아쓰기 — 오른쪽 Cmd 두 번
 
 말한 것을 지금 패널의 커서 자리에 글자로 넣는다(Voxio를 옮긴 것, VD). 소리는 마이크에서 Groq의 Whisper API로 가고, 받아 적은 글자를
-Groq의 LLM이 한 번 다듬은 뒤(군더더기 지우기) 들어간다. 네트워크(`net=dhcp` 또는 무선)와 Groq API 키가 있어야 한다.
+Groq의 LLM이 한 번 다듬은 뒤(군더더기 지우기) 들어간다. 네트워크(`net=dhcp` 또는 무선 — 기본은 꺼져
+있다, 위 "네트워크와 시계" 절)와 Groq API 키가 있어야 한다.
 
 키는 [Groq 콘솔](https://console.groq.com/keys)에서 만든다(무료). 파일 하나에 적는다.
 
@@ -668,7 +722,7 @@ jq -r 'select(.cleaned != null and .cleaned != .raw) | "\(.raw)\n → \(.cleaned
 
 | 줄 | 볼 것 |
 |---|---|
-| `curl: (6) Could not resolve host` · `(7) Failed to connect` | 네트워크. `ip -4 route` · `tars.conf`의 `net=dhcp` |
+| `curl: (6) Could not resolve host` · `(7) Failed to connect` | 네트워크. `ip -4 route` · `tars.conf`의 `net=dhcp`(기본은 `off` — "네트워크와 시계" 절) |
 | `curl: (60) SSL certificate problem: certificate is not yet valid` | 시계. `date -u`가 틀렸다(chronyd가 맞추기 전, 또는 RTC) |
 | `curl: (77)` | 인증 기관 목록이 없다(`/etc/ssl/certs/ca-certificates.crt`) — 알린다 |
 | `HTTP 401` | 키가 틀렸다 |

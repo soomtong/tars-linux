@@ -29,6 +29,15 @@ M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
 찍혔다. 바깥에 안 나갔고 지웠으며 `/tmp/run/vd2` 전체에 키 모양이 0개인 것을 다시 확인했다. plan에 "호스트에서 `tars-dictate`를
 돌리지 말 것"을 적었다. 키를 바꿀지는 사용자의 판단이다.
 
+## 2026-10-06 저녁 — net · ntp 기본값은 그대로, 켜는 법을 문서로
+
+사용자가 QEMU에서 VD를 보려다 `tars.conf`의 `net=off` · `ntp=off`를 보고 "기본 seed 값에 활성화하자"고 했고, `config.zig` 기본값
+둘을 `dhcp`로 바꿔 config · tools · service 체인이 초록인 채 루트 게이트를 돌리던 중 "비활성화 상태로 두고 활성화하는 방법을 담은
+문서를 남기자"로 바꿨다. 코드는 전부 되돌렸고(작업 트리에 코드 변경 0줄) 남은 것은 `docs/guides/running-tars.md`의 새 절
+"네트워크와 시계 — 기본은 꺼져 있다"(왜 꺼져 있나 · 세 줄 켜기 · QEMU의 SLIRP는 NTP 서버를 안 알려 준다 · 켜졌는지 보는 법)와
+기억 `docs/decisions/feedback_network_default_stays_off.md`다. 그 앞에 "게스트 curl에 CA 목록이 없다"는 보고를 확인했다 — VD-M0
+이전 상태이고 오늘 18:48의 ISO · initrd에는 150장이 있다(호스트 curl이 그 번들만으로 Groq 체인을 검증했다).
+
 ## 바로 다음에 할 것 — 실기에서 둘을 본다, 그리고 다음 서브프로젝트
 
 사용자가 실기 노트북에서 볼 것이 둘이다. 둘 다 `running-tars.md`에 명령이 있다.
