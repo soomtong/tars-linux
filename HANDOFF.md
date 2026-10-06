@@ -29,6 +29,31 @@ M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
 찍혔다. 바깥에 안 나갔고 지웠으며 `/tmp/run/vd2` 전체에 키 모양이 0개인 것을 다시 확인했다. plan에 "호스트에서 `tars-dictate`를
 돌리지 말 것"을 적었다. 키를 바꿀지는 사용자의 판단이다.
 
+## 2026-10-07 새벽 — Config Tool(TC) 진행 중. M0 끝, M1 plan 작성 중, M2는 design부터
+
+사용자의 요청("tars-config 실행 파일을 만들어서 시스템 전체 세팅을 할 수 있게 … 쉘 스크립트가 아니라면 어떤 언어로")에서 열었다.
+design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임, 전제 정정 7+), plan `-tc-m0.md`. 사용자 결정 셋 — seed의 별칭
+`tars-config` · `tars-rc`는 지운다(cat과 다를 게 없다), 언어는 Zig(`config.zig` 재사용), M1 · M2까지 끝까지 간다("진정한 user experience 개선").
+
+| 커밋 | 무엇 |
+|---|---|
+| `6968026` | TC design · M0 plan(Opus planner `tc-design`, 사본 `/tmp/run/tc0`) |
+| `8671f56` | M0 — `init/src/config_cli.zig`(root · 시스템 콜) · `config_edit.zig`(순수) · `config_edit_test.zig`(호스트), `config.zig`의 로그 24줄 → `log()`(root의 `configLog`가 가로챈다), seed 별칭 둘 제거, config 체인 1차에 동사 다섯 + `list`, 2차의 `echo`가 `set`으로. 구현 Sonnet `tc-m0-impl`, plan 코드 고친 곳 0. 루트 게이트 21체인 2/2 두 번(56:01 · 55:52) |
+
+동사는 여섯 — 인자 없음(보기) · `get` · `set` · `reset` · `check` · `list`(+ `help`). `unset`은 안 받고 `reset`을 가리킨다(design 결정 1 덧붙임).
+`set`은 이기는 줄 하나만 바꾸고 재부팅(`kill -INT 1`)이 필요하다고 매번 말한다.
+
+알릴 것 — 쓰던 설정 디스크(`out/tars-config.img` · 실기 p2)의 rc에는 `alias tars-config='cat …'`가 남아 있어 그 셸에서 실행 파일이 가려진다.
+처방은 design 결정 6의 세 줄(`sd 'alias tars-(config|rc)=.*' '' /config/fish.config /config/bashrc /config/zshrc` 또는 `command tars-config`).
+
+다음: planner가 M1 plan(`-tc-m1.md`, 사본 `/tmp/run/tc1`)을 쓰는 중 — 표면 넷의 앞문(`wifi` · `ssh-key add` · `firewall allow` · `dictation
+key/set`), 원칙은 결정 10(남의 문법을 다시 짓지 않는다). 그 뒤 Sonnet 구현 → 루트 게이트 2회 → commit. M2(`reload`)는 따로 design을 쓴다.
+서브프로젝트를 닫을 때 lead가 할 것은 design "닫을 때" 절(CLAUDE.md 표 · `project_config_tool.md` · lessons · running-tars의 `tars-config` 절 ·
+"네트워크와 시계" 절의 `sd` 세 줄을 `tars-config set`으로).
+
+lead의 실수 하나 — 루트 게이트를 커널 컴파일 중에 멈춰 `kernel/build`가 깨졌었다(vd2 사본의 빌드로 복구). 게이트를 멈출 때는 `kernel: ` 줄이
+지나갔는지 먼저 본다.
+
 ## 2026-10-06 저녁 — net · ntp 기본값은 그대로, 켜는 법을 문서로
 
 사용자가 QEMU에서 VD를 보려다 `tars.conf`의 `net=off` · `ntp=off`를 보고 "기본 seed 값에 활성화하자"고 했고, `config.zig` 기본값
