@@ -278,6 +278,22 @@ ln -sf aplay "$WORKDIR/usr/bin/arecord"
 mkdir -p "$WORKDIR/usr/share"
 cp -r "$SYSROOT/usr/share/alsa" "$WORKDIR/usr/share/"
 
+# AU-M3. alsactl init의 규칙 하나를 더한다 — DSP 뒤의 내장 디지털 마이크를 켠다.
+# SOF는 topology의 스위치 컨트롤을 꺼짐(0)으로 올리고(sof/ipc3-topology.c ·
+# ipc4-topology.c), alsactl의 범용 규칙(init/default)은 이름이 정확히 "Capture Switch"인
+# 것만 켠다. 그대로 두면 arecord가 내장 마이크에서 0만 받는다. Debian은 이 일을
+# alsa-ucm-conf의 부팅 순서로 하는데 그 순서가 Speaker · Headphone 스위치도 꺼서
+# (HDA/init.conf — 켜는 것은 PipeWire의 몫으로 본다) 우리는 UCM을 안 싣는다
+# (init/src/audio.zig의 -U 주석). postinit은 alsactl init이 카드마다 표준 규칙 뒤에
+# 읽는 자리라(init/00main) 다른 카드에는 아무 일도 안 한다 — 이름이 없으면 건너뛴다.
+# 볼륨은 커널이 0dB로 올리므로(VOL_ZERO_DB) 안 만진다.
+mkdir -p "$WORKDIR/usr/share/alsa/init/postinit"
+cat > "$WORKDIR/usr/share/alsa/init/postinit/00-tars-dmic.conf" <<'EOF'
+# tars(AU-M3): SOF 카드의 내장 디지털 마이크를 켠다. kernel/make_initrd.sh가 쓴다.
+CTL{reset}="mixer"
+CTL{name}="Dmic0 Capture Switch",CTL{do_search}=="1",CTL{values}="on"
+EOF
+
 # speaker-test -t wav가 채널마다 읽는 목소리 파일. 2채널(-c 2)이 읽는 둘만
 # 넣는다 — 나머지 일곱(Center · Rear · Side · Noise)은 노트북에 없는 채널이다.
 # 둘이 289,118바이트다. 사람이 왼쪽에서 "Front Left"를 듣는 것이 스피커 배선을

@@ -1,10 +1,11 @@
 # TARS Audio Devices — Design
 
 Date: 2026-10-05
-Status: 진행 중. M0 · M1 · M2가 끝났다(2026-10-06) — 커널 ALSA · HDA, 게스트 alsa-utils, 스무번째 체인 `audio/check.sh`(M0), 부팅이
-믹서를 켜고 볼륨을 `/config/asound.state`에 기억한다(M1), 실기 HDA 코덱 여덟 · USB 오디오 · 기본 카드(`/etc/asound.conf`, 결정 7)(M2).
-다음은 M3(Intel SOF · AMD ACP · firmware, `docs/plans/2026-10-05-tars-audio-devices-au-m3.md`). plan은 `-au-m0.md` ~ `-au-m2.md`이고
-각 끝의 "실측한 것" 절이 값이다.
+Status: 끝났다(2026-10-06, AU-M0~M3 — M0 · M1 · M2 · M3 전부 2026-10-06에, 하루 반). milestone은 쓸 때의 넷 그대로다. plan은
+`docs/plans/2026-10-05-tars-audio-devices-au-m0.md` ~ `-au-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. plan들이 바로잡은 전제는
+"lead의 전제를 바로잡은 것" 1 ~ 12에, 각 milestone의 결과는 결정 1 · 4 · 5의 덧붙임과 결정 7 · 8에 있다. 기억은
+`docs/decisions/project_audio_devices.md`. 남긴 것은 비목표 10(SoundWire · side-codec 앰프 — 실기가 요구하면 새 서브프로젝트)과
+lessons 이월 숙제(늦은 내장 카드 · firmware의 RAM · 사각파 하한 · 화면 줄 직접 읽는 자리).
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -76,14 +77,15 @@ M0이 `scripts/config -e`로 적는 것은 다섯이다. 전부 내장(`=y`)이�
 `olddefconfig`가 더하는 것 중 둘을 적어 둔다. `SND_INTEL_DSP_CONFIG`(HDA 컨트롤러가 Intel의 DSP 경로를 쓸지 고르는 표)가
 따라 켜지는데, 그 표의 항목이 전부 `IS_ENABLED(CONFIG_SND_SOC_SOF_…)`로 감싸여 있어서 SOF를 안 켠 커널에서는 언제나
 HDA로 간다(커널 소스 `sound/hda/core/intel-dsp-config.c`). DSP를 쓰는 노트북도 M0~M2의 커널에서는 HDA로 스피커와 헤드폰
-잭이 붙고 DMIC(내장 디지털 마이크)만 안 붙는다는 뜻이다. 그리고 `SND_JACK_INPUT_DEV`가 켜진다 — 프롬프트가 없고
+잭이 붙고 DMIC(내장 디지털 마이크)만 안 붙는다는 뜻이다. M3부터는 DMIC가 있는 Intel 노트북이 SOF로 간다 — firmware가 없으면
+HDA로 돌아오지 않는다(위험 11). 그리고 `SND_JACK_INPUT_DEV`가 켜진다 — 프롬프트가 없고
 `INPUT=y`면 무조건이다. 실기의 HDA 코덱은 잭마다 입력 장치(`HDA Intel PCH Headphone` 같은 것)를 하나씩 만든다(위험 2).
 
 | 후보 | 왜 아닌가 |
 |---|---|
 | (a) HDA 컨트롤러 + 범용 코덱 | 고른 것. QEMU가 흉내 내는 노트북 모양이 이것이고, 게이트가 바이트로 볼 수 있는 길이 이것뿐이다 |
 | (b) 여기에 실기 코덱(Realtek · Conexant · Cirrus 등)까지 | M2가 했다. 코덱 드라이버는 노트북마다의 quirk 표이고 QEMU에 그 코덱이 없다. 게이트가 심볼과 표로만 보는 덩어리라 QEMU 경로와 섞지 않는다 |
-| (c) 여기에 DSP(Intel SOF · AMD ACP)까지 | M3. firmware · topology가 붙고 QEMU에 없다 |
+| (c) 여기에 DSP(Intel SOF · AMD ACP)까지 | M3가 했다(SoundWire 코덱 · side-codec 앰프 제외). firmware · topology가 붙고 QEMU에 없다 |
 | (d) `virtio-sound` | QEMU에는 있지만 노트북에는 없다. TARS는 일반 x86_64 노트북에서 돈다(`project_target_hardware`) |
 | (e) QEMU의 옛 장치(AC97 · ES1370 · SB16) | 같은 이유. 노트북에 없다 |
 
@@ -100,6 +102,16 @@ HDA로 간다(커널 소스 `sound/hda/core/intel-dsp-config.c`). DSP를 쓰는 
 > SI3054 모뎀, 그리고 side-codec 앰프(CS35L41 · CS35L56 · TAS2781)는 `SND_SOC` · firmware가 있어야 붙으므로 M3의 층이다. 크기는
 > bzImage +258,048바이트(3.2%)인데 `inflate_fast`가 페이지 안 같은 자리(`0xb40`)라 `Run /init`과 `install` 부팅 7의 `init waited`가
 > HEAD와 같다.
+
+> M3가 켠 것(2026-10-06, `-au-m3.md` 확정 2). `scripts/config -k`(없으면 `ACP6x`를 `ACP6X`로 바꿔 조용히 사라진다)로 `-e` 열여덟 ·
+> `-d` 일곱. Intel — `SND_SOC` · `SND_SOC_SOF_TOPLEVEL` · `PCI` · `INTEL_TOPLEVEL` · 세대 열하나(Cannon Lake · Comet Lake ~ Panther Lake ·
+> Wildcat Lake, Elkhart Lake는 TGL 드라이버의 PCI 표에 함께 있어 둔다) · `HDA_LINK` · `HDA_AUDIO_CODEC`(SOF 아래에서도 M2의 HDA 코덱
+> 드라이버가 스피커 · 헤드폰을 받는다) · 범용 machine(`SND_SOC_INTEL_SOF_SKL_HDA_DSP_GENERIC_MACH`, Kconfig가 HDMI 코덱에 depends라
+> HDMI 코덱 다섯이 따라 켜진다 — GPU 드라이버가 없어 비목표 6은 그대로). AMD — 세대마다의 PDM 드라이버 셋(Renoir `ACP3x` · Yellow Carp
+> `ACP6x`+`YC_MACH` · ACP6.3 `snd_pci_ps`)과 ACP7.x의 기본 길인 범용 `snd_acp_pci` + legacy machine. 끈 것 — SKL · KBL · APL · GLK ·
+> Merrifield · Atom SST · `SDCA_HID`. 소리 밖에서 새로 서는 것은 `AUXILIARY_BUS` · `REGMAP_I2C` · `REGMAP_IRQ` 셋뿐이다. `SND_HDA_I915`가
+> 없어 SOF의 i915 init이 `-ENODEV` stub이라 GPU를 안 기다린다(소스로 확인). 크기 bzImage +372,736바이트(4.5%), `inflate_fast`의
+> `0xb40`은 그대로, `Run /init` 3.05 → 3.20초(initrd +6.3MB의 몫), `install` 부팅 7 `init waited` 1,800 · 1,900 → 1,700ms.
 
 ### 결정 2 — 유저랜드는 alsa-utils를 그대로 쓴다. 넣는 것은 바이너리 넷과 링크 하나, 설정 트리, 목소리 파일 둘이다
 
@@ -193,7 +205,7 @@ SIGUSR2다(`alsactl/daemon.c`). 우리의 종료 경로는 SIGTERM 뒤에 SIGHUP
 > 하나. 끄는 길의 `reapAll` 뒤 · `sync` 앞에서 `alsactl store`(상한 2초, 실측 50ms 남짓). 이 부팅에 믹서를 세웠고 `/config`가 붙었을
 > 때만 적는다 — 아니면 커널의 꺼진 기본값이 사람의 파일을 덮는다. (3) 늦게 오는 카드는 HDA의 시각만 쟀다(QEMU에서 카드가 PID 1보다
 > 2.5초 먼저 선다). 부팅 뒤에 꽂힌 USB 카드를 켜는 것은 M2다. 곁의 둘 — UCM은 `-U`로 끈다(M3에서 다시 본다), `tars.conf` 키는 없다
-> (사람이 `amixer`로 맞춘 값이 곧 설정이다).
+> (사람이 `amixer`로 맞춘 값이 곧 설정이다). UCM은 M3에서 다시 봤고 그대로 끈다(전제 11).
 
 ### 결정 5 — 게이트는 새 체인 `audio/check.sh`(스무번째) 하나, 부팅 하나, 판정은 바이트
 
@@ -250,6 +262,11 @@ D(자기 디스크, 표지 `audio/usb`)가 더해져 monitor(포트 45491, 첫 �
 샘플을 줄이므로(240/255) 프로브가 100%로 올린다. 부팅 때 꽂아 둔 판은 열 판 중 넷이 안 됐다(열거 누락 하나 · 시리얼 없이 선 셋) —
 그래서 게이트는 부팅 뒤에 꽂는다.
 
+M3가 바꾼 것. 검사 1이 SOF · ACP 심볼 스물다섯 · 음성 일곱(끈 것) · alias 열둘 · "커널이 찾는 `sof-*.ri` 이름 19개가 전부
+`guest_firmware.sh`에 있다" · initrd의 postinit 규칙 파일을 더 본다. 부팅 D 끝에 검사 16(드라이버 등록 · QEMU의 HDA는 여전히
+`snd_hda_intel` · 탈출로 파라미터 `snd_intel_dspcfg.dsp_driver`가 커널에 있다) · 17(postinit 규칙이 `Dmic0 Capture Switch`를 켠다 —
+QEMU에 그 컨트롤이 없어 프로브가 `alsactl -I restore`로 같은 이름의 사용자 컨트롤을 만들고 일꾼의 argv로 init을 돌린다). 검사 열일곱.
+
 mutation(M0 plan이 사본에서 다 돌렸다 — plan 확정 7).
 
 | 심는 고장 | 잡은 자리 |
@@ -291,6 +308,28 @@ default "N"`의 기본값 자리에 둔다 — 글자로 박으면 `ALSA_CARD=0 
 (`defaults.ctl.card`)은 재생 쪽 카드다. `/etc/asound.conf.tars`에 쓰고 `rename`한다. `tars.conf` 키는 없다 — 다른 카드를 원하면
 `ALSA_CARD=N` 또는 `-D sysdefault:CARD=N`.
 
+### 결정 8 — 녹음의 기본 장치는 세 단이다: 꽂힌 USB 마이크 · 내장 DMIC · 장치 0(M3)
+
+M2의 규칙("장치 0을 가진 카드 중 가장 큰 번호")은 SOF 카드(`sof-hda-dsp`)에서 틀린다 — DMIC가 장치 6이고 장치 0은 잭 마이크다. 그래서
+`init`의 `follow`가 `/proc/asound/pcm`을 읽어 PCM의 id로 알아보고, 녹음은 처음 있는 단에서 번호가 가장 큰 것을 고른다(M3 plan 확정 4).
+
+| 단 | 알아보는 법 | 파일의 글자 |
+|---|---|---|
+| 1 USB 마이크 · 헤드셋 | 카드 id가 USB-Audio이고 녹음 PCM이 있다 | `sysdefault:CARD=N` |
+| 2 내장 DMIC | 녹음 PCM의 이름에 `DMIC`(SOF 장치 6, AMD ACP 카드) | 장치 0이 아니면 `plughw:CARD=N,DEV=D` |
+| 3 그 밖 | 장치 0을 가진 카드(M2 그대로) | `sysdefault:CARD=N` |
+
+| 후보 | 왜 아닌가 |
+|---|---|
+| (a) 세 단, `/proc/asound/pcm`의 id | 고른 것 |
+| (b) UCM이 정하는 `default` | 전제 11 — UCM을 안 싣는다 |
+| (c) "녹음 PCM이 있는 카드 중 가장 큰 번호" | SOF 카드의 장치 0(잭 마이크)으로 간다. DMIC는 장치 6이다 |
+| (d) `tars.conf` 키 | 결정 7의 (c)와 같다 |
+| (e) 장치 번호를 글자로 박는다(6) | AMD는 ACP 카드의 장치 0이고 machine마다 다르다 |
+
+`plughw`라 두 프로그램이 동시에 녹음하면 둘째가 `Device or resource busy`다(위험 13). 잭에 꽂은 헤드셋 마이크는 고르지 않는다 — 사람이
+`arecord -D plughw:0,0`로 고른다(사운드 서버의 일, 비목표 2).
+
 ## lead의 전제를 바로잡은 것
 
 1. 마이크 증명에 게스트 안 루프백(`snd-aloop`)이 필요하지 않다. 컨테이너 alsa-lib의 `file` 플러그인이 QEMU의 HDA
@@ -310,6 +349,16 @@ default "N"`의 기본값 자리에 둔다 — 글자로 박으면 `ALSA_CARD=0 
    지금 볼륨을 물어 그대로 내놓는다 — QEMU `usb-audio`는 꽂을 때마다 `240 [-0.50dB] [on]`이었다. 꺼진 채 뜨는 것은 HDA 드라이버가
    가상 Master를 0에 두기 때문이고(실측 7) USB에는 그런 자리가 없다. 그래서 꽂을 때 `alsactl`을 부르는 자리가 없다.
 8. (M2) "monitor를 안 쓴다"(5)는 M2에서 바뀐다 — 부팅 D가 QEMU `usb-audio`를 `device_add`로 꽂고 뽑으므로 포트 45491을 처음 쓴다.
+9. (M3 planner) firmware의 출처가 Debian `firmware-sof-signed`가 아니라 sof-bin 릴리스(v2026.09.1)다. trixie의 패키지(2025.01)에는
+   Panther Lake · Wildcat Lake가 없고 이미지를 다시 구워야 한다. `vendor_firmware.sh`가 linux-firmware와 같은 방식(버전 · sha256)으로
+   받으므로 Dockerfile은 그대로다.
+10. (M3 planner) AMD는 SOF가 아니라 PDM 드라이버다. AMD SOF의 firmware는 linux-firmware에도 sof-bin에도 없고, DMI 표에 없는 Ryzen
+    노트북의 DMIC는 firmware 없는 PDM 드라이버가 받는다. lead의 틀에 있던 `ACP63` · `ACP70`은 세대마다의 `snd_pci_ps`와 7.x의 기본 길인
+    범용 `snd_acp_pci` + legacy machine이다.
+11. (M3 planner) UCM은 싣지 않고 `-U`는 그대로다. alsa-ucm-conf의 부팅 순서(`HDA/init.conf`)가 Speaker · Headphone 스위치를 끈다 — 사운드
+    서버가 켠다고 보는 설정이다. DMIC 스위치(`Dmic0 Capture Switch`, SOF가 꺼진 채 올린다)는 initrd의 alsactl postinit 규칙 한 줄이 켠다.
+12. (M3 planner) SoundWire 코덱(`sof_sdw`)과 스피커 앰프 side codec(CS35L41 · CS35L56 · TAS2781)은 M3에서 뺐다 — 지금 조용한 기계를
+    그대로 두는 것이고, 빼서 하루 크기가 됐다. lead가 AU의 비목표로 닫았다(비목표 10).
 
 ## 검증
 
@@ -352,6 +401,8 @@ M1이 넘긴 것 하나 더 — 부팅 뒤에 꽂힌 카드. M1의 restore와 st
 
 ### AU-M3 — DSP를 거치는 노트북의 내장 마이크(Intel SOF · AMD ACP)
 
+했다(2026-10-06, `-au-m3.md`). 결정 1의 M3 문단 · 결정 8 · 전제 9 ~ 12 · 위험 11 ~ 16 · 실측 18 · 19가 결과다. 아래는 쓸 때의 글이다.
+
 2019년 이후의 Intel 노트북 다수와 Ryzen 노트북의 내장 마이크는 HDA 코덱이 아니라 DSP 뒤의 DMIC다. Intel SOF(`sof-firmware`의
 firmware와 topology, SoundWire 코덱을 쓰는 기계는 `sof_sdw`)와 AMD ACP(세대별 PCI 드라이버와 DMI 표)를 켜고 firmware를 WL처럼
 initrd 꼬리에 붙인다. UCM(alsa-ucm-conf)이 필요한지, DMIC가 카드의 몇 번 장치로 오고 `default`가 그것을 고르게 할지가 이
@@ -386,6 +437,18 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
 10. (M2) USB를 꽂은 동안 `amixer sset Master …`는 `Unable to find simple control 'Master',0`으로 실패한다 — 믹서의 기본이 USB 카드이고
     거기에 `Master`가 없다. 내장 카드는 `amixer -c 0`. 그리고 위험 2(잭 입력 장치)가 M2부터 실기에서 현실이 된다 — `init`의 키보드
     판정과 terminal의 포인터 판정이 잭 장치(`EV_SW`, 헤드셋 버튼의 `KEY_PLAYPAUSE`)를 안 고른다는 것을 M2 planner가 코드로 읽었다.
+11. (M3) DMIC가 있는 Intel 노트북은 이제 스피커까지 SOF를 지난다. firmware · topology가 맞지 않거나 SOF가 그 기계에서 실패하면 M2까지
+    되던 스피커가 조용해진다. 탈출로는 커널 인자 `snd_intel_dspcfg.dsp_driver=1`(running-tars.md).
+12. (M3) IPC4(Meteor Lake 이후)의 범용 topology에 `-3ch`가 없다(sof-bin에 없다). DMIC 셋인 그 노트북은 topology를 못 찾는다 — 11과 같은 증상.
+13. (M3) DMIC를 `plughw`로 연다 — 두 프로그램이 동시에 녹음하면 둘째가 `Device or resource busy`다(SOF · ACP 카드에는 alsa-lib의 dsnoop
+    설정이 없다).
+14. (M3) M1의 일꾼은 `controlC0`이 서는 순간 있는 카드만 init한다. 카드가 여럿인 AMD 노트북(GPU 쪽 HDA · 아날로그 HDA · ACP)이나 SOF가
+    firmware를 늦게 올려 5초를 넘긴 Intel 노트북에서는 늦은 카드가 커널의 기본값(HDA는 꺼짐, DMIC 스위치 꺼짐)으로 남는다. 고치는 자리는
+    둘 — 일꾼이 `/dev/snd`가 잠잠해질 때까지 기다리는 것, 또는 `follow`가 새 카드를 볼 때 `alsactl -U init N`. 실기에서 겪은 뒤 정한다(lessons
+    이월 숙제).
+15. (M3) DMIC를 PCM 이름(`DMIC`)으로 알아본다. 이름을 그렇게 안 짓는 machine(이 milestone이 안 켠 I2S 기계 등)은 장치 0 단으로 떨어진다.
+16. (M3) 게스트 RAM. firmware 원본 13.7MB가 initramfs에 늘 있고 512MB 게스트의 `MemAvailable`이 8MB 남짓 줄었다(약 191 → 183MB). 다음에
+    firmware를 더하는 일은 lessons 이월 숙제("firmware가 게스트 RAM에 늘 있다")를 함께 본다.
 
 ## 비목표
 
@@ -400,6 +463,11 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
 8. 코덱 절전(`SND_HDA_POWER_SAVE_DEFAULT`). 기본값 0(끔) 그대로다.
 9. (M2) 꽂을 때 그 카드의 지난 볼륨을 되살리는 것(`alsactl restore N`). 사람이 그 카드를 꽂은 채 꺼야 파일에 남고 감독 루프가 일꾼을
    하나 더 거둬야 한다 — 얻는 것이 작다.
+10. (M3 뒤, lead) SoundWire 코덱 노트북(`sof_sdw`)과 스피커 앰프 side codec(CS35L41 · CS35L56 · TAS2781). 크기는 `SOUNDWIRE` ·
+    `SOUNDWIRE_INTEL` · `SND_SOC_INTEL_SOUNDWIRE_SOF_MACH`와 코덱 열 남짓, topology는 sof-bin의 SoundWire 것 전부(24MB 원본) 또는 실기
+    목록에서 고른 것, 앰프는 SSID마다의 firmware(cirrus 5.5MB · ti 12MB). 실기가 그것을 요구하면 새 서브프로젝트로 연다 — 게이트는
+    M3과 같이 심볼 · alias · firmware 이름이다. 그리고 AMD ACP6.2(6.18에 PDM 드라이버가 없다) · AMD SOF(firmware가 없다) · I2S 코덱
+    machine(ES8336 · RT5682 · MAX98357A — Chromebook과 싼 노트북) · Steam Deck.
 
 ## 착수 전에 실측한 것
 
@@ -468,6 +536,13 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
     47,000에서 40,000으로 내렸다(부하 아래 최소가 47,425였다 — 하한의 일은 음소거 · 틀린 볼륨을 잡는 것이고 둘 다 `tone`이 0이다).
     고친 뒤 부하 아래 다섯 판이 초록이었고, -20dB mutation은 `tone=0 · other=48000`(값 ±800)으로 여전히 빨갛다.
 
+18. (M3 planner) `SND_DYNAMIC_MINORS`가 HDMI 코덱을 따라 켜져 `SNDRV_CARDS`가 8 → 32가 됐다(M2의 `MAX_CARDS = 32` 주석은 M2에서는
+    커널 쪽이 8이었다). `snd_pci_acp6x` · `snd_pci_ps`는 PCI 표가 `modules.builtin.modinfo`의 alias로 안 나온다(Renoir만 나온다) — 게이트는
+    심볼로 본다. sof-bin v2026.09.1에서 싣는 것은 42개(firmware 19 · DRC 모듈 1 · 범용 topology 22, 원본 13,701,048바이트)이고 firmware
+    목록은 77 → 119개다. firmware가 없으면 SOF는 HDA로 돌아오지 않는다(위험 11) — 그래서 검사 1이 이름 19개를 대조한다.
+19. (M3 planner) QEMU에 없는 컨트롤에 규칙을 시험하는 법 — `alsactl -I restore`로 같은 이름의 사용자 컨트롤을 만들고, 일꾼의 argv 그대로
+    `alsactl -U init`을 돌려 postinit 규칙이 그것을 켜는지 본다(검사 17). lessons에도.
+
 ## 닫을 때(lead의 몫)
 
 - 이 design의 `Status:`를 `끝났다(날짜, AU-M0~M3)`로 고친다. milestone이 줄거나 늘면 그 사실을 한 줄로.
@@ -493,6 +568,9 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
 
   이어폰은 M2부터다. HDA 헤드폰 잭은 꽂으면 스피커가 꺼지고, USB 헤드셋은 꽂은 지 1초 안에 기본 카드가 된다(`cat /etc/asound.conf`로
   보인다, 결정 7). 내장 카드의 믹서는 USB가 꽂힌 동안 `amixer -c 0 sset Master …`다.
+  M3 — `dmesg | grep -i sof`에 `Firmware file:` · `Topology file:`이 보이면 SOF가 선 것이고 `SOF firmware and/or topology file not found.`면
+  그 이름을 적어 알린다. 탈출로는 커널 인자 `snd_intel_dspcfg.dsp_driver=1`. `arecord -l`에서 `DMIC`가 든 장치가 기본 녹음이고
+  `amixer -c 0 sget 'Dmic0 Capture Switch'`가 내장 마이크의 스위치다.
 - `HANDOFF.md`. VD를 열 사람에게 경계(비목표 4)와 `arecord -f S16_LE -r 16000 -c 1`이 기본 장치(`plug` → `dsnoop`)로 도는지는
   안 쟀다는 것을 넘긴다.
 

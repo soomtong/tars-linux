@@ -71,8 +71,11 @@ pub fn verbFor(storage_mounted: bool, state_exists: bool) Verb {
 ///   -U   UCM을 안 쓴다. 쓰면 alsa-ucm-conf가 없는 initrd에서 `Unable to find the
 ///        top-level configuration file '/usr/share/alsa/ucm2/ucm.conf'`와 `failed to
 ///        import hw:0 use case configuration -2` 두 줄을 부팅마다 찍고 범용 방법으로
-///        내려온다(design 실측 10). UCM이 필요한 기계(DSP 뒤의 마이크)는 AU-M3이고,
-///        그때 alsa-ucm-conf와 함께 이 플래그를 다시 본다
+///        내려온다(design 실측 10). AU-M3이 다시 봤고 그대로 둔다 — alsa-ucm-conf를
+///        실어도 그 부팅 순서(HDA/init.conf)가 Speaker · Headphone 스위치를 끈다. 켜는
+///        것은 사운드 서버(PipeWire)의 몫이라고 보는 설정이고 우리에게는 그것이 없다.
+///        DSP 뒤의 마이크(Dmic0) 스위치는 alsactl init의 postinit 규칙 하나가 켠다
+///        (make_initrd.sh의 AU-M3 절)
 ///   -f   기본 경로(/var/lib/alsa/asound.state)가 아닌 파일을 주면 alsactl이 잠금
 ///        파일을 안 만든다(lock.c). 게스트에 /var/lock이 없어도 된다
 ///
@@ -295,45 +298,77 @@ pub fn store() void {
 //
 // 듣지 않고 본다. 감독 루프는 이미 1초마다 깨므로, 깰 때마다 이름을 읽고 지난번과
 // 다를 때만 파일을 쓴다. uevent 소켓도 일꾼도 없다(AU-M2 plan 확정 4).
+//
+// AU-M3. 녹음은 장치 0이 아닐 수 있다. DSP 뒤의 내장 디지털 마이크(DMIC)는 Intel
+// SOF 카드에서 장치 6("DMIC (*)")이고 장치 0의 녹음은 헤드셋 잭이다 — 장치 0만 보면
+// arecord가 아무것도 안 꽂힌 잭을 듣는다. AMD는 DMIC가 따로 카드 하나(ACP)이고
+// 아날로그 HDA 카드와 어느 쪽이 큰 번호일지 정해져 있지 않다. 그래서 녹음은 세 단을
+// 차례로 본다 — 꽂힌 USB 마이크, 내장 DMIC, 그 밖의 장치 0. 무엇이 DMIC이고 무엇이
+// USB인지는 PCM의 이름으로 안다. 그래서 /dev/snd의 노드 이름 대신 /proc/asound/pcm을
+// 읽는다(AU-M3 plan 확정 4).
 
 pub const ASOUND_CONF_PATH: [:0]const u8 = "/etc/asound.conf";
 /// 다 쓴 뒤 rename한다. 반쯤 쓴 파일을 aplay가 읽지 않게.
 const ASOUND_CONF_TMP: [:0]const u8 = "/etc/asound.conf.tars";
-const SND_DIR: [:0]const u8 = "/dev/snd";
+/// 카드마다 PCM 한 줄 — 번호 · 이름 · 방향. 소리 장치가 없으면 빈 파일이다.
+const PCM_PROC: [:0]const u8 = "/proc/asound/pcm";
 
 /// 카드 번호의 상한. 커널의 SNDRV_CARDS(`CONFIG_SND_MAX_CARDS`의 기본 32)와 같다.
 pub const MAX_CARDS = 32;
 
-/// 장치 0에 재생 · 녹음이 있는 카드의 집합. 비트 하나가 카드 하나다.
+/// 장치 0에 재생 · 녹음이 있는 카드의 집합과 녹음 쪽의 표지 둘. 비트 하나가 카드
+/// 하나다.
 pub const Cards = struct {
     playback: u32 = 0,
     capture: u32 = 0,
+    /// 녹음이 되는 USB 카드(헤드셋 · USB 마이크). snd-usb-audio는 PCM id를 언제나
+    /// "USB Audio"로 짓는다(sound/usb/stream.c).
+    usb_capture: u32 = 0,
+    /// 녹음 PCM의 id에 "DMIC"가 든 카드. SOF는 "DMIC (*)"(장치 6)와 "DMIC16kHz (*)"
+    /// (장치 7), AMD ACP는 "DMIC capture dmic-hifi-0"(장치 0)이다.
+    dmic: u32 = 0,
+    /// 카드마다 그 DMIC PCM의 장치 번호. 둘 이상이면 처음 본 것(가장 작은 번호)이다.
+    dmic_dev: [MAX_CARDS]u8 = [_]u8{0} ** MAX_CARDS,
 };
 
-/// /dev/snd의 이름 하나를 `cards`에 더한다. `pcmC<카드>D0p` · `pcmC<카드>D0c`만
-/// 세고 나머지(control · timer · 장치 1 이상)는 버린다. 순수 함수다.
-pub fn addNode(cards: *Cards, name: []const u8) void {
-    const prefix = "pcmC";
-    if (!std.mem.startsWith(u8, name, prefix)) return;
-    const rest = name[prefix.len..];
-    const d = std.mem.indexOfScalar(u8, rest, 'D') orelse return;
-    if (d == 0 or !std.ascii.isDigit(rest[0])) return;
-    const card = std.fmt.parseInt(u8, rest[0..d], 10) catch return;
+/// /proc/asound/pcm의 한 줄을 `cards`에 더한다. 순수 함수다.
+///
+///   00-00: HDA Analog (*) :  : playback 1 : capture 1
+///   00-06: DMIC (*) :  : capture 1
+///   01-00: USB Audio : USB Audio : playback 1 : capture 1
+///
+/// 커널의 snd_pcm_proc_read가 쓰는 모양이다 — 카드와 장치 두 자리씩, id, name, 그리고
+/// 있는 방향만 " : playback N" · " : capture N". 모양이 다르거나 카드가 상한 밖이면
+/// 버린다.
+pub fn addPcmLine(cards: *Cards, line: []const u8) void {
+    if (line.len < 7 or line[2] != '-' or !std.mem.startsWith(u8, line[5..], ": ")) return;
+    if (!std.ascii.isDigit(line[0]) or !std.ascii.isDigit(line[3])) return;
+    const card = std.fmt.parseInt(u8, line[0..2], 10) catch return;
+    const dev = std.fmt.parseInt(u8, line[3..5], 10) catch return;
     if (card >= MAX_CARDS) return;
+    const rest = line[7..];
+    const id = rest[0 .. std.mem.indexOf(u8, rest, " : ") orelse return];
+    const playback = std.mem.indexOf(u8, rest, " : playback ") != null;
+    const capture = std.mem.indexOf(u8, rest, " : capture ") != null;
     const bit = @as(u32, 1) << @intCast(card);
-    if (std.mem.eql(u8, rest[d..], "D0p")) {
-        cards.playback |= bit;
-    } else if (std.mem.eql(u8, rest[d..], "D0c")) {
-        cards.capture |= bit;
+    if (dev == 0 and playback) cards.playback |= bit;
+    if (dev == 0 and capture) cards.capture |= bit;
+    if (!capture) return;
+    if (std.mem.startsWith(u8, id, "USB Audio")) cards.usb_capture |= bit;
+    if (std.ascii.indexOfIgnoreCase(id, "dmic") != null and cards.dmic & bit == 0) {
+        cards.dmic |= bit;
+        cards.dmic_dev[card] = dev;
     }
 }
 
 pub const Defaults = struct {
     playback: ?u8 = null,
     capture: ?u8 = null,
+    /// 녹음 카드의 장치. 내장 DMIC를 고를 때만 0이 아닐 수 있다(AU-M3).
+    capture_dev: u8 = 0,
 
     pub fn eql(a: Defaults, b: Defaults) bool {
-        return a.playback == b.playback and a.capture == b.capture;
+        return a.playback == b.playback and a.capture == b.capture and a.capture_dev == b.capture_dev;
     }
 };
 
@@ -342,9 +377,23 @@ fn highest(mask: u32) ?u8 {
     return @intCast(31 - @clz(mask));
 }
 
-/// 재생과 녹음 각각 번호가 가장 큰 카드. 순수 함수다.
+/// 재생은 장치 0을 가진 카드 중 번호가 가장 큰 것. 녹음은 세 단을 차례로 보고 처음
+/// 걸리는 단에서 번호가 가장 큰 카드다(AU-M3). 순수 함수다.
+///
+///   1. 꽂힌 USB 마이크 · 헤드셋(장치 0). 사람이 일부러 꽂은 것이 이긴다
+///   2. 내장 DMIC(그 PCM의 장치). SOF 카드의 장치 0 녹음은 헤드셋 잭이라 고르지 않는다
+///   3. 그 밖의 장치 0 녹음(AU-M2 그대로 — HDA의 아날로그 마이크, QEMU의 코덱)
 pub fn defaultsFor(cards: Cards) Defaults {
-    return .{ .playback = highest(cards.playback), .capture = highest(cards.capture) };
+    var d: Defaults = .{ .playback = highest(cards.playback) };
+    if (highest(cards.usb_capture & cards.capture)) |c| {
+        d.capture = c;
+    } else if (highest(cards.dmic)) |c| {
+        d.capture = c;
+        d.capture_dev = cards.dmic_dev[c];
+    } else {
+        d.capture = highest(cards.capture);
+    }
+    return d;
 }
 
 /// /etc/asound.conf의 글자. 둘 다 없으면 null이다(파일을 지운다). 순수 함수다.
@@ -361,12 +410,19 @@ pub fn defaultsFor(cards: Cards) Defaults {
 pub fn render(buf: []u8, d: Defaults) ?[]const u8 {
     const ctl = d.playback orelse d.capture orelse return null;
     var w: std.Io.Writer = .fixed(buf);
-    w.writeAll("# tars-init이 쓴다(AU-M2). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
-        "# 재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것이 기본이다.\n" ++
+    w.writeAll("# tars-init이 쓴다(AU-M2 · M3). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
+        "# 재생은 장치 0을 가진 카드 중 번호가 가장 큰 것, 녹음은 USB 마이크 · 내장 DMIC ·\n" ++
+        "# 그 밖의 장치 0 순으로 처음 있는 단에서 번호가 가장 큰 것이다.\n" ++
         "# ALSA_CARD(또는 ALSA_PCM_CARD)를 주면 그 카드가 두 방향 다 기본이다.\n" ++
         "pcm.!default {\n\ttype asym\n") catch return null;
     if (d.playback) |n| w.print(DIRECTION, .{ "playback", n }) catch return null;
-    if (d.capture) |n| w.print(DIRECTION, .{ "capture", n }) catch return null;
+    if (d.capture) |n| {
+        if (d.capture_dev == 0) {
+            w.print(DIRECTION, .{ "capture", n }) catch return null;
+        } else {
+            w.print(DIRECTION_DEV, .{ "capture", n, d.capture_dev }) catch return null;
+        }
+    }
     w.print("}}\ndefaults.ctl.card {d}\n", .{ctl}) catch return null;
     return w.buffered();
 }
@@ -378,24 +434,37 @@ const DIRECTION =
     "\t\tstrings [ \"sysdefault:CARD=\" {{ @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"{d}\" }} ]\n" ++
     "\t}}\n";
 
-/// 지금 /dev/snd에 있는 카드. 디렉터리가 없으면(소리 장치가 없는 기계) 빈 집합이다.
+/// 장치 0이 아닌 녹음(내장 DMIC, AU-M3). `sysdefault`는 장치 0만 열므로 `plughw`에 장치를
+/// 준다. SOF · ACP 카드에는 alsa-lib의 카드 설정(cards/*.conf)이 없어 그 카드의
+/// `sysdefault`도 원래 `plughw`다 — 섞기(dsnoop)가 없는 것은 장치 0일 때와 같다.
+const DIRECTION_DEV =
+    "\t{s}.pcm {{\n" ++
+    "\t\t@func concat\n" ++
+    "\t\tstrings [ \"plughw:CARD=\" {{ @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"{d}\" }} \",DEV={d}\" ]\n" ++
+    "\t}}\n";
+
+/// 지금 있는 카드. /proc/asound/pcm을 줄마다 `addPcmLine`에 준다. 파일이 없거나
+/// 비었으면(소리 장치가 없는 기계) 빈 집합이다. 한 줄이 80바이트 안팎이고 노트북 한
+/// 대가 열 줄 남짓이라 8KB면 넉넉하다 — 넘으면 넘은 줄을 안 본다.
 fn scanCards() Cards {
     var cards: Cards = .{};
-    const rc = linux.open(SND_DIR.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+    const rc = linux.open(PCM_PROC.ptr, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
     if (failed(rc) != null) return cards;
     const fd: i32 = @intCast(rc);
     defer _ = linux.close(fd);
-    var buf: [2048]u8 align(8) = undefined;
-    while (true) {
-        const n = linux.getdents64(fd, &buf, buf.len);
-        if (failed(n) != null or n == 0) break;
-        var off: usize = 0;
-        while (off < n) {
-            const ent: *align(1) const linux.dirent64 = @ptrCast(&buf[off]);
-            off += ent.reclen;
-            addNode(&cards, std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&ent.name)), 0));
+    var buf: [8192]u8 = undefined;
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, buf.len - len);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            break;
         }
+        if (n == 0) break;
+        len += n;
     }
+    var lines = std.mem.splitScalar(u8, buf[0..len], '\n');
+    while (lines.next()) |line| addPcmLine(&cards, line);
     return cards;
 }
 
@@ -441,10 +510,18 @@ pub fn follow() void {
         return;
     }
     var pb: [3]u8 = undefined;
-    var cb: [3]u8 = undefined;
+    var cb: [16]u8 = undefined;
     std.debug.print("tars-init: audio: default card is {s} for playback, {s} for capture\n", .{
-        cardText(&pb, want.playback), cardText(&cb, want.capture),
+        cardText(&pb, want.playback), captureText(&cb, want),
     });
+}
+
+/// 로그용. 녹음 카드와, 장치 0이 아니면 그 장치. "0 (device 6)"처럼 — 장치 0일 때는
+/// AU-M2의 글자 그대로다(게이트가 그 글자를 본다).
+fn captureText(buf: *[16]u8, d: Defaults) []const u8 {
+    const c = d.capture orelse return "none";
+    if (d.capture_dev == 0) return std.fmt.bufPrint(buf, "{d}", .{c}) catch unreachable;
+    return std.fmt.bufPrint(buf, "{d} (device {d})", .{ c, d.capture_dev }) catch unreachable;
 }
 
 /// 로그용. 카드 번호를 글자로, 없으면 "none". 번호는 32 아래라 두 자리면 된다.

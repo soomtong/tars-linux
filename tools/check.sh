@@ -234,7 +234,7 @@ for want in "${WANT[@]}"; do
 done
 echo "the initrd carries the four bones and all ${#GUEST_TOOLS[@]} tools the list names"
 
-# ── 검사 1b: initrd 꼬리에 무선 firmware가 전부 있는가 (WL-M1, 정적) ────
+# ── 검사 1b: initrd 꼬리에 무선 · 소리 firmware가 전부 있는가 (WL-M1 · AU-M3) ─
 #
 # 위 INITRD_LIST에는 firmware가 없다. make_initrd.sh가 firmware cpio를 뒤에
 # 이어 붙이는데 `cpio -it`는 첫 archive의 끝 표시에서 멈추기 때문이다. 그래서

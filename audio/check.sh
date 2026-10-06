@@ -35,9 +35,15 @@ cd "$(dirname "$0")"
 #      뽑으면 기본이 HDA로 돌아온다(검사 15). 판정은 여전히 샘플의 값이다 — USB 쪽
 #      소리는 QEMU의 둘째 오디오 백엔드가 또 하나의 file 플러그인으로 받는다
 #
+#      부팅 D는 끝에 DSP 쪽 둘도 본다(AU-M3) — 커널이 SOF · ACP 드라이버를 올렸고 QEMU의
+#      HDA는 여전히 snd_hda_intel이다(검사 16), alsactl init이 내장 마이크 스위치를
+#      켠다(검사 17)
+#
 # 이 체인이 못 보는 것 — 실기의 코덱(Realtek 등, 검사 1이 심볼과 표로만 본다) ·
-# DSP(SOF · ACP, AU-M3) · 헤드폰 잭의 꽂힘(QEMU 코덱에 잭 감지가 없다) · 마이크 달린
-# USB 헤드셋(QEMU usb-audio는 재생뿐이다).
+# DSP의 실제 probe와 firmware 로딩(SOF · ACP — QEMU에 그 장치가 없어 검사 1이 심볼 ·
+# 표 · firmware 이름으로, 검사 16 · 17이 드라이버 등록과 마이크 스위치 규칙으로만
+# 본다) · 녹음이 DMIC로 가는 것(호스트 검사 audio_test만 본다) · 헤드폰 잭의
+# 꽂힘(QEMU 코덱에 잭 감지가 없다) · 마이크 달린 USB 헤드셋(QEMU usb-audio는 재생뿐이다).
 
 # $GUEST_MEM 하나 때문에 source한다. nic · wifi 체인처럼 타이핑을 안 한다.
 source ../gate_lib.sh
@@ -100,6 +106,8 @@ report_failure() {
     "tars-init: audio: default card is" \
     "audio-probe: unplug now" \
     "audio-probe: plug now" \
+    "audio-probe: dsp drivers [" \
+    "audio-probe: dmic after init exit" \
     "tars-init: calling reboot"; do
     if grep -aF "$marker" "$LOG" >/dev/null; then
       echo "  found   ${marker}"
@@ -191,6 +199,76 @@ for alias in snd_hda_codec_alc269.alias=hdaudio:v10EC0256r snd_hda_codec_conexan
   fi
 done
 
+# AU-M3. DSP 뒤의 내장 마이크. Intel은 SOF(세대마다 하나)와 그 아래 HDA 코덱을 받는
+# 범용 machine, AMD는 세대마다의 PDM 드라이버(Renoir · Yellow Carp · ACP6.3)와 그
+# machine, 그리고 ACP 7.x를 받는 범용 ACP 드라이버와 legacy machine이다(7.x는 BIOS가
+# 따로 말하지 않으면 "DMIC만 legacy"로 정해져 PDM 드라이버가 물러난다 — acp-config.c).
+# QEMU에 둘 다 없어서 심볼과 표(modinfo alias)로 본다. 범용 machine이 HDMI 코덱에 걸려
+# 있어(Kconfig depends) SND_HDA_CODEC_HDMI도 켜진다.
+for sym in SND_SOC SND_SOC_SOF_TOPLEVEL SND_SOC_SOF_PCI SND_SOC_SOF_INTEL_TOPLEVEL \
+  SND_SOC_SOF_CANNONLAKE SND_SOC_SOF_COFFEELAKE SND_SOC_SOF_COMETLAKE SND_SOC_SOF_ICELAKE \
+  SND_SOC_SOF_JASPERLAKE SND_SOC_SOF_TIGERLAKE SND_SOC_SOF_ELKHARTLAKE SND_SOC_SOF_ALDERLAKE \
+  SND_SOC_SOF_METEORLAKE SND_SOC_SOF_LUNARLAKE SND_SOC_SOF_PANTHERLAKE \
+  SND_SOC_SOF_HDA_LINK SND_SOC_SOF_HDA_AUDIO_CODEC SND_SOC_INTEL_SKL_HDA_DSP_GENERIC_MACH SND_HDA_CODEC_HDMI \
+  SND_SOC_AMD_RENOIR SND_SOC_AMD_RENOIR_MACH SND_SOC_AMD_ACP6x SND_SOC_AMD_YC_MACH \
+  SND_SOC_AMD_PS SND_SOC_AMD_PS_MACH SND_SOC_AMD_ACP_PCI SND_AMD_ASOC_ACP70 SND_SOC_AMD_LEGACY_MACH; do
+  if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
+    exit 1
+  fi
+done
+# 꺼져 있어야 하는 것. SOF_PCI를 켜면 세대마다의 심볼이 기본값으로 따라 켜지는데, 아래
+# 넷(SKL · KBL · APL · GLK)과 Merrifield는 노트북에서 SOF로 안 가거나(SKL · KBL은 DSP
+# 표가 HDA로 묶는다) Chromebook · UP 보드 · 태블릿의 것이고 firmware도 싣지 않는다.
+# Atom의 SST는 ACPI면 기본으로 켜진다. SND_HDA_I915는 GPU 드라이버(i915 · xe)가 켤 때만
+# 선다 — 서 있으면 SOF가 i915의 오디오 컴포넌트를 기다리느라 카드를 안 만들 수 있다
+# (sound/soc/sof/intel/hda.c의 hda_codec_i915_init). 지금은 그 자리가 -ENODEV stub이다.
+for sym in SND_SOC_SOF_SKYLAKE SND_SOC_SOF_KABYLAKE SND_SOC_SOF_APOLLOLAKE SND_SOC_SOF_GEMINILAKE \
+  SND_SOC_SOF_MERRIFIELD SND_SST_ATOM_HIFI2_PLATFORM_ACPI SND_HDA_I915; do
+  if grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is on; AU-M3 keeps it off"
+    exit 1
+  fi
+done
+for alias in snd_sof_pci_intel_cnl.alias=pci:v00008086d000002C8 snd_sof_pci_intel_icl.alias=pci:v00008086d000034C8 \
+  snd_sof_pci_intel_tgl.alias=pci:v00008086d0000A0C8 snd_sof_pci_intel_tgl.alias=pci:v00008086d000051C8 \
+  snd_sof_pci_intel_mtl.alias=pci:v00008086d00007E28 snd_sof_pci_intel_lnl.alias=pci:v00008086d0000A828 \
+  snd_sof_pci_intel_ptl.alias=pci:v00008086d0000E428 snd_soc_skl_hda_dsp.alias=platform:skl_hda_dsp_generic \
+  'snd_rn_pci_acp3x.alias=pci:v00001022d000015E2sv*sd*bc04sc80i00*' snd_acp3x_rn.alias=platform:acp_pdm_mach \
+  snd_soc_acp6x_mach.alias=platform:acp_yc_mach snd_soc_ps_mach.alias=platform:acp_ps_mach \
+  'snd_acp_pci.alias=pci:v00001022d000015E2sv*sd*bc*sc*i*' snd_acp_legacy_mach.alias=platform:acp-pdm-mach; do
+  if ! tr '\0' '\n' < "$MODINFO" | grep -F "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*alias=}"
+    exit 1
+  fi
+done
+# SOF는 firmware가 없으면 HDA로 돌아오지 않고 카드를 아예 안 만든다(스피커까지 조용).
+# 그래서 커널 안에 있는 SOF firmware 이름(sof-<세대>.ri)이 전부 firmware 목록의 initrd
+# 경로 끝에 있어야 한다. 이름은 커널 이미지에서 읽는다 — 커널이 세대를 하나 더 켜거나
+# 커널을 올리면 여기서 걸린다. 목록의 파일이 initrd에 실제로 있는지는 tools 체인의
+# 검사 1b가 본다.
+. ../kernel/guest_firmware.sh
+FW_DESTS=$'\n'"$(printf '%s\n' "${GUEST_FIRMWARE[@]}" | sed 's/^[^:]*://; s#.*/##')"$'\n'
+# 이름은 커널 이미지와 SOF Intel 드라이버의 오브젝트 둘에 다 있는 것이다. 이미지에는 AMD
+# SOF용 machine 표(sound/soc/amd/acp-config.c — sof-rn · sof-rmb · sof-vangogh)도 들어
+# 있는데 AMD SOF 드라이버는 꺼져 있어 아무도 그 이름을 안 찾는다. 오브젝트만 보면 지난
+# 설정으로 빌드된 채 남은 것까지 센다 — 둘의 교집합이 "지금 링크된 Intel SOF"다.
+SOF_NAMES="$(comm -12 <(strings -n 6 ../kernel/build/vmlinux | grep -xE 'sof-[a-z0-9-]+\.ri' | sort -u) \
+  <(strings -n 6 ../kernel/build/sound/soc/sof/intel/*.o | grep -xE 'sof-[a-z0-9-]+\.ri' | sort -u))"
+if [ -z "$SOF_NAMES" ]; then
+  echo "FAIL: no sof-*.ri name in the kernel image; SOF did not build"
+  exit 1
+fi
+for name in $SOF_NAMES; do
+  case "$FW_DESTS" in
+    *$'\n'"${name}"$'\n'*) ;;
+    *)
+      echo "FAIL: the kernel asks for ${name} but kernel/guest_firmware.sh does not carry it"
+      exit 1
+      ;;
+  esac
+done
+
 # 바이너리 넷(guest_tools.sh 층 14)은 tools 체인의 검사 1이 목록을 되읽어 본다. 여기는
 # 목록에 없고 make_initrd.sh가 손으로 넣는 것만 literal로 적는다 — 그래야 이 검사가
 # tautology가 아니다(tools 체인의 WANT와 같은 이유).
@@ -199,7 +277,8 @@ PADDED_LIST=$'\n'"${INITRD_LIST}"$'\n'
 for want in usr/bin/arecord lib/x86_64-linux-gnu/libasound.so.2 \
   usr/share/alsa/alsa.conf usr/share/alsa/cards/HDA-Intel.conf \
   usr/share/alsa/pcm/dmix.conf usr/share/alsa/pcm/dsnoop.conf \
-  usr/share/sounds/alsa/Front_Left.wav usr/share/sounds/alsa/Front_Right.wav; do
+  usr/share/sounds/alsa/Front_Left.wav usr/share/sounds/alsa/Front_Right.wav \
+  usr/share/alsa/init/00main usr/share/alsa/init/postinit/00-tars-dmic.conf; do
   case "$PADDED_LIST" in
     *$'\n'"${want}"$'\n'*) ;;
     *)
@@ -217,6 +296,7 @@ case $'\n'"${GROUPS_FILE}" in
     ;;
 esac
 echo "the kernel carries ALSA, HDA, seven laptop codec drivers and USB audio, and the initrd carries arecord, libasound, its config, two voices and the audio group"
+echo "the kernel carries SOF for $(printf '%s\n' $SOF_NAMES | wc -l) Intel firmware names and AMD ACP, and the firmware list carries every one of those names"
 
 # ── 재료: 사각파 · 마이크에 넣을 상수 · 설정 디스크 · .asoundrc ─────────
 # 컨테이너에 python이 없어서 perl로 짓는다(lessons).
@@ -611,6 +691,30 @@ grep -aF 'audio-probe: default after unplug [default "0"|default "0"|ctl.card 0]
   || report_failure "after the unplug /etc/asound.conf still points away from card 0"
 grep -aF 'audio-probe: unplugged aplay exit 0 []' "$LOG" >/dev/null \
   || report_failure "aplay failed after the USB speaker went"
+
+# ── 검사 16: 커널이 DSP 드라이버를 올렸고, QEMU의 HDA는 HDA에 남았다 (AU-M3) ──
+# SOF 여섯(세대 묶음마다 PCI 드라이버 하나)과 AMD 넷이 PCI 버스에 등록됐다. 장치가 없어
+# probe는 안 돈다. 그리고 QEMU의 컨트롤러(ICH9)는 DSP 표에 없으므로 SOF를 켠 뒤에도
+# snd_hda_intel이 받는다 — 위 검사 2 ~ 15가 그 카드로 돈 것이다.
+grep -aF 'audio-probe: dsp drivers [snd_acp_pci|snd_pci_acp6x|snd_pci_ps|snd_rn_pci_acp3x|sof-audio-pci-intel-cnl|sof-audio-pci-intel-icl|sof-audio-pci-intel-lnl|sof-audio-pci-intel-mtl|sof-audio-pci-intel-ptl|sof-audio-pci-intel-tgl]' "$LOG" >/dev/null \
+  || report_failure "the kernel did not register the six SOF and four AMD ACP PCI drivers"
+grep -aF 'audio-probe: card 0 driver [snd_hda_intel]' "$LOG" >/dev/null \
+  || report_failure "QEMU's HDA controller is not driven by snd_hda_intel any more"
+# 실기에서 SOF가 실패하면 사람이 커널 인자 snd_intel_dspcfg.dsp_driver=1로 HDA에 돌아온다.
+# 그 이름이 커널에 있어야 그 탈출로가 선다.
+grep -aF 'audio-probe: dsp_driver [0]' "$LOG" >/dev/null   || report_failure "the kernel has no snd_intel_dspcfg.dsp_driver parameter; the way back to HDA is gone"
+echo "the kernel registered the SOF and ACP drivers, QEMU's HDA stayed with snd_hda_intel, and snd_intel_dspcfg.dsp_driver is there"
+
+# ── 검사 17: alsactl init이 내장 마이크 스위치를 켠다 (AU-M3) ───────────
+# SOF는 Dmic0 Capture Switch를 꺼진 채 올리고 alsactl의 범용 규칙은 그 이름을 모른다.
+# initrd의 postinit 규칙이 켠다. QEMU에는 그 컨트롤이 없어서 프로브가 같은 이름의 사용자
+# 컨트롤을 꺼진 채 만들고 init의 일꾼과 같은 argv로 다시 init한다 — 99는 범용 규칙으로
+# 켰다는 뜻이고 M1의 일꾼도 같은 코드를 받는다.
+grep -aF 'audio-probe: dmic control made exit 0 [  : values=off]' "$LOG" >/dev/null \
+  || report_failure "the probe could not make a Dmic0 Capture Switch to test the rule on"
+grep -aF 'audio-probe: dmic after init exit 99 [  : values=on]' "$LOG" >/dev/null \
+  || report_failure "alsactl init did not turn Dmic0 Capture Switch on; the postinit rule is missing or wrong"
+echo "alsactl init turned a Dmic0 Capture Switch on through the postinit rule"
 sleep 0.5
 HDA_2="$(count_tap "$WORK/tap.raw")"
 echo "hda tap after unplug: ${HDA_2}"

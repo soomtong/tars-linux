@@ -15,7 +15,9 @@
 #   again  믹서를 안 만지고 소리를 낸다. 첫 부팅이 바꾼 볼륨이 남았는지를 본다
 # 셋째 갈래는 따로 만든 디스크다(AU-M2). /config/audio/usb가 있으면 그것이다.
 #   usb    부팅 뒤에 꽂힌 USB 스피커로 기본 카드가 가고, 녹음은 HDA에 남고, 뽑으면
-#          기본이 돌아오는 것을 소리로 본다. 꽂고 뽑는 것은 체인이 monitor로 한다
+#          기본이 돌아오는 것을 소리로 본다. 꽂고 뽑는 것은 체인이 monitor로 한다.
+#          끝에 DSP 쪽 둘을 본다(AU-M3) — 커널이 SOF · ACP 드라이버를 올렸는지, 그리고
+#          alsactl init의 postinit 규칙이 내장 마이크 스위치(Dmic0)를 켜는지
 #
 # 끝나면 잠든다. 감독자는 끝난 서비스를 다시 띄우므로(SV), 일을 마친 뒤에 나가면
 # 같은 소리를 세 번 내고 포기한다.
@@ -90,6 +92,25 @@ if [ "$boot" = usb ]; then
   conf "default after unplug"
   out="$(aplay -q /config/audio/tone.wav 2>&1)"; rc=$?
   say "unplugged aplay exit ${rc} [$(printf '%s' "$out" | flat)]"
+
+  # AU-M3. QEMU에는 SOF · ACP 장치가 없으므로 드라이버가 "등록됐다"까지만 본다. 그리고
+  # QEMU의 HDA(ICH9)는 DSP 표(intel-dsp-config)에 없으니 여전히 snd_hda_intel이어야 한다.
+  say "dsp drivers [$(ls /sys/bus/pci/drivers | grep -E '^(sof-audio-pci-intel-|snd_rn_pci_acp3x$|snd_pci_acp6x$|snd_pci_ps$|snd_acp_pci$)' | flat)]"
+  say "card 0 driver [$(basename "$(readlink /sys/class/sound/card0/device/driver)")]"
+  # 실기에서 SOF가 실패할 때의 탈출로는 커널 인자 snd_intel_dspcfg.dsp_driver=1(HDA로)이다.
+  # 그 파라미터가 이 커널에 있는지 본다 — 기본값 0은 "DSP 표대로"다.
+  say "dsp_driver [$(cat /sys/module/snd_intel_dspcfg/parameters/dsp_driver 2>&1)]"
+  # postinit 규칙(make_initrd.sh의 AU-M3 절). QEMU의 코덱에는 Dmic0 컨트롤이 없어서 같은
+  # 이름의 사용자 컨트롤을 꺼진 채 하나 만든다 — alsactl restore가 접근에 user가 든
+  # 항목을 만들어 준다(-I는 파일에 없는 컨트롤 때문에 init으로 내려가지 않게). 그 뒤
+  # init의 일꾼과 같은 argv(-U init)로 이 카드를 다시 init해 스위치가 켜지는지 본다.
+  printf '%s\n' 'state.Intel {' '	control.1 {' '		iface MIXER' "		name 'Dmic0 Capture Switch'" \
+    '		value false' '		comment {' "			access 'read write user'" '			type BOOLEAN' \
+    '			count 1' '		}' '	}' '}' > /tmp/dmic.state
+  out="$(alsactl -U -I -f /tmp/dmic.state restore 0 2>&1)"; rc=$?
+  say "dmic control made exit ${rc} [$(amixer -c 0 cget name='Dmic0 Capture Switch' 2>&1 | grep ': values=' | flat)]"
+  out="$(alsactl -U init 0 2>&1)"; rc=$?
+  say "dmic after init exit ${rc} [$(amixer -c 0 cget name='Dmic0 Capture Switch' 2>&1 | grep ': values=' | flat)]"
   say "done"
   exec sleep 100000
 fi

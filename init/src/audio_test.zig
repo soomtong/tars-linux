@@ -7,6 +7,10 @@ const audio = @import("audio.zig");
 //
 // AU-M2. 기본 카드를 고르는 순수한 쪽 셋(`addNode` · `defaultsFor` · `render`). 꽂고 뽑을
 // 때 소리가 실제로 그 카드로 가는 것은 audio 체인의 부팅 D가 본다.
+//
+// AU-M3. `addNode`(/dev/snd의 이름)가 `addPcmLine`(/proc/asound/pcm의 줄)이 됐다. 녹음의
+// 세 단(USB 마이크 · 내장 DMIC · 장치 0)은 QEMU에 DMIC가 없어 여기서만 본다 — 아래
+// SOF · AMD의 줄은 커널의 snd_pcm_proc_read 모양에 그 드라이버들이 짓는 id를 넣은 것이다.
 
 fn fail(comptime fmt: []const u8, args: anytype) error{Mismatch} {
     std.debug.print("FAIL: " ++ fmt ++ "\n", args);
@@ -81,22 +85,37 @@ pub fn main() !void {
     if (audio.storeDecision(false, false) != .not_set) return fail("not set without /config must not store", .{});
     std.debug.print("audio_test: the mixer is stored only when it was set this boot and /config is there\n", .{});
 
-    // ── 어느 카드가 기본인가(AU-M2) ────────────────────────────────────
+    // ── 어느 카드가 기본인가(AU-M2 · M3) ───────────────────────────────
     //
-    // /dev/snd의 이름에서 장치 0의 재생 · 녹음만 센다. 아래 목록은 게스트의 실제
-    // 모양이다 — HDA(카드 0, 재생과 녹음)에 USB 스피커(카드 1, 재생만)가 꽂힌 것.
-    var cards: audio.Cards = .{};
-    for ([_][]const u8{ "controlC0", "controlC1", "pcmC0D0c", "pcmC0D0p", "pcmC1D0p", "timer", "seq" }) |name| audio.addNode(&cards, name);
-    if (cards.playback != 0b11 or cards.capture != 0b01) return fail("HDA plus a USB speaker reads as playback 0x{x} capture 0x{x}, want 0x3 0x1", .{ cards.playback, cards.capture });
-    // 장치 0이 아닌 것 · 모양이 다른 것은 안 센다. HDMI 코덱만 가진 카드는 장치 1(디지털)이다.
-    var none: audio.Cards = .{};
-    for ([_][]const u8{ "pcmC2D1p", "pcmC2D3p", "pcmC0D0", "pcmCD0p", "pcmC32D0p", "pcmCxD0p", "pcmC1D0px", "hwC0D0", "midiC1D0" }) |name| audio.addNode(&none, name);
-    if (none.playback != 0 or none.capture != 0) return fail("names that are not device 0 counted as playback 0x{x} capture 0x{x}", .{ none.playback, none.capture });
-    std.debug.print("audio_test: only pcmC<card>D0p and pcmC<card>D0c count\n", .{});
+    // /proc/asound/pcm의 줄에서 장치 0의 재생 · 녹음과, 녹음 쪽의 USB · DMIC 표지를
+    // 센다. 첫 목록은 게스트의 실제 모양이다 — QEMU의 HDA(카드 0, 재생과 녹음)에 USB
+    // 스피커(카드 1, 재생만)가 꽂힌 것.
+    const qemu = scan(&.{
+        "00-00: Generic Analog : Generic Analog : playback 1 : capture 1",
+        "01-00: USB Audio : USB Audio : playback 1",
+        "",
+    });
+    if (qemu.playback != 0b11 or qemu.capture != 0b01 or qemu.usb_capture != 0 or qemu.dmic != 0)
+        return fail("HDA plus a USB speaker reads as playback 0x{x} capture 0x{x} usb 0x{x} dmic 0x{x}, want 0x3 0x1 0 0", .{ qemu.playback, qemu.capture, qemu.usb_capture, qemu.dmic });
+    // 장치 0이 아닌 것 · 모양이 다른 것은 장치 0으로 안 센다. HDMI 코덱만 가진 카드는 장치
+    // 1(디지털)이나 3(HDMI)이다.
+    const none = scan(&.{
+        "02-01: ALC257 Digital : ALC257 Digital : playback 1",
+        "02-03: HDMI 0 : HDMI 0 : playback 1",
+        "32-00: Generic Analog : Generic Analog : playback 1 : capture 1",
+        "x0-00: Generic Analog : Generic Analog : playback 1 : capture 1",
+        "0-00: Generic Analog : Generic Analog : playback 1",
+        "00-00 Generic Analog : Generic Analog : playback 1",
+        "00-00: Generic Analog",
+        "card 0: Intel [HDA Intel], device 0: Generic Analog [Generic Analog]",
+    });
+    if (none.playback != 0 or none.capture != 0 or none.dmic != 0)
+        return fail("lines that are not device 0 counted as playback 0x{x} capture 0x{x} dmic 0x{x}", .{ none.playback, none.capture, none.dmic });
+    std.debug.print("audio_test: only device 0 counts for playback, from /proc/asound/pcm lines\n", .{});
 
     // 재생과 녹음 각각 번호가 가장 큰 카드. 마이크 없는 USB 스피커가 꽂혀도 녹음은 0에 남는다.
-    const split = audio.defaultsFor(cards);
-    if (split.playback != 1 or split.capture != 0) return fail("HDA plus a USB speaker picks playback {?d} capture {?d}, want 1 and 0", .{ split.playback, split.capture });
+    const split = audio.defaultsFor(qemu);
+    if (split.playback != 1 or split.capture != 0 or split.capture_dev != 0) return fail("HDA plus a USB speaker picks playback {?d} capture {?d}:{d}, want 1 and 0:0", .{ split.playback, split.capture, split.capture_dev });
     const headset = audio.defaultsFor(.{ .playback = 0b101, .capture = 0b101 });
     if (headset.playback != 2 or headset.capture != 2) return fail("a headset on card 2 picks playback {?d} capture {?d}, want 2 and 2", .{ headset.playback, headset.capture });
     const empty = audio.defaultsFor(.{});
@@ -105,23 +124,71 @@ pub fn main() !void {
     if (top.playback != 31 or top.capture != null) return fail("card 31 picks playback {?d} capture {?d}", .{ top.playback, top.capture });
     std.debug.print("audio_test: the highest card wins, for playback and capture apart\n", .{});
 
+    // Intel SOF(sof-hda-dsp). 장치 0의 녹음은 헤드셋 잭, 내장 마이크는 장치 6이다.
+    const sof_lines = [_][]const u8{
+        "00-00: HDA Analog (*) :  : playback 1 : capture 1",
+        "00-03: HDMI1 (*) :  : playback 1",
+        "00-04: HDMI2 (*) :  : playback 1",
+        "00-05: HDMI3 (*) :  : playback 1",
+        "00-06: DMIC (*) :  : capture 1",
+        "00-07: DMIC16kHz (*) :  : capture 1",
+        "00-31: Deepbuffer HDA Analog (*) :  : playback 1",
+    };
+    const sof = audio.defaultsFor(scan(&sof_lines));
+    if (sof.playback != 0 or sof.capture != 0 or sof.capture_dev != 6) return fail("a SOF laptop picks playback {?d} capture {?d}:{d}, want 0 and 0:6", .{ sof.playback, sof.capture, sof.capture_dev });
+    // 같은 노트북에 USB 헤드셋. 사람이 꽂은 마이크가 내장 DMIC를 이긴다.
+    const sof_usb = audio.defaultsFor(scan(&(sof_lines ++ [_][]const u8{"01-00: USB Audio : USB Audio : playback 1 : capture 1"})));
+    if (sof_usb.playback != 1 or sof_usb.capture != 1 or sof_usb.capture_dev != 0) return fail("a SOF laptop with a USB headset picks playback {?d} capture {?d}:{d}, want 1 and 1:0", .{ sof_usb.playback, sof_usb.capture, sof_usb.capture_dev });
+    // 마이크 없는 USB 스피커는 녹음을 안 가져간다.
+    const sof_spk = audio.defaultsFor(scan(&(sof_lines ++ [_][]const u8{"01-00: USB Audio : USB Audio : playback 1"})));
+    if (sof_spk.playback != 1 or sof_spk.capture != 0 or sof_spk.capture_dev != 6) return fail("a SOF laptop with a USB speaker picks playback {?d} capture {?d}:{d}, want 1 and 0:6", .{ sof_spk.playback, sof_spk.capture, sof_spk.capture_dev });
+    // AMD. GPU 쪽 HDA(HDMI뿐) · 아날로그 HDA · ACP(DMIC)가 따로 카드다. 번호의 차례는
+    // probe 순서라 정해져 있지 않다 — 어느 차례든 녹음은 ACP다.
+    const amd = audio.defaultsFor(scan(&.{
+        "00-03: HDMI 0 : HDMI 0 : playback 1",
+        "01-00: ALC257 Analog : ALC257 Analog : playback 1 : capture 1",
+        "02-00: DMIC capture dmic-hifi-0 :  : capture 1",
+    }));
+    if (amd.playback != 1 or amd.capture != 2 or amd.capture_dev != 0) return fail("an AMD laptop picks playback {?d} capture {?d}:{d}, want 1 and 2:0", .{ amd.playback, amd.capture, amd.capture_dev });
+    const amd_swapped = audio.defaultsFor(scan(&.{
+        "00-03: HDMI 0 : HDMI 0 : playback 1",
+        "01-00: DMIC capture dmic-hifi-0 :  : capture 1",
+        "02-00: ALC257 Analog : ALC257 Analog : playback 1 : capture 1",
+    }));
+    if (amd_swapped.playback != 2 or amd_swapped.capture != 1 or amd_swapped.capture_dev != 0) return fail("an AMD laptop with the ACP first picks playback {?d} capture {?d}:{d}, want 2 and 1:0", .{ amd_swapped.playback, amd_swapped.capture, amd_swapped.capture_dev });
+    std.debug.print("audio_test: capture goes to a plugged USB mic, else the built-in DMIC, else device 0\n", .{});
+
     // 파일의 글자. 손으로 적은 글자와 비교한다(tautology가 아니게). 카드 번호는 getenv의
     // 기본값 자리에 들어간다 — ALSA_CARD가 있으면 그것이 이긴다.
     var buf: [1024]u8 = undefined;
-    const head = "# tars-init이 쓴다(AU-M2). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
-        "# 재생과 녹음 각각, 장치 0을 가진 카드 중 번호가 가장 큰 것이 기본이다.\n" ++
+    const head = "# tars-init이 쓴다(AU-M2 · M3). 사운드 카드가 오고 갈 때마다 다시 쓴다.\n" ++
+        "# 재생은 장치 0을 가진 카드 중 번호가 가장 큰 것, 녹음은 USB 마이크 · 내장 DMIC ·\n" ++
+        "# 그 밖의 장치 0 순으로 처음 있는 단에서 번호가 가장 큰 것이다.\n" ++
         "# ALSA_CARD(또는 ALSA_PCM_CARD)를 주면 그 카드가 두 방향 다 기본이다.\n" ++
         "pcm.!default {\n\ttype asym\n";
+    const play0 = "\tplayback.pcm {\n\t\t@func concat\n" ++
+        "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"0\" } ]\n\t}\n";
     const play1 = "\tplayback.pcm {\n\t\t@func concat\n" ++
         "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"1\" } ]\n\t}\n";
     const cap0 = "\tcapture.pcm {\n\t\t@func concat\n" ++
         "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"0\" } ]\n\t}\n";
     const cap3 = "\tcapture.pcm {\n\t\t@func concat\n" ++
         "\t\tstrings [ \"sysdefault:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"3\" } ]\n\t}\n";
+    const cap0dmic = "\tcapture.pcm {\n\t\t@func concat\n" ++
+        "\t\tstrings [ \"plughw:CARD=\" { @func getenv vars [ ALSA_PCM_CARD ALSA_CARD ] default \"0\" } \",DEV=6\" ]\n\t}\n";
     try expectText("split", audio.render(&buf, split), head ++ play1 ++ cap0 ++ "}\ndefaults.ctl.card 1\n");
     try expectText("capture only", audio.render(&buf, .{ .capture = 3 }), head ++ cap3 ++ "}\ndefaults.ctl.card 3\n");
+    try expectText("sof", audio.render(&buf, sof), head ++ play0 ++ cap0dmic ++ "}\ndefaults.ctl.card 0\n");
     if (audio.render(&buf, .{}) != null) return fail("no card must render no file", .{});
     std.debug.print("audio_test: /etc/asound.conf points default at sysdefault:CARD=N unless ALSA_CARD says otherwise, and no card means no file\n", .{});
+    std.debug.print("audio_test: a DMIC that is not device 0 is opened as plughw:CARD=N,DEV=D\n", .{});
+}
+
+/// /proc/asound/pcm의 줄들을 차례로 더한다.
+fn scan(lines: []const []const u8) audio.Cards {
+    var cards: audio.Cards = .{};
+    for (lines) |line| audio.addPcmLine(&cards, line);
+    return cards;
 }
 
 fn expectText(what: []const u8, got: ?[]const u8, want: []const u8) !void {
