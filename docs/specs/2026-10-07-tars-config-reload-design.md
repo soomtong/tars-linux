@@ -1,9 +1,9 @@
 # TARS Config Reload — Design
 
 Date: 2026-10-07
-Status: lead가 검토했다(2026-10-07 — milestone 둘 · nft 기다림을 받고, `services.d` 다시 읽기를 재서 정하라고 했다 → 결정 11). TC-M2 plan은
-`docs/plans/2026-10-07-tars-config-reload-tc-m2.md`. plan은 lead가 이 design을 검토한 뒤 milestone마다 따로 쓴다. 코드 실측은 TC-M1이 main 트리에 들어간 뒤
-`/tmp/run/tc2/`에서 한다 — 이 design의 실측은 소스와 앞 서브프로젝트의 기록으로 한 것이다(아래 "착수 전에 실측한 것").
+Status: TC-M2가 끝났다(2026-10-07, plan `docs/plans/2026-10-07-tars-config-reload-tc-m2.md`의 실측 절이 값이다 — 루트 게이트 21체인 2/2 두 번,
+그 앞의 두 번이 net 검사 31에서 간헐로 빨개 Task 5b가 생겼다). TC-M3(`reload terminal`)은 plan `-tc-m3.md`로 이어진다. 이 design의 실측은 소스와 앞
+서브프로젝트의 기록으로 한 것이다(아래 "착수 전에 실측한 것").
 
 TC design(`docs/specs/2026-10-06-tars-config-tool-design.md`)의 M2 절이 "따로 design을 쓴다"고 남긴 것이다.
 

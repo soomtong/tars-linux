@@ -366,6 +366,32 @@ wait_for_screen "applied now: nft -f /etc/tars/firewall\.nft" \
 expect_tcp_bytes "$TCP_SHUT_PORT" fwm2-tcp-7072-ok 7072
 echo "tars-config opened 7072 in its own file and nft put it up without a reboot"
 
+# ── 검사 19: reload가 방화벽을 내리고 다시 올린다 (TC-M2) ──────────────────
+# `tars-config set firewall=off` · `reload`면 init이 `nft flush ruleset`을 돈다 — 부팅에는 없던
+# 길이다(reload design 결정 3의 6단계). 규칙이 하나도 안 남는 것을 셈으로 본다(판정 글자 fwn0은
+# echo가 짓는다). 다시 `on` · `reload`면 부팅의 `firewall.up`이 그대로 돌고 drop이 선다(fwp1).
+echo "=== typing 'tars-config set firewall=off' and 'tars-config reload' ==="
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o f f ret
+# set의 답을 본 뒤에 reload를 친다(TC-M2 Task 5b — net 검사 31의 간헐과 같은 모양을 막는다).
+wait_for_screen "\\| firewall: on -> off" \
+  || fail "tars-config set firewall=off never answered 'firewall: on -> off'" "terminal: screen>"
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen "firewall: down \\(nft flush ruleset\\)" \
+  || fail "reload did not take the firewall down" "terminal: screen>" "tars-init: reload"
+type_keys e c h o spc f w n shift-4 shift-9 n f t spc l i s t spc r u l e s e t spc \
+  shift-backslash spc w c spc minus l shift-0 ret
+wait_for_screen "fwn0" || fail "rules were still up after reload with firewall=off" "terminal: screen>"
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o n ret
+wait_for_screen "\\| firewall: off -> on" \
+  || fail "tars-config set firewall=on never answered 'firewall: off -> on'" "terminal: screen>"
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen "firewall: up \\(nft -f /etc/tars/firewall\\.nft\\)" \
+  || fail "reload did not bring the firewall back up" "terminal: screen>" "tars-init: reload"
+type_keys e c h o spc f w p shift-4 shift-9 n f t spc l i s t spc r u l e s e t spc \
+  shift-backslash spc g r e p spc minus c spc d r o p shift-0 ret
+wait_for_screen "fwp[1-9]" || fail "no drop policy after reload with firewall=on" "terminal: screen>"
+echo "reload flushed the rules with firewall=off and put them back with firewall=on, without a reboot"
+
 stop_guest
 
 echo "=== boot B: the same disk plus a broken nftables.d/broken.nft ==="

@@ -267,7 +267,7 @@ pub fn wifi(args: []const [*:0]const u8) u8 {
     if (existed) {
         say("apply now: tars-service restart wpa_supplicant\n", .{});
     } else {
-        say("init starts wpa_supplicant only when this file is there at boot; reboot (kill -INT 1)\n", .{});
+        say("apply now: tars-config reload starts wpa_supplicant (or the next boot)\n", .{});
     }
     return cli.EXIT_OK;
 }
@@ -332,7 +332,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
                     complain("cannot link {s} (errno {d})", .{ SSHD_LINK, @intFromEnum(e) });
                     return cli.EXIT_IO;
                 }
-                say("sshd: on — {s} -> {s}; init starts it at the next boot (kill -INT 1)\n", .{ SSHD_LINK, SSHD_TEMPLATE });
+                say("sshd: on — {s} -> {s}; tars-config reload starts it now (or the next boot)\n", .{ SSHD_LINK, SSHD_TEMPLATE });
             },
         }
         var keys_buf: [BUF]u8 = undefined;
@@ -353,7 +353,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
                     complain("cannot remove {s} (errno {d})", .{ SSHD_LINK, @intFromEnum(e) });
                     return cli.EXIT_IO;
                 }
-                say("sshd: off from the next boot; to stop it now: tars-service stop sshd\n", .{});
+                say("sshd: off — tars-config reload stops it now (or the next boot)\n", .{});
             },
         }
         return cli.EXIT_OK;
@@ -436,7 +436,7 @@ pub fn sshKey(args: []const [*:0]const u8) u8 {
         say("ssh-key: added {s}\n", .{fp});
         say("sshd reads {s} at every login — no restart\n", .{KEYS_PATH});
     }
-    if (sshdLinked() == .none) say("sshd is off: tars-config ssh on, then reboot\n", .{});
+    if (sshdLinked() == .none) say("sshd is off: tars-config ssh on, then tars-config reload\n", .{});
     sayFirewall22();
     return cli.EXIT_OK;
 }

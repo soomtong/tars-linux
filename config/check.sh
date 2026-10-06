@@ -115,6 +115,11 @@ TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
 # config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
 # 여기서 멈춘다.
 TC_LIST_KEYS=(t a r s minus c o n f i g spc l i s t ret)
+# tars-config set keyboard=pc · tars-config reload · echo shell=fsh >> /config/tars.conf (TC-M2)
+TC_SET_KB_KEYS=(t a r s minus c o n f i g spc s e t spc k e y b o a r d equal p c ret)
+TC_RELOAD_KEYS=(t a r s minus c o n f i g spc r e l o a d ret)
+TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
+                  slash c o n f i g slash t a r s dot c o n f ret)
 TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off esc_latin=on
@@ -548,6 +553,44 @@ edit_config_in_guest() {
     fi
   done
   echo "boot 1: tars-config list printed all ${#TC_LIST_WANT[@]} keys with their defaults and the values they take"
+
+  # ── TC-M2: reload의 대기 · 두 칸 · 거절 ─────────────────────────────────
+  #
+  # keyboard는 화면의 키다(위 TC-M0이 바꾼 clipboard=pane도 그렇다 — 둘 다 대기다). reload가 init의 값을 바꾸지만 화면(terminal)은 다음 부팅까지 apple이다 —
+  # 그래서 이 부팅의 타이핑이 그대로 된다. 이 체인은 net=off라 reload가 dhcpcd를 건드리면 안 된다.
+  # 끝으로 init이 거절할 줄을 심은 파일의 reload가 아무것도 안 바꾸는지 본다. 아래 EDIT_KEYS가 이
+  # 파일을 한 줄로 덮어쓰므로 2차로 넘어가는 것은 없다.
+  type_keys "${TC_SET_KB_KEYS[@]}"
+  # set의 답을 본 뒤에 reload를 친다(TC-M2 Task 5b — net 검사 31의 간헐과 같은 모양을 막는다).
+  if ! wait_for_screen '\| keyboard: apple -> pc$|\| keyboard: apple -> pc \|'; then
+    echo "FAIL(boot 1): tars-config set keyboard=pc never answered 'keyboard: apple -> pc'"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${TC_RELOAD_KEYS[@]}"
+  if ! wait_for_screen '\| keyboard: apple -> pc \(the screen keeps the old value until the next boot\)'; then
+    echo "FAIL(boot 1): reload did not report keyboard as waiting for the screen"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  if joined_screen_dump | grep -aF 'service dhcpcd' >/dev/null; then
+    echo "FAIL(boot 1): a reload that changed no network key touched dhcpcd"
+    return 1
+  fi
+  type_keys "${ALIAS_KEYS[@]}"
+  if ! wait_for_screen '\| # the screen keeps keyboard=apple clipboard=shared until the next boot'; then
+    echo "FAIL(boot 1): tars-config did not show that the screen still uses keyboard=apple"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${TC_BAD_LINE_KEYS[@]}"
+  type_keys "${TC_RELOAD_KEYS[@]}"
+  if ! wait_for_screen "\\| error: /config/tars\\.conf: unknown shell 'fsh', falling back to fish; nothing changed"; then
+    echo "FAIL(boot 1): reload did not refuse a file with a line init would not take"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: reload left keyboard=pc waiting for the screen, showed both values, and refused a file with shell=fsh"
 
   # ── ST-M1: 별칭이 실제로 도는가 ──────────────────────────────────────
   #

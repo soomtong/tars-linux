@@ -35,7 +35,10 @@ fn failed(rc: usize) ?linux.E {
 
 // ── 요청 ───────────────────────────────────────────────────────────
 
-pub const Verb = enum { status, stop, start, restart };
+/// TC-M2가 둘을 더했다 — `config`(init이 지금 쓰는 설정)와 `reload`(tars.conf를 다시 읽는다,
+/// reload design 결정 1). 둘은 이름을 안 받는다. 사람의 문은 `tars-config`이고 `tars-service`는
+/// 앞의 넷만 받는다(`service_cli.zig`).
+pub const Verb = enum { status, stop, start, restart, config, reload };
 
 pub const Request = struct {
     verb: Verb,
@@ -61,8 +64,9 @@ pub fn parseRequest(bytes: []const u8) ?Request {
     const name = it.next();
     if (it.next() != null) return null;
     if (name) |n| {
+        if (verb == .config or verb == .reload) return null;
         if (!nameOk(n)) return null;
-    } else if (verb != .status) return null;
+    } else if (verb != .status and verb != .config and verb != .reload) return null;
     return .{ .verb = verb, .name = name };
 }
 
@@ -109,8 +113,12 @@ pub fn stateOf(c: anytype) State {
 }
 
 /// 감독 루프 머리의 띄우는 조건(design 결정 4 규칙 1).
+///
+/// TC-M2. `config_off`는 설정(tars.conf · services.d)이 이 칸을 안 원한다는 뜻이다. `hold`(사람이
+/// 이 부팅에서 멈췄다)와 다른 칸인 이유는 reload design 결정 5 — 같은 칸이면
+/// `tars-service start`가 설정이 끈 것을 되살린다.
 pub fn wantsRunning(c: anytype) bool {
-    return c.pid < 0 and !c.given_up and c.hold != .stop;
+    return c.pid < 0 and !c.given_up and c.hold != .stop and !c.config_off;
 }
 
 pub const Outcome = enum { stopping, stopped, already_stopped, starting, already_running, restarting };
@@ -132,7 +140,9 @@ fn revive(c: anytype) void {
 /// 정해진다.
 pub fn apply(verb: Verb, c: anytype, now: isize) Applied {
     switch (verb) {
-        .status => unreachable,
+        // 감독 루프의 `answer`가 이 셋을 여기로 안 보낸다. `unreachable`이 아닌 이유는 PID 1이라서다 —
+        // ReleaseSafe의 `unreachable`은 패닉이고 PID 1의 패닉은 커널 패닉이다(TC-M2 plan 확정 2).
+        .status, .config, .reload => return .{ .outcome = .already_running, .signal = false },
         .stop => {
             if (c.pid < 0) {
                 const was = c.hold == .stop;
@@ -197,7 +207,7 @@ pub fn overdue(c: anytype, now: isize) bool {
 /// 클라이언트가 기다리는 끝(design 결정 6). restart는 옛 pid와 다른 pid로 돌아야 끝이다.
 pub fn reached(verb: Verb, seen: Seen, old_pid: linux.pid_t) bool {
     return switch (verb) {
-        .status => true,
+        .status, .config, .reload => true,
         .stop => seen.state == .stopped,
         .start => seen.state == .running,
         .restart => seen.state == .running and seen.pid != old_pid,

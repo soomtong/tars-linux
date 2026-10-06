@@ -601,12 +601,32 @@ grep -F 'tars-config: ssh-keygen does not read this as a public key' <<<"$OUT" >
 tc ssh-key list
 [ "$(grep -c 'ED25519' <<<"$OUT")" = "2" ] || fail "ssh-key list did not show the two keys (${OUT})"
 tc ssh off
-grep -F 'sshd: off from the next boot' <<<"$OUT" >/dev/null || fail "ssh off did not say so (${OUT})"
+grep -F 'sshd: off — tars-config reload stops it now' <<<"$OUT" >/dev/null || fail "ssh off did not say so (${OUT})"
 [ -z "$(on_guest 'readlink /config/services.d/sshd')" ] || fail "ssh off left the services.d link"
+echo "tars-config added a key sshd took at the next login, refused a duplicate and a non-key, and unlinked sshd"
+
+# ── 검사 28: reload가 services.d를 다시 읽는다 (TC-M2) ────────────────────
+# 링크를 지운 뒤 reload하면 sshd가 멈추고 새 로그인이 막힌다 — 이 제어 연결은 제 세션을 가진
+# sshd-session이 들고 있어 산다(검사 22와 같다). 다시 걸고 reload하면 재부팅 없이 sshd가 뜨고 새
+# 로그인이 된다. 이미 있던 이름(sleeper · stubborn · flaky)은 안 건드린다 — 검사 23이 멈춘
+# stubborn은 멈춘 그대로다.
+tc reload
+[ "$RC" = "0" ] || fail "tars-config reload gave rc ${RC} (${OUT})"
+grep -Fx 'service sshd: stops' <<<"$OUT" >/dev/null || fail "reload did not stop the unlinked sshd (${OUT})"
+for _ in $(seq 1 40); do fresh_ssh || break; sleep 0.25; done
+fresh_ssh && fail "a fresh ssh login still worked after reload stopped sshd"
 tc ssh on
 grep -F 'sshd: on' <<<"$OUT" >/dev/null || fail "ssh on did not say so (${OUT})"
 [ "$(on_guest 'readlink /config/services.d/sshd')" = "/etc/tars/services/sshd" ] || fail "ssh on did not link the template"
-echo "tars-config added a key sshd took at the next login, refused a duplicate and a non-key, and unlinked and relinked sshd"
+tc reload
+grep -Fx 'service sshd: starts' <<<"$OUT" >/dev/null || fail "reload did not start the relinked sshd (${OUT})"
+grep -E 'service (sleeper|stubborn|flaky)' <<<"$OUT" >/dev/null && fail "reload touched a service whose file did not change (${OUT})"
+OK=0
+for _ in $(seq 1 40); do if fresh_ssh; then OK=1; break; fi; sleep 0.25; done
+[ "$OK" = "1" ] || fail "no fresh ssh login after reload restarted sshd" "sshd" "reload"
+ts status stubborn
+tail -1 <<<"$OUT" | grep -E '^service stubborn +stopped$' >/dev/null || fail "reload woke stubborn, which tars-service had stopped (${OUT})"
+echo "reload stopped sshd when its link went and started it again when it came back, without a reboot, and left the other three alone"
 
 ssh -o ControlPath="$CTL" -O exit root@127.0.0.1 2>/dev/null || true
 stop_ssh

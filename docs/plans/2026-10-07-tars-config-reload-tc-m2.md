@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 Design: `docs/specs/2026-10-07-tars-config-reload-design.md`(결정 1 ~ 11)
-Status: plan을 썼다. 구현 전이다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "TC-M2가 실측한 것"에 들어간다.
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 4와 5b를 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 21체인 2/2가 두 번 초록이다. 그 앞의 루트 게이트 두 번이 net 검사 31에서 간헐로 빨갰고 그것이 Task 5b다. 값은 맨 아래 "TC-M2가 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -49,7 +49,8 @@ Opus로 올리는 조건 — 이 milestone은 PID 1의 감독 루프를 고치�
 | `firewall/check.sh` | 편집 하나 — 검사 19 | +21 |
 | `service/check.sh` | 편집 하나 — 검사 27의 끝 글자, 검사 28 | +22 −2 |
 
-`git diff --stat`은 12 files, +563 −63이고(새 파일 둘은 밖), `git add -N` 뒤에는 14 files다. 커널 · Dockerfile · `make_initrd.sh` ·
+`git diff --stat`은 12 files, +563 −63이고(새 파일 둘은 밖), `git add -N` 뒤에는 14 files다. Task 5b(수정 1 — 루트 게이트 뒤) 뒤에는 `net/check.sh` +23 −2 · `firewall/check.sh` +5 · `config/check.sh` +6이 더해져
+12 files, +597 −65다. 커널 · Dockerfile · `make_initrd.sh` ·
 `guest_tools.sh` · 루트 `check.sh`는 안 바뀐다. 새 체인 · 새 포트가 없다.
 
 design의 `Status:` · `CLAUDE.md` · `MEMORY.md` · `docs/decisions/` · `docs/guides/` · `HANDOFF.md`는 구현자가 안 고친다.
@@ -2025,6 +2026,179 @@ git status --short
 5. 실기 — 사용자가 노트북에서 `tars-config set net=dhcp` · `tars-config reload`와 `tars-config ssh on` · `reload`를 친다. running-tars.md의 "재부팅"
    줄들은 서브프로젝트를 닫을 때 `tars-config reload`로 고친다.
 
+## Task 5b: 수정 1 — set의 답을 본 뒤에 reload
+
+2026-10-07, Task 0 ~ 5를 넣고 lead의 루트 게이트를 돌린 뒤에 더했다. 첫 루트 게이트 두 회차가 net 검사 31(`reload did not stop dhcpcd
+after net=off`)에서 빨갰고, /tmp를 묶어 다시 돌린 게이트는 두 회차 다 초록이었다 — 루트 맥락에서 셋 중 둘, 단독에서 넷 중 영의
+간헐이다. 빨간 두 판의 시리얼에는 `tars-init: reload of /config/tars.conf` 뒤에 tars-init 줄이 하나도 없었다. 건강한 판은 그 뒤에
+`net=off, wifi stays off` · `net=off, leaving the network alone` · `reload: service dhcpcd stop`이 차례로 온다(lead가 /tmp/run/tc2/lead_gate의
+시리얼로 봤다). 빨간 판은 reload가 파일을 다시 읽었는데 net이 아직 dhcp였던 것 — `tars-config set net=off`가 파일을 안 바꿨거나 늦었던
+것(H1)이 가장 맞고, 결정적 근거는 못 잡았다(실패한 판의 게스트 로그가 없다).
+
+그래서 둘을 한다. set의 답을 화면에서 본 뒤에 reload를 친다 — set이 끝났다는 증거를 기다리면 그 창이 닫힌다. 그리고 검사 31이 다시
+빨개지면 한 판으로 가려지게 진단을 찍는다 — 그 시점의 마지막 화면, `cat /config/tars.conf`를 쳐서 되읽은 줄, 마지막 `reload of` 뒤의
+tars-init 줄들. 같은 모양("set 뒤 곧바로 reload")이 있는 firewall 검사 19 · config 1차에도 기다림을 넣는다. service 검사 28은 ssh 명령이
+하나씩 끝난 뒤에 다음을 보내므로 그 창이 없어 안 고친다.
+
+기준은 Task 0 ~ 5를 넣은 지금의 main 트리 파일(= `/tmp/run/tc2/new/`)이고, 편집 뒤는 `/tmp/run/tc2/new3/`다. 세 파일만 바뀐다 —
+`net/check.sh` +23 −2, `firewall/check.sh` +5, `config/check.sh` +6.
+
+### 5b-0. 기준을 본다
+
+```bash
+for f in net/check.sh firewall/check.sh config/check.sh; do cmp $f /tmp/run/tc2/new/$f && echo "BASE $f"; done
+```
+
+기대: `BASE` 셋. 다르면 멈추고 보고한다.
+
+### 5b-1. `net/check.sh` — 편집 둘
+
+P1 — `old_string`(지금 파일 989줄부터):
+
+```bash
+NW_LEASES_BEFORE="$(grep -ac 'eth0: leased 10\.0\.2\.15 ' "$LOG")"
+echo "=== typing 'tars-config set net=off' and 'tars-config reload' ==="
+type_keys t a r s minus c o n f i g spc s e t spc n e t equal o f f ret
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: stops' \
+  || fail "reload did not stop dhcpcd after net=off" "terminal: screen>" "tars-init: reload"
+```
+
+`new_string`:
+
+```bash
+#
+# set의 답을 화면에서 본 뒤에 reload를 친다(TC-M2 Task 5b). M2의 첫 루트 게이트에서 이 검사가 셋 중 둘
+# 빨갰고 그때 시리얼에는 `reload of` 뒤에 아무 줄이 없었다 — init이 파일을 다시 읽었는데 net이 아직
+# dhcp였다는 뜻이다(reload design 덧붙임의 H1). set이 끝났다는 증거를 기다리면 그 창이 닫히고, 다시
+# 빨개지면 아래 진단이 "set이 안 됐다"와 "reload가 안 됐다"를 한 판으로 가른다.
+NW_LEASES_BEFORE="$(grep -ac 'eth0: leased 10\.0\.2\.15 ' "$LOG")"
+# 실패하면 마지막 화면과 tars.conf의 되읽기를 찍는다. fail이 끝내기 전에 부른다.
+nw_reload_diag() {
+  echo "--- last screen before the diagnosis ---"
+  joined_screen_dump | tail -n 1 | sed 's/ | /\n/g' | tail -n 25
+  type_keys c a t spc slash c o n f i g slash t a r s dot c o n f ret
+  sleep 3
+  echo "--- after cat /config/tars.conf ---"
+  joined_screen_dump | tail -n 1 | sed 's/ | /\n/g' | tail -n 8
+  echo "--- tars-init lines after the last 'reload of' ---"
+  awk '/tars-init: reload of/ { n = NR } END { print n + 0 }' "$LOG" | {
+    read -r from; [ "$from" -gt 0 ] && tail -n +"$from" "$LOG" | grep -a 'tars-init:' | head -n 8; true; }
+}
+echo "=== typing 'tars-config set net=off' and 'tars-config reload' ==="
+type_keys t a r s minus c o n f i g spc s e t spc n e t equal o f f ret
+wait_for_screen '\| net: dhcp -> off' \
+  || { nw_reload_diag; fail "tars-config set net=off never answered 'net: dhcp -> off'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: stops' \
+  || { nw_reload_diag; fail "reload did not stop dhcpcd after net=off" "terminal: screen>" "tars-init: reload"; }
+```
+
+P2 — `old_string`(지금 파일 1003줄부터):
+
+```bash
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: starts' \
+  || fail "reload did not start dhcpcd after net=dhcp" "terminal: screen>" "tars-init: reload"
+```
+
+`new_string`:
+
+```bash
+wait_for_screen '\| net: off -> dhcp' \
+  || { nw_reload_diag; fail "tars-config set net=dhcp never answered 'net: off -> dhcp'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: starts' \
+  || { nw_reload_diag; fail "reload did not start dhcpcd after net=dhcp" "terminal: screen>" "tars-init: reload"; }
+```
+
+### 5b-2. `firewall/check.sh` — 편집 둘
+
+P1 — `old_string`(지금 파일 374줄부터):
+
+```bash
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o f f ret
+```
+
+`new_string`:
+
+```bash
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o f f ret
+# set의 답을 본 뒤에 reload를 친다(TC-M2 Task 5b — net 검사 31의 간헐과 같은 모양을 막는다).
+wait_for_screen "\\| firewall: on -> off" \
+  || fail "tars-config set firewall=off never answered 'firewall: on -> off'" "terminal: screen>"
+```
+
+P2 — `old_string`(지금 파일 381줄부터):
+
+```bash
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o n ret
+```
+
+`new_string`:
+
+```bash
+type_keys t a r s minus c o n f i g spc s e t spc f i r e w a l l equal o n ret
+wait_for_screen "\\| firewall: off -> on" \
+  || fail "tars-config set firewall=on never answered 'firewall: off -> on'" "terminal: screen>"
+```
+
+### 5b-3. `config/check.sh` — 편집 하나
+
+P1 — `old_string`(지금 파일 563줄부터):
+
+```bash
+  type_keys "${TC_SET_KB_KEYS[@]}"
+```
+
+`new_string`:
+
+```bash
+  type_keys "${TC_SET_KB_KEYS[@]}"
+  # set의 답을 본 뒤에 reload를 친다(TC-M2 Task 5b — net 검사 31의 간헐과 같은 모양을 막는다).
+  if ! wait_for_screen '\| keyboard: apple -> pc$|\| keyboard: apple -> pc \|'; then
+    echo "FAIL(boot 1): tars-config set keyboard=pc never answered 'keyboard: apple -> pc'"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+```
+
+### 5b-4. 확인과 체인 셋
+
+```bash
+for f in net/check.sh firewall/check.sh config/check.sh; do cmp $f /tmp/run/tc2/new3/$f && echo "SAME $f"; bash -n $f || echo "SYNTAX $f"; done
+until mkdir /tmp/run/docker.lock 2>/dev/null; do sleep 15; done
+docker run --rm -v "$PWD":/workspace -v /tmp/run/tc2/impl:/impl -w /workspace tars-devcontainer bash -c '
+  for c in net firewall config; do s=$(date +%s); bash $c/check.sh > /impl/p5b_$c.log 2>&1; echo "$c exit=$? $(( $(date +%s) - s ))s"; done'
+rmdir /tmp/run/docker.lock
+```
+
+기대: `SAME` 셋, `SYNTAX` 없음, 셋 다 `exit=0`. 사본에서 net 186 · firewall 62 · config 176초였다.
+
+진단이 쓸 만한지는 사본에서 한 번 봤다 — net 체인 사본의 `net=off`를 `net=ofx`로 바꿔 돌리면(`/tmp/run/tc2/mut5b/net_typo.sh`) set이 거절되고
+첫 기다림에서 빨개지며 아래가 찍힌다. "set이 안 됐다"가 화면 · 파일 두 자리에서 바로 읽힌다(거절의 둘째 줄 `net takes off | dhcp`가 화면 줄
+이음 ` | `과 겹쳐 두 줄로 보이는 것은 진단의 겉모양일 뿐이다). 구현자는 이것을 돌리지 않는다.
+
+```
+--- last screen before the diagnosis ---
+⋮
+root@(none) ~# tars-config set net=ofx
+tars-config: net=ofx: init would say "unknown net 'ofx', falling back to off"
+tars-config: net takes off
+dhcp
+tars-config: nothing was written
+root@(none) ~ [1]#
+--- after cat /config/tars.conf ---
+⋮
+root@(none) ~ [1]# cat /config/tars.conf
+net=dhcp
+root@(none) ~#
+--- tars-init lines after the last 'reload of' ---
+FAIL: tars-config set net=off never answered 'net: dhcp -> off'
+```
+
+보고는 Task 4의 보고와 같은 모양으로 — `git diff --stat`, 위 출력, plan과 다른 글자.
+
 ## design과 다르게 적은 것
 
 design 본문은 결정 1과 결정 9 밑의 덧붙임(이 plan과 같은 날 같은 사람)으로 맞췄다 — `config` 답의 모양, 보기의 다음 줄, 체인의 자리와 순서. 구현 뒤에
@@ -2039,4 +2213,30 @@ lead가 고칠 것은 `Status:`와, 확정 5의 시간이 루트 게이트에서
 
 ## TC-M2가 실측한 것
 
-(구현과 루트 게이트 뒤에 lead가 채운다.)
+lead가 2026-10-07에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열네 파일 전부 사본(`/tmp/run/tc2/new/`, Task 5b 뒤 세 체인은
+`new3/`)과 `cmp`가 같았고, 지운 63줄은 plan이 말한 자리뿐이었다. 체인 아홉의 로그에 `Attempted to kill init` · `Kernel panic`은 0건이고,
+`reload.zig`의 `unreachable` · `.?`는 머리 주석에만 있다.
+
+1. 구현자의 체인. `zig build test` 초록(`reload_test:` 다섯 줄 — plan은 여섯이라 적었는데 묶음 3(대기)이 따로 줄을 안 찍는다, plan 문구의 오타).
+   config 178초 · firewall 61초 · service 74초 · net 189초, regression 다섯(boot 25 · wifi 123 · power 50 · nic 32 · terminal 24초). mutation 여섯 전부
+   plan의 표와 같은 자리에서 잡혔다 — m1(`config_off` 무시)은 wifi 부팅 C의 음성 `found 'started service wpa_supplicant' in a boot with no file and
+   no radios`, m6(status가 끈 칸도 보임)은 DS-M2의 service 검사 17.
+2. 루트 게이트 — 처음 둘이 빨갰다. 둘 다 TD-M2(net) run 1/2의 검사 31 `FAIL: reload did not stop dhcpcd after net=off`(30:49 · 30:42에 멈춤).
+   시리얼에는 `tars-init: reload of /config/tars.conf`만 있고 그 뒤 `reload: service dhcpcd stop`이 없었다. net 체인 단독은 네 번 다 초록(planner ·
+   구현자 · lead 둘), 그리고 `/tmp`를 호스트에 묶고 다시 돌린 루트 게이트는 21체인 2/2 전부 초록이었다 — 결정적이 아니라 간헐이다. planner의 가설
+   셋(H1 `set`이 파일을 못 바꿨거나 늦었다 · H2 dhcpcd 칸의 `config_off`가 참 · H3 init이 섰다) 중 H1이 맞아 보이지만 실패 시점의 게스트 로그가
+   없어 결정적 근거는 없다. 그래서 Task 5b — `set`의 답(`| net: dhcp -> off`)을 화면에서 본 뒤에 reload를 치고, 실패하면 마지막 화면 ·
+   `cat /config/tars.conf` 되읽기 · `reload of` 뒤의 init 줄을 찍는다(firewall 19 · config 1차도 같은 기다림). planner가 `net=ofx`로 틀린 판을 돌려
+   그 진단이 "set이 안 됐다"를 한 판으로 보여 주는 것을 확인했다.
+3. 5b 뒤의 루트 게이트 두 번 — 58분 19초 · 58분 24초, 둘 다 21체인 `PASS: 2/2`, 빨간 줄 0, 기다림이 2초를 넘겨 `the screen took about`을 찍은
+   자리 0. M1 때(56:36 · 56:42)보다 1분 40초쯤 늘었다 — planner가 본 "회차당 2분 남짓"(타이핑 config 110 · net 130 · firewall 180키) 안이다.
+4. 크기. `init` 4,028,376바이트(M1 3,843,696 — reload · `Live` · 칸 열셋이 184KB), `tars-config` 3,690,128, initrd 98,113,899바이트.
+5. 게이트가 본 M2 줄 — net `reload with net=off stopped dhcpcd and eth0 lost its address` · `reload with net=dhcp started dhcpcd again and it leased
+   10.0.2.15, without a reboot`, firewall 검사 19(off · reload → 규칙 0줄, on · reload → drop), service 검사 28(sshd 링크를 지우고 reload → 멈춤 ·
+   새 로그인 막힘, 다시 걸고 reload → 재부팅 없이 로그인), config 1차 `reload left keyboard=pc waiting for the screen, showed both values, and refused
+   a file with shell=fsh`.
+6. 건강한 net 시리얼의 reload 순서(`/tmp/run/tc2/lead_gate/tmp.lNhV2kx2UH`): `reload of` → `net=off, wifi stays off` → `net=off, leaving the network
+   alone` → `reload: service dhcpcd stop` → 400줄 뒤 `service dhcpcd stopped on request`. 다시 켤 때 `reload: service dhcpcd start` → `started service
+   dhcpcd (pid 591)`.
+7. 이월 숙제 — chronyd의 reload(`ntp` 키)는 게이트가 안 본다(그 부팅에 ntp가 없다). 호스트 검사가 step 논리를 덮고 `clock.prepare`는 부팅이 같은
+   꼴로 부른다. 간헐 실패의 진짜 원인은 다음에 검사 31이 빨개질 때 진단이 가른다.

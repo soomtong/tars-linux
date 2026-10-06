@@ -89,3 +89,37 @@ pub fn up(want: config.Firewall, envp: [*:null]const ?[*:0]const u8) void {
     }
     std.debug.print("tars-init: firewall NOT up, inbound is open\n", .{});
 }
+
+/// TC-M2. 규칙을 내린다 — `firewall=on`에서 `off`로 reload했을 때(reload design 결정 3의 5단계).
+/// 부팅에는 이 길이 없다(`up(.off)`는 아무것도 안 올린다). `nft flush ruleset`은 init이 올린
+/// 것 말고 사람이 손수 올린 규칙도 지운다 — `firewall=off`가 "거르지 않는다"는 뜻이라 맞는
+/// 동작으로 본다(design 위험 3). 기다리는 것은 `up`과 같다(design 결정 4).
+pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
+    const pid = linux.fork();
+    if (failed(pid)) |e| {
+        std.debug.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
+        return false;
+    }
+    if (pid == 0) {
+        const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "flush", "ruleset", null };
+        _ = linux.execve(NFT_PATH.ptr, &argv, envp);
+        std.debug.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
+        linux.exit(127);
+    }
+    var status: u32 = 0;
+    while (true) {
+        const rc = linux.wait4(@intCast(pid), &status, 0, null);
+        if (failed(rc)) |e| {
+            if (e == .INTR) continue;
+            std.debug.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
+            return false;
+        }
+        break;
+    }
+    if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) {
+        std.debug.print("tars-init: firewall down (nft flush ruleset), inbound is open\n", .{});
+        return true;
+    }
+    std.debug.print("tars-init: nft flush ruleset failed (status {d})\n", .{status});
+    return false;
+}

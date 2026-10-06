@@ -101,6 +101,8 @@ pub fn main(init: std.process.Init.Minimal) u8 {
     const argv = init.args.vector;
     if (argv.len < 2 or argv.len > 3) return usage();
     const verb = std.meta.stringToEnum(control.Verb, std.mem.span(argv[1])) orelse return usage();
+    // TC-M2의 둘(config · reload)은 tars-config의 동사다(reload design 결정 1).
+    if (verb == .config or verb == .reload) return usage();
     const name: ?[]const u8 = if (argv.len == 3) std.mem.span(argv[2]) else null;
     if (verb != .status and name == null) return usage();
 

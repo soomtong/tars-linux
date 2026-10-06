@@ -23,6 +23,7 @@ const Fake = struct {
     fast_restarts: u32 = 0,
     hold: control.Hold = .none,
     kill_at: isize = 0,
+    config_off: bool = false,
 };
 
 fn expectParse(bytes: []const u8, verb: ?control.Verb, name: ?[]const u8) !void {
@@ -77,6 +78,11 @@ pub fn main() !void {
     try expectParse("stop", null, null);
     try expectParse("fly sshd", null, null);
     try expectParse("stop a b", null, null);
+    // TC-M2. 둘은 이름 없이만 받는다 — `reload terminal`은 TC-M3의 자리다.
+    try expectParse("config", .config, null);
+    try expectParse("reload", .reload, null);
+    try expectParse("reload terminal", null, null);
+    try expectParse("config sshd", null, null);
     try expectParse("stop  sshd", null, null);
     try expectParse("stop sshd\n", null, null);
     try expectParse("stop " ++ &@as([32]u8, @splat('n')), .stop, &@as([32]u8, @splat('n')));
@@ -85,7 +91,7 @@ pub fn main() !void {
     var req_buf: [control.REQUEST_MAX]u8 = undefined;
     const req = control.formatRequest(&req_buf, .restart, "sshd") orelse return fail("formatRequest failed", .{});
     try expectParse(req, .restart, "sshd");
-    std.debug.print("control_test: requests — four verbs, one name, nothing else\n", .{});
+    std.debug.print("control_test: requests — six verbs, config and reload without a name, one name, nothing else\n", .{});
 
     // ── 답의 글자 ──────────────────────────────────────────────────
     try expectRow("service sshd", .running, 51, 118, "service sshd    running   pid 51   up 118s\n");
@@ -121,6 +127,13 @@ pub fn main() !void {
     c.pid = -1;
     if (control.reaped(&c) != .stays_stopped) return fail("a stopped death did not stay stopped", .{});
     if (control.wantsRunning(&c)) return fail("a stopped service wants to run", .{});
+    {
+        // TC-M2. 설정이 끈 칸은 살아 있지 않아도 안 뜬다 — hold가 none이어도.
+        var off = Fake{ .config_off = true };
+        if (control.wantsRunning(&off)) return fail("a config_off slot wants to run", .{});
+        off.config_off = false;
+        if (!control.wantsRunning(&off)) return fail("a slot back on does not want to run", .{});
+    }
     try expectState(&c, .stopped);
     try expectApplied(control.apply(.stop, &c, now), .already_stopped, false);
     try expectApplied(control.apply(.start, &c, now), .starting, false);

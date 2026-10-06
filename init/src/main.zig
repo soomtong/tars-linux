@@ -13,6 +13,7 @@ const services = @import("services.zig");
 const login = @import("login.zig");
 const control = @import("control.zig");
 const audio = @import("audio.zig");
+const reload = @import("reload.zig");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -20,6 +21,20 @@ const audio = @import("audio.zig");
 fn failed(rc: usize) ?linux.E {
     const e = linux.errno(rc);
     return if (e == .SUCCESS) null else e;
+}
+
+/// TC-M2(reload design 결정 3). config.zig의 로그가 root의 이 이름으로 온다(`config.log`).
+/// 찍는 바이트는 그 전과 같다 — `tars-init: ` + 글 + 개행. 더하는 것은 세는 것뿐이고, reload가
+/// 그 수로 "init의 파서가 한 마디라도 했다"를 보고 파일을 거절한다. 부팅은 수를 안 본다.
+var config_heard: struct { count: usize = 0, len: usize = 0, buf: [160]u8 = undefined } = .{};
+
+pub fn configLog(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print("tars-init: " ++ fmt ++ "\n", args);
+    config_heard.count +|= 1;
+    if (config_heard.count != 1) return;
+    var w: std.Io.Writer = .fixed(&config_heard.buf);
+    w.print(fmt, args) catch {};
+    config_heard.len = w.end;
 }
 
 /// 성공하면 true. /proc·/sys·/dev는 실패해도 할 수 있는 일이 없어서 결과를
@@ -388,6 +403,10 @@ const Child = struct {
     /// 칸은 필드 이름으로만 만져진다 — 이름을 바꾸면 `control.zig`가 컴파일에서 막는다.
     hold: control.Hold = .none,
     kill_at: isize = 0,
+    /// TC-M2(reload design 결정 5). 설정(tars.conf · services.d)이 이 칸을 안 원한다. 데몬 셋과
+    /// 서비스 여덟의 칸은 부팅부터 늘 있고, 원하지 않는 칸이 이것으로 꺼져 있다 — 안 뜨고,
+    /// `status`에 안 나오고, `tars-service`가 이름으로 못 찾는다.
+    config_off: bool = false,
 };
 
 fn monotonicSeconds() isize {
@@ -446,7 +465,7 @@ fn find(children: []Child, pid: linux.pid_t) ?*Child {
 /// 걸린다(design 결정 5).
 fn findService(children: []Child, name: []const u8) ?*Child {
     for (children) |*c| {
-        if (c.kind != .service) continue;
+        if (c.kind != .service or c.config_off) continue;
         if (std.mem.eql(u8, c.label[services.LABEL_PREFIX.len..], name)) return c;
     }
     return null;
@@ -455,10 +474,21 @@ fn findService(children: []Child, name: []const u8) ?*Child {
 /// 요청 하나에 답을 짓는다. 시그널은 여기서 보낸다 — 규칙(`control.apply`)은 "보내라"를
 /// 돌려줄 뿐이다. 그룹에 보낸다(CT-M0 실측 5). 서비스는 fork 직후 `setsid`하므로 그 전의
 /// 아주 짧은 창에서는 그룹이 아직 없어 ESRCH다 — 그때는 `kill_at`의 SIGKILL이 받는다.
-fn answer(children: []Child, req: control.Request, out: *control.Out) void {
+fn answer(children: []Child, live: *Live, req: control.Request, out: *control.Out) void {
     const now = monotonicSeconds();
+    // TC-M2의 둘. 이름이 없다(control.parseRequest가 지켰다).
+    if (req.verb == .config) {
+        reload.configReply(out, live.cfg, live.screen);
+        return;
+    }
+    if (req.verb == .reload) {
+        doReload(children, live, out, now);
+        return;
+    }
     if (req.verb == .status) {
         for (children) |*c| {
+            // 설정이 끈 칸은 없는 것처럼 — TC-M2 전의 status와 줄이 같다(reload design 결정 5).
+            if (c.config_off) continue;
             if (req.name) |n| {
                 if (c.kind != .service or !std.mem.eql(u8, c.label[services.LABEL_PREFIX.len..], n)) continue;
             }
@@ -468,7 +498,10 @@ fn answer(children: []Child, req: control.Request, out: *control.Out) void {
             out.print(control.ERROR_PREFIX ++ "no service named {s}\n", .{req.name.?});
         return;
     }
-    const name = req.name.?;
+    const name = req.name orelse {
+        out.print(control.ERROR_PREFIX ++ "bad request\n", .{});
+        return;
+    };
     const c = findService(children, name) orelse {
         out.print(control.ERROR_PREFIX ++ "no service named {s}\n", .{name});
         std.debug.print("tars-init: control: {s} {s} -> no such service\n", .{ @tagName(req.verb), name });
@@ -483,7 +516,7 @@ fn answer(children: []Child, req: control.Request, out: *control.Out) void {
 
 /// listen fd가 깨웠을 때 연결 하나를 처리한다. 붙잡히는 시간은 `control.WAIT_MS`가
 /// 상한이다(design 결정 3).
-fn serveControl(children: []Child, lfd: i32) void {
+fn serveControl(children: []Child, live: *Live, lfd: i32) void {
     var req_buf: [control.REQUEST_MAX]u8 = undefined;
     const got = control.receive(lfd, &req_buf) orelse return;
     var reply_buf: [control.REPLY_MAX]u8 = undefined;
@@ -500,7 +533,7 @@ fn serveControl(children: []Child, lfd: i32) void {
         },
         .request => |bytes| {
             if (control.parseRequest(bytes)) |req| {
-                answer(children, req, &out);
+                answer(children, live, req, &out);
             } else {
                 // 요청의 바이트는 찍지 않는다 — 누구든 ESC를 심을 수 있다.
                 out.print(control.ERROR_PREFIX ++ "bad request\n", .{});
@@ -509,6 +542,219 @@ fn serveControl(children: []Child, lfd: i32) void {
         },
     }
     control.reply(got.fd, out.bytes());
+}
+
+// ── TC-M2. reload ─────────────────────────────────────────────────────
+
+/// 감독 목록의 칸 번호. 0 · 1이 terminal과 콘솔 셸, 2 ~ 4가 데몬 셋, 그 뒤 여덟이 services.d다.
+/// 칸은 부팅부터 늘 이 수만큼 있고 원하지 않는 칸은 `config_off`다(reload design 결정 5).
+const SLOT_WIFI: usize = 2;
+const SLOT_DHCPCD: usize = 3;
+const SLOT_CHRONYD: usize = 4;
+const SLOT_SERVICES: usize = 5;
+const SLOTS: usize = SLOT_SERVICES + services.MAX;
+
+/// init이 부팅에 정하고 reload가 다시 정하는 것(reload design 결정 5). `main()`의 스택에 살고
+/// `supervise()`가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다 — argv · env 포인터가
+/// 이 안을 가리킨다.
+const Live = struct {
+    /// init이 지금 쓰는 설정. cmdline의 `tars.noconfig`를 덮은 뒤의 값이다.
+    cfg: config.Config,
+    /// terminal이 뜰 때 받은 값. 화면 쪽 키는 TC-M2에서 다음 부팅까지 이것이다.
+    screen: config.Config,
+    mounted: bool,
+    noconfig: bool,
+    /// 커널이 준 env. 블록을 다시 지을 때의 바탕이다.
+    kernel_env: [*:null]const ?[*:0]const u8,
+    /// env 블록 두 벌과 TZ 글자 두 벌. reload가 쓰지 않는 쪽에 새 블록을 다 지은 뒤 `envp`
+    /// 하나를 바꾼다 — 짓다 멈춰도 옛 블록이 그대로다.
+    env: [2]environ.Block = undefined,
+    tz: [2][environ.TZ_ENTRY_MAX]u8 = undefined,
+    which: u1 = 0,
+    envp: [*:null]const ?[*:0]const u8,
+    /// 서비스 칸 여덟의 글자(경로 · 라벨). 칸의 `path` · `label`이 이 안을 가리킨다.
+    services: [services.MAX]services.Entry = undefined,
+};
+
+/// 칸 하나의 목표를 설정이 정한 대로 바꾼다. 실제 fork · kill · 거두기는 감독 루프가 한다 —
+/// CT의 stop · start와 같은 길이다(reload design 결정 4).
+fn steer(c: *Child, s: reload.Step, now: isize, out: *control.Out) void {
+    const pid = c.pid;
+    switch (s) {
+        .keep => return,
+        .start => {
+            c.config_off = false;
+            _ = control.apply(.start, c, now);
+        },
+        .stop => {
+            c.config_off = true;
+            const done = control.apply(.stop, c, now);
+            if (done.signal) _ = linux.kill(-pid, .TERM);
+        },
+        .restart => {
+            const done = control.apply(.restart, c, now);
+            if (done.signal) _ = linux.kill(-pid, .TERM);
+        },
+    }
+    out.print("{s}: {s}\n", .{ c.label, switch (s) {
+        .keep => "",
+        .start => "starts",
+        .stop => "stops",
+        .restart => "restarts",
+    } });
+    std.debug.print("tars-init: reload: {s} {s}\n", .{ c.label, @tagName(s) });
+}
+
+/// 서비스 칸 i에 새 서비스를 넣는다. 칸은 비었거나 꺼졌고 이미 거둬졌다(`reload.serviceActions`).
+fn placeService(children: []Child, live: *Live, i: usize, e: *const services.Entry) void {
+    if (i >= services.MAX or SLOT_SERVICES + i >= children.len) return;
+    live.services[i] = e.*;
+    const s = &live.services[i];
+    children[SLOT_SERVICES + i] = .{
+        .kind = .service,
+        .label = s.label(),
+        .path = s.path(),
+        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
+    };
+}
+
+/// 셸 · 시간대가 바뀌면 콘솔 셸의 argv · 로그인 셸 · env 블록 · sshd의 SetEnv를 다시 짓는다.
+/// 부팅의 그 자리(`main()`)와 같은 함수들을 같은 순서로 부른다.
+fn rebuildShellAndEnv(children: []Child, live: *Live, new: config.Config) void {
+    const shell = resolveShell(new.shell);
+    const console = &children[1];
+    console.path = shell.path();
+    console.argv[0] = shell.path().ptr;
+    console.argv[CONSOLE_FLAG_SLOT] = switch (new.shell_config) {
+        .on => null,
+        .off => shell.noConfigFlag().ptr,
+    };
+    console.rescue = if (live.mounted and new.shell_config == .on)
+        .{ .slot = CONSOLE_FLAG_SLOT, .flag = shell.noConfigFlag() }
+    else
+        null;
+
+    const tz = resolveTimezone(new.timezone);
+    const next: u1 = live.which ^ 1;
+    const tz_entry = environ.tzEntry(&live.tz[next], tz.slice());
+    live.envp = environ.withTarsEnv(live.kernel_env, &live.env[next], tz_entry, shell.histEntries());
+    live.which = next;
+
+    var ssh_env: [3 + 4][]const u8 = undefined;
+    var n: usize = 0;
+    for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry }) |e| {
+        ssh_env[n] = e;
+        n += 1;
+    }
+    for (shell.histEntries()) |e| {
+        if (n >= ssh_env.len) break;
+        ssh_env[n] = e;
+        n += 1;
+    }
+    login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell.path(), ssh_env[0..n]);
+    std.debug.print("tars-init: reload: console shell {s}, env {s}\n", .{ shell.path(), tz_entry });
+}
+
+/// `reload` 동사(reload design 결정 3). 순서가 계약이다 — 조이고(방화벽 켜기), 데몬 · 서비스의
+/// 목표를 바꾸고, 셸 · env를 다시 짓고, 푼다(방화벽 끄기). 기다리는 것은 파일 읽기와 nft뿐이다.
+fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void {
+    if (children.len < SLOTS) {
+        out.print(control.ERROR_PREFIX ++ "the supervisor has {d} slots, want {d}\n", .{ children.len, SLOTS });
+        return;
+    }
+    if (!live.mounted) {
+        out.print(control.ERROR_PREFIX ++ "no config disk is mounted at /config; nothing to reload\n", .{});
+        return;
+    }
+    config_heard = .{};
+    const loaded = config.load(CONFIG_PATH) orelse {
+        out.print(control.ERROR_PREFIX ++ "no {s}; nothing changed\n", .{CONFIG_PATH});
+        return;
+    };
+    if (config_heard.count != 0) {
+        out.print(control.ERROR_PREFIX ++ "{s}: {s}", .{ CONFIG_PATH, config_heard.buf[0..config_heard.len] });
+        if (config_heard.count > 1) out.print(" (and {d} more)", .{config_heard.count - 1});
+        out.print("; nothing changed (tars-config check)\n", .{});
+        std.debug.print("tars-init: reload refused, {s} has {d} line(s) init would not take\n", .{ CONFIG_PATH, config_heard.count });
+        return;
+    }
+    var new = loaded;
+    if (live.noconfig) new.shell_config = .off;
+    const old = live.cfg;
+    const keys = reload.changed(old, new);
+    std.debug.print("tars-init: reload of {s}\n", .{CONFIG_PATH});
+    const before = out.len;
+    reload.keyLines(out, old, new);
+
+    // 1. 조인다.
+    const fw = reload.firewallStep(old.firewall, new.firewall);
+    if (fw == .up) {
+        firewall.up(.on, live.envp);
+        out.print("firewall: up (nft -f /etc/tars/firewall.nft)\n", .{});
+    }
+
+    // 2. 데몬 셋. 셋의 판정은 부팅의 함수 그대로다. 무선은 키가 안 바뀌어도 다시 묻는다 —
+    //    `tars-config wifi`가 처음 만든 파일을 reload가 띄운다.
+    const want_wifi = wifi.wants(new.net, live.mounted, wifi.CONF_PATH);
+    steer(&children[SLOT_WIFI], reload.step(!children[SLOT_WIFI].config_off, want_wifi, false), now, out);
+    if (keys.has("net")) {
+        const want_dhcpcd = net.wantsDhcpcd(new.net);
+        steer(&children[SLOT_DHCPCD], reload.step(!children[SLOT_DHCPCD].config_off, want_dhcpcd, false), now, out);
+    }
+    if (keys.has("net") or keys.has("ntp")) {
+        const want_chronyd = clock.prepare(new.net, new.ntp, live.mounted);
+        steer(&children[SLOT_CHRONYD], reload.step(!children[SLOT_CHRONYD].config_off, want_chronyd, want_chronyd), now, out);
+    }
+
+    // 3. services.d를 다시 읽는다(design 결정 11). 이미 있는 이름은 안 건드린다.
+    var list = services.List{};
+    services.discover(services.DIR, &list);
+    var slots: [services.MAX]reload.Slot = undefined;
+    for (&slots, 0..) |*sl, i| {
+        const c = &children[SLOT_SERVICES + i];
+        const label = c.label;
+        sl.* = .{
+            .name = if (label.len > services.LABEL_PREFIX.len) label[services.LABEL_PREFIX.len..] else "",
+            .off = c.config_off,
+            .alive = c.pid >= 0,
+        };
+    }
+    var names: [services.MAX][]const u8 = undefined;
+    const entries = list.slice();
+    for (entries, 0..) |*e, i| {
+        const label = e.label();
+        names[i] = if (label.len > services.LABEL_PREFIX.len) label[services.LABEL_PREFIX.len..] else "";
+    }
+    var actions: [2 * services.MAX]reload.SvcAction = undefined;
+    const n = reload.serviceActions(&slots, names[0..entries.len], &actions);
+    for (actions[0..n]) |a| switch (a) {
+        .stop => |i| steer(&children[SLOT_SERVICES + i], .stop, now, out),
+        .revive => |i| steer(&children[SLOT_SERVICES + i], .start, now, out),
+        .add => |p| {
+            if (p.name >= entries.len) continue;
+            placeService(children, live, p.slot, &entries[p.name]);
+            out.print("{s}: starts (new in {s})\n", .{ entries[p.name].label(), services.DIR });
+            std.debug.print("tars-init: reload: {s} joins the services\n", .{entries[p.name].label()});
+        },
+        .no_room => |i| if (i < entries.len) {
+            out.print("{s}: no free slot until the next boot ({d} at most)\n", .{ entries[i].label(), services.MAX });
+        },
+    };
+
+    // 4 · 5. 셸과 env. 다음에 뜨는 콘솔 셸 · 서비스 · ssh 로그인부터다.
+    if (keys.has("shell") or keys.has("shell_config") or keys.has("timezone")) rebuildShellAndEnv(children, live, new);
+
+    // 6. 푼다.
+    if (fw == .down) {
+        if (firewall.down(live.envp)) {
+            out.print("firewall: down (nft flush ruleset)\n", .{});
+        } else {
+            out.print("firewall: nft flush ruleset failed; the rules stay up\n", .{});
+        }
+    }
+
+    live.cfg = new;
+    if (out.len == before) out.print("nothing changed\n", .{});
 }
 
 /// 감독 루프가 한 바퀴에 잠드는 시간. 이 값이 세 가지를 동시에 정한다.
@@ -531,7 +777,7 @@ fn supervise(
     children: []Child,
     buttons: []const i32,
     control_fd: ?i32,
-    envp: [*:null]const ?[*:0]const u8,
+    live: *Live,
 ) noreturn {
     // poll에 넘길 배열. 버튼 fd는 부팅 때 한 번 정해지고 변하지 않으므로
     // 루프 밖에서 한 번만 채운다. revents만 커널이 매 호출 덮어쓴다.
@@ -560,7 +806,8 @@ fn supervise(
         audio.follow();
 
         for (children) |*c| {
-            if (control.wantsRunning(c)) start(c, envp);
+            // env는 reload가 갈아 끼울 수 있어서 바퀴마다 `live`에서 읽는다(TC-M2).
+            if (control.wantsRunning(c)) start(c, live.envp);
         }
 
         // CT-M1 결정 4 규칙 3. SIGTERM을 무시한 서비스에게 유예 뒤 SIGKILL을 그룹으로
@@ -733,7 +980,7 @@ fn supervise(
         // ── CT-M1. 셋째 입력 ────────────────────────────────────────
         if (control_fd != null and fds[control_slot].revents != 0) {
             const p = &fds[control_slot];
-            if (p.revents & linux.POLL.IN != 0) serveControl(children, p.fd);
+            if (p.revents & linux.POLL.IN != 0) serveControl(children, live, p.fd);
             const broken = linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL;
             if (p.revents & broken != 0) {
                 std.debug.print("tars-init: control socket went away (revents {d})\n", .{p.revents});
@@ -787,7 +1034,8 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 매달리는 rc까지 덮는 것이 탈출로 1과 다른 점이다(결정 8은 자식이
     // 죽어야 발동한다). 대가는 사람이 부팅 순간에 개입해야 한다는 것이고,
     // 그래서 둘이 서로를 대체하지 않는다.
-    if (config.cmdlineNoConfig(config.CMDLINE_PATH)) {
+    const noconfig = config.cmdlineNoConfig(config.CMDLINE_PATH);
+    if (noconfig) {
         // 크게 찍는다. 이 줄이 없으면 "설정 파일에는 on이라고 적혀 있는데
         // 왜 rc가 안 읽히지"가 영영 안 풀린다.
         std.debug.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
@@ -1041,10 +1289,22 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 클립보드 범위도 같은 성질이다(CB-M0).
     const clipboard_arg = cfg.clipboard.arg();
 
-    // SV-M1 · DS-M1. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 둘이
-    // (DS design 결정 1), 그 뒤에 서비스가 이름순으로 붙는다. 크기는 컴파일
-    // 타임에 정해진다(힙이 없다) — 쓰는 것은 앞에서 `n + len`까지다.
-    var children: [2 + services.RESERVED.len + services.MAX]Child = undefined;
+    // TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리에 든다(reload design
+    // 결정 5). 아래 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 앞이다.
+    var live = Live{
+        .cfg = cfg,
+        .screen = cfg,
+        .mounted = storage_mounted,
+        .noconfig = noconfig,
+        .kernel_env = init.environ.block.slice.ptr,
+        .envp = envp,
+    };
+
+    // SV-M1 · DS-M1 · TC-M2. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 셋이(DS design
+    // 결정 1 · WL), 그 뒤에 서비스 여덟의 칸이 온다. TC-M2부터 칸은 늘 열셋이고 원하지 않는 칸은
+    // `config_off`다 — reload가 dhcpcd를 켜거나 services.d에 새 이름을 넣을 자리가 늘 있다(reload
+    // design 결정 5). 띄우는 순서(배열 순서)는 그 전과 같다.
+    var children: [SLOTS]Child = undefined;
     children[0] = .{
         .kind = .terminal,
         .label = "terminal",
@@ -1081,51 +1341,49 @@ pub fn main(init: std.process.Init.Minimal) void {
         .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null, null },
         .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
     };
-    var n: usize = 2;
     // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
     // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
     // WL-M2. wpa_supplicant도 같은 자리의 셋째다.
-    if (want_wifi) {
-        children[n] = .{
-            .kind = .service,
-            .label = services.LABEL_PREFIX ++ services.WPA_SUPPLICANT,
-            .path = wifi.WIFI_PATH,
-            .argv = wifi.WIFI_ARGV,
-        };
-        n += 1;
-    }
-    if (want_dhcpcd) {
-        children[n] = .{
-            .kind = .service,
-            .label = services.LABEL_PREFIX ++ services.DHCPCD,
-            .path = net.DHCPCD_PATH,
-            .argv = net.DHCPCD_ARGV,
-        };
-        n += 1;
-    }
-    if (want_chronyd) {
-        children[n] = .{
-            .kind = .service,
-            .label = services.LABEL_PREFIX ++ services.CHRONYD,
-            .path = clock.CHRONYD_PATH,
-            .argv = clock.CHRONYD_ARGV,
-        };
-        n += 1;
-    }
-    for (service_list.slice(), 0..) |*s, i| {
-        children[n + i] = .{
-            .kind = .service,
-            .label = s.label(),
-            .path = s.path(),
+    children[SLOT_WIFI] = .{
+        .kind = .service,
+        .label = services.LABEL_PREFIX ++ services.WPA_SUPPLICANT,
+        .path = wifi.WIFI_PATH,
+        .argv = wifi.WIFI_ARGV,
+        .config_off = !want_wifi,
+    };
+    children[SLOT_DHCPCD] = .{
+        .kind = .service,
+        .label = services.LABEL_PREFIX ++ services.DHCPCD,
+        .path = net.DHCPCD_PATH,
+        .argv = net.DHCPCD_ARGV,
+        .config_off = !want_dhcpcd,
+    };
+    children[SLOT_CHRONYD] = .{
+        .kind = .service,
+        .label = services.LABEL_PREFIX ++ services.CHRONYD,
+        .path = clock.CHRONYD_PATH,
+        .argv = clock.CHRONYD_ARGV,
+        .config_off = !want_chronyd,
+    };
+    for (0..services.MAX) |i| {
+        if (i < service_list.len) {
             // 인자는 없다 — 서비스는 실행 파일 하나이고(결정 2), 준비할 것은
             // 스크립트가 한다. 탈출로도 없다(결정 3).
-            .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
-        };
+            placeService(&children, &live, i, &service_list.entries[i]);
+        } else {
+            children[SLOT_SERVICES + i] = .{
+                .kind = .service,
+                .label = "",
+                .path = "",
+                .argv = .{ null, null, null, null, null, null, null, null, null },
+                .config_off = true,
+            };
+        }
     }
     // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.
     // 못 열면 로그 한 줄이고 CT 전과 같은 부팅이다.
     const control_fd = control.open(control.DIR, control.PATH);
-    supervise(children[0 .. n + service_list.len], button_fds[0..button_count], control_fd, envp);
+    supervise(&children, button_fds[0..button_count], control_fd, &live);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의

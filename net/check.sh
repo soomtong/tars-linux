@@ -981,6 +981,59 @@ if ! grep -a "tars-init: lo up" "$LOG" >/dev/null; then
 fi
 echo "init raised lo"
 
+# ── 검사 31: reload가 네트워크를 끄고 다시 켠다 (TC-M2) ────────────────────
+# 사람이 `tars-config set net=off`와 `tars-config reload`를 친다. init이 tars.conf를 다시 읽고
+# dhcpcd를 멈춘다 — SIGTERM을 받은 dhcpcd는 주소를 지우고 간다(DS). 다시 `net=dhcp`와 reload면 같은
+# 부팅 안에서 dhcpcd가 새로 뜨고 lease를 받는다. 재부팅이 없다는 것은 `started service dhcpcd`가 이
+# 로그에 둘이라는 것이다. 판정 글자 nw0은 우리가 짓는다(echo).
+#
+# set의 답을 화면에서 본 뒤에 reload를 친다(TC-M2 Task 5b). M2의 첫 루트 게이트에서 이 검사가 셋 중 둘
+# 빨갰고 그때 시리얼에는 `reload of` 뒤에 아무 줄이 없었다 — init이 파일을 다시 읽었는데 net이 아직
+# dhcp였다는 뜻이다(reload design 덧붙임의 H1). set이 끝났다는 증거를 기다리면 그 창이 닫히고, 다시
+# 빨개지면 아래 진단이 "set이 안 됐다"와 "reload가 안 됐다"를 한 판으로 가른다.
+NW_LEASES_BEFORE="$(grep -ac 'eth0: leased 10\.0\.2\.15 ' "$LOG")"
+# 실패하면 마지막 화면과 tars.conf의 되읽기를 찍는다. fail이 끝내기 전에 부른다.
+nw_reload_diag() {
+  echo "--- last screen before the diagnosis ---"
+  joined_screen_dump | tail -n 1 | sed 's/ | /\n/g' | tail -n 25
+  type_keys c a t spc slash c o n f i g slash t a r s dot c o n f ret
+  sleep 3
+  echo "--- after cat /config/tars.conf ---"
+  joined_screen_dump | tail -n 1 | sed 's/ | /\n/g' | tail -n 8
+  echo "--- tars-init lines after the last 'reload of' ---"
+  awk '/tars-init: reload of/ { n = NR } END { print n + 0 }' "$LOG" | {
+    read -r from; [ "$from" -gt 0 ] && tail -n +"$from" "$LOG" | grep -a 'tars-init:' | head -n 8; true; }
+}
+echo "=== typing 'tars-config set net=off' and 'tars-config reload' ==="
+type_keys t a r s minus c o n f i g spc s e t spc n e t equal o f f ret
+wait_for_screen '\| net: dhcp -> off' \
+  || { nw_reload_diag; fail "tars-config set net=off never answered 'net: dhcp -> off'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: stops' \
+  || { nw_reload_diag; fail "reload did not stop dhcpcd after net=off" "terminal: screen>" "tars-init: reload"; }
+for _ in $(seq 1 40); do grep -a "tars-init: service dhcpcd stopped on request" "$LOG" >/dev/null && break; sleep 0.25; done
+grep -a "tars-init: service dhcpcd stopped on request" "$LOG" >/dev/null \
+  || fail "init never reaped the dhcpcd that reload stopped" "tars-init: reload" "dhcpcd"
+type_keys e c h o spc n w shift-4 shift-9 i p spc minus 4 spc a d d r spc s h o w spc e t h 0 spc \
+  shift-backslash spc g r e p spc minus c spc i n e t shift-0 ret
+wait_for_screen '\| nw0' || fail "eth0 kept its address after reload turned the network off" "terminal: screen>"
+echo "reload with net=off stopped dhcpcd and eth0 lost its address"
+type_keys t a r s minus c o n f i g spc s e t spc n e t equal d h c p ret
+wait_for_screen '\| net: off -> dhcp' \
+  || { nw_reload_diag; fail "tars-config set net=dhcp never answered 'net: off -> dhcp'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service dhcpcd: starts' \
+  || { nw_reload_diag; fail "reload did not start dhcpcd after net=dhcp" "terminal: screen>" "tars-init: reload"; }
+for _ in $(seq 1 60); do
+  [ "$(grep -ac 'eth0: leased 10\.0\.2\.15 ' "$LOG")" -gt "$NW_LEASES_BEFORE" ] && break
+  sleep 0.5
+done
+[ "$(grep -ac 'eth0: leased 10\.0\.2\.15 ' "$LOG")" -gt "$NW_LEASES_BEFORE" ] \
+  || fail "the dhcpcd that reload started never leased" "tars-init: reload" "leased"
+[ "$(grep -ac 'tars-init: started service dhcpcd (pid' "$LOG")" -ge 2 ] \
+  || fail "dhcpcd was not started a second time in this boot" "tars-init: started service dhcpcd"
+echo "reload with net=dhcp started dhcpcd again and it leased 10.0.2.15, without a reboot"
+
 # ── 끈다 ──────────────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the guest ==="
 echo "system_powerdown" >&3

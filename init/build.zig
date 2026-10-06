@@ -295,6 +295,19 @@ pub fn build(b: *std.Build) void {
         .root_module = config_front_edit_test_mod,
     });
 
+    // TC-M2: reload가 무엇을 할지(diff · 갈래 · 순서 · services.d · 답의 글자). PID 1의 코드라 셈과
+    // 경계를 여기서 다 본다(reload design 결정 8). config_test와 같은 이유로 host_target이다.
+    const reload_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/reload_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const reload_test = b.addExecutable(.{
+        .name = "reload_test",
+        .root_module = reload_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -314,4 +327,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(audio_test).step);
     test_step.dependOn(&b.addRunArtifact(config_edit_test).step);
     test_step.dependOn(&b.addRunArtifact(config_front_edit_test).step);
+    test_step.dependOn(&b.addRunArtifact(reload_test).step);
 }

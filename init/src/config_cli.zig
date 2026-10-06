@@ -13,6 +13,7 @@ const linux = std.os.linux;
 const config = @import("config.zig");
 const edit = @import("config_edit.zig");
 const front = @import("config_front.zig");
+const control = @import("control.zig");
 
 /// config.zig의 로그를 가로챈다(config.zig의 `log`). 이 한 줄이 없으면 `set`이 틀린
 /// 값을 받을 때 `tars-init: unknown shell …`이 이 명령의 표준 에러에 그대로 찍히고,
@@ -77,6 +78,7 @@ const USAGE =
     \\       tars-config reset KEY...        put keys back to their defaults
     \\       tars-config check               list the lines init would complain about
     \\       tars-config list                every key with its default and the values it takes
+    \\       tars-config reload              init rereads tars.conf and services.d now (TC-M2)
     \\       tars-config help                this text and the list
     \\
     \\other files under /config (TC-M1):
@@ -202,6 +204,50 @@ fn bootRefuses(c: *const config.Config, path_buf: *[config.ZONEINFO_PATH_MAX]u8)
     return path;
 }
 
+// ── init에 묻기(TC-M2) ────────────────────────────────────────────────
+
+/// `config`의 답을 기다리는 시간. `tars-service`와 같다.
+const ASK_MS: i32 = 2000;
+/// `reload`의 답. init이 nft 한 번과 services.d를 지나 답한다(reload design 결정 4).
+const RELOAD_MS: i32 = 10000;
+
+/// init.sock에 동사 하나를 보내고 답을 받는다. 못 닿거나 답이 없으면 null.
+fn askInit(verb: control.Verb, buf: []u8, ms: i32) ?[]const u8 {
+    var req_buf: [16]u8 = undefined;
+    const req = control.formatRequest(&req_buf, verb, null) orelse return null;
+    return switch (control.dial(control.PATH, req)) {
+        .failed => null,
+        .fd => |fd| control.awaitReply(fd, buf, ms),
+    };
+}
+
+/// `config`의 답에서 그 키의 값.
+fn nowValue(reply: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, reply, '\n');
+    while (it.next()) |line| {
+        if (line.len > key.len and std.mem.startsWith(u8, line, key) and line[key.len] == '=') return line[key.len + 1 ..];
+    }
+    return null;
+}
+
+/// `config`의 답의 `screen …` 줄(화면이 대기 중인 키)의 꼬리. 없으면 null.
+fn screenLine(reply: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, reply, '\n');
+    while (it.next()) |line| if (std.mem.startsWith(u8, line, "screen ")) return line["screen".len..];
+    return null;
+}
+
+/// `tars-config reload`(reload design 결정 7). init의 답을 그대로 찍는다.
+fn reloadInit() u8 {
+    var buf: [control.REPLY_MAX]u8 = undefined;
+    const r = askInit(.reload, &buf, RELOAD_MS) orelse {
+        complain("init did not answer at {s}", .{control.PATH});
+        return EXIT_IO;
+    };
+    _ = writeAll(1, r);
+    return if (std.mem.startsWith(u8, r, control.ERROR_PREFIX)) EXIT_REFUSED else EXIT_OK;
+}
+
 // ── show · get ────────────────────────────────────────────────────────
 
 fn show() u8 {
@@ -222,13 +268,22 @@ fn show() u8 {
     edit.heard = .{};
     const c = parsed(cur.text);
     const complaints = edit.heard.count;
+    // TC-M2. init이 지금 쓰는 값(reload design 결정 1). 파일과 다른 키는 그 줄 밑에 주석 한 줄로
+    // 적는다 — 같은 줄 끝에 적으면 이 출력이 더는 그대로 쓸 수 있는 tars.conf가 아니다(TC 결정 8).
+    var now_buf: [control.REPLY_MAX]u8 = undefined;
+    const now = askInit(.config, &now_buf, ASK_MS);
     var line_buf: [edit.LINE_MAX]u8 = undefined;
     for (edit.KEYS) |key| {
         var vbuf: [edit.VALUE_MAX]u8 = undefined;
         const value = edit.valueText(&c, key, &vbuf).?;
         const mark = if (edit.setByFile(&line_buf, cur.text[0..@min(cur.text.len, config.MAX_FILE)], key)) "" else "#";
         say("{s}{s}={s}\n", .{ mark, key, value });
+        if (now) |r| if (nowValue(r, key)) |v| if (!std.mem.eql(u8, v, value))
+            say("#   init uses {s}={s} now; tars-config reload applies the line above\n", .{ key, v });
     }
+    if (now) |r| if (screenLine(r)) |sl|
+        say("# the screen keeps{s} until the next boot\n", .{sl});
+    if (now == null and cur.disk != null) say("# init did not answer at {s}; only the file is shown\n", .{control.PATH});
 
     if (complaints > 0) say("# init complains about {d} line(s) of this file; tars-config check lists them\n", .{complaints});
     var path_buf: [config.ZONEINFO_PATH_MAX]u8 = undefined;
@@ -236,7 +291,7 @@ fn show() u8 {
     edit.heard = .{};
     if (config.cmdlineNoConfig(config.CMDLINE_PATH))
         say("# {s} is on the kernel command line: this boot's shells read no rc\n", .{config.NO_CONFIG_TOKEN});
-    if (cur.disk != null) say("# change: tars-config set KEY=VALUE, then reboot (kill -INT 1)\n", .{});
+    if (cur.disk != null) say("# change: tars-config set KEY=VALUE, then tars-config reload (or reboot)\n", .{});
     return EXIT_OK;
 }
 
@@ -372,7 +427,7 @@ fn change(pairs: []const edit.Pair) u8 {
             say("{s}: {s}{s} -> {s}\n", .{ p.key, old_text[i], if (old_default[i]) " (default)" else "", canon[i] });
         }
     }
-    say("init reads {s} only at boot; reboot to apply (kill -INT 1)\n", .{CONF_PATH});
+    say("apply it now: tars-config reload (the screen's keys wait for the next boot)\n", .{});
     return EXIT_OK;
 }
 
@@ -493,6 +548,10 @@ pub fn main(init: std.process.Init.Minimal) u8 {
     if (std.mem.eql(u8, verb, "unset")) {
         complain("there is no unset; reset KEY writes the default value into that key's line (the line stays)", .{});
         return usage();
+    }
+    if (std.mem.eql(u8, verb, "reload")) {
+        if (rest.len != 0) return usage();
+        return reloadInit();
     }
     if (std.mem.eql(u8, verb, "check")) {
         if (rest.len != 0) return usage();
