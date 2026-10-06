@@ -12,8 +12,8 @@
 | `c855ae3` | M0 — 커널 `SOUND` · `SND` · `SND_HDA_INTEL` · `SND_HDA_GENERIC` · `SYSVIPC`, 게스트 alsa-utils 넷 + `arecord` 링크 · libasound · `/usr/share/alsa` · 목소리 둘 · `/etc/group`의 `audio`, 스무번째 체인 `audio/check.sh`(QEMU `alsa` 백엔드 + 컨테이너 alsa-lib `file` 플러그인으로 샘플을 값까지). 우리 코드 0줄. 구현 Sonnet. 루트 게이트 20체인 2/2, 50분 34초 |
 | `9eee60f` | M1 — `init/src/audio.zig`(일꾼 fork · `alsactl -U restore|init` · 99는 성공 · 끄는 길의 `store` · `/config/asound.state`) · `alsactl` 싣기 · 체인 부팅 셋 검사 열하나. 간헐 실패 하나를 lead가 추적 — dmix xrun의 두 배 프레임(`doubled` 갈래 · 하한 40,000). 구현 Sonnet. 20체인 2/2, 50분 54초 |
 | `cd9c12e` | M2 — 커널 HDA 코덱 여덟(Realtek 계열 전부 · Conexant · Senarytech · Cirrus · CS8409 · Analog · IDT · VIA) · `SND_USB_AUDIO` · `HID_APPLE` · `INPUT_LEDS` 끔, `audio.follow`(1초마다 `/dev/snd` → `/etc/asound.conf`, 재생 · 녹음 각각 가장 큰 번호), 체인 부팅 D(monitor 45491, `usb-audio` 꽂고 뽑기) 검사 열다섯. 첫 루트 게이트가 `pointer`에서 빨갰다 — 커널 printk가 화면 줄을 자른 것, `gate_lib.sh`의 `joined_screen_dump`. 구현 Sonnet. 20체인 2/2, 51분 10초 |
-| (M3 commit) | M3 — 커널 Intel SOF 열한 세대 · AMD ACP PDM 셋 + 범용, sof-bin v2026.09.1 firmware · topology 42개(`vendor_firmware.sh`가 받는다, firmware 목록 77 → 119), 녹음의 세 단(USB 마이크 · 내장 DMIC(`/proc/asound/pcm`) · 장치 0), postinit 규칙 한 줄(`Dmic0 Capture Switch`), 검사 열일곱. 구현 Sonnet. 루트 게이트는 M3 plan의 실측 절 |
-| (닫기 commit) | design `Status:` · CLAUDE.md 표 · `project_audio_devices.md` · MEMORY.md · target_hardware · lessons(포트 · 로그 문구 · AU 실측 일곱 · 이월 숙제 다섯 · 핵심 파일) · running-tars 소리 절 · HANDOFF |
+| `257b5e1` | M3 — 커널 Intel SOF 열한 세대 · AMD ACP PDM 셋 + 범용, sof-bin v2026.09.1 firmware · topology 42개(`vendor_firmware.sh`가 받는다, firmware 목록 77 → 119), 녹음의 세 단(USB 마이크 · 내장 DMIC(`/proc/asound/pcm`) · 장치 0), postinit 규칙 한 줄(`Dmic0 Capture Switch`), 검사 열일곱. 구현 Sonnet. 루트 게이트는 M3 plan의 실측 절 |
+| `52188ab` | design `Status:` · CLAUDE.md 표 · `project_audio_devices.md` · MEMORY.md · target_hardware · lessons(포트 · 로그 문구 · AU 실측 일곱 · 이월 숙제 다섯 · 핵심 파일) · running-tars 소리 절 · HANDOFF |
 
 design은 `docs/specs/2026-10-05-tars-audio-devices-design.md`(결정 8 · 전제 정정 12 · 위험 16 · 비목표 10 · 실측 19), plan은
 `-au-m0.md` ~ `-au-m3.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은 `docs/decisions/project_audio_devices.md`.
