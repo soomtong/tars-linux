@@ -369,6 +369,31 @@ chmod 0755 "$WORKDIR/usr/lib/tars/tars-wifi"
 cp tq-probe.sh "$WORKDIR/usr/bin/tq-probe"
 chmod 0755 "$WORKDIR/usr/bin/tq-probe"
 
+# VD-M0. 받아쓰기(VD design 결정 2). 사람이 셸에서 이름으로 치고, VD-M1부터는 터미널이
+# 오른쪽 Cmd 두 번에 이것을 띄운다. tq-probe와 같은 이유로 저장소에서 와서 /usr/bin에
+# 간다. bash 스크립트라 copy_lib_deps가 따라갈 것이 없다 — 부르는 arecord · curl · jq는
+# guest_tools.sh가 이미 싣는다.
+cp dictation/tars-dictate "$WORKDIR/usr/bin/tars-dictate"
+chmod 0755 "$WORKDIR/usr/bin/tars-dictate"
+
+# VD-M0. curl이 https에서 믿을 인증 기관 목록. libcurl이 컴파일 타임에 박아 둔 경로가
+# /etc/ssl/certs/ca-certificates.crt이고, 그 파일이 없으면 https는 전부
+# `curl: (77)`로 죽는다(VD design 실측 1). Debian은 이 묶음을 postinst의
+# update-ca-certificates로 짓는다 — dpkg -x로 푼 sysroot에는 인증서가 한 장씩만 있다.
+# 같은 일을 여기서 한다. 기본 설정(/etc/ca-certificates.conf)이 mozilla 디렉터리를
+# 전부 켜므로 전부 이어 붙이고, 끝에 개행이 없는 파일 뒤에 개행을 넣는 것까지 그
+# 스크립트와 같다.
+#
+# 컨테이너 자신의 /etc/ssl/certs/ca-certificates.crt를 복사하지 않는 이유가 하나 더
+# 있다. 그 파일에는 OrbStack이 넣은 개발용 인증 기관 둘(OrbStack Development Root CA ·
+# Caddy Local Authority)이 들어 있다(VD design 실측 2) — 게스트가 그것을 믿을 이유가 없다.
+mkdir -p "$WORKDIR/etc/ssl/certs"
+for crt in "$SYSROOT"/usr/share/ca-certificates/mozilla/*.crt; do
+  cat "$crt"
+  if [ -n "$(tail -c 1 "$crt")" ]; then echo; fi
+done > "$WORKDIR/etc/ssl/certs/ca-certificates.crt"
+chmod 0644 "$WORKDIR/etc/ssl/certs/ca-certificates.crt"
+
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
 # /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다

@@ -343,6 +343,13 @@ run_chain() {
 # 같은 디스크로 두 번 떠서 보고, 설정 디스크 없이 한 번 더 뜬다. 넷째 부팅은 monitor(45491)로
 # USB 스피커를 꽂고 뽑아 기본 카드가 따라가는 것을 본다(AU-M2). 회차당 부팅 4회.
 #
+# VD 체인은 받아쓰기를 본다. 게스트의 tars-dictate가 마이크(audio 체인과 같은 HDA와
+# file 플러그인)에서 녹음해 전사 API에 올리고 받은 글자를 낸다. API는 Groq가 아니라
+# 컨테이너의 perl stub이다 — QEMU의 guestfwd가 게스트의 10.0.2.100:8080 연결마다 띄운다.
+# 설정 디스크의 services.d/probe가 사람이 셸에서 하는 일(설정 파일을 고치고 치고 Ctrl+C)을
+# 열 갈래로 하고, stub은 받은 WAV의 샘플까지 로그에 적는다. curl이 인증 기관 목록을 읽는지는
+# 컨테이너의 openssl s_server(45492)로 본다. 게스트에 한 글자도 안 친다. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -366,6 +373,7 @@ CHAINS=(
   "CB-M0:./pane/check.sh"
   "PD-M4:./pointer/check.sh"
   "AU-M3:./audio/check.sh"
+  "VD-M0:./dictation/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

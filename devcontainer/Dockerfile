@@ -314,6 +314,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # alsa-utils의 Depends 중 libatopology · libfftw3 · libsamplerate는 안 받는다 —
 # alsatplg · alsabat · alsaloop의 것이고 우리는 그 셋을 안 싣는다. kmod도
 # 안 받는다(커널에 모듈이 없다).
+#
+# ── VD-M0: 층 15(TLS가 믿는 인증 기관) ─────────────────────────────────
+#
+# ca-certificates 하나다. 게스트의 curl은 NW-M2부터 TLS 라이브러리(libssl)를 링크해
+# 왔지만 무엇을 믿을지(인증 기관 목록)가 initrd에 없었다 — libcurl이 컴파일 타임에
+# 박아 둔 /etc/ssl/certs/ca-certificates.crt가 비어 있어서 https는 전부
+# `curl: (77) error setting certificate file`로 죽었다(VD design 실측 1). Voice Dictation이
+# Groq API(https)에 닿으려면 이것이 있어야 한다.
+#
+# Architecture: all이라 :amd64를 안 붙인다. 패키지에는 인증서가 한 장씩
+# (/usr/share/ca-certificates/mozilla/*.crt) 들어 있고, 한 파일로 묶는 것은 postinst의
+# update-ca-certificates다 — dpkg -x로 푼 여기에는 그 묶음이 없다(lessons 42와 같은 성질).
+# 그래서 kernel/make_initrd.sh가 같은 일(전부 이어 붙이기)을 한다. 실행 파일이 아니라
+# 데이터라 새 라이브러리는 0개다. 컨테이너 자신의 /etc/ssl/certs를 복사하지 않는 이유는
+# tzdata와 같고(TS design 결정 10) 하나가 더 있다 — 그 묶음에는 OrbStack이 넣은 개발용
+# 인증 기관 둘이 섞여 있다(VD design 실측 2).
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -449,6 +465,7 @@ RUN dpkg --add-architecture amd64 \
         alsa-utils:amd64 \
         libasound2t64:amd64 \
         libasound2-data \
+        ca-certificates \
         hostapd:amd64 \
         busybox:amd64 \
         ncurses-term \

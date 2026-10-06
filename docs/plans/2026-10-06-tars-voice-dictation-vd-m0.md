@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Design: `docs/specs/2026-10-06-tars-voice-dictation-design.md`
-Status: 구현 전. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에 있고, 맨 아래 "VD-M0이 실측한 것" 절은 구현 뒤에 lead가 채운다.
+Status: 끝났다(2026-10-06). plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "VD-M0이 실측한 것"에 있다. 다음은 VD-M1(`-vd-m1.md`).
 
 ## 누가 무엇을 하나
 
@@ -1676,4 +1676,18 @@ design 본문은 이 plan과 같은 날 같은 사람이 썼으므로 어긋난 
 
 ## VD-M0이 실측한 것
 
-(구현 뒤에 lead가 채운다.)
+구현은 Sonnet 서브에이전트가 2026-10-06에 main 작업 트리에서 했고, lead가 일곱 파일을 `/tmp/run/vd0/new/`와 `cmp`해 전부 같은
+것을 봤다. 로그는 `/tmp/run/vd0/impl/`(`dictation.log` · `serial.log` · `work/stub.log` · `reg_*.log` · `mut/run.out`), 루트 게이트는
+`/tmp/gate_vd0.log`.
+
+1. 편집과 검사. 이미지 굽기 1분 31초(sysroot의 인증서 150장, 묶음 파일 없음). `git diff --stat` 3 files +50(새 파일 넷은 밖), 지운 줄
+   없음. `SYNTAX-OK` · `ENTRY-OK` · `post: 5 edits, 0 bad`. `dictation` 체인 1분 58초 초록 — 프로브 열 갈래가 전부 기대값(s1 exit 0 `ms 1822` ·
+   s3 143 · s4 3 `ms 23` · s6 4 · s7 2 · s9 4 · 기록 5줄), stub 요청 여덟 건 전부 `header_data`가 `data`와 같다, 첫 요청이
+   `wav=[rate=16000 ch=1 bits=16 data=60698 header_data=60698] samples=[n=30349 mode=1234 mode_count=30349]`. regression 다섯 전부 exit 0
+   (`tools` 66초 `all 92 tools` · `net` 173 · `audio` 44 `AU check PASS` · `boot` 25 · `install` 109 `init waited 1700ms`).
+2. mutation 아홉 판 중 여덟이 plan의 자리에서 빨갰고, m2(WAV 머리를 다시 안 쓴다)만 다른 자리였다 — 이 판에서는 `arecord`가 s1의
+   머리를 스스로 고쳐 검사 3을 지나고, s7의 틀린 머리가 API에 간 것을 검사 12가 잡았다(`a WAV reached the API with a header that does
+   not match its length … data=62062 header_data=960000`). 확정 4가 "스물네 판 중 스물하나"라 적은 그 셋 중 하나이고 검사 12가 받친다.
+3. 루트 게이트. 스물한 체인 × 2회, 53분 28초, `PASS: 2/2` 스물하나 · `VD check PASS` 둘 · `AU check PASS` 둘 · `skipping make` 41.
+   `without a key tars-dictate stopped in 21ms before recording` 둘, `install` 부팅 7 `init waited` 1,700ms 둘. AU-M3의 52분 21초에 1분 7초가
+   더해졌다(design 검증 절이 본 "1분 남짓").

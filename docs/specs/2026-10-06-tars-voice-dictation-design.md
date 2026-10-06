@@ -1,7 +1,7 @@
 # TARS Voice Dictation — Design
 
 Date: 2026-10-06
-Status: VD-M0 plan을 썼다(`docs/plans/2026-10-06-tars-voice-dictation-vd-m0.md`, 구현 전). M1 · M2의 plan은 앞 milestone이 끝난 뒤에 쓴다.
+Status: 진행 중. M0이 끝났다(2026-10-06) — 게스트 파이프라인 `tars-dictate`(녹음 · Groq 전사 · 기록) · 인증 기관 목록 · 스물한번째 체인 `dictation/check.sh`. 다음은 M1(terminal의 트리거 · 상태 · 삽입, `docs/plans/2026-10-06-tars-voice-dictation-vd-m1.md`). plan은 `-vd-m0.md`이고 그 끝의 "실측한 것" 절이 값이다.
 
 사용자의 요청(2026-10-05)에서 시작한다.
 
@@ -362,7 +362,8 @@ M0와 M2를 나눈 이유. M0만으로 사람이 셸에서 쓸 수 있다(정리
    있으면 첫 단어를 잃는다 — 실기에서 `arecord` 앞부분이 0인지 본다(running-tars.md).
 2. 비밀번호 프롬프트. terminal이 PTY에 직접 넣으므로 `sudo` · `ssh`가 echo를 끈 프롬프트에도 글자가 들어간다(Enter는 안 붙는다). Voxio는
    AX로 비밀번호 칸을 보고 마이크를 안 열었다(V10). TARS에서 그 판정은 tty의 `ECHO`가 꺼졌는지(`tcgetattr`)로 할 수 있다 — M1 plan이
-   정한다.
+   정한다. lead의 결정(2026-10-06): M1이 그 판정으로 넣지 않고 상태 줄에 알린다. 그리고 "lead가 정할 것" 넷의 답 — 결정 3 · 5를
+   받는다, 21체인을 받는다, 위험 5의 연결 비용은 실기에서 잰다.
 3. bracketed paste가 꺼진 프로그램(`cat`, `read`)에서 Whisper가 준 글자 안의 개행은 줄 입력이다. 끝의 개행은 `tars-dictate`가 지운다.
 4. Groq 무료 티어 — 분당 20 · 일 2,000 요청, 요청마다 최소 10초로 센다(Voxio 7절). 짧게 자주 쓰면 요청 수가 먼저 닿는다. 429는 exit 4와
    "too many requests"다. 게이트는 Groq를 절대 안 부른다(키도 바깥 길도 없다).
