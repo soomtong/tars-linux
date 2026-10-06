@@ -1,6 +1,53 @@
-# HANDOFF: Audio Devices(AU)가 M0~M3으로 닫혔다 — 다음은 Voice Dictation(VD, Voxio 포팅)
+# HANDOFF: 사용자의 요청 둘이 다 닫혔다 — Audio Devices(AU-M0~M3)와 Voice Dictation(VD-M0~M2)
 
 ## 지금 어디인가
+
+2026-10-05 사용자의 요청 둘("1. 오디오(마이크/이어폰/스피커) 기기 활성화. 2. 마이크로 음성 전사 (Voxio 포팅).
+/Users/dp/Repository/Voxio" — "별도 도메인이니 순차", "계획 수립과 구현 방법 그리고 구현 작업에 목적에 맞는 모델을 사용하는 서브
+에이전트를 할당")을 AU와 VD로 열어 2026-10-06에 둘 다 닫았다. AU의 표는 아래 "그 앞" 절에 있다. VD의 commit은 이렇다.
+
+| 커밋 | 무엇 |
+|---|---|
+| `1bc451c` | VD design · M0 plan · HANDOFF의 AU commit 해시 |
+| `11039e6` | M0 — 게스트 bash `tars-dictate`(`arecord` 16kHz 모노 → `curl` multipart → `jq`, WAV 머리 다시 쓰기, 시그널은 그룹, 종료 코드 여덟) · `/config/dictation.conf` · `groq.key` · `dictation.jsonl` · initrd의 CA 목록 150장 · 스물한번째 체인 `dictation/check.sh`(perl stub, `openssl s_server` 45492). 구현 Sonnet. 루트 게이트 21체인 2/2, 53분 28초 |
+| `be9352c` | M1 — terminal의 `dictation.zig`(`DoubleTap` · `Phase` 넷 · `outcome` · `isPassword` · `sanitize`) · `input.zig`의 트리거(0번 단계)와 Esc(1.3번) · `main.zig`의 자식(fork · poll 두 칸 · `waitpid` · `pasteParts`) · 상태 줄 낱말 일곱(`MAX_LEN` 56) · 체인 부팅 B(monitor 45493, `sendkey meta_r 80`) 검사 14 ~ 23. 구현 Sonnet. 21체인 2/2, 54분 48초 |
+| (M2 commit) | M2 — `tars-dictate`의 정리 단계(Voxio 프롬프트 그대로 · 길이 가드 · 실패 · 시간 초과면 원문 · `cleanup` · `cleanup_url` · `cleanup_model` · `cleanup_timeout`) · SIGINT 틈 닫기 · stub `/chat/<답>/<갈래>` · 게스트 `/etc/hosts`로 Groq 막기 · 검사 24 ~ 29. 구현 Sonnet. 루트 게이트는 M2 plan 실측 절 |
+| (닫기 commit) | design `Status:` · CLAUDE.md 표 · `project_voice_dictation.md` · MEMORY.md · lessons(포트 · 로그 문구 · VD 실측 아홉 · 핵심 파일) · running-tars 받아쓰기 절 · HANDOFF |
+
+design은 `docs/specs/2026-10-06-tars-voice-dictation-design.md`(결정 12 · 전제 정정 9 · 위험 9 · 비목표 14 · 실측 14, Voxio D1 ~ D16
+대응표), plan은 `-vd-m0.md` ~ `-vd-m2.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은 `docs/decisions/project_voice_dictation.md`.
+실기 안내는 `docs/guides/running-tars.md`의 받아쓰기 절(키 파일 · 키 여덟 · 상태 줄 낱말 일곱 · 종료 코드 · 기록 읽기 · 안 될 때 ·
+무료 티어).
+
+방식은 AU와 같다 — planner(Opus) 셋이 저장소 밖 사본(`/tmp/run/vd0` ~ `vd2`)에서 코드를 돌리고 `old_string` · `new_string`을 기계로
+뽑았고, 구현자(Sonnet) 셋이 글자 그대로 넣었다. 세 milestone 모두 plan 코드를 고친 곳이 없었다. planner들이 lead의 전제를 아홉
+바로잡았다 — CA 목록 없음 · 설정은 `tars.conf`가 아니라 `dictation.conf` · 기록은 M0부터 · SIGINT가 WAV 머리를 못 고침 · 시그널은
+그룹 · M0는 monitor 없음 · `arecord` 16kHz는 됨 · jq 1.7에 `trim` 없음 · M0 체인은 화면을 안 봄, 그리고 M1이 `ECHO` → `ICANON && !ECHO`,
+M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
+
+알릴 것 하나 — M2 planner가 호스트에서 `tars-dictate`를 한 번 돌려 호스트 셸의 진짜 `GROQ_API_KEY`가 127.0.0.1의 stub 로그에
+찍혔다. 바깥에 안 나갔고 지웠으며 `/tmp/run/vd2` 전체에 키 모양이 0개인 것을 다시 확인했다. plan에 "호스트에서 `tars-dictate`를
+돌리지 말 것"을 적었다. 키를 바꿀지는 사용자의 판단이다.
+
+## 바로 다음에 할 것 — 실기에서 둘을 본다, 그리고 다음 서브프로젝트
+
+사용자가 실기 노트북에서 볼 것이 둘이다. 둘 다 `running-tars.md`에 명령이 있다.
+
+- 소리(AU) — `cat /proc/asound/cards` · `aplay -l` · `arecord -l` · `speaker-test` · `arecord → aplay`, 헤드폰 잭 · USB 헤드셋, SOF 노트북이면
+  `dmesg | grep -i sof`의 `Firmware file:` · `Topology file:`. 조용하면 `amixer -c N` · `snd_intel_dspcfg.dsp_driver=1`.
+- 받아쓰기(VD) — `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 진짜 Groq · 첫 연결 지연(정리가 매번 `cleanup timed out`이면
+  `cleanup_timeout`을 늘리거나 끈다) · SOF DMIC의 앞부분이 0인지(design 위험 1).
+
+다음 서브프로젝트 후보 — AU 비목표 10(SoundWire 코덱 노트북 · side-codec 스피커 앰프, 실기가 요구하면), VD 비목표(상주 프로세스로 연결
+재사용 — 첫 연결 지연이 크면, 알림음, hold 모드), 그리고 앞 절의 것들(ZU-M2 · 패키지 매니저 · IPv6 · USB 동글 층 B · WP-M3 방향 포커스 ·
+vim-runtime · 더블클릭 단어 선택 · 휠 방향 · 포인터 가속 · CB `workspace` 범위). 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"(AU 다섯 ·
+PD 넷 · …).
+
+측정 파일(저장소 밖, 지워도 된다): `/tmp/run/au0` ~ `au3` · `/tmp/run/vd0` ~ `vd2`(planner · 구현자 사본과 로그) · `/tmp/gate_au0.log` ~
+`gate_au3.log` · `/tmp/gate_vd0.log` ~ `gate_vd2.log`(루트 게이트). 이미지 `tars-devcontainer-au0` · `-vd0`는 지워도 된다.
+
+### 그 앞 — Audio Devices(AU)가 M0~M3으로 닫혔다
+
 
 2026-10-05 사용자의 요청 둘("1. 오디오(마이크/이어폰/스피커) 기기 활성화. 2. 마이크로 음성 전사 (Voxio 포팅).
 /Users/dp/Repository/Voxio")을 받았다. "별도 도메인이니 개발 과정은 병렬로 진행하지 말고 순차 진행", "계획 수립과 구현 방법 그리고
@@ -26,7 +73,7 @@ design은 `docs/specs/2026-10-05-tars-audio-devices-design.md`(결정 8 · 전�
 AMD는 PDM · UCM 안 싣는다 · SoundWire 제외. 게이트가 빨개진 둘(dmix xrun · printk 자름)은 lead가 재현해 원인을 잡았고 둘 다
 우리 코드가 아니었다(lessons).
 
-## 바로 다음에 할 것 — Voice Dictation(VD): Voxio를 TARS로 옮긴다
+#### (AU를 닫을 때의) 바로 다음에 할 것 — VD
 
 사용자의 요청 2번. Voxio(`/Users/dp/Repository/Voxio`, Swift, macOS 메뉴바 앱 1.0.1)는 "오른쪽 ⌘ 두 번 → 마이크 → Groq Whisper API로
 전사 → LLM으로 군더더기 정리 → 커서 자리에 붙여넣기"다. 기록은 로컬 SQLite에 남고 원본 오디오는 안 남긴다. 읽을 것은 `README.md` ·

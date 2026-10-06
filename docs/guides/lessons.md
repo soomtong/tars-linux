@@ -62,7 +62,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). 새 체인은 45492부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. 새 체인은 45494부터 쓴다.
 
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
@@ -227,7 +227,13 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 set this boot` · `no sound card within 5000ms, the mixer is left alone`(AU-M1, `init/src/audio.zig`) · `default card is N for playback, N
 for capture` · `… N (device 6) for capture`(AU-M2 · M3, 바뀔 때만) · `audio-probe: …` 줄들(`audio/probe.sh`가 찍고 `audio/check.sh`가
 본다 — 끝을 봐야 하는 값은 대괄호로 감싼다) · `snd_hda_codec_generic hdaudioC0D0: autoconfig for Generic`(커널) ·
-`usbcore: registered new interface driver snd-usb-audio`(커널, 부팅 D)
+`usbcore: registered new interface driver snd-usb-audio`(커널, 부팅 D) ·
+`terminal: dictate> start pid=N ws=N leaf=N` · `phase recording` · `stop pid=N` · `phase transcribing` · `cancel pid=N` · `ignored phase=…` ·
+`exit code=N`/`exit signal=N` · `insert len=N bracketed=0|1 ws=N leaf=N` · `refused password at=start|insert …` · `no pane shell=N` ·
+`notice …` · `nothing left to insert` · `spawn failed at …`(VD-M1, `terminal/src/main.zig`의 받아쓰기 절 — 받아 적은 글자는 어느 줄에도
+없다) · `terminal: status> dict ink=N` · `tars-dictate: recording; Ctrl+C stops (at most Ns)` · `tars-dictate: recording stopped …`(VD-M0의
+표준 에러 — M1부터 terminal이 파이프로 읽어 단계를 옮기고 시리얼에 다시 찍는다. 글자를 바꾸면 `dictation.phaseAfter`와 체인이 함께
+깨진다) · `dictate-probe: …`(`dictation/probe.sh`) · `stub: POST /ok/s1 …`(`dictation/stub.pl`의 로그 — 체인이 요청 수와 WAV 머리를 센다)
 
 새 copy 명령의 로그는 공짜다 — switch 아래의 `dumpCopy(screen,
 @tagName(cmd))`가 이미 찍는다. 새 `dump` 함수를 만들지 않는다. `find>`는 그와
@@ -782,6 +788,30 @@ RIS가 끈다(`vt_test` 95 · 96).
   뒤에 꽂은 판은 스무 번 남짓 다 0.2초 안에 열거됐다.
 - AU-7. `snd_pci_acp6x` · `snd_pci_ps`는 PCI 표가 `modules.builtin.modinfo`의 alias로 안 나온다. 게이트는 심볼로 본다.
 
+### VD(Voice Dictation, 2026-10-06)가 잰 것
+
+- VD-1. 게스트의 `curl`은 TLS 라이브러리(`libssl`)를 링크하지만 인증 기관 목록이 initrd에 없으면 https가 전부 `curl: (77) error setting
+  certificate file`이다. `make_initrd.sh`가 sysroot의 ca-certificates(mozilla 150장)를 `/etc/ssl/certs/ca-certificates.crt`로 이어 붙인다
+  (VD-M0). 컨테이너 자신의 묶음은 OrbStack의 개발용 인증 기관 둘이 섞여 있어 안 쓴다. 게이트는 `openssl s_server`(자기 서명)에 대고
+  "목록을 읽었다"를 exit 60(77이 아니라)으로 본다.
+- VD-2. `arecord -d N`을 SIGINT로 멈추면 WAV 머리를 거의 못 고친다(스물네 판 중 스물하나가 `pcm_read … Interrupted system call`로 머리를
+  그대로 두고 끝난다). 샘플은 멀쩡하다 — `tars-dictate`가 머리 44바이트를 실제 길이로 다시 쓴다(게스트에 `dd`가 없어 `printf` + `tail -c +45`).
+- VD-3. `arecord -f S16_LE -r 16000 -c 1`은 기본 장치(`plug` → `dsnoop`)로 문제없이 돈다. `plug`가 스테레오를 모노로 접을 때 왼쪽 채널만
+  가져간다 — alsa-lib의 규칙이라 체인은 두 채널에 같은 값을 넣어 기대지 않는다.
+- VD-4. 게스트의 `jq`는 1.7이라 `trim`이 없다(`sub`로 strip을 정의한다). Oniguruma 정규식이라 `\p{L}` · `\p{N}`은 안다 — 무음 판정(글자나
+  숫자가 하나라도 있는가)에 한글이 글자여야 해서 bash + `jq`가 Zig보다 맞았다(Zig std에 유니코드 범주 표가 없다).
+- VD-5. 시그널은 pid가 아니라 프로세스 그룹에 보낸다 — `arecord`가 직접 받아 끝나고 bash는 그 뒤에 trap을 돈다. 자식을 `setpgid`로 제
+  그룹에 두지 않으면 `kill(-pid)`가 `ESRCH`이고 `arecord`는 상한까지 녹음한다(M1 mutation 2).
+- VD-6. 비밀번호 프롬프트의 판정은 `ECHO`가 아니라 `ICANON && !ECHO`다. 셸의 줄 편집기와 vim은 둘을 함께 끈다(fish 프롬프트
+  `icanon=false echo=false`, `read -s` `icanon=true echo=false`). master에 `tcgetattr`를 하면 slave의 termios를 준다. ghostty와 같은 판정.
+- VD-7. QEMU `sendkey meta_r`가 게스트의 `KEY_RIGHTMETA`다. hold를 안 적으면 누른 시간 7 ~ 23ms · 두 누름 사이 20ms로 사람 손과 다르다 —
+  `sendkey meta_r 80` 둘이 누른 시간 80ms · 사이 160ms다. `type_keys`로는 못 친다(수정키 하나는 로그가 없어 키마다 0.3초를 기다린다).
+- VD-8. 게이트의 오디오 시간과 게스트 시계가 다르다 — `max_seconds=30` 녹음이 게스트 시계로 23초에 끝났다. TCG의 오디오가 게스트
+  시계보다 빨리 샘플을 낸다. 판정은 바이트 수로.
+- VD-9. terminal이 자식을 띄우는 길(VD-M1) — `pipe2(O_CLOEXEC)` 둘 · `fork` · 자식과 부모 양쪽의 `setpgid` · `dup2` · 표준 입력
+  `/dev/null` · `close_range(3, …)` · `execve`. terminal은 이미 libc를 링크하므로(`forkpty`) `std.c`로 부른다 — `project_zig_c_uapi_rule`의
+  "libc 없이"는 `init`의 길이다.
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -1020,6 +1050,17 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
+VD(2026-10-06)가 남긴 것.
+
+- [ ] `render` 검사 28(vim의 `R` 뒤 underline 커서)이 VD-M2의 루트 게이트 2회차에서 한 번 빨갰다(`vt=block`인 채 15초). 앞선 루트 게이트
+      여섯(열두 회차)과 그 뒤의 재실행은 초록이었고 M2는 terminal · 커널 · initrd 내용을 안 바꿨다 — 간헐이다. 시리얼 로그가 `mktemp`라
+      `R`이 vim에 닿았는지(`key>` 줄 · `-- REPLACE --`)를 못 봤다. `render/check.sh`의 `report_failure`가 이제 실패한 판의 시리얼 로그를
+      `out/render-failed-serial.log`에 남긴다 — 다음에 빨개지면 그 파일부터 본다. 다른 체인들의 `report_failure`도 같은 줄을 넣을 자리다.
+- [ ] 정리의 상한 `cleanup_timeout`(기본 1.5초)이 실기의 첫 연결(DNS · TLS)을 덮는지는 게이트로 못 잰다. 실기에서 `cleanup timed out`이
+      매번이면 값을 늘리거나 `cleanup = off`. 크면 연결을 붙잡아 두는 상주 프로세스(VD design 결정 1의 (d) · 위험 5)를 다시 연다.
+- [ ] 비밀번호 판정(`ICANON && !ECHO`)이 못 보는 자리 — 자기 편집기로 가리는 프롬프트(fish의 `read -s`)에는 글자가 들어간다(Enter는 안
+      붙는다). 겪으면 그 프로그램의 모양을 적는다.
+
 AU(2026-10-06)가 남긴 것.
 
 - [ ] 늦은 내장 카드(AU design 위험 14). M1의 일꾼은 `controlC0`이 서는 순간 있는 카드만 `alsactl init`한다. 카드가 여럿인 AMD
@@ -1164,6 +1205,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
   `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가
   안 바뀐다. `split`은 크기를 보려고 격자 전체(`whole`)를 받는다.
+- `dictation.zig` — 받아쓰기의 순수한 층(VD-M1). `DoubleTap`(누름 → 뗌 → 누름이 300ms 안, 다른 키가 끼면 버림, 다른 수정키가
+  눌려 있으면 발동 안 함 — "녹음 중"을 들지 않는다) · `Phase` 넷(`starting` · `recording` · `transcribing` · `cancelling`)과 `onTap` ·
+  `escCancels` · `phaseAfter`(자식의 표준 에러 두 줄이 단계를 옮긴다) · `outcome`(종료 코드 → 넣기 · 조용 · 알림) · `isPassword`
+  (`ICANON && !ECHO`) · `sanitize`. `dictation_test`가 본다. 시스템 콜은 전부 `main.zig`의 받아쓰기 절(fork · poll 두 칸 · `waitpid` ·
+  `pasteParts`)에 있다. 트리거는 `input.zig`의 `handleKey` 0번 단계(`KEY_RIGHTMETA` 갈래), Esc는 1.3번 단계 — 분기 순서가 계약이다.
 - `clipboard.zig` — 클립보드 칸과 범위(CB-M0). 순수 모듈이고 `clipboard_test`가
   호스트에서 본다(누수는 `DebugAllocator`). `Clipboard.set`이 옛것을 해제하므로
   `text()`가 준 슬라이스는 다음 `set`까지만 유효하다. 칸을 고르는 판단은
@@ -1339,6 +1385,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
   타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
   부팅이다 — A · B는 그것이 빠져도 초록이었다.
+- `dictation/check.sh` · `dictation/probe.sh` · `dictation/stub.pl` · `kernel/dictation/tars-dictate` — 스물한번째 체인(VD). 부팅 A는
+  게스트에 한 글자도 안 치고(프로브가 `tars-dictate`를 열 갈래로 친다) stub(perl, `guestfwd` `cmd:`)이 받은 바이트(WAV 머리 · 칸 ·
+  샘플의 최빈값)로 판정한다 — 경로의 첫 마디가 답(`/ok` · `/ctrl` · `/blank` · `/notext` · `/fail`), 둘째 마디가 갈래 이름. 부팅 B(M1)는
+  monitor `sendkey meta_r 80` 둘로 더블 탭을 치고 `last_screen`으로 본다. `tars-dictate`는 bash + `arecord` + `curl` + `jq`이고 종료 코드
+  (0 · 1 · 2 · 3 · 4 · 64 · 130 · 143)와 표준 에러 두 줄이 terminal과의 계약이다. 게이트는 Groq를 절대 안 부른다.
 - `audio/check.sh` · `audio/probe.sh` — 부팅 넷(A 새 디스크 · B 같은 디스크 · C 디스크 없음 · D USB 꽂고 뽑기) · 검사 열일곱(AU).
   게스트에 한 글자도 안 친다 — 설정 디스크의 `services.d/probe`(= `probe.sh`)가 사람이 치는 명령 그대로 치고 `audio-probe:` 줄로
   찍는다. 판정은 샘플 값이다(`count_tap`의 `tone` · `left` · `right` · `other` · `doubled`). 녹음 파일은 디스크에 남기고 QEMU를 끈 뒤

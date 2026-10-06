@@ -584,6 +584,111 @@ TAS2781 — 2022년 이후 ASUS · Lenovo · HP 일부, 헤드폰 잭은 되고 
 여는 것. 카드가 여럿이거나 firmware가 늦게 오는 기계에서 일부 카드가 꺼진 채 남으면 `amixer -c N sset … unmute`로 켜고
 그 사실을 알린다(AU design 위험 14).
 
+### 받아쓰기 — 오른쪽 Cmd 두 번
+
+말한 것을 지금 패널의 커서 자리에 글자로 넣는다(Voxio를 옮긴 것, VD). 소리는 마이크에서 Groq의 Whisper API로 가고, 받아 적은 글자를
+Groq의 LLM이 한 번 다듬은 뒤(군더더기 지우기) 들어간다. 네트워크(`net=dhcp` 또는 무선)와 Groq API 키가 있어야 한다.
+
+키는 [Groq 콘솔](https://console.groq.com/keys)에서 만든다(무료). 파일 하나에 적는다.
+
+```sh
+printf '%s\n' 'gsk_…' > /config/groq.key       # 앞뒤 공백 · 개행은 떼고 읽는다. 환경 변수 GROQ_API_KEY가 있으면 그쪽이 먼저다
+```
+
+쓰는 법.
+
+| 손 | 무엇이 | 상태 줄 맨 끝 |
+|---|---|---|
+| 오른쪽 Cmd를 300ms 안에 두 번(PC 자판 `keyboard=pc`는 오른쪽 Alt) | 마이크가 열린다 | `REC`(붉은 글자) |
+| 말하고 다시 두 번 | 녹음이 끝나고 전사 · 정리가 돈다 | `WAIT` |
+| (기다린다) | 두 번을 처음 누른 그 패널의 커서 자리에 글자가 들어간다. Enter는 안 붙는다 | 사라진다 |
+| 녹음 중에 Esc | 취소. API를 안 부르고 그 Esc는 셸 · vim에 안 간다 | 사라진다 |
+
+녹음은 `max_seconds`(기본 300초)에서 스스로 멈추고 같은 길로 글자를 넣는다. `WAIT` 동안의 두 번은 무시되고 Esc는 평소처럼 프로그램에 간다 —
+전사 중에는 취소가 없다. 상태 줄의 알림은 다음 키에 사라진다.
+
+| 상태 줄 | 뜻 |
+|---|---|
+| `REC` | 녹음 중 |
+| `WAIT` | 전사 · 정리 중 |
+| `NO KEY` | `/config/groq.key`가 없거나 비었다(마이크를 안 열었다) |
+| `NO MIC` | 녹음을 못 했다 — `arecord -l`로 장치를 본다(소리 절) |
+| `FAILED` | 전사가 실패했다(네트워크 · 키 · 429) — 아래 "안 될 때" |
+| `PASSWORD` | 비밀번호 프롬프트(`sudo` · `ssh` · `read -s`)라 마이크를 안 열었거나 글자를 안 넣었다. 글자는 기록에 있다 |
+| `NO PANE` | 말하는 사이에 그 패널이 닫혔다. 글자는 기록에 있다 |
+
+설정은 `/config/dictation.conf`(없으면 아래 기본값). 고치면 다음 받아쓰기부터 맞는다 — 재부팅이 필요 없다.
+
+| 키 | 기본값 | 뜻 |
+|---|---|---|
+| `transcribe_url` | `https://api.groq.com/openai/v1/audio/transcriptions` | 전사 API(OpenAI 호환이면 된다) |
+| `transcribe_model` | `whisper-large-v3-turbo` | 전사 모델 |
+| `language` | 빈 값(자동 감지) | `ko` · `en` 등. 고정하면 다른 말이 그 언어로 번역돼 들어올 수 있다 |
+| `max_seconds` | `300` | 녹음 상한(1 ~ 600초) |
+| `cleanup` | `on` | `off`면 받아 적은 그대로 넣는다 |
+| `cleanup_url` | `https://api.groq.com/openai/v1/chat/completions` | 정리 API |
+| `cleanup_model` | `qwen/qwen3.8-27b` | 정리 모델. 추론 모델(`openai/gpt-oss-*`)은 쓰지 않는다 — 출력 한도를 추론에 다 쓰고 빈 답을 준다 |
+| `cleanup_timeout` | `1.5` | 정리를 기다리는 초(0.5 ~ 10). 연결(DNS · TLS)까지 센다 — 넘으면 원문이 들어간다 |
+
+```
+# /config/dictation.conf 예
+language = ko
+cleanup = off
+```
+
+셸에서 직접 칠 수도 있다 — 말하고 Ctrl+C. 받아 적은 글자가 표준 출력에, 사람이 읽는 줄이 표준 에러에 나온다.
+
+```sh
+tars-dictate            # 말하고 Ctrl+C
+tars-dictate -h         # 키와 종료 코드
+echo $?                 # 0 글자를 냈다(정리가 실패해도 0) · 1 녹음 못 함 · 2 넣을 것 없음(무음) · 3 키 없음 · 4 전사 실패 · 130/143 취소
+```
+
+```
+tars-dictate: recording; Ctrl+C stops (at most 300s)
+tars-dictate: recording stopped by SIGINT after 2310ms
+tars-dictate: cleaned 23 characters into 19 in 412ms (changed=true)
+tars-dictate: transcribed 2310ms of audio into 19 characters in 1180ms
+```
+
+기록. 말한 것은 전사가 된 순간부터 `/config/dictation.jsonl`에 한 줄씩 남는다 — 넣지 못했어도(`PASSWORD` · `NO PANE`) 남는다. 오디오는 안
+남는다. `raw`가 받아 적은 그대로, `cleaned`가 정리본(정리를 끄거나 정리가 실패했으면 null), `inserted`가 실제로 넣은 글자다.
+
+```sh
+tail -n 5 /config/dictation.jsonl | jq                              # 최근 다섯
+tail -n 1 /config/dictation.jsonl | jq -r .inserted                  # 마지막 것을 다시 보기
+jq -r 'select(.cleaned != null and .cleaned != .raw) | "\(.raw)\n → \(.cleaned)\n"' /config/dictation.jsonl   # 정리가 바꾼 것
+```
+
+정리는 군더더기("음" · "어" · 되풀이 · 버린 말머리)만 지우고 문장 부호를 고치라고 시킨다. 그래도 LLM이라 뜻을 바꿀 수 있다 — 원문은
+늘 기록의 `raw`에 있다. 정리본이 원문의 절반보다 짧으면(요약) 버리고 원문을 넣는다. `cleanup_timeout`(기본 1.5초) 안에 답이 없거나
+실패해도 원문이다.
+
+안 될 때. `tars-dictate`를 셸에서 쳐서 표준 에러를 본다.
+
+| 줄 | 볼 것 |
+|---|---|
+| `curl: (6) Could not resolve host` · `(7) Failed to connect` | 네트워크. `ip -4 route` · `tars.conf`의 `net=dhcp` |
+| `curl: (60) SSL certificate problem: certificate is not yet valid` | 시계. `date -u`가 틀렸다(chronyd가 맞추기 전, 또는 RTC) |
+| `curl: (77)` | 인증 기관 목록이 없다(`/etc/ssl/certs/ca-certificates.crt`) — 알린다 |
+| `HTTP 401` | 키가 틀렸다 |
+| `HTTP 429, too many requests` | 무료 티어 한도(아래). 잠시 뒤에 |
+| `cleanup failed: HTTP 404 … model … does not exist` | `cleanup_model`이 그 키의 목록에 없다 — 아래 `models` |
+| `cleanup timed out after 1.5s` | 정리가 늦다. 매번이면 연결(DNS · TLS) 비용이다 — `cleanup_timeout = 3`처럼 늘리거나 `cleanup = off`, 그리고 알린다 |
+
+```sh
+curl -sS https://api.groq.com/openai/v1/models -H "Authorization: Bearer $(cat /config/groq.key)" | jq -r '.data[].id'   # 키 · 모델 목록
+curl -v https://api.groq.com/ 2>&1 | head -n 30                       # TLS가 어디서 멈추나
+arecord -d 3 -f S16_LE -r 16000 -c 1 /tmp/m.wav && aplay /tmp/m.wav   # 마이크 — 첫 단어가 빠지면 앞부분이 0인지(design 위험 1)
+```
+
+Groq 무료 티어(2026년 9월, [rate limits](https://console.groq.com/docs/rate-limits)). 전사는 분당 20 · 하루 2,000 요청이고 짧은 발화도
+10초로 센다 — 짧게 자주 쓰면 요청 수가 먼저 닿는다. 정리(chat)는 따로 분당 30 요청 · 분당 8K 토큰이다. 한 번 말하면 둘 다 하나씩 쓴다.
+
+기대하지 않는 것 — 로컬 모델(오프라인 전사), 녹음 중의 소리 크기 표시 · 시작음, 누르는 동안만 녹음하는 모드, 정리 프롬프트 바꾸기,
+비밀번호 프롬프트 판정이 못 보는 자기 편집기(fish의 `read -s`)에서 글자가 들어가는 것(Enter는 안 붙는다). 키는 평문 파일이다 — 설정
+디스크(USB)를 잃으면 콘솔에서 키를 지우고 새로 만든다.
+
 ### 무엇을 기대하고 무엇을 기대하지 않는가
 
 화면은 뜬다. 펌웨어가 잡아 둔 EFI GOP 프레임버퍼에 simpledrm이 붙고, 그
