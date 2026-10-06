@@ -11,8 +11,8 @@
 | `1bc451c` | VD design · M0 plan · HANDOFF의 AU commit 해시 |
 | `11039e6` | M0 — 게스트 bash `tars-dictate`(`arecord` 16kHz 모노 → `curl` multipart → `jq`, WAV 머리 다시 쓰기, 시그널은 그룹, 종료 코드 여덟) · `/config/dictation.conf` · `groq.key` · `dictation.jsonl` · initrd의 CA 목록 150장 · 스물한번째 체인 `dictation/check.sh`(perl stub, `openssl s_server` 45492). 구현 Sonnet. 루트 게이트 21체인 2/2, 53분 28초 |
 | `be9352c` | M1 — terminal의 `dictation.zig`(`DoubleTap` · `Phase` 넷 · `outcome` · `isPassword` · `sanitize`) · `input.zig`의 트리거(0번 단계)와 Esc(1.3번) · `main.zig`의 자식(fork · poll 두 칸 · `waitpid` · `pasteParts`) · 상태 줄 낱말 일곱(`MAX_LEN` 56) · 체인 부팅 B(monitor 45493, `sendkey meta_r 80`) 검사 14 ~ 23. 구현 Sonnet. 21체인 2/2, 54분 48초 |
-| (M2 commit) | M2 — `tars-dictate`의 정리 단계(Voxio 프롬프트 그대로 · 길이 가드 · 실패 · 시간 초과면 원문 · `cleanup` · `cleanup_url` · `cleanup_model` · `cleanup_timeout`) · SIGINT 틈 닫기 · stub `/chat/<답>/<갈래>` · 게스트 `/etc/hosts`로 Groq 막기 · 검사 24 ~ 29. 구현 Sonnet. 루트 게이트는 M2 plan 실측 절 |
-| (닫기 commit) | design `Status:` · CLAUDE.md 표 · `project_voice_dictation.md` · MEMORY.md · lessons(포트 · 로그 문구 · VD 실측 아홉 · 핵심 파일) · running-tars 받아쓰기 절 · HANDOFF |
+| `cbde2be` | M2 — `tars-dictate`의 정리 단계(Voxio 프롬프트 그대로 · 길이 가드 · 실패 · 시간 초과면 원문 · `cleanup` · `cleanup_url` · `cleanup_model` · `cleanup_timeout`) · SIGINT 틈 닫기 · stub `/chat/<답>/<갈래>` · 게스트 `/etc/hosts`로 Groq 막기 · 검사 24 ~ 29. 구현 Sonnet. 루트 게이트는 M2 plan 실측 절 |
+| `e914deb` | design `Status:` · CLAUDE.md 표 · `project_voice_dictation.md` · MEMORY.md · lessons(포트 · 로그 문구 · VD 실측 아홉 · 핵심 파일) · running-tars 받아쓰기 절 · HANDOFF |
 
 design은 `docs/specs/2026-10-06-tars-voice-dictation-design.md`(결정 12 · 전제 정정 9 · 위험 9 · 비목표 14 · 실측 14, Voxio D1 ~ D16
 대응표), plan은 `-vd-m0.md` ~ `-vd-m2.md`이고 각 끝의 "실측한 것" 절이 값이다. 기억은 `docs/decisions/project_voice_dictation.md`.
