@@ -282,6 +282,19 @@ pub fn build(b: *std.Build) void {
         .root_module = config_edit_test_mod,
     });
 
+    // TC-M1: 앞문 넷의 글자 쪽(포트 · 규칙 한 줄 · wpa 덩어리 · 키 몸통 · 받아쓰기 키). config_edit_test와
+    // 같은 이유로 host_target이다. tars-dictate의 case를 읽으므로 init/에서 돈다(zig build의 자리).
+    const config_front_edit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/config_front_edit_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const config_front_edit_test = b.addExecutable(.{
+        .name = "config_front_edit_test",
+        .root_module = config_front_edit_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -300,4 +313,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
     test_step.dependOn(&b.addRunArtifact(audio_test).step);
     test_step.dependOn(&b.addRunArtifact(config_edit_test).step);
+    test_step.dependOn(&b.addRunArtifact(config_front_edit_test).step);
 }

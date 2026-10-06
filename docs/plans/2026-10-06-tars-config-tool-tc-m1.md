@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 Design: `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 12 ~ 17)
-Status: plan을 썼다. 구현 전이다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "TC-M1이 실측한 것"에 들어간다.
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 4를 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 21체인 2/2가 두 번 초록이다. 값은 맨 아래 "TC-M1이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -1991,4 +1991,19 @@ design 본문(결정 12 ~ 17)은 이 plan과 같은 날 같은 사람이 썼으�
 
 ## TC-M1이 실측한 것
 
-(구현과 루트 게이트 뒤에 lead가 채운다.)
+lead가 2026-10-07에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열한 파일 전부 사본(`/tmp/run/tc1/new/`)과 `cmp`가
+같았고, 지운 22줄은 plan이 말한 것뿐이었다(`config_cli.zig`의 도우미 열한 줄이 `pub`으로 · dictation 체인의 요청 수 19 판정 · wifi 체인의
+옛 음성 한 줄 · 주석).
+
+1. 구현자의 체인. `zig build test` 초록(`config_front_edit_test` 네 줄, 그중 하나가 "the 8 dictation keys are tars-dictate's own, read from
+   its case"). dictation 94초(plan의 사본 값 158초 — 시간뿐) · service 73초 · firewall 51초 · wifi 122초 · config 172초. mutation 다섯 전부 plan의
+   표와 같은 자리에서 잡혔다 — m4(받아쓰기 `set`이 안 씀)만 겨냥한 검사 30보다 앞의 검사 29가 먼저 잡았다(s22가 s21의 설정으로 돌아 정리 요청이
+   11이 된다).
+2. 루트 게이트 두 번 — 56분 36초 · 56분 42초, 둘 다 21체인 `PASS: 2/2`, 빨간 줄 0. M0 때(56:01 · 55:52)보다 40초쯤 늘었다 — planner가 본
+   "회차당 30초 남짓"과 맞는다(체인 넷에 검사 하나씩).
+3. 크기. `tars-config` 3,667,792바이트(M0 3,417,176 — 앞문 넷이 250KB), `init` 3,843,696(변함없음), initrd 98,067,012바이트.
+4. 게이트가 본 M1 줄 — wifi 부팅 B `tars-config wifi replaced the wrong passphrase, and the restart it asked for brought wlan0 up with an address`,
+   service 부팅 D의 검사 27(ssh-key add → 곧바로 로그인 · 600 · 중복 거절 · 가짜 키 거절 · list · ssh off/on), firewall 부팅 A의 검사 18(닫혀 있던
+   7072가 `firewall allow 7072` 뒤 재부팅 없이 열린다), dictation 검사 30(다음 `tars-dictate`가 `dictation key` · `set`으로 쓴 키와 주소를 싣고 왔다).
+5. M2가 바꿀 것. M1의 끝 줄 셋(`ssh on|off` · 처음 만든 무선 파일 · sshd가 꺼진 채 더한 키)이 지금은 재부팅 또는 재시작을 말한다. reload design
+   결정 11(`services.d` 다시 읽기)이 들어가면 그 셋이 `tars-config reload`를 가리키게 된다 — M2 plan의 편집이다.

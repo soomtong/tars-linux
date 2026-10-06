@@ -354,6 +354,18 @@ wait_for_screen "fwm2-udp-7073=1" \
   || fail "the listener on udp 7073 got connected, so a datagram reached it" "terminal: screen>"
 echo "the listener on udp 7073 never saw a datagram"
 
+# ── 검사 18: tars-config firewall allow가 연 포트가 지금 열린다 (TC-M1) ──────
+# 검사 8 · 11이 닫혀 있음을 본 7072를 사람이 tars-config로 연다. 그 명령은 이 명령만 쓰는
+# nftables.d/tars-config.nft에 `tcp dport 7072 accept`를 더하고, firewall=on이라 init이 부팅에
+# 하는 `nft -f /etc/tars/firewall.nft`를 그 자리에서 돈다(TC design 결정 14). 7072의 리스너는
+# 검사 11이 본 대로 아직 아무와도 안 이어졌으므로, 지금 바이트가 오면 그 한 줄이 선 것이다.
+echo "=== typing 'tars-config firewall allow 7072' ==="
+type_keys t a r s minus c o n f i g spc f i r e w a l l spc a l l o w spc 7 0 7 2 ret
+wait_for_screen "applied now: nft -f /etc/tars/firewall\.nft" \
+  || fail "tars-config firewall allow 7072 did not apply the rules" "terminal: screen>"
+expect_tcp_bytes "$TCP_SHUT_PORT" fwm2-tcp-7072-ok 7072
+echo "tars-config opened 7072 in its own file and nft put it up without a reboot"
+
 stop_guest
 
 echo "=== boot B: the same disk plus a broken nftables.d/broken.nft ==="

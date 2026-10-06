@@ -11,7 +11,9 @@
 #               무선 경로를 탄다(WL design 결정 7)
 #   phy2/wlan2  늦은 인터페이스. netns park에 숨겼다가 wpa_supplicant를 재시작해
 #               잊게 한 뒤 꺼낸다 — dhcpcd의 hook만이 그것을 넘길 수 있다
-# 부팅 B는 /config/wl/mode가 ap-only라 AP만 세우고 멈춘다.
+# 부팅 B는 /config/wl/mode가 ap-only라 AP만 세운다. TC-M1부터 그 뒤에 사람이 할 일을 하나 더
+# 한다 — 틀린 비밀번호로 연결이 안 서는 것을 본 뒤 tars-config wifi로 비밀번호를 고치고
+# wpa_supplicant를 재시작한다(아래 2b).
 #
 # 목록은 대괄호로 감싸 찍는다. 콘솔 줄에는 앞에 프롬프트의 escape가, 끝에 tty의
 # \r이 붙을 수 있어서 체인이 ^ · $ 앵커를 못 쓴다 — 목록의 끝은 `]`가 말한다.
@@ -54,6 +56,22 @@ if [ "$mode" = full ]; then
 fi
 say "ap up on wlan1 in netns ap"
 
+# 2b. (부팅 B, TC-M1) 틀린 비밀번호를 tars-config로 고친다. wpa_supplicant가 그 망을 잠시 쉬는
+# 것(TEMP-DISABLED)을 본 뒤에 고친다 — 체인은 이 줄 앞의 로그에서 "연결이 안 섰다"를 본다.
+# 비밀번호는 표준 입력으로 준다(사람은 tty에서 echo 없이 친다). 파일에는 평문(#psk)이 안 남고
+# 해시된 psk 한 줄과 0600이 남아야 한다. 그다음은 그 명령이 말한 대로 재시작이다.
+if [ "$mode" = ap-only ]; then
+  for i in $(seq 1 120); do
+    wpa_cli -p /run/wpa_supplicant -i wlan0 list_networks 2>/dev/null | grep -q TEMP-DISABLED && break
+    sleep 0.5
+  done
+  say "wrong key seen [$(wpa_cli -p /run/wpa_supplicant -i wlan0 list_networks 2>/dev/null | grep -o TEMP-DISABLED)]"
+  say "tc [$(printf 'tars-secret\n' | tars-config wifi tars-wl 2>&1 | tr '\n' '|')]"
+  f=/config/wpa_supplicant.conf
+  say "tc file [$(grep -cF '#psk' $f) $(grep -cE '^[[:space:]]*psk=[0-9a-f]{64}$' $f) $(grep -cF 'ssid="tars-wl"' $f) $(grep -c '^country=KR$' $f) $(stat -c %a $f)]"
+  say "restart: $(tars-service restart wpa_supplicant 2>&1 | tail -n 1)"
+  exec sleep 100000
+fi
 if [ "$mode" != full ]; then exec sleep 100000; fi
 
 # 3. wlan0이 주소를 받을 때까지. 받는 것은 제품의 dhcpcd다.

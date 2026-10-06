@@ -113,6 +113,8 @@ report_failure() {
     "dictate-probe: s1 exit" \
     "dictate-probe: s10 exit" \
     "dictate-probe: s21 exit" \
+    "dictate-probe: tc key" \
+    "dictate-probe: s22 exit" \
     "dictate-probe: done" \
     "tars-init: calling reboot"; do
     if grep -aF "$marker" "$LOG" >/dev/null; then
@@ -437,17 +439,38 @@ for s in s11 s13 s14 s15 s16 s17 s18 s19 s20 s21; do
 done
 echo "the cleanup stub got ten requests, one for each run that had the cleanup on and pointed at it"
 
-# ── 검사 12: stub이 받은 전사 요청은 열아홉이고, 어느 WAV의 머리도 거짓말을 안 한다 ──
-# 취소(s3)와 키 없음(s4)만 API에 안 간다 — M0의 여덟과 정리 갈래(s11 ~ s21)의 열하나다. 머리의
+# ── 검사 30: tars-config가 쓴 키와 설정을 다음 tars-dictate가 읽는다 (TC-M1) ──
+# 프로브가 키를 표준 입력으로(`printf … | tars-config dictation key`), 전사 주소와 상한을
+# `tars-config dictation set`으로 고쳤다. s22의 요청이 그 주소(/fail/s22)로 그 키를 싣고 왔으면
+# 둘 다 파일에 들어가 tars-dictate가 읽은 것이다. 키 파일은 0600이고, 모르는 키(colour)는
+# 거절돼 파일에 한 줄도 안 남았다. tars-dictate가 이 갈래에서 exit 4(429)인 것은 /fail이 고른 답이다.
+grep -aF 'dictate-probe: tc key [dictation: wrote /config/groq.key (0600, 7 characters)|' "$LOG" >/dev/null \
+  || report_failure "tars-config dictation key did not write the key from stdin"
+grep -aF '] mode [600]' "$LOG" >/dev/null || report_failure "the key file tars-config wrote is not mode 600"
+grep -aF "dictate-probe: tc set [dictation: transcribe_url=http://10.0.2.100:8080/fail/s22|dictation: max_seconds=1|" "$LOG" >/dev/null \
+  || report_failure "tars-config dictation set did not report the two lines it wrote"
+grep -aF "dictate-probe: tc refused exit 1 [tars-config: unknown dictation key 'colour'" "$LOG" >/dev/null \
+  || report_failure "tars-config dictation set did not refuse the unknown key colour"
+grep -aF '] colour lines [0]' "$LOG" >/dev/null || report_failure "the refused key still landed in dictation.conf"
+expect_run s22 4 '""' 'tars-dictate: transcription failed: HTTP 429'
+S22="$(stub_line s22)"
+[ -n "$S22" ] || report_failure "s22: the request did not reach the transcribe_url tars-config set"
+[ "$(stub_field "$S22" auth)" = "[Bearer" ] || true
+case "$S22" in *"auth=[Bearer tc1-key]"*) ;; *) report_failure "s22: the request did not carry the key tars-config wrote (${S22})" ;; esac
+echo "tars-config wrote groq.key (0600) and two dictation.conf lines, refused an unknown key, and the next tars-dictate used both"
+
+# ── 검사 12: stub이 받은 전사 요청은 스물이고, 어느 WAV의 머리도 거짓말을 안 한다 ──
+# 취소(s3)와 키 없음(s4)만 API에 안 간다 — M0의 여덟과 정리 갈래(s11 ~ s21)의 열하나, 그리고
+# TC-M1의 s22 하나다(검사 30). 머리의
 # 길이는 SIGINT로 멈춘 셋(s1 · s7 · s9)이 본다 — arecord가 고치지 못한 머리를 tars-dictate가 다시
 # 쓴다(검사 3의 주석).
 REQUESTS="$(grep -ac '^stub: POST ' "$STUBLOG")"
-[ "$REQUESTS" -eq 19 ] || report_failure "the stub got ${REQUESTS} request(s), want 19 (s3 and s4 must not call it)"
+[ "$REQUESTS" -eq 20 ] || report_failure "the stub got ${REQUESTS} request(s), want 20 (s3 and s4 must not call it)"
 while IFS= read -r req; do
   [ "$(stub_field "$req" header_data)" = "$(stub_field "$req" data)" ] \
     || report_failure "a WAV reached the API with a header that does not match its length (${req})"
 done < <(grep -a '^stub: POST ' "$STUBLOG")
-echo "the stub got nineteen requests, and every WAV's header matched its length"
+echo "the stub got twenty requests, and every WAV's header matched its length"
 
 # ── 검사 13: 기록 — 전사가 성공한 열여섯만 원문 · 정리본과 함께 남는다 ─────────
 # 끈 뒤 디스크에서 꺼낸다. 원문(raw)은 받은 그대로라 s8의 제어 문자가 JSON 이스케이프로

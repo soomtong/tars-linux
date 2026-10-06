@@ -12,13 +12,14 @@ const std = @import("std");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const edit = @import("config_edit.zig");
+const front = @import("config_front.zig");
 
 /// config.zig의 로그를 가로챈다(config.zig의 `log`). 이 한 줄이 없으면 `set`이 틀린
 /// 값을 받을 때 `tars-init: unknown shell …`이 이 명령의 표준 에러에 그대로 찍히고,
 /// 거절의 이유를 이 명령이 들을 수 없다.
 pub const configLog = edit.configLog;
 
-const CONF_PATH: [:0]const u8 = "/config/tars.conf";
+pub const CONF_PATH: [:0]const u8 = "/config/tars.conf";
 /// 새 내용을 먼저 여기 쓰고 `rename`으로 갈아 끼운다(결정 5). 쓰다 끊겨도 init이
 /// 읽는 파일은 옛것 그대로이거나 새것 그대로다. `/config`는 `MS_SYNCHRONOUS`라
 /// write와 rename이 돌아온 때 이미 디스크에 있다.
@@ -26,24 +27,24 @@ const TEMP_PATH: [:0]const u8 = "/config/.tars.conf.new";
 const MOUNTS_PATH: [:0]const u8 = "/proc/mounts";
 const CONFIG_DIR = "/config";
 
-const EXIT_OK: u8 = 0;
+pub const EXIT_OK: u8 = 0;
 /// 값을 거절했다 · `check`가 문제를 찾았다.
-const EXIT_REFUSED: u8 = 1;
+pub const EXIT_REFUSED: u8 = 1;
 /// 설정 디스크가 없다 · 파일을 못 읽거나 못 썼다.
-const EXIT_IO: u8 = 2;
-const EXIT_USAGE: u8 = 64;
+pub const EXIT_IO: u8 = 2;
+pub const EXIT_USAGE: u8 = 64;
 
 /// 한 번의 `set` · `reset`이 받는 쌍의 상한.
 const PAIRS_MAX = 16;
 /// 파일을 읽는 버퍼. `config.MAX_FILE`의 두 배라 넘는 파일을 "넘는다"고 말할 수 있다.
-const READ_MAX = 2 * config.MAX_FILE;
+pub const READ_MAX = 2 * config.MAX_FILE;
 
-fn failed(rc: usize) ?linux.E {
+pub fn failed(rc: usize) ?linux.E {
     const e = linux.errno(rc);
     return if (e == .SUCCESS) null else e;
 }
 
-fn writeAll(fd: i32, bytes: []const u8) bool {
+pub fn writeAll(fd: i32, bytes: []const u8) bool {
     var off: usize = 0;
     while (off < bytes.len) {
         const n = linux.write(fd, bytes[off..].ptr, bytes.len - off);
@@ -57,13 +58,13 @@ fn writeAll(fd: i32, bytes: []const u8) bool {
     return true;
 }
 
-fn say(comptime fmt: []const u8, args: anytype) void {
+pub fn say(comptime fmt: []const u8, args: anytype) void {
     var buf: [READ_MAX + 256]u8 = undefined;
     const text = std.fmt.bufPrint(&buf, fmt, args) catch return;
     _ = writeAll(1, text);
 }
 
-fn complain(comptime fmt: []const u8, args: anytype) void {
+pub fn complain(comptime fmt: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;
     const text = std.fmt.bufPrint(&buf, "tars-config: " ++ fmt ++ "\n", args) catch return;
     _ = writeAll(2, text);
@@ -78,9 +79,16 @@ const USAGE =
     \\       tars-config list                every key with its default and the values it takes
     \\       tars-config help                this text and the list
     \\
+    \\other files under /config (TC-M1):
+    \\       tars-config wifi [SSID [--country CC]]       add or replace a network; the passphrase is asked for
+    \\       tars-config ssh [on|off]                     sshd at boot (the services.d link)
+    \\       tars-config ssh-key add [KEY] | list         /config/ssh/authorized_keys
+    \\       tars-config firewall [allow|deny PORT[/udp]] ports tars-config opens, applied now if firewall=on
+    \\       tars-config dictation [key [KEY] | set KEY=VALUE...]   /config/groq.key and dictation.conf
+    \\
 ;
 
-fn usage() u8 {
+pub fn usage() u8 {
     _ = writeAll(2, USAGE);
     return EXIT_USAGE;
 }
@@ -98,6 +106,7 @@ fn help() u8 {
 /// 본다 — 지금 값은 인자 없는 `tars-config`가 보여 준다.
 fn list() u8 {
     keyTable();
+    say("  (wifi · ssh · ssh-key · firewall · dictation write other files — tars-config help)\n", .{});
     return EXIT_OK;
 }
 
@@ -116,9 +125,9 @@ fn keyTable() void {
 
 // ── 읽기 ──────────────────────────────────────────────────────────────
 
-const Read = union(enum) { missing, failed: linux.E, bytes: []const u8 };
+pub const Read = union(enum) { missing, failed: linux.E, bytes: []const u8 };
 
-fn readFile(path: [*:0]const u8, buf: []u8) Read {
+pub fn readFile(path: [*:0]const u8, buf: []u8) Read {
     const rc = linux.open(path, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(rc)) |e| return if (e == .NOENT) .missing else .{ .failed = e };
     const fd: i32 = @intCast(rc);
@@ -138,7 +147,7 @@ fn readFile(path: [*:0]const u8, buf: []u8) Read {
 
 /// `/config`에 붙은 장치. init이 설정 디스크를 찾았을 때만 있다 — 못 찾은 부팅의
 /// `/config`는 initrd 안의 빈 디렉터리이고 init은 거기서 파일을 읽지도 않는다.
-fn configDisk(buf: []u8) ?[]const u8 {
+pub fn configDisk(buf: []u8) ?[]const u8 {
     return switch (readFile(MOUNTS_PATH, buf)) {
         .bytes => |b| edit.mountSource(b, CONFIG_DIR),
         else => null,
@@ -166,7 +175,7 @@ fn current(mounts_buf: []u8, text_buf: []u8) ?Current {
 }
 
 /// init의 `load`가 하는 것과 같다 — 앞의 `MAX_FILE` 바이트만 `parse`에 준다.
-fn parsed(text: []const u8) config.Config {
+pub fn parsed(text: []const u8) config.Config {
     return config.parse(text[0..@min(text.len, config.MAX_FILE)]);
 }
 
@@ -439,6 +448,9 @@ fn check() u8 {
         problems += 1;
     }
 
+    // 앞문 넷의 파일(TC-M1 결정 16). 남의 문법은 안 읽고 있는지 · 모드 · tars.conf와 맞는지만.
+    problems += front.check(c);
+
     // 옛 seed의 별칭(결정 6). 이 명령을 가리므로 문제로 센다. 지우지는 않는다.
     var rc_buf: [65536]u8 = undefined;
     for (std.enums.values(config.Shell)) |sh| {
@@ -486,6 +498,12 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         if (rest.len != 0) return usage();
         return check();
     }
+    // 앞문 넷(TC-M1). 인자는 각자 가른다.
+    if (std.mem.eql(u8, verb, "wifi")) return front.wifi(rest);
+    if (std.mem.eql(u8, verb, "ssh")) return front.ssh(rest);
+    if (std.mem.eql(u8, verb, "ssh-key")) return front.sshKey(rest);
+    if (std.mem.eql(u8, verb, "firewall")) return front.firewall(rest);
+    if (std.mem.eql(u8, verb, "dictation")) return front.dictation(rest);
     if (std.mem.eql(u8, verb, "get")) {
         if (rest.len != 1) return usage();
         return get(std.mem.trim(u8, std.mem.span(rest[0]), " \t"));

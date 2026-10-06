@@ -13,7 +13,8 @@ cd "$(dirname "$0")"
 #   부팅 A  radios=3 · 맞는 비밀번호. 부팅 때 있던 wlan0은 tars-wifi의 argv로,
 #           나중에 생긴 wlan2는 dhcpcd hook의 interface_add로 넘어간다. 둘 다
 #           제품 dhcpcd가 주소를 받는다
-#   부팅 B  radios=2 · 틀린 비밀번호. 연결이 안 서고 부팅은 끝난다
+#   부팅 B  radios=2 · 틀린 비밀번호. 연결이 안 서고 부팅은 끝난다. 그 뒤에 프로브가
+#           tars-config wifi로 비밀번호를 고치고 재시작하면 붙는다(TC-M1)
 #   부팅 C  radios 없음 · 설정 파일 없음. 라디오도 wpa_supplicant도 없다
 #
 # 이 체인이 못 보는 것 — 실칩 드라이버의 probe와 firmware 로딩(WL design 위험 4).
@@ -275,12 +276,31 @@ wait_for_log 'CTRL-EVENT-SSID-TEMP-DISABLED .*reason=WRONG_KEY' 60 \
   || report_failure "wpa_supplicant never reported a wrong key"
 wait_for_log 'terminal: screen>' 60 \
   || report_failure "the guest did not reach a prompt with a wrong passphrase"
+# TC-M1부터 이 부팅의 뒤쪽에서 프로브가 비밀번호를 고친다. "연결이 안 섰다"는 그 앞의 로그로만
+# 본다 — 고친 줄(`wifi-ap: tc [`)이 찍히기 전까지다.
+wait_for_log 'wifi-ap: tc \[' 90 || report_failure "the probe never ran tars-config wifi"
+FIX_LINE="$(grep -an 'wifi-ap: tc \[' "$LOG" | head -n 1 | cut -d: -f1)"
 for bad in 'CTRL-EVENT-CONNECTED' 'wlan0: leased'; do
-  if grep -a "$bad" "$LOG" >/dev/null; then
+  if head -n "$FIX_LINE" "$LOG" | grep -a "$bad" >/dev/null; then
     report_failure "a wrong passphrase still produced '${bad}'"
   fi
 done
 echo "a wrong passphrase is refused, no address, and the boot still ends at a prompt"
+
+# ── 검사 12: tars-config wifi가 고친 비밀번호로 붙는다 (TC-M1) ────────────
+# 사람이 `wpa_passphrase … > /config/wpa_supplicant.conf`로 하던 일이다. 그 명령은 같은 SSID의
+# 덩어리를 wpa_passphrase가 지은 것으로 바꾸고(평문 #psk 줄은 버린다), 파일이 이미 있었으니
+# 재부팅이 아니라 재시작을 말한다. 프로브가 그 말대로 재시작하면 연결이 서고 주소가 온다.
+grep -aF 'wifi-ap: tc [wifi: tars-wl replaced in /config/wpa_supplicant.conf|apply now: tars-service restart wpa_supplicant|]' "$LOG" >/dev/null \
+  || report_failure "tars-config wifi did not replace the tars-wl block and point at a restart"
+# 차례로 #psk 줄 0 · 64자리 psk 줄 1 · 그 SSID 1 · 사람의 country 줄 1 · 모드 600.
+grep -aF 'wifi-ap: tc file [0 1 1 1 600]' "$LOG" >/dev/null \
+  || report_failure "the file tars-config wrote is not one hashed block with the country kept and mode 600"
+wait_for_log 'wlan0: CTRL-EVENT-CONNECTED - Connection to .* completed' 60 \
+  || report_failure "wlan0 never connected after tars-config fixed the passphrase"
+wait_for_log 'wlan0: leased 192\.168\.77\.[0-9]+ ' 60 \
+  || report_failure "dhcpcd never leased an address after the fix"
+echo "tars-config wifi replaced the wrong passphrase, and the restart it asked for brought wlan0 up with an address"
 
 stop_guest
 

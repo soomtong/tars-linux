@@ -573,6 +573,41 @@ grep -q "socket:" <<<"$FDS" && fail "sleeper's sleep holds a socket (${FDS})"
 grep -q "/dev/input/event" <<<"$FDS" && fail "sleeper's sleep holds a power button fd (${FDS})"
 echo "sleeper's child holds no socket and no power button fd from init"
 
+# ── 검사 27: tars-config ssh-key · ssh (TC-M1) ────────────────────────────
+# 사람이 `cat >> /config/ssh/authorized_keys`로 하던 일을 tars-config가 한다. sshd는 로그인마다
+# 그 파일을 읽으므로 재시작 없이 다음 로그인이 판정이다 — 검사 14에서 거절된 bad 키를 더하면
+# 그 키로 들어온다. 같은 키를 다시 더하면 안 더하고, 키가 아닌 줄은 ssh-keygen이 거절한다.
+# 끝으로 ssh off · on이 템플릿 링크를 지웠다 되건다(다음 부팅에 반영되는 일이라 링크만 본다).
+tc() {
+  OUT="$(ssh "${SSHO[@]}" -o ControlPath="$CTL" root@127.0.0.1 "tars-config $*" 2>&1)"
+  RC=$?
+}
+BAD_PUB="$(cat "$KEYS/bad.pub")"
+tc ssh-key add "'${BAD_PUB}'"
+[ "$RC" = "0" ] || fail "tars-config ssh-key add gave rc ${RC} (${OUT})"
+grep -E '^ssh-key: added 256 SHA256:[A-Za-z0-9+/]+ sv-bad \(ED25519\)$' <<<"$OUT" >/dev/null \
+  || fail "tars-config ssh-key add did not print the fingerprint ssh-keygen read (${OUT})"
+ssh "${SSHO[@]}" -i "$KEYS/bad" -o ControlPath=none root@127.0.0.1 true >/dev/null 2>&1 \
+  || fail "the key tars-config added did not log in"
+[ "$(on_guest 'stat -c %a /config/ssh/authorized_keys')" = "600" ] || fail "authorized_keys is not 600 after tars-config wrote it"
+tc ssh-key add "'${BAD_PUB}'"
+grep -E '^ssh-key: already there' <<<"$OUT" >/dev/null || fail "adding the same key twice was not refused (${OUT})"
+[ "$(on_guest 'grep -c sv-bad /config/ssh/authorized_keys')" = "1" ] || fail "the same key landed twice"
+# 몸통 모양(AAAA…)은 갖춘 가짜다 — 그래서 이 줄을 거절할 수 있는 것은 ssh-keygen뿐이다.
+tc ssh-key add "'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAnotakeyatall tc1'"
+[ "$RC" = "1" ] || fail "a line that is not a key gave rc ${RC} (${OUT})"
+grep -F 'tars-config: ssh-keygen does not read this as a public key' <<<"$OUT" >/dev/null \
+  || fail "a line that is not a key was not refused in ssh-keygen's name (${OUT})"
+tc ssh-key list
+[ "$(grep -c 'ED25519' <<<"$OUT")" = "2" ] || fail "ssh-key list did not show the two keys (${OUT})"
+tc ssh off
+grep -F 'sshd: off from the next boot' <<<"$OUT" >/dev/null || fail "ssh off did not say so (${OUT})"
+[ -z "$(on_guest 'readlink /config/services.d/sshd')" ] || fail "ssh off left the services.d link"
+tc ssh on
+grep -F 'sshd: on' <<<"$OUT" >/dev/null || fail "ssh on did not say so (${OUT})"
+[ "$(on_guest 'readlink /config/services.d/sshd')" = "/etc/tars/services/sshd" ] || fail "ssh on did not link the template"
+echo "tars-config added a key sshd took at the next login, refused a duplicate and a non-key, and unlinked and relinked sshd"
+
 ssh -o ControlPath="$CTL" -O exit root@127.0.0.1 2>/dev/null || true
 stop_ssh
 rm -f "$LOG"

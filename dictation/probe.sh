@@ -160,6 +160,16 @@ dictate s20 cap
 conf "transcribe_url=${STUB}/ok/s21" "cleanup_url=${STUB}/chat/wait/s21" "cleanup_timeout=20" "cleanup_timeout=0.5" "max_seconds=1"
 dictate s21 cap
 
+# ── TC-M1 ─────────────────────────────────────────────────────────────
+# 22. 사람이 printf와 편집기로 하던 일을 tars-config가 한다 — 키를 표준 입력으로, 설정 두 줄을
+# set으로. tars-dictate는 실행마다 그 둘을 읽으므로 다음 실행이 곧 판정이다. /fail(429)로 보내서
+# 기록에 한 줄도 안 더한다(검사 13의 열여섯이 그대로다). 모르는 키는 거절되고 파일이 안 바뀐다.
+say "tc key [$(printf 'tc1-key\n' | tars-config dictation key 2>&1 | flat)] mode [$(stat -c %a /config/groq.key)]"
+say "tc set [$(tars-config dictation set "transcribe_url=${STUB}/fail/s22" max_seconds=1 2>&1 | flat)]"
+out="$(tars-config dictation set colour=blue 2>&1)"; rc=$?
+say "tc refused exit ${rc} [$(printf '%s' "$out" | flat)] colour lines [$(grep -c colour /config/dictation.conf)]"
+dictate s22 cap
+
 sync
 say "history lines [$(wc -l < /config/dictation.jsonl 2>/dev/null || echo none)]"
 say "done"
