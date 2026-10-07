@@ -281,14 +281,16 @@ rc가 안 읽히고 훅도 함께 안 걸린다. 그것이 맞는 동작이다 �
 끝난다(`docs/decisions/feedback_boot_never_blocks.md`) — dhcpcd는 인터페이스를
 기다리고 chronyd는 서버 없이 산다.
 
-켜는 법은 `/config/tars.conf`의 세 줄이다. 게스트에서 고치고 재부팅한다.
+켜는 법은 `/config/tars.conf`의 세 줄이다. 게스트에서 `tars-config`로 고치고 `reload`한다(TC). 재부팅은 없다 —
+`net` · `ntp`는 reload가 그 자리에서 dhcpcd · chronyd를 띄우고, `timezone`은 다음에 뜨는 셸부터다.
 
 ```sh
-sd 'net=off' 'net=dhcp' /config/tars.conf
-sd 'ntp=off' 'ntp=dhcp' /config/tars.conf
-sd 'timezone=UTC' 'timezone=Asia/Seoul' /config/tars.conf
-kill -INT 1        # 재부팅(Ctrl+Alt+Del과 같다). QEMU는 -no-reboot라 창이 닫힌다 — make boot-qemu를 다시
+tars-config set net=dhcp ntp=dhcp timezone=Asia/Seoul
+tars-config reload
 ```
+
+`tars-config`가 없는 옛 ISO면 `sd 'net=off' 'net=dhcp' /config/tars.conf`처럼 고치고 `kill -INT 1`(재부팅, Ctrl+Alt+Del과 같다 —
+QEMU는 `-no-reboot`라 창이 닫힌다)이다.
 
 | 키 | 값 | 무엇이 일어나나 |
 |---|---|---|
@@ -323,6 +325,31 @@ mkdir -p /config/chrony.d && printf 'pool pool.ntp.org iburst\n' > /config/chron
 둘 다 `tars-service status`에 `service dhcpcd` · `service chronyd`로 나오고
 다른 서비스처럼 멈추고 다시 띄운다(아래 "서비스를 멈추고 다시 띄우기").
 방화벽은 이것과 별개로 꺼져 있다 — 바깥에서 붙는 포트를 열었다면 "방화벽" 절.
+
+### 설정 — tars-config
+
+`/config` 아래를 손으로 고치는 대신 치는 명령 하나다(TC, 2026-10-07). `tars.conf`의 키 열둘은 이 명령이 읽고 쓰고, 값을 받을지는
+`init`의 파서가 정한다 — `init`이 부팅에 버릴 값은 `init`의 말 그대로 거절되고 파일에 안 남는다. 무선 · ssh · 방화벽 · 받아쓰기의
+파일은 그 문법의 주인(wpa_passphrase · ssh-keygen · nft)이 짓고 이 명령은 옮긴다. `reload`가 `init`에 재부팅 없이 다시 읽게 한다.
+
+| 동사 | 하는 일 |
+|---|---|
+| `tars-config` | `tars.conf`를 init이 읽을 모양으로 보인다(기본값은 `#`). init이 지금 쓰는 값과 다르면 그 줄 밑에 한 줄, 화면이 아직 옛 값을 쓰는 키도 한 줄 |
+| `tars-config get KEY` | 값 하나 |
+| `tars-config set KEY=VALUE…` | 그 키의 줄 하나만 바꾼다(사람의 주석 · 다른 줄은 그대로). init이 버릴 값은 그 말로 거절한다 |
+| `tars-config reset KEY…` | 기본값을 적는다. 줄은 안 지운다. "언세팅"이 이것이고 `unset`은 없다 |
+| `tars-config list` · `help` | 열두 키와 기본값 · 받는 값 / 쓰는 법 전부 |
+| `tars-config check` | init이 불평할 줄 · 4096바이트 · 없는 zoneinfo · rc의 옛 별칭 · 앞문 넷의 파일(모드 · `net`과의 짝 · 키 없음 · 모르는 받아쓰기 키) |
+| `tars-config wifi [SSID [--country CC]]` | 비밀번호를 echo 없이 묻고 같은 SSID의 덩어리를 바꿔 끼운다(0600, 평문 `#psk` 없음). 인자 없이 치면 지금 SSID들 |
+| `tars-config ssh [on\|off]` | sshd의 `services.d` 링크를 걸고 뗀다 |
+| `tars-config ssh-key add [KEY] \| list` | `ssh-keygen`이 읽어 본 키만 `/config/ssh/authorized_keys`에(0700 · 0600, 같은 키는 한 번) |
+| `tars-config firewall [allow\|deny PORT[/udp]]` | 이 명령 전용 파일 `nftables.d/tars-config.nft`에 한 줄. `firewall=on`이면 그 자리에서 `nft -f`. 사람이 연 포트는 안 건드린다 |
+| `tars-config dictation [key [KEY] \| set KEY=VALUE…]` | `/config/groq.key`(0600, 키는 echo 없이 묻는다) · `dictation.conf`의 키 여덟 |
+| `tars-config reload` | init이 `tars.conf`와 `services.d`를 지금 다시 읽는다 — `net` · `ntp` · `firewall`은 그 자리에서, `shell` · `shell_config` · `timezone`은 다음에 뜨는 셸 · ssh 로그인 · 서비스부터, 화면 쪽 키(자판 · `keyboard` · `clipboard` · `esc_latin`)는 대기 |
+| `tars-config reload terminal` | 화면을 init이 지금 쓰는 값으로 다시 띄운다. 패널 · 그 셸 · 클립보드가 사라진다. 대기가 없으면 아무것도 안 한다 |
+
+`set`은 파일만 쓰고 끝 줄이 `reload`를 가리킨다. 파일이 틀리면(init이 불평할 줄이 하나라도 있으면) `reload`는 아무것도 안 바꾸고
+그 말을 돌려준다 — `tars-config check`가 그 줄을 짚는다. 콘솔 셸은 `reload` 뒤 `exit`하면 새 셸로 뜬다.
 
 ### 한/영 전환 — 켜는 키 넷과 끄는 키 하나
 
@@ -390,6 +417,16 @@ copy mode의 `y`(또는 마우스로 끌어 뗌)가 잡은 글자는 terminal �
 재부팅한다(`/config/bashrc` · `/config/zshrc` · `/config/fish.config`).
 지운 자리에 새 seed가 깔린다. 그 경로는 `config/check.sh`의 6·7차 부팅이
 매번 밟는다. 그때 그 파일에 직접 더해 둔 줄은 함께 사라진다.
+
+TC(2026-10-07) 전에 만든 설정 디스크의 rc에는 `alias tars-config='cat /config/tars.conf'`가 남아 있다. 그 셸에서는 별칭이
+`/usr/bin/tars-config`를 가려 `tars-config set …`이 `cat`으로 풀린다(`cat: set: No such file or directory`). `tars-config check`가
+그 줄을 문제로 알린다. 처방은 셋 중 하나이고 새 셸부터 듣는다.
+
+```sh
+sd 'alias tars-(config|rc)=.*' '' /config/fish.config /config/bashrc /config/zshrc   # 그 두 줄을 비운다
+command tars-config check                                                              # 별칭을 건너뛰고 한 번
+rm /config/zshrc && kill -INT 1                                                        # 또는 새 seed(그 파일에 더한 줄도 사라진다)
+```
 
 ### 셸 설정을 고쳤는데 셸이 안 뜨면
 
@@ -471,7 +508,7 @@ done
 - shebang은 `#!/bin/sh`다. 게스트의 `/bin`에는 `sh`(bash) 하나만 있어서
   `#!/bin/bash`는 execve가 실패한다(로그에 `errno 2`).
 - 이름순으로 여덟까지 뜬다. `.`으로 시작하는 이름은 무시한다. 링크는 따라간다.
-- 고친 것은 다음 부팅에 반영된다. 부팅 중에 다시 읽지 않는다.
+- 고친 것은 `tars-config reload`가 다시 읽는다(TC-M2) — 새 이름은 뜨고 사라진 이름은 멈춘다. 그 전에는 다음 부팅이었다.
 - stdin은 `/dev/null`이고 stdout · stderr는 콘솔이다. 서비스가 찍는 것은 부팅
   로그에 섞여 나온다.
 
@@ -534,14 +571,17 @@ service broken  given up
 
 ### ssh로 붙기
 
-sshd는 서비스 하나로 들어 있다. 두 가지를 하면 켜진다.
+sshd는 서비스 하나로 들어 있다. 두 가지를 하면 켜진다 — `tars-config`가 둘 다 해 준다(TC-M1). 키는 `ssh-keygen`이 읽어 보고
+지문을 보인 뒤에만 들어가고 디렉터리 · 파일 모드(0700 · 0600)를 맞춘다. `reload`면 재부팅 없이 뜬다(TC-M2).
 
 ```sh
-ln -s /etc/tars/services/sshd /config/services.d/sshd
-cat >> /config/ssh/authorized_keys     # 당신의 공개 키 한 줄을 붙여 넣는다
+tars-config ssh-key add 'ssh-ed25519 AAAA… you@host'   # 또는 인자 없이 치고 표준 입력으로
+tars-config ssh on
+tars-config reload
 ```
 
-`/config/ssh`가 없으면 먼저 `mkdir -m 700 /config/ssh`. 다음 부팅에 sshd가 뜨고, 첫
+손으로 하면 `ln -s /etc/tars/services/sshd /config/services.d/sshd`와 `/config/ssh/authorized_keys`에 공개 키 한 줄이다
+(`/config/ssh`가 없으면 먼저 `mkdir -m 700 /config/ssh`). 처음 뜰 때 sshd가 첫
 부팅에는 호스트 키를 `/config/ssh/ssh_host_ed25519_key`에 구워 그 지문을 콘솔에
 찍는다. 키는 설정 디스크에 남으므로 재부팅해도 클라이언트가 "호스트 키가
 바뀌었다"를 보지 않는다. 그 파일을 지우면 다음 부팅에 새로 구워진다.
@@ -569,16 +609,17 @@ ssh로 붙은 셸은 콘솔과 같다 — `tars.conf`의 `shell`, 같은 rc, 같
 
 ### 무선에 붙기
 
-SSID와 비밀번호를 wpa_supplicant의 원래 형식으로 `/config/wpa_supplicant.conf`에 적고
-재부팅한다. `tars.conf`는 `net=dhcp`여야 한다(주소는 dhcpcd가 받는다).
+SSID와 비밀번호를 `tars-config wifi`로 적는다(TC-M1). 비밀번호는 화면에 안 보이게 묻고 `wpa_passphrase`에 표준 입력으로 준다 —
+인자 · 히스토리 · `ps`에 안 남고 평문 `#psk` 줄도 안 남는다. 같은 SSID가 있으면 그 덩어리만 바꿔 끼운다. `tars.conf`는 `net=dhcp`여야
+한다(주소는 dhcpcd가 받는다). 파일이 처음 생긴 것이든 고친 것이든 `tars-config reload`가 wpa_supplicant를 띄우거나 다시 띄운다.
 
 ```sh
-wpa_passphrase '집 와이파이' '비밀번호' > /config/wpa_supplicant.conf
-echo 'country=KR' >> /config/wpa_supplicant.conf     # 5GHz 채널이 열린다
+tars-config wifi '집 와이파이' --country KR     # 비밀번호를 묻는다. --country는 5GHz 채널을 연다
+tars-config reload
 ```
 
-`wpa_passphrase`는 평문 비밀번호를 `#psk="…"` 주석으로 함께 적는다. 남기기 싫으면 그
-줄을 지운다. 장소가 여럿이면 `network={ … }` 블록을 더 붙인다. 부팅 뒤에 사람이
+손으로 하면 `wpa_passphrase '집 와이파이' '비밀번호' > /config/wpa_supplicant.conf`에 `country=KR` 한 줄인데, `wpa_passphrase`는 평문
+비밀번호를 `#psk="…"` 주석으로 함께 적으니 그 줄을 지운다. 장소가 여럿이면 `network={ … }` 블록을 더 붙인다. 부팅 뒤에 사람이
 `wpa_cli`로 네트워크를 더하고 파일에 남기려면 파일 맨 위에 `update_config=1`을 두고
 `wpa_cli save_config`를 친다.
 
@@ -594,8 +635,8 @@ wlan0: leased 192.168.0.23 for 86400 seconds
   `iw reg get`(국가). 파일에 `country=`가 없으면 국가가 `00`이라 5GHz 여러 채널에서
   AP를 찾지 못한다.
 - `service wpa_supplicant`는 `tars-service`로 다룬다. 파일을 고쳤으면
-  `tars-service restart wpa_supplicant`로 재부팅 없이 다시 읽힌다(파일이 처음 생긴
-  것이면 재부팅해야 한다 — `init`은 부팅 때 파일이 있는지만 본다).
+  `tars-service restart wpa_supplicant`로 재부팅 없이 다시 읽힌다. 파일이 처음 생긴 것이면
+  `tars-config reload`다 — reload는 그 파일이 있는지 매번 다시 본다(TC-M2. 그 전에는 재부팅이었다).
 - 부팅 뒤에 생긴 무선 인터페이스(firmware를 늦게 올리는 칩)는 dhcpcd가 보고
   wpa_supplicant에게 넘긴다 — 로그에 `tars-wifi: handed wlan1 to wpa_supplicant`.
 - 비밀번호가 틀리면 `CTRL-EVENT-SSID-TEMP-DISABLED … reason=WRONG_KEY`가 뜨고 부팅은
@@ -646,7 +687,8 @@ Groq의 LLM이 한 번 다듬은 뒤(군더더기 지우기) 들어간다. 네�
 키는 [Groq 콘솔](https://console.groq.com/keys)에서 만든다(무료). 파일 하나에 적는다.
 
 ```sh
-printf '%s\n' 'gsk_…' > /config/groq.key       # 앞뒤 공백 · 개행은 떼고 읽는다. 환경 변수 GROQ_API_KEY가 있으면 그쪽이 먼저다
+tars-config dictation key                      # 키를 화면에 안 보이게 묻고 /config/groq.key에 0600으로(TC-M1)
+printf '%s\n' 'gsk_…' > /config/groq.key       # 손으로 할 때. 앞뒤 공백 · 개행은 떼고 읽는다. 환경 변수 GROQ_API_KEY가 있으면 그쪽이 먼저다
 ```
 
 쓰는 법.

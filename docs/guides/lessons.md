@@ -64,6 +64,15 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
 PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. 새 체인은 45494부터 쓴다.
 
+### 프로브가 연달아 찍는 줄은 줄마다 기다린다 (TC-M3)
+
+앞 줄을 `wait_for_log` · `wait_for_screen`으로 기다리고 다음 줄을 곧바로 `grep`하면 그 사이가 경합이다 — 프로브가 두 줄 사이에
+무엇을 재든(TC-M1 wifi 검사 12의 `grep -c` 넷과 `stat`) TCG에서는 수백 ms이고, 열두 판을 지난 검사가 루트 게이트에서 처음 빨갰다
+(TC-M3 Task 5c — 실패한 run의 마지막 로그 줄이 정확히 앞 줄이었다). 줄의 머리를 기다리고 값은 그 뒤에 견준다 — 값까지 든 글자를
+기다리면 틀린 값이 "안 왔다"로 보인다. 프로세스 하나가 차례로 찍는 줄들(terminal의 시작 줄 셋 `keyboard=` · `hangul=` · `clipboard scope=`)도
+같다. TC의 루트 게이트가 드러낸 간헐 셋은 전부 게이트 쪽이었다 — `set`의 답을 안 기다린 것(M2 5b), init 로그가 화면 dump를 자른
+것(M3 5b, 바로 아래 AU-M2 절의 덧붙임), 프로브의 둘째 줄을 안 기다린 것(M3 5c).
+
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
 `clean()`은 `run_chain` 안이 아니라 게이트 시작에서 한 번만 불린다. 그래서
@@ -273,6 +282,13 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 덤으로 하나 — `gate_lib.sh`에 함수를 더할 때는 체인들이 같은 이름을 이미 정의하고 있는지 `rg`로 먼저 본다. 처음 이름이
 `screen_lines`였는데 `pointer/check.sh`가 같은 이름으로 화면 줄 개수를 세고 있어서(source 뒤에 정의되어 덮는다) `wait_for_screen`이
 화면 대신 숫자 "3"을 받아 세 판 내리 "프롬프트가 안 떴다"로 빨갰다. 증상은 결정적이었고 `set -x`가 한 번에 보여 줬다.
+
+덧붙임(TC-M3, 2026-10-07). init의 줄도 같은 UART에 써서 같은 모양으로 자른다 — TC-M3 루트 게이트 2회차의 config 7차가 `whence -w fzf`
+뒤에 끼어든 `tars-init: audio: no sound card within 5000ms …` 때문에 마지막 dump를 못 이어 빨갰고(그 뒤 화면이 안 바뀌어 새 dump가
+없었다 — 한 번의 자름이 곧 실패다), `joined_screen_dump`가 이제 `tars-init: ` 조각도 떼고 잇는다. 접두사는 일부러 그 하나로 좁다 —
+`[a-z-]+: `로 넓히면 화면 글자 `fzf-history-widget: function`을 끼어든 줄로 보고 뗀다. 루트 `check.sh`의 진입 검사
+`require_screen_dump_joins`가 잘린 조각 넷(안 잘림 · printk · init · init 조각과 온전한 tars-init 줄)을 QEMU 없이 0.1초에 보므로, 다른
+쓰기(dhcpcd `[pid]:` · sshd · 서비스)의 접두사를 더할 때 그 함수에 조각 하나를 함께 더한다.
 
 ### 호스트 부하 아래 dmix가 xrun 구간을 두 번 더한다 (AU-M1)
 
@@ -812,6 +828,24 @@ RIS가 끈다(`vt_test` 95 · 96).
   `/dev/null` · `close_range(3, …)` · `execve`. terminal은 이미 libc를 링크하므로(`forkpty`) `std.c`로 부른다 — `project_zig_c_uapi_rule`의
   "libc 없이"는 `init`의 길이다.
 
+### TC(Config Tool, 2026-10-07)가 잰 것
+
+- TC-1. `config.parse`는 틀린 값을 로그로만 알리고 기본값에 머문다 — 실패를 돌려주지 않는다. 그래서 `tars-config set`은 `config.zig`의
+  로그를 root의 `configLog`로 가로채 거절의 이유로 쓴다. 가로채지 않으면 틀린 값을 받아들인다(M0 mutation m1).
+- TC-2. Zig 0.16의 multiline 문자열(`\\`)은 탭을 거부한다. 탭이 든 글자는 `"\t"`로 잇는다.
+- TC-3. `linux.W.TERMSIG`는 enum이다 — 숫자와 비교하지 않는다.
+- TC-4. `@embedFile`은 모듈 뿌리 밖을 못 읽는다. `kernel/dictation/tars-dictate`의 키 여덟은 호스트 검사가 런타임에 읽는다.
+- TC-5. `sd` 1.0은 줄 단위라 패턴의 `\n`을 못 맞춘다. 여러 줄을 바꿀 때는 perl이나 python.
+- TC-6. 콘솔 셸의 tty는 `console`이 아니라 `ttyS0`이다 — `TIOCSCTTY`가 그 밑의 장치를 준다. `pgrep -t console`은 빈다.
+- TC-7. fzf picker를 닫은 직후의 키는 샌다 — 그 뒤에 화면을 바꾸는 명령(`reload terminal`)을 치지 않는다. config 1차의 TC-M3 검사가 Ctrl+R
+  검사 앞에 있는 이유다.
+- TC-8. 반쪽 패널(pane 체인 부팅 B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joined_screen_dump`로 본다.
+- TC-9. terminal은 setsid를 안 해서 제 프로세스 그룹이 없다. `kill(-pid)`는 ESRCH로 아무도 안 죽인다. CT-M1부터 SIGKILL 시한이 모든 자식에
+  그룹으로 가게 돼 있었지만 서비스에만 시한이 서서 드러나지 않았다(M3 plan 확정 2).
+- TC-10. net 검사 31(`set net=off` · `reload` → dhcpcd 멈춤)이 루트 게이트에서 셋 중 둘 간헐로 빨갰고 단독에서는 넷 중 영이었다. 시리얼에
+  `reload of`만 있고 steer 줄이 없었다. Task 5b가 `set`의 답을 화면에서 본 뒤 reload를 치게 하고 실패 진단(마지막 화면 · `cat
+  /config/tars.conf` · `reload of` 뒤 init 줄)을 붙였다 — 그 뒤 4판 초록. 진짜 원인은 못 잡았다(이월 숙제).
+
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
 - `sd '옛것' '새것' 파일 > 사본` 으로 사본 만들기(TS-M1) — `sd`는 파일
@@ -1114,8 +1148,12 @@ PD(2026-10-05)가 남긴 것.
       판정한다(IN 비목표 3 · FW 비목표 3).
 - [ ] seed `tars.conf`의 `ntp:` 주석이 TD 전의 설명("부팅할 때 한 번만 묻고")으로 남아
       있다(EL-M0 planner가 찾았다). 고치면 seed의 글자가 바뀌어 `config` 체인을 함께 본다.
-      seed는 EL · CB 뒤 48줄이라 게스트 화면 47줄을 넘는다 — 키를 더하는 사람은 `config`
-      1차의 `| shell_config=on`(25번째 줄)이 화면에 남는지 함께 본다.
+      (seed가 화면을 넘는 문제는 TC-M0부터 없다 — config 1차가 `cat` 대신 `tars-config`를 보고 그 출력은 15줄이다.)
+- [ ] chronyd의 reload(`ntp` 키)를 게이트가 안 본다 — net 검사 31의 부팅에 ntp가 없다(TC-M2 plan 확정 4). 호스트 검사가 step 논리를 덮고
+      `clock.prepare`는 부팅이 같은 꼴로 부른다. ntp 부팅(net 부팅 A)에 `set ntp=…` · `reload`를 얹으면 덮인다.
+- [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
+      다시 빨개지면 진단의 세 덩어리(마지막 화면 · `cat /config/tars.conf` · `reload of` 뒤 tars-init 줄)로 가린다 — 가설은 "set이 파일을 못
+      바꿨거나 늦었다"(TC-10).
 
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
@@ -1306,6 +1344,19 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함께 고치는 구멍은 셋째 벌이 막는다(훅은 `HOOKED_TOOLS`, 옵션은
   `KNOWN_HIST_OPTIONS`). 상수를 늘리기 전에 그 줄의 stdout·stderr를 먼저
   잰다.
+- `config_cli.zig` · `config_edit.zig` — 게스트의 `tars-config`(TC-M0, 셋째 실행 파일). root가 `configLog`를 선언해 `config.zig`의 `log()`를
+  가로챈다 — `parse`가 실패를 돌려주지 않아서다. 순수한 쪽(`config_edit`: 줄 가르기 · `setLine` · 키 목록 · 힌트 — `config_edit_test`가
+  본다)과 시스템 콜 쪽(`config_cli`: 보기 두 칸 · get · set · reset · check · list · reload)을 가른다. `config.zig`의 로그 24줄은 전부 `log()`다.
+- `config_front.zig` · `config_front_edit.zig` — 앞문 넷(TC-M1). `wifi`(`wpa_passphrase`에 표준 입력) · `ssh` · `ssh-key`(`ssh-keygen -l -f -`) ·
+  `firewall`(전용 파일 `tars-config.nft`, `firewall=on`이면 `nft -f`) · `dictation`. 받아쓰기 키 여덟은 `config_front_edit_test`가
+  `kernel/dictation/tars-dictate`의 `case`에서 읽어 맞춘다.
+- `reload.zig` — `tars-config reload`가 무엇을 할지(TC-M2 · M3, 순수). 키 열둘의 갈래 셋 · `changed`(diff) · `pending`(대기) · `step` ·
+  `firewallStep` · `serviceActions`(services.d 규칙 넷) · 답의 글자 · `screenLines`. `unreachable`과 `.?`가 없다 — PID 1의 패닉은 커널
+  패닉이다. `reload_test`가 전부 덮는다.
+- `main.zig`의 TC-M2 · M3 자리 — `Live`(실효 Config · 화면이 받은 Config · argv 글자 · env), 칸은 늘 열셋(`SLOT_WIFI` 2 · `SLOT_DHCPCD` 3 ·
+  `SLOT_CHRONYD` 4 · `SLOT_SERVICES` 5 ~ 12)이고 원하지 않는 칸은 `Child.config_off`(`hold`와 다르다 — status에 안 보이고 `start`가 거절),
+  `doReload`(조이고 → 데몬 → services.d → 셸 · env → 푼다) · `doReloadTerminal`(argv 칸 일곱을 바꾸고 pid로 SIGTERM). SIGTERM · SIGKILL은
+  서비스만 그룹(`-pid`)이고 terminal · 콘솔 셸은 pid다 — terminal은 setsid를 안 해 제 그룹이 없다.
 
 ### 게이트
 
