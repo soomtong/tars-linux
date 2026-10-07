@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -89,7 +90,7 @@ pub const CHRONYD_ARGV = [9:null]?[*:0]const u8{
 fn writeConf(server: ?[4]u8, keep: bool) bool {
     var buf: [CONF_MAX]u8 = undefined;
     const text = renderConf(&buf, server, keep) orelse {
-        std.debug.print("tars-init: chrony config does not fit in {d} bytes\n", .{CONF_MAX});
+        logline.print("tars-init: chrony config does not fit in {d} bytes\n", .{CONF_MAX});
         return false;
     };
 
@@ -97,7 +98,7 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
     const mk = linux.mkdir(CONF_DIR.ptr, 0o755);
     if (failed(mk)) |e| {
         if (e != .EXIST) {
-            std.debug.print("tars-init: cannot make {s} (errno {d})\n", .{
+            logline.print("tars-init: cannot make {s} (errno {d})\n", .{
                 CONF_DIR, @intFromEnum(e),
             });
             return false;
@@ -106,7 +107,7 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
 
     const rc = linux.open(CONF_PATH.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: cannot open {s} (errno {d})\n", .{
+        logline.print("tars-init: cannot open {s} (errno {d})\n", .{
             CONF_PATH, @intFromEnum(e),
         });
         return false;
@@ -116,13 +117,13 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
 
     const n = linux.write(fd, text.ptr, text.len);
     if (failed(n)) |e| {
-        std.debug.print("tars-init: cannot write {s} (errno {d})\n", .{
+        logline.print("tars-init: cannot write {s} (errno {d})\n", .{
             CONF_PATH, @intFromEnum(e),
         });
         return false;
     }
     if (n != text.len) {
-        std.debug.print("tars-init: short write to {s} ({d} of {d})\n", .{
+        logline.print("tars-init: short write to {s} ({d} of {d})\n", .{
             CONF_PATH, n, text.len,
         });
         return false;
@@ -145,12 +146,12 @@ pub fn prepare(net: config.Net, want: config.Ntp, keep: bool) bool {
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
 
     if (want == .off) {
-        std.debug.print("tars-init: ntp=off, leaving the clock alone\n", .{});
+        logline.print("tars-init: ntp=off, leaving the clock alone\n", .{});
         return false;
     }
     // 네트워크가 꺼져 있으면 주소가 붙을 리 없으므로 chronyd도 없다.
     if (net == .off) {
-        std.debug.print("tars-init: ntp={s} but net=off, leaving the clock alone\n", .{
+        logline.print("tars-init: ntp={s} but net=off, leaving the clock alone\n", .{
             want.arg(&ntp_buf),
         });
         return false;
@@ -166,17 +167,17 @@ pub fn prepare(net: config.Net, want: config.Ntp, keep: bool) bool {
     // net/check.sh의 검사 25가 앞의 줄을 grep한다. 뒤의 줄은 설정 디스크가
     // 없는 부팅(ISO로 뜬 설치 세션 등)의 것이고, 침묵 대신 한 줄을 남긴다.
     if (keep) {
-        std.debug.print("tars-init: chronyd keeps its drift in {s}\n", .{CONFIG_DRIFT});
+        logline.print("tars-init: chronyd keeps its drift in {s}\n", .{CONFIG_DRIFT});
     } else {
-        std.debug.print("tars-init: no /config, chronyd forgets its drift at power-off\n", .{});
+        logline.print("tars-init: no /config, chronyd forgets its drift at power-off\n", .{});
     }
     // net/check.sh의 검사 18이 앞의 줄을 grep한다. 뒤의 줄은 DS 결정 M1-C다.
     if (server) |ip| {
-        std.debug.print("tars-init: chronyd will ask {d}.{d}.{d}.{d} ({s})\n", .{
+        logline.print("tars-init: chronyd will ask {d}.{d}.{d}.{d} ({s})\n", .{
             ip[0], ip[1], ip[2], ip[3], CONF_PATH,
         });
     } else {
-        std.debug.print("tars-init: chronyd will ask whoever dhcpcd names in {s}\n", .{SOURCES_DIR});
+        logline.print("tars-init: chronyd will ask whoever dhcpcd names in {s}\n", .{SOURCES_DIR});
     }
     return true;
 }

@@ -123,22 +123,16 @@ type_keys() {
 # 그 조각을 떼고 다음 줄을 이어 붙인다. 다음 줄이 또 커널 줄이면 건너뛰고,
 # terminal · kms의 줄이면(조각이 줄 끝에 떨어진 경우) 잇지 않는다.
 #
-# init의 줄도 같은 UART에 쓴다(TC-M3 Task 5b). init의 fd 2가 /dev/console이라
-# `tars-init: …` 한 줄이 terminal의 줄 한가운데 끼어 같은 모양으로 자른다 — TC-M3
-# 루트 게이트 2회차의 config 7차가 `whence -w fzf` 뒤에 `tars-init: audio: no sound
-# card within 5000ms …`가 끼어 `-history-widget | fzf-history-widget: function`이
-# 머리 없는 다음 줄로 갔다. 그래서 꼬리의 `tars-init: ` 조각도 떼고 잇고, 이을
-# 차례에 오는 온전한 `tars-init: ` 줄은 커널 줄처럼 건너뛴다.
+# init의 줄도 같은 UART에 쓴다. TC-M3 Task 5b 때는 init의 줄이 terminal의 줄 한가운데
+# 끼어 같은 모양으로 잘랐고(config 7차의 `whence -w fzf` 뒤에 `tars-init: audio: …`),
+# 그래서 꼬리의 `tars-init: ` 조각도 떼고 이었다. AL에서 terminal(M0)과 init(M1)이 한
+# 줄을 write 한 번으로 내게 되어 그 자름은 생길 수 없고, 꼬리 떼기를 지웠다 — 남아
+# 있으면 화면 글자로 `tars-init: `가 보이는 dump(사람이 시리얼 로그를 grep한 화면)의
+# 꼬리를 진짜 글자인데도 떼어 냈다(AL design 결정 5). 그 자름이 돌아오면 이 함수가
+# 아니라 check.sh의 셈(cut_log_lines의 A)이 그 회차를 빨갛게 한다.
 #
-# 접두사를 `tars-init: ` 하나로 좁힌 이유. 꼬리를 떼는 정규식은 줄 머리가 아니라
-# 줄 한가운데의 접두사를 찾는다 — `[a-z-]+: `처럼 넓히면 화면 글자 자체
-# (`fzf-history-widget: function`)를 끼어든 줄로 보고 떼어 버린다. 커널 줄은 시각
-# 표식이라는 화면에 없을 모양이 있어서 넓어도 됐고, init의 줄은 우리가 정한 고정
-# 접두사라 좁게 맞출 수 있다. 같은 UART에 쓰는 다른 것(dhcpcd · sshd · chronyd ·
-# 서비스의 표준 출력)이 같은 자름을 일으키면 그 고정 접두사를 여기 하나씩 더한다 —
-# 화면에 그 글자가 나올 수 있는지 먼저 보고. 거꾸로, 화면에 `tars-init: `가 그대로
-# 보이는 줄(사람이 시리얼 로그를 grep한 화면)은 그 자리부터 꼬리가 떨어진다 — 지금
-# 그런 화면을 판정하는 체인은 없다(check.sh의 require_screen_dump_joins가 모양을 본다).
+# 이을 차례에 오는 온전한 `tars-init: ` 줄은 커널 줄처럼 건너뛴다. 이것은 남는다 —
+# 커널이 화면 줄을 자르고 뒤 조각이 오기 전에 init이 온전한 한 줄을 쓸 수 있다.
 joined_screen_dump() {
   perl -ne '
     if (defined $cur) {
@@ -147,7 +141,6 @@ joined_screen_dump() {
       $cur .= $_;
     } elsif (/^terminal: screen>/) { $cur = $_ } else { next }
     next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
-    next if $cur =~ s/tars-init: [^\r\n]*\r?\n\z//;
     print $cur; undef $cur;
     END { print $cur, "\n" if defined $cur }
   ' "$LOG"
@@ -236,6 +229,14 @@ type_loopback_roundtrips() {
 #
 #   A <파일>: <줄>   terminal의 줄 가운데에 init의 줄이 들어 있다
 #   B <파일>: <줄>   init의 줄 가운데에 terminal의 줄이 들어 있다
+#   C <파일>: <줄>   terminal · init의 줄이 `logline.zig`의 상한(2048바이트)을 넘어 잘렸다
+#
+# C를 세는 까닭(AL-M1). 2048은 커널 tty가 긴 write를 끊는 단위이고, init은 SIGTERM ·
+# SIGINT 처리기를 단다 — 처리할 시그널이 걸린 채 2048을 넘는 write는 끊기는 자리에서
+# 돌아가고 그 사이에 남의 줄이 낄 수 있다. 그래서 `logline.print`는 2048에서 자르고
+# ` [cut]`을 붙인다. 게이트가 내는 줄은 그 상한에 한참 못 미쳐야 하고(가장 긴 init의 줄이
+# 247바이트), 잘린 줄이 보이면 줄 하나가 판정이 볼 글자를 잃었다는 뜻이다. 화면 dump는
+# 격자 크기 버퍼라 안 잘린다 — 잘렸다면 그것도 버그다.
 #
 # B에서 빼는 것은 init이 제 글로 `terminal: `을 쓰는 단 하나의 줄(`reload terminal:
 # pid …`, init/src/main.zig)이다. 그 fmt를 글자 그대로 맞춰 빼므로, 그 줄 뒤에
@@ -246,7 +247,8 @@ type_loopback_roundtrips() {
 # 것은 tty 잠금 밖에서 쓰이고 뒤의 것은 남의 프로세스라 AL이 고칠 수 없다(AL design
 # 비목표 1 · 2).
 #
-# 줄 머리가 `terminal: ` · `tars-init: `인 파일만 perl에 넘긴다. 회차 디렉터리에는
+# 줄 머리가 `terminal: ` · `tars-init: `인 파일만 perl에 넘긴다(C의 `kms: ` · `font: `
+# 줄도 terminal이 쓰므로 그 파일에 함께 있다). 회차 디렉터리에는
 # 디스크 이미지 · WAV도 있고, 줄바꿈이 드문 큰 파일을 perl이 줄로 읽으면 한 줄이
 # 수십 MB가 된다.
 cut_log_lines() {
@@ -255,6 +257,7 @@ cut_log_lines() {
   local IFS=$'\n'
   # shellcheck disable=SC2086
   perl -ne '
+    if (/^(terminal|kms|font|tars-init): .* \[cut\]\r?\n?\z/) { print "C $ARGV: $_" }
     if (/^terminal: .*tars-init: /) { print "A $ARGV: $_" }
     elsif (/^tars-init: .*terminal: / &&
            !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+\r?\n?\z/) {

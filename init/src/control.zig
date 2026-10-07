@@ -9,6 +9,7 @@
 //! `anytype`이라 호스트 검사가 가짜 구조체로 전부 본다(`control_test.zig`). 시그널을
 //! 보내는 것은 규칙이 아니라 `main.zig`다. 규칙은 "보내라"를 돌려줄 뿐이다.
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const services = @import("services.zig");
 
@@ -309,7 +310,7 @@ fn addrOf(path: []const u8) ?linux.sockaddr.un {
 }
 
 fn noSocket(step: []const u8, e: linux.E) ?i32 {
-    std.debug.print("tars-init: no control socket ({s} errno {d})\n", .{ step, @intFromEnum(e) });
+    logline.print("tars-init: no control socket ({s} errno {d})\n", .{ step, @intFromEnum(e) });
     return null;
 }
 
@@ -333,7 +334,7 @@ pub fn open(dir: [:0]const u8, path: [:0]const u8) ?i32 {
     if (failed(linux.bind(fd, @ptrCast(&a), ALEN))) |e| return closeAnd(fd, "bind", e);
     if (failed(linux.chmod(path.ptr, 0o600))) |e| return closeAnd(fd, "chmod", e);
     if (failed(linux.listen(fd, 4))) |e| return closeAnd(fd, "listen", e);
-    std.debug.print("tars-init: control socket {s}\n", .{path});
+    logline.print("tars-init: control socket {s}\n", .{path});
     return fd;
 }
 

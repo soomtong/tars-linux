@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -35,18 +36,18 @@ pub const WIFI_ARGV = [9:null]?[*:0]const u8{ WIFI_PATH.ptr, null, null, null, n
 /// `conf`를 인자로 받는 것은 wifi_test가 가짜 경로로 부르기 위해서다.
 pub fn wants(net: config.Net, mounted: bool, conf: [:0]const u8) bool {
     if (net == .off) {
-        std.debug.print("tars-init: net=off, wifi stays off\n", .{});
+        logline.print("tars-init: net=off, wifi stays off\n", .{});
         return false;
     }
     if (!mounted) {
-        std.debug.print("tars-init: no /config, wifi stays off\n", .{});
+        logline.print("tars-init: no /config, wifi stays off\n", .{});
         return false;
     }
     if (linux.errno(linux.access(conf.ptr, linux.F_OK)) != .SUCCESS) {
-        std.debug.print("tars-init: no {s}, wifi stays off\n", .{conf});
+        logline.print("tars-init: no {s}, wifi stays off\n", .{conf});
         return false;
     }
     // 감독자의 `started service wpa_supplicant (pid N, …)`가 뒤따른다.
-    std.debug.print("tars-init: wpa_supplicant joins the services, tars-wifi picks the interfaces\n", .{});
+    logline.print("tars-init: wpa_supplicant joins the services, tars-wifi picks the interfaces\n", .{});
     return true;
 }

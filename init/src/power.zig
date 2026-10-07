@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const audio = @import("audio.zig");
 
@@ -20,9 +21,10 @@ pub const Action = enum(u8) {
 /// 시그널 핸들러가 만질 수 있는 유일한 상태. 0은 "요청 없음"이다.
 var pending: u8 = 0;
 
-/// 시그널 핸들러 안에서는 재진입 안전하지 않은 것을 부를 수 없다. 우리 로그
-/// 함수(std.debug.print)가 바로 그런 것이므로, 핸들러는 정수 하나를 남기고
-/// 즉시 돌아온다. 로그는 깨어난 감독 루프가 찍는다.
+/// 시그널 핸들러 안에서는 재진입 안전하지 않은 것을 부를 수 없다. 옛 로그
+/// 함수(std.debug.print)가 바로 그런 것이었고, 지금의 `logline.print`도 핸들러에서
+/// 부르면 감독 루프가 쓰던 줄 한가운데에 핸들러의 줄이 끼어든다(AL design). 그래서
+/// 핸들러는 정수 하나를 남기고 즉시 돌아온다. 로그는 깨어난 감독 루프가 찍는다.
 fn onSignal(sig: linux.SIG) callconv(.c) void {
     const action: Action = switch (sig) {
         .TERM => .power_off,
@@ -60,7 +62,7 @@ pub fn install() void {
         .flags = 0,
     };
     if (failed(linux.sigaction(.TERM, &act, null))) |e| {
-        std.debug.print("tars-init: failed to install SIGTERM handler (errno {d})\n", .{
+        logline.print("tars-init: failed to install SIGTERM handler (errno {d})\n", .{
             @intFromEnum(e),
         });
         return;
@@ -68,12 +70,12 @@ pub fn install() void {
     // 같은 act를 그대로 재사용한다. 두 시그널이 하는 일은 "정수 하나를
     // 남긴다"로 동일하고, 무엇을 남길지는 onSignal 안에서 갈린다.
     if (failed(linux.sigaction(.INT, &act, null))) |e| {
-        std.debug.print("tars-init: failed to install SIGINT handler (errno {d})\n", .{
+        logline.print("tars-init: failed to install SIGINT handler (errno {d})\n", .{
             @intFromEnum(e),
         });
         return;
     }
-    std.debug.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
+    logline.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
 }
 
 /// `fork`한 자식이 PID 1의 시그널 정책을 물려받지 않게 되돌린다.
@@ -129,12 +131,12 @@ pub fn take() ?Action {
 /// 곤란하고, `kill -INT 1` 경로는 이것과 무관하게 살아 있다.
 pub fn disableCtrlAltDel() void {
     if (failed(linux.reboot(.MAGIC1, .MAGIC2, .CAD_OFF, null))) |e| {
-        std.debug.print("tars-init: could not take over ctrl-alt-del (errno {d})\n", .{
+        logline.print("tars-init: could not take over ctrl-alt-del (errno {d})\n", .{
             @intFromEnum(e),
         });
         return;
     }
-    std.debug.print("tars-init: ctrl-alt-del now arrives as SIGINT\n", .{});
+    logline.print("tars-init: ctrl-alt-del now arrives as SIGINT\n", .{});
 }
 
 /// 종료할 때 자식에게 보내는 시그널과 그 순서. `shutdown()`이 이 배열을
@@ -204,14 +206,14 @@ fn reapAll() bool {
                 }
             },
             .CHILD => {
-                std.debug.print("tars-init: every child is gone (reaped {d})\n", .{reaped});
+                logline.print("tars-init: every child is gone (reaped {d})\n", .{reaped});
                 return true;
             },
             // EINTR 등. 아래에서 기다렸다가 다시 묻는다.
             else => {},
         }
         if (monotonicSeconds() >= deadline) {
-            std.debug.print("tars-init: grace period expired (reaped {d})\n", .{reaped});
+            logline.print("tars-init: grace period expired (reaped {d})\n", .{reaped});
             return false;
         }
         sleepMillis(100);
@@ -223,7 +225,7 @@ fn reapAll() bool {
 /// 돌아가면 "안 떠 있는 자식을 띄운다"는 규칙이 방금 죽인 셸을 되살린다.
 /// 돌아갈 길 자체를 타입으로 막아둔다.
 pub fn shutdown(action: Action) noreturn {
-    std.debug.print("tars-init: shutdown requested (action {s})\n", .{@tagName(action)});
+    logline.print("tars-init: shutdown requested (action {s})\n", .{@tagName(action)});
 
     // -1은 "자기를 제외한 모든 프로세스"다. 감독 대상 둘뿐 아니라 PTY 안에서
     // 도는 셸까지 한 번에 닿으므로 자식 목록을 순회할 필요가 없고, 리눅스가
@@ -233,7 +235,7 @@ pub fn shutdown(action: Action) noreturn {
         // 문구를 @tagName으로 만드는 이유는 체인 다섯 자리가 지금 보는
         // 글자를 그대로 지키기 위해서다. TERM이 들어가면 이 줄은
         // "sent SIGTERM to every process"가 된다.
-        std.debug.print("tars-init: sent SIG{s} to every process\n", .{@tagName(sig)});
+        logline.print("tars-init: sent SIG{s} to every process\n", .{@tagName(sig)});
     }
 
     // 여기서 false가 나오면 SIGHUP에도 안 죽는 자식이 있다는 뜻이다.
@@ -243,7 +245,7 @@ pub fn shutdown(action: Action) noreturn {
     // power/check.sh가 이 분기를 밟지 않는 것을 판정한다(SL-M2).
     if (!reapAll()) {
         _ = linux.kill(-1, .KILL);
-        std.debug.print("tars-init: sent SIGKILL to what was left\n", .{});
+        logline.print("tars-init: sent SIGKILL to what was left\n", .{});
         _ = reapAll();
     }
 
@@ -258,7 +260,7 @@ pub fn shutdown(action: Action) noreturn {
     // 파일시스템만 보면 필요 없지만, 시스템 콜 한 번이고 다른 파일시스템에는
     // 그 보장이 없다.
     linux.sync();
-    std.debug.print("tars-init: filesystems synced\n", .{});
+    logline.print("tars-init: filesystems synced\n", .{});
 
     // RESTART는 POWER_OFF와 달리 ACPI 없이도 그대로 동작한다. 커널이
     // kernel_restart()로 들어가 "Restarting system"을 찍고(reboot.c:294)
@@ -267,11 +269,11 @@ pub fn shutdown(action: Action) noreturn {
         .power_off => .POWER_OFF,
         .restart => .RESTART,
     };
-    std.debug.print("tars-init: calling reboot({s})\n", .{@tagName(cmd)});
+    logline.print("tars-init: calling reboot({s})\n", .{@tagName(cmd)});
     _ = linux.reboot(.MAGIC1, .MAGIC2, cmd, null);
 
     // 여기에 도달했다는 것은 reboot(2)가 실패했다는 뜻이다. PID 1의 반환은
     // 곧 커널 패닉이므로 돌아가지 않고 여기서 쉰다.
-    std.debug.print("tars-init: reboot syscall returned; PID 1 stays alive\n", .{});
+    logline.print("tars-init: reboot syscall returned; PID 1 stays alive\n", .{});
     while (true) sleepMillis(1000);
 }

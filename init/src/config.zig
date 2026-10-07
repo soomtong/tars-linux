@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 
 /// main.zig에도 같은 함수가 있다. 세 줄짜리 헬퍼 하나 때문에 공용 모듈을
@@ -13,7 +14,8 @@ fn failed(rc: usize) ?linux.E {
 /// 부르던 것을 TC-M0이 여기 하나로 모았다.
 ///
 /// init에서는 그 전과 바이트 하나 다르지 않다 — `tars-init: ` 접두사와 개행을
-/// 붙여 표준 에러에 찍는다. 달라지는 것은 이 파일을 import하는 다른 실행
+/// 붙여 표준 에러에 찍는다. AL-M1부터는 그 한 줄이 `logline.print`로 write 한 번에
+/// 나간다(AL design 결정 3) — 글자는 같고 terminal의 줄과 섞이지 않는다. 달라지는 것은 이 파일을 import하는 다른 실행
 /// 파일이다. 그 root가 `configLog`를 선언하면 줄이 그리로 간다 — `tars-config`가
 /// 사람이 적으려는 값을 `parse`에 넣고, init이 부팅에 그 값에 대해 무엇이라고
 /// 말할지를 그 자리에서 듣는다(`config_edit.judge`). 그 말이 곧 거절의 이유다.
@@ -26,7 +28,7 @@ fn failed(rc: usize) ?linux.E {
 fn log(comptime fmt: []const u8, args: anytype) void {
     const root = @import("root");
     if (@hasDecl(root, "configLog")) return root.configLog(fmt, args);
-    std.debug.print("tars-init: " ++ fmt ++ "\n", args);
+    logline.print("tars-init: " ++ fmt ++ "\n", args);
 }
 
 /// 셸이 사용자의 rc 파일을 읽을 것인가(SC design 결정 2).

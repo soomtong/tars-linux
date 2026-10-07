@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const power = @import("power.zig");
@@ -29,7 +30,7 @@ fn failed(rc: usize) ?linux.E {
 var config_heard: struct { count: usize = 0, len: usize = 0, buf: [160]u8 = undefined } = .{};
 
 pub fn configLog(comptime fmt: []const u8, args: anytype) void {
-    std.debug.print("tars-init: " ++ fmt ++ "\n", args);
+    logline.print("tars-init: " ++ fmt ++ "\n", args);
     config_heard.count +|= 1;
     if (config_heard.count != 1) return;
     var w: std.Io.Writer = .fixed(&config_heard.buf);
@@ -49,12 +50,12 @@ fn mountFs(
 ) bool {
     const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, 0);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
+        logline.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
             fstype, target, @intFromEnum(e),
         });
         return false;
     }
-    std.debug.print("tars-init: mounted {s} at {s}\n", .{ fstype, target });
+    logline.print("tars-init: mounted {s} at {s}\n", .{ fstype, target });
     return true;
 }
 
@@ -65,7 +66,7 @@ fn mountDevpts() void {
     const rc = linux.mkdir("/dev/pts", 0o755);
     if (failed(rc)) |e| {
         if (e != .EXIST) {
-            std.debug.print("tars-init: failed to create /dev/pts (errno {d})\n", .{
+            logline.print("tars-init: failed to create /dev/pts (errno {d})\n", .{
                 @intFromEnum(e),
             });
             return;
@@ -97,10 +98,10 @@ fn linkDevFd() void {
     if (failed(rc)) |e| {
         // 이미 있다 = 누군가 먼저 만들었다. 조용히 둔다.
         if (e == .EXIST) return;
-        std.debug.print("tars-init: could not link /dev/fd (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: could not link /dev/fd (errno {d})\n", .{@intFromEnum(e)});
         return;
     }
-    std.debug.print("tars-init: linked /dev/fd to /proc/self/fd\n", .{});
+    logline.print("tars-init: linked /dev/fd to /proc/self/fd\n", .{});
 }
 
 /// `XDG_DATA_HOME`이 가리키는 디렉터리를 만든다(SM design 결정 9).
@@ -118,7 +119,7 @@ fn makeXdgDir() void {
     if (failed(rc)) |e| {
         // 이미 있다 = 두 번째 부팅부터의 정상 경로다. 조용히 둔다.
         if (e == .EXIST) return;
-        std.debug.print("tars-init: could not create {s} (errno {d})\n", .{
+        logline.print("tars-init: could not create {s} (errno {d})\n", .{
             environ.XDG_DATA_DIR, @intFromEnum(e),
         });
     }
@@ -160,9 +161,9 @@ fn mountConfig() bool {
         // 기다린 부팅만 한 줄 더. 설치된 기계에서 설정이 사라지는 증상의
         // 원인이 "늦었다"인지 "없다"인지를 이 줄이 가른다.
         if (max_ms > 0) {
-            std.debug.print("tars-init: waited {d}ms for config storage\n", .{max_ms});
+            logline.print("tars-init: waited {d}ms for config storage\n", .{max_ms});
         }
-        std.debug.print("tars-init: no disk labelled {s}* among {d} candidates\n", .{
+        logline.print("tars-init: no disk labelled {s}* among {d} candidates\n", .{
             storage.LABEL_PREFIX, list.len,
         });
         return false;
@@ -171,14 +172,14 @@ fn mountConfig() bool {
     // 기다린 적이 있을 때만 찍는다(HD-M2의 키보드와 같은 규칙). 늘 찍으면
     // 정상 부팅의 로그가 한 줄 늘고, 그 줄은 아무것도 안 가른다.
     if (waited > 0) {
-        std.debug.print("tars-init: config storage appeared after {d}ms\n", .{waited});
+        logline.print("tars-init: config storage appeared after {d}ms\n", .{waited});
     }
 
     // 이 줄이 RM-M2의 판정이다. 고른 이름과 고른 근거가 한 줄에 함께
     // 있어야 실패했을 때 갈린다 — "후보에 그 이름이 없었다"와 "라벨을 못
     // 읽었다"와 "라벨이 우리 것이 아니었다"와 "골랐는데 mount가 실패했다"가
     // 서로 다른 병이다(IS-M1 실측 5와 같은 종류).
-    std.debug.print("tars-init: config storage {s} (label {s})\n", .{
+    logline.print("tars-init: config storage {s} (label {s})\n", .{
         found.path, found.label(),
     });
 
@@ -203,12 +204,12 @@ const CONFIG_PATH: [:0]const u8 = "/config/tars.conf";
 ///   파일 있음    → 읽어서 쓴다.
 fn loadConfig(storage_mounted: bool) config.Config {
     if (!storage_mounted) {
-        std.debug.print("tars-init: no config storage, using defaults\n", .{});
+        logline.print("tars-init: no config storage, using defaults\n", .{});
         return .{};
     }
 
     if (config.load(CONFIG_PATH)) |c| {
-        std.debug.print("tars-init: loaded {s}\n", .{CONFIG_PATH});
+        logline.print("tars-init: loaded {s}\n", .{CONFIG_PATH});
         return c;
     }
 
@@ -216,10 +217,10 @@ fn loadConfig(storage_mounted: bool) config.Config {
     // 부팅했다. seed를 심는다.
     const defaults = config.Config{};
     config.save(CONFIG_PATH, defaults) catch {
-        std.debug.print("tars-init: could not seed {s}, using defaults\n", .{CONFIG_PATH});
+        logline.print("tars-init: could not seed {s}, using defaults\n", .{CONFIG_PATH});
         return defaults;
     };
-    std.debug.print("tars-init: created {s}\n", .{CONFIG_PATH});
+    logline.print("tars-init: created {s}\n", .{CONFIG_PATH});
     return defaults;
 }
 
@@ -236,7 +237,7 @@ fn resolveShell(want: config.Shell) config.Shell {
     if (failed(linux.access(want.path().ptr, linux.X_OK)) == null) return want;
 
     const fallback = config.Config{};
-    std.debug.print("tars-init: shell {s} is not executable, falling back to {s}\n", .{
+    logline.print("tars-init: shell {s} is not executable, falling back to {s}\n", .{
         want.path(), @tagName(fallback.shell),
     });
     return fallback.shell;
@@ -263,7 +264,7 @@ fn resolveTimezone(want: config.Timezone) config.Timezone {
     const path = config.zoneinfoPath(&path_buf, want);
     if (zoneinfoIsTzif(path)) return want;
 
-    std.debug.print("tars-init: timezone {s} has no zoneinfo file at {s}, falling back to {s}\n", .{
+    logline.print("tars-init: timezone {s} has no zoneinfo file at {s}, falling back to {s}\n", .{
         want.slice(), path, config.Timezone.UTC.slice(),
     });
     return config.Timezone.UTC;
@@ -287,9 +288,9 @@ fn logDrmDevicePresence() void {
     // 열지 않고 존재만 본다. 곧 fork될 /terminal이 이 장치를 독점해서
     // 열 것이므로 여기서는 건드리지 않는 편이 안전하다.
     if (failed(linux.access("/dev/dri/card0", linux.F_OK))) |_| {
-        std.debug.print("tars-init: /dev/dri/card0 not found\n", .{});
+        logline.print("tars-init: /dev/dri/card0 not found\n", .{});
     } else {
-        std.debug.print("tars-init: /dev/dri/card0 exists\n", .{});
+        logline.print("tars-init: /dev/dri/card0 exists\n", .{});
     }
 }
 
@@ -300,7 +301,7 @@ fn logDrmDevicePresence() void {
 fn setupControllingTerminal() void {
     const rc = linux.open("/dev/console", .{ .ACCMODE = .RDWR }, 0);
     if (failed(rc)) |e| {
-        std.debug.print("tars-init: failed to open /dev/console (errno {d})\n", .{
+        logline.print("tars-init: failed to open /dev/console (errno {d})\n", .{
             @intFromEnum(e),
         });
         return;
@@ -418,7 +419,7 @@ fn monotonicSeconds() isize {
 fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        std.debug.print("tars-init: fork for {s} failed (errno {d})\n", .{
+        logline.print("tars-init: fork for {s} failed (errno {d})\n", .{
             c.label, @intFromEnum(e),
         });
         return -1;
@@ -434,7 +435,7 @@ fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
         // execve가 돌아왔다는 것은 실패했다는 뜻이다. errno가 원인을 가른다 —
         // 2(ENOENT)는 파일이나 shebang의 인터프리터가 없는 것, 13(EACCES)은 실행
         // 비트가 없는 것이다(SV-M1 실측 9).
-        std.debug.print("tars-init: execve {s} failed (errno {d})\n", .{
+        logline.print("tars-init: execve {s} failed (errno {d})\n", .{
             c.path, @intFromEnum(linux.errno(exec_rc)),
         });
         linux.exit(127);
@@ -449,7 +450,7 @@ fn start(c: *Child, envp: [*:null]const ?[*:0]const u8) void {
     c.started_at = monotonicSeconds();
     // 경로까지 찍는다. "셸이 바뀌었는가"를 게이트가 확인할 수 있는 유일한
     // 줄이다 — 프로세스가 무엇을 exec했는지는 밖에서 볼 방법이 없다.
-    std.debug.print("tars-init: started {s} (pid {d}, {s})\n", .{
+    logline.print("tars-init: started {s} (pid {d}, {s})\n", .{
         c.label, pid, c.path,
     });
 }
@@ -509,14 +510,14 @@ fn answer(children: []Child, live: *Live, req: control.Request, out: *control.Ou
     };
     const c = findService(children, name) orelse {
         out.print(control.ERROR_PREFIX ++ "no service named {s}\n", .{name});
-        std.debug.print("tars-init: control: {s} {s} -> no such service\n", .{ @tagName(req.verb), name });
+        logline.print("tars-init: control: {s} {s} -> no such service\n", .{ @tagName(req.verb), name });
         return;
     };
     const pid = c.pid;
     const done = control.apply(req.verb, c, now);
     if (done.signal) _ = linux.kill(-pid, .TERM);
     control.outcome(out, done.outcome, c.label, pid);
-    std.debug.print("tars-init: control: {s} {s} -> {s}\n", .{ @tagName(req.verb), c.label, @tagName(done.outcome) });
+    logline.print("tars-init: control: {s} {s} -> {s}\n", .{ @tagName(req.verb), c.label, @tagName(done.outcome) });
 }
 
 /// listen fd가 깨웠을 때 연결 하나를 처리한다. 붙잡히는 시간은 `control.WAIT_MS`가
@@ -528,13 +529,13 @@ fn serveControl(children: []Child, live: *Live, lfd: i32) void {
     var out = control.Out{ .buf = &reply_buf };
     switch (got.what) {
         .silent => {
-            std.debug.print("tars-init: control client sent nothing in {d}ms\n", .{control.WAIT_MS});
+            logline.print("tars-init: control client sent nothing in {d}ms\n", .{control.WAIT_MS});
             _ = linux.close(got.fd);
             return;
         },
         .too_long => |n| {
             out.print(control.ERROR_PREFIX ++ "request of {d} bytes, at most {d}\n", .{ n, control.REQUEST_MAX });
-            std.debug.print("tars-init: control: bad request ({d} bytes)\n", .{n});
+            logline.print("tars-init: control: bad request ({d} bytes)\n", .{n});
         },
         .request => |bytes| {
             if (control.parseRequest(bytes)) |req| {
@@ -542,7 +543,7 @@ fn serveControl(children: []Child, live: *Live, lfd: i32) void {
             } else {
                 // 요청의 바이트는 찍지 않는다 — 누구든 ESC를 심을 수 있다.
                 out.print(control.ERROR_PREFIX ++ "bad request\n", .{});
-                std.debug.print("tars-init: control: bad request ({d} bytes)\n", .{bytes.len});
+                logline.print("tars-init: control: bad request ({d} bytes)\n", .{bytes.len});
             }
         },
     }
@@ -636,7 +637,7 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     if (done.signal) _ = linux.kill(pid, .TERM);
     out.print("terminal: restarts; every pane, its shell and the clipboard are gone\n", .{});
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    std.debug.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s}\n", .{
+    logline.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s}\n", .{
         pid,                     shell.path(),       @tagName(new.keyboard),       @tagName(new.hangul_layout),
         @tagName(new.latin_layout), new.terminalToggles(&toggle_buf), @tagName(new.clipboard),
     });
@@ -668,7 +669,7 @@ fn steer(c: *Child, s: reload.Step, now: isize, out: *control.Out) void {
         .stop => "stops",
         .restart => "restarts",
     } });
-    std.debug.print("tars-init: reload: {s} {s}\n", .{ c.label, @tagName(s) });
+    logline.print("tars-init: reload: {s} {s}\n", .{ c.label, @tagName(s) });
 }
 
 /// 서비스 칸 i에 새 서비스를 넣는다. 칸은 비었거나 꺼졌고 이미 거둬졌다(`reload.serviceActions`).
@@ -718,7 +719,7 @@ fn rebuildShellAndEnv(children: []Child, live: *Live, new: config.Config) void {
         n += 1;
     }
     login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell.path(), ssh_env[0..n]);
-    std.debug.print("tars-init: reload: console shell {s}, env {s}\n", .{ shell.path(), tz_entry });
+    logline.print("tars-init: reload: console shell {s}, env {s}\n", .{ shell.path(), tz_entry });
 }
 
 /// `reload` 동사(reload design 결정 3). 순서가 계약이다 — 조이고(방화벽 켜기), 데몬 · 서비스의
@@ -741,14 +742,14 @@ fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void 
         out.print(control.ERROR_PREFIX ++ "{s}: {s}", .{ CONFIG_PATH, config_heard.buf[0..config_heard.len] });
         if (config_heard.count > 1) out.print(" (and {d} more)", .{config_heard.count - 1});
         out.print("; nothing changed (tars-config check)\n", .{});
-        std.debug.print("tars-init: reload refused, {s} has {d} line(s) init would not take\n", .{ CONFIG_PATH, config_heard.count });
+        logline.print("tars-init: reload refused, {s} has {d} line(s) init would not take\n", .{ CONFIG_PATH, config_heard.count });
         return;
     }
     var new = loaded;
     if (live.noconfig) new.shell_config = .off;
     const old = live.cfg;
     const keys = reload.changed(old, new);
-    std.debug.print("tars-init: reload of {s}\n", .{CONFIG_PATH});
+    logline.print("tars-init: reload of {s}\n", .{CONFIG_PATH});
     const before = out.len;
     reload.keyLines(out, old, new);
 
@@ -800,7 +801,7 @@ fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void 
             if (p.name >= entries.len) continue;
             placeService(children, live, p.slot, &entries[p.name]);
             out.print("{s}: starts (new in {s})\n", .{ entries[p.name].label(), services.DIR });
-            std.debug.print("tars-init: reload: {s} joins the services\n", .{entries[p.name].label()});
+            logline.print("tars-init: reload: {s} joins the services\n", .{entries[p.name].label()});
         },
         .no_room => |i| if (i < entries.len) {
             out.print("{s}: no free slot until the next boot ({d} at most)\n", .{ entries[i].label(), services.MAX });
@@ -884,7 +885,7 @@ fn supervise(
                 // 서비스는 제 그룹을 가진다(setsid). terminal은 아니다 — TC-M3의 `reload terminal`이 이
                 // 길로 오는 첫 비서비스다. 그룹에 보내면 ESRCH로 아무도 안 죽는다.
                 _ = linux.kill(if (c.kind == .service) -c.pid else c.pid, .KILL);
-                std.debug.print("tars-init: {s} outlived SIGTERM by {d}s, sent SIGKILL to group {d}\n", .{
+                logline.print("tars-init: {s} outlived SIGTERM by {d}s, sent SIGKILL to group {d}\n", .{
                     c.label, control.GRACE_SECONDS, c.pid,
                 });
             }
@@ -904,7 +905,7 @@ fn supervise(
                 // ECHILD는 자식이 하나도 없다는 뜻이고, 감독 대상이 전부
                 // 포기 상태일 때의 정상 경로다.
                 if (e != .CHILD) {
-                    std.debug.print("tars-init: waitpid failed (errno {d})\n", .{
+                    logline.print("tars-init: waitpid failed (errno {d})\n", .{
                         @intFromEnum(e),
                     });
                 }
@@ -921,7 +922,7 @@ fn supervise(
                 // AU-M1. 소리 일꾼은 감독 목록에 없지만 고아도 아니다 — 그 끝을
                 // audio.zig가 읽는다(믹서를 세웠는지가 끌 때 적을지를 정한다).
                 if (audio.reaped(pid, status)) continue;
-                std.debug.print("tars-init: reaped orphan pid {d}\n", .{pid});
+                logline.print("tars-init: reaped orphan pid {d}\n", .{pid});
                 continue;
             };
 
@@ -929,11 +930,11 @@ fn supervise(
             c.pid = -1;
 
             if (linux.W.IFEXITED(status)) {
-                std.debug.print("tars-init: {s} exited (pid {d}, status {d}, lived {d}s)\n", .{
+                logline.print("tars-init: {s} exited (pid {d}, status {d}, lived {d}s)\n", .{
                     c.label, pid, linux.W.EXITSTATUS(status), lived,
                 });
             } else {
-                std.debug.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
+                logline.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
                     c.label, pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
                 });
             }
@@ -943,11 +944,11 @@ fn supervise(
             switch (control.reaped(c)) {
                 .normal => {},
                 .stays_stopped => {
-                    std.debug.print("tars-init: {s} stopped on request\n", .{c.label});
+                    logline.print("tars-init: {s} stopped on request\n", .{c.label});
                     continue;
                 },
                 .restarts => {
-                    std.debug.print("tars-init: restarting {s} on request\n", .{c.label});
+                    logline.print("tars-init: restarting {s} on request\n", .{c.label});
                     continue;
                 },
             }
@@ -976,10 +977,10 @@ fn supervise(
                     c.rescue = null; // 한 번만
                     // 이 줄 둘이 이 기능의 사용자 인터페이스 전부다.
                     // "왜 내 rc가 안 먹지"가 로그 한 줄로 답이 되어야 한다.
-                    std.debug.print("tars-init: {s} died {d} times fast, the rc files are the suspect; restarting it with {s}\n", .{
+                    logline.print("tars-init: {s} died {d} times fast, the rc files are the suspect; restarting it with {s}\n", .{
                         c.label, c.fast_restarts, r.flag,
                     });
-                    std.debug.print("tars-init: to keep it that way put shell_config=off in {s}, or {s} on the kernel command line\n", .{
+                    logline.print("tars-init: to keep it that way put shell_config=off in {s}, or {s} on the kernel command line\n", .{
                         CONFIG_PATH, config.NO_CONFIG_TOKEN,
                     });
                     // 로그 뒤에 0으로 되돌린다 — 찍는 수가 "몇 번 죽고
@@ -988,7 +989,7 @@ fn supervise(
                     continue;
                 }
                 c.given_up = true;
-                std.debug.print("tars-init: giving up on {s} after {d} fast exits\n", .{
+                logline.print("tars-init: giving up on {s} after {d} fast exits\n", .{
                     c.label, c.fast_restarts,
                 });
                 continue;
@@ -996,7 +997,7 @@ fn supervise(
 
             // "1s"가 여전히 참인 이유는 아래 poll이 그만큼 자기 때문이다.
             // terminal/check.sh:178이 이 문구를 진단 목록에 갖고 있다.
-            std.debug.print("tars-init: restarting {s} in 1s\n", .{c.label});
+            logline.print("tars-init: restarting {s} in 1s\n", .{c.label});
         }
 
         // ── 유일하게 잠드는 자리 ─────────────────────────────────────
@@ -1008,7 +1009,7 @@ fn supervise(
         const ready = linux.poll(&fds, nfds, POLL_TIMEOUT_MS);
         if (failed(ready)) |e| {
             if (e != .INTR) {
-                std.debug.print("tars-init: poll failed (errno {d})\n", .{
+                logline.print("tars-init: poll failed (errno {d})\n", .{
                     @intFromEnum(e),
                 });
             }
@@ -1024,7 +1025,7 @@ fn supervise(
             // CPU를 태우는 바쁜 루프가 되기 때문이다.
             if (devices.drainButton(p.fd)) {
                 // device/check.sh가 이 줄을 grep한다.
-                std.debug.print("tars-init: power button pressed\n", .{});
+                logline.print("tars-init: power button pressed\n", .{});
                 power.request(.power_off);
             }
 
@@ -1038,7 +1039,7 @@ fn supervise(
             // 버튼 없이 도는 상태가 된다 — 결정 6이 이미 허용한 상태다.
             const broken = linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL;
             if (p.revents & broken != 0) {
-                std.debug.print("tars-init: power button fd {d} went away (revents {d})\n", .{
+                logline.print("tars-init: power button fd {d} went away (revents {d})\n", .{
                     p.fd, p.revents,
                 });
                 p.fd = -1;
@@ -1051,7 +1052,7 @@ fn supervise(
             if (p.revents & linux.POLL.IN != 0) serveControl(children, live, p.fd);
             const broken = linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL;
             if (p.revents & broken != 0) {
-                std.debug.print("tars-init: control socket went away (revents {d})\n", .{p.revents});
+                logline.print("tars-init: control socket went away (revents {d})\n", .{p.revents});
                 p.fd = -1;
             }
         }
@@ -1059,7 +1060,7 @@ fn supervise(
 }
 
 pub fn main(init: std.process.Init.Minimal) void {
-    std.debug.print("tars-init: starting as PID 1\n", .{});
+    logline.print("tars-init: starting as PID 1\n", .{});
 
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
@@ -1106,7 +1107,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     if (noconfig) {
         // 크게 찍는다. 이 줄이 없으면 "설정 파일에는 on이라고 적혀 있는데
         // 왜 rc가 안 읽히지"가 영영 안 풀린다.
-        std.debug.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
+        logline.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
             config.NO_CONFIG_TOKEN, CONFIG_PATH,
         });
         cfg.shell_config = .off;
@@ -1156,7 +1157,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
     // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다.
     var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
-    std.debug.print(
+    logline.print(
         "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
         .{
             @tagName(cfg.shell),
@@ -1241,17 +1242,17 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
     // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
     if (envp != init.environ.block.slice.ptr) {
-        std.debug.print("tars-init: env {s} {s} {s}\n", .{
+        logline.print("tars-init: env {s} {s} {s}\n", .{
             environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry,
         });
         // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
         // 그 침묵이 결정 3의 절반(fish는 XDG 하나로 끝난다)을 로그에서
         // 읽는 법이다.
         for (shell.histEntries()) |entry| {
-            std.debug.print("tars-init: env {s}\n", .{entry});
+            logline.print("tars-init: env {s}\n", .{entry});
         }
     } else {
-        std.debug.print("tars-init: env unchanged (no room for PATH)\n", .{});
+        logline.print("tars-init: env unchanged (no room for PATH)\n", .{});
     }
 
     // SV-M2 결정 9. ssh 세션이 콘솔과 같은 셸 · 같은 env를 갖게 한다. `shell`은

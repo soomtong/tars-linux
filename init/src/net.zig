@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -60,7 +61,7 @@ pub fn loopbackUp() void {
     // AF_INET/SOCK_DGRAM이 관습이다. 여기서 실패하면 커널에 INET이 없다.
     const srv = linux.socket(linux.AF.INET, linux.SOCK.DGRAM, 0);
     if (failed(srv)) |e| {
-        std.debug.print("tars-init: cannot open a socket to raise lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot open a socket to raise lo (errno {d})\n", .{@intFromEnum(e)});
         return;
     }
     const fd: i32 = @intCast(srv);
@@ -70,21 +71,21 @@ pub fn loopbackUp() void {
     @memcpy(req.name[0..2], "lo");
 
     if (failed(linux.ioctl(fd, SIOCGIFFLAGS, @intFromPtr(&req)))) |e| {
-        std.debug.print("tars-init: cannot read the flags of lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot read the flags of lo (errno {d})\n", .{@intFromEnum(e)});
         return;
     }
     if (req.flags & IFF_UP != 0) {
-        std.debug.print("tars-init: lo was already up\n", .{});
+        logline.print("tars-init: lo was already up\n", .{});
         return;
     }
 
     req.flags |= IFF_UP;
     if (failed(linux.ioctl(fd, SIOCSIFFLAGS, @intFromPtr(&req)))) |e| {
-        std.debug.print("tars-init: cannot raise lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot raise lo (errno {d})\n", .{@intFromEnum(e)});
         return;
     }
     // LB-M3의 검사가 이 줄을 grep한다.
-    std.debug.print("tars-init: lo up\n", .{});
+    logline.print("tars-init: lo up\n", .{});
 }
 
 // WN-M2. 여기에 있던 것 — 인터페이스 이름 상수 `eth0`, `/sys/class/net/eth0`을
@@ -141,10 +142,10 @@ pub const DHCPCD_ARGV = [9:null]?[*:0]const u8{
 /// 붙는데 /etc/resolv.conf만 안 생긴다.
 pub fn wantsDhcpcd(want: config.Net) bool {
     if (want == .off) {
-        std.debug.print("tars-init: net=off, leaving the network alone\n", .{});
+        logline.print("tars-init: net=off, leaving the network alone\n", .{});
         return false;
     }
     // DS 결정 M1-C. 감독자의 `started service dhcpcd (pid N, …)`가 뒤따른다.
-    std.debug.print("tars-init: dhcpcd joins the services, it picks the interface\n", .{});
+    logline.print("tars-init: dhcpcd joins the services, it picks the interface\n", .{});
     return true;
 }

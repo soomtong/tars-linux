@@ -939,7 +939,10 @@ esac
 # `grep -qP '\x00'`을 쓰지 않는다. GNU grep 3.11에서 그것은 NUL이 든 파일에도
 # 매치되지 않는다 — 그대로 뒀으면 항상 통과하는 가짜 검사가 된다
 # (plan을 쓰면서 컨테이너에서 확인했다). 바이트 수를 세는 쪽은 확실하다.
-if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
+# NUL만 세어 한 번에 읽는다(AL-M1). 예전에는 파일을 두 번 읽어(NUL을 뺀 길이 · 전체 길이)
+# 견줬는데, QEMU가 아직 돌며 terminal의 dump를 쓰는 동안이라 두 번 사이에 로그가 자라
+# NUL이 없어도 거짓으로 빨갰다(AL-M1 사본의 pointer 부팅 B).
+if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
   report_failure "a NUL byte leaked into the log (dumpScreen did not skip empty cells)"
 fi
 echo "no NUL bytes in the log"

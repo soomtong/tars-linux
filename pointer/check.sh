@@ -1100,7 +1100,10 @@ PIX="$(ppm_arrow "$GONE")"
 echo "gone: $(last_at)"
 
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
-if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
+# NUL만 세어 한 번에 읽는다(AL-M1). 예전에는 파일을 두 번 읽어(NUL을 뺀 길이 · 전체 길이)
+# 견줬는데, QEMU가 아직 돌며 terminal의 dump를 쓰는 동안이라 두 번 사이에 로그가 자라
+# NUL이 없어도 거짓으로 빨갰다(AL-M1 사본의 pointer 부팅 B).
+if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
   report_failure "the serial log contains NUL bytes"
 fi
 
@@ -1643,7 +1646,10 @@ GOT="$(probe_result p)"
   report_failure "the child in the right pane read '${GOT}', expected 'pd-mouse-got-p 18 [^[[<0;3;2M^[[<0;3;2m]'"
 echo "panes: ${GOT}, $(last_pane_line)"
 
-if [ "$(tr -d '\0' < "$LOG" | wc -c)" -ne "$(wc -c < "$LOG")" ]; then
+# NUL만 세어 한 번에 읽는다(AL-M1). 예전에는 파일을 두 번 읽어(NUL을 뺀 길이 · 전체 길이)
+# 견줬는데, QEMU가 아직 돌며 terminal의 dump를 쓰는 동안이라 두 번 사이에 로그가 자라
+# NUL이 없어도 거짓으로 빨갰다(AL-M1 사본의 pointer 부팅 B).
+if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
   report_failure "the boot B serial log contains NUL bytes"
 fi
 

@@ -7,6 +7,7 @@
 //! 시스템 콜을 하는 `discover`도 디렉터리 경로를 인자로 받는다. 그래서 이 파일
 //! 전체가 호스트에서 /tmp의 가짜 디렉터리로 검사된다(`services_test.zig`).
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 
 /// 게스트의 진짜 자리. 검사는 여기에 /tmp의 디렉터리를 넣는다.
@@ -131,9 +132,9 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
     const rc = linux.open(dir.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
     if (failed(rc)) |e| {
         if (e == .NOENT) {
-            std.debug.print("tars-init: no {s}, 0 services\n", .{dir});
+            logline.print("tars-init: no {s}, 0 services\n", .{dir});
         } else {
-            std.debug.print("tars-init: cannot open {s} (errno {d}), 0 services\n", .{ dir, @intFromEnum(e) });
+            logline.print("tars-init: cannot open {s} (errno {d}), 0 services\n", .{ dir, @intFromEnum(e) });
         }
         return;
     }
@@ -150,7 +151,7 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
     while (true) {
         const n = linux.getdents64(fd, &buf, buf.len);
         if (failed(n)) |e| {
-            std.debug.print("tars-init: cannot read {s} (errno {d})\n", .{ dir, @intFromEnum(e) });
+            logline.print("tars-init: cannot read {s} (errno {d})\n", .{ dir, @intFromEnum(e) });
             break;
         }
         if (n == 0) break;
@@ -163,11 +164,11 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
             switch (judgeName(name)) {
                 .hidden => continue,
                 .too_long => {
-                    std.debug.print("tars-init: service name {s} is longer than {d} bytes, skipped\n", .{ name, NAME_MAX });
+                    logline.print("tars-init: service name {s} is longer than {d} bytes, skipped\n", .{ name, NAME_MAX });
                     continue;
                 },
                 .reserved => {
-                    std.debug.print("tars-init: service {s} is a name init keeps for itself, skipped\n", .{name});
+                    logline.print("tars-init: service {s} is a name init keeps for itself, skipped\n", .{name});
                     continue;
                 },
                 .ok => {},
@@ -182,7 +183,7 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
         }
     }
     if (overflow > 0) {
-        std.debug.print("tars-init: {s} has more than {d} entries, {d} not looked at\n", .{ dir, SCAN_MAX, overflow });
+        logline.print("tars-init: {s} has more than {d} entries, {d} not looked at\n", .{ dir, SCAN_MAX, overflow });
     }
 
     // ── 이름순으로 보고 여덟까지 담는다 ──────────────────────────────────
@@ -191,25 +192,25 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
     for (names[0..count]) |name| {
         var path_buf: [PATH_MAX]u8 = undefined;
         const path = joinPath(&path_buf, dir, name) orelse {
-            std.debug.print("tars-init: service {s} has a path too long, skipped\n", .{name});
+            logline.print("tars-init: service {s} has a path too long, skipped\n", .{name});
             continue;
         };
         switch (check(path)) {
             .unreadable => |e| {
-                std.debug.print("tars-init: service {s} cannot be read (errno {d}), skipped\n", .{ name, @intFromEnum(e) });
+                logline.print("tars-init: service {s} cannot be read (errno {d}), skipped\n", .{ name, @intFromEnum(e) });
                 continue;
             },
             .not_executable => {
                 // 실행 비트를 잊은 것이 가장 흔한 실수다(SV-M0 실측 3). 이 줄이
                 // 없으면 execve가 EACCES로 셋 죽고 포기되며 원인이 로그 깊숙이
                 // 묻힌다 — resolveShell이 미리 보는 것과 같은 생각이다.
-                std.debug.print("tars-init: service {s} is not an executable file, skipped\n", .{name});
+                logline.print("tars-init: service {s} is not an executable file, skipped\n", .{name});
                 continue;
             },
             .ok => {},
         }
         if (list.len == MAX) {
-            std.debug.print("tars-init: service {s} ignored, at most {d} services\n", .{ name, MAX });
+            logline.print("tars-init: service {s} ignored, at most {d} services\n", .{ name, MAX });
             continue;
         }
         const e = &list.entries[list.len];
@@ -218,5 +219,5 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
         list.len += 1;
     }
 
-    std.debug.print("tars-init: {d} services from {s}\n", .{ list.len, dir });
+    logline.print("tars-init: {d} services from {s}\n", .{ list.len, dir });
 }

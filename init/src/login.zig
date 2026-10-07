@@ -5,6 +5,7 @@
 //! 둘 다 initramfs의 루트에 쓰고 `/config`에는 안 쓴다 — 부팅마다 `tars.conf`에서
 //! 새로 나온다(M2-A). sshd를 안 켠 기계에서도 쓴다.
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 
 pub const PASSWD_PATH: [:0]const u8 = "/etc/passwd";
@@ -124,9 +125,9 @@ pub fn apply(
         break :blk writeAll(env_path, text);
     };
     if (passwd_ok and env_ok) {
-        std.debug.print("tars-init: login shell {s}, ssh env in {s}\n", .{ shell_path, env_path });
+        logline.print("tars-init: login shell {s}, ssh env in {s}\n", .{ shell_path, env_path });
     } else {
-        std.debug.print("tars-init: login shell {s} {s}, ssh env {s}\n", .{
+        logline.print("tars-init: login shell {s} {s}, ssh env {s}\n", .{
             shell_path,
             if (passwd_ok) "set" else "NOT set",
             if (env_ok) "written" else "NOT written",

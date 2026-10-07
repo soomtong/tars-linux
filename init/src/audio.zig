@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const power = @import("power.zig");
 
@@ -183,20 +184,20 @@ pub fn start(storage_mounted: bool, envp: [*:null]const ?[*:0]const u8) void {
 
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        std.debug.print("tars-init: audio: cannot fork (errno {d}), the mixer is left as the kernel set it\n", .{@intFromEnum(e)});
+        logline.print("tars-init: audio: cannot fork (errno {d}), the mixer is left as the kernel set it\n", .{@intFromEnum(e)});
         return;
     }
     if (pid == 0) {
         power.resetToDefault();
         const waited = waitForCard() orelse linux.exit(NO_CARD_EXIT);
         // 기다린 적이 있을 때만 찍는다(mountConfig와 같은 규칙).
-        if (waited > 0) std.debug.print("tars-init: audio: sound card appeared after {d}ms\n", .{waited});
+        if (waited > 0) logline.print("tars-init: audio: sound card appeared after {d}ms\n", .{waited});
         _ = linux.execve(ALSACTL_PATH.ptr, argvFor(worker_verb), envp);
-        std.debug.print("tars-init: cannot exec {s}\n", .{ALSACTL_PATH});
+        logline.print("tars-init: cannot exec {s}\n", .{ALSACTL_PATH});
         linux.exit(127);
     }
     worker_pid = @intCast(pid);
-    std.debug.print("tars-init: audio: alsactl {s} once a sound card shows up (pid {d})\n", .{ @tagName(worker_verb), pid });
+    logline.print("tars-init: audio: alsactl {s} once a sound card shows up (pid {d})\n", .{ @tagName(worker_verb), pid });
 }
 
 /// 감독 루프가 감독 목록에 없는 pid를 거둘 때 먼저 묻는다. 일꾼이면 그 끝을 로그
@@ -216,13 +217,13 @@ pub fn reaped(pid: linux.pid_t, status: u32) bool {
             // 99는 끝에 덧붙인다. 앞머리가 같아야 게이트가 한 글자로 둘을 다 받는다.
             const tail: []const u8 = if (got == .generic) " (generic rules, exit 99)" else "";
             switch (worker_verb) {
-                .restore => std.debug.print("tars-init: audio: alsactl restore set the mixer from {s}{s}\n", .{ STATE_PATH, tail }),
-                .init => std.debug.print("tars-init: audio: alsactl init turned the mixer on{s}\n", .{tail}),
+                .restore => logline.print("tars-init: audio: alsactl restore set the mixer from {s}{s}\n", .{ STATE_PATH, tail }),
+                .init => logline.print("tars-init: audio: alsactl init turned the mixer on{s}\n", .{tail}),
             }
         },
-        .no_card => std.debug.print("tars-init: audio: no sound card within {d}ms, the mixer is left alone\n", .{CARD_WAIT_MS}),
-        .exited => |code| std.debug.print("tars-init: audio: alsactl {s} exited {d}, the mixer is left as the kernel set it\n", .{ verb, code }),
-        .killed => |sig| std.debug.print("tars-init: audio: alsactl {s} was killed (signal {d})\n", .{ verb, sig }),
+        .no_card => logline.print("tars-init: audio: no sound card within {d}ms, the mixer is left alone\n", .{CARD_WAIT_MS}),
+        .exited => |code| logline.print("tars-init: audio: alsactl {s} exited {d}, the mixer is left as the kernel set it\n", .{ verb, code }),
+        .killed => |sig| logline.print("tars-init: audio: alsactl {s} was killed (signal {d})\n", .{ verb, sig }),
     }
     return true;
 }
@@ -236,23 +237,23 @@ pub fn store() void {
     switch (storeDecision(mixer_set, storage)) {
         .store => {},
         .not_set => {
-            std.debug.print("tars-init: audio: mixer not stored, it was not set this boot\n", .{});
+            logline.print("tars-init: audio: mixer not stored, it was not set this boot\n", .{});
             return;
         },
         .no_config => {
-            std.debug.print("tars-init: audio: mixer not stored, no /config\n", .{});
+            logline.print("tars-init: audio: mixer not stored, no /config\n", .{});
             return;
         },
     }
 
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        std.debug.print("tars-init: audio: cannot fork for alsactl store (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: audio: cannot fork for alsactl store (errno {d})\n", .{@intFromEnum(e)});
         return;
     }
     if (pid == 0) {
         _ = linux.execve(ALSACTL_PATH.ptr, &STORE_ARGV, env);
-        std.debug.print("tars-init: cannot exec {s}\n", .{ALSACTL_PATH});
+        logline.print("tars-init: cannot exec {s}\n", .{ALSACTL_PATH});
         linux.exit(127);
     }
 
@@ -262,25 +263,25 @@ pub fn store() void {
         const rc = linux.wait4(@intCast(pid), &status, linux.W.NOHANG, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("tars-init: audio: waiting for alsactl store failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: audio: waiting for alsactl store failed (errno {d})\n", .{@intFromEnum(e)});
             return;
         }
         if (rc != 0) break;
         if (waited >= STORE_WAIT_MS) {
             _ = linux.kill(@intCast(pid), .KILL);
             _ = linux.wait4(@intCast(pid), &status, 0, null);
-            std.debug.print("tars-init: audio: alsactl store did not finish in {d}ms, killed it\n", .{STORE_WAIT_MS});
+            logline.print("tars-init: audio: alsactl store did not finish in {d}ms, killed it\n", .{STORE_WAIT_MS});
             return;
         }
         sleepMillis(STORE_POLL_MS);
         waited += STORE_POLL_MS;
     }
     switch (outcome(status)) {
-        .done => std.debug.print("tars-init: audio: stored the mixer in {s}\n", .{STATE_PATH}),
-        .generic => std.debug.print("tars-init: audio: alsactl store exited {d}\n", .{GENERIC_EXIT}),
-        .no_card => std.debug.print("tars-init: audio: alsactl store exited {d}\n", .{NO_CARD_EXIT}),
-        .exited => |code| std.debug.print("tars-init: audio: alsactl store exited {d}\n", .{code}),
-        .killed => |sig| std.debug.print("tars-init: audio: alsactl store was killed (signal {d})\n", .{sig}),
+        .done => logline.print("tars-init: audio: stored the mixer in {s}\n", .{STATE_PATH}),
+        .generic => logline.print("tars-init: audio: alsactl store exited {d}\n", .{GENERIC_EXIT}),
+        .no_card => logline.print("tars-init: audio: alsactl store exited {d}\n", .{NO_CARD_EXIT}),
+        .exited => |code| logline.print("tars-init: audio: alsactl store exited {d}\n", .{code}),
+        .killed => |sig| logline.print("tars-init: audio: alsactl store was killed (signal {d})\n", .{sig}),
     }
 }
 
@@ -502,16 +503,16 @@ pub fn follow() void {
     var buf: [1024]u8 = undefined;
     const text = render(&buf, want) orelse {
         _ = linux.unlink(ASOUND_CONF_PATH.ptr);
-        std.debug.print("tars-init: audio: no sound card left, removed {s}\n", .{ASOUND_CONF_PATH});
+        logline.print("tars-init: audio: no sound card left, removed {s}\n", .{ASOUND_CONF_PATH});
         return;
     };
     if (writeConf(text)) |e| {
-        std.debug.print("tars-init: audio: cannot write {s} (errno {d})\n", .{ ASOUND_CONF_PATH, @intFromEnum(e) });
+        logline.print("tars-init: audio: cannot write {s} (errno {d})\n", .{ ASOUND_CONF_PATH, @intFromEnum(e) });
         return;
     }
     var pb: [3]u8 = undefined;
     var cb: [16]u8 = undefined;
-    std.debug.print("tars-init: audio: default card is {s} for playback, {s} for capture\n", .{
+    logline.print("tars-init: audio: default card is {s} for playback, {s} for capture\n", .{
         cardText(&pb, want.playback), captureText(&cb, want),
     });
 }

@@ -1,8 +1,9 @@
 # TARS Atomic Log Lines — Design
 
 Date: 2026-10-07
-Status: AL-M0(terminal)이 끝났다(2026-10-07, plan `docs/plans/2026-10-07-tars-atomic-log-lines-al-m0.md`의 실측 절 — 루트 게이트 21체인 2/2 두 번,
-84회차 전부 A=0 · B=0). AL-M1(init)은 plan `-al-m1.md`로 이어진다.
+Status: 끝났다(2026-10-07, AL-M0 · M1). plan `docs/plans/2026-10-07-tars-atomic-log-lines-al-m0.md` · `-al-m1.md`의 실측 절이 값이다 — 루트 게이트 21체인
+2/2 두 번씩, 168회차 전부 A=0 · B=0 · C=0. design의 수 둘(init 153곳 → 호출은 151, 로그를 지우던 자리 열하나 → 열넷)은 착수 전의 값이고 plan이 바로잡았다.
+기억은 `docs/decisions/project_atomic_log_lines.md`.
 
 TC(Config Tool)를 닫으며 남긴 후속이다(`HANDOFF.md`, TC-M3 plan의 "닫을 때 lead가 고칠 자리").
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 
 /// main.zig·config.zig·devices.zig에도 같은 함수가 있다. devices.zig가 적어 둔
@@ -125,7 +126,7 @@ pub fn candidates(installed: bool) []const [:0]const u8 {
 pub fn bootedInstalled(cmdline_path: [:0]const u8) bool {
     var buf: [2048]u8 = undefined;
     const text = readHead(cmdline_path, &buf) orelse {
-        std.debug.print("tars-init: cannot read {s}, assuming not {s}\n", .{ cmdline_path, INSTALLED_TOKEN });
+        logline.print("tars-init: cannot read {s}, assuming not {s}\n", .{ cmdline_path, INSTALLED_TOKEN });
         return false;
     };
     return cmdlineInstalled(text);

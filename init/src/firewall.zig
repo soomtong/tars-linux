@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -27,7 +28,7 @@ const BASE_PATH: [:0]const u8 = "/etc/tars/firewall-base.nft";
 fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        std.debug.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
         return false;
     }
     if (pid == 0) {
@@ -36,7 +37,7 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
         // 돌기 때문이고, 이 자식은 곧바로 execve한다.
         const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "-f", path.ptr, null };
         _ = linux.execve(NFT_PATH.ptr, &argv, envp);
-        std.debug.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
+        logline.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
         linux.exit(127);
     }
 
@@ -47,16 +48,16 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
             // SA_RESTART가 꺼져 있어(power.zig) 전원 버튼이 이 기다림을 깨운다.
             // 플래그는 이미 섰고 감독 루프가 곧 본다 — 여기서는 다시 기다린다.
             if (e == .INTR) continue;
-            std.debug.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
             return false;
         }
         break;
     }
     if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) return true;
     if (linux.W.IFEXITED(status)) {
-        std.debug.print("tars-init: nft -f {s} exited {d}\n", .{ path, linux.W.EXITSTATUS(status) });
+        logline.print("tars-init: nft -f {s} exited {d}\n", .{ path, linux.W.EXITSTATUS(status) });
     } else {
-        std.debug.print("tars-init: nft -f {s} was killed (signal {d})\n", .{
+        logline.print("tars-init: nft -f {s} was killed (signal {d})\n", .{
             path, @intFromEnum(linux.W.TERMSIG(status)),
         });
     }
@@ -76,18 +77,18 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
 ///          네트워크를 막는 쪽으로 가지 않는 이유는 design 결정 5의 셋째 항목
 pub fn up(want: config.Firewall, envp: [*:null]const ?[*:0]const u8) void {
     if (want == .off) {
-        std.debug.print("tars-init: firewall=off, inbound is open\n", .{});
+        logline.print("tars-init: firewall=off, inbound is open\n", .{});
         return;
     }
     if (load(RULES_PATH, envp)) {
-        std.debug.print("tars-init: firewall up from {s}, inbound closed but for /config/nftables.d\n", .{RULES_PATH});
+        logline.print("tars-init: firewall up from {s}, inbound closed but for /config/nftables.d\n", .{RULES_PATH});
         return;
     }
     if (load(BASE_PATH, envp)) {
-        std.debug.print("tars-init: firewall up from {s} without /config/nftables.d (nft said why above)\n", .{BASE_PATH});
+        logline.print("tars-init: firewall up from {s} without /config/nftables.d (nft said why above)\n", .{BASE_PATH});
         return;
     }
-    std.debug.print("tars-init: firewall NOT up, inbound is open\n", .{});
+    logline.print("tars-init: firewall NOT up, inbound is open\n", .{});
 }
 
 /// TC-M2. 규칙을 내린다 — `firewall=on`에서 `off`로 reload했을 때(reload design 결정 3의 5단계).
@@ -97,13 +98,13 @@ pub fn up(want: config.Firewall, envp: [*:null]const ?[*:0]const u8) void {
 pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        std.debug.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
         return false;
     }
     if (pid == 0) {
         const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "flush", "ruleset", null };
         _ = linux.execve(NFT_PATH.ptr, &argv, envp);
-        std.debug.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
+        logline.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
         linux.exit(127);
     }
     var status: u32 = 0;
@@ -111,15 +112,15 @@ pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
         const rc = linux.wait4(@intCast(pid), &status, 0, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
             return false;
         }
         break;
     }
     if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) {
-        std.debug.print("tars-init: firewall down (nft flush ruleset), inbound is open\n", .{});
+        logline.print("tars-init: firewall down (nft flush ruleset), inbound is open\n", .{});
         return true;
     }
-    std.debug.print("tars-init: nft flush ruleset failed (status {d})\n", .{status});
+    logline.print("tars-init: nft flush ruleset failed (status {d})\n", .{status});
     return false;
 }

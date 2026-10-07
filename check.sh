@@ -150,22 +150,21 @@ RUNS=2
 # `--rm`이고, `-e TMPDIR=`로 bind-mount해 두면 체인별로 나뉜 채 호스트에 남는다.
 GATE_LOGS="$(mktemp -d "${TMPDIR:-/tmp}/tars-gate.XXXXXX")"
 
-# 그 회차의 로그에서 남의 줄이 끼어든 줄을 센다(gate_lib.sh의 cut_log_lines). A(terminal의
-# 줄 가운데의 init)는 AL-M0 뒤로 생길 수 없으므로 하나라도 있으면 그 회차가 FAIL이다.
-# B(init의 줄 가운데의 terminal)는 init이 아직 한 줄을 write 여럿으로 내므로(AL-M1의 몫)
-# 수만 찍는다. 체인이 빨개도 세어서 찍는다 — 빨간 까닭이 이 자름일 수 있다.
+# 그 회차의 로그에서 남의 줄이 끼어든 줄과 잘린 줄을 센다(gate_lib.sh의 cut_log_lines).
+# terminal(AL-M0)과 init(AL-M1)이 한 줄을 write 한 번으로 내므로 A(terminal의 줄 가운데의
+# init)도 B(init의 줄 가운데의 terminal)도 생길 수 없고, C(2048에서 잘린 줄)는 게이트의 줄이
+# 그만큼 길지 않으므로 생기면 안 된다. 셋 가운데 하나라도 있으면 그 회차가 FAIL이다. 체인이
+# 빨개도 세어서 찍는다 — 빨간 까닭이 이 자름일 수 있다.
 count_cut_lines() {
-  local dir="$1" label="$2" cut a b
+  local dir="$1" label="$2" cut a b c
   cut="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir")"
   a="$(grep -c '^A ' <<<"$cut")"
   b="$(grep -c '^B ' <<<"$cut")"
-  echo "${label}: cut log lines A=${a} B=${b} (${dir})"
-  if [ "$b" -ne 0 ]; then
-    grep '^B ' <<<"$cut"
-  fi
-  if [ "$a" -ne 0 ]; then
-    echo "${label} FAIL: ${a} terminal line(s) carry a tars-init line in the middle:"
-    grep '^A ' <<<"$cut"
+  c="$(grep -c '^C ' <<<"$cut")"
+  echo "${label}: cut log lines A=${a} B=${b} C=${c} (${dir})"
+  if [ "$a" -ne 0 ] || [ "$b" -ne 0 ] || [ "$c" -ne 0 ]; then
+    echo "${label} FAIL: serial lines were cut (A: tars-init inside terminal, B: terminal inside tars-init, C: over 2048 bytes):"
+    grep -E '^[ABC] ' <<<"$cut"
     return 1
   fi
   return 0
@@ -424,20 +423,22 @@ for entry in "${CHAINS[@]}"; do
   require_explicit_nic "${entry#*:}" || entry_failed=1
 done
 
-# TC-M3 Task 5b. gate_lib.sh의 joined_screen_dump가 끼어든 줄을 잇는가. QEMU 없이 고정된
-# 조각 넷으로 본다 — 안 잘린 dump, 커널 printk가 자른 dump, init의 줄이 자른 dump, init의
-# 줄 둘(조각 + 온전한 한 줄)이 자른 dump가 전부 같은 한 줄이 되어야 한다. 이 함수가 잇지
-# 못하면 그 화면의 마지막 dump를 기다리는 검사가 30초 뒤에 거짓으로 빨갛다(TC-M3 루트
-# 게이트 2회차, config 7차). 게이트를 시작하기 전에 0.1초로 잡는다.
+# TC-M3 Task 5b · AL-M1. gate_lib.sh의 joined_screen_dump가 커널이 자른 줄을 잇는가. QEMU
+# 없이 고정된 조각으로 본다 — 안 잘린 dump, 커널 printk가 자른 dump, 커널이 자르고 뒤 조각
+# 앞에 init의 온전한 줄이 온 dump가 전부 같은 한 줄이 되어야 한다. 이 함수가 잇지 못하면
+# 그 화면의 마지막 dump를 기다리는 검사가 30초 뒤에 거짓으로 빨갛다(TC-M3 루트 게이트
+# 2회차, config 7차). 그리고 화면 글자로 `tars-init: `가 끝에 보이는 dump는 그대로여야
+# 한다 — AL-M1 전에는 init의 줄이 dump 가운데를 자를 수 있어서 그 꼬리를 떼어 냈고, 그
+# 규칙이 진짜 화면 글자까지 떼었다. init의 줄이 write 한 번이 된 뒤로 그런 자름은 없다
+# (AL design 결정 5). 게이트를 시작하기 전에 0.1초로 잡는다.
 require_screen_dump_joins() {
   local dir want got name
   dir="$(mktemp -d)"
   printf 'terminal: screen> a | (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk"
-  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: no sound card within 5000ms, the mixer is left alone\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init"
-  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: one\ntars-init: two\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init2"
+  printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\ntars-init: audio: no sound card within 5000ms, the mixer is left alone\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk_init"
   want="$(LOG="$dir/clean" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
-  for name in printk init init2; do
+  for name in printk printk_init; do
     got="$(LOG="$dir/$name" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
     if [ "$got" != "$want" ]; then
       echo "check FAIL: gate_lib.sh joined_screen_dump does not rejoin a screen> line cut by ${name}:" >&2
@@ -447,7 +448,16 @@ require_screen_dump_joins() {
       return 1
     fi
   done
+  printf 'terminal: screen> (none)# grep audio /tmp/serial.log | tars-init: audio: no sound card\r\nterminal: style> 0,0 fg=8ABEB7 bg=102030\r\n' > "$dir/text"
+  want="$(printf 'terminal: screen> (none)# grep audio /tmp/serial.log | tars-init: audio: no sound card\r')"
+  got="$(LOG="$dir/text" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
   rm -rf "$dir"
+  if [ "$got" != "$want" ]; then
+    echo "check FAIL: gate_lib.sh joined_screen_dump changes a screen> line whose text ends in tars-init:" >&2
+    echo "  want [${want}]" >&2
+    echo "  got  [${got}]" >&2
+    return 1
+  fi
   return 0
 }
 require_screen_dump_joins || entry_failed=1
@@ -455,8 +465,8 @@ require_screen_dump_joins || entry_failed=1
 # AL-M0. 회차마다 끼어든 줄을 세는 cut_log_lines가 실제로 잡는가. QEMU 없이 TC-M3 루트
 # 게이트 로그의 실제 줄 넷으로 본다 — init의 줄이 자른 `pointer>` 줄(A), terminal의 줄이
 # 붙은 init의 줄(B), init이 제 글로 `terminal: `을 쓰는 온전한 줄(셈 밖), 화면 글자에
-# `widget: function`이 든 온전한 `screen>` 줄(셈 밖). 못 잡으면 게이트가 회차마다
-# "0"이라고 거짓말을 한다.
+# `widget: function`이 든 온전한 `screen>` 줄(셈 밖). AL-M1이 다섯째를 더했다 — 2048에서
+# 잘려 ` [cut]`으로 끝나는 init의 줄(C). 못 잡으면 게이트가 회차마다 "0"이라고 거짓말을 한다.
 require_cut_lines_found() {
   local dir got want
   dir="$(mktemp -d)"
@@ -464,8 +474,9 @@ require_cut_lines_found() {
   printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
   printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane\n' > "$dir/legit"
   printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
+  printf 'tars-init: config line without = ignored: xxxxxxxx [cut]\n' > "$dir/c"
   got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"
-  want="A ${dir}/a B ${dir}/b "
+  want="A ${dir}/a B ${dir}/b C ${dir}/c "
   rm -rf "$dir"
   if [ "$got" != "$want" ]; then
     echo "check FAIL: gate_lib.sh cut_log_lines does not find the cut lines:" >&2
@@ -492,8 +503,9 @@ require_same_logline || entry_failed=1
 # 한 줄을 64바이트씩 write 여럿으로 내고, 그 사이에 남의 줄이 끼어든다 — 쓸 것은
 # `logline.print`다. `*_test.zig`는 호스트에서만 돌아 대상이 아니다. 주석 줄도 뺀다
 # (`logline.zig`가 그 이름을 설명에 쓴다). 별명(`const print = std.debug.print;`)도 이
-# 패턴에 걸린다. AL-M1이 init/src를 더한다.
-LOGLINE_DIRS=(terminal/src)
+# 패턴에 걸린다. AL-M1이 init/src를 더했다 — `tars-config` · `tars-service` · `tars-install`도
+# 같은 디렉터리라 함께 덮인다.
+LOGLINE_DIRS=(terminal/src init/src)
 require_no_debug_print() {
   local hits
   hits="$(find "${LOGLINE_DIRS[@]}" -name '*.zig' ! -name '*_test.zig' -print0 \

@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 Design: `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(결정 3 · 5 · 6)
-Status: plan을 썼다. 구현 전이다. 기준은 AL-M0이 들어간 트리다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 5를 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 21체인 2/2가 두 번 초록이며 84회차 전부 A=0 · B=0 · C=0이다. 값은 맨 아래 "AL-M1이 실측한 것".
 아래 "AL-M1이 실측한 것"에 들어간다.
 
 ## 누가 무엇을 하나
@@ -678,5 +678,19 @@ e1 · e5 · e6 · j1이 `TARS check FAIL: the entry checks …`, b1이 `B=1` · 
 - `tars-config` · `tars-service` · `tars-install`이 사람에게 쓰는 글(`writeAll`) — 치환은 `std.debug.print`만이다.
 
 ## AL-M1이 실측한 것
+
+lead가 2026-10-07에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열아홉 파일 전부 사본(`/tmp/run/al1/new/`)과 `cmp`가 같았고,
+`logline.zig` 사본 둘이 같고, 게스트 파일(`init/src` · `terminal/src`, 검사 파일 제외)에 `std.debug.print` 호출은 0곳이다(주석 넷만 남는다).
+지운 202줄 중 151개가 `std.debug.print(` 줄, 나머지 51개는 plan이 말한 것(옛 셈 A · B와 꼬리 떼기 · 옛 진입 검사 문구 · NUL 검사의 두 번 읽기
+5줄 · `config.zig` · `power.zig`의 옛 주석).
+
+1. 구현자의 확인. `zig build` · `zig build test` 초록, 진입 검사 rc=0. `init` 4,425,856바이트(M0 4,072,600, +8.7% — plan 확정 4와 같다),
+   `tars-config` 3,695,016 · `tars-install` 3,370,520 · `tars-service` 3,220,504(변함없음). 체인 여섯(boot 25초 · power 52 · service 75 · net 189 ·
+   config 194 · firewall 64) 전부 `A=0 B=0 C=0`, 패닉 0. mutation 일곱 판 전부 plan의 표대로 — e1 · e5 · e6 · j1은 진입 검사가 0 ~ 1초에, b1(init이
+   B 줄을 심음)은 `A=0 B=1 C=0`으로, c1(3000바이트 줄)은 `A=0 B=0 C=1`로 boot 회차를 FAIL로 만들었다(체인 자체는 초록).
+2. 루트 게이트 두 번 — 59분 10초 · 60분 03초, 둘 다 21체인 `PASS: 2/2`, 빨간 줄 0, 패닉 0, `[cut]` 0. 84회차 전부 `cut log lines A=0 B=0 C=0`.
+   초기 M0 게이트(59:09 · 59:14)와 같은 시간이다. initrd 98,248,295바이트.
+3. 로그는 `/tmp/run/al1/gate_1` · `gate_2`에 남았다(컨테이너 `/tmp`를 묶었다). TC-M3의 게이트가 회차당 2 ~ 8이던 끼어듦이 M0 · M1의 네 판
+   168회차에서 0이다.
 
 (구현과 루트 게이트 뒤에 lead가 채운다.)

@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const linux = std.os.linux;
 
 /// main.zig·config.zig에도 같은 함수가 있다. config.zig가 적어 둔 그대로,
@@ -288,7 +289,7 @@ pub fn findKeyboardWaiting(sys_root: []const u8, max_ms: isize) ?u8 {
             // 기다린 적이 있을 때만 찍는다. 늘 찍으면 정상 부팅의 로그가
             // 한 줄 늘고, 그 줄은 아무것도 안 가른다.
             if (waited > 0) {
-                std.debug.print("tars-init: keyboard showed up after {d}ms\n", .{waited});
+                logline.print("tars-init: keyboard showed up after {d}ms\n", .{waited});
             }
             return n;
         }
@@ -307,7 +308,7 @@ pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
 
 pub fn resolveKeyboardWaiting(sys_root: []const u8, out: *Path, max_ms: isize) void {
     const n = findKeyboardWaiting(sys_root, max_ms) orelse blk: {
-        std.debug.print("tars-init: no keyboard found under {s} in {d}ms, falling back to event0\n", .{
+        logline.print("tars-init: no keyboard found under {s} in {d}ms, falling back to event0\n", .{
             sys_root, max_ms,
         });
         break :blk 0;
@@ -323,7 +324,7 @@ pub fn resolveKeyboardWaiting(sys_root: []const u8, out: *Path, max_ms: isize) v
 
     // terminal/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
     // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
-    std.debug.print("tars-init: keyboard device {s} ({s})\n", .{ out.slice(), name });
+    logline.print("tars-init: keyboard device {s} ({s})\n", .{ out.slice(), name });
 }
 
 /// 버튼 fd에 쌓인 것을 전부 읽어 비우고, 그 안에 전원 버튼 누름이
@@ -383,7 +384,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
     if (n == 0) {
         // device/check.sh가 이 줄이 없음을 요구한다. 탐색기가 조용히
         // 실패하면 버튼은 안 먹는데 부팅은 멀쩡해 보이기 때문이다.
-        std.debug.print("tars-init: no power button found under {s}\n", .{sys_root});
+        logline.print("tars-init: no power button found under {s}\n", .{sys_root});
         return 0;
     }
 
@@ -397,7 +398,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
         // 물려받는다(CT design 실측 7 · DS-M0의 기준선 `3 -> /dev/input/event0`).
         const rc = linux.open(path.cstr(), .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true }, 0);
         if (failed(rc)) |e| {
-            std.debug.print("tars-init: could not open {s} (errno {d})\n", .{
+            logline.print("tars-init: could not open {s} (errno {d})\n", .{
                 path.slice(), @intFromEnum(e),
             });
             continue;
@@ -414,9 +415,9 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
 
         // device/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
         // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
-        std.debug.print("tars-init: power button {s} ({s})\n", .{ path.slice(), name });
+        logline.print("tars-init: power button {s} ({s})\n", .{ path.slice(), name });
     }
 
-    std.debug.print("tars-init: watching {d} power button(s)\n", .{opened});
+    logline.print("tars-init: watching {d} power button(s)\n", .{opened});
     return opened;
 }
