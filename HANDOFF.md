@@ -29,9 +29,9 @@ M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
 찍혔다. 바깥에 안 나갔고 지웠으며 `/tmp/run/vd2` 전체에 키 모양이 0개인 것을 다시 확인했다. plan에 "호스트에서 `tars-dictate`를
 돌리지 말 것"을 적었다. 키를 바꿀지는 사용자의 판단이다.
 
-## 2026-10-07 — Config Tool(TC-M0 ~ M3) 닫혔다. 후속 하나를 열었다 — 로그 줄을 write 한 번에(std.debug.print의 64바이트 버퍼)
+## 2026-10-07 — Config Tool(TC-M0 ~ M3)과 Atomic Log Lines(AL-M0 · M1)이 닫혔다
 
-### Atomic Log Lines(AL) 진행 중 — M0 끝(commit 아래), M1(init) plan 실측 중
+### Atomic Log Lines(AL-M0 · M1) 닫혔다 — 게이트의 끼어든 줄이 0이 됐다
 
 design `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(`22061fc`, 결정 7 · 전제 정정 3 · 실측 F), M0 plan `-al-m0.md`(`037744a`).
 `logline.zig` 사본 둘(init/src · terminal/src, 진입 검사가 cmp로 지킨다), 줄은 2048바이트까지 write 한 번(넘치면 UTF-8 경계에서 자르고 ` [cut]`),
@@ -39,6 +39,7 @@ design `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(`22061fc`, 결정
 `TMPDIR=<GATE_LOGS>/<체인>-<회차>`를 주고 끝나면 끼어든 줄을 센다(A = `terminal:` 줄 안의 `tars-init:` — M0부터 FAIL, B = 반대 — M1부터
 FAIL). 지금 값은 회차당 A+B 2 ~ 8이다. 로그를 지우던 8체인 14자리가 로그를 남긴다. M0 = terminal, M1 = init. 사본 `/tmp/run/al0`(측정 ·
 mutation · 도구), M1은 `/tmp/run/al1`. 구현자 Sonnet(`tc-m0-impl`) · planner Opus(`tc-design`)가 TC에서 이어서 한다.
+M1 commit(init 치환 151 · 셈 B · C FAIL · joiner 꼬리 떼기 제거 · NUL 검사 한 번 읽기): 루트 게이트 두 번 59:10 · 60:03, 84회차 전부 A=0 · B=0 · C=0. init 4.43MB(+8.7%). 닫기 문서는 `project_atomic_log_lines.md` · lessons(게이트 운영 절 "회차의 로그와 셈 줄" · AL 실측 여덟) · CLAUDE.md 표.
 M0 commit: `logline.zig` 사본 둘 · terminal 치환 98 · `dumpScreen`의 Line · `run_chain`의 회차 디렉터리와 셈 · 진입 검사 셋 · 로그를 남기는 체인 여덟. 루트 게이트 두 번 59:09 · 59:14, 84회차 전부 A=0 · B=0(TC-M3 때 회차당 2 ~ 8).
 
 
@@ -63,7 +64,9 @@ design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임,
 알릴 것 — 쓰던 설정 디스크(`out/tars-config.img` · 실기 p2)의 rc에는 `alias tars-config='cat …'`가 남아 있어 그 셸에서 실행 파일이 가려진다.
 처방은 design 결정 6의 세 줄(`sd 'alias tars-(config|rc)=.*' '' /config/fish.config /config/bashrc /config/zshrc` 또는 `command tars-config`).
 
-다음(열어 둔 후속): 로그 줄을 write 한 번에. Zig 0.16 `std.debug.print`의 내부 버퍼가 64바이트라 그보다 긴 줄은 write 둘 이상으로 나가고,
+다음: 열어 둔 것이 없다. 후보는 lessons 이월 숙제(chronyd reload 게이트 · net 31 간헐의 원인 · 콘솔 프롬프트 뒤 줄이 자르는 것)와 HANDOFF 앞 절의 것들(VD · AU 비목표, ZU-M2 · 패키지 매니저 · IPv6 …). 사용자가 실기에서 볼 것은 TC의 `tars-config` 넷(아래). `/tmp/run/tc0` ~ `tc3` · `al0` · `al1`(사본 · 측정 · 게이트 로그)은 지워도 된다 — 디스크 여유가 21GB다.
+
+(AL 전의 메모) 로그 줄을 write 한 번에. Zig 0.16 `std.debug.print`의 내부 버퍼가 64바이트라 그보다 긴 줄은 write 둘 이상으로 나가고,
 그 사이에 다른 프로세스의 write가 끼어든다 — terminal의 화면 dump · `pointer>` 줄(65바이트 자리에서 잘렸다)과 init의 `tars-init: audio: no sound
 card within 5000ms`가 하룻밤에 게이트를 두 번 빨갛게 했다(M3 실측 2). M3 5b의 joiner는 `screen>`만 잇는다. 고칠 자리는 terminal(`std.debug.print`
 90곳, 화면 dump는 칸마다 print) · init(55곳 + 모듈들)의 로그 줄을 한 버퍼에 지어 write 한 번으로 내는 helper다. planner(`tc-design`)에게 design을
