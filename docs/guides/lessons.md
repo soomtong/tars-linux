@@ -64,6 +64,15 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
 PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. 새 체인은 45494부터 쓴다.
 
+### 회차의 로그는 `<TMPDIR>/tars-gate.XXXXXX/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0)
+
+AL-M0부터 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>/<체인>-<회차>`를 주고, 체인이 `mktemp`로 만든 게스트 로그가
+전부 거기에 남는다(체인은 로그를 안 지운다 — 지우던 8체인 14자리를 AL-M0이 고쳤다. audio는 부팅 넷이 같은 파일을 덮어 써 마지막 하나만
+남아 있었다). 마지막 줄이 `(logs in /tmp/tars-gate.XXXXXX)`를 찍는다. 컨테이너 `/tmp`를 호스트에 묶어 돌리면(`-v <호스트>:/tmp`) 게이트가
+끝난 뒤에도 남는다 — TC-M3부터 lead가 그렇게 돌린다. 회차가 끝날 때마다 `cut log lines A=0 B=0 C=0` 한 줄이 찍힌다. A는 `terminal:` 줄
+안에 `tars-init:`이 낀 수, B는 그 반대(init 고유 `reload terminal: pid ` 줄 제외), C는 2048바이트를 넘어 ` [cut]`으로 잘린 줄이다. 셋 중 하나라도
+0이 아니면 그 회차는 FAIL이다. 체인이 빨갰을 때 이 줄이 0이면 끼어듦은 원인이 아니다 — 그 체인의 판정과 타이밍을 본다.
+
 ### 프로브가 연달아 찍는 줄은 줄마다 기다린다 (TC-M3)
 
 앞 줄을 `wait_for_log` · `wait_for_screen`으로 기다리고 다음 줄을 곧바로 `grep`하면 그 사이가 경합이다 — 프로브가 두 줄 사이에
@@ -845,6 +854,25 @@ RIS가 끈다(`vt_test` 95 · 96).
 - TC-10. net 검사 31(`set net=off` · `reload` → dhcpcd 멈춤)이 루트 게이트에서 셋 중 둘 간헐로 빨갰고 단독에서는 넷 중 영이었다. 시리얼에
   `reload of`만 있고 steer 줄이 없었다. Task 5b가 `set`의 답을 화면에서 본 뒤 reload를 치게 하고 실패 진단(마지막 화면 · `cat
   /config/tars.conf` · `reload of` 뒤 init 줄)을 붙였다 — 그 뒤 4판 초록. 진짜 원인은 못 잡았다(이월 숙제).
+
+### AL(Atomic Log Lines, 2026-10-07)이 잰 것
+
+- AL-1. 컨테이너 Zig 0.16의 `std.debug.print`는 `var buffer: [64]u8`로 stderr를 잠그고 비운다 — 호출 하나가 write 하나 이상이고 64바이트를
+  넘는 줄은 둘 이상이다(TC-M3 게이트의 `pointer>` 줄이 65바이트째에서 잘렸다). 두 프로세스가 같은 콘솔에 쓰면 호출 사이가 곧 끼어들 틈이다.
+- AL-2. tty 층은 write() 한 번을 `atomic_write_lock`으로 통째로 묶는다. 사용자 공간 둘 사이의 자름은 write 사이에서만 난다. 커널 printk는
+  UART에 직접 써서 write 안도 자른다(AU-M2).
+- AL-3. 2048은 커널 tty가 write 한 번을 쪼개는 chunk(`iterate_tty_write`)다. 그 안의 줄은 시그널이 걸려도 안 끊긴다. init의 처리기는
+  `SA_RESTART` 없이 달려 EINTR이 실제로 생길 수 있다 — `logline.flush`가 재시도와 이어 쓰기로 받는다.
+- AL-4. `std.fmt.bufPrint`는 넘쳤을 때 얼마나 썼는지를 안 돌려준다 — `Writer.fixed`를 쓴다. 한글이 버퍼 끝에 정확히 맞으면 온전한 글자까지
+  떼던 첫 원형의 버그는 경계값 검사(2048 · 2049 · 음절이 걸침 · 정확히 맞음)가 잡는 자리다.
+- AL-5. `@embedFile`처럼 공용 모듈(`b.path("../…")`)도 컨테이너 Zig에서 서지만, 그 파일을 import하는 호스트 검사 모듈 열다섯에 `addImport`가
+  필요하다. 사본 둘 + 진입 검사의 cmp가 더 싸다.
+- AL-6. 끼어듦은 드물다(게이트 한 판 42회차에 2 ~ 8). 되돌린 치환이 런타임에 잡히는지는 운이다 — 진입 검사(게스트 파일의 `std.debug.print`
+  0곳)가 결정적으로 지킨다. 진짜 끼어듦은 셈이 잡는다(심은 줄 → `A=2`로 FAIL).
+- AL-7. 파일을 두 번 읽는 검사(`tr -d '\0'` 길이와 `wc -c`)는 QEMU가 아직 쓰는 중이면 거짓 빨강이다 — 한 번 읽기(`tr -cd '\0' | wc -c`)로.
+  pointer · copy · render · pane의 NUL 검사가 그 모양이었다(AL-M1 Task 3-3).
+- AL-8. 화면 dump의 write가 회차당 180만에서 9,652로 줄어도 게이트 시간은 같다(59분) — TCG의 부팅 · 타이핑이 지배한다. init ReleaseSafe
+  바이너리는 8.7% 커진다(fmt마다 펼쳐지는 `logline.print`).
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
