@@ -118,6 +118,13 @@ TC_LIST_KEYS=(t a r s minus c o n f i g spc l i s t ret)
 # tars-config set keyboard=pc · tars-config reload · echo shell=fsh >> /config/tars.conf (TC-M2)
 TC_SET_KB_KEYS=(t a r s minus c o n f i g spc s e t spc k e y b o a r d equal p c ret)
 TC_RELOAD_KEYS=(t a r s minus c o n f i g spc r e l o a d ret)
+# tars-config reload terminal (TC-M3)
+TC_RELOAD_TERM_KEYS=(t a r s minus c o n f i g spc r e l o a d spc t e r m i n a l ret)
+# tars-config set shell=bash · kill -9 $(pgrep -t ttyS0) · tars-config set shell=zsh (TC-M3)
+TC_SET_BASH_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal b a s h ret)
+TC_KILL_CONSOLE_KEYS=(k i l l spc minus 9 spc shift-4 shift-9 p g r e p spc minus t spc
+                      t t y shift-s 0 shift-0 ret)
+TC_SET_ZSH_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal z s h ret)
 TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
                   slash c o n f i g slash t a r s dot c o n f ret)
 TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
@@ -568,7 +575,7 @@ edit_config_in_guest() {
     return 1
   fi
   type_keys "${TC_RELOAD_KEYS[@]}"
-  if ! wait_for_screen '\| keyboard: apple -> pc \(the screen keeps the old value until the next boot\)'; then
+  if ! wait_for_screen '\| keyboard: apple -> pc \(the screen keeps the old value until tars-config reload terminal\)'; then
     echo "FAIL(boot 1): reload did not report keyboard as waiting for the screen"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -578,7 +585,7 @@ edit_config_in_guest() {
     return 1
   fi
   type_keys "${ALIAS_KEYS[@]}"
-  if ! wait_for_screen '\| # the screen keeps keyboard=apple clipboard=shared until the next boot'; then
+  if ! wait_for_screen '\| # the screen keeps keyboard=apple clipboard=shared until tars-config reload terminal'; then
     echo "FAIL(boot 1): tars-config did not show that the screen still uses keyboard=apple"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -691,6 +698,106 @@ edit_config_in_guest() {
     return 1
   fi
   echo "boot 1: appended a marker line to the seeded /config/zshrc"
+
+
+  # ── TC-M3: reload terminal이 대기를 비운다 ───────────────────────────────
+  #
+  # 위 TC-M2 검사가 남긴 대기 둘(keyboard=pc · clipboard=pane)을 화면에 내린다. 아래 Ctrl+R 검사보다 앞이다 —
+  # 그 검사는 이 훅의 마지막이어야 하고(picker를 닫은 직후의 키가 fzf로 샌다), 처음 이 자리를 그 뒤에 두었더니
+  # `tars-config reload terminal`의 키가 닫히는 picker로 새어 아무 일도 안 일어났다(TC-M3 plan 확정 5). 새 화면의
+  # fish도 같은 히스토리(/config/xdg)를 읽으므로 Ctrl+R 검사는 새 화면에서 그대로 선다. 판정은 시리얼이다.
+  # terminal이 뜰 때마다 찍는 `terminal: keyboard=` · `clipboard scope=` 줄이 둘째로 나오고 그 값이 pc ·
+  # pane이면 새 argv로 떴다. 그 사이에 `restarting terminal on request`가 있어야 빨리 죽음이 아니다.
+  # 파일은 위 EDIT_KEYS가 이미 `shell=zsh` 한 줄로 덮었다 — reload terminal은 파일을 다시 안 읽고 init이
+  # 지금 쓰는 값(위 reload가 읽은 것)을 화면에 준다. 그래서 셸은 그대로 fish다.
+  type_keys "${TC_RELOAD_TERM_KEYS[@]}"
+  local tries=0
+  until grep -aq 'terminal: keyboard=pc (swap_alt_meta=true)' "$log"; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 60 ]; then
+      echo "FAIL(boot 1): no terminal came up with keyboard=pc after reload terminal"
+      grep -a 'tars-init: reload terminal\|restarting terminal\|started terminal\|terminal: keyboard=' "$log" | tail -6
+      return 1
+    fi
+    sleep 0.5
+  done
+  if ! grep -aq 'tars-init: restarting terminal on request' "$log"; then
+    echo "FAIL(boot 1): the terminal came back without init saying it restarted it on request"
+    return 1
+  fi
+  # terminal은 시작할 때 keyboard 줄 다음에 clipboard 줄을 찍는다(terminal/src/main.zig). 위에서 기다린 것은
+  # 앞 줄이라 이 줄은 따로 기다린다 — 앞 줄을 기다리고 다음 줄을 곧바로 세면 그 사이가 경합이다(TC-M3 Task 5c).
+  tries=0
+  until grep -aq 'terminal: clipboard scope=pane' "$log"; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 20 ]; then break; fi
+    sleep 0.5
+  done
+  if [ "$(grep -ac 'terminal: clipboard scope=pane' "$log")" != "1" ] || [ "$(grep -ac 'tars-init: started terminal' "$log")" != "2" ]; then
+    echo "FAIL(boot 1): want one 'clipboard scope=pane' and two 'started terminal' lines after reload terminal"
+    grep -a 'terminal: clipboard scope=\|tars-init: started terminal' "$log"
+    return 1
+  fi
+  if ! grep -aq 'tars-init: reload terminal: pid [0-9]*, shell /usr/bin/fish keyboard=pc' "$log"; then
+    echo "FAIL(boot 1): init did not log the argv it gave the new terminal"
+    return 1
+  fi
+  echo "boot 1: reload terminal brought the screen up again with keyboard=pc and clipboard=pane"
+
+  # 대기가 비었는가 — 한 번 더 치면 아무것도 안 보내고 그렇게 말한다(화면이 또 사라지면 안 된다).
+  sleep 2
+  type_keys "${TC_RELOAD_TERM_KEYS[@]}"
+  if ! wait_for_screen '\| nothing pending; the screen already uses what init uses'; then
+    echo "FAIL(boot 1): a second reload terminal did not say nothing was pending"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  if [ "$(grep -ac 'tars-init: started terminal' "$log")" != "2" ]; then
+    echo "FAIL(boot 1): the second reload terminal restarted the screen again"
+    return 1
+  fi
+  echo "boot 1: a second reload terminal found nothing pending and left the screen alone"
+
+  # ── TC-M3: 콘솔 셸은 다음에 뜰 때 새 셸이다 ─────────────────────────────
+  #
+  # shell은 "다음에 뜰 때부터"의 키다(reload design 결정 2). reload가 콘솔 셸 칸의 argv를 bash로 바꾸고,
+  # 사람이 그 셸을 끝내면 감독 루프가 그 칸의 새 argv로 띄운다. 이 체인은 콘솔에 칠 수 없으므로(시리얼이
+  # 쓰기 전용 파일) 화면의 셸에서 콘솔 셸을 죽인다. 콘솔 셸은 /dev/console을 열고 TIOCSCTTY하는데 커널은 그
+  # 밑의 실제 tty를 제어 터미널로 준다 — `pgrep -t console`은 아무것도 못 찾고 `-t ttyS0`이 콘솔 셸이다(TC-M3
+  # plan 확정 5). 대화형 셸은 SIGTERM을 무시하므로 9다. 끝으로 파일을 shell=zsh로 되돌린다 — 2차가 그 한 줄을 읽는다.
+  #
+  # 새 화면의 셸 프롬프트를 기다리지 않는다. type_keys가 키마다 로그가 자라기를 기다리고, 새 terminal의
+  # 첫 프레임은 위 keyboard=pc 줄보다 뒤다.
+  type_keys "${TC_SET_BASH_KEYS[@]}"
+  type_keys "${TC_RELOAD_KEYS[@]}"
+  tries=0
+  until grep -aq 'tars-init: reload: console shell /usr/bin/bash' "$log"; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 40 ]; then
+      echo "FAIL(boot 1): reload with shell=bash did not set the console shell's next argv"
+      grep -a 'tars-init: reload' "$log" | tail -4
+      return 1
+    fi
+    sleep 0.5
+  done
+  type_keys "${TC_KILL_CONSOLE_KEYS[@]}"
+  tries=0
+  until grep -aqE 'tars-init: started console shell \(pid [0-9]+, /usr/bin/bash\)' "$log"; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 40 ]; then
+      echo "FAIL(boot 1): the console shell did not come back as bash after it was killed"
+      grep -a 'console shell' "$log" | tail -4
+      return 1
+    fi
+    sleep 0.5
+  done
+  type_keys "${TC_SET_ZSH_KEYS[@]}"
+  if ! wait_for_screen '\| shell: bash -> zsh'; then
+    echo "FAIL(boot 1): could not put shell=zsh back for the second boot"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: after reload with shell=bash, the killed console shell came back as bash"
 
 
   # ── ST-M3: Ctrl+R이 첫 누름에 picker를 여는가 ─────────────────────────

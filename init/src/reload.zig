@@ -247,9 +247,22 @@ pub fn serviceActions(slots: []const Slot, names: []const []const u8, out: []Svc
 pub fn note(comptime key: []const u8) []const u8 {
     return switch (comptime groupOf(key)) {
         .now => "now",
-        .next_spawn => "the next console shell, ssh login and service; the screen keeps the old value until the next boot",
-        .terminal => "the screen keeps the old value until the next boot",
+        .next_spawn => "the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal",
+        .terminal => "the screen keeps the old value until tars-config reload terminal",
     };
+}
+
+/// TC-M3. `reload terminal`의 답 — 화면이 대기 중이던 키마다 `key: 화면의 값 -> init의 값` 한 줄.
+/// 이 줄들이 끝나면 대기가 빈다(`main.zig`가 `screen`을 `cfg`로 맞춘다).
+pub fn screenLines(out: *Out, screen: config.Config, live: config.Config) void {
+    const p = pending(live, screen);
+    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
+        if (p.bits & (@as(u16, 1) << i) != 0) {
+            var a: [VALUE_MAX]u8 = undefined;
+            var b: [VALUE_MAX]u8 = undefined;
+            out.print("{s}: {s} -> {s}\n", .{ f.name, text(f.type, @field(screen, f.name), &a), text(f.type, @field(live, f.name), &b) });
+        }
+    }
 }
 
 /// 바뀐 키마다 `key: old -> new (꼬리)` 한 줄.

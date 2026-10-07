@@ -36,7 +36,7 @@ fn failed(rc: usize) ?linux.E {
 // ── 요청 ───────────────────────────────────────────────────────────
 
 /// TC-M2가 둘을 더했다 — `config`(init이 지금 쓰는 설정)와 `reload`(tars.conf를 다시 읽는다,
-/// reload design 결정 1). 둘은 이름을 안 받는다. 사람의 문은 `tars-config`이고 `tars-service`는
+/// reload design 결정 1). `config`는 이름을 안 받고 `reload`는 `terminal` 하나만 받는다(TC-M3). 사람의 문은 `tars-config`이고 `tars-service`는
 /// 앞의 넷만 받는다(`service_cli.zig`).
 pub const Verb = enum { status, stop, start, restart, config, reload };
 
@@ -64,7 +64,9 @@ pub fn parseRequest(bytes: []const u8) ?Request {
     const name = it.next();
     if (it.next() != null) return null;
     if (name) |n| {
-        if (verb == .config or verb == .reload) return null;
+        if (verb == .config) return null;
+        // TC-M3. reload가 받는 이름은 `terminal` 하나다(화면을 새 argv로 다시 띄운다).
+        if (verb == .reload and !std.mem.eql(u8, n, "terminal")) return null;
         if (!nameOk(n)) return null;
     } else if (verb != .status and verb != .config and verb != .reload) return null;
     return .{ .verb = verb, .name = name };

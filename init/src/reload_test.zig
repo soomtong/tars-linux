@@ -75,10 +75,19 @@ pub fn main() !void {
     var ko = reload.Out{ .buf = &kb };
     reload.keyLines(&ko, def, live);
     try expectText(ko.bytes(),
-        "keyboard: apple -> pc (the screen keeps the old value until the next boot)\n" ++
+        "keyboard: apple -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
         "net: off -> dhcp (now)\n" ++
-        "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until the next boot)\n",
+        "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal)\n",
         "keyLines");
+    // TC-M3. reload terminal의 답 — 화면 쪽 키만, 화면의 값에서 init의 값으로.
+    var sb: [512]u8 = undefined;
+    var so = reload.Out{ .buf = &sb };
+    reload.screenLines(&so, def, live);
+    try expectText(so.bytes(), "keyboard: apple -> pc\ntimezone: UTC -> Asia/Seoul\n", "screenLines");
+    var none_buf: [64]u8 = undefined;
+    var no = reload.Out{ .buf = &none_buf };
+    reload.screenLines(&no, live, live);
+    if (no.len != 0) return fail("screenLines printed something with nothing pending", .{});
     // 넘치면 멈춘다 — PID 1이 답을 짓다가 죽지 않는다.
     var tiny: [10]u8 = undefined;
     var to = reload.Out{ .buf = &tiny };

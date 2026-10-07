@@ -779,6 +779,34 @@ wait_for_last_screen '\| cb-own \|' ||
   report_failure "boot B: the pasted line did not run in the right pane (no cb-own line)"
 echo "boot B: the right pane pasted its own line"
 
+# ── 검사 16: reload terminal은 화면을 새 값으로 다시 띄우고 패널은 하나로 돌아온다 (TC-M3) ──
+#
+# 사람이 clipboard를 shared로 되돌리고 reload한다 — 화면 쪽 키라 init의 값만 바뀌고 대기가 된다. 그다음
+# reload terminal이면 init이 terminal을 새 argv로 다시 띄운다. 판정 셋 — 새 terminal이 scope=shared를 찍고,
+# 배치가 패널 둘에서 `ws=1/1 panes=1`로 돌아오고, 부팅의 첫 셸만 찍는 `spawned child pid`가 하나 는다(새
+# terminal의 첫 셸이다). 클립보드가 사라지는 것은 따로 안 본다 — terminal 프로세스의 메모리였다(CB).
+echo "=== boot B: tars-config reload terminal ==="
+SPAWNS_BEFORE="$(spawn_lines)"
+type_keys t a r s minus c o n f i g spc s e t spc c l i p b o a r d equal s h a r e d ret
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_last_screen '\| clipboard: pane -> shared \(the screen keeps' ||
+  report_failure "boot B: reload did not leave clipboard=shared waiting for the screen"
+type_keys t a r s minus c o n f i g spc r e l o a d spc t e r m i n a l ret
+RESTARTED=0
+for _ in $(seq 1 60); do
+  if grep -aqF 'terminal: clipboard scope=shared' "$LOG"; then RESTARTED=1; break; fi
+  sleep 0.5
+done
+[ "$RESTARTED" = "1" ] || report_failure "boot B: no terminal came up with clipboard scope=shared after reload terminal"
+grep -aqF 'tars-init: restarting terminal on request' "$LOG" ||
+  report_failure "boot B: the terminal came back without init restarting it on request"
+wait_for_pane 'ws=1/1 panes=1 focus=0 rect=0,0 ' ||
+  report_failure "boot B: after reload terminal the layout is '$(last_pane_line)', want one pane"
+for _ in $(seq 1 60); do [ "$(spawn_lines)" -gt "$SPAWNS_BEFORE" ] && break; sleep 0.5; done
+[ "$(spawn_lines)" -eq $((SPAWNS_BEFORE + 1)) ] ||
+  report_failure "boot B: spawned child pid ${SPAWNS_BEFORE} -> $(spawn_lines), want one more (the new terminal's first shell)"
+echo "boot B: reload terminal brought the screen back with clipboard=shared and one pane"
+
 # NUL 바이트를 한 번의 읽기로 센다. 부팅 A의 검사처럼 크기를 두 번 재면
 # 그 사이에 게스트가 쓴 줄(방금 친 Enter의 프레임)이 차이로 잡힌다.
 if [ "$(tr -cd '\000' < "$LOG" | wc -c)" -ne 0 ]; then

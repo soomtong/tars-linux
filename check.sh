@@ -391,6 +391,34 @@ for entry in "${CHAINS[@]}"; do
   require_explicit_nic "${entry#*:}" || entry_failed=1
 done
 
+# TC-M3 Task 5b. gate_lib.sh의 joined_screen_dump가 끼어든 줄을 잇는가. QEMU 없이 고정된
+# 조각 넷으로 본다 — 안 잘린 dump, 커널 printk가 자른 dump, init의 줄이 자른 dump, init의
+# 줄 둘(조각 + 온전한 한 줄)이 자른 dump가 전부 같은 한 줄이 되어야 한다. 이 함수가 잇지
+# 못하면 그 화면의 마지막 dump를 기다리는 검사가 30초 뒤에 거짓으로 빨갛다(TC-M3 루트
+# 게이트 2회차, config 7차). 게이트를 시작하기 전에 0.1초로 잡는다.
+require_screen_dump_joins() {
+  local dir want got name
+  dir="$(mktemp -d)"
+  printf 'terminal: screen> a | (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
+  printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk"
+  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: no sound card within 5000ms, the mixer is left alone\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init"
+  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: one\ntars-init: two\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init2"
+  want="$(LOG="$dir/clean" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
+  for name in printk init init2; do
+    got="$(LOG="$dir/$name" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
+    if [ "$got" != "$want" ]; then
+      echo "check FAIL: gate_lib.sh joined_screen_dump does not rejoin a screen> line cut by ${name}:" >&2
+      echo "  want [${want}]" >&2
+      echo "  got  [${got}]" >&2
+      rm -rf "$dir"
+      return 1
+    fi
+  done
+  rm -rf "$dir"
+  return 0
+}
+require_screen_dump_joins || entry_failed=1
+
 # 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를
 # 넣으면 미래에 EARLY_EXIT_PIPE를 고쳐 자기가 자기에게 걸리는 순간 게이트가
 # 즉시 빨개져서 드러나고, 빼 두면 이 파일에 새로 들어오는 파이프라인을

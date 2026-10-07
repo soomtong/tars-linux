@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 Design: `docs/specs/2026-10-07-tars-config-reload-design.md`(TC-M3 절과 그 덧붙임)
-Status: plan을 썼다. 구현 전이다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "TC-M3이 실측한 것"에 들어간다.
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 4와 5b · 5c를 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 완주 통과가 둘(59:20 · 59:17)이며 그 사이의 빨감 셋은 전부 게이트 쪽의 간헐이었다. 값은 맨 아래 "TC-M3이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -38,7 +38,7 @@ Opus로 올리는 조건 — M2와 같은 셋에 하나를 더한다. 아래 하
 | `config/check.sh` | 편집 넷 — 키 배열 넷, M2 문구 둘, 1차의 TC-M3 검사 셋(Ctrl+R 앞) | +101 −2 |
 | `pane/check.sh` | 편집 하나 — 부팅 B의 검사 16 | +28 |
 
-`git diff --stat`은 8 files, +260 −23이다. 새 파일 · 커널 · Dockerfile · `make_initrd.sh` · terminal의 코드는 안 바뀐다. 새 체인 · 새 포트도 없다.
+`git diff --stat`은 8 files, +260 −23이다. Task 5b(수정 1 — 루트 게이트 뒤) 뒤에는 `gate_lib.sh` +19 −1 · `check.sh` +28이 더해져 10 files, +307 −24다. Task 5c(수정 2) 뒤에는 `wifi/check.sh` +11 −2 · `config/check.sh` +8이 더해져 11 files, +326 −26이다. 새 파일 · 커널 · Dockerfile · `make_initrd.sh` · terminal의 코드는 안 바뀐다. 새 체인 · 새 포트도 없다.
 
 design의 `Status:` · `CLAUDE.md` · `MEMORY.md` · `docs/decisions/` · `docs/guides/` · `HANDOFF.md`는 구현자가 안 고친다.
 
@@ -896,6 +896,278 @@ git status --short
 4. 실측 절, design `Status:`, commit(여덟 파일과 이 plan, design이 바뀌었으면 함께).
 5. TC를 닫는다 — 아래 "닫을 때 lead가 고칠 자리".
 
+## Task 5b: 수정 1 — `joined_screen_dump`가 init의 끼어든 줄도 잇는다
+
+2026-10-07, Task 0 ~ 4를 넣고 lead의 루트 게이트를 돌린 뒤에 더했다. 1회차는 21체인 2/2(59분 20초) 초록이었고 2회차가 config(CP-M2) run 2/2의 7차
+부팅에서 `FAIL(boot 7): the fzf integration never defined its history widget`으로 빨갰다(`/tmp/gate_tc3_2.log`). TC-M3의 검사(1차 셋 · pane 16)는 두
+회차 다 초록이다 — 이 milestone의 코드와 무관하다.
+
+원인은 게스트 시리얼(`/tmp/run/tc3/gate_2/tmp.AD81GFh5bD` 1153행)에 있다 — `whence -w fzf-history-widget`의 출력이 찍힌 screen> 줄 한가운데에 init의
+줄이 끼었다.
+
+```
+terminal: screen> … | (none)# whence -w fzftars-init: audio: no sound card within 5000ms, the mixer is left alone
+-history-widget | fzf-history-widget: function | (none)#
+```
+
+init의 fd 2가 /dev/console이라 terminal의 줄과 같은 UART에 쓴다. `gate_lib.sh`의 `joined_screen_dump`는 커널 printk(`[ 7.35] …`)가 자른 줄은 이어
+붙이지만(AU-M2) `tars-init: ` 줄은 몰랐다. 그 dump가 그 부팅의 마지막 screen> dump라(화면이 더 안 바뀌었다) 한 번의 자름이 곧 30초 뒤의 FAIL이었다.
+2회차에만 난 것은 audio 일꾼의 5,000ms 줄과 그 타이핑의 시각이 겹친 우연이다. 같은 2회차의 config 1차 시리얼(`tmp.RLRCcx21eQ`)에서도 `tars-init: reload of
+/config/tars.conf`가 `nothing pending …` 줄을 같은 모양으로 잘랐다 — 그쪽은 뒤의 dump가 이어져 판정이 살았다.
+
+고치는 것 둘. `joined_screen_dump`가 꼬리의 `tars-init: ` 조각을 떼고 다음 조각을 이어 붙이고(커널 줄과 같은 모양), 이을 차례에 오는 온전한
+`tars-init: ` 줄은 건너뛴다. 그리고 루트 `check.sh`의 진입 검사에 `require_screen_dump_joins`를 더한다 — QEMU 없이 고정된 조각 넷(안 잘린 dump ·
+printk가 자른 것 · init이 자른 것 · init의 조각과 온전한 한 줄이 함께 자른 것)이 전부 같은 한 줄이 되는지 본다.
+
+접두사를 `tars-init: ` 하나로 좁혔다. 꼬리를 떼는 정규식은 줄 머리가 아니라 줄 한가운데의 접두사를 찾으므로, `[a-z-]+: `처럼 넓히면 화면 글자
+(`fzf-history-widget: function`)를 끼어든 줄로 보고 떼어 버린다. 커널 줄은 시각 표식이라는 화면에 없을 모양이 있어 넓어도 됐고, init의 줄은 우리가 정한
+고정 접두사다. 같은 UART의 다른 쓰기(dhcpcd · sshd · chronyd · 서비스의 표준 출력)가 같은 자름을 일으키면 그 고정 접두사를 하나씩 더한다(주석에 적었다).
+대가 — 화면에 `tars-init: `가 그대로 보이는 줄(사람이 시리얼 로그를 grep한 화면)은 그 자리부터 꼬리가 떨어진다. 지금 그런 화면을 판정하는 체인은 없다.
+
+기준은 HEAD `3f8598d`의 파일(TC-M3은 이 둘을 안 건드렸다, `/tmp/run/tc3b/base/`)이고 편집 뒤는 `/tmp/run/tc3b/new/`다 — `gate_lib.sh` +19 −1,
+`check.sh` +28.
+
+### 5b-0. 기준을 본다
+
+```bash
+for f in gate_lib.sh check.sh; do cmp $f /tmp/run/tc3b/base/$f && echo "BASE $f"; done
+```
+
+### 5b-1. `gate_lib.sh` — 편집 둘
+
+P1 — `old_string`(지금 파일 125줄부터):
+
+```bash
+joined_screen_dump() {
+  perl -ne '
+    if (defined $cur) {
+      next if /^\[ *\d+\.\d+\] /;
+```
+
+`new_string`:
+
+```bash
+#
+# init의 줄도 같은 UART에 쓴다(TC-M3 Task 5b). init의 fd 2가 /dev/console이라
+# `tars-init: …` 한 줄이 terminal의 줄 한가운데 끼어 같은 모양으로 자른다 — TC-M3
+# 루트 게이트 2회차의 config 7차가 `whence -w fzf` 뒤에 `tars-init: audio: no sound
+# card within 5000ms …`가 끼어 `-history-widget | fzf-history-widget: function`이
+# 머리 없는 다음 줄로 갔다. 그래서 꼬리의 `tars-init: ` 조각도 떼고 잇고, 이을
+# 차례에 오는 온전한 `tars-init: ` 줄은 커널 줄처럼 건너뛴다.
+#
+# 접두사를 `tars-init: ` 하나로 좁힌 이유. 꼬리를 떼는 정규식은 줄 머리가 아니라
+# 줄 한가운데의 접두사를 찾는다 — `[a-z-]+: `처럼 넓히면 화면 글자 자체
+# (`fzf-history-widget: function`)를 끼어든 줄로 보고 떼어 버린다. 커널 줄은 시각
+# 표식이라는 화면에 없을 모양이 있어서 넓어도 됐고, init의 줄은 우리가 정한 고정
+# 접두사라 좁게 맞출 수 있다. 같은 UART에 쓰는 다른 것(dhcpcd · sshd · chronyd ·
+# 서비스의 표준 출력)이 같은 자름을 일으키면 그 고정 접두사를 여기 하나씩 더한다 —
+# 화면에 그 글자가 나올 수 있는지 먼저 보고. 거꾸로, 화면에 `tars-init: `가 그대로
+# 보이는 줄(사람이 시리얼 로그를 grep한 화면)은 그 자리부터 꼬리가 떨어진다 — 지금
+# 그런 화면을 판정하는 체인은 없다(check.sh의 require_screen_dump_joins가 모양을 본다).
+joined_screen_dump() {
+  perl -ne '
+    if (defined $cur) {
+      next if /^\[ *\d+\.\d+\] / || /^tars-init: /;
+```
+
+P2 — `old_string`(지금 파일 132줄부터):
+
+```bash
+    next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
+```
+
+`new_string`:
+
+```bash
+    next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
+    next if $cur =~ s/tars-init: [^\r\n]*\r?\n\z//;
+```
+
+### 5b-2. `check.sh` — 편집 하나
+
+P1 — `old_string`(지금 파일 394줄부터):
+
+```bash
+# 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를
+```
+
+`new_string`:
+
+```bash
+# TC-M3 Task 5b. gate_lib.sh의 joined_screen_dump가 끼어든 줄을 잇는가. QEMU 없이 고정된
+# 조각 넷으로 본다 — 안 잘린 dump, 커널 printk가 자른 dump, init의 줄이 자른 dump, init의
+# 줄 둘(조각 + 온전한 한 줄)이 자른 dump가 전부 같은 한 줄이 되어야 한다. 이 함수가 잇지
+# 못하면 그 화면의 마지막 dump를 기다리는 검사가 30초 뒤에 거짓으로 빨갛다(TC-M3 루트
+# 게이트 2회차, config 7차). 게이트를 시작하기 전에 0.1초로 잡는다.
+require_screen_dump_joins() {
+  local dir want got name
+  dir="$(mktemp -d)"
+  printf 'terminal: screen> a | (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
+  printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk"
+  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: no sound card within 5000ms, the mixer is left alone\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init"
+  printf 'terminal: screen> a | (none)# whence -w fzftars-init: audio: one\ntars-init: two\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/init2"
+  want="$(LOG="$dir/clean" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
+  for name in printk init init2; do
+    got="$(LOG="$dir/$name" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
+    if [ "$got" != "$want" ]; then
+      echo "check FAIL: gate_lib.sh joined_screen_dump does not rejoin a screen> line cut by ${name}:" >&2
+      echo "  want [${want}]" >&2
+      echo "  got  [${got}]" >&2
+      rm -rf "$dir"
+      return 1
+    fi
+  done
+  rm -rf "$dir"
+  return 0
+}
+require_screen_dump_joins || entry_failed=1
+
+# 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를
+```
+
+### 5b-3. 확인
+
+QEMU가 필요 없는 셋과 체인 둘이다.
+
+```bash
+for f in gate_lib.sh check.sh; do cmp $f /tmp/run/tc3b/new/$f && echo "SAME $f"; done
+F=/tmp/run/tc3/gate_2/tmp.AD81GFh5bD
+for v in /tmp/run/tc3b/base/gate_lib.sh ./gate_lib.sh; do
+  echo "$v finds=$(LOG=$F bash -c "source $v; joined_screen_dump" | grep -acE '\| fzf-history-widget: function')"; done
+until mkdir /tmp/run/docker.lock 2>/dev/null; do sleep 15; done
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
+  bash -c "source <(sed -n \"/^require_screen_dump_joins()/,/^}/p\" check.sh); require_screen_dump_joins && echo SELFTEST-OK"
+  bash -n check.sh && echo CHECK-SYNTAX-OK
+  bash -c "source <(sed -n \"/^BUILD_STEPS=(/,/^}/p; /^EARLY_EXIT_PIPE=/,/^}/p\" check.sh); require_no_early_exit_pipe ./gate_lib.sh && require_no_early_exit_pipe ./check.sh && echo PIPE-OK"
+  for c in boot pane; do s=$(date +%s); bash $c/check.sh > /tmp/$c.log 2>&1; echo "$c exit=$? $(( $(date +%s) - s ))s"; done'
+rmdir /tmp/run/docker.lock
+```
+
+기대: `SAME` 둘, 옛 것 `finds=0` · 새 것 `finds=1`, `SELFTEST-OK` · `CHECK-SYNTAX-OK` · `PIPE-OK`, `boot exit=0` · `pane exit=0`. 사본에서 boot 25초 · pane
+51초였다(pane은 `wait_for_screen` · `joined_screen_dump`를 가장 많이 쓰는 체인이다).
+
+사본에서 더 본 둘(구현자는 안 돌린다).
+- mutation — 옛 `gate_lib.sh`로 `require_screen_dump_joins`를 돌리면 printk 조각은 지나고 init 조각에서 멈춘다: `check FAIL: gate_lib.sh joined_screen_dump does not
+  rejoin a screen> line cut by init:` · `got [… whence -w fzftars-init: audio: no sound card within 5000ms, the mixer is left alone]`.
+- 2회차 게스트 로그 스물다섯에 옛 · 새 `joined_screen_dump`를 함께 돌려 출력을 견줬다. 다른 것은 둘뿐이고 둘 다 위의 끼어듦이다(`tmp.AD81GFh5bD`
+  1153행 · `tmp.RLRCcx21eQ`의 `reload of`) — 나머지 스물셋의 출력은 바이트까지 같다. 넓게 떼어 버리는 자리가 없다는 뜻이다.
+
+lessons의 AU-M2 절("커널 printk가 terminal의 화면 줄을 가운데서 자른다")에 lead가 덧붙일 두 문장:
+
+> init의 줄도 같은 UART에 써서 같은 모양으로 자른다 — TC-M3 루트 게이트 2회차의 config 7차가 `whence -w fzf` 뒤에 끼어든 `tars-init: audio: …` 때문에
+> 마지막 dump를 못 이어 빨갰고, `joined_screen_dump`가 이제 `tars-init: ` 조각도 떼고 잇는다(접두사는 일부러 그 하나로 좁다 — 넓히면 화면 글자를 뗀다).
+> 루트 `check.sh`의 진입 검사 `require_screen_dump_joins`가 잘린 조각 넷을 QEMU 없이 0.1초에 보므로, 다른 쓰기(dhcpcd · sshd · 서비스)의 접두사를 더할 때 그
+> 함수에 조각 하나를 함께 더한다.
+
+보고는 Task 4의 보고와 같은 모양으로.
+
+## Task 5c: 수정 2 — 프로브가 연달아 찍는 줄은 줄마다 기다린다
+
+2026-10-07, Task 5b를 넣고 lead의 루트 게이트를 다시 돌린 뒤에 더했다. 2회차는 21체인 2/2(59분 11초) 초록이었고 1회차가 wifi(WL-M3) run 2/2의 검사 12
+`FAIL: the file tars-config wrote is not one hashed block with the country kept and mode 600`으로 빨갰다(`/tmp/gate_tc3b_1.log` 19718행, 게스트 로그
+`/tmp/run/tc3/gate3_1/`). fail이 찍은 마지막 줄이 `wifi-ap: tc [wifi: tars-wl replaced …|apply now: …|]`였고 그다음 줄 `wifi-ap: tc file [...]`은 아직
+없었다. 검사 12는 `wait_for_log 'wifi-ap: tc \['`로 앞 줄을 기다린 뒤 다음 줄 `tc file [0 1 1 1 600]`을 기다림 없이 `grep`한다. 프로브(`wifi/ap.sh` 2b)는
+`tc` 줄을 찍고 `grep -c` 넷과 `stat`으로 값 다섯을 재서 `tc file` 줄을 찍으므로 그 사이가 TCG에서 수백 ms이고, 체인이 그 창에 들어가면 빨갛다. TC-M1의
+검사이고 그동안 열두 판에 처음 걸렸다(lead가 셌다).
+
+같은 모양 — "앞 줄을 기다린 뒤 그다음 줄을 기다림 없이 본다" — 을 TC가 더한 검사 전부에서 찾았다.
+
+| 검사 | 있나 | 왜 |
+|---|---|---|
+| wifi 12 | 있다 — 고친다 | 위 |
+| config 1차 TC-M3 `reload terminal` | 있다 — 고친다 | `terminal: keyboard=pc` 줄을 기다린 뒤 `terminal: clipboard scope=pane`을 곧바로 센다. terminal은 시작할 때 keyboard · hangul · clipboard 줄을 차례로 찍는다(`terminal/src/main.zig`) — 아직 안 걸렸지만 같은 창이다 |
+| config 1차 TC-M3 둘째 `reload terminal` · 콘솔 셸 | 없다 | 둘째는 `nothing pending`을 기다린 뒤 `started terminal`이 여전히 둘인지(없어야 하는 줄) 본다. 콘솔 셸은 줄마다 기다린다 |
+| config 1차 TC-M0 · M2 | 없다 | 화면 판정이 전부 `wait_for_screen`이다. M2의 "dhcpcd를 안 건드렸다"는 같은 답(한 번의 write) 안의 줄이 없는 것을 본다 |
+| net 31 | 없다 | 줄마다 기다린다(5b). 끝의 `started service dhcpcd` 둘은 lease보다 먼저 찍히는 줄이다 |
+| firewall 18 · 19 | 없다 | 화면은 `wait_for_screen`, 포트는 `expect_tcp_bytes`가 다시 본다 |
+| service 27 · 28 | 없다 | ssh 명령이 끝난 뒤의 출력을 본다(동기). 새 로그인은 다시 시도하며 기다린다 |
+| dictation 30 | 없다 | 게스트가 꺼진 뒤(`kill -TERM 1`)의 로그와 stub 로그를 본다 |
+| pane 16 | 없다 | `clipboard scope=shared`를 기다리고, 그보다 먼저 찍히는 `restarting terminal`을 본 뒤, 배치 · `spawned child pid`는 줄마다 기다린다 |
+| wifi 9 | 없다 | 고친 줄(`tc [`)을 기다린 뒤 그 앞의 로그만 본다 |
+
+고치는 모양. wifi 12는 그 줄의 머리(`wifi-ap: tc file [`)를 30초까지 기다리고 값은 그 뒤에 견준다 — 값까지 든 글자를 기다리면 틀린 값도 30초를 다 쓰고 "안
+왔다"로 보인다. 틀린 값이면 FAIL에 그 줄을 붙인다. config의 clipboard 줄은 10초까지 기다린 뒤 지금처럼 센다(못 오면 그 셈이 빨갛다).
+
+기준은 main 트리의 지금 파일이다 — `wifi/check.sh`는 HEAD `3f8598d`(TC-M3이 안 건드렸다, `/tmp/run/tc3c/base/wifi_check.sh`), `config/check.sh`는 Task 1 ~ 4를
+넣은 것(= `/tmp/run/tc3/new/config/check.sh`, `/tmp/run/tc3c/base/config_check.sh`). 편집 뒤는 `/tmp/run/tc3c/new/`다 — `wifi/check.sh` +11 −2, `config/check.sh` +8.
+
+### 5c-0. 기준을 본다
+
+```bash
+cmp wifi/check.sh /tmp/run/tc3c/base/wifi_check.sh && echo "BASE wifi/check.sh"
+cmp config/check.sh /tmp/run/tc3c/base/config_check.sh && echo "BASE config/check.sh"
+```
+
+### 5c-1. `wifi/check.sh` — 편집 하나
+
+P1 — `old_string`(지금 파일 297줄부터):
+
+```bash
+grep -aF 'wifi-ap: tc file [0 1 1 1 600]' "$LOG" >/dev/null \
+  || report_failure "the file tars-config wrote is not one hashed block with the country kept and mode 600"
+```
+
+`new_string`:
+
+```bash
+#
+# 이 줄은 위 `tc [` 줄과 따로 기다린다(TC-M3 Task 5c). 프로브가 `tc` 줄을 찍은 뒤 grep 넷과 stat으로
+# 다섯 값을 재서 이 줄을 찍으므로 둘 사이가 TCG에서 수백 ms다 — 앞 줄만 기다리고 이 줄을 곧바로 grep하면
+# 그 창에서 빨갛다(TC-M3 루트 게이트 1회차, 열두 판 만에 처음). 기다리는 것은 머리(`tc file [`)이고 값은
+# 그 뒤에 견준다 — 값까지 든 글자를 기다리면 틀린 값도 30초를 다 쓰고 "안 왔다"로 보인다.
+wait_for_log 'wifi-ap: tc file \[' 30 || report_failure "the probe never printed the tc file line"
+TC_FILE="$(grep -a 'wifi-ap: tc file \[' "$LOG" | head -n 1 | tr -d '\r')"
+case "$TC_FILE" in
+  *'wifi-ap: tc file [0 1 1 1 600]'*) ;;
+  *) report_failure "the file tars-config wrote is not one hashed block with the country kept and mode 600 (${TC_FILE})" ;;
+esac
+```
+
+### 5c-2. `config/check.sh` — 편집 하나
+
+P1 — `old_string`(지금 파일 728줄부터):
+
+```bash
+  if [ "$(grep -ac 'terminal: clipboard scope=pane' "$log")" != "1" ] || [ "$(grep -ac 'tars-init: started terminal' "$log")" != "2" ]; then
+```
+
+`new_string`:
+
+```bash
+  # terminal은 시작할 때 keyboard 줄 다음에 clipboard 줄을 찍는다(terminal/src/main.zig). 위에서 기다린 것은
+  # 앞 줄이라 이 줄은 따로 기다린다 — 앞 줄을 기다리고 다음 줄을 곧바로 세면 그 사이가 경합이다(TC-M3 Task 5c).
+  tries=0
+  until grep -aq 'terminal: clipboard scope=pane' "$log"; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 20 ]; then break; fi
+    sleep 0.5
+  done
+  if [ "$(grep -ac 'terminal: clipboard scope=pane' "$log")" != "1" ] || [ "$(grep -ac 'tars-init: started terminal' "$log")" != "2" ]; then
+```
+
+### 5c-3. 확인과 체인 둘
+
+```bash
+cmp wifi/check.sh /tmp/run/tc3c/new/wifi_check.sh && echo "SAME wifi/check.sh"
+cmp config/check.sh /tmp/run/tc3c/new/config_check.sh && echo "SAME config/check.sh"
+bash -n wifi/check.sh && bash -n config/check.sh && echo SYNTAX-OK
+until mkdir /tmp/run/docker.lock 2>/dev/null; do sleep 15; done
+docker run --rm -v "$PWD":/workspace -v /tmp/run/tc3/impl:/impl -w /workspace tars-devcontainer bash -c '
+  for c in wifi config; do s=$(date +%s); bash $c/check.sh > /impl/p5c_$c.log 2>&1; echo "$c exit=$? $(( $(date +%s) - s ))s"; done'
+rmdir /tmp/run/docker.lock
+```
+
+기대: `SAME` 둘, `SYNTAX-OK`, 둘 다 `exit=0`. 사본에서 wifi 122초 · config 191초였다.
+
+lessons의 "게이트를 돌리고 읽는 법" 절에 lead가 넣을 한 문단:
+
+> 프로브가 연달아 찍는 줄은 줄마다 기다린다. 앞 줄을 `wait_for_log` · `wait_for_screen`으로 기다리고 다음 줄을 곧바로 `grep`하면 그 사이가 경합이다 —
+> 프로브가 두 줄 사이에 무엇을 재든(TC-M1 wifi 검사 12의 `grep -c` 넷과 `stat`) TCG에서는 수백 ms이고, 열두 판을 지난 검사가 루트 게이트에서 처음 빨갰다
+> (TC-M3 Task 5c). 줄의 머리를 기다리고 값은 그 뒤에 견준다 — 값까지 든 글자를 기다리면 틀린 값이 "안 왔다"로 보인다. 프로세스 하나가 찍는 줄들(terminal의
+> 시작 줄 셋)도 같다.
+
+보고는 Task 4의 보고와 같은 모양으로.
+
 ## 닫을 때 lead가 고칠 자리(TC 전체, M3 기준)
 
 TC design(`2026-10-06-tars-config-tool-design.md`)과 reload design(`2026-10-07-tars-config-reload-design.md`)의 "닫을 때" 절을 M3까지의 값으로 한 번에
@@ -957,4 +1229,23 @@ design 본문은 M3 절의 덧붙임(이 plan과 같은 날 같은 사람)으로
 
 ## TC-M3이 실측한 것
 
-(구현과 루트 게이트 뒤에 lead가 채운다.)
+lead가 2026-10-07에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열한 파일 전부 사본(`/tmp/run/tc3/new/`, 5b는
+`tc3b/new/`, 5c는 `tc3c/new/`)과 `cmp`가 같았고, 지운 줄은 plan이 말한 자리뿐이었다. 체인 로그에 `Attempted to kill init` · `Kernel panic`은 0건.
+
+1. 구현자의 체인. `zig build test` 초록(`reload_test:` 다섯 줄 — M2와 같은 plan 문구 오타). config 192초 · pane 51 · service 76 · boot 24 ·
+   terminal 25 · power 50초. mutation 일곱 판 전부 plan의 표와 같았다 — m1(SIGTERM만 그룹으로 되돌림)은 기대대로 초록(208초, 3초 뒤의
+   SIGKILL이 pid로 가서 결국 다시 뜬다), m1b(둘 다 되돌림)는 `tars-init: terminal outlived SIGTERM by 3s, sent SIGKILL to group 39`로 빨감.
+2. 루트 게이트 — 네 번 돌렸고 완주 통과가 둘이다. (a) 1회차 21체인 2/2 59분 20초, 2회차는 config 7차에서 `the fzf integration never defined
+   its history widget` — init의 `tars-init: audio: no sound card within 5000ms` 줄이 화면 dump 줄을 잘라 출력이 머리 없는 조각으로 넘어갔다
+   (게스트 로그 `/tmp/run/tc3/gate_2/tmp.AD81GFh5bD` 1153행). → Task 5b: `joined_screen_dump`가 `tars-init: ` 조각도 잇고 루트 `check.sh`에
+   진입 검사 `require_screen_dump_joins`. (b) 1회차는 wifi run 2/2 검사 12 `the file tars-config wrote is not one hashed block …` — 프로브의
+   둘째 줄(`tc file [`)을 기다림 없이 grep했고 실패 run의 마지막 로그 줄이 정확히 첫 줄이었다. 2회차 21체인 2/2 59분 11초. → Task 5c:
+   줄마다 기다린다(wifi 12 · config 1차의 terminal 시작 줄 셋). (c) 1회차는 pointer run 1/2 — `terminal: pointer> at … ink=` 65바이트 자리에
+   같은 audio 줄이 끼었다(`last at: '… ink=tars-init: audio: …'`). 2회차 21체인 2/2 59분 17초. (c)는 5b의 joiner 밖이다 — 원인이 Zig 0.16
+   `std.debug.print`의 64바이트 내부 버퍼라(한 줄이 write 둘 이상으로 나간다) terminal · init 둘 다에 걸리고, 고치는 자리는 게이트가 아니라
+   로그 줄을 write 한 번에 내는 것이다. TC 밖의 후속으로 열었다(HANDOFF).
+   M3의 판정(config 1차 셋 · pane 16)은 네 번의 게이트 여덟 회차 전부에서 초록이었다.
+3. 크기. `init` 4,072,600바이트(M2 4,028,376 — `doReloadTerminal` · `Live.toggle`이 44KB), `tars-config` 3,695,016, initrd 98,153,417.
+4. 게이트가 본 M3 줄 — `reload terminal brought the screen up again with keyboard=pc and clipboard=pane` · `a second reload terminal found
+   nothing pending and left the screen alone` · `after reload with shell=bash, the killed console shell came back as bash`, pane 검사 16.
+5. 루트 게이트는 M2(58:19)보다 1분쯤 늘었다 — config 1차 150키 · pane 70키와 화면 재시작 둘.

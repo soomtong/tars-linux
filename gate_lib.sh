@@ -122,14 +122,32 @@ type_keys() {
 # 그래서 screen> 줄의 꼬리가 커널 시각 표식(`CONFIG_PRINTK_TIME`)이 붙은 조각이면
 # 그 조각을 떼고 다음 줄을 이어 붙인다. 다음 줄이 또 커널 줄이면 건너뛰고,
 # terminal · kms의 줄이면(조각이 줄 끝에 떨어진 경우) 잇지 않는다.
+#
+# init의 줄도 같은 UART에 쓴다(TC-M3 Task 5b). init의 fd 2가 /dev/console이라
+# `tars-init: …` 한 줄이 terminal의 줄 한가운데 끼어 같은 모양으로 자른다 — TC-M3
+# 루트 게이트 2회차의 config 7차가 `whence -w fzf` 뒤에 `tars-init: audio: no sound
+# card within 5000ms …`가 끼어 `-history-widget | fzf-history-widget: function`이
+# 머리 없는 다음 줄로 갔다. 그래서 꼬리의 `tars-init: ` 조각도 떼고 잇고, 이을
+# 차례에 오는 온전한 `tars-init: ` 줄은 커널 줄처럼 건너뛴다.
+#
+# 접두사를 `tars-init: ` 하나로 좁힌 이유. 꼬리를 떼는 정규식은 줄 머리가 아니라
+# 줄 한가운데의 접두사를 찾는다 — `[a-z-]+: `처럼 넓히면 화면 글자 자체
+# (`fzf-history-widget: function`)를 끼어든 줄로 보고 떼어 버린다. 커널 줄은 시각
+# 표식이라는 화면에 없을 모양이 있어서 넓어도 됐고, init의 줄은 우리가 정한 고정
+# 접두사라 좁게 맞출 수 있다. 같은 UART에 쓰는 다른 것(dhcpcd · sshd · chronyd ·
+# 서비스의 표준 출력)이 같은 자름을 일으키면 그 고정 접두사를 여기 하나씩 더한다 —
+# 화면에 그 글자가 나올 수 있는지 먼저 보고. 거꾸로, 화면에 `tars-init: `가 그대로
+# 보이는 줄(사람이 시리얼 로그를 grep한 화면)은 그 자리부터 꼬리가 떨어진다 — 지금
+# 그런 화면을 판정하는 체인은 없다(check.sh의 require_screen_dump_joins가 모양을 본다).
 joined_screen_dump() {
   perl -ne '
     if (defined $cur) {
-      next if /^\[ *\d+\.\d+\] /;
+      next if /^\[ *\d+\.\d+\] / || /^tars-init: /;
       if (/^(terminal|kms): /) { print $cur, "\n"; undef $cur; redo }
       $cur .= $_;
     } elsif (/^terminal: screen>/) { $cur = $_ } else { next }
     next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
+    next if $cur =~ s/tars-init: [^\r\n]*\r?\n\z//;
     print $cur; undef $cur;
     END { print $cur, "\n" if defined $cur }
   ' "$LOG"

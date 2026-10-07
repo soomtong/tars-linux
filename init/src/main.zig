@@ -482,7 +482,12 @@ fn answer(children: []Child, live: *Live, req: control.Request, out: *control.Ou
         return;
     }
     if (req.verb == .reload) {
-        doReload(children, live, out, now);
+        // TC-M3. 이름이 있으면 `terminal`이다(control.parseRequest가 그 하나만 받는다).
+        if (req.name != null) {
+            doReloadTerminal(children, live, out, now);
+        } else {
+            doReload(children, live, out, now);
+        }
         return;
     }
     if (req.verb == .status) {
@@ -574,7 +579,68 @@ const Live = struct {
     envp: [*:null]const ?[*:0]const u8,
     /// 서비스 칸 여덟의 글자(경로 · 라벨). 칸의 `path` · `label`이 이 안을 가리킨다.
     services: [services.MAX]services.Entry = undefined,
+    /// TC-M3. `reload terminal`이 짓는 전환 키 목록(terminal argv의 7번). 부팅의 것은 `main()`의
+    /// `terminal_toggle_buf`에 있고, 한 번 다시 띄우면 argv가 이 칸을 가리킨다. 한 벌로 되는 이유 —
+    /// execve가 argv를 자식에게 복사하므로 떠 있는 terminal은 이 버퍼를 안 본다.
+    toggle: [config.TOGGLE_ARG_MAX]u8 = undefined,
 };
+
+/// terminal argv의 자리(`children[0].argv`). 부팅의 argv 리터럴과 짝이다 — 어긋나면 `reload terminal`이
+/// 엉뚱한 자리를 덮는다. 4번(키보드 장치 경로)은 설정이 아니라 안 건드린다.
+const TERM_SHELL_SLOT: usize = 1;
+const TERM_KEYBOARD_SLOT: usize = 3;
+const TERM_HANGUL_SLOT: usize = 5;
+const TERM_LATIN_SLOT: usize = 6;
+const TERM_TOGGLES_SLOT: usize = 7;
+const TERM_CLIPBOARD_SLOT: usize = 8;
+
+/// TC-M3. `reload terminal` — 화면을 init이 지금 쓰는 값으로 다시 띄운다(reload design의 M3 절).
+///
+/// 순서 — argv를 먼저 다 바꾸고 그다음 terminal에 SIGTERM을 보낸다. 감독 루프가 거둘 때 `hold = .restart`라
+/// 빨리 죽음으로 안 세고(CT 결정 4 규칙 2) 다음 바퀴가 새 argv로 띄운다. 한 스레드라 순서를 뒤집어도 반쯤
+/// 바뀐 argv로 뜨는 일은 없지만, "바꾸고 죽인다"가 읽기에 맞다.
+///
+/// SIGTERM은 그룹이 아니라 terminal에게다 — terminal은 setsid를 안 하므로 제 그룹이 없다(`spawn`). 패널의
+/// 셸은 terminal이 죽어 PTY가 닫히면 SIGHUP을 받는다(SL).
+///
+/// 탈출로(rc 플래그)는 부팅의 판정(`storage_mounted and shell_config == on`)으로 다시 세운다. 부팅에서
+/// 이미 한 번 썼어도 다시 선다 — 사람이 rc를 고치고 화면을 다시 띄운 것으로 본다.
+fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isize) void {
+    if (children.len < SLOTS) {
+        out.print(control.ERROR_PREFIX ++ "the supervisor has {d} slots, want {d}\n", .{ children.len, SLOTS });
+        return;
+    }
+    if (reload.pending(live.cfg, live.screen).empty()) {
+        out.print("nothing pending; the screen already uses what init uses\n", .{});
+        return;
+    }
+    reload.screenLines(out, live.screen, live.cfg);
+    const new = live.cfg;
+    const shell = resolveShell(new.shell);
+    const term = &children[0];
+    term.argv[TERM_SHELL_SLOT] = shell.path().ptr;
+    term.argv[TERMINAL_FLAG_SLOT] = shell.configFlag(new.shell_config).ptr;
+    term.argv[TERM_KEYBOARD_SLOT] = new.keyboard.arg().ptr;
+    term.argv[TERM_HANGUL_SLOT] = new.hangul_layout.arg().ptr;
+    term.argv[TERM_LATIN_SLOT] = new.latin_layout.arg().ptr;
+    term.argv[TERM_TOGGLES_SLOT] = new.terminalToggles(&live.toggle).ptr;
+    term.argv[TERM_CLIPBOARD_SLOT] = new.clipboard.arg().ptr;
+    term.rescue = if (live.mounted and new.shell_config == .on)
+        .{ .slot = TERMINAL_FLAG_SLOT, .flag = shell.noConfigFlag() }
+    else
+        null;
+    live.screen = new;
+
+    const pid = term.pid;
+    const done = control.apply(.restart, term, now);
+    if (done.signal) _ = linux.kill(pid, .TERM);
+    out.print("terminal: restarts; every pane, its shell and the clipboard are gone\n", .{});
+    var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+    std.debug.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s}\n", .{
+        pid,                     shell.path(),       @tagName(new.keyboard),       @tagName(new.hangul_layout),
+        @tagName(new.latin_layout), new.terminalToggles(&toggle_buf), @tagName(new.clipboard),
+    });
+}
 
 /// 칸 하나의 목표를 설정이 정한 대로 바꾼다. 실제 fork · kill · 거두기는 감독 루프가 한다 —
 /// CT의 stop · start와 같은 길이다(reload design 결정 4).
@@ -815,7 +881,9 @@ fn supervise(
         const now = monotonicSeconds();
         for (children) |*c| {
             if (control.overdue(c, now)) {
-                _ = linux.kill(-c.pid, .KILL);
+                // 서비스는 제 그룹을 가진다(setsid). terminal은 아니다 — TC-M3의 `reload terminal`이 이
+                // 길로 오는 첫 비서비스다. 그룹에 보내면 ESRCH로 아무도 안 죽는다.
+                _ = linux.kill(if (c.kind == .service) -c.pid else c.pid, .KILL);
                 std.debug.print("tars-init: {s} outlived SIGTERM by {d}s, sent SIGKILL to group {d}\n", .{
                     c.label, control.GRACE_SECONDS, c.pid,
                 });

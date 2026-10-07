@@ -79,6 +79,7 @@ const USAGE =
     \\       tars-config check               list the lines init would complain about
     \\       tars-config list                every key with its default and the values it takes
     \\       tars-config reload              init rereads tars.conf and services.d now (TC-M2)
+    \\       tars-config reload terminal     restart the screen with what init uses; every pane goes away (TC-M3)
     \\       tars-config help                this text and the list
     \\
     \\other files under /config (TC-M1):
@@ -212,9 +213,9 @@ const ASK_MS: i32 = 2000;
 const RELOAD_MS: i32 = 10000;
 
 /// init.sock에 동사 하나를 보내고 답을 받는다. 못 닿거나 답이 없으면 null.
-fn askInit(verb: control.Verb, buf: []u8, ms: i32) ?[]const u8 {
-    var req_buf: [16]u8 = undefined;
-    const req = control.formatRequest(&req_buf, verb, null) orelse return null;
+fn askInit(verb: control.Verb, name: ?[]const u8, buf: []u8, ms: i32) ?[]const u8 {
+    var req_buf: [32]u8 = undefined;
+    const req = control.formatRequest(&req_buf, verb, name) orelse return null;
     return switch (control.dial(control.PATH, req)) {
         .failed => null,
         .fd => |fd| control.awaitReply(fd, buf, ms),
@@ -237,10 +238,25 @@ fn screenLine(reply: []const u8) ?[]const u8 {
     return null;
 }
 
-/// `tars-config reload`(reload design 결정 7). init의 답을 그대로 찍는다.
-fn reloadInit() u8 {
+/// `tars-config reload [terminal]`(reload design 결정 7 · M3 절). init의 답을 그대로 찍는다.
+///
+/// `terminal`이면 먼저 init에게 대기가 있는지 묻는다(`config`의 `screen` 줄). 없으면 아무것도 안 보내고
+/// 그렇게 말한다. 있으면 화면이 사라진다는 것을 먼저 찍고 보낸다 — 이 명령은 대개 그 화면 안의 셸에서
+/// 돌고, init이 terminal을 죽이면 이 프로세스도 SIGHUP으로 같이 간다. 답이 못 올 수 있어서 경고가 앞이다.
+fn reloadInit(terminal: bool) u8 {
     var buf: [control.REPLY_MAX]u8 = undefined;
-    const r = askInit(.reload, &buf, RELOAD_MS) orelse {
+    if (terminal) {
+        const now = askInit(.config, null, &buf, ASK_MS) orelse {
+            complain("init did not answer at {s}", .{control.PATH});
+            return EXIT_IO;
+        };
+        if (screenLine(now) == null) {
+            say("nothing pending; the screen already uses what init uses\n", .{});
+            return EXIT_OK;
+        }
+        say("the screen restarts now — every pane, its shell and the clipboard go away\n", .{});
+    }
+    const r = askInit(.reload, if (terminal) "terminal" else null, &buf, RELOAD_MS) orelse {
         complain("init did not answer at {s}", .{control.PATH});
         return EXIT_IO;
     };
@@ -271,7 +287,7 @@ fn show() u8 {
     // TC-M2. init이 지금 쓰는 값(reload design 결정 1). 파일과 다른 키는 그 줄 밑에 주석 한 줄로
     // 적는다 — 같은 줄 끝에 적으면 이 출력이 더는 그대로 쓸 수 있는 tars.conf가 아니다(TC 결정 8).
     var now_buf: [control.REPLY_MAX]u8 = undefined;
-    const now = askInit(.config, &now_buf, ASK_MS);
+    const now = askInit(.config, null, &now_buf, ASK_MS);
     var line_buf: [edit.LINE_MAX]u8 = undefined;
     for (edit.KEYS) |key| {
         var vbuf: [edit.VALUE_MAX]u8 = undefined;
@@ -282,7 +298,7 @@ fn show() u8 {
             say("#   init uses {s}={s} now; tars-config reload applies the line above\n", .{ key, v });
     }
     if (now) |r| if (screenLine(r)) |sl|
-        say("# the screen keeps{s} until the next boot\n", .{sl});
+        say("# the screen keeps{s} until tars-config reload terminal\n", .{sl});
     if (now == null and cur.disk != null) say("# init did not answer at {s}; only the file is shown\n", .{control.PATH});
 
     if (complaints > 0) say("# init complains about {d} line(s) of this file; tars-config check lists them\n", .{complaints});
@@ -550,8 +566,9 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         return usage();
     }
     if (std.mem.eql(u8, verb, "reload")) {
-        if (rest.len != 0) return usage();
-        return reloadInit();
+        if (rest.len == 0) return reloadInit(false);
+        if (rest.len == 1 and std.mem.eql(u8, std.mem.span(rest[0]), "terminal")) return reloadInit(true);
+        return usage();
     }
     if (std.mem.eql(u8, verb, "check")) {
         if (rest.len != 0) return usage();

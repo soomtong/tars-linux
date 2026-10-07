@@ -294,8 +294,17 @@ echo "a wrong passphrase is refused, no address, and the boot still ends at a pr
 grep -aF 'wifi-ap: tc [wifi: tars-wl replaced in /config/wpa_supplicant.conf|apply now: tars-service restart wpa_supplicant|]' "$LOG" >/dev/null \
   || report_failure "tars-config wifi did not replace the tars-wl block and point at a restart"
 # 차례로 #psk 줄 0 · 64자리 psk 줄 1 · 그 SSID 1 · 사람의 country 줄 1 · 모드 600.
-grep -aF 'wifi-ap: tc file [0 1 1 1 600]' "$LOG" >/dev/null \
-  || report_failure "the file tars-config wrote is not one hashed block with the country kept and mode 600"
+#
+# 이 줄은 위 `tc [` 줄과 따로 기다린다(TC-M3 Task 5c). 프로브가 `tc` 줄을 찍은 뒤 grep 넷과 stat으로
+# 다섯 값을 재서 이 줄을 찍으므로 둘 사이가 TCG에서 수백 ms다 — 앞 줄만 기다리고 이 줄을 곧바로 grep하면
+# 그 창에서 빨갛다(TC-M3 루트 게이트 1회차, 열두 판 만에 처음). 기다리는 것은 머리(`tc file [`)이고 값은
+# 그 뒤에 견준다 — 값까지 든 글자를 기다리면 틀린 값도 30초를 다 쓰고 "안 왔다"로 보인다.
+wait_for_log 'wifi-ap: tc file \[' 30 || report_failure "the probe never printed the tc file line"
+TC_FILE="$(grep -a 'wifi-ap: tc file \[' "$LOG" | head -n 1 | tr -d '\r')"
+case "$TC_FILE" in
+  *'wifi-ap: tc file [0 1 1 1 600]'*) ;;
+  *) report_failure "the file tars-config wrote is not one hashed block with the country kept and mode 600 (${TC_FILE})" ;;
+esac
 wait_for_log 'wlan0: CTRL-EVENT-CONNECTED - Connection to .* completed' 60 \
   || report_failure "wlan0 never connected after tars-config fixed the passphrase"
 wait_for_log 'wlan0: leased 192\.168\.77\.[0-9]+ ' 60 \

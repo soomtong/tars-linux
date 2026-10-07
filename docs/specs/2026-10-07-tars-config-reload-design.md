@@ -1,9 +1,9 @@
 # TARS Config Reload — Design
 
 Date: 2026-10-07
-Status: TC-M2가 끝났다(2026-10-07, plan `docs/plans/2026-10-07-tars-config-reload-tc-m2.md`의 실측 절이 값이다 — 루트 게이트 21체인 2/2 두 번,
-그 앞의 두 번이 net 검사 31에서 간헐로 빨개 Task 5b가 생겼다). TC-M3(`reload terminal`)은 plan `-tc-m3.md`로 이어진다. 이 design의 실측은 소스와 앞
-서브프로젝트의 기록으로 한 것이다(아래 "착수 전에 실측한 것").
+Status: 끝났다(2026-10-07, TC-M2 · M3). plan `docs/plans/2026-10-07-tars-config-reload-tc-m2.md` · `-tc-m3.md`의 실측 절이 값이다. 루트 게이트가
+드러낸 간헐 셋(set의 답 · init 로그의 화면 dump 자름 · 프로브 둘째 줄)은 전부 게이트 쪽이었고 M2 5b · M3 5b · 5c가 고쳤다. 남은 자르개(`std.debug.print`의
+64바이트 버퍼)는 TC 밖의 후속이다. 기억은 `docs/decisions/project_config_reload.md`.
 
 TC design(`docs/specs/2026-10-06-tars-config-tool-design.md`)의 M2 절이 "따로 design을 쓴다"고 남긴 것이다.
 

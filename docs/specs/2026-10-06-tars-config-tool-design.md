@@ -1,9 +1,9 @@
 # TARS Config Tool — Design
 
 Date: 2026-10-06
-Status: TC-M0이 끝났다(2026-10-07, plan `docs/plans/2026-10-06-tars-config-tool-tc-m0.md`의 실측 절이 값이다 — 루트 게이트 21체인
-2/2 두 번). TC-M1도 끝났다(2026-10-07, plan `-tc-m1.md`의 실측 절 — 결정 12 ~ 17, 루트 게이트 21체인 2/2 두 번). 사용자가 M1 · M2를
-승인했다(2026-10-06 "끝까지 진행해줘"). M2(`reload`)는 따로 design이다 — `docs/specs/2026-10-07-tars-config-reload-design.md`.
+Status: 끝났다(2026-10-07, TC-M0 ~ M3). M0 · M1은 이 design(결정 17), M2 · M3(`reload` · `reload terminal`)은
+`docs/specs/2026-10-07-tars-config-reload-design.md`(결정 11)다. plan 넷의 실측 절이 값이고, 기억은 `docs/decisions/project_config_tool.md` ·
+`project_config_reload.md`, 실기 안내는 `docs/guides/running-tars.md`의 "설정 — tars-config" 절이다.
 
 사용자의 요청(2026-10-06)에서 시작한다.
 
