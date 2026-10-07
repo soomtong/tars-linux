@@ -31,6 +31,16 @@ M2가 부팅 B 전체를 정리 켠 채로 · Groq 막기.
 
 ## 2026-10-07 — Config Tool(TC-M0 ~ M3) 닫혔다. 후속 하나를 열었다 — 로그 줄을 write 한 번에(std.debug.print의 64바이트 버퍼)
 
+### Atomic Log Lines(AL) 진행 중 — M0 구현 중, M1 plan 작성 중
+
+design `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(`22061fc`, 결정 7 · 전제 정정 3 · 실측 F), M0 plan `-al-m0.md`(`037744a`).
+`logline.zig` 사본 둘(init/src · terminal/src, 진입 검사가 cmp로 지킨다), 줄은 2048바이트까지 write 한 번(넘치면 UTF-8 경계에서 자르고 ` [cut]`),
+화면 dump는 격자 크기 버퍼에 조립, 게스트 파일의 `std.debug.print` 전부 치환(terminal 98 · init 153), 루트 `check.sh`의 `run_chain`이 회차마다
+`TMPDIR=<GATE_LOGS>/<체인>-<회차>`를 주고 끝나면 끼어든 줄을 센다(A = `terminal:` 줄 안의 `tars-init:` — M0부터 FAIL, B = 반대 — M1부터
+FAIL). 지금 값은 회차당 A+B 2 ~ 8이다. 로그를 지우던 8체인 14자리가 로그를 남긴다. M0 = terminal, M1 = init. 사본 `/tmp/run/al0`(측정 ·
+mutation · 도구), M1은 `/tmp/run/al1`. 구현자 Sonnet(`tc-m0-impl`) · planner Opus(`tc-design`)가 TC에서 이어서 한다.
+
+
 사용자의 요청("tars-config 실행 파일을 만들어서 시스템 전체 세팅을 할 수 있게 … 쉘 스크립트가 아니라면 어떤 언어로")에서 열었다.
 design `docs/specs/2026-10-06-tars-config-tool-design.md`(결정 11 + 덧붙임, 전제 정정 7+), plan `-tc-m0.md`. 사용자 결정 셋 — seed의 별칭
 `tars-config` · `tars-rc`는 지운다(cat과 다를 게 없다), 언어는 Zig(`config.zig` 재사용), M1 · M2까지 끝까지 간다("진정한 user experience 개선").
