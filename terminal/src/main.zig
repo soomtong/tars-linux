@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const clipboard = @import("clipboard.zig");
 const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
@@ -674,12 +675,18 @@ const STYLE_DUMP_LIMIT: usize = 96;
 /// 이 줄의 형식은 바꾸지 않는다. 여섯 체인 중 다섯(TF·CP·IP·PM·HD)이
 /// `terminal: screen>.*` 형태로 이 줄을 보고 화면을 판정한다. 색은 여기
 /// 섞지 않고 아래 dumpStyles가 별도의 줄로 낸다(design 결정 7).
-fn dumpScreen(cells: []const vt.CellGlyph) void {
-    std.debug.print("terminal: screen> ", .{});
+///
+/// 줄 하나를 `buf`에 다 지은 뒤 write 한 번으로 낸다(AL design 결정 2). 예전에는
+/// 머리 · 칸 하나 · ` | ` · 줄바꿈을 따로 찍어 화면 한 줄이 글자 수만큼의 write였고,
+/// 그 사이에 init의 줄이 끼어 게이트가 읽는 줄을 잘랐다(TC-M3 루트 게이트).
+/// `buf`는 `screenLineMax`만큼이라 이 줄은 잘리지 않는다.
+fn dumpScreen(cells: []const vt.CellGlyph, buf: []u8) void {
+    var line = logline.Line.init(buf);
+    line.print("terminal: screen> ", .{});
     var last_row: u16 = 0;
     for (cells) |cell| {
         if (cell.row != last_row) {
-            std.debug.print(" | ", .{});
+            line.print(" | ", .{});
             last_row = cell.row;
         }
         // 글자 없는 셀도 이제 여기 도착한다(vt.zig의 design 결정 3).
@@ -688,9 +695,17 @@ fn dumpScreen(cells: []const vt.CellGlyph) void {
         if (cell.codepoint == 0) continue;
         var utf8: [4]u8 = undefined;
         const len = std.unicode.utf8Encode(@intCast(cell.codepoint), &utf8) catch continue;
-        std.debug.print("{s}", .{utf8[0..len]});
+        line.print("{s}", .{utf8[0..len]});
     }
-    std.debug.print("\n", .{});
+    line.print("\n", .{});
+    line.flush();
+}
+
+/// `cols` × `rows` 격자의 화면 dump가 가질 수 있는 가장 긴 길이(바이트). 칸 하나의
+/// 글자는 UTF-8로 많아야 4바이트이고(`CellGlyph.codepoint`는 u21), 줄이 바뀔
+/// 때마다 ` | ` 3바이트, 앞에 머리, 끝에 줄바꿈이다. QEMU의 155×47이면 29,345다.
+fn screenLineMax(cols: u16, rows: u16) usize {
+    return @as(usize, rows) * (@as(usize, cols) * 4 + 3) + "terminal: screen> ".len + 1;
 }
 
 /// 기본 색과 다른 셀을 두 줄씩 찍는다 — 파서가 본 색과, 프레임버퍼에서
@@ -740,24 +755,24 @@ fn dumpStyles(
             continue;
         }
         shown += 1;
-        std.debug.print("terminal: style> {d},{d} fg={X:0>6} bg={X:0>6}\n", .{
+        logline.print("terminal: style> {d},{d} fg={X:0>6} bg={X:0>6}\n", .{
             cell.row, cell.col, cell.fg, cell.bg,
         });
         // 셀의 중앙을 읽는다. 모서리는 이웃 셀과의 경계라 off-by-one에
         // 취약하다.
         const px = o.x + @as(u32, cell.col) * CELL_W + CELL_W / 2;
         const py = o.y + @as(u32, cell.row) * ROW_HEIGHT + ROW_HEIGHT / 2;
-        std.debug.print("terminal: pixel> {d},{d} = {X:0>6}\n", .{
+        logline.print("terminal: pixel> {d},{d} = {X:0>6}\n", .{
             cell.row, cell.col, fb.getPixel(px, py) & 0x00FFFFFF,
         });
     }
     // 조용히 자르면 "색이 없다"와 "너무 많아서 안 찍었다"를 가를 수 없다.
     if (skipped > 0) {
-        std.debug.print("terminal: style> {d} more cell(s) not shown\n", .{skipped});
+        logline.print("terminal: style> {d} more cell(s) not shown\n", .{skipped});
     }
     // 조용히 건너뛰면 "그 줄에 색이 없다"와 "덮여서 안 봤다"를 가를 수 없다.
     if (hidden > 0) {
-        std.debug.print("terminal: style> {d} cell(s) hidden by the find prompt\n", .{hidden});
+        logline.print("terminal: style> {d} cell(s) hidden by the find prompt\n", .{hidden});
     }
 }
 
@@ -812,7 +827,7 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph,
                 }
             }
         }
-        std.debug.print("terminal: ink> {d},{d} U+{X} left={d} right={d}\n", .{
+        logline.print("terminal: ink> {d},{d} U+{X} left={d} right={d}\n", .{
             cell.row, cell.col, cell.codepoint, left, right,
         });
     }
@@ -845,7 +860,7 @@ fn dumpInk(fb: drm.Framebuffer, cache: *font.Cache, cells: []const vt.CellGlyph,
 fn dumpCursor(fb: drm.Framebuffer, screen: *vt.Screen, rect: layout.Rect) void {
     const asked = @tagName(screen.cursorAsked());
     const cm = screen.cursorMark() orelse {
-        std.debug.print("terminal: cursor> vt={s} drawn=none\n", .{asked});
+        logline.print("terminal: cursor> vt={s} drawn=none\n", .{asked});
         return;
     };
     const o = paneOrigin(rect);
@@ -878,7 +893,7 @@ fn dumpCursor(fb: drm.Framebuffer, screen: *vt.Screen, rect: layout.Rect) void {
     }
     const box_w: u32 = if (ink == 0) 0 else max_x - min_x + 1;
     const box_h: u32 = if (ink == 0) 0 else max_y - min_y + 1;
-    std.debug.print("terminal: cursor> vt={s} drawn={s} row={d} col={d} cols={d} ink={d} box={d}x{d}{s}\n", .{
+    logline.print("terminal: cursor> vt={s} drawn={s} row={d} col={d} cols={d} ink={d} box={d}x{d}{s}\n", .{
         asked, @tagName(cm.shape), cm.row, cm.col, cm.cols, ink, box_w, box_h,
         if (outside) " (outside the framebuffer)" else "",
     });
@@ -905,7 +920,7 @@ fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usi
         if (i >= 4) break;
         const left = @as(i64, o.x) + p.dst_x;
         const top = @as(i64, o.y) + p.dst_y;
-        std.debug.print("terminal: image> id={d} layer={s} dst={d},{d} {d}x{d} src={d},{d} {d}x{d} frame={d}us\n", .{
+        logline.print("terminal: image> id={d} layer={s} dst={d},{d} {d}x{d} src={d},{d} {d}x{d} frame={d}us\n", .{
             p.image_id, @tagName(p.layer), left,  top,   p.dst_w, p.dst_h,
             p.src_x,    p.src_y,           p.src_w, p.src_h, frame_us,
         });
@@ -921,11 +936,11 @@ fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usi
             const px = fb.getPixel(@intCast(x), @intCast(y)) & 0x00FFFFFF;
             _ = std.fmt.bufPrint(&hex[k], "{X:0>6}", .{px}) catch unreachable;
         }
-        std.debug.print("terminal: imgpx> id={d} tl={s} tr={s} bl={s} br={s}\n", .{
+        logline.print("terminal: imgpx> id={d} tl={s} tr={s} bl={s} br={s}\n", .{
             p.image_id, hex[0], hex[1], hex[2], hex[3],
         });
     }
-    if (dropped > 0) std.debug.print("terminal: image> {d} placement(s) not drawn (buffer full)\n", .{dropped});
+    if (dropped > 0) logline.print("terminal: image> {d} placement(s) not drawn (buffer full)\n", .{dropped});
 }
 
 /// 뷰포트가 스크롤백의 어디에 있는지를 찍는다.
@@ -941,7 +956,7 @@ fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usi
 /// 검사해야 하는 사실이다(design 결정 13).
 fn dumpScroll(screen: *vt.Screen) void {
     const sb = screen.scrollbar();
-    std.debug.print("terminal: scroll> total={d} offset={d} len={d}\n", .{
+    logline.print("terminal: scroll> total={d} offset={d} len={d}\n", .{
         sb.total, sb.offset, sb.len,
     });
 }
@@ -956,10 +971,10 @@ fn dumpScroll(screen: *vt.Screen) void {
 /// 체인들과 같은 구조이고, 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
     if (screen.copyCursor()) |cc| {
-        std.debug.print("terminal: copy> {s} row={d} col={d}\n", .{ what, cc.y, cc.x });
+        logline.print("terminal: copy> {s} row={d} col={d}\n", .{ what, cc.y, cc.x });
     } else {
         // exit에는 좌표가 없다. 커서가 이미 사라졌기 때문이다.
-        std.debug.print("terminal: copy> {s}\n", .{what});
+        logline.print("terminal: copy> {s}\n", .{what});
     }
 }
 
@@ -977,10 +992,10 @@ fn dumpCopy(screen: *vt.Screen, what: []const u8) void {
 /// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpFind(screen: *vt.Screen, what: []const u8) void {
     if (screen.findNeedle()) |n| {
-        std.debug.print("terminal: find> {s} needle={s} len={d}\n", .{ what, n, n.len });
+        logline.print("terminal: find> {s} needle={s} len={d}\n", .{ what, n, n.len });
     } else {
         // 프롬프트가 닫힌 뒤다. cancel과 submit이 여기로 온다.
-        std.debug.print("terminal: find> {s}\n", .{what});
+        logline.print("terminal: find> {s}\n", .{what});
     }
 }
 
@@ -1019,7 +1034,7 @@ fn dumpHangul(state: *const input.State) void {
     else
         0;
     const text: []const u8 = if (len == 0) "(none)" else utf8[0..len];
-    std.debug.print("terminal: hangul> on={} preedit={s}\n", .{
+    logline.print("terminal: hangul> on={} preedit={s}\n", .{
         state.hangul_on, text,
     });
 }
@@ -1037,7 +1052,7 @@ fn dumpOverlay(prompt: ?Prompt) void {
     else
         0;
     const edit: []const u8 = if (len == 0) "(none)" else utf8[0..len];
-    std.debug.print("terminal: find> overlay text={s} preedit={s}\n", .{ p.text, edit });
+    logline.print("terminal: find> overlay text={s} preedit={s}\n", .{ p.text, edit });
 }
 
 /// 프롬프트가 실제로 그린 것을 픽셀로 센다(SH-M2).
@@ -1073,7 +1088,7 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
             if (px == (p.bg & 0x00FFFFFF)) glyph_ink += 1;
         }
     }
-    std.debug.print("terminal: find> ink cols={d} inv={d} ink={d}\n", .{
+    logline.print("terminal: find> ink cols={d} inv={d} ink={d}\n", .{
         k.cols, inv, glyph_ink,
     });
 }
@@ -1122,17 +1137,17 @@ fn dumpStatus(
     @memcpy(last[0..st.text.len], st.text);
     last_len.* = st.text.len;
     last_caps.* = st.caps;
-    std.debug.print("terminal: status> text={s}\n", .{st.text});
+    logline.print("terminal: status> text={s}\n", .{st.text});
 
     // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 같은 산수로 y를
     // 구해야 한다 — 어긋나면 언제나 0이 나오고, 증상이 "안 그렸다"와 똑같아서
     // 원인을 `drawStatus`에서 찾게 된다.
     const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
     if (fb.height < grid_bottom + ROW_HEIGHT) {
-        std.debug.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
-        std.debug.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
-        std.debug.print("terminal: status> copy ink=0 (no room)\n", .{});
-        std.debug.print("terminal: status> dict ink=0 (no room)\n", .{});
+        logline.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
+        logline.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
+        logline.print("terminal: status> copy ink=0 (no room)\n", .{});
+        logline.print("terminal: status> dict ink=0 (no room)\n", .{});
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
@@ -1155,19 +1170,19 @@ fn dumpStatus(
             if (px == STATUS_DICT) dict += 1;
         }
     }
-    std.debug.print("terminal: status> ink fg={d}\n", .{fg});
+    logline.print("terminal: status> ink fg={d}\n", .{fg});
     // `on`과 `off`를 한 줄에 함께 찍는다. 하나만 보면 "아예 안 그렸다"와
     // "반대 색으로 그렸다"가 안 갈린다 — 게이트가 언제나 둘을 같이 읽는다.
-    std.debug.print("terminal: status> caps ink on={d} off={d}\n", .{ on, off });
+    logline.print("terminal: status> caps ink on={d} off={d}\n", .{ on, off });
     // `COPY` 칸의 픽셀(CI design 결정 6). `text=`만 보면 `drawStatus`가
     // 꼬리를 안 그려도, 색을 한 칸 밀려 그려도 초록이다 — 이 수가 그 둘을
     // 잡는다. copy 체인이 들어간 뒤 `>0`, Esc 뒤 `=0`을 짝으로 본다. 메모를
     // 넓힐 일은 없다 — `CAPS`와 달리 `COPY`는 글자 자체가 생기고 사라져서
     // `text`가 바뀐다.
-    std.debug.print("terminal: status> copy ink={d}\n", .{copy});
+    logline.print("terminal: status> copy ink={d}\n", .{copy});
     // 받아쓰기 칸의 픽셀(VD-M1). `copy ink`와 같은 짝이다 — 녹음 중에 `>0`, 끝난 뒤
     // `=0`을 dictation 체인이 본다. `text=`만 보면 칸을 안 그려도 초록이다.
-    std.debug.print("terminal: status> dict ink={d}\n", .{dict});
+    logline.print("terminal: status> dict ink={d}\n", .{dict});
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -1190,7 +1205,7 @@ fn dumpHighlight(screen: *vt.Screen) void {
     // `copy/check.sh`의 검사 16이 `sed -E 's/.*cells=([0-9]+).*/\1/'`로
     // `cells=`를 뽑으므로 그 뒤에 필드를 더하는 것은 안전하지만, `cells=`를
     // 옮기거나 `cells`를 부분 문자열로 갖는 이름을 쓰면 깨진다.
-    std.debug.print("terminal: find> hl spans={d} cells={d} cur={d} us={d}\n", .{
+    logline.print("terminal: find> hl spans={d} cells={d} cur={d} us={d}\n", .{
         hl.spans, hl.cells, hl.cur, hl.us,
     });
 }
@@ -1208,11 +1223,11 @@ fn dumpHighlight(screen: *vt.Screen) void {
 /// 한쪽을 고치면 다른 쪽도 고쳐야 한다.
 fn dumpClip(text: ?[]const u8) void {
     if (text) |t| {
-        std.debug.print("terminal: clip> len={d} text={s}\n", .{ t.len, t });
+        logline.print("terminal: clip> len={d} text={s}\n", .{ t.len, t });
     } else {
         // 선택이 없는데 y를 눌렀다. 조용히 넘어가면 게이트가 "복사가 안 됐다"와
         // "y가 아예 안 도착했다"를 못 가른다.
-        std.debug.print("terminal: clip> empty\n", .{});
+        logline.print("terminal: clip> empty\n", .{});
     }
 }
 
@@ -1250,14 +1265,14 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int, clip: ?[]const u8) void {
     const text = clip orelse {
         // 아직 아무것도 복사하지 않았는데 Cmd+V를 눌렀다. 조용히 넘어가면
         // 게이트가 "클립보드가 비었다"와 "Cmd+V가 아예 안 도착했다"를 못 가른다.
-        std.debug.print("terminal: clip> paste empty\n", .{});
+        logline.print("terminal: clip> paste empty\n", .{});
         return;
     };
     const parts = screen.pasteParts(text);
     for (parts) |p| {
         if (p.len > 0) pty.write(master_fd, p);
     }
-    std.debug.print("terminal: clip> paste len={d} bracketed={d}\n", .{
+    logline.print("terminal: clip> paste len={d} bracketed={d}\n", .{
         parts[1].len,
         @intFromBool(parts[0].len > 0),
     });
@@ -1282,7 +1297,7 @@ fn dumpPaste(screen: *vt.Screen, master_fd: c_int, clip: ?[]const u8) void {
 fn dumpFindPaste(screen: *vt.Screen, clip: ?[]const u8) void {
     const clip_len = if (clip) |t| t.len else 0;
     const put = screen.findPaste(clip);
-    std.debug.print("terminal: find> paste clip={d} put={d}\n", .{ clip_len, put });
+    logline.print("terminal: find> paste clip={d} put={d}\n", .{ clip_len, put });
 }
 
 /// 셸 하나(WP design 결정 1). WP 전에 `main`이 변수로 들던 `screen` ·
@@ -1498,7 +1513,7 @@ fn dumpPane(
             if (fb.getPixel(x, y) & 0x00FFFFFF == SEPARATOR) ink += 1;
         }
     }
-    std.debug.print("terminal: pane> ws={d}/{d} panes={d} focus={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
+    logline.print("terminal: pane> ws={d}/{d} panes={d} focus={d} rect={d},{d} {d}x{d} sep ink={d}\n", .{
         current + 1,  sig.total,    sig.panes,     sig.focus,
         sig.rect.col, sig.rect.row, sig.rect.cols, sig.rect.rows,
         ink,
@@ -1569,7 +1584,7 @@ const Dictation = struct {
 
     fn setNotice(self: *Dictation, s: dictation.Show) void {
         self.notice = s;
-        std.debug.print("terminal: dictate> notice {s}\n", .{@tagName(s)});
+        logline.print("terminal: dictate> notice {s}\n", .{@tagName(s)});
     }
 };
 
@@ -1651,11 +1666,11 @@ fn startDictation(d: *Dictation, pane: *const Pane, ws: usize, leaf: u4) void {
     d.overflow = false;
     d.line_len = 0;
     d.notice = null;
-    std.debug.print("terminal: dictate> start pid={d} ws={d} leaf={d}\n", .{ pid, ws + 1, leaf });
+    logline.print("terminal: dictate> start pid={d} ws={d} leaf={d}\n", .{ pid, ws + 1, leaf });
 }
 
 fn spawnFailed(d: *Dictation, what: []const u8) void {
-    std.debug.print("terminal: dictate> spawn failed at {s} error={s}\n", .{ what, @tagName(std.c.errno(-1)) });
+    logline.print("terminal: dictate> spawn failed at {s} error={s}\n", .{ what, @tagName(std.c.errno(-1)) });
     d.setNotice(.failed);
 }
 
@@ -1703,12 +1718,12 @@ fn drainDictErr(d: *Dictation) void {
 fn dictLine(d: *Dictation) void {
     const line = d.line[0..d.line_len];
     d.line_len = 0;
-    std.debug.print("{s}\n", .{line});
+    logline.print("{s}\n", .{line});
     const p = d.phase orelse return;
     const next = dictation.phaseAfter(p, line);
     if (next == p) return;
     d.phase = next;
-    std.debug.print("terminal: dictate> phase {s}\n", .{@tagName(next)});
+    logline.print("terminal: dictate> phase {s}\n", .{@tagName(next)});
 }
 
 /// 두 파이프가 다 닫혔다 — 자식이 끝났다. 거두고 종료 코드대로 한다.
@@ -1726,9 +1741,9 @@ fn finishDictation(
     const w: u32 = @bitCast(status_word);
     const code: ?u8 = if (std.c.W.IFEXITED(w)) std.c.W.EXITSTATUS(w) else null;
     if (code) |c_| {
-        std.debug.print("terminal: dictate> exit code={d}\n", .{c_});
+        logline.print("terminal: dictate> exit code={d}\n", .{c_});
     } else {
-        std.debug.print("terminal: dictate> exit signal={d}\n", .{std.c.W.TERMSIG(w)});
+        logline.print("terminal: dictate> exit signal={d}\n", .{std.c.W.TERMSIG(w)});
     }
     const phase = d.phase.?;
     d.phase = null;
@@ -1738,7 +1753,7 @@ fn finishDictation(
         .notice => |s| d.setNotice(s),
         .insert => {
             if (d.overflow) {
-                std.debug.print("terminal: dictate> text over {d} bytes, not inserted\n", .{DICTATE_TEXT_MAX});
+                logline.print("terminal: dictate> text over {d} bytes, not inserted\n", .{DICTATE_TEXT_MAX});
                 return d.setNotice(.failed);
             }
             insertDictation(d, workspaces, current, key_state);
@@ -1765,17 +1780,17 @@ fn insertDictation(
     key_state: *input.State,
 ) void {
     const ref = paneByShell(workspaces, d.target) orelse {
-        std.debug.print("terminal: dictate> no pane shell={d}\n", .{d.target});
+        logline.print("terminal: dictate> no pane shell={d}\n", .{d.target});
         return d.setNotice(.no_pane);
     };
     const fd = ref.pane.session.master_fd;
     if (passwordPrompt(fd)) {
-        std.debug.print("terminal: dictate> refused password at=insert ws={d} leaf={d}\n", .{ ref.ws + 1, ref.leaf });
+        logline.print("terminal: dictate> refused password at=insert ws={d} leaf={d}\n", .{ ref.ws + 1, ref.leaf });
         return d.setNotice(.password);
     }
     const text = dictation.sanitize(d.text[0..d.text_len]);
     if (text.len == 0) {
-        std.debug.print("terminal: dictate> nothing left to insert\n", .{});
+        logline.print("terminal: dictate> nothing left to insert\n", .{});
         return;
     }
     const w = &workspaces[current].?;
@@ -1787,7 +1802,7 @@ fn insertDictation(
     for (parts) |p| {
         if (p.len > 0) pty.write(fd, p);
     }
-    std.debug.print("terminal: dictate> insert len={d} bracketed={d} ws={d} leaf={d}\n", .{
+    logline.print("terminal: dictate> insert len={d} bracketed={d} ws={d} leaf={d}\n", .{
         text.len, @intFromBool(parts[0].len > 0), ref.ws + 1, ref.leaf,
     });
 }
@@ -1920,7 +1935,7 @@ fn dumpPointerAt(
 ) void {
     const hid = before != null and sprite.at == null;
     if (round.frames == 0 and !hid) return;
-    std.debug.print("terminal: pointer> at x={d} y={d} buttons={d} wheel={d} shown={d} ink={d}\n", .{
+    logline.print("terminal: pointer> at x={d} y={d} buttons={d} wheel={d} shown={d} ink={d}\n", .{
         state.x,                         state.y,                state.buttons.bits(), round.wheel,
         @intFromBool(sprite.at != null), sprite.ink(fb, before),
     });
@@ -1960,11 +1975,11 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     }
     const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true });
     if (fd < 0) {
-        std.debug.print("terminal: pointer> skip {s} error={s}\n", .{ path, @tagName(std.c.errno(fd)) });
+        logline.print("terminal: pointer> skip {s} error={s}\n", .{ path, @tagName(std.c.errno(fd)) });
         return;
     }
     const caps = readCaps(fd) orelse {
-        std.debug.print("terminal: pointer> skip {s} error=ioctl\n", .{path});
+        logline.print("terminal: pointer> skip {s} error=ioctl\n", .{path});
         _ = std.c.close(fd);
         return;
     };
@@ -1976,14 +1991,14 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
 
     const kind = pointer.classify(&caps);
     if (kind == .none) {
-        std.debug.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
+        logline.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
         _ = std.c.close(fd);
         return;
     }
     var pad: ?touchpad.Setup = null;
     if (kind == .touchpad) {
         pad = readPad(fd, &caps) orelse {
-            std.debug.print("terminal: pointer> skip {s} kind=touchpad error=axes name={s}\n", .{ path, dev_name });
+            logline.print("terminal: pointer> skip {s} kind=touchpad error=axes name={s}\n", .{ path, dev_name });
             _ = std.c.close(fd);
             return;
         };
@@ -1991,7 +2006,7 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     const free = for (devs, 0..) |slot, i| {
         if (slot == null) break i;
     } else {
-        std.debug.print("terminal: pointer> skip {s} full name={s}\n", .{ path, dev_name });
+        logline.print("terminal: pointer> skip {s} full name={s}\n", .{ path, dev_name });
         _ = std.c.close(fd);
         return;
     };
@@ -2006,12 +2021,12 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     // 장치면 0이다 — 열린 뒤 움직여야 보인다(design 결정 4의 보이는 조건 2).
     // 화살표가 보이는 동안 둘째 장치를 꽂으면 1이다.
     if (pad) |setup| {
-        std.debug.print("terminal: pointer> open {s} kind=touchpad slots={d} x={d}..{d} y={d}..{d} res={d},{d} shown={d} name={s}\n", .{
+        logline.print("terminal: pointer> open {s} kind=touchpad slots={d} x={d}..{d} y={d}..{d} res={d},{d} shown={d} name={s}\n", .{
             path,        setup.slots, setup.x.min,                 setup.x.max, setup.y.min, setup.y.max,
             setup.x.res, setup.y.res, @intFromBool(pointer_drawn), dev_name,
         });
     } else {
-        std.debug.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
+        logline.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
     }
 }
 
@@ -2056,7 +2071,7 @@ fn readAbs(fd: c_int, comptime code: u16) ?pointer.c.struct_input_absinfo {
 /// 산다. 포인터 없이 키보드만으로 지금처럼 쓴다.
 fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
     var dir = std.Io.Dir.openDirAbsolute(io, POINTER_DIR, .{ .iterate = true }) catch |err| {
-        std.debug.print("terminal: pointer> scan failed error={s}\n", .{@errorName(err)});
+        logline.print("terminal: pointer> scan failed error={s}\n", .{@errorName(err)});
         return;
     };
     defer dir.close(io);
@@ -2136,7 +2151,7 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
 /// 장치 칸을 비운다. 그 장치가 누르고 있던 버튼도 놓는다(`Pointer.forget`).
 fn closePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, slot: usize, state: *pointer.Pointer) void {
     const d = &devs[slot].?;
-    std.debug.print("terminal: pointer> close {s}\n", .{d.pathSlice()});
+    logline.print("terminal: pointer> close {s}\n", .{d.pathSlice()});
     _ = std.c.close(d.fd);
     _ = state.forget(@intCast(slot));
     devs[slot] = null;
@@ -2171,7 +2186,7 @@ fn dumpReport(leaf: u4, n: usize, bytes: []const u8) void {
             len += 1;
         }
     }
-    std.debug.print("terminal: pointer> report leaf={d} n={d} text={s}\n", .{ leaf, n, buf[0..len] });
+    logline.print("terminal: pointer> report leaf={d} n={d} text={s}\n", .{ leaf, n, buf[0..len] });
 }
 
 /// 픽셀을 격자 칸으로 바꾸되, 격자 밖이면 가장 가까운 가장자리 칸으로
@@ -2325,9 +2340,9 @@ const PointerWire = struct {
             break :cell .{ .leaf = h.leaf, .col = h.col, .row = h.row };
         };
         if (hit) |h| {
-            std.debug.print("terminal: pointer> press leaf={d} row={d} col={d}\n", .{ h.leaf, h.row, h.col });
+            logline.print("terminal: pointer> press leaf={d} row={d} col={d}\n", .{ h.leaf, h.row, h.col });
         } else {
-            std.debug.print("terminal: pointer> press none\n", .{});
+            logline.print("terminal: pointer> press none\n", .{});
         }
         self.gesture_ws.* = self.current;
         try self.run(self.gesture.press(hit, self.ws.focus));
@@ -2354,7 +2369,7 @@ const PointerWire = struct {
     /// 뒤의 뗌이다. 복사했는지는 뒤따르는 `clip>` 줄이 말한다.
     fn release(self: *PointerWire) !void {
         const dragged = self.gesture.phase == .dragging;
-        std.debug.print("terminal: pointer> release drag={d}\n", .{@intFromBool(dragged)});
+        logline.print("terminal: pointer> release drag={d}\n", .{@intFromBool(dragged)});
         try self.run(self.gesture.release(self.target()));
     }
 
@@ -2488,7 +2503,7 @@ pub fn main(init: std.process.Init) !void {
     // 패널 사각형이다(`spawnPane`). 패널 하나면 둘이 같다.
     const cols: u16 = @intCast((fb.width - 2 * GRID_X) / CELL_W);
     const rows: u16 = @intCast((fb.height - 2 * GRID_Y) / ROW_HEIGHT);
-    std.debug.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ cols, rows, fb.width, fb.height });
+    logline.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ cols, rows, fb.width, fb.height });
 
     const font_data = try std.Io.Dir.cwd().readFileAlloc(
         init.io,
@@ -2508,7 +2523,7 @@ pub fn main(init: std.process.Init) !void {
     // 참조만 하므로 캐시보다 오래 살아야 한다.
     var cache = try font.Cache.init(allocator, font_data);
     defer cache.deinit();
-    std.debug.print("terminal: font cache ready (lazy)\n", .{});
+    logline.print("terminal: font cache ready (lazy)\n", .{});
 
     // 다섯째 인자가 키보드 장치 경로다(HD-M0). 번호를 여기서 고르지 않는
     // 이유는 CP가 세운 규칙 그대로다 — 하드웨어를 살펴 고르는 일은 PID 1이
@@ -2522,10 +2537,10 @@ pub fn main(init: std.process.Init) !void {
     const input_device: [*:0]const u8 = if (args.len > 4) args[4] else "/dev/input/event0";
 
     const keyboard_fd = input.openDevice(input_device) catch |err| {
-        std.debug.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
+        logline.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
         return err;
     };
-    std.debug.print("terminal: opened {s}\n", .{input_device});
+    logline.print("terminal: opened {s}\n", .{input_device});
 
     // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
     // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
@@ -2673,14 +2688,14 @@ pub fn main(init: std.process.Init) !void {
     // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
     // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
     // 개수를 세는 마커라 그대로 둔다.
-    std.debug.print("terminal: spawned child pid {d} ({s})\n", .{
+    logline.print("terminal: spawned child pid {d} ({s})\n", .{
         first.session.child_pid, shell_path,
     });
     // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
     // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
     // 2차 부팅), 그 화면이 틀렸을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이
     // 틀렸다"를 가르는 것이 이 줄이다.
-    std.debug.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
+    logline.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
         keyboard, swap_alt_meta,
     });
     // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
@@ -2691,7 +2706,7 @@ pub fn main(init: std.process.Init) !void {
     // argv로 받은 문자열을 그대로 찍으면 "글자가 도착했다"만 증명되고
     // "우리가 그것을 맞게 읽었다"는 아무것도 증명되지 않는다.
     var toggle_buf: [input.TOGGLE_ARG_MAX]u8 = undefined;
-    std.debug.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
+    logline.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
         @tagName(hangul_layout),
         @tagName(latin_layout),
         input.togglesArg(toggles, &toggle_buf),
@@ -2699,10 +2714,14 @@ pub fn main(init: std.process.Init) !void {
     // 같은 이유의 줄이 클립보드에도 하나 필요하다(CB-M0). `tars-init: config`
     // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너
     // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
-    std.debug.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
+    logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
 
     const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
     defer allocator.free(cell_buf);
+    // 화면 dump 한 줄의 버퍼(AL-M0). `cell_buf`처럼 격자 전체 크기라 어느 패널에도
+    // 충분하고, 격자가 큰 실기계에서는 그만큼 커진다.
+    const screen_line_buf = try allocator.alloc(u8, screenLineMax(cols, rows));
+    defer allocator.free(screen_line_buf);
 
     // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
     // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
@@ -2769,7 +2788,7 @@ pub fn main(init: std.process.Init) !void {
         const linux = std.os.linux;
         const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
         if (fd < 0) {
-            std.debug.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(fd))});
+            logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(fd))});
             break :uevent -1;
         }
         // 그룹 1이 커널이 보내는 uevent다(그룹 2는 udevd가 다시 보내는 것). pid
@@ -2777,7 +2796,7 @@ pub fn main(init: std.process.Init) !void {
         const addr: linux.sockaddr.nl = .{ .pid = 0, .groups = 1 };
         const rc = std.c.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.nl));
         if (rc < 0) {
-            std.debug.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(rc))});
+            logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(rc))});
             _ = std.c.close(fd);
             break :uevent -1;
         }
@@ -2884,7 +2903,7 @@ pub fn main(init: std.process.Init) !void {
                 // 마커라 그대로 둔다. 뒤에 decckm을 덧붙이는 이유는
                 // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
                 // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
-                std.debug.print("terminal: key> {d} byte(s) decckm={}\n", .{
+                logline.print("terminal: key> {d} byte(s) decckm={}\n", .{
                     keys.bytes.len, ctx.cursor_keys,
                 });
                 pty.write(focus.session.master_fd, keys.bytes);
@@ -2993,7 +3012,7 @@ pub fn main(init: std.process.Init) !void {
                     .find_submit => {
                         const t0 = std.Io.Clock.now(.awake, init.io);
                         const r = try focus.screen.findSubmit();
-                        std.debug.print(
+                        logline.print(
                             "terminal: find> submit matches={d} moved={} us={d}\n",
                             .{
                                 r.matches,
@@ -3005,11 +3024,11 @@ pub fn main(init: std.process.Init) !void {
                     // 결과를 버리지 않고 찍는다. 못 옮긴 것과 옮긴 것은
                     // 사람에게 다른 뜻이고, 아래 dumpCopy의 좌표만으로는
                     // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
-                    .find_next => std.debug.print(
+                    .find_next => logline.print(
                         "terminal: find> next moved={}\n",
                         .{try focus.screen.findNext()},
                     ),
-                    .find_prev => std.debug.print(
+                    .find_prev => logline.print(
                         "terminal: find> prev moved={}\n",
                         .{try focus.screen.findPrev()},
                     ),
@@ -3055,7 +3074,7 @@ pub fn main(init: std.process.Init) !void {
                         // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
                         // 구별을 못 한다.
                         const leaf = ws.tree.split(ws.focus, dir, whole) orelse {
-                            std.debug.print("terminal: pane> split refused\n", .{});
+                            logline.print("terminal: pane> split refused\n", .{});
                             continue;
                         };
                         const rs = try applyLayout(ws, whole);
@@ -3072,7 +3091,7 @@ pub fn main(init: std.process.Init) !void {
                     .close => {
                         const fp = &ws.panes[ws.focus].?;
                         pty.hangup(fp.session);
-                        std.debug.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
+                        logline.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
                             ws.focus, fp.session.child_pid,
                         });
                     },
@@ -3085,7 +3104,7 @@ pub fn main(init: std.process.Init) !void {
                         // 아홉이 찼다. `split refused`와 같은 이유로 찍는다 —
                         // 조용하면 "키가 안 왔다"와 안 갈린다.
                         if (n == MAX_WORKSPACES) {
-                            std.debug.print("terminal: pane> workspace refused\n", .{});
+                            logline.print("terminal: pane> workspace refused\n", .{});
                             continue;
                         }
                         // 패널 하나짜리 트리의 사각형은 격자 전체다
@@ -3122,7 +3141,7 @@ pub fn main(init: std.process.Init) !void {
                         .start => {
                             const tp = &ws.panes[ws.focus].?;
                             if (passwordPrompt(tp.session.master_fd)) {
-                                std.debug.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ current + 1, ws.focus });
+                                logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ current + 1, ws.focus });
                                 dict.setNotice(.password);
                             } else {
                                 startDictation(&dict, tp, current, ws.focus);
@@ -3131,9 +3150,9 @@ pub fn main(init: std.process.Init) !void {
                         .stop => {
                             signalDictation(&dict, .INT);
                             dict.phase = .transcribing;
-                            std.debug.print("terminal: dictate> stop pid={d}\n", .{dict.pid});
+                            logline.print("terminal: dictate> stop pid={d}\n", .{dict.pid});
                         },
-                        .ignore => std.debug.print("terminal: dictate> ignored phase={s}\n", .{
+                        .ignore => logline.print("terminal: dictate> ignored phase={s}\n", .{
                             if (dict.phase) |p| @tagName(p) else "none",
                         }),
                     },
@@ -3142,7 +3161,7 @@ pub fn main(init: std.process.Init) !void {
                     .cancel => if (dictation.escCancels(dict.phase)) {
                         signalDictation(&dict, .TERM);
                         dict.phase = .cancelling;
-                        std.debug.print("terminal: dictate> cancel pid={d}\n", .{dict.pid});
+                        logline.print("terminal: dictate> cancel pid={d}\n", .{dict.pid});
                     },
                 }
                 needs_redraw = true;
@@ -3230,14 +3249,14 @@ pub fn main(init: std.process.Init) !void {
             const pane = ref.pane;
             const out = pty.readSome(pane.session.master_fd, &pty_buf);
             if (out.len == 0) {
-                std.debug.print("terminal: child exited (pty EOF)\n", .{});
+                logline.print("terminal: child exited (pty EOF)\n", .{});
                 // 마지막 패널이면 WP 전처럼 terminal이 끝나고 init이 되살린다
                 // (WP design 결정 5).
                 if (paneCount(&workspaces) == 1) break :main_loop;
                 // 아니면 그 패널만 닫는다. 닫는 자리는 여기 하나다 — `exit`도
                 // `Cmd+W`(SIGHUP)도 셸을 끝내고, 셸이 끝나면 여기로 온다.
                 const w = &workspaces[ref.ws].?;
-                std.debug.print("terminal: pane> closed leaf={d}\n", .{ref.leaf});
+                logline.print("terminal: pane> closed leaf={d}\n", .{ref.leaf});
                 pty.close(pane.session);
                 pane.screen.deinit();
                 pane.clip.deinit();
@@ -3254,7 +3273,7 @@ pub fn main(init: std.process.Init) !void {
                 // (design "모델" 절). 전체의 마지막 패널이었다면 위에서 이미
                 // 루프를 나갔다.
                 if (w.tree.count() == 0) {
-                    std.debug.print("terminal: pane> workspace closed ws={d}\n", .{ref.ws + 1});
+                    logline.print("terminal: pane> workspace closed ws={d}\n", .{ref.ws + 1});
                     var i = ref.ws;
                     while (i + 1 < MAX_WORKSPACES) : (i += 1) workspaces[i] = workspaces[i + 1];
                     workspaces[MAX_WORKSPACES - 1] = null;
@@ -3449,11 +3468,11 @@ pub fn main(init: std.process.Init) !void {
         const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
         if (!first_frame_timed) {
             first_frame_timed = true;
-            std.debug.print("terminal: render> first frame {d}us\n", .{frame_us});
+            logline.print("terminal: render> first frame {d}us\n", .{frame_us});
         }
         dumpImages(fb, imgs, focus.screen.images_dropped, frame_us, focus.rect);
 
-        dumpScreen(cells);
+        dumpScreen(cells, screen_line_buf);
         dumpHighlight(focus.screen);
         dumpOverlay(prompt);
         dumpPromptInk(fb, prompt_ink, prompt);
@@ -3478,7 +3497,7 @@ pub fn main(init: std.process.Init) !void {
         dumpScroll(focus.screen);
         if (cache.count() != last_glyph_count) {
             last_glyph_count = cache.count();
-            std.debug.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
+            logline.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
                 last_glyph_count, cache.bitmap_bytes,
             });
         }

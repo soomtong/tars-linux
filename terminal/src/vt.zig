@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 const ghostty_vt = @import("ghostty-vt");
 const png = @import("png.zig");
 const clipboard = @import("clipboard.zig");
@@ -618,7 +619,7 @@ pub const Screen = struct {
     fn pushReply(self: *Screen, bytes: []const u8) void {
         if (self.reply_len + bytes.len > self.reply_buf.len) {
             self.reply_dropped += 1;
-            std.debug.print(
+            logline.print(
                 "terminal: dropped a {d}-byte vt reply (buffer full at {d} bytes)\n",
                 .{ bytes.len, self.reply_len },
             );

@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 
 const stb = @import("c_stb_truetype");
 
@@ -119,7 +120,7 @@ pub const Cache = struct {
         // w*h가 0이 아닌데 null이면 malloc이 실패한 것이고, 그때는 알아야
         // 한다. 캐시에 들어가므로 이 경고는 글자마다 한 번만 찍힌다.
         if (bitmap == null and w * h != 0) {
-            std.debug.print("font: WARN could not rasterize U+{X}\n", .{codepoint});
+            logline.print("font: WARN could not rasterize U+{X}\n", .{codepoint});
         }
 
         var advance: c_int = 0;

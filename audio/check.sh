@@ -82,7 +82,8 @@ cleanup() {
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
-  rm -rf "$LOG" "$WORK"
+  # 시리얼 로그는 안 지운다 — 루트 check.sh가 회차 디렉터리에서 끼어든 줄을 센다(AL-M0).
+  rm -rf "$WORK"
 }
 trap cleanup EXIT
 
@@ -376,7 +377,9 @@ start_guest() {
         -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait)
       ;;
   esac
-  : > "$LOG"
+  # 부팅마다 새 로그다(AL-M0). 예전에는 같은 파일을 비우고 다시 써서 루트 check.sh가
+  # 회차 디렉터리에서 셀 때 마지막 부팅 하나만 남았다.
+  LOG="$(mktemp)"
   HOME="$WORK" qemu-system-x86_64 \
     -machine q35 \
     -nic none \

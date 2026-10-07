@@ -1,4 +1,5 @@
 const std = @import("std");
+const logline = @import("logline.zig");
 
 // C 헤더는 build.zig가 번역해 `c_drm`으로 넘긴다(ZU-M1). GL-M3이 `@cImport`
 // 시절에 여기서 끄던 fortify는 패키지 번역에서는 끌 필요가 없어 켜져 있다.
@@ -161,7 +162,7 @@ pub const Framebuffer = struct {
             .mode = self.mode,
         };
         try drmIoctl(self.fd, drmIowr(DrmModeCrtc, 0xA2), @ptrCast(&crtc));
-        std.debug.print("kms: set crtc {d} to fb {d}\n", .{ self.crtc_id, self.fb_id });
+        logline.print("kms: set crtc {d} to fb {d}\n", .{ self.crtc_id, self.fb_id });
     }
 };
 
@@ -184,7 +185,7 @@ fn getResources(allocator: std.mem.Allocator, fd: c_int) !struct {
 
     try drmIoctl(fd, drmIowr(DrmModeCardRes, 0xA0), @ptrCast(&res));
 
-    std.debug.print("kms: {d} crtcs, {d} connectors, {d} encoders\n", .{
+    logline.print("kms: {d} crtcs, {d} connectors, {d} encoders\n", .{
         res.count_crtcs, res.count_connectors, res.count_encoders,
     });
 
@@ -215,7 +216,7 @@ fn findConnectedConnector(
         try drmIoctl(fd, drmIowr(DrmModeGetConnector, 0xA7), @ptrCast(&conn));
 
         const mode = modes[0];
-        std.debug.print("kms: connector {d} connected, mode {d}x{d}\n", .{
+        logline.print("kms: connector {d} connected, mode {d}x{d}\n", .{
             id, mode.hdisplay, mode.vdisplay,
         });
         return .{ .connector = conn, .mode = mode, .encoders = encoders };
@@ -249,7 +250,7 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
         return error.NoEncoders;
     const crtc_id = try findCrtc(fd, encoder_id, resources.crtc_ids);
 
-    std.debug.print("kms: selected crtc {d}\n", .{crtc_id});
+    logline.print("kms: selected crtc {d}\n", .{crtc_id});
 
     var dumb: DrmModeCreateDumb = .{
         .height = found.mode.vdisplay,
@@ -257,7 +258,7 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
         .bpp = 32,
     };
     try drmIoctl(fd, drmIowr(DrmModeCreateDumb, 0xB2), @ptrCast(&dumb));
-    std.debug.print("kms: dumb buffer handle={d} pitch={d} size={d}\n", .{
+    logline.print("kms: dumb buffer handle={d} pitch={d} size={d}\n", .{
         dumb.handle, dumb.pitch, dumb.size,
     });
 
@@ -285,7 +286,7 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
         .handle = dumb.handle,
     };
     try drmIoctl(fd, drmIowr(DrmModeFbCmd, 0xAE), @ptrCast(&fb_cmd));
-    std.debug.print("kms: created framebuffer fb_id={d}\n", .{fb_cmd.fb_id});
+    logline.print("kms: created framebuffer fb_id={d}\n", .{fb_cmd.fb_id});
 
     return Framebuffer{
         .fd = fd,

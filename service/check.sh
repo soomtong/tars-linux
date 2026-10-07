@@ -74,7 +74,7 @@ cleanup() {
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG"
+  # 시리얼 로그는 안 지운다 — 루트 check.sh가 회차 디렉터리에서 끼어든 줄을 센다(AL-M0).
 }
 trap cleanup EXIT
 
@@ -345,7 +345,6 @@ stop_ssh() {
 }
 
 echo "=== boot B: sshd linked, firewall=on without ssh.nft ==="
-rm -f "$LOG"   # 부팅 A의 로그. cleanup은 마지막 LOG 하나만 지운다
 LOG="$(mktemp)"
 boot_ssh "$MONITOR_PORT_B"
 
@@ -630,8 +629,6 @@ echo "reload stopped sshd when its link went and started it again when it came b
 
 ssh -o ControlPath="$CTL" -O exit root@127.0.0.1 2>/dev/null || true
 stop_ssh
-rm -f "$LOG"
-rm -f "$B_LOG"
 rm -rf "$KEYS"
 
 echo "SV chain PASS"

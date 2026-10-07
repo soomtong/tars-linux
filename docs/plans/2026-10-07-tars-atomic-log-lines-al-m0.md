@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 Design: `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(결정 1 ~ 7, HEAD `22061fc`)
-Status: plan을 썼다. 구현 전이다. plan을 쓰며 사본에서 돈 값은 "착수 전에 확정한 것"에, 구현과 루트 게이트의 값은 맨 아래 "AL-M0이 실측한 것"에 들어간다.
+Status: 끝났다(2026-10-07). 구현은 Sonnet 서브에이전트가 Task 0 ~ 6을 글자 그대로 넣었고(plan 코드를 고친 곳 0), 루트 게이트 21체인 2/2가 두 번 초록이며 84회차 전부 A=0 · B=0이다. 값은 맨 아래 "AL-M0이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -1270,5 +1270,18 @@ e1 ~ e4가 `TARS check FAIL: the entry checks …`, t1 · t2가 `FAIL: …`와 `
 - 커널 printk와 콘솔 셸 프롬프트가 자르는 것(design 비목표 1 · 2).
 
 ## AL-M0이 실측한 것
+
+lead가 2026-10-07에 쟀다. 구현자(Sonnet)의 보고와 파일을 lead가 직접 대조했다 — 열여덟 파일 전부 사본(`/tmp/run/al0/new/`)과 `cmp`가
+같았고, `logline.zig` 사본 둘이 같고, 게스트 파일 넷의 `std.debug.print`는 0곳이다. 지운 116줄 중 98개가 `std.debug.print(` 줄, 나머지 18개는
+plan이 말한 것(체인의 `rm` 줄 · `dumpScreen` 서명 · 마지막 PASS 줄).
+
+1. 구현자의 확인. `logline_test` 13건 OK, 진입 검사 셋 rc=0. 체인 여섯(terminal 66초 · render 109 · pointer 76 · pane 52 · config 194 · audio 44)
+   전부 `A=0 B=0`, `[cut]` 0건. mutation 여덟 판 전부 plan의 표대로 — e1 ~ e4는 진입 검사가 0 ~ 1초에, t1 · t2는 `logline_test`가, m2(심은 끼어듦)는
+   `run_chain`이 `TF-M4 run 1/1: cut log lines A=2 B=0`으로.
+2. 루트 게이트 두 번 — 59분 09초 · 59분 14초, 둘 다 21체인 `PASS: 2/2`, 빨간 줄 0, 패닉 0, `[cut]` 0. 84회차(21체인 × 2 × 2) 전부
+   `cut log lines A=0 B=0` — B(init 줄 안의 terminal 조각)는 M1 전인데도 두 판에서 0이었다. TC-M3의 게이트가 회차당 2 ~ 8이었던 것과 견준다.
+   시간은 TC-M3(59:17)과 같다 — 화면 dump의 write가 180만에서 9,652로 줄었어도 TCG의 부팅 · 타이핑이 지배한다.
+3. 로그가 `<GATE_LOGS>/<체인>-<회차>/`에 남는다 — 이번 두 판은 `/tmp/run/al0/gate_1` · `gate_2`(컨테이너 `/tmp`를 묶었다). 마지막 줄이
+   `(logs in /tmp/tars-gate.XXXXXX)`를 찍는다.
 
 (구현과 루트 게이트 뒤에 lead가 채운다.)

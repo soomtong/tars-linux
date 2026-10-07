@@ -224,3 +224,41 @@ type_loopback_roundtrips() {
     slash t m p slash l b minus l h dot t x t spc \
     slash t m p slash l b minus a p p dot t x t ret
 }
+
+# AL-M0: 한 회차의 로그 디렉터리에서 남의 줄이 끼어든 줄을 찾는다(AL design 결정 4).
+#
+# terminal과 init은 같은 콘솔에 쓰고, 커널의 tty는 write 한 번 안에는 아무것도
+# 못 끼어들게 하지만 write와 write 사이에는 누구나 끼어든다. 그래서 한 줄을 write
+# 여럿으로 내던 시절에는 한쪽의 줄 가운데에 다른 쪽의 줄이 들어갔다(TC-M3 루트
+# 게이트 여섯 디렉터리에서 회차마다 2 ~ 8줄). AL은 두 쪽 다 한 줄을 write 한 번으로
+# 내게 바꾸고, 이 함수가 그것이 참인지를 회차마다 센다. 찾은 줄을 앞에 갈래를
+# 붙여 찍는다.
+#
+#   A <파일>: <줄>   terminal의 줄 가운데에 init의 줄이 들어 있다
+#   B <파일>: <줄>   init의 줄 가운데에 terminal의 줄이 들어 있다
+#
+# B에서 빼는 것은 init이 제 글로 `terminal: `을 쓰는 단 하나의 줄(`reload terminal:
+# pid …`, init/src/main.zig)이다. 그 fmt를 글자 그대로 맞춰 빼므로, 그 줄 뒤에
+# terminal의 조각이 붙은 줄은 여전히 B다. init의 fmt 가운데 `terminal: `을 담는 것이
+# 늘면 B가 거짓으로 빨갛다 — 그때 여기에 하나 더한다.
+#
+# 커널 printk(`[  7.35] …`)와 콘솔 셸의 프롬프트가 자르는 것은 세지 않는다. 앞의
+# 것은 tty 잠금 밖에서 쓰이고 뒤의 것은 남의 프로세스라 AL이 고칠 수 없다(AL design
+# 비목표 1 · 2).
+#
+# 줄 머리가 `terminal: ` · `tars-init: `인 파일만 perl에 넘긴다. 회차 디렉터리에는
+# 디스크 이미지 · WAV도 있고, 줄바꿈이 드문 큰 파일을 perl이 줄로 읽으면 한 줄이
+# 수십 MB가 된다.
+cut_log_lines() {
+  local dir="$1" files
+  files="$(grep -rlaE '^(terminal|tars-init): ' "$dir")" || return 0
+  local IFS=$'\n'
+  # shellcheck disable=SC2086
+  perl -ne '
+    if (/^terminal: .*tars-init: /) { print "A $ARGV: $_" }
+    elsif (/^tars-init: .*terminal: / &&
+           !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+\r?\n?\z/) {
+      print "B $ARGV: $_";
+    }
+  ' $files
+}

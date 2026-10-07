@@ -1649,5 +1649,4 @@ fi
 
 echo "boot B pointer> lines:"
 grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
-rm -f "$LOG_A" "$LOG"
 echo "PD-M4 check PASS"

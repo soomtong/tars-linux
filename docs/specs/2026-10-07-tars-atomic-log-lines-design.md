@@ -1,7 +1,8 @@
 # TARS Atomic Log Lines — Design
 
 Date: 2026-10-07
-Status: 설계. 착수 전 실측까지 끝났고 milestone 둘(AL-M0 terminal · AL-M1 init)의 plan은 아직 없다.
+Status: AL-M0(terminal)이 끝났다(2026-10-07, plan `docs/plans/2026-10-07-tars-atomic-log-lines-al-m0.md`의 실측 절 — 루트 게이트 21체인 2/2 두 번,
+84회차 전부 A=0 · B=0). AL-M1(init)은 plan `-al-m1.md`로 이어진다.
 
 TC(Config Tool)를 닫으며 남긴 후속이다(`HANDOFF.md`, TC-M3 plan의 "닫을 때 lead가 고칠 자리").
 

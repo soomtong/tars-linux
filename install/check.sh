@@ -92,7 +92,9 @@ fail() {
 # 게이트의 부하가 회차마다 다르다.
 boot_guest() {
   local name="$1"; shift
-  LOG="${WORK}/boot-${name}.log"
+  # 로그는 `$WORK` 밖에 둔다. cleanup이 `$WORK`(디스크 이미지)를 통째로 지우는데 시리얼
+  # 로그는 루트 check.sh가 회차 디렉터리에서 센다(AL-M0). `mktemp`은 `TMPDIR`을 따른다.
+  LOG="$(mktemp -t "install-boot-${name}.XXXXXX")"
   FIFO="${WORK}/boot-${name}.fifo"
   local vars="${WORK}/vars-${name}.fd"
   cp /usr/share/OVMF/OVMF_VARS_4M.fd "$vars"
@@ -461,7 +463,7 @@ stop_guest
 # 토큰뿐이라 어디서 왔는지는 모른다. 디스크는 부팅 6이 --wipe로 막 만든 그것이다.
 boot_kernel_usb() {
   local name="$1" cmdline="$2"
-  LOG="${WORK}/boot-${name}.log"
+  LOG="$(mktemp -t "install-boot-${name}.XXXXXX")"   # boot_guest와 같은 까닭(AL-M0)
   FIFO="${WORK}/boot-${name}.fifo"
   rm -f "$FIFO"; mkfifo "$FIFO"
   exec 4<>"$FIFO"

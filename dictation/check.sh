@@ -95,7 +95,8 @@ cleanup() {
     kill "$TLS_PID" 2>/dev/null || true
     wait "$TLS_PID" 2>/dev/null || true
   fi
-  rm -rf "$LOG" "$WORK"
+  # 시리얼 로그는 안 지운다 — 루트 check.sh가 회차 디렉터리에서 끼어든 줄을 센다(AL-M0).
+  rm -rf "$WORK"
 }
 trap cleanup EXIT
 
@@ -535,7 +536,6 @@ echo "dictation.jsonl keeps the sixteen successful runs with the raw text, the c
 # `안녕하세요 vd2-cleaned`이고, 기록에는 원문과 정리본이 함께 남는다(검사 23).
 DISK_B=../out/dictation-b.img
 STUBLOG_B="$WORK/stub_b.log"
-rm -f "$LOG"
 LOG="$(mktemp)"
 
 mkdir -p "$WORK/seed_b/services.d"

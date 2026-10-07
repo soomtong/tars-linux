@@ -144,13 +144,46 @@ require_explicit_nic() {
 # 체인은 그 체인만 따로 여러 번 돌린다(GE-M1 · PE-M0의 방식).
 RUNS=2
 
+# AL-M0: 회차마다 로그 디렉터리를 하나씩 준다(AL design 결정 4). 체인의 `mktemp`이 전부
+# `TMPDIR`을 따르므로, 회차의 시리얼 로그가 `<GATE_LOGS>/<체인>-<회차>/` 아래에 모인다.
+# 체인은 로그를 지우지 않는다 — 로그의 주인은 이 디렉터리다. 지우지도 않는다. 컨테이너는
+# `--rm`이고, `-e TMPDIR=`로 bind-mount해 두면 체인별로 나뉜 채 호스트에 남는다.
+GATE_LOGS="$(mktemp -d "${TMPDIR:-/tmp}/tars-gate.XXXXXX")"
+
+# 그 회차의 로그에서 남의 줄이 끼어든 줄을 센다(gate_lib.sh의 cut_log_lines). A(terminal의
+# 줄 가운데의 init)는 AL-M0 뒤로 생길 수 없으므로 하나라도 있으면 그 회차가 FAIL이다.
+# B(init의 줄 가운데의 terminal)는 init이 아직 한 줄을 write 여럿으로 내므로(AL-M1의 몫)
+# 수만 찍는다. 체인이 빨개도 세어서 찍는다 — 빨간 까닭이 이 자름일 수 있다.
+count_cut_lines() {
+  local dir="$1" label="$2" cut a b
+  cut="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir")"
+  a="$(grep -c '^A ' <<<"$cut")"
+  b="$(grep -c '^B ' <<<"$cut")"
+  echo "${label}: cut log lines A=${a} B=${b} (${dir})"
+  if [ "$b" -ne 0 ]; then
+    grep '^B ' <<<"$cut"
+  fi
+  if [ "$a" -ne 0 ]; then
+    echo "${label} FAIL: ${a} terminal line(s) carry a tars-init line in the middle:"
+    grep '^A ' <<<"$cut"
+    return 1
+  fi
+  return 0
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
+  local dir ok
 
   for i in $(seq 1 "$RUNS"); do
     echo "=== ${name} run ${i}/${RUNS} ==="
-    if ! "$script"; then
+    dir="${GATE_LOGS}/${name}-${i}"
+    mkdir -p "$dir"
+    ok=1
+    TMPDIR="$dir" "$script" || ok=0
+    count_cut_lines "$dir" "${name} run ${i}/${RUNS}" || ok=0
+    if [ "$ok" -ne 1 ]; then
       echo "${name} FAIL: run ${i}/${RUNS} failed"
       exit 1
     fi
@@ -419,6 +452,60 @@ require_screen_dump_joins() {
 }
 require_screen_dump_joins || entry_failed=1
 
+# AL-M0. 회차마다 끼어든 줄을 세는 cut_log_lines가 실제로 잡는가. QEMU 없이 TC-M3 루트
+# 게이트 로그의 실제 줄 넷으로 본다 — init의 줄이 자른 `pointer>` 줄(A), terminal의 줄이
+# 붙은 init의 줄(B), init이 제 글로 `terminal: `을 쓰는 온전한 줄(셈 밖), 화면 글자에
+# `widget: function`이 든 온전한 `screen>` 줄(셈 밖). 못 잡으면 게이트가 회차마다
+# "0"이라고 거짓말을 한다.
+require_cut_lines_found() {
+  local dir got want
+  dir="$(mktemp -d)"
+  printf 'terminal: pointer> at x=1279 y=799 buttons=0 wheel=0 shown=1 ink=tars-init: audio: no sound card within 5000ms, the mixer is left alone\n' > "$dir/a"
+  printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
+  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane\n' > "$dir/legit"
+  printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
+  got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"
+  want="A ${dir}/a B ${dir}/b "
+  rm -rf "$dir"
+  if [ "$got" != "$want" ]; then
+    echo "check FAIL: gate_lib.sh cut_log_lines does not find the cut lines:" >&2
+    echo "  want [${want}]" >&2
+    echo "  got  [${got}]" >&2
+    return 1
+  fi
+  return 0
+}
+require_cut_lines_found || entry_failed=1
+
+# AL-M0. 시리얼에 쓰는 helper `logline.zig`는 terminal과 init에 바이트까지 같은 사본
+# 둘이다(AL design 결정 1). 공용 모듈로 두지 않은 대신 여기서 어긋남을 막는다.
+require_same_logline() {
+  cmp terminal/src/logline.zig init/src/logline.zig >/dev/null && return 0
+  echo "check FAIL: terminal/src/logline.zig and init/src/logline.zig differ:" >&2
+  diff terminal/src/logline.zig init/src/logline.zig >&2
+  echo "  they are one file in two places; copy the edited one over the other (AL design 1)." >&2
+  return 1
+}
+require_same_logline || entry_failed=1
+
+# AL-M0. 게스트에서 도는 파일은 `std.debug.print`를 안 쓴다(AL design 결정 3). 그 함수는
+# 한 줄을 64바이트씩 write 여럿으로 내고, 그 사이에 남의 줄이 끼어든다 — 쓸 것은
+# `logline.print`다. `*_test.zig`는 호스트에서만 돌아 대상이 아니다. 주석 줄도 뺀다
+# (`logline.zig`가 그 이름을 설명에 쓴다). 별명(`const print = std.debug.print;`)도 이
+# 패턴에 걸린다. AL-M1이 init/src를 더한다.
+LOGLINE_DIRS=(terminal/src)
+require_no_debug_print() {
+  local hits
+  hits="$(find "${LOGLINE_DIRS[@]}" -name '*.zig' ! -name '*_test.zig' -print0 \
+    | xargs -0 grep -HnE 'std\.debug\.print' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//')" \
+    || return 0
+  echo "check FAIL: guest code writes serial lines with std.debug.print:" >&2
+  echo "$hits" >&2
+  echo "  use logline.print; std.debug.print splits a line into 64-byte writes (AL design 3)." >&2
+  return 1
+}
+require_no_debug_print || entry_failed=1
+
 # 체인이 source하는 공용 파일과 이 파일 자신도 같은 규칙을 받는다. 자기를
 # 넣으면 미래에 EARLY_EXIT_PIPE를 고쳐 자기가 자기에게 걸리는 순간 게이트가
 # 즉시 빨개져서 드러나고, 빼 두면 이 파일에 새로 들어오는 파이프라인을
@@ -448,4 +535,4 @@ for entry in "${CHAINS[@]}"; do
   run_chain "${entry%%:*}" "${entry#*:}"
 done
 
-echo "TARS check PASS: all chains ${RUNS}/${RUNS} consecutive runs succeeded"
+echo "TARS check PASS: all chains ${RUNS}/${RUNS} consecutive runs succeeded (logs in ${GATE_LOGS})"
