@@ -39,5 +39,5 @@ How to apply: When resuming this project, check
 `docs/plans/` for the current milestone's plan before assuming
 work status — this restart is recent (2026-08-01) and supersedes anything
 inferred from old habits/assumptions about the previous `tars.git` repo.
-Also see [[feedback-commit-delegation]] for the collaboration workflow in
+Also see [[feedback_commit_delegation]] for the collaboration workflow in
 effect (user hands-on for files/commands, Claude handles commits).

@@ -47,7 +47,7 @@
 - [Font selection](docs/decisions/project_font_selection.md) — 후보를 가르는 것은 커버리지가 아니라 16px 중간값 비율이다; 현재 폰트는 unifont 17.0.03
 - [Kernel config](docs/decisions/project_kernel_config.md) — `olddefconfig`가 적어 둔 설정과 빌드하는 설정을 가른다; 게이트 시간의 근원은 부팅이 아니라 커널 빌드다
 - [Gate chain composition](docs/decisions/project_gate_chain_composition.md) — 체인을 더하고 빼는 규칙; 게이트는 자기가 안 보는 것을 통과시킨다
-- [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸을 고르고 기억하는 기능의 배경
+- [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸 선택 요청 기록, 구현 완료(fish · bash · zsh, `shell=`)
 - [Copy mode](docs/decisions/project_copy_mode.md) — 스크롤백 위의 vim modal 선택 모드와 Cmd+V(CM-M0~M2, 2026-08-26 종료)
 - [Copy navigation](docs/decisions/project_copy_navigation.md) — copy 커서에 얹은 이동 수단 둘 — 단어 이동과 검색(CN-M0·M1, 2026-08-27 종료)
 - [Copy search feedback](docs/decisions/project_copy_search_feedback.md) — 검색이 사람에게 보이게 만든 층 — 하이라이트·검색 기록·"못 찾음"(CS-M0·M1, 2026-08-28 종료)
@@ -100,7 +100,7 @@
 - [Escape Latin](docs/decisions/project_escape_latin.md) — 한글을 치다가 Esc를 누르면 확정하고 영문으로(Patal의 `ESC라틴`). `esc_latin=on|off`가 `hangul_toggle` 목록이 아니라 따로 있는 키인 이유는 옛 seed가 목록 넷을 글자 그대로 적어 둔 것이고, argv는 그 목록 끝에 이름을 붙여 간다. 바이트를 내보내는 키는 `.redraw`를 못 돌려주므로 `readKeys`가 `hangul_on`의 앞뒤를 비교한다(EL-M0, 2026-10-05 종료)
 - [Clipboard scope](docs/decisions/project_clipboard_scope.md) — 클립보드가 `vt.Screen` 밖으로 나와 terminal에 하나(기본 `shared`, `clipboard=pane`이 옛 동작). 요청은 "워크스페이스마다"였지만 실제는 패널마다였고 `workspace` 범위는 안 뒀다. argv 아홉째 칸(`[9:null]` 여섯 자리). 줄 끝에 고정한 게이트 판정은 다음 키가 깨뜨린다 — `( |$)` 경계(CB-M0, 2026-10-05 종료)
 - [latticedb survey](docs/decisions/project_latticedb_survey.md) — Zig 임베디드 그래프 DB를 조사만 했다; x86_64 빌드는 되지만 FTS 토크나이저가 한글을 토큰 0개로 버려 한글이 풀리기 전까지 안 쓴다(2026-10-01, 코드 0줄)
-- [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium 브라우저를 조사만 했다; 게스트가 root이고 USER_NS · PID_NS · SECCOMP가 없어 설치에서 막힌다. 그 아래 층인 터미널 그래픽(kitty graphics를 우리 렌더러가 그린다)을 후보로 남겼다(2026-10-01, 코드 0줄)
+- [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium 브라우저를 조사만 했다; 게스트가 root이고 USER_NS · PID_NS · SECCOMP가 없어 설치에서 막힌다. 그 아래 층인 터미널 그래픽(kitty graphics를 우리 렌더러가 그린다)을 후보로 남겼다(2026-10-01, 코드 0줄); TG가 2026-10-03에 그 층을 구현했다
 - [Atomic Log Lines](docs/decisions/project_atomic_log_lines.md) — terminal · init의 시리얼 줄이 write 한 번이다. Zig 0.16 `std.debug.print`는 호출마다 64바이트 버퍼로 잠그고 비워 한 줄이 write 여럿이고 두 프로세스가 같은 콘솔에 쓰면 호출 사이가 끼어들 틈이다(TC-M3 게이트를 하룻밤에 두 번 빨갛게 했다). `logline.zig` 사본 둘(2048 = 커널 tty chunk), 루트 `check.sh`가 회차마다 A · B · C를 세어 FAIL, 로그의 주인은 회차 디렉터리, 되돌린 치환은 진입 검사가 지킨다(AL-M0 · M1, 2026-10-07)
 - [Config Tool](docs/decisions/project_config_tool.md) — 게스트의 `tars-config`(Zig, init 아래 셋째 실행 파일)가 `/config`를 보고 · 고치고 · 적용한다. `tars.conf`는 이기는 줄 하나만 바꾸고 값은 init의 `parse`가 정한다(로그를 root의 `configLog`가 가로챈다 — 안 하면 틀린 값을 받는다), 남의 문법은 주인(wpa_passphrase · ssh-keygen · nft)이 짓고 이 명령은 옮긴다, 이 명령의 파일을 가르는 것은 방화벽 하나, seed 별칭 둘을 지웠고 옛 디스크는 알리기만, "언세팅"은 `reset`(TC-M0 ~ M3, 2026-10-07 종료)
 - [Config reload](docs/decisions/project_config_reload.md) — `tars-config reload`가 init에 재부팅 없이 `tars.conf` · `services.d`를 다시 읽게 한다. 키 넷 갈래(지금 · 다음에 뜰 때부터 · 화면 · 안 함), 조이고 → 데몬 → 셸 → 푼다, init이 실효 설정을 들고 칸은 늘 열셋, `config_off` ≠ `hold`, `reload terminal`이 화면을 새 argv로. 드러난 잠재 버그 `kill(-pid)`(terminal은 그룹이 없다). net 검사 31의 간헐과 Task 5b(set의 답을 본 뒤 reload)(TC-M2 · M3, 2026-10-07)

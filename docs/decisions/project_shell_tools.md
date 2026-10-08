@@ -68,7 +68,7 @@ render · copy · tools)은 디스크를 안 붙이므로 seed rc를 안 읽고,
 ## seed를 재는 검사에 두 종류가 생겼다
 
 rc 셋은 "한 글자도 안 찍는가"를 재고(`expectQuietSeed`의 범주 검사 + 부팅),
-gitconfig는 셸이 안 읽으므로 그 대신 **문법**을 잰다 —
+gitconfig는 셸이 안 읽으므로 그 대신 문법을 잰다 —
 `expectGitconfigSeed`가 주석·절·`키 = 값` 셋 밖의 줄을 거부한다. `=`가 빠진
 줄 하나가 부팅 뒤 모든 git 명령에 `bad config line N`을 찍는 실패이고,
 그것을 0.1초에 잡는 자리다.
@@ -89,7 +89,7 @@ modes start with a dot)` · `git read init.defaultBranch=main out of the seeded
 - seed는 `O_EXCL`이라 이미 있는 파일을 안 덮는다. 그래서 별칭을 늘려도 이미
   쓰던 설정 디스크는 새 seed를 못 받는다 — 지우고 재부팅하면 새 seed가
   깔린다(config 체인 6·7차가 그 경로를 매번 밟는다). README에 적어 두었다.
-- 검사가 seed의 **주석**에 걸린 적이 있다. `[user]`를 글자로 찾는 검사가
+- 검사가 seed의 주석에 걸린 적이 있다. `[user]`를 글자로 찾는 검사가
   seed의 설명문에 있는 같은 글자를 잡았다 — 그래서 `expectGitconfigSeed`는
   주석 줄을 건너뛰고 절·키를 파싱한다.
 

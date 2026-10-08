@@ -71,10 +71,11 @@ dhcpcd의 비용이 388KB에 새 라이브러리 0개다. 절차는
    payload여야 한다 — 그 글자는 연결이 열렸을 때만 생긴다.
    판정 글자를 고르는 일반 규칙은 [[project_gate_screen_echo]]에 있다.
 
-## 실기에는 아직 없다
+## 실기의 NIC — 이 서브프로젝트 밖이었고 WN이 했다
 
 RM 체인(노트북)의 NIC는 virtio-net이 아니다. 그 드라이버를 켜는 것은 이
-서브프로젝트의 범위 밖이고, `CONFIG_NET`이 켜진 지금은 문이 열려 있다.
+서브프로젝트의 범위 밖이었고, WN(2026-09-26, `project_wired_nic`)이 노트북형
+유선 드라이버를 켰다.
 
 관련: [[project_kernel_config]] · [[project_seeding_a_config_disk]] ·
 [[project_gate_chain_composition]] · [[project_shutdown_signals]]

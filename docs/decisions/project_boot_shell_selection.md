@@ -1,12 +1,18 @@
 ---
 name: project_boot_shell_selection
-description: 사용자가 원하는 미래 기능 — 부팅 셸을 bash/zsh/fish/nushell 중 선택하고 마지막 선택을 기억(재부팅 시 반영). 영속 저장소가 선행 조건.
+description: 2026-08-11 사용자 요청 기록 — 부팅 셸을 고른다. 구현 완료(fish · bash · zsh를 tars.conf의 `shell=`로 고른다, 재부팅 반영). nushell은 미구현.
 metadata: 
   node_type: memory
   type: project
   originSessionId: 0b4b9b0c-8171-4506-bd85-91c52dd6c603
   modified: 2026-08-11T01:09:00.798Z
 ---
+
+상태: 구현 완료. `init/src/config.zig`의 `Shell` enum이 fish · bash · zsh를 받고
+`shell=` 키로 고른다(기본값 fish). 셸 설정 파일은 SC(`shell_config`)가, `shell=bash`
+부팅은 BB가 맡았다. 미구현: nushell, 마지막 선택을 자동으로 기억하는 것.
+
+아래는 요청 당시의 기록이다.
 
 2026-08-11 사용자 요청(“지금은 아니고 나중에”). TARS가 부팅할 때 사용할
 셸을 bash / zsh / fish / nushell 중에서 고를 수 있게 하고, 마지막에

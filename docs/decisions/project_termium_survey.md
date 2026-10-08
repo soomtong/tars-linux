@@ -35,7 +35,7 @@ metadata:
 non-root 사용자는 TARS 전체 모양을 바꾸는 결정이고, 저장 위치는 패키지 관리자와 겹친다.
 브라우저는 그 둘 뒤에 놓는 것이 자연스럽다.
 
-## 남긴 후보 — 터미널 그래픽
+## 남긴 후보 — 터미널 그래픽 (TG가 2026-10-03에 구현했다, [[project_terminal_graphics]])
 
 - ghostty vt는 x86_64 빌드에서 `kitty_graphics`가 켜진 채로 들어온다
   (`terminal/ghostty-src/src/terminal/build_options.zig`, wasm32-freestanding만 끈다).

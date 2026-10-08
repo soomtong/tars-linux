@@ -27,7 +27,7 @@ How to apply:
 - 설명은 줄이지 않는다. 이 피드백은 "덜 설명하라"가 아니라 "덜 물어보라"다.
   `CLAUDE.md`의 설명 → 실행 → 설명 순서는 그대로 유지한다.
 - 사용자가 "네가 정해"라고 말하면 되묻지 말고 바로 진행한다
-  ([[feedback_execution_scope.md]]가 "실행 모드를 다시 묻지 말 것"이라고
+  ([[feedback_execution_scope]]가 "실행 모드를 다시 묻지 말 것"이라고
   적은 것과 같은 종류의 실수다).
 
 관련: [[user_learning_goal]], [[feedback_execution_scope]],

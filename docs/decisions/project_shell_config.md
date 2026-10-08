@@ -302,7 +302,7 @@ seed가 다른 체인의 화면을 안 건드렸다는 것을 따로 봤다 — 
 $ debugfs -R 'ls /' out/power.img
 .  ..  lost+found  tars.conf  fish.config  bashrc  zshrc      ← 넷 다 그렇다
 $ debugfs -R 'cat /zshrc' out/config.img | tail -1
-echo tars-rc-alive        ← 1차에서 사람이 **더한** 줄. seed가 안 덮였다
+echo tars-rc-alive        ← 1차에서 사람이 더한 줄. seed가 안 덮였다
 $ debugfs -R 'cat /tars.conf' out/config.img
 shell=zsh                 ← 1차가 쓴 것
 shell_config=off          ← 2차가 더한 것

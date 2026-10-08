@@ -21,9 +21,9 @@ label은 `service dhcpcd` · `service chronyd`이고 `services.d`의 같은 이�
 - 게이트의 SLIRP는 option 42를 안 주므로 hook의 reload 경로는 게이트 안에서 안 돈다 —
   증거는 DS-M0 실측 5 하나다.
 
-**Why:** 두 데몬이 목록 밖이면 죽어도 안 뜨고, 사람이 `tars-service`로 못 다룬다(SV 비목표 5).
+Why: 두 데몬이 목록 밖이면 죽어도 안 뜨고, 사람이 `tars-service`로 못 다룬다(SV 비목표 5).
 
-**How to apply:** 감독 목록에 넣을 데몬은 갈라지지 않게 띄운다. execve 앞에 우리 코드를
+How to apply: 감독 목록에 넣을 데몬은 갈라지지 않게 띄운다. execve 앞에 우리 코드를
 두지 않는다 — 기다림이 필요하면 데몬의 기능(sourcedir 같은)으로 옮긴다. 판정은 "살아
 있다"가 아니라 "쥔 pid가 곧 그 데몬인가"로 한다. [[project_boot_services]] ·
 [[project_service_control]] · [[project_time_discipline]]

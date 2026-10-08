@@ -234,7 +234,7 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 `terminal: find> submit matches=… moved=… us=…` ·
 `terminal: find> next moved=…` · `terminal: find> prev moved=…`(CN-M1) ·
 `terminal: style> N cell(s) hidden by the find prompt`(CN-M1) ·
-`terminal: find> hl spans=… cells=… **cur=…** us=…`(CS-M0, `cur=`은 SP-M0) ·
+`terminal: find> hl spans=… cells=… cur=… us=…`(CS-M0, `cur=`은 SP-M0) ·
 `terminal: find> overlay text=…`(CS-M1. SP-M1 뒤로 `/needle [3/12]`도
 이 줄로 나온다 — 새 로그를 하나도 안 만들었다) ·
 `terminal: cursor> vt=… drawn=… row=… col=… cols=… ink=… box=…`(CU-M0. 매

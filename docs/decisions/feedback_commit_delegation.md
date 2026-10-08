@@ -19,7 +19,7 @@ code 에게 위임합니다" (from now on, delegate commit creation for approved
 content to Claude Code) after doing the first two commits (Dockerfile,
 devcontainer verification) manually themselves.
 
-How to apply: Within [[project_tars-boot-foundation]] work (and likely
+How to apply: Within [[project_boot_foundation_restart]] work (and likely
 this repo generally going forward), continue having the user create/edit
 files and run build/test commands, but perform `git add`/`git commit` steps
 directly instead of instructing the user to run them — only after the

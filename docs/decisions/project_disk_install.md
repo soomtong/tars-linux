@@ -17,7 +17,7 @@ How to apply:
   DI-M2부터는 cmdline에 `tars.installed`가 있을 때만이다 — 설치기가 ESP의 `limine.conf`에
   붙이는 표지다. ISO로 뜬 부팅은 디스크 열넷만 본다.
 - `tars-install`은 `init` 옆의 정적 실행 파일이다(`init/src/install.zig`, 순수 규칙은
-  `disk.zig`). 매체는 이름이 아니라 `boot/limine/limine.conf`의 존재로 알아본다.
+  `disk.zig`). 매체는 이름이 아니라 `boot/limine.conf`의 존재로 알아본다.
 - 판정은 `install/check.sh`이고, 게이트에서 유일하게 콘솔 셸에 시리얼 FIFO로 친다.
   판정 대상이 terminal 화면이 아니라 `tars-install`의 출력 줄이기 때문이다.
 - 설치 여부는 셋으로 본다 — GPT · p1이 FAT32이고 붙여 보면 `boot/bzImage`가 있다 ·

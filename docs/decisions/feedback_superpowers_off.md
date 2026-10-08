@@ -39,7 +39,7 @@ How to apply:
   빠진 skill 하나(예: systematic-debugging)를 `.claude/skills/`에 두는 쪽을
   먼저 본다.
 
-관련: [[feedback-execution-scope]]
+관련: [[feedback_execution_scope]]
 
 ## 첫 검증 — TG(2026-10-03)
 

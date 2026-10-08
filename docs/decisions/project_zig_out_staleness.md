@@ -62,7 +62,7 @@ zig-out/bin/init  3,363,824 bytes   ← 제대로 된 것
 음성 확인을 하기 전에 둘을 지운다.
 
 ```bash
-# ✓ **같은 컨테이너 안에서** 지운다
+# ✓ 같은 컨테이너 안에서 지운다
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
   rm -rf init/.zig-cache init/zig-out terminal/.zig-cache terminal/zig-out
   cd init && zig build test'
