@@ -209,7 +209,7 @@ pub fn main() !void {
             \\    protocol: linux
             \\    kernel_path: boot():/boot/bzImage
             \\    module_path: boot():/boot/initrd.cpio
-            \\    cmdline: console=ttyS0
+            \\    cmdline: console=ttyS0 initcall_blacklist=test_power_init
             \\
         ;
         const want =
@@ -220,7 +220,7 @@ pub fn main() !void {
             \\    protocol: linux
             \\    kernel_path: boot():/boot/bzImage
             \\    module_path: boot():/boot/initrd.cpio
-            \\    cmdline: console=ttyS0 tars.installed
+            \\    cmdline: console=ttyS0 initcall_blacklist=test_power_init tars.installed
             \\
         ;
         var out: [512]u8 = undefined;

@@ -126,8 +126,9 @@ boot() {
 
 # ── 검사 1: 커널이 무선을 안다 (부팅 없음) ──────────────────────────────
 # 부팅으로 판정하는 드라이버는 hwsim 하나뿐이라 실칩 열여섯이 빠지는 날은 여기서만
-# 드러난다(nic 체인 검사 1과 같은 자리). 내장 cmdline은 글자 그대로 본다 — 빠지면
-# 모든 부팅에 가짜 라디오 둘이 생긴다(결정 2). 부팅 C가 그 결과를 따로 본다.
+# 드러난다(nic 체인 검사 1과 같은 자리). 내장 cmdline에 hwsim의 낱말이 있는지 본다 — 빠지면
+# 모든 부팅에 가짜 라디오 둘이 생긴다(결정 2). 부팅 C가 그 결과를 따로 본다. 줄 전체를 안
+# 보는 것은 같은 줄에 battery 체인의 낱말도 있기 때문이다(BS design 결정 9).
 CONFIG=../kernel/.config
 for sym in CFG80211 MAC80211 RFKILL MAC80211_HWSIM IWLWIFI IWLMVM IWLMLD \
   RTW88_8822BE RTW88_8822CE RTW88_8723DE RTW88_8821CE \
@@ -140,7 +141,7 @@ for sym in CFG80211 MAC80211 RFKILL MAC80211_HWSIM IWLWIFI IWLMVM IWLMLD \
     exit 1
   fi
 done
-if ! grep -x 'CONFIG_CMDLINE="mac80211_hwsim.radios=0"' "$CONFIG" >/dev/null; then
+if ! grep -E '^CONFIG_CMDLINE="([^"]* )?mac80211_hwsim\.radios=0( [^"]*)?"$' "$CONFIG" >/dev/null; then
   echo "FAIL: the built-in cmdline no longer turns hwsim's radios off"
   exit 1
 fi
