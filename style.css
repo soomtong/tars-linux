@@ -264,3 +264,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: 
   .wrap { padding: 0 16px; }
   .status span:nth-child(3), .status span:nth-child(4) { display: none; }
 }
+
+/* 한글을 띄어쓰기 자리에서만 줄바꿈한다. 띄어쓰기 없이 칸보다 긴 덩어리
+   (긴 코드 · 경로)만 overflow-wrap이 마지막에 쪼갠다. */
+body { word-break: keep-all; overflow-wrap: break-word; }
