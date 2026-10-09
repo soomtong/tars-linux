@@ -80,6 +80,8 @@ milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 �
   새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
 - 서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.
   milestone을 다 끝내 놓고 표시만 빠뜨리기 쉽다.
+- 서브프로젝트를 끝내면 소개 페이지(`gh-pages` 브랜치의 `data.js`)에도 한
+  줄을 더한다 — 기준일 · 타임라인 · 전체 기능 목록. 순서는 `site/README.md`.
 - 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장 정확하다 —
   게이트가 매번 돌리는 목록이라 낡을 수가 없다.
 
