@@ -1,0 +1,71 @@
+# 완료된 서브프로젝트
+
+2026-10-10에 `CLAUDE.md`에서 옮겼다. 매 세션 실리는 규칙 파일에 역사 18KB가 들어 있을 이유가 없어서다. 서브프로젝트를
+끝내면 이 표 끝에 한 행을 더한다.
+
+design doc은 전부 `docs/specs/`에 날짜순으로, 기억은
+`docs/decisions/`에 있다. "무엇을 배웠나"는 그 두 곳에 있고 이 표에는 없다.
+각 행은 끝난 날의 상태다. 숫자(게이트 시간 · 검사 수 등)는 뒤 서브프로젝트가
+바꿨을 수 있으니, 지금 값은 `check.sh`의 `CHAINS`와 최신 design doc의 `Status:`에서 본다.
+
+| 서브프로젝트 | 끝난 날 | 무엇이 섰나 |
+|---|---|---|
+| Boot Foundation (BF-M0~M4) | 2026-08-07 | 커널을 직접 빌드해 QEMU에서 띄우고 PID 1이 자식을 감독한다 |
+| Display Foundation (DF-M0~M3) | 2026-08-08 | 프레임버퍼에 픽셀을 직접 찍는다 |
+| Terminal Foundation (TF-M0~M4) | 2026-08-13 | PTY 위의 터미널이 글자를 그린다 |
+| Zig Migration (ZM-M1~M3) | 2026-08-13 | Rust를 Zig로 옮겼다. 이제 Rust는 없다 |
+| Config Persistence (CP-M0~M2) | 2026-08-15 | ext2 디스크의 `key=value` 설정을 부팅 사이에 읽는다 |
+| Input Policy (IP-M0~M2) | 2026-08-19 | evdev 코드를 셸이 아는 바이트로 번역한다 |
+| Power Management (PM-M0·M1) | 2026-08-20 | 시그널로 끄고 되살린다 |
+| Hardware Discovery (HD-M0~M2) | 2026-08-22 | 키보드를 capability로 찾고 전원 버튼에 응답한다 |
+| Terminal Rendering (TR-M0~M2) | 2026-08-24 | 색·스크롤·오프셋을 `vt.zig`가 확정한다 |
+| Copy Mode (CM-M0~M2) | 2026-08-26 | 스크롤백 위의 vim modal 선택과 `Cmd+V` |
+| Copy Navigation (CN-M0·M1) | 2026-08-27 | 단어 이동 `w`/`b`와 스크롤백 검색 `/`·`n`·`N` |
+| Copy Search Feedback (CS-M0·M1) | 2026-08-28 | 매치 하이라이트 · 검색 기록 · "못 찾음" 메시지 |
+| Gate Latency (GL-M0~M3) | 2026-08-29 | 루트 게이트 54분 15초 → 16분 01~11초 |
+| Search Position (SP-M0·M1) | 2026-08-30 | 현재 매치를 밝은 앰버로, 오버레이에 `/needle [3/12]` |
+| Render Cost (RC-M0) | 2026-08-30 | 한 프레임의 84.7%가 `fill`이라는 것을 재기만 했다(코드는 안 고쳤다) |
+| Carryover Cleanup (CC-M0) | 2026-08-31 | 이월 숙제 셋을 없앴다(커널 config 둘 · sanity 도구 둘과 98MB 산출물 · 옛 폰트) |
+| Hangul Input (HI-M0~M3) | 2026-09-01 | 한글 자판 넷과 영문 자판 둘, 한/영 전환 키 넷을 `tars.conf`가 고른다 |
+| Input Status (IS-M0·M1) | 2026-09-09 | 화면 맨 아래 여백의 상태 줄 — 한/영 · 자판 · 대문자 잠금 |
+| Search Hangul (SH-M0~M2) | 2026-09-09 | copy mode 검색창에서 한글을 친다 |
+| Find Paste (FP-M0·M1) | 2026-09-09 | copy mode에서 잡은 글자를 `/` 프롬프트에 `Cmd+V`로 붙인다 |
+| Real Machine (RM-M0~M3) | 2026-09-10 | 일반 x86_64 노트북에서 뜬다 — UEFI · simpledrm · USB 키보드 · NVMe. 설정 디스크는 ext2 라벨 `tars-`로 찾는다. 열번째 체인 `machine/check.sh` |
+| Userland Tools (UT-M0~M3) | 2026-09-11 | 게스트에 도구 65개가 서고 `PATH`로 이름이 손에 닿는다. 목록은 `kernel/guest_tools.sh` 한 파일. 열한번째 체인 `tools/check.sh` |
+| Shell Config (SC-M0~M2) | 2026-09-11 | `tars.conf`의 `shell_config`가 rc를 켜고 끄고, 탈출로 둘(rc 없이 한 번 더 · 커널 cmdline `tars.noconfig`)이 섰다 |
+| Shell Memory (SM-M0~M2) | 2026-09-12 | `zoxide`·`fzf`와 히스토리 env로 기계가 배운 것 둘이 부팅을 넘는다 |
+| Gate Accuracy (GA-M0·M1) | 2026-09-12 | 게이트가 거짓을 말하던 일곱 자리를 없애고 `check.sh`의 진입 검사가 재발을 막는다 |
+| Shell History Durability (SD-M0~M2) | 2026-09-12 | 콘솔 셸에 친 명령이 전원 버튼과 함께 사라지지 않는다 — seed rc의 `setopt INC_APPEND_HISTORY` 한 줄 |
+| Bash History Durability (BH-M0~M2) | 2026-09-12 | 같은 일을 bash에 했다 — `PROMPT_COMMAND='history -a'` 한 줄이 zoxide 훅보다 먼저. 덤으로 게스트에 없던 `/dev/fd`를 세웠다 |
+| Bash Boot (BB-M0~M2) | 2026-09-12 | `config` 체인이 부팅 아홉이 됐고 아홉째가 `shell=bash`로 뜬다 — 중첩으로는 볼 수 없던 여섯을 본다 |
+| Shutdown Latency (SL-M0~M2) | 2026-09-13 | PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다. 콘솔 셸이 유예를 꽉 쓰던 2.9초가 0.13초가 됐다 |
+| Guest Network (NW-M0~M3) | 2026-09-14 | `tars.conf`의 `net=dhcp`가 게스트에 주소를 붙인다. 우리 코드는 링크를 올리고 dhcpcd를 띄우는 것까지고 나머지는 dhcpcd다. 판정은 SLIRP 안에서 닫힌다 — 열두번째 체인 `net/check.sh` |
+| Inbound Network (IN-M0~M2) | 2026-09-14 | 게스트가 연 포트에 바깥에서 붙어 바이트를 읽는다. 우리 코드는 0줄이고 `net/check.sh`가 검사 열여섯이 됐다 |
+| Time Sync (TS-M0~M3) | 2026-09-19 | 부팅에 SNTP로 한 번 묻고 시계를 뛰었다(우리 SNTP는 TD가 chronyd로 바꿨다). 상대는 설정의 주소든 DHCP가 알려 준 것이든 되고, `timezone=Asia/Seoul`이 그 시각을 사람이 읽는 모양으로 만든다. 네트워크가 없어도 부팅은 평소대로 끝난다 — `net/check.sh`가 검사 스물넷에 부팅 셋 |
+| Shell Tools (ST-M0~M2)|2026-09-19|깔려 있던 도구를 셸이 쓴다 — seed rc가 eza 별칭 넷을 정의하고(`ls`가 eza로 가는 것이 유일한 셰도다), `/config/gitconfig`가 생겨 `/.gitconfig` 링크가 더 이상 끊기지 않는다|
+| Terminal Queries (TQ-M1)|2026-09-19|터미널이 자식의 질의(커서 위치·상태 보고)에 답한다 — `effects.write_pty` 한 칸과 그 답이 pty로 돌아가는 길. ST-M3이 넣은 `--no-height` 우회를 지웠다|
+| Disk Install (DI-M0~M2) | 2026-09-23 | USB로 뜬 기계에서 `tars-install`이 내장 디스크에 ESP와 설정 파티션을 만들고 USB 없이 뜬다. 새 ISO로 갱신해도 설정이 남고 `--wipe`가 통째로 지운다. 열세번째 체인 `install/check.sh` |
+| Disk Install Carryover (DC-M0~M2) | 2026-09-26 | 설치된 부팅이 늦게 생기는 설정 파티션을 5초까지 기다린다. DI의 작은 것 다섯(4Kn GPT · 옛 ISO 서명 · 넘치는 줄 · 쪼개진 YES · PVD 음성)을 치웠다. install 체인이 부팅 일곱이 됐다 |
+| Time Discipline (TD-M0~M2) | 2026-09-26 | 시계를 chronyd가 만진다 — 우리 SNTP를 지우고 `init`은 fork · 설정 · execve 배관만 한다. `/config`가 붙으면 배운 drift가 `/config/chrony.drift`로 부팅을 넘고, 사람은 `/config/chrony.d/`에 서버를 적는다. `net/check.sh`가 부팅 다섯 |
+| Wired NIC (WN-M0~M3) | 2026-09-26 | 노트북형 유선 드라이버 여섯과 USB 동글 셋이 켜졌다. 모든 QEMU 호출이 `-nic none`/`-netdev`를 명시하고 진입 검사가 지킨다. `init`은 dhcpcd를 띄우기만 하고 인터페이스는 dhcpcd가 고른다 — 부팅 뒤 꽂은 USB 동글도 잡는다. 열네번째 체인 `nic/check.sh` |
+| Loopback (LB-M0~M3) | 2026-09-26 | `init`이 설정을 읽기 전에 `lo`를 올리고, `localhost`와 `아무거나.localhost`가 `net`과 무관하게 `127.0.0.1`로 풀린다 — `/etc/hosts` · `nsswitch.conf` · `libnss_myhostname`. 새 체인 없이 `tools` · `net` 체인이 이름 셋으로 게스트 안 TCP 왕복을 본다 |
+| Firewall (FW-M0~M2) | 2026-09-27 | `tars.conf`의 `firewall=on`이 들어오는 것을 기본으로 버리고, 사람은 `/config/nftables.d/*.nft`에 연다. `init`은 `net.bringUp` 앞에서 `nft -f`를 기다리고, 사람의 파일이 틀리면 기본 규칙만 올린다. 열다섯번째 체인 `firewall/check.sh` |
+| Boot Services (SV-M0~M2) | 2026-09-27 | `/config/services.d`에 둔 실행 파일을 `init`이 이름순으로 여덟까지 띄우고 감독한다. 첫 세입자 sshd는 템플릿 링크 하나와 공개 키 하나로 켜지고, ssh 세션은 콘솔과 같은 셸 · env다 — `init`이 부팅 때 `passwd`의 셸 자리와 sshd의 `SetEnv`를 쓴다. 열여섯번째 체인 `service/check.sh` |
+| Service Control (CT-M0~M2) | 2026-09-27 | `tars-service`의 동사 넷(status · stop · start · restart)이 `/run/tars/init.sock`으로 PID 1에게 말한다. 시그널은 서비스의 프로세스 그룹에 가고, 사람이 요청한 죽음은 빨리 죽음으로 세지 않는다. SIGTERM을 무시하면 3초 뒤 SIGKILL. 새 체인 없이 `service/check.sh`가 부팅 넷이 됐다 |
+| Daemon Supervision (DS-M0~M2) | 2026-09-27 | dhcpcd와 chronyd가 감독 목록에 들어갔다 — 죽으면 다시 뜨고 `tars-service`로 다룬다. dhcpcd는 `-B`, chronyd 앞의 30초 기다림은 chrony `sourcedir`로 바뀌었다. 덤으로 버튼 fd에 `CLOEXEC`. 새 체인 없이 net · service 체인이 본다 |
+| Wireless (WL-M0~M3) | 2026-09-28 | 노트북 내장 무선(Intel · Realtek · MediaTek · Qualcomm)이 붙는다. `/config/wpa_supplicant.conf`가 있으면 `init`이 `tars-wifi`(→ exec wpa_supplicant)를 감독하고, 늦게 생긴 인터페이스는 dhcpcd hook이 넘긴다. firmware 74개가 initrd 꼬리에 붙는다. 게이트는 mac80211_hwsim — 열일곱번째 체인 `wifi/check.sh` |
+| USB Wireless (UW-M0~M2) | 2026-09-28 | 같은 칩 계열의 USB 동글 열하나(rtw88 일곱 · rtw89 둘 · MT7921U · MT7925U)가 켜졌다. 우리 코드는 0줄, firmware는 77개. QEMU에 USB 무선이 없어서 `wifi/check.sh`가 심볼 · modinfo alias · 부팅 로그의 usbcore 등록 줄을 본다 |
+| Terminal Graphics (TG-M0~M3) | 2026-10-03 | 자식이 kitty graphics로 보낸 이미지를 우리 렌더러가 그린다 — 해석과 저장은 ghostty vt, 우리 몫은 셀 픽셀 크기 · 픽셀 사각형(`vt.zig`) · 그리기(`image.zig`) · PNG(`stb_image`). 새 체인 없이 `render` 체인이 사분면 픽셀로 본다 |
+| Copy Indicator (CI-M0) | 2026-10-03 | copy mode에 있는 동안 상태 줄 꼬리에 `COPY`가 뜬다. 앞 넷은 안 움직이고 색은 전용이다. 새 체인 없이 `copy` 체인이 글자와 픽셀을 짝으로 본다 |
+| Workspace Panes (WP-M0~M2) | 2026-10-04 | 화면 하나가 셸 여럿을 담는다 — 워크스페이스(탭) 아홉 × 패널 여덟, 키는 iTerm2 그대로(`Cmd+D` · `Cmd+Shift+D` · `Cmd+W` · `Cmd+[` · `Cmd+]` · `Cmd+T` · `Cmd+1~9`). 패널은 PTY · `vt.Screen` · 사각형이고 레이아웃은 순수 `layout.zig`. 설계는 Fable, 구현은 Opus 서브에이전트. 열여덟번째 체인 `pane/check.sh` |
+| Cursor Shape (CU-M0·M1) | 2026-10-04 | vim의 insert는 bar, replace는 underline, normal은 block이다 — 렌더러가 DECSCUSR 모양 셋을 그리고, 게스트 vi를 `vim.basic`으로 바꿔 시스템 vimrc 세 줄을 initrd에 넣었다. 새 체인 없이 `render` 체인이 본다 |
+| Guest Ergonomics (GE-M0·M1) | 2026-10-04 | 게스트에 `which`가 섰다(debianutils의 `#!/bin/sh` 스크립트 — 목록의 첫 비ELF, `copy_lib_deps`가 ELF magic으로 건너뛴다). 시스템 vimrc가 커서 세 줄에서 plugin · 런타임 없는 모던 설정 한 벌이 됐다 — 첫 줄 `set nocompatible`, 줄 번호 · 상태 줄 · 빠른 Esc. 설계 · plan은 Opus, 구현은 M0 Sonnet · M1 Opus 서브에이전트. 새 체인 없이 `tools` · `render` 체인이 본다 |
+| Paste Ergonomics (PE-M0~M2) | 2026-10-04 | 자식이 모드 2004를 켰으면 `Cmd+V`를 `ESC[200~` · `ESC[201~`로 감싼다 — CM 결정 9를 실측으로 다시 열었다. 셸에서 여러 줄을 붙여도 Enter 전에는 안 돌고 vim의 `autoindent` 계단이 없다. `/.vimrc`가 `/config/vimrc`로 가는 링크이고 `init`이 주석뿐인 seed를 깐다(gitconfig와 같은 모양). 덤으로 `service` 체인이 dhcpcd의 `adding default route` 줄까지 기다린다(`leased`는 주소가 붙기 전에 찍힌다). 설계 · plan은 Opus, 구현은 M0 · M2 Sonnet · M1 Opus 서브에이전트. 새 체인 없이 `copy` 검사 21 · 22와 `config` 1 · 2차가 본다 |
+| Pointer Devices (PD-M0~M4) | 2026-10-05 | 마우스와 터치패드가 화살표 하나를 움직인다. terminal이 uevent로 장치를 찾고(핫플러그), 화살표는 save-under, 누르고 끌어 뗀 글자가 클립보드에(copy mode의 기계 그대로), 휠은 포인터 아래 패널. 터치패드는 `touchpad.zig`가 MT 프로토콜 B를 번역하고 커널 심볼 41개(PS/2 · SMBus · I2C-HID · THC)가 켜졌다. M4가 마우스 보고를 더했다 — 자식이 마우스 모드를 켰으면 ghostty `encodeMouse`로 PTY에 보내고 우리 선택은 Shift 끌기, 게스트 vimrc는 `mouse=a`. 게이트는 uinput 가짜 패드와 bash `read -N` 프로브 — 열아홉번째 체인 `pointer/check.sh`. 설계 · plan 다섯은 Opus, 구현은 M1 Sonnet · 나머지 Opus 서브에이전트. 루트 게이트는 M2부터 2회 |
+| Escape Latin (EL-M0) | 2026-10-05 | 한글을 치다가 수정키 없는 Esc를 누르면 조합을 확정하고 영문으로 돌아온다 — vim의 insert에서 나오면 다음 키가 명령이다. Esc는 그대로 프로그램에 간다. `tars.conf`의 `esc_latin=on\|off`(기본 on)는 `hangul_toggle` 목록이 아니라 따로 있는 키라 옛 설정 파일에서도 켜진다(seed가 목록 넷을 글자 그대로 적어 두기 때문). argv는 그 목록 끝에 이름을 붙여 간다. 다시 그리기는 `readKeys`가 `hangul_on`의 앞뒤를 비교한다. 설계 · plan은 Opus, 구현은 Sonnet 서브에이전트. 새 체인 없이 `hangul` 검사 21~24가 vim으로 본다 |
+| Clipboard Scope (CB-M0) | 2026-10-05 | 클립보드가 `vt.Screen` 밖으로 나와 terminal 전체에 하나다 — 한 패널에서 `y`한 것을 다른 패널 · 다른 워크스페이스에서 `Cmd+V`로 붙인다. 요청의 전제를 바로잡았다(워크스페이스가 아니라 패널마다 따로였다). 순수 `clipboard.zig`(`Scope` · `Clipboard` · `pick`)와 `main.zig`의 `Clips` 한 자리가 칸을 고르고, `tars.conf`의 `clipboard=shared\|pane`(기본 shared)이 argv 아홉째 칸으로 간다(`[8:null]` → `[9:null]` 여섯 자리). EL의 `esc_latin=on$` 판정이 줄 끝 고정이라 깨져 `( \|$)`로 고쳤다. 설계 · plan · 구현 전부 Opus 서브에이전트. 새 체인 없이 `pane` 검사 10~15와 부팅 B(`clipboard=pane`, 45490) |
+| Audio Devices (AU-M0~M3) | 2026-10-06 | 노트북의 스피커 · 마이크 · 헤드폰 잭 · USB 헤드셋 · DSP 뒤 내장 마이크에 `aplay` · `arecord`가 닿는다 — 커널 ALSA · HDA 코덱 여덟 · Intel SOF · AMD ACP와 alsa-utils · sof-bin firmware 42개는 그대로, 우리 코드는 `init`의 `audio.zig`(부팅에 `alsactl` 일꾼, 끌 때 `/config/asound.state`, 1초마다 기본 카드를 `/etc/asound.conf`에 — 재생은 가장 큰 번호, 녹음은 USB 마이크 · 내장 DMIC · 장치 0 순)와 postinit 규칙 한 줄. 사람이 치는 `aplay x.wav`에는 커널 `SYSVIPC`와 `audio` 그룹이 더 필요했다. 게이트는 QEMU `alsa` 백엔드에 컨테이너 alsa-lib의 `file` 플러그인으로 샘플을 값까지 본다 — 스무번째 체인 `audio/check.sh`(부팅 넷 · 검사 열일곱, 부팅 D만 monitor 45491). 게이트가 빨개진 둘(dmix xrun의 두 배 프레임 · 커널 printk가 화면 줄을 자름)은 우리 코드가 아니었고 `gate_lib.sh`의 `joined_screen_dump`가 생겼다. 설계 · plan 넷은 Opus, 구현 넷은 Sonnet 서브에이전트 |
+| Voice Dictation (VD-M0~M2) | 2026-10-06 | Voxio(macOS 받아쓰기 앱)를 옮겼다 — 오른쪽 Cmd 두 번이면 `REC`, 말하고 다시 두 번이면 `arecord` → Groq Whisper 전사 → LLM 정리(길이 가드, 실패하면 원문) → 두 번을 누른 패널의 커서 자리에 bracketed paste, 기록은 `/config/dictation.jsonl`. terminal은 트리거(`dictation.zig`의 `DoubleTap` — "녹음 중"을 들지 않는다) · 자식 fork · 상태 줄 낱말 일곱 · 삽입 · 비밀번호 거절(`ICANON && !ECHO`)이고, 게스트 bash `tars-dictate`가 녹음 · 전사 · 정리 · 기록이다(설정 `/config/dictation.conf` 키 여덟, 키 `/config/groq.key`). 전제를 아홉 바로잡았다 — https에 CA 목록이 없었다(sysroot 150장을 initrd에), SIGINT가 WAV 머리를 못 고친다, `ECHO`만 보면 모든 프롬프트가 비밀번호다. 게이트는 perl stub으로 Groq를 절대 안 부른다 — 스물한번째 체인 `dictation/check.sh`(부팅 둘 · 검사 스물아홉, 45492 TLS · 45493 monitor). 설계 · plan 셋은 Opus, 구현 셋은 Sonnet 서브에이전트 |
+| Config Tool (TC-M0~M3) | 2026-10-07 | 게스트의 `tars-config`(Zig, `init` 아래 셋째 실행 파일 3.7MB)가 설정을 보고 · 고치고 · 적용한다 — `tars.conf`의 줄 하나만 바꾸고(값은 init의 `parse`가 정한다, 로그를 root의 `configLog`가 가로챈다), 무선 · ssh · 방화벽 · 받아쓰기의 파일에 그 주인(wpa_passphrase · ssh-keygen · nft)이 지은 줄을 두고, `reload`가 init에 재부팅 없이 `tars.conf`와 `services.d`를 다시 읽게 하고(키 넷 갈래 · 조이고 → 데몬 → 셸 → 푼다 · 칸 열셋 · `config_off`), `reload terminal`이 화면을 새 값으로 다시 띄운다. seed 별칭 둘(`tars-config` · `tars-rc`)을 지웠다. 드러난 잠재 버그 `kill(-pid)`를 고쳤다. 새 체인 없이 config · net · firewall · service · wifi · dictation · pane 체인이 본다. 설계 · plan 넷은 Opus planner 하나, 구현 넷은 Sonnet 구현자 하나, plan 코드 고친 곳 0. 루트 게이트는 M2에서 net 검사 31이 간헐로 빨개 set의 답을 기다리게 했다 |
+| Atomic Log Lines (AL-M0·M1) | 2026-10-07 | terminal과 `init`의 시리얼 로그 줄이 write 한 번이다 — Zig 0.16 `std.debug.print`는 64바이트 버퍼로 호출마다 잠그고 비워 한 줄이 write 여럿이었고, 두 프로세스가 같은 콘솔에 쓰니 호출 사이가 끼어들 틈이었다(TC-M3 게이트가 하룻밤에 두 번 빨갰다). `logline.zig` 사본 둘(2048바이트 = 커널 tty chunk, 넘치면 UTF-8 경계에서 ` [cut]`), 치환 terminal 98 · init 151, 화면 dump는 격자 크기 버퍼에 조립(바이트 동일). 루트 `check.sh`가 회차마다 `TMPDIR` 디렉터리를 주고 끼어든 줄 A · B와 잘린 줄 C를 세어 FAIL로 본다. 로그를 지우던 8체인 14자리가 로그를 남긴다. 되돌린 치환은 끼어듦이 드물어 런타임이 아니라 진입 검사가 지킨다. 설계 · plan 둘은 Opus, 구현 둘은 Sonnet, plan 코드 고친 곳 0 |
+| Battery Status (BS-M0·M1) | 2026-10-09 | 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의 잔량 칸(`100%` · ` 50%` · `  ?%`)이 뜬다 — 방전 중 회색, 어댑터가 꽂혔으면(`Charging` · `Full` · `Not charging`) 초록, 꽂히지 않고 15% 이하면 빨강. 배터리가 없는 기계는 화면이 한 픽셀도 안 바뀌고 poll은 무한 대기 그대로다. 순수 층 `battery.zig`(검사 17), 시스템 콜은 `main.zig`의 배터리 절, 갱신은 처음 훑기 · `SUBSYSTEM=power_supply` uevent · 60초 주기 셋이다. 게이트용 가짜 배터리는 커널에 내장한 test_power이고 내장 cmdline의 `test_power.battery_present=false`가 끈다 (`0`은 조용히 무시된다). limine 부팅은 `initcall_blacklist=test_power_init`로 등록 자체를 막는다 — 실기에 `test_ac`가 online으로 남으면 ACPI 배터리가 `Not charging`으로 읽히기 때문이다. 배터리를 켜는 uevent는 `test_battery`가 아니라 `test_ac`에서 와서 terminal은 이름을 안 본다. plan과 design의 기대 글자 하나(` 10%`)를 구현 중에 고쳤다(코드를 고친 곳은 0). 설계 · plan 셋은 Opus, 구현 둘은 Sonnet 서브에이전트. 스물두번째 체인 `battery/check.sh`(monitor 45494)와 `machine` 판정 14 |
