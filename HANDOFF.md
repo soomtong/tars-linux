@@ -1,7 +1,9 @@
 # HANDOFF: 열어 둔 서브프로젝트가 없다 — 실기 확인과 다음 후보를 기다린다
 
-## 지금 상태 (2026-10-09)
+## 지금 상태 (2026-10-10)
 
+- 2026-10-10에 문서 정리 네 건을 커밋 넷으로 적용했다 — 완료 표 이동 `35e0da9`, 규칙 정렬 `a20c523`, lessons 접기
+  `580ad3f`, decisions 셋 `aff7ea5`. 코드는 안 바뀌었고 게이트는 안 돌렸다(문서만). 아래 "문서 정리" 절.
 - 마지막으로 닫힌 것은 Battery Status(BS-M0 · M1)다(2026-10-09). 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의
   잔량 칸이 뜬다. 기억은 `docs/decisions/project_battery_status.md`, design은
   `docs/specs/2026-10-08-tars-battery-status-design.md`다.
@@ -10,7 +12,7 @@
 - BS-M1 루트 게이트(22체인 × 2): 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0
 - 체인은 이제 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
 - 그 전에 닫힌 것은 Config Tool(TC-M0~M3)과 Atomic Log Lines(AL-M0 · M1)다(2026-10-07, `f3b677c`).
-- 문서 감사(2026-10-08)의 남은 제거 후보는 "남은 정리" 절에 있다. 그중 낡은 수치(lessons · running-tars의 체인 수와 게이트
+- 문서 감사(2026-10-08)의 네 건은 2026-10-10에 적용했다("문서 정리" 절). 낡은 수치(lessons · running-tars의 체인 수와 게이트
   시간)는 BS를 닫으며 고쳤다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
   alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
@@ -66,9 +68,22 @@
   `/tmp/run/bs0/`(사본 실측 `measure.out` · M0 루트 게이트 `gate.log` · dictation 재실행 `vd-rerun*.log`)과
   `/tmp/run/bs1/`(체인 `chain-*.log` · mutation `mut/` · 주기 경로 `m2period.out` · M1 루트 게이트 `gate.log`)에 있다.
 
-## 남은 정리 (문서 감사에서 나온 것, 아직 적용 안 함)
+## 문서 정리 (2026-10-08 감사의 네 건, 2026-10-10에 다 적용했다)
 
-- CLAUDE.md 완료 표(약 18KB)를 "서브프로젝트 · 끝난 날 · 한 줄 요약"으로 줄이거나 없앤다.
-- lessons.md의 서브프로젝트별 "잰 것" 절(PD · AU · VD · TC · AL)은 함정만 주제별로 옮긴다.
-- docs/decisions의 경과 절(gate_latency · userland_tools · shell_config 등)은 함정만 남긴다.
-- CLAUDE.md의 두 규칙이 실제 관행과 어긋난다("구현 파일은 Claude가" vs 서브에이전트 구현, "다음 plan은 그 시점에" vs 앞 게이트 중 미리 쓰기). 어느 쪽이 기준인지 정해야 한다.
+- CLAUDE.md 완료 표(60행 · 18KB)를 `docs/guides/completed.md`로 그대로 옮기고 CLAUDE.md에는 가리키는 줄만 남겼다.
+  CLAUDE.md가 25KB에서 5.5KB가 됐다. 서브프로젝트를 끝내면 그 파일 끝에 한 행을 더한다.
+- CLAUDE.md의 두 규칙을 관행 쪽으로 고쳤다(사용자 결정). "진행 방식" 2는 구현을 서브에이전트에 맡길 수 있고 lead는
+  설명 · 대조 · 게이트 · commit이라고, "Milestone 단위 작업"은 다음 plan을 앞 게이트가 도는 동안 써도 되나 게이트 결과로
+  대조해 고친 뒤 넘긴다고 적었다. 기억 셋(`feedback_execution_scope` · `feedback_commit_delegation` · `user_learning_goal`)과
+  MEMORY.md 한 줄도 같은 날짜로 갱신했다.
+- lessons.md의 "잰 것" 절 다섯(PD · AU · VD · TC · AL, 41항목)을 지우고 함정만 셋으로 나눠 넣었다 — 실측 번호 목록 76~92(기존
+  6 · 56 · 59 · 70에 한 문장씩), "안 되는 접근"에 Zig 함정 다섯과 NUL 검출 항목 정정(두 번 읽기 → 한 번 읽기), 게이트 절에
+  "docker 작업은 한 번에 하나". 지운 여덟(PD-7 · AU-4 · VD-9 · TC-1 · TC-10 · AL-2 · AL-3 · AL-8)은 decisions나 다른 절에
+  이미 있는 것이다.
+- decisions 셋(gate_latency · userland_tools · shell_config)을 함정과 결정만 남기고 다시 썼다(25 · 27 · 27KB → 9 · 11 · 12KB).
+  지운 본문(milestone별 경과 · 게이트 시간 · "세운 것" 표)은 git 이력에만 있다(사용자 결정). shell_config의 seed alias
+  `tars-config` 절은 TC-M0이 실행 파일로 바꾼 사실로 고쳤다.
+- 같은 모양의 후보가 더 있다 — 경과 절이 긴 decisions(`project_copy_mode` 13KB · `project_copy_navigation` 12KB ·
+  `project_copy_search_feedback` 13KB · `project_search_position` 14KB · `project_hangul_input` 20KB · `project_real_machine`
+  21KB · `project_shell_memory` 21KB · `project_power_management` 17KB · `project_device_discovery` 18KB · `project_terminal_rendering`
+  18KB · `project_gate_chain_composition` 17KB). 사용자가 고르면 같은 기준으로 한다.
