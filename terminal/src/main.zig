@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const battery = @import("battery.zig");
 const clipboard = @import("clipboard.zig");
 const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
@@ -84,6 +85,27 @@ const STATUS_COPY: u32 = 0x00E0E8F0;
 /// 세지 않는다. 붉은 쪽인 것은 마이크가 열려 있다는 뜻이라서다. 여백 · 상태 줄 색
 /// 넷 · 구분선 · 매치 색 둘 · 커서 · 화살표 어느 것과도 다르다.
 const STATUS_DICT: u32 = 0x00F07070;
+
+/// 배터리 칸의 색 셋(BS design 결정 5). 방전 중이거나 잔량을 모르면 `STATUS_BAT`(회색),
+/// 어댑터가 꽂혀 있으면(`Charging` · `Full` · `Not charging`) `STATUS_BAT_PLUG`(초록),
+/// 꽂혀 있지 않고 15% 이하면 `STATUS_BAT_LOW`(빨강)다. 고르는 것은 `battery.class`다.
+///
+/// 셋 다 전용 색인 이유는 `STATUS_COPY`와 같다(CI design 결정 3). `dumpStatus`가 띠 전체에서
+/// 이 셋의 픽셀을 세어 `status> battery` 줄로 찍는데, 다른 칸이 같은 색을 쓰면 그 수가 이
+/// 칸만 세지 않는다. `STATUS_BAT`이 눈에는 `STATUS_FG`와 거의 같은 회색인데 값이 다른 것도
+/// 그 때문이다 — 재사용하면 배터리가 있는 부팅에서 `ink fg=`(hangul 체인의 기준값)가 바뀌고
+/// 배터리 칸을 따로 셀 길이 없다. 초록이 밝고 빨강이 어두운 것은 적록 색약에서도 둘이
+/// 갈리게 하려는 것이다(design 위험 4). 여백 · 상태 줄 색 다섯 · 구분선 · 매치 색 둘 · 커서 ·
+/// 화살표 둘 어느 것과도 다르다.
+const STATUS_BAT: u32 = 0x00909AA0;
+const STATUS_BAT_PLUG: u32 = 0x0060C070;
+const STATUS_BAT_LOW: u32 = 0x00E05040;
+
+/// 배터리 칸과 왼쪽 문자열 사이에 남겨야 하는 칸 수(BS design 결정 6). 상태 줄이 칸을
+/// 가르는 두 칸(`status.zig`의 `GAP`)과 같다. 그 이름은 pub이 아니고 design이 `status.zig`를
+/// 안 고치기로 했으므로 `COPY_TAIL`(= `GAP ++ COPY`)에서 길이를 얻는다 — 2로 다시 적으면
+/// `GAP`을 고친 사람이 이 파일을 안 고쳐도 컴파일이 통과한다.
+const STATUS_BAT_GAP: u32 = status.COPY_TAIL.len - status.COPY.len;
 
 /// 패널 사이 구분선의 색(WP design 결정 2).
 ///
@@ -335,7 +357,21 @@ fn drawStatus(
     // copy mode가 아니면 빈 슬라이스라 아무것도 안 그리고 col만 돌려준다.
     col = try drawRun(fb, cache, st.text[copy_at..dict_at], y, STATUS_COPY, col, fb.width);
     // 받아쓰기 칸(VD-M1). 받아쓰기가 없으면 빈 슬라이스다.
-    _ = try drawRun(fb, cache, st.text[dict_at..], y, STATUS_DICT, col, fb.width);
+    col = try drawRun(fb, cache, st.text[dict_at..], y, STATUS_DICT, col, fb.width);
+
+    // 배터리 칸(BS-M1, design 결정 6). 왼쪽 문자열과 따로 오른쪽 끝에 그린다 — 넉 자의
+    // 오른쪽 끝이 격자의 오른쪽 끝(`GRID_X + cols * CELL_W`)과 같다. 1280 × 800이면 격자가
+    // 155칸이라 칸은 151 ~ 154번, x는 1228 ~ 1259다.
+    //
+    // 왼쪽 문자열의 끝 col에서 `STATUS_BAT_GAP`만큼 안 떨어져 있으면 안 그린다. 지금 가장
+    // 긴 왼쪽 줄은 약 50칸이라 닿을 일이 없지만, `setPixel`에 범위 검사가 없는 저장소에서
+    // 겹침을 산수로 막는 자리는 있어야 한다. 겹쳐 그리면 두 칸의 픽셀이 섞여 `dumpStatus`의
+    // 셈도 틀린다.
+    const cell = st.battery orelse return;
+    if (st.cols < battery.CELL_LEN) return;
+    const bat_col = @as(u32, st.cols) - battery.CELL_LEN;
+    if (col + STATUS_BAT_GAP > bat_col) return;
+    _ = try drawRun(fb, cache, &cell.text, y, batteryColor(cell.class), bat_col, fb.width);
 }
 
 /// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, 다음 칸의 col을
@@ -590,6 +626,15 @@ const Status = struct {
     workspace: ?u8,
     /// 받아쓰기 칸(VD-M1). 없으면 null이다. `workspace`와 같은 이유로 따로 나른다.
     dict: ?dictation.Show,
+    /// 격자 전체의 칸 수(BS-M1). 배터리 칸의 자리가 격자의 오른쪽 끝이라 `drawStatus`가
+    /// 이것으로 x를 센다(BS design 결정 6). `main`이 시작할 때 구한 `cols`이고 패널의
+    /// 폭이 아니다.
+    cols: u16,
+    /// 배터리 칸(BS-M1). 고른 배터리가 없으면 null이고 아무것도 안 그린다.
+    ///
+    /// `text`에 안 들어 있다. 왼쪽 문자열과 따로 오른쪽 끝에 그리므로 `status.statusText`와
+    /// `status> text=`가 BS 전과 같다(design 결정 6).
+    battery: ?BatteryCell,
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
@@ -1123,6 +1168,11 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
 /// 찍힌다 — 그리고 그 증상은 "구멍이 안 고쳐졌다"와 구별이 안 된다
 /// (둘 다 `on=0`이다).
 ///
+/// 다섯째 줄(`status> battery`)은 오른쪽 끝의 배터리 칸이다(BS-M1). 칸의 글자와 색 셋의
+/// 픽셀 수를 함께 찍고, 배터리가 없으면 `cell=none`이다. `text=` 줄은 배터리와 무관하게
+/// 그대로다 — 칸이 왼쪽 문자열 밖에 있다(BS design 결정 6). 메모가 칸의 글자와 갈래도
+/// 기억하는 이유는 `sameBatteryCell`에 있다.
+///
 /// `render` 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
 fn dumpStatus(
     fb: drm.Framebuffer,
@@ -1130,13 +1180,16 @@ fn dumpStatus(
     last: *[status.MAX_LEN]u8,
     last_len: *?usize,
     last_caps: *bool,
+    last_battery: *?BatteryCell,
 ) void {
     if (last_len.*) |n| {
-        if (std.mem.eql(u8, last[0..n], st.text) and last_caps.* == st.caps) return;
+        if (std.mem.eql(u8, last[0..n], st.text) and last_caps.* == st.caps and
+            sameBatteryCell(last_battery.*, st.battery)) return;
     }
     @memcpy(last[0..st.text.len], st.text);
     last_len.* = st.text.len;
     last_caps.* = st.caps;
+    last_battery.* = st.battery;
     logline.print("terminal: status> text={s}\n", .{st.text});
 
     // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 같은 산수로 y를
@@ -1148,6 +1201,7 @@ fn dumpStatus(
         logline.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
         logline.print("terminal: status> copy ink=0 (no room)\n", .{});
         logline.print("terminal: status> dict ink=0 (no room)\n", .{});
+        dumpBatteryInk(st.battery, 0, 0, 0, " (no room)");
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
@@ -1158,6 +1212,11 @@ fn dumpStatus(
     var off: usize = 0;
     var copy: usize = 0;
     var dict: usize = 0;
+    // 배터리 칸의 색 셋(BS-M1). 셋 다 여백 안에서 이 칸에만 쓰이므로 띠 전체를 세도 이
+    // 칸의 수다 — x 범위를 안 재는 것은 위 `CAPS`의 이유 그대로다.
+    var bat_norm: usize = 0;
+    var bat_plug: usize = 0;
+    var bat_low: usize = 0;
     var row: u32 = 0;
     while (row < ROW_HEIGHT) : (row += 1) {
         var col: u32 = 0;
@@ -1168,6 +1227,9 @@ fn dumpStatus(
             if (px == STATUS_OFF) off += 1;
             if (px == STATUS_COPY) copy += 1;
             if (px == STATUS_DICT) dict += 1;
+            if (px == STATUS_BAT) bat_norm += 1;
+            if (px == STATUS_BAT_PLUG) bat_plug += 1;
+            if (px == STATUS_BAT_LOW) bat_low += 1;
         }
     }
     logline.print("terminal: status> ink fg={d}\n", .{fg});
@@ -1183,6 +1245,9 @@ fn dumpStatus(
     // 받아쓰기 칸의 픽셀(VD-M1). `copy ink`와 같은 짝이다 — 녹음 중에 `>0`, 끝난 뒤
     // `=0`을 dictation 체인이 본다. `text=`만 보면 칸을 안 그려도 초록이다.
     logline.print("terminal: status> dict ink={d}\n", .{dict});
+    // 배터리 칸(BS-M1, design 결정 10). 배터리가 없어도 찍는다 — `cell=none`과 세 수 0이
+    // "칸이 없다"의 판정이다(battery 체인 검사 A1 · A5).
+    dumpBatteryInk(st.battery, bat_norm, bat_plug, bat_low, "");
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -1807,6 +1872,275 @@ fn insertDictation(
     });
 }
 
+// ── 배터리(BS-M1) ─────────────────────────────────────────────────────
+//
+// 훑고 읽는 시스템 콜 쪽이다. 판단(거르기 · 고르기 · 칸 글자 · 갈래 · timeout)은 전부
+// `battery.zig`에 있고 여기는 파일 · 디렉터리 · 로그만 다룬다(BS design 결정 7). 포인터
+// 절과 같은 경계다.
+
+/// power_supply 장치가 모이는 디렉터리(BS design 결정 1). 항목은 장치 디렉터리로 가는
+/// 심볼릭 링크이고, 이름은 기계마다 다르다(`BAT0` · `BAT1` · `test_battery`).
+const BATTERY_DIR = "/sys/class/power_supply";
+/// 장치 이름의 상한. 실기에서 긴 이름은 UCSI의 `ucsi-source-psy-USBC000:001`(27자)
+/// 정도다. 넘는 이름은 고를 후보에서 빼고 `seen` · `present`에는 센다.
+const BATTERY_NAME_MAX = 64;
+/// `BATTERY_DIR/<이름>/<파일>`과 NUL. 23 + 1 + 64 + 1 + 8(`capacity`) + 1 = 98바이트다.
+const BATTERY_PATH_MAX = 128;
+/// 파일 하나의 내용. 가장 긴 값이 `Not charging`과 줄바꿈(13바이트)이다.
+const BATTERY_FILE_MAX = 64;
+/// 한 번의 훑기에서 고를 후보의 상한. 넘으면 나머지를 후보에서 빼고 `present`에는 센다.
+const BATTERY_MAX = 8;
+
+/// 상태 줄의 배터리 칸 하나(BS design 결정 4 · 5). 글자 넉 자와 색의 갈래다.
+///
+/// 둘을 함께 드는 이유는 결정 10이다. 잔량이 그대로인 채 어댑터를 꽂으면 글자(` 50%`)는
+/// 그대로이고 갈래만 바뀐다 — 하나만 들면 그 전환이 화면에도 로그에도 안 나온다.
+const BatteryCell = struct {
+    text: [battery.CELL_LEN]u8,
+    class: battery.Class,
+};
+
+/// 고른 배터리에서 마지막으로 읽은 값. `battery> read` 줄은 이것이 바뀔 때만 찍는다.
+const BatteryRead = struct {
+    status: battery.Status,
+    capacity: ?u8,
+};
+
+/// 배터리 절의 상태 전부. `main`이 하나를 들고 부르는 함수마다 넘긴다.
+const BatteryState = struct {
+    /// 고른 배터리의 이름. `pick_len`이 0이면 고른 것이 없다 — 장치 이름은 비어 있을 수 없다.
+    name: [BATTERY_NAME_MAX]u8 = undefined,
+    pick_len: usize = 0,
+    /// 지난 훑기의 `seen` · `present`(design 결정 10). `scan` 줄은 이 둘과 고른 이름이
+    /// 바뀔 때만 찍는다.
+    seen: usize = 0,
+    present: usize = 0,
+    /// 한 번이라도 훑었는가. 처음 훑기는 결과가 무엇이든 찍는다 — 기준선이 없으면 게이트가
+    /// "부팅 직후의 배터리"를 볼 창구가 없다(`dumpStatus`의 첫 프레임과 같은 이유).
+    scanned: bool = false,
+    /// 지난 읽기. 고른 배터리가 바뀌면 null로 돌려서 새 배터리의 첫 읽기가 반드시 찍힌다.
+    last_read: ?BatteryRead = null,
+    /// 상태 줄에 그릴 칸. 고른 배터리가 없으면 null이고, 그러면 화면이 BS 전과 한 픽셀도
+    /// 안 다르다(design 목표 3).
+    cell: ?BatteryCell = null,
+    /// 다음 주기 읽기의 시각(`main`이 잡은 원점부터의 단조 시계 밀리초). 고른 배터리가
+    /// 없으면 null이고 poll은 무한 대기다(`battery.pollTimeout`).
+    due: ?i64 = null,
+
+    fn pickName(self: *const BatteryState) ?[]const u8 {
+        if (self.pick_len == 0) return null;
+        return self.name[0..self.pick_len];
+    }
+};
+
+/// sysfs 파일을 못 읽은 이유. `readBattery`가 셋을 다르게 다룬다.
+const SysfsWhy = enum {
+    ok,
+    /// `ENOENT` — 파일이 없다. 속성 표에 없는 속성이거나(test_power의 `scope`) 장치가 빠졌다.
+    no_file,
+    /// `ENODEV` — 연 사이에 장치가 빠졌다.
+    no_device,
+    /// 그 밖의 실패. ACPI 배터리의 `_BST` 평가가 실패하면 `EIO` 같은 것이 온다.
+    other,
+};
+
+/// sysfs 파일 하나를 읽은 결과. `bytes`가 null이면 못 읽었고 그 이유가 `why`다.
+const SysfsRead = struct {
+    bytes: ?[]const u8,
+    why: SysfsWhy = .ok,
+};
+
+/// `BATTERY_DIR/<name>/<file>`을 한 번 읽는다. sysfs의 속성 파일은 `show` 한 번이 내용
+/// 전부라 read 한 번으로 끝난다.
+///
+/// errno는 실패한 호출 바로 뒤에 읽는다 — `close`가 errno를 덮을 수 있다.
+fn readSysfs(name: []const u8, file: []const u8, buf: *[BATTERY_FILE_MAX]u8) SysfsRead {
+    var path_buf: [BATTERY_PATH_MAX]u8 = undefined;
+    const path = std.fmt.bufPrintZ(&path_buf, BATTERY_DIR ++ "/{s}/{s}", .{ name, file }) catch
+        return .{ .bytes = null, .why = .other };
+    const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true });
+    if (fd >= 0) {
+        const n = std.c.read(fd, buf, buf.len);
+        if (n >= 0) {
+            _ = std.c.close(fd);
+            return .{ .bytes = buf[0..@intCast(n)] };
+        }
+    }
+    const why: SysfsWhy = switch (std.c.errno(-1)) {
+        .NOENT => .no_file,
+        .NODEV => .no_device,
+        else => .other,
+    };
+    if (fd >= 0) _ = std.c.close(fd);
+    return .{ .bytes = null, .why = why };
+}
+
+/// 디렉터리를 훑어 칸에 들어갈 배터리를 고르고, 고른 것을 읽는다(BS design 결정 1 · 2 · 8).
+/// 처음 훑기와, uevent가 power_supply를 알렸을 때 부른다.
+///
+/// 고른 이름이나 칸(글자 · 갈래)이 바뀌었으면 참이다. 부르는 쪽은 그때만 다시 그린다 —
+/// 값이 그대로인 uevent가 다시 그리기를 부르면 배터리가 없는 체인에도 `screen>` 프레임이
+/// 하나 더 생긴다(design 결정 8 · 위험 6).
+///
+/// `seen`은 `type`이 `Battery`인 장치의 수다. `counts`에 `present` · `scope`를 null로 넘기면
+/// 그 함수는 `type`만 본다 — 같은 비교를 여기 다시 적지 않는다.
+///
+/// 디렉터리를 못 열면 `scan failed` 줄을 찍고 고른 것을 잊는다. terminal은 산다 — 칸이
+/// 없을 뿐이다. 그다음 훑기는 처음 훑기처럼 결과를 찍는다.
+fn scanBattery(io: std.Io, bat: *BatteryState, now_ms: i64) bool {
+    var dir = std.Io.Dir.openDirAbsolute(io, BATTERY_DIR, .{ .iterate = true }) catch |err| {
+        logline.print("terminal: battery> scan failed error={s}\n", .{@errorName(err)});
+        const had = bat.pick_len != 0 or bat.cell != null;
+        bat.* = .{};
+        return had;
+    };
+    defer dir.close(io);
+
+    var name_bufs: [BATTERY_MAX][BATTERY_NAME_MAX]u8 = undefined;
+    var names: [BATTERY_MAX][]const u8 = undefined;
+    var n_names: usize = 0;
+    var seen: usize = 0;
+    var present: usize = 0;
+    var it = dir.iterate();
+    while (it.next(io) catch null) |entry| {
+        var kind_buf: [BATTERY_FILE_MAX]u8 = undefined;
+        var present_buf: [BATTERY_FILE_MAX]u8 = undefined;
+        var scope_buf: [BATTERY_FILE_MAX]u8 = undefined;
+        // `type`을 못 읽는 장치는 무엇인지 모르므로 안 센다.
+        const kind = readSysfs(entry.name, "type", &kind_buf).bytes orelse continue;
+        if (!battery.counts(kind, null, null)) continue;
+        seen += 1;
+        // 파일이 없거나 못 읽으면 null이다. `counts`는 그것을 "있다" · "통과"로 본다
+        // (design 결정 1의 표). test_battery에는 `scope`가 없다(BS-M0 plan 확정 2).
+        const pres = readSysfs(entry.name, "present", &present_buf).bytes;
+        const scope = readSysfs(entry.name, "scope", &scope_buf).bytes;
+        if (!battery.counts(kind, pres, scope)) continue;
+        present += 1;
+        if (n_names == BATTERY_MAX or entry.name.len > BATTERY_NAME_MAX) continue;
+        @memcpy(name_bufs[n_names][0..entry.name.len], entry.name);
+        names[n_names] = name_bufs[n_names][0..entry.name.len];
+        n_names += 1;
+    }
+    const picked = battery.pick(names[0..n_names]);
+
+    const old = bat.pickName();
+    const name_changed = if (old) |o| (picked == null or !std.mem.eql(u8, o, picked.?)) else picked != null;
+    if (!bat.scanned or name_changed or seen != bat.seen or present != bat.present) {
+        logline.print("terminal: battery> scan seen={d} present={d} pick={s}\n", .{ seen, present, picked orelse "none" });
+    }
+    bat.scanned = true;
+    bat.seen = seen;
+    bat.present = present;
+    if (name_changed) {
+        if (picked) |p| {
+            @memcpy(bat.name[0..p.len], p);
+            bat.pick_len = p.len;
+        } else {
+            bat.pick_len = 0;
+        }
+        bat.last_read = null;
+    }
+
+    const old_cell = bat.cell;
+    if (bat.pickName() == null) {
+        bat.cell = null;
+        bat.due = null;
+    } else if (readBattery(bat, now_ms) == .gone) {
+        // 훑은 사이에 빠졌다. 칸을 지우고 다음 주기에 다시 본다 — 그 읽기도 실패하면
+        // `tickBattery`가 다시 훑는다. 빠진 것을 알리는 uevent가 대개 그보다 먼저 온다.
+        bat.cell = null;
+        bat.due = now_ms + battery.PERIOD_MS;
+    }
+    return name_changed or !std.meta.eql(old_cell, bat.cell);
+}
+
+/// 고른 배터리의 `status` · `capacity`를 읽어 칸을 짓고 다음 주기를 정한다(BS design
+/// 결정 3 · 4 · 5 · 8).
+///
+/// `.gone`이면 장치가 빠졌다는 뜻이고 아무것도 안 바꾼다 — `status`가 `ENOENT` · `ENODEV`이거나
+/// `capacity`가 `ENODEV`일 때다. `capacity`의 `ENOENT`는 빠진 것이 아니다. ACPI에는 잔량을
+/// 아예 안 내는 배터리가 있고(design 확인 6) 그 칸은 `  ?%`다. `status`의 그 밖의 실패는
+/// `Unknown`, `capacity`의 그 밖의 실패는 "모른다"다(결정 3).
+///
+/// `battery> read` 줄은 읽은 값이 지난번과 다를 때만 찍는다(결정 10). `status=`는 커널의
+/// 글자 그대로라 `Not charging`이면 값에 공백이 든다.
+fn readBattery(bat: *BatteryState, now_ms: i64) enum { ok, gone } {
+    const name = bat.pickName() orelse return .gone;
+    var status_buf: [BATTERY_FILE_MAX]u8 = undefined;
+    var cap_buf: [BATTERY_FILE_MAX]u8 = undefined;
+    const status_file = readSysfs(name, "status", &status_buf);
+    const cap_file = readSysfs(name, "capacity", &cap_buf);
+    if (status_file.why == .no_file or status_file.why == .no_device or cap_file.why == .no_device) return .gone;
+
+    const got: BatteryRead = .{
+        .status = battery.parseStatus(status_file.bytes orelse ""),
+        .capacity = if (cap_file.bytes) |b| battery.parseCapacity(b) else null,
+    };
+    const cls = battery.class(got.status, got.capacity);
+    if (!std.meta.eql(bat.last_read, @as(?BatteryRead, got))) {
+        var num_buf: [3]u8 = undefined;
+        const cap_text: []const u8 = if (got.capacity) |v|
+            (std.fmt.bufPrint(&num_buf, "{d}", .{v}) catch "?")
+        else
+            "?";
+        logline.print("terminal: battery> read {s} capacity={s} status={s} class={s}\n", .{
+            name, cap_text, battery.statusName(got.status), @tagName(cls),
+        });
+    }
+    bat.last_read = got;
+    var cell: BatteryCell = .{ .text = undefined, .class = cls };
+    _ = battery.cellText(got.capacity, &cell.text);
+    bat.cell = cell;
+    bat.due = now_ms + battery.PERIOD_MS;
+    return .ok;
+}
+
+/// 주기 읽기(BS design 결정 8). 기한이 지났을 때만 부른다. 고른 배터리의 두 파일만 읽고,
+/// 빠졌으면(그 uevent를 놓쳤다) 디렉터리를 다시 훑는다. 칸이 바뀌었으면 참이다.
+fn tickBattery(io: std.Io, bat: *BatteryState, now_ms: i64) bool {
+    const old_cell = bat.cell;
+    if (readBattery(bat, now_ms) == .gone) return scanBattery(io, bat, now_ms);
+    return !std.meta.eql(old_cell, bat.cell);
+}
+
+/// 갈래 → 색(BS design 결정 5).
+fn batteryColor(cls: battery.Class) u32 {
+    return switch (cls) {
+        .normal => STATUS_BAT,
+        .plugged => STATUS_BAT_PLUG,
+        .low => STATUS_BAT_LOW,
+    };
+}
+
+/// `dumpStatus`의 메모가 배터리 칸을 비교한다(BS design 결정 10). 글자와 갈래를 둘 다 본다.
+///
+/// 갈래를 빼면 IS-M1이 `CAPS`에서 겪은 구멍이 다시 생긴다 — 잔량이 그대로인 채 어댑터를
+/// 꽂으면 글자는 그대로이고 색만 바뀌어서, 화면은 초록인데 새 `status>` 줄이 안 찍힌다.
+/// battery 체인의 검사 A4가 그 자리를 본다.
+///
+/// 다시 그릴지를 정하는 쪽(`scanBattery` · `tickBattery`)은 이 함수가 아니라
+/// `std.meta.eql`로 칸 전체를 비교한다. 이 함수를 고친 mutation이 메모만 건드리게 하려는
+/// 것이다(BS-M1 plan Task 7) — 같은 함수를 쓰면 A4가 빨개져도 메모 때문인지 다시 그리기를
+/// 안 해서인지가 안 갈린다.
+fn sameBatteryCell(a: ?BatteryCell, b: ?BatteryCell) bool {
+    const x = a orelse return b == null;
+    const y = b orelse return false;
+    return std.mem.eql(u8, &x.text, &y.text) and x.class == y.class;
+}
+
+/// `status> battery` 줄(BS design 결정 10). `dumpStatus`가 `status>` 줄들의 끝에 부른다.
+///
+/// 색 셋을 한 줄에 함께 찍는다 — `caps ink`와 같은 이유로, 하나만 보면 "안 그렸다"와
+/// "다른 색으로 그렸다"가 안 갈린다. `cell=`의 값을 따옴표로 감싸는 것은 앞의 공백이
+/// 값이기 때문이다(` 50%`). `tail`은 여백이 없을 때의 ` (no room)`이고 보통은 빈 문자열이다.
+fn dumpBatteryInk(cell: ?BatteryCell, norm: usize, plug: usize, low: usize, tail: []const u8) void {
+    if (cell) |b| {
+        logline.print("terminal: status> battery cell=\"{s}\" ink norm={d} plug={d} low={d}{s}\n", .{ &b.text, norm, plug, low, tail });
+    } else {
+        logline.print("terminal: status> battery cell=none ink norm={d} plug={d} low={d}{s}\n", .{ norm, plug, low, tail });
+    }
+}
+
 // ── 포인터 장치(PD-M0) ───────────────────────────────────────────────
 //
 // 찾고 열고 읽고 닫는 시스템 콜 쪽이다. 판단(분류 · 디코딩 · 좌표)은 전부
@@ -2094,18 +2428,27 @@ fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
 /// 안다(design 결정 1). read가 `ENOBUFS`면 소켓 버퍼가 넘쳐 커널이 메시지를
 /// 버린 것이다 — 놓친 장치가 있을 수 있으므로 디렉터리를 다시 훑는다. 이미
 /// 연 경로는 건너뛴다.
-fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
+///
+/// power_supply의 uevent를 하나라도 봤으면 참이다(BS-M1, design 결정 8). 이름도
+/// `ACTION`도 안 본다 — test_power가 배터리를 켜고 끄는 uevent는 `test_battery`가
+/// 아니라 `test_ac`에서 오고(BS design 확인 4), 배터리를 갈아 끼우면 `add` · `remove`가
+/// 온다. `ENOBUFS`도 참이다. 버려진 메시지에 power_supply가 있었을 수 있다.
+fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) bool {
     // 커널 uevent 하나는 `UEVENT_BUFFER_SIZE`(2048바이트) 안이다.
     var buf: [4096]u8 = undefined;
+    var supply = false;
     while (true) {
         const n = std.c.read(fd, &buf, buf.len);
         if (n < 0) {
-            if (std.c.errno(n) != .NOBUFS) return; // EAGAIN — 다 읽었다
+            if (std.c.errno(n) != .NOBUFS) return supply; // EAGAIN — 다 읽었다
             scanPointers(io, devs);
+            supply = true;
             continue;
         }
-        if (n == 0) return;
-        const name = pointer.ueventAddedNode(buf[0..@intCast(n)]) orelse continue;
+        if (n == 0) return supply;
+        const msg = buf[0..@intCast(n)];
+        if (battery.ueventIsPowerSupply(msg)) supply = true;
+        const name = pointer.ueventAddedNode(msg) orelse continue;
         tryOpenPointer(devs, name);
     }
 }
@@ -2741,6 +3084,10 @@ pub fn main(init: std.process.Init) !void {
     // 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
     // 초기값은 무엇이든 된다.
     var last_status_caps = false;
+    // 배터리 칸도 따로 기억한다(BS-M1). `CAPS`와 같은 이유다 — 잔량이 그대로인 채 어댑터를
+    // 꽂으면 글자는 그대로이고 갈래만 바뀐다. 초기값은 `last_status_caps`와 같은 이유로
+    // 무엇이든 된다.
+    var last_status_battery: ?BatteryCell = null;
     // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
@@ -2808,6 +3155,19 @@ pub fn main(init: std.process.Init) !void {
     touchpad_screen = .{ .w = fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
     scanPointers(init.io, &pointer_devs);
 
+    // 배터리(BS-M1, design 결정 8). 포인터와 같은 이유로 uevent 소켓을 연 뒤에 훑는다 —
+    // 반대면 훑은 뒤 소켓을 열기 전에 생긴 배터리를 놓친다.
+    //
+    // 시계의 원점을 여기서 잡는다. 주기의 기한은 이 시각부터의 밀리초다. 렌더 시간을 재는
+    // 것과 같은 단조 시계(`.awake`)이고, 커널에 `SUSPEND`가 없어서 잠든 시간은 따질 일이 없다.
+    //
+    // 처음 훑기는 다시 그리기를 안 켠다. 첫 프레임은 셸의 첫 출력이 그리고, 그 프레임의 상태
+    // 줄에 칸이 이미 있다(battery 체인 검사 B1). 여기서 켜면 셸보다 먼저 프레임이 하나 더
+    // 그려져 모든 체인의 `screen>` 줄 수가 바뀐다.
+    const battery_clock = std.Io.Clock.now(.awake, init.io);
+    var battery_state: BatteryState = .{};
+    _ = scanBattery(init.io, &battery_state, 0);
+
     // poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,
     // 그리고 모든 워크스페이스의 모든 패널이다(WP design 위험 1). 포커스 없는
     // 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
@@ -2860,8 +3220,11 @@ pub fn main(init: std.process.Init) !void {
         fds[nfds + 1] = .{ .fd = dict.err_fd, .events = c.POLLIN, .revents = 0 };
         nfds += 2;
 
-        // -1 = 무한 대기. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
-        const ready = c.poll(&fds, @intCast(nfds), -1);
+        // 고른 배터리가 없으면 -1(무한 대기)이다. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
+        // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
+        // 키 때문에 깼든 timeout으로 깼든, 읽는 것은 아래에서 기한이 지났을 때뿐이다.
+        const poll_now: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+        const ready = c.poll(&fds, @intCast(nfds), battery.pollTimeout(poll_now, battery_state.due));
         if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
@@ -3189,7 +3552,23 @@ pub fn main(init: std.process.Init) !void {
             }
             if (gone) closePointer(&pointer_devs, di, &pointer_state);
         }
-        if (fds[1].revents & c.POLLIN != 0) drainUevents(uevent_fd, init.io, &pointer_devs);
+        const supply_seen = fds[1].revents & c.POLLIN != 0 and drainUevents(uevent_fd, init.io, &pointer_devs);
+        // 배터리(BS-M1, design 결정 8). uevent가 power_supply를 봤으면(또는 메시지가
+        // 버려졌으면) 디렉터리를 다시 훑는다. 아니면 기한이 지났을 때만 고른 배터리를
+        // 읽는다 — 키를 칠 때마다 읽지 않는다. 어느 쪽이든 칸이 바뀌었을 때만 다시 그린다.
+        //
+        // 아래 `!needs_redraw`의 `continue`보다 앞이어야 한다. 뒤면 키도 PTY 출력도 없는
+        // 바퀴(uevent나 timeout으로만 깬 바퀴)에서 칸을 고쳐도 화면이 안 바뀐다(검사 A3).
+        {
+            const bat_now: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+            const changed = if (supply_seen)
+                scanBattery(init.io, &battery_state, bat_now)
+            else if (battery_state.due) |due|
+                bat_now >= due and tickBattery(init.io, &battery_state, bat_now)
+            else
+                false;
+            if (changed) needs_redraw = true;
+        }
         if (pointerCount(&pointer_devs) == 0) pointer_shown = false;
         if (round.woke) pointer_shown = true;
         // 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
@@ -3458,6 +3837,9 @@ pub fn main(init: std.process.Init) !void {
             .copy = copy_active,
             .workspace = ws_number,
             .dict = dict.show(),
+            .cols = cols,
+            // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
+            .battery = battery_state.cell,
         };
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
@@ -3476,7 +3858,7 @@ pub fn main(init: std.process.Init) !void {
         dumpHighlight(focus.screen);
         dumpOverlay(prompt);
         dumpPromptInk(fb, prompt_ink, prompt);
-        dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps);
+        dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps, &last_status_battery);
         dumpPane(fb, &workspaces, current, &last_pane);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는

@@ -387,6 +387,12 @@ run_chain() {
 # 열 갈래로 하고, stub은 받은 WAV의 샘플까지 로그에 적는다. curl이 인증 기관 목록을 읽는지는
 # 컨테이너의 openssl s_server(45492)로 본다. 게스트에 한 글자도 안 친다. 회차당 부팅 1회.
 #
+# BS 체인은 상태 줄의 배터리 칸을 본다. 커널에 내장된 test_power가 가짜 배터리를 만들고 내장
+# cmdline이 그것을 꺼 둔다. 부팅 A(monitor 45494)에서 셸로 test_power의 파라미터를 쓰면
+# terminal이 uevent를 보고 다시 훑고, 오른쪽 끝의 칸이 뜨고 · 바뀌고 · 사라진다. 판정은
+# terminal의 battery> 줄과 status> battery 줄(띠에서 색 셋의 픽셀을 센 것)이다. 부팅 B는
+# -append로 켠 배터리가 첫 프레임에 이미 칸으로 있는 것을 본다. 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -411,6 +417,7 @@ CHAINS=(
   "PD-M4:./pointer/check.sh"
   "AU-M3:./audio/check.sh"
   "VD-M0:./dictation/check.sh"
+  "BS-M1:./battery/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

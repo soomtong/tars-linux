@@ -341,6 +341,34 @@ if ! grep -aq "cpuidle: using governor" "$LOG"; then
 fi
 echo "the thermal core and cpuidle both came up"
 
+# ── BS-M1: limine으로 뜬 기계에는 가짜 배터리가 없다 ───────────────────
+#
+# 판정 14. 커널에는 게이트용 가짜 배터리(test_power)가 내장돼 있고, boot/limine.conf의
+# initcall_blacklist=test_power_init가 limine으로 뜨는 부팅에서 그 등록을 막는다(BS design
+# 결정 9의 겹 2). 이 체인이 limine을 지나는 UEFI 부팅이라 그 겹이 실제로 먹었는지를 여기서
+# 본다 — battery 체인은 -kernel로 떠서 limine을 안 지난다.
+#
+# 블랙리스트는 이름이 틀려도 아무 말을 안 한다(pr_debug뿐이다, BS design 위험 3). 그래서
+# 결과를 본다. 막혔으면 /sys/class/power_supply가 비어 seen=0이고, 이름이 안 맞았으면
+# test_battery가 등록돼 seen=1이다. 막히지 않아도 칸은 안 뜬다(내장 cmdline이 끈다) —
+# 화면으로는 안 갈리는 차이라 이 줄로 본다.
+#
+# 이 줄은 terminal의 처음 훑기가 첫 프레임 전에 찍는다. 위의 기다림이 `terminal: grid`까지만
+# 보므로 여기서 30초까지 기다린다.
+SCAN_SEEN=0
+for _ in $(seq 1 30); do
+  if grep -aq "terminal: battery> scan " "$LOG"; then SCAN_SEEN=1; break; fi
+  sleep 1
+done
+if [ "$SCAN_SEEN" != "1" ]; then
+  fail "terminal never printed a battery> scan line" "terminal: battery>" "terminal: grid"
+fi
+if ! grep -aqF "terminal: battery> scan seen=0 present=0 pick=none" "$LOG"; then
+  fail "test_power registered on a limine boot; initcall_blacklist=test_power_init did not take" \
+    "terminal: battery> scan" "Kernel command line" "test_ac"
+fi
+echo "limine's initcall_blacklist kept test_power from registering (battery> scan seen=0)"
+
 # ── 그리고 실제로 친다 ─────────────────────────────────────────────────
 #
 # "장치가 보인다"와 "키가 화면에 닿는다"는 다른 일이다. 앞의 판정 여섯은
