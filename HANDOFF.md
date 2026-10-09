@@ -5,8 +5,8 @@
 - 마지막으로 닫힌 것은 Battery Status(BS-M0 · M1)다(2026-10-09). 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의
   잔량 칸이 뜬다. 기억은 `docs/decisions/project_battery_status.md`, design은
   `docs/specs/2026-10-08-tars-battery-status-design.md`다.
-- BS-M0은 커밋됐다(`2ff5108`). BS-M1의 코드(`terminal/src/main.zig` · `battery/check.sh` · `check.sh` · `machine/check.sh`)와
-  BS를 닫는 문서는 루트 게이트의 결과를 받은 뒤 커밋한다.
+- 커밋 다섯 — design · M0 plan `272065f`, BS-M0 `2ff5108`, M1 plan `b1b1c5b`, BS-M1 `000e562`, 닫는 문서 `0412237`.
+  작업 트리는 깨끗하다.
 - BS-M1 루트 게이트(22체인 × 2): 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0
 - 체인은 이제 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
 - 그 전에 닫힌 것은 Config Tool(TC-M0~M3)과 Atomic Log Lines(AL-M0 · M1)다(2026-10-07, `f3b677c`).
