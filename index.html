@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<script>document.documentElement.classList.add("js")</script>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TARS — Terminal Architecture for Rendering &amp; Shell</title>
+<meta name="description" content="직접 빌드한 Linux 커널 위에 직접 만든 init(PID 1)과 터미널을 올린 시스템. 셸까지 가는 길을 매 단계 확인하며 만든다.">
+<meta property="og:title" content="TARS — Terminal Architecture for Rendering & Shell">
+<meta property="og:description" content="커널 위의 PID 1부터 픽셀 하나까지. 한글 조합, 패널, copy mode, kitty graphics를 직접 그리는 터미널 시스템.">
+<meta property="og:image" content="media/panes.webp">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top">T<span>A</span>RS</a>
+    <div class="links">
+      <a href="#chain">부팅 사슬</a>
+      <a href="#screens">화면</a>
+      <a href="#why">원칙</a>
+      <a href="#log">만든 순서</a>
+      <a href="#run">실행</a>
+      <a href="#features">전체 기능</a>
+      <a class="gh" href="https://github.com/soomtong/tars-linux">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <p class="eyebrow"><span class="p">root@(none)</span> <span class="t">~</span># cat /proc/1/comm</p>
+        <h1>TARS</h1>
+        <p class="acro" id="acro"><span class="caret"></span></p>
+        <p class="lead">직접 빌드한 Linux 커널 위에, 직접 만든 <em>init(PID 1)</em>과 <em>터미널</em>을 올린 시스템.</p>
+        <p class="sub">셸까지 가는 길에 배포판의 부품을 쓰지 않는다. 커널이 어디까지 책임지고 어디서부터 우리 코드인지를 매 단계 확인하면서 만든다. 데스크톱도, X도, Wayland도 없다 — 프레임버퍼에 픽셀을 직접 찍는다.</p>
+        <div class="cta">
+          <a class="btn primary" href="#screens">화면 보기</a>
+          <a class="btn" href="#features">전체 기능</a>
+          <a class="btn" href="https://github.com/soomtong/tars-linux">소스 ↗</a>
+        </div>
+        <p class="asof" id="asof"></p>
+      </div>
+      <div class="monitor reveal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">qemu-system-x86_64 — virtio-gpu 1024×640</span><span class="rec">실제 화면</span></div>
+        <div class="screen">
+          <video src="media/panes.mp4" poster="media/panes.webp" autoplay muted loop playsinline></video>
+        </div>
+      </div>
+    </header>
+  </div>
+
+  <section id="chain">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">01</span><h2>전원에서 프롬프트까지, 여섯 칸</h2></div>
+      <p class="sec-lead reveal">부팅은 사슬이다. 앞 칸은 다음 칸을 메모리에 올리고 손을 뗀다. 우리가 쓴 것은 주황색 칸이고, 파란 칸은 직접 빌드하고 설정하지만 코드는 남의 것이다.</p>
+      <div class="chain reveal" id="chainNodes">
+        <div class="node"><div class="box"><div class="k">image</div><div class="n">ISO</div><div class="d">xorriso hybrid. USB에 구워 노트북에서도 뜬다</div></div></div>
+        <div class="node"><div class="box"><div class="k">bootloader</div><div class="n">Limine</div><div class="d">UEFI · BIOS 양쪽. 커널과 initrd를 올린다</div></div></div>
+        <div class="node"><div class="box"><div class="k">kernel</div><div class="n">Linux</div><div class="d">직접 고른 config로 빌드. simpledrm · NVMe · USB · 무선</div></div></div>
+        <div class="node ours"><div class="box"><div class="k">pid 1 · zig</div><div class="n">init</div><div class="d">설정 디스크, 네트워크, 서비스 감독, 전원 버튼</div></div></div>
+        <div class="node ours"><div class="box"><div class="k">drm/kms · zig</div><div class="n">terminal</div><div class="d">PTY · 한글 조합 · 글리프 · 패널 · copy mode</div></div></div>
+        <div class="node"><div class="box"><div class="k">shell</div><div class="n">fish</div><div class="d">bash · zsh도 된다. <code>tars.conf</code>가 고른다</div></div></div>
+      </div>
+      <div class="legend reveal"><span class="o"><i></i>우리가 쓴 코드 (Zig)</span><span class="b"><i></i>빌드하고 설정하는 남의 코드</span><span>VT 해석은 ghostty-vt, 이미지 디코딩은 stb_image를 쓴다</span></div>
+      <div class="serial reveal" id="serial" aria-label="부팅 시리얼 로그 재생"></div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">02</span><h2>실제 화면</h2></div>
+      <p class="sec-lead reveal">아래 영상은 전부 QEMU monitor의 <code>sendkey</code>로 키를 치고 <code>screendump</code>로 0.1초마다 뜬 프레임이다. 편집이나 합성은 없다 — 찍는 스크립트는 저장소의 <code>site/capture.sh</code>다.</p>
+
+      <div class="feat reveal">
+        <div class="media"><div class="monitor"><div class="screen"><video data-src="media/boot.mp4" poster="media/boot.webp" muted loop playsinline></video></div></div></div>
+        <div class="text"><div>
+          <h3><span class="tag">BOOT</span>4초 만에 프롬프트</h3>
+          <p>QEMU에 커널과 initrd를 넘기고 녹화를 함께 시작했다. 커널 메시지는 시리얼로만 가고, 화면의 첫 픽셀은 우리 terminal이 찍는다.</p></div>
+          <ul>
+            <li><b>PID 1</b>은 <code>/init</code> — Zig로 쓴 우리 프로그램이다</li>
+            <li>죽은 자식은 다시 띄운다. terminal도, 셸도, 서비스도</li>
+            <li>맨 아래 줄은 상태 줄: 한/영 · 자판 · 라틴 배열 · 대문자 잠금</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feat reveal">
+        <div class="media"><div class="monitor"><div class="screen"><video data-src="media/hangul.mp4" poster="media/hangul.webp" muted loop playsinline></video></div></div></div>
+        <div class="text"><div>
+          <h3><span class="tag">HANGUL</span>한글은 터미널이 조합한다</h3>
+          <p>입력기 데몬이 없다. evdev 키 코드를 받아 terminal 안의 오토마타가 자모를 모으고, 조합 중인 글자는 커서 아래에 그린다. 화면의 자판은 신세벌식 PCS.</p></div>
+          <ul>
+            <li><kbd>Shift</kbd>+<kbd>Space</kbd> · 한/영 키 · CapsLock 탭 · 왼쪽 Ctrl 탭으로 전환</li>
+            <li><b>자판 넷</b> — 두벌식 · 공세벌 3-P3 · 신세벌 P2 · 신세벌 PCS</li>
+            <li>상태 줄의 <code>EN</code> ↔ <code>한</code>이 함께 바뀐다</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feat reveal">
+        <div class="media"><div class="monitor"><div class="screen"><video data-src="media/copy.mp4" poster="media/copy.webp" muted loop playsinline></video></div></div></div>
+        <div class="text"><div>
+          <h3><span class="tag">COPY MODE</span>스크롤백을 vim처럼</h3>
+          <p>마우스 없이 화면 위로 올라가 찾고, 고르고, 붙인다. 매치는 앰버로, 지금 매치는 더 밝게. 검색창에는 <code>/Freeing [3/4]</code>처럼 위치가 뜬다.</p></div>
+          <ul>
+            <li><kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> 진입 · <kbd>/</kbd> 검색 · <kbd>n</kbd> <kbd>N</kbd> 왕복</li>
+            <li><kbd>v</kbd> <kbd>V</kbd> 선택 · <kbd>w</kbd> <kbd>b</kbd> 단어 이동 · <kbd>y</kbd> 복사</li>
+            <li><kbd>⌘</kbd><kbd>V</kbd>는 자식이 원하면 bracketed paste로 감싼다</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feat reveal">
+        <div class="media"><div class="monitor"><div class="screen"><video data-src="media/vim.mp4" poster="media/vim.webp" muted loop playsinline></video></div></div></div>
+        <div class="text"><div>
+          <h3><span class="tag">VIM</span>커서 모양 셋, Esc 하나</h3>
+          <p>vim이 DECSCUSR로 부탁하는 모양을 그린다 — insert는 막대, normal은 블록, replace는 밑줄. 한글을 치다가 Esc를 누르면 조합을 끝내고 영문으로 돌아와서 다음 키가 명령이 된다.</p></div>
+          <ul>
+            <li><b>esc_latin</b> — <code>tars.conf</code>에서 끌 수 있다</li>
+            <li>게스트 vimrc는 플러그인 없는 모던 설정 한 벌, <code>mouse=a</code></li>
+            <li><code>bat</code> · <code>eza</code> · <code>rg</code> · <code>fd</code> · <code>fzf</code> 등 도구가 기본</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="stats reveal" id="stats"></div>
+    </div>
+  </section>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">03</span><h2>속도가 아니라 이해</h2></div>
+      <p class="sec-lead reveal">TARS는 한 번 멈췄다. 이전 저장소에서 "이해 없이 코드만 쌓이는" 문제로 막혀 처음부터 다시 시작했다. 이번 재시작의 목표는 빨리 만드는 것이 아니라, 커널이 어디까지 하고 어디서부터 우리 몫인지를 매번 몸으로 확인하는 것이다.</p>
+      <div class="flow reveal">
+        <div><h4>설명 먼저</h4><p>무엇을 왜 만드는지, 코드를 던지기 전에 말한다.</p></div>
+        <div><h4>실행</h4><p>빌드 · QEMU 부팅 · 게이트를 실제로 돌린다. 짐작하지 않고 잰다.</p></div>
+        <div><h4>결과를 줄 단위로</h4><p>로그가 왜 그렇게 나왔는지 읽는다. 실패가 정상인 단계는 왜 정상인지 짚는다.</p></div>
+        <div><h4>게이트가 판정</h4><p>체인마다 QEMU 안에서 화면 픽셀과 로그로 본다. 통과해야 다음으로 간다.</p></div>
+      </div>
+      <blockquote class="reveal">"init 없는 kernel panic"이 첫 milestone의 성공 조건이었다. 무엇이 없어서 멈추는지를 먼저 보고, 그 빈자리에 우리 코드를 하나씩 넣었다.<small>— Boot Foundation, BF-M1</small></blockquote>
+    </div>
+  </section>
+
+  <section id="log">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">04</span><h2>만든 순서</h2></div>
+      <p class="sec-lead reveal">서브프로젝트마다 design doc과 milestone별 plan을 쓰고, 끝나면 무엇을 배웠는지 기록한다. 전부 <code>docs/</code>에 있다.</p>
+      <div class="tl collapsed" id="tl"></div>
+      <button class="btn more" id="more" type="button"></button>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">05</span><h2>직접 띄워 보기</h2></div>
+      <p class="sec-lead reveal">빌드는 컨테이너 안에서만 된다 — 커널과 게스트 바이너리가 쓰는 x86_64 크로스 툴체인이 이미지 안에 있다. QEMU는 호스트에서 돈다.</p>
+      <div class="two reveal">
+        <div>
+          <h4>빌드하고 띄우기</h4>
+<pre><span class="p">$</span> git clone https://github.com/soomtong/tars-linux
+<span class="p">$</span> cd tars-linux
+<span class="p">$</span> docker build -t tars-devcontainer -f devcontainer/Dockerfile .
+<span class="p">$</span> make boot-qemu      <span class="c"># 전부 빌드하고 설정 디스크를 붙여 QEMU로</span>
+<span class="p">$</span> make run-qemu       <span class="c"># 빌드 없이 다시 띄우기</span></pre>
+        </div>
+        <div>
+          <h4>판정</h4>
+<pre><span class="p">$</span> make check CHAIN=config   <span class="c"># 체인 하나</span>
+<span class="p">$</span> make gate                  <span class="c"># 루트 게이트 — 전 체인</span>
+
+<span class="c"># 노트북: out/tars.iso를 USB에 굽고 UEFI로</span>
+<span class="c"># 깔기: tars-install &lt;디스크&gt;</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head reveal"><span class="sec-num">06</span><h2>전체 기능 목록</h2></div>
+      <p class="sec-lead reveal" id="featLead"></p>
+      <div class="fbar reveal">
+        <input id="fq" type="search" placeholder="찾기 — 예: 한글, Cmd+D, net=, wifi" autocomplete="off">
+        <label><input type="checkbox" id="fnew"> 최근 추가만</label>
+        <span id="fcount" class="dim"></span>
+      </div>
+      <div id="flist"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>TARS — Terminal Architecture for Rendering &amp; Shell</span>
+    <span><a href="https://github.com/soomtong/tars-linux">github.com/soomtong/tars-linux</a> · 영상은 <code>site/capture.sh</code>로 찍었다</span>
+  </div>
+</footer>
+
+<div class="status" aria-hidden="true">
+  <span id="stLang">EN</span><span>신세벌 PCS</span><span>쿼티</span><span class="off">CAPS</span><span class="copy" id="stCopy">COPY</span>
+  <span class="right"><span class="sec" id="stSec">00</span><span class="bat">100%</span></span>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
