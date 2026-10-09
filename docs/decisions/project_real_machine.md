@@ -30,7 +30,8 @@ design은 `docs/specs/2026-09-09-tars-real-machine-design.md`.
 | `USB_SUPPORT`·`USB_HID` | 본다 | `qemu-xhci` + `usb-kbd` + `i8042=off` |
 | `BLK_DEV_NVME` · AHCI | 본다 | `-device nvme` · q35의 `ich9-ahci` |
 | `THERMAL` · `ACPI_PROCESSOR` | 본다(RM-M3에서 뒤집혔다) | 거버너 등록 줄과 `_PPC` notify |
-| `ACPI_EC` · `ACPI_AC` · `ACPI_BATTERY` · 실 GPU | 못 본다 | QEMU에 EC도 어댑터도 배터리도 GPU도 없다 |
+| `ACPI_EC` · `ACPI_AC` · 실 GPU | 못 본다 | QEMU에 EC도 어댑터도 GPU도 없다 |
+| `ACPI_BATTERY` | 드라이버는 못 보고 sysfs 경로는 본다(BS, 2026-10-09) | QEMU에 배터리가 없다. 커널에 내장한 test_power가 같은 `power_supply_sysfs.c`로 `/sys/class/power_supply/`의 글자를 내고, battery 체인이 그것을 terminal의 칸까지 본다. ACPI 쪽(`_BST` 평가 · `capacity`가 없는 배터리)은 여전히 실기에서만 보인다([[project_battery_status]]) |
 
 못 보는 것이 열에서 셋으로 줄었고, 그 셋 중 둘은 안 켜기로 정했다.
 그리고 RM-M3에서 한 번 더 줄었다 — 재 보니 `THERMAL`과 `ACPI_PROCESSOR`도

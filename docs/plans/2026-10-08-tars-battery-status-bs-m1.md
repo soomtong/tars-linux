@@ -2,7 +2,7 @@
 
 Date: 2026-10-09
 Design: `docs/specs/2026-10-08-tars-battery-status-design.md`
-Status: plan을 썼다(구현 전). 구현과 루트 게이트의 값은 끝난 뒤 맨 아래 "BS-M1이 실측한 것"에 적는다. BS의 마지막 milestone이다.
+Status: 끝났다(2026-10-09). 구현은 Sonnet 서브에이전트가 Task 0 ~ 8을 글자 그대로 넣었고(plan 코드를 고친 곳 0, 컴파일 에러 0, plan의 기대 글자 하나를 고쳤다 — 확정 20), 루트 게이트 22체인 × 2는 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0. 값은 맨 아래 "BS-M1이 실측한 것". BS의 마지막 milestone이다.
 
 ## 누가 무엇을 하나
 
@@ -129,7 +129,7 @@ lock을 그만큼 오래 들 수 있다 — 컨테이너가 하나라도 있으�
     출력도 없는 바퀴(uevent나 timeout으로만 깬 바퀴)에서 칸을 고쳐도 화면이 안 바뀐다. 그것이 검사 A3의 자리다.
 
 14. 게이트 검사 A3의 방식. bash에서 `( sleep 5; echo 10 > battery_capacity ) &`를 친다. 판정은 셋이다.
-    - 칸이 빨강 `  10%`가 된다.
+    - 칸이 빨강 ` 10%`가 된다.
     - 그 칸을 그린 프레임의 `screen>` 줄이 바로 앞 프레임의 것과 글자까지 같다(`redraw_alone`). PTY 출력이 그 프레임에 끼었으면 다르다.
     - 앞 프레임부터 그 `status> battery` 줄까지 `key>` 줄이 없다.
 
@@ -159,6 +159,10 @@ lock을 그만큼 오래 들 수 있다 — 컨테이너가 하나라도 있으�
 
 19. 중간 상태는 빌드하지 않는다. Task 1의 배터리 절이 Task 3의 색 상수를 쓰므로 Task 1 · 2 · 3만 넣은 파일은 컴파일되지 않는다(Zig의
     `AstGen`이 쓰이지 않는 함수의 이름도 찾는다). 빌드는 Task 4가 끝난 뒤 한 번이다. Task마다 보는 것은 `git diff --stat`의 수다.
+
+20. (구현 중에 고침, 2026-10-09) 이 plan과 design 결정 11의 표가 잔량 10의 칸을 `  10%`(다섯 자)로 적었다. 칸은 `CELL_LEN` 넉 자라
+    실제 글자는 ` 10%`(공백 하나)이고 `  5%`만 공백 둘이다. 코드는 맞았고 체인 A3의 패턴만 틀려 첫 battery 체인이 A3에서 빨갰다
+    (실측 줄 `cell=" 10%" ink norm=0 plug=0 low=66`). lead가 두 문서의 글자를 고쳤고 구현자가 `battery/check.sh`를 고쳤다.
 
 ## Task 0: 바꾸기 전의 기준값
 
@@ -1077,7 +1081,7 @@ cd "$(dirname "$0")"
 #   → 셸에서 battery_present에 true를 쓰면 test_power가 test_ac에 uevent를 보낸다
 #   → terminal의 uevent 소켓(PD-M0이 연 것)이 SUBSYSTEM=power_supply를 보고 다시 훑는다.
 #     상태 줄의 오른쪽 끝에 넉 자 ` 50%`가 회색으로 뜬다(검사 A2)
-#   → 키도 PTY 출력도 없이 잔량이 10이 되면 그 칸만 빨강 `  10%`로 다시 그린다(검사 A3)
+#   → 키도 PTY 출력도 없이 잔량이 10이 되면 그 칸만 빨강 ` 10%`로 다시 그린다(검사 A3)
 #   → 글자가 그대로인 채 충전이 시작되면 초록이 되고 새 줄이 찍힌다(검사 A4)
 #   → 배터리를 끄면 칸이 사라진다(검사 A5)
 #   → 부팅 cmdline으로 켠 배터리는 첫 프레임에 이미 칸이 있다(검사 B1)
@@ -1330,7 +1334,7 @@ echo "$(last_line 'terminal: status> battery '); the status text is unchanged"
 # 그 출력도 다시 그리기를 불러서 성공 경로가 둘이 된다
 # (docs/decisions/project_gate_chain_composition.md).
 #
-# 판정은 셋이다. 칸이 빨강 `  10%`가 됐다. 그 칸을 그린 프레임의 screen>이 바로 앞
+# 판정은 셋이다. 칸이 빨강 ` 10%`가 됐다. 그 칸을 그린 프레임의 screen>이 바로 앞
 # 프레임과 글자까지 같다 — PTY 출력이 끼었다면 다르다. 앞 프레임부터 그 줄까지 key> 줄이
 # 없다. 5초는 bash가 `[1] <pid>`와 프롬프트를 다 그릴 여유다 — 그 프레임이 늦어 칸의
 # 프레임과 겹치면 둘째 판정이 거짓으로 빨갛다.
@@ -1344,11 +1348,11 @@ type_keys shift-9 spc s l e e p spc 5 semicolon spc e c h o spc 1 0 spc shift-do
   b a t t e r y shift-minus c a p a c i t y spc shift-0 spc shift-7 ret
 wait_for_screen '\[1\] [0-9]+' ||
   report_failure "A3: bash never reported the background job"
-wait_for_last 'terminal: status> battery ' '^terminal: status> battery cell="  10%" ink norm=0 plug=0 low=[1-9][0-9]*$' ||
-  report_failure "A3: the cell never turned into a low \"  10%\" (last: $(last_line 'terminal: status> battery '))"
-ALONE="$(redraw_alone 'terminal: status> battery cell="  10%"')"
+wait_for_last 'terminal: status> battery ' '^terminal: status> battery cell=" 10%" ink norm=0 plug=0 low=[1-9][0-9]*$' ||
+  report_failure "A3: the cell never turned into a low \" 10%\" (last: $(last_line 'terminal: status> battery '))"
+ALONE="$(redraw_alone 'terminal: status> battery cell=" 10%"')"
 [ "$ALONE" = "same=1 keys=0" ] ||
-  report_failure "A3: the frame that drew \"  10%\" was not a battery-only redraw (${ALONE}, want same=1 keys=0)"
+  report_failure "A3: the frame that drew \" 10%\" was not a battery-only redraw (${ALONE}, want same=1 keys=0)"
 LOW_A3="$(last_line 'terminal: status> battery ' | sed -E 's/.* low=([0-9]+)$/\1/')"
 READ="$(last_line 'terminal: battery> read ')"
 [ "$READ" = "terminal: battery> read test_battery capacity=10 status=Discharging class=low" ] ||
@@ -1357,14 +1361,14 @@ echo "$(last_line 'terminal: status> battery '); ${ALONE}"
 
 # ── 검사 A4: 글자가 그대로인 채 갈래만 바뀐다 ───────────────────────────
 #
-# 잔량이 10 그대로이고 상태만 Charging이 된다. 칸의 글자 `  10%`는 그대로이고 색이
+# 잔량이 10 그대로이고 상태만 Charging이 된다. 칸의 글자 ` 10%`는 그대로이고 색이
 # 빨강에서 초록으로 바뀐다. dumpStatus의 메모가 글자만 기억하면 화면은 초록인데 새 줄이
 # 안 찍힌다 — IS-M1이 CAPS에서 겪은 구멍이다(design 결정 10, plan Task 7의 mutation m3).
 # 그리고 픽셀 수가 A3의 빨강과 같아야 한다. 같은 넉 자를 색만 바꿔 칠했다는 증거다.
 echo "=== A4: the adapter goes in at the same capacity ==="
 # echo charging > battery_status
 type_keys e c h o spc c h a r g i n g spc shift-dot spc b a t t e r y shift-minus s t a t u s ret
-wait_for_last 'terminal: status> battery ' '^terminal: status> battery cell="  10%" ink norm=0 plug=[1-9][0-9]* low=0$' ||
+wait_for_last 'terminal: status> battery ' '^terminal: status> battery cell=" 10%" ink norm=0 plug=[1-9][0-9]* low=0$' ||
   report_failure "A4: no new status> battery line with plug>0 after battery_status=charging (last: $(last_line 'terminal: status> battery '))"
 READ="$(last_line 'terminal: battery> read ')"
 [ "$READ" = "terminal: battery> read test_battery capacity=10 status=Charging class=plugged" ] ||
@@ -1468,8 +1472,8 @@ echo "BS-M1 check PASS"
 | 0 | 없음(부팅 전) | `kernel/.config`의 `CONFIG_TEST_POWER=y` · `CONFIG_ACPI_BATTERY=y` · `CONFIG_POWER_SUPPLY=y`, 내장 cmdline의 낱말 `test_power.battery_present=false`, limine `cmdline:`의 낱말 `initcall_blacklist=test_power_init` |
 | A1 | 없음 | 마지막 `scan` 줄이 `seen=1 present=0 pick=none`, `read` 줄 0, `text=`가 `EN  신세벌 PCS  쿼티  CAPS`, 마지막 칸 줄이 `cell=none ink norm=0 plug=0 low=0` |
 | A2 | fish에서 `cd /sys/module/test_power/parameters` · `echo true > battery_present` | `scan … present=1 pick=test_battery`, 칸 줄 `cell=" 50%" … norm>0 plug=0 low=0`, `read … capacity=50 status=Discharging class=normal`, `text=` 그대로 |
-| A3 | `/usr/bin/bash --norc`, 프롬프트 `bash-` 뒤 `( sleep 5; echo 10 > battery_capacity ) &`, `[1] <pid>` 뒤 아무것도 안 친다 | 칸 줄 `cell="  10%" … norm=0 plug=0 low>0`(30초까지), `redraw_alone`이 `same=1 keys=0`, `read … capacity=10 status=Discharging class=low` |
-| A4 | bash에서 `echo charging > battery_status` | 칸 줄 `cell="  10%" … norm=0 plug>0 low=0`, `read … capacity=10 status=Charging class=plugged`, `plug=`이 A3의 `low=`와 같다 |
+| A3 | `/usr/bin/bash --norc`, 프롬프트 `bash-` 뒤 `( sleep 5; echo 10 > battery_capacity ) &`, `[1] <pid>` 뒤 아무것도 안 친다 | 칸 줄 `cell=" 10%" … norm=0 plug=0 low>0`(30초까지), `redraw_alone`이 `same=1 keys=0`, `read … capacity=10 status=Discharging class=low` |
+| A4 | bash에서 `echo charging > battery_status` | 칸 줄 `cell=" 10%" … norm=0 plug>0 low=0`, `read … capacity=10 status=Charging class=plugged`, `plug=`이 A3의 `low=`와 같다 |
 | A5 | bash에서 `echo false > battery_present` | `scan … present=0 pick=none`, 칸 줄 `cell=none … 0 0 0`, `text=` 그대로, 부팅 A 전체의 `scan` 줄 3 · `read` 줄 3 |
 | B1 | 없음(`-append`로 켰다) | 첫 칸 줄이 `cell="100%" … norm=0 plug>0 low=0`, 첫 `scan` 줄이 `present=1 pick=test_battery`, 첫 `read` 줄이 `capacity=100 status=Full class=plugged` |
 
@@ -1497,9 +1501,9 @@ terminal: battery> scan seen=1 present=0 pick=none; no battery was read; the sta
 === A2: battery_present=true from the shell ===
 terminal: status> battery cell=" 50%" ink norm=N plug=0 low=0; the status text is unchanged
 === A3: the capacity drops to 10 while nothing is typed ===
-terminal: status> battery cell="  10%" ink norm=0 plug=0 low=N; same=1 keys=0
+terminal: status> battery cell=" 10%" ink norm=0 plug=0 low=N; same=1 keys=0
 === A4: the adapter goes in at the same capacity ===
-terminal: status> battery cell="  10%" ink norm=0 plug=N low=0; the same N pixel(s) as the low cell
+terminal: status> battery cell=" 10%" ink norm=0 plug=N low=0; the same N pixel(s) as the low cell
 === A5: battery_present=false takes the cell away ===
 the cell is gone; boot A printed 3 scan and 3 read lines
 === boot B: the battery is on, full and plugged from the kernel command line ===
@@ -1694,7 +1698,7 @@ FAIL: A1: the boot scan reads "terminal: battery> scan seen=1 present=1 pick=tes
 FAIL: A2: no rescan picked test_battery after battery_present=true (last scan: terminal: battery> scan seen=1 present=0 pick=none)
 == m3
 === A4: the adapter goes in at the same capacity ===
-FAIL: A4: no new status> battery line with plug>0 after battery_status=charging (last: terminal: status> battery cell="  10%" ink norm=0 plug=0 low=N)
+FAIL: A4: no new status> battery line with plug>0 after battery_status=charging (last: terminal: status> battery cell=" 10%" ink norm=0 plug=0 low=N)
 ```
 
 판정 넷 중 하나라도 다르면(다른 검사에서 빨갛다, 초록이다, 빌드에서 죽는다) 그 판의 `.out` 전부를 보고하고 멈춘다. lessons의 "mutation이
@@ -1775,13 +1779,13 @@ qemu-system-x86_64 \
   -no-reboot &
 PID=$!
 
-# 0.1초 간격으로 4분까지 본다. t0는 프로브가 잔량을 쓴 줄을 처음 본 때, t1은 칸이 `  10%`가 된
+# 0.1초 간격으로 4분까지 본다. t0는 프로브가 잔량을 쓴 줄을 처음 본 때, t1은 칸이 ` 10%`가 된
 # 줄을 처음 본 때다.
 t0=""
 t1=""
 for _ in $(seq 1 2400); do
   if [ -z "$t0" ] && grep -aq 'bs1-probe: wrote capacity=10' "$LOG"; then t0="$(date +%s.%N)"; fi
-  if [ -n "$t0" ] && grep -aq 'terminal: status> battery cell="  10%"' "$LOG"; then t1="$(date +%s.%N)"; break; fi
+  if [ -n "$t0" ] && grep -aq 'terminal: status> battery cell=" 10%"' "$LOG"; then t1="$(date +%s.%N)"; break; fi
   if ! kill -0 "$PID" 2>/dev/null; then break; fi
   sleep 0.1
 done
@@ -1815,7 +1819,7 @@ terminal: status> battery cell=" 50%" ink norm=N plug=0 low=0
 …(같은 줄이 프레임마다)
 bs1-probe: wrote capacity=10
 terminal: battery> read test_battery capacity=10 status=Discharging class=low
-terminal: status> battery cell="  10%" ink norm=0 plug=0 low=N
+terminal: status> battery cell=" 10%" ink norm=0 plug=0 low=N
 elapsed=…s
 ```
 
@@ -1935,9 +1939,28 @@ design "BS-M1" 절의 다섯과 그것을 보는 명령.
 ## 닫을 때(lead의 몫)
 
 - 이 plan의 `Status:`를 고치고 맨 아래에 "BS-M1이 실측한 것" 절을 더한다 — Task 4의 컴파일 에러를 고친 자리(있었다면), Task 5-2의 픽셀
-  수(` 50%` · `  10%` · `100%`), Task 7의 `FAIL` 줄 셋과 `elapsed`, Task 8의 체인 시간과 배터리 줄 셈, 루트 게이트의 시간.
+  수(` 50%` · ` 10%` · `100%`), Task 7의 `FAIL` 줄 셋과 `elapsed`, Task 8의 체인 시간과 배터리 줄 셈, 루트 게이트의 시간.
 - design의 "닫을 때" 절 전부(`Status:` · `CLAUDE.md`의 완료 표 · `docs/decisions/project_battery_status.md` · `MEMORY.md` ·
   `project_wireless.md` · `project_real_machine.md` · `docs/guides/lessons.md`의 포트 45494와 체인 목록과 "핵심 파일" · `running-tars.md` ·
   `HANDOFF.md`). `project_battery_status.md`에 이 plan의 확정 4(`capacity`의 `ENOENT`는 빠짐이 아니다) · 8(메모와 다시 그리기의 비교를
   가른 이유) · 14(A3을 로그를 거꾸로 읽어 판정한 이유)를 함께 담는다.
 - commit은 하나다 — `main.zig` · `battery/check.sh` · `check.sh` · `machine/check.sh`. `git add`는 그 넷을 이름으로 준다.
+
+## BS-M1이 실측한 것
+
+lead가 2026-10-09에 쟀다. 구현자(Sonnet)의 보고와 `git diff`를 lead가 직접 대조했다 — `main.zig` +392 −10(지운 열 줄은 plan의 `old_string`),
+`check.sh` +7, `machine/check.sh` +28, 새 파일 `battery/check.sh` 397줄. 전부 plan 사본과 `cmp`가 같다. 배터리 절의 코드(errno를 읽는 자리 ·
+훑기 결과가 바뀔 때만 찍는 조건 · 처음 훑기가 다시 그리기를 안 켜는 것 · `continue` 앞의 배터리 블록)를 lead가 읽고 design 결정 8 · 10과
+맞는지 봤다.
+
+1. 빌드. 컨테이너 `prepare.sh` · `zig build test` 초록, 컴파일 에러 0. 호스트 검사 일곱(battery_test 포함) 전부 통과.
+2. battery 체인. 첫 판은 검사 A3에서 빨갰다 — plan의 기대 글자 `  10%`(다섯 자)가 틀렸고 실제 칸은 ` 10%`(확정 20). 코드는 맞았다
+   (`cell=" 10%" ink norm=0 plug=0 low=66`). 고친 뒤 `BS-M1 check PASS` 37초. 칸 픽셀: ` 50%` norm 73 · ` 10%` low 66 · ` 10%` plug 66 ·
+   `100%` plug 90. A3 `same=1 keys=0`, A4의 plug 66 = A3의 low 66, A5 scan 3줄 · read 3줄, B1 첫 프레임에 `100%`.
+3. mutation 셋. m1(`present` 파일 이름 바꿈) → A1(첫 scan이 `present=1 pick=test_battery`), m2(`ueventIsPowerSupply` 줄 삭제) → A2(마지막
+   scan이 `present=0`인 채), m3(`sameBatteryCell`의 갈래 비교 삭제) → A4(`plug=0 low=66`인 채 — `screen>`은 있고 `status>`는 없어 메모만
+   막혔다). 주기 경로(7-3, m2 바이너리): 잔량을 쓴 뒤 칸이 ` 10%`가 되기까지 40.2초(60초 안, scan 줄 하나).
+4. 체인 다섯. battery 1분 18초 · pointer 1분 14초 · render 1분 48초 · hangul 1분 22초 · machine 21초 전부 PASS. hangul 기준값
+   `383 pixel(s) of text and a dim CAPS (off=87)`이 BS-M0 게이트 로그와 같다. machine 판정 14 `battery> scan seen=0`. 네 체인의 배터리 줄은
+   `scan seen=1 present=0 pick=none`(machine은 `seen=0`)과 `cell=none`뿐이고 `read` · `cell="` · `scan failed` 줄은 0.
+5. 루트 게이트(22체인 × 2): 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0

@@ -42,6 +42,12 @@ How to apply:
 - 게이트 전용 커널 드라이버는 모듈이 없어도 넣을 수 있다 — 내장 cmdline으로 기본값을
   끄고 체인이 뒤에 덮는다. 그리고 "파라미터를 안 준 부팅"을 반드시 하나 둔다. 그 부팅만이
   기본값을 지킨다(M3 mutation 3에서 부팅 A · B는 초록이었다).
+  둘째 사례는 BS의 test_power다(2026-10-09, [[project_battery_status]]). 내장 cmdline이
+  `mac80211_hwsim.radios=0 test_power.battery_present=false`로 두 낱말이 되어서, `wifi/check.sh`
+  검사 1은 줄 전체(`grep -x`)가 아니라 자기 낱말 하나가 그 줄에 낱말로 있는지만 본다. battery
+  체인 검사 0도 같은 모양이다 — 셋째 파라미터를 더하는 사람이 두 체인을 함께 고치지 않아도 된다.
+  test_power는 실기에 남으면 ACPI 배터리의 읽기를 바꾸므로 limine의 `initcall_blacklist`로
+  등록까지 막는 겹이 하나 더 있다. hwsim에는 그 겹이 없다.
 - 판정에 쓸 줄은 콘솔에 앵커 없이 grep한다(lessons 68).
 
 관련: [[project_wired_nic]] · [[project_daemon_supervision]] · [[project_service_control]] ·

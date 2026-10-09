@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 Design: `docs/specs/2026-10-08-tars-battery-status-design.md`
-Status: plan을 썼다(구현 전). 구현과 루트 게이트의 값은 끝난 뒤 맨 아래 "BS-M0이 실측한 것"에 적는다. 다음은 BS-M1(`-bs-m1.md`).
+Status: 끝났다(2026-10-09, 커밋 `2ff5108`). 구현은 Sonnet 서브에이전트가 Task 0 ~ 7을 글자 그대로 넣었고(plan 코드를 고친 곳 0, 컴파일 에러 0), 루트 게이트 21체인은 스무 체인 2/2에 dictation 체인이 간헐로 한 번 빨갰다가 재실행 둘이 초록이다. 값은 맨 아래 "BS-M0이 실측한 것". 다음은 BS-M1(`-bs-m1.md`).
 
 ## 누가 무엇을 하나
 
@@ -1359,3 +1359,25 @@ design "BS-M0" 절의 다섯과 그것을 보는 명령.
 - 확정 10(`Unknown`의 갈래)과 확정 9(`statusName`을 더한 것)가 design의 뜻과 맞는지 보고, 아니면 BS-M1 plan 전에 design에 덧붙인다.
 - commit은 둘로 나눌 수 있다 — 커널(`kernel/.config`) · limine · `disk_test` · `wifi/check.sh`와, terminal의 새 파일 둘 · `build.zig`.
   `project_kernel_config`가 정규화와 의도한 변경을 나누라고 했지만, 이번에는 되접기가 비면 정규화 commit이 없다.
+
+## BS-M0이 실측한 것
+
+lead가 2026-10-08 ~ 09에 쟀다. 구현자(Sonnet)의 보고와 `git diff`를 lead가 직접 대조했다 — 추적 파일 다섯 +24 −8, 새 파일 둘, 지운 줄은
+plan의 `old_string`뿐이다.
+
+1. Task 1 · 2. `battery.zig` 175줄 · `battery_test.zig` 227줄이 Zig 0.16.0에서 컴파일 에러 없이 돌았다(plan 코드를 고친 곳 0). 검사 17 전부
+   초록. mutation 둘(`c < LOW_MAX` → 검사 10, `orelse return 0` → 검사 16)이 각각 빨갰다.
+2. Task 3. `.config` +2 −2, 첫 빌드 약 21초(`bzImage is ready (#2)`), 되접기 diff 비었음, 늘어난 `=y` 하나(`CONFIG_TEST_POWER`),
+   `System.map`에 `t test_power_init`.
+3. Task 4 · 5. limine `cmdline:` 한 줄, `disk_test` 검사 10의 사본 두 줄, init 호스트 검사 초록. wifi 검사 1의 regex가 아홉 줄에서 기대대로
+   갈렸고 진입 검사 `ENTRY-OK`.
+4. Task 6. QEMU 10.0.13 `-device help`에 batt · power 0줄. `k1`(-kernel) `supplies [test_ac test_battery test_usb]` · `test_battery present 0` ·
+   `Discharging` · `50`, `test_battery`에 `scope` 없음, `test_ac` · `test_usb`에 `present` 없음. `k2`(-append `=true`) `present 1`. `iso`
+   `supplies []`, cmdline 끝 `initcall_blacklist=test_power_init`, `/sys/module/test_power/parameters`는 그대로 11개. 세 부팅 다
+   `deliberately report errors` 0줄. 셋 합쳐 29.6초.
+5. Task 7. wifi 2분 01초 · install 1분 48초 · machine 19.5초 · boot 25.2초 전부 PASS. `Kernel command line` 셈 — ISO 부팅 5(블랙리스트 낱말),
+   설치된 ESP 부팅 3(그 뒤 `tars.installed`), 직접 커널 부팅 1.
+6. 루트 게이트(21체인 × 2) 57분 20초, `skipping make` 40. 스무 체인 `PASS: 2/2`, 잘린 줄 전부 `A=0 B=0 C=0`. dictation 체인(VD-M0)이
+   1회차 부팅 B의 검사 B4(`read -s got something`)에서 빨갰다 — 시리얼 로그에는 둘째 `got[]`가 `ret` 키의 바로 다음 프레임에 있어, 글자가
+   프롬프트에 들어간 것이 아니라 게이트의 10초 창을 놓친 것이다. dictation 체인만 두 번 다시 돌려 1분 35초 · 1분 33초에 둘 다 PASS. 이월 숙제에
+   적었다(`docs/guides/lessons.md`).

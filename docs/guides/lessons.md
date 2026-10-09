@@ -16,7 +16,7 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (열아홉 체인 × 2 — 2026-10-05 PD-M2부터 2회, feedback_gate_runs. 3회였을 때 1시간 8분(PD-M1), 2회는 약 50분으로 본다)
+# 루트 게이트 (스물두 체인 × 2 — 2026-10-05 PD-M2부터 2회, feedback_gate_runs. 3회였을 때 1시간 8분(PD-M1), 2회는 21체인에서 57분 20초(BS-M0)였다)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
@@ -62,7 +62,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. 새 체인은 45494부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). 새 체인은 45495부터 쓴다.
 
 ### 회차의 로그는 `<TMPDIR>/tars-gate.XXXXXX/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0)
 
@@ -307,6 +307,14 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 볼륨도 아니다(볼륨이 틀리면 값이 ±800이 되어 `tone`이 0이다). `count_tap`이 `doubled`를 따로 세어 판정에 안 쓰고, 사각파 하한은
 48,000 중 40,000이다(하한의 일은 음소거 · 틀린 볼륨을 잡는 것이고 둘 다 `tone`이 0이다). 부하 없는 루트 게이트에서도 47,9xx가
 나온다 — xrun은 늘 조금 있다.
+
+### 폭 고정 칸의 기대 글자는 검사 출력에서 베낀다 (BS-M1)
+
+배터리 칸은 `battery.CELL_LEN` 넉 자이고 숫자를 오른쪽에 붙인다. 그런데 BS의 design 결정 11 표와 M1 plan이 잔량 10의 칸을
+`  10%`(공백 둘, 다섯 자)로 적었다. 실제는 ` 10%`이고 공백 둘은 `  5%`뿐이다. 코드는 맞았고 첫 battery 체인이 A3에서
+빨갰다(`cell=" 10%" ink norm=0 plug=0 low=66`). 앞 공백의 개수는 사람이 눈으로 세면 틀리는 값이다. 칸의 폭을 고정하는
+함수(배터리의 `cellText`)가 있으면, 게이트의 기대 글자는 사람이 적지 않고 그 함수의 호스트 검사가 찍은 값이나 실측 줄에서
+베낀다. 판정 글자를 따옴표로 감싸 찍는 것(`cell=" 50%"`)도 같은 이유다 — 따옴표가 없으면 로그에서도 앞 공백이 안 보인다.
 
 ## 범용 명령
 
@@ -1112,6 +1120,17 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
+BS(2026-10-09)가 남긴 것.
+
+- [ ] `dictation` 체인 부팅 B의 검사 B4(`read -s got something`)가 BS-M0 루트 게이트 1회차에서 한 번 빨갰다. 시리얼 로그에서 둘째
+      `got[]`는 `ret` 키의 바로 다음 프레임에 찍혀 있었다 — 글자가 비밀번호 프롬프트에 들어간 것이 아니라 게이트의 10초 창
+      (`for _ in $(seq 1 100)` · `sleep 0.1`)을 놓친 간헐이다. 그 체인만 두 번 다시 돌려 둘 다 초록이었다. 다시 빨개지면 그 창을
+      늘리는 것이 처방 후보다.
+- [ ] 실기 노트북에서 볼 것 셋. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`으로 `Battery`가 있는지 본다(로그
+      `terminal: battery> scan seen=… present=… pick=…`도 같은 것을 말한다). `capacity` 파일이 없는 배터리는 칸이 `  ?%`인 것이
+      정상이다(ACPI의 `full_cap_broken`). 어댑터를 꽂았다 뺄 때 색이 곧바로 초록 · 회색으로 바뀌는지 본다 — 바뀌지 않으면 firmware가
+      ACPI notify를 안 보내는 기계이고 60초 주기가 받는다.
+
 VD(2026-10-06)가 남긴 것.
 
 - [ ] `render` 검사 28(vim의 `R` 뒤 underline 커서)이 VD-M2의 루트 게이트 2회차에서 한 번 빨갰다(`vt=block`인 채 15초). 앞선 루트 게이트
@@ -1253,6 +1272,15 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `[3/12]` · "못 찾음")이고 두 갈래를 가르는 것은 `findMatchCount()`
   하나다. `dumpStyles`는 프레임당 16줄 상한(`STYLE_DUMP_LIMIT`)이고 덮인 줄을
   건너뛴다. copy 배선 switch에 `else`가 없는 규율이 매번 값을 한다.
+  배터리 절(BS-M1)이 `BatteryState` · `readSysfs` · `scanBattery` · `readBattery` ·
+  `tickBattery`를 갖는다. 처음 훑기는 첫 프레임 앞에서 하고 `needs_redraw`를 안 켠다 —
+  켜면 모든 체인의 `screen>` 줄이 하나씩 는다. `drainUevents`가 `bool`(power_supply를
+  봤거나 `ENOBUFS`)을 돌려주고, 배터리 블록은 그 바로 뒤, `if (!needs_redraw)`보다
+  앞이어야 한다 — 뒤면 uevent나 timeout으로만 깬 바퀴에서 칸을 고쳐도 화면이 안 바뀐다.
+  poll timeout은 `battery.pollTimeout`이고 배터리가 없으면 `-1`이다. `drawStatus`가
+  칸을 col `cols - 4`에 그리고, `dumpStatus`의 메모는 칸의 글자와 갈래를
+  `sameBatteryCell`로 비교한다(다시 그리기는 `std.meta.eql` — 둘을 일부러 갈랐다,
+  `project_battery_status`).
 - `image.zig` — kitty 이미지 하나를 그린다(TG-M2). 순수 모듈이고 대상이 `anytype`이라
   `image_test`가 `u32` 배열로 같은 산수를 본다. 자르기 사각형이 곧 프레임버퍼 밖 쓰기를
   막는 자리다(`setPixel`에 범위 검사가 없다).
@@ -1260,6 +1288,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
+- `battery.zig` — 배터리 칸의 순수한 층(BS-M0). sysfs 글자를 받아 값을 돌려준다 —
+  `parseStatus` · `statusName`(커널의 글자, `@tagName`은 소문자라 안 쓴다) · `parseCapacity`
+  (0~100으로 자르고 정수가 아니면 null) · `counts`(`type` · `present` · `scope`, 파일이 없으면
+  null을 받아 "있다" · "통과"로 본다) · `pick`(이름순 첫째) · `class`(`LOW_MAX` 15) ·
+  `cellText`(`CELL_LEN` 넉 자) · `ueventIsPowerSupply`(이름도 `ACTION`도 안 본다) ·
+  `pollTimeout`(`PERIOD_MS` 60초). 파일을 여는 것은 `main.zig`의 배터리 절이고
+  `battery_test`가 호스트에서 본다(검사 17).
 - `pointer.zig` — 포인터 장치의 순수한 층(PD). `Owner` · `Grab`(첫 누름이 주인을 정해 마지막 뗌까지 — 자식의 것인지 우리
   제스처인지, PD-M4) · `wheelRoute` · `classify`(mouse · touchpad · none, capability로) · `Mouse` 디코더
   (`SYN_REPORT`마다 `Frame`) · `Pointer`(clamp · 장치별 버튼 합) · `Sprite`(화살표 save-under, `ink` 118) · `Gesture`
@@ -1292,7 +1327,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `c_pty` 번역에 헤더를 더하지 않는다.
 - `font.zig` — `Cache`(lazy 해시 맵) + `Glyph`. 코드는 폰트에 무관하다.
 - 검사 파일들 — `input_test.zig`(모드 밖 대조군 검사들이 여기 있다) ·
-  `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` · `layout_test.zig` ·
+  `vt_test.zig` · `image_test.zig` · `hangul_test.zig`(검사 2와 7이 짝이다) · `status_test.zig` · `battery_test.zig` · `layout_test.zig` ·
   `font_test.zig` · `pty_test.zig`. `vt_test.zig`는 `main()` 하나가 파일
   전체라 모든 지역 변수 이름이 서로 부딪치고 Zig가 shadowing을 컴파일 에러로
   막는다 — 새 검사는 이름을 `rg`로 먼저 확인하고, 자기 화면을 새로 만든다
@@ -1451,7 +1486,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   22(`which`)를 더했다. `copy_lib_deps`는 ELF magic이 아닌 파일을 건너뛰므로
   스크립트도 `GUEST_TOOLS`에 넣을 수 있다 — 인터프리터는 따라가지 않는다.
 - `machine/check.sh` — 실기 경로(RM). fish 인사말을 UEFI 부팅의 마커로 쓴다
-  — 그래서 인사말을 끄는 것은 화면 셸에만 한다.
+  — 그래서 인사말을 끄는 것은 화면 셸에만 한다. 판정 14(BS-M1)가 limine의
+  `initcall_blacklist=test_power_init`이 먹었는지를 `battery> scan seen=0`으로 본다 —
+  블랙리스트는 이름이 틀려도 말이 없어서 이 줄이 그것을 잡는 유일한 자리다.
 - `net/check.sh` — 부팅 다섯(NW · IN · TS · TD · LB). 나가는 길(`guestfwd`),
   받는 길(`hostfwd` 둘), 시계(perl NTP stub), `lo`와 `.localhost`를 본다.
   게이트에서 가장 무거운 축이다.
@@ -1463,7 +1500,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   (= `wifi/ap.sh`)가 hwsim 라디오를 netns로 옮겨 AP를 세우고 사람의 일(재시작 · 늦은
   인터페이스)을 대신 한다. hostapd · busybox는 sysroot에서 디스크로 가고 initrd에는 없다.
   타이핑이 없다. 부팅 C(라디오 파라미터 없음)가 내장 cmdline의 `radios=0`을 지키는 유일한
-  부팅이다 — A · B는 그것이 빠져도 초록이었다.
+  부팅이다 — A · B는 그것이 빠져도 초록이었다. 검사 1은 내장 cmdline 줄 전체가 아니라
+  `mac80211_hwsim.radios=0`이 그 줄에 낱말로 있는지만 본다 — 같은 줄에 battery 체인의
+  `test_power.battery_present=false`도 있다(BS-M0).
 - `dictation/check.sh` · `dictation/probe.sh` · `dictation/stub.pl` · `kernel/dictation/tars-dictate` — 스물한번째 체인(VD). 부팅 A는
   게스트에 한 글자도 안 치고(프로브가 `tars-dictate`를 열 갈래로 친다) stub(perl, `guestfwd` `cmd:`)이 받은 바이트(WAV 머리 · 칸 ·
   샘플의 최빈값)로 판정한다 — 경로의 첫 마디가 답(`/ok` · `/ctrl` · `/blank` · `/notext` · `/fail`), 둘째 마디가 갈래 이름. 부팅 B(M1)는
@@ -1474,6 +1513,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   찍는다. 판정은 샘플 값이다(`count_tap`의 `tone` · `left` · `right` · `other` · `doubled`). 녹음 파일은 디스크에 남기고 QEMU를 끈 뒤
   `debugfs`로 꺼낸다. 전원은 프로브의 `kill -TERM 1`. 부팅 D만 monitor 45491. 검사 1이 커널 심볼 · alias · firmware 이름 대조 ·
   initrd 파일을 본다. `tap:`의 `frames` · `zero` · `first_*`는 판마다 다르고 `tone` · `left` · `right`는 같아야 한다.
+- `battery/check.sh` — 스물두번째 체인(BS-M1). 검사 0(부팅 없음, 커널 기호 셋 · 내장 cmdline의
+  낱말 · limine의 블랙리스트) · 부팅 A(내장 cmdline 그대로 배터리가 꺼진 채, monitor 45494)의
+  A1~A5 · 부팅 B(`-append`로 켠 배터리, monitor 없음, 키 없음)의 B1. 부팅 A는 셸에서
+  `/sys/module/test_power/parameters/`에 써서 배터리를 켜고 · 잔량을 바꾸고 · 충전시키고 · 끈다.
+  판정은 terminal의 `battery> scan` · `battery> read` · `status> battery` 줄이고 화면 글자로는
+  판정하지 않는다(상태 줄은 격자 밖이다). A3은 bash의 배경 작업이 잔량을 쓰고, 로그를 다 받은 뒤
+  거꾸로 읽어 그 프레임에 키도 PTY 출력도 없었는지를 본다. 설정 디스크는 없다.
 - `pane/check.sh` — 부팅 하나(9b의 되살림까지 치면 terminal 둘) · 검사 열여섯(WP-M1
   열 + WP-M2 여섯). `pane>` 배치 줄은 서명이 바뀐 프레임에만 찍히므로
   `wait_for_pane`이 마지막 줄을 기다린다. 포커스를 옮긴 뒤의 음성 판정은

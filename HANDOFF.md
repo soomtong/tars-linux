@@ -1,11 +1,17 @@
 # HANDOFF: 열어 둔 서브프로젝트가 없다 — 실기 확인과 다음 후보를 기다린다
 
-## 지금 상태 (2026-10-08)
+## 지금 상태 (2026-10-09)
 
-- 마지막으로 닫힌 것은 Config Tool(TC-M0~M3)과 Atomic Log Lines(AL-M0 · M1)이다(2026-10-07, `f3b677c`).
-- 작업 트리는 깨끗하다. 열린 코드 작업은 없다.
-- 진행 중: 문서 정리. 살아 있는 문서(HANDOFF · CLAUDE · MEMORY · guides · decisions)의 감사 결과로
-  이 파일을 줄였다. 나머지 제거 후보는 "남은 정리" 절에 있다.
+- 마지막으로 닫힌 것은 Battery Status(BS-M0 · M1)다(2026-10-09). 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의
+  잔량 칸이 뜬다. 기억은 `docs/decisions/project_battery_status.md`, design은
+  `docs/specs/2026-10-08-tars-battery-status-design.md`다.
+- BS-M0은 커밋됐다(`2ff5108`). BS-M1의 코드(`terminal/src/main.zig` · `battery/check.sh` · `check.sh` · `machine/check.sh`)와
+  BS를 닫는 문서는 루트 게이트의 결과를 받은 뒤 커밋한다.
+- BS-M1 루트 게이트(22체인 × 2): 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0
+- 체인은 이제 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
+- 그 전에 닫힌 것은 Config Tool(TC-M0~M3)과 Atomic Log Lines(AL-M0 · M1)다(2026-10-07, `f3b677c`).
+- 문서 감사(2026-10-08)의 남은 제거 후보는 "남은 정리" 절에 있다. 그중 낡은 수치(lessons · running-tars의 체인 수와 게이트
+  시간)는 BS를 닫으며 고쳤다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
   alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
 
@@ -16,6 +22,9 @@
   `firewall=off`의 말이다.
 - AU: `cat /proc/asound/cards` · `aplay -l` · `arecord -l` · `speaker-test`, 헤드폰 잭 · USB 헤드셋. SOF 노트북이면
   `dmesg | grep -i sof`의 `Firmware file:` · `Topology file:`. 조용하면 `amixer -c N` · `snd_intel_dspcfg.dsp_driver=1`.
+- BS: 노트북에서 상태 줄 오른쪽 끝에 칸이 뜨는지, 어댑터를 꽂았다 뺄 때 색이 곧바로 초록 · 회색으로 바뀌는지, 방전 중 잔량이
+  60초 안에 따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄. `capacity`
+  파일이 없는 배터리는 `  ?%`가 정상이다. 게이트가 못 보는 것은 ACPI 배터리의 값 그 자체다(`docs/guides/lessons.md`의 "이월 숙제" BS 항목).
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
@@ -53,12 +62,13 @@
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(lessons).
 - 실칩 무선은 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 동글이 생기면 그것이 새 사실이다.
-- 측정 파일(저장소 밖, 지워도 된다): `/tmp/run/*`, `/tmp/gate_*.log`. 디스크 여유는 충분하다.
+- 측정 파일(저장소 밖, 지워도 된다): `/tmp/run/*`, `/tmp/gate_*.log`. 디스크 여유는 충분하다. BS의 측정은
+  `/tmp/run/bs0/`(사본 실측 `measure.out` · M0 루트 게이트 `gate.log` · dictation 재실행 `vd-rerun*.log`)과
+  `/tmp/run/bs1/`(체인 `chain-*.log` · mutation `mut/` · 주기 경로 `m2period.out` · M1 루트 게이트 `gate.log`)에 있다.
 
 ## 남은 정리 (문서 감사에서 나온 것, 아직 적용 안 함)
 
 - CLAUDE.md 완료 표(약 18KB)를 "서브프로젝트 · 끝난 날 · 한 줄 요약"으로 줄이거나 없앤다.
 - lessons.md의 서브프로젝트별 "잰 것" 절(PD · AU · VD · TC · AL)은 함정만 주제별로 옮긴다.
 - docs/decisions의 경과 절(gate_latency · userland_tools · shell_config 등)은 함정만 남긴다.
-- 낡은 수치: lessons의 체인 수(열아홉 → 21), 게이트 시간(약 50~60분), running-tars의 "열일곱 체인" → 21.
 - CLAUDE.md의 두 규칙이 실제 관행과 어긋난다("구현 파일은 Claude가" vs 서브에이전트 구현, "다음 plan은 그 시점에" vs 앞 게이트 중 미리 쓰기). 어느 쪽이 기준인지 정해야 한다.

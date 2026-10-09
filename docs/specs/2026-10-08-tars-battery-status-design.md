@@ -1,7 +1,10 @@
 # TARS Battery Status — Design
 
 Date: 2026-10-08
-Status: design을 썼다(구현 전). BS-M0 · BS-M1의 plan은 milestone마다 그 시점에 쓴다.
+Status: 끝났다(2026-10-09, BS-M0 · M1). plan `docs/plans/2026-10-08-tars-battery-status-bs-m0.md` · `-bs-m1.md`의 "착수 전에 확정한
+것" 절이 design과 달라진 자리다. 결정 11의 표가 잔량 10의 칸을 `  10%`(다섯 자)로 적었던 것은 구현 중에 ` 10%`로 고쳤다(BS-M1 plan
+확정 20). BS-M0의 루트 게이트는 21체인 2/2(57분 20초)이고, 그 안에서 dictation 체인이 한 번 간헐로 빨갰다(`docs/guides/lessons.md`의
+"이월 숙제"). 기억은 `docs/decisions/project_battery_status.md`.
 
 사용자의 요청 한 줄에서 시작한다(2026-10-08).
 
@@ -303,8 +306,8 @@ cmdline 낱말이 있고, `boot/limine.conf`의 `cmdline:` 줄에 `initcall_blac
 |---|---|---|
 | A1 | 키 없음 | `battery> scan seen=1 present=0 pick=none` · 마지막 `status> text=`가 `EN  신세벌 PCS  쿼티  CAPS` · `status> battery cell=none ink norm=0 plug=0 low=0` |
 | A2 | `cd /sys/module/test_power/parameters` · `echo true > battery_present` | `scan … present=1 pick=test_battery` · `cell=" 50%"` · `norm>0 plug=0 low=0` · `status> text=`는 A1과 같다 |
-| A3 | bash에서 `( sleep 2; echo 10 > battery_capacity ) &`를 치고 프롬프트가 돌아온 뒤 키를 더 안 친다 | 키도 PTY 출력도 없이 새 칸 줄 `cell="  10%"` · `low>0 norm=0` |
-| A4 | `echo charging > battery_status` | `cell="  10%"`(글자 그대로) · `plug>0 low=0` — 글자가 같은데 줄이 새로 찍혔다 |
+| A3 | bash에서 `( sleep 2; echo 10 > battery_capacity ) &`를 치고 프롬프트가 돌아온 뒤 키를 더 안 친다 | 키도 PTY 출력도 없이 새 칸 줄 `cell=" 10%"` · `low>0 norm=0` |
+| A4 | `echo charging > battery_status` | `cell=" 10%"`(글자 그대로) · `plug>0 low=0` — 글자가 같은데 줄이 새로 찍혔다 |
 | A5 | `echo false > battery_present` | `scan … present=0 pick=none` · `cell=none` · 세 수 0 · `status> text=`가 A1과 같다 |
 
 A2는 uevent가 `test_ac`에서 와도 다시 훑는다는 것(확인한 것 4)을, A3은 키 없이 다시 그린다는 것(목표 2)과 `low`를, A4는 결정 10의
