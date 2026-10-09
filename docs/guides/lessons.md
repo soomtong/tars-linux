@@ -436,7 +436,7 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, 키의 �
 처방은 둘 다 내용을 보는 것이다 — 입력의 sha256을 산출물 옆에 적는다.
 
 16. 게이트 시간의 8할은 빌드였다. 부팅은 2%가 안 됐다(GL 전의 값이다 —
-`type_keys`의 `sleep 0.3` 11%는 GL-M2가 없앴다). 단계별 실측값은 `project_gate_latency`에 표로 있다.
+`type_keys`의 `sleep 0.3` 11%는 GL-M2가 없앴다). 단계별 실측값은 `project_gate_latency`의 첫 절에 있다.
 
 17. `gzip -9`는 값을 못 하는 압축 레벨이다. initrd는 `-6`으로 만든다.
 
