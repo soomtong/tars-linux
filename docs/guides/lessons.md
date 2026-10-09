@@ -195,6 +195,11 @@ SIGPIPE를 안 받는다.
 컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. `docker run … bash -c 'rm -rf init/.zig-cache init/zig-out'`
 형태로 친다.
 
+### docker 작업은 한 번에 하나 (PD)
+
+OrbStack VM(4GB)에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU(512MB)가 겹치면
+OOM(exit 137)이나 VM 재시작이 난다. 체인 하나가 도는 동안 다른 컨테이너에서 빌드하지
+않는다. `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
 
 ### 로그 문구는 두 곳에 중복된다
 
@@ -397,6 +402,7 @@ variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데, 키의 �
 조용히 버린다. 대문자를 치려면 `shift-f`처럼 앞에 붙인다. 공백은 `space`가
 아니라 `spc`다 — SD-M0이 `space`로 한 회차를 버렸고, 증상은 에러가 아니라
 글자가 붙어서 나오는 것이다(`echo sdscreen…`이 `echosdscreen…`이 됐다).
+`:`도 `colon`이 아니라 `shift-semicolon`이다(PD).
 
 7. copy 커서는 셸 커서 자리에서 시작하고, 셸 커서가 화면 밖이면 `{0, 0}`이다
 (`copyEnter`). 뷰포트가 바닥이면 셸 커서가 맨 아랫줄이라
@@ -669,7 +675,9 @@ mtime은 새 시각을 따라간다.
 
 56. 게스트의 `/bin`에는 `sh`(bash) 하나만 산다. `#!/bin/bash` 스크립트는 execve가
 `ENOENT`로 실패하고 셸은 127을 낸다 — 게스트에 심는 스크립트는 전부 `#!/bin/sh`로 쓴다
-(SV-M1 실측 9). `init`의 execve 실패 줄은 SV-M2부터 errno를 찍는다.
+(SV-M1 실측 9). `init`의 execve 실패 줄은 SV-M2부터 errno를 찍는다. 설정 디스크의
+`services.d/` 스크립트도 같다 — `#!/bin/bash`이면 `init`이 `execve … failed (errno 2)`를 세 번 찍고
+포기한다(AU-M1).
 
 57. ext2의 `getdents64`는 만든 순서를 돌려준다(SV-M1 실측 11). `debugfs`로 디스크를
 심는 체인에서 "순서가 맞다"를 판정하려면 역순으로 써야 정렬이 빠진 것이 드러난다.
@@ -679,8 +687,9 @@ mtime은 새 시각을 따라간다.
 더해 `tic -x -o`로 굽는다. 컨테이너(arm64)의 `tic`으로 구운 것이 게스트에서 그대로
 읽힌다(SV 실측 14).
 
-59. `sd -F`는 치환 문자열의 `\n`을 줄바꿈이 아니라 글자 두 개로 넣는다(DS-M1). 여러
-줄로 바꾸는 편집은 python이나 Edit로 한다.
+59. `sd -F`는 치환 문자열의 `\n`을 줄바꿈이 아니라 글자 두 개로 넣는다(DS-M1). 그리고
+`sd` 1.0은 줄 단위라 패턴의 `\n`도 못 맞춘다(TC). 여러 줄로 바꾸는 편집은 python이나
+perl이나 Edit로 한다.
 
 60. `zig build test`가 `file contents changed during update`로 멈추면 편집 직후의 파일을
 빌드가 읽은 것이다(DS-M1). 코드와 무관하고 다시 돌리면 된다.
@@ -736,6 +745,7 @@ root ns에는 새 인터페이스가 생긴 것과 같다 — 부팅 뒤 꽂는 
 70. 커널의 `scripts/config`는 심볼 이름을 대문자로 바꾼다. `MT76x0U`처럼 소문자가 섞인
 심볼은 `--keep-case` 없이 켜면 없는 이름(`MT76X0U`)이 적히고 `olddefconfig`가 조용히 버린다.
 켠 뒤에는 해소된 `build/.config`에 `=y`로 남았는지 반드시 센다(2026-09-28 USB 동글 측정).
+AU-M0이 `ACP6x`로 같은 자리에 걸렸다 — `-k` 없이는 `ACP6X`가 적히고 조용히 사라진다.
 
 71. 게스트의 기본 셸 fish는 작은따옴표 안에서도 `\\`를 `\` 하나로 접는다. `printf`에 백슬래시를
 넘기려면 8진수 `\134`로 쓴다 — `\033`처럼 printf만 해석한다. 그리고 fish는 따옴표 문자열 전체에
@@ -783,104 +793,85 @@ fish는 꼬리 `ESC[201~`가 올 때까지 붙인 글자를 하나도 그리지 
 전부 삼킨다(PE-M1 plan 확정 1). ghostty vt의 모드 2004는 화면별이 아니라 `Terminal.modes` 하나이고
 RIS가 끈다(`vt_test` 95 · 96).
 
-### PD(Pointer Devices, 2026-10-05)가 잰 것
+76. 핫플러그는 netlink uevent로 받는다 — 커널 config가 필요 없고 노드는 uevent가 올 때 이미 있다.
+PD-M0이 `CONFIG_INOTIFY_USER`를 켰다가 `install` 부팅 7의 창이 닫혀 루트 게이트가 두 번 빨갰는데,
+늦어진 0.8초의 진짜 원인은 그 옵션의 일이 아니라 코드 배치였다 — gzip `inflate_fast`가 커널 이미지
+안에서 페이지 경계를 넘게 밀리면 QEMU TCG가 그 번역 블록을 직접 잇지 못해 initramfs 풀기가 2.6초에서
+3.8초가 된다(`X86_INTEL_LPSS` 하나로 재현, 드라이버 초기화는 전부 5ms 아래). 실기와 무관한 게이트의
+비용이고 어느 커널 변경이든 다시 움직인다. 커널을 바꾸면 System.map의 `inflate_fast` 주소 끝 세
+자리와 `install` 부팅 7의 `init waited`를 본다(PD).
 
-- PD-1. `CONFIG_INOTIFY_USER=y`는 `FSNOTIFY`를 끌어오고, 그 커널은 TCG에서 initramfs 풀기가 2.6초 → 3.8초였다. `install`
-  체인 부팅 7(`usb-storage.delay_use`)의 창이 닫혀 루트 게이트가 두 번 빨갰다. 핫플러그는 netlink uevent로 받는다 — 커널
-  config 불필요, 노드는 uevent가 올 때 이미 있다.
-- PD-2. ioctl 매크로(`EVIOCGBIT` · `EVIOCGPROP` · `EVIOCGNAME` · `EVIOCGABS`)는 translate-c 패키지가 inline fn으로 넘긴다.
-  HD 조사 6은 `@cImport` 시절의 사실이다.
-- PD-3. 부팅이 0.8초 늦어진 진짜 원인은 코드 배치였다. gzip `inflate_fast`가 커널 이미지 안에서 페이지 경계를 넘게 밀리면
-  QEMU TCG가 그 번역 블록을 직접 잇지 못해 풀기가 느려진다(`X86_INTEL_LPSS` 하나로 재현). 드라이버 초기화는 전부 5ms 아래.
-  실기와 무관한 게이트의 비용이고 어느 커널 변경이든 다시 움직일 수 있다. System.map의 `inflate_fast` 주소 끝 세 자리를
-  본다.
-- PD-4. QEMU HMP `mouse_move dx dy [dz]` · `mouse_button N`은 `-display none`에서도 usb-mouse로 간다. `device_add
-  usb-mouse,id=X` · `device_del X`가 핫플러그다(별표 대상은 새 것으로 가고 뽑으면 돌아온다). 127을 넘는 이동은 보고 셋으로
-  쪼개지고 합이 보존된다. 휠 한 눈금에 `REL_WHEEL_HI_RES` ±120이 함께 온다. pc 머신은 PS/2 마우스를 늘 갖고 있어
-  `MOUSE_PS2`를 켠 뒤 모든 pc 체인에 `ImExPS/2 Generic Explorer Mouse`가 생긴다(`i8042.noaux`로 끈다).
-- PD-5. 게스트에 `od` · `xxd` · `hexdump` · `timeout`이 없다 — 바이트는 `head -c N … | cat -v`. `sendkey colon`은 없는 이름이고
-  `:`는 `shift-semicolon`이다.
-- PD-6. OrbStack VM(4GB)에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU(512MB)가 겹치면 OOM(exit 137)이나 VM 재시작이
-  난다. docker 작업은 한 번에 하나만. `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
-- PD-7. 루트 게이트 반복 3 → 2(`feedback_gate_runs`): 19체인 3회 1시간 8분 → 2회 47분 46초.
+77. ioctl 매크로(`EVIOCGBIT` · `EVIOCGPROP` · `EVIOCGNAME` · `EVIOCGABS`)는 translate-c 패키지가
+inline fn으로 넘긴다. HD 조사 6("매크로를 손으로 푼다")은 `@cImport` 시절의 사실이다(PD).
 
-### AU(Audio Devices, 2026-10-06)가 잰 것
+78. QEMU HMP `mouse_move dx dy [dz]` · `mouse_button N`은 `-display none`에서도 usb-mouse로 가고,
+`device_add usb-mouse,id=X` · `device_del X`가 핫플러그다. 127을 넘는 이동은 보고 셋으로 쪼개지고
+합이 보존되며, 휠 한 눈금에 `REL_WHEEL_HI_RES` ±120이 함께 온다. pc 머신은 PS/2 마우스를 늘 갖고
+있어 `MOUSE_PS2`를 켜면 모든 pc 체인에 `ImExPS/2 Generic Explorer Mouse`가 생긴다 — `i8042.noaux`로
+끈다(PD).
 
-- AU-1. QEMU 오디오를 게이트가 값까지 보는 수법 — `-audiodev alsa,id=snd0,out.dev=tarstap,in.dev=tarsfeed,…`에 48kHz · 2채널 · s16을
-  박고, `HOME="$WORK"`로 컨테이너 libasound가 `$WORK/.asoundrc`를 읽게 해 `file` 플러그인 둘(`slave.pcm "null"`, 스피커는 `file`,
-  마이크는 `infile`)을 단다. `try-poll=off`. `wav` 백엔드는 녹음 쪽이 없다(`Could not create a backend for voice 'adc'`). 기본 속도
-  44100으로 두면 QEMU가 리샘플해 값이 바뀐다.
-- AU-2. 설정 디스크의 `services.d/` 스크립트 첫 줄은 `#!/usr/bin/bash`다. 게스트에 `/bin/bash`가 없어서 `#!/bin/bash`이면 `init`이
-  `execve … failed (errno 2)`를 세 번 찍고 포기한다.
-- AU-3. `alsactl init`의 exit 99는 성공이다(규칙 표에 없는 카드를 범용 규칙으로 켰다). `restore`는 파일이 없으면 init을 하고도 exit 2.
-  `-f`로 기본 경로가 아닌 파일을 주면 잠금 파일을 안 만든다. daemon 모드는 SIGTERM에 저장 없이 끝나고 SIGUSR2가 저장한다.
-- AU-4. QEMU에 없는 믹서 컨트롤에 alsactl 규칙을 시험하는 법 — `alsactl -I restore`로 같은 이름의 사용자 컨트롤을 만들고, `init`의
-  일꾼과 같은 argv로 `alsactl -U init`을 돌려 postinit 규칙이 그것을 켜는지 본다(`audio` 검사 17, `Dmic0 Capture Switch`).
-- AU-5. `scripts/config`는 `-k` 없이는 심볼 이름을 대문자로 바꾼다 — `ACP6x`가 `ACP6X`가 되어 조용히 사라진다.
-- AU-6. 부팅 때 `-device usb-audio`를 꽂아 둔 QEMU는 열 판 중 넷이 안 떴다(열거 누락 하나 · 시리얼 없이 선 셋). `device_add`로 부팅
-  뒤에 꽂은 판은 스무 번 남짓 다 0.2초 안에 열거됐다.
-- AU-7. `snd_pci_acp6x` · `snd_pci_ps`는 PCI 표가 `modules.builtin.modinfo`의 alias로 안 나온다. 게이트는 심볼로 본다.
+79. 부팅 때 `-device usb-audio`를 꽂아 둔 QEMU는 열 판 중 넷이 안 떴다(열거 누락 하나 · 시리얼 없이
+선 셋). `device_add`로 부팅 뒤에 꽂은 판은 스무 번 남짓 다 0.2초 안에 열거됐다 — 게이트의 USB 장치는
+부팅 뒤에 꽂는다(AU).
 
-### VD(Voice Dictation, 2026-10-06)가 잰 것
+80. 게스트에 `od` · `xxd` · `hexdump` · `timeout` · `dd`가 없다 — 바이트는 `head -c N … | cat -v`,
+파일 머리 고치기는 `printf` + `tail -c +45`(PD · VD).
 
-- VD-1. 게스트의 `curl`은 TLS 라이브러리(`libssl`)를 링크하지만 인증 기관 목록이 initrd에 없으면 https가 전부 `curl: (77) error setting
-  certificate file`이다. `make_initrd.sh`가 sysroot의 ca-certificates(mozilla 150장)를 `/etc/ssl/certs/ca-certificates.crt`로 이어 붙인다
-  (VD-M0). 컨테이너 자신의 묶음은 OrbStack의 개발용 인증 기관 둘이 섞여 있어 안 쓴다. 게이트는 `openssl s_server`(자기 서명)에 대고
-  "목록을 읽었다"를 exit 60(77이 아니라)으로 본다.
-- VD-2. `arecord -d N`을 SIGINT로 멈추면 WAV 머리를 거의 못 고친다(스물네 판 중 스물하나가 `pcm_read … Interrupted system call`로 머리를
-  그대로 두고 끝난다). 샘플은 멀쩡하다 — `tars-dictate`가 머리 44바이트를 실제 길이로 다시 쓴다(게스트에 `dd`가 없어 `printf` + `tail -c +45`).
-- VD-3. `arecord -f S16_LE -r 16000 -c 1`은 기본 장치(`plug` → `dsnoop`)로 문제없이 돈다. `plug`가 스테레오를 모노로 접을 때 왼쪽 채널만
-  가져간다 — alsa-lib의 규칙이라 체인은 두 채널에 같은 값을 넣어 기대지 않는다.
-- VD-4. 게스트의 `jq`는 1.7이라 `trim`이 없다(`sub`로 strip을 정의한다). Oniguruma 정규식이라 `\p{L}` · `\p{N}`은 안다 — 무음 판정(글자나
-  숫자가 하나라도 있는가)에 한글이 글자여야 해서 bash + `jq`가 Zig보다 맞았다(Zig std에 유니코드 범주 표가 없다).
-- VD-5. 시그널은 pid가 아니라 프로세스 그룹에 보낸다 — `arecord`가 직접 받아 끝나고 bash는 그 뒤에 trap을 돈다. 자식을 `setpgid`로 제
-  그룹에 두지 않으면 `kill(-pid)`가 `ESRCH`이고 `arecord`는 상한까지 녹음한다(M1 mutation 2).
-- VD-6. 비밀번호 프롬프트의 판정은 `ECHO`가 아니라 `ICANON && !ECHO`다. 셸의 줄 편집기와 vim은 둘을 함께 끈다(fish 프롬프트
-  `icanon=false echo=false`, `read -s` `icanon=true echo=false`). master에 `tcgetattr`를 하면 slave의 termios를 준다. ghostty와 같은 판정.
-- VD-7. QEMU `sendkey meta_r`가 게스트의 `KEY_RIGHTMETA`다. hold를 안 적으면 누른 시간 7 ~ 23ms · 두 누름 사이 20ms로 사람 손과 다르다 —
-  `sendkey meta_r 80` 둘이 누른 시간 80ms · 사이 160ms다. `type_keys`로는 못 친다(수정키 하나는 로그가 없어 키마다 0.3초를 기다린다).
-- VD-8. 게이트의 오디오 시간과 게스트 시계가 다르다 — `max_seconds=30` 녹음이 게스트 시계로 23초에 끝났다. TCG의 오디오가 게스트
-  시계보다 빨리 샘플을 낸다. 판정은 바이트 수로.
-- VD-9. terminal이 자식을 띄우는 길(VD-M1) — `pipe2(O_CLOEXEC)` 둘 · `fork` · 자식과 부모 양쪽의 `setpgid` · `dup2` · 표준 입력
-  `/dev/null` · `close_range(3, …)` · `execve`. terminal은 이미 libc를 링크하므로(`forkpty`) `std.c`로 부른다 — `project_zig_c_uapi_rule`의
-  "libc 없이"는 `init`의 길이다.
+81. QEMU 오디오를 게이트가 값까지 보는 수법 — `-audiodev alsa,…`에 48kHz · 2채널 · s16을 박고
+`HOME="$WORK"`로 컨테이너 libasound가 `$WORK/.asoundrc`의 `file` 플러그인 둘(스피커는 `file`,
+마이크는 `infile`, `slave.pcm "null"`)을 읽게 한다. `wav` 백엔드는 녹음 쪽이 없고(`Could not create a
+backend for voice 'adc'`), 기본 속도 44100으로 두면 QEMU가 리샘플해 값이 바뀐다. 그리고 게이트의
+오디오 시간은 게스트 시계와 다르다 — `max_seconds=30` 녹음이 게스트 시계로 23초에 끝났다. 판정은
+시간이 아니라 바이트 수로(AU · VD).
 
-### TC(Config Tool, 2026-10-07)가 잰 것
+82. `alsactl init`의 exit 99는 성공이다(규칙 표에 없는 카드를 범용 규칙으로 켰다). `restore`는 파일이
+없으면 init을 하고도 exit 2. `-f`로 기본 경로가 아닌 파일을 주면 잠금 파일을 안 만든다. daemon 모드는
+SIGTERM에 저장 없이 끝나고 SIGUSR2가 저장한다(AU).
 
-- TC-1. `config.parse`는 틀린 값을 로그로만 알리고 기본값에 머문다 — 실패를 돌려주지 않는다. 그래서 `tars-config set`은 `config.zig`의
-  로그를 root의 `configLog`로 가로채 거절의 이유로 쓴다. 가로채지 않으면 틀린 값을 받아들인다(M0 mutation m1).
-- TC-2. Zig 0.16의 multiline 문자열(`\\`)은 탭을 거부한다. 탭이 든 글자는 `"\t"`로 잇는다.
-- TC-3. `linux.W.TERMSIG`는 enum이다 — 숫자와 비교하지 않는다.
-- TC-4. `@embedFile`은 모듈 뿌리 밖을 못 읽는다. `kernel/dictation/tars-dictate`의 키 여덟은 호스트 검사가 런타임에 읽는다.
-- TC-5. `sd` 1.0은 줄 단위라 패턴의 `\n`을 못 맞춘다. 여러 줄을 바꿀 때는 perl이나 python.
-- TC-6. 콘솔 셸의 tty는 `console`이 아니라 `ttyS0`이다 — `TIOCSCTTY`가 그 밑의 장치를 준다. `pgrep -t console`은 빈다.
-- TC-7. fzf picker를 닫은 직후의 키는 샌다 — 그 뒤에 화면을 바꾸는 명령(`reload terminal`)을 치지 않는다. config 1차의 TC-M3 검사가 Ctrl+R
-  검사 앞에 있는 이유다.
-- TC-8. 반쪽 패널(pane 체인 부팅 B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joined_screen_dump`로 본다.
-- TC-9. terminal은 setsid를 안 해서 제 프로세스 그룹이 없다. `kill(-pid)`는 ESRCH로 아무도 안 죽인다. CT-M1부터 SIGKILL 시한이 모든 자식에
-  그룹으로 가게 돼 있었지만 서비스에만 시한이 서서 드러나지 않았다(M3 plan 확정 2).
-- TC-10. net 검사 31(`set net=off` · `reload` → dhcpcd 멈춤)이 루트 게이트에서 셋 중 둘 간헐로 빨갰고 단독에서는 넷 중 영이었다. 시리얼에
-  `reload of`만 있고 steer 줄이 없었다. Task 5b가 `set`의 답을 화면에서 본 뒤 reload를 치게 하고 실패 진단(마지막 화면 · `cat
-  /config/tars.conf` · `reload of` 뒤 init 줄)을 붙였다 — 그 뒤 4판 초록. 진짜 원인은 못 잡았다(이월 숙제).
+83. `snd_pci_acp6x` · `snd_pci_ps`는 PCI 표가 `modules.builtin.modinfo`의 alias로 안 나온다 — 그
+드라이버가 켜졌는지는 심볼로 본다(AU).
 
-### AL(Atomic Log Lines, 2026-10-07)이 잰 것
+84. alsa-lib의 `plug`가 스테레오를 모노로 접을 때 왼쪽 채널만 가져간다 — 녹음 판정에 두 채널이 같은
+값이기를 기대하지 않는다(VD).
 
-- AL-1. 컨테이너 Zig 0.16의 `std.debug.print`는 `var buffer: [64]u8`로 stderr를 잠그고 비운다 — 호출 하나가 write 하나 이상이고 64바이트를
-  넘는 줄은 둘 이상이다(TC-M3 게이트의 `pointer>` 줄이 65바이트째에서 잘렸다). 두 프로세스가 같은 콘솔에 쓰면 호출 사이가 곧 끼어들 틈이다.
-- AL-2. tty 층은 write() 한 번을 `atomic_write_lock`으로 통째로 묶는다. 사용자 공간 둘 사이의 자름은 write 사이에서만 난다. 커널 printk는
-  UART에 직접 써서 write 안도 자른다(AU-M2).
-- AL-3. 2048은 커널 tty가 write 한 번을 쪼개는 chunk(`iterate_tty_write`)다. 그 안의 줄은 시그널이 걸려도 안 끊긴다. init의 처리기는
-  `SA_RESTART` 없이 달려 EINTR이 실제로 생길 수 있다 — `logline.flush`가 재시도와 이어 쓰기로 받는다.
-- AL-4. `std.fmt.bufPrint`는 넘쳤을 때 얼마나 썼는지를 안 돌려준다 — `Writer.fixed`를 쓴다. 한글이 버퍼 끝에 정확히 맞으면 온전한 글자까지
-  떼던 첫 원형의 버그는 경계값 검사(2048 · 2049 · 음절이 걸침 · 정확히 맞음)가 잡는 자리다.
-- AL-5. `@embedFile`처럼 공용 모듈(`b.path("../…")`)도 컨테이너 Zig에서 서지만, 그 파일을 import하는 호스트 검사 모듈 열다섯에 `addImport`가
-  필요하다. 사본 둘 + 진입 검사의 cmp가 더 싸다.
-- AL-6. 끼어듦은 드물다(게이트 한 판 42회차에 2 ~ 8). 되돌린 치환이 런타임에 잡히는지는 운이다 — 진입 검사(게스트 파일의 `std.debug.print`
-  0곳)가 결정적으로 지킨다. 진짜 끼어듦은 셈이 잡는다(심은 줄 → `A=2`로 FAIL).
-- AL-7. 파일을 두 번 읽는 검사(`tr -d '\0'` 길이와 `wc -c`)는 QEMU가 아직 쓰는 중이면 거짓 빨강이다 — 한 번 읽기(`tr -cd '\0' | wc -c`)로.
-  pointer · copy · render · pane의 NUL 검사가 그 모양이었다(AL-M1 Task 3-3).
-- AL-8. 화면 dump의 write가 회차당 180만에서 9,652로 줄어도 게이트 시간은 같다(59분) — TCG의 부팅 · 타이핑이 지배한다. init ReleaseSafe
-  바이너리는 8.7% 커진다(fmt마다 펼쳐지는 `logline.print`).
+85. 게스트의 `curl`은 `libssl`을 링크하지만 인증 기관 목록이 initrd에 없으면 https가 전부 `curl: (77)
+error setting certificate file`이다. `make_initrd.sh`가 sysroot의 ca-certificates(mozilla 150장)를
+`/etc/ssl/certs/ca-certificates.crt`로 이어 붙인다. 컨테이너 자신의 묶음은 OrbStack의 개발용 인증
+기관 둘이 섞여 있어 안 쓴다. 게이트는 `openssl s_server`(자기 서명)에 대고 "목록을 읽었다"를 exit
+60(77이 아니라)으로 본다(VD).
+
+86. `arecord -d N`을 SIGINT로 멈추면 WAV 머리를 거의 못 고친다(스물네 판 중 스물하나가 `pcm_read …
+Interrupted system call`로 머리를 그대로 둔다). 샘플은 멀쩡하다 — `tars-dictate`가 머리 44바이트를
+실제 길이로 다시 쓴다(VD).
+
+87. 게스트의 `jq`는 1.7이라 `trim`이 없다(`sub`로 strip을 정의한다). Oniguruma 정규식이라 `\p{L}` ·
+`\p{N}`은 안다 — 한글이 글자여야 하는 판정은 bash + `jq`가 Zig보다 맞았다(Zig std에 유니코드 범주
+표가 없다)(VD).
+
+88. 시그널은 pid가 아니라 프로세스 그룹에 보낸다. 자식을 `setpgid`로 제 그룹에 두지 않으면
+`kill(-pid)`가 `ESRCH`이고 아무도 안 죽는다 — `tars-dictate`의 `arecord`가 상한까지 녹음했고(VD-M1
+mutation 2), terminal은 setsid를 안 해서 제 그룹이 없어 CT-M1부터 있던 SIGKILL 시한이 서비스에만
+서고 terminal에는 안 서 있었다(TC-M3 plan 확정 2). 콘솔 셸의 tty는 `console`이 아니라 `ttyS0`이다 —
+`TIOCSCTTY`가 그 밑의 장치를 주고 `pgrep -t console`은 빈다(TC).
+
+89. 비밀번호 프롬프트의 판정은 `ECHO`가 아니라 `ICANON && !ECHO`다 — 셸의 줄 편집기와 vim은 둘을
+함께 끄므로 `ECHO`만 보면 모든 프롬프트가 비밀번호다. master에 `tcgetattr`를 하면 slave의 termios를
+준다(VD).
+
+90. QEMU `sendkey meta_r`가 게스트의 `KEY_RIGHTMETA`다. hold를 안 적으면 누른 시간 7 ~ 23ms · 두
+누름 사이 20ms로 사람 손과 다르다 — `sendkey meta_r 80` 둘이 누른 시간 80ms · 사이 160ms다.
+`type_keys`로는 못 친다(수정키 하나는 로그가 없어 키마다 0.3초를 기다린다)(VD).
+
+91. fzf picker를 닫은 직후의 키는 샌다 — 그 뒤에 화면을 바꾸는 명령(`reload terminal`)을 치지
+않는다. config 1차의 TC-M3 검사가 Ctrl+R 검사 앞에 있는 이유다. 그리고 반쪽 패널(pane 체인 부팅
+B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joined_screen_dump`로 본다(TC).
+
+92. 게스트 코드(terminal · init)에 `std.debug.print`를 쓰지 않는다 — 컨테이너 Zig 0.16의 그것은
+64바이트 버퍼로 stderr를 잠그고 비워 한 줄이 write 여럿이고, 두 프로세스가 같은 콘솔에 쓰면 호출
+사이가 끼어들 틈이다(TC-M3 게이트를 하룻밤에 두 번 빨갛게 했다). `logline.zig`가 한 줄을 write
+하나로 보내고(2048 = 커널 tty chunk), 루트 `check.sh`가 회차마다 끼어든 줄 A · B와 잘린 줄 C를 센다.
+끼어듦은 드물어(한 판 42회차에 2 ~ 8) 되돌린 치환을 런타임이 잡는 것은 운이고, 진입 검사(게스트
+파일의 `std.debug.print` 0곳)가 결정적으로 지킨다(AL).
 
 ## 시도했으나 안 되는 접근 (같은 벽에 다시 부딪치지 말 것)
 
@@ -1025,8 +1016,10 @@ RIS가 끈다(`vt_test` 95 · 96).
 - 게이트 stdout에서 시리얼 로그의 줄을 `grep`하기 — 그 줄은 stdout에 없고
   체인이 만든 `mktemp` 파일 안에 있다.
 - NUL이 든 로그를 `-a` 없이 `grep`하기 — `Binary file ... matches`만 나온다.
-- `grep -qP '\x00'`으로 NUL 검출 — GNU grep 3.11에서 매치되지 않는다.
-  `[ "$(tr -d '\0' < "$f" | wc -c)" -ne "$(wc -c < "$f")" ]`를 쓴다.
+- `grep -qP '\x00'`으로 NUL 검출 — GNU grep 3.11에서 매치되지 않는다. 그리고 파일을
+  두 번 읽는 판정(`tr -d '\0' | wc -c`와 `wc -c`의 비교)은 QEMU가 아직 쓰는 중이면 두
+  값이 어긋나 거짓 빨강이다 — 한 번 읽는 `[ "$(tr -cd '\0' < "$f" | wc -c)" -eq 0 ]`로
+  센다(AL-M1이 pointer · copy · render · pane의 NUL 검사를 그렇게 고쳤다).
 - 파이프라인 끝에 `grep -q`를 두기 — 첫 매치에서 빠져나가며 앞단에
   SIGPIPE를 일으키고 `pipefail`이 그것을 실패로 판정한다. 이제 루트 게이트의
   진입 검사가 막는다(GA-M1).
@@ -1057,6 +1050,18 @@ RIS가 끈다(`vt_test` 95 · 96).
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
   `vt.Screen`이 `io`를 필드로 든 이유가 이것이다(CS-M0).
 - `std.posix.getenv` — Zig 0.16에 없다.
+- Zig 0.16의 multiline 문자열(`\\`)에 탭 넣기 — 거부한다. 탭이 든 글자는 `"\t"`로
+  잇는다(TC).
+- `linux.W.TERMSIG`를 숫자와 비교하기 — enum이다(TC).
+- `@embedFile`로 모듈 뿌리 밖의 파일 읽기 — 못 읽는다. `kernel/dictation/tars-dictate`의
+  키 여덟은 호스트 검사가 런타임에 읽는다(TC).
+- `std.fmt.bufPrint`로 넘칠 수 있는 줄 만들기 — 넘쳤을 때 얼마나 썼는지를 안 돌려준다.
+  `Writer.fixed`를 쓴다. 한글이 버퍼 끝에 정확히 맞으면 온전한 글자까지 떼던
+  `logline.zig` 첫 원형의 버그는 경계값 검사(2048 · 2049 · 음절이 걸침 · 정확히
+  맞음)가 잡는 자리다(AL).
+- `logline.zig`를 공용 모듈(`b.path("../…")`)로 하나만 두기 — 컨테이너 Zig에서 서기는
+  하지만 그 파일을 import하는 호스트 검사 모듈 열다섯에 `addImport`가 필요하다. 사본
+  둘 + 진입 검사의 cmp가 더 싸다(AL).
 - 컨테이너에서 `rg` 쓰기 — 없다. `grep -aE`를 쓴다.
 - 컨테이너에서 `nc`로 QEMU monitor에 명령 보내기 — `nc`가 없다. 체인들은
   `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
@@ -1166,7 +1171,7 @@ PD(2026-10-05)가 남긴 것.
 - [ ] 누름과 첫 칸 이동 사이에 출력이 오면 선택이 한 줄 어긋날 수 있다(PD design 위험 2). 겪으면 tracked pin으로.
 - [ ] 가지치기가 copy mode를 닫을 때 `input.State.mode`가 `.copy`에 남는다(PD design 위험 5, PD 전부터 있던 자리).
 - [ ] 커널 코드 배치가 TCG의 initramfs 풀기 시간을 움직인다. 커널을 바꾼 뒤 `install` 부팅 7의 `init waited`가 500ms 아래로
-      내려가면 그 신호다(지금 `delay_use=4`에 900ms). 아래 실측 PD-3.
+      내려가면 그 신호다(지금 `delay_use=4`에 900ms). 아래 실측 76.
 
 서브프로젝트 후보(패키지 매니저 · IPv6)는 `HANDOFF.md`에 있다.
 여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
@@ -1200,7 +1205,7 @@ PD(2026-10-05)가 남긴 것.
       `clock.prepare`는 부팅이 같은 꼴로 부른다. ntp 부팅(net 부팅 A)에 `set ntp=…` · `reload`를 얹으면 덮인다.
 - [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
       다시 빨개지면 진단의 세 덩어리(마지막 화면 · `cat /config/tars.conf` · `reload of` 뒤 tars-init 줄)로 가린다 — 가설은 "set이 파일을 못
-      바꿨거나 늦었다"(TC-10).
+      바꿨거나 늦었다"(빨갰던 회차의 시리얼에 `reload of`만 있고 steer 줄이 없었다. 단독에서는 넷 중 영).
 
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
