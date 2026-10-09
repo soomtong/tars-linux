@@ -16,7 +16,7 @@
 ## 협업 방식 (feedback)
 
 - [Commit delegation](docs/decisions/feedback_commit_delegation.md) — 승인된 뒤의 git commit은 Claude가 만든다
-- [Execution scope](docs/decisions/feedback_execution_scope.md) — 빌드·QEMU·게이트 명령은 Claude가 직접 실행하고(2026-08-22 변경), 구현 파일 편집만 사용자에게 남긴다
+- [Execution scope](docs/decisions/feedback_execution_scope.md) — 빌드·QEMU·게이트 명령은 Claude가 실행하고(2026-08-22), 구현 파일도 Claude가 쓰거나(2026-09-12) 서브에이전트에 맡긴다(2026-10-03). 사용자의 검토는 타이핑이 아니라 읽기다
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 중 기술 선택지를 계속 묻지 말고 추천안으로 정해 진행한다
 - [Push policy](docs/decisions/feedback_push_policy.md) — push는 묻지 말고 필요할 때 하고, 미푸시 커밋 수를 보고하지 않는다
 - [Plain Korean](docs/decisions/feedback_plain_korean.md) — 비유를 일반 어휘 자리에 쓰지 않고, 조사·어미를 생략하지 않는다. 특히 제목과 첫 문장

@@ -32,3 +32,9 @@ style" (explain → user executes → explain results, Claude commits) for
 every BF milestone until the whole project is done — don't ask again per
 milestone. See [[user_learning_goal]] for why. Do not re-offer
 subagent-driven/inline execution as options for this project.
+
+Superseded in three steps — since 2026-08-22 Claude runs the commands,
+since 2026-09-12 Claude writes the files, and since 2026-10-03 the
+implementation may go to a subagent (user's instruction at Workspace
+Panes). The commit rule itself is unchanged: Claude commits, subagents
+never do. Details in [[feedback_execution_scope]].

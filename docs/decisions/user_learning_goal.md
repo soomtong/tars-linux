@@ -21,3 +21,8 @@ at a time, to understand them) — see [[project_boot_foundation_restart]].
 Also reinforces [[feedback_commit_delegation]]'s pair-programming execution
 style: don't push toward subagent-driven/inline automated execution, since
 the user doing the hands-on work themselves is part of how they learn.
+
+Superseded in part on 2026-10-03: the user chose subagent implementation
+from Workspace Panes on (see [[feedback_execution_scope]]). The learning
+goal itself stands; the user now learns by reading the explanations and the
+code that lands, not by typing it.

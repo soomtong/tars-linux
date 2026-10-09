@@ -1,6 +1,6 @@
 ---
 name: feedback-execution-scope
-description: "Claude runs the build/QEMU/gate commands in TARS work (changed 2026-08-22) and, since 2026-09-12, writes the implementation files too; explanation before + interpretation after stay mandatory, and the user's review moved from typing the code to reading it"
+description: "Claude runs the build/QEMU/gate commands in TARS work (changed 2026-08-22), since 2026-09-12 writes the implementation files too, and since 2026-10-03 may hand implementation to a subagent while the lead explains, verifies the diff, runs the gate and commits; explanation before + interpretation after stay mandatory, and the user's review moved from typing the code to reading it"
 metadata: 
   node_type: memory
   type: feedback
@@ -25,7 +25,7 @@ what you said."
 | 하는 일 | 누가 |
 |---|---|
 | 무엇을 왜 하는지 설명 | Claude (변함없음) |
-| 구현 파일 편집 | Claude ← 2026-09-12에 바뀐 자리 |
+| 구현 파일 편집 | Claude 또는 서브에이전트 ← 2026-09-12 · 2026-10-03에 바뀐 자리 |
 | 빌드·QEMU 부팅·게이트·조사성 명령 실행 | Claude (2026-08-22에 바뀌었다) |
 | 결과 로그를 줄 단위로 해석 | Claude (변함없음) |
 | design/plan/HANDOFF/기억 파일 작성 | Claude (변함없음) |
@@ -55,6 +55,24 @@ messages"라고 밝힌 것이 그 뜻이다.
 Claude가 잘못 제시한 것을 그 자리에서 잡을 수 있다. HD-M2에서도 "넣을 것"만
 제시하고 사용자가 넣는 방식이 유지되고 있다.
 
+## 2026-10-03부터 — 구현은 서브에이전트에 맡길 수 있다
+
+Workspace Panes(WP)를 시작하면서 사용자가 구현을 서브에이전트에 맡기라고
+지시했고([[project_workspace_panes]]), 그 뒤 Battery Status까지 열두
+서브프로젝트가 같은 모양으로 갔다 — design · plan은 Opus, 구현은 Sonnet이나
+Opus 서브에이전트, lead(이 세션)는 설명 · 실측 · 보고된 diff를 실제 파일과
+대조 · 게이트 · commit. 서브에이전트는 commit하지 않고 diff · 로그만
+보고한다. [[user_learning_goal]]의 "서브에이전트로 밀지 말 것"과
+[[feedback_commit_delegation]]의 "다시 제안하지 말 것"은 사용자가 직접
+구현하던 때의 말이고, 사용자가 스스로 바꿨으므로 이 절이 그 둘을 덮는다.
+2026-10-10에 CLAUDE.md의 "진행 방식" 2를 이 관행대로 고쳤다(문서 감사의
+"규칙과 관행이 어긋난다"를 사용자가 관행 쪽으로 정했다).
+
+같은 날 고친 또 하나 — 다음 milestone의 plan을 앞 milestone의 게이트가 도는
+동안 쓰는 관행(2026-10-04 GE-M0부터). 게이트가 끝나면 결과로 바뀌는 자리를
+대조해 고친 뒤 구현에 넘긴다(PD-M2). CLAUDE.md의 "Milestone 단위 작업"에
+적었다.
+
 ## How to apply
 
 - Step마다 설명이 먼저다. 무엇을 만들고 왜 그렇게 생겼는지 말한 뒤에
@@ -71,9 +89,9 @@ Claude가 잘못 제시한 것을 그 자리에서 잡을 수 있다. HD-M2에�
   순수 추가면 지운 줄이 0인 것이 증명이다.
 - 편집 뒤에는 `Read`/`rg`로 직접 확인하고 나서 다음으로 넘어간다. 이
   조항은 규칙 변경과 무관하게 유효하다.
-- 실행 방식(subagent-driven/inline/pairing)을 milestone마다 다시 묻지
-  않는다 — 항상 pairing 방식이다. 바뀐 것은 pairing 안에서 명령을 누가
-  치느냐이지, pairing 자체가 아니다.
+- 실행 방식을 milestone마다 다시 묻지 않는다. 2026-10-03부터는 구현을
+  서브에이전트에 맡기는 것이 기본이고(위 절), 사용자가 다르게 말하면 그때
+  바꾼다. 설명 → 실행 → 해석의 순서는 누가 구현하든 같다.
 
 ## 이 규칙이 원래 왜 생겼는가 (2026-08-05)
 

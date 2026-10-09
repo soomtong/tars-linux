@@ -18,8 +18,11 @@ TARS는 이전 저장소(`tars.git`)에서 "이해 없이 코드만 쌓이는" �
 
 1. 설명 먼저 — 지금 무엇을 만들고 왜 필요한지 사용자가 이해할 수 있게
    먼저 설명한다. 코드를 던지기 전에 "이게 왜 이렇게 생겼는지"를 말한다.
-2. 파일 편집은 Claude가 — 구현 파일도 Claude Code가 직접 넣고, 사용자는
-   만들어진 코드를 읽으며 따라간다(`docs/decisions/feedback_execution_scope.md`).
+2. 구현 파일은 Claude가 넣는다 — 직접 넣거나(2026-09-12부터) 서브에이전트에
+   맡긴다(2026-10-03 WP부터, 사용자 지시). 맡겼을 때 lead인 이 세션의 몫은
+   설명 · plan · 보고된 diff를 실제 파일과 대조 · 게이트 · commit이고,
+   서브에이전트는 commit하지 않는다. 사용자는 만들어진 코드를 읽으며
+   따라간다(`docs/decisions/feedback_execution_scope.md`).
    검토 지점은 타이핑이 아니라 읽기에 있다 — 그래서 Claude는 매 편집 뒤
    `git diff --stat`으로 더한 줄과 지운 줄을 따로 세고, 지우는 편집은
    `git diff | rg '^-'`로 내용을 직접 읽어 의도한 줄만 지워졌는지 본다.
@@ -61,10 +64,12 @@ kernel/init/bootloader를 직접 빌드하므로 바이너리 산출물이 계�
 각 서브프로젝트는 `docs/specs/`에 design doc, `docs/plans/`에
 milestone별 plan을 작성한다 (예:
 `2026-08-01-tars-boot-foundation-design.md`,
-`2026-08-01-tars-boot-foundation-bf-m0.md`). 한 milestone이 끝나면 다음
-milestone의 plan은 그 시점에 새로 작성한다 — 전체 milestone을 한 번에
+`2026-08-01-tars-boot-foundation-bf-m0.md`). 전체 milestone을 한 번에
 미리 상세 설계하지 않는다 (이해가 쌓이면서 다음 단계의 구체적 결정이
-바뀔 수 있기 때문).
+바뀔 수 있기 때문). 다음 milestone의 plan은 앞 milestone의 게이트가 도는
+동안 써도 된다(2026-10-04 GE-M0부터의 관행) — 다만 그 plan은 게이트 결과를
+못 본 채 쓴 것이므로, 게이트가 끝나면 결과로 바뀌는 자리가 있는지 대조해
+고친 뒤에 구현에 넘긴다(PD-M2가 그렇게 했다).
 
 ## 참고
 
