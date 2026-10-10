@@ -150,6 +150,19 @@ RUNS=2
 # `--rm`이고, `-e TMPDIR=`로 bind-mount해 두면 체인별로 나뉜 채 호스트에 남는다.
 GATE_LOGS="$(mktemp -d "${TMPDIR:-/tmp}/tars-gate.XXXXXX")"
 
+# GP-M0: 회차마다 걸린 초를 적는다(체인 · 회차 · 초, 탭으로 가른다). 체인별 시간을 같은
+# 게이트 안에서 잰 적이 없어서, 병렬의 하한(가장 긴 체인)을 추정이 아니라 이 표로 정한다.
+# 첫 체인의 1회차는 clean 직후의 cold 빌드를 품는다.
+TIMES="${GATE_LOGS}/times.tsv"
+: > "$TIMES"
+
+# 느린 회차부터 찍고 합계를 낸다. 빨간 게이트에서도 불러 어디까지 몇 초였는지 남긴다.
+print_times() {
+  echo "=== time per run (seconds, slowest first) ==="
+  sort -t $'\t' -k3,3 -rn "$TIMES" | awk -F '\t' '{ printf "%6d  %s run %s\n", $3, $1, $2 }'
+  awk -F '\t' '{ s += $3 } END { printf "%6d  total of %d runs\n", s, NR }' "$TIMES"
+}
+
 # 그 회차의 로그에서 남의 줄이 끼어든 줄과 잘린 줄을 센다(gate_lib.sh의 cut_log_lines).
 # terminal(AL-M0)과 init(AL-M1)이 한 줄을 write 한 번으로 내므로 A(terminal의 줄 가운데의
 # init)도 B(init의 줄 가운데의 terminal)도 생길 수 없고, C(2048에서 잘린 줄)는 게이트의 줄이
@@ -173,17 +186,22 @@ count_cut_lines() {
 run_chain() {
   local name="$1"
   local script="$2"
-  local dir ok
+  local dir ok start secs
 
   for i in $(seq 1 "$RUNS"); do
     echo "=== ${name} run ${i}/${RUNS} ==="
     dir="${GATE_LOGS}/${name}-${i}"
     mkdir -p "$dir"
     ok=1
+    start="$(date +%s)"
     TMPDIR="$dir" "$script" || ok=0
     count_cut_lines "$dir" "${name} run ${i}/${RUNS}" || ok=0
+    secs=$(( $(date +%s) - start ))
+    printf '%s\t%s\t%s\n' "$name" "$i" "$secs" >> "$TIMES"
+    echo "time: ${name} run ${i}/${RUNS} ${secs}s"
     if [ "$ok" -ne 1 ]; then
       echo "${name} FAIL: run ${i}/${RUNS} failed"
+      print_times
       exit 1
     fi
     echo "=== ${name} run ${i}/${RUNS} PASSED ==="
@@ -554,4 +572,5 @@ for entry in "${CHAINS[@]}"; do
   run_chain "${entry%%:*}" "${entry#*:}"
 done
 
+print_times
 echo "TARS check PASS: all chains ${RUNS}/${RUNS} consecutive runs succeeded (logs in ${GATE_LOGS})"
