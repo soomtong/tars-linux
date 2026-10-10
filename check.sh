@@ -205,7 +205,6 @@ run_chain() {
     echo "time: ${name} run ${i}/${RUNS} ${secs}s"
     if [ "$ok" -ne 1 ]; then
       echo "${name} FAIL: run ${i}/${RUNS} failed"
-      print_times
       exit 1
     fi
     echo "=== ${name} run ${i}/${RUNS} PASSED ==="
@@ -572,9 +571,117 @@ fi
 # 변경이지 반복을 줄이는 변경이 아니다(반복을 3에서 2로 줄인 것은 RUNS의 주석).
 clean
 
+# GP-M2: 체인을 동시에 돌린다(docs/plans/2026-10-10-tars-gate-parallel-gp-m2.md).
+#
+# 빌드 단계. 체인이 부르는 빌드 명령은 종류가 여덟이고 그중 일곱을 여기서 한 번 돌려
+# 둔다. 그러면 동시에 도는 체인들의 빌드 호출은 전부 캐시 적중이라 같은 트리에 아무도
+# 안 쓴다. 체인이 빌드를 부르는 구조(require_build_steps)는 그대로다. 남는 하나
+# (make_iso.sh)는 아래 ISO 줄 안의 일이다. 이 단계 뒤에는 `skipping make`가 체인 수 ×
+# RUNS여야 한다 — 첫 체인도 커널을 안 빌드했다는 뜻이다.
+prebuild() {
+  (cd kernel && ./build.sh) &&
+    (cd init && zig build && zig build test) &&
+    (cd terminal && ./prepare.sh && zig build test) &&
+    (cd kernel && ./make_initrd.sh) &&
+    (cd boot && ./build.sh)
+}
+
+echo "=== prebuild ==="
+start="$(date +%s)"
+if ! prebuild > "${GATE_LOGS}/prebuild.out" 2>&1; then
+  cat "${GATE_LOGS}/prebuild.out"
+  echo "TARS check FAIL: prebuild failed (logs in ${GATE_LOGS})"
+  exit 1
+fi
+echo "time: prebuild $(( $(date +%s) - start ))s"
+
+# 줄(lane). 한 줄 안의 체인은 차례로 돌고 줄끼리 동시에 돈다. 대부분의 체인은 혼자 한
+# 줄이다. make_iso.sh를 부르는 체인(boot · machine · install)은 한 줄로 묶는다 — 셋이
+# out/tars.iso를 제자리에 쓰고 그것으로 부팅하며, boot/build.sh가 limine 도구를
+# `make -B`로 매번 다시 빌드한다. 이름을 적지 않고 스크립트를 읽어 찾으므로 ISO 체인이
+# 늘어도 안 빠진다. 줄은 CHAINS 순서이고 ISO 줄은 그 첫 체인의 자리에 선다.
+calls_make_iso() {
+  grep -v '^[[:space:]]*#' "$1" | grep 'make_iso\.sh' > /dev/null
+}
+
+LANES=()
+iso_lane=-1
 for entry in "${CHAINS[@]}"; do
-  run_chain "${entry%%:*}" "${entry#*:}"
+  if calls_make_iso "${entry#*:}"; then
+    if [ "$iso_lane" -lt 0 ]; then
+      iso_lane=${#LANES[@]}
+      LANES+=("$entry")
+    else
+      LANES[iso_lane]+=" $entry"
+    fi
+  else
+    LANES+=("$entry")
+  fi
 done
 
+# 한 줄을 끝까지 돈다. 빨간 체인이 있어도 줄의 나머지를 돌고, 그 이름을 failed에 적는다.
+# run_chain의 `exit 1`은 괄호의 subshell만 끝낸다.
+FAILED="${GATE_LOGS}/failed"
+: > "$FAILED"
+run_lane() {
+  local entry
+  for entry in $1; do
+    ( run_chain "${entry%%:*}" "${entry#*:}" ) || echo "${entry%%:*}" >> "$FAILED"
+  done
+}
+
+# 동시에 JOBS개의 줄. 기본값은 이 컨테이너가 보는 메모리에서 계산한다 — OrbStack에 준
+# 메모리가 장비마다 다르기 때문이다. 줄 하나를 1GiB로 잡고(GP-M2 실측: QEMU 하나 RSS 최대
+# 686MiB, 다섯이 떴을 때 VM 3.3GiB) 1.5GiB를 남긴다. 4GB면 2, 8GB 이상이면 6이다. 6이
+# 상한인 것은 GP-M0의 CPU 평균 57%로 6개가 코어 약 3.5개 몫이기 때문이고, 코어 수도
+# 넘지 않는다. `-e JOBS=N`이 계산보다 앞선다(`-e JOBS=1`이면 한 줄씩).
+# 줄의 출력은 파일에 모았다가 그 줄이 끝날 때 한 덩어리로 찍는다 — 체인의 로그가 서로
+# 섞이지 않게.
+MEM_MIB=$(( $(awk '/^MemTotal:/ { print $2 }' /proc/meminfo) / 1024 ))
+CPUS="$(nproc)"
+default_jobs() {
+  local j=6 by_mem=$(( (MEM_MIB - 1536) / 1024 ))
+  [ "$by_mem" -lt "$j" ] && j="$by_mem"
+  [ "$CPUS" -lt "$j" ] && j="$CPUS"
+  [ "$j" -lt 1 ] && j=1
+  echo "$j"
+}
+JOBS="${JOBS:-$(default_jobs)}"
+declare -A LANE_OF_PID=()
+running=0
+
+start_lane() {
+  local n="$1"
+  echo "=== lane ${n} start: ${LANES[n]} ==="
+  run_lane "${LANES[n]}" > "${GATE_LOGS}/lane-${n}.out" 2>&1 &
+  LANE_OF_PID[$!]="$n"
+  running=$(( running + 1 ))
+}
+
+finish_one() {
+  local pid n
+  wait -n -p pid
+  n="${LANE_OF_PID[$pid]}"
+  running=$(( running - 1 ))
+  cat "${GATE_LOGS}/lane-${n}.out"
+}
+
+echo "=== ${#LANES[@]} lanes, ${JOBS} at a time (memory ${MEM_MIB} MiB, ${CPUS} cpus) ==="
+start="$(date +%s)"
+for n in "${!LANES[@]}"; do
+  while [ "$running" -ge "$JOBS" ]; do
+    finish_one
+  done
+  start_lane "$n"
+done
+while [ "$running" -gt 0 ]; do
+  finish_one
+done
+echo "time: lanes $(( $(date +%s) - start ))s"
+
 print_times
+if [ -s "$FAILED" ]; then
+  echo "TARS check FAIL: $(tr '\n' ' ' < "$FAILED")(logs in ${GATE_LOGS})"
+  exit 1
+fi
 echo "TARS check PASS: all chains ${RUNS}/${RUNS} consecutive runs succeeded (logs in ${GATE_LOGS})"

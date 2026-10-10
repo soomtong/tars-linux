@@ -1,8 +1,9 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const login = @import("login.zig");
 
-const ROOT = "/tmp/tars-login-test";
+const ROOT = "tars-login-test";
 const PASSWD = ROOT ++ "/passwd";
 const ENV = ROOT ++ "/tars-env.conf";
 
@@ -41,6 +42,7 @@ const PASSWD_IN =
     "sshd:x:100:65534::/run/sshd:/usr/sbin/nologin\n";
 
 pub fn main() !void {
+    try scratch.enter();
     // ── passwd의 root 셸 자리만 바뀐다 ───────────────────────────────
     var out: [512]u8 = undefined;
     const replaced = login.replaceRootShell(PASSWD_IN, "/usr/bin/zsh", &out) orelse {

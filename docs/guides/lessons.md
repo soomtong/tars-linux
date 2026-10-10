@@ -16,11 +16,11 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (스물두 체인 × 1 — 2026-10-10부터 1회, feedback_gate_runs. 2회는 22체인에서 1시간 01분 18초(GP-M0)였다. 회차별 초는 끝의 표)
+# 루트 게이트 (스물두 체인 × 1, 동시 JOBS줄 — GP-M2부터 9분 51초. 순차 1회는 32분 23초, 2회는 1시간 01분 18초였다. 회차별 초는 끝의 표)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
-# 반복을 늘려 확인할 때(파일은 안 고친다)
-docker run --rm -e RUNS=3 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
+# 반복을 늘리거나 동시 실행 수를 정할 때(파일은 안 고친다). JOBS 기본값은 메모리에서 계산한다 — 4GB면 2, 8GB 이상이면 6
+docker run --rm -e RUNS=3 -e JOBS=4 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer ./net/check.sh > /tmp/net.log 2>&1
@@ -85,6 +85,20 @@ AL-M0부터 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>
 같다. TC의 루트 게이트가 드러낸 간헐 셋은 전부 게이트 쪽이었다 — `set`의 답을 안 기다린 것(M2 5b), init 로그가 화면 dump를 자른
 것(M3 5b, 바로 아래 AU-M2 절의 덧붙임), 프로브의 둘째 줄을 안 기다린 것(M3 5c).
 
+### 체인은 동시에 돈다 — 둘이 같은 자리에 쓰면 안 된다 (GP-M2)
+
+루트 게이트는 `prebuild`(빌드 한 번) 뒤에 체인을 `JOBS`줄씩 동시에 돌린다. 줄의 출력은 그 줄이 끝날 때 한 덩어리로 찍히고,
+빨간 체인이 있어도 끝까지 돈 뒤 `TARS check FAIL: <체인들>`로 모은다. 체인을 더하거나 고칠 때 볼 것 넷.
+
+- 포트는 체인마다 따로다(위의 목록). 같은 포트를 쓰면 동시에 도는 남의 게스트에 붙는다.
+- 호스트 쪽 파일은 `mktemp`(회차의 `TMPDIR`)나 그 체인 이름이 든 `out/<체인>-….img`에 둔다. 둘 이상이 같은 경로에 쓰면 안 된다.
+  예외인 `out/tars.iso`와 limine 도구는 그것을 쓰는 체인(스크립트가 `make_iso.sh`를 부르는 체인)을 `check.sh`가 한 줄로 묶어 지킨다.
+- 체인이 부르는 호스트 검사(`zig build test`)도 같은 컨테이너에서 겹친다. init 검사 일곱이 /tmp 아래 고정 경로를 써서 첫 병렬
+  게이트의 10체인이 부팅 전에 죽었다(`dial to a closed listener succeeded`). 검사가 파일을 만들면 `test_scratch.zig`의
+  `enter`를 `main` 맨 앞에서 부르고 경로는 상대 경로로 둔다. symlink의 상대 대상은 링크가 놓인 디렉터리에서 풀리므로 같은
+  자리의 형제는 이름만 준다.
+- 공유 산출물은 제자리에서 다시 쓰지 않는다 — 다 만든 뒤 `mv`로 바꿔치기한다(`make_initrd.sh`, tools 검사 1d).
+
 ### 게이트는 첫 회차에만 clean하고 나머지는 증분이다 (GL-M0)
 
 `clean()`은 `run_chain` 안이 아니라 게이트 시작에서 한 번만 불린다. 그래서
@@ -97,9 +111,10 @@ AL-M0부터 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>
 
 커널은 입력이 안 바뀌면 아예 빌드하지 않는다 (GL-M1). `kernel/build.sh`가
 `.config`와 자기 자신의 sha256을 `build/.tars-build-stamp`에 적어 두고 대조한다.
-게이트 로그의 `skipping make` 횟수는 `체인 수 × 회차 수 − 1`이어야 한다(회차 수는 `check.sh`의 `RUNS`, 지금 1 — 그러면 체인 수 − 1) — 첫
-회차만 clean에서 지운 자리를 다시 빌드한다. 그 수보다 하나 많으면 `clean()`이
-지운 자리에서도 건너뛴 것이라 잘못이다. `build.sh`가 해시에 들어가는 이유는
+게이트 로그의 `skipping make` 횟수는 `체인 수 × 회차 수`여야 한다(회차 수는 `check.sh`의 `RUNS`, 지금 1 — 그러면 체인 수).
+GP-M2부터 clean 직후의 빌드는 체인이 아니라 `prebuild`가 하고(그 출력은 `<GATE_LOGS>/prebuild.out`이라 게이트 로그에 안 섞인다),
+체인의 빌드 호출은 전부 건너뛴다. 그 수보다 적으면 어느 체인이 `prebuild`가 안 덮은 입력으로 커널을 다시 빌드한 것이고,
+동시에 도는 다른 체인과 같은 트리에 쓴 것이다. `build.sh`가 해시에 들어가는 이유는
 `KERNEL_VERSION`이 그 안에 있기 때문이고, 커널 버전을 올릴 사람은 이것을 알아야
 한다.
 

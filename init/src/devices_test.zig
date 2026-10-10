@@ -1,10 +1,11 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const devices = @import("devices.zig");
 
 /// 이 검사가 만드는 가짜 트리의 뿌리. 게스트가 아니라 빌드 컨테이너의
-/// /tmp에 만든다.
-const ROOT = "/tmp/tars-devices-test";
+/// /tmp 아래, 프로세스마다 따로인 자리에 만든다(test_scratch.zig).
+const ROOT = "tars-devices-test";
 const FULL = ROOT ++ "/full";
 const BUTTON = ROOT ++ "/button";
 
@@ -105,6 +106,7 @@ fn nowMillis() i64 {
 /// 실패하면 0이 아닌 종료 코드로 끝난다. 체인 스크립트가 셋을 똑같이 다룰
 /// 수 있어야 한다.
 pub fn main() !void {
+    try scratch.enter();
     // ── 1. 워드의 방향 ────────────────────────────────────────────────
     //
     // 이 파일에서 가장 중요한 두 줄이다. sysfs는 가장 높은 워드를 맨 앞에

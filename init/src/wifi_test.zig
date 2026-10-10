@@ -1,11 +1,12 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const wifi = @import("wifi.zig");
 
 // WL-M2. `wifi.wants`의 네 갈래. 설정 파일은 게스트가 아니라 빌드 컨테이너의
-// /tmp에 만든다 — `wants`가 경로를 인자로 받는 이유가 이것이다.
+// /tmp 아래, 프로세스마다 따로인 자리에 만든다(test_scratch.zig) — `wants`가 경로를 인자로 받는 이유가 이것이다.
 
-const ROOT = "/tmp/tars-wifi-test";
+const ROOT = "tars-wifi-test";
 const CONF = ROOT ++ "/wpa_supplicant.conf";
 
 fn expect(what: []const u8, got: bool, want: bool) !void {
@@ -16,6 +17,7 @@ fn expect(what: []const u8, got: bool, want: bool) !void {
 }
 
 pub fn main() !void {
+    try scratch.enter();
     _ = linux.mkdir(ROOT, 0o755);
     _ = linux.unlink(CONF);
 

@@ -1,9 +1,10 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const services = @import("services.zig");
 
-/// 이 검사가 만드는 가짜 services.d. 게스트가 아니라 빌드 컨테이너의 /tmp다.
-const ROOT = "/tmp/tars-services-test";
+/// 이 검사가 만드는 가짜 services.d. 게스트가 아니라 빌드 컨테이너의 /tmp 아래, 프로세스마다 따로인 자리다(test_scratch.zig).
+const ROOT = "tars-services-test";
 const DIR = ROOT ++ "/services.d";
 const MISSING = ROOT ++ "/nope";
 
@@ -64,6 +65,7 @@ fn expectVerdict(name: []const u8, want: services.Verdict) !void {
 }
 
 pub fn main() !void {
+    try scratch.enter();
     // ── 이름만으로 가르는 것 ─────────────────────────────────────────
     try expectVerdict("sshd", .ok);
     try expectVerdict(".hidden", .hidden);
@@ -111,8 +113,10 @@ pub fn main() !void {
     try touch(".hidden", 0o755);
     try mkdirOne(join("{s}/{s}", .{ DIR, "subdir" }));
     try touch("a-first", 0o755);
-    try link("l-link", DIR ++ "/a-first");
-    try link("k-broken", DIR ++ "/does-not-exist");
+    // 대상은 이름만 준다. symlink의 상대 대상은 링크가 놓인 디렉터리에서 풀리므로 같은 자리의
+    // 형제를 가리킨다 — DIR가 상대 경로(GP-M2)라서 `DIR ++ "/a-first"`는 없는 곳이 된다.
+    try link("l-link", "a-first");
+    try link("k-broken", "does-not-exist");
     var i: u8 = 0;
     while (i < 7) : (i += 1) {
         const name = [_]u8{ 'n', '0' + i };

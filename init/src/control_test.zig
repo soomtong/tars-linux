@@ -1,9 +1,10 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const control = @import("control.zig");
 
-/// 이 검사가 쓰는 소켓 자리. 게스트가 아니라 빌드 컨테이너의 /tmp다.
-const DIR = "/tmp/tars-control-test";
+/// 이 검사가 쓰는 소켓 자리. 게스트가 아니라 빌드 컨테이너의 /tmp 아래, 프로세스마다 따로인 자리다(test_scratch.zig).
+const DIR = "tars-control-test";
 const PATH = DIR ++ "/init.sock";
 
 fn failed(rc: usize) ?linux.E {
@@ -68,6 +69,7 @@ fn rawConnect() !i32 {
 }
 
 pub fn main() !void {
+    try scratch.enter();
     // ── 요청의 글자 ─────────────────────────────────────────────────
     try expectParse("status", .status, null);
     try expectParse("status sshd", .status, "sshd");

@@ -4,14 +4,15 @@
 //! 이 파일이 root라서 아래 `configLog`가 config.zig의 로그를 가로챈다. `judge`가
 //! 듣는 것이 그 길이고, 그래서 여기서는 `tars-init:` 줄이 하나도 안 찍힌다.
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const edit = @import("config_edit.zig");
 
 pub const configLog = edit.configLog;
 
-/// `config.save`가 seed를 쓰는 자리. 게스트가 아니라 빌드 컨테이너의 /tmp다.
-const SEED_PATH: [:0]const u8 = "/tmp/tars-config-edit-test.conf";
+/// `config.save`가 seed를 쓰는 자리. 게스트가 아니라 빌드 컨테이너의 /tmp 아래, 프로세스마다 따로인 자리다(test_scratch.zig).
+const SEED_PATH: [:0]const u8 = "tars-config-edit-test.conf";
 
 fn fail(comptime fmt: []const u8, args: anytype) error{Failed} {
     std.debug.print("FAIL: " ++ fmt ++ "\n", args);
@@ -110,6 +111,7 @@ fn oneLineApart(a: []const u8, b: []const u8) bool {
 }
 
 pub fn main() !void {
+    try scratch.enter();
     // ── 1. 키는 Config의 필드 이름이고, parse가 그 이름을 전부 안다 ─────
     //
     // 필드를 더하고 parse의 갈래를 빠뜨리면 여기서 "unknown config key"를 듣는다.

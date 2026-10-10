@@ -1,4 +1,5 @@
 const std = @import("std");
+const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const storage = @import("storage.zig");
 
@@ -51,9 +52,9 @@ fn nowMillis() i64 {
     return @as(i64, ts.sec) * 1000 + @divTrunc(@as(i64, ts.nsec), 1_000_000);
 }
 
-/// 기다림 검사가 여는 가짜 디스크. 게스트가 아니라 빌드 컨테이너의 /tmp다.
-const FAKE_DISK: [:0]const u8 = "/tmp/tars-storage-test.img";
-const NO_DISK: [:0]const u8 = "/tmp/tars-storage-test-absent.img";
+/// 기다림 검사가 여는 가짜 디스크. 게스트가 아니라 빌드 컨테이너의 /tmp 아래, 프로세스마다 따로인 자리다(test_scratch.zig).
+const FAKE_DISK: [:0]const u8 = "tars-storage-test.img";
+const NO_DISK: [:0]const u8 = "tars-storage-test-absent.img";
 
 /// bytes를 path에 통째로 쓴다. devices_test의 writeFile과 같은 루프다.
 fn writeFile(path: [:0]const u8, bytes: []const u8) !void {
@@ -79,6 +80,7 @@ fn writeFile(path: [:0]const u8, bytes: []const u8) !void {
 }
 
 pub fn main() !void {
+    try scratch.enter();
     // ── 1. 대조군: 매직이 없다 ────────────────────────────────────────
     //
     // 빈 디스크와 GPT 디스크가 이 경로다. 노트북의 내장 NVMe를 디스크 전체로
