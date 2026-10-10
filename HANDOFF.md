@@ -2,15 +2,24 @@
 
 ## 지금 상태 (2026-10-10)
 
+- 마지막으로 닫힌 것은 Gate Parallel(GP-M0~M2)이다(2026-10-10). 루트 게이트가 1시간 01분 18초에서 9분 51초가 됐다 —
+  `prebuild`가 빌드를 한 번 하고 체인을 동시 `JOBS`줄로 돌린다. 기억은 `docs/decisions/project_gate_parallel.md`, design은
+  `docs/specs/2026-10-10-tars-gate-parallel-design.md`다.
+- 커밋 — GP-M0 `9e8633f`, `RUNS` 2 → 1 `a7ef734`(사용자 결정, 별도 커밋), GP-M1 `97333dd`, GP-M2 `6b04492`, 닫는 문서는 이 커밋.
+- GP-M2 루트 게이트(22체인 × 1, 동시 6): 22체인 전부 `PASS: 1/1`, 9분 51초(prebuild 246초 + 줄 336초), `skipping make` 22,
+  잘린 줄 0, 빨간 줄 0. QEMU 하나 최대 689MiB, VM 최대 3.81GiB.
+- 게이트 운영이 바뀌었다 — `RUNS` 기본 1(`-e RUNS=N`), `JOBS` 기본은 컨테이너 메모리에서 계산(4GB 2 · 8GB 이상 6, `-e JOBS=N`),
+  `skipping make`의 기대값은 체인 수 × `RUNS`, 빨간 체인이 있어도 끝까지 돌고 끝에 `TARS check FAIL: <체인들>`. 이 기계의 OrbStack
+  메모리는 12GB다(사용자가 늘렸다). 루트 게이트가 10분 안팎이라 Bash 도구의 상한에 걸릴 수 있으니 여전히 `run_in_background`로 돌린다.
+- 새 체인을 쓸 때 볼 것이 늘었다 — 동시에 도는 다른 체인과 같은 자리(포트 · 호스트 파일 · 공유 산출물 · 호스트 검사의 /tmp)를
+  쓰지 않는다. `docs/guides/lessons.md`의 "체인은 동시에 돈다" 절.
 - 2026-10-10에 문서 정리를 커밋 일곱으로 적용했다 — 완료 표 이동 `35e0da9`, 규칙 정렬 `a20c523`, lessons 접기
   `580ad3f`, decisions 셋 `aff7ea5`, 그 뒤 decisions 열하나 `7265cc4` · `34d4a9c` · `218712d`. 코드는 안 바뀌었고 게이트는
   안 돌렸다(문서만). 아래 "문서 정리" 절.
-- 마지막으로 닫힌 것은 Battery Status(BS-M0 · M1)다(2026-10-09). 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의
+- 그 전에 닫힌 것은 Battery Status(BS-M0 · M1)다(2026-10-09). 배터리가 있는 기계에서 상태 줄 오른쪽 끝에 폭 4의
   잔량 칸이 뜬다. 기억은 `docs/decisions/project_battery_status.md`, design은
   `docs/specs/2026-10-08-tars-battery-status-design.md`다.
-- 커밋 다섯 — design · M0 plan `272065f`, BS-M0 `2ff5108`, M1 plan `b1b1c5b`, BS-M1 `000e562`, 닫는 문서 `0412237`.
-  작업 트리는 깨끗하다.
-- BS-M1 루트 게이트(22체인 × 2): 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0
+- BS의 커밋 다섯 — design · M0 plan `272065f`, BS-M0 `2ff5108`, M1 plan `b1b1c5b`, BS-M1 `000e562`, 닫는 문서 `0412237`.
 - 체인은 이제 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
 - 그 전에 닫힌 것은 Config Tool(TC-M0~M3)과 Atomic Log Lines(AL-M0 · M1)다(2026-10-07, `f3b677c`).
 - 문서 감사(2026-10-08)의 네 건은 2026-10-10에 적용했다("문서 정리" 절). 낡은 수치(lessons · running-tars의 체인 수와 게이트
