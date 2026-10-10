@@ -18,7 +18,10 @@ fi
 ./vendor_firmware.sh
 
 WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+# GP-M1: initrd는 이 임시 파일에 다 만든 뒤 맨 끝에서 `mv`로 바꿔치기한다. rename이
+# 원자적이려면 같은 파일시스템이어야 하므로 /tmp가 아니라 이 디렉터리에 둔다.
+OUT="$(mktemp initrd.cpio.XXXXXX)"
+trap 'rm -rf "$WORKDIR" "$OUT"' EXIT
 
 # "찾는 곳"과 "넣는 곳"을 분리한다.
 #
@@ -724,7 +727,7 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 # 19% 늘었는데 BF 부팅 시간이 34/33/33초로 변하지 않았다
 # (docs/decisions/project_gate_chain_composition.md). 1.3%는 그 영향권 밖이다.
 # 53MB에서 부팅조차 못 했던 것은 선형적인 느려짐이 아니라 다른 종류의 벽이었다.
-(cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -6 > initrd.cpio
+(cd "$WORKDIR" && find . | cpio -o -H newc) | gzip -6 > "$OUT"
 
 # WL-M1. 무선 firmware를 뒤에 이어 붙인다. 커널은 이어 붙인 cpio를 차례로
 # 풀어 한 트리로 합친다(WL design 실측 9). 따로 두는 이유는 압축이다 — 38MB를
@@ -733,4 +736,12 @@ done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 #
 # ⚠ `gzip -dc initrd.cpio | cpio -it`는 첫 archive의 끝 표시에서 멈춘다 —
 # firmware는 그 목록에 안 나온다. tools/check.sh가 꼬리를 따로 대조한다.
-cat src/firmware/firmware.cpio.gz >> initrd.cpio
+cat src/firmware/firmware.cpio.gz >> "$OUT"
+
+# GP-M1. 예전에는 위 두 줄이 initrd.cpio를 제자리에서 자르고 다시 썼다. 그러면 그 파일을
+# 읽던 쪽(QEMU의 -initrd · 체인의 `gzip -dc | cpio -it` · make_iso.sh의 cp)이 중간부터
+# 새 내용이나 빈 파일을 읽는다. 체인이 동시에 돌면 실제로 겹친다. rename은 경로가
+# 가리키는 inode만 바꾸므로 이미 연 쪽은 옛 파일을 끝까지 온전히 읽는다(tools 검사 1d).
+# mktemp가 0600으로 만들므로 예전 `>`와 같은 0644로 맞춘다.
+chmod 644 "$OUT"
+mv -f "$OUT" initrd.cpio

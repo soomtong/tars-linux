@@ -6,6 +6,7 @@ devcontainer/sanity/sanity.elf
 kernel/src/
 kernel/build/
 kernel/initrd.cpio
+kernel/initrd.cpio.*
 
 init/zig-out/
 init/.zig-cache/

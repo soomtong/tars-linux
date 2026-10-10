@@ -284,6 +284,42 @@ if grep -a "readelf: Error" "$INITRD_ERR"; then
 fi
 echo "make_initrd.sh printed no readelf error"
 
+# ── 검사 1d: make_initrd.sh가 initrd를 제자리에서 다시 쓰지 않는다 (GP-M1, 정적) ─
+#
+# 체인이 동시에 돌면 한 체인이 initrd를 다시 만드는 동안 다른 체인이 그것을 읽는다.
+# 그래서 make_initrd.sh는 임시 파일에 다 만든 뒤 rename으로 바꿔치기한다. 여기서는
+# 파일을 열어 둔 채 한 번 더 만들고 셋을 본다 —
+#   (a) 연 fd의 inode와 경로의 inode가 다르다 — rename이 일어났다.
+#   (b) 연 fd로 읽은 내용이 열기 전과 같다 — 옛 파일이 온전하다.
+#   (c) 임시 파일(initrd.cpio.*)이 안 남았다.
+# (b)만으로는 모자란다. initrd는 지금 매번 다른 바이트로 나와서(cpio가 mtime · inode를
+# 적는다) 제자리 쓰기도 (b)에서 빨개지지만, 누가 initrd를 재현 가능하게 만들면 제자리
+# 쓰기가 같은 바이트를 내어 (b)를 통과한다. (a)는 그런 두 번째 길이 없다.
+HELD_SHA_BEFORE="$(sha256sum ../kernel/initrd.cpio | cut -d' ' -f1)"
+exec 4< ../kernel/initrd.cpio
+if ! (cd ../kernel && ./make_initrd.sh) > /dev/null 2>&1; then
+  echo "FAIL: the second initrd build failed"
+  exit 1
+fi
+HELD_INODE="$(stat -L -c %i /dev/fd/4)"
+PATH_INODE="$(stat -c %i ../kernel/initrd.cpio)"
+HELD_SHA_AFTER="$(sha256sum <&4 | cut -d' ' -f1)"
+exec 4<&-
+if [ "$HELD_INODE" = "$PATH_INODE" ]; then
+  echo "FAIL: make_initrd.sh rewrote initrd.cpio in place (inode ${PATH_INODE} kept) — a reader would see it change under it"
+  exit 1
+fi
+if [ "$HELD_SHA_AFTER" != "$HELD_SHA_BEFORE" ]; then
+  echo "FAIL: a reader that opened initrd.cpio before the rebuild read different bytes"
+  exit 1
+fi
+LEFT_OVER="$(cd ../kernel && ls initrd.cpio.* 2>/dev/null || true)"
+if [ -n "$LEFT_OVER" ]; then
+  echo "FAIL: make_initrd.sh left temporary files behind: ${LEFT_OVER}"
+  exit 1
+fi
+echo "make_initrd.sh swaps initrd.cpio by rename (inode ${HELD_INODE} -> ${PATH_INODE}), an open reader kept the old bytes"
+
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
