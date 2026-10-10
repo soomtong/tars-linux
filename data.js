@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-10-09',
-  latest: 'Battery Status (BS-M0·M1)',
+  asOf: '2026-10-10',
+  latest: 'Gate Parallel (GP-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 931,       // git rev-list --count main
+    commits: 946,       // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
     zigKLines: 34,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -94,6 +94,7 @@ window.TARS = {
     ['2026-10-07', 'Config Tool', 'TC', '`tars-config`가 설정을 보고 · 고치고 · 재부팅 없이 적용한다'],
     ['2026-10-07', 'Atomic Log Lines', 'AL', '로그 한 줄이 write 한 번'],
     ['2026-10-09', 'Battery Status', 'BS', '상태 줄 오른쪽 끝의 배터리 잔량'],
+    ['2026-10-10', 'Gate Parallel', 'GP', '루트 게이트 1시간 01분 → 9분 51초, 체인을 동시에'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
