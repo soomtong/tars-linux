@@ -16,8 +16,11 @@
 ## 게이트를 돌리고 읽는 법
 
 ```bash
-# 루트 게이트 (스물두 체인 × 2 — 2026-10-05 PD-M2부터 2회, feedback_gate_runs. 3회였을 때 1시간 8분(PD-M1), 2회는 21체인에서 57분 20초(BS-M0)였다)
+# 루트 게이트 (스물두 체인 × 1 — 2026-10-10부터 1회, feedback_gate_runs. 2회는 22체인에서 1시간 01분 18초(GP-M0)였다. 회차별 초는 끝의 표)
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
+
+# 반복을 늘려 확인할 때(파일은 안 고친다)
+docker run --rm -e RUNS=3 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer ./net/check.sh > /tmp/net.log 2>&1
@@ -94,7 +97,7 @@ AL-M0부터 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>
 
 커널은 입력이 안 바뀌면 아예 빌드하지 않는다 (GL-M1). `kernel/build.sh`가
 `.config`와 자기 자신의 sha256을 `build/.tars-build-stamp`에 적어 두고 대조한다.
-게이트 로그의 `skipping make` 횟수는 `체인 수 × 회차 수 − 1`이어야 한다(회차 수는 `check.sh`의 `RUNS`, 지금 2) — 첫
+게이트 로그의 `skipping make` 횟수는 `체인 수 × 회차 수 − 1`이어야 한다(회차 수는 `check.sh`의 `RUNS`, 지금 1 — 그러면 체인 수 − 1) — 첫
 회차만 clean에서 지운 자리를 다시 빌드한다. 그 수보다 하나 많으면 `clean()`이
 지운 자리에서도 건너뛴 것이라 잘못이다. `build.sh`가 해시에 들어가는 이유는
 `KERNEL_VERSION`이 그 안에 있기 때문이고, 커널 버전을 올릴 사람은 이것을 알아야

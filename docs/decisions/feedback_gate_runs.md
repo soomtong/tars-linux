@@ -1,10 +1,21 @@
 ---
 name: feedback_gate_runs
-description: 루트 게이트의 연속 반복 수를 3에서 2로 줄인다(사용자 결정, 2026-10-05). 3은 측정이 아니라 BF design의 관례였고, 회귀는 늘 1회차에서 잡혔다.
+description: 루트 게이트의 연속 반복 수를 3에서 2로(2026-10-05), 다시 1로(2026-10-10) 줄였다(둘 다 사용자 결정). 3은 BF design의 관례였고, 회귀는 늘 1회차에서 잡혔다. 반복은 `-e RUNS=N`으로 가끔 늘린다.
 metadata:
   node_type: memory
   type: feedback
 ---
+
+## 2026-10-10 — 2에서 1로
+
+사용자 결정이다. "그동안 많은 검증을 거쳤고 어느 정도 안정화됐다. 추후 간간히 RUNS 수치를 늘려서
+검증한다." 2회로 PD-M2부터 BS-M1까지 지나는 동안 2회차가 잡은 것(AU-M2 pointer `seq 200` · VD-M2 render
+검사 28 · TC-M3 config)은 전부 게이트 쪽 경합이었고 제품 회귀는 없었다. GP-M0의 실측으로 2회차의 몫은
+약 28분(1시간 01분 18초 중)이었다.
+
+How to apply: `check.sh`의 `RUNS`는 `"${RUNS:-1}"`이다. 반복을 늘리는 확인은 파일을 고치지 않고
+`docker run -e RUNS=3 …`으로 준다. 기본 1회 게이트에서는 `skipping make`가 체인 수 − 1이다. 경합이 의심되는
+체인은 여전히 그 체인만 따로 여러 번 돌린다. 아래는 3에서 2로 줄일 때의 기록이다.
 
 Why: 3회는 Boot Foundation design(2026-08-01)의 Exit gate 한 줄 "3회 연속 실행
 성공(일관성 확인)"에서 왔고, 왜 3인지 잰 기록이 없다. `check.sh`의 GL-M0 주석대로
