@@ -123,29 +123,7 @@ const SEPARATOR: u32 = 0x00405060;
 /// (design 결정 6) — 글자가 셀 경계를 넘을 수 있어서, 섞어 그리면 다음
 /// 셀의 배경이 앞 글자의 삐져나온 획을 지운다.
 fn drawCellBackground(fb: drm.Framebuffer, x: u32, y: u32, color: u32) void {
-    var row: u32 = 0;
-    while (row < ROW_HEIGHT) : (row += 1) {
-        var col: u32 = 0;
-        while (col < CELL_W) : (col += 1) {
-            fb.setPixel(x + col, y + row, color);
-        }
-    }
-}
-
-/// 사각형 하나를 한 색으로 칠한다. bar · underline 커서의 띠가 이것이다
-/// (CU design 결정 3).
-///
-/// `setPixel`에 범위 검사가 없다. 여기서도 안 본다 — 부르는 자리가 넘기는
-/// 사각형은 `vt.Screen.cursorMark()`의 것이고, 그쪽이 칸 수(`cols`)를 격자
-/// 안으로 자르므로 패널 밖으로 안 나간다.
-fn fillRect(fb: drm.Framebuffer, x: u32, y: u32, w: u32, h: u32, color: u32) void {
-    var row: u32 = 0;
-    while (row < h) : (row += 1) {
-        var col: u32 = 0;
-        while (col < w) : (col += 1) {
-            fb.setPixel(x + col, y + row, color);
-        }
-    }
+    fb.fillRect(x, y, CELL_W, ROW_HEIGHT, color);
 }
 
 /// 알파 블렌딩을 하지 않고 문턱값으로 찍는다(design 결정 4).
@@ -518,7 +496,10 @@ fn renderPane(
     // 뒤, 이 함수의 맨 끝이다. 띠는 그 칸의 글리프 위에 그려져 글자의
     // 왼쪽(bar) 또는 아래(underline) 2픽셀을 덮는다 — ghostty 앱 렌더러도
     // 같다. block은 `cells()`가 이미 반전으로 그렸고 `px`가 null이다.
-    if (cursor) |cm| if (cm.px) |cr| fillRect(fb, o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
+    //
+    // `fillRect`에 범위 검사가 없다. 넘기는 사각형은 `vt.Screen.cursorMark()`의
+    // 것이고, 그쪽이 칸 수(`cols`)를 격자 안으로 자르므로 패널 밖으로 안 나간다.
+    if (cursor) |cm| if (cm.px) |cr| fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
 /// 프레임을 끝낸다 — 포커스 패널의 프롬프트와 상태 줄을 얹고 내보낸다.

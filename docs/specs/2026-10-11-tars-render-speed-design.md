@@ -1,7 +1,7 @@
 # TARS Render Speed — Design
 
 Date: 2026-10-11
-Status: 진행 중 — RS-M0(기준 측정) 끝, RS-M1 다음
+Status: 진행 중 — RS-M0 · RS-M1 끝, RS-M2 다음
 
 사용자의 요청에서 시작한다(2026-10-10).
 
@@ -59,7 +59,7 @@ RC-M0(2026-08-30)은 "어느 구간이 비싼가"를 재고 "쓰는 픽셀 수�
 | | 무엇을 | 상태 |
 |---|---|---|
 | RS-M0 | 프로브(`probe/`)와 기준선. 시나리오 (a) · (b), 부팅 3회. 프레임 안(`frame`) · 덤프(`dump`) · 읽기 횟수 · 바이트 | 끝 — (b) 5.5초 · 365프레임(읽기 수와 같다) · 그리기 61% · 덤프 7%, (a) frame 11.6ms · dump 2.6ms |
-| RS-M1 | 칠하기를 행 단위 `@memset`으로(`fill` · `drawCellBackground` · `fillRect`), `present`의 프레임마다 시리얼 줄. 픽셀 동일 | 예정 |
+| RS-M1 | 칠하기를 행 단위 `@memset`으로(`fill` · `drawCellBackground` · `fillRect`), `present`의 프레임마다 시리얼 줄. 픽셀 동일 | 끝 — (b) 5.5 → 3.0초, frame 합 −79%, (a) frame 11.6 → 4.9ms. 게이트 PASS |
 | RS-M2 | 프레임 합치기 — 읽을 것이 남아 있으면 더 읽고 그린다, 쏟아질 때는 그리기 간격에 하한. 체인의 `screen>` 의존을 먼저 조사 | 예정 |
 | RS-M3 | `present`를 SETCRTC에서 DIRTYFB로(모드셋은 시작에 한 번) | 예정 |
 

@@ -119,7 +119,11 @@ pub const Framebuffer = struct {
     width: u32,
     height: u32,
     pitch: u32,
-    pixels: [*]volatile u8,
+    /// `volatile`이 아니다(RS-M1). dumb buffer는 MAP_SHARED로 잡은 보통 메모리이고
+    /// 장치 레지스터가 아니다. 포인터가 `mmap`에서 왔으므로 컴파일러는 `present`의
+    /// `ioctl`이 이 메모리를 읽을 수 있다고 봐야 하고, 그 앞의 쓰기를 못 지운다.
+    /// `volatile`이 막던 것은 쓰기를 묶는 일 — `fillRect`의 `@memset`이 쓰는 것이다.
+    pixels: [*]u8,
     crtc_id: u32,
     fb_id: u32,
     connector_id: u32,
@@ -127,7 +131,7 @@ pub const Framebuffer = struct {
 
     pub fn setPixel(self: Framebuffer, x: u32, y: u32, color: u32) void {
         const offset = y * self.pitch + x * 4;
-        const ptr: *volatile u32 = @ptrCast(@alignCast(self.pixels + offset));
+        const ptr: *u32 = @ptrCast(@alignCast(self.pixels + offset));
         ptr.* = color;
     }
 
@@ -137,18 +141,27 @@ pub const Framebuffer = struct {
     /// 유일한 창구다(design 결정 7).
     pub fn getPixel(self: Framebuffer, x: u32, y: u32) u32 {
         const offset = y * self.pitch + x * 4;
-        const ptr: *volatile u32 = @ptrCast(@alignCast(self.pixels + offset));
+        const ptr: *u32 = @ptrCast(@alignCast(self.pixels + offset));
         return ptr.*;
     }
 
-    pub fn fill(self: Framebuffer, color: u32) void {
+    /// 사각형 하나를 한 색으로 칠한다(RS-M1). 행마다 그 행의 픽셀 `w`개를 `@memset`
+    /// 한 번으로 쓴다. 픽셀마다 `setPixel`을 부르면 주소 산수와 ReleaseSafe의 overflow
+    /// 검사가 픽셀마다 붙고, 4바이트씩 따로 쓴다. 여기서는 그것이 행마다 한 번이고
+    /// 쓰기는 컴파일러가 넓게 묶는다. 찍히는 값은 픽셀마다 쓴 것과 같다.
+    ///
+    /// `setPixel`처럼 범위 검사가 없다. 부르는 자리가 화면 안으로 자른 사각형만 넘긴다.
+    pub fn fillRect(self: Framebuffer, x: u32, y: u32, w: u32, h: u32, color: u32) void {
         var row: u32 = 0;
-        while (row < self.height) : (row += 1) {
-            var col: u32 = 0;
-            while (col < self.width) : (col += 1) {
-                self.setPixel(col, row, color);
-            }
+        while (row < h) : (row += 1) {
+            const offset = (y + row) * self.pitch + x * 4;
+            const line: [*]u32 = @ptrCast(@alignCast(self.pixels + offset));
+            @memset(line[0..w], color);
         }
+    }
+
+    pub fn fill(self: Framebuffer, color: u32) void {
+        self.fillRect(0, 0, self.width, self.height, color);
     }
 
     pub fn present(self: Framebuffer) !void {
@@ -161,8 +174,9 @@ pub const Framebuffer = struct {
             .mode_valid = 1,
             .mode = self.mode,
         };
+        // 프레임마다 시리얼에 한 줄을 찍던 자리다. RS-M1이 지웠다 — 그 줄이 그리기
+        // 시간(`frame_us`) 안에 있었고 읽는 게이트가 없었다.
         try drmIoctl(self.fd, drmIowr(DrmModeCrtc, 0xA2), @ptrCast(&crtc));
-        logline.print("kms: set crtc {d} to fb {d}\n", .{ self.crtc_id, self.fb_id });
     }
 };
 
