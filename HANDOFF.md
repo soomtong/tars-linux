@@ -2,6 +2,11 @@
 
 ## 지금 상태 (2026-10-11)
 
+- 첫 공개 버전 0.1.0을 냈다(2026-10-11) — tag `v0.1.0` = `0a6d4bc`, GitHub release에 `tars-0.1.0-x86_64.iso`
+  (sha256 `f9ef7da2fd52a74c893ea80dac669a54959bf52458532ae7c66211bfa9a81686`)와 `SHA256SUMS`. 배포 절차와 확인한 것은
+  `docs/decisions/project_release.md`. 소개 페이지에 다운로드 버튼 · 사용하기 절의 받기 명령 · 작업 내역의 `RELEASE` 줄이
+  생겼고(`data.js`의 `releases`), 메뉴 이름 다섯을 바꿨다(부팅 체인 · 동작 화면 · 작업 원칙 · 작업 내역 · 사용하기).
+  다음 버전은 그 문서의 절차 일곱 단계대로 한다.
 - 마지막으로 닫힌 것은 Render Speed(RS-M0~M3)다(2026-10-11). GPU 전에 그리기를 빠르게 했다 — 같은 프로브(`probe/`)로 재어
   `seq 1 200000`이 5.5 → 2.2초(남은 81%는 VT 파서), 화면이 찬 상태의 키 하나가 그리기 11.6 → 4.3ms. 칠하기를 행마다 `@memset`(M1),
   PTY 출력의 그리기에 16ms 하한(M2, `pacing.zig`), `present`를 DIRTYFB로(M3). 기억은 `docs/decisions/project_render_speed.md`,

@@ -36,6 +36,18 @@ git worktree add ../tars-linux-pages gh-pages   # 처음 한 번 (없을 때)
    `data.js`를 `<script>`로 읽어서 fetch가 없다).
 7. `gh-pages`에서 커밋하고 push한다. 1~2분 뒤 반영된다.
 
+## 릴리스를 냈을 때
+
+GitHub release를 만든 뒤(절차는 `docs/decisions/project_release.md`) `data.js`의 `releases` 끝에
+`[날짜, 버전, 한 줄, ISO 파일명, sha256]`을 한 줄 더한다. 그것만으로 셋이 바뀐다 —
+
+- hero의 `ISO 받기` 버튼이 그 버전의 release 페이지를 가리킨다.
+- 사용하기 절의 "받아서 띄우기" 명령(`curl` · `shasum` · `qemu`)이 그 파일 이름이 된다.
+- 작업 내역에 초록 `RELEASE` 줄이 섞인다. 끝낸 서브프로젝트 수(`timeline.length`)에는 안 들어간다.
+
+`timeline`에 넣지 않는 이유가 그 수다. 이 기능은 2026-10-11에 `app.js` · `index.html`을 고쳐 만들었다 — 위
+"갱신" 절의 "두 파일은 손대지 않는다"는 새 종류의 내용을 들일 때만 예외다.
+
 ## 영상 다시 찍기
 
 ```bash
