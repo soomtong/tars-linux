@@ -197,6 +197,17 @@ if ! grep -aqE "terminal: style> [0-9]+,[0-9]+ fg=102030 bg=[0-9A-F]{6}" "$LOG";
 fi
 echo "the cursor is on screen as an inverted cell"
 
+# ── RS-M3: 프레임을 DIRTYFB로 내보낸다 ──────────────────────────────────
+#
+# virtio-gpu의 fb는 `.dirty`를 갖는다(`virtgpu_display.c`). 이 줄이 `setcrtc`면
+# 프레임마다 모드셋으로 돌아간 것이다 — 화면은 그대로라 다른 검사가 못 본다.
+# simpledrm 쪽은 machine 체인이 같은 줄을 본다.
+if ! grep -aq "kms: present by dirtyfb" "$LOG"; then
+  grep -a "kms: present by" "$LOG"
+  report_failure "the terminal does not present frames by DIRTYFB on virtio-gpu"
+fi
+echo "frames are presented by DIRTYFB, the mode is set once"
+
 # ── 한글을 만든다 (TR-M1) ──────────────────────────────────────────────
 #
 # printf '\xed\x95\x9c\033[41m \033[0m\n'

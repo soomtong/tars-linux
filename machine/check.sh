@@ -212,6 +212,15 @@ if ! grep -aqF "$WANT_GRID" "$LOG"; then
 fi
 echo "terminal drew on the GOP framebuffer at the firmware's native mode"
 
+# 판정 3b(RS-M3). simpledrm의 fb가 DIRTYFB를 받는다(`drm_gem_fb_create_with_dirty`).
+# 실기의 드라이버가 이것이라 이 체인이 그 길을 보는 유일한 자리다. `setcrtc`면
+# 프레임마다 모드셋이고 화면 전체를 VRAM으로 옮긴다 — 화면은 같아 다른 판정이 못 본다.
+if ! grep -aq "kms: present by dirtyfb" "$LOG"; then
+  fail "simpledrm did not take DIRTYFB, so every frame is a modeset" \
+    "kms: present by" "Initialized simpledrm"
+fi
+echo "simpledrm takes DIRTYFB, the mode is set once"
+
 # card0이 있었으므로 감독자가 포기할 이유가 없다. boot/check.sh가 -vga none으로
 # 보는 것의 반대편이고, 둘이 한 쌍이다.
 if grep -aq "tars-init: giving up on terminal" "$LOG"; then

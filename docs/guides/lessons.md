@@ -322,6 +322,13 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 `require_screen_dump_joins`가 잘린 조각 넷(안 잘림 · printk · init · init 조각과 온전한 tars-init 줄)을 QEMU 없이 0.1초에 보므로, 다른
 쓰기(dhcpcd `[pid]:` · sshd · 서비스)의 접두사를 더할 때 그 함수에 조각 하나를 함께 더한다.
 
+덧붙임(RS-M2 · M3, 2026-10-11). 앞에 붙는 것도 있다. 콘솔(`/dev/console`)에 도는 둘째 fish의 프롬프트가 줄바꿈 없이 끝나
+바로 다음에 쓰인 terminal의 줄이 무엇이든 그 뒤에 붙는다(`ESC]133;A;…root@(none) ~# …ESC[=5u=terminal: …`). 콘솔 fish는 TCG에서
+늦게 떠 부팅 뒤 아무 때나 찍힌다. 전부터 있었는데 붙는 줄이 대개 `screen>`이라 곧 다음 프레임이 와서 안 보였고, RS-M2가 프레임을
+줄이자 pointer · battery 체인이 빨갰다. `joined_screen_dump`가 줄 중간의 `screen>`도 읽고, 마지막 줄을 꺼내 `^terminal:`로
+대조하거나 통째로 비교하는 자리는 `from_terminal`을 거친다. 새 대기 함수가 그렇게 대조하면 `from_terminal`을 끼운다. 진입 검사의
+조각은 `console`이다.
+
 ### 호스트 부하 아래 dmix가 xrun 구간을 두 번 더한다 (AU-M1)
 
 `audio` 체인의 사각파 판정이 간헐적으로 `other` 16~19프레임으로 빨갰다. 부하 없이 열다섯 판은 전부 0이고, 컨테이너에 CPU 부하
@@ -1231,14 +1238,14 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 의 비목표 절이 그 둘을 그대로 갖고 있다. 그중 `ESC라틴` trait은 2026-10-05에
 사용자가 다시 집어 EL-M0이 했다(`esc_latin=on|off`, [[project_escape_latin]]).
 
-렌더 쪽 — 둘 다 미룬 것이고 근거가 있다.
+렌더 쪽 — 미룬 것이고 근거가 있다.
 
-- [ ] 부분 갱신(dirty 추적). 사용자가 2026-08-30에 "당장 성능 문제는 없다"로
-      정했다. RC-M0이 프레임의 84.7%가 `fill`이라고 쟀지만 21밀리초는 초당
-      47프레임이고 TCG 위의 값이다. 다시 집을 신호는 "사람이 느린 것을 느낀다"이다.
-      집게 되면 게이트의 `style>` · `ink>` 덤프가 매 프레임 화면 전체를 전제로
-      하고 있어서 게이트까지 함께 건드려야 한다 — 이것이 이 일의 진짜 크기다.
-- [ ] `present`의 매 프레임 모드셋. 같은 결정에 딸린다(RC-M0이 4%로 쟀다).
+- [ ] 부분 갱신(dirty 추적). Render Speed(RS-M0~M3, 2026-10-11)가 그 앞의 축 셋(칠하기 방식 · 프레임
+      수 · 모드셋)을 먼저 줄였다 — 키 하나의 그리기 11.6 → 4.3ms, `seq 1 200000` 5.5 → 2.2초(남은 81%는
+      VT 파서). 하느냐는 사용자가 다시 판단한다. 하게 되면 출발점은 "지난 프레임의 셀 격자와 이번
+      `cells()`를 행 단위로 비교"이고 손상 사각형을 `present`(DIRTYFB)의 clip으로 넘긴다
+      (`project_render_speed`). 게이트의 `style>` · `ink>` 덤프는 `cells()` 전체와 프레임버퍼를 되읽으므로
+      덤프는 그대로 두고 잔상을 보는 검사를 새로 써야 한다.
 - [ ] 큰 kitty 이미지의 그리기 비용. 화면 가득한 이미지가 게이트에서 프레임을 9.6 → 69.7ms로
       늘린다(TG 실측 7). `image.draw`가 픽셀마다 64비트 나눗셈 둘로 원본 좌표를 구하는 것이
       원인으로 보이고, 줄마다 열 대응표를 한 번 만들면 줄일 자리다. 다시 집을 신호는 위와 같다.
@@ -1311,6 +1318,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   함수 셋을 `extern`으로 선언한다. 넣는 자리는 `Screen.init`이다.
 - `status.zig` — 화면 맨 아래 여백의 상태 줄(IS-M0·M1). 한/영 · 자판 · 대문자
   잠금을 보여 준다.
+- `pacing.zig` — 그리는 간격의 하한(RS-M2). `wait`(그릴 것이 없으면 -1 · 처음과 하한 뒤 0 · 아니면 남은 ms)와
+  `soonest`(-1은 무한이라 `@min`을 못 쓴다). `main.zig`는 PTY 출력이 켠 `output_pending`만 하한을 따르게 한다 —
+  키 · 포인터 · 배터리 · 패널 닫힘은 `needs_redraw`로 곧바로 그린다. 기다리는 자리가 `poll`이어야 CPU 하나인
+  게스트에서 자식이 돈다(`poll(0)`로 더 읽기는 운이었다, `project_render_speed`). 이름이 `frame`이 아닌 것은
+  `main.zig`의 `|frame|` capture 때문이다. `pacing_test`가 본다.
 - `battery.zig` — 배터리 칸의 순수한 층(BS-M0). sysfs 글자를 받아 값을 돌려준다 —
   `parseStatus` · `statusName`(커널의 글자, `@tagName`은 소문자라 안 쓴다) · `parseCapacity`
   (0~100으로 자르고 정수가 아니면 null) · `counts`(`type` · `present` · `scope`, 파일이 없으면
@@ -1343,7 +1355,10 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `drm.zig` · `pty.zig` — 프레임버퍼와 PTY. `drm.zig`·`main.zig`·`pty.zig`
   세 자리에서 fortify를 끈다(`_FORTIFY_SOURCE=0`, `// GL-M3` 표식). 이유는
   `drm.zig`에만 길게 적혀 있고 나머지 둘은 그 자리를 가리킨다. `setPixel`·
-  `getPixel`에 범위 검사가 없고 고치지 않고 호출부에서 막는다.
+  `getPixel`에 범위 검사가 없고 고치지 않고 호출부에서 막는다. 사각형 칠하기는
+  `fillRect` 하나다(행마다 `@memset`, RS-M1) — `fill` · 셀 배경 · 커서 띠가 이것을 부르고
+  `pixels`는 `volatile`이 아니다. 모드셋은 `modeset()`으로 시작에 한 번, `present()`는
+  `dirty`(`open`이 물어 정한다)면 DIRTYFB이고 아니면 SETCRTC다(RS-M3).
   `pty.zig`의 패널 함수 셋(WP-M1): `resize`(`TIOCSWINSZ` — SIGWINCH는 커널이
   보낸다) · `hangup`(SIGHUP만 보내고 안 기다린다, 닫힘은 EOF 경로) · `close`(master
   fd를 닫고 `waitpid`로 거둔다). `kill` · `waitpid`는 `extern "c"` 선언이다 —
@@ -1580,6 +1595,10 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `exe_mod`와 `ghostty_dep` 둘만 쓴다. 마지막 주석이 "누가 실행하는가"의
   선을 긋는다.
 - `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.
+- `probe/` — 그리기 비용의 프로브(RS). 게이트가 아니다 — `patch.pl`이 `main.zig` 사본에 `terminal: probe>` 줄을 더하고
+  (anchor는 정확히 한 번), `run.sh`가 그 사본을 read-only로 마운트해 부팅 한 번(`seq 1 200000` · 키 넷), `report.pl`이
+  집계한다. 돌리는 법은 `docs/plans/2026-10-11-tars-render-speed-rs-m0.md`. 그리기를 고치면 같은 판으로 전후를 잰다.
+  monitor 45590(체인 범위 밖). 루트 게이트의 `clean()`이 `out/probe-rs/`를 지운다.
 
 ### 기억
 

@@ -157,6 +157,20 @@ joined_screen_dump() {
   ' "$LOG"
 }
 
+# 줄마다 첫 `terminal: ` 앞을 뗀다(RS-M3). 위 `joined_screen_dump`의 붙은 조각과 같은
+# 일이 화면 줄이 아닌 줄에도 일어난다 — 콘솔 fish는 TCG에서 늦게 떠 그 프롬프트가 부팅
+# 뒤 아무 때나 찍히고, 바로 다음에 쓰인 terminal의 줄이 무엇이든 그 뒤에 붙는다.
+#
+#   ESC]133;A;…root@(none) ~# …ESC[=5u=terminal: pointer> at x=650 y=405 …
+#
+# 마지막 줄을 꺼내 `^terminal: …`로 대조하는 자리(pointer의 `last_at` · `last_pane_line`,
+# battery의 `last_line` · `redraw_alone` · B1)가 그 파이프에 이것을 끼운다. 전부터 있던
+# 일이고, RS-M2가 프레임을 줄이자 붙는 줄이 무해한 `screen>`(곧 다음 프레임이 온다)에서
+# 다른 줄로 옮겨 가 RS-M3 루트 게이트의 pointer 체인이 빨갰다.
+from_terminal() {
+  perl -pe 's/^.*?(?=terminal: )//'
+}
+
 wait_for_screen() {
   local pattern="$1" i screen
   for i in $(seq 1 150); do

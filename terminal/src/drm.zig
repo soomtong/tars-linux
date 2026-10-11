@@ -104,6 +104,16 @@ const DrmModeFbCmd = extern struct {
     handle: u32 = 0,
 };
 
+/// `struct drm_mode_fb_dirty_cmd`(uapi `drm_mode.h`). clip이 없으면(`num_clips` 0,
+/// `clips_ptr` 0) fb 전체가 손상이다 — 둘 중 하나만 0이면 커널이 `-EINVAL`을 낸다.
+const DrmModeFbDirtyCmd = extern struct {
+    fb_id: u32 = 0,
+    flags: u32 = 0,
+    color: u32 = 0,
+    num_clips: u32 = 0,
+    clips_ptr: u64 = 0,
+};
+
 fn drmIowr(comptime T: type, nr: u32) u32 {
     const drm_ioctl_base: u32 = 'd';
     return (@as(u32, 3) << 30) | (drm_ioctl_base << 8) | nr | (@as(u32, @sizeOf(T)) << 16);
@@ -128,6 +138,9 @@ pub const Framebuffer = struct {
     fb_id: u32,
     connector_id: u32,
     mode: DrmModeModeinfo,
+    /// 드라이버가 DIRTYFB를 받는가(RS-M3). `open`이 한 번 물어 정한다. false면
+    /// `present`가 RS-M2까지처럼 SETCRTC를 한다.
+    dirty: bool,
 
     pub fn setPixel(self: Framebuffer, x: u32, y: u32, color: u32) void {
         const offset = y * self.pitch + x * 4;
@@ -164,7 +177,9 @@ pub const Framebuffer = struct {
         self.fillRect(0, 0, self.width, self.height, color);
     }
 
-    pub fn present(self: Framebuffer) !void {
+    /// 이 fb를 CRTC에 건다(SETCRTC). 시작에 한 번이다(RS-M3) — `main`이 첫 `fill` 뒤에
+    /// 부른다. DIRTYFB가 안 되는 드라이버에서는 `present`가 프레임마다 이것을 부른다.
+    pub fn modeset(self: Framebuffer) !void {
         var connector_id_arr = [_]u32{self.connector_id};
         var crtc: DrmModeCrtc = .{
             .set_connectors_ptr = @intFromPtr(&connector_id_arr),
@@ -177,6 +192,15 @@ pub const Framebuffer = struct {
         // 프레임마다 시리얼에 한 줄을 찍던 자리다. RS-M1이 지웠다 — 그 줄이 그리기
         // 시간(`frame_us`) 안에 있었고 읽는 게이트가 없었다.
         try drmIoctl(self.fd, drmIowr(DrmModeCrtc, 0xA2), @ptrCast(&crtc));
+    }
+
+    /// 그린 것을 내보낸다. 모드셋이 아니라 "fb가 바뀌었다"를 알리는 DIRTYFB다(RS-M3).
+    /// clip이 없어 fb 전체가 손상이다. simpledrm은 손상 영역을 VRAM으로 옮기고
+    /// virtio-gpu는 host로 옮긴다 — 부분 갱신이 생기면 여기에 사각형을 넘길 자리다.
+    pub fn present(self: Framebuffer) !void {
+        if (!self.dirty) return self.modeset();
+        var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
+        try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
     }
 };
 
@@ -302,6 +326,13 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
     try drmIoctl(fd, drmIowr(DrmModeFbCmd, 0xAE), @ptrCast(&fb_cmd));
     logline.print("kms: created framebuffer fb_id={d}\n", .{fb_cmd.fb_id});
 
+    // DIRTYFB를 받는지 묻는다(RS-M3). 드라이버의 fb funcs에 `.dirty`가 없으면 커널이
+    // `-ENOSYS`를 낸다 — 그 판정은 plane을 안 보므로 아직 CRTC에 안 건 지금 물어도 답이
+    // 같고, 걸리지 않은 fb의 dirty는 아무 일도 안 한다. 실패가 무엇이든 SETCRTC로 남는다.
+    var probe: DrmModeFbDirtyCmd = .{ .fb_id = fb_cmd.fb_id };
+    const dirty = if (drmIoctl(fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&probe))) |_| true else |_| false;
+    logline.print("kms: present by {s}\n", .{if (dirty) "dirtyfb" else "setcrtc"});
+
     return Framebuffer{
         .fd = fd,
         .width = dumb.width,
@@ -312,5 +343,6 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
         .fb_id = fb_cmd.fb_id,
         .connector_id = found.connector.connector_id,
         .mode = found.mode,
+        .dirty = dirty,
     };
 }

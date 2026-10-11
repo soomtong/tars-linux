@@ -1,11 +1,19 @@
 # HANDOFF: 열어 둔 서브프로젝트가 없다 — 실기 확인과 다음 후보를 기다린다
 
-## 지금 상태 (2026-10-10)
+## 지금 상태 (2026-10-11)
 
-- 마지막으로 닫힌 것은 Gate Parallel(GP-M0~M2)이다(2026-10-10). 루트 게이트가 1시간 01분 18초에서 9분 51초가 됐다 —
+- 마지막으로 닫힌 것은 Render Speed(RS-M0~M3)다(2026-10-11). GPU 전에 그리기를 빠르게 했다 — 같은 프로브(`probe/`)로 재어
+  `seq 1 200000`이 5.5 → 2.2초(남은 81%는 VT 파서), 화면이 찬 상태의 키 하나가 그리기 11.6 → 4.3ms. 칠하기를 행마다 `@memset`(M1),
+  PTY 출력의 그리기에 16ms 하한(M2, `pacing.zig`), `present`를 DIRTYFB로(M3). 기억은 `docs/decisions/project_render_speed.md`,
+  design은 `docs/specs/2026-10-11-tars-render-speed-design.md`다. 부분 갱신은 안 했다 — 사용자가 다시 판단한다.
+- RS의 커밋 — M0 `a2fd36a`, M1 `7610860`, M2 `f34df27`, M3와 닫는 문서는 이 커밋.
+- RS가 게이트를 고쳤다 — 콘솔 fish의 프롬프트(줄바꿈 없이 끝난다)에 terminal의 줄이 붙는 오랜 일이 M2 · M3 루트 게이트에서
+  pointer · battery를 빨갛게 했다. `gate_lib.sh`의 `joined_screen_dump`가 줄 중간의 `screen>`도 읽고, `^terminal:`로 대조하는
+  꺼내기 함수는 `from_terminal`을 거친다(lessons "커널 printk가…" 절의 덧붙임). 마지막 루트 게이트: 22체인 PASS, 9분 30초.
+- 그 전에 닫힌 것은 Gate Parallel(GP-M0~M2)이다(2026-10-10). 루트 게이트가 1시간 01분 18초에서 9분 51초가 됐다 —
   `prebuild`가 빌드를 한 번 하고 체인을 동시 `JOBS`줄로 돌린다. 기억은 `docs/decisions/project_gate_parallel.md`, design은
   `docs/specs/2026-10-10-tars-gate-parallel-design.md`다.
-- 커밋 — GP-M0 `9e8633f`, `RUNS` 2 → 1 `a7ef734`(사용자 결정, 별도 커밋), GP-M1 `97333dd`, GP-M2 `6b04492`, 닫는 문서는 이 커밋.
+- 커밋 — GP-M0 `9e8633f`, `RUNS` 2 → 1 `a7ef734`(사용자 결정, 별도 커밋), GP-M1 `97333dd`, GP-M2 `6b04492`, 닫는 문서 `2c49fbd`.
 - GP-M2 루트 게이트(22체인 × 1, 동시 6): 22체인 전부 `PASS: 1/1`, 9분 51초(prebuild 246초 + 줄 336초), `skipping make` 22,
   잘린 줄 0, 빨간 줄 0. QEMU 하나 최대 689MiB, VM 최대 3.81GiB.
 - 게이트 운영이 바뀌었다 — `RUNS` 기본 1(`-e RUNS=N`), `JOBS` 기본은 컨테이너 메모리에서 계산(4GB 2 · 8GB 이상 6, `-e JOBS=N`),
@@ -29,6 +37,8 @@
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
+- RS: 로그에 `kms: present by dirtyfb`가 찍히는지(simpledrm은 `machine` 체인이 QEMU에서 본다), `cat` · 빌드 로그처럼 출력이
+  쏟아질 때 화면이 매끄럽게 따라오는지, 키 입력이 늦게 느껴지지 않는지. 느리면 그때가 부분 갱신을 다시 집을 신호다.
 - TC: `tars-config wifi …`와 `tars-config dictation key`의 tty 입력(echo 없이 묻는다), `tars-config set net=dhcp ntp=dhcp`,
   `tars-config reload`, `tars-config reload terminal`. 게이트가 못 보는 것은 tty 질문, `--country`, `firewall deny`,
   `firewall=off`의 말이다.
@@ -42,6 +52,8 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
+- 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
+  GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
 - WP-M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor` — `docs/specs/2026-10-03-tars-workspace-panes-design.md`의 Milestone 절).
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).

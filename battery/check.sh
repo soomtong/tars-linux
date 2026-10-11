@@ -131,7 +131,7 @@ source ../gate_lib.sh
 
 # 접두가 $1인 마지막 줄. 값이 줄 끝까지 가므로 \r를 지운다(HI-M1 실측 4).
 last_line() {
-  grep -a "$1" "$LOG" | tail -n 1 | tr -d '\r'
+  grep -a "$1" "$LOG" | tail -n 1 | tr -d '\r' | from_terminal
 }
 
 # 접두가 $1인 줄의 수.
@@ -160,7 +160,7 @@ wait_for_last() {
 # 수를 낸다. `same=1 keys=0`이면 그 프레임은 칸 말고 바뀐 것이 없고 키도 없었다.
 # 그 줄이 없으면 `missing`이다.
 redraw_alone() {
-  tr -d '\r' < "$LOG" | awk -v want="$1" '
+  tr -d '\r' < "$LOG" | from_terminal | awk -v want="$1" '
     found { next }
     index($0, want) == 1 { found = 1; next }
     /^terminal: screen>/ { prev = cur; cur = $0; gap = since; since = 0; next }
@@ -377,10 +377,10 @@ done
 # 첫 status> battery 줄은 첫 프레임의 것이다. 그 줄이 이미 초록 `100%`이면 처음 훑기가
 # 첫 프레임 전에 돌았다. 처음 훑기를 첫 프레임 뒤로 미룬 코드는 첫 줄이 cell=none이다.
 echo "=== B1: the first frame already has the cell ==="
-FIRST="$(grep -a -m 1 'terminal: status> battery ' "$LOG" | tr -d '\r')"
+FIRST="$(grep -a -m 1 'terminal: status> battery ' "$LOG" | tr -d '\r' | from_terminal)"
 grep -aqE '^terminal: status> battery cell="100%" ink norm=0 plug=[1-9][0-9]* low=0$' <<<"$FIRST" ||
   report_failure "B1: the first battery line is \"${FIRST}\", expected a plugged \"100%\""
-FIRST_SCAN="$(grep -a -m 1 'terminal: battery> scan ' "$LOG" | tr -d '\r')"
+FIRST_SCAN="$(grep -a -m 1 'terminal: battery> scan ' "$LOG" | tr -d '\r' | from_terminal)"
 [ "$FIRST_SCAN" = "$SCAN_ON" ] ||
   report_failure "B1: the first scan line is \"${FIRST_SCAN}\", expected \"${SCAN_ON}\""
 FIRST_READ="$(grep -a -m 1 'terminal: battery> read ' "$LOG" | tr -d '\r')"

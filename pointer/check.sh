@@ -197,7 +197,7 @@ pointer_count() {
 
 # 마지막 at 줄. 값이 줄 끝까지 가므로 \r를 지운다(HI-M1 실측 4).
 last_at() {
-  grep -a 'terminal: pointer> at ' "$LOG" | tail -n 1 | tr -d '\r'
+  grep -a 'terminal: pointer> at ' "$LOG" | tail -n 1 | tr -d '\r' | from_terminal
 }
 
 # 커널이 만든 USB 마우스 입력 장치의 수. 검사 6이 "QEMU · 커널이 둘째
@@ -322,7 +322,7 @@ paste_lines() {
 
 # 마지막 배치 줄과 그 개수(pane/check.sh의 last_pane_line과 같다).
 last_pane_line() {
-  grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r'
+  grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r' | from_terminal
 }
 
 pane_lines() {

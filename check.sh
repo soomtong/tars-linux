@@ -465,8 +465,10 @@ require_screen_dump_joins() {
   printf 'terminal: screen> a | (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk"
   printf 'terminal: screen> a | (none)# whence -w fzf[   7.359211] random: crng init done\r\ntars-init: audio: no sound card within 5000ms, the mixer is left alone\n-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/printk_init"
+  # RS-M2. 콘솔 fish의 프롬프트(줄바꿈 없이 끝난다)에 dump의 머리가 붙은 줄.
+  printf '\033]133;A;special_key=1root@(none) ~# \033[K\033[=5u=terminal: screen> a | (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/console"
   want="$(LOG="$dir/clean" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
-  for name in printk printk_init; do
+  for name in printk printk_init console; do
     got="$(LOG="$dir/$name" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
     if [ "$got" != "$want" ]; then
       echo "check FAIL: gate_lib.sh joined_screen_dump does not rejoin a screen> line cut by ${name}:" >&2
@@ -482,6 +484,15 @@ require_screen_dump_joins() {
   rm -rf "$dir"
   if [ "$got" != "$want" ]; then
     echo "check FAIL: gate_lib.sh joined_screen_dump changes a screen> line whose text ends in tars-init:" >&2
+    echo "  want [${want}]" >&2
+    echo "  got  [${got}]" >&2
+    return 1
+  fi
+  # RS-M3. from_terminal은 붙은 조각을 떼고, 온전한 줄은 글자에 `terminal: `이 또 있어도 그대로 둔다.
+  want="$(printf 'terminal: pointer> at x=650 y=405\nterminal: screen> a terminal: b\n')"
+  got="$(printf '\033]133;A;root@(none) ~# \033[=5u=terminal: pointer> at x=650 y=405\nterminal: screen> a terminal: b\n' | bash -c 'source ./gate_lib.sh; from_terminal')"
+  if [ "$got" != "$want" ]; then
+    echo "check FAIL: gate_lib.sh from_terminal does not strip what the console shell glued in front:" >&2
     echo "  want [${want}]" >&2
     echo "  got  [${got}]" >&2
     return 1

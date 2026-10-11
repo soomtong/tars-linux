@@ -2818,7 +2818,8 @@ pub fn main(init: std.process.Init) !void {
 
     const fb = try drm.open(allocator, "/dev/dri/card0");
     fb.fill(MARGIN_COLOR);
-    try fb.present();
+    // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
+    try fb.modeset();
 
     // 화면 크기를 여기서 한 번만 계산해 렌더러·Terminal·PTY winsize
     // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
