@@ -46,6 +46,39 @@
 
   // ── hero ───────────────────────────────────────────────────────────
   $('asof').textContent = '기준 ' + D.asOf + ' · 마지막으로 끝난 것 ' + D.latest;
+
+  // ── 다운로드 — releases의 맨 끝이 최신이다 ──────────────────────────
+  {
+    const [date, ver, , iso, sha] = D.releases[D.releases.length - 1];
+    // 주소를 U로 뺀다 — 그대로 쓰면 pre 칸(약 64자)을 넘어 잘린다.
+    const base = 'github.com/soomtong/tars-linux/releases/download/v' + ver;
+    const dl = $('dl');
+    dl.href = 'https://github.com/soomtong/tars-linux/releases/tag/v' + ver;
+    dl.textContent = 'ISO 받기 · ' + ver;
+    $('dlHead').textContent = '받아서 띄우기 — ' + ver + ' (' + date + ')';
+    // pre 한 줄: [명령, 주석]. 명령이 비면 주석만 있는 줄이다.
+    const pre = (el, lines) => lines.forEach(([cmd, c], k) => {
+      if (k) el.append('\n');
+      if (cmd) el.append(h('span', 'p', '$'), ' ' + cmd);
+      if (c) el.append(h('span', 'c', (cmd ? '  ' : '') + '# ' + c));
+    });
+    pre($('dlRun'), [
+      ['U=' + base],
+      ['curl -LO https://$U/' + iso],
+      ['curl -LO https://$U/SHA256SUMS'],
+      ['shasum -a 256 -c SHA256SUMS', 'sha256 ' + sha.slice(0, 12) + '…'],
+      ['qemu-system-x86_64 -m 1024 -cdrom ' + iso],
+    ]);
+    pre($('dlUsb'), [
+      [null, 'macOS — <N>은 diskutil list로 확인한 USB 번호'],
+      ['diskutil unmountDisk /dev/disk<N>'],
+      ['sudo dd if=' + iso + ' of=/dev/rdisk<N> bs=4m'],
+      [null, ''],
+      [null, 'USB로 뜬 뒤 내장 디스크에 깔기 (UEFI)'],
+      ['tars-install <디스크>'],
+    ]);
+  }
+
   {
     const acro = $('acro');
     const words = ['Terminal', 'Architecture for', 'Rendering', '&', 'Shell'];
@@ -130,17 +163,25 @@
     sio.observe(box);
   }
 
-  // ── 만든 순서 ──────────────────────────────────────────────────────
+  // ── 작업 내역 ──────────────────────────────────────────────────────
+  // 릴리스는 서브프로젝트와 섞어 그린다. 같은 날이면 릴리스가 위다 —
+  // 그날 끝난 것까지 담아 찍은 것이기 때문이다.
   {
     const tl = $('tl'), more = $('more');
     const tio = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), { threshold: 0.6 });
-    [...D.timeline].sort((a, b) => b[0].localeCompare(a[0])).forEach(([date, name, id, what]) => {
+    const rows = [
+      ...D.timeline.map(([date, name, id, what]) => ({ date, name, id, what })),
+      ...D.releases.map(([date, ver, what]) => ({ date, name: 'TARS ' + ver, id: 'v' + ver, what, rel: true })),
+    ];
+    rows.sort((a, b) => b.date.localeCompare(a.date) || (b.rel ? 1 : 0) - (a.rel ? 1 : 0));
+    rows.forEach(({ date, name, id, what, rel }) => {
       const nm = h('div', 'name', name, h('span', 'id', id));
-      if (isNew(date)) nm.append(h('span', 'new', 'NEW'));
-      const it = h('div', 'it', h('div', 'date', date), h('div', null, nm, h('div', 'what', rich(what))));
+      if (rel) nm.append(h('span', 'new rel', 'RELEASE'));
+      else if (isNew(date)) nm.append(h('span', 'new', 'NEW'));
+      const it = h('div', 'it' + (rel ? ' rel' : ''), h('div', 'date', date), h('div', null, nm, h('div', 'what', rich(what))));
       tl.append(it); tio.observe(it);
     });
-    const label = () => { more.textContent = tl.classList.contains('collapsed') ? '전부 보기 (' + D.timeline.length + ')' : '접기'; };
+    const label = () => { more.textContent = tl.classList.contains('collapsed') ? '전부 보기 (' + rows.length + ')' : '접기'; };
     more.onclick = () => { tl.classList.toggle('collapsed'); label(); };
     label();
   }
