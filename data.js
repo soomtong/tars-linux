@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-10-10',
-  latest: 'Gate Parallel (GP-M0~M2)',
+  asOf: '2026-10-11',
+  latest: 'Render Speed (RS-M0~M3)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 946,       // git rev-list --count main
+    commits: 950,       // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
     zigKLines: 34,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -95,6 +95,7 @@ window.TARS = {
     ['2026-10-07', 'Atomic Log Lines', 'AL', '로그 한 줄이 write 한 번'],
     ['2026-10-09', 'Battery Status', 'BS', '상태 줄 오른쪽 끝의 배터리 잔량'],
     ['2026-10-10', 'Gate Parallel', 'GP', '루트 게이트 1시간 01분 → 9분 51초, 체인을 동시에'],
+    ['2026-10-11', 'Render Speed', 'RS', '그리기를 빠르게 — 출력 폭주 5.5 → 2.2초, 키 하나의 그리기 11.6 → 4.3ms'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -192,6 +193,7 @@ window.TARS = {
         ['마우스 보고', '모드 9 · 1000 · 1002 · 1003, 1007(대체 화면의 휠 → 화살표)', '2026-10-05'],
         ['워크스페이스 · 패널', '워크스페이스 아홉 × 패널 여덟. 마지막 패널을 닫으면 terminal이 끝나고 init이 새로 띄운다', '2026-10-04'],
         ['클립보드', 'terminal 전체에 하나 — 한 패널에서 잡은 것을 다른 워크스페이스에 붙인다. `clipboard=pane`이면 패널마다', '2026-10-05'],
+        ['그리기 속도', '칠하기는 행마다 한 번에 쓰고, 출력이 쏟아질 때는 초당 60번 안쪽으로 그린다. 화면은 DIRTYFB로 내보낸다', '2026-10-11'],
       ],
     },
     {
