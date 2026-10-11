@@ -52,6 +52,10 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
+- TODO `tars-config`에 버전 표시 — 0.1.0을 GitHub release로 공개했지만(2026-10-11, tag `v0.1.0` = `0a6d4bc`,
+  `tars-0.1.0-x86_64.iso` + `SHA256SUMS`) 시스템 안에는 버전이 없어 받은 사람이 자기 ISO가 몇 버전인지 알 길이 없다.
+  `tars-config version`(또는 `--version`)이 빌드에 박힌 버전을 찍게 한다. 동사 분기는 `init/src/config_cli.zig`. 정할 것:
+  버전의 원천(태그 · 파일 하나 · `build.zig` 옵션)과 부팅 로그의 `tars-init:` 첫 줄에도 찍을지.
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
