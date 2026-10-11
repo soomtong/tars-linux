@@ -43,11 +43,10 @@ patch("    var pty_buf: [4096]u8 = undefined;\n",
     . "    var probe_bytes: usize = 0;\n"
     . "    const probe_clock = std.Io.Clock.now(.awake, init.io);\n");
 
-# (2) PTY를 읽어 화면에 먹이는 자리는 하나다.
-patch("            pane.screen.feed(out);\n",
-      "            probe_reads += 1;\n"
-    . "            probe_bytes += out.len;\n"
-    . "            pane.screen.feed(out);\n");
+# (2) PTY를 읽어 화면에 먹이는 자리는 하나다. 들여쓰기는 anchor에 안 넣는다 — RS-M2가
+# 이 줄을 반복문 안으로 옮겼다. 같은 줄 앞에 붙이므로 들여쓰기가 무엇이든 맞는다.
+patch("pane.screen.feed(out);",
+      "probe_reads += 1; probe_bytes += out.len; pane.screen.feed(out);");
 
 # (3) 프레임의 마지막 덤프 뒤. 화살표만 고치는 갈래(`!needs_redraw`)에도 같은
 # 호출이 있으므로 앞의 주석 줄까지 anchor에 넣는다.

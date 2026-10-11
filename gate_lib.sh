@@ -133,13 +133,24 @@ type_keys() {
 #
 # 이을 차례에 오는 온전한 `tars-init: ` 줄은 커널 줄처럼 건너뛴다. 이것은 남는다 —
 # 커널이 화면 줄을 자르고 뒤 조각이 오기 전에 init이 온전한 한 줄을 쓸 수 있다.
+#
+# 화면 줄의 머리 앞에 남의 조각이 붙는 경우도 있다(RS-M2). 콘솔(`/dev/console`)에도
+# fish가 하나 돌고(project_init_supervisor), 그 프롬프트가 줄바꿈 없이 끝나 바로 다음에
+# 쓰인 terminal의 줄이 그 뒤에 붙는다 —
+#
+#   ESC]133;A;…root@(none) ~# ESC[K…ESC[=5u=terminal: screen> root@(none) ~#
+#
+# 그래서 `terminal: screen>`이 줄 중간에 있어도 그 앞을 떼고 화면 줄로 읽는다. 전부터
+# 있던 일이고, 셸의 프롬프트가 여러 번에 나눠 읽혀 프레임이 여럿이던 동안은 뒤에 붙지
+# 않은 화면 줄이 하나 더 왔다. RS-M2가 그것을 한 프레임으로 합치자 부팅 직후의 마지막
+# 화면 줄이 붙은 줄이 되어 pointer · battery 체인의 프롬프트 대기가 빨개졌다.
 joined_screen_dump() {
   perl -ne '
     if (defined $cur) {
       next if /^\[ *\d+\.\d+\] / || /^tars-init: /;
-      if (/^(terminal|kms): /) { print $cur, "\n"; undef $cur; redo }
+      if (/^(terminal|kms): / || /terminal: screen>/) { print $cur, "\n"; undef $cur; redo }
       $cur .= $_;
-    } elsif (/^terminal: screen>/) { $cur = $_ } else { next }
+    } elsif (s/^.*?(?=terminal: screen>)//) { $cur = $_ } else { next }
     next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
     print $cur; undef $cur;
     END { print $cur, "\n" if defined $cur }

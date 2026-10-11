@@ -369,6 +369,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(battery_test);
 
+    // pacing_test도 호스트에서 돈다(RS-M2). 그리는 간격의 하한과 poll timeout을 고르는
+    // 순수 산수라 battery_test와 같은 모양이다. 시계를 읽는 것은 `main.zig`다.
+    const pacing_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/pacing_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const pacing_test = b.addExecutable(.{
+        .name = "pacing_test",
+        .root_module = pacing_test_mod,
+    });
+    b.installArtifact(pacing_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
     // 기본 `zig build`와 분리하는 이유는 속도였는데, 그 이유가 이제 거의
@@ -390,6 +403,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(dictation_test).step);
     test_step.dependOn(&b.addRunArtifact(logline_test).step);
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
+    test_step.dependOn(&b.addRunArtifact(pacing_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

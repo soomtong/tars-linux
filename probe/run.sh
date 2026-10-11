@@ -27,6 +27,18 @@ cd /workspace/terminal
 (cd ../kernel && ./make_initrd.sh) || { echo "FAIL: initrd"; exit 1; }
 
 source ../gate_lib.sh
+
+# 셸 프롬프트를 기다린다. `wait_for_screen`(곧 `joined_screen_dump`)은 줄머리의 `terminal: screen>`만
+# 보는데, 부팅 직후 셸의 escape 바이트가 시리얼에서 그 줄 앞에 붙는 회차가 있다(RS-M2 3회차). 그 뒤 화면이
+# 안 바뀌면 15초 뒤 실패하므로 여기서는 줄 중간의 `screen>`도 본다.
+until_prompt() {
+  local i
+  for i in $(seq 1 150); do
+    grep -aq "terminal: screen> .*~# " "$LOG" && return 0
+    sleep 0.1
+  done
+  return 1
+}
 mkdir -p /workspace/out
 
 PORT=45590
@@ -54,7 +66,7 @@ for _ in $(seq 1 20); do
   exec 3<>"/dev/tcp/127.0.0.1/${PORT}" && break
   sleep 0.5
 done
-wait_for_screen '~# ' || { cp "$LOG" /workspace/out/probe-rs-failed.log; echo "FAIL: no shell prompt"; exit 1; }
+until_prompt || { cp "$LOG" /workspace/out/probe-rs-failed.log; echo "FAIL: no shell prompt"; exit 1; }
 sleep 1
 
 # (b)

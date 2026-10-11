@@ -2,6 +2,7 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const battery = @import("battery.zig");
 const clipboard = @import("clipboard.zig");
+const pacing = @import("pacing.zig");
 const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
 const font = @import("font.zig");
@@ -3072,6 +3073,15 @@ pub fn main(init: std.process.Init) !void {
     // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     var needs_redraw = false;
+    // PTY 출력이 화면을 바꿨다(RS-M2). `needs_redraw`와 따로 둔다 — 출력 때문에 생긴
+    // 그리기만 간격의 하한(`pacing.MIN_GAP_MS`)을 따르고, 키 · 포인터 · 배터리 · 패널
+    // 닫힘은 지금처럼 곧바로 그린다. 하한의 목적이 출력이 쏟아질 때이고, 포인터의
+    // `at` 줄이 그 프레임의 `scroll>` 뒤에 온다는 게이트의 순서(pointer 검사 11)를
+    // 미룬 바퀴가 깨지 않게 하려는 것이기도 하다.
+    var output_pending = false;
+    // 마지막으로 그린 시각(밀리초, `battery_clock` 기준 — 루프의 밀리초 시계가 그것
+    // 하나다). 처음 프레임 전에는 null이고 `pacing.wait`가 기다리지 않는다.
+    var last_frame_ms: ?i64 = null;
     var key_state: input.State = .{
         .hangul_layout = hangul_layout,
         .latin_layout = latin_layout,
@@ -3205,7 +3215,13 @@ pub fn main(init: std.process.Init) !void {
         // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
         // 키 때문에 깼든 timeout으로 깼든, 읽는 것은 아래에서 기한이 지났을 때뿐이다.
         const poll_now: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
-        const ready = c.poll(&fds, @intCast(nfds), battery.pollTimeout(poll_now, battery_state.due));
+        //
+        // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
+        // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
+        const ready = c.poll(&fds, @intCast(nfds), pacing.soonest(
+            battery.pollTimeout(poll_now, battery_state.due),
+            pacing.wait(poll_now, last_frame_ms, output_pending),
+        ));
         if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
@@ -3696,7 +3712,8 @@ pub fn main(init: std.process.Init) !void {
             // (design 위험 1). 로그를 안 남기면 사람이 "왜 갑자기 모드가
             // 풀렸지"를 영영 모른다.
             if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
-            needs_redraw = true;
+            // `needs_redraw`가 아니다(RS-M2). 그릴지는 루프 끝에서 하한을 보고 정한다.
+            output_pending = true;
         }
 
         // 받아쓰기의 파이프 둘(VD-M1). PTY 뒤 · 렌더 앞이다 — 위 PTY 루프가 대상 패널을
@@ -3729,6 +3746,14 @@ pub fn main(init: std.process.Init) !void {
         // 화면 전체를 다시 그릴 일이 없는 회차. 화살표만 고친다 — 저장한
         // 픽셀을 되돌리고, 새 자리 밑을 저장하고, 그리고, 내보낸다. 렌더도
         // 덤프도 없다(design 결정 4). 자리가 그대로면 아무것도 안 한다.
+        //
+        // PTY 출력은 하한이 지났을 때만 그리기가 된다(RS-M2). 다른 이유로 어차피 그리는
+        // 바퀴면 기다리지 않고 함께 그린다 — 그 프레임이 출력도 담는다. 하한 안이면
+        // 이 바퀴는 그리지 않고, 위 `poll`이 남은 시간 뒤에 다시 깨운다.
+        if (output_pending and !needs_redraw) {
+            const now_ms: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+            if (pacing.wait(now_ms, last_frame_ms, true) == 0) needs_redraw = true;
+        }
         if (!needs_redraw) {
             if (!pointer.sameSpot(sprite.at, want)) {
                 sprite.restore(fb);
@@ -3739,6 +3764,8 @@ pub fn main(init: std.process.Init) !void {
             continue;
         }
         needs_redraw = false;
+        output_pending = false;
+        last_frame_ms = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
 
         // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
         // 포커스 패널을 닫았을 수 있다 — 그때 위의 `focus`는 빈 슬롯을
