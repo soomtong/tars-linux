@@ -65,6 +65,6 @@
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(lessons).
 - 실칩 무선은 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 동글이 생기면 그것이 새 사실이다.
-- decisions 중 10KB를 넘고 아직 함정 · 결정만 남기는 정리를 안 한 것: `project_guest_environment` · `project_input_status` ·
-  `project_kernel_config` · `project_shell_history` · `project_init_supervisor` · `project_zig_c_uapi_rule` ·
-  `project_config_persistence` · `project_input_policy`. 더 줄일지는 사용자가 고른다.
+- decisions의 함정 · 결정만 남기는 정리는 2026-10-20에 남은 여덟도 끝냈다. 아직 10KB를 넘는 다섯(`project_real_machine` ·
+  `project_gate_chain_composition` · `project_hangul_input` · `project_shell_config` · `project_userland_tools`)은
+  2026-10-10에 이미 정리를 거친 것이다. 문서 속 줄 번호 · 배열 길이는 낡으니 인용하기 전에 코드에서 다시 본다.
