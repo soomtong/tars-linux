@@ -3,12 +3,13 @@
 ## 지금 상태 (2026-10-20)
 
 - 첫 공개 버전 0.1.0(2026-10-11) — tag `v0.1.0` = `0a6d4bc`, GitHub release에 `tars-0.1.0-x86_64.iso`와 `SHA256SUMS`.
-  다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다.
-- 마지막으로 닫힌 것은 Render Speed(RS-M0~M3, 2026-10-11)다. 부분 갱신은 안 했다 — 사용자가 다시 판단한다.
-  그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
+  다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
+- 마지막으로 닫힌 것은 Build Version(BV-M0, 2026-10-20)이다. 저장소 뿌리 `VERSION`(지금 `0.1.0`)과 git 꼬리표가
+  `tars-config version`과 부팅 첫 줄 `tars-init: starting as PID 1 (TARS <ver>)`에 나온다. 그 전의 서브프로젝트는
+  `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(RS-M3): 22체인 PASS, 9분 30초. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은 `docs/guides/lessons.md`의
-  "게이트를 돌리고 읽는 법" 절.
+  마지막 루트 게이트(BV-M0): 1회차 20/22(PM · UT가 병렬 initrd 경합으로 — lessons "이월 숙제" BV), 2회차 22/22, 약 10분.
+  게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
   alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
 
@@ -28,9 +29,6 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- TODO `tars-config`에 버전 표시 — 시스템 안에 버전이 없어 받은 사람이 자기 ISO가 몇 버전인지 알 길이 없다.
-  `tars-config version`(또는 `--version`)이 빌드에 박힌 버전을 찍게 한다. 동사 분기는 `init/src/config_cli.zig`. 정할 것:
-  버전의 원천(태그 · 파일 하나 · `build.zig` 옵션)과 부팅 로그의 `tars-init:` 첫 줄에도 찍을지.
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.

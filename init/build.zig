@@ -1,4 +1,5 @@
 const std = @import("std");
+const version = @import("src/version.zig");
 
 pub fn build(b: *std.Build) void {
     // 타깃을 호스트 기본값이 아니라 명시적으로 고정한다. 이유는
@@ -89,6 +90,15 @@ pub fn build(b: *std.Build) void {
         .root_module = config_cli_mod,
     });
     b.installArtifact(config_cli_exe);
+
+    // BV-M0: 버전 글자 하나를 PID 1과 tars-config에 같이 붙인다 — 부팅 로그의 첫 줄과
+    // `tars-config version`이 한 값에서 나오므로 서로 다를 수 없다(BV design 결정 5).
+    // 이 함수는 `zig build`마다 다시 돌므로 git도 매번 다시 묻고, 글자가 바뀐 때만
+    // 두 exe가 다시 컴파일된다.
+    const build_info = b.addOptions();
+    build_info.addOption([]const u8, "version", buildVersion(b));
+    exe_mod.addOptions("build_info", build_info);
+    config_cli_mod.addOptions("build_info", build_info);
 
     // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //
@@ -308,6 +318,19 @@ pub fn build(b: *std.Build) void {
         .root_module = reload_test_mod,
     });
 
+    // BV-M0: 버전 글자를 짓는 함수의 검사. config_edit_test와 같은 이유로 host_target이다 —
+    // version.zig에는 시스템 콜이 없다. git을 묻는 쪽은 이 파일 끝의 buildVersion이다.
+    const version_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/version_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const version_test = b.addExecutable(.{
+        .name = "version_test",
+        .root_module = version_test_mod,
+    });
+
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
     // 부르는데, 그건 TF-M3 시절 손으로 ./zig-out/bin/input_test를 돌리던
     // 잔재다. 여기는 처음부터 `zig build test`로만 도므로 install할 이유가
@@ -328,4 +351,44 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(config_edit_test).step);
     test_step.dependOn(&b.addRunArtifact(config_front_edit_test).step);
     test_step.dependOn(&b.addRunArtifact(reload_test).step);
+    test_step.dependOn(&b.addRunArtifact(version_test).step);
+}
+
+/// BV-M0: 저장소 뿌리의 `VERSION`과 git의 답 셋으로 버전 글자를 짓는다(BV design 결정 1~3).
+/// `VERSION`을 못 읽거나 비었으면 빌드를 멈춘다. git을 못 쓰면 `VERSION` 그대로다.
+fn buildVersion(b: *std.Build) []const u8 {
+    const text = b.build_root.handle.readFileAlloc(b.graph.io, "../VERSION", b.allocator, .limited(4096)) catch |err|
+        std.process.fatal("../VERSION: {t} (the TARS version is read from there)", .{err});
+    const ver = version.base(text) catch |err|
+        std.process.fatal("../VERSION: {t} (it holds one line like 0.1.0)", .{err});
+
+    const root = b.pathFromRoot("..");
+    const head = git(b, root, &.{ "rev-parse", "--short=7", "HEAD" }) orelse return ver;
+    // 태그가 아직 없으면(릴리즈 사이의 모든 빌드) null이고 "HEAD != 태그"다.
+    const tag = git(b, root, &.{ "rev-parse", "--short=7", b.fmt("v{s}^{{commit}}", .{ver}) });
+    const tag_matches = if (tag) |t| std.mem.eql(u8, t, head) else false;
+    // 추적 파일만 본다. 빌드 산출물 · firmware는 .gitignore라 매번 dirty를 만들지 않는다.
+    // `diff --quiet`가 아니라 status다 — 컨테이너의 git 2.47은 diff 때마다 `.git/index`를
+    // 다시 쓰고 `--no-optional-locks`를 안 따르는데, status는 따른다(BV-M0 실측).
+    // 물음이 실패하면 dirty로 친다 — 모르는 트리에 릴리즈의 맨 글자를 주지 않는다.
+    const status = git(b, root, &.{ "status", "--porcelain", "--untracked-files=no" });
+    const dirty = if (status) |s| s.len != 0 else true;
+
+    const buf = b.allocator.create([version.MAX]u8) catch @panic("OOM");
+    return version.format(buf, ver, head, tag_matches, dirty);
+}
+
+/// 저장소 뿌리에서 git을 부르고 stdout을 공백 벗겨 돌려준다. git이 없거나 0이 아닌
+/// 코드로 끝나면 null — 부르는 쪽이 "모른다"로 읽는다.
+///
+/// `safe.directory=*`: 마운트한 사람과 git을 부르는 사람이 다르면 git이 저장소를
+/// 거절하고, 그러면 꼬리표가 조용히 사라진다. `--no-optional-locks`: `git status`가
+/// index를 새로 고쳐 쓰지 않게 한다 — 컨테이너의 root가 호스트의 `.git/index`를
+/// 건드리면 안 된다(BV design 위험 2).
+fn git(b: *std.Build, root: []const u8, args: []const []const u8) ?[]const u8 {
+    const head = [_][]const u8{ "git", "--no-optional-locks", "-c", "safe.directory=*", "-C", root };
+    const argv = std.mem.concat(b.allocator, []const u8, &.{ &head, args }) catch @panic("OOM");
+    var code: u8 = undefined;
+    const out = b.runAllowFail(argv, &code, .ignore) catch return null;
+    return std.mem.trim(u8, out, " \t\r\n");
 }

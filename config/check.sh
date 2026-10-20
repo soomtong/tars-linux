@@ -115,6 +115,8 @@ TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
 # config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
 # 여기서 멈춘다.
 TC_LIST_KEYS=(t a r s minus c o n f i g spc l i s t ret)
+# tars-config version (BV-M0) — 화면의 `TARS …`와 시리얼 첫 줄의 괄호 안을 대조한다.
+TC_VERSION_KEYS=(t a r s minus c o n f i g spc v e r s i o n ret)
 # tars-config set keyboard=pc · tars-config reload · echo shell=fsh >> /config/tars.conf (TC-M2)
 TC_SET_KB_KEYS=(t a r s minus c o n f i g spc s e t spc k e y b o a r d equal p c ret)
 TC_RELOAD_KEYS=(t a r s minus c o n f i g spc r e l o a d ret)
@@ -560,6 +562,26 @@ edit_config_in_guest() {
     fi
   done
   echo "boot 1: tars-config list printed all ${#TC_LIST_WANT[@]} keys with their defaults and the values they take"
+
+  # BV-M0: tars-config version — 빌드가 박은 글자가 화면에 나오고, PID 1이 첫 로그 줄에 찍은
+  # 것과 같은가(BV design 결정 9). 꼬리표 규칙(+커밋, -dirty)은 다시 짓지 않는다 — 그것은
+  # version_test가 보고, 여기는 VERSION이 두 출력에 같은 값으로 닿았는지만 본다.
+  local ver ver_re screen_ver log_ver
+  ver="$(tr -d ' \t\r\n' < ../VERSION)"
+  ver_re="TARS ${ver//./\\.}(\\+[0-9a-f]{7,}(-dirty)?)?"
+  type_keys "${TC_VERSION_KEYS[@]}"
+  if ! wait_for_screen "\\| ${ver_re}( \\||\$)"; then
+    echo "FAIL(boot 1): 'tars-config version' did not print TARS ${ver}"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  screen_ver="$(joined_screen_dump | grep -aoE "\\| ${ver_re}( \\||\$)" | tail -1 | grep -aoE "${ver_re}")"
+  log_ver="$(grep -aoE "tars-init: starting as PID 1 \\(${ver_re}\\)" "$log" | head -1 | grep -aoE "${ver_re}")"
+  if [ -z "$screen_ver" ] || [ "$screen_ver" != "$log_ver" ]; then
+    echo "FAIL(boot 1): tars-config says '${screen_ver}' but init's first line says '${log_ver}'"
+    return 1
+  fi
+  echo "boot 1: tars-config version printed ${screen_ver}, the same as init's first line"
 
   # ── TC-M2: reload의 대기 · 두 칸 · 거절 ─────────────────────────────────
   #

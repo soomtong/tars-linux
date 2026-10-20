@@ -15,6 +15,7 @@ const login = @import("login.zig");
 const control = @import("control.zig");
 const audio = @import("audio.zig");
 const reload = @import("reload.zig");
+const build_info = @import("build_info");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
 /// -1 리턴 + errno 전역 변수로 바꿔주는데, 여기서는 libc를 링크하지 않으므로
@@ -1060,7 +1061,9 @@ fn supervise(
 }
 
 pub fn main(init: std.process.Init.Minimal) void {
-    logline.print("tars-init: starting as PID 1\n", .{});
+    // BV-M0: 버전을 줄 끝에 붙인다. 이 줄을 보는 게이트 · release smoke가 모두 부분
+    // 일치라 그대로 맞는다(BV design 결정 8).
+    logline.print("tars-init: starting as PID 1 (TARS {s})\n", .{build_info.version});
 
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에

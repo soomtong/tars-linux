@@ -14,6 +14,7 @@ const config = @import("config.zig");
 const edit = @import("config_edit.zig");
 const front = @import("config_front.zig");
 const control = @import("control.zig");
+const build_info = @import("build_info");
 
 /// config.zig의 로그를 가로챈다(config.zig의 `log`). 이 한 줄이 없으면 `set`이 틀린
 /// 값을 받을 때 `tars-init: unknown shell …`이 이 명령의 표준 에러에 그대로 찍히고,
@@ -80,6 +81,7 @@ const USAGE =
     \\       tars-config list                every key with its default and the values it takes
     \\       tars-config reload              init rereads tars.conf and services.d now (TC-M2)
     \\       tars-config reload terminal     restart the screen with what init uses; every pane goes away (TC-M3)
+    \\       tars-config version             the TARS version this image was built from
     \\       tars-config help                this text and the list
     \\
     \\other files under /config (TC-M1):
@@ -97,6 +99,7 @@ pub fn usage() u8 {
 }
 
 fn help() u8 {
+    say("TARS {s}\n\n", .{build_info.version});
     _ = writeAll(1, USAGE);
     say("\nkeys (with their defaults):\n", .{});
     keyTable();
@@ -553,6 +556,12 @@ pub fn main(init: std.process.Init.Minimal) u8 {
     if (std.mem.eql(u8, verb, "help") or std.mem.eql(u8, verb, "-h") or std.mem.eql(u8, verb, "--help")) {
         if (rest.len != 0) return usage();
         return help();
+    }
+    // BV-M0. 글자는 빌드가 박은 것이다 — VERSION과 git의 답(BV design 결정 2 · 7).
+    if (std.mem.eql(u8, verb, "version") or std.mem.eql(u8, verb, "--version") or std.mem.eql(u8, verb, "-V")) {
+        if (rest.len != 0) return usage();
+        say("TARS {s}\n", .{build_info.version});
+        return EXIT_OK;
     }
     if (std.mem.eql(u8, verb, "list")) {
         if (rest.len != 0) return usage();

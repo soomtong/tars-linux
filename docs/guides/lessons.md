@@ -1150,6 +1150,15 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
+BV(2026-10-20)가 남긴 것.
+
+- [ ] 병렬 레인이 `kernel/initrd.cpio`를 동시에 다시 조립하는 경합. BV-M0 루트 게이트 1회차에서 두 체인이 14 · 15초 만에 빨갰다 —
+      PM-M1은 `qemu: error reading initrd ../kernel/initrd.cpio: … No such file or directory`(게스트가 안 떴다), UT-M3은 검사 1d(c)가
+      `initrd.cpio.7IetxQ`를 "남은 임시 파일"로 셌다. 같은 트리의 2회차는 22/22 초록이다. 코드에 그 파일을 지우는 곳은 없다 —
+      (c)는 다른 레인이 쓰는 중인 임시 파일까지 세고, PM의 ENOENT는 바인드 마운트에서 rename 순간의 `open()`으로 본다. 다시 빨개지면
+      처방 후보는 둘: (c)가 자기 `make_initrd.sh`가 만든 이름만 보게 하는 것, 체인 안의 `make_initrd.sh`를 prebuild의 산출물이 있으면
+      건너뛰게 하는 것.
+
 BS(2026-10-09)가 남긴 것.
 
 - [ ] `dictation` 체인 부팅 B의 검사 B4(`read -s got something`)가 BS-M0 루트 게이트 1회차에서 한 번 빨갰다. 시리얼 로그에서 둘째
