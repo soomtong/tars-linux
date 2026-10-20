@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-10-11',
-  latest: 'Render Speed (RS-M0~M3)',
+  asOf: '2026-10-20',
+  latest: 'Build Version (BV-M0)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 950,       // git rev-list --count main
+    commits: 957,       // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
     zigKLines: 34,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -96,6 +96,7 @@ window.TARS = {
     ['2026-10-09', 'Battery Status', 'BS', '상태 줄 오른쪽 끝의 배터리 잔량'],
     ['2026-10-10', 'Gate Parallel', 'GP', '루트 게이트 1시간 01분 → 9분 51초, 체인을 동시에'],
     ['2026-10-11', 'Render Speed', 'RS', '그리기를 빠르게 — 출력 폭주 5.5 → 2.2초, 키 하나의 그리기 11.6 → 4.3ms'],
+    ['2026-10-20', 'Build Version', 'BV', '시스템 안의 버전 — `tars-config version`과 부팅 로그 첫 줄'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -179,6 +180,7 @@ window.TARS = {
       title: '명령',
       items: [
         ['`tars-config`', '인자 없이: 지금 설정을 init이 읽는 모양으로, 실제로 쓰이는 값과 다르면 알린다', '2026-10-07'],
+        ['`tars-config version`', '이 이미지의 TARS 버전. 릴리즈가 아닌 빌드는 커밋(`+sha`)과 `-dirty`를 붙인다. 부팅 로그 첫 줄에도 같은 글자', '2026-10-20'],
         ['`tars-config get` · `set KEY=VALUE` · `reset` · `list` · `check`', '`tars.conf`의 줄 하나만 바꾼다. 값의 판정은 init의 파서가', '2026-10-07'],
         ['`tars-config reload`', '재부팅 없이 적용 — net · ntp · firewall · services.d · 무선은 곧바로, 셸 키는 다음 셸부터', '2026-10-07'],
         ['`tars-config reload terminal`', '화면을 새 값으로 다시 띄운다(패널과 클립보드는 사라진다)', '2026-10-07'],
