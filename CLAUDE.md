@@ -73,21 +73,16 @@ milestone별 plan을 작성한다 (예:
 
 ## 참고
 
-- 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지, 후보 목록):
-  `docs/specs/2026-08-01-tars-boot-foundation-design.md`의
-  "배경" 절
+- 최종 비전 전체 배경(왜 여러 서브프로젝트로 나뉘는지): `docs/specs/2026-08-01-tars-boot-foundation-design.md`의 "배경" 절
 - 현재 진행 상황: `HANDOFF.md`
-- 서브프로젝트를 넘어 유효한 작업 요령(게이트 운영 · 다시 조사하지 말 실측 ·
-  안 되는 접근 · 핵심 파일 지도): `docs/guides/lessons.md`
-- 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문
-  한 파일당 하나). 2026-08-11에 `~/.claude/projects/.../memory/`에서 이리로
-  옮겼다 — 저장소 밖이 아니라 저장소 안에 두어 히스토리에 남기기 위함이다.
-  새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
-- 서브프로젝트를 끝내면 그 design doc의 `Status:` 줄을 함께 고친다.
-  milestone을 다 끝내 놓고 표시만 빠뜨리기 쉽다.
-- 서브프로젝트를 끝내면 소개 페이지(`gh-pages` 브랜치의 `data.js`)에도 한
-  줄을 더한다 — 기준일 · 타임라인 · 전체 기능 목록. 순서는 `site/README.md`.
-- 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장 정확하다 —
-  게이트가 매번 돌리는 목록이라 낡을 수가 없다.
-- 완료된 서브프로젝트 표(이름 · 끝난 날 · 무엇이 섰나): `docs/guides/completed.md`. 서브프로젝트를 끝내면 그 표 끝에 한
-  행을 더한다. 2026-10-10까지는 이 파일 안에 있었다.
+- 서브프로젝트를 넘어 유효한 작업 요령(게이트 운영 · 다시 조사하지 말 실측 · 안 되는 접근 · 핵심 파일 지도):
+  `docs/guides/lessons.md`
+- 세션을 넘어 유지되는 기억: `MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 저장소 밖이 아니라 안에 두어
+  히스토리에 남긴다. 새 기억은 `docs/decisions/<name>.md`를 만들고 `MEMORY.md`에 한 줄 추가.
+- 서브프로젝트의 실제 상태는 `check.sh`의 `CHAINS` 배열이 가장 정확하다 — 게이트가 매번 돌리는 목록이라 낡을 수가 없다.
+- 서브프로젝트를 끝내면 함께 고칠 것(milestone을 다 끝내 놓고 표시만 빠뜨리기 쉽다):
+  - 그 design doc의 `Status:` 줄
+  - `docs/guides/completed.md` 표 끝에 한 행(이름 · 끝난 날 · 무엇이 섰나)
+  - 소개 페이지(`gh-pages` 브랜치의 `data.js`) — 기준일 · 타임라인 · 전체 기능 목록. 순서는 `site/README.md`
+  - `docs/decisions/`의 기억 한 파일과 `MEMORY.md` 한 줄, `HANDOFF.md`
+- 버전을 낼 때는 `docs/decisions/project_release.md`의 절차 일곱 단계를 따른다.
