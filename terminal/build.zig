@@ -35,10 +35,10 @@ pub fn build(b: *std.Build) void {
     // 가므로 크기와 무관하고, 최적화하면 `zig build test`만 느려진다
     // (소스를 고친 뒤 9.5초 대 25.8초). init/build.zig:29가 같은 선을 긋는다.
     const guest_optimize = b.option(
-        std.builtin.OptimizeMode,
+        std.lang.Optimize,
         "guest-optimize",
         "게스트로 가는 terminal 바이너리의 최적화 모드 (기본 ReleaseSafe)",
-    ) orelse .ReleaseSafe;
+    ) orelse .safe;
 
     // ZU-M1: C 헤더 번역. 0.17이 `@cImport`를 없애서 번역이 Zig 소스에서
     // 여기로 왔다. 파일마다 모듈 하나다 — `@cImport` 하나가 한 파일의
@@ -427,7 +427,7 @@ fn translateC(
     name: []const u8,
     header: []const u8,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) Translator {
     return .init(b.dependency("translate_c", .{}), .{
         .name = name,

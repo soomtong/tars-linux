@@ -31,9 +31,9 @@ pub const LINE_MAX = 256;
 /// 이름을 기본값과 함께 `parse`에 넣어 "모르는 키"가 하나도 안 나오는지를 잰다.
 /// 필드를 하나 더하고 `parse`의 갈래를 빠뜨리면 거기서 멈춘다.
 pub const KEYS = blk: {
-    const fields = @typeInfo(config.Config).@"struct".fields;
-    var names: [fields.len][]const u8 = undefined;
-    for (fields, 0..) |f, i| names[i] = f.name;
+    const info = @typeInfo(config.Config).@"struct";
+    var names: [info.field_names.len][]const u8 = undefined;
+    for (info.field_names, 0..) |f_name, i| names[i] = f_name;
     const out = names;
     break :blk out;
 };
@@ -50,8 +50,8 @@ pub fn isKey(key: []const u8) bool {
 /// 모르는 타입의 필드가 생기면 `fieldText`가 컴파일 에러를 낸다 — 새 키를
 /// 더한 사람이 이 명령을 잊을 수가 없다.
 pub fn valueText(c: *const config.Config, key: []const u8, buf: *[VALUE_MAX]u8) ?[]const u8 {
-    inline for (@typeInfo(config.Config).@"struct".fields) |f| {
-        if (std.mem.eql(u8, key, f.name)) return fieldText(f.type, @field(c, f.name), buf);
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {
+        if (std.mem.eql(u8, key, f_name)) return fieldText(f_type, @field(c, f_name), buf);
     }
     return null;
 }
@@ -73,8 +73,8 @@ fn fieldText(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
 /// enum은 이름을 컴파일 타임에 모으므로 config.zig에 이름을 하나 더하면 여기도
 /// 따라온다. enum이 아닌 셋만 글로 적는다.
 pub fn hint(key: []const u8) ?[]const u8 {
-    inline for (@typeInfo(config.Config).@"struct".fields) |f| {
-        if (std.mem.eql(u8, key, f.name)) return comptime hintFor(f.type);
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {
+        if (std.mem.eql(u8, key, f_name)) return comptime hintFor(f_type);
     }
     return null;
 }
@@ -91,7 +91,7 @@ fn hintFor(comptime T: type) []const u8 {
 fn join(comptime E: type, comptime sep: []const u8) []const u8 {
     comptime {
         var s: []const u8 = "";
-        for (@typeInfo(E).@"enum".fields, 0..) |f, i| s = s ++ (if (i == 0) "" else sep) ++ f.name;
+        for (@typeInfo(E).@"enum".field_names, 0..) |f_name, i| s = s ++ (if (i == 0) "" else sep) ++ f_name;
         return s;
     }
 }

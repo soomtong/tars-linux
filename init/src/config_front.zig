@@ -152,7 +152,7 @@ fn run(argv: [*:null]const ?[*:0]const u8, input: []const u8, out: []u8) ?Ran {
     }
     _ = linux.close(out_fds[0]);
     var status: u32 = 0;
-    while (failed(linux.wait4(@intCast(pid), &status, 0, null))) |e| {
+    while (failed(linux.wait4(@intCast(pid), @ptrCast(&status), 0, null))) |e| {
         if (e != .INTR) return null;
     }
     const code: u8 = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else 128 +| @as(u8, @truncate(@intFromEnum(linux.W.TERMSIG(status))));

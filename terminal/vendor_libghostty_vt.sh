@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-GHOSTTY_SHA="2602886144c7e95099c9e2ba07f181c69e7276f3"
+GHOSTTY_SHA="3d07ef9e28c4af05065b9e2e546b8ac8f9b62df0"
 SRC_DIR="ghostty-src"
 URL="https://github.com/ghostty-org/ghostty/archive/${GHOSTTY_SHA}.tar.gz"
 

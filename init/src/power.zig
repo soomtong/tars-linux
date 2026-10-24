@@ -196,7 +196,7 @@ fn reapAll() bool {
     var reaped: usize = 0;
     while (true) {
         var status: u32 = 0;
-        const rc = linux.waitpid(-1, &status, linux.W.NOHANG);
+        const rc = linux.waitpid(-1, @ptrCast(&status), linux.W.NOHANG);
         switch (linux.errno(rc)) {
             .SUCCESS => {
                 // rc가 0이면 "살아 있지만 아직 안 죽었다"이므로 아래로 간다.

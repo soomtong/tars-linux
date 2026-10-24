@@ -900,7 +900,7 @@ fn supervise(
         // 순서 하나가 대신한다.
         while (true) {
             var status: u32 = 0;
-            const rc = linux.waitpid(-1, &status, linux.W.NOHANG);
+            const rc = linux.waitpid(-1, @ptrCast(&status), linux.W.NOHANG);
             if (failed(rc)) |e| {
                 if (e == .INTR) continue;
                 // ECHILD는 자식이 하나도 없다는 뜻이고, 감독 대상이 전부

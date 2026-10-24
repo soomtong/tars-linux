@@ -260,7 +260,7 @@ pub fn store() void {
     var waited: u32 = 0;
     var status: u32 = 0;
     while (true) {
-        const rc = linux.wait4(@intCast(pid), &status, linux.W.NOHANG, null);
+        const rc = linux.wait4(@intCast(pid), @ptrCast(&status), linux.W.NOHANG, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
             logline.print("tars-init: audio: waiting for alsactl store failed (errno {d})\n", .{@intFromEnum(e)});
@@ -269,7 +269,7 @@ pub fn store() void {
         if (rc != 0) break;
         if (waited >= STORE_WAIT_MS) {
             _ = linux.kill(@intCast(pid), .KILL);
-            _ = linux.wait4(@intCast(pid), &status, 0, null);
+            _ = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
             logline.print("tars-init: audio: alsactl store did not finish in {d}ms, killed it\n", .{STORE_WAIT_MS});
             return;
         }
@@ -329,7 +329,7 @@ pub const Cards = struct {
     /// (장치 7), AMD ACP는 "DMIC capture dmic-hifi-0"(장치 0)이다.
     dmic: u32 = 0,
     /// 카드마다 그 DMIC PCM의 장치 번호. 둘 이상이면 처음 본 것(가장 작은 번호)이다.
-    dmic_dev: [MAX_CARDS]u8 = [_]u8{0} ** MAX_CARDS,
+    dmic_dev: [MAX_CARDS]u8 = @splat(0),
 };
 
 /// /proc/asound/pcm의 한 줄을 `cards`에 더한다. 순수 함수다.
@@ -356,7 +356,7 @@ pub fn addPcmLine(cards: *Cards, line: []const u8) void {
     if (dev == 0 and capture) cards.capture |= bit;
     if (!capture) return;
     if (std.mem.startsWith(u8, id, "USB Audio")) cards.usb_capture |= bit;
-    if (std.ascii.indexOfIgnoreCase(id, "dmic") != null and cards.dmic & bit == 0) {
+    if (std.ascii.findIgnoreCase(id, "dmic") != null and cards.dmic & bit == 0) {
         cards.dmic |= bit;
         cards.dmic_dev[card] = dev;
     }

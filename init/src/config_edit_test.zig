@@ -144,7 +144,7 @@ pub fn main() !void {
     // 개행 하나가 한 번의 set을 두 줄로 만든다.
     try expectVerdict("shell", "zsh\nnet=dhcp", .control_byte);
     try expectVerdict("shell", "zsh\r", .control_byte);
-    try expectVerdict("timezone", "a" ** 300, .too_long);
+    try expectVerdict("timezone", &@as([300]u8, @splat('a')), .too_long);
     // 정규형으로 쓴다 — 적은 순서 · 공백 · 0으로 시작하는 주소가 init의 글자로 바뀐다.
     try expectOk("hangul_toggle", " lctrl_tap , shift_space ", "shift_space,lctrl_tap");
     try expectOk("hangul_toggle", "", "none");

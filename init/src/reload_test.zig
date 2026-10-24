@@ -38,7 +38,7 @@ pub fn main() !void {
     // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열둘 다 들었다. 갈래의 수를 세서
     // design 결정 2의 표(지금 셋 · 다음에 뜰 때부터 셋 · 화면 여섯)와 견준다.
     var counts = [_]usize{ 0, 0, 0 };
-    inline for (@typeInfo(config.Config).@"struct".fields) |f| counts[@intFromEnum(comptime reload.groupOf(f.name))] += 1;
+    inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@intFromEnum(comptime reload.groupOf(f_name))] += 1;
     if (counts[0] != 3 or counts[1] != 3 or counts[2] != 6) return fail("groups now/next/terminal = {d}/{d}/{d}, want 3/3/6", .{ counts[0], counts[1], counts[2] });
     std.debug.print("reload_test: twelve keys in three groups — three now, three at the next spawn, six on the screen\n", .{});
 

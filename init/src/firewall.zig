@@ -43,7 +43,7 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
 
     var status: u32 = 0;
     while (true) {
-        const rc = linux.wait4(@intCast(pid), &status, 0, null);
+        const rc = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
         if (failed(rc)) |e| {
             // SA_RESTART가 꺼져 있어(power.zig) 전원 버튼이 이 기다림을 깨운다.
             // 플래그는 이미 섰고 감독 루프가 곧 본다 — 여기서는 다시 기다린다.
@@ -109,7 +109,7 @@ pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
     }
     var status: u32 = 0;
     while (true) {
-        const rc = linux.wait4(@intCast(pid), &status, 0, null);
+        const rc = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
             logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});

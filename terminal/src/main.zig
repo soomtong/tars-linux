@@ -1938,7 +1938,7 @@ const SysfsRead = struct {
 /// errno는 실패한 호출 바로 뒤에 읽는다 — `close`가 errno를 덮을 수 있다.
 fn readSysfs(name: []const u8, file: []const u8, buf: *[BATTERY_FILE_MAX]u8) SysfsRead {
     var path_buf: [BATTERY_PATH_MAX]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&path_buf, BATTERY_DIR ++ "/{s}/{s}", .{ name, file }) catch
+    const path = std.fmt.bufPrintSentinel(&path_buf, BATTERY_DIR ++ "/{s}/{s}", .{ name, file }, 0) catch
         return .{ .bytes = null, .why = .other };
     const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true });
     if (fd >= 0) {
@@ -2284,7 +2284,7 @@ fn readCaps(fd: c_int) ?pointer.Caps {
 /// 그 줄이 첫 단서다(design "실기에서 같은 코드로 가는가").
 fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) void {
     var path_buf: [POINTER_PATH_MAX]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&path_buf, POINTER_DIR ++ "/{s}", .{name}) catch return;
+    const path = std.fmt.bufPrintSentinel(&path_buf, POINTER_DIR ++ "/{s}", .{name}, 0) catch return;
     for (devs) |slot| {
         const d = slot orelse continue;
         if (std.mem.eql(u8, d.pathSlice(), path)) return;

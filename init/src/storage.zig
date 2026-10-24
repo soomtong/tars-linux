@@ -138,7 +138,7 @@ pub fn bootedInstalled(cmdline_path: [:0]const u8) bool {
 pub fn partitionName(buf: []u8, disk: []const u8, n: u8) ?[:0]const u8 {
     if (disk.len == 0) return null;
     const sep: []const u8 = if (std.ascii.isDigit(disk[disk.len - 1])) "p" else "";
-    return std.fmt.bufPrintZ(buf, "{s}{s}{d}", .{ disk, sep, n }) catch null;
+    return std.fmt.bufPrintSentinel(buf, "{s}{s}{d}", .{ disk, sep, n }, 0) catch null;
 }
 
 /// 고른 디스크. 라벨을 슬라이스가 아니라 복사로 들고 있다 — 슬라이스로

@@ -76,7 +76,7 @@ fn readFile(path: [*:0]const u8, buf: []u8) ?[]const u8 {
 /// /sys/block/<이름>/<속성>의 내용을 앞뒤 공백 없이. 없으면 null.
 fn sysAttr(name: []const u8, attr: []const u8, buf: []u8) ?[]const u8 {
     var path: [128]u8 = undefined;
-    const p = std.fmt.bufPrintZ(&path, "/sys/block/{s}/{s}", .{ name, attr }) catch return null;
+    const p = std.fmt.bufPrintSentinel(&path, "/sys/block/{s}/{s}", .{ name, attr }, 0) catch return null;
     const text = readFile(p.ptr, buf) orelse return null;
     return std.mem.trim(u8, text, " \t\r\n");
 }
@@ -124,7 +124,7 @@ fn findMedium() ?[:0]const u8 {
         return null;
     }
     var mark_buf: [128]u8 = undefined;
-    const mark = std.fmt.bufPrintZ(&mark_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.MEDIUM_MARK }) catch unreachable;
+    const mark = std.fmt.bufPrintSentinel(&mark_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.MEDIUM_MARK }, 0) catch unreachable;
 
     for (MEDIUM_CANDIDATES) |path| {
         var buf: [disk.HEAD_BYTES]u8 = undefined;
@@ -176,7 +176,7 @@ fn isInstalled(path: [:0]const u8) bool {
     if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", linux.MS.RDONLY, 0)) != null) return false;
     defer _ = linux.umount(ESP_DIR.ptr);
     var kernel_buf: [128]u8 = undefined;
-    const kernel = std.fmt.bufPrintZ(&kernel_buf, "{s}/{s}", .{ ESP_DIR, disk.BOOT_FILES[0] }) catch unreachable;
+    const kernel = std.fmt.bufPrintSentinel(&kernel_buf, "{s}/{s}", .{ ESP_DIR, disk.BOOT_FILES[0] }, 0) catch unreachable;
     return exists(kernel.ptr);
 }
 
@@ -320,7 +320,7 @@ fn runTool(
 
     var status: u32 = 0;
     while (true) {
-        const rc = linux.wait4(@intCast(pid), &status, 0, null);
+        const rc = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
             complain("waiting for {s} failed (errno {d})", .{ tool, @intFromEnum(e) });
@@ -406,7 +406,7 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
 /// 아무것도 지우지 않고 멈춰야 한다(disk.espConf의 약속).
 fn prepareConf(in_buf: []u8, out_buf: []u8) ?[]const u8 {
     var src_buf: [128]u8 = undefined;
-    const src = std.fmt.bufPrintZ(&src_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.LIMINE_CONF }) catch unreachable;
+    const src = std.fmt.bufPrintSentinel(&src_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.LIMINE_CONF }, 0) catch unreachable;
     const conf = readFile(src.ptr, in_buf) orelse {
         complain("cannot read {s}", .{src});
         return null;
@@ -611,7 +611,7 @@ fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
 fn copyAll(esp_conf: []const u8) bool {
     for (disk.ESP_DIRS) |d| {
         var buf: [128]u8 = undefined;
-        const p = std.fmt.bufPrintZ(&buf, "{s}/{s}", .{ ESP_DIR, d }) catch unreachable;
+        const p = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ ESP_DIR, d }, 0) catch unreachable;
         if (!mkdirOk(p.ptr)) {
             complain("cannot create {s}", .{p});
             return false;
@@ -621,8 +621,8 @@ fn copyAll(esp_conf: []const u8) bool {
     for (disk.BOOT_FILES) |rel| {
         var from_buf: [128]u8 = undefined;
         var to_buf: [128]u8 = undefined;
-        const from = std.fmt.bufPrintZ(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }) catch unreachable;
-        const to = std.fmt.bufPrintZ(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }) catch unreachable;
+        const from = std.fmt.bufPrintSentinel(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }, 0) catch unreachable;
+        const to = std.fmt.bufPrintSentinel(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }, 0) catch unreachable;
         const copied = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) writeConf(to, esp_conf) else copyFile(from, to);
         const n = copied orelse return false;
         say("  {s} {d} bytes\n", .{ rel, n });

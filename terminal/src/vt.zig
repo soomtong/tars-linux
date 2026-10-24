@@ -117,7 +117,7 @@ pub const REPLY_MAX = 512;
 /// `Screen.reply_buf`다. 이 함수가 도는 자리는 `feed` 안이며, 버퍼에
 /// 복사만 하고 pty에는 쓰지 않는다 — `main.zig`가 `feed` 뒤에 한 번에 쓴다
 /// (design 결정 3).
-fn onWritePty(h: *Handler, bytes: [:0]const u8) void {
+fn onWritePty(h: *Handler, bytes: []const u8) void {
     // `Screen.init`이 `handler.terminal = &self.term`으로 만들었으므로
     // 여기서 Screen을 되찾을 수 있다. 전역 변수를 두지 않는 이유가
     // 이것이다(design 결정 "착수 전에 읽은 것" 4).
@@ -1026,7 +1026,8 @@ pub const Screen = struct {
             const p = kv.value_ptr;
             const pin = switch (p.location) {
                 .pin => |pin| pin,
-                .virtual => continue,
+                // 부모 상대 placement(P=/Q=)는 그리지 않는다(ZU-M2 결정 M2-E).
+                .virtual, .relative => continue,
             };
             // 스크롤백 가지치기로 붙어 있던 페이지가 사라진 placement.
             if (pin.garbage) continue;

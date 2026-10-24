@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         // PID 1은 스레드를 만들지 않는다. 끄면 TLS 준비 과정이 빠지고
         // 바이너리도 작아진다.
         .single_threaded = true,
@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
     const install_mod = b.createModule(.{
         .root_source_file = b.path("src/install.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         .single_threaded = true,
     });
     const install_exe = b.addExecutable(.{
@@ -66,7 +66,7 @@ pub fn build(b: *std.Build) void {
     const service_mod = b.createModule(.{
         .root_source_file = b.path("src/service_cli.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         .single_threaded = true,
     });
     const service_exe = b.addExecutable(.{
@@ -82,7 +82,7 @@ pub fn build(b: *std.Build) void {
     const config_cli_mod = b.createModule(.{
         .root_source_file = b.path("src/config_cli.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         .single_threaded = true,
     });
     const config_cli_exe = b.addExecutable(.{
@@ -357,12 +357,12 @@ pub fn build(b: *std.Build) void {
 /// BV-M0: 저장소 뿌리의 `VERSION`과 git의 답 셋으로 버전 글자를 짓는다(BV design 결정 1~3).
 /// `VERSION`을 못 읽거나 비었으면 빌드를 멈춘다. git을 못 쓰면 `VERSION` 그대로다.
 fn buildVersion(b: *std.Build) []const u8 {
-    const text = b.build_root.handle.readFileAlloc(b.graph.io, "../VERSION", b.allocator, .limited(4096)) catch |err|
+    const text = b.root.root_dir.handle.readFileAlloc(b.graph.io, "../VERSION", b.allocator, .limited(4096)) catch |err|
         std.process.fatal("../VERSION: {t} (the TARS version is read from there)", .{err});
     const ver = version.base(text) catch |err|
         std.process.fatal("../VERSION: {t} (it holds one line like 0.1.0)", .{err});
 
-    const root = b.pathFromRoot("..");
+    const root = b.pathResolve(&.{ b.root.toString(b.allocator) catch @panic("OOM"), ".." });
     const head = git(b, root, &.{ "rev-parse", "--short=7", "HEAD" }) orelse return ver;
     // 태그가 아직 없으면(릴리즈 사이의 모든 빌드) null이고 "HEAD != 태그"다.
     const tag = git(b, root, &.{ "rev-parse", "--short=7", b.fmt("v{s}^{{commit}}", .{ver}) });

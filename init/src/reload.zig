@@ -54,7 +54,7 @@ fn same(comptime T: type, a: T, b: T) bool {
 pub const Keys = struct {
     bits: u16 = 0,
 
-    pub const count = @typeInfo(config.Config).@"struct".fields.len;
+    pub const count = @typeInfo(config.Config).@"struct".field_names.len;
 
     comptime {
         if (count > 16) @compileError("reload.Keys holds 16 keys");
@@ -69,8 +69,8 @@ pub const Keys = struct {
     }
 
     fn bit(comptime key: []const u8) u16 {
-        inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
-            if (comptime std.mem.eql(u8, f.name, key)) return @as(u16, 1) << i;
+        inline for (@typeInfo(config.Config).@"struct".field_names, 0..) |f_name, i| {
+            if (comptime std.mem.eql(u8, f_name, key)) return @as(u16, 1) << i;
         }
         @compileError("no key " ++ key);
     }
@@ -79,8 +79,8 @@ pub const Keys = struct {
 /// 바뀐 키.
 pub fn changed(old: config.Config, new: config.Config) Keys {
     var k = Keys{};
-    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
-        if (!same(f.type, @field(old, f.name), @field(new, f.name))) k.bits |= @as(u16, 1) << i;
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
+        if (!same(f_type, @field(old, f_name), @field(new, f_name))) k.bits |= @as(u16, 1) << i;
     }
     return k;
 }
@@ -89,9 +89,9 @@ pub fn changed(old: config.Config, new: config.Config) Keys {
 /// 다른 화면 쪽 키.
 pub fn pending(live: config.Config, screen: config.Config) Keys {
     var k = Keys{};
-    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
-        if (comptime onScreen(f.name)) {
-            if (!same(f.type, @field(live, f.name), @field(screen, f.name))) k.bits |= @as(u16, 1) << i;
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
+        if (comptime onScreen(f_name)) {
+            if (!same(f_type, @field(live, f_name), @field(screen, f_name))) k.bits |= @as(u16, 1) << i;
         }
     }
     return k;
@@ -129,17 +129,17 @@ pub const Out = control.Out;
 /// `config` 동사의 답(design 결정 1). 열두 줄 `key=value`(init이 지금 쓰는 값), 그리고 화면이
 /// 대기 중이면 `screen key=value …` 한 줄(terminal이 지금 쓰는 값).
 pub fn configReply(out: *Out, live: config.Config, screen: config.Config) void {
-    inline for (@typeInfo(config.Config).@"struct".fields) |f| {
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {
         var buf: [VALUE_MAX]u8 = undefined;
-        out.print("{s}={s}\n", .{ f.name, text(f.type, @field(live, f.name), &buf) });
+        out.print("{s}={s}\n", .{ f_name, text(f_type, @field(live, f_name), &buf) });
     }
     const p = pending(live, screen);
     if (p.empty()) return;
     out.print("screen", .{});
-    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
         if (p.bits & (@as(u16, 1) << i) != 0) {
             var buf: [VALUE_MAX]u8 = undefined;
-            out.print(" {s}={s}", .{ f.name, text(f.type, @field(screen, f.name), &buf) });
+            out.print(" {s}={s}", .{ f_name, text(f_type, @field(screen, f_name), &buf) });
         }
     }
     out.print("\n", .{});
@@ -256,11 +256,11 @@ pub fn note(comptime key: []const u8) []const u8 {
 /// 이 줄들이 끝나면 대기가 빈다(`main.zig`가 `screen`을 `cfg`로 맞춘다).
 pub fn screenLines(out: *Out, screen: config.Config, live: config.Config) void {
     const p = pending(live, screen);
-    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
         if (p.bits & (@as(u16, 1) << i) != 0) {
             var a: [VALUE_MAX]u8 = undefined;
             var b: [VALUE_MAX]u8 = undefined;
-            out.print("{s}: {s} -> {s}\n", .{ f.name, text(f.type, @field(screen, f.name), &a), text(f.type, @field(live, f.name), &b) });
+            out.print("{s}: {s} -> {s}\n", .{ f_name, text(f_type, @field(screen, f_name), &a), text(f_type, @field(live, f_name), &b) });
         }
     }
 }
@@ -268,12 +268,12 @@ pub fn screenLines(out: *Out, screen: config.Config, live: config.Config) void {
 /// 바뀐 키마다 `key: old -> new (꼬리)` 한 줄.
 pub fn keyLines(out: *Out, old: config.Config, new: config.Config) void {
     const k = changed(old, new);
-    inline for (@typeInfo(config.Config).@"struct".fields, 0..) |f, i| {
+    inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
         if (k.bits & (@as(u16, 1) << i) != 0) {
             var a: [VALUE_MAX]u8 = undefined;
             var b: [VALUE_MAX]u8 = undefined;
             out.print("{s}: {s} -> {s} ({s})\n", .{
-                f.name, text(f.type, @field(old, f.name), &a), text(f.type, @field(new, f.name), &b), note(f.name),
+                f_name, text(f_type, @field(old, f_name), &a), text(f_type, @field(new, f_name), &b), note(f_name),
             });
         }
     }

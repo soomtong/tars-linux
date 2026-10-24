@@ -6,7 +6,7 @@ const Clipboard = clipboard.Clipboard;
 /// `alloc`으로 `s`의 사본을 만든다. `copyYank`가 `selectionString`으로 하는
 /// 일과 같은 모양 — 할당자가 준 sentinel 슬라이스다.
 fn dup(alloc: std.mem.Allocator, s: []const u8) ![:0]const u8 {
-    return try alloc.dupeZ(u8, s);
+    return try alloc.dupeSentinel(u8, s, 0);
 }
 
 fn expectText(what: []const u8, got: ?[]const u8, want: ?[]const u8) !void {

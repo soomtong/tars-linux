@@ -143,7 +143,7 @@ pub fn main() !void {
         // 칸마다 몇 개의 사각형이 덮는지 센다. 2 이상이면 겹친 것이고,
         // 격자 밖이면 인덱스가 넘친다.
         t.rects(WHOLE, &rs);
-        var cover = [_][155]u8{[_]u8{0} ** 155} ** 47;
+        var cover: [47][155]u8 = @splat(@splat(0));
         var area: usize = 0;
         for (rs) |r| {
             if (r.col + r.cols > WHOLE.cols or r.row + r.rows > WHOLE.rows or r.cols == 0 or r.rows == 0) {
@@ -256,7 +256,7 @@ pub fn main() !void {
         const ss = t.separators(WHOLE, &seps);
         if (ss.len != 7) return error.WrongSeparatorCount;
 
-        var cover = [_][155]u8{[_]u8{0} ** 155} ** 47;
+        var cover: [47][155]u8 = @splat(@splat(0));
         for (rs ++ seps) |r| {
             var y = r.row;
             while (y < r.row + r.rows) : (y += 1) {

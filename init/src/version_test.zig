@@ -32,8 +32,8 @@ pub fn main() !void {
         return error.EmptyTaken;
     } else |_| {}
     {
-        const long = "1" ** (version.BASE_MAX + 1);
-        if (version.base(long)) |_| {
+        const long: [version.BASE_MAX + 1]u8 = @splat('1');
+        if (version.base(&long)) |_| {
             std.debug.print("FAIL: a {d}-byte VERSION was taken\n", .{long.len});
             return error.LongTaken;
         } else |_| {}

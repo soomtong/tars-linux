@@ -473,7 +473,7 @@ RUN dpkg --add-architecture amd64 \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 
-ENV ZIG_VERSION=0.16.0 \
+ENV ZIG_VERSION=0.17.0 \
     PATH=/usr/local/zig:$PATH
 
 RUN curl -sSL -o /tmp/zig.tar.xz \

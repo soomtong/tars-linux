@@ -46,7 +46,7 @@ fn touch(name: []const u8, mode: linux.mode_t) !void {
 
 fn link(name: []const u8, target: []const u8) !void {
     var target_buf: [256]u8 = undefined;
-    const t = std.fmt.bufPrintZ(&target_buf, "{s}", .{target}) catch unreachable;
+    const t = std.fmt.bufPrintSentinel(&target_buf, "{s}", .{target}, 0) catch unreachable;
     const path = join("{s}/{s}", .{ DIR, name });
     _ = linux.unlink(path.ptr);
     const rc = linux.symlink(t.ptr, path.ptr);

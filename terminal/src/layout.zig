@@ -259,7 +259,7 @@ pub const Tree = struct {
     /// 쓰이지 않은 가장 작은 잎 번호. `split`이 잎 수를 먼저 보므로 언제나
     /// 있다.
     fn freeLeaf(self: *const Tree) u4 {
-        var used = [_]bool{false} ** MAX_LEAVES;
+        var used: [MAX_LEAVES]bool = @splat(false);
         for (self.nodes) |node| {
             if (node == .leaf) used[node.leaf] = true;
         }
