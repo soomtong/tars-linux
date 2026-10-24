@@ -30,6 +30,11 @@ ISO         ?= out/tars.iso
 # `git config --global`이 여기 쌓인다). README의 손 절차와 같은 이름이다.
 CONFIG_DISK ?= out/tars-config.img
 
+# 체인 목록은 손으로 적지 않는다 — check.sh를 가진 디렉터리가 체인이다. 손으로
+# 적던 시절 12개에서 멈춰 있었다(2026-10-24에 22개였다). 판정의 기준은 루트
+# check.sh의 CHAINS 배열이고, 이 변수는 도움말과 인자 검사에만 쓴다.
+CHAINS := $(sort $(patsubst %/check.sh,%,$(wildcard */check.sh)))
+
 # 화면 창은 호스트에 따라 다르다. macOS는 cocoa, 그 밖은 gtk.
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -85,8 +90,9 @@ help:
 	@echo "      네트워크가 필요하다"
 	@echo
 	@echo "  make initrd"
-	@echo "      위 셋을 기다린 뒤 kernel/make_initrd.sh. 게스트 도구 75개와 셸 셋, 폰트를"
-	@echo "      모아 40MB cpio를 gzip -6으로 17MB로 만든다(약 10초)"
+	@echo "      위 셋을 기다린 뒤 kernel/make_initrd.sh. 셸 셋과 게스트 도구(kernel/guest_tools.sh),"
+	@echo "      폰트를 gzip -6 cpio로 모으고 그 뒤에 firmware archive(kernel/guest_firmware.sh)를"
+	@echo "      압축 없이 이어 붙인다. 둘을 합쳐 약 98MB. 다 만든 뒤 mv로 바꿔치기한다"
 	@echo
 	@echo "  make iso"
 	@echo "      initrd 뒤에 boot/build.sh(limine을 -B로 다시 빌드한다 — 배포 tarball의 실행"
@@ -116,12 +122,13 @@ help:
 	@echo "게이트 (판정. 컨테이너 안에서 돈다)"
 	@echo
 	@echo "  make check CHAIN=x"
-	@echo "      체인 하나만 돌린다. x는 boot terminal config input power device render"
-	@echo "      copy hangul machine tools net 중 하나. 대개 2~8분이고, 그 체인이 스스로"
-	@echo "      빌드하므로 무엇을 고쳤든 그 체인만 다시 돌리면 된다"
+	@echo "      체인 하나만 돌린다. x는 check.sh가 있는 디렉터리 이름 중 하나:"
+	@echo "      $(CHAINS)"
+	@echo "      대개 2~8분이고, 그 체인이 스스로 빌드하므로 무엇을 고쳤든 그 체인만 다시 돌리면 된다"
 	@echo
 	@echo "  make gate"
-	@echo "      루트 check.sh — 12체인을 각각 3회. 16~35분(호스트 부하에 따라 흔들린다)."
+	@echo "      루트 check.sh — 모든 체인을 1회씩, 빌드 한 번 뒤 동시에(JOBS줄). 약 10분."
+	@echo "      회차와 동시 실행 수는 RUNS=N JOBS=N으로 넘긴다(기본 JOBS는 컨테이너 메모리로 정한다)."
 	@echo "      시작할 때 out/을 통째로 지우므로 설정 디스크를 out/ 밖에 두거나"
 	@echo "      CONFIG_DISK로 이 파일을 따로 잡아 둬라"
 	@echo
@@ -238,13 +245,16 @@ run-qemu:
 boot-qemu: iso disk
 	@$(MAKE) --no-print-directory run-qemu
 
+# RUNS · JOBS를 주면 컨테이너 환경으로 넘긴다(check.sh가 읽는 이름 그대로).
+# 안 주면 넘기지 않아 check.sh의 기본값(1회 · 메모리로 정한 JOBS)이 산다.
+GATE_ENV = $(if $(RUNS),-e RUNS=$(RUNS)) $(if $(JOBS),-e JOBS=$(JOBS))
 gate: container
-	$(IN_CONTAINER) './check.sh'
+	$(DOCKER) run --rm $(GATE_ENV) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c './check.sh'
 
 # 체인 하나. CHAIN을 안 주면 무엇을 줄지 알려주고 멈춘다 — 조용히 루트
-# 게이트를 돌리면 16분을 기다린 뒤에야 잘못 친 것을 알게 된다.
+# 게이트를 돌리면 10분을 기다린 뒤에야 잘못 친 것을 알게 된다.
 check: container
-	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — boot terminal config input power device render copy hangul machine tools net"; exit 1; }
+	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
 	$(IN_CONTAINER) 'cd $(CHAIN) && ./check.sh'
 

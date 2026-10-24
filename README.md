@@ -50,7 +50,7 @@ make boot-qemu                 # 전부 빌드하고 설정 디스크를 붙여 
 make run-qemu                  # 빌드 없이 방금 만든 것으로 다시 띄운다
 make disk-fresh                # 설정 디스크를 지우고 새로 굽는다
 make check CHAIN=config        # 체인 하나만 (2~8분)
-make gate                      # 루트 게이트 13체인 × 3회 (약 38분)
+make gate                      # 루트 게이트 — 모든 체인을 1회, 동시에 (약 10분)
 make clean                     # 빌드 산출물만 지운다 — 설정 디스크는 살린다
 ```
 
@@ -67,8 +67,11 @@ VM(UTM 등)에 올리거나, 실기 노트북 USB로 부팅하는 방법은 `doc
 ## 검증
 
 ```bash
-# 전체 — 열세 체인 × 3회차, 약 38분
+# 전체 — 모든 체인(지금 스물둘)을 1회차씩, 빌드 한 번 뒤 동시에. 약 10분
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
+
+# 회차를 늘리거나 동시 실행 수를 정할 때 (기본 JOBS는 컨테이너 메모리로 정한다)
+docker run --rm -e RUNS=2 -e JOBS=4 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh
 
 # 한 체인만
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/check.sh
@@ -88,6 +91,8 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/c
 | `HANDOFF.md` | 지금 어디까지 왔는지, 다음에 무엇을 하는지 |
 | `MEMORY.md` | 세션을 넘어 유지되는 기억의 색인 (본문은 `docs/decisions/`) |
 | `docs/guides/running-tars.md` | 로컬 화면·VM·실기 노트북에서 띄워 보는 방법 |
+| `docs/guides/lessons.md` | 게이트 운영법 · 다시 조사하지 말 실측 · 안 되는 접근 · 이월 숙제 · 핵심 파일 지도 |
+| `docs/guides/completed.md` | 끝난 서브프로젝트 표 (이름 · 끝난 날 · 무엇이 섰나) |
 | `docs/study/` | 용어집과 개념 학습 노트 |
 | `docs/specs/` | 서브프로젝트별 design doc |
 | `docs/plans/` | milestone별 실행 plan |
