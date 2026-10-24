@@ -187,6 +187,18 @@ count_cut_lines() {
   return 0
 }
 
+# GF-M0 결정 2. 회차 뒤에도 kernel/initrd.cpio가 prebuild가 만든 그 파일인가. 다르면 누군가 다시
+# 만들었다는 뜻이다(rename은 inode를 바꾼다). INITRD_INODE는 prebuild 뒤에 적는다.
+check_initrd_inode() {
+  local label="$1" now
+  now="$(stat -c %i kernel/initrd.cpio)"
+  if [ "$now" != "$INITRD_INODE" ]; then
+    echo "${label} FAIL: kernel/initrd.cpio was rebuilt during the run (inode ${INITRD_INODE} -> ${now})"
+    return 1
+  fi
+  return 0
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
@@ -200,6 +212,7 @@ run_chain() {
     start="$(date +%s)"
     TMPDIR="$dir" "$script" || ok=0
     count_cut_lines "$dir" "${name} run ${i}/${RUNS}" || ok=0
+    check_initrd_inode "${name} run ${i}/${RUNS}" || ok=0
     secs=$(( $(date +%s) - start ))
     printf '%s\t%s\t%s\n' "$name" "$i" "$secs" >> "$TIMES"
     echo "time: ${name} run ${i}/${RUNS} ${secs}s"
@@ -605,6 +618,11 @@ if ! prebuild > "${GATE_LOGS}/prebuild.out" 2>&1; then
   exit 1
 fi
 echo "time: prebuild $(( $(date +%s) - start ))s"
+
+# GF-M0 결정 1 · 2. 여기부터 initrd는 읽기만 한다. 변수는 체인이 부르는 make_initrd.sh가 보고, inode는
+# 회차마다 대조한다 — 글자는 건너뛰었다는 주장이고 inode는 안 썼다는 사실이다.
+export TARS_PREBUILT_INITRD=1
+INITRD_INODE="$(stat -c %i kernel/initrd.cpio)"
 
 # 줄(lane). 한 줄 안의 체인은 차례로 돌고 줄끼리 동시에 돈다. 대부분의 체인은 혼자 한
 # 줄이다. make_iso.sh를 부르는 체인(boot · machine · install)은 한 줄로 묶는다 — 셋이

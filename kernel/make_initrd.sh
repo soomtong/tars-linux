@@ -3,6 +3,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
+# GF-M0 결정 3. 출력 경로. 기본은 공유 산출물 initrd.cpio이고, tools 검사 1d는 자기 사본을 준다.
+INITRD_OUT="${INITRD_OUT:-initrd.cpio}"
+
+# GF-M0 결정 1. 루트 게이트는 prebuild에서 한 번 만든 뒤 이 변수를 둔다. 그 뒤의 체인 22개가 저마다
+# 다시 만들면 최대 JOBS개가 같은 파일을 동시에 rename하고, bind mount에서는 그 순간 open()이
+# ENOENT를 받는다(BV-M0 루트 게이트 1회차의 PM). 사본을 달라는 호출(INITRD_OUT)은 건너뛰지 않는다.
+if [ -n "${TARS_PREBUILT_INITRD:-}" ] && [ "$INITRD_OUT" = initrd.cpio ] && [ -f initrd.cpio ]; then
+  echo "skipping initrd (prebuilt by the root gate)"
+  exit 0
+fi
+
 # initrd에 들어가는 유저랜드는 전부 x86_64다. 빌드 컨테이너는 ZM-M3부터
 # arm64라서 컨테이너 자신의 /usr/bin/fish를 복사할 수 없다 — Dockerfile이
 # 구워둔 amd64 sysroot에서만 가져온다. 여기서 실패하면 게이트가 엉뚱한
@@ -19,8 +30,8 @@ fi
 
 WORKDIR="$(mktemp -d)"
 # GP-M1: initrd는 이 임시 파일에 다 만든 뒤 맨 끝에서 `mv`로 바꿔치기한다. rename이
-# 원자적이려면 같은 파일시스템이어야 하므로 /tmp가 아니라 이 디렉터리에 둔다.
-OUT="$(mktemp initrd.cpio.XXXXXX)"
+# 원자적이려면 같은 파일시스템이어야 하므로 /tmp가 아니라 출력 파일 옆에 둔다(경로는 INITRD_OUT, GF-M0).
+OUT="$(mktemp "${INITRD_OUT}.XXXXXX")"
 trap 'rm -rf "$WORKDIR" "$OUT"' EXIT
 
 # "찾는 곳"과 "넣는 곳"을 분리한다.
@@ -744,4 +755,4 @@ cat src/firmware/firmware.cpio.gz >> "$OUT"
 # 가리키는 inode만 바꾸므로 이미 연 쪽은 옛 파일을 끝까지 온전히 읽는다(tools 검사 1d).
 # mktemp가 0600으로 만들므로 예전 `>`와 같은 0644로 맞춘다.
 chmod 644 "$OUT"
-mv -f "$OUT" initrd.cpio
+mv -f "$OUT" "$INITRD_OUT"

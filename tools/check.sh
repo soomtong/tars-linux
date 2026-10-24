@@ -295,14 +295,22 @@ echo "make_initrd.sh printed no readelf error"
 # (b)만으로는 모자란다. initrd는 지금 매번 다른 바이트로 나와서(cpio가 mtime · inode를
 # 적는다) 제자리 쓰기도 (b)에서 빨개지지만, 누가 initrd를 재현 가능하게 만들면 제자리
 # 쓰기가 같은 바이트를 내어 (b)를 통과한다. (a)는 그런 두 번째 길이 없다.
-HELD_SHA_BEFORE="$(sha256sum ../kernel/initrd.cpio | cut -d' ' -f1)"
-exec 4< ../kernel/initrd.cpio
-if ! (cd ../kernel && ./make_initrd.sh) > /dev/null 2>&1; then
-  echo "FAIL: the second initrd build failed"
+#
+# GF-M0 결정 3. 루트 게이트에서는 다른 레인이 ../kernel/initrd.cpio를 읽는 중이고 그 레인들의
+# make_initrd.sh는 건너뛴다(TARS_PREBUILT_INITRD). 그 공유 파일을 여기서 다시 만들면 이 검사가
+# 유일한 "동시에 쓰는 쪽"이 된다. 그래서 TMPDIR 아래 사본에 INITRD_OUT으로 만든다 — rename의
+# 세 성질은 경로가 어디든 같고, (c)는 자기 디렉터리라 남의 임시 파일을 셀 일이 없다. 사본은
+# 지우지 않는다(회차의 로그와 같은 수명).
+INITRD_1D="$(mktemp -d)"
+cp ../kernel/initrd.cpio "$INITRD_1D/initrd.cpio"
+HELD_SHA_BEFORE="$(sha256sum "$INITRD_1D/initrd.cpio" | cut -d' ' -f1)"
+exec 4< "$INITRD_1D/initrd.cpio"
+if ! (cd ../kernel && INITRD_OUT="$INITRD_1D/initrd.cpio" ./make_initrd.sh) > /dev/null 2>&1; then
+  echo "FAIL: the second initrd build (into a private copy) failed"
   exit 1
 fi
 HELD_INODE="$(stat -L -c %i /dev/fd/4)"
-PATH_INODE="$(stat -c %i ../kernel/initrd.cpio)"
+PATH_INODE="$(stat -c %i "$INITRD_1D/initrd.cpio")"
 HELD_SHA_AFTER="$(sha256sum <&4 | cut -d' ' -f1)"
 exec 4<&-
 if [ "$HELD_INODE" = "$PATH_INODE" ]; then
@@ -313,12 +321,12 @@ if [ "$HELD_SHA_AFTER" != "$HELD_SHA_BEFORE" ]; then
   echo "FAIL: a reader that opened initrd.cpio before the rebuild read different bytes"
   exit 1
 fi
-LEFT_OVER="$(cd ../kernel && ls initrd.cpio.* 2>/dev/null || true)"
+LEFT_OVER="$(ls "$INITRD_1D"/initrd.cpio.* 2>/dev/null || true)"
 if [ -n "$LEFT_OVER" ]; then
   echo "FAIL: make_initrd.sh left temporary files behind: ${LEFT_OVER}"
   exit 1
 fi
-echo "make_initrd.sh swaps initrd.cpio by rename (inode ${HELD_INODE} -> ${PATH_INODE}), an open reader kept the old bytes"
+echo "make_initrd.sh swaps initrd.cpio by rename (inode ${HELD_INODE} -> ${PATH_INODE}), an open reader kept the old bytes (on a private copy)"
 
 qemu-system-x86_64 \
   -nic none \
