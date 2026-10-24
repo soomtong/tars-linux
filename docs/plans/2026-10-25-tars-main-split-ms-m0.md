@@ -2,7 +2,7 @@
 
 Date: 2026-10-25
 Design: `docs/specs/2026-10-25-tars-main-split-design.md`
-Status: 착수 전.
+Status: 끝났다(2026-10-25, 루트 게이트 22/22, prebuild 293초 + lanes 289초). 값은 맨 아래 "MS-M0이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -125,4 +125,25 @@ Status: 착수 전.
 
 ## MS-M0이 실측한 것
 
-(끝난 뒤 적는다.)
+1. commit 넷 — Task 1 `4338581`(+624 −498), Task 2 `9f87233`(+349 −314), Task 3 `edf3152`(+219 −146), probe `2d6b91c`.
+   `main.zig`는 3,889줄 → 4,123줄(+234, 전부 필드 문서 주석 · 함수 머리 · struct 테두리). 함수 길이 — `App` 필드 선언 169 ·
+   `spawnFirst` 151(주석이 대부분) · `runCopies` 122 · `readPanes` 106 · `render` 93 · `readKeyboard` 73 · `runPanes` 73 ·
+   `tick` 39 · `main` 10.
+2. 세 Task 모두 컨테이너 빌드와 `zig build test`가 첫 시도에 통과했고 호스트 `zig fmt`는 한 줄도 안 바꿨다. 체인 — Task 1 terminal ·
+   Task 2 hangul · Task 3 pointer 모두 PASS. 시리얼 로그의 준비 일곱 줄 순서(`grid` → … → `clipboard scope=`)는 세 체인의 네 부팅에서
+   그대로였다.
+3. 로그 집합 비교 (a)는 `diff -w`여야 한다 — 여러 줄짜리 `logline.print(` 셋이 함수로 들어가며 한 단 얕아져 `rg --multiline`이 잡은
+   앞 공백이 달라졌다. 글자는 같았다. "지운 줄 가운데 새 파일에 (들여쓰기 무시) 없는 것"을 `comm`으로 뽑는 검사가 (b)의 기계판으로
+   쓸 만했다 — 매 Task에서 그 목록이 전부 예상한 모양(선언 → 필드, `self.` 접두사, `//` → `///`, `break`/`continue` → 반환값,
+   `var focus` → `const`)이었다.
+4. 확정 5의 `undefined` 필드는 열아홉이었다(`io` · `allocator`는 `open`의 인자에서 바로). 확정 7과 달리 `ws`는 `readPointers`가 아니라
+   `wirePointer`가 구한다 — `readPointers`는 워크스페이스를 안 본다. `readPanes`의 반환은 `!enum { keep, quit }`(`readBattery`의 모양).
+   `Frame`에 `focus` · `cells` · `imgs` · `prompt` · `prompt_ink` · `status_line` · `frame_us`와 버퍼 둘이 들어갔고 `tick`의 스택에 산다.
+5. Task 3의 큰 `Edit`(old_string 380줄)이 한 글자 어긋나 실패했다. 줄 번호로 자르고 새 본문을 파일로 써서 `sed -n` 셋을 이어 붙이는
+   길이 더 믿을 만했다(Task 1도 그 길이었다).
+6. probe anchor는 넷이 됐다(확정 10) — `probe_clock`의 원점은 `openBattery`의 `battery_clock` 줄 뒤, 덤프 시간은 `dumpFrame`의
+   `const frame_us = frame.frame_us;` 뒤에서 잡은 시각부터 끝까지(MS 전에는 `frame_start`부터의 총 시간에서 `frame_us`를 뺐다).
+   사본은 +15줄, 컴파일되고 부팅 한 번(`probe/run.sh ms 1`)에 `probe>` 120줄. 첫 프레임 `frame=37264 dump=32013`, 이후 프레임
+   2~3ms · 덤프 1.5~2.4ms — RS 때와 같은 자릿수다.
+7. 루트 게이트 22/22(2026-10-25, `out/gate-logs/20261024-162235/` — 컨테이너 시계가 하루 뒤처져 있다). prebuild 293초 + lanes
+   289초, 느린 셋은 CP 184 · TD 180 · CM 165.

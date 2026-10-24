@@ -1,7 +1,11 @@
 # TARS Main Split — Design
 
 Date: 2026-10-25
-Status: 진행 중 — MS-M0 plan `docs/plans/2026-10-25-tars-main-split-ms-m0.md`.
+Status: 진행 중 — MS-M0 끝(2026-10-25, 루트 게이트 22/22, prebuild 293초 + lanes 289초, plan
+`docs/plans/2026-10-25-tars-main-split-ms-m0.md`). MS-M1(init `Boot`)은 plan `docs/plans/2026-10-25-tars-main-split-ms-m1.md`.
+구현 중 design과 달라진 자리 — 결정 4의 "`readPointers`가 `round` · `before_spot` · `supply_seen`을 struct 하나로"는 `Pointers`가
+됐고 `ws`는 `wirePointer`가 구한다. 그리기 단계의 `render` → `dumpFrame` 사이는 `Frame` struct(프롬프트 · 상태 줄 버퍼 포함,
+`tick`의 스택)로 건넨다. probe anchor는 셋이 아니라 넷이다(plan 실측 6).
 
 HANDOFF "다음 후보"의 첫 항목에서 시작한다(2026-10-24 프로젝트 점검이 남긴 넷 가운데 추천 1순위. 사용자가 2026-10-25에 골랐다).
 

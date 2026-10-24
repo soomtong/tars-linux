@@ -1338,7 +1338,14 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   underline)를 그 값 하나가 정하고, `main.zig`는 `cursorMark()`로 받기만 한다 — 같은
   판단을 두 자리에서 하면 언젠가 갈려 반전과 띠가 함께 그려진다. 우선순위는 copy mode ·
   포커스 없음 · 뷰포트 밖(셋 다 null) · preedit(두 칸 block) · DECSCUSR 모양 순이다.
-- `main.zig` — `drawGlyph`·`render`·`dump*`와 `poll` 루프. 렌더는 루프 끝에
+- `main.zig` — `drawGlyph` · `renderPane` · `dump*`와 `App`(MS-M0). `main`은 `App.open` →
+  `tick` 반복 → `close` 네 줄이다. `open`은 `openScreen` · `openKeyboard` · `spawnFirst` ·
+  `openPointers` · `openBattery`(로그 일곱 줄의 순서가 이 순서다), `tick`은 `arm` → poll →
+  `readKeyboard`(`runScrolls` · `runCopies` · `runPanes` · `runDictates`) → `readPointers` →
+  `pollBattery` → `wirePointer` → `readPanes` → `readDictation` → `decideFrame` → `render` →
+  `dumpFrame`이고 그 순서가 바퀴의 계약이다. 바퀴를 넘어 사는 값은 전부 `App`의 필드(자기
+  포인터 없음 — `open`이 값으로 돌려준다), 한 바퀴 안의 값은 `Pointers` · `Frame`이다.
+  `ws` · `focus`는 단계마다 `self.current`로 다시 구한다. 렌더는 바퀴 끝에
   있고 `needs_redraw`가 문지기다. `promptText`의 갈래가 셋(프롬프트 ·
   `[3/12]` · "못 찾음")이고 두 갈래를 가르는 것은 `findMatchCount()`
   하나다. `dumpStyles`는 프레임당 16줄 상한(`STYLE_DUMP_LIMIT`)이고 덮인 줄을
@@ -1346,7 +1353,7 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   배터리 절(BS-M1)이 `BatteryState` · `readSysfs` · `scanBattery` · `readBattery` ·
   `tickBattery`를 갖는다. 처음 훑기는 첫 프레임 앞에서 하고 `needs_redraw`를 안 켠다 —
   켜면 모든 체인의 `screen>` 줄이 하나씩 는다. `drainUevents`가 `bool`(power_supply를
-  봤거나 `ENOBUFS`)을 돌려주고, 배터리 블록은 그 바로 뒤, `if (!needs_redraw)`보다
+  봤거나 `ENOBUFS`)을 돌려주고, `pollBattery`는 그 바로 뒤, `decideFrame`보다
   앞이어야 한다 — 뒤면 uevent나 timeout으로만 깬 바퀴에서 칸을 고쳐도 화면이 안 바뀐다.
   poll timeout은 `battery.pollTimeout`이고 배터리가 없으면 `-1`이다. `drawStatus`가
   칸을 col `cols - 4`에 그리고, `dumpStatus`의 메모는 칸의 글자와 갈래를
