@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "첫 공개 버전 TARS 0.1.0(2026-10-11) — tag v0.1.0 = 0a6d4bc, GitHub release에 tars-0.1.0-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "첫 공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc)과 0.1.1(2026-10-24, tag v0.1.1 = 1f2978f) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -21,6 +21,19 @@ metadata:
 
 notes는 한국어로 썼다 — 다운로드 · 체크섬 확인, 요구 사항(x86_64 · 메모리 1GB · 실기는 Secure Boot 끔), QEMU · USB `dd` ·
 `tars-install`, 기능 갈래, 알려진 한계. 자세한 절차는 tag에 고정된 `docs/guides/running-tars.md` 링크로 넘긴다.
+
+## 0.1.1 (2026-10-24)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.1.1` (annotated) → `1f2978f` (`Release 0.1.1`, ZU-M2 뒤. 그 커밋의 루트 게이트 22/22) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.1 (Latest) |
+| ISO | `tars-0.1.1-x86_64.iso`, 112,136,192 B (0.1.0보다 1.0MB 큼 — terminal의 디버그 섹션 4.6MB가 gzip 뒤 그만큼) |
+| sha256 | `c749d8fc74d39b3d6627723fc9c52c0bffc9cd5d9b5629ffa4af3320734077be` |
+
+0.1.0 뒤의 세 서브프로젝트(BV · GF · ZU)를 담은 도구 층 갱신이다. 노트는 0.1.0 것을 두고 "0.1.0에서 달라진 것" 절을 앞에 더했다.
+절차는 아래 1~6을 그대로 밟았고(1의 게이트는 `VERSION` 커밋에서 다시 돌렸다, 10분 34초), 7(소개 페이지)은 사용자 결정으로 건너뛰었다.
+smoke 로그 첫 줄이 `tars-init: starting as PID 1 (TARS 0.1.1)`로 꼬리표가 없었다 — BV의 버전 글자가 처음으로 릴리즈에서 쓰였다.
 
 ## 배포 절차 (다음 버전도 이대로)
 

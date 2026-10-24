@@ -2,7 +2,7 @@
 
 ## 지금 상태 (2026-10-24)
 
-- 첫 공개 버전 0.1.0(2026-10-11) — tag `v0.1.0` = `0a6d4bc`, GitHub release에 `tars-0.1.0-x86_64.iso`와 `SHA256SUMS`.
+- 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`. 그 앞 0.1.0(2026-10-11)은 `0a6d4bc`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
 - 마지막으로 닫힌 것은 Zig Upgrade(ZU-M2, 2026-10-24)다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`(0.17 전환 커밋, PR #14519).
   깨진 자리와 대체는 `docs/decisions/project_zig_upgrade.md`의 표에 있고, 호스트 macOS의 0.17(`/opt/homebrew/bin/zig`)로
