@@ -1,21 +1,25 @@
-# HANDOFF: 열어 둔 서브프로젝트가 없다 — Zig 0.17 전환(ZU)을 닫았고, 점검이 남긴 후보와 실기 확인을 기다린다
+# HANDOFF: Screen Args(SA)가 열려 있다 — M0을 닫았고 M1 plan 초안이 있다
 
 ## 지금 상태 (2026-10-24)
 
-- 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`. 그 앞 0.1.0(2026-10-11)은 `0a6d4bc`.
+- 열린 서브프로젝트는 Screen Args(SA)다. design `docs/specs/2026-10-24-tars-screen-args-design.md`, 기억
+  `docs/decisions/project_screen_args.md`. SA-M0(2026-10-24, 루트 게이트 22/22)이 init → terminal argv 계약을
+  `shared/screen_args.zig` 한 파일로 모았다 — 두 build.zig가 `b.path("../shared/…")`로 named module로 붙이고, 양쪽은 옛 이름을
+  별명으로 다시 내보낸다. argv의 모양(위치 아홉 칸)과 로그 줄은 그대로다.
+- 다음은 SA-M1 — `docs/plans/2026-10-24-tars-screen-args-sa-m1.md`가 초안이다(M0 게이트가 도는 동안 썼다. 게이트 결과로 바뀔 자리는
+  없었다). `Args` 구조체와 `encode` · `decode`를 공유 파일에 더해 init의 쓰는 자리 둘(부팅 · `doReloadTerminal`)과 terminal의 읽는
+  자리가 한 함수 쌍을 거치게 한다. 걸리는 자리는 reload가 장치 경로 칸을 그대로 되돌려 넣어야 한다는 것(plan 확정 4)과
+  `TERMINAL_PATH`를 공유 파일로 옮기는 것(Task 2)이다. 구현 전에 plan을 한 번 더 읽고 시작한다.
+- 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
-- 마지막으로 닫힌 것은 Zig Upgrade(ZU-M2, 2026-10-24)다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`(0.17 전환 커밋, PR #14519).
-  깨진 자리와 대체는 `docs/decisions/project_zig_upgrade.md`의 표에 있고, 호스트 macOS의 0.17(`/opt/homebrew/bin/zig`)로
-  `ast-check` · `fmt --check`를 돌릴 수 있다(빌드는 컨테이너가 한다). 같은 날 그 앞에 Gate Flakes(GF-M0~M2)를 닫았다. 루트 게이트는 initrd를 prebuild 한 번만 만들고 회차마다 inode를
-  대조하며, 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`)에 남고, `gate_lib.sh`의 `tlog`가
-  커널 printk가 자른 `terminal:` 줄을 잇는다. 그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
-- 2026-10-24에 프로젝트 점검을 했다. 찾은 여덟 가운데 둘(문서 · shellcheck 정리 `5dd567c` · `523c909`, 게이트 간헐 GF)을 닫았고
-  나머지는 아래 "다음 후보"의 첫 항목이다.
+- 같은 날 그 앞에 Zig Upgrade(ZU-M2)와 Gate Flakes(GF-M0~M2)를 닫았다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`. 호스트 macOS의
+  0.17(`/opt/homebrew/bin/zig`)로 `fmt --check` · `ast-check`를 돌릴 수 있고(명령은 lessons "범용 명령", `shared/`도 포함), 0.17
+  `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
+  그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(ZU-M2): 22/22, prebuild 364초(빈 `zig-pkg`를 다시 받은 회차, 평소 약 4분) + lanes 305초. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
+  마지막 루트 게이트(SA-M0): 22/22, prebuild 339초 + lanes 294초. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
   `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절. 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
-- 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
-  alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
+- 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
@@ -31,15 +35,14 @@
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
-## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
+## 다음 후보 (SA 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것, 추천 순서대로. (1) init → terminal 인터페이스가 위치 기반 argv 9칸이고 자판 enum 이름을 문자열로
-  넘겨 컴파일러가 짝을 못 잡는다 — `key=value` 인자나 두 쪽이 import하는 공유 모듈 하나. (2) `terminal/src/main.zig`의 `main`이
-  1,088줄(2816~3904), init의 `main`이 404줄 — 설정 꺼내기 · 장치 열기 · 이벤트 루프로 나눈다. 다음 기능(부분 갱신 · WP-M3)이
-  전부 이 함수에 더해질 자리다. (3) 호스트 검사가 없는 큰 파일 셋 `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 —
-  인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다. (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나
-  분량이다. (5) `.github`가 없다 — Dockerfile 빌드 · 호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는
-  지금은 선택).
+- 2026-10-24 점검이 남긴 것 가운데 남은 넷, 추천 순서대로. (2) `terminal/src/main.zig`의 `main`이 1,100줄쯤, init의 `main`이
+  400줄쯤 — 설정 꺼내기 · 장치 열기 · 이벤트 루프로 나눈다. 다음 기능(부분 갱신 · WP-M3)이 전부 이 함수에 더해질 자리다.
+  SA-M1이 끝나면 terminal `main`의 argv 읽는 자리가 `decode` 한 줄이라 그 출발점이 된다. (3) 호스트 검사가 없는 큰 파일 셋
+  `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 — 인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다.
+  (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
+  호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
@@ -67,6 +70,8 @@
 - Docker는 OrbStack이다(메모리 12GB). 소켓이 없다고 나오면 `orb start`.
 - 새로 받은 저장소는 이미지부터 굽는다(Dockerfile). 첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
+- `shared/`는 init과 terminal이 함께 컴파일하는 파일의 자리다. 순수해야 한다(libc · 로그 없음) — init이 libc를 안 링크한다.
+  그 파일을 고치면 두 빌드가 다시 돈다(`zig build --summary all`로 보인다).
 - initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(lessons).
 - 실칩 무선은 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 동글이 생기면 그것이 새 사실이다.
 - decisions의 함정 · 결정만 남기는 정리는 2026-10-20에 남은 여덟도 끝냈다. 아직 10KB를 넘는 다섯(`project_real_machine` ·

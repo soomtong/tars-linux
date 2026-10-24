@@ -403,6 +403,11 @@ debugfs -w -R "write <호스트 파일> <디스크 안 경로>" <이미지>
 docker run -d --name tars-measure tars-devcontainer sleep 7200
 docker exec tars-measure bash -c 'apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish >/dev/null 2>&1'
+
+# 호스트 0.17로 서식 · 문법 검사(빌드는 컨테이너가 한다). shared/도 함께 — 사람이 돌리는
+# 검사라 목록에 없으면 영영 안 돈다(SA-M0). zsh에서는 파일 목록을 배열로 넘긴다.
+/opt/homebrew/bin/zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared
+for f in init/src/*.zig terminal/src/*.zig shared/*.zig; do /opt/homebrew/bin/zig ast-check "$f" || echo "FAIL $f"; done
 ```
 
 편집 스크립트를 셸 heredoc으로 감쌀 때 바깥 구분자가 안쪽 내용의 `EOF`와 겹치면
@@ -1284,6 +1289,16 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 (`rg -n 'fn copyApply' terminal/src/vt.zig`). 아래는 어느 파일이 무엇을
 책임지고, 무엇을 건드리면 무엇이 깨지는가의 지도다.
 
+### 두 프로그램이 함께 컴파일하는 것 (`shared/`)
+
+- `screen_args.zig` — init이 terminal에 execve argv로 넘기는 값의 계약(SA-M0). 값의 종류 다섯(`Keyboard` ·
+  `HangulLayout` · `LatinLayout` · `ToggleKey` · `Toggles`) · `ClipboardScope` · 자리 `Slot`과 `ARGC` · 손으로 띄울 때의
+  기본값. 두 build.zig가 `b.path("../shared/screen_args.zig")`로 `screen_args`라는 named module로 붙이고, 그 파일을 트리에
+  둔 모듈마다 `addImport`한다(빠뜨리면 컴파일러가 모듈 이름을 말한다). 순수 파일이다 — libc도 로그도 없다. init 쪽
+  `config.zig`와 terminal 쪽 `hangul` · `input` · `clipboard`는 옛 이름을 별명으로 다시 내보낸다. 왕복 검사
+  `screen_args_test.zig`는 init의 `zig build test`에만 든다. 칸을 더할 때는 `Slot`에 이름을 더하고 `ARGC`를 올린다 —
+  서비스 셋의 `*_ARGV` 리터럴이 길이가 안 맞아 컴파일에서 막히고, 그것이 "함께 늘리라"는 알림이다.
+
 ### 게스트 화면 쪽 (`terminal/src/`)
 
 - `hangul.zig` — 한글 오토마타(HI-M0~M3). 시스템 콜도 `vt.zig`도 `drm.zig`도
@@ -1292,13 +1307,17 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   줄을 끼우면 컴파일이 막힌다. `Syllable`은 인덱스를 담고 `jong`의 null이
   "받침 없음"이다(0을 안 쓴다). `codepoint()`는 못 그리는 조합이면 null이고
   `feedConsonant`가 그 성질을 쓴다. `splitVowel`은 앞 모음만, `splitFinal`은
-  앞뒤 둘 다 준다. `erase`의 null이 "조합 중이 아니다".
+  앞뒤 둘 다 준다. `erase`의 null이 "조합 중이 아니다". `Layout`은 SA-M0부터
+  `shared/screen_args.zig`의 `HangulLayout` 별명이고, 그 위에 얹혀 있던 `lookup` ·
+  `nonSyllable` · `carriesFinal` · `tenseByRepeat`는 자유 함수다(`hangul.lookup(layout, ch)`).
 - `input.zig` — evdev 코드를 셸이 아는 바이트로 번역한다. `keymap`에도
   `comptime` 앵커가 있다. `handleKey`의 분기 순서가 계약이다 — find →
   copy 표 → 한글 층 → `chord()`. 프롬프트가 열려 있을 때 `n`은 `.find_next`가
   아니라 글자 `'n'`이어야 하므로 순서를 뒤집으면 검색어에 `n`을 못 친다.
   `Keys.hangul`은 값이 아니라 사실만 나르고, `readKeys`가 그 키의 결과보다
-  먼저 `takeCommit()`을 out에 옮긴다 — 이 순서도 계약이다.
+  먼저 `takeCommit()`을 out에 옮긴다 — 이 순서도 계약이다. `LatinLayout` · `Toggles` ·
+  `TOGGLE_ARG_MAX`는 SA-M0부터 `shared/screen_args.zig`의 별명이고 `parseToggles` · `togglesArg`는
+  없다 — `Toggles.parse(.argv, text, sink)` · `toggles.arg(&buf)`다.
 - `vt.zig` — `Screen`. `cells()`가 색·inverse·매치·선택·preedit·커서를 전부
   해소해 `CellGlyph`로 넘긴다. 매치 층은 `break`를 안 한다(목록 순서가 색을
   정한다). `copyApply`는 모든 이동 수단이 통과하는 문이고,
@@ -1359,7 +1378,8 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `escCancels` · `phaseAfter`(자식의 표준 에러 두 줄이 단계를 옮긴다) · `outcome`(종료 코드 → 넣기 · 조용 · 알림) · `isPassword`
   (`ICANON && !ECHO`) · `sanitize`. `dictation_test`가 본다. 시스템 콜은 전부 `main.zig`의 받아쓰기 절(fork · poll 두 칸 · `waitpid` ·
   `pasteParts`)에 있다. 트리거는 `input.zig`의 `handleKey` 0번 단계(`KEY_RIGHTMETA` 갈래), Esc는 1.3번 단계 — 분기 순서가 계약이다.
-- `clipboard.zig` — 클립보드 칸과 범위(CB-M0). 순수 모듈이고 `clipboard_test`가
+- `clipboard.zig` — 클립보드 칸과 범위(CB-M0. `Scope`는 SA-M0부터 `shared/screen_args.zig`의
+  `ClipboardScope` 별명이다). 순수 모듈이고 `clipboard_test`가
   호스트에서 본다(누수는 `DebugAllocator`). `Clipboard.set`이 옛것을 해제하므로
   `text()`가 준 슬라이스는 다음 `set`까지만 유효하다. 칸을 고르는 판단은
   `pick(scope, shared, own)` 한 줄이고 `main.zig`의 `Clips.of`가 그것을 부른다 —
@@ -1425,7 +1445,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `install.zig` — 따로 빌드되는 실행 파일 `tars-install`(DI). GPT에 ESP(p1)와
   `tars-config`(p2)를 만든다. `storage.zig`의 후보 목록을 같이 쓰고, 안전은 라벨이
   지킨다. 외부 도구(`sfdisk` · `mkfs.*`)를 `wait4`로 기다리는 헬퍼가 여기 있다.
-- `config.zig` — `/config/tars.conf` 파서 한 벌. 키 열(TS-M1이 `ntp`을,
+- `config.zig` — `/config/tars.conf` 파서 한 벌. 키보드 · 자판 둘 · 전환 키 · 클립보드 범위의 enum은
+  SA-M0부터 `shared/screen_args.zig`에 있고 여기서는 별명이다(`hangul_toggle`의 파싱은
+  `Toggles.parse(.file, value, LogUnknownToggle{})`). 키 열(TS-M1이 `ntp`을,
   TS-M3이 `timezone`을, FW-M1이 `firewall`을 더했다. `Ntp`는 union이고 값 셋 중 하나가 주소다 —
   `parseIpv4`가 여기 사는 이유는 import 방향이다. `Timezone`은 배열 64바이트를
   가진 struct이고 값을 해석하지 않는다 — 모양만 보고 파일은 `main.zig`가 연다). `rcSeed()`가 seed rc를
