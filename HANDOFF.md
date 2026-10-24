@@ -1,15 +1,17 @@
-# HANDOFF: 열어 둔 서브프로젝트가 없다 — 실기 확인과 다음 후보를 기다린다
+# HANDOFF: 열어 둔 서브프로젝트가 없다 — 점검이 남긴 후보와 실기 확인을 기다린다
 
-## 지금 상태 (2026-10-20)
+## 지금 상태 (2026-10-24)
 
 - 첫 공개 버전 0.1.0(2026-10-11) — tag `v0.1.0` = `0a6d4bc`, GitHub release에 `tars-0.1.0-x86_64.iso`와 `SHA256SUMS`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
-- 마지막으로 닫힌 것은 Build Version(BV-M0, 2026-10-20)이다. 저장소 뿌리 `VERSION`(지금 `0.1.0`)과 git 꼬리표가
-  `tars-config version`과 부팅 첫 줄 `tars-init: starting as PID 1 (TARS <ver>)`에 나온다. 그 전의 서브프로젝트는
-  `docs/guides/completed.md`의 표에 있다.
+- 마지막으로 닫힌 것은 Gate Flakes(GF-M0~M2, 2026-10-24)다. 루트 게이트는 initrd를 prebuild 한 번만 만들고 회차마다 inode를
+  대조하며, 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`)에 남고, `gate_lib.sh`의 `tlog`가
+  커널 printk가 자른 `terminal:` 줄을 잇는다. 그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
+- 2026-10-24에 프로젝트 점검을 했다. 찾은 여덟 가운데 둘(문서 · shellcheck 정리 `5dd567c` · `523c909`, 게이트 간헐 GF)을 닫았고
+  나머지는 아래 "다음 후보"의 첫 항목이다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(BV-M0): 1회차 20/22(PM · UT가 병렬 initrd 경합으로 — lessons "이월 숙제" BV), 2회차 22/22, 약 10분.
-  게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절.
+  마지막 루트 게이트(GF-M2): 22/22, prebuild 약 4분 + lanes 약 5분. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
+  `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절. 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
   alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
 
@@ -29,6 +31,13 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
+- 2026-10-24 점검이 남긴 것, 추천 순서대로. (1) init → terminal 인터페이스가 위치 기반 argv 9칸이고 자판 enum 이름을 문자열로
+  넘겨 컴파일러가 짝을 못 잡는다 — `key=value` 인자나 두 쪽이 import하는 공유 모듈 하나. (2) `terminal/src/main.zig`의 `main`이
+  1,088줄(2816~3904), init의 `main`이 404줄 — 설정 꺼내기 · 장치 열기 · 이벤트 루프로 나눈다. 다음 기능(부분 갱신 · WP-M3)이
+  전부 이 함수에 더해질 자리다. (3) 호스트 검사가 없는 큰 파일 셋 `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 —
+  인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다. (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나
+  분량이다. (5) `.github`가 없다 — Dockerfile 빌드 · 호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는
+  지금은 선택).
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.

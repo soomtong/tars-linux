@@ -1,8 +1,8 @@
 # TARS Gate Flakes — Design
 
 Date: 2026-10-24
-Status: GF-M0 끝(2026-10-24, 루트 게이트 22/22, `skipping initrd` 22줄, inode 대조 22회차 통과). GF-M1은
-`docs/plans/2026-10-24-tars-gate-flakes-gf-m1.md`.
+Status: 끝났다(2026-10-24, GF-M0 · M1 · M2 — 하루에). M0 루트 게이트 22/22, M1 첫 판 21/22(PD가 printk 자름으로 — 그 로그가 M2를
+열었다), M1 · M2를 함께 닫은 판 22/22. plan은 `-gf-m0.md` · `-gf-m1.md` · `-gf-m2.md`. 기억은 `docs/decisions/project_gate_flakes.md`.
 
 2026-10-24의 프로젝트 점검에서 사용자가 골랐다. 점검이 찾은 "보강할 것" 여덟 가운데 둘째다 — 첫째(문서 · 스크립트 정리)는
 `5dd567c` · `523c909`로 끝났다.
@@ -59,6 +59,19 @@ Status: GF-M0 끝(2026-10-24, 루트 게이트 22/22, `skipping initrd` 22줄, i
 9. dictation B4의 둘째 `got[]` 기다림은 `for _ in $(seq 1 100); do … sleep 0.1; done`으로 10초다. 바로 위의 `refused password at=insert`
    기다림은 20초(`wait_count … 1 20`)다. 같은 검사 안에서 창의 길이가 다른 이유는 없다.
 10. `check.sh` 590줄의 주석은 "prebuild 뒤에는 `skipping make`가 체인 수 × RUNS여야 한다"고 적었지만 그것을 세는 코드는 없다.
+
+GF-M1의 루트 게이트(2026-10-24, 21/22)가 남긴 로그에서 더 확인한 것.
+
+11. PD-M4가 빨개진 줄은 `terminal: pointer> at x=679 y=499 … ink=118[   12.315317] random: crng init done`이다. 커널 printk가 terminal의
+    줄 꼬리에 끼었고, `wait_for_at`의 패턴이 `ink=118$`로 줄 끝을 고정해 못 맞았다. AU-M2가 `screen>` 줄에서 본 자름과 같은 기계다.
+12. 같은 판의 시리얼 로그 57개에서 terminal 줄 안에 커널 시각 표식이 든 체인은 여섯이다(CM `style>` · CP `style>` · IP `pixel>` ·
+    PD `pointer>` · PM `scroll>` · TR). 빨개진 것은 그 줄의 끝을 대조한 PD 하나다 — 나머지는 그 줄을 안 읽었거나 앞 칸만 읽었다.
+13. `joined_screen_dump`는 `screen>` 줄만 잇는다. 체인이 `terminal:` 줄을 `grep -a … "$LOG"`로 직접 읽는 자리는 8체인 119곳
+    (copy 50 · pointer 44 · hangul 35 · render 34 · pane 24 · dictation 9 · config 4 · battery 3, `-q` · `-c`는 뺀 수)이고, 줄 전체를
+    견주는 자리는 pointer 16(`wait_for_at` 11 · `last_at` 등식 5) · battery 4다.
+14. 커널 콘솔을 `loglevel=4`로 조용히 하면 자름은 줄지만 pointer(`input: QEMU QEMU USB Mouse`) · audio · wifi(`usbcore: registered new
+    interface driver`)가 info 수준의 printk 줄을 판정에 쓰고 있어 그 셋을 먼저 게스트 안 `dmesg`로 옮겨야 한다. 이 서브프로젝트의
+    자리가 아니다.
 
 ## 목표
 
@@ -123,6 +136,21 @@ SEED · 디스크 이미지 사본이 남는다. `TMPDIR`을 bind mount로 바�
 같은 검사의 앞 기다림과 같은 길이로 맞춘다. 판정 글자는 그대로다. 이것만이 이 서브프로젝트가 고치는 판정이고, 근거는 BS 때 읽은
 로그다(`got[]`가 `ret`의 바로 다음 프레임에 있었다 — 글자가 비밀번호 프롬프트에 들어간 것이 아니다).
 
+### 결정 8. `gate_lib.sh`의 `tlog`가 모든 `terminal:` 줄의 커널 자름을 잇고, 직접 읽는 자리는 그것을 거친다
+
+`joined_screen_dump`의 잇기를 `screen>` 줄에서 모든 `terminal:` · `kms:` 줄로 넓힌 함수 `tlog`를 둔다. 시리얼 로그를 읽어 — 꼬리에
+커널 시각 표식(`[ *N.N] …`)이 붙은 terminal 줄은 그 조각을 떼고 다음 줄(잘린 나머지)을 이어 붙이며, 그 사이에 온 온전한 `tars-init:`
+줄은 건너뛴다 — 고친 로그를 그대로 찍는다. 뗀 커널 조각은 버리지 않고 바로 뒤에 제 줄로 다시 낸다 — pointer · audio · wifi가 커널
+줄을 세기 때문이다. `joined_screen_dump`는 `tlog | grep 'terminal: screen>' | from_terminal`이 되어 지금과 같은 글자를 낸다(진입
+검사 `require_screen_dump_joins`의 조각 넷이 그것을 지킨다).
+
+체인이 `grep -a … 'terminal: …' "$LOG"`로 읽는 119곳은 `tlog | grep -a … 'terminal: …'`이 된다. `-q` · `-c`는 바꾸지 않는다 — 줄의
+머리는 자름에도 남아 있어 수와 존재는 틀리지 않고, `-q`는 파이프 뒤에서 SIGPIPE가 `pipefail`에 걸린다([[project_gate_accuracy]]).
+`tail -n 1` · `head -n 1` · `tr` · `sed` 뒤가 붙은 자리는 그대로 붙는다.
+
+진입 검사 `require_screen_dump_joins`에 조각 둘을 더한다 — 꼬리 끝에서 잘린 `pointer> at` 줄(나머지가 빈 줄), 그리고 뗀 커널 조각이
+제 줄로 다시 나오는 것.
+
 ### 결정 7. render 28과 net 31은 건드리지 않는다
 
 원인을 모르는 판정을 넓히면 진짜 회귀를 가린다. 둘은 lessons "이월 숙제"에 그대로 두고, 다음에 빨개지면 결정 4가 남긴 로그부터
@@ -135,6 +163,8 @@ SEED · 디스크 이미지 사본이 남는다. `TMPDIR`을 bind mount로 바�
 - GF-M1 — 로그가 남는다. 결정 4 · 5 · 6과 render의 복사 삭제, lessons · README의 로그 절 갱신. 끝 조건은 루트 게이트 뒤
   `out/gate-logs/<시각>/`에 22체인의 디렉터리와 `times.tsv` · `prebuild.out`이 있고, `make check CHAIN=device` 뒤 `out/gate-logs/device/`에
   시리얼 로그가 있는 것. 통과한 체인도 남는다.
+- GF-M2 — 커널 printk가 자른 `terminal:` 줄을 읽는 쪽이 잇는다. 결정 8. 끝 조건은 `tlog`가 GF-M1 게이트의 PD 로그에서 `… ink=118`로
+  끝나는 at 줄을 내는 것, 진입 검사의 조각 여섯 통과, 루트 게이트 22/22(이 한 판이 M1도 함께 닫는다).
 
 ## 위험
 

@@ -50,6 +50,7 @@
 - [Seeding a config disk](docs/decisions/project_seeding_a_config_disk.md) — `debugfs`로 ext2 이미지에 파일을 써서 키를 시험한다(NW-M2, 2026-09-13)
 - [Gate Parallel](docs/decisions/project_gate_parallel.md) — prebuild 한 번 뒤 동시 `JOBS`줄, 1시간 → 10분(GP-M0~M2, 2026-10-10)
 - [Atomic Log Lines](docs/decisions/project_atomic_log_lines.md) — 시리얼 로그 한 줄을 write 한 번으로(AL-M0 · M1, 2026-10-07)
+- [Gate Flakes](docs/decisions/project_gate_flakes.md) — initrd는 prebuild 한 번, 로그는 `out/gate-logs/`에, 커널 자름은 `tlog`가 잇는다(GF-M0~M2, 2026-10-24)
 
 init · 설정 · 전원
 

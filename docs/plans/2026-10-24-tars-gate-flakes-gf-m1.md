@@ -2,7 +2,7 @@
 
 Date: 2026-10-24
 Design: `docs/specs/2026-10-24-tars-gate-flakes-design.md`
-Status: 쓰는 중(2026-10-24). GF-M0의 루트 게이트가 도는 동안 썼다 — 그 결과로 바뀌는 자리가 있으면 구현 전에 고친다.
+Status: 끝났다(2026-10-24). 첫 루트 게이트 21/22(PD-M4가 printk 자름으로 — 아래 실측), GF-M2와 함께 돈 둘째 판 22/22.
 
 ## 누가 무엇을 하나
 
@@ -101,4 +101,25 @@ design "닫을 때" 절 그대로 — 이 milestone이 GF의 마지막이다.
 
 ## GF-M1이 실측한 것
 
-(끝난 뒤 채운다.)
+| 항목 | 값 |
+|---|---|
+| `make check CHAIN=device` | 35초, `out/gate-logs/device/` 24KB(시리얼 로그 하나) |
+| `make check CHAIN=tools` | 66초, `out/gate-logs/tools/` 103MB(1d의 initrd 사본 98MB 포함) |
+| 루트 게이트 1판(2026-10-24 09:48 UTC) | 21/22 — PD-M4 하나 빨강. prebuild 257초 · lanes 289초 · `time: logs 0s` |
+| 옮긴 트리 `out/gate-logs/20261024-094856/` | 141MB. 체인 디렉터리 22 · 시리얼 로그 57 · `lane-*.out` 20 · `times.tsv` 22행 · `prebuild.out` · `failed` |
+| `skipping initrd` / `was rebuilt` / A=0 B=0 C=0 | 22 / 0 / 22 (GF-M0의 성질 그대로) |
+| dictation B4(결정 6) | 통과 — `a password prompt that appeared while speaking got nothing …` |
+
+PD-M4의 빨강은 M1의 변경과 무관하고, 옮긴 로그가 처음으로 쓰인 자리다. `wait_for_at`이 기다린 줄
+`^terminal: pointer> at x=679 y=499 … ink=118$`의 끝에 커널 printk가 끼어 있었다 —
+
+```
+terminal: pointer> at x=679 y=499 buttons=0 wheel=0 shown=1 ink=118[   12.315317] random: crng init done
+```
+
+AU-M2가 `screen>` 줄에서 본 것과 같은 자름이다(lessons "커널 printk가 terminal의 화면 줄을 가운데서 자른다"). `joined_screen_dump`는
+`screen>` 줄만 잇고, `pointer>` · `style>` · `pixel>` · `scroll>` 줄을 직접 읽는 자리는 그대로라 그 줄이 마지막 줄이면 한 번의 자름이
+곧 실패다. 같은 판의 로그 57개를 훑으니 terminal 줄 안에 커널 시각 표식이 든 체인이 여섯이었다(CM `style>` · CP `style>` · IP `pixel>` ·
+PD `pointer>` · PM `scroll>` · TR) — 빨개진 것은 그중 그 줄을 `$`로 대조한 PD 하나다. 커널 콘솔을 `loglevel=4`로 조용히 하는 길은
+pointer(`input: QEMU QEMU USB Mouse`) · audio · wifi(`usbcore: registered new interface driver`)가 info 수준의 printk를 판정에 쓰고
+있어 바로는 못 간다.

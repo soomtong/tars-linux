@@ -67,12 +67,13 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
 PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). 새 체인은 45495부터 쓴다.
 
-### 회차의 로그는 `<TMPDIR>/tars-gate.XXXXXX/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0)
+### 회차의 로그는 `out/gate-logs/<시각>/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0 · GF-M1)
 
 AL-M0부터 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>/<체인>-<회차>`를 주고, 체인이 `mktemp`로 만든 게스트 로그가
 전부 거기에 남는다(체인은 로그를 안 지운다 — 지우던 8체인 14자리를 AL-M0이 고쳤다. audio는 부팅 넷이 같은 파일을 덮어 써 마지막 하나만
-남아 있었다). 마지막 줄이 `(logs in /tmp/tars-gate.XXXXXX)`를 찍는다. 컨테이너 `/tmp`를 호스트에 묶어 돌리면(`-v <호스트>:/tmp`) 게이트가
-끝난 뒤에도 남는다 — TC-M3부터 lead가 그렇게 돌린다. 회차가 끝날 때마다 `cut log lines A=0 B=0 C=0` 한 줄이 찍힌다. A는 `terminal:` 줄
+남아 있었다). GF-M1부터 게이트가 어떻게 끝나든(초록 · 빨강 · Ctrl+C) EXIT trap이 그 트리를 저장소의 `out/gate-logs/<시작 시각>/`으로
+옮기고 `logs moved to …` 한 줄을 찍는다 — `--rm` 컨테이너의 `/tmp`를 호스트에 묶을 필요가 없다. 통과한 판도 남는다. 다음 게이트의
+`clean()`이 `out/`을 지우니 남길 판은 밖으로 옮긴다. `make check CHAIN=x`는 같은 것을 `out/gate-logs/<체인>/`에 둔다. 회차가 끝날 때마다 `cut log lines A=0 B=0 C=0` 한 줄이 찍힌다. A는 `terminal:` 줄
 안에 `tars-init:`이 낀 수, B는 그 반대(init 고유 `reload terminal: pid ` 줄 제외), C는 2048바이트를 넘어 ` [cut]`으로 잘린 줄이다. 셋 중 하나라도
 0이 아니면 그 회차는 FAIL이다. 체인이 빨갰을 때 이 줄이 0이면 끼어듦은 원인이 아니다 — 그 체인의 판정과 타이밍을 본다.
 
@@ -155,16 +156,18 @@ TR-M2 때 Chrome을 짚을 수 있었던 것은 assertion에 앱 이름이 찍�
 
 ### 게이트 로그를 조사하는 법
 
-각 체인은 시리얼 로그를 `mktemp` 파일에 담고 실패했을 때만 뿜는다.
-통과하면 `docker run --rm`과 함께 사라지므로, 특정 줄을 보려면 한 번의
-`docker run` 안에서 게이트를 돌리고 `/tmp/tmp.*`를 뒤져야 한다.
+각 체인은 시리얼 로그를 `mktemp` 파일에 담고 실패했을 때만 뿜는다. GF-M1부터
+그 파일이 호스트에 남는다 — 루트 게이트는 `out/gate-logs/<시각>/<체인>-<회차>/`,
+`make check CHAIN=x`는 `out/gate-logs/<체인>/`. 특정 줄은 거기서 찾는다.
 
 ```bash
-docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
-  bash copy/check.sh > /tmp/gate.out 2>&1
-  grep -ah "찾을 문구" /tmp/tmp.*
-'
+make check CHAIN=copy > /tmp/copy.out 2>&1
+grep -ah "찾을 문구" out/gate-logs/copy/tmp.*
 ```
+
+체인을 `docker run … bash copy/check.sh`로 직접 돌리면 `TMPDIR`을 주는 쪽이
+없어 예전처럼 컨테이너 `/tmp`에 쓰고 `--rm`과 함께 사라진다. 로그가 필요하면
+`make check`를 쓰거나 `-e TMPDIR=`로 bind mount 아래를 준다.
 
 `grep`에 `-a`를 반드시 붙인다. 로그에 NUL이 한 바이트라도 있으면 `grep`이
 파일을 binary로 취급해 `Binary file ... matches`만 뱉는다.
@@ -322,6 +325,15 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 `require_screen_dump_joins`가 잘린 조각 넷(안 잘림 · printk · init · init 조각과 온전한 tars-init 줄)을 QEMU 없이 0.1초에 보므로, 다른
 쓰기(dhcpcd `[pid]:` · sshd · 서비스)의 접두사를 더할 때 그 함수에 조각 하나를 함께 더한다.
 
+덧붙임(GF-M2, 2026-10-24). 자르는 것은 `screen>` 줄만이 아니다. GF-M1 루트 게이트의 pointer가 `terminal: pointer> at … ink=118[   12.315317]
+random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판의 로그 57개에서 terminal 줄 안에 커널 시각 표식이 든 체인이
+여섯이었다(style> · pixel> · scroll> · pointer>). `gate_lib.sh`의 `tlog`가 이제 모든 `terminal:` · `kms:` 줄을 같은 규칙으로 잇고(뗀 커널
+조각은 바로 뒤에 제 줄로 다시 낸다 — pointer가 `input: QEMU QEMU USB Mouse` 줄을 센다), 체인이 terminal 줄을 `grep -a … "$LOG"`로 직접
+읽던 119곳이 `tlog | grep -a …`가 됐다. `-q` · `-c`는 그대로다(머리는 안 잘리고, `-q`는 파이프 뒤에서 SIGPIPE). 위 "67곳" 처방은 이로써
+닫혔다. `tlog`는 1MB 로그에서 24ms(grep 8ms)라 폴링 0.1초 안이지만, "표지가 보일 때까지 기다린 뒤 마지막 줄을 읽는" 자리는 그 사이 새
+프레임의 부분 줄을 읽을 수 있다 — pointer `probe_result`가 그렇게 ''를 읽어 "표지가 든 마지막 줄"을 읽게 고쳤다. 새 읽기를 쓸 때는 기다린
+글자가 든 줄을 읽는다.
+
 덧붙임(RS-M2 · M3, 2026-10-11). 앞에 붙는 것도 있다. 콘솔(`/dev/console`)에 도는 둘째 fish의 프롬프트가 줄바꿈 없이 끝나
 바로 다음에 쓰인 terminal의 줄이 무엇이든 그 뒤에 붙는다(`ESC]133;A;…root@(none) ~# …ESC[=5u=terminal: …`). 콘솔 fish는 TCG에서
 늦게 떠 부팅 뒤 아무 때나 찍힌다. 전부터 있었는데 붙는 줄이 대개 `screen>`이라 곧 다음 프레임이 와서 안 보였고, RS-M2가 프레임을
@@ -351,24 +363,19 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 끝난 milestone의 측정 하네스는 여기 없다 — 각 plan의 Task에 글자 그대로 있다.
 
 ```bash
-# 통과한 회차의 시리얼 로그를 꺼내 온다. 체인이 mktemp로 컨테이너 /tmp에 쓰고
-# --rm과 함께 버리므로, 한 docker run 안에서 돌리고 복사해 나온다. 새 화면
-# 판정을 넣었으면 실패 대비가 아니라 기본 절차다.
-mkdir -p /tmp/run
-docker run --rm -v "$PWD":/workspace -v /tmp/run:/tmp/run -w /workspace \
-  tars-devcontainer bash -c '
-  bash net/check.sh > /tmp/run/chain.log 2>&1; echo "exit=$?"
-  n=0; for f in /tmp/tmp.*; do
-    if grep -a "tars-init" "$f" >/dev/null 2>&1; then n=$((n+1)); cp "$f" /tmp/run/serial_$n.log; fi
-  done'
+# 통과한 회차의 시리얼 로그를 본다. GF-M1부터 make check가 체인의 TMPDIR을
+# 끝에 out/gate-logs/<체인>/으로 옮기므로 따로 꺼낼 일이 없다. 새 화면 판정을
+# 넣었으면 실패 대비가 아니라 기본 절차다. 시리얼 로그는 tars-init 줄이 든 파일이다.
+make check CHAIN=net > /tmp/net.out 2>&1; echo "exit=$?"
+SERIAL="$(grep -al "tars-init" out/gate-logs/net/tmp.* | head -1)"
 
 # 흔들리는 검사를 잡을 때는 위를 여러 판 돌리고 죽은 판의 로그만 남긴다.
 
 # 그 로그에서 ANSI를 걷어내고 마지막 화면을 행으로 복원한다.
 # ⚠ tr '|'가 명령줄 안의 파이프 문자도 함께 쪼갠다(IN-M1 실측 9).
 perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?>=]*[a-zA-Z]//g;
-          s/\e[()][AB0]//g; s/\r/\n/g' /tmp/run/serial_1.log > /tmp/run/serial.clean
-grep -a "terminal: screen>" /tmp/run/serial.clean | tail -1 | tr '|' '\n' | tail -12
+          s/\e[()][AB0]//g; s/\r/\n/g' "$SERIAL" > /tmp/serial.clean
+grep -a "terminal: screen>" /tmp/serial.clean | tail -1 | tr '|' '\n' | tail -12
 
 # mutation은 사본을 만들어 -v로 덮는다. sd는 파일 인자를 in-place로 고치므로
 # cp를 먼저 하고 사본에 친다. 사본에 chmod +x를 잊지 않는다.
@@ -1150,21 +1157,16 @@ CM-M1도 CM-M2도 CN-M0도 CN-M1도 CS-M1도 프로브를 안 돌렸다. 대신
 
 ## 이월 숙제
 
-BV(2026-10-20)가 남긴 것.
+BV(2026-10-20)가 남긴 것 — GF-M0(2026-10-24)이 닫았다.
 
-- [ ] 병렬 레인이 `kernel/initrd.cpio`를 동시에 다시 조립하는 경합. BV-M0 루트 게이트 1회차에서 두 체인이 14 · 15초 만에 빨갰다 —
-      PM-M1은 `qemu: error reading initrd ../kernel/initrd.cpio: … No such file or directory`(게스트가 안 떴다), UT-M3은 검사 1d(c)가
-      `initrd.cpio.7IetxQ`를 "남은 임시 파일"로 셌다. 같은 트리의 2회차는 22/22 초록이다. 코드에 그 파일을 지우는 곳은 없다 —
-      (c)는 다른 레인이 쓰는 중인 임시 파일까지 세고, PM의 ENOENT는 바인드 마운트에서 rename 순간의 `open()`으로 본다. 다시 빨개지면
-      처방 후보는 둘: (c)가 자기 `make_initrd.sh`가 만든 이름만 보게 하는 것, 체인 안의 `make_initrd.sh`를 prebuild의 산출물이 있으면
-      건너뛰게 하는 것.
+- [x] 병렬 레인이 `kernel/initrd.cpio`를 동시에 다시 조립하는 경합(BV-M0 루트 게이트 1회차의 PM ENOENT · UT 1d(c)). 루트 게이트는
+      prebuild 뒤 `TARS_PREBUILT_INITRD=1`을 두어 체인의 `make_initrd.sh`가 건너뛰고, 회차마다 inode를 대조한다. tools 1d는 `TMPDIR`
+      아래 사본에 `INITRD_OUT`으로 만든다([[project_gate_flakes]]).
 
 BS(2026-10-09)가 남긴 것.
 
-- [ ] `dictation` 체인 부팅 B의 검사 B4(`read -s got something`)가 BS-M0 루트 게이트 1회차에서 한 번 빨갰다. 시리얼 로그에서 둘째
-      `got[]`는 `ret` 키의 바로 다음 프레임에 찍혀 있었다 — 글자가 비밀번호 프롬프트에 들어간 것이 아니라 게이트의 10초 창
-      (`for _ in $(seq 1 100)` · `sleep 0.1`)을 놓친 간헐이다. 그 체인만 두 번 다시 돌려 둘 다 초록이었다. 다시 빨개지면 그 창을
-      늘리는 것이 처방 후보다.
+- [x] `dictation` B4(`read -s got something`)의 10초 창 — GF-M1(2026-10-24)이 같은 검사의 앞 기다림과 같은 20초로 넓혔다. BS-M0
+      루트 게이트 1회차에서 한 번 빨갰고 로그의 둘째 `got[]`는 `ret` 바로 다음 프레임에 있었다(글자가 프롬프트에 들어간 것이 아니다).
 - [ ] 실기 노트북에서 볼 것 셋. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`으로 `Battery`가 있는지 본다(로그
       `terminal: battery> scan seen=… present=… pick=…`도 같은 것을 말한다). `capacity` 파일이 없는 배터리는 칸이 `  ?%`인 것이
       정상이다(ACPI의 `full_cap_broken`). 어댑터를 꽂았다 뺄 때 색이 곧바로 초록 · 회색으로 바뀌는지 본다 — 바뀌지 않으면 firmware가
@@ -1174,8 +1176,9 @@ VD(2026-10-06)가 남긴 것.
 
 - [ ] `render` 검사 28(vim의 `R` 뒤 underline 커서)이 VD-M2의 루트 게이트 2회차에서 한 번 빨갰다(`vt=block`인 채 15초). 앞선 루트 게이트
       여섯(열두 회차)과 그 뒤의 재실행은 초록이었고 M2는 terminal · 커널 · initrd 내용을 안 바꿨다 — 간헐이다. 시리얼 로그가 `mktemp`라
-      `R`이 vim에 닿았는지(`key>` 줄 · `-- REPLACE --`)를 못 봤다. `render/check.sh`의 `report_failure`가 이제 실패한 판의 시리얼 로그를
-      `out/render-failed-serial.log`에 남긴다 — 다음에 빨개지면 그 파일부터 본다. 다른 체인들의 `report_failure`도 같은 줄을 넣을 자리다.
+      `R`이 vim에 닿았는지(`key>` 줄 · `-- REPLACE --`)를 못 봤다. GF-M1(2026-10-24)부터 모든 체인의 로그가 `out/gate-logs/`에
+      남는다(루트 게이트는 `<시각>/TR-M2-<회차>/`) — 다음에 빨개지면 그 로그에서 `key>` 줄과 `-- REPLACE --`부터 본다. 판정은 안
+      넓혔다(원인을 모른다).
 - [ ] 정리의 상한 `cleanup_timeout`(기본 1.5초)이 실기의 첫 연결(DNS · TLS)을 덮는지는 게이트로 못 잰다. 실기에서 `cleanup timed out`이
       매번이면 값을 늘리거나 `cleanup = off`. 크면 연결을 붙잡아 두는 상주 프로세스(VD design 결정 1의 (d) · 위험 5)를 다시 연다.
 - [ ] 비밀번호 판정(`ICANON && !ECHO`)이 못 보는 자리 — 자기 편집기로 가리는 프롬프트(fish의 `read -s`)에는 글자가 들어간다(Enter는 안
@@ -1239,7 +1242,8 @@ PD(2026-10-05)가 남긴 것.
       `clock.prepare`는 부팅이 같은 꼴로 부른다. ntp 부팅(net 부팅 A)에 `set ntp=…` · `reload`를 얹으면 덮인다.
 - [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
       다시 빨개지면 진단의 세 덩어리(마지막 화면 · `cat /config/tars.conf` · `reload of` 뒤 tars-init 줄)로 가린다 — 가설은 "set이 파일을 못
-      바꿨거나 늦었다"(빨갰던 회차의 시리얼에 `reload of`만 있고 steer 줄이 없었다. 단독에서는 넷 중 영).
+      바꿨거나 늦었다"(빨갰던 회차의 시리얼에 `reload of`만 있고 steer 줄이 없었다. 단독에서는 넷 중 영). GF-M1부터 그 회차의
+      시리얼 로그가 `out/gate-logs/<시각>/TD-M2-<회차>/`에 남으니 진단 출력과 로그를 함께 본다.
 
 HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장은 당분간
 마일스톤에서 제거한다. 팥알입력기의 나머지 trait도 당분간 고려 대상 아님."
