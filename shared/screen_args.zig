@@ -233,11 +233,26 @@ pub const Slot = enum(u8) {
     /// `Toggles.arg`의 글자 — 파일의 `hangul_toggle`에 `esc_latin`을 합친 것.
     toggles = 7,
     clipboard = 8,
+
+    /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
+    /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
+    /// 다루므로 `Args`를 모르는 편이 맞다(SA-M1 plan 확정 5).
+    pub fn index(self: Slot) usize {
+        return @backingInt(self);
+    }
 };
 
-/// argv 배열의 길이. `[ARGC:null]?[*:0]const u8`가 init의 `Child.argv`와 서비스
-/// 셋의 `*_ARGV` 상수의 타입이다.
+/// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
+/// 타입이다.
 pub const ARGC = 9;
+
+/// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
+/// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
+pub const Argv = [ARGC:null]?[*:0]const u8;
+
+/// terminal 바이너리의 경로. `encode`가 0번 칸에 넣고 init의 `Child.path`가 같은 글자다 —
+/// 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다.
+pub const TERMINAL_PATH: [:0]const u8 = "/terminal";
 
 comptime {
     // 자리가 전부 배열 안에 있고 겹치지 않는다. enum이 값의 중복을 이미 막으므로
@@ -259,4 +274,95 @@ pub const default_keyboard: Keyboard = .apple;
 pub const default_hangul: HangulLayout = .shin_pcs;
 pub const default_latin: LatinLayout = .qwerty;
 pub const default_toggles_arg: []const u8 = LONGEST_TOGGLES;
+/// 위 글자를 집합으로 적은 것 — 다섯이 전부 켜진다. 둘이 같은 것은 `screen_args_test`가 본다.
+pub const default_toggles: Toggles = .{
+    .hangul_key = true,
+    .shift_space = true,
+    .capslock_tap = true,
+    .lctrl_tap = true,
+    .esc_latin = true,
+};
 pub const default_clipboard: ClipboardScope = .shared;
+
+/// terminal argv의 값 전체(SA design 결정 7). init이 채우고 terminal이 읽는 것은 이
+/// 구조체 하나이고, 칸 번호와 글자는 아래 `encode` · `decode` 안에만 있다.
+///
+/// 값을 타입으로 든다 — 전환 키는 `Toggles`(집합)이고 글자가 아니다. 글자는 `encode`
+/// 안에서만 생기고 `decode`가 되돌린다. 기본값이 없는 것은 일부러다: init이 필드 하나를
+/// 빠뜨리면 컴파일이 막혀야 한다. SA-M0까지는 `Slot`에 이름을 더하고 그 칸을 안 채워도
+/// 통과했다(null일 뿐이다). 없는 칸의 기본값은 `decode`의 일이다.
+///
+/// 포인터 셋(`shell_path` · `shell_flag` · `device_path`)은 소유하지 않는다. init에서는
+/// `main()`의 스택과 `Live`를 가리키고 프로세스 수명 내내 유효하다 — terminal에서는
+/// 커널이 준 argv다.
+pub const Args = struct {
+    shell_path: [*:0]const u8,
+    shell_flag: [*:0]const u8,
+    keyboard: Keyboard,
+    device_path: [*:0]const u8,
+    hangul: HangulLayout,
+    latin: LatinLayout,
+    toggles: Toggles,
+    clipboard: ClipboardScope,
+};
+
+/// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
+///
+/// `toggle_buf`는 호출자가 들고 argv가 살아 있는 동안 유지한다 — init에는 힙이 없다.
+/// 부팅은 `main()`의 `terminal_toggle_buf`, `reload terminal`은 `Live.toggle`이다
+/// (SA-M1 plan 확정 2). `Toggles.arg`가 그 버퍼에 글자를 쓰고 그 포인터가 7번 칸이다.
+pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
+    var v: Argv = @splat(null);
+    v[0] = TERMINAL_PATH.ptr;
+    v[Slot.shell.index()] = a.shell_path;
+    v[Slot.flag.index()] = a.shell_flag;
+    v[Slot.keyboard.index()] = a.keyboard.arg().ptr;
+    v[Slot.device.index()] = a.device_path;
+    v[Slot.hangul.index()] = a.hangul.arg().ptr;
+    v[Slot.latin.index()] = a.latin.arg().ptr;
+    v[Slot.toggles.index()] = a.toggles.arg(toggle_buf).ptr;
+    v[Slot.clipboard.index()] = a.clipboard.arg().ptr;
+    return v;
+}
+
+/// argv에서 `Args`를 되돌린다. 없는 칸(null)과 못 읽는 글자는 위 `default_*`다.
+///
+/// init이 화이트리스트를 이미 거쳤으므로 init이 띄운 terminal에서 기본값으로 떨어지는
+/// 길은 없다 — 그 길은 손으로 `./terminal`을 띄울 때를 위한 것이다. 그때 엉뚱한 글자를
+/// 주면 로그에 기본값의 이름이 찍힌다(글자가 아니라 읽은 결과를 찍는다). 전환 키의
+/// 모르는 이름은 버린다 — init이 이미 한 번 경고를 찍었다.
+///
+/// init의 `reload terminal`도 이것을 쓴다 — 떠 있는 argv를 되돌려 설정에서 온 필드만
+/// 바꾸고 다시 `encode`한다. 장치 경로가 그대로 되돌아가는 것이 "설정이 아니라 안
+/// 건드린다"를 코드로 세우는 자리다(plan 확정 4).
+pub fn decode(v: Argv) Args {
+    return .{
+        .shell_path = v[Slot.shell.index()] orelse default_shell_path,
+        .shell_flag = v[Slot.flag.index()] orelse default_shell_flag,
+        .keyboard = enumAt(Keyboard, v, .keyboard, default_keyboard),
+        .device_path = v[Slot.device.index()] orelse default_device_path,
+        .hangul = enumAt(HangulLayout, v, .hangul, default_hangul),
+        .latin = enumAt(LatinLayout, v, .latin, default_latin),
+        .toggles = if (v[Slot.toggles.index()]) |t|
+            Toggles.parse(.argv, std.mem.span(t), ignore_unknown)
+        else
+            default_toggles,
+        .clipboard = enumAt(ClipboardScope, v, .clipboard, default_clipboard),
+    };
+}
+
+/// `decode`의 enum 칸 하나.
+fn enumAt(comptime T: type, v: Argv, s: Slot, default: T) T {
+    const raw = v[s.index()] orelse return default;
+    return std.meta.stringToEnum(T, std.mem.span(raw)) orelse default;
+}
+
+/// 커널이 준 argv(`std.process.Init.minimal.args.vector`, 길이가 가변인 슬라이스)를
+/// `decode`가 받는 아홉 칸으로 옮긴다. 앞 `ARGC`칸까지만 보고 남는 칸은 null이다 —
+/// 손으로 띄우면 인자가 없거나 적고, 더 많은 인자는 뜻이 없다(plan 확정 3).
+pub fn argvOf(args: []const [*:0]const u8) Argv {
+    var v: Argv = @splat(null);
+    const n = @min(args.len, ARGC);
+    for (v[0..n], args[0..n]) |*dst, src| dst.* = src;
+    return v;
+}

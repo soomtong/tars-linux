@@ -361,19 +361,14 @@ const Rescue = struct {
 
 /// 위 슬롯 둘. terminal의 것은 `screen_args.Slot`에서 온다(SA-M0) — terminal이 같은
 /// enum으로 그 자리를 읽으므로 어긋날 수 없다. 콘솔 셸의 것은 init 혼자 짓고 혼자
-/// 쓰는 자리라 여기 숫자로 남는다.
-const TERMINAL_FLAG_SLOT: usize = slot(.flag);
+/// 쓰는 자리라 여기 숫자로 남는다. SA-M1부터 init이 `Slot`을 직접 보는 자리는 이 한
+/// 줄뿐이다 — 부팅과 `doReloadTerminal`은 `screen_args.encode` · `decode`를 거친다.
+const TERMINAL_FLAG_SLOT: usize = screen_args.Slot.flag.index();
 const CONSOLE_FLAG_SLOT: usize = 1;
 
-/// terminal argv의 자리 이름 → 배열 인덱스. 부팅(`main`) · `doReloadTerminal` · 탈출로가
-/// 전부 이것으로 칸을 가리킨다. SA 전에는 여기 상수 일곱과 terminal의 `args[n]` 여덟이
-/// 주석으로만 묶여 있었다.
-fn slot(s: screen_args.Slot) usize {
-    return @backingInt(s);
-}
-
-/// terminal은 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다.
-const TERMINAL_PATH: [:0]const u8 = "/terminal";
+/// terminal은 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다. 글자는
+/// `encode`가 0번 칸에 넣는 것과 같아야 하므로 공유 파일의 것을 쓴다(SA-M1).
+const TERMINAL_PATH = screen_args.TERMINAL_PATH;
 
 /// 이 초를 못 채우고 죽으면 "빨리 죽었다"로 센다.
 const FAST_EXIT_SECONDS: isize = 10;
@@ -399,7 +394,8 @@ const Child = struct {
     /// `ARGC` · `Slot`에 있고 terminal이 같은 것을 읽는다. 콘솔 셸은 1번 뒤를
     /// 전부 null로 둔다. 같은 타입을 쓰는 상수가 셋 더 있다(`clock.CHRONYD_ARGV` ·
     /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV`) — `ARGC`를 올리면 함께 늘어난다.
-    argv: [screen_args.ARGC:null]?[*:0]const u8,
+    /// terminal의 것은 SA-M1부터 `screen_args.encode`가 짓는다.
+    argv: screen_args.Argv,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -619,14 +615,21 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     const new = live.cfg;
     const shell = resolveShell(new.shell);
     const term = &children[0];
-    // `.device`(키보드 장치 경로)는 설정이 아니라 안 건드린다.
-    term.argv[slot(.shell)] = shell.path().ptr;
-    term.argv[slot(.flag)] = shell.configFlag(new.shell_config).ptr;
-    term.argv[slot(.keyboard)] = new.keyboard.arg().ptr;
-    term.argv[slot(.hangul)] = new.hangul_layout.arg().ptr;
-    term.argv[slot(.latin)] = new.latin_layout.arg().ptr;
-    term.argv[slot(.toggles)] = new.terminalToggles(&live.toggle).ptr;
-    term.argv[slot(.clipboard)] = new.clipboard.arg().ptr;
+    // SA-M1. 떠 있는 argv를 되돌려 설정에서 온 필드만 바꾸고 다시 짓는다. `device_path`
+    // (키보드 장치 경로)는 설정이 아니라 안 건드린다 — `decode`가 꺼낸 값이 그대로 다시
+    // 들어간다. SA-M0까지는 "그 칸을 대입하지 않는다"는 부재로만 표현됐다.
+    //
+    // `decode`가 전환 키 글자를 집합으로 읽은 뒤에 `encode`가 `live.toggle`에 새 글자를
+    // 쓰므로, 옛 argv가 그 버퍼를 가리키고 있어도(두 번째 reload부터) 겹쳐 쓰는 문제가 없다.
+    var a = screen_args.decode(term.argv);
+    a.shell_path = shell.path().ptr;
+    a.shell_flag = shell.configFlag(new.shell_config).ptr;
+    a.keyboard = new.keyboard;
+    a.hangul = new.hangul_layout;
+    a.latin = new.latin_layout;
+    a.toggles = new.screenToggles();
+    a.clipboard = new.clipboard;
+    term.argv = screen_args.encode(a, &live.toggle);
     term.rescue = if (live.mounted and new.shell_config == .on)
         .{ .slot = TERMINAL_FLAG_SLOT, .flag = shell.noConfigFlag() }
     else
@@ -1150,9 +1153,9 @@ pub fn main(init: std.process.Init.Minimal) void {
     const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
     // terminal에 가는 것은 위 목록에 `esc_latin`을 더한 것이다(EL design
     // 결정 1). 로그는 파일에 적힌 두 키를 따로 찍고, argv는 합친 것을 쓴다.
-    // 수명은 `toggle_buf`와 같다.
+    // 그 글자를 담는 버퍼다 — 아래 `screen_args.encode`가 여기에 쓰고 argv의
+    // 7번 칸이 이것을 가리킨다. 수명은 `toggle_buf`와 같다.
     var terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    const terminal_toggle_arg = cfg.terminalToggles(&terminal_toggle_buf);
     // TS-M1이 여덟째 키를 맨 뒤에 붙였다. 뒤여야 하는 이유는 위와 같다 —
     // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
     // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
@@ -1351,25 +1354,24 @@ pub fn main(init: std.process.Init.Minimal) void {
         shell.noConfigFlag()
     else
         null;
-    // 셸과 달리 폴백 검사(resolveShell 같은 것)가 없다. 키보드 종류는
-    // 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미 화이트리스트다.
-    const keyboard_arg = cfg.keyboard.arg();
-    // 자판 둘도 같은 성질이다 — enum이 화이트리스트이고, 확인할 파일이 없다
-    // (HI design 결정 7). 런타임 전환이 없으므로 여기서 한 번 정해진다.
-    const hangul_arg = cfg.hangul_layout.arg();
-    const latin_arg = cfg.latin_layout.arg();
-    // 클립보드 범위도 같은 성질이다(CB-M0).
-    const clipboard_arg = cfg.clipboard.arg();
-    var term_argv: [screen_args.ARGC:null]?[*:0]const u8 = @splat(null);
-    term_argv[0] = TERMINAL_PATH.ptr;
-    term_argv[slot(.shell)] = shell_path.ptr;
-    term_argv[slot(.flag)] = shell_flag.ptr;
-    term_argv[slot(.keyboard)] = keyboard_arg.ptr;
-    term_argv[slot(.device)] = keyboard_path.cstr();
-    term_argv[slot(.hangul)] = hangul_arg.ptr;
-    term_argv[slot(.latin)] = latin_arg.ptr;
-    term_argv[slot(.toggles)] = terminal_toggle_arg.ptr;
-    term_argv[slot(.clipboard)] = clipboard_arg.ptr;
+    // 키보드 종류 · 자판 둘 · 클립보드 범위는 셸과 달리 폴백 검사(resolveShell 같은
+    // 것)가 없다 — 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미
+    // 화이트리스트다(HI design 결정 7 · CB-M0). 런타임 전환이 없으므로 여기서 한 번
+    // 정해진다.
+    //
+    // SA-M1. 아홉 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
+    // 생긴다. 필드 하나를 빠뜨리면 컴파일이 막힌다(`Args`에 기본값이 없다). 0번 칸의
+    // `/terminal`도 `encode`가 넣는다(`TERMINAL_PATH`).
+    const term_argv = screen_args.encode(.{
+        .shell_path = shell_path.ptr,
+        .shell_flag = shell_flag.ptr,
+        .keyboard = cfg.keyboard,
+        .device_path = keyboard_path.cstr(),
+        .hangul = cfg.hangul_layout,
+        .latin = cfg.latin_layout,
+        .toggles = cfg.screenToggles(),
+        .clipboard = cfg.clipboard,
+    }, &terminal_toggle_buf);
 
     // TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리에 든다(reload design
     // 결정 5). 아래 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 앞이다.
@@ -1399,8 +1401,8 @@ pub fn main(init: std.process.Init.Minimal) void {
         // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
         // 이 인자는 셸로 새지 않는다.
         //
-        // SA-M0. 칸을 자리 번호가 아니라 `Slot` 이름으로 채운다 — terminal이 같은
-        // 이름으로 읽는다(`doReloadTerminal`도 같은 모양이다).
+        // SA-M1. 위 `screen_args.encode`가 지은 아홉 칸이다 — terminal이 같은 파일의
+        // `decode`로 읽는다(`doReloadTerminal`도 같은 함수 쌍을 쓴다).
         .argv = term_argv,
         .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
     };

@@ -797,17 +797,26 @@ pub const Config = struct {
     /// 근거는 위 `ClipboardScope`의 문서 주석에 있다(CB-M0).
     clipboard: ClipboardScope = .shared,
 
-    /// terminal의 argv로 넘기는 목록(EL design 결정 1). `hangul_toggle`의
-    /// 정규형에 `esc_latin`을 더한다 — 켜져 있으면 맨 뒤에 그 이름이 붙는다.
+    /// terminal에 가는 전환 키의 집합(EL design 결정 1). `hangul_toggle`에
+    /// `esc_latin`을 더한 것이다 — 파일에서는 둘이 따로 있는 키이고 argv에서는 한
+    /// 칸이다. SA-M1부터 `screen_args.Args.toggles`에 이 값이 들어가고 글자는
+    /// `encode`가 만든다.
+    pub fn screenToggles(self: Config) Toggles {
+        var t = self.hangul_toggle;
+        t.esc_latin = self.esc_latin == .on;
+        return t;
+    }
+
+    /// 위 집합의 글자 — 정규형에 `esc_latin`이 켜져 있으면 맨 뒤에 그 이름이 붙는다.
+    /// SA-M1부터 argv는 이것을 안 쓴다(`encode`가 직접 만든다). 남는 쓰임은
+    /// `reload terminal`의 로그 줄과 `config_test`다.
     ///
-    /// 로그의 `toggles=`는 이것이 아니라 `hangul_toggle.arg()`를 찍는다. 그
+    /// 부팅 로그의 `toggles=`는 이것이 아니라 `hangul_toggle.arg()`를 찍는다. 그
     /// 자리는 "파일의 `hangul_toggle`에 무엇이 적혔나"이고 `esc_latin=`은 줄
     /// 끝에 따로 찍힌다. 둘을 합친 모양은 terminal의 `hangul layout=… toggles=`
     /// 줄이 보여 준다.
     pub fn terminalToggles(self: Config, buf: []u8) [:0]const u8 {
-        var t = self.hangul_toggle;
-        t.esc_latin = self.esc_latin == .on;
-        return t.arg(buf);
+        return self.screenToggles().arg(buf);
     }
 };
 

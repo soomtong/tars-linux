@@ -118,5 +118,123 @@ pub fn main() !void {
         }
     }
 
+    // ── 6. Args — encode → decode 왕복(SA-M1, plan 확정 7) ──
+    //
+    // 기본값 전부인 것과 전부 다른 것 둘. 포인터 칸은 글자로 비교한다 — `encode`는
+    // 포인터를 그대로 넣으므로 같은 주소가 돌아오지만, 보려는 것은 글자다.
+    {
+        const all_default = sa.Args{
+            .shell_path = sa.default_shell_path,
+            .shell_flag = sa.default_shell_flag,
+            .keyboard = sa.default_keyboard,
+            .device_path = sa.default_device_path,
+            .hangul = sa.default_hangul,
+            .latin = sa.default_latin,
+            .toggles = sa.default_toggles,
+            .clipboard = sa.default_clipboard,
+        };
+        const all_other = sa.Args{
+            .shell_path = "/usr/bin/zsh",
+            .shell_flag = "none",
+            .keyboard = .pc,
+            .device_path = "/dev/input/event3",
+            .hangul = .dubeol,
+            .latin = .dvorak,
+            .toggles = .{ .shift_space = true },
+            .clipboard = .pane,
+        };
+        var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
+        for ([_]sa.Args{ all_default, all_other }) |a| {
+            const v = sa.encode(a, &tbuf);
+            // 0번은 terminal 자신이고, 아홉 칸이 전부 차 있다.
+            if (!std.mem.eql(u8, std.mem.span(v[0].?), sa.TERMINAL_PATH)) return error.ArgvZeroNotTerminal;
+            for (v, 0..) |slot, i| {
+                if (slot == null) {
+                    std.debug.print("FAIL: encode left slot {d} null\n", .{i});
+                    return error.EncodeLeftNull;
+                }
+            }
+            try expectArgsEql(sa.decode(v), a);
+        }
+        // `default_toggles`(집합)와 `default_toggles_arg`(글자)는 같은 것이다.
+        if (!std.mem.eql(u8, sa.default_toggles.arg(&tbuf), sa.default_toggles_arg)) return error.DefaultTogglesSplit;
+    }
+
+    // ── 7. decode — 빈 argv는 기본값, 엉뚱한 글자는 그 칸만 기본값 ──
+    {
+        const empty: sa.Argv = @splat(null);
+        const d = sa.decode(empty);
+        if (!std.mem.eql(u8, std.mem.span(d.shell_path), std.mem.span(sa.default_shell_path)) or
+            !std.mem.eql(u8, std.mem.span(d.shell_flag), std.mem.span(sa.default_shell_flag)) or
+            !std.mem.eql(u8, std.mem.span(d.device_path), std.mem.span(sa.default_device_path)) or
+            d.keyboard != sa.default_keyboard or d.hangul != sa.default_hangul or d.latin != sa.default_latin or
+            d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles))
+        {
+            return error.EmptyArgvNotDefault;
+        }
+
+        var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
+        var v = sa.encode(.{
+            .shell_path = "/usr/bin/zsh",
+            .shell_flag = "none",
+            .keyboard = .pc,
+            .device_path = "/dev/input/event3",
+            .hangul = .dubeol,
+            .latin = .dvorak,
+            .toggles = .{ .lctrl_tap = true },
+            .clipboard = .pane,
+        }, &tbuf);
+        v[sa.Slot.hangul.index()] = "bogus";
+        const b = sa.decode(v);
+        if (b.hangul != sa.default_hangul) return error.BogusEnumNotDefault;
+        if (b.keyboard != .pc or b.latin != .dvorak or b.clipboard != .pane or !b.toggles.lctrl_tap or b.toggles.hangul_key or
+            !std.mem.eql(u8, std.mem.span(b.device_path), "/dev/input/event3"))
+        {
+            std.debug.print("FAIL: a bogus hangul slot disturbed another field\n", .{});
+            return error.BogusEnumSpread;
+        }
+    }
+
+    // ── 8. argvOf — 짧은 슬라이스는 남는 칸이 null, 긴 슬라이스는 ARGC에서 잘린다 ──
+    {
+        const short = [_][*:0]const u8{ "/terminal", "/usr/bin/zsh" };
+        const v = sa.argvOf(&short);
+        if (!std.mem.eql(u8, std.mem.span(v[0].?), "/terminal")) return error.ArgvOfSlotZero;
+        if (!std.mem.eql(u8, std.mem.span(v[1].?), "/usr/bin/zsh")) return error.ArgvOfSlotOne;
+        for (v[2..], 2..) |slot, i| {
+            if (slot != null) {
+                std.debug.print("FAIL: argvOf filled slot {d} from a two-item slice\n", .{i});
+                return error.ArgvOfOverfilled;
+            }
+        }
+        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "extra" };
+        const w = sa.argvOf(&long);
+        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "h")) return error.ArgvOfLastSlot;
+        // 빈 슬라이스(인자가 하나도 없다)는 전부 null이고 decode가 기본값을 준다.
+        const none = sa.argvOf(&[_][*:0]const u8{});
+        if (sa.decode(none).keyboard != sa.default_keyboard) return error.ArgvOfEmpty;
+    }
+
     std.debug.print("screen_args_test: all checks passed\n", .{});
+}
+
+/// `Args` 둘이 같은가. 포인터 셋은 글자로, 나머지는 값으로 본다.
+fn expectArgsEql(got: sa.Args, want: sa.Args) !void {
+    const strs = [_][2][*:0]const u8{
+        .{ got.shell_path, want.shell_path },
+        .{ got.shell_flag, want.shell_flag },
+        .{ got.device_path, want.device_path },
+    };
+    for (strs) |pair| {
+        if (!std.mem.eql(u8, std.mem.span(pair[0]), std.mem.span(pair[1]))) {
+            std.debug.print("FAIL: Args string \"{s}\" came back as \"{s}\"\n", .{ pair[1], pair[0] });
+            return error.ArgsStringChanged;
+        }
+    }
+    if (got.keyboard != want.keyboard or got.hangul != want.hangul or got.latin != want.latin or
+        got.clipboard != want.clipboard or !std.meta.eql(got.toggles, want.toggles))
+    {
+        std.debug.print("FAIL: Args enum/toggle field did not round-trip\n", .{});
+        return error.ArgsValueChanged;
+    }
 }
