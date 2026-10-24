@@ -117,7 +117,7 @@ report_failure() {
     fi
   done
   echo "--- pane lines ---"
-  grep -a 'terminal: pane>' "$LOG" | tail -n 20
+  tlog | grep -a 'terminal: pane>' | tail -n 20
   echo "--- clip lines ---"
   grep -a -e 'terminal: clip' -e 'tars-init: config shell=' "$LOG" | tail -n 10
   echo "--- last screen ---"
@@ -155,7 +155,7 @@ exit_lines() {
 # `tr -d '\r'`은 값이 줄 끝이라 안 지우면 같아 보이는 값으로 실패하기
 # 때문이다(HI-M1 실측 4).
 last_pane_line() {
-  grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r'
+  tlog | grep -a 'terminal: pane> ws=' | tail -n 1 | tr -d '\r'
 }
 
 # 마지막 배치 줄에서 값 하나. ws는 `1/1`이라 `/`까지 받는다.
@@ -170,7 +170,7 @@ pane_origin() {
 
 # 마지막 프레임의 screen> 줄. 포커스 패널의 것이다(결정 7).
 last_screen() {
-  grep -a 'terminal: screen>' "$LOG" | tail -n 1
+  tlog | grep -a 'terminal: screen>' | tail -n 1
 }
 
 # 마지막 배치 줄이 패턴에 맞을 때까지 기다린다. 있으면 0, 15초가 지나면 1.
@@ -379,7 +379,7 @@ echo "=== Cmd+D inside copy mode is swallowed ==="
 PANES_BEFORE_COPY="$(pane_lines)"
 type_keys meta_l-shift-c
 sleep 1
-grep -aE 'terminal: copy> enter row=' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: copy> enter row=' >/dev/null ||
   report_failure "Cmd+Shift+C did not open copy mode, so the negative check below means nothing"
 type_keys meta_l-d
 sleep 1
@@ -450,9 +450,9 @@ type_keys meta_l-w
 # 순회의 다음이라 끝에서 감겨 focus=0(왼쪽)이었다.
 wait_for_pane 'panes=2 focus=1 rect=78,0 ' ||
   report_failure "Cmd+W did not leave 'panes=2 focus=1 rect=78,0' (the focus should go to the sibling that took the place)"
-grep -aE 'terminal: pane> hangup leaf=2 pid=[0-9]+' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: pane> hangup leaf=2 pid=[0-9]+' >/dev/null ||
   report_failure "no 'pane> hangup leaf=2' line, Cmd+W never sent SIGHUP"
-grep -aE 'terminal: pane> closed leaf=2' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: pane> closed leaf=2' >/dev/null ||
   report_failure "no 'pane> closed leaf=2' line, the pane was never closed"
 [ "$(exit_lines)" -eq $((EXITS_BEFORE + 1)) ] ||
   report_failure "expected one more 'child exited' line, got ${EXITS_BEFORE} -> $(exit_lines)"
@@ -507,14 +507,14 @@ echo "init restarted the terminal: spawned child pid ${BOOT_SPAWNS} -> $(spawn_l
 # 상태 줄의 `W` 칸은 워크스페이스가 둘 이상일 때만 뜬다(결정 8). 그 판정은
 # 마지막 `status> text=` 줄로 본다.
 status_text() {
-  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*text=//'
 }
 
 # 마지막 `status> caps ink` 줄의 `off=` 값. `CAPS` 칸이 꺼진 색으로 그려진
 # 픽셀 수다(IS-M1). hangul 체인의 같은 헬퍼와 같은 모양이다.
 caps_off() {
-  grep -a 'terminal: status> caps ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> caps ink ' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*off=([0-9]+).*/\1/'
 }
 
@@ -643,7 +643,7 @@ echo "=== Cmd+W on the second workspace's only pane ==="
 type_keys meta_l-w
 wait_for_pane 'ws=1/1 panes=1 ' ||
   report_failure "closing the second workspace's last pane did not bring 'ws=1/1 panes=1'"
-grep -aE 'terminal: pane> workspace closed ws=2' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: pane> workspace closed ws=2' >/dev/null ||
   report_failure "no 'pane> workspace closed ws=2' line"
 TEXT="$(status_text)"
 case "$TEXT" in
@@ -663,11 +663,11 @@ if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
 fi
 
 echo "pane> lines:"
-grep -a 'terminal: pane>' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: pane>' | tr -d '\r'
 echo "status> text lines:"
-grep -a 'terminal: status> text=' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: status> text=' | tr -d '\r'
 echo "clip> lines:"
-grep -a 'terminal: clip>' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: clip>' | tr -d '\r'
 
 # ══ 부팅 B: clipboard=pane (CB-M0) ═══════════════════════════════════════
 #
@@ -734,7 +734,7 @@ echo "=== boot B: the clipboard is per pane ==="
 grep -aE 'tars-init: config shell=.* clipboard=pane' "$LOG" >/dev/null ||
   report_failure "boot B: the tars-init: config line does not end with clipboard=pane"
 grep -aF 'terminal: clipboard scope=pane' "$LOG" >/dev/null ||
-  report_failure "boot B: init read clipboard=pane but terminal says '$(grep -a 'terminal: clipboard scope=' "$LOG" | tail -n 1 | tr -d '\r')'"
+  report_failure "boot B: init read clipboard=pane but terminal says '$(tlog | grep -a 'terminal: clipboard scope=' | tail -n 1 | tr -d '\r')'"
 echo "boot B: clipboard=pane reached the terminal"
 
 # ── 검사 14(음성): 다른 패널의 Cmd+V는 빈 클립보드다 ───────────────────
@@ -816,5 +816,5 @@ if [ "$(tr -cd '\000' < "$LOG" | wc -c)" -ne 0 ]; then
 fi
 
 echo "boot B clip> lines:"
-grep -a 'terminal: clip>' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: clip>' | tr -d '\r'
 echo "CB-M0 check PASS"

@@ -121,7 +121,7 @@ report_failure() {
     fi
   done
   echo "--- battery and status lines ---"
-  grep -aE 'terminal: (battery> |status> (text=|battery ))' "$LOG" | tr -d '\r' | tail -n 30
+  tlog | grep -aE 'terminal: (battery> |status> (text=|battery ))' | tr -d '\r' | tail -n 30
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -141,7 +141,7 @@ count_lines() {
 
 # 마지막 status> text= 줄의 값(hangul/check.sh의 status_text와 같다).
 status_text() {
-  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'
 }
 
 # 접두가 $1인 마지막 줄이 패턴(ERE) $2에 맞을 때까지 기다린다. 있으면 0, 30초가 지나면 1.

@@ -566,9 +566,9 @@ mkfs.ext2 -F -q -m 0 -L tars-dictate -d "$WORK/seed_b" "$DISK_B"
 report_b() {
   echo "FAIL(boot B): $1"
   echo "--- dictation lines ---"
-  grep -aE 'terminal: dictate>|tars-dictate:' "$LOG" | tr -d '\r' | tail -n 40
+  tlog | grep -aE 'terminal: dictate>|tars-dictate:' | tr -d '\r' | tail -n 40
   echo "--- status lines ---"
-  grep -aE 'terminal: status> (text=|dict ink)' "$LOG" | tr -d '\r' | tail -n 12
+  tlog | grep -aE 'terminal: status> (text=|dict ink)' | tr -d '\r' | tail -n 12
   echo "--- stub (boot B) ---"
   cat "$STUBLOG_B" 2>/dev/null
   echo "--- last screen ---"
@@ -591,8 +591,8 @@ wait_count() {
   return 1
 }
 # 상태 줄의 마지막 글자와 받아쓰기 칸의 마지막 픽셀 수.
-last_status() { grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'; }
-last_dict_ink() { grep -a 'terminal: status> dict ink=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*ink=([0-9]+).*/\1/'; }
+last_status() { tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'; }
+last_dict_ink() { tlog | grep -a 'terminal: status> dict ink=' | tail -n 1 | tr -d '\r' | sed -E 's/.*ink=([0-9]+).*/\1/'; }
 # 상태 줄이 패턴(ERE, 줄 끝까지)과 맞을 때까지 기다린다.
 wait_status() {
   local pattern="$1" secs="$2"
@@ -691,7 +691,7 @@ sleep 0.6
 echo "sendkey meta_r 80" >&3
 sleep 1
 [ "$(count_b 'terminal: dictate>')" -eq 0 ] \
-  || report_b "a single tap or two taps 0.6s apart started something ($(grep -a 'terminal: dictate>' "$LOG" | head -n 1))"
+  || report_b "a single tap or two taps 0.6s apart started something ($(tlog | grep -a 'terminal: dictate>' | head -n 1))"
 echo "a single tap and two taps 0.6s apart did nothing"
 
 # ── 검사 15: 두 번 → REC → 두 번 → 글자가 프롬프트에 들어간다 ──────────────
@@ -708,8 +708,8 @@ wait_count 'terminal: dictate> stop pid=' 1 10 || report_b "B1: the second doubl
 wait_count 'terminal: dictate> insert len=' 1 20 || report_b "B1: nothing was inserted"
 grep -aF 'tars-dictate: recording stopped by SIGINT after' "$LOG" >/dev/null \
   || report_b "B1: tars-dictate did not stop on SIGINT (did the signal reach the process group?)"
-grep -aE 'terminal: status> text=.*  WAIT' "$LOG" >/dev/null || report_b "B1: the status line never showed WAIT"
-INSERT1="$(grep -a 'terminal: dictate> insert len=' "$LOG" | head -n 1 | tr -d '\r' | sed -E 's/.*dictate> //')"
+tlog | grep -aE 'terminal: status> text=.*  WAIT' >/dev/null || report_b "B1: the status line never showed WAIT"
+INSERT1="$(tlog | grep -a 'terminal: dictate> insert len=' | head -n 1 | tr -d '\r' | sed -E 's/.*dictate> //')"
 [ "$INSERT1" = "insert len=27 bracketed=1 ws=1 leaf=0" ] || report_b "B1: the insert line is '${INSERT1}'"
 grep -aF 'tars-dictate: cleaned 18 characters into 17 in' "$LOG" >/dev/null || report_b "B1: tars-dictate did not clean the transcript"
 [ "$(chat_b_count)" -eq 1 ] || report_b "B1: the cleanup stub got $(chat_b_count) request(s), want 1"
@@ -767,7 +767,9 @@ wait_count 'terminal: dictate> refused password at=insert ws=1 leaf=0' 1 20 \
   || report_b "B4: the text was not refused at the password prompt"
 wait_status '  PASSWORD$' 10 || report_b "B4: the status line did not say PASSWORD ($(last_status))"
 type_keys ret
-for _ in $(seq 1 100); do [ "$(last_screen_count 'got[]')" -ge 2 ] && break; sleep 0.1; done
+# 창은 20초다 — 바로 위 refused 기다림과 같다. BS-M0 루트 게이트에서 10초 창을 한 번 놓쳤고 그때 로그의 둘째
+# got[]는 ret 바로 다음 프레임에 있었다(GF-M1 결정 6).
+for _ in $(seq 1 200); do [ "$(last_screen_count 'got[]')" -ge 2 ] && break; sleep 0.1; done
 [ "$(last_screen_count 'got[]')" -ge 2 ] || report_b "B4: read -s got something (the text went into the password prompt)"
 [ "$(count_b 'terminal: dictate> insert len=')" -eq 1 ] || report_b "B4: an insert line appeared"
 [ "$(stub_b_count)" -eq 2 ] || report_b "B4: the stub got $(stub_b_count) request(s), want 2"
@@ -788,8 +790,8 @@ type_keys meta_l-bracket_left
 wait_count 'terminal: pane> ws=1/1 panes=2 focus=0' 1 10 || report_b "B5: Cmd+[ did not move the focus"
 double_tap
 wait_count 'terminal: dictate> insert len=' 2 20 || report_b "B5: nothing was inserted"
-grep -a 'terminal: dictate> insert len=' "$LOG" | tail -n 1 | grep -aF 'ws=1 leaf=1' >/dev/null \
-  || report_b "B5: the text went to $(grep -a 'terminal: dictate> insert len=' "$LOG" | tail -n 1 | tr -d '\r')"
+tlog | grep -a 'terminal: dictate> insert len=' | tail -n 1 | grep -aF 'ws=1 leaf=1' >/dev/null \
+  || report_b "B5: the text went to $(tlog | grep -a 'terminal: dictate> insert len=' | tail -n 1 | tr -d '\r')"
 sleep 1
 [ "$(last_screen_count "$TEXT")" -eq 0 ] || report_b "B5: the focused pane (leaf 0) shows the text"
 type_keys meta_l-bracket_right

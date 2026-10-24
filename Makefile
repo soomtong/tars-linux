@@ -124,13 +124,14 @@ help:
 	@echo "  make check CHAIN=x"
 	@echo "      체인 하나만 돌린다. x는 check.sh가 있는 디렉터리 이름 중 하나:"
 	@echo "      $(CHAINS)"
-	@echo "      대개 2~8분이고, 그 체인이 스스로 빌드하므로 무엇을 고쳤든 그 체인만 다시 돌리면 된다"
+	@echo "      대개 2~8분이고, 그 체인이 스스로 빌드하므로 무엇을 고쳤든 그 체인만 다시 돌리면 된다."
+	@echo "      시리얼 로그는 out/gate-logs/<체인>/에 남는다(앞 판의 것은 지운다)"
 	@echo
 	@echo "  make gate"
 	@echo "      루트 check.sh — 모든 체인을 1회씩, 빌드 한 번 뒤 동시에(JOBS줄). 약 10분."
 	@echo "      회차와 동시 실행 수는 RUNS=N JOBS=N으로 넘긴다(기본 JOBS는 컨테이너 메모리로 정한다)."
 	@echo "      시작할 때 out/을 통째로 지우므로 설정 디스크를 out/ 밖에 두거나"
-	@echo "      CONFIG_DISK로 이 파일을 따로 잡아 둬라"
+	@echo "      CONFIG_DISK로 이 파일을 따로 잡아 둬라. 끝나면 회차별 시리얼 로그가 out/gate-logs/<시각>/에 남는다"
 	@echo
 	@echo "그 밖"
 	@echo
@@ -256,7 +257,7 @@ gate: container
 check: container
 	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
-	$(IN_CONTAINER) 'cd $(CHAIN) && ./check.sh'
+	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'
 
 shell: container
 	@$(DOCKER) run --rm -it -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash

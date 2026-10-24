@@ -77,9 +77,6 @@ cleanup() {
 trap cleanup EXIT
 
 report_failure() {
-  # 실패한 판의 시리얼 로그를 남긴다 — 검사 28(vim의 R)이 VD-M2 루트 게이트에서 한 번 빨갰는데 로그가 mktemp라 원인을 못 봤다.
-  # 루트 check.sh의 clean()이 out/을 지우므로 다음 판이 덮어쓴다.
-  mkdir -p ../out && cp "$LOG" ../out/render-failed-serial.log 2>/dev/null
   echo "FAIL: $1"
   echo "--- markers ---"
   local marker
@@ -99,9 +96,9 @@ report_failure() {
     fi
   done
   echo "--- style/pixel lines ---"
-  grep -aE 'terminal: (style|pixel)>' "$LOG" | tail -n 40
+  tlog | grep -aE 'terminal: (style|pixel)>' | tail -n 40
   echo "--- cursor lines ---"
-  grep -a 'terminal: cursor>' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: cursor>' | tail -n 5
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -159,7 +156,7 @@ sleep 3
 #
 # 팔레트 1번이 #CC6666이다. xterm 고전값(#CD0000)이 아니라는 것이 요점이다 —
 # 2026-08-23에 컨테이너에서 직접 재서 확인했다.
-STYLE_LINE="$(grep -aE 'terminal: style> [0-9]+,[0-9]+ fg=[0-9A-F]{6} bg=CC6666' "$LOG" | tail -n 1)"
+STYLE_LINE="$(tlog | grep -aE 'terminal: style> [0-9]+,[0-9]+ fg=[0-9A-F]{6} bg=CC6666' | tail -n 1)"
 if [ -z "$STYLE_LINE" ]; then
   report_failure "the parser never reported a red background (SGR 41 -> palette[1] = CC6666)"
 fi
@@ -247,7 +244,7 @@ echo "the parser assembled U+D55C from three UTF-8 bytes"
 #
 # 이 체인에서 TR-M1이 더하는 가장 값진 검사다. left만 있고 right가 0이면
 # 글자가 반쪽만 그려진 것인데, 셀 하나만 보는 검사로는 그것을 못 잡는다.
-INK_LINE="$(grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+D55C left=[0-9]+ right=[0-9]+' "$LOG" | tail -n 1)"
+INK_LINE="$(tlog | grep -aE 'terminal: ink> [0-9]+,[0-9]+ U\+D55C left=[0-9]+ right=[0-9]+' | tail -n 1)"
 if [ -z "$INK_LINE" ]; then
   report_failure "no ink line for U+D55C, so the renderer never treated it as a wide glyph"
 fi
@@ -281,7 +278,7 @@ echo "the next character sits two columns after U+D55C"
 # (한글 전체 = 2.06MB)는 font_test가 호스트에서 이미 재고, 여기서 보는 것은
 # 실사용량이다. 1MB를 넘으면 무언가 예상과 다르다 — 화면에 나오는 글자는
 # 수십 자이고 한 자가 평균 193바이트다.
-FONT_LINE="$(grep -a 'terminal: font>' "$LOG" | tail -n 1)"
+FONT_LINE="$(tlog | grep -a 'terminal: font>' | tail -n 1)"
 if [ -z "$FONT_LINE" ]; then
   report_failure "the font cache never reported its size"
 fi
@@ -315,7 +312,7 @@ sleep 4
 # 언제나 마지막 줄을 본다 — 이 로그는 매 프레임 찍히므로 마지막 줄이 곧
 # 지금의 상태다.
 scroll_field() {
-  grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | sed -E "s/.*$1=([0-9]+).*/\1/"
+  tlog | grep -a 'terminal: scroll>' | tail -n 1 | sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
 # 지금 화면에 밀려난 첫 줄이 있는지 본다. 있으면 0, 없으면 1을 돌려준다.
@@ -326,7 +323,7 @@ scroll_field() {
 # input/check.sh가 initrd 목록에서 이미 한 번 데인 함정이다.
 line_one_on_screen() {
   local last
-  last="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+  last="$(tlog | grep -a 'terminal: screen>' | tail -n 1)"
   case "$last" in
     *"screen> 1 |"* | *"| 1 |"* | *"| 1") return 0 ;;
     *) return 1 ;;
@@ -334,7 +331,7 @@ line_one_on_screen() {
 }
 
 # ── 검사 8: 스크롤백이 쌓였고 지금은 바닥이다 ──────────────────────────
-SCROLL_LINE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1)"
+SCROLL_LINE="$(tlog | grep -a 'terminal: scroll>' | tail -n 1)"
 if [ -z "$SCROLL_LINE" ]; then
   report_failure "the terminal never reported a scroll position"
 fi
@@ -357,12 +354,12 @@ echo "$((TOTAL - LEN)) rows of history exist and the viewport sits at the bottom
 if line_one_on_screen; then
   echo "FAIL: line '1' is still on screen before scrolling"
   echo "--- the screen ---"
-  grep -a 'terminal: screen>' "$LOG" | tail -n 1
+  tlog | grep -a 'terminal: screen>' | tail -n 1
   report_failure "200 lines did not push the first line off a ${LEN}-row screen"
 fi
 echo "line '1' has scrolled off the screen"
 
-BOTTOM_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+BOTTOM_SCREEN="$(tlog | grep -a 'terminal: screen>' | tail -n 1)"
 
 # ── 한 화면 올라간다 ───────────────────────────────────────────────────
 #
@@ -385,7 +382,7 @@ echo "the viewport moved up exactly one screen (offset ${BOTTOM_OFFSET} -> ${UP_
 #
 # 위치 숫자만 보면 뷰포트는 움직였는데 화면은 그대로인 상태를 못 잡는다.
 # 렌더를 키 쪽으로 열지 않았을 때가 정확히 그 상태다(TR-M2의 구조 변경).
-UP_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+UP_SCREEN="$(tlog | grep -a 'terminal: screen>' | tail -n 1)"
 if [ "$UP_SCREEN" = "$BOTTOM_SCREEN" ]; then
   echo "FAIL: the viewport moved but the screen dump is identical"
   echo "--- the screen ---"
@@ -410,7 +407,7 @@ fi
 if ! line_one_on_screen; then
   echo "FAIL: at the top of the scrollback but line '1' is not on screen"
   echo "--- the screen ---"
-  grep -a 'terminal: screen>' "$LOG" | tail -n 1
+  tlog | grep -a 'terminal: screen>' | tail -n 1
   report_failure "the viewport reached the top but the scrollback did not hold the first line"
 fi
 echo "at the top of the scrollback, the line that had scrolled off is on screen"
@@ -516,7 +513,7 @@ sleep 3
 #
 # 셀 크기가 비어 있으면 c=4,r=2가 0×0이 된다(TG 실측 2).
 if ! grep -aqE 'terminal: image> id=1 layer=above_text dst=[0-9]+,[0-9]+ 32x32 src=0,0 2x2 ' "$LOG"; then
-  grep -a 'terminal: image>' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: image>' | tail -n 5
   report_failure "no 32x32 image> line for image 1 (did vt.zig get the cell pixel size?)"
 fi
 echo "image 1 was placed as a 32x32 rectangle"
@@ -526,7 +523,7 @@ echo "image 1 was placed as a 32x32 rectangle"
 # 사분면 중심 픽셀을 프레임버퍼에서 되읽은 값이다. 최근접 이웃이라 배율 16에서
 # 경계가 정확히 떨어진다(image_test 검사 1이 호스트에서 같은 것을 본다).
 if ! grep -aq 'terminal: imgpx> id=1 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF' "$LOG"; then
-  grep -a 'terminal: imgpx> id=1' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: imgpx> id=1' | tail -n 5
   report_failure "image 1 did not reach the framebuffer as red/green/blue/white quadrants"
 fi
 echo "image 1 reached the framebuffer: red, green, blue, white"
@@ -535,7 +532,7 @@ echo "image 1 reached the framebuffer: red, green, blue, white"
 #
 # 889098은 (s·a + d·(255−a) + 127)/255를 채널마다 미리 셈한 값이다.
 if ! grep -aq 'terminal: imgpx> id=2 tl=889098 tr=889098 bl=889098 br=889098' "$LOG"; then
-  grep -a 'terminal: imgpx> id=2' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: imgpx> id=2' | tail -n 5
   report_failure "image 2 was not alpha-blended to 889098 over the background"
 fi
 echo "image 2 was alpha-blended to 889098"
@@ -546,7 +543,7 @@ echo "image 2 was alpha-blended to 889098"
 # (project_gate_screen_echo). 대신 페이로드를 센다 — 마지막 화면에서 정확히
 # 한 번(되울린 명령 줄)이어야 한다. 파서가 명령을 삼키지 못했다면 출력으로
 # 한 번 더 찍혀 둘이 된다.
-LAST_SCREEN="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+LAST_SCREEN="$(tlog | grep -a 'terminal: screen>' | tail -n 1)"
 PAYLOAD_SEEN="$(grep -o -- "$IMG1_PAYLOAD" <<<"$LAST_SCREEN" | wc -l)"
 if [ "$PAYLOAD_SEEN" -ne 1 ]; then
   echo "$LAST_SCREEN"
@@ -564,7 +561,7 @@ type_text "printf '\\033_Ga=T,f=100,i=4,c=4,r=2,q=2;iVBORw0KGgoAAAANSUhEUgAAAAIA
 type_keys ret
 sleep 3
 if ! grep -aq 'terminal: imgpx> id=4 tl=FF0000 tr=00FF00 bl=0000FF br=FFFFFF' "$LOG"; then
-  grep -a 'terminal: imgpx> id=4' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: imgpx> id=4' | tail -n 5
   report_failure "the PNG image did not reach the framebuffer as red/green/blue/white quadrants"
 fi
 echo "the PNG image was decoded in the guest: red, green, blue, white"
@@ -598,7 +595,7 @@ last_frame() {
   awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } /terminal: cursor>/ { done = buf } END { printf "%s", done }' "$LOG"
 }
 # 마지막 `cursor>` 줄. 위 `last_frame`의 마지막 줄과 같은 줄이다.
-last_cursor() { grep -a 'terminal: cursor>' "$LOG" | tail -n 1 || true; }
+last_cursor() { tlog | grep -a 'terminal: cursor>' | tail -n 1 || true; }
 # 마지막 cursor> 줄이 패턴과 맞을 때까지 기다린다(15초). wait_for_screen과
 # 같은 이유로 고정 sleep을 안 쓴다. 파이프가 아니라 here-string인 것도 같은
 # 이유다(gate_lib.sh의 그 함수 주석).
@@ -970,9 +967,9 @@ if grep -aq "Attempted to kill init" "$LOG"; then
 fi
 
 echo "--- style/pixel lines ---"
-grep -aE 'terminal: (style|pixel)>' "$LOG" | tail -n 20
+tlog | grep -aE 'terminal: (style|pixel)>' | tail -n 20
 echo "--- ink lines ---"
-grep -a 'terminal: ink>' "$LOG" | tail -n 10
+tlog | grep -a 'terminal: ink>' | tail -n 10
 echo "--- scroll lines ---"
-grep -a 'terminal: scroll>' "$LOG" | tail -n 10
+tlog | grep -a 'terminal: scroll>' | tail -n 10
 echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for, and vim switches the cursor shape between modes, and the system vimrc turns on line numbers, a status line and showmode"

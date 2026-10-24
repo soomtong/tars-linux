@@ -81,6 +81,10 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/c
 없다. 다만 `check.sh`는 시작할 때 `out/`·`kernel/build`·`zig-out`을 지운다 —
 `out/` 아래에 남긴 조사 로그가 있으면 먼저 빼낸다.
 
+게이트가 남긴 시리얼 로그는 컨테이너가 사라진 뒤에도 `out/gate-logs/`에 있다 —
+루트 게이트는 `<시작 시각>/<체인>-<회차>/`, `make check CHAIN=x`는 `<체인>/`.
+다음 게이트의 시작이 `out/`을 지우므로 남길 판은 밖으로 옮긴다.
+
 체인 목록은 `check.sh`의 `CHAINS` 배열 확인.
 
 ## 문서

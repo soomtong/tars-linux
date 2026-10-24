@@ -142,21 +142,40 @@ type_keys() {
 #
 #   ESC]133;A;…root@(none) ~# ESC[K…ESC[=5u=terminal: screen> root@(none) ~#
 #
-# 그래서 `terminal: screen>`이 줄 중간에 있어도 그 앞을 떼고 화면 줄로 읽는다. 전부터
-# 있던 일이고, 셸의 프롬프트가 여러 번에 나눠 읽혀 프레임이 여럿이던 동안은 뒤에 붙지
+# 그래서 `terminal: screen>`이 줄 중간에 있어도 그 앞을 떼고 화면 줄로 읽는다(아래 `from_terminal`).
+# 전부터 있던 일이고, 셸의 프롬프트가 여러 번에 나눠 읽혀 프레임이 여럿이던 동안은 뒤에 붙지
 # 않은 화면 줄이 하나 더 왔다. RS-M2가 그것을 한 프레임으로 합치자 부팅 직후의 마지막
 # 화면 줄이 붙은 줄이 되어 pointer · battery 체인의 프롬프트 대기가 빨개졌다.
-joined_screen_dump() {
+#
+# GF-M2(결정 8). 잇는 것은 `screen>` 줄만이 아니다. GF-M1의 루트 게이트에서 pointer 체인이
+#
+#   terminal: pointer> at x=679 y=499 buttons=0 wheel=0 shown=1 ink=118[   12.315317] random: crng init done
+#
+# 으로 빨갰고(`wait_for_at`의 패턴이 `ink=118$`), 같은 판의 로그 57개에서 terminal 줄 안에
+# 커널 시각 표식이 든 체인이 여섯이었다(style> · pixel> · scroll> · pointer>). 그래서 `tlog`가
+# 시리얼 로그 전체를 읽어 모든 `terminal:` · `kms:` 줄을 같은 규칙으로 잇고, 체인이 terminal
+# 줄을 읽는 자리(`grep -a 'terminal: …' "$LOG"` 119곳)는 `$LOG` 대신 `tlog |`를 거친다.
+# `-q` · `-c`는 거치지 않는다 — 줄의 머리는 자름에도 남아 수와 존재는 틀리지 않고, `-q`는
+# 파이프 뒤에서 먼저 나가 SIGPIPE가 pipefail에 걸린다(project_gate_accuracy).
+#
+# 뗀 커널 조각은 버리지 않고 이은 줄 바로 뒤에 제 줄로 다시 낸다 — pointer의 `kernel_mice`가
+# `input: QEMU QEMU USB Mouse as`를 세는데, 그 printk가 바로 terminal 줄을 자른 조각일 수
+# 있다. 이을 차례에 온 온전한 커널 · init 줄도 같은 자리에 둔다(순서만 한 줄 뒤로 간다).
+tlog() {
   perl -ne '
     if (defined $cur) {
-      next if /^\[ *\d+\.\d+\] / || /^tars-init: /;
-      if (/^(terminal|kms): / || /terminal: screen>/) { print $cur, "\n"; undef $cur; redo }
+      if (/^\[ *\d+\.\d+\] / || /^tars-init: /) { $frag .= $_; next }
+      if (/^(terminal|kms): / || /terminal: screen>/) { print $cur, "\n", $frag; undef $cur; redo }
       $cur .= $_;
-    } elsif (s/^.*?(?=terminal: screen>)//) { $cur = $_ } else { next }
-    next if $cur =~ s/\[ *\d+\.\d+\] [^\r\n]*\r?\n\z//;
-    print $cur; undef $cur;
-    END { print $cur, "\n" if defined $cur }
+    } elsif (/terminal: / || /^kms: /) { $cur = $_; $frag = "" } else { print; next }
+    if ($cur =~ s/(\[ *\d+\.\d+\] [^\r\n]*)\r?\n\z//) { $frag .= "$1\n"; next }
+    print $cur, $frag; undef $cur;
+    END { print $cur, "\n", $frag if defined $cur }
   ' "$LOG"
+}
+
+joined_screen_dump() {
+  tlog | grep -a 'terminal: screen>' | from_terminal
 }
 
 # 줄마다 첫 `terminal: ` 앞을 뗀다(RS-M3). 위 `joined_screen_dump`의 붙은 조각과 같은

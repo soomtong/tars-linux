@@ -119,9 +119,9 @@ report_failure() {
     fi
   done
   echo "--- hangul lines ---"
-  grep -a 'terminal: hangul>' "$LOG" | tail -n 20
+  tlog | grep -a 'terminal: hangul>' | tail -n 20
   echo "--- key lines ---"
-  grep -a 'terminal: key>' "$LOG" | tail -n 10
+  tlog | grep -a 'terminal: key>' | tail -n 10
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -143,7 +143,7 @@ key_lines() {
 # `copy/check.sh`의 `copy_value`가 이 함정을 안 밟은 것은 `([0-9]+)`로 잡아
 # 숫자에서 멈추기 때문이고, 우연이지 설계가 아니다.
 hangul_field() {
-  grep -a 'terminal: hangul>' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: hangul>' | tail -n 1 | tr -d '\r' |
     sed -E "s/.*$1=([^ ]+).*/\1/"
 }
 
@@ -157,13 +157,13 @@ hangul_field() {
 #   2. `s/.*text=//` — `hangul_field`처럼 `([^ ]+)`로 잡으면 첫 칸에서
 #      멈춘다. 이 값에는 공백이 들어 있다.
 status_text() {
-  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*text=//'
 }
 
 # 마지막 `status> ink fg=` 줄의 개수.
 status_ink() {
-  grep -a 'terminal: status> ink fg=' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> ink fg=' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*fg=([0-9]+).*/\1/'
 }
 
@@ -178,7 +178,7 @@ status_ink() {
 # "integer expression expected"로 죽는다 — 값이 같아 보이는데 실패하는
 # 그 함정의 사촌이다.
 status_caps() {
-  grep -a 'terminal: status> caps ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> caps ink ' | tail -n 1 | tr -d '\r' |
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
@@ -187,7 +187,7 @@ status_caps() {
 # `tr -d '\r'`는 `status_caps`와 같은 이유다 — `ink=`가 줄 끝이라 안 지우면
 # `[ "$X" -le 0 ]`가 "integer expression expected"로 죽는다.
 find_ink() {
-  grep -a 'terminal: find> ink ' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: find> ink ' | tail -n 1 | tr -d '\r' |
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
@@ -266,7 +266,7 @@ screen_lines() {
 wait_for_new_screen() {
   local n="$1" pattern="$2"
   for _ in $(seq 1 150); do
-    if grep -aqE -- "$pattern" <<<"$(grep -a 'terminal: screen>' "$LOG" | tail -n "+$((n + 1))")"; then return 0; fi
+    if grep -aqE -- "$pattern" <<<"$(tlog | grep -a 'terminal: screen>' | tail -n "+$((n + 1))")"; then return 0; fi
     sleep 0.1
   done
   return 1
@@ -895,7 +895,7 @@ if ! grep -aq 'terminal: find> commit needle=가 len=3' "$LOG"; then
 fi
 
 # 검색이 매치를 만들었다. 화면에 `가 `가 있으므로 하나 이상이어야 한다.
-SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
+SUBMIT="$(tlog | grep -a 'terminal: find> submit' | tail -n 1 | tr -d '\r')"
 MATCHES="$(echo "$SUBMIT" | sed -E 's/.*matches=([0-9]+).*/\1/')"
 if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
   report_failure "the hangul needle found ${MATCHES:-no} match(es): ${SUBMIT}"
@@ -930,7 +930,7 @@ sleep 1
 
 if ! grep -aq 'terminal: find> overlay text=/가 preedit=ㄱ' "$LOG"; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "the overlay does not carry the committed 가 and the composing ㄱ"
 fi
 
@@ -956,7 +956,7 @@ type_keys esc
 sleep 1
 if ! grep -aq 'terminal: find> overlay text=/가 preedit=(none)' "$LOG"; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "Esc did not drop the composing letter (or it dropped the needle too)"
 fi
 INV="$(find_ink inv)"
@@ -1005,11 +1005,11 @@ sleep 1
 type_keys y
 sleep 1
 
-CLIP_LINE="$(grep -a 'terminal: clip> len=' "$LOG" | tail -n 1 | tr -d '\r')"
+CLIP_LINE="$(tlog | grep -a 'terminal: clip> len=' | tail -n 1 | tr -d '\r')"
 CLIP_LEN="$(echo "$CLIP_LINE" | sed -E 's/.*len=([0-9]+).*/\1/')"
 if [ -z "$CLIP_LEN" ] || [ "$CLIP_LEN" -lt 1 ]; then
   echo "--- clip> lines ---"
-  grep -a 'terminal: clip>' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: clip>' | tail -n 5
   report_failure "y did not put anything on the clipboard: ${CLIP_LINE}"
 fi
 
@@ -1027,10 +1027,10 @@ sleep 1
 # 판정 하나가 두 수를 함께 본다. `put`이 `clip`과 같으면 통째로
 # 들어갔다는 뜻이고, 0이면 안 들어간 것이다. 첫 줄 자르기는 `vt_test`의
 # 검사 58이 호스트에서 초 단위로 이미 본다 — 여기서 보는 것은 배선이다.
-PASTE_LINE="$(grep -a 'terminal: find> paste ' "$LOG" | tail -n 1 | tr -d '\r')"
+PASTE_LINE="$(tlog | grep -a 'terminal: find> paste ' | tail -n 1 | tr -d '\r')"
 if [ -z "$PASTE_LINE" ]; then
   echo "--- find> lines ---"
-  grep -a 'terminal: find> ' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> ' | tail -n 5
   report_failure "Cmd+V in the prompt produced no 'find> paste' line at all"
 fi
 PUT="$(echo "$PASTE_LINE" | sed -E 's/.*put=([0-9]+).*/\1/')"
@@ -1047,14 +1047,14 @@ fi
 # needle이 그 글자다. 기존 `find> overlay` 줄을 그대로 쓴다.
 if ! grep -aq 'terminal: find> overlay text=/가' "$LOG"; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "the pasted 가 never showed up in the prompt overlay"
 fi
 
 # 붙인 한글이 화면의 한글을 찾는다.
 type_keys ret
 sleep 1
-SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1 | tr -d '\r')"
+SUBMIT="$(tlog | grep -a 'terminal: find> submit' | tail -n 1 | tr -d '\r')"
 MATCHES="$(echo "$SUBMIT" | sed -E 's/.*matches=([0-9]+).*/\1/')"
 if [ -z "$MATCHES" ] || [ "$MATCHES" -lt 1 ]; then
   report_failure "the pasted needle found ${MATCHES:-no} match(es): ${SUBMIT}"

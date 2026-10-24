@@ -181,7 +181,7 @@ report_failure() {
   echo "--- kernel mouse lines ---"
   grep -aE 'input: QEMU QEMU USB Mouse|USB disconnect' "$LOG" | tr -d '\r'
   echo "--- pointer lines ---"
-  grep -a 'terminal: pointer>' "$LOG" | tr -d '\r' | tail -n 30
+  tlog | grep -a 'terminal: pointer>' | tr -d '\r' | tail -n 30
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -197,7 +197,7 @@ pointer_count() {
 
 # 마지막 at 줄. 값이 줄 끝까지 가므로 \r를 지운다(HI-M1 실측 4).
 last_at() {
-  grep -a 'terminal: pointer> at ' "$LOG" | tail -n 1 | tr -d '\r' | from_terminal
+  tlog | grep -a 'terminal: pointer> at ' | tail -n 1 | tr -d '\r' | from_terminal
 }
 
 # 커널이 만든 USB 마우스 입력 장치의 수. 검사 6이 "QEMU · 커널이 둘째
@@ -212,7 +212,7 @@ screen_lines() {
 
 # 마지막 scroll> 줄의 값 하나(copy/check.sh의 scroll_field와 같다).
 scroll_field() {
-  grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | tr -d '\r' | sed -E "s/.*$1=([0-9]+).*/\1/"
+  tlog | grep -a 'terminal: scroll>' | tail -n 1 | tr -d '\r' | sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
 # screendump(P6) 하나에서 화살표 색(POINTER_FILL FCFCF4 · POINTER_EDGE 040810)인
@@ -294,11 +294,11 @@ wait_for_count() {
 
 # 마지막 press · release 줄.
 last_press() {
-  grep -a 'terminal: pointer> press ' "$LOG" | tail -n 1 | tr -d '\r'
+  tlog | grep -a 'terminal: pointer> press ' | tail -n 1 | tr -d '\r'
 }
 
 last_release() {
-  grep -a 'terminal: pointer> release ' "$LOG" | tail -n 1 | tr -d '\r'
+  tlog | grep -a 'terminal: pointer> release ' | tail -n 1 | tr -d '\r'
 }
 
 # copy> 줄 중 동사가 맞는 것의 개수(`enter` · `point` · `exit` · `yank`).
@@ -312,7 +312,7 @@ clip_lines() {
 }
 
 last_clip() {
-  grep -a 'terminal: clip> len=' "$LOG" | tail -n 1 | tr -d '\r'
+  tlog | grep -a 'terminal: clip> len=' | tail -n 1 | tr -d '\r'
 }
 
 # 12바이트 붙여넣기의 횟수(검사 15의 둘째). 클립보드는 pd-drag-word다.
@@ -322,7 +322,7 @@ paste_lines() {
 
 # 마지막 배치 줄과 그 개수(pane/check.sh의 last_pane_line과 같다).
 last_pane_line() {
-  grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r' | from_terminal
+  tlog | grep -a 'terminal: pane> ws=' | tail -n 1 | tr -d '\r' | from_terminal
 }
 
 pane_lines() {
@@ -341,7 +341,7 @@ wait_for_pane() {
 
 # 마지막 상태 줄의 글자(copy/check.sh의 status_text와 같다).
 status_text() {
-  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' | sed -E 's/.*text=//'
 }
 
 # 상태 줄 꼬리가 `  COPY`가 될 때까지(인자 on) 또는 아닐 때까지(off) 기다린다.
@@ -369,7 +369,7 @@ last_frame() {
 # 번호다. 행은 패널 안의 상대 행이다 — 세로 분할의 두 패널은 격자의 0행에서
 # 시작하므로 격자의 행과 같다.
 screen_row() {
-  grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: screen>' | tail -n 1 | tr -d '\r' |
     WANT="$1" perl -ne 's/^.*?terminal: screen> //; chomp; my @r = split / \| /, $_, -1;
       my $i = -1; for my $k (0 .. $#r) { $i = $k if $r[$k] eq $ENV{WANT} } print "$i\n";'
 }
@@ -528,15 +528,15 @@ wait_for_log 'terminal: pointer> open /dev/input/event[0-9]+ kind=mouse shown=0 
 OPENS="$(pointer_count 'open ')"
 [ "$OPENS" -eq 1 ] ||
   report_failure "expected exactly one 'pointer> open' at boot, got ${OPENS}"
-grep -aE 'terminal: pointer> skip /dev/input/event[0-9]+ kind=none name=AT Translated Set 2 keyboard' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: pointer> skip /dev/input/event[0-9]+ kind=none name=AT Translated Set 2 keyboard' >/dev/null ||
   report_failure "the AT keyboard was not skipped as kind=none"
-grep -aE 'terminal: pointer> skip /dev/input/event[0-9]+ kind=none name=Power Button' "$LOG" >/dev/null ||
+tlog | grep -aE 'terminal: pointer> skip /dev/input/event[0-9]+ kind=none name=Power Button' >/dev/null ||
   report_failure "the power button was not skipped as kind=none"
 [ "$(pointer_count 'close ')" -eq 0 ] ||
   report_failure "a pointer device was closed before anything was unplugged"
 [ "$(pointer_count 'at ')" -eq 0 ] ||
   report_failure "an 'at' line showed up before the mouse moved: $(last_at)"
-MOUSE_PATH="$(grep -a 'terminal: pointer> open ' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*open ([^ ]+) .*/\1/')"
+MOUSE_PATH="$(tlog | grep -a 'terminal: pointer> open ' | tail -n 1 | tr -d '\r' | sed -E 's/.*open ([^ ]+) .*/\1/')"
 echo "boot mouse: ${MOUSE_PATH}"
 
 # ── 검사 7: 움직이기 전에는 화살표가 없다 ─────────────────────────────
@@ -554,7 +554,7 @@ screendump "$BEFORE" || report_failure "screendump did not write ${BEFORE}"
 PIX="$(ppm_arrow "$BEFORE")"
 [ "$PIX" -eq 0 ] ||
   report_failure "the screen has ${PIX} arrow-colored pixels before the mouse moved; the arrow must wait for the first move"
-PANE_LINE="$(grep -a 'terminal: pane> ws=' "$LOG" | tail -n 1 | tr -d '\r')"
+PANE_LINE="$(tlog | grep -a 'terminal: pane> ws=' | tail -n 1 | tr -d '\r')"
 [ "$PANE_LINE" = "terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 sep ink=0" ] ||
   report_failure "the pane> line is '${PANE_LINE}', not the one a boot without a mouse prints"
 echo "no arrow yet: ${PIX} arrow pixels on the screen"
@@ -647,7 +647,7 @@ if ! wait_for_count pointer_count 'open ' 2; then
   fi
   report_failure "the kernel registered a second mouse but terminal never opened it (no second 'pointer> open')"
 fi
-NEW_LINE="$(grep -a 'terminal: pointer> open ' "$LOG" | tail -n 1 | tr -d '\r')"
+NEW_LINE="$(tlog | grep -a 'terminal: pointer> open ' | tail -n 1 | tr -d '\r')"
 NEW_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$NEW_LINE")"
 case "$NEW_LINE" in
   *" kind=mouse shown=1 name=QEMU QEMU USB Mouse") ;;
@@ -670,7 +670,7 @@ wait_for_log "terminal: pointer> close ${NEW_PATH}" ||
   report_failure "the unplugged mouse was never closed (no 'pointer> close ${NEW_PATH}')"
 [ "$(pointer_count 'close ')" -eq 1 ] ||
   report_failure "expected one 'pointer> close', got $(pointer_count 'close ')"
-echo "unplugged: $(grep -a 'terminal: pointer> close ' "$LOG" | tail -n 1 | tr -d '\r')"
+echo "unplugged: $(tlog | grep -a 'terminal: pointer> close ' | tail -n 1 | tr -d '\r')"
 
 # 대상이 원래 마우스로 돌아왔다. 그 fd가 아직 열려 있고 읽힌다.
 hmp "mouse_move 10 10"
@@ -889,7 +889,7 @@ wait_for_screen '\| pd-drag-word \|' ||
   report_failure "the right pane's shell did not print pd-drag-word"
 ROW="$(screen_row pd-drag-word)"
 [ "$ROW" -ge 0 ] ||
-  report_failure "pd-drag-word is not a row of its own on the last screen: $(grep -a 'terminal: screen>' "$LOG" | tail -n 1)"
+  report_failure "pd-drag-word is not a row of its own on the last screen: $(tlog | grep -a 'terminal: screen>' | tail -n 1)"
 PX="$(cell_x 78)"
 PY="$(cell_y "$ROW")"
 move_to "$PX" "$PY" ||
@@ -906,9 +906,9 @@ hmp "mouse_move 95 15"
 wait_for_count copy_lines enter "$((ENTERS + 1))" ||
   report_failure "dragging to the next cells did not enter copy mode (no new 'copy> enter')"
 wait_for_log "terminal: copy> point row=${ROW} col=11" ||
-  report_failure "the drag did not move the selection end to row ${ROW} col 11 (last copy> line: '$(grep -a 'terminal: copy>' "$LOG" | tail -n 1 | tr -d '\r')')"
-[ "$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
-  report_failure "the drag entered copy mode at '$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')', expected the pressed cell row=${ROW} col=0"
+  report_failure "the drag did not move the selection end to row ${ROW} col 11 (last copy> line: '$(tlog | grep -a 'terminal: copy>' | tail -n 1 | tr -d '\r')')"
+[ "$(tlog | grep -a 'terminal: copy> enter' | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
+  report_failure "the drag entered copy mode at '$(tlog | grep -a 'terminal: copy> enter' | tail -n 1 | tr -d '\r')', expected the pressed cell row=${ROW} col=0"
 wait_for_status_copy on ||
   report_failure "while dragging the status line reads '$(status_text)', expected it to end with '  COPY'"
 button_up || report_failure "mouse_button 0 after the drag printed no 'pointer> release' line"
@@ -1030,7 +1030,7 @@ button_down || report_failure "mouse_button 1 on the long row printed no 'pointe
 move_to 720 "$PY" ||
   report_failure "the drag did not reach x=720 over the right pane (last at: '$(last_at)')"
 wait_for_log "terminal: copy> point row=${ROW} col=76" ||
-  report_failure "over the right pane the selection end is '$(grep -a 'terminal: copy> point' "$LOG" | tail -n 1 | tr -d '\r')', expected row=${ROW} col=76 (the pressed pane's last column)"
+  report_failure "over the right pane the selection end is '$(tlog | grep -a 'terminal: copy> point' | tail -n 1 | tr -d '\r')', expected row=${ROW} col=76 (the pressed pane's last column)"
 button_up || report_failure "mouse_button 0 over the right pane printed no 'pointer> release' line"
 wait_for_count clip_lines '' "$((CLIPS + 1))" ||
   report_failure "the release over the right pane put nothing on the clipboard"
@@ -1069,8 +1069,8 @@ wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
 OFF_B="$(scroll_field offset)"
 [ "$OFF_B" -eq "$((OFF_A - 3))" ] ||
   report_failure "a wheel notch while pressed moved the pressed pane from offset ${OFF_A} to ${OFF_B}, expected $((OFF_A - 3))"
-[ "$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
-  report_failure "the wheel while pressed did not start the selection at the pressed cell (last copy> enter: '$(grep -a 'terminal: copy> enter' "$LOG" | tail -n 1 | tr -d '\r')')"
+[ "$(tlog | grep -a 'terminal: copy> enter' | tail -n 1 | tr -d '\r')" = "terminal: copy> enter row=${ROW} col=0" ] ||
+  report_failure "the wheel while pressed did not start the selection at the pressed cell (last copy> enter: '$(tlog | grep -a 'terminal: copy> enter' | tail -n 1 | tr -d '\r')')"
 button_up || report_failure "mouse_button 0 after the wheel printed no 'pointer> release' line"
 wait_for_count clip_lines '' "$((CLIPS + 1))" ||
   report_failure "the release after the wheel put nothing on the clipboard"
@@ -1108,7 +1108,7 @@ if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
 fi
 
 echo "pointer> lines:"
-grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: pointer>' | tr -d '\r'
 
 # ══ 부팅 B: PS/2 마우스와 uinput 터치패드 (PD-M3) ═══════════════════════
 #
@@ -1238,8 +1238,8 @@ echo "=== boot B: the touchpad drivers are registered ==="
 type_keys slash c o n f i g slash p d slash d r i v e r s ret
 wait_for_screen '\| pd-drivers [0-9]+/[0-9]+ \|' ||
   report_failure "the driver list script printed no summary"
-DRV_LINE="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' | grep -oE 'pd-drivers [0-9]+/[0-9]+' | tail -n 1)"
-DRV_MISSING="$(grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' | grep -oE 'pd-drv-no [^ |]+' | sort -u | tr '\n' ' ')"
+DRV_LINE="$(tlog | grep -a 'terminal: screen>' | tail -n 1 | tr -d '\r' | grep -oE 'pd-drivers [0-9]+/[0-9]+' | tail -n 1)"
+DRV_MISSING="$(tlog | grep -a 'terminal: screen>' | tail -n 1 | tr -d '\r' | grep -oE 'pd-drv-no [^ |]+' | sort -u | tr '\n' ' ')"
 [ "$DRV_LINE" = "pd-drivers 13/13" ] ||
   report_failure "the guest is missing touchpad drivers: '${DRV_LINE}' ${DRV_MISSING}"
 echo "drivers: ${DRV_LINE}"
@@ -1332,7 +1332,7 @@ ATS="$(pointer_count 'at ')"
 replay "scroll 90"
 SCROLLED=0
 for _ in $(seq 1 150); do
-  LINE="$(grep -a 'terminal: scroll>' "$LOG" | tail -n 1 | tr -d '\r')"
+  LINE="$(tlog | grep -a 'terminal: scroll>' | tail -n 1 | tr -d '\r')"
   T="$(sed -E 's/.*total=([0-9]+).*/\1/' <<<"$LINE")"
   O="$(sed -E 's/.*offset=([0-9]+).*/\1/' <<<"$LINE")"
   L="$(sed -E 's/.*len=([0-9]+).*/\1/' <<<"$LINE")"
@@ -1341,7 +1341,7 @@ for _ in $(seq 1 150); do
 done
 [ "$SCROLLED" = "1" ] ||
   report_failure "two fingers 90 units down left the viewport at '${LINE}', expected six rows above the bottom"
-NEW_ATS="$(grep -a 'terminal: pointer> at ' "$LOG" | tail -n "+$((ATS + 1))" | tr -d '\r')"
+NEW_ATS="$(tlog | grep -a 'terminal: pointer> at ' | tail -n "+$((ATS + 1))" | tr -d '\r')"
 grep -avE ' x=819 y=464 ' <<<"$NEW_ATS" >/dev/null &&
   report_failure "two fingers moved the pointer: $(grep -avE ' x=819 y=464 ' <<<"$NEW_ATS" | sed -n 1p)"
 WHEEL=0
@@ -1363,7 +1363,7 @@ wait_for_log "terminal: pointer> close ${TP_PATH}" ||
 type_keys e c h o spc p d minus t p minus g o n e ret
 wait_for_screen '\| pd-tp-gone \|' ||
   report_failure "the shell did not answer after the touchpad went away"
-echo "closed: $(grep -a 'terminal: pointer> close ' "$LOG" | tail -n 1 | tr -d '\r')"
+echo "closed: $(tlog | grep -a 'terminal: pointer> close ' | tail -n 1 | tr -d '\r')"
 
 # ══ PD-M4: 마우스 보고 (부팅 B) ══════════════════════════════════════════
 #
@@ -1387,7 +1387,7 @@ report_count() {
 }
 
 last_report() {
-  grep -a 'terminal: pointer> report ' "$LOG" | tail -n 1 | tr -d '\r'
+  tlog | grep -a 'terminal: pointer> report ' | tail -n 1 | tr -d '\r'
 }
 
 # 글자열 하나를 sendkey 이름으로 바꿔 치고 Enter를 친다. 영소문자 · 숫자 ·
@@ -1411,7 +1411,7 @@ type_cmd() {
 wait_for_screen_text() {
   local text="$1" i
   for i in $(seq 1 150); do
-    if grep -aqF -- "$text" <<<"$(grep -a 'terminal: screen>' "$LOG")"; then return 0; fi
+    if grep -aqF -- "$text" <<<"$(tlog | grep -a 'terminal: screen>')"; then return 0; fi
     sleep 0.1
   done
   return 1
@@ -1422,7 +1422,7 @@ wait_for_screen_text() {
 wait_for_new_screen() {
   local n="$1" pattern="$2" i
   for i in $(seq 1 150); do
-    if grep -aqE -- "$pattern" <<<"$(grep -a 'terminal: screen>' "$LOG" | tail -n "+$((n + 1))")"; then return 0; fi
+    if grep -aqE -- "$pattern" <<<"$(tlog | grep -a 'terminal: screen>' | tail -n "+$((n + 1))")"; then return 0; fi
     sleep 0.1
   done
   return 1
@@ -1436,16 +1436,20 @@ probe_start() {
   wait_for_screen_text "pd-mouse-ready-$1"
 }
 
-# 프로브가 찍은 결과 줄(마지막 screen>에서 pd-mouse-got-표지로 시작하는 행).
+# 프로브가 찍은 결과 줄(그 표지가 든 마지막 screen>에서 pd-mouse-got-표지로 시작하는 행).
 # 나올 때까지 기다린 뒤 그 행을 낸다. 20초 — 프로브가 시간이 다 되어 끝나는
 # 검사(29)가 있다.
+#
+# "마지막 screen>"이 아니라 "표지가 든 마지막 screen>"을 읽는다(GF-M2). 기다림이 끝난
+# 뒤 읽기까지의 사이에 다음 프레임이 쓰이기 시작하면 마지막 줄은 그 부분 줄이고 거기에는
+# 결과 행이 아직 없다 — tlog가 읽기를 8ms에서 24ms로 늘리자 검사 28이 그렇게 ''를 읽었다.
 probe_result() {
   local tag="$1" i
   for i in $(seq 1 200); do
-    if grep -aqF -- "pd-mouse-got-${tag} " <<<"$(grep -a 'terminal: screen>' "$LOG")"; then break; fi
+    if grep -aqF -- "pd-mouse-got-${tag} " <<<"$(tlog | grep -a 'terminal: screen>')"; then break; fi
     sleep 0.1
   done
-  grep -a 'terminal: screen>' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: screen>' | grep -aF -- "pd-mouse-got-${tag} " | tail -n 1 | tr -d '\r' |
     TAG="$tag" perl -ne 's/^.*?terminal: screen> //; chomp;
       for my $r (split / \| /, $_, -1) { print "$r\n" if index($r, "pd-mouse-got-$ENV{TAG} ") == 0 }' | tail -n 1
 }
@@ -1526,7 +1530,7 @@ wait_for_count report_count '' "$((N + 2))" || report_failure "a wheel notch dow
 GOT="$(probe_result c)"
 [ "$GOT" = 'pd-mouse-got-c 22 [^[[<64;13;2M^[[<65;13;2M]' ] ||
   report_failure "the child read '${GOT}', expected 'pd-mouse-got-c 22 [^[[<64;13;2M^[[<65;13;2M]'"
-LIFTED="$(grep -a 'terminal: scroll>' "$LOG" | tail -n "+$((SCROLLS_N + 1))" | tr -d '\r' |
+LIFTED="$(tlog | grep -a 'terminal: scroll>' | tail -n "+$((SCROLLS_N + 1))" | tr -d '\r' |
   perl -ne 'print if /total=(\d+) offset=(\d+) len=(\d+)/ and $1 - $3 != $2')"
 [ -z "$LIFTED" ] ||
   report_failure "a reported wheel also moved our scrollback: $(sed -n 1p <<<"$LIFTED")"
@@ -1655,5 +1659,5 @@ if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
 fi
 
 echo "boot B pointer> lines:"
-grep -a 'terminal: pointer>' "$LOG" | tr -d '\r'
+tlog | grep -a 'terminal: pointer>' | tr -d '\r'
 echo "PD-M4 check PASS"

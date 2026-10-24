@@ -101,7 +101,7 @@ report_failure() {
     fi
   done
   echo "--- copy lines ---"
-  grep -a 'terminal: copy>' "$LOG" | tail -n 20
+  tlog | grep -a 'terminal: copy>' | tail -n 20
   echo "--- last 40 lines ---"
   tail -n 40 "$LOG"
   exit 1
@@ -117,7 +117,7 @@ key_lines() {
 # copy> 줄에서 값 하나를 뽑는다. 언제나 마지막 줄을 본다 — 마지막 줄이
 # 곧 지금의 상태다.
 copy_value() {
-  grep -a 'terminal: copy>' "$LOG" | tail -n 1 |
+  tlog | grep -a 'terminal: copy>' | tail -n 1 |
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
@@ -126,7 +126,7 @@ copy_value() {
 # 값으로 실패하기 때문이고(HI-M1 실측 4), `s/.*text=//`는 값에 공백이 들어
 # 있어 `([^ ]+)`로는 첫 칸에서 멈추기 때문이다.
 status_text() {
-  grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*text=//'
 }
 
@@ -134,7 +134,7 @@ status_text() {
 # 그 칸에만 쓰이므로 띠 전체를 센 값이 곧 그 칸의 값이다(IS-M1의 `caps
 # ink`와 같은 논리).
 status_copy_ink() {
-  grep -a 'terminal: status> copy ink=' "$LOG" | tail -n 1 | tr -d '\r' |
+  tlog | grep -a 'terminal: status> copy ink=' | tail -n 1 | tr -d '\r' |
     sed -E 's/.*ink=([0-9]+).*/\1/'
 }
 
@@ -167,7 +167,7 @@ inverted_cells() {
 # scroll> 줄에서 값 하나를 뽑는다. copy_value와 같은 모양이고, 언제나 마지막
 # 줄을 본다 — 그 줄이 곧 지금의 뷰포트 위치다.
 scroll_field() {
-  grep -a 'terminal: scroll>' "$LOG" | tail -n 1 |
+  tlog | grep -a 'terminal: scroll>' | tail -n 1 |
     sed -E "s/.*$1=([0-9]+).*/\1/"
 }
 
@@ -250,7 +250,7 @@ type_keys meta_l-shift-c
 sleep 2
 
 # ── 검사 2: 모드에 들어갔는가 ───────────────────────────────────────────
-ENTER_LINE="$(grep -aE 'terminal: copy> enter row=[0-9]+ col=[0-9]+' "$LOG" | tail -n 1)"
+ENTER_LINE="$(tlog | grep -aE 'terminal: copy> enter row=[0-9]+ col=[0-9]+' | tail -n 1)"
 if [ -z "$ENTER_LINE" ]; then
   report_failure "Cmd+Shift+C did not open copy mode (no 'copy> enter' line)"
 fi
@@ -750,14 +750,14 @@ type_keys f i n d m e
 sleep 1
 if ! grep -aq 'terminal: find> type needle=findme len=6' "$LOG"; then
   echo "--- find> lines so far ---"
-  grep -a 'terminal: find>' "$LOG" | tail -n 8
+  tlog | grep -a 'terminal: find>' | tail -n 8
   report_failure "the prompt did not accumulate 'findme'"
 fi
 
 type_keys ret
 sleep 3
 
-SUBMIT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+SUBMIT="$(tlog | grep -a 'terminal: find> submit' | tail -n 1)"
 # 넷인 것에 산수가 있다. `echo findme` 한 번이 스크롤백에 두 줄을 남긴다 —
 # 셸이 되비춘 명령줄 `root@(none) ~# echo findme`와 출력줄 `findme`다. 표적이
 # 둘이므로 2 × 2 = 4다. plan은 이것을 2로 적었고 그것이 틀렸다.
@@ -798,7 +798,7 @@ type_keys y
 sleep 2
 if ! grep -aq 'terminal: clip> len=6 text=findme' "$LOG"; then
   echo "--- clip> lines ---"
-  grep -a 'terminal: clip>' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: clip>' | tail -n 5
   report_failure "the yanked line was not 'findme'"
 fi
 echo "the search reached scrollback and the yanked line was findme"
@@ -854,7 +854,7 @@ fi
 type_keys n
 sleep 2
 if ! grep -aq 'terminal: find> next moved=true' "$LOG"; then
-  grep -a 'terminal: find> next' "$LOG" | tail -n 3
+  tlog | grep -a 'terminal: find> next' | tail -n 3
   report_failure "n did not move to another match"
 fi
 ROW_SECOND=$(( $(scroll_field offset) + $(copy_value row) ))
@@ -878,7 +878,7 @@ echo "n moved the cursor up the scrollback (row ${ROW_FIRST} -> ${ROW_SECOND}, c
 # 두 겹으로 본다(plan 결정 3). `find> hl`은 vt.zig가 센 값이고 `style>`는 그
 # 색이 정말 셀에 닿았는지다. 한 겹만 보면 "셌지만 안 칠했다"를 못 잡는다 —
 # TR design 결정 7이 style>/pixel>을 두 겹으로 둔 것과 같은 규율이다.
-HL="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
+HL="$(tlog | grep -a 'terminal: find> hl' | tail -n 1)"
 if [ -z "$HL" ]; then
   report_failure "no find> hl line; the highlight never ran"
 fi
@@ -960,7 +960,7 @@ SUBMITS_AFTER="$(grep -ac 'terminal: find> submit' "$LOG" || true)"
 if [ "$SUBMITS_AFTER" -le "$SUBMITS_BEFORE" ]; then
   report_failure "the empty Enter did not submit (find> submit ${SUBMITS_BEFORE} -> ${SUBMITS_AFTER})"
 fi
-REPEAT="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+REPEAT="$(tlog | grep -a 'terminal: find> submit' | tail -n 1)"
 case "$REPEAT" in
   *"matches=4"*) ;;
   *) report_failure "the empty Enter did not re-run 'findme': ${REPEAT}" ;;
@@ -978,7 +978,7 @@ echo "an empty Enter re-ran the remembered search: ${REPEAT}"
 type_keys slash z z z ret
 sleep 3
 
-MISS="$(grep -a 'terminal: find> submit' "$LOG" | tail -n 1)"
+MISS="$(tlog | grep -a 'terminal: find> submit' | tail -n 1)"
 case "$MISS" in
   *"matches=0"*) ;;
   *) report_failure "expected /zzz to find nothing, got: ${MISS}" ;;
@@ -993,7 +993,7 @@ esac
 # 일으키고 `set -o pipefail`이 그것을 실패로 판정한다.
 if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zzz: not found' || true)" -eq 0 ]; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "the overlay did not say that /zzz was not found"
 fi
 echo "the overlay reported that /zzz was not found"
@@ -1052,7 +1052,7 @@ sleep 3
 # 출력줄의 둘이 보인다. 명령줄까지 보이면 넷이다 — 몇인지는 못 박지 않고
 # "둘 이상"만 본다. 프롬프트가 화면 어디에 오는지는 앞 검사들이 남긴 상태에
 # 딸린 값이기 때문이다.
-HL2="$(grep -a 'terminal: find> hl' "$LOG" | tail -n 1)"
+HL2="$(tlog | grep -a 'terminal: find> hl' | tail -n 1)"
 if [ -z "$HL2" ]; then
   report_failure "no find> hl line after searching for zq"
 fi
@@ -1102,7 +1102,7 @@ echo "both match colours reached the framebuffer (current=${CUR_CELLS} other=${O
 # 첫 매치를 건너뛰지 않는다 — 건너뛰면 인덱스가 1이 되어 `[2/4]`가 뜬다.
 if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [1/4]' || true)" -eq 0 ]; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "the overlay did not number the current match as [1/4]"
 fi
 echo "the overlay numbered the current match: /zq [1/4]"
@@ -1115,7 +1115,7 @@ type_keys n
 sleep 2
 if [ "$(last_frame | grep -acF 'terminal: find> overlay text=/zq [2/4]' || true)" -eq 0 ]; then
   echo "--- overlay lines ---"
-  grep -a 'terminal: find> overlay' "$LOG" | tail -n 5
+  tlog | grep -a 'terminal: find> overlay' | tail -n 5
   report_failure "n did not move the number to [2/4]"
 fi
 echo "n moved the number to [2/4]"
@@ -1190,7 +1190,7 @@ sleep 2
 # 개행째 찍으므로 둘째 줄은 다음 로그 줄로 넘어간다(FP design 결정 5의
 # 실측). 그래서 첫 줄까지만 글자로 보고, 둘째 줄이 잡힌 것은 길이로 본다.
 if ! grep -aq 'terminal: clip> len=21 text=echo PEONE' "$LOG"; then
-  report_failure "y did not put the two lines (21 bytes) on the clipboard: $(grep -a 'terminal: clip> len=' "$LOG" | tail -n 1)"
+  report_failure "y did not put the two lines (21 bytes) on the clipboard: $(tlog | grep -a 'terminal: clip> len=' | tail -n 1)"
 fi
 echo "the clipboard holds the two lines (21 bytes)"
 
@@ -1254,7 +1254,7 @@ echo "Enter ran both pasted lines together"
 
 # 갈래의 표지. 화면 판정이 다 끝난 뒤에 본다(이 검사의 머리 주석). 시리얼
 # 로그의 줄 끝은 \r\n이라 \r를 지우고 꼬리를 맞춘다.
-PE_LINE="$(grep -a 'terminal: clip> paste' "$LOG" | tail -n 1 | tr -d '\r')"
+PE_LINE="$(tlog | grep -a 'terminal: clip> paste' | tail -n 1 | tr -d '\r')"
 case "$PE_LINE" in
   *"terminal: clip> paste len=21 bracketed=1") ;;
   *) report_failure "the paste at the fish prompt was logged as '${PE_LINE}', expected 'clip> paste len=21 bracketed=1'" ;;
@@ -1304,7 +1304,7 @@ fi
 
 # 판정(음성). 화면 어디에도 `[200~`가 없었다. 이 체인의 어떤 키도 그 글자를
 # 만들지 않으므로 마지막 프레임이 아니라 로그의 screen> 줄 전부를 본다.
-if [ "$(grep -acF '[200~' <<<"$(grep -a 'terminal: screen>' "$LOG")" || true)" -ne 0 ]; then
+if [ "$(grep -acF '[200~' <<<"$(tlog | grep -a 'terminal: screen>')" || true)" -ne 0 ]; then
   report_failure "the paste under cat was bracketed: '[200~' showed up on the screen"
 fi
 echo "cat got the two lines as they are (echo PEONE ${PE_CAT_BEFORE} -> ${PE_CAT_AFTER}, no [200~ on screen)"
@@ -1314,7 +1314,7 @@ type_keys ctrl-c
 sleep 1
 
 # 갈래의 표지. 검사 21과 같은 이유로 맨 끝에 본다.
-PE_LINE="$(grep -a 'terminal: clip> paste' "$LOG" | tail -n 1 | tr -d '\r')"
+PE_LINE="$(tlog | grep -a 'terminal: clip> paste' | tail -n 1 | tr -d '\r')"
 case "$PE_LINE" in
   *"terminal: clip> paste len=21 bracketed=0") ;;
   *) report_failure "the paste under cat was logged as '${PE_LINE}', expected 'clip> paste len=21 bracketed=0'" ;;

@@ -150,9 +150,28 @@ RUNS="${RUNS:-1}"
 
 # AL-M0: 회차마다 로그 디렉터리를 하나씩 준다(AL design 결정 4). 체인의 `mktemp`이 전부
 # `TMPDIR`을 따르므로, 회차의 시리얼 로그가 `<GATE_LOGS>/<체인>-<회차>/` 아래에 모인다.
-# 체인은 로그를 지우지 않는다 — 로그의 주인은 이 디렉터리다. 지우지도 않는다. 컨테이너는
-# `--rm`이고, `-e TMPDIR=`로 bind-mount해 두면 체인별로 나뉜 채 호스트에 남는다.
+# 체인은 로그를 지우지 않는다 — 로그의 주인은 이 디렉터리다. 지우지도 않는다.
 GATE_LOGS="$(mktemp -d "${TMPDIR:-/tmp}/tars-gate.XXXXXX")"
+
+# GF-M1 결정 4. 컨테이너는 --rm이라 /tmp의 로그는 게이트와 함께 사라진다. 어떻게 끝나든(초록 · 빨강 ·
+# Ctrl+C) 트리를 저장소의 out/gate-logs/<시작 시각>/으로 옮긴다 — 간헐은 통과한 판과 빨간 판을 나란히
+# 놓고 보는 것이라 통과한 판도 남긴다. 처음부터 bind mount에 쓰지 않는 이유는 QEMU의 -serial file:이
+# 작은 write를 많이 내기 때문이다. out/은 clean()이 게이트 시작에 지우므로 앞 게이트의 로그는 다음
+# 게이트가 지운다 — 남길 판은 사람이 밖으로 옮긴다.
+GATE_STAMP="$(date +%Y%m%d-%H%M%S)"
+keep_logs() {
+  local start dest
+  start="$(date +%s)"
+  dest="out/gate-logs/${GATE_STAMP}"
+  mkdir -p out/gate-logs
+  if mv "$GATE_LOGS" "$dest" 2>/dev/null; then
+    echo "time: logs $(( $(date +%s) - start ))s"
+    echo "logs moved to ${dest}"
+  else
+    echo "logs stayed in ${GATE_LOGS} (mv failed)"
+  fi
+}
+trap keep_logs EXIT
 
 # GP-M0: 회차마다 걸린 초를 적는다(체인 · 회차 · 초, 탭으로 가른다). 체인별 시간을 같은
 # 게이트 안에서 잰 적이 없어서, 병렬의 하한(가장 긴 체인)을 추정이 아니라 이 표로 정한다.
@@ -491,6 +510,24 @@ require_screen_dump_joins() {
       return 1
     fi
   done
+  # GF-M2. tlog는 screen>이 아닌 terminal 줄도 잇는다 — 꼬리에서 잘린 pointer> at 줄(나머지는 빈 줄)이
+  # 제 모양으로 돌아오고, 뗀 커널 조각은 바로 뒤에 제 줄로 다시 나온다(pointer가 커널 줄을 센다).
+  printf 'terminal: pointer> at x=679 y=499 buttons=0 wheel=0 shown=1 ink=118[   12.315317] random: crng init done\r\n\r\n' > "$dir/tail_cut"
+  want="$(printf 'terminal: pointer> at x=679 y=499 buttons=0 wheel=0 shown=1 ink=118\r\n[   12.315317] random: crng init done')"
+  got="$(LOG="$dir/tail_cut" bash -c 'source ./gate_lib.sh; tlog')"
+  if [ "$got" != "$want" ]; then
+    echo "check FAIL: gate_lib.sh tlog does not rejoin a pointer> line cut at its tail, or drops the kernel fragment:" >&2
+    echo "  want [${want}]" >&2
+    echo "  got  [${got}]" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  got="$(LOG="$dir/printk" bash -c 'source ./gate_lib.sh; tlog' | grep -ac 'random: crng init done')"
+  if [ "$got" != 1 ]; then
+    echo "check FAIL: gate_lib.sh tlog should re-emit the kernel line that cut a screen> dump exactly once, got ${got}" >&2
+    rm -rf "$dir"
+    return 1
+  fi
   printf 'terminal: screen> (none)# grep audio /tmp/serial.log | tars-init: audio: no sound card\r\nterminal: style> 0,0 fg=8ABEB7 bg=102030\r\n' > "$dir/text"
   want="$(printf 'terminal: screen> (none)# grep audio /tmp/serial.log | tars-init: audio: no sound card\r')"
   got="$(LOG="$dir/text" bash -c 'source ./gate_lib.sh; joined_screen_dump')"
