@@ -3288,10 +3288,9 @@ const App = struct {
         self.cache.deinit();
     }
 
-    /// 바퀴 하나. MS 전 `main_loop`의 몸통 그대로다 — `break :main_loop`가 `return false`,
-    /// `continue`가 `return true`로 바뀐 것뿐이다. `false`는 마지막 패널의 셸이 끝났다는
-    /// 뜻이고 그러면 terminal이 끝난다.
-    fn tick(self: *App) !bool {
+    /// 바퀴 1. poll에 넘길 fd를 다시 짓는다. 자리는 `fds`의 문서 주석에 있다 — 키보드 ·
+    /// uevent 소켓 · 포인터 장치 · 모든 워크스페이스의 모든 패널 · 받아쓰기 파이프 둘.
+    fn arm(self: *App) void {
         self.fds[0] = .{ .fd = self.keyboard_fd, .events = c.POLLIN, .revents = 0 };
         self.fds[1] = .{ .fd = self.uevent_fd, .events = c.POLLIN, .revents = 0 };
         self.nfds = 2;
@@ -3315,6 +3314,343 @@ const App = struct {
         self.fds[self.nfds] = .{ .fd = self.dict.out_fd, .events = c.POLLIN, .revents = 0 };
         self.fds[self.nfds + 1] = .{ .fd = self.dict.err_fd, .events = c.POLLIN, .revents = 0 };
         self.nfds += 2;
+    }
+
+    /// 바퀴 2. 키보드가 깨웠을 때. 키 → PTY 바이트 · 스크롤 · copy · 조합 글자 · 패널 ·
+    /// 받아쓰기 명령의 순서이고, 그 순서의 이유는 `run*` 넷의 머리에 있다.
+    ///
+    /// 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
+    /// 포커스 패널이다(WP design 결정 1). 그래서 그 코드는 WP 전의
+    /// `screen` · `session`이 `focus.screen` · `focus.session`으로 이름만
+    /// 바뀌었다.
+    ///
+    /// `focus`는 이 단계의 머리에서 한 번 잡는다. 패널 명령이 포커스를 옮겨도 이 배치
+    /// 안에서는 안 바꾼다(WP-M1) — 받아쓰기 명령이 그래서 `ws.focus`로 다시 구한다.
+    /// 그리기 직전의 포커스는 `tick`이 다시 구한다.
+    fn readKeyboard(self: *App) !void {
+        const ws = &self.workspaces[self.current].?;
+        const focus = &ws.panes[ws.focus].?;
+
+        // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
+        // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
+        // 캐시하지 않고 키를 읽는 순간의 값을 쓴다. packed struct의
+        // 비트 읽기 한 번이라 비용이 없다 — design doc 결정 6이 "값으로
+        // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
+        const ctx = input.Context{
+            .cursor_keys = focus.screen.term.modes.get(.cursor_keys),
+            // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
+            // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
+            .swap_alt_meta = self.swap_alt_meta,
+            // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
+            .dictating = dictation.escCancels(self.dict.phase),
+        };
+        const keys = input.readKeys(&self.key_state, self.keyboard_fd, &self.key_buf, ctx);
+        // 받아쓰기의 알림은 다음 키에 사라진다(VD-M1). "키"는 무언가를 한 키다 —
+        // 수정키를 누르고 떼기만 한 배치는 안 센다. 그렇지 않으면 더블 탭의 마지막
+        // 뗌이 방금 뜬 `PASSWORD`를 바로 지운다.
+        if (self.dict.notice != null and (keys.bytes.len > 0 or keys.scrolls.len > 0 or
+            keys.copies.len > 0 or keys.panes.len > 0 or keys.dictates.len > 0 or keys.redraw))
+        {
+            self.dict.notice = null;
+            self.needs_redraw = true;
+        }
+        if (keys.bytes.len > 0) {
+            // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
+            // 마커라 그대로 둔다. 뒤에 decckm을 덧붙이는 이유는
+            // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
+            // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
+            logline.print("terminal: key> {d} byte(s) decckm={}\n", .{
+                keys.bytes.len, ctx.cursor_keys,
+            });
+            pty.write(focus.session.master_fd, keys.bytes);
+            // 치는 동안 화살표가 그 줄의 글자를 가리지 않게 숨긴다(보이는
+            // 조건 3). 다음 움직임에 다시 보인다. 바이트가 나간 키만이다 —
+            // 수정 키 · copy mode 명령 · 스크롤 · 패널 명령은 안 숨긴다.
+            self.pointer_shown = false;
+        }
+        self.runScrolls(focus, keys.scrolls);
+        try self.runCopies(focus, keys.copies);
+        // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). 값을 만드는
+        // 것은 `input.State`이고 그리는 것은 `vt.zig`이며, 둘을 잇는 것이
+        // 여기다 — `input.zig`는 `vt.zig`를 import하지 않는다
+        // (IP design 결정 6). `find_open`이 이미 같은 길로 돈다.
+        //
+        // `needs_redraw`를 여기서 켜야 한다. 화면만 바뀐 키는 PTY로
+        // 아무것도 안 보내고 스크롤도 copy 명령도 안 만든다 — 그래서
+        // 이 한 줄이 없으면 조합 중인 글자가 영영 화면에 안 나오고,
+        // 대문자 잠금을 켜도 `CAPS` 칸이 다음 키를 칠 때까지 안
+        // 밝아진다(IS design 결정 8).
+        //
+        // copy 루프 뒤인 것에도 뜻이 있다. copy mode에 들어가는 키가
+        // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
+        // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
+        if (keys.redraw) {
+            focus.screen.setPreedit(self.key_state.preedit());
+            dumpHangul(&self.key_state);
+            self.needs_redraw = true;
+        }
+        try self.runPanes(keys.panes);
+        self.runDictates(keys.dictates);
+    }
+
+    /// 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
+    /// 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
+    /// delta로 바꾸는 것도 여기서 한다 — input.zig는 격자 크기를 모른다.
+    /// 한 화면은 포커스 패널의 줄 수다(WP design 결정 1).
+    ///
+    /// 순서대로 도는 이유는 자동 반복 때문이다. PageUp을 누르고 있으면
+    /// 한 번의 read에 여러 개가 실려 오고, 그만큼 올라가야 한다.
+    fn runScrolls(self: *App, focus: *Pane, cmds: []const input.Scroll) void {
+        for (cmds) |s| {
+            switch (s) {
+                .top => focus.screen.scrollToTop(),
+                .bottom => focus.screen.scrollToBottom(),
+                .page_up => focus.screen.scrollByRows(-@as(isize, focus.rect.rows)),
+                .page_down => focus.screen.scrollByRows(@as(isize, focus.rect.rows)),
+            }
+            self.needs_redraw = true;
+        }
+    }
+
+    /// copy mode 명령도 PTY로 나가지 않는다(design 결정 3). 스크롤과
+    /// 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
+    /// 개를 실어 온다.
+    fn runCopies(self: *App, focus: *Pane, cmds: []const input.Copy) !void {
+        for (cmds) |cmd| {
+            // "못 찾았다" 메시지는 다음 키에 사라진다(design 결정 9).
+            //
+            // 끄는 자리가 루프 안인 것에 뜻이 있다. 밖에 두면 한 번의
+            // read에 여러 키가 실려 왔을 때(자동 반복) 첫 키만 메시지를
+            // 지운다.
+            //
+            // 그리고 `switch`보다 앞이라, 모든 명령이 예외 없이 지우고
+            // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
+            // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
+            focus.screen.findClearStatus();
+            switch (cmd) {
+                .enter => focus.screen.copyEnter(),
+                .exit => focus.screen.copyExit(),
+                .left => try focus.screen.copyMove(-1, 0),
+                .down => try focus.screen.copyMove(0, 1),
+                .up => try focus.screen.copyMove(0, -1),
+                .right => try focus.screen.copyMove(1, 0),
+                // 단어 이동(CN-M0). copyMove와 형제이고 선택 갱신도 같은
+                // copyApply를 통과한다 — 그래서 여기 배선은 한 줄이다.
+                .word_next => try focus.screen.copyMoveWord(.next),
+                .word_prev => try focus.screen.copyMoveWord(.prev),
+                .select_char => try focus.screen.copySelect(.char),
+                .select_line => try focus.screen.copySelect(.line),
+                // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
+                // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
+                // 때문이다.
+                .yank => try self.clips.yank(focus),
+                // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
+                // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
+                // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
+                // 살아 있는가"를 본다.
+                //
+                // 목적지가 `Clips.paste`에서 갈린다(FP design 결정 3). `input.zig`는
+                // `vt.zig`를 import하지 않으므로(IP design 결정 6) 이 갈래는
+                // 이 파일에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
+                // 알고, 클립보드도 프롬프트도 이 파일이 본다.
+                //
+                // 판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
+                // 이다. `main.zig`가 볼 수 있는 것이 화면 쪽 사실이고,
+                // `findBytes`가 이미 `find_open`을 스스로 지킨다.
+                //
+                // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
+                // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
+                .paste => self.clips.paste(focus),
+                // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
+                // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
+                .find_open => {
+                    focus.screen.findOpen();
+                    dumpFind(focus.screen, "open");
+                },
+                .find_char => |ch| {
+                    focus.screen.findChar(ch);
+                    dumpFind(focus.screen, "type");
+                },
+                .find_erase => {
+                    focus.screen.findErase();
+                    dumpFind(focus.screen, "erase");
+                },
+                .find_cancel => {
+                    focus.screen.findCancel();
+                    dumpFind(focus.screen, "cancel");
+                },
+                // 확정된 한글이 needle로 들어간다(SH-M1). `findChar`가
+                // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다 —
+                // 바이트씩 넣으면 128바이트 경계에서 음절이 반만 들어간다.
+                //
+                // 이 명령을 만드는 것은 `handleKey`가 아니라
+                // `readKeys`다(design 결정 4·5). 그 함수가 모드를
+                // `handleKey` 앞에서 읽어 목적지를 가른다.
+                .find_commit => |cmt| {
+                    focus.screen.findBytes(cmt.buf[0..cmt.len]);
+                    dumpFind(focus.screen, "commit");
+                },
+                // 이 milestone에서 유일하게 시간이 걸리는 명령이다.
+                // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
+                // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —
+                // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
+                .find_submit => {
+                    const t0 = std.Io.Clock.now(.awake, self.io);
+                    const r = try focus.screen.findSubmit();
+                    logline.print(
+                        "terminal: find> submit matches={d} moved={} us={d}\n",
+                        .{
+                            r.matches,
+                            r.moved,
+                            @divTrunc(t0.untilNow(self.io, .awake).nanoseconds, 1000),
+                        },
+                    );
+                },
+                // 결과를 버리지 않고 찍는다. 못 옮긴 것과 옮긴 것은
+                // 사람에게 다른 뜻이고, 아래 dumpCopy의 좌표만으로는
+                // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
+                .find_next => logline.print(
+                    "terminal: find> next moved={}\n",
+                    .{try focus.screen.findNext()},
+                ),
+                .find_prev => logline.print(
+                    "terminal: find> prev moved={}\n",
+                    .{try focus.screen.findPrev()},
+                ),
+            }
+            dumpCopy(focus.screen, @tagName(cmd));
+            self.needs_redraw = true;
+        }
+    }
+
+    /// 패널 명령(WP-M1). PTY로 나가지 않는다 — 스크롤 · copy와 같이
+    /// 순서대로 돈다.
+    ///
+    /// `keys.redraw` 뒤인 것에 뜻이 있다. 포커스를 옮기는 키는 조합
+    /// 중인 한글을 먼저 확정시키고(HI 결정 6) 그 확정이 `redraw`를
+    /// 켠다. 그 블록이 떠나기 전 패널의 조합 글자를 지워야 하므로, 포커스가
+    /// 바뀌기 전에 돌아야 한다. 순서를 뒤집으면 지우는 일이 새 패널에
+    /// 가고 떠난 패널에 확정된 글자가 조합 중인 모양으로 남는다.
+    ///
+    /// 바이트(확정된 `한` 포함)는 이 블록보다 먼저 옛 패널의 셸에
+    /// 갔다(WP design 결정 4).
+    ///
+    /// `ws`가 `var`인 이유는 워크스페이스를 바꾸는 명령이 같은 배치의 뒤 명령을 위해
+    /// 다시 구하기 때문이다. 이 함수를 나가면 `self.current`가 진실이다.
+    fn runPanes(self: *App, cmds: []const input.Pane) !void {
+        var ws = &self.workspaces[self.current].?;
+        for (cmds) |cmd| {
+            switch (cmd) {
+                .split_right, .split_below => {
+                    const dir: layout.Dir = if (cmd == .split_right) .right else .below;
+                    // 꽉 찼거나 가를 수 없을 만큼 작다(`Tree.split`).
+                    // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
+                    // 구별을 못 한다.
+                    const leaf = ws.tree.split(ws.focus, dir, self.whole) orelse {
+                        logline.print("terminal: pane> split refused\n", .{});
+                        continue;
+                    };
+                    const rs = try applyLayout(ws, self.whole);
+                    // 새 셸은 부팅의 것과 같은 셸이다. `spawned child pid`
+                    // 줄은 안 찍는다(WP-M1 plan 확정 1) — terminal/check.sh가
+                    // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
+                    // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
+                    // `pane>` 줄이 대신한다.
+                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf]);
+                    ws.focus = leaf;
+                },
+                // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
+                // 닫는다 — `exit`를 친 것과 같은 길이다.
+                .close => {
+                    const fp = &ws.panes[ws.focus].?;
+                    pty.hangup(fp.session);
+                    logline.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
+                        ws.focus, fp.session.child_pid,
+                    });
+                },
+                .focus_next => ws.focus = ws.tree.next(ws.focus),
+                .focus_prev => ws.focus = ws.tree.prev(ws.focus),
+                // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
+                // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
+                .new_workspace => {
+                    const n = workspaceCount(&self.workspaces);
+                    // 아홉이 찼다. `split refused`와 같은 이유로 찍는다 —
+                    // 조용하면 "키가 안 왔다"와 안 갈린다.
+                    if (n == MAX_WORKSPACES) {
+                        logline.print("terminal: pane> workspace refused\n", .{});
+                        continue;
+                    }
+                    // 패널 하나짜리 트리의 사각형은 격자 전체다
+                    // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
+                    self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+                    self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole);
+                    self.current = n;
+                    // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
+                    // 워크스페이스에 가도록 여기서 다시 구한다.
+                    ws = &self.workspaces[self.current].?;
+                },
+                // 없는 번호와 지금 번호는 아무 일도 안 한다 — 로그도 다시
+                // 그리기도 없다(`continue`가 아래 `needs_redraw`를 건너뛴다).
+                // 게이트가 `pane>` 줄 수가 안 는 것으로 그것을 본다.
+                .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => {
+                    const target: usize = @backingInt(cmd) - @backingInt(input.Pane.workspace_1);
+                    if (target >= workspaceCount(&self.workspaces) or target == self.current) continue;
+                    self.current = target;
+                    ws = &self.workspaces[self.current].?;
+                },
+            }
+            self.needs_redraw = true;
+        }
+    }
+
+    /// 받아쓰기 명령(VD-M1). 패널 명령 뒤다 — 같은 배치에서 포커스가 옮겨졌으면
+    /// 옮긴 뒤의 패널이 대상이다. 그래서 `readKeyboard`가 잡은 `focus`가 아니라 지금의
+    /// `self.current` · `ws.focus`로 다시 구한다(패널 명령이 그 둘은 고치고 `focus`는 안 고친다).
+    ///
+    /// 시작하기 전에 그 패널이 비밀번호를 받고 있는지 본다(design 위험 2). 그렇다면
+    /// 마이크를 안 연다 — Voxio가 비밀번호 칸에서 녹음을 안 시작한 것과 같다(V10).
+    /// 넣을 때 한 번 더 본다(`insertDictation`). 말하는 사이에 `sudo`가 뜰 수 있다.
+    fn runDictates(self: *App, cmds: []const input.Dictate) void {
+        const ws = &self.workspaces[self.current].?;
+        for (cmds) |cmd| {
+            switch (cmd) {
+                .toggle => switch (dictation.onTap(self.dict.phase)) {
+                    .start => {
+                        const tp = &ws.panes[ws.focus].?;
+                        if (passwordPrompt(tp.session.master_fd)) {
+                            logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ self.current + 1, ws.focus });
+                            self.dict.setNotice(.password);
+                        } else {
+                            startDictation(&self.dict, tp, self.current, ws.focus);
+                        }
+                    },
+                    .stop => {
+                        signalDictation(&self.dict, .INT);
+                        self.dict.phase = .transcribing;
+                        logline.print("terminal: dictate> stop pid={d}\n", .{self.dict.pid});
+                    },
+                    .ignore => logline.print("terminal: dictate> ignored phase={s}\n", .{
+                        if (self.dict.phase) |p| @tagName(p) else "none",
+                    }),
+                },
+                // 녹음 중의 Esc(design 결정 11). `ctx.dictating`이 참일 때만 오지만,
+                // 같은 배치의 앞 키가 단계를 바꿨을 수 있어 한 번 더 본다.
+                .cancel => if (dictation.escCancels(self.dict.phase)) {
+                    signalDictation(&self.dict, .TERM);
+                    self.dict.phase = .cancelling;
+                    logline.print("terminal: dictate> cancel pid={d}\n", .{self.dict.pid});
+                },
+            }
+            self.needs_redraw = true;
+        }
+    }
+
+    /// 바퀴 하나. 단계의 순서가 이 함수다 — `arm` → poll → `readKeyboard` → 포인터 → 배터리 →
+    /// PTY → 받아쓰기 → 그리기. `false`는 마지막 패널의 셸이 끝났다는 뜻이고 그러면 terminal이
+    /// 끝난다(MS 전의 `break :main_loop`). 그릴 일이 없는 바퀴는 화살표만 고치고 `true`다
+    /// (MS 전의 `continue`).
+    fn tick(self: *App) !bool {
+        self.arm();
 
         // 고른 배터리가 없으면 -1(무한 대기)이다. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
         // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
@@ -3329,310 +3665,7 @@ const App = struct {
         ));
         if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
-        // 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
-        // 포커스 패널이다(WP design 결정 1). 그래서 그 코드는 WP 전의
-        // `screen` · `session`이 `focus.screen` · `focus.session`으로 이름만
-        // 바뀌었다.
-        //
-        // `var`인 이유는 포커스가 바퀴 안에서 바뀌기 때문이다(WP-M1). 패널
-        // 명령이 옮기고, EOF가 포커스 패널을 닫는다. 렌더 앞에서 다시 구한다.
-        var ws = &self.workspaces[self.current].?;
-        var focus = &ws.panes[ws.focus].?;
-
-        if (self.fds[0].revents & c.POLLIN != 0) {
-            // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
-            // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
-            // 캐시하지 않고 키를 읽는 순간의 값을 쓴다. packed struct의
-            // 비트 읽기 한 번이라 비용이 없다 — design doc 결정 6이 "값으로
-            // 넘긴다"를 고르면서 감수하기로 한 대가가 이것이다.
-            const ctx = input.Context{
-                .cursor_keys = focus.screen.term.modes.get(.cursor_keys),
-                // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
-                // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
-                .swap_alt_meta = self.swap_alt_meta,
-                // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
-                .dictating = dictation.escCancels(self.dict.phase),
-            };
-            const keys = input.readKeys(&self.key_state, self.keyboard_fd, &self.key_buf, ctx);
-            // 받아쓰기의 알림은 다음 키에 사라진다(VD-M1). "키"는 무언가를 한 키다 —
-            // 수정키를 누르고 떼기만 한 배치는 안 센다. 그렇지 않으면 더블 탭의 마지막
-            // 뗌이 방금 뜬 `PASSWORD`를 바로 지운다.
-            if (self.dict.notice != null and (keys.bytes.len > 0 or keys.scrolls.len > 0 or
-                keys.copies.len > 0 or keys.panes.len > 0 or keys.dictates.len > 0 or keys.redraw))
-            {
-                self.dict.notice = null;
-                self.needs_redraw = true;
-            }
-            if (keys.bytes.len > 0) {
-                // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
-                // 마커라 그대로 둔다. 뒤에 decckm을 덧붙이는 이유는
-                // design doc 위험 4다 — 게이트가 `ESC O` 경로를 실제로
-                // 밟았는지 아니면 `ESC [`만 봤는지를 로그로 알 수 있어야 한다.
-                logline.print("terminal: key> {d} byte(s) decckm={}\n", .{
-                    keys.bytes.len, ctx.cursor_keys,
-                });
-                pty.write(focus.session.master_fd, keys.bytes);
-                // 치는 동안 화살표가 그 줄의 글자를 가리지 않게 숨긴다(보이는
-                // 조건 3). 다음 움직임에 다시 보인다. 바이트가 나간 키만이다 —
-                // 수정 키 · copy mode 명령 · 스크롤 · 패널 명령은 안 숨긴다.
-                self.pointer_shown = false;
-            }
-            // 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
-            // 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
-            // delta로 바꾸는 것도 여기서 한다 — input.zig는 격자 크기를 모른다.
-            // 한 화면은 포커스 패널의 줄 수다(WP design 결정 1).
-            //
-            // 순서대로 도는 이유는 자동 반복 때문이다. PageUp을 누르고 있으면
-            // 한 번의 read에 여러 개가 실려 오고, 그만큼 올라가야 한다.
-            for (keys.scrolls) |s| {
-                switch (s) {
-                    .top => focus.screen.scrollToTop(),
-                    .bottom => focus.screen.scrollToBottom(),
-                    .page_up => focus.screen.scrollByRows(-@as(isize, focus.rect.rows)),
-                    .page_down => focus.screen.scrollByRows(@as(isize, focus.rect.rows)),
-                }
-                self.needs_redraw = true;
-            }
-            // copy mode 명령도 PTY로 나가지 않는다(design 결정 3). 스크롤과
-            // 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
-            // 개를 실어 온다.
-            for (keys.copies) |cmd| {
-                // "못 찾았다" 메시지는 다음 키에 사라진다(design 결정 9).
-                //
-                // 끄는 자리가 루프 안인 것에 뜻이 있다. 밖에 두면 한 번의
-                // read에 여러 키가 실려 왔을 때(자동 반복) 첫 키만 메시지를
-                // 지운다.
-                //
-                // 그리고 `switch`보다 앞이라, 모든 명령이 예외 없이 지우고
-                // 그중 `.find_submit`만이 그 뒤에 다시 켤 수 있다. 순서 하나로
-                // "다음 키에 사라진다"와 "새로 실패하면 다시 뜬다"가 함께 나온다.
-                focus.screen.findClearStatus();
-                switch (cmd) {
-                    .enter => focus.screen.copyEnter(),
-                    .exit => focus.screen.copyExit(),
-                    .left => try focus.screen.copyMove(-1, 0),
-                    .down => try focus.screen.copyMove(0, 1),
-                    .up => try focus.screen.copyMove(0, -1),
-                    .right => try focus.screen.copyMove(1, 0),
-                    // 단어 이동(CN-M0). copyMove와 형제이고 선택 갱신도 같은
-                    // copyApply를 통과한다 — 그래서 여기 배선은 한 줄이다.
-                    .word_next => try focus.screen.copyMoveWord(.next),
-                    .word_prev => try focus.screen.copyMoveWord(.prev),
-                    .select_char => try focus.screen.copySelect(.char),
-                    .select_line => try focus.screen.copySelect(.line),
-                    // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
-                    // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
-                    // 때문이다.
-                    .yank => try self.clips.yank(focus),
-                    // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
-                    // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
-                    // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
-                    // 살아 있는가"를 본다.
-                    //
-                    // 목적지가 `Clips.paste`에서 갈린다(FP design 결정 3). `input.zig`는
-                    // `vt.zig`를 import하지 않으므로(IP design 결정 6) 이 갈래는
-                    // 이 파일에만 설 수 있다 — 저쪽은 `Cmd+V`가 눌렸다는 것까지만
-                    // 알고, 클립보드도 프롬프트도 이 파일이 본다.
-                    //
-                    // 판단 근거가 `input.State`의 모드가 아니라 `findNeedle()`
-                    // 이다. `main.zig`가 볼 수 있는 것이 화면 쪽 사실이고,
-                    // `findBytes`가 이미 `find_open`을 스스로 지킨다.
-                    //
-                    // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
-                    // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
-                    .paste => self.clips.paste(focus),
-                    // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
-                    // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
-                    .find_open => {
-                        focus.screen.findOpen();
-                        dumpFind(focus.screen, "open");
-                    },
-                    .find_char => |ch| {
-                        focus.screen.findChar(ch);
-                        dumpFind(focus.screen, "type");
-                    },
-                    .find_erase => {
-                        focus.screen.findErase();
-                        dumpFind(focus.screen, "erase");
-                    },
-                    .find_cancel => {
-                        focus.screen.findCancel();
-                        dumpFind(focus.screen, "cancel");
-                    },
-                    // 확정된 한글이 needle로 들어간다(SH-M1). `findChar`가
-                    // 아니라 `findBytes`인 것이 SH-M0의 이유 전부다 —
-                    // 바이트씩 넣으면 128바이트 경계에서 음절이 반만 들어간다.
-                    //
-                    // 이 명령을 만드는 것은 `handleKey`가 아니라
-                    // `readKeys`다(design 결정 4·5). 그 함수가 모드를
-                    // `handleKey` 앞에서 읽어 목적지를 가른다.
-                    .find_commit => |cmt| {
-                        focus.screen.findBytes(cmt.buf[0..cmt.len]);
-                        dumpFind(focus.screen, "commit");
-                    },
-                    // 이 milestone에서 유일하게 시간이 걸리는 명령이다.
-                    // searchAll()이 스크롤백 전체를 훑는 동안 화면이 멈춘다
-                    // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —
-                    // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
-                    .find_submit => {
-                        const t0 = std.Io.Clock.now(.awake, self.io);
-                        const r = try focus.screen.findSubmit();
-                        logline.print(
-                            "terminal: find> submit matches={d} moved={} us={d}\n",
-                            .{
-                                r.matches,
-                                r.moved,
-                                @divTrunc(t0.untilNow(self.io, .awake).nanoseconds, 1000),
-                            },
-                        );
-                    },
-                    // 결과를 버리지 않고 찍는다. 못 옮긴 것과 옮긴 것은
-                    // 사람에게 다른 뜻이고, 아래 dumpCopy의 좌표만으로는
-                    // "안 움직였다"와 "같은 자리가 맞다"를 못 가른다.
-                    .find_next => logline.print(
-                        "terminal: find> next moved={}\n",
-                        .{try focus.screen.findNext()},
-                    ),
-                    .find_prev => logline.print(
-                        "terminal: find> prev moved={}\n",
-                        .{try focus.screen.findPrev()},
-                    ),
-                }
-                dumpCopy(focus.screen, @tagName(cmd));
-                self.needs_redraw = true;
-            }
-            // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). 값을 만드는
-            // 것은 `input.State`이고 그리는 것은 `vt.zig`이며, 둘을 잇는 것이
-            // 여기다 — `input.zig`는 `vt.zig`를 import하지 않는다
-            // (IP design 결정 6). `find_open`이 이미 같은 길로 돈다.
-            //
-            // `needs_redraw`를 여기서 켜야 한다. 화면만 바뀐 키는 PTY로
-            // 아무것도 안 보내고 스크롤도 copy 명령도 안 만든다 — 그래서
-            // 이 한 줄이 없으면 조합 중인 글자가 영영 화면에 안 나오고,
-            // 대문자 잠금을 켜도 `CAPS` 칸이 다음 키를 칠 때까지 안
-            // 밝아진다(IS design 결정 8).
-            //
-            // copy 루프 뒤인 것에도 뜻이 있다. copy mode에 들어가는 키가
-            // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
-            // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
-            if (keys.redraw) {
-                focus.screen.setPreedit(self.key_state.preedit());
-                dumpHangul(&self.key_state);
-                self.needs_redraw = true;
-            }
-            // 패널 명령(WP-M1). PTY로 나가지 않는다 — 스크롤 · copy와 같이
-            // 순서대로 돈다.
-            //
-            // `keys.redraw` 뒤인 것에 뜻이 있다. 포커스를 옮기는 키는 조합
-            // 중인 한글을 먼저 확정시키고(HI 결정 6) 그 확정이 `redraw`를
-            // 켠다. 위 블록이 떠나기 전 패널의 조합 글자를 지워야 하므로, 포커스가
-            // 바뀌기 전에 돌아야 한다. 순서를 뒤집으면 지우는 일이 새 패널에
-            // 가고 떠난 패널에 확정된 글자가 조합 중인 모양으로 남는다.
-            //
-            // 바이트(확정된 `한` 포함)는 이 블록보다 먼저 옛 패널의 셸에
-            // 갔다(WP design 결정 4).
-            for (keys.panes) |cmd| {
-                switch (cmd) {
-                    .split_right, .split_below => {
-                        const dir: layout.Dir = if (cmd == .split_right) .right else .below;
-                        // 꽉 찼거나 가를 수 없을 만큼 작다(`Tree.split`).
-                        // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
-                        // 구별을 못 한다.
-                        const leaf = ws.tree.split(ws.focus, dir, self.whole) orelse {
-                            logline.print("terminal: pane> split refused\n", .{});
-                            continue;
-                        };
-                        const rs = try applyLayout(ws, self.whole);
-                        // 새 셸은 부팅의 것과 같은 셸이다. `spawned child pid`
-                        // 줄은 안 찍는다(WP-M1 plan 확정 1) — terminal/check.sh가
-                        // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
-                        // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
-                        // `pane>` 줄이 대신한다.
-                        ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf]);
-                        ws.focus = leaf;
-                    },
-                    // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
-                    // 닫는다 — `exit`를 친 것과 같은 길이다.
-                    .close => {
-                        const fp = &ws.panes[ws.focus].?;
-                        pty.hangup(fp.session);
-                        logline.print("terminal: pane> hangup leaf={d} pid={d}\n", .{
-                            ws.focus, fp.session.child_pid,
-                        });
-                    },
-                    .focus_next => ws.focus = ws.tree.next(ws.focus),
-                    .focus_prev => ws.focus = ws.tree.prev(ws.focus),
-                    // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
-                    // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
-                    .new_workspace => {
-                        const n = workspaceCount(&self.workspaces);
-                        // 아홉이 찼다. `split refused`와 같은 이유로 찍는다 —
-                        // 조용하면 "키가 안 왔다"와 안 갈린다.
-                        if (n == MAX_WORKSPACES) {
-                            logline.print("terminal: pane> workspace refused\n", .{});
-                            continue;
-                        }
-                        // 패널 하나짜리 트리의 사각형은 격자 전체다
-                        // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
-                        self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
-                        self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole);
-                        self.current = n;
-                        // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
-                        // 워크스페이스에 가도록 여기서 다시 구한다.
-                        ws = &self.workspaces[self.current].?;
-                    },
-                    // 없는 번호와 지금 번호는 아무 일도 안 한다 — 로그도 다시
-                    // 그리기도 없다(`continue`가 아래 `needs_redraw`를 건너뛴다).
-                    // 게이트가 `pane>` 줄 수가 안 는 것으로 그것을 본다.
-                    .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => {
-                        const target: usize = @backingInt(cmd) - @backingInt(input.Pane.workspace_1);
-                        if (target >= workspaceCount(&self.workspaces) or target == self.current) continue;
-                        self.current = target;
-                        ws = &self.workspaces[self.current].?;
-                    },
-                }
-                self.needs_redraw = true;
-            }
-            // 받아쓰기 명령(VD-M1). 패널 명령 뒤다 — 같은 배치에서 포커스가 옮겨졌으면
-            // 옮긴 뒤의 패널이 대상이다. 그래서 `focus` 변수가 아니라 `ws.focus`로 다시
-            // 구한다(패널 명령이 `ws`는 고치고 `focus`는 안 고친다).
-            //
-            // 시작하기 전에 그 패널이 비밀번호를 받고 있는지 본다(design 위험 2). 그렇다면
-            // 마이크를 안 연다 — Voxio가 비밀번호 칸에서 녹음을 안 시작한 것과 같다(V10).
-            // 넣을 때 한 번 더 본다(`insertDictation`). 말하는 사이에 `sudo`가 뜰 수 있다.
-            for (keys.dictates) |cmd| {
-                switch (cmd) {
-                    .toggle => switch (dictation.onTap(self.dict.phase)) {
-                        .start => {
-                            const tp = &ws.panes[ws.focus].?;
-                            if (passwordPrompt(tp.session.master_fd)) {
-                                logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ self.current + 1, ws.focus });
-                                self.dict.setNotice(.password);
-                            } else {
-                                startDictation(&self.dict, tp, self.current, ws.focus);
-                            }
-                        },
-                        .stop => {
-                            signalDictation(&self.dict, .INT);
-                            self.dict.phase = .transcribing;
-                            logline.print("terminal: dictate> stop pid={d}\n", .{self.dict.pid});
-                        },
-                        .ignore => logline.print("terminal: dictate> ignored phase={s}\n", .{
-                            if (self.dict.phase) |p| @tagName(p) else "none",
-                        }),
-                    },
-                    // 녹음 중의 Esc(design 결정 11). `ctx.dictating`이 참일 때만 오지만,
-                    // 같은 배치의 앞 키가 단계를 바꿨을 수 있어 한 번 더 본다.
-                    .cancel => if (dictation.escCancels(self.dict.phase)) {
-                        signalDictation(&self.dict, .TERM);
-                        self.dict.phase = .cancelling;
-                        logline.print("terminal: dictate> cancel pid={d}\n", .{self.dict.pid});
-                    },
-                }
-                self.needs_redraw = true;
-            }
-        }
-
+        if (self.fds[0].revents & c.POLLIN != 0) try self.readKeyboard();
         // 포인터 장치(PD-M0). 키보드 뒤 · PTY 앞이다(design 결정 3).
         //
         // 빠진 장치를 uevent보다 먼저 닫는다. 빠진 번호가 곧바로 다시 쓰이면
@@ -3692,6 +3725,8 @@ const App = struct {
         // 뷰포트가 바뀌었거나 선택이 바뀌었으면 화면 전체를 다시 그린다
         // (`scroll>` · `copy>` 줄도 그 프레임 앞뒤에 찍힌다).
         {
+            // 키보드 단계가 워크스페이스를 바꿨을 수 있어 그 뒤에 구한다.
+            const ws = &self.workspaces[self.current].?;
             var wire: PointerWire = .{
                 .gesture = &self.gesture,
                 .gesture_ws = &self.gesture_ws,
@@ -3872,12 +3907,12 @@ const App = struct {
         self.output_pending = false;
         self.last_frame_ms = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
 
-        // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
-        // 포커스 패널을 닫았을 수 있다 — 그때 위의 `focus`는 빈 슬롯을
-        // 가리킨다. 워크스페이스도 다시 구한다(WP-M2) — EOF가 워크스페이스를
-        // 지워 배열을 당겼으면 위의 `ws`는 다른 워크스페이스를 가리킨다.
-        ws = &self.workspaces[self.current].?;
-        focus = &ws.panes[ws.focus].?;
+        // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
+        // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
+        // 그래서 여기서 구한다. 워크스페이스도 같다(WP-M2) — EOF가 워크스페이스를
+        // 지워 배열을 당겼으면 같은 번호가 가리키는 것이 바뀌어 있다.
+        const ws = &self.workspaces[self.current].?;
+        const focus = &ws.panes[ws.focus].?;
 
         // 포커스 아닌 패널을 먼저 그린다(WP-M1). 포커스 패널이 마지막이어야
         // 아래 덤프 넷이 읽는 `cell_buf` · `img_buf`가 그 패널의 것으로
