@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # BS 체인 — 상태 줄의 배터리 칸(BS-M1). 스물두번째 체인.
 #
@@ -147,8 +147,8 @@ status_text() {
 # 접두가 $1인 마지막 줄이 패턴(ERE) $2에 맞을 때까지 기다린다. 있으면 0, 30초가 지나면 1.
 # 15초가 아니라 30초인 것은 검사 A3이 셸의 sleep 5를 기다리기 때문이다.
 wait_for_last() {
-  local prefix="$1" pattern="$2" i
-  for i in $(seq 1 300); do
+  local prefix="$1" pattern="$2"
+  for _ in $(seq 1 300); do
     if grep -aqE -- "$pattern" <<<"$(last_line "$prefix")"; then return 0; fi
     sleep 0.1
   done

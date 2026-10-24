@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # UT 체인 — 게스트가 명령을 이름으로 찾는가.
 #

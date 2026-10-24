@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # NW-M2. config/make_disk.sh와 다른 점이 둘이다 — 라벨이 tars-net이고,
 # 빈 디스크가 아니라 tars.conf를 미리 담아 굽는다.

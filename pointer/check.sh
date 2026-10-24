@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # PD 체인 — 포인터 장치(PD-M0~M4). 열아홉번째 체인.
 #
@@ -1179,7 +1179,6 @@ truncate -s 16M "$DISK_B"
 mkfs.ext2 -F -q -m 0 -L tars-pd -d "$SEED" "$DISK_B"
 rm -rf "$SEED"
 
-LOG_A="$LOG"
 LOG="$(mktemp)"
 echo "=== boot B: the PS/2 mouse and a uinput touchpad ==="
 qemu-system-x86_64 \
@@ -1274,6 +1273,8 @@ replay() {
   local word keys=()
   for word in $1; do
     [ "${#keys[@]}" -gt 0 ] && keys+=(spc)
+    # 글자 하나가 키 하나다 — 낱말 분리가 의도다.
+    # shellcheck disable=SC2207
     keys+=($(sed -e 's/./& /g' -e 's/-/minus/g' <<<"$word"))
   done
   type_keys "${keys[@]}" ret

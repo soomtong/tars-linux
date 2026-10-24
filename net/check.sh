@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 REPO_ROOT="$(cd .. && pwd)"
 
 # NW 체인 — 커널이 NIC를 보고 게스트가 주소를 받는다.
@@ -1148,8 +1148,8 @@ echo "the guest read ntp=${NTP_SERVER} and timezone=${TZ_NAME} off the config di
 # 버스트로 세지 않은 채 2초마다 다시 보낸다(TD design 실측 13). 그래서 뒤의
 # 두 줄은 리스 뒤에 나오고, 그 대기가 검사 5와 같은 크기다.
 wait_log() {
-  local pattern="$1" i
-  for i in $(seq 1 90); do
+  local pattern="$1"
+  for _ in $(seq 1 90); do
     if grep -a "$pattern" "$LOGA" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID_A" 2>/dev/null; then return 1; fi
     sleep 1
@@ -1475,8 +1475,8 @@ echo "nothing outlived SIGTERM — chronyd went down with the rest"
 
 # 로그에 패턴이 나올 때까지 기다린다. 게스트가 죽으면 곧바로 포기한다.
 wait_in_log() {
-  local log="$1" pattern="$2" pid="$3" i
-  for i in $(seq 1 90); do
+  local log="$1" pattern="$2" pid="$3"
+  for _ in $(seq 1 90); do
     if grep -a "$pattern" "$log" >/dev/null; then return 0; fi
     if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
     sleep 1
@@ -1486,7 +1486,7 @@ wait_in_log() {
 
 # drift 디스크로 게스트를 띄우고 프롬프트까지 기다린다. DRIFT_QEMU_PID에 남긴다.
 start_drift_guest() {
-  local log="$1" port="$2" name="$3" i ready=0
+  local log="$1" port="$2" name="$3" ready=0
   qemu-system-x86_64 \
     -m "$GUEST_MEM" \
     -kernel ../kernel/build/arch/x86/boot/bzImage \
@@ -1502,7 +1502,7 @@ start_drift_guest() {
     -monitor tcp:127.0.0.1:${port},server,nowait \
     -no-reboot &
   DRIFT_QEMU_PID=$!
-  for i in $(seq 1 120); do
+  for _ in $(seq 1 120); do
     if grep -a "terminal: screen>" "$log" >/dev/null; then ready=1; break; fi
     if ! kill -0 "$DRIFT_QEMU_PID" 2>/dev/null; then break; fi
     sleep 1
@@ -1513,8 +1513,8 @@ start_drift_guest() {
 
 # 전원 버튼을 누르고, 꺼지기를 기다리고, 유예가 안 쓰였는지 본다(SL-M2).
 power_off_guest() {
-  local port="$1" pid="$2" log="$3" name="$4" i connected=0 gone=0
-  for i in $(seq 1 20); do
+  local port="$1" pid="$2" log="$3" name="$4" connected=0 gone=0
+  for _ in $(seq 1 20); do
     if exec 3<>"/dev/tcp/127.0.0.1/${port}"; then connected=1; break; fi
     sleep 0.5
   done
@@ -1524,7 +1524,7 @@ power_off_guest() {
   sleep 0.3
   exec 3<&-
   exec 3>&-
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if ! kill -0 "$pid" 2>/dev/null; then gone=1; break; fi
     sleep 1
   done

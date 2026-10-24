@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # VD 체인 — 게스트의 tars-dictate가 마이크의 바이트를 전사 API에 보내고 받은 글자를 낸다.
 #
@@ -134,8 +134,8 @@ report_failure() {
 }
 
 wait_for_log() {
-  local pattern="$1" seconds="$2" i
-  for i in $(seq 1 "$seconds"); do
+  local pattern="$1" seconds="$2"
+  for _ in $(seq 1 "$seconds"); do
     if grep -aE "$pattern" "$LOG" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 1
@@ -145,8 +145,8 @@ wait_for_log() {
 
 # 게스트가 스스로 꺼지기를 기다린다(audio 체인과 같다).
 wait_for_exit() {
-  local seconds="$1" i
-  for i in $(seq 1 "$seconds"); do
+  local seconds="$1"
+  for _ in $(seq 1 "$seconds"); do
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
       wait "$QEMU_PID" 2>/dev/null || true
       QEMU_PID=""
@@ -582,8 +582,8 @@ report_b() {
 count_b() { grep -acE -- "$1" "$LOG" || true; }
 # 그 수가 want가 될 때까지 0.1초 간격으로 기다린다. 상한은 초.
 wait_count() {
-  local pattern="$1" want="$2" secs="$3" i
-  for i in $(seq 1 $((secs * 10))); do
+  local pattern="$1" want="$2" secs="$3"
+  for _ in $(seq 1 $((secs * 10))); do
     [ "$(count_b "$pattern")" -ge "$want" ] && return 0
     kill -0 "$QEMU_PID" 2>/dev/null || return 1
     sleep 0.1
@@ -595,8 +595,8 @@ last_status() { grep -a 'terminal: status> text=' "$LOG" | tail -n 1 | tr -d '\r
 last_dict_ink() { grep -a 'terminal: status> dict ink=' "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*ink=([0-9]+).*/\1/'; }
 # 상태 줄이 패턴(ERE, 줄 끝까지)과 맞을 때까지 기다린다.
 wait_status() {
-  local pattern="$1" secs="$2" i
-  for i in $(seq 1 $((secs * 10))); do
+  local pattern="$1" secs="$2"
+  for _ in $(seq 1 $((secs * 10))); do
     grep -aE -- "$pattern" <<<"$(last_status)" >/dev/null && return 0
     sleep 0.1
   done
@@ -606,8 +606,8 @@ wait_status() {
 # `text=` 줄 뒤에 `dict ink=` 줄을 찍으므로, `text=`를 본 순간의 마지막 `dict ink`는 앞
 # 프레임의 것일 수 있다.
 wait_dict_ink() {
-  local want="$1" i v
-  for i in $(seq 1 50); do
+  local want="$1" v
+  for _ in $(seq 1 50); do
     v="$(last_dict_ink)"
     if [ -n "$v" ]; then
       [ "$want" = on ] && [ "$v" -gt 0 ] && return 0
@@ -620,8 +620,8 @@ wait_dict_ink() {
 # 마지막 프레임의 화면 줄(포커스 패널).
 last_screen() { joined_screen_dump | tail -n 1; }
 wait_last_screen() {
-  local pattern="$1" secs="$2" i
-  for i in $(seq 1 $((secs * 10))); do
+  local pattern="$1" secs="$2"
+  for _ in $(seq 1 $((secs * 10))); do
     grep -aE -- "$pattern" <<<"$(last_screen)" >/dev/null && return 0
     sleep 0.1
   done

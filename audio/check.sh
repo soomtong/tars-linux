@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # AU 체인 — 게스트의 스피커와 마이크에 바이트가 오간다.
 #
@@ -124,8 +124,8 @@ report_failure() {
 }
 
 wait_for_log() {
-  local pattern="$1" seconds="$2" i
-  for i in $(seq 1 "$seconds"); do
+  local pattern="$1" seconds="$2"
+  for _ in $(seq 1 "$seconds"); do
     if grep -aE "$pattern" "$LOG" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 1
@@ -142,8 +142,8 @@ stop_guest() {
 # 게스트가 스스로 꺼지기를 기다린다(power 체인과 같은 판정 — 로그의 글자가 아니라
 # 프로세스가 사라졌는가). 꺼졌으면 거두고 0이다.
 wait_for_exit() {
-  local seconds="$1" i
-  for i in $(seq 1 "$seconds"); do
+  local seconds="$1"
+  for _ in $(seq 1 "$seconds"); do
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
       wait "$QEMU_PID" 2>/dev/null || true
       QEMU_PID=""
@@ -368,13 +368,15 @@ EOF
 # 모양으로 박는다.
 start_guest() {
   local drive=() usb=()
+  # QEMU 인자 안의 콤마다 — 배열 원소를 나누는 것이 아니다.
+  # shellcheck disable=SC2054
   case "$1" in
     with-disk) drive=(-drive file="$DISK",if=virtio,format=raw) ;;
     usb)
       drive=(-drive file="$DISK_USB",if=virtio,format=raw)
       usb=(-audiodev alsa,id=snd1,out.dev=tarsusb,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off
         -device qemu-xhci,id=xhci
-        -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait)
+        "-monitor" "tcp:127.0.0.1:${MONITOR_PORT},server,nowait")
       ;;
   esac
   # 부팅마다 새 로그다(AL-M0). 예전에는 같은 파일을 비우고 다시 써서 루트 check.sh가

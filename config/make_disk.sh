@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # 설정 저장소용 디스크. 16MB면 텍스트 설정 파일 수십 개에 과분하다 —
 # 크기를 키울 이유가 생기면 그때 늘린다(이미지는 매번 새로 굽는다).

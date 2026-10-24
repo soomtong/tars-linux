@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # WL 체인 — 무선이 AP에 붙고 dhcpcd가 주소를 받는다.
 #
@@ -90,8 +90,8 @@ report_failure() {
 }
 
 wait_for_log() {
-  local pattern="$1" seconds="$2" i
-  for i in $(seq 1 "$seconds"); do
+  local pattern="$1" seconds="$2"
+  for _ in $(seq 1 "$seconds"); do
     if grep -aE "$pattern" "$LOG" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 1
@@ -165,7 +165,7 @@ SYSROOT="${AMD64_SYSROOT:-/usr/local/amd64-sysroot}"
 mkdir -p ../out
 make_disk() {
   local disk="$1" mode="$2" psk="$3"
-  rm -rf "$SEED"/* && mkdir -p "$SEED/services.d" "$SEED/wl"
+  rm -rf "${SEED:?}"/* && mkdir -p "$SEED/services.d" "$SEED/wl"
   printf 'net=dhcp\n' > "$SEED/tars.conf"
   if [ -n "$mode" ]; then
     cp "$SYSROOT/usr/sbin/hostapd" "$SYSROOT/usr/bin/busybox" "$SEED/wl/"

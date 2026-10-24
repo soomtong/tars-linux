@@ -28,7 +28,7 @@
 # init/src/control.zig · service_cli.zig(멈추고 다시 띄우기)다.
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 REPO_ROOT="$(cd .. && pwd)"
 
 source ../gate_lib.sh
@@ -370,7 +370,6 @@ if timeout 15 ssh "${SSHO[@]}" -i "$KEYS/good" root@127.0.0.1 true >/dev/null 2>
 fi
 echo "with firewall=on and no ssh.nft, port 22 stayed shut"
 stop_ssh
-B_LOG="$LOG"
 
 sdbg "write $SEED/ssh.nft nftables.d/ssh.nft"
 rm -rf "$SEED"

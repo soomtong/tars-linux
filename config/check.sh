@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 REPO_ROOT="$(cd .. && pwd)"
 
@@ -127,8 +127,11 @@ TC_SET_BASH_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal b a s 
 TC_KILL_CONSOLE_KEYS=(k i l l spc minus 9 spc shift-4 shift-9 p g r e p spc minus t spc
                       t t y shift-s 0 shift-0 ret)
 TC_SET_ZSH_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal z s h ret)
+# 아래 두 배열의 콤마는 타이핑할 글자와 기대 값의 일부다.
+# shellcheck disable=SC2054
 TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
                   slash c o n f i g slash t a r s dot c o n f ret)
+# shellcheck disable=SC2054
 TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off esc_latin=on
@@ -1478,6 +1481,8 @@ probe_persisted_memory() {
 # 보고 있고, 이 둘이 그 순서의 결과를 게스트에서 본다.
 probe_bash_production() {
   local log="$1"
+  # gate_lib.sh의 type_keys가 읽는 전역이다. 이 파일 안에서는 안 읽어 shellcheck이 모른다.
+  # shellcheck disable=SC2034
   LOG="$log"
 
   local ready=0

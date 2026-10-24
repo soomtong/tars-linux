@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # GNU Unifont. 문턱값 렌더링(design 결정 4)에 쓸 수 있는 비트맵 폰트다 —
 # unitsPerEm이 64라 16px에서 scale이 정확히 0.25이고, coverage가 0 아니면

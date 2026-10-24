@@ -7,7 +7,7 @@
 # terminal/check.sh 둘 다 이 스크립트를 부른다.
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # vendor 스크립트들은 산출물이 이미 있으면 아무것도 하지 않는다.
 # ghostty-src는 다운로드에 더해 lib-vt 빌드까지 하므로 트리가 없을 때만 부른다.

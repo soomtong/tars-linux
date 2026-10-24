@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # WP 체인 — 패널 분할 · 닫기 · 순환(WP-M1)과 워크스페이스(WP-M2). 열여덟번째 체인.
 #
@@ -177,8 +177,8 @@ last_screen() {
 # gate_lib.sh의 wait_for_screen과 같은 이유로 고정 sleep을 안 쓴다 — 셸 둘이
 # 같은 TCG 게스트에서 돌고 있어 한 프레임이 얼마나 걸릴지 아무도 안 쟀다.
 wait_for_pane() {
-  local pattern="$1" i line
-  for i in $(seq 1 150); do
+  local pattern="$1" line
+  for _ in $(seq 1 150); do
     line="$(last_pane_line)"
     if grep -aqE -- "$pattern" <<<"$line"; then return 0; fi
     sleep 0.1
@@ -194,8 +194,8 @@ clip_count() {
 
 # clip_count가 기준보다 커질 때까지 기다린다. 있으면 0, 15초가 지나면 1.
 wait_for_clip() {
-  local what="$1" before="$2" i
-  for i in $(seq 1 150); do
+  local what="$1" before="$2"
+  for _ in $(seq 1 150); do
     if [ "$(clip_count "$what")" -gt "$before" ]; then return 0; fi
     sleep 0.1
   done
@@ -206,8 +206,8 @@ wait_for_clip() {
 # 15초가 지나면 1. wait_for_screen은 로그 전체를 보므로 "어느 패널에
 # 나왔는가"를 못 가른다(project_gate_screen_echo).
 wait_for_last_screen() {
-  local pattern="$1" i
-  for i in $(seq 1 150); do
+  local pattern="$1"
+  for _ in $(seq 1 150); do
     if grep -aqE -- "$pattern" <<<"$(last_screen)"; then return 0; fi
     sleep 0.1
   done
@@ -219,10 +219,10 @@ wait_for_last_screen() {
 # 출력 줄이다(copy 체인 검사 8과 같은 키). 들어간 것을 copy> enter 줄 수로
 # 기다린다 — 안 들어갔는데 k를 치면 셸이 k를 받는다.
 yank_line_above_prompt() {
-  local enters i
+  local enters
   enters="$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)"
   type_keys meta_l-shift-c
-  for i in $(seq 1 150); do
+  for _ in $(seq 1 150); do
     [ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$enters" ] && break
     sleep 0.1
   done
@@ -234,8 +234,8 @@ yank_line_above_prompt() {
 # 어떤 줄의 개수가 기준보다 커질 때까지 기다린다. 60초 — init이 terminal을
 # 되살리는 데 걸리는 시간을 terminal/check.sh가 같은 한도로 본다.
 wait_for_more() {
-  local fn="$1" before="$2" i
-  for i in $(seq 1 600); do
+  local fn="$1" before="$2"
+  for _ in $(seq 1 600); do
     if [ "$("$fn")" -gt "$before" ]; then return 0; fi
     sleep 0.1
   done
@@ -689,7 +689,6 @@ truncate -s 16M "$DISK_B"
 mkfs.ext2 -F -q -m 0 -L tars-cb -d "$SEED" "$DISK_B"
 rm -rf "$SEED"
 
-LOG_A="$LOG"
 LOG="$(mktemp)"
 echo "=== boot B: clipboard=pane ==="
 qemu-system-x86_64 \

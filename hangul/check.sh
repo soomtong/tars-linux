@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # HI 체인 — 한글 입력.
 #
@@ -264,8 +264,8 @@ screen_lines() {
 # 있던 글자가 바로 맞는다 — vim이 끝나고 돌아온 화면만 보려면 기준점이
 # 필요하다. 있으면 0, 15초가 지나면 1.
 wait_for_new_screen() {
-  local n="$1" pattern="$2" i
-  for i in $(seq 1 150); do
+  local n="$1" pattern="$2"
+  for _ in $(seq 1 150); do
     if grep -aqE -- "$pattern" <<<"$(grep -a 'terminal: screen>' "$LOG" | tail -n "+$((n + 1))")"; then return 0; fi
     sleep 0.1
   done

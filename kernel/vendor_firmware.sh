@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # 무선 firmware를 받아 guest_firmware.sh의 목록대로 골라 cpio 하나로 만든다
 # (WL-M1). make_initrd.sh가 부르고, 그 cpio를 initrd 뒤에 이어 붙인다.

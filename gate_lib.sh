@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 게이트 체인들이 함께 쓰는 것 둘 — 게스트 메모리 크기와 타이핑 헬퍼.
 #
 # 왜 파일 하나인가. GL-M2 전까지 아래 함수는 다섯 체인에 글자 그대로 같은
@@ -40,6 +41,7 @@
 #
 # boot/check.sh와 device/check.sh는 타이핑을 안 하는데도 이 파일을 source한다.
 # 이 수 하나 때문이다.
+# shellcheck disable=SC2034
 GUEST_MEM=512
 
 # 게스트에 키를 한 개씩 보내고, 게스트가 반응할 때까지 기다린다.

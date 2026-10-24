@@ -1224,13 +1224,16 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   /config/fish.config. off면 셸이 설정 없이 뜬다
         \\shell_config={s}
         \\# net: off | dhcp
-        \\#   dhcp면 init이 eth0을 UP으로 올리고 dhcpcd를 띄운다. 주소도
-        \\#   라우트도 /etc/resolv.conf도 dhcpcd가 쓴다
+        \\#   dhcp면 init이 dhcpcd를 띄우고 인터페이스는 dhcpcd가 고른다 —
+        \\#   부팅 뒤에 꽂은 USB 동글도 잡는다. 주소도 라우트도
+        \\#   /etc/resolv.conf도 dhcpcd가 쓴다
         \\net={s}
         \\# ntp: off | dhcp | <IPv4 주소>
-        \\#   dhcp면 DHCP 서버가 알려 준 NTP 서버에 묻고, 주소를 적으면 그
-        \\#   주소에 묻는다. 부팅할 때 한 번만 묻고 시계를 그 값으로 뛴다 —
-        \\#   그 뒤로는 시계를 안 건드린다. net=off면 아무 일도 안 한다
+        \\#   시계는 chronyd가 맞춘다. dhcp면 DHCP 서버가 알려 준 NTP 서버에,
+        \\#   주소를 적으면 그 주소에 묻는다. 처음 세 번은 1초 넘게 틀리면
+        \\#   뛰고 그 뒤로는 조금씩 당긴다. 배운 drift는 /config/chrony.drift에
+        \\#   남고, 서버를 더 두려면 /config/chrony.d/에 적는다.
+        \\#   net=off면 아무 일도 안 한다
         \\ntp={s}
         \\# timezone: UTC | <IANA 이름. 예: Asia/Seoul>
         \\#   /usr/share/zoneinfo 아래의 이름이다. 없는 이름이면 로그를 찍고

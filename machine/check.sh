@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # RM-M0: 열번째 체인. 아홉 체인이 전부 QEMU의 기본 BIOS(SeaBIOS)로 뜨는데
 # 실머신 노트북은 예외 없이 UEFI다. 이 체인은 같은 ISO를 UEFI 펌웨어로

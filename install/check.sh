@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # DI-M1 · M2: 열세번째 체인. ISO로 부팅한 기계가 자기를 내장 디스크에
 # 설치하고, 그 디스크만으로 다시 뜨고, 새 ISO로 갱신해도 설정이 남는가
@@ -155,8 +155,8 @@ CR=$(printf '\r')
 
 # 로그에 고정 문자열이 나타날 때까지 기다린다. 0이면 나왔다.
 wait_log() {
-  local want="$1" limit="${2:-30}" i
-  for i in $(seq 1 "$((limit * 10))"); do
+  local want="$1" limit="${2:-30}"
+  for _ in $(seq 1 "$((limit * 10))"); do
     if grep -aqF -- "$want" "$LOG"; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 0.1

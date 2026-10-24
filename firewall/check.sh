@@ -15,7 +15,7 @@
 # nf_tables이고 규칙을 넣는 것은 nft다(design 결정 2).
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 REPO_ROOT="$(cd .. && pwd)"
 
 source ../gate_lib.sh
@@ -102,8 +102,8 @@ fail() {
 }
 
 wait_for_log() {
-  local pattern="$1" seconds="$2" i
-  for i in $(seq 1 "$seconds"); do
+  local pattern="$1" seconds="$2"
+  for _ in $(seq 1 "$seconds"); do
     if grep -aE "$pattern" "$LOG" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 1

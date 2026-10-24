@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 게스트에 들어가는 무선 · 소리 firmware 목록 — 이것이 사는 유일한 자리다(WL-M1 ·
 # AU-M3).
 #
@@ -43,6 +44,7 @@
 # 가리키는 것이 없어진다. 뒤쪽은 vendor_firmware.sh가 빌드 때 잡는다(없는
 # 파일이면 죽는다). 앞쪽은 아무도 안 잡는다 — 옛 파일로도 칩은 뜬다.
 
+# shellcheck disable=SC2034
 GUEST_FIRMWARE=(
   # Intel — iwlwifi
   linux-firmware/intel/iwlwifi/iwlwifi-3160-17.ucode:lib/firmware/iwlwifi-3160-17.ucode

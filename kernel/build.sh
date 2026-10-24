@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 KERNEL_VERSION="6.18.42"
 KERNEL_MAJOR="6.x"

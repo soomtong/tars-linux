@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 GHOSTTY_SHA="2602886144c7e95099c9e2ba07f181c69e7276f3"
 SRC_DIR="ghostty-src"

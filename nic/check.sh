@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # WN 체인 — 노트북형 유선 NIC가 붙고, 부팅 뒤에 꽂은 것도 주소를 받는다.
 #
@@ -94,8 +94,8 @@ report_failure() {
 
 # 로그에 패턴(ERE)이 나올 때까지 기다린다. QEMU가 먼저 죽으면 바로 돌아온다.
 wait_for_log() {
-  local pattern="$1" seconds="$2" i
-  for i in $(seq 1 "$seconds"); do
+  local pattern="$1" seconds="$2"
+  for _ in $(seq 1 "$seconds"); do
     if grep -aE "$pattern" "$LOG" >/dev/null; then return 0; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then return 1; fi
     sleep 1
