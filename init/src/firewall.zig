@@ -28,7 +28,7 @@ const BASE_PATH: [:0]const u8 = "/etc/tars/firewall-base.nft";
 fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@backingInt(e)});
         return false;
     }
     if (pid == 0) {
@@ -48,7 +48,7 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
             // SA_RESTART가 꺼져 있어(power.zig) 전원 버튼이 이 기다림을 깨운다.
             // 플래그는 이미 섰고 감독 루프가 곧 본다 — 여기서는 다시 기다린다.
             if (e == .INTR) continue;
-            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@backingInt(e)});
             return false;
         }
         break;
@@ -58,7 +58,7 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
         logline.print("tars-init: nft -f {s} exited {d}\n", .{ path, linux.W.EXITSTATUS(status) });
     } else {
         logline.print("tars-init: nft -f {s} was killed (signal {d})\n", .{
-            path, @intFromEnum(linux.W.TERMSIG(status)),
+            path, @backingInt(linux.W.TERMSIG(status)),
         });
     }
     return false;
@@ -98,7 +98,7 @@ pub fn up(want: config.Firewall, envp: [*:null]const ?[*:0]const u8) void {
 pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot fork for nft (errno {d})\n", .{@backingInt(e)});
         return false;
     }
     if (pid == 0) {
@@ -112,7 +112,7 @@ pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
         const rc = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: waiting for nft failed (errno {d})\n", .{@backingInt(e)});
             return false;
         }
         break;

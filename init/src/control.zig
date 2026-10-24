@@ -310,7 +310,7 @@ fn addrOf(path: []const u8) ?linux.sockaddr.un {
 }
 
 fn noSocket(step: []const u8, e: linux.E) ?i32 {
-    logline.print("tars-init: no control socket ({s} errno {d})\n", .{ step, @intFromEnum(e) });
+    logline.print("tars-init: no control socket ({s} errno {d})\n", .{ step, @backingInt(e) });
     return null;
 }
 

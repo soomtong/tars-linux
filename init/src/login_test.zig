@@ -49,8 +49,7 @@ pub fn main() !void {
         std.debug.print("FAIL: replaceRootShell gave up on a normal passwd\n", .{});
         return error.NoResult;
     };
-    try expectEql("root's shell", replaced,
-        "root:x:0:0:root:/:/usr/bin/zsh\n" ++
+    try expectEql("root's shell", replaced, "root:x:0:0:root:/:/usr/bin/zsh\n" ++
         "sshd:x:100:65534::/run/sshd:/usr/sbin/nologin\n");
     // 두 번 해도 같다 — 부팅은 initramfs의 원본에서 시작하지만, 함수는 멱등이어야 한다.
     var out2: [512]u8 = undefined;
@@ -78,8 +77,7 @@ pub fn main() !void {
         std.debug.print("FAIL: renderSetEnv gave up\n", .{});
         return error.NoResult;
     };
-    try expectEql("SetEnv", env,
-        login.SETENV_HEADER ++
+    try expectEql("SetEnv", env, login.SETENV_HEADER ++
         "SetEnv PATH=\"/usr/bin:/bin\" XDG_DATA_HOME=\"/config/xdg\" TZ=\"Asia/Seoul\" HISTFILE=\"/config/zsh_history\"\n");
     const bad = [_][]const u8{"TZ=a\"b"};
     if (login.renderSetEnv(&out, &bad) != null) {
@@ -99,8 +97,7 @@ pub fn main() !void {
     _ = linux.unlink(ENV);
     login.apply(PASSWD, ENV, "/usr/bin/bash", &entries);
     var rb: [512]u8 = undefined;
-    try expectEql("passwd on disk", try readFile(PASSWD, &rb),
-        "root:x:0:0:root:/:/usr/bin/bash\n" ++
+    try expectEql("passwd on disk", try readFile(PASSWD, &rb), "root:x:0:0:root:/:/usr/bin/bash\n" ++
         "sshd:x:100:65534::/run/sshd:/usr/sbin/nologin\n");
     var rb2: [512]u8 = undefined;
     try expectEql("env on disk", try readFile(ENV, &rb2), env);

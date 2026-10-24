@@ -60,7 +60,7 @@ const NO_DISK: [:0]const u8 = "tars-storage-test-absent.img";
 fn writeFile(path: [:0]const u8, bytes: []const u8) !void {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
-        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.OpenFailed;
     }
     const fd: i32 = @intCast(rc);
@@ -71,7 +71,7 @@ fn writeFile(path: [:0]const u8, bytes: []const u8) !void {
         const n = linux.write(fd, bytes.ptr + written, bytes.len - written);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @backingInt(e) });
             return error.WriteFailed;
         }
         if (n == 0) return error.WriteFailed;

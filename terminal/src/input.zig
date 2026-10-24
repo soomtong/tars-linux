@@ -1738,11 +1738,11 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         // 사라졌고, 사라진 것이 트리거의 뗌이면 판정이 "첫 누름"에 멈춰 있다 —
         // 버린다(Voxio `recoverFromDroppedEvents`의 toggle 갈래). 수정키 비트가 눌린
         // 채로 남을 수 있는 오래된 구멍(design 실측 12)은 이 milestone의 것이 아니다.
-        if (ev.@"type" == c.EV_SYN and ev.code == c.SYN_DROPPED) {
+        if (ev.type == c.EV_SYN and ev.code == c.SYN_DROPPED) {
             self.dictate_tap.reset();
             continue;
         }
-        if (ev.@"type" != c.EV_KEY) continue;
+        if (ev.type != c.EV_KEY) continue;
         // 이 값은 이미 손에 있었다(HI-M0 실측 3). `readKeys`가
         // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
         // 모드를 `handleKey` 앞에서 읽는다(SH design 결정 5). `Enter`가

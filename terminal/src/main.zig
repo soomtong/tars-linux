@@ -40,7 +40,7 @@ const MARGIN_COLOR: u32 = 0x00102030;
 const GRID_X: u32 = 20;
 const GRID_Y: u32 = 20;
 const CELL_W: u32 = 8; // unifont의 라틴 advance. 폰트가 준 값과 같아야
-                       // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
+// 한다 — font.zig의 Glyph.cell_width가 그 값이다.
 const ROW_HEIGHT: u32 = 16;
 
 /// 상태 줄 앞 세 칸의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서
@@ -921,7 +921,7 @@ fn dumpCursor(fb: drm.Framebuffer, screen: *vt.Screen, rect: layout.Rect) void {
     const box_w: u32 = if (ink == 0) 0 else max_x - min_x + 1;
     const box_h: u32 = if (ink == 0) 0 else max_y - min_y + 1;
     logline.print("terminal: cursor> vt={s} drawn={s} row={d} col={d} cols={d} ink={d} box={d}x{d}{s}\n", .{
-        asked, @tagName(cm.shape), cm.row, cm.col, cm.cols, ink, box_w, box_h,
+        asked,                                             @tagName(cm.shape), cm.row, cm.col, cm.cols, ink, box_w, box_h,
         if (outside) " (outside the framebuffer)" else "",
     });
 }
@@ -948,7 +948,7 @@ fn dumpImages(fb: drm.Framebuffer, imgs: []const vt.ImagePlacement, dropped: usi
         const left = @as(i64, o.x) + p.dst_x;
         const top = @as(i64, o.y) + p.dst_y;
         logline.print("terminal: image> id={d} layer={s} dst={d},{d} {d}x{d} src={d},{d} {d}x{d} frame={d}us\n", .{
-            p.image_id, @tagName(p.layer), left,  top,   p.dst_w, p.dst_h,
+            p.image_id, @tagName(p.layer), left,    top,     p.dst_w,  p.dst_h,
             p.src_x,    p.src_y,           p.src_w, p.src_h, frame_us,
         });
         var hex: [4][6]u8 = undefined;
@@ -3481,7 +3481,7 @@ pub fn main(init: std.process.Init) !void {
                     // 그리기도 없다(`continue`가 아래 `needs_redraw`를 건너뛴다).
                     // 게이트가 `pane>` 줄 수가 안 는 것으로 그것을 본다.
                     .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => {
-                        const target: usize = @intFromEnum(cmd) - @intFromEnum(input.Pane.workspace_1);
+                        const target: usize = @backingInt(cmd) - @backingInt(input.Pane.workspace_1);
                         if (target >= workspaceCount(&workspaces) or target == current) continue;
                         current = target;
                         ws = &workspaces[current].?;

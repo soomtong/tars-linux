@@ -322,7 +322,7 @@ fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
     return error.WrongCommit;
 }
 
-/// libc를 직접 선언한다(SH-M1). Zig 0.16의 `std.posix`에는 `pipe`도
+/// libc를 직접 선언한다(SH-M1). Zig 0.16부터 `std.posix`에는 `pipe`도
 /// `write`도 `close`도 없다 — I/O가 `std.Io`로 옮겨 갔기 때문이다.
 /// `input.zig`가 `read`와 `open`을 같은 이유로 이렇게 선언해 두었다.
 extern "c" fn pipe(fds: *[2]c_int) c_int;
@@ -336,7 +336,7 @@ extern "c" fn close(fd: c_int) c_int;
 /// 키는 전부 자모와 Enter라 tap과 무관하다.
 fn keyEvent(code: u16, value: i32) input.c.struct_input_event {
     var ev = std.mem.zeroes(input.c.struct_input_event);
-    ev.@"type" = input.c.EV_KEY;
+    ev.type = input.c.EV_KEY;
     ev.code = code;
     ev.value = value;
     return ev;
@@ -354,7 +354,7 @@ fn keyEventAt(code: u16, value: i32, us: u64) input.c.struct_input_event {
 /// 커널의 이벤트 버퍼가 넘쳤다는 표시(`EV_SYN` · `SYN_DROPPED`).
 fn synDropped() input.c.struct_input_event {
     var ev = std.mem.zeroes(input.c.struct_input_event);
-    ev.@"type" = input.c.EV_SYN;
+    ev.type = input.c.EV_SYN;
     ev.code = input.c.SYN_DROPPED;
     return ev;
 }

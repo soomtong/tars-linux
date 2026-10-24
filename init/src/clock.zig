@@ -99,7 +99,7 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
     if (failed(mk)) |e| {
         if (e != .EXIST) {
             logline.print("tars-init: cannot make {s} (errno {d})\n", .{
-                CONF_DIR, @intFromEnum(e),
+                CONF_DIR, @backingInt(e),
             });
             return false;
         }
@@ -108,7 +108,7 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
     const rc = linux.open(CONF_PATH.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
         logline.print("tars-init: cannot open {s} (errno {d})\n", .{
-            CONF_PATH, @intFromEnum(e),
+            CONF_PATH, @backingInt(e),
         });
         return false;
     }
@@ -118,7 +118,7 @@ fn writeConf(server: ?[4]u8, keep: bool) bool {
     const n = linux.write(fd, text.ptr, text.len);
     if (failed(n)) |e| {
         logline.print("tars-init: cannot write {s} (errno {d})\n", .{
-            CONF_PATH, @intFromEnum(e),
+            CONF_PATH, @backingInt(e),
         });
         return false;
     }

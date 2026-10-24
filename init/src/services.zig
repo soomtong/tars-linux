@@ -134,7 +134,7 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
         if (e == .NOENT) {
             logline.print("tars-init: no {s}, 0 services\n", .{dir});
         } else {
-            logline.print("tars-init: cannot open {s} (errno {d}), 0 services\n", .{ dir, @intFromEnum(e) });
+            logline.print("tars-init: cannot open {s} (errno {d}), 0 services\n", .{ dir, @backingInt(e) });
         }
         return;
     }
@@ -151,7 +151,7 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
     while (true) {
         const n = linux.getdents64(fd, &buf, buf.len);
         if (failed(n)) |e| {
-            logline.print("tars-init: cannot read {s} (errno {d})\n", .{ dir, @intFromEnum(e) });
+            logline.print("tars-init: cannot read {s} (errno {d})\n", .{ dir, @backingInt(e) });
             break;
         }
         if (n == 0) break;
@@ -197,7 +197,7 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
         };
         switch (check(path)) {
             .unreadable => |e| {
-                logline.print("tars-init: service {s} cannot be read (errno {d}), skipped\n", .{ name, @intFromEnum(e) });
+                logline.print("tars-init: service {s} cannot be read (errno {d}), skipped\n", .{ name, @backingInt(e) });
                 continue;
             },
             .not_executable => {

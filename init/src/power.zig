@@ -44,7 +44,7 @@ fn onSignal(sig: linux.SIG) callconv(.c) void {
 /// 하는 일이 원자적 저장 하나뿐이라 시그널 핸들러 안에서 불러도 안전하다 —
 /// 그래서 onSignal이 이 함수를 그대로 쓴다.
 pub fn request(action: Action) void {
-    @atomicStore(u8, &pending, @intFromEnum(action), .seq_cst);
+    @atomicStore(u8, &pending, @backingInt(action), .seq_cst);
 }
 
 /// 시그널 처리를 켠다. 이 함수를 부르기 전까지 PID 1에게 보낸 SIGTERM은
@@ -63,7 +63,7 @@ pub fn install() void {
     };
     if (failed(linux.sigaction(.TERM, &act, null))) |e| {
         logline.print("tars-init: failed to install SIGTERM handler (errno {d})\n", .{
-            @intFromEnum(e),
+            @backingInt(e),
         });
         return;
     }
@@ -71,7 +71,7 @@ pub fn install() void {
     // 남긴다"로 동일하고, 무엇을 남길지는 onSignal 안에서 갈린다.
     if (failed(linux.sigaction(.INT, &act, null))) |e| {
         logline.print("tars-init: failed to install SIGINT handler (errno {d})\n", .{
-            @intFromEnum(e),
+            @backingInt(e),
         });
         return;
     }
@@ -110,7 +110,7 @@ pub fn resetToDefault() void {
 pub fn take() ?Action {
     const raw = @atomicRmw(u8, &pending, .Xchg, 0, .seq_cst);
     if (raw == 0) return null;
-    return @enumFromInt(raw);
+    return @fromBackingInt(@intCast(raw));
 }
 
 /// Ctrl+Alt+Del을 커널에게서 빼앗아 우리에게 돌린다.
@@ -132,7 +132,7 @@ pub fn take() ?Action {
 pub fn disableCtrlAltDel() void {
     if (failed(linux.reboot(.MAGIC1, .MAGIC2, .CAD_OFF, null))) |e| {
         logline.print("tars-init: could not take over ctrl-alt-del (errno {d})\n", .{
-            @intFromEnum(e),
+            @backingInt(e),
         });
         return;
     }

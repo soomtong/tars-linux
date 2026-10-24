@@ -159,10 +159,10 @@ pub fn main() !void {
     // 줄마다 둘에 함께 넣는다. parse가 말없이 받는 줄은 classify가 건너뛰는 줄이거나
     // judge가 받는 쌍이어야 하고, 그 반대도 같다.
     const lines = [_][]const u8{
-        "",               "   ",            "# shell=zsh",  "  # x",           "shell=zsh",
-        "  shell = zsh  ", "\tshell\t=\tzsh", "shell=zsh\r",  "shell=zsh=extra", "no equals",
-        "=zsh",           "shell=",         "colour=red",   "net = dhcp",      "hangul_toggle=",
-        "ntp=1.2.3",      "timezone = Asia/Seoul",
+        "",                "   ",                   "# shell=zsh", "  # x",           "shell=zsh",
+        "  shell = zsh  ", "\tshell\t=\tzsh",       "shell=zsh\r", "shell=zsh=extra", "no equals",
+        "=zsh",            "shell=",                "colour=red",  "net = dhcp",      "hangul_toggle=",
+        "ntp=1.2.3",       "timezone = Asia/Seoul",
     };
     for (lines) |raw| {
         edit.heard = .{};
@@ -190,8 +190,7 @@ pub fn main() !void {
     // 마지막 줄이 이기므로 그 줄을 바꾼다. 앞 줄은 그대로 둔다(check가 알린다).
     try expectSet("shell=zsh\nnet=off\nshell=bash\n", "shell", "fish", "shell=zsh\nnet=off\nshell=fish\n");
     // 사람의 주석 · 모르는 키 · 틀린 줄 · 끝에 개행 없음 — 바꾸는 줄 밖은 바이트 하나 안 바뀐다.
-    try expectSet("# mine\ncolour=red\n  net = off  # old\nno equals\nkeyboard=pc",
-        "net", "dhcp", "# mine\ncolour=red\nnet=dhcp\nno equals\nkeyboard=pc");
+    try expectSet("# mine\ncolour=red\n  net = off  # old\nno equals\nkeyboard=pc", "net", "dhcp", "# mine\ncolour=red\nnet=dhcp\nno equals\nkeyboard=pc");
     // CRLF 줄은 그 줄만 LF가 된다(parse는 \r을 뗀다).
     try expectSet("shell=zsh\r\nnet=off\r\n", "net", "dhcp", "shell=zsh\r\nnet=dhcp\n");
     // 주석 안의 키는 줄이 아니다.

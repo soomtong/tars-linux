@@ -7,7 +7,6 @@ const storage = @import("storage.zig");
 /// install.zig와 가른 이유는 storage.zig가 tarsLabel과 findConfigDisk를 가른
 /// 것과 같다 — 순수한 쪽은 disk_test가 호스트에서 0.1초에 본다. 시스템 콜을
 /// 하는 쪽은 install 체인이 OVMF 부팅으로 본다.
-
 /// 앞머리를 이만큼 읽는다. ISO9660의 primary volume descriptor가 오프셋
 /// 32768(섹터 16)에서 시작하고 2048바이트다. ext2 superblock(1024~2047)과
 /// GPT 헤더(512)와 MBR 서명(510)은 전부 그 앞에 든다.
@@ -75,7 +74,7 @@ fn hasGptAt(head: []const u8, off: usize) bool {
 /// 전에는 넘치면 줄을 통째로 버렸다. 긴 인자를 되풀이하는 에러
 /// (`<arg> is not a disk ...`)가 그래서 아무 말 없이 종료 코드만 남겼다.
 ///
-/// Zig 0.16의 bufPrint는 넘칠 때 NoSpaceLeft를 돌려주면서 buf에 들어간
+/// Zig의 bufPrint는(0.16에서 확인) 넘칠 때 NoSpaceLeft를 돌려주면서 buf에 들어간
 /// 만큼은 채워 둔다(DC-M2 plan에서 확인). 그 동작에 기댄다 — 바뀌면
 /// disk_test의 검사 11이 빨개진다. buf는 4바이트보다 커야 한다.
 pub fn clip(buf: []u8, comptime fmt: []const u8, args: anytype) []const u8 {

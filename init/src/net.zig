@@ -61,7 +61,7 @@ pub fn loopbackUp() void {
     // AF_INET/SOCK_DGRAM이 관습이다. 여기서 실패하면 커널에 INET이 없다.
     const srv = linux.socket(linux.AF.INET, linux.SOCK.DGRAM, 0);
     if (failed(srv)) |e| {
-        logline.print("tars-init: cannot open a socket to raise lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot open a socket to raise lo (errno {d})\n", .{@backingInt(e)});
         return;
     }
     const fd: i32 = @intCast(srv);
@@ -71,7 +71,7 @@ pub fn loopbackUp() void {
     @memcpy(req.name[0..2], "lo");
 
     if (failed(linux.ioctl(fd, SIOCGIFFLAGS, @intFromPtr(&req)))) |e| {
-        logline.print("tars-init: cannot read the flags of lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot read the flags of lo (errno {d})\n", .{@backingInt(e)});
         return;
     }
     if (req.flags & IFF_UP != 0) {
@@ -81,7 +81,7 @@ pub fn loopbackUp() void {
 
     req.flags |= IFF_UP;
     if (failed(linux.ioctl(fd, SIOCSIFFLAGS, @intFromPtr(&req)))) |e| {
-        logline.print("tars-init: cannot raise lo (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: cannot raise lo (errno {d})\n", .{@backingInt(e)});
         return;
     }
     // LB-M3의 검사가 이 줄을 grep한다.

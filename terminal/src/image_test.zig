@@ -36,9 +36,21 @@ const RGB_2x2 = [_]u8{ 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF };
 
 fn quad(dst_x: i32, dst_y: i32) vt.ImagePlacement {
     return .{
-        .layer = .above_text, .z = 0, .image_id = 1, .format = .rgb, .data = &RGB_2x2,
-        .width = 2, .height = 2, .src_x = 0, .src_y = 0, .src_w = 2, .src_h = 2,
-        .dst_x = dst_x, .dst_y = dst_y, .dst_w = 32, .dst_h = 32,
+        .layer = .above_text,
+        .z = 0,
+        .image_id = 1,
+        .format = .rgb,
+        .data = &RGB_2x2,
+        .width = 2,
+        .height = 2,
+        .src_x = 0,
+        .src_y = 0,
+        .src_w = 2,
+        .src_h = 2,
+        .dst_x = dst_x,
+        .dst_y = dst_y,
+        .dst_w = 32,
+        .dst_h = 32,
     };
 }
 

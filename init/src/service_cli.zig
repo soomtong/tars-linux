@@ -123,7 +123,7 @@ pub fn main(init: std.process.Init.Minimal) u8 {
 
     const text = switch (ask(req, &buf)) {
         .down => |e| {
-            complain("cannot reach init at {s} (errno {d})", .{ control.PATH, @intFromEnum(e) });
+            complain("cannot reach init at {s} (errno {d})", .{ control.PATH, @backingInt(e) });
             return EXIT_UNREACHABLE;
         },
         .silent => {

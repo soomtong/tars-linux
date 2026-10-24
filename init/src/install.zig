@@ -14,7 +14,6 @@ const disk = @import("disk.zig");
 ///
 /// init처럼 libc 없이 시스템 콜만 쓴다. 게스트에 `mount` 명령이 없어서다
 /// (design 확인 6). 파티션과 포맷만 외부 도구 셋에 맡긴다(결정 3).
-
 /// main.zig·storage.zig에도 같은 함수가 있다. 세 줄짜리 헬퍼 하나 때문에
 /// 공용 모듈을 만들지 않는다는 devices.zig의 규칙 그대로다.
 fn failed(rc: usize) ?linux.E {
@@ -273,14 +272,14 @@ fn runTool(
     var fds: [2]i32 = .{ -1, -1 };
     if (input != null) {
         if (failed(linux.pipe(&fds))) |e| {
-            complain("pipe for {s} failed (errno {d})", .{ tool, @intFromEnum(e) });
+            complain("pipe for {s} failed (errno {d})", .{ tool, @backingInt(e) });
             return false;
         }
     }
 
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        complain("fork for {s} failed (errno {d})", .{ tool, @intFromEnum(e) });
+        complain("fork for {s} failed (errno {d})", .{ tool, @backingInt(e) });
         return false;
     }
     if (pid == 0) {
@@ -323,7 +322,7 @@ fn runTool(
         const rc = linux.wait4(@intCast(pid), @ptrCast(&status), 0, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            complain("waiting for {s} failed (errno {d})", .{ tool, @intFromEnum(e) });
+            complain("waiting for {s} failed (errno {d})", .{ tool, @backingInt(e) });
             return false;
         }
         break;
@@ -333,7 +332,7 @@ fn runTool(
     if (linux.W.IFEXITED(status)) {
         complain("{s} failed (exit {d}); what it said:", .{ tool, linux.W.EXITSTATUS(status) });
     } else {
-        complain("{s} was killed (signal {d}); what it said:", .{ tool, @intFromEnum(linux.W.TERMSIG(status)) });
+        complain("{s} was killed (signal {d}); what it said:", .{ tool, @backingInt(linux.W.TERMSIG(status)) });
     }
     var said: [4096]u8 = undefined;
     if (readFile(log.ptr, &said)) |text| writeAll(2, text);
@@ -360,7 +359,7 @@ fn waitForNode(path: [:0]const u8) bool {
 fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
     const in_rc = linux.open(src.ptr, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(in_rc)) |e| {
-        complain("cannot open {s} (errno {d})", .{ src, @intFromEnum(e) });
+        complain("cannot open {s} (errno {d})", .{ src, @backingInt(e) });
         return null;
     }
     const in_fd: i32 = @intCast(in_rc);
@@ -368,7 +367,7 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
 
     const out_rc = linux.open(dst.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(out_rc)) |e| {
-        complain("cannot create {s} (errno {d})", .{ dst, @intFromEnum(e) });
+        complain("cannot create {s} (errno {d})", .{ dst, @backingInt(e) });
         return null;
     }
     const out_fd: i32 = @intCast(out_rc);
@@ -380,7 +379,7 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
         const n = linux.read(in_fd, &buf, buf.len);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            complain("reading {s} failed (errno {d})", .{ src, @intFromEnum(e) });
+            complain("reading {s} failed (errno {d})", .{ src, @backingInt(e) });
             return null;
         }
         if (n == 0) break;
@@ -389,7 +388,7 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
             const w = linux.write(out_fd, buf[off..].ptr, n - off);
             if (failed(w)) |e| {
                 if (e == .INTR) continue;
-                complain("writing {s} failed (errno {d})", .{ dst, @intFromEnum(e) });
+                complain("writing {s} failed (errno {d})", .{ dst, @backingInt(e) });
                 return null;
             }
             off += w;
@@ -426,7 +425,7 @@ fn prepareConf(in_buf: []u8, out_buf: []u8) ?[]const u8 {
 fn writeConf(dst: [:0]const u8, text: []const u8) ?u64 {
     const rc = linux.open(dst.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
-        complain("cannot create {s} (errno {d})", .{ dst, @intFromEnum(e) });
+        complain("cannot create {s} (errno {d})", .{ dst, @backingInt(e) });
         return null;
     }
     const fd: i32 = @intCast(rc);
@@ -436,7 +435,7 @@ fn writeConf(dst: [:0]const u8, text: []const u8) ?u64 {
         const w = linux.write(fd, text[off..].ptr, text.len - off);
         if (failed(w)) |e| {
             if (e == .INTR) continue;
-            complain("writing {s} failed (errno {d})", .{ dst, @intFromEnum(e) });
+            complain("writing {s} failed (errno {d})", .{ dst, @backingInt(e) });
             return null;
         }
         off += w;
@@ -588,7 +587,7 @@ fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
         return false;
     }
     if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", 0, 0))) |e| {
-        complain("cannot mount {s} as vfat (errno {d})", .{ p1, @intFromEnum(e) });
+        complain("cannot mount {s} as vfat (errno {d})", .{ p1, @backingInt(e) });
         return false;
     }
     const copied = copyAll(esp_conf);
@@ -598,7 +597,7 @@ fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
     say("tars-install: syncing\n", .{});
     linux.sync();
     if (failed(linux.umount(ESP_DIR.ptr))) |e| {
-        complain("cannot unmount {s} (errno {d})", .{ ESP_DIR, @intFromEnum(e) });
+        complain("cannot unmount {s} (errno {d})", .{ ESP_DIR, @backingInt(e) });
         return false;
     }
     return copied;

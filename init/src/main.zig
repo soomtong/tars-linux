@@ -52,7 +52,7 @@ fn mountFs(
     const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, 0);
     if (failed(rc)) |e| {
         logline.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
-            fstype, target, @intFromEnum(e),
+            fstype, target, @backingInt(e),
         });
         return false;
     }
@@ -68,7 +68,7 @@ fn mountDevpts() void {
     if (failed(rc)) |e| {
         if (e != .EXIST) {
             logline.print("tars-init: failed to create /dev/pts (errno {d})\n", .{
-                @intFromEnum(e),
+                @backingInt(e),
             });
             return;
         }
@@ -99,7 +99,7 @@ fn linkDevFd() void {
     if (failed(rc)) |e| {
         // 이미 있다 = 누군가 먼저 만들었다. 조용히 둔다.
         if (e == .EXIST) return;
-        logline.print("tars-init: could not link /dev/fd (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: could not link /dev/fd (errno {d})\n", .{@backingInt(e)});
         return;
     }
     logline.print("tars-init: linked /dev/fd to /proc/self/fd\n", .{});
@@ -121,7 +121,7 @@ fn makeXdgDir() void {
         // 이미 있다 = 두 번째 부팅부터의 정상 경로다. 조용히 둔다.
         if (e == .EXIST) return;
         logline.print("tars-init: could not create {s} (errno {d})\n", .{
-            environ.XDG_DATA_DIR, @intFromEnum(e),
+            environ.XDG_DATA_DIR, @backingInt(e),
         });
     }
 }
@@ -303,7 +303,7 @@ fn setupControllingTerminal() void {
     const rc = linux.open("/dev/console", .{ .ACCMODE = .RDWR }, 0);
     if (failed(rc)) |e| {
         logline.print("tars-init: failed to open /dev/console (errno {d})\n", .{
-            @intFromEnum(e),
+            @backingInt(e),
         });
         return;
     }
@@ -421,7 +421,7 @@ fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
     const pid = linux.fork();
     if (failed(pid)) |e| {
         logline.print("tars-init: fork for {s} failed (errno {d})\n", .{
-            c.label, @intFromEnum(e),
+            c.label, @backingInt(e),
         });
         return -1;
     }
@@ -437,7 +437,7 @@ fn spawn(c: *const Child, envp: [*:null]const ?[*:0]const u8) linux.pid_t {
         // 2(ENOENT)는 파일이나 shebang의 인터프리터가 없는 것, 13(EACCES)은 실행
         // 비트가 없는 것이다(SV-M1 실측 9).
         logline.print("tars-init: execve {s} failed (errno {d})\n", .{
-            c.path, @intFromEnum(linux.errno(exec_rc)),
+            c.path, @backingInt(linux.errno(exec_rc)),
         });
         linux.exit(127);
     }
@@ -639,7 +639,7 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     out.print("terminal: restarts; every pane, its shell and the clipboard are gone\n", .{});
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     logline.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s}\n", .{
-        pid,                     shell.path(),       @tagName(new.keyboard),       @tagName(new.hangul_layout),
+        pid,                        shell.path(),                     @tagName(new.keyboard),  @tagName(new.hangul_layout),
         @tagName(new.latin_layout), new.terminalToggles(&toggle_buf), @tagName(new.clipboard),
     });
 }
@@ -907,7 +907,7 @@ fn supervise(
                 // 포기 상태일 때의 정상 경로다.
                 if (e != .CHILD) {
                     logline.print("tars-init: waitpid failed (errno {d})\n", .{
-                        @intFromEnum(e),
+                        @backingInt(e),
                     });
                 }
                 break;
@@ -936,7 +936,7 @@ fn supervise(
                 });
             } else {
                 logline.print("tars-init: {s} killed (pid {d}, signal {d}, lived {d}s)\n", .{
-                    c.label, pid, @intFromEnum(linux.W.TERMSIG(status)), lived,
+                    c.label, pid, @backingInt(linux.W.TERMSIG(status)), lived,
                 });
             }
 
@@ -1011,7 +1011,7 @@ fn supervise(
         if (failed(ready)) |e| {
             if (e != .INTR) {
                 logline.print("tars-init: poll failed (errno {d})\n", .{
-                    @intFromEnum(e),
+                    @backingInt(e),
                 });
             }
             continue;

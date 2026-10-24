@@ -25,7 +25,7 @@ fn mkdirOne(path: [:0]const u8) !void {
     const rc = linux.mkdir(path.ptr, 0o755);
     if (failed(rc)) |e| {
         if (e == .EXIST) return;
-        std.debug.print("FAIL: mkdir {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: mkdir {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.MkdirFailed;
     }
 }
@@ -36,7 +36,7 @@ fn touch(name: []const u8, mode: linux.mode_t) !void {
     const path = join("{s}/{s}", .{ DIR, name });
     const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, mode);
     if (failed(rc)) |e| {
-        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.OpenFailed;
     }
     _ = linux.close(@intCast(rc));
@@ -51,7 +51,7 @@ fn link(name: []const u8, target: []const u8) !void {
     _ = linux.unlink(path.ptr);
     const rc = linux.symlink(t.ptr, path.ptr);
     if (failed(rc)) |e| {
-        std.debug.print("FAIL: symlink {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: symlink {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.SymlinkFailed;
     }
 }

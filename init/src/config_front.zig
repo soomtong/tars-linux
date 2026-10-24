@@ -74,7 +74,7 @@ fn readOr(path: [*:0]const u8, buf: []u8) ?[]const u8 {
         .bytes => |b| b,
         .missing => "",
         .failed => |e| {
-            complain("cannot read {s} (errno {d})", .{ std.mem.span(path), @intFromEnum(e) });
+            complain("cannot read {s} (errno {d})", .{ std.mem.span(path), @backingInt(e) });
             return null;
         },
     };
@@ -84,7 +84,7 @@ fn readOr(path: [*:0]const u8, buf: []u8) ?[]const u8 {
 fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux.mode_t) bool {
     const rc = linux.open(temp.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, mode);
     if (failed(rc)) |e| {
-        complain("cannot create {s} (errno {d})", .{ temp, @intFromEnum(e) });
+        complain("cannot create {s} (errno {d})", .{ temp, @backingInt(e) });
         return false;
     }
     const fd: i32 = @intCast(rc);
@@ -98,7 +98,7 @@ fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux
         return false;
     }
     if (failed(linux.rename(temp.ptr, path.ptr))) |e| {
-        complain("cannot rename {s} to {s} (errno {d})", .{ temp, path, @intFromEnum(e) });
+        complain("cannot rename {s} to {s} (errno {d})", .{ temp, path, @backingInt(e) });
         return false;
     }
     return true;
@@ -107,7 +107,7 @@ fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux
 fn ensureDir(path: [:0]const u8, mode: linux.mode_t) bool {
     if (failed(linux.mkdir(path.ptr, mode))) |e| {
         if (e == .EXIST) return true;
-        complain("cannot make {s} (errno {d})", .{ path, @intFromEnum(e) });
+        complain("cannot make {s} (errno {d})", .{ path, @backingInt(e) });
         return false;
     }
     _ = linux.chmod(path.ptr, mode);
@@ -155,7 +155,7 @@ fn run(argv: [*:null]const ?[*:0]const u8, input: []const u8, out: []u8) ?Ran {
     while (failed(linux.wait4(@intCast(pid), @ptrCast(&status), 0, null))) |e| {
         if (e != .INTR) return null;
     }
-    const code: u8 = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else 128 +| @as(u8, @truncate(@intFromEnum(linux.W.TERMSIG(status))));
+    const code: u8 = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else 128 +| @as(u8, @truncate(@backingInt(linux.W.TERMSIG(status))));
     return .{ .code = code, .out = out[0..len] };
 }
 
@@ -329,7 +329,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
             .none => {
                 if (!ensureDir(SERVICES_DIR, 0o755)) return cli.EXIT_IO;
                 if (failed(linux.symlink(SSHD_TEMPLATE.ptr, SSHD_LINK.ptr))) |e| {
-                    complain("cannot link {s} (errno {d})", .{ SSHD_LINK, @intFromEnum(e) });
+                    complain("cannot link {s} (errno {d})", .{ SSHD_LINK, @backingInt(e) });
                     return cli.EXIT_IO;
                 }
                 say("sshd: on — {s} -> {s}; tars-config reload starts it now (or the next boot)\n", .{ SSHD_LINK, SSHD_TEMPLATE });
@@ -350,7 +350,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
             },
             .template => {
                 if (failed(linux.unlink(SSHD_LINK.ptr))) |e| {
-                    complain("cannot remove {s} (errno {d})", .{ SSHD_LINK, @intFromEnum(e) });
+                    complain("cannot remove {s} (errno {d})", .{ SSHD_LINK, @backingInt(e) });
                     return cli.EXIT_IO;
                 }
                 say("sshd: off — tars-config reload stops it now (or the next boot)\n", .{});

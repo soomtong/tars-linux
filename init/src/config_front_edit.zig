@@ -215,8 +215,8 @@ pub fn keyCount(keys: []const u8) usize {
 /// tars-dictate가 "unknown key"로 버린다. `config_front_edit_test`가 그 파일에서 이름을
 /// 읽어 이 목록과 견준다.
 pub const DICTATION_KEYS = [_][]const u8{
-    "transcribe_url", "transcribe_model", "language",        "max_seconds",
-    "cleanup",        "cleanup_url",      "cleanup_model",   "cleanup_timeout",
+    "transcribe_url", "transcribe_model", "language",      "max_seconds",
+    "cleanup",        "cleanup_url",      "cleanup_model", "cleanup_timeout",
 };
 
 pub fn isDictationKey(key: []const u8) bool {

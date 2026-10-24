@@ -29,7 +29,7 @@ fn mkdirOne(path: [:0]const u8) !void {
     const rc = linux.mkdir(path.ptr, 0o755);
     if (failed(rc)) |e| {
         if (e == .EXIST) return;
-        std.debug.print("FAIL: mkdir {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: mkdir {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.MkdirFailed;
     }
 }
@@ -41,7 +41,7 @@ fn writeFile(path: [:0]const u8, text: []const u8) !void {
         .TRUNC = true,
     }, 0o644);
     if (failed(rc)) |e| {
-        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @backingInt(e) });
         return error.OpenFailed;
     }
     const fd: i32 = @intCast(rc);
@@ -52,7 +52,7 @@ fn writeFile(path: [:0]const u8, text: []const u8) !void {
         const n = linux.write(fd, text.ptr + written, text.len - written);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @intFromEnum(e) });
+            std.debug.print("FAIL: write {s} (errno {d})\n", .{ path, @backingInt(e) });
             return error.WriteFailed;
         }
         if (n == 0) return error.WriteFailed;
@@ -85,7 +85,7 @@ fn writeEvents(fd: i32, events: []const devices.Event) !void {
         const n = linux.write(fd, bytes.ptr + written, bytes.len - written);
         if (failed(n)) |e| {
             if (e == .INTR) continue;
-            std.debug.print("FAIL: write events (errno {d})\n", .{@intFromEnum(e)});
+            std.debug.print("FAIL: write events (errno {d})\n", .{@backingInt(e)});
             return error.WriteFailed;
         }
         if (n == 0) return error.WriteFailed;
@@ -93,7 +93,7 @@ fn writeEvents(fd: i32, events: []const devices.Event) !void {
     }
 }
 
-/// 벽시계 밀리초. `std.time.Timer`를 안 쓴다 — Zig 0.16에 없다
+/// 벽시계 밀리초. `std.time.Timer`를 안 쓴다 — Zig 0.16부터 없다
 /// (`std.time`에 `Timer` 멤버가 없다). SH-M1이 `std.posix`의 `pipe`에서 겪은
 /// 것과 같은 종류이고, 처방도 같다: 커널 인터페이스를 직접 부른다.
 fn nowMillis() i64 {
@@ -194,8 +194,7 @@ pub fn main() !void {
     // 값 셋 다 sysfs가 실제로 주는 모양이다 — 줄 끝의 개행까지 포함한다.
     // 개행을 빼고 검사하면 tokenize가 그것을 걸러 준다는 사실을 못 보게 된다.
     try makeDevice(FULL, 0, "Power Button\n", "3\n", "10000000000000 0\n");
-    try makeDevice(FULL, 1, "AT Translated Set 2 keyboard\n", "120013\n",
-        "402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe\n");
+    try makeDevice(FULL, 1, "AT Translated Set 2 keyboard\n", "120013\n", "402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe\n");
     // BTN_LEFT(0x110 = 272)만 가진 장치. EV_KEY는 있지만 키보드는 아니다.
     try makeDevice(FULL, 2, "TARS fake mouse\n", "3\n", "10000 0 0 0 0\n");
 
@@ -361,7 +360,7 @@ pub fn main() !void {
 
     var pipe_fds: [2]i32 = undefined;
     if (failed(linux.pipe2(&pipe_fds, .{ .NONBLOCK = true }))) |e| {
-        std.debug.print("FAIL: pipe2 (errno {d})\n", .{@intFromEnum(e)});
+        std.debug.print("FAIL: pipe2 (errno {d})\n", .{@backingInt(e)});
         return error.PipeFailed;
     }
     const rd = pipe_fds[0];
@@ -377,10 +376,10 @@ pub fn main() !void {
     // QEMU의 system_powerdown이 실제로 보내는 모양: 누름 · 동기화 · 뗌 ·
     // 동기화. 뗌(0)까지 누름으로 세면 한 번의 누름이 두 번이 된다.
     const press = [_]devices.Event{
-        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 1 },
-        .{ .sec = 0, .usec = 0, .@"type" = 0, .code = 0, .value = 0 },
-        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 0 },
-        .{ .sec = 0, .usec = 0, .@"type" = 0, .code = 0, .value = 0 },
+        .{ .sec = 0, .usec = 0, .type = 1, .code = 116, .value = 1 },
+        .{ .sec = 0, .usec = 0, .type = 0, .code = 0, .value = 0 },
+        .{ .sec = 0, .usec = 0, .type = 1, .code = 116, .value = 0 },
+        .{ .sec = 0, .usec = 0, .type = 0, .code = 0, .value = 0 },
     };
     try writeEvents(wr, &press);
     if (!devices.drainButton(rd)) {
@@ -396,7 +395,7 @@ pub fn main() !void {
 
     // 뗌만 온 경우. 누름이 아니므로 종료가 되면 안 된다.
     const release_only = [_]devices.Event{
-        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 116, .value = 0 },
+        .{ .sec = 0, .usec = 0, .type = 1, .code = 116, .value = 0 },
     };
     try writeEvents(wr, &release_only);
     if (devices.drainButton(rd)) {
@@ -407,7 +406,7 @@ pub fn main() !void {
     // 다른 키가 눌린 경우. 이 fd에는 전원 버튼만 오게 되어 있지만, 코드를
     // 실제로 본다는 증거를 남긴다.
     const other_key = [_]devices.Event{
-        .{ .sec = 0, .usec = 0, .@"type" = 1, .code = 30, .value = 1 },
+        .{ .sec = 0, .usec = 0, .type = 1, .code = 30, .value = 1 },
     };
     try writeEvents(wr, &other_key);
     if (devices.drainButton(rd)) {

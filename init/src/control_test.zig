@@ -60,11 +60,11 @@ fn expectState(c: *const Fake, want: control.State) !void {
 
 fn rawConnect() !i32 {
     const rc = linux.socket(linux.AF.UNIX, linux.SOCK.SEQPACKET | linux.SOCK.CLOEXEC, 0);
-    if (failed(rc)) |e| return fail("socket errno {d}", .{@intFromEnum(e)});
+    if (failed(rc)) |e| return fail("socket errno {d}", .{@backingInt(e)});
     const fd: i32 = @intCast(rc);
     var a: linux.sockaddr.un = .{ .path = @splat(0) };
     @memcpy(a.path[0..PATH.len], PATH);
-    if (failed(linux.connect(fd, &a, @sizeOf(linux.sockaddr.un)))) |e| return fail("connect errno {d}", .{@intFromEnum(e)});
+    if (failed(linux.connect(fd, &a, @sizeOf(linux.sockaddr.un)))) |e| return fail("connect errno {d}", .{@backingInt(e)});
     return fd;
 }
 
@@ -188,7 +188,7 @@ pub fn main() !void {
     const d = control.dial(PATH, "stop sshd");
     const cfd = switch (d) {
         .fd => |fd| fd,
-        .failed => |e| return fail("dial errno {d}", .{@intFromEnum(e)}),
+        .failed => |e| return fail("dial errno {d}", .{@backingInt(e)}),
     };
     var in_buf: [control.REQUEST_MAX]u8 = undefined;
     const got = control.receive(lfd, &in_buf) orelse return fail("receive got nothing", .{});
@@ -204,7 +204,7 @@ pub fn main() !void {
     const big: [100]u8 = @splat('x');
     const bfd = switch (control.dial(PATH, &big)) {
         .fd => |fd| fd,
-        .failed => |e| return fail("dial big errno {d}", .{@intFromEnum(e)}),
+        .failed => |e| return fail("dial big errno {d}", .{@backingInt(e)}),
     };
     const g2 = control.receive(lfd, &in_buf) orelse return fail("receive big got nothing", .{});
     switch (g2.what) {
@@ -223,12 +223,12 @@ pub fn main() !void {
 
     _ = linux.close(lfd);
     switch (control.dial(PATH, "status")) {
-        .failed => |e| if (e != .CONNREFUSED) return fail("dial to a closed listener errno {d}", .{@intFromEnum(e)}),
+        .failed => |e| if (e != .CONNREFUSED) return fail("dial to a closed listener errno {d}", .{@backingInt(e)}),
         .fd => return fail("dial to a closed listener succeeded", .{}),
     }
     _ = linux.unlink(PATH);
     switch (control.dial(PATH, "status")) {
-        .failed => |e| if (e != .NOENT) return fail("dial to no socket errno {d}", .{@intFromEnum(e)}),
+        .failed => |e| if (e != .NOENT) return fail("dial to no socket errno {d}", .{@backingInt(e)}),
         .fd => return fail("dial to no socket succeeded", .{}),
     }
     std.debug.print("control_test: socket — 0600, one request each way, 100 bytes too long, silence ends, no listener is refused\n", .{});

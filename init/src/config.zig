@@ -1005,7 +1005,7 @@ pub fn load(path: [:0]const u8) ?Config {
     if (failed(rc)) |e| {
         if (e == .NOENT) return null;
         log("failed to open {s} (errno {d})", .{
-            path, @intFromEnum(e),
+            path, @backingInt(e),
         });
         return Config{};
     }
@@ -1021,7 +1021,7 @@ pub fn load(path: [:0]const u8) ?Config {
         if (failed(n)) |e| {
             if (e == .INTR) continue;
             log("failed to read {s} (errno {d})", .{
-                path, @intFromEnum(e),
+                path, @backingInt(e),
             });
             return Config{};
         }
@@ -1275,7 +1275,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     }, 0o644);
     if (failed(rc)) |e| {
         log("failed to create {s} (errno {d})", .{
-            path, @intFromEnum(e),
+            path, @backingInt(e),
         });
         return error.OpenFailed;
     }
@@ -1298,7 +1298,7 @@ fn writeAll(fd: i32, text: []const u8, path: [:0]const u8) SaveError!void {
         if (failed(n)) |e| {
             if (e == .INTR) continue;
             log("failed to write {s} (errno {d})", .{
-                path, @intFromEnum(e),
+                path, @backingInt(e),
             });
             return error.WriteFailed;
         }
@@ -1470,7 +1470,7 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
         // 부팅마다 네 줄이 늘고, 그 넷은 아무것도 알려주지 않는다.
         if (e == .EXIST) return;
         log("could not seed {s} (errno {d})", .{
-            path, @intFromEnum(e),
+            path, @backingInt(e),
         });
         return;
     }
@@ -1500,7 +1500,7 @@ pub fn cmdlineNoConfig(path: [:0]const u8) bool {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
     if (failed(rc)) |e| {
         log("cannot read {s} (errno {d}), assuming no {s}", .{
-            path, @intFromEnum(e), NO_CONFIG_TOKEN,
+            path, @backingInt(e), NO_CONFIG_TOKEN,
         });
         return false;
     }
@@ -1515,7 +1515,7 @@ pub fn cmdlineNoConfig(path: [:0]const u8) bool {
         if (failed(n)) |e| {
             if (e == .INTR) continue;
             log("failed to read {s} (errno {d})", .{
-                path, @intFromEnum(e),
+                path, @backingInt(e),
             });
             return false;
         }

@@ -72,7 +72,7 @@ pub const MAX_BUTTONS: usize = 4;
 pub const Event = extern struct {
     sec: i64,
     usec: i64,
-    @"type": u16,
+    type: u16,
     code: u16,
     value: i32,
 };
@@ -355,7 +355,7 @@ pub fn drainButton(fd: i32) bool {
         var off: usize = 0;
         while (off + @sizeOf(Event) <= rc) : (off += @sizeOf(Event)) {
             const ev: *align(1) const Event = @ptrCast(&raw[off]);
-            if (ev.@"type" != EV_KEY) continue;
+            if (ev.type != EV_KEY) continue;
             if (ev.code != KEY_POWER) continue;
             if (ev.value == VALUE_PRESS) pressed = true;
         }
@@ -399,7 +399,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
         const rc = linux.open(path.cstr(), .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true }, 0);
         if (failed(rc)) |e| {
             logline.print("tars-init: could not open {s} (errno {d})\n", .{
-                path.slice(), @intFromEnum(e),
+                path.slice(), @backingInt(e),
             });
             continue;
         }

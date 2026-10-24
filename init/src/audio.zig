@@ -114,7 +114,7 @@ pub fn outcome(status: u32) Outcome {
         if (code == NO_CARD_EXIT) return .no_card;
         return .{ .exited = code };
     }
-    return .{ .killed = @intCast(@intFromEnum(linux.W.TERMSIG(status))) };
+    return .{ .killed = @intCast(@backingInt(linux.W.TERMSIG(status))) };
 }
 
 pub const StoreDecision = enum {
@@ -184,7 +184,7 @@ pub fn start(storage_mounted: bool, envp: [*:null]const ?[*:0]const u8) void {
 
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        logline.print("tars-init: audio: cannot fork (errno {d}), the mixer is left as the kernel set it\n", .{@intFromEnum(e)});
+        logline.print("tars-init: audio: cannot fork (errno {d}), the mixer is left as the kernel set it\n", .{@backingInt(e)});
         return;
     }
     if (pid == 0) {
@@ -248,7 +248,7 @@ pub fn store() void {
 
     const pid = linux.fork();
     if (failed(pid)) |e| {
-        logline.print("tars-init: audio: cannot fork for alsactl store (errno {d})\n", .{@intFromEnum(e)});
+        logline.print("tars-init: audio: cannot fork for alsactl store (errno {d})\n", .{@backingInt(e)});
         return;
     }
     if (pid == 0) {
@@ -263,7 +263,7 @@ pub fn store() void {
         const rc = linux.wait4(@intCast(pid), @ptrCast(&status), linux.W.NOHANG, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            logline.print("tars-init: audio: waiting for alsactl store failed (errno {d})\n", .{@intFromEnum(e)});
+            logline.print("tars-init: audio: waiting for alsactl store failed (errno {d})\n", .{@backingInt(e)});
             return;
         }
         if (rc != 0) break;
@@ -507,7 +507,7 @@ pub fn follow() void {
         return;
     };
     if (writeConf(text)) |e| {
-        logline.print("tars-init: audio: cannot write {s} (errno {d})\n", .{ ASOUND_CONF_PATH, @intFromEnum(e) });
+        logline.print("tars-init: audio: cannot write {s} (errno {d})\n", .{ ASOUND_CONF_PATH, @backingInt(e) });
         return;
     }
     var pb: [3]u8 = undefined;

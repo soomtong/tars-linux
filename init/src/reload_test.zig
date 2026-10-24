@@ -16,9 +16,9 @@ fn expectText(got: []const u8, want: []const u8, what: []const u8) !void {
 
 /// 키마다 기본값이 아닌 값 하나. `config.parse`로 짓는다 — init이 읽는 그 길이다.
 const OTHER = [_][]const u8{
-    "shell=zsh",       "keyboard=pc",       "hangul_layout=dubeol", "latin_layout=dvorak",
-    "hangul_toggle=shift_space", "shell_config=off", "net=dhcp", "ntp=10.0.2.2",
-    "timezone=Asia/Seoul", "firewall=on", "esc_latin=off", "clipboard=pane",
+    "shell=zsh",                 "keyboard=pc",      "hangul_layout=dubeol", "latin_layout=dvorak",
+    "hangul_toggle=shift_space", "shell_config=off", "net=dhcp",             "ntp=10.0.2.2",
+    "timezone=Asia/Seoul",       "firewall=on",      "esc_latin=off",        "clipboard=pane",
 };
 
 const S = reload.Slot;
@@ -38,7 +38,7 @@ pub fn main() !void {
     // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열둘 다 들었다. 갈래의 수를 세서
     // design 결정 2의 표(지금 셋 · 다음에 뜰 때부터 셋 · 화면 여섯)와 견준다.
     var counts = [_]usize{ 0, 0, 0 };
-    inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@intFromEnum(comptime reload.groupOf(f_name))] += 1;
+    inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@backingInt(comptime reload.groupOf(f_name))] += 1;
     if (counts[0] != 3 or counts[1] != 3 or counts[2] != 6) return fail("groups now/next/terminal = {d}/{d}/{d}, want 3/3/6", .{ counts[0], counts[1], counts[2] });
     std.debug.print("reload_test: twelve keys in three groups — three now, three at the next spawn, six on the screen\n", .{});
 
@@ -66,19 +66,16 @@ pub fn main() !void {
     var buf: [control.REPLY_MAX]u8 = undefined;
     var out = reload.Out{ .buf = &buf };
     reload.configReply(&out, live, def);
-    try expectText(out.bytes(),
-        "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
+    try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
         "timezone=Asia/Seoul\nfirewall=off\nesc_latin=on\nclipboard=shared\n" ++
         "screen keyboard=apple timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
     reload.keyLines(&ko, def, live);
-    try expectText(ko.bytes(),
-        "keyboard: apple -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
+    try expectText(ko.bytes(), "keyboard: apple -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
         "net: off -> dhcp (now)\n" ++
-        "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal)\n",
-        "keyLines");
+        "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal)\n", "keyLines");
     // TC-M3. reload terminal의 답 — 화면 쪽 키만, 화면의 값에서 init의 값으로.
     var sb: [512]u8 = undefined;
     var so = reload.Out{ .buf = &sb };
@@ -127,7 +124,7 @@ pub fn main() !void {
         .{ .add = .{ .slot = 1, .name = 0 } },
     }, "reuse a reaped slot, not a dying one");
     // 칸이 없으면 다음 부팅.
-    try expectActions(&[_]S{ .{ .name = "a", .off = false, .alive = true } }, &[_][]const u8{ "a", "b" }, &[_]reload.SvcAction{
+    try expectActions(&[_]S{.{ .name = "a", .off = false, .alive = true }}, &[_][]const u8{ "a", "b" }, &[_]reload.SvcAction{
         .{ .no_room = 1 },
     }, "no room");
     // out보다 많으면 out만큼 — 셈이 넘치지 않는다.

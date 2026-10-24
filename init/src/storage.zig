@@ -13,7 +13,7 @@ fn failed(rc: usize) ?linux.E {
 /// 시작해 1024바이트이므로 2048이면 통째로 든다.
 ///
 /// lseek을 안 쓰는 것이 이 상수의 이유다. 오프셋 0에서 여기까지를 그냥
-/// 읽으면 시스템 콜 하나가 줄고, Zig 0.16의 std.os.linux에 pread가 있는지를
+/// 읽으면 시스템 콜 하나가 줄고, Zig std.os.linux에 pread가 있는지를
 /// 신경 쓸 필요도 없다.
 pub const HEAD_BYTES: usize = 2048;
 
@@ -57,11 +57,11 @@ pub const LABEL_PREFIX: []const u8 = "tars-";
 /// 못 찾는다"가 안 생긴다(DI design 결정 5).
 pub const DISKS = [_][:0]const u8{
     // virtio-blk. 게이트 다섯 체인이 이것이다.
-    "/dev/vda",     "/dev/vdb",     "/dev/vdc", "/dev/vdd",
+    "/dev/vda",     "/dev/vdb",     "/dev/vdc",     "/dev/vdd",
     // 요즘 노트북의 내장 저장장치. machine·install 체인이 이것이다.
     "/dev/nvme0n1", "/dev/nvme1n1", "/dev/nvme2n1", "/dev/nvme3n1",
     // SATA(AHCI) · USB 스토리지 · SD 리더가 전부 SCSI 디스크로 나온다.
-    "/dev/sda",     "/dev/sdb",     "/dev/sdc", "/dev/sdd",
+    "/dev/sda",     "/dev/sdb",     "/dev/sdc",     "/dev/sdd",
     // eMMC. 저가 노트북·태블릿의 내장 저장장치다.
     "/dev/mmcblk0", "/dev/mmcblk1",
 };
@@ -77,13 +77,13 @@ pub const DISKS = [_][:0]const u8{
 /// 안전("남의 root를 잡지 않는다")은 라벨 필터가 계속 지킨다 — 남의 ext2
 /// root 파티션은 매직이 맞아도 라벨이 `tars-`로 시작하지 않는다.
 const PARTITIONS = [_][:0]const u8{
-    "/dev/vda1",       "/dev/vda2",       "/dev/vdb1",       "/dev/vdb2",
-    "/dev/vdc1",       "/dev/vdc2",       "/dev/vdd1",       "/dev/vdd2",
-    "/dev/nvme0n1p1",  "/dev/nvme0n1p2",  "/dev/nvme1n1p1",  "/dev/nvme1n1p2",
-    "/dev/nvme2n1p1",  "/dev/nvme2n1p2",  "/dev/nvme3n1p1",  "/dev/nvme3n1p2",
-    "/dev/sda1",       "/dev/sda2",       "/dev/sdb1",       "/dev/sdb2",
-    "/dev/sdc1",       "/dev/sdc2",       "/dev/sdd1",       "/dev/sdd2",
-    "/dev/mmcblk0p1",  "/dev/mmcblk0p2",  "/dev/mmcblk1p1",  "/dev/mmcblk1p2",
+    "/dev/vda1",      "/dev/vda2",      "/dev/vdb1",      "/dev/vdb2",
+    "/dev/vdc1",      "/dev/vdc2",      "/dev/vdd1",      "/dev/vdd2",
+    "/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme1n1p1", "/dev/nvme1n1p2",
+    "/dev/nvme2n1p1", "/dev/nvme2n1p2", "/dev/nvme3n1p1", "/dev/nvme3n1p2",
+    "/dev/sda1",      "/dev/sda2",      "/dev/sdb1",      "/dev/sdb2",
+    "/dev/sdc1",      "/dev/sdc2",      "/dev/sdd1",      "/dev/sdd2",
+    "/dev/mmcblk0p1", "/dev/mmcblk0p2", "/dev/mmcblk1p1", "/dev/mmcblk1p2",
 };
 
 /// 설치된 디스크로 떴을 때 init이 훑는 순서. 디스크 전체가 먼저다 — 게이트의

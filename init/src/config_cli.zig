@@ -174,7 +174,7 @@ fn current(mounts_buf: []u8, text_buf: []u8) ?Current {
         .missing => .{ .disk = disk, .exists = false, .text = "" },
         .bytes => |b| .{ .disk = disk, .exists = true, .text = b },
         .failed => |e| {
-            complain("cannot read {s} (errno {d})", .{ CONF_PATH, @intFromEnum(e) });
+            complain("cannot read {s} (errno {d})", .{ CONF_PATH, @backingInt(e) });
             return null;
         },
     };
@@ -387,7 +387,7 @@ fn change(pairs: []const edit.Pair) u8 {
     var text: []const u8 = switch (readFile(CONF_PATH, &text_buf)) {
         .bytes => |b| b,
         .failed => |e| {
-            complain("cannot read {s} (errno {d})", .{ CONF_PATH, @intFromEnum(e) });
+            complain("cannot read {s} (errno {d})", .{ CONF_PATH, @backingInt(e) });
             return EXIT_IO;
         },
         .missing => seed: {
@@ -435,7 +435,7 @@ fn change(pairs: []const edit.Pair) u8 {
     if (!std.mem.eql(u8, text, before) or !fileExists(CONF_PATH)) {
         if (!writeFile(TEMP_PATH, text)) return EXIT_IO;
         if (failed(linux.rename(TEMP_PATH, CONF_PATH))) |e| {
-            complain("cannot rename {s} to {s} (errno {d})", .{ TEMP_PATH, CONF_PATH, @intFromEnum(e) });
+            complain("cannot rename {s} to {s} (errno {d})", .{ TEMP_PATH, CONF_PATH, @backingInt(e) });
             return EXIT_IO;
         }
     }
@@ -457,7 +457,7 @@ fn fileExists(path: [:0]const u8) bool {
 fn writeFile(path: [:0]const u8, text: []const u8) bool {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
-        complain("cannot create {s} (errno {d})", .{ path, @intFromEnum(e) });
+        complain("cannot create {s} (errno {d})", .{ path, @backingInt(e) });
         return false;
     }
     const fd: i32 = @intCast(rc);
