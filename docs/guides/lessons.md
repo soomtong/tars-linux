@@ -17,6 +17,8 @@
 
 ```bash
 # 루트 게이트 (스물두 체인 × 1, 동시 JOBS줄 — GP-M2부터 9분 51초. 순차 1회는 32분 23초, 2회는 1시간 01분 18초였다. 회차별 초는 끝의 표)
+# 요약 로그는 저장소의 out/ 아래에 두지 않는다 — check.sh의 clean()이 게이트 시작에 out/을 통째로 지워 열린 파일이 떨어져
+# 나간다(SA-M1에서 요약 한 줄을 잃었다). 체인별 로그는 게이트가 끝에 out/gate-logs/<시각>/으로 옮기므로 거기는 남는다.
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 반복을 늘리거나 동시 실행 수를 정할 때(파일은 안 고친다). JOBS 기본값은 메모리에서 계산한다 — 4GB면 2, 8GB 이상이면 6
@@ -408,6 +410,8 @@ docker exec tars-measure bash -c 'apt-get update -qq && \
 # 검사라 목록에 없으면 영영 안 돈다(SA-M0). zsh에서는 파일 목록을 배열로 넘긴다.
 /opt/homebrew/bin/zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared
 for f in init/src/*.zig terminal/src/*.zig shared/*.zig; do /opt/homebrew/bin/zig ast-check "$f" || echo "FAIL $f"; done
+# shared/는 순수 파일이라(libc · 시스템 콜 없음) 그 검사만은 컨테이너 없이 호스트에서 바로 돈다(SA-M1).
+/opt/homebrew/bin/zig run shared/screen_args_test.zig
 ```
 
 편집 스크립트를 셸 heredoc으로 감쌀 때 바깥 구분자가 안쪽 내용의 `EOF`와 겹치면
@@ -1296,8 +1300,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   기본값. 두 build.zig가 `b.path("../shared/screen_args.zig")`로 `screen_args`라는 named module로 붙이고, 그 파일을 트리에
   둔 모듈마다 `addImport`한다(빠뜨리면 컴파일러가 모듈 이름을 말한다). 순수 파일이다 — libc도 로그도 없다. init 쪽
   `config.zig`와 terminal 쪽 `hangul` · `input` · `clipboard`는 옛 이름을 별명으로 다시 내보낸다. 왕복 검사
-  `screen_args_test.zig`는 init의 `zig build test`에만 든다. 칸을 더할 때는 `Slot`에 이름을 더하고 `ARGC`를 올린다 —
-  서비스 셋의 `*_ARGV` 리터럴이 길이가 안 맞아 컴파일에서 막히고, 그것이 "함께 늘리라"는 알림이다.
+  `screen_args_test.zig`는 init의 `zig build test`에 들고, 순수 파일이라 호스트 `zig run`으로도 돈다("범용 명령").
+  SA-M1부터 argv를 짓고 읽는 것도 이 파일이다 — `Args`(값을 타입으로 든다, 기본값 없음) · `Argv` · `encode(a, *toggle_buf)` ·
+  `decode(argv)` · `argvOf(slice)` · `TERMINAL_PATH`. init은 부팅(`main`)과 `doReloadTerminal`이 `encode`를, reload는 그 앞에
+  `decode`로 떠 있는 argv를 되돌려 설정에서 온 필드만 바꾼다(장치 경로가 그대로 되돌아간다). terminal `main`은 `decode` 한 줄.
+  init이 `Slot`을 직접 보는 자리는 탈출로 `TERMINAL_FLAG_SLOT` 하나다. 칸을 더할 때는 `Args`에 필드 · `Slot`에 이름 ·
+  `encode` · `decode`에 한 줄씩 · `ARGC` — `Args`에 기본값이 없어서 init이 필드를 빠뜨리면 컴파일에서 막히고, 서비스 셋의
+  `*_ARGV` 리터럴이 길이가 안 맞아 함께 막힌다. 그것이 "함께 늘리라"는 알림이다.
 
 ### 게스트 화면 쪽 (`terminal/src/`)
 

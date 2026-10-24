@@ -1,6 +1,6 @@
 ---
 name: project_screen_args
-description: "init → terminal argv 계약을 한 파일로 모은 Screen Args(SA-M0, 2026-10-24). shared/screen_args.zig를 두 build.zig가 b.path(\"../shared/…\")로 named module로 붙인다 — target 없는 모듈 하나가 게스트 exe와 호스트 검사에 같이 간다. 0.17의 @tagName은 sentinel이 있다 · enum을 옮기면 그 메서드는 자유 함수가 된다 · Toggles.parse(.file|.argv, text, sink)가 파일 넷 · argv 다섯을 한 함수에 둔다 · 왕복 검사는 init의 zig build test 한 곳"
+description: "init → terminal argv 계약을 한 파일로 모은 Screen Args(SA-M0~M1, 2026-10-24). shared/screen_args.zig를 두 build.zig가 b.path(\"../shared/…\")로 named module로 붙인다 — target 없는 모듈 하나가 게스트 exe와 호스트 검사에 같이 간다. M1부터 Args · encode · decode가 거기 있어 init은 encode, terminal은 decode 한 줄이다(Args에 기본값 없음 — 필드를 빠뜨리면 컴파일이 막힌다). 0.17의 @tagName은 sentinel이 있다 · enum을 옮기면 그 메서드는 자유 함수가 된다 · Toggles.parse(.file|.argv, text, sink)가 파일 넷 · argv 다섯을 한 함수에 둔다 · 순수한 shared/의 검사는 호스트 zig run으로도 돈다"
 metadata:
   type: project
 ---
@@ -43,7 +43,24 @@ target으로 컴파일된다. 그 파일을 트리에 둔 모듈마다 붙여야
 - 왕복 검사(`shared/screen_args_test.zig`)는 init의 `zig build test` 한 곳에만 등록했다. terminal 쪽에도 넣으면 같은 검사가 두 번
   돌고 빠뜨릴 곳이 둘이 된다. 검사 모듈의 뿌리는 `shared/`라 `screen_args.zig`를 파일로 import한다.
 
-## 다음(M1)
+## M1 — argv를 짓고 읽는 함수도 한 파일에 (2026-10-24)
 
-`Args` 구조체와 `encode` · `decode`를 공유 파일에 더해 init의 쓰는 자리 둘(부팅 · `doReloadTerminal`)과 terminal의 읽는 자리가 한
-함수 쌍을 거치게 한다(design 결정 7). `Rescue.slot`을 `Slot`으로 바꿀지는 그때 본다.
+`Args`(셸 경로 · 플래그 · 키보드 · 장치 경로 · 자판 둘 · `Toggles` · 클립보드) · `Argv` · `encode(a, *toggle_buf)` · `decode(argv)` ·
+`argvOf(slice)` · `TERMINAL_PATH`가 `shared/screen_args.zig`에 더해졌다(design 결정 7). init의 부팅은 `encode` 한 번,
+`doReloadTerminal`은 `decode` → 설정에서 온 일곱 필드 대입 → `encode`, terminal의 `main`은 `decode` 한 줄이다. init의 `argAt` ·
+`enumArg` 같은 읽기 도우미는 terminal에서 사라졌고 init이 `Slot`을 직접 보는 자리는 탈출로 `TERMINAL_FLAG_SLOT` 하나다.
+
+- `Args`에 기본값을 두지 않았다. SA-M0까지는 `Slot`에 이름을 더하고 그 칸을 안 채워도 컴파일이 통과했다(null일 뿐). 이제 init이
+  필드 하나를 빠뜨리면 컴파일이 막힌다. 없는 칸의 기본값은 `decode`의 일이고 `default_*` 상수가 그것이다.
+- `encode`의 전환 키 버퍼는 호출자가 든다(init에 힙이 없다) — 부팅은 `main()`의 `terminal_toggle_buf`, reload는 `Live.toggle`.
+  reload에서 옛 argv가 `Live.toggle`을 가리키고 있어도(두 번째 reload부터) `decode`가 글자를 집합으로 읽은 뒤에 `encode`가
+  같은 버퍼에 쓰므로 겹쳐 쓰는 문제가 없다.
+- 장치 경로를 reload가 안 건드린다는 것이 코드로 섰다 — `decode`가 꺼낸 `device_path`가 그대로 다시 들어간다. M0까지는 "그
+  칸을 대입하지 않는다"는 부재였다.
+- `Rescue.slot`은 `usize`로 남겼다. 그 자리는 terminal(2번)과 콘솔 셸(1번)을 같은 코드로 다루므로 `Args`를 모르는 편이 맞다.
+  plan은 init의 `fn slot()`을 남기려 했지만 공유 `Slot.index()` 하나로 대신했다 — 같은 한 줄 변환이 두 파일에 있는 것이 SA가
+  없애려는 중복이다.
+- terminal의 `init.minimal.args.vector`는 `[]const [*:0]const u8`(0.17 `std.process.Args.Vector`)라 `argvOf`가 그 타입을 그대로
+  받는다 — `anytype`이 필요 없었다.
+- `shared/`가 순수하다는 것의 덤 — `zig run shared/screen_args_test.zig`가 호스트 macOS Zig에서 그대로 돈다. 컨테이너 빌드 전에
+  공유 파일의 검사를 먼저 볼 수 있다.

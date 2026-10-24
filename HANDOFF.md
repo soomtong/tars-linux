@@ -1,15 +1,15 @@
-# HANDOFF: Screen Args(SA)가 열려 있다 — M0을 닫았고 M1 plan 초안이 있다
+# HANDOFF: Screen Args(SA)를 닫았다 — 열린 서브프로젝트가 없다
 
-## 지금 상태 (2026-10-24)
+## 지금 상태 (2026-10-25)
 
-- 열린 서브프로젝트는 Screen Args(SA)다. design `docs/specs/2026-10-24-tars-screen-args-design.md`, 기억
-  `docs/decisions/project_screen_args.md`. SA-M0(2026-10-24, 루트 게이트 22/22)이 init → terminal argv 계약을
-  `shared/screen_args.zig` 한 파일로 모았다 — 두 build.zig가 `b.path("../shared/…")`로 named module로 붙이고, 양쪽은 옛 이름을
-  별명으로 다시 내보낸다. argv의 모양(위치 아홉 칸)과 로그 줄은 그대로다.
-- 다음은 SA-M1 — `docs/plans/2026-10-24-tars-screen-args-sa-m1.md`가 초안이다(M0 게이트가 도는 동안 썼다. 게이트 결과로 바뀔 자리는
-  없었다). `Args` 구조체와 `encode` · `decode`를 공유 파일에 더해 init의 쓰는 자리 둘(부팅 · `doReloadTerminal`)과 terminal의 읽는
-  자리가 한 함수 쌍을 거치게 한다. 걸리는 자리는 reload가 장치 경로 칸을 그대로 되돌려 넣어야 한다는 것(plan 확정 4)과
-  `TERMINAL_PATH`를 공유 파일로 옮기는 것(Task 2)이다. 구현 전에 plan을 한 번 더 읽고 시작한다.
+- 열린 서브프로젝트가 없다. 마지막으로 닫은 것은 Screen Args(SA-M0~M1, 2026-10-24). design
+  `docs/specs/2026-10-24-tars-screen-args-design.md`, 기억 `docs/decisions/project_screen_args.md`. init → terminal argv 계약이
+  `shared/screen_args.zig` 한 파일이다 — 값의 종류 · `Slot` · 기본값(M0)에 `Args` · `encode` · `decode` · `argvOf` ·
+  `TERMINAL_PATH`(M1)까지. init의 부팅은 `encode` 한 번, `doReloadTerminal`은 `decode → 설정 필드 일곱 대입 → encode`, terminal
+  `main`은 `decode` 한 줄이다. `Args`에 기본값이 없어 칸을 더하고 init이 안 채우면 컴파일이 막힌다. argv의 모양(위치 아홉 칸)과
+  로그 줄은 그대로다. 소개 페이지(`gh-pages` `data.js`)에는 안 넣었다 — 기능 추가가 아닌 내부 작업(ZU · SA)은 타임라인에서
+  건너뛴다(사용자 결정, 2026-10-25).
+- 다음 서브프로젝트는 아래 "다음 후보"에서 사용자가 고른다 — 새 것은 design부터다.
 - 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
 - 같은 날 그 앞에 Zig Upgrade(ZU-M2)와 Gate Flakes(GF-M0~M2)를 닫았다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`. 호스트 macOS의
@@ -17,8 +17,9 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(SA-M0): 22/22, prebuild 339초 + lanes 294초. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
-  `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절. 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
+  마지막 루트 게이트(SA-M1): 22/22, 약 10분 37초(prebuild 약 335초 + lanes 약 302초). 게이트 운영(`RUNS` · `JOBS` ·
+  `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
+  게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
@@ -39,7 +40,7 @@
 
 - 2026-10-24 점검이 남긴 것 가운데 남은 넷, 추천 순서대로. (2) `terminal/src/main.zig`의 `main`이 1,100줄쯤, init의 `main`이
   400줄쯤 — 설정 꺼내기 · 장치 열기 · 이벤트 루프로 나눈다. 다음 기능(부분 갱신 · WP-M3)이 전부 이 함수에 더해질 자리다.
-  SA-M1이 끝나면 terminal `main`의 argv 읽는 자리가 `decode` 한 줄이라 그 출발점이 된다. (3) 호스트 검사가 없는 큰 파일 셋
+  SA-M1로 terminal `main`의 argv 읽는 자리가 `decode` 한 줄이 됐으니 그것이 출발점이다. (3) 호스트 검사가 없는 큰 파일 셋
   `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 — 인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다.
   (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).

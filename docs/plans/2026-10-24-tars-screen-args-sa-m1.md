@@ -84,4 +84,16 @@ M0과 같다 — 컨테이너에서 두 `zig build` · `zig build test`, 호스�
 
 ## SA-M1이 실측한 것
 
-(끝나면 적는다)
+1. 루트 게이트 22/22(2026-10-24 23:52 시작, 약 10분 37초 — prebuild 약 335초 + lanes 약 302초). 요약 한 줄은 못 남겼다 — 로그를
+   `out/sa-m1-gate.log`로 보냈는데 `check.sh`의 `clean()`이 게이트 시작에 `out/`을 지운다(lessons "범용 명령"이 `/tmp/gate.log`를
+   쓰는 이유). 체인별 판정은 `out/gate-logs/20261024-145224/lane-*.out`의 `consecutive runs succeeded` 스물둘과 종료 코드 0으로
+   확인했고, 초는 `prebuild.out` · `times.tsv`의 mtime에서 왔다. 가장 긴 체인은 CP-M2 187초 · TD-M2 180초 · CM-M2 164초.
+2. 호스트 `zig fmt --check` · `ast-check` 통과, 컨테이너 init · terminal `zig build`와 두 `zig build test` PASS. `shared/`는 순수
+   파일이라 `zig run shared/screen_args_test.zig`가 호스트 macOS Zig에서 그대로 돈다 — 컨테이너 전에 공유 파일 검사를 먼저 본다.
+3. plan과 달라진 자리 — init의 `fn slot()`을 남기지 않고 공유 `Slot.index()`로 대신했다(같은 한 줄 변환이 두 파일에 있는 것이 SA가
+   없애려는 중복이다). terminal의 `init.minimal.args.vector`는 `[]const [*:0]const u8`(0.17 `std.process.Args.Vector`)라
+   `argvOf`가 `anytype` 없이 그 타입을 받는다. `Args`에 기본값을 두지 않았다(필드를 빠뜨리면 컴파일이 막혀야 한다).
+   `default_toggles`(집합)를 `default_toggles_arg`(글자) 옆에 더했고 둘이 같은지를 검사 6이 본다.
+4. 줄 수 — 공유 파일 +110, 검사 +118, init `main.zig` 88줄 바뀜(짓는 자리 둘이 `encode` 한 번과 `decode → 대입 → encode`),
+   terminal `main.zig` -28줄(`argAt` · `enumArg`와 호출 여덟이 `decode` 한 줄과 필드 꺼내기 일곱으로). 로그 줄과 체인 스크립트는
+   글자 하나 안 바뀌었다(design 결정 8) — 게이트가 그것을 봤다.

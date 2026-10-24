@@ -1,9 +1,11 @@
 # TARS Screen Args — Design
 
 Date: 2026-10-24
-Status: SA-M0 끝났다(2026-10-24, 루트 게이트 22/22 — prebuild 339초 + lanes 294초). plan은 `docs/plans/2026-10-24-tars-screen-args-sa-m0.md`,
-기억은 `docs/decisions/project_screen_args.md`. 구현 중 design과 달라진 자리 — 결정 4의 `arg()`는 지우지 않고 `@tagName` 한 줄로
-남겼다(init 호출자 열 곳이 그대로다). 0.17 `zig fmt`가 `@intFromEnum`을 `@backingInt`로 바꾼다. SA-M1은 `-sa-m1.md`(초안).
+Status: 끝났다 — SA-M0(2026-10-24, 루트 게이트 22/22, prebuild 339초 + lanes 294초) · SA-M1(2026-10-24, 루트 게이트 22/22,
+약 10분 37초). plan은 `docs/plans/2026-10-24-tars-screen-args-sa-m{0,1}.md`, 기억은 `docs/decisions/project_screen_args.md`.
+구현 중 design과 달라진 자리 — 결정 4의 `arg()`는 지우지 않고 `@tagName` 한 줄로 남겼다(init 호출자 열 곳이 그대로다). 결정 7의
+`encode(args, *argv)`는 `encode(args, *toggle_buf) Argv`가 됐다(전환 키 글자의 버퍼는 호출자가 든다). `Rescue.slot`은 `usize`로
+남겼다. 0.17 `zig fmt`가 `@intFromEnum`을 `@backingInt`로 바꾼다.
 
 HANDOFF "다음 후보"의 첫 항목에서 시작한다(2026-10-24 프로젝트 점검이 남긴 다섯 가운데 추천 1순위).
 
