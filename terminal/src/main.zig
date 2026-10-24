@@ -2814,401 +2814,520 @@ const PointerWire = struct {
     }
 };
 
-pub fn main(init: std.process.Init) !void {
-    const allocator = std.heap.page_allocator;
+/// terminal 한 프로세스의 상태 전부(MS-M0). `main`의 지역 변수 56개가 이 필드들이다.
+///
+/// 필드가 되는 것은 바퀴를 넘어 사는 값이다. 한 바퀴 안의 값(`ws` · `focus` · `round` ·
+/// `before_spot` · `supply_seen` · `want`)은 `tick`의 지역 변수로 남는다 — 그것이 둘을
+/// 가르는 선이고, 바퀴가 끝나면 사라져야 하는 값이 다음 바퀴로 새는 길을 막는다.
+///
+/// 자기 필드를 가리키는 포인터를 두지 않는다. `open`이 이 struct를 값으로 돌려주므로
+/// 복사 뒤에 그런 포인터는 낡은 주소가 된다. `fd_panes`가 `workspaces` 안의 패널을
+/// 가리키지만 바퀴마다 `poll` 앞에서 다시 짓고 그 바퀴 안에서만 읽는다 — `open`이 끝난
+/// 뒤에는 비어 있다. `PointerWire`도 바퀴마다 새로 짓는다.
+///
+/// 모양은 같은 파일의 `PointerWire`(PD-M4) · `Dictation` · `BatteryState`와 같다 — 상태
+/// 묶음에 그것을 만지는 함수가 붙는다. 다른 것은 범위다. 저쪽은 바퀴의 한 단계이고 이쪽은
+/// 프로세스 전체다.
+const App = struct {
+    // ── 화면 ───────────────────────────────────────────────────────────
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    fb: drm.Framebuffer,
+    /// 미리 굽지 않는다. 처음 쓸 때 굽는 캐시가 대신한다(design의 TR-M1 절).
+    ///
+    /// 이 폰트에 완성형 한글 11172자가 전부 들어 있어서 미리 굽기가 성립하지
+    /// 않는다 — 전부 구우면 비트맵만 2.07MB이고, 컨테이너(arm64 native)에서도
+    /// Debug 빌드로 396밀리초가 드는 일을 TCG 에뮬레이션 게스트가 부팅마다
+    /// 할 이유가 없다.
+    cache: font.Cache,
+    /// 화면 크기를 `openScreen`에서 한 번만 계산해 렌더러·Terminal·PTY winsize
+    /// 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
+    /// 그리는 폭이 달라져 줄바꿈이 엉킨다.
+    ///
+    /// WP-M0부터 이것은 격자 전체이고, Terminal·PTY가 받는 것은 그 안의
+    /// 패널 사각형이다(`spawnPane`). 패널 하나면 둘이 같다.
+    cols: u16,
+    rows: u16,
+    /// 격자 전체의 사각형. 부팅의 첫 패널도 트리에서 이것을 받는다(WP-M0) —
+    /// 하나면 격자 전체지만, 분할이 생기는 M1에서 이 자리가 따로 산수를 하고
+    /// 있으면 둘이 갈린다.
+    whole: layout.Rect,
+    cell_buf: []vt.CellGlyph,
+    /// 화면 dump 한 줄의 버퍼(AL-M0). `cell_buf`처럼 격자 전체 크기라 어느 패널에도
+    /// 충분하고, 격자가 큰 실기계에서는 그만큼 커진다.
+    screen_line_buf: []u8,
+    /// kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
+    /// `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
+    img_buf: [16]vt.ImagePlacement = undefined,
 
-    const fb = try drm.open(allocator, "/dev/dri/card0");
-    fb.fill(MARGIN_COLOR);
-    // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
-    try fb.modeset();
+    // ── 셸 ─────────────────────────────────────────────────────────────
+    /// 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 분할(WP-M1)과
+    /// 새 워크스페이스(WP-M2)가 같은 셸을 같은 argv로 띄운다.
+    shell_path: [*:0]const u8,
+    /// 셸에 넘기는 argv. SC-M0 결정 3 — init이 `"none"`을 넘기면 둘째 칸이 null이다.
+    argv: [2:null]?[*:0]const u8,
+    /// 키보드 종류(IP-M2, design doc 결정 9)가 하는 일은 이것 하나다.
+    swap_alt_meta: bool,
 
-    // 화면 크기를 여기서 한 번만 계산해 렌더러·Terminal·PTY winsize
-    // 세 곳에 같은 값을 넘긴다. 이 셋이 어긋나면 셸이 생각하는 폭과 우리가
-    // 그리는 폭이 달라져 줄바꿈이 엉킨다.
-    //
-    // WP-M0부터 이것은 격자 전체이고, Terminal·PTY가 받는 것은 그 안의
-    // 패널 사각형이다(`spawnPane`). 패널 하나면 둘이 같다.
-    const cols: u16 = @intCast((fb.width - 2 * GRID_X) / CELL_W);
-    const rows: u16 = @intCast((fb.height - 2 * GRID_Y) / ROW_HEIGHT);
-    logline.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ cols, rows, fb.width, fb.height });
+    // ── 패널 ───────────────────────────────────────────────────────────
+    /// 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0).
+    workspaces: [MAX_WORKSPACES]?Workspace = @splat(null),
+    /// `Cmd+T` · `Cmd+1`~`9`가 바꾸고, 워크스페이스가 사라지면 EOF 경로가 맞춘다(WP-M2).
+    current: usize = 0,
+    /// 공유 칸은 패널보다 오래 산다 — 마지막 패널이 닫히면 terminal이 끝나므로
+    /// 프로세스와 같은 수명이다(CB design 비목표 2: terminal이 되살아나면 빈
+    /// 칸으로 시작한다).
+    clips: Clips,
+    /// 마지막으로 찍은 `pane>` 줄의 서명(WP design 결정 7). null이면 아직 한
+    /// 번도 안 찍었다 — 첫 프레임이 반드시 찍힌다.
+    last_pane: ?PaneSig = null,
 
-    const font_data = try std.Io.Dir.cwd().readFileAlloc(
-        init.io,
-        "vendor/fonts/unifont.otf",
-        allocator,
-        .unlimited,
-    );
+    // ── 입력 ───────────────────────────────────────────────────────────
+    keyboard_fd: c_int,
+    key_state: input.State,
+    key_buf: [64]u8 = undefined,
+    pty_buf: [4096]u8 = undefined,
 
-    // 미리 굽지 않는다. 처음 쓸 때 굽는 캐시가 대신한다(design의 TR-M1 절).
-    //
-    // 이 폰트에 완성형 한글 11172자가 전부 들어 있어서 미리 굽기가 성립하지
-    // 않는다 — 전부 구우면 비트맵만 2.07MB이고, 컨테이너(arm64 native)에서도
-    // Debug 빌드로 396밀리초가 드는 일을 TCG 에뮬레이션 게스트가 부팅마다
-    // 할 이유가 없다.
-    //
-    // font_data를 free하지 않는다. stb_truetype이 그 바이트를 복사하지 않고
-    // 참조만 하므로 캐시보다 오래 살아야 한다.
-    var cache = try font.Cache.init(allocator, font_data);
-    defer cache.deinit();
-    logline.print("terminal: font cache ready (lazy)\n", .{});
+    // ── 포인터 ─────────────────────────────────────────────────────────
+    /// 포인터 장치(PD-M0). 키보드와 달리 terminal이 스스로 찾고, 부팅 뒤에
+    /// 꽂힌 것도 잡는다(PD design 결정 1). init의 `argv[4]`는 그대로다.
+    pointer_devs: [pointer.MAX_DEVICES]?PointerDev = @splat(null),
+    pointer_state: pointer.Pointer,
+    /// 화살표와 그 밑의 픽셀(PD-M1, design 결정 4).
+    sprite: pointer.Sprite,
+    /// 보이는 조건 2 · 3(design 결정 4). 움직이거나 누르면 켜지고, 키보드가
+    /// PTY에 바이트를 보내면 꺼진다. 장치가 다 빠져도 꺼진다 — 다시 꽂은
+    /// 장치는 움직여야 보인다. 조건 1(장치가 하나 이상)은 `pointerCount`가 본다.
+    pointer_shown: bool = false,
+    /// 누름 · 끎 · 뗌의 상태(PD-M2, design 결정 6)와, 누른 패널이 있던
+    /// 워크스페이스 번호. 누른 채 키보드가 워크스페이스를 바꾸면 `PointerWire`가
+    /// 이 번호로 알아채고 제스처를 버린다.
+    gesture: pointer.Gesture = .{},
+    gesture_ws: usize = 0,
+    /// 버튼이 눌린 동안의 주인과 그 워크스페이스(PD-M4). 자식이 마우스를
+    /// 원하면 누름이 `gesture` 대신 그 자식에게 보고로 간다.
+    grab: pointer.Grab = .{},
+    grab_ws: usize = 0,
+    /// 부팅 뒤의 장치는 커널의 uevent로 안다. udev가 듣는 것과 같은 netlink
+    /// 소켓이고 커널 config가 더 필요 없다 — inotify를 켜면 initramfs 풀기가
+    /// 느려진다(PD-M0 plan 확정 7). 소켓을 먼저 열고 그다음에 훑는다.
+    ///
+    /// 소켓이 실패해도 terminal은 산다 — 부팅 때 있던 장치만 쓰고 핫플러그를
+    /// 잃는다. 그때 이 값은 -1이고 poll은 음수 fd를 건너뛴다.
+    uevent_fd: c_int,
 
-    // init이 argv에 실어 보낸 값 전체(SA-M1). init이 같은 파일의 `encode`로 지은 아홉
-    // 칸을 `decode`가 되돌린다 — 칸 번호와 글자는 그 파일 안에만 있고 여기는 필드다.
-    // 없는 칸(init 없이 손으로 띄웠다)과 못 읽는 글자는 `screen_args`의 기본값이고,
-    // 그 기본값은 설정 파일의 기본값과 같아야 한다는 것을 그 파일이 적어 둔다.
-    //
-    // 장치 경로(HD-M0)의 번호를 여기서 고르지 않는 이유는 CP가 세운 규칙 그대로다 —
-    // 하드웨어를 살펴 고르는 일은 PID 1이 하고 terminal은 그 결정을 실행만 한다.
-    // 셸 인자를 꺼내는 자리보다 위에서 읽는 이유는 장치를 여는 일이 그보다 먼저
-    // 오기 때문이다(로그 순서를 지킨다).
-    const a = screen_args.decode(screen_args.argvOf(init.minimal.args.vector));
-    const input_device = a.device_path;
+    // ── 배터리 ─────────────────────────────────────────────────────────
+    /// 시계의 원점(BS-M1). 주기의 기한은 이 시각부터의 밀리초다. 렌더 시간을 재는
+    /// 것과 같은 단조 시계(`.awake`)이고, 커널에 `SUSPEND`가 없어서 잠든 시간은 따질 일이 없다.
+    /// 루프의 밀리초 시계가 이것 하나다 — 프레임 하한(RS-M2)도 이 원점을 쓴다.
+    battery_clock: std.Io.Timestamp,
+    battery_state: BatteryState = .{},
 
-    const keyboard_fd = input.openDevice(input_device) catch |err| {
-        logline.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
-        return err;
-    };
-    logline.print("terminal: opened {s}\n", .{input_device});
+    // ── 받아쓰기 ───────────────────────────────────────────────────────
+    /// 받아쓰기(VD-M1). 자식이 없으면 `phase`가 null이다.
+    dict: Dictation = .{},
 
-    // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
-    // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
-    // 벌이 되면 두 프로세스가 같은 파일에서 서로 다른 답을 얻을 수 있다.
-    // 인자 없이 손으로 실행할 때를 위해 기본값은 남긴다.
-    //
-    // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
-    //
-    // SC-M0 전에는 이 플래그가 조건 없이 붙었다. 이유로 적혀 있던 것은
-    // "프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있다"였는데,
-    // 2026-09-11에 재 보니 설정을 다 읽은 fish의 프롬프트가 `--no-config`로
-    // 뜬 것과 글자까지 같았다(design 실측 14(c)). 그 이유는 이제 없다.
-    //
-    // 인자 없이 손으로 실행할 때의 기본값은 `--no-config`로 남긴다 — 그때는
-    // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
-    //
-    // SA-M0 · M1. 값의 종류가 init과 같은 enum이라 자판 · 키보드 · 클립보드 범위의
-    // 이름이 어긋날 자리가 없고, 위 `decode`가 이미 읽었으므로 여기는 필드를 꺼내는
-    // 것뿐이다. 이름은 전과 같이 둔다 — 아래 로그 줄과 패널 띄우기가 이 이름으로 쓴다.
-    const shell_path: [*:0]const u8 = a.shell_path;
-    const shell_flag: [*:0]const u8 = a.shell_flag;
-    // 키보드 종류(IP-M2, design doc 결정 9). 이 값이 하는 일은 `swap_alt_meta` 하나다.
-    const keyboard = a.keyboard;
-    const swap_alt_meta = keyboard == .pc;
+    // ── 프레임 ─────────────────────────────────────────────────────────
+    /// 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
+    /// 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
+    first_frame_timed: bool = false,
+    /// 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
+    /// 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
+    last_glyph_count: usize = 0,
+    /// 마지막으로 찍은 상태 줄. `?usize`인 것에 뜻이 있다 — 0을 초기값으로
+    /// 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
+    last_status: [status.MAX_LEN]u8 = undefined,
+    last_status_len: ?usize = null,
+    /// 글자와 따로 기억해야 한다(IS-M1). `CAPS` 칸은 켜져도 글자가 안
+    /// 바뀌므로, 이 값이 없으면 CapsLock을 눌러도 새 `status>` 줄이 한 줄도
+    /// 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
+    /// 초기값은 무엇이든 된다.
+    last_status_caps: bool = false,
+    /// 배터리 칸도 따로 기억한다(BS-M1). `CAPS`와 같은 이유다 — 잔량이 그대로인 채 어댑터를
+    /// 꽂으면 글자는 그대로이고 갈래만 바뀐다. 초기값은 `last_status_caps`와 같은 이유로
+    /// 무엇이든 된다.
+    last_status_battery: ?BatteryCell = null,
+    /// TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
+    /// 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
+    needs_redraw: bool = false,
+    /// PTY 출력이 화면을 바꿨다(RS-M2). `needs_redraw`와 따로 둔다 — 출력 때문에 생긴
+    /// 그리기만 간격의 하한(`pacing.MIN_GAP_MS`)을 따르고, 키 · 포인터 · 배터리 · 패널
+    /// 닫힘은 지금처럼 곧바로 그린다. 하한의 목적이 출력이 쏟아질 때이고, 포인터의
+    /// `at` 줄이 그 프레임의 `scroll>` 뒤에 온다는 게이트의 순서(pointer 검사 11)를
+    /// 미룬 바퀴가 깨지 않게 하려는 것이기도 하다.
+    output_pending: bool = false,
+    /// 마지막으로 그린 시각(밀리초, `battery_clock` 기준 — 루프의 밀리초 시계가 그것
+    /// 하나다). 처음 프레임 전에는 null이고 `pacing.wait`가 기다리지 않는다.
+    last_frame_ms: ?i64 = null,
 
-    // 자판 둘(HI-M2, design 결정 7).
-    const hangul_layout: hangul.Layout = a.hangul;
-    const latin_layout: input.LatinLayout = a.latin;
+    // ── poll ───────────────────────────────────────────────────────────
+    /// poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,
+    /// 그리고 모든 워크스페이스의 모든 패널이다(WP design 위험 1). 포커스 없는
+    /// 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
+    /// 멈춘다.
+    ///
+    /// 크기는 상한(1 + 1 + 8 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
+    /// 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
+    /// "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
+    ///
+    /// 자리는 `[0]` 키보드 · `[1]` uevent 소켓 · `[2..pty_base]` 포인터 장치 ·
+    /// `[pty_base..nfds]` PTY다. PD 전에는 PTY가 `[1..]`이었다 — 그 오프셋이
+    /// 이제 바퀴마다 다르므로 `pty_base`로 든다.
+    ///
+    /// 맨 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
+    fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined,
+    /// `fds[2 + k]`가 어느 장치 칸의 것인지.
+    fd_devs: [pointer.MAX_DEVICES]usize = undefined,
+    /// `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
+    /// 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
+    ///
+    /// 워크스페이스 번호와 잎 번호를 함께 드는 이유는 EOF다(WP-M1). 그
+    /// 패널을 닫으려면 트리에서 지워야 하고, 트리는 잎 번호만 안다.
+    fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]PaneRef = undefined,
+    /// 이 바퀴에 `fds`에서 쓴 길이와 PTY 구간. 바퀴마다 `tick`의 머리가 다시 정한다.
+    nfds: usize = 0,
+    pty_base: usize = 0,
+    pty_end: usize = 0,
 
-    // 한/영 전환 키 목록(HI-M3, design 결정 7). 자판 둘과 달리 enum 하나가 아니라
-    // 집합이다. 끝의 `esc_latin`은 설정 파일의 `hangul_toggle`이 아니라 `esc_latin=on`에서
-    // 온다 — init이 둘을 합쳐 한 칸에 넣고(EL design 결정 1) `decode`가 집합으로 되돌린다.
-    // 모르는 이름은 그 안에서 버린다 — init이 이미 한 번 경고를 찍었다.
-    const toggles: input.Toggles = a.toggles;
+    /// 준비 전부. 순서가 로그의 순서다 — `grid` → `font cache ready` → `opened` →
+    /// `spawned child pid` → `keyboard=` → `hangul layout=` → `clipboard scope=`.
+    /// `config/check.sh`가 `keyboard` 줄 다음에 `clipboard` 줄이 온다는 것을 쓴다.
+    ///
+    /// 중간에 실패하면 에러를 돌려주고 프로세스가 끝난다 — init이 되살린다. 그때까지
+    /// 연 것을 닫지 않는 것은 MS 전과 같다.
+    ///
+    /// 값이 준비 중에 정해지는 필드만 `undefined`로 시작한다. 나머지는 선언의 기본값이다.
+    fn open(init: std.process.Init, allocator: std.mem.Allocator) !App {
+        var self: App = .{
+            .io = init.io,
+            .allocator = allocator,
+            .fb = undefined,
+            .cache = undefined,
+            .cols = undefined,
+            .rows = undefined,
+            .whole = undefined,
+            .cell_buf = undefined,
+            .screen_line_buf = undefined,
+            .shell_path = undefined,
+            .argv = undefined,
+            .swap_alt_meta = undefined,
+            .clips = undefined,
+            .keyboard_fd = undefined,
+            .key_state = undefined,
+            .pointer_state = undefined,
+            .sprite = undefined,
+            .uevent_fd = undefined,
+            .battery_clock = undefined,
+        };
+        try self.openScreen();
+        const a = try self.openKeyboard(init);
+        try self.spawnFirst(a);
+        self.openPointers();
+        self.openBattery();
+        return self;
+    }
 
-    // 클립보드의 범위(CB-M0, design 결정 3). 기본값이 `shared`인 것은 사용자가
-    // 정했다(2026-10-05).
-    const clip_scope: clipboard.Scope = a.clipboard;
+    /// 준비 1. DRM을 열고 모드셋 한 번, 격자 크기, 폰트 캐시.
+    fn openScreen(self: *App) !void {
+        self.fb = try drm.open(self.allocator, "/dev/dri/card0");
+        self.fb.fill(MARGIN_COLOR);
+        // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
+        try self.fb.modeset();
 
-    // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
-    // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
-    // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
-    // 리눅스 콘솔이 아니라 libghostty-vt다. 셸과 ncurses 프로그램은 terminfo를
-    // 보고 시퀀스를 고르므로, 이름이 틀리면 우리가 보내는 특수키와 셸이
-    // 기대하는 것이 어긋난다 — Home이 linux에서는 `ESC [ 1 ~`, xterm에서는
-    // `ESC O H`다.
-    //
-    // execv는 환경을 그대로 상속하므로 fork 전에 고쳐두면 자식이 받는다.
-    // 이 setenv가 PID 1이 아니라 여기 있는 이유는 시리얼 콘솔 셸 때문이다 —
-    // 그쪽은 정말로 커널 콘솔이라 TERM=linux가 맞다. 같은 기계 안에서 두
-    // 셸의 TERM이 다른 것이 정상이다(design doc 결정 7).
-    //
-    // TR-M0부터 xterm-256color다. 그전에는 "우리가 색을 하나도 그리지 않아서"
-    // xterm이었는데, 이제 팔레트 256색과 truecolor를 전부 칠하므로 xterm이라고
-    // 말하는 쪽이 거짓말이 된다(design 결정 8).
-    _ = setenv("TERM", "xterm-256color", 1);
+        self.cols = @intCast((self.fb.width - 2 * GRID_X) / CELL_W);
+        self.rows = @intCast((self.fb.height - 2 * GRID_Y) / ROW_HEIGHT);
+        logline.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ self.cols, self.rows, self.fb.width, self.fb.height });
 
-    // 로케일도 여기서 정한다(HI-M1). TERM과 같은 자리에 있는 이유가 다르다 —
-    // TERM은 시리얼 콘솔 셸과 값이 갈려야 해서 여기 있고, LANG은 갈릴 이유가
-    // 없는데도 여기 있다. PID 1은 커널이 준 envp 블록을 그대로 execve에 넘기고
-    // (`init/src/main.zig:389`) 거기에 항목을 더하려면 블록을 새로 만들어야
-    // 하는데, 한글 입력을 받는 셸은 이쪽 하나뿐이라 그 값을 치르지 않는다.
-    // 시리얼 콘솔 셸은 C 로케일로 남는다.
-    //
-    // 이것이 없으면 셸이 한글을 한 글자로 읽지 못한다. `setlocale`이
-    // 실패하면 `mbrtowc`가 바이트를 하나씩 돌려주고, fish는 우리가 보낸 세
-    // 바이트를 세 글자로 들고 바이트마다 폭을 센다(0x80~0x9F는 0칸,
-    // 0xA0 이상은 1칸). 그러면 커서가 두 칸짜리 글자의 가운데에 서고 다음
-    // 글자가 앞 글자를 지운다 — 증상이 입력이 아니라 화면에 나타난다.
-    //
-    // 값이 참이 되려면 `/usr/lib/locale/C.utf8`이 게스트에 있어야 한다.
-    // `make_initrd.sh`가 그것을 넣고, terminfo와 정확히 같은 종류의 짝이다.
-    _ = setenv("LANG", "C.UTF-8", 1);
+        const font_data = try std.Io.Dir.cwd().readFileAlloc(
+            self.io,
+            "vendor/fonts/unifont.otf",
+            self.allocator,
+            .unlimited,
+        );
 
-    // SC-M0 결정 6. TERM·LANG과 같은 자리에 있는 이유가 TERM과 같다 —
-    // 값이 두 셸에서 갈려야 해서 여기 있다. 화면은 TARS의 화면이라 다른
-    // 제품의 배너가 뜰 자리가 아니고, 시리얼 콘솔은 fish를 그대로 보는
-    // 자리다(machine/check.sh:117이 그 인사말을 UEFI 부팅의 마커로 쓴다 —
-    // 여기서 끄면 그 마커가 살고, /etc/fish/config.fish로 끄면 죽는다).
-    //
-    // fish의 `fish_greeting` 함수는 `set -q fish_greeting`이 참이면 기본
-    // 문구를 안 만들고, 값이 비어 있으면 아무것도 안 찍는다. 환경 변수는
-    // fish에서 전역 변수로 보이므로 `set -q`가 참이 된다. 2026-09-11에
-    // 게스트에서 확인했다(design 실측 14(b)).
-    //
-    // bash·zsh는 이런 이름의 환경 변수를 모른다 — 조건 없이 넣는다.
-    _ = setenv("fish_greeting", "", 1);
+        // font_data를 free하지 않는다. stb_truetype이 그 바이트를 복사하지 않고
+        // 참조만 하므로 캐시보다 오래 살아야 한다.
+        self.cache = try font.Cache.init(self.allocator, font_data);
+        logline.print("terminal: font cache ready (lazy)\n", .{});
+    }
 
-    // SC-M0 결정 3. init이 `"none"`을 넘기면 셸에 플래그를 안 붙인다 —
-    // 슬롯을 null로 덮으면 execv가 거기서 멈추므로 배열 길이를 안 바꿔도
-    // 된다(sentinel은 그대로 배열 끝에 있다).
-    //
-    // 문자열 하나로 말하는 이유는 `config.zig`의 `configFlag` 주석에
-    // 있다 — argv를 짓는 쪽(PID 1)과 쓰는 쪽(여기)이 프로세스 경계로
-    // 갈려 있어서 "인자가 없다"를 포인터로 못 보낸다.
-    var argv = [_:null]?[*:0]const u8{ shell_path, shell_flag };
-    if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) argv[1] = null;
+    /// 준비 2. init이 argv에 실어 보낸 값 전체를 읽고(SA-M1) 키보드 장치를 연다.
+    /// 읽은 값은 돌려준다 — 준비 3이 셸 · 자판 · 클립보드를 거기서 꺼낸다.
+    ///
+    /// init이 같은 파일의 `encode`로 지은 아홉 칸을 `decode`가 되돌린다 — 칸 번호와
+    /// 글자는 그 파일 안에만 있고 여기는 필드다. 없는 칸(init 없이 손으로 띄웠다)과
+    /// 못 읽는 글자는 `screen_args`의 기본값이고, 그 기본값은 설정 파일의 기본값과
+    /// 같아야 한다는 것을 그 파일이 적어 둔다.
+    ///
+    /// 장치 경로(HD-M0)의 번호를 여기서 고르지 않는 이유는 CP가 세운 규칙 그대로다 —
+    /// 하드웨어를 살펴 고르는 일은 PID 1이 하고 terminal은 그 결정을 실행만 한다.
+    /// 셸 인자를 꺼내는 자리보다 위에서 읽는 이유는 장치를 여는 일이 그보다 먼저
+    /// 오기 때문이다(로그 순서를 지킨다).
+    fn openKeyboard(self: *App, init: std.process.Init) !screen_args.Args {
+        const a = screen_args.decode(screen_args.argvOf(init.minimal.args.vector));
+        const input_device = a.device_path;
 
-    // 공유 칸은 패널보다 오래 산다 — 마지막 패널이 닫히면 terminal이 끝나므로
-    // 프로세스와 같은 수명이다(CB design 비목표 2: terminal이 되살아나면 빈
-    // 칸으로 시작한다).
-    var clips: Clips = .{ .scope = clip_scope, .shared = .init(allocator) };
-    defer clips.shared.deinit();
+        self.keyboard_fd = input.openDevice(input_device) catch |err| {
+            logline.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
+            return err;
+        };
+        logline.print("terminal: opened {s}\n", .{input_device});
+        return a;
+    }
 
-    // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
-    // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
-    // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
-    //
-    // `current`는 `Cmd+T` · `Cmd+1`~`9`가 바꾸고, 워크스페이스가 사라지면
-    // EOF 경로가 맞춘다(WP-M2).
-    const whole: layout.Rect = .{ .col = 0, .row = 0, .cols = cols, .rows = rows };
-    var workspaces: [MAX_WORKSPACES]?Workspace = @splat(null);
-    var current: usize = 0;
-    workspaces[current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
-    var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
-    workspaces[current].?.tree.rects(whole, &boot_rects);
-    const first = try spawnPane(init.io, allocator, shell_path, &argv, boot_rects[0]);
-    workspaces[current].?.panes[0] = first;
-    defer for (workspaces) |slot| {
-        const w = slot orelse continue;
-        for (w.panes) |maybe| {
-            if (maybe) |pane| {
-                pane.screen.deinit();
-                pane.clip.deinit();
+    /// 준비 3. 셸의 환경과 argv, 클립보드, 첫 워크스페이스의 첫 패널, 설정이 여기까지
+    /// 왔다는 로그 셋, 프레임 버퍼 둘, 키 상태.
+    fn spawnFirst(self: *App, a: screen_args.Args) !void {
+        // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
+        // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
+        // 벌이 되면 두 프로세스가 같은 파일에서 서로 다른 답을 얻을 수 있다.
+        // 인자 없이 손으로 실행할 때를 위해 기본값은 남긴다.
+        //
+        // `-c` 없이 실행하면 대화형 모드다 — 프롬프트를 그리고 입력을 기다린다.
+        //
+        // SC-M0 전에는 이 플래그가 조건 없이 붙었다. 이유로 적혀 있던 것은
+        // "프롬프트가 예측 가능해야 게이트가 화면을 검사할 수 있다"였는데,
+        // 2026-09-11에 재 보니 설정을 다 읽은 fish의 프롬프트가 `--no-config`로
+        // 뜬 것과 글자까지 같았다(design 실측 14(c)). 그 이유는 이제 없다.
+        //
+        // 인자 없이 손으로 실행할 때의 기본값은 `--no-config`로 남긴다 — 그때는
+        // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
+        //
+        // SA-M0 · M1. 값의 종류가 init과 같은 enum이라 자판 · 키보드 · 클립보드 범위의
+        // 이름이 어긋날 자리가 없고, 위 `decode`가 이미 읽었으므로 여기는 필드를 꺼내는
+        // 것뿐이다. 이름은 전과 같이 둔다 — 아래 로그 줄과 패널 띄우기가 이 이름으로 쓴다.
+        self.shell_path = a.shell_path;
+        const shell_flag: [*:0]const u8 = a.shell_flag;
+        // 키보드 종류(IP-M2, design doc 결정 9). 이 값이 하는 일은 `swap_alt_meta` 하나다.
+        const keyboard = a.keyboard;
+        self.swap_alt_meta = keyboard == .pc;
+
+        // 자판 둘(HI-M2, design 결정 7).
+        const hangul_layout: hangul.Layout = a.hangul;
+        const latin_layout: input.LatinLayout = a.latin;
+
+        // 한/영 전환 키 목록(HI-M3, design 결정 7). 자판 둘과 달리 enum 하나가 아니라
+        // 집합이다. 끝의 `esc_latin`은 설정 파일의 `hangul_toggle`이 아니라 `esc_latin=on`에서
+        // 온다 — init이 둘을 합쳐 한 칸에 넣고(EL design 결정 1) `decode`가 집합으로 되돌린다.
+        // 모르는 이름은 그 안에서 버린다 — init이 이미 한 번 경고를 찍었다.
+        const toggles: input.Toggles = a.toggles;
+
+        // 클립보드의 범위(CB-M0, design 결정 3). 기본값이 `shared`인 것은 사용자가
+        // 정했다(2026-10-05).
+        const clip_scope: clipboard.Scope = a.clipboard;
+
+        // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
+        // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
+        // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
+        // 리눅스 콘솔이 아니라 libghostty-vt다. 셸과 ncurses 프로그램은 terminfo를
+        // 보고 시퀀스를 고르므로, 이름이 틀리면 우리가 보내는 특수키와 셸이
+        // 기대하는 것이 어긋난다 — Home이 linux에서는 `ESC [ 1 ~`, xterm에서는
+        // `ESC O H`다.
+        //
+        // execv는 환경을 그대로 상속하므로 fork 전에 고쳐두면 자식이 받는다.
+        // 이 setenv가 PID 1이 아니라 여기 있는 이유는 시리얼 콘솔 셸 때문이다 —
+        // 그쪽은 정말로 커널 콘솔이라 TERM=linux가 맞다. 같은 기계 안에서 두
+        // 셸의 TERM이 다른 것이 정상이다(design doc 결정 7).
+        //
+        // TR-M0부터 xterm-256color다. 그전에는 "우리가 색을 하나도 그리지 않아서"
+        // xterm이었는데, 이제 팔레트 256색과 truecolor를 전부 칠하므로 xterm이라고
+        // 말하는 쪽이 거짓말이 된다(design 결정 8).
+        _ = setenv("TERM", "xterm-256color", 1);
+
+        // 로케일도 여기서 정한다(HI-M1). TERM과 같은 자리에 있는 이유가 다르다 —
+        // TERM은 시리얼 콘솔 셸과 값이 갈려야 해서 여기 있고, LANG은 갈릴 이유가
+        // 없는데도 여기 있다. PID 1은 커널이 준 envp 블록을 그대로 execve에 넘기고
+        // (`init/src/main.zig:389`) 거기에 항목을 더하려면 블록을 새로 만들어야
+        // 하는데, 한글 입력을 받는 셸은 이쪽 하나뿐이라 그 값을 치르지 않는다.
+        // 시리얼 콘솔 셸은 C 로케일로 남는다.
+        //
+        // 이것이 없으면 셸이 한글을 한 글자로 읽지 못한다. `setlocale`이
+        // 실패하면 `mbrtowc`가 바이트를 하나씩 돌려주고, fish는 우리가 보낸 세
+        // 바이트를 세 글자로 들고 바이트마다 폭을 센다(0x80~0x9F는 0칸,
+        // 0xA0 이상은 1칸). 그러면 커서가 두 칸짜리 글자의 가운데에 서고 다음
+        // 글자가 앞 글자를 지운다 — 증상이 입력이 아니라 화면에 나타난다.
+        //
+        // 값이 참이 되려면 `/usr/lib/locale/C.utf8`이 게스트에 있어야 한다.
+        // `make_initrd.sh`가 그것을 넣고, terminfo와 정확히 같은 종류의 짝이다.
+        _ = setenv("LANG", "C.UTF-8", 1);
+
+        // SC-M0 결정 6. TERM·LANG과 같은 자리에 있는 이유가 TERM과 같다 —
+        // 값이 두 셸에서 갈려야 해서 여기 있다. 화면은 TARS의 화면이라 다른
+        // 제품의 배너가 뜰 자리가 아니고, 시리얼 콘솔은 fish를 그대로 보는
+        // 자리다(machine/check.sh:117이 그 인사말을 UEFI 부팅의 마커로 쓴다 —
+        // 여기서 끄면 그 마커가 살고, /etc/fish/config.fish로 끄면 죽는다).
+        //
+        // fish의 `fish_greeting` 함수는 `set -q fish_greeting`이 참이면 기본
+        // 문구를 안 만들고, 값이 비어 있으면 아무것도 안 찍는다. 환경 변수는
+        // fish에서 전역 변수로 보이므로 `set -q`가 참이 된다. 2026-09-11에
+        // 게스트에서 확인했다(design 실측 14(b)).
+        //
+        // bash·zsh는 이런 이름의 환경 변수를 모른다 — 조건 없이 넣는다.
+        _ = setenv("fish_greeting", "", 1);
+
+        // SC-M0 결정 3. init이 `"none"`을 넘기면 셸에 플래그를 안 붙인다 —
+        // 슬롯을 null로 덮으면 execv가 거기서 멈추므로 배열 길이를 안 바꿔도
+        // 된다(sentinel은 그대로 배열 끝에 있다).
+        //
+        // 문자열 하나로 말하는 이유는 `config.zig`의 `configFlag` 주석에
+        // 있다 — argv를 짓는 쪽(PID 1)과 쓰는 쪽(여기)이 프로세스 경계로
+        // 갈려 있어서 "인자가 없다"를 포인터로 못 보낸다.
+        self.argv = .{ self.shell_path, shell_flag };
+        if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) self.argv[1] = null;
+
+        self.clips = .{ .scope = clip_scope, .shared = .init(self.allocator) };
+
+        // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
+        // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
+        // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
+        self.whole = .{ .col = 0, .row = 0, .cols = self.cols, .rows = self.rows };
+        self.workspaces[self.current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+        var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
+        self.workspaces[self.current].?.tree.rects(self.whole, &boot_rects);
+        const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0]);
+        self.workspaces[self.current].?.panes[0] = first;
+        // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
+        // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
+        // 개수를 세는 마커라 그대로 둔다.
+        logline.print("terminal: spawned child pid {d} ({s})\n", .{
+            first.session.child_pid, self.shell_path,
+        });
+        // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
+        // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
+        // 2차 부팅), 그 화면이 틀렸을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이
+        // 틀렸다"를 가르는 것이 이 줄이다.
+        logline.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
+            @tagName(keyboard), self.swap_alt_meta,
+        });
+        // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
+        // 짝이다 — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
+        // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
+        // 뒤만 보면 여기 기본값이 우연히 맞아도 초록이다. HI 게이트가 둘을 다 본다.
+        // `toggles=`는 파싱한 결과를 다시 문자열로 만든 것이다(HI-M3).
+        // argv로 받은 문자열을 그대로 찍으면 "글자가 도착했다"만 증명되고
+        // "우리가 그것을 맞게 읽었다"는 아무것도 증명되지 않는다.
+        var toggle_buf: [input.TOGGLE_ARG_MAX]u8 = undefined;
+        logline.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
+            @tagName(hangul_layout),
+            @tagName(latin_layout),
+            toggles.arg(&toggle_buf),
+        });
+        // 같은 이유의 줄이 클립보드에도 하나 필요하다(CB-M0). `tars-init: config`
+        // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너
+        // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
+        logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
+
+        self.cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows);
+        self.screen_line_buf = try self.allocator.alloc(u8, screenLineMax(self.cols, self.rows));
+
+        self.key_state = .{
+            .hangul_layout = hangul_layout,
+            .latin_layout = latin_layout,
+            .toggles = toggles,
+        };
+    }
+
+    /// 준비 4. uevent 소켓을 먼저 열고 그다음에 포인터 장치를 훑는다(PD-M0).
+    fn openPointers(self: *App) void {
+        self.pointer_state = pointer.Pointer.init(self.fb.width, self.fb.height);
+        self.sprite = pointer.Sprite.init(self.fb.width, self.fb.height);
+        self.uevent_fd = uevent: {
+            const linux = std.os.linux;
+            const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
+            if (fd < 0) {
+                logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(fd))});
+                break :uevent -1;
+            }
+            // 그룹 1이 커널이 보내는 uevent다(그룹 2는 udevd가 다시 보내는 것). pid
+            // 0은 소켓의 주소를 커널이 고르게 한다.
+            const addr: linux.sockaddr.nl = .{ .pid = 0, .groups = 1 };
+            const rc = std.c.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.nl));
+            if (rc < 0) {
+                logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(rc))});
+                _ = std.c.close(fd);
+                break :uevent -1;
+            }
+            break :uevent fd;
+        };
+        // 터치패드의 배율과 휠 눈금(PD-M3). 패드 가로 전체가 프레임버퍼 가로이고,
+        // 두 손가락이 휠 한 눈금의 줄 수만큼 움직이면 한 눈금이다 — 손가락과 글자가
+        // 같은 거리를 간다. 처음 훑기보다 먼저 정해야 부팅 때 있던 패드도 이 값을 쓴다.
+        touchpad_screen = .{ .w = self.fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
+        scanPointers(self.io, &self.pointer_devs);
+    }
+
+    /// 준비 5. 배터리(BS-M1, design 결정 8). 포인터와 같은 이유로 uevent 소켓을 연 뒤에
+    /// 훑는다 — 반대면 훑은 뒤 소켓을 열기 전에 생긴 배터리를 놓친다.
+    ///
+    /// 처음 훑기는 다시 그리기를 안 켠다. 첫 프레임은 셸의 첫 출력이 그리고, 그 프레임의 상태
+    /// 줄에 칸이 이미 있다(battery 체인 검사 B1). 여기서 켜면 셸보다 먼저 프레임이 하나 더
+    /// 그려져 모든 체인의 `screen>` 줄 수가 바뀐다.
+    fn openBattery(self: *App) void {
+        self.battery_clock = std.Io.Clock.now(.awake, self.io);
+        _ = scanBattery(self.io, &self.battery_state, 0);
+    }
+
+    /// 정리. MS 전 `main`의 `defer` 여섯을 등록의 역순 그대로 — 받아쓰기 자식 →
+    /// 버퍼 둘 → 패널 → 공유 클립보드 → 폰트 캐시.
+    fn close(self: *App) void {
+        // terminal이 끝나면(마지막 패널이 닫혔다) 자식도 끝낸다. 안 그러면 녹음이 상한까지
+        // 돌고 그동안 마이크가 열려 있다. 거두지는 않는다 — 고아는 init이 거둔다.
+        if (self.dict.phase != null) signalDictation(&self.dict, .TERM);
+        self.allocator.free(self.screen_line_buf);
+        self.allocator.free(self.cell_buf);
+        for (self.workspaces) |slot| {
+            const w = slot orelse continue;
+            for (w.panes) |maybe| {
+                if (maybe) |pane| {
+                    pane.screen.deinit();
+                    pane.clip.deinit();
+                }
             }
         }
-    };
-    // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
-    // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
-    // 개수를 세는 마커라 그대로 둔다.
-    logline.print("terminal: spawned child pid {d} ({s})\n", .{
-        first.session.child_pid, shell_path,
-    });
-    // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
-    // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
-    // 2차 부팅), 그 화면이 틀렸을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이
-    // 틀렸다"를 가르는 것이 이 줄이다.
-    logline.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
-        @tagName(keyboard), swap_alt_meta,
-    });
-    // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
-    // 짝이다 — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
-    // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
-    // 뒤만 보면 여기 기본값이 우연히 맞아도 초록이다. HI 게이트가 둘을 다 본다.
-    // `toggles=`는 파싱한 결과를 다시 문자열로 만든 것이다(HI-M3).
-    // argv로 받은 문자열을 그대로 찍으면 "글자가 도착했다"만 증명되고
-    // "우리가 그것을 맞게 읽었다"는 아무것도 증명되지 않는다.
-    var toggle_buf: [input.TOGGLE_ARG_MAX]u8 = undefined;
-    logline.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
-        @tagName(hangul_layout),
-        @tagName(latin_layout),
-        toggles.arg(&toggle_buf),
-    });
-    // 같은 이유의 줄이 클립보드에도 하나 필요하다(CB-M0). `tars-init: config`
-    // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너
-    // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
-    logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
+        self.clips.shared.deinit();
+        self.cache.deinit();
+    }
 
-    const cell_buf = try allocator.alloc(vt.CellGlyph, @as(usize, cols) * rows);
-    defer allocator.free(cell_buf);
-    // 화면 dump 한 줄의 버퍼(AL-M0). `cell_buf`처럼 격자 전체 크기라 어느 패널에도
-    // 충분하고, 격자가 큰 실기계에서는 그만큼 커진다.
-    const screen_line_buf = try allocator.alloc(u8, screenLineMax(cols, rows));
-    defer allocator.free(screen_line_buf);
-
-    // 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
-    // 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
-    var first_frame_timed = false;
-    // kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
-    // `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
-    var img_buf: [16]vt.ImagePlacement = undefined;
-    // 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
-    // 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
-    var last_glyph_count: usize = 0;
-    // 마지막으로 찍은 상태 줄. `?usize`인 것에 뜻이 있다 — 0을 초기값으로
-    // 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
-    var last_status: [status.MAX_LEN]u8 = undefined;
-    var last_status_len: ?usize = null;
-    // 글자와 따로 기억해야 한다(IS-M1). `CAPS` 칸은 켜져도 글자가 안
-    // 바뀌므로, 이 값이 없으면 CapsLock을 눌러도 새 `status>` 줄이 한 줄도
-    // 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
-    // 초기값은 무엇이든 된다.
-    var last_status_caps = false;
-    // 배터리 칸도 따로 기억한다(BS-M1). `CAPS`와 같은 이유다 — 잔량이 그대로인 채 어댑터를
-    // 꽂으면 글자는 그대로이고 갈래만 바뀐다. 초기값은 `last_status_caps`와 같은 이유로
-    // 무엇이든 된다.
-    var last_status_battery: ?BatteryCell = null;
-    // TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
-    // 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
-    var needs_redraw = false;
-    // PTY 출력이 화면을 바꿨다(RS-M2). `needs_redraw`와 따로 둔다 — 출력 때문에 생긴
-    // 그리기만 간격의 하한(`pacing.MIN_GAP_MS`)을 따르고, 키 · 포인터 · 배터리 · 패널
-    // 닫힘은 지금처럼 곧바로 그린다. 하한의 목적이 출력이 쏟아질 때이고, 포인터의
-    // `at` 줄이 그 프레임의 `scroll>` 뒤에 온다는 게이트의 순서(pointer 검사 11)를
-    // 미룬 바퀴가 깨지 않게 하려는 것이기도 하다.
-    var output_pending = false;
-    // 마지막으로 그린 시각(밀리초, `battery_clock` 기준 — 루프의 밀리초 시계가 그것
-    // 하나다). 처음 프레임 전에는 null이고 `pacing.wait`가 기다리지 않는다.
-    var last_frame_ms: ?i64 = null;
-    var key_state: input.State = .{
-        .hangul_layout = hangul_layout,
-        .latin_layout = latin_layout,
-        .toggles = toggles,
-    };
-    var key_buf: [64]u8 = undefined;
-    var pty_buf: [4096]u8 = undefined;
-
-    // 받아쓰기(VD-M1). 자식이 없으면 `phase`가 null이다.
-    var dict: Dictation = .{};
-    // terminal이 끝나면(마지막 패널이 닫혔다) 자식도 끝낸다. 안 그러면 녹음이 상한까지
-    // 돌고 그동안 마이크가 열려 있다. 거두지는 않는다 — 고아는 init이 거둔다.
-    defer if (dict.phase != null) signalDictation(&dict, .TERM);
-
-    // 포인터 장치(PD-M0). 키보드와 달리 terminal이 스스로 찾고, 부팅 뒤에
-    // 꽂힌 것도 잡는다(PD design 결정 1). init의 `argv[4]`는 그대로다.
-    //
-    // 부팅 뒤의 장치는 커널의 uevent로 안다. udev가 듣는 것과 같은 netlink
-    // 소켓이고 커널 config가 더 필요 없다 — inotify를 켜면 initramfs 풀기가
-    // 느려진다(PD-M0 plan 확정 7). 소켓을 먼저 열고 그다음에 훑는다.
-    //
-    // 소켓이 실패해도 terminal은 산다 — 부팅 때 있던 장치만 쓰고 핫플러그를
-    // 잃는다. 그때 `uevent_fd`는 -1이고 poll은 음수 fd를 건너뛴다.
-    var pointer_devs: [pointer.MAX_DEVICES]?PointerDev = @splat(null);
-    var pointer_state = pointer.Pointer.init(fb.width, fb.height);
-    // 화살표와 그 밑의 픽셀(PD-M1, design 결정 4).
-    var sprite = pointer.Sprite.init(fb.width, fb.height);
-    // 보이는 조건 2 · 3(design 결정 4). 움직이거나 누르면 켜지고, 키보드가
-    // PTY에 바이트를 보내면 꺼진다. 장치가 다 빠져도 꺼진다 — 다시 꽂은
-    // 장치는 움직여야 보인다. 조건 1(장치가 하나 이상)은 `pointerCount`가 본다.
-    var pointer_shown = false;
-    // 누름 · 끎 · 뗌의 상태(PD-M2, design 결정 6)와, 누른 패널이 있던
-    // 워크스페이스 번호. 누른 채 키보드가 워크스페이스를 바꾸면 `PointerWire`가
-    // 이 번호로 알아채고 제스처를 버린다.
-    var gesture: pointer.Gesture = .{};
-    var gesture_ws: usize = 0;
-    // 버튼이 눌린 동안의 주인과 그 워크스페이스(PD-M4). 자식이 마우스를
-    // 원하면 누름이 `gesture` 대신 그 자식에게 보고로 간다.
-    var grab: pointer.Grab = .{};
-    var grab_ws: usize = 0;
-    const uevent_fd: c_int = uevent: {
-        const linux = std.os.linux;
-        const fd = socket(linux.AF.NETLINK, linux.SOCK.DGRAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, linux.NETLINK.KOBJECT_UEVENT);
-        if (fd < 0) {
-            logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(fd))});
-            break :uevent -1;
-        }
-        // 그룹 1이 커널이 보내는 uevent다(그룹 2는 udevd가 다시 보내는 것). pid
-        // 0은 소켓의 주소를 커널이 고르게 한다.
-        const addr: linux.sockaddr.nl = .{ .pid = 0, .groups = 1 };
-        const rc = std.c.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.nl));
-        if (rc < 0) {
-            logline.print("terminal: pointer> uevent failed error={s}\n", .{@tagName(std.c.errno(rc))});
-            _ = std.c.close(fd);
-            break :uevent -1;
-        }
-        break :uevent fd;
-    };
-    // 터치패드의 배율과 휠 눈금(PD-M3). 패드 가로 전체가 프레임버퍼 가로이고,
-    // 두 손가락이 휠 한 눈금의 줄 수만큼 움직이면 한 눈금이다 — 손가락과 글자가
-    // 같은 거리를 간다. 처음 훑기보다 먼저 정해야 부팅 때 있던 패드도 이 값을 쓴다.
-    touchpad_screen = .{ .w = fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
-    scanPointers(init.io, &pointer_devs);
-
-    // 배터리(BS-M1, design 결정 8). 포인터와 같은 이유로 uevent 소켓을 연 뒤에 훑는다 —
-    // 반대면 훑은 뒤 소켓을 열기 전에 생긴 배터리를 놓친다.
-    //
-    // 시계의 원점을 여기서 잡는다. 주기의 기한은 이 시각부터의 밀리초다. 렌더 시간을 재는
-    // 것과 같은 단조 시계(`.awake`)이고, 커널에 `SUSPEND`가 없어서 잠든 시간은 따질 일이 없다.
-    //
-    // 처음 훑기는 다시 그리기를 안 켠다. 첫 프레임은 셸의 첫 출력이 그리고, 그 프레임의 상태
-    // 줄에 칸이 이미 있다(battery 체인 검사 B1). 여기서 켜면 셸보다 먼저 프레임이 하나 더
-    // 그려져 모든 체인의 `screen>` 줄 수가 바뀐다.
-    const battery_clock = std.Io.Clock.now(.awake, init.io);
-    var battery_state: BatteryState = .{};
-    _ = scanBattery(init.io, &battery_state, 0);
-
-    // poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,
-    // 그리고 모든 워크스페이스의 모든 패널이다(WP design 위험 1). 포커스 없는
-    // 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
-    // 멈춘다.
-    //
-    // 크기는 상한(1 + 1 + 8 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
-    // 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
-    // "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
-    //
-    // 자리는 `[0]` 키보드 · `[1]` uevent 소켓 · `[2..pty_base]` 포인터 장치 ·
-    // `[pty_base..nfds]` PTY다. PD 전에는 PTY가 `[1..]`이었다 — 그 오프셋이
-    // 이제 바퀴마다 다르므로 `pty_base`로 든다.
-    //
-    // 맨 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
-    var fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined;
-    // `fds[2 + k]`가 어느 장치 칸의 것인지.
-    var fd_devs: [pointer.MAX_DEVICES]usize = undefined;
-    // `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
-    // 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
-    //
-    // 워크스페이스 번호와 잎 번호를 함께 드는 이유는 EOF다(WP-M1). 그
-    // 패널을 닫으려면 트리에서 지워야 하고, 트리는 잎 번호만 안다.
-    var fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]PaneRef = undefined;
-    // 마지막으로 찍은 `pane>` 줄의 서명(WP design 결정 7). null이면 아직 한
-    // 번도 안 찍었다 — 첫 프레임이 반드시 찍힌다.
-    var last_pane: ?PaneSig = null;
-
-    main_loop: while (true) {
-        fds[0] = .{ .fd = keyboard_fd, .events = c.POLLIN, .revents = 0 };
-        fds[1] = .{ .fd = uevent_fd, .events = c.POLLIN, .revents = 0 };
-        var nfds: usize = 2;
-        for (&pointer_devs, 0..) |*slot, di| {
+    /// 바퀴 하나. MS 전 `main_loop`의 몸통 그대로다 — `break :main_loop`가 `return false`,
+    /// `continue`가 `return true`로 바뀐 것뿐이다. `false`는 마지막 패널의 셸이 끝났다는
+    /// 뜻이고 그러면 terminal이 끝난다.
+    fn tick(self: *App) !bool {
+        self.fds[0] = .{ .fd = self.keyboard_fd, .events = c.POLLIN, .revents = 0 };
+        self.fds[1] = .{ .fd = self.uevent_fd, .events = c.POLLIN, .revents = 0 };
+        self.nfds = 2;
+        for (&self.pointer_devs, 0..) |*slot, di| {
             const d = if (slot.*) |*d| d else continue;
-            fds[nfds] = .{ .fd = d.fd, .events = c.POLLIN, .revents = 0 };
-            fd_devs[nfds - 2] = di;
-            nfds += 1;
+            self.fds[self.nfds] = .{ .fd = d.fd, .events = c.POLLIN, .revents = 0 };
+            self.fd_devs[self.nfds - 2] = di;
+            self.nfds += 1;
         }
-        const pty_base = nfds;
-        for (&workspaces, 0..) |*slot, wi| {
+        self.pty_base = self.nfds;
+        for (&self.workspaces, 0..) |*slot, wi| {
             const w = if (slot.*) |*w| w else continue;
             for (&w.panes, 0..) |*pane_slot, leaf| {
                 const pane = if (pane_slot.*) |*pane| pane else continue;
-                fds[nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
-                fd_panes[nfds - pty_base] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
-                nfds += 1;
+                self.fds[self.nfds] = .{ .fd = pane.session.master_fd, .events = c.POLLIN, .revents = 0 };
+                self.fd_panes[self.nfds - self.pty_base] = .{ .pane = pane, .ws = wi, .leaf = @intCast(leaf) };
+                self.nfds += 1;
             }
         }
-        const pty_end = nfds;
-        fds[nfds] = .{ .fd = dict.out_fd, .events = c.POLLIN, .revents = 0 };
-        fds[nfds + 1] = .{ .fd = dict.err_fd, .events = c.POLLIN, .revents = 0 };
-        nfds += 2;
+        self.pty_end = self.nfds;
+        self.fds[self.nfds] = .{ .fd = self.dict.out_fd, .events = c.POLLIN, .revents = 0 };
+        self.fds[self.nfds + 1] = .{ .fd = self.dict.err_fd, .events = c.POLLIN, .revents = 0 };
+        self.nfds += 2;
 
         // 고른 배터리가 없으면 -1(무한 대기)이다. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
         // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
         // 키 때문에 깼든 timeout으로 깼든, 읽는 것은 아래에서 기한이 지났을 때뿐이다.
-        const poll_now: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+        const poll_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
         //
         // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
         // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
-        const ready = c.poll(&fds, @intCast(nfds), pacing.soonest(
-            battery.pollTimeout(poll_now, battery_state.due),
-            pacing.wait(poll_now, last_frame_ms, output_pending),
+        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(
+            battery.pollTimeout(poll_now, self.battery_state.due),
+            pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
         ));
-        if (ready < 0) continue; // EINTR 등은 그냥 다시 기다린다
+        if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드 · copy · 프롬프트 · 상태 줄 · 렌더 · 덤프가 보는 것은 전부
         // 포커스 패널이다(WP design 결정 1). 그래서 그 코드는 WP 전의
@@ -3217,10 +3336,10 @@ pub fn main(init: std.process.Init) !void {
         //
         // `var`인 이유는 포커스가 바퀴 안에서 바뀌기 때문이다(WP-M1). 패널
         // 명령이 옮기고, EOF가 포커스 패널을 닫는다. 렌더 앞에서 다시 구한다.
-        var ws = &workspaces[current].?;
+        var ws = &self.workspaces[self.current].?;
         var focus = &ws.panes[ws.focus].?;
 
-        if (fds[0].revents & c.POLLIN != 0) {
+        if (self.fds[0].revents & c.POLLIN != 0) {
             // DECCKM은 셸이 언제든 켜고 끌 수 있으므로(프롬프트를 그릴 때
             // smkx, 외부 명령을 실행하기 전에 rmkx 하는 식으로 오간다)
             // 캐시하지 않고 키를 읽는 순간의 값을 쓴다. packed struct의
@@ -3230,19 +3349,19 @@ pub fn main(init: std.process.Init) !void {
                 .cursor_keys = focus.screen.term.modes.get(.cursor_keys),
                 // DECCKM과 달리 이 값은 부팅 내내 상수다. 매 키마다 다시
                 // 넣는 것은 Context를 한 자리에서 조립하기 위해서일 뿐이다.
-                .swap_alt_meta = swap_alt_meta,
+                .swap_alt_meta = self.swap_alt_meta,
                 // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
-                .dictating = dictation.escCancels(dict.phase),
+                .dictating = dictation.escCancels(self.dict.phase),
             };
-            const keys = input.readKeys(&key_state, keyboard_fd, &key_buf, ctx);
+            const keys = input.readKeys(&self.key_state, self.keyboard_fd, &self.key_buf, ctx);
             // 받아쓰기의 알림은 다음 키에 사라진다(VD-M1). "키"는 무언가를 한 키다 —
             // 수정키를 누르고 떼기만 한 배치는 안 센다. 그렇지 않으면 더블 탭의 마지막
             // 뗌이 방금 뜬 `PASSWORD`를 바로 지운다.
-            if (dict.notice != null and (keys.bytes.len > 0 or keys.scrolls.len > 0 or
+            if (self.dict.notice != null and (keys.bytes.len > 0 or keys.scrolls.len > 0 or
                 keys.copies.len > 0 or keys.panes.len > 0 or keys.dictates.len > 0 or keys.redraw))
             {
-                dict.notice = null;
-                needs_redraw = true;
+                self.dict.notice = null;
+                self.needs_redraw = true;
             }
             if (keys.bytes.len > 0) {
                 // 앞부분("terminal: key> ")은 input/check.sh가 grep하는
@@ -3256,7 +3375,7 @@ pub fn main(init: std.process.Init) !void {
                 // 치는 동안 화살표가 그 줄의 글자를 가리지 않게 숨긴다(보이는
                 // 조건 3). 다음 움직임에 다시 보인다. 바이트가 나간 키만이다 —
                 // 수정 키 · copy mode 명령 · 스크롤 · 패널 명령은 안 숨긴다.
-                pointer_shown = false;
+                self.pointer_shown = false;
             }
             // 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
             // 줄인지를 아는 것은 여기뿐이라, page_up/page_down을 rows 만큼의
@@ -3272,7 +3391,7 @@ pub fn main(init: std.process.Init) !void {
                     .page_up => focus.screen.scrollByRows(-@as(isize, focus.rect.rows)),
                     .page_down => focus.screen.scrollByRows(@as(isize, focus.rect.rows)),
                 }
-                needs_redraw = true;
+                self.needs_redraw = true;
             }
             // copy mode 명령도 PTY로 나가지 않는다(design 결정 3). 스크롤과
             // 같은 이유로 순서대로 돈다 — j를 누르고 있으면 자동 반복이 여러
@@ -3304,7 +3423,7 @@ pub fn main(init: std.process.Init) !void {
                     // yank는 모드를 나간다. 그래서 아래 dumpCopy는 좌표
                     // 없이 `copy> yank`만 찍는다 — 커서가 이미 사라졌기
                     // 때문이다.
-                    .yank => try clips.yank(focus),
+                    .yank => try self.clips.yank(focus),
                     // 붙여넣기는 모드를 건드리지 않는다. 그래서 모드 안에서
                     // 누르면 아래 dumpCopy가 좌표를 그대로 찍고, 모드 밖에서
                     // 누르면 `copy> paste`만 찍힌다. 게이트가 그 차이로 "모드가
@@ -3321,7 +3440,7 @@ pub fn main(init: std.process.Init) !void {
                     //
                     // 셸 갈래는 여전히 copies 배열에서 유일하게 PTY로 나가는
                     // 명령이다. 다른 아홉은 전부 우리 안에서 끝난다.
-                    .paste => clips.paste(focus),
+                    .paste => self.clips.paste(focus),
                     // 검색 프롬프트(CN-M1). 넷 다 화면 상태를 바꾸지 않는다 —
                     // needle 버퍼만 만지고, 그리는 것은 아래 render가 한다.
                     .find_open => {
@@ -3356,14 +3475,14 @@ pub fn main(init: std.process.Init) !void {
                     // (design 결정 5). 얼마나 멈추는지를 여기서 재서 찍는다 —
                     // 그 값이 "증분으로 바꿔야 하는가"를 나중에 가른다.
                     .find_submit => {
-                        const t0 = std.Io.Clock.now(.awake, init.io);
+                        const t0 = std.Io.Clock.now(.awake, self.io);
                         const r = try focus.screen.findSubmit();
                         logline.print(
                             "terminal: find> submit matches={d} moved={} us={d}\n",
                             .{
                                 r.matches,
                                 r.moved,
-                                @divTrunc(t0.untilNow(init.io, .awake).nanoseconds, 1000),
+                                @divTrunc(t0.untilNow(self.io, .awake).nanoseconds, 1000),
                             },
                         );
                     },
@@ -3380,7 +3499,7 @@ pub fn main(init: std.process.Init) !void {
                     ),
                 }
                 dumpCopy(focus.screen, @tagName(cmd));
-                needs_redraw = true;
+                self.needs_redraw = true;
             }
             // 조합 중인 글자를 화면에 넘긴다(HI design 결정 2). 값을 만드는
             // 것은 `input.State`이고 그리는 것은 `vt.zig`이며, 둘을 잇는 것이
@@ -3397,9 +3516,9 @@ pub fn main(init: std.process.Init) !void {
             // 조합을 확정시키므로(design 결정 6), 그 확정 결과를 화면에
             // 반영하는 것은 모드 전환이 끝난 뒤여야 한다.
             if (keys.redraw) {
-                focus.screen.setPreedit(key_state.preedit());
-                dumpHangul(&key_state);
-                needs_redraw = true;
+                focus.screen.setPreedit(self.key_state.preedit());
+                dumpHangul(&self.key_state);
+                self.needs_redraw = true;
             }
             // 패널 명령(WP-M1). PTY로 나가지 않는다 — 스크롤 · copy와 같이
             // 순서대로 돈다.
@@ -3419,17 +3538,17 @@ pub fn main(init: std.process.Init) !void {
                         // 꽉 찼거나 가를 수 없을 만큼 작다(`Tree.split`).
                         // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
                         // 구별을 못 한다.
-                        const leaf = ws.tree.split(ws.focus, dir, whole) orelse {
+                        const leaf = ws.tree.split(ws.focus, dir, self.whole) orelse {
                             logline.print("terminal: pane> split refused\n", .{});
                             continue;
                         };
-                        const rs = try applyLayout(ws, whole);
+                        const rs = try applyLayout(ws, self.whole);
                         // 새 셸은 부팅의 것과 같은 셸이다. `spawned child pid`
                         // 줄은 안 찍는다(WP-M1 plan 확정 1) — terminal/check.sh가
                         // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
                         // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
                         // `pane>` 줄이 대신한다.
-                        ws.panes[leaf] = try spawnPane(init.io, allocator, shell_path, &argv, rs[leaf]);
+                        ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf]);
                         ws.focus = leaf;
                     },
                     // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
@@ -3446,7 +3565,7 @@ pub fn main(init: std.process.Init) !void {
                     // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
                     // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
                     .new_workspace => {
-                        const n = workspaceCount(&workspaces);
+                        const n = workspaceCount(&self.workspaces);
                         // 아홉이 찼다. `split refused`와 같은 이유로 찍는다 —
                         // 조용하면 "키가 안 왔다"와 안 갈린다.
                         if (n == MAX_WORKSPACES) {
@@ -3455,24 +3574,24 @@ pub fn main(init: std.process.Init) !void {
                         }
                         // 패널 하나짜리 트리의 사각형은 격자 전체다
                         // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
-                        workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
-                        workspaces[n].?.panes[0] = try spawnPane(init.io, allocator, shell_path, &argv, whole);
-                        current = n;
+                        self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+                        self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole);
+                        self.current = n;
                         // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
                         // 워크스페이스에 가도록 여기서 다시 구한다.
-                        ws = &workspaces[current].?;
+                        ws = &self.workspaces[self.current].?;
                     },
                     // 없는 번호와 지금 번호는 아무 일도 안 한다 — 로그도 다시
                     // 그리기도 없다(`continue`가 아래 `needs_redraw`를 건너뛴다).
                     // 게이트가 `pane>` 줄 수가 안 는 것으로 그것을 본다.
                     .workspace_1, .workspace_2, .workspace_3, .workspace_4, .workspace_5, .workspace_6, .workspace_7, .workspace_8, .workspace_9 => {
                         const target: usize = @backingInt(cmd) - @backingInt(input.Pane.workspace_1);
-                        if (target >= workspaceCount(&workspaces) or target == current) continue;
-                        current = target;
-                        ws = &workspaces[current].?;
+                        if (target >= workspaceCount(&self.workspaces) or target == self.current) continue;
+                        self.current = target;
+                        ws = &self.workspaces[self.current].?;
                     },
                 }
-                needs_redraw = true;
+                self.needs_redraw = true;
             }
             // 받아쓰기 명령(VD-M1). 패널 명령 뒤다 — 같은 배치에서 포커스가 옮겨졌으면
             // 옮긴 뒤의 패널이 대상이다. 그래서 `focus` 변수가 아니라 `ws.focus`로 다시
@@ -3483,34 +3602,34 @@ pub fn main(init: std.process.Init) !void {
             // 넣을 때 한 번 더 본다(`insertDictation`). 말하는 사이에 `sudo`가 뜰 수 있다.
             for (keys.dictates) |cmd| {
                 switch (cmd) {
-                    .toggle => switch (dictation.onTap(dict.phase)) {
+                    .toggle => switch (dictation.onTap(self.dict.phase)) {
                         .start => {
                             const tp = &ws.panes[ws.focus].?;
                             if (passwordPrompt(tp.session.master_fd)) {
-                                logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ current + 1, ws.focus });
-                                dict.setNotice(.password);
+                                logline.print("terminal: dictate> refused password at=start ws={d} leaf={d}\n", .{ self.current + 1, ws.focus });
+                                self.dict.setNotice(.password);
                             } else {
-                                startDictation(&dict, tp, current, ws.focus);
+                                startDictation(&self.dict, tp, self.current, ws.focus);
                             }
                         },
                         .stop => {
-                            signalDictation(&dict, .INT);
-                            dict.phase = .transcribing;
-                            logline.print("terminal: dictate> stop pid={d}\n", .{dict.pid});
+                            signalDictation(&self.dict, .INT);
+                            self.dict.phase = .transcribing;
+                            logline.print("terminal: dictate> stop pid={d}\n", .{self.dict.pid});
                         },
                         .ignore => logline.print("terminal: dictate> ignored phase={s}\n", .{
-                            if (dict.phase) |p| @tagName(p) else "none",
+                            if (self.dict.phase) |p| @tagName(p) else "none",
                         }),
                     },
                     // 녹음 중의 Esc(design 결정 11). `ctx.dictating`이 참일 때만 오지만,
                     // 같은 배치의 앞 키가 단계를 바꿨을 수 있어 한 번 더 본다.
-                    .cancel => if (dictation.escCancels(dict.phase)) {
-                        signalDictation(&dict, .TERM);
-                        dict.phase = .cancelling;
-                        logline.print("terminal: dictate> cancel pid={d}\n", .{dict.pid});
+                    .cancel => if (dictation.escCancels(self.dict.phase)) {
+                        signalDictation(&self.dict, .TERM);
+                        self.dict.phase = .cancelling;
+                        logline.print("terminal: dictate> cancel pid={d}\n", .{self.dict.pid});
                     },
                 }
-                needs_redraw = true;
+                self.needs_redraw = true;
             }
         }
 
@@ -3525,17 +3644,17 @@ pub fn main(init: std.process.Init) !void {
         var round: PointerRound = .{};
         // 이 회차 앞의 화살표 자리. `at` 줄의 `ink`가 이 사각형도 센다 — 옛
         // 자리를 못 지웠으면 그 자국이 여기 남는다(design 결정 10).
-        const before_spot = sprite.at;
+        const before_spot = self.sprite.at;
         pointer_drawn = before_spot != null;
-        for (fds[2..pty_base], fd_devs[0 .. pty_base - 2]) |pfd, di| {
+        for (self.fds[2..self.pty_base], self.fd_devs[0 .. self.pty_base - 2]) |pfd, di| {
             if (pfd.revents == 0) continue;
             var gone = pfd.revents & (c.POLLERR | c.POLLHUP) != 0;
             if (!gone and pfd.revents & c.POLLIN != 0) {
-                gone = drainPointer(&pointer_devs[di].?, @intCast(di), &pointer_state, &round) == .gone;
+                gone = drainPointer(&self.pointer_devs[di].?, @intCast(di), &self.pointer_state, &round) == .gone;
             }
-            if (gone) closePointer(&pointer_devs, di, &pointer_state);
+            if (gone) closePointer(&self.pointer_devs, di, &self.pointer_state);
         }
-        const supply_seen = fds[1].revents & c.POLLIN != 0 and drainUevents(uevent_fd, init.io, &pointer_devs);
+        const supply_seen = self.fds[1].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs);
         // 배터리(BS-M1, design 결정 8). uevent가 power_supply를 봤으면(또는 메시지가
         // 버려졌으면) 디렉터리를 다시 훑는다. 아니면 기한이 지났을 때만 고른 배터리를
         // 읽는다 — 키를 칠 때마다 읽지 않는다. 어느 쪽이든 칸이 바뀌었을 때만 다시 그린다.
@@ -3543,17 +3662,17 @@ pub fn main(init: std.process.Init) !void {
         // 아래 `!needs_redraw`의 `continue`보다 앞이어야 한다. 뒤면 키도 PTY 출력도 없는
         // 바퀴(uevent나 timeout으로만 깬 바퀴)에서 칸을 고쳐도 화면이 안 바뀐다(검사 A3).
         {
-            const bat_now: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+            const bat_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
             const changed = if (supply_seen)
-                scanBattery(init.io, &battery_state, bat_now)
-            else if (battery_state.due) |due|
-                bat_now >= due and tickBattery(init.io, &battery_state, bat_now)
+                scanBattery(self.io, &self.battery_state, bat_now)
+            else if (self.battery_state.due) |due|
+                bat_now >= due and tickBattery(self.io, &self.battery_state, bat_now)
             else
                 false;
-            if (changed) needs_redraw = true;
+            if (changed) self.needs_redraw = true;
         }
-        if (pointerCount(&pointer_devs) == 0) pointer_shown = false;
-        if (round.woke) pointer_shown = true;
+        if (pointerCount(&self.pointer_devs) == 0) self.pointer_shown = false;
+        if (round.woke) self.pointer_shown = true;
         // 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
         // `PointerWire`다(design 결정 3).
         //
@@ -3574,27 +3693,27 @@ pub fn main(init: std.process.Init) !void {
         // (`scroll>` · `copy>` 줄도 그 프레임 앞뒤에 찍힌다).
         {
             var wire: PointerWire = .{
-                .gesture = &gesture,
-                .gesture_ws = &gesture_ws,
+                .gesture = &self.gesture,
+                .gesture_ws = &self.gesture_ws,
                 .ws = ws,
-                .current = current,
-                .key_state = &key_state,
-                .whole = whole,
-                .cols = cols,
-                .rows = rows,
-                .grab = &grab,
-                .grab_ws = &grab_ws,
-                .mods = key_state.modifiers(),
-                .clips = &clips,
+                .current = self.current,
+                .key_state = &self.key_state,
+                .whole = self.whole,
+                .cols = self.cols,
+                .rows = self.rows,
+                .grab = &self.grab,
+                .grab_ws = &self.grab_ws,
+                .mods = self.key_state.modifiers(),
+                .clips = &self.clips,
             };
             for (round.edges[0..round.edge_count]) |e| {
                 try wire.moved(e.x, e.y);
                 try wire.edge(e);
             }
-            grab.settle(pointer_state.buttons);
-            if (round.woke) try wire.moved(pointer_state.x, pointer_state.y);
-            if (round.wheel != 0) try wire.wheel(round.wheel, pointer_state.x, pointer_state.y);
-            if (wire.redraw) needs_redraw = true;
+            self.grab.settle(self.pointer_state.buttons);
+            if (round.woke) try wire.moved(self.pointer_state.x, self.pointer_state.y);
+            if (round.wheel != 0) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
+            if (wire.redraw) self.needs_redraw = true;
         }
         // `at` 줄은 그린 뒤에 찍는다(`dumpPointerAt`) — `ink`가 그린 결과를 센다.
 
@@ -3606,18 +3725,18 @@ pub fn main(init: std.process.Init) !void {
         //
         // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
         // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
-        for (fds[pty_base..pty_end], fd_panes[0 .. pty_end - pty_base]) |pfd, ref| {
+        for (self.fds[self.pty_base..self.pty_end], self.fd_panes[0 .. self.pty_end - self.pty_base]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
             const pane = ref.pane;
-            const out = pty.readSome(pane.session.master_fd, &pty_buf);
+            const out = pty.readSome(pane.session.master_fd, &self.pty_buf);
             if (out.len == 0) {
                 logline.print("terminal: child exited (pty EOF)\n", .{});
                 // 마지막 패널이면 WP 전처럼 terminal이 끝나고 init이 되살린다
                 // (WP design 결정 5).
-                if (paneCount(&workspaces) == 1) break :main_loop;
+                if (paneCount(&self.workspaces) == 1) return false;
                 // 아니면 그 패널만 닫는다. 닫는 자리는 여기 하나다 — `exit`도
                 // `Cmd+W`(SIGHUP)도 셸을 끝내고, 셸이 끝나면 여기로 온다.
-                const w = &workspaces[ref.ws].?;
+                const w = &self.workspaces[ref.ws].?;
                 logline.print("terminal: pane> closed leaf={d}\n", .{ref.leaf});
                 pty.close(pane.session);
                 pane.screen.deinit();
@@ -3629,7 +3748,7 @@ pub fn main(init: std.process.Init) !void {
                 // 물으면 제자리를 돌려준다.
                 if (w.focus == ref.leaf) w.focus = w.tree.heir(ref.leaf);
                 w.tree.remove(ref.leaf);
-                needs_redraw = true;
+                self.needs_redraw = true;
                 // 워크스페이스의 마지막 패널이었다(WP-M2). 워크스페이스가
                 // 사라지고 뒤의 것들이 한 자리씩 앞으로 온다 — 번호는 자리다
                 // (design "모델" 절). 전체의 마지막 패널이었다면 위에서 이미
@@ -3637,16 +3756,16 @@ pub fn main(init: std.process.Init) !void {
                 if (w.tree.count() == 0) {
                     logline.print("terminal: pane> workspace closed ws={d}\n", .{ref.ws + 1});
                     var i = ref.ws;
-                    while (i + 1 < MAX_WORKSPACES) : (i += 1) workspaces[i] = workspaces[i + 1];
-                    workspaces[MAX_WORKSPACES - 1] = null;
-                    const left = workspaceCount(&workspaces);
+                    while (i + 1 < MAX_WORKSPACES) : (i += 1) self.workspaces[i] = self.workspaces[i + 1];
+                    self.workspaces[MAX_WORKSPACES - 1] = null;
+                    const left = workspaceCount(&self.workspaces);
                     // 지금 보던 워크스페이스가 사라졌으면 같은 자리(이제 뒤의
                     // 것이 왔다)로, 그것이 끝이었으면 한 칸 앞으로. 뒤의 것을
                     // 보던 중이었으면 번호가 하나 당겨진다.
-                    if (current == ref.ws) {
-                        current = @min(ref.ws, left - 1);
-                    } else if (current > ref.ws) {
-                        current -= 1;
+                    if (self.current == ref.ws) {
+                        self.current = @min(ref.ws, left - 1);
+                    } else if (self.current > ref.ws) {
+                        self.current -= 1;
                     }
                     // `fd_panes`의 남은 항목은 이 바퀴에 지은 것이라 `ws`
                     // 번호와 패널 포인터가 당기기 전의 자리를 가리킨다
@@ -3654,7 +3773,7 @@ pub fn main(init: std.process.Init) !void {
                     // 출력은 다음 `poll`이 다시 알린다.
                     break;
                 }
-                _ = try applyLayout(w, whole);
+                _ = try applyLayout(w, self.whole);
                 // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
                 // 가리키므로 이 바퀴에서 더 안 만진다.
                 continue;
@@ -3699,7 +3818,7 @@ pub fn main(init: std.process.Init) !void {
             // 풀렸지"를 영영 모른다.
             if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
             // `needs_redraw`가 아니다(RS-M2). 그릴지는 루프 끝에서 하한을 보고 정한다.
-            output_pending = true;
+            self.output_pending = true;
         }
 
         // 받아쓰기의 파이프 둘(VD-M1). PTY 뒤 · 렌더 앞이다 — 위 PTY 루프가 대상 패널을
@@ -3709,12 +3828,12 @@ pub fn main(init: std.process.Init) !void {
         // 다시 그리는 것은 상태 줄의 칸이 바뀌었을 때뿐이다. 표준 출력을 읽을 때마다
         // 그리면 `screen>` 덤프가 그만큼 는다. 넣은 글자는 셸이 되울리고, 그 출력이 다음
         // 바퀴의 PTY 루프에서 다시 그리게 한다.
-        if (dict.phase != null) {
-            const shown = dict.show();
-            if (dict.out_fd >= 0 and fds[pty_end].revents != 0) drainDictOut(&dict);
-            if (dict.err_fd >= 0 and fds[pty_end + 1].revents != 0) drainDictErr(&dict);
-            if (dict.out_fd < 0 and dict.err_fd < 0) finishDictation(&dict, &workspaces, current, &key_state);
-            if (!std.meta.eql(shown, dict.show())) needs_redraw = true;
+        if (self.dict.phase != null) {
+            const shown = self.dict.show();
+            if (self.dict.out_fd >= 0 and self.fds[self.pty_end].revents != 0) drainDictOut(&self.dict);
+            if (self.dict.err_fd >= 0 and self.fds[self.pty_end + 1].revents != 0) drainDictErr(&self.dict);
+            if (self.dict.out_fd < 0 and self.dict.err_fd < 0) finishDictation(&self.dict, &self.workspaces, self.current, &self.key_state);
+            if (!std.meta.eql(shown, self.dict.show())) self.needs_redraw = true;
         }
 
         // 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
@@ -3725,8 +3844,8 @@ pub fn main(init: std.process.Init) !void {
         // 키처럼 아무것도 바꾸지 않는 이벤트에서는 그리지 않는다.
         // 화살표가 있어야 할 자리(PD design 결정 4). 보이는 조건 셋이 다
         // 맞아야 한다 — 장치가 있고, 움직였고, 그 뒤로 키를 안 쳤다.
-        const want: ?pointer.Spot = if (pointer_shown and pointerCount(&pointer_devs) > 0)
-            .{ .x = pointer_state.x, .y = pointer_state.y }
+        const want: ?pointer.Spot = if (self.pointer_shown and pointerCount(&self.pointer_devs) > 0)
+            .{ .x = self.pointer_state.x, .y = self.pointer_state.y }
         else
             null;
         // 화면 전체를 다시 그릴 일이 없는 회차. 화살표만 고친다 — 저장한
@@ -3736,28 +3855,28 @@ pub fn main(init: std.process.Init) !void {
         // PTY 출력은 하한이 지났을 때만 그리기가 된다(RS-M2). 다른 이유로 어차피 그리는
         // 바퀴면 기다리지 않고 함께 그린다 — 그 프레임이 출력도 담는다. 하한 안이면
         // 이 바퀴는 그리지 않고, 위 `poll`이 남은 시간 뒤에 다시 깨운다.
-        if (output_pending and !needs_redraw) {
-            const now_ms: i64 = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
-            if (pacing.wait(now_ms, last_frame_ms, true) == 0) needs_redraw = true;
+        if (self.output_pending and !self.needs_redraw) {
+            const now_ms: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
+            if (pacing.wait(now_ms, self.last_frame_ms, true) == 0) self.needs_redraw = true;
         }
-        if (!needs_redraw) {
-            if (!pointer.sameSpot(sprite.at, want)) {
-                sprite.restore(fb);
-                if (want) |s| sprite.show(fb, s);
-                try fb.present();
+        if (!self.needs_redraw) {
+            if (!pointer.sameSpot(self.sprite.at, want)) {
+                self.sprite.restore(self.fb);
+                if (want) |s| self.sprite.show(self.fb, s);
+                try self.fb.present();
             }
-            dumpPointerAt(fb, &pointer_state, round, &sprite, before_spot);
-            continue;
+            dumpPointerAt(self.fb, &self.pointer_state, round, &self.sprite, before_spot);
+            return true;
         }
-        needs_redraw = false;
-        output_pending = false;
-        last_frame_ms = @intCast(@divTrunc(battery_clock.untilNow(init.io, .awake).nanoseconds, 1_000_000));
+        self.needs_redraw = false;
+        self.output_pending = false;
+        self.last_frame_ms = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
 
         // 포커스를 다시 구한다(WP-M1). 위의 패널 명령이 옮겼거나 EOF가
         // 포커스 패널을 닫았을 수 있다 — 그때 위의 `focus`는 빈 슬롯을
         // 가리킨다. 워크스페이스도 다시 구한다(WP-M2) — EOF가 워크스페이스를
         // 지워 배열을 당겼으면 위의 `ws`는 다른 워크스페이스를 가리킨다.
-        ws = &workspaces[current].?;
+        ws = &self.workspaces[self.current].?;
         focus = &ws.panes[ws.focus].?;
 
         // 포커스 아닌 패널을 먼저 그린다(WP-M1). 포커스 패널이 마지막이어야
@@ -3768,21 +3887,21 @@ pub fn main(init: std.process.Init) !void {
         // `focused`를 매 프레임 여기서 맞춘다(결정 6). 포커스의 진실은
         // `ws.focus` 하나이고, 화면 쪽 값은 그리기 직전의 사본이다 —
         // 포커스를 옮기는 자리마다 그 값을 고치게 하면 하나를 빠뜨린다.
-        const frame_start = std.Io.Clock.now(.awake, init.io);
-        renderBackdrop(fb, &ws.tree, whole);
+        const frame_start = std.Io.Clock.now(.awake, self.io);
+        renderBackdrop(self.fb, &ws.tree, self.whole);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             if (leaf == ws.focus) continue;
             p.screen.focused = false;
-            const p_cells = try p.screen.cells(cell_buf);
+            const p_cells = try p.screen.cells(self.cell_buf);
             const p_bg = p.screen.defaultBg();
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
-            try renderPane(fb, &cache, p_cells, p.screen.images(&img_buf), p_bg, p.rect, p.screen.cursorMark());
+            try renderPane(self.fb, &self.cache, p_cells, p.screen.images(&self.img_buf), p_bg, p.rect, p.screen.cursorMark());
         }
         focus.screen.focused = true;
 
-        const cells = try focus.screen.cells(cell_buf);
+        const cells = try focus.screen.cells(self.cell_buf);
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
@@ -3801,7 +3920,7 @@ pub fn main(init: std.process.Init) !void {
             //
             // `findNeedle()`이 열림의 진실이다 — `promptText`가 갈래를 가를
             // 때 보는 값과 같은 것이라 둘이 어긋날 수 없다.
-            .edit = if (focus.screen.findNeedle() != null) key_state.preedit() else null,
+            .edit = if (focus.screen.findNeedle() != null) self.key_state.preedit() else null,
             .rect = focus.rect,
             // `cells()` 뒤에 읽어야 한다 — `state.colors`는 update()가
             // 채운다(vt.zig의 defaultFg 주석).
@@ -3821,66 +3940,73 @@ pub fn main(init: std.process.Init) !void {
         // 워크스페이스가 둘 이상일 때만 번호를 단다(WP design 결정 8). 하나뿐인
         // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
-        const ws_number: ?u8 = if (workspaceCount(&workspaces) > 1) @intCast(current + 1) else null;
+        const ws_number: ?u8 = if (workspaceCount(&self.workspaces) > 1) @intCast(self.current + 1) else null;
         const status_line: Status = .{
-            .text = status.statusText(&key_state, copy_active, ws_number, dict.show(), &status_buf),
-            .rows = rows,
+            .text = status.statusText(&self.key_state, copy_active, ws_number, self.dict.show(), &status_buf),
+            .rows = self.rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
-            .caps = key_state.caps_lock,
+            .caps = self.key_state.caps_lock,
             .copy = copy_active,
             .workspace = ws_number,
-            .dict = dict.show(),
-            .cols = cols,
+            .dict = self.dict.show(),
+            .cols = self.cols,
             // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
-            .battery = battery_state.cell,
+            .battery = self.battery_state.cell,
         };
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
-        const imgs = focus.screen.images(&img_buf);
-        try renderPane(fb, &cache, cells, imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
-        const prompt_ink = try renderFinish(fb, &cache, prompt, status_line, &sprite, want);
-        const frame_us = @divTrunc(frame_start.untilNow(init.io, .awake).nanoseconds, 1000);
-        if (!first_frame_timed) {
-            first_frame_timed = true;
+        const imgs = focus.screen.images(&self.img_buf);
+        try renderPane(self.fb, &self.cache, cells, imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
+        const prompt_ink = try renderFinish(self.fb, &self.cache, prompt, status_line, &self.sprite, want);
+        const frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
+        if (!self.first_frame_timed) {
+            self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame_us});
         }
-        dumpImages(fb, imgs, focus.screen.images_dropped, frame_us, focus.rect);
+        dumpImages(self.fb, imgs, focus.screen.images_dropped, frame_us, focus.rect);
 
-        dumpScreen(cells, screen_line_buf);
+        dumpScreen(cells, self.screen_line_buf);
         dumpHighlight(focus.screen);
         dumpOverlay(prompt);
-        dumpPromptInk(fb, prompt_ink, prompt);
-        dumpStatus(fb, status_line, &last_status, &last_status_len, &last_status_caps, &last_status_battery);
-        dumpPane(fb, &workspaces, current, &last_pane);
+        dumpPromptInk(self.fb, prompt_ink, prompt);
+        dumpStatus(self.fb, status_line, &self.last_status, &self.last_status_len, &self.last_status_caps, &self.last_status_battery);
+        dumpPane(self.fb, &self.workspaces, self.current, &self.last_pane);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.
         dumpStyles(
-            fb,
+            self.fb,
             cells,
             focus.screen.defaultFg(),
             focus.screen.defaultBg(),
             if (prompt != null) focus.rect.rows - 1 else null,
             focus.rect,
         );
-        dumpInk(fb, &cache, cells, focus.rect);
+        dumpInk(self.fb, &self.cache, cells, focus.rect);
         // `dumpInk` 뒤 · `dumpScroll` 앞이다(CU-M0 plan 확정 7). 마지막
         // `screen>`부터 파일 끝까지를 한 프레임으로 자르는 게이트의
         // `last_frame`이 이 줄을 담으려면 `screen>` 뒤여야 한다.
-        dumpCursor(fb, focus.screen, focus.rect);
+        dumpCursor(self.fb, focus.screen, focus.rect);
         dumpScroll(focus.screen);
-        if (cache.count() != last_glyph_count) {
-            last_glyph_count = cache.count();
+        if (self.cache.count() != self.last_glyph_count) {
+            self.last_glyph_count = self.cache.count();
             logline.print("terminal: font> {d} glyph(s) cached, {d} bitmap bytes\n", .{
-                last_glyph_count, cache.bitmap_bytes,
+                self.last_glyph_count, self.cache.bitmap_bytes,
             });
         }
         // 덤프들 뒤다. 게이트는 이 줄이 보이면 같은 프레임의 `scroll>`이 이미
         // 찍혔다고 읽는다(pointer/check.sh 검사 11).
-        dumpPointerAt(fb, &pointer_state, round, &sprite, before_spot);
+        dumpPointerAt(self.fb, &self.pointer_state, round, &self.sprite, before_spot);
+        return true;
     }
+};
+
+pub fn main(init: std.process.Init) !void {
+    var app = try App.open(init, std.heap.page_allocator);
+    defer app.close();
+    while (try app.tick()) {}
 
     // 마지막 패널의 셸이 끝나면 터미널도 끝난다(WP design 결정 5). PID
     // 1(tars-init)이 우리를 다시 띄우고, 새 프로세스가 DRM을 다시 열어 새
