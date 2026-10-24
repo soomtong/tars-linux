@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-10-20',
-  latest: 'Build Version (BV-M0)',
+  asOf: '2026-10-24',
+  latest: 'Gate Flakes (GF-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 957,       // git rev-list --count main
+    commits: 962,       // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
     zigKLines: 34,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -97,6 +97,7 @@ window.TARS = {
     ['2026-10-10', 'Gate Parallel', 'GP', '루트 게이트 1시간 01분 → 9분 51초, 체인을 동시에'],
     ['2026-10-11', 'Render Speed', 'RS', '그리기를 빠르게 — 출력 폭주 5.5 → 2.2초, 키 하나의 그리기 11.6 → 4.3ms'],
     ['2026-10-20', 'Build Version', 'BV', '시스템 안의 버전 — `tars-config version`과 부팅 로그 첫 줄'],
+    ['2026-10-24', 'Gate Flakes', 'GF', '게이트 간헐 셋을 닫았다 — initrd는 prebuild 한 번, 로그는 out/gate-logs/에, 커널 자름은 tlog가 잇는다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
