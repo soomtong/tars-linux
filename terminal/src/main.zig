@@ -3645,38 +3645,27 @@ const App = struct {
         }
     }
 
-    /// 바퀴 하나. 단계의 순서가 이 함수다 — `arm` → poll → `readKeyboard` → 포인터 → 배터리 →
-    /// PTY → 받아쓰기 → 그리기. `false`는 마지막 패널의 셸이 끝났다는 뜻이고 그러면 terminal이
-    /// 끝난다(MS 전의 `break :main_loop`). 그릴 일이 없는 바퀴는 화살표만 고치고 `true`다
-    /// (MS 전의 `continue`).
-    fn tick(self: *App) !bool {
-        self.arm();
+    /// 한 바퀴 안의 포인터 회차. `readPointers`가 만들고 `pollBattery` · `wirePointer` ·
+    /// `decideFrame` · `dumpFrame`이 받는다 — 바퀴가 끝나면 사라진다(필드가 아닌 이유).
+    const Pointers = struct {
+        round: PointerRound,
+        /// 이 회차 앞의 화살표 자리. `at` 줄의 `ink`가 이 사각형도 센다 — 옛
+        /// 자리를 못 지웠으면 그 자국이 여기 남는다(design 결정 10).
+        before_spot: ?pointer.Spot,
+        /// uevent가 power_supply를 봤다(또는 메시지가 버려졌다) — 배터리를 다시 훑는 신호.
+        supply_seen: bool,
+    };
 
-        // 고른 배터리가 없으면 -1(무한 대기)이다. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
-        // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
-        // 키 때문에 깼든 timeout으로 깼든, 읽는 것은 아래에서 기한이 지났을 때뿐이다.
-        const poll_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
-        //
-        // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
-        // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
-        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(
-            battery.pollTimeout(poll_now, self.battery_state.due),
-            pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
-        ));
-        if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
-
-        if (self.fds[0].revents & c.POLLIN != 0) try self.readKeyboard();
-        // 포인터 장치(PD-M0). 키보드 뒤 · PTY 앞이다(design 결정 3).
-        //
-        // 빠진 장치를 uevent보다 먼저 닫는다. 빠진 번호가 곧바로 다시 쓰이면
-        // 옛 칸의 경로가 남아 새 장치를 "이미 열었다"로 건너뛰기 때문이다.
-        //
-        // `POLLERR` · `POLLHUP`이면 읽지 않고 닫는다. 이것을 빠뜨리면 poll이
-        // 그 fd에 대해 매 바퀴 즉시 돌아와 terminal이 CPU를 다 쓴다(design
-        // 결정 1).
+    /// 바퀴 3. 포인터 장치(PD-M0). 키보드 뒤 · PTY 앞이다(design 결정 3).
+    ///
+    /// 빠진 장치를 uevent보다 먼저 닫는다. 빠진 번호가 곧바로 다시 쓰이면
+    /// 옛 칸의 경로가 남아 새 장치를 "이미 열었다"로 건너뛰기 때문이다.
+    ///
+    /// `POLLERR` · `POLLHUP`이면 읽지 않고 닫는다. 이것을 빠뜨리면 poll이
+    /// 그 fd에 대해 매 바퀴 즉시 돌아와 terminal이 CPU를 다 쓴다(design
+    /// 결정 1).
+    fn readPointers(self: *App) Pointers {
         var round: PointerRound = .{};
-        // 이 회차 앞의 화살표 자리. `at` 줄의 `ink`가 이 사각형도 센다 — 옛
-        // 자리를 못 지웠으면 그 자국이 여기 남는다(design 결정 10).
         const before_spot = self.sprite.at;
         pointer_drawn = before_spot != null;
         for (self.fds[2..self.pty_base], self.fd_devs[0 .. self.pty_base - 2]) |pfd, di| {
@@ -3688,78 +3677,86 @@ const App = struct {
             if (gone) closePointer(&self.pointer_devs, di, &self.pointer_state);
         }
         const supply_seen = self.fds[1].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs);
-        // 배터리(BS-M1, design 결정 8). uevent가 power_supply를 봤으면(또는 메시지가
-        // 버려졌으면) 디렉터리를 다시 훑는다. 아니면 기한이 지났을 때만 고른 배터리를
-        // 읽는다 — 키를 칠 때마다 읽지 않는다. 어느 쪽이든 칸이 바뀌었을 때만 다시 그린다.
-        //
-        // 아래 `!needs_redraw`의 `continue`보다 앞이어야 한다. 뒤면 키도 PTY 출력도 없는
-        // 바퀴(uevent나 timeout으로만 깬 바퀴)에서 칸을 고쳐도 화면이 안 바뀐다(검사 A3).
-        {
-            const bat_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
-            const changed = if (supply_seen)
-                scanBattery(self.io, &self.battery_state, bat_now)
-            else if (self.battery_state.due) |due|
-                bat_now >= due and tickBattery(self.io, &self.battery_state, bat_now)
-            else
-                false;
-            if (changed) self.needs_redraw = true;
-        }
+        return .{ .round = round, .before_spot = before_spot, .supply_seen = supply_seen };
+    }
+
+    /// 바퀴 4. 배터리(BS-M1, design 결정 8). uevent가 power_supply를 봤으면(또는 메시지가
+    /// 버려졌으면) 디렉터리를 다시 훑는다. 아니면 기한이 지났을 때만 고른 배터리를
+    /// 읽는다 — 키를 칠 때마다 읽지 않는다. 어느 쪽이든 칸이 바뀌었을 때만 다시 그린다.
+    ///
+    /// `decideFrame`의 `!needs_redraw` 갈래보다 앞이어야 한다. 뒤면 키도 PTY 출력도 없는
+    /// 바퀴(uevent나 timeout으로만 깬 바퀴)에서 칸을 고쳐도 화면이 안 바뀐다(검사 A3).
+    fn pollBattery(self: *App, supply_seen: bool) void {
+        const bat_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
+        const changed = if (supply_seen)
+            scanBattery(self.io, &self.battery_state, bat_now)
+        else if (self.battery_state.due) |due|
+            bat_now >= due and tickBattery(self.io, &self.battery_state, bat_now)
+        else
+            false;
+        if (changed) self.needs_redraw = true;
+    }
+
+    /// 바퀴 5. 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
+    /// `PointerWire`다(design 결정 3).
+    ///
+    /// 버튼의 전이를 회차 안의 순서대로 먼저 돈다. 전이마다 그 순간의
+    /// 자리로 움직임을 먼저 주고 그다음 누름이나 뗌을 준다 — 끌다가 뗀 보고
+    /// 하나는 마지막 칸까지 선택을 늘린 뒤에 복사해야 한다. 그다음 회차
+    /// 끝의 자리로 움직임 한 번, 마지막이 휠이다.
+    ///
+    /// PD-M4부터 전이마다 주인을 가른다(`pointer.Grab`, design 결정 12).
+    /// 자식이 마우스를 원하는 패널의 누름은 `Gesture`를 건너뛰고 그 PTY에
+    /// 보고로 간다. 회차 끝에 `settle`이 주인의 버튼을 포인터의 버튼에
+    /// 맞춘다 — 누른 채 빠진 장치의 버튼이 영영 눌린 채로 남지 않게.
+    ///
+    /// 휠이 맨 뒤라 한 회차 안의 누름 · 휠 · 뗌의 순서는 안 남는다. 사람의
+    /// 손으로 한 회차(밀리초 단위)에 그 셋이 함께 오는 일은 드물다.
+    ///
+    /// 뷰포트가 바뀌었거나 선택이 바뀌었으면 화면 전체를 다시 그린다
+    /// (`scroll>` · `copy>` 줄도 그 프레임 앞뒤에 찍힌다).
+    ///
+    /// `at` 줄은 그린 뒤에 찍는다(`dumpPointerAt`) — `ink`가 그린 결과를 센다.
+    fn wirePointer(self: *App, round: *const PointerRound) !void {
         if (pointerCount(&self.pointer_devs) == 0) self.pointer_shown = false;
         if (round.woke) self.pointer_shown = true;
-        // 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
-        // `PointerWire`다(design 결정 3).
-        //
-        // 버튼의 전이를 회차 안의 순서대로 먼저 돈다. 전이마다 그 순간의
-        // 자리로 움직임을 먼저 주고 그다음 누름이나 뗌을 준다 — 끌다가 뗀 보고
-        // 하나는 마지막 칸까지 선택을 늘린 뒤에 복사해야 한다. 그다음 회차
-        // 끝의 자리로 움직임 한 번, 마지막이 휠이다.
-        //
-        // PD-M4부터 전이마다 주인을 가른다(`pointer.Grab`, design 결정 12).
-        // 자식이 마우스를 원하는 패널의 누름은 `Gesture`를 건너뛰고 그 PTY에
-        // 보고로 간다. 회차 끝에 `settle`이 주인의 버튼을 포인터의 버튼에
-        // 맞춘다 — 누른 채 빠진 장치의 버튼이 영영 눌린 채로 남지 않게.
-        //
-        // 휠이 맨 뒤라 한 회차 안의 누름 · 휠 · 뗌의 순서는 안 남는다. 사람의
-        // 손으로 한 회차(밀리초 단위)에 그 셋이 함께 오는 일은 드물다.
-        //
-        // 뷰포트가 바뀌었거나 선택이 바뀌었으면 화면 전체를 다시 그린다
-        // (`scroll>` · `copy>` 줄도 그 프레임 앞뒤에 찍힌다).
-        {
-            // 키보드 단계가 워크스페이스를 바꿨을 수 있어 그 뒤에 구한다.
-            const ws = &self.workspaces[self.current].?;
-            var wire: PointerWire = .{
-                .gesture = &self.gesture,
-                .gesture_ws = &self.gesture_ws,
-                .ws = ws,
-                .current = self.current,
-                .key_state = &self.key_state,
-                .whole = self.whole,
-                .cols = self.cols,
-                .rows = self.rows,
-                .grab = &self.grab,
-                .grab_ws = &self.grab_ws,
-                .mods = self.key_state.modifiers(),
-                .clips = &self.clips,
-            };
-            for (round.edges[0..round.edge_count]) |e| {
-                try wire.moved(e.x, e.y);
-                try wire.edge(e);
-            }
-            self.grab.settle(self.pointer_state.buttons);
-            if (round.woke) try wire.moved(self.pointer_state.x, self.pointer_state.y);
-            if (round.wheel != 0) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
-            if (wire.redraw) self.needs_redraw = true;
+        // 키보드 단계가 워크스페이스를 바꿨을 수 있어 그 뒤에 구한다.
+        const ws = &self.workspaces[self.current].?;
+        var wire: PointerWire = .{
+            .gesture = &self.gesture,
+            .gesture_ws = &self.gesture_ws,
+            .ws = ws,
+            .current = self.current,
+            .key_state = &self.key_state,
+            .whole = self.whole,
+            .cols = self.cols,
+            .rows = self.rows,
+            .grab = &self.grab,
+            .grab_ws = &self.grab_ws,
+            .mods = self.key_state.modifiers(),
+            .clips = &self.clips,
+        };
+        for (round.edges[0..round.edge_count]) |e| {
+            try wire.moved(e.x, e.y);
+            try wire.edge(e);
         }
-        // `at` 줄은 그린 뒤에 찍는다(`dumpPointerAt`) — `ink`가 그린 결과를 센다.
+        self.grab.settle(self.pointer_state.buttons);
+        if (round.woke) try wire.moved(self.pointer_state.x, self.pointer_state.y);
+        if (round.wheel != 0) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
+        if (wire.redraw) self.needs_redraw = true;
+    }
 
-        // PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
-        // 남은 출력이 있으면 POLLIN과 함께 오지만 다 읽고 나면 POLLHUP만
-        // 남으므로, POLLIN만 보면 read를 영영 호출하지 못하고 poll이 즉시
-        // 반환하는 바쁜 루프에 빠진다. POLLHUP에서도 read를 시도하면 남은
-        // 데이터를 먼저 비우고, 비고 나면 read가 EIO를 내 EOF 경로로 간다.
-        //
-        // 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
-        // `feed`까지 하고, 그리는 것은 아래에서 포커스 패널만 한다.
+    /// 바퀴 6. PTY 출력과 EOF. `quit`은 마지막 패널의 셸이 끝났다는 뜻이다.
+    ///
+    /// PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
+    /// 남은 출력이 있으면 POLLIN과 함께 오지만 다 읽고 나면 POLLHUP만
+    /// 남으므로, POLLIN만 보면 read를 영영 호출하지 못하고 poll이 즉시
+    /// 반환하는 바쁜 루프에 빠진다. POLLHUP에서도 read를 시도하면 남은
+    /// 데이터를 먼저 비우고, 비고 나면 read가 EIO를 내 EOF 경로로 간다.
+    ///
+    /// 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
+    /// `feed`까지 하고, 그리는 것은 `render`에서 포커스 패널만 한다.
+    fn readPanes(self: *App) !enum { keep, quit } {
         for (self.fds[self.pty_base..self.pty_end], self.fd_panes[0 .. self.pty_end - self.pty_base]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
             const pane = ref.pane;
@@ -3768,7 +3765,7 @@ const App = struct {
                 logline.print("terminal: child exited (pty EOF)\n", .{});
                 // 마지막 패널이면 WP 전처럼 terminal이 끝나고 init이 되살린다
                 // (WP design 결정 5).
-                if (paneCount(&self.workspaces) == 1) return false;
+                if (paneCount(&self.workspaces) == 1) return .quit;
                 // 아니면 그 패널만 닫는다. 닫는 자리는 여기 하나다 — `exit`도
                 // `Cmd+W`(SIGHUP)도 셸을 끝내고, 셸이 끝나면 여기로 온다.
                 const w = &self.workspaces[ref.ws].?;
@@ -3852,31 +3849,40 @@ const App = struct {
             // (design 위험 1). 로그를 안 남기면 사람이 "왜 갑자기 모드가
             // 풀렸지"를 영영 모른다.
             if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
-            // `needs_redraw`가 아니다(RS-M2). 그릴지는 루프 끝에서 하한을 보고 정한다.
+            // `needs_redraw`가 아니다(RS-M2). 그릴지는 `decideFrame`이 하한을 보고 정한다.
             self.output_pending = true;
         }
+        return .keep;
+    }
 
-        // 받아쓰기의 파이프 둘(VD-M1). PTY 뒤 · 렌더 앞이다 — 위 PTY 루프가 대상 패널을
-        // 닫았으면 그것을 본 뒤에 넣을지 정한다. 두 파이프가 다 닫히면 자식이 끝난
-        // 것이고, 거두고 넣는다.
-        //
-        // 다시 그리는 것은 상태 줄의 칸이 바뀌었을 때뿐이다. 표준 출력을 읽을 때마다
-        // 그리면 `screen>` 덤프가 그만큼 는다. 넣은 글자는 셸이 되울리고, 그 출력이 다음
-        // 바퀴의 PTY 루프에서 다시 그리게 한다.
-        if (self.dict.phase != null) {
-            const shown = self.dict.show();
-            if (self.dict.out_fd >= 0 and self.fds[self.pty_end].revents != 0) drainDictOut(&self.dict);
-            if (self.dict.err_fd >= 0 and self.fds[self.pty_end + 1].revents != 0) drainDictErr(&self.dict);
-            if (self.dict.out_fd < 0 and self.dict.err_fd < 0) finishDictation(&self.dict, &self.workspaces, self.current, &self.key_state);
-            if (!std.meta.eql(shown, self.dict.show())) self.needs_redraw = true;
-        }
+    /// 바퀴 7. 받아쓰기의 파이프 둘(VD-M1). PTY 뒤 · 렌더 앞이다 — `readPanes`가 대상 패널을
+    /// 닫았으면 그것을 본 뒤에 넣을지 정한다. 두 파이프가 다 닫히면 자식이 끝난
+    /// 것이고, 거두고 넣는다.
+    ///
+    /// 다시 그리는 것은 상태 줄의 칸이 바뀌었을 때뿐이다. 표준 출력을 읽을 때마다
+    /// 그리면 `screen>` 덤프가 그만큼 는다. 넣은 글자는 셸이 되울리고, 그 출력이 다음
+    /// 바퀴의 PTY 루프에서 다시 그리게 한다.
+    fn readDictation(self: *App) void {
+        if (self.dict.phase == null) return;
+        const shown = self.dict.show();
+        if (self.dict.out_fd >= 0 and self.fds[self.pty_end].revents != 0) drainDictOut(&self.dict);
+        if (self.dict.err_fd >= 0 and self.fds[self.pty_end + 1].revents != 0) drainDictErr(&self.dict);
+        if (self.dict.out_fd < 0 and self.dict.err_fd < 0) finishDictation(&self.dict, &self.workspaces, self.current, &self.key_state);
+        if (!std.meta.eql(shown, self.dict.show())) self.needs_redraw = true;
+    }
 
-        // 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
-        // PTY 출력 분기 안에만 있었다 — 스크롤은 키로 일어나므로 그대로
-        // 두면 뷰포트만 움직이고 화면은 안 바뀐다.
-        //
-        // 플래그를 두는 이유는 그리는 횟수를 늘리지 않기 위해서다. modifier
-        // 키처럼 아무것도 바꾸지 않는 이벤트에서는 그리지 않는다.
+    /// `decideFrame`의 답. `draw`의 값은 화살표가 있어야 할 자리다.
+    const Decision = union(enum) { skip, draw: ?pointer.Spot };
+
+    /// 바퀴 8. 이 바퀴에 화면 전체를 그릴지.
+    ///
+    /// 렌더를 루프 끝으로 뺀 것이 TR-M2의 구조 변경이다. 그전에는 렌더가
+    /// PTY 출력 분기 안에만 있었다 — 스크롤은 키로 일어나므로 그대로
+    /// 두면 뷰포트만 움직이고 화면은 안 바뀐다.
+    ///
+    /// 플래그를 두는 이유는 그리는 횟수를 늘리지 않기 위해서다. modifier
+    /// 키처럼 아무것도 바꾸지 않는 이벤트에서는 그리지 않는다.
+    fn decideFrame(self: *App, p: Pointers) !Decision {
         // 화살표가 있어야 할 자리(PD design 결정 4). 보이는 조건 셋이 다
         // 맞아야 한다 — 장치가 있고, 움직였고, 그 뒤로 키를 안 쳤다.
         const want: ?pointer.Spot = if (self.pointer_shown and pointerCount(&self.pointer_devs) > 0)
@@ -3889,7 +3895,7 @@ const App = struct {
         //
         // PTY 출력은 하한이 지났을 때만 그리기가 된다(RS-M2). 다른 이유로 어차피 그리는
         // 바퀴면 기다리지 않고 함께 그린다 — 그 프레임이 출력도 담는다. 하한 안이면
-        // 이 바퀴는 그리지 않고, 위 `poll`이 남은 시간 뒤에 다시 깨운다.
+        // 이 바퀴는 그리지 않고, `tick`의 `poll`이 남은 시간 뒤에 다시 깨운다.
         if (self.output_pending and !self.needs_redraw) {
             const now_ms: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
             if (pacing.wait(now_ms, self.last_frame_ms, true) == 0) self.needs_redraw = true;
@@ -3900,19 +3906,44 @@ const App = struct {
                 if (want) |s| self.sprite.show(self.fb, s);
                 try self.fb.present();
             }
-            dumpPointerAt(self.fb, &self.pointer_state, round, &self.sprite, before_spot);
-            return true;
+            dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
+            return .skip;
         }
         self.needs_redraw = false;
         self.output_pending = false;
         self.last_frame_ms = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
+        return .{ .draw = want };
+    }
 
+    /// 그린 프레임에서 덤프가 읽는 것. `render`가 채우고 `dumpFrame`이 읽는다. 프롬프트와
+    /// 상태 줄의 글자 버퍼도 여기 있다 — `prompt.text` · `status_line.text`가 그 안을
+    /// 가리키므로 이 struct는 `tick`의 스택에 놓고 포인터로만 건넨다.
+    const Frame = struct {
+        /// 버퍼가 needle보다 마흔다섯 칸 크다. 앞의 `/` 하나와, 뒤에 올 수
+        /// 있는 것 중 긴 쪽인 ` [20/20]` 마흔넷 때문이다(SP-M1). `usize`가
+        /// 최대 스무 자리라 숫자 둘이 마흔이고, ` [`·`/`·`]`가 넷이다.
+        /// `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
+        prompt_buf: [173]u8 = undefined,
+        status_buf: [status.MAX_LEN]u8 = undefined,
+        focus: *Pane = undefined,
+        cells: []vt.CellGlyph = undefined,
+        imgs: []vt.ImagePlacement = undefined,
+        prompt: ?Prompt = null,
+        prompt_ink: ?PromptInk = null,
+        status_line: Status = undefined,
+        frame_us: i96 = 0,
+    };
+
+    /// 바퀴 9. 프레임 하나를 그린다 — 포커스 아닌 패널 → 포커스 패널 → 프롬프트 · 상태 줄 ·
+    /// 화살표(`renderFinish`). 덤프가 읽을 것은 `frame`에 남긴다.
+    fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
         // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
         // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
         // 그래서 여기서 구한다. 워크스페이스도 같다(WP-M2) — EOF가 워크스페이스를
         // 지워 배열을 당겼으면 같은 번호가 가리키는 것이 바뀌어 있다.
         const ws = &self.workspaces[self.current].?;
         const focus = &ws.panes[ws.focus].?;
+        frame.focus = focus;
 
         // 포커스 아닌 패널을 먼저 그린다(WP-M1). 포커스 패널이 마지막이어야
         // 아래 덤프 넷이 읽는 `cell_buf` · `img_buf`가 그 패널의 것으로
@@ -3936,18 +3967,12 @@ const App = struct {
         }
         focus.screen.focused = true;
 
-        const cells = try focus.screen.cells(self.cell_buf);
+        frame.cells = try focus.screen.cells(self.cell_buf);
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
         // 것과 반대 방향의 같은 경계다(모양은 main.zig가 정한다).
-        //
-        // 버퍼가 needle보다 마흔다섯 칸 크다. 앞의 `/` 하나와, 뒤에 올 수
-        // 있는 것 중 긴 쪽인 ` [20/20]` 마흔넷 때문이다(SP-M1). `usize`가
-        // 최대 스무 자리라 숫자 둘이 마흔이고, ` [`·`/`·`]`가 넷이다.
-        // `: not found` 열하나는 그보다 짧으므로 이 크기가 둘 다 덮는다.
-        var prompt_buf: [173]u8 = undefined;
-        const prompt: ?Prompt = if (promptText(focus.screen, &prompt_buf)) |t| .{
+        frame.prompt = if (promptText(focus.screen, &frame.prompt_buf)) |t| .{
             .text = t,
             // 프롬프트가 열려 있을 때만 조합을 붙인다(SH-M2). 닫힌 뒤의
             // 오버레이는 지난 검색의 결과 표시이고, 그 위에 조합을 그리면
@@ -3966,18 +3991,18 @@ const App = struct {
         // 상태 줄을 여기서 만든다. `prompt`와 같은 자리이고 같은 이유다 —
         // 모양은 `main.zig`가 정하고 그리는 함수는 "한 줄을 준 색으로 쓴다"
         // 하나만 안다.
-        var status_buf: [status.MAX_LEN]u8 = undefined;
+        //
         // copy mode는 `vt.Screen`의 상태다. `status.zig`가 `vt.zig`를 import하지
         // 않으므로(CI design 결정 4) 여기서 bool 하나로 넘긴다. 갱신 경로는
-        // 새로 없다 — copy 명령은 전부 위의 copy 루프에서 `needs_redraw`를
+        // 새로 없다 — copy 명령은 전부 `runCopies`에서 `needs_redraw`를
         // 켜고, 이 자리는 그 프레임 안이다.
         const copy_active = focus.screen.copyActive();
         // 워크스페이스가 둘 이상일 때만 번호를 단다(WP design 결정 8). 하나뿐인
         // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
         const ws_number: ?u8 = if (workspaceCount(&self.workspaces) > 1) @intCast(self.current + 1) else null;
-        const status_line: Status = .{
-            .text = status.statusText(&self.key_state, copy_active, ws_number, self.dict.show(), &status_buf),
+        frame.status_line = .{
+            .text = status.statusText(&self.key_state, copy_active, ws_number, self.dict.show(), &frame.status_buf),
             .rows = self.rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
@@ -3992,21 +4017,29 @@ const App = struct {
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
-        const imgs = focus.screen.images(&self.img_buf);
-        try renderPane(self.fb, &self.cache, cells, imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
-        const prompt_ink = try renderFinish(self.fb, &self.cache, prompt, status_line, &self.sprite, want);
-        const frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
+        frame.imgs = focus.screen.images(&self.img_buf);
+        try renderPane(self.fb, &self.cache, frame.cells, frame.imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
+        frame.prompt_ink = try renderFinish(self.fb, &self.cache, frame.prompt, frame.status_line, &self.sprite, want);
+        frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
-            logline.print("terminal: render> first frame {d}us\n", .{frame_us});
+            logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
         }
-        dumpImages(self.fb, imgs, focus.screen.images_dropped, frame_us, focus.rect);
+    }
+
+    /// 바퀴 10. 그린 프레임의 덤프 열둘. 순서가 게이트의 계약이다 — `dumpCursor`는
+    /// `dumpInk` 뒤 · `dumpScroll` 앞, `dumpPointerAt`이 맨 뒤.
+    fn dumpFrame(self: *App, frame: *const Frame, p: Pointers) void {
+        const focus = frame.focus;
+        const cells = frame.cells;
+        const frame_us = frame.frame_us;
+        dumpImages(self.fb, frame.imgs, focus.screen.images_dropped, frame_us, focus.rect);
 
         dumpScreen(cells, self.screen_line_buf);
         dumpHighlight(focus.screen);
-        dumpOverlay(prompt);
-        dumpPromptInk(self.fb, prompt_ink, prompt);
-        dumpStatus(self.fb, status_line, &self.last_status, &self.last_status_len, &self.last_status_caps, &self.last_status_battery);
+        dumpOverlay(frame.prompt);
+        dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
+        dumpStatus(self.fb, frame.status_line, &self.last_status, &self.last_status_len, &self.last_status_caps, &self.last_status_battery);
         dumpPane(self.fb, &self.workspaces, self.current, &self.last_pane);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
@@ -4016,7 +4049,7 @@ const App = struct {
             cells,
             focus.screen.defaultFg(),
             focus.screen.defaultBg(),
-            if (prompt != null) focus.rect.rows - 1 else null,
+            if (frame.prompt != null) focus.rect.rows - 1 else null,
             focus.rect,
         );
         dumpInk(self.fb, &self.cache, cells, focus.rect);
@@ -4033,7 +4066,47 @@ const App = struct {
         }
         // 덤프들 뒤다. 게이트는 이 줄이 보이면 같은 프레임의 `scroll>`이 이미
         // 찍혔다고 읽는다(pointer/check.sh 검사 11).
-        dumpPointerAt(self.fb, &self.pointer_state, round, &self.sprite, before_spot);
+        dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
+    }
+
+    /// 바퀴 하나. 단계의 순서가 이 함수다. `false`는 마지막 패널의 셸이 끝났다는 뜻이고
+    /// 그러면 terminal이 끝난다(MS 전의 `break :main_loop`). 그릴 일이 없는 바퀴는
+    /// `decideFrame`이 화살표만 고치고 `true`다(MS 전의 `continue`).
+    fn tick(self: *App) !bool {
+        self.arm();
+
+        // 고른 배터리가 없으면 -1(무한 대기)이다. 이벤트가 없으면 CPU를 전혀 쓰지 않는다.
+        // 있으면 다음 주기 읽기까지의 밀리초다(BS design 결정 8) — 한 시간에 60번 깬다.
+        // 키 때문에 깼든 timeout으로 깼든, 읽는 것은 `pollBattery`에서 기한이 지났을 때뿐이다.
+        const poll_now: i64 = @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
+        //
+        // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
+        // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
+        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(
+            battery.pollTimeout(poll_now, self.battery_state.due),
+            pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
+        ));
+        if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
+
+        // 키보드가 먼저다. 그 뒤 단계는 키보드가 바꾼 워크스페이스 · 포커스를 본다.
+        if (self.fds[0].revents & c.POLLIN != 0) try self.readKeyboard();
+        // 포인터는 키보드 뒤 · PTY 앞(PD design 결정 3).
+        const pointers = self.readPointers();
+        // 배터리는 `decideFrame`보다 앞 — 그래야 uevent · timeout만으로 깬 바퀴도 그린다(검사 A3).
+        self.pollBattery(pointers.supply_seen);
+        try self.wirePointer(&pointers.round);
+        // PTY. 마지막 패널의 EOF면 여기서 끝난다.
+        if (try self.readPanes() == .quit) return false;
+        // 받아쓰기는 PTY 뒤 · 렌더 앞 — 대상 패널이 방금 닫혔는지를 본 뒤에 넣는다.
+        self.readDictation();
+        // 그릴지는 맨 끝에서 하한을 보고 정한다(RS-M2).
+        const want = switch (try self.decideFrame(pointers)) {
+            .skip => return true,
+            .draw => |want| want,
+        };
+        var frame: Frame = .{};
+        try self.render(&frame, want);
+        self.dumpFrame(&frame, pointers);
         return true;
     }
 };
