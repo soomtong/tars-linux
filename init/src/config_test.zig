@@ -1,5 +1,6 @@
 const std = @import("std");
 const config = @import("config.zig");
+const screen_args = @import("screen_args");
 
 /// `expectQuietSeed`가 훅을 몇 개까지 셀 수 있는가. 힙이 없어서 상한이
 /// 필요하고, 지금은 셸마다 둘이다(`zoxide`·`fzf`). 늘리면 그 함수가 조용히
@@ -1072,15 +1073,9 @@ pub fn main() !void {
     try expect("clipboard=shared\n", .{});
     try expect("clipboard=workspace\n", .{}); // enum에 없는 값
     try expect("clipboard=\n", .{}); // 값 없음
-    // 이름이 argv로 그대로 간다. terminal의 `clipboard.Scope`가 같은 이름을
-    // `stringToEnum`으로 되돌리므로, `arg()`가 enum 이름과 다르면 설정이
-    // 조용히 기본값으로 떨어진다.
-    for (std.enums.values(config.ClipboardScope)) |scope| {
-        if (!std.mem.eql(u8, scope.arg(), @tagName(scope))) {
-            std.debug.print("FAIL: ClipboardScope.arg gave \"{s}\" for {s}\n", .{ scope.arg(), @tagName(scope) });
-            return error.UnexpectedClipboardArg;
-        }
-    }
+    // 이름이 argv로 그대로 간다. SA-M0 전에는 여기서 `arg()`가 `@tagName`과 같은지
+    // 봤다 — terminal이 다른 enum으로 되돌렸기 때문이다. 이제 둘이 같은 enum이고
+    // 왕복은 `shared/screen_args_test.zig`가 본다.
     // pane 체인의 부팅 B가 쓰는 줄이다.
     try expect("shell=fish\nclipboard=pane\n", .{ .clipboard = .pane });
 
@@ -1134,9 +1129,9 @@ pub fn main() !void {
 
     // ── `arg()` → `parse()` 왕복 ────────────────────────────────────────
     //
-    // 이 왕복이 argv 배선의 계약이다. init이 `arg()`로 쓰고 terminal이
-    // 같은 문법으로 읽는데, 둘을 잇는 것은 문자열 하나뿐이라 컴파일러가 못
-    // 잡는다 — `HangulLayout` ↔ `hangul.Layout`과 정확히 같은 자리다.
+    // SA-M0부터 쓰는 쪽과 읽는 쪽이 `shared/screen_args.zig` 한 벌이고 서른두 조합의
+    // 왕복은 `screen_args_test`가 본다. 여기 남긴 것은 파일 쪽(`.file`)의 모양이다 —
+    // 넷을 켠 목록, 거꾸로 적은 목록, `none`.
     var arg_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const all = config.Toggles{
         .hangul_key = true,
@@ -1149,14 +1144,14 @@ pub fn main() !void {
         std.debug.print("FAIL: Toggles.arg gave \"{s}\"\n", .{all_text});
         return error.UnexpectedToggleArg;
     }
-    if (!std.meta.eql(config.Toggles.parse(all_text), all)) {
+    if (!std.meta.eql(config.Toggles.parse(.file, all_text, screen_args.ignore_unknown), all)) {
         std.debug.print("FAIL: Toggles.arg -> parse did not round-trip\n", .{});
         return error.ToggleRoundTripFailed;
     }
 
     // 순서가 정규화된다는 것을 여기서 못 박는다. 거꾸로 적어도 같은
     // 문자열이 나오므로, 게이트가 로그에서 읽는 값이 흔들리지 않는다.
-    const reversed = config.Toggles.parse("lctrl_tap,capslock_tap,shift_space,hangul_key");
+    const reversed = config.Toggles.parse(.file, "lctrl_tap,capslock_tap,shift_space,hangul_key", screen_args.ignore_unknown);
     var rev_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     if (!std.mem.eql(u8, reversed.arg(&rev_buf), all_text)) {
         std.debug.print("FAIL: Toggles.arg is not order-normalized\n", .{});
@@ -1172,7 +1167,7 @@ pub fn main() !void {
         std.debug.print("FAIL: empty Toggles gave \"{s}\", want \"none\"\n", .{none_text});
         return error.UnexpectedToggleArg;
     }
-    if (!std.meta.eql(config.Toggles.parse(none_text), none)) {
+    if (!std.meta.eql(config.Toggles.parse(.file, none_text, screen_args.ignore_unknown), none)) {
         std.debug.print("FAIL: \"none\" did not round-trip to an empty set\n", .{});
         return error.ToggleRoundTripFailed;
     }

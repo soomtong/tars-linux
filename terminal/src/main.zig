@@ -12,6 +12,7 @@ const input = @import("input.zig");
 const layout = @import("layout.zig");
 const pointer = @import("pointer.zig");
 const pty = @import("pty.zig");
+const screen_args = @import("screen_args");
 const status = @import("status.zig");
 const touchpad = @import("touchpad.zig");
 const vt = @import("vt.zig");
@@ -2813,6 +2814,23 @@ const PointerWire = struct {
     }
 };
 
+/// init이 argv에 실어 보낸 칸 하나(SA-M0). 자리는 init과 같은 `screen_args.Slot`이다 —
+/// SA 전에는 여기가 `args[5]` 같은 숫자였고 init의 상수와 주석으로만 묶여 있었다.
+/// 칸이 없으면(init 없이 손으로 띄웠다) null이고, 호출자가 `screen_args`의 기본값을
+/// 쓴다.
+fn argAt(args: anytype, s: screen_args.Slot) ?[*:0]const u8 {
+    const i = @backingInt(s);
+    return if (args.len > i) args[i] else null;
+}
+
+/// argv의 enum 칸 하나를 되돌린다. init이 화이트리스트를 이미 거쳤으므로 여기 도착하는
+/// 값은 언제나 맞고, 기본값으로 떨어지는 길은 손으로 띄울 때를 위한 것이다. 그때 엉뚱한
+/// 글자를 주면 로그에 기본값의 이름이 찍힌다 — 글자가 아니라 읽은 결과를 찍는다.
+fn enumArg(comptime T: type, args: anytype, s: screen_args.Slot, default: T) T {
+    const raw = argAt(args, s) orelse return default;
+    return std.meta.stringToEnum(T, std.mem.span(raw)) orelse default;
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
@@ -2860,7 +2878,7 @@ pub fn main(init: std.process.Init) !void {
     // 일이 그보다 먼저 오기 때문이다. 로그 순서를 그대로 두려고 여는 자리를
     // 내리지 않고 선언을 올렸다.
     const args = init.minimal.args.vector;
-    const input_device: [*:0]const u8 = if (args.len > 4) args[4] else "/dev/input/event0";
+    const input_device: [*:0]const u8 = argAt(args, .device) orelse screen_args.default_device_path;
 
     const keyboard_fd = input.openDevice(input_device) catch |err| {
         logline.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
@@ -2882,46 +2900,32 @@ pub fn main(init: std.process.Init) !void {
     //
     // 인자 없이 손으로 실행할 때의 기본값은 `--no-config`로 남긴다 — 그때는
     // init이 없어서 `"none"`을 넘겨줄 사람이 없다.
-    const shell_path: [*:0]const u8 = if (args.len > 1) args[1] else "/usr/bin/fish";
-    const shell_flag: [*:0]const u8 = if (args.len > 2) args[2] else "--no-config";
-    // 넷째 인자가 키보드 종류다(IP-M2, design doc 결정 9). enum을 여기 다시
-    // 정의하지 않고 문자열 하나만 비교하는 것이 요점이다 — CP가 정한
-    // "파서는 한 벌"을 지킨다. init이 enum으로 이미 걸렀으므로 여기 도착하는
-    // 값은 apple 아니면 pc이고, 그 외 무엇이 오더라도 apple로 떨어진다.
-    const keyboard: [*:0]const u8 = if (args.len > 3) args[3] else "apple";
-    const swap_alt_meta = std.mem.eql(u8, std.mem.span(keyboard), "pc");
-
-    // 여섯째와 일곱째가 자판 둘이다(HI-M2, design 결정 7). keyboard와 달리
-    // enum 이름이 그대로 오므로 `stringToEnum`으로 되돌린다 — 이름이
-    // `init/src/config.zig`의 enum과 짝이어야 하고 컴파일러가 그것을 못
-    // 잡는다. init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은
-    // 언제나 맞고, 아래 fallback은 terminal을 손으로 띄울 때를 위한 것이다.
-    const hangul_arg: []const u8 = if (args.len > 5) std.mem.span(args[5]) else "shin_pcs";
-    const latin_arg: []const u8 = if (args.len > 6) std.mem.span(args[6]) else "qwerty";
-    const hangul_layout = std.meta.stringToEnum(hangul.Layout, hangul_arg) orelse .shin_pcs;
-    const latin_layout = std.meta.stringToEnum(input.LatinLayout, latin_arg) orelse .qwerty;
-
-    // 여덟째가 한/영 전환 키 목록이다(HI-M3, design 결정 7). 자판 둘과 달리
-    // enum 하나가 아니라 집합이라 `stringToEnum` 대신 콤마 파서를 쓴다.
     //
-    // fallback을 문자열로 두는 것에 뜻이 있다. 집합 리터럴로 쓰면 기본값이
-    // 이 파일에도 한 벌 생기는데, 그 값은 `init/src/config.zig`의 `Config`와
-    // 같아야 하고 컴파일러가 그것을 못 잡는다. 문자열로 두면 적어도 눈으로
-    // 대조할 형태가 설정 파일과 같아진다. 끝의 `esc_latin`은 설정 파일의
-    // `hangul_toggle`이 아니라 `esc_latin=on`에서 온다 — init이 둘을 합쳐 이
-    // 자리에 넣는다(EL design 결정 1).
-    const toggle_arg: []const u8 = if (args.len > 7)
-        std.mem.span(args[7])
-    else
-        "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin";
-    const toggles = input.parseToggles(toggle_arg);
+    // SA-M0. 칸은 init과 같은 `screen_args.Slot`으로 읽고, 값의 종류도 init과 같은
+    // enum이다 — 자판 · 키보드 · 클립보드 범위의 이름이 어긋날 자리가 없다. 손으로 띄울
+    // 때의 기본값도 `screen_args`에 한 벌이다(설정 파일의 기본값과 같아야 한다는 것을
+    // 그 파일이 적어 둔다).
+    const shell_path: [*:0]const u8 = argAt(args, .shell) orelse screen_args.default_shell_path;
+    const shell_flag: [*:0]const u8 = argAt(args, .flag) orelse screen_args.default_shell_flag;
+    // 키보드 종류(IP-M2, design doc 결정 9). 이 값이 하는 일은 `swap_alt_meta` 하나다.
+    const keyboard = enumArg(screen_args.Keyboard, args, .keyboard, screen_args.default_keyboard);
+    const swap_alt_meta = keyboard == .pc;
 
-    // 아홉째가 클립보드의 범위다(CB-M0, design 결정 3). 자판 둘과 같은
-    // 모양이다 — init이 `tars.conf`의 화이트리스트를 이미 거쳤으므로 여기
-    // 도착하는 값은 언제나 맞고, fallback은 terminal을 손으로 띄울 때를 위한
-    // 것이다. 기본값이 `shared`인 것은 사용자가 정했다(2026-10-05).
-    const clip_arg: []const u8 = if (args.len > 8) std.mem.span(args[8]) else "shared";
-    const clip_scope = std.meta.stringToEnum(clipboard.Scope, clip_arg) orelse .shared;
+    // 자판 둘(HI-M2, design 결정 7).
+    const hangul_layout = enumArg(hangul.Layout, args, .hangul, screen_args.default_hangul);
+    const latin_layout = enumArg(input.LatinLayout, args, .latin, screen_args.default_latin);
+
+    // 한/영 전환 키 목록(HI-M3, design 결정 7). 자판 둘과 달리 enum 하나가 아니라
+    // 집합이라 `stringToEnum` 대신 콤마 파서를 쓴다. 끝의 `esc_latin`은 설정 파일의
+    // `hangul_toggle`이 아니라 `esc_latin=on`에서 온다 — init이 둘을 합쳐 이 자리에
+    // 넣는다(EL design 결정 1). 그래서 `.argv`다. 모르는 이름은 버린다 — init이 이미
+    // 한 번 경고를 찍었다.
+    const toggle_arg: []const u8 = if (argAt(args, .toggles)) |a| std.mem.span(a) else screen_args.default_toggles_arg;
+    const toggles = input.Toggles.parse(.argv, toggle_arg, screen_args.ignore_unknown);
+
+    // 클립보드의 범위(CB-M0, design 결정 3). 기본값이 `shared`인 것은 사용자가
+    // 정했다(2026-10-05).
+    const clip_scope = enumArg(clipboard.Scope, args, .clipboard, screen_args.default_clipboard);
 
     // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
     // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
@@ -3022,7 +3026,7 @@ pub fn main(init: std.process.Init) !void {
     // 2차 부팅), 그 화면이 틀렸을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이
     // 틀렸다"를 가르는 것이 이 줄이다.
     logline.print("terminal: keyboard={s} (swap_alt_meta={})\n", .{
-        keyboard, swap_alt_meta,
+        @tagName(keyboard), swap_alt_meta,
     });
     // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
     // 짝이다 — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
@@ -3035,7 +3039,7 @@ pub fn main(init: std.process.Init) !void {
     logline.print("terminal: hangul layout={s} latin={s} toggles={s}\n", .{
         @tagName(hangul_layout),
         @tagName(latin_layout),
-        input.togglesArg(toggles, &toggle_buf),
+        toggles.arg(&toggle_buf),
     });
     // 같은 이유의 줄이 클립보드에도 하나 필요하다(CB-M0). `tars-init: config`
     // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너

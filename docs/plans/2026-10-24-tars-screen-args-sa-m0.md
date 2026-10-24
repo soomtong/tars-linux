@@ -2,7 +2,7 @@
 
 Date: 2026-10-24
 Design: `docs/specs/2026-10-24-tars-screen-args-design.md`
-Status: 진행 중. 값은 맨 아래 "SA-M0이 실측한 것".
+Status: 끝났다(2026-10-24, 루트 게이트 22/22). 값은 맨 아래 "SA-M0이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -97,4 +97,14 @@ init — 모듈을 만들고 `exe_mod` · `config_cli_mod`와 `config.zig`를 �
 
 ## SA-M0이 실측한 것
 
-(끝나면 적는다)
+1. 두 빌드가 첫 시도에 됐다 — `addImport`를 빠뜨린 모듈이 없었다(init 9 · terminal 6). 호스트 검사 전부 통과,
+   `screen_args_test: all checks passed`.
+2. 호스트 0.17 `zig fmt`가 새 파일의 `@intFromEnum`을 `@backingInt`로 바꿨고, `**`는 0.17에서 문법 오류다(`@splat`). 손으로 편집한
+   파일 열셋 가운데 fmt가 바꾼 것은 `hangul.zig` 하나(자유 함수가 된 메서드 넷의 들여쓰기)다.
+3. design 위험 1 — `zig build --summary all`로 봤다. 안 바꾸면 `compile exe init … cached 3ms`, `shared/screen_args.zig` 끝에 주석
+   한 줄을 더하면 `init … success 13s` · `tars-config … success 10s`이고 그 파일을 안 보는 `tars-install`은 `cached`다.
+   바이너리 sha256은 init이 그대로였다(주석 한 줄은 코드도 줄 번호도 안 바꾼다) — 해시가 아니라 summary로 봐야 한다.
+4. 루트 게이트 22/22(2026-10-24 13:19, `out/gate-logs/20261024-131913/`). prebuild 339초 + lanes 294초. CP 체인의 시리얼 로그에서
+   `terminal: keyboard=apple (swap_alt_meta=false)` · `terminal: hangul layout=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin` ·
+   `terminal: clipboard scope=shared`가 SA 전과 같은 글자다.
+5. 줄 수 — 지운 줄 506, 더한 줄 304(새 파일 둘 포함). `config.zig` 1526 → 1353, `input.zig` 1842 → 1767.

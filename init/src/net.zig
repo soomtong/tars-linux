@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const screen_args = @import("screen_args");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -121,7 +122,7 @@ pub const DHCPCD_PATH: [:0]const u8 = "/usr/bin/dhcpcd";
 /// 42를 영영 안 주므로(TS 확인 5) 이 단어가 뜻을 갖는 것은 실기계에서뿐이다.
 ///
 /// `-b`는 안 붙인다(WN 실측 14).
-pub const DHCPCD_ARGV = [9:null]?[*:0]const u8{
+pub const DHCPCD_ARGV = [screen_args.ARGC:null]?[*:0]const u8{
     DHCPCD_PATH.ptr, "-B", "-j", "/dev/console", "-o", "ntp_servers", null, null, null,
 };
 

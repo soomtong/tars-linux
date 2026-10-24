@@ -39,6 +39,17 @@ pub fn build(b: *std.Build) void {
     // 핵심 결정이다 — init이 쓰는 것은 전부 시스템 콜이라 libc가 필요 없고,
     // 링크하지 않으면 정적 바이너리가 되어 initrd에 .so를 넣지 않아도 된다.
 
+    // SA-M0: init과 terminal이 함께 컴파일하는 argv 계약(`shared/screen_args.zig`).
+    // target · optimize를 주지 않는다 — 게스트 exe와 호스트 검사가 같은 모듈 객체를
+    // 받고 각자의 target으로 컴파일한다(SA design 확인 4). 순수 파일이라 libc가
+    // 없다. `config.zig`를 트리에 둔 모듈마다 붙여야 하고, 빠뜨리면 컴파일러가
+    // "no module named 'screen_args' available within module …"으로 어느 모듈인지
+    // 말한다.
+    const screen_args = b.createModule(.{
+        .root_source_file = b.path("../shared/screen_args.zig"),
+    });
+    exe_mod.addImport("screen_args", screen_args);
+
     const exe = b.addExecutable(.{
         .name = "init",
         .root_module = exe_mod,
@@ -85,6 +96,7 @@ pub fn build(b: *std.Build) void {
         .optimize = .safe,
         .single_threaded = true,
     });
+    config_cli_mod.addImport("screen_args", screen_args);
     const config_cli_exe = b.addExecutable(.{
         .name = "tars-config",
         .root_module = config_cli_mod,
@@ -117,6 +129,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    config_test_mod.addImport("screen_args", screen_args);
     const config_test = b.addExecutable(.{
         .name = "config_test",
         .root_module = config_test_mod,
@@ -177,6 +190,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    environ_test_mod.addImport("screen_args", screen_args);
     const environ_test = b.addExecutable(.{
         .name = "environ_test",
         .root_module = environ_test_mod,
@@ -194,6 +208,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    clock_test_mod.addImport("screen_args", screen_args);
     const clock_test = b.addExecutable(.{
         .name = "clock_test",
         .root_module = clock_test_mod,
@@ -260,6 +275,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    wifi_test_mod.addImport("screen_args", screen_args);
     const wifi_test = b.addExecutable(.{
         .name = "wifi_test",
         .root_module = wifi_test_mod,
@@ -287,6 +303,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    config_edit_test_mod.addImport("screen_args", screen_args);
     const config_edit_test = b.addExecutable(.{
         .name = "config_edit_test",
         .root_module = config_edit_test_mod,
@@ -300,6 +317,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    config_front_edit_test_mod.addImport("screen_args", screen_args);
     const config_front_edit_test = b.addExecutable(.{
         .name = "config_front_edit_test",
         .root_module = config_front_edit_test_mod,
@@ -313,6 +331,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    reload_test_mod.addImport("screen_args", screen_args);
     const reload_test = b.addExecutable(.{
         .name = "reload_test",
         .root_module = reload_test_mod,
@@ -329,6 +348,21 @@ pub fn build(b: *std.Build) void {
     const version_test = b.addExecutable(.{
         .name = "version_test",
         .root_module = version_test_mod,
+    });
+
+    // SA-M0: argv 계약의 왕복 검사. 검사 파일이 `shared/`에 있어 그 디렉터리가 이
+    // 모듈의 뿌리다 — `screen_args.zig`를 같은 디렉터리의 파일로 import하므로 위의
+    // `screen_args` 모듈은 안 붙인다. terminal의 `zig build test`에는 안 든다 — 같은
+    // 검사를 두 번 돌릴 이유가 없고, 한 곳이면 빠뜨릴 곳도 한 곳이다(SA design 결정 6).
+    const screen_args_test_mod = b.createModule(.{
+        .root_source_file = b.path("../shared/screen_args_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const screen_args_test = b.addExecutable(.{
+        .name = "screen_args_test",
+        .root_module = screen_args_test_mod,
     });
 
     // installArtifact를 부르지 않는다. terminal/build.zig의 input_test는
@@ -352,6 +386,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(config_front_edit_test).step);
     test_step.dependOn(&b.addRunArtifact(reload_test).step);
     test_step.dependOn(&b.addRunArtifact(version_test).step);
+    test_step.dependOn(&b.addRunArtifact(screen_args_test).step);
 }
 
 /// BV-M0: 저장소 뿌리의 `VERSION`과 git의 답 셋으로 버전 글자를 짓는다(BV design 결정 1~3).

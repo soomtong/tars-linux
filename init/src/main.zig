@@ -2,6 +2,7 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
+const screen_args = @import("screen_args");
 const power = @import("power.zig");
 const devices = @import("devices.zig");
 const storage = @import("storage.zig");
@@ -358,10 +359,18 @@ const Rescue = struct {
     flag: [:0]const u8,
 };
 
-/// 위 슬롯 둘. 아래 `children` 배열의 argv 리터럴과 짝이고, 어긋나면
-/// 탈출로가 엉뚱한 인자를 덮어쓴다 — terminal이면 키보드 종류 자리다.
-const TERMINAL_FLAG_SLOT: usize = 2;
+/// 위 슬롯 둘. terminal의 것은 `screen_args.Slot`에서 온다(SA-M0) — terminal이 같은
+/// enum으로 그 자리를 읽으므로 어긋날 수 없다. 콘솔 셸의 것은 init 혼자 짓고 혼자
+/// 쓰는 자리라 여기 숫자로 남는다.
+const TERMINAL_FLAG_SLOT: usize = slot(.flag);
 const CONSOLE_FLAG_SLOT: usize = 1;
+
+/// terminal argv의 자리 이름 → 배열 인덱스. 부팅(`main`) · `doReloadTerminal` · 탈출로가
+/// 전부 이것으로 칸을 가리킨다. SA 전에는 여기 상수 일곱과 terminal의 `args[n]` 여덟이
+/// 주석으로만 묶여 있었다.
+fn slot(s: screen_args.Slot) usize {
+    return @backingInt(s);
+}
 
 /// terminal은 우리가 빌드해 initrd 루트에 넣는 것이라 설정 대상이 아니다.
 const TERMINAL_PATH: [:0]const u8 = "/terminal";
@@ -386,12 +395,11 @@ const Child = struct {
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
     /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로, HI-M2에서
     /// 다섯에서 일곱으로, HI-M3에서 일곱에서 여덟으로, CB-M0에서 여덟에서
-    /// 아홉으로 늘었다. terminal이 받는 넷째가 keyboard, 다섯째가 키보드 장치
-    /// 경로, 여섯째가 한글 자판, 일곱째가 영문 자판, 여덟째가 한/영 전환 키
-    /// 목록, 아홉째가 클립보드 범위이고, 콘솔 셸은 그 자리를 전부 null로 둔다.
-    /// 같은 타입을 쓰는 상수가 셋 더 있다(`clock.CHRONYD_ARGV` ·
-    /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV`). 늘릴 때 함께 늘린다.
-    argv: [9:null]?[*:0]const u8,
+    /// 아홉으로 늘었다. 길이와 칸의 뜻은 SA-M0부터 `shared/screen_args.zig`의
+    /// `ARGC` · `Slot`에 있고 terminal이 같은 것을 읽는다. 콘솔 셸은 1번 뒤를
+    /// 전부 null로 둔다. 같은 타입을 쓰는 상수가 셋 더 있다(`clock.CHRONYD_ARGV` ·
+    /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV`) — `ARGC`를 올리면 함께 늘어난다.
+    argv: [screen_args.ARGC:null]?[*:0]const u8,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
     pid: linux.pid_t = -1,
     started_at: isize = 0,
@@ -587,15 +595,6 @@ const Live = struct {
     toggle: [config.TOGGLE_ARG_MAX]u8 = undefined,
 };
 
-/// terminal argv의 자리(`children[0].argv`). 부팅의 argv 리터럴과 짝이다 — 어긋나면 `reload terminal`이
-/// 엉뚱한 자리를 덮는다. 4번(키보드 장치 경로)은 설정이 아니라 안 건드린다.
-const TERM_SHELL_SLOT: usize = 1;
-const TERM_KEYBOARD_SLOT: usize = 3;
-const TERM_HANGUL_SLOT: usize = 5;
-const TERM_LATIN_SLOT: usize = 6;
-const TERM_TOGGLES_SLOT: usize = 7;
-const TERM_CLIPBOARD_SLOT: usize = 8;
-
 /// TC-M3. `reload terminal` — 화면을 init이 지금 쓰는 값으로 다시 띄운다(reload design의 M3 절).
 ///
 /// 순서 — argv를 먼저 다 바꾸고 그다음 terminal에 SIGTERM을 보낸다. 감독 루프가 거둘 때 `hold = .restart`라
@@ -620,13 +619,14 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     const new = live.cfg;
     const shell = resolveShell(new.shell);
     const term = &children[0];
-    term.argv[TERM_SHELL_SLOT] = shell.path().ptr;
-    term.argv[TERMINAL_FLAG_SLOT] = shell.configFlag(new.shell_config).ptr;
-    term.argv[TERM_KEYBOARD_SLOT] = new.keyboard.arg().ptr;
-    term.argv[TERM_HANGUL_SLOT] = new.hangul_layout.arg().ptr;
-    term.argv[TERM_LATIN_SLOT] = new.latin_layout.arg().ptr;
-    term.argv[TERM_TOGGLES_SLOT] = new.terminalToggles(&live.toggle).ptr;
-    term.argv[TERM_CLIPBOARD_SLOT] = new.clipboard.arg().ptr;
+    // `.device`(키보드 장치 경로)는 설정이 아니라 안 건드린다.
+    term.argv[slot(.shell)] = shell.path().ptr;
+    term.argv[slot(.flag)] = shell.configFlag(new.shell_config).ptr;
+    term.argv[slot(.keyboard)] = new.keyboard.arg().ptr;
+    term.argv[slot(.hangul)] = new.hangul_layout.arg().ptr;
+    term.argv[slot(.latin)] = new.latin_layout.arg().ptr;
+    term.argv[slot(.toggles)] = new.terminalToggles(&live.toggle).ptr;
+    term.argv[slot(.clipboard)] = new.clipboard.arg().ptr;
     term.rescue = if (live.mounted and new.shell_config == .on)
         .{ .slot = TERMINAL_FLAG_SLOT, .flag = shell.noConfigFlag() }
     else
@@ -1360,6 +1360,16 @@ pub fn main(init: std.process.Init.Minimal) void {
     const latin_arg = cfg.latin_layout.arg();
     // 클립보드 범위도 같은 성질이다(CB-M0).
     const clipboard_arg = cfg.clipboard.arg();
+    var term_argv: [screen_args.ARGC:null]?[*:0]const u8 = @splat(null);
+    term_argv[0] = TERMINAL_PATH.ptr;
+    term_argv[slot(.shell)] = shell_path.ptr;
+    term_argv[slot(.flag)] = shell_flag.ptr;
+    term_argv[slot(.keyboard)] = keyboard_arg.ptr;
+    term_argv[slot(.device)] = keyboard_path.cstr();
+    term_argv[slot(.hangul)] = hangul_arg.ptr;
+    term_argv[slot(.latin)] = latin_arg.ptr;
+    term_argv[slot(.toggles)] = terminal_toggle_arg.ptr;
+    term_argv[slot(.clipboard)] = clipboard_arg.ptr;
 
     // TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리에 든다(reload design
     // 결정 5). 아래 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 앞이다.
@@ -1388,17 +1398,10 @@ pub fn main(init: std.process.Init.Minimal) void {
         // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
         // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
         // 이 인자는 셸로 새지 않는다.
-        .argv = .{
-            TERMINAL_PATH.ptr,
-            shell_path.ptr,
-            shell_flag.ptr,
-            keyboard_arg.ptr,
-            keyboard_path.cstr(),
-            hangul_arg.ptr,
-            latin_arg.ptr,
-            terminal_toggle_arg.ptr,
-            clipboard_arg.ptr,
-        },
+        //
+        // SA-M0. 칸을 자리 번호가 아니라 `Slot` 이름으로 채운다 — terminal이 같은
+        // 이름으로 읽는다(`doReloadTerminal`도 같은 모양이다).
+        .argv = term_argv,
         .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
     };
     children[1] = .{

@@ -1,4 +1,5 @@
 const std = @import("std");
+const screen_args = @import("screen_args");
 
 /// 한글 조합. 시스템 콜도 `vt.zig`도 `drm.zig`도 안 본다(design 결정 1).
 /// 그 대가로 `hangul_test.zig`가 호스트에서 돈다 — 게이트 16분이 아니라
@@ -606,117 +607,115 @@ fn tenseFinal(j: u5) ?u5 {
     };
 }
 
-/// 한글 자판. `Shell`·`Keyboard`와 같은 화이트리스트 구조다
-/// (`init/src/config.zig`) — enum이 "무엇을 적을 수 있는가"를, 아래 switch들이
-/// "그것이 무엇을 하는가"를 정한다. 이름을 하나 더하면 switch들이 전부
-/// 컴파일 에러를 내서 빠뜨릴 수 없다.
-pub const Layout = enum {
-    dubeol,
-    sebeol_3p3,
-    shin_p2,
-    shin_pcs,
+/// 한글 자판. 이름은 SA-M0부터 init과 함께 컴파일하는 `shared/screen_args.zig`에
+/// 있다 — 거기가 "무엇을 적을 수 있는가"이고, 아래 switch들이 "그것이 무엇을
+/// 하는가"를 정한다. 이름을 하나 더하면 switch들이 전부 컴파일 에러를 내서
+/// 빠뜨릴 수 없고, SA부터는 init의 switch도 같이 난다.
+///
+/// 아래 넷이 enum의 메서드가 아니라 자유 함수인 이유 — Zig의 enum은 선언 밖에서
+/// 메서드를 더할 수 없고, 이 함수들이 보는 자판 표는 이 파일에 있다.
+pub const Layout = screen_args.HangulLayout;
 
-    /// 쿼티 배치의 문자 하나 → 후보. 인자는 언제나 쿼티다
-    /// (design 결정 13) — 영문 배열이 드보락이어도 여기 오는 문자는 안 바뀐다.
-    pub fn lookup(self: Layout, ch: u8) ?Cand {
-        return switch (self) {
-            .dubeol => dubeol(ch),
-            .sebeol_3p3 => sebeol3P3(ch),
-            .shin_p2 => shinP2(ch),
-            .shin_pcs => shinPcs(ch),
-        };
-    }
+/// 쿼티 배치의 문자 하나 → 후보. 인자는 언제나 쿼티다
+/// (design 결정 13) — 영문 배열이 드보락이어도 여기 오는 문자는 안 바뀐다.
+pub fn lookup(self: Layout, ch: u8) ?Cand {
+    return switch (self) {
+        .dubeol => dubeol(ch),
+        .sebeol_3p3 => sebeol3P3(ch),
+        .shin_p2 => shinP2(ch),
+        .shin_pcs => shinPcs(ch),
+    };
+}
 
-    /// 한글 상태에서 자모가 아닌 것을 내는 키(Patal의 `nonSyllableMap`).
-    ///
-    /// 세벌식은 이것이 없으면 숫자를 못 친다. 3-P3은 숫자 열이 자모라
-    /// (`1`이 종성 ㅋ) 되돌려 줄 자리가 필요하고, 신세벌 PCS는 오른쪽
-    /// 새끼손가락 키가 없는 키보드를 가정해서 괄호와 따옴표를 왼쪽으로
-    /// 옮겨 놓았다.
-    ///
-    /// 두벌식은 빈 표다. 두벌식에서 숫자 키는 애초에 자모가 아니라서
-    /// `lookup`이 null을 주고, 그러면 기존 길(확정하고 그 키의 바이트를
-    /// 보낸다)로 흘러간다.
-    ///
-    /// `u21`인 이유는 P2가 `✕`·`○`·`△` 같은 기호를 주기 때문이다.
-    /// 나가는 길은 `input.zig`의 `.bytes`이고 `commit_buf`가 아니다 — 조합
-    /// 중이던 음절과 이 기호가 둘 다 나가야 하는데 `commit_buf`는
-    /// 코드포인트 하나만 담는다.
-    ///
-    /// `두줄숫자`·`수정기호` 같은 옵션 맵은 안 옮긴다(design 비목표).
-    /// 여기 있는 것은 각 자판의 기본 맵뿐이다.
-    pub fn nonSyllable(self: Layout, ch: u8) ?u21 {
-        return switch (self) {
-            .dubeol => null,
-            .sebeol_3p3 => switch (ch) {
-                'Y' => '/',
-                'U' => '7',
-                'I' => '8',
-                'O' => '9',
-                'P' => ';',
-                'G' => '<',
-                'H' => '\'',
-                'J' => '4',
-                'K' => '5',
-                'L' => '6',
-                'B' => '>',
-                'N' => '0',
-                'M' => '1',
-                '<' => '2',
-                '>' => '3',
-                else => null,
-            },
-            .shin_p2 => switch (ch) {
-                'Y' => '✕',
-                'U' => '○',
-                'I' => '△',
-                'O' => '※',
-                'P' => ';',
-                'H' => '□',
-                'J' => '\'',
-                'K' => '"',
-                'L' => '·',
-                '"' => '/',
-                'N' => '―',
-                'M' => '…',
-                else => null,
-            },
-            .shin_pcs => switch (ch) {
-                'Y' => '{',
-                'U' => '}',
-                'I' => '\'',
-                'O' => '"',
-                'P' => ';',
-                'H' => '[',
-                'J' => ']',
-                'K' => ',',
-                'L' => '.',
-                'N' => '(',
-                'M' => ')',
-                else => null,
-            },
-        };
-    }
+/// 한글 상태에서 자모가 아닌 것을 내는 키(Patal의 `nonSyllableMap`).
+///
+/// 세벌식은 이것이 없으면 숫자를 못 친다. 3-P3은 숫자 열이 자모라
+/// (`1`이 종성 ㅋ) 되돌려 줄 자리가 필요하고, 신세벌 PCS는 오른쪽
+/// 새끼손가락 키가 없는 키보드를 가정해서 괄호와 따옴표를 왼쪽으로
+/// 옮겨 놓았다.
+///
+/// 두벌식은 빈 표다. 두벌식에서 숫자 키는 애초에 자모가 아니라서
+/// `lookup`이 null을 주고, 그러면 기존 길(확정하고 그 키의 바이트를
+/// 보낸다)로 흘러간다.
+///
+/// `u21`인 이유는 P2가 `✕`·`○`·`△` 같은 기호를 주기 때문이다.
+/// 나가는 길은 `input.zig`의 `.bytes`이고 `commit_buf`가 아니다 — 조합
+/// 중이던 음절과 이 기호가 둘 다 나가야 하는데 `commit_buf`는
+/// 코드포인트 하나만 담는다.
+///
+/// `두줄숫자`·`수정기호` 같은 옵션 맵은 안 옮긴다(design 비목표).
+/// 여기 있는 것은 각 자판의 기본 맵뿐이다.
+pub fn nonSyllable(self: Layout, ch: u8) ?u21 {
+    return switch (self) {
+        .dubeol => null,
+        .sebeol_3p3 => switch (ch) {
+            'Y' => '/',
+            'U' => '7',
+            'I' => '8',
+            'O' => '9',
+            'P' => ';',
+            'G' => '<',
+            'H' => '\'',
+            'J' => '4',
+            'K' => '5',
+            'L' => '6',
+            'B' => '>',
+            'N' => '0',
+            'M' => '1',
+            '<' => '2',
+            '>' => '3',
+            else => null,
+        },
+        .shin_p2 => switch (ch) {
+            'Y' => '✕',
+            'U' => '○',
+            'I' => '△',
+            'O' => '※',
+            'P' => ';',
+            'H' => '□',
+            'J' => '\'',
+            'K' => '"',
+            'L' => '·',
+            '"' => '/',
+            'N' => '―',
+            'M' => '…',
+            else => null,
+        },
+        .shin_pcs => switch (ch) {
+            'Y' => '{',
+            'U' => '}',
+            'I' => '\'',
+            'O' => '"',
+            'P' => ';',
+            'H' => '[',
+            'J' => ']',
+            'K' => ',',
+            'L' => '.',
+            'N' => '(',
+            'M' => ')',
+            else => null,
+        },
+    };
+}
 
-    /// 받침 넘기기(도깨비불). 두벌식만이다(design 결정 12).
-    ///
-    /// 세벌식은 초성 키와 종성 키가 아예 달라서 넘길 이유가 없고, 넘기면
-    /// 틀린다 — 3-P3에서 `각`+ㅜ는 `가구`가 아니라 `각ㅜ`가 맞다.
-    fn carriesFinal(self: Layout) bool {
-        return switch (self) {
-            .dubeol => true,
-            .sebeol_3p3, .shin_p2, .shin_pcs => false,
-        };
-    }
+/// 받침 넘기기(도깨비불). 두벌식만이다(design 결정 12).
+///
+/// 세벌식은 초성 키와 종성 키가 아예 달라서 넘길 이유가 없고, 넘기면
+/// 틀린다 — 3-P3에서 `각`+ㅜ는 `가구`가 아니라 `각ㅜ`가 맞다.
+fn carriesFinal(self: Layout) bool {
+    return switch (self) {
+        .dubeol => true,
+        .sebeol_3p3, .shin_p2, .shin_pcs => false,
+    };
+}
 
-    /// 연타 된소리. 세벌식 셋만이다.
-    fn tenseByRepeat(self: Layout) bool {
-        return switch (self) {
-            .dubeol => false,
-            .sebeol_3p3, .shin_p2, .shin_pcs => true,
-        };
-    }
-};
+/// 연타 된소리. 세벌식 셋만이다.
+fn tenseByRepeat(self: Layout) bool {
+    return switch (self) {
+        .dubeol => false,
+        .sebeol_3p3, .shin_p2, .shin_pcs => true,
+    };
+}
 
 /// 자모 하나를 먹인 결과.
 pub const Step = struct {
@@ -767,7 +766,7 @@ pub fn feed(buf: Syllable, cand: Cand, layout: Layout) Step {
             // 연타 된소리 — 신세벌의 `cc`가 ㄲ받침이 되는 자리다. 겹받침을
             // 먼저 본 뒤이므로 `joinFinal`과 안 겹친다(ㄱ+ㄱ은 겹받침 표에
             // 없다).
-            if (layout.tenseByRepeat() and buf.jong.? == j) {
+            if (tenseByRepeat(layout) and buf.jong.? == j) {
                 if (tenseFinal(j)) |t| return .{ .buf = .{
                     .cho = buf.cho,
                     .jung = buf.jung,
@@ -781,7 +780,7 @@ pub fn feed(buf: Syllable, cand: Cand, layout: Layout) Step {
             // 받침 넘기기(도깨비불). 두벌식만이고, 초성과 중성이 함께
             // 있을 때만 뜻이 있다 — 종성만 있는 상태에서 넘기면 확정할
             // 음절이 없다.
-            if (layout.carriesFinal() and has_cho and has_jung)
+            if (carriesFinal(layout) and has_cho and has_jung)
                 return carryFinal(buf, v, cand.jung_opens);
             return commitAnd(buf, .{ .jung = v, .jung_opens = cand.jung_opens });
         }
@@ -826,7 +825,7 @@ pub fn feed(buf: Syllable, cand: Cand, layout: Layout) Step {
         } };
         if (cand.cho) |c| {
             // 연타 된소리 — 세벌식의 `kk`가 ㄲ이 되는 자리다.
-            if (layout.tenseByRepeat() and buf.cho.? == c) {
+            if (tenseByRepeat(layout) and buf.cho.? == c) {
                 if (tenseInitial(c)) |t| return .{ .buf = .{ .cho = t } };
             }
             return commitAnd(buf, .{ .cho = c });

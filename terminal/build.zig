@@ -79,6 +79,14 @@ pub fn build(b: *std.Build) void {
         \\
     , target, guest_optimize);
 
+    // SA-M0: init과 함께 컴파일하는 argv 계약(`shared/screen_args.zig`). init/build.zig와
+    // 같은 줄이다 — target · optimize를 주지 않아 게스트 exe와 호스트 검사가 같은 모듈
+    // 객체를 받는다(SA design 확인 4). `input` · `hangul` · `clipboard`를 트리에 둔
+    // 모듈마다 붙여야 하고, 빠뜨리면 컴파일러가 어느 모듈인지 말한다.
+    const screen_args = b.createModule(.{
+        .root_source_file = b.path("../shared/screen_args.zig"),
+    });
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -100,6 +108,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("c_poll", c_poll.mod);
     exe_mod.addImport("c_stb_truetype", c_stb_truetype.mod);
     exe_mod.addImport("c_input", c_input.mod);
+    exe_mod.addImport("screen_args", screen_args);
 
     // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
     // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
@@ -173,6 +182,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     vt_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    vt_test_mod.addImport("screen_args", screen_args);
     addStbImage(b, vt_test_mod);
     const vt_test = b.addExecutable(.{
         .name = "vt_test",
@@ -203,6 +213,7 @@ pub fn build(b: *std.Build) void {
     });
     input_test_mod.link_libc = true;
     input_test_mod.addImport("c_input", c_input_host.mod);
+    input_test_mod.addImport("screen_args", screen_args);
     const input_test = b.addExecutable(.{
         .name = "input_test",
         .root_module = input_test_mod,
@@ -247,6 +258,7 @@ pub fn build(b: *std.Build) void {
         .target = host_target,
         .optimize = optimize,
     });
+    hangul_test_mod.addImport("screen_args", screen_args);
     const hangul_test = b.addExecutable(.{
         .name = "hangul_test",
         .root_module = hangul_test_mod,
@@ -263,6 +275,7 @@ pub fn build(b: *std.Build) void {
     });
     status_test_mod.link_libc = true;
     status_test_mod.addImport("c_input", c_input_host.mod);
+    status_test_mod.addImport("screen_args", screen_args);
     const status_test = b.addExecutable(.{
         .name = "status_test",
         .root_module = status_test_mod,
@@ -321,6 +334,7 @@ pub fn build(b: *std.Build) void {
         .target = host_target,
         .optimize = optimize,
     });
+    clipboard_test_mod.addImport("screen_args", screen_args);
     const clipboard_test = b.addExecutable(.{
         .name = "clipboard_test",
         .root_module = clipboard_test_mod,

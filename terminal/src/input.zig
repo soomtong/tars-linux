@@ -1,5 +1,6 @@
 const std = @import("std");
 const hangul = @import("hangul.zig");
+const screen_args = @import("screen_args");
 const dictation = @import("dictation.zig");
 
 /// `pub`인 이유는 `input_test.zig`가 `input.c.KEY_LEFT`처럼 커널이 정한
@@ -154,96 +155,20 @@ const dvorak_keymap = [_][2]u8{
     .{ ' ', ' ' }, // 57: KEY_SPACE
 };
 
-/// 영문 자판. 한글 자판과 직교한다(HI design 결정 13).
-pub const LatinLayout = enum { qwerty, dvorak };
-
-/// 켜진 한/영 전환 키의 집합(HI design 결정 7).
+/// 영문 자판 · 전환 키의 집합 · 그 글자의 버퍼 크기. SA-M0부터 init과 함께 컴파일하는
+/// `shared/screen_args.zig`에 있고 여기서는 이름만 다시 내보낸다 — 이 파일의 switch와
+/// `input_test` · `status.zig`가 `input.LatinLayout` · `input.Toggles`로 부르는 자리를
+/// 안 건드리기 위해서다. 콤마 목록 ↔ 집합(`Toggles.parse` · `Toggles.arg`)도 그쪽
+/// 한 벌이다. SA 전에는 둘이 `config.zig`와 여기에 한 벌씩이었고 잇는 것이 argv의
+/// 문자열뿐이었다.
 ///
-/// `init/src/config.zig`의 `Toggles`와 짝이다. 거기가 "설정 파일에 무엇을
-/// 적을 수 있는가"이고 여기가 "그것이 키를 어떻게 바꾸는가"인데, 둘을 잇는
-/// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과
-/// `hangul.Layout`이 이미 정확히 같은 모양이다. 문자열 문법을 못 박는 것은
-/// `config_test`의 `arg` → `parse` 왕복 검사다.
-///
-/// 다섯째 `esc_latin`(EL-M0)은 설정 파일에서 오는 길이 다르다. 앞의 넷은
-/// `hangul_toggle` 목록의 이름이고 `esc_latin`은 따로 있는 키(`esc_latin=on`)인데,
-/// init이 둘을 argv 문자열 하나로 합쳐 넘긴다(`Config.terminalToggles`, EL design
-/// 결정 1). 그래서 이 구조체가 담는 것은 "설정 파일의 한 줄"이 아니라 "argv로 온
-/// 목록"이다.
-pub const Toggles = struct {
-    hangul_key: bool = false,
-    shift_space: bool = false,
-    capslock_tap: bool = false,
-    lctrl_tap: bool = false,
-    /// 한글을 치다가 수정키 없는 Esc를 누르면 영문으로 돌아온다(EL design
-    /// 결정 2). 앞의 넷과 달리 한 방향이다 — 끄기만 하고 켜지는 않는다.
-    esc_latin: bool = false,
-};
-
-/// `togglesArg`가 만드는 문자열을 담을 버퍼의 크기. `config.zig`의
-/// `TOGGLE_ARG_MAX`와 같은 값이다.
-pub const TOGGLE_ARG_MAX = 64;
-
-/// `parseToggles`가 이름을 거르는 화이트리스트. 앞의 넷은 `config.zig`의
-/// `ToggleKey`와 이름이 같아야 한다. `esc_latin`은 그쪽 목록에 없고
-/// `Config.terminalToggles`가 붙인다(EL design 결정 1).
-const ToggleKey = enum { hangul_key, shift_space, capslock_tap, lctrl_tap, esc_latin };
-
-/// 콤마 목록을 집합으로 바꾼다.
-///
-/// init이 화이트리스트를 이미 거쳤으므로 여기 도착하는 값은 언제나
-/// 정규형이다. 공백을 떼고 모르는 이름을 흘려보내는 관대함은 terminal을
-/// 손으로 띄울 때를 위한 것이고, 로그는 안 남긴다 — init이 이미 한 번 경고를
-/// 찍었으므로 같은 줄을 두 번 낼 이유가 없다.
-pub fn parseToggles(text: []const u8) Toggles {
-    var t = Toggles{};
-    var it = std.mem.splitScalar(u8, text, ',');
-    while (it.next()) |raw| {
-        const name = std.mem.trim(u8, raw, " \t");
-        // 빈 항목과 `none`과 모르는 이름이 전부 여기서 떨어진다.
-        const key = std.meta.stringToEnum(ToggleKey, name) orelse continue;
-        switch (key) {
-            .hangul_key => t.hangul_key = true,
-            .shift_space => t.shift_space = true,
-            .capslock_tap => t.capslock_tap = true,
-            .lctrl_tap => t.lctrl_tap = true,
-            .esc_latin => t.esc_latin = true,
-        }
-    }
-    return t;
-}
-
-/// 로그에 찍을 정규형 목록. `config.zig`의 `Toggles.arg`와 같은 문자열을
-/// 만든다.
-///
-/// 파싱한 결과를 다시 문자열로 만드는 것이 요점이다. argv로 받은 문자열을
-/// 그대로 찍으면 "글자가 도착했다"만 증명되고 "우리가 그것을 맞게 읽었다"는
-/// 아무것도 증명되지 않는다 — `terminal: hangul layout=`이 `stringToEnum`을
-/// 거친 값을 `@tagName`으로 찍는 것과 같은 이유다.
-pub fn togglesArg(t: Toggles, buf: []u8) [:0]const u8 {
-    var len: usize = 0;
-    if (t.hangul_key) appendToggleName(buf, &len, "hangul_key");
-    if (t.shift_space) appendToggleName(buf, &len, "shift_space");
-    if (t.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
-    if (t.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
-    if (t.esc_latin) appendToggleName(buf, &len, "esc_latin");
-    if (len == 0) appendToggleName(buf, &len, "none");
-    buf[len] = 0;
-    return buf[0..len :0];
-}
-
-fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
-    if (len.* > 0) {
-        if (len.* + 1 >= buf.len) return;
-        buf[len.*] = ',';
-        len.* += 1;
-    }
-    for (name) |ch| {
-        if (len.* + 1 >= buf.len) return;
-        buf[len.*] = ch;
-        len.* += 1;
-    }
-}
+/// `Toggles`가 담는 것은 "설정 파일의 한 줄"이 아니라 "argv로 온 목록"이다. 다섯째
+/// `esc_latin`(EL-M0)은 파일의 `hangul_toggle`이 아니라 따로 있는 키 `esc_latin=on`에서
+/// 오고, init이 둘을 argv 문자열 하나로 합쳐 넘긴다(`Config.terminalToggles`, EL design
+/// 결정 1). 그래서 `main.zig`는 `Toggles.parse(.argv, …)`로 읽는다.
+pub const LatinLayout = screen_args.LatinLayout;
+pub const Toggles = screen_args.Toggles;
+pub const TOGGLE_ARG_MAX = screen_args.TOGGLE_ARG_MAX;
 
 // 두 표가 같은 길이여야 한다 — 아니면 한쪽에서만 배열 밖을 읽는다.
 // `qwerty_keymap.len`이 여러 곳에서 상한으로 쓰이기 때문이다.
@@ -1182,7 +1107,7 @@ pub const State = struct {
         // `.bytes`로 내보낸다 — `readKeys`가 `takeCommit()`을 그 키의 바이트보다
         // 먼저 비우므로 순서가 저절로 맞다(HI-M1 실측 2). 뒤집히면 셸에
         // `1가`가 도착한다.
-        if (self.hangul_layout.nonSyllable(ch)) |cp| {
+        if (hangul.nonSyllable(self.hangul_layout, ch)) |cp| {
             self.commitHangul();
             const n = std.unicode.utf8Encode(cp, &self.seq) catch return .redraw;
             return .{ .bytes = self.seq[0..n] };
@@ -1190,7 +1115,7 @@ pub const State = struct {
         // 자모가 아닌 문자 키(숫자·기호·공백)와 Enter·Tab·Esc가 여기 온다 —
         // 자판이 셋 다 null을 준다. 확정한 글자가 그 키의 바이트보다
         // 먼저 나가는 것을 보장하는 것은 `readKeys`다.
-        const cand = self.hangul_layout.lookup(ch) orelse {
+        const cand = hangul.lookup(self.hangul_layout, ch) orelse {
             self.commitHangul();
             return null;
         };

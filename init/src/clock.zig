@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const screen_args = @import("screen_args");
 const linux = std.os.linux;
 const config = @import("config.zig");
 
@@ -82,7 +83,7 @@ pub const CHRONYD_PATH: [:0]const u8 = "/usr/bin/chronyd";
 ///   -u root   게스트에 _chrony가 없다
 ///   -f        설정을 /run에서 읽는다
 ///   (-F 없음) 커널에 seccomp가 없다
-pub const CHRONYD_ARGV = [9:null]?[*:0]const u8{
+pub const CHRONYD_ARGV = [screen_args.ARGC:null]?[*:0]const u8{
     CHRONYD_PATH.ptr, "-d", "-u", "root", "-f", CONF_PATH.ptr, null, null, null,
 };
 

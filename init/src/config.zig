@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const screen_args = @import("screen_args");
 const linux = std.os.linux;
 
 /// main.zig에도 같은 함수가 있다. 세 줄짜리 헬퍼 하나 때문에 공용 모듈을
@@ -87,28 +88,13 @@ pub const EscLatin = enum {
 };
 
 /// terminal의 클립보드를 누구와 나누는가(CB design 결정 2). `shared`면 모든
-/// 패널과 워크스페이스가 하나를 쓰고, `pane`이면 패널마다 따로다.
+/// 패널과 워크스페이스가 하나를 쓰고, `pane`이면 패널마다 따로다. 값은 SA-M0부터
+/// `shared/screen_args.zig`에 있다(위 `Keyboard`와 같은 자리).
 ///
 /// 기본값이 `shared`인 것은 사용자가 정했다(2026-10-05). `net`·`firewall`과
 /// 달리 켜는 비용이 없고, `keyboard`·`hangul_layout`처럼 이 기계를 쓰는
 /// 사람이 쓰는 것이 기본값이다.
-///
-/// 이름이 `terminal/src/clipboard.zig`의 `Scope`와 짝이어야 한다. 둘을 잇는
-/// 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — `HangulLayout`과 같은
-/// 자리이고, 부팅 로그의 `terminal: clipboard scope=` 줄이 그것을 보인다.
-pub const ClipboardScope = enum {
-    shared,
-    pane,
-
-    /// terminal에 argv로 넘길 문자열. `HangulLayout.arg`와 같은 이유로
-    /// sentinel이 있는 리터럴을 돌려준다.
-    pub fn arg(self: ClipboardScope) [:0]const u8 {
-        return switch (self) {
-            .shared => "shared",
-            .pane => "pane",
-        };
-    }
-};
+pub const ClipboardScope = screen_args.ClipboardScope;
 
 /// 점 넷으로 적은 IPv4 주소를 바이트 넷으로 바꾼다. 시스템 콜이 없는 순수
 /// 함수이고, 이 파일에서 `parse`·`cmdlineWantsNoConfig`와 같은 성질이다.
@@ -739,186 +725,27 @@ pub const Shell = enum {
     }
 };
 
-/// 물리 키보드 종류. 재배치가 아니라 하드웨어 선언이다 — 사용자가 키를
-/// 임의로 옮기는 문이 아니라, "스페이스 옆 두 키가 어느 순서인가"라는 사실
-/// 하나를 알려주는 것이다(design doc 비목표: 범용 키바인딩 엔진은 안 만든다).
-///
-/// Shell과 같은 화이트리스트 구조다. enum에 없는 이름은 파싱을 통과할 수
-/// 없으므로 검사 목록을 따로 유지할 필요가 없다.
-pub const Keyboard = enum {
-    apple,
-    pc,
+/// SA-M0부터 키보드 종류 · 자판 둘 · 전환 키(`ToggleKey` · `Toggles`)는 init과 terminal이
+/// 함께 컴파일하는 `shared/screen_args.zig`에 있다. 여기서는 이름만 다시 내보낸다 —
+/// `tars-config` · `reload.zig` · 검사들이 `config.Keyboard`로 부르는 자리를 안 건드리기
+/// 위해서다. 화이트리스트라는 성질(enum에 없는 이름은 `stringToEnum`을 못 지난다)은
+/// 그대로이고, 기본값의 근거는 아래 `Config`의 필드 주석에 있다.
+pub const Keyboard = screen_args.Keyboard;
+pub const HangulLayout = screen_args.HangulLayout;
+pub const LatinLayout = screen_args.LatinLayout;
+pub const ToggleKey = screen_args.ToggleKey;
+pub const Toggles = screen_args.Toggles;
+pub const TOGGLE_ARG_MAX = screen_args.TOGGLE_ARG_MAX;
 
-    /// terminal에 argv로 넘길 문자열. @tagName은 sentinel이 없는 슬라이스를
-    /// 주는데 execve의 argv는 널 종료 문자열이 필요하다 — Shell.path()가
-    /// 경로를 [:0]const u8로 돌려주는 것과 같은 이유로 여기서 짝을 맞춘다.
-    ///
-    /// enum에 이름을 하나 더 넣으면 이 switch가 컴파일 에러를 내서
-    /// 빠뜨릴 수 없다.
-    pub fn arg(self: Keyboard) [:0]const u8 {
-        return switch (self) {
-            .apple => "apple",
-            .pc => "pc",
-        };
+/// `Toggles.parse`에 주는 sink. 모르는 이름을 이 파일의 `log`로 찍는다 — 글자는 SA 전과
+/// 같다. 설정 파일은 사람이 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이고,
+/// 그 규칙이 목록 안에서도 선다: 이름 하나가 틀려도 나머지는 살아남는다. terminal은
+/// `screen_args.ignore_unknown`을 준다 — init이 이미 한 번 찍었다.
+const LogUnknownToggle = struct {
+    pub fn unknown(_: LogUnknownToggle, name: []const u8) void {
+        log("unknown hangul_toggle '{s}', ignored", .{name});
     }
 };
-
-/// 한글 자판(HI design 결정 7). `Shell`·`Keyboard`와 같은 화이트리스트
-/// 구조다 — enum에 없는 이름은 파싱을 통과할 수 없다.
-///
-/// 이름이 `terminal/src/hangul.zig`의 `Layout`과 짝이어야 한다. 여기가
-/// "무엇을 적을 수 있는가"이고 저기가 "그것이 어떻게 조합하는가"인데, 둘을
-/// 잇는 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다. 어긋나면
-/// 증상은 "설정을 적었는데 기본 자판으로 뜬다"이고, 로그에 자판 이름이
-/// 찍히므로 HI 게이트가 그것을 본다.
-pub const HangulLayout = enum {
-    dubeol,
-    sebeol_3p3,
-    shin_p2,
-    shin_pcs,
-
-    pub fn arg(self: HangulLayout) [:0]const u8 {
-        return switch (self) {
-            .dubeol => "dubeol",
-            .sebeol_3p3 => "sebeol_3p3",
-            .shin_p2 => "shin_p2",
-            .shin_pcs => "shin_pcs",
-        };
-    }
-};
-
-/// 영문 자판. 한글 자판과 직교한다(HI design 결정 13) — 한글 배열은
-/// 물리 키 위치를 쓰므로 이 값이 무엇이든 안 흔들린다.
-pub const LatinLayout = enum {
-    qwerty,
-    dvorak,
-
-    pub fn arg(self: LatinLayout) [:0]const u8 {
-        return switch (self) {
-            .qwerty => "qwerty",
-            .dvorak => "dvorak",
-        };
-    }
-};
-
-/// 한/영 전환 키(HI design 결정 7).
-///
-/// `Shell`·`Keyboard`·자판 둘과 모양이 다른 유일한 설정이다. 그 넷은
-/// 하나를 고르는 것이지만 전환 키는 배타적이지 않다 — 한/영 키를 쓰면서
-/// CapsLock도 쓰는 것이 정상이다. 그래서 enum 하나가 아니라 아래 `Toggles`
-/// 집합이 값이 되고, 이 enum은 이름의 화이트리스트 역할만 한다.
-pub const ToggleKey = enum {
-    /// 실기의 한/영 키(evdev 122). 게이트가 못 보낸다 — QEMU가
-    /// `sendkey lang1`을 이름만 받고 조용히 버린다(HI-M0 실측 1). 그래서 이
-    /// 갈래를 덮는 것은 `input_test`의 호스트 검사뿐이다.
-    hangul_key,
-    /// Shift+Space. HI-M1이 유일한 전환 키로 골랐던 것이고 이제 끌 수 있다 —
-    /// `HELLO WORLD`를 칠 때 한/영이 바뀌는 것이 그 대가였다.
-    shift_space,
-    /// CapsLock을 짧게 눌렀다 뗀 것. 길게 누르면 대문자 잠금이다(결정 9).
-    capslock_tap,
-    /// 왼쪽 Ctrl을 짧게 눌렀다 뗀 것. 누른 동안 다른 키가 오면 평범한
-    /// modifier이므로 아무 일도 안 일어난다(결정 8).
-    lctrl_tap,
-};
-
-/// `Toggles.arg`가 만드는 문자열을 담을 버퍼의 크기. 넷을 전부 켠 목록이
-/// 45바이트이고, `Config.terminalToggles`가 `,esc_latin` 열 바이트를 붙이면
-/// 55바이트다. NUL 하나가 더 든다.
-pub const TOGGLE_ARG_MAX = 64;
-
-comptime {
-    const longest = "hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin";
-    if (longest.len + 1 > TOGGLE_ARG_MAX)
-        @compileError("TOGGLE_ARG_MAX is too small for the full toggle list");
-}
-
-/// 켜진 전환 키의 집합.
-pub const Toggles = struct {
-    hangul_key: bool = false,
-    shift_space: bool = false,
-    capslock_tap: bool = false,
-    lctrl_tap: bool = false,
-    /// `hangul_toggle` 목록으로는 못 켠다 — `ToggleKey`에 이 이름이 없다.
-    /// 켜는 것은 `Config.terminalToggles` 하나이고, 그 값은 설정 파일의
-    /// `esc_latin=` 줄에서 온다(EL design 결정 1). `parse`가 만드는 값에서는
-    /// 언제나 거짓이므로 `arg` → `parse` 왕복이 그대로 맞는다.
-    esc_latin: bool = false,
-
-    /// 콤마 목록을 집합으로 바꾼다.
-    ///
-    /// 모르는 이름은 로그만 남기고 넘어간다 — 설정 파일은 사람이 손으로
-    /// 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이라는 CP의 판단 그대로다.
-    /// 그 규칙이 목록 안에서도 서는 것이 여기서 새로운 점이다: 이름 하나가
-    /// 틀려도 나머지는 살아남는다.
-    ///
-    /// 빈 값(`hangul_toggle=`)은 뜻이 있는 입력이다. 기본값으로 떨어뜨리지
-    /// 않는다 — 그러면 전환 키를 전부 끌 방법이 없어진다.
-    pub fn parse(value: []const u8) Toggles {
-        var t = Toggles{};
-        var it = std.mem.splitScalar(u8, value, ',');
-        while (it.next()) |raw| {
-            const name = std.mem.trim(u8, raw, " \t");
-            if (name.len == 0) continue;
-            // `arg()`가 빈 집합에 쓰는 이름이다. 왕복을 위해 여기서 받는다 —
-            // 안 받으면 전환 키를 다 끈 사람의 부팅 로그에 매번
-            // "모르는 이름 none"이 찍힌다.
-            if (std.mem.eql(u8, name, "none")) continue;
-            const key = std.meta.stringToEnum(ToggleKey, name) orelse {
-                log("unknown hangul_toggle '{s}', ignored", .{name});
-                continue;
-            };
-            switch (key) {
-                .hangul_key => t.hangul_key = true,
-                .shift_space => t.shift_space = true,
-                .capslock_tap => t.capslock_tap = true,
-                .lctrl_tap => t.lctrl_tap = true,
-            }
-        }
-        return t;
-    }
-
-    /// argv로 넘기고 로그에 찍을 정규형 콤마 목록. 버퍼는 호출자가 준다 —
-    /// 이 파일에는 힙이 없고, `Keyboard.arg()`처럼 상수 문자열을 돌려줄 수도
-    /// 없다(조합이 서른두 가지다).
-    ///
-    /// 정규화가 이 함수의 값이다. 설정 파일에 어떤 순서로 적었든 enum 선언
-    /// 순서로 나오므로, 로그에 찍힌 문자열 하나가 곧 집합 전체다. HI 게이트가
-    /// 그 줄 하나로 "무엇이 켜지고 무엇이 꺼졌는가"를 본다.
-    ///
-    /// 하나도 안 켜졌으면 `none`이다 — 빈 문자열을 argv에 넣으면 terminal
-    /// 쪽에서 "인자가 없다"와 구분이 안 된다.
-    pub fn arg(self: Toggles, buf: []u8) [:0]const u8 {
-        var len: usize = 0;
-        if (self.hangul_key) appendToggleName(buf, &len, "hangul_key");
-        if (self.shift_space) appendToggleName(buf, &len, "shift_space");
-        if (self.capslock_tap) appendToggleName(buf, &len, "capslock_tap");
-        if (self.lctrl_tap) appendToggleName(buf, &len, "lctrl_tap");
-        if (self.esc_latin) appendToggleName(buf, &len, "esc_latin");
-        if (len == 0) appendToggleName(buf, &len, "none");
-        buf[len] = 0;
-        return buf[0..len :0];
-    }
-};
-
-/// `Toggles.arg`가 쓰는 이어붙이기. 첫 항목이 아니면 콤마를 먼저 넣는다.
-///
-/// 모자라면 자른다. 위 `comptime`이 `TOGGLE_ARG_MAX`가 최악의 경우보다
-/// 크다는 것을 못 박으므로 이 길로 실제로 갈 일은 없고, 그래도 배열 밖을
-/// 쓰지 않는 쪽으로 적어 둔다. `len.* + 1`을 보는 것은 `buf[len]`에 들어갈
-/// NUL 한 칸을 남기기 위해서다.
-fn appendToggleName(buf: []u8, len: *usize, name: []const u8) void {
-    if (len.* > 0) {
-        if (len.* + 1 >= buf.len) return;
-        buf[len.*] = ',';
-        len.* += 1;
-    }
-    for (name) |ch| {
-        if (len.* + 1 >= buf.len) return;
-        buf[len.*] = ch;
-        len.* += 1;
-    }
-}
 
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
 ///
@@ -1103,7 +930,7 @@ pub fn parse(text: []const u8) Config {
             // 앞의 넷과 모양이 다른 유일한 키다(결정 7). `stringToEnum`
             // 하나로 안 끝나고 콤마로 갈라야 한다. 모르는 이름을 흘려보내는
             // 규칙은 같고, 그 규칙이 목록 안에서도 선다.
-            c.hangul_toggle = Toggles.parse(value);
+            c.hangul_toggle = Toggles.parse(.file, value, LogUnknownToggle{});
         } else if (std.mem.eql(u8, key, "shell_config")) {
             // shell·keyboard·자판 둘과 완전히 같은 모양이다. `hangul_toggle`만
             // 집합이라 다르고, 여섯째 키는 다시 enum 하나다.

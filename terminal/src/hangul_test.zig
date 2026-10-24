@@ -11,7 +11,7 @@ fn typeAll(layout: hangul.Layout, keys: []const u8, out: []u8) ![]const u8 {
     var buf = hangul.Syllable{};
     var len: usize = 0;
     for (keys) |ch| {
-        const cand = layout.lookup(ch) orelse return error.NotAJamoKey;
+        const cand = hangul.lookup(layout, ch) orelse return error.NotAJamoKey;
         const step = hangul.feed(buf, cand, layout);
         if (step.commit) |cp| len += try std.unicode.utf8Encode(cp, out[len..]);
         buf = step.buf;

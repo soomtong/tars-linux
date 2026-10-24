@@ -12,21 +12,14 @@
 //! 누가 갖는지가 여기다.
 
 const std = @import("std");
+const screen_args = @import("screen_args");
 
 /// 클립보드를 누구와 나누는가(CB design 결정 2). `tars.conf`의
-/// `clipboard=` 값이고, init이 argv의 아홉째 칸으로 넘긴다.
-///
-/// 이름이 `init/src/config.zig`의 `ClipboardScope`와 짝이어야 한다. 둘을
-/// 잇는 것은 argv의 문자열 하나뿐이라 컴파일러가 못 잡는다 — 자판 이름
-/// (`HangulLayout` ↔ `hangul.Layout`)과 같은 자리다. 어긋나면 증상은 "설정을
-/// 적었는데 기본값으로 뜬다"이고, 부팅 로그의 `terminal: clipboard scope=`
-/// 줄이 그것을 보인다.
-pub const Scope = enum {
-    /// 모든 패널과 모든 워크스페이스가 하나를 쓴다. 기본값이다.
-    shared,
-    /// 패널마다 하나다. CB 전의 동작과 같다.
-    pane,
-};
+/// `clipboard=` 값이고, init이 argv의 아홉째 칸으로 넘긴다. 이름은 SA-M0부터
+/// init과 함께 컴파일하는 `shared/screen_args.zig`에 있다 — `shared`는 모든
+/// 패널과 모든 워크스페이스가 하나를 쓰고(기본값), `pane`은 패널마다 하나다
+/// (CB 전의 동작).
+pub const Scope = screen_args.ClipboardScope;
 
 /// 문자열 하나를 소유하는 칸.
 ///
