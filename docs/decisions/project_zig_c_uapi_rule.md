@@ -65,7 +65,9 @@ Debug가 아닌 모드에서 Zig가 `-D_FORTIFY_SOURCE`를 붙이면 glibc의
 
 Zig 0.17이 `@cImport`를 없애서 0.16에서 미리 translate-c 패키지(ghostty가
 0.16에서 쓰는 `80f8b6e` 판)로 옮겼다. 번역은 `terminal/build.zig`의
-`translateC`가 stub 헤더로 하고, 파일은 `@import("c_drm")`처럼 받는다.
+`translateC`가 stub 헤더로 하고, 파일은 `@import("c_drm")`처럼 받는다. ZU-M2(2026-10-24)가 0.17 판
+`02ff0c5`(2.0.0, ghostty의 `pkg/translate-c` wrapper가 받는 것과 같은 판)로 올렸다 —
+`Translator.init`의 모양이 같아 `translateC`는 안 바뀌었다.
 
 패키지도 ReleaseSafe 번역에 `-D_FORTIFY_SOURCE=2`를 붙이고(패키지
 `src/main.zig:233`), 그 인자가 우리의 `defineCMacro` · `extra_args`보다 뒤에
@@ -107,7 +109,7 @@ type`)일 수 있다 — `ghostty_vt.Stream`이 그랬고 필요한 것은 인�
 돌려주고 libc가 그것을 `-1` + `errno`로 바꾸던 일을 `std.os.linux.errno(rc)`가
 대신한다.
 
-Zig 0.16에서 `environ` 대체: `pub fn main(init: std.process.Init.Minimal)`로
+Zig 0.16부터 `environ` 대체: `pub fn main(init: std.process.Init.Minimal)`로
 선언하면 `init.environ.block.slice.ptr`이 커널이 스택에 올려준 envp다
 (`std/start.zig:508-519`가 libc 없이 채운다). `execve`에 그대로 넘긴다 — std
 자신도 같은 방식이다(`std/Io/Threaded.zig:16792`). 인자 없는 `main()`이나 전체

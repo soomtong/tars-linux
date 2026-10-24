@@ -1,16 +1,18 @@
-# HANDOFF: 열어 둔 서브프로젝트가 없다 — 점검이 남긴 후보와 실기 확인을 기다린다
+# HANDOFF: 열어 둔 서브프로젝트가 없다 — Zig 0.17 전환(ZU)을 닫았고, 점검이 남긴 후보와 실기 확인을 기다린다
 
 ## 지금 상태 (2026-10-24)
 
 - 첫 공개 버전 0.1.0(2026-10-11) — tag `v0.1.0` = `0a6d4bc`, GitHub release에 `tars-0.1.0-x86_64.iso`와 `SHA256SUMS`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
-- 마지막으로 닫힌 것은 Gate Flakes(GF-M0~M2, 2026-10-24)다. 루트 게이트는 initrd를 prebuild 한 번만 만들고 회차마다 inode를
+- 마지막으로 닫힌 것은 Zig Upgrade(ZU-M2, 2026-10-24)다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`(0.17 전환 커밋, PR #14519).
+  깨진 자리와 대체는 `docs/decisions/project_zig_upgrade.md`의 표에 있고, 호스트 macOS의 0.17(`/opt/homebrew/bin/zig`)로
+  `ast-check` · `fmt --check`를 돌릴 수 있다(빌드는 컨테이너가 한다). 같은 날 그 앞에 Gate Flakes(GF-M0~M2)를 닫았다. 루트 게이트는 initrd를 prebuild 한 번만 만들고 회차마다 inode를
   대조하며, 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`)에 남고, `gate_lib.sh`의 `tlog`가
   커널 printk가 자른 `terminal:` 줄을 잇는다. 그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 2026-10-24에 프로젝트 점검을 했다. 찾은 여덟 가운데 둘(문서 · shellcheck 정리 `5dd567c` · `523c909`, 게이트 간헐 GF)을 닫았고
   나머지는 아래 "다음 후보"의 첫 항목이다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(GF-M2): 22/22, prebuild 약 4분 + lanes 약 5분. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
+  마지막 루트 게이트(ZU-M2): 22/22, prebuild 364초(빈 `zig-pkg`를 다시 받은 회차, 평소 약 4분) + lanes 305초. 게이트 운영(`RUNS` · `JOBS` · `run_in_background`)은
   `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절. 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다. 그래서 옛 설정 디스크의
   alias 처방(`running-tars.md` "seed는 한 번만 깔린다")은 지금 흐름에 필요 없다.
@@ -47,15 +49,10 @@
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
 - 패키지 매니저(아래 "이미지 뷰어 메모"), IPv6(방화벽 표를 `inet`으로, FW design 위험 6), USB 동글 층 B,
   vim-runtime 축소(38MB — 문법 색 · filetype만 고르는 길).
+- terminal 바이너리의 디버그 섹션 — 0.17에서 15.2MB 가운데 `.debug_*`가 12.0MB(`.debug_loc` 5.8MB)이고 `make_initrd.sh:154`가
+  strip을 안 해 initrd에 그대로 실린다(ZU design 실측 9). `strip --strip-debug`(심볼은 남긴다)로 패닉 trace가 그대로 읽히는지 재고,
+  그렇다면 initrd 4.6MB를 되찾는다. init 바이너리도 같이 본다.
 - 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
-
-## 열린 대기 조건
-
-- ZU-M2(ghostty의 Zig 0.17 전환)를 여는 신호는 ghostty main의 `build.zig.zon`이 `minimum_zig_version = "0.17.0"`이 되는
-  것이다. 확인 명령: `curl -sSL https://raw.githubusercontent.com/ghostty-org/ghostty/main/build.zig.zon | rg minimum_zig`.
-  태그 릴리즈는 기다리지 않고 SHA로 고정한다. M2의 할 일은 `docs/specs/2026-10-03-tars-zig-upgrade-design.md`의 Milestone 절에 있다.
-  호스트 macOS의 0.17은 `/opt/homebrew/bin/zig`다(`~/.local/bin/zig`는 0.15.2, 빌드는 컨테이너가 한다).
-  2026-10-20 확인 때도 신호가 없었다(ghostty main은 `"0.16.0"`, PR #14519는 draft를 벗었지만 아직 open).
 
 ## 이미지 뷰어 메모 (기본 이미지에 넣지 않는다 — 사용자 결정, 2026-10-03)
 

@@ -898,7 +898,7 @@ mutation 2), terminal은 setsid를 안 해서 제 그룹이 없어 CT-M1부터 �
 않는다. config 1차의 TC-M3 검사가 Ctrl+R 검사 앞에 있는 이유다. 그리고 반쪽 패널(pane 체인 부팅
 B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joined_screen_dump`로 본다(TC).
 
-92. 게스트 코드(terminal · init)에 `std.debug.print`를 쓰지 않는다 — 컨테이너 Zig 0.16의 그것은
+92. 게스트 코드(terminal · init)에 `std.debug.print`를 쓰지 않는다 — 컨테이너 Zig의 그것은(0.16에서 잰 것, 0.17도 같은 규칙)
 64바이트 버퍼로 stderr를 잠그고 비워 한 줄이 write 여럿이고, 두 프로세스가 같은 콘솔에 쓰면 호출
 사이가 끼어들 틈이다(TC-M3 게이트를 하룻밤에 두 번 빨갛게 했다). `logline.zig`가 한 줄을 write
 하나로 보내고(2048 = 커널 tty chunk), 루트 `check.sh`가 회차마다 끼어든 줄 A · B와 잘린 줄 C를 센다.
@@ -1077,12 +1077,12 @@ B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joi
 - `rg`에 `-E`를 "extended regex"로 쓰기 — `-E`는 `--encoding`이다.
 - Bash 도구에서 `cd`로 옮겨 다니기 — 작업 디렉터리가 호출 사이에 남는다.
   조사성 명령은 저장소 루트 기준 상대 경로를 그대로 쓴다.
-- `std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기 — Zig 0.16에
-  둘 다 없다. `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
+- `std.time.Timer` / `std.posix.clock_gettime`으로 시간 재기 — Zig 0.16부터
+  둘 다 없다(0.17도 같다). `std.Io.Clock.now(.awake, io)`이고 단조 시계 이름이
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
   `vt.Screen`이 `io`를 필드로 든 이유가 이것이다(CS-M0).
-- `std.posix.getenv` — Zig 0.16에 없다.
-- Zig 0.16의 multiline 문자열(`\\`)에 탭 넣기 — 거부한다. 탭이 든 글자는 `"\t"`로
+- `std.posix.getenv` — Zig 0.16부터 없다(0.17도 같다).
+- Zig의 multiline 문자열(`\\`)에 탭 넣기 — 거부한다. 탭이 든 글자는 `"\t"`로
   잇는다(TC).
 - `linux.W.TERMSIG`를 숫자와 비교하기 — enum이다(TC).
 - `@embedFile`로 모듈 뿌리 밖의 파일 읽기 — 못 읽는다. `kernel/dictation/tars-dictate`의

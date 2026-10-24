@@ -128,3 +128,4 @@ copy mode · 클립보드
 
 - [latticedb survey](docs/decisions/project_latticedb_survey.md) — Zig 임베디드 그래프 DB, 한글 FTS가 안 돼 안 쓴다(2026-10-01)
 - [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium, 게스트 권한에서 막힌다(2026-10-01)
+- [Zig upgrade](docs/decisions/project_zig_upgrade.md) — 0.16 → 0.17은 ghostty를 따라 SHA로 고정, 컨테이너가 거부하지 않는 문법은 다시 들어온다, 없어진 std 선언과 대체 표(2026-10-24)

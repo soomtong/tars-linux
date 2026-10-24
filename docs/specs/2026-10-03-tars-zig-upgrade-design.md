@@ -2,7 +2,7 @@
 
 접두사: ZU
 
-Status: 진행 중(2026-10-03) — M0 · M1 끝(`**` → `@splat`, `@cImport` → translate-c 패키지, 실측 1~5, 루트 게이트 17체인 3/3). M2는 ghostty의 0.17 전환이 업스트림에 들어간 뒤에 연다.
+Status: 끝났다(2026-10-24) — M0 · M1(2026-10-03, `**` → `@splat`, `@cImport` → translate-c 패키지) · M2(2026-10-24, 컨테이너 0.17.0 · ghostty `3d07ef9` · 고침 47자리 · `zig fmt`, 실측 6~10, 루트 게이트 22/22).
 
 관련 문서: `docs/specs/2026-08-13-tars-zig-migration-design.md`(Rust를 Zig 0.16으로 옮긴 ZM) ·
 `docs/decisions/project_zig_c_uapi_rule.md`(translate-c가 fortify 헤더를 못 넘는 일) ·
@@ -158,3 +158,46 @@ stub 헤더 하나에 `#undef _FORTIFY_SOURCE`를 뒀다 — 명령줄 define은
 
 17체인 3/3, `FAIL` 0줄, 1시간 1분 50초. `__read_chk`를 지나는 `pty`의 읽기와 fortify를 켠 `drm`이
 부팅하는 모든 체인에서 섰다.
+
+## 실측 (M2, 2026-10-24)
+
+### 실측 6 — ghostty `3d07ef9`는 0.17 의존으로 그대로 서고, 우리 코드가 깨지는 자리는 47이다
+
+호스트 macOS의 0.17.0으로 `terminal` · `init` 사본을 빌드해서 뽑고(plan의 "착수 전에 아는 것"), 컨테이너
+0.17.0이 확인했다. ghostty 쪽에서 컴파일이 깨진 것은 둘뿐이다 — `effects.write_pty` 콜백의 인자가
+`[]const u8`이 됐고, kitty `Placement.Location`에 `relative`(P=/Q= 부모 상대 placement)가 늘었다. 나머지
+45는 Zig std가 없앤 것(`bufPrintZ` 11 · `dupeZ` 1 · `indexOfIgnoreCase` 1 · `@typeInfo(...).fields` 10 ·
+`std.builtin.OptimizeMode` · `b.build_root` · `b.pathFromRoot` 9) · std 안의 어긋남(`waitpid`는 `*i32`인데
+`W.*`는 `u32` — 8) · M0 뒤에 다시 들어온 `**` 5다. 그 다섯은 전부 2026-10-03 뒤의 WP · AU · BV · config_edit
+코드다 — 컨테이너 컴파일러가 거부하지 않는 문법은 다시 들어온다. 이제 컨테이너가 0.17이라 게이트가 막는다.
+
+착수 전 6("참조 구현이 고친 나머지는 우리 코드에 없다")은 그날은 맞았고 그 뒤 세 주 동안 `dupeZ` · `b.build_root` ·
+`std.ascii.indexOfIgnoreCase`가 들어왔다. 신호를 기다리는 동안 코드는 멈춰 있지 않는다.
+
+### 실측 7 — translate-c는 zon 두 줄만 바뀌었다 (결정 4 성립)
+
+ghostty 0.17은 zon의 URL 대신 저장소 안 `pkg/translate-c`(wrapper)를 받고, wrapper가 codeberg 판
+`translate_c-02ff0c5…`(2.0.0)와 `apple_sdk`를 받는다. `Translator.init(dep, .{ .name, .c_source_file, .target,
+.optimize, .link_libc })` · `.mod` · `addIncludePath`가 그대로라 우리 `translateC`는 안 바뀌었다. wrapper를
+거치지 않고 안쪽 패키지를 바로 받았다 — wrapper가 더 주는 것은 `addImportToModule` 하나이고 그것이 `translateC`다.
+
+### 실측 8 — 0.17 `zig fmt`는 438줄 · 30파일을 바꾸고, 그중 84줄이 `@backingInt`다
+
+`@intFromEnum` → `@backingInt` 84줄(옛 이름도 컴파일된다), 0.17이 `type`을 식별자로 허용해 `@"type"` → `type`
+(`input_test.zig`의 `input_event`), 끝 쉼표 없는 여러 줄 호출을 한 줄로 합치기, 문자열 배열의 열 정렬. M0 실측 2의
+61줄이 이 안에 있다. 고침과 따로 commit해서 diff를 갈랐다(plan 결정 M2-D).
+
+### 실측 9 — terminal 바이너리가 4.6MB 커졌고 그 전부가 디버그 섹션이다
+
+컨테이너 0.17, 캐시 없는 빌드: init `zig build` + `zig build test` 1분 14초, terminal `./prepare.sh`(빈 `zig-pkg`에
+패키지를 다시 받고 translate-c · aro를 컴파일하는 것 포함) 2분 37초, 이어진 `zig build test` 4.5초.
+`zig-out/bin/terminal`은 15,176,440바이트(M1 10,577,544). `size -A`로 보면 `.debug_*`가 12.0MB(`.debug_loc` 5.8MB ·
+`.debug_info` 2.8MB · `.debug_line` 1.4MB), `.text` 2.1MB, `.rodata` 0.4MB — 커진 것은 0.17 컴파일러가 더 내는 디버그
+정보다. `kernel/make_initrd.sh:154`가 strip을 안 하므로(패닉 trace의 심볼을 지키려고, TF-M4) 이 4.6MB는 initrd에 그대로
+실린다. 이번에는 두고 HANDOFF에 적었다 — `.debug_loc`만 떼는 길(`strip --strip-debug`는 심볼은 남긴다)을 다음에 잰다.
+
+### 실측 10 — 루트 게이트는 첫 판에 22/22다
+
+고침 commit과 fmt commit을 함께 덮어 한 번 돌렸다(plan 결정 M2-D). `FAIL` 0줄, prebuild 364초 + lanes 305초 =
+11분 12초(GF-M2 때 prebuild 약 4분 — 빈 `zig-pkg`에 패키지를 다시 받고 translate-c · aro를 처음 컴파일한 몫이다. 다음
+게이트부터는 캐시가 있다). 호스트 0.17로 사본에서 뽑은 고침 표 밖의 오류는 컨테이너에서도 하나도 안 나왔다.
