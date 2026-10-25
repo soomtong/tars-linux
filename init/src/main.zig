@@ -1094,6 +1094,32 @@ const Boot = struct {
     button_fds: [devices.MAX_BUTTONS]i32 = undefined,
     button_count: usize = 0,
 
+    // ── 셸 · env(`buildEnv`) ───────────────────────────────────────────
+    /// `resolveShell` 뒤의 값 — `tars.conf`가 적은 이름이 아니라 initrd에 정말 있는 셸.
+    /// `HISTFILE` · ssh의 셸 · `children[1]`이 전부 이것을 본다.
+    shell: config.Shell = undefined,
+    shell_path: [:0]const u8 = undefined,
+    /// `TZ=` 항목의 글자. `env_buf`가 이 안의 포인터를 담는다.
+    tz_buf: [environ.TZ_ENTRY_MAX]u8 = undefined,
+    tz_entry: [:0]const u8 = undefined,
+    /// 자식 모두가 받는 env 블록. 자식은 fork 뒤 execve로 이 포인터를 읽는다.
+    env_buf: environ.Block = undefined,
+    envp: [*:null]const ?[*:0]const u8 = undefined,
+    /// 커널이 준 env 블록. reload가 블록을 다시 지을 때의 바탕이다(`Live.kernel_env`).
+    kernel_env: [*:null]const ?[*:0]const u8 = undefined,
+
+    // ── 자식(`placeChildren`) ──────────────────────────────────────────
+    /// 전환 키의 글자 — `screen_args.encode`가 여기에 쓰고 terminal argv의 7번 칸이 이것을
+    /// 가리킨다. `reload terminal`이 다시 지은 것은 `Live.toggle`에 있다(TC-M3).
+    terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined,
+    /// `/config/services.d`의 목록. 서비스 칸의 argv가 이 안의 경로를 가리킨다.
+    service_list: services.List = .{},
+    /// TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리(reload design 결정
+    /// 5). 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 먼저 채운다.
+    live: Live = undefined,
+    /// 감독 목록 열셋 — terminal · 콘솔 셸 · 데몬 셋 · 서비스 여덟(`SLOTS`).
+    children: [SLOTS]Child = undefined,
+
     /// 단계 2. 설정 디스크 → 설정 파일 → cmdline 탈출로 → seed 넷 → `config shell=` 로그 줄.
     fn readConfig(self: *Boot) void {
         self.mounted = mountConfig();
@@ -1185,6 +1211,261 @@ const Boot = struct {
         devices.resolveKeyboard(devices.SYS_INPUT, &self.keyboard_path);
         self.button_count = devices.openPowerButtons(devices.SYS_INPUT, &self.button_fds);
     }
+
+    /// 단계 4. 셸을 정하고, 시간대와 env 블록을 짓고, ssh 세션에 같은 목록을 준다.
+    fn buildEnv(self: *Boot, init: std.process.Init.Minimal) void {
+        // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
+        // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
+        // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
+        self.shell = resolveShell(self.cfg.shell);
+        self.shell_path = self.shell.path();
+
+        // TS-M3. `resolveShell`과 같은 자리의 같은 선택이다 — 설정이 고른 이름의
+        // 파일이 initrd에 정말 있는지 보고, 없으면 UTC다. 이 값이 env 블록에
+        // 들어가면 게스트의 모든 프로세스가 물려받는다(design 결정 9) — 셸도
+        // `date`도 같은 것을 본다.
+        const tz = resolveTimezone(self.cfg.timezone);
+        self.tz_entry = environ.tzEntry(&self.tz_buf, tz.slice());
+
+        // ── env 블록은 여기서 짓는다(SM-M2) ──────────────────────────────────
+        //
+        // UT-M0에서는 `main()`의 첫 줄이었다. 내려온 이유는 `HISTFILE`이
+        // 셸마다 다른 파일이어야 하기 때문이다(결정 3) — 그 값을 알려면 설정을
+        // 읽고 `resolveShell`이 끝나 있어야 한다.
+        //
+        // `cfg.shell`이 아니라 `shell`을 보는 것이 중요하다. `tars.conf`가
+        // zsh라고 적어도 initrd에 zsh가 없으면 실제로 도는 것은 fish이고, 그때
+        // `HISTFILE=/config/zsh_history`를 주면 아무도 안 읽는 파일 이름을 env에
+        // 심는 것이 된다. 폴백 뒤의 값을 쓰면 로그의 `config shell=`과 여기가
+        // 언제나 같은 셸을 말한다.
+        self.kernel_env = init.environ.block.slice.ptr;
+        self.envp = environ.withTarsEnv(
+            self.kernel_env,
+            &self.env_buf,
+            self.tz_entry,
+            self.shell.histEntries(),
+        );
+
+        // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
+        // 블록을 받는다는 것은 `supervise()`가 `start(c, envp)`를 한 루프에서
+        // 부르는 코드 구조가 보장한다.
+        //
+        // withTarsEnv가 자리 부족으로 폴백했으면 이 줄들이 안 나온다. 그 침묵이
+        // 곧 판정이다.
+        //
+        // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
+        // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
+        if (self.envp != self.kernel_env) {
+            logline.print("tars-init: env {s} {s} {s}\n", .{
+                environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry,
+            });
+            // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
+            // 그 침묵이 결정 3의 절반(fish는 XDG 하나로 끝난다)을 로그에서
+            // 읽는 법이다.
+            for (self.shell.histEntries()) |entry| {
+                logline.print("tars-init: env {s}\n", .{entry});
+            }
+        } else {
+            logline.print("tars-init: env unchanged (no room for PATH)\n", .{});
+        }
+
+        // SV-M2 결정 9. ssh 세션이 콘솔과 같은 셸 · 같은 env를 갖게 한다. `shell`은
+        // `resolveShell` 뒤의 값이다 — 위 `HISTFILE`이 폴백 뒤의 셸을 보는 것과 같은
+        // 이유다. 서비스(sshd)가 뜨기 전이어야 하므로 `supervise`보다 앞이면 되고, env
+        // 블록과 나란히 두는 것이 "같은 목록"(M2-B)을 읽기에 맞다.
+        //
+        // 크기 `3 + 4` — 앞의 셋에 셸별 히스토리 env(가장 긴 zsh가 셋)가 붙고 한 칸이
+        // 남는다. `config.zig`의 목록을 늘려 넘치면 ReleaseSafe가 여기서 패닉한다.
+        var ssh_env: [3 + 4][]const u8 = undefined;
+        var ssh_env_len: usize = 0;
+        for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry }) |e| {
+            ssh_env[ssh_env_len] = e;
+            ssh_env_len += 1;
+        }
+        for (self.shell.histEntries()) |e| {
+            ssh_env[ssh_env_len] = e;
+            ssh_env_len += 1;
+        }
+        login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, self.shell_path, ssh_env[0..ssh_env_len]);
+    }
+
+    /// 단계 5. 일꾼 둘 — 믹서는 fork만 하고 돌아오고, 방화벽은 여기서 기다린다.
+    fn startHelpers(self: *Boot) void {
+        // AU-M1. 믹서를 켠다(AU design 결정 4). 기다리지 않는다 — 일꾼 하나를 fork하고
+        // 곧장 다음 줄로 간다. 일꾼이 카드를 기다렸다가 alsactl이 되고, 그 끝은 감독
+        // 루프가 거둘 때 audio.zig가 읽는다. 아래 nft를 기다리는 동안 함께 돈다.
+        // `/config`가 붙었는지가 restore와 init을 가르고, 끌 때 적을지도 정한다.
+        audio.start(self.mounted, self.envp);
+
+        // FW-M1. dhcpcd보다 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
+        // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
+        // 로컬 netlink만 쓰므로 부팅이 네트워크에 묶이지 않는다. `/config`가 안
+        // 붙었어도 같은 파일을 올린다 — 빈 include는 에러가 아니다(FW-M0 실측 4).
+        firewall.up(self.cfg.firewall, self.envp);
+    }
+
+    /// 단계 6. 원하는 데몬 셋, 서비스 목록, 플래그 셋, terminal의 argv, `Live`, `children`
+    /// 열셋. 여기서는 아무것도 띄우지 않는다 — 띄우는 것은 `supervise`의 첫 바퀴다.
+    fn placeChildren(self: *Boot) void {
+        // NW-M2 · DS-M1. 여기서는 띄우지 않고 답만 듣는다 — dhcpcd를 감독 목록에
+        // 넣을지다. 띄우는 것은 `supervise`의 첫 바퀴이고, 그때는 `startHelpers`의
+        // `firewall.up`이 이미 끝나 있다(FW design 결정 5의 순서가 그대로 선다).
+        // hook이 sed·rm을 이름으로 부르므로 PATH가 필요한데(NW design 결정 F),
+        // 감독자가 위 env 블록을 넘긴다.
+        const want_dhcpcd = net.wantsDhcpcd(self.cfg.net);
+
+        // WL-M2. 무선도 답만 듣는다. `/config/wpa_supplicant.conf`가 있으면 아래
+        // `children`에서 dhcpcd 앞에 선다(WL design 결정 4). 앞인 이유는 한 바퀴 안의
+        // 순서다 — dhcpcd가 처음 본 무선 인터페이스에 hook을 부를 때 wpa_supplicant의
+        // global 소켓이 있을 확률을 높인다. 없어도 hook이 몇 초 다시 시도한다(실측 7).
+        const want_wifi = wifi.wants(self.cfg.net, self.mounted, wifi.CONF_PATH);
+
+        // TS-M1 · TD-M1 · DS-M1. chronyd의 설정을 쓰고 감독 목록에 넣을지를 답한다.
+        // 기다리는 것이 없다 — `ntp=dhcp`의 서버는 dhcpcd의 hook이 나중에
+        // `/run/tars/chrony.sources`에 쓰고 chronyc로 알린다(DS design 결정 3).
+        const want_chronyd = clock.prepare(self.cfg.net, self.cfg.ntp, self.mounted);
+
+        // SV-M1. 서비스는 아래 `children`에서 dhcpcd · chronyd 뒤에 붙는다(SV design
+        // 결정 4의 순서를 DS-M1부터는 배열이 지킨다). 여기서는 읽기만 한다.
+        // 띄우는 것은 `supervise`의 첫 바퀴이고, terminal · 콘솔 셸과 한 바퀴에
+        // 함께 뜬다 — 어느 서비스도 부팅 경로에서 기다리지 않는다.
+        //
+        // `/config`가 안 붙은 부팅은 tmpfs의 빈 `/config`라 "no … 0 services" 한 줄로
+        // 끝난다. 조건을 따로 두지 않는다.
+        services.discover(services.DIR, &self.service_list);
+
+        // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
+        // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
+        const shell_flag = self.shell.configFlag(self.cfg.shell_config);
+        // 콘솔 셸은 `"none"`을 안 쓴다(결정 4). 이쪽은 init이 셸을 직접
+        // exec하므로 argv를 짓는 쪽과 쓰는 쪽이 같다 — "인자가 없다"를 null
+        // 슬롯으로 그대로 말할 수 있다. 지금까지 이 자리는 조건 없이 null
+        // 이었고, `main.zig`의 아래 주석이 *"나중에 설정 파일이 생기면 그것을
+        // 읽는 편이 맞다"*고 예고해 둔 자리다.
+        const console_flag: ?[*:0]const u8 = switch (self.cfg.shell_config) {
+            .on => null,
+            .off => self.shell.noConfigFlag().ptr,
+        };
+        // SC-M2 결정 8 — 탈출로 1. 자식 둘 다에게 준다(결정 4가 두 셸을 같은
+        // 설정으로 묶은 것의 연장이다).
+        //
+        // `mounted`를 함께 보는 것이 이 조건의 핵심이다. 디스크가 안
+        // 붙은 부팅에는 rc 실체가 아예 없다 — 홈의 링크는 끊어져 있고 셸은
+        // 아무것도 안 읽는다(SC-M0이 여섯 체인에서 확인한 정상 경로다). 그런
+        // 기계에서 자식이 죽는 이유는 rc가 아니고, 고칠 수 있는 것이 없는데
+        // 다시 띄우는 것은 탈출이 아니라 소음이다.
+        //
+        // 그리고 그 소음은 남의 검사를 깬다: BF 체인은 `-vga none`이라 terminal이
+        // 매번 죽고, `boot/check.sh`가 그 재시작 횟수를 정확히 3으로 세고
+        // 있다(그 수가 곧 `MAX_FAST_RESTARTS` 정책이다). 조건 없이 주면 6이 된다.
+        //
+        // `off`일 때 안 주는 이유는 단순하다 — 이미 rc를 안 읽는 셸에서 뺄 것이
+        // 없다.
+        const rescue_flag: ?[:0]const u8 = if (self.mounted and self.cfg.shell_config == .on)
+            self.shell.noConfigFlag()
+        else
+            null;
+        // 키보드 종류 · 자판 둘 · 클립보드 범위는 셸과 달리 폴백 검사(resolveShell 같은
+        // 것)가 없다 — 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미
+        // 화이트리스트다(HI design 결정 7 · CB-M0). 런타임 전환이 없으므로 여기서 한 번
+        // 정해진다.
+        //
+        // SA-M1. 아홉 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
+        // 생긴다. 필드 하나를 빠뜨리면 컴파일이 막힌다(`Args`에 기본값이 없다). 0번 칸의
+        // `/terminal`도 `encode`가 넣는다(`TERMINAL_PATH`).
+        const term_argv = screen_args.encode(.{
+            .shell_path = self.shell_path.ptr,
+            .shell_flag = shell_flag.ptr,
+            .keyboard = self.cfg.keyboard,
+            .device_path = self.keyboard_path.cstr(),
+            .hangul = self.cfg.hangul_layout,
+            .latin = self.cfg.latin_layout,
+            .toggles = self.cfg.screenToggles(),
+            .clipboard = self.cfg.clipboard,
+        }, &self.terminal_toggle_buf);
+
+        self.live = Live{
+            .cfg = self.cfg,
+            .screen = self.cfg,
+            .mounted = self.mounted,
+            .noconfig = self.noconfig,
+            .kernel_env = self.kernel_env,
+            .envp = self.envp,
+        };
+
+        // SV-M1 · DS-M1 · TC-M2. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 셋이(DS design
+        // 결정 1 · WL), 그 뒤에 서비스 여덟의 칸이 온다. TC-M2부터 칸은 늘 열셋이고 원하지 않는 칸은
+        // `config_off`다 — reload가 dhcpcd를 켜거나 services.d에 새 이름을 넣을 자리가 늘 있다(reload
+        // design 결정 5). 띄우는 순서(배열 순서)는 그 전과 같다.
+        self.children[0] = .{
+            .kind = .terminal,
+            .label = "terminal",
+            .path = TERMINAL_PATH,
+            // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지와
+            // 어느 키보드인지를 PID 1이 정해서 인자로 넘긴다 — 파서가 두
+            // 벌이 되면 두 프로세스가 서로 다른 답을 얻을 수 있다.
+            //
+            // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
+            // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
+            // 이 인자는 셸로 새지 않는다.
+            //
+            // SA-M1. 위 `screen_args.encode`가 지은 아홉 칸이다 — terminal이 같은 파일의
+            // `decode`로 읽는다(`doReloadTerminal`도 같은 함수 쌍을 쓴다).
+            .argv = term_argv,
+            .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
+        };
+        self.children[1] = .{
+            .kind = .console_shell,
+            .label = "console shell",
+            .path = self.shell_path,
+            // 위 주석이 예고한 것을 SC-M0이 실행한 자리다. 그때 적어
+            // 둔 것은 *"나중에 설정 파일이 생기면 그것을 읽는 편이 맞다"*
+            // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
+            // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
+            // 설정을 따른다(결정 4).
+            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null },
+            .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
+        };
+        // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
+        // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
+        // WL-M2. wpa_supplicant도 같은 자리의 셋째다.
+        self.children[SLOT_WIFI] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.WPA_SUPPLICANT,
+            .path = wifi.WIFI_PATH,
+            .argv = wifi.WIFI_ARGV,
+            .config_off = !want_wifi,
+        };
+        self.children[SLOT_DHCPCD] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.DHCPCD,
+            .path = net.DHCPCD_PATH,
+            .argv = net.DHCPCD_ARGV,
+            .config_off = !want_dhcpcd,
+        };
+        self.children[SLOT_CHRONYD] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.CHRONYD,
+            .path = clock.CHRONYD_PATH,
+            .argv = clock.CHRONYD_ARGV,
+            .config_off = !want_chronyd,
+        };
+        for (0..services.MAX) |i| {
+            if (i < self.service_list.len) {
+                // 인자는 없다 — 서비스는 실행 파일 하나이고(결정 2), 준비할 것은
+                // 스크립트가 한다. 탈출로도 없다(결정 3).
+                placeService(&self.children, &self.live, i, &self.service_list.entries[i]);
+            } else {
+                self.children[SLOT_SERVICES + i] = .{
+                    .kind = .service,
+                    .label = "",
+                    .path = "",
+                    .argv = .{ null, null, null, null, null, null, null, null, null },
+                    .config_off = true,
+                };
+            }
+        }
+    }
 };
 
 /// 단계 1. 시그널 핸들러와 마운트. 설정을 읽기 전이고 상태가 없다.
@@ -1220,282 +1501,20 @@ pub fn main(init: std.process.Init.Minimal) void {
     // 일치라 그대로 맞는다(BV design 결정 8).
     logline.print("tars-init: starting as PID 1 (TARS {s})\n", .{build_info.version});
 
+    // 단계의 순서가 이 함수다 — 마운트 → 설정 → 장치 → env → 일꾼 → 자식 → 감독. 각 순서의
+    // 이유는 단계 함수의 머리에 있다(MS-M1). `boot`는 이 스택에 살고 `supervise`가 반환하지
+    // 않으므로 프로세스 수명 내내 유효하다 — 자식의 argv와 env가 그 안을 가리킨다.
     mountEarly();
     var boot: Boot = .{};
     boot.readConfig();
     boot.probeDevices();
-    // MS-M1 Task 1의 임시 별명 — 아래 절은 Task 2에서 `Boot`의 단계로 옮긴다.
-    const cfg = boot.cfg;
-    const storage_mounted = boot.mounted;
-    const noconfig = boot.noconfig;
-
-    // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
-    // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
-    // 않는다는 뜻이고, "고치고 재부팅해야 반영된다"는 정책이 그래서 지켜진다.
-    const shell = resolveShell(cfg.shell);
-    const shell_path = shell.path();
-
-    // TS-M3. `resolveShell`과 같은 자리의 같은 선택이다 — 설정이 고른 이름의
-    // 파일이 initrd에 정말 있는지 보고, 없으면 UTC다. 이 값이 env 블록에
-    // 들어가면 게스트의 모든 프로세스가 물려받는다(design 결정 9) — 셸도
-    // `date`도 같은 것을 본다.
-    const tz = resolveTimezone(cfg.timezone);
-    // 이 버퍼도 `main()`의 스택에 산다. 아래 env_buf가 이 안의 포인터를 담고
-    // `supervise()`가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
-    var tz_buf: [environ.TZ_ENTRY_MAX]u8 = undefined;
-    const tz_entry = environ.tzEntry(&tz_buf, tz.slice());
-
-    // ── env 블록은 여기서 짓는다(SM-M2) ──────────────────────────────────
-    //
-    // UT-M0에서는 `main()`의 첫 줄이었다. 내려온 이유는 `HISTFILE`이
-    // 셸마다 다른 파일이어야 하기 때문이다(결정 3) — 그 값을 알려면 설정을
-    // 읽고 `resolveShell`이 끝나 있어야 한다.
-    //
-    // `cfg.shell`이 아니라 `shell`을 보는 것이 중요하다. `tars.conf`가
-    // zsh라고 적어도 initrd에 zsh가 없으면 실제로 도는 것은 fish이고, 그때
-    // `HISTFILE=/config/zsh_history`를 주면 아무도 안 읽는 파일 이름을 env에
-    // 심는 것이 된다. 폴백 뒤의 값을 쓰면 로그의 `config shell=`과 여기가
-    // 언제나 같은 셸을 말한다.
-    //
-    // 이 버퍼가 `main()`의 스택에 있는 것이 중요하다. `supervise()`가 영영
-    // 반환하지 않으므로 프로세스 수명 내내 유효하다 — `keyboard_path`·argv와
-    // 같은 근거다. 자식은 fork 뒤 execve로 이 포인터를 읽는다.
-    var env_buf: environ.Block = undefined;
-    const envp = environ.withTarsEnv(
-        init.environ.block.slice.ptr,
-        &env_buf,
-        tz_entry,
-        shell.histEntries(),
-    );
-
-    // UT-M0: 게이트가 "블록을 제대로 지었는가"를 보는 자리. 자식 둘이 같은
-    // 블록을 받는다는 것은 `supervise()`가 `start(c, envp)`를 한 루프에서
-    // 부르는 코드 구조가 보장한다.
-    //
-    // withTarsEnv가 자리 부족으로 폴백했으면 이 줄들이 안 나온다. 그 침묵이
-    // 곧 판정이다.
-    //
-    // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
-    // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
-    if (envp != init.environ.block.slice.ptr) {
-        logline.print("tars-init: env {s} {s} {s}\n", .{
-            environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry,
-        });
-        // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
-        // 그 침묵이 결정 3의 절반(fish는 XDG 하나로 끝난다)을 로그에서
-        // 읽는 법이다.
-        for (shell.histEntries()) |entry| {
-            logline.print("tars-init: env {s}\n", .{entry});
-        }
-    } else {
-        logline.print("tars-init: env unchanged (no room for PATH)\n", .{});
-    }
-
-    // SV-M2 결정 9. ssh 세션이 콘솔과 같은 셸 · 같은 env를 갖게 한다. `shell`은
-    // `resolveShell` 뒤의 값이다 — 위 `HISTFILE`이 폴백 뒤의 셸을 보는 것과 같은
-    // 이유다. 서비스(sshd)가 뜨기 전이어야 하므로 `supervise`보다 앞이면 되고, env
-    // 블록과 나란히 두는 것이 "같은 목록"(M2-B)을 읽기에 맞다.
-    //
-    // 크기 `3 + 4` — 앞의 셋에 셸별 히스토리 env(가장 긴 zsh가 셋)가 붙고 한 칸이
-    // 남는다. `config.zig`의 목록을 늘려 넘치면 ReleaseSafe가 여기서 패닉한다.
-    var ssh_env: [3 + 4][]const u8 = undefined;
-    var ssh_env_len: usize = 0;
-    for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry }) |e| {
-        ssh_env[ssh_env_len] = e;
-        ssh_env_len += 1;
-    }
-    for (shell.histEntries()) |e| {
-        ssh_env[ssh_env_len] = e;
-        ssh_env_len += 1;
-    }
-    login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell_path, ssh_env[0..ssh_env_len]);
-
-    // AU-M1. 믹서를 켠다(AU design 결정 4). 기다리지 않는다 — 일꾼 하나를 fork하고
-    // 곧장 다음 줄로 간다. 일꾼이 카드를 기다렸다가 alsactl이 되고, 그 끝은 감독
-    // 루프가 거둘 때 audio.zig가 읽는다. 아래 nft를 기다리는 동안 함께 돈다.
-    // `/config`가 붙었는지가 restore와 init을 가르고, 끌 때 적을지도 정한다.
-    audio.start(storage_mounted, envp);
-
-    // FW-M1. dhcpcd보다 앞인 것이 이 한 줄의 유일한 제약이다(FW design 결정
-    // 5) — 규칙이 서기 전에 주소가 붙는 틈을 없앤다. 여기는 기다린다. nft는
-    // 로컬 netlink만 쓰므로 부팅이 네트워크에 묶이지 않는다. `/config`가 안
-    // 붙었어도 같은 파일을 올린다 — 빈 include는 에러가 아니다(FW-M0 실측 4).
-    firewall.up(cfg.firewall, envp);
-
-    // NW-M2 · DS-M1. 여기서는 띄우지 않고 답만 듣는다 — dhcpcd를 감독 목록에
-    // 넣을지다. 띄우는 것은 아래 `supervise`의 첫 바퀴이고, 그때는 위
-    // `firewall.up`이 이미 끝나 있다(FW design 결정 5의 순서가 그대로 선다).
-    // hook이 sed·rm을 이름으로 부르므로 PATH가 필요한데(NW design 결정 F),
-    // 감독자가 위 env 블록을 넘긴다.
-    const want_dhcpcd = net.wantsDhcpcd(cfg.net);
-
-    // WL-M2. 무선도 답만 듣는다. `/config/wpa_supplicant.conf`가 있으면 아래
-    // `children`에서 dhcpcd 앞에 선다(WL design 결정 4). 앞인 이유는 한 바퀴 안의
-    // 순서다 — dhcpcd가 처음 본 무선 인터페이스에 hook을 부를 때 wpa_supplicant의
-    // global 소켓이 있을 확률을 높인다. 없어도 hook이 몇 초 다시 시도한다(실측 7).
-    const want_wifi = wifi.wants(cfg.net, storage_mounted, wifi.CONF_PATH);
-
-    // TS-M1 · TD-M1 · DS-M1. chronyd의 설정을 쓰고 감독 목록에 넣을지를 답한다.
-    // 기다리는 것이 없다 — `ntp=dhcp`의 서버는 dhcpcd의 hook이 나중에
-    // `/run/tars/chrony.sources`에 쓰고 chronyc로 알린다(DS design 결정 3).
-    const want_chronyd = clock.prepare(cfg.net, cfg.ntp, storage_mounted);
-
-    // SV-M1. 서비스는 아래 `children`에서 dhcpcd · chronyd 뒤에 붙는다(SV design
-    // 결정 4의 순서를 DS-M1부터는 배열이 지킨다). 여기서는 읽기만 한다.
-    // 띄우는 것은 아래 `supervise`의 첫 바퀴이고, terminal · 콘솔 셸과 한 바퀴에
-    // 함께 뜬다 — 어느 서비스도 부팅 경로에서 기다리지 않는다.
-    //
-    // `/config`가 안 붙은 부팅은 tmpfs의 빈 `/config`라 "no … 0 services" 한 줄로
-    // 끝난다. 조건을 따로 두지 않는다.
-    //
-    // 이 값도 `main()`의 스택에 산다. 아래 argv가 이 안의 경로를 가리키고
-    // `supervise()`가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
-    var service_list = services.List{};
-    services.discover(services.DIR, &service_list);
-
-    // SC-M0 결정 3. `off`면 지금까지의 플래그이고, `on`이면 `"none"`이다 —
-    // terminal이 그 값을 보면 셸 argv에 아무것도 안 붙인다.
-    const shell_flag = shell.configFlag(cfg.shell_config);
-    // 콘솔 셸은 `"none"`을 안 쓴다(결정 4). 이쪽은 init이 셸을 직접
-    // exec하므로 argv를 짓는 쪽과 쓰는 쪽이 같다 — "인자가 없다"를 null
-    // 슬롯으로 그대로 말할 수 있다. 지금까지 이 자리는 조건 없이 null
-    // 이었고, `main.zig`의 아래 주석이 *"나중에 설정 파일이 생기면 그것을
-    // 읽는 편이 맞다"*고 예고해 둔 자리다.
-    const console_flag: ?[*:0]const u8 = switch (cfg.shell_config) {
-        .on => null,
-        .off => shell.noConfigFlag().ptr,
-    };
-    // SC-M2 결정 8 — 탈출로 1. 자식 둘 다에게 준다(결정 4가 두 셸을 같은
-    // 설정으로 묶은 것의 연장이다).
-    //
-    // `storage_mounted`를 함께 보는 것이 이 조건의 핵심이다. 디스크가 안
-    // 붙은 부팅에는 rc 실체가 아예 없다 — 홈의 링크는 끊어져 있고 셸은
-    // 아무것도 안 읽는다(SC-M0이 여섯 체인에서 확인한 정상 경로다). 그런
-    // 기계에서 자식이 죽는 이유는 rc가 아니고, 고칠 수 있는 것이 없는데
-    // 다시 띄우는 것은 탈출이 아니라 소음이다.
-    //
-    // 그리고 그 소음은 남의 검사를 깬다: BF 체인은 `-vga none`이라 terminal이
-    // 매번 죽고, `boot/check.sh`가 그 재시작 횟수를 정확히 3으로 세고
-    // 있다(그 수가 곧 `MAX_FAST_RESTARTS` 정책이다). 조건 없이 주면 6이 된다.
-    //
-    // `off`일 때 안 주는 이유는 단순하다 — 이미 rc를 안 읽는 셸에서 뺄 것이
-    // 없다.
-    const rescue_flag: ?[:0]const u8 = if (storage_mounted and cfg.shell_config == .on)
-        shell.noConfigFlag()
-    else
-        null;
-    // 키보드 종류 · 자판 둘 · 클립보드 범위는 셸과 달리 폴백 검사(resolveShell 같은
-    // 것)가 없다 — 파일시스템에 존재를 확인할 대상이 아니고, enum이 이미
-    // 화이트리스트다(HI design 결정 7 · CB-M0). 런타임 전환이 없으므로 여기서 한 번
-    // 정해진다.
-    //
-    // SA-M1. 아홉 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
-    // 생긴다. 필드 하나를 빠뜨리면 컴파일이 막힌다(`Args`에 기본값이 없다). 0번 칸의
-    // `/terminal`도 `encode`가 넣는다(`TERMINAL_PATH`).
-    //
-    // 전환 키의 글자를 담는 버퍼다 — `encode`가 여기에 쓰고 argv의 7번 칸이 이것을
-    // 가리킨다. `main()`의 스택에 살고 `supervise()`가 영영 반환하지 않으므로 프로세스
-    // 수명 내내 유효하다.
-    var terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    const term_argv = screen_args.encode(.{
-        .shell_path = shell_path.ptr,
-        .shell_flag = shell_flag.ptr,
-        .keyboard = cfg.keyboard,
-        .device_path = boot.keyboard_path.cstr(),
-        .hangul = cfg.hangul_layout,
-        .latin = cfg.latin_layout,
-        .toggles = cfg.screenToggles(),
-        .clipboard = cfg.clipboard,
-    }, &terminal_toggle_buf);
-
-    // TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리에 든다(reload design
-    // 결정 5). 아래 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 앞이다.
-    var live = Live{
-        .cfg = cfg,
-        .screen = cfg,
-        .mounted = storage_mounted,
-        .noconfig = noconfig,
-        .kernel_env = init.environ.block.slice.ptr,
-        .envp = envp,
-    };
-
-    // SV-M1 · DS-M1 · TC-M2. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 셋이(DS design
-    // 결정 1 · WL), 그 뒤에 서비스 여덟의 칸이 온다. TC-M2부터 칸은 늘 열셋이고 원하지 않는 칸은
-    // `config_off`다 — reload가 dhcpcd를 켜거나 services.d에 새 이름을 넣을 자리가 늘 있다(reload
-    // design 결정 5). 띄우는 순서(배열 순서)는 그 전과 같다.
-    var children: [SLOTS]Child = undefined;
-    children[0] = .{
-        .kind = .terminal,
-        .label = "terminal",
-        .path = TERMINAL_PATH,
-        // terminal은 설정 파일을 읽지 않는다. 어느 셸을 PTY에 띄울지와
-        // 어느 키보드인지를 PID 1이 정해서 인자로 넘긴다 — 파서가 두
-        // 벌이 되면 두 프로세스가 서로 다른 답을 얻을 수 있다.
-        //
-        // 넷째 자리를 쓰는 것이 안전한 이유는 terminal이 셸에 넘기는
-        // argv를 {shell_path, shell_flag} 둘로 따로 조립하기 때문이다 —
-        // 이 인자는 셸로 새지 않는다.
-        //
-        // SA-M1. 위 `screen_args.encode`가 지은 아홉 칸이다 — terminal이 같은 파일의
-        // `decode`로 읽는다(`doReloadTerminal`도 같은 함수 쌍을 쓴다).
-        .argv = term_argv,
-        .rescue = if (rescue_flag) |f| .{ .slot = TERMINAL_FLAG_SLOT, .flag = f } else null,
-    };
-    children[1] = .{
-        .kind = .console_shell,
-        .label = "console shell",
-        .path = shell_path,
-        // 위 주석이 예고한 것을 SC-M0이 실행한 자리다. 그때 적어
-        // 둔 것은 *"나중에 설정 파일이 생기면 그것을 읽는 편이 맞다"*
-        // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
-        // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
-        // 설정을 따른다(결정 4).
-        .argv = .{ shell_path.ptr, console_flag, null, null, null, null, null, null, null },
-        .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
-    };
-    // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
-    // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
-    // WL-M2. wpa_supplicant도 같은 자리의 셋째다.
-    children[SLOT_WIFI] = .{
-        .kind = .service,
-        .label = services.LABEL_PREFIX ++ services.WPA_SUPPLICANT,
-        .path = wifi.WIFI_PATH,
-        .argv = wifi.WIFI_ARGV,
-        .config_off = !want_wifi,
-    };
-    children[SLOT_DHCPCD] = .{
-        .kind = .service,
-        .label = services.LABEL_PREFIX ++ services.DHCPCD,
-        .path = net.DHCPCD_PATH,
-        .argv = net.DHCPCD_ARGV,
-        .config_off = !want_dhcpcd,
-    };
-    children[SLOT_CHRONYD] = .{
-        .kind = .service,
-        .label = services.LABEL_PREFIX ++ services.CHRONYD,
-        .path = clock.CHRONYD_PATH,
-        .argv = clock.CHRONYD_ARGV,
-        .config_off = !want_chronyd,
-    };
-    for (0..services.MAX) |i| {
-        if (i < service_list.len) {
-            // 인자는 없다 — 서비스는 실행 파일 하나이고(결정 2), 준비할 것은
-            // 스크립트가 한다. 탈출로도 없다(결정 3).
-            placeService(&children, &live, i, &service_list.entries[i]);
-        } else {
-            children[SLOT_SERVICES + i] = .{
-                .kind = .service,
-                .label = "",
-                .path = "",
-                .argv = .{ null, null, null, null, null, null, null, null, null },
-                .config_off = true,
-            };
-        }
-    }
+    boot.buildEnv(init);
+    boot.startHelpers();
+    boot.placeChildren();
     // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.
     // 못 열면 로그 한 줄이고 CT 전과 같은 부팅이다.
     const control_fd = control.open(control.DIR, control.PATH);
-    supervise(&children, boot.button_fds[0..boot.button_count], control_fd, &live);
+    supervise(&boot.children, boot.button_fds[0..boot.button_count], control_fd, &boot.live);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의
