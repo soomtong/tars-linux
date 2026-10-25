@@ -8,7 +8,11 @@
 //! 여기서 남의 문법을 파싱하지 않는다(결정 10). 하는 일은 셋뿐이다 — 우리가 짓는 한 줄
 //! (`tcp dport 22 accept`)을 짓고 찾는 것, 남의 도구가 낸 덩어리를 그대로 옮기는 것, 그
 //! 덩어리를 같은 이름의 덩어리와 바꿔 끼울 자리를 찾는 것.
+//!
+//! HC-M1. 동사마다 인자를 가르는 것과 찍는 문장도 여기다(HC design 결정 5 · 6). 시스템 콜 쪽은
+//! 가른 칸을 `switch`로 받고, 파일 · 링크 · tars.conf에서 읽은 것을 문장 함수에 넘긴다.
 const std = @import("std");
+const edit = @import("config_edit.zig");
 
 // ── 방화벽 ────────────────────────────────────────────────────────────
 
@@ -76,6 +80,43 @@ pub const RULES_HEADER =
     \\# another file in this directory; this one is rewritten by that command.
     \\
 ;
+
+/// `firewall` 상태의 규칙 줄 — 이 명령의 nft 파일에서 빈 줄 · 주석을 뺀 줄을 하나씩. 그 수를 돌려준다.
+pub fn firewallRules(sink: anytype, text: []const u8) usize {
+    var it = std.mem.splitScalar(u8, text, '\n');
+    var n: usize = 0;
+    while (it.next()) |raw| {
+        const t = std.mem.trim(u8, raw, " \t\r");
+        if (t.len == 0 or t[0] == '#') continue;
+        sink.print("{s}\n", .{t});
+        n += 1;
+    }
+    return n;
+}
+
+/// `allow` · `deny`가 그 파일에 할 일. `same`이면 쓸 것이 없다 — 이미 열렸거나, 이 명령이 연 적이 없다.
+pub const FirewallChange = union(enum) { same, changed: []const u8, overflow };
+
+/// allow는 빈 파일이면 `RULES_HEADER` 위에 더한다. deny는 이 명령의 파일에서만 뺀다(결정 14).
+pub fn firewallChange(out: []u8, text: []const u8, allow: bool, rule: []const u8) FirewallChange {
+    if (allow) {
+        const base = if (text.len == 0) RULES_HEADER else text;
+        if (hasLine(base, rule)) return .same;
+        return if (appendLine(out, base, rule)) |t| .{ .changed = t } else .overflow;
+    }
+    if (!hasLine(text, rule)) return .same;
+    return if (removeLine(out, text, rule)) |t| .{ .changed = t } else .overflow;
+}
+
+/// `allow` · `deny`의 결과. changed는 `firewallChange`가 `changed`였는가.
+pub fn firewallSaid(sink: anytype, allow: bool, rule: []const u8, changed: bool, nft_dir: []const u8) void {
+    if (changed) {
+        sink.print("firewall: {s} {s}\n", .{ if (allow) "opened" else "closed", rule });
+        return;
+    }
+    sink.print("firewall: {s} was {s}\n", .{ rule, if (allow) "already open here" else "not opened by tars-config" });
+    if (!allow) sink.print("rules you wrote yourself live in other files under {s}; this command does not touch them\n", .{nft_dir});
+}
 
 // ── 무선 ──────────────────────────────────────────────────────────────
 
@@ -175,6 +216,32 @@ pub fn setCountry(out: []u8, conf: []const u8, cc: []const u8) ?[]const u8 {
     return std.fmt.bufPrint(out, "country={s}\n{s}", .{ cc, conf }) catch null;
 }
 
+/// `wifi` 상태. 망의 이름만 보인다 — psk 줄은 안 찍는다.
+pub fn wifiStatusLines(sink: anytype, conf: []const u8) void {
+    var it = std.mem.splitScalar(u8, conf, '\n');
+    while (it.next()) |raw| {
+        const t = std.mem.trim(u8, raw, " \t\r");
+        if (std.mem.startsWith(u8, t, "ssid=") or std.mem.startsWith(u8, t, "country=")) sink.print("{s}\n", .{t});
+    }
+}
+
+/// `wifi SSID`가 쓴 뒤의 말 — 쓴 것 한 줄과 다음 걸음. 파일이 없던 자리면 wpa_supplicant가 아직 안
+/// 떠 있으므로 restart가 아니라 reload다.
+pub fn wifiDone(sink: anytype, ssid: []const u8, path: []const u8, replaced: bool, with_country: bool, net_off: bool, existed: bool) void {
+    sink.print("wifi: {s} {s} in {s}{s}\n", .{
+        ssid,
+        if (replaced) "replaced" else "added",
+        path,
+        if (with_country) " (with country)" else "",
+    });
+    if (net_off) sink.print("net=off: wifi needs the network on — tars-config set net=dhcp\n", .{});
+    if (existed) {
+        sink.print("apply now: tars-service restart wpa_supplicant\n", .{});
+    } else {
+        sink.print("apply now: tars-config reload starts wpa_supplicant (or the next boot)\n", .{});
+    }
+}
+
 // ── ssh ───────────────────────────────────────────────────────────────
 
 /// 공개 키 한 줄의 몸통(base64). 키 줄은 `[옵션] 형식 몸통 [설명]`이고 몸통은 늘 `AAAA`로
@@ -205,6 +272,36 @@ pub fn keyCount(keys: []const u8) usize {
         if (t.len != 0 and t[0] != '#') n += 1;
     }
     return n;
+}
+
+/// `ssh-key add`가 받은 글자에서 키 한 줄. 앞뒤 공백 · 개행을 뗀다. 비었거나 개행 · 제어 문자가
+/// 남으면 null — 키 둘이 한 번에 들어가거나 파일의 한 줄이 둘이 되는 길이다.
+pub fn keyLine(raw: []const u8) ?[]const u8 {
+    const line = std.mem.trim(u8, raw, " \t\r\n");
+    if (line.len == 0 or std.mem.indexOfScalar(u8, line, '\n') != null or hasControl(line)) return null;
+    return line;
+}
+
+/// `/config/services.d/sshd`가 무엇인가. 사람이 다른 sshd 스크립트를 그 이름으로 두었으면 `other`다.
+pub const Sshd = enum { none, template, other };
+
+/// `ssh` 상태의 `sshd:` 뒤.
+pub fn sshdText(s: Sshd) []const u8 {
+    return switch (s) {
+        .template => "on (/config/services.d/sshd -> /etc/tars/services/sshd)",
+        .other => "/config/services.d/sshd is yours, not the template",
+        .none => "off",
+    };
+}
+
+/// firewall=on일 때 22를 이 명령이 열었는지. nft_text는 이 명령의 파일이다. 사람의 nft 파일은 안
+/// 읽는다(결정 10) — 열려 있을 수도 있다고만 말한다.
+pub fn firewall22(sink: anytype, nft_text: []const u8, nft_dir: []const u8) void {
+    if (hasLine(nft_text, "tcp dport 22 accept")) {
+        sink.print("firewall=on: tars-config opened port 22\n", .{});
+    } else {
+        sink.print("firewall=on: port 22 is open only if a file in {s} says so; tars-config firewall allow 22\n", .{nft_dir});
+    }
 }
 
 // ── 받아쓰기 ──────────────────────────────────────────────────────────
@@ -238,4 +335,150 @@ pub fn apiKey(text: []const u8) ?[]const u8 {
 pub fn hasControl(text: []const u8) bool {
     for (text) |b| if (b < 0x20 or b == 0x7f) return true;
     return false;
+}
+
+/// `dictation set`의 쌍을 text에 차례로 적고, 쌍마다 한 줄을 찍는다. 같은 문법(`#` 주석 · 첫 `=` ·
+/// 양쪽 공백)이라 tars.conf의 줄 바꾸기를 그대로 쓴다. work 둘을 번갈아 쓴다.
+///
+/// args는 `dictationArgs`가 `.set`으로 준 것이다(쌍마다 `=`가 있다). 넘치면 null이고, 그 앞의 쌍은
+/// 이미 찍혔다.
+pub fn dictationApply(sink: anytype, work: [2][]u8, text: []const u8, args: edit.Rest) ?[]const u8 {
+    var cur = text;
+    for (args, 0..) |a, i| {
+        const arg = std.mem.span(a);
+        const eq = std.mem.indexOfScalar(u8, arg, '=').?;
+        const key = std.mem.trim(u8, arg[0..eq], " \t");
+        const value = std.mem.trim(u8, arg[eq + 1 ..], " \t");
+        cur = edit.setLine(work[i % 2], cur, key, value) orelse return null;
+        sink.print("dictation: {s}={s}\n", .{ key, value });
+    }
+    return cur;
+}
+
+/// `check`의 받아쓰기 줄 — tars-dictate가 모르는 키의 줄마다 한 줄. 빈 줄 · 주석 · `=` 없는 줄은
+/// 건너뛴다. 돌려주는 것은 문제의 수다.
+pub fn dictationUnknown(sink: anytype, text: []const u8, path: []const u8) usize {
+    var problems: usize = 0;
+    var it = std.mem.splitScalar(u8, text, '\n');
+    var number: usize = 0;
+    while (it.next()) |raw| {
+        number += 1;
+        const t = std.mem.trim(u8, raw, " \t\r");
+        if (t.len == 0 or t[0] == '#') continue;
+        const eq = std.mem.indexOfScalar(u8, t, '=') orelse continue;
+        const key = std.mem.trim(u8, t[0..eq], " \t");
+        if (!isDictationKey(key)) {
+            sink.print("{s} line {d}: tars-dictate does not know the key '{s}'\n", .{ path, number, key });
+            problems += 1;
+        }
+    }
+    return problems;
+}
+
+// ── 인자 ──────────────────────────────────────────────────────────────
+//
+// 동사 뒤의 argv를 가른다. 거절도 칸이다 — 그 문장은 `config_front`가 찍는다. 칸을 거절마다 따로 두는
+// 것은 시스템 콜 쪽이 `needDisk`와의 순서를 지금 그대로 지키게 하려는 것이다(HC-M1 plan 확정 2).
+
+pub const WifiArgs = union(enum) {
+    status,
+    add: struct { ssid: []const u8, country: ?[]const u8 },
+    usage,
+    /// `--country` 뒤가 대문자 둘이 아니다.
+    bad_country,
+    /// SSID가 0바이트 · 32바이트 넘음 · 제어 문자.
+    bad_ssid,
+};
+
+/// `wifi SSID [--country CC]` (결정 12). 나라를 SSID보다 먼저 본다.
+pub fn wifiArgs(args: edit.Rest) WifiArgs {
+    if (args.len == 0) return .status;
+    const ssid = std.mem.span(args[0]);
+    var country: ?[]const u8 = null;
+    if (args.len == 3 and std.mem.eql(u8, std.mem.span(args[1]), "--country")) {
+        country = std.mem.span(args[2]);
+        if (!countryOk(country.?)) return .bad_country;
+    } else if (args.len != 1) return .usage;
+    if (ssid.len == 0 or ssid.len > 32 or hasControl(ssid)) return .bad_ssid;
+    return .{ .add = .{ .ssid = ssid, .country = country } };
+}
+
+/// `bad_verb`는 `usage`와 같은 문장이지만 디스크를 본 뒤에 찍는다 — `ssh foo`는 디스크가 없으면
+/// "no config disk"다.
+pub const SshArgs = union(enum) { status, on, off, usage, bad_verb };
+
+/// `ssh [on|off]` (결정 13).
+pub fn sshArgs(args: edit.Rest) SshArgs {
+    if (args.len > 1) return .usage;
+    if (args.len == 0) return .status;
+    const verb = std.mem.span(args[0]);
+    if (std.mem.eql(u8, verb, "on")) return .on;
+    if (std.mem.eql(u8, verb, "off")) return .off;
+    return .bad_verb;
+}
+
+/// `add`의 null은 표준 입력(`< id_ed25519.pub`)이다.
+pub const SshKeyArgs = union(enum) { list, add: ?[]const u8, usage };
+
+/// `ssh-key add [KEY] | list` (결정 13).
+pub fn sshKeyArgs(args: edit.Rest) SshKeyArgs {
+    if (args.len == 0) return .usage;
+    const verb = std.mem.span(args[0]);
+    if (std.mem.eql(u8, verb, "list")) return if (args.len == 1) .list else .usage;
+    if (!std.mem.eql(u8, verb, "add") or args.len > 2) return .usage;
+    return .{ .add = if (args.len == 2) std.mem.span(args[1]) else null };
+}
+
+pub const FirewallArgs = union(enum) {
+    status,
+    change: struct { allow: bool, spec: PortSpec },
+    usage,
+    bad_port,
+};
+
+/// `firewall [allow|deny PORT[/udp]]` (결정 14). 동사를 포트보다 먼저 본다.
+pub fn firewallArgs(args: edit.Rest) FirewallArgs {
+    if (args.len == 0) return .status;
+    if (args.len != 2) return .usage;
+    const verb = std.mem.span(args[0]);
+    const allow = std.mem.eql(u8, verb, "allow");
+    if (!allow and !std.mem.eql(u8, verb, "deny")) return .usage;
+    const spec = parsePort(std.mem.span(args[1])) orelse return .bad_port;
+    return .{ .change = .{ .allow = allow, .spec = spec } };
+}
+
+pub const DictationArgs = union(enum) {
+    status,
+    /// null은 표준 입력이다.
+    key: ?[]const u8,
+    /// 쌍 검사를 지난 인자. `dictationApply`에 그대로 준다.
+    set: edit.Rest,
+    usage,
+    /// 그 인자.
+    no_equals: []const u8,
+    /// 그 키.
+    unknown_key: []const u8,
+    /// 그 키.
+    control_byte: []const u8,
+};
+
+/// `dictation [key [KEY] | set KEY=VALUE…]` (결정 15). 쌍은 앞에서부터 보고 처음 걸린 것에서 멈춘다.
+/// 한 쌍 안에서는 `=` → 이름 → 제어 문자 순이다. 이름만 거른다 — 값은 tars-dictate가 실행마다 읽고
+/// 틀리면 경고한다.
+pub fn dictationArgs(args: edit.Rest) DictationArgs {
+    if (args.len == 0) return .status;
+    const verb = std.mem.span(args[0]);
+    if (std.mem.eql(u8, verb, "key")) {
+        if (args.len > 2) return .usage;
+        return .{ .key = if (args.len == 2) std.mem.span(args[1]) else null };
+    }
+    if (!std.mem.eql(u8, verb, "set") or args.len < 2) return .usage;
+    for (args[1..]) |a| {
+        const arg = std.mem.span(a);
+        const eq = std.mem.indexOfScalar(u8, arg, '=') orelse return .{ .no_equals = arg };
+        const key = std.mem.trim(u8, arg[0..eq], " \t");
+        if (!isDictationKey(key)) return .{ .unknown_key = key };
+        if (hasControl(arg)) return .{ .control_byte = key };
+    }
+    return .{ .set = args[1..] };
 }
