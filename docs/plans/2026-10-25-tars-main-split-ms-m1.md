@@ -2,7 +2,7 @@
 
 Date: 2026-10-25
 Design: `docs/specs/2026-10-25-tars-main-split-design.md` 결정 8
-Status: 착수 전(M0 게이트 뒤에 썼다 — 사용자 승인 뒤 구현).
+Status: 끝났다(2026-10-25, 루트 게이트 22/22, prebuild 293초 + lanes 289초). 값은 맨 아래 "MS-M1이 실측한 것".
 
 ## 누가 무엇을 하나
 
@@ -111,4 +111,18 @@ Status: 착수 전(M0 게이트 뒤에 썼다 — 사용자 승인 뒤 구현).
 
 ## MS-M1이 실측한 것
 
-(끝난 뒤 적는다.)
+1. commit 둘 — Task 1 `4e85cad`(+145 −110), Task 2 `9bda00d`(+288 −269). `main.zig`는 1,472줄 → 1,526줄(+54). 함수 길이 —
+   `Boot` 선언 46 · `readConfig` 85 · `probeDevices` 7 · `buildEnv` 77 · `startHelpers` 16 · `placeChildren` 163(자식 열셋의 리터럴) ·
+   `mountEarly` 27 · `main` 27.
+2. 두 Task 모두 컨테이너 `zig build && zig build test`가 첫 시도에 통과했고 호스트 `zig fmt`는 한 줄도 안 바꿨다. 체인 — Task 1 config ·
+   Task 2 boot 모두 PASS. boot 체인에서 terminal이 정확히 세 번 뜨고 `giving up on terminal`로 끝나는 길(디스크가 없어 `rescue`가
+   null인 길)이 그대로였고, init 로그의 순서(`starting` → `config shell=` → `env PATH` → `control socket` → `started …`)도 같았다.
+3. 로그 서식 문자열 56개의 집합은 전후 같다(`diff -w`). "지운 줄 가운데 새 파일에 없는 것"은 두 Task 모두 선언 → 필드, `self.` ·
+   `boot.` 접두사, 수명 주석 다섯, Task 1의 임시 별명 셋(`const cfg = boot.cfg;` 등)뿐이었다.
+4. 확정 2와 달리 `Boot`의 필드는 Task 1에 설정 · 장치 묶음만 선언하고 셸 · env · 자식 묶음은 Task 2에서 더했다 — 채우는 단계와 함께
+   들어가는 쪽이 읽기에 맞았다. `tz_entry`의 타입은 `[:0]const u8`(`environ.tzEntry`의 반환), `envp` · `kernel_env`는
+   `[*:null]const ?[*:0]const u8`(`Live`와 같다).
+5. 편집은 둘 다 줄 번호로 잘라 이어 붙였다(확정 9). Task 2는 필드 · 메서드 · `main` 조각 셋을 따로 파일로 쓰고 `button_count` 줄 ·
+   `probeDevices`의 끝 · `mountEarly`의 끝을 경계로 끼웠다.
+6. 루트 게이트 22/22(2026-10-25, `out/gate-logs/20261025-001156/`). prebuild 293초 + lanes 289초 — M0과 초 단위까지 같다. 느린 셋은
+   CP 184 · TD 182 · CM 164.

@@ -1422,8 +1422,12 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 
 ### PID 1 쪽 (`init/src/`)
 
-- `main.zig` — 감독 루프와 자식 둘. env 블록을 짓는 자리가 `resolveShell`
-  뒤에 있다(`HISTFILE`이 셸마다 다른 파일이라 셸이 정해져 있어야 하고,
+- `main.zig` — `Boot`와 감독 루프(MS-M1). `main`은 `mountEarly` → `Boot` 하나를 스택에 → `readConfig` ·
+  `probeDevices` · `buildEnv` · `startHelpers` · `placeChildren` → `control.open` → `supervise`다. 프로세스
+  수명 내내 살아야 하는 버퍼(`keyboard_path` · `tz_buf` · `env_buf` · `terminal_toggle_buf` · `service_list` ·
+  `live` · `children`)는 전부 `Boot`의 필드이고 그 수명 규칙은 타입의 문서 주석 한 자리에 있다 —
+  `Boot`는 값으로 돌려주지 않는다(argv · env가 그 안을 가리킨다). env 블록을 짓는 자리(`buildEnv`)가
+  `resolveShell` 뒤에 있다(`HISTFILE`이 셸마다 다른 파일이라 셸이 정해져 있어야 하고,
   `cfg.shell`이 아니라 폴백 뒤의 `shell`을 본다).
 - `audio.zig` — 소리의 세 자리(AU-M1 ~ M3). 위 절반이 순수(`verbFor` · `argvFor` · `outcome` · `storeDecision`, M2 · M3의
   `defaultsFor` · `render` — `audio_test`가 본다)이고 아래가 시스템 콜(`start` — 일꾼을 fork하고 안 기다린다, `reaped` — 감독 루프가

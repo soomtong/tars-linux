@@ -1,15 +1,15 @@
-# HANDOFF: Main Split(MS) 진행 중 — M0(terminal `App`) 끝, M1(init `Boot`) plan 작성
+# HANDOFF: Main Split(MS)을 닫았다 — 열린 서브프로젝트가 없다
 
 ## 지금 상태 (2026-10-25)
 
-- 열린 서브프로젝트는 Main Split(MS). design `docs/specs/2026-10-25-tars-main-split-design.md`, M0 plan
-  `docs/plans/2026-10-25-tars-main-split-ms-m0.md`(끝났다 — 루트 게이트 22/22, prebuild 293초 + lanes 289초). terminal의 `main`이
-  `App` struct의 `open`(단계 다섯) → `tick`(단계 열) → `close`가 됐고 동작 · 로그는 0줄 바뀌었다. commit은 Task마다 하나
-  (`4338581` · `9f87233` · `edf3152` · probe `2d6b91c`) — 읽는 법은 design 결정 1(b)(`--color-moved` · `--word-diff`). 다음은
-  M1 — init의 `main`을 `Boot` struct와 단계 일곱으로(design 결정 8). plan `docs/plans/2026-10-25-tars-main-split-ms-m1.md`을
-  M0 게이트 뒤에 썼고 사용자 승인 뒤 구현에 들어간다. M1이 끝나면 닫을 것 — design `Status:` · `completed.md` 한 행 ·
-  `docs/decisions/project_main_split.md` · `MEMORY.md` 한 줄 · lessons "핵심 파일"의 init `main.zig` 줄 · 이 파일. 소개 페이지는 안 넣는다
-  (내부 작업).
+- 열린 서브프로젝트가 없다. 마지막으로 닫은 것은 Main Split(MS-M0~M1, 2026-10-25). design
+  `docs/specs/2026-10-25-tars-main-split-design.md`, 기억 `docs/decisions/project_main_split.md`. terminal의 `main`은 `App.open`(단계
+  다섯) → `tick`(단계 열) → `close`, init의 `main`은 `mountEarly` → `Boot`의 단계 다섯 → `supervise`다. 동작 · 로그 · 체인 스크립트는
+  0줄 바뀌었다. commit은 Task마다 하나(M0 `4338581` · `9f87233` · `edf3152` · probe `2d6b91c`, M1 `4e85cad` · `9bda00d`) — 읽는 법은
+  design 결정 1(b)(`--color-moved` · `--word-diff`). 다음 기능(부분 갱신 · WP-M3)은 `App`의 `render`/`dumpFrame` · `runPanes`에,
+  새 설정 키는 `Boot.placeChildren`에 더하는 자리가 생겼다. `probe/patch.pl`의 anchor는 넷이고 `App`의 자리를 찍는다. 소개 페이지에는
+  안 넣었다(내부 작업).
+- 다음 서브프로젝트는 아래 "다음 후보"에서 사용자가 고른다 — 새 것은 design부터다.
 - 그 전에 닫은 것은 Screen Args(SA-M0~M1, 2026-10-24). design
   `docs/specs/2026-10-24-tars-screen-args-design.md`, 기억 `docs/decisions/project_screen_args.md`. init → terminal argv 계약이
   `shared/screen_args.zig` 한 파일이다 — 값의 종류 · `Slot` · 기본값(M0)에 `Args` · `encode` · `decode` · `argvOf` ·
@@ -46,7 +46,7 @@
 
 ## 다음 후보 (SA 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것 가운데 남은 셋, 추천 순서대로((2) `main` 분할은 MS가 진행 중). (3) 호스트 검사가 없는 큰 파일 셋
+- 2026-10-24 점검이 남긴 것 가운데 남은 셋, 추천 순서대로. (3) 호스트 검사가 없는 큰 파일 셋
   `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 — 인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다.
   (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).

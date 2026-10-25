@@ -1,9 +1,9 @@
 # TARS Main Split — Design
 
 Date: 2026-10-25
-Status: 진행 중 — MS-M0 끝(2026-10-25, 루트 게이트 22/22, prebuild 293초 + lanes 289초, plan
-`docs/plans/2026-10-25-tars-main-split-ms-m0.md`). MS-M1(init `Boot`)은 plan `docs/plans/2026-10-25-tars-main-split-ms-m1.md`.
-구현 중 design과 달라진 자리 — 결정 4의 "`readPointers`가 `round` · `before_spot` · `supply_seen`을 struct 하나로"는 `Pointers`가
+Status: 끝났다 — MS-M0(2026-10-25, 루트 게이트 22/22, prebuild 293초 + lanes 289초) · MS-M1(2026-10-25, 루트 게이트 22/22,
+prebuild 293초 + lanes 289초). plan은 `docs/plans/2026-10-25-tars-main-split-ms-m{0,1}.md`, 기억은
+`docs/decisions/project_main_split.md`. 구현 중 design과 달라진 자리 — 결정 4의 "`readPointers`가 `round` · `before_spot` · `supply_seen`을 struct 하나로"는 `Pointers`가
 됐고 `ws`는 `wirePointer`가 구한다. 그리기 단계의 `render` → `dumpFrame` 사이는 `Frame` struct(프롬프트 · 상태 줄 버퍼 포함,
 `tick`의 스택)로 건넨다. probe anchor는 셋이 아니라 넷이다(plan 실측 6).
 

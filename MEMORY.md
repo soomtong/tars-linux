@@ -59,6 +59,7 @@ init · 설정 · 전원
 - [Device discovery](docs/decisions/project_device_discovery.md) — 입력 장치를 번호가 아니라 성질로 찾는다
 - [Config persistence](docs/decisions/project_config_persistence.md) — 설정은 `/config/tars.conf` 하나, 파서는 PID 1 한 벌
 - [Screen Args](docs/decisions/project_screen_args.md) — init → terminal argv 계약은 `shared/screen_args.zig` 한 파일, 두 build.zig가 named module로. `Args` · `encode` · `decode`도 거기 — init은 encode, terminal은 decode 한 줄(SA-M0~M1, 2026-10-24)
+- [Main Split](docs/decisions/project_main_split.md) — terminal `main`은 `App.open` · `tick` · `close`, init `main`은 `Boot`와 단계 일곱. 동작 0줄 변경, 바퀴를 넘어 사는 값만 필드(MS-M0~M1, 2026-10-25)
 - [Guest environment](docs/decisions/project_guest_environment.md) — 게스트에 직접 넣어야 하는 것들(`PATH` · terminfo · 로케일)
 - [Kernel config](docs/decisions/project_kernel_config.md) — `olddefconfig`가 적어 둔 설정과 빌드하는 설정을 가른다
 - [Real machine](docs/decisions/project_real_machine.md) — 일반 x86_64 노트북에서 뜨는 커널(RM-M0~M3, 2026-09-10)
