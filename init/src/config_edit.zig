@@ -297,3 +297,189 @@ pub fn staleAlias(rc: []const u8) ?usize {
     }
     return null;
 }
+
+// ── 명령 ──────────────────────────────────────────────────────────────
+
+/// 한 번의 `set` · `reset`이 받는 쌍의 상한.
+pub const PAIRS_MAX = 16;
+
+/// 동사 뒤의 인자. argv를 가리킨다 — argv는 프로세스 수명이다.
+pub const Rest = []const [*:0]const u8;
+
+/// `tars-config`의 동사 하나(HC design 결정 4). 거절도 칸이다 — 그 문장은 `config_cli`의 `main`이 찍는다.
+pub const Command = union(enum) {
+    show,
+    help,
+    /// BV-M0. 글자는 빌드가 박은 것이다 — VERSION과 git의 답(BV design 결정 2 · 7).
+    version,
+    list,
+    /// "언세팅"은 reset이다. unset이라는 이름은 받지 않는다 — 그 낱말은 "줄을 지운다"로
+    /// 읽히는데 reset은 줄을 지우지 않고 기본값을 적는다(design 결정 1의 덧붙임).
+    /// 친 사람이 길을 잃지 않게 그 차이를 말하고 쓰는 법으로 끝낸다.
+    unset,
+    /// `reload` · `reload terminal`. true가 terminal.
+    reload: bool,
+    check,
+    /// 앞문 다섯(TC-M1). 인자는 각자 가른다.
+    wifi: Rest,
+    ssh: Rest,
+    ssh_key: Rest,
+    firewall: Rest,
+    dictation: Rest,
+    /// 공백을 벗긴 키. 아는 키인지는 `get`이 `isKey`로 본다.
+    get: []const u8,
+    /// `set K=V…` · `reset K…`가 같은 칸이다 — `change`는 쌍만 받는다.
+    change: []const Pair,
+    usage,
+    /// `set`의 인자에 `=`가 없다. 그 인자다.
+    no_equals: []const u8,
+    /// `reset`의 모르는 키.
+    unknown_key: []const u8,
+};
+
+/// argv[1..]을 가른다. `set`의 쌍은 pairs에, `reset`의 기본값 글자는 default_bufs에 짓는다 — 둘 다 호출자의 스택이다.
+///
+/// 하나라도 거절이면 그 자리에서 멈춘다. 앞의 쌍은 pairs에 남지만 아무도 안 읽는다.
+pub fn parseCommand(args: Rest, pairs: *[PAIRS_MAX]Pair, default_bufs: *[PAIRS_MAX][VALUE_MAX]u8) Command {
+    if (args.len == 0) return .show;
+    const verb = std.mem.span(args[0]);
+    const rest = args[1..];
+
+    if (std.mem.eql(u8, verb, "help") or std.mem.eql(u8, verb, "-h") or std.mem.eql(u8, verb, "--help"))
+        return if (rest.len == 0) .help else .usage;
+    if (std.mem.eql(u8, verb, "version") or std.mem.eql(u8, verb, "--version") or std.mem.eql(u8, verb, "-V"))
+        return if (rest.len == 0) .version else .usage;
+    if (std.mem.eql(u8, verb, "list")) return if (rest.len == 0) .list else .usage;
+    if (std.mem.eql(u8, verb, "unset")) return .unset;
+    if (std.mem.eql(u8, verb, "reload")) {
+        if (rest.len == 0) return .{ .reload = false };
+        if (rest.len == 1 and std.mem.eql(u8, std.mem.span(rest[0]), "terminal")) return .{ .reload = true };
+        return .usage;
+    }
+    if (std.mem.eql(u8, verb, "check")) return if (rest.len == 0) .check else .usage;
+    if (std.mem.eql(u8, verb, "wifi")) return .{ .wifi = rest };
+    if (std.mem.eql(u8, verb, "ssh")) return .{ .ssh = rest };
+    if (std.mem.eql(u8, verb, "ssh-key")) return .{ .ssh_key = rest };
+    if (std.mem.eql(u8, verb, "firewall")) return .{ .firewall = rest };
+    if (std.mem.eql(u8, verb, "dictation")) return .{ .dictation = rest };
+    if (std.mem.eql(u8, verb, "get")) {
+        if (rest.len != 1) return .usage;
+        return .{ .get = std.mem.trim(u8, std.mem.span(rest[0]), " \t") };
+    }
+    const is_set = std.mem.eql(u8, verb, "set");
+    if (!is_set and !std.mem.eql(u8, verb, "reset")) return .usage;
+    if (rest.len == 0 or rest.len > PAIRS_MAX) return .usage;
+
+    const defaults = config.Config{};
+    for (rest, 0..) |arg_z, i| {
+        const arg = std.mem.span(arg_z);
+        if (is_set) {
+            // 설정 파일의 한 줄과 같은 규칙으로 가른다 — 첫 `=`, 양쪽 공백.
+            const eq = std.mem.indexOfScalar(u8, arg, '=') orelse return .{ .no_equals = arg };
+            pairs[i] = .{
+                .key = std.mem.trim(u8, arg[0..eq], " \t"),
+                .value = std.mem.trim(u8, arg[eq + 1 ..], " \t"),
+            };
+        } else {
+            const key = std.mem.trim(u8, arg, " \t");
+            const value = valueText(&defaults, key, &default_bufs[i]) orelse return .{ .unknown_key = key };
+            pairs[i] = .{ .key = key, .value = value };
+        }
+    }
+    return .{ .change = pairs[0..rest.len] };
+}
+
+// ── init의 답(TC-M2) ──────────────────────────────────────────────────
+//
+// 답을 짓는 쪽은 `reload.configReply`다. 이 파일은 reload.zig를 import하지 않는다(그것은 PID 1의
+// 것이다) — 두 벌이 맞는지는 `config_edit_test`가 지은 답을 그대로 넣어 본다(HC design 결정 7).
+
+/// `config`의 답에서 그 키의 값.
+pub fn nowValue(reply: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, reply, '\n');
+    while (it.next()) |line| {
+        if (line.len > key.len and std.mem.startsWith(u8, line, key) and line[key.len] == '=') return line[key.len + 1 ..];
+    }
+    return null;
+}
+
+/// `config`의 답의 `screen …` 줄(화면이 대기 중인 키)의 꼬리. 없으면 null.
+pub fn screenLine(reply: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, reply, '\n');
+    while (it.next()) |line| if (std.mem.startsWith(u8, line, "screen ")) return line["screen".len..];
+    return null;
+}
+
+// ── 문장 ──────────────────────────────────────────────────────────────
+//
+// 여러 줄을 찍는 함수는 `sink`를 받는다 — `print(fmt, args)`가 있는 것이면 된다. `config_cli`는 줄마다
+// `write` 한 번인 `Say`를, 검사는 `control.Out`을 준다. 버퍼 하나에 모으지 않는 것은 `checkLines`의
+// 출력이 파일의 줄 수에 비례하기 때문이다(HC-M0 plan 확정 3).
+
+/// `set` · `reset`이 키마다 찍는 결과 한 줄. 키는 `judge`가 받은 것(13자 이하)이고 값 둘은
+/// `VALUE_MAX` 안이라 `LINE_MAX`를 넘지 않는다.
+pub fn changeLine(buf: *[LINE_MAX]u8, key: []const u8, old: []const u8, old_default: bool, new: []const u8) []const u8 {
+    if (std.mem.eql(u8, old, new)) return std.fmt.bufPrint(buf, "{s}: {s} (unchanged)\n", .{ key, new }) catch unreachable;
+    return std.fmt.bufPrint(buf, "{s}: {s}{s} -> {s}\n", .{ key, old, if (old_default) " (default)" else "", new }) catch unreachable;
+}
+
+/// 열두 키를 `key=기본값`과 받는 값으로 한 줄씩. `help`와 `list`가 함께 쓴다. 왼쪽 칸은
+/// 그대로 `set`에 줄 수 있는 모양이고(`reset`이 적는 값이 그것이다), 오른쪽은
+/// `hint` — enum이면 config.zig의 이름에서 컴파일 타임에 나온다.
+pub fn keyTable(sink: anytype) void {
+    const defaults = config.Config{};
+    for (KEYS) |key| {
+        var vbuf: [VALUE_MAX]u8 = undefined;
+        var pair_buf: [LINE_MAX]u8 = undefined;
+        const pair = std.fmt.bufPrint(&pair_buf, "{s}={s}", .{ key, valueText(&defaults, key, &vbuf).? }) catch key;
+        sink.print("  {s:<26} {s}\n", .{ pair, hint(key).? });
+    }
+}
+
+/// `show`의 키 줄 열둘. 파일이 정하지 않는 키는 `#`로 시작한다. text는 파일 전체이고 init처럼 앞의
+/// `MAX_FILE` 바이트만 본다. c는 그것을 `parse`한 것, now는 init의 `config` 답(못 받았으면 null).
+///
+/// TC-M2. init이 지금 쓰는 값(reload design 결정 1). 파일과 다른 키는 그 줄 밑에 주석 한 줄로
+/// 적는다 — 같은 줄 끝에 적으면 이 출력이 더는 그대로 쓸 수 있는 tars.conf가 아니다(TC 결정 8).
+pub fn showKeyLines(sink: anytype, text: []const u8, c: *const config.Config, now: ?[]const u8) void {
+    var line_buf: [LINE_MAX]u8 = undefined;
+    for (KEYS) |key| {
+        var vbuf: [VALUE_MAX]u8 = undefined;
+        const value = valueText(c, key, &vbuf).?;
+        const mark = if (setByFile(&line_buf, text[0..@min(text.len, config.MAX_FILE)], key)) "" else "#";
+        sink.print("{s}{s}={s}\n", .{ mark, key, value });
+        if (now) |r| if (nowValue(r, key)) |v| if (!std.mem.eql(u8, v, value))
+            sink.print("#   init uses {s}={s} now; tars-config reload applies the line above\n", .{ key, v });
+    }
+}
+
+/// `check`의 글자만 보는 둘 — init이 말하는 줄과 같은 키가 여러 줄인 자리. 돌려주는 것은 문제의 수다.
+/// `heard`를 줄마다 비우고 쓴다(`judge`와 같다).
+pub fn checkLines(sink: anytype, text: []const u8) usize {
+    var problems: usize = 0;
+
+    // 줄마다 init의 파서에 따로 넣는다. 줄 사이에 상태가 없는 파서라(마지막 줄이
+    // 이긴다는 것뿐이다) 한 줄씩 들어도 init이 파일째로 읽을 때와 같은 말을 한다.
+    var it = Lines{ .text = text };
+    while (it.next()) |span| {
+        if (span.start >= config.MAX_FILE) break;
+        const raw = text[span.start..span.end];
+        if (classify(raw) == .skip) continue;
+        heard = .{};
+        _ = config.parse(raw);
+        if (heard.count == 0) continue;
+        sink.print("line {d}: {s}\n", .{ span.number, heard.first() });
+        problems += 1;
+    }
+
+    // 같은 키가 둘 이상이면 알린다. 틀린 것은 아니다 — 마지막 줄이 이긴다.
+    for (KEYS) |key| {
+        var numbers: [8]usize = undefined;
+        const n = lineNumbers(text, key, &numbers);
+        if (n < 2) continue;
+        sink.print("{s} is on {d} lines (", .{ key, n });
+        for (numbers[0..@min(n, numbers.len)], 0..) |num, i| sink.print("{s}{d}", .{ if (i == 0) "" else ", ", num });
+        sink.print("); the last one wins\n", .{});
+    }
+    return problems;
+}

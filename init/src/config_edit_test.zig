@@ -8,6 +8,10 @@ const scratch = @import("test_scratch.zig");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const edit = @import("config_edit.zig");
+// HC-M0. init의 `config` 답을 짓는 쪽 — 읽는 쪽(`nowValue` · `screenLine`)과 왕복으로 본다. config_edit.zig는
+// reload.zig를 import하지 않는다. 둘을 함께 아는 것은 이 검사뿐이다(HC design 결정 7).
+const control = @import("control.zig");
+const reload = @import("reload.zig");
 
 pub const configLog = edit.configLog;
 
@@ -93,6 +97,23 @@ fn readAll(path: [:0]const u8, buf: []u8) ![]const u8 {
         len += n;
     }
     return buf[0..len];
+}
+
+fn expectText(got: []const u8, want: []const u8, what: []const u8) !void {
+    if (!std.mem.eql(u8, got, want)) return fail("{s}:\n--- got ---\n{s}\n--- want ---\n{s}", .{ what, got, want });
+}
+
+var cmd_pairs: [edit.PAIRS_MAX]edit.Pair = undefined;
+var cmd_defaults: [edit.PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
+
+fn command(args: edit.Rest) edit.Command {
+    return edit.parseCommand(args, &cmd_pairs, &cmd_defaults);
+}
+
+fn expectCommand(args: edit.Rest, want: std.meta.Tag(edit.Command)) !edit.Command {
+    const got = command(args);
+    if (got != want) return fail("parseCommand {s}… gave {s}, want {s}", .{ if (args.len > 0) std.mem.span(args[0]) else "(none)", @tagName(got), @tagName(want) });
+    return got;
 }
 
 /// a와 b가 정확히 한 줄만 다른가.
@@ -264,6 +285,196 @@ pub fn main() !void {
         if (edit.staleAlias(sh.rcSeed())) |n| return fail("the {s} seed line {d} aliases tars-config", .{ @tagName(sh), n });
     }
     std.debug.print("config_edit_test: /config's device is read from the mount table; no seed aliases tars-config\n", .{});
+
+    // HC-M0. 아래 7 ~ 11의 기대 글자는 옮기기 전 config_cli.zig의 서식 문자열에서 베꼈다 — 옮긴 함수의
+    // 출력에서 베끼면 검사가 그 함수를 그대로 되풀이할 뿐이다(HC design 결정 9). 폭 26칸 패딩은
+    // 셸의 `printf '%-26s'`로 셌다.
+
+    // ── 7. parseCommand — main의 사다리를 그대로 ─────────────────────────
+    const A = [*:0]const u8;
+    _ = try expectCommand(&[_]A{}, .show);
+    for ([_]A{ "help", "-h", "--help" }) |v| _ = try expectCommand(&[_]A{v}, .help);
+    for ([_]A{ "version", "--version", "-V" }) |v| _ = try expectCommand(&[_]A{v}, .version);
+    _ = try expectCommand(&[_]A{"list"}, .list);
+    _ = try expectCommand(&[_]A{"check"}, .check);
+    _ = try expectCommand(&[_]A{"unset"}, .unset);
+    // unset은 뒤에 무엇이 와도 같은 말을 한다.
+    _ = try expectCommand(&[_]A{ "unset", "shell" }, .unset);
+    if ((try expectCommand(&[_]A{"reload"}, .reload)).reload) return fail("reload gave reload terminal", .{});
+    if (!(try expectCommand(&[_]A{ "reload", "terminal" }, .reload)).reload) return fail("reload terminal gave reload", .{});
+    // 앞문 다섯은 동사 뒤를 그대로 넘긴다. 비어 있어도 그 동사다.
+    if ((try expectCommand(&[_]A{ "wifi", "a", "b" }, .wifi)).wifi.len != 2) return fail("wifi a b did not keep two args", .{});
+    if ((try expectCommand(&[_]A{"ssh"}, .ssh)).ssh.len != 0) return fail("ssh kept an arg", .{});
+    _ = try expectCommand(&[_]A{ "ssh-key", "list" }, .ssh_key);
+    _ = try expectCommand(&[_]A{ "firewall", "allow", "22" }, .firewall);
+    _ = try expectCommand(&[_]A{"dictation"}, .dictation);
+    try expectText((try expectCommand(&[_]A{ "get", "shell" }, .get)).get, "shell", "get shell");
+    try expectText((try expectCommand(&[_]A{ "get", " shell\t" }, .get)).get, "shell", "get with spaces");
+    {
+        const ps = (try expectCommand(&[_]A{ "set", "shell=zsh", " net = dhcp " }, .change)).change;
+        if (ps.len != 2) return fail("set gave {d} pairs, want 2", .{ps.len});
+        try expectText(ps[0].key, "shell", "set pair 0 key");
+        try expectText(ps[0].value, "zsh", "set pair 0 value");
+        try expectText(ps[1].key, "net", "set pair 1 key");
+        try expectText(ps[1].value, "dhcp", "set pair 1 value");
+        // 첫 `=`에서 나눈다 — 값 속의 `=`는 값이다(judge가 거절할 일이다).
+        const eqs = (try expectCommand(&[_]A{ "set", "shell=a=b" }, .change)).change;
+        try expectText(eqs[0].value, "a=b", "set splits at the first =");
+        // reset은 기본값을 적는 set이다.
+        const rs = (try expectCommand(&[_]A{ "reset", " shell ", "net" }, .change)).change;
+        if (rs.len != 2) return fail("reset gave {d} pairs, want 2", .{rs.len});
+        try expectText(rs[0].key, "shell", "reset pair 0 key");
+        try expectText(rs[0].value, "fish", "reset pair 0 value");
+        try expectText(rs[1].value, "off", "reset pair 1 value");
+    }
+    const usages = [_][]const A{
+        &.{ "help", "x" }, &.{ "-h", "x" },       &.{ "version", "x" }, &.{ "-V", "x" },
+        &.{ "list", "x" }, &.{ "check", "x" },    &.{ "reload", "x" },  &.{ "reload", "terminal", "x" },
+        &.{"get"},         &.{ "get", "a", "b" }, &.{"set"},            &.{"reset"},
+        &.{"frobnicate"},  &.{"Set"},             &.{"--list"},
+    };
+    for (usages) |args| _ = try expectCommand(args, .usage);
+    {
+        var many: [1 + edit.PAIRS_MAX + 1]A = @splat("shell=zsh");
+        many[0] = "set";
+        _ = try expectCommand(&many, .usage);
+        if ((try expectCommand(many[0 .. 1 + edit.PAIRS_MAX], .change)).change.len != edit.PAIRS_MAX) return fail("set with PAIRS_MAX pairs", .{});
+    }
+    try expectText((try expectCommand(&[_]A{ "set", "shell" }, .no_equals)).no_equals, "shell", "set shell");
+    // 거절은 처음 걸린 인자에서 멈춘다.
+    try expectText((try expectCommand(&[_]A{ "set", "net=dhcp", "shell", "x" }, .no_equals)).no_equals, "shell", "set with a bare second arg");
+    try expectText((try expectCommand(&[_]A{ "reset", "shell", " nope " }, .unknown_key)).unknown_key, "nope", "reset nope");
+    std.debug.print("config_edit_test: parseCommand sorts the verbs the way main did, refusals included\n", .{});
+
+    // ── 8. init의 답을 읽는다 — reload가 지은 그대로 ────────────────────
+    {
+        var file_buf: [512]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&file_buf);
+        for (OTHER) |p| w.print("{s}={s}\n", .{ p.key, p.value }) catch return fail("OTHER does not fit", .{});
+        edit.heard = .{};
+        const live = config.parse(file_buf[0..w.end]);
+        if (edit.heard.count != 0) return fail("parse complained about OTHER: {s}", .{edit.heard.first()});
+
+        var rbuf: [control.REPLY_MAX]u8 = undefined;
+        var out = reload.Out{ .buf = &rbuf };
+        reload.configReply(&out, live, live);
+        for (OTHER) |p| {
+            const got = edit.nowValue(out.bytes(), p.key) orelse return fail("nowValue found no {s}", .{p.key});
+            try expectText(got, p.value, p.key);
+        }
+        if (edit.nowValue(out.bytes(), "colour") != null) return fail("nowValue found colour", .{});
+        // 화면과 init이 같으면 screen 줄이 없다.
+        if (edit.screenLine(out.bytes()) != null) return fail("screenLine with nothing pending", .{});
+        // 키가 다른 키의 앞부분이어도 그 키만 — shell은 shell_config가 아니다.
+        try expectText(edit.nowValue("shell_config=off\nshell=zsh\n", "shell") orelse "", "zsh", "nowValue shell after shell_config");
+
+        // 화면이 기다리는 키. reload_test 4의 그 답이다.
+        var sbuf: [control.REPLY_MAX]u8 = undefined;
+        var so = reload.Out{ .buf = &sbuf };
+        reload.configReply(&so, config.parse("keyboard=pc\nnet=dhcp\ntimezone=Asia/Seoul\n"), defaults);
+        try expectText(edit.screenLine(so.bytes()) orelse "", " keyboard=apple timezone=UTC", "screenLine");
+        try expectText(edit.nowValue(so.bytes(), "keyboard") orelse "", "pc", "nowValue keyboard with a screen line");
+    }
+    std.debug.print("config_edit_test: nowValue and screenLine read what reload.configReply writes\n", .{});
+
+    // ── 9. changeLine — set · reset의 결과 한 줄 ─────────────────────────
+    {
+        var lb: [edit.LINE_MAX]u8 = undefined;
+        try expectText(edit.changeLine(&lb, "shell", "fish", true, "zsh"), "shell: fish (default) -> zsh\n", "changeLine from the default");
+        try expectText(edit.changeLine(&lb, "shell", "bash", false, "zsh"), "shell: bash -> zsh\n", "changeLine from a line");
+        try expectText(edit.changeLine(&lb, "shell", "zsh", false, "zsh"), "shell: zsh (unchanged)\n", "changeLine unchanged");
+        // 같으면 기본값이었는지는 말하지 않는다.
+        try expectText(edit.changeLine(&lb, "net", "off", true, "off"), "net: off (unchanged)\n", "changeLine unchanged default");
+        // 가장 긴 것도 LINE_MAX 안이다.
+        const old: [edit.VALUE_MAX]u8 = @splat('a');
+        const new: [edit.VALUE_MAX]u8 = @splat('b');
+        if (edit.changeLine(&lb, "hangul_layout", &old, true, &new).len != "hangul_layout: ".len + old.len + " (default) -> ".len + new.len + 1)
+            return fail("changeLine of the longest values", .{});
+    }
+    std.debug.print("config_edit_test: changeLine says unchanged, (default) or the old value\n", .{});
+
+    // ── 10. keyTable · showKeyLines ─────────────────────────────────────
+    {
+        var tbuf: [4096]u8 = undefined;
+        var t = control.Out{ .buf = &tbuf };
+        edit.keyTable(&t);
+        if (t.full) return fail("keyTable did not fit in 4096 bytes", .{});
+        if (std.mem.count(u8, t.bytes(), "\n") != edit.KEYS.len) return fail("keyTable printed {d} lines", .{std.mem.count(u8, t.bytes(), "\n")});
+        if (!std.mem.startsWith(u8, t.bytes(), "  shell=fish                 fish | bash | zsh\n")) return fail("keyTable first row:\n{s}", .{t.bytes()});
+        const rows = [_][]const u8{
+            "\n  net=off                    off | dhcp\n",
+            "\n  ntp=off                    off | dhcp | <IPv4 address>\n",
+            "\n  timezone=UTC               UTC | <a name under /usr/share/zoneinfo, e.g. Asia/Seoul>\n",
+            "\n  firewall=off               off | on\n",
+            // 26칸을 넘는 쌍은 자르지 않고 빈칸 하나로 잇는다.
+            "\n  hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap a comma list of ",
+        };
+        for (rows) |row| if (std.mem.indexOf(u8, t.bytes(), row) == null) return fail("keyTable has no row{s}--- got ---\n{s}", .{ row, t.bytes() });
+
+        const text = "shell=zsh\nnet=bogus\n";
+        edit.heard = .{};
+        const c = config.parse(text);
+        const keys_tail = "#keyboard=apple\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
+            "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
+        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#esc_latin=on\n#clipboard=shared\n";
+        var sbuf: [2048]u8 = undefined;
+        var s = control.Out{ .buf = &sbuf };
+        edit.showKeyLines(&s, text, &c, null);
+        // 틀린 줄(net=bogus)은 init이 버리므로 기본값이고 `#`이다.
+        try expectText(s.bytes(), "shell=zsh\n" ++ keys_tail ++ keys_end, "showKeyLines without init");
+
+        var rbuf: [control.REPLY_MAX]u8 = undefined;
+        var r = reload.Out{ .buf = &rbuf };
+        const live = config.parse("shell=zsh\nnet=dhcp\n");
+        reload.configReply(&r, live, live);
+        s = control.Out{ .buf = &sbuf };
+        edit.showKeyLines(&s, text, &c, r.bytes());
+        try expectText(s.bytes(), "shell=zsh\n" ++ keys_tail ++
+            "#   init uses net=dhcp now; tars-config reload applies the line above\n" ++ keys_end, "showKeyLines with init's answer");
+
+        // MAX_FILE 밖의 줄은 init이 안 읽는다 — 그 줄은 키를 정하지 않는다.
+        var long_buf: [config.MAX_FILE + 16]u8 = undefined;
+        long_buf[0] = '#';
+        @memset(long_buf[1 .. config.MAX_FILE - 1], 'x');
+        long_buf[config.MAX_FILE - 1] = '\n';
+        const tail = "shell=zsh\n";
+        @memcpy(long_buf[config.MAX_FILE..][0..tail.len], tail);
+        const long_text = long_buf[0 .. config.MAX_FILE + tail.len];
+        edit.heard = .{};
+        const lc = config.parse(long_text[0..config.MAX_FILE]);
+        s = control.Out{ .buf = &sbuf };
+        edit.showKeyLines(&s, long_text, &lc, null);
+        if (!std.mem.startsWith(u8, s.bytes(), "#shell=fish\n#keyboard=apple\n")) return fail("showKeyLines read past MAX_FILE:\n{s}", .{s.bytes()});
+    }
+    std.debug.print("config_edit_test: keyTable rows and show's key lines, with init's value under the line it differs from\n", .{});
+
+    // ── 11. checkLines ──────────────────────────────────────────────────
+    {
+        var cbuf: [1024]u8 = undefined;
+        var o = control.Out{ .buf = &cbuf };
+        if (edit.checkLines(&o, "# mine\nshell=zsh\n\nnet=dhcp\n") != 0 or o.len != 0) return fail("checkLines on a clean file:\n{s}", .{o.bytes()});
+        o = control.Out{ .buf = &cbuf };
+        if (edit.checkLines(&o, "#x\nshell=fsh") != 1) return fail("checkLines did not count shell=fsh", .{});
+        try expectText(o.bytes(), "line 2: unknown shell 'fsh', falling back to fish\n", "checkLines shell=fsh");
+        // 같은 키가 여러 줄인 것은 알리지만 문제로 세지 않는다 — 마지막 줄이 이긴다.
+        o = control.Out{ .buf = &cbuf };
+        if (edit.checkLines(&o, "shell=zsh\n#x\nshell=fish\n") != 0) return fail("checkLines counted a repeated key", .{});
+        try expectText(o.bytes(), "shell is on 2 lines (1, 3); the last one wins\n", "checkLines repeated key");
+        // 둘 다 — 틀린 줄이 먼저, 겹친 키가 뒤.
+        o = control.Out{ .buf = &cbuf };
+        if (edit.checkLines(&o, "net=on\nnet=dhcp\n") != 1) return fail("checkLines net=on", .{});
+        try expectText(o.bytes(), "line 1: unknown net 'on', falling back to off\nnet is on 2 lines (1, 2); the last one wins\n", "checkLines both");
+        // MAX_FILE 밖의 틀린 줄은 init이 안 읽으므로 말하지 않는다.
+        var long_buf: [config.MAX_FILE + 16]u8 = undefined;
+        long_buf[0] = '#';
+        @memset(long_buf[1 .. config.MAX_FILE - 1], 'x');
+        long_buf[config.MAX_FILE - 1] = '\n';
+        const tail = "shell=fsh\n";
+        @memcpy(long_buf[config.MAX_FILE..][0..tail.len], tail);
+        o = control.Out{ .buf = &cbuf };
+        if (edit.checkLines(&o, long_buf[0 .. config.MAX_FILE + tail.len]) != 0) return fail("checkLines read past MAX_FILE:\n{s}", .{o.bytes()});
+    }
+    std.debug.print("config_edit_test: checkLines names init's complaint per line and the keys written twice\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
