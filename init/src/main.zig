@@ -1063,11 +1063,132 @@ fn supervise(
     }
 }
 
-pub fn main(init: std.process.Init.Minimal) void {
-    // BV-M0: 버전을 줄 끝에 붙인다. 이 줄을 보는 게이트 · release smoke가 모두 부분
-    // 일치라 그대로 맞는다(BV design 결정 8).
-    logline.print("tars-init: starting as PID 1 (TARS {s})\n", .{build_info.version});
+/// PID 1의 부팅 상태 전부(MS-M1). `main`의 지역 변수 가운데 단계 사이를 건너는 값과,
+/// 프로세스 수명 내내 살아야 하는 버퍼가 이 필드들이다.
+///
+/// 수명 규칙은 하나다 — 이 struct는 `main()`의 스택에 살고 `supervise()`가 영영 반환하지
+/// 않으므로 프로세스 수명 내내 유효하다. 자식의 argv와 env 블록이 이 안의 버퍼
+/// (`keyboard_path` · `tz_buf` · `env_buf` · `terminal_toggle_buf` · `service_list` · `live` ·
+/// `children`)를 가리키고, 자식은 fork 뒤 execve로 그 포인터를 읽는다. MS 전에는 이 문장이
+/// 버퍼마다 한 번씩 여섯 자리에 있었다.
+///
+/// 값으로 돌려주지 않는다 — 위의 포인터들이 이 안을 가리키므로 복사하면 주소가 낡는다.
+/// `main`이 `var boot: Boot = .{};` 하나를 놓고 단계는 전부 `*Boot`를 받는다. init은 힙이
+/// 없으므로 버퍼는 `undefined`로 시작하고 각 단계가 채운다(terminal의 `App`과 다른 점).
+const Boot = struct {
+    // ── 설정(`readConfig`) ─────────────────────────────────────────────
+    /// cmdline의 `tars.noconfig`를 덮은 뒤의 값. 아래 모든 단계가 이것을 본다.
+    cfg: config.Config = undefined,
+    /// 설정 디스크가 `/config`에 붙었는가. seed · 탈출로 1 · 무선 · chronyd의 조건이다.
+    mounted: bool = false,
+    noconfig: bool = false,
 
+    // ── 장치(`probeDevices`) ───────────────────────────────────────────
+    /// sysfs를 붙인 뒤여야 한다. terminal의 argv 4번 칸이 이 안을 가리킨다.
+    keyboard_path: devices.Path = .{},
+    /// 전원 버튼은 PID 1이 직접 연다(design 결정 7). terminal이 읽는 안은
+    /// 물렸다 — 자식이 전부 포기 상태여도 버튼은 살아 있어야 하고, 하필 다
+    /// 망가졌을 때 눌러야 하는 것이 전원 버튼이기 때문이다. BF 체인처럼
+    /// /dev/dri/card0이 없어 감독자가 terminal을 포기한 상태가 정확히 그
+    /// 경우다.
+    button_fds: [devices.MAX_BUTTONS]i32 = undefined,
+    button_count: usize = 0,
+
+    /// 단계 2. 설정 디스크 → 설정 파일 → cmdline 탈출로 → seed 넷 → `config shell=` 로그 줄.
+    fn readConfig(self: *Boot) void {
+        self.mounted = mountConfig();
+        self.cfg = loadConfig(self.mounted);
+        // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
+        //
+        // 이 키 하나만 이 예외를 갖는다. 근거는 *"`tars.conf`를 고칠 셸이 없을
+        // 때 쓰는 것"*이다 — 사용자의 rc가 셸을 죽이거나 매달리게 만들면 설정을
+        // 고칠 자리가 통째로 사라진다(design 위험 3). 실기는 limine 메뉴를
+        // 지나므로 사람이 부팅 순간에 이 단어를 적어 넣을 수 있다(실측 12).
+        //
+        // `loadConfig` 바로 뒤인 것이 중요하다. 아래의 `config shell=` 로그
+        // 줄과 argv 배선이 전부 `cfg`를 보므로, 여기서 덮으면 그 뒤는 아무것도
+        // 안 고쳐도 된다 — 게이트도 그 한 줄에서 실효값을 읽는다.
+        //
+        // 매달리는 rc까지 덮는 것이 탈출로 1과 다른 점이다(결정 8은 자식이
+        // 죽어야 발동한다). 대가는 사람이 부팅 순간에 개입해야 한다는 것이고,
+        // 그래서 둘이 서로를 대체하지 않는다.
+        self.noconfig = config.cmdlineNoConfig(config.CMDLINE_PATH);
+        if (self.noconfig) {
+            // 크게 찍는다. 이 줄이 없으면 "설정 파일에는 on이라고 적혀 있는데
+            // 왜 rc가 안 읽히지"가 영영 안 풀린다.
+            logline.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
+                config.NO_CONFIG_TOKEN, CONFIG_PATH,
+            });
+            self.cfg.shell_config = .off;
+        }
+        // SC-M1 결정 7. `loadConfig`보다 뒤이고 자식을 띄우기보다 앞이다 —
+        // 앞이어야 하는 이유는 이 부팅의 셸이 곧바로 이 파일을 읽기 때문이고,
+        // `loadConfig` 뒤인 이유는 `tars.conf`의 seed가 먼저 생기는 편이 로그의
+        // 순서로 읽기에 맞기 때문이다(둘 사이에 의존은 없다).
+        //
+        // `cfg`를 안 넘긴다. seed는 `shell_config`도 `shell`도 안 본다 —
+        // 그 근거는 `config.seedRcFiles`의 주석에 있다.
+        if (self.mounted) {
+            config.seedRcFiles();
+            // ST-M2. `/.gitconfig`가 가리키는 자리를 채운다 — 그 링크는 UT-M3
+            // 결정 8이 걸어 둔 것이고, 그 실체를 만드는 코드가 여기다.
+            //
+            // 조건이 rc와 글자 그대로 같다. 디스크가 안 붙으면 `/config`는 tmpfs의
+            // 빈 디렉터리이고, 거기 만든 파일은 재부팅마다 사라진다.
+            config.seedGitconfig();
+            // PE-M2. `/.vimrc`가 가리키는 자리를 채운다 — 위 gitconfig와 같은 모양이고
+            // 조건도 같다. seed는 주석뿐이라 vim이 읽어도 아무것도 안 바뀐다(PE
+            // design 결정 7). 있으면 안 건드리므로 사람이 고친 vimrc가 재부팅을 넘는다.
+            config.seedVimrc();
+            // SM-M2 결정 9. seed rc와 같은 조건이다 — 디스크가 붙은 기계에만
+            // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
+            // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그
+            // 자체다: 에러가 안 나는 것이 화면 좌표를 지키는 것이다.
+            makeXdgDir();
+        }
+        // 줄을 새로 만들지 않고 이 줄을 넓힌다(HI-M2). 다른 체인들이
+        // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
+        //
+        // 전환 키 목록의 글자는 이 로그 한 줄에만 쓰인다. terminal에 가는 것은
+        // `placeChildren`의 `screen_args.encode`가 `terminal_toggle_buf`에 따로 짓는다(SA-M1).
+        var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
+        const toggle_arg = self.cfg.hangul_toggle.arg(&toggle_buf);
+        // TS-M1이 여덟째 키를 맨 뒤에 붙였다. 뒤여야 하는 이유는 위와 같다 —
+        // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
+        // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
+        // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
+        // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
+        // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다.
+        var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
+        logline.print(
+            "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
+            .{
+                @tagName(self.cfg.shell),
+                @tagName(self.cfg.keyboard),
+                @tagName(self.cfg.hangul_layout),
+                @tagName(self.cfg.latin_layout),
+                toggle_arg,
+                @tagName(self.cfg.shell_config),
+                @tagName(self.cfg.net),
+                self.cfg.ntp.arg(&ntp_buf),
+                self.cfg.timezone.slice(),
+                @tagName(self.cfg.firewall),
+                @tagName(self.cfg.esc_latin),
+                @tagName(self.cfg.clipboard),
+            },
+        );
+    }
+
+    /// 단계 3. DRM 존재 로그, 키보드 경로, 전원 버튼. sysfs를 붙인 뒤여야 한다.
+    fn probeDevices(self: *Boot) void {
+        logDrmDevicePresence();
+        devices.resolveKeyboard(devices.SYS_INPUT, &self.keyboard_path);
+        self.button_count = devices.openPowerButtons(devices.SYS_INPUT, &self.button_fds);
+    }
+};
+
+/// 단계 1. 시그널 핸들러와 마운트. 설정을 읽기 전이고 상태가 없다.
+fn mountEarly() void {
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
     // 맞다. 이 호출 전까지 커널은 PID 1에게 온 SIGTERM을 조용히 버린다.
@@ -1092,112 +1213,21 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `lo`를 만들기만 하고 올리지 않으며(LB-M0 실측 1), 보통 리눅스에서 이
     // 일은 PID 1(systemd)이나 init 스크립트의 몫이다.
     net.loopbackUp();
+}
 
-    const storage_mounted = mountConfig();
-    var cfg = loadConfig(storage_mounted);
-    // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
-    //
-    // 이 키 하나만 이 예외를 갖는다. 근거는 *"`tars.conf`를 고칠 셸이 없을
-    // 때 쓰는 것"*이다 — 사용자의 rc가 셸을 죽이거나 매달리게 만들면 설정을
-    // 고칠 자리가 통째로 사라진다(design 위험 3). 실기는 limine 메뉴를
-    // 지나므로 사람이 부팅 순간에 이 단어를 적어 넣을 수 있다(실측 12).
-    //
-    // `loadConfig` 바로 뒤인 것이 중요하다. 아래의 `config shell=` 로그
-    // 줄과 argv 배선이 전부 `cfg`를 보므로, 여기서 덮으면 그 뒤는 아무것도
-    // 안 고쳐도 된다 — 게이트도 그 한 줄에서 실효값을 읽는다.
-    //
-    // 매달리는 rc까지 덮는 것이 탈출로 1과 다른 점이다(결정 8은 자식이
-    // 죽어야 발동한다). 대가는 사람이 부팅 순간에 개입해야 한다는 것이고,
-    // 그래서 둘이 서로를 대체하지 않는다.
-    const noconfig = config.cmdlineNoConfig(config.CMDLINE_PATH);
-    if (noconfig) {
-        // 크게 찍는다. 이 줄이 없으면 "설정 파일에는 on이라고 적혀 있는데
-        // 왜 rc가 안 읽히지"가 영영 안 풀린다.
-        logline.print("tars-init: {s} on the kernel command line beats {s}, shell_config=off\n", .{
-            config.NO_CONFIG_TOKEN, CONFIG_PATH,
-        });
-        cfg.shell_config = .off;
-    }
-    // SC-M1 결정 7. `loadConfig`보다 뒤이고 자식을 띄우기보다 앞이다 —
-    // 앞이어야 하는 이유는 이 부팅의 셸이 곧바로 이 파일을 읽기 때문이고,
-    // `loadConfig` 뒤인 이유는 `tars.conf`의 seed가 먼저 생기는 편이 로그의
-    // 순서로 읽기에 맞기 때문이다(둘 사이에 의존은 없다).
-    //
-    // `cfg`를 안 넘긴다. seed는 `shell_config`도 `shell`도 안 본다 —
-    // 그 근거는 `config.seedRcFiles`의 주석에 있다.
-    if (storage_mounted) {
-        config.seedRcFiles();
-        // ST-M2. `/.gitconfig`가 가리키는 자리를 채운다 — 그 링크는 UT-M3
-        // 결정 8이 걸어 둔 것이고, 그 실체를 만드는 코드가 여기다.
-        //
-        // 조건이 rc와 글자 그대로 같다. 디스크가 안 붙으면 `/config`는 tmpfs의
-        // 빈 디렉터리이고, 거기 만든 파일은 재부팅마다 사라진다.
-        config.seedGitconfig();
-        // PE-M2. `/.vimrc`가 가리키는 자리를 채운다 — 위 gitconfig와 같은 모양이고
-        // 조건도 같다. seed는 주석뿐이라 vim이 읽어도 아무것도 안 바뀐다(PE
-        // design 결정 7). 있으면 안 건드리므로 사람이 고친 vimrc가 재부팅을 넘는다.
-        config.seedVimrc();
-        // SM-M2 결정 9. seed rc와 같은 조건이다 — 디스크가 붙은 기계에만
-        // 우리가 만든다. 값(`XDG_DATA_HOME`)은 조건 없이 주고 디렉터리만
-        // 여기서 만드는 것이 비대칭으로 보이지만, 그 비대칭이 결정 9 그
-        // 자체다: 에러가 안 나는 것이 화면 좌표를 지키는 것이다.
-        makeXdgDir();
-    }
-    // 줄을 새로 만들지 않고 이 줄을 넓힌다(HI-M2). 다른 체인들이
-    // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
-    //
-    // 이 배열이 argv로도 간다. `main()`의 스택에 살고 `supervise()`가 영영
-    // 반환하지 않으므로 프로세스 수명 내내 유효하다 — `keyboard_path`와
-    // 같은 근거다.
-    var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    const toggle_arg = cfg.hangul_toggle.arg(&toggle_buf);
-    // terminal에 가는 것은 위 목록에 `esc_latin`을 더한 것이다(EL design
-    // 결정 1). 로그는 파일에 적힌 두 키를 따로 찍고, argv는 합친 것을 쓴다.
-    // 그 글자를 담는 버퍼다 — 아래 `screen_args.encode`가 여기에 쓰고 argv의
-    // 7번 칸이 이것을 가리킨다. 수명은 `toggle_buf`와 같다.
-    var terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    // TS-M1이 여덟째 키를 맨 뒤에 붙였다. 뒤여야 하는 이유는 위와 같다 —
-    // `config/check.sh`가 `config shell=zsh.*shell_config=on` 꼴로,
-    // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
-    // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
-    // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
-    // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다.
-    var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
-    logline.print(
-        "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
-        .{
-            @tagName(cfg.shell),
-            @tagName(cfg.keyboard),
-            @tagName(cfg.hangul_layout),
-            @tagName(cfg.latin_layout),
-            toggle_arg,
-            @tagName(cfg.shell_config),
-            @tagName(cfg.net),
-            cfg.ntp.arg(&ntp_buf),
-            cfg.timezone.slice(),
-            @tagName(cfg.firewall),
-            @tagName(cfg.esc_latin),
-            @tagName(cfg.clipboard),
-        },
-    );
+pub fn main(init: std.process.Init.Minimal) void {
+    // BV-M0: 버전을 줄 끝에 붙인다. 이 줄을 보는 게이트 · release smoke가 모두 부분
+    // 일치라 그대로 맞는다(BV design 결정 8).
+    logline.print("tars-init: starting as PID 1 (TARS {s})\n", .{build_info.version});
 
-    logDrmDevicePresence();
-
-    // sysfs를 붙인 뒤여야 한다(:332). 이 값은 main()의 스택에 살고,
-    // supervise()가 영영 반환하지 않으므로 argv에 넣은 포인터가 뜨지 않는다.
-    var keyboard_path = devices.Path{};
-    devices.resolveKeyboard(devices.SYS_INPUT, &keyboard_path);
-
-    // 전원 버튼은 PID 1이 직접 연다(design 결정 7). terminal이 읽는 안은
-    // 물렸다 — 자식이 전부 포기 상태여도 버튼은 살아 있어야 하고, 하필 다
-    // 망가졌을 때 눌러야 하는 것이 전원 버튼이기 때문이다. BF 체인처럼
-    // /dev/dri/card0이 없어 감독자가 terminal을 포기한 상태가 정확히 그
-    // 경우다.
-    //
-    // keyboard_path와 마찬가지로 이 배열은 main()의 스택에 살고, supervise()가
-    // 영영 반환하지 않으므로 프로세스 수명 내내 유효하다.
-    var button_fds: [devices.MAX_BUTTONS]i32 = undefined;
-    const button_count = devices.openPowerButtons(devices.SYS_INPUT, &button_fds);
+    mountEarly();
+    var boot: Boot = .{};
+    boot.readConfig();
+    boot.probeDevices();
+    // MS-M1 Task 1의 임시 별명 — 아래 절은 Task 2에서 `Boot`의 단계로 옮긴다.
+    const cfg = boot.cfg;
+    const storage_mounted = boot.mounted;
+    const noconfig = boot.noconfig;
 
     // 설정이 실제 동작이 되는 유일한 자리. 여기서 한 번 정해지면 감독 루프는
     // 설정을 모른 채 이 값을 반복해서 띄운다 — 재시작이 설정을 다시 읽지
@@ -1362,11 +1392,16 @@ pub fn main(init: std.process.Init.Minimal) void {
     // SA-M1. 아홉 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
     // 생긴다. 필드 하나를 빠뜨리면 컴파일이 막힌다(`Args`에 기본값이 없다). 0번 칸의
     // `/terminal`도 `encode`가 넣는다(`TERMINAL_PATH`).
+    //
+    // 전환 키의 글자를 담는 버퍼다 — `encode`가 여기에 쓰고 argv의 7번 칸이 이것을
+    // 가리킨다. `main()`의 스택에 살고 `supervise()`가 영영 반환하지 않으므로 프로세스
+    // 수명 내내 유효하다.
+    var terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     const term_argv = screen_args.encode(.{
         .shell_path = shell_path.ptr,
         .shell_flag = shell_flag.ptr,
         .keyboard = cfg.keyboard,
-        .device_path = keyboard_path.cstr(),
+        .device_path = boot.keyboard_path.cstr(),
         .hangul = cfg.hangul_layout,
         .latin = cfg.latin_layout,
         .toggles = cfg.screenToggles(),
@@ -1460,7 +1495,7 @@ pub fn main(init: std.process.Init.Minimal) void {
     // CT-M1. 서비스를 띄우기 전에 연다 — 사람이 부팅 직후에 쳐도 받을 자리가 있다.
     // 못 열면 로그 한 줄이고 CT 전과 같은 부팅이다.
     const control_fd = control.open(control.DIR, control.PATH);
-    supervise(&children, button_fds[0..button_count], control_fd, &live);
+    supervise(&children, boot.button_fds[0..boot.button_count], control_fd, &live);
 }
 
 // TS-M3 plan 결정 M3-D. `environ.zig`는 `config.zig`를 모르므로 `TZ` 버퍼의
