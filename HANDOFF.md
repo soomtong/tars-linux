@@ -1,15 +1,25 @@
-# HANDOFF: Main Split(MS)을 닫았다 — 열린 서브프로젝트가 없다
+# HANDOFF: Host Checks(HC) 진행 중 — HC-M0 완료, 다음은 HC-M1
 
-## 지금 상태 (2026-10-25)
+## 지금 상태 (2026-10-26)
 
-- 열린 서브프로젝트가 없다. 마지막으로 닫은 것은 Main Split(MS-M0~M1, 2026-10-25). design
+- 열린 서브프로젝트는 Host Checks(HC-M0~M2)다. design `docs/specs/2026-10-25-tars-host-checks-design.md`. HANDOFF "다음 후보"의
+  (3)을 사용자가 골랐다. `tars-config` · `tars-install`의 시스템 콜 쪽에 남은 순수한 것(argv 가르기 · init 답 읽기 · 문장 조립)을
+  이미 있는 순수 짝으로 내리고 짝의 호스트 검사에 글자를 박는다. 출력 바이트 · exit code · `build.zig`는 0 변경.
+  - HC-M0 완료(2026-10-26, 루트 게이트 22/22): `config_cli` → `config_edit`(`parseCommand` · `nowValue` · `screenLine` ·
+    `changeLine` · `keyTable` · `showKeyLines` · `checkLines`), 검사 7~11. commit `c17e1a5` · `770b3e8`. 실측과 plan에서 달라진 셋은
+    plan `docs/plans/2026-10-25-tars-host-checks-hc-m0.md`의 끝.
+  - 다음: HC-M1 plan `docs/plans/2026-10-26-tars-host-checks-hc-m1.md`는 M0 게이트가 도는 동안 쓴 초안이다. 게이트 결과로 바뀌는
+    자리는 없었다(M0의 빨강은 부하 flake). 사용자 확인 뒤 Task 1부터. 순서의 함정(`ssh`의 `needDisk`가 동사 검사 앞, `firewall`의
+    읽기가 인자 검사 앞)이 확정 2에 있다.
+  - 검사 (a)의 명령은 `/tmp/hc-fmt.sh`로 묶었다(세션이 바뀌면 M0 plan 확정 1의 명령으로 다시 만든다).
+  - 닫을 때(M2 뒤): decisions `project_host_checks.md` · `MEMORY.md` · `completed.md` · lessons "핵심 파일" 세 줄(design "닫을 때").
+- 그 전에 닫은 것은 Main Split(MS-M0~M1, 2026-10-25). design
   `docs/specs/2026-10-25-tars-main-split-design.md`, 기억 `docs/decisions/project_main_split.md`. terminal의 `main`은 `App.open`(단계
   다섯) → `tick`(단계 열) → `close`, init의 `main`은 `mountEarly` → `Boot`의 단계 다섯 → `supervise`다. 동작 · 로그 · 체인 스크립트는
   0줄 바뀌었다. commit은 Task마다 하나(M0 `4338581` · `9f87233` · `edf3152` · probe `2d6b91c`, M1 `4e85cad` · `9bda00d`) — 읽는 법은
   design 결정 1(b)(`--color-moved` · `--word-diff`). 다음 기능(부분 갱신 · WP-M3)은 `App`의 `render`/`dumpFrame` · `runPanes`에,
   새 설정 키는 `Boot.placeChildren`에 더하는 자리가 생겼다. `probe/patch.pl`의 anchor는 넷이고 `App`의 자리를 찍는다. 소개 페이지에는
   안 넣었다(내부 작업).
-- 다음 서브프로젝트는 아래 "다음 후보"에서 사용자가 고른다 — 새 것은 design부터다.
 - 그 전에 닫은 것은 Screen Args(SA-M0~M1, 2026-10-24). design
   `docs/specs/2026-10-24-tars-screen-args-design.md`, 기억 `docs/decisions/project_screen_args.md`. init → terminal argv 계약이
   `shared/screen_args.zig` 한 파일이다 — 값의 종류 · `Slot` · 기본값(M0)에 `Args` · `encode` · `decode` · `argvOf` ·
@@ -17,7 +27,6 @@
   `main`은 `decode` 한 줄이다. `Args`에 기본값이 없어 칸을 더하고 init이 안 채우면 컴파일이 막힌다. argv의 모양(위치 아홉 칸)과
   로그 줄은 그대로다. 소개 페이지(`gh-pages` `data.js`)에는 안 넣었다 — 기능 추가가 아닌 내부 작업(ZU · SA)은 타임라인에서
   건너뛴다(사용자 결정, 2026-10-25).
-- 다음 서브프로젝트는 아래 "다음 후보"에서 사용자가 고른다 — 새 것은 design부터다.
 - 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`.
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
 - 같은 날 그 앞에 Zig Upgrade(ZU-M2)와 Gate Flakes(GF-M0~M2)를 닫았다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`. 호스트 macOS의
@@ -46,8 +55,7 @@
 
 ## 다음 후보 (SA 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것 가운데 남은 셋, 추천 순서대로. (3) 호스트 검사가 없는 큰 파일 셋
-  `config_cli.zig` 622 · `config_front.zig` 639 · `install.zig` 679 — 인자 파싱과 문장 조립은 호스트 검사로 내려올 수 있다.
+- 2026-10-24 점검이 남긴 것 가운데 남은 셋, 추천 순서대로. (3)은 HC로 진행 중이다(위 "지금 상태").
   (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").

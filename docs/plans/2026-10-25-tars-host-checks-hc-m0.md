@@ -2,7 +2,7 @@
 
 Date: 2026-10-25
 Design: `docs/specs/2026-10-25-tars-host-checks-design.md` 결정 2 · 4 · 6 · 7 · 9 ~ 12
-Status: 진행 중.
+Status: 완료 (2026-10-26) — 루트 게이트 22/22.
 
 ## 누가 무엇을 하나
 
@@ -25,12 +25,16 @@ Status: 진행 중.
    ```bash
    P='\b(say|complain|print|bufPrint)\(\s*(?:[&\w\[\]\.]+,\s*)?"(?:[^"\\]|\\.)*"'
    F='init/src/config_cli.zig init/src/config_edit.zig init/src/config_front.zig init/src/config_front_edit.zig'
-   rg -o --multiline "$P" $F | sed 's/^[^:]*://' | sort > /tmp/hc-tc-before.txt          # 151줄, Task 전에 한 번
-   rg -o --multiline "$P" $F | sed 's/^[^:]*://' | sort | diff /tmp/hc-tc-before.txt -    # Task 1 뒤: `>`만, Task 2 뒤: 빈 출력
+   rg -o --multiline "$P" $F | sed 's/^[^:]*://' | sed 's/^[^"]*//' | sort > /tmp/hc-tc-before.txt          # 151줄, Task 전에 한 번
+   rg -o --multiline "$P" $F | sed 's/^[^:]*://' | sed 's/^[^"]*//' | sort | diff /tmp/hc-tc-before.txt -    # Task 1 뒤: `>`만, Task 2 뒤: 빈 출력
    docker run --rm -v "$PWD":/workspace -w /workspace/init tars-devcontainer bash -c 'zig build && zig build test'
    git diff --stat; git diff --color-moved=dimmed-zebra init/src/
    make check CHAIN=config > /tmp/config.out 2>&1; echo "exit=$?"
    ```
+
+   둘째 `sed`는 Task 1에서 더했다 — `rg -o`는 호출 접두사(`say(` · `bufPrint(&pair_buf, `)까지 뽑는데, 문장을 옮기면
+   `say("…"`가 `sink.print("…"` · `bufPrint(buf, "…"`가 되어 글자가 같아도 diff가 남는다. 리터럴만 견준다. 그리고 `$F`는 zsh에서
+   단어로 쪼개지지 않으므로 bash로 돈다(`/tmp/hc-fmt.sh`로 묶었다).
 
    Task 1 뒤의 diff에 `>`만 있는 것은 옛 문장이 아직 `config_cli`에 있고 새 사본이 `config_edit`에 더해졌기 때문이다 — 그 `>` 줄
    하나하나가 `<`로 짝을 지어 Task 2에서 사라져야 한다. 둘 다 끝나면 빈 출력이다. 파일 단위가 아니라 네 파일 합이라 글자가 조금만
@@ -223,5 +227,31 @@ commit: `HC-M0: Add the tars-config command parser and sentence functions to con
 
 ## HC-M0가 실측한 것
 
-(Task 3 뒤에 채운다 — (a)의 줄 수 전후, `git diff --stat`의 더한 줄 · 지운 줄, `zig build test`의 시간, mutation 둘이 찍은 `FAIL:` 줄,
-루트 게이트의 prebuild · lanes 초.)
+2026-10-26. commit은 Task 1 `c17e1a5` · Task 2 `770b3e8`.
+
+1. (a) 서식 문자열 — 기준선 151줄(`config_cli` 61 · `config_edit` 3 · `config_front` 81 · `config_front_edit` 6). Task 1 뒤 `>` 열
+   줄(`keyTable` 2 · `checkLines` 4 · `changeLine` 2 · `showKeyLines` 2), Task 2 뒤 빈 출력.
+2. `git diff --stat` — Task 1은 `config_edit.zig` +186 · `config_edit_test.zig` +211, 지운 줄 0. Task 2는 `config_cli.zig` +51 −151
+   (622 → 522줄). `config_edit.zig`는 299 → 485줄 — design 위험 6의 "450줄쯤"을 조금 넘었고 500 안이다.
+3. `--color-moved=dimmed-zebra`(`HEAD~1` 대비, Task 1 + 2)에서 `config_cli`의 진한 줄은 `Say` · `edit.` 호출 여섯 · 배열 다섯의
+   `edit.PAIRS_MAX` · `switch`의 갈래뿐이다. `config_edit` 쪽의 진한 줄은 `say(` → `sink.print(`, `edit.`을 뗀 것처럼 한 글자라도
+   바뀐 줄이다 — 글자 그대로인지는 (a)가 본다.
+4. `zig build && zig build test`(컨테이너, 첫 회 1분 17초). `config_edit_test`가 새 다섯 줄과 `PASS`.
+5. mutation 둘 — 사본을 `-v …:ro`로 덮어 `zig build test`만. 둘 다 exit 1, 저장소는 깨끗하다.
+   - m1(`reload`의 `eql`을 뺀다): `FAIL: parseCommand reload… gave reload, want usage`
+   - m2(`" (default)"` → `""`): `FAIL: changeLine from the default:`
+6. config 체인(`make check CHAIN=config`, Task 2 뒤): PASS, 5분 20초.
+7. 호스트 0.17 `zig fmt --check` · `ast-check`: 깨끗하다.
+8. 루트 게이트 — 첫 회 21/22(10분 18초). install 체인(DC-M2) 부팅 7의 판정 17이 빨갰다: 22 lane이 함께 도는 부하에서
+   initramfs 풀기가 5.5초(0.74 → 6.25초)라 4초 늦게 붙는 USB 디스크(`sda2` 6.30초)가 `/init`(6.35초)보다 먼저 섰고, init이 기다릴
+   틈이 없었다. 이 milestone은 커널도 init의 기다림도 안 건드렸고 initrd 크기도 같다(`96932K` 둘 다). install 체인 단독 재실행은 PASS
+   (풀기 3.1초, `appeared after 1300ms`, 4분 2초). 둘째 회 22/22(11분 27초 — prebuild 361초 + lanes 325초, 부팅 7은 1500ms).
+   로그 `out/gate-logs/20261025-154845/`.
+
+plan과 달랐던 것 셋.
+
+- 확정 1의 (a) 명령 — 위 확정 1의 덧붙임.
+- Zig 0.17에서 배열 반복 `**`가 문법 에러다(`binary operator '*' has whitespace on one side`). 검사 7의 쌍 열일곱과 검사 9의 가장
+  긴 값은 `@splat`으로 짓는다 — 저장소의 다른 검사(`environ_test` · `screen_args_test`)가 이미 그렇게 한다.
+- 검사 11의 `shell=fsh`는 주석 한 줄 뒤에 두어 `line 2:`로 본다(줄 번호를 함께 본다). 기대 말은 `heard.first()`가 아니라 검사 2가
+  이미 박은 글자 그대로다.
