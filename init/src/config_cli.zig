@@ -36,8 +36,6 @@ pub const EXIT_REFUSED: u8 = 1;
 pub const EXIT_IO: u8 = 2;
 pub const EXIT_USAGE: u8 = 64;
 
-/// 한 번의 `set` · `reset`이 받는 쌍의 상한.
-const PAIRS_MAX = 16;
 /// 파일을 읽는 버퍼. `config.MAX_FILE`의 두 배라 넘는 파일을 "넘는다"고 말할 수 있다.
 pub const READ_MAX = 2 * config.MAX_FILE;
 
@@ -72,6 +70,13 @@ pub fn complain(comptime fmt: []const u8, args: anytype) void {
     _ = writeAll(2, text);
 }
 
+/// `config_edit`의 여러 줄 함수에 주는 sink. 줄마다 `say` 한 번 — 옮기기 전과 같은 `write`다.
+const Say = struct {
+    pub fn print(_: Say, comptime fmt: []const u8, args: anytype) void {
+        say(fmt, args);
+    }
+};
+
 const USAGE =
     \\usage: tars-config                     show /config/tars.conf as init reads it
     \\       tars-config get KEY             print one value
@@ -102,7 +107,7 @@ fn help() u8 {
     say("TARS {s}\n\n", .{build_info.version});
     _ = writeAll(1, USAGE);
     say("\nkeys (with their defaults):\n", .{});
-    keyTable();
+    edit.keyTable(Say{});
     say("\ninit reads /config/tars.conf only at boot. To reboot: kill -INT 1\n", .{});
     return EXIT_OK;
 }
@@ -111,22 +116,9 @@ fn help() u8 {
 /// 세팅을 하거나 언세팅을 할 수 있지 않을까"). `help`의 표만 찍는다. 파일도 디스크도 안
 /// 본다 — 지금 값은 인자 없는 `tars-config`가 보여 준다.
 fn list() u8 {
-    keyTable();
+    edit.keyTable(Say{});
     say("  (wifi · ssh · ssh-key · firewall · dictation write other files — tars-config help)\n", .{});
     return EXIT_OK;
-}
-
-/// 열두 키를 `key=기본값`과 받는 값으로 한 줄씩. `help`와 `list`가 함께 쓴다. 왼쪽 칸은
-/// 그대로 `set`에 줄 수 있는 모양이고(`reset`이 적는 값이 그것이다), 오른쪽은
-/// `config_edit.hint` — enum이면 config.zig의 이름에서 컴파일 타임에 나온다.
-fn keyTable() void {
-    const defaults = config.Config{};
-    for (edit.KEYS) |key| {
-        var vbuf: [edit.VALUE_MAX]u8 = undefined;
-        var pair_buf: [edit.LINE_MAX]u8 = undefined;
-        const pair = std.fmt.bufPrint(&pair_buf, "{s}={s}", .{ key, edit.valueText(&defaults, key, &vbuf).? }) catch key;
-        say("  {s:<26} {s}\n", .{ pair, edit.hint(key).? });
-    }
 }
 
 // ── 읽기 ──────────────────────────────────────────────────────────────
@@ -225,22 +217,6 @@ fn askInit(verb: control.Verb, name: ?[]const u8, buf: []u8, ms: i32) ?[]const u
     };
 }
 
-/// `config`의 답에서 그 키의 값.
-fn nowValue(reply: []const u8, key: []const u8) ?[]const u8 {
-    var it = std.mem.splitScalar(u8, reply, '\n');
-    while (it.next()) |line| {
-        if (line.len > key.len and std.mem.startsWith(u8, line, key) and line[key.len] == '=') return line[key.len + 1 ..];
-    }
-    return null;
-}
-
-/// `config`의 답의 `screen …` 줄(화면이 대기 중인 키)의 꼬리. 없으면 null.
-fn screenLine(reply: []const u8) ?[]const u8 {
-    var it = std.mem.splitScalar(u8, reply, '\n');
-    while (it.next()) |line| if (std.mem.startsWith(u8, line, "screen ")) return line["screen".len..];
-    return null;
-}
-
 /// `tars-config reload [terminal]`(reload design 결정 7 · M3 절). init의 답을 그대로 찍는다.
 ///
 /// `terminal`이면 먼저 init에게 대기가 있는지 묻는다(`config`의 `screen` 줄). 없으면 아무것도 안 보내고
@@ -253,7 +229,7 @@ fn reloadInit(terminal: bool) u8 {
             complain("init did not answer at {s}", .{control.PATH});
             return EXIT_IO;
         };
-        if (screenLine(now) == null) {
+        if (edit.screenLine(now) == null) {
             say("nothing pending; the screen already uses what init uses\n", .{});
             return EXIT_OK;
         }
@@ -287,20 +263,11 @@ fn show() u8 {
     edit.heard = .{};
     const c = parsed(cur.text);
     const complaints = edit.heard.count;
-    // TC-M2. init이 지금 쓰는 값(reload design 결정 1). 파일과 다른 키는 그 줄 밑에 주석 한 줄로
-    // 적는다 — 같은 줄 끝에 적으면 이 출력이 더는 그대로 쓸 수 있는 tars.conf가 아니다(TC 결정 8).
+    // TC-M2. init이 지금 쓰는 값(reload design 결정 1). 키 줄과 그 밑의 주석은 `edit.showKeyLines`.
     var now_buf: [control.REPLY_MAX]u8 = undefined;
     const now = askInit(.config, null, &now_buf, ASK_MS);
-    var line_buf: [edit.LINE_MAX]u8 = undefined;
-    for (edit.KEYS) |key| {
-        var vbuf: [edit.VALUE_MAX]u8 = undefined;
-        const value = edit.valueText(&c, key, &vbuf).?;
-        const mark = if (edit.setByFile(&line_buf, cur.text[0..@min(cur.text.len, config.MAX_FILE)], key)) "" else "#";
-        say("{s}{s}={s}\n", .{ mark, key, value });
-        if (now) |r| if (nowValue(r, key)) |v| if (!std.mem.eql(u8, v, value))
-            say("#   init uses {s}={s} now; tars-config reload applies the line above\n", .{ key, v });
-    }
-    if (now) |r| if (screenLine(r)) |sl|
+    edit.showKeyLines(Say{}, cur.text, &c, now);
+    if (now) |r| if (edit.screenLine(r)) |sl|
         say("# the screen keeps{s} until tars-config reload terminal\n", .{sl});
     if (now == null and cur.disk != null) say("# init did not answer at {s}; only the file is shown\n", .{control.PATH});
 
@@ -343,8 +310,8 @@ fn change(pairs: []const edit.Pair) u8 {
     }
 
     // 1. 전부 먼저 듣는다. 하나라도 거절이면 아무것도 안 쓴다.
-    var canon_bufs: [PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
-    var canon: [PAIRS_MAX][]const u8 = undefined;
+    var canon_bufs: [edit.PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
+    var canon: [edit.PAIRS_MAX][]const u8 = undefined;
     var line_buf: [edit.LINE_MAX]u8 = undefined;
     var refused = false;
     for (pairs, 0..) |p, i| {
@@ -413,9 +380,9 @@ fn change(pairs: []const edit.Pair) u8 {
 
     // 3. 쌍마다 그 키의 줄 하나를 바꾼다. 버퍼 둘을 번갈아 쓴다.
     var work: [2][READ_MAX]u8 = undefined;
-    var olds: [PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
-    var old_text: [PAIRS_MAX][]const u8 = undefined;
-    var old_default: [PAIRS_MAX]bool = undefined;
+    var olds: [edit.PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
+    var old_text: [edit.PAIRS_MAX][]const u8 = undefined;
+    var old_default: [edit.PAIRS_MAX]bool = undefined;
     for (pairs, 0..) |p, i| {
         edit.heard = .{};
         const was = parsed(text);
@@ -439,13 +406,7 @@ fn change(pairs: []const edit.Pair) u8 {
             return EXIT_IO;
         }
     }
-    for (pairs, 0..) |p, i| {
-        if (std.mem.eql(u8, old_text[i], canon[i])) {
-            say("{s}: {s} (unchanged)\n", .{ p.key, canon[i] });
-        } else {
-            say("{s}: {s}{s} -> {s}\n", .{ p.key, old_text[i], if (old_default[i]) " (default)" else "", canon[i] });
-        }
-    }
+    for (pairs, 0..) |p, i| _ = writeAll(1, edit.changeLine(&line_buf, p.key, old_text[i], old_default[i], canon[i]));
     say("apply it now: tars-config reload (the screen's keys wait for the next boot)\n", .{});
     return EXIT_OK;
 }
@@ -490,29 +451,8 @@ fn check() u8 {
         problems += 1;
     }
 
-    // 줄마다 init의 파서에 따로 넣는다. 줄 사이에 상태가 없는 파서라(마지막 줄이
-    // 이긴다는 것뿐이다) 한 줄씩 들어도 init이 파일째로 읽을 때와 같은 말을 한다.
-    var it = edit.Lines{ .text = text };
-    while (it.next()) |span| {
-        if (span.start >= config.MAX_FILE) break;
-        const raw = text[span.start..span.end];
-        if (edit.classify(raw) == .skip) continue;
-        edit.heard = .{};
-        _ = config.parse(raw);
-        if (edit.heard.count == 0) continue;
-        say("line {d}: {s}\n", .{ span.number, edit.heard.first() });
-        problems += 1;
-    }
-
-    // 같은 키가 둘 이상이면 알린다. 틀린 것은 아니다 — 마지막 줄이 이긴다.
-    for (edit.KEYS) |key| {
-        var numbers: [8]usize = undefined;
-        const n = edit.lineNumbers(text, key, &numbers);
-        if (n < 2) continue;
-        say("{s} is on {d} lines (", .{ key, n });
-        for (numbers[0..@min(n, numbers.len)], 0..) |num, i| say("{s}{d}", .{ if (i == 0) "" else ", ", num });
-        say("); the last one wins\n", .{});
-    }
+    // init이 말하는 줄과 같은 키가 여러 줄인 자리 — 글자만 보는 둘은 `edit.checkLines`.
+    problems += edit.checkLines(Say{}, text);
 
     edit.heard = .{};
     const c = parsed(text);
@@ -549,74 +489,34 @@ fn check() u8 {
 
 pub fn main(init: std.process.Init.Minimal) u8 {
     const argv = init.args.vector;
-    if (argv.len < 2) return show();
-    const verb = std.mem.span(argv[1]);
-    const rest = argv[2..];
-
-    if (std.mem.eql(u8, verb, "help") or std.mem.eql(u8, verb, "-h") or std.mem.eql(u8, verb, "--help")) {
-        if (rest.len != 0) return usage();
-        return help();
-    }
-    // BV-M0. 글자는 빌드가 박은 것이다 — VERSION과 git의 답(BV design 결정 2 · 7).
-    if (std.mem.eql(u8, verb, "version") or std.mem.eql(u8, verb, "--version") or std.mem.eql(u8, verb, "-V")) {
-        if (rest.len != 0) return usage();
-        say("TARS {s}\n", .{build_info.version});
-        return EXIT_OK;
-    }
-    if (std.mem.eql(u8, verb, "list")) {
-        if (rest.len != 0) return usage();
-        return list();
-    }
-    // "언세팅"은 reset이다. unset이라는 이름은 받지 않는다 — 그 낱말은 "줄을 지운다"로
-    // 읽히는데 reset은 줄을 지우지 않고 기본값을 적는다(design 결정 1의 덧붙임).
-    // 친 사람이 길을 잃지 않게 그 차이를 말하고 쓰는 법으로 끝낸다.
-    if (std.mem.eql(u8, verb, "unset")) {
-        complain("there is no unset; reset KEY writes the default value into that key's line (the line stays)", .{});
-        return usage();
-    }
-    if (std.mem.eql(u8, verb, "reload")) {
-        if (rest.len == 0) return reloadInit(false);
-        if (rest.len == 1 and std.mem.eql(u8, std.mem.span(rest[0]), "terminal")) return reloadInit(true);
-        return usage();
-    }
-    if (std.mem.eql(u8, verb, "check")) {
-        if (rest.len != 0) return usage();
-        return check();
-    }
-    // 앞문 넷(TC-M1). 인자는 각자 가른다.
-    if (std.mem.eql(u8, verb, "wifi")) return front.wifi(rest);
-    if (std.mem.eql(u8, verb, "ssh")) return front.ssh(rest);
-    if (std.mem.eql(u8, verb, "ssh-key")) return front.sshKey(rest);
-    if (std.mem.eql(u8, verb, "firewall")) return front.firewall(rest);
-    if (std.mem.eql(u8, verb, "dictation")) return front.dictation(rest);
-    if (std.mem.eql(u8, verb, "get")) {
-        if (rest.len != 1) return usage();
-        return get(std.mem.trim(u8, std.mem.span(rest[0]), " \t"));
-    }
-    const is_set = std.mem.eql(u8, verb, "set");
-    if (!is_set and !std.mem.eql(u8, verb, "reset")) return usage();
-    if (rest.len == 0 or rest.len > PAIRS_MAX) return usage();
-
-    var pairs: [PAIRS_MAX]edit.Pair = undefined;
-    var default_bufs: [PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
-    const defaults = config.Config{};
-    for (rest, 0..) |arg_z, i| {
-        const arg = std.mem.span(arg_z);
-        if (is_set) {
-            // 설정 파일의 한 줄과 같은 규칙으로 가른다 — 첫 `=`, 양쪽 공백.
-            const eq = std.mem.indexOfScalar(u8, arg, '=') orelse {
-                complain("'{s}' has no '='; set takes KEY=VALUE", .{arg});
-                return EXIT_USAGE;
-            };
-            pairs[i] = .{
-                .key = std.mem.trim(u8, arg[0..eq], " \t"),
-                .value = std.mem.trim(u8, arg[eq + 1 ..], " \t"),
-            };
-        } else {
-            const key = std.mem.trim(u8, arg, " \t");
-            const value = edit.valueText(&defaults, key, &default_bufs[i]) orelse return unknownKey(key);
-            pairs[i] = .{ .key = key, .value = value };
-        }
-    }
-    return change(pairs[0..rest.len]);
+    var pairs: [edit.PAIRS_MAX]edit.Pair = undefined;
+    var default_bufs: [edit.PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
+    return switch (edit.parseCommand(if (argv.len > 1) argv[1..] else argv[0..0], &pairs, &default_bufs)) {
+        .show => show(),
+        .help => help(),
+        .version => blk: {
+            say("TARS {s}\n", .{build_info.version});
+            break :blk EXIT_OK;
+        },
+        .list => list(),
+        .unset => blk: {
+            complain("there is no unset; reset KEY writes the default value into that key's line (the line stays)", .{});
+            break :blk usage();
+        },
+        .reload => |terminal| reloadInit(terminal),
+        .check => check(),
+        .wifi => |rest| front.wifi(rest),
+        .ssh => |rest| front.ssh(rest),
+        .ssh_key => |rest| front.sshKey(rest),
+        .firewall => |rest| front.firewall(rest),
+        .dictation => |rest| front.dictation(rest),
+        .get => |key| get(key),
+        .change => |p| change(p),
+        .usage => usage(),
+        .no_equals => |arg| blk: {
+            complain("'{s}' has no '='; set takes KEY=VALUE", .{arg});
+            break :blk EXIT_USAGE;
+        },
+        .unknown_key => |key| unknownKey(key),
+    };
 }
