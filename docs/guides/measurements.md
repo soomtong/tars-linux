@@ -498,3 +498,8 @@ B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joi
 하나로 보내고(2048 = 커널 tty chunk), 루트 `check.sh`가 회차마다 끼어든 줄 A · B와 잘린 줄 C를 센다.
 끼어듦은 드물어(한 판 42회차에 2 ~ 8) 되돌린 치환을 런타임이 잡는 것은 운이고, 진입 검사(게스트
 파일의 `std.debug.print` 0곳)가 결정적으로 지킨다(AL).
+
+93. 게스트 패닉 trace는 Zig 0.17 · ReleaseSafe에서 파일:줄까지 나오고, `--strip-debug` 판은 `.symtab`으로 함수 이름만
+(`???:?:?: 0x1190982 in main.App.dumpFrame`) 낸다. 주소는 두 판이 같고 바이너리가 non-PIE라 호스트의 `zig-out` 원본에
+`x86_64-linux-gnu-addr2line -f -i -C -e …`로 그대로 풀린다 — `-i`가 게스트 trace에 없는 inline 사슬까지 낸다. libc 프레임은 어느
+판이든 `???`다(Debian `.so`는 strip돼 있다). panic은 SIGABRT(signal 6)이고 init이 1초 뒤 다시 띄운다(LI-M0 실측 3).

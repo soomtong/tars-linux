@@ -1,7 +1,7 @@
 # TARS Lean Initrd — Design
 
 Date: 2026-10-26
-Status: LI-M0 끝(2026-10-26, 실측은 `docs/plans/2026-10-26-tars-lean-initrd-li-m0.md`). 결정 1 · 3 · 5가 실측대로라 그대로 간다. LI-M1 plan 전.
+Status: 끝났다 — LI-M0(실측) · LI-M1(2026-10-26, 루트 게이트 22/22). plan은 `docs/plans/2026-10-26-tars-lean-initrd-li-m0.md` · `-li-m1.md`. 기억은 `docs/decisions/project_lean_initrd.md`.
 
 HANDOFF "다음 후보"의 "terminal 바이너리의 디버그 섹션" 항목에서 시작한다(사용자가 2026-10-26에 골랐다).
 

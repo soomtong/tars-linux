@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 Design: `docs/specs/2026-10-26-tars-lean-initrd-design.md` 결정 1 ~ 4 · 6 · 7
-Status: plan
+Status: 완료(2026-10-26, 루트 게이트 22/22).
 
 ## 누가 무엇을 하나
 
@@ -44,4 +44,10 @@ lead가 직접 넣는다. 고치는 파일은 스크립트 하나와 문서 · �
 
 ## LI-M1이 실측한 것
 
-(Task 3에서 적는다)
+1. initrd(`kernel/initrd.cpio`, 두 archive 합) 99,264,851 → 92,957,200바이트(−6,307,651). 첫 archive의 cpio blocks 275,340 →
+   226,921(×512 = −24.8MB, 게스트 RAM 쪽). LI-M0 실측 1의 예측과 맞는다. initrd 안의 다섯은 M0 표의 strip-debug 열과 바이트까지
+   같고 `.debug_info` 0 · `.symtab` 1이다. `zig-out`의 원본은 그대로다(terminal 14,565,904 · init 4,723,400).
+2. 루트 게이트 첫 회 22/22, 12분 18초(prebuild 402초 + lanes 334초). 로그 `out/gate-logs/20261026-120005/`. HC-M2(309 + 294초)보다
+   길지만 strip 탓으로 읽지 않는다 — prebuild는 `clean()` 뒤의 cold build(커널 `CC` 2,466줄)이고 strip 루프는 1초가 안 된다. lanes는
+   단발이고 체인 대부분은 QEMU `-initrd`가 호스트 파일을 바로 싣는다(ZM-M1 "크기가 곧 시간은 아니다"). 빨라졌다고도 적지 않는다.
+3. 게이트 로그의 `failed`는 0바이트 파일이다 — 게이트가 처음에 만들고 빨간 체인 이름만 적는다. 비어 있으면 정상이다.

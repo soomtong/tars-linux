@@ -62,6 +62,7 @@ init · 설정 · 전원
 - [Main Split](docs/decisions/project_main_split.md) — terminal `main`은 `App.open` · `tick` · `close`, init `main`은 `Boot`와 단계 일곱. 동작 0줄 변경, 바퀴를 넘어 사는 값만 필드(MS-M0~M1, 2026-10-25)
 - [Host Checks](docs/decisions/project_host_checks.md) — tars-config · tars-install의 argv 가르기 · 답 읽기 · 문장이 순수 짝으로, 거절도 union 칸(순서 때문에 따로), 여러 줄은 sink, 서식 리터럴 집합 diff로 0 변경 확인(HC-M0~M2, 2026-10-26)
 - [Lessons Split](docs/decisions/project_lessons_split.md) — lessons.md를 허브와 measurements · dead-ends · carryover · key-files로, 글은 옮기기만, 실측 번호 그대로, 옛 참조는 허브 표로(LS-M0, 2026-10-26)
+- [Lean Initrd](docs/decisions/project_lean_initrd.md) — initrd의 우리 바이너리 다섯은 사본만 --strip-debug, 게스트 trace는 함수 이름까지, 파일:줄은 zig-out 원본에 addr2line -i(LI-M0~M1, 2026-10-26)
 - [Guest environment](docs/decisions/project_guest_environment.md) — 게스트에 직접 넣어야 하는 것들(`PATH` · terminfo · 로케일)
 - [Kernel config](docs/decisions/project_kernel_config.md) — `olddefconfig`가 적어 둔 설정과 빌드하는 설정을 가른다
 - [Real machine](docs/decisions/project_real_machine.md) — 일반 x86_64 노트북에서 뜨는 커널(RM-M0~M3, 2026-09-10)

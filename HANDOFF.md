@@ -1,9 +1,15 @@
-# HANDOFF: Lessons Split(LS) 닫음 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Lean Initrd(LI) 닫음 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 지금 상태 (2026-10-26)
 
 - 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
-- 마지막에 닫은 것은 Lessons Split(LS-M0, 2026-10-26). design `docs/specs/2026-10-26-tars-lessons-split-design.md`, 기억
+- 마지막에 닫은 것은 Lean Initrd(LI-M0~M1, 2026-10-26). design `docs/specs/2026-10-26-tars-lean-initrd-design.md`, 기억
+  `docs/decisions/project_lean_initrd.md`. `make_initrd.sh`가 우리 바이너리 다섯(terminal · init · tars-install · tars-service ·
+  tars-config)의 initrd 사본만 `x86_64-linux-gnu-strip --strip-debug`한다 — initrd 99.3 → 93.0MB, 게스트 RAM −24.8MB. `zig-out` 원본은
+  그대로다. 게스트 패닉 trace는 함수 이름까지 찍고(`.symtab`), 파일:줄은 그 빌드의 `zig-out` 원본에 `addr2line -i`(lessons "범용 명령",
+  measurements 93). 루트 게이트 22/22, 12분 18초(prebuild 402 + lanes 334초, 단발 — 시간 효과로 읽지 않는다). commit은 design
+  `c86d561` · M0 `c700113` · M1 `74e4733` · `e534da3` · 닫기. 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Lessons Split(LS-M0, 2026-10-26). design `docs/specs/2026-10-26-tars-lessons-split-design.md`, 기억
   `docs/decisions/project_lessons_split.md`. `docs/guides/lessons.md`는 허브(규칙 넷 · 옮긴 절 표 · 게이트를 돌리고 읽는 법 · 범용
   명령)이고, 실측은 `measurements.md`(번호 1~92 그대로), 안 되는 접근은 `dead-ends.md`, 이월 숙제는 `carryover.md`, 핵심 파일은
   `key-files.md`다. 옛 문서의 `lessons "<절>"` · `lessons N`은 허브의 표로 찾는다. 글은 옮기기만 했다 — 이월 숙제의 닫힌 `[x]` 셋 같은
@@ -36,7 +42,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(HC-M2): 22/22, 10분 5초(prebuild 309초 + lanes 294초). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(LI-M1): 22/22, 12분 18초(prebuild 402초 + lanes 334초 — HC-M2는 309 + 294초, prebuild는 cold build라 흔들린다). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
@@ -55,7 +61,7 @@
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
-## 다음 후보 (HC 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
+## 다음 후보 (LI 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
 - 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
   (5) `.github`가 없다 — Dockerfile 빌드 ·
@@ -69,9 +75,6 @@
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
 - 패키지 매니저(아래 "이미지 뷰어 메모"), IPv6(방화벽 표를 `inet`으로, FW design 위험 6), USB 동글 층 B,
   vim-runtime 축소(38MB — 문법 색 · filetype만 고르는 길).
-- terminal 바이너리의 디버그 섹션 — 0.17에서 15.2MB 가운데 `.debug_*`가 12.0MB(`.debug_loc` 5.8MB)이고 `make_initrd.sh:154`가
-  strip을 안 해 initrd에 그대로 실린다(ZU design 실측 9). `strip --strip-debug`(심볼은 남긴다)로 패닉 trace가 그대로 읽히는지 재고,
-  그렇다면 initrd 4.6MB를 되찾는다. init 바이너리도 같이 본다.
 - 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다.
 
 ## 이미지 뷰어 메모 (기본 이미지에 넣지 않는다 — 사용자 결정, 2026-10-03)
