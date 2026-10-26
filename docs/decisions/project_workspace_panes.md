@@ -1,6 +1,6 @@
 ---
 name: project_workspace_panes
-description: 화면 하나가 셸 여럿을 담는다 — 워크스페이스(탭) 아홉 × 패널 여덟, 키는 iTerm2 그대로. 패널 하나가 PTY · vt.Screen · 사각형이고 키보드는 포커스 패널에만 간다(WP-M0~M2, 2026-10-04 종료). 열여덟번째 체인 pane/check.sh
+description: 화면 하나가 셸 여럿을 담는다 — 워크스페이스(탭) 아홉 × 패널 여덟, 키는 iTerm2 그대로. 패널 하나가 PTY · vt.Screen · 사각형이고 키보드는 포커스 패널에만 간다(WP-M0~M2, 2026-10-04 종료 · M3 방향 포커스 2026-10-27). 열여덟번째 체인 pane/check.sh
 metadata:
   type: project
 ---
@@ -60,7 +60,24 @@ lead가 파일을 직접 대조한 뒤 commit했다 — "만들었다"는 보고
   (로그 전체)이 아니라 마지막 `screen>` 줄 하나로 본다
   ([[project_gate_screen_echo]]).
 
-열지 않은 것: M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor`), 패널 간
+M3 방향 포커스는 2026-10-27에 따로 열어 닫았다(plan
+`docs/plans/2026-10-27-tars-workspace-panes-wp-m3.md`). `Cmd+Option+←↑↓→`가
+`Tree.neighbor(whole, leaf, side)`로 간다.
+
+- 절반 분할에서는 마주 보는 이웃이 늘 구분선 한 칸 거리라 "가장 가까운
+  것"이 아무것도 안 정한다. 정하는 것은 동률 규칙이고, 사용자가 변의
+  시작점(좌우면 맨 위 줄, 상하면 맨 왼쪽 칸)과 마주 보는 것을 골랐다 —
+  tmux식 최근 포커스는 상태를 들어야 한다. 끝에서는 감기지 않는다(감기는
+  것은 `Cmd+]` · `Cmd+[`).
+- 산수는 새로 안 했다. 시작점에서 구분선 한 칸을 건너뛴 칸을 `hit`에 묻는다.
+  그 칸이 구분선에 안 떨어지는 것은 양쪽이 같은 `halves`의 이분 나무라서고,
+  `layout_test` 검사 15가 모양 512개로 본다.
+- Cmd 분기 안에 `alted()` switch가 섰다. 표에 없는 Cmd+Option은 null이라
+  `Cmd+Option+Backspace`가 `0x15`가 아니라 맨 Backspace가 됐다. 옛 "Cmd가
+  이긴다" 검사가 `Cmd+Option+←`를 `0x01`로 못 박고 있어 첫 체인이 거기서
+  빨갰다 — 동작을 바꾸는 확정은 그 키의 옛 기대값부터 찾는다.
+
+열지 않은 것: 패널 간
 클립보드(지금은 `vt.Screen`마다 하나 — CB가 2026-10-05에 `main.zig`로 올렸다,
 [[project_clipboard_scope]]), 비율 조절, 세션 복원. M1이 바꾼
 `Cmd+Shift+←·→·Backspace`(Shift를 무시하던 것이 맨 키로)는 사용자가 그대로

@@ -102,7 +102,7 @@ terminal · 화면
 - [Terminal queries](docs/decisions/project_terminal_queries.md) — 자식의 vt 질의에 terminal이 답한다(TQ-M1, 2026-09-19)
 - [Terminal graphics](docs/decisions/project_terminal_graphics.md) — kitty graphics 이미지를 우리 렌더러가 그린다(TG-M0~M3, 2026-10-03)
 - [Cursor shape](docs/decisions/project_cursor_shape.md) — DECSCUSR 커서 모양 셋과 게스트 vi를 `vim.basic`으로(CU-M0 · M1, 2026-10-04)
-- [Workspace panes](docs/decisions/project_workspace_panes.md) — 워크스페이스 아홉 × 패널 여덟(WP-M0~M2, 2026-10-04)
+- [Workspace panes](docs/decisions/project_workspace_panes.md) — 워크스페이스 아홉 × 패널 여덟(WP-M0~M2, 2026-10-04) · 방향 포커스 Cmd+Option+화살표(WP-M3, 2026-10-27)
 - [Pointer devices](docs/decisions/project_pointer_devices.md) — 마우스 · 터치패드와 드래그 선택(PD-M0~M4, 2026-10-05)
 
 copy mode · 클립보드

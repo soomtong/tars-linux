@@ -1,9 +1,14 @@
-# HANDOFF: Lean Initrd(LI) 닫음 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: WP-M3 방향 포커스 닫음 — 다음 서브프로젝트는 사용자가 고른다
 
-## 지금 상태 (2026-10-26)
+## 지금 상태 (2026-10-27)
 
 - 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
-- 마지막에 닫은 것은 Lean Initrd(LI-M0~M1, 2026-10-26). design `docs/specs/2026-10-26-tars-lean-initrd-design.md`, 기억
+- 마지막에 닫은 것은 WP-M3 방향 포커스(2026-10-27). WP design에 이미 있던 milestone이라 새 design 없이 plan
+  `docs/plans/2026-10-27-tars-workspace-panes-wp-m3.md`의 "착수 전에 확정한 것"에 결정을 적었다. 기억은
+  `docs/decisions/project_workspace_panes.md`에 덧붙였다. `Cmd+Option+←↑↓→` → `layout.Tree.neighbor(whole, leaf, side)`.
+  이웃이 여럿이면 변의 시작점과 마주 보는 것, 끝에서는 감기지 않는다(사용자 결정 둘, 2026-10-26). `Cmd+Option+Backspace`는
+  이제 맨 Backspace다(`alted()` switch의 null). pane 체인 검사 16, 루트 게이트 22/22(prebuild 322 + lanes 305초).
+- 그 전에 닫은 것은 Lean Initrd(LI-M0~M1, 2026-10-26). design `docs/specs/2026-10-26-tars-lean-initrd-design.md`, 기억
   `docs/decisions/project_lean_initrd.md`. `make_initrd.sh`가 우리 바이너리 다섯(terminal · init · tars-install · tars-service ·
   tars-config)의 initrd 사본만 `x86_64-linux-gnu-strip --strip-debug`한다 — initrd 99.3 → 93.0MB, 게스트 RAM −24.8MB. `zig-out` 원본은
   그대로다. 게스트 패닉 trace는 함수 이름까지 찍고(`.symtab`), 파일:줄은 그 빌드의 `zig-out` 원본에 `addr2line -i`(lessons "범용 명령",
@@ -58,10 +63,12 @@
   `dmesg | grep -i sof`의 `Firmware file:` · `Topology file:`. 조용하면 `amixer -c N` · `snd_intel_dspcfg.dsp_driver=1`.
 - BS: 노트북에서 상태 줄 오른쪽 끝에 칸이 뜨는지, 어댑터를 꽂았다 뺄 때 색이 곧바로 바뀌는지, 방전 중 잔량이 60초 안에
   따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄(`carryover.md`의 BS 항목).
+- WP-M3: `Cmd+Option+화살표`(`keyboard=pc`면 `Alt+Win+화살표`)로 패널 사이를 다닐 때 손에 맞는지, 동률의 "맨 위 · 맨
+  왼쪽" 규칙이 어색하지 않은지. 어색하면 최근 포커스(tmux식)가 다른 후보였다.
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
-## 다음 후보 (LI 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
+## 다음 후보 (WP-M3 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
 - 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
   (5) `.github`가 없다 — Dockerfile 빌드 ·
@@ -69,7 +76,6 @@
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
-- WP-M3 방향 포커스(`Cmd+Option+화살표`, `Tree.neighbor` — `docs/specs/2026-10-03-tars-workspace-panes-design.md`의 Milestone 절).
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
