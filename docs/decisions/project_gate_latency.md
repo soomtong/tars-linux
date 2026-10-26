@@ -110,7 +110,8 @@ terminal을 ReleaseSafe로 올리는 벽은 `drm.zig` 하나가 아니라 glibc 
   게이트가 안 빨라진다.
 
 strip은 안 한다 — ReleaseSafe가 심볼을 지우지 않고도 78.6%를 줄이고, 심볼이 있어도
-트레이스는 Debug에서도 안 읽혔다(TF-M4).
+트레이스는 Debug에서도 안 읽혔다(TF-M4). LI-M1(2026-10-26)부터는 initrd 사본만
+`--strip-debug`한다 — 이유는 [[project_gate_chain_composition]]의 strip 문단.
 
 ## How to apply
 

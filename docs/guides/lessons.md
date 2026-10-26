@@ -412,6 +412,13 @@ docker run --rm tars-devcontainer bash -c '
   mkdir -p root; for d in *.deb; do dpkg -x "$d" root; done
   readelf -d root/<경로> | sed -n "s/.*(NEEDED).*\[\(.*\)\]/  \1/p"'
 
+# 게스트 패닉 trace의 주소를 파일:줄로 푼다. initrd의 우리 바이너리는 --strip-debug라
+# 게스트는 `???:?:?: 0x… in main.App.tick`까지만 찍는다(LI-M1). 원본은 zig-out에 있다 —
+# 그 로그를 낸 빌드의 zig-out이어야 한다(다시 빌드하면 주소가 바뀐다). non-PIE라 주소를
+# 그대로 넣는다. -i가 게스트 trace에 없는 inline 사슬을 낸다. init 계열은 init/zig-out/bin/<이름>.
+docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer \
+  x86_64-linux-gnu-addr2line -f -i -C -e terminal/zig-out/bin/terminal 0x1190982 0x112b42d
+
 # initrd 목록 (gzip이다 — cpio에 바로 주면 0줄이다)
 zcat kernel/initrd.cpio | cpio -it 2>/dev/null | grep <이름>
 

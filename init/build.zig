@@ -22,8 +22,9 @@ pub fn build(b: *std.Build) void {
     // 깨진다)이 여기에는 없다(docs/decisions/project_zig_c_uapi_rule.md).
     //
     // 게스트 안 에러 트레이스는 살아 있다. ReleaseSafe는 strip이 아니라
-    // 심볼도 안전 검사도 유지한다 — strip을 안 쓰기로 한 이유는
-    // docs/decisions/project_gate_chain_composition.md에 있다.
+    // 심볼도 안전 검사도 유지한다. 여기서 strip하지 않는 이유는 zig-out의
+    // 이 원본이 호스트에서 trace 주소를 푸는 재료라서다 — initrd에 놓이는
+    // 사본만 kernel/make_initrd.sh가 --strip-debug한다(LI-M1).
     //
     // 아래 세 test_mod는 위의 `optimize`를 그대로 쓴다. 호스트가 돌리는
     // 검사라 크기와 무관하고, 여기까지 최적화하면 `zig build test`만 느려진다.
