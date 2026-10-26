@@ -1,5 +1,10 @@
 const std = @import("std");
+const linux = std.os.linux;
 const disk = @import("disk.zig");
+const control = @import("control.zig");
+
+/// install 체인의 자리. `zig build test`는 init/에서 돈다.
+const INSTALL_CHECK: [:0]const u8 = "../install/check.sh";
 
 /// tars-install의 순수한 쪽을 본다. storage_test와 같은 모양이다 — 호스트
 /// 아키텍처로 컨테이너가 직접 돌리고, 실패하면 무엇이 틀렸는지 한 줄 찍고
@@ -28,6 +33,39 @@ fn expectText(got: []const u8, want: []const u8, what: []const u8) !void {
     if (!std.mem.eql(u8, got, want)) {
         std.debug.print("FAIL: {s}: want '{s}', got '{s}'\n", .{ what, want, got });
         return error.WrongText;
+    }
+}
+
+/// 파일 하나를 buf에. config_front_edit_test의 것과 같은 루프다.
+fn readAll(path: [:0]const u8, buf: []u8) ![]const u8 {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(rc) != .SUCCESS) {
+        std.debug.print("FAIL: cannot open {s}\n", .{path});
+        return error.NoFile;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, buf.len - len);
+        if (linux.errno(n) != .SUCCESS) {
+            std.debug.print("FAIL: cannot read {s}\n", .{path});
+            return error.NoFile;
+        }
+        if (n == 0) break;
+        len += n;
+    }
+    return buf[0..len];
+}
+
+fn expectState(got: disk.State, want: disk.State, what: []const u8) !void {
+    const same = std.meta.activeTag(got) == std.meta.activeTag(want) and
+        std.mem.eql(u8, disk.stateWord(got), disk.stateWord(want));
+    if (!same) {
+        std.debug.print("FAIL: {s}: want .{s} '{s}', got .{s} '{s}'\n", .{
+            what, @tagName(want), disk.stateWord(want), @tagName(got), disk.stateWord(got),
+        });
+        return error.WrongState;
     }
 }
 
@@ -335,5 +373,93 @@ pub fn main() !void {
         }
     }
 
+    // ── 14. 크기와 상태 (HC-M2) ──────────────────────────────────────
+    if (disk.sectorsToBytes("2097152") != 1024 * 1024 * 1024) {
+        std.debug.print("FAIL: 2097152 sectors are not 1 GiB\n", .{});
+        return error.WrongBytes;
+    }
+    for ([_][]const u8{ "", "x", "-1", "12 " }) |t| {
+        if (disk.sectorsToBytes(t) != null) {
+            std.debug.print("FAIL: sectorsToBytes took '{s}'\n", .{t});
+            return error.WrongBytes;
+        }
+    }
+    try expectState(disk.headState(&buf, null), .{ .other = "unreadable" }, "a head that could not be read");
+    try expectState(disk.headState(&buf, .{ .kind = .iso9660, .label = "TARS" }), .medium, "a second TARS stick");
+    try expectState(disk.headState(&buf, .{ .kind = .iso9660, .label = "DEBIAN" }), .{ .other = "foreign (iso9660 DEBIAN)" }, "another iso");
+    try expectState(disk.headState(&buf, .{ .kind = .blank }), .{ .other = "blank" }, "a blank disk");
+    try expectText(disk.stateWord(.medium), "boot medium", "stateWord medium");
+    try expectText(disk.stateWord(.installed), "TARS installed", "stateWord installed");
+    try expectText(disk.stateWord(.{ .other = "foreign (gpt)" }), "foreign (gpt)", "stateWord other");
+
+    // ── 15. 목록의 행 (HC-M2) ────────────────────────────────────────
+    // 조각은 서식의 칸 그대로다 — `  {s:<14} {s:>7}  {s:<22} {s:<9}  {s}\n`.
+    var out_buf: [2048]u8 = undefined;
+    var out = control.Out{ .buf = &out_buf };
+    disk.listRow(&out, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "0", "blank");
+    try expectText(out.bytes(), "  " ++ "/dev/nvme0n1  " ++ " " ++ "   1 GB" ++ "  " ++ "QEMU NVMe Ctrl        " ++ " " ++
+        "internal " ++ "  " ++ "blank\n", "an internal blank row");
+    out = control.Out{ .buf = &out_buf };
+    disk.listRow(&out, "/dev/sda", "16 GB", "USB Stick", "1", "TARS installed");
+    try expectText(out.bytes(), "  " ++ "/dev/sda      " ++ " " ++ "  16 GB" ++ "  " ++ "USB Stick             " ++ " " ++
+        "removable" ++ "  " ++ "TARS installed\n", "a removable installed row");
+
+    // ── 16. 계획 (HC-M2) ─────────────────────────────────────────────
+    const P1 = "  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n";
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true);
+    try expectText(out.bytes(), "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.\n" ++
+        P1 ++
+        "  p2    1 GiB  Linux       ext2   tars-config <- not opened\n" ++
+        "  tars-install /dev/nvme0n1 --wipe erases both instead\n", "the update plan");
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", false);
+    const fresh = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank\n" ++
+        P1 ++
+        "  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
+        "  rest unallocated\n";
+    try expectText(out.bytes(), fresh, "the fresh plan");
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true);
+    try expectText(out.bytes(), fresh ++ "  the settings now on p2 are erased too\n", "the fresh plan over old settings");
+
+    // ── 17. 도구가 끝난 모양 (HC-M2) ─────────────────────────────────
+    // status는 wait4의 모양으로 짓는다 — exit는 code << 8, 시그널은 번호 그대로.
+    out = control.Out{ .buf = &out_buf };
+    if (!disk.toolOk(&out, "/usr/bin/sfdisk", 0) or out.len != 0) {
+        std.debug.print("FAIL: exit 0 was not ok, or it said something\n", .{});
+        return error.WrongTool;
+    }
+    if (disk.toolOk(&out, "/usr/bin/sfdisk", 1 << 8)) {
+        std.debug.print("FAIL: exit 1 was ok\n", .{});
+        return error.WrongTool;
+    }
+    try expectText(out.bytes(), "/usr/bin/sfdisk failed (exit 1); what it said:", "exit 1");
+    out = control.Out{ .buf = &out_buf };
+    if (disk.toolOk(&out, "/usr/bin/mke2fs", 9)) {
+        std.debug.print("FAIL: SIGKILL was ok\n", .{});
+        return error.WrongTool;
+    }
+    try expectText(out.bytes(), "/usr/bin/mke2fs was killed (signal 9); what it said:", "SIGKILL");
+
+    // ── 18. 쓰는 법 — 마지막 줄이 install 체인의 LIST_END (HC-M2) ──────
+    out = control.Out{ .buf = &out_buf };
+    disk.usageLines(&out);
+    try expectText(out.bytes(), "tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n" ++
+        "tars-install <disk> --yes   same, without asking\n" ++
+        "tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", "usage");
+    var check_buf: [65536]u8 = undefined;
+    const check = try readAll(INSTALL_CHECK, &check_buf);
+    const key = "\nLIST_END=\"";
+    const from = (std.mem.indexOf(u8, check, key) orelse {
+        std.debug.print("FAIL: install/check.sh has no LIST_END=\"\n", .{});
+        return error.NoListEnd;
+    }) + key.len;
+    const to = std.mem.indexOfScalarPos(u8, check, from, '"') orelse return error.NoListEnd;
+    const lines = out.bytes();
+    const last = std.mem.trimEnd(u8, lines, "\n");
+    try expectText(last[(std.mem.lastIndexOfScalar(u8, last, '\n') orelse 0) + 1 ..], check[from..to], "the last usage line is the chain's LIST_END");
+
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
+    std.debug.print("disk_test: the state column, a list row, both plans, a tool's end and the usage lines are the installer's words\n", .{});
 }

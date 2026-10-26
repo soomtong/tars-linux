@@ -1,4 +1,5 @@
 const std = @import("std");
+const linux = std.os.linux;
 const storage = @import("storage.zig");
 
 /// tars-install이 시스템 콜 없이 정하는 것들. 디스크 앞머리를 읽고 무엇이
@@ -125,6 +126,31 @@ pub fn isTarsMedium(seen: Seen) bool {
     return seen.kind == .iso9660 and std.mem.eql(u8, seen.label, MEDIUM_VOLUME);
 }
 
+/// 상태 칸의 두 값. install은 `State`의 칸으로 갈래를 고르고 이 글자를 찍는다.
+pub const STATE_MEDIUM = "boot medium";
+pub const STATE_INSTALLED = "TARS installed";
+
+/// 한 디스크의 상태. install은 `medium`이면 거절하고 `installed`면 갱신으로 간다(`--wipe`가 없을 때).
+pub const State = union(enum) { medium, installed, other: []const u8 };
+
+pub fn stateWord(s: State) []const u8 {
+    return switch (s) {
+        .medium => STATE_MEDIUM,
+        .installed => STATE_INSTALLED,
+        .other => |t| t,
+    };
+}
+
+/// 앞머리를 읽은 뒤의 상태. seen이 null이면 못 읽은 것이다.
+///
+/// 그 앞의 둘 — 붙여서 확인한 매체 · 설치됨 — 은 install의 `stateOf`가 먼저 본다. 설치됨은 p1을
+/// 붙여 보는 일이라 매체 디스크에서는 부르지 않는다(HC-M2 plan 확정 3).
+pub fn headState(buf: []u8, seen: ?Seen) State {
+    const s = seen orelse return .{ .other = "unreadable" };
+    if (isTarsMedium(s)) return .medium;
+    return .{ .other = stateText(buf, s) };
+}
+
 /// p1의 앞머리가 FAT32 부트 섹터인가. mkfs.fat이 오프셋 82(BS_FilSysType)에
 /// "FAT32   "을, 510에 55 AA를 쓴다. 82의 여덟 글자는 FAT 규격상 참고용이지만
 /// 우리가 판정하는 것은 "tars-install이 만든 p1인가"이고 그것을 만든 것이
@@ -142,6 +168,13 @@ pub fn formatSize(buf: []u8, bytes: u64) []const u8 {
     if (bytes >= gb) return std.fmt.bufPrint(buf, "{d} GB", .{bytes / gb}) catch "?";
     if (bytes >= mb) return std.fmt.bufPrint(buf, "{d} MB", .{bytes / mb}) catch "?";
     return std.fmt.bufPrint(buf, "{d} B", .{bytes}) catch "?";
+}
+
+/// /sys/block/<이름>/size의 글자를 바이트로. 그 수는 장치의 논리 섹터 크기와 무관하게
+/// 늘 512바이트 단위다(커널 문서 Documentation/ABI/stable/sysfs-block). 수가 아니면 null.
+pub fn sectorsToBytes(text: []const u8) ?u64 {
+    const sectors = std.fmt.parseInt(u64, text, 10) catch return null;
+    return sectors * 512;
 }
 
 pub const Command = union(enum) {
@@ -267,4 +300,62 @@ pub fn espConf(out: []u8, conf: []const u8) ?[]const u8 {
         n += mark.len;
     }
     return if (marked) out[0..n] else null;
+}
+
+// ── 문장 ──────────────────────────────────────────────────────────────
+//
+// 여러 줄을 찍는 함수는 `sink`를 받는다 — `print(fmt, args)`가 있는 것이면 된다. install은 줄마다 `say`
+// 한 번인 `Say`와 줄마다 `complain` 한 번인 `Complain`(접두사와 개행은 `complain`이 붙인다)을, 검사는
+// `control.Out`을 준다. `config_edit`의 문장 절과 같은 모양이다(HC-M0 plan 확정 3).
+
+/// 마지막 줄이 목록의 끝이다. install 체인이 그 줄을 기다린다.
+pub fn usageLines(sink: anytype) void {
+    sink.print("tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n", .{});
+    sink.print("tars-install <disk> --yes   same, without asking\n", .{});
+    sink.print("tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", .{});
+}
+
+/// 목록의 한 행. removable은 /sys/block/<이름>/removable의 글자다(`1`이면 떼는 장치).
+pub fn listRow(sink: anytype, path: []const u8, size: []const u8, model: []const u8, removable: []const u8, state: []const u8) void {
+    sink.print("  {s:<14} {s:>7}  {s:<22} {s:<9}  {s}\n", .{
+        path,
+        size,
+        model,
+        if (std.mem.eql(u8, removable, "1")) "removable" else "internal",
+        state,
+    });
+}
+
+/// 설치의 계획. 갱신은 p1만 갈고 p2를 남긴다(DI design 결정 8). 새 설치는 지울 디스크가 지금 무엇을
+/// 들고 있는지 보인다. p2_settings는 p2에 `tars-` 라벨이 있는가이고 새 설치일 때만 뜻이 있다.
+pub fn planLines(sink: anytype, update: bool, path: []const u8, size: []const u8, model: []const u8, state: []const u8, p2_settings: bool) void {
+    if (update) {
+        sink.print("tars-install: {s} ({s}, {s}) already has TARS. p1 will be updated, p2 (your settings) is kept.\n", .{
+            path, size, model,
+        });
+        sink.print("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        sink.print("  p2    1 GiB  Linux       ext2   tars-config <- not opened\n", .{});
+        sink.print("  tars-install {s} --wipe erases both instead\n", .{path});
+    } else {
+        sink.print("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
+            path, size, model, state,
+        });
+        sink.print("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        sink.print("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
+        sink.print("  rest unallocated\n", .{});
+        if (p2_settings) sink.print("  the settings now on p2 are erased too\n", .{});
+    }
+}
+
+/// 도구가 0으로 끝났는가. 아니면 무엇으로 끝났는지 한 줄을 찍는다 — 그 뒤에 도구가 한 말이 온다.
+/// status는 wait4의 것이다(`audio.outcome`과 같은 읽기). 줄은 `Complain`으로 가므로 개행이 없다.
+pub fn toolOk(sink: anytype, tool: []const u8, status: u32) bool {
+    if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) return true;
+
+    if (linux.W.IFEXITED(status)) {
+        sink.print("{s} failed (exit {d}); what it said:", .{ tool, linux.W.EXITSTATUS(status) });
+    } else {
+        sink.print("{s} was killed (signal {d}); what it said:", .{ tool, @backingInt(linux.W.TERMSIG(status)) });
+    }
+    return false;
 }
