@@ -334,6 +334,12 @@ pub const Pane = enum {
     focus_next,
     /// `Cmd+[` — 이전 패널로 포커스.
     focus_prev,
+    /// `Cmd+Option+←↑↓→` — 그 방향의 이웃 패널로 포커스(WP-M3). 넷을
+    /// variant로 적는 이유는 `workspace_N`과 같다. 끝에서 감기지 않는다.
+    focus_left,
+    focus_right,
+    focus_up,
+    focus_down,
     /// `Cmd+T` — 새 워크스페이스를 끝에 만들고 그리로 간다(WP-M2). 만드는
     /// 자리는 이것 하나다 — `Cmd+5`가 없는 워크스페이스를 만들면 "셸이 하나
     /// 더 떴다"가 실수인지 의도인지 사람이 모른다(design "모델" 절).
@@ -1159,6 +1165,17 @@ pub const State = struct {
                     break :blk .{ .copy = .enter };
                 },
                 c.KEY_D => .{ .pane = .split_below },
+                else => null,
+            };
+            // Cmd+Option(WP-M3, design 위험 6이 예고한 자리). Shift와 같은
+            // 규칙이다 — 표에 없는 조합은 null이고 아래 Option 없는 표로
+            // 떨어지지 않는다. 떨어지면 Cmd+Option+D가 분할이 된다. M3 전에는
+            // Cmd+Option+←·→·Backspace가 Option을 무시하고 0x01·0x05·0x15였다.
+            if (self.alted()) return switch (code) {
+                c.KEY_LEFT => .{ .pane = .focus_left },
+                c.KEY_RIGHT => .{ .pane = .focus_right },
+                c.KEY_UP => .{ .pane = .focus_up },
+                c.KEY_DOWN => .{ .pane = .focus_down },
                 else => null,
             };
             // Cmd 계열은 제어 문자 한 바이트다. 0x01이 beginning-of-line인

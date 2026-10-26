@@ -7,6 +7,9 @@ const Rect = layout.Rect;
 /// 가르면 양쪽이 같아지고, 짝수 쪽 검사는 따로 154를 쓴다.
 const WHOLE: Rect = .{ .col = 0, .row = 0, .cols = 155, .rows = 47 };
 
+/// 방향 넷(WP-M3). 배열이라 `inline for`의 `switch`가 빠짐없이 닫힌다.
+const SIDES = [_]layout.Side{ .left, .right, .up, .down };
+
 fn expectRect(what: []const u8, got: Rect, want: Rect) !void {
     if (std.meta.eql(got, want)) {
         std.debug.print("layout_test: {s} = {d},{d} {d}x{d} OK\n", .{
@@ -351,6 +354,100 @@ pub fn main() !void {
         // 가로 분할의 아래 잎(78,24 77x23, 검사 12). 위로 끌어 나가면 첫 줄이다.
         const lower: Rect = .{ .col = 78, .row = 24, .cols = 77, .rows = 23 };
         try expectHit("clamp above the lower leaf", layout.clampInto(lower, 2, 100, 3), .{ .leaf = 2, .col = 22, .row = 0 });
+    }
+
+    // ── 검사 14: 방향의 이웃 (WP-M3) ───────────────────────────────────
+    //
+    // 0 | (1 / 2)에서 모든 잎 · 모든 방향(검사 12와 같은 사각형). 0의 →가
+    // 이 검사의 중심이다 — 1과 2가 둘 다 0의 오른쪽 변과 마주 보고, 변의
+    // 시작점(맨 위 줄)과 마주 보는 1이 이긴다(사용자 결정, 2026-10-26).
+    // 끝에서는 감기지 않는다 — 감기는 이동은 순환의 몫이다.
+    {
+        const one = layout.Tree.init();
+        inline for (SIDES) |side| {
+            try expectLeaf("one leaf has no neighbor " ++ @tagName(side), one.neighbor(WHOLE, 0, side), null);
+        }
+
+        var t = layout.Tree.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        try expectLeaf("0 right is the top of the two (1, not 2)", t.neighbor(WHOLE, 0, .right), 1);
+        try expectLeaf("1 left is 0", t.neighbor(WHOLE, 1, .left), 0);
+        try expectLeaf("2 left is 0", t.neighbor(WHOLE, 2, .left), 0);
+        try expectLeaf("1 down is 2", t.neighbor(WHOLE, 1, .down), 2);
+        try expectLeaf("2 up is 1", t.neighbor(WHOLE, 2, .up), 1);
+        try expectLeaf("0 left is the edge", t.neighbor(WHOLE, 0, .left), null);
+        try expectLeaf("0 up is the edge", t.neighbor(WHOLE, 0, .up), null);
+        try expectLeaf("0 down is the edge", t.neighbor(WHOLE, 0, .down), null);
+        try expectLeaf("1 right is the edge", t.neighbor(WHOLE, 1, .right), null);
+        try expectLeaf("1 up is the edge", t.neighbor(WHOLE, 1, .up), null);
+        try expectLeaf("2 right is the edge", t.neighbor(WHOLE, 2, .right), null);
+        try expectLeaf("2 down is the edge", t.neighbor(WHOLE, 2, .down), null);
+        try expectLeaf("a leaf not in the tree", t.neighbor(WHOLE, 5, .left), null);
+    }
+
+    // ── 검사 15: 건너뛴 칸은 구분선에 떨어지지 않는다 (WP-M3) ───────────
+    //
+    // `neighbor`는 변의 시작점에서 구분선 한 칸을 건너뛴 칸을 `hit`에 묻는다.
+    // 그 칸이 구분선이면 `hit`이 null이라 이웃이 있는데 "끝"이라고 답한다
+    // (WP-M3 plan 확정 2가 그렇지 않다고 말한다). 분할 모양 256가지 × 격자
+    // 둘(홀수 · 짝수)을 잎 여덟까지 쌓으며 매 단계 모든 잎 · 모든 방향에서
+    // 둘을 본다.
+    //   1. null이면 그 변이 격자 끝이고, 끝이면 null이다.
+    //   2. null이 아니면 그 잎이 구분선 한 칸 건너편에서 시작하고, 변의
+    //      시작점과 마주 본다.
+    {
+        const grids = [_]Rect{ WHOLE, .{ .col = 0, .row = 0, .cols = 154, .rows = 46 } };
+        var asked: usize = 0;
+        for (grids) |whole| {
+            for (0..256) |p| {
+                var t = layout.Tree.init();
+                for (0..layout.MAX_LEAVES - 1) |k| {
+                    const dir: layout.Dir = if ((p >> @intCast(k)) & 1 == 1) .right else .below;
+                    // 지운 적이 없으니 잎 번호는 0..count-1로 빈틈이 없다.
+                    const target: u4 = @intCast((p * 7 + k * 3) % t.count());
+                    _ = t.split(target, dir, whole);
+                    var at: [layout.MAX_LEAVES]Rect = undefined;
+                    t.rects(whole, &at);
+                    for (0..t.count()) |li| {
+                        const leaf: u4 = @intCast(li);
+                        const f = at[leaf];
+                        inline for (SIDES) |side| {
+                            asked += 1;
+                            const edge = switch (side) {
+                                .left => f.col == whole.col,
+                                .right => f.col + f.cols == whole.col + whole.cols,
+                                .up => f.row == whole.row,
+                                .down => f.row + f.rows == whole.row + whole.rows,
+                            };
+                            const got = t.neighbor(whole, leaf, side);
+                            if ((got == null) != edge) {
+                                std.debug.print("FAIL: grid {d}x{d} shape {d} step {d} leaf {d} {s}: got {?d}, edge={}\n", .{
+                                    whole.cols, whole.rows, p, k, leaf, @tagName(side), got, edge,
+                                });
+                                return error.NeighborOnSeparator;
+                            }
+                            if (got) |n| {
+                                const r = at[n];
+                                const ok = switch (side) {
+                                    .left => r.col + r.cols + 1 == f.col and r.row <= f.row and f.row < r.row + r.rows,
+                                    .right => r.col == f.col + f.cols + 1 and r.row <= f.row and f.row < r.row + r.rows,
+                                    .up => r.row + r.rows + 1 == f.row and r.col <= f.col and f.col < r.col + r.cols,
+                                    .down => r.row == f.row + f.rows + 1 and r.col <= f.col and f.col < r.col + r.cols,
+                                };
+                                if (!ok) {
+                                    std.debug.print("FAIL: grid {d}x{d} shape {d} step {d} leaf {d} {s} -> {d} does not face the edge's start\n", .{
+                                        whole.cols, whole.rows, p, k, leaf, @tagName(side), n,
+                                    });
+                                    return error.NeighborNotFacing;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std.debug.print("layout_test: {d} neighbor answers are the edge or the leaf facing its start OK\n", .{asked});
     }
 
     std.debug.print("layout_test: all checks passed\n", .{});

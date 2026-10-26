@@ -437,6 +437,47 @@ read -r COL ROW <<<"$(pane_origin)"
   report_failure "the new pane is not below (rect row=${ROW})"
 echo "split below: $(last_pane_line)"
 
+# ── 검사 16: Cmd+Option+화살표가 그 방향의 이웃으로 간다(WP-M3) ────────
+#
+# 검사 5가 만든 0 | (1 / 2)에서 돈다. 왼쪽 0이 0,0 77x47, 오른쪽 위 1이
+# 78,0, 오른쪽 아래 2가 78,24다(layout_test 검사 12). 16b가 중심이다 — 0의
+# 오른쪽 변은 1과 2가 함께 마주 보고, 변의 시작점(맨 위 줄)과 마주 보는 1이
+# 이긴다(사용자 결정, 2026-10-26). 끝에서 포커스가 2로 돌아와야 검사 6의
+# hangup leaf=2가 그대로 선다. 어느 줄에서도 바이트가 PTY로 안 샌다.
+echo "=== Cmd+Option+arrows move the focus to the neighbor ==="
+KEYS_BEFORE_SIDE="$(key_lines)"
+type_keys meta_l-alt-up
+wait_for_pane 'panes=3 focus=1 rect=78,0 ' ||
+  report_failure "Cmd+Option+Up from the lower right did not move the focus to leaf 1 above"
+type_keys meta_l-alt-left
+wait_for_pane 'panes=3 focus=0 rect=0,0 ' ||
+  report_failure "Cmd+Option+Left from the upper right did not move the focus to leaf 0"
+type_keys meta_l-alt-right
+wait_for_pane 'panes=3 focus=1 rect=78,0 ' ||
+  report_failure "Cmd+Option+Right from leaf 0 did not pick leaf 1 (the pane facing the top of the edge)"
+
+# 16c(음성). 1은 오른쪽 위 끝이다 — → 와 ↑에 이웃이 없고 감기지 않는다.
+# 대조군은 바로 앞의 16b다(같은 →가 포커스를 옮겼다). 감기면 →가 0으로,
+# ↑이 2로 가서 pane> 줄이 는다.
+PANES_BEFORE_EDGE="$(pane_lines)"
+type_keys meta_l-alt-right
+type_keys meta_l-alt-up
+sleep 1
+[ "$(pane_lines)" -eq "$PANES_BEFORE_EDGE" ] ||
+  report_failure "Cmd+Option at the upper right edge moved the focus (pane> ${PANES_BEFORE_EDGE} -> $(pane_lines)), it should stop, not wrap"
+[ "$(pane_value focus)" -eq 1 ] ||
+  report_failure "after Cmd+Option at the edge the focus is $(pane_value focus), expected 1"
+
+type_keys meta_l-alt-down
+wait_for_pane 'panes=3 focus=2 ' ||
+  report_failure "Cmd+Option+Down from leaf 1 did not move the focus to leaf 2 below"
+read -r COL ROW <<<"$(pane_origin)"
+[ "$ROW" -gt 0 ] ||
+  report_failure "Cmd+Option+Down landed on a pane that is not below (rect row=${ROW})"
+[ "$(key_lines)" -eq "$KEYS_BEFORE_SIDE" ] ||
+  report_failure "Cmd+Option+arrows leaked bytes to the PTY (key> ${KEYS_BEFORE_SIDE} -> $(key_lines))"
+echo "the focus went up, left, right (to the top), stopped at the edge, then down: $(last_pane_line)"
+
 # ── 검사 6: Cmd+W가 그 패널만 닫고 terminal은 산다 ────────────────────
 #
 # 순서가 셋이다 — SIGHUP을 보냈다(hangup) → 셸이 끝나 PTY가 EOF를 냈다

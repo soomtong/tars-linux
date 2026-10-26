@@ -16,6 +16,10 @@ pub const Hit = struct { leaf: u4, col: u16, row: u16 };
 /// 새 패널이 어느 쪽에 서는가. 오른쪽(세로 구분선) 또는 아래(가로 구분선).
 pub const Dir = enum { right, below };
 
+/// 포커스가 어느 쪽 이웃으로 가는가(WP-M3). 분할의 `Dir`과 따로인 이유는
+/// 분할에 왼쪽 · 위가 없어서다 — 새 패널은 늘 오른쪽(아래)에 선다.
+pub const Side = enum { left, right, up, down };
+
 /// 워크스페이스 하나의 패널 수 상한. 잎 번호가 0..7이고 `main.zig`의
 /// 패널 배열이 이 번호로 바로 인덱싱된다.
 pub const MAX_LEAVES = 8;
@@ -184,6 +188,35 @@ pub const Tree = struct {
             return .{ .leaf = leaf, .col = col - r.col, .row = row - r.row };
         }
         return null;
+    }
+
+    /// 잎 `leaf`의 `side` 쪽 이웃(WP-M3). 그쪽에 잎이 없으면(격자 끝) null —
+    /// 감기지 않는다. 감기는 이동은 `next` · `prev`가 맡는다.
+    ///
+    /// 마주 보는 이웃이 여럿이면 포커스 변의 시작점(좌우면 맨 위 줄, 상하면
+    /// 맨 왼쪽 칸)과 마주 보는 잎이다. `0 | (1 / 2)`에서 0의 →는 1이다.
+    /// 사람이 고른 규칙이고(2026-10-26), 상태 없이 사각형만으로 정해진다.
+    ///
+    /// 그 시작점에서 구분선 한 칸을 건너뛴 칸을 `hit`에 묻는다. 사각형
+    /// 산수를 여기서 다시 하지 않는 이유는 `hit`의 주석과 같다. 그 칸은
+    /// 구분선 위에 떨어지지 않는다 — 구분선의 양쪽이 같은 구간을 같은
+    /// `halves`로 나누므로, 한쪽 잎이 시작하는 줄이 다른 쪽에서 구분선일 수
+    /// 없다(WP-M3 plan 확정 2, `layout_test` 검사 15).
+    pub fn neighbor(self: *const Tree, whole: Rect, leaf: u4, side: Side) ?u4 {
+        if (self.findLeaf(leaf) == null) return null;
+        var rs: [MAX_LEAVES]Rect = undefined;
+        self.rects(whole, &rs);
+        const f = rs[leaf];
+        // ← · ↑은 u16 뺄셈이 넘치기 전에 끝을 본다. `whole`의 왼쪽 위가
+        // 0,0이 아니어도 그 밖의 칸은 `hit`이 null로 돌려준다.
+        const col: u16, const row: u16 = switch (side) {
+            .left => if (f.col < 2) return null else .{ f.col - 2, f.row },
+            .right => .{ f.col + f.cols + 1, f.row },
+            .up => if (f.row < 2) return null else .{ f.col, f.row - 2 },
+            .down => .{ f.col, f.row + f.rows + 1 },
+        };
+        const h = self.hit(whole, col, row) orelse return null;
+        return h.leaf;
     }
 
     /// 잎의 수.

@@ -617,14 +617,18 @@ pub fn main() !void {
     try expect(&state, K.KEY_LEFT, 1, "\x01"); // 오른쪽 Meta(126)도 같다
     try expect(&state, K.KEY_RIGHTMETA, 0, "");
 
-    // ── 둘 다 눌리면 Cmd가 이긴다 ───────────────────────────────────────
+    // ── 둘 다 눌리면 Cmd 분기가 먼저 본다 ───────────────────────────────
     //
     // 임의의 선택이지만 결정적이어야 한다. macOS에서 Cmd가 더 강한
     // modifier라는 직관과 맞고, 코드에서는 chord가 Meta를 먼저 보는 것으로
     // 표현된다. 이 줄이 그 순서를 못 박는다.
+    //
+    // WP-M3 전에는 Cmd 표가 Option을 무시해서 Cmd+Option+←가 0x01이었다.
+    // 이제 Cmd 분기 안에 Cmd+Option 표가 따로 있어 방향 포커스다 — 여전히
+    // Option 분기의 ESC b가 아니다(검사 84가 넷을 다 본다).
     try expect(&state, K.KEY_LEFTALT, 1, "");
     try expect(&state, K.KEY_LEFTMETA, 1, "");
-    try expect(&state, K.KEY_LEFT, 1, "\x01"); // ESC b가 아니라 0x01
+    try expectPane(&state, K.KEY_LEFT, .focus_left); // ESC b도 0x01도 아니다
     try expect(&state, K.KEY_LEFTMETA, 0, "");
     try expect(&state, K.KEY_LEFT, 1, "\x1bb"); // Meta를 떼면 Option으로
     try expect(&state, K.KEY_LEFTALT, 0, "");
@@ -1803,6 +1807,42 @@ pub fn main() !void {
     }
 
     std.debug.print("input_test: Cmd+T와 Cmd+1~9가 워크스페이스 명령이 되고 copy mode 안에서는 삼켜진다 OK\n", .{});
+
+    // ── WP-M3: 방향 포커스 ───────────────────────────────────────────────
+    //
+    // 검사 84. `Cmd+Option+←↑↓→` 넷이 방향 포커스가 된다. M3 전에는
+    // `Cmd+Option+←`가 Option을 무시하고 `0x01`이었다(design 위험 6).
+    {
+        var wf: input.State = .{};
+        try expect(&wf, K.KEY_LEFTMETA, 1, "");
+        try expect(&wf, K.KEY_LEFTALT, 1, "");
+        try expectPane(&wf, K.KEY_LEFT, .focus_left);
+        try expectPane(&wf, K.KEY_RIGHT, .focus_right);
+        try expectPane(&wf, K.KEY_UP, .focus_up);
+        try expectPane(&wf, K.KEY_DOWN, .focus_down);
+        // 음성. 표에 없는 Cmd+Option 조합은 Option 없는 Cmd 표로 안 떨어진다 —
+        // 떨어지면 `Cmd+Option+D`가 분할이다. modifier가 없었던 것처럼 `d`다.
+        try expect(&wf, K.KEY_D, 1, "d");
+        try expect(&wf, K.KEY_LEFTALT, 0, "");
+        // 대조군. Option을 떼면 `Cmd+←`는 다시 beginning-of-line이다.
+        try expect(&wf, K.KEY_LEFT, 1, "\x01");
+        try expect(&wf, K.KEY_LEFTMETA, 0, "");
+    }
+
+    // 검사 85(음성). copy mode 안의 `Cmd+Option+←`는 패널 명령이 아니라 copy
+    // 커서의 왼쪽이다. copy 분기가 `chord()`보다 앞이다(검사 61과 같은 성질).
+    {
+        var wc: input.State = .{};
+        wc.mode = .copy;
+        try expect(&wc, K.KEY_LEFTMETA, 1, "");
+        try expect(&wc, K.KEY_LEFTALT, 1, "");
+        try expectCopy(&wc, K.KEY_LEFT, .left);
+        try expect(&wc, K.KEY_LEFTALT, 0, "");
+        try expect(&wc, K.KEY_LEFTMETA, 0, "");
+        if (wc.mode != .copy) return error.ModeLeft;
+    }
+
+    std.debug.print("input_test: Cmd+Option+화살표가 방향 포커스가 되고 copy mode 안에서는 copy 이동이다 OK\n", .{});
 
     // ── PD-M2: 포인터가 모드를 바꾼다 ────────────────────────────────────
     //

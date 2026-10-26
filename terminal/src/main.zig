@@ -3570,6 +3570,19 @@ const App = struct {
                 },
                 .focus_next => ws.focus = ws.tree.next(ws.focus),
                 .focus_prev => ws.focus = ws.tree.prev(ws.focus),
+                // 그 방향에 이웃이 없으면(격자 끝) 감기지 않고 아무 일도 안
+                // 한다(WP-M3). 없는 워크스페이스 번호와 같은 길이다 —
+                // `continue`가 `needs_redraw`를 건너뛰고 `pane>` 줄도 안 는다.
+                .focus_left, .focus_right, .focus_up, .focus_down => {
+                    const side: layout.Side = switch (cmd) {
+                        .focus_left => .left,
+                        .focus_right => .right,
+                        .focus_up => .up,
+                        .focus_down => .down,
+                        else => unreachable,
+                    };
+                    ws.focus = ws.tree.neighbor(self.whole, ws.focus, side) orelse continue;
+                },
                 // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
                 // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
                 .new_workspace => {
