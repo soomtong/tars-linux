@@ -150,18 +150,30 @@ chmod 0755 "$WORKDIR/usr/bin/tars-config"
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
 # `guest-optimize` 옵션이고 기본값이 ReleaseSafe다.
-#
-# strip은 여전히 안 한다. ReleaseSafe가 심볼을 지우지 않고도 78.6%를
-# 줄이므로 strip을 검토할 이유가 없어졌다 — `readelf -S`로 확인하면
-# `.debug_info`를 포함한 `.debug_*` 섹션 열 개가 그대로 있다.
-#
-# 옛 주석은 "심볼을 남기는 이유는 에러 트레이스"라고 적고 바로 다음 문장에서
-# "단, 심볼이 있다고 트레이스가 바로 읽히지는 않았다"고 스스로를 부정하고
-# 있었다 — 2026-08-12 TF-M4 실측에서 strip 버전은 `???` 주소 두 줄, 심볼
-# 버전은 트레이스 자체가 없었다. 그 이유는 지금도 규명되지 않았고, Debug
-# 에서도 안 읽혔으므로 ReleaseSafe에서 안 읽히는 것은 회귀가 아니다.
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
+
+# LI-M1. 우리가 빌드한 다섯은 initrd에 놓인 사본만 --strip-debug한다. 다섯의
+# `.debug_*`가 RAM에서 24.8MB, 이 initrd(gzip)에서 6.3MB였다(LI-M0 실측 1).
+#
+# TF-M4(2026-08-12)부터 strip을 안 했던 것은 "trace가 디버그 정보를 런타임에
+# 읽으니 strip하면 고칠 여지가 없다"였다. Zig 0.17에서 둘 다 바뀌었다 — DWARF가
+# 없으면 .symtab으로 함수 이름을 찍고(`???:?:?: 0x… in main.App.tick`), 바이너리가
+# non-PIE라 그 주소를 zig-out/bin/의 원본에 addr2line으로 넣으면 파일:줄과 inline
+# 사슬까지 나온다(LI-M0 실측 3, 명령은 lessons "범용 명령"). 그래서 원본은 두고
+# 사본만 뗀다 — build.zig의 strip이 아닌 이유다. --strip-debug라 .symtab(0.3MB)은
+# 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
+#
+# 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config terminal)
+if ! command -v x86_64-linux-gnu-strip >/dev/null; then
+  echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
+  echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2
+  exit 1
+fi
+for bin in "${OWN_BINS[@]}"; do
+  x86_64-linux-gnu-strip --strip-debug "$WORKDIR/$bin"
+done
 
 mkdir -p "$WORKDIR/vendor/fonts"
 cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
