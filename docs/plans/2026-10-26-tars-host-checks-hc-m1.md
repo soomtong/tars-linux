@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 Design: `docs/specs/2026-10-25-tars-host-checks-design.md` 결정 1 · 2 · 5 · 6 · 9 ~ 12
-Status: 초안 — HC-M0 루트 게이트가 도는 동안 썼다. 게이트 결과와 대조한 뒤 구현에 넘긴다.
+Status: 완료(2026-10-26, 루트 게이트 22/22). HC-M0 루트 게이트가 도는 동안 쓴 초안이고, 그 게이트 결과로 바뀐 자리는 없었다.
 
 ## 누가 무엇을 하나
 
@@ -137,4 +137,26 @@ M0 Task 3과 같다. 루트 게이트가 도는 동안 HC-M2 plan을 쓴다.
 
 ## HC-M1이 실측한 것
 
-(Task 3 뒤에 채운다.)
+2026-10-26. commit은 Task 1 `dd248de` · Task 2 `6d1df4b`.
+
+1. (a) 서식 문자열 — 기준선 151줄(M0 뒤 그대로). Task 1 뒤 `>` 열셋(`wifiDone` 4 · `firewall22` 2 · `firewallSaid` 3 ·
+   `wifiStatusLines` · `firewallRules`의 `"{s}\n"` 2 · `dictationApply` 1 · `dictationUnknown` 1), Task 2 뒤 빈 출력.
+2. `git diff --numstat` — Task 1은 `config_front_edit.zig` +243 · `config_front_edit_test.zig` +164, 지운 줄 0. Task 2는
+   `config_front.zig` +125 −175(639 → 589줄) · `config_cli.zig` +2 −2. `config_front_edit.zig`는 241 → 484줄 — design 위험 6의
+   "400줄쯤"을 넘었고 500 안이다.
+3. `zig build test`(컨테이너) — `config_front_edit_test`가 새 다섯 줄과 `PASS`. 표준 에러의 `tars-init:` 줄은 Task 1 · 2 뒤 모두 58로
+   기준선과 같다 — `config_edit` import가 로그를 새게 하지 않았다(design 위험 4).
+4. 체인 넷(Task 2 뒤, 차례로) — wifi 243초 · service 196초 · firewall 186초 · dictation 215초, 모두 PASS. service의 ssh 문장 넷은
+   게스트 로그에 없다 — 검사 27이 ssh로 받은 `$OUT`을 본다(`service/check.sh` 586). 나머지는 `out/gate-logs/<체인>/`에서 글자로 보인다.
+5. mutation 둘 — 사본을 `-v …:ro`로 덮어 `zig build test`만. 둘 다 exit 1, 저장소는 깨끗하다.
+   - m1(`--country`를 `args[2]`에서): `FAIL: wifi tars-wl --country KR: got .usage, want .add`
+   - m2(`"not opened by tars-config"` → `"not open"`): `FAIL: firewallSaid not opened here:` — firewall 체인이 안 치는 문장이다.
+6. 호스트 0.17 `zig fmt --check init/src shared` · 바뀐 네 파일의 `ast-check`: 깨끗하다.
+7. 루트 게이트 첫 회 22/22, 9분 44초(prebuild 293초 + lanes 288초). 로그 `out/gate-logs/20261026-000939/`.
+
+plan과 달라진 셋.
+
+- `config_cli.zig`의 `Say`에 `pub`을 붙였다 — 고친 파일이 넷이다. 같은 네 줄 struct를 `config_front`에 하나 더 두지 않았다.
+- `dictationApply`의 `work`는 `*[2][]u8`가 아니라 `[2][]u8` 값이다 — 원소가 이미 slice다.
+- 0.17에는 `**`(배열 반복)가 없다 — `"a" ** 32`가 `binary operator '*' has whitespace on one side`로 막혔다. 검사의 32 · 33바이트
+  SSID는 글자로 적었다.

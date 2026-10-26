@@ -1,4 +1,4 @@
-# HANDOFF: Host Checks(HC) 진행 중 — HC-M0 완료, 다음은 HC-M1
+# HANDOFF: Host Checks(HC) 진행 중 — HC-M0 · M1 완료, 다음은 HC-M2
 
 ## 지금 상태 (2026-10-26)
 
@@ -8,10 +8,14 @@
   - HC-M0 완료(2026-10-26, 루트 게이트 22/22): `config_cli` → `config_edit`(`parseCommand` · `nowValue` · `screenLine` ·
     `changeLine` · `keyTable` · `showKeyLines` · `checkLines`), 검사 7~11. commit `c17e1a5` · `770b3e8`. 실측과 plan에서 달라진 셋은
     plan `docs/plans/2026-10-25-tars-host-checks-hc-m0.md`의 끝.
-  - 다음: HC-M1 plan `docs/plans/2026-10-26-tars-host-checks-hc-m1.md`는 M0 게이트가 도는 동안 쓴 초안이다. 게이트 결과로 바뀌는
-    자리는 없었다(M0의 빨강은 부하 flake). 사용자 확인 뒤 Task 1부터. 순서의 함정(`ssh`의 `needDisk`가 동사 검사 앞, `firewall`의
-    읽기가 인자 검사 앞)이 확정 2에 있다.
-  - 검사 (a)의 명령은 `/tmp/hc-fmt.sh`로 묶었다(세션이 바뀌면 M0 plan 확정 1의 명령으로 다시 만든다).
+  - HC-M1 완료(2026-10-26, 루트 게이트 22/22, 9분 44초): `config_front` → `config_front_edit`(인자 union 다섯 · `wifiStatusLines` ·
+    `wifiDone` · `keyLine` · `Sshd` · `firewall22` · `firewallRules` · `firewallChange` · `firewallSaid` · `dictationApply` ·
+    `dictationUnknown`), 검사 5~9. commit `dd248de` · `6d1df4b`. plan과 달라진 셋(`cli.Say`를 `pub`으로 · `work` 값 · 0.17에 `**`
+    없음)은 plan `docs/plans/2026-10-26-tars-host-checks-hc-m1.md`의 끝.
+  - 다음: HC-M2 plan `docs/plans/2026-10-26-tars-host-checks-hc-m2.md`는 M1 게이트가 도는 동안 쓴 초안이고 게이트로 바뀐 자리는
+    없다. 사용자 확인 뒤 Task 1부터. design 결정 8과 다른 자리 — `stateOf`의 앞 둘(매체 경로 비교 · `isInstalled`, p1을 붙여 본다)은
+    `install`에 남고 앞머리 뒤의 판정만 `disk.headState`로 간다(확정 3).
+  - 검사 (a)의 명령은 `/tmp/hc-fmt.sh`(tars-config 네 파일)로 묶었다. M2는 같은 정규식에 `install.zig disk.zig`(기준선 57줄).
   - 닫을 때(M2 뒤): decisions `project_host_checks.md` · `MEMORY.md` · `completed.md` · lessons "핵심 파일" 세 줄(design "닫을 때").
 - 그 전에 닫은 것은 Main Split(MS-M0~M1, 2026-10-25). design
   `docs/specs/2026-10-25-tars-main-split-design.md`, 기억 `docs/decisions/project_main_split.md`. terminal의 `main`은 `App.open`(단계
@@ -34,7 +38,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(SA-M1): 22/22, 약 10분 37초(prebuild 약 335초 + lanes 약 302초). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(HC-M1): 22/22, 9분 44초(prebuild 293초 + lanes 288초). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.

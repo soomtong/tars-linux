@@ -1091,6 +1091,8 @@ B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joi
   `.monotonic`이 아니라 `.awake`다. 경과는 `t0.untilNow(io, .awake).nanoseconds`.
   `vt.Screen`이 `io`를 필드로 든 이유가 이것이다(CS-M0).
 - `std.posix.getenv` — Zig 0.16부터 없다(0.17도 같다).
+- 배열 반복 `"a" ** 32` — 0.17에는 없다. `binary operator '*' has whitespace on one side, but not the other`로
+  막힌다. 검사의 긴 글자는 그대로 적는다(HC-M1).
 - Zig의 multiline 문자열(`\\`)에 탭 넣기 — 거부한다. 탭이 든 글자는 `"\t"`로
   잇는다(TC).
 - `linux.W.TERMSIG`를 숫자와 비교하기 — enum이다(TC).

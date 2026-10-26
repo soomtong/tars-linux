@@ -1,7 +1,7 @@
 # TARS Host Checks — Design
 
 Date: 2026-10-25
-Status: 진행 중 — HC-M0 완료(2026-10-26, 루트 게이트 22/22). plan은 milestone마다 하나 — `docs/plans/2026-10-25-tars-host-checks-hc-m0.md` · `docs/plans/2026-10-26-tars-host-checks-hc-m1.md`(초안).
+Status: 진행 중 — HC-M0 · HC-M1 완료(2026-10-26, 루트 게이트 22/22 각각). plan은 milestone마다 하나 — `docs/plans/2026-10-25-tars-host-checks-hc-m0.md` · `docs/plans/2026-10-26-tars-host-checks-hc-m1.md` · `docs/plans/2026-10-26-tars-host-checks-hc-m2.md`(초안).
 
 HANDOFF "다음 후보"의 첫 항목에서 시작한다(2026-10-24 프로젝트 점검이 남긴 셋 가운데 추천 1순위. 사용자가 2026-10-25에 골랐다).
 
