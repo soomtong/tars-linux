@@ -95,7 +95,11 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/c
 | `HANDOFF.md` | 지금 어디까지 왔는지, 다음에 무엇을 하는지 |
 | `MEMORY.md` | 세션을 넘어 유지되는 기억의 색인 (본문은 `docs/decisions/`) |
 | `docs/guides/running-tars.md` | 로컬 화면·VM·실기 노트북에서 띄워 보는 방법 |
-| `docs/guides/lessons.md` | 게이트 운영법 · 다시 조사하지 말 실측 · 안 되는 접근 · 이월 숙제 · 핵심 파일 지도 |
+| `docs/guides/lessons.md` | 작업 요령의 허브 — 게이트 운영법 · 범용 명령, 아래 넷으로 옮긴 절의 표 |
+| `docs/guides/measurements.md` | 다시 조사하지 말 실측 (번호 목록) |
+| `docs/guides/dead-ends.md` | 시도했으나 안 되는 접근 |
+| `docs/guides/carryover.md` | 이월 숙제 (미룬 일) |
+| `docs/guides/key-files.md` | 핵심 파일 지도 — 어느 파일이 무엇을 책임지고 무엇을 건드리면 깨지는가 |
 | `docs/guides/completed.md` | 끝난 서브프로젝트 표 (이름 · 끝난 날 · 무엇이 섰나) |
 | `docs/study/` | 용어집과 개념 학습 노트 |
 | `docs/specs/` | 서브프로젝트별 design doc |
