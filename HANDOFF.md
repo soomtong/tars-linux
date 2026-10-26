@@ -1,9 +1,14 @@
-# HANDOFF: Host Checks(HC) 닫음 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Lessons Split(LS) 닫음 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 지금 상태 (2026-10-26)
 
 - 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
-- 마지막에 닫은 것은 Host Checks(HC-M0~M2, 2026-10-26). design `docs/specs/2026-10-25-tars-host-checks-design.md`, 기억
+- 마지막에 닫은 것은 Lessons Split(LS-M0, 2026-10-26). design `docs/specs/2026-10-26-tars-lessons-split-design.md`, 기억
+  `docs/decisions/project_lessons_split.md`. `docs/guides/lessons.md`는 허브(규칙 넷 · 옮긴 절 표 · 게이트를 돌리고 읽는 법 · 범용
+  명령)이고, 실측은 `measurements.md`(번호 1~92 그대로), 안 되는 접근은 `dead-ends.md`, 이월 숙제는 `carryover.md`, 핵심 파일은
+  `key-files.md`다. 옛 문서의 `lessons "<절>"` · `lessons N`은 허브의 표로 찾는다. 글은 옮기기만 했다 — 이월 숙제의 닫힌 `[x]` 셋 같은
+  정리는 아직이다. commit `634e886` · `3819dff` · 닫기. 코드 · 스크립트 0줄이라 게이트를 안 돌았다.
+- 그 전에 닫은 것은 Host Checks(HC-M0~M2, 2026-10-26). design `docs/specs/2026-10-25-tars-host-checks-design.md`, 기억
   `docs/decisions/project_host_checks.md`. `tars-config` · `tars-install`의 시스템 콜 쪽에 남은 순수한 것이 짝으로 내려갔다 —
   동사 열넷은 `config_edit.parseCommand`, 앞문 다섯의 인자는 `config_front_edit`의 union 다섯, 설치기의 상태 · 행 · 계획 · 도구 실패 ·
   usage는 `disk`. 출력 바이트 · exit code · `build.zig`는 0 변경(서식 리터럴 집합 diff로 확인). commit은 milestone마다 Task 둘
@@ -46,14 +51,14 @@
 - AU: `cat /proc/asound/cards` · `aplay -l` · `arecord -l` · `speaker-test`, 헤드폰 잭 · USB 헤드셋. SOF 노트북이면
   `dmesg | grep -i sof`의 `Firmware file:` · `Topology file:`. 조용하면 `amixer -c N` · `snd_intel_dspcfg.dsp_driver=1`.
 - BS: 노트북에서 상태 줄 오른쪽 끝에 칸이 뜨는지, 어댑터를 꽂았다 뺄 때 색이 곧바로 바뀌는지, 방전 중 잔량이 60초 안에
-  따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄(lessons "이월 숙제" BS 항목).
+  따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄(`carryover.md`의 BS 항목).
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
 ## 다음 후보 (HC 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것 가운데 남은 둘, 추천 순서대로((3)은 HC로 닫았다).
-  (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
+- 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
+  (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
   GPU 가속은 그 뒤다.
@@ -67,7 +72,7 @@
 - terminal 바이너리의 디버그 섹션 — 0.17에서 15.2MB 가운데 `.debug_*`가 12.0MB(`.debug_loc` 5.8MB)이고 `make_initrd.sh:154`가
   strip을 안 해 initrd에 그대로 실린다(ZU design 실측 9). `strip --strip-debug`(심볼은 남긴다)로 패닉 trace가 그대로 읽히는지 재고,
   그렇다면 initrd 4.6MB를 되찾는다. init 바이너리도 같이 본다.
-- 작은 것은 `docs/guides/lessons.md`의 "이월 숙제"에 있다.
+- 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다.
 
 ## 이미지 뷰어 메모 (기본 이미지에 넣지 않는다 — 사용자 결정, 2026-10-03)
 
@@ -84,7 +89,7 @@
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - `shared/`는 init과 terminal이 함께 컴파일하는 파일의 자리다. 순수해야 한다(libc · 로그 없음) — init이 libc를 안 링크한다.
   그 파일을 고치면 두 빌드가 다시 돈다(`zig build --summary all`로 보인다).
-- initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(lessons).
+- initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(`measurements.md`).
 - 실칩 무선은 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 동글이 생기면 그것이 새 사실이다.
 - decisions의 함정 · 결정만 남기는 정리는 2026-10-20에 남은 여덟도 끝냈다. 아직 10KB를 넘는 다섯(`project_real_machine` ·
   `project_gate_chain_composition` · `project_hangul_input` · `project_shell_config` · `project_userland_tools`)은

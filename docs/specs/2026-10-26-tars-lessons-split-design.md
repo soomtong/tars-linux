@@ -1,7 +1,7 @@
 # TARS Lessons Split — Design
 
 Date: 2026-10-26
-Status: design — 사용자 검토 전.
+Status: 끝났다 — LS-M0(2026-10-26, 코드 · 스크립트 0줄이라 게이트 없음). plan은 `docs/plans/2026-10-26-tars-lessons-split-ls-m0.md`. 기억은 `docs/decisions/project_lessons_split.md`.
 
 HANDOFF "다음 후보"의 첫 항목에서 시작한다(2026-10-24 프로젝트 점검이 남긴 둘 가운데 추천 1순위 (4). 사용자가 2026-10-26에 골랐다).
 
