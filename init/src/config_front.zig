@@ -194,20 +194,21 @@ fn readSecret(prompt: []const u8, buf: []u8) ?[]const u8 {
 
 /// `tars-config wifi SSID [--country CC]` (결정 12).
 pub fn wifi(args: []const [*:0]const u8) u8 {
-    if (args.len == 0) return wifiStatus();
-    const ssid = std.mem.span(args[0]);
-    var country: ?[]const u8 = null;
-    if (args.len == 3 and std.mem.eql(u8, std.mem.span(args[1]), "--country")) {
-        country = std.mem.span(args[2]);
-        if (!fe.countryOk(country.?)) {
+    const add = switch (fe.wifiArgs(args)) {
+        .status => return wifiStatus(),
+        .add => |a| a,
+        .usage => return cli.usage(),
+        .bad_country => {
             complain("--country takes two capital letters, like KR", .{});
             return cli.EXIT_USAGE;
-        }
-    } else if (args.len != 1) return cli.usage();
-    if (ssid.len == 0 or ssid.len > 32 or fe.hasControl(ssid)) {
-        complain("an SSID is 1 to 32 bytes without control characters", .{});
-        return cli.EXIT_USAGE;
-    }
+        },
+        .bad_ssid => {
+            complain("an SSID is 1 to 32 bytes without control characters", .{});
+            return cli.EXIT_USAGE;
+        },
+    };
+    const ssid = add.ssid;
+    const country = add.country;
     if (!needDisk()) return cli.EXIT_IO;
 
     var pass_buf: [256]u8 = undefined;
@@ -256,19 +257,7 @@ pub fn wifi(args: []const [*:0]const u8) u8 {
     // 해시된 psk가 든다 — 그 망에 붙는 데는 그것으로 충분하므로 비밀이다.
     if (!replace(WPA_PATH, WPA_TEMP, text, 0o600)) return cli.EXIT_IO;
 
-    say("wifi: {s} {s} in {s}{s}\n", .{
-        ssid,
-        if (placed.replaced) "replaced" else "added",
-        WPA_PATH,
-        if (country != null) " (with country)" else "",
-    });
-    const c = tarsConf();
-    if (c.net == .off) say("net=off: wifi needs the network on — tars-config set net=dhcp\n", .{});
-    if (existed) {
-        say("apply now: tars-service restart wpa_supplicant\n", .{});
-    } else {
-        say("apply now: tars-config reload starts wpa_supplicant (or the next boot)\n", .{});
-    }
+    fe.wifiDone(cli.Say{}, ssid, WPA_PATH, placed.replaced, country != null, tarsConf().net == .off, existed);
     return cli.EXIT_OK;
 }
 
@@ -279,12 +268,7 @@ fn wifiStatus() u8 {
         say("no {s}: wifi is off. tars-config wifi SSID adds a network\n", .{WPA_PATH});
         return cli.EXIT_OK;
     }
-    // 망의 이름만 보인다. psk 줄은 안 찍는다.
-    var it = std.mem.splitScalar(u8, conf, '\n');
-    while (it.next()) |raw| {
-        const t = std.mem.trim(u8, raw, " \t\r");
-        if (std.mem.startsWith(u8, t, "ssid=") or std.mem.startsWith(u8, t, "country=")) say("{s}\n", .{t});
-    }
+    fe.wifiStatusLines(cli.Say{}, conf);
     return cli.EXIT_OK;
 }
 
@@ -295,7 +279,7 @@ fn fileExists(path: [:0]const u8) bool {
 // ── ssh ───────────────────────────────────────────────────────────────
 
 /// 링크가 템플릿을 가리키는가. 사람이 다른 sshd 스크립트를 그 이름으로 두었으면 거짓이다.
-fn sshdLinked() enum { none, template, other } {
+fn sshdLinked() fe.Sshd {
     var buf: [256]u8 = undefined;
     const rc = linux.readlink(SSHD_LINK.ptr, &buf, buf.len);
     if (failed(rc)) |e| return if (e == .NOENT) .none else .other;
@@ -304,22 +288,22 @@ fn sshdLinked() enum { none, template, other } {
 
 /// `tars-config ssh [on|off]` (결정 13).
 pub fn ssh(args: []const [*:0]const u8) u8 {
-    if (args.len > 1) return cli.usage();
-    if (args.len == 0) {
-        var keys_buf: [BUF]u8 = undefined;
-        const keys = readOr(KEYS_PATH, &keys_buf) orelse return cli.EXIT_IO;
-        say("sshd: {s}\n", .{switch (sshdLinked()) {
-            .template => "on (/config/services.d/sshd -> /etc/tars/services/sshd)",
-            .other => "/config/services.d/sshd is yours, not the template",
-            .none => "off",
-        }});
-        say("keys: {d} in {s}\n", .{ fe.keyCount(keys), KEYS_PATH });
-        sayFirewall22();
-        return cli.EXIT_OK;
+    const verb = fe.sshArgs(args);
+    switch (verb) {
+        .usage => return cli.usage(),
+        .status => {
+            var keys_buf: [BUF]u8 = undefined;
+            const keys = readOr(KEYS_PATH, &keys_buf) orelse return cli.EXIT_IO;
+            say("sshd: {s}\n", .{fe.sshdText(sshdLinked())});
+            say("keys: {d} in {s}\n", .{ fe.keyCount(keys), KEYS_PATH });
+            sayFirewall22();
+            return cli.EXIT_OK;
+        },
+        // 동사가 틀린 것은 디스크를 본 뒤에 말한다(HC-M1 plan 확정 2).
+        .on, .off, .bad_verb => {},
     }
-    const verb = std.mem.span(args[0]);
     if (!needDisk()) return cli.EXIT_IO;
-    if (std.mem.eql(u8, verb, "on")) {
+    if (verb == .on) {
         switch (sshdLinked()) {
             .template => say("sshd: already on\n", .{}),
             .other => {
@@ -341,7 +325,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
         sayFirewall22();
         return cli.EXIT_OK;
     }
-    if (std.mem.eql(u8, verb, "off")) {
+    if (verb == .off) {
         switch (sshdLinked()) {
             .none => say("sshd: already off\n", .{}),
             .other => {
@@ -361,49 +345,43 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
     return cli.usage();
 }
 
-/// firewall=on이면 22를 이 명령이 열었는지 말한다. 사람의 nft 파일은 안 읽는다(결정 10) —
-/// 열려 있을 수도 있다고만 말한다.
+/// firewall=on이면 22를 이 명령이 열었는지 말한다.
 fn sayFirewall22() void {
     if (tarsConf().firewall != .on) return;
     var buf: [BUF]u8 = undefined;
     const text = readOr(NFT_PATH, &buf) orelse return;
-    if (fe.hasLine(text, "tcp dport 22 accept")) {
-        say("firewall=on: tars-config opened port 22\n", .{});
-    } else {
-        say("firewall=on: port 22 is open only if a file in {s} says so; tars-config firewall allow 22\n", .{NFT_DIR});
-    }
+    fe.firewall22(cli.Say{}, text, NFT_DIR);
 }
 
 /// `tars-config ssh-key add [KEY] | list` (결정 13).
 pub fn sshKey(args: []const [*:0]const u8) u8 {
-    if (args.len == 0) return cli.usage();
-    const verb = std.mem.span(args[0]);
-    if (std.mem.eql(u8, verb, "list")) {
-        if (args.len != 1) return cli.usage();
-        if (!fileExists(KEYS_PATH)) {
-            say("no {s}\n", .{KEYS_PATH});
-            return cli.EXIT_OK;
-        }
-        const argv = [_:null]?[*:0]const u8{ SSH_KEYGEN, "-l", "-f", KEYS_PATH };
-        var out: [BUF]u8 = undefined;
-        const ran = run(&argv, "", &out) orelse return cli.EXIT_IO;
-        _ = cli.writeAll(1, ran.out);
-        return if (ran.code == 0) cli.EXIT_OK else cli.EXIT_REFUSED;
-    }
-    if (!std.mem.eql(u8, verb, "add") or args.len > 2) return cli.usage();
+    const given = switch (fe.sshKeyArgs(args)) {
+        .usage => return cli.usage(),
+        .list => {
+            if (!fileExists(KEYS_PATH)) {
+                say("no {s}\n", .{KEYS_PATH});
+                return cli.EXIT_OK;
+            }
+            const argv = [_:null]?[*:0]const u8{ SSH_KEYGEN, "-l", "-f", KEYS_PATH };
+            var out: [BUF]u8 = undefined;
+            const ran = run(&argv, "", &out) orelse return cli.EXIT_IO;
+            _ = cli.writeAll(1, ran.out);
+            return if (ran.code == 0) cli.EXIT_OK else cli.EXIT_REFUSED;
+        },
+        .add => |k| k,
+    };
     if (!needDisk()) return cli.EXIT_IO;
 
     // 키 한 줄 — 인자 하나(따옴표로 싼 줄)이거나 표준 입력(`< id_ed25519.pub`).
     var in_buf: [8192]u8 = undefined;
-    const raw: []const u8 = if (args.len == 2) std.mem.span(args[1]) else (readSecret("public key: ", &in_buf) orelse {
+    const raw: []const u8 = given orelse (readSecret("public key: ", &in_buf) orelse {
         complain("the key is too long", .{});
         return cli.EXIT_REFUSED;
     });
-    const line = std.mem.trim(u8, raw, " \t\r\n");
-    if (line.len == 0 or std.mem.indexOfScalar(u8, line, '\n') != null or fe.hasControl(line)) {
+    const line = fe.keyLine(raw) orelse {
         complain("give one public key line, like 'ssh-ed25519 AAAA… you@host'", .{});
         return cli.EXIT_USAGE;
-    }
+    };
     // 키인지는 ssh-keygen이 정한다. 지문이 사람에게 보여 줄 것이기도 하다.
     const argv = [_:null]?[*:0]const u8{ SSH_KEYGEN, "-l", "-f", "-" };
     var out: [1024]u8 = undefined;
@@ -448,46 +426,37 @@ pub fn firewall(args: []const [*:0]const u8) u8 {
     const c = tarsConf();
     var buf: [BUF]u8 = undefined;
     const text = readOr(NFT_PATH, &buf) orelse return cli.EXIT_IO;
-    if (args.len == 0) {
-        say("firewall={s}\n", .{@tagName(c.firewall)});
-        var it = std.mem.splitScalar(u8, text, '\n');
-        var n: usize = 0;
-        while (it.next()) |raw| {
-            const t = std.mem.trim(u8, raw, " \t\r");
-            if (t.len == 0 or t[0] == '#') continue;
-            say("{s}\n", .{t});
-            n += 1;
-        }
-        if (n == 0) say("tars-config opened no port ({s} has no rule)\n", .{NFT_PATH});
-        say("rules you wrote yourself live in other files under {s}; nft list ruleset shows what is up\n", .{NFT_DIR});
-        return cli.EXIT_OK;
-    }
-    if (args.len != 2) return cli.usage();
-    const verb = std.mem.span(args[0]);
-    const allow = std.mem.eql(u8, verb, "allow");
-    if (!allow and !std.mem.eql(u8, verb, "deny")) return cli.usage();
-    const spec = fe.parsePort(std.mem.span(args[1])) orelse {
-        complain("a port is 1 to 65535, optionally /tcp or /udp (tcp is the default)", .{});
-        return cli.EXIT_USAGE;
+    const change = switch (fe.firewallArgs(args)) {
+        .status => {
+            say("firewall={s}\n", .{@tagName(c.firewall)});
+            if (fe.firewallRules(cli.Say{}, text) == 0) say("tars-config opened no port ({s} has no rule)\n", .{NFT_PATH});
+            say("rules you wrote yourself live in other files under {s}; nft list ruleset shows what is up\n", .{NFT_DIR});
+            return cli.EXIT_OK;
+        },
+        .change => |ch| ch,
+        .usage => return cli.usage(),
+        .bad_port => {
+            complain("a port is 1 to 65535, optionally /tcp or /udp (tcp is the default)", .{});
+            return cli.EXIT_USAGE;
+        },
     };
+    const allow = change.allow;
     if (!needDisk()) return cli.EXIT_IO;
     var rule_buf: [32]u8 = undefined;
-    const rule = fe.ruleLine(&rule_buf, spec);
+    const rule = fe.ruleLine(&rule_buf, change.spec);
 
     var new_buf: [BUF + 64]u8 = undefined;
-    const base = if (text.len == 0) fe.RULES_HEADER else text;
-    const changed: ?[]const u8 = if (allow)
-        (if (fe.hasLine(base, rule)) null else fe.appendLine(&new_buf, base, rule) orelse return cli.EXIT_REFUSED)
-    else
-        (if (!fe.hasLine(text, rule)) null else fe.removeLine(&new_buf, text, rule) orelse return cli.EXIT_REFUSED);
-    if (changed) |t| {
-        if (!ensureDir(NFT_DIR, 0o755)) return cli.EXIT_IO;
-        if (!replace(NFT_PATH, NFT_TEMP, t, 0o644)) return cli.EXIT_IO;
-        say("firewall: {s} {s}\n", .{ if (allow) "opened" else "closed", rule });
-    } else {
-        say("firewall: {s} was {s}\n", .{ rule, if (allow) "already open here" else "not opened by tars-config" });
-        if (!allow) say("rules you wrote yourself live in other files under {s}; this command does not touch them\n", .{NFT_DIR});
-        return cli.EXIT_OK;
+    switch (fe.firewallChange(&new_buf, text, allow, rule)) {
+        .overflow => return cli.EXIT_REFUSED,
+        .same => {
+            fe.firewallSaid(cli.Say{}, allow, rule, false, NFT_DIR);
+            return cli.EXIT_OK;
+        },
+        .changed => |t| {
+            if (!ensureDir(NFT_DIR, 0o755)) return cli.EXIT_IO;
+            if (!replace(NFT_PATH, NFT_TEMP, t, 0o644)) return cli.EXIT_IO;
+            fe.firewallSaid(cli.Say{}, allow, rule, true, NFT_DIR);
+        },
     }
 
     if (c.firewall != .on) {
@@ -516,71 +485,64 @@ pub fn firewall(args: []const [*:0]const u8) u8 {
 
 /// `tars-config dictation [key [KEY] | set KEY=VALUE…]` (결정 15).
 pub fn dictation(args: []const [*:0]const u8) u8 {
-    if (args.len == 0) {
-        say("key: {s}\n", .{if (fileExists(KEY_PATH)) "/config/groq.key is there (not shown)" else "none — tars-config dictation key"});
-        var buf: [BUF]u8 = undefined;
-        const text = readOr(DICT_PATH, &buf) orelse return cli.EXIT_IO;
-        if (text.len == 0) say("no {s}: tars-dictate uses its defaults (tars-dictate -h)\n", .{DICT_PATH}) else _ = cli.writeAll(1, text);
-        return cli.EXIT_OK;
+    const parsed = fe.dictationArgs(args);
+    switch (parsed) {
+        .status => {
+            say("key: {s}\n", .{if (fileExists(KEY_PATH)) "/config/groq.key is there (not shown)" else "none — tars-config dictation key"});
+            var buf: [BUF]u8 = undefined;
+            const text = readOr(DICT_PATH, &buf) orelse return cli.EXIT_IO;
+            if (text.len == 0) say("no {s}: tars-dictate uses its defaults (tars-dictate -h)\n", .{DICT_PATH}) else _ = cli.writeAll(1, text);
+            return cli.EXIT_OK;
+        },
+        .key => |given| {
+            if (!needDisk()) return cli.EXIT_IO;
+            var in_buf: [512]u8 = undefined;
+            const raw: []const u8 = given orelse (readSecret("Groq API key: ", &in_buf) orelse {
+                complain("the key is too long", .{});
+                return cli.EXIT_REFUSED;
+            });
+            const key = fe.apiKey(raw) orelse {
+                complain("an API key is one word without spaces or control characters; nothing was written", .{});
+                return cli.EXIT_REFUSED;
+            };
+            var line_buf: [520]u8 = undefined;
+            const line = std.fmt.bufPrint(&line_buf, "{s}\n", .{key}) catch return cli.EXIT_REFUSED;
+            if (!replace(KEY_PATH, KEY_TEMP, line, 0o600)) return cli.EXIT_IO;
+            say("dictation: wrote {s} (0600, {d} characters)\n", .{ KEY_PATH, key.len });
+            say("tars-dictate reads it at every run — no restart\n", .{});
+            if (tarsConf().net == .off) say("net=off: dictation needs the network — tars-config set net=dhcp\n", .{});
+            return cli.EXIT_OK;
+        },
+        .usage => return cli.usage(),
+        // 쌍의 거절은 디스크를 본 뒤에 말한다(HC-M1 plan 확정 2).
+        .set, .no_equals, .unknown_key, .control_byte => {},
     }
-    const verb = std.mem.span(args[0]);
-    if (std.mem.eql(u8, verb, "key")) {
-        if (args.len > 2) return cli.usage();
-        if (!needDisk()) return cli.EXIT_IO;
-        var in_buf: [512]u8 = undefined;
-        const raw: []const u8 = if (args.len == 2) std.mem.span(args[1]) else (readSecret("Groq API key: ", &in_buf) orelse {
-            complain("the key is too long", .{});
-            return cli.EXIT_REFUSED;
-        });
-        const key = fe.apiKey(raw) orelse {
-            complain("an API key is one word without spaces or control characters; nothing was written", .{});
-            return cli.EXIT_REFUSED;
-        };
-        var line_buf: [520]u8 = undefined;
-        const line = std.fmt.bufPrint(&line_buf, "{s}\n", .{key}) catch return cli.EXIT_REFUSED;
-        if (!replace(KEY_PATH, KEY_TEMP, line, 0o600)) return cli.EXIT_IO;
-        say("dictation: wrote {s} (0600, {d} characters)\n", .{ KEY_PATH, key.len });
-        say("tars-dictate reads it at every run — no restart\n", .{});
-        if (tarsConf().net == .off) say("net=off: dictation needs the network — tars-config set net=dhcp\n", .{});
-        return cli.EXIT_OK;
-    }
-    if (!std.mem.eql(u8, verb, "set") or args.len < 2) return cli.usage();
     if (!needDisk()) return cli.EXIT_IO;
-    // 이름만 거른다. 값은 tars-dictate가 실행마다 읽고 틀리면 경고한다(결정 15).
-    for (args[1..]) |a| {
-        const arg = std.mem.span(a);
-        const eq = std.mem.indexOfScalar(u8, arg, '=') orelse {
+    const pairs = switch (parsed) {
+        .set => |p| p,
+        .no_equals => |arg| {
             complain("'{s}' has no '='; set takes KEY=VALUE", .{arg});
             return cli.EXIT_USAGE;
-        };
-        const key = std.mem.trim(u8, arg[0..eq], " \t");
-        if (!fe.isDictationKey(key)) {
+        },
+        .unknown_key => |key| {
             complain("unknown dictation key '{s}'; the keys are in tars-dictate -h", .{key});
             complain("nothing was written", .{});
             return cli.EXIT_REFUSED;
-        }
-        if (fe.hasControl(arg)) {
+        },
+        .control_byte => |key| {
             complain("{s}: a control character cannot go into a config line", .{key});
             return cli.EXIT_REFUSED;
-        }
-    }
+        },
+        .status, .key, .usage => unreachable, // 위의 switch가 돌아갔다
+    };
     var buf: [BUF]u8 = undefined;
-    var text = readOr(DICT_PATH, &buf) orelse return cli.EXIT_IO;
+    const text = readOr(DICT_PATH, &buf) orelse return cli.EXIT_IO;
     var work: [2][BUF]u8 = undefined;
-    // 같은 문법(`#` 주석 · 첫 `=` · 양쪽 공백)이라 tars.conf의 줄 바꾸기를 그대로 쓴다.
-    const edit = @import("config_edit.zig");
-    for (args[1..], 0..) |a, i| {
-        const arg = std.mem.span(a);
-        const eq = std.mem.indexOfScalar(u8, arg, '=').?;
-        const key = std.mem.trim(u8, arg[0..eq], " \t");
-        const value = std.mem.trim(u8, arg[eq + 1 ..], " \t");
-        text = edit.setLine(&work[i % 2], text, key, value) orelse {
-            complain("{s} would grow past {d} bytes", .{ DICT_PATH, BUF });
-            return cli.EXIT_REFUSED;
-        };
-        say("dictation: {s}={s}\n", .{ key, value });
-    }
-    if (!replace(DICT_PATH, DICT_TEMP, text, 0o644)) return cli.EXIT_IO;
+    const written = fe.dictationApply(cli.Say{}, .{ &work[0], &work[1] }, text, pairs) orelse {
+        complain("{s} would grow past {d} bytes", .{ DICT_PATH, BUF });
+        return cli.EXIT_REFUSED;
+    };
+    if (!replace(DICT_PATH, DICT_TEMP, written, 0o644)) return cli.EXIT_IO;
     say("tars-dictate reads {s} at every run — no restart; it warns about a value it does not take\n", .{DICT_PATH});
     return cli.EXIT_OK;
 }
@@ -622,18 +584,6 @@ pub fn check(c: config.Config) usize {
     }
     var dbuf: [BUF]u8 = undefined;
     const dict = readOr(DICT_PATH, &dbuf) orelse "";
-    var it = std.mem.splitScalar(u8, dict, '\n');
-    var number: usize = 0;
-    while (it.next()) |raw| {
-        number += 1;
-        const t = std.mem.trim(u8, raw, " \t\r");
-        if (t.len == 0 or t[0] == '#') continue;
-        const eq = std.mem.indexOfScalar(u8, t, '=') orelse continue;
-        const key = std.mem.trim(u8, t[0..eq], " \t");
-        if (!fe.isDictationKey(key)) {
-            say("{s} line {d}: tars-dictate does not know the key '{s}'\n", .{ DICT_PATH, number, key });
-            problems += 1;
-        }
-    }
+    problems += fe.dictationUnknown(cli.Say{}, dict, DICT_PATH);
     return problems;
 }

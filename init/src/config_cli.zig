@@ -70,8 +70,8 @@ pub fn complain(comptime fmt: []const u8, args: anytype) void {
     _ = writeAll(2, text);
 }
 
-/// `config_edit`의 여러 줄 함수에 주는 sink. 줄마다 `say` 한 번 — 옮기기 전과 같은 `write`다.
-const Say = struct {
+/// `config_edit` · `config_front_edit`의 여러 줄 함수에 주는 sink. 줄마다 `say` 한 번 — 옮기기 전과 같은 `write`다.
+pub const Say = struct {
     pub fn print(_: Say, comptime fmt: []const u8, args: anytype) void {
         say(fmt, args);
     }
