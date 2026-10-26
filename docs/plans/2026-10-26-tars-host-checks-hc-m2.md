@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 Design: `docs/specs/2026-10-25-tars-host-checks-design.md` 결정 1 · 2 · 6 · 8 ~ 12
-Status: 초안 — HC-M1 루트 게이트가 도는 동안 썼다. 그 게이트는 22/22였고 결과로 바뀌는 자리는 없다. 사용자 확인 뒤 구현에 넘긴다.
+Status: 완료(2026-10-26, 루트 게이트 22/22). HC-M1 루트 게이트가 도는 동안 쓴 초안이고, 그 게이트 결과로 바뀐 자리는 없었다.
 
 ## 누가 무엇을 하나
 
@@ -102,4 +102,22 @@ M1 Task 3과 같고, 끝에 design "닫을 때"의 넷을 한다 — design `Sta
 
 ## HC-M2가 실측한 것
 
-(Task 3 뒤에 채운다.)
+2026-10-26. commit은 Task 1 `71a471f` · Task 2 `94ee1e5`.
+
+1. (a) 서식 문자열 — 기준선 57줄. Task 1 뒤 `>` 열여섯(`planLines` 9 — p1 줄은 두 갈래에 하나씩 · `usageLines` 3 · `toolOk` 2 ·
+   `listRow` 1 · 갱신 줄 1), Task 2 뒤 빈 출력.
+2. `git diff --numstat` — Task 1은 `disk.zig` +91 · `disk_test.zig` +126, 지운 줄 0. Task 2는 `install.zig` +29 −51(678 → 656줄).
+   `disk.zig`는 270 → 361줄.
+3. `zig build test`(컨테이너) — `disk_test`가 새 줄 하나와 `PASS`, `tars-init:` 줄은 58로 그대로. 검사 18이 `install/check.sh`의
+   `LIST_END=`를 런타임에 읽어 usage 마지막 줄과 견준다 — 체인과 코드가 어긋나면 호스트가 먼저 빨개진다.
+4. install 체인(Task 2 뒤): PASS, 248초. 게스트 로그에 `internal   blank` · `internal   TARS installed` 행, 갱신 줄, `will be erased.
+   it now holds: blank` · `foreign (gpt)` · `TARS installed`(`--wipe` 갈래 — `stateWord(.installed)`), usage 마지막 줄 다섯 번.
+5. mutation 둘 — 사본을 `-v …:ro`로 덮어 `zig build test`만. 둘 다 exit 1, 저장소는 깨끗하다.
+   - m1(`headState`가 `isTarsMedium`을 건너뜀): `FAIL: a second TARS stick: want .medium 'boot medium', got .other 'foreign (iso9660 TARS)'`.
+     첫 시도는 개행을 넣은 `sd` 패턴이 안 맞아 사본이 원본 그대로였다(exit 0) — 비튼 뒤 `diff`로 바뀐 줄을 먼저 본다.
+   - m2(`rest unallocated` → `rest free`): `FAIL: the fresh plan` — install 체인이 안 치는 문장이다.
+6. 호스트 0.17 `zig fmt --check init/src shared` · 바뀐 세 파일의 `ast-check`: 깨끗하다.
+7. 루트 게이트 첫 회 22/22, 10분 5초(prebuild 309초 + lanes 294초). 로그 `out/gate-logs/20261026-102555/`.
+
+plan과 달라진 하나 — `toolFailure`는 `toolOk`가 됐다. 정상 종료에 true를 돌려주므로 부르는 자리(`if (disk.toolOk(Complain{}, tool,
+status)) return true;`)가 바로 읽히는 이름으로.

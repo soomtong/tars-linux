@@ -1,22 +1,15 @@
-# HANDOFF: Host Checks(HC) 진행 중 — HC-M0 · M1 완료, 다음은 HC-M2
+# HANDOFF: Host Checks(HC) 닫음 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 지금 상태 (2026-10-26)
 
-- 열린 서브프로젝트는 Host Checks(HC-M0~M2)다. design `docs/specs/2026-10-25-tars-host-checks-design.md`. HANDOFF "다음 후보"의
-  (3)을 사용자가 골랐다. `tars-config` · `tars-install`의 시스템 콜 쪽에 남은 순수한 것(argv 가르기 · init 답 읽기 · 문장 조립)을
-  이미 있는 순수 짝으로 내리고 짝의 호스트 검사에 글자를 박는다. 출력 바이트 · exit code · `build.zig`는 0 변경.
-  - HC-M0 완료(2026-10-26, 루트 게이트 22/22): `config_cli` → `config_edit`(`parseCommand` · `nowValue` · `screenLine` ·
-    `changeLine` · `keyTable` · `showKeyLines` · `checkLines`), 검사 7~11. commit `c17e1a5` · `770b3e8`. 실측과 plan에서 달라진 셋은
-    plan `docs/plans/2026-10-25-tars-host-checks-hc-m0.md`의 끝.
-  - HC-M1 완료(2026-10-26, 루트 게이트 22/22, 9분 44초): `config_front` → `config_front_edit`(인자 union 다섯 · `wifiStatusLines` ·
-    `wifiDone` · `keyLine` · `Sshd` · `firewall22` · `firewallRules` · `firewallChange` · `firewallSaid` · `dictationApply` ·
-    `dictationUnknown`), 검사 5~9. commit `dd248de` · `6d1df4b`. plan과 달라진 셋(`cli.Say`를 `pub`으로 · `work` 값 · 0.17에 `**`
-    없음)은 plan `docs/plans/2026-10-26-tars-host-checks-hc-m1.md`의 끝.
-  - 다음: HC-M2 plan `docs/plans/2026-10-26-tars-host-checks-hc-m2.md`는 M1 게이트가 도는 동안 쓴 초안이고 게이트로 바뀐 자리는
-    없다. 사용자 확인 뒤 Task 1부터. design 결정 8과 다른 자리 — `stateOf`의 앞 둘(매체 경로 비교 · `isInstalled`, p1을 붙여 본다)은
-    `install`에 남고 앞머리 뒤의 판정만 `disk.headState`로 간다(확정 3).
-  - 검사 (a)의 명령은 `/tmp/hc-fmt.sh`(tars-config 네 파일)로 묶었다. M2는 같은 정규식에 `install.zig disk.zig`(기준선 57줄).
-  - 닫을 때(M2 뒤): decisions `project_host_checks.md` · `MEMORY.md` · `completed.md` · lessons "핵심 파일" 세 줄(design "닫을 때").
+- 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
+- 마지막에 닫은 것은 Host Checks(HC-M0~M2, 2026-10-26). design `docs/specs/2026-10-25-tars-host-checks-design.md`, 기억
+  `docs/decisions/project_host_checks.md`. `tars-config` · `tars-install`의 시스템 콜 쪽에 남은 순수한 것이 짝으로 내려갔다 —
+  동사 열넷은 `config_edit.parseCommand`, 앞문 다섯의 인자는 `config_front_edit`의 union 다섯, 설치기의 상태 · 행 · 계획 · 도구 실패 ·
+  usage는 `disk`. 출력 바이트 · exit code · `build.zig`는 0 변경(서식 리터럴 집합 diff로 확인). commit은 milestone마다 Task 둘
+  (M0 `c17e1a5` · `770b3e8`, M1 `dd248de` · `6d1df4b`, M2 `71a471f` · `94ee1e5`). 새 동사 · 새 키는 `Command`의 칸 하나와 검사 몇
+  줄로 시작한다. `config_edit` 485 · `config_front_edit` 484줄 — 500을 넘으면 "동사별 파일"이 후보다. 소개 페이지에는 안 넣었다
+  (내부 작업).
 - 그 전에 닫은 것은 Main Split(MS-M0~M1, 2026-10-25). design
   `docs/specs/2026-10-25-tars-main-split-design.md`, 기억 `docs/decisions/project_main_split.md`. terminal의 `main`은 `App.open`(단계
   다섯) → `tick`(단계 열) → `close`, init의 `main`은 `mountEarly` → `Boot`의 단계 다섯 → `supervise`다. 동작 · 로그 · 체인 스크립트는
@@ -38,7 +31,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(HC-M1): 22/22, 9분 44초(prebuild 293초 + lanes 288초). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(HC-M2): 22/22, 10분 5초(prebuild 309초 + lanes 294초). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
@@ -57,9 +50,9 @@
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
-## 다음 후보 (SA 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
+## 다음 후보 (HC 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것 가운데 남은 셋, 추천 순서대로. (3)은 HC로 진행 중이다(위 "지금 상태").
+- 2026-10-24 점검이 남긴 것 가운데 남은 둘, 추천 순서대로((3)은 HC로 닫았다).
   (4) `lessons.md` 1,700줄 — "이월 숙제" · "핵심 파일" 절은 각자 문서 하나 분량이다. (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
 - 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").

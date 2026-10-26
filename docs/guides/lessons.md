@@ -1468,7 +1468,9 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
   `chrony.d`를 읽고 drift를 `/config/chrony.drift`에 남긴다.
 - `install.zig` — 따로 빌드되는 실행 파일 `tars-install`(DI). GPT에 ESP(p1)와
   `tars-config`(p2)를 만든다. `storage.zig`의 후보 목록을 같이 쓰고, 안전은 라벨이
-  지킨다. 외부 도구(`sfdisk` · `mkfs.*`)를 `wait4`로 기다리는 헬퍼가 여기 있다.
+  지킨다. 외부 도구(`sfdisk` · `mkfs.*`)를 `wait4`로 기다리는 헬퍼가 여기 있다. 순수한 짝은 `disk.zig`(`disk_test`) —
+  `parseArgs` · 앞머리 판정 · `State`/`headState` · 목록 행 · 계획 · 도구 실패 · usage의 글자가 거기다(HC-M2). `stateOf`의 앞
+  둘(매체 경로 · `isInstalled`, p1을 붙여 본다)만 여기 남는다.
 - `config.zig` — `/config/tars.conf` 파서 한 벌. 키보드 · 자판 둘 · 전환 키 · 클립보드 범위의 enum은
   SA-M0부터 `shared/screen_args.zig`에 있고 여기서는 별명이다(`hangul_toggle`의 파싱은
   `Toggles.parse(.file, value, LogUnknownToggle{})`). 키 열(TS-M1이 `ntp`을,
@@ -1507,9 +1509,13 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - `config_cli.zig` · `config_edit.zig` — 게스트의 `tars-config`(TC-M0, 셋째 실행 파일). root가 `configLog`를 선언해 `config.zig`의 `log()`를
   가로챈다 — `parse`가 실패를 돌려주지 않아서다. 순수한 쪽(`config_edit`: 줄 가르기 · `setLine` · 키 목록 · 힌트 — `config_edit_test`가
   본다)과 시스템 콜 쪽(`config_cli`: 보기 두 칸 · get · set · reset · check · list · reload)을 가른다. `config.zig`의 로그 24줄은 전부 `log()`다.
+  동사 열넷의 가르기는 `edit.parseCommand → Command`, init 답 읽기(`nowValue` · `screenLine`)와 여러 줄 문장도 `config_edit`다 —
+  `main`은 `switch` 하나, 문장은 `Say` sink로 찍는다(HC-M0). 새 동사는 `Command`의 칸 하나와 검사 몇 줄로 시작한다.
 - `config_front.zig` · `config_front_edit.zig` — 앞문 넷(TC-M1). `wifi`(`wpa_passphrase`에 표준 입력) · `ssh` · `ssh-key`(`ssh-keygen -l -f -`) ·
   `firewall`(전용 파일 `tars-config.nft`, `firewall=on`이면 `nft -f`) · `dictation`. 받아쓰기 키 여덟은 `config_front_edit_test`가
-  `kernel/dictation/tars-dictate`의 `case`에서 읽어 맞춘다.
+  `kernel/dictation/tars-dictate`의 `case`에서 읽어 맞춘다. 동사마다 인자 union(`wifiArgs` · `sshArgs` · `sshKeyArgs` ·
+  `firewallArgs` · `dictationArgs`)과 조건이 고르는 문장이 `config_front_edit`다(HC-M1). 거절 칸이 따로인 것은 `needDisk`와의 순서
+  때문이다 — `ssh foo`는 디스크가 없으면 exit 2, `dictation set`의 쌍 거절도 디스크 뒤.
 - `reload.zig` — `tars-config reload`가 무엇을 할지(TC-M2 · M3, 순수). 키 열둘의 갈래 셋 · `changed`(diff) · `pending`(대기) · `step` ·
   `firewallStep` · `serviceActions`(services.d 규칙 넷) · 답의 글자 · `screenLines`. `unreachable`과 `.?`가 없다 — PID 1의 패닉은 커널
   패닉이다. `reload_test`가 전부 덮는다.
