@@ -50,6 +50,19 @@ fn complain(comptime fmt: []const u8, args: anytype) void {
     writeAll(2, disk.clip(&buf, "tars-install: " ++ fmt ++ "\n", args));
 }
 
+/// `disk`의 여러 줄 함수에 주는 sink. 줄마다 `say` · `complain` 한 번 — 옮기기 전과 같은 `write`다.
+const Say = struct {
+    pub fn print(_: Say, comptime fmt: []const u8, args: anytype) void {
+        say(fmt, args);
+    }
+};
+
+const Complain = struct {
+    pub fn print(_: Complain, comptime fmt: []const u8, args: anytype) void {
+        complain(fmt, args);
+    }
+};
+
 // ── 작은 파일 읽기 ───────────────────────────────────────────────────
 
 /// devices.readFile과 같은 루프다. sysfs 속성은 전부 한 페이지 안이다.
@@ -80,13 +93,11 @@ fn sysAttr(name: []const u8, attr: []const u8, buf: []u8) ?[]const u8 {
     return std.mem.trim(u8, text, " \t\r\n");
 }
 
-/// 바이트 크기. /sys/block/<이름>/size는 장치의 논리 섹터 크기와 무관하게
-/// 늘 512바이트 단위다(커널 문서 Documentation/ABI/stable/sysfs-block).
+/// 바이트 크기(disk.sectorsToBytes).
 fn sizeBytes(name: []const u8) ?u64 {
     var buf: [32]u8 = undefined;
     const text = sysAttr(name, "size", &buf) orelse return null;
-    const sectors = std.fmt.parseInt(u64, text, 10) catch return null;
-    return sectors * 512;
+    return disk.sectorsToBytes(text);
 }
 
 fn exists(path: [*:0]const u8) bool {
@@ -140,11 +151,8 @@ fn findMedium() ?[:0]const u8 {
 
 // ── 목록 ─────────────────────────────────────────────────────────────
 
-/// 마지막 줄이 목록의 끝이다. install 체인이 그 줄을 기다린다.
 fn printUsage() void {
-    say("tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n", .{});
-    say("tars-install <disk> --yes   same, without asking\n", .{});
-    say("tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", .{});
+    disk.usageLines(Say{});
 }
 
 /// 디스크에 TARS가 설치돼 있는가(DI design 결정 7). 셋을 다 본다.
@@ -192,24 +200,18 @@ fn p2HasSettings(path: [:0]const u8) bool {
     return storage.tarsLabel(head) != null;
 }
 
-/// 상태 칸의 두 값. install이 이 글자로 갈래를 고르므로 한 곳에 둔다.
-const STATE_MEDIUM = "boot medium";
-const STATE_INSTALLED = "TARS installed";
-
 /// 한 디스크의 상태 칸. 매체 · 설치됨 · 앞머리에 보이는 것 순이다.
 ///
 /// 매체는 둘로 본다. 붙여서 확인한 것(medium)과, 볼륨 ID가 TARS인 ISO다.
 /// 스틱이 둘 꽂혀 있으면 findMedium은 첫 것만 붙인다(DI-M1 실측 15).
-fn stateOf(path: [:0]const u8, medium: ?[:0]const u8, buf: []u8) []const u8 {
+fn stateOf(path: [:0]const u8, medium: ?[:0]const u8, buf: []u8) disk.State {
     if (medium) |m| {
-        if (std.mem.eql(u8, m, path)) return STATE_MEDIUM;
+        if (std.mem.eql(u8, m, path)) return .medium;
     }
-    if (isInstalled(path)) return STATE_INSTALLED;
+    if (isInstalled(path)) return .installed;
     var head_buf: [disk.HEAD_BYTES]u8 = undefined;
-    const head = storage.readHead(path, &head_buf) orelse return "unreadable";
-    const seen = disk.describe(head);
-    if (disk.isTarsMedium(seen)) return STATE_MEDIUM;
-    return disk.stateText(buf, seen);
+    const head = storage.readHead(path, &head_buf);
+    return disk.headState(buf, if (head) |h| disk.describe(h) else null);
 }
 
 fn list(medium: ?[:0]const u8) void {
@@ -238,13 +240,8 @@ fn list(medium: ?[:0]const u8) void {
         var state_buf: [64]u8 = undefined;
         const model = sysAttr(name, "device/model", &model_buf) orelse "-";
         const removable = sysAttr(name, "removable", &rem_buf) orelse "0";
-        say("  {s:<14} {s:>7}  {s:<22} {s:<9}  {s}\n", .{
-            path,
-            disk.formatSize(&size_buf, bytes),
-            model,
-            if (std.mem.eql(u8, removable, "1")) "removable" else "internal",
-            stateOf(path, medium, &state_buf),
-        });
+        const state = disk.stateWord(stateOf(path, medium, &state_buf));
+        disk.listRow(Say{}, path, disk.formatSize(&size_buf, bytes), model, removable, state);
     }
     if (shown == 0) say("  (no disks)\n", .{});
     say("\n", .{});
@@ -327,13 +324,7 @@ fn runTool(
         }
         break;
     }
-    if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) return true;
-
-    if (linux.W.IFEXITED(status)) {
-        complain("{s} failed (exit {d}); what it said:", .{ tool, linux.W.EXITSTATUS(status) });
-    } else {
-        complain("{s} was killed (signal {d}); what it said:", .{ tool, @backingInt(linux.W.TERMSIG(status)) });
-    }
+    if (disk.toolOk(Complain{}, tool, status)) return true;
     var said: [4096]u8 = undefined;
     if (readFile(log.ptr, &said)) |text| writeAll(2, text);
     return false;
@@ -499,32 +490,19 @@ fn install(
     var state_buf: [64]u8 = undefined;
     const model = sysAttr(name, "device/model", &model_buf) orelse "-";
     const state = stateOf(path, medium, &state_buf);
-    if (std.mem.eql(u8, state, STATE_MEDIUM)) {
+    if (state == .medium) {
         complain("{s} is a TARS boot medium; pick another disk", .{path});
         return 1;
     }
-    const installed = std.mem.eql(u8, state, STATE_INSTALLED);
+    const installed = state == .installed;
     // 설치된 디스크에 --wipe가 없으면 갱신이다(design 결정 8). 설치 안 된
     // 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
     const update = installed and !wipe;
 
     // ── 계획 ──
-    if (update) {
-        say("tars-install: {s} ({s}, {s}) already has TARS. p1 will be updated, p2 (your settings) is kept.\n", .{
-            path, disk.formatSize(&size_buf, bytes), model,
-        });
-        say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-        say("  p2    1 GiB  Linux       ext2   tars-config <- not opened\n", .{});
-        say("  tars-install {s} --wipe erases both instead\n", .{path});
-    } else {
-        say("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
-            path, disk.formatSize(&size_buf, bytes), model, state,
-        });
-        say("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-        say("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
-        say("  rest unallocated\n", .{});
-        if (p2HasSettings(path)) say("  the settings now on p2 are erased too\n", .{});
-    }
+    // p2는 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
+    const settings = !update and p2HasSettings(path);
+    disk.planLines(Say{}, update, path, disk.formatSize(&size_buf, bytes), model, disk.stateWord(state), settings);
 
     if (!yes) {
         say("type YES to continue: ", .{});
