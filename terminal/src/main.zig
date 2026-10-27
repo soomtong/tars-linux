@@ -1445,7 +1445,7 @@ fn spawnPane(
     argv: [*:null]const ?[*:0]const u8,
     rect: layout.Rect,
 ) !Pane {
-    const session = try pty.spawn(path, argv, rect.cols, rect.rows);
+    const session = try pty.spawn(path, argv, rect.cols, rect.rows, CELL_W, ROW_HEIGHT);
     const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
     return .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc) };
 }
@@ -1494,7 +1494,7 @@ fn applyLayout(ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Re
         const r = rs[leaf];
         if (std.meta.eql(p.rect, r)) continue;
         try p.screen.resize(r.cols, r.rows);
-        pty.resize(p.session.master_fd, r.cols, r.rows);
+        pty.resize(p.session.master_fd, r.cols, r.rows, CELL_W, ROW_HEIGHT);
         p.rect = r;
     }
     return rs;

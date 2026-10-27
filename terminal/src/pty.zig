@@ -24,6 +24,21 @@ pub const Session = struct {
     child_pid: c.pid_t,
 };
 
+/// 자식에게 알릴 창 크기. 칸 수와 함께 픽셀을 채운다(LE design 결정 4) —
+/// 이미지 뷰어(`chafa` · `icat` 등)는 `TIOCGWINSZ`의 픽셀을 칸 수로 나눠 셀
+/// 크기를 셈한다. 같은 곱셈이 `vt.Screen`의 `width_px`(`CSI 14t`의 답)에도
+/// 있고, 두 곳의 출처는 `main.zig`의 `CELL_W` · `ROW_HEIGHT` 하나다.
+///
+/// 곱이 `u16`을 넘으면 0이다. 0은 "모른다"이고 LE 전에 늘 넘기던 값이다.
+pub fn winsize(cols: u16, rows: u16, cell_w: u32, cell_h: u32) c.struct_winsize {
+    return .{
+        .ws_row = rows,
+        .ws_col = cols,
+        .ws_xpixel = std.math.cast(u16, @as(u32, cols) * cell_w) orelse 0,
+        .ws_ypixel = std.math.cast(u16, @as(u32, rows) * cell_h) orelse 0,
+    };
+}
+
 /// PTY를 만들고 그 안에서 임의의 프로그램을 실행한다.
 /// cols/rows를 winsize로 넘기는 것이 핵심이다 — 이 값이 0이면 대화형 셸이
 /// 화면 폭을 모르는 상태로 프롬프트를 그려서 줄바꿈이 엉킨다.
@@ -32,13 +47,10 @@ pub fn spawn(
     argv: [*:null]const ?[*:0]const u8,
     cols: u16,
     rows: u16,
+    cell_w: u32,
+    cell_h: u32,
 ) !Session {
-    var ws: c.struct_winsize = .{
-        .ws_row = rows,
-        .ws_col = cols,
-        .ws_xpixel = 0,
-        .ws_ypixel = 0,
-    };
+    var ws = winsize(cols, rows, cell_w, cell_h);
 
     var master_fd: c_int = undefined;
     const pid = c.forkpty(&master_fd, null, null, &ws);
@@ -60,13 +72,8 @@ pub fn spawn(
 ///
 /// SIGWINCH는 우리가 안 보낸다. `TIOCSWINSZ`가 크기가 바뀌었으면 커널이
 /// 전경 프로세스 그룹에 보낸다.
-pub fn resize(fd: c_int, cols: u16, rows: u16) void {
-    var ws: c.struct_winsize = .{
-        .ws_row = rows,
-        .ws_col = cols,
-        .ws_xpixel = 0,
-        .ws_ypixel = 0,
-    };
+pub fn resize(fd: c_int, cols: u16, rows: u16, cell_w: u32, cell_h: u32) void {
+    var ws = winsize(cols, rows, cell_w, cell_h);
     _ = c.ioctl(fd, c.TIOCSWINSZ, &ws);
 }
 
@@ -103,7 +110,7 @@ pub fn spawnFish(command: [:0]const u8) !Session {
         "-c",
         command.ptr,
     };
-    return spawn("/usr/bin/fish", &argv, 80, 25);
+    return spawn("/usr/bin/fish", &argv, 80, 25, 0, 0);
 }
 
 /// master fd에서 자식이 끝날 때까지(EOF) 나오는 모든 바이트를 읽는다.

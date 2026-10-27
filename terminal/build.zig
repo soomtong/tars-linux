@@ -155,8 +155,8 @@ pub fn build(b: *std.Build) void {
     // 빈 쿼리 `.{}`가 네이티브다.
     const host_target = b.resolveTargetQuery(.{});
 
-    // ZU-M1: 호스트 검사가 쓰는 번역 둘. 위의 게스트 번역과 헤더는 같고
-    // 대상만 다르다.
+    // ZU-M1: 호스트 검사가 쓰는 번역들. 위의 게스트 번역과 헤더는 같고
+    // 대상만 다르다. `c_pty_host`는 LE-M0이 더했다(pty_size_test).
     const c_stb_truetype_host = translateC(b, "c_stb_truetype",
         \\#include <stb_truetype.h>
         \\
@@ -164,6 +164,12 @@ pub fn build(b: *std.Build) void {
     c_stb_truetype_host.addIncludePath(b.path("vendor"));
     const c_input_host = translateC(b, "c_input",
         \\#include <linux/input.h>
+        \\
+    , host_target, optimize);
+    const c_pty_host = translateC(b, "c_pty",
+        \\#include <pty.h>
+        \\#include <sys/ioctl.h>
+        \\#include <unistd.h>
         \\
     , host_target, optimize);
 
@@ -396,6 +402,21 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(pacing_test);
 
+    // pty_size_test도 호스트에서 돈다(LE-M0). `pty_test`와 달리 아무것도 exec하지 않고
+    // `openpty`의 쌍에서 창 크기만 되읽으므로 컨테이너의 아키텍처로 돈다.
+    const pty_size_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/pty_size_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    pty_size_test_mod.link_libc = true;
+    pty_size_test_mod.addImport("c_pty", c_pty_host.mod);
+    const pty_size_test = b.addExecutable(.{
+        .name = "pty_size_test",
+        .root_module = pty_size_test_mod,
+    });
+    b.installArtifact(pty_size_test);
+
     // `zig build test` = 호스트에서 도는 검사만 빌드해서 실행한다.
     //
     // 기본 `zig build`와 분리하는 이유는 속도였는데, 그 이유가 이제 거의
@@ -418,6 +439,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(logline_test).step);
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
+    test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

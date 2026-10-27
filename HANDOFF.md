@@ -90,7 +90,7 @@
   RAM 위 initrd에 늘 얹기에는 크다.
 - 필요한 사람은 패키지 관리자로 설치한다. Homebrew `install.sh`는 root이면 멈추므로 non-root 사용자가 먼저다.
   설치물은 디스크의 prefix(`/home/linuxbrew/.linuxbrew`)에 놓여야 하고, DI의 설치 디스크 위다.
-- 어느 뷰어든 `pty.zig`의 `ws_xpixel` · `ws_ypixel`(지금 0)을 우리가 채워야 한다(이월 숙제).
+- `pty.zig`가 `ws_xpixel` · `ws_ypixel`을 칸 수 × 셀 크기로 채운다(LE-M0, 2026-10-27) — 뷰어가 `TIOCGWINSZ`로 셀 크기를 셈할 수 있다.
 
 ## 이어받는 사람이 볼 것
 
