@@ -1,9 +1,18 @@
-# HANDOFF: Clock Reload(CR-M0) 닫음 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M0 끝, 다음은 DR-M1(verify) plan
 
 ## 지금 상태 (2026-10-28)
 
-- 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
-- 마지막에 닫은 것은 Clock Reload(CR-M0, 2026-10-28). design `docs/specs/2026-10-27-tars-clock-reload-design.md`, 기억
+- 열린 서브프로젝트는 Dirty Rows(부분 갱신, 2026-10-28). design `docs/specs/2026-10-28-tars-dirty-rows-design.md`. 지난 프레임의
+  `cells()` 사본과 행 단위로 비교해 바뀐 행만 다시 칠하고 DIRTYFB clip으로 넘긴다. 잔상은 verify 모드(같은 프레임을 별도 버퍼에
+  통째로 그려 바이트 비교, 22체인 전부)가 판정한다. milestone은 M0 측정 · M1 verify · M2 부분 갱신 + clip + 호스트 무작위 검사(결정 9).
+  - DR-M0 끝(plan `docs/plans/2026-10-28-tars-dirty-rows-dr-m0.md`, Task 1 `67596a0`). 새 기준선 (a) frame 2.45ms — backdrop
+    0.72 · cells 0.63(25.5%) · pane 0.81 · finish 0.29(present 0.21). 진단 판은 `probe/split.pl`(`patch.pl` 위에 얹는다, M0의 HEAD에만
+    붙는다). cells가 30% 미만이라 M3(행 dirty 비트)은 기본으로 없고, M2 재측정 뒤에 다시 판단한다.
+  - 다음: DR-M1 plan. 정할 것은 verify를 켜는 길(체인 스물둘을 하나씩 안 고치고 배포 ISO에서는 꺼짐), `renderFinish`에서 그리기와
+    `present` · 화살표를 가르는 손질, verify 줄의 모양과 루트 게이트의 판정 자리(design 결정 7 · 8, 위험 1 · 2).
+  - ghostty를 참고로 읽을 때는 `/Users/dp/Repository/_study/ghostty`(최신)다. `terminal/ghostty-src`는 빌드 입력이다
+    (`docs/decisions/reference_ghostty_source.md`).
+- 그 전에 닫은 것은 Clock Reload(CR-M0, 2026-10-28). design `docs/specs/2026-10-27-tars-clock-reload-design.md`, 기억
   `docs/decisions/project_clock_reload.md`. net 부팅 A의 검사 32가 `tars-config set ntp=dhcp|off|10.0.2.2` · `reload`를 차례로 쳐서
   chronyd 칸의 restart · stop · start를 본다(`doReload`가 `clock.prepare`의 답을 `rewrote`로 넘기는 배선 — mutation으로 확인).
   코드 0줄, 낡은 주석 둘(`power.zig` · `firewall.zig`). carryover 항목 하나를 지웠다. 루트 게이트 22/22, 9분 47초(prebuild 289 +
@@ -84,8 +93,7 @@
 - 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
   (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
-- 부분 갱신(dirty 추적) — RS 뒤의 다음 단계. 출발점은 행 단위 셀 비교와 DIRTYFB clip(`project_render_speed`의 "남은 것").
-  GPU 가속은 그 뒤다.
+- 부분 갱신은 Dirty Rows로 진행 중(위). GPU 가속은 그 뒤다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.

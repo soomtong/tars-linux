@@ -2,7 +2,7 @@
 
 Date: 2026-10-28
 Design: `docs/specs/2026-10-28-tars-dirty-rows-design.md`
-Status: 착수 전.
+Status: 끝났다(2026-10-28). Task 1 `67596a0`. (a) frame 2.45ms — backdrop 29% · cells 25.5% · pane 33% · finish 12%(present 0.21ms). cells가 30% 미만이라 M3은 기본으로 없다.
 
 ## 이 milestone이 끝나면
 
@@ -56,3 +56,49 @@ HEAD `8483f59`에서 코드로 확인했다.
 - 결과 절에 회차별 줄과 중앙값, 구간 표, 확정 6의 판단을 적는다.
 - design의 milestone 표 DR-M0 행 상태, 이 plan Status, `HANDOFF.md`.
 - 코드 0줄이라 루트 게이트는 안 돈다(LS-M0과 같다). commit 하나.
+
+## 결과 (2026-10-28, HEAD `67596a0`, 부팅 3회씩)
+
+호스트에서 두 패치가 붙고(`split.pl`이 바꾼 줄 여섯, 전부 원래 문장 앞뒤에 붙인 것) 0.17 `ast-check`가 통과했다. `split>` 없는
+가짜 로그에서 `report.pl`의 출력이 옛 판과 바이트까지 같았다(`cmp`). 부팅 여섯 번이 14분 44초였다(부팅마다 terminal을 다시 컴파일한다).
+
+비교 판(`dr-m0`):
+
+```
+dr-m0-run1  (b) span=1135ms frames=69 frame_sum=156ms dump_sum=99ms other=880ms reads=370   (a) frame=2.247 dump=2.716
+dr-m0-run2  (b) span=1393ms frames=84 frame_sum=234ms dump_sum=132ms other=1026ms reads=373  (a) frame=2.566 dump=2.341
+dr-m0-run3  (b) span=1127ms frames=68 frame_sum=173ms dump_sum=83ms other=870ms reads=368   (a) frame=2.411 dump=2.506
+median      (b) span=1135ms frames=69 frame_sum=173ms dump_sum=99ms reads=370               (a) frame=2.446 dump=2.506 (n=12)
+```
+
+DR의 기준선은 이것이다 — (a) frame 2.45ms. RS-M3의 4.3ms(2026-10-11)와는 섞지 않는다. 그 사이 호스트 · QEMU 조건이 같다는
+보장이 없고, RS의 방법도 "같은 판의 전후만 비교"다. (a)의 dump(2.5ms)가 frame과 같은 크기라 사람이 느끼는 키 하나는 둘의 합인
+5ms 남짓이다 — dump는 이 서브프로젝트의 비목표다(design).
+
+진단 판(`dr-m0-split`):
+
+```
+dr-m0-split-run1  (b) span=1285ms frames=77 ...  (a) frame=2.463 dump=2.267
+dr-m0-split-run2  (b) span=1275ms frames=77 ...  (a) frame=2.458 dump=2.256
+dr-m0-split-run3  (b) span=1165ms frames=71 ...  (a) frame=2.364 dump=2.323
+median  (a) frame=2.463 ms  split (n=12): backdrop=0.718 others=0.001 cells=0.628 pane=0.813 finish=0.29 present=0.208
+```
+
+| 구간 | ms | (a) frame 중 | DR-M2 뒤 |
+|---|---|---|---|
+| `backdrop` | 0.718 | 29% | 첫 프레임 · 레이아웃이 바뀔 때만 |
+| `others` | 0.001 | 0% | 패널 하나라 없다 |
+| `cells` | 0.628 | 25.5% | 그대로 |
+| `pane` | 0.813 | 33% | 바뀐 행 몫으로 |
+| `finish` | 0.290 | 12% | 상태 줄 · 프롬프트는 남는다 |
+| 그 안의 `present` | 0.208 | | clip으로 줄 수 있다 |
+| 나머지 | 약 0.01 | | |
+
+- 다섯 구간의 합(2.45)이 frame(2.463)과 0.01ms 안에서 맞는다 — 빠진 구간이 없다. 진단 판의 frame(2.463)이 비교 판(2.446)과
+  0.02ms 차이라 시계 여섯 번이 잰 것을 흔들지 않았다. 키마다의 `split>` 줄도 `backdrop` 0.7 · `cells` 0.6 · `pane` 0.8 언저리로 고르다.
+- DR-M2가 줄일 수 있는 몫의 상한은 `backdrop` 0.72 + `pane`의 대부분 약 0.78 + `present`의 일부, 합 약 1.5ms다. (a) frame이
+  2.45ms에서 1ms 안팎으로 갈 수 있다.
+- 확정 6의 판단: `cells`가 25.5%로 30% 미만이다. M3 없이 M2로 닫는 것이 기본이다. 다만 M2가 위의 몫을 없애면 남는 1ms 안팎의
+  60% 이상이 `cells`가 된다 — 규칙은 지금 바꾸지 않고, M2의 같은 판 재측정 뒤에 그 숫자로 M3을 다시 판단한다.
+- `present`가 0.21ms다. virtio-gpu는 손상 영역만 host로 옮기므로 M2의 clip이 QEMU에서도 보일 수 있다.
+- (b)는 이 milestone이 판단에 안 쓴다. 비교 판의 (b) 1.1초 중 880ms가 프레임 밖(대부분 VT 파서)이다.
