@@ -2,7 +2,13 @@
 
 Date: 2026-10-27
 Design: `docs/specs/2026-10-27-tars-loose-ends-design.md`
-Status: 계획
+Status: 끝났다(2026-10-27). Task마다 commit 하나(`e19acb0` · `a029839` · `6241824`). copy 검사 23 · pane 검사 9a ·
+`pty_size_test`가 섰고 mutation 셋(되돌림의 `forceMode` 빼기 → copy 23 · pane 9a 빨강, `ws_xpixel`에 `* 0` → `pty_size_test` 빨강)이
+전부 잡혔다. 루트 게이트 22/22(9분 50초, prebuild 298 + lanes 291초).
+
+구현 중에 바뀐 것 하나 — pane 9a의 reset 판정을 처음에 `tlog | sed … | grep -aq`로 썼다가 빨갰다. `-q`가 첫 매치에서 나가 `sed`가
+SIGPIPE를 받고 `pipefail`이 그것을 실패로 돌려준다. 같은 파일의 다른 판정처럼 `>/dev/null`로 바꿨다(코드 쪽은 맞았다 — 로그의
+`pane> closed leaf=1` 바로 다음 줄이 `input> mode reset from=copy`였다).
 
 ## 이 milestone이 끝나면
 

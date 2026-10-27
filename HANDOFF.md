@@ -1,9 +1,15 @@
-# HANDOFF: WP-M3 방향 포커스 닫음 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Loose Ends(LE-M0) 닫음 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 지금 상태 (2026-10-27)
 
 - 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고르고, design부터 쓴다.
-- 마지막에 닫은 것은 WP-M3 방향 포커스(2026-10-27). WP design에 이미 있던 milestone이라 새 design 없이 plan
+- 마지막에 닫은 것은 Loose Ends(LE-M0, 2026-10-27). design `docs/specs/2026-10-27-tars-loose-ends-design.md`, 기억
+  `docs/decisions/project_loose_ends.md`. 이월 숙제 넷: 화면 쪽 copy mode가 가지치기나 포커스 패널의 셸 종료로 닫히면
+  `App.resetInputMode`가 입력 모드도 normal로 돌리고 `terminal: input> mode reset from=copy|find`를 찍는다(셸 종료 자리는 LE가
+  찾았다). `input.State.pointerMode`는 `forceMode`가 됐다. `pty.winsize`가 `ws_xpixel` · `ws_ypixel`을 채운다(호스트
+  `pty_size_test`). `carryover.md`의 닫힌 항목을 지웠다. copy 검사 23 · pane 검사 9a(닫기를 셸 종료로 바꿈). 루트 게이트 22/22,
+  9분 50초(prebuild 298 + lanes 291초). 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 WP-M3 방향 포커스(2026-10-27). WP design에 이미 있던 milestone이라 새 design 없이 plan
   `docs/plans/2026-10-27-tars-workspace-panes-wp-m3.md`의 "착수 전에 확정한 것"에 결정을 적었다. 기억은
   `docs/decisions/project_workspace_panes.md`에 덧붙였다. `Cmd+Option+←↑↓→` → `layout.Tree.neighbor(whole, leaf, side)`.
   이웃이 여럿이면 변의 시작점과 마주 보는 것, 끝에서는 감기지 않는다(사용자 결정 둘, 2026-10-26). `Cmd+Option+Backspace`는
@@ -47,7 +53,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(LI-M1): 22/22, 12분 18초(prebuild 402초 + lanes 334초 — HC-M2는 309 + 294초, prebuild는 cold build라 흔들린다). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(LE-M0): 22/22, 9분 50초(prebuild 298초 + lanes 291초 — LI-M1은 402 + 334초, prebuild는 cold build라 흔들린다). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
@@ -82,7 +88,7 @@
 - 패키지 매니저(아래 "이미지 뷰어 메모"), IPv6(방화벽 표를 `inet`으로, FW design 위험 6), USB 동글 층 B.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다. 사용자는 코드 작업을 neovim · helix로 하고 게스트 vim은 대충 쓴다
   (`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`에 남아 있다.
-- 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다.
+- 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다. LE-M0 뒤로 실기 없이 할 수 있는 것은 chronyd reload를 게이트가 보게 하는 것(net 부팅 A에 `set ntp=…` · `reload`)과 렌더 쪽 미룬 둘(부분 갱신 · 큰 kitty 이미지)이고, 나머지는 실기나 간헐의 다음 근거를 기다린다.
 
 ## 이미지 뷰어 메모 (기본 이미지에 넣지 않는다 — 사용자 결정, 2026-10-03)
 

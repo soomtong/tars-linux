@@ -1,7 +1,7 @@
 # TARS Loose Ends — Design
 
 Date: 2026-10-27
-Status: design — 사용자 검토 전
+Status: 끝났다 — LE-M0(2026-10-27, 루트 게이트 22/22). plan은 `docs/plans/2026-10-27-tars-loose-ends-le-m0.md`. 기억은 `docs/decisions/project_loose_ends.md`.
 
 `docs/guides/carryover.md`(이월 숙제)에서 실기 없이 닫을 수 있는 것을 묶는다(사용자가 2026-10-27에 골랐다). HANDOFF "다음
 후보"의 "작은 것은 `carryover.md`에" 항목이다.
