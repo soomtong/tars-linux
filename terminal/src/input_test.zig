@@ -1853,23 +1853,23 @@ pub fn main() !void {
         var pk_n: input.State = .{ .hangul_layout = .dubeol, .hangul_on = true };
         try expectHangul(&pk_n, K.KEY_G, "", 'ㅎ');
         try expectHangul(&pk_n, K.KEY_K, "", '하');
-        const pk_out = pk_n.pointerMode(.copy);
+        const pk_out = pk_n.forceMode(.copy);
         if (!std.mem.eql(u8, pk_out, "하")) {
-            std.debug.print("FAIL: pointerMode from normal returned \"{s}\", want \"하\"\n", .{pk_out});
-            return error.PointerModeCommit;
+            std.debug.print("FAIL: forceMode from normal returned \"{s}\", want \"하\"\n", .{pk_out});
+            return error.ForceModeCommit;
         }
         if (pk_n.mode != .copy or pk_n.preedit() != null) {
-            std.debug.print("FAIL: after pointerMode(.copy) mode={s} preedit={?d}\n", .{ @tagName(pk_n.mode), pk_n.preedit() });
-            return error.PointerModeState;
+            std.debug.print("FAIL: after forceMode(.copy) mode={s} preedit={?d}\n", .{ @tagName(pk_n.mode), pk_n.preedit() });
+            return error.ForceModeState;
         }
         try expectCommit(&pk_n, 0, "");
         // 검사 66의 앞 절반. 이제 키는 copy 표로 간다 — 끌어서 들어간 뒤 친
         // `j`가 셸로 새지 않는다.
         try expectCopy(&pk_n, K.KEY_J, .down);
-        const pk_back = pk_n.pointerMode(.normal);
+        const pk_back = pk_n.forceMode(.normal);
         if (pk_back.len != 0 or pk_n.mode != .normal) {
-            std.debug.print("FAIL: pointerMode(.normal) from copy returned {d} byte(s), mode={s}\n", .{ pk_back.len, @tagName(pk_n.mode) });
-            return error.PointerModeState;
+            std.debug.print("FAIL: forceMode(.normal) from copy returned {d} byte(s), mode={s}\n", .{ pk_back.len, @tagName(pk_n.mode) });
+            return error.ForceModeState;
         }
         // 검사 66의 뒤 절반. 복사한 뒤 친 글자는 셸로 간다. 한글이 켜져 있으니
         // 자모가 조합으로 간다 — copy 표에 삼켜지지 않았다는 것이 요점이다.
@@ -1885,14 +1885,14 @@ pub fn main() !void {
         pk_f.mode = .find;
         try expectHangul(&pk_f, K.KEY_G, "", 'ㅎ');
         try expectHangul(&pk_f, K.KEY_K, "", '하');
-        const pk_drop = pk_f.pointerMode(.normal);
+        const pk_drop = pk_f.forceMode(.normal);
         if (pk_drop.len != 0) {
-            std.debug.print("FAIL: pointerMode from find returned \"{s}\"; the composing syllable belongs to the needle, not the shell\n", .{pk_drop});
-            return error.PointerModeLeak;
+            std.debug.print("FAIL: forceMode from find returned \"{s}\"; the composing syllable belongs to the needle, not the shell\n", .{pk_drop});
+            return error.ForceModeLeak;
         }
         if (pk_f.mode != .normal or pk_f.preedit() != null or !pk_f.hangul_on) {
-            std.debug.print("FAIL: after pointerMode from find mode={s} preedit={?d} hangul_on={}\n", .{ @tagName(pk_f.mode), pk_f.preedit(), pk_f.hangul_on });
-            return error.PointerModeState;
+            std.debug.print("FAIL: after forceMode from find mode={s} preedit={?d} hangul_on={}\n", .{ @tagName(pk_f.mode), pk_f.preedit(), pk_f.hangul_on });
+            return error.ForceModeState;
         }
         try expectCommit(&pk_f, 0, "");
     }

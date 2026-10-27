@@ -963,7 +963,9 @@ pub const State = struct {
         return out;
     }
 
-    /// 포인터가 모드를 바꾼다(PD design 결정 6). 조합 중인 한글은 normal이었으면
+    /// 키가 아닌 것이 모드를 바꾼다. 부르는 자리는 넷이다 — 포인터(PD design
+    /// 결정 6), 받아쓰기, 그리고 화면 쪽 copy mode가 가지치기나 포커스 패널의
+    /// 셸 종료로 닫힌 뒤(LE design 결정 1). 조합 중인 한글은 normal이었으면
     /// 확정해 돌려주고(호출부가 옛 포커스의 PTY에 쓴다), find였으면 버린다
     /// (`Esc`와 같은 뜻 — 검색 프롬프트의 조합은 검색어지 셸 입력이 아니다).
     /// 그리고 `mode`를 `to`로 둔다.
@@ -979,7 +981,7 @@ pub const State = struct {
     ///
     /// 돌려주는 슬라이스는 `commit_buf`를 가리킨다. 다음 키가 덮어쓰므로
     /// 호출부가 바로 쓴다 — `takeCommit`과 같은 계약이다.
-    pub fn pointerMode(self: *State, to: Mode) []const u8 {
+    pub fn forceMode(self: *State, to: Mode) []const u8 {
         switch (self.mode) {
             .normal => self.commitHangul(),
             .copy, .find => self.hangul_buf = .{},

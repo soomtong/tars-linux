@@ -15,6 +15,7 @@ cd "$(dirname "$0")" || exit 1
 #   → Cmd+V가 그 글자를 셸에 써 넣고, Enter를 치면 셸이 그것을 실행한다
 #   → 복사한 글자가 실행 결과로 화면에 다시 나타난다
 #   → Esc로 나오면 다시 나간다
+#   → 가지치기가 모드를 닫아도 다시 나간다(LE-M0, 검사 23)
 #   → 자식이 모드 2004를 켰으면 붙인 글자를 ESC[200~ · ESC[201~로 감싸고,
 #     꺼져 있으면 그대로 쓴다(PE-M1, 검사 21 · 22)
 #
@@ -1320,6 +1321,56 @@ case "$PE_LINE" in
   *) report_failure "the paste under cat was logged as '${PE_LINE}', expected 'clip> paste len=21 bracketed=0'" ;;
 esac
 echo "check 22: the paste under cat went unwrapped (${PE_LINE##*clip> })"
+
+# ── 검사 23: 가지치기가 copy mode를 닫으면 키가 다시 셸로 간다 (LE-M0) ──
+#
+# 화면 쪽 모드(`copy_cursor`)와 키 쪽 모드(`input.State.mode`)가 따로 있다.
+# 가지치기는 화면 쪽만 닫았고, 그러면 다음에 친 글자가 copy 표에 삼켜졌다
+# (PD design 위험 5). LE-M0부터 `readPanes`가 키 쪽도 닫고 `input> mode reset`을
+# 찍는다.
+#
+# 가지치기를 일으키는 법은 vt_test와 같다 — 한도 1,000줄을 넘게 3,000줄. 백그라운드
+# 작업 대신 `sleep 3`을 앞에 두고 그동안 모드에 들어간다. 모드는 terminal 쪽이라
+# 셸이 바빠도 들어간다. `v`가 있어야 한다 — 가지치기 감시는 선택의 앵커를 본다.
+#
+# 판정은 둘이다. `mode reset` 줄이 나왔다(고치기 전에는 없다). 그 뒤 친 `echo LE_OK`가
+# 셸에 닿아 출력 행 `LE_OK`가 화면에 선다(고치기 전에는 `e`부터 copy 표가 삼킨다).
+echo "=== check 23: pruning ends copy mode, keys reach the shell again ==="
+CM_ENTERS="$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)"
+type_keys s l e e p spc 3 semicolon spc s e q spc 1 spc 3 0 0 0 ret
+type_keys meta_l-shift-c
+for _ in $(seq 1 150); do
+  [ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$CM_ENTERS" ] && break
+  sleep 0.1
+done
+[ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$CM_ENTERS" ] ||
+  report_failure "check 23: Cmd+Shift+C during 'sleep 3' did not open copy mode"
+type_keys v
+RESET_OK=0
+for _ in $(seq 1 600); do
+  if grep -aq 'terminal: input> mode reset from=copy' "$LOG"; then RESET_OK=1; break; fi
+  sleep 0.1
+done
+grep -aq 'terminal: copy> pruned' "$LOG" ||
+  report_failure "check 23: no 'copy> pruned' line, 3000 lines never pruned the selection (the check did not reach its case)"
+[ "$RESET_OK" = "1" ] ||
+  report_failure "check 23: pruning closed copy mode but the input mode stayed (no 'input> mode reset from=copy')"
+echo "pruned and reset: $(tlog | grep -a 'terminal: input> mode reset' | tail -n 1 | tr -d '\r')"
+
+# seq가 끝날 때까지 기다린다. 끝 줄은 행 `3000`이다(명령줄은 `seq 1 3000`이라
+# 앞에 글자가 있어 안 걸린다). TCG에서 fish 함수의 3,000줄은 15초를 넘을 수 있다.
+SEQ_DONE=0
+for _ in 1 2 3 4; do
+  if wait_for_screen '\| 3000 \|'; then SEQ_DONE=1; break; fi
+done
+[ "$SEQ_DONE" = "1" ] || report_failure "check 23: 'seq 1 3000' never finished on screen"
+CM_KEYS="$(key_lines)"
+type_keys e c h o spc shift-l shift-e shift-minus shift-o shift-k ret
+wait_for_screen '\| LE_OK \|' ||
+  report_failure "check 23: 'echo LE_OK' after the reset never printed LE_OK (key> ${CM_KEYS} -> $(key_lines)), the keys went to the copy table"
+[ "$(key_lines)" -gt "$CM_KEYS" ] ||
+  report_failure "check 23: no key> lines after the reset"
+echo "check 23: keys reached the shell after pruning (key> ${CM_KEYS} -> $(key_lines))"
 
 # ── 음성 검사: 로그에 NUL이 섞이지 않았다 ──────────────────────────────
 #

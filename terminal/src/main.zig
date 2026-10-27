@@ -1820,7 +1820,7 @@ fn finishDictation(
 ///
 /// 그 패널이 포커스이고 한글을 조합 중이면 그 글자를 먼저 확정해 보낸다. 조합은 사람이
 /// 넣기 전에 친 것이므로 셸에도 먼저 가야 한다 — `Cmd+V`가 1.35번 단계에서 하는 일과
-/// 같다. `pointerMode(.normal)`은 normal에서 normal로 가며 확정만 한다.
+/// 같다. `forceMode(.normal)`은 normal에서 normal로 가며 확정만 한다.
 fn insertDictation(
     d: *Dictation,
     workspaces: *[MAX_WORKSPACES]?Workspace,
@@ -1843,7 +1843,7 @@ fn insertDictation(
     }
     const w = &workspaces[current].?;
     if (ref.ws == current and ref.leaf == w.focus and key_state.mode == .normal and key_state.preedit() != null) {
-        pty.write(fd, key_state.pointerMode(.normal));
+        pty.write(fd, key_state.forceMode(.normal));
         ref.pane.screen.setPreedit(null);
     }
     const parts = ref.pane.screen.pasteParts(text);
@@ -2753,7 +2753,7 @@ const PointerWire = struct {
                 .cancel => {
                     const fp = &self.ws.panes[self.ws.focus].?;
                     const composing = self.key_state.preedit() != null;
-                    const bytes = self.key_state.pointerMode(.normal);
+                    const bytes = self.key_state.forceMode(.normal);
                     if (bytes.len > 0) pty.write(fp.session.master_fd, bytes);
                     if (composing) {
                         fp.screen.setPreedit(null);
@@ -2778,7 +2778,7 @@ const PointerWire = struct {
                 .select_start => |at| {
                     const p = &self.ws.panes[at.leaf].?;
                     const composing = self.key_state.preedit() != null;
-                    const bytes = self.key_state.pointerMode(.copy);
+                    const bytes = self.key_state.forceMode(.copy);
                     if (bytes.len > 0) pty.write(p.session.master_fd, bytes);
                     if (composing) {
                         p.screen.setPreedit(null);
@@ -2806,7 +2806,7 @@ const PointerWire = struct {
                     const p = &self.ws.panes[leaf].?;
                     try self.clips.yank(p);
                     dumpCopy(p.screen, "yank");
-                    _ = self.key_state.pointerMode(.normal);
+                    _ = self.key_state.forceMode(.normal);
                     self.redraw = true;
                 },
             }
@@ -3759,6 +3759,20 @@ const App = struct {
         if (wire.redraw) self.needs_redraw = true;
     }
 
+    /// 화면 쪽 copy mode가 키 밖의 이유로 닫혔을 때 입력 모드를 맞춘다(LE design
+    /// 결정 1). 이유는 둘이다 — 가지치기(`copyTakePruned`)와 포커스 패널의 셸
+    /// 종료. 안 맞추면 다음에 친 글자가 copy 표에 삼켜지고 사람은 `Esc`를 한 번
+    /// 더 쳐야 셸에 닿는다(PD design 위험 5).
+    ///
+    /// 그 패널이 지금 워크스페이스의 포커스인지는 부르는 쪽이 본다. 이미
+    /// normal이면 아무것도 안 한다. copy · find에서 `forceMode`가 돌려주는
+    /// 확정분은 늘 비어 있다(조합을 버린다).
+    fn resetInputMode(self: *App) void {
+        if (self.key_state.mode == .normal) return;
+        logline.print("terminal: input> mode reset from={s}\n", .{@tagName(self.key_state.mode)});
+        _ = self.key_state.forceMode(.normal);
+    }
+
     /// 바퀴 6. PTY 출력과 EOF. `quit`은 마지막 패널의 셸이 끝났다는 뜻이다.
     ///
     /// PTY master는 slave가 전부 닫히면 POLLIN이 아니라 POLLHUP을 올린다.
@@ -3791,6 +3805,10 @@ const App = struct {
                 // 사용자가 2026-10-03에 골랐다 — M1은 순회의 다음이었다).
                 // `heir`는 그 잎이 트리에 있어야 형제를 안다 — 지운 뒤에
                 // 물으면 제자리를 돌려준다.
+                //
+                // 지금 보던 포커스 패널이 copy mode 중에 닫혔으면 입력 모드도
+                // 닫는다. 형제는 copy mode가 아니다(LE design 결정 1).
+                if (ref.ws == self.current and w.focus == ref.leaf) self.resetInputMode();
                 if (w.focus == ref.leaf) w.focus = w.tree.heir(ref.leaf);
                 w.tree.remove(ref.leaf);
                 self.needs_redraw = true;
@@ -3860,8 +3878,13 @@ const App = struct {
             if (!pane.screen.copyActive()) pane.screen.scrollToBottom();
             // 위 feed가 가지치기를 만났으면 vt.zig가 모드를 이미 닫았다
             // (design 위험 1). 로그를 안 남기면 사람이 "왜 갑자기 모드가
-            // 풀렸지"를 영영 모른다.
-            if (pane.screen.copyTakePruned()) dumpCopy(pane.screen, "pruned");
+            // 풀렸지"를 영영 모른다. 포커스 패널이면 입력 모드도 닫는다(LE
+            // design 결정 1) — copy mode는 포커스 패널에만 있을 수 있지만
+            // 그 사실에 기대지 않고 조건으로 적는다.
+            if (pane.screen.copyTakePruned()) {
+                dumpCopy(pane.screen, "pruned");
+                if (ref.ws == self.current and ref.leaf == self.workspaces[ref.ws].?.focus) self.resetInputMode();
+            }
             // `needs_redraw`가 아니다(RS-M2). 그릴지는 `decideFrame`이 하한을 보고 정한다.
             self.output_pending = true;
         }

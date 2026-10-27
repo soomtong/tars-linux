@@ -503,10 +503,30 @@ sleep 2
 echo "one pane closed, terminal alive: $(last_pane_line)"
 
 # ── 검사 9a: 하나 더 닫으면 패널 하나, 구분선 없음 ────────────────────
-echo "=== Cmd+W again: one pane left ==="
-type_keys meta_l-w
+#
+# 이번에는 Cmd+W가 아니라 셸이 스스로 끝난다(LE-M0). 셸이 `sleep 3` 중일 때
+# copy mode에 들어가 두면, 셸이 끝나 패널이 닫힐 때 키 쪽 모드도 닫혀야 한다 —
+# 형제 패널은 copy mode가 아니다. 안 닫히면 아래 `echo whole $COLUMNS`가 copy
+# 표에 삼켜져 155가 안 나온다. 그 타이핑이 곧 이 고침의 판정이다. Cmd+W의
+# 닫기는 검사 6이 본다. 닫히는 길(EOF → closed)은 둘이 같다.
+echo "=== the focused pane's shell exits during copy mode: one pane left ==="
+PANE_ENTERS="$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)"
+type_keys s l e e p spc 3 semicolon spc e x i t ret
+type_keys meta_l-shift-c
+for _ in $(seq 1 150); do
+  [ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$PANE_ENTERS" ] && break
+  sleep 0.1
+done
+[ "$(grep -ac 'terminal: copy> enter row=' "$LOG" || true)" -gt "$PANE_ENTERS" ] ||
+  report_failure "Cmd+Shift+C during 'sleep 3' did not open copy mode"
 wait_for_pane 'panes=1 focus=[0-9]+ rect=0,0 ' ||
-  report_failure "the second Cmd+W did not leave one pane covering the grid"
+  report_failure "the exiting shell did not leave one pane covering the grid"
+tlog | grep -aE 'terminal: pane> closed leaf=1' >/dev/null ||
+  report_failure "no 'pane> closed leaf=1' line, the exiting shell never closed its pane"
+# `grep -q`가 아니라 `>/dev/null`이다 — `-q`는 첫 매치에서 나가 앞의 sed가
+# SIGPIPE를 받고, pipefail이 그것을 실패로 돌려준다(LE-M0에서 한 번 빨갰다).
+tlog | sed -n '/terminal: pane> closed leaf=1/,$p' | grep -a 'terminal: input> mode reset from=copy' >/dev/null ||
+  report_failure "the pane closed during copy mode but the input mode stayed (no 'input> mode reset from=copy' after 'pane> closed leaf=1')"
 [ "$(pane_value ink)" -eq 0 ] ||
   report_failure "one pane left but sep ink=$(pane_value ink), the separator outlived the split"
 [ "$(spawn_lines)" -eq "$BOOT_SPAWNS" ] ||
@@ -518,7 +538,7 @@ echo "one pane left: $(last_pane_line)"
 type_keys e c h o spc w h o l e spc shift-4 \
   shift-c shift-o shift-l shift-u shift-m shift-n shift-s ret
 wait_for_screen '\| whole 155 \|' ||
-  report_failure "the remaining pane's shell did not answer 'whole 155' — if it says 77, closing never told the shell (TIOCSWINSZ)"
+  report_failure "the remaining pane's shell did not answer 'whole 155' — if it says 77, closing never told the shell (TIOCSWINSZ); if nothing, the keys went to the copy table (LE-M0)"
 echo "the remaining pane's shell answered: whole 155"
 
 # ── 검사 9b: 마지막 패널을 닫으면 terminal이 끝나고 init이 되살린다 ────
