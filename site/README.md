@@ -27,10 +27,10 @@ git worktree add ../tars-linux-pages gh-pages   # 처음 한 번 (없을 때)
 3. `features`의 알맞은 갈래에 `[이름, 설명, 끝난 날]`을 더한다. 사용자가
    손으로 닿는 것(키 · `tars.conf` 키 · `/config` 파일 · 명령)마다 한 줄이다.
    새 갈래가 필요하면 `{ title, note, items }`를 하나 더한다.
-   끝난 날이 `asOf`에서 `newWithinDays`(7일) 안이면 페이지에 NEW가 붙는다.
+   끝난 날이 `asOf`에서 `newWithinDays`(지금 2일, 값은 `data.js`에 있다) 안이면 페이지에 NEW가 붙는다.
 4. `stats` — `commits`는 `git rev-list --count main`, `chains`는 `check.sh`의
    `CHAINS` 개수, `zigKLines`는
-   `fd -e zig . init terminal tars-config | xargs wc -l | tail -1`을 1000으로.
+   `fd -e zig . init terminal | xargs wc -l | tail -1`을 1000으로(`tars-config`의 소스는 `init/` 안에 있다).
 5. 화면에 보이는 기능이면 영상을 찍는다(아래). 아니면 건너뛴다.
 6. 로컬에서 본다: `open ../tars-linux-pages/index.html` (파일로 열어도 된다 —
    `data.js`를 `<script>`로 읽어서 fetch가 없다).
