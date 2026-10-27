@@ -20,6 +20,9 @@ sub median {
 }
 
 my (@spans, @b_frames, @b_frame_ms, @b_dump_ms, @b_reads, @a_frame, @a_dump);
+# DR-M0: `split>` 줄(probe/split.pl)이 있는 로그면 (a)의 구간별 값. 없으면 아래 출력이 RS 때와 같다.
+my @SPLIT = qw(backdrop others cells pane finish present);
+my %a_split = map { $_ => [] } @SPLIT;
 
 for my $file (@ARGV) {
     open my $fh, '<', $file or die "read $file: $!\n";
@@ -27,12 +30,18 @@ for my $file (@ARGV) {
     my $key_pending = 0; # 마지막 probe> 뒤로 key> 가 있었나
     my $done = 0;        # DONE0을 이미 봤나
     my $last_key_frame;  # 마지막 key> 뒤 첫 프레임의 번호
+    my $split;          # 마지막으로 본 split> 값. 같은 프레임의 probe> 줄이 그 뒤에 온다
     while (my $line = <$fh>) {
         $done = 1 if !$done && $line =~ /DONE0/;
         if ($line =~ /terminal: key> /) { $key_pending = 1; next }
+        if ($line =~ /terminal: split> backdrop=(\d+) others=(\d+) cells=(\d+) pane=(\d+) finish=(\d+) present=(\d+)/) {
+            @$split{@SPLIT} = ($1, $2, $3, $4, $5, $6);
+            next;
+        }
         next unless $line =~ /terminal: probe> t=(\d+) frame=(\d+) dump=(-?\d+) reads=(\d+) bytes=(\d+)/;
-        push @frames, [$1, $2, $3, $4, $5, $key_pending, $done];
+        push @frames, [$1, $2, $3, $4, $5, $key_pending, $done, $split];
         $key_pending = 0;
+        undef $split;
     }
     close $fh;
 
@@ -62,9 +71,17 @@ for my $file (@ARGV) {
     push @b_reads, $r;
     push @a_frame, @af;
     push @a_dump, @ad;
+    for my $f (grep { defined $_->[7] } @a) {
+        push @{ $a_split{$_} }, $f->[7]{$_} / 1000 for @SPLIT;
+    }
 }
 
 printf "\nmedian over %d run(s)\n  (b) span=%.0fms frames=%d frame_sum=%.0fms dump_sum=%.0fms reads=%d\n"
      . "  (a) frame=%s ms dump=%s ms (n=%d)\n",
     scalar @spans, median(@spans), median(@b_frames), median(@b_frame_ms), median(@b_dump_ms),
     median(@b_reads), median(@a_frame), median(@a_dump), scalar @a_frame;
+
+if (@{ $a_split{cells} }) {
+    printf "  (a) split (median ms, n=%d): %s\n",
+        scalar @{ $a_split{cells} }, join ' ', map { "$_=" . median(@{ $a_split{$_} }) } @SPLIT;
+}
