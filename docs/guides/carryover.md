@@ -4,16 +4,8 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
-BV(2026-10-20)가 남긴 것 — GF-M0(2026-10-24)이 닫았다.
-
-- [x] 병렬 레인이 `kernel/initrd.cpio`를 동시에 다시 조립하는 경합(BV-M0 루트 게이트 1회차의 PM ENOENT · UT 1d(c)). 루트 게이트는
-      prebuild 뒤 `TARS_PREBUILT_INITRD=1`을 두어 체인의 `make_initrd.sh`가 건너뛰고, 회차마다 inode를 대조한다. tools 1d는 `TMPDIR`
-      아래 사본에 `INITRD_OUT`으로 만든다([[project_gate_flakes]]).
-
 BS(2026-10-09)가 남긴 것.
 
-- [x] `dictation` B4(`read -s got something`)의 10초 창 — GF-M1(2026-10-24)이 같은 검사의 앞 기다림과 같은 20초로 넓혔다. BS-M0
-      루트 게이트 1회차에서 한 번 빨갰고 로그의 둘째 `got[]`는 `ret` 바로 다음 프레임에 있었다(글자가 프롬프트에 들어간 것이 아니다).
 - [ ] 실기 노트북에서 볼 것 셋. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`으로 `Battery`가 있는지 본다(로그
       `terminal: battery> scan seen=… present=… pick=…`도 같은 것을 말한다). `capacity` 파일이 없는 배터리는 칸이 `  ?%`인 것이
       정상이다(ACPI의 `full_cap_broken`). 어댑터를 꽂았다 뺄 때 색이 곧바로 초록 · 회색으로 바뀌는지 본다 — 바뀌지 않으면 firmware가
@@ -48,9 +40,6 @@ AU(2026-10-06)가 남긴 것.
 
 PD(2026-10-05)가 남긴 것.
 
-- [x] 마우스 보고 — PD-M4가 같은 날 했다(design 결정 12). 자식이 마우스 모드를 켰으면 ghostty의 `encodeMouse`로 보고하고 우리
-      선택은 Shift 끌기, 대체 화면의 휠은 모드 1007로 화살표 키. 남은 것은 design 비목표 14~18(1004 포커스 보고 · XTSHIFTESCAPE ·
-      OSC 52 · 가로 휠과 포인터 모양 · 보고 끄기 설정).
 - [ ] 터치패드 출발값 셋(180ms · 2% · 배율)을 실기에서 손으로 본다(PD design 위험 3). 고친 값은 `touchpad_test`에도.
 - [ ] 누름과 첫 칸 이동 사이에 출력이 오면 선택이 한 줄 어긋날 수 있다(PD design 위험 2). 겪으면 tracked pin으로.
 - [ ] 가지치기가 copy mode를 닫을 때 `input.State.mode`가 `.copy`에 남는다(PD design 위험 5, PD 전부터 있던 자리).
@@ -84,9 +73,6 @@ PD(2026-10-05)가 남긴 것.
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
       판정한다(IN 비목표 3 · FW 비목표 3).
-- [ ] seed `tars.conf`의 `ntp:` 주석이 TD 전의 설명("부팅할 때 한 번만 묻고")으로 남아
-      있다(EL-M0 planner가 찾았다). 고치면 seed의 글자가 바뀌어 `config` 체인을 함께 본다.
-      (seed가 화면을 넘는 문제는 TC-M0부터 없다 — config 1차가 `cat` 대신 `tars-config`를 보고 그 출력은 15줄이다.)
 - [ ] chronyd의 reload(`ntp` 키)를 게이트가 안 본다 — net 검사 31의 부팅에 ntp가 없다(TC-M2 plan 확정 4). 호스트 검사가 step 논리를 덮고
       `clock.prepare`는 부팅이 같은 꼴로 부른다. ntp 부팅(net 부팅 A)에 `set ntp=…` · `reload`를 얹으면 덮인다.
 - [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
