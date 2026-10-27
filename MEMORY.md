@@ -136,3 +136,4 @@ copy mode · 클립보드
 - [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium, 게스트 권한에서 막힌다(2026-10-01)
 - [Zig upgrade](docs/decisions/project_zig_upgrade.md) — 0.16 → 0.17은 ghostty를 따라 SHA로 고정, 컨테이너가 거부하지 않는 문법은 다시 들어온다, 없어진 std 선언과 대체 표(2026-10-24)
 - [Loose ends](docs/decisions/project_loose_ends.md) — 이월 숙제 넷: 화면이 copy mode를 닫으면 입력 모드도 normal(`input> mode reset`), PTY 픽셀, carryover 정리(2026-10-27)
+- [Clock reload](docs/decisions/project_clock_reload.md) — net 부팅 A의 검사 32가 reload의 chronyd restart · stop · start를 본다, 검사 30의 restart 줄과 섞이지 않게(2026-10-28)

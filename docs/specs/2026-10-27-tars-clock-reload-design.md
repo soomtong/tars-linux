@@ -1,7 +1,7 @@
 # TARS Clock Reload — Design
 
 Date: 2026-10-27
-Status: CR-M0 진행 중. 사용자 승인 2026-10-27.
+Status: 끝났다 — CR-M0(2026-10-28, 루트 게이트 22/22). plan은 `docs/plans/2026-10-28-tars-clock-reload-cr-m0.md`. 기억은 `docs/decisions/project_clock_reload.md`.
 
 `docs/guides/carryover.md`(이월 숙제)의 "chronyd의 reload(`ntp` 키)를 게이트가 안 본다" 항목을 닫는다(사용자가 2026-10-27에
 골랐다). HANDOFF "다음 후보"의 "실기 없이 할 수 있는 것" 첫째다.

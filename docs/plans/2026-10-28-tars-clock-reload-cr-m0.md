@@ -2,13 +2,16 @@
 
 Date: 2026-10-28
 Design: `docs/specs/2026-10-27-tars-clock-reload-design.md`
-Status: 진행 중.
+Status: 끝났다(2026-10-28). Task 1 `771ddd3`. 검사 32가 섰고 mutation(`rewrote`에 `false`)이 차례 a에서 잡혔다. 루트 게이트 22/22(9분 47초, prebuild 289 + lanes 296초, net 196초).
+
+구현 중에 바뀐 것 둘 — 차례 a의 시리얼 대기를 `restarting service chronyd on request`에서 steer의 `reload: service chronyd restart`로
+바꿨다(앞의 줄은 검사 30이 이미 남긴다). 주석 고침에 `firewall.zig`의 같은 옛 문장을 더했다(그런 자식은 지금 `audio.zig`의 일꾼).
 
 ## 이 milestone이 끝나면
 
 - net 체인 부팅 A의 검사 30 뒤에 검사 32가 있다. `tars-config set ntp=dhcp|off|10.0.2.2`와 `tars-config reload`를 차례로 쳐서
   chronyd 칸의 restart · stop · start를 한 번씩 본다.
-- `power.zig`의 `resetToDefault` 주석이 지금 구조(그런 자식이 없다)를 말한다.
+- `power.zig`의 `resetToDefault` 주석이 지금 구조(그런 자식은 `audio.zig`의 일꾼 하나)를 말한다.
 - `carryover.md`에서 chronyd reload 항목이 빠진다. 루트 게이트 22/22.
 
 ## 착수 전에 확정한 것

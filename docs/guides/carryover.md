@@ -72,8 +72,6 @@ PD(2026-10-05)가 남긴 것.
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
       판정한다(IN 비목표 3 · FW 비목표 3).
-- [ ] chronyd의 reload(`ntp` 키)를 게이트가 안 본다 — net 검사 31의 부팅에 ntp가 없다(TC-M2 plan 확정 4). 호스트 검사가 step 논리를 덮고
-      `clock.prepare`는 부팅이 같은 꼴로 부른다. ntp 부팅(net 부팅 A)에 `set ntp=…` · `reload`를 얹으면 덮인다.
 - [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
       다시 빨개지면 진단의 세 덩어리(마지막 화면 · `cat /config/tars.conf` · `reload of` 뒤 tars-init 줄)로 가린다 — 가설은 "set이 파일을 못
       바꿨거나 늦었다"(빨갰던 회차의 시리얼에 `reload of`만 있고 steer 줄이 없었다. 단독에서는 넷 중 영). GF-M1부터 그 회차의
