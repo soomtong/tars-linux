@@ -24,6 +24,7 @@
 ## 사용자 (user)
 
 - [Learning goal](docs/decisions/user_learning_goal.md) — 목적은 속도가 아니라 이해다
+- [Editor use](docs/decisions/user_editor_use.md) — 코드 작업은 neovim · helix, 게스트 vim은 대충 쓴다(VR 취소, 2026-10-27)
 
 ## 프로젝트 (project)
 
