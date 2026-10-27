@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-10-24',
-  latest: 'Gate Flakes (GF-M0~M2)',
+  asOf: '2026-10-27',
+  latest: 'Workspace Panes M3 (WP-M3)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 962,       // git rev-list --count main
+    commits: 1006,      // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
-    zigKLines: 34,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 36,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -98,6 +98,7 @@ window.TARS = {
     ['2026-10-11', 'Render Speed', 'RS', '그리기를 빠르게 — 출력 폭주 5.5 → 2.2초, 키 하나의 그리기 11.6 → 4.3ms'],
     ['2026-10-20', 'Build Version', 'BV', '시스템 안의 버전 — `tars-config version`과 부팅 로그 첫 줄'],
     ['2026-10-24', 'Gate Flakes', 'GF', '게이트 간헐 셋을 닫았다 — initrd는 prebuild 한 번, 로그는 out/gate-logs/에, 커널 자름은 tlog가 잇는다'],
+    ['2026-10-27', 'Workspace Panes M3', 'WP-M3', '[⌘⌥←↑↓→]로 그 방향의 이웃 패널에'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -228,6 +229,7 @@ window.TARS = {
         ['[⌘D] · [⌘⇧D]', '오른쪽 · 아래에 새 패널', '2026-10-04'],
         ['[⌘W]', '포커스 패널을 닫는다(셸에 SIGHUP)', '2026-10-04'],
         ['[⌘]] · [⌘[]', '다음 · 이전 패널', '2026-10-04'],
+        ['[⌘⌥←] · [⌘⌥↑] · [⌘⌥↓] · [⌘⌥→]', '그 방향의 이웃 패널. 여럿이면 맨 위 · 맨 왼쪽과 마주 보는 것, 끝에서는 멈춘다', '2026-10-27'],
         ['[⌘T] · [⌘1]~[⌘9]', '새 워크스페이스 · 그 번호로', '2026-10-04'],
         ['[⌘⇧C]', 'copy mode', '2026-08-26'],
         ['[⌘V]', '붙이기. 어느 모드에서나, 검색 프롬프트에서는 검색어에', '2026-09-09'],
