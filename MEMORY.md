@@ -26,6 +26,10 @@
 - [Learning goal](docs/decisions/user_learning_goal.md) — 목적은 속도가 아니라 이해다
 - [Editor use](docs/decisions/user_editor_use.md) — 코드 작업은 neovim · helix, 게스트 vim은 대충 쓴다(VR 취소, 2026-10-27)
 
+## 참고 (reference)
+
+- [ghostty source](docs/decisions/reference_ghostty_source.md) — 참고는 `_study/ghostty`(최신), `terminal/ghostty-src`는 빌드 입력(2026-10-28)
+
 ## 프로젝트 (project)
 
 규칙과 판단
