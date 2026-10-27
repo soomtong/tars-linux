@@ -87,8 +87,9 @@ pub fn install() void {
 ///
 /// `net.zig`의 dhcpcd 자식은 이 함수가 필요 없다 — `execve`가 다뤄진
 /// 시그널을 전부 `SIG_DFL`로 되돌려 주기 때문이다. `execve` 전에 우리 코드로
-/// 오래 머무는 자식만 손으로 해야 하고, 지금 그런 자식은 `clock.zig`의 것
-/// 하나다 — `ntp=dhcp`면 서버 파일을 최대 30초 기다린 뒤에 chronyd가 된다.
+/// 오래 머무는 자식만 손으로 해야 하고, 지금 그런 자식은 `audio.zig`의 일꾼
+/// 하나다 — 소리 카드를 최대 5초 기다린 뒤에 alsactl이 된다. (TS-M2의
+/// `clock.zig` 자식도 그랬지만 DS-M1부터 chronyd는 감독 목록에서 곧바로 exec된다.)
 ///
 /// 안 부르면 증상이 종료에서 난다. `shutdown()`의 SIGTERM에 그 자식만
 /// 안 죽고 `reapAll()`이 유예 3초를 다 써서 `grace period expired`가 찍히고,

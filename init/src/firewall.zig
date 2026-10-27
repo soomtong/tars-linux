@@ -32,7 +32,7 @@ fn load(path: [:0]const u8, envp: [*:null]const ?[*:0]const u8) bool {
         return false;
     }
     if (pid == 0) {
-        // 부모의 SIGTERM · SIGINT 핸들러는 execve가 기본값으로 되돌린다. clock.zig가
+        // 부모의 SIGTERM · SIGINT 핸들러는 execve가 기본값으로 되돌린다. audio.zig의 일꾼이
         // power.resetToDefault()를 부르는 것은 execve 전에 우리 코드가 오래
         // 돌기 때문이고, 이 자식은 곧바로 execve한다.
         const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "-f", path.ptr, null };

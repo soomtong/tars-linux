@@ -50,6 +50,7 @@ REPO_ROOT="$(cd .. && pwd)"
 #   → 게스트의 date가 2031년을 찍는다
 #   → (DS-M2) 사람이 dhcpcd를 죽이면 감독자가 되살리고, chronyd를
 #     tars-service로 다시 띄우면 다시 stub을 고른다
+#   → (CR-M0) tars-config reload가 ntp 키로 chronyd를 다시 띄우고 · 멈추고 · 새로 띄운다
 #
 # 이 부팅에서 우리 코드는 init/src/clock.zig의 배관이고 시계는 chronyd가
 # 만진다. 상대는 우리가 쓴 perl 서른 줄이고, 그 둘 사이의 모든 것(SLIRP ·
@@ -1276,6 +1277,65 @@ done
 [ "$RESELECTED" = "1" ] || fail "the restarted chronyd never selected ${NTP_SERVER} again" \
   "Selected source" "tars-init: service chronyd"
 echo "tars-service restart chronyd, and the new chronyd selected ${NTP_SERVER} again"
+
+# ── 검사 32: reload가 ntp 키로 chronyd를 다시 띄우고 · 멈추고 · 새로 띄운다 (CR-M0) ──
+# 검사 31이 net 키로 dhcpcd를 밟은 길을 ntp 키로 chronyd에 대해 밟는다. doReload는 ntp가 바뀌면
+# clock.prepare로 설정을 다시 쓰고 그 답을 reload.step의 rewrote로 넘긴다 — 그 배선은 호스트 검사가
+# 못 본다(CR design 배경). 차례 셋이 step의 세 답이다.
+#   a. 10.0.2.2 → dhcp  켠 채로 파일이 바뀐다 → restart. 새 chronyd가 sourcedir 줄을 읽는다
+#   b. dhcp → off       → stop
+#   c. off → 10.0.2.2   → start. 다시 쓴 server 줄을 읽고 stub을 고른다
+# 끝이 처음과 같아서 아래의 전원 끄기가 지금과 같은 상태에서 돈다. ntp=dhcp의 chronyd는 서버 없이
+# 산다 — SLIRP의 리스에 option 42가 없다(부팅 B의 검사 31과 같은 상태).
+CR_STARTS_BEFORE="$(grep -ac 'tars-init: started service chronyd (pid' "$LOGA")"
+echo "=== typing 'tars-config set ntp=dhcp' and 'tars-config reload' ==="
+type_keys t a r s minus c o n f i g spc s e t spc n t p equal d h c p ret
+wait_for_screen '\| ntp: 10\.0\.2\.2 -> dhcp' \
+  || { nw_reload_diag; fail "tars-config set ntp=dhcp never answered 'ntp: 10.0.2.2 -> dhcp'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service chronyd: restarts' \
+  || { nw_reload_diag; fail "reload did not restart chronyd after ntp=dhcp" "terminal: screen>" "tars-init: reload"; }
+# `restarting service chronyd on request`는 검사 30이 이미 이 로그에 남겼다. 그래서 그 줄이 아니라 steer의
+# 줄을 듣고, 새 chronyd는 started 줄의 수로 가른다.
+wait_log "tars-init: reload: service chronyd restart" || \
+  fail "init never logged the chronyd restart that reload asked for" "tars-init: reload"
+CR_STARTED=0
+for _ in $(seq 1 30); do
+  if [ "$(grep -ac 'tars-init: started service chronyd (pid' "$LOGA")" -gt "$CR_STARTS_BEFORE" ]; then CR_STARTED=1; break; fi
+  sleep 1
+done
+[ "$CR_STARTED" = "1" ] || fail "no new chronyd was started after reload restarted it" "tars-init: started service chronyd"
+# 판정 글자 cr1은 명령 치환의 출력에만 생긴다(검사 19와 같다).
+type_keys e c h o spc c r shift-4 shift-9 g r e p spc minus c spc s o u r c e d i r spc \
+  slash r u n slash t a r s slash c h r o n y dot c o n f shift-0 ret
+wait_for_screen '\| cr1' || fail "reload did not rewrite /run/tars/chrony.conf for ntp=dhcp" "terminal: screen>" "tars-init: chronyd"
+echo "reload with ntp=dhcp rewrote chrony.conf and restarted chronyd"
+
+type_keys t a r s minus c o n f i g spc s e t spc n t p equal o f f ret
+wait_for_screen '\| ntp: dhcp -> off' \
+  || { nw_reload_diag; fail "tars-config set ntp=off never answered 'ntp: dhcp -> off'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service chronyd: stops' \
+  || { nw_reload_diag; fail "reload did not stop chronyd after ntp=off" "terminal: screen>" "tars-init: reload"; }
+wait_log "tars-init: service chronyd stopped on request" || \
+  fail "init never reaped the chronyd that reload stopped" "tars-init: reload" "service chronyd"
+echo "reload with ntp=off stopped chronyd"
+
+CR_SELECTED_BEFORE="$(grep -ac "Selected source ${NTP_SERVER}" "$LOGA")"
+type_keys t a r s minus c o n f i g spc s e t spc n t p equal 1 0 dot 0 dot 2 dot 2 ret
+wait_for_screen "\\| ntp: off -> 10\\.0\\.2\\.2" \
+  || { nw_reload_diag; fail "tars-config set ntp=${NTP_SERVER} never answered 'ntp: off -> ${NTP_SERVER}'" "terminal: screen>"; }
+type_keys t a r s minus c o n f i g spc r e l o a d ret
+wait_for_screen '\| service chronyd: starts' \
+  || { nw_reload_diag; fail "reload did not start chronyd after ntp=${NTP_SERVER}" "terminal: screen>" "tars-init: reload"; }
+CR_RESELECTED=0
+for _ in $(seq 1 30); do
+  if [ "$(grep -ac "Selected source ${NTP_SERVER}" "$LOGA")" -gt "$CR_SELECTED_BEFORE" ]; then CR_RESELECTED=1; break; fi
+  sleep 1
+done
+[ "$CR_RESELECTED" = "1" ] || fail "the chronyd that reload started never selected ${NTP_SERVER}" \
+  "Selected source" "tars-init: service chronyd"
+echo "reload with ntp=${NTP_SERVER} started chronyd and it selected ${NTP_SERVER} again, without a reboot"
 
 # ── 부팅 A를 끈다 ─────────────────────────────────────────────────────
 echo "=== sending system_powerdown to the ntp guest ==="
