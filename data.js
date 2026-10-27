@@ -108,6 +108,8 @@ window.TARS = {
   releases: [
     ['2026-10-11', '0.1.0', '첫 공개 버전 — BIOS · UEFI 겸용 x86_64 ISO', 'tars-0.1.0-x86_64.iso',
       'f9ef7da2fd52a74c893ea80dac669a54959bf52458532ae7c66211bfa9a81686'],
+    ['2026-10-24', '0.1.1', '도구 층의 갱신 — 시스템 안의 버전, ghostty-vt `3d07ef9`, Zig 0.17', 'tars-0.1.1-x86_64.iso',
+      'c749d8fc74d39b3d6627723fc9c52c0bffc9cd5d9b5629ffa4af3320734077be'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
