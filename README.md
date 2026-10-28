@@ -64,6 +64,24 @@ make clean                     # 빌드 산출물만 지운다 — 설정 디스
 `make boot-qemu`로 바로 뜬다. 로컬 macOS 화면으로 직접 QEMU를 띄우거나,
 VM(UTM 등)에 올리거나, 실기 노트북 USB로 부팅하는 방법은 `docs/guides/running-tars.md`에 따로 정리했다.
 
+## 키보드 — Cmd는 시스템, Ctrl은 프로그램
+
+키보드는 macOS의 modifier 의미를 따른다. 키는 evdev에서 terminal로 바로 오고
+사이에 X도 Wayland도 입력기 데몬도 없으므로, 이 의미는 프로그램마다 흩어진
+설정이 아니라 부팅 시점부터 시스템 하나의 정책이다.
+
+- Cmd는 control plane — workspace · pane · clipboard · 줄 편집. 동작인 것은
+  PTY에 가지 않는다 (`Cmd+1~9` · `Cmd+T` · `Cmd+D` · `Cmd+W` · `Cmd+Shift+C` · `Cmd+V`)
+- Ctrl은 data plane — terminal이 가로채지 않고 제어 문자로 PTY에 보낸다
+  (`Ctrl+C`는 `0x03`이고, SIGINT는 커널의 N_TTY가 보낸다)
+- Opt는 편집 — 셸이 이미 아는 바이트로 번역한다 (`Opt+←`는 `ESC b`,
+  `Cmd+←`는 `0x01`). 설정 파일 없는 셸에서도 그대로 동작한다
+- 한/영은 terminal 안의 상태 — 입력기 데몬 없이 오토마타가 조합하고,
+  한글 조합 중 `Esc`는 조합을 확정하고 영문으로 돌아온다
+
+Apple과 PC 키보드는 `tars.conf`의 `keyboard=apple|pc`가 고른다. 조합 표
+전체와 알고 있는 어긋남은 `docs/guides/keyboard-semantics.md`.
+
 ## 검증
 
 ```bash
@@ -95,6 +113,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash copy/c
 | `HANDOFF.md` | 지금 어디까지 왔는지, 다음에 무엇을 하는지 |
 | `MEMORY.md` | 세션을 넘어 유지되는 기억의 색인 (본문은 `docs/decisions/`) |
 | `docs/guides/running-tars.md` | 로컬 화면·VM·실기 노트북에서 띄워 보는 방법 |
+| `docs/guides/keyboard-semantics.md` | 키보드 의미 — Cmd · Ctrl · Opt · 한/영의 역할과 조합 표 |
 | `docs/guides/lessons.md` | 작업 요령의 허브 — 게이트 운영법 · 범용 명령, 아래 넷으로 옮긴 절의 표 |
 | `docs/guides/measurements.md` | 다시 조사하지 말 실측 (번호 목록) |
 | `docs/guides/dead-ends.md` | 시도했으나 안 되는 접근 |
