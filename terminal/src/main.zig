@@ -276,10 +276,9 @@ fn drawPrompt(
 /// `rows`가 여백을 다 먹을 수 있는데, 그때 그리면 격자 바깥이 아니라 화면
 /// 밖에 쓴다 — `setPixel`은 범위를 검사하지 않는다(`drm.zig:149`).
 ///
-/// 띠를 따로 안 지운다. `render()`가 매 프레임 `fill(MARGIN_COLOR)`로
-/// 시작하므로 지난 프레임의 꼬리가 남을 수 없다. `drawPrompt`가 줄 전체를
-/// 먼저 칠해야 했던 것은 그쪽이 격자 안이라 `fill` 뒤에 셀 배경이 다시
-/// 덮이기 때문이고, 여백은 그 덮임이 없다.
+/// 띠를 여기서 안 지운다 — `renderOverlay`가 이 함수 앞에서 격자 아래 여백 전체를
+/// `MARGIN_COLOR`로 지운다(DR-M2). 그전에는 `render()`의 `fill(MARGIN_COLOR)`이 매 프레임
+/// 지웠는데, 부분 갱신 뒤로 그 `fill`은 통째 프레임에만 있다.
 fn drawStatus(
     fb: drm.Framebuffer,
     cache: *font.Cache,
@@ -400,11 +399,14 @@ fn drawRun(
     return col;
 }
 
-/// 화면 전체를 지우고 셀 목록을 다시 그린다. 부분 갱신은 Dirty Rows(DR)가 넣는다 —
-/// DR-M1은 verify 모드(`App.verifyFrame`)만 세웠고 그리기는 아직 통째다. `RenderState`가
-/// 주는 dirty 비트는 안 쓴다(DR design 결정 2 — dirty의 출처는 `cells()`의 사본이다).
+/// 화면 전체를 지우고 셀 목록을 다시 그리는 통째 경로의 첫 단계. DR-M2부터 실제 경로는
+/// 첫 프레임 · 워크스페이스 전환 · 트리 변경에만 여기를 지나고, 그 밖의 프레임은 `App.paintPane`이
+/// 패널마다 dirty 행만 다시 칠한다. verify 모드의 그림자(`App.verifyFrame`)는 매 프레임 이
+/// 통째 경로 그대로다 — 그래서 이 함수와 `renderPane` · `renderOverlay`의 모양이 "통째 경로"의
+/// 정의다. `RenderState`가 주는 dirty 비트는 안 쓴다(DR design 결정 2 — dirty의 출처는
+/// `cells()`의 사본이다).
 ///
-/// 한 프레임이 세 단계다(WP-M1). `renderBackdrop` → 패널마다 `renderPane`
+/// 통째 경로는 세 단계다(WP-M1). `renderBackdrop` → 패널마다 `renderPane`
 /// → `renderOverlay` → `presentFrame`(DR-M1 전에는 뒤의 둘이 `renderFinish` 하나였다).
 /// 패널 하나를 그리는 일이 둘째이고, WP 전의 `render` 본문이 거의 그대로 그 안에 있다.
 ///
@@ -506,6 +508,69 @@ fn renderPane(
     if (cursor) |cm| if (cm.px) |cr| fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
+/// 패널 오른쪽 한 칸의 색(DR-M2 plan 확정 2). 트리의 타일링상 패널의 바로 오른쪽 칸은
+/// 언제나 구분선(세로 분할의 `first` 쪽 — 구분선이 부모 높이 전체라 이 패널의 모든 행에
+/// 걸린다)이거나 격자 오른쪽 끝의 여백이다. 이 주장이 틀리면 패널을 가른 모든 프레임에서
+/// verify가 `mismatch`를 찍는다.
+fn stripColor(rect: layout.Rect, whole: layout.Rect) u32 {
+    return if (rect.col + rect.cols >= whole.col + whole.cols) MARGIN_COLOR else SEPARATOR;
+}
+
+/// 패널의 행 `first`부터 `count`행을 지운다 — 패널 폭을 `MARGIN_COLOR`로, 오른쪽 한 칸을
+/// `strip`으로(DR-M2 plan 확정 1 · 2).
+///
+/// 지우는 색이 그 패널의 기본 배경이 아닌 이유: 통째 경로에서 빈 칸은 `fill(MARGIN_COLOR)`의
+/// 색이다 — `cells()`가 글자도 없고 배경도 기본인 셀을 안 내보내고 `renderPane`은 내보낸 셀만
+/// 칠한다. verify의 정답이 그 경로이므로 여기도 같은 색이어야 한다.
+///
+/// 오른쪽 한 칸을 되돌리는 이유: 마지막 열의 preedit(폭 2)은 오른쪽 절반을 격자 밖에 그린다
+/// (`vt.zig`의 "커서가 마지막 열이면" 주석, `drawPrompt`의 조합 글자도 같다). 통째 경로는 다음
+/// 프레임의 `fill`이 지우지만 부분 경로에는 그 `fill`이 없다. 오른쪽 여백은 `GRID_X`라 한 칸이
+/// 들어가지만 `fillRect`가 경계를 안 보므로 여기서 검사한다.
+fn clearRows(fb: drm.Framebuffer, rect: layout.Rect, first: u16, count: u16, strip: u32) void {
+    const o = paneOrigin(rect);
+    const y = o.y + @as(u32, first) * ROW_HEIGHT;
+    const h = @as(u32, count) * ROW_HEIGHT;
+    fb.fillRect(o.x, y, @as(u32, rect.cols) * CELL_W, h, MARGIN_COLOR);
+    const sx = o.x + @as(u32, rect.cols) * CELL_W;
+    if (sx + CELL_W <= fb.width) fb.fillRect(sx, y, CELL_W, h, strip);
+}
+
+/// 패널의 dirty 행만 지우고 다시 칠한다(DR-M2, design 결정 5). 행마다 `clearRows` 뒤에 그 행의
+/// 셀을 배경 전부 → 글리프 전부 순으로 칠한다 — `renderPane`의 두 벌 순서를 행 안에서 지킨다
+/// (TR design 결정 6). 이미지는 없다 — 이미지가 있는 패널은 `renderPane`으로 통째다(plan 확정 4).
+/// 커서 띠는 그 행이 dirty일 때 글리프 뒤에 칠한다 — `renderPane`의 맨 끝과 같은 자리이고,
+/// `paintPane`이 띠의 행을 언제나 dirty에 넣으므로 띠가 빠지는 프레임은 없다.
+///
+/// `starts[r]..starts[r + 1]`이 r행의 셀이다(`verify.rowStarts`).
+fn renderRows(
+    fb: drm.Framebuffer,
+    cache: *font.Cache,
+    cells: []const vt.CellGlyph,
+    starts: []const u32,
+    dirty: []const bool,
+    rect: layout.Rect,
+    cursor: ?vt.CursorMark,
+    strip: u32,
+) !void {
+    const o = paneOrigin(rect);
+    for (dirty, 0..) |d, r| {
+        if (!d) continue;
+        clearRows(fb, rect, @intCast(r), 1, strip);
+        const y = o.y + @as(u32, @intCast(r)) * ROW_HEIGHT;
+        const row = cells[starts[r]..starts[r + 1]];
+        for (row) |cell| drawCellBackground(fb, o.x + @as(u32, cell.col) * CELL_W, y, cell.bg);
+        for (row) |cell| {
+            if (cell.codepoint == 0) continue;
+            const glyph = try cache.find(cell.codepoint);
+            drawGlyph(fb, glyph, o.x + @as(u32, cell.col) * CELL_W, y, cell.fg);
+        }
+    }
+    if (cursor) |cm| if (cm.px) |cr| {
+        if (dirty[cm.row]) fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
+    };
+}
+
 /// 프레임의 overlay — 포커스 패널의 프롬프트와 상태 줄. DR-M1 전에는 `renderFinish`가
 /// 이것과 아래 `presentFrame`을 함께 했다. 가른 이유는 verify 모드다(DR design 위험 2) —
 /// 그림자 버퍼에는 여기까지 그리고, 화살표와 `present`는 실제 fb에만 한다.
@@ -524,6 +589,12 @@ fn renderOverlay(
     var ink: ?PromptInk = null;
     if (prompt) |p| ink = try drawPrompt(fb, cache, p);
 
+    // 상태 줄의 띠(격자 아래 여백 전체)를 먼저 지운다(DR-M2 plan 확정 7). 부분 경로에는
+    // 지난 프레임의 글자를 지워 줄 `fill`이 없다. 통째 경로와 그림자에서는 이미 그 색이라
+    // 픽셀이 안 바뀐다 — 그래서 여기 한 자리에 두어도 "통째 경로"의 정의가 안 바뀐다.
+    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    if (grid_bottom < fb.height) fb.fillRect(0, grid_bottom, fb.width, fb.height - grid_bottom, MARGIN_COLOR);
+
     // 프롬프트와 안 겹친다 — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try drawStatus(fb, cache, st);
@@ -534,17 +605,16 @@ fn renderOverlay(
 /// 안 된다, `drm.Framebuffer.shadow`). DR-M2가 clip을 넘길 자리가 여기 하나다.
 fn presentFrame(
     fb: drm.Framebuffer,
-    // 화살표(PD-M1). `want`이 null이면 안 그린다. 화면 전체를 방금 다시
-    // 칠했으므로 옛 화살표는 이미 지워졌고 저장한 픽셀은 낡았다 — 되돌리지
-    // 않고 잊는다(`forget`). 그리고 `present` 바로 앞에서 새로 저장하고 그린다
-    // (PD design 결정 4).
+    // 화살표(PD-M1). `want`이 null이면 안 그린다. 옛 화살표는 `render`가 프레임 처음에
+    // `restore`로 되돌렸다(DR-M2 plan 확정 8 — 부분 경로에는 옛 화살표를 지워 줄 `fill`이
+    // 없다. DR-M2 전에는 여기서 `forget`했다). 그리고 `present` 바로 앞에서 새로 저장하고
+    // 그린다(PD design 결정 4).
     sprite: *pointer.Sprite,
     want: ?pointer.Spot,
 ) !void {
     // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
     // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
     // 보이는 것은 사람이 포인터를 움직인 뒤뿐이라 다른 체인의 덤프는 안 바뀐다.
-    sprite.forget();
     if (want) |s| sprite.show(fb, s);
     try fb.present();
 }
@@ -1368,7 +1438,44 @@ const Pane = struct {
     /// 이 패널만의 클립보드(CB design 결정 1). `clipboard=pane`일 때만 쓰이고,
     /// `shared`면 비어 있다. 패널을 닫는 자리가 `screen`과 함께 해제한다.
     clip: clipboard.Clipboard,
+    /// 셀 목록 두 벌(DR-M2, design 결정 2 · plan 확정 5). `cells_buf[shown]`이 화면에 있는
+    /// 목록이고 `cells()`는 반대쪽에 받는다 — 행마다 비교한 뒤 다 그리고 나서 뒤집는다.
+    /// 복사 대신 뒤집는 이유는 비용이다(격자 전체 116KB를 TCG에서 매 프레임 옮기지 않는다).
+    /// 크기는 이 패널의 `cols × rows`이고 `applyLayout`이 사각형을 바꾸면 다시 잡는다.
+    /// `starts_buf`는 행마다 시작 위치(`rows + 1`칸, `verify.rowStarts`).
+    cells_buf: [2][]vt.CellGlyph,
+    starts_buf: [2][]u32,
+    shown: u1 = 0,
+    shown_len: usize = 0,
+    /// false면 지난 목록이 없다 — 막 띄웠거나 사각형이 바뀌었거나 지난 목록이 행 순서가
+    /// 아니었다. 다음 프레임은 통째로 그린다(plan 확정 4).
+    prev_valid: bool = false,
+    /// 지난 프레임의 overlay 자리(plan 확정 4 · 7). 이미지가 있었으면 이번도 통째이고,
+    /// 프롬프트가 있었으면 마지막 행이, 커서 띠가 있었으면 그 행이 이번에도 dirty다 —
+    /// 픽셀이 남기 때문이다.
+    had_imgs: bool = false,
+    had_prompt: bool = false,
+    band_row: ?u16 = null,
 };
+
+/// 패널의 셀 목록 두 벌을 잡는다(DR-M2). `spawnPane`과 `applyLayout`이 부른다.
+fn allocPaneBuffers(alloc: std.mem.Allocator, pane: *Pane, rect: layout.Rect) !void {
+    const n = @as(usize, rect.cols) * rect.rows;
+    for (&pane.cells_buf, &pane.starts_buf) |*cb, *sb| {
+        cb.* = try alloc.alloc(vt.CellGlyph, n);
+        sb.* = try alloc.alloc(u32, @as(usize, rect.rows) + 1);
+    }
+    pane.shown = 0;
+    pane.shown_len = 0;
+    pane.prev_valid = false;
+}
+
+fn freePaneBuffers(alloc: std.mem.Allocator, pane: *const Pane) void {
+    for (pane.cells_buf, pane.starts_buf) |cb, sb| {
+        alloc.free(cb);
+        alloc.free(sb);
+    }
+}
 
 /// 클립보드 둘과 그중 무엇을 쓸지(CB design 결정 1 · 2).
 ///
@@ -1457,7 +1564,9 @@ fn spawnPane(
 ) !Pane {
     const session = try pty.spawn(path, argv, rect.cols, rect.rows, CELL_W, ROW_HEIGHT);
     const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
-    return .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc) };
+    var pane: Pane = .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc), .cells_buf = undefined, .starts_buf = undefined };
+    try allocPaneBuffers(alloc, &pane, rect);
+    return pane;
 }
 
 /// `poll`의 fd 하나가 누구의 것인가(WP-M1). 패널 포인터와, 그 패널을
@@ -1496,7 +1605,7 @@ fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
 ///
 /// 새 잎의 칸은 아직 null이라 건너뛴다. 부르는 쪽이 돌려받은 사각형으로
 /// 그 칸에 `spawnPane`한다.
-fn applyLayout(ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Rect {
+fn applyLayout(alloc: std.mem.Allocator, ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Rect {
     var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
     ws.tree.rects(whole, &rs);
     for (&ws.panes, 0..) |*slot, leaf| {
@@ -1505,6 +1614,10 @@ fn applyLayout(ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Re
         if (std.meta.eql(p.rect, r)) continue;
         try p.screen.resize(r.cols, r.rows);
         pty.resize(p.session.master_fd, r.cols, r.rows, CELL_W, ROW_HEIGHT);
+        // 셀 목록 두 벌도 새 크기다(DR-M2). 지난 목록은 옛 사각형의 것이라 쓸모가 없고,
+        // `prev_valid`가 꺼져 다음 프레임은 통째다 — 트리가 바뀐 프레임은 어차피 화면 전체다.
+        freePaneBuffers(alloc, p);
+        try allocPaneBuffers(alloc, p, r);
         p.rect = r;
     }
     return rs;
@@ -2882,10 +2995,17 @@ const App = struct {
     /// 하나면 격자 전체지만, 분할이 생기는 M1에서 이 자리가 따로 산수를 하고
     /// 있으면 둘이 갈린다.
     whole: layout.Rect,
-    cell_buf: []vt.CellGlyph,
-    /// 화면 dump 한 줄의 버퍼(AL-M0). `cell_buf`처럼 격자 전체 크기라 어느 패널에도
-    /// 충분하고, 격자가 큰 실기계에서는 그만큼 커진다.
+    /// 화면 dump 한 줄의 버퍼(AL-M0). 격자 전체 크기라 어느 패널에도 충분하고, 격자가 큰
+    /// 실기계에서는 그만큼 커진다. 셀 목록의 버퍼는 패널마다 있다(`Pane.cells_buf`, DR-M2 —
+    /// 그전에는 여기 `cell_buf` 하나를 패널마다 돌려 썼다).
     screen_line_buf: []u8,
+    /// 한 패널의 dirty 행 비트(DR-M2, `paintPane`). 격자 행 수만큼이라 어느 패널에도 충분하다.
+    dirty_rows: []bool,
+    /// 지난 프레임의 워크스페이스 번호와 트리(DR-M2 plan 확정 3). 둘 중 하나라도 다르면 화면
+    /// 전체를 다시 그린다 — 구분선과 여백이 바뀌었다. null은 첫 프레임이다. 플래그가 아니라
+    /// 비교인 이유는 결정 2와 같다 — 바꾸는 자리마다 켜게 하면 하나를 빠뜨린다.
+    last_current: ?usize = null,
+    last_tree: ?layout.Tree = null,
     /// kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
     /// `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
     img_buf: [16]vt.ImagePlacement = undefined,
@@ -3039,8 +3159,8 @@ const App = struct {
             .cols = undefined,
             .rows = undefined,
             .whole = undefined,
-            .cell_buf = undefined,
             .screen_line_buf = undefined,
+            .dirty_rows = undefined,
             .shell_path = undefined,
             .argv = undefined,
             .swap_alt_meta = undefined,
@@ -3267,8 +3387,8 @@ const App = struct {
         // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
         logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
 
-        self.cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows);
         self.screen_line_buf = try self.allocator.alloc(u8, screenLineMax(self.cols, self.rows));
+        self.dirty_rows = try self.allocator.alloc(bool, self.rows);
 
         self.key_state = .{
             .hangul_layout = hangul_layout,
@@ -3324,7 +3444,7 @@ const App = struct {
         // 돌고 그동안 마이크가 열려 있다. 거두지는 않는다 — 고아는 init이 거둔다.
         if (self.dict.phase != null) signalDictation(&self.dict, .TERM);
         self.allocator.free(self.screen_line_buf);
-        self.allocator.free(self.cell_buf);
+        self.allocator.free(self.dirty_rows);
         if (self.verify) |v| {
             self.allocator.free(v.cell_buf);
             self.allocator.free(v.fb.pixels[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
@@ -3335,6 +3455,7 @@ const App = struct {
                 if (maybe) |pane| {
                     pane.screen.deinit();
                     pane.clip.deinit();
+                    freePaneBuffers(self.allocator, &pane);
                 }
             }
         }
@@ -3604,7 +3725,7 @@ const App = struct {
                         logline.print("terminal: pane> split refused\n", .{});
                         continue;
                     };
-                    const rs = try applyLayout(ws, self.whole);
+                    const rs = try applyLayout(self.allocator, ws, self.whole);
                     // 새 셸은 부팅의 것과 같은 셸이다. `spawned child pid`
                     // 줄은 안 찍는다(WP-M1 plan 확정 1) — terminal/check.sh가
                     // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
@@ -3854,6 +3975,7 @@ const App = struct {
                 pty.close(pane.session);
                 pane.screen.deinit();
                 pane.clip.deinit();
+                freePaneBuffers(self.allocator, pane);
                 w.panes[ref.leaf] = null;
                 // 포커스를 먼저 옮긴다. 자리를 넘겨받는 형제로 간다(WP-M2,
                 // 사용자가 2026-10-03에 골랐다 — M1은 순회의 다음이었다).
@@ -3890,7 +4012,7 @@ const App = struct {
                     // 출력은 다음 `poll`이 다시 알린다.
                     break;
                 }
-                _ = try applyLayout(w, self.whole);
+                _ = try applyLayout(self.allocator, w, self.whole);
                 // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
                 // 가리키므로 이 바퀴에서 더 안 만진다.
                 continue;
@@ -4024,9 +4146,9 @@ const App = struct {
         frame_us: i96 = 0,
     };
 
-    /// 바퀴 9. 프레임 하나를 그린다 — 포커스 아닌 패널 → 포커스 패널 → 프롬프트 · 상태 줄
-    /// (`renderOverlay`) → verify(`verifyFrame`, 켜져 있을 때) → 화살표 · `present`(`presentFrame`).
-    /// 덤프가 읽을 것은 `frame`에 남긴다.
+    /// 바퀴 9. 프레임 하나를 그린다 — 화살표 되돌리기 → 통째 판정 → 포커스 아닌 패널 → 포커스
+    /// 패널(각각 `paintPane`) → 프롬프트 · 상태 줄(`renderOverlay`) → verify(`verifyFrame`, 켜져
+    /// 있을 때) → 화살표 · `present`(`presentFrame`). 덤프가 읽을 것은 `frame`에 남긴다.
     fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
         // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
         // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
@@ -4045,20 +4167,27 @@ const App = struct {
         // `ws.focus` 하나이고, 화면 쪽 값은 그리기 직전의 사본이다 —
         // 포커스를 옮기는 자리마다 그 값을 고치게 하면 하나를 빠뜨린다.
         const frame_start = std.Io.Clock.now(.awake, self.io);
-        renderBackdrop(self.fb, &ws.tree, self.whole);
+        // 화살표를 먼저 되돌린다(DR-M2 plan 확정 8). 부분 경로에는 옛 화살표를 지워 줄 `fill`이
+        // 없으므로 저장한 픽셀로 되돌리는 것이 유일한 길이고, 통째 프레임에서도 같은 순서면
+        // 된다(되돌린 뒤 덮는다). 그래서 verify의 픽셀 비교 시점에 실제 fb에 화살표가 없다.
+        self.sprite.restore(self.fb);
+        // 화면 전체를 다시 그릴 프레임인가(DR-M2 plan 확정 3). 첫 프레임, 워크스페이스가 바뀜,
+        // 트리가 바뀜(분할 · 닫기 — 구분선과 여백이 바뀐다). 트리가 같으면 패널의 사각형도 같다.
+        const full = self.last_current != self.current or
+            if (self.last_tree) |t| !std.meta.eql(t, ws.tree) else true;
+        if (full) renderBackdrop(self.fb, &ws.tree, self.whole);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             if (leaf == ws.focus) continue;
             p.screen.focused = false;
-            const p_cells = try p.screen.cells(self.cell_buf);
-            const p_bg = p.screen.defaultBg();
+            const p_cells = try p.screen.cells(p.cells_buf[p.shown ^ 1]);
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
-            try renderPane(self.fb, &self.cache, p_cells, p.screen.images(&self.img_buf), p_bg, p.rect, p.screen.cursorMark());
+            try self.paintPane(p, full, p_cells, p.screen.images(&self.img_buf), false);
         }
         focus.screen.focused = true;
 
-        frame.cells = try focus.screen.cells(self.cell_buf);
+        frame.cells = try focus.screen.cells(focus.cells_buf[focus.shown ^ 1]);
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
@@ -4109,7 +4238,9 @@ const App = struct {
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
         frame.imgs = focus.screen.images(&self.img_buf);
-        try renderPane(self.fb, &self.cache, frame.cells, frame.imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
+        try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null);
+        self.last_current = self.current;
+        self.last_tree = ws.tree;
         frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line);
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
@@ -4139,6 +4270,43 @@ const App = struct {
                 logline.print("terminal: verify> mismatch rows={d} first={s} us={d}\n", .{ v.report.rows, list[0..n], v.us });
             }
         }
+    }
+
+    /// 패널 하나를 그린다(DR-M2) — 통째(`renderPane`) 또는 dirty 행만(`renderRows`). `cells`는
+    /// 방금 `p.cells_buf[p.shown ^ 1]`에 받은 이번 목록이다. 다 그린 뒤 두 벌을 뒤집고 다음
+    /// 프레임이 볼 overlay 자리를 기억한다.
+    ///
+    /// 통째인 조건(plan 확정 4): 화면 전체 프레임(`full`), 지난 목록이 없음, 이번 목록이 행
+    /// 순서가 아님(`rowStarts` false — 그때 `starts`는 반쯤 쓰인 값이라 못 쓴다), 이번이나 지난
+    /// 프레임에 이미지. 그 밖에는 행 비교다 — 저절로 잡히는 것(스크롤 · alt screen · 팔레트 ·
+    /// 선택 · 하이라이트 · block 커서 · preedit)은 셀 값에 들어 있고, 따로 더하는 것은 픽셀이
+    /// 남는 overlay 행 셋(확정 7): 커서 띠의 행(이번 · 지난), 프롬프트 행(이번 · 지난).
+    fn paintPane(self: *App, p: *Pane, full: bool, cells: []vt.CellGlyph, imgs: []const vt.ImagePlacement, has_prompt: bool) !void {
+        const next = p.shown ^ 1;
+        const sorted = verify.rowStarts(vt.CellGlyph, cells, p.starts_buf[next]);
+        const cursor = p.screen.cursorMark();
+        const strip = stripColor(p.rect, self.whole);
+        const whole_pane = full or !p.prev_valid or !sorted or imgs.len > 0 or p.had_imgs;
+        if (whole_pane) {
+            // `full`이면 `renderBackdrop`이 방금 지웠다. 아니면 이 패널의 사각형(+ 오른쪽 한 칸)만.
+            if (!full) clearRows(self.fb, p.rect, 0, p.rect.rows, strip);
+            try renderPane(self.fb, &self.cache, cells, imgs, p.screen.defaultBg(), p.rect, cursor);
+        } else {
+            const dirty = self.dirty_rows[0..p.rect.rows];
+            _ = verify.dirtyRows(vt.CellGlyph, p.cells_buf[p.shown][0..p.shown_len], p.starts_buf[p.shown], cells, p.starts_buf[next], dirty);
+            if (p.band_row) |r| dirty[r] = true;
+            if (cursor) |cm| if (cm.px != null) {
+                dirty[cm.row] = true;
+            };
+            if ((has_prompt or p.had_prompt) and p.rect.rows > 0) dirty[p.rect.rows - 1] = true;
+            try renderRows(self.fb, &self.cache, cells, p.starts_buf[next], dirty, p.rect, cursor, strip);
+        }
+        p.shown = next;
+        p.shown_len = cells.len;
+        p.prev_valid = sorted;
+        p.had_imgs = imgs.len > 0;
+        p.had_prompt = has_prompt;
+        p.band_row = if (cursor) |cm| (if (cm.px != null) cm.row else null) else null;
     }
 
     /// verify 모드(DR-M1, design 결정 7 · 8). 같은 프레임을 그림자 버퍼에 통째 경로로 다시

@@ -151,3 +151,26 @@ HEAD `f107e5f`에서 코드로, 커널 6.18.42 소스로 확인했다.
   것(최대 116KB)이다. 프로브가 `diff` 구간으로 그것을 보여 준다.
 - 접힌 clip(`folded`)은 언제나 상위 집합이라 안전하다. 확정 10의 판정은 상위 집합을 통과시키므로 "너무 큰 clip"은 못 잡는다 — 그것은
   성능이지 정확성이 아니고, 실기의 효과는 "사용자가 확인할 것"이다(design "효과가 없거나…" 절).
+
+## 결과
+
+### Task 1 (2026-10-29, `b158233`)
+
+`verify_test` 검사 6~9와 `dirty_test` 300회차가 호스트 macOS와 컨테이너에서 통과했다. `dirty_test`는 dirty 행 합 314 · dirty
+프레임 157 — 회차의 절반은 화면이 안 바뀌었고(같은 SGR 반복 · 닫힌 프롬프트의 cancel) 바뀐 회차는 평균 두 행이다. 검사 9의 첫
+실패는 모듈이 아니라 검사의 버그였다 — 검사 8이 일부러 false를 내는 목록을 같은 `starts`에 썼고, `rowStarts`는 false로 빠질 때
+앞부분만 채운다. 그 성질이 확정 4의 "false면 통째"의 근거다. Zig 0.17 사실 둘: `std.meta.fields`는 deprecated
+(`@typeInfo(T).@"struct".field_types`), `uintLessThan(u24, 0x1000000)`은 상한이 타입을 넘어 컴파일 에러(`rnd.int(u24)`).
+`std.meta.eql`은 `union(enum)`을 태그 → 값 순으로 비교한다(`meta.zig:620`) — 확정 3의 `last_tree` 비교가 그대로 쓴다.
+
+### Task 2 (2026-10-29)
+
+`make check CHAIN=` 다섯이 전부 PASS이고 verify는 2601프레임 전부 `ok`, `mismatch` 0 — render 807(중앙값 6.0ms) · pane 390(6.6) ·
+hangul 182(8.4) · copy 553(8.5) · pointer 669(7.2).
+
+mutation은 자리를 한 번 옮겼다. plan 확정 15(a)의 "지난 프레임의 프롬프트 행을 뺀 판"은 render 체인에서 804 `ok` · 0 `mismatch`로
+안 잡혔다 — 이 체인에서 프롬프트가 사라지는 프레임은 셸이 화면 맨 아래 줄에 있을 때이고, 그 줄은 커서 반전이 움직여 어차피
+dirty다. `had_prompt`가 드러나는 것은 커서가 다른 줄에 있는 채 프롬프트가 닫힐 때(vim 안)뿐이다. 그래서 같은 물음("verify가 부분
+경로에서도 load-bearing인가")을 다른 자리로 물었다 — 지난 프레임의 커서 띠 행(`band_row`)을 뺀 판. render 체인은 PASS인 채
+verify가 126프레임 `mismatch`(행 하나씩, 0 · 1행 — vim이 bar 커서를 옮긴 옛 줄에 띠가 남았다)를 찍었다. 덤프는 글자 있는 셀만
+읽으므로 잔상을 못 본다(design 배경 6) — M1의 mutation과 같은 모양이다.
