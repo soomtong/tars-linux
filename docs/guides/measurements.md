@@ -503,3 +503,18 @@ B)에서 긴 줄은 접힌다 — 판정 패턴을 한 줄 안에 두거나 `joi
 (`???:?:?: 0x1190982 in main.App.dumpFrame`) 낸다. 주소는 두 판이 같고 바이너리가 non-PIE라 호스트의 `zig-out` 원본에
 `x86_64-linux-gnu-addr2line -f -i -C -e …`로 그대로 풀린다 — `-i`가 게스트 trace에 없는 inline 사슬까지 낸다. libc 프레임은 어느
 판이든 `???`다(Debian `.so`는 strip돼 있다). panic은 SIGABRT(signal 6)이고 init이 1초 뒤 다시 띄운다(LI-M0 실측 3).
+
+94. 통째 경로에서 패널의 빈 칸은 패널의 기본 배경이 아니라 `MARGIN_COLOR`다(DR-M2). `cells()`가 `cp == 0 and bg == default_bg`인
+셀을 안 내보내고(`vt.zig`) `renderPane`은 내보낸 셀만 칠하므로, `fill(MARGIN_COLOR)`의 색이 남는다. OSC 11로 기본 배경을 바꿔도
+빈 칸은 그대로다. 부분 갱신이 행을 지우는 색이 그래서 `MARGIN_COLOR`이고, verify의 정답지도 그 경로다.
+
+95. 커널 6.18.42의 DIRTYFB clip 처리 — virtio-gpu(`virtgpu_plane.c`)는 `drm_atomic_helper_damage_merged`로 clip 전부를 경계 상자
+하나로 합쳐 그 사각형만 `transfer_to_host_2d` · `resource_flush`하고, simpledrm(`sysfb/drm_sysfb_modeset.c`)은
+`drm_atomic_for_each_plane_damage`로 clip마다 `drm_fb_blit`를 한다. 둘 다 `drm_atomic_helper_dirtyfb`가 clip을 plane의
+`fb_damage_clips` blob으로 바꾼다. ioctl 상한은 `DRM_MODE_FB_DIRTY_MAX_CLIPS` 256. QEMU TCG에서 clip 셋을 넘기는 DIRTYFB는 clip
+없는 것보다 약 0.1ms 더 든다(0.21 → 0.32ms, DR-M2 프로브) — 옮기는 픽셀이 줄어 얻는 것은 QEMU에서 안 보인다.
+
+96. 부분 갱신 뒤 키 하나의 그리기(DR-M2 프로브, 부팅 3회 중앙값): frame 2.45 → 1.36ms. 남은 구간은 cells 0.63(46%) · 행 하나 다시
+칠하기 0.14 · 행 비교 0.03 · overlay(상태 줄 띠 1280 × 28 지우기 + 글자) 0.20 · present 0.32. `seq 1 200000`은 1135 → 1105ms로
+잡음 안 — 스크롤 프레임은 모든 행이 dirty다. verify(픽셀 + 화면 흉내, 4MB 비교 둘) 한 번은 게이트 TCG에서 약 12ms(M1의 하나일 때
+6~7ms).

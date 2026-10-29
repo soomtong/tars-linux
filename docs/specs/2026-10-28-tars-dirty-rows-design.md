@@ -1,7 +1,7 @@
 # TARS Dirty Rows — Design
 
 Date: 2026-10-28
-Status: 진행 중 — DR-M0 끝(2026-10-28) · DR-M1 끝(2026-10-29), 다음은 DR-M2(부분 갱신 + clip).
+Status: DR-M0~M2 끝(2026-10-30). M3(행 dirty 비트)은 M2의 숫자(`cells` 46%)로 제안 중 — 사용자가 고른다.
 
 HANDOFF "다음 후보"의 부분 갱신을 집는다(사용자가 2026-10-28에 골랐다). Render Speed(RS-M0~M3, 2026-10-11)가 그 앞의 축
 셋(칠하기 방식 · 프레임 수 · 모드셋)을 줄이고 남겨 둔 것이다 — `docs/decisions/project_render_speed.md`의 "남은 것",
@@ -122,10 +122,11 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
 |---|---|---|
 | DR-M0 | 프로브로 키 하나의 그리기를 구간별로 쪼갠다(결정 1). 코드 0줄 | 끝 — (a) frame 2.45ms(새 기준선). backdrop 0.72 · cells 0.63(25.5%) · pane 0.81 · finish 0.29(present 0.21). M2가 줄일 몫의 상한 약 1.5ms. M3은 M2 재측정 뒤에 다시 판단 |
 | DR-M1 | verify 모드(결정 7 · 8). 그리기는 통째 그대로라 모든 프레임이 `ok`. mutation으로 verify가 잡는 것을 본다 | 끝 — initrd 표식 `/etc/tars/render-verify`(`make_initrd.sh`, `TARS_RENDER_VERIFY=1`)로 켠다. 프레임마다 `terminal: verify> ok us=N`, 루트 게이트 `check_verify_lines`가 회차마다 판정. 세 회차 약 2만 3천 프레임 `ok`, verify 한 번 중앙값 약 7ms(게이트 TCG). `renderFinish` → `renderOverlay` + `presentFrame`. mutation(지우기 뺌) 31프레임 `mismatch` |
-| DR-M2 | 행 단위 부분 갱신(결정 2~5)과 clip(결정 6), 행 비교 모듈과 호스트 무작위 검사(결정 9). 같은 프로브로 다시 잰다. 루트 게이트에서 verify 전부 `ok` | plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`(2026-10-29) |
+| DR-M2 | 행 단위 부분 갱신(결정 2~5)과 clip(결정 6), 행 비교 모듈과 호스트 무작위 검사(결정 9). 같은 프로브로 다시 잰다. 루트 게이트에서 verify 전부 `ok` | 끝(2026-10-30, plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`) — (a) frame 2.45 → 1.36ms(−45%). cells 0.63(46%) · pane 0.165(행 비교 0.03 + 행 칠하기 0.14) · overlay 0.20 · finish 0.32(present 0.32 — clip 있는 DIRTYFB가 QEMU에서 0.1ms 더 든다). (b)는 잡음 안. 지우는 색은 `MARGIN_COLOR`, 행 하나는 패널 폭 + 오른쪽 한 칸, 통째 판정은 트리 비교. verify가 clip도 본다(화면 흉내 버퍼). mutation 둘(지난 커서 띠 행 · 행 run clip) 잡힘 |
 
-`cells()` 몫에 따라 M3(행 dirty 비트)이 생길 수 있다(결정 2). M1 이후의 구체 결정은 앞 milestone의 숫자를 보고 그 plan에서
-정한다.
+`cells()` 몫에 따라 M3(행 dirty 비트)이 생길 수 있다(결정 2). M2 뒤 `cells`가 frame의 46%(0.63/1.36ms)라 M2 plan 확정 14의
+규칙(30%)대로 M3을 제안한다 — 하느냐는 사용자가 고른다. 하게 되면 `RenderState`의 `row.dirty`를 끄는 자리부터이고(배경 절의
+"우리 `vt.zig`는 `row.dirty`를 끄지 않는다"), 지금의 셀 사본 비교가 그 비트의 정답지다.
 
 ## 위험
 

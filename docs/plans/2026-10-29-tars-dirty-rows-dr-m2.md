@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 Design: `docs/specs/2026-10-28-tars-dirty-rows-design.md`(결정 2~6 · 9, 위험 3 · 4 · 5)
-Status: plan(2026-10-29, HEAD `f107e5f`). 착수 전.
+Status: 끝났다(2026-10-30). plan `a6c10ee` · Task 1 `b158233` · Task 2 `40cbf2e` · Task 3 `aabd0bc` · Task 4 닫기. (a) frame 2.45 → 1.36ms(−45%). 루트 게이트 22/22(9분 45초), verify 8153프레임 전부 `ok`. `cells` 46%라 M3을 제안한다.
 
 ## 이 milestone이 끝나면
 
@@ -187,3 +187,58 @@ mutation (b)(상태 줄 띠의 `clips.push`를 뺀 판)는 두 번 돌렸다. �
 있어야 하는데 render 체인에는 없다. 다음 세션의 mutation (b')는 포커스 패널의 행 clip(`paintPane`의 run `clips.push`)을 뺀 판 —
 키마다 화면이 clip 밖에서 바뀌므로 거의 모든 프레임이 `mismatch clip`이어야 한다. 그것을 본 뒤에 확정 10의 판정이 clip을 정말
 본다고 말할 수 있다.
+
+mutation (b')(2026-10-30, `paintPane`의 행 run `clips.push`를 뺀 판): render 체인은 PASS인 채 verify가 523프레임 `mismatch clip`
+(`ok` 260 — 통째 프레임과 화면이 안 바뀐 프레임), 픽셀 `mismatch` 0. 확정 10의 판정이 clip을 본다.
+
+### Task 4 — 재측정 (2026-10-30, HEAD `aabd0bc`, 부팅 3회씩)
+
+비교 판(`dr-m2`, `patch.pl` 그대로 — anchor 넷이 그대로 붙었다):
+
+```
+dr-m2-run1  (b) span=1184ms frames=72 frame_sum=160ms dump_sum=117ms other=906ms reads=368   (a) frame=1.280 dump=4.553
+dr-m2-run2  (b) span=1105ms frames=67 frame_sum=153ms dump_sum=89ms  other=863ms reads=370   (a) frame=1.451 dump=4.148
+dr-m2-run3  (b) span=1087ms frames=66 frame_sum=149ms dump_sum=96ms  other=842ms reads=367   (a) frame=1.319 dump=5.024
+median      (b) span=1105ms frames=67 frame_sum=153ms dump_sum=96ms reads=368                (a) frame=1.356 dump=5.024 (n=12)
+```
+
+(a) frame 2.446 → 1.356ms(−45%). design이 말한 상한(약 1.5ms 절약) 안에서 1.09ms를 줄였다. (b) `seq 1 200000`은 1135 → 1105ms로
+잡음 안이다 — 스크롤 프레임은 모든 행이 dirty라 부분 갱신의 이득이 없고 81%가 파서라는 design "효과가 없거나…" 절 그대로다.
+(a)의 dump(2.5 → 5.0ms)가 늘어 보이는 것은 RS 재사용 사실 4의 가설(프레임이 빨라지면 덤프가 앞 덤프의 시리얼 배출을 기다린다)과
+같은 모양이고 n=12의 흔들림이 크다(4.1~5.0) — 덤프는 이 서브프로젝트의 비목표다.
+
+진단 판(`dr-m2-split`, 새 anchor 일곱):
+
+```
+(a) split (median ms, n=12): others=0.011 cells=0.63 pane=0.165 rows=0.137 overlay=0.195 finish=0.324 present=0.318
+    frame=1.397  rest(frame − others − cells − pane − overlay − finish)=0.07
+```
+
+| 구간 | M0 (2.45ms) | M2 (1.40ms) | 읽기 |
+|---|---|---|---|
+| backdrop | 0.72 | 0(통째 프레임에만) | `fill` 4MB가 사라졌다 |
+| others | ~0 | 0.011 | 화살표 되돌리기 · 트리 비교 — 패널 하나라 거의 0 |
+| cells | 0.63 | 0.63 | 그대로다. 이제 frame의 46% |
+| pane(= diff + rows) | 0.81 | 0.165 | 행 비교 0.028 + 행 하나 다시 칠하기 0.137 |
+| overlay | (finish 안) | 0.195 | 프롬프트 없음 · 상태 줄 띠 지우기(1280 × 28) + 글자 |
+| finish | 0.29 | 0.324 | clip 목록 · `present` |
+| present | 0.21 | 0.318 | clip 셋(행 run · 띠 · 화살표 없음)을 넘기는 DIRTYFB가 clip 없는 것보다 0.1ms 느리다 |
+
+`present`가 는 것은 뜻밖이다. 커널이 clip을 blob으로 만들어 plane state에 붙이고(`drm_atomic_helper_dirtyfb`의 `kcalloc` ·
+`drm_property_create_blob`) virtio-gpu가 damage를 합치는 길이 clip 없는 길(`full_update`)보다 길다 — TCG에서 0.1ms다. 옮기는
+픽셀이 줄어 얻는 것은 QEMU에서는 안 보인다(RS 재사용 사실 5). 실기 simpledrm에서는 반대여야 하고(8MB 복사 대신 행 몇 줄),
+그것은 "사용자가 확인할 것"이다. 이 0.1ms를 아끼려고 clip을 안 넘기는 것은 이 서브프로젝트의 목적에 반한다 — 그대로 둔다.
+
+확정 14의 판단: `cells` 0.63ms가 frame 1.36ms의 46%로 30%를 넘는다 → M3(행 dirty 비트로 `cells()`를 줄이기, design 결정 2)을
+사용자에게 제안한다. 지금의 셀 사본 비교가 그때 dirty 비트의 정답지가 된다(design 결정 2의 둘째 문장). 하느냐는 사용자가 고른다.
+
+### Task 4 — 루트 게이트와 닫기 (2026-10-30, `aabd0bc`)
+
+22/22, 9분 45초(prebuild 284 + lanes 298초 — DR-M1 셋째 회차의 288 + 300과 같다). verify 8153프레임 전부 `ok`, `mismatch` 0,
+BF-M4는 "no frame was rendered"로 통과. verify 한 번의 중앙값 11.6ms(p90 15.8ms, 게이트 TCG, 여섯 줄 동시) — M1의 6.6ms에서 는 것은
+확정 10의 화면 흉내 비교(4MB 한 번 더)이고, lanes 시간은 안 늘었다(design 위험 1). 체인별 verify 줄 수는 M1 셋째 회차와 같은
+자리들이다(CP 2019 · TD 1407 · UT 915 · TR 790 · PD 657 · CM 541 · FW 510 · CB 384 …).
+
+닫기: design 표 · Status, `completed.md` 한 행, `carryover.md`의 부분 갱신 항목(닫아서 지움), `measurements.md` 94~96,
+`docs/decisions/project_dirty_rows.md` + `MEMORY.md`, `HANDOFF.md`, 소개 페이지(RS처럼 타임라인에 한 줄). M3은 design 표 아래
+문단에 제안으로 적었고 사용자가 고른다.

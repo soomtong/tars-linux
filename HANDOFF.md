@@ -1,44 +1,26 @@
-# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M2 Task 1~3 커밋, 다음은 mutation (b') 한 번 → Task 4(재측정 · 루트 게이트 · 닫기)
+# HANDOFF: Dirty Rows(DR-M0~M2) 닫음(2026-10-30) — 다음은 M3(행 dirty 비트) 여부를 사용자가 고른다
 
-## 지금 상태 (2026-10-29)
+## 지금 상태 (2026-10-30)
 
-- 열린 서브프로젝트는 Dirty Rows(부분 갱신, 2026-10-28). design `docs/specs/2026-10-28-tars-dirty-rows-design.md`. 지난 프레임의
-  `cells()` 사본과 행 단위로 비교해 바뀐 행만 다시 칠하고 DIRTYFB clip으로 넘긴다. 잔상은 verify 모드(같은 프레임을 별도 버퍼에
-  통째로 그려 바이트 비교, 22체인 전부)가 판정한다. milestone은 M0 측정 · M1 verify · M2 부분 갱신 + clip + 호스트 무작위 검사(결정 9).
-  - DR-M0 끝(plan `docs/plans/2026-10-28-tars-dirty-rows-dr-m0.md`, Task 1 `67596a0`). 새 기준선 (a) frame 2.45ms — backdrop
-    0.72 · cells 0.63(25.5%) · pane 0.81 · finish 0.29(present 0.21). 진단 판은 `probe/split.pl`(`patch.pl` 위에 얹는다, M0의 HEAD에만
-    붙는다). cells가 30% 미만이라 M3(행 dirty 비트)은 기본으로 없고, M2 재측정 뒤에 다시 판단한다.
-  - DR-M1 끝(plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m1.md`, 2026-10-29). verify 모드: 게이트의 initrd에만 있는 표식
-    `/etc/tars/render-verify`(`make_initrd.sh`가 `TARS_RENDER_VERIFY=1`일 때 넣고, 루트 `check.sh`가 export · `make check`가 붙인다)를
-    terminal이 `App.open`에서 보고 켠다. 켜지면 프레임마다 같은 프레임을 heap 그림자(`drm.Framebuffer.shadow`)에 통째로 다시 그려
-    픽셀 행마다 비교하고 `terminal: verify> ok us=N` 또는 `mismatch rows=n first=…`를 찍는다(`App.verifyFrame`, 순수 비교는
-    `terminal/src/verify.zig` + 호스트 `verify_test`). `renderFinish`는 `renderOverlay`(프롬프트 · 상태 줄) + `presentFrame`(화살표 ·
-    `present`)로 갈라졌다 — M2가 clip을 넘길 자리는 `presentFrame` 하나. 루트 게이트는 `run_chain`의 `check_verify_lines`가 회차마다
-    판정한다(`ok` 아닌 줄 → 빨강, 프레임을 그렸는데 줄이 없음 → 빨강, boot 체인처럼 안 그렸으면 통과). 진입 자가검사
-    `require_verify_verdict`. 세 회차 약 2만 3천 프레임 전부 `ok`, mutation(`renderBackdrop` 호출 뺌)은 31프레임 `mismatch`.
-    verify 한 번은 게이트 TCG에서 중앙값 약 7ms — lanes 시간은 300 · 328 · 339초로 CR-M0(296초)의 흔들림 안이다.
-    둘째 회차에 FW 검사 18 · DC boot 7이 verify와 무관하게 빨갰고 혼자서는 3/3 · 1/1 초록이었다 — FW의 숨은 경주(한 번짜리 `nc`와
-    SLIRP의 묵은 SYN)는 `carryover.md`에 적었다.
-  - DR-M2 진행(2026-10-29, 세션이 사용량 한도로 끊겼다). plan commit `a6c10ee`, Task 1 `b158233`(`verify.zig`의
-    `rowStarts` · `dirtyRows`, `verify_test` 검사 6~9, 새 `dirty_test` 300회차 — 전부 통과), Task 2 `40cbf2e`(패널마다 셀 목록
-    두 벌 · `paintPane` · `renderRows` · `clearRows` · `stripColor`, 화살표 `restore`가 프레임 처음, `App.cell_buf` 삭제 —
-    render · pane · hangul · copy · pointer 다섯 체인 PASS, verify 2601프레임 `ok`. mutation은 plan 확정 15(a)가 가려져(셸이 맨 아래
-    줄이라 그 줄은 어차피 dirty) `band_row`를 뺀 판으로 바꿔 126 `mismatch`를 봤다 — plan의 "결과" 절에 적혀 있다).
-    Task 3도 커밋했다(`drm.zig`의 `Clip` · `ClipList`(64, 접기) · `present(clips)`, `main.zig`의 clip 모으기 · 화살표 바퀴의 clip 둘 ·
-    `Verify.screen` 화면 흉내 · `verifyClips` · `copyClips` · `printMismatch`, `mismatch clip ` 줄, 그리고 Task 4용 `probe/split.pl` ·
-    `report.pl`의 새 anchor 일곱 구간). render · pointer 체인 PASS, verify 1444프레임 `ok`, 중앙값 11.7ms(비교 둘). 남은 것 하나:
-    mutation (b)가 두 번 가려졌다(plan "결과" Task 3 절) — 다음 세션은 `paintPane`의 run `clips.push`를 뺀 판(mutation (b'))으로
-    render 체인 한 번(M1 plan의 docker 한 줄, `/tmp/run/main.zig`에 사본)을 돌려 `mismatch clip`을 본 뒤 Task 4로 간다 — 프로브
-    3+3회(`probe/run.sh`, label `dr-m2` · `dr-m2-split`), M0의 2.45ms와 비교, `cells` 몫 30%로 M3 판단, 루트 게이트, 닫기 목록.
-  - DR-M2 plan(`docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`, 2026-10-29, 착수 전). 확정 열다섯 — 지우는 색은 `MARGIN_COLOR`
-    (통째 경로의 빈 칸이 그 색, 확정 1), 행 하나는 패널 폭 + 오른쪽 한 칸(마지막 열 preedit의 새는 반 칸, 확정 2), 통째 판정은
-    `last_current` · `last_tree` 비교(확정 3), 패널마다 셀 목록 두 벌(확정 5), 행 비교는 `verify.zig`의 `rowStarts` · `dirtyRows`
-    (확정 6) + 호스트 `dirty_test`(확정 11), 화살표는 프레임 처음에 `restore`(확정 8), clip은 `drm.ClipList` 64개 · run 합치기
-    (확정 9 — virtio-gpu는 경계 상자 하나로 합치고 simpledrm은 clip마다 복사), clip 판정은 verify의 화면 흉내 버퍼(확정 10).
-    Task 넷 — 1 모듈 + 호스트 검사, 2 부분 갱신(clip 없이), 3 clip + 화면 흉내, 4 재측정 · 루트 게이트 · 닫기. M3 판단은 새 frame의
-    `cells` 몫 30%(확정 14). `verifyFrame`과 `renderBackdrop` · `renderPane` · `renderOverlay`의 모양은 그대로 둔다.
-  - ghostty를 참고로 읽을 때는 `/Users/dp/Repository/_study/ghostty`(최신)다. `terminal/ghostty-src`는 빌드 입력이다
-    (`docs/decisions/reference_ghostty_source.md`).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Dirty Rows(DR-M0~M2, 2026-10-28~30). design
+  `docs/specs/2026-10-28-tars-dirty-rows-design.md`, 기억 `docs/decisions/project_dirty_rows.md`. 패널마다 지난 프레임의 `cells()`
+  목록(두 벌 버퍼 `Pane.cells_buf`)과 행마다 비교해(`verify.rowStarts` · `dirtyRows`) 바뀐 행만 지우고 다시 칠하고(`App.paintPane` ·
+  `renderRows`) DIRTYFB clip으로 넘긴다(`drm.ClipList`). 통째는 첫 프레임 · 워크스페이스 전환 · 트리 변경(`last_current` · `last_tree`
+  비교) · 이미지 패널뿐. 잔상은 verify 모드(initrd 표식 `/etc/tars/render-verify`, 게이트 전 체인)가 본다 — 픽셀(그림자에 통째로
+  그린 것)과 clip(화면 흉내 버퍼) 둘 다, `terminal: verify> ok us=N` 한 줄, 루트 `check.sh`의 `check_verify_lines`가 회차마다 센다.
+  - 숫자(같은 프로브 `probe/patch.pl`, 부팅 3회 중앙값): 키 하나의 그리기 (a) frame 2.45 → 1.36ms(−45%). 구간은 cells 0.63(46%) ·
+    행 비교 0.03 · 행 칠하기 0.14 · overlay 0.20 · present 0.32(clip 있는 DIRTYFB가 QEMU에서 0.1ms 더 든다 — 실기 simpledrm은
+    반대여야 하고 "사용자가 확인할 것"). `seq 1 200000`은 잡음 안(스크롤은 모든 행이 dirty). 진단 판 `probe/split.pl`은 M2 HEAD의
+    anchor 일곱 구간이다. verify 한 번은 게이트 TCG에서 중앙값 11.6ms(비교 둘).
+  - 루트 게이트 22/22, 9분 45초(prebuild 284 + lanes 298초), verify 8153프레임 전부 `ok`.
+  - 다음 후보 M3: `cells()`가 frame의 46%라 M2 plan 확정 14의 규칙(30%)대로 제안했다. 하게 되면 `RenderState`의 `row.dirty`를 끄는
+    자리부터이고(design 배경 절 — 우리 `vt.zig`는 `row.dirty`를 끄지 않는다), 지금의 셀 사본 비교가 그 비트의 정답지다(결정 2).
+    design 표 아래 문단과 M2 plan 결과 절에 적혀 있다. 사용자가 고른다 — 하면 design에 M3 행을 더하고 plan을 쓴다.
+  - 알아 둘 것: 지우는 색은 `MARGIN_COLOR`다(통째 경로의 빈 칸이 그 색, 실측 94). 행 하나는 패널 폭 + 오른쪽 한 칸(마지막 열 preedit이
+    새는 반 칸). mutation은 가려질 수 있다(셸이 맨 아래 줄이면 그 줄은 어차피 dirty, 상태 줄은 같은 글자를 다시 그린다) — 잡히는
+    자리를 골라야 한다(M2 plan 결과 절). ghostty를 참고로 읽을 때는 `/Users/dp/Repository/_study/ghostty`(최신)다. `terminal/ghostty-src`는
+    빌드 입력이다(`docs/decisions/reference_ghostty_source.md`).
+
 - 그 전에 닫은 것은 Clock Reload(CR-M0, 2026-10-28). design `docs/specs/2026-10-27-tars-clock-reload-design.md`, 기억
   `docs/decisions/project_clock_reload.md`. net 부팅 A의 검사 32가 `tars-config set ntp=dhcp|off|10.0.2.2` · `reload`를 차례로 쳐서
   chronyd 칸의 restart · stop · start를 본다(`doReload`가 `clock.prepare`의 답을 `rewrote`로 넘기는 배선 — mutation으로 확인).
@@ -94,16 +76,17 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(DR-M1 셋째 회차): 22/22, 9분 50초(prebuild 288초 + lanes 300초 — 같은 날 앞 두 회차는 389 + 339 · 322 + 328초,
-  prebuild는 cold build라 흔들린다). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(DR-M2 닫기): 22/22, 9분 45초(prebuild 284초 + lanes 298초. prebuild는 cold build라 흔들린다 — DR-M1의
+  세 회차는 389 · 322 · 288초였다). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
-- RS: 로그에 `kms: present by dirtyfb`가 찍히는지, `cat` · 빌드 로그처럼 출력이 쏟아질 때 화면이 매끄럽게 따라오는지,
-  키 입력이 늦게 느껴지지 않는지. 느리면 그때가 부분 갱신을 다시 집을 신호다.
+- RS · DR: 로그에 `kms: present by dirtyfb`가 찍히는지, `cat` · 빌드 로그처럼 출력이 쏟아질 때 화면이 매끄럽게 따라오는지,
+  키 입력이 늦게 느껴지지 않는지. DR 뒤로 키 하나는 바뀐 행 몇 줄만 VRAM으로 가므로(simpledrm은 clip마다 복사) 체감이 달라야
+  한다 — 달라지지 않았으면 그것이 새 사실이다. 느리면 M3(행 dirty 비트)이 다음 후보다.
 - TC: `tars-config wifi …`와 `tars-config dictation key`의 tty 입력(echo 없이 묻는다), `tars-config set net=dhcp ntp=dhcp`,
   `tars-config reload`, `tars-config reload terminal`. 게이트가 못 보는 것은 tty 질문, `--country`, `firewall deny`,
   `firewall=off`의 말이다.
@@ -116,12 +99,12 @@
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
   늘리거나 끈다, SOF DMIC 앞부분이 0인지(VD design 위험 1).
 
-## 다음 후보 (WP-M3 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
+## 다음 후보 (DR 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
 - 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
   (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
-- 부분 갱신은 Dirty Rows로 진행 중(위). GPU 가속은 그 뒤다.
+- 부분 갱신은 Dirty Rows로 닫았다(위). 남은 렌더 후보는 M3(행 dirty 비트, `cells()` 46%)와 그 뒤의 GPU 가속이다.
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
@@ -129,7 +112,7 @@
 - 패키지 매니저(아래 "이미지 뷰어 메모"), IPv6(방화벽 표를 `inet`으로, FW design 위험 6), USB 동글 층 B.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다. 사용자는 코드 작업을 neovim · helix로 하고 게스트 vim은 대충 쓴다
   (`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`에 남아 있다.
-- 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다. CR-M0 뒤로 실기 없이 할 수 있는 것은 렌더 쪽 미룬 둘(부분 갱신 · 큰 kitty 이미지)이고, 나머지는 실기나 간헐의 다음 근거를 기다린다.
+- 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다. DR 뒤로 실기 없이 할 수 있는 것은 렌더 쪽 미룬 하나(큰 kitty 이미지)와 M3이고, 나머지는 실기나 간헐의 다음 근거를 기다린다.
 
 ## 이미지 뷰어 메모 (기본 이미지에 넣지 않는다 — 사용자 결정, 2026-10-03)
 
