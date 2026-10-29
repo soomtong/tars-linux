@@ -221,13 +221,16 @@ check_initrd_inode() {
 # DR-M1 결정 7. 회차의 시리얼 로그마다 terminal의 `verify>` 줄을 읽는다. terminal은 verify가 켜지면
 # 프레임마다 같은 프레임을 그림자 버퍼에 통째로 한 번 더 그려 실제 fb와 비교한 줄을 찍는다(main.zig의
 # verifyFrame) — `ok`가 아닌 줄 하나가 잔상이다. 한 줄도 없는 것도 빨강이다. initrd의 표식(make_initrd.sh,
-# TARS_RENDER_VERIFY)이 조용히 빠지면 모든 체인이 "통과"로 읽히기 때문이다. 부팅의 `on bytes=` 한 줄도
-# 받는다. 커널 printk가 자른 줄은 tlog가 잇는다(파일 찾기는 cut_log_lines와 같다). make check CHAIN=x에는
-# 이 판정이 없다 — 그 로그를 읽는 한 줄은 lessons "범용 명령"에 있다.
+# TARS_RENDER_VERIFY)이 조용히 빠지면 모든 체인이 "통과"로 읽히기 때문이다 — 다만 프레임을 그린 회차에서만이다
+# (`terminal: render> first frame`이 있는 로그). boot 체인은 DRM 없이 부팅해 terminal이 OpenFailed로 죽는 것을 보므로
+# 프레임도 verify 줄도 없는 것이 맞다. 부팅의 `on bytes=` 한 줄도 받는다. 커널 printk가 자른 줄은 tlog가 잇는다
+# (파일 찾기는 cut_log_lines와 같다). make check CHAIN=x에는 이 판정이 없다 — 그 로그를 읽는 한 줄은 lessons
+# "범용 명령"에 있다.
 VERIFY_OK_LINE='^[^ ]+: terminal: verify> (on bytes=[0-9]+|ok us=[0-9]+)$'
 check_verify_lines() {
-  local dir="$1" label="$2" files lines total bad
+  local dir="$1" label="$2" files lines total bad rendered
   files="$(grep -rlaE '^terminal: ' "$dir")" || files=""
+  rendered="$(grep -rla 'terminal: render> first frame' "$dir")" || rendered=""
   lines="$(
     IFS=$'\n'
     for f in $files; do
@@ -240,7 +243,11 @@ check_verify_lines() {
   bad="$(grep -avE "$VERIFY_OK_LINE" <<<"$lines" | grep -a .)" || bad=""
   echo "${label}: verify lines ${total} (${dir})"
   if [ "$total" -eq 0 ]; then
-    echo "${label} FAIL: no terminal: verify> line — the initrd marker (TARS_RENDER_VERIFY) is off or the terminal never rendered"
+    if [ -z "$rendered" ]; then
+      echo "${label}: no frame was rendered, so no verify line is expected"
+      return 0
+    fi
+    echo "${label} FAIL: frames were rendered but no terminal: verify> line — the initrd marker (TARS_RENDER_VERIFY) is off"
     return 1
   fi
   if [ -n "$bad" ]; then
@@ -611,15 +618,17 @@ require_cut_lines_found() {
 }
 require_cut_lines_found || entry_failed=1
 
-# DR-M1. check_verify_lines가 거짓 초록을 내지 않는지 가짜 회차 셋으로 본다 — ok만 있는 회차는 통과,
-# mismatch가 섞인 회차와 verify 줄이 하나도 없는 회차는 빨강. 커널 printk가 자른 ok 줄은 이어서 ok로 읽는다.
+# DR-M1. check_verify_lines가 거짓 초록을 내지 않는지 가짜 회차 넷으로 본다 — ok만 있는 회차는 통과,
+# mismatch가 섞인 회차와 프레임은 그렸는데 verify 줄이 없는 회차는 빨강, 프레임을 안 그린 회차(boot 체인)는
+# 통과. 커널 printk가 자른 ok 줄은 이어서 ok로 읽는다.
 require_verify_verdict() {
   local dir
   dir="$(mktemp -d)"
-  mkdir -p "$dir/pass" "$dir/mismatch" "$dir/none"
+  mkdir -p "$dir/pass" "$dir/mismatch" "$dir/none" "$dir/norender"
   printf 'terminal: verify> on bytes=4096000\r\nterminal: verify> ok us=2[   3.141592] random: crng init done\r\n345\r\nterminal: screen> a\r\n' > "$dir/pass/serial"
   printf 'terminal: verify> ok us=2345\r\nterminal: verify> mismatch rows=1 first=7 us=2400\r\n' > "$dir/mismatch/serial"
-  printf 'tars-init: boot\nterminal: screen> a\r\n' > "$dir/none/serial"
+  printf 'tars-init: boot\nterminal: render> first frame 2345us\r\nterminal: screen> a\r\n' > "$dir/none/serial"
+  printf 'tars-init: boot\ntars-init: giving up on terminal after 3 fast exits\n' > "$dir/norender/serial"
   if ! check_verify_lines "$dir/pass" verify-pass > /dev/null; then
     echo "check FAIL: check_verify_lines rejects a run whose verify lines are all ok" >&2
     rm -rf "$dir"
@@ -631,7 +640,12 @@ require_verify_verdict() {
     return 1
   fi
   if check_verify_lines "$dir/none" verify-none > /dev/null; then
-    echo "check FAIL: check_verify_lines passes a run without any verify line" >&2
+    echo "check FAIL: check_verify_lines passes a run that rendered frames without any verify line" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  if ! check_verify_lines "$dir/norender" verify-norender > /dev/null; then
+    echo "check FAIL: check_verify_lines rejects a run that never rendered a frame" >&2
     rm -rf "$dir"
     return 1
   fi
