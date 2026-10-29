@@ -611,12 +611,17 @@ fn presentFrame(
     // 그린다(PD design 결정 4).
     sprite: *pointer.Sprite,
     want: ?pointer.Spot,
+    // 이 프레임이 다시 칠한 사각형들(DR-M2, design 결정 6). 화살표의 새 자리를 더해 넘긴다.
+    clips: *drm.ClipList,
 ) !void {
     // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
     // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
     // 보이는 것은 사람이 포인터를 움직인 뒤뿐이라 다른 체인의 덤프는 안 바뀐다.
-    if (want) |s| sprite.show(fb, s);
-    try fb.present();
+    if (want) |s| {
+        sprite.show(fb, s);
+        clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
+    }
+    try fb.present(clips.slice());
 }
 
 /// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
@@ -2958,6 +2963,11 @@ const Verify = struct {
     fb: drm.Framebuffer,
     cell_buf: []vt.CellGlyph,
     img_buf: [16]vt.ImagePlacement = undefined,
+    /// 화면 흉내(DR-M2 plan 확정 10). `present`가 넘긴 clip 안의 픽셀만 fb에서 복사해 둔
+    /// 같은 치수의 버퍼다 — 드라이버가 화면에 옮겼을 것과 같다. 프레임 뒤에 fb와 비교해 clip
+    /// 밖에서 바뀐 픽셀(clip을 빼먹은 그리기)을 잡는다. 픽셀 비교(`fb`)는 이것을 못 본다 —
+    /// fb는 맞고 화면만 낡는다.
+    screen: [*]u8,
 };
 
 /// 한 프레임의 verify 결과. `us`는 그림자에 그리고 비교하는 데 든 시간이다 — `frame_us`
@@ -3214,9 +3224,11 @@ const App = struct {
         if (fd < 0) return;
         _ = std.c.close(fd);
         const pixels = try self.allocator.alloc(u8, @as(usize, self.fb.pitch) * self.fb.height);
+        const screen = try self.allocator.alloc(u8, pixels.len);
         self.verify = .{
             .fb = self.fb.shadow(pixels.ptr),
             .cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows),
+            .screen = screen.ptr,
         };
         logline.print("terminal: verify> on bytes={d}\n", .{pixels.len});
     }
@@ -3448,6 +3460,7 @@ const App = struct {
         if (self.verify) |v| {
             self.allocator.free(v.cell_buf);
             self.allocator.free(v.fb.pixels[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
+            self.allocator.free(v.screen[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
         }
         for (self.workspaces) |slot| {
             const w = slot orelse continue;
@@ -4114,9 +4127,18 @@ const App = struct {
         }
         if (!self.needs_redraw) {
             if (!pointer.sameSpot(self.sprite.at, want)) {
+                // clip은 옛 자리와 새 자리 둘이다(DR-M2 plan 확정 8). verify 모드의 화면 흉내에는
+                // 복사만 하고 비교는 안 한다 — 포인터 움직임마다 4MB 비교를 더하지 않는다(확정 10).
+                // 여기서 clip이 빠지면 다음 프레임의 비교가 잡는다.
+                var clips = drm.ClipList.init(self.fb.width, self.fb.height);
+                if (self.sprite.at) |s| clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
                 self.sprite.restore(self.fb);
-                if (want) |s| self.sprite.show(self.fb, s);
-                try self.fb.present();
+                if (want) |s| {
+                    self.sprite.show(self.fb, s);
+                    clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
+                }
+                try self.fb.present(clips.slice());
+                if (self.verify) |*v| self.copyClips(v.screen, &clips);
             }
             dumpPointerAt(self.fb, &self.pointer_state, p.round, &self.sprite, p.before_spot);
             return .skip;
@@ -4170,12 +4192,17 @@ const App = struct {
         // 화살표를 먼저 되돌린다(DR-M2 plan 확정 8). 부분 경로에는 옛 화살표를 지워 줄 `fill`이
         // 없으므로 저장한 픽셀로 되돌리는 것이 유일한 길이고, 통째 프레임에서도 같은 순서면
         // 된다(되돌린 뒤 덮는다). 그래서 verify의 픽셀 비교 시점에 실제 fb에 화살표가 없다.
+        var clips = drm.ClipList.init(self.fb.width, self.fb.height);
+        if (self.sprite.at) |s| clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
         self.sprite.restore(self.fb);
         // 화면 전체를 다시 그릴 프레임인가(DR-M2 plan 확정 3). 첫 프레임, 워크스페이스가 바뀜,
         // 트리가 바뀜(분할 · 닫기 — 구분선과 여백이 바뀐다). 트리가 같으면 패널의 사각형도 같다.
         const full = self.last_current != self.current or
             if (self.last_tree) |t| !std.meta.eql(t, ws.tree) else true;
-        if (full) renderBackdrop(self.fb, &ws.tree, self.whole);
+        if (full) {
+            renderBackdrop(self.fb, &ws.tree, self.whole);
+            clips.all();
+        }
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             if (leaf == ws.focus) continue;
@@ -4183,7 +4210,7 @@ const App = struct {
             const p_cells = try p.screen.cells(p.cells_buf[p.shown ^ 1]);
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
-            try self.paintPane(p, full, p_cells, p.screen.images(&self.img_buf), false);
+            try self.paintPane(p, full, p_cells, p.screen.images(&self.img_buf), false, &clips);
         }
         focus.screen.focused = true;
 
@@ -4238,14 +4265,20 @@ const App = struct {
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
         frame.imgs = focus.screen.images(&self.img_buf);
-        try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null);
+        try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
         self.last_current = self.current;
         self.last_tree = ws.tree;
         frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line);
+        // 상태 줄의 띠는 `renderOverlay`가 매 프레임 다시 칠한다(plan 확정 7). 프롬프트 행은
+        // 포커스 패널의 dirty 행 안이라 `paintPane`이 이미 넣었다.
+        const grid_bottom = GRID_Y + @as(u32, self.rows) * ROW_HEIGHT;
+        if (grid_bottom < self.fb.height) clips.push(0, grid_bottom, self.fb.width, self.fb.height - grid_bottom);
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
-        try presentFrame(self.fb, &self.sprite, want);
+        try presentFrame(self.fb, &self.sprite, want, &clips);
+        // clip의 판정은 `present` 뒤다 — 화면 흉내가 이 프레임의 clip을 받은 뒤에 fb와 비교한다.
+        const clipped = self.verifyClips(&clips);
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
@@ -4254,22 +4287,68 @@ const App = struct {
         // `frame_us` 뒤에 찍는다 — 줄을 쓰는 시간이 그리기 시간에 안 든다. 덤프 열둘보다 앞이라
         // 게이트의 `last_frame`(마지막 `screen>`부터) 밖이고, 체인의 덤프 순서 계약에 안 든다.
         if (verified) |v| {
-            if (v.report.ok()) {
-                logline.print("terminal: verify> ok us={d}\n", .{v.us});
+            const cl = clipped.?;
+            const us = v.us + cl.us;
+            if (v.report.ok() and cl.report.ok()) {
+                logline.print("terminal: verify> ok us={d}\n", .{us});
+            } else if (!v.report.ok()) {
+                printMismatch("", v.report, us);
             } else {
-                // 한 줄을 한 번의 write로 낸다(AL design 3) — 목록을 먼저 짓는다.
-                var list: [verify.MAX_FIRST * 6]u8 = undefined;
-                var n: usize = 0;
-                for (v.report.listed(), 0..) |row, i| {
-                    if (i != 0) {
-                        list[n] = ',';
-                        n += 1;
-                    }
-                    n += (std.fmt.bufPrint(list[n..], "{d}", .{row}) catch unreachable).len;
-                }
-                logline.print("terminal: verify> mismatch rows={d} first={s} us={d}\n", .{ v.report.rows, list[0..n], v.us });
+                printMismatch("clip ", cl.report, us);
             }
         }
+    }
+
+    /// `terminal: verify> mismatch [clip ]rows=<n> first=<r>,… us=<N>`. 픽셀 비교가 틀리면 `kind`가
+    /// 비어 있고, 픽셀은 맞는데 clip 밖이 바뀌었으면 `clip `이다(DR-M2 plan 확정 10). 둘 다
+    /// 루트 게이트의 `ok` regex에 안 맞아 빨강이다.
+    fn printMismatch(kind: []const u8, report: verify.Report, us: i96) void {
+        // 한 줄을 한 번의 write로 낸다(AL design 3) — 목록을 먼저 짓는다.
+        var list: [verify.MAX_FIRST * 6]u8 = undefined;
+        var n: usize = 0;
+        for (report.listed(), 0..) |row, i| {
+            if (i != 0) {
+                list[n] = ',';
+                n += 1;
+            }
+            n += (std.fmt.bufPrint(list[n..], "{d}", .{row}) catch unreachable).len;
+        }
+        logline.print("terminal: verify> mismatch {s}rows={d} first={s} us={d}\n", .{ kind, report.rows, list[0..n], us });
+    }
+
+    /// clip 안의 픽셀을 fb에서 `dst`(화면 흉내)로 복사한다(DR-M2 plan 확정 10). `whole`이면 전부다.
+    fn copyClips(self: *App, dst: [*]u8, clips: *const drm.ClipList) void {
+        const pitch: usize = self.fb.pitch;
+        if (clips.whole) {
+            const size = pitch * self.fb.height;
+            @memcpy(dst[0..size], self.fb.pixels[0..size]);
+            return;
+        }
+        for (clips.slice()) |cl| {
+            var y: usize = cl.y1;
+            while (y < cl.y2) : (y += 1) {
+                const off = y * pitch + @as(usize, cl.x1) * 4;
+                const len = (@as(usize, cl.x2) - cl.x1) * 4;
+                @memcpy(dst[off..][0..len], self.fb.pixels[off..][0..len]);
+            }
+        }
+    }
+
+    /// clip의 판정(DR-M2 plan 확정 10). 이 프레임의 clip을 화면 흉내에 복사한 뒤 fb 전체와
+    /// 비교한다 — 다르면 clip 밖의 픽셀을 바꿨다는 뜻이다(clip을 빼먹은 그리기). 꺼져 있으면 null.
+    fn verifyClips(self: *App, clips: *const drm.ClipList) ?Verified {
+        const v = if (self.verify) |*v| v else return null;
+        const start = std.Io.Clock.now(.awake, self.io);
+        self.copyClips(v.screen, clips);
+        const report = verify.compare(
+            self.fb.pixels,
+            v.screen,
+            @as(usize, self.fb.width) * 4,
+            self.fb.pitch,
+            self.fb.height,
+            .{ .top = GRID_Y, .row_height = ROW_HEIGHT, .rows = self.rows },
+        );
+        return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000) };
     }
 
     /// 패널 하나를 그린다(DR-M2) — 통째(`renderPane`) 또는 dirty 행만(`renderRows`). `cells`는
@@ -4281,16 +4360,22 @@ const App = struct {
     /// 프레임에 이미지. 그 밖에는 행 비교다 — 저절로 잡히는 것(스크롤 · alt screen · 팔레트 ·
     /// 선택 · 하이라이트 · block 커서 · preedit)은 셀 값에 들어 있고, 따로 더하는 것은 픽셀이
     /// 남는 overlay 행 셋(확정 7): 커서 띠의 행(이번 · 지난), 프롬프트 행(이번 · 지난).
-    fn paintPane(self: *App, p: *Pane, full: bool, cells: []vt.CellGlyph, imgs: []const vt.ImagePlacement, has_prompt: bool) !void {
+    ///
+    /// 다시 칠한 사각형은 `clips`에 더한다(design 결정 6) — 통째 패널은 사각형 하나(+ 오른쪽 한 칸),
+    /// 행은 이웃한 dirty 행을 run 하나로. `full`이면 목록이 이미 fb 전체라 더해도 무시된다.
+    fn paintPane(self: *App, p: *Pane, full: bool, cells: []vt.CellGlyph, imgs: []const vt.ImagePlacement, has_prompt: bool, clips: *drm.ClipList) !void {
         const next = p.shown ^ 1;
         const sorted = verify.rowStarts(vt.CellGlyph, cells, p.starts_buf[next]);
         const cursor = p.screen.cursorMark();
         const strip = stripColor(p.rect, self.whole);
+        const o = paneOrigin(p.rect);
+        const span_w = (@as(u32, p.rect.cols) + 1) * CELL_W;
         const whole_pane = full or !p.prev_valid or !sorted or imgs.len > 0 or p.had_imgs;
         if (whole_pane) {
             // `full`이면 `renderBackdrop`이 방금 지웠다. 아니면 이 패널의 사각형(+ 오른쪽 한 칸)만.
             if (!full) clearRows(self.fb, p.rect, 0, p.rect.rows, strip);
             try renderPane(self.fb, &self.cache, cells, imgs, p.screen.defaultBg(), p.rect, cursor);
+            clips.push(o.x, o.y, span_w, @as(u32, p.rect.rows) * ROW_HEIGHT);
         } else {
             const dirty = self.dirty_rows[0..p.rect.rows];
             _ = verify.dirtyRows(vt.CellGlyph, p.cells_buf[p.shown][0..p.shown_len], p.starts_buf[p.shown], cells, p.starts_buf[next], dirty);
@@ -4300,6 +4385,13 @@ const App = struct {
             };
             if ((has_prompt or p.had_prompt) and p.rect.rows > 0) dirty[p.rect.rows - 1] = true;
             try renderRows(self.fb, &self.cache, cells, p.starts_buf[next], dirty, p.rect, cursor, strip);
+            var r: usize = 0;
+            while (r < dirty.len) : (r += 1) {
+                if (!dirty[r]) continue;
+                const first = r;
+                while (r + 1 < dirty.len and dirty[r + 1]) r += 1;
+                clips.push(o.x, o.y + @as(u32, @intCast(first)) * ROW_HEIGHT, span_w, @as(u32, @intCast(r - first + 1)) * ROW_HEIGHT);
+            }
         }
         p.shown = next;
         p.shown_len = cells.len;

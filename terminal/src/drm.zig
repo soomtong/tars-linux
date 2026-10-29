@@ -114,6 +114,78 @@ const DrmModeFbDirtyCmd = extern struct {
     clips_ptr: u64 = 0,
 };
 
+/// `struct drm_clip_rect`(uapi `drm.h:96`). `x2` · `y2`는 끝 다음이다. DIRTYFB의 clip 하나.
+pub const Clip = extern struct { x1: u16, y1: u16, x2: u16, y2: u16 };
+
+/// 한 프레임에 넘기는 clip의 상한(DR-M2 plan 확정 9). 커널 상한은 `DRM_MODE_FB_DIRTY_MAX_CLIPS`
+/// 256이고, 패널 여덟 × 행 47의 교대 run은 192까지 갈 수 있어 접는 규칙이 있어야 한다. 64인
+/// 이유는 커널 6.18.42의 두 드라이버다 — virtio-gpu는 clip 전부를 경계 상자 하나로 합쳐
+/// (`drm_atomic_helper_damage_merged`) 상자만 host로 옮기므로 개수가 뜻이 없고, simpledrm은
+/// clip마다 `drm_fb_blit`를 하므로 64를 넘는 프레임은 어차피 화면 대부분이다.
+pub const MAX_CLIPS = 64;
+
+/// 한 프레임의 clip 목록(DR-M2). `push`로 다시 칠한 사각형을 더하고 `present`에 `slice()`를
+/// 넘긴다. `all()`은 fb 전체다(통째 프레임) — 그 뒤의 `push`는 무시되고 `slice()`는 비어 있어
+/// `present`가 clip 없이(fb 전체 손상) 보낸다. 가득 차면 전부를 경계 상자 하나로 접는다
+/// (`folded`) — 접힌 상자는 언제나 상위 집합이라 안전하다.
+///
+/// 좌표는 fb 안으로 자른다. `fillRect` · `setPixel`과 달리 여기는 자르는 것이 맞다 — clip이
+/// fb를 넘으면 커널이 거부하고(`drm_atomic_helper_check_plane_state`), 화살표는 가장자리에서
+/// 실제로 잘린다(`pointer.Sprite.span`).
+pub const ClipList = struct {
+    items: [MAX_CLIPS]Clip = undefined,
+    len: usize = 0,
+    folded: bool = false,
+    whole: bool = false,
+    width: u32,
+    height: u32,
+
+    pub fn init(width: u32, height: u32) ClipList {
+        return .{ .width = width, .height = height };
+    }
+
+    pub fn all(self: *ClipList) void {
+        self.whole = true;
+    }
+
+    pub fn push(self: *ClipList, x: u32, y: u32, w: u32, h: u32) void {
+        if (self.whole) return;
+        if (x >= self.width or y >= self.height or w == 0 or h == 0) return;
+        const r: Clip = .{
+            .x1 = @intCast(x),
+            .y1 = @intCast(y),
+            .x2 = @intCast(@min(x + w, self.width)),
+            .y2 = @intCast(@min(y + h, self.height)),
+        };
+        if (self.len == MAX_CLIPS and !self.folded) {
+            var box = self.items[0];
+            for (self.items[1..]) |o| box = merge(box, o);
+            self.items[0] = box;
+            self.len = 1;
+            self.folded = true;
+        }
+        if (self.folded) {
+            self.items[0] = merge(self.items[0], r);
+        } else {
+            self.items[self.len] = r;
+            self.len += 1;
+        }
+    }
+
+    pub fn slice(self: *const ClipList) []const Clip {
+        return if (self.whole) &.{} else self.items[0..self.len];
+    }
+
+    fn merge(a: Clip, b: Clip) Clip {
+        return .{
+            .x1 = @min(a.x1, b.x1),
+            .y1 = @min(a.y1, b.y1),
+            .x2 = @max(a.x2, b.x2),
+            .y2 = @max(a.y2, b.y2),
+        };
+    }
+};
+
 fn drmIowr(comptime T: type, nr: u32) u32 {
     const drm_ioctl_base: u32 = 'd';
     return (@as(u32, 3) << 30) | (drm_ioctl_base << 8) | nr | (@as(u32, @sizeOf(T)) << 16);
@@ -195,11 +267,19 @@ pub const Framebuffer = struct {
     }
 
     /// 그린 것을 내보낸다. 모드셋이 아니라 "fb가 바뀌었다"를 알리는 DIRTYFB다(RS-M3).
-    /// clip이 없어 fb 전체가 손상이다. simpledrm은 손상 영역을 VRAM으로 옮기고
-    /// virtio-gpu는 host로 옮긴다 — 부분 갱신이 생기면 여기에 사각형을 넘길 자리다.
-    pub fn present(self: Framebuffer) !void {
+    /// `clips`가 비어 있으면 fb 전체가 손상이고(DR-M2 전까지 늘 그랬다), 아니면 그 사각형들만이다
+    /// (DR-M2, design 결정 6). simpledrm은 손상 영역을 VRAM으로 옮기고 virtio-gpu는 host로
+    /// 옮긴다 — clip이 작을수록 옮기는 것이 적다. 둘 다 `drm_atomic_helper_dirtyfb`를 지나
+    /// plane의 damage가 되고, virtio-gpu는 경계 상자 하나로 합친다(`ClipList` 주석).
+    ///
+    /// DIRTYFB를 안 받는 드라이버(`dirty` false)는 clip을 무시하고 SETCRTC다.
+    pub fn present(self: Framebuffer, clips: []const Clip) !void {
         if (!self.dirty) return self.modeset();
         var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
+        if (clips.len > 0) {
+            cmd.num_clips = @intCast(clips.len);
+            cmd.clips_ptr = @intFromPtr(clips.ptr);
+        }
         try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
     }
 

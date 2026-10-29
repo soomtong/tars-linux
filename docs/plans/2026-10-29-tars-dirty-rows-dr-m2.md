@@ -174,3 +174,16 @@ dirty다. `had_prompt`가 드러나는 것은 커서가 다른 줄에 있는 채
 경로에서도 load-bearing인가")을 다른 자리로 물었다 — 지난 프레임의 커서 띠 행(`band_row`)을 뺀 판. render 체인은 PASS인 채
 verify가 126프레임 `mismatch`(행 하나씩, 0 · 1행 — vim이 bar 커서를 옮긴 옛 줄에 띠가 남았다)를 찍었다. 덤프는 글자 있는 셀만
 읽으므로 잔상을 못 본다(design 배경 6) — M1의 mutation과 같은 모양이다.
+
+### Task 3 (2026-10-29, 세션이 사용량 한도로 끊겨 mutation (b)는 미완)
+
+render · pointer 체인 PASS, `kms: present by dirtyfb` 그대로, verify 1444프레임 전부 `ok`(render 789 · pointer 655), `mismatch` 0.
+verify 한 번의 중앙값이 6~7ms에서 11.7ms로 늘었다 — 확정 10의 화면 흉내 비교(4MB 한 번 더)의 값이다. 루트 게이트가 이것을 견디는지는
+Task 4가 본다.
+
+mutation (b)(상태 줄 띠의 `clips.push`를 뺀 판)는 두 번 돌렸다. 첫 판은 빌드가 깨졌다 — 줄을 빼니 `grid_bottom`이 안 쓰여 Zig가
+막는다(`_ = grid_bottom;`으로 고쳤다). 둘째 판은 776 `ok` · `mismatch clip` 0 — 안 잡혔다. 상태 줄은 매 프레임 같은 글자를 같은
+자리에 다시 그리므로 clip이 빠져도 화면 흉내의 픽셀이 fb와 같다. 잡히려면 상태 줄이 바뀌는 프레임(CapsLock · copy mode · `W2`)이
+있어야 하는데 render 체인에는 없다. 다음 세션의 mutation (b')는 포커스 패널의 행 clip(`paintPane`의 run `clips.push`)을 뺀 판 —
+키마다 화면이 clip 밖에서 바뀌므로 거의 모든 프레임이 `mismatch clip`이어야 한다. 그것을 본 뒤에 확정 10의 판정이 clip을 정말
+본다고 말할 수 있다.

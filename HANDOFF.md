@@ -1,4 +1,4 @@
-# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M2 plan 썼다, 다음은 Task 1(행 비교 모듈)
+# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M2 Task 1~3 커밋, 다음은 mutation (b') 한 번 → Task 4(재측정 · 루트 게이트 · 닫기)
 
 ## 지금 상태 (2026-10-29)
 
@@ -19,6 +19,17 @@
     verify 한 번은 게이트 TCG에서 중앙값 약 7ms — lanes 시간은 300 · 328 · 339초로 CR-M0(296초)의 흔들림 안이다.
     둘째 회차에 FW 검사 18 · DC boot 7이 verify와 무관하게 빨갰고 혼자서는 3/3 · 1/1 초록이었다 — FW의 숨은 경주(한 번짜리 `nc`와
     SLIRP의 묵은 SYN)는 `carryover.md`에 적었다.
+  - DR-M2 진행(2026-10-29, 세션이 사용량 한도로 끊겼다). plan commit `a6c10ee`, Task 1 `b158233`(`verify.zig`의
+    `rowStarts` · `dirtyRows`, `verify_test` 검사 6~9, 새 `dirty_test` 300회차 — 전부 통과), Task 2 `40cbf2e`(패널마다 셀 목록
+    두 벌 · `paintPane` · `renderRows` · `clearRows` · `stripColor`, 화살표 `restore`가 프레임 처음, `App.cell_buf` 삭제 —
+    render · pane · hangul · copy · pointer 다섯 체인 PASS, verify 2601프레임 `ok`. mutation은 plan 확정 15(a)가 가려져(셸이 맨 아래
+    줄이라 그 줄은 어차피 dirty) `band_row`를 뺀 판으로 바꿔 126 `mismatch`를 봤다 — plan의 "결과" 절에 적혀 있다).
+    Task 3도 커밋했다(`drm.zig`의 `Clip` · `ClipList`(64, 접기) · `present(clips)`, `main.zig`의 clip 모으기 · 화살표 바퀴의 clip 둘 ·
+    `Verify.screen` 화면 흉내 · `verifyClips` · `copyClips` · `printMismatch`, `mismatch clip ` 줄, 그리고 Task 4용 `probe/split.pl` ·
+    `report.pl`의 새 anchor 일곱 구간). render · pointer 체인 PASS, verify 1444프레임 `ok`, 중앙값 11.7ms(비교 둘). 남은 것 하나:
+    mutation (b)가 두 번 가려졌다(plan "결과" Task 3 절) — 다음 세션은 `paintPane`의 run `clips.push`를 뺀 판(mutation (b'))으로
+    render 체인 한 번(M1 plan의 docker 한 줄, `/tmp/run/main.zig`에 사본)을 돌려 `mismatch clip`을 본 뒤 Task 4로 간다 — 프로브
+    3+3회(`probe/run.sh`, label `dr-m2` · `dr-m2-split`), M0의 2.45ms와 비교, `cells` 몫 30%로 M3 판단, 루트 게이트, 닫기 목록.
   - DR-M2 plan(`docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`, 2026-10-29, 착수 전). 확정 열다섯 — 지우는 색은 `MARGIN_COLOR`
     (통째 경로의 빈 칸이 그 색, 확정 1), 행 하나는 패널 폭 + 오른쪽 한 칸(마지막 열 preedit의 새는 반 칸, 확정 2), 통째 판정은
     `last_current` · `last_tree` 비교(확정 3), 패널마다 셀 목록 두 벌(확정 5), 행 비교는 `verify.zig`의 `rowStarts` · `dirtyRows`

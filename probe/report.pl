@@ -21,7 +21,8 @@ sub median {
 
 my (@spans, @b_frames, @b_frame_ms, @b_dump_ms, @b_reads, @a_frame, @a_dump);
 # DR-M0: `split>` 줄(probe/split.pl)이 있는 로그면 (a)의 구간별 값. 없으면 아래 출력이 RS 때와 같다.
-my @SPLIT = qw(backdrop others cells pane finish present);
+# 구간 이름은 DR-M2의 것이다(M0은 backdrop others cells pane finish present — 그 판은 `git log -p`에).
+my @SPLIT = qw(others cells pane rows overlay finish present);
 my %a_split = map { $_ => [] } @SPLIT;
 
 for my $file (@ARGV) {
@@ -34,8 +35,8 @@ for my $file (@ARGV) {
     while (my $line = <$fh>) {
         $done = 1 if !$done && $line =~ /DONE0/;
         if ($line =~ /terminal: key> /) { $key_pending = 1; next }
-        if ($line =~ /terminal: split> backdrop=(\d+) others=(\d+) cells=(\d+) pane=(\d+) finish=(\d+) present=(\d+)/) {
-            @$split{@SPLIT} = ($1, $2, $3, $4, $5, $6);
+        if ($line =~ /terminal: split> others=(\d+) cells=(\d+) pane=(\d+) rows=(\d+) overlay=(\d+) finish=(\d+) present=(\d+)/) {
+            @$split{@SPLIT} = ($1, $2, $3, $4, $5, $6, $7);
             next;
         }
         next unless $line =~ /terminal: probe> t=(\d+) frame=(\d+) dump=(-?\d+) reads=(\d+) bytes=(\d+)/;
