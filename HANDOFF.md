@@ -1,4 +1,4 @@
-# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M1 끝, 다음은 DR-M2(부분 갱신 + clip) plan
+# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M2 plan 썼다, 다음은 Task 1(행 비교 모듈)
 
 ## 지금 상태 (2026-10-29)
 
@@ -19,11 +19,13 @@
     verify 한 번은 게이트 TCG에서 중앙값 약 7ms — lanes 시간은 300 · 328 · 339초로 CR-M0(296초)의 흔들림 안이다.
     둘째 회차에 FW 검사 18 · DC boot 7이 verify와 무관하게 빨갰고 혼자서는 3/3 · 1/1 초록이었다 — FW의 숨은 경주(한 번짜리 `nc`와
     SLIRP의 묵은 SYN)는 `carryover.md`에 적었다.
-  - 다음: DR-M2 plan. 행 비교 모듈(design 결정 9, `verify.zig`에 같이)과 호스트 무작위 검사, 패널마다 지난 `cells()` 사본, 통째로
-    다시 그리는 조건(결정 3), overlay 행(결정 4), 행 지우고 다시 칠하기(결정 5), clip(결정 6 — 상한과 합치기, virtio-gpu · simpledrm이
-    clip 여럿을 어떻게 받는지). `verifyFrame`은 그대로 두고 실제 경로만 바꾼다 — 그림자 경로가 `renderBackdrop` · `renderPane` ·
-    `renderOverlay`를 그대로 부르므로 그 함수들의 모양을 바꾸면 그림자도 같이 바뀐다는 것을 plan이 기억한다. 끝나면 같은 프로브
-    (`probe/patch.pl`, `split.pl`은 M0 HEAD 전용이라 anchor를 다시 고른다)로 (a) frame 2.45ms와 비교하고 M3(행 dirty 비트)을 다시 판단한다.
+  - DR-M2 plan(`docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`, 2026-10-29, 착수 전). 확정 열다섯 — 지우는 색은 `MARGIN_COLOR`
+    (통째 경로의 빈 칸이 그 색, 확정 1), 행 하나는 패널 폭 + 오른쪽 한 칸(마지막 열 preedit의 새는 반 칸, 확정 2), 통째 판정은
+    `last_current` · `last_tree` 비교(확정 3), 패널마다 셀 목록 두 벌(확정 5), 행 비교는 `verify.zig`의 `rowStarts` · `dirtyRows`
+    (확정 6) + 호스트 `dirty_test`(확정 11), 화살표는 프레임 처음에 `restore`(확정 8), clip은 `drm.ClipList` 64개 · run 합치기
+    (확정 9 — virtio-gpu는 경계 상자 하나로 합치고 simpledrm은 clip마다 복사), clip 판정은 verify의 화면 흉내 버퍼(확정 10).
+    Task 넷 — 1 모듈 + 호스트 검사, 2 부분 갱신(clip 없이), 3 clip + 화면 흉내, 4 재측정 · 루트 게이트 · 닫기. M3 판단은 새 frame의
+    `cells` 몫 30%(확정 14). `verifyFrame`과 `renderBackdrop` · `renderPane` · `renderOverlay`의 모양은 그대로 둔다.
   - ghostty를 참고로 읽을 때는 `/Users/dp/Repository/_study/ghostty`(최신)다. `terminal/ghostty-src`는 빌드 입력이다
     (`docs/decisions/reference_ghostty_source.md`).
 - 그 전에 닫은 것은 Clock Reload(CR-M0, 2026-10-28). design `docs/specs/2026-10-27-tars-clock-reload-design.md`, 기억
