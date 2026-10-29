@@ -224,14 +224,16 @@ check_initrd_inode() {
 # TARS_RENDER_VERIFY)이 조용히 빠지면 모든 체인이 "통과"로 읽히기 때문이다. 부팅의 `on bytes=` 한 줄도
 # 받는다. 커널 printk가 자른 줄은 tlog가 잇는다(파일 찾기는 cut_log_lines와 같다). make check CHAIN=x에는
 # 이 판정이 없다 — 그 로그를 읽는 한 줄은 lessons "범용 명령"에 있다.
-VERIFY_OK_LINE='^[^ ]+: terminal: verify> (on bytes=[0-9]+|ok us=[0-9]+)\r?$'
+VERIFY_OK_LINE='^[^ ]+: terminal: verify> (on bytes=[0-9]+|ok us=[0-9]+)$'
 check_verify_lines() {
   local dir="$1" label="$2" files lines total bad
   files="$(grep -rlaE '^terminal: ' "$dir")" || files=""
   lines="$(
     IFS=$'\n'
     for f in $files; do
-      LOG="$f" bash -c 'source ./gate_lib.sh; tlog | grep -a "terminal: verify>" | from_terminal' | sed "s|^|${f}: |"
+      # 시리얼의 CR은 tr로 뗀다 — GNU grep의 ERE는 `\r`를 모른다(BSD grep은 안다. 호스트의 자가검사만 통과하고
+      # 컨테이너의 진입 검사가 빨갰던 자리).
+      LOG="$f" bash -c 'source ./gate_lib.sh; tlog | grep -a "terminal: verify>" | from_terminal' | tr -d '\r' | sed "s|^|${f}: |"
     done
   )"
   total="$(grep -ac . <<<"$lines")"
