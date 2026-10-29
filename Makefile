@@ -126,6 +126,7 @@ help:
 	@echo "      $(CHAINS)"
 	@echo "      대개 2~8분이고, 그 체인이 스스로 빌드하므로 무엇을 고쳤든 그 체인만 다시 돌리면 된다."
 	@echo "      시리얼 로그는 out/gate-logs/<체인>/에 남는다(앞 판의 것은 지운다)"
+	@echo "      render verify가 켜진 채 돈다(TARS_RENDER_VERIFY=1, DR-M1) — 로그의 terminal: verify> 줄이 전부 ok여야 한다"
 	@echo
 	@echo "  make gate"
 	@echo "      루트 check.sh — 모든 체인을 1회씩, 빌드 한 번 뒤 동시에(JOBS줄). 약 10분."
@@ -257,7 +258,7 @@ gate: container
 check: container
 	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
-	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'
+	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TARS_RENDER_VERIFY=1 TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'
 
 shell: container
 	@$(DOCKER) run --rm -it -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash

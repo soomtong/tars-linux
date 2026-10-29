@@ -218,6 +218,37 @@ check_initrd_inode() {
   return 0
 }
 
+# DR-M1 결정 7. 회차의 시리얼 로그마다 terminal의 `verify>` 줄을 읽는다. terminal은 verify가 켜지면
+# 프레임마다 같은 프레임을 그림자 버퍼에 통째로 한 번 더 그려 실제 fb와 비교한 줄을 찍는다(main.zig의
+# verifyFrame) — `ok`가 아닌 줄 하나가 잔상이다. 한 줄도 없는 것도 빨강이다. initrd의 표식(make_initrd.sh,
+# TARS_RENDER_VERIFY)이 조용히 빠지면 모든 체인이 "통과"로 읽히기 때문이다. 부팅의 `on bytes=` 한 줄도
+# 받는다. 커널 printk가 자른 줄은 tlog가 잇는다(파일 찾기는 cut_log_lines와 같다). make check CHAIN=x에는
+# 이 판정이 없다 — 그 로그를 읽는 한 줄은 lessons "범용 명령"에 있다.
+VERIFY_OK_LINE='^[^ ]+: terminal: verify> (on bytes=[0-9]+|ok us=[0-9]+)\r?$'
+check_verify_lines() {
+  local dir="$1" label="$2" files lines total bad
+  files="$(grep -rlaE '^terminal: ' "$dir")" || files=""
+  lines="$(
+    IFS=$'\n'
+    for f in $files; do
+      LOG="$f" bash -c 'source ./gate_lib.sh; tlog | grep -a "terminal: verify>" | from_terminal' | sed "s|^|${f}: |"
+    done
+  )"
+  total="$(grep -ac . <<<"$lines")"
+  bad="$(grep -avE "$VERIFY_OK_LINE" <<<"$lines" | grep -a .)" || bad=""
+  echo "${label}: verify lines ${total} (${dir})"
+  if [ "$total" -eq 0 ]; then
+    echo "${label} FAIL: no terminal: verify> line — the initrd marker (TARS_RENDER_VERIFY) is off or the terminal never rendered"
+    return 1
+  fi
+  if [ -n "$bad" ]; then
+    echo "${label} FAIL: render verify saw frames that differ from a full redraw (first 20):"
+    head -20 <<<"$bad"
+    return 1
+  fi
+  return 0
+}
+
 run_chain() {
   local name="$1"
   local script="$2"
@@ -232,6 +263,7 @@ run_chain() {
     TMPDIR="$dir" "$script" || ok=0
     count_cut_lines "$dir" "${name} run ${i}/${RUNS}" || ok=0
     check_initrd_inode "${name} run ${i}/${RUNS}" || ok=0
+    check_verify_lines "$dir" "${name} run ${i}/${RUNS}" || ok=0
     secs=$(( $(date +%s) - start ))
     printf '%s\t%s\t%s\n' "$name" "$i" "$secs" >> "$TIMES"
     echo "time: ${name} run ${i}/${RUNS} ${secs}s"
@@ -577,6 +609,35 @@ require_cut_lines_found() {
 }
 require_cut_lines_found || entry_failed=1
 
+# DR-M1. check_verify_lines가 거짓 초록을 내지 않는지 가짜 회차 셋으로 본다 — ok만 있는 회차는 통과,
+# mismatch가 섞인 회차와 verify 줄이 하나도 없는 회차는 빨강. 커널 printk가 자른 ok 줄은 이어서 ok로 읽는다.
+require_verify_verdict() {
+  local dir
+  dir="$(mktemp -d)"
+  mkdir -p "$dir/pass" "$dir/mismatch" "$dir/none"
+  printf 'terminal: verify> on bytes=4096000\r\nterminal: verify> ok us=2[   3.141592] random: crng init done\r\n345\r\nterminal: screen> a\r\n' > "$dir/pass/serial"
+  printf 'terminal: verify> ok us=2345\r\nterminal: verify> mismatch rows=1 first=7 us=2400\r\n' > "$dir/mismatch/serial"
+  printf 'tars-init: boot\nterminal: screen> a\r\n' > "$dir/none/serial"
+  if ! check_verify_lines "$dir/pass" verify-pass > /dev/null; then
+    echo "check FAIL: check_verify_lines rejects a run whose verify lines are all ok" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  if check_verify_lines "$dir/mismatch" verify-mismatch > /dev/null; then
+    echo "check FAIL: check_verify_lines passes a run with a mismatch line" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  if check_verify_lines "$dir/none" verify-none > /dev/null; then
+    echo "check FAIL: check_verify_lines passes a run without any verify line" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  rm -rf "$dir"
+  return 0
+}
+require_verify_verdict || entry_failed=1
+
 # AL-M0. 시리얼에 쓰는 helper `logline.zig`는 terminal과 init에 바이트까지 같은 사본
 # 둘이다(AL design 결정 1). 공용 모듈로 두지 않은 대신 여기서 어긋남을 막는다.
 require_same_logline() {
@@ -631,6 +692,12 @@ fi
 # 것을 뒤 회차가 실패시킬 경로가 사실상 없다. 반복의 목적을 부팅에 돌려주는
 # 변경이지 반복을 줄이는 변경이 아니다(반복을 3에서 2로 줄인 것은 RUNS의 주석).
 clean
+
+# DR-M1 결정 7. 아래 prebuild의 make_initrd.sh가 initrd에 render verify의 표식(/etc/tars/render-verify)을
+# 넣는다 — 모든 체인의 모든 프레임이 `terminal: verify>` 줄을 찍고 check_verify_lines가 회차마다 읽는다.
+# 변수 하나로 스물두 체인과 ISO 줄이 함께 켜지는 것은 initrd를 여기서 한 번만 묶기 때문이다. make iso ·
+# probe/run.sh에는 이 변수가 없어 배포 ISO와 측정은 꺼진 채다.
+export TARS_RENDER_VERIFY=1
 
 # GP-M2: 체인을 동시에 돌린다(docs/plans/2026-10-10-tars-gate-parallel-gp-m2.md).
 #

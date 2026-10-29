@@ -723,6 +723,17 @@ while IFS= read -r mod; do
   copy_lib_deps "$mod"
 done < <(find "$WORKDIR/usr/lib/x86_64-linux-gnu/zsh" -name '*.so')
 
+# DR-M1. 게이트에서만 켜는 render verify 모드의 표식. terminal이 부팅에 이 파일이 열리는지
+# 보고(main.zig의 `openVerify`), 있으면 프레임마다 같은 프레임을 그림자 버퍼에 한 번 더 그려
+# 실제 fb와 비교한 줄(`terminal: verify> …`)을 찍는다. 변수는 루트 check.sh가 prebuild 앞에서
+# export하고 Makefile의 check 타깃이 체인 앞에 둔다. `make iso` · probe/run.sh에는 없다 —
+# 배포 ISO와 측정은 이 파일이 없어 꺼진 채다. 파일 하나인 이유는 체인 스물둘이 저마다
+# -append를 가져 cmdline으로는 스물두 군데이고, initrd를 묶는 자리는 여기 하나이기 때문이다.
+if [ -n "${TARS_RENDER_VERIFY:-}" ]; then
+  : > "$WORKDIR/etc/tars/render-verify"
+  echo "render verify marker on (TARS_RENDER_VERIFY)"
+fi
+
 # /usr/share/zsh(zsh-common)는 넣지 않는다. fish가 fish-common을 필요로
 # 했던 것과 같은 구조이긴 한데 크기가 다르다 — 17MB이고 대부분이 완성
 # 함수(Completion)다. zsh는 이 트리가 없어도 조용히 시작한다: 여기 있는 것은
