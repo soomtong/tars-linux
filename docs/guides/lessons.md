@@ -390,6 +390,11 @@ random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판
 make check CHAIN=net > /tmp/net.out 2>&1; echo "exit=$?"
 SERIAL="$(grep -al "tars-init" out/gate-logs/net/tmp.* | head -1)"
 
+# render verify(DR-M1)의 줄. 루트 게이트는 회차마다 check_verify_lines로 판정하지만 make check에는
+# 판정이 없다 — 돌린 뒤 ok가 아닌 줄을 이렇게 본다. 한 줄도 없으면 initrd의 표식이 빠진 것이다
+# (TARS_RENDER_VERIFY). 커널 printk가 자른 줄은 여기 걸리므로 하나면 tlog로 이어서 다시 본다.
+grep -rah 'terminal: verify>' out/gate-logs/net | grep -av ' ok us=' | grep -av ' on bytes='
+
 # 흔들리는 검사를 잡을 때는 위를 여러 판 돌리고 죽은 판의 로그만 남긴다.
 
 # 그 로그에서 ANSI를 걷어내고 마지막 화면을 행으로 복원한다.

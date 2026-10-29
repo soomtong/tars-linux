@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 Design: `docs/specs/2026-10-28-tars-dirty-rows-design.md`(결정 7 · 8, 위험 1 · 2)
-Status: plan(착수 전). 앞 milestone DR-M0은 끝났다(`67596a0`).
+Status: 끝났다(2026-10-29). Task 1 `b8ffd8f` · Task 2 `0c2109e` + `bc52490` + `9fd3e68` · Task 3 닫기. 루트 게이트 22/22(셋째 회차, 9분 50초). verify는 세 회차 약 2만 3천 프레임 전부 `ok`, mutation은 31프레임 `mismatch`로 잡혔다.
 
 ## 이 milestone이 끝나면
 
@@ -104,3 +104,92 @@ HEAD `3d37659`에서 코드로 확인했다.
 - 결과 절: 체인별 verify 줄 수, 한 체인 로그의 `us` 중앙값, 게이트 시간(prebuild · lanes)과 CR-M0 비교, 흔들린 체인 유무.
 - design의 milestone 표 M1 행, 이 plan Status, `HANDOFF.md`, lessons "범용 명령"에 verify 줄 읽는 한 줄.
 - commit 하나.
+
+## 결과 (2026-10-29)
+
+plan과 달라진 것 둘. 격자 행 산수는 `y / ROW_HEIGHT`가 아니라 격자 원점(`GRID_Y` 20)을 뺀 것이다(`verify.Grid.rowOf` — 위 여백은
+0번, 격자 아래는 `rows`번). 그리고 부팅에 `terminal: verify> on bytes=<N>` 한 줄을 더 찍는다 — "표식이 없다"와 "프레임이 한 번도
+없었다"를 가르기 위해서이고, 판정의 regex가 이 줄도 받는다. mutation (a)는 손으로 한 번 대는 대신 게이트 시작마다 도는 진입
+검사 `require_verify_verdict`로 넣었다(`require_cut_lines_found`와 같은 꼴, 가짜 회차 셋 — ok만 · mismatch 섞임 · 줄 없음).
+
+Task 1(`b8ffd8f`): 호스트 0.17 `zig fmt --check` · `ast-check` 통과, 순수 `verify_test` 다섯 통과(호스트 `zig run`과 컨테이너
+`zig build test` 둘 다). 컨테이너 `prepare.sh && zig build test` 1분 57초. 지운 줄 16은 전부 `renderFinish`의 머리 · 화살표 인자 ·
+호출 한 줄과 낡은 주석 둘이다.
+
+Task 2(`0c2109e`): `check_verify_lines`의 자가검사 셋이 호스트에서 통과했고 `require_no_early_exit_pipe ./check.sh`도 통과했다.
+
+mutation (b) — `render`의 `renderBackdrop(self.fb, &ws.tree, self.whole);` 한 줄을 뺀 사본:
+
+```bash
+cp terminal/src/main.zig /tmp/run/main.zig && perl -0pi -e 's/^        renderBackdrop\(self\.fb, &ws\.tree, self\.whole\);\n//m' /tmp/run/main.zig
+docker run --rm -e TARS_RENDER_VERIFY=1 -v "$PWD":/workspace -v /tmp/run/main.zig:/workspace/terminal/src/main.zig:ro \
+  -w /workspace tars-devcontainer bash -c 'mkdir -p /tmp/gate-logs/mutation && (cd terminal && TMPDIR=/tmp/gate-logs/mutation ./check.sh); \
+  mkdir -p out/gate-logs && rm -rf out/gate-logs/mutation && mv /tmp/gate-logs/mutation out/gate-logs/'
+bash -c 'source <(sed -n "/^VERIFY_OK_LINE=/,/^}/p" check.sh); check_verify_lines out/gate-logs/mutation MUTATION'
+```
+
+체인 자체는 PASS였다(2분 32초) — 덤프는 글자가 있는 셀만 읽으므로 잔상을 못 본다(design 배경 6 그대로). verify는 봤다: 줄 55
+(`on` 2 · `ok` 22 · `mismatch` 31), 판정은 FAIL.
+
+```
+MUTATION: verify lines 55 (out/gate-logs/mutation)
+MUTATION FAIL: render verify saw frames that differ from a full redraw (first 20):
+out/gate-logs/mutation/tmp.meRbqHdRLN: terminal: verify> mismatch rows=1 first=0 us=9116
+…
+out/gate-logs/mutation/tmp.meRbqHdRLN: terminal: verify> mismatch rows=2 first=0,2 us=7848
+```
+
+다른 행은 0(프롬프트 줄)과 2다 — 체인이 글자를 치고 지우는 줄이고, 지우기가 빠진 실제 fb에 그 픽셀이 남았다. 아무것도 안
+사라진 프레임은 `ok`라 줄 전부가 빨갛지는 않다(확정 8의 기대 그대로). verify 한 번의 `us` 중앙값은 5.9ms(n=53, 4.7~21.5ms) —
+DR-M0의 (a) frame 2.45ms보다 크다. 그림자 그리기에 4MB 비교가 더해진 값이고 프로브와 조건이 같지 않으므로(체인 하나의 부팅,
+heap 버퍼의 첫 page fault) 숫자 자체는 안 옮긴다. 이것이 프레임을 늘여 체인을 흔드는지는 아래 루트 게이트가 본다.
+
+첫 루트 게이트는 0.8초 만에 진입 검사에서 빨갰다 — `check FAIL: check_verify_lines rejects a run whose verify lines are all ok`.
+호스트의 자가검사는 통과했는데 컨테이너에서는 아니었다. 판정 regex의 `\r?`가 원인이다: macOS의 BSD grep은 `\r`를 CR로 읽지만
+컨테이너의 GNU grep은 ERE에서 `\r`를 모른다(글자 `r`). 시리얼의 CR을 `tr -d '\r'`로 떼고 regex에서 `\r?`를 뺐다(`bc52490`). 양쪽
+grep에서 자가검사가 통과한다 — 게이트의 셸 검사는 호스트에서 대 본 것으로 끝내지 않고 컨테이너에서도 한 번 댄다.
+
+루트 게이트 첫 회차(`bc52490`): 12분 11초(prebuild 389초 — cold build, lanes 339초). 21/22 — 21체인 7852프레임이 전부 `ok`,
+`mismatch` 0. 빨간 하나는 BF-M4(boot 체인)로, `verify lines 0`이라 판정이 FAIL했다. 그 체인은 DRM 장치 없이 부팅해 terminal이
+`OpenFailed`로 세 번 죽고 init이 포기하는 것을 보는 체인이다 — 프레임이 없으니 verify 줄이 0인 것이 맞다. 판정 규칙을 좁혔다
+(`9fd3e68`): 줄이 0이면 빨강인 것은 `terminal: render> first frame`이 있는 회차(프레임을 그렸다)뿐이고, 안 그린 회차는
+"no frame was rendered"를 찍고 통과한다. 표식이 빠진 채 그린 부팅은 `first frame`은 있고 verify 줄은 없으니 여전히 빨갛다.
+자가검사에 넷째(프레임 없는 회차 → 통과)를 더했고, 첫 회차의 BF-M4 · TF-M4 로그 디렉터리에 새 판정을 대 보니 통과 · 57줄 통과였다.
+
+첫 회차의 체인별 verify(`ok` 줄 수 · `us` 중앙값, ms): AU 12 · 14.6, BS 226 · 5.6, CB 383 · 6.4, CM 545 · 6.5, CP 1784 · 7.0,
+CT 9 · 21.8, DC 18 · 13.3, FW 510 · 6.7, HD 3 · 15.0, HI 180 · 5.8, IP 169 · 6.7, PD 678 · 6.5, PM 55 · 7.2, RM 4 · 7.7, TD 1392 · 7.9,
+TF 55 · 6.1, TR 770 · 6.7, UT 895 · 10.3, VD 147 · 5.8, WL 10 · 17.7, WN 7 · 5.3. 전체 중앙값 7.2ms(n=7852, p90 15.2ms). 프레임이 적은
+체인(CT · WL · HD · AU)의 중앙값이 큰 것은 첫 프레임들(heap 그림자의 첫 page fault · 글리프 굽기)이 표본의 대부분이라서다.
+동시에 여섯 줄이 도는 게이트의 TCG라 DR-M0의 프로브(혼자 도는 부팅, 2.45ms)와 섞지 않는다. lanes 339초는 CR-M0의 296초보다
+43초(15%) 길고 LI-M1의 334초와는 같다 — verify 비용이 게이트 시간에 보이기는 하되 체인을 흔들지는 않았다(위험 1). 가장 긴 체인은
+CP 216초 · TD 213초(CR-M0은 net 196초).
+
+루트 게이트 둘째 회차(`9fd3e68`): 10분 53초(prebuild 322 + lanes 328초). verify는 전부 통과 — 21체인 7486프레임 `ok`,
+`mismatch` 0, 중앙값 6.8ms(p90 14.4ms), BF-M4는 "no frame was rendered"로 통과. 그러나 20/22 — FW-M2와 DC-M2가 verify와 무관한
+제 검사에서 빨갰다(첫 회차에서는 둘 다 통과).
+- DC-M2 boot 7(USB 디스크를 4초 늦게): `tars-init: config storage /dev/sda2`를 기다림 없이 찍었고 `appeared after`가 없다. 그
+  부팅의 콘솔 셸이 17초 만에 떴다(다른 부팅 여섯은 8~10초) — 커널 부팅이 느려 init이 처음 훑을 때 이미 USB의 4초가 지나
+  있었다. terminal이 뜨기 전의 일이고 그 부팅은 `/dev/dri/card0 not found`라 프레임도 없다. 동시에 여섯 줄이 도는 호스트의
+  순간 부하다.
+- FW-M2 검사 18(`tars-config firewall allow 7072` 뒤 호스트가 붙어 `fwm2-tcp-7072-ok`를 받는다): `applied now`까지 화면에 떴는데
+  받은 것이 빈 값이고, 회차가 58초(첫 회차)가 아니라 35초로 끝났다 — 열 번의 `read -t 5`가 timeout이 아니라 곧바로 EOF였다는
+  뜻이다. 7072의 리스너는 `nc -l -p 7072` 한 번짜리다. 읽히는 모양은: 검사 8이 막힌 포트에 붙었을 때 SLIRP이 호스트 쪽 연결은
+  받고 게스트로 보낸 SYN은 방화벽이 버렸는데(실측 73의 모양), SLIRP이 그 SYN을 재전송하다가 allow로 포트가 열린 순간 닿아
+  `nc`가 그 묵은 연결을 받아 한 줄을 쓰고 끝났고, 검사 18의 진짜 연결은 RST → EOF. 실측 73이 "SLIRP이 버려진 SYN을 언제 다시
+  보내는지는 재지 않았다"고 남겨 둔 자리다. 검사 8과 allow 사이는 타이핑과 화면 대기라, verify로 프레임이 늘면 그 간격이
+  재전송 창에 걸리는 자리가 움직일 수 있다 — verify의 잘못은 아니지만 verify가 드러낼 수 있는 체인의 숨은 경주다.
+
+둘을 verify 켠 채 혼자 다시 돌렸다(한 컨테이너에서 차례로, 7분 4초): FW 3/3 통과(193 · 61 · 59초 — 첫 판은 빌드 포함), DC 1/1
+통과(110초). verify 1549프레임 전부 `ok`. 둘 다 동시에 여섯 줄이 도는 게이트의 부하에서만 난 흔들림으로 읽는다. FW의 숨은
+경주(위)는 `carryover.md`에 적는다 — 고치는 길은 검사 18이 검사 8이 건드린 적 없는 포트를 열어 보는 것, 또는 7072의 리스너를
+한 번짜리 `nc`가 아니라 다시 듣는 꼴로 두는 것이다. 이 milestone에서는 안 고친다(verify의 일이 아니다).
+
+루트 게이트 셋째 회차(`9fd3e68`, 코드는 둘째와 같다): 22/22, 9분 50초(prebuild 288 + lanes 300초). verify 8219프레임 `ok`,
+`mismatch` 0, 중앙값/p90 6.6/10.4ms. BF-M4는 "no frame was rendered"로 통과. 가장 긴 체인 TD 199초 · CP 182초. lanes 300초는
+CR-M0의 296초와 같다 — 둘째 회차의 328 · 첫 회차의 339초까지 합치면 verify의 게이트 시간 비용은 호스트 부하의 흔들림(±40초)
+안이다. 세 회차 합쳐 21체인 약 2만 3천 프레임에서 `mismatch`가 한 번도 없었다 — 통째 경로 둘이 같은 픽셀을 내고, 이 숫자가
+DR-M2가 부분 갱신을 넣은 뒤 받아야 할 기준이다.
+
+이 milestone이 남긴 것: DR-M2의 `verifyFrame`은 그대로 두고 실제 경로만 부분 갱신으로 바꾼다. 그림자 경로가 `renderBackdrop` ·
+`renderPane` · `renderOverlay`를 그대로 부르므로 M2가 그 함수들의 모양을 바꾸면 그림자도 함께 바뀐다 — 통째 경로의 정의가
+"지금의 함수 셋을 차례로"라는 것을 M2 plan이 기억해야 한다.

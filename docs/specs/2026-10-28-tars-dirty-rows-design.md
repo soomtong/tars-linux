@@ -1,7 +1,7 @@
 # TARS Dirty Rows — Design
 
 Date: 2026-10-28
-Status: 진행 중 — DR-M0 끝(2026-10-28), 다음은 DR-M1(verify).
+Status: 진행 중 — DR-M0 끝(2026-10-28) · DR-M1 끝(2026-10-29), 다음은 DR-M2(부분 갱신 + clip).
 
 HANDOFF "다음 후보"의 부분 갱신을 집는다(사용자가 2026-10-28에 골랐다). Render Speed(RS-M0~M3, 2026-10-11)가 그 앞의 축
 셋(칠하기 방식 · 프레임 수 · 모드셋)을 줄이고 남겨 둔 것이다 — `docs/decisions/project_render_speed.md`의 "남은 것",
@@ -119,7 +119,7 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
 | | 무엇을 | 상태 |
 |---|---|---|
 | DR-M0 | 프로브로 키 하나의 그리기를 구간별로 쪼갠다(결정 1). 코드 0줄 | 끝 — (a) frame 2.45ms(새 기준선). backdrop 0.72 · cells 0.63(25.5%) · pane 0.81 · finish 0.29(present 0.21). M2가 줄일 몫의 상한 약 1.5ms. M3은 M2 재측정 뒤에 다시 판단 |
-| DR-M1 | verify 모드(결정 7 · 8). 그리기는 통째 그대로라 모든 프레임이 `ok`. mutation으로 verify가 잡는 것을 본다 | |
+| DR-M1 | verify 모드(결정 7 · 8). 그리기는 통째 그대로라 모든 프레임이 `ok`. mutation으로 verify가 잡는 것을 본다 | 끝 — initrd 표식 `/etc/tars/render-verify`(`make_initrd.sh`, `TARS_RENDER_VERIFY=1`)로 켠다. 프레임마다 `terminal: verify> ok us=N`, 루트 게이트 `check_verify_lines`가 회차마다 판정. 세 회차 약 2만 3천 프레임 `ok`, verify 한 번 중앙값 약 7ms(게이트 TCG). `renderFinish` → `renderOverlay` + `presentFrame`. mutation(지우기 뺌) 31프레임 `mismatch` |
 | DR-M2 | 행 단위 부분 갱신(결정 2~5)과 clip(결정 6), 행 비교 모듈과 호스트 무작위 검사(결정 9). 같은 프로브로 다시 잰다. 루트 게이트에서 verify 전부 `ok` | |
 
 `cells()` 몫에 따라 M3(행 dirty 비트)이 생길 수 있다(결정 2). M1 이후의 구체 결정은 앞 milestone의 숫자를 보고 그 plan에서

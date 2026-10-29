@@ -1,6 +1,6 @@
-# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M0 끝, 다음은 DR-M1(verify) plan
+# HANDOFF: Dirty Rows(DR) 진행 중 — DR-M1 끝, 다음은 DR-M2(부분 갱신 + clip) plan
 
-## 지금 상태 (2026-10-28)
+## 지금 상태 (2026-10-29)
 
 - 열린 서브프로젝트는 Dirty Rows(부분 갱신, 2026-10-28). design `docs/specs/2026-10-28-tars-dirty-rows-design.md`. 지난 프레임의
   `cells()` 사본과 행 단위로 비교해 바뀐 행만 다시 칠하고 DIRTYFB clip으로 넘긴다. 잔상은 verify 모드(같은 프레임을 별도 버퍼에
@@ -8,8 +8,22 @@
   - DR-M0 끝(plan `docs/plans/2026-10-28-tars-dirty-rows-dr-m0.md`, Task 1 `67596a0`). 새 기준선 (a) frame 2.45ms — backdrop
     0.72 · cells 0.63(25.5%) · pane 0.81 · finish 0.29(present 0.21). 진단 판은 `probe/split.pl`(`patch.pl` 위에 얹는다, M0의 HEAD에만
     붙는다). cells가 30% 미만이라 M3(행 dirty 비트)은 기본으로 없고, M2 재측정 뒤에 다시 판단한다.
-  - 다음: DR-M1 plan. 정할 것은 verify를 켜는 길(체인 스물둘을 하나씩 안 고치고 배포 ISO에서는 꺼짐), `renderFinish`에서 그리기와
-    `present` · 화살표를 가르는 손질, verify 줄의 모양과 루트 게이트의 판정 자리(design 결정 7 · 8, 위험 1 · 2).
+  - DR-M1 끝(plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m1.md`, 2026-10-29). verify 모드: 게이트의 initrd에만 있는 표식
+    `/etc/tars/render-verify`(`make_initrd.sh`가 `TARS_RENDER_VERIFY=1`일 때 넣고, 루트 `check.sh`가 export · `make check`가 붙인다)를
+    terminal이 `App.open`에서 보고 켠다. 켜지면 프레임마다 같은 프레임을 heap 그림자(`drm.Framebuffer.shadow`)에 통째로 다시 그려
+    픽셀 행마다 비교하고 `terminal: verify> ok us=N` 또는 `mismatch rows=n first=…`를 찍는다(`App.verifyFrame`, 순수 비교는
+    `terminal/src/verify.zig` + 호스트 `verify_test`). `renderFinish`는 `renderOverlay`(프롬프트 · 상태 줄) + `presentFrame`(화살표 ·
+    `present`)로 갈라졌다 — M2가 clip을 넘길 자리는 `presentFrame` 하나. 루트 게이트는 `run_chain`의 `check_verify_lines`가 회차마다
+    판정한다(`ok` 아닌 줄 → 빨강, 프레임을 그렸는데 줄이 없음 → 빨강, boot 체인처럼 안 그렸으면 통과). 진입 자가검사
+    `require_verify_verdict`. 세 회차 약 2만 3천 프레임 전부 `ok`, mutation(`renderBackdrop` 호출 뺌)은 31프레임 `mismatch`.
+    verify 한 번은 게이트 TCG에서 중앙값 약 7ms — lanes 시간은 300 · 328 · 339초로 CR-M0(296초)의 흔들림 안이다.
+    둘째 회차에 FW 검사 18 · DC boot 7이 verify와 무관하게 빨갰고 혼자서는 3/3 · 1/1 초록이었다 — FW의 숨은 경주(한 번짜리 `nc`와
+    SLIRP의 묵은 SYN)는 `carryover.md`에 적었다.
+  - 다음: DR-M2 plan. 행 비교 모듈(design 결정 9, `verify.zig`에 같이)과 호스트 무작위 검사, 패널마다 지난 `cells()` 사본, 통째로
+    다시 그리는 조건(결정 3), overlay 행(결정 4), 행 지우고 다시 칠하기(결정 5), clip(결정 6 — 상한과 합치기, virtio-gpu · simpledrm이
+    clip 여럿을 어떻게 받는지). `verifyFrame`은 그대로 두고 실제 경로만 바꾼다 — 그림자 경로가 `renderBackdrop` · `renderPane` ·
+    `renderOverlay`를 그대로 부르므로 그 함수들의 모양을 바꾸면 그림자도 같이 바뀐다는 것을 plan이 기억한다. 끝나면 같은 프로브
+    (`probe/patch.pl`, `split.pl`은 M0 HEAD 전용이라 anchor를 다시 고른다)로 (a) frame 2.45ms와 비교하고 M3(행 dirty 비트)을 다시 판단한다.
   - ghostty를 참고로 읽을 때는 `/Users/dp/Repository/_study/ghostty`(최신)다. `terminal/ghostty-src`는 빌드 입력이다
     (`docs/decisions/reference_ghostty_source.md`).
 - 그 전에 닫은 것은 Clock Reload(CR-M0, 2026-10-28). design `docs/specs/2026-10-27-tars-clock-reload-design.md`, 기억
@@ -67,7 +81,8 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(CR-M0): 22/22, 9분 47초(prebuild 289초 + lanes 296초 — LI-M1은 402 + 334초, prebuild는 cold build라 흔들린다). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(DR-M1 셋째 회차): 22/22, 9분 50초(prebuild 288초 + lanes 300초 — 같은 날 앞 두 회차는 389 + 339 · 322 + 328초,
+  prebuild는 cold build라 흔들린다). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
