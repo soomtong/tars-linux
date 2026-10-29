@@ -1,4 +1,4 @@
-//! `verify.zig`의 산수를 호스트에서 본다(DR-M1 plan Task 1).
+//! `verify.zig`의 산수를 호스트에서 본다(DR-M1 plan Task 1, 행 비교는 DR-M2 plan Task 1).
 //!
 //! 화면은 폭 8픽셀(32바이트) · pitch 40(패딩 8바이트) · 격자 원점 20 · 행 높이 16이다.
 //! 높이는 검사마다 다르다 — 격자 4행이면 20 + 64 + 20 = 104, 10행이면 200.
@@ -67,4 +67,72 @@ pub fn main() !void {
     try expectRows(verify.compare(&c, &d, WIDTH_BYTES, PITCH, 200, grid(10)), 11, &.{ 0, 1, 2, 3, 4, 5, 6, 7 }, "열한 행");
     _ = &c;
     std.debug.print("verify_test: 여덟을 넘으면 수만 센다 OK\n", .{});
+
+    try rowTests();
+}
+
+/// `vt.CellGlyph`와 같은 모양의 가짜 셀(DR-M2 plan Task 1). `vt.zig`를 import하면 ghostty가
+/// 따라오므로 여기서 다시 적는다 — 필드 순서와 크기가 같아 `dirtyRows`의 패딩 단언도 같이 본다.
+const Cell = struct { codepoint: u32, col: u16, row: u16, fg: u32, bg: u32 };
+
+fn cell(row: u16, col: u16, cp: u32) Cell {
+    return .{ .codepoint = cp, .col = col, .row = row, .fg = 0xFFFFFF, .bg = 0x102030 };
+}
+
+fn expectStarts(got: []const u32, want: []const u32, what: []const u8) !void {
+    if (!std.mem.eql(u32, got, want)) return fail("{s}: starts={any}, want {any}", .{ what, got, want });
+}
+
+fn expectDirty(got: []const bool, want: []const bool, n: u16, what: []const u8) !void {
+    if (!std.mem.eql(bool, got, want)) return fail("{s}: dirty={any}, want {any}", .{ what, got, want });
+    var count: u16 = 0;
+    for (want) |d| if (d) {
+        count += 1;
+    };
+    if (n != count) return fail("{s}: n={d}, want {d}", .{ what, n, count });
+}
+
+/// 행 비교(DR-M2 plan 확정 6 · 11). 격자는 4행이다.
+fn rowTests() !void {
+    var starts: [5]u32 = undefined;
+
+    // 검사 6. 빈 목록 — 모든 행이 0에서 시작하고 끝난다.
+    if (!verify.rowStarts(Cell, &.{}, &starts)) return fail("빈 목록이 false다", .{});
+    try expectStarts(&starts, &.{ 0, 0, 0, 0, 0 }, "빈 목록");
+    std.debug.print("verify_test: 빈 목록의 행 시작은 전부 0이다 OK\n", .{});
+
+    // 검사 7. 0행 둘 · 2행 하나 — 1행과 3행은 비어 있다.
+    const a = [_]Cell{ cell(0, 0, 'a'), cell(0, 1, 'b'), cell(2, 5, 'c') };
+    if (!verify.rowStarts(Cell, &a, &starts)) return fail("정렬된 목록이 false다", .{});
+    try expectStarts(&starts, &.{ 0, 2, 2, 3, 3 }, "행 셋");
+    std.debug.print("verify_test: 빈 행은 앞 행의 끝에서 시작하고 끝난다 OK\n", .{});
+
+    // 검사 8. 행이 거꾸로 오거나 격자를 넘으면 false다.
+    const back = [_]Cell{ cell(2, 0, 'a'), cell(1, 0, 'b') };
+    if (verify.rowStarts(Cell, &back, &starts)) return fail("거꾸로 온 행이 true다", .{});
+    const over = [_]Cell{ cell(0, 0, 'a'), cell(4, 0, 'b') };
+    if (verify.rowStarts(Cell, &over, &starts)) return fail("격자를 넘는 행이 true다", .{});
+    std.debug.print("verify_test: 거꾸로 온 행과 격자 밖 행은 false다 OK\n", .{});
+
+    // 검사 9. 같은 목록은 dirty가 없다. 2행의 색 하나가 바뀌면 2행만, 0행에 셀이 하나 늘면
+    // 0행만(길이가 다르다), 비어 있던 3행에 셀이 생기면 3행만 dirty다.
+    // 검사 8의 false 호출이 `starts`를 반쯤 덮었으므로 `a`의 것을 다시 계산한다.
+    _ = verify.rowStarts(Cell, &a, &starts);
+    var dirty: [4]bool = undefined;
+    var starts_b: [5]u32 = undefined;
+    var b = a;
+    _ = verify.rowStarts(Cell, &b, &starts_b);
+    try expectDirty(&dirty, &.{ false, false, false, false }, verify.dirtyRows(Cell, &a, &starts, &b, &starts_b, &dirty), "같은 목록");
+
+    b[2].fg = 0xCC6666;
+    try expectDirty(&dirty, &.{ false, false, true, false }, verify.dirtyRows(Cell, &a, &starts, &b, &starts_b, &dirty), "2행의 색");
+
+    const grown = [_]Cell{ cell(0, 0, 'a'), cell(0, 1, 'b'), cell(0, 2, 'x'), cell(2, 5, 'c') };
+    _ = verify.rowStarts(Cell, &grown, &starts_b);
+    try expectDirty(&dirty, &.{ true, false, false, false }, verify.dirtyRows(Cell, &a, &starts, &grown, &starts_b, &dirty), "0행이 늘었다");
+
+    const tail = [_]Cell{ cell(0, 0, 'a'), cell(0, 1, 'b'), cell(2, 5, 'c'), cell(3, 0, 'z') };
+    _ = verify.rowStarts(Cell, &tail, &starts_b);
+    try expectDirty(&dirty, &.{ false, false, false, true }, verify.dirtyRows(Cell, &a, &starts, &tail, &starts_b, &dirty), "3행이 생겼다");
+    std.debug.print("verify_test: 바뀐 행만 dirty다 OK\n", .{});
 }

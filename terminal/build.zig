@@ -212,6 +212,22 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(image_test);
 
+    // dirty_test도 호스트에서 돈다(DR-M2). 진짜 `vt.Screen`에 고정 seed의 무작위 조작을 넣고
+    // `verify.zig`의 행 비교를 무식한 행별 비교와 대조한다 — `image_test`와 같은 배선이다
+    // (vt.zig를 통해 ghostty-vt와 stb가 따라온다).
+    const dirty_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/dirty_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    dirty_test_mod.addImport("ghostty-vt", ghostty_host_dep.module("ghostty-vt"));
+    addStbImage(b, dirty_test_mod);
+    const dirty_test = b.addExecutable(.{
+        .name = "dirty_test",
+        .root_module = dirty_test_mod,
+    });
+    b.installArtifact(dirty_test);
+
     const input_test_mod = b.createModule(.{
         .root_source_file = b.path("src/input_test.zig"),
         .target = host_target,
@@ -454,6 +470,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
     test_step.dependOn(&b.addRunArtifact(verify_test).step);
+    test_step.dependOn(&b.addRunArtifact(dirty_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

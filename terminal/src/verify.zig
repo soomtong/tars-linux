@@ -1,7 +1,11 @@
-//! verify 모드의 비교(DR-M1, design 결정 7). 실제 fb와 그림자 fb의 픽셀을 행마다 대조해
-//! 다른 격자 행을 센다. 순수하다 — fb도 libc도 로그도 모른다. 줄을 찍는 것은 `main.zig`의
-//! `render`다. DR-M2의 행 비교(design 결정 9 — 지난 셀 목록과 이번 셀 목록에서 dirty 행을
-//! 내는 함수)도 이 파일에 들어온다.
+//! 렌더의 순수한 비교 둘. 하나는 verify 모드의 픽셀 비교(DR-M1, design 결정 7) — 실제 fb와
+//! 그림자 fb를 행마다 대조해 다른 격자 행을 센다. 다른 하나는 부분 갱신의 행 비교(DR-M2,
+//! design 결정 9) — 지난 프레임의 셀 목록과 이번 목록에서 dirty 행을 낸다. 둘 다 fb도 libc도
+//! 로그도 모른다. 줄을 찍는 것은 `main.zig`의 `render`다.
+//!
+//! 셀 타입을 `comptime`으로 받는 이유는 이 파일이 `vt.zig`를 import하지 않기 위해서다 —
+//! `vt.zig`는 ghostty를 끌고 오고, `verify_test`는 ghostty 없이 돈다. 무작위 검사(`dirty_test`)가
+//! 진짜 `vt.CellGlyph`로 같은 함수를 돌린다.
 const std = @import("std");
 
 /// 보고에 담는 격자 행의 최대 수. 잔상이 어디서 났는지 보는 데는 앞 몇 행이면 되고,
@@ -54,4 +58,54 @@ pub fn compare(a: [*]const u8, b: [*]const u8, width_bytes: usize, pitch: usize,
         r.rows += 1;
     }
     return r;
+}
+
+/// 행마다 시작 위치. `starts[r]..starts[r+1]`이 r행의 셀이다(`starts`는 `rows + 1`칸).
+/// 목록이 행 오름차순이 아니면 false다 — `cells()`는 행 바깥 · 열 안쪽 순서로 돌므로 늘
+/// 오름차순이지만, 그것은 `vt.zig`의 성질이지 이 함수가 아는 계약이 아니다. false면 부르는
+/// 쪽이 그 패널을 통째로 그린다(M2 plan 확정 6).
+///
+/// `rows`를 넘는 행이 있어도 false다. `starts`가 그 행을 가리킬 수 없다.
+pub fn rowStarts(comptime Cell: type, cells: []const Cell, starts: []u32) bool {
+    const rows = starts.len - 1;
+    var row: usize = 0;
+    starts[0] = 0;
+    for (cells, 0..) |cell, i| {
+        const r: usize = cell.row;
+        if (r >= rows) return false;
+        if (r < row) return false;
+        // 비어 있는 행들(row..r)은 이 셀에서 시작하고 끝난다.
+        while (row < r) : (row += 1) starts[row + 1] = @intCast(i);
+    }
+    while (row < rows) : (row += 1) starts[row + 1] = @intCast(cells.len);
+    return true;
+}
+
+/// 두 목록을 행마다 비교해 다른 행에 `dirty[r] = true`를 쓰고 그 수를 돌려준다. 같은 행은
+/// 길이가 같고 바이트가 같은 행이다 — 셀의 모든 필드(글자 · 자리 · 색 둘)가 들어간다.
+///
+/// 바이트 비교가 패딩을 읽지 않으려면 `Cell`에 패딩이 없어야 한다. 아래 `comptime` 단언이
+/// 그것을 본다 — `vt.CellGlyph`는 4 + 2 + 2 + 4 + 4 = 16바이트다. 패딩이 생기면 컴파일이
+/// 막히고, 그때는 필드마다 비교하는 판으로 바꾼다.
+pub fn dirtyRows(
+    comptime Cell: type,
+    prev: []const Cell,
+    prev_starts: []const u32,
+    cur: []const Cell,
+    cur_starts: []const u32,
+    dirty: []bool,
+) u16 {
+    comptime {
+        var sum: usize = 0;
+        for (@typeInfo(Cell).@"struct".field_types) |T| sum += @sizeOf(T);
+        if (sum != @sizeOf(Cell)) @compileError("dirtyRows: " ++ @typeName(Cell) ++ " has padding; compare fields instead of bytes");
+    }
+    var n: u16 = 0;
+    for (dirty, 0..) |*d, r| {
+        const a = prev[prev_starts[r]..prev_starts[r + 1]];
+        const b = cur[cur_starts[r]..cur_starts[r + 1]];
+        d.* = !std.mem.eql(u8, std.mem.sliceAsBytes(a), std.mem.sliceAsBytes(b));
+        if (d.*) n += 1;
+    }
+    return n;
 }
