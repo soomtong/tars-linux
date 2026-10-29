@@ -202,6 +202,27 @@ pub const Framebuffer = struct {
         var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
         try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
     }
+
+    /// 같은 치수의 그림자 버퍼(DR-M1). 모든 그리기 함수가 `Framebuffer`를 값으로 받으므로,
+    /// `pixels`만 heap 메모리를 가리키는 값을 하나 더 만들면 그 위에 같은 그림이 그려진다.
+    /// verify 모드가 "같은 프레임을 통째 경로로 한 번 더 그려 비교할" 자리다.
+    ///
+    /// `fd`가 -1이고 id가 전부 0이다 — 이 값으로 `present` · `modeset`을 부르면 안 된다.
+    /// 화면에 거는 것은 원본 하나뿐이다.
+    pub fn shadow(self: Framebuffer, pixels: [*]u8) Framebuffer {
+        return .{
+            .fd = -1,
+            .width = self.width,
+            .height = self.height,
+            .pitch = self.pitch,
+            .pixels = pixels,
+            .crtc_id = 0,
+            .fb_id = 0,
+            .connector_id = 0,
+            .mode = self.mode,
+            .dirty = false,
+        };
+    }
 };
 
 fn getResources(allocator: std.mem.Allocator, fd: c_int) !struct {

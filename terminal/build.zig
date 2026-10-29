@@ -301,6 +301,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(layout_test);
 
+    // verify_test도 호스트에서 돈다(DR-M1). `layout_test`와 같은 자리다 — 바이트 두 벌을
+    // 행마다 대조하는 순수 계산이라 libc도 번역도 필요 없다.
+    const verify_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/verify_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const verify_test = b.addExecutable(.{
+        .name = "verify_test",
+        .root_module = verify_test_mod,
+    });
+    b.installArtifact(verify_test);
+
     // pointer_test도 호스트에서 돈다(PD-M0). `status_test`와 같은 자리다 —
     // `pointer.zig`가 `c_input`(linux/input.h 번역)을 쓰므로 libc가 따라온다.
     // 분류 · 디코더 · 좌표의 산수만 보고 fd는 안 연다.
@@ -440,6 +453,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
+    test_step.dependOn(&b.addRunArtifact(verify_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

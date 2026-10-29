@@ -15,6 +15,7 @@ const pty = @import("pty.zig");
 const screen_args = @import("screen_args");
 const status = @import("status.zig");
 const touchpad = @import("touchpad.zig");
+const verify = @import("verify.zig");
 const vt = @import("vt.zig");
 
 // C 헤더는 build.zig가 번역해 `c_poll`로 넘긴다(ZU-M1). fortify를 끄는 유일한
@@ -399,12 +400,13 @@ fn drawRun(
     return col;
 }
 
-/// 화면 전체를 지우고 셀 목록을 다시 그린다. 키 입력 빈도에서 부분 갱신은
-/// 불필요한 복잡도다(YAGNI) — `RenderState`가 dirty를 주지만 쓰지 않는다.
+/// 화면 전체를 지우고 셀 목록을 다시 그린다. 부분 갱신은 Dirty Rows(DR)가 넣는다 —
+/// DR-M1은 verify 모드(`App.verifyFrame`)만 세웠고 그리기는 아직 통째다. `RenderState`가
+/// 주는 dirty 비트는 안 쓴다(DR design 결정 2 — dirty의 출처는 `cells()`의 사본이다).
 ///
 /// 한 프레임이 세 단계다(WP-M1). `renderBackdrop` → 패널마다 `renderPane`
-/// → `renderFinish`. 패널 하나를 그리는 일이 둘째이고, WP 전의 `render`
-/// 본문이 거의 그대로 그 안에 있다.
+/// → `renderOverlay` → `presentFrame`(DR-M1 전에는 뒤의 둘이 `renderFinish` 하나였다).
+/// 패널 하나를 그리는 일이 둘째이고, WP 전의 `render` 본문이 거의 그대로 그 안에 있다.
 ///
 /// 하나의 함수로 안 묶은 이유는 그리는 순서와 계산하는 순서가 엇갈리기
 /// 때문이다. 포커스 패널을 마지막에 그려야 덤프 넷이 읽는 `cell_buf` ·
@@ -504,8 +506,10 @@ fn renderPane(
     if (cursor) |cm| if (cm.px) |cr| fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
-/// 프레임을 끝낸다 — 포커스 패널의 프롬프트와 상태 줄을 얹고 내보낸다.
-fn renderFinish(
+/// 프레임의 overlay — 포커스 패널의 프롬프트와 상태 줄. DR-M1 전에는 `renderFinish`가
+/// 이것과 아래 `presentFrame`을 함께 했다. 가른 이유는 verify 모드다(DR design 위험 2) —
+/// 그림자 버퍼에는 여기까지 그리고, 화살표와 `present`는 실제 fb에만 한다.
+fn renderOverlay(
     fb: drm.Framebuffer,
     cache: *font.Cache,
     prompt: ?Prompt,
@@ -513,12 +517,6 @@ fn renderFinish(
     // import하는데 Zig는 안쪽 블록에서도 이름 가리기를 막는다
     // (HI-M1 실측 8 · SP-M0 실측 9와 같은 자리).
     st: Status,
-    // 화살표(PD-M1). `want`이 null이면 안 그린다. 화면 전체를 방금 다시
-    // 칠했으므로 옛 화살표는 이미 지워졌고 저장한 픽셀은 낡았다 — 되돌리지
-    // 않고 잊는다(`forget`). 그리고 `present` 바로 앞에서 새로 저장하고 그린다
-    // (PD design 결정 4).
-    sprite: *pointer.Sprite,
-    want: ?pointer.Spot,
 ) !?PromptInk {
     // 그린 결과를 돌려준다(SH-M2). 게이트가 "무엇을 그렸는가"를 볼 창구가
     // 이것이고, 반전 구간의 픽셀 범위를 여기서 나르므로 `dumpPromptInk`가
@@ -529,14 +527,26 @@ fn renderFinish(
     // 프롬프트와 안 겹친다 — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
     try drawStatus(fb, cache, st);
+    return ink;
+}
 
+/// 프레임을 내보낸다 — 화살표를 얹고 `present`. 실제 fb에만 부른다(그림자 버퍼에는
+/// 안 된다, `drm.Framebuffer.shadow`). DR-M2가 clip을 넘길 자리가 여기 하나다.
+fn presentFrame(
+    fb: drm.Framebuffer,
+    // 화살표(PD-M1). `want`이 null이면 안 그린다. 화면 전체를 방금 다시
+    // 칠했으므로 옛 화살표는 이미 지워졌고 저장한 픽셀은 낡았다 — 되돌리지
+    // 않고 잊는다(`forget`). 그리고 `present` 바로 앞에서 새로 저장하고 그린다
+    // (PD design 결정 4).
+    sprite: *pointer.Sprite,
+    want: ?pointer.Spot,
+) !void {
     // 무엇보다 위에 그린다 — 프롬프트와 상태 줄 뒤, `present` 앞이다. 그래서
     // 아래 덤프들이 화살표 픽셀을 읽는다(design 결정 4가 받아들였다). 화살표가
     // 보이는 것은 사람이 포인터를 움직인 뒤뿐이라 다른 체인의 덤프는 안 바뀐다.
     sprite.forget();
     if (want) |s| sprite.show(fb, s);
     try fb.present();
-    return ink;
 }
 
 /// 한 층의 이미지를 z 순으로 그린다. 산수는 전부 `image.zig`에 있다.
@@ -2828,6 +2838,26 @@ const PointerWire = struct {
 /// 모양은 같은 파일의 `PointerWire`(PD-M4) · `Dictation` · `BatteryState`와 같다 — 상태
 /// 묶음에 그것을 만지는 함수가 붙는다. 다른 것은 범위다. 저쪽은 바퀴의 한 단계이고 이쪽은
 /// 프로세스 전체다.
+/// verify 모드의 그림자(DR-M1). `fb`는 `drm.Framebuffer.shadow` — heap 위의 같은 치수
+/// 버퍼다. `cell_buf` · `img_buf`는 포커스 아닌 패널의 `cells()` · `images()`를 다시 받을
+/// 자리다 — `App`의 것을 쓰면 덤프 열둘이 읽는 포커스 패널의 목록을 덮는다.
+const Verify = struct {
+    fb: drm.Framebuffer,
+    cell_buf: []vt.CellGlyph,
+    img_buf: [16]vt.ImagePlacement = undefined,
+};
+
+/// 한 프레임의 verify 결과. `us`는 그림자에 그리고 비교하는 데 든 시간이다 — `frame_us`
+/// 안에 들어 있으므로 빼서 읽는다.
+const Verified = struct {
+    report: verify.Report,
+    us: i96,
+};
+
+/// 이 파일이 initrd에 있으면 verify가 켜진다. `kernel/make_initrd.sh`가 `TARS_RENDER_VERIFY=1`일
+/// 때 넣고, 루트 게이트와 `make check`가 그 변수를 둔다. 배포 ISO에는 없다.
+const VERIFY_MARKER = "/etc/tars/render-verify";
+
 const App = struct {
     // ── 화면 ───────────────────────────────────────────────────────────
     io: std.Io,
@@ -2859,6 +2889,9 @@ const App = struct {
     /// kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
     /// `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
     img_buf: [16]vt.ImagePlacement = undefined,
+    /// verify 모드(DR-M1, design 결정 7). `VERIFY_MARKER`가 열릴 때만 있다. 프레임마다 같은
+    /// 프레임을 이 그림자에 통째로 그려 실제 fb와 비교한다(`verifyFrame`).
+    verify: ?Verify = null,
 
     // ── 셸 ─────────────────────────────────────────────────────────────
     /// 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 분할(WP-M1)과
@@ -3020,6 +3053,7 @@ const App = struct {
             .battery_clock = undefined,
         };
         try self.openScreen();
+        try self.openVerify();
         const a = try self.openKeyboard(init);
         try self.spawnFirst(a);
         self.openPointers();
@@ -3049,6 +3083,22 @@ const App = struct {
         // 참조만 하므로 캐시보다 오래 살아야 한다.
         self.cache = try font.Cache.init(self.allocator, font_data);
         logline.print("terminal: font cache ready (lazy)\n", .{});
+    }
+
+    /// 준비 1b. verify 모드(DR-M1). 표식 파일이 열리면 그림자 버퍼와 셀 버퍼를 잡는다.
+    /// 없으면 아무것도 안 한다 — 배포 ISO의 경로다. init의 argv 계약(`screen_args`)을 안
+    /// 거치는 이유는 이것이 설정이 아니라 게이트의 빌드 산출물이기 때문이다. 표식이 조용히
+    /// 빠지면 아래 `on` 줄도 프레임의 `ok` 줄도 없고, 루트 게이트가 그것을 빨강으로 읽는다.
+    fn openVerify(self: *App) !void {
+        const fd = std.c.open(VERIFY_MARKER, .{ .ACCMODE = .RDONLY, .CLOEXEC = true });
+        if (fd < 0) return;
+        _ = std.c.close(fd);
+        const pixels = try self.allocator.alloc(u8, @as(usize, self.fb.pitch) * self.fb.height);
+        self.verify = .{
+            .fb = self.fb.shadow(pixels.ptr),
+            .cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows),
+        };
+        logline.print("terminal: verify> on bytes={d}\n", .{pixels.len});
     }
 
     /// 준비 2. init이 argv에 실어 보낸 값 전체를 읽고(SA-M1) 키보드 장치를 연다.
@@ -3275,6 +3325,10 @@ const App = struct {
         if (self.dict.phase != null) signalDictation(&self.dict, .TERM);
         self.allocator.free(self.screen_line_buf);
         self.allocator.free(self.cell_buf);
+        if (self.verify) |v| {
+            self.allocator.free(v.cell_buf);
+            self.allocator.free(v.fb.pixels[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
+        }
         for (self.workspaces) |slot| {
             const w = slot orelse continue;
             for (w.panes) |maybe| {
@@ -3970,8 +4024,9 @@ const App = struct {
         frame_us: i96 = 0,
     };
 
-    /// 바퀴 9. 프레임 하나를 그린다 — 포커스 아닌 패널 → 포커스 패널 → 프롬프트 · 상태 줄 ·
-    /// 화살표(`renderFinish`). 덤프가 읽을 것은 `frame`에 남긴다.
+    /// 바퀴 9. 프레임 하나를 그린다 — 포커스 아닌 패널 → 포커스 패널 → 프롬프트 · 상태 줄
+    /// (`renderOverlay`) → verify(`verifyFrame`, 켜져 있을 때) → 화살표 · `present`(`presentFrame`).
+    /// 덤프가 읽을 것은 `frame`에 남긴다.
     fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
         // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
         // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
@@ -4055,12 +4110,71 @@ const App = struct {
         // render 사이라 안전하다.
         frame.imgs = focus.screen.images(&self.img_buf);
         try renderPane(self.fb, &self.cache, frame.cells, frame.imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
-        frame.prompt_ink = try renderFinish(self.fb, &self.cache, frame.prompt, frame.status_line, &self.sprite, want);
+        frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line);
+        // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
+        // 화살표가 실제 fb에 오르기 전에 한다.
+        const verified = try self.verifyFrame(frame, ws);
+        try presentFrame(self.fb, &self.sprite, want);
         frame.frame_us = @divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);
         if (!self.first_frame_timed) {
             self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
         }
+        // `frame_us` 뒤에 찍는다 — 줄을 쓰는 시간이 그리기 시간에 안 든다. 덤프 열둘보다 앞이라
+        // 게이트의 `last_frame`(마지막 `screen>`부터) 밖이고, 체인의 덤프 순서 계약에 안 든다.
+        if (verified) |v| {
+            if (v.report.ok()) {
+                logline.print("terminal: verify> ok us={d}\n", .{v.us});
+            } else {
+                // 한 줄을 한 번의 write로 낸다(AL design 3) — 목록을 먼저 짓는다.
+                var list: [verify.MAX_FIRST * 6]u8 = undefined;
+                var n: usize = 0;
+                for (v.report.listed(), 0..) |row, i| {
+                    if (i != 0) {
+                        list[n] = ',';
+                        n += 1;
+                    }
+                    n += (std.fmt.bufPrint(list[n..], "{d}", .{row}) catch unreachable).len;
+                }
+                logline.print("terminal: verify> mismatch rows={d} first={s} us={d}\n", .{ v.report.rows, list[0..n], v.us });
+            }
+        }
+    }
+
+    /// verify 모드(DR-M1, design 결정 7 · 8). 같은 프레임을 그림자 버퍼에 통째 경로로 다시
+    /// 그리고 실제 fb와 픽셀 행마다 비교한다. 순서는 위 `render`와 같다 — `renderBackdrop` →
+    /// 포커스 아닌 패널 → 포커스 패널 → `renderOverlay`. 화살표는 없다(`presentFrame` 전에
+    /// 부른다). 꺼져 있으면 null이다.
+    ///
+    /// 포커스 패널은 `frame.cells` · `frame.imgs`를 그대로 쓴다 — `cells()`를 다시 부르면
+    /// `self.cell_buf`를 덮고, 덤프 열둘이 그것을 읽는다. 포커스 아닌 패널은 실제 경로가 이미
+    /// 버린 목록이라 그림자의 `cell_buf`에 다시 받는다. 한 프레임에 `cells()`를 두 번 부르는
+    /// 것은 같은 답을 전제한다 — 어긋나면 `mismatch`가 그것을 보여 준다(design 결정 8).
+    ///
+    /// DR-M1에서는 실제 경로도 통째라 모든 프레임이 `ok`여야 한다. DR-M2가 실제 경로를 부분
+    /// 갱신으로 바꾸면 이 함수가 잔상의 판정이 된다.
+    fn verifyFrame(self: *App, frame: *const Frame, ws: *Workspace) !?Verified {
+        const v = if (self.verify) |*v| v else return null;
+        const start = std.Io.Clock.now(.awake, self.io);
+        renderBackdrop(v.fb, &ws.tree, self.whole);
+        for (&ws.panes, 0..) |*slot, leaf| {
+            const p = if (slot.*) |*p| p else continue;
+            if (leaf == ws.focus) continue;
+            const p_cells = try p.screen.cells(v.cell_buf);
+            try renderPane(v.fb, &self.cache, p_cells, p.screen.images(&v.img_buf), p.screen.defaultBg(), p.rect, p.screen.cursorMark());
+        }
+        const focus = frame.focus;
+        try renderPane(v.fb, &self.cache, frame.cells, frame.imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
+        _ = try renderOverlay(v.fb, &self.cache, frame.prompt, frame.status_line);
+        const report = verify.compare(
+            self.fb.pixels,
+            v.fb.pixels,
+            @as(usize, self.fb.width) * 4,
+            self.fb.pitch,
+            self.fb.height,
+            .{ .top = GRID_Y, .row_height = ROW_HEIGHT, .rows = self.rows },
+        );
+        return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000) };
     }
 
     /// 바퀴 10. 그린 프레임의 덤프 열둘. 순서가 게이트의 계약이다 — `dumpCursor`는
