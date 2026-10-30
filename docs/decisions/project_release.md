@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "첫 공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc)과 0.1.1(2026-10-24, tag v0.1.1 = 1f2978f) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -34,6 +34,20 @@ notes는 한국어로 썼다 — 다운로드 · 체크섬 확인, 요구 사항
 0.1.0 뒤의 세 서브프로젝트(BV · GF · ZU)를 담은 도구 층 갱신이다. 노트는 0.1.0 것을 두고 "0.1.0에서 달라진 것" 절을 앞에 더했다.
 절차는 아래 1~6을 그대로 밟았고(1의 게이트는 `VERSION` 커밋에서 다시 돌렸다, 10분 34초), 7(소개 페이지)은 사용자 결정으로 건너뛰었다가 2026-10-27에 사용자의 지시로 `releases`에 넣었다.
 smoke 로그 첫 줄이 `tars-init: starting as PID 1 (TARS 0.1.1)`로 꼬리표가 없었다 — BV의 버전 글자가 처음으로 릴리즈에서 쓰였다.
+
+## 0.1.2 (2026-10-30)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.1.2` (annotated) → `d2f9ef7` (`Release 0.1.2`, SB-M0 뒤. 그 커밋의 루트 게이트 22/22, 10분 5초) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.2 (Latest) |
+| ISO | `tars-0.1.2-x86_64.iso`, 105,799,680 B (0.1.1보다 6.0MB 작음 — LI-M1이 initrd 사본의 디버그 정보를 뗐다) |
+| sha256 | `de72b22e63d942f3bcde81f8c1ab63b3ff1ea211d64d19bdd667fd21009e2a8d` |
+
+0.1.1 뒤의 열 서브프로젝트(SA · MS · HC · LS · LI · WP-M3 · LE · CR · DR · SB)를 담았고 본론은 터미널의 부분 갱신(DR + SB)이다. 노트는
+0.1.1의 틀에 "0.1.1에서 달라진 것" 절을 새로 썼고, "알려진 한계"의 "CPU 전체 프레임 갱신" 줄을 "CPU다(GPU 가속 없음), 바뀐 행과 상태
+줄만"으로 고쳤다. 절차 1~7을 그대로 밟았다 — 1의 게이트는 `VERSION` 커밋에서 돌렸고, smoke 첫 줄이 `TARS 0.1.2`(꼬리표 없음), 7은
+같은 날 `releases`에 넣었다. 사용자 요청은 "release this build to 0.1.2 version into github release"(2026-10-30).
 
 ## 배포 절차 (다음 버전도 이대로)
 

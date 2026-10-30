@@ -85,7 +85,8 @@
   `main`은 `decode` 한 줄이다. `Args`에 기본값이 없어 칸을 더하고 init이 안 채우면 컴파일이 막힌다. argv의 모양(위치 아홉 칸)과
   로그 줄은 그대로다. 소개 페이지(`gh-pages` `data.js`)에는 안 넣었다 — 기능 추가가 아닌 내부 작업(ZU · SA)은 타임라인에서
   건너뛴다(사용자 결정, 2026-10-25).
-- 최신 공개 버전 0.1.1(2026-10-24) — tag `v0.1.1` = `1f2978f`, GitHub release에 `tars-0.1.1-x86_64.iso`(107 MiB)와 `SHA256SUMS`.
+- 최신 공개 버전 0.1.2(2026-10-30) — tag `v0.1.2` = `d2f9ef7`, GitHub release에 `tars-0.1.2-x86_64.iso`(101 MiB)와 `SHA256SUMS`.
+  0.1.1 뒤의 열 서브프로젝트(SA~SB)를 담았고 본론은 부분 갱신(DR + SB)이다(`docs/decisions/project_release.md`의 0.1.2 절).
   다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 한다 — BV부터 `VERSION` 커밋 → tag → `make iso` 순서다.
 - 같은 날 그 앞에 Zig Upgrade(ZU-M2)와 Gate Flakes(GF-M0~M2)를 닫았다 — 컨테이너 Zig 0.17.0, ghostty `3d07ef9`. 호스트 macOS의
   0.17(`/opt/homebrew/bin/zig`)로 `fmt --check` · `ast-check`를 돌릴 수 있고(명령은 lessons "범용 명령", `shared/`도 포함), 0.17
