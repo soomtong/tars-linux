@@ -1,7 +1,7 @@
 # TARS Shellcheck Notes — Design
 
 Date: 2026-10-31
-Status: 진행 중 — SN-M0
+Status: 끝났다 — SN-M0(2026-10-31, note 46 → 0, `make quick` · CI `host`가 note까지 판정, 루트 게이트 22/22 10분 4초(prebuild 301 + lanes 302초), verify 전부 통과). plan은 `docs/plans/2026-10-31-tars-shellcheck-notes-sn-m0.md`
 
 GH-M1이 남긴 다음 후보 셋 가운데 "shellcheck note 46"에서 시작한다. 사용자가 골랐다(2026-10-31).
 

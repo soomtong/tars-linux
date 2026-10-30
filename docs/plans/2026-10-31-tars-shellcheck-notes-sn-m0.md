@@ -2,7 +2,7 @@
 
 Date: 2026-10-31
 Design: `docs/specs/2026-10-31-tars-shellcheck-notes-design.md`
-Status: 진행 중
+Status: 끝났다(2026-10-31)
 
 ## 착수 전에 확정한 것
 
@@ -47,7 +47,7 @@ design의 확인 1~5에 더해, plan을 쓰며 읽은 것.
 
 ## 결과
 
-### Task 1
+### Task 1 (`6a1e4aa`)
 
 - `git diff --stat`: 19파일, +44 −16. 지운 16줄은 design 결정 4 표의 자리 전부(`check.sh:133`은 SC2086 · SC2116이 한 줄)이고, 더한
   44줄은 지시자 28과 그 16줄의 새 꼴이다. `git diff | rg '^-[^-]'`로 지운 줄을 하나씩 읽었다.
@@ -59,3 +59,13 @@ design의 확인 1~5에 더해, plan을 쓰며 읽은 것.
   지시자 한 줄.
 - 조각(scratchpad): `bash -n site/capture.sh` ok, `tr '[:upper:]' '[:lower:]' <<<Q` → `q`, `$(echo $hits)`와 `${hits//$'\n'/ }`가
   `12 40 77`로 같다, `printf '%s\n' $S | wc -l`과 `wc -l <<<"$S"`가 셋일 때 3 · 비었을 때 1로 같다.
+
+### Task 2
+
+- 루트 게이트(`out/gate-logs/20261030-160610`): 22/22, 10분 4초(prebuild 301 + lanes 302초). `verify lines` 합 8115, `VERIFY_OK_LINE`
+  (`on bytes=` · `ok us=`) 밖의 줄 0, `failed` 0바이트.
+- `render`의 `=== typing printf …` 열 줄을 지난 회차(`20261030-154626`)와 `diff` — 같다. `audio`의 `SOF for 19 …` 줄도 같다.
+  게이트 로그를 `rg`로 바로 세면 `ok` 8052 · `on` 63으로 합이 8115보다 작다 — 게이트는 `tlog`로 printk에 잘린 줄을 이어 붙여
+  센다. 숫자는 게이트의 줄을 읽는다.
+- CI run 41088453820(`6a1e4aa`): 두 job 초록. `host` 2분 25초, 로그 `quick_check: shellcheck 51 files` → `quick_check: PASS`.
+  `container` 7분 42초.

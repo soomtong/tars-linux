@@ -1,8 +1,17 @@
-# HANDOFF: Font in Repo(FR-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: Shellcheck Notes(SN-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-31)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Font in Repo(FR-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 "미러 대신 저장소
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Shellcheck Notes(SN-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
+  design `docs/specs/2026-10-31-tars-shellcheck-notes-design.md`, plan `docs/plans/2026-10-31-tars-shellcheck-notes-sn-m0.md`, 기억은
+  `docs/decisions/project_github_actions.md`의 SN-M0 절. `quick_check.sh`(= `make quick` = CI `host`)의 shellcheck가 `-S style`로
+  note까지 판정한다 — 새 note 하나가 push를 빨갛게 한다. 의도한 것은 그 줄 위에 `# shellcheck disable=SCxxxx # 이유`(부르는
+  자리 · 이름이 오는 곳을 적는다). 46건 = 고침 18(출력 같은 꼴) + 지시자 28.
+  - 함정: shellcheck 0.11은 파일 끝 최상위 명령이 `exit`이면 trap 핸들러 · 이름으로 넘긴 콜백을 SC2329로 찍는다. 함수 위
+    지시자로 표시한다(전역으로 끄지 않는다).
+  - 숫자: 루트 게이트 22/22, 10분 4초(prebuild 301 + lanes 302초), verify 8115줄 통과. `render` typing 줄 열이 지난 회차와 같다.
+    CI host 2분 25초 · container 7분 42초. 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Font in Repo(FR-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 "미러 대신 저장소
   안"으로 골랐다). design `docs/specs/2026-10-31-tars-font-in-repo-design.md`, plan `docs/plans/2026-10-31-tars-font-in-repo-fr-m0.md`,
   기억은 `docs/decisions/project_font_selection.md`에 한 단락. GNU Unifont 17.0.03이 `terminal/vendor/fonts/`에 커밋돼 있다
   (`unifont.otf` · `OFL-1.1.txt` · `README`). `.gitignore`는 `terminal/vendor/*` + `!terminal/vendor/fonts/`라 stb 헤더 둘은 여전히
@@ -19,7 +28,7 @@
   - 숫자: `container` 8분 10초 → 10분 51초(재시도 step) → 7분 30초(캐시 공유, 로컬 288 → 180초). `host` 2분 32초. mutation 둘
     (`version_test` · `layout_test`)이 각자의 step에서 `FAIL:` 줄로 잡혔다. 게이트 입력 0줄이라 루트 게이트는 안 돌았다.
   - 남은 바깥 몫: ghostty tarball · stb 둘은 sha256 대조가 없다(게이트도 같다). unifont는 FR-M0이 저장소에 넣었다.
-  - 다음 후보(사용자가 고른다): shellcheck note 46 · vendor sha256 · ghcr.io 이미지.
+  - 다음 후보(사용자가 고른다): vendor sha256 · ghcr.io 이미지(shellcheck note 46은 SN-M0이 닫았다).
 - 그 전에 닫은 것은 GitHub Actions(GH-M0, 2026-10-30, 2026-10-24 점검의 마지막 (5)). design
   `docs/specs/2026-10-30-tars-github-actions-design.md`, plan `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`, 기억
   `docs/decisions/project_github_actions.md`. `.github/workflows/checks.yml` 하나 — `host`(amd64)는 루트의 `quick_check.sh`(사람은
@@ -150,7 +159,7 @@
 
 ## 다음 후보 (DR 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 다음 후보는 위(M1은 닫았다).
+- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 다음 후보는 위(M1 · SN · FR은 닫았다) — vendor sha256 · ghcr.io 이미지.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
@@ -173,7 +182,7 @@
 ## 이어받는 사람이 볼 것
 
 - Docker는 OrbStack이다(메모리 12GB). 소켓이 없다고 나오면 `orb start`.
-- 부팅 없이 1분에 보는 검사는 `make quick`(`quick_check.sh`)이다 — shellcheck · Zig fmt · ast-check · shared · init 빌드. push마다
+- 부팅 없이 1분에 보는 검사는 `make quick`(`quick_check.sh`)이다 — shellcheck(note까지) · Zig fmt · ast-check · shared · init 빌드. push마다
   CI(`checks.yml`)가 같은 것과 컨테이너 안 `zig build test`를 돌리고 README 배지가 그 결과다. 빨강이 `sha256sum` · `curl`이면 우리 코드가 아니다 — `gh run rerun`.
 - 새로 받은 저장소는 이미지부터 굽는다(Dockerfile). 첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).

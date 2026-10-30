@@ -20,7 +20,7 @@ BF design(2026-08-01)의 비목표 "GitHub Actions 재도입은 … 별도로 �
   sha256을 대조하고 `quick_check.sh`. `container`(ubuntu-24.04-arm)는 `devcontainer/Dockerfile`을 0줄 고치지 않고 굽고 안에서
   `devcontainer/sanity/check.sh`(BF-M0) · `cd init && zig build`. 트리거는 `push`(`main`만) · `pull_request` · `workflow_dispatch`.
 - README 배지 한 줄. 초록은 "서식 · 문법 · 셸 규칙 · 컨테이너가 구워진다"이지 부팅이 아니다 — 게이트는 로컬 `make gate`.
-- shellcheck warning 넷을 지웠다(지시자 둘 · `|| exit 1` · `for _`). note 46은 판정하지 않고 수만 찍는다.
+- shellcheck warning 넷을 지웠다(지시자 둘 · `|| exit 1` · `for _`). note 46은 판정하지 않고 수만 찍는다(SN-M0이 0으로 만들고 판정에 넣었다, 아래).
 
 commit은 design `e7343cc` · `2eb20a9`, plan `5ce369f`, Task 1 `e7d7faf`, Task 2 `2259b14`, Task 4 · 닫기.
 
@@ -73,9 +73,22 @@ M0의 M1 후보 가운데 사용자가 골랐다. plan `docs/plans/2026-10-30-ta
 - `quick_check.sh`의 init 빌드는 `--prefix out/quick/init`다. `init/zig-out`을 덮으면 initrd가 호스트 Mac의 zig로 만든 바이너리를
   싣는다(같은 버전이면 같겠지만 확인하지 않았다).
 
+## SN-M0(2026-10-31) — shellcheck note 46 → 0, note도 판정
+
+GH-M1의 다음 후보 가운데 사용자가 골랐다. design `docs/specs/2026-10-31-tars-shellcheck-notes-design.md`, plan
+`docs/plans/2026-10-31-tars-shellcheck-notes-sn-m0.md`. `quick_check.sh`의 판정이 `-S warning` → `-S style`이고 수 세는 줄은 없다.
+46건 가운데 18은 출력이 같은 정석 꼴로 고쳤고(따옴표 · `printf '%s\n'` · `\\)` · `read -r` · `[:upper:]`), 28은 그 줄 위에 지시자와
+이유를 달았다(SC2329 19 · SC2012 5 · SC2016 3 · SC2059 1).
+
+- 함정: shellcheck 0.11은 파일의 마지막 최상위 명령이 `exit`이면 trap 핸들러와 이름으로 넘긴 콜백을 SC2329("never invoked")로
+  찍는다. 같은 `trap cleanup EXIT`이라도 끝이 `exit`가 아닌 체인은 조용하다. 최소 예제로 재현했다. 전역으로 끄지 않고 함수
+  위에 `# shellcheck disable=SC2329 # trap cleanup EXIT이 부른다`(콜백은 `boot_once가 이름으로 부른다`)를 단다 — 진짜 죽은 함수는
+  계속 보이게.
+- 지시자 이유는 부르는 자리 · 이름이 오는 곳을 적는다. 적다가 두 개가 틀린 것을 찾았다(wav 이름의 출처 · 프레임을 짓는 함수).
+
 ## 남긴 것(다음 후보)
 
-shellcheck note 46(그중 SC2329 19, `config/check.sh`에 10)의 정리 · vendor 스크립트의 sha256(ghostty tarball · stb 둘은 대조가
+vendor 스크립트의 sha256(ghostty tarball · stb 둘은 대조가
 없다, 게이트 입력이라 게이트가 따라온다) · 구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단).
 
 ## 관련
