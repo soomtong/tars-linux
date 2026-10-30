@@ -440,7 +440,8 @@ docker exec tars-measure bash -c 'apt-get update -qq && \
 # 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig로 shellcheck(52파일, warning 이상) ·
 # zig fmt --check · ast-check · shared/의 순수 검사 · init 크로스 빌드. 명령은 quick_check.sh에 있고
 # CI(.github/workflows/checks.yml의 host job)가 같은 파일을 돌린다 — 사람이 안 돌려도 push마다 돈다.
-# "shellcheck notes: N" 줄은 판정이 아니다(기준선 46, 2026-10-30).
+# "shellcheck notes: N" 줄은 판정이 아니다(기준선 46, 2026-10-30). 호스트 검사(zig build test)는 여기에 없다 —
+# macOS에서 init 검사가 안 끝난다. CI의 container job이 push마다 돈다(GH-M1).
 make quick
 ```
 

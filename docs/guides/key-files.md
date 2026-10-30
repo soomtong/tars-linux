@@ -381,7 +381,9 @@
   `make quick`과 CI의 host job이 같은 파일을 부른다. 셸 검사기 버전은 이 파일, Zig 버전은 Dockerfile의 `ZIG_VERSION`이 정본.
   주석 줄을 `# shellcheck`로 시작하면 지시자로 읽힌다(SC1073).
 - `.github/workflows/checks.yml` — CI. `host`(amd64, tarball로 받은 shellcheck 0.11.0 · Zig, sha256 대조 → `quick_check.sh`)와
-  `container`(`ubuntu-24.04-arm`, Dockerfile 그대로 굽고 안에서 `devcontainer/sanity/check.sh` · `cd init && zig build`). 초록은
+  `container`(`ubuntu-24.04-arm`, Dockerfile 그대로 굽고 안에서 `devcontainer/sanity/check.sh` · 게이트 prebuild의 두 줄 —
+  init · terminal의 `zig build test`, GH-M1. 그 앞에 ghostty 의존성을 세 번까지 받는 step, 세 step이 `/tmp/zig-global`을 전역
+  캐시로 잇는다). 초록은
   부팅이 아니다 — 게이트는 로컬. `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.
 
 ## 기억

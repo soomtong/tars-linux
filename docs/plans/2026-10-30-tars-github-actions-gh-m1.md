@@ -2,7 +2,7 @@
 
 Date: 2026-10-30
 Design: `docs/specs/2026-10-30-tars-github-actions-design.md`의 "GH-M1" 절(결정 8~11)
-Status: plan
+Status: 끝났다(2026-10-30). Task 1 뒤에 결정 12(재시도 fetch step) · 13(전역 캐시 공유)을 더했다
 
 ## 착수 전에 확정한 것
 
@@ -91,4 +91,30 @@ commit 하나(닫기). 소개 페이지에는 안 넣는다(내부 작업).
 
 ## 결과
 
-(Task마다 채운다)
+### Task 1 (`f49e59d`)
+
+`make quick` PASS 뒤 push. run 41069764532 — `host` 3분 8초 초록. `container`는 1회차에서 terminal step이
+`ghostty-src/pkg/zlib/build.zig.zon:9:20: error: HTTP response read failure: ConnectionResetByPeer`(`deps.files.ghostty.org`)로 빨갰고,
+`gh run rerun --failed`로 초록 — 8분 10초(`docker build` 50초 · sanity 6초 · init 2분 43초 · terminal 4분 29초). init step의 몫은 M0의
+`zig build` 2분 17초에 검사 열일곱이 약 26초를 더한 것. terminal의 4분 29초 가운데 unifont(`ftp.gnu.org`)가 103초(1회차 106초).
+
+### Task 2 — mutation 둘
+
+- (a) `gh-m1-mut-a`(run 41071942786): `init build and test` 빨강, `FAIL: tag, clean: got '0.1.0', want '0.1.1'` · `error: ReleaseNotBare`.
+  terminal step은 `skipped`. `host` 초록.
+- (b) `gh-m1-mut-b`(run 41071816399): 1회차는 다시 zlib의 `ConnectionResetByPeer`(판정 아님), 재실행에서 `terminal prepare and test`
+  빨강, `FAIL: count = 1, want 2` · `error: WrongCount`. init step 초록, `host` 초록.
+- `gh workflow run`이 HTTP 500을 두 번 냈다(GitHub 쪽). 20초 뒤 다시 부르면 됐다.
+- 두 브랜치 삭제(원격 · 로컬).
+
+### 결정 12 · 13 — 계획에 없던 것
+
+terminal step 네 회차 중 둘이 같은 zlib에서 끊겨 사용자가 재시도 step을 골랐다(결정 12, `e85808c`). `zig build --help`가 쓰는 lazy
+의존성 8개만 받는다(로컬 비교는 design의 표). 그 회차(run 41076414402)는 초록이었지만 `container` 10분 51초 — fetch step 1분 55초의
+대부분이 build runner 컴파일이었고 다음 step이 그것을 다시 했다. 사용자가 캐시 공유를 골랐다(결정 13, `4321c74`). 로컬 288 → 180초.
+
+run 41079768248(`4321c74`): 두 job 초록. `host` 2분 32초 · `container` 7분 30초(`docker build` 49초 · sanity 5초 · init 2분 41초 ·
+fetch 22초 · terminal 3분 28초). `info: fetching` 다섯 줄은 전부 fetch step에, terminal step에는 0. 재시도가 실제로 돈 회차는 아직
+없다(`fetch failed` 줄 없음).
+
+루트 게이트는 돌지 않았다 — 게이트가 읽는 파일은 0줄 바뀌었다(design 결정 10).

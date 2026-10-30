@@ -1,7 +1,7 @@
 # TARS GitHub Actions — Design
 
 Date: 2026-10-30
-Status: GH-M1 design(2026-10-30, 아래 "GH-M1" 절). GH-M0은 끝났다(2026-10-30, 첫 회차 두 job 초록, 루트 게이트 22/22, 10분 11초(prebuild 311 + lanes 299초)). plan은 `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`. 기억은 `docs/decisions/project_github_actions.md`.
+Status: 끝났다 — GH-M1(2026-10-30, 아래 "GH-M1" 절. container에서 init · terminal의 `zig build test`, 재시도 fetch step · 전역 캐시 공유를 더해 7분 30초, mutation 둘 잡힘, plan `docs/plans/2026-10-30-tars-github-actions-gh-m1.md`). GH-M0도 끝났다(2026-10-30, 첫 회차 두 job 초록, 루트 게이트 22/22, 10분 11초(prebuild 311 + lanes 299초)). plan은 `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`. 기억은 `docs/decisions/project_github_actions.md`.
 
 HANDOFF "다음 후보"의 (5)에서 시작한다(2026-10-24 프로젝트 점검이 남긴 다섯 가운데 마지막. (3)은 HC, (4)는 LS로 닫았다.
 사용자가 2026-10-30에 골랐다).
