@@ -72,8 +72,8 @@ HEAD `81ff52a`에서 코드로 확인했다. 라이브러리 줄 번호는 빌�
 7. 호스트 검사(`dirty_test.zig`). 회차마다 `cellsReuse(&bufs[next], prev)`로 증분 목록을 받고, 바로 `cells(&fresh)`로 fresh 목록을
    받아 `std.mem.sliceAsBytes`로 비교한다 — 다르면 seed · 회차 · 조작 이름 · 첫 다른 행을 찍는다. M2의 정답지 검사(`rowEql`)는 증분
    목록 위에서 그대로 돈다. load-bearing 조건 둘을 더한다 — `last_reused`의 합이 0이면 실패(한 번도 재사용을 안 했다 = 검사가 증분
-   경로를 안 봤다), 그리고 조작 목록에 커서만 움직이는 것(CUP · DECSCUSR 모양 · DECTCEM 숨김은 이미 있다)이 있어 "내용은 같고 층만
-   바뀐 행"이 나온다. 300회차 · seed는 M2 그대로.
+   경로를 안 봤다), 그리고 조작 목록에 커서만 움직이는 것(CUP · DECTCEM 숨김은 이미 있다, DECSCUSR 모양 `CSI n SP q`는 더한다)이 있어 "내용은
+   같고 층만 바뀐 행"이 나온다. 300회차 · seed는 M2 그대로.
 8. mutation 둘. (호스트) 확정 4의 커서 행 더하기를 뺀 판 — `dirty_test`가 CUP 회차에서 fresh 비교로 실패해야 한다(커서 자리의
    반전이 지난 자리에 남는다). (게스트) spans 비교를 뺀 판 — copy 체인의 `n`(현재 매치 이동, `copy/check.sh:840`)에서 내용은 그대로이고
    `current` 색만 바뀌므로 `mismatch cells`여야 한다. `make check CHAIN=copy` 한 판. 둘 다 잡히지 않으면 왜인지 먼저 읽는다(M2 plan
@@ -85,7 +85,8 @@ HEAD `81ff52a`에서 코드로 확인했다. 라이브러리 줄 번호는 빌�
    `cells>` 없는 로그의 출력은 바이트까지 그대로다. 컨테이너에는 `main.zig`(patch + split)와 `vt.zig` 둘을 마운트한다. Task 3의
    재측정은 `split.pl`의 anchor 하나를 고친다 — `frame.cells = try focus.screen.cells(focus.cells_buf[focus.shown ^ 1]);`가 확정 5의
    `cellsReuse` 줄이 된다. `patch.pl`의 anchor 넷은 안 건드린다.
-10. Task 0의 판단 규칙 — 숫자를 보기 전에 정한다. (a)에서 `loop`의 중앙값이 `cells`(split> 줄)의 70% 이상이면 M3을 그대로 간다.
+10. Task 0의 판단 규칙 — 숫자를 보기 전에 정한다. (a)에서 `loop`의 중앙값이 세 구간 합(`update + spans + loop`)의 70% 이상이면
+    M3을 그대로 간다(`split>`의 `cells`가 아니라 합을 쓴다 — `cells>` 줄을 쓰는 비용이 `cells`에 들기 때문이다).
     `update`가 50% 이상이면 M3이 줄일 몫이 작다(라이브러리 안의 비용은 판을 올려야 줄고 이 milestone의 범위 밖) — 멈추고 사용자에게
     숫자와 함께 묻는다. 그 사이면 가되 상한을 결과 절에 적는다. 재사용 행의 복사(패널 가득 찬 화면에서 약 110KB `memcpy`)는 `loop`에
     남는 비용이라 0이 되지는 않는다.
@@ -123,3 +124,30 @@ HEAD `81ff52a`에서 코드로 확인했다. 라이브러리 줄 번호는 빌�
 - 닫기: design 표 DR-M3 행 · Status, `completed.md`의 DR 행에 M3 덧붙임, `measurements.md` 97, `docs/decisions/project_dirty_rows.md`
   (결정 10~12의 함정과 숫자) + `MEMORY.md` 한 줄, `HANDOFF.md`, 소개 페이지(`gh-pages` `data.js`)의 DR 줄 숫자. 이 plan Status.
 - commit 하나.
+
+## 결과
+
+### Task 0 — `cells()` 안을 쪼갰다 (2026-10-30, HEAD `1588583` + 프로브 셋, 부팅 3회)
+
+진단 판(`dr-m3-split`: `patch.pl` + `split.pl` + `cells.pl`, 부팅 세 번에 6분 53초):
+
+```
+dr-m3-split-run1  (a) frame=1.691  split cells=…  cells> …
+dr-m3-split-run2  (a) frame=1.547
+dr-m3-split-run3  (a) frame=1.441
+median (n=12)     (a) frame=1.691 ms
+  split: others=0.012 cells=0.888 pane=0.143 rows=0.107 overlay=0.168 finish=0.384 present=0.379
+  cells: update=0.041 spans=0.001 loop=0.636 sum=0.678
+```
+
+| `cells()` 안 | 중앙값 ms | 합의 몫 |
+|---|---|---|
+| `update`(라이브러리의 증분 복사) | 0.041 | 6% |
+| `spans`(`findSpans`, 검색 없음) | 0.001 | 0% |
+| `loop`(`shell_cursor` + 행 × 열 변환) | 0.636 | 94% |
+| 합 | 0.678 | |
+
+확정 10의 판단: `loop`가 합의 94%로 70%를 넘는다 → M3을 그대로 간다. design 결정 10의 가설("몫은 `update`가 아니라 변환
+루프")이 맞았다 — 라이브러리는 이미 증분이라 0.04ms다. 이 판의 `split> cells` 0.888ms와 합 0.678ms의 차 0.21ms는 `cells>`
+줄을 시리얼에 쓰는 비용이고(`cells()` 안에서 찍는다), 그래서 `frame`도 M2의 1.36에서 1.69로 늘어 보인다 — 비교 판의 값이
+아니므로 읽지 않는다(`cells.pl` 머리 주석). M3이 줄일 상한은 약 0.6ms, 재사용 행의 복사(`memcpy` 약 110KB)가 그 안에서 남는다.

@@ -24,6 +24,10 @@ my (@spans, @b_frames, @b_frame_ms, @b_dump_ms, @b_reads, @a_frame, @a_dump);
 # 구간 이름은 DR-M2의 것이다(M0은 backdrop others cells pane finish present — 그 판은 `git log -p`에).
 my @SPLIT = qw(others cells pane rows overlay finish present);
 my %a_split = map { $_ => [] } @SPLIT;
+# DR-M3 Task 0: `cells>` 줄(probe/cells.pl)이 있는 로그면 `cells()` 안의 세 구간. `split>`과 같은 방법으로 다음 `probe>`
+# 프레임에 붙인다. 없는 로그의 출력은 그대로다.
+my @CELLS = qw(update spans loop);
+my %a_cells = map { $_ => [] } @CELLS;
 
 for my $file (@ARGV) {
     open my $fh, '<', $file or die "read $file: $!\n";
@@ -32,6 +36,7 @@ for my $file (@ARGV) {
     my $done = 0;        # DONE0을 이미 봤나
     my $last_key_frame;  # 마지막 key> 뒤 첫 프레임의 번호
     my $split;          # 마지막으로 본 split> 값. 같은 프레임의 probe> 줄이 그 뒤에 온다
+    my $cells;          # 마지막으로 본 cells> 값. 패널 하나라 프레임마다 하나다
     while (my $line = <$fh>) {
         $done = 1 if !$done && $line =~ /DONE0/;
         if ($line =~ /terminal: key> /) { $key_pending = 1; next }
@@ -39,10 +44,15 @@ for my $file (@ARGV) {
             @$split{@SPLIT} = ($1, $2, $3, $4, $5, $6, $7);
             next;
         }
+        if ($line =~ /terminal: cells> update=(\d+) spans=(\d+) loop=(\d+)/) {
+            @$cells{@CELLS} = ($1, $2, $3);
+            next;
+        }
         next unless $line =~ /terminal: probe> t=(\d+) frame=(\d+) dump=(-?\d+) reads=(\d+) bytes=(\d+)/;
-        push @frames, [$1, $2, $3, $4, $5, $key_pending, $done, $split];
+        push @frames, [$1, $2, $3, $4, $5, $key_pending, $done, $split, $cells];
         $key_pending = 0;
         undef $split;
+        undef $cells;
     }
     close $fh;
 
@@ -75,6 +85,9 @@ for my $file (@ARGV) {
     for my $f (grep { defined $_->[7] } @a) {
         push @{ $a_split{$_} }, $f->[7]{$_} / 1000 for @SPLIT;
     }
+    for my $f (grep { defined $_->[8] } @a) {
+        push @{ $a_cells{$_} }, $f->[8]{$_} / 1000 for @CELLS;
+    }
 }
 
 printf "\nmedian over %d run(s)\n  (b) span=%.0fms frames=%d frame_sum=%.0fms dump_sum=%.0fms reads=%d\n"
@@ -85,4 +98,10 @@ printf "\nmedian over %d run(s)\n  (b) span=%.0fms frames=%d frame_sum=%.0fms du
 if (@{ $a_split{cells} }) {
     printf "  (a) split (median ms, n=%d): %s\n",
         scalar @{ $a_split{cells} }, join ' ', map { "$_=" . median(@{ $a_split{$_} }) } @SPLIT;
+}
+if (@{ $a_cells{loop} }) {
+    my $sum = 0;
+    $sum += median(@{ $a_cells{$_} }) for @CELLS;
+    printf "  (a) cells (median ms, n=%d): %s sum=%.3f\n",
+        scalar @{ $a_cells{loop} }, join(' ', map { "$_=" . median(@{ $a_cells{$_} }) } @CELLS), $sum;
 }
