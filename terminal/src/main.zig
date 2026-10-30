@@ -1463,6 +1463,15 @@ const Pane = struct {
     band_row: ?u16 = null,
 };
 
+/// `cellsReuse`에 줄 지난 목록(DR-M3, design 결정 10). 화면에 있는 쪽(`shown`)과 그 행 시작
+/// 위치다 — `paintPane`이 지난 프레임에 `rowStarts`로 채운 것. `prev_valid`가 거짓이면 null —
+/// 막 띄웠거나 사각형이 바뀌었거나 지난 목록이 행 순서가 아니었다. 그때는 라이브러리도 크기
+/// 변경으로 `.full`이라 두 겹으로 안전하다.
+fn prevOf(p: *const Pane) ?vt.Prev {
+    if (!p.prev_valid) return null;
+    return .{ .cells = p.cells_buf[p.shown][0..p.shown_len], .starts = p.starts_buf[p.shown] };
+}
+
 /// 패널의 셀 목록 두 벌을 잡는다(DR-M2). `spawnPane`과 `applyLayout`이 부른다.
 fn allocPaneBuffers(alloc: std.mem.Allocator, pane: *Pane, rect: layout.Rect) !void {
     const n = @as(usize, rect.cols) * rect.rows;
@@ -2962,6 +2971,9 @@ const PointerWire = struct {
 const Verify = struct {
     fb: drm.Framebuffer,
     cell_buf: []vt.CellGlyph,
+    /// fresh 목록의 행 시작 위치(DR-M3 plan 확정 6). 격자 행 + 1칸. 증분 목록과 행마다 비교할 때
+    /// `dirtyRows`에 준다.
+    starts_buf: []u32,
     img_buf: [16]vt.ImagePlacement = undefined,
     /// 화면 흉내(DR-M2 plan 확정 10). `present`가 넘긴 clip 안의 픽셀만 fb에서 복사해 둔
     /// 같은 치수의 버퍼다 — 드라이버가 화면에 옮겼을 것과 같다. 프레임 뒤에 fb와 비교해 clip
@@ -2975,6 +2987,10 @@ const Verify = struct {
 const Verified = struct {
     report: verify.Report,
     us: i96,
+    /// 증분 목록 vs fresh 목록(DR-M3, design 결정 11). 패널마다 다른 행의 수를 더한 것이고 `first`는
+    /// 패널 안의 행 번호다. `ok()`가 아니면 그 프레임의 줄은 `mismatch cells`다 — 픽셀 · clip보다
+    /// 먼저다(원인에 가장 가까운 말).
+    cells: verify.Report = .{},
 };
 
 /// 이 파일이 initrd에 있으면 verify가 켜진다. `kernel/make_initrd.sh`가 `TARS_RENDER_VERIFY=1`일
@@ -3228,6 +3244,7 @@ const App = struct {
         self.verify = .{
             .fb = self.fb.shadow(pixels.ptr),
             .cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows),
+            .starts_buf = try self.allocator.alloc(u32, @as(usize, self.rows) + 1),
             .screen = screen.ptr,
         };
         logline.print("terminal: verify> on bytes={d}\n", .{pixels.len});
@@ -3459,6 +3476,7 @@ const App = struct {
         self.allocator.free(self.dirty_rows);
         if (self.verify) |v| {
             self.allocator.free(v.cell_buf);
+            self.allocator.free(v.starts_buf);
             self.allocator.free(v.fb.pixels[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
             self.allocator.free(v.screen[0 .. @as(usize, v.fb.pitch) * v.fb.height]);
         }
@@ -4207,14 +4225,16 @@ const App = struct {
             const p = if (slot.*) |*p| p else continue;
             if (leaf == ws.focus) continue;
             p.screen.focused = false;
-            const p_cells = try p.screen.cells(p.cells_buf[p.shown ^ 1]);
+            const p_cells = try p.screen.cellsReuse(p.cells_buf[p.shown ^ 1], prevOf(p));
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
             try self.paintPane(p, full, p_cells, p.screen.images(&self.img_buf), false, &clips);
         }
         focus.screen.focused = true;
 
-        frame.cells = try focus.screen.cells(focus.cells_buf[focus.shown ^ 1]);
+        // 증분 호출(DR-M3). 이 프레임의 첫 `cells()`여야 한다 — 비트를 끄기 때문이다. verify의 fresh
+        // 호출은 이 뒤다.
+        frame.cells = try focus.screen.cellsReuse(focus.cells_buf[focus.shown ^ 1], prevOf(focus));
 
         // 프롬프트 문자열을 여기서 만든다. `vt.zig`는 앞의 `/`를 모른다 —
         // 그것은 표현이지 상태가 아니고, TR-M0이 색을 vt.zig에서 확정해 넘긴
@@ -4289,8 +4309,10 @@ const App = struct {
         if (verified) |v| {
             const cl = clipped.?;
             const us = v.us + cl.us;
-            if (v.report.ok() and cl.report.ok()) {
+            if (v.report.ok() and cl.report.ok() and v.cells.ok()) {
                 logline.print("terminal: verify> ok us={d}\n", .{us});
+            } else if (!v.cells.ok()) {
+                printMismatch("cells ", v.cells, us);
             } else if (!v.report.ok()) {
                 printMismatch("", v.report, us);
             } else {
@@ -4299,9 +4321,10 @@ const App = struct {
         }
     }
 
-    /// `terminal: verify> mismatch [clip ]rows=<n> first=<r>,… us=<N>`. 픽셀 비교가 틀리면 `kind`가
-    /// 비어 있고, 픽셀은 맞는데 clip 밖이 바뀌었으면 `clip `이다(DR-M2 plan 확정 10). 둘 다
-    /// 루트 게이트의 `ok` regex에 안 맞아 빨강이다.
+    /// `terminal: verify> mismatch [cells |clip ]rows=<n> first=<r>,… us=<N>`. 증분 목록이 fresh와
+    /// 다르면 `cells `(DR-M3, 행은 패널 안 번호), 픽셀 비교가 틀리면 `kind`가 비어 있고, 픽셀은
+    /// 맞는데 clip 밖이 바뀌었으면 `clip `이다(DR-M2 plan 확정 10). 셋 다 루트 게이트의 `ok`
+    /// regex에 안 맞아 빨강이다.
     fn printMismatch(kind: []const u8, report: verify.Report, us: i96) void {
         // 한 줄을 한 번의 write로 낸다(AL design 3) — 목록을 먼저 짓는다.
         var list: [verify.MAX_FIRST * 6]u8 = undefined;
@@ -4406,25 +4429,29 @@ const App = struct {
     /// 포커스 아닌 패널 → 포커스 패널 → `renderOverlay`. 화살표는 없다(`presentFrame` 전에
     /// 부른다). 꺼져 있으면 null이다.
     ///
-    /// 포커스 패널은 `frame.cells` · `frame.imgs`를 그대로 쓴다 — `cells()`를 다시 부르면
-    /// `self.cell_buf`를 덮고, 덤프 열둘이 그것을 읽는다. 포커스 아닌 패널은 실제 경로가 이미
-    /// 버린 목록이라 그림자의 `cell_buf`에 다시 받는다. 한 프레임에 `cells()`를 두 번 부르는
-    /// 것은 같은 답을 전제한다 — 어긋나면 `mismatch`가 그것을 보여 준다(design 결정 8).
+    /// 모든 패널의 목록을 `cells()`(fresh — 비트 없이 처음부터)로 다시 받는다(DR-M3, design
+    /// 결정 11). 실제 경로의 증분 목록(`cellsReuse`)이 층 하나를 빠뜨려 낡은 행을 품으면 그
+    /// 행의 픽셀도 낡고, 그림자를 증분 목록으로 그리면 둘이 같아져 못 본다 — 그래서 그림자는
+    /// fresh다(DR-M2까지는 포커스 패널에 `frame.cells`를 그대로 썼다). 그리고 fresh 목록을 증분
+    /// 목록과 행마다 비교해(`Verified.cells`) `mismatch cells`로 따로 말한다 — 픽셀 비교보다
+    /// 원인에 가깝다. 포커스 패널의 증분 목록은 `frame.cells`이고 덤프 열둘이 그것을 읽는다 —
+    /// fresh는 그림자의 `cell_buf`에 받으므로 안 덮는다. 호출 순서가 계약이다: 증분(실제 경로)
+    /// 이 먼저, fresh가 뒤 — fresh는 비트를 안 보고 메모를 같은 값으로 다시 적는다.
     ///
-    /// DR-M1에서는 실제 경로도 통째라 모든 프레임이 `ok`여야 한다. DR-M2가 실제 경로를 부분
-    /// 갱신으로 바꾸면 이 함수가 잔상의 판정이 된다.
+    /// DR-M1에서는 실제 경로도 통째라 모든 프레임이 `ok`여야 했다. DR-M2가 실제 경로를 부분
+    /// 갱신으로 바꾼 뒤로 이 함수가 잔상의 판정이고, DR-M3부터 증분 목록의 판정이기도 하다.
     fn verifyFrame(self: *App, frame: *const Frame, ws: *Workspace) !?Verified {
         const v = if (self.verify) |*v| v else return null;
         const start = std.Io.Clock.now(.awake, self.io);
+        var cells_report: verify.Report = .{};
         renderBackdrop(v.fb, &ws.tree, self.whole);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
-            if (leaf == ws.focus) continue;
-            const p_cells = try p.screen.cells(v.cell_buf);
-            try renderPane(v.fb, &self.cache, p_cells, p.screen.images(&v.img_buf), p.screen.defaultBg(), p.rect, p.screen.cursorMark());
+            const fresh = try p.screen.cells(v.cell_buf);
+            self.compareLists(p, fresh, &cells_report);
+            const imgs = if (leaf == ws.focus) frame.imgs else p.screen.images(&v.img_buf);
+            try renderPane(v.fb, &self.cache, fresh, imgs, p.screen.defaultBg(), p.rect, p.screen.cursorMark());
         }
-        const focus = frame.focus;
-        try renderPane(v.fb, &self.cache, frame.cells, frame.imgs, focus.screen.defaultBg(), focus.rect, focus.screen.cursorMark());
         _ = try renderOverlay(v.fb, &self.cache, frame.prompt, frame.status_line);
         const report = verify.compare(
             self.fb.pixels,
@@ -4434,7 +4461,27 @@ const App = struct {
             self.fb.height,
             .{ .top = GRID_Y, .row_height = ROW_HEIGHT, .rows = self.rows },
         );
-        return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000) };
+        return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000), .cells = cells_report };
+    }
+
+    /// 패널 하나의 증분 목록(`p.cells_buf[p.shown]` — `paintPane`이 뒤집은 뒤라 이번 목록이다)과
+    /// fresh 목록을 행마다 비교해 다른 행을 `report`에 더한다(DR-M3 plan 확정 6). `dirty_rows`는
+    /// `paintPane`이 다 쓴 뒤라 빌려 쓴다. fresh가 행 순서가 아니면(변환 루프는 행 오름차순이라
+    /// 있을 수 없다) 패널의 모든 행을 다른 것으로 센다.
+    fn compareLists(self: *App, p: *const Pane, fresh: []const vt.CellGlyph, report: *verify.Report) void {
+        const v = &self.verify.?;
+        const rows = p.rect.rows;
+        const dirty = self.dirty_rows[0..rows];
+        if (!verify.rowStarts(vt.CellGlyph, fresh, v.starts_buf[0 .. @as(usize, rows) + 1])) {
+            @memset(dirty, true);
+        } else {
+            _ = verify.dirtyRows(vt.CellGlyph, p.cells_buf[p.shown][0..p.shown_len], p.starts_buf[p.shown], fresh, v.starts_buf[0 .. @as(usize, rows) + 1], dirty);
+        }
+        for (dirty, 0..) |d, r| {
+            if (!d) continue;
+            if (report.rows < verify.MAX_FIRST) report.first[report.rows] = @intCast(r);
+            report.rows += 1;
+        }
     }
 
     /// 바퀴 10. 그린 프레임의 덤프 열둘. 순서가 게이트의 계약이다 — `dumpCursor`는

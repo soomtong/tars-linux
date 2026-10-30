@@ -81,8 +81,9 @@ patch("        const frame_start = std.Io.Clock.now(.awake, self.io);\n",
 # (4) 구간의 끝들. 들여쓰기는 anchor에 안 넣고 같은 줄 뒤나 앞에 붙인다.
 patch("focus.screen.focused = true;",
       "focus.screen.focused = true; " . lap("others"));
-patch("frame.cells = try focus.screen.cells(focus.cells_buf[focus.shown ^ 1]);",
-      "frame.cells = try focus.screen.cells(focus.cells_buf[focus.shown ^ 1]); " . lap("cells"));
+# DR-M3부터 증분 호출이다(`cellsReuse`, plan 확정 9).
+patch("frame.cells = try focus.screen.cellsReuse(focus.cells_buf[focus.shown ^ 1], prevOf(focus));",
+      "frame.cells = try focus.screen.cellsReuse(focus.cells_buf[focus.shown ^ 1], prevOf(focus)); " . lap("cells"));
 # `paintPane` 호출 앞에 표시를 다시 잡아 프롬프트 · 상태 줄 짓기와 `images()`를 `pane`에서 뺀다.
 patch("try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);",
       "probe_mark = std.Io.Clock.now(.awake, self.io); "

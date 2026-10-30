@@ -168,3 +168,18 @@ fresh 비교가 첫 판에서 바로 틈 하나를 잡았다 — 회차 18 `osc 
 
 호스트 mutation(확정 8, 커서 행 더하기를 뺀 판을 마운트): 회차 0 `focus`에서 실패 — "첫 다른 행 0, 길이 1 vs 0, 재사용 12행".
 포커스가 꺼져 반전이 사라졌는데 그 행을 복사해 반전된 셀 하나가 남았다. 잡힌다.
+
+### Task 2 — 배선과 verify (2026-10-30)
+
+`main.zig` +65/−18: `render`의 두 호출이 `cellsReuse(…, prevOf(p))`, `verifyFrame`이 모든 패널을 fresh `cells()`로 다시 받아
+그림자에 그리고 `compareLists`로 증분 목록과 행마다 비교(`Verified.cells`, `Verify.starts_buf`), 출력은 `mismatch cells`가 픽셀 ·
+clip보다 먼저. `paintPane`은 0줄. `split.pl`의 anchor 하나.
+
+게스트 mutation(확정 8, spans 비교를 뺀 판을 마운트): copy 체인은 호스트 테스트를 먼저 돌므로 `dirty_test`가 먼저 잡았다(체인
+rc=1, "terminal host tests failed"). 게스트를 보려고 그 단계를 건너뛴 `copy/check.sh`를 함께 마운트했다 — 537프레임 가운데
+`mismatch cells` 넷(`rows=2 first=0,1` · `rows=1 first=44` 둘 · `first=45`), 체인 자체는 PASS. 검색 하이라이트의 `current`가 옮겨 가는
+프레임만 걸리는 것이 맞다 — 내용이 같은 행에서 색만 바뀌는 자리가 그것뿐이다. 그래서 이 mutation을 빨갛게 만드는 것은 루트
+게이트의 verify 줄 판정(`check_verify_lines`)이지 체인의 검사가 아니다(DR-M1 design 결정 7의 뜻 그대로).
+
+되돌린 판의 체인 넷(`make check`, 차례로 15분): copy 539 · render 779 · hangul 175 · pane 137 + 235(패널 둘) 프레임 전부 `ok`,
+`mismatch` 0. 넷 다 PASS.
