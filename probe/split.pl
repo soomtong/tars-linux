@@ -13,7 +13,7 @@
 #   cells     포커스 패널의 `cells()`
 #   pane      포커스 패널의 `paintPane` 전체 — `rowStarts` · `dirtyRows` · overlay 행 · 그리기 · clip
 #   rows      그 안의 그리기만(`renderRows`, 통째 패널이면 `renderPane`). pane − rows가 행 비교의 몫이다
-#   overlay   `renderOverlay` — 프롬프트 · 상태 줄(띠 지우기 포함)
+#   overlay   프롬프트(`drawPrompt`) · 상태 줄 띠(`paintBand` — SB-M0부터 바뀐 프레임에만 지우고 쓴다)
 #   finish    그 뒤부터 `frame_us`까지 — clip 목록 · verify(프로브에서는 꺼져 있다) · 화살표 · `present`
 #   present   그 안의 `fb.present(clips)`
 #
@@ -88,8 +88,9 @@ patch("frame.cells = try focus.screen.cellsReuse(focus.cells_buf[focus.shown ^ 1
 patch("try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);",
       "probe_mark = std.Io.Clock.now(.awake, self.io); "
     . "try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips); " . lap("pane"));
-patch("frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line);",
-      "frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line); " . lap("overlay"));
+# SB-M0부터 실제 경로는 프롬프트와 띠를 따로 부른다 — `overlay`는 둘의 합이고, 띠는 바뀐 프레임에만 그려진다.
+patch("try paintBand(self.fb, &self.cache, frame.status_line, full or frame.status_changed, &clips);",
+      "try paintBand(self.fb, &self.cache, frame.status_line, full or frame.status_changed, &clips); " . lap("overlay"));
 
 # (5) `frame_us`를 셈하는 줄 앞뒤.
 my $frame_us = "        frame.frame_us = \@divTrunc(frame_start.untilNow(self.io, .awake).nanoseconds, 1000);\n";

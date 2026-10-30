@@ -276,7 +276,7 @@ fn drawPrompt(
 /// `rows`가 여백을 다 먹을 수 있는데, 그때 그리면 격자 바깥이 아니라 화면
 /// 밖에 쓴다 — `setPixel`은 범위를 검사하지 않는다(`drm.zig:149`).
 ///
-/// 띠를 여기서 안 지운다 — `renderOverlay`가 이 함수 앞에서 격자 아래 여백 전체를
+/// 띠를 여기서 안 지운다 — `renderStatusBand`가 이 함수 앞에서 격자 아래 여백 전체를
 /// `MARGIN_COLOR`로 지운다(DR-M2). 그전에는 `render()`의 `fill(MARGIN_COLOR)`이 매 프레임
 /// 지웠는데, 부분 갱신 뒤로 그 `fill`은 통째 프레임에만 있다.
 fn drawStatus(
@@ -574,6 +574,12 @@ fn renderRows(
 /// 프레임의 overlay — 포커스 패널의 프롬프트와 상태 줄. DR-M1 전에는 `renderFinish`가
 /// 이것과 아래 `presentFrame`을 함께 했다. 가른 이유는 verify 모드다(DR design 위험 2) —
 /// 그림자 버퍼에는 여기까지 그리고, 화살표와 `present`는 실제 fb에만 한다.
+///
+/// 통째 경로의 정의이고, SB-M0부터 그림자(`App.verifyFrame`)만 부른다. 실제 경로(`App.render`)는
+/// 둘을 따로 부른다 — 프롬프트는 `drawPrompt`(있으면 매 프레임. 그 행은 `paintPane`이 방금
+/// 지웠다), 띠는 `paintBand`(내용이 바뀐 프레임과 통째 프레임만). 이 함수가 분기를 안 품는
+/// 쪽을 골랐다(SB design 결정 3) — 그림자가 매 프레임 띠를 통째로 그리므로, 실제 경로가 띠를
+/// 잘못 건너뛰면 픽셀 비교가 격자 아래 행(`rows`번)으로 말한다.
 fn renderOverlay(
     fb: drm.Framebuffer,
     cache: *font.Cache,
@@ -589,16 +595,34 @@ fn renderOverlay(
     var ink: ?PromptInk = null;
     if (prompt) |p| ink = try drawPrompt(fb, cache, p);
 
-    // 상태 줄의 띠(격자 아래 여백 전체)를 먼저 지운다(DR-M2 plan 확정 7). 부분 경로에는
-    // 지난 프레임의 글자를 지워 줄 `fill`이 없다. 통째 경로와 그림자에서는 이미 그 색이라
-    // 픽셀이 안 바뀐다 — 그래서 여기 한 자리에 두어도 "통째 경로"의 정의가 안 바뀐다.
-    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
-    if (grid_bottom < fb.height) fb.fillRect(0, grid_bottom, fb.width, fb.height - grid_bottom, MARGIN_COLOR);
-
     // 프롬프트와 안 겹친다 — 프롬프트는 격자의 마지막 줄이고 이것은 격자
     // 바깥이다. 그래서 순서에 뜻이 없고, `present` 앞이라는 것만 중요하다.
-    try drawStatus(fb, cache, st);
+    try renderStatusBand(fb, cache, st);
     return ink;
+}
+
+/// 상태 줄의 띠(격자 아래 여백 전체)를 지우고 상태 줄을 쓴다. DR-M2 plan 확정 7의 "띠를 먼저
+/// 지운다"가 이 자리다 — 부분 경로에는 지난 프레임의 글자를 지워 줄 `fill`이 없다. 통째 경로와
+/// 그림자에서는 이미 그 색이라 픽셀이 안 바뀐다.
+fn renderStatusBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status) !void {
+    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    if (grid_bottom < fb.height) fb.fillRect(0, grid_bottom, fb.width, fb.height - grid_bottom, MARGIN_COLOR);
+    try drawStatus(fb, cache, st);
+}
+
+/// 실제 경로의 띠(SB-M0, design 결정 1 · 4). `want`이 거짓이면 띠에 손대지 않는다 — 지난 프레임에
+/// 그린 상태 줄이 그대로 남아 있고 그 내용이 이번과 같다. 참이면 `renderStatusBand`로 다시 그리고
+/// 띠의 사각형을 clip에 넣는다(`full`이면 `clips.whole`이라 무시된다). `want`을 정하는 것은 부르는
+/// 쪽이다 — `full or frame.status_changed`.
+///
+/// 띠에 쓰는 것은 이것과 화살표뿐이다. 화살표는 `render`의 처음에 `restore`로 되돌리므로 띠를
+/// 건너뛴 프레임에도 띠의 픽셀은 지난 프레임에 그린 것이다. 격자 마지막 행의 글리프가 아래로
+/// 삐져나오면 그 픽셀이 여기 남는다 — 그림자는 fresh라 verify가 `first=<rows>`로 잡는다(design 위험 1).
+fn paintBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status, want: bool, clips: *drm.ClipList) !void {
+    if (!want) return;
+    try renderStatusBand(fb, cache, st);
+    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    if (grid_bottom < fb.height) clips.push(0, grid_bottom, fb.width, fb.height - grid_bottom);
 }
 
 /// 프레임을 내보낸다 — 화살표를 얹고 `present`. 실제 fb에만 부른다(그림자 버퍼에는
@@ -703,6 +727,37 @@ const Status = struct {
     /// `text`에 안 들어 있다. 왼쪽 문자열과 따로 오른쪽 끝에 그리므로 `status.statusText`와
     /// `status> text=`가 BS 전과 같다(design 결정 6).
     battery: ?BatteryCell,
+};
+
+/// 마지막으로 본 상태 줄의 내용(SB-M0, design 결정 2). 둘이 함께 쓴다 — `App.render`가 띠를 다시
+/// 그릴지(`paintBand`의 `want`), `dumpStatus`가 `status>` 줄을 찍을지. 그전에는 `dumpStatus`만 네
+/// 필드로 메모했고, 찍는 때와 그리는 때가 같은 조건("지난번과 다르다")이라 하나로 합쳤다.
+///
+/// 비교하는 것은 셋이다. `text` 바이트(`copy` · `workspace` · `dict`는 이 안에 있다), `caps`(글자가
+/// 아니라 `CAPS` 칸의 색 — IS-M1이 `text`만 보다가 겪은 구멍), `battery`(칸 전체 — 잔량이 그대로인
+/// 채 어댑터를 꽂으면 글자는 그대로이고 갈래만 바뀐다, BS-M1). `rows` · `cols`는 부팅 중 안 바뀐다.
+///
+/// `len`이 `?usize`인 것에 뜻이 있다 — 0을 초기값으로 쓰면 "빈 줄을 봤다"와 "아직 아무것도 안
+/// 봤다"가 안 갈린다. 첫 프레임은 반드시 `changed`다 — 기준선이 없으면 게이트가 "부팅 직후의
+/// 상태"를 볼 창구가 없다.
+const StatusMemo = struct {
+    text: [status.MAX_LEN]u8 = undefined,
+    len: ?usize = null,
+    caps: bool = false,
+    battery: ?BatteryCell = null,
+
+    fn changed(self: *const StatusMemo, st: Status) bool {
+        const n = self.len orelse return true;
+        return !std.mem.eql(u8, self.text[0..n], st.text) or self.caps != st.caps or
+            !std.meta.eql(self.battery, st.battery);
+    }
+
+    fn remember(self: *StatusMemo, st: Status) void {
+        @memcpy(self.text[0..st.text.len], st.text);
+        self.len = st.text.len;
+        self.caps = st.caps;
+        self.battery = st.battery;
+    }
 };
 
 /// 오버레이 한 줄에 쓸 글자를 정한다. 갈래가 셋이다(SP design 결정 7).
@@ -1206,13 +1261,14 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
     });
 }
 
-/// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). 값이 바뀌었을 때만 찍는다.
+/// 입력기 상태 줄을 시리얼에 찍는다(IS-M0). 값이 바뀌었을 때만 찍는다 — `changed`는
+/// `render`가 `StatusMemo`로 정한 값이다(SB-M0). 그전에는 이 함수가 메모 넷을 직접 들었다.
 ///
 /// RC-M0 실측 7이 시리얼 한 줄에 0.6~8.8밀리초라고 쟀다. 프레임이 21
 /// 밀리초인데 두 줄을 매 프레임 찍으면 최악 18밀리초가 붙는다. 덤으로 로그가
 /// 읽기 좋아진다 — 한 줄이 곧 한 번의 전환이다.
 ///
-/// 첫 프레임은 반드시 찍힌다(`last_len`이 null이다). 기준선이 없으면
+/// 첫 프레임은 반드시 찍힌다(메모가 비어 있다). 기준선이 없으면
 /// 게이트가 "부팅 직후의 상태"를 볼 창구가 없다.
 ///
 /// 줄이 셋인 이유가 이 서브프로젝트의 검증 구조다. 여백은 격자 밖이라
@@ -1234,30 +1290,17 @@ fn dumpPromptInk(fb: drm.Framebuffer, ink: ?PromptInk, prompt: ?Prompt) void {
 /// 메모가 `text`만 보면 안 된다. `CAPS`는 켜져도 글자가 안 바뀌므로,
 /// `caps`를 함께 기억하지 않으면 CapsLock을 눌러도 새 줄이 한 줄도 안
 /// 찍힌다 — 그리고 그 증상은 "구멍이 안 고쳐졌다"와 구별이 안 된다
-/// (둘 다 `on=0`이다).
+/// (둘 다 `on=0`이다). 그 메모가 `StatusMemo`다.
 ///
 /// 다섯째 줄(`status> battery`)은 오른쪽 끝의 배터리 칸이다(BS-M1). 칸의 글자와 색 셋의
 /// 픽셀 수를 함께 찍고, 배터리가 없으면 `cell=none`이다. `text=` 줄은 배터리와 무관하게
-/// 그대로다 — 칸이 왼쪽 문자열 밖에 있다(BS design 결정 6). 메모가 칸의 글자와 갈래도
-/// 기억하는 이유는 `sameBatteryCell`에 있다.
+/// 그대로다 — 칸이 왼쪽 문자열 밖에 있다(BS design 결정 6). 메모가 칸의 글자와 갈래를
+/// 둘 다 보는 이유도 `StatusMemo`에 있다(갈래를 빼면 `CAPS`의 구멍이 배터리에서 다시
+/// 생긴다 — battery 체인의 검사 A4가 그 자리를 본다).
 ///
 /// `render` 뒤에 불러야 한다. 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
-fn dumpStatus(
-    fb: drm.Framebuffer,
-    st: Status,
-    last: *[status.MAX_LEN]u8,
-    last_len: *?usize,
-    last_caps: *bool,
-    last_battery: *?BatteryCell,
-) void {
-    if (last_len.*) |n| {
-        if (std.mem.eql(u8, last[0..n], st.text) and last_caps.* == st.caps and
-            sameBatteryCell(last_battery.*, st.battery)) return;
-    }
-    @memcpy(last[0..st.text.len], st.text);
-    last_len.* = st.text.len;
-    last_caps.* = st.caps;
-    last_battery.* = st.battery;
+fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
+    if (!changed) return;
     logline.print("terminal: status> text={s}\n", .{st.text});
 
     // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 같은 산수로 y를
@@ -2232,22 +2275,6 @@ fn batteryColor(cls: battery.Class) u32 {
     };
 }
 
-/// `dumpStatus`의 메모가 배터리 칸을 비교한다(BS design 결정 10). 글자와 갈래를 둘 다 본다.
-///
-/// 갈래를 빼면 IS-M1이 `CAPS`에서 겪은 구멍이 다시 생긴다 — 잔량이 그대로인 채 어댑터를
-/// 꽂으면 글자는 그대로이고 색만 바뀌어서, 화면은 초록인데 새 `status>` 줄이 안 찍힌다.
-/// battery 체인의 검사 A4가 그 자리를 본다.
-///
-/// 다시 그릴지를 정하는 쪽(`scanBattery` · `tickBattery`)은 이 함수가 아니라
-/// `std.meta.eql`로 칸 전체를 비교한다. 이 함수를 고친 mutation이 메모만 건드리게 하려는
-/// 것이다(BS-M1 plan Task 7) — 같은 함수를 쓰면 A4가 빨개져도 메모 때문인지 다시 그리기를
-/// 안 해서인지가 안 갈린다.
-fn sameBatteryCell(a: ?BatteryCell, b: ?BatteryCell) bool {
-    const x = a orelse return b == null;
-    const y = b orelse return false;
-    return std.mem.eql(u8, &x.text, &y.text) and x.class == y.class;
-}
-
 /// `status> battery` 줄(BS design 결정 10). `dumpStatus`가 `status>` 줄들의 끝에 부른다.
 ///
 /// 색 셋을 한 줄에 함께 찍는다 — `caps ink`와 같은 이유로, 하나만 보면 "안 그렸다"와
@@ -3113,19 +3140,9 @@ const App = struct {
     /// 캐시가 자랐을 때만 찍는다. 매 프레임 찍으면 키를 칠 때마다 같은 줄이
     /// 반복된다. design 위험 3을 게이트가 볼 수 있게 하는 자리다.
     last_glyph_count: usize = 0,
-    /// 마지막으로 찍은 상태 줄. `?usize`인 것에 뜻이 있다 — 0을 초기값으로
-    /// 쓰면 "빈 줄을 찍었다"와 "아직 아무것도 안 찍었다"가 안 갈린다.
-    last_status: [status.MAX_LEN]u8 = undefined,
-    last_status_len: ?usize = null,
-    /// 글자와 따로 기억해야 한다(IS-M1). `CAPS` 칸은 켜져도 글자가 안
-    /// 바뀌므로, 이 값이 없으면 CapsLock을 눌러도 새 `status>` 줄이 한 줄도
-    /// 안 찍힌다. 첫 프레임은 `last_status_len`이 null이라 어차피 찍히므로
-    /// 초기값은 무엇이든 된다.
-    last_status_caps: bool = false,
-    /// 배터리 칸도 따로 기억한다(BS-M1). `CAPS`와 같은 이유다 — 잔량이 그대로인 채 어댑터를
-    /// 꽂으면 글자는 그대로이고 갈래만 바뀐다. 초기값은 `last_status_caps`와 같은 이유로
-    /// 무엇이든 된다.
-    last_status_battery: ?BatteryCell = null,
+    /// 마지막으로 본 상태 줄의 내용(SB-M0). `render`가 띠를 다시 그릴지를 이것으로 정하고,
+    /// `dumpStatus`가 `status>` 줄을 찍을지도 같은 답(`Frame.status_changed`)을 본다.
+    status_memo: StatusMemo = .{},
     /// TR-M2의 구조 변경. 그전에는 렌더가 PTY 출력 분기 안에만 있었다 —
     /// 스크롤은 키로 일어나므로 그대로 두면 뷰포트만 움직이고 화면은 안 바뀐다.
     needs_redraw: bool = false,
@@ -4183,12 +4200,16 @@ const App = struct {
         prompt: ?Prompt = null,
         prompt_ink: ?PromptInk = null,
         status_line: Status = undefined,
+        /// 상태 줄의 내용이 지난 프레임과 다른가(SB-M0). `render`가 `StatusMemo`로 정한다 —
+        /// 띠를 다시 그릴지와 `dumpStatus`가 찍을지가 이 하나를 본다.
+        status_changed: bool = false,
         frame_us: i96 = 0,
     };
 
     /// 바퀴 9. 프레임 하나를 그린다 — 화살표 되돌리기 → 통째 판정 → 포커스 아닌 패널 → 포커스
-    /// 패널(각각 `paintPane`) → 프롬프트 · 상태 줄(`renderOverlay`) → verify(`verifyFrame`, 켜져
-    /// 있을 때) → 화살표 · `present`(`presentFrame`). 덤프가 읽을 것은 `frame`에 남긴다.
+    /// 패널(각각 `paintPane`) → 프롬프트(`drawPrompt`) · 상태 줄 띠(`paintBand`, 바뀐 프레임과 통째
+    /// 프레임만) → verify(`verifyFrame`, 켜져 있을 때) → 화살표 · `present`(`presentFrame`). 덤프가
+    /// 읽을 것은 `frame`에 남긴다.
     fn render(self: *App, frame: *Frame, want: ?pointer.Spot) !void {
         // 포커스를 그리기 직전에 구한다(WP-M1). `readKeyboard`가 잡았던 포커스는 그 단계
         // 안의 것이고, 그 뒤 패널 명령이 옮겼거나 EOF가 포커스 패널을 닫았을 수 있다 —
@@ -4281,6 +4302,11 @@ const App = struct {
             // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
             .battery = self.battery_state.cell,
         };
+        // 상태 줄이 바뀌었는가(SB-M0, design 결정 2). `full`과 무관하게 바뀌었으면 기억한다 — 메모는
+        // "마지막으로 본 내용"이지 "마지막으로 그린 때"가 아니다. 띠를 그릴지는 아래 `paintBand`가
+        // `full`과 함께 보고, `dumpStatus`가 찍을지는 이 값 하나다.
+        frame.status_changed = self.status_memo.changed(frame.status_line);
+        if (frame.status_changed) self.status_memo.remember(frame.status_line);
 
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
@@ -4288,11 +4314,11 @@ const App = struct {
         try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
         self.last_current = self.current;
         self.last_tree = ws.tree;
-        frame.prompt_ink = try renderOverlay(self.fb, &self.cache, frame.prompt, frame.status_line);
-        // 상태 줄의 띠는 `renderOverlay`가 매 프레임 다시 칠한다(plan 확정 7). 프롬프트 행은
-        // 포커스 패널의 dirty 행 안이라 `paintPane`이 이미 넣었다.
-        const grid_bottom = GRID_Y + @as(u32, self.rows) * ROW_HEIGHT;
-        if (grid_bottom < self.fb.height) clips.push(0, grid_bottom, self.fb.width, self.fb.height - grid_bottom);
+        // 실제 경로는 `renderOverlay`를 안 부르고 둘을 따로 한다(SB-M0, design 결정 3). 프롬프트 행은
+        // 포커스 패널의 dirty 행 안이라 `paintPane`이 방금 지웠고 clip에도 넣었다 — 있으면 매 프레임
+        // 다시 쓴다. 띠는 내용이 바뀐 프레임과 통째 프레임(`renderBackdrop`이 띠도 지웠다)에만.
+        frame.prompt_ink = if (frame.prompt) |p| try drawPrompt(self.fb, &self.cache, p) else null;
+        try paintBand(self.fb, &self.cache, frame.status_line, full or frame.status_changed, &clips);
         // 화살표와 `present` 앞이다(DR design 위험 2). 그림자에는 화살표가 없으므로 비교도
         // 화살표가 실제 fb에 오르기 전에 한다.
         const verified = try self.verifyFrame(frame, ws);
@@ -4496,7 +4522,7 @@ const App = struct {
         dumpHighlight(focus.screen);
         dumpOverlay(frame.prompt);
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
-        dumpStatus(self.fb, frame.status_line, &self.last_status, &self.last_status_len, &self.last_status_caps, &self.last_status_battery);
+        dumpStatus(self.fb, frame.status_line, frame.status_changed);
         dumpPane(self.fb, &self.workspaces, self.current, &self.last_pane);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는

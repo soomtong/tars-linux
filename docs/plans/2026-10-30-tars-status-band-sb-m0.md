@@ -78,3 +78,25 @@ HEAD `25e34ef`에서 코드로 확인했다. 줄 번호는 그 HEAD의 `terminal
 - commit 하나.
 
 ## 결과
+
+### Task 1 — 코드와 mutation (2026-10-30)
+
+`main.zig` +94/−67(`StatusMemo` · `renderStatusBand` · `paintBand` · `Frame.status_changed` · `dumpStatus`의 인자 셋 · `sameBatteryCell`
+삭제 · 주석), `probe/split.pl` anchor 하나 + 주석. 호스트 0.17 `fmt --check` · `ast-check` 통과, 컨테이너 `zig build` · `zig build test`
+통과(호스트 테스트 0줄 변경). `patch.pl` + `split.pl`이 새 HEAD에 붙고 `ast-check`를 지난다.
+
+mutation 둘, 둘 다 hangul 체인(마운트, `TARS_RENDER_VERIFY=1`):
+
+| 판 | 체인 | verify 줄 |
+|---|---|---|
+| (a) `full or frame.status_changed` → `full` | FAIL — CapsLock 홀드 검사 `on=0`("Action.redraw is missing") | `ok` 22 · `mismatch rows=1 first=47` 25. 첫 mismatch가 Shift+Space 프레임(`status> text=한 …` 바로 앞 줄) |
+| (b) 띠 clip을 1 × 1로 | PASS(rc=0) | `ok` 110 · `mismatch clip rows=1 first=47` 67. 첫 mismatch가 같은 프레임 |
+
+(a)에서 체인이 빨개진 자리는 확정 8의 예상("`text=`는 초록")대로 검사 2가 아니다 — `text=`는 메모가 찍으므로 `한`으로 바뀌어 지나갔고,
+`ink fg=`도 `한`(2칸)과 `EN`(2칸)의 픽셀 수가 우연히 비슷해 지나갔으며, 띠의 앰버 픽셀을 세는 CapsLock 검사에서야 멈췄다. 띠가
+낡은 것을 그 프레임에 바로 말한 것은 verify뿐이다(design 결정 5). (b)는 체인이 PASS다 — 그린 픽셀은 맞고 clip만 빠졌으므로 덤프는
+전부 정상이고, 화면 흉내가 띠를 영영 못 받아 그 뒤 모든 프레임이 `mismatch clip`이다. 루트 게이트의 `check_verify_lines`가
+빨갛게 만드는 자리다(확정 8의 둘째 문장 그대로).
+
+되돌린 판(`make check`): hangul PASS, 178프레임 `ok` · `mismatch` 0 · `status> text=` 19줄. battery PASS, 부팅 A 221프레임 `ok` ·
+`status>` 5줄(배터리 칸이 바뀌는 프레임마다 띠를 다시 그렸다), 부팅 B 3프레임 `ok`.
