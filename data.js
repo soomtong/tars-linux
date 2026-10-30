@@ -5,15 +5,15 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-10-30',
-  latest: 'Dirty Rows (DR-M0~M2)',
+  latest: 'Dirty Rows (DR-M0~M3)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1033,      // git rev-list --count main
+    commits: 1038,      // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
-    zigKLines: 36,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 37,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -99,7 +99,7 @@ window.TARS = {
     ['2026-10-20', 'Build Version', 'BV', '시스템 안의 버전 — `tars-config version`과 부팅 로그 첫 줄'],
     ['2026-10-24', 'Gate Flakes', 'GF', '게이트 간헐 셋을 닫았다 — initrd는 prebuild 한 번, 로그는 out/gate-logs/에, 커널 자름은 tlog가 잇는다'],
     ['2026-10-27', 'Workspace Panes M3', 'WP-M3', '[⌘⌥←↑↓→]로 그 방향의 이웃 패널에'],
-    ['2026-10-30', 'Dirty Rows', 'DR', '바뀐 행만 다시 칠한다 — 키 하나의 그리기 2.45 → 1.36ms, 잔상은 게이트의 verify 모드가 매 프레임 판정'],
+    ['2026-10-30', 'Dirty Rows', 'DR', '바뀐 행만 다시 칠하고 셀 목록도 바뀐 행만 다시 짓는다 — 키 하나의 그리기 2.45 → 0.92ms, 잔상과 낡은 행은 게이트의 verify 모드가 매 프레임 판정'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
