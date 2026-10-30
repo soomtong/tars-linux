@@ -8,8 +8,8 @@ const font = @import("font.zig");
 /// 둘이다: `yoff`가 글자마다 다르고(A는 -10, 한은 -12), 그릴 것이
 /// 없는 글자는 에러가 아니라 빈 비트맵으로 온다.
 ///
-/// 이 파일의 기대값은 unifont 17.0.03의 실측이다. vendor_fonts.sh가 그
-/// 버전에 고정하고 sha256으로 확인한다. 폰트를 바꾸면 다시 재야 하는 곳이
+/// 이 파일의 기대값은 unifont 17.0.03의 실측이다. 폰트는 저장소에 커밋돼
+/// 있다(`vendor/fonts/README`, FR-M0). 폰트를 바꾸면 다시 재야 하는 곳이
 /// 기대값 표만이 아니다 — 아래 4번 검사의 표본도 폰트를 탄다.
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;

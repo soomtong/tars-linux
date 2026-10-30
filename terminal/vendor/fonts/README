@@ -1,0 +1,24 @@
+GNU Unifont 17.0.03 — TARS 터미널의 유일한 폰트(FR-M0, 2026-10-31부터 저장소 안).
+
+출처      https://ftp.gnu.org/gnu/unifont/unifont-17.0.03/unifont-17.0.03.otf
+sha256    26071c5a97533cefdcbc6b0645e7ee279413049079f09f592b26916ca6c21bf5
+저작권    Copyright © 1998-2025 Roman Czyborra, Paul Hardy, Qianqian Fang, Andrew Miller,
+          Johnnie Weaver, David Corbett, Ælla Chiana Moskopp, Rebecca Bettencourt,
+          Ho-Seok Ee, et al. (폰트의 name 테이블 nameID 0 그대로)
+라이선스  SIL OFL 1.1(OFL-1.1.txt, 배포 tarball의 원문 — 줄 끝만 LF) — GNU GPL v2+(Font
+          Embedding Exception)와의 이중 라이선스 가운데 OFL로 재배포한다.
+
+왜 unifont인가. 문턱값 렌더링(TR design 결정 4)에 쓸 수 있는 비트맵 폰트다 —
+unitsPerEm이 64라 16px에서 scale이 정확히 0.25이고, coverage가 0 아니면 255뿐이라
+게이트가 픽셀을 상수와 비교할 수 있다. 아웃라인 폰트는 16px에서 잉크의 90% 넘게가
+중간값이라 문턱값으로 자르면 획이 끊긴다. 후보를 전부 잰 것은
+docs/decisions/project_font_selection.md.
+
+왜 버전을 고정하나. terminal/src/font_test.zig의 기대값 표가 이 버전의 실측이다.
+다른 파일이 조용히 들어오면 표가 통째로 틀어지는데, 그때 나는 실패는 "글자가 좀
+이상하다"라서 원인까지 멀다. 그래서 받지 않고 여기 둔다 — 바뀌면 diff에 보인다.
+
+올릴 때. 파일을 바꾸고 이 README의 버전 · sha256 · 저작권 줄을 고치고 font_test.zig의
+표를 다시 잰다. 파일 이름에는 버전을 넣지 않는다 — 이 경로를 읽는 곳이 넷이다
+(kernel/make_initrd.sh · terminal/src/main.zig · terminal/src/font_test.zig ·
+terminal/prepare.sh의 주석).

@@ -85,7 +85,7 @@ help:
 	@echo "      3.3MB로 줄인 것이 부팅 시간에 반영됐다"
 	@echo
 	@echo "  make terminal"
-	@echo "      terminal/prepare.sh. vendor 셋(stb_truetype · ghostty lib-vt · unifont)을"
+	@echo "      terminal/prepare.sh. vendor 셋(stb 헤더 둘 · ghostty lib-vt)을"
 	@echo "      준비하고 zig build. ghostty-src는 트리가 없을 때만 받으므로 첫 회차에만"
 	@echo "      네트워크가 필요하다"
 	@echo
@@ -136,7 +136,7 @@ help:
 	@echo
 	@echo "  make quick"
 	@echo "      quick_check.sh — 게이트가 아닌 1분짜리 검사. 컨테이너 없이 호스트의 shellcheck · zig로"
-	@echo "      shellcheck(52파일) · zig fmt --check · ast-check · shared 검사 · init 크로스 빌드. CI(.github/"
+	@echo "      shellcheck(51파일) · zig fmt --check · ast-check · shared 검사 · init 크로스 빌드. CI(.github/"
 	@echo "      workflows/checks.yml)가 같은 파일을 돌린다. 산출물은 out/quick/ 아래"
 	@echo
 	@echo "그 밖"

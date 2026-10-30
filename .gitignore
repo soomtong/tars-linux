@@ -16,7 +16,9 @@ boot/limine-binary/
 out/
 
 terminal/ghostty-src/
-terminal/vendor/
+# vendor/는 받는 것(stb 헤더 둘)이고 fonts/만 커밋한다(FR-M0). 디렉터리째 무시하면 `!`로 못 되살린다.
+terminal/vendor/*
+!terminal/vendor/fonts/
 
 terminal/zig-out/
 terminal/zig-pkg/

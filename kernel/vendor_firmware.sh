@@ -7,7 +7,7 @@ cd "$(dirname "$0")" || exit 1
 # (WL-M1). make_initrd.sh가 부르고, 그 cpio를 initrd 뒤에 이어 붙인다.
 # AU-M3부터 소리 DSP(Intel SOF)의 firmware와 topology도 같은 cpio에 들어간다.
 #
-# 버전을 고정하고 sha256을 확인한다. terminal/vendor_fonts.sh와 같은 이유다 —
+# 버전을 고정하고 sha256을 확인한다. 폰트(terminal/vendor/fonts/README)와 같은 이유다 —
 # 다른 파일이 조용히 들어오면 실패가 "실기에서 무선이 안 뜬다"로 나타나는데,
 # 게이트는 실칩을 못 보므로(WL design 위험 4) 그 실패는 원인에서 가장 멀다.
 # 해시는 kernel.org의 sha256sums.asc와 대조했다(WL design 실측 3).

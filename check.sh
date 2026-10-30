@@ -7,7 +7,7 @@ cd "$(dirname "$0")" || exit 1
 #
 # 지우면 안 되는 것들(전부 .gitignore 대상이라 눈에 안 띈다):
 #   terminal/ghostty-src  GitHub tarball로 받아온 vendor 소스 트리
-#   terminal/vendor       stb_truetype.h + unifont
+#   terminal/vendor       stb 헤더 둘(unifont는 vendor/fonts/에 커밋돼 있다, FR-M0)
 #   terminal/zig-pkg      Zig의 프로젝트 로컬 패키지 캐시
 # 이 셋은 네트워크가 있어야만 복구되므로, clean 대상에 넣으면 매 회차 수백
 # MB를 다시 받고 오프라인에서는 아예 복구가 불가능하다.

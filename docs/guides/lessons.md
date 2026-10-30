@@ -437,7 +437,7 @@ docker run -d --name tars-measure tars-devcontainer sleep 7200
 docker exec tars-measure bash -c 'apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish >/dev/null 2>&1'
 
-# 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig로 shellcheck(52파일, warning 이상) ·
+# 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig로 shellcheck(51파일, warning 이상) ·
 # zig fmt --check · ast-check · shared/의 순수 검사 · init 크로스 빌드. 명령은 quick_check.sh에 있고
 # CI(.github/workflows/checks.yml의 host job)가 같은 파일을 돌린다 — 사람이 안 돌려도 push마다 돈다.
 # "shellcheck notes: N" 줄은 판정이 아니다(기준선 46, 2026-10-30). 호스트 검사(zig build test)는 여기에 없다 —
