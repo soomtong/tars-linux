@@ -287,12 +287,32 @@ push → `gh run watch`로 두 job 초록과 step별 시간을 plan의 결과 �
 "정적 검사와 컨테이너 빌드다(`make quick`과 같은 것)"가 이제 틀린다 — `container`가 `make quick`에 없는 호스트 검사를 돈다.
 "정적 검사 · 컨테이너 빌드 · 호스트 검사(`zig build test`)다 — 부팅 판정인 게이트는 로컬 `make gate`"로 바꾼다.
 
+### 결정 12. ghostty 의존성은 재시도하는 step에서 먼저 받는다(Task 1 뒤에 더함)
+
+Task 1의 첫 네 회차 가운데 둘에서 terminal step이 `deps.files.ghostty.org`의 zlib을 받다가 `ConnectionResetByPeer`로 멈췄다(위험 9가
+반을 차지했다). 사용자가 재시도 step을 골랐다(2026-10-30). terminal step 앞에 `terminal fetch (retry)`를 둔다 —
+`./vendor_libghostty_vt.sh` 뒤 `zig build --help`를 세 번까지. 받은 패키지는 `terminal/zig-pkg/`에 남으므로 다음 step의 prebuild
+줄은 아무것도 받지 않는다. 그 줄은 글자 그대로 남는다(결정 8).
+
+받는 명령은 로컬 컨테이너에서 깨끗한 사본으로 셋을 견줬다.
+
+| 명령 | 받는 것 | 그 뒤 `prepare.sh`의 `fetching` | `zig build test` |
+|---|---|---|---|
+| `zig build --fetch` | 3개(lazy 아닌 것) | 5줄(zlib 포함) | PASS |
+| `zig build --fetch=all` | 37개, 534MB, 73초 | 0 | PASS |
+| `zig build --help` | 8개, 32MB, 70초(build runner 컴파일 포함) | 0 | PASS |
+
+`--help`는 받으라고 있는 옵션이 아니다. build.zig를 configure까지 돌리면 `lazyDependency`가 실제로 쓰는 것만 받는다는 사실에
+기댄다. Zig가 그 동작을 바꾸면 이 step은 받는 것 없이 초록으로 끝나고 다음 step이 받는다. 재시도가 없어질 뿐 판정은 같다.
+
 ### 위험(M1)
 
 8. container job이 길어진다. M0의 3분 13초에 init 검사와 terminal 준비가 더해진다 — 로컬 비율로 어림하면 7~9분이다(재지 않았다).
    10분을 넘으면 층 · Zig 캐시가 다음 후보다. `host`는 따로 3분에 끝나므로 빠른 답은 그대로다.
 9. 우리 코드가 아닌 빨강이 늘어난다. 받는 곳이 github.com · raw.githubusercontent · ftp.gnu.org · deps.files.ghostty.org 넷 더해진다.
-   구분은 M0 위험 2와 같다 — `curl`이나 `fetching` 줄이면 `gh run rerun`.
+   구분은 M0 위험 2와 같다 — `curl`이나 `fetching` 줄이면 `gh run rerun`. 실측(Task 1): 네 회차 중 둘이
+   `deps.files.ghostty.org`의 `ConnectionResetByPeer` — 결정 12가 재시도를 더했다. unifont(`ftp.gnu.org`)는 runner에서 두 번 다
+   103 · 106초 걸렸다(실패는 아니다).
 10. ghostty tarball과 stb 두 헤더는 해시를 대조하지 않는다. 커밋으로 고정했으므로 내용은 같지만 받은 바이트가 맞는지는 아무도
     안 본다 — 게이트도 같다. 이번에 고치지 않는다(비목표 8).
 11. 검사가 timing에 기대면 4 vCPU에서 흔들릴 수 있다. 로컬 게이트에서 호스트 검사가 흔들린 기록은 없다(GP-M2의 고정 경로 충돌은

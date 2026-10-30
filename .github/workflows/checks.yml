@@ -71,6 +71,14 @@ jobs:
       - name: init build and test
         run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd init && zig build && zig build test'
 
+      # ghostty의 의존성만 먼저 받는다. deps.files.ghostty.org가 runner에서 연결을 자주 끊는다(GH-M1 첫
+      # 네 회차 중 둘, zlib에서 ConnectionResetByPeer). --help는 build.zig를 configure까지 돌려 실제로 쓰는
+      # lazy 의존성(8개, 32MB)만 받는다 — --fetch=all은 37개 534MB, --fetch는 lazy를 안 받는다. 받은 것은
+      # terminal/zig-pkg에 남아 다음 step이 다시 받지 않고, 다시 시도해도 못 받은 것만 받는다. 아래 줄이
+      # 게이트 prebuild와 같은 글자로 남게 재시도는 이 step만의 일이다(결정 12).
+      - name: terminal fetch (retry)
+        run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd terminal && ./vendor_libghostty_vt.sh && for i in 1 2 3; do zig build --help > /dev/null && exit 0; echo "fetch failed (try $i)"; sleep 15; done; exit 1'
+
       # 같은 prebuild의 terminal 줄. prepare.sh가 ghostty · stb 둘 · unifont · zon 의존성을 받는다 —
       # 여기의 빨강이 curl이나 fetching 줄이면 우리 코드가 아니다(gh run rerun). step을 init과 나눈 것은
       # 빨강의 자리를 step 이름이 말하게 하려는 것이다(결정 9).
