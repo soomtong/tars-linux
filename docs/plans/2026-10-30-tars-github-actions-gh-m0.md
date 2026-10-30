@@ -2,7 +2,7 @@
 
 Date: 2026-10-30
 Design: `docs/specs/2026-10-30-tars-github-actions-design.md`
-Status: 진행 중
+Status: 끝났다(2026-10-30)
 
 ## 착수 전에 확정한 것
 
@@ -235,4 +235,37 @@ commit 없음(브랜치는 지운다). 결과는 아래 결과 절에.
 
 ## 결과
 
-(Task마다 적는다.)
+### Task 1
+
+- 첫 `make quick`이 `FAIL: shellcheck`로 빨갰다 — 둘. (1) `quick_check.sh` 자신의 머리 주석 한 줄이 `# shellcheck 버전은 …`으로
+  시작해 shellcheck가 지시자로 읽고 SC1073 · SC1072(error)를 냈다. 주석을 "셸 검사기의 버전은"으로 바꾸고 그 사실을 주석에 적었다.
+  (2) `wifi/ap.sh`의 `for i`가 둘이 아니라 넷이었다(32 · 64 · 78 · 89행) — shellcheck는 한 변수에 SC2034를 한 번만 찍어 둘을 고친 뒤에야
+  다음이 보였다. 넷 다 `_`. 그 뒤 `quick_check: PASS`, `shellcheck 52 files`(49 `.sh` + 게스트 둘 + `quick_check.sh` 자신),
+  `shellcheck notes: 46`, 호스트 23초(warm).
+- `make check CHAIN=wifi` PASS(WL-M3 줄), verify에 `ok` 아닌 줄 0. ap.sh가 찍는 `wlan0 inet` · `wrong key seen` · `after restart` 셋 그대로.
+- commit `e7d7faf`.
+
+### Task 2
+
+- commit `2259b14`, push → run 41065218866(push, main). 두 job 초록. host 13:40:52 → 13:44:01(3분 9초), container 13:40:54 →
+  13:44:07(3분 13초). 큐 대기는 push 뒤 3초.
+- host 단계: checkout 2초 · shellcheck 받기 1초 미만 · zig 받기 9초 · `quick_check.sh` 2분 54초(shellcheck 두 번 27초 · fmt + ast-check +
+  shared 5초 · init 크로스 빌드 약 2분 20초, cold cache). 로그에 `shellcheck 52 files` · `shellcheck notes: 46` · `PASS`, 버전 불일치
+  줄 없음.
+- container 단계: `docker build` 46초(캐시 없음 — design의 "몇 분" 걱정은 틀렸다, runner의 네트워크가 빠르다) · sanity 5초 · `cd init
+  && zig build` 2분 17초(aarch64, cold). 층 캐시(M1 후보)는 필요 없다 — 시간의 대부분이 Zig 빌드다.
+
+### Task 3
+
+- (a) `gh-m0-mut-a`(`probe/run.sh`의 `|| exit 1`을 뺌) → run 41065384460(workflow_dispatch). host 빨강 — 로그에 SC2164 warning과
+  `quick_check: FAIL: shellcheck`. container 초록(3분 17초).
+- (b) `gh-m0-mut-b`(`shared/screen_args.zig` 27행 들여쓰기 한 칸) → run 41065427544. host 빨강 — `zig fmt --check`가
+  `shared/screen_args.zig`를 찍고 `quick_check: FAIL: zig-fmt`. container 초록(3분 7초) — 서식이 깨져도 컴파일은 되므로 맞다.
+- 둘 다 `quick_check.sh`가 실패한 단계 뒤에도 나머지 단계를 끝까지 돌고 마지막에 실패한 단계 이름을 모아 말한다(설계대로).
+- 브랜치 둘은 원격 · 로컬에서 지웠다. commit 없음.
+
+### Task 4
+
+- 문서 셋(lessons "범용 명령" → `make quick`, key-files 두 줄, project_zig_upgrade의 fmt 절과 "다음에 올릴 때 고칠 자리").
+- 루트 게이트 22/22, 10분 11초(prebuild 311 + lanes 299초), 22회차 verify 줄 전부 `ok`(`out/gate-logs/20261030-134638`). 바뀐 것이 지시자 주석 둘 · `for _` · `|| exit 1`이라
+  게이트에 보일 것은 없었고, 보이지 않았다.

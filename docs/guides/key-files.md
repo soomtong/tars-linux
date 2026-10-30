@@ -376,6 +376,13 @@
   (anchor는 정확히 한 번), `run.sh`가 그 사본을 read-only로 마운트해 부팅 한 번(`seq 1 200000` · 키 넷), `report.pl`이
   집계한다. 돌리는 법은 `docs/plans/2026-10-11-tars-render-speed-rs-m0.md`. 그리기를 고치면 같은 판으로 전후를 잰다.
   monitor 45590(체인 범위 밖). 루트 게이트의 `clean()`이 `out/probe-rs/`를 지운다.
+- `quick_check.sh` — 게이트가 아닌 1분짜리 검사(GH-M0). shellcheck(`git ls-files '*.sh'` + 게스트 스크립트 둘, `-x -P
+  SCRIPTDIR -S warning`) · `zig fmt --check` · `ast-check` · `shared/screen_args_test.zig` · init 크로스 빌드(`out/quick/` 아래).
+  `make quick`과 CI의 host job이 같은 파일을 부른다. 셸 검사기 버전은 이 파일, Zig 버전은 Dockerfile의 `ZIG_VERSION`이 정본.
+  주석 줄을 `# shellcheck`로 시작하면 지시자로 읽힌다(SC1073).
+- `.github/workflows/checks.yml` — CI. `host`(amd64, tarball로 받은 shellcheck 0.11.0 · Zig, sha256 대조 → `quick_check.sh`)와
+  `container`(`ubuntu-24.04-arm`, Dockerfile 그대로 굽고 안에서 `devcontainer/sanity/check.sh` · `cd init && zig build`). 초록은
+  부팅이 아니다 — 게이트는 로컬. `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.
 
 ## 기억
 

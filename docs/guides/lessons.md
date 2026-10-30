@@ -437,12 +437,11 @@ docker run -d --name tars-measure tars-devcontainer sleep 7200
 docker exec tars-measure bash -c 'apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish >/dev/null 2>&1'
 
-# 호스트 0.17로 서식 · 문법 검사(빌드는 컨테이너가 한다). shared/도 함께 — 사람이 돌리는
-# 검사라 목록에 없으면 영영 안 돈다(SA-M0). zsh에서는 파일 목록을 배열로 넘긴다.
-/opt/homebrew/bin/zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared
-for f in init/src/*.zig terminal/src/*.zig shared/*.zig; do /opt/homebrew/bin/zig ast-check "$f" || echo "FAIL $f"; done
-# shared/는 순수 파일이라(libc · 시스템 콜 없음) 그 검사만은 컨테이너 없이 호스트에서 바로 돈다(SA-M1).
-/opt/homebrew/bin/zig run shared/screen_args_test.zig
+# 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig로 shellcheck(52파일, warning 이상) ·
+# zig fmt --check · ast-check · shared/의 순수 검사 · init 크로스 빌드. 명령은 quick_check.sh에 있고
+# CI(.github/workflows/checks.yml의 host job)가 같은 파일을 돌린다 — 사람이 안 돌려도 push마다 돈다.
+# "shellcheck notes: N" 줄은 판정이 아니다(기준선 46, 2026-10-30).
+make quick
 ```
 
 편집 스크립트를 셸 heredoc으로 감쌀 때 바깥 구분자가 안쪽 내용의 `EOF`와 겹치면

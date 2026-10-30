@@ -54,7 +54,15 @@ std 안의 어긋남 하나: `linux.waitpid` · `wait4`가 `*i32`를 받는데 `
 
 0.17 `zig fmt`는 438줄 · 30파일을 바꾸고 그중 84줄이 `@intFromEnum` → `@backingInt`
 자동 치환이다. 고침 commit과 섞이면 diff를 못 읽는다. 이 저장소에 fmt 게이트는
-없고(M0 실측 2) 만들지 않았다.
+없었고(M0 실측 2) ZU는 만들지 않았다 — GH-M0(2026-10-30)부터 `quick_check.sh`가
+`fmt --check` · `ast-check`를 호스트(`make quick`)와 CI에서 본다([[project_github_actions]]).
+
+## 다음에 올릴 때 고칠 자리
+
+Dockerfile의 `ENV ZIG_VERSION`이 정본이고 `quick_check.sh` · `checks.yml`이 그 줄을 읽는다.
+해시는 버전마다 다르므로 `checks.yml`의 `ZIG_SHA256`(x86_64-linux tarball, ziglang.org
+`index.json`의 `shasum`)을 함께 고친다. 둘이 어긋나면 host job이 `sha256sum -c`에서 빨개진다 —
+우리 코드가 아닌 빨강이다.
 
 ## 호스트 0.17로 미리 잴 수 있는 것과 없는 것
 
