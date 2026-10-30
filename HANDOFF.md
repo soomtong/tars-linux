@@ -1,8 +1,21 @@
-# HANDOFF: Status Band(SB-M0) 닫음(2026-10-30) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: GitHub Actions(GH-M0) 닫음(2026-10-30) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-30)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Status Band(SB-M0, 2026-10-30, DR과 같은 날). design
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 GitHub Actions(GH-M0, 2026-10-30, 2026-10-24 점검의 마지막 (5)). design
+  `docs/specs/2026-10-30-tars-github-actions-design.md`, plan `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`, 기억
+  `docs/decisions/project_github_actions.md`. `.github/workflows/checks.yml` 하나 — `host`(amd64)는 루트의 `quick_check.sh`(사람은
+  `make quick`): shellcheck 0.11.0으로 52파일(warning 이상 판정, note 46은 수만) · `zig fmt --check` · `ast-check` · shared 검사 ·
+  init 크로스 빌드(`out/quick/`). `container`(`ubuntu-24.04-arm`)는 Dockerfile을 그대로 굽고 안에서 sanity 부팅과 `cd init && zig
+  build`. 게이트는 Actions에서 안 돈다 — 초록은 부팅이 아니다(README 배지 옆 한 줄). 도구는 tarball + sha256, 제3자 action 없음.
+  `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.
+  - 숫자: 첫 회차 host 3분 9초 · container 3분 13초. `docker build`는 캐시 없이 46초(걱정이 틀렸다), 시간은 Zig 빌드(cold 약 2분
+    20초)다. mutation 둘(shellcheck warning · zig fmt) 다 host 빨강. 루트 게이트 22/22, 10분 11초(prebuild 311 + lanes 299초), verify 8122프레임 전부 `ok`.
+  - 함정: 주석 줄을 `# shellcheck`로 시작하면 지시자로 읽힌다(SC1073). SC2034는 변수마다 한 번만 찍힌다. init의 `zig build test`는
+    macOS 호스트에서 안 끝난다(host job에 없다). Zig를 올리면 Dockerfile `ZIG_VERSION`과 `checks.yml` `ZIG_SHA256`을 함께.
+  - M1 후보(사용자가 고른다): shellcheck note 46 정리 · 컨테이너 안 `zig build test`(init · terminal) · ghcr.io 이미지.
+  - 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Status Band(SB-M0, 2026-10-30, DR과 같은 날). design
   `docs/specs/2026-10-30-tars-status-band-design.md`, plan `docs/plans/2026-10-30-tars-status-band-sb-m0.md`, 기억
   `docs/decisions/project_status_band.md`. 격자 아래 띠(1280 × 28)를 매 프레임 지우고 상태 줄을 다시 쓰고 clip으로 넘기던 것을,
   내용(`text` · `caps` · `battery`)이 바뀐 프레임과 통째 프레임에만 하게 바꿨다 — `App.render`가 `drawPrompt`와 `paintBand(…, full or
@@ -93,7 +106,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(SB-M0 닫기): 22/22, 11분 14초(prebuild 364 + lanes 308초), verify 8109프레임 전부 `ok`(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(GH-M0 닫기): 22/22, 10분 11초(prebuild 311 + lanes 299초), verify 8122프레임 전부 `ok`(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -120,9 +133,7 @@
 
 ## 다음 후보 (DR 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
-  (5) `.github`가 없다 — Dockerfile 빌드 ·
-  호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
+- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 M1 후보는 위.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
@@ -145,6 +156,8 @@
 ## 이어받는 사람이 볼 것
 
 - Docker는 OrbStack이다(메모리 12GB). 소켓이 없다고 나오면 `orb start`.
+- 부팅 없이 1분에 보는 검사는 `make quick`(`quick_check.sh`)이다 — shellcheck · Zig fmt · ast-check · shared · init 빌드. push마다
+  CI(`checks.yml`)가 같은 것을 돌리고 README 배지가 그 결과다. 빨강이 `sha256sum` · `curl`이면 우리 코드가 아니다 — `gh run rerun`.
 - 새로 받은 저장소는 이미지부터 굽는다(Dockerfile). 첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - `shared/`는 init과 terminal이 함께 컴파일하는 파일의 자리다. 순수해야 한다(libc · 로그 없음) — init이 libc를 안 링크한다.
