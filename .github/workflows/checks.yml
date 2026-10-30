@@ -6,7 +6,8 @@
 #   host       amd64 runner. shellcheck · Zig를 release tarball로 받아(sha256 대조) quick_check.sh를
 #              돌린다 — 사람이 `make quick`으로 돌리는 그 파일이다.
 #   container  arm64 runner. devcontainer/Dockerfile이 zig-aarch64를 받으므로(ZM-M3) amd64에서는
-#              못 쓴다. 그대로 굽고, 안에서 BF-M0 sanity 부팅과 init의 zig build를 돌린다.
+#              못 쓴다. 그대로 굽고, 안에서 BF-M0 sanity 부팅과 게이트 prebuild의 두 줄(init · terminal의
+#              zig build test, GH-M1)을 돌린다.
 #
 # 제3자 action은 쓰지 않는다 — 무엇이 도는지 이 파일에서 읽히게. actions/checkout만 태그로 핀한다.
 # Zig 버전은 Dockerfile의 ENV ZIG_VERSION이 정본이고 여기서는 해시만 적는다(ZU가 올릴 때 함께).
@@ -64,5 +65,14 @@ jobs:
       # BF-M0의 sanity. 크로스 gcc → 32비트 ELF → qemu TCG 5초 → 시리얼 표식.
       - run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer devcontainer/sanity/check.sh
 
-      # 이미지 안의 zig(aarch64)가 게스트 바이너리 넷을 만든다 — host job의 5단계와 짝.
-      - run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd init && zig build'
+      # 게이트 prebuild(check.sh)의 init 줄과 글자가 같다(GH-M1 design 결정 8). zig build는 이미지 안의
+      # zig(aarch64)가 게스트 바이너리 넷을 만들고 — host job의 5단계와 짝 — zig build test는 호스트 검사
+      # 열일곱을 이 arm64 Linux에서 돌린다. macOS에서는 init 검사가 안 끝나 quick_check.sh에 없다.
+      - name: init build and test
+        run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd init && zig build && zig build test'
+
+      # 같은 prebuild의 terminal 줄. prepare.sh가 ghostty · stb 둘 · unifont · zon 의존성을 받는다 —
+      # 여기의 빨강이 curl이나 fetching 줄이면 우리 코드가 아니다(gh run rerun). step을 init과 나눈 것은
+      # 빨강의 자리를 step 이름이 말하게 하려는 것이다(결정 9).
+      - name: terminal prepare and test
+        run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd terminal && ./prepare.sh && zig build test'
