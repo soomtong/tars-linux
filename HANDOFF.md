@@ -1,20 +1,29 @@
-# HANDOFF: GitHub Actions(GH-M1) 닫음(2026-10-30) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: Font in Repo(FR-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
 
-## 지금 상태 (2026-10-30)
+## 지금 상태 (2026-10-31)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 GH-M1(2026-10-30, 사용자가 M0의 후보에서 골랐다). design의 "GH-M1" 절(결정
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Font in Repo(FR-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 "미러 대신 저장소
+  안"으로 골랐다). design `docs/specs/2026-10-31-tars-font-in-repo-design.md`, plan `docs/plans/2026-10-31-tars-font-in-repo-fr-m0.md`,
+  기억은 `docs/decisions/project_font_selection.md`에 한 단락. GNU Unifont 17.0.03이 `terminal/vendor/fonts/`에 커밋돼 있다
+  (`unifont.otf` · `OFL-1.1.txt` · `README`). `.gitignore`는 `terminal/vendor/*` + `!terminal/vendor/fonts/`라 stb 헤더 둘은 여전히
+  받는다. `vendor_fonts.sh`는 지웠다 — shellcheck 대상 51파일. 폰트를 읽는 코드는 0줄 바뀌었다.
+  - 숫자: CI `container` 6분 51초(terminal step 3분 28초 → 2분 45초, −43초). 루트 게이트 22/22, 10분 1초(prebuild 303 + lanes 298초),
+    verify 8141줄 전부 `ok`.
+  - 바로잡은 것: GH-M1의 "unifont 100초"는 cold build runner 컴파일이 섞인 간격이었다. step 사이의 줄 간격으로 한 몫을 재지 않는다.
+  - 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 GH-M1(2026-10-30, 사용자가 M0의 후보에서 골랐다). design의 "GH-M1" 절(결정
   8~13), plan `docs/plans/2026-10-30-tars-github-actions-gh-m1.md`, 기억은 `docs/decisions/project_github_actions.md`의 GH-M1 절.
   `container` job이 게이트 prebuild의 두 줄(`cd init && zig build && zig build test` · `cd terminal && ./prepare.sh && zig build test`)을
   글자 그대로 돈다 — 호스트 검사 서른넷이 push마다 arm64 Linux에서. 그 사이에 ghostty 의존성을 세 번까지 받는 step(`zig build
   --help` — `deps.files.ghostty.org`가 네 회차 중 둘 끊겼다), 세 step이 `-v /tmp/zig-global:/root/.cache/zig`로 전역 캐시를 잇는다.
   - 숫자: `container` 8분 10초 → 10분 51초(재시도 step) → 7분 30초(캐시 공유, 로컬 288 → 180초). `host` 2분 32초. mutation 둘
     (`version_test` · `layout_test`)이 각자의 step에서 `FAIL:` 줄로 잡혔다. 게이트 입력 0줄이라 루트 게이트는 안 돌았다.
-  - 남은 바깥 몫: unifont(`ftp.gnu.org`)가 runner에서 매번 100초 남짓. ghostty tarball · stb 둘은 sha256 대조가 없다(게이트도 같다).
-  - 다음 후보(사용자가 고른다): shellcheck note 46 · vendor sha256 · unifont 미러 · ghcr.io 이미지.
+  - 남은 바깥 몫: ghostty tarball · stb 둘은 sha256 대조가 없다(게이트도 같다). unifont는 FR-M0이 저장소에 넣었다.
+  - 다음 후보(사용자가 고른다): shellcheck note 46 · vendor sha256 · ghcr.io 이미지.
 - 그 전에 닫은 것은 GitHub Actions(GH-M0, 2026-10-30, 2026-10-24 점검의 마지막 (5)). design
   `docs/specs/2026-10-30-tars-github-actions-design.md`, plan `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`, 기억
   `docs/decisions/project_github_actions.md`. `.github/workflows/checks.yml` 하나 — `host`(amd64)는 루트의 `quick_check.sh`(사람은
-  `make quick`): shellcheck 0.11.0으로 52파일(warning 이상 판정, note 46은 수만) · `zig fmt --check` · `ast-check` · shared 검사 ·
+  `make quick`): shellcheck 0.11.0으로 52파일(FR-M0 뒤 51)(warning 이상 판정, note 46은 수만) · `zig fmt --check` · `ast-check` · shared 검사 ·
   init 크로스 빌드(`out/quick/`). `container`(`ubuntu-24.04-arm`)는 Dockerfile을 그대로 굽고 안에서 sanity 부팅과 `cd init && zig
   build`. 게이트는 Actions에서 안 돈다 — 초록은 부팅이 아니다(README 배지 옆 한 줄). 도구는 tarball + sha256, 제3자 action 없음.
   `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.

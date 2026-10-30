@@ -96,7 +96,7 @@ commit 하나(닫기). 소개 페이지에는 안 넣는다(내부 작업).
 `make quick` PASS 뒤 push. run 41069764532 — `host` 3분 8초 초록. `container`는 1회차에서 terminal step이
 `ghostty-src/pkg/zlib/build.zig.zon:9:20: error: HTTP response read failure: ConnectionResetByPeer`(`deps.files.ghostty.org`)로 빨갰고,
 `gh run rerun --failed`로 초록 — 8분 10초(`docker build` 50초 · sanity 6초 · init 2분 43초 · terminal 4분 29초). init step의 몫은 M0의
-`zig build` 2분 17초에 검사 열일곱이 약 26초를 더한 것. terminal의 4분 29초 가운데 unifont(`ftp.gnu.org`)가 103초(1회차 106초).
+`zig build` 2분 17초에 검사 열일곱이 약 26초를 더한 것. terminal의 4분 29초 가운데 unifont(`ftp.gnu.org`)가 103초(1회차 106초) (FR-M0에서 바로잡음: 그 간격은 `Downloading … unifont` 줄에서 다음 `fetching` 줄까지였고 cold build runner 컴파일이 섞였다. 저장소에 넣어 빠진 몫은 43초다).
 
 ### Task 2 — mutation 둘
 

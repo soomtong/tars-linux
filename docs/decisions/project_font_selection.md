@@ -111,6 +111,9 @@ TR-M1은 Hanme의 자모 커버리지 표를 본문에서 반대로 읽어 "낱�
 있었고, 그 우회로를 설계까지 했는데 같은 날 unifont로 바꾸면서 통째로 필요
 없어졌다. 표를 만들었다고 표를 읽은 것은 아니다.
 
+FR-M0(2026-10-31)부터 폰트는 받지 않고 저장소에 있다 — `terminal/vendor/fonts/`에 `unifont.otf` · `OFL-1.1.txt` · `README`(출처 ·
+sha256 · 저작권 줄 · 올릴 때 할 일). `terminal/vendor_fonts.sh`는 지웠다. design `docs/specs/2026-10-31-tars-font-in-repo-design.md`.
+
 ## 관련
 
 - 문턱값 렌더링의 근거: [[project_terminal_rendering]]

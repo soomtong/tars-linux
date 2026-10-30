@@ -1,6 +1,6 @@
 ---
 name: project_github_actions
-description: "GitHub Actions(GH-M0, 2026-10-30). checks.yml 하나에 host(quick_check.sh: shellcheck 0.11.0 · Zig fmt/ast-check/shared 검사/init 크로스 빌드)와 container(ubuntu-24.04-arm에서 Dockerfile 그대로 굽고 sanity · 게이트 prebuild의 두 줄 = init · terminal zig build test, GH-M1) — 게이트는 안 돌린다, 도구는 tarball + sha256, 주석을 '# shellcheck'로 시작하면 지시자, push는 main만, deps.files.ghostty.org가 끊겨 재시도 fetch step(zig build --help), step 사이 전역 Zig 캐시 공유, host 3분 · container 7분 30초"
+description: "GitHub Actions(GH-M0, 2026-10-30). checks.yml 하나에 host(quick_check.sh: shellcheck 0.11.0 · Zig fmt/ast-check/shared 검사/init 크로스 빌드)와 container(ubuntu-24.04-arm에서 Dockerfile 그대로 굽고 sanity · 게이트 prebuild의 두 줄 = init · terminal zig build test, GH-M1) — 게이트는 안 돌린다, 도구는 tarball + sha256, 주석을 '# shellcheck'로 시작하면 지시자, push는 main만, deps.files.ghostty.org가 끊겨 재시도 fetch step(zig build --help), step 사이 전역 Zig 캐시 공유, host 3분 · container 7분 30초(FR-M0 뒤 6분 51초)"
 metadata:
   type: project
 ---
@@ -66,7 +66,9 @@ M0의 M1 후보 가운데 사용자가 골랐다. plan `docs/plans/2026-10-30-ta
   job에 넣지 않았다 — 컨테이너 안이면 되고, GH-M1이 `container`에 넣었다.
 - ghostty의 lazy 의존성을 미리 받는 명령은 `zig build --help`다. `--fetch`(needed)는 lazy를 안 받고(3개), `--fetch=all`은 ghostty가
   쓸 수 있는 것 전부(37개 534MB)다. `--help`는 build.zig를 configure까지 돌려 실제로 쓰는 8개(32MB)만 받는다.
-- unifont(`ftp.gnu.org`)는 runner에서 매번 100초 남짓 걸린다(실패는 아니다). 지금 `container`의 가장 큰 바깥 몫이다.
+- unifont(`ftp.gnu.org`)를 runner에서 "100초 남짓"으로 읽은 것은 틀렸다 — `Downloading` 줄에서 다음 `fetching` 줄까지의 간격에 cold
+  build runner 컴파일이 섞였다. 다운로드 끝은 로그에 안 찍힌다. FR-M0이 폰트를 저장소에 넣어 빠진 몫은 43초였다(3분 28초 → 2분 45초).
+  step 사이의 간격으로 한 몫을 재지 않는다 — 그 사이에 찍히지 않는 일이 있다.
 - `gh workflow run`이 HTTP 500을 낼 때가 있다(GitHub 쪽). 20초 뒤 다시 부르면 된다.
 - `quick_check.sh`의 init 빌드는 `--prefix out/quick/init`다. `init/zig-out`을 덮으면 initrd가 호스트 Mac의 zig로 만든 바이너리를
   싣는다(같은 버전이면 같겠지만 확인하지 않았다).
@@ -74,7 +76,7 @@ M0의 M1 후보 가운데 사용자가 골랐다. plan `docs/plans/2026-10-30-ta
 ## 남긴 것(다음 후보)
 
 shellcheck note 46(그중 SC2329 19, `config/check.sh`에 10)의 정리 · vendor 스크립트의 sha256(ghostty tarball · stb 둘은 대조가
-없다, 게이트 입력이라 게이트가 따라온다) · unifont를 더 빠른 미러에서 · 구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단).
+없다, 게이트 입력이라 게이트가 따라온다) · 구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단).
 
 ## 관련
 

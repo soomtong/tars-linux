@@ -334,7 +334,7 @@ terminal step이 줄어든 몫은 init이 구운 aarch64의 std · compiler_rt�
 9. 우리 코드가 아닌 빨강이 늘어난다. 받는 곳이 github.com · raw.githubusercontent · ftp.gnu.org · deps.files.ghostty.org 넷 더해진다.
    구분은 M0 위험 2와 같다 — `curl`이나 `fetching` 줄이면 `gh run rerun`. 실측(Task 1): 네 회차 중 둘이
    `deps.files.ghostty.org`의 `ConnectionResetByPeer` — 결정 12가 재시도를 더했다. unifont(`ftp.gnu.org`)는 runner에서 두 번 다
-   103 · 106초 걸렸다(실패는 아니다).
+   103 · 106초 걸렸다(실패는 아니다). (FR-M0에서 바로잡음: 그 간격은 `Downloading … unifont` 줄에서 다음 `fetching` 줄까지였고 cold build runner 컴파일이 섞였다. 저장소에 넣어 빠진 몫은 43초다).
 10. ghostty tarball과 stb 두 헤더는 해시를 대조하지 않는다. 커밋으로 고정했으므로 내용은 같지만 받은 바이트가 맞는지는 아무도
     안 본다 — 게이트도 같다. 이번에 고치지 않는다(비목표 8).
 11. 검사가 timing에 기대면 4 vCPU에서 흔들릴 수 있다. 로컬 게이트에서 호스트 검사가 흔들린 기록은 없다(GP-M2의 고정 경로 충돌은

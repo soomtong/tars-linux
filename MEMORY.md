@@ -98,7 +98,7 @@ terminal · 화면
 
 - [Input policy](docs/decisions/project_input_policy.md) — evdev 코드를 셸이 아는 바이트로 번역하는 세 단계
 - [Terminal rendering](docs/decisions/project_terminal_rendering.md) — 색 · 오프셋 · 스크롤은 `vt.zig`가 확정하고 렌더러는 숫자만 받는다
-- [Font selection](docs/decisions/project_font_selection.md) — 폰트를 고르는 기준과 현재 폰트 unifont 17.0.03
+- [Font selection](docs/decisions/project_font_selection.md) — 폰트를 고르는 기준과 현재 폰트 unifont 17.0.03, FR-M0(2026-10-31)부터 terminal/vendor/fonts/에 커밋(OFL · README)
 - [Render cost](docs/decisions/project_render_cost.md) — 한 프레임의 비용을 구간별로 잰 결과(RC-M0, 2026-08-30)
 - [Render Speed](docs/decisions/project_render_speed.md) — 행마다 `@memset` · 16ms 하한 · DIRTYFB, 부분 갱신은 안 했다(RS-M0~M3, 2026-10-11)
 - [Input status](docs/decisions/project_input_status.md) — 화면 맨 아래의 상태 줄(IS-M0 · M1, 2026-09-09)

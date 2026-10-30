@@ -1,7 +1,7 @@
 # TARS Font in Repo — Design
 
 Date: 2026-10-31
-Status: design
+Status: 끝났다 — FR-M0(2026-10-31, CI terminal step 3분 28초 → 2분 45초, 루트 게이트 22/22 10분 1초(prebuild 303 + lanes 298초), verify 전부 `ok`). plan은 `docs/plans/2026-10-31-tars-font-in-repo-fr-m0.md`
 
 GH-M1이 남긴 다음 후보 "unifont 미러"에서 시작한다. 사용자가 미러가 아니라 저장소 안에 두는 쪽으로 골랐다(2026-10-31).
 
@@ -9,7 +9,7 @@ GH-M1이 남긴 다음 후보 "unifont 미러"에서 시작한다. 사용자가 
 
 GNU Unifont 17.0.03(`unifont.otf`, 5.3MB, gzip 1.3MB)을 지금 자리 `terminal/vendor/fonts/` 그대로 커밋하고, 받는 스크립트
 `terminal/vendor_fonts.sh`를 지운다. 라이선스 원문(`OFL-1.1.txt`)과 출처 · 버전 · sha256을 적은 `README`를 옆에 둔다. 폰트를 읽는
-코드(게스트 `main.zig` · `font_test.zig` · `make_initrd.sh`)는 0줄 바뀐다. CI의 terminal step에서 `ftp.gnu.org`의 100초가 빠진다.
+코드(게스트 `main.zig` · `font_test.zig` · `make_initrd.sh`)는 0줄 바뀐다. CI의 terminal step에서 `ftp.gnu.org` 다운로드가 빠진다(design은 100초로 어림했고 실측은 43초 — plan 결과 절).
 
 ## 배경
 

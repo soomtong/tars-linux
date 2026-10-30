@@ -2,7 +2,7 @@
 
 Date: 2026-10-31
 Design: `docs/specs/2026-10-31-tars-font-in-repo-design.md`
-Status: plan
+Status: 끝났다(2026-10-31)
 
 ## 착수 전에 확정한 것
 
@@ -85,4 +85,22 @@ commit 하나.
 
 ## 결과
 
-(Task마다 채운다)
+### Task 1 (`c898a8e`)
+
+- `OFL-1.1.txt`는 tarball의 원문이 CRLF였고 전역 `core.autocrlf=input`이 LF로 넣었다(`git ls-files --eol`: `i/lf w/crlf`). 글은
+  같다 — `README`에 "줄 끝만 LF"라 적었다. `unifont.otf`는 git이 바이너리(`-text`)로 판정해 바이트 그대로다.
+- OFL 원문에는 Unifont의 저작권자 줄이 없다. 폰트의 name 테이블(nameID 0)에 있다 — `Copyright © 1998-2025 Roman Czyborra, Paul
+  Hardy, …`. 그 줄을 `README`로 옮겼다.
+- `git check-ignore -v terminal/vendor/stb_image.h` → `.gitignore:20:terminal/vendor/*`. 더해진 것은 `fonts/` 아래 셋.
+- `make quick` PASS, `shellcheck 51 files`.
+- 깨끗한 사본(`c898a8e`)의 컨테이너: 폰트 sha256 `26071c5a…` 그대로, `prepare.sh`의 `Downloading`은 셋(ghostty · stb 둘), `unifont` 0줄,
+  `zig build test` PASS(`font_test: 라틴 대문자 OK` …).
+
+### Task 2
+
+- CI run 41083788800: 두 job 초록. `container` 6분 51초(GH-M1 마지막 7분 30초), `terminal prepare and test` 3분 28초 → 2분 45초(−43초).
+  로그에 `ftp.gnu.org` · `unifont` 0줄.
+- design이 어림한 100초는 틀렸다. GH-M1이 그 숫자를 `Downloading … unifont` 줄에서 다음 `info: fetching` 줄까지로 쟀는데, 그
+  사이에 `zig build`의 cold build runner 컴파일이 있었다(로그에 안 찍힌다). GH 문서 셋에 바로잡는 주석을 달았다.
+- 루트 게이트(`out/gate-logs/20261030-154626`): 22/22, prebuild 303 + lanes 298초. `verify>` 줄 8141개 전부 `ok`, `failed` 0바이트.
+  prebuild는 로컬에 stb · ghostty가 이미 있어 아무것도 받지 않았다.
