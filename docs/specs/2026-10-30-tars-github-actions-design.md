@@ -305,6 +305,28 @@ Task 1의 첫 네 회차 가운데 둘에서 terminal step이 `deps.files.ghostt
 `--help`는 받으라고 있는 옵션이 아니다. build.zig를 configure까지 돌리면 `lazyDependency`가 실제로 쓰는 것만 받는다는 사실에
 기댄다. Zig가 그 동작을 바꾸면 이 step은 받는 것 없이 초록으로 끝나고 다음 step이 받는다. 재시도가 없어질 뿐 판정은 같다.
 
+### 결정 13. 전역 Zig 캐시를 step 사이에 잇는다(결정 12 뒤에 더함)
+
+결정 12를 더한 회차에서 `container`가 10분 51초로 결정 10의 10분을 넘었다(`docker build` 1분 46초의 네트워크 편차를 빼도 9분대).
+fetch step의 `zig build --help`가 build runner를 굽고, `--rm` 컨테이너가 끝나면서 전역 캐시(`/root/.cache/zig`)를 버려 다음
+step이 같은 것을 다시 구웠다 — 결정 9가 받아들인 대가가 step 하나만큼 커졌다. 사용자가 캐시 공유를 골랐다(2026-10-30).
+
+init · fetch · terminal 세 step의 `docker run`에 `-v /tmp/zig-global:/root/.cache/zig`를 더한다. runner의 `/tmp`이라 job과 함께
+버려지고, 회차 사이의 캐시(`actions/cache`)는 여전히 없다. 결정 9가 `ZIG_GLOBAL_CACHE_DIR`를 물리친 두 이유 — 새 경로가
+저장소 안에 생기고 `bash -c`의 줄이 prebuild와 달라진다 — 를 둘 다 피한다. 마운트는 `docker run`의 플래그이고 컨테이너 안에서는
+같은 `/root/.cache/zig`다.
+
+로컬 컨테이너, 깨끗한 사본, CI와 같은 순서의 `docker run` 셋:
+
+| step | 공유 없음 | 공유 |
+|---|---|---|
+| init build and test | 79초 | 82초 |
+| terminal fetch | 75초 | 20초 |
+| terminal prepare and test | 134초 | 78초 |
+| 합 | 288초 | 180초 |
+
+terminal step이 줄어든 몫은 init이 구운 aarch64의 std · compiler_rt를 쓰는 데서 온다. 캐시는 173MB.
+
 ### 위험(M1)
 
 8. container job이 길어진다. M0의 3분 13초에 init 검사와 terminal 준비가 더해진다 — 로컬 비율로 어림하면 7~9분이다(재지 않았다).
