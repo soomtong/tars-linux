@@ -130,7 +130,7 @@ require_explicit_nic() {
   [ -z "$hits" ] && return 0
 
   echo "check FAIL: ${script} starts QEMU without saying which NIC it gets:" >&2
-  echo "  line(s): $(echo $hits)" >&2
+  echo "  line(s): ${hits//$'\n'/ }" >&2
   echo "  QEMU adds a default NIC (e1000 on pc, e1000e on q35) when none is named." >&2
   echo "  add '-nic none', or '-netdev ...' if the chain wants a network (WN-M1)." >&2
   return 1

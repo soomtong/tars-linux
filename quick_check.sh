@@ -34,17 +34,17 @@ have_zig="$(zig version)"
 # 1. shellcheck. 대상은 추적 중인 *.sh 전부와, 확장자 없이 게스트에 들어가는 둘이다.
 #    추적 파일 기준이라 terminal/vendor · ghostty-src · out/은 안 걸린다. -x -P SCRIPTDIR은
 #    `source ../gate_lib.sh`를 스크립트 위치 기준으로 따라가게 한다(없으면 SC1091 28줄).
-#    판정은 warning 이상(-S warning). note는 판정하지 않고 수만 찍는다 — 기준선 46(2026-10-30).
+#    판정은 style 이상(-S style), 곧 note까지 전부다. GH-M0은 warning 이상만 판정하고 note 46은 수만
+#    찍었는데, SN-M0이 그 46을 고치거나 지시자로 표시해 0으로 만들고 판정을 내렸다. 의도한 것은 그 줄
+#    위에 지시자와 이유를 단다 — trap · 콜백 함수의 SC2329는 파일 끝이 exit일 때 shellcheck가 헛짚는 것이다.
 mapfile -t sh_files < <(git ls-files '*.sh')
 sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate)
 note "shellcheck ${#sh_files[@]} files"
-if shellcheck -x -P SCRIPTDIR -S warning "${sh_files[@]}"; then
+if shellcheck -x -P SCRIPTDIR -S style "${sh_files[@]}"; then
   :
 else
   failed+=(shellcheck)
 fi
-notes="$(shellcheck -x -P SCRIPTDIR -S style -f gcc "${sh_files[@]}" 2>/dev/null | grep -c ': note:' || true)"
-note "shellcheck notes: $notes"
 
 # 2. Zig 서식. 디렉터리는 재귀다.
 zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared || failed+=(zig-fmt)

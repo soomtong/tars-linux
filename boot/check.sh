@@ -20,6 +20,7 @@ source ../gate_lib.sh
 LOG="$(mktemp)"
 QEMU_PID=""
 
+# shellcheck disable=SC2329 # trap cleanup EXIT이 부른다
 cleanup() {
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
     kill "$QEMU_PID" 2>/dev/null || true

@@ -143,7 +143,7 @@ done
 # printf는 fish와 bash 양쪽의 빌트인이라 PATH가 비어 있어도 된다
 # (project_guest_environment). \e가 아니라 \033을 쓰는 것은 셸마다 \e 지원이
 # 갈리기 때문이다.
-echo "=== typing printf '\\033[41m \\033[0m\\n' ==="
+printf '%s\n' "=== typing printf '\\033[41m \\033[0m\\n' ==="
 type_keys p r i n t f spc apostrophe \
   backslash 0 3 3 bracket_left 4 1 m \
   spc \
@@ -217,7 +217,7 @@ echo "frames are presented by DIRTYFB, the mode is set once"
 # style> 줄이 좌표를 주므로, 게이트가 한글 셀의 열 번호에 2를 더한 값과
 # 비교할 수 있다 — 이것이 "다음 글자가 겹치지 않는다"의 파서 쪽 증거이고,
 # 아래 ink> 검사가 렌더러 쪽 증거다. 둘이 따로 틀릴 수 있다.
-echo "=== typing printf '\\xed\\x95\\x9c\\033[41m \\033[0m\\n' ==="
+printf '%s\n' "=== typing printf '\\xed\\x95\\x9c\\033[41m \\033[0m\\n' ==="
 type_keys p r i n t f spc apostrophe \
   backslash x e d backslash x 9 5 backslash x 9 c \
   backslash 0 3 3 bracket_left 4 1 m \
@@ -477,7 +477,7 @@ type_text() {
       [A-Z]) keys+=("shift-${ch,,}") ;;
       ' ') keys+=(spc) ;;
       "'") keys+=(apostrophe) ;;
-      '\') keys+=(backslash) ;;
+      \\) keys+=(backslash) ;;
       '_') keys+=(shift-minus) ;;
       '=') keys+=(equal) ;;
       ',') keys+=(comma) ;;
@@ -690,7 +690,7 @@ vim_shape_check() {
 # 뒤의 bar · underline 검사가 보는 자리를 믿을 수 있다. 그리고 이 검사가
 # "셸은 DECSCUSR을 안 보낸다"(CU design 위험 1)의 판정이다 — 셸이 언젠가
 # 모양을 바꾸기 시작하면 여기가 먼저 빨개진다.
-echo "=== typing printf '\\033[H\\033[2J' ==="
+printf '%s\n' "=== typing printf '\\033[H\\033[2J' ==="
 type_text "printf '\\033[H\\033[2J'"
 type_keys ret
 if ! settle; then
@@ -727,7 +727,7 @@ echo "control: the shell starts with a block cursor and cursor> points at the in
 # 지금까지 반전 셀이 있던 바로 그 자리에 칠해졌다는 것도 함께 본다.
 cursor_shape_check() {
   local n="$1" shape="$2" want_ink="$3" want_inv="$4" line got_ink
-  echo "=== typing printf '\\033[H\\033[2J\\033[${n} q' ==="
+  printf '%s\n' "=== typing printf '\\033[H\\033[2J\\033[${n} q' ==="
   type_text "printf '\\033[H\\033[2J\\033[${n} q'"
   type_keys ret
   if ! wait_for_cursor "vt=${shape} drawn=${shape} row=${CU_ROW} col=${CU_COL} "; then
@@ -802,7 +802,7 @@ VIM_COL=4
 # 기동 직후의 모양은 셸에서 물려받은 block이다. vim은 기동할 때 t_EI를 미리
 # 보내지 않는다(CU design 실측 4). 그래서 이 검사가 26의 bar에 대한 대조군이다.
 VIM_LOG_START="$(wc -c < "$LOG")"
-echo "=== typing printf '\\033[H\\033[2J'; vim /tmp/cu.txt ==="
+printf '%s\n' "=== typing printf '\\033[H\\033[2J'; vim /tmp/cu.txt ==="
 type_text "printf '\\033[H\\033[2J'; vim /tmp/cu.txt"
 type_keys ret
 # GE-M1: [New]는 set nocompatible의 증거이기도 하다. vimrc는 shortmess에 n을
@@ -885,7 +885,7 @@ esac
 # [New]라서 이 패턴(`[New File]`)과 안 맞지만, 시스템 vimrc의 nocompatible이
 # 빠지면 25도 [New File]이 되어 다시 걸린다. 이름이 다르면 swap 파일도 안 부딪친다.
 VIM_NONE_START="$(wc -c < "$LOG")"
-echo "=== typing printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt ==="
+printf '%s\n' "=== typing printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt ==="
 type_text "printf '\\033[H\\033[2J'; vim -u NONE /tmp/cunone.txt"
 type_keys ret
 if ! wait_for_screen 'cunone\.txt" \[New File\]'; then
@@ -931,7 +931,7 @@ echo "no vim error line in either session"
 # 치기 전에도 커서가 이미 프롬프트 자리의 block이라 기다림은 곧바로 맞는다.
 # 그래서 마지막 프레임의 화면 줄에 printf가 없는 것(지운 뒤의 프레임인 것)을
 # 따로 본다. 그 전에 판정했다면 여기서 빨개진다.
-echo "=== typing printf '\\033[H\\033[2J\\033[?1049h\\033[6 q\\033[?1049l' ==="
+printf '%s\n' "=== typing printf '\\033[H\\033[2J\\033[?1049h\\033[6 q\\033[?1049l' ==="
 type_text "printf '\\033[H\\033[2J\\033[?1049h\\033[6 q\\033[?1049l'"
 type_keys ret
 vim_shape_check "bar set inside 1049" "vt=block drawn=block row=${CU_ROW} col=${CU_COL} " "ink=0 box=0x0" 1

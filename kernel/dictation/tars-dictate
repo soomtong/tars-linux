@@ -203,6 +203,7 @@ trap 'rm -f "$wav" "$wav.new" "$body" "$errs" "$req"' EXIT
 
 phase=recording
 stopped=0
+# shellcheck disable=SC2329 # trap on_int INT이 부른다
 on_int() {
   if [ "$phase" = recording ]; then
     stopped=1
@@ -211,6 +212,7 @@ on_int() {
     exit 130
   fi
 }
+# shellcheck disable=SC2329 # trap on_term TERM이 부른다
 on_term() {
   say "cancelled"
   exit 143
@@ -257,6 +259,7 @@ audio_ms=$(( data * 1000 / 32000 ))
 # 형식은 우리가 고른 것(16kHz 모노 16비트 PCM)이라 머리 44바이트를 통째로 다시 짓는다.
 # 게스트에 dd가 없어서 새 파일로 쓰고 바꾼다.
 le32() {
+  # shellcheck disable=SC2059 # format 자리의 \xHH로 바이트를 낸다
   printf "$(printf '\\x%02x\\x%02x\\x%02x\\x%02x' $(($1 & 255)) $(($1 >> 8 & 255)) $(($1 >> 16 & 255)) $(($1 >> 24 & 255)))"
 }
 {

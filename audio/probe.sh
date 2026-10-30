@@ -39,6 +39,7 @@ for _ in $(seq 1 50); do
   sleep 0.1
 done
 say "card [$(head -n 1 /proc/asound/cards)]"
+# shellcheck disable=SC2012 # 이름은 정해져 있다(커널이 만드는 /dev/snd 노드)
 say "nodes [$(ls /dev/snd | tr '\n' ' ' | sed 's/ $//')]"
 say "aplay -l [$(aplay -l 2>&1 | grep '^card ' | flat)]"
 say "arecord -l [$(arecord -l 2>&1 | grep '^card ' | flat)]"

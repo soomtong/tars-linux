@@ -172,6 +172,7 @@ for want in usr/bin/tars-dictate etc/ssl/certs/ca-certificates.crt; do
   esac
 done
 BUNDLE_CERTS="$(gzip -dc ../kernel/initrd.cpio | cpio -i --to-stdout etc/ssl/certs/ca-certificates.crt 2>/dev/null | grep -c 'BEGIN CERTIFICATE')"
+# shellcheck disable=SC2012 # 이름은 정해져 있다(Debian ca-certificates의 *.crt)
 SYSROOT_CERTS="$(ls "${AMD64_SYSROOT:-/usr/local/amd64-sysroot}"/usr/share/ca-certificates/mozilla/*.crt | wc -l)"
 if [ "$SYSROOT_CERTS" -lt 100 ] || [ "$BUNDLE_CERTS" -ne "$SYSROOT_CERTS" ]; then
   echo "FAIL: the initrd's CA bundle holds ${BUNDLE_CERTS} certificate(s), the sysroot has ${SYSROOT_CERTS}"
@@ -548,6 +549,7 @@ printf '%s\n' '# written by the VD chain, boot B' 'transcribe_url = http://10.0.
 #             (ICANON 켜짐 · ECHO 꺼짐). 받은 것을 대괄호 안에 되보여 준다
 #   vd-cap    설정을 고친다 — 1초에서 스스로 멈추는 녹음(키 없이 끝나는 길)
 #   vd-nokey  키 파일을 치운다
+# shellcheck disable=SC2016 # $x는 게스트 셸이 펼친다
 printf '%s\n' '#!/usr/bin/bash' "read -rsp 'pw> ' x" 'echo' 'echo "got[$x]"' > "$WORK/seed_b/vd-pw"
 printf '%s\n' '#!/usr/bin/bash' \
   "printf '%s\\n' 'transcribe_url = http://10.0.2.100:8080/ok/cap' 'cleanup_url = http://10.0.2.100:8080/chat/ok/cap' 'max_seconds = 1' > /config/dictation.conf" \
@@ -556,6 +558,7 @@ printf '%s\n' '#!/usr/bin/bash' 'mv /config/groq.key /config/groq.key.off' > "$W
 chmod 0755 "$WORK/seed_b/vd-pw" "$WORK/seed_b/vd-cap" "$WORK/seed_b/vd-nokey"
 # Groq 막기(부팅 A의 프로브와 같은 줄). 부팅 B에는 프로브가 없으므로 서비스 하나가 부팅 때
 # api.groq.com을 127.0.0.1로 돌리고 잠든다 — 위 설정에서 cleanup_url이 빠져도 Groq에 안 닿는다.
+# shellcheck disable=SC2016 # $(…)는 게스트 셸이 펼친다
 printf '%s\n' '#!/usr/bin/bash' "echo '127.0.0.1 api.groq.com' >> /etc/hosts" \
   'echo "groq-off: hosts [$(grep groq /etc/hosts)]"' 'exec sleep 100000' > "$WORK/seed_b/services.d/groq-off"
 chmod 0755 "$WORK/seed_b/services.d/groq-off"

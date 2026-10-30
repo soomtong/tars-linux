@@ -387,6 +387,7 @@ QEMU_PID=""
 PAYLOAD="$(mktemp)"
 printf 'nwm3-outbound-ok\n' > "$PAYLOAD"
 
+# shellcheck disable=SC2329 # trap cleanup EXIT이 부른다
 cleanup() {
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
     kill "$QEMU_PID" 2>/dev/null || true
@@ -1559,7 +1560,7 @@ start_drift_guest() {
     -device virtio-net-pci,netdev=n0 \
     -drive file="$DRIFT_IMG",if=virtio,format=raw \
     -serial file:"$log" \
-    -monitor tcp:127.0.0.1:${port},server,nowait \
+    -monitor tcp:127.0.0.1:"${port}",server,nowait \
     -no-reboot &
   DRIFT_QEMU_PID=$!
   for _ in $(seq 1 120); do

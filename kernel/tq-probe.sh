@@ -25,5 +25,5 @@
 # "스크립트"라는 뜻이기 때문이다.
 printf '\033[6n'
 # shellcheck disable=SC3045 # 위 문단 — 이 게스트의 /bin/sh는 bash다
-read -n 20 -t 2 r
+read -r -n 20 -t 2 r
 printf 'len%d\n' "${#r}"

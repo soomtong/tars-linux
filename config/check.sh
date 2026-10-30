@@ -54,6 +54,7 @@ LOG2="$(mktemp)"
 LOG3="$(mktemp)"
 QEMU_PID=""
 
+# shellcheck disable=SC2329 # trap cleanup EXIT이 부른다
 cleanup() {
   if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
     kill "$QEMU_PID" 2>/dev/null || true
@@ -461,6 +462,7 @@ VIM_TS_KEYS=(v i m spc minus shift-t spc d u m b spc minus e spc
 
 # 1차 부팅에서 QEMU를 죽이기 전에 하는 일: 게스트 안의 셸에 직접 타이핑해서
 # 설정을 바꾼다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 edit_config_in_guest() {
   local log="$1"
 
@@ -876,6 +878,7 @@ edit_config_in_guest() {
 # 이 부팅의 셸은 zsh다. 프롬프트가 fish의 `root@(none) ~#`가 아니라
 # `(none)#`이지만(design 실측 14(e)) 타이핑하는 쪽은 그것을 안 봐도 된다 —
 # 판정은 전부 출력의 행 첫머리로 한다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 watch_console_shell() {
   local log="$1"
   LOG="$log"
@@ -956,6 +959,7 @@ watch_console_shell() {
 #
 # 이 부팅은 안 다친다. 여기 셸은 off라 rc를 안 읽으므로 함정을 파도 밟지
 # 않는다. 4차부터 밟는다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 plant_broken_rc() {
   local log="$1"
   LOG="$log"
@@ -1023,6 +1027,7 @@ plant_broken_rc() {
 #      이상의 재시작·포기)이라 부재를 폴링으로 증명할 수 없다 — 2차 부팅의
 #      5초와 같은 이유의 고정 대기이고, 재시작 backoff 1초에 terminal의 기동
 #      몇 초를 더해 넉넉히 잡았다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 watch_rescue() {
   local log="$1"
 
@@ -1048,6 +1053,7 @@ watch_rescue() {
 # 뽑은 이유가 이 함수다 — 수리를 여기 얹으면 SC-M2의 증명(아무도 안 죽는다)과
 # SM-M1의 준비(깨진 rc를 지운다)가 한 함수에서 엉키고, 5차의 부정 검사가
 # 화면에 생긴 글자에 걸릴 길이 하나 늘어난다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 watch_quiet() {
   sleep 8
   return 0
@@ -1059,6 +1065,7 @@ watch_quiet() {
 # `exit`를 밟지 않고, 그 파일을 지울 수 있다. SC-M2가 그 토큰을 만든 근거가
 # 정확히 이것이었다(*"설정을 고칠 셸이 없을 때 쓰는 것"*). 게이트가 자기
 # 탈출로를 실제로 그 용도로 쓰는 첫 자리다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 repair_broken_rc() {
   local log="$1"
   LOG="$log"
@@ -1113,6 +1120,7 @@ repair_broken_rc() {
 #
 #   1. `z`가 돈다      → zoxide 훅이 `chpwd`에 걸렸다
 #   2. 위젯이 있다      → fzf 통합이 돌았다
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 probe_shell_hooks() {
   local log="$1"
   LOG="$log"
@@ -1344,6 +1352,7 @@ probe_shell_hooks() {
 #   1. z가 돈다        → zoxide DB가 /config/xdg에 남았다(쓰는 시점이 cd다)
 #   2. db.zo가 보인다  → 그 DB가 tmpfs의 홈이 아니라 설정 디스크에 있다
 #   3. history에 있다  → 7차가 칠 때마다 쓴 줄이 전원을 넘었다(SD-M2)
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 probe_persisted_memory() {
   local log="$1"
   LOG="$log"
@@ -1479,6 +1488,7 @@ probe_persisted_memory() {
 # 히스토리 줄을 훅보다 먼저 두어 둘이 함께 산다. 뒤집히면 2는 초록이고 1이
 # 빨개진다 — 호스트 검사(`expectPromptCommandBeforeHooks`)가 seed의 순서를
 # 보고 있고, 이 둘이 그 순서의 결과를 게스트에서 본다.
+# shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 probe_bash_production() {
   local log="$1"
   # gate_lib.sh의 type_keys가 읽는 전역이다. 이 파일 안에서는 안 읽어 shellcheck이 모른다.

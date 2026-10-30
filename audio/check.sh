@@ -297,7 +297,7 @@ case $'\n'"${GROUPS_FILE}" in
     ;;
 esac
 echo "the kernel carries ALSA, HDA, seven laptop codec drivers and USB audio, and the initrd carries arecord, libasound, its config, two voices and the audio group"
-echo "the kernel carries SOF for $(printf '%s\n' $SOF_NAMES | wc -l) Intel firmware names and AMD ACP, and the firmware list carries every one of those names"
+echo "the kernel carries SOF for $(wc -l <<<"$SOF_NAMES") Intel firmware names and AMD ACP, and the firmware list carries every one of those names"
 
 # ── 재료: 사각파 · 마이크에 넣을 상수 · 설정 디스크 · .asoundrc ─────────
 # 컨테이너에 python이 없어서 perl로 짓는다(lessons).

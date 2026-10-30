@@ -316,7 +316,7 @@ boot_ssh() {  # $1 = monitor 포트
     -device virtio-net-pci,netdev=n0 \
     -drive file="$SSH_DISK",if=virtio,format=raw \
     -serial file:"$LOG" \
-    -monitor tcp:127.0.0.1:$1,server,nowait \
+    -monitor tcp:127.0.0.1:"$1",server,nowait \
     -no-reboot &
   QEMU_PID=$!
   wait_for_log "terminal: screen>" 120 || fail "terminal never rendered a prompt"
@@ -563,6 +563,7 @@ expect_refused "bogus" 64 "usage: tars-service status [NAME]"
 echo "unknown names, the terminal, a bad request, a long request and bad usage were refused"
 
 # ── 검사 26: 통로의 fd가 서비스로 새지 않는다 ──────────────────────────────
+# shellcheck disable=SC2016 # $(pgrep …)는 게스트 셸이 펼친다
 FDS="$(on_guest 'ls -l /proc/$(pgrep -x sleep -P $(pgrep -x sleeper))/fd')"
 [ -n "$FDS" ] || fail "could not list the fds of sleeper's sleep"
 grep -q "socket:" <<<"$FDS" && fail "sleeper's sleep holds a socket (${FDS})"

@@ -125,7 +125,7 @@ boot_guest() {
     -device virtio-net-pci,netdev=n0 \
     -drive file="$2",if=virtio,format=raw \
     -serial file:"$LOG" \
-    -monitor tcp:127.0.0.1:$1,server,nowait \
+    -monitor tcp:127.0.0.1:"$1",server,nowait \
     -no-reboot &
   QEMU_PID=$!
 

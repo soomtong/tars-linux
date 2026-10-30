@@ -43,6 +43,7 @@ dictate() {
   rc=$?
   local ms=$(( (${EPOCHREALTIME/./} - ${t0/./}) / 1000 ))
   say "$1 exit ${rc} ms ${ms} out [$(jq -Rs . < /tmp/vd-out)] err [$(flat < /tmp/vd-err)]"
+  # shellcheck disable=SC2012 # 이름은 정해져 있다(tars-dictate가 짓는 /tmp/tars-dictate.<pid>.wav)
   say "$1 leftover wav [$(ls /tmp/tars-dictate.*.wav 2>/dev/null | flat)]"
 }
 

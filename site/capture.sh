@@ -118,11 +118,11 @@ typ() {
     ch="${s:i:1}"
     case "$ch" in
       [a-z0-9]) key "$ch" ;;
-      [A-Z]) key "shift-$(tr 'A-Z' 'a-z' <<<"$ch")" ;;
+      [A-Z]) key "shift-$(tr '[:upper:]' '[:lower:]' <<<"$ch")" ;;
       ' ') key spc ;;
       "'") key apostrophe ;;
       '"') key shift-apostrophe ;;
-      '\') key backslash ;;
+      \\) key backslash ;;
       '_') key shift-minus ;;
       '=') key equal ;;
       ',') key comma ;;
@@ -257,6 +257,7 @@ encode() {
   local scene="$1" frames="${WORK}/f" last
   # 마지막 한 장이 쓰는 중일 수 있어 크기가 덜 찬 것은 버린다.
   find "$frames" -name '*.ppm' -size -$((XRES * YRES * 3 / 1024))k -delete
+  # shellcheck disable=SC2012 # 이름은 정해져 있다(start_recording이 %05d.ppm으로 짓는 프레임)
   last="$(ls "$frames" | tail -1)"
   ffmpeg -loglevel error -y -framerate "$FPS" -pattern_type glob -i "${frames}/*.ppm" \
     -vf "fps=30,scale=${XRES}:-2:flags=lanczos,format=yuv420p" \
@@ -264,6 +265,7 @@ encode() {
     "${OUT}/${scene}.mp4"
   magick "${frames}/${last}" "${WORK}/last.png"
   cwebp -quiet -q 85 "${WORK}/last.png" -o "${OUT}/${scene}.webp"
+  # shellcheck disable=SC2012 # 이름은 정해져 있다(start_recording이 %05d.ppm으로 짓는 프레임)
   printf '%s: %s frames, %s\n' "$scene" "$(ls "$frames" | wc -l | tr -d ' ')" \
     "$(du -h "${OUT}/${scene}.mp4" | cut -f1)"
 }
