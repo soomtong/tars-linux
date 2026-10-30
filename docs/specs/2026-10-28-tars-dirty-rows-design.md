@@ -1,8 +1,8 @@
 # TARS Dirty Rows — Design
 
 Date: 2026-10-28
-Status: DR-M0~M2 끝(2026-10-30). DR-M3(행 dirty 비트) 진행 중 — 사용자가 2026-10-30에 골랐다(M2 plan 확정 14의 규칙,
-`cells` 46%). plan `docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`, 결정 10~12.
+Status: DR-M0~M3 끝(2026-10-30). M3은 사용자가 2026-10-30에 골랐다(M2 plan 확정 14의 규칙, `cells` 46%) — plan
+`docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`, 결정 10~12. 키 하나의 그리기 2.45 → 1.36 → 0.92ms.
 
 HANDOFF "다음 후보"의 부분 갱신을 집는다(사용자가 2026-10-28에 골랐다). Render Speed(RS-M0~M3, 2026-10-11)가 그 앞의 축
 셋(칠하기 방식 · 프레임 수 · 모드셋)을 줄이고 남겨 둔 것이다 — `docs/decisions/project_render_speed.md`의 "남은 것",
@@ -136,6 +136,8 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
     여섯 기준). 커서 이동은 라이브러리가 행을 안 더럽힌다(`:739-741`, "the cursor is unrelated") — 그래서 셸 커서가 층에 든다.
     호출 계약: 한 프레임의 첫 `cells()`가 증분 호출이어야 한다(비트를 끄므로). 그 뒤의 fresh 호출은 비트를 안 보고 메모를 같은
     값으로 다시 적는다(멱등) — verify가 그 순서다. `vt_test`의 호출 예순 곳은 fresh 경로 그대로다.
+    M3 Task 1이 다섯째 층을 더했다 — 기본 전경 · 배경. OSC 10 · 11은 `terminal.colors`만 바꾸고 어떤 dirty 플래그도 안 켠다
+    (ghostty는 기본 색을 GPU uniform으로 넘겨 셀에 안 굽는다). 우리는 색을 셀에 해소해 넣으므로(TR design 결정 1) 바뀌면 전부다.
 
 ## Milestone
 
@@ -145,7 +147,7 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
 | DR-M1 | verify 모드(결정 7 · 8). 그리기는 통째 그대로라 모든 프레임이 `ok`. mutation으로 verify가 잡는 것을 본다 | 끝 — initrd 표식 `/etc/tars/render-verify`(`make_initrd.sh`, `TARS_RENDER_VERIFY=1`)로 켠다. 프레임마다 `terminal: verify> ok us=N`, 루트 게이트 `check_verify_lines`가 회차마다 판정. 세 회차 약 2만 3천 프레임 `ok`, verify 한 번 중앙값 약 7ms(게이트 TCG). `renderFinish` → `renderOverlay` + `presentFrame`. mutation(지우기 뺌) 31프레임 `mismatch` |
 | DR-M2 | 행 단위 부분 갱신(결정 2~5)과 clip(결정 6), 행 비교 모듈과 호스트 무작위 검사(결정 9). 같은 프로브로 다시 잰다. 루트 게이트에서 verify 전부 `ok` | 끝(2026-10-30, plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`) — (a) frame 2.45 → 1.36ms(−45%). cells 0.63(46%) · pane 0.165(행 비교 0.03 + 행 칠하기 0.14) · overlay 0.20 · finish 0.32(present 0.32 — clip 있는 DIRTYFB가 QEMU에서 0.1ms 더 든다). (b)는 잡음 안. 지우는 색은 `MARGIN_COLOR`, 행 하나는 패널 폭 + 오른쪽 한 칸, 통째 판정은 트리 비교. verify가 clip도 본다(화면 흉내 버퍼). mutation 둘(지난 커서 띠 행 · 행 run clip) 잡힘 |
 
-| DR-M3 | 행 dirty 비트로 `cells()`를 줄인다(결정 10~12). Task 0이 `cells()` 안을 쪼개 변환 루프의 몫을 먼저 잰다. 호스트 `dirty_test`가 fresh 비교, verify가 `mismatch cells`. 같은 프로브로 다시 잰다 | 진행 중(2026-10-30, plan `docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`) |
+| DR-M3 | 행 dirty 비트로 `cells()`를 줄인다(결정 10~12). Task 0이 `cells()` 안을 쪼개 변환 루프의 몫을 먼저 잰다. 호스트 `dirty_test`가 fresh 비교, verify가 `mismatch cells`. 같은 프로브로 다시 잰다 | 끝(2026-10-30, plan `docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`) — Task 0: `cells` 0.63 = `update` 0.04 + 변환 루프 0.64(94%). (a) frame 1.36 → 0.92ms(−32%), cells 0.63 → 0.12ms(−81%). `cellsReuse(out, prev)`가 비트의 소비자, 층은 다섯(검색 하이라이트 · copy 커서 · 셸 커서 반전 · preedit · 기본 색 — OSC 10 · 11은 플래그를 안 켠다, fresh 비교가 첫 판에 잡았다). mutation 둘(커서 행 · spans) 호스트 · 게스트에서 잡힘. 루트 게이트 22/22, verify 8119 `ok` |
 
 M3은 M2 뒤 `cells`가 frame의 46%(0.63/1.36ms)라 M2 plan 확정 14의 규칙(30%)대로 제안했고 사용자가 2026-10-30에 골랐다.
 모양은 결정 10~12다 — 비트를 끄는 자리는 `cells()`의 끝이고, 정답지는 셀 사본 비교가 아니라 fresh 목록이다(결정 11).

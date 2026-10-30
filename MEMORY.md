@@ -141,4 +141,4 @@ copy mode · 클립보드
 - [Zig upgrade](docs/decisions/project_zig_upgrade.md) — 0.16 → 0.17은 ghostty를 따라 SHA로 고정, 컨테이너가 거부하지 않는 문법은 다시 들어온다, 없어진 std 선언과 대체 표(2026-10-24)
 - [Loose ends](docs/decisions/project_loose_ends.md) — 이월 숙제 넷: 화면이 copy mode를 닫으면 입력 모드도 normal(`input> mode reset`), PTY 픽셀, carryover 정리(2026-10-27)
 - [Clock reload](docs/decisions/project_clock_reload.md) — net 부팅 A의 검사 32가 reload의 chronyd restart · stop · start를 본다, 검사 30의 restart 줄과 섞이지 않게(2026-10-28)
-- [Dirty rows](docs/decisions/project_dirty_rows.md) — 패널마다 cells() 사본과 행 비교, 바뀐 행만 칠하고 clip으로. 지우는 색은 MARGIN_COLOR, 행은 패널 폭 + 오른쪽 한 칸, verify가 픽셀과 clip을 본다. 키 하나 2.45 → 1.36ms, cells 46%라 M3 제안(2026-10-30)
+- [Dirty rows](docs/decisions/project_dirty_rows.md) — 패널마다 cells() 사본과 행 비교, 바뀐 행만 칠하고 clip으로(M2). cells()도 증분 — cellsReuse가 라이브러리 행 dirty 비트 + 층 다섯 메모로 지난 목록에서 복사, 정답지는 fresh 목록(dirty_test · verify `mismatch cells`)(M3). OSC 10/11은 플래그를 안 켠다. 키 하나 2.45 → 1.36 → 0.92ms(2026-10-30)

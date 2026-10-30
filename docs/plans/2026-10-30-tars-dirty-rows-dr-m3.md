@@ -2,7 +2,8 @@
 
 Date: 2026-10-30
 Design: `docs/specs/2026-10-28-tars-dirty-rows-design.md`(결정 10~12, 배경 절의 ghostty 1층)
-Status: 진행 중. Task 0(프로브)부터.
+Status: 끝났다(2026-10-30). plan `1588583` · Task 0 `bb4ba98` · Task 1 `1357482` · Task 2 `a2f5aef` · Task 3 닫기. (a) frame 1.36 → 0.92ms(−32%,
+M0의 2.45에서 −62%), cells 0.63 → 0.12ms(−81%). 루트 게이트 22/22(9분 41초), verify 8119프레임 전부 `ok`.
 
 ## 이 milestone이 끝나면
 
@@ -183,3 +184,43 @@ rc=1, "terminal host tests failed"). 게스트를 보려고 그 단계를 건너
 
 되돌린 판의 체인 넷(`make check`, 차례로 15분): copy 539 · render 779 · hangul 175 · pane 137 + 235(패널 둘) 프레임 전부 `ok`,
 `mismatch` 0. 넷 다 PASS.
+
+### Task 3 — 측정 · 루트 게이트 · 닫기 (2026-10-30, HEAD `a2f5aef`)
+
+같은 프로브, 부팅 3회씩(여섯 번에 13분 46초). 비교 판(`dr-m3`, `patch.pl` 그대로):
+
+```
+dr-m3-run1  (b) span=1141ms frames=69 frame_sum=142ms dump_sum=113ms other=886ms reads=369   (a) frame=1.838 dump=6.763
+dr-m3-run2  (b) span=1139ms frames=69 frame_sum=138ms dump_sum=111ms other=890ms reads=369   (a) frame=0.577 dump=4.172
+dr-m3-run3  (b) span=1120ms frames=68 frame_sum=137ms dump_sum=119ms other=864ms reads=368   (a) frame=0.924 dump=6.349
+median      (b) span=1139ms frames=69 frame_sum=138ms dump_sum=113ms                          (a) frame=0.924 ms (n=12)
+```
+
+진단 판(`dr-m3-split2`, `split.pl`의 anchor 하나를 `cellsReuse` 줄로):
+
+```
+median      (a) frame=0.962 ms (n=12)
+  split: others=0.014 cells=0.12 pane=0.181 rows=0.133 overlay=0.219 finish=0.371 present=0.364
+```
+
+| (a) 키 하나 | M0 `67596a0` | M2 `aabd0bc` | M3 `a2f5aef` |
+|---|---|---|---|
+| frame | 2.45 | 1.36 | 0.92 (M2에서 −32%, M0에서 −62%) |
+| cells | 0.63 | 0.63 | 0.12 (−81%) |
+| pane(비교 + 행 칠하기) | 0.81 | 0.165 | 0.181 |
+| overlay | — | 0.20 | 0.22 |
+| finish(present) | 0.29 (0.21) | 0.32 (0.32) | 0.37 (0.36) |
+| (b) `seq 1 200000` | 1,135ms | 1,105ms | 1,139ms(잡음 안) |
+
+`cells`가 0.63 → 0.12ms다. 남은 0.12는 `update` 0.04 + 행 하나의 변환 + 지난 목록 46행의 `memcpy`(약 110KB)다 — Task 0이 예고한
+"0이 되지 않는 몫"이다. 비교 판의 회차별 (a)가 1.84 · 0.58 · 0.92로 흔들렸다(run1은 `dump`도 6.8ms로 전부 느렸다 — TCG의 그
+부팅이 느렸던 것이고 `n=4`라 한 회차의 중앙값이 통째로 끌린다). 열두 프레임의 중앙값 0.92와 진단 판의 0.96이 같은 자리라
+그것을 읽는다. (b)는 잡음 안 — 스크롤 프레임은 모든 행이 dirty라 M3이 건드릴 것이 없다(design "안 하는 것").
+
+루트 게이트(`bash check.sh`, 10:03:47 → 10:13:28): 22/22, 9분 41초(prebuild 279 + lanes 299초). `verify lines` 합 8119,
+`mismatch` 0. 체인별 줄 수는 M2 닫기 회차와 같은 자리(CP 2007 · TD 1382 · UT 916 · TR 790 · PD 653 · CM 550 · FW 515 · CB 377 …).
+verify 한 번은 `mismatch cells` 줄의 `us`로 보면 13ms 안팎 — fresh `cells()`가 패널마다 한 번 더 들지만 M2의 11.6ms에서 lanes
+시간은 안 늘었다(298 → 299초).
+
+닫기: design 표 · Status, `completed.md`의 DR 행, `measurements.md` 97, `docs/decisions/project_dirty_rows.md` + `MEMORY.md`,
+`HANDOFF.md`, 소개 페이지(`data.js`의 DR 타임라인 줄 · `latest` · stats).
