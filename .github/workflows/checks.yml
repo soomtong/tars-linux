@@ -1,0 +1,68 @@
+# TARS의 CI — 게이트가 아니다. 초록은 "소스가 서식 · 문법 · 셸 규칙을 지키고 컨테이너가
+# 구워진다"이지 "부팅한다"가 아니다. 부팅 판정은 로컬 게이트(make gate)다.
+# design: docs/specs/2026-10-30-tars-github-actions-design.md
+#
+# job 둘은 병렬이다.
+#   host       amd64 runner. shellcheck · Zig를 release tarball로 받아(sha256 대조) quick_check.sh를
+#              돌린다 — 사람이 `make quick`으로 돌리는 그 파일이다.
+#   container  arm64 runner. devcontainer/Dockerfile이 zig-aarch64를 받으므로(ZM-M3) amd64에서는
+#              못 쓴다. 그대로 굽고, 안에서 BF-M0 sanity 부팅과 init의 zig build를 돌린다.
+#
+# 제3자 action은 쓰지 않는다 — 무엇이 도는지 이 파일에서 읽히게. actions/checkout만 태그로 핀한다.
+# Zig 버전은 Dockerfile의 ENV ZIG_VERSION이 정본이고 여기서는 해시만 적는다(ZU가 올릴 때 함께).
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    env:
+      SHELLCHECK_VERSION: 0.11.0
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+      ZIG_SHA256: 1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026
+    steps:
+      - uses: actions/checkout@v7
+
+      # runner에 있는 shellcheck는 0.9.0이라 호스트(0.11.0)와 답이 다르다(SC2329는 0.10부터).
+      - name: shellcheck
+        run: |
+          curl -sSL -o /tmp/shellcheck.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  /tmp/shellcheck.tar.xz" | sha256sum -c -
+          mkdir -p /opt/shellcheck
+          tar -xJf /tmp/shellcheck.tar.xz -C /opt/shellcheck --strip-components=1
+          echo /opt/shellcheck >> "$GITHUB_PATH"
+
+      - name: zig
+        run: |
+          v="$(sed -n 's/^ENV ZIG_VERSION=\([0-9.]*\).*/\1/p' devcontainer/Dockerfile)"
+          curl -sSL -o /tmp/zig.tar.xz "https://ziglang.org/download/${v}/zig-x86_64-linux-${v}.tar.xz"
+          echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c -
+          mkdir -p /opt/zig
+          tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1
+          echo /opt/zig >> "$GITHUB_PATH"
+
+      - run: ./quick_check.sh
+
+  container:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      # Makefile의 container 타깃과 같은 줄. 층 캐시는 없다 — 먼저 캐시 없는 시간을 잰다(design 결정 5).
+      - run: docker build -t tars-devcontainer devcontainer/
+
+      # BF-M0의 sanity. 크로스 gcc → 32비트 ELF → qemu TCG 5초 → 시리얼 표식.
+      - run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer devcontainer/sanity/check.sh
+
+      # 이미지 안의 zig(aarch64)가 게스트 바이너리 넷을 만든다 — host job의 5단계와 짝.
+      - run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'cd init && zig build'

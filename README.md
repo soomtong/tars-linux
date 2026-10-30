@@ -1,5 +1,8 @@
 # TARS
 
+[![checks](https://github.com/soomtong/tars-linux/actions/workflows/checks.yml/badge.svg)](https://github.com/soomtong/tars-linux/actions/workflows/checks.yml)
+정적 검사와 컨테이너 빌드다(`make quick`과 같은 것) — 부팅 판정인 게이트는 로컬 `make gate`.
+
 직접 빌드한 Linux 커널 위에, 직접 만든 init(PID 1)과 터미널을 올린 시스템이다.
 셸까지 가는 길에 배포판의 부품을 쓰지 않는다 — 커널이 어디까지 책임지고
 어디서부터 우리 코드인지를 매 단계 확인하면서 만든다.
