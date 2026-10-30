@@ -18,7 +18,7 @@
 set -uo pipefail
 LABEL="${1:?label}"
 RUN="${2:?run number}"
-cd /workspace/terminal
+cd /workspace/terminal || exit 1
 
 # 커널은 스탬프로 건너뛴다. terminal은 main.zig가 마운트로 바뀌었으므로 다시 컴파일된다.
 (cd ../kernel && ./build.sh)       || { echo "FAIL: kernel"; exit 1; }

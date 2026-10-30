@@ -29,7 +29,7 @@ global=/run/wpa_supplicant/global
 # 1. 제품이 라디오를 다 잡을 때까지
 want="wlan0 wlan1"
 [ "$mode" = full ] && want="wlan0 wlan1 wlan2"
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   have="$(wpa_cli -g $global interface 2>/dev/null)"
   missing=""
   for w in $want; do echo "$have" | grep -qx "$w" || missing="$missing $w"; done
@@ -61,7 +61,7 @@ say "ap up on wlan1 in netns ap"
 # 비밀번호는 표준 입력으로 준다(사람은 tty에서 echo 없이 친다). 파일에는 평문(#psk)이 안 남고
 # 해시된 psk 한 줄과 0600이 남아야 한다. 그다음은 그 명령이 말한 대로 재시작이다.
 if [ "$mode" = ap-only ]; then
-  for i in $(seq 1 120); do
+  for _ in $(seq 1 120); do
     wpa_cli -p /run/wpa_supplicant -i wlan0 list_networks 2>/dev/null | grep -q TEMP-DISABLED && break
     sleep 0.5
   done
@@ -75,7 +75,7 @@ fi
 if [ "$mode" != full ]; then exec sleep 100000; fi
 
 # 3. wlan0이 주소를 받을 때까지. 받는 것은 제품의 dhcpcd다.
-for i in $(seq 1 120); do
+for _ in $(seq 1 120); do
   ip -4 addr show wlan0 | grep -q 'inet 192\.168\.77\.' && break
   sleep 0.5
 done
@@ -86,7 +86,7 @@ say "wpa pid $(pgrep -x wpa_supplicant)"
 
 # 4. 사람이 재시작을 친다. 새 wpa_supplicant는 wlan0만 센다(wlan2는 park에 있다).
 say "restart: $(tars-service restart wpa_supplicant 2>&1 | tail -n 1)"
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   wpa_cli -p /run/wpa_supplicant -i wlan0 status 2>/dev/null | grep -qx wpa_state=COMPLETED && break
   sleep 0.5
 done

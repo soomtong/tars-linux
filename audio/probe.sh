@@ -95,6 +95,7 @@ if [ "$boot" = usb ]; then
 
   # AU-M3. QEMU에는 SOF · ACP 장치가 없으므로 드라이버가 "등록됐다"까지만 본다. 그리고
   # QEMU의 HDA(ICH9)는 DSP 표(intel-dsp-config)에 없으니 여전히 snd_hda_intel이어야 한다.
+  # shellcheck disable=SC2010 # /sys의 이름은 커널이 정한 것이라 공백이 없고, ls의 정렬 순서를 체인이 say 줄 그대로 읽는다(GH-M0)
   say "dsp drivers [$(ls /sys/bus/pci/drivers | grep -E '^(sof-audio-pci-intel-|snd_rn_pci_acp3x$|snd_pci_acp6x$|snd_pci_ps$|snd_acp_pci$)' | flat)]"
   say "card 0 driver [$(basename "$(readlink /sys/class/sound/card0/device/driver)")]"
   # 실기에서 SOF가 실패할 때의 탈출로는 커널 인자 snd_intel_dspcfg.dsp_driver=1(HDA로)이다.

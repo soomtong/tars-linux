@@ -24,5 +24,6 @@
 # (make_initrd.sh가 그렇게 건다), #!/bin/sh인 것은 그것이 이 게스트의
 # "스크립트"라는 뜻이기 때문이다.
 printf '\033[6n'
+# shellcheck disable=SC3045 # 위 문단 — 이 게스트의 /bin/sh는 bash다
 read -n 20 -t 2 r
 printf 'len%d\n' "${#r}"

@@ -67,7 +67,7 @@ endif
 IN_CONTAINER = $(DOCKER) run --rm -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c
 
 .DEFAULT_GOAL := help
-.PHONY: help container kernel init terminal initrd iso disk disk-fresh boot-qemu run-qemu gate check shell clean
+.PHONY: help container kernel init terminal initrd iso disk disk-fresh boot-qemu run-qemu quick gate check shell clean
 
 # 도움말의 백틱은 이스케이프한다. recipe는 셸이 읽으므로 안 하면 그 자리가
 # 명령 치환이 되고, `make`가 조용히 /bin/sh를 부른다(help에서 실제로 그랬다).
@@ -133,6 +133,11 @@ help:
 	@echo "      회차와 동시 실행 수는 RUNS=N JOBS=N으로 넘긴다(기본 JOBS는 컨테이너 메모리로 정한다)."
 	@echo "      시작할 때 out/을 통째로 지우므로 설정 디스크를 out/ 밖에 두거나"
 	@echo "      CONFIG_DISK로 이 파일을 따로 잡아 둬라. 끝나면 회차별 시리얼 로그가 out/gate-logs/<시각>/에 남는다"
+	@echo
+	@echo "  make quick"
+	@echo "      quick_check.sh — 게이트가 아닌 1분짜리 검사. 컨테이너 없이 호스트의 shellcheck · zig로"
+	@echo "      shellcheck(52파일) · zig fmt --check · ast-check · shared 검사 · init 크로스 빌드. CI(.github/"
+	@echo "      workflows/checks.yml)가 같은 파일을 돌린다. 산출물은 out/quick/ 아래"
 	@echo
 	@echo "그 밖"
 	@echo
@@ -246,6 +251,11 @@ run-qemu:
 # 셋이 동시에 시작해 낡은 ISO로 부팅할 수 있다.
 boot-qemu: iso disk
 	@$(MAKE) --no-print-directory run-qemu
+
+# 게이트가 아닌 1분짜리 검사. 컨테이너 없이 호스트의 shellcheck · zig로 돈다 — 부르는
+# 쪽이 CI(.github/workflows/checks.yml의 host job)와 같다(GH-M0).
+quick:
+	@./quick_check.sh
 
 # RUNS · JOBS를 주면 컨테이너 환경으로 넘긴다(check.sh가 읽는 이름 그대로).
 # 안 주면 넘기지 않아 check.sh의 기본값(1회 · 메모리로 정한 JOBS)이 산다.
