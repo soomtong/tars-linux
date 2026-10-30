@@ -2,7 +2,8 @@
 
 Date: 2026-10-30
 Design: `docs/specs/2026-10-30-tars-status-band-design.md`(결정 1~7)
-Status: 착수 전
+Status: 끝났다(2026-10-30). plan `9c004ab` · Task 1 `7ab50e0` · Task 2 닫기. (a) frame 0.92 → 0.42ms(−54%, DR-M0의 2.45에서 −83%),
+overlay 0.22 → 0.001, present 0.36 → 0.27. 루트 게이트 22/22(11분 14초), verify 8109프레임 전부 `ok`.
 
 ## 이 milestone이 끝나면
 
@@ -100,3 +101,44 @@ mutation 둘, 둘 다 hangul 체인(마운트, `TARS_RENDER_VERIFY=1`):
 
 되돌린 판(`make check`): hangul PASS, 178프레임 `ok` · `mismatch` 0 · `status> text=` 19줄. battery PASS, 부팅 A 221프레임 `ok` ·
 `status>` 5줄(배터리 칸이 바뀌는 프레임마다 띠를 다시 그렸다), 부팅 B 3프레임 `ok`.
+
+### Task 2 — 측정 (2026-10-30, HEAD `7ab50e0`)
+
+같은 프로브, 부팅 3회씩. 비교 판(`sb-m0`, `patch.pl` 그대로):
+
+```
+sb-m0-run1  (b) span=1245ms frames=75 frame_sum=184ms dump_sum=104ms other=957ms reads=372   (a) frame=0.393 dump=2.584
+sb-m0-run2  (b) span=1216ms frames=73 frame_sum=177ms dump_sum=117ms other=922ms reads=370   (a) frame=0.368 dump=2.783
+sb-m0-run3  (b) span=1121ms frames=68 frame_sum=160ms dump_sum=96ms  other=864ms reads=368   (a) frame=0.495 dump=3.862
+median      (b) span=1216ms frames=73 frame_sum=177ms dump_sum=104ms                          (a) frame=0.42 ms (n=12)
+```
+
+진단 판(`sb-m0-split`, `split.pl`의 anchor를 `paintBand` 줄로):
+
+```
+median      (a) frame=0.528 ms (n=12)
+  split: others=0.01 cells=0.074 pane=0.164 rows=0.135 overlay=0.001 finish=0.275 present=0.272
+```
+
+| (a) 키 하나 | M0 `67596a0` | DR-M2 | DR-M3 `a2f5aef` | SB-M0 `7ab50e0` |
+|---|---|---|---|---|
+| frame | 2.45 | 1.36 | 0.92 | 0.42 (M3에서 −54%, M0에서 −83%) |
+| cells | 0.63 | 0.63 | 0.12 | 0.07 |
+| pane(비교 + 행 칠하기) | 0.81 | 0.165 | 0.18 | 0.16 |
+| overlay | — | 0.20 | 0.22 | 0.001 |
+| finish(present) | 0.29 (0.21) | 0.32 (0.32) | 0.37 (0.36) | 0.28 (0.27) |
+| (b) `seq 1 200000` | 1,135ms | 1,105ms | 1,139ms | 1,216ms(잡음 안 — 회차 1,121 · 1,216 · 1,245) |
+
+`overlay`가 0.22 → 0.001ms다 — (a)의 프레임에서 띠 판정은 `eql` 셋뿐이고 띠를 안 그린다(확정 9의 "0.05를 넘으면"은 안 넘었다).
+`present`도 0.36 → 0.27로 줄었다 — 띠 clip(1280 × 28)이 빠져 virtio-gpu가 받는 경계 상자가 작아진 것이고, 확정 9가 "줄 수
+있다"고만 한 자리다. 비교 판의 frame 0.42와 진단 판의 0.53의 차는 `lap` 다섯과 `split>` 줄의 비용이다(M3에서는 0.92 · 0.96).
+세 회차가 0.37 · 0.39 · 0.50으로 M3(0.58 · 0.92 · 1.84)보다 고르다. (b)는 잡음 안 — 스크롤 프레임은 띠와 무관하다(design "안 하는 것").
+
+### Task 2 — 루트 게이트 · 닫기 (2026-10-30)
+
+루트 게이트(`bash check.sh`, 21:17:59 → 21:29:13): 22/22, 11분 14초(prebuild 364 + lanes 308초 — prebuild는 cold build라 흔들린다,
+DR-M3 닫기는 279초였다). `verify lines` 합 8109(DR-M3 닫기 8119과 같은 자리 — CP 1980 · TD 1381 · UT 911 · TR 798 · PD 668 · CM 545 ·
+FW 510 · CB 380 …), 회차 로그 스물둘에 `mismatch` 0. `cut log lines` 전부 0.
+
+닫기: design 표 · Status, `completed.md`의 SB 행, `measurements.md` 98, `docs/decisions/project_status_band.md` + `MEMORY.md` 한 줄,
+`HANDOFF.md`(지금 상태 · 사용자가 확인할 것의 RS · DR 항목 · 다음 후보 · 게이트 줄). 소개 페이지에는 안 넣었다(내부 작업).

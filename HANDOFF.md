@@ -1,8 +1,22 @@
-# HANDOFF: Dirty Rows(DR-M0~M3) 닫음(2026-10-30) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: Status Band(SB-M0) 닫음(2026-10-30) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-30)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Dirty Rows(DR-M0~M3, 2026-10-28~30). design
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Status Band(SB-M0, 2026-10-30, DR과 같은 날). design
+  `docs/specs/2026-10-30-tars-status-band-design.md`, plan `docs/plans/2026-10-30-tars-status-band-sb-m0.md`, 기억
+  `docs/decisions/project_status_band.md`. 격자 아래 띠(1280 × 28)를 매 프레임 지우고 상태 줄을 다시 쓰고 clip으로 넘기던 것을,
+  내용(`text` · `caps` · `battery`)이 바뀐 프레임과 통째 프레임에만 하게 바꿨다 — `App.render`가 `drawPrompt`와 `paintBand(…, full or
+  frame.status_changed, &clips)`를 따로 부르고, `renderOverlay`는 그림자(verify)용 통째 경로로 남는다. 메모는 `StatusMemo` 하나이고
+  `dumpStatus`의 `status>` 줄도 같은 답(`Frame.status_changed`)으로 찍는다(`sameBatteryCell` 삭제). 새 판정 장치는 없다 — 띠를 잘못
+  건너뛰면 DR verify가 `mismatch rows=1 first=47`, clip을 빼먹으면 `mismatch clip`(mutation 둘로 확인, hangul 체인).
+  - 숫자(같은 프로브, 부팅 3회 중앙값): 키 하나의 그리기 (a) 0.92 → 0.42ms(−54%, DR-M0의 2.45에서 −83%). overlay 0.22 → 0.001,
+    present 0.36 → 0.27(띠 clip이 빠져 virtio-gpu의 경계 상자가 작아진 몫 — 기대 밖), cells 0.07 · pane 0.16. `seq`는 잡음 안.
+  - 루트 게이트 22/22, 11분 14초(prebuild 364 + lanes 308초), verify 8109프레임 전부 `ok`.
+  - 남은 렌더 축: 0.42ms가 present 0.27(커널) · 행 칠하기 0.135 · cells 0.07로 나뉜다. 다음은 GPU 가속(DR design "안 하는 것")이고
+    작은 것은 없다 — 상태 줄 띠는 이번에 끝났다. 함정은 띠가 "마지막으로 그린 상태 줄"이 남는 자리가 됐다는 것 — 격자 마지막
+    행의 글리프가 아래로 삐져나오면 verify가 `first=47`로 잡고, 그때는 띠를 지우는 조건에 "마지막 행이 dirty"를 더한다.
+  - 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Dirty Rows(DR-M0~M3, 2026-10-28~30). design
   `docs/specs/2026-10-28-tars-dirty-rows-design.md`, 기억 `docs/decisions/project_dirty_rows.md`. 패널마다 지난 프레임의 `cells()`
   목록(두 벌 버퍼 `Pane.cells_buf`)과 행마다 비교해(`verify.rowStarts` · `dirtyRows`) 바뀐 행만 지우고 다시 칠하고(`App.paintPane` ·
   `renderRows`) DIRTYFB clip으로 넘긴다(`drm.ClipList`, M2). M3(2026-10-30, 사용자가 골랐다)부터 `cells()`도 증분이다 —
@@ -16,9 +30,7 @@
     `cells()` 0.63의 속은 라이브러리 `update` 0.04 · 변환 루프 0.64였다(Task 0, `probe/cells.pl`). 비교 판의 회차별 (a)는 1.84 · 0.58 ·
     0.92로 흔들렸다(한 회차 `n=4`) — 열두 프레임의 중앙값을 읽는다.
   - 루트 게이트 22/22, 9분 41초(prebuild 279 + lanes 299초), verify 8119프레임 전부 `ok`.
-  - 남은 렌더 축: 키 하나 0.92ms가 present 0.36(커널) · overlay 0.22(상태 줄 띠) · 행 칠하기 0.13 · cells 0.12로 나뉘어 한 구간이
-    지배하지 않는다. 다음은 GPU 가속(design "안 하는 것")이고, 그 전에 할 만한 작은 것은 상태 줄 띠(1280 × 28 지우기 + 글자, 매
-    프레임)를 바뀐 칸만 그리는 것 — 숫자로 0.22ms가 상한이다. 사용자가 고른다.
+  - 상태 줄 띠(overlay 0.22)는 SB-M0이 같은 날 집었다(위).
   - 알아 둘 것: OSC 10 · 11(기본 전경 · 배경)은 라이브러리가 어떤 dirty 플래그도 안 켠다 — `Drawn.fg/bg` 메모가 그 자리다
     (`dirty_test`의 fresh 비교가 첫 판에 잡았다). 증분 호출(`cellsReuse`)이 한 프레임의 첫 `cells()`여야 한다(비트를 끈다). 지우는
     색은 `MARGIN_COLOR`다(실측 94). mutation은 가려질 수 있다 — 체인은 호스트 테스트를 먼저 도므로 게스트 mutation을 보려면
@@ -80,8 +92,8 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(DR-M3 닫기): 22/22, 9분 41초(prebuild 279초 + lanes 299초. prebuild는 cold build라 흔들린다 — DR-M1의
-  세 회차는 389 · 322 · 288초였다). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
+  마지막 루트 게이트(SB-M0 닫기): 22/22, 11분 14초(prebuild 364 + lanes 308초), verify 8109프레임 전부 `ok`(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
@@ -90,7 +102,9 @@
 
 - RS · DR: 로그에 `kms: present by dirtyfb`가 찍히는지, `cat` · 빌드 로그처럼 출력이 쏟아질 때 화면이 매끄럽게 따라오는지,
   키 입력이 늦게 느껴지지 않는지. DR 뒤로 키 하나는 바뀐 행 몇 줄만 VRAM으로 가므로(simpledrm은 clip마다 복사) 체감이 달라야
-  한다 — 달라지지 않았으면 그것이 새 사실이다. TCG에서 키 하나의 그리기는 0.92ms다(M3).
+  한다 — 달라지지 않았으면 그것이 새 사실이다. SB 뒤로는 상태 줄 띠(1280 × 28 = 143KB, 1080p에서 153KB)도 내용이 바뀐
+  프레임에만 간다. TCG에서 키 하나의 그리기는 0.42ms다(SB-M0). 한/영 · CapsLock · 배터리가 바뀔 때 상태 줄이 그 프레임에
+  바로 따라오는지도 본다(안 따라오면 `StatusMemo`의 비교가 그 칸을 못 보는 것).
 - TC: `tars-config wifi …`와 `tars-config dictation key`의 tty 입력(echo 없이 묻는다), `tars-config set net=dhcp ntp=dhcp`,
   `tars-config reload`, `tars-config reload terminal`. 게이트가 못 보는 것은 tty 질문, `--country`, `firewall deny`,
   `firewall=off`의 말이다.
@@ -108,7 +122,8 @@
 - 2026-10-24 점검이 남긴 것 가운데 남은 하나((3)은 HC, (4)는 LS로 닫았다).
   (5) `.github`가 없다 — Dockerfile 빌드 ·
   호스트 Zig 검사 · shellcheck 정도는 Actions에서 돌릴 수 있다(혼자 작업하는 지금은 선택).
-- 부분 갱신은 Dirty Rows(M0~M3)로 닫았다(위). 남은 렌더 후보는 상태 줄 띠의 부분 갱신(상한 0.22ms)과 그 뒤의 GPU 가속이다.
+- 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
+  present 0.27이 커널 쪽).
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.

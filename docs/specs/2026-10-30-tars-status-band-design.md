@@ -1,7 +1,8 @@
 # TARS Status Band — Design
 
 Date: 2026-10-30
-Status: 초안(사용자 검토 전). milestone 하나(SB-M0).
+Status: 끝났다 — SB-M0(2026-10-30, 루트 게이트 22/22, 11분 14초(prebuild 364 + lanes 308초), verify 8109프레임 전부 `ok`). plan은 `docs/plans/2026-10-30-tars-status-band-sb-m0.md`. 기억은
+`docs/decisions/project_status_band.md`. 키 하나의 그리기 0.92 → 0.42ms(overlay 0.22 → 0.001, present 0.36 → 0.27).
 
 HANDOFF "다음 후보"의 "상태 줄 띠의 부분 갱신(상한 0.22ms)"을 집는다(사용자가 2026-10-30에 골랐다). Dirty Rows(DR-M0~M3,
 `docs/specs/2026-10-28-tars-dirty-rows-design.md`)가 격자 안을 행 단위로 바꾸고 남겨 둔 격자 밖의 한 자리다 — DR design 결정 4의
@@ -90,7 +91,7 @@ HANDOFF "다음 후보"의 "상태 줄 띠의 부분 갱신(상한 0.22ms)"을 �
 
 | | 무엇을 | 상태 |
 |---|---|---|
-| SB-M0 | 메모 하나(결정 2) · 실제 경로의 `renderStatusBand` 분리(결정 3) · clip(결정 4) · mutation 둘(결정 5) · 같은 프로브로 재측정(결정 6) · 루트 게이트 | plan 전 |
+| SB-M0 | 메모 하나(결정 2) · 실제 경로의 `renderStatusBand` 분리(결정 3) · clip(결정 4) · mutation 둘(결정 5) · 같은 프로브로 재측정(결정 6) · 루트 게이트 | 끝(2026-10-30) — (a) frame 0.92 → 0.42ms(−54%). overlay 0.22 → 0.001, present 0.36 → 0.27(띠 clip이 빠져 경계 상자가 작아졌다 — 결정 6이 "줄 수 있다"고만 한 자리), cells 0.07 · pane 0.16. mutation 둘 다 hangul의 Shift+Space 프레임에서 `mismatch rows=1 first=47` · `mismatch clip`. (a) 판은 체인도 빨개졌지만 자리는 CapsLock 홀드 검사였다(`text=`는 메모가 찍어 초록). 루트 게이트 22/22, 11분 14초(prebuild 364 + lanes 308초), verify 8109프레임 전부 `ok` |
 
 하나로 끝낸다. 코드는 `main.zig` 안의 수십 줄이고 새 모듈 · 새 검사 · 새 로그 줄이 없다.
 

@@ -142,3 +142,4 @@ copy mode · 클립보드
 - [Loose ends](docs/decisions/project_loose_ends.md) — 이월 숙제 넷: 화면이 copy mode를 닫으면 입력 모드도 normal(`input> mode reset`), PTY 픽셀, carryover 정리(2026-10-27)
 - [Clock reload](docs/decisions/project_clock_reload.md) — net 부팅 A의 검사 32가 reload의 chronyd restart · stop · start를 본다, 검사 30의 restart 줄과 섞이지 않게(2026-10-28)
 - [Dirty rows](docs/decisions/project_dirty_rows.md) — 패널마다 cells() 사본과 행 비교, 바뀐 행만 칠하고 clip으로(M2). cells()도 증분 — cellsReuse가 라이브러리 행 dirty 비트 + 층 다섯 메모로 지난 목록에서 복사, 정답지는 fresh 목록(dirty_test · verify `mismatch cells`)(M3). OSC 10/11은 플래그를 안 켠다. 키 하나 2.45 → 1.36 → 0.92ms(2026-10-30)
+- [Status band](docs/decisions/project_status_band.md) — 상태 줄 띠를 바뀐 프레임과 통째 프레임에만 지우고 쓴다. StatusMemo 하나가 띠 다시 그리기와 status> 덤프를 함께 정한다, renderOverlay는 그림자용 통째 경로로 남는다, 판정은 DR verify 그대로(mismatch rows=1 first=47 · mismatch clip). 키 하나 0.92 → 0.42ms(2026-10-30)
