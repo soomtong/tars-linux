@@ -1,7 +1,8 @@
 # TARS Dirty Rows — Design
 
 Date: 2026-10-28
-Status: DR-M0~M2 끝(2026-10-30). M3(행 dirty 비트)은 M2의 숫자(`cells` 46%)로 제안 중 — 사용자가 고른다.
+Status: DR-M0~M2 끝(2026-10-30). DR-M3(행 dirty 비트) 진행 중 — 사용자가 2026-10-30에 골랐다(M2 plan 확정 14의 규칙,
+`cells` 46%). plan `docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`, 결정 10~12.
 
 HANDOFF "다음 후보"의 부분 갱신을 집는다(사용자가 2026-10-28에 골랐다). Render Speed(RS-M0~M3, 2026-10-11)가 그 앞의 축
 셋(칠하기 방식 · 프레임 수 · 모드셋)을 줄이고 남겨 둔 것이다 — `docs/decisions/project_render_speed.md`의 "남은 것",
@@ -115,6 +116,26 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
    `vt.Screen`에 고정 seed의 무작위 바이트를 먹이고, 회차마다 "dirty가 아니라고 한 행의 셀이 정말 지난번과 같은가"를 단언한다.
    픽셀 쪽(지우기 · overlay · clip)은 이 검사가 못 닿고 결정 7의 verify가 본다. 두 검사가 나눠 맡는다 — 호스트는 빠르고 많은 경우를,
    게스트는 실제 경로(패널 · 프롬프트 · 화살표)를.
+10. M3 — `cells()`가 행 dirty 비트의 소비자가 된다(사용자 결정, 2026-10-30). 착수 전 조사(HEAD `81ff52a`)가 배경 절의
+    "`row.dirty`를 끄지 않는다"를 정확히 했다. 라이브러리의 `update`는 이미 증분이다 — page 행의 dirty(`page_row.dirty`)는
+    `update`가 스스로 소비하고 바뀐 행만 `row_data`에 다시 복사한다(빌드 입력 판 `render.zig:807-836`). 우리가 안 끄는 것은
+    렌더러용 두 플래그, `RenderState.dirty`(`false | partial | full`)와 `row_data`의 `Row.dirty`이고, 둘은 `clean()`이 끌 때까지
+    쌓인다(`:948-957` · `:1033-1038`). 그래서 `cells()` 0.63ms의 몫은 `update`가 아니라 우리 변환 루프(`cols × rows` 전부를 매
+    프레임 색으로 푸는 것)일 것이다 — 가설이라 M3 plan의 Task 0이 먼저 잰다. M3은 dirty 아닌 행을 지난 목록에서 run째 복사하고
+    dirty 행만 다시 짓는다. 지난 목록은 호출자가 준다 — 결정 2의 두 벌(`Pane.cells_buf[shown]` · `starts_buf[shown]`)이 그것이다.
+    `.full`이면 전부, 지난 목록이 없어도(첫 프레임 · 사각형 변경 · 행 순서 깨짐) 전부. 비트는 `cells()`의 끝에서 끈다.
+11. 정답지는 "처음부터 지은 목록"이다. 결정 2의 둘째 문장("셀 사본 비교가 정답지")을 정확히 한다 — `paintPane`의 행 비교는
+    그대로 남아 픽셀을 지키지만, 증분 목록이 낡은 행을 품으면 비교도 그 행을 "같다"고 하므로 잡을 수 없다. 그래서 정답지는
+    ghostty의 `testIncrementalMatchesFresh`와 같다 — 같은 상태를 비트 없이 처음부터 지은 목록. 둘이 본다. 호스트 `dirty_test`가
+    회차마다 증분 목록과 fresh 목록을 바이트로 비교하고, 게스트 verify가 그림자를 fresh `cells()`로 그리며(픽셀) 그 목록을 증분
+    목록과 행마다 비교해(`mismatch cells`) 같은 한 줄에 담는다. 그래서 22체인의 모든 프레임이 이 비교다.
+12. 라이브러리가 모르는 층은 `Screen`이 메모와 비교해 켠다 — ghostty의 검색 하이라이트가 렌더러에서 행 dirty를 직접 켜는
+    것(`generic.zig:1582-1599`)과 같은 길. 층은 넷이다: 검색 하이라이트(`hl_spans`), copy 커서, 셸 커서의 반전(위치 · block 여부 ·
+    포커스 · 가시성 · 폭), preedit. `Screen`이 지난 `cells()`가 본 값을 들고, 바뀌었으면 지난 자리의 행 ∪ 이번 자리의 행을
+    dirty에 더한다. 선택은 라이브러리가 켠다(`render.zig:914-928`). 팔레트 · alt screen · 크기 · 스크롤은 `.full`이다(`redraw`
+    여섯 기준). 커서 이동은 라이브러리가 행을 안 더럽힌다(`:739-741`, "the cursor is unrelated") — 그래서 셸 커서가 층에 든다.
+    호출 계약: 한 프레임의 첫 `cells()`가 증분 호출이어야 한다(비트를 끄므로). 그 뒤의 fresh 호출은 비트를 안 보고 메모를 같은
+    값으로 다시 적는다(멱등) — verify가 그 순서다. `vt_test`의 호출 예순 곳은 fresh 경로 그대로다.
 
 ## Milestone
 
@@ -124,9 +145,10 @@ ZU-M2)는 빌드 입력으로만 두고 참고로 읽지 않는다(사용자 결
 | DR-M1 | verify 모드(결정 7 · 8). 그리기는 통째 그대로라 모든 프레임이 `ok`. mutation으로 verify가 잡는 것을 본다 | 끝 — initrd 표식 `/etc/tars/render-verify`(`make_initrd.sh`, `TARS_RENDER_VERIFY=1`)로 켠다. 프레임마다 `terminal: verify> ok us=N`, 루트 게이트 `check_verify_lines`가 회차마다 판정. 세 회차 약 2만 3천 프레임 `ok`, verify 한 번 중앙값 약 7ms(게이트 TCG). `renderFinish` → `renderOverlay` + `presentFrame`. mutation(지우기 뺌) 31프레임 `mismatch` |
 | DR-M2 | 행 단위 부분 갱신(결정 2~5)과 clip(결정 6), 행 비교 모듈과 호스트 무작위 검사(결정 9). 같은 프로브로 다시 잰다. 루트 게이트에서 verify 전부 `ok` | 끝(2026-10-30, plan `docs/plans/2026-10-29-tars-dirty-rows-dr-m2.md`) — (a) frame 2.45 → 1.36ms(−45%). cells 0.63(46%) · pane 0.165(행 비교 0.03 + 행 칠하기 0.14) · overlay 0.20 · finish 0.32(present 0.32 — clip 있는 DIRTYFB가 QEMU에서 0.1ms 더 든다). (b)는 잡음 안. 지우는 색은 `MARGIN_COLOR`, 행 하나는 패널 폭 + 오른쪽 한 칸, 통째 판정은 트리 비교. verify가 clip도 본다(화면 흉내 버퍼). mutation 둘(지난 커서 띠 행 · 행 run clip) 잡힘 |
 
-`cells()` 몫에 따라 M3(행 dirty 비트)이 생길 수 있다(결정 2). M2 뒤 `cells`가 frame의 46%(0.63/1.36ms)라 M2 plan 확정 14의
-규칙(30%)대로 M3을 제안한다 — 하느냐는 사용자가 고른다. 하게 되면 `RenderState`의 `row.dirty`를 끄는 자리부터이고(배경 절의
-"우리 `vt.zig`는 `row.dirty`를 끄지 않는다"), 지금의 셀 사본 비교가 그 비트의 정답지다.
+| DR-M3 | 행 dirty 비트로 `cells()`를 줄인다(결정 10~12). Task 0이 `cells()` 안을 쪼개 변환 루프의 몫을 먼저 잰다. 호스트 `dirty_test`가 fresh 비교, verify가 `mismatch cells`. 같은 프로브로 다시 잰다 | 진행 중(2026-10-30, plan `docs/plans/2026-10-30-tars-dirty-rows-dr-m3.md`) |
+
+M3은 M2 뒤 `cells`가 frame의 46%(0.63/1.36ms)라 M2 plan 확정 14의 규칙(30%)대로 제안했고 사용자가 2026-10-30에 골랐다.
+모양은 결정 10~12다 — 비트를 끄는 자리는 `cells()`의 끝이고, 정답지는 셀 사본 비교가 아니라 fresh 목록이다(결정 11).
 
 ## 위험
 
