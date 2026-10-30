@@ -91,15 +91,17 @@ URL이 죽으면 그때 드러난다. 매 push마다 깨끗한 기계에서 한 
 
 ### 결정 1. 워크플로 파일 하나, job 둘
 
-`.github/workflows/checks.yml` 하나. 트리거는 `push`(모든 브랜치) · `pull_request` · `workflow_dispatch`(손으로). `concurrency`로
-같은 ref의 앞 회차를 취소한다. job 둘은 병렬이고 서로 기다리지 않는다.
+`.github/workflows/checks.yml` 하나. 트리거는 `push`(`main`만) · `pull_request` · `workflow_dispatch`(손으로, 어느 브랜치든
+`gh workflow run checks.yml --ref <브랜치>`). `concurrency`로 같은 ref의 앞 회차를 취소한다. job 둘은 병렬이고 서로 기다리지
+않는다.
 
 - `host` — `ubuntu-24.04`(amd64). `actions/checkout` 뒤 shellcheck와 Zig tarball을 받아 `./quick_check.sh`를 돌린다.
 - `container` — `ubuntu-24.04-arm`. `docker build -t tars-devcontainer devcontainer/`(Makefile `container`와 같은 줄), 그 다음
   `docker run … devcontainer/sanity/check.sh`와 `docker run … 'cd init && zig build'`.
 
-왜 하나인가 — 검사가 두 종류뿐이고, 읽을 파일이 하나면 "CI가 무엇을 하는가"를 한 번에 읽는다. 왜 `push`가 모든 브랜치인가 — 혼자
-작업하는 저장소라 브랜치가 드물고, 일부러 깨뜨린 브랜치를 push해서 빨개지는지 보는 것(결정 6의 mutation)이 PR 없이 된다.
+왜 하나인가 — 검사가 두 종류뿐이고, 읽을 파일이 하나면 "CI가 무엇을 하는가"를 한 번에 읽는다. `push`는 `main`만이다(사용자 결정,
+2026-10-30) — 임시 브랜치의 push마다 컨테이너를 굽지 않는다. 일부러 깨뜨린 브랜치(결정 6의 mutation)는 `workflow_dispatch`를
+그 브랜치로 불러 본다.
 
 ### 결정 2. 도구는 저장소가 정한 버전을 tarball로 받고 sha256을 대조한다
 
@@ -156,8 +158,8 @@ Dockerfile은 0줄 바꾸지 않는다(arm64 runner를 쓰는 이유다 — 확�
 
 워크플로는 push해야 돈다. GH-M0의 Task는 "로컬 `make quick` 통과 → commit → push → `gh run watch`"의 순서이고, 결과(두 job의
 시간 · 로그의 버전 줄)를 plan의 결과 절에 적는다. 일부러 깨뜨려 빨개지는 것을 둘 본다 — (a) `.sh` 하나에 `cd /nowhere` 같은
-warning을 넣은 브랜치, (b) `.zig` 하나의 서식을 깨뜨린 브랜치. 둘 다 임시 브랜치를 push해 `host`가 빨개지는 것을 보고 브랜치를
-지운다. `container`의 mutation은 Dockerfile을 깨뜨려 몇 분을 기다리는 일이라 하지 않는다 — `docker build`의 exit code가 판정이고
+warning을 넣은 브랜치, (b) `.zig` 하나의 서식을 깨뜨린 브랜치. 둘 다 임시 브랜치를 push하고 `gh workflow run checks.yml --ref
+<브랜치>`로 불러 `host`가 빨개지는 것을 보고 브랜치를 지운다(push 트리거는 `main`만이라 push만으로는 안 돈다). `container`의 mutation은 Dockerfile을 깨뜨려 몇 분을 기다리는 일이라 하지 않는다 — `docker build`의 exit code가 판정이고
 그것은 Docker의 몫이다.
 
 로컬 게이트는 결정 4가 고치는 네 파일이 어느 체인에 닿는지 plan이 보고 정한다 — 넷 다 체인의 `check.sh`가 아니므로 닿는 체인만
@@ -165,7 +167,7 @@ warning을 넣은 브랜치, (b) `.zig` 하나의 서식을 깨뜨린 브랜치.
 
 ### 결정 7. README에 상태 배지 한 줄
 
-README 제목 아래에 `checks.yml`의 배지를 한 줄 둔다. 배지 옆 글은 "정적 검사와 컨테이너 빌드 — 게이트는 로컬(`make gate`)"이다.
+README 제목 아래에 `checks.yml`의 배지를 한 줄 둔다(사용자 결정, 2026-10-30). 배지 옆 글은 "정적 검사와 컨테이너 빌드 — 게이트는 로컬(`make gate`)"이다.
 초록이 부팅을 뜻한다고 읽히지 않게 하는 한 줄이다(위험 5).
 
 ## Milestone
