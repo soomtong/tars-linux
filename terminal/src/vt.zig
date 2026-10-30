@@ -45,6 +45,74 @@ pub const RowSpan = struct {
     }
 };
 
+/// 지난 프레임의 셀 목록(DR-M3, design 결정 10). `cellsReuse`가 dirty 아닌 행을
+/// 여기서 run째 복사한다. `starts`는 `rows + 1`칸, `starts[r]..starts[r + 1]`이
+/// r행이다(`verify.rowStarts`의 모양). 호출자(`main.zig`의 `Pane`)가 둘 다 이미
+/// 들고 있다 — 두 벌 버퍼의 화면에 있는 쪽이라 복사본이 새로 생기지 않는다.
+pub const Prev = struct { cells: []const CellGlyph, starts: []const u32 };
+
+/// 커서 층이 건드린 자리(DR-M3). 셸 커서를 반전하거나 preedit을 그릴 때의
+/// 자리와 폭이다. 둘 다 아니면(bar · underline · 포커스 없음 · copy mode ·
+/// 뷰포트 밖) null — 그때 커서는 셀 목록에 아무 흔적도 안 남긴다.
+pub const CursorSpot = struct { x: u16, y: u16, span: u8 };
+
+/// 지난 `cells()`가 본 층 넷의 값(DR-M3, design 결정 12). 라이브러리의 행 dirty
+/// 비트는 `row_data`에 든 것만 안다 — 검색 하이라이트 · copy 커서 · 셸 커서의
+/// 반전 · preedit은 우리가 `cells()` 안에서 얹는 층이라 비트에 안 든다. 커서
+/// 이동은 라이브러리가 행을 안 더럽힌다고 주석이 명시한다(`render.zig`의
+/// "the cursor is unrelated"). 그래서 이 값을 들고 이번 값과 비교해 바뀐
+/// 자리의 행(지난 ∪ 이번)을 dirty에 더한다. 증분 호출이든 fresh 호출이든
+/// 끝에서 같은 값으로 다시 적으므로 한 프레임에 두 번 불러도 답이 안 바뀐다.
+pub const Drawn = struct {
+    cursor: ?CursorSpot = null,
+    preedit: ?u21 = null,
+    copy: ?Screen.Cursor = null,
+    /// 지난 기본 전경 · 배경(`0x00RRGGBB`). OSC 10 · 11은 `terminal.colors`만 바꾸고
+    /// 어떤 dirty 플래그도 안 켠다(`stream_terminal.zig`의 `.dynamic` 갈래 — OSC 4
+    /// 팔레트만 `dirty.palette`다). 모든 셀의 색과 "빈 칸" 판정이 이 둘에 기대므로
+    /// 바뀌면 전부 다시 짓는다. `dirty_test`의 `osc color` 회차가 이 틈을 잡았다.
+    fg: u32 = 0,
+    bg: u32 = 0,
+    /// 지난 `hl_spans`의 사본. `hl_spans`는 매 호출 다시 짓고 `hlSpans()`가
+    /// 게이트에 이번 값을 내보내므로 맞바꾸지 않고 복사한다 — 검색 중에만
+    /// 비어 있지 않다.
+    spans: std.ArrayListUnmanaged(RowSpan) = .empty,
+};
+
+/// 행 하나를 dirty로. 크기가 줄어든 뒤의 옛 메모가 격자 밖을 가리킬 수 있어
+/// 범위를 본다 — 그 프레임은 어차피 `.full`이다.
+fn markRow(dirty: []bool, y: u16) void {
+    if (y < dirty.len) dirty[y] = true;
+}
+
+/// 지난 spans와 이번 spans를 행마다 비교해 다른 행을 dirty로. 두 목록은 행
+/// 오름차순이라(`RowSpan.lessThan`) 두 포인터로 한 번 걷는다 — 한쪽에만 있는
+/// 행도 다른 행이다. 원소를 하나씩 비교하는 이유는 `RowSpan`에 패딩이 있어
+/// 바이트 비교가 쓰레기를 볼 수 있기 때문이다.
+fn markSpanRows(dirty: []bool, a: []const RowSpan, b: []const RowSpan) void {
+    var i: usize = 0;
+    var j: usize = 0;
+    while (i < a.len or j < b.len) {
+        const ra: u16 = if (i < a.len) a[i].row else std.math.maxInt(u16);
+        const rb: u16 = if (j < b.len) b[j].row else std.math.maxInt(u16);
+        const r = @min(ra, rb);
+        const from_a = i;
+        while (i < a.len and a[i].row == r) i += 1;
+        const from_b = j;
+        while (j < b.len and b[j].row == r) j += 1;
+        const sa = a[from_a..i];
+        const sb = b[from_b..j];
+        var same = sa.len == sb.len;
+        if (same) for (sa, sb) |x, y| {
+            if (!std.meta.eql(x, y)) {
+                same = false;
+                break;
+            }
+        };
+        if (!same) markRow(dirty, r);
+    }
+}
+
 /// 마지막 `cells()`가 만든 하이라이트의 실측(design 결정 5).
 ///
 /// 상한을 안 두기로 한 결정의 근거를 남기는 값이다. `us`가 밀리초 단위로
@@ -422,6 +490,13 @@ pub const Screen = struct {
     /// 언젠가 갈려서 반전과 띠가 함께 그려진다.
     shell_cursor: ?CursorMark = null,
 
+    /// 지난 `cells()`가 본 층 넷(DR-M3, design 결정 12). 설명은 `Drawn`에.
+    drawn: Drawn = .{},
+    /// 마지막 `cellsReuse`가 지난 목록에서 복사한 행 수. 호스트 검사
+    /// (`dirty_test`)가 증분 경로를 정말 밟았는지 보는 값이다 — 0이면 검사가
+    /// fresh 경로만 본 것이다.
+    last_reused: u16 = 0,
+
     /// 마지막으로 보고한 칸(PD-M4). ghostty의 인코더가 움직임 보고를 칸이
     /// 바뀔 때만 내려고 들고 다니는 값이다(`MouseEncodeOptions.last_cell`).
     /// 패널마다 따로다 — 보고가 가는 자식이 패널마다 따로이기 때문이다.
@@ -553,6 +628,7 @@ pub const Screen = struct {
         // `f.deinit()`이 이미 해제한 버퍼를 가리키는 얕은 복사다.
         if (self.find_matches) |m| alloc.free(m);
         self.hl_spans.deinit(alloc);
+        self.drawn.spans.deinit(alloc);
         self.state.deinit(alloc);
         self.stream.deinit();
         self.term.deinit(alloc);
@@ -646,6 +722,29 @@ pub const Screen = struct {
     /// 생긴 뒤로는 빈 셀도 그릴 것이 있기 때문이다 — `ls` 출력의 색 띠,
     /// 커서 자리, 그리고 나중의 선택 영역이 그렇다.
     pub fn cells(self: *Screen, out: []CellGlyph) ![]CellGlyph {
+        return self.cellsReuse(out, null);
+    }
+
+    /// `cells()`의 증분 판(DR-M3, design 결정 10~12). `prev`가 지난 호출의 결과면
+    /// dirty 아닌 행은 거기서 run째 복사하고 dirty 행만 다시 짓는다. dirty는
+    /// 라이브러리가 켠 행 비트(`row_data`의 `dirty`, `update`가 다시 지은 행)와
+    /// 우리 층 넷의 메모 비교(`Drawn`)의 합집합이다. `state.dirty == .full`
+    /// (팔레트 · alt screen · 크기 · 스크롤 — `redraw`의 여섯 기준)이거나 `prev`가
+    /// 없거나 행 수가 안 맞으면 전부 다시 짓는다. 끝에서 `state.clean()`으로
+    /// 비트를 끈다 — 그래서 한 프레임의 첫 호출이 이것이어야 한다. 그 뒤의
+    /// fresh 호출(`cells()`, verify의 그림자)은 비트를 안 보고 메모를 같은 값으로
+    /// 다시 적는다.
+    ///
+    /// 지난 목록을 호출자가 주는 이유는 `main.zig`의 `Pane`이 두 벌 버퍼로
+    /// 이미 들고 있기 때문이다(M2 plan 확정 5) — 여기 사본을 또 두면 패널마다
+    /// 수백 KB가 더 든다. `prev.cells`의 r행이 정말 r행인 것은 `rowStarts`가
+    /// 보장한다(순서가 깨지면 `Pane.prev_valid`가 거짓이라 null로 온다).
+    ///
+    /// 증분이 틀리는 길은 "층 하나를 빠뜨림"이다 — 그 행은 지난 값을 복사하고
+    /// 아무도 모른다. 정답지는 처음부터 지은 목록이다(design 결정 11): 호스트
+    /// `dirty_test`가 회차마다 둘을 바이트로 비교하고, 게스트 verify가 fresh
+    /// 목록으로 그림자를 그려 픽셀과 목록을 본다.
+    pub fn cellsReuse(self: *Screen, out: []CellGlyph, prev: ?Prev) ![]CellGlyph {
         // update()는 beginUpdate() + endUpdate()다(`render.zig:326`).
         // 셀별 style은 endUpdate에서 채워지므로 이 호출 뒤에 읽어도 된다.
         try self.state.update(self.alloc, &self.term);
@@ -667,6 +766,35 @@ pub const Screen = struct {
         const default_bg = packRgb(colors.background);
         const cursor = self.state.cursor.viewport;
 
+        // 커서 층이 이번에 건드릴 자리(DR-M3). 아래 루프의 조건 그대로다 — copy
+        // mode가 아니고 뷰포트 안이며, 반전하거나(`invert_cursor`) preedit이 있을 때.
+        const cur_spot: ?CursorSpot = if (self.copy_cursor == null) blk: {
+            const vp = cursor orelse break :blk null;
+            if (!invert_cursor and self.preedit == null) break :blk null;
+            break :blk .{ .x = vp.x, .y = vp.y, .span = if (self.preedit == null) 1 else 2 };
+        } else null;
+
+        // dirty 표는 라이브러리의 행 비트 그대로다 — 우리가 그 비트의 소비자라
+        // 거기에 층의 행을 더해 써도 된다(design 결정 10). `.full`이면 비트와
+        // 무관하게 전부이고, 지난 목록이 없거나 행 수가 안 맞아도 전부다.
+        const row_dirty = self.state.row_data.items(.dirty);
+        const all = self.state.dirty == .full or prev == null or
+            prev.?.starts.len != row_dirty.len + 1 or
+            self.drawn.fg != default_fg or self.drawn.bg != default_bg;
+        if (!all) {
+            const d = &self.drawn;
+            if (!std.meta.eql(d.cursor, cur_spot) or !std.meta.eql(d.preedit, self.preedit)) {
+                if (d.cursor) |c| markRow(row_dirty, c.y);
+                if (cur_spot) |c| markRow(row_dirty, c.y);
+            }
+            if (!std.meta.eql(d.copy, self.copy_cursor)) {
+                if (d.copy) |c| markRow(row_dirty, c.y);
+                if (self.copy_cursor) |c| markRow(row_dirty, c.y);
+            }
+            markSpanRows(row_dirty, d.spans.items, self.hl_spans.items);
+        }
+        var reused: u16 = 0;
+
         var n: usize = 0;
         const row_data = self.state.row_data.slice();
         const row_cells = row_data.items(.cells);
@@ -680,6 +808,17 @@ pub const Screen = struct {
         var hl_at: usize = 0;
 
         for (0..self.state.rows) |y| {
+            // dirty 아닌 행은 지난 목록의 run을 그대로 옮긴다(DR-M3). 그 run의
+            // `row`는 이미 y다. 아래 `hl_at`은 다음 dirty 행에서 따라잡는다.
+            if (!all and !row_dirty[y]) {
+                const p = prev.?;
+                const run = p.cells[p.starts[y]..p.starts[y + 1]];
+                if (n + run.len > out.len) return out[0..n];
+                @memcpy(out[n..][0..run.len], run);
+                n += run.len;
+                reused += 1;
+                continue;
+            }
             // `@as(usize, ...)`는 이 파일의 기존 규율이다 — 아래 선택 범위를
             // 보는 자리가 `x >= @as(usize, range[0])`으로 쓴다.
             while (hl_at < spans.len and
@@ -881,6 +1020,17 @@ pub const Screen = struct {
                 n += 1;
             }
         }
+        // 비트를 끈다 — 이 호출이 소비자다(DR-M3). 그리고 층 넷의 메모를 이번
+        // 값으로. fresh 호출도 같은 값을 적으므로 멱등이다.
+        self.state.clean();
+        self.last_reused = reused;
+        self.drawn.cursor = cur_spot;
+        self.drawn.preedit = self.preedit;
+        self.drawn.copy = self.copy_cursor;
+        self.drawn.fg = default_fg;
+        self.drawn.bg = default_bg;
+        self.drawn.spans.clearRetainingCapacity();
+        try self.drawn.spans.appendSlice(self.alloc, self.hl_spans.items);
         return out[0..n];
     }
 

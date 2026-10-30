@@ -9,6 +9,12 @@
 //!
 //! 픽셀 쪽(지우기 · overlay 행 · clip)은 이 검사가 못 닿고 게이트의 verify 모드가 본다(design
 //! 결정 9의 "두 검사가 나눠 맡는다").
+//!
+//! DR-M3부터 둘째 절반이 붙었다 — `testIncrementalMatchesFresh`의 이름 그대로다. 회차마다 목록을
+//! 증분(`cellsReuse`, 지난 목록에서 dirty 아닌 행을 복사)으로 받고 같은 상태를 fresh(`cells`, 비트 없이
+//! 처음부터)로 한 번 더 받아 바이트로 비교한다(design 결정 11). 증분이 틀리는 길은 "층 하나를
+//! 빠뜨림"이고, 그러면 그 행은 지난 값이 남는데 행 비교는 그것을 "같다"고 하므로 이 비교만이 잡는다.
+//! `last_reused`의 합이 0이면 실패다 — 증분 경로를 한 번도 안 밟은 검사는 아무것도 안 본 것이다.
 const std = @import("std");
 const vt = @import("vt.zig");
 const verify = @import("verify.zig");
@@ -47,7 +53,7 @@ const HANGUL_CP = [_]u21{ '가', '나', '다', '한', '글' };
 
 /// 조작 하나. 돌려주는 이름은 실패 메시지용이다.
 fn step(screen: *vt.Screen, rnd: std.Random, buf: []u8) ![]const u8 {
-    switch (rnd.uintLessThan(u8, 26)) {
+    switch (rnd.uintLessThan(u8, 27)) {
         // 글자가 가장 흔하다 — 화면이 차야 나머지 조작이 뜻을 가진다.
         0, 1, 2, 3, 4 => {
             const len = rnd.intRangeAtMost(usize, 1, 30);
@@ -163,6 +169,13 @@ fn step(screen: *vt.Screen, rnd: std.Random, buf: []u8) ![]const u8 {
             screen.feed(if (rnd.boolean()) "\x1b[?25l" else "\x1b[?25h");
             return "cursor visible";
         },
+        25 => {
+            // DECSCUSR. block ↔ bar · underline은 내용은 그대로이고 커서 자리의 반전만 바뀐다 —
+            // "층만 바뀐 행"의 가장 깨끗한 예다(DR-M3 plan 확정 7).
+            const s = try std.fmt.bufPrint(buf, "\x1b[{d} q", .{rnd.intRangeAtMost(u8, 1, 6)});
+            screen.feed(s);
+            return "decscusr";
+        },
         else => {
             // 기본 배경 · 전경이 바뀌면 내보내는 셀의 색이 통째로 바뀐다(M2 plan 확정 1의 자리).
             const s = try std.fmt.bufPrint(buf, "\x1b]1{d};#{x:0>6}\x1b\\", .{ rnd.uintLessThan(u8, 2), rnd.int(u24) });
@@ -184,7 +197,11 @@ pub fn main(init: std.process.Init) !void {
     var bufs: [2][COLS * ROWS]vt.CellGlyph = undefined;
     var starts: [2][ROWS + 1]u32 = undefined;
     var shown: u1 = 0;
-    var shown_len: usize = (try screen.cells(&bufs[0])).len;
+    var shown_len: usize = (try screen.cellsReuse(&bufs[0], null)).len;
+    // fresh 목록의 자리(DR-M3). 증분 호출 뒤에 받는다 — 순서가 반대면 fresh가 비트를 끄고
+    // 증분이 낡은 행을 복사한다(`cellsReuse`의 호출 계약).
+    var fresh: [COLS * ROWS]vt.CellGlyph = undefined;
+    var reused_total: usize = 0;
     if (!verify.rowStarts(vt.CellGlyph, bufs[0][0..shown_len], &starts[0])) return fail("첫 프레임의 행이 오름차순이 아니다", .{});
 
     var op_buf: [64]u8 = undefined;
@@ -194,7 +211,21 @@ pub fn main(init: std.process.Init) !void {
     while (round < ROUNDS) : (round += 1) {
         const op = try step(screen, rnd, &op_buf);
         const next = shown ^ 1;
-        const cur = try screen.cells(&bufs[next]);
+        const cur = try screen.cellsReuse(&bufs[next], .{ .cells = bufs[shown][0..shown_len], .starts = &starts[shown] });
+        // fresh 호출이 `last_reused`를 0으로 덮으므로 먼저 읽는다.
+        const reused = screen.last_reused;
+        reused_total += reused;
+        const fr = try screen.cells(&fresh);
+        if (!std.mem.eql(u8, std.mem.sliceAsBytes(cur), std.mem.sliceAsBytes(fr))) {
+            var first: ?usize = null;
+            for (0..ROWS) |r| {
+                if (!rowEql(cur, fr, @intCast(r))) {
+                    first = r;
+                    break;
+                }
+            }
+            return fail("seed {x} 회차 {d} ({s}): 증분 목록이 fresh와 다르다 — 첫 다른 행 {?d}, 길이 {d} vs {d}, 재사용 {d}행", .{ SEED, round, op, first, cur.len, fr.len, reused });
+        }
         if (!verify.rowStarts(vt.CellGlyph, cur, &starts[next])) return fail("seed {x} 회차 {d} ({s}): 행이 오름차순이 아니다", .{ SEED, round, op });
 
         var dirty: [ROWS]bool = undefined;
@@ -215,7 +246,8 @@ pub fn main(init: std.process.Init) !void {
     // 그러나 전부 0이거나 전부 전체이면 검사가 아무것도 안 본 것이다.
     if (dirty_rows_total == 0) return fail("300회차에 dirty 행이 하나도 없다", .{});
     if (dirty_rows_total == ROUNDS * ROWS) return fail("300회차가 전부 모든 행 dirty다", .{});
-    std.debug.print("dirty_test: {d}회차 OK — dirty 행 합 {d}, dirty 프레임 {d}, 마지막 셀 {d}개 (seed {x})\n", .{
-        ROUNDS, dirty_rows_total, dirty_frames, shown_len, SEED,
+    if (reused_total == 0) return fail("300회차에 재사용한 행이 하나도 없다 — 증분 경로를 안 봤다", .{});
+    std.debug.print("dirty_test: {d}회차 OK — dirty 행 합 {d}, dirty 프레임 {d}, 재사용 행 합 {d}, 마지막 셀 {d}개 (seed {x})\n", .{
+        ROUNDS, dirty_rows_total, dirty_frames, reused_total, shown_len, SEED,
     });
 }

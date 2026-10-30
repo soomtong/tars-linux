@@ -151,3 +151,20 @@ median (n=12)     (a) frame=1.691 ms
 루프")이 맞았다 — 라이브러리는 이미 증분이라 0.04ms다. 이 판의 `split> cells` 0.888ms와 합 0.678ms의 차 0.21ms는 `cells>`
 줄을 시리얼에 쓰는 비용이고(`cells()` 안에서 찍는다), 그래서 `frame`도 M2의 1.36에서 1.69로 늘어 보인다 — 비교 판의 값이
 아니므로 읽지 않는다(`cells.pl` 머리 주석). M3이 줄일 상한은 약 0.6ms, 재사용 행의 복사(`memcpy` 약 110KB)가 그 안에서 남는다.
+
+### Task 1 — `cellsReuse`와 호스트 검사 (2026-10-30)
+
+`vt.zig` +141줄 · 0줄 삭제(`Prev` · `CursorSpot` · `Drawn` · `markRow` · `markSpanRows` · `cellsReuse`, `cells()`는 한 줄),
+`dirty_test.zig` +40/−5(fresh 비교 · `last_reused` 합 · DECSCUSR 조작). 호스트 0.17 `fmt --check` · `ast-check` 통과(`i0`이
+primitive 이름이라 `from_a`로 — 0.17의 새 규칙). 컨테이너 `zig build test` 전부 통과: `dirty_test` 300회차, dirty 행 합 388,
+재사용 행 합 2760(/3600), 마지막 셀 19개.
+
+fresh 비교가 첫 판에서 바로 틈 하나를 잡았다 — 회차 18 `osc color`, 증분 목록이 fresh와 1행부터 다르다. OSC 10 · 11(기본 전경 ·
+배경)은 라이브러리가 `terminal.colors`만 바꾸고 어떤 dirty 플래그도 안 켠다(`stream_terminal.zig`의 `.dynamic` 갈래. OSC 4 팔레트만
+`dirty.palette`). ghostty는 기본 색을 GPU uniform으로 넘겨 셀 데이터에 안 굽기 때문에 플래그가 필요 없고(`generic.zig:2365`), 우리는
+`cells()`가 색을 셀에 해소해 넣으므로(TR design 결정 1) 바뀌면 모든 셀이 바뀐다. `Drawn`에 `fg` · `bg`를 더해 다르면 전부 다시
+짓는다 — design 결정 12의 층이 넷에서 다섯(기본 색)이 됐다. 확정 2의 "라이브러리의 `row_data`에 없는 입력" 목록이 하나 모자랐던
+것이고, 결정 11의 정답지가 왜 있어야 하는지를 첫 판이 보여 줬다.
+
+호스트 mutation(확정 8, 커서 행 더하기를 뺀 판을 마운트): 회차 0 `focus`에서 실패 — "첫 다른 행 0, 길이 1 vs 0, 재사용 12행".
+포커스가 꺼져 반전이 사라졌는데 그 행을 복사해 반전된 셀 하나가 남았다. 잡힌다.
