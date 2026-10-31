@@ -1,3 +1,6 @@
+# 이미지 세대: 2026-10-31. 이 파일의 sha256 앞 12자가 ghcr.io 태그다(devcontainer/image.sh) —
+# 이 날짜를 바꾸면 해시가 바뀌어 main의 다음 CI가 다시 굽고 올린다(apt 갱신을 받는 길). GI design 결정 4.
+#
 # 호스트(Apple Silicon)와 같은 arm64로 돈다. 예전에는
 # `--platform=linux/amd64`가 붙어 있어서 컴파일러와 QEMU 바이너리 자체가
 # Rosetta 에뮬레이션을 통과했고, 그 안에서 다시 x86_64 게스트를 TCG로
@@ -489,3 +492,7 @@ RUN curl -sSL -o /tmp/zig.tar.xz \
     && rm /tmp/zig.tar.xz
 
 WORKDIR /workspace
+
+# ghcr.io 패키지를 이 저장소에 연결한다(GI design 확인 6 — 저장소 페이지에 보이고 Actions 토큰이 올릴 수
+# 있다). 끝에 두어 이 층만 다시 굽힌다.
+LABEL org.opencontainers.image.source=https://github.com/soomtong/tars-linux

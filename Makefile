@@ -145,8 +145,8 @@ help:
 	@echo "      이 목록. 인자 없는 make가 이걸 부른다"
 	@echo
 	@echo "  make container"
-	@echo "      devcontainer/에서 tars-devcontainer를 굽는다. 없으면 다른 타깃들이 알아서"
-	@echo "      부른다. 커널 도구·amd64 sysroot·zig·mkfs.ext2·xorriso가 전부 그 안에 있다"
+	@echo "      tars-devcontainer를 ghcr.io에서 받는다(없거나 오프라인이면 굽는다). 없으면 다른"
+	@echo "      타깃들이 알아서 부른다. 커널 도구·amd64 sysroot·zig·mkfs.ext2·xorriso가 전부 그 안에 있다"
 	@echo
 	@echo "  make shell"
 	@echo "      컨테이너 셸. sysroot 안을 들여다보거나 게스트용 바이너리를 그 자리에서"
@@ -187,12 +187,14 @@ help:
 	@echo "  DOCKER=$(DOCKER)"
 	@echo "      이미지 이름과 docker 실행 파일. 다른 태그를 쓰려면 여기를 덮는다"
 
-# 이미지가 없으면 굽는다. 첫 사람만 겪는 일이고, 없을 때 docker run이 내는
-# 메시지("Unable to find image ... locally")는 무엇을 해야 하는지 안 알려준다.
+# 이미지가 없으면 ghcr.io에서 받고, 못 받으면 굽는다(devcontainer/image.sh — 태그는 Dockerfile의
+# 해시, GI-M0). 첫 사람만 겪는 일이고, 없을 때 docker run이 내는 메시지("Unable to find image ...
+# locally")는 무엇을 해야 하는지 안 알려준다. 이미 있으면 Dockerfile이 바뀌어도 안 움직인다 —
+# 새 Dockerfile의 이미지를 쓰려면 `docker rmi tars-devcontainer && make container`.
 container:
 	@$(DOCKER) image inspect $(CONTAINER) >/dev/null 2>&1 || { \
-	  echo "devcontainer/에서 $(CONTAINER)를 굽는다 (처음 한 번, 몇 분)"; \
-	  $(DOCKER) build -t $(CONTAINER) devcontainer/; }
+	  echo "$(CONTAINER)를 ghcr.io에서 받는다(1.5GB). 없거나 오프라인이면 devcontainer/에서 굽는다"; \
+	  ./devcontainer/image.sh pull || ./devcontainer/image.sh build; }
 
 kernel: container
 	$(IN_CONTAINER) 'cd kernel && ./build.sh'

@@ -6,7 +6,8 @@
 #   host       amd64 runner. shellcheck · Zig를 release tarball로 받아(sha256 대조) quick_check.sh를
 #              돌린다 — 사람이 `make quick`으로 돌리는 그 파일이다.
 #   container  arm64 runner. devcontainer/Dockerfile이 zig-aarch64를 받으므로(ZM-M3) amd64에서는
-#              못 쓴다. 그대로 굽고, 안에서 BF-M0 sanity 부팅과 게이트 prebuild의 두 줄(init · terminal의
+#              못 쓴다. 이미지를 ghcr.io에서 받거나(Dockerfile 해시 태그가 있으면) 굽고(없으면 — main
+#              push면 올린다, GI-M0), 안에서 BF-M0 sanity 부팅과 게이트 prebuild의 두 줄(init · terminal의
 #              zig build test, GH-M1)을 돌린다.
 #
 # 제3자 action은 쓰지 않는다 — 무엇이 도는지 이 파일에서 읽히게. actions/checkout만 태그로 핀한다.
@@ -56,11 +57,31 @@ jobs:
 
   container:
     runs-on: ubuntu-24.04-arm
+    # packages: write는 아래 image push의 docker login 몫이다. permissions를 적으면 적은 것만 남으므로
+    # checkout의 contents: read를 함께 적는다.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
 
-      # Makefile의 container 타깃과 같은 줄. 층 캐시는 없다 — 먼저 캐시 없는 시간을 잰다(design 결정 5).
-      - run: docker build -t tars-devcontainer devcontainer/
+      # Makefile의 container 타깃과 같은 줄(GI-M0). 태그는 Dockerfile 내용의 sha256 앞 12자 — 있으면 받고
+      # (게이트 · 새 저장소와 같은 이미지), 없으면 Dockerfile이 바뀐 것이라 굽는다. 어느 길인지는 로그의
+      # `image> pulled|built` 줄. 받은 회차는 올릴 것이 없다.
+      - name: image (pull or build)
+        id: image
+        run: |
+          if ./devcontainer/image.sh pull; then echo built=0 >> "$GITHUB_OUTPUT"
+          else ./devcontainer/image.sh build && echo built=1 >> "$GITHUB_OUTPUT"; fi
+
+      # 구운 것을 올리는 것은 main의 push만이다 — 브랜치(workflow_dispatch) · PR은 굽기만 한다. 제3자
+      # action 없이 docker login · docker push 둘. 첫 push가 만드는 패키지는 비공개라 한 번 Public으로
+      # 바꾼다(design 결정 6의 (d)).
+      - name: image push
+        if: github.event_name == 'push' && steps.image.outputs.built == '1'
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ./devcontainer/image.sh push
 
       # BF-M0의 sanity. 크로스 gcc → 32비트 ELF → qemu TCG 5초 → 시리얼 표식.
       - run: docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer devcontainer/sanity/check.sh

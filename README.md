@@ -16,10 +16,12 @@ xorriso hybrid ISO → Limine → 자체 빌드 커널 → Zig init(PID 1)
 ## 준비
 
 빌드는 컨테이너 안에서만 된다. 커널과 게스트 바이너리가 x86_64 크로스
-툴체인을 쓰는데 그것이 이미지 안에만 있기 때문이다.
+툴체인을 쓰는데 그것이 이미지 안에만 있기 때문이다. 이미지는 CI가 구워
+`ghcr.io/soomtong/tars-devcontainer`에 올려 둔 것을 받는다(1.5GB, 태그는
+`devcontainer/Dockerfile`의 해시). 없거나 오프라인이면 그 자리에서 굽는다.
 
 ```bash
-docker build -t tars-devcontainer -f devcontainer/Dockerfile .
+make container
 ```
 
 `--platform`을 붙이지 않는다. 호스트(Apple Silicon)와 같은 arm64로 돌고,
