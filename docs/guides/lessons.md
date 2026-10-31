@@ -38,13 +38,14 @@ design · 스크립트 주석이 `lessons "<옛 절 이름>"`으로 가리키는
 # 루트 게이트 (스물두 체인 × 1, 동시 JOBS줄 — GP-M2부터 9분 51초. 순차 1회는 32분 23초, 2회는 1시간 01분 18초였다. 회차별 초는 끝의 표)
 # 요약 로그는 저장소의 out/ 아래에 두지 않는다 — check.sh의 clean()이 게이트 시작에 out/을 통째로 지워 열린 파일이 떨어져
 # 나간다(SA-M1에서 요약 한 줄을 잃었다). 체인별 로그는 게이트가 끝에 out/gate-logs/<시각>/으로 옮기므로 거기는 남는다.
-docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
+# --sysctl은 체인 포트를 ephemeral 범위에서 뺀다(RP-M0). 빠지면 check.sh가 빌드 전에 멈춘다. make gate · make check는 알아서 넣는다.
+docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 반복을 늘리거나 동시 실행 수를 정할 때(파일은 안 고친다). JOBS 기본값은 메모리에서 계산한다 — 4GB면 2, 8GB 이상이면 6
-docker run --rm -e RUNS=3 -e JOBS=4 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
+docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -e RUNS=3 -e JOBS=4 -v "$PWD":/workspace -w /workspace tars-devcontainer bash check.sh > /tmp/gate.log 2>&1
 
 # 체인 하나
-docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer ./net/check.sh > /tmp/net.log 2>&1
+docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./net/check.sh > /tmp/net.log 2>&1
 
 # 이미지 — ghcr.io에서 받기(42초, 1.5GB). 없으면 make container가 알아서 받거나 굽는다(GI-M0)
 docker rmi tars-devcontainer && make container
@@ -89,7 +90,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). 새 체인은 45495부터 쓴다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). 새 체인은 45495부터 쓴다. 45599까지는 예약돼 있다(RP-M0). 넘기면 Makefile `RESERVED_PORTS`와 `check.sh`의 `RESERVED_PORTS_WANT`를 함께 넓힌다.
 
 ### 회차의 로그는 `out/gate-logs/<시각>/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0 · GF-M1)
 

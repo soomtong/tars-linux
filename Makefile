@@ -62,9 +62,16 @@ else
 DISK_GUARD = @test -f $(CONFIG_DISK) || { echo "$(CONFIG_DISK)가 없다 — make disk"; exit 1; }
 endif
 
+# 게이트 체인의 포트(45455~, probe 45590까지)를 컨테이너의 ephemeral 범위(32768~60999)에서
+# 뺀다. 안 빼면 동시에 도는 다른 lane의 나가는 연결이 그 번호를 출발 포트로 받아 체인의
+# bind()가 Address already in use로 진다(UB-M2 2회차의 VD-M0). 예약은 자동 배정만 막고
+# 명시한 bind는 그대로 된다. 컨테이너 안에서는 /proc/sys가 읽기 전용이라 여기서 넘겨야 하고,
+# 루트 check.sh가 같은 범위를 읽어 확인한다(RESERVED_PORTS_WANT — 바꿀 때 둘 다, RP-M0).
+RESERVED_PORTS = --sysctl net.ipv4.ip_local_reserved_ports=45455-45599
+
 # 컨테이너 안에서 한 줄을 돌린다. 게이트의 체인들이 docker run에 넘기는
 # 것과 같은 모양이다(저장소 전체를 /workspace에 붙인다).
-IN_CONTAINER = $(DOCKER) run --rm -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c
+IN_CONTAINER = $(DOCKER) run --rm $(RESERVED_PORTS) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c
 
 .DEFAULT_GOAL := help
 .PHONY: help container kernel init terminal initrd iso disk disk-fresh boot-qemu run-qemu quick gate check shell clean
@@ -263,7 +270,7 @@ quick:
 # 안 주면 넘기지 않아 check.sh의 기본값(1회 · 메모리로 정한 JOBS)이 산다.
 GATE_ENV = $(if $(RUNS),-e RUNS=$(RUNS)) $(if $(JOBS),-e JOBS=$(JOBS))
 gate: container
-	$(DOCKER) run --rm $(GATE_ENV) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c './check.sh'
+	$(DOCKER) run --rm $(RESERVED_PORTS) $(GATE_ENV) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c './check.sh'
 
 # 체인 하나. CHAIN을 안 주면 무엇을 줄지 알려주고 멈춘다 — 조용히 루트
 # 게이트를 돌리면 10분을 기다린 뒤에야 잘못 친 것을 알게 된다.
@@ -273,7 +280,7 @@ check: container
 	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TARS_RENDER_VERIFY=1 TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'
 
 shell: container
-	@$(DOCKER) run --rm -it -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash
+	@$(DOCKER) run --rm -it $(RESERVED_PORTS) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash
 
 # 지우는 것이 게이트의 clean()과 같다. 다른 점이 하나 있다 — 게이트의
 # clean()은 out/을 통째로 지우는데 여기서는 오래 쓰는 설정 디스크를 먼저

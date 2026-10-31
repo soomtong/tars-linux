@@ -95,6 +95,7 @@ init · 설정 · 전원
 - [Wireless](docs/decisions/project_wireless.md) — wpa_supplicant 감독과 PCIe firmware, 게이트는 mac80211_hwsim(WL-M0~M3, 2026-09-28)
 - [USB wireless](docs/decisions/project_usb_wireless.md) — 같은 칩 계열의 USB 동글 열하나, 코드 0줄(UW-M0~M2, 2026-09-28)
 - [USB dongles B](docs/decisions/project_usb_dongles_b.md) — UW가 남긴 USB 동글 드라이버 여섯(층 B 다섯 + rtl8xxxu), firmware +21, 코드 0줄. RT2X00은 부모 메뉴라 직접, HID_APPLE은 게이트의 음성 검사로(UB-M0~M2, 2026-10-31)
+- [Reserved ports](docs/decisions/project_reserved_ports.md) — 게이트 체인 포트 45455~45599를 ephemeral 범위에서 뺐다. `docker run --sysctl`로만 걸리고 루트 check.sh가 값을 확인한다(RP-M0, 2026-11-01)
 
 terminal · 화면
 

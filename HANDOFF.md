@@ -1,8 +1,16 @@
-# HANDOFF: USB Dongles B(UB-M0~M2) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 게이트 포트 ephemeral 충돌이 작은 후보로 남음
+# HANDOFF: Reserved Ports(RP-M0) 닫음(2026-11-01) — 열린 서브프로젝트 없음
 
-## 지금 상태 (2026-10-31)
+## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 USB Dongles B(UB-M0~M2, 2026-10-31, 사용자가 "네트워크"를 골랐고 같은 자리에서
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Reserved Ports(RP-M0, 2026-11-01, UB-M2가 남긴 작은 후보를 사용자가 골랐다).
+  design `docs/specs/2026-11-01-tars-reserved-ports-design.md`, plan `docs/plans/2026-11-01-tars-reserved-ports-rp-m0.md`, 기억
+  `docs/decisions/project_reserved_ports.md`. 게이트 체인 포트 45455~45599를 컨테이너 ephemeral 범위에서 뺐다. Makefile
+  `RESERVED_PORTS`(`IN_CONTAINER` · `gate` · `shell`)와 lessons의 `docker run` 세 줄이 `--sysctl net.ipv4.ip_local_reserved_ports=…`를
+  넘긴다. 루트 `check.sh`의 `require_reserved_ports`가 값을 읽고, 다르면 빌드 전에 멈춘다. 코드 0줄.
+  - 함정: 체인을 `docker run`으로 직접 띄울 때도 플래그를 넣는다. 범위를 넓힐 때는 Makefile과 `check.sh`의 `RESERVED_PORTS_WANT`를
+    함께 고친다. `make gate`는 `IN_CONTAINER`가 아니라 자기 줄을 쓴다.
+  - 숫자: `make gate` 22/22, 10분 22초(prebuild 321 + lanes 299초), verify 8126줄.
+- 그 전에 닫은 것은 USB Dongles B(UB-M0~M2, 2026-10-31, 사용자가 "네트워크"를 골랐고 같은 자리에서
   IPv6를 결정으로 닫았다 — `docs/decisions/feedback_ipv4_only.md`). design `docs/specs/2026-10-31-tars-usb-dongles-b-design.md`,
   plan `docs/plans/2026-10-31-tars-usb-dongles-b-ub-m{0,1,2}.md`, 기억 `docs/decisions/project_usb_dongles_b.md`. UW가 남긴 USB
   무선 동글 드라이버 여섯(mt7601u · mt76x0u · mt76x2u · rt2800usb · ath9k_htc · rtl8xxxu)이 `=y`, firmware 119 → 140, wifi 검사 1 ·
@@ -15,8 +23,7 @@
   - 숫자: bzImage +372,736. 루트 게이트 3회차 22/22, 10분 23초(prebuild 318 + lanes 303초), verify 8132줄. 앞 두 회차는 AU-M3
     (`speaker-test` underrun) · VD-M0(45492 `bind()` 실패)이 한 번씩 빨갰다 — 둘 다 UB 밖 간헐, 단독 PASS, carryover에 적었다.
   - 새 사실: 게이트 포트 45455~45495가 전부 컨테이너 ephemeral 범위(32768~60999) 안이라 다른 lane의 나가는 연결과 부딪칠 수 있다.
-    `docker run --sysctl net.ipv4.ip_local_reserved_ports=45455-45499`가 먹히는 것까지 확인했다 — Makefile `IN_CONTAINER`와 lessons의
-    `docker run` 줄에 넣는 작은 서브프로젝트(GF 꼴)가 다음 후보 중 하나다(`carryover.md` "미룬 것").
+    RP-M0(2026-11-01)이 45455~45599를 예약해 닫았다(위).
 - 그 전에 닫은 것은 Ghcr Image(GI-M0, 2026-10-31, GH-M1의 마지막 후보, 사용자가 골랐다).
   design `docs/specs/2026-10-31-tars-ghcr-image-design.md`, plan `docs/plans/2026-10-31-tars-ghcr-image-gi-m0.md`, 기억은
   `docs/decisions/project_github_actions.md`의 GI-M0 절. 컨테이너 이미지를 `ghcr.io/soomtong/tars-devcontainer:<Dockerfile sha256 앞
@@ -204,7 +211,6 @@
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
-- 게이트 포트를 ephemeral 범위에서 빼는 것(`--sysctl ip_local_reserved_ports`, 확인 끝, `carryover.md` "미룬 것") — 작고 근거가 있다.
 - 패키지 매니저(아래 "이미지 뷰어 메모"). USB 동글은 층 A(UW) · 층 B + rtl8xxxu(UB)로 끝났고 남은 것은 실제 동글이 근거를 줄 때.
 - IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다. 사용자는 코드 작업을 neovim · helix로 하고 게스트 vim은 대충 쓴다

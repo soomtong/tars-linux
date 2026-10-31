@@ -58,14 +58,6 @@ PD(2026-10-05)가 남긴 것.
 
 미룬 것.
 
-- [ ] 게이트 포트가 ephemeral 범위 안이다 — 컨테이너의 `ip_local_port_range`는 32768~60999이고 체인의 포트(45455~45495, VD의 TLS
-      45492 · monitor 포트들)가 전부 그 안에 있다. 다른 lane이 나가는 연결(curl · nc · SLIRP hostfwd)의 출발 포트로 그 번호를
-      받은 순간 그 체인의 `bind()`가 `Address already in use`로 진다. UB-M2 루트 게이트 2회차(2026-10-31)에서 VD-M0이
-      `openssl s_server died at startup`으로 그렇게 빨갰다(다른 체인은 45492를 안 쓴다, 단독 재실행 PASS, 로그
-      `out/gate-logs/20261031-141844/VD-M0-1/`). 고치는 법은 확인했다 — `docker run --sysctl
-      net.ipv4.ip_local_reserved_ports=45455-45499`가 컨테이너 안에서 먹힌다(네임스페이스별 sysctl이라 권한이 더 필요
-      없다). 넣을 자리는 Makefile `IN_CONTAINER`와 lessons "게이트를 돌리고 읽는 법"의 `docker run` 줄, CI `container` job은
-      게이트를 안 돌리니 그대로. 작은 서브프로젝트(GF 꼴) 하나다.
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(SM 비목표 2 — TUI라
       체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
 - [ ] 무선의 남은 것(WL 비목표). Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의

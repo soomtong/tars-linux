@@ -700,6 +700,32 @@ if [ "$entry_failed" -ne 0 ]; then
   exit 1
 fi
 
+# RP-M0: 체인 포트가 컨테이너의 ephemeral 범위에서 빠졌는지 본다.
+#
+# 체인의 monitor · TLS 포트(45455~)는 ip_local_port_range(32768~60999) 안에 있다. 예약이
+# 없으면 동시에 도는 다른 lane의 나가는 연결이 그 번호를 출발 포트로 받고, 그 순간 체인의
+# bind()가 진다(UB-M2 2회차의 VD-M0 `openssl s_server died at startup`). 예약은 docker run의
+# --sysctl로만 걸린다 — 컨테이너 안의 /proc/sys는 읽기 전용이다. 여기서는 읽기만 한다.
+#
+# 포함 관계가 아니라 같은 문자열인지를 본다. Makefile의 RESERVED_PORTS와 이 값은 함께 바뀌어야
+# 하고, 한쪽만 바뀌면 여기가 빨개진다. 빌드보다 먼저 부르는 것은 10분 뒤가 아니라 몇 초 안에
+# 알게 하려는 것이다.
+RESERVED_PORTS_WANT=45455-45599
+require_reserved_ports() {
+  local have
+  have="$(cat /proc/sys/net/ipv4/ip_local_reserved_ports 2>/dev/null)"
+  [ "$have" = "$RESERVED_PORTS_WANT" ] && return 0
+
+  echo "check FAIL: ip_local_reserved_ports is '${have}', want '${RESERVED_PORTS_WANT}'" >&2
+  echo "  the chain ports sit inside the ephemeral range, so another lane's outgoing" >&2
+  echo "  connection can take one and the chain's bind() fails (RP-M0)." >&2
+  echo "  run the gate with 'make gate', or add to docker run:" >&2
+  echo "    --sysctl net.ipv4.ip_local_reserved_ports=${RESERVED_PORTS_WANT}" >&2
+  return 1
+}
+
+require_reserved_ports || exit 1
+
 # GL-M0: clean은 여기서 한 번만 부른다. 예전에는 run_chain이 회차마다 불렀고
 # 그것이 게이트 54분 중 약 45분을 만들었다(같은 산출물을 24번 빌드했다).
 #
