@@ -2,7 +2,7 @@
 
 접두사: UB
 
-Status: 설계(2026-10-31). 착수 전 확인 1~7. M0이 실측으로 채운다.
+Status: M0 끝(2026-10-31) — 실측 1~4. 확인 1 · 3 · 4를 실측으로 고쳤다(`RT2X00` 메뉴는 직접 켠다, 새 이름은 22, 등록 이름은 여섯 다 모듈 이름). M1(config · firmware · 검사)이 다음이다.
 
 관련 문서: `2026-09-28-tars-usb-wireless-design.md`(UW. 이 사이클은 그 비목표 1을 목표로
 옮긴다) · `docs/decisions/project_usb_wireless.md` · `docs/guides/carryover.md`의 "USB 무선
@@ -12,9 +12,9 @@ Status: 설계(2026-10-31). 착수 전 확인 1~7. M0이 실측으로 채운다.
 ## 한 줄 요약
 
 UW가 남긴 USB 무선 동글 드라이버 여섯(MediaTek 셋 · Ralink · Atheros HTC · Realtek
-rtl8xxxu)을 커널에 켜고, 그것들이 요청하는 firmware 27개(약 739KB)를 initrd 꼬리에
-더한다. 우리 코드는 0줄이고 게이트는 UW의 세 층을 그대로 늘린다 — 단, 등록 이름 하나가
-모듈 이름과 다르고(확인 5), `HID_APPLE`이 꺼진 채인지 보는 음성 검사 하나가 는다(결정 4).
+rtl8xxxu)을 커널에 켜고, 그것들이 요청하는 firmware 21개(약 739KB)를 initrd 꼬리에
+더한다. 우리 코드는 0줄이고 게이트는 UW의 세 층을 그대로 늘리고, `HID_APPLE`이 꺼진 채인지
+보는 음성 검사 둘이 는다(결정 4).
 
 ## 왜 지금인가
 
@@ -36,7 +36,7 @@ RTL8188EU)과 USB 802.11ac 초기 칩(MT7610U · MT7612U)이다. 내장 무선�
 | `MT7601U` | 없음(독립 드라이버) | not set |
 | `MT76x0U` | `MT76x0_COMMON` · `MT76x02_USB` | not set. `MT76_CORE` · `MT76_USB`는 UW가 켰다 |
 | `MT76x2U` | `MT76x2_COMMON` · `MT76x02_USB` | not set |
-| `RT2800USB` | `RT2800_LIB` · `RT2X00_LIB_USB` · `RT2X00_LIB_FIRMWARE` · `RT2X00_LIB_CRYPTO` | `RT2X00` 자체가 not set — 메뉴 하나가 통째로 열린다 |
+| `RT2800USB` | `RT2800_LIB` · `RT2X00_LIB_USB` · `RT2X00_LIB_FIRMWARE` · `RT2X00_LIB_CRYPTO` | `RT2X00` 자체가 not set — 부모 메뉴라 `RT2X00`도 직접 켜야 한다(실측 1. 처음에는 "메뉴가 열린다"고 썼다가 `olddefconfig`가 `RT2800USB`를 조용히 버리는 것을 봤다) |
 | `ATH9K_HTC` | `ATH9K_HW` · `ATH9K_COMMON` · `MAC80211_LEDS` | not set. `ATH_COMMON` · `MAC80211_LEDS`는 이미 `=y` |
 
 `RT2800USB` 아래 bool 다섯: `RT33XX` · `RT35XX`는 default y, `RT3573` · `RT53XX` · `RT55XX`는
@@ -53,6 +53,8 @@ UW 비목표 1의 근거는 "`NEW_LEDS`가 있어야 붙고 그것이 `HID_APPLE
 입력 쪽을 건드리지 않는다. M0이 `.config` diff로 확인한다(위험 2). 틀리면 UW처럼 뺀다.
 
 ### 확인 3 — 요청하는 firmware 이름은 소스에 전부 적혀 있고 tarball에 다 있다
+
+(이름은 22개다 — 층 B 여덟 + rtl8xxxu 열넷. 처음 "27개"로 적은 것은 셈이 틀렸고 실측 2가 22를 보였다.)
 
 이름은 `MODULE_FIRMWARE`와 `request_firmware` 호출에서, 크기는 linux-firmware-20260916
 tarball에서 읽었다. 맨 위 이름 셋은 WHENCE의 `Link:`라 원본은 `mediatek/` 아래다(UW의
@@ -83,12 +85,13 @@ iwlwifi · ath11k와 같은 사정, `guest_firmware.sh` 형식의 이유).
   `rtl8723bu_nic.bin`이다(`8723b.c`). 열셋만 넣고 위험 3에 적는다. `vendor_firmware.sh`는
   없는 파일이면 죽으므로 목록에 못 적는다.
 
-### 확인 4 — 등록 이름은 다섯이 모듈 이름이고 하나가 아니다
+### 확인 4 — 등록 이름은 여섯 다 모듈 이름이다(실측 4로 고쳤다)
 
 `usbcore: registered new interface driver <이름>`의 `<이름>`은 `struct usb_driver.name`이다.
-mt7601u · mt76x0u · mt76x2u · rt2800usb · rtl8xxxu(`DRIVER_NAME "rtl8xxxu"`)는 모듈 이름과
-같다(UW 실측 3). ath9k_htc만 `.name = "ath9k_hif_usb"`(`hif_usb.c`)다 — 모듈 `ath9k_htc`
-안의 USB 전송 층 이름이다. 부팅 층 검사에는 이 이름을 적는다.
+처음에는 ath9k_htc만 `ath9k_hif_usb`라고 적었는데 틀렸다 — `hif_usb.c`의 `.name =
+"ath9k_hif_usb"`는 `struct ath9k_htc_hif`(드라이버 안의 전송 층 구조체)의 것이고, 등록되는
+`struct usb_driver ath9k_hif_usb_driver`의 `.name`은 `KBUILD_MODNAME`(= `ath9k_htc`)이다.
+실측 4의 부팅 로그가 `ath9k_htc`를 찍었다. UW 실측 3의 규칙이 여섯 전부에 맞는다.
 
 ### 확인 5 — 대표 alias는 소스의 id 표 첫 줄과 주석에서 고른다
 
@@ -122,29 +125,29 @@ source해서 세므로 자동). 새 체인 · 새 부팅 · 설정 디스크 변
 
 ### 결정 1 — 커널은 여섯을 켠다(층 B 다섯 + rtl8xxxu)
 
-`MT7601U` · `MT76x0U` · `MT76x2U` · `RT2800USB`(하위 `RT33XX` · `RT35XX` · `RT3573` ·
-`RT53XX` · `RT55XX` 전부 y, `UNKNOWN`은 n) · `ATH9K_HTC` · `RTL8XXXU`(`UNTESTED`는 n). 전부
+`MT7601U` · `MT76x0U` · `MT76x2U` · `RT2800USB`(부모 메뉴 `RT2X00`을 함께 — 실측 1. 하위 `RT33XX` ·
+`RT35XX` · `RT3573` · `RT53XX` · `RT55XX` 전부 y, `UNKNOWN`은 n) · `ATH9K_HTC` · `RTL8XXXU`(`UNTESTED`는 n). 전부
 `=y`(모듈 없는 커널). `olddefconfig`가 더 켜는 것은 M0이 센다. 입력 쪽(`HID_*` · `INPUT_LEDS`)이
 바뀌면 그 드라이버를 빼고 다시 정한다(UW 위험 2와 같다).
 
 ### 결정 2 — firmware는 빌드 산출물의 `firmware=` 줄에서 센다
 
 UW 결정 2 그대로다. 빌드 뒤 `kernel/build/modules.builtin.modinfo`의 `firmware=` 줄을 지금
-(115줄)과 비교해 새 이름만 `kernel/guest_firmware.sh`에 더한다. 예상은 확인 3의 27개이고
-그중 하나(`rtl8723bu_bt.bin`)는 파일이 없어 못 넣는다. 출처는 linux-firmware-20260916 그대로.
+(고유 110줄)과 비교해 새 이름만 `kernel/guest_firmware.sh`에 더한다. 실측 2의 22개이고
+그중 하나(`rtl8723bu_bt.bin`)는 파일이 없고 6.18이 요청하지도 않는다(위험 3). 출처는 linux-firmware-20260916 그대로.
 목록에는 UW처럼 계열 주석을 달고, 빠진 하나는 머리말의 "뺀 것"에 적는다.
 
 ### 결정 3 — 게이트는 세 층을 늘린다. 새 체인도 새 부팅도 없다
 
 1. 정적. 검사 1의 심볼 목록에 여섯을 더한다. `RT2800USB_RT53XX`도 더한다 — 하위 bool이
    빠지는 것은 드라이버가 빠지는 것과 같은 실패(RT5370이 안 잡힌다)인데 심볼은 따로다.
-   firmware는 1b가 자동으로 센다(목록에 26개가 늘어난다 — 이름 27 중 파일 없는 하나를 뺀 수).
+   firmware는 1b가 자동으로 센다(목록에 21개가 늘어난다 — 이름 22 중 파일 없는 하나를 뺀 수).
 2. 커널 산출물. 검사 1의 alias 목록에 확인 5의 여섯을 더한다.
-3. 부팅. 검사 11의 등록 줄에 여섯을 더한다 — 다섯은 모듈 이름, 하나는 `ath9k_hif_usb`(확인 4).
+3. 부팅. 검사 11의 등록 줄에 모듈 이름 여섯을 더한다(확인 4).
 
 셈 문자열은 `eleven` → `seventeen`으로 고친다. mutation은 둘이다 — `CONFIG_MT7601U`를 끄면
-검사 1이 부팅 전에 잡는다(UW 실측 6과 같은 모양). 둘째는 검사 11의 등록 이름을 모듈 이름
-`ath9k_htc`로 적는 것이다 — 확인 4가 맞으면 빨개지고, 틀렸으면 거기서 드러난다.
+검사 1이 부팅 전에 잡는다(UW 실측 6과 같은 모양). 둘째는 `kernel/.config`의 `# CONFIG_HID_APPLE
+is not set`을 `CONFIG_HID_APPLE=y`로 바꾸는 것이다 — 결정 4의 음성 검사가 부팅 전에 잡아야 한다.
 `guest_firmware.sh`의 줄을 지우는 것은 mutation이 못 된다 — 1b는 목록을 되읽는다(WL 위험 4).
 
 ### 결정 4 — `HID_APPLE` · `INPUT_LEDS`가 꺼진 채인지 게이트가 본다
@@ -167,12 +170,12 @@ UW 위험 1 그대로. QEMU에 이 동글이 없다. 실제 동글의 probe · f
 확인 2가 전제를 적었다. M0이 `.config` diff에서 `HID_` · `INPUT_LEDS` · `LEDS_` 줄을 센다.
 하나라도 바뀌면 rtl8xxxu를 빼고 다섯으로 간다 — 결정 4의 음성 검사는 그래도 넣는다.
 
-### 위험 3 — 8723BU의 bluetooth 짝 firmware가 없다
+### 위험 3 — 8723BU의 bluetooth 짝 firmware가 없다(M0이 닫았다)
 
-`rtl8723bu_bt.bin`은 이 linux-firmware에 없다. `enable_bluetooth`가 참인 8723BU에서 드라이버가
-그 이름을 요청하고 실패하면 `request_firmware(...) failed` 경고 뒤 그 동글은 안 뜬다.
-`enable_bluetooth`가 어디서 정해지는지(efuse인지 모듈 파라미터인지)는 M0이 소스에서 본다.
-그것이 efuse라면 그 동글은 비목표 3이고, 파라미터라면 기본값이 무엇인지 적는다.
+`rtl8723bu_bt.bin`은 이 linux-firmware에 없다. 드라이버는 `priv->enable_bluetooth`일 때만 그
+이름을 요청하는데, 6.18의 `rtl8xxxu/` 전체에서 그 비트에 대입하는 자리가 0곳이다(읽는 자리
+둘 `8723a.c` · `8723b.c`, 선언 `rtl8xxxu.h`). 즉 항상 0이고 8723BU는 언제나 `rtl8723bu_nic.bin`을
+받는다. `MODULE_FIRMWARE`에만 남은 죽은 이름이라 목록에서 빼도 잃는 것이 없다.
 
 ### 위험 4 — 2.4GHz 전용 옛 칩의 regulatory
 
@@ -202,3 +205,60 @@ initrd에 있고(WL) 채널 12~14는 나라 설정(`tars-config wifi --country`)
   출처, bzImage 증분.
 - UB-M1 — 커널 config, firmware 목록, 체인 검사 셋 + 음성 검사 둘.
 - UB-M2 — mutation 둘, 루트 게이트(22체인, 약 10분), carryover · decisions · HANDOFF, 닫기.
+
+## 실측 (M0, 2026-10-31)
+
+plan은 `plans/2026-10-31-tars-usb-dongles-b-ub-m0.md`. 하네스는 세션 scratchpad의 `ub/`. 기준선은
+GI-M0 닫기 뒤의 빌드(`build.sh`가 "skipping make", bzImage 8,586,240바이트). 두 번 빌드했고
+각각 29초 · 24초였다(증분).
+
+### 실측 1 — `RT2X00`은 직접 켜야 하고, 따라 켜진 것에 입력 쪽은 없다
+
+첫 빌드에서 `scripts/config -k --enable`로 아홉(여섯 + `RT2800USB_RT3573` · `RT53XX` · `RT55XX`)을
+켰더니 해소된 `build/.config`에 다섯만 `=y`로 남았다. `RT2800USB`와 하위 셋은 `.config`에 없던
+심볼이라 파일 끝에 덧붙었고, 부모 메뉴 `RT2X00`이 `not set`이라 `olddefconfig`가 조용히 버렸다
+(measurements 70과 같은 종류의 침묵 — 이번에는 대소문자가 아니라 부모 메뉴). `RT2X00`을 더해
+다시 켜니 열하나가 전부 `=y`다(`RT33XX` · `RT35XX`는 default y로 따라왔다).
+
+기준선 대비 diff의 `>` 줄 — 여섯과 하위 다섯 말고 따라 켜진 것:
+`ATH9K_HW` · `ATH9K_COMMON` · `ATH9K_BTCOEX_SUPPORT`(`default y`, `depends on ATH9K || ATH9K_HTC`) ·
+`MT76x02_LIB` · `MT76x02_USB` · `MT76x0_COMMON` · `MT76x2_COMMON` · `RT2X00` · `RT2800_LIB` ·
+`RT2X00_LIB` · `RT2X00_LIB_USB` · `RT2X00_LIB_FIRMWARE` · `RT2X00_LIB_CRYPTO` · `RT2X00_LIB_LEDS`
+(`LEDS_CLASS=y`라서) · `CRC_CCITT`. 그리고 `not set`으로 새로 적힌 것 — `RT2X00` 메뉴의 다른
+드라이버 여섯(`RT2400PCI` · `RT2500PCI` · `RT61PCI` · `RT2800PCI` · `RT2500USB` · `RT73USB`) ·
+`RT2800USB_UNKNOWN` · `RT2X00_DEBUG` · `RTL8XXXU_UNTESTED`.
+
+`HID_` · `INPUT_LEDS` · `LEDS_` 줄은 diff에 없다 — 확인 2가 맞았고 위험 2는 현실이 되지 않았다.
+`ATH9K_PCI` · `ATH9K`도 없다 — 확인 6대로 carryover의 그 줄이 틀렸다(고쳤다). bzImage는
+8,586,240 → 8,958,976바이트(+372,736). carryover의 "+348KB(층 B) + 82KB(rtl8xxxu)"보다 작다.
+
+### 실측 2 — 새 `firmware=` 줄은 22이고 확인 3의 표와 글자 그대로 같다
+
+고유 `firmware=` 줄 110 → 132. 새 22: `ath9k_htc/htc_7010-1.4.0.fw` · `htc_9271-1.4.0.fw` ·
+`mediatek/mt7610e.bin` · `mt7610u.bin` · `mt7601u.bin` · `mt7662_rom_patch.bin` · `mt7662.bin` ·
+`rt2870.bin` · `rtlwifi/` 열넷. 설계 때 "27개"로 적은 것은 셈이 틀렸다. 파일은 21개(`rtl8723bu_bt.bin`
+제외)이고 전부 tarball에 있다(확인 3). `enable_bluetooth`에 대입하는 자리는 0곳이다(위험 3 닫음).
+
+### 실측 3 — alias는 여섯에 391줄이고 대표 여섯이 다 있다
+
+모듈마다: `rt2800usb` 275 · `rtl8xxxu` 33 · `ath9k_htc` 27 · `mt76x0u` 24 · `mt7601u` 17 ·
+`mt76x2u` 15. 대표 여섯의 실제 줄(앞부분):
+
+| 모듈 | 줄 |
+|---|---|
+| mt7601u | `mt7601u.alias=usb:v0B05p17D3d*dc*dsc*dp*ic*isc*ip*in*` |
+| mt76x0u | `mt76x0u.alias=usb:v148Fp7610d*…` |
+| mt76x2u | `mt76x2u.alias=usb:v0B05p1833d*…` |
+| rt2800usb | `rt2800usb.alias=usb:v07B8p2870d*…` |
+| ath9k_htc | `ath9k_htc.alias=usb:v0CF3p9271d*…` |
+| rtl8xxxu | `rtl8xxxu.alias=usb:v2357p0108d*dc*dsc*dp*icFFiscFFipFFin*` |
+
+rtl8xxxu만 인터페이스 class 자리가 `FF`다(`USB_DEVICE_AND_INTERFACE_INFO`). M1의 검사는 UW처럼
+`<모듈>.alias=usb:v…p…d`까지만 `grep -F`한다.
+
+### 실측 4 — usbcore 등록 줄은 여섯 다 모듈 이름이다
+
+설정 디스크 없는 부팅 한 번(`-nic none`, `-usb` 없음), 0.527~0.531초에 여섯 줄:
+`ath9k_htc` · `mt7601u` · `mt76x0u` · `mt76x2u` · `rt2800usb` · `rtl8xxxu`. 부팅 전체의 등록 줄은
+28(UW 때 열하나 + 유선 USB · hid · storage · hub + 이번 여섯). 확인 4의 `ath9k_hif_usb`는 틀렸고
+그 자리에서 고쳤다 — 등록 이름은 `struct usb_driver.name`이고 ath9k_htc의 그것은 `KBUILD_MODNAME`이다.

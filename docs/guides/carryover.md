@@ -62,7 +62,7 @@ PD(2026-10-05)가 남긴 것.
       MT7925U)는 UW가 켰다(2026-09-28). 남은 것은 층 B와 `RTL8XXXU`다. 코드는 0줄이고
       게이트는 UW의 세 층(심볼 · modinfo alias · usbcore 등록 줄)을 그대로 늘리면 된다.
       층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb ·
-      ath9k_htc)는 커널 +348KB · firmware 약 0.4MB이고 `ATH9K_PCI`가 따라 켜진다.
+      ath9k_htc)는 커널 +348KB · firmware 약 0.4MB다(`ATH9K_PCI`는 따라 켜지지 않는다 — UB-M0 실측 1, `depends on ATH9K`).
       `RTL8XXXU`는 +82KB · 약 0.3MB인데 `NEW_LEDS`가 있어야 붙고, 그것이 `HID_APPLE` ·
       `INPUT_LEDS`를 끌고 온다 — 실제 Apple 키보드의 fn 키가 커널에서 바뀔 수 있어
       `keyboard=apple`과 부딪칠 수 있고, 게이트는 못 본다. 넣으려면 `HID_APPLE`을 먼저
