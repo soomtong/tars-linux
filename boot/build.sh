@@ -6,10 +6,14 @@ cd "$(dirname "$0")" || exit 1
 LIMINE_TAG="v12.5.2"
 DIR="limine-binary"
 URL="https://github.com/limine-bootloader/limine/releases/download/${LIMINE_TAG}/limine-binary.tar.gz"
+# tarball의 sha256(VS-M0). GitHub release 자산의 digest에서 읽는다
+# (gh api repos/limine-bootloader/limine/releases/tags/${LIMINE_TAG} --jq '.assets[].digest'). 태그를 올릴 때 함께 고친다.
+LIMINE_SHA256="4c760c09c53560d859b362319a3dc63b79cca3d47f35d69ab0106a13b8057055"
 
 if [ ! -d "$DIR" ]; then
   echo "Downloading ${URL}..."
   curl -sSL -o limine-binary.tar.gz "$URL"
+  echo "${LIMINE_SHA256}  limine-binary.tar.gz" | sha256sum -c -
   tar xzf limine-binary.tar.gz
   rm limine-binary.tar.gz
 fi

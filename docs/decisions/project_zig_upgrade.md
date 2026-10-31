@@ -61,7 +61,8 @@ std 안의 어긋남 하나: `linux.waitpid` · `wait4`가 `*i32`를 받는데 `
 
 Dockerfile의 `ENV ZIG_VERSION`이 정본이고 `quick_check.sh` · `checks.yml`이 그 줄을 읽는다.
 해시는 버전마다 다르므로 `checks.yml`의 `ZIG_SHA256`(x86_64-linux tarball, ziglang.org
-`index.json`의 `shasum`)을 함께 고친다. 둘이 어긋나면 host job이 `sha256sum -c`에서 빨개진다 —
+`index.json`의 `shasum`)과 Dockerfile의 `ARG ZIG_SHA256`(같은 파일의 aarch64-linux 행, VS-M0)을
+함께 고친다. 어긋나면 host job 또는 `docker build`가 `sha256sum -c`에서 빨개진다 —
 우리 코드가 아닌 빨강이다.
 
 ## 호스트 0.17로 미리 잴 수 있는 것과 없는 것

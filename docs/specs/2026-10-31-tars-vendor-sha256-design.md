@@ -81,10 +81,14 @@ HANDOFF의 "vendor sha256"은 terminal의 셋이었지만, 같은 한 줄 패턴
 echo "${GHOSTTY_SHA256}  ghostty-src.tar.gz" | sha256sum -c -
 ```
 
-한 줄. `set -e`라 `FAILED`에서 멈추고 `sha256sum`이 실패 줄을 찍는다. `vendor_firmware.sh`의 `fetch()` 꼴(`.tmp` · 세 줄 메시지)을
-가져오지 않는 이유 — 그 함수는 세 tarball을 받고 "받은 것은 버리지 않는다"는 캐시를 지키려는 모양이고, 여기 다섯은 한 파일을 받아
-풀고 지우는 자리라 받은 tarball이 남아도 다음 실행이 덮어쓴다. `gate_lib.sh`에 공통 함수를 두지도 않는다 — `prepare.sh` ·
-`build.sh`는 게이트 밖(README의 빌드 한 줄)에서도 불리고 `gate_lib.sh`를 source하지 않는다.
+한 줄. `set -e`라 `FAILED`에서 멈추고 `sha256sum`이 실패 줄을 찍는다. `vendor_firmware.sh`의 `fetch()` 꼴(세 줄 메시지)을 가져오지
+않는다. `gate_lib.sh`에 공통 함수를 두지도 않는다 — `prepare.sh` · `build.sh`는 게이트 밖(README의 빌드 한 줄)에서도 불리고
+`gate_lib.sh`를 source하지 않는다.
+
+받는 파일이 곧 "이미 있으면 안 받는다"의 검사 대상인 자리(stb 둘 — `-o "$DEST"`)는 `${DEST}.tmp`로 받아 대조한 뒤 `mv`한다.
+`FAILED`로 멈춘 뒤 나쁜 파일이 `DEST`에 남으면 다음 실행이 "있다"로 건너뛰어 조용히 쓰기 때문이다 — plan의 mutation이 첫 꼴에서
+그것을 잡았다(plan 결과). tarball 셋은 존재 검사가 푼 디렉터리에 걸려 있고 tarball은 풀기 전이라 남아도 다음 실행이 덮어쓴다 —
+`.tmp` 없이 간다. `vendor_firmware.sh`가 `.tmp`를 쓰는 것도 같은 이유였다(받은 tarball 자체를 캐시로 남기므로).
 
 다른 파일이 들어왔을 때 사람이 볼 것은 "실제 해시"다. `sha256sum -c`는 그것을 안 찍지만, 그 값은 `sha256sum <파일>` 한 번이고 어차피
 버전을 올리는 사람이 기대값을 바꾸기 전에 출처(결정 3)와 대조해야 한다 — 실제 해시를 그대로 옮겨 적는 길을 만들지 않는다.

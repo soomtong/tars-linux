@@ -371,7 +371,6 @@
   `guest_optimize`(기본 `ReleaseSafe`, `-Dguest-optimize=Debug`가 문)를
   `exe_mod`와 `ghostty_dep` 둘만 쓴다. 마지막 주석이 "누가 실행하는가"의
   선을 긋는다.
-- `terminal/vendor_fonts.sh` — GNU ftp에서 unifont를 받고 sha256을 확인한다.
 - `probe/` — 그리기 비용의 프로브(RS). 게이트가 아니다 — `patch.pl`이 `main.zig` 사본에 `terminal: probe>` 줄을 더하고
   (anchor는 정확히 한 번), `run.sh`가 그 사본을 read-only로 마운트해 부팅 한 번(`seq 1 200000` · 키 넷), `report.pl`이
   집계한다. 돌리는 법은 `docs/plans/2026-10-11-tars-render-speed-rs-m0.md`. 그리기를 고치면 같은 판으로 전후를 잰다.

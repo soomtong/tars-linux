@@ -58,4 +58,19 @@ design의 확인 1~8에 더해, plan을 쓰며 읽은 것.
 
 ## 결과
 
-(채운다)
+### Task 1
+
+- `git diff --stat`: 9파일, +39 −4. 지운 넷은 CC-M0 주석의 한 단어 자리 · `key-files.md`의 `vendor_fonts.sh` 줄 · 문서 두 줄(ZU · ghostty
+  기억)뿐이다. `git diff | rg '^-[^-]'`로 읽었다(key-files 줄은 markdown 불릿이라 `--`로 시작해 그 필터에 안 걸린다 — stat의 4와
+  필터의 3이 다른 이유).
+- `make quick` PASS(고친 뒤 두 번).
+- 받는 분기 다섯을 컨테이너 안에서 탔다 — `ghostty-src.tar.gz: OK` · `vendor/stb_truetype.h.tmp: OK` · `vendor/stb_image.h.tmp: OK` ·
+  `limine-binary.tar.gz: OK` · `src/linux-6.18.42.tar.xz: OK`. terminal 셋 5초, limine 2초, 커널은 받기 · 풀기 · 빌드까지 113초(`kernel/build/`가
+  있어 증분). 새 `ghostty-src`는 옮겨 둔 트리와 `diff -rq`(캐시 제외) 0줄, stb 둘은 `cmp` 동일. `*.before-vs`는 지웠다.
+- 컨테이너 안에 `rg`가 없다(GH design 확인 9의 runner와 같다) — 첫 재현에서 파이프가 죽어 `grep`으로 다시 돌렸다.
+- mutation 둘 다 `FAILED`로 멈췄다.
+  - Dockerfile 해시 끝 글자 → `docker build` rc 1, 88초(앞 층은 캐시, Zig 층의 `sha256sum: WARNING: 1 computed checksum did NOT match`).
+  - `vendor_stb_image.sh` 해시 끝 글자 → rc 1. 그런데 첫 꼴(`-o "$DEST"`)은 나쁜 파일을 `vendor/stb_image.h`에 남겼다 — 다음 실행이
+    "있다"로 건너뛰어 조용히 썼을 것이다. stb 둘을 `${DEST}.tmp`로 받아 대조 뒤 `mv`하는 꼴로 고치고(design 결정 2에 반영) 다시 돌렸다:
+    `vendor/stb_image.h.tmp: FAILED`, `DEST` 없음. 정상 재현도 `.tmp` 꼴로 다시 — `OK` 둘, `cmp` 동일.
+- 이미지 다시 굽기: 19초(Zig 층만), `/tmp/zig.tar.xz: OK`, ID `9d5eebc3e08e` → `6c2674d36158`.

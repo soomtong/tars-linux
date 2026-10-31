@@ -476,8 +476,14 @@ RUN dpkg --add-architecture amd64 \
 ENV ZIG_VERSION=0.17.0 \
     PATH=/usr/local/zig:$PATH
 
+# tarball의 sha256(VS-M0). ziglang.org/download/index.json의 aarch64-linux 행 shasum이다 — checks.yml의
+# ZIG_SHA256은 같은 파일의 x86_64-linux 행이라 값이 다르다. ZIG_VERSION을 올릴 때 둘 다 고친다(ZU).
+# ARG라 이미지의 환경에는 안 남는다.
+ARG ZIG_SHA256=9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
+
 RUN curl -sSL -o /tmp/zig.tar.xz \
         "https://ziglang.org/download/${ZIG_VERSION}/zig-aarch64-linux-${ZIG_VERSION}.tar.xz" \
+    && echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c - \
     && mkdir -p /usr/local/zig \
     && tar -xJf /tmp/zig.tar.xz -C /usr/local/zig --strip-components=1 \
     && rm /tmp/zig.tar.xz

@@ -8,11 +8,15 @@ KERNEL_MAJOR="6.x"
 TARBALL="linux-${KERNEL_VERSION}.tar.xz"
 URL="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR}/${TARBALL}"
 SRC_DIR="src/linux-${KERNEL_VERSION}"
+# tarball의 sha256(VS-M0). kernel.org의 v6.x/sha256sums.asc에서 읽는다 — 버전을 올릴 때 함께 고친다.
+# 다른 파일이 조용히 들어오면 게이트가 다른 커널로 부팅한다(vendor_firmware.sh가 고정하는 이유와 같다).
+KERNEL_SHA256="35a8ef5e8fb44467e56a42b40c23c4c10a61d1e95ff8d738f285230e8bed63e7"
 
 if [ ! -d "$SRC_DIR" ]; then
   echo "Downloading ${URL}..."
   mkdir -p src
   curl -sSL -o "src/${TARBALL}" "$URL"
+  echo "${KERNEL_SHA256}  src/${TARBALL}" | sha256sum -c -
   tar -C src -xf "src/${TARBALL}"
   rm "src/${TARBALL}"
 fi
