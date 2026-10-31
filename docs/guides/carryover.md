@@ -47,7 +47,7 @@ PD(2026-10-05)가 남긴 것.
       적이 있다(HC-M0 첫 회, 2026-10-26 — 풀기 5.5초, `sda2`가 `/init`보다 50ms 먼저). 단독 재실행이 PASS(1300ms)이고 initrd
       크기가 같으면 부하다. 한 번 더 겪으면 `delay_use`를 5로 올리는 것을 본다.
 
-서브프로젝트 후보(패키지 매니저 · IPv6)는 `HANDOFF.md`에 있다.
+서브프로젝트 후보(패키지 매니저 · USB 동글 층 B)는 `HANDOFF.md`에 있다. IPv6는 후보가 아니다(`docs/decisions/feedback_ipv4_only.md`).
 여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
 서브프로젝트는 `docs/guides/completed.md`의 완료 표가 목록이다.
 

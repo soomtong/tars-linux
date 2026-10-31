@@ -1,4 +1,4 @@
-# HANDOFF: Ghcr Image(GI-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, GH 줄기 끝, 다음 방향은 사용자가 고른다
+# HANDOFF: Ghcr Image(GI-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, IPv6는 결정으로 닫음, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-31)
 
@@ -189,7 +189,8 @@
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
-- 패키지 매니저(아래 "이미지 뷰어 메모"), IPv6(방화벽 표를 `inet`으로, FW design 위험 6), USB 동글 층 B.
+- 패키지 매니저(아래 "이미지 뷰어 메모"), USB 동글 층 B.
+- IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다. 사용자는 코드 작업을 neovim · helix로 하고 게스트 vim은 대충 쓴다
   (`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`에 남아 있다.
 - 작은 것은 `docs/guides/carryover.md`(이월 숙제)에 있다. DR 뒤로 실기 없이 할 수 있는 것은 렌더 쪽 미룬 하나(큰 kitty 이미지)이고, 나머지는 실기나 간헐의 다음 근거를 기다린다.

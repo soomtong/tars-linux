@@ -221,6 +221,7 @@ LAN에서의 동작은 같은 커널 경로를 탈 것으로 보지만 게이트
 사이클이 `CONFIG_NF_TABLES_INET`을 켜고 표를 `inet`으로 바꿔야 한다. 그 사이클의
 design이 이 위험을 첫 확인으로 인용해야 하고, `firewall/check.sh`에 v6 음성 검사를
 더하는 것이 그 사이클의 몫이다.
+그 사이클은 IPv6 망의 제품에 탑재될 때만 연다(`decisions/feedback_ipv4_only.md`, 2026-10-31).
 
 ## FW-M0이 실행으로 증명한 것
 

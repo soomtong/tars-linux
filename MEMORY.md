@@ -18,6 +18,7 @@
 - [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 정착한 영어 jargon(seed · mutation)은 번역하지 않고 조사를 붙인다
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복은 1회, 가끔 `-e RUNS=N`으로 늘린다
 - [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 스크립팅 런타임은 한 묶음으로만 들이고, 지금은 perl로 간다
+- [IPv4 only](docs/decisions/feedback_ipv4_only.md) — IPv6는 후보에서 뺐다(2026-10-31). 다시 여는 조건은 IPv6 망의 제품 탑재, 그때 FW 위험 6부터
 - [net · ntp 기본값은 off](docs/decisions/feedback_network_default_stays_off.md) — seed의 `net` · `ntp`는 `off`, 켜는 법은 문서로
 - [superpowers 제거](docs/decisions/feedback_superpowers_off.md) — superpowers plugin을 user scope에서 지운 이유(2026-10-03)
 
