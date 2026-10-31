@@ -94,6 +94,7 @@ init · 설정 · 전원
 - [Firewall](docs/decisions/project_firewall.md) — `firewall=on`이 들어오는 것을 기본으로 버린다(FW-M0~M2, 2026-09-27)
 - [Wireless](docs/decisions/project_wireless.md) — wpa_supplicant 감독과 PCIe firmware, 게이트는 mac80211_hwsim(WL-M0~M3, 2026-09-28)
 - [USB wireless](docs/decisions/project_usb_wireless.md) — 같은 칩 계열의 USB 동글 열하나, 코드 0줄(UW-M0~M2, 2026-09-28)
+- [USB dongles B](docs/decisions/project_usb_dongles_b.md) — UW가 남긴 USB 동글 드라이버 여섯(층 B 다섯 + rtl8xxxu), firmware +21, 코드 0줄. RT2X00은 부모 메뉴라 직접, HID_APPLE은 게이트의 음성 검사로(UB-M0~M2, 2026-10-31)
 
 terminal · 화면
 

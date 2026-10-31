@@ -37,4 +37,4 @@ design은 `docs/specs/2026-09-28-tars-usb-wireless-design.md`(결정 3 · 위험
 - `services.d`의 탐침은 끝나고 나가면 `init`이 다시 띄운다 — 탐침 출력은 여러 번 찍힌다.
 
 게이트가 못 보는 것: 실제 동글의 probe · firmware 로딩 · `wlan` 생성. 층 B와 `RTL8XXXU`는
-lessons의 이월 숙제에 남았다.
+[[project_usb_dongles_b]](UB, 2026-10-31)가 켰다.

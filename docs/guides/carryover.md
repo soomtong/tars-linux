@@ -32,6 +32,11 @@ AU(2026-10-06)가 남긴 것.
       (AU design 위험 16). 다음에 firmware를 더하는 일은 이것을 함께 본다 — 초기 ramfs에서 빼서 늦게 붙이는 길이 있는지.
 - [ ] `audio` 검사 5의 사각파 하한 40,000은 부하 아래 최소 47,425에서 정했다(AU design 실측 17). 루트 게이트가 `tone`으로 빨개지면
       dmix xrun이 더 커진 것이다 — `doubled` · `zero`를 먼저 본다.
+- [ ] `audio` 부팅 A의 `speaker-test` 간헐(UB-M2 루트 게이트 1회차, 2026-10-31, lane 17). 출력이 `0 - Front Left|Write error: -32,Broken
+      pipe| 1 - Front Right`라 판정 줄 `[ 0 - Front Left| 1 - Front Right]`와 안 맞았다 — ALSA underrun(EPIPE)이 두 목소리 사이에
+      끼었고 같은 부팅의 `aplay` 사각파(tone=47952 · doubled=0)와 그 뒤 두 채널 판정은 멀쩡했다. 단독 재실행 PASS, 2회차 루트
+      게이트도 본다. 로그 `out/gate-logs/20261031-140338/AU-M3-1/`. 판정은 안 넓혔다 — 한 번 더 겪으면 `speaker-test` 줄에서
+      `Write error` 토막을 빼고 보는 것(underrun은 소리가 끊긴 것이지 채널이 바뀐 것이 아니다)이 후보다.
 - [ ] 체인이 `grep -a 'terminal: screen>' "$LOG" | tail -n 1`로 화면 줄을 직접 읽는 자리 67곳은 printk에 잘린 줄을 못 잇는다
       (`joined_screen_dump`는 `wait_for_screen`만 쓴다). 그 자리가 이상한 값으로 빨개지면 로그의 `screen>` 줄 안에 커널 시각 표식이 있는지
       먼저 본다.
@@ -53,21 +58,24 @@ PD(2026-10-05)가 남긴 것.
 
 미룬 것.
 
+- [ ] 게이트 포트가 ephemeral 범위 안이다 — 컨테이너의 `ip_local_port_range`는 32768~60999이고 체인의 포트(45455~45495, VD의 TLS
+      45492 · monitor 포트들)가 전부 그 안에 있다. 다른 lane이 나가는 연결(curl · nc · SLIRP hostfwd)의 출발 포트로 그 번호를
+      받은 순간 그 체인의 `bind()`가 `Address already in use`로 진다. UB-M2 루트 게이트 2회차(2026-10-31)에서 VD-M0이
+      `openssl s_server died at startup`으로 그렇게 빨갰다(다른 체인은 45492를 안 쓴다, 단독 재실행 PASS, 로그
+      `out/gate-logs/20261031-141844/VD-M0-1/`). 고치는 법은 확인했다 — `docker run --sysctl
+      net.ipv4.ip_local_reserved_ports=45455-45499`가 컨테이너 안에서 먹힌다(네임스페이스별 sysctl이라 권한이 더 필요
+      없다). 넣을 자리는 Makefile `IN_CONTAINER`와 lessons "게이트를 돌리고 읽는 법"의 `docker run` 줄, CI `container` job은
+      게이트를 안 돌리니 그대로. 작은 서브프로젝트(GF 꼴) 하나다.
 - [ ] `git-delta`(SM 비목표 1) · `Ctrl+R`을 게이트가 치는 것(SM 비목표 2 — TUI라
       체인이 매달린다. 안 하는 쪽에 근거가 쌓여 있다).
 - [ ] 무선의 남은 것(WL 비목표). Intel BE201과 `sc-a0-fm-c0`(커널 6.18이 받는 번호의
       firmware가 linux-firmware-20260916에 없다 — 커널을 올릴 때 같이 본다) · 보드별 변형
       firmware(ath11k `nfa765` · ath12k `ncm865`) · WPA-Enterprise · 실칩 판정(실기가 생기면).
-- [ ] USB 무선 동글의 나머지(UW 비목표 1). 층 A(rtw88 USB 일곱 · rtw89 둘 · MT7921U ·
-      MT7925U)는 UW가 켰다(2026-09-28). 남은 것은 층 B와 `RTL8XXXU`다. 코드는 0줄이고
-      게이트는 UW의 세 층(심볼 · modinfo alias · usbcore 등록 줄)을 그대로 늘리면 된다.
-      층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb ·
-      ath9k_htc)는 커널 +348KB · firmware 약 0.4MB다(`ATH9K_PCI`는 따라 켜지지 않는다 — UB-M0 실측 1, `depends on ATH9K`).
-      `RTL8XXXU`는 +82KB · 약 0.3MB인데 `NEW_LEDS`가 있어야 붙고, 그것이 `HID_APPLE` ·
-      `INPUT_LEDS`를 끌고 온다 — 실제 Apple 키보드의 fn 키가 커널에서 바뀔 수 있어
-      `keyboard=apple`과 부딪칠 수 있고, 게이트는 못 본다. 넣으려면 `HID_APPLE`을 먼저
-      정한다. `mt7601u.bin` · `mt7662.bin` · `mt7662_rom_patch.bin`은 맨 위 이름이라
-      `WHENCE`의 `Link:`로 실체를 찾고, `rtlwifi/rtl8723bu_bt.bin`은 이 릴리스에 없다.
+- [ ] USB 무선 동글의 나머지. 층 A는 UW(2026-09-28), 층 B 다섯과 `RTL8XXXU`는 UB(2026-10-31)가 켰다.
+      남은 것은 드라이버 작성자가 안 본 장치 목록(`RT2800USB_UNKNOWN` · `RTL8XXXU_UNTESTED`)과
+      다른 계열(`rtl8187` · `zd1211rw` · `carl9170` · `ar5523` · `p54usb` · brcmfmac USB)이다 — 실제
+      동글이 그 목록에 있을 때 켠다(UB design 비목표 2 · 5). 켜는 법은 UB와 같다: 부모 메뉴까지
+      `-k`로 켜고 해소본에서 `=y`를 센 뒤 `firmware=` 줄에서 이름을 센다.
 - [ ] firmware 96MB가 게스트 RAM에 늘 있다(WL 위험 5). 게이트의 512MB에서 `MemAvailable`
       213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만

@@ -77,7 +77,7 @@ firmware를 올리고 인터페이스를 만드는지는 게이트 밖이다(비
 
 ## 비목표
 
-1. 층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb · ath9k_htc)와 `RTL8XXXU`.
+1. 층 B(MT7601U · MT76x0U · MT76x2U · rt2800usb · ath9k_htc)와 `RTL8XXXU` — UB가 2026-10-31에 켰다(`2026-10-31-tars-usb-dongles-b-design.md`).
    `RTL8XXXU`는 `NEW_LEDS`를 거쳐 `HID_APPLE`을 끌고 와서 `keyboard=apple`과 부딪칠 수 있다.
 2. 실칩 판정. 실제 동글을 꽂아 보는 것은 동글이 생기면 연다.
 3. WL의 나머지 비목표(BE201 · 보드별 변형 firmware · WPA-Enterprise)는 그대로 남는다.

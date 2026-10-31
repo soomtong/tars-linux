@@ -1,8 +1,23 @@
-# HANDOFF: Ghcr Image(GI-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, IPv6는 결정으로 닫음, 다음 방향은 사용자가 고른다
+# HANDOFF: USB Dongles B(UB-M0~M2) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 게이트 포트 ephemeral 충돌이 작은 후보로 남음
 
 ## 지금 상태 (2026-10-31)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Ghcr Image(GI-M0, 2026-10-31, GH-M1의 마지막 후보, 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 USB Dongles B(UB-M0~M2, 2026-10-31, 사용자가 "네트워크"를 골랐고 같은 자리에서
+  IPv6를 결정으로 닫았다 — `docs/decisions/feedback_ipv4_only.md`). design `docs/specs/2026-10-31-tars-usb-dongles-b-design.md`,
+  plan `docs/plans/2026-10-31-tars-usb-dongles-b-ub-m{0,1,2}.md`, 기억 `docs/decisions/project_usb_dongles_b.md`. UW가 남긴 USB
+  무선 동글 드라이버 여섯(mt7601u · mt76x0u · mt76x2u · rt2800usb · ath9k_htc · rtl8xxxu)이 `=y`, firmware 119 → 140, wifi 검사 1 ·
+  11이 열일곱을 센다. 코드 0줄, 소개 페이지에는 안 넣었다(실기 판정 없음, UW와 같다).
+  - 함정: `scripts/config --enable`은 부모 메뉴(`RT2X00`)가 not set이면 하위를 파일 끝에 덧붙이고 `olddefconfig`가 조용히 버린다 —
+    해소된 `build/.config`에서 `=y`를 센다. `RTL8XXXU`를 막던 `LEDS_CLASS`는 AU-M2가 켰고 `HID_APPLE` · `INPUT_LEDS`는 not set인
+    채 — wifi 검사 1의 음성 검사 둘이 지킨다(커널을 올리는 날 빨개지면 그것이 신호). usbcore 등록 이름은 `struct usb_driver.name` =
+    모듈 이름이다(`hif_usb.c`의 `ath9k_hif_usb`는 전송 층 구조체). `MODULE_FIRMWARE`에 있어도 안 요청하는 이름이 있다
+    (`rtl8723bu_bt.bin`).
+  - 숫자: bzImage +372,736. 루트 게이트 3회차 22/22, 10분 23초(prebuild 318 + lanes 303초), verify 8132줄. 앞 두 회차는 AU-M3
+    (`speaker-test` underrun) · VD-M0(45492 `bind()` 실패)이 한 번씩 빨갰다 — 둘 다 UB 밖 간헐, 단독 PASS, carryover에 적었다.
+  - 새 사실: 게이트 포트 45455~45495가 전부 컨테이너 ephemeral 범위(32768~60999) 안이라 다른 lane의 나가는 연결과 부딪칠 수 있다.
+    `docker run --sysctl net.ipv4.ip_local_reserved_ports=45455-45499`가 먹히는 것까지 확인했다 — Makefile `IN_CONTAINER`와 lessons의
+    `docker run` 줄에 넣는 작은 서브프로젝트(GF 꼴)가 다음 후보 중 하나다(`carryover.md` "미룬 것").
+- 그 전에 닫은 것은 Ghcr Image(GI-M0, 2026-10-31, GH-M1의 마지막 후보, 사용자가 골랐다).
   design `docs/specs/2026-10-31-tars-ghcr-image-design.md`, plan `docs/plans/2026-10-31-tars-ghcr-image-gi-m0.md`, 기억은
   `docs/decisions/project_github_actions.md`의 GI-M0 절. 컨테이너 이미지를 `ghcr.io/soomtong/tars-devcontainer:<Dockerfile sha256 앞
   12자>`에서 받는다 — `devcontainer/image.sh tag|pull|build|push`가 이름 · 태그를 아는 유일한 자리, Makefile `container`와 CI
@@ -154,7 +169,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(GI-M0 닫기, ghcr에서 받은 이미지): 22/22, 10분 3초(prebuild 299 + lanes 301초), verify 8104줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(UB-M2 닫기, 3회차): 22/22, 10분 23초(prebuild 318 + lanes 303초), verify 8132줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -189,7 +204,8 @@
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
-- 패키지 매니저(아래 "이미지 뷰어 메모"), USB 동글 층 B.
+- 게이트 포트를 ephemeral 범위에서 빼는 것(`--sysctl ip_local_reserved_ports`, 확인 끝, `carryover.md` "미룬 것") — 작고 근거가 있다.
+- 패키지 매니저(아래 "이미지 뷰어 메모"). USB 동글은 층 A(UW) · 층 B + rtl8xxxu(UB)로 끝났고 남은 것은 실제 동글이 근거를 줄 때.
 - IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다. 사용자는 코드 작업을 neovim · helix로 하고 게스트 vim은 대충 쓴다
   (`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`에 남아 있다.

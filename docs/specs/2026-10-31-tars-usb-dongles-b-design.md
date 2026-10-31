@@ -2,7 +2,7 @@
 
 접두사: UB
 
-Status: M1 끝(2026-10-31) — 여섯 `=y`, firmware 119 → 140, wifi 검사 1(심볼 여덟 · alias 여섯 · 음성 검사 둘) · 11(등록 줄 열일곱), tools · wifi 체인 초록. M0 실측 1~4로 확인 1 · 3 · 4를 고쳤다. M2(mutation · 루트 게이트 · 닫기)가 다음이다.
+Status: 끝났다(2026-10-31) — M0~M2, 결정 4 · 위험 4 · 실측 1~6. 여섯 `=y`, firmware 119 → 140, wifi 검사 1 · 11이 열일곱을 센다, 음성 검사 둘. mutation 둘 잡힘. 루트 게이트 22/22(3회차, 앞 두 회차의 빨강은 UB 밖 간헐 — 실측 6). 코드 0줄.
 
 관련 문서: `2026-09-28-tars-usb-wireless-design.md`(UW. 이 사이클은 그 비목표 1을 목표로
 옮긴다) · `docs/decisions/project_usb_wireless.md` · `docs/guides/carryover.md`의 "USB 무선
@@ -262,3 +262,31 @@ rtl8xxxu만 인터페이스 class 자리가 `FF`다(`USB_DEVICE_AND_INTERFACE_IN
 `ath9k_htc` · `mt7601u` · `mt76x0u` · `mt76x2u` · `rt2800usb` · `rtl8xxxu`. 부팅 전체의 등록 줄은
 28(UW 때 열하나 + 유선 USB · hid · storage · hub + 이번 여섯). 확인 4의 `ath9k_hif_usb`는 틀렸고
 그 자리에서 고쳤다 — 등록 이름은 `struct usb_driver.name`이고 ath9k_htc의 그것은 `KBUILD_MODNAME`이다.
+
+## 실측 (M2, 2026-10-31)
+
+### 실측 5 — mutation 둘은 예측한 검사에서 부팅 전에 잡힌다
+
+작업 트리의 `kernel/.config`만 바꾸고 `make check CHAIN=wifi`를 돌렸다. 체인이 시작에 바뀐
+`.config`로 커널을 한 번 다시 빌드한 뒤 검사 1에서 멈췄다(rc=1, 부팅 0회).
+
+| mutation | 잡은 줄 |
+|---|---|
+| `CONFIG_MT7601U=y` → `not set` | `FAIL: CONFIG_MT7601U is not =y in kernel/.config` |
+| `# CONFIG_HID_APPLE is not set` → `=y` | `FAIL: CONFIG_HID_APPLE is no longer not set in kernel/.config — keyboard=apple may break` |
+
+둘째가 결정 4의 음성 검사다 — 커널을 올리는 날 `olddefconfig`가 `HID_APPLE`을 켜면 이 줄로
+빨개진다. 되돌린 뒤 `git status`가 깨끗했다.
+
+### 실측 6 — 루트 게이트는 세 번째 회차에 22/22다. 빨갰던 둘은 UB 밖의 간헐이다
+
+| 회차 | 결과 | 시간 | 빨간 체인과 이유 |
+|---|---|---|---|
+| 1 | 21/22 | 11분 8초(prebuild 327 + lanes 338초) | AU-M3 — `speaker-test` 출력에 `Write error: -32,Broken pipe`(ALSA underrun)가 두 목소리 사이에 끼어 판정 문자열과 안 맞음. 같은 부팅의 `aplay` 사각파(tone=47952 · doubled=0)는 통과 |
+| 2 | 21/22 | 10분 57초(prebuild 353 + lanes 302초) | VD-M0 — 컨테이너의 `openssl s_server`가 45492에 `bind()` 실패(`Address already in use`). 다른 체인은 그 번호를 안 쓴다 — 게이트 포트가 ephemeral 범위(32768~60999) 안이라 다른 lane의 나가는 연결이 출발 포트로 받은 것 |
+| 3 | 22/22 | 10분 23초(prebuild 318 + lanes 303초) | 없음. verify 8132줄 전부 통과 |
+
+둘 다 단독 재실행은 PASS(audio 3분 1초 · dictation 3분 37초)이고 UB가 바꾼 자리(무선 USB 드라이버 ·
+firmware · wifi 체인)와 무관하다. 둘 다 `carryover.md`에 적었다 — speaker-test는 AU 절에 판정 후보와,
+포트는 "미룬 것"에 확인한 고치는 법(`docker run --sysctl net.ipv4.ip_local_reserved_ports=45455-45499`)과
+함께. wifi 체인은 세 회차 다 초록이고 `seventeen USB dongles` · `all seventeen USB dongle drivers`를 찍었다.
