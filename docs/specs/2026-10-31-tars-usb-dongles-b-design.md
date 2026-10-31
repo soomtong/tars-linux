@@ -2,7 +2,7 @@
 
 접두사: UB
 
-Status: M0 끝(2026-10-31) — 실측 1~4. 확인 1 · 3 · 4를 실측으로 고쳤다(`RT2X00` 메뉴는 직접 켠다, 새 이름은 22, 등록 이름은 여섯 다 모듈 이름). M1(config · firmware · 검사)이 다음이다.
+Status: M1 끝(2026-10-31) — 여섯 `=y`, firmware 119 → 140, wifi 검사 1(심볼 여덟 · alias 여섯 · 음성 검사 둘) · 11(등록 줄 열일곱), tools · wifi 체인 초록. M0 실측 1~4로 확인 1 · 3 · 4를 고쳤다. M2(mutation · 루트 게이트 · 닫기)가 다음이다.
 
 관련 문서: `2026-09-28-tars-usb-wireless-design.md`(UW. 이 사이클은 그 비목표 1을 목표로
 옮긴다) · `docs/decisions/project_usb_wireless.md` · `docs/guides/carryover.md`의 "USB 무선

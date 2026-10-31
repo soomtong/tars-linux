@@ -21,6 +21,7 @@
 #
 # kernel/.config가 켠 PCIe 무선 드라이버(WL design 결정 1)와 USB 동글(UW design
 # 결정 1)이 찾는 것. USB 동글이 새로 찾는 것은 rtw88의 `…a_fw.bin` 셋뿐이다.
+# UB(층 B 다섯 + rtl8xxxu, UB design 결정 1)가 21개를 더했다 — UB 실측 2.
 # 드라이버가 찾는 이름은 빌드 산출물 kernel/build/modules.builtin.modinfo의
 # `firmware=` 줄이다. 짐작하지 않고 거기서 센다.
 #
@@ -34,7 +35,9 @@
 # 뺀 것. r8169 · r8152의 Realtek 유선 firmware(WN 비목표 1). 2012년 이전 Intel
 # 칩(IWLDVM · iwlegacy를 안 켰다). 받을 번호의 파일이 이 릴리스에 없는 Intel
 # 둘(BE201 `bz-b0-wh-b0` · `sc-a0-fm-c0`). 보드별 변형(ath11k nfa765 · ath12k
-# ncm865). 서버용(ath11k QCN9074).
+# ncm865). 서버용(ath11k QCN9074). `rtlwifi/rtl8723bu_bt.bin`은 이 릴리스에 없고
+# 6.18의 rtl8xxxu가 요청하지도 않는 죽은 이름이다(UB 위험 3). `mt7662u.bin` ·
+# `htc_9271.fw`는 이름이 비슷해도 6.18이 요청하지 않는다(UB 비목표 4).
 #
 # ── 커널이나 linux-firmware를 올릴 때 ───────────────────────────────────
 #
@@ -87,7 +90,7 @@ GUEST_FIRMWARE=(
   linux-firmware/intel/iwlwifi/iwlwifi-ty-a0-gf-a0.pnvm:lib/firmware/iwlwifi-ty-a0-gf-a0.pnvm
   linux-firmware/intel/iwlwifi/iwlwifi-ty-a0-gf-a0-89.ucode:lib/firmware/iwlwifi-ty-a0-gf-a0-89.ucode
 
-  # Realtek — rtw88 · rtw89
+  # Realtek — rtw88 · rtw89 · rtl8xxxu(UB)
   linux-firmware/rtw88/rtw8723d_fw.bin:lib/firmware/rtw88/rtw8723d_fw.bin
   linux-firmware/rtw88/rtw8812a_fw.bin:lib/firmware/rtw88/rtw8812a_fw.bin
   linux-firmware/rtw88/rtw8814a_fw.bin:lib/firmware/rtw88/rtw8814a_fw.bin
@@ -102,8 +105,23 @@ GUEST_FIRMWARE=(
   linux-firmware/rtw89/rtw8852bt_fw.bin:lib/firmware/rtw89/rtw8852bt_fw.bin
   linux-firmware/rtw89/rtw8852c_fw-2.bin:lib/firmware/rtw89/rtw8852c_fw-2.bin
   linux-firmware/rtw89/rtw8922a_fw-4.bin:lib/firmware/rtw89/rtw8922a_fw-4.bin
+  linux-firmware/rtlwifi/rtl8188eufw.bin:lib/firmware/rtlwifi/rtl8188eufw.bin
+  linux-firmware/rtlwifi/rtl8188fufw.bin:lib/firmware/rtlwifi/rtl8188fufw.bin
+  linux-firmware/rtlwifi/rtl8192cufw_A.bin:lib/firmware/rtlwifi/rtl8192cufw_A.bin
+  linux-firmware/rtlwifi/rtl8192cufw_B.bin:lib/firmware/rtlwifi/rtl8192cufw_B.bin
+  linux-firmware/rtlwifi/rtl8192cufw_TMSC.bin:lib/firmware/rtlwifi/rtl8192cufw_TMSC.bin
+  linux-firmware/rtlwifi/rtl8192eu_nic.bin:lib/firmware/rtlwifi/rtl8192eu_nic.bin
+  linux-firmware/rtlwifi/rtl8192fufw.bin:lib/firmware/rtlwifi/rtl8192fufw.bin
+  linux-firmware/rtlwifi/rtl8710bufw_SMIC.bin:lib/firmware/rtlwifi/rtl8710bufw_SMIC.bin
+  linux-firmware/rtlwifi/rtl8710bufw_UMC.bin:lib/firmware/rtlwifi/rtl8710bufw_UMC.bin
+  linux-firmware/rtlwifi/rtl8723aufw_A.bin:lib/firmware/rtlwifi/rtl8723aufw_A.bin
+  linux-firmware/rtlwifi/rtl8723aufw_B.bin:lib/firmware/rtlwifi/rtl8723aufw_B.bin
+  linux-firmware/rtlwifi/rtl8723aufw_B_NoBT.bin:lib/firmware/rtlwifi/rtl8723aufw_B_NoBT.bin
+  linux-firmware/rtlwifi/rtl8723bu_nic.bin:lib/firmware/rtlwifi/rtl8723bu_nic.bin
 
-  # MediaTek — mt7921e(MT7921 · MT7922) · mt7925e
+  # MediaTek — mt7921e(MT7921 · MT7922) · mt7925e · mt7601u · mt76x0u · mt76x2u(UB)
+  # 맨 위 이름 셋(mt7601u.bin · mt7662.bin · mt7662_rom_patch.bin)은 WHENCE의 Link:라
+  # 출처는 mediatek/ 아래다. mt76x0u는 mt7610e.bin을 먼저 찾고 없으면 mt7610u.bin이다.
   linux-firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin:lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin
   linux-firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin:lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin
   linux-firmware/mediatek/WIFI_MT7922_patch_mcu_1_1_hdr.bin:lib/firmware/mediatek/WIFI_MT7922_patch_mcu_1_1_hdr.bin
@@ -112,8 +130,16 @@ GUEST_FIRMWARE=(
   linux-firmware/mediatek/WIFI_RAM_CODE_MT7922_1.bin:lib/firmware/mediatek/WIFI_RAM_CODE_MT7922_1.bin
   linux-firmware/mediatek/WIFI_RAM_CODE_MT7961_1.bin:lib/firmware/mediatek/WIFI_RAM_CODE_MT7961_1.bin
   linux-firmware/mediatek/WIFI_RAM_CODE_MT7961_1a.bin:lib/firmware/mediatek/WIFI_RAM_CODE_MT7961_1a.bin
+  linux-firmware/mediatek/mt7601u.bin:lib/firmware/mt7601u.bin
+  linux-firmware/mediatek/mt7610e.bin:lib/firmware/mediatek/mt7610e.bin
+  linux-firmware/mediatek/mt7610u.bin:lib/firmware/mediatek/mt7610u.bin
+  linux-firmware/mediatek/mt7662.bin:lib/firmware/mt7662.bin
+  linux-firmware/mediatek/mt7662_rom_patch.bin:lib/firmware/mt7662_rom_patch.bin
 
-  # Qualcomm — ath11k · ath12k
+  # Ralink — rt2800usb(UB)
+  linux-firmware/rt2870.bin:lib/firmware/rt2870.bin
+
+  # Qualcomm · Atheros — ath11k · ath12k · ath9k_htc(UB)
   linux-firmware/ath11k/QCA6390/hw2.0/amss.bin:lib/firmware/ath11k/QCA6390/hw2.0/amss.bin
   linux-firmware/ath11k/QCA6390/hw2.0/board-2.bin:lib/firmware/ath11k/QCA6390/hw2.0/board-2.bin
   linux-firmware/ath11k/QCA6390/hw2.0/m3.bin:lib/firmware/ath11k/QCA6390/hw2.0/m3.bin
@@ -128,6 +154,8 @@ GUEST_FIRMWARE=(
   linux-firmware/ath11k/WCN6855/hw2.0/board-2.bin:lib/firmware/ath11k/WCN6855/hw2.1/board-2.bin
   linux-firmware/ath11k/WCN6855/hw2.0/m3.bin:lib/firmware/ath11k/WCN6855/hw2.1/m3.bin
   linux-firmware/ath11k/WCN6855/hw2.0/regdb.bin:lib/firmware/ath11k/WCN6855/hw2.1/regdb.bin
+  linux-firmware/ath9k_htc/htc_7010-1.4.0.fw:lib/firmware/ath9k_htc/htc_7010-1.4.0.fw
+  linux-firmware/ath9k_htc/htc_9271-1.4.0.fw:lib/firmware/ath9k_htc/htc_9271-1.4.0.fw
 
   # 규제 db — cfg80211
   wireless-regdb/regulatory.db:lib/firmware/regulatory.db

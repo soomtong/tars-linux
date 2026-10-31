@@ -135,7 +135,8 @@ for sym in CFG80211 MAC80211 RFKILL MAC80211_HWSIM IWLWIFI IWLMVM IWLMLD \
   RTW89_8851BE RTW89_8852AE RTW89_8852BE RTW89_8852BTE RTW89_8852CE RTW89_8922AE \
   MT7921E MT7925E ATH11K_PCI ATH12K CMDLINE_BOOL \
   RTW88_8822BU RTW88_8822CU RTW88_8723DU RTW88_8821CU RTW88_8821AU RTW88_8812AU RTW88_8814AU \
-  RTW89_8851BU RTW89_8852BU MT7921U MT7925U; do
+  RTW89_8851BU RTW89_8852BU MT7921U MT7925U \
+  MT7601U MT76x0U MT76x2U RT2X00 RT2800USB RT2800USB_RT53XX ATH9K_HTC RTL8XXXU; do
   if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
     echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
     exit 1
@@ -150,13 +151,25 @@ fi
 # modinfo는 NUL로 나뉜 파일이다. 대표는 UW design 실측 4의 표다.
 MODINFO=../kernel/build/modules.builtin.modinfo
 for alias in rtw88_8822bu.alias=usb:v2357p012Dd rtw89_8852bu.alias=usb:v0BDApB832d \
-  mt7921u.alias=usb:v0E8Dp7961d mt7925u.alias=usb:v0E8Dp7925d; do
+  mt7921u.alias=usb:v0E8Dp7961d mt7925u.alias=usb:v0E8Dp7925d \
+  mt7601u.alias=usb:v0B05p17D3d mt76x0u.alias=usb:v148Fp7610d mt76x2u.alias=usb:v0B05p1833d \
+  rt2800usb.alias=usb:v07B8p2870d ath9k_htc.alias=usb:v0CF3p9271d rtl8xxxu.alias=usb:v2357p0108d; do
   if ! tr '\0' '\n' < "$MODINFO" | grep -F "$alias" >/dev/null; then
     echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*usb:}"
     exit 1
   fi
 done
-echo "the kernel carries the wireless stack, sixteen laptop chips, eleven USB dongles and hwsim with no radios"
+# rtl8xxxu가 기대는 LEDS_CLASS는 HID_APPLE · INPUT_LEDS의 조건이기도 하다. 둘이 켜지면 커널 HID
+# 층이 Apple 키보드의 fn 키를 먼저 바꿔 keyboard=apple과 부딪친다(UW 비목표 1의 이유). 지금은
+# .config에 "not set"으로 적혀 있어 olddefconfig가 안 뒤집지만, 커널을 올리는 날 새로 물을 수
+# 있다 — 그날 여기가 빨개진다(UB design 결정 4).
+for sym in HID_APPLE INPUT_LEDS; do
+  if ! grep -x "# CONFIG_${sym} is not set" "$CONFIG" >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is no longer not set in kernel/.config — keyboard=apple may break"
+    exit 1
+  fi
+done
+echo "the kernel carries the wireless stack, sixteen laptop chips, seventeen USB dongles and hwsim with no radios"
 
 # 설정 디스크 셋. 게이트 전용 둘(hostapd · busybox)은 sysroot에서 온다 — initrd에는
 # 없다(Dockerfile 층 12). 라이브러리는 wpa_supplicant가 initrd에 이미 데려왔다.
@@ -334,16 +347,17 @@ for bad in 'started service wpa_supplicant' 'tars-wifi:' 'wlan'; do
 done
 echo "no file means no wpa_supplicant, and hwsim makes no radios by default"
 
-# ── 검사 11: usbcore가 USB 동글 드라이버 열하나를 등록했다 (UW-M1) ──────
+# ── 검사 11: usbcore가 USB 동글 드라이버 열일곱을 등록했다 (UW-M1 · UB-M1) ──
 # 검사 1은 "켜기로 했다"까지다. 이 줄은 usb_register_driver가 찍으므로 커널이 드라이버를
 # USB 코어에 실제로 올렸다는 뜻이다(UW design 실측 5). 장치와 무관하게 일어나서 이
 # 부팅에는 USB 컨트롤러가 없어도 된다. 꽂힌 동글의 probe와 firmware는 게이트 밖이다.
 for drv in rtw88_8822bu rtw88_8822cu rtw88_8723du rtw88_8821cu rtw88_8821au \
-  rtw88_8812au rtw88_8814au rtw89_8851bu rtw89_8852bu mt7921u mt7925u; do
+  rtw88_8812au rtw88_8814au rtw89_8851bu rtw89_8852bu mt7921u mt7925u \
+  mt7601u mt76x0u mt76x2u rt2800usb ath9k_htc rtl8xxxu; do
   grep -a "usbcore: registered new interface driver ${drv}\b" "$LOG" >/dev/null \
     || report_failure "usbcore never registered ${drv}"
 done
-echo "usbcore registered all eleven USB dongle drivers"
+echo "usbcore registered all seventeen USB dongle drivers"
 
 stop_guest
 
