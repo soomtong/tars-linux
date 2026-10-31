@@ -2,7 +2,7 @@
 
 Date: 2026-10-31
 Design: `docs/specs/2026-10-31-tars-ghcr-image-design.md`
-Status: 착수
+Status: 끝났다(2026-10-31)
 
 ## 착수 전에 확정한 것
 
@@ -104,4 +104,28 @@ LABEL org.opencontainers.image.source=https://github.com/soomtong/tars-linux
 
 ## 결과
 
-(Task마다 적는다)
+Task 1(2026-10-31, commit `83fa9d0`). 파일 다섯, +43 −11(지운 11줄은 checks.yml의 `docker build` step 셋 · Makefile 다섯 · README 둘 ·
+머리 주석 하나). (a) `make quick` PASS, shellcheck 52 files. (b) `tag` → `f54d9852ec88`(세대 줄 · LABEL이 들어가 `20da2fc38301`에서
+바뀌었다). `pull` → ghcr이 `denied`(없는 패키지도 비공개도 같은 답이다) → exit 1. `build` 2.1초(LABEL 층만, 나머지 캐시),
+ID `0c6c594a70b7`, 라벨 값이 저장소 URL, 이름 셋이 같은 ID.
+
+(c) CI run 41195498790(`83fa9d0`): 두 job 초록. `host` 1분 48초, `container` 8분 2초 — `image (pull or build)` 48초(`denied` → 통째
+build), `image push` 30초(해시 · `latest` 같은 digest `sha256:9ad85b41…`, 구운 ID `0e214546893d`), 그 뒤 sanity 6초 · init 2분 41초 ·
+fetch 21초 · terminal 3분 31초.
+
+(d) 할 일이 없었다 — push 직후 익명 `docker manifest inspect`가 읽히고 패키지 페이지가 200. 공개 저장소에 라벨로 연결된 패키지를
+Actions가 올리면 처음부터 공개다(design 확인 6을 고쳤다).
+
+(e) CI run 41196154474(`workflow_dispatch`, 같은 커밋): 두 job 초록. `image (pull or build)` 25초 → `image> pulled f54d9852ec88
+id=0e214546893d`(digest 같음), `image push` skipped. `container` 6분 24초 — (c)의 8분 2초에서 이미지 몫은 78 → 25초(−53초)이고 나머지
+45초는 init · terminal step의 흔들림(2분 41초 → 2분 45초, 3분 31초 → 2분 44초). `host` 1분 49초.
+
+(f) 로컬 `docker rmi` 셋 → `make container` 42초 → `image> pulled f54d9852ec88 id=0e214546893d`. CI가 구운 ID와 같다(확인 7 —
+manifest digest로 갈 일이 없었다). `RepoDigests`도 push의 digest.
+
+(g) 받은 이미지(`0e214546893d`)로 루트 게이트 1회: 22/22, 10분 3초(prebuild 299 + lanes 301초), verify 8104줄 전부 `ok`. 지난 회차
+(VS-M0, 로컬에서 구운 `6c2674d36158`)와 같은 숫자대 — apt 층이 다른 빌드여도 게이트가 보는 것은 안 바뀌었다.
+
+Task 2 닫기: design `Status:` · 확인 6 · 결정 6 (d) · 위험 2 바로잡음, `completed.md` 한 행, `project_github_actions.md` GI-M0 절(남긴 것은
+비었다), `MEMORY.md`, `project_zig_upgrade.md` · `key-files.md` · `lessons.md` 한 줄씩, `HANDOFF.md`.
+

@@ -63,7 +63,9 @@ Dockerfile의 `ENV ZIG_VERSION`이 정본이고 `quick_check.sh` · `checks.yml`
 해시는 버전마다 다르므로 `checks.yml`의 `ZIG_SHA256`(x86_64-linux tarball, ziglang.org
 `index.json`의 `shasum`)과 Dockerfile의 `ARG ZIG_SHA256`(같은 파일의 aarch64-linux 행, VS-M0)을
 함께 고친다. 어긋나면 host job 또는 `docker build`가 `sha256sum -c`에서 빨개진다 —
-우리 코드가 아닌 빨강이다.
+우리 코드가 아닌 빨강이다. Dockerfile이 바뀌면 `main`의 다음 CI가 새 해시 태그로 이미지를
+구워 ghcr.io에 올린다(GI-M0). 로컬은 자동으로 따라가지 않는다 — `docker rmi tars-devcontainer
+&& make container`로 그 이미지를 받는다.
 
 ## 호스트 0.17로 미리 잴 수 있는 것과 없는 것
 

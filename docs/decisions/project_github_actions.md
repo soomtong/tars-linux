@@ -102,9 +102,30 @@ Dockerfile의 Zig aarch64 tarball을 더해 여섯 — 전부 `*_SHA256` 변수 
   `FAILED`이고 재실행으로 안 풀린다. 새 tarball을 풀어 지난 트리와 `diff -rq` 0줄을 본 뒤 고친다.
 - 숫자: 루트 게이트 22/22, 10분 1초(prebuild 301 + lanes 300초). CI host 2분 39초 · container 6분 54초.
 
+## GI-M0(2026-10-31) — 이미지를 ghcr.io에서 받는다
+
+GH-M1의 마지막 후보, 사용자가 골랐다. design `docs/specs/2026-10-31-tars-ghcr-image-design.md`, plan
+`docs/plans/2026-10-31-tars-ghcr-image-gi-m0.md`. `ghcr.io/soomtong/tars-devcontainer:<Dockerfile sha256 앞 12자>` — 받는 ·
+굽는 · 올리는 판단은 `devcontainer/image.sh` 하나(`tag|pull|build|push`), Makefile `container`와 CI `container` job이 `pull || build`,
+CI는 `main` push에서 구웠을 때만 `docker login` 뒤 `push`. 로컬 태그 `tars-devcontainer`에 붙이므로 `docker run` 줄은 안 바뀌었다.
+
+- 목표는 시간이 아니라 동일성이다. `docker build`는 runner에서 46~50초뿐이고, 얻은 것은 게이트 · CI · 새 저장소가 같은 digest를
+  쓴다는 것(apt 층 824MB가 "구운 날"에 따라 달라지던 것이 멈췄다). CI `container` 8분 2초(built) → 6분 24초(pulled), 이미지 몫 78 → 25초.
+- 태그가 커밋이 아니라 Dockerfile 해시인 이유: Dockerfile은 드물게 바뀌고, 태그 없음 = "이 Dockerfile로는 아직 안 구웠다"라 굽는
+  조건이 따로 없다. 갱신(apt 보안 갱신 포함)은 Dockerfile 머리의 "이미지 세대" 날짜를 바꾸는 것 — 한 줄이라도 바뀌면 새 태그.
+- 로컬은 Dockerfile을 자동으로 따라가지 않는다(`git pull` 한 번에 1.5GB가 사람 모르게 시작되지 않게). `docker rmi tars-devcontainer
+  && make container`. Dockerfile을 바꾸는 commit 메시지에 새 태그를 적는다.
+- 틀렸던 가정: "첫 push가 만드는 패키지는 비공개라 UI에서 한 번 Public으로". 공개 저장소에 `org.opencontainers.image.source`
+  LABEL로 연결된 패키지를 그 저장소의 Actions가 올리면 처음부터 공개다 — 사람이 할 일이 없었다.
+- 함정: ghcr은 없는 태그 · 비공개 · 권한 없음을 다 `denied`로 답한다 — `image> pull failed` 메시지가 세 경우를 다 말한다. 받은 이미지의
+  ID는 구운 쪽과 같다(config digest) — 동일성 비교는 `docker image inspect --format '{{.Id}}'`로 된다. 같은 태그를 덮어쓰는 것을
+  막는 장치는 없다(반쪽 장애에서 `pull` 실패 → `build` → `push`면 같은 Dockerfile의 다른 빌드가 덮는다 — 패키지 버전 페이지에 두
+  digest가 남는다). 옛 태그는 Dockerfile을 고칠 때마다 1.5GB씩 쌓인다(공개라 무료, 지우는 것은 손으로).
+- 숫자: 로컬 pull 42초, ID `0e214546893d` = CI. 루트 게이트 22/22, 10분 3초(prebuild 299 + lanes 301초), verify 8104줄 통과.
+
 ## 남긴 것(다음 후보)
 
-구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단). vendor sha256은 VS-M0이 닫았다(위).
+없다 — GH-M1이 적은 넷(컨테이너 `zig build test` · shellcheck note · vendor sha256 · ghcr.io 이미지)을 M1 · SN · VS · GI가 다 닫았다.
 
 ## 관련
 

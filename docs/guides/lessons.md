@@ -46,8 +46,11 @@ docker run --rm -e RUNS=3 -e JOBS=4 -v "$PWD":/workspace -w /workspace tars-devc
 # 체인 하나
 docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer ./net/check.sh > /tmp/net.log 2>&1
 
-# 이미지 재빌드 (Dockerfile을 고쳤을 때, 30~50초)
-{ time docker build -t tars-devcontainer devcontainer/ ; } 2>&1 | tail -3
+# 이미지 — ghcr.io에서 받기(42초, 1.5GB). 없으면 make container가 알아서 받거나 굽는다(GI-M0)
+docker rmi tars-devcontainer && make container
+
+# 이미지 재빌드 (Dockerfile을 고쳤을 때, 로컬 30~50초 — CI는 main의 다음 회차가 굽고 올린다)
+./devcontainer/image.sh build
 ```
 
 `--platform`을 붙이지 않는다(`project_build_host_arch`).

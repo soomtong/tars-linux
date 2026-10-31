@@ -1,8 +1,19 @@
-# HANDOFF: Vendor Sha256(VS-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: Ghcr Image(GI-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, GH 줄기 끝, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-31)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Vendor Sha256(VS-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Ghcr Image(GI-M0, 2026-10-31, GH-M1의 마지막 후보, 사용자가 골랐다).
+  design `docs/specs/2026-10-31-tars-ghcr-image-design.md`, plan `docs/plans/2026-10-31-tars-ghcr-image-gi-m0.md`, 기억은
+  `docs/decisions/project_github_actions.md`의 GI-M0 절. 컨테이너 이미지를 `ghcr.io/soomtong/tars-devcontainer:<Dockerfile sha256 앞
+  12자>`에서 받는다 — `devcontainer/image.sh tag|pull|build|push`가 이름 · 태그를 아는 유일한 자리, Makefile `container`와 CI
+  `container` job이 `pull || build`, CI는 `main` push에서 구웠을 때만 `docker login` + `push`. 로컬 태그 `tars-devcontainer`는 그대로.
+  지금 태그 `f54d9852ec88`, ID `0e214546893d`(로컬 · CI 같음). 코드 0줄.
+  - 함정: Dockerfile을 한 줄이라도 고치면 새 태그 = `main`의 다음 CI가 굽고 올린다. 로컬은 자동으로 안 따라간다 — `docker rmi
+    tars-devcontainer && make container`(42초). apt 갱신을 받고 싶으면 Dockerfile 첫 줄 "이미지 세대" 날짜를 바꾼다. ghcr의 `denied`는
+    없음 · 비공개 · 권한 없음을 구분하지 않는다. 틀렸던 가정 — 패키지는 처음부터 공개였다(공개 저장소 + LABEL), UI 작업 없음.
+  - 숫자: 목표는 시간이 아니라 동일성. CI `container` 8분 2초(built 48 + push 30초) → 6분 24초(pulled 25초). 루트 게이트 22/22,
+    10분 3초(prebuild 299 + lanes 301초), verify 8104줄 통과. 소개 페이지에는 안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Vendor Sha256(VS-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
   design `docs/specs/2026-10-31-tars-vendor-sha256-design.md`, plan `docs/plans/2026-10-31-tars-vendor-sha256-vs-m0.md`, 기억은
   `docs/decisions/project_github_actions.md`의 VS-M0 절. 네트워크에서 받는 자리 여섯(ghostty tarball · stb 둘 · 커널 tarball ·
   limine · Dockerfile의 Zig aarch64)이 `*_SHA256` 변수(출처 주석)와 `sha256sum -c -` 한 줄로 대조한다. 받는 모양 · 산출물은
@@ -39,7 +50,7 @@
   - 숫자: `container` 8분 10초 → 10분 51초(재시도 step) → 7분 30초(캐시 공유, 로컬 288 → 180초). `host` 2분 32초. mutation 둘
     (`version_test` · `layout_test`)이 각자의 step에서 `FAIL:` 줄로 잡혔다. 게이트 입력 0줄이라 루트 게이트는 안 돌았다.
   - 남은 바깥 몫: ghostty tarball · stb 둘은 sha256 대조가 없다(게이트도 같다). unifont는 FR-M0이 저장소에 넣었다.
-  - 다음 후보(사용자가 고른다): ghcr.io 이미지(shellcheck note 46은 SN-M0이, vendor sha256은 VS-M0이 닫았다).
+  - 다음 후보 넷은 다 닫았다(shellcheck note 46은 SN-M0, vendor sha256은 VS-M0, ghcr.io 이미지는 GI-M0).
 - 그 전에 닫은 것은 GitHub Actions(GH-M0, 2026-10-30, 2026-10-24 점검의 마지막 (5)). design
   `docs/specs/2026-10-30-tars-github-actions-design.md`, plan `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`, 기억
   `docs/decisions/project_github_actions.md`. `.github/workflows/checks.yml` 하나 — `host`(amd64)는 루트의 `quick_check.sh`(사람은
@@ -143,7 +154,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(VS-M0 닫기): 22/22, 10분 1초(prebuild 301 + lanes 300초), verify 8133줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(GI-M0 닫기, ghcr에서 받은 이미지): 22/22, 10분 3초(prebuild 299 + lanes 301초), verify 8104줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -170,7 +181,8 @@
 
 ## 다음 후보 (DR 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 다음 후보는 위(M1 · SN · FR · VS는 닫았다) — ghcr.io 이미지.
+- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH 줄기의 후속(M1 · SN · FR · VS · GI)도 다 닫았다 — CI 쪽에 남은
+  후보는 없다.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
@@ -195,7 +207,8 @@
 - Docker는 OrbStack이다(메모리 12GB). 소켓이 없다고 나오면 `orb start`.
 - 부팅 없이 1분에 보는 검사는 `make quick`(`quick_check.sh`)이다 — shellcheck(note까지) · Zig fmt · ast-check · shared · init 빌드. push마다
   CI(`checks.yml`)가 같은 것과 컨테이너 안 `zig build test`를 돌리고 README 배지가 그 결과다. 빨강이 `sha256sum` · `curl`이면 우리 코드가 아니다 — `gh run rerun`.
-- 새로 받은 저장소는 이미지부터 굽는다(Dockerfile). 첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고
+- 새로 받은 저장소는 `make container`가 이미지를 ghcr.io에서 받는다(1.5GB, 없거나 오프라인이면 Dockerfile로 굽는다 — GI-M0).
+  첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고
   `clean()`이 지우지 않는다. `terminal/prepare.sh`가 `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - `shared/`는 init과 terminal이 함께 컴파일하는 파일의 자리다. 순수해야 한다(libc · 로그 없음) — init이 libc를 안 링크한다.
   그 파일을 고치면 두 빌드가 다시 돈다(`zig build --summary all`로 보인다).

@@ -384,8 +384,12 @@
   SCRIPTDIR -S warning`) · `zig fmt --check` · `ast-check` · `shared/screen_args_test.zig` · init 크로스 빌드(`out/quick/` 아래).
   `make quick`과 CI의 host job이 같은 파일을 부른다. 셸 검사기 버전은 이 파일, Zig 버전은 Dockerfile의 `ZIG_VERSION`이 정본.
   주석 줄을 `# shellcheck`로 시작하면 지시자로 읽힌다(SC1073).
+- `devcontainer/image.sh` — 컨테이너 이미지의 받기(`pull`) · 굽기(`build`) · 올리기(`push`) · 태그(`tag`). 태그는 Dockerfile 내용의
+  sha256 앞 12자, 이름 `ghcr.io/soomtong/tars-devcontainer`를 아는 자리는 이 파일 하나(GI-M0). Makefile `container`와 CI가 `pull ||
+  build`로 부른다. Dockerfile 머리의 "이미지 세대" 날짜를 바꾸면 새 태그 = CI가 다시 굽는다(apt 갱신을 받는 길).
 - `.github/workflows/checks.yml` — CI. `host`(amd64, tarball로 받은 shellcheck 0.11.0 · Zig, sha256 대조 → `quick_check.sh`)와
-  `container`(`ubuntu-24.04-arm`, Dockerfile 그대로 굽고 안에서 `devcontainer/sanity/check.sh` · 게이트 prebuild의 두 줄 —
+  `container`(`ubuntu-24.04-arm`, 이미지를 ghcr.io에서 받거나 굽고(`main` push면 올린다, GI-M0) 안에서 `devcontainer/sanity/check.sh` ·
+  게이트 prebuild의 두 줄 —
   init · terminal의 `zig build test`, GH-M1. 그 앞에 ghostty 의존성을 세 번까지 받는 step, 세 step이 `/tmp/zig-global`을 전역
   캐시로 잇는다). 초록은
   부팅이 아니다 — 게이트는 로컬. `push`는 `main`만, 브랜치는 `gh workflow run checks.yml --ref <브랜치>`.

@@ -1,7 +1,7 @@
 # TARS Ghcr Image — Design
 
 Date: 2026-10-31
-Status: 착수 전
+Status: 끝났다 — GI-M0(2026-10-31, `ghcr.io/soomtong/tars-devcontainer:f54d9852ec88`, CI 1회차 built+push · 2회차 pulled(이미지 몫 78 → 25초), 로컬 pull 42초 ID 같음, 패키지는 처음부터 공개, 루트 게이트 22/22 10분 3초(prebuild 299 + lanes 301초), verify 8104줄 전부 통과). plan은 `docs/plans/2026-10-31-tars-ghcr-image-gi-m0.md`
 
 GH-M1이 남긴 다음 후보 가운데 마지막 하나(ghcr.io 이미지). 사용자가 골랐다(2026-10-31, VS-M0을 닫은 뒤).
 
@@ -40,10 +40,11 @@ GH-M1이 남긴 다음 후보 가운데 마지막 하나(ghcr.io 이미지). 사
    게이트 `check.sh` 자체는 이름을 모른다(밖에서 `docker run`으로 들어온다).
 5. 해시 도구. `shasum -a 256`이 macOS(`/usr/bin/shasum`, Perl)와 Linux runner 양쪽에 있다. `sha256sum`은 macOS 기본에 없다(지금은
    `/sbin/sha256sum`이 있지만 coreutils 설치분이다). 오늘 Dockerfile의 앞 12자는 `20da2fc38301` — 결정 2의 LABEL이 들어가면 바뀐다.
-6. ghcr.io의 규칙. 이름은 `ghcr.io/<계정>/<이름>`. 첫 push가 만드는 패키지는 기본 비공개이고, 공개로 바꾸는 것은 패키지 설정 페이지에서
-   한 번이다(API로는 `packages` 범위 PAT가 필요해 UI로 한다). 이미지에 `org.opencontainers.image.source` 라벨이 저장소 URL이면
-   패키지가 그 저장소에 연결돼 저장소 페이지 옆에 보이고, 그 저장소의 Actions 토큰이 올릴 권한을 갖는다. 태그를 덮어쓰는 것을
-   막는 장치는 없다(위험 1).
+6. ghcr.io의 규칙. 이름은 `ghcr.io/<계정>/<이름>`. 이미지에 `org.opencontainers.image.source` 라벨이 저장소 URL이면 패키지가 그
+   저장소에 연결돼 저장소 페이지 옆에 보이고, 그 저장소의 Actions 토큰이 올릴 권한을 갖는다. 태그를 덮어쓰는 것을 막는 장치는
+   없다(위험 1). 착수 전에는 "첫 push가 만드는 패키지는 비공개라 UI에서 한 번 공개로 바꾼다"라고 적었는데 틀렸다 — 공개 저장소에
+   라벨로 연결된 패키지를 그 저장소의 Actions가 처음 올리면 저장소의 공개 여부를 그대로 받는다. GI-M0의 첫 push 직후 익명
+   `docker manifest inspect`가 읽혔다(plan 결과). 사람이 할 일은 없었다.
 7. 이미지 ID의 동일성. 받은 이미지의 ID는 config의 digest라 올린 쪽과 같아야 한다. 확인은 결정 6의 (f)가 한다 — 다르면 manifest
    digest(`RepoDigests`)로 비교한다.
 
@@ -114,7 +115,8 @@ ghcr에 간다. fork의 PR은 토큰이 읽기 전용이라 어차피 못 올리
 - (b) 로컬 `./devcontainer/image.sh pull`이 `pull failed`(아직 없다)로 exit 1, `build`가 LABEL 층만 다시 굽는다(짧다). `docker image
   inspect`로 라벨 확인.
 - (c) push → CI 1회차. `container` 로그에 `image> built <태그>`와 push의 digest 줄. `host`는 바뀐 것이 없다.
-- (d) 사용자가 패키지 `tars-devcontainer`를 Public으로(UI, 한 번). 저장소 페이지 Packages 칸에 보이는지.
+- (d) 패키지가 공개인지 — 익명 `docker manifest inspect`. (착수 전에는 "사용자가 UI에서 Public으로 한 번"이었는데 공개 저장소의
+  Actions가 올린 패키지는 처음부터 공개였다. 확인 6.)
 - (e) CI 2회차(`gh workflow run checks.yml --ref main`). 로그에 `image> pulled <태그>`, push step은 건너뜀. `container` 시간을 1회차와
   비교해 적는다(기대: 30초 안의 차이).
 - (f) 로컬 `docker rmi tars-devcontainer` → `make container` → `image> pulled`. `docker image inspect --format '{{.Id}}'`가 (c)의 ID와
@@ -130,8 +132,8 @@ mutation은 따로 두지 않는다 — "태그 없음 → 굽기 → 올리기"
    받기만 실패하고 올리기는 되는 반쪽 장애면 같은 태그를 다른 빌드로 덮어쓴다(확인 6, 막는 장치 없음). 같은 Dockerfile의 다른
    빌드라 깨지는 것은 없고 "그날의 apt"로 바뀌는 것이다 — 패키지 버전 페이지에 두 digest가 남아 알 수 있다. 로컬은 `build`로
    떨어져 지금과 같다.
-2. 비공개인 사이. (c)와 (d) 사이에 새 사람이 `make container`를 치면 `pull failed`(denied) 뒤 굽는다 — 결과는 지금과 같고 메시지가
-   길을 말한다. (d)는 한 번이다.
+2. (착수 전의 걱정 — 비공개인 사이에 새 사람이 받으면 `denied` 뒤 굽는다. 패키지가 처음부터 공개여서 그런 사이가 없었다. 남는
+   사실 하나: ghcr은 없는 태그도 비공개도 똑같이 `denied`로 답하므로 `pull failed` 메시지가 세 경우를 다 말한다.)
 3. 저장이 쌓인다. Dockerfile을 고칠 때마다 1.5GB 버전이 하나 남는다(층을 거의 공유하지 않는다 — apt 층이 매번 새 바이트다). 공개
    패키지는 무료고 지우는 것은 패키지 버전 페이지에서 손으로(비목표 3). 한 해에 열 번 고치면 15GB다 — 지우기 전에는 digest가
    남아 옛 회차를 다시 받을 수 있다는 것이 쌓이는 쪽의 값이다.
