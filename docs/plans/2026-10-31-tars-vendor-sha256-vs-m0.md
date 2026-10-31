@@ -2,7 +2,7 @@
 
 Date: 2026-10-31
 Design: `docs/specs/2026-10-31-tars-vendor-sha256-design.md`
-Status: 진행 중
+Status: 끝났다(2026-10-31)
 
 ## 착수 전에 확정한 것
 
@@ -74,3 +74,16 @@ design의 확인 1~8에 더해, plan을 쓰며 읽은 것.
     "있다"로 건너뛰어 조용히 썼을 것이다. stb 둘을 `${DEST}.tmp`로 받아 대조 뒤 `mv`하는 꼴로 고치고(design 결정 2에 반영) 다시 돌렸다:
     `vendor/stb_image.h.tmp: FAILED`, `DEST` 없음. 정상 재현도 `.tmp` 꼴로 다시 — `OK` 둘, `cmp` 동일.
 - 이미지 다시 굽기: 19초(Zig 층만), `/tmp/zig.tar.xz: OK`, ID `9d5eebc3e08e` → `6c2674d36158`.
+
+### Task 2 (`9469739`, 닫기)
+
+- 루트 게이트(`out/gate-logs/20261031-002451`): 22/22, 10분 1초(prebuild 301 + lanes 300초). `verify lines` 합 8133, 로그의 `verify>`는
+  `ok` 8072 · `on` 64뿐(합이 작은 것은 게이트가 printk에 잘린 줄을 이어 세기 때문 — SN-M0 결과와 같다). prebuild 301은 SN-M0(301)과
+  같다 — 커널 빌드는 매 회차라 이번 일로 안 바뀐다.
+- CI run 41150072962(`9469739`, 게이트와 나란히 돌렸다): 두 job 초록. `host` 2분 39초, `container` 6분 54초. `container` 로그의 새 `OK`
+  넷 — `docker build` 안 `/tmp/zig.tar.xz: OK`(3.6초에), `terminal fetch (retry)` step의 `ghostty-src.tar.gz: OK`, `terminal prepare and
+  test` step의 `vendor/stb_truetype.h.tmp: OK` · `vendor/stb_image.h.tmp: OK`. 깨끗한 runner라 받는 분기를 실제로 탔다 — 대조가 도는
+  자리는 CI다(design 배경의 마지막 줄).
+- 문서: design `Status` · `completed.md` · `project_github_actions.md`(VS-M0 단락, "남긴 것"에서 vendor sha256 삭제) · `MEMORY.md` ·
+  `key-files.md` · `HANDOFF.md`.
+

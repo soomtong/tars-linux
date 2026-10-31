@@ -347,7 +347,8 @@
   틀리면 글자는 맞고 색만 밀린다.
 - `terminal/check.sh`의 monitor 재시도 loop — `Connection refused`가 여기서
   나오고 실패가 아니다.
-- `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프. `kernel/make_initrd.sh`의
+- `kernel/build.sh` — GL-M1의 스킵 판정과 스탬프(자기 자신이 입력이라 이 파일을 고치면 로컬 증분 빌드가 한 번 통째다).
+  커널 tarball의 sha256 대조(VS-M0, kernel.org `sha256sums.asc`). `kernel/make_initrd.sh`의
   `gzip -6`을 `-9`로 되돌리지 말 것. 그 뒤의 마지막 줄이 무선 firmware cpio를 이어 붙인다.
 - `kernel/vim/` — 게스트 vim의 시스템 vimrc(`vimrc` →
   `/etc/vim/vimrc`, 커서 세 줄과 GE-M1의 모던 설정 — 첫 줄이 `set nocompatible`이다)와
@@ -371,6 +372,10 @@
   `guest_optimize`(기본 `ReleaseSafe`, `-Dguest-optimize=Debug`가 문)를
   `exe_mod`와 `ghostty_dep` 둘만 쓴다. 마지막 주석이 "누가 실행하는가"의
   선을 긋는다.
+- 네트워크에서 받는 자리 여섯(VS-M0) — `terminal/vendor_libghostty_vt.sh`(ghostty tarball) · `terminal/vendor_stb_truetype.sh` ·
+  `terminal/vendor_stb_image.sh`(`.tmp`로 받아 대조 뒤 `mv`) · `kernel/build.sh` · `boot/build.sh`(limine) · `devcontainer/Dockerfile`
+  (Zig aarch64, `ARG ZIG_SHA256`). 각자 `*_SHA256` 변수와 출처 주석, `sha256sum -c -` 한 줄. `rg -n 'curl -sSL -o'`가 목록이다.
+  `FAILED`는 재실행으로 안 풀린다 — 버전을 올렸으면 해시도, 아니면 출처에서 새 값을 읽고 왜 바뀌었는지 본다.
 - `probe/` — 그리기 비용의 프로브(RS). 게이트가 아니다 — `patch.pl`이 `main.zig` 사본에 `terminal: probe>` 줄을 더하고
   (anchor는 정확히 한 번), `run.sh`가 그 사본을 read-only로 마운트해 부팅 한 번(`seq 1 200000` · 키 넷), `report.pl`이
   집계한다. 돌리는 법은 `docs/plans/2026-10-11-tars-render-speed-rs-m0.md`. 그리기를 고치면 같은 판으로 전후를 잰다.

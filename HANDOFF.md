@@ -1,8 +1,19 @@
-# HANDOFF: Shellcheck Notes(SN-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
+# HANDOFF: Vendor Sha256(VS-M0) 닫음(2026-10-31) — 열린 서브프로젝트 없음, 다음 방향은 사용자가 고른다
 
 ## 지금 상태 (2026-10-31)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Shellcheck Notes(SN-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Vendor Sha256(VS-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
+  design `docs/specs/2026-10-31-tars-vendor-sha256-design.md`, plan `docs/plans/2026-10-31-tars-vendor-sha256-vs-m0.md`, 기억은
+  `docs/decisions/project_github_actions.md`의 VS-M0 절. 네트워크에서 받는 자리 여섯(ghostty tarball · stb 둘 · 커널 tarball ·
+  limine · Dockerfile의 Zig aarch64)이 `*_SHA256` 변수(출처 주석)와 `sha256sum -c -` 한 줄로 대조한다. 받는 모양 · 산출물은
+  그대로, 코드 0줄. 받는 자리의 목록은 `rg -n 'curl -sSL -o'`.
+  - 함정: stb처럼 받는 파일이 곧 존재 검사 대상이면 `.tmp`로 받아 대조 뒤 `mv`(mutation이 잡았다). 컨테이너 안에 `rg`가 없다.
+    `FAILED`는 재실행으로 안 풀린다 — ghostty는 GitHub archive 바이트가 바뀔 수 있으니 새 tarball을 풀어 지난 트리와 diff 뒤 고친다.
+    Zig를 올리면 Dockerfile `ZIG_VERSION` · `ARG ZIG_SHA256` · `checks.yml` `ZIG_SHA256` 셋.
+  - 숫자: 루트 게이트 22/22, 10분 1초(prebuild 301 + lanes 300초), verify 8133줄 통과. CI host 2분 39초 · container 6분 54초 —
+    `container`가 깨끗한 runner에서 받는 분기를 타 `OK` 넷을 찍는다(대조가 실제로 도는 자리). 이미지 ID `6c2674d36158`. 소개 페이지에는
+    안 넣었다(내부 작업).
+- 그 전에 닫은 것은 Shellcheck Notes(SN-M0, 2026-10-31, GH-M1의 다음 후보에서 사용자가 골랐다).
   design `docs/specs/2026-10-31-tars-shellcheck-notes-design.md`, plan `docs/plans/2026-10-31-tars-shellcheck-notes-sn-m0.md`, 기억은
   `docs/decisions/project_github_actions.md`의 SN-M0 절. `quick_check.sh`(= `make quick` = CI `host`)의 shellcheck가 `-S style`로
   note까지 판정한다 — 새 note 하나가 push를 빨갛게 한다. 의도한 것은 그 줄 위에 `# shellcheck disable=SCxxxx # 이유`(부르는
@@ -28,7 +39,7 @@
   - 숫자: `container` 8분 10초 → 10분 51초(재시도 step) → 7분 30초(캐시 공유, 로컬 288 → 180초). `host` 2분 32초. mutation 둘
     (`version_test` · `layout_test`)이 각자의 step에서 `FAIL:` 줄로 잡혔다. 게이트 입력 0줄이라 루트 게이트는 안 돌았다.
   - 남은 바깥 몫: ghostty tarball · stb 둘은 sha256 대조가 없다(게이트도 같다). unifont는 FR-M0이 저장소에 넣었다.
-  - 다음 후보(사용자가 고른다): vendor sha256 · ghcr.io 이미지(shellcheck note 46은 SN-M0이 닫았다).
+  - 다음 후보(사용자가 고른다): ghcr.io 이미지(shellcheck note 46은 SN-M0이, vendor sha256은 VS-M0이 닫았다).
 - 그 전에 닫은 것은 GitHub Actions(GH-M0, 2026-10-30, 2026-10-24 점검의 마지막 (5)). design
   `docs/specs/2026-10-30-tars-github-actions-design.md`, plan `docs/plans/2026-10-30-tars-github-actions-gh-m0.md`, 기억
   `docs/decisions/project_github_actions.md`. `.github/workflows/checks.yml` 하나 — `host`(amd64)는 루트의 `quick_check.sh`(사람은
@@ -132,7 +143,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(GH-M0 닫기): 22/22, 10분 11초(prebuild 311 + lanes 299초), verify 8122프레임 전부 `ok`(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(VS-M0 닫기): 22/22, 10분 1초(prebuild 301 + lanes 300초), verify 8133줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -159,7 +170,7 @@
 
 ## 다음 후보 (DR 뒤. 새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 다음 후보는 위(M1 · SN · FR은 닫았다) — vendor sha256 · ghcr.io 이미지.
+- 2026-10-24 점검이 남긴 다섯은 다 닫았다((3) HC · (4) LS · (5) GH). GH의 다음 후보는 위(M1 · SN · FR · VS는 닫았다) — ghcr.io 이미지.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
 - PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.

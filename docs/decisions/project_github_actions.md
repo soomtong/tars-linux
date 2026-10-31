@@ -1,6 +1,6 @@
 ---
 name: project_github_actions
-description: "GitHub Actions(GH-M0, 2026-10-30). checks.yml 하나에 host(quick_check.sh: shellcheck 0.11.0 · Zig fmt/ast-check/shared 검사/init 크로스 빌드)와 container(ubuntu-24.04-arm에서 Dockerfile 그대로 굽고 sanity · 게이트 prebuild의 두 줄 = init · terminal zig build test, GH-M1) — 게이트는 안 돌린다, 도구는 tarball + sha256, 주석을 '# shellcheck'로 시작하면 지시자, push는 main만, deps.files.ghostty.org가 끊겨 재시도 fetch step(zig build --help), step 사이 전역 Zig 캐시 공유, host 3분 · container 7분 30초(FR-M0 뒤 6분 51초)"
+description: "GitHub Actions(GH-M0, 2026-10-30). checks.yml 하나에 host(quick_check.sh: shellcheck 0.11.0 · Zig fmt/ast-check/shared 검사/init 크로스 빌드)와 container(ubuntu-24.04-arm에서 Dockerfile 그대로 굽고 sanity · 게이트 prebuild의 두 줄 = init · terminal zig build test, GH-M1) — 게이트는 안 돌린다, 도구는 tarball + sha256, 주석을 '# shellcheck'로 시작하면 지시자, push는 main만, deps.files.ghostty.org가 끊겨 재시도 fetch step(zig build --help), step 사이 전역 Zig 캐시 공유, host 3분 · container 7분 30초(FR-M0 뒤 6분 51초). VS-M0(2026-10-31): 받는 자리 여섯에 sha256 대조, stb는 .tmp 경유"
 metadata:
   type: project
 ---
@@ -86,10 +86,25 @@ GH-M1의 다음 후보 가운데 사용자가 골랐다. design `docs/specs/2026
   계속 보이게.
 - 지시자 이유는 부르는 자리 · 이름이 오는 곳을 적는다. 적다가 두 개가 틀린 것을 찾았다(wav 이름의 출처 · 프레임을 짓는 함수).
 
+## VS-M0(2026-10-31) — 받는 자리 여섯에 sha256
+
+GH-M1의 다음 후보 가운데 사용자가 골랐다. design `docs/specs/2026-10-31-tars-vendor-sha256-design.md`, plan
+`docs/plans/2026-10-31-tars-vendor-sha256-vs-m0.md`. HANDOFF가 적은 셋(ghostty tarball · stb 둘)에 커널 tarball · limine tarball ·
+Dockerfile의 Zig aarch64 tarball을 더해 여섯 — 전부 `*_SHA256` 변수 하나(출처 주석)와 `echo "$SHA  파일" | sha256sum -c -` 한 줄.
+`checks.yml`의 꼴 그대로다. 받는 자리는 `rg -n 'curl -sSL -o'`로 찾는다.
+
+- 함정: 받는 파일이 곧 "이미 있으면 안 받는다"의 검사 대상이면(stb의 `-o "$DEST"`) `FAILED` 뒤 나쁜 파일이 남아 다음 실행이 조용히
+  쓴다. `.tmp`로 받아 대조한 뒤 `mv` — mutation이 잡았다. tarball은 존재 검사가 푼 디렉터리에 걸려 그럴 일이 없다.
+- 대조는 받는 순간 한 번이다. 로컬 게이트는 트리가 있어 안 타고, CI `container`는 깨끗한 runner라 push마다 탄다 — 로그에 `OK` 넷.
+- 컨테이너 안에 `rg`는 없다(runner와 같다). 컨테이너에서 돌릴 한 줄은 `grep`으로.
+- 버전을 올릴 때 해시도 함께: Zig는 Dockerfile `ZIG_VERSION` · Dockerfile `ARG ZIG_SHA256`(aarch64) · `checks.yml` `ZIG_SHA256`(x86_64)
+  셋([[project_zig_upgrade]]). ghostty는 `GHOSTTY_SHA`와 `GHOSTTY_SHA256` 둘 — GitHub archive가 바이트를 바꾸면(2023-01에 한 번)
+  `FAILED`이고 재실행으로 안 풀린다. 새 tarball을 풀어 지난 트리와 `diff -rq` 0줄을 본 뒤 고친다.
+- 숫자: 루트 게이트 22/22, 10분 1초(prebuild 301 + lanes 300초). CI host 2분 39초 · container 6분 54초.
+
 ## 남긴 것(다음 후보)
 
-vendor 스크립트의 sha256(ghostty tarball · stb 둘은 대조가
-없다, 게이트 입력이라 게이트가 따라온다) · 구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단).
+구운 이미지를 ghcr.io에 올려 다음 사람이 굽지 않게 하는 것(README "준비"가 바뀌는 새 판단). vendor sha256은 VS-M0이 닫았다(위).
 
 ## 관련
 

@@ -1,7 +1,7 @@
 # TARS Vendor Sha256 — Design
 
 Date: 2026-10-31
-Status: 초안 — 사용자 검토 전
+Status: 끝났다 — VS-M0(2026-10-31, 받는 자리 여섯에 sha256 대조, stb 둘은 `.tmp` 경유, 루트 게이트 22/22 10분 1초(prebuild 301 + lanes 300초), verify 8133줄 전부 통과, CI 두 job 초록 — `container`가 깨끗한 runner에서 `OK` 넷). plan은 `docs/plans/2026-10-31-tars-vendor-sha256-vs-m0.md`
 
 GH-M1이 남긴 다음 후보 둘(vendor sha256 · ghcr.io 이미지) 가운데 "vendor sha256"에서 시작한다. 사용자가 골랐다(2026-10-31).
 
