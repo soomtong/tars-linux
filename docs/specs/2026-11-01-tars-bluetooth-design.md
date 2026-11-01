@@ -99,7 +99,7 @@ initrd에 아직 없는 것이 있으면 M0의 before/after가 센다. `btvirt`�
 
 | 계열 | 드라이버 | 이름 | tarball(20260916) raw | gzip -6 |
 |---|---|---|---|---|
-| Intel | `btintel.c` | `intel/ibt-<hw>-<rev>.sfi` · `.ddc`(ROM 세대는 `ibt-hw-37.7/37.8*.bseq`). `MODULE_FIRMWARE`는 넷뿐, 나머지는 `snprintf` | 28,169,921 (91개) | 19,951,194 |
+| Intel | `btintel.c` | `intel/ibt-<hw>-<rev>.sfi` · `.ddc`(ROM 세대는 `ibt-hw-37.7/37.8*.bseq`). `MODULE_FIRMWARE`는 넷뿐, 나머지는 `snprintf` | 28,169,921 (84개) | 19,951,194 |
 | Realtek | `btrtl.c` | `rtl_bt/rtl8xxx_fw.bin` · `_config.bin`. `MODULE_FIRMWARE` 50줄 | 1,454,837 (38개) | 922,899 |
 | MediaTek | `btmtk.c` | `mediatek/BT_RAM_CODE_MT%04x_1_%x_hdr.bin`, 7925는 `mediatek/mt7925/` 아래 | 2,503,660 (5개) | 2,263,864 |
 | Qualcomm | `btusb.c` | `qca/rampatch_usb_%08x.bin` · `qca/nvm_usb_%08x*.bin` | 1,065,156 (38개) | 651,055 |
@@ -306,3 +306,95 @@ initramfs 풀기가 늘고(WL 실측 9는 45MB에 0.96초) RAM에 그만큼 남�
   reload · 호스트 검사) · `tars-config`의 열셋 · `running-tars.md`.
 - BT-M2 — 체인 `bluetooth/check.sh`, mutation 셋, 루트 게이트(23체인), 문서 닫기(확인 8의 자리 · completed · 소개
   페이지 · decisions · HANDOFF).
+
+## 실측 (M0, 2026-11-01 ~ 11-02)
+
+plan은 `plans/2026-11-01-tars-bluetooth-bt-m0.md`. 하네스는 세션 scratchpad의 `bt/`. 기준선은 KU-M1 닫기 뒤의 빌드
+(bzImage 8,983,552 · initrd 93,380,191바이트). 컨테이너 이미지는 아직 옛것이라 BlueZ · D-Bus는 설정 디스크에 실어
+`LD_LIBRARY_PATH`로 띄웠다 — `services.d/bt`가 WL의 `ap.sh`처럼 콘솔에 `bt-m0:` 줄을 찍었다. 부팅 다섯 번.
+
+### 실측 1 — 아홉을 켜면 71줄이 바뀌고 입력 쪽은 안 움직인다
+
+`scripts/config -k --enable`로 아홉을 켠 뒤 빌드 43초(증분, `net/bluetooth` · `drivers/bluetooth`가 새로). 해소된
+`build/.config`에 아홉이 전부 `=y`. 기준선 대비 diff 71줄 — 따라 켜진 것은 `BT_BREDR` · `BT_LE` · `BT_LE_L2CAP_ECRED` ·
+`BT_INTEL` · `BT_BCM` · `BT_RTL` · `BT_MTK` · `BT_HCIBTUSB_POLL_SYNC` · `_BCM` · `_RTL`, 암호 쪽 `CRYPTO_ECDH` · `ECC` · `KPP` ·
+`HMAC` · `SHA512` · `SHA3` · `DRBG(_MENU · _HMAC)` · `JITTERENTROPY` · `RNG(_DEFAULT)` · `CRYPTO_USER_API` ·
+`_ENABLE_OBSOLETE` · `LIB_SHA512(_ARCH)` · `CRC16`. `not set`으로 새로 적힌 것은 `BT_RFCOMM` · `BT_BNEP` · `BT_LEDS` ·
+`BT_MSFTEXT` · `BT_AOSPEXT` · `BT_FEATURE_DEBUG` · `BT_HCIBTUSB_AUTOSUSPEND` · `BT_HCIUART` · `BT_HCIBCM203X` ·
+`BT_HCIBCM4377` · `BT_HCIBFUSB` · `BT_MRVL` · `BT_ATH3K` · `BT_VIRTIO` · 그리고 `HID_NVIDIA_SHIELD`(`BT`에 기대는
+심볼이라 처음 보인 것 — 입력 쪽의 변화가 아니다). `HID_` · `INPUT_LEDS` · `LEDS_`의 값은 하나도 안 바뀌었다.
+bzImage 8,983,552 → 9,335,808(+352,256). `.config`는 `project_kernel_config`대로 해소된 모양으로 되접어 고정점임을
+확인했다(두 번째 빌드의 diff 0).
+
+### 실측 2 — Realtek은 `MODULE_FIRMWARE`가 아니라 칩 표가 진짜 목록이다. Intel은 넷뿐이다
+
+`firmware=` 줄 132 → 194(+62: `rtl_bt/` 50 · `mediatek/` 8 · `intel/` 4). 그런데 tarball에는 `rtl_bt/rtl8192ee_fw.bin` ·
+`rtl8192eu_fw.bin` · `rtl8812ae_fw.bin`이 있는데 50줄에 없다 — `btrtl.c`의 `ic_id_table`(`fw_name` · `cfg_name`)을 다시
+세니 이름이 50이고 `MODULE_FIRMWARE` 50줄과 같은 집합이었다. 즉 셋은 6.18이 요청하지 않는 파일이다(뺐다). 50 중 19는
+이 릴리스에 없다(거의 `*_config.bin` — 드라이버는 config가 없으면 넘어간다, 그리고 `rtl8852bs_*` · `rtl8723ds_*`
+같은 SDIO 칩) → 31을 넣는다. MediaTek 8 중 `mt7927/BT_RAM_CODE_MT6639_2_1_hdr.bin`은 tarball에 없다(KU-M1 plan
+확정 5의 그 이름) — 무선도 안 싣는 칩이라 함께 뺐다. 목록은 157줄 — Intel 84 · Realtek 31 · MediaTek 4 · Qualcomm 38,
+`GUEST_FIRMWARE` 140 → 297.
+
+함정 하나. 목록을 만드는 셸이 zsh였고 `"$n:lib/…"`의 `:l`이 zsh의 소문자 변환 수식어라 157줄이 전부 깨진 채
+들어갔다(`…binib/firmware/…`). `vendor_firmware.sh`의 `tar`가 "Not found in archive"로 죽어 바로 드러났다. `${n}:lib`로
+고쳤다 — 이 저장소의 셸 작업은 zsh라 `$var:` 뒤에 글자가 오면 중괄호를 쓴다.
+
+### 실측 3 — initrd는 23.2MB 커지고 풀기는 0.48초 늘고 RAM은 약 31MB 줄어든다(위험 1)
+
+| | 기준선 | BT 뒤 | 차 |
+|---|---|---|---|
+| firmware cpio의 원본 합 | — | 68,618,738 (297개) | |
+| `initrd.cpio` | 93,380,191 | 116,568,247 | +23,188,056 |
+| `Freeing initrd memory` | 91,192K @ 3.32s | 113,840K @ 3.80s | +22.1MB, +0.48s |
+| `MemAvailable`(부팅 뒤 5초, 512MiB) | 195,856 kB | 162,408 ~ 165,264 kB | −31 ~ 33MB |
+
+예상(약 24MB)과 맞는다. 0.48초는 WL 실측 9(0.96초)의 절반이고 받아들인다 — 결정 2는 그대로다. 512MiB 게이트
+게스트의 여유는 아직 160MB대라 `GUEST_MEM`을 안 올린다.
+
+### 실측 4 — 커널 줄 일곱, `/dev/vhci` · `/dev/uhid`
+
+부팅마다 0.4초에 `Bluetooth: Core ver 2.22` · `HCI device and connection manager initialized` · `HCI socket layer
+initialized` · `L2CAP socket layer initialized` · `SCO socket layer initialized`, 0.84초에 `HIDP (Human Interface
+Emulation) ver 1.2` · `HIDP socket layer initialized`. 컨트롤러가 생기면 `Bluetooth: MGMT ver 1.23`이 컨트롤러마다
+한 줄. `/dev/vhci`와 `/dev/uhid`는 부팅 직후 있다. 체인의 커널 쪽 판정은 이 줄들이다.
+
+### 실측 5 — dbus-daemon은 2초 뒤에 소켓을 내고, machine-id 없이 뜬다(위험 2 닫음)
+
+`--system`과 `--config-file`을 함께 주면 "--config-file specified but configuration file … already requested"로 안
+뜬다(첫 판의 실패 — `--system`이 곧 그 파일이다). `/usr/share/dbus-1/system.conf`를 제자리에 두고 `--system --nofork
+--nopidfile`만 주면 소켓이 약 2.0초 뒤(0.1초 × 20) 생긴다 — TCG의 값이다. stderr는 `Cannot initialize inotify: Function
+not implemented` 한 줄(커널에 `INOTIFY_USER`가 없다, 설정 감시만 포기한다). `/etc/machine-id`가 없어도 `GetId`가
+답한다(dbus 1.16은 제 안에서 짓는다) — `dbus-uuidgen`은 안 싣는다. `tars-bluetoothd`의 대기는 10초로 넉넉히 둔다.
+
+### 실측 6 — bluetoothd는 떴고, 투덜대는 둘은 `-P sap,network`로 끈다(위험 3 닫음)
+
+`bluetoothd -n`: `Bluetooth daemon 5.82` · `Starting SDP server` · `Bluetooth management interface 1.23 initialized`.
+그리고 `profiles/network/bnep.c: kernel lacks bnep-protocol support`와 어댑터마다 `sap-server: Operation not permitted`
+(RFCOMM이 없다) — `-P sap,network`로 둘 다 사라졌다(`Excluding (cli) sap` · `network`). AF_ALG 쪽 경고는 없었고
+실측 7의 페어링(SMP)이 됐으므로 위험 3은 닫는다. `btvirt -l2`가 hci0(`00:AA:01:00:00:00`) · hci1(`00:AA:01:01:00:01`)을
+만들고 `bluetoothctl list`에 둘, `show`가 `Powered: yes`(AutoEnable) · `Pairable: no`. 두 어댑터의 `settings`가
+`/config/bluetooth/<주소>/settings`에 바로 생겼다 — `/var/lib/bluetooth` 링크가 산다(결정 6).
+
+### 실측 7 — 두 가상 컨트롤러가 페어링되고 키가 `/config`에 남는다(위험 5 닫음, 결정 8에 넣는다)
+
+길 셋을 견줬다. (1) fifo로 stdin을 주는 `bluetoothctl`은 아무 명령도 안 받은 것처럼 보였는데, 실은 stdout이 tty가
+아니면 전부 버퍼링해 끝날 때까지 한 줄도 안 쓴 것이었다 — 파일로 받고 `quit` 뒤에 읽으면 된다. (2) `btmgmt`는
+stdin이 `/dev/null`이면 명령 뒤에 안 끝나고 멈춘다(두 번 걸렸다) — 체인에서 안 쓴다. (3) 파이프 둘. B 쪽
+`( … echo "agent off"; echo "select B"; echo "pairable on"; echo "discoverable on"; echo "advertise on"; sleep 70 ) |
+bluetoothctl`과 A 쪽 `( … echo "agent NoInputNoOutput"; echo "default-agent"; echo "scan on"; sleep 8; echo "pair B";
+sleep 15; echo "trust B"; echo "info B"; echo quit ) | bluetoothctl`. 에이전트는 하나(A 쪽, NoInputNoOutput → Just
+Works)여야 한다 — 둘이면 확인 질문이 어디로 갈지 모른다. 결과: `[NEW] Device 00:AA:01:00:00:00` → `Connected: yes` →
+`Bonded: yes`, B 쪽은 `Advertising object registered`. `/config/bluetooth/<A>/<B>/info`에 `[LinkKey]` ·
+`[PeripheralLongTermKey]` · `[LocalSignatureKey]` · `Trusted=true`, 양쪽에 `cache/`와 `attributes`. 전체 40초인데 대부분
+`sleep`이다 — 체인은 광고 2초 · 스캔 8초 · 페어 15초로 간다.
+
+### 실측 8 — dbus를 죽이면 bluetoothd는 `Stopping SDP server` · `Exit`로 깨끗이 끝난다(위험 7)
+
+감독자가 다시 띄울 것이고 두 번 안에 끝난다. 사람은 `tars-service restart bluetoothd`만 친다(문서에 그렇게 적었다).
+
+### 실측 9 — Debian 패키지는 그대로 들어온다
+
+`bluez 5.82-1.1` · `bluez-test-tools 5.82-1.1` · `dbus-daemon 1.16.2-2` · `dbus-system-bus-common 1.16.2-2` · `dbus-bin
+1.16.2-2`와 라이브러리 여덟을 Dockerfile에 더해 이미지를 다시 구웠다(태그 `ee4aa97122b5`, 35초 — 레이어 캐시가
+살아 있었다). sysroot에 `/usr/libexec/bluetooth/bluetoothd` · `/usr/bin/btvirt` · `/usr/bin/dbus-daemon`이 있다.
