@@ -3,14 +3,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-KERNEL_VERSION="6.18.42"
+KERNEL_VERSION="6.18.60"
 KERNEL_MAJOR="6.x"
 TARBALL="linux-${KERNEL_VERSION}.tar.xz"
 URL="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR}/${TARBALL}"
 SRC_DIR="src/linux-${KERNEL_VERSION}"
 # tarball의 sha256(VS-M0). kernel.org의 v6.x/sha256sums.asc에서 읽는다 — 버전을 올릴 때 함께 고친다.
 # 다른 파일이 조용히 들어오면 게이트가 다른 커널로 부팅한다(vendor_firmware.sh가 고정하는 이유와 같다).
-KERNEL_SHA256="35a8ef5e8fb44467e56a42b40c23c4c10a61d1e95ff8d738f285230e8bed63e7"
+KERNEL_SHA256="3c2f44ef6acc021a7ad444d9a2e6ec1ef488ff09368793d0004a6080f69d621e"
 
 if [ ! -d "$SRC_DIR" ]; then
   echo "Downloading ${URL}..."
@@ -21,20 +21,6 @@ if [ ! -d "$SRC_DIR" ]; then
   rm "src/${TARBALL}"
 fi
 
-# GL-M1: make가 "할 일 없음"을 확인하는 데만 9.3초가 들고 olddefconfig가 1.3초를
-# 더한다. 증분 회차 29초 중 13초가 그것이었고, 루트 게이트는 24회 치른다.
-#
-# 커널 소스는 tarball을 푼 뒤 불변이므로 이 빌드의 입력은 사실상 .config
-# 하나다. 그래서 make의 판단을 여기서 대신한다 — mtime을 보는 것은 make가
-# 쓰던 기준 그대로다.
-#
-# build.sh 자신도 비교 대상인 것이 중요하다. KERNEL_VERSION이 이 파일 안에
-# 있어서, 커널 버전을 올리면 SRC_DIR이 바뀌고 새 소스를 받는데 build/는 옛
-# 산출물을 그대로 갖고 있다. 이 파일을 함께 보지 않으면 버전을 올린 뒤에도
-# 낡은 bzImage로 부팅한다.
-#
-# 틀렸을 때의 증상은 조용하지 않다 — 게이트가 낡은 커널로 부팅하고 판정이
-# 흔들린다. 그것이 이 판정의 검출 수단이다.
 # GL-M1: make가 "할 일 없음"을 확인하는 데만 9.3초가 들고 olddefconfig가 1.3초를
 # 더한다. 증분 회차 29초 중 13초가 그것이었고, 루트 게이트는 24회 치른다.
 #
@@ -51,6 +37,9 @@ fi
 # 있어서, 커널 버전을 올리면 SRC_DIR이 바뀌고 새 소스를 받는데 build/는 옛
 # 산출물을 그대로 갖고 있다. 이 파일을 함께 보지 않으면 버전을 올린 뒤에도
 # 낡은 bzImage로 부팅한다.
+#
+# 틀렸을 때의 증상은 조용하지 않다 — 게이트가 낡은 커널로 부팅하고 판정이
+# 흔들린다. 그것이 이 판정의 검출 수단이다.
 #
 # clean()이 kernel/build를 통째로 지우므로 스탬프도 함께 사라진다 — 게이트
 # 첫 회차는 언제나 진짜로 빌드한다.

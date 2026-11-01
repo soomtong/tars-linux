@@ -119,9 +119,10 @@ pub const Clip = extern struct { x1: u16, y1: u16, x2: u16, y2: u16 };
 
 /// 한 프레임에 넘기는 clip의 상한(DR-M2 plan 확정 9). 커널 상한은 `DRM_MODE_FB_DIRTY_MAX_CLIPS`
 /// 256이고, 패널 여덟 × 행 47의 교대 run은 192까지 갈 수 있어 접는 규칙이 있어야 한다. 64인
-/// 이유는 커널 6.18.42의 두 드라이버다 — virtio-gpu는 clip 전부를 경계 상자 하나로 합쳐
-/// (`drm_atomic_helper_damage_merged`) 상자만 host로 옮기므로 개수가 뜻이 없고, simpledrm은
-/// clip마다 `drm_fb_blit`를 하므로 64를 넘는 프레임은 어차피 화면 대부분이다.
+/// 이유는 커널 6.18의 두 드라이버다(6.18.42에서 읽고 6.18.60에서 같은 자리를 확인, KU-M1 plan
+/// 확정 6) — virtio-gpu는 clip 전부를 경계 상자 하나로 합쳐(`drm_atomic_helper_damage_merged`)
+/// 상자만 host로 옮기므로 개수가 뜻이 없고, simpledrm은 clip마다 `drm_fb_blit`를 하므로 64를
+/// 넘는 프레임은 어차피 화면 대부분이다.
 pub const MAX_CLIPS = 64;
 
 /// 한 프레임의 clip 목록(DR-M2). `push`로 다시 칠한 사각형을 더하고 `present`에 `slice()`를

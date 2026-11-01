@@ -84,7 +84,7 @@ help:
 	@echo "빌드 (부르는 스크립트가 순서와 staleness 판정을 갖고 있다. 여기서 다시 구현하지 않는다)"
 	@echo
 	@echo "  make kernel"
-	@echo "      kernel/build.sh. 커널 6.18.42를 tarball에서 풀어 make한다. .config와 그"
+	@echo "      kernel/build.sh. 커널 6.18.60을 tarball에서 풀어 make한다. .config와 그"
 	@echo "      스크립트의 해시가 산출물 옆에 적힌 것과 같으면 make를 아예 안 부르고 1초에 끝난다"
 	@echo
 	@echo "  make init"
