@@ -1,8 +1,20 @@
-# HANDOFF: Kernel Upgrade 끝남(2026-11-01) — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Kernel Upgrade 끝남(2026-11-01) — 다음은 Bluetooth design
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트가 없다. 다음은 아래 "다음 후보"에서 사용자가 고른다.
+- 열린 서브프로젝트가 없다. 다음 세션은 Bluetooth 활성화의 design부터 한다(사용자 결정, 2026-11-01). 착수 전에 범위를 사용자와
+  정한다 — 키보드 · 마우스(HID over BT)까지인지, 오디오(A2DP)까지인지.
+  - 지금 상태: `kernel/.config`가 `# CONFIG_BT is not set`, initrd에 BlueZ도 D-Bus도 없다. 소개 페이지 "부팅 · 하드웨어"의 note와
+    AU design 비목표 1("블루투스 스택 자체가 없다"), VD design(블루투스가 없다는 전제)이 이 사실에 기대고 있어 열면 함께 고친다.
+  - 층: (1) 커널 `CONFIG_BT` · `BT_HCIBTUSB`(노트북 내장 BT는 대부분 USB) · `BT_HIDP`와 칩별 firmware(Intel `ibt-*` · Realtek
+    `rtl_bt/*` · MediaTek, `guest_firmware.sh`에 무선과 같은 방식으로). (2) 사용자 공간 — BlueZ `bluetoothd`는 D-Bus가 필요하다. D-Bus를
+    들일지, 커널 mgmt 소켓을 직접 다루는 작은 도구를 만들지가 가장 큰 결정이다(`feedback_scripting_runtimes.md` 같은 "한 묶음으로만
+    들인다" 원칙을 본다). (3) 페어링 명령의 자리(`tars-config bluetooth …`?)와 `/config`에 남길 페어링 키. (4) 오디오는 A2DP 코덱과
+    오디오 서버가 필요해 훨씬 무겁다.
+  - 게이트: QEMU에 쓸 만한 가짜 BT 컨트롤러가 없다. 착수 전 조사로 확인할 것 — 커널의 `hci_vhci`(`/dev/vhci`, 가상 HCI)로 컨트롤러
+    등록 · mgmt 명령까지는 게스트 안에서 볼 수 있는지. 실칩 동작은 무선처럼 실기 몫이다.
+  - 6.18.60에서 새로 요청하는 BT firmware 넷(`rtl_bt/rtl8761cu_*` · MT7920 · MT7927)은 KU-M1 plan 확정 5에 있다.
+- 0.1.4를 낼지는 아직 사용자 답이 없다(KU를 담은 ISO). 다음 세션에서 묻는다.
 - 마지막으로 닫은 것은 Kernel Upgrade(KU-M0~M1, 2026-11-01) — 이미지 슬롯 둘 · 1GiB ESP · 메뉴의 old 엔트리, 커널 6.18.60. 닫은 서브프로젝트의 경과 · 함정 · 숫자는
   여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 그 plan의
   결과 절이다. 최근 것부터:
