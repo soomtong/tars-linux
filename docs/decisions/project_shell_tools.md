@@ -31,12 +31,12 @@ plan 셋은 `docs/plans/2026-09-19-tars-shell-tools-st-m0.md` ·
 
 ### 게이트가 rc 켜진 셸에 치는 이름
 
-설정 디스크를 붙이는 체인은 여섯이다(`-drive file=` 개수로 셌다): config ·
-input · power · hangul · net · machine. 나머지 여섯(boot · terminal · device ·
-render · copy · tools)은 디스크를 안 붙이므로 seed rc를 안 읽고, 따라서
-어떤 별칭도 그 체인에서는 안 돈다.
+ST 당시(열두 체인) 설정 디스크를 붙이는 체인은 여섯이었다(`-drive file=` 개수로 셌다:
+config · input · power · hangul · net · machine). 디스크를 안 붙이는 체인은 seed rc를
+안 읽으므로 어떤 별칭도 거기서는 안 돈다. 지금은 체인이 스물둘이라 세는 방법만 남긴다 —
+`rg -l 'drive file=' */check.sh`.
 
-치환의 첫 낱말을 세어 보면 `ls`가 돌아가는 자리가 셋이다 — config 6차
+치환의 첫 낱말을 세어 보면 `ls`가 돌아가는 자리가 셋이었다 — config 6차
 (`ls /config/zshrc` → `No such file`) · config 8차(`ls /config/xdg/zoxide` →
 `db.zo`) · net 검사 2(`ls /sys/class/net` → `eth0`). 셋 다 "이름이 화면에
 찍혔는가"를 본다.
@@ -77,18 +77,16 @@ gitconfig는 셸이 안 읽으므로 그 대신 문법을 잰다 —
 
 config 체인 1차 부팅이 셋을 찍는다 — `the seeded 'ls' alias runs eza (file
 modes start with a dot)` · `git read init.defaultBranch=main out of the seeded
-/config/gitconfig` · `init seeded the gitconfig too`. `ls`가 돌아가는 자리
-셋(config 6·8차, net 검사 2)도 그대로 초록이다. tools 체인은 검사 13이
-증명하는 경로가 안 바뀐 채 초록이고, 루트 게이트는 12체인 3/3에 `FAIL` 0줄이다.
+/config/gitconfig` · `init seeded the gitconfig too`. tools 체인 검사 13이
+증명하는 경로는 안 바뀌었다.
 
 ## 다시 조사하지 말 것
 
-- Zig의 multiline 문자열 리터럴은 탭을 거부한다(`string literal contains
-  invalid byte: '\t'`). gitconfig seed의 들여쓰기가 공백 넷인 이유다. git은
-  둘 다 받는다.
-- seed는 `O_EXCL`이라 이미 있는 파일을 안 덮는다. 그래서 별칭을 늘려도 이미
-  쓰던 설정 디스크는 새 seed를 못 받는다 — 지우고 재부팅하면 새 seed가
-  깔린다(config 체인 6·7차가 그 경로를 매번 밟는다). README에 적어 두었다.
+- Zig의 multiline 문자열 리터럴은 탭을 거부한다(`docs/guides/dead-ends.md`). gitconfig
+  seed의 들여쓰기가 공백 넷인 이유다. git은 둘 다 받는다.
+- seed는 `O_EXCL`이라 별칭을 늘려도 이미 쓰던 설정 디스크는 새 seed를 못 받는다
+  ([[project_shell_history]]의 "이미 설정 디스크를 가진 기계"). config 체인 6·7차가
+  지우고 다시 깔리는 경로를 매번 밟는다. README에 적어 두었다.
 - 검사가 seed의 주석에 걸린 적이 있다. `[user]`를 글자로 찾는 검사가
   seed의 설명문에 있는 같은 글자를 잡았다 — 그래서 `expectGitconfigSeed`는
   주석 줄을 건너뛰고 절·키를 파싱한다.

@@ -23,7 +23,8 @@ metadata:
 
 ## 실측 — 붙는 쪽
 
-- `build.zig.zon`의 `minimum_zig_version = "0.16.0"`이 우리 `terminal`과 같다.
+- `build.zig.zon`의 `minimum_zig_version = "0.16.0"`이 조사 당시 우리 `terminal`과
+  같았다(ZU-M2 뒤로 우리는 0.17.0 — `devcontainer/Dockerfile`의 `ZIG_VERSION`이 정본).
 - 호스트 zig 0.16.0으로 `zig build -Dtarget=x86_64-linux-gnu.2.41 -Doptimize=ReleaseSafe`가
   경고 없이 59초. 컨테이너에서는 안 돌렸다(그날 OrbStack이 꺼져 있었다).
 - 공유 라이브러리 의존은 `libc.so.6` 하나, 요구 심볼은 `GLIBC_2.36`까지 — 게스트 glibc

@@ -5,13 +5,13 @@ metadata:
   type: project
 ---
 
-dhcpcd와 chronyd는 `init`이 스스로 `children`의 2 · 3번 칸에 넣는 `Kind.service`다.
+dhcpcd와 chronyd는 `init`이 스스로 `children`에 넣는 `Kind.service`다(DS 때 2 · 3번 칸,
+TC-M2가 wifi 칸을 앞에 끼워 지금은 `SLOT_DHCPCD = 3` · `SLOT_CHRONYD = 4`, `main.zig`).
 label은 `service dhcpcd` · `service chronyd`이고 `services.d`의 같은 이름은 건너뛴다.
 
-- dhcpcd는 `-B`다. manager mode는 lease 전에 배경으로 가서 PID 1이 쥔 pid가 곧 죽는다.
-  `-B`를 빼면 감독자가 "1초 만에 exit 0"을 세 번 보고 포기하는데, 배경으로 간 손자들이
-  주소를 받아 와서 "주소가 붙었다"만 보는 검사는 전부 초록이다(DS-M2 mutation). `-B`여도
-  나중에 꽂힌 동글을 같은 pid로 잡는다(DS-M0 실측 7).
+- dhcpcd는 `-B`다. manager mode는 lease 전에 배경으로 가서 PID 1이 쥔 pid가 곧 죽는다 —
+  `-B`를 빼면 어떻게 조용히 초록인지는 measurements 61. `-B`여도 나중에 꽂힌 동글을 같은
+  pid로 잡는다(DS-M0 실측 7).
 - `-j /dev/console`은 남겼다. `-B`에서는 줄이 두 벌이 되지만 `[pid]` 줄머리가 체인의 판정
   근거다.
 - chronyd 앞의 30초 기다림을 지웠다. `ntp=dhcp`면 설정이 `sourcedir

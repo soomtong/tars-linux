@@ -35,11 +35,10 @@ baseline을 모른다.
   그대로 온다.
 - `\e[1;31m`처럼 bold가 붙으면 팔레트 1번이 아니라 9번이다. `Style.fg()`에
   `.bold = .bright`를 준 결과이고, 폰트가 하나라 bold를 표현하는 유일한 길이다.
-- `Terminal.Options.max_scrollback_lines`만 주면 아무 일도 안 일어난다. 기본
+- 스크롤백 한도는 값 둘을 함께 줘야 걸린다(measurements 11) — 기본
   `max_scrollback_bytes`(10,000)가 먼저 걸리는데 그 값은 활성 영역의 최소값보다
-  작아 처음부터 무시되고 있었다. `bytes = null, lines = 1000`을 함께 준다. 155×47
-  격자에서 history가 754~1000줄 사이를 오가는 것은 정상이다 — 가지치기가
-  페이지(약 286줄) 통째로 일어난다.
+  작아 처음부터 무시되고 있었다. 우리 값은 `bytes = null, lines = 1000`이다. 155×47 격자에서 history가 754~1000줄 사이를 오가는
+  것은 정상이다 — 가지치기가 페이지(약 286줄) 통째로 일어난다.
 - 새 출력이 뷰포트를 안 내리는 것은 라이브러리의 성질이다. PTY 출력이
   도착하는 자리에서 `scrollToBottom()`을 우리가 부른다. 그 한 줄이 덤으로
   "뷰포트가 history에 머무는 동안 가지치기가 pin을 무효로 만드는" 상황을
@@ -47,8 +46,8 @@ baseline을 모른다.
 - 스크롤 API의 variant 이름이 층마다 다르다. 부르는 것은
   `Terminal.scrollViewport`(`.bottom` · `.delta` · `.top` · `.row`)이고
   `PageList.Scroll`(`.active` · `.delta_row`)이 아니다. 위치는
-  `pages.scrollbar()`의 `{total, offset, len}`이고 "바닥에 있다"는 `offset ==
-  total - len`이다 — 게이트와 호스트 검사가 전부 이 식을 쓴다.
+  `pages.scrollbar()`의 `{total, offset, len}`이고 "바닥에 있다"의 식은 measurements 12 —
+  게이트와 호스트 검사가 전부 그 식을 쓴다.
 - `RenderState`는 뷰포트를 따라간다(`update()`가 `getTopLeft(.viewport)`에서
   시작). 스크롤한 뒤 `cells()`를 부르면 옛 줄이 그대로 나오므로 `cells()`는
   손댈 것이 없었다.
@@ -78,10 +77,9 @@ native 16px로 구워 coverage가 이분값인 것이 첫째 이유이고, 블�
   조용함에 기댄다), modifier 키처럼 아무것도 안 바꾸는 이벤트에서는 안 그린다.
 - 배경색이 생긴 뒤로는 글자가 없어도 그릴 것이 있어 `cells()`가 `codepoint ==
   0`인 셀도 내보낸다. 그 결과 `dumpScreen`이 NUL을 로그에 흘린 적이 있고
-  `render/check.sh`의 음성 검사가 지킨다. NUL 한 바이트는 `grep`을 통째로
-  막으므로(`Binary file ... matches`) 체인의 모든 `grep`에 `-a`를 붙였다. 검출은
-  `grep -qP '\x00'`이 아니라(안 잡힌다) 한 번 읽기 `tr -cd '\0' | wc -c`다
-  ([[project_atomic_log_lines]]가 두 번 읽기를 거짓 빨강으로 고쳤다).
+  `render/check.sh`의 음성 검사가 지킨다. NUL이 `grep`을 막는 것과 검출 방법은
+  `docs/guides/dead-ends.md`의 NUL 항목 둘([[project_atomic_log_lines]]가 두 번 읽기를
+  거짓 빨강으로 고쳤다).
 
 ## 죽은 검사 · 죽은 필드는 틀려도 아무도 모른다
 
@@ -104,18 +102,16 @@ native 16px로 구워 coverage가 이분값인 것이 첫째 이유이고, 블�
 
 ## 그 밖의 함정
 
-- `setPixel`도 `getPixel`도 범위 검사를 하지 않는다(`drm.zig`). 오프셋으로
-  좌표가 음수가 될 수 있으므로 `drawGlyph`와 `dumpInk`가 호출부에서 막는다.
-  `font_test`의 "한글 11172자가 전부 셀 안에 들어간다"는 폰트에 대한 사실이지
-  코드의 성질이 아니다.
+- `setPixel` · `getPixel`의 범위 검사는 호출부(`drawGlyph` · `dumpInk`)에 있다
+  (`docs/guides/key-files.md`의 `drm.zig` 항목). `font_test`의 "한글 11172자가 전부 셀
+  안에 들어간다"는 폰트에 대한 사실이지 코드의 성질이 아니다.
 - 폰트 캐시가 lazy인 이유는 메모리가 아니라 시간이다. 11172자를 전부 구워도
   2.07MB이고 게이트가 실제로 쓴 양은 1,665바이트인데, 굽는 데 Debug 396ms ·
   ReleaseFast 46ms(컨테이너 arm64 native)이고 게스트는 TCG라 그 위에 몇십
   배다. 시간을 적을 때는 최적화 수준을 함께 적는다 — "29.3ms"로만 적어 둔
   ReleaseFast대의 수가 한동안 근거로 남아 있었다.
-- 게이트 시간은 기계가 한가할 때만 잰다. TR-M2를 끝내며 처음 잰 값이 8배였고
-  Chrome의 영상 재생(`pmset -g log`의 `Video Wake Lock`)이 원인이었다 — 판정은
-  멀쩡했다. 값이 기준선에서 크게 벗어나면 코드보다 기계를 먼저 의심한다.
+- 게이트 시간은 기계가 한가할 때만 잰다 — TR-M2의 8배(Chrome 영상 재생)는
+  `docs/guides/lessons.md`의 "이 게이트의 시간은 ±3분 수준의 잡음을 가진다" 절.
 - 체인 하나를 더하는 비용은 커널 빌드만 세면 과소평가한다(TR 체인은 예상의
   두 배였다 — libghostty-vt를 arm64로 한 벌 더 빌드하고 타이핑이 붙는다).
   있는 체인에 검사를 더하는 것은 거의 공짜다.

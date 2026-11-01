@@ -37,11 +37,9 @@ plan은 `docs/plans/2026-10-07-tars-config-reload-tc-m2.md` · `-tc-m3.md`. PID 
   일곱을 `live.cfg`로 바꾸고 탈출로(rc 플래그)를 부팅의 판정으로 다시 세운 뒤 CT의 `restart`와 같은 길(요청한 죽음은 빨리 죽음으로 안
   센다)로 SIGTERM을 보낸다. 콘솔 셸은 같은 동사로 안 다룬다 — M2가 그 칸의 경로 · argv를 이미 바꿔 두므로 `exit`하면 새 셸로 뜬다(게이트가
   `kill -9 $(pgrep -t ttyS0)`로 본다 — 콘솔 셸의 tty는 `console`이 아니라 `ttyS0`이다).
-- 드러난 잠재 버그 — `kill(-pid)`. CT-M1 결정 4 규칙 3("SIGTERM을 무시하면 유예 뒤 SIGKILL을 그룹으로")이 `supervise`의 `overdue` 갈래에
-  모든 자식에 대해 들어갔지만, 시한을 세우는 `control.apply`는 서비스에만 불려 비서비스에는 한 번도 닿지 않았다. `reload terminal`이
-  terminal(setsid를 안 해 제 그룹이 없다)에 그 길을 쓰는 첫 자리였다 — `kill(-pid)`는 ESRCH로 아무도 안 죽인다. SIGTERM · SIGKILL 둘 다
-  서비스만 그룹, 나머지는 pid로 고쳤고 mutation 두 판(SIGTERM만 되돌림 → 17초 늦게 초록, 둘 다 되돌림 → `sent SIGKILL to group 39`로
-  빨감)이 둘이 서로를 받치는 것을 보였다.
+- 드러난 잠재 버그 — `kill(-pid)`(measurements 88). CT-M1의 SIGKILL 시한이 `control.apply`를 거쳐 서비스에만 서 있었고 `reload
+  terminal`이 비서비스에 그 길을 쓰는 첫 자리였다. SIGTERM · SIGKILL 둘 다 서비스만 그룹, 나머지는 pid로 고쳤고 mutation 두
+  판(SIGTERM만 되돌림 → 17초 늦게 초록, 둘 다 되돌림 → `sent SIGKILL to group 39`로 빨감)이 둘이 서로를 받치는 것을 보였다.
 
 ## 게이트가 남긴 것
 
@@ -50,7 +48,7 @@ plan은 `docs/plans/2026-10-07-tars-config-reload-tc-m2.md` · `-tc-m3.md`. PID 
   없다. Task 5b — `set`의 답(`| net: dhcp -> off`)을 화면에서 본 뒤에 reload를 치고(firewall 19 · config 1차도), 실패하면 마지막 화면 ·
   `cat /config/tars.conf` · `reload of` 뒤 init 줄을 찍는다. 그 뒤 4판 초록.
 - 이월 숙제 둘 — chronyd의 reload(`ntp` 키)를 게이트가 안 본다(그 부팅에 ntp가 없다. ntp 부팅에 `set ntp=…` · `reload`를 얹으면 덮인다).
-  간헐 31의 진짜 원인(다시 빨개지면 5b의 진단 세 덩어리로 가린다).
+  간헐 31의 진짜 원인(`docs/guides/carryover.md`의 "net 검사 31의 간헐" 항목).
 - 게이트가 못 보는 것 — tty에서 echo를 끄고 묻는 길, `--country`, `firewall deny`, 실기의 `reload terminal`(사용자가 친다).
 
 관련: [[project_config_tool]] · [[project_daemon_supervision]] · [[project_service_control]] · [[project_boot_services]] ·

@@ -14,7 +14,7 @@ arm64로 바꿨다. 게스트(TARS)는 여전히 x86_64다. 즉 이 저장소는
 
 ## 왜 바꿨나
 
-`Dockerfile:1`이 `FROM --platform=linux/amd64`였다. 호스트가 Apple
+`Dockerfile`의 `FROM` 줄이 `--platform=linux/amd64`였다. 호스트가 Apple
 Silicon이므로 층이 이렇게 쌓여 있었다: gcc·zig·qemu-system-x86_64
 바이너리 자체가 Rosetta 에뮬레이션을 통과하고, 그 안에서 다시 게스트
 x86_64를 TCG로 번역했다. 에뮬레이터를 에뮬레이션하고 있었다.
@@ -29,7 +29,8 @@ x86_64를 TCG로 번역했다. 에뮬레이터를 에뮬레이션하고 있었�
 | 루트 게이트 전체(6회) | (미측정, BF 3회만 53분) | 8분 52초 | — |
 
 부팅이 8.5배 빨라진 것이 TCG가 JIT이라는 사실과 맞는다. 이미지는 1.11GB →
-1.3GB(sysroot + 크로스 툴체인).
+1.3GB(sysroot + 크로스 툴체인). 표는 2026-08-13의 값이다 — 지금 게이트는 체인
+스물둘을 `RUNS=1`로 동시에 돌린다([[project_gate_parallel]]).
 
 ## 네 가지 규칙
 
@@ -54,8 +55,8 @@ x86_64를 TCG로 번역했다. 에뮬레이터를 에뮬레이션하고 있었�
 3. initrd 유저랜드는 컨테이너가 아니라 `$AMD64_SYSROOT`에서 온다.
 `Dockerfile`이 `apt-get download <pkg>:amd64` → `dpkg -x`로
 `/usr/local/amd64-sysroot`에 구워두고, `kernel/make_initrd.sh`는 거기서만
-복사한다. 이미지 빌드 때 한 번만 네트워크를 쓰는 구조라 게이트(clean 재빌드
-6회)가 오프라인·재현 가능하게 유지된다.
+복사한다. 이미지 빌드 때 한 번만 네트워크를 쓰는 구조라 게이트의 clean 빌드가
+오프라인·재현 가능하게 유지된다.
 
 대가는 initrd에 새 바이너리를 넣으려면 `Dockerfile`의 패키지 목록을
 고쳐야 한다는 것이다(`apt-get install` 한 줄로 안 끝난다). `apt-get

@@ -13,8 +13,8 @@ HD-M1(2026-08-21)이 `kernel/.config`에 ACPI를 켜며 세웠고 CC-M0이
 
 ## `.config`는 `olddefconfig`의 고정점으로 유지한다
 
-`kernel/build.sh:21`이 `.config`를 `build/.config`로 복사한 뒤
-`olddefconfig`를 돌린다. 커밋된 파일과 실제로 빌드되는 설정은 같은 파일이
+`kernel/build.sh`가 `.config`를 `build/.config`로 복사한 뒤
+`make … olddefconfig`를 돌린다. 커밋된 파일과 실제로 빌드되는 설정은 같은 파일이
 아니고, HD-M1 전까지 60줄 넘게 달랐다. 차이는 세 갈래였다 — 환경에서
 캐내는 값(`CC_VERSION_TEXT`가 호스트 gcc, `RUSTC_VERSION`이 다른 기계의 값
 — `CROSS_COMPILE` 없이 만든 흔적, [[project_build_host_arch]]), 안 적힌 것과
@@ -61,18 +61,19 @@ AML이 부팅 중에 실패하고, 그것은 커널을 한 번 더 빌드해야 
 `PNP0C09`가 없고(fish가 `PNP0C09*`에 `No matches for wildcard`), 끄고 부팅한
 로그에 `ACPI Error:`가 없다.
 
-`PNP_DEBUG_MESSAGES`도 껐다. `pnp_dbg`(`base.h:179`)는 module parameter
-`pnp_debug`(`drivers/pnp/core.c:220-223`)로 감싸여 있고 우리 cmdline은
-`console=ttyS0` 하나라(`boot/limine.conf:7`) 켜진 적이 없다. 우리가 읽는
-`i8042: PNP: ...` · `00:04: ttyS0 at I/O 0x3f8`은 보통 `pr_info`라 그대로
-나온다. 둘을 끄고 bzImage가 2,946,048 → 2,933,760바이트가 됐지만 크기가
-이유는 아니다 — "쓰지 않는 것은 안 켠다"다.
+`PNP_DEBUG_MESSAGES`도 껐다. `pnp_dbg`(`drivers/pnp/base.h`)는 module parameter
+`pnp_debug`(`drivers/pnp/core.c`)로 감싸여 있고 CC-M0 당시 cmdline은 `console=ttyS0`
+하나라 켜진 적이 없다(지금은 내장 `CONFIG_CMDLINE`에 게이트용 낱말 둘이 있고 limine이
+`initcall_blacklist`를 더하지만 `pnp_debug`는 여전히 없다 — measurements 64,
+[[project_wireless]]). 우리가 읽는 `i8042: PNP: ...` · `00:04: ttyS0 at I/O 0x3f8`은
+보통 `pr_info`라 그대로 나온다. 둘을 끄고 bzImage가 2,946,048 → 2,933,760바이트가
+됐지만 크기가 이유는 아니다 — "쓰지 않는 것은 안 켠다"다.
 
-실머신으로 갈 때 `ACPI_EC`를 되켠다. 노트북 DSDT에는 대개 EC가 있고 배터리
-· 뚜껑 · 밝기 키가 그 위에 있는데, 안 켰을 때의 증상이 "AML이 실패한다"라
-원인까지 멀다. 다만 되켤 것은 그 한 줄이 아니다 — `EFI` · `USB_SUPPORT` ·
-`BLK_DEV_NVME` · `PCI_MSI` · `DRM_I915`도 꺼져 있어 이 커널은 노트북에서 못
-뜨고, 그것은 서브프로젝트 하나다([[project_target_hardware]]).
+`ACPI_EC`는 RM-M3(2026-09-10)이 되켰다 — 노트북 DSDT에는 대개 EC가 있고 배터리 ·
+뚜껑 · 밝기 키가 그 위에 있는데, 안 켰을 때의 증상이 "AML이 실패한다"라 원인까지
+멀다. `EFI` · `USB_SUPPORT` · `BLK_DEV_NVME` · `PCI_MSI`도 그때 함께 켜졌고
+(`kernel/.config`의 `CONFIG_ACPI_EC=y` · `CONFIG_EFI=y` · `CONFIG_USB_SUPPORT=y`), GPU
+드라이버는 simpledrm으로 대신했다. 그 경과는 [[project_real_machine]]이다.
 
 ## 한 항목을 켜면 무관해 보이는 것들이 함께 움직인다
 
@@ -92,16 +93,14 @@ ACPI를 켰을 때 `select`로 딸려 온 `PNP` · `FIRMWARE_TABLE` 말고도 �
 - `ACPI: Failed to create genetlink family for ACPI event` — `CONFIG_NET is
   not set`이라 generic netlink가 없다. 우리는 evdev로 읽으므로 상관없다.
 
-## 빌드 시간은 15배로 곱해진다 — RM-M0(2026-09-09)에 1배가 됐다
+## 설정 변경의 빌드 비용은 게이트당 1배다
 
-HD-M1 때는 루트 게이트의 `clean()`이 매 회차 `kernel/build`를 지워 설정
-변경의 빌드 비용(ACPI는 +2.589초)이 15배로 치러졌다. 지금은 GL-M0이
-`clean()`을 게이트 시작 1회로 옮기고 GL-M1이 `.config`와 `build.sh`의 sha256
-스탬프를 넣어 1배다(RM-M0 실측: 커널 빌드 1회, `skipping make` 29회).
-교훈은 배수 자체보다 문서에 적은 배수가 게이트 시간과 같은 종류로 낡는다는
-것이다 — 배수를 인용하기 전에 게이트 로그를 다시 센다.
+HD-M1 때는 매 회차 `clean()`이 커널을 다시 빌드해 15배였고, GL-M0 · GL-M1 뒤로는
+게이트 시작에 한 번이다(`docs/guides/lessons.md`의 "게이트는 첫 회차에만 clean하고
+나머지는 증분이다" 절, [[project_gate_latency]]). 문서에 적은 배수는 게이트 시간과
+같은 종류로 낡는다 — 인용하기 전에 게이트 로그의 `skipping make` 수를 다시 센다.
 
-## 부팅은 게이트 시간의 2%가 안 된다 (`PRINTK_TIME`으로 실측)
+## 부팅은 게이트 시간의 2%가 안 된다 (`PRINTK_TIME`으로 실측, measurements 16)
 
 `CONFIG_PRINTK_TIME=y`로 커널 줄마다 시각을 붙여 갈랐다.
 
@@ -128,7 +127,7 @@ Refined TSC clocksource calibration`이라 사용자 공간까지 1.46초 안에
 `Power off not available`도 줄 중간을 본다).
 
 커맨드라인 `printk.time=1`이나 `/sys/module/printk/parameters/time`으로도
-된다(`printk_time`은 `#ifdef` 밖의 `0644` 파라미터, `printk.c:1345-1346`).
+된다(`printk_time`은 `kernel/printk/printk.c`에서 `#ifdef` 밖의 `0644` 파라미터다).
 설정을 고른 이유는 커맨드라인 경로가 체인마다 `-append`를 고쳐야 하고 실
 하드웨어로 갈 때 빠뜨릴 자리가 되기 때문이다. `PRINTK_TIME`은 잎 노드라
 되접기가 필요 없었다.

@@ -1,6 +1,6 @@
 ---
 name: project_guest_environment
-description: "게스트의 환경변수는 커널이 준 HOME=/ · TERM=linux 둘에서 시작한다 · PATH=/usr/bin:/bin은 PID 1이 지어 자식 둘에게 준다(UT-M0) · TERM=xterm-256color와 LANG=C.UTF-8은 terminal의 setenv로 화면 셸에만, 시리얼 셸은 linux · C 로케일 · 환경변수와 데이터(terminfo · C.utf8)는 한 벌로 initrd에 넣는다 · 자식마다 갈릴 이유가 없는 값은 PID 1에"
+description: "게스트의 환경변수는 커널이 준 HOME=/ · TERM=linux 둘에서 시작한다 · PATH=/usr/bin:/bin은 PID 1이 지어 자식 둘에게 준다(UT-M0) · TERM=xterm-256color와 LANG=C.UTF-8은 terminal의 setenv로 화면 셸에만, 시리얼 셸은 linux · C 로케일 · 환경변수와 데이터(terminfo · C.utf8)는 한 벌로 initrd에 넣는다 · 자식마다 갈릴 이유가 없는 값은 PID 1에. 지금 PID 1이 짓는 블록의 목록은 key-files의 environ.zig 항목"
 metadata:
   node_type: memory
   type: project
@@ -19,10 +19,11 @@ IP-M0(2026-08-17)이 확인했고 IP-M1 · TR-M2 · HI-M1 · UT-M0이 하나씩 
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 ```
 
-initrd에 프로필 스크립트가 없고 게이트의 셸은 전부 no-config 모드(`fish
---no-config` / `bash --norc` / `zsh -f`)라 셸 초기화 파일이 채울 여지도 없다.
-그래서 필요한 값은 우리가 PID 1이나 `terminal`에서 넣어야 하고, 넣지 않은
-것은 없다.
+initrd에 프로필 스크립트가 없어 셸 초기화 파일이 채울 여지가 없었다 — UT 때까지는
+게이트의 셸이 전부 no-config 모드(`fish --no-config` / `bash --norc` / `zsh -f`,
+`config.zig`의 `Shell.flag`)였고, SC부터 `shell_config=on`이면 `init`이 깐 seed rc를
+읽지만 그 rc는 env를 안 바꾼다(`config_test`의 `expectQuietSeed`가 지킨다). 그래서
+필요한 값은 우리가 PID 1이나 `terminal`에서 넣어야 하고, 넣지 않은 것은 없다.
 
 ## 결과 1: `PATH`가 없었다 — UT-M0(2026-09-10)에 고쳤다
 
@@ -43,7 +44,7 @@ builtin만 쓰는 동안은 드러나지 않았고, 사람이 기계를 쓰자 "
 | `tools/check.sh` | 게스트에 절대 경로 없이 `ls`를 치는 체인 |
 
 값이 `/usr/bin:/bin` 둘뿐인 것에 뜻이 있다. 도구는 전부 `/usr/bin`에, `/bin`
-에는 `sh` 하나만 둔다. 이 문자열과 `kernel/make_initrd.sh`가 넣는 자리가
+에는 `sh` 하나만 둔다(measurements 56). 이 문자열과 `kernel/make_initrd.sh`가 넣는 자리가
 어긋나면 증상은 "어떤 명령도 안 찾아진다"이고 원인에서 멀다.
 
 자리가 모자라면 커널 블록을 그대로 돌려준다. PATH가 없는 게스트는 살아
@@ -52,7 +53,8 @@ builtin만 쓰는 동안은 드러나지 않았고, 사람이 기계를 쓰자 "
 
 시리얼 콘솔 셸도 받는다 — 다만 `supervise()`가 `start(c, envp)`를 한
 루프에서 부르는 코드 구조가 보장할 뿐 관측된 적은 없다. 체인 전부가
-`-serial file:`(쓰기 전용)이라 시리얼 셸에 타이핑하는 체인이 없다.
+`-serial file:`(쓰기 전용)이라 시리얼 셸에 타이핑하는 체인이 없다(뒤에 DI의
+`install` 체인이 시리얼 FIFO로 치지만 그 판정은 `tars-install`의 출력이다).
 
 `PATH`만으로는 부족해 뼈대 넷이 함께 생겼다 — `/bin/sh`(→
 `../usr/bin/bash`) · `/tmp`(모드 1777) · `/etc/passwd` · `/etc/group`.
@@ -71,7 +73,8 @@ builtin만 쓰는 동안은 드러나지 않았고, 사람이 기계를 쓰자 "
 `kernel/make_initrd.sh`가 `/usr/share/terminfo/x/xterm`과
 `x/xterm-256color`를 넣고, 파일은 `devcontainer/Dockerfile`의 `apt-get
 download` 목록의 `ncurses-base`에서 온다 — arch: all이라
-`fish-common`/`zsh-common`처럼 `:amd64`를 붙이지 않는다.
+`fish-common`/`zsh-common`처럼 `:amd64`를 붙이지 않는다(SV가 terminfo 일곱으로
+늘렸다 — measurements 58).
 
 함정: 이름을 바꾸면 데이터가 따라와야 한다. TR-M0이 `xterm-256color`로
 바꾸고 initrd는 `x/xterm`만 복사해, 광고하는 이름의 terminfo가 없는 채로 두
@@ -91,9 +94,8 @@ for want in xterm xterm-256color; do
 done
 ```
 
-`grep -qx`를 안 쓰는 이유는 그 파일 위쪽의 `case` 주석과 같다 — `grep -q`가
-첫 매치에서 빠져나가며 앞단 `cpio`에 SIGPIPE를 일으키고 `pipefail`이 그것을
-실패로 판정한다.
+`grep -qx`를 안 쓰는 이유는 파이프 뒤의 `grep -q`가 앞단에 SIGPIPE를 일으키기
+때문이다([[project_gate_accuracy]]).
 
 terminfo를 제대로 넣어도 화면을 grep하는 체인의 `screen>` 줄은 하나도
 달라지지 않았다(TR design 위험 1이 닫혔다). 그래도 `fish --no-config`는
@@ -120,7 +122,7 @@ PTY에 보내는데, `setlocale`이 실패한 셸에서 `mbrtowc`가 바이트�
 ```
 string length 나          → 3   ← 세 글자로 센다
 string length -V 나       → 1   ← 그래서 폭이 1
-string length \ub098   → 1   ← 이스케이프로 만든 같은 글자는 정상
+string length 나   → 1   ← 이스케이프로 만든 같은 글자는 정상
 ```
 
 함정: `LANG`만 설정해서는 안 된다. 값이 셸까지 닿아도(`echo x=$LANG` →
@@ -141,9 +143,12 @@ string length \ub098   → 1   ← 이스케이프로 만든 같은 글자는 �
 
 ## How to apply
 
-게스트에 지금 있는 환경변수는 넷이다 — `HOME=/`(커널) · `TERM`(화면 셸은
+UT-M0 시점의 게스트 환경변수는 넷이었다 — `HOME=/`(커널) · `TERM`(화면 셸은
 `xterm-256color`, 시리얼 셸은 `linux`) · `LANG=C.UTF-8`(화면 셸만) ·
-`PATH=/usr/bin:/bin`(둘 다). 그 밖의 것은 없다고 가정한다.
+`PATH=/usr/bin:/bin`(둘 다). 그 뒤 PID 1의 블록에 `XDG_DATA_HOME`(SM) · `TZ`(TS) ·
+히스토리 env(SD · BH)가 붙었고 terminal이 `fish_greeting`을 비운다 — 지금 목록은
+`docs/guides/key-files.md`의 `environ.zig` 항목과 `init/src/environ.zig`의 상수들
+(`PATH_ENTRY` · `XDG_ENTRY` · `TZ_PREFIX`)이 정본이다. 거기 없는 것은 없다고 가정한다.
 
 게이트를 새로 쓸 때는 여전히 절대 경로(`/usr/bin/sleep`)를 기본으로 쓴다.
 PATH가 생겼어도 틀린 것이 아니고 기존 체인이 그렇게 쓰여 있어 일관성이 값이다.
@@ -157,4 +162,5 @@ PID 1이고, `init/src/environ.zig`의 `PATH_ENTRY` 옆에 항목을 하나 더�
 단위로 맞추는지 본다.
 
 관련: [[project_init_supervisor]], [[project_config_persistence]],
-[[project_gate_chain_composition]], [[project_userland_tools]]
+[[project_gate_chain_composition]], [[project_userland_tools]],
+[[project_shell_config]], [[project_shell_memory]]

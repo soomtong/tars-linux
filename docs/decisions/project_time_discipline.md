@@ -55,11 +55,10 @@ How to apply:
      말없이 죽는다. driftfile 판정은 충분히 산 부팅(게이트는 점프 뒤 20초)에서 본다.
 - `confdir`의 증거는 `Could not add source`가 아니라(순서가 어느 쪽이든 찍힌다)
   stub이 받은 요청 수다 — 0.25초 폴링이면 20초에 77번, 기본 폴링이면 1번.
-- mutation을 돌리기 전에 `git diff`로 바뀐 줄을 먼저 찍는다. `sd -F`가 Zig의 `\\`와
-  줄바꿈을 못 맞춰 편집 없이 `PASS`가 나온 판이 있었다. 그리고 `net` 체인은 부팅 전에
-  `zig build test`를 돌리므로, 코드를 바꾸는 mutation은 호스트 검사가 먼저 잡는다 —
-  게이트 판정을 보려면 검사의 기대값도 함께 바꾼다.
-- 체인의 게스트 로그는 컨테이너 `/tmp`의 mktemp다. 읽으려면 `-v 호스트:/tmp`로 문다.
+- 코드를 바꾸는 mutation은 호스트 검사가 먼저 잡고, 돌리기 전에 `git diff`로 편집이
+  실제로 들어갔는지 본다(measurements 52 — TD의 `sd -F` 판이 그 출처다).
+- 체인의 게스트 로그는 GF-M1부터 `out/gate-logs/`에 남는다(`docs/guides/lessons.md`의
+  "회차의 로그는 out/gate-logs…" 절). TD 당시의 `-v 호스트:/tmp`는 필요 없다.
 
 관련: [[project_guest_network]] · [[project_write_or_reuse]] · [[project_measuring_tool_cost]] ·
 [[feedback_boot_never_blocks]] · [[project_shutdown_signals]]

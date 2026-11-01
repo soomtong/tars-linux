@@ -80,12 +80,12 @@ docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c '
 그동안 음성 확인의 첫 회차를 세 번 잘못 읽었다.
 
 루트 게이트(`check.sh`)는 이미 안전하다 — `clean()`이 매 판 시작에
-`zig-out`과 `.zig-cache`를 넷 다 지운다(`check.sh:15`). 위험한 것은 체인을
+`zig-out`과 `.zig-cache`를 넷 다 지운다. 위험한 것은 체인을
 단독으로 돌릴 때뿐이고, 음성 확인이 정확히 그 자리다.
 
 ## 함정의 입구 — 주석 한 줄
 
-`check.sh:26`이 이렇게 적고 있다.
+`check.sh`의 `require_build_steps` 위 주석이 이렇게 적고 있다.
 
 > Zig는 내용 해시로 판단해서 touch를 무시하므로 mtime 비교는 …
 

@@ -1,6 +1,6 @@
 ---
 name: project_userland_tools
-description: "게스트 도구 한 벌(GNU + 모던 + git, 65개)과 그 이름이 PATH로 손에 닿게 한 층(UT-M0~M3, 2026-09-10·11). 목록은 kernel/guest_tools.sh 한 자리, 조달은 Debian .deb 하나로. 함정 — 비용은 DT_NEEDED가 데려오는 .so 한 겹 더 · Debian alternatives 링크는 dpkg -x에 없다 · initramfs는 tmpfs라 푼 크기가 RAM이다 · 목록과 검사가 같은 파일을 보면 tautology"
+description: "게스트 도구 한 벌(GNU + 모던 + git, UT 때 65개 — 그 뒤 다른 서브프로젝트들이 더해 지금은 guest_tools.sh가 정본)과 그 이름이 PATH로 손에 닿게 한 층(UT-M0~M3, 2026-09-10·11). 목록은 kernel/guest_tools.sh 한 자리, 조달은 Debian .deb 하나로. 함정 — 비용은 DT_NEEDED가 데려오는 .so 한 겹 더 · Debian alternatives 링크는 dpkg -x에 없다 · initramfs는 tmpfs라 푼 크기가 RAM이다 · 목록과 검사가 같은 파일을 보면 tautology"
 metadata:
   node_type: memory
   type: project
@@ -42,8 +42,8 @@ UT-M0~M3이 2026-09-10·11에 끝났다. milestone별 경과와 게이트 시간
 
 ## 비용은 바이너리 크기가 아니라 DT_NEEDED가 데려오는 것 — 그리고 한 겹 더
 
-- 도구의 무게는 `Installed-Size`가 아니라 `readelf -d`로 잰다. `copy_lib_deps`가
-  재귀로 따라가므로 그것이 진짜 비용이다. 절차는 [[project_measuring_tool_cost]].
+- 도구의 무게는 `Installed-Size`가 아니라 `readelf -d`로 잰다(measurements 40). 절차는
+  [[project_measuring_tool_cost]].
 - 바이너리의 `DT_NEEDED`만 보고 `.so`의 `DT_NEEDED`를 안 보면 틀린다. M1에서
   "새 라이브러리 둘"이라고 적었는데 넷이었다(`libproc2` → `libsystemd` 1.1MB,
   coreutils → `libattr`). M2는 착수 전에 `.so`까지 재귀로 재서 `MISSING` 0을 빌드 전에
@@ -62,8 +62,9 @@ UT-M0~M3이 2026-09-10·11에 끝났다. milestone별 경과와 게이트 시간
 - `bat`은 `/usr/bin/batcat`, `fd`의 실체는 `/usr/lib/cargo/bin/fd`(`fdfind`는 링크).
   실체를 복사한다 — 링크를 복사하면 initrd 안에서 끊어진다. initrd 안의 이름은 우리가
   정한다(목록이 `src:dest`인 이유).
-- `awk`는 `.deb` 안에 없다. `mawk` 패키지는 `/usr/bin/mawk`만 담고 `/usr/bin/awk`는
-  postinst가 만드는 alternatives 링크다. `nc` · `pager` · `editor` · `vi`도 같은 자리다.
+- `awk`는 `.deb` 안에 없다 — `mawk` 패키지는 `/usr/bin/mawk`만 담고 `/usr/bin/awk`는
+  postinst가 만드는 alternatives 링크다(measurements 42 — `nc` · `pager` · `editor` · `vi`도
+  같은 자리).
 - 바이너리가 이름으로 부르는 다른 프로그램도 본다 — `DT_NEEDED`는 라이브러리만
   말한다. Debian git은 `GIT_PAGER=pager` · `GIT_EDITOR=editor`로 부르고(`git var -l`로
   게스트에게 물었다) 없으면 `git log`가 매달리는 것이 아니라 죽는다(`error: cannot run
@@ -82,12 +83,12 @@ UT-M0~M3이 2026-09-10·11에 끝났다. milestone별 경과와 게이트 시간
   작지만 압축에 31초라 `gzip -6`을 유지한다(`CONFIG_RD_XZ` · `RD_ZSTD`는 켜져 있어
   바꾸려면 압축기만 바꾸면 된다).
 - 그런데 QEMU 기본 메모리 128MiB에서 기계가 안 켜졌다(`System is deadlocked on
-  memory`). 푼 84MB가 통째로 RAM에 남아 커널과 예약 48MB를 빼면 자리가 없다 — 78MB는
-  되고 84MB는 안 되는 경계를 아무도 잰 적이 없었다. 처방은 `gate_lib.sh`의
-  `GUEST_MEM=512`(256은 뜨지만 여유 125MB). 그때까지 QEMU 호출 열둘 중
-  `machine/check.sh`만 `-m 512`를 갖고 있었고 나머지는 기본값으로 돌고 있었다 — 아무도
-  그 수를 고른 적이 없었다. 실기(GB 단위)에서는 영원히 안 보였을 게이트만의 제약이다.
-  게스트 payload를 키우는 변경은 도구가 도는가보다 기계가 켜지는가를 먼저 본다.
+  memory`) — 처방이 `gate_lib.sh`의 `GUEST_MEM=512`다(`docs/guides/lessons.md`의 "타이핑
+  대기는 gate_lib.sh에 있다" 단락). 경계는 푼 78MB는 되고 84MB는 안 되는 자리였고
+  (커널과 예약 48MB), 256은 뜨지만 여유가 125MB다. 그때까지 QEMU 호출 열둘 중
+  `machine/check.sh`만 `-m 512`를 갖고 있었다 — 아무도 그 수를 고른 적이 없었다.
+  실기(GB 단위)에서는 영원히 안 보였을 게이트만의 제약이다. 게스트 payload를 키우는
+  변경은 도구가 도는가보다 기계가 켜지는가를 먼저 본다.
 
 ## 게이트가 가르쳐 준 것
 
@@ -95,9 +96,10 @@ UT-M0~M3이 2026-09-10·11에 끝났다. milestone별 경과와 게이트 시간
   `./`를 붙여 적어 뒀고 그대로 썼으면 언제나 빨강이었다. initrd 목록을 보는 검사를 쓸
   때는 `tools/check.sh`의 기존 검사를 먼저 본다.
 - `/etc/passwd`를 넣으니 fish가 uid 0을 이름으로 풀어 프롬프트가 `root@(none) ~#`이
-  됐고 `copy/check.sh`의 `col 16`이 20이 됐다. 프롬프트 폭에 기대는 자리는 저장소에서
-  그 하나뿐이다(`rg`로 셌다). 게스트의 사용자 데이터베이스를 건드리면 그 수도 본다.
-  증상은 CM 체인의 FAIL이고 원인은 `make_initrd.sh`라 서로 멀다.
+  됐고 `copy/check.sh`가 상수로 적어 둔 `col 16`이 20이 됐다(그 자리는 지금
+  `COL_BEFORE` · `COL_AFTER`의 상대 비교다). 게스트의 사용자 데이터베이스를 건드리면
+  프롬프트 폭에 기대는 자리가 있는지 `rg`로 센다. 증상은 CM 체인의 FAIL이고 원인은
+  `make_initrd.sh`라 서로 멀다.
 - 목록과 검사가 같은 파일을 보면 그 검사는 tautology다. 정적 검사가 증명하는 것은
   "목록이 완전한가"가 아니라 "`make_initrd.sh`가 목록이 말하는 것을 전부 넣었는가"다.
   목록의 완전성은 design이 답할 질문이다. 링크 넷과 템플릿은 배열이 아니라

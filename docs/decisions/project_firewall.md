@@ -22,7 +22,7 @@ design은 `docs/specs/2026-09-27-tars-firewall-design.md`. IN이 미룬 셋(UDP 
   전부 `=y`). Dockerfile 층 10 · `guest_tools.sh`의 `/usr/bin/nft`(새 파일 다섯, 1.39MB).
 - `make_initrd.sh`의 `/etc/tars/firewall.nft`(기본 규칙 + include)와
   `/etc/tars/firewall-base.nft`(include 없음).
-- `init/src/firewall.zig`의 `up()` — `fork` · `execve(nft -f)` · `wait4`. 갈래는 `off`와
+- `init/src/firewall.zig`의 `up()`(`docs/guides/key-files.md`의 `firewall.zig` 항목). 갈래는 `off`와
   셋(1 섰다 · 2 사람의 파일 때문에 기본만 섰다 · 3 기본도 실패해서 열려 있다).
 - `firewall/check.sh` — 부팅 둘, 검사 열일곱.
 
@@ -47,9 +47,9 @@ How to apply:
   쪽에서 본다. 한 번만 사는 TCP 리스너가 아직 LISTEN이면 연결이 안 왔고, `nc -u -l`은
   첫 데이터그램에 connect하므로 `/proc/net/udp`의 상대 주소가 `00000000:0000`이면
   아무것도 안 왔다.
-- `/proc/net/tcp`의 포트 16진수는 손으로 옮기지 않는다. 7070은 `0x1B9E`인데 `0x1BAE`로
-  옮겨서 M0에서 한 번, M1에서 한 번 0을 셌다. 체인은 `printf '%04X'`를 쓴다. M0에서
-  "패턴이 틀렸다"로 적고 원인을 안 본 것이 두 번째를 불렀다.
+- `/proc/net/tcp`의 포트 16진수는 손으로 옮기지 않는다 — 체인은 `printf '%04X'`를 쓴다
+  (`docs/guides/key-files.md`의 `firewall/check.sh` 항목). 7070을 `0x1BAE`로 옮겨서 M0 · M1에서
+  한 번씩 0을 셌고, M0에서 "패턴이 틀렸다"로 적고 원인을 안 본 것이 두 번째를 불렀다.
 
 관련: [[project_inbound_network]] · [[project_guest_network]] · [[project_loopback]] ·
 [[feedback_boot_never_blocks]] · [[project_write_or_reuse]] · [[project_gate_screen_echo]]

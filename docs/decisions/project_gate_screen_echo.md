@@ -1,12 +1,20 @@
+---
+name: project_gate_screen_echo
+description: 게이트의 화면 판정은 자기가 친 명령도 화면으로 센다(NW-M3 · IN · TS, 2026-09-14~15). 판정 글자는 출력에만 생기게 만든다(명령 치환 · guestfwd payload) · fish는 치지 않은 글자(히스토리 제안)도 화면에 남긴다 · 게스트에 심는 배경 job은 stdin을 끊어 준다(SIGTTIN) · 드라이버 이름이 숫자면 printk 타임스탬프에 걸린다 · 판정 대상에 우리가 친 명령이 들어가는가를 화면이든 파일이든 먼저 묻는다
+metadata:
+  type: project
+---
+
 # 게이트의 화면 판정은 자기가 친 명령도 화면으로 센다
 
-NW-M3(2026-09-14)에서 검사 하나를 쓰다가 드러난 성질이다. 이 저장소의 체인
-여덟이 같은 방식으로 판정하고 있어서 전부에 해당한다.
+NW-M3(2026-09-14)에서 검사 하나를 쓰다가 드러난 성질이다. `wait_for_screen`으로
+판정하는 체인 전부에 해당한다(당시 여덟, 지금은 대부분).
 
 ## 무엇이 문제인가
 
 `gate_lib.sh`의 `wait_for_screen`은 로그에서 `terminal: screen>` 줄을 전부
-모아 패턴을 건다. 마지막 프레임이 아니라 부팅 이후 찍힌 모든 프레임이다.
+모아 패턴을 건다 — 마지막 프레임이 아니라 부팅 이후 찍힌 모든 프레임이다
+(measurements 26).
 
 게스트에 친 명령은 셸이 에코해서 화면에 나타난다. 그러니까 명령줄 자체가
 판정 대상 안에 있다 — 패턴이 명령줄 안의 글자면, 그 명령이 아무 일도 안 해도
@@ -23,24 +31,16 @@ wait_for_screen "dhcpcd"        # 친 명령의 에코가 이미 dhcpcd다
 
 ## 처방 — 출력에만 생기는 글자를 만든다
 
-명령 치환으로 값을 만들어 붙이면 명령줄과 출력의 글자가 갈린다.
-
-```bash
-# echo dhcpcd-alive=$(pgrep -c dhcpcd)
-#   명령줄:  dhcpcd-alive=$(pgrep -c dhcpcd)
-#   출력:    dhcpcd-alive=1
-type_keys e c h o spc d h c p c d minus a l i v e equal \
-  shift-4 shift-9 p g r e p spc minus c spc d h c p c d shift-0 ret
-wait_for_screen "dhcpcd-alive=[1-9]"
-```
-
-`$(`가 `shift-4 shift-9`, `)`가 `shift-0`이다. fish가 `$(...)`를 읽는다는
-것은 `config/check.sh`의 `NEG_COUNT_KEYS`가 이미 증명했다.
+명령 치환으로 값을 만들어 붙이면 명령줄과 출력의 글자가 갈린다 —
+`echo dhcpcd-alive=$(pgrep -c dhcpcd)`는 명령줄에 `$(pgrep …)`, 출력에
+`dhcpcd-alive=1`이 남고 판정은 `dhcpcd-alive=[1-9]`다. `$(`와 `)`를 치는 키
+이름은 measurements 25에 있고 fish가 `$(...)`를 읽는다는 것은 `config/check.sh`의
+`NEG_COUNT_KEYS`가 증명했다.
 
 다른 길도 있다. 판정 글자를 우리가 바깥에서 넣는 것이다 — `net/check.sh`의
 검사 9가 그 모양이다. QEMU가 `guestfwd`로 흘려 넣는 `nwm3-outbound-ok`는
 게스트가 실제로 연결을 열었을 때만 화면에 생기고, 명령줄(`nc -w 5
-10.0.2.100 8080`)에는 그 글자가 없다.
+10.0.2.100 8080`)에는 그 글자가 없다(measurements 41).
 
 ## 검사를 쓸 때 물어볼 것
 
@@ -77,24 +77,11 @@ fish: Job 1, 'echo inm1-inbound-ok | nc -l -p…' has ended
 ## 그 로그를 사람이 읽을 때 — 행 구분자가 `|`다
 
 판정이 아니라 진단 이야기다. `terminal: screen>` 줄은 화면의 행을 ` | `로
-이어 붙여 한 줄로 만든다. 그래서 로그를 읽을 때 `tr '|' '\n'`으로 행을
-복원하는 것이 이 저장소의 관습인데, 화면에 `|` 문자를 찍는 명령을 치면 그
-문자와 행 경계가 구별되지 않는다.
-
-IN-M1(2026-09-14)이 그런 명령을 치는 첫 자리다. `echo inm1-inbound-ok | nc -l
--p 8080 &`를 친 회차에서 복원된 화면이 이렇게 보였다.
-
-```
- root@(none) ~# echo inm1-inbound-ok
- nc -l -p 8080 &
-```
-
-한 줄인 명령이 두 줄로 갈려서 잠깐 "파이프가 안 들어갔나"로 읽힌다. 실제로는
-들어갔다 — 확인하려면 쪼개지 말고 원본 줄을 그대로 보면 된다.
-
-```bash
-grep -a "terminal: screen>" serial.clean | tail -1
-```
+이어 붙이므로 `tr '|' '\n'`으로 행을 복원하면 화면에 찍힌 `|` 문자도 함께
+쪼개진다(`docs/guides/lessons.md` "범용 명령"의 ⚠). IN-M1의 `echo inm1-inbound-ok
+| nc -l -p 8080 &`가 두 줄로 갈려 잠깐 "파이프가 안 들어갔나"로 읽혔다 —
+확인하려면 쪼개지 말고 원본 줄을 그대로 본다(`grep -a "terminal: screen>" … |
+tail -1`).
 
 ## 게스트에 심는 배경 job은 stdin을 끊어 준다
 
@@ -152,13 +139,10 @@ nc -l -p 8081 < /dev/null > /tmp/inm2.txt &
 
 ## 관련된 다른 자리
 
-같은 병이 화면이 아닌 곳에서도 나온다. SD 실측 11이 그것인데, 그쪽은 게스트
-히스토리 파일이다 — `grep`의 명령줄이 실행 전에 히스토리 파일에 써져서
-패턴이 자기를 세고, 음성 기대값이 0이 아니라 1이 된다. 처방도 같은 종류다
-(`grep -x`로 줄 전체 일치를 요구한다).
-
-즉 규칙은 "판정 대상에 우리가 친 명령이 들어가는가"를 먼저 묻는 것이고,
-화면이든 파일이든 답이 같다.
+같은 병이 화면이 아닌 곳에서도 나온다 — 게스트 히스토리 파일에 `grep`의
+명령줄이 실행 전에 써져서 패턴이 자기를 세는 것(measurements 24, 처방은
+`grep -x`). 즉 규칙은 "판정 대상에 우리가 친 명령이 들어가는가"를 먼저 묻는
+것이고, 화면이든 파일이든 답이 같다.
 
 관련: [[project_shell_history]] · [[project_gate_accuracy]] ·
 [[project_guest_network]]

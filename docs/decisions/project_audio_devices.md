@@ -11,10 +11,6 @@ Audio Devices(AU)는 2026-10-05에 열어 2026-10-06에 AU-M0~M3으로 닫혔다
 `docs/specs/2026-10-05-tars-audio-devices-design.md`(결정 8 · 전제 정정 12 · 위험 16 ·
 비목표 10 · 실측 19), plan은 `-au-m0.md` ~ `-au-m3.md`이고 각 끝의 "실측한 것" 절이 값이다.
 
-design과 plan 넷은 Opus 서브에이전트가 저장소 밖 사본에서 코드를 돌려 쓰고, 구현
-넷은 전부 Sonnet 서브에이전트가 plan의 글자 그대로 넣었다. lead(Fable)는 대조 ·
-루트 게이트 · commit · 결정과, 게이트가 빨개진 두 자리의 조사를 맡았다.
-
 ## 무엇을 직접 짜고 무엇을 그대로 썼나
 
 [[project_write_or_reuse]]의 기준이 또렷이 갈린 서브프로젝트다. 커널의 ALSA ·
@@ -54,21 +50,16 @@ libasound의 `default`는 카드 0이라 USB 헤드셋(카드 1)이 안 쓰인�
 
 ## 게이트가 샘플을 값까지 보는 수법
 
-QEMU `-audiodev alsa`가 컨테이너의 libasound를 쓰고, 그 libasound의 `file` 플러그인이
-스피커의 샘플을 파일에 받고(`tap.raw`) 파일의 샘플을 마이크에 넣는다(`infile`). 48kHz ·
-2채널 · s16으로 박으면 QEMU가 리샘플하지 않는다. `wav` 백엔드는 녹음 쪽이 없고 게스트
-안 루프백은 HDA의 마이크 길을 안 지난다(결정 5). 게스트 쪽은 설정 디스크의
-`services.d/probe`라 체인이 게스트에 한 글자도 안 친다. 부팅 D만 monitor(45491)로
-`usb-audio`를 꽂고 뽑는다.
+QEMU `-audiodev alsa` + 컨테이너 libasound의 `file` 플러그인 둘(스피커 `tap.raw` · 마이크
+`infile`)이다 — 수법과 함정(`wav` 백엔드 · 44100 리샘플 · 게스트 시계)은 measurements 81.
+게스트 안 루프백은 HDA의 마이크 길을 안 지나서 안 쓴다(결정 5). 게스트 쪽은 설정 디스크의
+`services.d/probe`라 체인이 게스트에 한 글자도 안 친다. 부팅 D만 monitor로 `usb-audio`를
+꽂고 뽑는다(포트는 lessons의 포트 절).
 
 ## 게이트가 빨개진 두 자리 — 둘 다 우리 코드가 아니었다
 
-- 호스트 부하 아래 dmix가 xrun 구간을 하드웨어 버퍼에 두 번 더해 ±16000 프레임이 한
-  덩어리로 나온다. `count_tap`이 `doubled`를 따로 세어 판정에 안 쓰고 사각파 하한이
-  40,000이다(design 실측 17).
-- 커널 printk(`random: crng init done`)가 terminal의 `screen>` 덤프 줄을 가운데서
-  잘라 뒤 조각에 머리가 없었다. `gate_lib.sh`의 `joined_screen_dump`가 이어 붙인다.
-  처음 이름이 `pointer/check.sh`의 함수와 충돌해 세 판 더 빨갰다(lessons).
+둘 다 `docs/guides/lessons.md`에 절로 있다 — "호스트 부하 아래 dmix가 xrun 구간을 두 번
+더한다(AU-M1)"와 "커널 printk가 terminal의 화면 줄을 가운데서 자른다(AU-M2)".
 
 ## VD와의 경계
 

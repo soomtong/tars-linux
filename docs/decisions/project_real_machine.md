@@ -12,8 +12,7 @@ metadata:
 RM-M0~M3이 2026-09-10에 끝났다. milestone별 경과와 게이트 시간은 2026-10-10에
 지웠다(커밋 이력에 있다). 여기에는 결정과 다시 밟지 말 함정만 남긴다.
 
-그 뒤에 얹힌 층 — 내장 디스크 설치와 설정 파티션([[project_disk_install]] ·
-[[project_disk_carryover]]), 유선 · 무선 드라이버([[project_wired_nic]] ·
+그 뒤에 얹힌 층 — 내장 디스크 설치와 설정 파티션([[project_disk_install]], DC도 거기), 유선 · 무선 드라이버([[project_wired_nic]] ·
 [[project_wireless]]), 터치패드([[project_pointer_devices]]), 배터리
 ([[project_battery_status]]). 실기에 꽂는 법은 `docs/guides/running-tars.md`의
 "실기 노트북에 꽂아 보기" 절이다 — Secure Boot를 끄고(커널에 서명이 없고 안 끄면
@@ -163,7 +162,7 @@ RM-M3이 경합을 만든 것이 아니라 지터를 넓혀 드러냈다. RM-M1�
 기다림을 넣을 때의 실수 둘을 호스트 검사가 각각 잡는다 — 자고 나서 묻기
 (`SleptBeforeLooking`, 모든 부팅이 느려지고 증상이 "좀 느리다"뿐이라 아무도 못
 잡는다) · 기다림이 없음(`GaveUpTooEarly`). 같은 모양을 뒤에 `storage.zig`의 파티션
-기다림이 썼다([[project_disk_carryover]]).
+기다림이 썼다([[project_disk_install]]의 DC 절).
 
 ## ISO 하나가 두 펌웨어를 태운다
 
@@ -176,9 +175,8 @@ option`으로 죽는다. `limine-uefi-cd.bin`은 El Torito가 가리키는 FAT �
 
 ## 그 밖에
 
-- 게이트는 커널을 회차마다가 아니라 1회 빌드한다([[project_gate_latency]]). 그래서
-  `.config`를 하나로 유지하는 대가가 체인 수의 배수가 아니라 1배다. 문서에 적힌
-  배수는 게이트 시간과 같은 종류로 낡는다.
+- `.config`를 하나로 유지하는 대가는 게이트당 커널 빌드 1회다([[project_kernel_config]]의
+  "설정 변경의 빌드 비용은 게이트당 1배다").
 - `SUSPEND`(S3)는 RM 밖이다. `ACPI_BUTTON`이 켜져 있어 lid 이벤트는 오지만 뚜껑을
   닫아 절전으로 가는 것은 별 서브프로젝트다.
 
@@ -190,4 +188,4 @@ escape를 걷어내고 읽고, (6) 게이트가 초록이어도 무엇이 딸려
 
 관련: [[project_target_hardware]] · [[project_kernel_config]] ·
 [[project_device_discovery]] · [[project_gate_latency]] ·
-[[project_gate_chain_composition]] · [[project_disk_install]] · [[project_disk_carryover]]
+[[project_gate_chain_composition]] · [[project_disk_install]]

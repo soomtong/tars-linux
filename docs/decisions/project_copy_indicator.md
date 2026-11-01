@@ -1,3 +1,10 @@
+---
+name: project_copy_indicator
+description: copy mode를 상태 줄 꼬리의 COPY 칸으로 보여 준다(CI-M0, 2026-10-03). 꼬리인 이유(앞 넷이 안 움직인다) · 켜질 때만 뜨는 이유 · 전용 색을 쓰는 이유(띠 전체를 센 값이 그 칸의 값이려면 색이 그 칸에만 쓰여야 한다) · 순수 모듈은 bool을 받는다 · 판정은 text=와 ink 짝
+metadata:
+  type: project
+---
+
 # Copy Indicator (CI) — copy mode를 상태 줄에 보여 주는 칸
 
 착수 2026-10-03. 완료 2026-10-03 (CI-M0).
@@ -38,7 +45,7 @@ IS 결정 2(자리 고정)가 그대로 서고, hangul 체인이 copy mode 밖�
 `CAPS` 칸의 값으로 읽는다. 그 전제는 "여백 안에서 그 두 색은 `CAPS` 칸에만
 쓰인다"다(IS-M1 plan 확정 3). `COPY`에 앰버를 쓰면 copy mode 안에서
 `CAPS`가 꺼져 있어도 `on`이 0이 아니게 되고, 그 전제가 조용히 거짓이 된다.
-그래서 전용 색 `STATUS_COPY`(`0x00E0E8F0`)다 — 그 덕에 게이트가 `COPY`
+그래서 전용 색 `STATUS_COPY`다(값은 `main.zig`가 정본) — 그 덕에 게이트가 `COPY`
 칸만 세는 넷째 줄 `status> copy ink=N`을 같은 방법으로 얻는다.
 
 같은 색을 두 칸이 나눠 쓰면 "띠 전체를 센 값이 곧 그 칸의 값"이라는 싼
@@ -57,15 +64,9 @@ bool이 있다 — `drawStatus`가 `CAPS` 칸의 시작을 꼬리에서 세는�
 날 조용히 틀린다.
 
 `MAX_LEN`은 36에서 42가 됐고, 버퍼를 손으로 늘린 자리는 없다 — IS 결정 5의
-comptime 셈이 두 번째로 값을 한 자리다.
-
-## 갱신 경로는 새로 없었다
-
-copy 명령은 전부 `main.zig`의 copy 루프 끝에서 `needs_redraw`를 켠다. 들어가는
-`.enter`, 나가는 `.exit` · `.yank`, 가지치기로 끊기는 `pruned` 전부가 그
-프레임에 `statusText`를 다시 만든다. IS-M1이 `CAPS`에서 겪은 갱신 구멍은
-여기 없었고, `dumpStatus`의 메모를 넓힐 일도 없었다 — `CAPS`와 달리 `COPY`는
-글자 자체가 생기고 사라져서 `text`가 바뀐다.
+comptime 셈이 두 번째로 값을 한 자리다. 갱신 경로도 새로 없었다 — copy 명령은
+전부 copy 루프 끝에서 `needs_redraw`를 켜고, `COPY`는 글자 자체가 생기고 사라져서
+`CAPS`와 달리 `dumpStatus`의 메모를 넓힐 일이 없었다.
 
 ## 검증 구조 — 판정이 짝이고 둘씩이다
 
@@ -99,11 +100,6 @@ copy mode 안에서 `caps ink on`이 거짓이 됐고, 그것을 알아채는 �
 3. "꺼진 화면이 안 바뀐다"는 기준값으로 증명된다. hangul 체인의 383 · 87이
 그대로라는 것이 결정 2의 증거이고, 그 수가 바뀌었으면 꼬리에만 붙였다는
 말이 틀린 것이다.
-
-4. 한 번에 고치면 예고한 빨강을 못 본다. plan이 적어 둔 첫 실패(검사 10의
-36 ≠ 42)는 `status.zig`와 `status_test.zig`를 함께 고쳐서 나타나지 않았다.
-그래도 mutation 한 회전이 "일부러 실패를 본다"의 자리를 맡았다 — 그 빨강은
-산수가 아니라 게이트의 눈을 증명하므로 더 값지다.
 
 ## 관련
 

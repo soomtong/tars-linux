@@ -1,3 +1,10 @@
+---
+name: project_measuring_tool_cost
+description: "게스트에 도구를 넣기 전에 재귀 DT_NEEDED로 비용을 재는 절차(NW-M0, 2026-09-13) — apt-cache 닫힘 · 스테이징 · before/after · 귀속, 함정은 stat -L과 cpio 5번째 필드"
+metadata:
+  type: project
+---
+
 # 게스트에 도구를 넣기 전에 그 비용을 재는 방법
 
 2026-09-13, NW-M0에서 세웠다. UT가 도구 65개를 넣을 때 쓴 절차를 한 단계 더
@@ -5,20 +12,11 @@
 
 ## 왜 필요한가
 
-패키지의 `Installed-Size`는 우리가 치를 비용이 아니다. 우리는 패키지를
-설치하지 않고 바이너리 하나를 initrd에 복사하며, 딸려 오는 것은
-`copy_lib_deps`가 `DT_NEEDED`를 재귀로 따라간 만큼이다. 그 둘이 양쪽으로
-어긋난다.
-
-- 적게 잡히는 쪽. `dhcpcd-base`는 `libssl3t64`와 `libudev1`을 요구하지만
-  `dhcpcd` 바이너리가 부르는 것은 `libcrypto.so.3`와 `libc.so.6` 둘뿐이고
-  둘 다 이미 있다. 실제 비용이 388KB에 새 라이브러리 0개다.
-- 많이 잡히는 쪽. `curl` 바이너리의 `DT_NEEDED`는 세 줄뿐인데
-  (`libcurl.so.4` · `libz.so.1` · `libc.so.6`) 재귀로 따라가면 새 라이브러리가
-  20개에 10,927,904바이트다. 도구 넷을 넣었을 때 늘어난 13MB의 86%가 이
-  하나다.
-
-그래서 `readelf -d`의 첫 줄만 보고 판단하면 양쪽으로 다 틀린다.
+패키지의 `Installed-Size`는 우리가 치를 비용이 아니다 — 비용은 `copy_lib_deps`가
+`DT_NEEDED`를 재귀로 따라간 만큼이고, 그 둘은 양쪽으로 어긋난다(measurements 40의
+`dhcpcd`와 `curl`). 수치는 `dhcpcd` 388KB에 새 라이브러리 0개, `curl`은 재귀 20개에
+10,927,904바이트 — 도구 넷을 넣었을 때 늘어난 13MB의 86%가 이 하나다. 그래서
+`readelf -d`의 첫 줄만 보고 판단하면 양쪽으로 다 틀린다.
 
 ## 절차
 
@@ -61,9 +59,9 @@ macOS에서 `cpio -tv`의 크기는 5번째 필드다(`-rw-r--r-- 1 root wheel 9
 
 ## 도구가 sysroot에 있는 이름과 사람이 치는 이름이 다를 수 있다
 
-`dpkg -x`는 alternatives 링크를 안 만든다. `/usr/bin/nc`는 sysroot에 없고
-실체는 `nc.traditional`이다. `vi`·`editor`·`pager`도 같은 자리이고
-`make_initrd.sh`가 그 셋에 링크를 직접 걸고 있다.
+`dpkg -x`는 alternatives 링크를 안 만든다(measurements 42). 목록에는 실체 이름을
+적고 사람이 치는 이름은 `make_initrd.sh`의 `ln -sf`가 세운다 — `nc` · `vi` · `editor` ·
+`pager`가 그 자리이고 지금은 `arecord`와 홈의 rc 링크들까지 같은 줄에 있다.
 
 ## `/usr/sbin`에 사는 도구는 이름으로 못 부른다
 

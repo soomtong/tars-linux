@@ -35,7 +35,7 @@ HANDOFF의 TODO에서 사용자가 골랐다(2026-10-20): 받은 사람이 자�
 ## 실측
 
 - `git status` 0.05~0.15초, 캐시 적중 `zig build` 0.1초 안팎 — 체인마다 다시 물어도 비용이 없다.
-- 루트 게이트 1회차: 20/22, PM-M1 · UT-M3가 병렬 레인의 initrd 다시 조립 경합으로 빨갰다(lessons "이월 숙제" BV).
-  2회차 22/22 PASS(prebuild 285초 + 레인 328초).
+- 루트 게이트 1회차: 20/22, PM-M1 · UT-M3가 병렬 레인의 initrd 다시 조립 경합으로 빨갰다 — 공유 산출물은 `mv`로 바꿔치기한다는
+  규칙의 자리다(`docs/guides/lessons.md`의 "체인은 동시에 돈다" 절). 2회차 22/22 PASS.
 
 관련: [[project_release]], [[project_gate_chain_composition]]

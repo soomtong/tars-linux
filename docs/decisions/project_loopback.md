@@ -36,7 +36,7 @@ How to apply:
   답한다. 그 줄은 NSS를 안 거치는 resolver(정적 Go · musl)를 위한 것이고 게스트에 그런
   클라이언트가 없다. 그 클라이언트가 `*.localhost`를 필요로 하는 날 로컬 DNS stub을
   다시 본다(design 비목표 1).
-- 판정의 재료를 판정 대상과 같은 파일로 두지 말 것 — `/etc/hosts`를 흘려 보내던 첫
-  판에서 그 파일을 비우자 게이트가 "loopback을 못 건넜다"고 거짓말했다.
+- 판정의 재료를 판정 대상과 같은 파일로 두지 말 것(measurements 48 — LB의
+  `/etc/hosts`가 그 출처다).
 - 게스트에 `timeout` · `install`이 없다. bash로 짠 타임아웃의 감시자는 출력을 닫아야
   `$(...)`가 안 매달린다.

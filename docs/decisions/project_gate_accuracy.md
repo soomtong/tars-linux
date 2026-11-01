@@ -61,7 +61,7 @@ HANDOFF가 "로그가 파이프 버퍼(64KiB)보다 크면 터진다"고 적어 
 
 ### 검사가 망가지는 조건이 검사가 필요한 조건과 같을 수 있다
 
-`config/check.sh:894`가 그 모양이었고 일곱 중 가장 나빴다. 평시에는 앞단
+`config/check.sh`의 2차 부팅 검사(시리얼 콘솔이 fish로 뜨지 않았다)가 그 모양이었고 일곱 중 가장 나빴다. 평시에는 앞단
 출력이 0줄이라 안전해 보인다 — 2차 부팅은 두 셸이 다 zsh라 fish 인사말이
 없다. 그런데 시리얼 콘솔이 정말 fish로 떴다면(= 이 검사가 빨개져야 하는
 상황) 화면 셸도 fish이므로 인사말이 `screen>` 프레임마다 붙어 앞단이 커진다.
@@ -103,9 +103,9 @@ if ! grep -a "tars-init: keyboard device" "$LOG" | grep -a "USB Keyboard" >/dev/
 ## 재발 방지는 `check.sh`의 진입 검사에 있다
 
 `require_no_early_exit_pipe`가 `require_build_steps` 옆에 있고, 같은
-`CHAINS` 배열을 훑는다. 대상은 체인 열하나에 `gate_lib.sh`와 `check.sh`
-자신을 더한 열셋이다. 부팅 전에 끝나므로 28분을 기다린 뒤가 아니라 시작
-몇 초 안에 말해 준다.
+`CHAINS` 배열을 훑는다. 대상은 `CHAINS`의 체인 전부(GA 때 열하나, 지금 스물둘)에
+`gate_lib.sh`와 `check.sh` 자신을 더한 것이다(`for extra in ./gate_lib.sh ./check.sh`).
+부팅 전에 끝나므로 게이트를 다 기다린 뒤가 아니라 시작 몇 초 안에 말해 준다.
 
 주의할 것 둘.
 
@@ -137,9 +137,8 @@ if ! grep -a "tars-init: keyboard device" "$LOG" | grep -a "USB Keyboard" >/dev/
 대조군의 셋째·넷째가 GA-M0이 넣은 처방 모양이다. 처방이 lint를 통과하는
 것을 직접 보지 않으면 둘 중 하나가 틀렸을 수 있다.
 
-`cd "$(dirname "$0")"`를 조심한다. `check.sh`의 사본을 `/tmp`에서 돌리면
-그 줄이 작업 디렉터리를 옮겨 체인 파일을 전부 못 찾고, 증상이 lint의 거짓
-양성과 똑같이 생긴다. 잘라낸 사본에서 그 줄을 빼고 돌린다.
+`cd "$(dirname "$0")"`를 조심한다 — `docs/guides/dead-ends.md`의 "`check.sh`의 사본을
+`/tmp`에서 돌려 진입 검사만 보기(GA-M1)" 항목.
 
 ## 범위 밖
 

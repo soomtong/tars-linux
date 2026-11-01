@@ -41,14 +41,9 @@ PID 1 = tars-init         ← supervise()가 noreturn. 절대 반환하지 않�
 ## 감독 루프는 `poll` 구조다 (2026-08-22 HD-M2)
 
 PID 1이 전원 버튼을 직접 열면서([[project_device_discovery]]) 자식의 죽음과 버튼
-fd를 함께 기다려야 하게 됐다. 블로킹 `waitpid`로는 하나만 기다릴 수 있다.
-
-```
-1. power.take()   → 종료 요청이 있으면 shutdown(noreturn)
-2. start()        → 안 떠 있고 포기하지 않은 자식을 띄운다
-3. waitpid(-1, WNOHANG) 반복 → 거둘 것을 전부 거둔다
-4. poll(버튼 fd들, 1000ms)   → 유일하게 잠드는 자리
-```
+fd를 함께 기다려야 하게 됐다. 블로킹 `waitpid`로는 하나만 기다릴 수 있다. 네 단계의
+순서(`take` → `start` → `waitpid(WNOHANG)` 반복 → `poll` 1000ms)는
+`docs/guides/key-files.md`의 "감독 루프의 구조" 절에 있다.
 
 거두기(3)를 `poll`(4)보다 앞에 둔 순서가 backoff다. 죽은 자식을 그 바퀴에서
 거두고 곧바로 1초를 자므로 재시작은 다음 바퀴 머리에서 일어난다. 그래서
@@ -57,12 +52,11 @@ fd를 함께 기다려야 하게 됐다. 블로킹 `waitpid`로는 하나만 기
 `poll(fds, 0, 1000)`이 그냥 1초 `sleep`이다. `Child`에 `restart_after` 필드를
 더하는 길은 가장 민감한 코드에 상태를 얹는 것이라 물렸다.
 
-### `SA_RESTART`는 `poll`에서도 같은 이유로 필수다
+### `SA_RESTART`는 `poll`에서도 같은 이유로 꺼져 있어야 한다
 
-`SA_RESTART`가 켜져 있으면 커널이 `poll`을 안에서 재시작한다
-([[project_power_management]]). 끈 채로 두어야 `poll`이 `EINTR`로 깨어나고
-`if (e != .INTR)` 분기가 흐름을 루프 머리로 돌려보낸다. PM 체인 부팅
-2(Ctrl+Alt+Del → SIGINT → 재부팅)가 이 성질을 정면으로 밟는다.
+이유와 증상은 [[project_power_management]]의 "`SA_RESTART`를 켜면 플래그를 세워도
+아무 일이 안 일어난다" 절에 있다. PM 체인 부팅 2(Ctrl+Alt+Del → SIGINT → 재부팅)가
+이 성질을 정면으로 밟는다.
 
 ### 1초 타임아웃이 덮는 것은 `SIGCHLD` 경합이다
 
@@ -136,7 +130,8 @@ How to apply: 감독 루프를 고칠 때는 (1) 루프 머리의 `power.take()`
 루프 머리로 돌아가는지 확인하며(`SA_RESTART`를 켜는 순간 조용히 깨진다),
 (3) `poll`이 깨운 fd는 반드시 읽어 비우고, (4) 고친 뒤에는 HD 체인이 아니라
 BF와 PM을 먼저 돌린다. 감독 대상은 `Kind` enum에 컴파일 타임으로 고정돼 있고,
-늘리려면 `Child.argv` 배열 길이(`main.zig`, 지금 `[9:null]`)도 함께 본다.
+늘리려면 argv 길이도 함께 본다 — SA-M1부터 `Child.argv`의 타입은
+`shared/screen_args.zig`의 `Argv`(`[ARGC:null]`, `ARGC = 9`)다.
 
 관련: [[project_power_management]], [[project_device_discovery]],
 [[project_boot_shell_selection]], [[project_gate_chain_composition]],

@@ -81,10 +81,9 @@ QEMU system_powerdown → ACPI → evdev        ─┘        ↓
 
 ## 셸마다 `SIGTERM`에 다르게 반응한다 — 게이트는 "모두 죽었다"만 요구한다
 
-대화형 bash · zsh는 `SIGTERM`을 무시하고 fish는 죽는다. HD-M2 전까지 이
-자리에 "셋 다 무시한다"고 적혀 있었다 — 종료를 시키는 체인이 bash로 뜨는
-하나뿐이라 fish로 종료해 본 적이 없었고, 디스크를 안 무는 `device/check.sh`가
-처음 밟았다. 둘만 확인하고 "대화형 셸"로 묶어 쓴 일반화였다.
+대화형 bash · zsh는 `SIGTERM`을 무시하고 fish는 죽는다(measurements 22 · 36 — 둘만
+확인하고 "대화형 셸"로 묶어 쓴 일반화를 디스크를 안 무는 `device/check.sh`가 처음
+밟았다).
 
 그래서 게이트는 어떤 시그널에 죽었는지를 요구하지도 금지하지도 않고
 `every child is gone`만 요구한다. 지금의 순서(`TERMINATION_SIGNALS = TERM ·
@@ -126,8 +125,8 @@ ACPI가 전원을 끊으므로 `power/check.sh` 부팅 1은 QEMU가 스스로 �
 보며, 패닉 검사(`Attempted to kill init`)는 실패에 이름을 붙이는 용도로
 남긴다.
 
-`power` 체인의 디스크는 `shell=bash`다(`power/make_disk.sh`) — `kill` 빌트인이
-확실한 셸로 띄운다. 게스트에 `kill` 바이너리는 UT가 넣었다.
+`power` 체인의 디스크는 `shell=bash`다(`power/make_disk.sh`, measurements 34) — `kill`
+빌트인이 확실한 셸로 띄운다. 게스트에 `kill` 바이너리는 UT가 넣었다.
 
 ## How to apply
 

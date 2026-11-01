@@ -43,13 +43,11 @@ or exclusively non-whitespace"). 그래서 `"ABC  DEF"`가 세 단어이고, vim
 
 ## `pointFromPin(.viewport, …)`은 위아래가 비대칭이다
 
-뷰포트 위쪽 밖이면 null이지만 아래쪽 밖은 알려주지 않는다 — `rows`보다 큰 y를 그냥
-준다. 아래쪽은 우리가 가른다(`copyPlace`의 `if (co.y >= rows) return;`). 빠뜨리면 증상이
-크래시가 아니라 "커서가 안 보인다"라 훨씬 늦게 발견된다. 검색도 같은 함수를 쓴다.
-
-`Terminal.ScrollViewport`에는 `.pin`이 없고 `Screen.Scroll`에는 있다 —
-`screens.active.scroll(.{ .pin = p })`이 그 pin을 뷰포트 맨 위로 만든다(x는 무시).
-`assertIntegrity`와 kitty dirty 표시까지 해 주므로 `pages.scroll`을 직접 부르지 않는다.
+`docs/guides/dead-ends.md`의 `pointFromPin(.viewport, …)` 항목과 `Terminal.scrollViewport`
+항목. 아래쪽을 가르는 자리는 `copyPlace`의 `if (co.y >= rows) return;`이고, 빠뜨리면
+증상이 크래시가 아니라 "커서가 안 보인다"라 늦게 발견된다. `screens.active.scroll(.{ .pin
+= p })`을 쓰는 이유는 `assertIntegrity`와 kitty dirty 표시까지 해 줘서다 — `pages.scroll`을
+직접 부르지 않는다.
 
 ## 라이브러리의 검색은 우리 선택을 안 건드린다
 
@@ -89,18 +87,11 @@ design 위험 1("`ScreenSearch`가 `Screen.selection`을 만지면 우리 선택
 
 ## 게이트가 밟은 함정
 
-- QEMU `sendkey`의 키 이름은 전부 소문자다. `sendkey F`는 조용히 버려지고 체인은
-  monitor 응답을 안 읽어 에러도 없다. `echo FINDME`가 `echo `로 도착했는데 "화면에 표적이
-  없다"는 검사가 그것을 통과시켰다 — 밀려난 것과 안 쳐진 것을 못 가른다. needle은
-  소문자(`findme`), 실제로 쳐졌는지는 `find> type needle=…`로 따로 본다.
-- `copy> row=`은 뷰포트 안의 행이라 검색에서는 늘 0이다(`copyPlace`가 매치를 뷰포트 맨
-  위로 올린다). `scroll> offset`을 더해 절대 행으로 센다.
-- `copyMove`의 좌우가 줄을 안 넘고 x를 0에서 멈추므로 `h`를 40번 누르면 반드시 col 0이다 —
-  프롬프트 길이에 기대지 않는 길이다. 대상 줄은 새로 만든다(화면에 이미 있는 줄은
-  프롬프트가 섞여 col을 못 센다).
-- `echo findme` 한 번이 스크롤백에 두 줄(되비춘 명령줄과 출력줄)을 남겨 매치가 넷이다.
-  커서가 선 줄을 yank하면 `len=6 text=findme` — 여섯 자가 곧 "명령줄이 아니라
-  출력줄에 섰다"의 증거다.
+measurements 6(소문자 키 이름) · 8 · 9(`copyMove` 좌우 · 대상 줄은 새로 만든다) ·
+10(`scroll> offset`을 더해 절대 행으로)과 `docs/guides/dead-ends.md`의 "화면에 표적이
+없다로 … 판정하기" 항목. 여기에만 있는 것 — `echo findme` 한 번이 스크롤백에 두
+줄(되비춘 명령줄과 출력줄)을 남겨 매치가 넷이다. 커서가 선 줄을 yank하면 `len=6
+text=findme` — 여섯 자가 곧 "명령줄이 아니라 출력줄에 섰다"의 증거다.
 
 관련: [[project_copy_mode]] · [[project_input_policy]] · [[project_terminal_rendering]] ·
 [[project_gate_chain_composition]]

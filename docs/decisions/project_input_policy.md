@@ -49,14 +49,16 @@ D`로 번역돼 샌다. 이 순서를 지키는 검사가 따로 있다 — DECC
 ## 설정 파서는 한 벌뿐이다 (CP 구조의 두 번째 시험)
 
 "파일을 읽는 것은 PID 1 하나"([[project_config_persistence]])를 지킨다.
-`init`이 `Keyboard` enum으로 검증한 뒤 `apple`/`pc` 하나만 argv 넷째 자리에
-넣고, `terminal`은 `std.mem.eql(u8, kb, "pc")` 한 줄로 받는다. enum을 복사하면
-파서가 두 벌이 되고 두 프로세스가 같은 파일에서 다른 답을 얻을 수 있다.
+`init`이 `Keyboard` enum으로 검증한 뒤 값 하나만 argv로 넘기고 `terminal`은 받기만
+한다. enum을 복사하면 파서가 두 벌이 되고 두 프로세스가 같은 파일에서 다른 답을
+얻을 수 있다. IP 시절에는 `apple`/`pc` 문자열을 argv 넷째 자리에 넣고 `terminal`이
+`std.mem.eql`로 비교했는데, SA-M0부터 그 자리는 `shared/screen_args.zig`의 `Slot` ·
+`encode` · `decode`다(`docs/guides/key-files.md`의 `shared/` 절) — enum은 여전히 한 벌이고
+이제 두 프로그램이 같은 파일을 컴파일한다.
 
-`Child.argv`의 넷째 자리를 콘솔 셸은 `null`로 둔다 — execve가
-첫 null에서 멈추므로 인자 수가 다른 자식이 같은 배열 타입을 쓴다. 이 인자가
-셸로 새지 않는 것은 `terminal`이 셸 argv를 `{shell_path, shell_flag}`로 따로
-조립하기 때문이다.
+콘솔 셸의 argv는 뒤 칸을 `null`로 둔다 — execve가 첫 null에서 멈추므로 인자 수가
+다른 자식이 같은 배열 타입을 쓴다. 이 인자가 셸로 새지 않는 것은 `terminal`이 셸
+argv를 `{shell_path, shell_flag}`로 따로 조립하기 때문이다.
 
 `config.zig`의 `parse`는 시스템 콜 없는 순수 함수라 `config_test.zig`(`zig
 build test`)가 깨진 입력 아홉 가지가 전부 기본값으로 떨어지는 것("설정 하나로

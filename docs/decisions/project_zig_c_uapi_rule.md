@@ -19,8 +19,10 @@ milestone별 경과와 게이트 시간은 2026-10-20에 지웠다(커밋 이력
 UAPI 구조체에는 해당하지 않는다. 새 구조체를 가져오면 먼저 `@sizeOf`를 찍어
 기대값과 대조한다.
 
-`_IOR`/`_IOWR`/`_IOW` 계열은 매크로 확장이라 못 가져온다.
-`terminal/src/drm.zig`가 `_IOWR`을 비트 연산으로 손수 푼 것이 그 사례다.
+`_IOR`/`_IOWR`/`_IOW` 계열은 `@cImport`가 매크로 확장이라 못 가져왔다.
+`terminal/src/drm.zig`가 `_IOWR`을 비트 연산으로 손수 푼 것이 그 사례다. translate-c
+패키지(ZU-M1, 아래 절)는 `EVIOCGBIT` 같은 ioctl 매크로를 inline fn으로 넘긴다
+(measurements 77) — 그래서 지금 "손으로 푼다"는 std에도 번역에도 없을 때의 길이다.
 다만 먼저 std를 찾는다 — `TIOCSCTTY`는 `std.os.linux.T.IOCSCTTY`(x86_64
 `0x540e`)로 이미 있었다. `drm.zig`가 손으로 푼 것은 DRM 계열이 std에 없기
 때문이지 매크로라서가 아니다.
@@ -69,8 +71,8 @@ Zig 0.17이 `@cImport`를 없애서 0.16에서 미리 translate-c 패키지(ghos
 `02ff0c5`(2.0.0, ghostty의 `pkg/translate-c` wrapper가 받는 것과 같은 판)로 올렸다 —
 `Translator.init`의 모양이 같아 `translateC`는 안 바뀌었다.
 
-패키지도 ReleaseSafe 번역에 `-D_FORTIFY_SOURCE=2`를 붙이고(패키지
-`src/main.zig:233`), 그 인자가 우리의 `defineCMacro` · `extra_args`보다 뒤에
+패키지도 ReleaseSafe 번역에 `-D_FORTIFY_SOURCE=2`를 붙이고(패키지 `src/main.zig`가
+최적화 모드를 보고 더한다), 그 인자가 우리의 `defineCMacro` · `extra_args`보다 뒤에
 온다. 명령줄로 `_FORTIFY_SOURCE=0`을 줘도 진다. 그래서 stub 헤더 안에
 `#undef _FORTIFY_SOURCE`를 둔다(소스 안의 지시문이 명령줄 define 뒤에
 처리된다).
@@ -111,8 +113,8 @@ type`)일 수 있다 — `ghostty_vt.Stream`이 그랬고 필요한 것은 인�
 
 Zig 0.16부터 `environ` 대체: `pub fn main(init: std.process.Init.Minimal)`로
 선언하면 `init.environ.block.slice.ptr`이 커널이 스택에 올려준 envp다
-(`std/start.zig:508-519`가 libc 없이 채운다). `execve`에 그대로 넘긴다 — std
-자신도 같은 방식이다(`std/Io/Threaded.zig:16792`). 인자 없는 `main()`이나 전체
+(`std/start.zig`가 libc 없이 채운다). `execve`에 그대로 넘긴다 — std
+자신도 같은 방식이다(`std/Io/Threaded.zig`의 execve 자리). 인자 없는 `main()`이나 전체
 `Init`을 받으면 allocator · `Io.Threaded` · environ map 구성이 앞에 붙으므로
 PID 1에는 `Minimal`이 맞다.
 

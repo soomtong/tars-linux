@@ -1,3 +1,10 @@
+---
+name: project_seeding_a_config_disk
+description: "설정 디스크를 부팅 없이 debugfs로 굽는다(NW-M2, 2026-09-13) — 특권이 안 드는 이유와 세 길의 비교"
+metadata:
+  type: project
+---
+
 # 설정 디스크를 미리 굽는다 — `debugfs`
 
 NW-M2(2026-09-13)에서 정했다. 체인이 게스트에 설정을 주는 방법이 지금까지 둘
@@ -6,17 +13,11 @@ NW-M2(2026-09-13)에서 정했다. 체인이 게스트에 설정을 주는 방�
 ## 무엇을 하는가
 
 `debugfs`는 마운트도 loop 장치도 특권도 없이 ext2 이미지에 파일을 쓴다.
-이미지 파일을 파일로 읽고 쓸 뿐이다.
-
-```bash
-truncate -s 16M net.img
-mkfs.ext2 -F -q -m 0 -L tars-net net.img
-printf 'net=dhcp\n' > /tmp/c.conf
-debugfs -w -R "write /tmp/c.conf tars.conf" net.img
-```
-
-`Allocated inode: 12`가 나오면 들어간 것이고 `debugfs -R "cat tars.conf"`로
-읽어 확인한다. 실물이 `net/make_disk.sh`다.
+이미지 파일을 파일로 읽고 쓸 뿐이다. 명령은 `docs/guides/lessons.md` "범용 명령"의
+"설정 디스크를 부팅 없이 읽고 쓰기"(쓰기는 `debugfs -w -R "write …"`, 읽기는
+measurements 38). `Allocated inode: 12`가 나오면 들어간 것이다. 실물이
+`net/make_disk.sh`이고, 디스크를 만들 때 디렉터리째 담는 `mkfs.ext2 -d`는
+measurements 34(`power/make_disk.sh` · `hangul/make_disk.sh`).
 
 `e2fsprogs`에 들어 있어서 따로 받을 것이 없다 — 이 저장소는 `mkfs.ext2`를
 이미 쓰고 있었고(`config/make_disk.sh`) 같은 패키지다.

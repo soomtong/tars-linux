@@ -215,7 +215,7 @@ grep -ah "찾을 문구" out/gate-logs/copy/tmp.*
 
 ### 파이프 뒤의 `grep -q`는 게이트가 막는다 (GA-M1)
 
-`check.sh`의 진입 검사에 `require_no_early_exit_pipe`가 있다. 체인 열하나와
+`check.sh`의 진입 검사에 `require_no_early_exit_pipe`가 있다. `CHAINS`의 체인 전부와
 `gate_lib.sh`·`check.sh` 자신을 훑어, 주석이 아닌 줄에서 파이프 뒤의
 `grep`/`rg`에 `-q`가 있으면 첫 부팅 전에 게이트를 세우고 줄 번호를 찍는다.
 `-aqE`처럼 `q`가 플래그 가운데 있어도, `--quiet`와 `rg -q`도 잡힌다.
@@ -235,17 +235,16 @@ SIGPIPE를 안 받는다.
 ### ⚠ 캐시는 컨테이너 안에서 지운다
 
 `project_zig_out_staleness`의 처방(음성 확인 전에 `.zig-cache`와 `zig-out`을
-지운다)을 호스트(macOS)에서 치면 바로 뒤의 `zig build`가
-`error: FileNotFound` 한 줄로 죽는다 — 9회 중 2회. 같은 삭제를 컨테이너
-안에서 하면 6/6 정상이다. `--verbose`를 줘도 한 줄도 더 안 나오고
-컴파일 에러와 구분이 안 되는 모양이라 더 나쁘다. `docker run … bash -c 'rm -rf init/.zig-cache init/zig-out'`
-형태로 친다.
+지운다)을 호스트(macOS)에서 치면 바로 뒤의 `zig build`가 `error: FileNotFound`로
+죽을 수 있다. `docker run … bash -c 'rm -rf init/.zig-cache init/zig-out'` 형태로
+친다 — 수치와 이유는 그 기억의 ⚠ 절.
 
 ### docker 작업은 한 번에 하나 (PD)
 
-OrbStack VM(4GB)에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU(512MB)가 겹치면
-OOM(exit 137)이나 VM 재시작이 난다. 체인 하나가 도는 동안 다른 컨테이너에서 빌드하지
-않는다. `install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
+OrbStack VM이 4GB였을 때 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU(512MB)가 겹치면
+OOM(exit 137)이나 VM 재시작이 났다. 지금은 12GB(GP-M2, 2026-10-10)라 루트 게이트가 `JOBS`줄을
+동시에 돌리지만, 게이트가 도는 동안 다른 컨테이너에서 cold 빌드를 시작하는 것은 여전히 피한다.
+`install` 체인의 시리얼 로그를 남기려면 `rm -rf "$WORK"`를 뺀 사본을 덮는다.
 
 ### 로그 문구는 두 곳에 중복된다
 
@@ -256,8 +255,8 @@ OOM(exit 137)이나 VM 재시작이 난다. 체인 하나가 도는 동안 다�
 `config shell=… net=… ntp=… timezone=… firewall=… esc_latin=… clipboard=…`(키를 더할 때는 맨 뒤에 붙인다 — EL-M0이 `esc_latin=`을, 같은 날 CB-M0이 `clipboard=`를 그렇게 붙였다. 그리고 이 줄의 판정을 줄 끝 `$`에 고정하지 않는다 — EL이 `esc_latin=on$`로 고정했다가 CB가 뒤에 키를 붙이자 hangul 체인이 깨졌다. 경계는 `( |$)`다, `hangul/check.sh`의 `toggles=` 판정처럼. `terminal: clipboard scope=`는 짝인 terminal 줄이다. `net/check.sh`의
 검사 3이 `config shell=.* net=dhcp`로 본다 — 앞부분을 고치면 다른 체인들의
 grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
-부팅도 침묵하지 않는다) · `started dhcpcd (pid N), it picks the interface`(WN-M2. `net` · `nic`가 보고,
-`net link`는 없어야 한다) · `firewall=off, inbound is open` ·
+부팅도 침묵하지 않는다) · `dhcpcd joins the services, it picks the interface`(WN-M2 · DS-M1. 감독자의
+`started service dhcpcd (pid N`이 뒤따르고 `net` · `nic`가 그 줄을 본다, `net link`는 없어야 한다) · `firewall=off, inbound is open` ·
 `firewall up from /etc/tars/firewall.nft,` · `firewall up from /etc/tars/firewall-base.nft` ·
 `nft -f /etc/tars/firewall.nft exited 1`(FW. `firewall/check.sh`가 본다) ·
 `eth0: leased 10.0.2.15`(dhcpcd 자신의 말. 검사 5가 이것을 기다린다) ·
@@ -311,7 +310,7 @@ for capture` · `… N (device 6) for capture`(AU-M2 · M3, 바뀔 때만) · `a
 
 `find> hl`과 `find> overlay`는 매 프레임 찍힌다(CS-M0·CS-M1). "바뀔 때만"으로
 하면 상태가 하나 늘고, 그 판정이 틀렸을 때 증상이 "로그가 안 나온다"라 조사하기
-나쁘다. `style>`가 프레임당 16줄 상한이라(`STYLE_DUMP_LIMIT`) 셀 수를 그것만으로
+나쁘다. `style>`가 프레임당 상한이 있어(`STYLE_DUMP_LIMIT`, 지금 96) 셀 수를 그것만으로
 셀 수 없다 — `find> hl`에는 상한이 없고, 둘을 함께 보는 것이 검사 16이다.
 
 `find> overlay`가 오버레이 내용의 유일한 관측 수단이다(CS-M1). `screen>`에
@@ -441,7 +440,7 @@ docker run -d --name tars-measure tars-devcontainer sleep 7200
 docker exec tars-measure bash -c 'apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh fish >/dev/null 2>&1'
 
-# 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig로 shellcheck(51파일, note까지 전부 — SN-M0) ·
+# 게이트가 아닌 1분짜리 검사(GH-M0). 호스트의 shellcheck · zig(`/opt/homebrew/bin/zig` 0.17)로 shellcheck(51파일, note까지 전부 — SN-M0) ·
 # zig fmt --check · ast-check · shared/의 순수 검사 · init 크로스 빌드. 명령은 quick_check.sh에 있고
 # CI(.github/workflows/checks.yml의 host job)가 같은 파일을 돌린다 — 사람이 안 돌려도 push마다 돈다.
 # 의도한 note는 그 줄 위에 `# shellcheck disable=SCxxxx # 이유`. 호스트 검사(zig build test)는 여기에 없다 —

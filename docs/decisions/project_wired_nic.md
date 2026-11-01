@@ -42,14 +42,12 @@ How to apply:
   3. 인터페이스가 하나도 없으면 `no valid interfaces found`를 찍고 30초 timeout을
      넘겨 살아서 기다린다. 나중에 생긴 장치를 udev 없이 잡는다.
   4. 링크를 스스로 올린다(`IFF_UP` ioctl이 필요 없다).
-- 장치가 붙었는지는 드라이버 이름이 아니라 인터페이스 이름으로 센다. 드라이버가
-  커널에 있으면 장치가 없어도 `e1000e: Intel(R) PRO/1000 …` 배너가 찍힌다.
-- `usbnet: failed control transaction …` 세 줄은 게스트가 아니라 QEMU가 자기
-  stderr에 찍는 것이다. `-serial stdio`로 재면 게스트 로그에 섞여 보인다.
+- 장치가 붙었는지는 인터페이스 이름으로 세고, `usbnet: failed control transaction …`은
+  QEMU의 stderr다(measurements 54). `-serial stdio`로 재면 게스트 로그에 섞여 보인다.
 - `-netdev`만 주고 NIC 장치를 안 주면 QEMU는 기본 NIC를 안 붙인다(pc는 `e1000`,
   q35는 `e1000e`를 붙이는 것이 기본이다).
-- 새 체인이 QEMU를 띄우면 `-nic none`을 달거나 `-netdev`를 준다. 안 그러면 진입
-  검사가 게이트를 세운다.
+- 새 체인이 QEMU를 띄우면 `-nic none`을 달거나 `-netdev`를 준다(`docs/guides/lessons.md`의
+  "게이트를 돌리고 읽는 법" — 진입 검사 `require_explicit_nic`가 세운다).
 
 관련: [[project_guest_network]] · [[project_time_discipline]] ·
 [[feedback_boot_never_blocks]] · [[project_real_machine]]

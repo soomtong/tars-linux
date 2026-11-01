@@ -80,15 +80,12 @@ CN-M1이 검색을 넣었지만 사람이 받는 신호는 커서가 움직이�
 
 ## 오버레이는 `screen>`에 안 나온다 — `find> overlay` 줄이 창구다
 
-오버레이는 `cells()`에 안 섞여 `screen>`에 영영 안 나오고 `dumpStyles`도 덮인 줄을
-통째로 건너뛴다(`overlaid_row`). `find> submit matches=0`은 "검색이 못 찾았다"까지만
-말한다. 그래서 `terminal: find> overlay text=…`를 만들었다 — `render()`에 넘어간 바로 그
-값을 받아 찍는다. 다시 만들면 그리는 것과 찍는 것이 갈릴 수 있다.
-
-게이트 검사 순서 — "못 찾음"을 먼저 검사하면 그 needle이 `find_last`를 덮어 이어지는 빈
-Enter도 `matches=0`을 내고, "기록이 동작했다"와 "빈 Enter가 아무 일도 안 했다"가 안
-갈린다. 기록을 먼저 보면 앞 검사가 남긴 `findme`를 되불러 `matches=4`가 나온다.
-`vt_test`에서는 `matches`가 아니라 `findMissed()`가 다시 needle을 주는 것으로 판정한다.
+`docs/guides/lessons.md`의 로그 문구 절("`find> overlay`가 오버레이 내용의 유일한 관측
+수단이다")과 `docs/guides/dead-ends.md`의 "`find> submit matches=0`으로 …" · "`matches`로
+빈 Enter가 …(CS-M1)" 항목. 여기에만 있는 것 — 그 줄은 `render()`에 넘어간 바로 그 값을
+받아 찍는다(다시 만들면 그리는 것과 찍는 것이 갈릴 수 있다). 게이트 검사 순서 — "못
+찾음"을 먼저 검사하면 그 needle이 `find_last`를 덮어 이어지는 빈 Enter도 `matches=0`을
+내므로 기록 검사를 먼저 둔다.
 
 ## 게이트의 첫 검색 값은 번역 비용을 포함한다
 
@@ -100,12 +97,10 @@ Enter도 `matches=0`을 내고, "기록이 동작했다"와 "빈 Enter가 아무
 
 ## 코드를 읽을 때 알아야 할 것
 
-- Zig는 struct의 필드 사이에 선언을 끼우는 것을 막는다. `RowSpan` · `HlStats`가 `Screen`
-  안이 아니라 파일 스코프에 있는 이유다.
-- `vt.Screen`이 `io`를 필드로 든다. `cells()`에서 시간을 재기 위해서다.
-- `find> hl` 줄은 검색이 살아 있는 매 프레임 찍힌다. "바뀔 때만"은 상태를 하나 더
-  만들고 그 판정이 틀리면 증상이 "로그가 안 나온다"라 조사하기 나쁘다.
-- `vt_test`의 새 검사는 자기 화면을 만든다. 남의 화면에 붙이면 앞 검사가 흔들린다.
+전부 가이드에 있다 — `docs/guides/dead-ends.md`의 "struct의 필드 사이에 `const`"(`RowSpan` ·
+`HlStats`가 파일 스코프인 이유) · "`std.time.Timer`…"(`vt.Screen`이 `io`를 드는 이유) ·
+"`vt_test`의 검사를 남의 화면에 붙이기" 항목, `docs/guides/lessons.md`의 "`find> hl`과
+`find> overlay`는 매 프레임 찍힌다" 문단.
 
 관련: [[project_copy_navigation]] · [[project_copy_mode]] · [[project_search_position]] ·
 [[project_terminal_rendering]] · [[project_gate_chain_composition]]

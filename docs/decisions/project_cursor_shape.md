@@ -14,10 +14,10 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
 
 ## 무엇이 바뀌었나
 
-- 렌더러(CU-M0). `vt.zig`의 `cells()`가 셸 커서를 한 번 정해 `shell_cursor`에 두고,
-  block이면 반전, bar · underline이면 `main.zig`가 2픽셀 띠를 전용 색
-  `CURSOR_COLOR`(`0xF0F0F0`)로 칠한다. 깜빡임은 안 그린다. 게이트는 매 프레임의
-  `terminal: cursor> vt=… drawn=… row=… col=… cols=… ink=… box=…`로 세 층을 본다.
+- 렌더러(CU-M0). 셸 커서를 `cells()`가 한 번 정해 `shell_cursor`에 두는 구조와 우선순위는
+  `docs/guides/key-files.md`의 `vt.zig` 항목. bar · underline은 `main.zig`가 2픽셀 띠를 전용 색
+  `CURSOR_COLOR`로 칠하고 깜빡임은 안 그린다. 게이트는 매 프레임의 `terminal: cursor>` 줄로
+  세 층을 본다(lessons의 로그 문구 절).
 - 게스트 vi(CU-M1). sysroot의 `vim-tiny`를 `vim`(바이너리 `vim.basic`)으로 바꿨고
   `libsodium.so.23` · `libgpm.so.2`가 따라온다. `kernel/guest_tools.sh`의 한 줄이
   `usr/bin/vim.basic:usr/bin/vim`이고, `vi` · `editor`는 여전히 링크다.
@@ -36,15 +36,14 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
   언제나 block이고, 커서 반전을 세는 검사(`render` 검사 3 · `hangul`의
   `inverted_cells`)가 안 흔들린다. 셸이 언젠가 보내기 시작하면 `render` 검사 20이
   먼저 빨개진다.
-- stub이 없으면 vim.basic은 `E1187: Failed to source defaults.vim`과 `Press ENTER`를
-  띄우고 키를 기다린다. 시스템 vimrc의 `skip_defaults_vim`으로는 못 막는다 — 그
-  변수를 보는 코드가 `defaults.vim` 안에 있다.
-- 경로의 `vim91`은 vim 판에 묶여 있다. Debian이 9.2로 올리면 `vim92`가 되어 stub이
-  안 읽히고, 그날 `render` 검사 25가 `E1187`로 빨개진다. 그때는 `make_initrd.sh`의
-  경로 하나와 `tools/check.sh` 검사 1의 literal 하나를 고친다.
-- vim 화면의 `style>` 덤프는 언제나 잘린다. vim이 `~` 줄의 나머지를 NonText 색의
-  공백으로 채워서 셀이 6,976개다(GE-M1의 줄 번호 칸 뒤로는 6,980개). 게이트는 "덤프가 커서 칸을 지났다"로 판정한다
-  (`render/check.sh`의 `style_covers`).
+- stub이 없으면 `E1187`과 `Press ENTER`, 경로의 `vim91`이 vim 판에 묶여 있는 것 —
+  `docs/guides/key-files.md`의 `kernel/vim/` 항목. 여기에만 있는 것 — 시스템 vimrc의
+  `skip_defaults_vim`으로는 못 막는다(그 변수를 보는 코드가 `defaults.vim` 안에 있다),
+  `vim92`가 되는 날 고칠 자리는 `make_initrd.sh`의 경로 하나와 `tools/check.sh` 검사 1의
+  literal 하나다.
+- vim 화면의 `style>` 덤프는 언제나 잘린다(`render/check.sh`의 `style_covers` —
+  `docs/guides/key-files.md`의 `render/check.sh` 항목). vim이 `~` 줄의 나머지를 NonText
+  색의 공백으로 채우기 때문이다.
 - vim은 어떤 길로 나가든 마지막에 block을 보낸다. "대체 화면의 모양이 기본 화면으로
   안 샌다"는 vim으로 판정할 수 없고, `render` 검사 32가 printf로 판정한다.
 - vim이 켜는 키 모드(DECCKM)는 우리 키 입력에 영향이 없다. vim 안에서도 Esc는 1바이트로
@@ -55,8 +54,9 @@ Cursor Shape(CU)는 2026-10-04에 M0 · M1로 닫혔다. 사용자의 요청 한
 
 - `vim -u NONE` — vimrc를 아무것도 안 읽는다.
 - 사람이 `/.vimrc`에 `set t_SI= t_SR= t_EI=`를 쓰면 끈다. 시스템 vimrc가 먼저 읽히고
-  사용자 vimrc가 그 뒤에 읽히기 때문이다. 다만 `/.vimrc`가 생기면 vim이
-  `nocompatible`로 뜬다. 그리고 지금 `/.vimrc`는 tmpfs라 재부팅에 사라진다(design 비목표 7).
+  사용자 vimrc가 그 뒤에 읽히기 때문이다. CU 때 `/.vimrc`는 tmpfs라 재부팅에 사라졌는데
+  (design 비목표 7), PE-M2가 `/config/vimrc`로 가는 링크로 바꿔 설정 디스크가 붙은
+  기계에서 재부팅을 넘는다([[project_paste_ergonomics]]).
 - 시스템 vimrc는 `/config`가 아니라 initrd에 있어서 `tars.noconfig`와 무관하다.
 
 ## 관련

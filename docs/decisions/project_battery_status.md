@@ -8,8 +8,7 @@ metadata:
 Battery Status(BS)는 사용자의 요청 한 줄("노트북인 경우 배터리 잔량 표시", 2026-10-08)에서 시작했다. design은
 `docs/specs/2026-10-08-tars-battery-status-design.md`(결정 12 · 확인한 것 10), plan은
 `docs/plans/2026-10-08-tars-battery-status-bs-m0.md`(커널 · 순수 층) · `-bs-m1.md`(`main.zig` 배선 · 새 체인)이고 각 plan의 "착수 전에
-확정한 것" 절이 design과 달라진 자리다. 설계 · plan 셋은 Opus, 구현 둘은 Sonnet 서브에이전트가 했다. plan의 코드를 고친 곳은 0이고
-기대 글자를 고친 곳이 1이다(아래 "교훈").
+확정한 것" 절이 design과 달라진 자리다. plan의 코드를 고친 곳은 0이고 기대 글자를 고친 곳이 1이다(아래 "교훈").
 
 ## test_power의 함정 — 다시 조사하지 말 것
 
@@ -38,8 +37,8 @@ QEMU 10.0.13에는 배터리 장치가 없다(`-device help`에 `batt` · `power
 갈래가 `deliberately report errors` 줄을 커널 로그에 쌓는다. 블랙리스트를 내장 cmdline에 안 두는 것은 뒤에 붙인 파라미터로
 지울 수 없어서 게이트가 test_power를 다시 켤 길이 없어지기 때문이다.
 
-블랙리스트는 이름이 틀려도 `pr_debug`만 찍는다. 그것을 잡는 자리는 `machine` 체인 판정 14
-(`battery> scan seen=0 present=0 pick=none`) 하나뿐이다. `-kernel`로 뜨는 다른 체인은 전부 `seen=1 present=0`이다.
+블랙리스트는 이름이 틀려도 `pr_debug`만 찍는다. 그것을 잡는 자리는 `machine` 체인 판정 14 하나뿐이다(`docs/guides/key-files.md`의
+`machine/check.sh` 항목). `-kernel`로 뜨는 다른 체인은 전부 `seen=1 present=0`이다.
 
 ## ACPI 배터리에서 갈리는 것
 
@@ -59,10 +58,10 @@ QEMU 10.0.13에는 배터리 장치가 없다(`-device help`에 `batt` · `power
   [[project_copy_indicator]]와 같은 이유로, 띠 전체를 센 픽셀 수를 그 칸의 값으로 읽으려면 그 색이 그 칸에만 쓰여야 한다.
 - `dumpStatus`의 메모가 칸의 글자와 갈래를 함께 기억한다. 잔량 10인 채 충전이 시작되면 글자 ` 10%`는 그대로이고 색만 바뀐다.
   글자만 보면 새 줄이 안 찍힌다 — IS-M1이 `CAPS`에서 겪은 구멍이다. 검사 A4가 본다.
-- 다시 그릴지와 메모의 비교를 일부러 다른 함수로 했다(M1 plan 확정 8). 다시 그리기는 `std.meta.eql`, 메모는 `sameBatteryCell`이다.
+- 다시 그릴지와 메모의 비교를 일부러 다른 함수로 했다(M1 plan 확정 8) — 다시 그리기는 `std.meta.eql`, 메모는 `sameBatteryCell`.
   같은 함수를 쓰면 mutation m3(갈래를 뺀다)가 다시 그리기도 막아, A4가 빨개졌을 때 메모 때문인지 안 그려서인지가 안 갈린다.
-- 처음 훑기는 `needs_redraw`를 안 켠다(M1 plan 확정 7). 켜면 셸보다 먼저 빈 프레임이 하나 그려져 스물한 체인 전부의
-  `screen>` 줄 수가 하나씩 는다. 처음 훑기가 첫 프레임 앞이라 첫 프레임에 칸이 이미 있다(검사 B1).
+  배선의 자리(처음 훑기가 첫 프레임 앞 · `needs_redraw`를 안 켬 · `pollBattery`가 `decideFrame` 앞)는 `docs/guides/key-files.md`의
+  `main.zig` 배터리 절. `needs_redraw`를 켜면 모든 체인의 `screen>` 줄 수가 하나씩 는다(당시 스물한 체인, 지금은 `CHAINS` 스물둘).
 - 검사 A3은 로그를 다 받은 뒤 거꾸로 읽는다(M1 plan 확정 14). 칸을 그린 프레임의 `screen>`이 바로 앞 프레임과 글자까지 같고
   그 사이에 `key>` 줄이 없으면 "키도 PTY 출력도 없이 다시 그렸다"이다. 이렇게 하면 게이트가 "프롬프트가 다 그려진 순간"을 맞혀
   기준을 잡을 필요가 없다. 셸은 bash다 — 배경 작업이 끝난 것을 다음 프롬프트에서야 알려서 성공 경로가 uevent 하나다.
@@ -78,18 +77,15 @@ QEMU 10.0.13에는 배터리 장치가 없다(`-device help`에 `batt` · `power
 | mutation 셋 | `present` 거르기를 지운 판 → A1, `drainUevents`가 power_supply를 안 알리는 판 → A2, 메모에서 갈래를 뺀 판 → A4 |
 | 주기 경로 | uevent를 끈 판에서 잔량을 쓴 뒤 칸이 바뀌기까지 40.2초(60초 안) |
 | hangul 기준값 | `383 pixel(s) of text and a dim CAPS (off=87)` 그대로 |
-| BS-M0 루트 게이트 | 21체인 2/2, 57분 20초(dictation 체인의 간헐 하나는 그 체인만 두 번 다시 돌려 초록) |
-| BS-M1 루트 게이트 | 22체인 전부 `PASS: 2/2`, 1시간 00분 18초, `skipping make` 43, 44회차 전부 `A=0 B=0 C=0`, hangul `383 … (off=87)` 두 번, 빨간 줄 0 |
 
 ## 교훈 — 폭 고정 칸의 기대 글자는 검사 출력에서 베낀다
 
-plan과 design 결정 11의 표가 잔량 10의 칸을 `  10%`(다섯 자)로 적었다. 칸은 `CELL_LEN` 넉 자라 실제는 ` 10%`이고 공백 둘은
-`  5%`뿐이다. 코드는 맞았고 첫 battery 체인이 A3에서 빨갰다. 앞 공백의 개수는 사람이 눈으로 세면 틀리는 값이다. 게이트의 기대
-글자는 `battery_test`의 `cellText` 검사가 찍은 값이나 실측 줄에서 베낀다.
+`docs/guides/lessons.md`의 같은 제목 절(BS-M1)에 있다. plan과 design 결정 11의 표가 ` 10%`를 `  10%`로 적어 첫 battery 체인이 A3에서
+빨갰던 자리다.
 
 ## 남긴 것
 
-- 실기 노트북에서 한 번 보는 것 — `docs/guides/lessons.md`의 "이월 숙제" BS 항목.
+- 실기 노트북에서 한 번 보는 것 — `docs/guides/carryover.md`의 BS 항목.
 - 주기 경로(60초)는 게이트가 안 본다. `battery.pollTimeout`을 `battery_test`가 호스트에서 보고, 위의 40.2초가 한 번의 실측이다.
 
 관련: [[project_input_status]] · [[project_copy_indicator]] · [[project_wireless]](게이트 전용 커널 드라이버의 첫 사례) ·

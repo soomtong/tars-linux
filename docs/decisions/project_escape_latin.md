@@ -10,11 +10,8 @@ Escape Latin(EL)은 2026-10-05에 EL-M0 하나로 닫혔다. 사용자의 요청
 됨")에서 시작했고, 사용자의 macOS 입력기 Patal의 `ESC라틴` trait과 같은
 동작이다 — 조합을 확정하고, 영문으로 돌리고, Esc 자체는 프로그램이 받는다.
 design은 `docs/specs/2026-10-05-tars-escape-latin-design.md`, plan은
-`docs/plans/2026-10-05-tars-escape-latin-el-m0.md`.
-
-설계 · plan은 Opus 서브에이전트가, 구현은 Sonnet 서브에이전트가, 대조 · 루트
-게이트 · commit은 lead(Fable)가 했다. planner가 lead의 권고 하나를 바로잡았고
-그것이 이 기억의 첫 항목이다.
+`docs/plans/2026-10-05-tars-escape-latin-el-m0.md`. planner가 lead의 권고 하나를
+바로잡았고 그것이 이 기억의 첫 항목이다.
 
 ## 설정이 `hangul_toggle`의 다섯째 이름이 아니라 따로 있는 키인 이유
 
@@ -33,7 +30,8 @@ argv는 권고대로 간다. init이 목록 문자열 끝에 `esc_latin`을 붙�
 그대로 넘기고(`Config.terminalToggles`, 순수 함수), terminal의 `Toggles`가
 그 이름을 받는다. 그래서 같은 이름의 구조체 둘이 다른 뜻이다 — init 쪽은
 "파일의 `hangul_toggle` 줄", terminal 쪽은 "argv로 온 목록". 두 주석이 그
-차이를 적는다. init 로그의 `toggles=`는 파일의 목록 그대로이고 줄 끝에
+차이를 적는다(SA-M0부터 `Toggles`는 `shared/screen_args.zig`에 있고 그 칸은
+`Slot.toggles = 7`이다 — `docs/guides/key-files.md`의 `screen_args.zig` 항목). init 로그의 `toggles=`는 파일의 목록 그대로이고 줄 끝에
 `esc_latin=`이 붙는다. terminal 로그의 `toggles=`에는 `,esc_latin`이 붙는다.
 
 ## Esc의 뜻은 normal 모드 · 수정키 없음 · 한글 켜짐일 때뿐이다
@@ -74,11 +72,8 @@ vim에서 insert로 `닷`을 치고 Esc를 누른 뒤 `:wq`로 나와 `cat`으�
 
 ## 숫자
 
-- hangul 체인 65초 → 81초(검사 넷이 16초). 루트 게이트 19체인 2/2, 50분 58초
-  (PD-M4의 49분 56초 + 62초).
-- `input_test` OK 16 → 20. mutation 다섯 판 전부 예상한 검사에서 빨갰다.
-- 편집 36 · 8파일 · +570 −17. 구현자가 Edit 도구 대신 plan 본문에서 뽑은
-  스크립트로 넣었고 여덟 파일이 planner의 사본과 바이트까지 같았다.
+- hangul 체인 65초 → 81초(검사 넷이 16초). `input_test` OK 16 → 20. mutation 다섯 판
+  전부 예상한 검사에서 빨갰다.
 
 ## 남긴 것
 

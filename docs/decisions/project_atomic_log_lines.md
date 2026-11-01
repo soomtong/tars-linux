@@ -7,8 +7,7 @@ metadata:
 
 Atomic Log Lines(AL)는 TC-M3의 루트 게이트가 하룻밤에 두 번 빨개진 자리에서 열었다(2026-10-07). design은
 `docs/specs/2026-10-07-tars-atomic-log-lines-design.md`(결정 7 · 전제 정정 3 · 실측 F), plan은
-`docs/plans/2026-10-07-tars-atomic-log-lines-al-m0.md`(terminal) · `-al-m1.md`(init)이고 각 끝의 "실측한 것" 절이 값이다. planner Opus
-(`tc-design`) · 구현자 Sonnet(`tc-m0-impl`)이 TC에서 이어서 했고 plan 코드를 고친 곳은 0이다.
+`docs/plans/2026-10-07-tars-atomic-log-lines-al-m0.md`(terminal) · `-al-m1.md`(init)이고 각 끝의 "실측한 것" 절이 값이다.
 
 ## 사슬 — 다시 조사하지 말 것
 
@@ -26,20 +25,18 @@ Atomic Log Lines(AL)는 TC-M3의 루트 게이트가 하룻밤에 두 번 빨개
 
 ## 결정
 
-- `logline.zig` 하나를 `init/src` · `terminal/src`에 바이트까지 같은 사본 둘로(결정 1). 공용 모듈도 서지만 그 파일을 import하는 호스트 검사
-  열다섯에 `addImport`가 필요해서다. API는 `print(fmt, args)`(std.debug.print와 같은 fmt — perl 한 줄 치환)와 조각용 `Line`(init · print ·
-  bytes · flush). `Writer.fixed`를 쓴다(`bufPrint`는 얼마나 썼는지를 안 돌려준다). 에러는 삼키고 런타임 값에 assert는 없다.
+- `logline.zig` 하나를 `init/src` · `terminal/src`에 바이트까지 같은 사본 둘로(결정 1 — 공용 모듈을 안 둔 이유와 `Writer.fixed`를 쓰는
+  이유는 `docs/guides/dead-ends.md`의 `logline.zig` · `std.fmt.bufPrint` 항목). API는 `print(fmt, args)`(std.debug.print와 같은 fmt — perl
+  한 줄 치환)와 조각용 `Line`(init · print · bytes · flush). 에러는 삼키고 런타임 값에 assert는 없다.
 - 여러 조각으로 짓던 줄은 `dumpScreen` 하나뿐이라 그것만 `Line`에(결정 2). 바이트는 전과 같다 — 같은 부팅에서 옛 · 새 모양을 둘 다 찍어
   1,220프레임을 견줬다(한글 음절 76 포함).
 - 게스트 파일의 `std.debug.print`는 전부(terminal 98 · init 151 — design의 153은 주석 둘을 센 것). `config.zig`의 `log()`와 `configLog`
   가로채기(TC 결정 3)는 그대로, 싱크만 바뀐다.
-- 게이트(결정 4): 새 체인 없이 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR=<GATE_LOGS>/<체인>-<회차>`를 주고 끝나면 `cut_log_lines`로
-  센다 — A(`terminal:` 줄 안의 `tars-init:`), B(반대 — init 고유 `reload terminal: pid ` 줄 제외), C(` [cut]`으로 끝난 줄). 셋 다 FAIL. 로그를
-  지우던 8체인 14자리가 로그를 남긴다 — audio는 부팅 넷이 같은 파일을 덮어 써 마지막 하나만 남아 있었다.
+- 게이트(결정 4): 새 체인 없이 루트 `check.sh`의 `run_chain`이 회차마다 `TMPDIR`을 주고 끝나면 `cut_log_lines`로 A · B · C를 센다 — 무엇을
+  세고 로그가 어디 남는지는 `docs/guides/lessons.md`의 "회차의 로그는 `out/gate-logs/<시각>/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다" 절.
 - `joined_screen_dump`(결정 5): 커널 조각 처리와 온전한 `tars-init:` 줄 건너뛰기는 남기고, TC-M3 5b의 `tars-init:` 꼬리 떼기는 M1이 지웠다 —
   AL 뒤에는 그 규칙이 화면 글자의 꼬리를 떼는 거짓만 만들 수 있다.
-- 덤(M1 Task 3-3): pointer · copy · render · pane의 NUL 검사가 파일을 두 번 읽어(`tr -d` 길이와 `wc -c`) QEMU가 아직 쓰는 중이면 거짓 빨강이
-  났다. 한 번 읽기(`tr -cd '\0' | wc -c`)로 바꿨다.
+- 덤(M1 Task 3-3): pointer · copy · render · pane의 NUL 검사를 한 번 읽기로 바꿨다(`docs/guides/dead-ends.md`의 `grep -qP '\x00'` 항목).
 
 ## 남긴 것
 

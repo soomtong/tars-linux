@@ -10,15 +10,14 @@ Config Tool(TC)은 2026-10-06 사용자의 요청("tars-config 실행 파일을 
 `docs/specs/2026-10-07-tars-config-reload-design.md`(M2 · M3, 결정 11 — 기억은 [[project_config_reload]]), plan은
 `docs/plans/2026-10-06-tars-config-tool-tc-m0.md` · `-tc-m1.md` · `2026-10-07-tars-config-reload-tc-m2.md` · `-tc-m3.md`이고 각 끝의
 "실측한 것" 절이 값이다. 사용자 결정 셋 — seed의 별칭 `tars-config` · `tars-rc`는 지운다(cat과 다를 게 없다), 언어는 Zig, M1 · M2까지
-끝까지("진정한 user experience 개선"). design · plan은 Opus planner 하나(`tc-design`)가 사본 넷(`/tmp/run/tc0` ~ `tc3`)에서 코드를 돌려
-썼고, 구현은 Sonnet 구현자 하나(`tc-m0-impl`)가 글자 그대로 넣었다 — 네 milestone 모두 plan 코드를 고친 곳이 0이다.
+끝까지("진정한 user experience 개선"). 네 milestone 모두 plan 코드를 고친 곳이 0이다.
 
 ## 자리 — Zig, init 아래의 셋째 실행 파일
 
 `tars-install` · `tars-service`와 같은 길이다. `init/build.zig`의 `addExecutable`로 정적 바이너리(3.7MB)를 만들고 `make_initrd.sh`가
-`/usr/bin`에 넣는다. 시스템 콜 쪽 `config_cli.zig` · `config_front.zig`와 순수한 쪽 `config_edit.zig` · `config_front_edit.zig`를 가르고,
-순수한 쪽은 호스트 검사(`config_edit_test` · `config_front_edit_test`)가 덮는다. bash를 안 고른 이유는 `key=value` 파서가 셋째가
-되고(config.zig · tars-dictate 뒤) init이 받는 값의 목록을 베껴야 해서다. 새 런타임은 [[feedback_scripting_runtimes]]가 막는다.
+`/usr/bin`에 넣는다. 파일 넷의 가르기(시스템 콜 쪽 · 순수한 쪽)와 호스트 검사는 `docs/guides/key-files.md`의 `config_cli.zig` ·
+`config_front.zig` 항목. bash를 안 고른 이유는 `key=value` 파서가 셋째가 되고(config.zig · tars-dictate 뒤) init이 받는 값의 목록을
+베껴야 해서다. 새 런타임은 [[feedback_scripting_runtimes]]가 막는다.
 
 ## 결정 — 다시 조사하지 말 것
 

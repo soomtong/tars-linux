@@ -1,6 +1,6 @@
 ---
 name: project_config_persistence
-description: "설정은 virtio-blk 디스크 전체의 ext2를 MS_SYNCHRONOUS로 마운트한 /config/tars.conf 하나 · 읽는 것은 PID 1뿐이고 부팅 시점에 한 번 · load의 null은 ENOENT만이라 못 읽은 파일을 덮어쓰지 않는다 · 마운트 실패 후 /config에 쓰면 tmpfs 가짜 영속성 · 영속성은 QEMU 두 번 띄우는 게이트와 2차의 'created 없음'으로만 증명된다"
+description: "설정은 ext2를 MS_SYNCHRONOUS로 마운트한 /config/tars.conf 하나 · 파서는 PID 1의 한 벌(tars-config도 그것을 쓴다)이고 부팅 시점에 읽는다(TC-M2부터 reload가 다시 읽는다) · load의 null은 ENOENT만이라 못 읽은 파일을 덮어쓰지 않는다 · 마운트 실패 후 /config에 쓰면 tmpfs 가짜 영속성 · 영속성은 QEMU 두 번 띄우는 게이트와 2차의 'created 없음'으로만 증명된다"
 metadata:
   node_type: memory
   type: project
@@ -20,8 +20,10 @@ PID 1 = tars-init
 
 ## 저장소를 이렇게 만든 이유
 
-파티션 테이블 없이 디스크 전체가 ext2라 게스트가 보는 이름은 `/dev/vda1`이
-아니라 `/dev/vda`다(MBR/GPT 파싱은 이 단계에서 배울 대상이 아니었다). ext2는
+게이트의 설정 디스크는 파티션 테이블 없이 디스크 전체가 ext2라 게스트가 보는 이름은 `/dev/vda1`이
+아니라 `/dev/vda`다(MBR/GPT 파싱은 이 단계에서 배울 대상이 아니었다). RM부터 `init`은 장치 이름이 아니라
+ext2 라벨 `tars-`로 찾고, DI부터 설치된 디스크의 p2(파티션)도 후보다([[project_real_machine]] ·
+[[project_disk_install]]). ext2는
 저널이 없어서 골랐다 — 어쩌다 한 번 쓰는 설정 파일에서는 저널이 방어하는
 상황이 거의 없다. FAT은 유닉스 퍼미션이 없어 마운트 옵션 잡음이 있었고,
 raw 블록은 사용자가 손으로 고칠 수 없어 가장 먼저 탈락했다.
@@ -45,14 +47,17 @@ seeding(`save`)을 한다. 열기 · 읽기 · 파싱 실패는 null이 아니�
 돌려준다 — 못 읽은 파일을 덮어쓰면 사용자가 손으로 쓴 설정이 사라진다.
 
 실행할 것은 `Child`(`kind` · `path` · `argv`, `init/src/main.zig`)가 들고 있다. 전역 변수도, `supervise`→`start`→`spawn` 인자 릴레이도
-아니다. "설정은 부팅 시점에 한 번만 읽는다"를 타입으로 표현한 것이라 감독
+아니다. "설정은 부팅 시점에 읽는다"를 타입으로 표현한 것이라 감독
 루프는 설정을 모르고, 자식을 재시작할 때도 `Child`에 적힌 그것을 다시
-띄운다([[project_init_supervisor]]).
+띄운다([[project_init_supervisor]]). TC-M2(2026-10-07)부터는 `tars-config reload`가 재부팅 없이
+`tars.conf`를 다시 읽어 `Live`(실효 설정)와 `Child`를 고친다 — "한 번만"은 그때 끝났고, 지금의
+규칙은 "읽는 자리는 PID 1 하나"다([[project_config_reload]]).
 
-`terminal`도 설정 파일을 읽지 않는다. `init`이 `/terminal`을 exec할 때
-`argv[1]`에 셸 경로, `argv[2]`에 no-config 플래그를 싣고 `terminal`은 그것을
-`pty.spawn`에 그대로 넘긴다. 파서가 두 벌이 되면 두 프로세스가 같은 파일에서
-다른 답을 얻는다. 이름 → 경로 → 플래그 매핑은 `Shell` enum 한 곳뿐이다
+`terminal`도 설정 파일을 읽지 않는다. `init`이 `/terminal`을 exec할 때 argv에 셸 경로와
+no-config 플래그를 싣고 `terminal`은 그것을 `pty.spawn`에 그대로 넘긴다(argv의 계약은 SA-M0부터
+`shared/screen_args.zig` 한 파일, [[project_screen_args]]). 파서가 두 벌이 되면 두 프로세스가 같은
+파일에서 다른 답을 얻는다 — 게스트의 `tars-config`도 그래서 `config.parse`를 그대로 쓴다
+([[project_config_tool]]). 이름 → 경로 → 플래그 매핑은 `Shell` enum 한 곳뿐이다
 (`fish --no-config` / `bash --norc` / `zsh -f`).
 
 ## 깨진 설정으로 부팅이 막히지 않게 하는 장치 넷
@@ -118,8 +123,9 @@ seeding(`save`)을 한다. 열기 · 읽기 · 파싱 실패는 null이 아니�
 
 앞으로 생기는 설정은 `/config/tars.conf`에 키를 더하는 방식으로 얹는다 —
 `Config`에 필드를 추가하고 `parse`에 `else if` 한 줄이면 되고, 기본값이 곧
-"설정 파일이 없을 때의 TARS"다. 값을 동작에 잇는 코드는 부팅 시점에 한 번 읽어
-넘기는 지금 구조를 따른다. 설정 스키마 버전은 의도적으로 비워 둔 자리다.
+"설정 파일이 없을 때의 TARS"다. 값을 동작에 잇는 코드는 부팅 시점에 읽어 넘기는 지금 구조를
+따르고, 새 키가 `reload`에서 어떤 갈래인지는 `reload.zig`에 적는다([[project_config_reload]]). 설정 스키마
+버전은 의도적으로 비워 둔 자리다.
 
 관련: [[project_boot_shell_selection]] · [[project_init_supervisor]] ·
 [[project_gate_chain_composition]] · [[project_build_host_arch]] ·

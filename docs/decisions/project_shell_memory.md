@@ -59,10 +59,11 @@ bash는 `PROMPT_COMMAND`(프롬프트마다). 그래서 `bash -i -c '…'`으로
 
 `config_test.zig`의 `expectQuietSeed`가 셋을 본다 — 정방향(비주석 · 비`alias` 줄은
 `hookLines()`의 한 줄과 글자 그대로 같다) · 역방향(`hookLines()`의 전부가 seed에 있다) ·
-덮개(훅 목록이 `zoxide` · `fzf` 둘을 다 덮는다). 그래서 seed의 훅 글자와 `hookLines()`의
-글자를 두 벌로 둔다 — `++`로 조립하면 역방향이 언제나 참이다(UT-M1의 정적 목록
-검사가 같은 이유로 가짜였다). `startsWith`가 아니라 `eql`인 것도 같은 종류다 —
-접두사로 보면 `command -v zoxide >/dev/null && rm -rf /`가 통과한다.
+덮개(훅 목록이 `zoxide` · `fzf` 둘을 다 덮는다). seed의 글자와 목록을 두 벌로 두는
+이유(조립하면 역방향이 tautology)는 [[project_shell_history]]의 "상수가 세 벌인 이유"가
+정본이다 — UT-M1의 정적 목록 검사가 같은 이유로 가짜였다. `startsWith`가 아니라
+`eql`인 것도 같은 종류다 — 접두사로 보면 `command -v zoxide >/dev/null && rm -rf /`가
+통과한다.
 
 ## 판정 글자가 타이핑한 명령줄에 있으면 그 검사는 도구가 죽어도 초록이다
 
@@ -93,11 +94,9 @@ pwd  →  /usr/share/terminfo/x       ← 이 글자를 만들 수 있는 것은
 
 "부팅 사이에 남는다"를 적을 때는 기계를 어떻게 끄는지 함께 적는다. 게이트의
 `boot_once`는 `kill "$QEMU_PID"`로 전원을 뽑으므로 셸이 나갈 때 하는 일이 하나도 안
-일어난다. SM-M2는 7차가 `fc -W`를 직접 치게 했는데 그 우회는 SD-M2가 뺐다 — seed의
-`setopt INC_APPEND_HISTORY`가 칠 때마다 쓰므로 필요 없고, `fc -W`는 메모리의 목록으로
-파일을 통째로 덮어 다른 세션의 줄을 지운다. 그리고 "실기는 PID 1의 SIGTERM이 있어
-안전하다"도 틀렸다 — 대화형 셸은 SIGTERM을 무시한다([[project_shutdown_signals]] ·
-[[project_shell_history]]).
+일어난다. SM-M2가 그 자리에 둔 `fc -W` 우회는 SD-M2가 뺐다([[project_shell_history]]의
+"`fc -W`를 되살리지 말 것"). 그리고 SM design의 "실기는 PID 1의 SIGTERM이 있어 안전하다"도
+틀렸다 — zsh · bash는 SIGTERM을 무시한다(measurements 22, [[project_shutdown_signals]]).
 
 ## design이 부팅을 세면서 앞 부팅이 남긴 디스크 상태를 안 봤다
 
@@ -111,25 +110,17 @@ M1은 부팅 하나를 더한다고 적었는데 둘이다 — 3차가 심은 `e
 
 ## 게이트 자신에게서 찾은 것 — `| grep -q`의 SIGPIPE
 
-`tools/check.sh`의 맨 뒤 음성 확인이 `grep -a … | grep -aq …`였다. `grep -q`는 첫
-매치에서 즉시 나가고 아직 로그를 쏟던 앞단이 SIGPIPE로 죽으며, `set -uo pipefail`이
-그 141을 파이프라인 코드로 올려 `if`가 "안 맞았다"로 읽는다 — 매치할수록 초록이 되는
-검사였고 쓰인 날부터 죽어 있었다. 같은 파일의 다른 검사 주석이 이 함정을 설명하고
-있었다 — 아는 것과 안 밟는 것이 다르다. `!` 형이면 거짓 빨강이다(`hangul/check.sh`가
-루트 게이트에서 그렇게 죽었다 — 크기가 아니라 경주라 회차마다 갈린다). 처방은 `-q`를
-빼서 뒤쪽 grep이 입력을 끝까지 읽게 하는 것.
-
-SM-M0이 센 목록이 `hangul`의 자리를 못 센 이유는 `rg` 패턴이 플래그 끝이 `q`인 것만
-찾았는데 그 자리는 `-aqE`였기 때문이다 — "목록을 만들었다"와 "목록이 완전하다"는
-다르다. 남은 자리들은 GA가 전부 없앴고 루트 `check.sh`의 진입 검사가 재발을 막는다
-([[project_gate_accuracy]]).
+`tools/check.sh`의 맨 뒤 음성 확인이 `grep -a … | grep -aq …`라 매치할수록 초록이 되는
+검사였고 쓰인 날부터 죽어 있었다 — 같은 파일의 다른 검사 주석이 이 함정을 설명하고
+있었다. 아는 것과 안 밟는 것이 다르다. `!` 형이면 거꾸로 거짓 빨강이다(`hangul/check.sh`가
+루트 게이트에서 그렇게 죽었다 — 크기가 아니라 경주라 회차마다 갈린다). SM-M0이 센 목록이 `hangul`의 `-aqE`를 못 센 것도
+같다("목록을 만들었다"와 "목록이 완전하다"는 다르다). 메커니즘과 처방은
+`docs/guides/lessons.md`의 "파이프 뒤의 `grep -q`는 게이트가 막는다" 절 — GA가 남은 자리를
+전부 없애고 진입 검사가 재발을 막는다([[project_gate_accuracy]]).
 
 ## 음성 확인의 첫 회차를 믿을 수 없다
 
-"깨뜨렸는데 첫 회차가 초록"이 따뜻한 캐시에서 5회 중 1회이고, 처방은 두 번 돌리는
-것이 아니라 음성 확인 전에 `.zig-cache`와 `zig-out`을 함께 지우는 것이다 — 단, 컨테이너
-안에서 지운다(호스트에서 지우면 뒤이은 `zig build`가 9회 중 2회 `error: FileNotFound`로
-죽고 그 모양이 컴파일 에러와 구분이 안 된다). 본문은 [[project_zig_out_staleness]].
-여기서 한 번 틀리게 적었다가 고쳤다 — "범인은 install 단계"라고 결론 냈는데
-`init/build.zig`가 `config_test`를 install하지 않는다. 인과를 문서에 적기 전에 그것이
-코드에서 가능한지 먼저 본다.
+SM-M1이 비율을 재고(따뜻한 캐시에서 5회 중 1회 거짓 초록) SM-M2가 "지우는 것도 컨테이너
+안에서"로 처방을 좁혔다 — 본문은 [[project_zig_out_staleness]]. 여기서 한 번 틀리게
+적었다가 고쳤다 — "범인은 install 단계"라고 결론 냈는데 `init/build.zig`가 `config_test`를
+install하지 않는다. 인과를 문서에 적기 전에 그것이 코드에서 가능한지 먼저 본다.

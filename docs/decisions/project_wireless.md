@@ -1,6 +1,6 @@
 ---
 name: project_wireless
-description: "노트북 내장 무선을 켠 서브프로젝트(WL-M0~M3, 2026-09-28). PCIe 네 계열 드라이버와 linux-firmware에서 고른 firmware 74개가 initrd 꼬리에 붙고, /config/wpa_supplicant.conf가 있으면 init이 tars-wifi(→ exec wpa_supplicant)를 감독하며, 늦은 인터페이스는 dhcpcd hook이 interface_add로 넘긴다. 게이트는 mac80211_hwsim — 열일곱번째 체인 wifi/check.sh"
+description: "노트북 내장 무선을 켠 서브프로젝트(WL-M0~M3, 2026-09-28). PCIe 네 계열 드라이버와 linux-firmware에서 고른 firmware 74개(UW가 77로 늘렸다)가 initrd 꼬리에 붙고, /config/wpa_supplicant.conf가 있으면 init이 tars-wifi(→ exec wpa_supplicant)를 감독하며, 늦은 인터페이스는 dhcpcd hook이 interface_add로 넘긴다. 게이트는 mac80211_hwsim — 열일곱번째 체인 wifi/check.sh"
 metadata:
   node_type: memory
   type: project
@@ -35,20 +35,20 @@ How to apply:
   우리가 새로 쓴 것은 "파일이 있으면 감독 목록에 넣는다"와 "늦은 인터페이스를 넘긴다"
   둘이다.
 - argv를 init이 못 짓는 데몬은 wrapper 셸이 짓고 `exec`한다. exec을 빼면 연결은 똑같이
-  서고 pid 대조만 틀린다(M3 mutation) — DS의 `-B`와 같은 교훈이다(lessons 61).
-- Debian 빌드에 무엇이 켜져 있는지는 짐작하지 말고 도움말 문자열로 본다 — `-M`이 없었다.
+  서고 pid 대조만 틀린다(M3 mutation) — DS의 `-B`와 같은 교훈이다(measurements 61).
+- Debian 빌드에 무엇이 켜져 있는지는 짐작하지 말고 도움말 문자열로 본다 — `-M`이
+  없었다(measurements 65).
 - firmware 이름은 `modules.builtin.modinfo`가 말한다. 단 iwlwifi는 요청 순서를 따라
-  고른다(lessons 63). 커널이나 linux-firmware를 올리면 iwlwifi 줄을 다시 고른다.
+  고른다(measurements 63). 커널이나 linux-firmware를 올리면 iwlwifi 줄을 다시 고른다.
 - 게이트 전용 커널 드라이버는 모듈이 없어도 넣을 수 있다 — 내장 cmdline으로 기본값을
-  끄고 체인이 뒤에 덮는다. 그리고 "파라미터를 안 준 부팅"을 반드시 하나 둔다. 그 부팅만이
-  기본값을 지킨다(M3 mutation 3에서 부팅 A · B는 초록이었다).
-  둘째 사례는 BS의 test_power다(2026-10-09, [[project_battery_status]]). 내장 cmdline이
-  `mac80211_hwsim.radios=0 test_power.battery_present=false`로 두 낱말이 되어서, `wifi/check.sh`
-  검사 1은 줄 전체(`grep -x`)가 아니라 자기 낱말 하나가 그 줄에 낱말로 있는지만 본다. battery
-  체인 검사 0도 같은 모양이다 — 셋째 파라미터를 더하는 사람이 두 체인을 함께 고치지 않아도 된다.
-  test_power는 실기에 남으면 ACPI 배터리의 읽기를 바꾸므로 limine의 `initcall_blacklist`로
-  등록까지 막는 겹이 하나 더 있다. hwsim에는 그 겹이 없다.
-- 판정에 쓸 줄은 콘솔에 앵커 없이 grep한다(lessons 68).
+  끄고 체인이 뒤에 덮는다(measurements 64). 그리고 "파라미터를 안 준 부팅"을 반드시 하나
+  둔다. 그 부팅만이 기본값을 지킨다(M3 mutation 3에서 부팅 A · B는 초록이었다). 둘째
+  사례는 BS의 test_power다(2026-10-09, [[project_battery_status]]) — 내장 cmdline이 두 낱말이
+  되어 `wifi/check.sh` 검사 1과 battery 검사 0이 자기 낱말 하나만 보는 것은
+  `docs/guides/key-files.md`의 `wifi/check.sh` 항목에 있다. test_power는 실기에 남으면 ACPI
+  배터리의 읽기를 바꾸므로 limine의 `initcall_blacklist`로 등록까지 막는 겹이 하나 더 있다.
+  hwsim에는 그 겹이 없다.
+- 판정에 쓸 줄은 콘솔에 앵커 없이 grep한다(measurements 68).
 
 관련: [[project_wired_nic]] · [[project_daemon_supervision]] · [[project_service_control]] ·
 [[project_target_hardware]] · [[feedback_boot_never_blocks]] · [[project_measuring_tool_cost]]

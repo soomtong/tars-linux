@@ -13,7 +13,7 @@ design은 `docs/specs/2026-10-06-tars-voice-dictation-design.md`(결정 12 · �
 위험 9 · 비목표 14 · 실측 14, Voxio D1 ~ D16 대응표), plan은 `-vd-m0.md` ~ `-vd-m2.md`이고
 각 끝의 "실측한 것" 절이 값이다. 실기 안내는 `docs/guides/running-tars.md`의 받아쓰기 절.
 
-design과 plan 셋은 Opus 서브에이전트가, 구현 셋은 Sonnet 서브에이전트가 했다. 포팅이지
+분업(plan · 구현은 서브에이전트, lead는 대조 · 게이트 · commit)은 design 결정 12. 포팅이지
 복제가 아니다 — macOS에만 있는 것(TCC · Keychain · 메뉴바 · 오버레이 · AX 포커스 ·
 클립보드 경유)은 TARS의 같은 뜻을 가진 자리(상태 줄 · `/config`의 파일 · 포커스 패널 ·
 PTY에 직접)로 옮기거나 비목표로 보냈다.
@@ -39,31 +39,24 @@ Voxio 불변식 1 "전사가 된 순간부터 남는다"를 첫 milestone부터)
 
 ## 실측이 바로잡은 전제들
 
-- 게스트의 `curl`은 TLS 라이브러리는 있지만 인증 기관 목록이 없어 https가 전부 `(77)`이었다.
-  sysroot의 ca-certificates 150장을 initrd에 잇는다(컨테이너의 묶음은 OrbStack 인증 기관이
-  섞여 있어 안 쓴다).
-- `arecord`를 SIGINT로 멈추면 WAV 머리를 거의 못 고친다(24판 중 21판). `tars-dictate`가
-  머리 44바이트를 다시 쓴다.
-- 비밀번호 프롬프트의 판정은 `ECHO`가 아니라 `ICANON && !ECHO`다 — 셸의 줄 편집기가
-  `ECHO`를 끈다. 시작할 때와 넣을 때 두 번 본다(상태 줄 `PASSWORD`). fish의 `read -s`처럼
-  자기 편집기로 가리는 것은 못 본다.
-- QEMU `sendkey meta_r`는 hold 80을 줘야 사람 손과 비슷하다(기본은 누른 시간 10ms).
+- 인증 기관 목록이 없던 https(measurements 85) · SIGINT가 못 고치는 WAV 머리(86) ·
+  비밀번호 판정 `ICANON && !ECHO`(89) · `sendkey meta_r`의 hold 80(90). 비밀번호는 시작할
+  때와 넣을 때 두 번 본다(상태 줄 `PASSWORD`) — fish의 `read -s`처럼 자기 편집기로
+  가리는 것은 못 본다.
 - M0의 SIGINT 틈(`arecord` 전의 SIGINT를 기억만 하고 상한까지 녹음)을 M2가 닫았다.
 - 정리의 상한은 매 실행이 새 `curl`이라 DNS · TLS까지 센다 — Voxio의 1.5초는 데워진 연결의
   값이었다. `cleanup_timeout` 키를 열었다(기본 1.5, 실기에서 매번 넘으면 늘리거나 끈다).
 
 ## 게이트는 Groq를 절대 안 부른다
 
-스물한번째 체인 `dictation/check.sh`. 전사 · 정리 API는 perl stub(`guestfwd` `cmd:`)이고
-경로의 첫 마디가 답(`/ok` · `/ctrl` · `/blank` · `/notext` · `/fail`, 정리는 `/chat/<답>/<갈래>`),
-판정은 stub이 받은 바이트(WAV 머리 · 칸 · 샘플의 최빈값 — 마이크는 AU의 `file` 플러그인
-`infile`로 넣는다)와 기록 파일이다. 부팅 A는 게스트에 한 글자도 안 치고(프로브가
-`tars-dictate`를 스물한 갈래로 친다), 부팅 B(monitor 45493)는 `sendkey meta_r 80` 둘로
-더블 탭을 치고 화면 · 상태 줄 · `dictate>` 줄을 본다. 두 부팅 모두 게스트의 `/etc/hosts`가
-`api.groq.com`을 127.0.0.1로 돌린다 — 설정을 빠뜨린 갈래가 진짜 Groq에 닿지 않게. 인증 기관
-목록은 `openssl s_server`(45492, 자기 서명)에 대고 exit 60(77이 아니라)으로 본다. 호스트에서
-`tars-dictate`를 돌리지 않는다 — 호스트 셸에 사람의 진짜 키가 있다(M2 planner가 한 번 stub
-로그에 찍었고 지웠다).
+체인 `dictation/check.sh`의 모양(perl stub · 경로 첫 마디가 답 · 부팅 A는 타이핑 0이고 프로브가
+`tars-dictate`를 스물한 갈래로 친다 · 부팅 B의 `sendkey meta_r 80` 둘 · 인증 기관 목록은
+`openssl s_server`에 exit 60)은
+`docs/guides/key-files.md`의 `dictation/check.sh` 항목과 measurements 85. 정리 API의 경로는
+`/chat/<답>/<갈래>`이고 마이크는 AU의 `file` 플러그인 `infile`로 넣는다. 두 부팅 모두 게스트의
+`/etc/hosts`가 `api.groq.com`을 127.0.0.1로 돌린다 — 설정을 빠뜨린 갈래가 진짜 Groq에 닿지
+않게. 호스트에서 `tars-dictate`를 돌리지 않는다 — 호스트 셸에 사람의 진짜 키가 있다(M2
+planner가 한 번 stub 로그에 찍었고 지웠다).
 
 ## 남긴 것
 

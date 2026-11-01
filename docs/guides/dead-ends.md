@@ -199,8 +199,8 @@
 - `/tmp`에 만든 파일이 `docker run --rm` 사이에 남기 — 안 남는다.
 - 임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기 — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.
-- 루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기 — 46분이라 상한을
-  넘는다. `run_in_background`로 돌린다.
+- 루트 게이트를 Bash 도구의 기본 타임아웃으로 돌리기 — 10분 상한을
+  넘는다(GP 뒤에도 10분 안팎). `run_in_background`로 돌린다.
 - `git cherry-pick`에 `-q`를 붙이기 — 그런 옵션이 없다.
 - `vt_test`의 검사를 남의 화면에 붙이기 — 화면마다 크기와 history가 다르다.
   CM-M1이 `cm`, CM-M2가 `pruned`, CN-M0이 `wm`, CN-M1이 `fm`·`fs`, CS-M0이 `hs`,

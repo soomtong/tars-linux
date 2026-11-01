@@ -64,7 +64,7 @@
   `ws` · `focus`는 단계마다 `self.current`로 다시 구한다. 렌더는 바퀴 끝에
   있고 `needs_redraw`가 문지기다. `promptText`의 갈래가 셋(프롬프트 ·
   `[3/12]` · "못 찾음")이고 두 갈래를 가르는 것은 `findMatchCount()`
-  하나다. `dumpStyles`는 프레임당 16줄 상한(`STYLE_DUMP_LIMIT`)이고 덮인 줄을
+  하나다. `dumpStyles`는 프레임당 상한(`STYLE_DUMP_LIMIT`, 지금 96)이 있고 덮인 줄을
   건너뛴다. copy 배선 switch에 `else`가 없는 규율이 매번 값을 한다.
   배터리 절(BS-M1)이 `BatteryState` · `readSysfs` · `scanBattery` · `readBattery` ·
   `tickBattery`를 갖는다. 처음 훑기는 첫 프레임 앞에서 하고 `needs_redraw`를 안 켠다 —
@@ -72,9 +72,8 @@
   봤거나 `ENOBUFS`)을 돌려주고, `pollBattery`는 그 바로 뒤, `decideFrame`보다
   앞이어야 한다 — 뒤면 uevent나 timeout으로만 깬 바퀴에서 칸을 고쳐도 화면이 안 바뀐다.
   poll timeout은 `battery.pollTimeout`이고 배터리가 없으면 `-1`이다. `drawStatus`가
-  칸을 col `cols - 4`에 그리고, `dumpStatus`의 메모는 칸의 글자와 갈래를
-  `sameBatteryCell`로 비교한다(다시 그리기는 `std.meta.eql` — 둘을 일부러 갈랐다,
-  `project_battery_status`).
+  칸을 col `cols - 4`에 그린다. 상태 줄 띠를 다시 그릴지와 `dumpStatus`가 `status>` 줄을
+  찍을지는 `StatusMemo` 하나가 정한다(SB-M0, `project_status_band`).
 - `image.zig` — kitty 이미지 하나를 그린다(TG-M2). 순수 모듈이고 대상이 `anytype`이라
   `image_test`가 `u32` 배열로 같은 산수를 본다. 자르기 사각형이 곧 프레임버퍼 밖 쓰기를
   막는 자리다(`setPixel`에 범위 검사가 없다).
@@ -155,7 +154,8 @@
   `bringUp()`은 `net=dhcp`면 dhcpcd를 `-j /dev/console`로 인자 없이 띄운다
   (WN-M2). 인터페이스를 고르고 올리는 것은 dhcpcd다 — `init`이 링크를 만지면
   `net` · `nic` 체인이 `net link` 줄로 잡는다. `envp`를 지은 뒤에 불러야 hook이
-  `PATH`를 갖는다(NW 결정 F). dhcpcd는 감독 목록 밖이다.
+  `PATH`를 갖는다(NW 결정 F). dhcpcd는 DS-M0부터 감독 목록의 칸이다(`-B`로 배경을
+  막는다, `project_daemon_supervision`).
 - `firewall.zig` — `firewall=on`이면 `nft -f /etc/tars/firewall.nft`를 `fork` ·
   `execve` · `wait4`로 돌리고, 실패하면 include 없는 `firewall-base.nft`를 한 번
   더 올린다(FW 결정 5). `main.zig`가 `net.bringUp` 바로 앞에서 부른다 — 그 순서가
@@ -319,7 +319,7 @@
   `mac80211_hwsim.radios=0`이 그 줄에 낱말로 있는지만 본다 — 같은 줄에 battery 체인의
   `test_power.battery_present=false`도 있다(BS-M0).
 - `dictation/check.sh` · `dictation/probe.sh` · `dictation/stub.pl` · `kernel/dictation/tars-dictate` — 스물한번째 체인(VD). 부팅 A는
-  게스트에 한 글자도 안 치고(프로브가 `tars-dictate`를 열 갈래로 친다) stub(perl, `guestfwd` `cmd:`)이 받은 바이트(WAV 머리 · 칸 ·
+  게스트에 한 글자도 안 치고(프로브가 `tars-dictate`를 갈래 스물 남짓으로 친다 — 목록은 `dictation/probe.sh`의 `s1`~) stub(perl, `guestfwd` `cmd:`)이 받은 바이트(WAV 머리 · 칸 ·
   샘플의 최빈값)로 판정한다 — 경로의 첫 마디가 답(`/ok` · `/ctrl` · `/blank` · `/notext` · `/fail`), 둘째 마디가 갈래 이름. 부팅 B(M1)는
   monitor `sendkey meta_r 80` 둘로 더블 탭을 치고 `last_screen`으로 본다. `tars-dictate`는 bash + `arecord` + `curl` + `jq`이고 종료 코드
   (0 · 1 · 2 · 3 · 4 · 64 · 130 · 143)와 표준 에러 두 줄이 terminal과의 계약이다. 게이트는 Groq를 절대 안 부른다.
@@ -396,12 +396,9 @@
 
 ## 기억
 
-`MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 새 세션이 먼저
-읽을 것은 일곱이고 그중 `feedback_execution_scope`가 2026-09-12에 바뀌었다
-(구현 파일 편집이 Claude에게 왔다) — 협업 방식 feedback 여섯(`feedback_execution_scope` ·
-`feedback_commit_delegation` · `feedback_design_question_load` ·
-`feedback_plain_korean` · `feedback_no_emphasis` · `feedback_jargon_translation`)과
-`user_learning_goal`.
+`MEMORY.md`(색인) + `docs/decisions/`(본문 한 파일당 하나). 어느 기억을 먼저 읽을지는
+`MEMORY.md`의 절(협업 방식 · 사용자 · 게이트 · init · 네트워크 · terminal · copy mode · 셸)이
+갈래다.
 
 옛 이름 둘. 2026-10-04 전의 문서와 커밋은 seed(첫 부팅에 `init`이
 `/config`에 쓰는 기본 파일)를 "씨앗"이라 불렀다. 지금 트리에는 그 말이
@@ -412,22 +409,6 @@
 절차)을 "반사실"이라 부르던 것도 바꿨다. 옛 커밋에서 찾으려면
 `git log -S반사실 --oneline`이다.
 
-그다음은 손에 든 일에 따라 고른다. 게이트를 건드리면
-`project_gate_chain_composition`·`project_gate_latency`·
-`project_zig_out_staleness`, 빌드·Zig를 건드리면 `project_zig_c_uapi_rule`·
-`project_build_host_arch`, 게스트 환경이면 `project_guest_environment`·
-`project_userland_tools`·`project_shell_config`·`project_shell_memory`·
-`project_shell_history`,
-종료·시그널이면 `project_shutdown_signals`·`project_power_management`·
-`project_init_supervisor`,
-화면이면 `project_terminal_rendering`·`project_render_cost`, 입력이면
-`project_input_policy`·`project_hangul_input`·`project_device_discovery`,
-실기면 `project_real_machine`·`project_kernel_config`·
-`project_target_hardware`, 네트워크면 `project_guest_network`·`project_inbound_network`·
-`project_wired_nic`·`project_loopback`·`project_firewall`·`project_time_discipline`·
-`project_wireless`,
-설치면 `project_disk_install`·`project_disk_carryover`.
-
 ## 감독 루프의 구조 (HD-M2가 만든 것, 그대로 유효)
 
 ```
@@ -437,9 +418,8 @@
 4. poll(버튼 fd들, 1000ms)   → 유일하게 잠드는 자리
 ```
 
-거두기(3)를 `poll`(4)보다 앞에 둔 것이 backoff를 만든다. 이 코드의 진짜
-계약은 HD 체인이 아니라 BF의 `started terminal` 정확히 3회와 PM의
-`started console shell` 정확히 1회에 있다.
+왜 이 순서인지(거두기가 `poll` 앞이라 backoff가 생긴다)와 이 루프의 진짜 계약은
+`project_init_supervisor`에 있다.
 
 ## 참고: vendor된 ghostty 소스의 프롬프트 인젝션 (조치 불필요, 인지만)
 

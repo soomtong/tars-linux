@@ -1,3 +1,10 @@
+---
+name: project_bash_boot
+description: 게이트가 bash로 뜨는 부팅을 하나 갖게 된 일(BB-M0~M2, 2026-09-12). config 체인 9차가 shell=bash로 뜨고 로그 여덟 · 화면 넷을 판정한다. power 체인은 전부터 bash로 떴지만 프롬프트까지만 봤다 — 밟는 것과 판정하는 것은 다르다
+metadata:
+  type: project
+---
+
 # 게이트가 bash로 뜨는 부팅을 하나 갖게 된 일 (BB-M0~M2, 2026-09-12)
 
 design: `docs/specs/2026-09-12-tars-bash-boot-design.md`
@@ -9,11 +16,13 @@ design: `docs/specs/2026-09-12-tars-bash-boot-design.md`
 
 ⚠ 이 서브프로젝트가 착수할 때 쓴 전제 하나가 틀렸다. "게이트에 bash로 뜨는
 부팅이 없다"고 적었는데 `power` 체인의 첫 부팅이 `shell=bash`로 뜬다
-(`power/make_disk.sh`가 `mkfs.ext2 -d`로 그 줄을 심는다. 이유는 게이트가
-그 셸에 `kill -TERM 1`을 치는데 `kill` 빌트인이 fish에 있는지 확인되지
-않았다는 것이다). 그 체인이 보는 것은 로그의 `config shell=bash`와 화면의
-`screen>.*bash-` 둘이고, 셸 자신의 성질은 하나도 안 본다. 그래서 BB가 세운
-것은 "bash로 뜨는 자리"가 아니라 "bash로 뜬 부팅의 판정"이다.
+(`power/make_disk.sh`가 `mkfs.ext2 -d`로 그 줄을 심는다 — measurements 34). 그 체인이
+보는 것은 로그의 `config shell=bash`와 화면의 `screen>.*bash-` 둘이고, 셸 자신의
+성질은 하나도 안 본다. 그래서 BB가 세운 것은 "bash로 뜨는 자리"가 아니라 "bash로
+뜬 부팅의 판정"이다. `linkDevFd()`를 눕힌 사본으로 `power/check.sh`를 돌리면 화면에
+에러 줄이 찍히는데 체인은 통과한다 — `BASH_OK` 대기가 `screen>.*bash-`라 앞줄에
+무엇이 있어도 만족되기 때문이다(measurements 27 둘째 문단). 부팅은 있었고 판정이
+없었다.
 
 8차 훅의 맨 끝이 `echo shell=bash >> /config/tars.conf` 한 줄을 심는다.
 append인 것과 심는 자리가 8차 판정 셋보다 뒤인 것이 둘 다 의도다 — 마지막
@@ -28,40 +37,17 @@ append인 것과 심는 자리가 8차 판정 셋보다 뒤인 것이 둘 다 �
 
 ## 왜 중첩으로는 안 됐나
 
-BH-M2가 7차 부팅 안에 중첩 bash를 띄워 seed의 한 줄을 판정했고 그 선택은
-부팅 하나를 아꼈다. 중첩이 볼 수 없는 것이 여섯 있었다.
-
-아래 여섯 중 1은 절반이, 3은 전부가 `power` 체인이 이미 밟고 있던 것이다
-(위 ⚠). 밟는 것과 판정하는 것이 다르다는 것이 이 목록의 요점이다.
-
-1. `resolveShell(.bash)`가 `/usr/bin/bash`를 실행 가능으로 판정하는 것.
-2. 히스토리 env의 bash 갈래. 중첩은 `HISTFILE`을 첫 명령으로 손수 맞췄다 —
-   production 값이 맞는지는 아무도 안 봤다는 뜻이다.
-3. init이 셸 경로와 플래그를 argv로 terminal에 넘겨 화면 셸도 bash가 되는 것.
-4. seed bashrc가 production 부팅에서 아무것도 안 찍는 것.
-5. `PROMPT_COMMAND`를 두고 겨루는 훅 둘이 함께 사는 것. bash에서 `z`가
-   실제로 도는 것을 본 부팅이 없었다.
-6. 콘솔 셸도 bash로 서는 것. 중첩은 화면 셸 안에서만 일어났다.
-
-이 여섯이 열린 근거는 BH 자신이다. 게스트에 `/dev/fd`가 없어서 seed의 fzf
-훅이 부팅마다 에러 한 줄을 찍고 있었고, 서브프로젝트 넷이 지나도록 아무도
-그것을 못 봤다. BH는 그 이유를 "게이트에 bash로 뜨는 자리가 없다"로 적었고,
-맞는 이유는 "자리는 있는데(PM 체인) 그 화면을 프롬프트까지만 본다"다.
-
-이것은 BB-M2 뒤에 실측으로 확인했다. `linkDevFd()` 호출을 눕힌 사본으로
-`power/check.sh`를 돌리면 그 체인의 화면에
-`bash: /dev/fd/63: No such file or directory`가 찍히는데 체인은 통과한다.
-`power/check.sh:148`이 기다리는 것이 `screen>.*bash-`이고, 그 앞줄에 무엇이
-있어도 그 대기는 만족되기 때문이다. 부팅은 있었고 판정이 없었다 — 이 한
-문장이 BB가 한 일의 전부다.
+BH-M2가 7차 부팅 안에 중첩 bash를 띄워 seed의 한 줄을 판정했지만, 중첩이 볼
+수 없는 것이 여섯 있었다 — `resolveShell(.bash)`의 실행 가능 판정 · 히스토리
+env의 bash 갈래 · argv로 화면 셸도 bash가 되는 것 · seed bashrc가 production에서
+조용한 것 · `PROMPT_COMMAND` 훅 둘이 함께 사는 것 · 콘솔 셸도 bash인 것. 여섯의
+설명은 design의 "왜 중첩으로는 안 됐나" 절. 이 여섯이 열린 근거는 BH 자신이다
+(`/dev/fd`가 없어 seed의 fzf 훅이 부팅마다 에러 한 줄을 찍는 것을 서브프로젝트
+넷이 못 봤다 — measurements 27).
 
 ## 다시 조사하지 말 것
 
-1. 인자 하나인 `z`는 DB를 안 본다. 그 인자가 현재 디렉터리 아래의 실제
-   디렉터리이면 zoxide가 그냥 `cd`한다. `/`에서 `z bin`은 `/usr/bin`이 아니라
-   `/bin`으로 가고(게스트에는 둘이 서로 다른 실체로 있다), 그러면 훅이 안
-   걸려도 검사가 초록이 된다. 판정 질의는 인자 둘로 한다 — `z usr bin`.
-   7차의 zsh 판정이 이 함정을 안 밟은 것은 `z terminfo x`여서였다.
+1. 인자 하나인 `z`는 DB를 안 본다 — measurements 33. 판정 질의는 인자 둘(`z usr bin`).
 2. `declare -F <이름>`의 출력은 이름 그 자체다. 인자 없이 부를 때와 다르다
    (그때는 `declare -f <이름>`). 타이핑한 줄과 글자가 같아서 판정 글자로 못
    쓴다. `echo bprodw$(type -t __fzf_history__)`로 우리가 글자를 만든다.
@@ -74,11 +60,8 @@ BH-M2가 7차 부팅 안에 중첩 bash를 띄워 seed의 한 줄을 판정했�
    그려진 뒤 readline이 그 글자를 다시 그려서 명령은 제대로 실행된다.
    BH-M2가 본 "글자가 쪼개진다"와 다른 현상이고, 판정 글자를 우리가 만드는
    규칙이 이것까지 막는다.
-5. `mkfs.ext2 -d`가 조사용 부팅을 하나로 줄인다. `tars.conf` 한 줄을 담은
-   디렉터리를 그대로 이미지에 넣으면, 체인처럼 "1차에서 고치고 2차에서
-   읽는" 두 부팅이 필요 없다. 새 길이 아니다 — IP-M2가 열었고
-   `power/make_disk.sh`와 `hangul/make_disk.sh`가 이미 그렇게 굽는다.
-   착수 전에 그 파일들을 읽었으면 위 ⚠의 착각도 없었다.
+5. `mkfs.ext2 -d`가 조사용 부팅을 하나로 줄인다 — measurements 34(착수 전에
+   `*/make_disk.sh`를 전부 읽으라는 것까지).
 6. `shift-backslash`가 게스트에 `|`로 닿는다(키맵 43번이 `\`/`|` 쌍이다).
    다만 판정에는 쓰지 않는다 — `screen>` 덤프의 행 구분자가 `|`라서 패턴이
    모호해진다.
@@ -91,7 +74,8 @@ BH-M2가 7차 부팅 안에 중첩 bash를 띄워 seed의 한 줄을 판정했�
 
 seed bashrc에서 `PROMPT_COMMAND` 줄을 훅 뒤로 옮긴 사본으로 셋을 확인했다.
 사본 하나만 마운트하면 `config_test.zig`가 부팅 앞에서 죽이므로 그 검사의
-마지막 줄에 `or true`를 넣은 사본을 함께 준다(SD-M2와 같은 자리).
+마지막 줄에 `or true`를 넣은 사본을 함께 준다(`docs/guides/dead-ends.md`의
+"호스트 검사가 지키는 줄을 뺀 mutation을 마운트 하나로 보기" 항목).
 
 그렇게 하면 판정 1만 빨개지고 2·3은 초록으로 남는다. 히스토리는 남고 `z`만
 아무것도 안 배우는 것 — BH가 "증상이 조용하다"고 적어 둔 그 모양이다.

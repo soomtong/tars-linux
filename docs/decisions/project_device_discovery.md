@@ -107,9 +107,10 @@ showed up after` 줄이 한 번도 안 나왔다. `init`이 커지며 훑는 시
 ## 결과 경로의 수명과 결정의 자리
 
 힙이 없으므로 탐색 결과는 `devices.Path`(고정 버퍼)로 `main()`의 스택에 살고
-`argv`에 그 포인터가 들어간다. `supervise()`가 `noreturn`이라 그 프레임이
-프로세스 수명 내내 산다 — 누군가 `supervise`를 반환하게 만들면 이 포인터가
-뜬다(`Path`의 doc comment가 유일한 방어). `terminal`은 `argv[4]`를 열 뿐
+`argv`에 그 포인터가 들어간다(지금은 `Boot`의 필드 `keyboard_path`이고 argv는
+`shared/screen_args.zig`의 `Slot.device = 4` — `docs/guides/key-files.md`의 두 항목).
+`supervise()`가 `noreturn`이라 그 프레임이 프로세스 수명 내내 산다 — 누군가
+`supervise`를 반환하게 만들면 이 포인터가 뜬다. `terminal`은 `argv[4]`를 열 뿐
 번호를 스스로 고르지 않는다 — 하드웨어를 살펴 결정하는 일이 두 프로세스에
 나뉘면 다른 답을 얻는다([[project_config_persistence]]와 같은 규칙).
 `terminal` 안의 기본값 `/dev/input/event0`은 인자가 없을 때만 쓰이는 값이라

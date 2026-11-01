@@ -28,8 +28,9 @@ AU(2026-10-06)가 남긴 것.
 - [ ] 늦은 내장 카드(AU design 위험 14). M1의 일꾼은 `controlC0`이 서는 순간 있는 카드만 `alsactl init`한다. 카드가 여럿인 AMD
       노트북이나 SOF가 firmware를 늦게 올리는 Intel 노트북에서 늦은 카드가 꺼진 채 남으면 — 일꾼이 `/dev/snd`가 잠잠해질 때까지
       기다리거나 `follow`가 새 카드에 `alsactl -U init N`을 부른다. 실기에서 겪은 뒤 정한다.
-- [ ] firmware가 게스트 RAM에 늘 있다. 무선 77 + 소리 42 = 119개, 원본 약 14MB가 더 늘어 512MB 게스트의 `MemAvailable`이 약 183MB다
-      (AU design 위험 16). 다음에 firmware를 더하는 일은 이것을 함께 본다 — 초기 ramfs에서 빼서 늦게 붙이는 길이 있는지.
+- [ ] firmware가 게스트 RAM에 늘 있다(WL 위험 5 · AU 위험 16). 무선 77 + 소리 42 = 119개일 때 512MB 게스트의 `MemAvailable`이
+      약 183MB였고, UB(2026-10-31)가 21개를 더해 140개다. 다음에 firmware를 더하는 일은 이것을 함께 본다 — 초기 ramfs에서 빼서
+      늦게 붙이는 길이 있는지. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] `audio` 검사 5의 사각파 하한 40,000은 부하 아래 최소 47,425에서 정했다(AU design 실측 17). 루트 게이트가 `tone`으로 빨개지면
       dmix xrun이 더 커진 것이다 — `doubled` · `zero`를 먼저 본다.
 - [ ] `audio` 부팅 A의 `speaker-test` 간헐(UB-M2 루트 게이트 1회차, 2026-10-31, lane 17). 출력이 `0 - Front Left|Write error: -32,Broken
@@ -37,9 +38,6 @@ AU(2026-10-06)가 남긴 것.
       끼었고 같은 부팅의 `aplay` 사각파(tone=47952 · doubled=0)와 그 뒤 두 채널 판정은 멀쩡했다. 단독 재실행 PASS, 2회차 루트
       게이트도 본다. 로그 `out/gate-logs/20261031-140338/AU-M3-1/`. 판정은 안 넓혔다 — 한 번 더 겪으면 `speaker-test` 줄에서
       `Write error` 토막을 빼고 보는 것(underrun은 소리가 끊긴 것이지 채널이 바뀐 것이 아니다)이 후보다.
-- [ ] 체인이 `grep -a 'terminal: screen>' "$LOG" | tail -n 1`로 화면 줄을 직접 읽는 자리 67곳은 printk에 잘린 줄을 못 잇는다
-      (`joined_screen_dump`는 `wait_for_screen`만 쓴다). 그 자리가 이상한 값으로 빨개지면 로그의 `screen>` 줄 안에 커널 시각 표식이 있는지
-      먼저 본다.
 - [ ] 실기에서 볼 것 — `running-tars.md`의 소리 절. SOF 노트북에서 `Firmware file:` · `Topology file:` 두 줄, IPC4 `-3ch` topology 없음
       (위험 12), 잭 입력 장치가 키보드 · 포인터 판정에 안 걸리는지(위험 2).
 
@@ -52,8 +50,8 @@ PD(2026-10-05)가 남긴 것.
       적이 있다(HC-M0 첫 회, 2026-10-26 — 풀기 5.5초, `sda2`가 `/init`보다 50ms 먼저). 단독 재실행이 PASS(1300ms)이고 initrd
       크기가 같으면 부하다. 한 번 더 겪으면 `delay_use`를 5로 올리는 것을 본다.
 
-서브프로젝트 후보(패키지 매니저 · USB 동글 층 B)는 `HANDOFF.md`에 있다. IPv6는 후보가 아니다(`docs/decisions/feedback_ipv4_only.md`).
-여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
+서브프로젝트 후보(패키지 매니저 · GPU 가속 · PD · SE 비목표)는 `HANDOFF.md`의 "다음 후보"에 있다. IPv6는 후보가
+아니다(`docs/decisions/feedback_ipv4_only.md`). 여기는 그보다 작은 것과, 닫아 두어서 다시 열려면 근거가 필요한 결정이다. 끝난
 서브프로젝트는 `docs/guides/completed.md`의 완료 표가 목록이다.
 
 미룬 것.
@@ -68,8 +66,6 @@ PD(2026-10-05)가 남긴 것.
       다른 계열(`rtl8187` · `zd1211rw` · `carl9170` · `ar5523` · `p54usb` · brcmfmac USB)이다 — 실제
       동글이 그 목록에 있을 때 켠다(UB design 비목표 2 · 5). 켜는 법은 UB와 같다: 부모 메뉴까지
       `-k`로 켜고 해소본에서 `=y`를 센 뒤 `firmware=` 줄에서 이름을 센다.
-- [ ] firmware 96MB가 게스트 RAM에 늘 있다(WL 위험 5). 게이트의 512MB에서 `MemAvailable`
-      213MB. 체인이 메모리로 흔들리면 여기부터 본다.
 - [ ] 실기에서 LAN의 다른 컴퓨터가 게스트 포트에 붙는 것. 게이트는 SLIRP 안에서만
       판정한다(IN 비목표 3 · FW 비목표 3).
 - [ ] net 검사 31의 간헐(TC-M2 루트 게이트 두 판, 셋 중 둘)의 진짜 원인. Task 5b가 set의 답을 기다리고 진단을 찍게 했고 그 뒤 4판 초록이다.
@@ -105,6 +101,11 @@ HI가 남긴 것 둘은 2026-09-13에 사용자가 뺐다. "한글 기호 확장
 - [ ] 검색 결과의 실시간 갱신. CS design 결정 7이 "안 한다"로 정했다.
 - [ ] init이 직접 포트를 듣는 것. IN 비목표 5 — 다시 열릴 조건은 "게스트가
       무엇을 서빙해야 하는지가 정해지는 것".
+- [ ] 이미지 뷰어를 기본 이미지에 넣지 않는다(사용자 결정, 2026-10-03). Debian `chafa`(1.14.5)는 바이너리 190KB지만 재귀
+      `DT_NEEDED`가 sysroot에 없는 `.so` 69개, 44.6MB를 끈다 — RAM 위 initrd에 늘 얹기에는 크다. 필요한 사람은 패키지 관리자로
+      설치한다. Homebrew `install.sh`는 root이면 멈추므로 non-root 사용자가 먼저고, 설치물은 디스크의 prefix
+      (`/home/linuxbrew/.linuxbrew`)에 놓여야 하며 그것은 DI의 설치 디스크 위다. 뷰어가 셀 크기를 셈할 전제(`TIOCGWINSZ`의
+      `ws_xpixel` · `ws_ypixel`)는 LE-M0(2026-10-27)이 채웠다. 다시 여는 자리는 "패키지 매니저" 서브프로젝트다.
 
 ## IP-M2가 남긴 것 (그대로 이월)
 

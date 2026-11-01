@@ -15,7 +15,7 @@ fzf의 셸 통합(fish는 `fzf --fish`, bash는 `fzf --bash`)은 위젯마다
 터미널에 묻고(`ESC[6n`, 커서 위치 보고) 그 답으로 자기 상자 높이를 정한다.
 
 우리 `terminal`은 그 질의에 답하지 않았다. ghostty lib-vt가 답을 만들 창구를
-갖고 있지만(`stream_terminal.zig:78`의 `write_pty`) 그 칸이 `null`이었고,
+갖고 있지만(`stream_terminal.zig`의 `Handler.effects.write_pty`) 그 칸이 `null`이었고,
 라이브러리는 그 칸이 비면 답을 아예 만들지 않는다(응답 갈래 여럿이 이 필드를
 문지기로 본다). 그래서 fzf가 답을 기다리며 멈췄다 — 증상이 사람에게 보이는
 모양은 "Ctrl+R을 두 번 눌러야 picker가 열린다"였다(첫 누름에 멈춰 있다가 다음
@@ -53,16 +53,14 @@ config 체인 1차 부팅(우회 없이 첫 Ctrl+R에 picker) · tools 체인(�
 
 ## 다시 밟지 말 것 다섯
 
-1. 질의 바이트를 게이트가 `type_keys`로 칠 수 없다. 이스케이프가 fish → bash
-   → printf 층에서 죽어 리터럴 `033[6n`이 나간다(화면에 그대로 찍혔다). ESC가
-   든 스크립트를 initrd에 실어 그 경로를 치게 한다.
+1. 질의 바이트를 게이트가 `type_keys`로 칠 수 없다 — initrd의 `tq-probe`가 보낸다
+   (measurements 53).
 2. 묻기와 읽기가 한 프로세스 안에 있어야 한다. 답은 pty의 입력이라, 사이에
    프롬프트로 돌아온 셸의 라인 편집기가 먼저 가져간다 — fish가 묻고 bash가
    읽게 했더니 `len0`이었다.
-3. 답은 tty가 되울린다(ECHOCTL이 ESC를 `^[`로 바꾼다). 화면에는
-   `^[[4;1Rlen6`처럼 한 행에 붙어 나오므로 판정 글자를 행 첫머리에 기대면
-   안 된다 — `len<n>`이고, 우리가 치는 것에 `len`이 없다는 것이 그 판정이
-   안전한 근거다(`project_gate_screen_echo`의 autosuggestion 함정과 같은 자리).
+3. 답은 tty가 되울려 `^[[4;1Rlen6`처럼 한 행에 붙어 나온다(measurements 53). 판정
+   글자는 `len<n>`이고, 우리가 치는 것에 `len`이 없다는 것이 그 판정이 안전한
+   근거다(`project_gate_screen_echo`의 autosuggestion 함정과 같은 자리).
 4. DA1(`ESC[c`)은 그 한 칸으로 안 된다(0바이트). 임베더가 장치 속성을
    선언해야 만들어진다 — design 비목표 1이고 지금도 안 한다.
 5. 넘치는 답은 통째로 버린다. 반쪽을 넣으면 자식 파서가 그걸 답으로 읽어

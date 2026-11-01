@@ -1,3 +1,10 @@
+---
+name: feedback_boot_never_blocks
+description: "네트워크가 꺼져 있거나 안 닿아도 부팅은 평소대로 끝난다(사용자, 2026-09-15). 네트워크 호출은 타임아웃 + fork로 주 흐름 밖에 두고, 증명은 죽은 주소로 부팅하는 음성 검사다"
+metadata:
+  type: feedback
+---
+
 # 네트워크가 없어도 부팅은 평소대로 끝난다
 
 사용자가 2026-09-15에 Time Sync(TS) 설계 중에 못 박은 제약이다. 원문은

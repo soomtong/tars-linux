@@ -1,3 +1,10 @@
+---
+name: project_search_hangul
+description: "copy mode 검색창에서 한글을 친다(SH-M0~M2, 2026-09-09) — PromptInk, cols로 UTF-8을 가르는 자리"
+metadata:
+  type: project
+---
+
 # 검색창에서 한글을 친다 (2026-09-09 착수, SH-M0~M2 완료 2026-09-09 — 끝났다)
 
 사용자가 2026-09-09에 HI가 남긴 비목표 셋 중 "copy mode 검색창의 한글
@@ -72,38 +79,31 @@ design이 "`find_text` variant를 안 골랐다"고 적은 것과 어긋나 보�
 있어서, `handleKey`만 부르는 검사로는 원리적으로 못 본다. 판정은
 `keys.bytes.len != 0` 한 줄이다.
 
-4. Zig 0.16의 `std.posix`에는 `pipe`도 `write`도 `close`도 없다. I/O가
-`std.Io`로 옮겨 갔다. 처방은 libc 직접 선언이고 `input.zig`가 `read`·`open`에
-대해 이미 쓰던 방법이다. 착수 전에 컨테이너의 `lib/std/posix.zig`를 확인해서
-plan을 고쳤다.
+4. Zig 0.16부터 `std.posix`에는 `pipe`도 `write`도 `close`도 없다(I/O가 `std.Io`로
+갔다 — `std.posix.getenv`가 없는 것과 같은 자리, `docs/guides/dead-ends.md`). 처방은
+libc 직접 선언이고 `input.zig`가 `read`·`open`에 대해 이미 쓰던 방법이다.
 
-5. Zig는 컨테이너 필드 사이의 선언을 막는다. union의 새 variant 뒤에
-`pub const`를 두면 `declarations are not allowed between container fields`다.
+5. 필드 사이의 선언 금지와 `vt_test`의 이름 가리기(`sb` · `cm`을 다시 밟았다)는
+dead-ends의 "struct의 필드 사이에 `const` 선언을 끼우기" · "`vt_test`에서 지역 변수
+이름을 겹쳐 쓰기" 항목이다 — plan의 위험 목록에 적어 두는 것으로는 안 막히고
+컴파일 에러가 막는다.
 
-6. 이름 가리기 금지를 한 Task에서 두 번 밟았다. 새 `State`를 `sb`로,
-switch capture를 `cm`으로 지었는데 둘 다 위쪽 검사가 쓰던 이름이었다.
-plan이 그 함정을 위험 목록에 적어 두고도 새 이름 둘에서 다시 밟았다 —
-적어 두는 것으로는 안 막히고 컴파일 에러가 막는다.
-
-7. "그린 함수가 자기가 칠한 범위를 돌려준다"가 IS-M0의 함정을 아예 없앤다.
+6. "그린 함수가 자기가 칠한 범위를 돌려준다"가 IS-M0의 함정을 아예 없앤다.
 `dumpStatus`는 `drawStatus`와 같은 y 산수를 다시 해야 했고, 어긋나면 언제나
 0이 나와 증상이 "안 그렸다"와 구별되지 않는다. `drawPrompt`는 `PromptInk`로
 자기가 칠한 픽셀 범위를 그대로 준다 — 같은 산수가 두 곳에 안 생긴다.
 
-8. 정수 하나가 UTF-8을 가른다. 프롬프트가 그린 칸 수(`cols`)가 `/가`에서
+7. 정수 하나가 UTF-8을 가른다. 프롬프트가 그린 칸 수(`cols`)가 `/가`에서
 3이면 폭 2를 안 것이고 4면 바이트를 센 것이다. 실측: `/가ㄱ`에서
 `cols=5 inv=239 ink=17`(반전 두 칸 256픽셀이 239+17로 정확히 갈린다),
 `Esc` 뒤 `cols=3 inv=0`.
 
-9. 게이트 시간은 안 갈렸다. 18분 32.80초(IS-M1) → 18분 36.52초(SH-M0)
-→ 18분 48.22초(SH-M1, 키 넷과 판정 다섯이 늘었다) → 19분 11.21초(SH-M2)
-→ 18분 58.81초(클립 수정 뒤 최종). 넷의 폭이 35초이고 같은 세션의 값이라
-비교가 선다(HI-M2 실측 11). SH가 게이트에 더한 것은 20초 남짓이다.
+8. SH가 게이트에 더한 시간은 20초 남짓이었다(같은 세션의 네 값, plan 결과 절).
 
 ## 남은 것 — 붙여넣기는 FP가 했다
 
 SH는 milestone 셋으로 닫았다. 검색창의 붙여넣기는 SH 밖이었고, 그 뒤 FP-M0 · M1
 (2026-09-09)이 copy mode에서 잡은 글자를 `/` 프롬프트에 `Cmd+V`로 붙이는 것을 했다
-(CLAUDE.md 완료 표의 Find Paste 행). SH가 놓은 두 층 위에 얹힌 것이고, 그때 정한
+(`docs/guides/completed.md`의 Find Paste 행). SH가 놓은 두 층 위에 얹힌 것이고, 그때 정한
 비목표(같은 뜻이 적히는 자리가 셋이 되는 것 · 여러 줄 개행이 needle에 들어가는 것)는
 SH design의 비목표 절에 있고, FP 설계는 `docs/specs/2026-09-09-tars-find-paste-design.md`다.

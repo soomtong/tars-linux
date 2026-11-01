@@ -1,40 +1,25 @@
 ---
 name: feedback-commit-delegation
-description: "User does hands-on file creation/command execution themselves, but delegates git commit creation for approved content to Claude Code"
-metadata: 
-  node_type: memory
+description: "Once a step's result is approved by the user, Claude Code creates the git commit itself (user, 2026-08-02); subagents never commit. Never ask the user to run git add/commit"
+metadata:
   type: feedback
-  originSessionId: 22978997-aa43-4082-af11-aeec48afb813
 ---
 
-For the TARS boot-foundation guided-execution workflow, the user writes files
-and runs build/verify commands themselves (pair-programming style — explain
-before, user executes, explain results after). However, once content is
-approved (a step's expected result is confirmed), Claude Code should create
-the git commit itself rather than asking the user to run `git add`/`git
-commit`.
+Once content is approved (a step's expected result is confirmed), Claude Code
+creates the git commit itself rather than asking the user to run `git add`/`git
+commit`. Subagents that implement a milestone never commit — the lead verifies
+their diff against the files and commits.
 
-Why: User explicitly stated: "앞으로 승인된 내용의 commit 생성은 claude
-code 에게 위임합니다" (from now on, delegate commit creation for approved
-content to Claude Code) after doing the first two commits (Dockerfile,
-devcontainer verification) manually themselves.
+Why: User stated (2026-08-02): "앞으로 승인된 내용의 commit 생성은 claude code
+에게 위임합니다" after doing the first two commits (Dockerfile, devcontainer
+verification) manually. On 2026-08-03 the user also refused to be asked about
+execution mode per milestone — the division of labor is settled, not a question
+to re-open.
 
-How to apply: Within [[project_boot_foundation_restart]] work (and likely
-this repo generally going forward), continue having the user create/edit
-files and run build/test commands, but perform `git add`/`git commit` steps
-directly instead of instructing the user to run them — only after the
-user has confirmed the step's result is correct/expected.
-
-Confirmed standing (2026-08-03): When a plan's execution-mode question
-came up (subagent-driven vs. inline vs. this pair-programming style), the
-user rejected the question and stated explicitly: use "our own execution
-style" (explain → user executes → explain results, Claude commits) for
-every BF milestone until the whole project is done — don't ask again per
-milestone. See [[user_learning_goal]] for why. Do not re-offer
-subagent-driven/inline execution as options for this project.
-
-Superseded in three steps — since 2026-08-22 Claude runs the commands,
-since 2026-09-12 Claude writes the files, and since 2026-10-03 the
-implementation may go to a subagent (user's instruction at Workspace
-Panes). The commit rule itself is unchanged: Claude commits, subagents
-never do. Details in [[feedback_execution_scope]].
+How to apply: commit only after the user has confirmed the step's result;
+narrow `git add` to the intended paths (`CLAUDE.md` "Commit 전 git status
+확인"). Who writes files and runs commands has changed three times since
+(2026-08-22 commands, 2026-09-12 files, 2026-10-03 subagent implementation) —
+the current table is in [[feedback_execution_scope]]; this memory only holds
+the commit rule, which never changed. Push is a separate rule:
+[[feedback_push_policy]].

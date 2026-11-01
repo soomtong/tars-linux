@@ -62,12 +62,9 @@ screen 좌표는 목록 맨 위에서부터 세는 절대 좌표라 아래에 �
 
 ## `copyMove`는 격자 크기를 `RenderState`에서 읽으면 안 된다
 
-`RenderState`는 마지막 `cells()`가 찍은 스냅숏이고 `init`은 그것을 `.empty`(0×0)로
-둔다. 그래서 한 번도 그리지 않은 화면에서 `state.cols` · `state.rows`를 읽는 `copyMove`는
-크래시 없이 조용히 아무 일도 안 한다. 실전에서 안 드러난 이유는 `main.zig`가 키를 받기
-전에 이미 한 프레임을 그렸기 때문이다. 격자는 `pages.cols` · `pages.rows`에서 읽는다 —
-언제나 살아 있는 값이다. `copyEnter`가 읽는 `state.cursor.viewport`는 진짜 렌더 상태라
-그대로 두고, 대신 검사는 화면을 만든 뒤 `cells()`를 한 번 부르고 시작한다.
+measurements 13과 `docs/guides/dead-ends.md`의 "`vt.Screen`을 새로 만들고 곧바로
+`copyMove`" 항목. 실전에서 안 드러난 이유는 `main.zig`가 키를 받기 전에 이미 한
+프레임을 그렸기 때문이다. 격자는 `pages.cols` · `pages.rows`에서 읽는다.
 
 ## `Cmd+V`는 키 표 두 곳에 있다 — 한쪽만 고치면 조용히 안 먹는다
 
@@ -78,13 +75,10 @@ screen 좌표는 목록 맨 위에서부터 세는 절대 좌표라 아래에 �
 
 ## 키의 의미를 바꾸는 것은 enum을 넓히는 것과 다른 축이다
 
-`Copy`에 variant를 더하는 것 자체는 `input_test`를 안 깨뜨리는데(`expectCopy` ·
-`expectCtx`는 `Action`만 훑는다), `Cmd+V`가 바이트에서 copy 명령으로 뜻이 바뀌자 IP
-시절의 `expect(&state, K.KEY_V, 1, "v")`가 깨졌다. 두 축을 따로 센다. 그리고 `Action` ·
-`Keys` · `Copy`를 건드리면 `zig build`도 함께 돌린다 — Zig가 참조되지 않는 함수를
-분석하지 않아서 `readKeys`가 쓰는 필드가 사라진 것을 `zig build test`가 두 번 놓쳤다
-(`input_test`는 `handleKey`만 부른다). `main.zig`의 copy switch에 `else`가 없는 규율이
-새 variant의 배선 자리를 컴파일러가 짚게 한다.
+measurements 1 · 2 · 3. 여기서 깨진 것은 `Cmd+V`가 바이트에서 copy 명령으로 뜻이 바뀌자
+IP 시절의 `expect(&state, K.KEY_V, 1, "v")`였다(`expectCopy` · `expectCtx`는 `Action`만
+훑는다). `main.zig`의 copy switch에 `else`가 없는 규율이 새 variant의 배선 자리를
+컴파일러가 짚게 한다.
 
 ## 비워 둔 것과 그 뒤
 

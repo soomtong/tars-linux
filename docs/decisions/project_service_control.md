@@ -44,10 +44,10 @@ How to apply:
   통과하고 19에서 죽었다).
 - `zig build test`의 끝줄은 판정이 아니다. 검사가 병렬로 돌아 실패가 있어도 다른 검사의
   `PASS`가 끝에 온다. 종료 코드와 `error` · `FAIL`로 가른다.
-- 체인에 `… | grep -q`를 쓰면 GA-M0의 진입 검사가 게이트를 시작하지 않는다. `grep …
-  >/dev/null`로 쓴다(CT-M2가 첫 루트 게이트에서 걸렸다).
-- 부수 발견: PID 1의 전원 버튼 fd에 `CLOEXEC`가 없어 콘솔 셸 · 서비스와 그 자식이
-  물려받는다(실측 7). `docs/guides/lessons.md`의 이월 숙제에 있다.
+- 체인에 `… | grep -q`를 쓰면 진입 검사가 게이트를 세운다(`docs/guides/lessons.md`의
+  "파이프 뒤의 `grep -q`는 게이트가 막는다" 절 — CT-M2가 첫 루트 게이트에서 걸렸다).
+- 부수 발견이던 "전원 버튼 fd에 `CLOEXEC`가 없어 콘솔 셸 · 서비스가 물려받는다"(실측 7)는
+  DS 결정 6이 닫았다 — `devices.zig`의 `open`이 `.CLOEXEC = true`를 준다.
 
 관련: [[project_boot_services]] · [[project_init_supervisor]] ·
 [[feedback_boot_never_blocks]] · [[project_gate_chain_composition]]

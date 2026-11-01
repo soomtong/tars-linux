@@ -1,3 +1,10 @@
+---
+name: project_font_selection
+description: "터미널 폰트는 GNU Unifont 17.0.03 — 후보를 가르는 것은 커버리지가 아니라 문턱값 렌더링에서의 안티앨리어싱이다(2026-08-23). FR-M0(2026-10-31)부터 terminal/vendor/fonts/에 커밋. 폰트를 또 바꿀 때 고칠 자리 열과 함정 셋"
+metadata:
+  type: project
+---
+
 # 폰트 선택 기준과 현재 폰트 (2026-08-23)
 
 TARS의 터미널 폰트는 GNU Unifont 17.0.03이다. 이 문서는 왜 그것이고,
@@ -67,20 +74,19 @@ g   6x11  cell_width=8   x_offset=1  y_offset=5
 ## 폰트를 또 바꾼다면 — 고칠 자리 열과 함정 셋
 
 저장 이름에 버전을 넣지 않는다(`vendor/fonts/unifont.otf`). 경로를 읽는
-곳이 다섯이라 이름에 버전을 박으면 올릴 때마다 전부 고쳐야 한다. 버전은
-`vendor_fonts.sh` 한 곳에만 있고, 어느 파일인지는 sha256이 보증한다.
+곳이 다섯이라 이름에 버전을 박으면 올릴 때마다 전부 고쳐야 한다. 버전과
+sha256은 `terminal/vendor/fonts/README` 한 곳에만 있다(FR-M0 전에는 `vendor_fonts.sh`였다).
 
 ```
-terminal/vendor_fonts.sh             URL · 파일 이름 · sha256
-kernel/make_initrd.sh:94             initrd에 복사
-kernel/make_initrd.sh:186            initrd 크기 실측 주석
+terminal/vendor/fonts/README         출처 · 버전 · sha256 · 올릴 때 할 일
+kernel/make_initrd.sh                initrd에 복사 · initrd 크기 실측 주석
 terminal/src/main.zig                경로 문자열
 terminal/src/font_test.zig           경로 + 기대값 표 + 4번 검사 표본
 terminal/prepare.sh                  주석
-terminal/build.zig:102               확장자가 박힌 주석
+terminal/build.zig                   확장자가 박힌 주석
 terminal/sanity/stb_truetype_main.c  경로 문자열
 terminal/src/font.zig                실측 주석 다섯 (코드는 안 바뀐다)
-check.sh:10                          폰트 이름이 박힌 주석
+check.sh                             폰트 이름이 박힌 주석
 ```
 
 함정 1 — 검색에 안 걸리는 자리가 있다. 위 열 중 셋(`check.sh`,

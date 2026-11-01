@@ -1,6 +1,6 @@
 ---
 name: project_render_speed
-description: "GPU 전에 그리기를 빠르게 한 서브프로젝트 Render Speed(RS-M0~M3, 2026-10-11). 같은 프로브(probe/)로 전후를 쟀다 — seq 1 200000이 5.5 → 2.2초(남은 81%는 VT 파서), 키 하나의 그리기 11.6 → 4.3ms. 84.7%가 fill이던 것은 픽셀 수가 아니라 쓰는 방식(volatile 4바이트씩)이었다. CPU 하나인 게스트에서 poll(0)로 더 읽기는 운이고, 그리기를 미뤄 poll에서 막혀야 자식이 돈다. 부분 갱신은 아직 안 했다"
+description: "GPU 전에 그리기를 빠르게 한 서브프로젝트 Render Speed(RS-M0~M3, 2026-10-11). 같은 프로브(probe/)로 전후를 쟀다 — seq 1 200000이 5.5 → 2.2초(남은 81%는 VT 파서), 키 하나의 그리기 11.6 → 4.3ms. 84.7%가 fill이던 것은 픽셀 수가 아니라 쓰는 방식(volatile 4바이트씩)이었다. CPU 하나인 게스트에서 poll(0)로 더 읽기는 운이고, 그리기를 미뤄 poll에서 막혀야 자식이 돈다. 부분 갱신은 그 뒤 DR(2026-10-30)이 했다"
 metadata:
   type: project
 ---
@@ -42,23 +42,19 @@ RC-M0([[project_render_cost]])의 21.3ms와는 조건(호스트 · 측정 경계
 
 ## 게이트에서 드러난 것 — 콘솔 fish의 프롬프트에 terminal 줄이 붙는다
 
-게스트에는 fish가 둘이다(PTY · `/dev/console`, [[project_init_supervisor]]). 콘솔 fish는 TCG에서 늦게 떠 그 프롬프트가 부팅 뒤
-아무 때나 시리얼에 찍히고, 줄바꿈 없이 끝나 바로 다음에 쓰인 terminal의 줄이 그 뒤에 붙는다. 전부터 있었고 붙는 줄이 대개
-`screen>`이라 곧 다음 프레임이 와서 무해했다. M2가 프레임을 줄이자 마지막 화면 줄(M2 루트 게이트의 pointer · battery)과
-`pointer> at` 줄(M3 루트 게이트)이 붙었다. `gate_lib.sh`의 `joined_screen_dump`가 줄 중간의 `screen>`도 읽고, 마지막 줄을 꺼내
-`^terminal:`로 대조하거나 줄 전체를 문자열로 비교하는 자리들(pointer 둘 · battery 넷)이 `from_terminal`을 거친다. anchor 없이
-부분 대조(`grep -q 패턴`)하는 자리는 붙은 조각이 있어도 맞으므로 그대로다. 새 대기 함수가 `^terminal:`로 대조하거나 줄을 통째로
-비교하면 `from_terminal`을 끼운다.
+M2가 프레임을 줄이자 드러났다. 모양과 처방(`joined_screen_dump` · `from_terminal`)은
+`docs/guides/lessons.md`의 "커널 printk가 terminal의 화면 줄을 가운데서 자른다" 절의 RS-M2 · M3 덧붙임에 있다.
 
 ## 방법
 
 - 측정 → 변경 → 같은 프로브로 재측정. 프로브는 원본을 안 바꾸는 패치 사본이고 anchor는 정확히 한 번이어야 한다.
 - 결과가 판마다 갈리면 구간을 더 쪼갠 진단 판(저장소 밖 `/tmp`)으로 잰다. M2의 drain을 버린 근거가 그것이다.
-- 루트 게이트의 `clean()`이 `out/`을 지운다. 프로브 로그는 게이트 전에 옮긴다. 체인 하나의 시리얼 로그를 남기려면
-  `-e TMPDIR=<마운트한 디렉터리>`로 체인을 단독 실행한다.
+- 루트 게이트의 `clean()`이 `out/`을 지운다. 프로브 로그는 게이트 전에 옮긴다. 체인 하나의 시리얼 로그는 GF-M1부터
+  `make check CHAIN=x`가 `out/gate-logs/<체인>/`에 남긴다(`docs/guides/lessons.md`의 "회차의 로그는 out/gate-logs…" 절).
 
-## 남은 것
+## 그 뒤
 
-- 부분 갱신. 사용자가 다시 판단한다. 이제 키 하나의 그리기가 4ms대이고 (b)의 81%가 파서다. 하게 되면 출발점은 "지난 프레임의
-  셀 격자와 이번 `cells()`를 행 단위로 비교"(design "효과가 없거나…" 절)이고, 손상 사각형을 DIRTYFB의 clip으로 넘긴다.
+- 부분 갱신은 Dirty Rows(DR-M0~M3, 2026-10-30, [[project_dirty_rows]])가 했다 — 출발점은 여기 적어 둔 그대로("지난 프레임의
+  셀 격자와 이번 `cells()`를 행 단위로 비교", 손상 사각형을 DIRTYFB clip으로). 키 하나의 그리기 2.45 → 0.92ms(measurements 96 · 97),
+  상태 줄 띠까지 하면 0.42ms(SB-M0, measurements 98).
 - 덤프가 프레임과 비슷한 크기가 됐다((a) 4ms 안팎). 끄는 길은 전 체인에 걸친다(design 결정 5).

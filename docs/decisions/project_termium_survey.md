@@ -35,17 +35,11 @@ metadata:
 non-root 사용자는 TARS 전체 모양을 바꾸는 결정이고, 저장 위치는 패키지 관리자와 겹친다.
 브라우저는 그 둘 뒤에 놓는 것이 자연스럽다.
 
-## 남긴 후보 — 터미널 그래픽 (TG가 2026-10-03에 구현했다, [[project_terminal_graphics]])
+## 남긴 후보 — 터미널 그래픽
 
-- ghostty vt는 x86_64 빌드에서 `kitty_graphics`가 켜진 채로 들어온다
-  (`terminal/ghostty-src/src/terminal/build_options.zig`, wasm32-freestanding만 끈다).
-  이미지 명령을 받아 저장하는 쪽은 라이브러리가 할 가능성이 높다 — 실제로 저장되는지와
-  질의(`a=q`)의 답이 [[project_terminal_queries]]의 `write_pty` 길로 나가는지는 안 봤다.
-- 빠진 것은 우리 렌더러다. `terminal/src/main.zig`에 image · placement를 다루는 줄이 없다.
-- 서면 termium의 최고 화질 모드만이 아니라 이미지 뷰어 · 파일 관리자 미리보기도 함께 된다.
-  게이트는 QEMU 안에서 `printf`로 이미지 명령 하나를 보내는 것으로 세울 수 있다.
-- 비용 주의 — [[project_render_cost]]에서 한 프레임의 84.7%가 `fill`이었다. 큰 그림을 자주
-  바꾸는 화면은 그것을 키운다.
+이 조사가 남긴 후보("ghostty vt는 `kitty_graphics`가 켜져 들어오고 빠진 것은 우리
+렌더러다")는 TG가 2026-10-03에 구현했다([[project_terminal_graphics]]). termium의 최고
+화질 모드가 그 위에 서는 것은 그대로다.
 
 남의 것을 쓸지 짤지의 기준은 [[project_write_or_reuse]]. 같은 날 조사만 한 것으로
 [[project_latticedb_survey]]가 있다.

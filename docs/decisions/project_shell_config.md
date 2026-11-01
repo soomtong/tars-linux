@@ -30,11 +30,10 @@ milestone별 경과와 게이트 시간은 2026-10-10에 지웠다(커밋 이력
 
 ## 착수 전 프로브가 닫은 것
 
-- fish는 인사말을 찍고 빈 `fish_greeting` 환경 변수가 그것을 막는다. 그런데 그 인사말을
-  `machine/check.sh`가 UEFI 부팅의 마커로 grep한다 — `/etc/fish/config.fish`로 시스템
-  전체를 끄면 그 마커가 죽는다. 처방은 `terminal`의 `setenv("fish_greeting", "", 1)` —
-  화면 셸만 조용해지고 시리얼 콘솔 셸은 그대로 찍는다. 인사말을 건드리는 사람은
-  `machine/check.sh`의 그 마커를 함께 본다.
+- fish 인사말은 `terminal`의 `setenv("fish_greeting", "", 1)`로 화면 셸에서만 끈다 —
+  `machine/check.sh`가 콘솔 셸의 그 인사말을 UEFI 부팅의 마커로 쓰기 때문이다
+  (`docs/guides/key-files.md`의 `machine/check.sh` 항목). `/etc/fish/config.fish`로 시스템
+  전체를 끄면 그 마커가 죽는다.
 - 설정을 다 읽은 fish의 기본 프롬프트가 `--no-config`로 뜬 것과 글자까지 같다 — 게이트
   좌표계가 그대로 선다. 다만 "프롬프트가 안 움직인다"가 덮는 범위는 글자뿐이었다(아래).
 - zsh의 newuser 마법사는 안 뜬다. sysroot에 `zsh-newuser-install`이 있다는 사실로 세운
@@ -63,8 +62,9 @@ fish는 `none`을 스크립트 파일 이름으로 읽는다 — terminal의 가
 - `style>` 덤프 상한이 16이라 색칠된 명령줄 32칸이 예산을 다 쓰고 아래 줄이 통째로
   잘렸다. 진단은 `terminal: style> 16 more cell(s) not shown` 한 줄 — 자르는 것을
   조용히 하지 않기로 한 TR-M2의 선택이 값을 냈다. 상한을 96으로.
-- 로그 줄을 넓히면 앞과 뒤를 동시에 건드린다. `tars-init: config shell=` 줄을 `$`로
-  뒤에 매달아 잡던 자리가 하나 있었다. 처방은 끝 대신 경계(`( |$)`).
+- 로그 줄을 넓히면 앞과 뒤를 동시에 건드린다 — `config shell=` 줄의 판정을 `$`에
+  고정하지 않고 경계 `( |$)`로 보는 규칙은 `docs/guides/lessons.md`의 "로그 문구는 두
+  곳에 중복된다" 절에 있다.
 - "반전됐다"를 색 두 개(`fg=102030 bg=FFFFFF`)로 박아 두면 셸이 글자에 색을 쓰는 순간
   틀린다. 반전의 표식은 `fg`가 기본 배경색이라는 것 하나이고 `bg`는 그 글자가 원래 갖던
   색이라 검사가 알 바가 아니다. 같은 가정을 쓰는 셋(`hangul` · `copy` · `render`)을 다
@@ -74,9 +74,11 @@ fish는 `none`을 스크립트 파일 이름으로 읽는다 — terminal의 가
 ## seed는 한 글자도 찍으면 안 된다
 
 설정 디스크를 붙이는 체인 중 셋이 화면의 셀 좌표로 판정한다. seed 파일이 생기는 순간
-그 체인들의 화면이 seed의 내용을 따라간다. 그래서 seed에 쓸 수 있는 줄은 주석과
-`alias`뿐이고 `init/src/config_test.zig`의 `expectQuietSeed`가 호스트에서 0.1초에
-확인한다(줄의 종류 · alias 최소 하나 · seed가 자기 경로를 적었는가). 이 검사의 목적은
+그 체인들의 화면이 seed의 내용을 따라간다. 그래서 seed에 쓸 수 있는 줄의 종류가 닫혀 있고
+`init/src/config_test.zig`의 `expectQuietSeed`가 호스트에서 0.1초에 확인한다(줄의 종류 ·
+alias 최소 하나 · seed가 자기 경로를 적었는가. 허용되는 줄의 목록과 두 벌 규칙은
+`docs/guides/key-files.md`의 `config_test.zig` 항목과 [[project_shell_history]]의 "상수가 세
+벌인 이유"). 이 검사의 목적은
 지금 통과하는 것이 아니라 나중에 막는 것이다 — seed를 늘리는 사람이 보는 것은 부팅
 20초 뒤에 밀린 화면 좌표가 아니라 이 줄이다.
 
@@ -129,20 +131,19 @@ fish는 `none`을 스크립트 파일 이름으로 읽는다 — terminal의 가
 `started`가 각 1이다. 죽는 셸은 첫 렌더보다 먼저 죽어 `terminal: screen>`가 한 줄도 없는
 구간이 생기고, 되살아난 뒤 그 줄이 있다는 것이 검사 하나다.
 
-## 컨테이너의 첫 읽기가 낡은 파일을 봤다 — 원인 미상
+## `zig build test`가 세 번 직전 내용의 결과를 냈다
 
-`zig build test`가 세 번, 직전 내용의 결과를 냈다(깨뜨린 첫 실행이 `PASS`, 둘째가 옳은
-`FAIL`). 같은 컨테이너 안에서 `md5sum`이 옛 내용을, 밀리초 뒤의 `grep`이 새 내용을 본
-것이 증거다 — zig 캐시가 아니라 bind mount의 첫 읽기다. 재현은 서른 판에서 못 했다.
-처방은 음성 확인을 한 번으로 판정하지 않는 것이다([[project_zig_out_staleness]]와 다른
-병이지만 증상은 같다).
+SC 때 깨뜨린 첫 실행이 `PASS`, 둘째가 옳은 `FAIL`이었다. 그때는 bind mount의 첫 읽기를
+의심했는데(같은 컨테이너 안에서 `md5sum`이 옛 내용을, 밀리초 뒤의 `grep`이 새 내용을
+봤다 — 재현은 서른 판에서 못 했다), 뒤에 SM-M1이 bind mount는 범인이 아니라고 재고
+처방을 "음성 확인 전에 `.zig-cache` · `zig-out`을 컨테이너 안에서 지운다"로 세웠다.
+본문은 [[project_zig_out_staleness]].
 
 ## `debugfs`로 이미지에 직접 묻는다
 
 게이트 로그에 `tars-init: seeded`가 일부 체인에만 보여도 seed가 안 깔린 것이 아니라 그
 체인이 성공했을 때 첫 부팅의 로그를 안 찍는 것일 수 있다 — 로그에 없는 것과 안 일어난
-것이 다르다. `debugfs -R 'cat /zshrc' out/config.img`로 파일시스템에 직접 묻는다
-([[project_seeding_a_config_disk]]).
+것이 다르다. 파일시스템에 직접 묻는 명령은 measurements 38.
 
 ## 게이트로 못 보는 것
 

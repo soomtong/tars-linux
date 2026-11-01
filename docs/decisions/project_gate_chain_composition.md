@@ -15,17 +15,13 @@ TF-M4(2026-08-12)에서 루트 `check.sh`를 재구성하며 세운 원칙이고
 
 ## 낡은 게이트는 되살리지 않고 파일째 지운다 — 동작하는 수동 도구는 살린다
 
-DF 게이트(`display/check.sh`)는 "화면 (10,10)이 kms가 칠한 빨강인가"를 봤는데
-TF-M2가 initrd에 kms 대신 terminal을 넣으면서 부팅된 시스템에 kms가 없어졌다.
-되살리려면 커널 cmdline으로 무엇을 띄울지 고르는 부팅 모드 스위치를 제품
-코드에 넣어야 하는데, DF가 검증하던 DRM/KMS present 경로는 TF 체인이 매
-회차 실제로 픽셀을 띄우며 이미 본다. 죽은 테스트를 살리려고 부팅 경로에
-분기를 넣지 않는다.
-
-은퇴 표시를 주석으로 남기는 방식은 오래 못 간다 — "실행하지 말 것" 머리말을
-단 파일이 `cargo build`를 품은 채 남아 ZM-M2의 Rust 제거 범위를 다시
-넓혔다. `kernel/check.sh`(BF-M2 시절)는 아무도 안 돌리는 사이 이미 깨져
-있었다. 은퇴 사유는 이 기억과 git 이력에 남기고 파일은 지운다.
+DF 게이트(`display/check.sh`)는 kms를 봤는데 TF-M2가 initrd에 kms 대신 terminal을
+넣으면서 볼 것이 없어졌다. 되살리려면 부팅 모드 스위치를 제품 코드에 넣어야 하고,
+그것이 검증하던 DRM/KMS present 경로는 TF 체인이 매 회차 본다 — 죽은 테스트를
+살리려고 부팅 경로에 분기를 넣지 않는다. "실행하지 말 것" 머리말을 단 파일은 오래
+못 간다(`cargo build`를 품은 채 남아 ZM-M2의 범위를 넓혔고, `kernel/check.sh`는
+아무도 안 돌리는 사이 깨져 있었다). 은퇴 사유는 이 기억과 git 이력에 남기고
+파일은 지운다. 경위는 `docs/specs/2026-08-13-tars-zig-migration-design.md`.
 
 지우지 않는 것은 동작하는 수동 도구다. `kernel/check-virtio-gpu.sh`는 이미
 만들어진 산출물로 `/dev/dri/card0 exists`만 확인하므로 지금도 돈다.
@@ -47,7 +43,8 @@ build`를 `terminal/prepare.sh`로 뽑아 체인들이 함께 부르게 한 것�
 `make_initrd.sh`가 직접 부르게 하지는 않았다 — 그 스크립트는 아무것도
 빌드하지 않는 순수 조립 스크립트라 terminal만 예외로 두면 비대칭이 생긴다.
 재발 방지는 루트 게이트가 모든 체인을 매번 돌리는 것과, GL-M0부터 `check.sh`
-진입 검사가 체인마다 빌드 스텝을 부르는지 읽는 것이다([[project_gate_latency]]).
+진입 검사(`require_build_steps`)가 체인마다 빌드 스텝을 부르는지 읽는 것이다
+([[project_gate_latency]], `docs/guides/lessons.md`의 "게이트는 첫 회차에만 clean" 절).
 
 ## `clean()`이 지워도 되는 것은 빌드 산출물뿐
 
@@ -58,36 +55,20 @@ build`를 `terminal/prepare.sh`로 뽑아 체인들이 함께 부르게 한 것�
 캐시, 지워도 됨)와 `zig-pkg`(패키지 캐시, 지우면 안 됨)는 이름이 비슷하고
 성격이 반대다.
 
-clean에서 뺀 디렉터리는 "옛 호스트의 산출물"을 품고 살아남는다.
-`boot/limine-binary`도 네트워크가 필요해 clean 대상이 아닌데 그 안의
-`limine`은 호스트에서 도는 도구라, 옛 amd64 컨테이너가 빌드한 x86_64
-바이너리가 남아 arm64 컨테이너의 BF 체인이 ISO 만들기에서 죽었다(`make`는
-소스보다 새것이라 다시 안 만든다). 대응은 `boot/build.sh`의 `make -C "$DIR"
--B`. 경위는 [[project_build_host_arch]].
+clean에서 뺀 디렉터리는 "옛 호스트의 산출물"을 품고 살아남는다 —
+`boot/limine-binary`의 `limine`이 그랬고 대응은 `boot/build.sh`의 `make -B`다.
+경위는 [[project_build_host_arch]] 규칙 4.
 
 ## initrd 크기는 BF 체인에서만 병목이다 — 그리고 크기가 곧 시간은 아니다
 
-TF-M4에서 BF가 부팅조차 못 하고 120초를 넘겼다(시리얼 0바이트). 원인은 initrd
-53MB — Debug terminal 42MB. 같은 initrd로 다른 체인은 멀쩡했다. QEMU가
+TF-M4에서 BF가 부팅조차 못 하고 120초를 넘겼다(시리얼 0바이트). 원인은 Debug
+terminal이 든 initrd 53MB였고 같은 initrd로 다른 체인은 멀쩡했다 — QEMU가
 `-initrd`로 호스트 파일을 게스트 메모리에 직접 복사하는 것과 달리 limine은
 BIOS INT13h로 ISO9660에서 읽고 그 경로가 에뮬레이션에서 극단적으로 느리다.
-해결은 cpio를 gzip으로 압축한 것(53MB → 11.8MB)이고, 지금은 terminal이
-ReleaseSafe라 그보다 작다([[project_gate_latency]]).
-
-strip은 쓰지 않는다. initrd 사본만 strip하면 더 작고 빠르지만 Zig의 에러
-트레이스는 바이너리 자체의 디버그 정보를 런타임에 읽어 만들므로 strip하면
-게스트 안에서 트레이스를 되살릴 방법이 원리적으로 사라진다(호스트에 심볼
-사본을 둬도 소용없다). 단, 심볼이 있다고 트레이스가 바로 읽히지는 않았다 —
-같은 크래시에서 strip 판은 `???:?:?: 0x… in ???`를 찍고 심볼 판은 아예 안
-찍었다(원인 미규명). 지금의 선택은 "트레이스가 잘 나와서"가 아니라 "strip하면
-고칠 여지 자체가 없어서"다.
-
-LI-M1(2026-10-26)에서 바뀌었다 — 이제 우리 바이너리 다섯의 initrd 사본은
-`--strip-debug`한다. Zig 0.17은 DWARF가 없으면 `.symtab`으로 함수 이름을 찍고,
-바이너리가 non-PIE라 그 주소를 호스트의 `zig-out` 원본에 `addr2line -i`로 넣으면
-게스트 trace보다 많이(inline 사슬까지) 나온다. 위의 "호스트 사본은 소용없다"가 더는
-참이 아니다. 심볼 판이 trace를 안 찍던 것도 0.17 · ReleaseSafe에서는 재현되지 않았다
-(LI-M0 실측 3, [[project_lean_initrd]]).
+해결은 cpio를 gzip으로 압축한 것이고, 지금은 terminal이 ReleaseSafe이고 우리
+바이너리의 initrd 사본은 `--strip-debug`다([[project_gate_latency]] ·
+[[project_lean_initrd]] — TF-M4의 "strip하면 트레이스를 되살릴 길이 없다"는
+Zig 0.17에서 더는 참이 아니다).
 
 크기가 곧 시간은 아니다(ZM-M1 실측). initrd가 19% 늘어도 BF 부팅 시간은 안
 변했고, 단독 1회에서 나온 느린 값은 3회 반복에서 사라진 잡음이었다. 53MB에서
@@ -107,7 +88,8 @@ fish만 뜨면 PASS다. PID 1을 Rust에서 Zig로 통째로 다시 쓰는 작�
 
 마커 문자열은 `init` 코드와 체인 스크립트에 중복된다. 공유 파일로 빼지 않은
 것은 체인이 각자 단독 실행 가능해야 한다는 설계 때문이고, 대신 `init`의 출력
-문자열을 바꾸면 체인을 같이 고친다. 어떤 컴포넌트를 다시 쓰는 작업을
+문자열을 바꾸면 체인을 같이 고친다(목록은 `docs/guides/lessons.md`의 "로그 문구는
+두 곳에 중복된다" 절). 어떤 컴포넌트를 다시 쓰는 작업을
 시작할 때는 "게이트가 이 컴포넌트의 무엇을 실제로 보는가"를 먼저 확인하고,
 안 보고 있으면 그 검사를 먼저 더한 뒤 재작성에 들어간다.
 
@@ -158,7 +140,7 @@ design이 "IP는 디스크를 안 문다"고 적으면서 같은 문서에서 `k
 양립할 수 없었다. 켤 수 있는 것을 안 켜고 "게이트가 구조적으로 못 본다"고
 적는 것은 게으름이지 구조적 한계가 아니다 — 그 문장은 진짜로 못 켜는 것에만
 쓴다. 비용이 작았던 이유는 `mkfs.ext2 -d`로 내용이 든 이미지를 굽는 것이고
-([[project_seeding_a_config_disk]]), 디스크 없는 부팅은 그대로 남아 폴백
+(measurements 34, [[project_seeding_a_config_disk]]), 디스크 없는 부팅은 그대로 남아 폴백
 경로도 계속 밟는다.
 
 대조군을 함께 넣는다 — 2차 부팅이 `keyboard=pc`였다는 것만으로는 설정이 정말
@@ -172,12 +154,12 @@ design이 "IP는 디스크를 안 문다"고 적으면서 같은 문서에서 `k
 `input.zig`의 `keymap`은 "N번째 칸이 evdev 코드 N"이라는 규약 위에 서 있는데
 그것을 지켜 주는 것이 주석뿐이었다. 중간에 한 줄이 끼면 뒤가 전부 밀리고
 컴파일은 통과하며 증상은 "a를 쳤는데 s가 나온다"로만 나타나 진단에 부팅 한
-바퀴가 든다. IP-M2가 표의 양끝과 가운데를 커널의 이름에 묶는 `comptime` 블록
-(`keymap.len != c.KEY_SPACE + 1`, `keymap[c.KEY_A][0] != 'a'` 등)을 넣고
-일부러 한 줄을 끼워 에러가 나는 것을 확인했다 — 이 확인을 건너뛰면 `if
+바퀴가 든다. IP-M2가 표의 양끝과 가운데를 커널의 이름에 묶는 `comptime` 블록을
+넣고 일부러 한 줄을 끼워 에러가 나는 것을 확인했다 — 이 확인을 건너뛰면 `if
 (false) @compileError(...)`와 구분되지 않는다. doc comment(`///`)는 `comptime`
 블록에 못 붙고, Zig는 첫 `@compileError`에서 멈추므로 앵커가 여럿 어긋나도
-에러는 하나만 나온다.
+에러는 하나만 나온다. 같은 앵커가 `hangul.zig`의 표 셋에도 있다
+(`docs/guides/key-files.md`의 `input.zig` · `hangul.zig` 항목).
 
 ## How to apply
 
@@ -189,4 +171,4 @@ design이 "IP는 디스크를 안 문다"고 적으면서 같은 문서에서 `k
 
 관련: [[project_zig_c_uapi_rule]], [[project_zig_rewrite_intent]],
 [[project_gate_latency]], [[project_gate_accuracy]], [[project_build_host_arch]],
-[[project_seeding_a_config_disk]]
+[[project_seeding_a_config_disk]], [[project_lean_initrd]]

@@ -7,10 +7,9 @@ metadata:
 ---
 
 2026-10-05 사용자의 요청 "마우스 장치 지원: 마우스 포인터 및 인터렉션(드래그 선택).
-터치패드 역시 지원"으로 열어 같은 날 닫았다. 사용자는 결정권을 lead(Fable)에게
-위임했고, design과 plan 넷은 Opus 서브에이전트가, 구현은 M0 · M2 · M3을 Opus,
-M1을 Sonnet 서브에이전트가 plan만 보고 했다. lead는 실측 · 대조 · 게이트 · commit을
-맡았다. design은 `docs/specs/2026-10-05-tars-pointer-devices-design.md`.
+터치패드 역시 지원"으로 열어 같은 날 닫았다. 사용자는 결정권을 lead에게 위임했고,
+분업(plan · 구현은 서브에이전트, lead는 실측 · 대조 · 게이트 · commit)은 design 결정 11에
+있다. design은 `docs/specs/2026-10-05-tars-pointer-devices-design.md`.
 
 무엇이 섰나.
 
@@ -42,30 +41,22 @@ M1을 Sonnet 서브에이전트가 plan만 보고 했다. lead는 실측 · 대�
 
 배운 것 — 다시 조사하지 말 것.
 
-1. `CONFIG_INOTIFY_USER=y`를 켜면 `FSNOTIFY`가 따라 켜지고, 그 커널은 TCG에서 initramfs
-   풀기가 2.6초 → 3.8초로 늦어져 `install` 체인 부팅 7(`usb-storage.delay_use=3`)의
-   창이 닫혔다. 루트 게이트가 두 번 빨갰고 단독 재현이 결정적이었다. M3이 같은 증상을
-   다시 겪으며 진짜 원인을 찾았다 — 드라이버가 아니라 코드 배치다. gzip `inflate_fast`가
-   커널 이미지 안에서 페이지 경계를 넘게 밀리면 QEMU TCG가 그 번역 블록을 직접 잇지 못해
-   풀기가 0.8초 늦어진다(HEAD 설정에 `X86_INTEL_LPSS` 하나만 켠 커널로 확인). M0의
-   FSNOTIFY도 같은 것이었을 가능성이 크지만 그때 System.map을 안 봐서 재지 않았다.
-   실기와 무관한 게이트의 비용이고, 어느 커널 변경이든 다시 움직일 수 있다. M3이 부팅 7의
-   `delay_use`를 4로 올려 여유를 1.1초로 되돌렸다.
-2. ioctl 매크로(`EVIOCGBIT` 등)는 ZU-M1의 translate-c 패키지가 inline fn으로 넘긴다.
-   HD 조사 6("매크로라 안 넘어온다")은 `@cImport` 시절의 사실이다.
-3. OrbStack VM(4GB)에서 cold `zig build`(약 3GB)와 다른 컨테이너의 QEMU가 겹치면 OOM
-   (exit 137)이나 VM 재시작이 난다. docker 작업은 한 번에 하나만 돌린다.
-4. QEMU HMP `mouse_move` · `mouse_button`은 `-display none`에서도 usb-mouse로 가고,
-   `device_add usb-mouse,id=…` · `device_del`이 핫플러그를 만든다. 127을 넘는 이동은
-   보고 셋으로 쪼개지고 합은 보존된다. 휠 한 눈금에 `REL_WHEEL_HI_RES` ±120이 함께 온다.
-5. 게스트에 `od` · `xxd` · `timeout`이 없다 — 바이트는 `head -c N | cat -v`. `sendkey
-   colon`은 없는 이름이고 `:`는 `shift-semicolon`이다.
-6. 루트 게이트 반복을 3에서 2로 줄였다(`feedback_gate_runs`). 3회 1시간 8분이 2회 47분
-   46초가 됐다.
+1. `CONFIG_INOTIFY_USER`를 켰다가 `install` 부팅 7의 창이 닫힌 일과 그 진짜 원인(TCG의
+   코드 배치, `inflate_fast`)은 measurements 76. M0의 FSNOTIFY도 같은 것이었을 가능성이
+   크지만 그때 System.map을 안 봐서 재지 않았다. M3이 부팅 7의 `delay_use`를 4로 올려
+   여유를 1.1초로 되돌렸다.
+2. ioctl 매크로는 translate-c 패키지가 inline fn으로 넘긴다(measurements 77).
+3. docker 작업은 한 번에 하나(`docs/guides/lessons.md`의 "docker 작업은 한 번에 하나 (PD)" 절).
+4. QEMU HMP의 마우스 · 핫플러그 명령과 그 성질은 measurements 78.
+5. 게스트에 없는 바이트 도구와 `head -c N | cat -v`는 measurements 80, `:`가
+   `shift-semicolon`인 것은 measurements 6.
+6. 루트 게이트 반복은 PD 때 3에서 2로, 2026-10-10에 다시 1로 줄었다 — `check.sh`의
+   `RUNS="${RUNS:-1}"`([[feedback_gate_runs]]).
 7. 자식이 받는 이스케이프 바이트를 게이트가 보는 법 — 설정 디스크에 bash 스크립트를 싣고
    `read -N`으로 받아 `cat -v` 모양으로 화면에 찍게 한 뒤, 우리 로그 줄과 같은 글자로 맞춘다
    (PD-M4 검사 26~32). Shift는 HMP `sendkey shift 3000`으로 누른 채 두고 그 사이에 마우스를
-   움직인다 — 마우스 사건은 키 큐를 안 거친다.
+   움직인다 — 마우스 사건은 키 큐를 안 거치고, `sendkey`의 hold가 큐를 2N ms 쥐는 것은
+   measurements 99.
 
 - 마우스 보고(M4, 같은 날 사용자의 결정 "같은 맥락이라 새 마일스톤으로 빼는 것이 합리적이지
   않다"로 비목표 1을 열었다 — design 결정 12). 누른 패널의 자식이 모드 9 · 1000 · 1002 · 1003을
