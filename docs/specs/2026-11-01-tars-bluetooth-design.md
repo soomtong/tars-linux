@@ -2,7 +2,7 @@
 
 접두사: BT
 
-Status: 진행 중(2026-11-01) — M0부터.
+Status: 끝났다(2026-11-02) — M0~M2, 결정 8 · 위험 8 · 실측 1~12. 커널 아홉 `=y`, firmware 157(initrd +23MB), BlueZ 5.82 + dbus-daemon을 init이 감독, `bluetooth=on`, 체인 스물셋째. mutation 셋 잡힘. 루트 게이트 23/23, 10분 25초(prebuild 약 310 + lanes 315초), verify 8208줄 전부 통과. 사용자가 외출하며 결정을 맡겨 M0~M2를 한 세션에 했다.
 
 관련 문서: `2026-09-28-tars-wireless-design.md`(WL. 커널 드라이버 + firmware + 데몬 하나를 감독 목록에
 넣은 선례 — 이 설계는 그 모양을 그대로 따른다) · `2026-10-31-tars-usb-dongles-b-design.md`(UB. firmware를
@@ -404,3 +404,33 @@ Works)여야 한다 — 둘이면 확인 질문이 어디로 갈지 모른다. �
 `bluez 5.82-1.1` · `bluez-test-tools 5.82-1.1` · `dbus-daemon 1.16.2-2` · `dbus-system-bus-common 1.16.2-2` · `dbus-bin
 1.16.2-2`와 라이브러리 여덟을 Dockerfile에 더해 이미지를 다시 구웠다(태그 `ee4aa97122b5`, 35초 — 레이어 캐시가
 살아 있었다). sysroot에 `/usr/libexec/bluetooth/bluetoothd` · `/usr/bin/btvirt` · `/usr/bin/dbus-daemon`이 있다.
+
+## 실측 (M2, 2026-11-02)
+
+### 실측 10 — 체인은 네 번째 판에 초록이다. 앞 세 판의 빨강은 전부 체인 자신의 셈이었다
+
+| 판 | 멈춘 곳 | 이유 |
+|---|---|---|
+| 1 | 검사 1 | `gzip -dc initrd \| cpio -i --to-stdout etc/passwd \| grep`을 `if` 안에 두었다. initrd 뒤에 firmware cpio가 이어 붙어 있어 cpio가 첫 archive 끝에서 멈추면 gzip이 EPIPE로 죽고 pipefail이 그것을 빨강으로 올린다. 파일에 받고 따로 본다 |
+| 2 | 검사 6 | `Bonded: yes`가 pair의 `[CHG]` 줄과 `info`의 줄로 두 번 나온다 — "1 bonded"가 아니라 "하나 이상" |
+| 3 | 검사 7 | 재시작 뒤 `bluetoothctl info B`가 빈 답. bluetoothctl의 기본 어댑터가 부팅마다 · 재시작마다 다를 수 있어 B를 아는 어댑터(A)를 `select`해야 한다 — 한 줄 명령은 select를 못 하므로 파이프로 |
+| 4 | — | PASS, 3분 18초(빌드 건너뜀 · 부팅 둘) |
+
+페어링의 방향도 부팅마다 다르다 — 어느 가상 컨트롤러가 `[default]`가 되는지가 바뀐다(판 4는 `00:AA:01:00:00:00`이 A였다).
+체인은 `list`의 첫 줄을 A로 삼으므로 상관없다.
+
+### 실측 11 — mutation 셋은 잡히되, 둘째는 예측한 자리가 아니다
+
+| mutation | 예측 | 잡은 곳 |
+|---|---|---|
+| `CONFIG_BT=y` → not set | 검사 1 | 검사 1 `CONFIG_BT=y is missing from kernel/.config`(부팅 0회) |
+| `make_initrd.sh`의 링크 줄 제거 | 검사 1 | 검사 1 `initrd has no var/lib/bluetooth`(부팅 0회) |
+| `bluetooth.wants`가 `.off`를 무시 | 검사 9 | 호스트 `bluetooth_test`가 먼저(`off, mounted — got true, want false`). 체인에서는 검사 8 `init did not stop service dbus on reload` — 부팅 A의 끄기에서 reload가 `.off`를 보고도 데몬을 안 내린다. 부팅 B(검사 9)까지 못 간다 |
+
+둘째의 첫 시도는 `if (bt == .off)` 블록을 통째로 지운 것이었는데 Zig가 `unused function parameter`로 컴파일을 막아
+체인의 `zig build`에서 멈췄다 — 그것은 mutation이 아니라 문법 오류다. `bt == .on and bt == .off`(항상 거짓)로 다시 했다.
+reload가 부팅과 같은 `wants`를 쓰므로 끄기가 먼저 걸린다는 것은 설계의 결과다 — 검사 8과 9가 같은 함수를 두 자리에서 본다.
+
+### 실측 12 — 루트 게이트는 첫 판에 23/23이다
+
+`docker run … bash check.sh`, 10분 25초(prebuild 약 310초 + lanes 315초). 23체인 전부 1/1, verify 8208줄 전부 통과(BT 체인은 verify 8줄 — 부팅 둘의 첫 프레임뿐이다). BT 체인의 lane은 68줄을 끼어든 줄로 셌는데(`bt-probe:` 줄이 커널 printk와 섞인다) 판정에는 안 걸린다. 로그는 `out/gate-logs/20261101-160733`.

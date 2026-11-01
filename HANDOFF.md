@@ -1,45 +1,45 @@
-# HANDOFF: Kernel Upgrade 끝남(2026-11-01) — 다음은 Bluetooth design
+# HANDOFF: Bluetooth 끝남(2026-11-02) — 다음은 사용자가 고른다
 
-## 지금 상태 (2026-11-01)
+## 지금 상태 (2026-11-02)
 
-- 열린 서브프로젝트가 없다. 다음 세션은 Bluetooth 활성화의 design부터 한다(사용자 결정, 2026-11-01). 착수 전에 범위를 사용자와
-  정한다 — 키보드 · 마우스(HID over BT)까지인지, 오디오(A2DP)까지인지.
-  - 지금 상태: `kernel/.config`가 `# CONFIG_BT is not set`, initrd에 BlueZ도 D-Bus도 없다. 소개 페이지 "부팅 · 하드웨어"의 note와
-    AU design 비목표 1("블루투스 스택 자체가 없다"), VD design(블루투스가 없다는 전제)이 이 사실에 기대고 있어 열면 함께 고친다.
-  - 층: (1) 커널 `CONFIG_BT` · `BT_HCIBTUSB`(노트북 내장 BT는 대부분 USB) · `BT_HIDP`와 칩별 firmware(Intel `ibt-*` · Realtek
-    `rtl_bt/*` · MediaTek, `guest_firmware.sh`에 무선과 같은 방식으로). (2) 사용자 공간 — BlueZ `bluetoothd`는 D-Bus가 필요하다. D-Bus를
-    들일지, 커널 mgmt 소켓을 직접 다루는 작은 도구를 만들지가 가장 큰 결정이다(`feedback_scripting_runtimes.md` 같은 "한 묶음으로만
-    들인다" 원칙을 본다). (3) 페어링 명령의 자리(`tars-config bluetooth …`?)와 `/config`에 남길 페어링 키. (4) 오디오는 A2DP 코덱과
-    오디오 서버가 필요해 훨씬 무겁다.
-  - 게이트: QEMU에 쓸 만한 가짜 BT 컨트롤러가 없다. 착수 전 조사로 확인할 것 — 커널의 `hci_vhci`(`/dev/vhci`, 가상 HCI)로 컨트롤러
-    등록 · mgmt 명령까지는 게스트 안에서 볼 수 있는지. 실칩 동작은 무선처럼 실기 몫이다.
-  - 6.18.60에서 새로 요청하는 BT firmware 넷(`rtl_bt/rtl8761cu_*` · MT7920 · MT7927)은 KU-M1 plan 확정 5에 있다.
-- 0.1.4를 낼지는 아직 사용자 답이 없다(KU를 담은 ISO). 다음 세션에서 묻는다.
-- 마지막으로 닫은 것은 Kernel Upgrade(KU-M0~M1, 2026-11-01) — 이미지 슬롯 둘 · 1GiB ESP · 메뉴의 old 엔트리, 커널 6.18.60. 닫은 서브프로젝트의 경과 · 함정 · 숫자는
-  여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 그 plan의
-  결과 절이다. 최근 것부터:
-  - Kernel Upgrade(KU-M0~M1, 11-01) — `docs/decisions/project_kernel_upgrade.md`
+- 열린 서브프로젝트가 없다. 2026-11-01 사용자가 외출하며 "이 세션에서 모든 작업을 완료, 모든 결정을 Claude에게 위임"했고, 그
+  위임으로 Bluetooth(BT-M0~M2)를 design부터 닫기까지 한 세션에 했다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4 시점(커널 7.4
+  뒤)만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 돌아와서 뒤집을 것이
+  있으면 그 문서의 결정 번호로 말하면 된다.
+  - 섰다: 커널 BT 스택 · USB/PCIe HCI · HIDP · uhid, firmware 157(initrd 93 → 117MB), Debian BlueZ 5.82 + dbus-daemon을 init이
+    감독(감독 칸 2 · 3번), `tars.conf` 열셋째 키 `bluetooth=off|on`, 페어링은 `bluetoothctl`, 키는 `/config/bluetooth`. 체인 스물셋째
+    `bluetooth/check.sh`가 가상 컨트롤러 둘의 페어링 · 재시작 · 끄기를 본다. 사용 설명은 `docs/guides/running-tars.md`의 "블루투스" 절.
+  - 사용자가 알아야 할 틈 하나: BT 키보드는 아직 글자를 못 친다. terminal이 부팅 때 init이 고른 키보드 하나만 읽는다(BT design 확인 7 ·
+    비목표 1). 마우스는 PD의 uevent 핫플러그로 끝까지 간다. 후속 후보 "Keyboard Hotplug"가 `carryover.md`의 BT 항목에 있다.
+  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer && make container`.
+    main에 push되면 CI가 같은 태그를 ghcr.io에 올린다.
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · 1GiB ESP · 6.18.60) + BT. 절차는
+  `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
+- 마지막으로 닫은 것은 Bluetooth(BT-M0~M2, 2026-11-02). 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
+  `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Bluetooth(BT-M0~M2, 11-02) — `docs/decisions/project_bluetooth.md`
+  - Kernel Upgrade(KU-M0~M1, 11-01) — `project_kernel_upgrade.md`
   - Extend Repeat(ER-M0, 11-01) — `project_extend_repeat.md`
   - Shift Extend(SE-M0~M1, 11-01) — `project_shift_extend.md`
   - Multi Click(MC-M0~M2, 11-01) — `project_multi_click.md`
   - Reserved Ports(RP-M0, 11-01) — `project_reserved_ports.md`
   - USB Dongles B(UB-M0~M2, 10-31) — `project_usb_dongles_b.md`. 같은 자리에서 IPv6를 결정으로 닫았다(`feedback_ipv4_only.md`)
   - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
-  - Font in Repo(FR-M0, 10-31) — `project_font_selection.md`의 끝 단락
-  - Status Band(SB-M0, 10-30) · Dirty Rows(DR-M0~M3, 10-28~30) — `project_status_band.md` · `project_dirty_rows.md`
-  - Clock Reload(CR) · Loose Ends(LE) · WP-M3 · Lean Initrd(LI) · Lessons Split(LS) · Host Checks(HC) · Main Split(MS) · Screen Args(SA)
-    (10-24~28) — 각각 `project_<이름>.md`(WP-M3은 `project_workspace_panes.md`)
   - 그 전은 `docs/guides/completed.md`.
-- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU(슬롯 · 1GiB ESP · 6.18.60)가 쌓였고 아직 내지 않았다. 다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 —
-  `VERSION` 커밋 → tag → `make iso` 순서다.
-- 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터, 예약 범위
-  45455~45599(RP-M0). 마지막 루트 게이트(KU-M1): 22/22, 10분 30초(prebuild 322 + lanes 306초), verify 8214줄 전부 통과.
+- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU와 BT가 쌓였고 아직 내지 않았다.
+- 체인은 스물셋이다(`check.sh`의 `CHAINS`, 마지막이 `BT-M2:./bluetooth/check.sh`). BT 체인은 monitor 포트를 안 쓴다 — 새 체인의
+  monitor 포트는 여전히 45495부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(BT-M2): 23/23, 10분 25초(prebuild 약 310 + lanes 315초), verify 8208줄 전부 통과.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
+- BT: `tars-config set bluetooth=on` · `tars-config reload` 뒤 `bluetoothctl list`에 내장 어댑터가 뜨는지(안 뜨면 `dmesg | grep -i
+  bluetooth` — firmware 이름이 안 보이면 그 이름을 `guest_firmware.sh`에). BLE 마우스를 `scan on` · `pair` · `trust` · `connect`한 뒤
+  화살표가 움직이는지 — 게이트가 못 보는 uhid → evdev → terminal의 길이다(BT design 위험 4). 재부팅 뒤 마우스가 스스로 다시 붙는지
+  (`/config/bluetooth`의 키). dbus-daemon의 소켓이 실기에서 몇 ms에 생기는지(`tars-bluetoothd: bus ready after Nms`, TCG는 2000).
+  initrd가 23MB 커진 만큼 실기 부팅이 느려졌는지(QEMU는 +0.48초).
 - RS · DR: 로그에 `kms: present by dirtyfb`가 찍히는지, `cat` · 빌드 로그처럼 출력이 쏟아질 때 화면이 매끄럽게 따라오는지,
   키 입력이 늦게 느껴지지 않는지. DR 뒤로 키 하나는 바뀐 행 몇 줄만 VRAM으로 가므로(simpledrm은 clip마다 복사) 체감이 달라야
   한다 — 달라지지 않았으면 그것이 새 사실이다. SB 뒤로는 상태 줄 띠(1280 × 28 = 143KB, 1080p에서 153KB)도 내용이 바뀐
@@ -69,8 +69,11 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 전에 0.1.4를 낼지도 사용자가 정한다.
-- 2026-10-24 점검이 남긴 다섯과 GH 줄기의 후속(M1 · SN · FR · VS · GI)은 다 닫았다 — CI 쪽에 남은 후보는 없다.
+- Keyboard Hotplug — BT 키보드와 부팅 뒤 꽂은 USB 키보드가 글자를 치게. terminal의 키보드 하나(`keyboard_fd`)를 PD의 uevent 길로
+  여러 개로(`carryover.md`의 BT 항목). BT가 끝났으니 이것이 없으면 BT 키보드의 값이 없다 — 첫 후보로 둔다.
+- 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
+- BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
+  (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.
 - 렌더: 부분 갱신은 DR + SB로 닫았다. 남은 축은 GPU 가속뿐이다(키 하나 0.42ms 가운데 present 0.27이 커널 쪽, DR design "안 하는 것").
   실기 없이 할 수 있는 작은 것은 큰 kitty 이미지의 그리기 비용 하나(`carryover.md`).
 - PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기.
@@ -88,14 +91,17 @@
 - Docker는 OrbStack이다(메모리 12GB). 소켓이 없다고 나오면 `orb start`. 호스트 디스크가 가득 차면(ENOSPC) 체인이 `ld.lld`에서
   죽고 OrbStack이 내려간다 — 비운 뒤 `orb start`(MC 중에 한 번).
 - 부팅 없이 1분에 보는 검사는 `make quick`(`quick_check.sh`) — shellcheck(note까지) · Zig fmt · ast-check · shared · init 빌드. 호스트
-  Zig는 `/opt/homebrew/bin/zig`(0.17). push마다 CI(`checks.yml`)가 같은 것과 컨테이너 안 `zig build test`를 돌리고 README 배지가
-  그 결과다. 빨강이 `sha256sum` · `curl`이면 우리 코드가 아니다 — `gh run rerun`.
+  Zig는 `/opt/homebrew/bin/zig`(0.17). init의 `zig build test`는 macOS에서 안 끝난다 — 컨테이너에서 돌린다(BT-M1에서 다시 겪었다).
+  push마다 CI(`checks.yml`)가 같은 것과 컨테이너 안 `zig build test`를 돌리고 README 배지가 그 결과다. 빨강이 `sha256sum` ·
+  `curl`이면 우리 코드가 아니다 — `gh run rerun`.
 - 새로 받은 저장소는 `make container`가 이미지를 ghcr.io에서 받는다(1.5GB, 없거나 오프라인이면 Dockerfile로 굽는다 — GI-M0).
   첫 빌드가 linux-firmware 662MB를 `kernel/src/firmware/`에 받고 `clean()`이 지우지 않는다. `terminal/prepare.sh`가
   `stb_image.h`도 받는다(`terminal/vendor/`, 커밋 안 함).
 - `shared/`는 init과 terminal이 함께 컴파일하는 파일의 자리다. 순수해야 한다(libc · 로그 없음) — init이 libc를 안 링크한다.
   그 파일을 고치면 두 빌드가 다시 돈다(`zig build --summary all`로 보인다).
-- initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(measurements 62).
-- 실칩 무선은 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 동글이 생기면 그것이 새 사실이다.
+- initrd는 두 archive다. `gzip -dc initrd.cpio | cpio -it`에 firmware가 안 나온다(measurements 62). 그 파이프라인을 `if` 안에 두면
+  pipefail이 gzip의 EPIPE를 거짓 빨강으로 올린다(BT-M2 체인의 첫 판) — 파일에 받고 따로 본다.
+- 이 저장소의 셸 작업은 zsh다. `"$n:lib"`처럼 `$var` 뒤에 `:`가 오면 수식어로 읽혀 글자가 깨진다 — `${n}:lib`(BT-M0 실측 2).
+- 실칩 무선 · 블루투스는 PCIe도 USB도 아직 한 번도 안 떴다. 실기와 실제 장치가 생기면 그것이 새 사실이다.
 - 세션 문서(HANDOFF · MEMORY · `docs/guides` · `docs/decisions`)의 중복을 2026-11-01에 걷어냈다 — 사실 하나는 한 자리에 두고 나머지는
   포인터다. 닫은 서브프로젝트의 경과를 HANDOFF에 다시 쌓지 않는다. 문서 속 줄 번호 · 배열 길이는 낡으니 인용하기 전에 코드에서 다시 본다.
