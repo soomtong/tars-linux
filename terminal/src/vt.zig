@@ -323,6 +323,18 @@ pub const Screen = struct {
     /// 지금 무엇을 잡고 있는가. null이면 커서만 움직이는 중이다.
     copy_kind: ?SelectKind = null,
 
+    /// 단어 방식(`.word`)의 앵커 — 더블클릭한 자리(MC design 결정 4).
+    ///
+    /// 다른 방식은 앵커를 "지금 선택의 start"로 읽는다. 단어 방식에서 그
+    /// start는 누른 자리가 아니라 어느 단어의 첫 글자이고, 앵커 왼쪽으로 끌어
+    /// 선택이 뒤집히면 커서 쪽 단어의 첫 글자가 된다. 그 자리를 앵커로 다시
+    /// 쓰면 오른쪽으로 되돌아올 때 처음 고른 단어가 사라진다. 그래서 누른
+    /// 자리를 tracked pin으로 따로 든다 — 뷰포트가 움직여도 따라간다.
+    ///
+    /// pin은 만든 `PageList`에서 놓아야 하므로 화면도 함께 든다(대체 화면으로
+    /// 바뀐 뒤에 놓을 수 있다). 놓는 곳은 `dropWordAnchor` 하나다.
+    copy_word: ?WordAnchor = null,
+
     /// 앵커의 screen 좌표 y. 가지치기 감시용이다(CM-M1).
     ///
     /// 이 값이 왜 필요한지가 이 milestone에서 가장 미묘한 자리다.
@@ -1282,10 +1294,13 @@ pub const Screen = struct {
     ///
     /// `copyEnter`를 부르지 않는다. 그 함수가 하는 일은 커서를 셸 커서 자리에
     /// 두는 것뿐이고 여기서는 곧바로 덮어쓴다.
-    pub fn copyEnterAt(self: *Screen, x: u16, y: u16) !void {
+    ///
+    /// `kind`는 선택의 방식이다(MC design 결정 6). 끌기의 첫 이동은 `.char`,
+    /// 더블클릭은 `.word`, 트리플클릭은 `.line`이다.
+    pub fn copyEnterAt(self: *Screen, x: u16, y: u16, kind: SelectKind) !void {
         if (self.copy_cursor != null) self.copyExit();
         self.copy_cursor = self.copyClamp(x, y) orelse return;
-        try self.copySelect(.char);
+        try self.copySelect(kind);
     }
 
     /// 포인터가 선택 끝을 `(x, y)`로 옮긴다(PD design 결정 6). 화면 밖이면
@@ -1301,9 +1316,12 @@ pub const Screen = struct {
     pub fn copyPointTo(self: *Screen, x: u16, y: u16) !void {
         if (self.copy_cursor == null) return;
         self.copy_cursor = self.copyClamp(x, y) orelse return;
-        if (self.copy_kind == null) return;
-        const sel = self.term.screens.active.selection orelse return;
+        const kind = self.copy_kind orelse return;
         const cursor = self.copyPin() orelse return;
+        // 단어 방식의 앵커는 선택과 따로 있다 — 선택이 비어 있어도(쓰이지 않은
+        // 칸을 두 번 눌렀다) 단어 쪽으로 끌면 선택이 생겨야 한다.
+        if (kind == .word) return self.copyApply(cursor, cursor);
+        const sel = self.term.screens.active.selection orelse return;
         try self.copyApply(sel.start(), cursor);
     }
 
@@ -1323,6 +1341,7 @@ pub const Screen = struct {
     pub fn copyExit(self: *Screen) void {
         self.copy_cursor = null;
         self.copy_kind = null;
+        self.dropWordAnchor();
         self.copy_anchor_y = null;
         // 프롬프트도 함께 닫는다(design 결정 10). 안 닫으면 모드를 나갔다
         // 다시 들어왔을 때 지난 검색어가 화면에 남는다.
@@ -2056,8 +2075,21 @@ pub const Screen = struct {
         self.copy_cursor = .{ .x = @intCast(co.x), .y = @intCast(co.y) };
     }
 
-    /// 선택 방식. `v`가 char, `V`가 line이다.
-    pub const SelectKind = enum { char, line };
+    /// 선택 방식. `v`가 char, `V`가 line이고, word는 더블클릭만 쓴다(MC design
+    /// 결정 4). 키보드에는 word를 여는 키가 없다.
+    pub const SelectKind = enum { char, line, word };
+
+    /// 단어 방식의 앵커 pin과 그 pin을 든 화면.
+    const WordAnchor = struct { screen: *ghostty_vt.Screen, pin: *ghostty_vt.Pin };
+
+    /// 단어 앵커를 놓는다. 없으면 아무 일도 없다. 모든 출구(`copyExit` ·
+    /// 방식을 풀거나 바꾸는 `copySelect`)가 이 한 자리를 지난다 — 하나라도
+    /// 빠지면 pin이 PageList에 쌓인다(MC design 위험 3).
+    fn dropWordAnchor(self: *Screen) void {
+        const w = self.copy_word orelse return;
+        w.screen.pages.untrackPin(w.pin);
+        self.copy_word = null;
+    }
 
     /// 지금 커서 자리를 라이브러리의 pin으로 바꾼다.
     ///
@@ -2081,12 +2113,18 @@ pub const Screen = struct {
             if (cur == kind) {
                 self.copy_kind = null;
                 self.copy_anchor_y = null;
+                self.dropWordAnchor();
                 self.term.screens.active.clearSelection();
                 return;
             }
         }
+        self.dropWordAnchor();
         self.copy_kind = kind;
         const pin = self.copyPin() orelse return;
+        if (kind == .word) {
+            const s = self.term.screens.active;
+            self.copy_word = .{ .screen = s, .pin = try s.pages.trackPin(pin) };
+        }
         try self.copyApply(pin, pin);
     }
 
@@ -2109,9 +2147,35 @@ pub const Screen = struct {
             // 줄 선택은 양 끝을 줄 전체로 넓힌다. 줄 끝 공백 트림을 손으로
             // 짜지 않는다 — selectLine이 이미 한다.
             .line => copyLineSel(s, anchor, cursor) orelse .init(anchor, cursor, false),
+            // 단어 선택의 앵커는 인자가 아니라 누른 자리다(`copy_word`의 주석).
+            // 단어가 없으면(쓰이지 않은 칸) 선택을 비운다 — 문자 선택으로
+            // 떨어지면 빈 칸을 두 번 누른 것이 한 칸 선택이 된다.
+            .word => copyWordSel(s, if (self.copy_word) |w| w.pin.* else anchor, cursor) orelse {
+                s.clearSelection();
+                self.copy_anchor_y = null;
+                return;
+            },
         };
         try s.select(sel);
         self.copy_anchor_y = anchorY(s);
+    }
+
+    /// 앵커 쪽 단어와 커서 쪽 단어를 이은 선택(MC design 결정 4).
+    ///
+    /// 라이브러리 `SelectionGesture.dragSelectionWord`의 몸통을 옮겼다(그
+    /// 함수는 private이다). `selectWordBetween(a, b)`는 a에서 b 쪽으로 가며
+    /// 처음 만나는 단어다 — 그래서 커서가 빈 칸에 있어도 앵커 쪽으로 거슬러
+    /// 단어를 찾는다(MC-M0 측정 4의 5b). 커서가 앵커보다 앞이면 커서 쪽
+    /// 단어의 시작부터 앵커 쪽 단어의 끝까지다.
+    fn copyWordSel(
+        s: *ghostty_vt.Screen,
+        anchor: ghostty_vt.Pin,
+        cursor: ghostty_vt.Pin,
+    ) ?ghostty_vt.Selection {
+        const a = s.selectWordBetween(anchor, cursor, &WORD_BOUNDARY) orelse return null;
+        const c = s.selectWordBetween(cursor, anchor, &WORD_BOUNDARY) orelse return null;
+        if (cursor.before(anchor)) return .init(c.start(), a.end(), false);
+        return .init(a.start(), c.end(), false);
     }
 
     /// 앵커 줄과 커서 줄을 합친 선택.

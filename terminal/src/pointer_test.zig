@@ -82,6 +82,14 @@ fn expectFrame(what: []const u8, got: ?pointer.Frame, want: ?pointer.Frame) !voi
     return error.WrongFrame;
 }
 
+/// 시각 없는 누름(MC-M1). 반복이 될 수 없으므로 PD-M2의 검사들이 그대로 선다.
+const NO_TIME: pointer.Stamp = .{ .t_us = null, .x = 0, .y = 0, .ws = 0 };
+
+/// 시각 `ms`에 픽셀 (x, y)를 워크스페이스 0에서 누른 것(MC-M1).
+fn stamp(ms: i64, x: u32, y: u32) pointer.Stamp {
+    return .{ .t_us = ms * 1000, .x = x, .y = y, .ws = 0 };
+}
+
 /// 의도 목록이 기대와 같은가. 순서까지 본다 — `cancel`이 `focus`보다 먼저,
 /// `select_start`가 `scroll`보다 먼저인 것이 design 결정 6 · 7의 계약이다.
 fn expectIntents(what: []const u8, got: pointer.Intents, want: []const pointer.Intent) !void {
@@ -457,7 +465,7 @@ pub fn main() !void {
     const a: pointer.Cell = .{ .leaf = 0, .col = 3, .row = 2 };
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("a click on the focused pane only cancels", g.press(a, 0), &.{.cancel});
+        try expectIntents("a click on the focused pane only cancels", g.press(a, 0, NO_TIME), &.{.cancel});
         try expectTrue("the press remembers the leaf", g.held() != null and g.held().? == 0);
         try expectIntents("a move inside the same cell does nothing", g.motion(a, .normal), &.{});
         try expectIntents("releasing a click copies nothing", g.release(.normal), &.{});
@@ -466,7 +474,7 @@ pub fn main() !void {
         // 다른 패널을 누르면 포커스가 그리로 간다. `cancel`이 먼저다 — 조합
         // 중인 한글이 옛 포커스의 PTY로 가야 한다(WP 결정 4).
         const b: pointer.Cell = .{ .leaf = 1, .col = 0, .row = 5 };
-        try expectIntents("a click on another pane cancels, then moves the focus", g.press(b, 0), &.{ .cancel, .{ .focus = 1 } });
+        try expectIntents("a click on another pane cancels, then moves the focus", g.press(b, 0, NO_TIME), &.{ .cancel, .{ .focus = 1 } });
         try expectIntents("its release copies nothing", g.release(.normal), &.{});
     }
 
@@ -476,7 +484,7 @@ pub fn main() !void {
     // 때까지의 움직임과 휠도 제스처의 것이 아니다(휠은 평소의 휠로 간다).
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("a press off any pane does nothing", g.press(null, 0), &.{});
+        try expectIntents("a press off any pane does nothing", g.press(null, 0, NO_TIME), &.{});
         try expectTrue("a press off any pane holds nothing", g.held() == null);
         try expectIntents("dragging from the margin does nothing", g.motion(a, .normal), &.{});
         try expectTrue("a wheel after a margin press is the plain wheel", g.wheel(1, .normal) == null);
@@ -489,9 +497,9 @@ pub fn main() !void {
     // `select_to`(지금 칸)가 함께 나온다. 그 뒤로는 칸이 바뀔 때만 `select_to`다.
     {
         var g: pointer.Gesture = .{};
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         try expectIntents("the first move to another cell starts the selection", g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal), &.{
-            .{ .select_start = a },
+            .{ .select_start = .{ .at = a, .unit = .char } },
             .{ .select_to = .{ .leaf = 0, .col = 5, .row = 2 } },
         });
         try expectTrue("the gesture is dragging", g.phase == .dragging);
@@ -509,9 +517,9 @@ pub fn main() !void {
     // 자르지만, 이웃 잎의 칸이 들어와도 잎은 누른 잎이다.
     {
         var g: pointer.Gesture = .{};
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         try expectIntents("a cell from another leaf still ends in the pressed leaf", g.motion(.{ .leaf = 1, .col = 9, .row = 2 }, .normal), &.{
-            .{ .select_start = a },
+            .{ .select_start = .{ .at = a, .unit = .char } },
             .{ .select_to = .{ .leaf = 0, .col = 9, .row = 2 } },
         });
     }
@@ -523,14 +531,14 @@ pub fn main() !void {
     // 누른 패널이 포커스를 잃어도(`gone`) 같다.
     {
         var g: pointer.Gesture = .{};
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         _ = g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal);
         try expectIntents("a move after the keyboard closed the mode does nothing", g.motion(.{ .leaf = 0, .col = 6, .row = 2 }, .normal), &.{});
         try expectTrue("the gesture now ignores the rest", g.phase == .ignored);
         try expectIntents("even if copy mode comes back, moves stay ignored", g.motion(.{ .leaf = 0, .col = 7, .row = 2 }, .copy), &.{});
         try expectIntents("the release copies nothing", g.release(.copy), &.{});
 
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         try expectIntents("a move after the pressed pane lost the focus does nothing", g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .gone), &.{});
         try expectIntents("and its release copies nothing", g.release(.normal), &.{});
     }
@@ -542,9 +550,9 @@ pub fn main() !void {
     // 먼저 닫는다.
     {
         var g: pointer.Gesture = .{};
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         try expectIntents("a drag still starts when the keyboard entered copy mode first", g.motion(.{ .leaf = 0, .col = 4, .row = 2 }, .copy), &.{
-            .{ .select_start = a },
+            .{ .select_start = .{ .at = a, .unit = .char } },
             .{ .select_to = .{ .leaf = 0, .col = 4, .row = 2 } },
         });
     }
@@ -556,9 +564,9 @@ pub fn main() !void {
     // 글자에 붙은 뒤에 뷰포트가 움직여야 한다. 칸이 같아도 `select_to`를 낸다.
     {
         var g: pointer.Gesture = .{};
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         try expectIntents("a wheel while pressed starts the selection before it scrolls", g.wheel(1, .normal).?, &.{
-            .{ .select_start = a },
+            .{ .select_start = .{ .at = a, .unit = .char } },
             .{ .scroll = .{ .leaf = 0, .notches = 1 } },
             .{ .select_to = a },
         });
@@ -575,7 +583,7 @@ pub fn main() !void {
         try expectTrue("a wheel with nothing held is the plain wheel", g.wheel(1, .normal) == null);
 
         // 키보드가 모드를 닫은 뒤의 휠은 제스처의 것이 아니다.
-        _ = g.press(a, 0);
+        _ = g.press(a, 0, NO_TIME);
         _ = g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal);
         try expectTrue("a wheel after the keyboard closed the mode is the plain wheel", g.wheel(1, .normal) == null);
         _ = g.release(.normal);
@@ -677,6 +685,130 @@ pub fn main() !void {
         const b = (pointer.Buttons{}).with(.middle, true).with(.left, true).with(.left, false);
         try expectTrue("with() sets and clears one button", b.has(.middle) and !b.has(.left) and !b.has(.right));
         try expectNum("the middle button alone is bit 4 (HMP mouse_button)", b.bits(), 4);
+    }
+
+    // ── 검사 29: 1 → 2 → 3 → 3 (MC design 결정 3 · 4) ───────────────────
+    //
+    // 두 번째 누름은 단어, 세 번째부터는 줄을 곧바로 고른다. 횟수는 3에서
+    // 멈춘다(넷째도 줄, 라이브러리와 같다). 간격은 앞 누름과 잰다.
+    const w: pointer.Cell = .{ .leaf = 0, .col = 3, .row = 2 };
+    const word: pointer.Intent = .{ .select_start = .{ .at = w, .unit = .word } };
+    const line: pointer.Intent = .{ .select_start = .{ .at = w, .unit = .line } };
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("the first press of a run only cancels", g.press(w, 0, stamp(1000, 44, 52)), &.{.cancel});
+        try expectNum("the first press is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+        try expectIntents("the second press selects the word at once", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, word });
+        try expectNum("the second press is click 2", g.clicks, 2);
+        try expectNum("its gap is 100ms", @intCast(g.gap_us), 100_000);
+        try expectTrue("the second press is already dragging", g.phase == .dragging);
+        // ── 검사 30: 그 뗌은 복사한다(MC design 결정 5) ──
+        try expectIntents("releasing the double click copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectIntents("the third press selects the line", g.press(w, 0, stamp(1200, 44, 52)), &.{ .cancel, line });
+        try expectNum("the third press is click 3", g.clicks, 3);
+        _ = g.release(.copy);
+        try expectIntents("a fourth press stays on the line", g.press(w, 0, stamp(1300, 44, 52)), &.{ .cancel, line });
+        try expectNum("the fourth press is still click 3", g.clicks, 3);
+        _ = g.release(.copy);
+    }
+
+    // ── 검사 31: 연속이 끊기는 자리 (MC design 결정 3) ──────────────────
+    //
+    // 첫 누름은 (44, 52), 시각 1000ms, 잎 0, ws 0이다. 경계값 둘(500ms ·
+    // 8픽셀 정확히)은 반복이고, 한 걸음 넘으면 처음부터다.
+    {
+        const Case = struct { what: []const u8, cell: pointer.Cell, stamp: pointer.Stamp, want: u64 };
+        const far: pointer.Cell = .{ .leaf = 1, .col = 3, .row = 2 };
+        const cases = [_]Case{
+            .{ .what = "500ms exactly repeats", .cell = w, .stamp = stamp(1500, 44, 52), .want = 2 },
+            .{ .what = "501ms starts over", .cell = w, .stamp = stamp(1501, 44, 52), .want = 1 },
+            .{ .what = "8 pixels exactly repeats", .cell = w, .stamp = stamp(1100, 52, 52), .want = 2 },
+            .{ .what = "9 pixels starts over", .cell = w, .stamp = stamp(1100, 53, 52), .want = 1 },
+            .{ .what = "6,6 diagonally (72 > 64) starts over", .cell = w, .stamp = stamp(1100, 50, 58), .want = 1 },
+            .{ .what = "another leaf starts over", .cell = far, .stamp = stamp(1100, 44, 52), .want = 1 },
+            .{ .what = "another workspace starts over", .cell = w, .stamp = .{ .t_us = 1_100_000, .x = 44, .y = 52, .ws = 1 }, .want = 1 },
+            .{ .what = "a time before the last press starts over", .cell = w, .stamp = stamp(999, 44, 52), .want = 1 },
+            .{ .what = "a press without a time starts over", .cell = w, .stamp = NO_TIME, .want = 1 },
+        };
+        for (cases) |cs| {
+            var g: pointer.Gesture = .{};
+            _ = g.press(w, 0, stamp(1000, 44, 52));
+            _ = g.release(.normal);
+            _ = g.press(cs.cell, 0, cs.stamp);
+            try expectNum(cs.what, g.clicks, cs.want);
+        }
+    }
+
+    // ── 검사 32: 끌기 · 자식 · 여백 · 시각 없음 뒤는 처음부터 ────────────
+    //
+    // 끈 뒤의 뗌은 이미 복사하고 모드를 나갔다 — 그 직후의 클릭을 더블로 읽지
+    // 않는다(MC design 결정 3의 4). 두 번째 누름 뒤에 끈 것도 같다(MC-M1 plan
+    // 확정 2 — phase로는 못 가른다).
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, stamp(1000, 44, 52));
+        _ = g.motion(.{ .leaf = 0, .col = 5, .row = 2 }, .normal);
+        _ = g.release(.copy);
+        _ = g.press(w, 0, stamp(1100, 44, 52));
+        try expectNum("a press right after a drag is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+        _ = g.press(w, 0, stamp(1200, 44, 52));
+        try expectNum("the press after that is click 2", g.clicks, 2);
+        try expectIntents("dragging after a double click extends the selection", g.motion(.{ .leaf = 0, .col = 9, .row = 2 }, .copy), &.{
+            .{ .select_to = .{ .leaf = 0, .col = 9, .row = 2 } },
+        });
+        _ = g.release(.copy);
+        _ = g.press(w, 0, stamp(1300, 44, 52));
+        try expectNum("a press after a dragged double click is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+
+        // 누른 채 휠도 끌기다.
+        _ = g.press(w, 0, stamp(2000, 44, 52));
+        _ = g.wheel(1, .normal);
+        _ = g.release(.copy);
+        _ = g.press(w, 0, stamp(2100, 44, 52));
+        try expectNum("a press after a held wheel is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+
+        // 자식에게 넘긴 누름(vim `mouse=a`)은 연속을 끊는다.
+        _ = g.press(w, 0, stamp(3000, 44, 52));
+        _ = g.release(.normal);
+        _ = g.handOff(0, 0);
+        _ = g.release(.normal);
+        _ = g.press(w, 0, stamp(3200, 44, 52));
+        try expectNum("a press after a hand-off is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+
+        // 여백 누름도 끊는다.
+        _ = g.press(w, 0, stamp(4000, 44, 52));
+        _ = g.release(.normal);
+        _ = g.press(null, 0, stamp(4100, 44, 52));
+        try expectNum("a margin press is click 0", g.clicks, 0);
+        _ = g.release(.normal);
+        _ = g.press(w, 0, stamp(4200, 44, 52));
+        try expectNum("a press after a margin press is click 1", g.clicks, 1);
+        _ = g.release(.normal);
+    }
+
+    // ── 검사 33: 시각 없는 누름은 반복이 안 된다 (MC-M1 plan 확정 1) ────
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, NO_TIME);
+        _ = g.release(.normal);
+        try expectIntents("a second press without a time is a plain click", g.press(w, 0, NO_TIME), &.{.cancel});
+        try expectNum("so it is click 1", g.clicks, 1);
+    }
+
+    // ── 검사 34: 포커스가 다른 패널일 때의 두 번째 누름 ─────────────────
+    //
+    // 두 클릭 사이에 키보드가 포커스를 옮겼다. 의도 셋이 버퍼를 꽉 채운다 —
+    // `cancel` · `focus` · `select_start` 순서다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, stamp(1000, 44, 52));
+        _ = g.release(.normal);
+        try expectIntents("a double click on a pane that lost the focus takes it back first", g.press(w, 1, stamp(1100, 44, 52)), &.{ .cancel, .{ .focus = 0 }, word });
     }
 
     std.debug.print("pointer_test: all checks passed\n", .{});

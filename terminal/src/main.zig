@@ -2368,6 +2368,22 @@ var pointer_drawn = false;
 /// 값이다. 설정은 비목표 7이다.
 const WHEEL_ROWS: isize = 3;
 
+// 다시 누름의 거리 상한은 한 칸 너비다(MC design 결정 3). `pointer.zig`는 이
+// 파일을 못 보므로 상수를 따로 두고 여기서 맞춘다.
+comptime {
+    std.debug.assert(pointer.MULTI_CLICK_PX == CELL_W);
+}
+
+/// 선택 단위를 화면의 선택 방식으로 옮긴다(MC design 결정 6). `else`가 없다 —
+/// 한쪽에 갈래가 늘면 여기서 컴파일이 멈춘다.
+fn unitKind(u: pointer.Unit) vt.Screen.SelectKind {
+    return switch (u) {
+        .char => .char,
+        .word => .word,
+        .line => .line,
+    };
+}
+
 /// 격자의 칸 하나. 패널이 아니라 격자 전체의 좌표다.
 const GridCell = struct { col: u16, row: u16 };
 
@@ -2835,7 +2851,8 @@ const PointerWire = struct {
             logline.print("terminal: pointer> press none\n", .{});
         }
         self.gesture_ws.* = self.current;
-        try self.run(self.gesture.press(hit, self.ws.focus));
+        // 시각은 MC-M2가 잇는다. null이면 반복이 될 수 없다 — 지금은 PD-M2 그대로다.
+        try self.run(self.gesture.press(hit, self.ws.focus, .{ .t_us = null, .x = x, .y = y, .ws = self.current }));
     }
 
     /// 포인터가 움직였다. 버튼이 패널 칸 위에서 눌린 채일 때만 일이 있다.
@@ -2939,7 +2956,8 @@ const PointerWire = struct {
                 // 옮긴다(design 결정 6). 누른 뒤 첫 이동 전에 친 한글이 조합
                 // 중일 수 있고, 그 글자는 이 패널의 셸로 간다 — 누름이 포커스를
                 // 이미 이리로 옮겼다.
-                .select_start => |at| {
+                .select_start => |st| {
+                    const at = st.at;
                     const p = &self.ws.panes[at.leaf].?;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.copy);
@@ -2948,7 +2966,7 @@ const PointerWire = struct {
                         p.screen.setPreedit(null);
                         dumpHangul(self.key_state);
                     }
-                    try p.screen.copyEnterAt(at.col, at.row);
+                    try p.screen.copyEnterAt(at.col, at.row, unitKind(st.unit));
                     dumpCopy(p.screen, "enter");
                     self.redraw = true;
                 },

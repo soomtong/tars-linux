@@ -2645,10 +2645,10 @@ pub fn main(init: std.process.Init) !void {
     try pd_kb.copyMove(0, 1);
     try pd_kb.copyMove(-1, 0);
     const pd_kb_text = (try pd_kb.copyYank(&pd_kb_clip)) orelse return error.NothingYanked;
-    try pd_pt.copyEnterAt(6, 0);
+    try pd_pt.copyEnterAt(6, 0, .char);
     const pd_at = pd_pt.copyCursor() orelse return error.NoCopyCursor;
     if (pd_at.x != 6 or pd_at.y != 0) {
-        std.debug.print("FAIL: copyEnterAt(6, 0) put the copy cursor at {d},{d}\n", .{ pd_at.x, pd_at.y });
+        std.debug.print("FAIL: copyEnterAt(6, 0, .char) put the copy cursor at {d},{d}\n", .{ pd_at.x, pd_at.y });
         return error.WrongCopyCursor;
     }
     try pd_pt.copyPointTo(5, 1);
@@ -2664,7 +2664,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("vt_test: 포인터로 고른 선택이 키보드로 고른 것과 같은 글자를 준다 OK\n", .{});
 
     // 검사 98. 거꾸로 끌어도 같다 — 앵커가 오른쪽, 끝이 왼쪽(검사 6과 같은 성질).
-    try pd_pt.copyEnterAt(4, 0);
+    try pd_pt.copyEnterAt(4, 0, .char);
     try pd_pt.copyPointTo(0, 0);
     const pd_back = (try pd_pt.copyYank(&pd_pt_clip)) orelse return error.NothingYanked;
     if (!std.mem.eql(u8, pd_back, "hello")) {
@@ -2679,7 +2679,7 @@ pub fn main(init: std.process.Init) !void {
     // 한 번에 하나").
     pd_pt.copyEnter();
     try pd_pt.copySelect(.char);
-    try pd_pt.copyEnterAt(0, 1);
+    try pd_pt.copyEnterAt(0, 1, .char);
     try pd_pt.copyPointTo(5, 1);
     const pd_over = (try pd_pt.copyYank(&pd_pt_clip)) orelse {
         std.debug.print("FAIL: a drag that started inside keyboard copy mode (v on) left no selection\n", .{});
@@ -2693,7 +2693,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 검사 100. 화면 밖 좌표는 가장자리 칸으로 붙는다. 20칸 화면에 99를 주면
     // 19다. 줄 끝 공백은 트림되므로 문자열은 `second line`이다.
-    try pd_pt.copyEnterAt(0, 1);
+    try pd_pt.copyEnterAt(0, 1, .char);
     try pd_pt.copyPointTo(99, 1);
     const pd_edge = pd_pt.copyCursor() orelse return error.NoCopyCursor;
     if (pd_edge.x != 19 or pd_edge.y != 1) {
@@ -2725,7 +2725,7 @@ pub fn main(init: std.process.Init) !void {
     }
     _ = try pd_sc.cells(&buf);
     // 바닥의 뷰포트는 A27 · A28 · A29 · A30 · 빈 줄(셸 커서)이다. row 3이 A30이다.
-    try pd_sc.copyEnterAt(0, 3);
+    try pd_sc.copyEnterAt(0, 3, .char);
     try pd_sc.copyPointTo(0, 3);
     pd_sc.scrollByRows(-3);
     try pd_sc.copyPointTo(0, 3);
@@ -2801,6 +2801,83 @@ pub fn main(init: std.process.Init) !void {
     if (ms.wheelKeys()) return error.WheelKeysBackOnPrimary;
     std.debug.print("vt_test: 대체 화면의 휠은 화살표 키 OK\n", .{});
 
+    // 검사 107~113. 더블클릭 · 트리플클릭의 선택(MC design 결정 4, MC-M1).
+    // 문자열은 MC-M0 측정 4와 같다. 판정은 `copyYank`의 글자다 — 키보드의
+    // `y`와 포인터의 뗌이 같은 함수다.
+    //          0         1         2
+    //          0123456789012345678901234567890
+    const mc = try vt.Screen.init(init.io, init.gpa, 40, 5, CELL);
+    defer mc.deinit();
+    var mc_clip = clipboard.Clipboard.init(init.gpa);
+    defer mc_clip.deinit();
+    mc.feed("alpha beta-gamma (delta)  eps\r\n");
+    const mc_pins = mc.term.screens.active.pages.countTrackedPins();
+
+    // 검사 107. 더블클릭은 그 자리의 단어다. `-`는 경계가 아니다.
+    try mc.copyEnterAt(7, 0, .word);
+    try expectYank(mc, &mc_clip, "beta-gamma", "a double click on the e of beta");
+
+    // 검사 108. 왼쪽으로 끌어 앵커 단어를 넘으면 두 단어가 통째다.
+    try mc.copyEnterAt(7, 0, .word);
+    try mc.copyPointTo(1, 0);
+    try expectYank(mc, &mc_clip, "alpha beta-gamma", "a word drag back over alpha");
+
+    // 검사 109. 왼쪽으로 넘어갔다가 오른쪽으로 되돌아와도 앵커 단어가 남는다
+    // (MC-M1 plan 확정 3). 앵커를 선택의 start에서 읽으면 alpha가 앵커가 되어
+    // 'alpha beta-gamma (delta'가 나온다 — mutation 1이 노리는 자리다.
+    try mc.copyEnterAt(7, 0, .word);
+    try mc.copyPointTo(1, 0);
+    try mc.copyPointTo(19, 0);
+    try expectYank(mc, &mc_clip, "beta-gamma (delta", "a word drag left then right to delta");
+
+    // 검사 110. 트리플클릭은 줄 전체다. 끝 공백은 selectLine이 자른다.
+    try mc.copyEnterAt(7, 0, .line);
+    try expectYank(mc, &mc_clip, "alpha beta-gamma (delta)  eps", "a triple click on the line");
+
+    // 검사 111. 쓰이지 않은 칸을 두 번 누르면 아무것도 안 고른다 — 클립보드는
+    // 그대로이고 모드는 나간다(MC design 결정 4).
+    try mc.copyEnterAt(35, 0, .word);
+    if ((try mc.copyYank(&mc_clip)) != null) {
+        std.debug.print("FAIL: a double click on an unwritten cell selected something\n", .{});
+        return error.UnwrittenWordSelected;
+    }
+    std.debug.print("vt_test: 쓰이지 않은 칸의 더블클릭은 아무것도 안 고른다 OK\n", .{});
+
+    // 검사 112. 단어 앵커 pin은 모드를 나가면 풀린다 — 나가는 길(y · 방식 바꾸기 ·
+    // Esc)마다 센다. 하나라도 빠지면 pin이 PageList에 쌓인다(MC design 위험 3).
+    //
+    // 선택 자체도 tracked다 — 라이브러리의 선택이 양 끝을 pin 둘로 든다(문자
+    // 선택이 기준 + 2). 단어 선택은 거기에 앵커 하나를 더해 기준 + 3이다.
+    try mc.copyEnterAt(7, 0, .char);
+    try expectPins(mc, mc_pins + 2, "while a char selection is held (the two ends)");
+    mc.copyExit();
+    try mc.copyEnterAt(7, 0, .word);
+    try expectPins(mc, mc_pins + 3, "while a word is selected (two ends and the anchor)");
+    mc.copyExit();
+    try expectPins(mc, mc_pins, "after copyExit");
+    try mc.copyEnterAt(7, 0, .word);
+    try mc.copySelect(.char);
+    try expectPins(mc, mc_pins + 2, "after switching the word to v (the char ends stay, the anchor goes)");
+    mc.copyExit();
+    try mc.copyEnterAt(7, 0, .word);
+    try mc.copySelect(.word);
+    try expectPins(mc, mc_pins, "after toggling the word off");
+    mc.copyExit();
+    try mc.copyEnterAt(7, 0, .word);
+    _ = try mc.copyYank(&mc_clip);
+    try expectPins(mc, mc_pins, "after y");
+    try mc.copyEnterAt(7, 0, .word);
+    try mc.copyEnterAt(1, 0, .word);
+    try expectPins(mc, mc_pins + 3, "after a second double click without leaving");
+    mc.copyExit();
+
+    // 검사 113. soft wrap으로 두 줄에 걸친 단어는 아랫줄을 눌러도 통째다.
+    const mcw = try vt.Screen.init(init.io, init.gpa, 10, 5, CELL);
+    defer mcw.deinit();
+    mcw.feed("ab wrapword12 c\r\n");
+    try mcw.copyEnterAt(1, 1, .word);
+    try expectYank(mcw, &mc_clip, "wrapword12", "a double click on the wrapped row of a word");
+
     std.debug.print("PASS\n", .{});
 }
 
@@ -2810,4 +2887,27 @@ fn expectMouse(got: []const u8, want: []const u8, what: []const u8) !void {
     if (std.mem.eql(u8, got, want)) return;
     std.debug.print("FAIL: {s}: got {any}, want {any}\n", .{ what, got, want });
     return error.WrongMouseBytes;
+}
+
+/// `copyYank`가 기대한 글자를 주는가(MC-M1).
+fn expectYank(scr: *vt.Screen, clip: *clipboard.Clipboard, want: []const u8, what: []const u8) !void {
+    const got = (try scr.copyYank(clip)) orelse {
+        std.debug.print("FAIL: {s}: nothing was yanked, want '{s}'\n", .{ what, want });
+        return error.NothingYanked;
+    };
+    if (!std.mem.eql(u8, got, want)) {
+        std.debug.print("FAIL: {s}: yanked '{s}', want '{s}'\n", .{ what, got, want });
+        return error.WrongYank;
+    }
+    std.debug.print("vt_test: {s} → '{s}' OK\n", .{ what, got });
+}
+
+/// 활성 화면의 tracked pin 수(MC-M1). 단어 앵커가 새는지 센다.
+fn expectPins(scr: *vt.Screen, want: usize, what: []const u8) !void {
+    const got = scr.term.screens.active.pages.countTrackedPins();
+    if (got != want) {
+        std.debug.print("FAIL: tracked pins {s}: {d}, want {d}\n", .{ what, got, want });
+        return error.WordAnchorLeaked;
+    }
+    std.debug.print("vt_test: tracked pins {s} = {d} OK\n", .{ what, got });
 }

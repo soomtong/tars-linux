@@ -1,7 +1,7 @@
 # TARS Multi Click — Design
 
 Date: 2026-11-01
-Status: MC-M0 끝(2026-11-01, 실측), MC-M1 착수 전. plan은 `docs/plans/2026-11-01-tars-multi-click-mc-m0.md`.
+Status: MC-M1 끝(2026-11-01, 순수 층 · 호스트 테스트), MC-M2 착수 전. plan은 `docs/plans/2026-11-01-tars-multi-click-mc-m{0,1}.md`.
 
 PD design(`docs/specs/2026-10-05-tars-pointer-devices-design.md`)의 비목표 2 "더블클릭 단어 선택 · 세 번 클릭 줄 선택 · Shift
 클릭으로 늘리기"를 연다. 사용자가 2026-11-01에 HANDOFF의 "PD 비목표" 셋(더블클릭 · 휠 방향 · 포인터 가속) 가운데 골랐다. 같은

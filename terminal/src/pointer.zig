@@ -492,6 +492,26 @@ pub const Target = enum {
     copy,
 };
 
+/// 다시 누름으로 치는 간격(µs)과 첫 누름에서의 거리(픽셀, MC design 결정 3).
+/// 500ms는 ghostty의 기본값이고 macOS 기본과 같다. 거리는 한 칸 너비다 — 칸이
+/// 아니라 픽셀로 재는 것은 칸 경계 위의 한 픽셀 떨림에 칸이 바뀌기 때문이다.
+/// `MULTI_CLICK_PX`는 `main.zig`의 `CELL_W`와 같아야 한다(거기 comptime 단언).
+pub const MULTI_CLICK_US: i64 = 500_000;
+pub const MULTI_CLICK_PX: u32 = 8;
+
+/// 선택의 단위(MC design 결정 6). 한 번 누름은 문자, 두 번은 단어, 세 번은
+/// 줄이다. `vt.Screen.SelectKind`와 짝이고 `main.zig`가 옮겨 담는다 — 이
+/// 파일은 `vt.zig`를 import하지 않는다(머리 주석).
+pub const Unit = enum { char, word, line };
+
+/// copy mode에 들어가며 선택을 시작할 칸과 그 단위.
+pub const Start = struct { at: Cell, unit: Unit };
+
+/// 누름 하나의 때와 자리(MC design 결정 2 · 3). `t_us`는 커널이 이벤트에 찍은
+/// 단조 시각이고, null이면 이 누름은 반복이 될 수 없다(라이브러리
+/// `pressRepeat`와 같다). `x` · `y`는 프레임버퍼 픽셀, `ws`는 워크스페이스 번호다.
+pub const Stamp = struct { t_us: ?i64, x: u32, y: u32, ws: usize };
+
 /// 끄는 중의 휠(design 결정 7). 누른 패널을 `notches` 눈금만큼 움직인다.
 /// 양수가 휠을 앞으로 민 것이고 위로 간다 — `Frame.wheel`과 같다.
 pub const Scroll = struct { leaf: u4, notches: i32 };
@@ -504,8 +524,9 @@ pub const Intent = union(enum) {
     cancel,
     /// 포커스를 이 잎으로 옮긴다.
     focus: u4,
-    /// copy mode에 들어가며 이 칸에서 문자 단위 선택을 시작한다.
-    select_start: Cell,
+    /// copy mode에 들어가며 이 칸에서 선택을 시작한다. 단위는 누른 횟수가
+    /// 정한다(MC design 결정 4) — 끌기의 첫 이동은 언제나 문자다.
+    select_start: Start,
     /// 선택 끝을 이 칸으로 옮긴다. 칸이 같아도 다시 맞춘다 — 휠이 뷰포트를
     /// 밀었으면 같은 칸이 다른 글자다.
     select_to: Cell,
@@ -515,7 +536,8 @@ pub const Intent = union(enum) {
     copy: u4,
 };
 
-/// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `focus`,
+/// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `focus`(두
+/// 번째 · 세 번째 누름은 `select_start`까지 셋),
 /// 첫 이동이 `select_start` · `select_to`, 누른 채 첫 휠이 `select_start` ·
 /// `scroll` · `select_to`다. 순서대로 실행한다.
 pub const Intents = struct {
@@ -555,8 +577,38 @@ pub const Gesture = struct {
     start: Cell = .{ .leaf = 0, .col = 0, .row = 0 },
     /// 마지막으로 선택 끝을 맞춘 칸. `pressed`에서는 `start`와 같다.
     cur: Cell = .{ .leaf = 0, .col = 0, .row = 0 },
+    /// 이 연속의 기억(MC design 결정 3). null이면 다음 누름은 처음부터다.
+    last: ?Last = null,
+    /// 마지막 누름이 이 연속의 몇 번째였나(1~3). 패널 칸이 아닌 누름은 0이다.
+    /// `main.zig`가 `repeat` 줄에 찍는다.
+    clicks: u2 = 0,
+    /// 마지막 누름과 그 앞 누름의 시각 차(µs). `clicks`가 2 이상일 때만 뜻이 있다.
+    gap_us: i64 = 0,
 
     pub const Phase = enum { idle, pressed, dragging, ignored };
+
+    /// 반복을 견줄 지난 누름. `x0` · `y0`은 이 연속의 첫 누름 자리이고
+    /// (거리는 첫 누름에서 잰다 — 라이브러리와 같다), `t_us`는 가장 최근
+    /// 누름의 시각이다(간격은 앞 누름과 잰다).
+    const Last = struct { t_us: i64, x0: u32, y0: u32, leaf: u4, ws: usize, count: u2 };
+
+    /// 이 누름이 지난 누름의 반복인가(MC design 결정 3의 넷).
+    fn repeats(self: *const Gesture, at: Stamp, leaf: u4) bool {
+        const l = self.last orelse return false;
+        const t = at.t_us orelse return false;
+        const dt = t - l.t_us;
+        if (dt < 0 or dt > MULTI_CLICK_US) return false;
+        const dx = @as(i64, at.x) - @as(i64, l.x0);
+        const dy = @as(i64, at.y) - @as(i64, l.y0);
+        const max = @as(i64, MULTI_CLICK_PX);
+        if (dx * dx + dy * dy > max * max) return false;
+        return leaf == l.leaf and at.ws == l.ws;
+    }
+
+    /// 연속을 끊는다. 다음 누름은 처음부터다.
+    fn breakRun(self: *Gesture) void {
+        self.last = null;
+    }
 
     /// 누른 잎. 버튼이 패널 칸 위에서 눌린 채이면 그 잎이고, 아니면 null이다.
     /// `main.zig`가 끄는 칸을 자를 사각형과 `Target`을 이것으로 고른다.
@@ -575,17 +627,44 @@ pub const Gesture = struct {
     /// copy mode가 닫힌다. 키보드 copy mode는 포커스 패널에만 있다(copy 표가
     /// `Cmd+]`를 삼킨다). 그리고 다른 패널이면 `focus`를 낸다. 순서가
     /// 계약이다 — 조합 중인 한글은 옛 포커스의 PTY로 가야 한다(WP 결정 4).
-    pub fn press(self: *Gesture, hit: ?Cell, focus: u4) Intents {
+    ///
+    /// `at`이 지난 누름의 반복이면(MC design 결정 3) 두 번째는 단어, 세 번째부터는
+    /// 줄을 곧바로 고른다 — `select_start`를 내고 `dragging`으로 간다. 그래서
+    /// 뗌은 끌기와 같은 길로 복사한다(MC design 결정 5).
+    pub fn press(self: *Gesture, hit: ?Cell, focus: u4, at: Stamp) Intents {
         var out: Intents = .{};
         const h = hit orelse {
             self.phase = .ignored;
+            self.clicks = 0;
+            self.breakRun();
             return out;
         };
-        self.phase = .pressed;
+        if (self.repeats(at, h.leaf)) {
+            const l = &self.last.?;
+            self.gap_us = at.t_us.? - l.t_us;
+            l.t_us = at.t_us.?;
+            // 3에서 멈춘다(넷째도 줄, 라이브러리와 같다). `u2`라 3 + 1을 먼저
+            // 셈하면 넘친다 — 비교가 먼저다.
+            if (l.count < 3) l.count += 1;
+            self.clicks = l.count;
+        } else {
+            self.gap_us = 0;
+            self.clicks = 1;
+            self.last = if (at.t_us) |t|
+                .{ .t_us = t, .x0 = at.x, .y0 = at.y, .leaf = h.leaf, .ws = at.ws, .count = 1 }
+            else
+                null;
+        }
         self.start = h;
         self.cur = h;
         out.push(.cancel);
         if (h.leaf != focus) out.push(.{ .focus = h.leaf });
+        if (self.clicks == 1) {
+            self.phase = .pressed;
+        } else {
+            self.phase = .dragging;
+            out.push(.{ .select_start = .{ .at = h, .unit = if (self.clicks == 2) .word else .line } });
+        }
         return out;
     }
 
@@ -599,9 +678,11 @@ pub const Gesture = struct {
             .pressed => {
                 if (target == .gone) {
                     self.phase = .ignored;
+                    self.breakRun();
                 } else if (!sameCell(at, self.start)) {
                     self.phase = .dragging;
-                    out.push(.{ .select_start = self.start });
+                    self.breakRun();
+                    out.push(.{ .select_start = .{ .at = self.start, .unit = .char } });
                     out.push(.{ .select_to = at });
                     self.cur = at;
                 }
@@ -609,9 +690,13 @@ pub const Gesture = struct {
             .dragging => {
                 // 키보드가 모드를 닫았다(`Esc` · `y` · `Cmd+C`, design 결정 6의
                 // 표). 뗄 때까지의 움직임은 무시한다.
+                // 선택 끝이 누른 칸을 떠나면 연속을 끊는다(MC-M1 plan 확정 2) —
+                // 두 번째 누름은 누름에서 이미 `dragging`이라 phase로는 못 가른다.
                 if (target != .copy) {
                     self.phase = .ignored;
+                    self.breakRun();
                 } else if (!sameCell(at, self.cur)) {
+                    self.breakRun();
                     out.push(.{ .select_to = at });
                     self.cur = at;
                 }
@@ -638,6 +723,8 @@ pub const Gesture = struct {
     pub fn handOff(self: *Gesture, leaf: u4, focus: u4) Intents {
         var out: Intents = .{};
         self.phase = .ignored;
+        self.clicks = 0;
+        self.breakRun();
         out.push(.cancel);
         if (leaf != focus) out.push(.{ .focus = leaf });
         return out;
@@ -660,18 +747,21 @@ pub const Gesture = struct {
             .pressed => {
                 if (target == .gone) {
                     self.phase = .ignored;
+                    self.breakRun();
                     return null;
                 }
                 self.phase = .dragging;
-                out.push(.{ .select_start = self.start });
+                out.push(.{ .select_start = .{ .at = self.start, .unit = .char } });
             },
             .dragging => {
                 if (target != .copy) {
                     self.phase = .ignored;
+                    self.breakRun();
                     return null;
                 }
             },
         }
+        self.breakRun();
         out.push(.{ .scroll = .{ .leaf = self.start.leaf, .notches = notches } });
         out.push(.{ .select_to = self.cur });
         return out;
