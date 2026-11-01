@@ -1,7 +1,9 @@
 # TARS Extend Repeat — Design
 
 Date: 2026-11-01
-Status: design — ER-M0 착수 전.
+Status: 끝났다 — ER-M0(2026-11-01). 루트 게이트 22/22, 10분 50초(prebuild 346 + lanes 303초), verify 8218줄 전부 통과. plan은
+`docs/plans/2026-11-01-tars-extend-repeat-er-m0.md`, 기억은 `docs/decisions/project_extend_repeat.md`. `pointer` 체인 검사 42 · 43, mutation 셋.
+게이트의 `sendkey`가 큐를 2N ms 쥐는 것을 찾아 `hold_shift`로 고쳤다(measurements 99) — SE 검사 40 · 41이 숨기던 것이다.
 
 SE design(`docs/specs/2026-11-01-tars-shift-extend-design.md`)의 비목표 4 "Shift + 더블클릭으로 단어 단위 늘리기"를 연다. 사용자가
 2026-11-01에 HANDOFF의 후보 넷(Shift + 더블클릭 단어 늘리기 · 휠 방향 설정 · 0.1.3 릴리스 · CB 범위 workspace)에서 골랐다. 같은

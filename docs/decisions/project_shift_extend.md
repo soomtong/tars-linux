@@ -34,7 +34,9 @@ design은 `docs/specs/2026-11-01-tars-shift-extend-design.md`, plan은 `docs/pla
    그대로 간다.
 2. 반복이 늘리기보다 먼저다(ghostty와 같다). 더블클릭으로 고른 단어가 남아 있을 때 500ms 안의 Shift 클릭은 트리플이다.
 3. 게이트의 Shift 클릭은 `sendkey shift 3000` 뒤 `hmp` 둘로만 보낸다 — `button_down` · `move_to`의 기다림이 3초를 먹는다. Shift
-   없는 클릭이 뒤따르면 `sleep 3.2`. 안 기다리면 그 클릭이 늘리기가 된다.
+   없는 클릭이 뒤따르면 `sleep 3.2`. 안 기다리면 그 클릭이 늘리기가 된다. 그리고 `sendkey`끼리는 6.1초를 띄운다(`hold_shift`) — ER-M0이
+   찾았다: 검사 40이 39의 1.3초 뒤에 보낸 Shift가 4.7초 늦게 닿았고, 40은 39의 Shift 덕에, 41의 Shift 클릭은 음성 검사라 초록이었다
+   ([[project_extend_repeat]], measurements 99).
 4. 호스트 테스트가 먼저 잡는 게스트 mutation(앵커 고정 → `vt_test` 116)은 `terminal`의 `zig build test` 줄을 `if false`로 바꾼
    `check.sh` 사본을 `/workspace/pointer/check.sh`에 `:ro`로 마운트해 게스트까지 보낸다(DR-M3과 같다). 검사 40이 `mc-one m`(8)으로
    잡았다.
@@ -46,5 +48,7 @@ design은 `docs/specs/2026-11-01-tars-shift-extend-design.md`, plan은 `docs/pla
 ## 숫자
 
 루트 게이트 22/22, 10분 20초(prebuild 321 + lanes 299초), verify 8219줄 전부 통과.
+
+비목표 4(Shift + 더블클릭의 단어 단위 늘리기)는 Extend Repeat(2026-11-01, [[project_extend_repeat]])가 열었다.
 
 관련: [[project_pointer_devices]] · [[project_multi_click]] · [[project_copy_mode]].

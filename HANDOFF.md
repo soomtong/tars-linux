@@ -1,8 +1,18 @@
-# HANDOFF: Shift Extend(SE-M0~M1) 닫음(2026-11-01) — 열린 서브프로젝트 없음
+# HANDOFF: Extend Repeat(ER-M0) 닫음(2026-11-01) — 열린 서브프로젝트 없음
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Shift Extend(SE-M0~M1, 2026-11-01, HANDOFF의 후보 넷에서 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Extend Repeat(ER-M0, 2026-11-01, HANDOFF의 후보 넷에서 사용자가 골랐다 — SE 비목표 4).
+  design `docs/specs/2026-11-01-tars-extend-repeat-design.md`, plan `docs/plans/2026-11-01-tars-extend-repeat-er-m0.md`, 기억
+  `docs/decisions/project_extend_repeat.md`. 남은 선택 위의 Shift 더블클릭은 단어, 트리플클릭은 줄 단위로 늘린다. 늘리기 누름도 연속을
+  기억하고(`Gesture.Last.extend`), 반복은 첫 누름의 앵커(`copy_word` 또는 `sel.start()`)를 둔 채 단위만 바꾼다(`copyExtendAt(x, y,
+  ?SelectKind)`). 양 끝이 다 넓어지고 연속의 첫 누름이 늘리기인지를 정한다(둘 다 사용자 결정). 새 로그 줄 없음.
+  - 함정: QEMU `sendkey KEY N`은 뗀 뒤에도 N ms delay를 남겨 키보드 큐를 2N ms 쥔다 — 그 안의 `sendkey`는 늦게 가고 마우스는 먼저 간다
+    (measurements 99). SE 검사 40 · 41이 이것을 숨기고 있었다. `pointer/check.sh`의 `hold_shift`가 앞 `sendkey`에서 6.1초를 기다린다.
+    반복에서 가까운 끝을 다시 고르면 왼쪽 늘리기에서 커서가 앵커가 된다(게이트 검사 42가 왼쪽인 이유).
+  - 숫자: `pointer` 검사 42 · 43, mutation 셋(호스트 · 게스트 다 빨강). 루트 게이트 22/22, 10분 50초(prebuild 346 + lanes 303초), verify
+    8218줄 전부 통과. 소개 페이지 "마우스 · 터치패드"에 한 줄.
+- 그 전에 닫은 것은 Shift Extend(SE-M0~M1, 2026-11-01, HANDOFF의 후보 넷에서 사용자가 골랐다).
   design `docs/specs/2026-11-01-tars-shift-extend-design.md`, plan `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`, 기억
   `docs/decisions/project_shift_extend.md`. MC 비목표 1과 PD 비목표 5를 함께 열었다 — 끌어 떼면 복사하고 copy mode를 나가되
   선택은 화면에 남고(`hasLinger` = `selection != null and copy_cursor == null`, 새 필드 없음), Shift를 누른 채 그 패널을 누르면
@@ -200,7 +210,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(SE-M1 닫기): 22/22, 10분 20초(prebuild 321 + lanes 299초), verify 8219줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(ER-M0 닫기): 22/22, 10분 50초(prebuild 346 + lanes 303초), verify 8218줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -224,6 +234,8 @@
   180ms 뒤 두 탭 끝의 차). 안 맞으면 값은 `pointer.MULTI_CLICK_US` · `MULTI_CLICK_PX` 둘이다(설정은 MC 비목표 3).
 - SE: 끌어 뗀 뒤 반전이 남는 것이 거슬리는지(글자를 쳐도 남는다 — 거슬리면 SE 비목표 1, 키 경로에 `clearLinger` 한 줄), Shift
   클릭이 늘리는 끝이 손의 기대와 맞는지(가까운 끝). 자식이 마우스를 원하는 패널(vim)에서 Shift 끌기 뒤 Shift 클릭도 같다.
+- ER: Shift 더블 · 트리플클릭이 단어 · 줄로 느는지, Shift 클릭 바로 뒤(500ms · 8픽셀 안) Shift 없이 누른 클릭이 지우기가 아니라
+  단어 늘리기가 되는 것이 거슬리는지(거슬리면 ER 비목표 1 — 둘째 누름의 Shift를 본다).
 - WP-M3: `Cmd+Option+화살표`(`keyboard=pc`면 `Alt+Win+화살표`)로 패널 사이를 다닐 때 손에 맞는지, 동률의 "맨 위 · 맨
   왼쪽" 규칙이 어색하지 않은지. 어색하면 최근 포커스(tmux식)가 다른 후보였다.
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
@@ -236,7 +248,7 @@
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
 - PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. 더블 · 트리플클릭은 MC가, Shift 클릭 늘리기와 뗀 뒤 반전 남기기는 SE가 닫았다(2026-11-01).
-  SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기 · Shift + 더블클릭의 단어 단위 늘리기.
+  SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기. Shift + 더블클릭의 단어 단위 늘리기는 ER이 닫았다.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
