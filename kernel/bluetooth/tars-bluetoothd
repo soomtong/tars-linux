@@ -1,0 +1,26 @@
+#!/bin/sh
+# 감독 목록의 bluetoothd 칸(BT design 결정 4). init이 이 스크립트를 띄우고, 이 스크립트는
+# 키가 남을 자리를 만들고 시스템 버스를 기다린 뒤 bluetoothd를 exec한다 — exec이라서
+# PID 1이 쥔 pid가 곧 bluetoothd다.
+#
+# 페어링 키 · 신뢰 · 어댑터 설정은 bluetoothd가 /var/lib/bluetooth 아래에 쓴다. initrd에서
+# 그 자리는 /config/bluetooth로 가는 심볼릭 링크다(make_initrd.sh) — 그래서 재부팅을
+# 넘는다. 디렉터리는 여기서 만든다(/config가 비어 있을 수 있다).
+#
+# 버스를 기다리는 이유: 감독 루프가 dbus 칸과 이 칸을 같은 바퀴에 띄우는데 bluetoothd는
+# 버스가 없으면 "Unable to get on D-Bus"로 바로 죽는다. 죽고 다시 뜨는 평소 길로도 맞춰지지만
+# 로그가 지저분하다. TCG 게스트에서 dbus-daemon의 소켓은 약 2초 뒤에 생겼다(BT-M0 실측 5).
+# 10초가 지나면 그냥 exec한다 — 그때는 죽고 감독자가 다시 띄우는 평소 길이다.
+#
+# -n은 포그라운드, -P는 안 쓰는 플러그인이다 — sap은 RFCOMM 채널을 열려다 "Operation not
+# permitted"를 매번 적고(커널에 RFCOMM이 없다, BT 비목표 3), network(BNEP)는 "kernel lacks
+# bnep-protocol support"를 적는다. 둘 다 동작에는 영향이 없지만 로그에 두지 않는다.
+mkdir -p /config/bluetooth
+i=0
+while [ ! -S /run/dbus/system_bus_socket ] && [ "$i" -lt 100 ]; do
+  sleep 0.1
+  i=$((i + 1))
+done
+# bluetooth 체인이 이 줄을 grep한다.
+echo "tars-bluetoothd: bus ready after ${i}00ms, starting bluetoothd" >&2
+exec /usr/libexec/bluetooth/bluetoothd -n -P sap,network

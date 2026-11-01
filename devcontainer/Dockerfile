@@ -343,6 +343,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 데이터라 새 라이브러리는 0개다. 컨테이너 자신의 /etc/ssl/certs를 복사하지 않는 이유는
 # tzdata와 같고(TS design 결정 10) 하나가 더 있다 — 그 묶음에는 OrbStack이 넣은 개발용
 # 인증 기관 둘이 섞여 있다(VD design 실측 2).
+#
+# ── BT-M1: 층 16(Bluetooth) ────────────────────────────────────────────────
+#
+# 사용자가 2026-11-01에 골랐다(BT design). 커널의 BT 스택 위에 설 사용자 공간 — BlueZ와
+# D-Bus 시스템 버스. 비용은 BT design 확인 4가 쟀다(project_measuring_tool_cost의 절차).
+#
+#   bluez                  bluetoothd(1,693,224) · bluetoothctl(584,632) · btmgmt(182,696) ·
+#                          /etc/bluetooth/main.conf · input.conf · dbus 정책 bluetooth.conf
+#   bluez-test-tools       btvirt(166,384, libc뿐) — 가상 HCI 컨트롤러. 게이트 전용이라
+#                          initrd에 없고 bluetooth/check.sh의 설정 디스크가 가져간다(hostapd와 같다)
+#   dbus-daemon            /usr/bin/dbus-daemon(248,408). dbus-broker는 systemd 런처가 필요하다
+#   dbus-system-bus-common /usr/share/dbus-1/system.conf(arch: all, :amd64 없음)
+#   dbus-bin               dbus-send(진단). 나머지 넷(dbus-monitor 등)은 sysroot에만 풀린다
+#   라이브러리 여덟        libglib2.0-0t64(1,404,320) · libdw1t64(762,392) · libudev1(280,936) ·
+#                          liblzma5(198,832) · libexpat1(186,528) · libapparmor1(84,728) ·
+#                          libbz2-1.0(74,688) · libatomic1(30,848) — 합 3,023,272
+#
+# bluez의 Depends 중 kmod · udev · init-system-helpers · adduser는 안 받는다 — 모듈 없는
+# 커널에 udev가 없고(터미널이 uevent를 직접 듣는다), 사용자 추가는 make_initrd.sh의
+# passwd 블록이 한다. libsystemd0 · libselinux1 · libelf1t64 · zlib1g · libzstd1 · libpcre2-8-0은
+# 위에서 이미 받았다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -482,7 +503,20 @@ RUN dpkg --add-architecture amd64 \
         hostapd:amd64 \
         busybox:amd64 \
         ncurses-term \
-        tzdata) \
+        tzdata \
+        bluez:amd64 \
+        bluez-test-tools:amd64 \
+        dbus-daemon:amd64 \
+        dbus-system-bus-common \
+        dbus-bin:amd64 \
+        libglib2.0-0t64:amd64 \
+        libdw1t64:amd64 \
+        libudev1:amd64 \
+        liblzma5:amd64 \
+        libexpat1:amd64 \
+        libapparmor1:amd64 \
+        libbz2-1.0:amd64 \
+        libatomic1:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 

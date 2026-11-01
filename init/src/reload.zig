@@ -23,10 +23,10 @@ pub const Group = enum {
     terminal,
 };
 
-/// 열두 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
+/// 열세 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
 /// `groupOf`가 컴파일 에러를 낸다.
 pub fn groupOf(comptime key: []const u8) Group {
-    const now = [_][]const u8{ "net", "ntp", "firewall" };
+    const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth" };
     const next = [_][]const u8{ "shell", "shell_config", "timezone" };
     const term = [_][]const u8{ "keyboard", "hangul_layout", "latin_layout", "hangul_toggle", "esc_latin", "clipboard" };
     inline for (now) |k| if (comptime std.mem.eql(u8, k, key)) return .now;
@@ -126,7 +126,7 @@ fn text(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
 /// 않는다(`control.Out`의 주석).
 pub const Out = control.Out;
 
-/// `config` 동사의 답(design 결정 1). 열두 줄 `key=value`(init이 지금 쓰는 값), 그리고 화면이
+/// `config` 동사의 답(design 결정 1). 열세 줄 `key=value`(init이 지금 쓰는 값), 그리고 화면이
 /// 대기 중이면 `screen key=value …` 한 줄(terminal이 지금 쓰는 값).
 pub fn configReply(out: *Out, live: config.Config, screen: config.Config) void {
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {

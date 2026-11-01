@@ -36,6 +36,7 @@ const OTHER = [_]edit.Pair{
     .{ .key = "ntp", .value = "10.0.2.2" },
     .{ .key = "timezone", .value = "Asia/Seoul" },
     .{ .key = "firewall", .value = "on" },
+    .{ .key = "bluetooth", .value = "on" },
     .{ .key = "esc_latin", .value = "off" },
     .{ .key = "clipboard", .value = "pane" },
 };
@@ -138,7 +139,7 @@ pub fn main() !void {
     // 필드를 더하고 parse의 갈래를 빠뜨리면 여기서 "unknown config key"를 듣는다.
     // 기본값을 글자로 바꿨다가 되읽어 같은지도 본다 — valueText와 parse가 같은
     // 글자를 쓴다는 것이 `set`이 쓰는 줄을 init이 읽는다는 뜻이다.
-    if (edit.KEYS.len != 12) return fail("{d} keys, want 12 (the seed has twelve)", .{edit.KEYS.len});
+    if (edit.KEYS.len != 13) return fail("{d} keys, want 13 (the seed has thirteen)", .{edit.KEYS.len});
     const defaults = config.Config{};
     for (edit.KEYS) |key| {
         var buf: [edit.VALUE_MAX]u8 = undefined;
@@ -150,7 +151,7 @@ pub fn main() !void {
     if (OTHER.len != edit.KEYS.len) return fail("OTHER has {d} rows for {d} keys", .{ OTHER.len, edit.KEYS.len });
     if (edit.isKey("colour") or edit.hint("colour") != null) return fail("colour is a key", .{});
     if (!std.mem.eql(u8, edit.hint("shell").?, "fish | bash | zsh")) return fail("shell hint {s}", .{edit.hint("shell").?});
-    std.debug.print("config_edit_test: twelve keys, each read back by parse as written\n", .{});
+    std.debug.print("config_edit_test: thirteen keys, each read back by parse as written\n", .{});
 
     // ── 2. judge — init이 하는 말이 곧 거절의 이유다 ───────────────────
     try expectRefused("shell", "fsh", "unknown shell 'fsh', falling back to fish");
@@ -406,6 +407,7 @@ pub fn main() !void {
             "\n  ntp=off                    off | dhcp | <IPv4 address>\n",
             "\n  timezone=UTC               UTC | <a name under /usr/share/zoneinfo, e.g. Asia/Seoul>\n",
             "\n  firewall=off               off | on\n",
+            "\n  bluetooth=off              off | on\n",
             // 26칸을 넘는 쌍은 자르지 않고 빈칸 하나로 잇는다.
             "\n  hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap a comma list of ",
         };
@@ -416,7 +418,7 @@ pub fn main() !void {
         const c = config.parse(text);
         const keys_tail = "#keyboard=apple\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
-        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#esc_latin=on\n#clipboard=shared\n";
+        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n";
         var sbuf: [2048]u8 = undefined;
         var s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, text, &c, null);

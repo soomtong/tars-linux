@@ -39,9 +39,15 @@ pub const CHRONYD = "chronyd";
 /// `exec` 뒤에 남는 것은 wpa_supplicant라서 이름을 그것으로 둔다 — 사람은
 /// `tars-service restart wpa_supplicant`라고 친다.
 pub const WPA_SUPPLICANT = "wpa_supplicant";
+/// BT-M1. 넷째 · 다섯째(BT design 결정 4). path는 래퍼 `tars-dbus` · `tars-bluetoothd`지만
+/// `exec` 뒤에 남는 것이 dbus-daemon · bluetoothd라 이름을 그것으로 둔다 — 사람은
+/// `tars-service restart bluetoothd`라고 친다. `dbus`가 짧은 것은 데몬 이름(dbus-daemon)이
+/// 아니라 버스의 이름이기 때문이다 — 사람이 부르는 이름이 그쪽이다.
+pub const DBUS = "dbus";
+pub const BLUETOOTHD = "bluetoothd";
 /// 같은 이름이 `services.d`에 있으면 건너뛴다(DS design 결정 5). 둘이 같은 label을
 /// 달면 `tars-service stop dhcpcd`가 무엇을 멈출지 모호하다.
-pub const RESERVED = [_][]const u8{ DHCPCD, CHRONYD, WPA_SUPPLICANT };
+pub const RESERVED = [_][]const u8{ DHCPCD, CHRONYD, WPA_SUPPLICANT, DBUS, BLUETOOTHD };
 const LABEL_MAX: usize = LABEL_PREFIX.len + NAME_MAX;
 
 fn failed(rc: usize) ?linux.E {

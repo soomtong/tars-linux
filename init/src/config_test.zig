@@ -103,6 +103,9 @@ fn expect(text: []const u8, want: config.Config) !void {
         // FW-M1: 열째 필드. SC-M0이 여섯째에 대해 적어 둔 것과 같은 자리다 —
         // 이 줄이 없으면 아래 firewall 검사가 아무것도 안 보고 초록이다.
         got.firewall == want.firewall and
+        // BT-M1: 열셋째 필드(firewall 다음). 이 줄이 없으면 아래 bluetooth 검사가 아무것도
+        // 안 보고 초록이다.
+        got.bluetooth == want.bluetooth and
         // EL-M0: 열한째 필드. FW-M1이 열째에 대해 적어 둔 것과 같은 자리다.
         got.esc_latin == want.esc_latin and
         // CB-M0: 열두째 필드. 이 줄이 없으면 아래 clipboard 검사가 아무것도
@@ -116,8 +119,8 @@ fn expect(text: []const u8, want: config.Config) !void {
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
+        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s}\n" ++
+            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s}\n",
         .{
             text,
             @tagName(got.shell),
@@ -130,6 +133,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             got.ntp.arg(&got_ntp),
             got.timezone.slice(),
             @tagName(got.firewall),
+            @tagName(got.bluetooth),
             @tagName(got.esc_latin),
             @tagName(got.clipboard),
             @tagName(want.shell),
@@ -142,6 +146,7 @@ fn expect(text: []const u8, want: config.Config) !void {
             want.ntp.arg(&want_ntp),
             want.timezone.slice(),
             @tagName(want.firewall),
+            @tagName(want.bluetooth),
             @tagName(want.esc_latin),
             @tagName(want.clipboard),
         },
@@ -1064,6 +1069,17 @@ pub fn main() !void {
     try expect("firewall=\n", .{}); // 값 없음
     // 체인의 디스크가 실제로 쓰는 두 줄이다.
     try expect("net=dhcp\nfirewall=on\n", .{ .net = .dhcp, .firewall = .on });
+
+    // ── BT-M1: bluetooth ──────────────────────────────────────────────
+    //
+    // firewall과 같은 모양의 enum 키다. 기본값이 off인 것이 BT design 결정 5다 —
+    // 라디오를 켜는 것은 이 기계를 쓰는 사람이 정한다.
+    try expect("bluetooth=on\n", .{ .bluetooth = .on });
+    try expect("bluetooth=off\n", .{});
+    try expect("bluetooth=yes\n", .{}); // enum에 없는 값
+    try expect("bluetooth=\n", .{}); // 값 없음
+    // 체인의 디스크가 실제로 쓰는 모양이다.
+    try expect("bluetooth=on\nnet=off\n", .{ .bluetooth = .on });
 
     // ── CB-M0: clipboard ───────────────────────────────────────────────
     //

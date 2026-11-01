@@ -69,6 +69,18 @@ pub const Firewall = enum {
     on,
 };
 
+/// 블루투스를 켜는가(BT design 결정 5). 켜면 init이 D-Bus 시스템 버스(dbus-daemon)와
+/// BlueZ(bluetoothd)를 감독 목록에 넣는다. 페어링은 bluetoothctl이 하고 키는
+/// /config/bluetooth에 남는다. 이 값은 스위치 하나다 — `bluetooth.zig`가 이것만 본다.
+///
+/// 기본값이 `off`인 근거는 `net`과 같다 — 라디오를 켜는 것은 이 기계를 쓰는 사람이
+/// 정하고, 데몬 둘(약 5MB)이 부팅마다 붙는 비용이 있다. 이 키를 안 적은 기계는 한
+/// 글자도 안 바뀐다.
+pub const Bluetooth = enum {
+    off,
+    on,
+};
+
 /// 한글을 치다가 Esc를 누르면 영문으로 돌아오는가(EL design 결정 1).
 ///
 /// `hangul_toggle` 목록의 다섯째 이름이 아니라 따로 있는 키인 이유가 둘이다.
@@ -789,6 +801,8 @@ pub const Config = struct {
     timezone: Timezone = Timezone.UTC,
     /// 기본값이 `off`인 넷째 키다. 근거는 위 `Firewall`의 문서 주석에 있다.
     firewall: Firewall = .off,
+    /// 기본값이 `off`인 다섯째 키다. 근거는 위 `Bluetooth`의 문서 주석에 있다(BT-M1).
+    bluetooth: Bluetooth = .off,
     /// 기본값이 `on`인 근거는 `keyboard`·`hangul_layout`과 같다 — 이 기계를
     /// 쓰는 사람이 쓰는 것이 기본값이다(2026-10-05에 사용자가 요청했다).
     /// 이 키가 없는 파일에서도 켜진다. 그것이 이 값이 `hangul_toggle` 목록이
@@ -987,6 +1001,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "bluetooth")) {
+            // firewall과 완전히 같은 모양이다(BT-M1).
+            c.bluetooth = std.meta.stringToEnum(Bluetooth, value) orelse {
+                log("unknown bluetooth '{s}', falling back to {s}", .{
+                    value, @tagName(c.bluetooth),
+                });
+                continue;
+            };
         } else if (std.mem.eql(u8, key, "esc_latin")) {
             // shell_config와 완전히 같은 모양이다(EL design 결정 1).
             c.esc_latin = std.meta.stringToEnum(EscLatin, value) orelse {
@@ -1081,6 +1103,11 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   /config/nftables.d/ 아래 .nft 파일에 nftables 문법으로 한 줄씩
         \\#   적는다. 예: tcp dport 8080 accept
         \\firewall={s}
+        \\# bluetooth: off | on
+        \\#   on이면 init이 D-Bus와 BlueZ(bluetoothd)를 띄운다. 페어링은
+        \\#   bluetoothctl로 하고(scan on · pair · trust · connect) 키는
+        \\#   /config/bluetooth에 남는다. 키보드 · 마우스까지다 — 오디오는 없다
+        \\bluetooth={s}
         \\# clipboard: shared | pane
         \\#   shared면 모든 패널과 워크스페이스가 클립보드 하나를 쓰고,
         \\#   pane이면 패널마다 따로다
@@ -1098,6 +1125,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         c.ntp.arg(&ntp_buf),
         c.timezone.slice(),
         @tagName(c.firewall),
+        @tagName(c.bluetooth),
         @tagName(c.clipboard),
     }) catch return error.FormatFailed;
 

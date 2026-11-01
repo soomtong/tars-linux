@@ -18,7 +18,8 @@ fn expectText(got: []const u8, want: []const u8, what: []const u8) !void {
 const OTHER = [_][]const u8{
     "shell=zsh",                 "keyboard=pc",      "hangul_layout=dubeol", "latin_layout=dvorak",
     "hangul_toggle=shift_space", "shell_config=off", "net=dhcp",             "ntp=10.0.2.2",
-    "timezone=Asia/Seoul",       "firewall=on",      "esc_latin=off",        "clipboard=pane",
+    "timezone=Asia/Seoul",       "firewall=on",      "bluetooth=on",         "esc_latin=off",
+    "clipboard=pane",
 };
 
 const S = reload.Slot;
@@ -33,14 +34,14 @@ fn expectActions(slots: []const S, names: []const []const u8, want: []const relo
 }
 
 pub fn main() !void {
-    // ── 1. 열두 키가 다 한 갈래에 든다 ──────────────────────────────────
+    // ── 1. 열세 키가 다 한 갈래에 든다 ──────────────────────────────────
     //
-    // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열둘 다 들었다. 갈래의 수를 세서
-    // design 결정 2의 표(지금 셋 · 다음에 뜰 때부터 셋 · 화면 여섯)와 견준다.
+    // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열셋 다 들었다. 갈래의 수를 세서
+    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 여섯)와 견준다.
     var counts = [_]usize{ 0, 0, 0 };
     inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@backingInt(comptime reload.groupOf(f_name))] += 1;
-    if (counts[0] != 3 or counts[1] != 3 or counts[2] != 6) return fail("groups now/next/terminal = {d}/{d}/{d}, want 3/3/6", .{ counts[0], counts[1], counts[2] });
-    std.debug.print("reload_test: twelve keys in three groups — three now, three at the next spawn, six on the screen\n", .{});
+    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 6) return fail("groups now/next/terminal = {d}/{d}/{d}, want 4/3/6", .{ counts[0], counts[1], counts[2] });
+    std.debug.print("reload_test: thirteen keys in three groups — four now, three at the next spawn, six on the screen\n", .{});
 
     // ── 2. diff — 키 하나를 바꾸면 그 비트 하나 ────────────────────────
     const def = config.Config{};
@@ -68,7 +69,7 @@ pub fn main() !void {
     reload.configReply(&out, live, def);
     try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
-        "timezone=Asia/Seoul\nfirewall=off\nesc_latin=on\nclipboard=shared\n" ++
+        "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\n" ++
         "screen keyboard=apple timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
@@ -90,7 +91,7 @@ pub fn main() !void {
     var to = reload.Out{ .buf = &tiny };
     reload.configReply(&to, live, def);
     if (!to.full or to.len > tiny.len) return fail("a 10-byte reply buffer did not stop cleanly", .{});
-    std.debug.print("reload_test: config answers twelve key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
+    std.debug.print("reload_test: config answers thirteen key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
 
     // ── 5. 데몬 · 방화벽 ────────────────────────────────────────────────
     const table = [_]struct { bool, bool, bool, reload.Step }{

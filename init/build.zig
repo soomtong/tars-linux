@@ -285,6 +285,20 @@ pub fn build(b: *std.Build) void {
         .root_module = wifi_test_mod,
     });
 
+    // BT-M1: dbus · bluetoothd를 감독 목록에 넣을지의 검사. wifi_test와 같은 자리지만 파일을
+    // 안 보므로 시스템 콜이 없다 — 그래도 bluetooth.zig가 screen_args(Argv의 길이)를 import한다.
+    const bluetooth_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/bluetooth_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    bluetooth_test_mod.addImport("screen_args", screen_args);
+    const bluetooth_test = b.addExecutable(.{
+        .name = "bluetooth_test",
+        .root_module = bluetooth_test_mod,
+    });
+
     // AU-M1: 믹서를 켜고 적는 배관의 순수한 쪽(동사 · argv · wait status · 적을지).
     // clock_test와 같은 이유로 host_target이다 — audio.zig에서 시스템 콜을 하는
     // 부분은 이 넷 아래에만 있다.
@@ -385,6 +399,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(login_test).step);
     test_step.dependOn(&b.addRunArtifact(control_test).step);
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
+    test_step.dependOn(&b.addRunArtifact(bluetooth_test).step);
     test_step.dependOn(&b.addRunArtifact(audio_test).step);
     test_step.dependOn(&b.addRunArtifact(config_edit_test).step);
     test_step.dependOn(&b.addRunArtifact(config_front_edit_test).step);

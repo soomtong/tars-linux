@@ -22,6 +22,8 @@
 # kernel/.config가 켠 PCIe 무선 드라이버(WL design 결정 1)와 USB 동글(UW design
 # 결정 1)이 찾는 것. USB 동글이 새로 찾는 것은 rtw88의 `…a_fw.bin` 셋뿐이다.
 # UB(층 B 다섯 + rtl8xxxu, UB design 결정 1)가 21개를 더했다 — UB 실측 2.
+# BT(BT design 결정 2)가 Bluetooth 157개를 더했다 — Intel 84 · Realtek 31 · MediaTek 4 ·
+# Qualcomm 38, 합 약 32MB(gzip 뒤 약 23MB, BT-M0 실측 3). 규칙은 배열 끝 Bluetooth 블록의 주석에 있다.
 # 드라이버가 찾는 이름은 빌드 산출물 kernel/build/modules.builtin.modinfo의
 # `firmware=` 줄이다. 짐작하지 않고 거기서 센다.
 #
@@ -38,10 +40,16 @@
 # ncm865). 서버용(ath11k QCN9074). `rtlwifi/rtl8723bu_bt.bin`은 이 릴리스에 없고
 # 6.18의 rtl8xxxu가 요청하지도 않는 죽은 이름이다(UB 위험 3). `mt7662u.bin` ·
 # `htc_9271.fw`는 이름이 비슷해도 6.18이 요청하지 않는다(UB 비목표 4).
+# Bluetooth(BT-M1)에서 뺀 것 — btrtl 표의 이름 50 중 이 릴리스에 없는 19(거의 `*_config.bin`,
+# 드라이버가 없으면 그냥 넘어간다 — `rtl8723b_config` · `rtl8723d_config` · `rtl8852bs_*` 등),
+# tarball에만 있고 6.18이 요청하지 않는 `rtl8192ee_fw` · `rtl8192eu_fw` · `rtl8812ae_fw`,
+# 무선을 안 싣는 칩의 MediaTek 둘(`MT7902` · `MT7927`의 `MT6639`), Broadcom `brcm/BCM*.hcd`
+# (BT 비목표 4).
 #
 # ── 커널이나 linux-firmware를 올릴 때 ───────────────────────────────────
 #
-# 이 목록은 커널 6.18.42와 linux-firmware-20260916에 대해 고른 것이다. 커널을
+# 이 목록은 커널 6.18.42와 linux-firmware-20260916에 대해 고른 것이다(Bluetooth 블록은
+# 6.18.60, BT-M1). Intel BT는 iwlwifi처럼 hw_variant 표가 커널에 있어 커널을 올리면 다시 본다. 커널을
 # 6.18.60으로 올릴 때 iwlwifi의 API_MAX와 트리 전체의 MODULE_FIRMWARE를 대조해
 # 그대로 두었다(KU-M1 plan 확정 4 · 5). 둘 중 하나를 올리면 iwlwifi 줄을
 # 다시 골라야 한다 — 커널의 최대 API가 오르면 더 새 파일을 받기 시작하고,
@@ -225,4 +233,179 @@ GUEST_FIRMWARE=(
   sof-bin/sof-ipc4-tplg/sof-hda-generic-idisp.tplg:lib/firmware/intel/sof-ipc4-tplg/sof-hda-generic-idisp.tplg
   sof-bin/sof-ipc4-tplg/sof-hda-generic-idisp-2ch.tplg:lib/firmware/intel/sof-ipc4-tplg/sof-hda-generic-idisp-2ch.tplg
   sof-bin/sof-ipc4-tplg/sof-hda-generic-idisp-4ch.tplg:lib/firmware/intel/sof-ipc4-tplg/sof-hda-generic-idisp-4ch.tplg
+  # ── Bluetooth(BT-M1) ────────────────────────────────────────────────────
+  #
+  # 계열마다 규칙이 다르다(BT design 결정 2 · 실측 2). Realtek(btrtl)은 소스의 칩 표
+  # (ic_id_table의 fw_name · cfg_name)가 이름을 다 적고 있어 거기서 셌다 — MODULE_FIRMWARE
+  # 50줄은 그 표의 부분집합이다. tarball에 없는 이름(주로 *_config.bin — 드라이버가
+  # 없으면 그냥 넘어간다)은 뺐다. Intel(btintel · btintel_pcie)은 iwlwifi처럼 실행 중에
+  # 이름을 만든다(ibt-<hw>-<rev>.sfi · .ddc, ROM 세대는 ibt-hw-37.x*.bseq) —
+  # MODULE_FIRMWARE는 넷뿐이라 modinfo로 못 세고, hw_variant 표(WP ~ Scorpious Peak)가
+  # 우리가 싣는 iwlwifi 세대 전부와 겹쳐 intel/ibt-*를 전부 넣는다. 이것이 initrd 증분의
+  # 거의 전부다(BT design 위험 1). MediaTek(btmtk)은 BT_RAM_CODE_MT<칩>_1_<rev>_hdr.bin을
+  # 만들고, 우리가 무선을 싣는 MT7921(7961 · 7961 1a) · MT7922 · MT7925만 넣는다(MT7902 ·
+  # MT7927은 무선을 안 싣는 칩, MT7927의 것은 이 릴리스에 없기도 하다). Qualcomm(btusb)은
+  # qca/rampatch_usb_<id>.bin · nvm_usb_<id>*.bin을 만든다 — nvm은 보드 변형이라 다 넣는다.
+  #
+  # Realtek — btrtl
+  linux-firmware/rtl_bt/rtl8723a_fw.bin:lib/firmware/rtl_bt/rtl8723a_fw.bin
+  linux-firmware/rtl_bt/rtl8723b_fw.bin:lib/firmware/rtl_bt/rtl8723b_fw.bin
+  linux-firmware/rtl_bt/rtl8723bs_config.bin:lib/firmware/rtl_bt/rtl8723bs_config.bin
+  linux-firmware/rtl_bt/rtl8723bs_fw.bin:lib/firmware/rtl_bt/rtl8723bs_fw.bin
+  linux-firmware/rtl_bt/rtl8723cs_xx_config.bin:lib/firmware/rtl_bt/rtl8723cs_xx_config.bin
+  linux-firmware/rtl_bt/rtl8723cs_xx_fw.bin:lib/firmware/rtl_bt/rtl8723cs_xx_fw.bin
+  linux-firmware/rtl_bt/rtl8723d_fw.bin:lib/firmware/rtl_bt/rtl8723d_fw.bin
+  linux-firmware/rtl_bt/rtl8761a_fw.bin:lib/firmware/rtl_bt/rtl8761a_fw.bin
+  linux-firmware/rtl_bt/rtl8761b_config.bin:lib/firmware/rtl_bt/rtl8761b_config.bin
+  linux-firmware/rtl_bt/rtl8761b_fw.bin:lib/firmware/rtl_bt/rtl8761b_fw.bin
+  linux-firmware/rtl_bt/rtl8761bu_config.bin:lib/firmware/rtl_bt/rtl8761bu_config.bin
+  linux-firmware/rtl_bt/rtl8761bu_fw.bin:lib/firmware/rtl_bt/rtl8761bu_fw.bin
+  linux-firmware/rtl_bt/rtl8761cu_config.bin:lib/firmware/rtl_bt/rtl8761cu_config.bin
+  linux-firmware/rtl_bt/rtl8761cu_fw.bin:lib/firmware/rtl_bt/rtl8761cu_fw.bin
+  linux-firmware/rtl_bt/rtl8821a_fw.bin:lib/firmware/rtl_bt/rtl8821a_fw.bin
+  linux-firmware/rtl_bt/rtl8821c_config.bin:lib/firmware/rtl_bt/rtl8821c_config.bin
+  linux-firmware/rtl_bt/rtl8821c_fw.bin:lib/firmware/rtl_bt/rtl8821c_fw.bin
+  linux-firmware/rtl_bt/rtl8821cs_fw.bin:lib/firmware/rtl_bt/rtl8821cs_fw.bin
+  linux-firmware/rtl_bt/rtl8822b_config.bin:lib/firmware/rtl_bt/rtl8822b_config.bin
+  linux-firmware/rtl_bt/rtl8822b_fw.bin:lib/firmware/rtl_bt/rtl8822b_fw.bin
+  linux-firmware/rtl_bt/rtl8822cs_config.bin:lib/firmware/rtl_bt/rtl8822cs_config.bin
+  linux-firmware/rtl_bt/rtl8822cs_fw.bin:lib/firmware/rtl_bt/rtl8822cs_fw.bin
+  linux-firmware/rtl_bt/rtl8822cu_fw.bin:lib/firmware/rtl_bt/rtl8822cu_fw.bin
+  linux-firmware/rtl_bt/rtl8851bu_fw.bin:lib/firmware/rtl_bt/rtl8851bu_fw.bin
+  linux-firmware/rtl_bt/rtl8852au_fw.bin:lib/firmware/rtl_bt/rtl8852au_fw.bin
+  linux-firmware/rtl_bt/rtl8852btu_fw.bin:lib/firmware/rtl_bt/rtl8852btu_fw.bin
+  linux-firmware/rtl_bt/rtl8852bu_fw.bin:lib/firmware/rtl_bt/rtl8852bu_fw.bin
+  linux-firmware/rtl_bt/rtl8852cu_fw_v2.bin:lib/firmware/rtl_bt/rtl8852cu_fw_v2.bin
+  linux-firmware/rtl_bt/rtl8852cu_fw.bin:lib/firmware/rtl_bt/rtl8852cu_fw.bin
+  linux-firmware/rtl_bt/rtl8922au_config.bin:lib/firmware/rtl_bt/rtl8922au_config.bin
+  linux-firmware/rtl_bt/rtl8922au_fw.bin:lib/firmware/rtl_bt/rtl8922au_fw.bin
+  # Intel — btintel · btintel_pcie
+  linux-firmware/intel/ibt-0040-0041.ddc:lib/firmware/intel/ibt-0040-0041.ddc
+  linux-firmware/intel/ibt-0040-0041.sfi:lib/firmware/intel/ibt-0040-0041.sfi
+  linux-firmware/intel/ibt-0040-1020.ddc:lib/firmware/intel/ibt-0040-1020.ddc
+  linux-firmware/intel/ibt-0040-1020.sfi:lib/firmware/intel/ibt-0040-1020.sfi
+  linux-firmware/intel/ibt-0041-0041.ddc:lib/firmware/intel/ibt-0041-0041.ddc
+  linux-firmware/intel/ibt-0041-0041.sfi:lib/firmware/intel/ibt-0041-0041.sfi
+  linux-firmware/intel/ibt-0093-0041.ddc:lib/firmware/intel/ibt-0093-0041.ddc
+  linux-firmware/intel/ibt-0093-0041.sfi:lib/firmware/intel/ibt-0093-0041.sfi
+  linux-firmware/intel/ibt-0093-0291.ddc:lib/firmware/intel/ibt-0093-0291.ddc
+  linux-firmware/intel/ibt-0093-0291.sfi:lib/firmware/intel/ibt-0093-0291.sfi
+  linux-firmware/intel/ibt-0093-1050.ddc:lib/firmware/intel/ibt-0093-1050.ddc
+  linux-firmware/intel/ibt-0093-1050.sfi:lib/firmware/intel/ibt-0093-1050.sfi
+  linux-firmware/intel/ibt-0093-4150.ddc:lib/firmware/intel/ibt-0093-4150.ddc
+  linux-firmware/intel/ibt-0093-4150.sfi:lib/firmware/intel/ibt-0093-4150.sfi
+  linux-firmware/intel/ibt-00a0-0041-iml.sfi:lib/firmware/intel/ibt-00a0-0041-iml.sfi
+  linux-firmware/intel/ibt-00a0-0041-pci.ddc:lib/firmware/intel/ibt-00a0-0041-pci.ddc
+  linux-firmware/intel/ibt-00a0-0041-pci.sfi:lib/firmware/intel/ibt-00a0-0041-pci.sfi
+  linux-firmware/intel/ibt-00a0-01a1-iml.sfi:lib/firmware/intel/ibt-00a0-01a1-iml.sfi
+  linux-firmware/intel/ibt-00a0-01a1-pci.ddc:lib/firmware/intel/ibt-00a0-01a1-pci.ddc
+  linux-firmware/intel/ibt-00a0-01a1-pci.sfi:lib/firmware/intel/ibt-00a0-01a1-pci.sfi
+  linux-firmware/intel/ibt-00a0-0291-iml.sfi:lib/firmware/intel/ibt-00a0-0291-iml.sfi
+  linux-firmware/intel/ibt-00a0-0291-pci.ddc:lib/firmware/intel/ibt-00a0-0291-pci.ddc
+  linux-firmware/intel/ibt-00a0-0291-pci.sfi:lib/firmware/intel/ibt-00a0-0291-pci.sfi
+  linux-firmware/intel/ibt-0180-0041.ddc:lib/firmware/intel/ibt-0180-0041.ddc
+  linux-firmware/intel/ibt-0180-0041.sfi:lib/firmware/intel/ibt-0180-0041.sfi
+  linux-firmware/intel/ibt-0180-1050.ddc:lib/firmware/intel/ibt-0180-1050.ddc
+  linux-firmware/intel/ibt-0180-1050.sfi:lib/firmware/intel/ibt-0180-1050.sfi
+  linux-firmware/intel/ibt-0180-4150.ddc:lib/firmware/intel/ibt-0180-4150.ddc
+  linux-firmware/intel/ibt-0180-4150.sfi:lib/firmware/intel/ibt-0180-4150.sfi
+  linux-firmware/intel/ibt-0190-0041-iml.sfi:lib/firmware/intel/ibt-0190-0041-iml.sfi
+  linux-firmware/intel/ibt-0190-0041-pci.ddc:lib/firmware/intel/ibt-0190-0041-pci.ddc
+  linux-firmware/intel/ibt-0190-0041-pci.sfi:lib/firmware/intel/ibt-0190-0041-pci.sfi
+  linux-firmware/intel/ibt-0190-0041-usb.ddc:lib/firmware/intel/ibt-0190-0041-usb.ddc
+  linux-firmware/intel/ibt-0190-0041-usb.sfi:lib/firmware/intel/ibt-0190-0041-usb.sfi
+  linux-firmware/intel/ibt-0190-0291-iml.sfi:lib/firmware/intel/ibt-0190-0291-iml.sfi
+  linux-firmware/intel/ibt-0190-0291-pci.ddc:lib/firmware/intel/ibt-0190-0291-pci.ddc
+  linux-firmware/intel/ibt-0190-0291-pci.sfi:lib/firmware/intel/ibt-0190-0291-pci.sfi
+  linux-firmware/intel/ibt-0190-0291-usb.ddc:lib/firmware/intel/ibt-0190-0291-usb.ddc
+  linux-firmware/intel/ibt-0190-0291-usb.sfi:lib/firmware/intel/ibt-0190-0291-usb.sfi
+  linux-firmware/intel/ibt-0190-0291.ddc:lib/firmware/intel/ibt-0190-0291.ddc
+  linux-firmware/intel/ibt-0190-0291.sfi:lib/firmware/intel/ibt-0190-0291.sfi
+  linux-firmware/intel/ibt-0291-0291.ddc:lib/firmware/intel/ibt-0291-0291.ddc
+  linux-firmware/intel/ibt-0291-0291.sfi:lib/firmware/intel/ibt-0291-0291.sfi
+  linux-firmware/intel/ibt-1040-0041.ddc:lib/firmware/intel/ibt-1040-0041.ddc
+  linux-firmware/intel/ibt-1040-0041.sfi:lib/firmware/intel/ibt-1040-0041.sfi
+  linux-firmware/intel/ibt-1040-1020.ddc:lib/firmware/intel/ibt-1040-1020.ddc
+  linux-firmware/intel/ibt-1040-1020.sfi:lib/firmware/intel/ibt-1040-1020.sfi
+  linux-firmware/intel/ibt-11-5.ddc:lib/firmware/intel/ibt-11-5.ddc
+  linux-firmware/intel/ibt-11-5.sfi:lib/firmware/intel/ibt-11-5.sfi
+  linux-firmware/intel/ibt-1190-0041-iml.sfi:lib/firmware/intel/ibt-1190-0041-iml.sfi
+  linux-firmware/intel/ibt-1190-0041-pci.ddc:lib/firmware/intel/ibt-1190-0041-pci.ddc
+  linux-firmware/intel/ibt-1190-0041-pci.sfi:lib/firmware/intel/ibt-1190-0041-pci.sfi
+  linux-firmware/intel/ibt-1190-0041-usb.ddc:lib/firmware/intel/ibt-1190-0041-usb.ddc
+  linux-firmware/intel/ibt-1190-0041-usb.sfi:lib/firmware/intel/ibt-1190-0041-usb.sfi
+  linux-firmware/intel/ibt-1190-01a1-iml.sfi:lib/firmware/intel/ibt-1190-01a1-iml.sfi
+  linux-firmware/intel/ibt-1190-01a1-pci.ddc:lib/firmware/intel/ibt-1190-01a1-pci.ddc
+  linux-firmware/intel/ibt-1190-01a1-pci.sfi:lib/firmware/intel/ibt-1190-01a1-pci.sfi
+  linux-firmware/intel/ibt-12-16.ddc:lib/firmware/intel/ibt-12-16.ddc
+  linux-firmware/intel/ibt-12-16.sfi:lib/firmware/intel/ibt-12-16.sfi
+  linux-firmware/intel/ibt-17-0-1.ddc:lib/firmware/intel/ibt-17-0-1.ddc
+  linux-firmware/intel/ibt-17-0-1.sfi:lib/firmware/intel/ibt-17-0-1.sfi
+  linux-firmware/intel/ibt-17-16-1.ddc:lib/firmware/intel/ibt-17-16-1.ddc
+  linux-firmware/intel/ibt-17-16-1.sfi:lib/firmware/intel/ibt-17-16-1.sfi
+  linux-firmware/intel/ibt-18-0-1.ddc:lib/firmware/intel/ibt-18-0-1.ddc
+  linux-firmware/intel/ibt-18-0-1.sfi:lib/firmware/intel/ibt-18-0-1.sfi
+  linux-firmware/intel/ibt-18-16-1.ddc:lib/firmware/intel/ibt-18-16-1.ddc
+  linux-firmware/intel/ibt-18-16-1.sfi:lib/firmware/intel/ibt-18-16-1.sfi
+  linux-firmware/intel/ibt-19-0-4.ddc:lib/firmware/intel/ibt-19-0-4.ddc
+  linux-firmware/intel/ibt-19-0-4.sfi:lib/firmware/intel/ibt-19-0-4.sfi
+  linux-firmware/intel/ibt-20-0-3.ddc:lib/firmware/intel/ibt-20-0-3.ddc
+  linux-firmware/intel/ibt-20-0-3.sfi:lib/firmware/intel/ibt-20-0-3.sfi
+  linux-firmware/intel/ibt-20-1-3.ddc:lib/firmware/intel/ibt-20-1-3.ddc
+  linux-firmware/intel/ibt-20-1-3.sfi:lib/firmware/intel/ibt-20-1-3.sfi
+  linux-firmware/intel/ibt-20-1-4.ddc:lib/firmware/intel/ibt-20-1-4.ddc
+  linux-firmware/intel/ibt-20-1-4.sfi:lib/firmware/intel/ibt-20-1-4.sfi
+  linux-firmware/intel/ibt-hw-37.7.10-fw-1.0.1.2d.d.bseq:lib/firmware/intel/ibt-hw-37.7.10-fw-1.0.1.2d.d.bseq
+  linux-firmware/intel/ibt-hw-37.7.10-fw-1.0.2.3.d.bseq:lib/firmware/intel/ibt-hw-37.7.10-fw-1.0.2.3.d.bseq
+  linux-firmware/intel/ibt-hw-37.7.10-fw-1.80.1.2d.d.bseq:lib/firmware/intel/ibt-hw-37.7.10-fw-1.80.1.2d.d.bseq
+  linux-firmware/intel/ibt-hw-37.7.10-fw-1.80.2.3.d.bseq:lib/firmware/intel/ibt-hw-37.7.10-fw-1.80.2.3.d.bseq
+  linux-firmware/intel/ibt-hw-37.7.bseq:lib/firmware/intel/ibt-hw-37.7.bseq
+  linux-firmware/intel/ibt-hw-37.8.10-fw-1.10.2.27.d.bseq:lib/firmware/intel/ibt-hw-37.8.10-fw-1.10.2.27.d.bseq
+  linux-firmware/intel/ibt-hw-37.8.10-fw-1.10.3.11.e.bseq:lib/firmware/intel/ibt-hw-37.8.10-fw-1.10.3.11.e.bseq
+  linux-firmware/intel/ibt-hw-37.8.10-fw-22.50.19.14.f.bseq:lib/firmware/intel/ibt-hw-37.8.10-fw-22.50.19.14.f.bseq
+  linux-firmware/intel/ibt-hw-37.8.bseq:lib/firmware/intel/ibt-hw-37.8.bseq
+  # MediaTek — btmtk(btusb)
+  linux-firmware/mediatek/BT_RAM_CODE_MT7961_1_2_hdr.bin:lib/firmware/mediatek/BT_RAM_CODE_MT7961_1_2_hdr.bin
+  linux-firmware/mediatek/BT_RAM_CODE_MT7961_1a_2_hdr.bin:lib/firmware/mediatek/BT_RAM_CODE_MT7961_1a_2_hdr.bin
+  linux-firmware/mediatek/BT_RAM_CODE_MT7922_1_1_hdr.bin:lib/firmware/mediatek/BT_RAM_CODE_MT7922_1_1_hdr.bin
+  linux-firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin:lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin
+  # Qualcomm — btusb
+  linux-firmware/qca/nvm_usb_00000200.bin:lib/firmware/qca/nvm_usb_00000200.bin
+  linux-firmware/qca/nvm_usb_00000201.bin:lib/firmware/qca/nvm_usb_00000201.bin
+  linux-firmware/qca/nvm_usb_00000300.bin:lib/firmware/qca/nvm_usb_00000300.bin
+  linux-firmware/qca/nvm_usb_00000302_eu.bin:lib/firmware/qca/nvm_usb_00000302_eu.bin
+  linux-firmware/qca/nvm_usb_00000302.bin:lib/firmware/qca/nvm_usb_00000302.bin
+  linux-firmware/qca/nvm_usb_00130200_0104.bin:lib/firmware/qca/nvm_usb_00130200_0104.bin
+  linux-firmware/qca/nvm_usb_00130200_0105.bin:lib/firmware/qca/nvm_usb_00130200_0105.bin
+  linux-firmware/qca/nvm_usb_00130200_0106.bin:lib/firmware/qca/nvm_usb_00130200_0106.bin
+  linux-firmware/qca/nvm_usb_00130200_0107.bin:lib/firmware/qca/nvm_usb_00130200_0107.bin
+  linux-firmware/qca/nvm_usb_00130200_0109.bin:lib/firmware/qca/nvm_usb_00130200_0109.bin
+  linux-firmware/qca/nvm_usb_00130200_0110.bin:lib/firmware/qca/nvm_usb_00130200_0110.bin
+  linux-firmware/qca/nvm_usb_00130200.bin:lib/firmware/qca/nvm_usb_00130200.bin
+  linux-firmware/qca/nvm_usb_00130201_010a.bin:lib/firmware/qca/nvm_usb_00130201_010a.bin
+  linux-firmware/qca/nvm_usb_00130201_010b.bin:lib/firmware/qca/nvm_usb_00130201_010b.bin
+  linux-firmware/qca/nvm_usb_00130201_0303.bin:lib/firmware/qca/nvm_usb_00130201_0303.bin
+  linux-firmware/qca/nvm_usb_00130201_gf_010a.bin:lib/firmware/qca/nvm_usb_00130201_gf_010a.bin
+  linux-firmware/qca/nvm_usb_00130201_gf_010b.bin:lib/firmware/qca/nvm_usb_00130201_gf_010b.bin
+  linux-firmware/qca/nvm_usb_00130201_gf_0303.bin:lib/firmware/qca/nvm_usb_00130201_gf_0303.bin
+  linux-firmware/qca/nvm_usb_00130201_gf.bin:lib/firmware/qca/nvm_usb_00130201_gf.bin
+  linux-firmware/qca/nvm_usb_00130201.bin:lib/firmware/qca/nvm_usb_00130201.bin
+  linux-firmware/qca/nvm_usb_00190200_0104.bin:lib/firmware/qca/nvm_usb_00190200_0104.bin
+  linux-firmware/qca/nvm_usb_00190200_0106.bin:lib/firmware/qca/nvm_usb_00190200_0106.bin
+  linux-firmware/qca/nvm_usb_00190200_0108.bin:lib/firmware/qca/nvm_usb_00190200_0108.bin
+  linux-firmware/qca/nvm_usb_00190200_0109.bin:lib/firmware/qca/nvm_usb_00190200_0109.bin
+  linux-firmware/qca/nvm_usb_00190200_010a.bin:lib/firmware/qca/nvm_usb_00190200_010a.bin
+  linux-firmware/qca/nvm_usb_00190200_010c.bin:lib/firmware/qca/nvm_usb_00190200_010c.bin
+  linux-firmware/qca/nvm_usb_00190200_010e.bin:lib/firmware/qca/nvm_usb_00190200_010e.bin
+  linux-firmware/qca/nvm_usb_00190200_0110.bin:lib/firmware/qca/nvm_usb_00190200_0110.bin
+  linux-firmware/qca/nvm_usb_00190200_0111.bin:lib/firmware/qca/nvm_usb_00190200_0111.bin
+  linux-firmware/qca/nvm_usb_00190200_0112.bin:lib/firmware/qca/nvm_usb_00190200_0112.bin
+  linux-firmware/qca/nvm_usb_00190200.bin:lib/firmware/qca/nvm_usb_00190200.bin
+  linux-firmware/qca/rampatch_usb_00000200.bin:lib/firmware/qca/rampatch_usb_00000200.bin
+  linux-firmware/qca/rampatch_usb_00000201.bin:lib/firmware/qca/rampatch_usb_00000201.bin
+  linux-firmware/qca/rampatch_usb_00000300.bin:lib/firmware/qca/rampatch_usb_00000300.bin
+  linux-firmware/qca/rampatch_usb_00000302.bin:lib/firmware/qca/rampatch_usb_00000302.bin
+  linux-firmware/qca/rampatch_usb_00130200.bin:lib/firmware/qca/rampatch_usb_00130200.bin
+  linux-firmware/qca/rampatch_usb_00130201.bin:lib/firmware/qca/rampatch_usb_00130201.bin
+  linux-firmware/qca/rampatch_usb_00190200.bin:lib/firmware/qca/rampatch_usb_00190200.bin
 )

@@ -24,7 +24,7 @@ if [ ! -d "$SYSROOT" ]; then
   exit 1
 fi
 
-# WL-M1. 무선 firmware cpio. 이 파일의 끝에서 initrd 뒤에 이어 붙인다.
+# WL-M1. 무선 · 소리 · 블루투스 firmware cpio(AU-M3 · BT-M1). 이 파일의 끝에서 initrd 뒤에 이어 붙인다.
 # 목록이 안 바뀌었으면 곧바로 끝난다(그 스크립트의 스탬프).
 ./vendor_firmware.sh
 
@@ -389,6 +389,27 @@ mkdir -p "$WORKDIR/usr/lib/tars"
 cp wifi/tars-wifi "$WORKDIR/usr/lib/tars/tars-wifi"
 chmod 0755 "$WORKDIR/usr/lib/tars/tars-wifi"
 
+# BT-M1. 블루투스의 조각 넷(BT design 결정 3 · 4).
+#
+#   래퍼 둘        init이 감독 목록의 path로 exec하는 실행 파일(0755). 자리는
+#                  init/src/bluetooth.zig의 DBUS_PATH · BLUETOOTHD_PATH와 같은 글자여야 한다
+#   설정 넷        Debian 패키지의 것을 그대로 — bluetoothd의 /etc/bluetooth/main.conf ·
+#                  input.conf, dbus-daemon의 /usr/share/dbus-1/system.conf(messagebus 사용자 ·
+#                  소켓 자리), bluetoothd가 org.bluez를 가질 수 있게 하는 정책
+#                  system.d/bluetooth.conf. 정책 파일이 없으면 bluetoothd가 "Name request
+#                  failed"로 죽는다. 우리가 짓는 글자는 없다
+#   링크 하나      /var/lib/bluetooth → /config/bluetooth. bluetoothd가 페어링 키 · 신뢰 ·
+#                  어댑터 설정을 쓰는 자리가 컴파일 타임의 /var/lib/bluetooth라, 디스크로
+#                  보내는 길이 이 링크다(BT design 결정 6). 디렉터리는 tars-bluetoothd가 만든다
+#   사용자 하나    messagebus — 아래 passwd · group 블록에 있다
+mkdir -p "$WORKDIR/etc/bluetooth" "$WORKDIR/usr/share/dbus-1/system.d" "$WORKDIR/var/lib" "$WORKDIR/run/dbus"
+cp "$SYSROOT/etc/bluetooth/main.conf" "$SYSROOT/etc/bluetooth/input.conf" "$WORKDIR/etc/bluetooth/"
+cp "$SYSROOT/usr/share/dbus-1/system.conf" "$WORKDIR/usr/share/dbus-1/system.conf"
+cp "$SYSROOT/usr/share/dbus-1/system.d/bluetooth.conf" "$WORKDIR/usr/share/dbus-1/system.d/bluetooth.conf"
+ln -s /config/bluetooth "$WORKDIR/var/lib/bluetooth"
+cp bluetooth/tars-dbus bluetooth/tars-bluetoothd "$WORKDIR/usr/lib/tars/"
+chmod 0755 "$WORKDIR/usr/lib/tars/tars-dbus" "$WORKDIR/usr/lib/tars/tars-bluetoothd"
+
 # TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
 #
 # sysroot가 아니라 저장소에서 온다 — 우리가 쓴 파일이라 게스트에 넣을 원본이
@@ -501,13 +522,20 @@ cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
 # must be a valid group (create group audio)`로 죽는다 — -D hw:0으로 장치를 직접
 # 고르면 돌아서, 사람은 "가끔만 안 된다"로 겪는다(AU design 결정 3). 29는 Debian의
 # 번호다. 우리는 root로 돌므로 구성원을 안 적는다.
+#
+# BT-M1: messagebus. dbus-daemon의 system.conf가 `<user>messagebus</user>`로 그 사용자로
+# 내려앉는다 — 없으면 "Failed to start message bus: Could not get UID and GID for username
+# messagebus"다. 101은 sshd(100) 다음 빈 번호이고 Debian은 동적으로 받는 사용자라 정해진
+# 번호가 없다.
 cat > "$WORKDIR/etc/passwd" <<'EOF'
 root:x:0:0:root:/:/bin/sh
 sshd:x:100:65534::/run/sshd:/usr/sbin/nologin
+messagebus:x:101:101::/nonexistent:/usr/sbin/nologin
 EOF
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
 audio:x:29:
+messagebus:x:101:
 nogroup:x:65534:
 EOF
 

@@ -9,6 +9,7 @@ const storage = @import("storage.zig");
 const environ = @import("environ.zig");
 const net = @import("net.zig");
 const wifi = @import("wifi.zig");
+const bluetooth = @import("bluetooth.zig");
 const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
 const services = @import("services.zig");
@@ -392,8 +393,8 @@ const Child = struct {
     /// 다섯에서 일곱으로, HI-M3에서 일곱에서 여덟으로, CB-M0에서 여덟에서
     /// 아홉으로 늘었다. 길이와 칸의 뜻은 SA-M0부터 `shared/screen_args.zig`의
     /// `ARGC` · `Slot`에 있고 terminal이 같은 것을 읽는다. 콘솔 셸은 1번 뒤를
-    /// 전부 null로 둔다. 같은 타입을 쓰는 상수가 셋 더 있다(`clock.CHRONYD_ARGV` ·
-    /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV`) — `ARGC`를 올리면 함께 늘어난다.
+    /// 전부 null로 둔다. 같은 타입을 쓰는 상수가 다섯 더 있다(`clock.CHRONYD_ARGV` ·
+    /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV` · `bluetooth.DBUS_ARGV` · `BLUETOOTHD_ARGV`) — `ARGC`를 올리면 함께 늘어난다.
     /// terminal의 것은 SA-M1부터 `screen_args.encode`가 짓는다.
     argv: screen_args.Argv,
     /// -1이면 지금 돌고 있지 않다는 뜻이다.
@@ -557,12 +558,15 @@ fn serveControl(children: []Child, live: *Live, lfd: i32) void {
 
 // ── TC-M2. reload ─────────────────────────────────────────────────────
 
-/// 감독 목록의 칸 번호. 0 · 1이 terminal과 콘솔 셸, 2 ~ 4가 데몬 셋, 그 뒤 여덟이 services.d다.
+/// 감독 목록의 칸 번호. 0 · 1이 terminal과 콘솔 셸, 2 ~ 6이 데몬 다섯(BT-M1이 dbus · bluetoothd를
+/// 앞에 더했다), 그 뒤 여덟이 services.d다.
 /// 칸은 부팅부터 늘 이 수만큼 있고 원하지 않는 칸은 `config_off`다(reload design 결정 5).
-const SLOT_WIFI: usize = 2;
-const SLOT_DHCPCD: usize = 3;
-const SLOT_CHRONYD: usize = 4;
-const SLOT_SERVICES: usize = 5;
+const SLOT_DBUS: usize = 2;
+const SLOT_BLUETOOTHD: usize = 3;
+const SLOT_WIFI: usize = 4;
+const SLOT_DHCPCD: usize = 5;
+const SLOT_CHRONYD: usize = 6;
+const SLOT_SERVICES: usize = 7;
 const SLOTS: usize = SLOT_SERVICES + services.MAX;
 
 /// init이 부팅에 정하고 reload가 다시 정하는 것(reload design 결정 5). `main()`의 스택에 살고
@@ -764,8 +768,14 @@ fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void 
         out.print("firewall: up (nft -f /etc/tars/firewall.nft)\n", .{});
     }
 
-    // 2. 데몬 셋. 셋의 판정은 부팅의 함수 그대로다. 무선은 키가 안 바뀌어도 다시 묻는다 —
-    //    `tars-config wifi`가 처음 만든 파일을 reload가 띄운다.
+    // 2. 데몬 다섯. 판정은 부팅의 함수 그대로다. 무선은 키가 안 바뀌어도 다시 묻는다 —
+    //    `tars-config wifi`가 처음 만든 파일을 reload가 띄운다. 블루투스 둘은 한 답을 나눠
+    //    갖고 dbus가 앞이다(BT design 결정 4) — 켤 때 버스가 먼저 서야 bluetoothd가 붙는다.
+    if (keys.has("bluetooth")) {
+        const want_bt = bluetooth.wants(new.bluetooth, live.mounted);
+        steer(&children[SLOT_DBUS], reload.step(!children[SLOT_DBUS].config_off, want_bt, false), now, out);
+        steer(&children[SLOT_BLUETOOTHD], reload.step(!children[SLOT_BLUETOOTHD].config_off, want_bt, false), now, out);
+    }
     const want_wifi = wifi.wants(new.net, live.mounted, wifi.CONF_PATH);
     steer(&children[SLOT_WIFI], reload.step(!children[SLOT_WIFI].config_off, want_wifi, false), now, out);
     if (keys.has("net")) {
@@ -1117,7 +1127,7 @@ const Boot = struct {
     /// TC-M2. init이 부팅에 정한 것을 reload가 다시 정할 수 있게 한 자리(reload design 결정
     /// 5). 서비스 칸의 글자가 이 안을 가리키므로 `children`보다 먼저 채운다.
     live: Live = undefined,
-    /// 감독 목록 열셋 — terminal · 콘솔 셸 · 데몬 셋 · 서비스 여덟(`SLOTS`).
+    /// 감독 목록 열다섯 — terminal · 콘솔 셸 · 데몬 다섯 · 서비스 여덟(`SLOTS`).
     children: [SLOTS]Child = undefined,
 
     /// 단계 2. 설정 디스크 → 설정 파일 → cmdline 탈출로 → seed 넷 → `config shell=` 로그 줄.
@@ -1304,7 +1314,7 @@ const Boot = struct {
         firewall.up(self.cfg.firewall, self.envp);
     }
 
-    /// 단계 6. 원하는 데몬 셋, 서비스 목록, 플래그 셋, terminal의 argv, `Live`, `children`
+    /// 단계 6. 원하는 데몬 다섯, 서비스 목록, 플래그 셋, terminal의 argv, `Live`, `children`
     /// 열셋. 여기서는 아무것도 띄우지 않는다 — 띄우는 것은 `supervise`의 첫 바퀴다.
     fn placeChildren(self: *Boot) void {
         // NW-M2 · DS-M1. 여기서는 띄우지 않고 답만 듣는다 — dhcpcd를 감독 목록에
@@ -1324,6 +1334,10 @@ const Boot = struct {
         // 기다리는 것이 없다 — `ntp=dhcp`의 서버는 dhcpcd의 hook이 나중에
         // `/run/tars/chrony.sources`에 쓰고 chronyc로 알린다(DS design 결정 3).
         const want_chronyd = clock.prepare(self.cfg.net, self.cfg.ntp, self.mounted);
+
+        // BT-M1. 블루투스도 답만 듣는다. dbus와 bluetoothd가 한 답을 나눠 갖고 아래
+        // `children`에서 무선 셋 앞에 선다(BT design 결정 4) — 버스가 같은 바퀴에서 먼저 뜬다.
+        const want_bt = bluetooth.wants(self.cfg.bluetooth, self.mounted);
 
         // SV-M1. 서비스는 아래 `children`에서 dhcpcd · chronyd 뒤에 붙는다(SV design
         // 결정 4의 순서를 DS-M1부터는 배열이 지킨다). 여기서는 읽기만 한다.
@@ -1393,8 +1407,8 @@ const Boot = struct {
             .envp = self.envp,
         };
 
-        // SV-M1 · DS-M1 · TC-M2. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 셋이(DS design
-        // 결정 1 · WL), 그 뒤에 서비스 여덟의 칸이 온다. TC-M2부터 칸은 늘 열셋이고 원하지 않는 칸은
+        // SV-M1 · DS-M1 · TC-M2. 앞 둘은 SV 전과 같고, 그 뒤에 init이 스스로 넣는 데몬 다섯이(DS design
+        // 결정 1 · WL · BT), 그 뒤에 서비스 여덟의 칸이 온다. TC-M2부터 칸은 늘 있고(지금 열다섯) 원하지 않는 칸은
         // `config_off`다 — reload가 dhcpcd를 켜거나 services.d에 새 이름을 넣을 자리가 늘 있다(reload
         // design 결정 5). 띄우는 순서(배열 순서)는 그 전과 같다.
         self.children[0] = .{
@@ -1428,6 +1442,22 @@ const Boot = struct {
         };
         // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
         // tars-service의 동사 넷)이 코드 없이 그대로 선다. 탈출로는 없다.
+        // BT-M1. dbus와 bluetoothd(BT design 결정 4). 무선 셋보다 앞이다 — 한 바퀴 안의 순서로
+        // 버스가 먼저 뜨고, tars-bluetoothd는 그래도 소켓을 기다린다.
+        self.children[SLOT_DBUS] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.DBUS,
+            .path = bluetooth.DBUS_PATH,
+            .argv = bluetooth.DBUS_ARGV,
+            .config_off = !want_bt,
+        };
+        self.children[SLOT_BLUETOOTHD] = .{
+            .kind = .service,
+            .label = services.LABEL_PREFIX ++ services.BLUETOOTHD,
+            .path = bluetooth.BLUETOOTHD_PATH,
+            .argv = bluetooth.BLUETOOTHD_ARGV,
+            .config_off = !want_bt,
+        };
         // WL-M2. wpa_supplicant도 같은 자리의 셋째다.
         self.children[SLOT_WIFI] = .{
             .kind = .service,

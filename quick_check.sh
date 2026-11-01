@@ -38,7 +38,7 @@ have_zig="$(zig version)"
 #    찍었는데, SN-M0이 그 46을 고치거나 지시자로 표시해 0으로 만들고 판정을 내렸다. 의도한 것은 그 줄
 #    위에 지시자와 이유를 단다 — trap · 콜백 함수의 SC2329는 파일 끝이 exit일 때 shellcheck가 헛짚는 것이다.
 mapfile -t sh_files < <(git ls-files '*.sh')
-sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate)
+sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate kernel/bluetooth/tars-dbus kernel/bluetooth/tars-bluetoothd)
 note "shellcheck ${#sh_files[@]} files"
 if shellcheck -x -P SCRIPTDIR -S style "${sh_files[@]}"; then
   :

@@ -382,4 +382,27 @@ GUEST_TOOLS=(
   # 같은 글자여야 한다. 130,584바이트, 새 라이브러리 0개(libasound는 위 넷이
   # 이미 데려왔다).
   usr/sbin/alsactl:usr/bin/alsactl
+
+  # ── 층 16 · Bluetooth(BT-M1) ───────────────────────────────────────────
+  # 사용자가 2026-11-01에 골랐다(범위는 클래식 + BLE 키보드 · 마우스, BT design). 커널의
+  # BT 스택 위에 Debian의 BlueZ 5.82와 D-Bus 1.16이 선다 — 둘 다 init이 감독한다
+  # (kernel/bluetooth/tars-dbus · tars-bluetoothd가 exec한다, BT design 결정 4).
+  #
+  #   dbus-daemon    시스템 버스. bluetoothd가 그 위에 서고 bluetoothctl이 그 위로 말한다.
+  #                  Debian의 dbus-broker는 systemd 런처가 필요해 못 쓴다
+  #   bluetoothd     BlueZ 데몬. 페어링 · 연결 · 클래식 HID(커널 hidp에 넘긴다) · BLE HID
+  #                  (GATT로 읽어 /dev/uhid로 넣는다). 자리는 패키지 그대로 /usr/libexec
+  #   bluetoothctl   사람의 페어링 도구 — scan on · pair · trust · connect
+  #   btmgmt         커널 mgmt 소켓을 직접 두드리는 진단 도구(D-Bus 없이 어댑터를 본다)
+  #   dbus-send      버스가 살아 있는지 보는 진단 도구(GetId 한 줄)
+  #
+  # 새 라이브러리는 여덟, 합 3,023,272바이트(BT design 확인 4) — libglib-2.0(1.4MB) ·
+  # libdw · libudev · liblzma · libexpat · libapparmor · libbz2 · libatomic. libdbus-1은
+  # wpa_supplicant가 이미 데려왔다. btvirt(가상 컨트롤러, 게이트 전용)는 sysroot에만
+  # 있고 bluetooth/check.sh의 설정 디스크가 가져간다(WL의 hostapd와 같다).
+  usr/bin/dbus-daemon:usr/bin/dbus-daemon
+  usr/libexec/bluetooth/bluetoothd:usr/libexec/bluetooth/bluetoothd
+  usr/bin/bluetoothctl:usr/bin/bluetoothctl
+  usr/bin/btmgmt:usr/bin/btmgmt
+  usr/bin/dbus-send:usr/bin/dbus-send
 )

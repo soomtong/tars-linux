@@ -697,6 +697,40 @@ wlan0: leased 192.168.0.23 for 86400 seconds
   USB 무선 동글과 Broadcom은 없다. Intel BE201은 커널 6.18이 받는 번호의 firmware가
   없어 안 뜬다.
 
+### 블루투스 — 키보드 · 마우스까지, 오디오는 없다
+
+기본은 꺼져 있다(`bluetooth=off`). 켜면 init이 D-Bus 시스템 버스(`dbus`)와 BlueZ(`bluetoothd`)를 서비스로 띄운다(BT-M1). 페어링은
+`bluetoothctl`로 하고, 키 · 신뢰 · 어댑터 설정은 `/config/bluetooth`에 남아 재부팅을 넘는다. 재부팅은 필요 없다 — `reload`가 둘을 띄운다.
+
+```sh
+tars-config set bluetooth=on
+tars-config reload
+bluetoothctl                 # 대화형. 아래를 차례로 친다
+  scan on                    # 장치가 `[NEW] Device AA:BB:… 이름`으로 보인다
+  pair AA:BB:CC:DD:EE:FF
+  trust AA:BB:CC:DD:EE:FF    # 다음부터 장치 쪽에서 다시 붙는 것을 받아 준다 — 빠뜨리면 거절된다
+  connect AA:BB:CC:DD:EE:FF
+```
+
+```
+tars-init: dbus and bluetoothd join the services, keys live in /config/bluetooth
+tars-init: started service dbus (pid 41, /usr/lib/tars/tars-dbus)
+tars-init: started service bluetoothd (pid 42, /usr/lib/tars/tars-bluetoothd)
+tars-bluetoothd: bus ready after 2000ms, starting bluetoothd
+bluetoothd[42]: Bluetooth daemon 5.82
+```
+
+- 보는 창은 `bluetoothctl list`(어댑터) · `show`(켜졌나, `Powered: yes`) · `devices`(아는 장치) · `info <주소>`(Paired · Trusted ·
+  Connected)다. 어댑터가 하나도 없으면 커널이 칩을 못 봤거나 firmware가 없는 것이다 — `dmesg | grep -i bluetooth`.
+- 마우스는 붙는 순간부터 쓸 수 있다(terminal이 새 입력 장치를 uevent로 잡는다, PD). 키보드는 아직이다 — terminal은 부팅 때
+  고른 키보드 하나만 읽는다(BT design 비목표 1, 후속 "Keyboard Hotplug"). USB 키보드를 부팅 뒤에 꽂아도 같다.
+- `service bluetoothd` · `service dbus`는 `tars-service`로 다룬다. 다시 띄울 일이 있으면 `tars-service restart bluetoothd`다 — `dbus`를
+  재시작하면 bluetoothd도 버스를 잃고 따라 죽었다 살아난다.
+- 켜 둔 길: USB HCI(Intel · Realtek · MediaTek · Qualcomm의 내장 BT와 USB 동글) · Intel PCIe HCI(BE200 · BE201). firmware는
+  Intel `ibt-*` 전부, Realtek `rtl_bt` 31, MediaTek MT7921 · MT7922 · MT7925, Qualcomm USB 전부. Broadcom · UART · SDIO는 없다.
+- 기대하지 않는 것: 오디오(A2DP · HFP) · 시리얼(RFCOMM) · 네트워크(PAN) · 파일 전송(OBEX). 블루투스 스택은 있지만 그 프로필의
+  사용자 공간이 없다.
+
 ### 소리 — 스피커 · 마이크 · 이어폰
 
 부팅이 믹서를 켠다(AU-M1). 처음에는 Master -20dB · Capture 0dB이고, `amixer`나 `alsamixer`로 바꾼 볼륨은 끌 때
@@ -723,7 +757,7 @@ DSP 뒤의 내장 마이크(2019년 이후 Intel · Ryzen 노트북, AU-M3). `dm
 `snd_intel_dspcfg.dsp_driver=1`로 HDA 경로로 되돌려 볼 수 있다. 내장 마이크의 스위치는 `amixer -c 0 sget 'Dmic0 Capture Switch'`
 (부팅이 켠다). AMD는 ACP 카드가 따로 선다 — `arecord -l`에서 보인다.
 
-기대하지 않는 것 — Bluetooth 오디오, HDMI 오디오, SoundWire 코덱 노트북과 side-codec 스피커 앰프(CS35L41 · CS35L56 ·
+기대하지 않는 것 — Bluetooth 오디오(스택은 BT-M1부터 있지만 A2DP가 없다), HDMI 오디오, SoundWire 코덱 노트북과 side-codec 스피커 앰프(CS35L41 · CS35L56 ·
 TAS2781 — 2022년 이후 ASUS · Lenovo · HP 일부, 헤드폰 잭은 되고 내장 스피커만 조용하다), 두 프로그램이 동시에 내장 DMIC를
 여는 것. 카드가 여럿이거나 firmware가 늦게 오는 기계에서 일부 카드가 꺼진 채 남으면 `amixer -c N sset … unmute`로 켜고
 그 사실을 알린다(AU design 위험 14).
