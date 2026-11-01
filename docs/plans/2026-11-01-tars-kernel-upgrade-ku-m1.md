@@ -107,4 +107,32 @@ KU 서브프로젝트가 이 milestone으로 끝난다.
 
 ## 결과
 
-(Task 3 뒤에 적는다.)
+2026-11-01.
+
+1. Task 1. 바뀐 파일 다섯, +20 −26. `make quick` PASS(31초). 이어 붙인 주석 두 자리가 한 줄로 길어져 두 번 다시 접었다 — 지운 줄을
+   `git diff | rg '^-'`로 읽는 것과 함께 더한 줄도 읽어야 잡힌다.
+2. Task 2. `make iso` 411초(커널 처음부터). `sha256sum -c`가 `OK`, 빌드 스탬프가 버전 변경을 보고 make를 다시 불렀다(`bzImage is ready
+   (#2)`, 확정 8). `warning:` 줄은 없다.
+
+   | | 6.18.42 | 6.18.60 | 차이 |
+   | --- | --- | --- | --- |
+   | `bzImage` | 8,958,976 | 8,983,552 | +24,576 |
+   | `initrd.cpio` | 93,367,226 | 93,378,546 | +11,320 |
+   | 한 벌 | 102,326,202 | 102,362,098 | +35,896 |
+
+   두 벌 약 204.7MB는 첫 설치 뒤 1GiB ESP의 빈 자리 968,904,704바이트에 들고, 256MiB 디스크의 문턱(한 벌 약 125MB)보다 23MB 아래다.
+   initrd가 커널과 상관없이 11KB 늘었는데 옛 initrd가 남아 있지 않아 원인을 보지 않았다. ISO 106,602,496바이트.
+3. 부팅 한 번. `make run-qemu CONFIG_DISK= QEMU_DISPLAY="-display none"`(설정 디스크는 지난 게이트의 `clean()`이 지웠다). `Linux version
+   6.18.60`, simpledrm 초기화, terminal의 `kms: present by dirtyfb`. 경고 둘(`fail to add MMCONFIG`, `Processor Platform Limit`)은 지난
+   게이트(6.18.42) 로그에도 41 · 59개 파일에 있던 것이다. 함정 하나 — `perl -e 'alarm 90; exec @ARGV' make …`는 make만 끊고 QEMU는
+   init(ppid 1)의 자식으로 남는다. 손으로 껐다.
+4. Task 3. 루트 게이트 22/22, 10분 30초(prebuild 322 + lanes 306초), verify 8214줄. 로그 `out/gate-logs/20261101-140738/`.
+   - 커널 첫 빌드가 들었는데도 prebuild가 지난 회차(320초)와 같다. tarball은 Task 2가 이미 받아 `kernel/src/`에 풀어 두었고(`clean()`은
+     `kernel/build`만 지운다), 커널 빌드는 게이트마다 원래 처음부터였다. plan의 "약 12분" 어림이 틀린 이유다.
+   - 로그 전체에 `Linux version 6.18.60`이 61번이고 다른 버전은 없다. `] WARNING:` · `] BUG:` · `Oops` · `Kernel panic` · `Call Trace`는
+     0이다.
+   - 지난 회차와의 dmesg 비교는 못 했다. `clean()`이 `out/`을 통째로 지우므로 `out/gate-logs`에는 마지막 회차만 남는다 — Task 2의
+     경고 대조는 게이트 전이라 지난 로그가 있었다. 다음에 비교가 필요하면 게이트 전에 그 디렉터리를 scratch로 옮긴다.
+   - verify 합계는 ER-M0 닫기 8218 → KU-M0 8237 → 이번 8214로 회차마다 움직인다. 체인별 지난 값이 남아 있지 않아 어느 체인이 23줄
+     적은지는 가리지 못했다. 판정은 전부 통과했다.
+5. 확정 10대로 `kernel/src/linux-6.18.42`(1.6GB, `.gitignore`의 `kernel/src/`)를 지웠다.
