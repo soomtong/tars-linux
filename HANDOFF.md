@@ -1,8 +1,12 @@
-# HANDOFF: Extend Repeat(ER-M0) 닫음(2026-11-01) — 열린 서브프로젝트 없음
+# HANDOFF: Kernel Upgrade(KU) design 확정(2026-11-01) — KU-M0 plan 전
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Extend Repeat(ER-M0, 2026-11-01). 닫은 서브프로젝트의 경과 · 함정 · 숫자는
+- 열린 서브프로젝트는 Kernel Upgrade(KU)다. design `docs/specs/2026-11-01-tars-kernel-upgrade-design.md`를 사용자가 확정했다
+  (2026-11-01). ESP에 이미지 슬롯 둘(new는 `boot/`, old는 `boot/old/`)을 두고 메뉴에서 사람이 old를 고른다(KU-M0). 그 위에서 커널
+  버전을 올린다(KU-M1). Limine v12.5.2에는 boot counting · fallback이 없다(design 확인 1). 다음 일은 KU-M0 plan 전에 design의
+  "M0이 먼저 잴 것" 둘(시리얼로 Limine 메뉴 조작 · `kernel_path`가 없을 때의 동작)을 QEMU로 재는 것이다.
+- 마지막으로 닫은 것은 Extend Repeat(ER-M0, 2026-11-01). 닫은 서브프로젝트의 경과 · 함정 · 숫자는
   여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 그 plan의
   결과 절이다. 최근 것부터:
   - Extend Repeat(ER-M0, 11-01) — `docs/decisions/project_extend_repeat.md`
