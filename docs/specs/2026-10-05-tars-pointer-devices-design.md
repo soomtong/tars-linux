@@ -809,6 +809,8 @@ save-under 그리기 · 전용 색 둘 · 보이는 조건 셋 · 휠(`WHEEL_ROW
    화살표 키로 바꾸는 모드 1007이 함께 온다. 게스트 vimrc의 `set mouse=`도 그때 다시 본다.
 2. 더블클릭 단어 선택 · 세 번 클릭 줄 선택 · Shift 클릭으로 늘리기. `ev.time`이 있어 타이머 없이 할 수 있다. CN의 단어
    경계(`copyMoveWord`)가 재료다. 끌기 선택을 쓰다가 단어 하나 잡는 것이 불편해지면 연다.
+   — Multi Click(MC-M0~M2, 2026-11-01, `docs/specs/2026-11-01-tars-multi-click-design.md`)이 더블 · 세 번 클릭을 열었다. Shift
+   클릭으로 늘리기는 MC 비목표 1로 남았다.
 3. 끄는 중 가장자리에서 뷰포트가 저절로 따라가기. 시간이 지나면 한 줄씩 미는 것이라 타이머가 필요하다. 끄는 중의
    휠이 그 대신이다(결정 7).
 4. 절대 좌표 장치 — usb-tablet · virtio-tablet · 터치스크린(`INPUT_PROP_DIRECT`). usb-tablet은 축을 화면에 비례로 대는

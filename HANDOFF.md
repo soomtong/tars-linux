@@ -1,8 +1,20 @@
-# HANDOFF: Reserved Ports(RP-M0) 닫음(2026-11-01) — 열린 서브프로젝트 없음
+# HANDOFF: Multi Click(MC-M0~M2) 닫음(2026-11-01) — 열린 서브프로젝트 없음
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Reserved Ports(RP-M0, 2026-11-01, UB-M2가 남긴 작은 후보를 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Multi Click(MC-M0~M2, 2026-11-01, HANDOFF의 PD 비목표 셋에서 사용자가 골랐다).
+  design `docs/specs/2026-11-01-tars-multi-click-design.md`, plan `docs/plans/2026-11-01-tars-multi-click-mc-m{0,1,2}.md`, 기억
+  `docs/decisions/project_multi_click.md`. 더블클릭은 단어, 트리플클릭은 줄을 곧바로 고르고 떼면 복사한다(끌기와 같은 규칙, 사용자
+  결정). 누른 채 끌면 단어 · 줄 단위로 는다. 반복의 조건은 앞 누름과 500ms · 첫 누름에서 8픽셀 · 같은 잎과 ws · 앞 누름이 안
+  끌렸다. 횟수는 `pointer.Gesture`, 시각은 `EVIOCSCLOCKID(CLOCK_MONOTONIC)`를 고른 `ev.time`(`PointerEdge.t_us`), 단어 앵커는
+  `vt.Screen.copy_word`(tracked pin 하나, `dropWordAnchor`에서만 놓는다). 로그는 `pointer> repeat n=N dt=MS`.
+  - 함정: 반복을 보는 게이트 검사는 `hmp`만 기다림 없이 이어 보낸다 — `button_down` · `button_up` · `move_to`는 로그 줄을 0.1초씩
+    기다려 500ms · 8픽셀이 먼저 연속을 끊는다(검사 37의 첫 판이 mutation을 놓쳤다). 라이브러리 선택은 양 끝을 tracked pin 둘로
+    든다(단어 선택은 셋). 공백을 두 번 누르면 이웃한 괄호 · 따옴표와 한 덩어리다(ghostty와 같다).
+  - 숫자: 게이트 hmp 네 명령의 두 누름 차 97~120ms(부하에도 같다). `pointer` 검사 33~37, mutation 셋. 루트 게이트 22/22, 11분
+    33초(prebuild 357 + lanes 332초 — 디스크 정리 뒤 cold 캐시), verify 8152줄. 소개 페이지 "마우스 · 터치패드"에 한 줄.
+  - 중간에 호스트 디스크가 가득 차(ENOSPC) 체인이 `ld.lld`에서 죽고 OrbStack이 내려갔다. 사용자가 비운 뒤 `orb start`.
+- 그 전에 닫은 것은 Reserved Ports(RP-M0, 2026-11-01, UB-M2가 남긴 작은 후보를 사용자가 골랐다).
   design `docs/specs/2026-11-01-tars-reserved-ports-design.md`, plan `docs/plans/2026-11-01-tars-reserved-ports-rp-m0.md`, 기억
   `docs/decisions/project_reserved_ports.md`. 게이트 체인 포트 45455~45599를 컨테이너 ephemeral 범위에서 뺐다. Makefile
   `RESERVED_PORTS`(`IN_CONTAINER` · `gate` · `shell`)와 lessons의 `docker run` 세 줄이 `--sysctl net.ipv4.ip_local_reserved_ports=…`를
@@ -196,6 +208,8 @@
   `dmesg | grep -i sof`의 `Firmware file:` · `Topology file:`. 조용하면 `amixer -c N` · `snd_intel_dspcfg.dsp_driver=1`.
 - BS: 노트북에서 상태 줄 오른쪽 끝에 칸이 뜨는지, 어댑터를 꽂았다 뺄 때 색이 곧바로 바뀌는지, 방전 중 잔량이 60초 안에
   따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄(`carryover.md`의 BS 항목).
+- MC: 실기 마우스로 더블클릭 · 트리플클릭이 손의 속도에 맞는지(500ms · 8픽셀), 터치패드의 두 번 탭이 더블이 되는지(탭 판정
+  180ms 뒤 두 탭 끝의 차). 안 맞으면 값은 `pointer.MULTI_CLICK_US` · `MULTI_CLICK_PX` 둘이다(설정은 MC 비목표 3).
 - WP-M3: `Cmd+Option+화살표`(`keyboard=pc`면 `Alt+Win+화살표`)로 패널 사이를 다닐 때 손에 맞는지, 동률의 "맨 위 · 맨
   왼쪽" 규칙이 어색하지 않은지. 어색하면 최근 포커스(tmux식)가 다른 후보였다.
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
@@ -207,7 +221,7 @@
   후보는 없다.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
-- PD 비목표: 더블클릭 단어 선택, `tars.conf`의 휠 방향, 포인터 가속.
+- PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. 더블 · 트리플클릭은 MC가 닫았다. Shift 클릭 늘리기는 MC 비목표 1(뗀 뒤 반전 남기기와 함께).
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).

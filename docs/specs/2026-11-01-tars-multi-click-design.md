@@ -1,7 +1,9 @@
 # TARS Multi Click — Design
 
 Date: 2026-11-01
-Status: MC-M1 끝(2026-11-01, 순수 층 · 호스트 테스트), MC-M2 착수 전. plan은 `docs/plans/2026-11-01-tars-multi-click-mc-m{0,1}.md`.
+Status: 끝났다 — MC-M0~M2(2026-11-01). 루트 게이트 22/22, 11분 33초(prebuild 357 + lanes 332초), verify 8152줄. plan은
+`docs/plans/2026-11-01-tars-multi-click-mc-m{0,1,2}.md`, 기억은 `docs/decisions/project_multi_click.md`. `pointer` 체인 검사 33~37이
+더블 · 트리플 · 단어 끌기 · 느린 두 클릭 · 끌기 직후 클릭을 보고, mutation 셋을 잡는다.
 
 PD design(`docs/specs/2026-10-05-tars-pointer-devices-design.md`)의 비목표 2 "더블클릭 단어 선택 · 세 번 클릭 줄 선택 · Shift
 클릭으로 늘리기"를 연다. 사용자가 2026-11-01에 HANDOFF의 "PD 비목표" 셋(더블클릭 · 휠 방향 · 포인터 가속) 가운데 골랐다. 같은

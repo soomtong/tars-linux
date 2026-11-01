@@ -2323,11 +2323,17 @@ const PointerDev = struct {
     fn feed(self: *PointerDev, ev: *align(1) const pointer.c.struct_input_event) touchpad.Frames {
         return switch (self.decoder) {
             .mouse => |*m| if (m.feed(ev.type, ev.code, ev.value)) |f| touchpad.Frames.one(f) else touchpad.Frames{},
-            .touchpad => |*t| t.feed(ev.type, ev.code, ev.value, @as(i64, ev.time.tv_sec) * 1_000_000 + @as(i64, ev.time.tv_usec)),
+            .touchpad => |*t| t.feed(ev.type, ev.code, ev.value, eventUs(ev)),
             .none => touchpad.Frames{},
         };
     }
 };
+
+/// 이벤트에 커널이 찍은 시각(µs). 터치패드의 탭 판정과 다시 누름의 간격이 같은
+/// 값을 쓴다 — 장치를 열 때 `CLOCK_MONOTONIC`을 골랐다(`tryOpenPointer`).
+fn eventUs(ev: *align(1) const pointer.c.struct_input_event) i64 {
+    return @as(i64, ev.time.tv_sec) * 1_000_000 + @as(i64, ev.time.tv_usec);
+}
 
 /// 터치패드 디코더가 쓰는 화면 값(PD-M3). 프레임버퍼를 연 뒤 처음 훑기 전에
 /// 한 번 정한다. `pointer_drawn`과 같은 이유로 파일 하나의 값이다 — 장치를
@@ -2338,7 +2344,12 @@ var touchpad_screen: touchpad.Screen = .{ .w = 1, .notch_px = 1 };
 /// 회차가 끝난 뒤의 자리 하나로는 "누르고 끌고 뗐다"의 순서를 되살릴 수 없다.
 /// PD-M2는 왼쪽만 담았고, PD-M4부터 셋을 다 담는다 — 오른쪽 · 가운데도
 /// 자식에게 보고로 간다.
-const PointerEdge = struct { down: bool, button: pointer.Button, x: u32, y: u32 };
+///
+/// `t_us`는 그 전이를 만든 이벤트에 커널이 찍은 시각(µs)이다(MC design 결정 2).
+/// 장치를 열 때 `CLOCK_MONOTONIC`을 골랐으므로 단조 시각이다. 다시 누름(더블 ·
+/// 트리플클릭)의 간격을 이것으로 잰다 — 우리가 깨어난 시각에는 회차의 지연이
+/// 섞이고, 두 클릭이 한 회차에 같이 들어오면 간격이 0이 된다.
+const PointerEdge = struct { down: bool, button: pointer.Button, x: u32, y: u32, t_us: i64 };
 
 /// 한 회차에 담는 전이의 수. 사람의 손으로는 한 회차(밀리초 단위)에 둘을
 /// 넘기 어렵다. 넘치면 뒤를 버린다 — 뗌을 잃어도 다음 누름이 제스처를 새로
@@ -2514,6 +2525,14 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
         .decoder = if (pad) |setup| .{ .touchpad = touchpad.Touchpad.init(setup, touchpad_screen) } else .{ .mouse = .{} },
     };
     @memcpy(devs[free].?.path[0..path.len], path);
+    // 이벤트 시각을 단조 시계로 받는다(MC design 결정 2). evdev의 기본은
+    // `CLOCK_REALTIME`이라 chronyd가 시계를 맞추는 순간 두 이벤트의 차가 뛴다
+    // (MC-M0 확정 1). 실패해도 장치는 쓴다 — 뒤로 간 시각은 다시 누름이 아닌
+    // 것으로 친다(`pointer.Gesture`). 성공은 안 찍는다 — `open` 줄을 여러 검사가
+    // 글자 그대로 본다.
+    var mono: c_int = @backingInt(std.posix.CLOCK.MONOTONIC);
+    const clock_rc = ioctl(fd, pointer.c.EVIOCSCLOCKID, &mono);
+    if (clock_rc < 0) logline.print("terminal: pointer> clock {s} error={s}\n", .{ path, @tagName(std.c.errno(clock_rc)) });
     // `shown`은 지금 화면에 화살표가 있는가다(PD-M1, `pointer_drawn`). 첫
     // 장치면 0이다 — 열린 뒤 움직여야 보인다(design 결정 4의 보이는 조건 2).
     // 화살표가 보이는 동안 둘째 장치를 꽂으면 1이다.
@@ -2645,7 +2664,7 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
                     const down = e.pressed.has(b);
                     if (!down and !e.released.has(b)) continue;
                     if (round.edge_count == MAX_EDGES) break;
-                    round.edges[round.edge_count] = .{ .down = down, .button = b, .x = state.x, .y = state.y };
+                    round.edges[round.edge_count] = .{ .down = down, .button = b, .x = state.x, .y = state.y, .t_us = eventUs(ev) };
                     round.edge_count += 1;
                 }
             }
@@ -2781,7 +2800,7 @@ const PointerWire = struct {
                 if (fresh) try self.run(self.gesture.handOff(self.grab.leaf, self.ws.focus));
                 self.report(.press, e.button, e.x, e.y);
             },
-            .ours => if (e.button == .left) try self.press(e.x, e.y),
+            .ours => if (e.button == .left) try self.press(e.x, e.y, e.t_us),
         }
     }
 
@@ -2839,7 +2858,11 @@ const PointerWire = struct {
 
     /// 왼쪽 버튼이 눌렸다. `pointer> press` 줄을 찍는다 — 패널 칸이면 그
     /// 잎과 상대 칸이고, 여백 · 구분선 · 상태 줄이면 `none`이다.
-    fn press(self: *PointerWire, x: u32, y: u32) !void {
+    ///
+    /// 이 누름이 지난 누름의 반복이면(MC design 결정 3) `press` 줄 뒤에 `repeat
+    /// n=N dt=MS` 한 줄을 더 찍는다 — `press` 줄은 여러 검사가 글자 그대로 보므로
+    /// 모양을 안 바꾼다(MC design 결정 7). `dt`는 앞 누름과의 차(ms, 내림)다.
+    fn press(self: *PointerWire, x: u32, y: u32, t_us: i64) !void {
         const hit: ?pointer.Cell = cell: {
             const gc = gridCell(x, y, self.cols, self.rows) orelse break :cell null;
             const h = self.ws.tree.hit(self.whole, gc.col, gc.row) orelse break :cell null;
@@ -2851,8 +2874,11 @@ const PointerWire = struct {
             logline.print("terminal: pointer> press none\n", .{});
         }
         self.gesture_ws.* = self.current;
-        // 시각은 MC-M2가 잇는다. null이면 반복이 될 수 없다 — 지금은 PD-M2 그대로다.
-        try self.run(self.gesture.press(hit, self.ws.focus, .{ .t_us = null, .x = x, .y = y, .ws = self.current }));
+        const intents = self.gesture.press(hit, self.ws.focus, .{ .t_us = t_us, .x = x, .y = y, .ws = self.current });
+        if (self.gesture.clicks >= 2) {
+            logline.print("terminal: pointer> repeat n={d} dt={d}\n", .{ self.gesture.clicks, @divTrunc(self.gesture.gap_us, 1000) });
+        }
+        try self.run(intents);
     }
 
     /// 포인터가 움직였다. 버튼이 패널 칸 위에서 눌린 채일 때만 일이 있다.

@@ -1078,6 +1078,137 @@ wait_for_count clip_lines '' "$((CLIPS + 1))" ||
   report_failure "the wheel drag copied '$(last_clip)', expected 'clip> len=13 text=147' (147 to the first byte of 150)"
 echo "wheel while pressed: offset ${OFF_A} -> ${OFF_B}, $(last_clip)"
 
+# ══ MC-M2: 더블클릭 · 트리플클릭 ═══════════════════════════════════════════
+#
+# 두 번째 누름은 단어, 세 번째는 줄을 곧바로 고르고 떼면 복사한다(MC design
+# 결정 3 · 4 · 5). 다시 누름은 press 줄 뒤의 repeat 줄로 보인다(결정 7).
+#
+# 누름은 button_down · button_up을 안 쓰고 hmp를 기다림 없이 이어 보낸다. 그
+# 둘은 로그 줄이 늘 때까지 0.1초씩 기다리므로 두 누름 사이가 길어진다(MC-M2
+# plan 확정 1). hmp는 명령마다 50ms를 자고, 그때 두 누름의 차는 단독 97~118ms ·
+# 루트 게이트 부하 아래 103~120ms였다(MC-M0 측정 2 · 3) — 500ms에 380ms 여유.
+#
+# 판정은 clip> 줄이다(화면 에코와 무관, 검사 15와 같다). 줄은 왼쪽 패널의
+# mc-one mc-two:three — `-`는 단어 경계가 아니고 `:`와 공백은 경계다.
+repeat_count() { pointer_count 'repeat '; }
+last_repeat() { tlog | grep -a 'terminal: pointer> repeat ' | tail -n 1 | tr -d '\r'; }
+mc_state() { echo "last repeat: '$(last_repeat)', last clip: '$(last_clip)'"; }
+
+echo "=== MC-M2: a line to click on ==="
+type_keys e c h o spc m c minus o n e spc m c minus t w o shift-semicolon t h r e e ret
+wait_for_screen '\| mc-one mc-two:three \|' ||
+  report_failure "the left pane's shell did not print mc-one mc-two:three"
+ROW="$(screen_row 'mc-one mc-two:three')"
+[ "$ROW" -ge 0 ] ||
+  report_failure "mc-one mc-two:three is not a row of its own on the last screen"
+PY="$(cell_y "$ROW")"
+# o는 3열이다(m0 c1 -2 o3).
+move_to "$(cell_x 3)" "$PY" ||
+  report_failure "the pointer did not reach the o of mc-one (last at: '$(last_at)')"
+
+# ── 검사 33: 더블클릭은 그 단어를 복사한다 ─────────────────────────────
+echo "=== a double click copies the word ==="
+REPEATS="$(repeat_count)"; CLIPS="$(clip_lines)"; RELS="$(pointer_count 'release ')"
+hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 2))" ||
+  report_failure "the double click printed fewer than two release lines"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the double click put nothing on the clipboard ($(mc_state))"
+if [ "$(repeat_count)" -ne "$((REPEATS + 1))" ] || [[ "$(last_repeat)" != "terminal: pointer> repeat n=2 dt="* ]]; then
+  report_failure "the double click printed $(($(repeat_count) - REPEATS)) repeat lines, expected one with n=2 ($(mc_state))"
+fi
+[ "$(last_clip)" = "terminal: clip> len=6 text=mc-one" ] ||
+  report_failure "the double click copied '$(last_clip)', expected 'clip> len=6 text=mc-one'"
+wait_for_status_copy off ||
+  report_failure "after the double click the status line still reads '$(status_text)'; the release leaves copy mode"
+echo "double click: $(last_repeat) / $(last_clip)"
+
+# ── 검사 34: 트리플클릭은 그 줄을 복사한다 ─────────────────────────────
+#
+# 첫 두 누름이 단어를 한 번 복사하고(첫 뗌이 아니라 둘째 뗌), 셋째 누름이 줄을
+# 고르고 셋째 뗌이 그 줄을 복사한다.
+echo "=== a triple click copies the line ==="
+sleep 0.7 # 앞 검사의 마지막 누름과 이어지지 않게(500ms)
+REPEATS="$(repeat_count)"; CLIPS="$(clip_lines)"; RELS="$(pointer_count 'release ')"
+hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 3))" ||
+  report_failure "the triple click printed fewer than three release lines"
+wait_for_count clip_lines '' "$((CLIPS + 2))" ||
+  report_failure "the triple click did not copy twice (word, then line) ($(mc_state))"
+if [ "$(repeat_count)" -ne "$((REPEATS + 2))" ] || [[ "$(last_repeat)" != "terminal: pointer> repeat n=3 dt="* ]]; then
+  report_failure "the triple click printed $(($(repeat_count) - REPEATS)) repeat lines, expected two ending with n=3 ($(mc_state))"
+fi
+[ "$(last_clip)" = "terminal: clip> len=19 text=mc-one mc-two:three" ] ||
+  report_failure "the triple click copied '$(last_clip)', expected 'clip> len=19 text=mc-one mc-two:three'"
+echo "triple click: $(last_repeat) / $(last_clip)"
+
+# ── 검사 35: 더블클릭한 채 끌면 단어 단위로 늘어난다 ───────────────────
+#
+# 끄는 칸(10열, mc-two의 t)의 단어가 통째로 들어온다. 문자 단위였다면
+# mc-one mc-t에서 끊긴다.
+echo "=== dragging a double click extends by words ==="
+sleep 0.7
+REPEATS="$(repeat_count)"; CLIPS="$(clip_lines)"
+hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"
+wait_for_count repeat_count '' "$((REPEATS + 1))" ||
+  report_failure "the held double click printed no repeat line ($(mc_state))"
+move_to "$(cell_x 10)" "$PY" ||
+  report_failure "the pointer did not reach the t of mc-two while held (last at: '$(last_at)')"
+button_up || report_failure "mouse_button 0 after the word drag printed no 'pointer> release' line"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the word drag put nothing on the clipboard ($(mc_state))"
+[ "$(last_clip)" = "terminal: clip> len=13 text=mc-one mc-two" ] ||
+  report_failure "the word drag copied '$(last_clip)', expected 'clip> len=13 text=mc-one mc-two'"
+echo "word drag: $(last_clip)"
+
+# ── 검사 36: 느린 두 클릭은 반복이 아니다 ──────────────────────────────
+#
+# 0.8초는 500ms에서 300ms 위다. 두 누름의 차가 그 수면보다 짧아질 수는 없다.
+echo "=== two slow clicks are two single clicks ==="
+move_to "$(cell_x 3)" "$PY" ||
+  report_failure "the pointer did not get back to the o of mc-one (last at: '$(last_at)')"
+sleep 0.7
+REPEATS="$(repeat_count)"; CLIPS="$(clip_lines)"; RELS="$(pointer_count 'release ')"
+hmp "mouse_button 1"; hmp "mouse_button 0"
+sleep 0.8
+hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 2))" ||
+  report_failure "the two slow clicks printed fewer than two release lines"
+sleep 0.5
+[ "$(repeat_count)" -eq "$REPEATS" ] ||
+  report_failure "two clicks 0.8s apart printed a repeat line ($(mc_state))"
+[ "$(clip_lines)" -eq "$CLIPS" ] ||
+  report_failure "two clicks 0.8s apart copied something ($(mc_state))"
+echo "slow clicks: no repeat"
+
+# ── 검사 37: 끌어 복사한 직후의 클릭은 반복이 아니다 ───────────────────
+#
+# 끈 뒤의 뗌은 이미 복사하고 모드를 나갔다 — 그 직후의 클릭을 더블로 읽으면
+# 사람이 의도하지 않은 단어 선택이 된다(MC design 결정 3의 4).
+#
+# 끌기 조건만 남기려고 시간과 거리 조건은 반복이 되게 둔다. 여섯 명령을
+# 기다림 없이 이어 보내(누름 → 32픽셀 오른쪽 → 뗌 → 32픽셀 되돌림 → 누름 →
+# 뗌) 두 누름이 약 200ms 차 · 같은 픽셀이다. 처음 판은 button_down · move_to로
+# 끌어 500ms와 8픽셀이 먼저 연속을 끊었고, 끌기 조건을 지운 mutation이 초록으로
+# 지나갔다(MC-M2 plan 결과). 한 회차에 다 들어와도 전이마다 그 자리로 먼저
+# 움직이므로(main.zig의 round.edges 루프) 뗌 앞에서 끌기가 생긴다.
+echo "=== a click right after a drag copy is a single click ==="
+move_to "$(cell_x 0)" "$PY" ||
+  report_failure "the pointer did not reach the m of mc-one (last at: '$(last_at)')"
+sleep 0.7
+REPEATS="$(repeat_count)"; CLIPS="$(clip_lines)"; RELS="$(pointer_count 'release ')"
+hmp "mouse_button 1"; hmp "mouse_move 32 0"; hmp "mouse_button 0"
+hmp "mouse_move -32 0"; hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 2))" ||
+  report_failure "the drag and the click printed fewer than two release lines"
+sleep 0.5
+[ "$(repeat_count)" -eq "$REPEATS" ] ||
+  report_failure "a click right after a drag copy printed a repeat line ($(mc_state))"
+if [ "$(clip_lines)" -ne "$((CLIPS + 1))" ] || [ "$(last_clip)" != "terminal: clip> len=5 text=mc-on" ]; then
+  report_failure "after the drag and the click the clipboard lines grew by $(($(clip_lines) - CLIPS)), expected one 'clip> len=5 text=mc-on' ($(mc_state))"
+fi
+echo "click after drag: no repeat, $(last_clip)"
+
 # 마지막 검사(부팅 마우스를 뺀다)는 M1의 자리(679, 0)를 본다. 그리로 되돌린다.
 # 움직이면 화살표가 다시 보이므로, 뺄 때 숨는 at 줄이 찍힌다.
 move_to 679 0 ||
