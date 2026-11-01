@@ -4,15 +4,15 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-01',
-  latest: 'Kernel Upgrade (KU-M0~M1)',
+  asOf: '2026-11-02',
+  latest: 'Bluetooth (BT-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1103,      // git rev-list --count main
+    commits: 1109,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 22,         // check.sh의 CHAINS
+    chains: 23,         // check.sh의 CHAINS
     zigKLines: 38,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
@@ -104,6 +104,7 @@ window.TARS = {
     ['2026-11-01', 'Shift Extend', 'SE', '떼도 선택이 남고 [Shift]+클릭이 가까운 끝을 옮긴다 — 떼면 다시 클립보드에'],
     ['2026-11-01', 'Extend Repeat', 'ER', '[Shift]+더블클릭은 단어, 트리플클릭은 줄 단위로 선택을 늘린다'],
     ['2026-11-01', 'Kernel Upgrade', 'KU', '갱신이 지금 이미지를 old로 남기고 부트 메뉴에서 고를 수 있다 — 새 설치의 ESP는 1GiB, 커널은 6.18.60'],
+    ['2026-11-02', 'Bluetooth', 'BT', '커널 BT 스택과 BlueZ · D-Bus — `bluetooth=on`이면 init이 띄우고 bluetoothctl로 페어링, 키는 `/config/bluetooth`에'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -125,12 +126,13 @@ window.TARS = {
   features: [
     {
       title: '부팅 · 하드웨어',
-      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. GPU 가속 · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth · HDMI 오디오 · IPv6는 아직 없다.',
+      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. GPU 가속 · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth 오디오 · HDMI 오디오 · IPv6는 아직 없다. Bluetooth 키보드는 스택까지만이다(terminal이 부팅 때 고른 키보드 하나만 읽는다).',
       items: [
         ['하이브리드 ISO `out/tars.iso`', 'BIOS와 UEFI 항목이 한 ISO에. `dd`로 USB에 그대로 쓴다. 부트로더는 Limine, Secure Boot는 끈다', '2026-09-10'],
         ['화면 — simpledrm · virtio-gpu', '펌웨어가 준 프레임버퍼를 패널 기본 해상도로 쓴다. 격자 크기는 KMS가 준 크기에서 정한다', '2026-09-10'],
         ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · VFAT · ISO9660', '2026-09-10'],
         ['키보드', 'PS/2와 USB HID. 이름이 아니라 capability로 찾고, 늦게 잡히는 USB 키보드는 3초까지 기다린다', '2026-09-10'],
+        ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
         ['전원 버튼', '누르면 정상 종료. SIGTERM은 끄기, SIGINT와 [Ctrl+Alt+Del]은 재부팅', '2026-08-22'],
         ['빠른 종료', 'SIGTERM 다음 SIGHUP도 보낸다. 콘솔 셸이 2.9초 끌던 것이 0.13초', '2026-09-13'],
         ['배터리 · AC', 'ACPI 배터리와 어댑터를 읽어 상태 줄에 잔량을 그린다', '2026-10-09'],
@@ -158,7 +160,7 @@ window.TARS = {
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 열둘',
+      title: '설정 — `tars.conf` 키 열셋',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -172,6 +174,7 @@ window.TARS = {
         ['`ntp`', '`off` | `dhcp` | IPv4 주소 — 기본 `off`', '2026-09-26'],
         ['`timezone`', '`UTC` | IANA 이름(`Asia/Seoul`) — 기본 `UTC`', '2026-09-19'],
         ['`firewall`', '`off` | `on` — 기본 `off`', '2026-09-27'],
+        ['`bluetooth`', '`off` | `on` — 기본 `off`. `on`이면 dbus · bluetoothd가 뜬다', '2026-11-02'],
         ['`clipboard`', '`shared` | `pane` — 기본 `shared`', '2026-10-05'],
       ],
     },
