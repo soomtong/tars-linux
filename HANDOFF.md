@@ -16,7 +16,7 @@
   - Clock Reload(CR) · Loose Ends(LE) · WP-M3 · Lean Initrd(LI) · Lessons Split(LS) · Host Checks(HC) · Main Split(MS) · Screen Args(SA)
     (10-24~28) — 각각 `project_<이름>.md`(WP-M3은 `project_workspace_panes.md`)
   - 그 전은 `docs/guides/completed.md`.
-- 최신 공개 버전 0.1.2(2026-10-30, tag `v0.1.2` = `d2f9ef7`). 다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 —
+- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 —
   `VERSION` 커밋 → tag → `make iso` 순서다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터, 예약 범위
   45455~45599(RP-M0). 마지막 루트 게이트(ER-M0 닫기): 22/22, 10분 50초(prebuild 346 + lanes 303초), verify 8218줄 전부 통과.

@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -49,6 +49,20 @@ smoke 로그 첫 줄이 `tars-init: starting as PID 1 (TARS 0.1.1)`로 꼬리표
 줄만"으로 고쳤다. 절차 1~7을 그대로 밟았다 — 1의 게이트는 `VERSION` 커밋에서 돌렸고, smoke 첫 줄이 `TARS 0.1.2`(꼬리표 없음), 7은
 같은 날 `releases`에 넣었다. 사용자 요청은 "release this build to 0.1.2 version into github release"(2026-10-30).
 
+## 0.1.3 (2026-11-01)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.1.3` (annotated) → `055228d` (`Release 0.1.3`, ER-M0과 문서 정리 뒤. 그 커밋의 루트 게이트 22/22, lanes 303초) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.3 (Latest) |
+| ISO | `tars-0.1.3-x86_64.iso`, 106,567,680 B (0.1.2보다 768KB 큼 — UB의 firmware 21개와 드라이버 여섯) |
+| sha256 | `b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7` |
+
+0.1.2 뒤의 서브프로젝트(GH · FR · SN · VS · GI · UB · RP · MC · SE · ER)를 담았고 본론은 마우스 선택(MC · SE · ER)이다. 노트는
+0.1.2의 틀에 "0.1.2에서 달라진 것" 절을 새로 썼다. 사용자 요청은 "release 0.1.3"(2026-11-01).
+첫 `make iso`의 smoke가 `TARS 0.1.3+055228d-dirty`였다 — 아래 "재사용할 사실"의 줄끝 함정. 디스크의 파일만 다시 써서(커밋 0)
+tag는 그대로 두고 ISO를 다시 만들었다.
+
 ## 배포 절차 (다음 버전도 이대로)
 
 BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VERSION>` 태그이고 추적 파일에 고친 데가 없을 때만 맨 `<ver>`를
@@ -72,6 +86,11 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 
 ## 재사용할 사실
 
+- 버전의 dirty는 컨테이너의 git이 판정한다(`init/build.zig`의 `status --porcelain`). 호스트 `~/.gitconfig`의
+  `core.autocrlf=input`은 작업 트리의 CRLF를 비교에서 감춰 호스트에선 깨끗한데, 설정 없는 컨테이너는 그 파일을 수정으로 본다.
+  FR-M0의 `terminal/vendor/fonts/OFL-1.1.txt`가 blob은 LF · 디스크는 CRLF여서 그 뒤 모든 빌드가 `-dirty`였다(게이트 이미지는
+  어차피 `+<sha>`라 안 보였다). 3단계 전에 `git ls-files --eol | rg 'w/crlf' | rg -v 'i/crlf'`가 비었는지 본다. 고칠 때는 파일을
+  지우고 `git checkout -- <파일>`.
 - ISO 하나가 BIOS · UEFI 겸용 hybrid라 아키텍처별 · 펌웨어별로 나눌 것이 없다. 이름의 `x86_64`는 arm64 빌드가 없다는 표시다.
 - `make iso` 끝의 `No active partition found` · `Reminder: … limine-bios.sys`는 `limine bios-install`의 평소 출력이다.
 - 0.1.0 ISO 안에는 버전이 없다 — 그 이미지는 ISO 파일 이름과 sha256만이 버전을 말한다. BV(2026-10-20) 뒤의 빌드는
