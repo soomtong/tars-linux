@@ -2874,7 +2874,9 @@ const PointerWire = struct {
             logline.print("terminal: pointer> press none\n", .{});
         }
         self.gesture_ws.* = self.current;
-        const intents = self.gesture.press(hit, self.ws.focus, .{ .t_us = t_us, .x = x, .y = y, .ws = self.current });
+        // `extend`(Shift + 남은 선택, SE design 결정 3)는 SE-M1이 잇는다 — 거짓이면
+        // 늘리기가 없다(`Stamp.extend`의 기본값).
+        const intents = self.gesture.press(hit, self.ws.focus, .{ .t_us = t_us, .x = x, .y = y, .ws = self.current, .extend = false });
         if (self.gesture.clicks >= 2) {
             logline.print("terminal: pointer> repeat n={d} dt={d}\n", .{ self.gesture.clicks, @divTrunc(self.gesture.gap_us, 1000) });
         }
@@ -3015,6 +3017,34 @@ const PointerWire = struct {
                     try self.clips.yank(p);
                     dumpCopy(p.screen, "yank");
                     _ = self.key_state.forceMode(.normal);
+                    self.redraw = true;
+                },
+                // 남은 선택을 지운다(SE design 결정 2). 지금 워크스페이스의 패널
+                // 전부를 본다 — 포커스를 옮기는 클릭이면 선택이 남은 패널은 옛
+                // 포커스다. 실제로 지운 패널마다 `copy> deselect` 한 줄이고 지울
+                // 것이 없는 클릭은 조용하다(`copy>` 줄을 세는 검사가 안 흔들리게).
+                .deselect => for (&self.ws.panes) |*slot| {
+                    const p = if (slot.*) |*p| p else continue;
+                    if (!p.screen.clearLinger()) continue;
+                    logline.print("terminal: copy> deselect\n", .{});
+                    self.redraw = true;
+                },
+                // Shift 클릭이 남은 선택의 가까운 끝을 이 칸으로 옮긴다(SE design
+                // 결정 4). 화면이 copy mode에 들어갔을 때만 입력 모드를 따라 옮긴다 —
+                // 두 사본은 함께 간다(PD design 결정 6). 조합 중인 한글은
+                // `select_start`와 같이 이 패널의 셸로 간다.
+                .select_extend => |at| {
+                    const p = &self.ws.panes[at.leaf].?;
+                    try p.screen.copyExtendAt(at.col, at.row);
+                    if (!p.screen.copyActive()) continue;
+                    const composing = self.key_state.preedit() != null;
+                    const bytes = self.key_state.forceMode(.copy);
+                    if (bytes.len > 0) pty.write(p.session.master_fd, bytes);
+                    if (composing) {
+                        p.screen.setPreedit(null);
+                        dumpHangul(self.key_state);
+                    }
+                    dumpCopy(p.screen, "extend");
                     self.redraw = true;
                 },
             }

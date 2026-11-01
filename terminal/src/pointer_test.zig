@@ -465,7 +465,7 @@ pub fn main() !void {
     const a: pointer.Cell = .{ .leaf = 0, .col = 3, .row = 2 };
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("a click on the focused pane only cancels", g.press(a, 0, NO_TIME), &.{.cancel});
+        try expectIntents("a click on the focused pane cancels and deselects", g.press(a, 0, NO_TIME), &.{ .cancel, .deselect });
         try expectTrue("the press remembers the leaf", g.held() != null and g.held().? == 0);
         try expectIntents("a move inside the same cell does nothing", g.motion(a, .normal), &.{});
         try expectIntents("releasing a click copies nothing", g.release(.normal), &.{});
@@ -474,17 +474,18 @@ pub fn main() !void {
         // 다른 패널을 누르면 포커스가 그리로 간다. `cancel`이 먼저다 — 조합
         // 중인 한글이 옛 포커스의 PTY로 가야 한다(WP 결정 4).
         const b: pointer.Cell = .{ .leaf = 1, .col = 0, .row = 5 };
-        try expectIntents("a click on another pane cancels, then moves the focus", g.press(b, 0, NO_TIME), &.{ .cancel, .{ .focus = 1 } });
+        try expectIntents("a click on another pane cancels, then moves the focus", g.press(b, 0, NO_TIME), &.{ .cancel, .deselect, .{ .focus = 1 } });
         try expectIntents("its release copies nothing", g.release(.normal), &.{});
     }
 
     // ── 검사 17: 여백 · 구분선 · 상태 줄을 누른다 ─────────────────────────
     //
-    // 아무 일도 없다 — 포커스도 안 바뀌고 키보드 copy mode도 안 닫힌다. 뗄
-    // 때까지의 움직임과 휠도 제스처의 것이 아니다(휠은 평소의 휠로 간다).
+    // 남은 선택을 지우는 것 말고는 아무 일도 없다(SE design 결정 2) — 포커스도 안
+    // 바뀌고 키보드 copy mode도 안 닫힌다. 뗄 때까지의 움직임과 휠도 제스처의
+    // 것이 아니다(휠은 평소의 휠로 간다).
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("a press off any pane does nothing", g.press(null, 0, NO_TIME), &.{});
+        try expectIntents("a press off any pane only deselects", g.press(null, 0, NO_TIME), &.{.deselect});
         try expectTrue("a press off any pane holds nothing", g.held() == null);
         try expectIntents("dragging from the margin does nothing", g.motion(a, .normal), &.{});
         try expectTrue("a wheel after a margin press is the plain wheel", g.wheel(1, .normal) == null);
@@ -651,13 +652,14 @@ pub fn main() !void {
         var g: pointer.Gesture = .{};
         try expectIntents("handing a press on another pane to its child moves the focus", g.handOff(1, 0), &.{
             .cancel,
+            .deselect,
             .{ .focus = 1 },
         });
         try expectTrue("the gesture holds nothing after a hand-off", g.held() == null);
         try expectIntents("a drag after a hand-off makes no selection", g.motion(.{ .leaf = 1, .col = 4, .row = 2 }, .normal), &.{});
         try expectTrue("a wheel after a hand-off is not the gesture's", g.wheel(1, .normal) == null);
         try expectIntents("the release after a hand-off copies nothing", g.release(.normal), &.{});
-        try expectIntents("handing a press on the focused pane only cancels", g.handOff(0, 0), &.{.cancel});
+        try expectIntents("handing a press on the focused pane cancels and deselects", g.handOff(0, 0), &.{ .cancel, .deselect });
     }
 
     // ── 검사 27: 휠의 갈 곳 ───────────────────────────────────────────────
@@ -696,7 +698,7 @@ pub fn main() !void {
     const line: pointer.Intent = .{ .select_start = .{ .at = w, .unit = .line } };
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("the first press of a run only cancels", g.press(w, 0, stamp(1000, 44, 52)), &.{.cancel});
+        try expectIntents("the first press of a run cancels and deselects", g.press(w, 0, stamp(1000, 44, 52)), &.{ .cancel, .deselect });
         try expectNum("the first press is click 1", g.clicks, 1);
         _ = g.release(.normal);
         try expectIntents("the second press selects the word at once", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, word });
@@ -796,7 +798,7 @@ pub fn main() !void {
         var g: pointer.Gesture = .{};
         _ = g.press(w, 0, NO_TIME);
         _ = g.release(.normal);
-        try expectIntents("a second press without a time is a plain click", g.press(w, 0, NO_TIME), &.{.cancel});
+        try expectIntents("a second press without a time is a plain click", g.press(w, 0, NO_TIME), &.{ .cancel, .deselect });
         try expectNum("so it is click 1", g.clicks, 1);
     }
 
@@ -809,6 +811,59 @@ pub fn main() !void {
         _ = g.press(w, 0, stamp(1000, 44, 52));
         _ = g.release(.normal);
         try expectIntents("a double click on a pane that lost the focus takes it back first", g.press(w, 1, stamp(1100, 44, 52)), &.{ .cancel, .{ .focus = 0 }, word });
+    }
+
+    // ── 검사 35: Shift 클릭이 남은 선택을 늘린다 (SE design 결정 3 · 4) ───────
+    //
+    // `extend`(Shift + 그 패널에 남은 선택)인 첫 누름은 `select_extend`를 내고
+    // 곧바로 `dragging`이다 — 그 뒤의 끌기와 뗌은 끌기와 같다. `deselect`는 안
+    // 낸다(지우면 늘릴 것이 없다). 연속은 끊긴다 — 다음 누름은 처음부터다.
+    const ext: pointer.Stamp = .{ .t_us = 1_000_000, .x = 44, .y = 52, .ws = 0, .extend = true };
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("a Shift press on a lingering selection extends it", g.press(w, 0, ext), &.{ .cancel, .{ .select_extend = w } });
+        try expectTrue("the extending press is already dragging", g.phase == .dragging and g.held().? == 0);
+        try expectNum("an extending press is click 1", g.clicks, 1);
+        try expectIntents("dragging after the Shift press moves the end", g.motion(.{ .leaf = 0, .col = 9, .row = 2 }, .copy), &.{
+            .{ .select_to = .{ .leaf = 0, .col = 9, .row = 2 } },
+        });
+        try expectIntents("releasing it copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectIntents("the press after an extension starts over", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, .deselect });
+        try expectNum("so it is click 1", g.clicks, 1);
+    }
+
+    // ── 검사 36: 다른 패널이 포커스일 때의 늘리기 ──────────────────────────
+    //
+    // 의도 셋이 버퍼를 꽉 채운다 — `cancel` · `focus` · `select_extend` 순서다.
+    {
+        var g: pointer.Gesture = .{};
+        try expectIntents("extending on a pane without the focus takes it first", g.press(w, 1, ext), &.{ .cancel, .{ .focus = 0 }, .{ .select_extend = w } });
+    }
+
+    // ── 검사 37: 반복이 늘리기보다 먼저다 (SE design 결정 3의 5) ───────────
+    //
+    // 더블클릭 간격 안의 Shift 누름은 두 번째 클릭이다 — ghostty와 같다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, stamp(1000, 44, 52));
+        _ = g.release(.normal);
+        const second: pointer.Stamp = .{ .t_us = 1_100_000, .x = 44, .y = 52, .ws = 0, .extend = true };
+        try expectIntents("a Shift press inside the repeat interval is the second click", g.press(w, 0, second), &.{ .cancel, word });
+        try expectNum("so it is click 2", g.clicks, 2);
+    }
+
+    // ── 검사 38: `deselect`의 자리 (SE design 결정 2) ───────────────────────
+    //
+    // 여백 누름은 `extend`여도 지우기만 한다. 반복 누름은 안 낸다 — 그 연속의
+    // 첫 누름이 이미 지웠다(검사 29의 둘째 · 셋째 누름이 그것이다).
+    {
+        var g: pointer.Gesture = .{};
+        const margin: pointer.Stamp = .{ .t_us = 1_000_000, .x = 4, .y = 4, .ws = 0, .extend = true };
+        try expectIntents("a Shift press off any pane only deselects", g.press(null, 0, margin), &.{.deselect});
+        _ = g.release(.normal);
+        _ = g.press(w, 0, stamp(2000, 44, 52));
+        _ = g.release(.normal);
+        try expectIntents("a repeated press does not deselect", g.press(w, 0, stamp(2100, 44, 52)), &.{ .cancel, word });
     }
 
     std.debug.print("pointer_test: all checks passed\n", .{});

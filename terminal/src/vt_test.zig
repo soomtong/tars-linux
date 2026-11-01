@@ -2878,7 +2878,152 @@ pub fn main(init: std.process.Init) !void {
     try mcw.copyEnterAt(1, 1, .word);
     try expectYank(mcw, &mc_clip, "wrapword12", "a double click on the wrapped row of a word");
 
+    // 검사 114~124. 뗀 뒤 남은 선택과 Shift 클릭 늘리기(SE design 결정 1 · 2 · 4,
+    // SE-M0). 같은 `mc` 화면이다. `linger`가 문자 선택을 끌어 놓고 `copyRelease`로
+    // 뗀다 — 남은 선택을 만드는 길이다.
+
+    // 검사 114. 뗌은 복사하고 모드를 나가지만 선택은 둔다 — 양 끝 pin 둘이 그대로다.
+    try expectText(try linger(mc, &mc_clip, 6, 9), "beta", "the release copies the dragged word");
+    if (mc.copyActive() or !mc.hasLinger()) {
+        std.debug.print("FAIL: after copyRelease copy mode is {} and a lingering selection is {}\n", .{ mc.copyActive(), mc.hasLinger() });
+        return error.ReleaseDidNotLinger;
+    }
+    try expectPins(mc, mc_pins + 2, "while a selection lingers (its two ends)");
+
+    // 검사 115. 선택 뒤를 누르면 오른쪽 끝이 그리로 가며 모드에 들어간다.
+    try mc.copyExtendAt(18, 0);
+    if (!mc.copyActive()) {
+        std.debug.print("FAIL: copyExtendAt did not enter copy mode\n", .{});
+        return error.ExtendDidNotEnter;
+    }
+    try expectYank(mc, &mc_clip, "beta-gamma (d", "extending right to the d of delta");
+
+    // 검사 116. 선택 앞을 누르면 가까운 끝(왼쪽)이 움직인다(SE design 결정 4).
+    // 앵커 고정이면 'alpha beta-gamma (d'가 남는다 — SE-M1 mutation 2가 노리는 자리다.
+    _ = try linger(mc, &mc_clip, 18, 22);
+    try mc.copyExtendAt(0, 0);
+    try expectYank(mc, &mc_clip, "alpha beta-gamma (delta", "extending left from delta to alpha keeps delta");
+
+    // 검사 117. 선택 안을 누르면 오른쪽 끝이 당겨진다(ghostty와 같다).
+    _ = try linger(mc, &mc_clip, 6, 15);
+    try mc.copyExtendAt(9, 0);
+    try expectYank(mc, &mc_clip, "beta", "extending inside the selection shrinks it from the right");
+
+    // 검사 118. 단어 방식은 앵커 pin을 새 자리로 다시 든다 — pin 수가 늘지 않고
+    // 늘어난 선택은 단어 단위다.
+    try mc.copyEnterAt(19, 0, .word);
+    try expectText(try mc.copyRelease(&mc_clip), "delta", "releasing a double click");
+    try expectPins(mc, mc_pins + 3, "while a word selection lingers (two ends and the anchor)");
+    try mc.copyExtendAt(7, 0);
+    try expectPins(mc, mc_pins + 3, "after extending a word selection (the anchor moved, not doubled)");
+    try expectYank(mc, &mc_clip, "beta-gamma (delta", "extending a word selection left by words");
+
+    // 검사 119. 줄 방식은 줄 단위로 는다.
+    mc.feed("zeta eta\r\n");
+    try mc.copyEnterAt(7, 0, .line);
+    _ = try mc.copyRelease(&mc_clip);
+    try mc.copyExtendAt(2, 1);
+    try expectYank(mc, &mc_clip, "alpha beta-gamma (delta)  eps\nzeta eta", "extending a line selection to the next row");
+
+    // 검사 120. 늘린 뒤 끌어도 앵커는 안 끌려간다 — `copyPointTo`가 읽는 start()가
+    // 늘리기가 넣은 앵커다(SE-M0 plan 확정 2).
+    _ = try linger(mc, &mc_clip, 6, 9);
+    try mc.copyExtendAt(18, 0);
+    try mc.copyPointTo(20, 0);
+    try expectYank(mc, &mc_clip, "beta-gamma (del", "dragging on after an extension");
+    _ = try linger(mc, &mc_clip, 6, 9);
+    try mc.copyExtendAt(18, 0);
+    try mc.copyPointTo(1, 0);
+    try expectYank(mc, &mc_clip, "lpha b", "dragging back over the anchor after an extension");
+
+    // 검사 121. `clearLinger`는 선택과 pin을 버리고 지웠는지 말한다.
+    _ = try linger(mc, &mc_clip, 6, 9);
+    if (!mc.clearLinger() or mc.hasLinger()) {
+        std.debug.print("FAIL: clearLinger did not clear the lingering selection\n", .{});
+        return error.LingerNotCleared;
+    }
+    try expectPins(mc, mc_pins, "after clearLinger");
+    if (mc.clearLinger()) {
+        std.debug.print("FAIL: a second clearLinger reported a clear\n", .{});
+        return error.ClearLingerTwice;
+    }
+
+    // 검사 122. 새 선택이 남은 선택을 지운다 — 포인터(`copyEnterAt`)도
+    // 키보드(`copyEnter`)도(SE design 결정 2).
+    _ = try linger(mc, &mc_clip, 6, 9);
+    try mc.copyEnterAt(18, 0, .char);
+    try expectPins(mc, mc_pins + 2, "a new drag over a lingering selection holds one selection");
+    try expectYank(mc, &mc_clip, "d", "the new drag selects only its own cell");
+    _ = try linger(mc, &mc_clip, 6, 9);
+    mc.copyEnter();
+    if (mc.term.screens.active.selection != null) {
+        std.debug.print("FAIL: Cmd+Shift+C kept the lingering selection\n", .{});
+        return error.LingerSurvivedCopyEnter;
+    }
+    mc.copyExit();
+    try expectPins(mc, mc_pins, "after copyEnter cleared the lingering selection and copyExit");
+
+    // 검사 123. 가지치기는 남은 선택을 조용히 지운다 — `copy> pruned`가 아니다
+    // (SE design 결정 2). 검사 9의 모양이다 — 한도는 1000줄(vt.zig의 init).
+    const lp = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer lp.deinit();
+    var lbuf: [16]u8 = undefined;
+    var lq: usize = 1;
+    while (lq <= 200) : (lq += 1) {
+        lp.feed(std.fmt.bufPrint(&lbuf, "P{d}\r\n", .{lq}) catch unreachable);
+    }
+    lp.scrollByRows(-10);
+    try lp.copyEnterAt(0, 0, .char);
+    try lp.copyPointTo(1, 0);
+    _ = try lp.copyRelease(&mc_clip);
+    if (!lp.hasLinger()) {
+        std.debug.print("FAIL: the selection in the scrollback did not linger\n", .{});
+        return error.ScrollbackDidNotLinger;
+    }
+    lq = 1;
+    while (lq <= 3000) : (lq += 1) {
+        lp.feed(std.fmt.bufPrint(&lbuf, "Q{d}\r\n", .{lq}) catch unreachable);
+    }
+    if (lp.hasLinger()) {
+        std.debug.print("FAIL: pruning left the lingering selection\n", .{});
+        return error.LingerSurvivedPrune;
+    }
+    if (lp.copyTakePruned()) {
+        std.debug.print("FAIL: pruning a lingering selection was reported as a copy mode prune\n", .{});
+        return error.LingerPruneReported;
+    }
+    std.debug.print("vt_test: 가지치기가 남은 선택을 조용히 지운다 OK\n", .{});
+
+    // 검사 124. copy mode 안에서는 남은 선택이 아니고 `copyExtendAt`은 아무 일도 안 한다.
+    try mc.copyEnterAt(6, 0, .char);
+    if (mc.hasLinger()) {
+        std.debug.print("FAIL: a selection inside copy mode counts as lingering\n", .{});
+        return error.CopyModeLingers;
+    }
+    try mc.copyExtendAt(18, 0);
+    try expectYank(mc, &mc_clip, "b", "copyExtendAt inside copy mode changes nothing");
+
     std.debug.print("PASS\n", .{});
+}
+
+/// 문자 선택을 `x0`에서 `x1`까지(0행) 끌어 `copyRelease`로 뗀다(SE-M0) — 남은
+/// 선택을 만든다. 답은 복사된 글자다.
+fn linger(scr: *vt.Screen, clip: *clipboard.Clipboard, x0: u16, x1: u16) !?[]const u8 {
+    try scr.copyEnterAt(x0, 0, .char);
+    try scr.copyPointTo(x1, 0);
+    return scr.copyRelease(clip);
+}
+
+/// `copyRelease`가 돌려준 글자가 기대와 같은가(SE-M0).
+fn expectText(got: ?[]const u8, want: []const u8, what: []const u8) !void {
+    const g = got orelse {
+        std.debug.print("FAIL: {s}: nothing was released, want '{s}'\n", .{ what, want });
+        return error.NothingReleased;
+    };
+    if (!std.mem.eql(u8, g, want)) {
+        std.debug.print("FAIL: {s}: released '{s}', want '{s}'\n", .{ what, g, want });
+        return error.WrongText;
+    }
 }
 
 /// 마우스 보고 하나가 기대한 바이트인가(PD-M4). 다르면 둘 다 `{any}`로 찍는다 —

@@ -507,10 +507,12 @@ pub const Unit = enum { char, word, line };
 /// copy mode에 들어가며 선택을 시작할 칸과 그 단위.
 pub const Start = struct { at: Cell, unit: Unit };
 
-/// 누름 하나의 때와 자리(MC design 결정 2 · 3). `t_us`는 커널이 이벤트에 찍은
-/// 단조 시각이고, null이면 이 누름은 반복이 될 수 없다(라이브러리
+/// 누름 하나의 사실(MC design 결정 2 · 3, SE design 결정 5). `t_us`는 커널이
+/// 이벤트에 찍은 단조 시각이고, null이면 이 누름은 반복이 될 수 없다(라이브러리
 /// `pressRepeat`와 같다). `x` · `y`는 프레임버퍼 픽셀, `ws`는 워크스페이스 번호다.
-pub const Stamp = struct { t_us: ?i64, x: u32, y: u32, ws: usize };
+/// `extend`는 "Shift가 눌렸고 누른 패널에 남은 선택이 있다"다 — 둘을 합친 bool로
+/// 받는 이유는 이 파일이 `input.zig`도 `vt.zig`도 import하지 않기 때문이다(머리 주석).
+pub const Stamp = struct { t_us: ?i64, x: u32, y: u32, ws: usize, extend: bool = false };
 
 /// 끄는 중의 휠(design 결정 7). 누른 패널을 `notches` 눈금만큼 움직인다.
 /// 양수가 휠을 앞으로 민 것이고 위로 간다 — `Frame.wheel`과 같다.
@@ -534,12 +536,18 @@ pub const Intent = union(enum) {
     scroll: Scroll,
     /// 이 잎의 선택을 클립보드에 넣고 copy mode를 나간다(`Cmd+C`와 같다).
     copy: u4,
+    /// 남은 선택(뗀 뒤 화면에 남은 반전, SE design 결정 1)을 지운다 — 지금
+    /// 워크스페이스의 패널 전부에서(SE design 결정 2). 늘리기가 아닌 누름이 낸다.
+    deselect,
+    /// 남은 선택의 가까운 끝을 이 칸으로 옮기며 copy mode에 들어간다(SE design
+    /// 결정 4). 그 뒤의 끌기는 `select_to`, 뗌은 `copy`로 끌기와 같다.
+    select_extend: Cell,
 };
 
-/// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `focus`(두
-/// 번째 · 세 번째 누름은 `select_start`까지 셋),
-/// 첫 이동이 `select_start` · `select_to`, 누른 채 첫 휠이 `select_start` ·
-/// `scroll` · `select_to`다. 순서대로 실행한다.
+/// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `deselect` ·
+/// `focus`(두 번째 · 세 번째 누름은 `cancel` · `focus` · `select_start`, 늘리기는
+/// `cancel` · `focus` · `select_extend`), 첫 이동이 `select_start` · `select_to`,
+/// 누른 채 첫 휠이 `select_start` · `scroll` · `select_to`다. 순서대로 실행한다.
 pub const Intents = struct {
     buf: [3]Intent = undefined,
     len: usize = 0,
@@ -631,15 +639,24 @@ pub const Gesture = struct {
     /// `at`이 지난 누름의 반복이면(MC design 결정 3) 두 번째는 단어, 세 번째부터는
     /// 줄을 곧바로 고른다 — `select_start`를 내고 `dragging`으로 간다. 그래서
     /// 뗌은 끌기와 같은 길로 복사한다(MC design 결정 5).
+    ///
+    /// 반복이 아니고 `at.extend`면 늘리기다(SE design 결정 3) — `select_extend`를
+    /// 내고 `dragging`으로 가며 연속을 끊는다. 반복이 늘리기보다 먼저인 것은
+    /// ghostty와 같다. 그 밖의 누름(여백 포함)은 `deselect`를 더 낸다 — 남은
+    /// 선택은 다음 누름이 지운다(SE design 결정 2). 반복 누름은 안 낸다 — 그
+    /// 연속의 첫 누름이 이미 지웠고, 버퍼 셋이 `cancel` · `focus` ·
+    /// `select_start`로 찬다.
     pub fn press(self: *Gesture, hit: ?Cell, focus: u4, at: Stamp) Intents {
         var out: Intents = .{};
         const h = hit orelse {
             self.phase = .ignored;
             self.clicks = 0;
             self.breakRun();
+            out.push(.deselect);
             return out;
         };
-        if (self.repeats(at, h.leaf)) {
+        const repeat = self.repeats(at, h.leaf);
+        if (repeat) {
             const l = &self.last.?;
             self.gap_us = at.t_us.? - l.t_us;
             l.t_us = at.t_us.?;
@@ -650,20 +667,27 @@ pub const Gesture = struct {
         } else {
             self.gap_us = 0;
             self.clicks = 1;
-            self.last = if (at.t_us) |t|
-                .{ .t_us = t, .x0 = at.x, .y0 = at.y, .leaf = h.leaf, .ws = at.ws, .count = 1 }
-            else
-                null;
+            // 늘리기 뒤의 누름은 처음부터다 — 연속을 기억하지 않는다.
+            self.last = null;
+            if (!at.extend) {
+                if (at.t_us) |t| {
+                    self.last = .{ .t_us = t, .x0 = at.x, .y0 = at.y, .leaf = h.leaf, .ws = at.ws, .count = 1 };
+                }
+            }
         }
         self.start = h;
         self.cur = h;
         out.push(.cancel);
+        if (!repeat and !at.extend) out.push(.deselect);
         if (h.leaf != focus) out.push(.{ .focus = h.leaf });
-        if (self.clicks == 1) {
-            self.phase = .pressed;
-        } else {
+        if (repeat) {
             self.phase = .dragging;
             out.push(.{ .select_start = .{ .at = h, .unit = if (self.clicks == 2) .word else .line } });
+        } else if (at.extend) {
+            self.phase = .dragging;
+            out.push(.{ .select_extend = h });
+        } else {
+            self.phase = .pressed;
         }
         return out;
     }
@@ -714,9 +738,9 @@ pub const Gesture = struct {
         return out;
     }
 
-    /// 이 누름은 자식의 것이다(PD-M4, design 결정 12). 누름처럼 `cancel`과
-    /// (다른 패널이면) `focus`를 내고, 뗄 때까지 아무것도 안 한다 — 끎과
-    /// 뗌은 자식에게 보고로 간다.
+    /// 이 누름은 자식의 것이다(PD-M4, design 결정 12). 누름처럼 `cancel` ·
+    /// `deselect`와 (다른 패널이면) `focus`를 내고, 뗄 때까지 아무것도 안 한다 —
+    /// 끎과 뗌은 자식에게 보고로 간다.
     ///
     /// 포커스를 먼저 옮기는 것은 tmux의 기본 바인딩(`select-pane` 뒤에
     /// `send-keys -M`)과 같다. 확정한 한글이 보고보다 먼저 PTY에 간다.
@@ -726,6 +750,7 @@ pub const Gesture = struct {
         self.clicks = 0;
         self.breakRun();
         out.push(.cancel);
+        out.push(.deselect);
         if (leaf != focus) out.push(.{ .focus = leaf });
         return out;
     }

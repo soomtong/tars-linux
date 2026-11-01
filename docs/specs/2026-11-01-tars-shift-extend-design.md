@@ -1,7 +1,7 @@
 # TARS Shift Extend — Design
 
 Date: 2026-11-01
-Status: 착수 전(design만). plan은 `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`.
+Status: SE-M0 진행 중. plan은 `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`.
 
 MC design(`docs/specs/2026-11-01-tars-multi-click-design.md`)의 비목표 1 "Shift 클릭으로 늘리기"를 연다. 사용자가 2026-11-01에
 HANDOFF의 후보 넷(PD 비목표의 휠 방향 · 포인터 가속, Shift 클릭 늘리기, CB 범위 workspace, 큰 kitty 이미지)에서 골랐다. MC 비목표 1이 적어
@@ -115,8 +115,9 @@ deselect,
 select_extend: Cell,
 ```
 
-`Gesture.press(hit, focus, at: Stamp, extend: bool)`. `extend`는 `main.zig`가 셈한 "Shift가 눌렸고 누른 패널에 남은 선택이 있다"다 —
-`pointer.zig`는 `vt.zig`도 `input.zig`도 import하지 않으므로(머리 주석) 두 사실을 합친 bool 하나를 받는다. 반복 판정이 먼저이고(결정 3의
+`Stamp`에 `extend: bool = false`를 더한다. 값은 `main.zig`가 셈한 "Shift가 눌렸고 누른 패널에 남은 선택이 있다"다 — `pointer.zig`는
+`vt.zig`도 `input.zig`도 import하지 않으므로(머리 주석) 두 사실을 합친 bool 하나를 받는다. `press`의 인자가 아니라 `Stamp`의 칸인
+이유는 `pointer_test`의 호출 서른 곳이 그대로 서기 때문이다(SE-M0 plan 확정 1). 반복 판정이 먼저이고(결정 3의
 5), 반복이 아니고 `extend`면 늘리기, 아니면 지금의 누름에 `deselect`를 더한다. `handOff`(자식의 것)도 `deselect`를 낸다. `Intents`의
 버퍼 3은 그대로 찬다 — 보통 누름 `cancel` · `deselect` · `focus?`, 반복 `cancel` · `focus?` · `select_start`, 늘리기 `cancel` · `focus?` ·
 `select_extend`.

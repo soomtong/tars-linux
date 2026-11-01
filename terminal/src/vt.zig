@@ -332,7 +332,9 @@ pub const Screen = struct {
     /// 자리를 tracked pin으로 따로 든다 — 뷰포트가 움직여도 따라간다.
     ///
     /// pin은 만든 `PageList`에서 놓아야 하므로 화면도 함께 든다(대체 화면으로
-    /// 바뀐 뒤에 놓을 수 있다). 놓는 곳은 `dropWordAnchor` 하나다.
+    /// 바뀐 뒤에 놓을 수 있다). 놓는 곳은 `dropWordAnchor` 하나다. 뗀 뒤 남은
+    /// 선택(SE design 결정 1)에서도 들고 있다 — Shift 클릭 늘리기가 앵커를 다시
+    /// 잡는 자리다(`copyExtendAt`).
     copy_word: ?WordAnchor = null,
 
     /// 앵커의 screen 좌표 y. 가지치기 감시용이다(CM-M1).
@@ -679,6 +681,13 @@ pub const Screen = struct {
         const now = anchorY(self.term.screens.active);
         if (now != null and now.? == want) return;
 
+        // 남은 선택(copy mode 밖, SE design 결정 2)이면 조용히 지운다 — 이미
+        // 복사한 뒤라 잘못 복사될 것이 없고, 입력 모드도 normal이라 되돌릴 것이
+        // 없다. `copy> pruned`는 copy mode가 끊긴 것을 말하는 줄이다.
+        if (self.copy_cursor == null) {
+            _ = self.clearLinger();
+            return;
+        }
         self.copyExit();
         self.copy_pruned = true;
     }
@@ -1278,6 +1287,9 @@ pub const Screen = struct {
     /// 왼쪽 위에서 시작한다 — 안 보이는 자리에 커서를 두면 사람이 무엇을
     /// 움직이는지 알 수 없다.
     pub fn copyEnter(self: *Screen) void {
+        // 남은 선택(SE design 결정 2)은 새 선택이 시작되면 사라진다 — 옛 반전
+        // 위에 새 커서가 서는 프레임을 안 만든다.
+        _ = self.clearLinger();
         self.copy_cursor = if (self.state.cursor.viewport) |vp|
             .{ .x = vp.x, .y = vp.y }
         else
@@ -1298,7 +1310,8 @@ pub const Screen = struct {
     /// `kind`는 선택의 방식이다(MC design 결정 6). 끌기의 첫 이동은 `.char`,
     /// 더블클릭은 `.word`, 트리플클릭은 `.line`이다.
     pub fn copyEnterAt(self: *Screen, x: u16, y: u16, kind: SelectKind) !void {
-        if (self.copy_cursor != null) self.copyExit();
+        // 남은 선택도 새 선택이 지운다(SE design 결정 2, `copyEnter`와 같다).
+        if (self.copy_cursor != null) self.copyExit() else _ = self.clearLinger();
         self.copy_cursor = self.copyClamp(x, y) orelse return;
         try self.copySelect(kind);
     }
@@ -1325,6 +1338,52 @@ pub const Screen = struct {
         try self.copyApply(sel.start(), cursor);
     }
 
+    /// 뗀 뒤 남은 선택인가(SE design 결정 1) — copy mode는 아니고 선택은 있다.
+    /// 새 필드가 아니다. `copyRelease`가 선택을 두고 나간 상태가 곧 이것이다.
+    pub fn hasLinger(self: *const Screen) bool {
+        return self.copy_cursor == null and self.term.screens.active.selection != null;
+    }
+
+    /// 남은 선택을 지운다(SE design 결정 2). copy mode면 아무 일도 안 한다 — 그
+    /// 선택은 모드의 것이고 `copyExit`이 지운다. 지웠으면 참이다(`main.zig`가
+    /// `copy> deselect`를 찍는 조건). 방식 · 단어 앵커 · 앵커 감시도 함께 버린다 —
+    /// 셋은 남은 선택을 늘릴 때만 쓸모가 있다.
+    pub fn clearLinger(self: *Screen) bool {
+        if (self.copy_cursor != null) return false;
+        const had = self.term.screens.active.selection != null;
+        self.copy_kind = null;
+        self.dropWordAnchor();
+        self.copy_anchor_y = null;
+        self.term.screens.active.clearSelection();
+        return had;
+    }
+
+    /// Shift 클릭이 남은 선택의 가까운 끝을 `(x, y)`로 옮기며 copy mode에
+    /// 들어간다(SE design 결정 4). 남은 선택이 아니면(copy mode이거나 선택이
+    /// 없다) 아무 일도 안 한다 — 그때의 누름은 보통 클릭이다.
+    ///
+    /// 누른 칸이 선택의 왼쪽 위 끝보다 앞이면 앵커는 오른쪽 아래 끝이고,
+    /// 아니면(선택 안이거나 뒤) 왼쪽 위 끝이다 — xterm의 "가까운 끝"이다.
+    /// `copyApply(앵커, 커서)`가 `init(앵커, 커서)`로 넣으므로 그 뒤 `copyPointTo`가
+    /// 읽는 `start()`가 이 앵커다 — `Selection.start()`는 넣은 순서 그대로이고
+    /// 정렬된 끝은 `topLeft` · `bottomRight`가 따로다. 단어 방식은 앵커를
+    /// `copy_word`에서 읽으므로(MC design 결정 4) 그 pin을 새 앵커 자리로 다시
+    /// 든다. 방식은 남은 선택의 것 그대로다(`copy_kind`).
+    pub fn copyExtendAt(self: *Screen, x: u16, y: u16) !void {
+        if (!self.hasLinger()) return;
+        const kind = self.copy_kind orelse return;
+        const s = self.term.screens.active;
+        const sel = s.selection orelse return;
+        self.copy_cursor = self.copyClamp(x, y) orelse return;
+        const cursor = self.copyPin() orelse return;
+        const anchor = if (cursor.before(sel.topLeft(s))) sel.bottomRight(s) else sel.topLeft(s);
+        if (kind == .word) {
+            self.dropWordAnchor();
+            self.copy_word = .{ .screen = s, .pin = try s.pages.trackPin(anchor) };
+        }
+        try self.copyApply(anchor, cursor);
+    }
+
     /// 뷰포트 좌표를 화면 안으로 붙인다. 화면 크기가 아직 0이면 null이다.
     /// 격자 크기를 `pages`에서 읽는 이유는 `copyMove`의 주석에 있다.
     fn copyClamp(self: *Screen, x: u16, y: u16) ?Cursor {
@@ -1337,12 +1396,20 @@ pub const Screen = struct {
     }
 
     /// copy mode를 나간다. 선택도 함께 지운다 — 안 지우면 모드를 나간 뒤에도
-    /// 반전된 띠가 화면에 남는다.
+    /// 반전된 띠가 화면에 남는다. 뗌이 선택을 두고 나가는 길은 `copyRelease`다
+    /// (SE design 결정 1).
     pub fn copyExit(self: *Screen) void {
-        self.copy_cursor = null;
+        self.copyDetach();
         self.copy_kind = null;
         self.dropWordAnchor();
         self.copy_anchor_y = null;
+        self.term.screens.active.clearSelection();
+    }
+
+    /// copy mode의 커서와 검색 상태를 버린다 — `copyExit`의 반이다. 선택 · 방식 ·
+    /// 단어 앵커 · 앵커 감시는 두므로 `copyRelease`가 쓴다(SE design 결정 6).
+    fn copyDetach(self: *Screen) void {
+        self.copy_cursor = null;
         // 프롬프트도 함께 닫는다(design 결정 10). 안 닫으면 모드를 나갔다
         // 다시 들어왔을 때 지난 검색어가 화면에 남는다.
         self.findCancel();
@@ -1366,7 +1433,6 @@ pub const Screen = struct {
         // 나갔다 들어와도 `/`+Enter가 동작하는 것이 CS-M1의 전부다.
         // 검사 33이 이 예외를 본다.
         self.find_status = false;
-        self.term.screens.active.clearSelection();
     }
 
     /// `/`. 프롬프트를 연다. 언제나 빈 검색어로 시작한다(design 결정 8) —
@@ -2218,6 +2284,22 @@ pub const Screen = struct {
         clip.set(text);
         // copyExit이 선택을 지우므로 문자열을 먼저 뽑아 둔 뒤에 부른다.
         self.copyExit();
+        return text;
+    }
+
+    /// 포인터의 뗌(SE design 결정 1). `copyYank`와 같이 선택을 `clip`에 넣고 copy
+    /// mode를 나가지만, 선택을 지우지 않는다 — 반전이 남은 선택으로 화면에 남고
+    /// Shift 클릭이 그것을 늘린다(`copyExtendAt`). 방식 · 단어 앵커 · 앵커 감시도
+    /// 함께 둔다. 선택이 없으면 `copyYank`와 같다(모드를 나가고 null).
+    pub fn copyRelease(self: *Screen, clip: *clipboard.Clipboard) !?[]const u8 {
+        const s = self.term.screens.active;
+        const sel = s.selection orelse {
+            self.copyExit();
+            return null;
+        };
+        const text = try s.selectionString(clip.alloc, .{ .sel = sel });
+        clip.set(text);
+        self.copyDetach();
         return text;
     }
 
