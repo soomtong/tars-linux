@@ -452,7 +452,8 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
 
 ## 비목표
 
-1. Bluetooth 오디오(이어폰 · 헤드셋). 블루투스 스택 자체가 없다.
+1. Bluetooth 오디오(이어폰 · 헤드셋). 블루투스 스택은 BT(2026-11-02)가 들였지만 A2DP · HFP의 사용자 공간(코덱 · 오디오 서버)이
+   없다 — BT design 비목표 2.
 2. PipeWire · PulseAudio · JACK, 앱 사이의 섞기 · 라우팅 정책. 섞기는 alsa-lib의 dmix까지다(결정 3).
 3. 터미널이 소리를 내는 것(벨, `\a`). terminal은 소리 장치를 안 연다.
 4. VD의 전사 파이프라인. 경계는 이렇다 — AU는 "`arecord`가 마이크의 바이트를 WAV로 쓰고 `aplay`가 WAV를 스피커로 낸다"까지이고,

@@ -188,7 +188,8 @@ initrd에 있고(WL) 채널 12~14는 나라 설정(`tars-config wifi --country`)
 1. 실칩 판정. 동글이 생기면 연다.
 2. `RT2800USB_UNKNOWN` · `RTL8XXXU_UNTESTED`. 드라이버 작성자가 안 본 장치 목록이다. 실제
    동글이 그 목록에 있으면 그때 켠다.
-3. 8723BU의 bluetooth(위험 3). TARS에 bluetooth 스택이 없다.
+3. 8723BU의 bluetooth(위험 3). 이 design 때는 TARS에 bluetooth 스택이 없었다 — BT(2026-11-02)가 들였지만 8723BU의 BT는
+   `rtl8xxxu`의 `enable_bluetooth`가 늘 0이라 여전히 안 켜진다.
 4. ath9k_htc의 1.3 firmware(`htc_9271.fw`) · mt76x2의 `mt7662u.bin` — 커널 6.18이 요청하지
    않는 파일.
 5. 다른 USB 무선 계열 — `rtl8187` · `zd1211rw` · `carl9170` · `ar5523` · `p54usb` ·

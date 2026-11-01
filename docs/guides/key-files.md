@@ -170,6 +170,11 @@
   인터페이스를 세어 `wpa_supplicant -g -O -c -i … -N …`를 exec한다. 부팅 뒤 생긴 인터페이스는
   `kernel/dhcpcd-hooks/10-tars-wifi`가 `interface_add`로 넣는다. `main.zig`가 그 칸을
   dhcpcd 앞에 둔다. 예약 이름 셋째가 `wpa_supplicant`다(`services.zig`).
+- `bluetooth.zig` — `bluetooth=on`이고 `/config`가 붙었으면 dbus와 bluetoothd를 감독 목록에 넣는다고 답한다(BT-M1).
+  path는 래퍼 둘 `/usr/lib/tars/tars-dbus` · `tars-bluetoothd`(`kernel/bluetooth/`)다 — 앞은 `/run/dbus`를 만들고
+  `dbus-daemon --system --nofork --nopidfile`을, 뒤는 `/config/bluetooth`를 만들고 버스 소켓을 기다린 뒤
+  `bluetoothd -n -P sap,network`을 exec한다. `main.zig`가 두 칸을 무선 셋 앞(2 · 3번)에 둔다. 예약 이름 넷째 ·
+  다섯째가 `dbus` · `bluetoothd`다. 페어링 키는 `/var/lib/bluetooth → /config/bluetooth` 링크(`make_initrd.sh`)로 디스크에 남는다.
 - `login.zig` — 부팅 때 `/etc/passwd`의 root 셸 자리와
   `/etc/ssh/sshd_config.d/tars-env.conf`의 `SetEnv` 한 줄을 쓴다(SV-M2). ssh 세션이
   콘솔과 같은 셸 · env를 갖는 이유가 이 파일이다.

@@ -90,7 +90,7 @@ NIC를 말하지 않으면 기본 NIC를 붙인다.
 45462(hangul) · 45463(tools) · 45464(net) · 45467~45470(net의 부팅 B~E) ·
 45471(machine) · 45472 · 45473(nic) · 45474 · 45480(firewall)이고, `hostfwd`는
 45465 · 45466(net)과 45475~45479(firewall)다. `boot` · `install`은 monitor를 안 쓴다.
-PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). 새 체인은 45495부터 쓴다. 45599까지는 예약돼 있다(RP-M0). 넘기면 Makefile `RESERVED_PORTS`와 `check.sh`의 `RESERVED_PORTS_WANT`를 함께 넓힌다.
+PD의 `pointer`가 45488(부팅 A) · 45489(부팅 B)를 쓴다(service가 45481~45486, pane이 45487 · 부팅 B 45490 — CB-M0). AU의 `audio`는 부팅 A · B · C가 monitor를 안 쓰고(전원은 프로브의 `kill -TERM 1`) 부팅 D만 45491을 쓴다(`usb-audio`의 `device_add`). VD의 `dictation`은 45492를 TLS 상대(`openssl s_server`, 부팅 A)에, 45493을 부팅 B의 monitor에 쓴다. BS의 `battery`는 부팅 A만 45494를 쓴다(부팅 B는 monitor가 없다). BT의 `bluetooth`는 포트를 안 쓴다(두 부팅 다 monitor 없이 프로브가 친다). 새 체인은 45495부터 쓴다. 45599까지는 예약돼 있다(RP-M0). 넘기면 Makefile `RESERVED_PORTS`와 `check.sh`의 `RESERVED_PORTS_WANT`를 함께 넓힌다.
 
 ### 회차의 로그는 `out/gate-logs/<시각>/<체인>-<회차>/`에 남고 셈 줄이 먼저 말한다 (AL-M0 · GF-M1)
 

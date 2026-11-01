@@ -487,6 +487,13 @@ run_chain() {
 # terminal의 battery> 줄과 status> battery 줄(띠에서 색 셋의 픽셀을 센 것)이다. 부팅 B는
 # -append로 켠 배터리가 첫 프레임에 이미 칸으로 있는 것을 본다. 회차당 부팅 2회.
 #
+# BT 체인은 블루투스를 본다. 커널에 내장된 가상 HCI(/dev/vhci) 위에 BlueZ의 btvirt(설정 디스크,
+# sysroot에서)가 컨트롤러 둘을 만들고, 디스크의 bluetooth=on을 본 init이 dbus · bluetoothd를
+# 감독 목록에 넣는다. 프로브(services.d/bt)가 두 컨트롤러를 Just Works로 페어링하고 bluetoothd를
+# 재시작하고 tars-config로 끈다 — 판정은 init · 래퍼 · 커널의 줄과 프로브의 bt-probe: 줄, 그리고
+# /config/bluetooth에 남은 키 파일이다. 부팅 B는 디스크 없이 떠서 기본값(꺼짐)의 음성을 본다.
+# 게스트에 한 글자도 안 치고 monitor도 없다. 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -512,6 +519,7 @@ CHAINS=(
   "AU-M3:./audio/check.sh"
   "VD-M0:./dictation/check.sh"
   "BS-M1:./battery/check.sh"
+  "BT-M2:./bluetooth/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -737,7 +745,7 @@ clean
 
 # DR-M1 결정 7. 아래 prebuild의 make_initrd.sh가 initrd에 render verify의 표식(/etc/tars/render-verify)을
 # 넣는다 — 모든 체인의 모든 프레임이 `terminal: verify>` 줄을 찍고 check_verify_lines가 회차마다 읽는다.
-# 변수 하나로 스물두 체인과 ISO 줄이 함께 켜지는 것은 initrd를 여기서 한 번만 묶기 때문이다. make iso ·
+# 변수 하나로 스물세 체인과 ISO 줄이 함께 켜지는 것은 initrd를 여기서 한 번만 묶기 때문이다. make iso ·
 # probe/run.sh에는 이 변수가 없어 배포 ISO와 측정은 꺼진 채다.
 export TARS_RENDER_VERIFY=1
 

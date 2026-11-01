@@ -95,7 +95,7 @@ milestone은 둘(BS-M0 · BS-M1)이다. 크기는 Copy Indicator(CI)보다 크�
 |---|---|---|
 | `type` | `Battery` | `Mains` · `USB`는 어댑터다 |
 | `present` | `0`이 아니다(파일이 없으면 있는 것으로 본다) | test_power의 꺼진 배터리를 거른다(결정 9). ACPI는 빠진 배터리를 아예 지우므로 실기에서는 거의 안 걸린다 |
-| `scope` | `Device`가 아니다(파일이 없으면 통과) | 무선 마우스 · 블루투스 헤드셋의 배터리가 `Device`다. 커널의 `__power_supply_is_system_supplied`도 같은 값으로 거른다. 지금 커널은 `HID_BATTERY_STRENGTH`가 꺼져 있어 그런 장치가 없지만, 켜지는 날 마우스 잔량이 노트북 잔량 자리에 뜨면 안 된다 |
+| `scope` | `Device`가 아니다(파일이 없으면 통과) | 무선 마우스 · 블루투스 헤드셋의 배터리가 `Device`다. BT(2026-11-02)가 블루투스를 들였지만 `HID_BATTERY_STRENGTH`는 그대로 꺼져 있다(BT 비목표 6). 커널의 `__power_supply_is_system_supplied`도 같은 값으로 거른다. 지금 커널은 `HID_BATTERY_STRENGTH`가 꺼져 있어 그런 장치가 없지만, 켜지는 날 마우스 잔량이 노트북 잔량 자리에 뜨면 안 된다 |
 
 DMI chassis type(`/sys/class/dmi/id/chassis_type`)을 안 쓰는 이유는 셋이다. 첫째, 요청이 말하는 것은 "노트북이라는 분류"가
 아니라 "보여 줄 잔량"이다 — 배터리를 뺀 노트북에는 보여 줄 것이 없고, 배터리가 붙은 미니 PC에는 있다. 둘째, firmware가

@@ -4,6 +4,19 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+BT(2026-11-02)가 남긴 것.
+
+- [ ] Keyboard Hotplug — terminal은 부팅 때 init이 고른 키보드 하나(`argv[4]`)만 읽는다(BT design 확인 7 · 비목표 1). BT 키보드는
+      bluetoothd → uhid/hidp → evdev까지 가고 거기서 멈춘다. USB 키보드를 부팅 뒤에 꽂아도 같다. 포인터는 PD-M0의 uevent로
+      이미 잡으므로 그 길(`drainUevents` → `tryOpenPointer`)에 키보드를 더하는 서브프로젝트다 — 여러 키보드의 `key_state`를
+      어떻게 나눌지가 설계의 핵심. 게이트는 monitor `device_add usb-kbd` 뒤 `sendkey`가 그 장치로 가는지부터 본다.
+- [ ] 실기에서 처음 볼 것: `bluetoothctl list`에 내장 어댑터가 뜨는지(안 뜨면 `dmesg | grep -i bluetooth` — firmware 이름이
+      목록에 없으면 그 이름을 `guest_firmware.sh`에), BLE 마우스를 `pair` · `trust` · `connect`한 뒤 화살표가 움직이는지(uhid →
+      evdev → terminal의 pointer hotplug), 재부팅 뒤 마우스가 스스로 다시 붙는지(`/config/bluetooth`의 키). BLE HID의 uhid 길은
+      게이트가 못 본다(BT design 위험 4).
+- [ ] Intel BT firmware 28MB를 전부 싣는다(BT design 결정 2). 실기가 쓰는 칩이 몇 개로 정해지면 그 `ibt-<hw>` 계열만 남겨
+      initrd를 20MB 줄일 수 있다 — 지금은 근거가 없어 전부다.
+
 KU(2026-11-01)가 남긴 것.
 
 - [ ] 7.4가 longterm으로 지정되면(12월 중순 예상, kernel.org `releases.json`의 `moniker`) 6.18에서 옮긴다. 메이저가 바뀌어

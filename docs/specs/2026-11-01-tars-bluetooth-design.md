@@ -171,7 +171,7 @@ default y로 따라온다. 모듈 없는 커널이라 전부 내장이다. `oldd
 
 Dockerfile의 sysroot 목록에 더하는 것: `bluez` · `bluez-test-tools` · `dbus-daemon` · `dbus-system-bus-common` ·
 `dbus-bin` · 확인 4의 라이브러리 여덟. `guest_tools.sh`에 층 하나(Bluetooth)를 더한다 — `bluetoothd`(자리
-`/usr/libexec/bluetooth/`는 그대로) · `bluetoothctl` · `btmgmt` · `dbus-daemon` · `dbus-send` · `dbus-uuidgen`. `btvirt`는
+`/usr/libexec/bluetooth/`는 그대로) · `bluetoothctl` · `btmgmt` · `dbus-daemon` · `dbus-send`(`dbus-uuidgen`은 실측 5로 뺐다). `btvirt`는
 목록에 없다(게이트 전용). `make_initrd.sh`는 `/etc/bluetooth/main.conf` · `input.conf` · `/usr/share/dbus-1/system.conf` ·
 `system.d/bluetooth.conf`를 sysroot에서 복사하고, `/etc/passwd` · `group`에 `messagebus`(101)를 더하고,
 `/var/lib/bluetooth`를 `/config/bluetooth`로 가는 심볼릭 링크로 만든다 — 페어링 키가 재부팅을 넘는 길이 이
@@ -185,9 +185,10 @@ WL과 같은 래퍼 스크립트를 띄운다(`kernel/bluetooth/tars-dbus` · `t
 - `tars-dbus` — `mkdir -p /run/dbus`, `exec dbus-daemon --system --nofork --nopidfile`. `exec`이라 PID 1이 쥔 pid가
   곧 dbus-daemon이다.
 - `tars-bluetoothd` — `mkdir -p /config/bluetooth`, 시스템 버스 소켓(`/run/dbus/system_bus_socket`)이 생길 때까지
-  최대 5초(0.1초 × 50) 기다린 뒤 `exec bluetoothd -n`. 기다리는 이유는 감독 루프가 두 칸을 같은 바퀴에 띄우고
-  `bluetoothd`는 버스가 없으면 바로 죽기 때문이다 — 죽음 · 재시작으로 맞추는 것보다 기다리는 것이 로그가
-  깨끗하다. 5초가 지나면 그냥 exec한다(죽고 재시작되는 평소 길).
+  최대 10초(0.1초 × 100) 기다린 뒤 `exec bluetoothd -n -P sap,network`(실측 5 · 6 — TCG에서 소켓은 2초 뒤에
+  생긴다, `-P`는 RFCOMM · BNEP가 없어 투덜대는 플러그인 둘을 끈다). 기다리는 이유는 감독 루프가 두 칸을 같은
+  바퀴에 띄우고 `bluetoothd`는 버스가 없으면 바로 죽기 때문이다 — 죽음 · 재시작으로 맞추는 것보다 기다리는 것이
+  로그가 깨끗하다. 10초가 지나면 그냥 exec한다(죽고 재시작되는 평소 길).
 
 둘의 이름은 `services.RESERVED`에 들어가 `services.d`의 같은 이름을 막는다. `tars-service restart bluetoothd`가
 그대로 된다(CT의 동사 넷). `dbus`를 재시작하면 `bluetoothd`가 버스를 잃고 죽어 감독자가 다시 띄운다 — 위험 7.
@@ -217,20 +218,25 @@ WL과 같은 래퍼 스크립트를 띄운다(`kernel/bluetooth/tars-dbus` · `t
 
 ### 결정 8 — 게이트는 스물셋째 체인 `bluetooth/check.sh`다
 
-- 정적(부팅 없음) — 확인 1의 심볼 아홉이 `=y`, initrd에 데몬 둘 · `bluetoothctl` · 설정 파일 넷 · `messagebus` 줄 ·
-  `/var/lib/bluetooth` 링크가 있다. firmware는 1b가 센다.
-- 부팅 A — 설정 디스크에 `bluetooth=on`과 `btvirt`(sysroot에서), 그리고 가상 컨트롤러를 띄우고 `bluetoothctl`을
-  모는 스크립트(`bluetooth/bt.sh`, `services.d`가 아니라 셸에서 친다). 판정: init의 `join` 줄 · 감독자의 `started
-  service dbus` · `started service bluetoothd` · 커널의 `Bluetooth: HIDP (Human Interface Emulation)` 줄 ·
-  `/dev/uhid` 존재 · `btvirt` 뒤 `bluetoothctl list`에 컨트롤러 · `show`의 `Powered: yes`(AutoEnable) ·
-  `/config/bluetooth/<주소>/settings`가 생겼다(링크가 산다) · `tars-service restart bluetoothd` 뒤 복귀 ·
-  `tars-config set bluetooth=off` + `reload`로 둘이 내려간다.
-- 부팅 A의 후보 — 두 가상 컨트롤러 사이의 LE 페어링(`btvirt -l2`, 한쪽 `advertise on` · 다른 쪽 `scan on` · `pair`).
-  되면 `/config/bluetooth/<A>/<B>/info`의 `[LongTermKey]`가 "페어링 키가 디스크에 남는다"를 글자로 증명한다. M0이
-  손으로 먼저 해 보고 되는 만큼만 체인에 넣는다(위험 5).
-- 부팅 B — 디스크 없음. `bluetooth stays off`, 데몬 둘은 `config_off`, `bluetoothd`가 로그에 없다(기본값의 음성).
-- mutation 셋 — `CONFIG_BT`를 끄면 정적 검사, `wants`가 `off`를 무시하면 부팅 B, 링크를 빼면 `settings`가
-  `/config`에 안 생긴다.
+(M0 뒤에 모양을 정했다 — 처음 적은 것은 "페어링은 후보"였는데 실측 7이 되는 것을 보여 검사로 올렸다.)
+
+게스트 쪽 일은 설정 디스크의 `services.d/bt`(= `bluetooth/bt.sh`)가 하고 체인은 한 글자도 안 친다 — monitor
+포트가 없다(audio 부팅 A ~ C와 같다). `btvirt`는 sysroot에서 디스크로 가고 initrd에는 없다.
+
+- 정적(부팅 없음) — 심볼 열하나(`BT` · `BT_BREDR` · `BT_LE` · `BT_HIDP` · `BT_HCIBTUSB` · `_MTK` · `BT_INTEL_PCIE` ·
+  `BT_HCIVHCI` · `UHID` · `CRYPTO_USER_API_HASH` · `_SKCIPHER`)이 `=y`, initrd에 데몬 둘 · `bluetoothctl` · `btmgmt` ·
+  `dbus-send` · 설정 넷 · 래퍼 둘 · `/var/lib/bluetooth` 링크 · `libglib-2.0`, `/etc/passwd`의 `messagebus`, 래퍼 둘의
+  `exec`. firmware는 `tools` 1b가 센다.
+- 부팅 A — `bluetooth=on`. init의 `join` 줄과 `started service dbus`가 `bluetoothd`보다 앞(검사 2) · 프로브의 `pgrep`이
+  감독자의 pid와 같다(exec, 검사 3) · 커널 줄 일곱과 `/dev/vhci` · `/dev/uhid` · 링크(검사 4) · `btvirt -l2`의
+  컨트롤러 둘이 `Powered: yes`이고 `/config/bluetooth/<주소>/settings`가 둘(검사 5) · A가 B를 Just Works로 페어링해
+  `Bonded: yes`, `info`에 `[LinkKey]` · LongTermKey · `Trusted=true`(검사 6) · `tars-service restart bluetoothd` 뒤 새
+  pid가 컨트롤러 둘과 `Paired: yes`를 안다 — 디스크의 키를 되읽었다(검사 7) · `tars-config set bluetooth=off` + `reload`가
+  `bluetooth: on -> off (now)`를 말하고 `reload: service dbus stop` · `bluetoothd stop`, `pgrep`이 비었다(검사 8).
+- 부팅 B — 디스크 없음. `bluetooth=off, bluetooth stays off`, 데몬 둘 · 래퍼 줄 · `Bluetooth daemon`이 로그에 없고
+  커널 스택 줄은 있다(검사 9, 기본값의 음성).
+- mutation 셋 — `CONFIG_BT`를 끄면 검사 1, `bluetooth.wants`가 `.off`를 무시하면 검사 9, `make_initrd.sh`의 링크를 빼면
+  검사 1(정적)과 검사 5(`settings`가 `/config`에 안 생긴다).
 
 ## 위험
 
