@@ -130,6 +130,26 @@ ESP에는 두 벌만 들어가므로(확인 3) old를 먼저 지워야 한다. �
 상태는 그 부팅 한 번뿐이다. 계속 old로 쓰려면 매번 고르거나, 고친 ISO로 다시 갱신한다. 실행 중인 시스템에서 old를 new로 올리는
 명령은 만들지 않는다(비목표 3).
 
+### 결정 8. 새 설치의 ESP는 1GiB다
+
+사용자가 정했다(2026-11-01). 슬롯 둘은 ESP 사용량을 두 배로 만든다. 그 비용을 같은 서브프로젝트에서 치른다. 256MiB에서는 한 벌이
+약 125MB를 넘는 순간 회전이 멈추는데(위험 2), 지금 한 벌이 102MB라 여유가 23MB뿐이다. 1GiB면 한 벌이 약 500MB가 될 때까지
+두 벌이 들어간다.
+
+다른 운영체제와 비교하면 이렇다. Windows는 ESP(100 · 260MB)에 부트 관리자만 두고 커널은 NTFS 파티션에서 읽는다. macOS는
+고정 크기 파티션 대신 APFS 볼륨들이 컨테이너의 빈 공간을 나눠 쓴다. TARS는 둘 다 못 한다. Limine이 읽는 파일시스템이
+FAT12/16/32와 ISO9660뿐이라서다(v12.5.2 README). 그래서 커널이 FAT 위에 있어야 하고, FAT 파티션의 크기를 넉넉히 잡는 것이
+가장 싼 답이다. ESP와 이미지를 가르는 길(systemd의 XBOOTLDR처럼 p3에 큰 FAT를 따로 두기)은 비목표 4에 남긴다.
+
+- `disk.zig`의 `SFDISK_SCRIPT`에서 p1을 `size=1GiB`로 바꾼다. p2(1GiB)는 그대로다.
+- 디스크가 배치보다 작으면 디스크를 건드리기 전에, YES를 묻기 전에 거절한다. 지금은 이런 검사가 없다. 최소 크기가 약 1.3GiB에서
+  2GiB 남짓으로 커지므로, 2GB USB 스틱에 깔면 확인을 받은 뒤 sfdisk에서 실패하게 된다.
+- install 체인의 디스크(`truncate -s 2G`)를 3G로 올린다. 2GiB에는 1GiB + 1GiB에 GPT의 앞뒤 머리가 들어가지 않는다. sparse 파일이라
+  호스트 디스크는 거의 쓰지 않는다.
+- 사용자 안내(`docs/guides/running-tars.md` 216줄)의 256MiB를 고친다. DI design의 256MiB는 그때의 기록이라 고치지 않는다.
+- 이미 설치된 디스크(256MiB)는 `--wipe`로 다시 깔아야 넓어진다. 갱신은 ESP 크기를 바꾸지 않는다(비목표 4). 그런 디스크에서는
+  위험 2의 검사가 넘침을 막는다.
+
 ## 게이트
 
 install 체인(`install/check.sh`)에 붙인다. 새 체인을 만들지 않는다 — 슬롯은 설치된 디스크에만 있고, 설치된 디스크를 만드는 것은
@@ -144,32 +164,54 @@ install 체인(`install/check.sh`)에 붙인다. 새 체인을 만들지 않는�
 
 ## Milestone
 
-- KU-M0 — 슬롯 둘. 결정 1~7과 게이트. 커널 버전은 그대로다. plan을 쓰기 전에 아래 "M0이 먼저 잴 것" 둘을 잰다.
+- KU-M0 — 슬롯 둘과 1GiB ESP. 결정 1~8과 게이트. 커널 버전은 그대로다. 착수 전 실측 둘은 아래 "M0 전에 잰 것"에 있다.
 - KU-M1 — 커널 버전 올리기. 6.18 longterm의 최신 패치로 갈지, 그 다음 longterm으로 갈지는 M0 게이트 뒤에 조사해서 고른다.
   `.config`를 `olddefconfig`로 옮긴 diff를 읽는 일, tarball sha256(VS), 이미지 크기를 다시 재서 ESP 두 벌에 들어가는지 보는 일,
   루트 게이트 22/22가 이 milestone의 몫이다. 실기 확인은 사용자 몫이고, 그때 old 엔트리가 처음으로 실제 쓸모를 갖는다.
 
-## M0이 먼저 잴 것
+## M0 전에 잰 것
 
-1. Limine 메뉴를 시리얼로 조작할 수 있는가. `serial: yes`가 출력뿐 아니라 입력도 받는지, OVMF에서 화살표의 escape 순서가 메뉴에
-   먹는지. 안 되면 게이트의 old 부팅은 `default_entry: 2`로 지은 conf를 따로 놓는 방식으로 바꾼다.
-2. 엔트리의 `kernel_path`가 없을 때 Limine이 무엇을 하는가. 메뉴로 돌아가는지, panic으로 멈추는지. 결정 4의 표에서 "빈 자리"를
-   기본 엔트리로 만난 사람이 old를 고를 수 있는지가 이것에 달렸다.
+2026-11-01, HEAD `2234888`, Limine 12.5.2, 컨테이너의 OVMF(`OVMF_CODE_4M.fd`) + TCG. ESP는 디스크 이미지 대신 QEMU의 vvfat
+(`-drive file=fat:<디렉터리>,if=none,readonly=on` + `virtio-blk-pci`)로 흉내 냈다. 기본 IDE 장치는 읽기 전용 vvfat를 `Block node is
+read-only`로 거부한다. 엔트리 둘의 cmdline에 `tars.slot=new` · `tars.slot=old`를 두고, 커널의 `Command line:` 줄로 어느 쪽이
+떴는지 갈랐다. 엔트리 둘은 같은 `bzImage` · `initrd.cpio`의 복사본이다.
+
+| | conf | 시리얼 입력 | 결과 |
+| --- | --- | --- | --- |
+| A | 둘 다 있음, `timeout: 3` | 없음 | `tars.slot=new`(기본 엔트리) |
+| B | 둘 다 있음, `timeout: 10` | 메뉴가 보이면 `ESC [ B`, 0.5초 뒤 `CR` | `tars.slot=old` |
+| C | new의 `kernel_path`가 없는 파일, `timeout: 3` | 없음 | `PANIC: linux: Failed to open kernel with path …` 뒤 `Press a key to return to menu.`에서 멈춰 기다린다 |
+| D | C와 같음 | 그 줄이 보이면 공백 하나, 3초 뒤 `ESC [ B` · `CR` | 메뉴로 돌아가 `tars.slot=old` |
+
+1. 시리얼로 메뉴를 조작할 수 있다. `serial: yes`는 입력도 받고, VT100의 아래 화살표(`ESC [ B`)가 먹는다. 게이트의 old 부팅은 이
+   방식으로 한다. 함정 하나가 있다. Limine은 메뉴 글자 사이에 커서 이동 escape를 끼우므로 날 로그에서 `TARS old`를 grep하면 영영
+   안 나온다(B의 첫 회가 그래서 키를 못 보냈다). install 체인의 `clean()`과 같은 perl로 escape를 걷은 뒤 `Booting automatically`를
+   본다.
+2. 없는 `kernel_path`는 panic이지만 막다른 길이 아니다. 키 하나로 메뉴에 돌아가고, 돌아간 메뉴에는 카운트다운이 없다
+   (`Booting automatically`가 로그 전체에 한 번뿐이다). 사람이 고를 때까지 기다린다. 그래서 결정 4의 표에서 new가 "빈 자리"인
+   순간에 끊긴 디스크도 사람이 old를 고를 수 있다. 빈 자리를 만나서 기본 엔트리로 계속 다시 시작하는 일은 없다.
+3. 메뉴의 아래 줄은 `ARROWS Select  ENTER Boot  E Edit  S Firmware Setup  B Blank Entry`다. `E`(편집기)는 기본으로 켜져 있다
+   (`editor_enabled`). 실기에서 cmdline을 손으로 고칠 길이 이미 있는 셈이다(`project_shell_config.md`의 "실기에서 limine 메뉴로
+   토큰을 적는 것").
 
 ## 비목표
 
-1. legacy 보관(세 번째 세대). 사용자가 뺐다(2026-11-01). 크기로도 ESP에 안 들어간다(확인 3).
+1. legacy 보관(세 번째 세대). 사용자가 뺐다(2026-11-01). 256MiB ESP에는 크기로도 안 들어갔다(확인 3). 1GiB(결정 8)에는 들어가지만 뺀 결정은 그대로다.
 2. 자동 롤백 · boot counting. Limine에 재료가 없다(확인 1). 필요해지면 UEFI `BootNext`와 init의 "부팅 성공" 확정을 묶는 다음
    서브프로젝트다.
 3. 실행 중인 시스템에서 슬롯을 바꾸는 명령(`tars-install --rollback` 같은 것). 갱신은 지금처럼 ISO로 뜬 기계에서만 한다.
-4. ESP 크기 바꾸기. 이미 설치된 디스크는 `--wipe` 없이 못 키운다. KU-M1의 크기 재기가 근거를 주면 그때 연다.
+4. 이미 설치된 디스크의 ESP 키우기, ESP와 이미지 파티션 가르기. 새 설치는 결정 8이 1GiB로 키운다. 이미 설치된 디스크는 파티션을
+   옮겨야 하므로 갱신으로 하지 않고 `--wipe`에 맡긴다. 이미지를 p3의 큰 FAT로 옮기는 길(XBOOTLDR식)은 한 벌이 1GiB ESP에도 두 벌
+   안 들어갈 만큼 커질 때 연다. 그보다 먼저 쓸 손잡이는 initrd 꼬리의 무선 firmware(`firmware.cpio.gz`, 45MB)다.
 5. 네트워크로 받는 갱신, Secure Boot용 경로 hash(`CONFIG.md`의 `#<blake2b>`).
 
 ## 위험
 
 1. vfat는 저널이 없다. 단계마다 `sync`해도 rename 도중 전원이 나가면 디렉터리 항목이 깨질 수 있다. 그때는 지금과 같다 — ISO로
    다시 갱신한다.
-2. ESP 여유. 두 벌 204MB에 EFI 파일과 FAT32의 몫을 더하면 256MiB에서 약 60MB가 남는다. 커널을 올리거나 firmware를 더하면 줄어든다.
-   한 벌이 약 125MB를 넘으면 회전이 실패한다. 회전 전에 매체의 두 파일 크기와 ESP의 빈 자리를 비교해서, 모자라면 아무것도 지우지
-   않고 멈춘다(DI의 "디스크를 건드리기 전에 본다"와 같은 원칙).
+2. ESP 넘침. 결정 8 이전에 설치된 256MiB ESP에서는 한 벌이 약 125MB를 넘으면 두 벌이 안 들어간다(지금 102MB). 1GiB ESP에서는
+   그 문턱이 약 500MB다. 검사 없이 회전하면 1단계에서 old를 지운 뒤 4단계의 복사가 `ENOSPC`로 죽는다. 그러면 new는 반쪽이고 old는
+   이미 없어서, 결정 4의 "엔트리 하나는 뜬다"가 깨지는 유일한 길이 된다. 그래서 회전 전에 `ESP의 빈 자리 + old 슬롯의 크기 ≥ 매체의
+   두 파일 크기`인지 보고, 모자라면 아무것도 지우지 않고 멈춘다(DI의 "디스크를 건드리기 전에 본다"와 같은 원칙). 이 검사는
+   M0 게이트의 판정 하나로 둔다.
 3. 실기의 3초. 부팅마다 늦어진다. 길게 느껴지면 값만 줄인다(`0.5`도 된다).
