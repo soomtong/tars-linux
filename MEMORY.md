@@ -80,6 +80,7 @@ init · 설정 · 전원
 - [Shutdown signals](docs/decisions/project_shutdown_signals.md) — 종료 때 무엇이 저장되는지는 누가 먼저 죽는지에 갈린다, TERM 뒤 HUP의 뜻
 - [Shutdown latency](docs/decisions/project_shutdown_latency.md) — PID 1이 SIGTERM 뒤에 SIGHUP도 보낸다(2.9초 → 0.13초, SL, 2026-09-13)
 - [Disk install](docs/decisions/project_disk_install.md) — `tars-install`이 ESP와 설정 파티션을 만들고 디스크로 뜬다(DI, 2026-09-23) · 설치된 부팅의 5초 기다림 · 4Kn · 옛 ISO 서명(DC, 2026-09-26)
+- [Kernel upgrade](docs/decisions/project_kernel_upgrade.md) — 이미지 슬롯 둘 · 1GiB ESP · Limine 메뉴의 old 엔트리, 커널 6.18.60(KU-M0~M1, 2026-11-01)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)

@@ -4,6 +4,15 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+KU(2026-11-01)가 남긴 것.
+
+- [ ] 7.4가 longterm으로 지정되면(12월 중순 예상, kernel.org `releases.json`의 `moniker`) 6.18에서 옮긴다. 메이저가 바뀌어
+      `KERNEL_MAJOR`가 `7.x`이고 config diff가 크다. KU-M1 plan 확정 1~7을 같은 방법으로 다시 본다(`project_kernel_upgrade.md`
+      배운 것 4) — 툴체인 최소 버전도 더한다.
+- [ ] 실기에서 처음 볼 것: 메뉴 3초가 손에 맞는지, 0.1.3 이하로 깔린 디스크를 새 ISO로 갱신한 뒤 메뉴의 `(old)`가 옛 커널로 뜨는지(이미
+      깔린 디스크는 `boot/version`이 없어 첫 갱신에 old가 안 생긴다 — 두 번째 갱신부터, 또는 `--wipe`로 다시 깐 뒤), Limine 메뉴가
+      GOP 화면에 보이는지.
+
 BS(2026-10-09)가 남긴 것.
 
 - [ ] 실기 노트북에서 볼 것 셋. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`으로 `Battery`가 있는지 본다(로그

@@ -1,7 +1,7 @@
 # TARS Kernel Upgrade — Design
 
 Date: 2026-11-01
-Status: KU-M0 끝남(2026-11-01, 슬롯 둘 · 1GiB ESP · 컨테이너에 mtools, `make gate` 22/22 10분 26초, verify 8237줄). KU-M1(커널 버전 올리기) plan 전
+Status: 끝남(2026-11-01). KU-M0 슬롯 둘 · 1GiB ESP(`make gate` 22/22 10분 26초) · KU-M1 커널 6.18.42 → 6.18.60(22/22 10분 30초, verify 8214줄)
 
 사용자가 제안했다(2026-11-01). 설치된 디스크에 부트 엔트리 둘(new · old)을 두고, 새 이미지로 뜬 부팅에 이상이 있으면 old로
 돌아간다. 처음 제안에는 그 전 세대를 legacy로 보관하는 것도 있었는데 사용자가 뺐다(아래 비목표 1). 목적은 커널 버전을 올리는 것이지만,
@@ -181,6 +181,8 @@ KU-M0에서 실제로 선 판정은 이렇다(plan `docs/plans/2026-11-01-tars-k
 - KU-M1 — 커널 버전 올리기. 6.18 longterm의 최신 패치로 갈지, 그 다음 longterm으로 갈지는 M0 게이트 뒤에 조사해서 고른다.
   `.config`를 `olddefconfig`로 옮긴 diff를 읽는 일, tarball sha256(VS), 이미지 크기를 다시 재서 ESP 두 벌에 들어가는지 보는 일,
   루트 게이트 22/22가 이 milestone의 몫이다. 실기 확인은 사용자 몫이고, 그때 old 엔트리가 처음으로 실제 쓸모를 갖는다.
+  2026-11-01에 6.18.60을 골랐다(plan `docs/plans/2026-11-01-tars-kernel-upgrade-ku-m1.md`). 다음 longterm(관례상 7.4, 12월 중순)이 아직
+  없고 7.3은 longterm이 아니라서다. 7.4 이동은 나온 뒤에 따로 연다(`carryover.md`).
 
 ## M0 전에 잰 것
 
