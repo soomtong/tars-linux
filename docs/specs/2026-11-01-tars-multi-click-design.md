@@ -1,7 +1,7 @@
 # TARS Multi Click — Design
 
 Date: 2026-11-01
-Status: 설계(MC-M0 착수 전).
+Status: MC-M0 끝(2026-11-01, 실측), MC-M1 착수 전. plan은 `docs/plans/2026-11-01-tars-multi-click-mc-m0.md`.
 
 PD design(`docs/specs/2026-10-05-tars-pointer-devices-design.md`)의 비목표 2 "더블클릭 단어 선택 · 세 번 클릭 줄 선택 · Shift
 클릭으로 늘리기"를 연다. 사용자가 2026-11-01에 HANDOFF의 "PD 비목표" 셋(더블클릭 · 휠 방향 · 포인터 가속) 가운데 골랐다. 같은
@@ -48,6 +48,16 @@ PD design(`docs/specs/2026-10-05-tars-pointer-devices-design.md`)의 비목표 2
 9. 로그. 누름은 `terminal: pointer> press leaf=L row=R col=C`(여백이면 `press none`), 뗌은 `pointer> release drag=0|1`, 복사는
    `clip> len=N text=…` 뒤 `copy> yank`. `pointer/check.sh`는 `press` 줄을 글자 그대로 비교하는 자리가 여럿이다 — 이 줄의 모양을
    바꾸면 그 비교가 다 흔들린다.
+
+## 실측 (M0, 2026-11-01)
+
+값과 표는 MC-M0 plan의 "실측한 것" 절에 있다. 결정에 닿는 것만 옮긴다.
+
+1. `EVIOCSCLOCKID(CLOCK_MONOTONIC)`가 게스트에서 `rc=0`이고, 그 뒤 `ev.time`과 읽은 순간의 단조 시계 차가 0.05~0.23ms다(결정 2).
+2. 게이트의 `hmp` 네 명령에서 두 누름 차는 단독 96.8~117.6ms, 루트 게이트 부하 아래 103.1~119.7ms다. 500ms까지 380ms가 남는다 —
+   위험 1의 대책은 안 쓴다.
+3. 결정 4의 단어 식은 오른쪽 · 왼쪽 끌기 · 빈 칸으로 끌기 · soft wrap에서 섰다. 공백을 두 번 누르면 공백만이 아니라 이웃한 경계
+   문자(괄호 · 따옴표 등)와 한 덩어리이고, `selectionString`이 끝 공백을 자른다(`)  ` → `)`). ghostty와 같아 그대로 둔다.
 
 ## 결정
 
@@ -115,8 +125,8 @@ PD design(`docs/specs/2026-10-05-tars-pointer-devices-design.md`)의 비목표 2
 경계 문자는 `WORD_BOUNDARY` 하나다. 더블클릭과 `w`/`b`가 다른 경계를 쓰면 "`w`로 간 자리와 더블클릭이 고른 단어가 다르다"가 된다.
 
 단어가 없는 자리(쓰이지 않은 셀)를 두 번 누르면 `selectWord`가 null이다. 그때 선택은 비고, 뗌의 `copyYank`가 null을 돌려
-클립보드를 그대로 두고 모드를 나간다 — 이미 있는 길이다(`clip>` 줄이 안 나온다). 공백 위를 두 번 누르면 공백 덩어리가 고른다
-(조사 4, ghostty와 같다).
+클립보드를 그대로 두고 모드를 나간다 — 이미 있는 길이다(`clip>` 줄이 안 나온다). 공백 위를 두 번 누르면 공백과 이웃한 경계 문자의
+덩어리가 고른다(실측 3, ghostty와 같다).
 
 앵커가 단어 선택의 `start()`라는 점이 하나 걸린다. `copyApply`는 앵커를 "지금 선택의 start"로 받는데(조사 3), `.word`의 start는
 누른 자리가 아니라 그 단어의 첫 글자다. 거기서 다시 `selectWordBetween`을 불러도 같은 단어가 나오므로 결과는 같다. 왼쪽으로 끌어
