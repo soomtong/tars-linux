@@ -363,6 +363,13 @@ last_frame() {
   awk '/terminal: screen>/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$LOG"
 }
 
+# 마지막 프레임에서 $1행의 반전된 셀 수(copy/check.sh의 inverted_cells와 같다).
+# 반전은 전경이 기본 배경색(102030)이 된 셀이다 — 선택과 copy 커서가 그렇다.
+# style>은 포커스 패널의 기본색 아닌 셀을 96개까지 찍는다(STYLE_DUMP_LIMIT).
+inverted_cells() {
+  last_frame | grep -acE "terminal: style> $1,[0-9]+ fg=102030 bg=[0-9A-F]{6}" || true
+}
+
 # 마지막 screen> 줄에서 글자가 정확히 $1인 행의 번호(0부터). 여럿이면 가장
 # 아래 것, 없으면 -1이다. screen>은 포커스 패널의 행을 ' | '로 잇고(main.zig의
 # dumpScreen) 행이 바뀔 때마다 구분자가 하나씩 붙으므로 구간의 번호가 곧 행
@@ -1208,6 +1215,117 @@ if [ "$(clip_lines)" -ne "$((CLIPS + 1))" ] || [ "$(last_clip)" != "terminal: cl
   report_failure "after the drag and the click the clipboard lines grew by $(($(clip_lines) - CLIPS)), expected one 'clip> len=5 text=mc-on' ($(mc_state))"
 fi
 echo "click after drag: no repeat, $(last_clip)"
+
+# ── SE-M1: 뗀 뒤 선택이 남고, Shift 클릭이 늘린다 ─────────────────────────
+#
+# 같은 줄(ROW · PY)이다 — mc-two는 7~12열, three는 14~18열. 반전은 style> 줄로
+# 센다(inverted_cells). Shift는 sendkey shift 3000으로 3초 누른 채 두고(검사 29)
+# 그 안에 hmp 둘로 누르고 뗀다 — button_down · button_up의 기다림은 3초를 먹을
+# 수 있다. Shift 없는 클릭은 그 3초가 지난 뒤에 한다(sleep 3.2).
+#
+# 검사 사이의 sleep 0.7은 반복(500ms)이 아니라는 것을 조건 하나(앞 누름이
+# 끌렸다 · 늘리기 뒤는 처음부터)에 기대지 않으려는 것이다.
+se_state() { echo "last clip: '$(last_clip)', last copy: '$(tlog | grep -a 'terminal: copy>' | tail -n 1 | tr -d '\r')', inverted on row ${ROW}: $(inverted_cells "$ROW")"; }
+
+# ── 검사 38: 뗀 뒤 반전이 남는다 ───────────────────────────────────────────
+echo "=== the selection stays on screen after a drag copy ==="
+sleep 0.7
+CLIPS="$(clip_lines)"
+move_to "$(cell_x 7)" "$PY" ||
+  report_failure "the pointer did not reach the m of mc-two (last at: '$(last_at)')"
+button_down || report_failure "mouse_button 1 on mc-two printed no 'pointer> press' line"
+move_to "$(cell_x 12)" "$PY" ||
+  report_failure "the drag did not reach the o of mc-two (last at: '$(last_at)')"
+button_up || report_failure "mouse_button 0 after the mc-two drag printed no 'pointer> release' line"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "the mc-two drag put nothing on the clipboard ($(se_state))"
+[ "$(last_clip)" = "terminal: clip> len=6 text=mc-two" ] ||
+  report_failure "the mc-two drag copied '$(last_clip)', expected 'clip> len=6 text=mc-two'"
+wait_for_status_copy off ||
+  report_failure "after the mc-two drag the status line still reads '$(status_text)'; the release leaves copy mode"
+sleep 0.3
+[ "$(inverted_cells "$ROW")" -ge 6 ] ||
+  report_failure "after the release row ${ROW} has $(inverted_cells "$ROW") inverted cell(s), expected at least 6: the selection must stay on screen ($(se_state))"
+echo "lingering selection: $(inverted_cells "$ROW") inverted cells on row ${ROW}"
+
+# ── 검사 39: Shift 클릭이 오른쪽 끝을 옮기고 떼면 늘어난 글자를 복사한다 ──
+echo "=== a Shift click extends the selection to the right ==="
+sleep 0.7
+CLIPS="$(clip_lines)"; EXTENDS="$(copy_lines extend)"; REPEATS="$(repeat_count)"; RELS="$(pointer_count 'release ')"
+move_to "$(cell_x 18)" "$PY" ||
+  report_failure "the pointer did not reach the last e of three (last at: '$(last_at)')"
+echo "sendkey shift 3000" >&3
+sleep 0.3
+hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
+  report_failure "the Shift click printed no 'pointer> release' line"
+wait_for_count copy_lines extend "$((EXTENDS + 1))" ||
+  report_failure "the Shift click on a lingering selection printed no 'copy> extend' ($(se_state))"
+wait_for_log "terminal: copy> extend row=${ROW} col=18" ||
+  report_failure "the Shift click extended to '$(tlog | grep -a 'terminal: copy> extend' | tail -n 1 | tr -d '\r')', expected 'copy> extend row=${ROW} col=18'"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "releasing the Shift click put nothing on the clipboard ($(se_state))"
+[ "$(last_clip)" = "terminal: clip> len=12 text=mc-two:three" ] ||
+  report_failure "the Shift click copied '$(last_clip)', expected 'clip> len=12 text=mc-two:three'"
+[ "$(repeat_count)" -eq "$REPEATS" ] ||
+  report_failure "the Shift click counted as a repeat: '$(last_repeat)'"
+wait_for_status_copy off ||
+  report_failure "after the Shift click the status line still reads '$(status_text)'"
+echo "shift click right: $(last_clip)"
+
+# ── 검사 40: 선택 앞을 Shift 클릭하면 가까운 끝(왼쪽)이 움직인다 ──────────
+#
+# 앵커 고정이면 누른 칸에서 옛 앵커(7열)까지라 'mc-one m'(8)이 된다 — mutation 2.
+echo "=== a Shift click before the selection moves its left end ==="
+sleep 0.7
+CLIPS="$(clip_lines)"; EXTENDS="$(copy_lines extend)"; RELS="$(pointer_count 'release ')"
+move_to "$(cell_x 0)" "$PY" ||
+  report_failure "the pointer did not reach the m of mc-one (last at: '$(last_at)')"
+echo "sendkey shift 3000" >&3
+sleep 0.3
+hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
+  report_failure "the second Shift click printed no 'pointer> release' line"
+wait_for_count copy_lines extend "$((EXTENDS + 1))" ||
+  report_failure "the Shift click before the selection printed no 'copy> extend' ($(se_state))"
+wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+  report_failure "releasing the second Shift click put nothing on the clipboard ($(se_state))"
+[ "$(last_clip)" = "terminal: clip> len=19 text=mc-one mc-two:three" ] ||
+  report_failure "the Shift click before the selection copied '$(last_clip)', expected 'clip> len=19 text=mc-one mc-two:three' (the nearer end moves)"
+echo "shift click left: $(last_clip)"
+
+# ── 검사 41: Shift 없는 클릭이 남은 선택을 지운다 ─────────────────────────
+#
+# 지운 뒤의 Shift 클릭은 보통 클릭이다 — 늘릴 것이 없다.
+echo "=== a plain click clears the lingering selection ==="
+sleep 3.2
+CLIPS="$(clip_lines)"; DESELECTS="$(copy_lines deselect)"; EXTENDS="$(copy_lines extend)"
+move_to "$(cell_x 3)" "$PY" ||
+  report_failure "the pointer did not reach the o of mc-one (last at: '$(last_at)')"
+button_down || report_failure "the plain click printed no 'pointer> press' line"
+button_up || report_failure "the plain click printed no 'pointer> release' line"
+wait_for_count copy_lines deselect "$((DESELECTS + 1))" ||
+  report_failure "the plain click on a lingering selection printed no 'copy> deselect' ($(se_state))"
+sleep 0.3
+[ "$(inverted_cells "$ROW")" -eq 0 ] ||
+  report_failure "after the plain click row ${ROW} still has $(inverted_cells "$ROW") inverted cell(s) ($(se_state))"
+[ "$(clip_lines)" -eq "$CLIPS" ] ||
+  report_failure "the plain click copied something: '$(last_clip)'"
+RELS="$(pointer_count 'release ')"
+move_to "$(cell_x 10)" "$PY" ||
+  report_failure "the pointer did not reach the t of mc-two (last at: '$(last_at)')"
+echo "sendkey shift 3000" >&3
+sleep 0.3
+hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
+  report_failure "the Shift click without a lingering selection printed no 'pointer> release' line"
+sleep 0.5
+[ "$(copy_lines extend)" -eq "$EXTENDS" ] ||
+  report_failure "a Shift click with nothing to extend printed 'copy> extend' ($(se_state))"
+[ "$(clip_lines)" -eq "$CLIPS" ] ||
+  report_failure "a Shift click with nothing to extend copied something: '$(last_clip)'"
+echo "plain click: deselected, a Shift click afterwards is a plain click"
+sleep 3 # Shift가 떨어진 뒤에 다음 검사로
 
 # 마지막 검사(부팅 마우스를 뺀다)는 M1의 자리(679, 0)를 본다. 그리로 되돌린다.
 # 움직이면 화살표가 다시 보이므로, 뺄 때 숨는 at 줄이 찍힌다.

@@ -1550,9 +1550,15 @@ const Clips = struct {
         return clipboard.pick(self.scope, &self.shared, &pane.clip);
     }
 
-    /// `y`와 포인터 뗌. 선택을 고른 칸에 넣고 `clip>` 줄을 찍는다.
+    /// `y`. 선택을 고른 칸에 넣고 `clip>` 줄을 찍는다.
     fn yank(self: *Clips, pane: *Pane) !void {
         dumpClip(try pane.screen.copyYank(self.of(pane)));
+    }
+
+    /// 포인터 뗌(SE design 결정 1). `yank`와 같은 칸 · 같은 `clip>` 줄이지만 선택은
+    /// 화면에 남는다 — Shift 클릭이 그것을 늘린다.
+    fn release(self: *Clips, pane: *Pane) !void {
+        dumpClip(try pane.screen.copyRelease(self.of(pane)));
     }
 
     /// `Cmd+V`. 목적지가 여기서 갈린다(FP design 결정 3) — 검색 프롬프트가
@@ -2874,9 +2880,16 @@ const PointerWire = struct {
             logline.print("terminal: pointer> press none\n", .{});
         }
         self.gesture_ws.* = self.current;
-        // `extend`(Shift + 남은 선택, SE design 결정 3)는 SE-M1이 잇는다 — 거짓이면
-        // 늘리기가 없다(`Stamp.extend`의 기본값).
-        const intents = self.gesture.press(hit, self.ws.focus, .{ .t_us = t_us, .x = x, .y = y, .ws = self.current, .extend = false });
+        // 늘리기(SE design 결정 3) — Shift를 누른 채 남은 선택이 있는 패널을 눌렀다.
+        // 두 사실을 여기서 합쳐 넘긴다(`pointer.zig`는 둘 다 못 본다).
+        const linger = if (hit) |h| self.ws.panes[h.leaf].?.screen.hasLinger() else false;
+        const intents = self.gesture.press(hit, self.ws.focus, .{
+            .t_us = t_us,
+            .x = x,
+            .y = y,
+            .ws = self.current,
+            .extend = self.mods.shift and linger,
+        });
         if (self.gesture.clicks >= 2) {
             logline.print("terminal: pointer> repeat n={d} dt={d}\n", .{ self.gesture.clicks, @divTrunc(self.gesture.gap_us, 1000) });
         }
@@ -3011,10 +3024,11 @@ const PointerWire = struct {
                 // 뗌 = 복사(design 결정 6). 키보드의 `y`와 같은 줄 둘이 같은
                 // 순서로 찍힌다 — `clip>` 다음 `copy> yank`. 그리고 입력 모드를
                 // normal로 되돌린다. 안 되돌리면 복사한 뒤 친 글자가 copy 표에
-                // 삼켜진다(pointer/check.sh 검사 18).
+                // 삼켜진다(pointer/check.sh 검사 18). `y`와 다른 것 하나 — 선택은
+                // 화면에 남는다(SE design 결정 1). 다음 누름이 지운다.
                 .copy => |leaf| {
                     const p = &self.ws.panes[leaf].?;
-                    try self.clips.yank(p);
+                    try self.clips.release(p);
                     dumpCopy(p.screen, "yank");
                     _ = self.key_state.forceMode(.normal);
                     self.redraw = true;
