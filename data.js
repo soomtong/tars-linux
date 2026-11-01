@@ -5,12 +5,12 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-01',
-  latest: 'Extend Repeat (ER-M0)',
+  latest: 'Kernel Upgrade (KU-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1090,      // git rev-list --count main
+    commits: 1103,      // git rev-list --count main
     since: '2026-08-01',
     chains: 22,         // check.sh의 CHAINS
     zigKLines: 38,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -21,7 +21,7 @@ window.TARS = {
   serial: [
     [0, 'iso', 'out/tars.iso — El Torito · GPT hybrid'],
     [1, 'limine', 'kernel bzImage · module initrd.cpio'],
-    [2, '[    0.000000]', 'Linux version 6.18.42 (x86_64-linux-gnu-gcc 14.2.0)'],
+    [2, '[    0.000000]', 'Linux version 6.18.60 (x86_64-linux-gnu-gcc 14.2.0)'],
     [2, '[    3.457510]', 'Run /init as init process'],
     [3, 'tars-init:', 'starting as PID 1'],
     [3, 'tars-init:', 'mounted devtmpfs at /dev'],
@@ -103,6 +103,7 @@ window.TARS = {
     ['2026-11-01', 'Multi Click', 'MC', '두 번 누르면 단어, 세 번 누르면 줄 — 떼면 클립보드에'],
     ['2026-11-01', 'Shift Extend', 'SE', '떼도 선택이 남고 [Shift]+클릭이 가까운 끝을 옮긴다 — 떼면 다시 클립보드에'],
     ['2026-11-01', 'Extend Repeat', 'ER', '[Shift]+더블클릭은 단어, 트리플클릭은 줄 단위로 선택을 늘린다'],
+    ['2026-11-01', 'Kernel Upgrade', 'KU', '갱신이 지금 이미지를 old로 남기고 부트 메뉴에서 고를 수 있다 — 새 설치의 ESP는 1GiB, 커널은 6.18.60'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -135,6 +136,8 @@ window.TARS = {
         ['배터리 · AC', 'ACPI 배터리와 어댑터를 읽어 상태 줄에 잔량을 그린다', '2026-10-09'],
         ['터치패드 · 마우스 커널', 'PS/2(Synaptics · Elantech · ALPS 등) · SMBus · I2C-HID · Intel THC · HID multitouch', '2026-10-05'],
         ['오디오 커널', 'HDA 코덱 여덟 · Intel SOF(CNL~PTL) · AMD ACP · USB Audio, firmware 42개', '2026-10-06'],
+        ['부트 메뉴 — new · old', '설치된 디스크로 뜨면 Limine 메뉴가 3초. 기본은 새 이미지, 이상하면 화살표로 `(old)`를 골라 갱신 전 이미지로 뜬다', '2026-11-01'],
+        ['커널 6.18.60', '6.18 longterm의 최신 패치(6.18.42에서)', '2026-11-01'],
       ],
     },
     {
@@ -198,7 +201,7 @@ window.TARS = {
         ['`tars-config reload terminal`', '화면을 새 값으로 다시 띄운다(패널과 클립보드는 사라진다)', '2026-10-07'],
         ['`tars-config wifi` · `ssh` · `ssh-key` · `firewall` · `dictation`', '무선 접속 · sshd 켜고 끄기 · 공개 키 추가 · 포트 열고 닫기 · 받아쓰기 키와 설정', '2026-10-07'],
         ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
-        ['`tars-install <디스크>`', 'GPT에 256MiB ESP와 1GiB 설정 파티션. 이미 깔린 디스크는 부트 파일만 갱신하고 설정은 남긴다. UEFI 전용', '2026-09-23'],
+        ['`tars-install <디스크>`', 'GPT에 1GiB ESP와 1GiB 설정 파티션. 이미 깔린 디스크는 부트 파일만 갱신하고 설정은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-01'],
         ['`tars-install --wipe` · `--yes`', '설정까지 통째로 지운다 · 확인 `YES`를 건너뛴다', '2026-09-23'],
         ['`tars-dictate`', '말하고 [Ctrl+C]. 셸에서 직접 받아쓰기', '2026-10-06'],
       ],
