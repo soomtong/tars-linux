@@ -112,6 +112,9 @@ pub fn build(b: *std.Build) void {
     build_info.addOption([]const u8, "version", buildVersion(b));
     exe_mod.addOptions("build_info", build_info);
     config_cli_mod.addOptions("build_info", build_info);
+    // KU-M0: tars-install이 ESP의 boot/version과 엔트리 제목에 자기 버전을 적는다.
+    // 매체에서 뜬 tars-install은 그 매체의 initrd에서 왔으므로 깔 이미지의 버전이다.
+    install_mod.addOptions("build_info", build_info);
 
     // ── 여기서부터는 게스트가 아니라 빌드 호스트가 실행한다 ──────────
     //

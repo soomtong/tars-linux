@@ -232,13 +232,28 @@ pub fn confirmed(line: []const u8) bool {
 }
 
 /// sfdisk에 stdin으로 넘기는 배치(DI design 결정 2 · 3). DI-M0 실측 8이 이
-/// 세 줄을 그대로 먹였다.
+/// 세 줄을 그대로 먹였다. p1은 KU-M0에서 256MiB → 1GiB가 됐다(KU design
+/// 결정 8) — 이미지 슬롯 둘(약 102MB씩)이 들어가고, 한 벌이 약 500MB가 될
+/// 때까지 둘이 들어간다. 그 전에 설치된 256MiB ESP는 갱신이 키우지 않는다.
 pub const SFDISK_SCRIPT =
     \\label: gpt
-    \\size=256MiB, type=uefi, name=TARS-BOOT
+    \\size=1GiB, type=uefi, name=TARS-BOOT
     \\size=1GiB, type=linux, name=TARS-CONFIG
     \\
 ;
+
+/// 위 배치가 들어가는 가장 작은 디스크(KU-M0 plan 확정 값). p1 · p2에 GPT
+/// 앞의 1MiB 정렬과 뒤의 백업 헤더 몫을 더했다. 이보다 작은 디스크는 YES를
+/// 묻기 전에 거절한다 — 묻고 나서 sfdisk가 실패하면 늦다.
+pub const MIN_DISK_BYTES: u64 = (2 << 30) + (2 << 20);
+
+/// 거절 줄에 쓰는 최소 크기의 글자. formatSize는 10진 버림이라 최소 크기와
+/// 2GB 스틱이 둘 다 `2 GB`로 찍혀서 "2 GB는 2 GB가 필요하다"가 된다.
+pub const MIN_DISK_WORDS = "more than 2 GiB";
+
+pub fn bigEnough(bytes: u64) bool {
+    return bytes >= MIN_DISK_BYTES;
+}
 
 pub const ESP_LABEL: [:0]const u8 = "TARS-BOOT";
 pub const CONFIG_LABEL: [:0]const u8 = "tars-config";
@@ -255,52 +270,159 @@ pub const BOOT_FILES = [_][:0]const u8{
     "EFI/BOOT/BOOTX64.EFI",
 };
 
-/// BOOT_FILES를 놓기 전에 ESP에 만들 디렉터리. 부모가 먼저다.
-pub const ESP_DIRS = [_][:0]const u8{ "boot", "boot/limine", "EFI", "EFI/BOOT" };
+/// BOOT_FILES를 놓기 전에 ESP에 만들 디렉터리. 부모가 먼저다. `boot/old`는
+/// old 슬롯의 자리다(KU design 결정 2). 새 설치에서는 빈 채로 둔다.
+pub const ESP_DIRS = [_][:0]const u8{ "boot", "boot/old", "boot/limine", "EFI", "EFI/BOOT" };
+
+/// 이미지 슬롯(KU design 결정 1 · 2). new는 `boot/`, old는 `boot/old/`이고 파일
+/// 이름은 둘이 같다. `version`은 버전 글자 한 줄이고 늘 맨 마지막에 쓴다 —
+/// 이 파일이 있으면 그 슬롯은 끝까지 써진 것이다(결정 5).
+pub const NEW_DIR = "boot";
+pub const OLD_DIR = "boot/old";
+pub const SLOT_FILES = [_][:0]const u8{ "bzImage", "initrd.cpio", "version" };
+
+/// old 엔트리의 cmdline에 붙는 낱말. init은 안 쓴다 — 사람과 게이트가
+/// /proc/cmdline으로 "old로 떴다"를 알아보는 표지다.
+pub const SLOT_OLD_TOKEN = "tars.slot=old";
+
+/// ESP conf의 메뉴 대기 초. ISO conf는 0 그대로다(KU design 결정 3).
+pub const MENU_TIMEOUT = "3";
+
+/// 디스크에서 읽은 버전 글자를 conf 제목에 넣어도 되는가. 비지 않았고 64자
+/// 이하이며 글자가 전부 눈에 보이는 ASCII(공백 제외)여야 한다 — 개행이 섞이면
+/// conf의 줄이 갈라지고, 제어 문자는 메뉴를 어지럽힌다. BV의 버전 글자
+/// (`0.1.3`, `0.1.3+abc1234-dirty`)는 늘 통과한다.
+pub fn plainVersion(text: []const u8) bool {
+    if (text.len == 0 or text.len > 64) return false;
+    for (text) |c| {
+        if (c <= ' ' or c > '~') return false;
+    }
+    return true;
+}
 
 /// 매체라고 판정하는 파일(DI design 결정 4). 이름이 아니라 쓰임으로 본다.
 pub const MEDIUM_MARK: [:0]const u8 = LIMINE_CONF;
 
-/// ISO의 limine.conf를 ESP에 쓸 모양으로 바꿔 out에 담는다. `cmdline:` 줄마다
-/// 끝에 storage.INSTALLED_TOKEN을 붙이고 나머지 바이트는 그대로다.
+/// ISO의 limine.conf로 ESP의 conf를 지어 out에 담는다(KU design 결정 3).
 ///
-/// design 확인 2는 "바이트 그대로 복사한다"였고 DI-M2가 이것을 바꿨다. init은
-/// 이 표지가 있어야 파티션을 설정 디스크 후보로 본다 — ISO로 뜬 기계가
-/// 설치된 p2를 붙여 두면 --wipe가 막히기 때문이다(storage.INSTALLED_TOKEN).
+/// ISO conf를 첫 엔트리(`/`로 시작하는 줄) 앞의 전역 줄과 엔트리 블록으로
+/// 가른다.
+/// - 전역 줄은 그대로 옮기되 `timeout:`의 값만 MENU_TIMEOUT으로 바꾼다. ISO는
+///   고를 것이 없어 0이고, 설치된 디스크는 old를 고를 틈이 있어야 한다.
+/// - 엔트리 블록을 제목 `/TARS <new_ver>`로 한 번 쓴다. `cmdline:` 줄 끝에는
+///   storage.INSTALLED_TOKEN을 붙인다(DI-M2 — init은 이 표지가 있어야 파티션을
+///   설정 디스크 후보로 본다). 이미 있으면 다시 안 붙인다.
+/// - old_ver가 있으면 빈 줄 하나 뒤에 블록을 다시 쓴다. 제목은
+///   `/TARS <old_ver> (old)`, `path:` · `kernel_path:` · `module_path:` 값의
+///   `boot():/boot/`를 `boot():/boot/old/`로, cmdline 끝에 SLOT_OLD_TOKEN을 더한다.
+///   경로 줄에 `boot():/boot/`가 없으면 null이다 — old 엔트리가 조용히 new의
+///   파일을 가리키면 그 엔트리로 돌아갈 곳이 없다.
 ///
-/// cmdline 줄이 하나도 없거나 out이 모자라면 null이다. 표지 없이 설치하면
-/// 설치된 기계가 설정 디스크를 못 찾는다 — 그런 설치는 시작하지 않는다.
-/// 이미 표지가 있는 줄에는 다시 붙이지 않는다.
-/// LF 파일만 다룬다(boot/limine.conf가 그렇다). CRLF면 표지가 \r 뒤에 붙는다.
-/// limine의 kernel_cmdline: 별칭은 안 본다 — 그 키로 바꾸면 null이 되어 설치가 시작되지 않는다.
-pub fn espConf(out: []u8, conf: []const u8) ?[]const u8 {
-    const key = "cmdline:";
-    const mark = " " ++ storage.INSTALLED_TOKEN;
-    var n: usize = 0;
-    var marked = false;
-    var lines = std.mem.splitScalar(u8, conf, '\n');
-    var first = true;
-    while (lines.next()) |line| {
-        if (!first) {
-            if (n + 1 > out.len) return null;
-            out[n] = '\n';
-            n += 1;
-        }
-        first = false;
-        if (n + line.len > out.len) return null;
-        @memcpy(out[n..][0..line.len], line);
-        n += line.len;
-
-        const body = std.mem.trimStart(u8, line, " \t");
-        if (!std.mem.startsWith(u8, body, key)) continue;
-        marked = true;
-        if (storage.cmdlineInstalled(body[key.len..])) continue;
-        if (n + mark.len > out.len) return null;
-        @memcpy(out[n..][0..mark.len], mark);
-        n += mark.len;
+/// null인 경우: 버전 글자가 plainVersion이 아니다 · 엔트리가 하나가 아니다 ·
+/// 전역 `timeout:`이 없다(ISO conf의 모양이 바뀐 것이다) · 블록에 cmdline 줄이
+/// 없다(표지 없이 설치하면 설정 디스크를 못 찾는다) · out이 모자란다. 어느
+/// 것이든 설치는 시작하지 않는다.
+///
+/// 결과는 늘 개행으로 끝난다. LF 파일만 다룬다(boot/limine.conf가 그렇다).
+/// limine의 kernel_cmdline: 별칭은 안 본다 — 그 키로 바꾸면 null이 된다.
+pub fn espConf(out: []u8, conf: []const u8, new_ver: []const u8, old_ver: ?[]const u8) ?[]const u8 {
+    if (!plainVersion(new_ver)) return null;
+    if (old_ver) |v| {
+        if (!plainVersion(v)) return null;
     }
-    return if (marked) out[0..n] else null;
+
+    // 엔트리 머리 줄을 센다. 하나여야 하고, 그 앞에 timeout:이 있어야 한다.
+    var entry_at: ?usize = null;
+    var entries: usize = 0;
+    var timeout_seen = false;
+    {
+        var off: usize = 0;
+        var it = std.mem.splitScalar(u8, conf, '\n');
+        while (it.next()) |line| : (off += line.len + 1) {
+            const body = std.mem.trimStart(u8, line, " \t");
+            if (std.mem.startsWith(u8, body, "/")) {
+                entries += 1;
+                if (entry_at == null) entry_at = off;
+            } else if (entry_at == null and std.mem.startsWith(u8, body, "timeout:")) {
+                timeout_seen = true;
+            }
+        }
+    }
+    const at = entry_at orelse return null;
+    if (entries != 1 or !timeout_seen) return null;
+
+    var w = Fill{ .out = out };
+    // conf[0..at]는 '\n'으로 끝난다. 그래서 마지막 조각은 빈 글자이고 쓰지 않는다.
+    var globals = std.mem.splitScalar(u8, conf[0..at], '\n');
+    while (globals.next()) |line| {
+        if (globals.index == null) break;
+        const body = std.mem.trimStart(u8, line, " \t");
+        if (std.mem.startsWith(u8, body, "timeout:")) {
+            w.put("timeout: " ++ MENU_TIMEOUT);
+        } else {
+            w.put(line);
+        }
+        w.put("\n");
+    }
+    const block = std.mem.trimEnd(u8, conf[at..], "\n");
+    if (!entryBlock(&w, block, new_ver, false)) return null;
+    if (old_ver) |v| {
+        w.put("\n");
+        if (!entryBlock(&w, block, v, true)) return null;
+    }
+    if (w.full) return null;
+    return out[0..w.n];
 }
+
+/// 엔트리 블록 하나를 쓴다. cmdline 줄이 없거나, old인데 경로를 못 바꿨으면 거짓.
+fn entryBlock(w: *Fill, block: []const u8, ver: []const u8, old: bool) bool {
+    const from = "boot():/boot/";
+    var cmdline = false;
+    var it = std.mem.splitScalar(u8, block, '\n');
+    while (it.next()) |line| {
+        const body = std.mem.trimStart(u8, line, " \t");
+        if (std.mem.startsWith(u8, body, "/")) {
+            w.put("/TARS ");
+            w.put(ver);
+            if (old) w.put(" (old)");
+        } else if (std.mem.startsWith(u8, body, "cmdline:")) {
+            cmdline = true;
+            w.put(line);
+            if (!storage.cmdlineInstalled(body["cmdline:".len..])) w.put(" " ++ storage.INSTALLED_TOKEN);
+            if (old) w.put(" " ++ SLOT_OLD_TOKEN);
+        } else if (old and (std.mem.startsWith(u8, body, "path:") or
+            std.mem.startsWith(u8, body, "kernel_path:") or
+            std.mem.startsWith(u8, body, "module_path:")))
+        {
+            const i = std.mem.indexOf(u8, line, from) orelse return false;
+            w.put(line[0 .. i + from.len]);
+            w.put("old/");
+            w.put(line[i + from.len ..]);
+        } else {
+            w.put(line);
+        }
+        w.put("\n");
+    }
+    return cmdline;
+}
+
+/// 고정 버퍼에 이어 쓴다. 넘치면 그 뒤로 아무것도 안 쓰고 full만 남긴다 —
+/// 부르는 쪽이 끝에서 한 번 본다.
+const Fill = struct {
+    out: []u8,
+    n: usize = 0,
+    full: bool = false,
+
+    fn put(self: *Fill, s: []const u8) void {
+        if (self.full) return;
+        if (self.n + s.len > self.out.len) {
+            self.full = true;
+            return;
+        }
+        @memcpy(self.out[self.n..][0..s.len], s);
+        self.n += s.len;
+    }
+};
 
 // ── 문장 ──────────────────────────────────────────────────────────────
 //
@@ -328,24 +450,93 @@ pub fn listRow(sink: anytype, path: []const u8, size: []const u8, model: []const
 
 /// 설치의 계획. 갱신은 p1만 갈고 p2를 남긴다(DI design 결정 8). 새 설치는 지울 디스크가 지금 무엇을
 /// 들고 있는지 보인다. p2_settings는 p2에 `tars-` 라벨이 있는가이고 새 설치일 때만 뜻이 있다.
-pub fn planLines(sink: anytype, update: bool, path: []const u8, size: []const u8, model: []const u8, state: []const u8, p2_settings: bool) void {
+///
+/// 갱신은 KU-M0부터 슬롯을 말한다. 크기 칸은 뺐다 — 256MiB ESP로 깔린 디스크도
+/// 갱신되고, 갱신은 ESP 크기를 안 바꾼다(KU design 결정 8). `rot`가 rotate면
+/// 지금 이미지(cur_ver)가 old로 가고, overwrite면 old 자리는 그대로다. no_room은
+/// 계획까지 오지 않는다(roomLines가 먼저 거절한다). 새 설치에서 cur_ver · rot는
+/// 안 쓴다.
+pub fn planLines(
+    sink: anytype,
+    update: bool,
+    path: []const u8,
+    size: []const u8,
+    model: []const u8,
+    state: []const u8,
+    p2_settings: bool,
+    new_ver: []const u8,
+    cur_ver: ?[]const u8,
+    rot: Rotation,
+) void {
     if (update) {
         sink.print("tars-install: {s} ({s}, {s}) already has TARS. p1 will be updated, p2 (your settings) is kept.\n", .{
             path, size, model,
         });
-        sink.print("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-        sink.print("  p2    1 GiB  Linux       ext2   tars-config <- not opened\n", .{});
+        sink.print("  boot/      <- TARS {s}\n", .{new_ver});
+        if (rot == .rotate) {
+            sink.print("  boot/old/  <- TARS {s}, for the boot menu if the new one fails\n", .{cur_ver orelse "?"});
+        } else {
+            sink.print("  boot/old/  <- left as it is\n", .{});
+        }
+        sink.print("  p2 (tars-config) <- not opened\n", .{});
         sink.print("  tars-install {s} --wipe erases both instead\n", .{path});
     } else {
         sink.print("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
             path, size, model, state,
         });
-        sink.print("  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        sink.print("  p1    1 GiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
         sink.print("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
         sink.print("  rest unallocated\n", .{});
         if (p2_settings) sink.print("  the settings now on p2 are erased too\n", .{});
     }
 }
+
+// ── 슬롯 회전 (KU-M0) ────────────────────────────────────────────────
+
+/// 새 이미지 두 파일에 더하는 여유. conf · version 몇 바이트와 FAT의 클러스터
+/// 반올림(파일마다 한 클러스터 아래)의 몫이다.
+pub const NEED_SLACK: u64 = 1 << 20;
+
+pub const Rotation = enum { rotate, overwrite, no_room };
+
+/// 갱신이 할 일(KU design 결정 5, 위험 2). 모든 수는 바이트다.
+///   has_version  boot/version이 있다 — 지금 이미지가 끝까지 써졌다
+///   free         ESP의 빈 자리
+///   old_slot     boot/old의 bzImage + initrd.cpio — rotate가 맨 먼저 지운다
+///   cur_slot     boot/의 bzImage + initrd.cpio — overwrite가 O_TRUNC로 덮는다
+///   need         매체의 bzImage + initrd.cpio + NEED_SLACK
+///
+/// 지금 이미지가 끝까지 써졌으면 old로 보낸다. 반쪽이면 old로 보내지 않고 그
+/// 자리를 덮는다 — 반쪽을 old로 보내면 멀쩡한 old가 지워진다. 어느 쪽이든 풀리는
+/// 몫까지 더해도 need에 모자라면 아무것도 안 건드린다. 검사 없이 회전하면
+/// old를 지운 뒤 복사가 ENOSPC로 죽어, new는 반쪽이고 old는 없는 디스크가 된다.
+pub fn rotation(has_version: bool, free: u64, old_slot: u64, cur_slot: u64, need: u64) Rotation {
+    if (has_version) return if (free +| old_slot >= need) .rotate else .no_room;
+    return if (free +| cur_slot >= need) .overwrite else .no_room;
+}
+
+/// 빈 자리 줄. no_room이면 거절 줄이 뒤따른다 — 그 뒤에는 아무것도 안 바뀐다.
+/// 둘 다 YES를 묻기 전에 찍힌다.
+pub fn roomLines(sink: anytype, free: u64, old_slot: u64, need: u64, rot: Rotation) void {
+    sink.print("tars-install: p1 has {d} bytes free and {d} bytes in boot/old; the new image needs {d}\n", .{
+        free, old_slot, need,
+    });
+    if (rot == .no_room) sink.print("tars-install: p1 has no room for two images; nothing was changed.\n", .{});
+}
+
+pub const Op = enum { clear_old, write_conf, move_to_old, copy_new, write_version };
+
+/// 회전의 순서(KU design 결정 4). install.zig가 이 배열을 그대로 돌고, op마다
+/// sync한다. disk_test 검사 21이 같은 배열을 상태 모형 위에서 돌려, 어느 op
+/// 뒤에 끊겨도 뜨는 엔트리가 하나는 있는지 본다.
+///   clear_old      boot/old의 셋을 지운다. ESP에는 두 벌만 들어가므로 먼저다
+///   write_conf     엔트리 둘의 conf. new는 아직 지금 이미지를, old는 빈 자리를 가리킨다
+///   move_to_old    boot/의 셋을 boot/old/로 rename한다
+///   copy_new       매체의 두 파일을 boot/로
+///   write_version  boot/version. 이것이 있어야 이 슬롯이 다음 회전의 old가 된다
+/// write_conf가 move_to_old보다 앞이어야 한다. 거꾸로면 옛 conf(엔트리 하나)가
+/// 빈 boot/bzImage를 가리키는 순간이 생긴다.
+pub const ROTATION = [_]Op{ .clear_old, .write_conf, .move_to_old, .copy_new, .write_version };
 
 /// 도구가 0으로 끝났는가. 아니면 무엇으로 끝났는지 한 줄을 찍는다 — 그 뒤에 도구가 한 말이 온다.
 /// status는 wait4의 것이다(`audio.outcome`과 같은 읽기). 줄은 `Complain`으로 가므로 개행이 없다.

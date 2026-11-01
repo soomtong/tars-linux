@@ -182,7 +182,10 @@
   `tars-config`(p2)를 만든다. `storage.zig`의 후보 목록을 같이 쓰고, 안전은 라벨이
   지킨다. 외부 도구(`sfdisk` · `mkfs.*`)를 `wait4`로 기다리는 헬퍼가 여기 있다. 순수한 짝은 `disk.zig`(`disk_test`) —
   `parseArgs` · 앞머리 판정 · `State`/`headState` · 목록 행 · 계획 · 도구 실패 · usage의 글자가 거기다(HC-M2). `stateOf`의 앞
-  둘(매체 경로 · `isInstalled`, p1을 붙여 본다)만 여기 남는다.
+  둘(매체 경로 · `isInstalled`, p1을 붙여 본다)만 여기 남는다. KU-M0부터 ESP는 1GiB이고 이미지 슬롯이 둘이다 — new는 `boot/`,
+  old는 `boot/old/`, 각 슬롯의 `version`이 "끝까지 써졌다"는 표지다. 갱신은 YES 전에 `readSlots`(statfs는 시스템 콜 직접)로
+  `disk.rotation`을 정하고, rotate면 `disk.ROTATION`(clear_old → write_conf → move_to_old → copy_new → write_version)을 op마다
+  sync하며 돈다. ESP conf(엔트리 둘 · `timeout: 3` · old의 `tars.slot=old`)는 `disk.espConf`가 짓는다.
 - `config.zig` — `/config/tars.conf` 파서 한 벌. 키보드 · 자판 둘 · 전환 키 · 클립보드 범위의 enum은
   SA-M0부터 `shared/screen_args.zig`에 있고 여기서는 별명이다(`hangul_toggle`의 파싱은
   `Toggles.parse(.file, value, LogUnknownToggle{})`). 키 열(TS-M1이 `ntp`을,

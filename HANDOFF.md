@@ -1,12 +1,14 @@
-# HANDOFF: Kernel Upgrade(KU) design 확정(2026-11-01) — KU-M0 plan 전
+# HANDOFF: Kernel Upgrade KU-M0 끝남(2026-11-01) — 다음은 KU-M1 plan
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 Kernel Upgrade(KU)다. design `docs/specs/2026-11-01-tars-kernel-upgrade-design.md`를 사용자가 확정했다
-  (2026-11-01). ESP에 이미지 슬롯 둘(new는 `boot/`, old는 `boot/old/`)을 두고 메뉴에서 사람이 old를 고른다(KU-M0). 그 위에서 커널
-  버전을 올린다(KU-M1). Limine v12.5.2에는 boot counting · fallback이 없다(design 확인 1). 착수 전 실측 둘은 끝났다(design
-  "M0 전에 잰 것": 시리얼 `ESC [ B` · `CR`로 old를 고를 수 있다 · 없는 `kernel_path`는 panic 뒤 키 하나로 카운트다운 없는 메뉴로
-  돌아간다). 다음 일은 KU-M0 plan이다.
+- 열린 서브프로젝트는 Kernel Upgrade(KU)다. design `docs/specs/2026-11-01-tars-kernel-upgrade-design.md`. KU-M0이 끝났다
+  (2026-11-01, plan `docs/plans/2026-11-01-tars-kernel-upgrade-ku-m0.md`의 결과 절): 새 설치의 ESP는 1GiB이고 이미지 슬롯이
+  둘이다(new `boot/`, old `boot/old/`, 각 슬롯의 `version`이 끝까지 써졌다는 표지). 갱신이 지금 이미지를 old로 보내고, ESP conf에
+  엔트리 둘과 메뉴 3초가 생긴다. 컨테이너에 mtools · netcat-openbsd · iproute2를 넣었다(태그 `6275bea93f04`, ghcr에 올라감).
+  다음 일은 KU-M1 plan — 커널 버전을 고르는 조사부터(design의 Milestone 절).
+- KU-M0이 남긴 함정 둘(plan 결과 4 · 7): `set -o pipefail` 아래의 `clean | grep -q`는 일치를 찾고도 거짓이 될 수 있다(perl의
+  SIGPIPE) — `>/dev/null`로 쓴다. 루트 `check.sh`의 진입 검사가 이것을 잡으므로 체인 단독 전에 진입 검사부터 본다.
 - 마지막으로 닫은 것은 Extend Repeat(ER-M0, 2026-11-01). 닫은 서브프로젝트의 경과 · 함정 · 숫자는
   여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 그 plan의
   결과 절이다. 최근 것부터:
@@ -24,7 +26,7 @@
 - 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 다음 버전은 `docs/decisions/project_release.md`의 절차 일곱 단계대로 —
   `VERSION` 커밋 → tag → `make iso` 순서다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터, 예약 범위
-  45455~45599(RP-M0). 마지막 루트 게이트(ER-M0 닫기): 22/22, 10분 50초(prebuild 346 + lanes 303초), verify 8218줄 전부 통과.
+  45455~45599(RP-M0). 마지막 루트 게이트(KU-M0): 22/22, 10분 26초(prebuild 320 + lanes 304초), verify 8237줄 전부 통과.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
@@ -46,6 +48,8 @@
   180ms 뒤 두 탭 끝의 차). 안 맞으면 값은 `pointer.MULTI_CLICK_US` · `MULTI_CLICK_PX` 둘이다(설정은 MC 비목표 3).
 - SE: 끌어 뗀 뒤 반전이 남는 것이 거슬리는지(글자를 쳐도 남는다 — 거슬리면 SE 비목표 1, 키 경로에 `clearLinger` 한 줄), Shift
   클릭이 늘리는 끝이 손의 기대와 맞는지(가까운 끝). 자식이 마우스를 원하는 패널(vim)에서 Shift 끌기 뒤 Shift 클릭도 같다.
+- KU: 실기에서 설치된 디스크로 뜰 때 메뉴 3초가 손에 맞는지(길면 `disk.MENU_TIMEOUT`), 같은 ISO로 한 번 더 갱신한 뒤 메뉴에서
+  아래 화살표로 `(old)`를 골라 뜨는지. 실제 펌웨어에서 Limine 메뉴가 GOP 화면에 보이는지도 이때 처음 본다.
 - ER: Shift 더블 · 트리플클릭이 단어 · 줄로 느는지, Shift 클릭 바로 뒤(500ms · 8픽셀 안) Shift 없이 누른 클릭이 지우기가 아니라
   단어 늘리기가 되는 것이 거슬리는지(거슬리면 ER 비목표 1 — 둘째 누름의 Shift를 본다).
 - WP-M3: `Cmd+Option+화살표`(`keyboard=pc`면 `Alt+Win+화살표`)로 패널 사이를 다닐 때 손에 맞는지, 동률의 "맨 위 · 맨

@@ -191,3 +191,42 @@ Architecture: 순수 규칙은 `disk.zig`에 둔다 — ESP conf 짓기(`espConf
 - 실기 확인. 메뉴 3초가 손에 맞는지, 실제 펌웨어에서 old가 뜨는지는 사용자 몫이다(HANDOFF "사용자가 확인할 것"에 한 줄).
 - 끊김의 실제 재현(전원을 끊는 것). 결정 4의 표는 검사 21의 모형이 본다. 끊긴 뒤의 디스크 모양 하나(결정 6)는 판정 21a가 mtools로
   만들어 본다.
+
+## 결과
+
+2026-11-01.
+
+1. Task 0. 이미지를 로컬에서 굽는 데 73초(ghcr 받기 실패 뒤 build, 아래 층은 캐시). 새 태그 `6275bea93f04`. CI run 41306230854가 초록이고
+   (host 2분 25초 · container 7분 14초) container job이 그 태그를 굽고 ghcr에 올렸다. mtools 4.0.48 · OpenBSD netcat 1.229 ·
+   iproute2 6.15.0. `mdir`은 수를 세 자리마다 공백으로 끊고 끝에 빈 줄을 찍는다.
+2. 확정 8. 진짜 설치된 이미지에서 `mdir -i "$DISK@@1M"`이 p1을 읽었다 — 첫 설치 뒤 빈 자리 968,904,704바이트.
+3. Task 2. vfat의 `rename`은 있는 이름 위로 덮는다. 부팅 3의 `write_conf`가 `limine.conf.tmp`를 있는 `limine.conf` 위로 옮겼고 EEXIST가
+   없었다. 부팅 3a의 need는 103,384,080바이트(매체 두 파일 + 1MiB).
+4. 체인 첫 회차의 실패 둘.
+   - 판정 4b(DC-M2)가 깨졌다. 64MiB scratch가 이제 YES 전에 크기로 거절돼(판정 4d) 4b가 볼 YES 줄 읽기까지 안 간다. 대상을
+     `nvme0n1`(판정 5가 곧 통째로 깔 디스크)로 옮겼다.
+   - 판정 20이 일치를 못 봤다. `set -o pipefail` 아래의 `clean | grep -q`가 원인이다 — grep이 첫 일치에서 끝나면 아직 쓰던 perl이
+     SIGPIPE(141)로 죽고, pipefail이 그것을 파이프 전체의 실패로 읽는다. 메뉴 줄은 로그 맨 앞이라 이 경우를 밟는다. 부팅 2의
+     `Booting automatically`는 운으로 지났다. 기존 판정들이 `clean | grep … >/dev/null`로 써 온 이유가 이것이었다. 넣은 다섯 자리와
+     `boot_guest`의 old 고르기를 그 모양으로 고쳤다.
+5. install 체인 단독 PASS, 빌드 포함 278초. 부팅 4b는 메뉴의 3초를 건너뛰어 콘솔이 7초에 떴다(다른 NVMe 부팅은 11초).
+6. mutation 일곱이 다 의도한 자리에 걸렸다.
+
+   | | 무엇 | 잡은 것 |
+   | --- | --- | --- |
+   | 1 | `ROTATION`의 write_conf ↔ move_to_old | 검사 21 "start 0: nothing boots after move_to_old" |
+   | 2 | `rotation`이 has_version을 안 봄 | 검사 20 "no version, room to spare: want overwrite, got rotate" |
+   | 3 | `rotation`이 old_slot을 안 더함 | 검사 20 "fits once old is cleared (==): want rotate, got no_room" |
+   | 4 | old 엔트리에 `tars.slot=old` 없음 | 판정 21, 228초 |
+   | 5 | `bigEnough` 검사 뺌 | 판정 4d, 149초 |
+   | 6 | no_room을 무시하고 진행 | 판정 19a, 188초 — 회전이 아니라 덮기로 갔다(`rot == .rotate`가 거짓). `nothing was changed.` 뒤에 `copying the boot files` |
+   | 7 | `isInstalled`가 boot/bzImage만 봄 | 판정 21a, 234초 |
+
+   3의 첫 시도(`old_slot`을 식에서 뺌)는 Zig가 안 쓰는 매개변수를 컴파일 오류로 막아 테스트가 아무것도 증명하지 못했다. `0 * old_slot`으로
+   다시 했다.
+7. 첫 루트 게이트는 체인을 돌기 전에 진입 검사에서 멈췄다(0초). GA-M0의 "grep -q로 넘기는 파이프" 검사가 19a의
+   `grep -aqF … "$LOG" || grep -aqF …`를 짚었다 — 파이프가 아니라 `||`인데 `|`가 패턴에 걸린 것이다. 한 줄 `grep -aE '(…|…)' >/dev/null`로
+   합쳤다. 4의 pipefail 함정을 막는 검사가 저장소에 이미 있었다. 체인을 단독으로만 돌려서 그것을 거치지 않았다 — 다음에는 체인 단독
+   전에 `bash check.sh`의 진입 검사만이라도 먼저 본다.
+8. 루트 게이트 22/22, 10분 26초(prebuild 320 + lanes 304초), verify 8237줄(ER-M0 닫기 때 8218). `DC-M2` 137초(지난 105초, 어림
+   150초) — 부팅 3a · 4b와 Limine 대기 3초 × 넷. 로그 `out/gate-logs/20261101-130913/`.

@@ -233,11 +233,11 @@ pub fn main() !void {
         if (disk.isFat32(clear()[0..511])) return error.ShortFat32;
     }
 
-    // ── 10. espConf — cmdline 줄에만 표지 하나 ──────────────────────
+    // ── 10. espConf — timeout 3, 엔트리 하나 또는 둘 (DI-M2, KU-M0) ──────
     //
-    // 원본은 boot/limine.conf의 항목 부분을 글자 그대로 옮긴 것이다. 파일
-    // 자체를 이 검사가 못 읽으므로(패키지 밖) 실물이 표지를 받는지는 install
-    // 체인 부팅 2의 `Kernel command line:` 줄이 본다.
+    // 원본은 boot/limine.conf를 글자 그대로 옮긴 것이다. 파일 자체를 이 검사가
+    // 못 읽으므로(패키지 밖) 실물이 표지를 받는지는 install 체인 부팅 2의
+    // `Kernel command line:` 줄이, 엔트리 둘은 부팅 4 · 4b가 본다.
     {
         const iso =
             \\serial: yes
@@ -250,50 +250,80 @@ pub fn main() !void {
             \\    cmdline: console=ttyS0 initcall_blacklist=test_power_init
             \\
         ;
-        const want =
+        const one =
             \\serial: yes
-            \\timeout: 0
+            \\timeout: 3
             \\
-            \\/TARS
+            \\/TARS 0.1.4
             \\    protocol: linux
             \\    kernel_path: boot():/boot/bzImage
             \\    module_path: boot():/boot/initrd.cpio
             \\    cmdline: console=ttyS0 initcall_blacklist=test_power_init tars.installed
             \\
         ;
-        var out: [512]u8 = undefined;
-        const got = disk.espConf(&out, iso) orelse return error.EspConfNull;
-        try expectText(got, want, "esp limine.conf");
-        // 한 번 더 지나도 표지는 하나다.
-        var again: [512]u8 = undefined;
-        const twice_got = disk.espConf(&again, got) orelse return error.EspConfAgainNull;
-        try expectText(twice_got, want, "esp limine.conf twice");
+        const two = one ++
+            \\
+            \\/TARS 0.1.3 (old)
+            \\    protocol: linux
+            \\    kernel_path: boot():/boot/old/bzImage
+            \\    module_path: boot():/boot/old/initrd.cpio
+            \\    cmdline: console=ttyS0 initcall_blacklist=test_power_init tars.installed tars.slot=old
+            \\
+        ;
+        var out: [1024]u8 = undefined;
+        const got = disk.espConf(&out, iso, "0.1.4", null) orelse return error.EspConfNull;
+        try expectText(got, one, "esp limine.conf, one entry");
+        const got2 = disk.espConf(&out, iso, "0.1.4", "0.1.3") orelse return error.EspConfTwoNull;
+        try expectText(got2, two, "esp limine.conf, new and old");
+        // 엔트리 하나의 결과를 다시 넣어도 표지는 하나다.
+        var again: [1024]u8 = undefined;
+        const twice_got = disk.espConf(&again, one, "0.1.4", null) orelse return error.EspConfAgainNull;
+        try expectText(twice_got, one, "esp limine.conf twice");
+        // 엔트리가 둘인 conf(ESP의 것)는 원본이 될 수 없다.
+        if (disk.espConf(&again, two, "0.1.4", null) != null) return error.TwoEntriesAccepted;
         // cmdline이 없는 설정은 거부한다 — 표지 없이 설치하면 설정을 못 찾는다.
-        if (disk.espConf(&out, "serial: yes\n/TARS\n    protocol: linux\n") != null) return error.NoCmdlineAccepted;
+        if (disk.espConf(&out, "timeout: 0\n/TARS\n    protocol: linux\n", "0.1.4", null) != null) return error.NoCmdlineAccepted;
+        // timeout:이 없으면 ISO conf의 모양이 바뀐 것이다.
+        if (disk.espConf(&out, "serial: yes\n/TARS\n    cmdline: a\n", "0.1.4", null) != null) return error.NoTimeoutAccepted;
+        // old의 경로를 못 바꾸면 거부한다 — old 엔트리가 new의 파일을 가리키게 된다.
+        {
+            const odd = "timeout: 0\n/TARS\n    kernel_path: boot(2):/bzImage\n    cmdline: a\n";
+            if (disk.espConf(&out, odd, "0.1.4", "0.1.3") != null) return error.OldPathUnmoved;
+            // old가 없으면 그 줄은 손대지 않으니 된다.
+            _ = disk.espConf(&out, odd, "0.1.4", null) orelse return error.OddOneNull;
+        }
+        // 버전 글자에 개행 · 공백이 있으면 거부한다(plainVersion).
+        if (disk.espConf(&out, iso, "0.1.4", "0.1.3\n/X") != null) return error.NewlineVersion;
+        if (disk.espConf(&out, iso, "", null) != null) return error.EmptyVersion;
         // 모자란 버퍼는 null이지 잘린 파일이 아니다.
         var tiny: [40]u8 = undefined;
-        if (disk.espConf(&tiny, iso) != null) return error.TruncatedConf;
+        if (disk.espConf(&tiny, iso, "0.1.4", null) != null) return error.TruncatedConf;
         // 주석 줄은 limine에게 주석이다. 표지를 받으면 안 된다.
         {
-            var o: [64]u8 = undefined;
-            const g = disk.espConf(&o, "# cmdline: x\n    cmdline: a\n") orelse return error.CommentConfNull;
-            try expectText(g, "# cmdline: x\n    cmdline: a tars.installed\n", "comment line untouched");
+            var o: [96]u8 = undefined;
+            const g = disk.espConf(&o, "timeout: 0\n/T\n# cmdline: x\n    cmdline: a\n", "1", null) orelse return error.CommentConfNull;
+            try expectText(g, "timeout: 3\n/TARS 1\n# cmdline: x\n    cmdline: a tars.installed\n", "comment line untouched");
         }
-        // 마지막 줄에 개행이 없으면 결과에도 없다.
+        // 마지막 줄에 개행이 없어도 결과는 개행으로 끝난다.
         {
             var o: [64]u8 = undefined;
-            const g = disk.espConf(&o, "/T\n cmdline: a") orelse return error.NoNewlineConfNull;
-            try expectText(g, "/T\n cmdline: a tars.installed", "no final newline");
+            const g = disk.espConf(&o, "timeout: 0\n/T\n cmdline: a", "1", null) orelse return error.NoNewlineConfNull;
+            try expectText(g, "timeout: 3\n/TARS 1\n cmdline: a tars.installed\n", "no final newline in, one out");
         }
         // 버퍼 경계. 결과 길이와 딱 같으면 되고 한 바이트 모자라면 null이다.
         {
-            const exact_want = " cmdline: a tars.installed";
+            const exact_want = "timeout: 3\n/TARS 1\n cmdline: a tars.installed\n";
             var fit: [exact_want.len]u8 = undefined;
-            const g = disk.espConf(&fit, " cmdline: a") orelse return error.ExactFitNull;
+            const g = disk.espConf(&fit, "timeout: 0\n/T\n cmdline: a\n", "1", null) orelse return error.ExactFitNull;
             try expectText(g, exact_want, "exact fit");
             var short: [exact_want.len - 1]u8 = undefined;
-            if (disk.espConf(&short, " cmdline: a") != null) return error.OneShortAccepted;
+            if (disk.espConf(&short, "timeout: 0\n/T\n cmdline: a\n", "1", null) != null) return error.OneShortAccepted;
         }
+        // plainVersion — BV의 글자는 통과하고, 빈 것 · 공백 · 개행 · 65자는 아니다.
+        if (!disk.plainVersion("0.1.3") or !disk.plainVersion("0.1.3+abc1234-dirty")) return error.PlainVersionRejected;
+        if (disk.plainVersion("") or disk.plainVersion("0.1 3") or disk.plainVersion("0.1.3\n")) return error.PlainVersionAccepted;
+        const long: [65]u8 = @splat('x');
+        if (disk.plainVersion(&long) or !disk.plainVersion(long[0..64])) return error.PlainVersionLength;
     }
 
     // ── 11. clip — 넘치는 줄은 앞부분과 `...\n` (DC-M2) ────────────────
@@ -404,23 +434,28 @@ pub fn main() !void {
     try expectText(out.bytes(), "  " ++ "/dev/sda      " ++ " " ++ "  16 GB" ++ "  " ++ "USB Stick             " ++ " " ++
         "removable" ++ "  " ++ "TARS installed\n", "a removable installed row");
 
-    // ── 16. 계획 (HC-M2) ─────────────────────────────────────────────
-    const P1 = "  p1  256 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n";
+    // ── 16. 계획 (HC-M2, KU-M0) ──────────────────────────────────────
+    const P1 = "  p1    1 GiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n";
+    const UPDATE_HEAD = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.\n" ++
+        "  boot/      <- TARS 0.1.4\n";
+    const UPDATE_TAIL = "  p2 (tars-config) <- not opened\n" ++
+        "  tars-install /dev/nvme0n1 --wipe erases both instead\n";
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true);
-    try expectText(out.bytes(), "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.\n" ++
-        P1 ++
-        "  p2    1 GiB  Linux       ext2   tars-config <- not opened\n" ++
-        "  tars-install /dev/nvme0n1 --wipe erases both instead\n", "the update plan");
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true, "0.1.4", "0.1.3", .rotate);
+    try expectText(out.bytes(), UPDATE_HEAD ++
+        "  boot/old/  <- TARS 0.1.3, for the boot menu if the new one fails\n" ++ UPDATE_TAIL, "the rotating update plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", false);
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true, "0.1.4", null, .overwrite);
+    try expectText(out.bytes(), UPDATE_HEAD ++ "  boot/old/  <- left as it is\n" ++ UPDATE_TAIL, "the overwriting update plan");
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", false, "0.1.4", null, .rotate);
     const fresh = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank\n" ++
         P1 ++
         "  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
         "  rest unallocated\n";
     try expectText(out.bytes(), fresh, "the fresh plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true);
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true, "0.1.4", null, .rotate);
     try expectText(out.bytes(), fresh ++ "  the settings now on p2 are erased too\n", "the fresh plan over old settings");
 
     // ── 17. 도구가 끝난 모양 (HC-M2) ─────────────────────────────────
@@ -460,6 +495,113 @@ pub fn main() !void {
     const last = std.mem.trimEnd(u8, lines, "\n");
     try expectText(last[(std.mem.lastIndexOfScalar(u8, last, '\n') orelse 0) + 1 ..], check[from..to], "the last usage line is the chain's LIST_END");
 
+    // ── 19. 최소 디스크 (KU-M0) ──────────────────────────────────────
+    if (disk.bigEnough(2 << 30)) return error.TwoGibAccepted;
+    if (!disk.bigEnough(disk.MIN_DISK_BYTES) or disk.bigEnough(disk.MIN_DISK_BYTES - 1)) return error.MinBoundary;
+    if (disk.bigEnough(64 << 20) or disk.bigEnough(2_000_000_000)) return error.SmallDiskAccepted;
+    if (!disk.bigEnough(100_000_000_000)) return error.SsdRejected;
+
+    // ── 20. rotation — 무엇을 하나, 경계는 == 에서 된다 (KU-M0) ─────────
+    {
+        const need: u64 = 103 << 20;
+        const Case = struct { v: bool, free: u64, old: u64, cur: u64, want: disk.Rotation, what: []const u8 };
+        const cases = [_]Case{
+            .{ .v = true, .free = 900 << 20, .old = 0, .cur = 102 << 20, .want = .rotate, .what = "version, room to spare" },
+            .{ .v = true, .free = 50 << 20, .old = 53 << 20, .cur = 102 << 20, .want = .rotate, .what = "version, fits once old is cleared (==)" },
+            .{ .v = true, .free = 50 << 20, .old = 0, .cur = 102 << 20, .want = .no_room, .what = "version, no room even with cur" },
+            .{ .v = false, .free = 900 << 20, .old = 0, .cur = 0, .want = .overwrite, .what = "no version, room to spare" },
+            .{ .v = false, .free = 1 << 20, .old = 0, .cur = 102 << 20, .want = .overwrite, .what = "no version, fits once cur is truncated (==)" },
+            .{ .v = false, .free = 1 << 20, .old = 200 << 20, .cur = 50 << 20, .want = .no_room, .what = "no version, old is not freed" },
+        };
+        for (cases) |c| {
+            const got = disk.rotation(c.v, c.free, c.old, c.cur, need);
+            if (got != c.want) {
+                std.debug.print("FAIL: rotation {s}: want {s}, got {s}\n", .{ c.what, @tagName(c.want), @tagName(got) });
+                return error.WrongRotation;
+            }
+        }
+        out = control.Out{ .buf = &out_buf };
+        disk.roomLines(&out, 50, 0, 103, .no_room);
+        try expectText(out.bytes(), "tars-install: p1 has 50 bytes free and 0 bytes in boot/old; the new image needs 103\n" ++
+            "tars-install: p1 has no room for two images; nothing was changed.\n", "the no-room lines");
+        out = control.Out{ .buf = &out_buf };
+        disk.roomLines(&out, 900, 0, 103, .rotate);
+        try expectText(out.bytes(), "tars-install: p1 has 900 bytes free and 0 bytes in boot/old; the new image needs 103\n", "the room line");
+    }
+
+    // ── 21. ROTATION — 어느 op 뒤에 끊겨도 뜨는 엔트리가 있다 (KU design 결정 4) ──
+    //
+    // 모형: 디렉터리 둘의 내용과 conf의 엔트리 수. 엔트리가 뜨는 조건은 "conf에
+    // 있고 그 디렉터리가 비지도 반쪽도 아니다". copy_new는 도중(partial)과 뒤를
+    // 따로 본다. 시작은 둘 — 슬롯 전에 깔린 디스크(엔트리 하나, old 없음)와 이미
+    // 회전한 디스크(엔트리 둘, old 있음).
+    {
+        const starts = [_]Model{
+            .{ .new = .current, .old = .empty, .conf_two = false },
+            .{ .new = .current, .old = .prev, .conf_two = true },
+        };
+        for (starts, 0..) |start, si| {
+            var m = start;
+            if (!m.bootable()) return error.StartNotBootable;
+            for (disk.ROTATION) |op| {
+                if (op == .copy_new) {
+                    var mid = m;
+                    mid.new = .partial;
+                    if (!mid.bootable()) {
+                        std.debug.print("FAIL: start {d}: nothing boots while copy_new is half done\n", .{si});
+                        return error.CutDuringCopy;
+                    }
+                }
+                m.apply(op);
+                if (!m.bootable()) {
+                    std.debug.print("FAIL: start {d}: nothing boots after {s}\n", .{ si, @tagName(op) });
+                    return error.CutAfterOp;
+                }
+            }
+            if (m.new != .next or m.old != .current or !m.conf_two) {
+                std.debug.print("FAIL: start {d}: ends as new={s} old={s} two={}\n", .{ si, @tagName(m.new), @tagName(m.old), m.conf_two });
+                return error.WrongEnd;
+            }
+        }
+    }
+
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
     std.debug.print("disk_test: the state column, a list row, both plans, a tool's end and the usage lines are the installer's words\n", .{});
+    std.debug.print("disk_test: the minimum disk, the rotation rule and its order (something boots after every step) hold\n", .{});
 }
+
+/// 검사 21의 모형. 디렉터리가 담은 것은 이렇다.
+///   empty    없다
+///   prev     회전 전의 old
+///   current  회전 전의 new(지금 이미지)
+///   partial  복사 도중
+///   next     새 이미지
+const Dir = enum { empty, prev, current, partial, next };
+
+const Model = struct {
+    new: Dir,
+    old: Dir,
+    conf_two: bool,
+
+    fn complete(d: Dir) bool {
+        return d != .empty and d != .partial;
+    }
+
+    /// 기본 엔트리(new)가 뜨거나, conf에 old 엔트리가 있고 그것이 뜬다.
+    fn bootable(self: Model) bool {
+        return complete(self.new) or (self.conf_two and complete(self.old));
+    }
+
+    fn apply(self: *Model, op: disk.Op) void {
+        switch (op) {
+            .clear_old => self.old = .empty,
+            .write_conf => self.conf_two = true,
+            .move_to_old => {
+                self.old = self.new;
+                self.new = .empty;
+            },
+            .copy_new => self.new = .next,
+            .write_version => {},
+        }
+    }
+};

@@ -7,12 +7,14 @@ cd "$(dirname "$0")" || exit 1
 # 설치하고, 그 디스크만으로 다시 뜨고, 새 ISO로 갱신해도 설정이 남는가
 # (DI design 결정 9).
 #
-# 부팅 여섯이 같은 NVMe 이미지를 잇달아 쓴다.
+# 부팅 아홉이 같은 NVMe 이미지를 잇달아 쓴다(3a · 4b는 KU-M0).
 #   1  ISO + 빈 NVMe       tars-install의 목록 · 거절 · 설치
 #   2  NVMe만              -cdrom 없이 뜨고 init이 p2를 잡는다. 마커를 쓴다
-#   3  ISO + 설치된 NVMe   init이 p2를 안 잡는다 · TARS installed · 갱신
-#   4  NVMe만              갱신을 넘어 마커가 남았다
-#   5  ISO + 설치된 NVMe   --wipe로 통째로 다시 설치
+#   3a ISO + 꽉 찬 ESP     호스트가 mtools로 p1을 채웠다 · 갱신이 아무것도 안 건드리고 거절
+#   3  ISO + 설치된 NVMe   init이 p2를 안 잡는다 · TARS installed · 갱신(회전)
+#   4  NVMe만              기본은 new이고 메뉴에 old가 있다 · 갱신을 넘어 마커가 남았다
+#   4b NVMe만, old 고름    Limine 메뉴에서 시리얼로 old를 골랐다 · 같은 p2를 본다
+#   5  ISO + 설치된 NVMe   boot/bzImage를 지워도 TARS installed · --wipe로 통째로 다시 설치
 #   6  NVMe만              마커가 사라졌고 설정이 첫 부팅처럼 새로 깔린다
 #   7  같은 디스크를 USB로  -kernel · delay_use=4. init이 늦은 p2를 기다려 잡는다(DC-M1)
 #
@@ -43,9 +45,16 @@ fi
 
 WORK="$(mktemp -d)"
 DISK="${WORK}/target.img"
-# 2GiB. 배치(256MiB + 1GiB)가 들어가고 나머지가 비는 가장 작은 정수다.
-# truncate라 호스트 디스크를 실제로는 거의 안 쓴다.
-truncate -s 2G "$DISK"
+# 3GiB. 배치(1GiB + 1GiB, KU-M0)에 GPT 머리까지 들어가고 나머지가 비는 가장
+# 작은 정수다 — 2GiB에는 안 들어간다(disk.MIN_DISK_BYTES). truncate라 호스트
+# 디스크를 실제로는 거의 안 쓴다(부팅 3a의 mcopy가 900MB쯤 실제로 쓴다).
+truncate -s 3G "$DISK"
+
+# KU-M0: mtools가 QEMU가 꺼진 사이 p1(FAT32)을 직접 연다. sfdisk의 기본 정렬로
+# p1은 2048섹터(1MiB)에서 시작한다. SKIP_CHECK는 mtools가 FAT의 기하 값을
+# 따지지 않게 한다 — 파일 이미지에는 실제 기하가 없다.
+export MTOOLS_SKIP_CHECK=1
+ESP_IMG="${DISK}@@1M"
 
 QEMU_PID=""
 LOG=""
@@ -119,10 +128,23 @@ boot_guest() {
     < "$FIFO" > "$LOG" 2>&1 &
   QEMU_PID=$!
 
-  local waited=0
+  # KU-M0: PICK_OLD=1이면 Limine 메뉴에서 old를 고른다. 메뉴의 글자 사이에
+  # 커서 이동 escape가 끼어 있어 날 로그로는 안 보이므로 clean을 거친다(KU design
+  # "M0 전에 잰 것" 1). 대기가 3초뿐이라 고르기 전에는 0.2초마다 본다.
+  local waited=0 ticks=0 pick="${PICK_OLD:-0}"
   while [ "$waited" -lt 180 ]; do
     if grep -aq "tars-init: started console shell" "$LOG"; then break; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    if [ "$pick" = 1 ]; then
+      if clean | grep -aF "Booting automatically" >/dev/null; then
+        printf '\033[B' >&4; sleep 0.3; printf '\r' >&4
+        pick=sent
+        echo "boot ${name}: picked the old entry in the Limine menu"
+      fi
+      sleep 0.2; ticks=$((ticks + 1))
+      if [ "$ticks" -ge 5 ]; then ticks=0; waited=$((waited + 1)); fi
+      continue
+    fi
     sleep 1; waited=$((waited + 1))
   done
   if ! grep -aq "tars-init: started console shell" "$LOG"; then
@@ -236,7 +258,10 @@ echo "a GPT on a 4096-byte-sector disk reads as gpt"
 # 판정 4b (DC-M2). YES를 줄로 읽는다. 파이프로 `YES`와 ` please\n`를 1초 사이를
 # 두고 보내면, read 한 번으로 받던 전 코드는 `YES`만 보고 확인으로 읽었다.
 # 지금은 `YES please`를 다 모아 거절한다. not confirmed가 판정 4에 이어 둘째다.
-send "sh -c '(printf YES; sleep 1; printf \" please\\n\") | tars-install /dev/nvme1n1'; printf 'dc-split-%s\n' done"
+# 대상은 nvme0n1이다. KU-M0부터 64MiB scratch는 YES를 묻기 전에 크기로 거절돼
+# 이 판정이 볼 줄 읽기까지 안 간다(판정 4d). nvme0n1은 판정 5가 곧 통째로
+# 깔 디스크라, 옛 코드가 YES로 읽어 지워도 잃는 것이 없고 아래 판정이 잡는다.
+send "sh -c '(printf YES; sleep 1; printf \" please\\n\") | tars-install /dev/nvme0n1'; printf 'dc-split-%s\n' done"
 wait_log "dc-split-done" 30 \
   || fail "the split YES never came back to the shell" "tars-install:" "dc-split"
 if [ "$(grep -acF "tars-install: not confirmed; nothing was changed." "$LOG")" -lt 2 ]; then
@@ -257,6 +282,28 @@ if ! clean | grep -aE '^tars-install: /dev/x+\.\.\.$' >/dev/null; then
 fi
 echo "an error line longer than its buffer is printed clipped, not dropped"
 
+# 판정 4d (KU-M0). 배치(1GiB + 1GiB)가 안 들어가는 디스크는 YES 전에 거절하고
+# 아무것도 안 쓴다. 64MiB scratch가 그 디스크다. 크기 글자는 formatSize의 10진
+# 버림(67,108,864 → 67 MB)이고 최소는 글자로 적는다(disk.MIN_DISK_WORDS).
+send "tars-install /dev/nvme1n1 --yes; printf 'ku-small-%s\n' done"
+wait_log "ku-small-done" \
+  || fail "tars-install on the 64 MiB disk never came back to the shell" "tars-install:" "ku-small"
+if ! grep -aqF "tars-install: /dev/nvme1n1 is 67 MB; TARS needs more than 2 GiB" "$LOG"; then
+  fail "a disk too small for the layout was not refused by size" "tars-install:"
+fi
+if grep -aqF "tars-install: writing the partition table" "$LOG"; then
+  fail "the too-small disk was partitioned anyway" "tars-install:"
+fi
+send "tars-install"
+for _ in $(seq 1 300); do
+  [ "$(clean | grep -acE '^  /dev/nvme1n1 .* foreign \(gpt\)$')" -ge 2 ] && break
+  sleep 0.1
+done
+if [ "$(clean | grep -acE '^  /dev/nvme1n1 .* foreign \(gpt\)$')" -lt 2 ]; then
+  fail "after the size refusal the scratch disk was no longer foreign (gpt)" "/dev/nvme1n1"
+fi
+echo "a disk smaller than the layout is refused before YES and left alone"
+
 # 판정 5. 설치. mke2fs가 4초, sfdisk가 3.5초(DI-M0 실측 8)라 TCG에서
 # 넉넉히 120초를 준다.
 send "tars-install /dev/nvme0n1 --yes"
@@ -265,12 +312,12 @@ if ! wait_log "tars-install: done. remove the boot medium and reboot." 120; then
     "tars-install:" "failed" "never appeared"
 fi
 # 넷이 다 갔다. 크기까지는 안 본다 — 부팅 2가 커널과 initrd를 실제로 읽는다.
-for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI; do
+for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI boot/version; do
   if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then
     fail "tars-install did not report copying ${f}" "tars-install: copying"
   fi
 done
-echo "tars-install wrote the disk and copied the four boot files"
+echo "tars-install wrote the disk, copied the four boot files and wrote boot/version"
 
 stop_guest
 
@@ -324,6 +371,19 @@ if ! grep -aE "Kernel command line: .*tars\.installed( |${CR}|\$)" "$LOG" >/dev/
 fi
 echo "the installed disk booted with tars.installed"
 
+# 판정 18 (KU-M0). ESP의 conf가 메뉴를 3초 보였고(ISO는 0초라 이 줄이 없다),
+# 첫 설치라 엔트리는 하나다. 메뉴 글자는 escape를 걷어야 보인다.
+if grep -aE "Kernel command line: .*tars\.slot=old" "$LOG" >/dev/null; then
+  fail "the first boot of a fresh install came up as the old slot" "Kernel command line"
+fi
+if ! clean | grep -aF "Booting automatically" >/dev/null; then
+  fail "the installed disk booted without a menu timeout; the ESP conf kept timeout 0" "Booting"
+fi
+if clean | grep -aE 'TARS [^ ]+ \(old\)' >/dev/null; then
+  fail "a fresh install already lists an old entry" "(old)"
+fi
+echo "a fresh install waits in the menu and has one entry"
+
 # 마커. 부팅 4가 이것이 갱신을 넘었는지, 부팅 6이 --wipe로 사라졌는지 본다.
 # 출력(di-marker-written)이 타이핑한 줄에 없는 모양이라 에코와 안 섞인다.
 send "echo kept > /config/di-marker && printf 'di-marker-%s\n' written"
@@ -332,6 +392,47 @@ wait_log "di-marker-written" \
 echo "wrote /config/di-marker"
 
 stop_guest
+
+# ── 부팅 3a: ISO + 꽉 찬 ESP (KU-M0) ───────────────────────────────────
+# QEMU가 꺼진 사이 호스트가 p1을 채워 빈 자리를 50MB쯤만 남긴다. old는 아직
+# 비었으니 need(매체 두 파일 + 1MiB, 약 103MB)에 모자란다 — 갱신은 YES 전에
+# 거절하고 아무것도 안 건드려야 한다(KU design 위험 2). mdir은 수를 세 자리마다
+# 공백으로 끊는다. 채우는 파일은 sparse라 호스트에서 읽을 때만 0이 된다.
+echo "=== boot 3a: the ISO and an installed NVMe whose ESP is full ==="
+esp_free() { mdir -i "$ESP_IMG" ::/ | grep "bytes free" | tr -d ' ' | sed 's/bytesfree//'; }
+FREE="$(esp_free)" || fail "mdir could not read p1 of the installed image at 1 MiB" "mdir"
+case "$FREE" in ''|*[!0-9]*) fail "mdir gave no free-bytes number for p1: '${FREE}'" "mdir" ;; esac
+FILL=$((FREE - 50000000))
+truncate -s "$FILL" "${WORK}/ku-fill"
+mcopy -i "$ESP_IMG" "${WORK}/ku-fill" ::/ku-fill \
+  || fail "mcopy could not fill p1" "mcopy"
+rm -f "${WORK}/ku-fill"
+echo "p1 had ${FREE} bytes free; filled it to $(esp_free)"
+boot_guest 3a -cdrom ../out/tars.iso
+
+# 판정 19a. 자리가 없다고 말하고 멈췄다. 회전도 복사도 시작하지 않았다.
+send "tars-install /dev/nvme0n1 --yes; printf 'ku-full-%s\n' done"
+wait_log "ku-full-done" 60 \
+  || fail "the update on a full ESP never came back to the shell" "tars-install:"
+if ! grep -aqF "tars-install: p1 has no room for two images; nothing was changed." "$LOG"; then
+  fail "an update with no room on p1 was not refused" "tars-install:"
+fi
+if grep -aE "tars-install: (moving the current image|copying the boot files)" "$LOG" >/dev/null; then
+  fail "the update on a full ESP touched the boot files" "tars-install:"
+fi
+echo "with no room on p1 the update refused before YES"
+
+stop_guest
+
+# 정말로 그대로다. 채운 것을 지우고, 지금 이미지의 version이 남았고 old는 비었다.
+mdel -i "$ESP_IMG" ::/ku-fill || fail "mdel could not remove the fill file" "mdel"
+if [ -z "$(mtype -i "$ESP_IMG" ::/boot/version 2>/dev/null)" ]; then
+  fail "after the refused update boot/version is gone" "version"
+fi
+if mdir -b -i "$ESP_IMG" ::/boot/old 2>/dev/null | grep bzImage >/dev/null; then
+  fail "after the refused update boot/old holds an image" "boot/old"
+fi
+echo "the refused update left boot/ as it was and boot/old empty"
 
 # ── 부팅 3: ISO + 설치된 NVMe ──────────────────────────────────────────
 echo "=== boot 3: the ISO and the installed NVMe ==="
@@ -371,12 +472,30 @@ fi
 # 넷을 다 다시 썼다. 이것이 없으면 아무것도 안 쓰는 갱신도 부팅 4를 지난다 —
 # 부팅 1이 쓴 ESP가 그대로 뜨기 때문이다. 로그가 부팅 3의 것이라 부팅 1의
 # 복사 줄은 안 섞인다.
-for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI; do
+for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI boot/version; do
   if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then
     fail "the update did not copy ${f}" "tars-install: copying"
   fi
 done
 echo "the update rewrote p1 only"
+
+# 판정 19 (KU-M0). 회전했다. 빈 자리 줄을 진짜 FAT에서 읽었고(첫 갱신이라 old는
+# 0), 지금 이미지의 셋이 boot/old/로 갔으며, 계획이 그것을 말했다.
+if ! grep -aE "tars-install: p1 has [1-9][0-9]* bytes free and 0 bytes in boot/old; the new image needs [1-9][0-9]*" "$LOG" >/dev/null; then
+  fail "the update did not report the free space on p1" "tars-install: p1 has"
+fi
+if ! grep -aqF "tars-install: moving the current image to boot/old" "$LOG"; then
+  fail "the update did not move the current image to boot/old" "tars-install:"
+fi
+for f in bzImage initrd.cpio version; do
+  if ! grep -aqF "  boot/${f} -> boot/old/${f}" "$LOG"; then
+    fail "the update did not move boot/${f}" "-> boot/old"
+  fi
+done
+if ! grep -aqF "  boot/old/  <- TARS " "$LOG"; then
+  fail "the update plan did not say what goes to boot/old" "boot/old/"
+fi
+echo "the update moved the current image to boot/old and wrote the new one"
 
 stop_guest
 
@@ -399,6 +518,15 @@ if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
     "tars-init: loaded /config" "tars-init: created"
 fi
 
+# 판정 20 (KU-M0). 엔트리가 둘이 됐고 기본은 new다.
+if grep -aE "Kernel command line: .*tars\.slot=old" "$LOG" >/dev/null; then
+  fail "after the update the default entry was the old slot" "Kernel command line"
+fi
+if ! clean | grep -aE 'TARS [^ ]+ \(old\)' >/dev/null; then
+  fail "after the update the menu has no old entry" "(old)"
+fi
+echo "after the update the menu lists new and old, and new boots by default"
+
 # 판정 14. 이 milestone의 심장이다 — 마커가 갱신을 넘었다.
 send "printf 'di-marker:'; cat /config/di-marker"
 wait_log "di-marker:kept" \
@@ -407,9 +535,50 @@ echo "the marker survived the update"
 
 stop_guest
 
+# ── 부팅 4b: NVMe만, 메뉴에서 old를 고른다 (KU-M0) ─────────────────────
+echo "=== boot 4b: the NVMe alone, picking the old entry ==="
+PICK_OLD=1 boot_guest 4b
+
+# 판정 21. old 엔트리로 떴다. 표지도 그대로 붙었고, 같은 p2를 잡았으며 마커가
+# 보인다 — old도 new와 같은 설정을 본다(KU design 확인 4).
+if ! grep -aE "Kernel command line: .*tars\.slot=old( |${CR}|\$)" "$LOG" >/dev/null; then
+  fail "picking the old entry did not boot the old slot" "Kernel command line" "picked the old"
+fi
+if ! grep -aE "Kernel command line: .*tars\.installed( |${CR}|\$)" "$LOG" >/dev/null; then
+  fail "the old entry booted without tars.installed" "Kernel command line"
+fi
+if ! grep -aqF "$WANT_DISK" "$LOG"; then
+  fail "booted from the old slot, init did not pick p2" \
+    "tars-init: config storage" "tars-init: no disk labelled"
+fi
+if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
+  fail "booted from the old slot, tars.conf was not the one from before" \
+    "tars-init: loaded /config" "tars-init: created"
+fi
+send "printf 'di-marker:'; cat /config/di-marker"
+wait_log "di-marker:kept" \
+  || fail "booted from the old slot, the marker was not there" "di-marker"
+echo "the old entry boots from the menu and sees the same settings"
+
+stop_guest
+
+# 회전 3단계(move_to_old) 뒤에 끊긴 디스크의 모양을 만든다 — boot/bzImage가 없고
+# boot/old/bzImage가 있다(KU design 결정 6). 이 디스크는 곧 --wipe로 다시 깔린다.
+mdel -i "$ESP_IMG" ::/boot/bzImage || fail "mdel could not remove boot/bzImage" "mdel"
+
 # ── 부팅 5: ISO + 설치된 NVMe, --wipe ──────────────────────────────────
 echo "=== boot 5: the ISO and the installed NVMe, --wipe ==="
 boot_guest 5 -cdrom ../out/tars.iso
+
+# 판정 21a (KU-M0). boot/bzImage가 없어도 boot/old/bzImage가 있으면 설치된
+# 디스크다. 새 설치로 읽히면 p2(설정)까지 지우는 길로 간다.
+send "tars-install"
+wait_log "$LIST_END" \
+  || fail "tars-install never finished its list after boot/bzImage was removed" "tars-install"
+if ! clean | grep -aE '^  /dev/nvme0n1 +[0-9]+ GB .* internal +TARS installed$' >/dev/null; then
+  fail "with only boot/old/bzImage the NVMe was not listed as TARS installed" "/dev/nvme0n1"
+fi
+echo "with only the old slot's kernel the disk still reads as TARS installed"
 
 # 판정 15. --wipe는 갱신 대신 통째로 지운다. 부팅 3이 p2를 안 붙인 것이
 # 여기서 쓰인다 — 붙였으면 sfdisk가 "in use"로 거부한다.
@@ -442,6 +611,12 @@ send "test -e /config/di-marker || printf 'di-marker-%s\n' gone"
 wait_log "di-marker-gone" \
   || fail "the marker survived --wipe" "di-marker"
 echo "--wipe left a fresh config partition"
+
+# 판정 22 (KU-M0). --wipe가 p1도 새로 만들었으니 old 엔트리가 없다.
+if clean | grep -aE 'TARS [^ ]+ \(old\)' >/dev/null; then
+  fail "after --wipe the menu still lists an old entry" "(old)"
+fi
+echo "after --wipe the menu has one entry again"
 
 stop_guest
 

@@ -213,14 +213,33 @@ tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 ```
 
 `tars-install /dev/nvme0n1`은 계획을 찍고 대문자 `YES`를 기다린다. 새 설치는
-디스크 전체를 지우고 GPT에 둘을 만든다. p1은 256MiB ESP(FAT32 `TARS-BOOT`)이고
+디스크 전체를 지우고 GPT에 둘을 만든다. p1은 1GiB ESP(FAT32 `TARS-BOOT`)이고
 커널·initrd·limine이 들어간다. p2는 1GiB ext2(`tars-config`)이고 설정이 산다.
-나머지는 비워 둔다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
+나머지는 비워 둔다. 그래서 디스크가 2GiB보다 커야 한다 — 작으면 `YES`를 묻기
+전에 거절한다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
 재부팅하지 않는다.
 
 새 ISO가 나오면 그 ISO로 떠서 같은 명령을 친다. 목록이 그 디스크를
-`TARS installed`로 보이고, p1의 파일 넷만 갈고 p2는 열지도 않는다(`updated.`).
-처음부터 다시 하려면 `--wipe`를 준다. 설정도 함께 지워진다.
+`TARS installed`로 보이고, p2는 열지도 않는다(`updated.`). p1에서는 지금
+이미지(커널 · initrd)가 `boot/old/`로 옮겨지고 새 이미지가 `boot/`에 들어간다.
+그 전에 빈 자리를 보고, 두 벌이 안 들어가면 아무것도 안 건드리고 멈춘다
+(`no room for two images`). 0.1.3까지 256MiB ESP로 깐 디스크는 갱신으로
+넓어지지 않는다 — 넓히려면 `--wipe`다. 처음부터 다시 하려면 `--wipe`를 준다.
+설정도 함께 지워진다.
+
+#### 새 버전이 안 뜰 때 — 이전 버전으로 돌아가기
+
+설치된 디스크로 뜨면 부팅 메뉴가 3초 보인다. 갱신한 뒤에는 엔트리가 둘이다 —
+위가 새 버전(`TARS <버전>`), 아래가 바로 전 버전(`TARS <버전> (old)`)이다.
+아무것도 안 누르면 새 버전으로 뜬다. 새 버전이 화면을 못 띄우거나 키보드가
+안 먹으면 전원을 껐다 켜고, 메뉴에서 아래 화살표로 `(old)`를 골라 Enter를
+누른다. 새 버전의 커널을 못 읽은 경우에는 `PANIC: linux: Failed to open
+kernel …` 뒤에 `Press a key to return to menu.`가 보인다 — 키 하나로 메뉴에
+돌아가고, 돌아간 메뉴는 고를 때까지 기다린다.
+
+old로 뜬 것은 그 부팅 한 번뿐이다. 다음 부팅의 기본은 다시 새 버전이다.
+계속 이전 버전을 쓰려면 매번 고르거나, 고친 ISO로 다시 갱신한다. 두 버전은
+같은 설정(p2)을 본다. 이전 버전이 모르는 설정 키는 기본값으로 읽힌다.
 
 ISO로 뜬 동안에는 설치된 디스크의 설정이 안 붙는다(`among 14 candidates`).
 `tars-install`이 ESP의 `limine.conf`에 `tars.installed`를 붙여 두고, `init`은

@@ -2,6 +2,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const storage = @import("storage.zig");
 const disk = @import("disk.zig");
+const build_info = @import("build_info");
 
 /// tars-install — 부팅 매체의 부트 파일 넷을 내장 디스크에 옮겨 USB 없이
 /// 뜨게 한다(DI design). 인자 없이 치면 목록, 디스크를 주면 계획을 보이고
@@ -104,6 +105,47 @@ fn exists(path: [*:0]const u8) bool {
     return failed(linux.access(path, linux.F_OK)) == null;
 }
 
+/// 파일 크기. 끝으로 lseek한 자리다. 없거나 못 열면 null.
+fn fileSize(path: [*:0]const u8) ?u64 {
+    const rc = linux.open(path, .{ .ACCMODE = .RDONLY }, 0);
+    if (failed(rc)) |_| return null;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    const end = linux.lseek(fd, 0, linux.SEEK.END);
+    if (failed(end)) |_| return null;
+    return end;
+}
+
+/// x86_64의 struct statfs. 필드가 전부 8바이트인 arch/x86의 모양이다. Zig 0.17의
+/// std.os.linux에는 statfs가 없어서 시스템 콜을 직접 부른다(KU-M0 plan 확정 2).
+const Statfs = extern struct {
+    type: i64,
+    bsize: i64,
+    blocks: u64,
+    bfree: u64,
+    bavail: u64,
+    files: u64,
+    ffree: u64,
+    fsid: [2]i32,
+    namelen: i64,
+    frsize: i64,
+    flags: i64,
+    spare: [4]i64,
+};
+
+comptime {
+    std.debug.assert(@sizeOf(Statfs) == 120);
+    std.debug.assert(@offsetOf(Statfs, "bavail") == 32);
+}
+
+/// path가 있는 파일시스템에서 root가 아닌 사람이 쓸 수 있는 바이트(f_bavail).
+/// FAT에는 예약 블록이 없어 bfree와 같다.
+fn freeBytes(path: [*:0]const u8) ?u64 {
+    var st: Statfs = undefined;
+    if (failed(linux.syscall2(.statfs, @intFromPtr(path), @intFromPtr(&st)))) |_| return null;
+    return st.bavail * @as(u64, @intCast(st.bsize));
+}
+
 // ── 부팅 매체 ────────────────────────────────────────────────────────
 
 const WORK_DIR: [:0]const u8 = "/tmp/tars-install";
@@ -158,7 +200,7 @@ fn printUsage() void {
 /// 디스크에 TARS가 설치돼 있는가(DI design 결정 7). 셋을 다 본다.
 ///
 ///   디스크 앞머리가 GPT
-///   p1이 FAT32이고, 붙여 보면 boot/bzImage가 있다
+///   p1이 FAT32이고, 붙여 보면 boot/bzImage나 boot/old/bzImage가 있다
 ///   p2가 `tars-` 라벨의 ext2
 ///
 /// bzImage를 보는 것이 design 위험 4의 처방이다. sfdisk와 mkfs까지 되고
@@ -182,9 +224,86 @@ fn isInstalled(path: [:0]const u8) bool {
     if (!mkdirOk(WORK_DIR.ptr) or !mkdirOk(ESP_DIR.ptr)) return false;
     if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", linux.MS.RDONLY, 0)) != null) return false;
     defer _ = linux.umount(ESP_DIR.ptr);
+    // 둘 중 하나면 된다(KU design 결정 6). 회전이 boot/의 셋을 boot/old/로 옮긴
+    // 뒤 새 파일을 다 쓰기 전에 끊긴 디스크는 boot/bzImage가 없다 — 그 디스크가
+    // 새 설치(p2 지우기)로 가면 안 된다.
     var kernel_buf: [128]u8 = undefined;
-    const kernel = std.fmt.bufPrintSentinel(&kernel_buf, "{s}/{s}", .{ ESP_DIR, disk.BOOT_FILES[0] }, 0) catch unreachable;
-    return exists(kernel.ptr);
+    for ([_][]const u8{ disk.NEW_DIR, disk.OLD_DIR }) |dir| {
+        const kernel = slotPath(&kernel_buf, dir, "bzImage");
+        if (exists(kernel.ptr)) return true;
+    }
+    return false;
+}
+
+/// ESP_DIR 아래 슬롯 파일의 경로. 이름이 다 짧아 128바이트를 못 넘는다.
+fn slotPath(buf: []u8, dir: []const u8, file: []const u8) [:0]const u8 {
+    return std.fmt.bufPrintSentinel(buf, "{s}/{s}/{s}", .{ ESP_DIR, dir, file }, 0) catch unreachable;
+}
+
+/// 갱신이 YES 전에 p1에서 읽는 것(KU-M0). 버전은 plainVersion을 통과한 것만이다 —
+/// 깨진 version 파일은 "끝까지 안 써진 슬롯"과 같이 다룬다(disk.rotation).
+const Slots = struct {
+    cur_ver: ?[]const u8,
+    old_ver: ?[]const u8,
+    cur_bytes: u64,
+    old_bytes: u64,
+    free: u64,
+};
+
+/// p1을 읽기 전용으로 붙여 두 슬롯과 빈 자리를 읽고 뗀다. isInstalled와 같은 모양이다.
+/// 버전 글자는 부르는 쪽의 버퍼에 남는다.
+fn readSlots(p1: [:0]const u8, cur_buf: []u8, old_buf: []u8) ?Slots {
+    if (!mkdirOk(WORK_DIR.ptr) or !mkdirOk(ESP_DIR.ptr)) {
+        complain("cannot create {s}", .{ESP_DIR});
+        return null;
+    }
+    if (failed(linux.mount(p1.ptr, ESP_DIR.ptr, "vfat", linux.MS.RDONLY, 0))) |e| {
+        complain("cannot mount {s} as vfat (errno {d})", .{ p1, @backingInt(e) });
+        return null;
+    }
+    defer _ = linux.umount(ESP_DIR.ptr);
+    const free = freeBytes(ESP_DIR.ptr) orelse {
+        complain("cannot read the free space on {s}", .{p1});
+        return null;
+    };
+    return .{
+        .cur_ver = slotVersion(disk.NEW_DIR, cur_buf),
+        .old_ver = slotVersion(disk.OLD_DIR, old_buf),
+        .cur_bytes = slotBytes(disk.NEW_DIR),
+        .old_bytes = slotBytes(disk.OLD_DIR),
+        .free = free,
+    };
+}
+
+/// 슬롯의 version 한 줄. 없거나, buf를 채울 만큼 길거나, plainVersion이 아니면 null.
+fn slotVersion(dir: []const u8, buf: []u8) ?[]const u8 {
+    var path_buf: [128]u8 = undefined;
+    const text = readFile(slotPath(&path_buf, dir, "version").ptr, buf) orelse return null;
+    if (text.len == buf.len) return null;
+    const ver = std.mem.trim(u8, text, " \t\r\n");
+    return if (disk.plainVersion(ver)) ver else null;
+}
+
+/// 슬롯의 bzImage + initrd.cpio. 없는 파일은 0이다.
+fn slotBytes(dir: []const u8) u64 {
+    var path_buf: [128]u8 = undefined;
+    var total: u64 = 0;
+    for (disk.SLOT_FILES[0..2]) |f| total += fileSize(slotPath(&path_buf, dir, f).ptr) orelse 0;
+    return total;
+}
+
+/// 매체의 bzImage + initrd.cpio. 갱신의 need가 여기서 온다.
+fn mediumBytes() ?u64 {
+    var total: u64 = 0;
+    for (disk.SLOT_FILES[0..2]) |f| {
+        var path_buf: [128]u8 = undefined;
+        const p = std.fmt.bufPrintSentinel(&path_buf, "{s}/{s}/{s}", .{ MEDIUM_DIR, disk.NEW_DIR, f }, 0) catch unreachable;
+        total += fileSize(p.ptr) orelse {
+            complain("cannot read the size of {s}", .{p});
+            return null;
+        };
+    }
+    return total;
 }
 
 /// p2에 `tars-` 라벨이 있는가. 새 설치가 "설정도 지워진다"고 경고할 조건이다.
@@ -389,12 +508,13 @@ fn copyFile(src: [:0]const u8, dst: [:0]const u8) ?u64 {
     return total;
 }
 
-/// 매체의 limine.conf를 읽어 표지를 붙인 모양으로 돌려준다(disk.espConf).
-/// 원본은 1KB 아래라(DI-M0 실측 7의 908바이트) 버퍼 하나에 든다.
+/// 매체의 limine.conf로 ESP의 conf를 짓는다(disk.espConf). 원본은 1KB 아래라
+/// (DI-M0 실측 7의 908바이트) 버퍼 하나에 든다. old_ver가 있으면 old 엔트리가
+/// 붙는다 — 쓰기가 끝난 뒤 boot/old/에 있을 이미지의 버전이다.
 ///
 /// 디스크를 건드리기 전, YES를 묻기 전에 부른다 — espConf가 거부할 conf면
 /// 아무것도 지우지 않고 멈춰야 한다(disk.espConf의 약속).
-fn prepareConf(in_buf: []u8, out_buf: []u8) ?[]const u8 {
+fn prepareConf(in_buf: []u8, out_buf: []u8, new_ver: []const u8, old_ver: ?[]const u8) ?[]const u8 {
     var src_buf: [128]u8 = undefined;
     const src = std.fmt.bufPrintSentinel(&src_buf, "{s}/{s}", .{ MEDIUM_DIR, disk.LIMINE_CONF }, 0) catch unreachable;
     const conf = readFile(src.ptr, in_buf) orelse {
@@ -405,8 +525,8 @@ fn prepareConf(in_buf: []u8, out_buf: []u8) ?[]const u8 {
         complain("{s} does not fit in {d} bytes", .{ src, in_buf.len });
         return null;
     }
-    return disk.espConf(out_buf, conf) orelse {
-        complain("{s} has no cmdline line to mark with {s}", .{ src, storage.INSTALLED_TOKEN });
+    return disk.espConf(out_buf, conf, new_ver, old_ver) orelse {
+        complain("{s} is not one entry with a timeout and a cmdline line to mark with {s}", .{ src, storage.INSTALLED_TOKEN });
         return null;
     };
 }
@@ -480,11 +600,6 @@ fn install(
         return 1;
     }
 
-    // 표지를 붙일 수 있는 conf인지 먼저 본다. 디스크를 지운 뒤에 알면 늦다.
-    var conf_in: [8192]u8 = undefined;
-    var conf_out: [2 * 8192]u8 = undefined;
-    const esp_conf = prepareConf(&conf_in, &conf_out) orelse return 1;
-
     var size_buf: [16]u8 = undefined;
     var model_buf: [64]u8 = undefined;
     var state_buf: [64]u8 = undefined;
@@ -499,10 +614,44 @@ fn install(
     // 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
     const update = installed and !wipe;
 
+    var p1_buf: [32]u8 = undefined;
+    var p2_buf: [32]u8 = undefined;
+    const p1 = storage.partitionName(&p1_buf, path, 1).?;
+    const p2 = storage.partitionName(&p2_buf, path, 2).?;
+
+    // ── YES 전의 판단 (KU-M0) ──
+    // 디스크를 건드리기 전에 다 정한다. 새 설치는 배치가 들어가는가, 갱신은
+    // p1에 새 이미지가 들어갈 자리가 있는가와 old로 무엇이 남는가.
+    const new_ver: []const u8 = build_info.version;
+    if (!update and !disk.bigEnough(bytes)) {
+        complain("{s} is {s}; TARS needs " ++ disk.MIN_DISK_WORDS, .{ path, disk.formatSize(&size_buf, bytes) });
+        return 1;
+    }
+    var cur_buf: [72]u8 = undefined;
+    var old_buf: [72]u8 = undefined;
+    var rot: disk.Rotation = .rotate;
+    var cur_ver: ?[]const u8 = null;
+    // 쓰기가 끝난 뒤 boot/old/에 있을 이미지의 버전. 이것이 있어야 old 엔트리가 생긴다.
+    var old_after: ?[]const u8 = null;
+    if (update) {
+        const slots = readSlots(p1, &cur_buf, &old_buf) orelse return 1;
+        const need = (mediumBytes() orelse return 1) + disk.NEED_SLACK;
+        rot = disk.rotation(slots.cur_ver != null, slots.free, slots.old_bytes, slots.cur_bytes, need);
+        disk.roomLines(Say{}, slots.free, slots.old_bytes, need, rot);
+        if (rot == .no_room) return 1;
+        cur_ver = slots.cur_ver;
+        old_after = if (rot == .rotate) slots.cur_ver else slots.old_ver;
+    }
+
+    // 지을 수 있는 conf인지 먼저 본다. 디스크를 지운 뒤에 알면 늦다.
+    var conf_in: [8192]u8 = undefined;
+    var conf_out: [2 * 8192]u8 = undefined;
+    const esp_conf = prepareConf(&conf_in, &conf_out, new_ver, old_after) orelse return 1;
+
     // ── 계획 ──
     // p2는 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
     const settings = !update and p2HasSettings(path);
-    disk.planLines(Say{}, update, path, disk.formatSize(&size_buf, bytes), model, disk.stateWord(state), settings);
+    disk.planLines(Say{}, update, path, disk.formatSize(&size_buf, bytes), model, disk.stateWord(state), settings, new_ver, cur_ver, rot);
 
     if (!yes) {
         say("type YES to continue: ", .{});
@@ -514,13 +663,8 @@ fn install(
         }
     }
 
-    var p1_buf: [32]u8 = undefined;
-    var p2_buf: [32]u8 = undefined;
-    const p1 = storage.partitionName(&p1_buf, path, 1).?;
-    const p2 = storage.partitionName(&p2_buf, path, 2).?;
-
     if (update) {
-        if (!fillEsp(p1, esp_conf)) return 1;
+        if (!fillEsp(p1, esp_conf, new_ver, rot == .rotate)) return 1;
         say("tars-install: updated. remove the boot medium and reboot.\n", .{});
         return 0;
     }
@@ -546,20 +690,20 @@ fn install(
     const mke2fs = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext2", "-L", disk.CONFIG_LABEL, p2 };
     if (!runTool(&mke2fs, null, WORK_DIR ++ "/mke2fs.log", envp)) return 1;
 
-    if (!fillEsp(p1, esp_conf)) return 1;
+    if (!fillEsp(p1, esp_conf, new_ver, false)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});
     return 0;
 }
 
-/// p1을 붙이고 넷을 쓰고 sync하고 뗀다. 새 설치와 갱신이 같은 길이다 —
-/// 갱신은 이 앞의 sfdisk와 mkfs를 건너뛸 뿐이다.
+/// p1을 붙이고 쓰고 sync하고 뗀다. 새 설치와 갱신이 같은 입구다 — 갱신은
+/// 이 앞의 sfdisk와 mkfs를 건너뛸 뿐이다.
 ///
-/// 갱신은 파일을 제자리에서 덮는다(O_TRUNC). 도중에 전원이 나가면 p1의
-/// 커널이나 initrd가 반쪽이 되지만, 그 자리의 사람은 ISO를 손에 들고 있고
-/// bzImage가 이름으로는 남아 있어 목록이 여전히 `TARS installed`로 보인다 —
-/// 같은 명령을 한 번 더 치면 된다. 새 이름으로 쓰고 rename하는 길은 p1에
-/// 두 벌이 들 자리(90MB)가 있지만 이번에는 안 한다.
-fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
+/// rotate면 disk.ROTATION을 돈다(KU design 결정 4). 지금 이미지를 boot/old/로
+/// 보내고 새 것을 쓰므로, 도중에 끊겨도 메뉴에서 뜨는 엔트리가 하나는 남는다.
+/// 아니면 boot/의 파일을 제자리에서 덮는다(O_TRUNC). 새 설치와, 지금 이미지에
+/// version이 없는 갱신(끝까지 안 써졌거나 슬롯 전에 깔린 것 — 결정 5)이다.
+/// 어느 쪽이든 boot/version을 맨 마지막에 쓴다.
+fn fillEsp(p1: [:0]const u8, esp_conf: []const u8, new_ver: []const u8, rotate: bool) bool {
     if (!mkdirOk(ESP_DIR.ptr)) {
         complain("cannot create {s}", .{ESP_DIR});
         return false;
@@ -568,7 +712,7 @@ fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
         complain("cannot mount {s} as vfat (errno {d})", .{ p1, @backingInt(e) });
         return false;
     }
-    const copied = copyAll(esp_conf);
+    const written = makeDirs() and (if (rotate) rotateAll(esp_conf, new_ver) else copyAll(esp_conf) and writeVersion(new_ver));
     // sync가 umount보다 먼저다. 캐시에만 있는 41MB는 전원 버튼과 함께
     // 사라진다(design 위험 3). umount도 쓰기를 내보내지만 실패하면 안
     // 내보내므로 sync를 따로 부른다.
@@ -578,14 +722,10 @@ fn fillEsp(p1: [:0]const u8, esp_conf: []const u8) bool {
         complain("cannot unmount {s} (errno {d})", .{ ESP_DIR, @backingInt(e) });
         return false;
     }
-    return copied;
+    return written;
 }
 
-/// 매체는 findMedium이 MEDIUM_DIR에 붙여 두었고 p1은 install이 ESP_DIR에
-/// 붙였다. limine.conf는 esp_conf(디스크를 건드리기 전에 prepareConf가 이미
-/// 지어 둔 표지 붙은 text)를 그대로 쓰고, 나머지 셋만 두 디렉터리 사이에서
-/// 바이트 그대로 옮긴다.
-fn copyAll(esp_conf: []const u8) bool {
+fn makeDirs() bool {
     for (disk.ESP_DIRS) |d| {
         var buf: [128]u8 = undefined;
         const p = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ ESP_DIR, d }, 0) catch unreachable;
@@ -594,15 +734,123 @@ fn copyAll(esp_conf: []const u8) bool {
             return false;
         }
     }
+    return true;
+}
+
+/// 매체는 findMedium이 MEDIUM_DIR에 붙여 두었고 p1은 install이 ESP_DIR에
+/// 붙였다. limine.conf는 esp_conf(디스크를 건드리기 전에 prepareConf가 이미
+/// 지어 둔 text)를 그대로 쓰고, 나머지 셋만 두 디렉터리 사이에서 바이트 그대로
+/// 옮긴다.
+fn copyAll(esp_conf: []const u8) bool {
     say("tars-install: copying the boot files\n", .{});
     for (disk.BOOT_FILES) |rel| {
+        const ok = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) writeEspConf(esp_conf, false) else copyFromMedium(rel);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/// 매체의 rel을 ESP의 같은 자리로. 쓴 크기를 한 줄 찍는다(판정 5 · 12가 센다).
+fn copyFromMedium(rel: []const u8) bool {
+    var from_buf: [128]u8 = undefined;
+    var to_buf: [128]u8 = undefined;
+    const from = std.fmt.bufPrintSentinel(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }, 0) catch unreachable;
+    const to = std.fmt.bufPrintSentinel(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }, 0) catch unreachable;
+    const n = copyFile(from, to) orelse return false;
+    say("  {s} {d} bytes\n", .{ rel, n });
+    return true;
+}
+
+/// ESP의 limine.conf. via_tmp면 `.tmp`에 쓰고 rename한다 — 회전 도중 conf가
+/// 반쪽인 순간이 없게. vfat의 rename은 있는 이름 위로 덮는다(KU-M0 plan Task 2
+/// 결과 절에 실제 동작을 적는다).
+fn writeEspConf(esp_conf: []const u8, via_tmp: bool) bool {
+    var to_buf: [128]u8 = undefined;
+    const to = std.fmt.bufPrintSentinel(&to_buf, "{s}/{s}", .{ ESP_DIR, disk.LIMINE_CONF }, 0) catch unreachable;
+    if (!via_tmp) {
+        const n = writeConf(to, esp_conf) orelse return false;
+        say("  {s} {d} bytes\n", .{ disk.LIMINE_CONF, n });
+        return true;
+    }
+    var tmp_buf: [128]u8 = undefined;
+    const tmp = std.fmt.bufPrintSentinel(&tmp_buf, "{s}.tmp", .{to}, 0) catch unreachable;
+    const n = writeConf(tmp, esp_conf) orelse return false;
+    if (failed(linux.rename(tmp.ptr, to.ptr))) |e| {
+        complain("cannot rename {s} to {s} (errno {d})", .{ tmp, to, @backingInt(e) });
+        return false;
+    }
+    say("  {s} {d} bytes\n", .{ disk.LIMINE_CONF, n });
+    return true;
+}
+
+/// boot/version — 이 슬롯은 끝까지 써졌다는 표지(KU design 결정 5). 늘 맨 마지막이다.
+fn writeVersion(ver: []const u8) bool {
+    var text_buf: [80]u8 = undefined;
+    const text = std.fmt.bufPrint(&text_buf, "{s}\n", .{ver}) catch unreachable;
+    var path_buf: [128]u8 = undefined;
+    const n = writeConf(slotPath(&path_buf, disk.NEW_DIR, "version"), text) orelse return false;
+    say("  {s}/version {d} bytes\n", .{ disk.NEW_DIR, n });
+    return true;
+}
+
+// ── 회전 (KU-M0) ─────────────────────────────────────────────────────
+
+/// disk.ROTATION을 순서 그대로 돈다. op마다 sync해서 캐시가 순서를 뒤섞지 않게
+/// 한다 — 결정 4의 "어느 순간에 끊겨도"는 디스크에 닿은 순서에 대한 말이다.
+fn rotateAll(esp_conf: []const u8, new_ver: []const u8) bool {
+    for (disk.ROTATION) |op| {
+        const ok = switch (op) {
+            .clear_old => clearOld(),
+            .write_conf => writeEspConf(esp_conf, true),
+            .move_to_old => moveToOld(),
+            .copy_new => copyNew(),
+            .write_version => writeVersion(new_ver),
+        };
+        if (!ok) return false;
+        linux.sync();
+    }
+    return true;
+}
+
+/// boot/old/의 셋을 지운다. 없는 것은 넘어간다(첫 회전에는 비어 있다).
+fn clearOld() bool {
+    for (disk.SLOT_FILES) |f| {
+        var buf: [128]u8 = undefined;
+        const p = slotPath(&buf, disk.OLD_DIR, f);
+        if (failed(linux.unlink(p.ptr))) |e| {
+            if (e == .NOENT) continue;
+            complain("cannot remove {s} (errno {d})", .{ p, @backingInt(e) });
+            return false;
+        }
+    }
+    return true;
+}
+
+/// boot/의 셋을 boot/old/로. 같은 파일시스템 안의 rename이라 복사가 없다.
+/// rotate는 boot/version이 있을 때만 오므로 셋이 다 있어야 한다.
+fn moveToOld() bool {
+    say("tars-install: moving the current image to {s}\n", .{disk.OLD_DIR});
+    for (disk.SLOT_FILES) |f| {
         var from_buf: [128]u8 = undefined;
         var to_buf: [128]u8 = undefined;
-        const from = std.fmt.bufPrintSentinel(&from_buf, "{s}/{s}", .{ MEDIUM_DIR, rel }, 0) catch unreachable;
-        const to = std.fmt.bufPrintSentinel(&to_buf, "{s}/{s}", .{ ESP_DIR, rel }, 0) catch unreachable;
-        const copied = if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) writeConf(to, esp_conf) else copyFile(from, to);
-        const n = copied orelse return false;
-        say("  {s} {d} bytes\n", .{ rel, n });
+        const from = slotPath(&from_buf, disk.NEW_DIR, f);
+        const to = slotPath(&to_buf, disk.OLD_DIR, f);
+        if (failed(linux.rename(from.ptr, to.ptr))) |e| {
+            complain("cannot move {s} to {s} (errno {d})", .{ from, to, @backingInt(e) });
+            return false;
+        }
+        say("  {s}/{s} -> {s}/{s}\n", .{ disk.NEW_DIR, f, disk.OLD_DIR, f });
+    }
+    return true;
+}
+
+/// 매체의 커널 · initrd와 EFI 로더를 쓴다. 로더도 이 자리에서 덮는다 — 새 ISO의
+/// Limine 판이 다를 수 있다. 로더는 슬롯이 아니라 한 벌뿐이다.
+fn copyNew() bool {
+    say("tars-install: copying the boot files\n", .{});
+    for (disk.BOOT_FILES) |rel| {
+        if (std.mem.eql(u8, rel, disk.LIMINE_CONF)) continue;
+        if (!copyFromMedium(rel)) return false;
     }
     return true;
 }
