@@ -1,8 +1,20 @@
-# HANDOFF: Multi Click(MC-M0~M2) 닫음(2026-11-01) — 열린 서브프로젝트 없음
+# HANDOFF: Shift Extend(SE-M0~M1) 닫음(2026-11-01) — 열린 서브프로젝트 없음
 
 ## 지금 상태 (2026-11-01)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Multi Click(MC-M0~M2, 2026-11-01, HANDOFF의 PD 비목표 셋에서 사용자가 골랐다).
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Shift Extend(SE-M0~M1, 2026-11-01, HANDOFF의 후보 넷에서 사용자가 골랐다).
+  design `docs/specs/2026-11-01-tars-shift-extend-design.md`, plan `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`, 기억
+  `docs/decisions/project_shift_extend.md`. MC 비목표 1과 PD 비목표 5를 함께 열었다 — 끌어 떼면 복사하고 copy mode를 나가되
+  선택은 화면에 남고(`hasLinger` = `selection != null and copy_cursor == null`, 새 필드 없음), Shift를 누른 채 그 패널을 누르면
+  가까운 끝이 그 칸으로 옮겨 가며(xterm, 사용자 결정) 끌면 늘고 떼면 다시 복사한다. 반복(더블클릭)이 늘리기보다 먼저다. 남은
+  선택은 늘리기 아닌 모든 누름(`Intent.deselect`, 지금 ws의 패널 전부) · 새 선택 시작 · 가지치기(조용히)가 지운다. 키 입력은 안
+  지우고(사용자 결정) 키보드 `y`는 그대로다(사용자 결정). 로그 `copy> extend row= col=` · `copy> deselect`.
+  - 함정: `Selection.start()`는 넣은 순서 그대로라 `copyPointTo`의 "앵커 = start()"가 뒤집힌 선택에서도 선다. 게이트의 Shift
+    클릭은 `sendkey shift 3000` 뒤 `hmp` 둘로만(대기 헬퍼가 3초를 먹는다), Shift 없는 클릭이 뒤따르면 `sleep 3.2`. 호스트
+    테스트가 먼저 잡는 게스트 mutation은 `zig build test` 줄을 `if false`로 바꾼 `check.sh` 사본을 마운트한다(DR-M3과 같다).
+  - 숫자: `pointer` 검사 38~41(반전은 `style>`의 `inverted_cells`), mutation 넷 전부 빨강(Shift 무시는 검사 16의 둘째가 먼저).
+    루트 게이트 22/22, 10분 20초(prebuild 321 + lanes 299초), verify 8219줄 전부 통과. 소개 페이지 "마우스 · 터치패드"에 한 줄.
+- 그 전에 닫은 것은 Multi Click(MC-M0~M2, 2026-11-01, HANDOFF의 PD 비목표 셋에서 사용자가 골랐다).
   design `docs/specs/2026-11-01-tars-multi-click-design.md`, plan `docs/plans/2026-11-01-tars-multi-click-mc-m{0,1,2}.md`, 기억
   `docs/decisions/project_multi_click.md`. 더블클릭은 단어, 트리플클릭은 줄을 곧바로 고르고 떼면 복사한다(끌기와 같은 규칙, 사용자
   결정). 누른 채 끌면 단어 · 줄 단위로 는다. 반복의 조건은 앞 누름과 500ms · 첫 누름에서 8픽셀 · 같은 잎과 ws · 앞 누름이 안
@@ -188,7 +200,7 @@
   `zig fmt`는 `@intFromEnum`을 `@backingInt`로 바꾼다. 게이트 로그는 `out/gate-logs/<시각>/`(루트) · `out/gate-logs/<체인>/`(`make check`).
   그 전의 서브프로젝트는 `docs/guides/completed.md`의 표에 있다.
 - 체인은 스물둘이다(`check.sh`의 `CHAINS`, 마지막이 `BS-M1:./battery/check.sh`). 새 체인의 monitor 포트는 45495부터다.
-  마지막 루트 게이트(UB-M2 닫기, 3회차): 22/22, 10분 23초(prebuild 318 + lanes 303초), verify 8132줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
+  마지막 루트 게이트(SE-M1 닫기): 22/22, 10분 20초(prebuild 321 + lanes 299초), verify 8219줄 전부 통과(prebuild는 cold build라 흔들린다 — DR-M1의 세 회차는 389 · 322 · 288초였다. DR-M3
   닫기는 9분 41초, prebuild 279 + lanes 299초). 루트 게이트는 이제 회차마다 `verify lines N` 줄도 찍는다(DR-M1). 게이트 운영(`RUNS` · `JOBS` ·
   `run_in_background`)은 `docs/guides/lessons.md`의 "게이트를 돌리고 읽는 법" 절 — 요약 로그는 `/tmp/gate.log`에 쓴다(`out/`은
   게이트가 시작에 지운다). 다음에 어느 체인이 빨개지면 `out/gate-logs/`의 그 회차 로그부터 본다.
@@ -210,6 +222,8 @@
   따라오는지. 칸이 안 뜨면 `cat /sys/class/power_supply/*/type`과 로그 `terminal: battery> scan …` 줄(`carryover.md`의 BS 항목).
 - MC: 실기 마우스로 더블클릭 · 트리플클릭이 손의 속도에 맞는지(500ms · 8픽셀), 터치패드의 두 번 탭이 더블이 되는지(탭 판정
   180ms 뒤 두 탭 끝의 차). 안 맞으면 값은 `pointer.MULTI_CLICK_US` · `MULTI_CLICK_PX` 둘이다(설정은 MC 비목표 3).
+- SE: 끌어 뗀 뒤 반전이 남는 것이 거슬리는지(글자를 쳐도 남는다 — 거슬리면 SE 비목표 1, 키 경로에 `clearLinger` 한 줄), Shift
+  클릭이 늘리는 끝이 손의 기대와 맞는지(가까운 끝). 자식이 마우스를 원하는 패널(vim)에서 Shift 끌기 뒤 Shift 클릭도 같다.
 - WP-M3: `Cmd+Option+화살표`(`keyboard=pc`면 `Alt+Win+화살표`)로 패널 사이를 다닐 때 손에 맞는지, 동률의 "맨 위 · 맨
   왼쪽" 규칙이 어색하지 않은지. 어색하면 최근 포커스(tmux식)가 다른 후보였다.
 - VD: `/config/groq.key`를 만들고 오른쪽 Cmd 두 번. 첫 연결 지연, `cleanup timed out`이 매번 나면 `cleanup_timeout`을
@@ -221,7 +235,8 @@
   후보는 없다.
 - 부분 갱신은 Dirty Rows(M0~M3)와 Status Band(SB-M0)로 닫았다(위). 남은 렌더 후보는 GPU 가속뿐이다(키 하나 0.42ms 가운데
   present 0.27이 커널 쪽).
-- PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. 더블 · 트리플클릭은 MC가 닫았다. Shift 클릭 늘리기는 MC 비목표 1(뗀 뒤 반전 남기기와 함께).
+- PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. 더블 · 트리플클릭은 MC가, Shift 클릭 늘리기와 뗀 뒤 반전 남기기는 SE가 닫았다(2026-11-01).
+  SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기 · Shift + 더블클릭의 단어 단위 늘리기.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).

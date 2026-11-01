@@ -1,7 +1,9 @@
 # TARS Shift Extend — Design
 
 Date: 2026-11-01
-Status: SE-M0 진행 중. plan은 `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`.
+Status: 끝났다 — SE-M0~M1(2026-11-01). 루트 게이트 22/22, 10분 20초(prebuild 321 + lanes 299초), verify 8219줄 전부 통과. plan은 `docs/plans/2026-11-01-tars-shift-extend-se-m{0,1}.md`,
+기억은 `docs/decisions/project_shift_extend.md`. `pointer` 체인 검사 38~41이 남은 반전 · 오른쪽 늘리기 · 왼쪽(가까운 끝) 늘리기 ·
+보통 클릭의 지우기를 보고, mutation 넷을 잡는다.
 
 MC design(`docs/specs/2026-11-01-tars-multi-click-design.md`)의 비목표 1 "Shift 클릭으로 늘리기"를 연다. 사용자가 2026-11-01에
 HANDOFF의 후보 넷(PD 비목표의 휠 방향 · 포인터 가속, Shift 클릭 늘리기, CB 범위 workspace, 큰 kitty 이미지)에서 골랐다. MC 비목표 1이 적어

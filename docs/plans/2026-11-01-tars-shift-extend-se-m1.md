@@ -65,3 +65,21 @@ inverted_cells() {
 design `Status` · `docs/guides/completed.md` 한 행 · 소개 페이지(`gh-pages` `data.js`) "마우스 · 터치패드"에 한 줄 ·
 `docs/decisions/project_shift_extend.md` + `MEMORY.md` 한 줄 · `HANDOFF.md` · PD design 비목표 5와 MC design 비목표 1에 "SE가 열었다"
 한 줄 · `docs/decisions/project_pointer_devices.md` · `project_multi_click.md`에 한 줄.
+
+## 결과 (2026-11-01)
+
+- `make quick` PASS. `pointer` 체인 단독 PASS, 3분 49초. 시리얼 로그의 순서가 설계 그대로다 — `clip> len=6 text=mc-two` →
+  `copy> extend row=45 col=18` → `clip> len=12 text=mc-two:three` → `copy> extend row=45 col=0` → `clip> len=19 text=mc-one
+  mc-two:three` → `copy> deselect`. 검사 38의 반전은 6칸이었다.
+- mutation 넷 전부 빨강(각각 `pointer` 체인 단독).
+  1. `.copy`를 `clips.yank`로 → 검사 38: "row 45 has 0 inverted cell(s), expected at least 6"(`copy> yank`는 찍혔다 — 복사는 되고
+     반전만 없다).
+  2. `copyExtendAt`의 앵커를 언제나 `topLeft`로 → 호스트 `vt_test` 검사 116이 먼저 잡으므로, `terminal`의 `zig build test` 단계를
+     `if false`로 바꾼 `check.sh` 사본을 `/workspace/pointer/check.sh`에 읽기 전용으로 마운트해 게스트까지 보냈다(DR-M3과 같은
+     법). 검사 40: "copied 'clip> len=8 text=mc-one m', expected 'clip> len=19 …'" — design이 예고한 글자 그대로다.
+  3. `.deselect` 갈래를 `{}`로 → 검사 41: "printed no 'copy> deselect'", 반전 19칸이 그대로였다.
+  4. `.extend = linger`(Shift를 안 봄) → 검사 41이 아니라 검사 16의 둘째가 먼저 잡았다: "the wheel while pressed did not start the
+     selection at the pressed cell"(`copy> enter row=44 col=0`). 검사 16의 끌기가 남긴 선택을 그 다음 Shift 없는 누름이 늘려서다 —
+     기존 검사들이 "보통 누름은 늘리기가 아니다"를 이미 지킨다. 검사 41은 그 뒤에 서 있다.
+- 알아 둘 것: `button_down` · `move_to`의 기다림이 3초를 먹을 수 있어 Shift 클릭은 `sendkey shift 3000` 뒤 `hmp` 둘로만 보낸다.
+  Shift 없는 클릭이 뒤따를 때는 `sleep 3.2`로 Shift가 떨어지길 기다린다(안 기다리면 그 클릭이 늘리기가 된다).

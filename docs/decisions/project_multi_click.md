@@ -37,4 +37,7 @@ design은 `docs/specs/2026-11-01-tars-multi-click-design.md`, plan은 `docs/plan
    `selectionString`이 끝 공백을 자른다(`)  ` → `)`). ghostty와 같아 그대로 둔다.
 6. `u2` 횟수를 `@min(n + 1, 3)`으로 올리면 3 + 1이 `u2`에서 넘친다.
 
+Shift 클릭 늘리기(비목표 1)는 Shift Extend(2026-11-01, [[project_shift_extend]])가 열었다 — 뗌이 선택을 남기고 Shift 클릭이
+가까운 끝을 옮긴다.
+
 관련: [[project_pointer_devices]] · [[project_copy_mode]] · [[feedback_gate_runs]].

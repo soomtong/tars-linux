@@ -79,10 +79,12 @@ M1을 Sonnet 서브에이전트가 plan만 보고 했다. lead는 실측 · 대�
 
 더블 · 트리플클릭은 Multi Click(2026-11-01, [[project_multi_click]])이 열었다.
 
-열지 않은 것(design 비목표): Shift 클릭 늘리기(MC 비목표 1) · 가장자리 자동 스크롤 · 절대 좌표 장치
-(usb-tablet · 터치스크린) · 뗀 뒤 반전 남기기 · 포인터 가속과 터치패드의 나머지(손바닥
+열지 않은 것(design 비목표): 가장자리 자동 스크롤 · 절대 좌표 장치
+(usb-tablet · 터치스크린) · 포인터 가속과 터치패드의 나머지(손바닥
 거부 · 세 손가락 · 관성) · `tars.conf` 항목(휠 방향이 첫 후보) · 왼손잡이 · 키보드 핫플러그 ·
 Apple 트랙패드 · 패널 비율 드래그 · 시간 기반 숨김 · THC QuickSPI.
+
+Shift 클릭 늘리기와 뗀 뒤 반전 남기기(비목표 5)는 Shift Extend(2026-11-01, [[project_shift_extend]])가 열었다.
 
 관련: [[project_device_discovery]] · [[project_copy_mode]] · [[project_workspace_panes]] ·
 [[project_kernel_config]] · [[feedback_gate_runs]].
