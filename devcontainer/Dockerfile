@@ -1,4 +1,4 @@
-# 이미지 세대: 2026-10-31. 이 파일의 sha256 앞 12자가 ghcr.io 태그다(devcontainer/image.sh) —
+# 이미지 세대: 2026-11-01. 이 파일의 sha256 앞 12자가 ghcr.io 태그다(devcontainer/image.sh) —
 # 이 날짜를 바꾸면 해시가 바뀌어 main의 다음 CI가 다시 굽고 올린다(apt 갱신을 받는 길). GI design 결정 4.
 #
 # 호스트(Apple Silicon)와 같은 arm64로 돈다. 예전에는
@@ -22,6 +22,13 @@ FROM debian:trixie-slim
 # SV-M2가 openssh-client를 더한다. service 체인이 게스트의 sshd에 붙는 ssh ·
 # ssh-keyscan · ssh-keygen이다 — 게스트에 넣는 것(아래 층 11)과 별개로 컨테이너
 # (arm64) 자신이 쓴다.
+#
+# KU-M0이 셋을 더한다. mtools는 install 체인이 QEMU가 꺼진 사이 디스크 이미지의
+# p1(FAT32, 1MiB 자리)에 파일을 직접 넣고 지우는 데 쓴다(`-i img@@1M`) — ESP를
+# 채워 갱신의 "자리 부족"을 진짜 FAT로 만들고, 끊긴 회전의 디스크 모양을 만든다.
+# 게스트에는 mount가 없어서 그 일은 컨테이너 쪽이다. netcat-openbsd(nc)와
+# iproute2(ss)는 그동안 "컨테이너에 없다"(measurements 41)를 perl로 우회해 온
+# 소켓 실험 · 포트 점유 확인 도구다. 이미지를 다시 굽는 김에 함께 넣는다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         gcc-multilib-x86-64-linux-gnu \
@@ -46,6 +53,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         e2fsprogs \
         zstd \
         openssh-client \
+        mtools \
+        netcat-openbsd \
+        iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # initrd에 들어갈 x86_64 유저랜드. 컨테이너가 arm64라서 컨테이너 자신의

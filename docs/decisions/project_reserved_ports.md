@@ -22,7 +22,8 @@ design은 `docs/specs/2026-11-01-tars-reserved-ports-design.md`, plan은 `docs/p
 
 - `make gate`는 `IN_CONTAINER`를 쓰지 않고 자기 `docker run` 줄을 갖고 있다. carryover 메모가 `IN_CONTAINER`만 적었던 것은 틀렸다.
 - 예약은 출발 포트의 자동 배정만 막는다. 명시해서 하는 `bind()`는 그대로 된다(perl 실측, design "착수 전" 2).
-- 컨테이너에 `nc` · `ss` · `python3`가 없다. 소켓 실험에는 `perl -MIO::Socket::INET`를 쓴다.
+- 컨테이너에 `nc` · `ss` · `python3`가 없었다. 소켓 실험에는 `perl -MIO::Socket::INET`를 썼다. KU-M0(2026-11-01)부터 `nc` · `ss`는
+  있다(Dockerfile의 `netcat-openbsd` · `iproute2`). `python3`는 여전히 없다.
 - 체인을 `docker run`으로 직접 띄울 때는 `--sysctl net.ipv4.ip_local_reserved_ports=45455-45599`를 넣는다(lessons의 세 줄).
   루트 게이트는 이 플래그가 없으면 멈추고, 체인 하나만 띄울 때는 플래그가 없어도 멈추지 않는다.
 

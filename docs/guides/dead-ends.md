@@ -194,8 +194,8 @@
   하지만 그 파일을 import하는 호스트 검사 모듈 열다섯에 `addImport`가 필요하다. 사본
   둘 + 진입 검사의 cmp가 더 싸다(AL).
 - 컨테이너에서 `rg` 쓰기 — 없다. `grep -aE`를 쓴다.
-- 컨테이너에서 `nc`로 QEMU monitor에 명령 보내기 — `nc`가 없다. 체인들은
-  `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
+- 컨테이너에서 `nc`로 QEMU monitor에 명령 보내기 — KU-M0(2026-11-01) 전에는 `nc`가 없었다. 이제 `netcat-openbsd`가 있어 손으로
+  하는 실험에는 된다. 체인들은 그대로 `exec 3<>/dev/tcp/127.0.0.1/PORT`를 쓴다.
 - `/tmp`에 만든 파일이 `docker run --rm` 사이에 남기 — 안 남는다.
 - 임시 Zig 프로젝트의 path 의존에 절대 경로 쓰기 — `expected path relative
   to build root`로 막힌다. 심볼릭 링크로 우회한다.

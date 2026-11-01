@@ -213,7 +213,9 @@ fish이므로 설정 디스크 없이 뜨는 부팅의 종료는 원래부터 13
 `libcurl.so.4`가 LDAP·RTMP·brotli까지 `DT_NEEDED`에 적어 두어서 안 쓰는
 것이 전부 따라온다. 판정 명령은 위 "범용 명령"에 있다.
 
-41. 컨테이너에 `nc`·`ncat`·`socat`·`python3`·`busybox`가 없다 (NW 착수 조사).
+41. 컨테이너에 `nc`·`ncat`·`socat`·`python3`·`busybox`가 없다 (NW 착수 조사). KU-M0(2026-11-01)이 Dockerfile에 `netcat-openbsd`(`nc`) ·
+`iproute2`(`ss`) · `mtools`를 넣었다 — 없던 것은 Dockerfile이 안 넣었기 때문이었다. 체인들은 여전히 아래의 perl · `/dev/tcp`를 쓴다(바꿀 까닭이 없다).
+`ncat` · `socat` · `python3` · `busybox`는 여전히 없다.
 bash의 `/dev/tcp`는 거는 것만 되고 듣지는 못한다. 들어야 하면 perl이다 — 45번,
 그리고 FW-M0의 `echo.pl`이 `IO::Socket::INET`으로 TCP와 UDP를 함께 들었다. 게스트에서 컨테이너로 연결을 받아야 하면 QEMU의
 `guestfwd`를 쓴다 —

@@ -138,7 +138,7 @@ Architecture: 순수 규칙은 `disk.zig`에 둔다 — ESP conf 짓기(`espConf
 - 판정 5 · 12의 복사 목록에 `boot/version`.
 - 판정 18(부팅 2): cmdline에 `tars.slot=old`가 없다. escape를 걷은 로그에 `Booting automatically`가 있고(timeout 3이 ESP에 갔다)
   `(old)`가 없다(첫 설치는 엔트리 하나).
-- 부팅 3a 새로(2 뒤, 3 앞) — ESP가 모자라는 갱신. QEMU가 꺼진 사이 호스트에서 `mdir -i "$DISK@@1M" ::/`의 끝 줄로 빈 바이트를 읽고,
+- 부팅 3a 새로(2 뒤, 3 앞) — ESP가 모자라는 갱신. QEMU가 꺼진 사이 호스트에서 `mdir -i "$DISK@@1M" ::/ | grep "bytes free" | tr -d " "`로 빈 바이트를 읽고(mdir은 수를 세 자리마다 공백으로 끊고 끝에 빈 줄을 찍는다 — Task 0 실측),
   `빈 자리 - 50 MB` 크기의 파일(`fallocate`)을 `mcopy`로 p1의 `::/ku-fill`에 넣는다. 그러면 빈 자리는 약 50MB이고 old는 0이라 `need`
   (약 103MB)에 모자란다. `boot_guest 3a -cdrom ../out/tars.iso`. 판정 19a: `tars-install /dev/nvme0n1 --yes` → 빈 자리 줄과
   `p1 has no room for two images; nothing was changed.`, `moving the current image` · `copying the boot files` 줄이 없다. 끈 뒤
