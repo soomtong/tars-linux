@@ -2891,7 +2891,7 @@ pub fn main(init: std.process.Init) !void {
     try expectPins(mc, mc_pins + 2, "while a selection lingers (its two ends)");
 
     // 검사 115. 선택 뒤를 누르면 오른쪽 끝이 그리로 가며 모드에 들어간다.
-    try mc.copyExtendAt(18, 0);
+    try mc.copyExtendAt(18, 0, null);
     if (!mc.copyActive()) {
         std.debug.print("FAIL: copyExtendAt did not enter copy mode\n", .{});
         return error.ExtendDidNotEnter;
@@ -2901,12 +2901,12 @@ pub fn main(init: std.process.Init) !void {
     // 검사 116. 선택 앞을 누르면 가까운 끝(왼쪽)이 움직인다(SE design 결정 4).
     // 앵커 고정이면 'alpha beta-gamma (d'가 남는다 — SE-M1 mutation 2가 노리는 자리다.
     _ = try linger(mc, &mc_clip, 18, 22);
-    try mc.copyExtendAt(0, 0);
+    try mc.copyExtendAt(0, 0, null);
     try expectYank(mc, &mc_clip, "alpha beta-gamma (delta", "extending left from delta to alpha keeps delta");
 
     // 검사 117. 선택 안을 누르면 오른쪽 끝이 당겨진다(ghostty와 같다).
     _ = try linger(mc, &mc_clip, 6, 15);
-    try mc.copyExtendAt(9, 0);
+    try mc.copyExtendAt(9, 0, null);
     try expectYank(mc, &mc_clip, "beta", "extending inside the selection shrinks it from the right");
 
     // 검사 118. 단어 방식은 앵커 pin을 새 자리로 다시 든다 — pin 수가 늘지 않고
@@ -2914,7 +2914,7 @@ pub fn main(init: std.process.Init) !void {
     try mc.copyEnterAt(19, 0, .word);
     try expectText(try mc.copyRelease(&mc_clip), "delta", "releasing a double click");
     try expectPins(mc, mc_pins + 3, "while a word selection lingers (two ends and the anchor)");
-    try mc.copyExtendAt(7, 0);
+    try mc.copyExtendAt(7, 0, null);
     try expectPins(mc, mc_pins + 3, "after extending a word selection (the anchor moved, not doubled)");
     try expectYank(mc, &mc_clip, "beta-gamma (delta", "extending a word selection left by words");
 
@@ -2922,17 +2922,17 @@ pub fn main(init: std.process.Init) !void {
     mc.feed("zeta eta\r\n");
     try mc.copyEnterAt(7, 0, .line);
     _ = try mc.copyRelease(&mc_clip);
-    try mc.copyExtendAt(2, 1);
+    try mc.copyExtendAt(2, 1, null);
     try expectYank(mc, &mc_clip, "alpha beta-gamma (delta)  eps\nzeta eta", "extending a line selection to the next row");
 
     // 검사 120. 늘린 뒤 끌어도 앵커는 안 끌려간다 — `copyPointTo`가 읽는 start()가
     // 늘리기가 넣은 앵커다(SE-M0 plan 확정 2).
     _ = try linger(mc, &mc_clip, 6, 9);
-    try mc.copyExtendAt(18, 0);
+    try mc.copyExtendAt(18, 0, null);
     try mc.copyPointTo(20, 0);
     try expectYank(mc, &mc_clip, "beta-gamma (del", "dragging on after an extension");
     _ = try linger(mc, &mc_clip, 6, 9);
-    try mc.copyExtendAt(18, 0);
+    try mc.copyExtendAt(18, 0, null);
     try mc.copyPointTo(1, 0);
     try expectYank(mc, &mc_clip, "lpha b", "dragging back over the anchor after an extension");
 
@@ -3000,8 +3000,59 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("FAIL: a selection inside copy mode counts as lingering\n", .{});
         return error.CopyModeLingers;
     }
-    try mc.copyExtendAt(18, 0);
+    try mc.copyExtendAt(18, 0, null);
     try expectYank(mc, &mc_clip, "b", "copyExtendAt inside copy mode changes nothing");
+
+    // 검사 125~129. Shift 클릭 연속의 반복은 첫 누름의 앵커를 두고 단위만
+    // 바꾼다(ER design 결정 2 · 3 · 4, ER-M0). 같은 `mc` 화면이다 — `-`는 단어 경계가
+    // 아니라 `beta-gamma`가 한 단어다.
+
+    // 검사 125. 왼쪽으로 늘린 뒤 같은 칸의 반복은 단어 단위다. 가까운 끝을 다시
+    // 고르면 0열이 곧 왼쪽 끝이라 커서 자신이 앵커가 되어 'alpha'만 남는다 —
+    // ER-M0 mutation 2가 노리는 자리다. 단어 앵커 pin이 하나 는다.
+    _ = try linger(mc, &mc_clip, 6, 9);
+    try mc.copyExtendAt(0, 0, null);
+    try expectText(try mc.copyRelease(&mc_clip), "alpha beta", "the first Shift click extends left by characters");
+    try mc.copyExtendAt(0, 0, .word);
+    try expectPins(mc, mc_pins + 3, "after a Shift double click (two ends and the word anchor)");
+    try expectYank(mc, &mc_clip, "alpha beta-gamma", "the Shift double click widens both ends to words");
+
+    // 검사 126. 셋째는 줄 단위다 — 단어 앵커를 놓아 pin이 다시 둘이다.
+    _ = try linger(mc, &mc_clip, 6, 9);
+    try mc.copyExtendAt(0, 0, null);
+    _ = try mc.copyRelease(&mc_clip);
+    try mc.copyExtendAt(0, 0, .word);
+    _ = try mc.copyRelease(&mc_clip);
+    try mc.copyExtendAt(0, 0, .line);
+    try expectPins(mc, mc_pins + 2, "after a Shift triple click (the word anchor is gone)");
+    try expectYank(mc, &mc_clip, "alpha beta-gamma (delta)  eps", "the Shift triple click takes the whole line");
+
+    // 검사 127. 오른쪽으로 — 앵커 쪽(be)도 단어로 넓어진다.
+    _ = try linger(mc, &mc_clip, 6, 7);
+    try mc.copyExtendAt(20, 0, null);
+    try expectText(try mc.copyRelease(&mc_clip), "beta-gamma (del", "the first Shift click extends right by characters");
+    try mc.copyExtendAt(20, 0, .word);
+    try expectYank(mc, &mc_clip, "beta-gamma (delta", "the Shift double click to the right");
+
+    // 검사 128. 이미 단어 방식인 남은 선택 — 단어 앵커를 그대로 쓴다(pin이 안 는다).
+    try mc.copyEnterAt(19, 0, .word);
+    _ = try mc.copyRelease(&mc_clip);
+    try mc.copyExtendAt(7, 0, null);
+    _ = try mc.copyRelease(&mc_clip);
+    try mc.copyExtendAt(7, 0, .word);
+    try expectPins(mc, mc_pins + 3, "after a Shift double click on a word selection");
+    try expectYank(mc, &mc_clip, "beta-gamma (delta", "the Shift double click on a word selection keeps its anchor");
+
+    // 검사 129. 남은 선택이 없으면 반복도 아무 일도 안 한다.
+    _ = try linger(mc, &mc_clip, 6, 9);
+    _ = mc.clearLinger();
+    try mc.copyExtendAt(0, 0, .word);
+    if (mc.copyActive() or mc.term.screens.active.selection != null) {
+        std.debug.print("FAIL: a Shift double click with nothing lingering entered copy mode or selected\n", .{});
+        return error.ExtendWithoutLinger;
+    }
+    try expectPins(mc, mc_pins, "after a Shift double click with nothing lingering");
+    std.debug.print("vt_test: Shift 더블 · 트리플클릭이 단어 · 줄로 늘린다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }

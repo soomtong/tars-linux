@@ -507,6 +507,12 @@ pub const Unit = enum { char, word, line };
 /// copy mode에 들어가며 선택을 시작할 칸과 그 단위.
 pub const Start = struct { at: Cell, unit: Unit };
 
+/// Shift 누름이 늘릴 칸과 단위. `unit`이 null이면 늘리기 연속의 첫 누름이다 —
+/// 남은 선택의 방식으로 가까운 끝을 옮긴다(SE design 결정 4). 반복이면 둘째가
+/// word, 셋째부터 line이고 첫 누름이 정한 앵커를 둔 채 단위만 바꾼다(ER design
+/// 결정 2 · 4).
+pub const Extend = struct { at: Cell, unit: ?Unit = null };
+
 /// 누름 하나의 사실(MC design 결정 2 · 3, SE design 결정 5). `t_us`는 커널이
 /// 이벤트에 찍은 단조 시각이고, null이면 이 누름은 반복이 될 수 없다(라이브러리
 /// `pressRepeat`와 같다). `x` · `y`는 프레임버퍼 픽셀, `ws`는 워크스페이스 번호다.
@@ -539,9 +545,10 @@ pub const Intent = union(enum) {
     /// 남은 선택(뗀 뒤 화면에 남은 반전, SE design 결정 1)을 지운다 — 지금
     /// 워크스페이스의 패널 전부에서(SE design 결정 2). 늘리기가 아닌 누름이 낸다.
     deselect,
-    /// 남은 선택의 가까운 끝을 이 칸으로 옮기며 copy mode에 들어간다(SE design
-    /// 결정 4). 그 뒤의 끌기는 `select_to`, 뗌은 `copy`로 끌기와 같다.
-    select_extend: Cell,
+    /// 남은 선택을 이 칸까지 늘리며 copy mode에 들어간다 — 첫 누름은 가까운
+    /// 끝을 옮기고(SE design 결정 4), 반복은 단위를 바꾼다(ER design 결정 2).
+    /// 그 뒤의 끌기는 `select_to`, 뗌은 `copy`로 끌기와 같다.
+    select_extend: Extend,
 };
 
 /// 한 단계가 내는 의도들. 셋을 넘지 않는다 — 누름이 `cancel` · `deselect` ·
@@ -597,8 +604,9 @@ pub const Gesture = struct {
 
     /// 반복을 견줄 지난 누름. `x0` · `y0`은 이 연속의 첫 누름 자리이고
     /// (거리는 첫 누름에서 잰다 — 라이브러리와 같다), `t_us`는 가장 최근
-    /// 누름의 시각이다(간격은 앞 누름과 잰다).
-    const Last = struct { t_us: i64, x0: u32, y0: u32, leaf: u4, ws: usize, count: u2 };
+    /// 누름의 시각이다(간격은 앞 누름과 잰다). `extend`는 이 연속의 첫 누름이
+    /// 늘리기였나다 — 반복의 뜻을 그것이 정한다(ER design 결정 2).
+    const Last = struct { t_us: i64, x0: u32, y0: u32, leaf: u4, ws: usize, count: u2, extend: bool };
 
     /// 이 누름이 지난 누름의 반복인가(MC design 결정 3의 넷).
     fn repeats(self: *const Gesture, at: Stamp, leaf: u4) bool {
@@ -641,8 +649,10 @@ pub const Gesture = struct {
     /// 뗌은 끌기와 같은 길로 복사한다(MC design 결정 5).
     ///
     /// 반복이 아니고 `at.extend`면 늘리기다(SE design 결정 3) — `select_extend`를
-    /// 내고 `dragging`으로 가며 연속을 끊는다. 반복이 늘리기보다 먼저인 것은
-    /// ghostty와 같다. 그 밖의 누름(여백 포함)은 `deselect`를 더 낸다 — 남은
+    /// 내고 `dragging`으로 간다. 반복이 늘리기보다 먼저인 것은 ghostty와 같다.
+    /// 늘리기 누름도 연속을 기억하고, 그 연속의 반복은 단어 · 줄 단위
+    /// 늘리기다(ER design 결정 1 · 2) — 반복 누름의 Shift는 안 본다. 연속이
+    /// 무엇인지는 첫 누름이 정한다. 그 밖의 누름(여백 포함)은 `deselect`를 더 낸다 — 남은
     /// 선택은 다음 누름이 지운다(SE design 결정 2). 반복 누름은 안 낸다 — 그
     /// 연속의 첫 누름이 이미 지웠고, 버퍼 셋이 `cancel` · `focus` ·
     /// `select_start`로 찬다.
@@ -667,12 +677,9 @@ pub const Gesture = struct {
         } else {
             self.gap_us = 0;
             self.clicks = 1;
-            // 늘리기 뒤의 누름은 처음부터다 — 연속을 기억하지 않는다.
             self.last = null;
-            if (!at.extend) {
-                if (at.t_us) |t| {
-                    self.last = .{ .t_us = t, .x0 = at.x, .y0 = at.y, .leaf = h.leaf, .ws = at.ws, .count = 1 };
-                }
+            if (at.t_us) |t| {
+                self.last = .{ .t_us = t, .x0 = at.x, .y0 = at.y, .leaf = h.leaf, .ws = at.ws, .count = 1, .extend = at.extend };
             }
         }
         self.start = h;
@@ -682,10 +689,15 @@ pub const Gesture = struct {
         if (h.leaf != focus) out.push(.{ .focus = h.leaf });
         if (repeat) {
             self.phase = .dragging;
-            out.push(.{ .select_start = .{ .at = h, .unit = if (self.clicks == 2) .word else .line } });
+            const unit: Unit = if (self.clicks == 2) .word else .line;
+            if (self.last.?.extend) {
+                out.push(.{ .select_extend = .{ .at = h, .unit = unit } });
+            } else {
+                out.push(.{ .select_start = .{ .at = h, .unit = unit } });
+            }
         } else if (at.extend) {
             self.phase = .dragging;
-            out.push(.{ .select_extend = h });
+            out.push(.{ .select_extend = .{ .at = h } });
         } else {
             self.phase = .pressed;
         }

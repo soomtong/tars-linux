@@ -1368,14 +1368,37 @@ pub const Screen = struct {
     /// 읽는 `start()`가 이 앵커다 — `Selection.start()`는 넣은 순서 그대로이고
     /// 정렬된 끝은 `topLeft` · `bottomRight`가 따로다. 단어 방식은 앵커를
     /// `copy_word`에서 읽으므로(MC design 결정 4) 그 pin을 새 앵커 자리로 다시
-    /// 든다. 방식은 남은 선택의 것 그대로다(`copy_kind`).
-    pub fn copyExtendAt(self: *Screen, x: u16, y: u16) !void {
+    /// 든다. `unit`이 null이면 방식은 남은 선택의 것 그대로다(`copy_kind`).
+    ///
+    /// `unit`이 word · line이면 Shift 클릭 연속의 반복이다(ER design 결정 2 · 4).
+    /// 가까운 끝을 다시 고르지 않는다 — 반복은 첫 누름과 같은 칸이고 그 칸이 곧
+    /// 첫 누름이 옮긴 끝이라, 왼쪽으로 늘렸으면 커서 자신이 앵커로 뽑힌다. 앵커는
+    /// 첫 누름이 넣은 것(단어 방식이면 `copy_word`, 아니면 `start()`)이고 방식만
+    /// 바꿔 다시 짓는다 — 단어 · 줄 식이 앵커 쪽 끝도 그 단위로 넓힌다(ER design
+    /// 결정 3). `.char`는 반복이 안 내므로 null과 같다.
+    pub fn copyExtendAt(self: *Screen, x: u16, y: u16, unit: ?SelectKind) !void {
         if (!self.hasLinger()) return;
-        const kind = self.copy_kind orelse return;
+        const cur_kind = self.copy_kind orelse return;
         const s = self.term.screens.active;
         const sel = s.selection orelse return;
         self.copy_cursor = self.copyClamp(x, y) orelse return;
         const cursor = self.copyPin() orelse return;
+        const again: ?SelectKind = if (unit) |k| (if (k == .char) null else k) else null;
+        if (again) |kind| {
+            // 앵커는 pin의 값으로 복사해 둔다 — 줄로 바뀌면 `copy_word`를 놓는다.
+            // `copy_word`는 단어 방식에만 있다(`dropWordAnchor`의 주석).
+            const anchor: ghostty_vt.Pin = if (self.copy_word) |w| w.pin.* else sel.start();
+            switch (kind) {
+                .word => if (self.copy_word == null) {
+                    self.copy_word = .{ .screen = s, .pin = try s.pages.trackPin(anchor) };
+                },
+                .line => self.dropWordAnchor(),
+                .char => unreachable,
+            }
+            self.copy_kind = kind;
+            return self.copyApply(anchor, cursor);
+        }
+        const kind = cur_kind;
         const anchor = if (cursor.before(sel.topLeft(s))) sel.bottomRight(s) else sel.topLeft(s);
         if (kind == .word) {
             self.dropWordAnchor();

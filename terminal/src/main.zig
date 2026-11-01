@@ -3047,9 +3047,12 @@ const PointerWire = struct {
                 // 결정 4). 화면이 copy mode에 들어갔을 때만 입력 모드를 따라 옮긴다 —
                 // 두 사본은 함께 간다(PD design 결정 6). 조합 중인 한글은
                 // `select_start`와 같이 이 패널의 셸로 간다.
-                .select_extend => |at| {
+                // 반복(Shift 더블 · 트리플클릭)이면 단위가 실려 온다 — 첫 누름의
+                // 앵커를 두고 단어 · 줄로 다시 짓는다(ER design 결정 4).
+                .select_extend => |e| {
+                    const at = e.at;
                     const p = &self.ws.panes[at.leaf].?;
-                    try p.screen.copyExtendAt(at.col, at.row);
+                    try p.screen.copyExtendAt(at.col, at.row, if (e.unit) |u| unitKind(u) else null);
                     if (!p.screen.copyActive()) continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.copy);

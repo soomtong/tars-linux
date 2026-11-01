@@ -817,18 +817,19 @@ pub fn main() !void {
     //
     // `extend`(Shift + 그 패널에 남은 선택)인 첫 누름은 `select_extend`를 내고
     // 곧바로 `dragging`이다 — 그 뒤의 끌기와 뗌은 끌기와 같다. `deselect`는 안
-    // 낸다(지우면 늘릴 것이 없다). 연속은 끊긴다 — 다음 누름은 처음부터다.
+    // 낸다(지우면 늘릴 것이 없다). 끌었으므로 다음 누름은 처음부터다 — 끌지 않은
+    // 늘리기의 반복은 검사 39다.
     const ext: pointer.Stamp = .{ .t_us = 1_000_000, .x = 44, .y = 52, .ws = 0, .extend = true };
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("a Shift press on a lingering selection extends it", g.press(w, 0, ext), &.{ .cancel, .{ .select_extend = w } });
+        try expectIntents("a Shift press on a lingering selection extends it", g.press(w, 0, ext), &.{ .cancel, .{ .select_extend = .{ .at = w } } });
         try expectTrue("the extending press is already dragging", g.phase == .dragging and g.held().? == 0);
         try expectNum("an extending press is click 1", g.clicks, 1);
         try expectIntents("dragging after the Shift press moves the end", g.motion(.{ .leaf = 0, .col = 9, .row = 2 }, .copy), &.{
             .{ .select_to = .{ .leaf = 0, .col = 9, .row = 2 } },
         });
         try expectIntents("releasing it copies", g.release(.copy), &.{.{ .copy = 0 }});
-        try expectIntents("the press after an extension starts over", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, .deselect });
+        try expectIntents("the press after a dragged extension starts over", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, .deselect });
         try expectNum("so it is click 1", g.clicks, 1);
     }
 
@@ -837,7 +838,7 @@ pub fn main() !void {
     // 의도 셋이 버퍼를 꽉 채운다 — `cancel` · `focus` · `select_extend` 순서다.
     {
         var g: pointer.Gesture = .{};
-        try expectIntents("extending on a pane without the focus takes it first", g.press(w, 1, ext), &.{ .cancel, .{ .focus = 0 }, .{ .select_extend = w } });
+        try expectIntents("extending on a pane without the focus takes it first", g.press(w, 1, ext), &.{ .cancel, .{ .focus = 0 }, .{ .select_extend = .{ .at = w } } });
     }
 
     // ── 검사 37: 반복이 늘리기보다 먼저다 (SE design 결정 3의 5) ───────────
@@ -864,6 +865,41 @@ pub fn main() !void {
         _ = g.press(w, 0, stamp(2000, 44, 52));
         _ = g.release(.normal);
         try expectIntents("a repeated press does not deselect", g.press(w, 0, stamp(2100, 44, 52)), &.{ .cancel, word });
+    }
+
+    // ── 검사 39: 늘리기 연속의 반복은 단위를 바꿔 늘린다 (ER design 결정 1 · 2) ─
+    //
+    // 늘리기 누름도 연속을 기억한다. 둘째 누름은 단어, 셋째부터 줄 단위의
+    // `select_extend`이고, 둘째 · 셋째의 Shift(`extend`)는 안 본다 — 연속이 무엇인지는
+    // 첫 누름이 정한다. 넷째도 줄이다.
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, ext);
+        try expectIntents("releasing the first Shift click copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectIntents("the second press of an extending run extends by words", g.press(w, 0, stamp(1100, 44, 52)), &.{
+            .cancel, .{ .select_extend = .{ .at = w, .unit = .word } },
+        });
+        try expectNum("so it is click 2", g.clicks, 2);
+        try expectTrue("the word extension is dragging", g.phase == .dragging);
+        try expectIntents("releasing it copies", g.release(.copy), &.{.{ .copy = 0 }});
+        try expectIntents("the third press extends by lines", g.press(w, 0, stamp(1200, 44, 52)), &.{
+            .cancel, .{ .select_extend = .{ .at = w, .unit = .line } },
+        });
+        try expectNum("so it is click 3", g.clicks, 3);
+        _ = g.release(.copy);
+        try expectIntents("the fourth press still extends by lines", g.press(w, 0, stamp(1300, 44, 52)), &.{
+            .cancel, .{ .select_extend = .{ .at = w, .unit = .line } },
+        });
+    }
+
+    // ── 검사 40: 늘리기 연속도 끌면 끊긴다 (MC design 결정 3의 넷째) ─────
+    {
+        var g: pointer.Gesture = .{};
+        _ = g.press(w, 0, ext);
+        _ = g.motion(.{ .leaf = 0, .col = 4, .row = 2 }, .copy);
+        _ = g.release(.copy);
+        try expectIntents("a press after a dragged extension is not a repeat", g.press(w, 0, stamp(1100, 44, 52)), &.{ .cancel, .deselect });
+        try expectNum("so it is click 1", g.clicks, 1);
     }
 
     std.debug.print("pointer_test: all checks passed\n", .{});

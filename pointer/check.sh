@@ -433,6 +433,26 @@ hmp() {
   sleep 0.05
 }
 
+# Shift를 3초 누른 채 둔다(검사 29 · 39~43). 마우스는 HMP 큐를 안 거치므로 그 3초
+# 안에 hmp로 누르고 뗀다.
+#
+# QEMU sendkey는 hold만큼 기다린 뒤 떼고, 뗀 뒤에도 같은 hold만큼 delay를 키보드
+# 큐에 남긴다(measurements 90의 "사이 160ms"가 그것이다) — sendkey shift 3000 하나가
+# 큐를 6초 쥔다. 그 안에 보낸 sendkey는 큐 뒤에 줄을 서서 늦게 간다: SE 검사 40이
+# 39의 1.3초 뒤에 보낸 Shift는 4.7초 늦게 닿았고, 그 뒤의 Shift가 전부 사슬로
+# 밀렸다(ER-M0 실측). 그래서 앞 sendkey에서 6.1초가 지나기를 기다린 뒤 보내고, 닿을
+# 0.3초를 더 기다린다.
+SHIFT_SENT_MS=0
+hold_shift() {
+  local now wait
+  now="$(date +%s%3N)"
+  wait=$((SHIFT_SENT_MS + 6100 - now))
+  if [ "$wait" -gt 0 ]; then sleep "$((wait / 1000)).$(printf '%03d' $((wait % 1000)))"; fi
+  echo "sendkey shift 3000" >&3
+  SHIFT_SENT_MS="$(date +%s%3N)"
+  sleep 0.3
+}
+
 # screendump 하나를 뜨고 파일이 생길 때까지 기다린다. 10초.
 screendump() {
   local out="$1" i
@@ -1219,12 +1239,12 @@ echo "click after drag: no repeat, $(last_clip)"
 # ── SE-M1: 뗀 뒤 선택이 남고, Shift 클릭이 늘린다 ─────────────────────────
 #
 # 같은 줄(ROW · PY)이다 — mc-two는 7~12열, three는 14~18열. 반전은 style> 줄로
-# 센다(inverted_cells). Shift는 sendkey shift 3000으로 3초 누른 채 두고(검사 29)
-# 그 안에 hmp 둘로 누르고 뗀다 — button_down · button_up의 기다림은 3초를 먹을
-# 수 있다. Shift 없는 클릭은 그 3초가 지난 뒤에 한다(sleep 3.2).
+# 센다(inverted_cells). Shift는 hold_shift로 3초 누른 채 두고(앞 sendkey에서 6.1초를
+# 기다린다 — 헬퍼의 주석) 그 안에 hmp 둘로 누르고 뗀다 — button_down · button_up의
+# 기다림은 3초를 먹을 수 있다. Shift 없는 클릭은 그 3초가 지난 뒤에 한다(sleep 3.2).
 #
 # 검사 사이의 sleep 0.7은 반복(500ms)이 아니라는 것을 조건 하나(앞 누름이
-# 끌렸다 · 늘리기 뒤는 처음부터)에 기대지 않으려는 것이다.
+# 끌렸다)에 기대지 않으려는 것이다.
 se_state() { echo "last clip: '$(last_clip)', last copy: '$(tlog | grep -a 'terminal: copy>' | tail -n 1 | tr -d '\r')', inverted on row ${ROW}: $(inverted_cells "$ROW")"; }
 
 # ── 검사 38: 뗀 뒤 반전이 남는다 ───────────────────────────────────────────
@@ -1254,8 +1274,7 @@ sleep 0.7
 CLIPS="$(clip_lines)"; EXTENDS="$(copy_lines extend)"; REPEATS="$(repeat_count)"; RELS="$(pointer_count 'release ')"
 move_to "$(cell_x 18)" "$PY" ||
   report_failure "the pointer did not reach the last e of three (last at: '$(last_at)')"
-echo "sendkey shift 3000" >&3
-sleep 0.3
+hold_shift
 hmp "mouse_button 1"; hmp "mouse_button 0"
 wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
   report_failure "the Shift click printed no 'pointer> release' line"
@@ -1281,8 +1300,7 @@ sleep 0.7
 CLIPS="$(clip_lines)"; EXTENDS="$(copy_lines extend)"; RELS="$(pointer_count 'release ')"
 move_to "$(cell_x 0)" "$PY" ||
   report_failure "the pointer did not reach the m of mc-one (last at: '$(last_at)')"
-echo "sendkey shift 3000" >&3
-sleep 0.3
+hold_shift
 hmp "mouse_button 1"; hmp "mouse_button 0"
 wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
   report_failure "the second Shift click printed no 'pointer> release' line"
@@ -1314,8 +1332,7 @@ sleep 0.3
 RELS="$(pointer_count 'release ')"
 move_to "$(cell_x 10)" "$PY" ||
   report_failure "the pointer did not reach the t of mc-two (last at: '$(last_at)')"
-echo "sendkey shift 3000" >&3
-sleep 0.3
+hold_shift
 hmp "mouse_button 1"; hmp "mouse_button 0"
 wait_for_count pointer_count 'release ' "$((RELS + 1))" ||
   report_failure "the Shift click without a lingering selection printed no 'pointer> release' line"
@@ -1325,6 +1342,74 @@ sleep 0.5
 [ "$(clip_lines)" -eq "$CLIPS" ] ||
   report_failure "a Shift click with nothing to extend copied something: '$(last_clip)'"
 echo "plain click: deselected, a Shift click afterwards is a plain click"
+sleep 3 # Shift가 떨어진 뒤에 다음 검사로
+
+# ── ER-M0: Shift 더블 · 트리플클릭이 단어 · 줄 단위로 늘린다 ────────────────
+#
+# 같은 줄(ROW · PY)이다 — mc-one 0~5열, mc-two 7~12열, three 14~18열. `-`는 단어
+# 경계가 아니고 `:`는 경계다. 두 검사 다 8~11열(c-tw)을 끌어 남긴 뒤 Shift를 누른
+# 채 hmp만 이어 보낸다 — 누름 사이가 500ms 안이어야 반복이다(MC 함정). 뗌마다
+# 복사하므로 clip> 줄이 누름 수만큼 늘고, 판정은 마지막 줄이다.
+er_drag() {
+  move_to "$(cell_x 8)" "$PY" ||
+    report_failure "the pointer did not reach the c of mc-two (last at: '$(last_at)')"
+  button_down || report_failure "mouse_button 1 on the c of mc-two printed no 'pointer> press' line"
+  move_to "$(cell_x 11)" "$PY" ||
+    report_failure "the drag did not reach the w of mc-two (last at: '$(last_at)')"
+  button_up || report_failure "mouse_button 0 after the c-tw drag printed no 'pointer> release' line"
+  wait_for_count clip_lines '' "$((CLIPS + 1))" ||
+    report_failure "the c-tw drag put nothing on the clipboard ($(se_state))"
+  [ "$(last_clip)" = "terminal: clip> len=4 text=c-tw" ] ||
+    report_failure "the c-tw drag copied '$(last_clip)', expected 'clip> len=4 text=c-tw'"
+}
+
+# ── 검사 42: Shift 더블클릭이 단어 단위로 늘린다(왼쪽) ─────────────────────
+#
+# 첫 누름은 가까운 끝(오른쪽 11열이 앵커)으로 'c-one mc-tw'(11), 둘째는 앵커를 둔 채
+# 단어로 'mc-one mc-two'(13). 둘째에서 가까운 끝을 다시 고르면 1열 자신이 앵커라
+# 'mc-one'(6) — mutation 2. 늘리기가 연속을 안 기억하면 'c-one mc-tw'(11) — mutation 1.
+echo "=== a Shift double click extends by words ==="
+sleep 0.7
+CLIPS="$(clip_lines)"
+er_drag
+CLIPS="$(clip_lines)"; REPEATS="$(repeat_count)"; RELS="$(pointer_count 'release ')"
+move_to "$(cell_x 1)" "$PY" ||
+  report_failure "the pointer did not reach the c of mc-one (last at: '$(last_at)')"
+hold_shift
+hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 2))" ||
+  report_failure "the Shift double click printed fewer than two 'pointer> release' lines"
+wait_for_count clip_lines '' "$((CLIPS + 2))" ||
+  report_failure "the Shift double click put fewer than two lines on the clipboard ($(se_state))"
+[ "$(repeat_count)" -eq "$((REPEATS + 1))" ] && [ "$(last_repeat | sed 's/ dt=.*//')" = "terminal: pointer> repeat n=2" ] ||
+  report_failure "the Shift double click did not count as one 'repeat n=2' (last: '$(last_repeat)', $(( $(repeat_count) - REPEATS )) new)"
+[ "$(last_clip)" = "terminal: clip> len=13 text=mc-one mc-two" ] ||
+  report_failure "the Shift double click copied '$(last_clip)', expected 'clip> len=13 text=mc-one mc-two' (the first click's anchor, both ends by words)"
+echo "shift double click: $(last_clip)"
+
+# ── 검사 43: Shift 트리플클릭이 줄 단위로 늘린다(오른쪽) ───────────────────
+#
+# 'c-two:thr'(9) → 'mc-two:three'(12) → 줄 전체 'mc-one mc-two:three'(19). 셋째를
+# 단어로 두면 12 — mutation 3.
+echo "=== a Shift triple click extends by lines ==="
+sleep 3.2 # 검사 42의 Shift가 떨어진 뒤에 끈다
+CLIPS="$(clip_lines)"
+er_drag
+CLIPS="$(clip_lines)"; REPEATS="$(repeat_count)"; RELS="$(pointer_count 'release ')"
+move_to "$(cell_x 16)" "$PY" ||
+  report_failure "the pointer did not reach the r of three (last at: '$(last_at)')"
+hold_shift
+hmp "mouse_button 1"; hmp "mouse_button 0"; hmp "mouse_button 1"; hmp "mouse_button 0"
+hmp "mouse_button 1"; hmp "mouse_button 0"
+wait_for_count pointer_count 'release ' "$((RELS + 3))" ||
+  report_failure "the Shift triple click printed fewer than three 'pointer> release' lines"
+wait_for_count clip_lines '' "$((CLIPS + 3))" ||
+  report_failure "the Shift triple click put fewer than three lines on the clipboard ($(se_state))"
+[ "$(repeat_count)" -eq "$((REPEATS + 2))" ] && [ "$(last_repeat | sed 's/ dt=.*//')" = "terminal: pointer> repeat n=3" ] ||
+  report_failure "the Shift triple click did not count up to 'repeat n=3' (last: '$(last_repeat)', $(( $(repeat_count) - REPEATS )) new)"
+[ "$(last_clip)" = "terminal: clip> len=19 text=mc-one mc-two:three" ] ||
+  report_failure "the Shift triple click copied '$(last_clip)', expected 'clip> len=19 text=mc-one mc-two:three' (the whole line)"
+echo "shift triple click: $(last_clip)"
 sleep 3 # Shift가 떨어진 뒤에 다음 검사로
 
 # 마지막 검사(부팅 마우스를 뺀다)는 M1의 자리(679, 0)를 본다. 그리로 되돌린다.
@@ -1803,8 +1888,7 @@ ROW="$(screen_row pd-mouse-ready-s)"
 [ "$ROW" -ge 0 ] || report_failure "no screen row is exactly pd-mouse-ready-s"
 move_to "$(( $(cell_x 0) + 3 ))" "$(( $(cell_y "$ROW") + 7 ))" ||
   report_failure "the pointer did not reach the ready line (last at: '$(last_at)')"
-echo "sendkey shift 3000" >&3
-sleep 0.3
+hold_shift
 button_down || report_failure "a Shift-press in mode 1000 printed no 'pointer> press' line (last report: '$(last_report)')"
 [ "$(last_press)" = "terminal: pointer> press leaf=0 row=${ROW} col=0" ] ||
   report_failure "the Shift-press printed '$(last_press)', expected 'press leaf=0 row=${ROW} col=0'"

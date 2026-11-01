@@ -533,3 +533,10 @@ pane 0.16(행 비교 0.03 + 행 칠하기 0.135) · cells 0.07. `seq 1 200000`�
 (0.37 · 0.39 · 0.50)가 M3(0.58 · 0.92 · 1.84)보다 고르다. 게이트의 1280 × 800에서 띠는 `rows` 47 · `grid_bottom` 772 · 28픽셀 행 =
 143KB, 1080p에서는 `rows` 65 · 20픽셀 행 = 153KB — simpledrm은 clip마다 VRAM으로 복사하므로 실기에서 키 하나마다 그만큼이 안 간다
 (실측은 사용자).
+
+99. QEMU `sendkey KEY N`은 키보드 큐를 2N ms 쥔다 — 누른 뒤 N ms를 기다려 떼고, 뗀 뒤에도 같은 N ms의 delay를 큐에 남긴다
+(90의 "사이 160ms"가 그 꼬리다). 큐가 비어 있지 않을 때 보낸 `sendkey`는 그 뒤에 줄을 서므로 늦게 간다. 마우스(`mouse_button` ·
+`mouse_move`)는 큐를 안 거쳐 곧바로 간다. 그래서 `sendkey shift 3000` 1.3초 뒤에 보낸 둘째 `sendkey shift 3000`은 게스트에 4.7초
+늦게 닿았고(첫 Shift의 뗌 +3초 꼬리 뒤), 그 뒤의 Shift 클릭이 전부 3초 단위의 사슬로 밀렸다 — 누름이 Shift보다 먼저 닿는다.
+`pointer` 체인은 `hold_shift`가 앞 `sendkey`에서 6.1초를 기다린다. 측정은 게스트 `CLOCK_MONOTONIC`과 호스트 `date +%s.%3N`을
+SE 검사 39의 `sendkey` → 누름(호스트 309ms · 게스트 318ms)으로 맞춰 셌다(ER-M0).
