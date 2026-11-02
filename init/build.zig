@@ -67,6 +67,8 @@ pub fn build(b: *std.Build) void {
         .optimize = .safe,
         .single_threaded = true,
     });
+    // HP-M1: 계정을 쓰려고 config.zig · account.zig를 쓰고, 그 둘이 uid 상수 때문에 screen_args를 본다.
+    install_mod.addImport("screen_args", screen_args);
     const install_exe = b.addExecutable(.{
         .name = "tars-install",
         .root_module = install_mod,
@@ -253,9 +255,24 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    login_test_mod.addImport("screen_args", screen_args); // HP-M1: login → account → uid 상수
     const login_test = b.addExecutable(.{
         .name = "login_test",
         .root_module = login_test_mod,
+    });
+
+    // HP-M1: 계정 하나의 규칙(이름 검증 · passwd · group · shadow 줄). 순수한 함수뿐이다.
+    // uid 상수가 `screen_args`에 있어서 그 import가 필요하다.
+    const account_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/account_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    account_test_mod.addImport("screen_args", screen_args);
+    const account_test = b.addExecutable(.{
+        .name = "account_test",
+        .root_module = account_test_mod,
     });
 
     // CT-M1: 통로 · 감독 규칙 · 글자. login_test와 같은 이유로 host_target이다 —
@@ -308,6 +325,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    audio_test_mod.addImport("screen_args", screen_args); // HP-M1: AUDIO_GID
     const audio_test = b.addExecutable(.{
         .name = "audio_test",
         .root_module = audio_test_mod,
@@ -397,6 +415,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(disk_test).step);
     test_step.dependOn(&b.addRunArtifact(services_test).step);
     test_step.dependOn(&b.addRunArtifact(login_test).step);
+    test_step.dependOn(&b.addRunArtifact(account_test).step);
     test_step.dependOn(&b.addRunArtifact(control_test).step);
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
     test_step.dependOn(&b.addRunArtifact(bluetooth_test).step);

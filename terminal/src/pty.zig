@@ -15,6 +15,47 @@ extern "c" fn execv(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8) c_i
 extern "c" fn kill(pid: c.pid_t, sig: c_int) c_int;
 extern "c" fn waitpid(pid: c.pid_t, status: ?*c_int, options: c_int) c.pid_t;
 
+/// HP-M1. 셸 자식이 root에서 사용자로 내려가는 데 쓰는 것들. `kill` · `waitpid`와 같은
+/// 수법이다 — `setgroups`는 grp.h, `fchmod`는 sys/stat.h에 있고 그 둘을 번역에 더하지 않는다.
+/// `execve`는 `execv`와 같은 이유로(const) 직접 선언한다.
+extern "c" fn setgroups(size: usize, list: [*]const c.gid_t) c_int;
+extern "c" fn setgid(gid: c.gid_t) c_int;
+extern "c" fn setuid(uid: c.uid_t) c_int;
+extern "c" fn fchown(fd: c_int, uid: c.uid_t, gid: c.gid_t) c_int;
+extern "c" fn fchmod(fd: c_int, mode: c_uint) c_int; // mode_t는 unistd.h에 없다(u32)
+extern "c" fn chdir(path: [*:0]const u8) c_int;
+extern "c" fn execve(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) c_int;
+
+/// 셸을 띄울 사용자(HP design 결정 8). terminal이 시작할 때 한 번 짓고(`main.zig`) 패널마다
+/// 같은 것을 넘긴다. 모든 글자는 부모의 힙에 있다 — 자식은 fork 뒤 읽기만 한다.
+pub const Account = struct {
+    uid: c.uid_t,
+    gid: c.gid_t,
+    /// pty slave의 그룹(tty).
+    tty_gid: c.gid_t,
+    /// 보조 그룹(audio 하나).
+    groups: [1]c.gid_t,
+    home: [*:0]const u8,
+    /// 셸이 받는 env 전체. `HOME` · `USER` · `LOGNAME` · `SHELL`이 사용자의 것이다.
+    envp: [*:null]const ?[*:0]const u8,
+};
+
+/// 자식 안에서 권한을 내린다. 실패하면 false — 부르는 쪽이 root로 이어 띄우지 않고 끝낸다.
+///
+/// 순서가 뜻이다. pty를 먼저 준다 — root일 때만 된다. 자식의 fd 0이 곧 slave라 경로
+/// (`ptsname`)가 필요 없다(위험 4). 그다음 보조 그룹 → gid → uid. uid를 먼저 내리면 그룹을
+/// 바꿀 권한이 없다.
+fn dropTo(acct: *const Account) bool {
+    _ = fchown(0, acct.uid, acct.tty_gid);
+    _ = fchmod(0, 0o620);
+    if (setgroups(acct.groups.len, &acct.groups) != 0) return false;
+    if (setgid(acct.gid) != 0) return false;
+    if (setuid(acct.uid) != 0) return false;
+    // 홈이 없으면(디스크를 다른 도구로 비웠고 init이 못 만들었으면) `/`에서 뜬다.
+    if (chdir(acct.home) != 0) _ = chdir("/");
+    return true;
+}
+
 /// 리눅스의 SIGHUP. 값은 `asm-generic/signal.h`의 것이고 x86_64도 같다.
 /// 헤더를 안 끌어오므로 여기 적는다.
 const SIGHUP: c_int = 1;
@@ -49,6 +90,7 @@ pub fn spawn(
     rows: u16,
     cell_w: u32,
     cell_h: u32,
+    account: ?*const Account,
 ) !Session {
     var ws = winsize(cols, rows, cell_w, cell_h);
 
@@ -57,6 +99,17 @@ pub fn spawn(
     if (pid < 0) return error.ForkptyFailed;
 
     if (pid == 0) {
+        if (account) |acct| {
+            if (!dropTo(acct)) {
+                // root로 이어 띄우지 않는다. 이 글은 패널(pty)에 보이고, 셸이 바로 끝나므로
+                // 패널이 닫힌다.
+                const msg = "terminal: cannot drop to the user's uid, the shell does not start\r\n";
+                _ = c.write(2, msg, msg.len);
+                c._exit(126);
+            }
+            _ = execve(path, argv, acct.envp);
+            c._exit(127);
+        }
         _ = execv(path, argv);
         // execv가 돌아왔다는 건 실패했다는 뜻이다.
         c._exit(127);
@@ -110,7 +163,7 @@ pub fn spawnFish(command: [:0]const u8) !Session {
         "-c",
         command.ptr,
     };
-    return spawn("/usr/bin/fish", &argv, 80, 25, 0, 0);
+    return spawn("/usr/bin/fish", &argv, 80, 25, 0, 0, null);
 }
 
 /// master fd에서 자식이 끝날 때까지(EOF) 나오는 모든 바이트를 읽는다.

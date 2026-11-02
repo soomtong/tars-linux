@@ -1,5 +1,6 @@
 const std = @import("std");
 const config = @import("config.zig");
+const scratch = @import("test_scratch.zig");
 const screen_args = @import("screen_args");
 
 /// `expectQuietSeed`가 훅을 몇 개까지 셀 수 있는가. 힙이 없어서 상한이
@@ -111,6 +112,8 @@ fn expect(text: []const u8, want: config.Config) !void {
         // CB-M0: 열두째 필드. 이 줄이 없으면 아래 clipboard 검사가 아무것도
         // 안 보고 초록이다.
         got.clipboard == want.clipboard and
+        // HP-M1: 열넷째 필드. 이 줄이 없으면 아래 user 검사가 아무것도 안 보고 초록이다.
+        config.User.eql(got.user, want.user) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
         // 앞의 넷은 enum이라 `==`가 되지만 이쪽은 필드 넷을 비교해야 한다.
         std.meta.eql(got.hangul_toggle, want.hangul_toggle)) return;
@@ -1287,5 +1290,53 @@ pub fn main() !void {
     try expectCmdline("tars.noconfig=1", true);
     try expectCmdline("tars.noconfig=0", true);
 
+    try userChecks();
+
     std.debug.print("PASS\n", .{});
+}
+
+/// HP-M1: `user=`(design 결정 5). 규칙은 `account.validName`이고 여기서는 그 규칙이
+/// 파서까지 이어졌는지와, `save`의 꼬리가 다음 부팅의 `parse`로 돌아오는지를 본다.
+fn userChecks() !void {
+    const tars = config.User.parse("tars") orelse return error.UserDidNotParse;
+    try expect("user=tars\n", .{ .user = tars });
+    try expect("user = tars \n", .{ .user = tars });
+    // 규칙 밖은 "사용자 없음"이다(root 셸). 값 없음 · root · 대문자 · 콜론 · 경로.
+    try expect("user=\n", .{});
+    try expect("user=root\n", .{});
+    try expect("user=Tars\n", .{});
+    try expect("user=a:b\n", .{});
+    try expect("user=../x\n", .{});
+    // 다른 키와 함께. 설치기가 쓰는 파일의 모양이다.
+    try expect("shell=zsh\nuser=tars\n", .{ .shell = .zsh, .user = tars });
+    // argv 글자는 NUL로 끝난다 — terminal의 `user` 칸에 `.ptr`로 들어간다.
+    const a = tars.arg();
+    if (!std.mem.eql(u8, a, "tars") or a.ptr[a.len] != 0) return error.UserArgNotTerminated;
+
+    // save → 파일 → parse 왕복. 설치기가 p2에 쓰는 길이고 다음 부팅이 그것을 읽는다.
+    try scratch.enter();
+    var file_buf: [config.MAX_FILE]u8 = undefined;
+    const with_user = try saveAndRead("hp-user.conf", .{ .user = tars }, &file_buf);
+    try expect(with_user, .{ .user = tars });
+    if (std.mem.indexOf(u8, with_user, "\nuser=tars\n") == null) return error.SavedUserLineMissing;
+    // 없는 기계의 seed에는 그 키가 한 글자도 없다(ISO 부팅의 파일이 HP 전과 같다).
+    var plain_buf: [config.MAX_FILE]u8 = undefined;
+    const plain = try saveAndRead("hp-plain.conf", .{}, &plain_buf);
+    try expect(plain, .{});
+    if (std.mem.indexOf(u8, plain, "user") != null) return error.SeedMentionsUser;
+    // 꼬리가 붙어도 load가 읽는 한도 안이다.
+    if (with_user.len >= config.MAX_FILE) return error.SavedFileTooBig;
+    std.debug.print("config_test: user= saved {d} bytes ({d} without it)\n", .{ with_user.len, plain.len });
+}
+
+fn saveAndRead(path: [:0]const u8, c: config.Config, buf: []u8) ![]const u8 {
+    const linux = std.os.linux;
+    try config.save(path, c);
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(rc) != .SUCCESS) return error.SavedFileUnreadable;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    const n = linux.read(fd, buf.ptr, buf.len);
+    if (linux.errno(n) != .SUCCESS) return error.SavedFileUnreadable;
+    return buf[0..n];
 }

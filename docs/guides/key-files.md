@@ -176,6 +176,9 @@
   `dbus-daemon --system --nofork --nopidfile`을, 뒤는 `/config/bluetooth`를 만들고 버스 소켓을 기다린 뒤
   `bluetoothd -n -P sap,network`을 exec한다. `main.zig`가 두 칸을 무선 셋 앞(2 · 3번)에 둔다. 예약 이름 넷째 ·
   다섯째가 `dbus` · `bluetoothd`다. 페어링 키는 `/var/lib/bluetooth → /config/bluetooth` 링크(`make_initrd.sh`)로 디스크에 남는다.
+- `account.zig` — 사용자 계정 하나의 규칙(HP-M1). 이름 검증(`validName`)과 passwd · group · shadow 줄 짓기, `mkpasswd`
+  출력에서 해시 꺼내기. 순수하다. 설치기(질문 · p2의 `shadow`) · `config.zig`(`user=`) · `login.zig`가 같이 쓴다. uid ·
+  gid · tty · audio 번호는 `shared/screen_args.zig` 한 벌이고 terminal의 `pty.Account`(셸 자식의 setuid)도 그것을 본다.
 - `login.zig` — 부팅 때 `/etc/passwd`의 root 셸 자리와
   `/etc/ssh/sshd_config.d/tars-env.conf`의 `SetEnv` 한 줄을 쓴다(SV-M2). ssh 세션이
   콘솔과 같은 셸 · env를 갖는 이유가 이 파일이다.

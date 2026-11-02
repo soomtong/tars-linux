@@ -64,6 +64,12 @@ fn fieldText(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
         @memcpy(buf[0..s.len], s);
         return buf[0..s.len];
     }
+    if (T == ?config.User) {
+        // 없으면 빈 글자다. `show`는 정하는 줄이 없으니 그 줄 앞에 `#`를 붙인다.
+        const s = if (v) |u| u.slice() else "";
+        @memcpy(buf[0..s.len], s);
+        return buf[0..s.len];
+    }
     if (@typeInfo(T) == .@"enum") return @tagName(v);
     @compileError("tars-config cannot print a " ++ @typeName(T) ++ "; teach config_edit.fieldText");
 }
@@ -84,6 +90,7 @@ fn hintFor(comptime T: type) []const u8 {
         return "a comma list of " ++ join(config.ToggleKey, ", ") ++ "; empty turns them all off";
     if (T == config.Ntp) return "off | dhcp | <IPv4 address>";
     if (T == config.Timezone) return "UTC | <a name under /usr/share/zoneinfo, e.g. Asia/Seoul>";
+    if (T == ?config.User) return "the user name tars-install made; it is not changed here";
     if (@typeInfo(T) == .@"enum") return join(T, " | ");
     @compileError("tars-config has no hint for a " ++ @typeName(T) ++ "; teach config_edit.hintFor");
 }
@@ -95,6 +102,17 @@ fn join(comptime E: type, comptime sep: []const u8) []const u8 {
         return s;
     }
 }
+
+/// `set` · `reset`이 안 받는 키(HP-M1 plan 확정 5). 읽기(`get` · `show` · `check`)는 된다.
+///
+/// `judge`가 아니라 따로인 이유는 `judge`가 파일 검사에도 쓰이기 때문이다 — 거기서
+/// 거절하면 설치기가 쓴 정상인 `user=` 줄이 틀린 줄로 보인다. 막을 것은 바꾸는 길뿐이다.
+pub fn installOnly(key: []const u8) bool {
+    return std.mem.eql(u8, key, "user");
+}
+
+/// `installOnly`의 키를 바꾸려 할 때의 둘째 줄.
+pub const INSTALL_ONLY_HINT = "the home directory and the password are tied to this name; tars-install <disk> --wipe makes a new one";
 
 // ── 줄 ────────────────────────────────────────────────────────────────
 

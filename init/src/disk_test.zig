@@ -458,6 +458,13 @@ pub fn main() !void {
     out = control.Out{ .buf = &out_buf };
     disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true, "0.1.4", null, .rotate);
     try expectText(out.bytes(), fresh ++ "  the settings now on p2 are erased too\n", "the fresh plan over old settings");
+    // HP-M1: 계정 한 줄. 비밀번호의 글자는 안 찍는다.
+    out = control.Out{ .buf = &out_buf };
+    disk.userLine(&out, "tars", true);
+    try expectText(out.bytes(), "  user  tars  (home /home/tars, password tars-linux, the default)\n", "the default user line");
+    out = control.Out{ .buf = &out_buf };
+    disk.userLine(&out, "hpuser", false);
+    try expectText(out.bytes(), "  user  hpuser  (home /home/hpuser, password as typed)\n", "the typed user line");
 
     // ── 17. 도구가 끝난 모양 (HC-M2) ─────────────────────────────────
     // status는 wait4의 모양으로 짓는다 — exit는 code << 8, 시그널은 번호 그대로.

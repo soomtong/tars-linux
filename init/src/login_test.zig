@@ -102,4 +102,36 @@ pub fn main() !void {
     var rb2: [512]u8 = undefined;
     try expectEql("env on disk", try readFile(ENV, &rb2), env);
     std.debug.print("login_test: apply writes both files\n", .{});
+
+    // ── HP-M1: applyAccount가 passwd · group · shadow에 사용자 하나를 넣는다 ──
+    const paths = login.AccountPaths{
+        .passwd = PASSWD,
+        .group = ROOT ++ "/group",
+        .shadow = ROOT ++ "/shadow",
+        .store = ROOT ++ "/store",
+    };
+    try writeFile(paths.group, "root:x:0:\ntty:x:5:\naudio:x:29:\n");
+    try writeFile(paths.store, "hpuser:$y$j9T$salt$hash\n");
+    _ = linux.unlink(paths.shadow);
+    login.applyAccount(paths, "hpuser", "/usr/bin/fish");
+    login.applyAccount(paths, "hpuser", "/usr/bin/zsh"); // reload: 셸만 바뀐다
+    var pb: [512]u8 = undefined;
+    try expectEql("passwd with the user", try readFile(PASSWD, &pb), "root:x:0:0:root:/:/usr/bin/bash\n" ++
+        "sshd:x:100:65534::/run/sshd:/usr/sbin/nologin\n" ++
+        "hpuser:x:1000:1000::/home/hpuser:/usr/bin/zsh\n");
+    var gb: [512]u8 = undefined;
+    try expectEql("group with the user", try readFile(paths.group, &gb), "root:x:0:\ntty:x:5:\naudio:x:29:hpuser\nhpuser:x:1000:\n");
+    var sb: [512]u8 = undefined;
+    try expectEql("shadow", try readFile(paths.shadow, &sb), "root:*:::::::\nhpuser:$y$j9T$salt$hash:::::::\n");
+    var st: linux.Statx = undefined;
+    if (linux.errno(linux.statx(linux.AT.FDCWD, paths.shadow.ptr, 0, .{ .MODE = true }, &st)) != .SUCCESS) return error.ShadowStat;
+    if (st.mode & 0o777 != 0o600) {
+        std.debug.print("FAIL: shadow mode {o}, want 600\n", .{st.mode & 0o777});
+        return error.ShadowMode;
+    }
+    // 저장된 해시가 없으면 잠근다. 부팅은 간다.
+    _ = linux.unlink(paths.store);
+    login.applyAccount(paths, "hpuser", "/usr/bin/zsh");
+    try expectEql("locked shadow", try readFile(paths.shadow, &sb), "root:*:::::::\nhpuser:!:::::::\n");
+    std.debug.print("login_test: applyAccount puts one user in passwd, group and shadow (600), locked without a stored hash\n", .{});
 }

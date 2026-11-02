@@ -212,13 +212,23 @@ tars-install <disk> --yes   same, without asking
 tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 ```
 
-`tars-install /dev/nvme0n1`은 계획을 찍고 대문자 `YES`를 기다린다. 새 설치는
+`tars-install /dev/nvme0n1`은 계획을 찍고, 새 설치면 사용자 이름(`user name [tars]:`)과
+비밀번호(`password [tars-linux]:`, 화면에 안 찍힌다)를 묻는다. Enter만 치면 괄호 안의 기본값이다.
+이름은 영문 소문자로 시작하는 32자까지(`a-z 0-9 _ -`)이고 `root` 같은 시스템 이름은 다시 묻는다.
+`--yes`는 질문 없이 기본값이다. 그다음 대문자 `YES`를 기다린다. 새 설치는
 디스크 전체를 지우고 GPT에 셋을 만든다. p1은 768MiB ESP(FAT32 `TARS-BOOT`)이고
 커널·initrd·limine이 들어간다. p2는 256MiB ext2(`tars-config`)이고 설정이 산다.
 p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크가 4GiB보다 커야
 한다 — 작으면 `YES`를 묻기
 전에 거절한다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
 재부팅하지 않는다.
+
+설치된 디스크로 뜨면 화면의 셸은 그 사용자(uid 1000)로 `/home/<이름>`에서 뜬다. rc 파일
+(`~/.bashrc` · `~/.zshrc` · `~/.config/fish/config.fish`)과 `~/.gitconfig` · `~/.vimrc`는 홈의
+진짜 파일이고 고치면 남는다. 시리얼 콘솔의 셸과 ssh는 root 그대로다. 사용자는 `/config`를
+읽을 수 있지만 쓸 수 없다 — `tars-config set`은 아직 root만 된다(sudo는 다음 단계다).
+`/home`이 없는 부팅(ISO, HP 전에 깐 디스크)은 지금처럼 root 셸이다. 이름을 바꾸는 길은
+`tars-install <disk> --wipe`뿐이다(`tars-config set user=…`은 거절한다).
 
 새 ISO가 나오면 그 ISO로 떠서 같은 명령을 친다. 목록이 그 디스크를
 `TARS installed`로 보이고, p2는 열지도 않는다(`updated.`). p1에서는 지금

@@ -238,3 +238,14 @@ monitor 45497 · QMP 45498을 이제 실제로 연다(화면 셸에 `sendkey`). 
 - Task 1~4: 편집과 단위 검사. 파일이 셋 프로그램에 걸쳐 있어 가장 길다 — 1시간 남짓.
 - Task 5 · 6: home 체인이 부팅 셋에 `sendkey`가 더해져 5분쯤.
 - Task 8: 루트 게이트 12분 남짓.
+
+## 구현에서 달라진 것 (2026-11-02, 게이트 뒤)
+
+- 화면 셸에 `sendkey`를 안 친다. 판정 4는 그 셸 pid의 `/proc`(status · environ · cwd · fd 0)을 시리얼 root가 읽고, 사용자의 쓰기는
+  `setpriv --reuid=1000`이다. monitor · QMP는 여전히 안 연다.
+- shadow 날짜 칸은 0이 아니라 빈 칸(`pam_unix`가 0을 "바꿔라"로 읽는다).
+- 사용자가 있는 부팅에도 `/config`의 root용 seed를 깐다(시리얼 · ssh가 root다). 홈의 seed에는 머리말 두 줄이 붙는다.
+- `user`는 `reload`의 넷째 갈래 `.boot`이고 `reload terminal`도 부팅의 사용자를 그대로 둔다.
+- Task 5는 `/dev/snd` 하나였다(audio 일꾼이 `root:audio 660`). `ping` · `tty`는 initrd에 없었다. 판정은 `amixer -c 0`.
+- install 체인은 `--yes` 없는 판정 4 · 4b에 Enter 둘을 더 친다 — 4b는 그것 없이 이름 질문에서 거절되고도 초록이었다.
+- 자세한 것은 design의 "실측 (M1)"과 "M1의 첫 판들이 가르친 것".

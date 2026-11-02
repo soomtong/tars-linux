@@ -221,6 +221,11 @@ echo "the blank NVMe is listed as internal, blank"
 # 판정 4. YES가 아니면 아무것도 안 한다. 디스크를 통째로 지우는 명령의
 # 문지기이고, 게이트가 늘 --yes로 치므로 이 자리가 아니면 영영 안 밟힌다.
 send "tars-install /dev/nvme0n1"
+# HP-M1. YES 앞에 계정 질문 둘이 온다. Enter(기본값)로 넘긴다 — 질문 자체는 home/check.sh가 본다.
+wait_log "user name [tars]: " || fail "tars-install never asked for the user name" "tars-install:"
+send ""
+wait_log "password [tars-linux]: " || fail "tars-install never asked for the password" "tars-install:"
+send ""
 wait_log "type YES to continue: " \
   || fail "tars-install never asked for YES" "tars-install:"
 send "no"
@@ -262,12 +267,17 @@ echo "a GPT on a 4096-byte-sector disk reads as gpt"
 # 대상은 nvme0n1이다. KU-M0부터 64MiB scratch는 YES를 묻기 전에 크기로 거절돼
 # 이 판정이 볼 줄 읽기까지 안 간다(판정 4d). nvme0n1은 판정 5가 곧 통째로
 # 깔 디스크라, 옛 코드가 YES로 읽어 지워도 잃는 것이 없고 아래 판정이 잡는다.
-send "sh -c '(printf YES; sleep 1; printf \" please\\n\") | tars-install /dev/nvme0n1'; printf 'dc-split-%s\n' done"
+# HP-M1. 앞의 `\n\n`은 계정 질문 둘의 Enter(기본값)다 — 없으면 `YES please`가 이름 질문에서
+# 거절되어 이 판정이 YES 문을 안 밟고 초록이 된다(HP-M1의 첫 판이 그랬다).
+send "sh -c '(printf \"\\n\\n\"; printf YES; sleep 1; printf \" please\\n\") | tars-install /dev/nvme0n1'; printf 'dc-split-%s\n' done"
 wait_log "dc-split-done" 30 \
   || fail "the split YES never came back to the shell" "tars-install:" "dc-split"
 if [ "$(grep -acF "tars-install: not confirmed; nothing was changed." "$LOG")" -lt 2 ]; then
   fail "'YES' then ' please' arriving apart was taken as YES" \
     "tars-install:" "writing the partition table"
+fi
+if grep -aqF "'YES please' is not a user name" "$LOG"; then
+  fail "the split YES was refused by the user name question, not by the YES gate" "tars-install:"
 fi
 echo "a YES split across two writes is read as the whole line, and refused"
 
@@ -308,6 +318,7 @@ echo "a disk smaller than the layout is refused before YES and left alone"
 
 # 판정 5. 설치. mke2fs가 4초, sfdisk가 3.5초(DI-M0 실측 8)라 TCG에서
 # 넉넉히 120초를 준다.
+ASKED_BEFORE="$(grep -aoF "user name [" "$LOG" | wc -l)"
 send "tars-install /dev/nvme0n1 --yes"
 if ! wait_log "tars-install: done. remove the boot medium and reboot." 120; then
   fail "tars-install /dev/nvme0n1 --yes never said done" \
@@ -320,6 +331,18 @@ for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.
   fi
 done
 echo "tars-install wrote the disk, copied the four boot files and wrote boot/version"
+# HP-M1. --yes는 질문 없이 기본 계정이다 — 계획에 그 줄이 있고, p2에 tars.conf와 shadow를,
+# p3에 홈을 썼다. 사람의 길(질문 셋)은 home/check.sh가 본다.
+for want in \
+  "  user  tars  (home /home/tars, password tars-linux, the default)" \
+  "tars-install: wrote tars.conf (user=tars) and shadow" \
+  "tars-install: made /home/tars"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "tars-install:"
+done
+if [ "$(grep -aoF "user name [" "$LOG" | wc -l)" -ne "$ASKED_BEFORE" ]; then
+  fail "--yes still asked for the user name" "user name"
+fi
+echo "--yes made the default account tars without asking"
 
 stop_guest
 
@@ -337,16 +360,20 @@ if ! grep -aqF "$WANT_DISK" "$LOG"; then
 fi
 echo "booted without the ISO; init found its config on /dev/nvme0n1p2"
 
-# 판정 7. 붙었고, 빈 p2에 첫 부팅의 seed를 심었다. mke2fs가 만든 것이 init이
-# 쓸 수 있는 ext2라는 것까지다.
+# 판정 7. 붙었고, 설치기가 쓴 tars.conf를 읽었다. HP-M1부터 첫 부팅의 seed(`created`)가
+# 아니라 `loaded`다 — 설치기가 `user=`가 든 tars.conf를 `config.save`로 이미 썼다(HP-M1 plan
+# 확정 4). mke2fs가 만든 것이 init이 읽을 수 있는 ext2라는 것까지는 그대로 증명된다.
 if ! grep -aq "tars-init: mounted ext2 at /config" "$LOG"; then
   fail "p2 was picked but never mounted" "tars-init: failed to mount"
 fi
-if ! grep -aq "tars-init: created /config/tars.conf" "$LOG"; then
-  fail "the fresh config partition did not get its first-boot tars.conf" \
+if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
+  fail "init did not load the tars.conf the installer wrote" \
     "tars-init: loaded /config" "tars-init: created"
 fi
-echo "the config partition mounted and took the first-boot seed"
+if ! grep -aqF "tars-init: user tars uid 1000 home /home/tars" "$LOG"; then
+  fail "the default account tars did not come up" "tars-init: user" "tars-init: no "
+fi
+echo "the config partition mounted, init loaded the installer's tars.conf and brought up user tars"
 
 # 판정 8. 설치된 기계에서 tars-install은 매체가 없다고 말한다(design 결정 4).
 # QEMU가 빈 sr0을 붙여 두므로(DI-M0 실측 9) 노드가 있어도 매체가 아니라는
@@ -600,13 +627,14 @@ stop_guest
 echo "=== boot 6: the NVMe alone, after --wipe ==="
 boot_guest 6
 
-# 판정 16. 새 p2다. seed가 다시 깔렸고 마커가 없다.
+# 판정 16. 새 p2다. 설치기가 tars.conf를 다시 썼고(HP-M1 — 그래서 `created`가 아니라
+# `loaded`) 마커가 없다. "새것"의 증명은 마커가 맡는다.
 if ! grep -aqF "$WANT_DISK" "$LOG"; then
   fail "after --wipe init did not pick p2" \
     "tars-init: config storage" "tars-init: no disk labelled"
 fi
-if ! grep -aq "tars-init: created /config/tars.conf" "$LOG"; then
-  fail "after --wipe the config partition was not fresh" \
+if ! grep -aq "tars-init: loaded /config/tars.conf" "$LOG"; then
+  fail "after --wipe init did not load the installer's tars.conf" \
     "tars-init: loaded /config" "tars-init: created"
 fi
 send "test -e /config/di-marker || printf 'di-marker-%s\n' gone"

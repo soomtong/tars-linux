@@ -405,4 +405,16 @@ GUEST_TOOLS=(
   usr/bin/bluetoothctl:usr/bin/bluetoothctl
   usr/bin/btmgmt:usr/bin/btmgmt
   usr/bin/dbus-send:usr/bin/dbus-send
+
+  # ── 층 17 · 계정(HP-M1) ────────────────────────────────────────────────
+  # 설치 때 사용자 하나를 만들고 화면의 셸이 그 사용자(uid 1000)로 뜬다(HP design 결정 5 · 8).
+  #
+  #   mkpasswd   tars-install이 `mkpasswd -m yescrypt -s`로 부른다. 비밀번호는 stdin으로만
+  #              준다 — argv면 /proc/<pid>/cmdline에 보인다. whois 패키지, libcrypt는 sshd가
+  #              이미 데려왔다(HP design 위험 2)
+  #   setpriv    root 셸에서 "사용자로 한 번" 치는 길 — `setpriv --reuid=1000 --regid=1000
+  #              --init-groups <cmd>`. su · sudo가 없는 M1에서 home 체인과 사람이 사용자의
+  #              권한을 재는 도구다. util-linux는 dmesg 때문에 이미 sysroot에 있다
+  usr/bin/mkpasswd:usr/bin/mkpasswd
+  usr/bin/setpriv:usr/bin/setpriv
 )

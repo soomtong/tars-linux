@@ -315,6 +315,12 @@ fn change(pairs: []const edit.Pair) u8 {
     var line_buf: [edit.LINE_MAX]u8 = undefined;
     var refused = false;
     for (pairs, 0..) |p, i| {
+        if (edit.installOnly(p.key)) {
+            complain("{s} is set by tars-install, not by tars-config", .{p.key});
+            complain("{s}", .{edit.INSTALL_ONLY_HINT});
+            refused = true;
+            continue;
+        }
         switch (edit.judge(&line_buf, p.key, p.value)) {
             .ok => |c| {
                 canon[i] = edit.valueText(&c, p.key, &canon_bufs[i]).?;

@@ -2,9 +2,9 @@
 
 접두사: HP
 
-Status: M0 끝남(2026-11-02) — p3 ext4 `tars-home`이 `/home`에 붙고 재부팅을 넘어 남는다. 체인 스물다섯째 `home/check.sh`(판정 1 · 2 · 3 ·
-5 · 6 · 7). 결정 12 · 위험 10(1 · 6은 M0이 닫았다) · 실측 1~6. 다음은 M1(계정) — plan은
-`docs/plans/2026-11-02-tars-home-partition-hp-m1.md`.
+Status: M1 끝남(2026-11-02) — 설치 때 계정 하나(기본 `tars` · `tars-linux`)를 만들고 화면 셸이 uid 1000으로 홈에서 뜬다.
+`/home`이 없는 부팅은 root 셸. 체인 `home/check.sh`가 판정 1~7 · 9 · 10을 본다(8은 M2). 실측 1~11. 다음은 M2(sudo) —
+plan은 아직 없다.
 
 관련 문서: `docs/decisions/project_config_fs_ext2.md`(`/config`가 ext2에 머무는 이유와 ext4로 갈 세 신호 — 이 설계가 그
 신호를 `/home`에서 켠다) · `2026-09-23-tars-disk-install-design.md`(DI. `tars-install`과 p1 · p2) ·
@@ -137,6 +137,9 @@ Enter만 치면 괄호의 기본값이다. 비밀번호는 echo 없이 받는다
 아니다. 바꾸는 명령은 `sudo tars-config passwd`(M2). sudo 실체(Debian `sudo`인지 `doas`에 `sudo` 이름을 씌운 것인지)와 PAM
 사슬은 M2가 크기를 재고 정한다(위험 3).
 
+shadow 줄의 날짜 칸(마지막 변경일)은 비운다(M1). `0`이면 `pam_unix`가 "다음 로그인에 바꿔라"로 읽고, 부팅 직후의 시계는
+1970년일 수 있어 오늘 날짜도 안 믿는다. 빈 칸은 "나이 규칙 없음"이다. 해시가 없거나 깨졌으면 사용자 줄을 `!`(잠김)로 둔다.
+
 ### 결정 7 — passwd · group · shadow는 부팅마다 tmpfs `/etc`에 만든다
 
 영속되는 것은 `tars.conf`의 `user=<이름>`과 `/config/shadow` 둘뿐이다. init이 부팅 때 initrd의 정적 `/etc/passwd` ·
@@ -176,6 +179,11 @@ M1 plan을 쓰다 찾은 자리다. root의 홈은 `/`(tmpfs)라서 `~/.gitconfi
 설정(`tars.conf` · `shadow` · `ssh/` · `services.d/` · `bluetooth/` · `groq.key`)만 남는다. 홈 없는 부팅의 root 셸은 지금
 그대로 `/config` 링크를 쓴다. 다른 길(링크를 두고 그 파일들을 1000으로 chown)은 `/config` 안의 소유자가 둘로 갈려 버렸다.
 
+M1이 정한 둘. 홈의 seed는 `/config`의 것과 같은 상수에 머리말 두 줄(`config.HOME_SEED_HEADER` — "이 파일은 홈의 진짜
+파일이다, 아래의 /config 이야기는 root 사본의 것")을 앞에 붙인 것이다 — 상수를 고치면 seed 글자를 보는 검사들이 함께
+흔들린다. 사용자가 있는 부팅에도 `/config`의 root용 seed는 그대로 깐다(M1 plan은 "안 깐다"였다) — 시리얼 셸과 ssh는
+root이고 `/.bashrc` → `/config/bashrc` 링크를 읽는다.
+
 ### 결정 11 — 게이트는 스물다섯째 체인 `home/check.sh`다
 
 포트 monitor 45497 · QMP 45498(예약 범위 45455~45599, RP-M0). 설치 체인(`install/check.sh`, DC)이 이미 가상 디스크에
@@ -208,6 +216,8 @@ M0이 닫았다(실측 2). 설치 직후 빈 자리 674,811,904바이트 — 한
 (libcrypto는 이미 있고 CLI만 더한다) · Zig로 `crypt_r` 호출(glibc libcrypt, `$6$` 또는 `$y$`). 셋째가 외부 도구가 없고
 설치기 · `tars-config passwd` 둘이 같은 함수를 쓴다. M1이 잰다.
 
+M1이 닫았다(실측 7). `mkpasswd -m yescrypt -s`, 비밀번호는 stdin. Zig `crypt_r`은 init이 musl 정적이라 안 됐다.
+
 ### 위험 3 — sudo의 크기와 PAM 사슬
 
 Debian `sudo`는 libpam · libaudit · libselinux 등을 끈다. `doas`는 작지만 역시 libpam이고 Homebrew는 `sudo`라는 이름을
@@ -219,6 +229,9 @@ Debian `sudo`는 libpam · libaudit · libselinux 등을 끈다. `doas`는 작�
 `forkpty`가 `openpty`로 연 slave는 root 소유 620이다. 사용자 셸이 `tty` · `stty`는 되지만(fd는 이미 열려 있다) `script` ·
 `tmux`처럼 경로로 다시 여는 도구는 `EACCES`다. terminal이 자식 pid를 받은 뒤 `ptsname`으로 경로를 얻어 `chown` · `chmod`한다.
 devpts가 `gid=5,mode=620`으로 붙어 있는지 `main.zig`의 `/dev/pts` 마운트 옵션을 M1이 본다.
+
+M1이 닫았다(실측 9). 경로 대신 자식의 fd 0을 `fchown(0, 1000, 5)` · `fchmod(0, 0620)` — `ptsname`이 필요 없다.
+devpts는 `gid=5,mode=620,ptmxmode=666`, initrd의 group에 `tty:x:5:`.
 
 ### 위험 5 — 라벨 탐색 둘이 서로를 잡는다
 
@@ -239,9 +252,15 @@ extent 64bit flex_bg metadata_csum_seed sparse_super large_file huge_file dir_nl
 결정 3이 root 셸로 떨어뜨리는데, 사용자가 `/home/tars`에 무언가를 쓰면 tmpfs다. 셸 프롬프트와 로그 둘 다에서 알게 한다 —
 init 로그 한 줄과, terminal의 상태 줄에 `ROOT`를 보이는 것을 M1이 검토한다(상태 줄은 SB 설계의 칸 규칙을 따른다).
 
+M1이 정했다. 상태 줄의 `ROOT` 칸은 안 넣는다 — 셸 프롬프트가 root를 `#`로 가르고, ISO 부팅은 늘 root라 칸이 거의 늘
+켜지며, 상태 줄 픽셀을 보는 체인들의 기대값이 다 바뀐다. 로그 한 줄(`no tars-home disk, shell runs as root`)로 알린다.
+
 ### 위험 8 — 설치 질문이 들어가면 `install/check.sh`의 타이핑이 바뀐다
 
 DC 체인은 `--yes`로 돌므로 질문이 안 나온다. 사람의 길(질문 셋)은 게이트가 못 본다 — HANDOFF의 "사용자가 확인할 것"에 적는다.
+
+M1이 고쳤다 — "게이트가 못 본다"는 틀렸다. 시리얼 콘솔이 tty라 home 체인이 질문 길(이름 거절 · 다시 묻기 · echo 끈
+비밀번호)을 탄다(판정 9). install 체인은 `--yes`(기본값)와, `--yes` 없는 판정 4 · 4b에 Enter 둘을 더 친다.
 
 ### 위험 9 — 사용자 이름이 라벨 · 경로 · passwd 줄에 들어간다
 
@@ -254,6 +273,10 @@ udev가 없어 devtmpfs가 만드는 노드는 드라이버가 정한 모드 그
 `speaker-test`(`/dev/snd`), `ping`(raw 소켓 · `ping_group_range`), `dmesg`(`dmesg_restrict`), `bluetoothctl`(D-Bus 정책)이
 막힐 수 있다. 받아쓰기는 terminal(root)이 띄우므로 안 걸린다. M1이 사용자로 하나씩 쳐서 목록을 만들고, 값이 싼 것(그룹 ·
 sysctl 한 줄)은 M1에서, 권한 승격이 맞는 것은 M2(sudo)로, 나머지는 `carryover.md`로 보낸다.
+
+M1이 쟀다(실측 10). 막힌 것은 `/dev/snd`(root 0600) 하나였고 init의 audio 일꾼이 카드가 선 뒤 `root:audio 0660`으로
+바꾼다 — 판정으로 올렸다. 부팅 뒤 꽂은 USB 헤드셋의 노드는 안 바뀐다(`carryover.md`의 HP 절). `bluetoothctl`은 게이트가
+`bluetooth=off`라 못 쟀다.
 
 ## 비목표
 
@@ -316,6 +339,51 @@ FAT32 · ext2 · ext4 · ESP 복사 · sync)는 13,843ms — DI-M0 실측 8의 e
 붙여도 `home storage /dev/nvme0n1p3 (label tars-home)` 그대로이고 `config storage /dev/nvme0n1p2` 그대로다. `tars-home`이 설정
 탐색의 접두사 규칙에 걸리지만 `tarsLabel`이 그 이름만 뺀다 — 단위 검사 8a(`tars-home` · `tars-homex` · `debian-home`)가 그 경계를
 본다.
+
+## 실측 (M1, 2026-11-02)
+
+### 실측 7 — `mkpasswd`는 새 라이브러리 0개, yescrypt 한 번은 TCG 2.1초(위험 2)
+
+`mkpasswd` 26,936바이트(`libcrypt.so.1` · `libc.so.6`), `setpriv` 92,560바이트(`libcap-ng.so.0` · `libc.so.6`) — 둘 다 sshd가
+이미 데려온 것이라 새 라이브러리는 없다. initrd 118,907,323 → 118,978,535바이트(+71,212, 코드 포함). 설치기의 `password hashed
+(yescrypt) in 2151ms`(TCG, 두 판 2,141 · 2,151). YES 뒤 · sfdisk 앞이라 디스크를 건드리기 전에 끝난다. 컨테이너 이미지 태그
+`80a4c6be0eba`(`whois:amd64`).
+
+### 실측 8 — 계정은 부팅을 늘리지 않는다(결정 7)
+
+home 체인 부팅 2의 콘솔 셸까지 12초 — M0과 같다. init 줄은 넷이다: `user hpuser uid 1000 home /home/hpuser` · `seeded
+/home/hpuser/…`(첫 부팅만, 다섯) · `hpuser is in /etc/passwd, /etc/group and /etc/shadow` · terminal의 `spawned child pid N
+(/usr/bin/fish) as hpuser`. ISO 부팅은 `no tars-home disk, shell runs as root` 한 줄이 는다.
+
+### 실측 9 — 화면 셸의 모양(결정 8, 위험 4)
+
+`/proc/<pid>/status`의 `Uid: 1000 1000 1000 1000` · `Gid: 1000 1000` · `Groups: 29`, cwd `/home/hpuser`, pty `hpuser:tty 620`,
+env에 `HOME=/home/hpuser` · `USER` · `LOGNAME` · `SHELL=/usr/bin/fish`이 있고 `XDG_DATA_HOME`이 없다. 셸 env는 terminal이
+시작할 때 한 번 짓는다 — fork 뒤 자식에서 `setenv`(malloc)를 안 부르려고. `HISTFILE=/config/zsh_history`는 `~/.zsh_history`로 옮긴다.
+
+### 실측 10 — 사용자로 막히는 것(위험 10)
+
+`setpriv --reuid=1000 --regid=1000 --init-groups`로 친 결과(0이 됨). `amixer -c 0` 0(고친 뒤 — 전에는 `/dev/snd/*`가 `crw-------
+root`), `dmesg` 0(`dmesg_restrict=0`), `git config --global` 0(홈의 `~/.gitconfig`), `tars-config get` · `ls /config` 0,
+`cat /config/shadow` 1. `ping` · `tty`는 initrd에 없다(127) — 권한의 문제가 아니다. `ping_group_range`는 커널 기본 `1 0`이고
+ping이 생기면 다시 본다. `aplay -l`은 카드를 못 열어도 0이라 판정에 못 쓴다 — `amixer -c 0`이 제어 장치를 실제로 연다.
+
+### 실측 11 — 사용자 셸의 히스토리 자리는 못 쟀다(결정 12)
+
+화면 셸에 키를 안 치는 체인이라 fish가 히스토리를 쓰는 순간이 없다. `XDG_DATA_HOME`이 없으니 fish의 기본(`~/.local/share/fish`)이고
+그 디렉터리는 fish가 만든다는 것이 기대다 — HANDOFF의 "사용자가 확인할 것"에 넣었다.
+
+### M1의 첫 판들이 가르친 것
+
+- 비밀번호 프롬프트를 echo를 끄기 전에 찍으면, 프롬프트를 보자마자 친 글자가 echo로 찍히고 `tcsetattr(.FLUSH)`가 그것을
+  버린다. echo 끄기 → 프롬프트, 되돌릴 때는 `.NOW`다(`install.zig`의 `readSecretAnswer`).
+- 질문이 새로 앞에 서면 기존 판정의 입력이 그 질문에 먹힌다. install 체인 4b("YES가 두 조각")가 `'YES please' is not a user
+  name`으로 거절되고도 초록이었다 — 판정이 본 것은 `not confirmed`의 수였다. 앞에 Enter 둘을 넣고, 이름 질문에서 거절됐으면
+  빨강인 줄을 더했다.
+- 시리얼 콘솔 셸은 fish다 — `for … do … done`을 보내면 아무 출력 없이 그 줄이 사라진다. 반복은 호스트의 bash에서.
+- 게스트의 `ls`는 eza 별칭이고 `-l`이 그룹 칸을 안 찍는다. 권한 판정은 `stat -c`로.
+- `ARGC`를 올리면 서비스 argv 상수 다섯(dbus · bluetoothd · wifi · dhcpcd · chronyd)과 `main.zig`의 셋이 컴파일러에 걸린다 —
+  `Argv` 타입이 길이를 들고 있어서다.
 
 ### 게이트가 가르친 것 둘
 

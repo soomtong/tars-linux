@@ -4,6 +4,15 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+HP-M1(2026-11-02)이 남긴 것.
+
+- [ ] 부팅 뒤 꽂은 USB 헤드셋 · 사운드 카드의 노드는 root 0600 그대로다 — init의 audio 일꾼이 부팅에 한 번 `/dev/snd/*`를
+      `root:audio 660`으로 바꿀 뿐이고 init에는 uevent가 없다. 실기에서 거슬리면 terminal의 uevent 길(포인터 · 키보드가 쓰는 것)에
+      `SUBSYSTEM=sound`를 얹거나 init에 작은 uevent 듣기를 둔다.
+- [ ] `ping`이 initrd에 없다. 넣으면 사용자는 `ping_group_range`(커널 기본 `1 0`)에 막힌다 — Debian 기본(`0 2147483647`)을
+      init이 쓴다.
+- [ ] 화면 셸의 히스토리 자리(fish `~/.local/share/fish`)와 zoxide DB가 홈에 생기는지 게이트가 못 봤다(HP 실측 11).
+
 KH(2026-11-02)가 남긴 것.
 
 - [ ] init의 키보드 고르기 · 3초 기다림 · argv의 `device_path` 칸은 이제 terminal이 안 쓴다(KH 비목표 2). 키보드 없이 부팅하면 3초가

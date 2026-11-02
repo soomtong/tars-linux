@@ -2,6 +2,9 @@ const std = @import("std");
 const linux = std.os.linux;
 const storage = @import("storage.zig");
 const disk = @import("disk.zig");
+const config = @import("config.zig");
+const account = @import("account.zig");
+const screen_args = @import("screen_args");
 const build_info = @import("build_info");
 
 /// tars-install — 부팅 매체의 부트 파일 넷을 내장 디스크에 옮겨 USB 없이
@@ -49,6 +52,12 @@ fn say(comptime fmt: []const u8, args: anytype) void {
 fn complain(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
     writeAll(2, disk.clip(&buf, "tars-install: " ++ fmt ++ "\n", args));
+}
+
+/// `config.zig`의 로그가 root에서 찾는 이름(TC design 결정 3의 수법). 설치기가 `config.save`로
+/// p2의 `tars.conf`를 쓸 때 그 함수가 하는 말이 `tars-init:`이 아니라 `tars-install:`로 나간다.
+pub fn configLog(comptime fmt: []const u8, args: anytype) void {
+    say("tars-install: " ++ fmt ++ "\n", args);
 }
 
 /// `disk`의 여러 줄 함수에 주는 sink. 줄마다 `say` · `complain` 한 번 — 옮기기 전과 같은 `write`다.
@@ -151,6 +160,9 @@ fn freeBytes(path: [*:0]const u8) ?u64 {
 const WORK_DIR: [:0]const u8 = "/tmp/tars-install";
 const MEDIUM_DIR: [:0]const u8 = "/tmp/tars-install/medium";
 const ESP_DIR: [:0]const u8 = "/tmp/tars-install/esp";
+/// 새 설치가 계정을 쓰려고 p2 · p3를 잠깐 붙이는 자리(HP-M1).
+const CONFIG_DIR: [:0]const u8 = "/tmp/tars-install/config";
+const HOME_DIR: [:0]const u8 = "/tmp/tars-install/home";
 
 /// 매체일 수 있는 것. 광학 드라이브 둘(QEMU의 -cdrom · 실기의 외장 드라이브)과
 /// 디스크 전부(dd로 ISO를 쓴 USB 스틱은 /dev/sdX다). 광학 드라이브는 init의
@@ -416,7 +428,9 @@ fn runTool(
             const nul = linux.open("/dev/null", .{ .ACCMODE = .RDONLY }, 0);
             if (failed(nul) == null) _ = linux.dup2(@intCast(nul), 0);
         }
-        const out = linux.open(log.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+        // 0600: mkpasswd의 로그에는 해시가 남는다(HP-M1). 다른 도구의 로그도 사람이 읽을
+        // 까닭이 root 말고는 없다.
+        const out = linux.open(log.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o600);
         if (failed(out) == null) {
             _ = linux.dup2(@intCast(out), 1);
             _ = linux.dup2(@intCast(out), 2);
@@ -577,6 +591,250 @@ fn readLine(fd: i32, buf: []u8) ?[]const u8 {
     return null;
 }
 
+// ── 계정 (HP-M1) ─────────────────────────────────────────────────────
+
+/// 새 설치가 만들 사용자 하나. 질문의 답이거나(`askAccount`) `--yes`의 기본값이다.
+/// 힙이 없어 글자를 값으로 든다.
+const Account = struct {
+    name_buf: [account.NAME_MAX]u8 = undefined,
+    name_len: usize = 0,
+    pw_buf: [account.PASSWORD_MAX]u8 = undefined,
+    pw_len: usize = 0,
+    default_pw: bool = true,
+
+    fn defaults() Account {
+        var a: Account = .{};
+        a.setName(account.DEFAULT_NAME);
+        a.setPassword(account.DEFAULT_PASSWORD);
+        return a;
+    }
+
+    fn setName(self: *Account, n: []const u8) void {
+        @memcpy(self.name_buf[0..n.len], n);
+        self.name_len = n.len;
+    }
+
+    fn setPassword(self: *Account, pw: []const u8) void {
+        @memcpy(self.pw_buf[0..pw.len], pw);
+        self.pw_len = pw.len;
+    }
+
+    fn name(self: *const Account) []const u8 {
+        return self.name_buf[0..self.name_len];
+    }
+
+    fn password(self: *const Account) []const u8 {
+        return self.pw_buf[0..self.pw_len];
+    }
+
+    /// 해시를 만든 뒤 비밀번호를 지운다. 프로세스가 곧 끝나지만 sfdisk · mkfs를 기다리는
+    /// 수십 초 동안 메모리에 둘 까닭이 없다.
+    fn forgetPassword(self: *Account) void {
+        @memset(&self.pw_buf, 0);
+        self.pw_len = 0;
+    }
+};
+
+/// 한 줄을 읽고 끝의 개행을 뗀다. EOF(아무것도 없이 끝남)면 `.eof`, 버퍼보다 길면 그 줄의
+/// 나머지를 버리고 `.too_long` — 남은 글자가 다음 질문의 답으로 읽히지 않게 한다.
+const Answer = union(enum) { line: []const u8, eof, too_long };
+
+fn readAnswer(buf: []u8) Answer {
+    const got = readLine(0, buf) orelse {
+        var b: [1]u8 = undefined;
+        while (true) {
+            const n = linux.read(0, &b, 1);
+            if (failed(n)) |e| {
+                if (e == .INTR) continue;
+                return .eof;
+            }
+            if (n == 0) return .eof;
+            if (b[0] == '\n') return .too_long;
+        }
+    };
+    if (got.len == 0) return .eof;
+    return .{ .line = std.mem.trimEnd(u8, got, "\r\n") };
+}
+
+/// echo를 끄고 prompt를 찍은 뒤 한 줄을 읽는다. 표준 입력이 tty가 아니면(파이프) 그대로 읽는다.
+/// `config_front.readSecret`과 같은 몇 줄이다 — 설치기는 그 파일을 import하지 않는다
+/// (공용 모듈을 안 만드는 이 파일 머리의 규칙).
+///
+/// 순서가 뜻이다. echo를 먼저 끄고 prompt를 찍는다 — 거꾸로면 prompt를 보고 곧바로 친
+/// 글자가 echo가 꺼지기 전에 도착해 화면에 찍힌다. 끌 때는 `.FLUSH`(prompt 전에 미리 친
+/// 것은 버린다), 되돌릴 때는 `.NOW`(그 사이 친 다음 답 — YES — 를 버리지 않는다).
+fn readSecretAnswer(prompt: []const u8, buf: []u8) Answer {
+    var old: linux.termios = undefined;
+    const tty = failed(linux.tcgetattr(0, &old)) == null;
+    if (tty) {
+        var quiet = old;
+        quiet.lflag.ECHO = false;
+        _ = linux.tcsetattr(0, .FLUSH, &quiet);
+    }
+    say("{s}", .{prompt});
+    const a = readAnswer(buf);
+    if (tty) {
+        _ = linux.tcsetattr(0, .NOW, &old);
+        // echo가 꺼져 있어 사람이 친 Enter가 화면에 안 나왔다. 다음 줄을 위해 대신 넘긴다.
+        say("\n", .{});
+    }
+    return a;
+}
+
+/// 이름과 비밀번호를 묻는다(HP design 결정 5). Enter만 치면 괄호 안의 기본값이다. 규칙 밖이면
+/// 이유 한 줄 뒤 같은 질문을 다시 묻는다. EOF면 null — 아무것도 안 바꾸고 끝낸다.
+fn askAccount() ?Account {
+    var a = Account.defaults();
+    while (true) {
+        say("user name [" ++ account.DEFAULT_NAME ++ "]: ", .{});
+        var line: [128]u8 = undefined;
+        const n = switch (readAnswer(&line)) {
+            .eof => return null,
+            .too_long => {
+                say("tars-install: that is longer than a user name can be (up to {d})\n", .{account.NAME_MAX});
+                continue;
+            },
+            .line => |l| std.mem.trim(u8, l, " \t"),
+        };
+        if (n.len == 0) break;
+        if (!account.validName(n)) {
+            say("tars-install: '{s}' is not a user name; use a-z, 0-9, _ and -, start with a-z or _, up to {d}, and not a system name like root\n", .{ n, account.NAME_MAX });
+            continue;
+        }
+        a.setName(n);
+        break;
+    }
+    while (true) {
+        var line: [account.PASSWORD_MAX + 2]u8 = undefined;
+        const pw = switch (readSecretAnswer("password [" ++ account.DEFAULT_PASSWORD ++ "]: ", &line)) {
+            .eof => return null,
+            .too_long => {
+                say("tars-install: the password is too long (up to {d})\n", .{account.PASSWORD_MAX});
+                continue;
+            },
+            .line => |l| l,
+        };
+        defer @memset(&line, 0);
+        if (pw.len == 0) break;
+        if (!account.validPassword(pw)) {
+            say("tars-install: the password has a control character; type it again\n", .{});
+            continue;
+        }
+        a.setPassword(pw);
+        a.default_pw = false;
+        break;
+    }
+    return a;
+}
+
+fn monotonicMs() u64 {
+    var ts: linux.timespec = undefined;
+    _ = linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / std.time.ns_per_ms;
+}
+
+/// `mkpasswd -m yescrypt -s`로 해시를 만든다(HP-M1 plan 확정 2). 비밀번호는 stdin으로만
+/// 준다 — argv면 `/proc/<pid>/cmdline`에 보인다. 출력은 로그 파일로 받아 읽고 지운다.
+/// YES 뒤 · sfdisk 앞에 부른다(확정 3) — 디스크를 지운 뒤에 실패하면 늦다.
+fn makeHash(pw: []const u8, out: *[account.HASH_MAX]u8, envp: [*:null]const ?[*:0]const u8) ?[]const u8 {
+    if (!mkdirOk(WORK_DIR.ptr)) {
+        complain("cannot create {s}", .{WORK_DIR});
+        return null;
+    }
+    var input: [account.PASSWORD_MAX + 1]u8 = undefined;
+    defer @memset(&input, 0);
+    @memcpy(input[0..pw.len], pw);
+    input[pw.len] = '\n';
+
+    const log = WORK_DIR ++ "/mkpasswd.log";
+    defer _ = linux.unlink(log);
+    const argv = [_:null]?[*:0]const u8{ "/usr/bin/mkpasswd", "-m", "yescrypt", "-s" };
+    const t0 = monotonicMs();
+    if (!runTool(&argv, input[0 .. pw.len + 1], log, envp)) return null;
+    const ms = monotonicMs() - t0;
+
+    var buf: [512]u8 = undefined;
+    const text = readFile(log.ptr, &buf) orelse {
+        complain("cannot read {s}", .{log});
+        return null;
+    };
+    const hash = account.hashFromTool(text) orelse {
+        complain("mkpasswd did not give a yescrypt hash; nothing was changed", .{});
+        return null;
+    };
+    @memcpy(out[0..hash.len], hash);
+    say("tars-install: password hashed (yescrypt) in {d}ms\n", .{ms});
+    return out[0..hash.len];
+}
+
+/// 새로 구운 p2에 `tars.conf`(`user=` 포함)와 `shadow`를, p3에 홈 디렉터리를 만든다(HP design
+/// 결정 5 · 7). 영속되는 계정은 이 셋이 전부이고 passwd · group은 init이 부팅마다 짓는다.
+fn writeAccount(p2: [:0]const u8, p3: [:0]const u8, name: []const u8, hash: []const u8) bool {
+    if (!mkdirOk(CONFIG_DIR.ptr) or !mkdirOk(HOME_DIR.ptr)) {
+        complain("cannot create {s} or {s}", .{ CONFIG_DIR, HOME_DIR });
+        return false;
+    }
+
+    if (failed(linux.mount(p2.ptr, CONFIG_DIR.ptr, "ext2", 0, 0))) |e| {
+        complain("cannot mount {s} as ext2 (errno {d})", .{ p2, @backingInt(e) });
+        return false;
+    }
+    const settings = writeSettings(name, hash);
+    linux.sync();
+    _ = linux.umount(CONFIG_DIR.ptr);
+    if (!settings) return false;
+
+    if (failed(linux.mount(p3.ptr, HOME_DIR.ptr, "ext4", 0, 0))) |e| {
+        complain("cannot mount {s} as ext4 (errno {d})", .{ p3, @backingInt(e) });
+        return false;
+    }
+    const home = makeHome(name);
+    linux.sync();
+    _ = linux.umount(HOME_DIR.ptr);
+    return home;
+}
+
+fn writeSettings(name: []const u8, hash: []const u8) bool {
+    const user = config.User.parse(name) orelse {
+        complain("'{s}' is not a user name", .{name});
+        return false;
+    };
+    config.save(CONFIG_DIR ++ "/tars.conf", .{ .user = user }) catch return false;
+
+    var line_buf: [account.NAME_MAX + account.HASH_MAX + 4]u8 = undefined;
+    const line = account.storeLine(&line_buf, name, hash) orelse {
+        complain("the shadow line for {s} does not fit", .{name});
+        return false;
+    };
+    const shadow = CONFIG_DIR ++ "/shadow";
+    // 0600 root. 해시는 root만 읽는다 — init이 부팅마다 /etc/shadow로 옮긴다.
+    const rc = linux.open(shadow.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true }, 0o600);
+    if (failed(rc)) |e| {
+        complain("cannot create {s} (errno {d})", .{ shadow, @backingInt(e) });
+        return false;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    writeAll(fd, line);
+    say("tars-install: wrote tars.conf (user={s}) and shadow\n", .{name});
+    return true;
+}
+
+fn makeHome(name: []const u8) bool {
+    var buf: [HOME_DIR.len + account.NAME_MAX + 2]u8 = undefined;
+    const dir = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ HOME_DIR, name }, 0) catch unreachable;
+    if (failed(linux.mkdir(dir.ptr, 0o700))) |e| {
+        complain("cannot create /home/{s} (errno {d})", .{ name, @backingInt(e) });
+        return false;
+    }
+    if (failed(linux.chown(dir.ptr, screen_args.USER_UID, screen_args.USER_GID))) |e| {
+        complain("cannot give /home/{s} to uid {d} (errno {d})", .{ name, screen_args.USER_UID, @backingInt(e) });
+        return false;
+    }
+    say("tars-install: made /home/{s}\n", .{name});
+    return true;
+}
+
 // ── 설치 ─────────────────────────────────────────────────────────────
 
 fn install(
@@ -655,6 +913,17 @@ fn install(
     const settings = !update and p2HasSettings(path);
     disk.planLines(Say{}, update, path, disk.formatSize(&size_buf, bytes), model, disk.stateWord(state), settings, new_ver, cur_ver, rot);
 
+    // ── 계정 (HP-M1) ──
+    // 새 설치만 묻는다. 갱신은 p2 · p3를 안 열므로(design 결정 10) 물을 것이 없다.
+    var acct = Account.defaults();
+    if (!update) {
+        if (!yes) acct = askAccount() orelse {
+            say("tars-install: not confirmed; nothing was changed.\n", .{});
+            return 1;
+        };
+        disk.userLine(Say{}, acct.name(), acct.default_pw);
+    }
+
     if (!yes) {
         say("type YES to continue: ", .{});
         var line: [64]u8 = undefined;
@@ -670,6 +939,11 @@ fn install(
         say("tars-install: updated. remove the boot medium and reboot.\n", .{});
         return 0;
     }
+
+    // ── 해시 (HP-M1 plan 확정 3) ──
+    var hash_buf: [account.HASH_MAX]u8 = undefined;
+    const hash = makeHash(acct.password(), &hash_buf, envp) orelse return 1;
+    acct.forgetPassword();
 
     // ── 파티션 ──
     // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
@@ -699,6 +973,13 @@ fn install(
     say("tars-install: formatting {s} (ext4, {s})\n", .{ p3, disk.HOME_LABEL });
     const mkext4 = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext4", "-e", "remount-ro", "-L", disk.HOME_LABEL, p3 };
     if (!runTool(&mkext4, null, WORK_DIR ++ "/mke2fs-home.log", envp)) return 1;
+
+    // 계정. 여기서 실패한 디스크는 파티션만 있고 ESP가 비어 TARS로 안 보인다 — 다시 치면
+    // 새 설치로 처음부터 간다.
+    if (!writeAccount(p2, p3, acct.name(), hash)) {
+        complain("the account was not written; run tars-install {s} again", .{path});
+        return 1;
+    }
 
     if (!fillEsp(p1, esp_conf, new_ver, false)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});

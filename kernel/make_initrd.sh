@@ -529,6 +529,11 @@ cp -r "$SYSROOT/usr/share/git-core/templates" "$WORKDIR/usr/share/git-core/"
 # 내려앉는다 — 없으면 "Failed to start message bus: Could not get UID and GID for username
 # messagebus"다. 101은 sshd(100) 다음 빈 번호이고 Debian은 동적으로 받는 사용자라 정해진
 # 번호가 없다.
+#
+# HP-M1: tty(5). init이 devpts를 gid=5로 붙여서 pty마다 이 그룹이 붙는다 — 이름이 없으면
+# `ls -l /dev/pts`가 숫자를 찍는다. 화면 셸이 사용자(uid 1000)로 뜨는 부팅은 init이 이 두
+# 파일에 사용자 줄을 더하고 audio 줄에 구성원을 적는다(init/src/login.zig의 applyAccount).
+# 그래서 여기는 사용자 없는 모양 그대로다.
 cat > "$WORKDIR/etc/passwd" <<'EOF'
 root:x:0:0:root:/:/bin/sh
 sshd:x:100:65534::/run/sshd:/usr/sbin/nologin
@@ -536,6 +541,7 @@ messagebus:x:101:101::/nonexistent:/usr/sbin/nologin
 EOF
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
+tty:x:5:
 audio:x:29:
 messagebus:x:101:
 nogroup:x:65534:

@@ -1,6 +1,7 @@
 const std = @import("std");
 const logline = @import("logline.zig");
 const screen_args = @import("screen_args");
+const account = @import("account.zig");
 const linux = std.os.linux;
 
 /// main.zig에도 같은 함수가 있다. 세 줄짜리 헬퍼 하나 때문에 공용 모듈을
@@ -281,6 +282,42 @@ pub const Timezone = struct {
     }
 };
 
+/// 화면 셸을 띄울 사용자(HP design 결정 5). 셋째 자유 문자열 키이고 `Timezone`과 같은
+/// 모양이다 — 힙이 없어 이름을 값으로 든다.
+///
+/// 규칙은 `account.validName` 하나다. 설치기가 질문의 답을 거르는 것도, init이 이 키를
+/// 읽는 것도 그 함수라서 "설치는 받았는데 부팅이 버린다"가 구조로 없다.
+///
+/// NUL 자리를 하나 더 잡는다. 이 이름이 terminal argv의 `user` 칸에 `.ptr`로 그대로
+/// 들어간다(`screen_args.Slot.user`).
+pub const User = struct {
+    name: [account.NAME_MAX + 1]u8,
+    len: usize,
+
+    /// 규칙 밖이면 null이다. 호출자가 로그를 찍고 "사용자 없음"(root 셸)에 머문다.
+    pub fn parse(value: []const u8) ?User {
+        if (!account.validName(value)) return null;
+        var u = User{ .name = @splat(0), .len = value.len };
+        @memcpy(u.name[0..value.len], value);
+        return u;
+    }
+
+    pub fn slice(self: *const User) []const u8 {
+        return self.name[0..self.len];
+    }
+
+    /// argv에 넣을 글자. `name`이 0으로 채워져 있어서 끝이 NUL이다.
+    pub fn arg(self: *const User) [:0]const u8 {
+        return self.name[0..self.len :0];
+    }
+
+    /// 둘 다 없거나 같은 이름이면 참. `config_test`의 필드 비교가 쓴다.
+    pub fn eql(a: ?User, b: ?User) bool {
+        if (a == null or b == null) return a == null and b == null;
+        return std.mem.eql(u8, a.?.slice(), b.?.slice());
+    }
+};
+
 /// `/usr/share/zoneinfo/<이름>`을 NUL로 닫아 buf에 만든다. 시스템 콜이 없는
 /// 순수 함수라 `config_test`가 본다 — 여는 것은 `main.zig`다(TS-M3 plan
 /// 결정 M3-C).
@@ -409,6 +446,16 @@ pub const Shell = enum {
     /// `make_initrd.sh`의 링크 셋과 짝이라는 것을 주석으로 못 박는 쪽을
     /// 고른다 — 어긋나면 증상은 "rc를 고쳤는데 안 읽힌다"이고,
     /// `config/check.sh`의 2차 부팅이 그것을 본다.
+    /// 사용자 홈 안의 rc 자리(HP design 결정 12). 셸이 원래 읽는 자리이고, 홈 없는 부팅의
+    /// root는 이 자리가 `/config`로 가는 링크다(`make_initrd.sh`).
+    pub fn homeRcPath(self: Shell) []const u8 {
+        return switch (self) {
+            .fish => ".config/fish/config.fish",
+            .bash => ".bashrc",
+            .zsh => ".zshrc",
+        };
+    }
+
     pub fn rcPath(self: Shell) [:0]const u8 {
         return switch (self) {
             .fish => "/config/fish.config",
@@ -810,6 +857,11 @@ pub const Config = struct {
     esc_latin: EscLatin = .on,
     /// 근거는 위 `ClipboardScope`의 문서 주석에 있다(CB-M0).
     clipboard: ClipboardScope = .shared,
+    /// 기본값이 없음(null)인 유일한 키다. 이 줄은 사람이 아니라 `tars-install`이 쓴다(HP
+    /// design 결정 5) — 설치 때 물은 이름이다. 없으면 화면 셸은 root로 뜬다. 있어도
+    /// `/home`이 안 붙은 부팅이면 root다(결정 3). `tars-config set`은 이 키를 거절한다
+    /// (`config_edit.installOnly`) — 이름을 바꾸면 홈과 비밀번호가 어긋난다.
+    user: ?User = null,
 
     /// terminal에 가는 전환 키의 집합(EL design 결정 1). `hangul_toggle`에
     /// `esc_latin`을 더한 것이다 — 파일에서는 둘이 따로 있는 키이고 argv에서는 한
@@ -1025,6 +1077,13 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "user")) {
+            // timezone과 같은 모양이다(HP-M1). 다른 키와 달리 떨어지는 자리가 기본값이
+            // 아니라 "사용자 없음"이고, 그 뜻을 로그에 적는다 — 화면 셸이 root로 뜬다.
+            c.user = User.parse(value) orelse {
+                log("user '{s}' is not a valid user name, the shell runs as root", .{value});
+                continue;
+            };
         } else {
             log("unknown config key '{s}'", .{key});
         }
@@ -1128,6 +1187,16 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.bluetooth),
         @tagName(c.clipboard),
     }) catch return error.FormatFailed;
+    // `user`는 있을 때만 적는다(HP-M1 plan Task 1). 없는 기계(ISO 부팅의 seed)의 파일은
+    // 이 키가 생기기 전과 바이트 하나 다르지 않다 — 그 파일을 판정하는 체인들이 그대로다.
+    const tail: []const u8 = if (c.user) |u| std.fmt.bufPrint(buf[text.len..],
+        \\# user: tars-install이 정한다. /home이 붙으면 화면의 셸이 이 사용자로 뜬다
+        \\#   여기서 바꾸지 않는다 — 홈과 비밀번호가 이 이름에 묶여 있다
+        \\#   (바꾸려면 tars-install <disk> --wipe)
+        \\user={s}
+        \\
+    , .{u.slice()}) catch return error.FormatFailed else "";
+    const whole = buf[0 .. text.len + tail.len];
 
     // O_EXCL을 쓰지 않는다. "파일이 있는가"는 load가 이미 답했고, save의
     // 계약은 "이 내용으로 만든다"이다. O_TRUNC는 나중에 이 함수가 갱신에도
@@ -1146,7 +1215,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
     const fd: i32 = @intCast(rc);
     defer _ = linux.close(fd);
 
-    return writeAll(fd, text, path);
+    return writeAll(fd, whole, path);
 }
 
 /// fd에 전부 쓴다. `save`와 `seedRcFiles`가 같은 루프를 쓴다 — SC-M1이
@@ -1346,6 +1415,65 @@ fn seedOneFile(path: [:0]const u8, text: []const u8) void {
     // `created`가 아니라 `seeded`다. `tars-init: created /config/tars.conf`
     // 를 config 체인이 1차·2차 부팅의 판정으로 쓰고 있어서, 앞부분이 겹치면
     // 그 검사가 seed 몇 줄까지 함께 보게 된다.
+    log("seeded {s}", .{path});
+}
+
+// ── 홈의 seed (HP-M1, design 결정 12) ───────────────────────────────
+
+/// 홈에 까는 seed의 머리말. seed 글자는 `/config`에 깔던 것과 같은 상수이고 그 안의 설명은
+/// "홈이 tmpfs라 실체가 /config에 있다"는 root의 이야기다 — 그 상수를 고치면 seed를 판정하는
+/// 검사들이 함께 흔들리므로, 홈의 사본 앞에만 이 두 줄을 붙인다. vimrc는 주석 글자가 `"`다.
+pub const HOME_SEED_HEADER =
+    \\# 이 파일은 홈(/home, 설치 디스크의 ext4)의 진짜 파일이다 — 고치면 재부팅을 넘어 남는다.
+    \\# 아래 머리말의 /config 이야기는 홈이 없는 부팅에서 root가 쓰는 사본의 것이다.
+    \\
+;
+pub const HOME_SEED_HEADER_VIM =
+    \\" 이 파일은 홈(/home, 설치 디스크의 ext4)의 진짜 파일이다 — 고치면 재부팅을 넘어 남는다.
+    \\" 아래 머리말의 /config 이야기는 홈이 없는 부팅에서 root가 쓰는 사본의 것이다.
+    \\
+;
+
+/// 사용자의 홈에 seed 다섯을 "없으면 만든다"(HP design 결정 12). `/config`의 seed와 같은 규칙
+/// (`O_EXCL` — 있으면 그때부터 사용자의 것)이고 다른 것은 자리와 주인이다. 만든 파일과
+/// `.config` · `.config/fish` 디렉터리를 uid · gid에 준다.
+///
+/// `home`은 이미 있는 디렉터리여야 한다(`main.zig`가 만든다). 홈의 셸 사본 셋은
+/// `shell`과 무관하게 다 깐다 — `seedRcFiles`와 같은 근거다(결정 7).
+pub fn seedHome(home: []const u8, uid: u32, gid: u32) void {
+    var dir_buf: [128]u8 = undefined;
+    for ([_][]const u8{ ".config", ".config/fish" }) |rel| {
+        const dir = std.fmt.bufPrintSentinel(&dir_buf, "{s}/{s}", .{ home, rel }, 0) catch return;
+        const rc = linux.mkdir(dir.ptr, 0o755);
+        if (failed(rc)) |e| {
+            if (e != .EXIST) {
+                log("could not create {s} (errno {d})", .{ dir, @backingInt(e) });
+                return;
+            }
+        } else {
+            _ = linux.chown(dir.ptr, uid, gid);
+        }
+    }
+    for (std.enums.values(Shell)) |sh| seedHomeFile(home, sh.homeRcPath(), HOME_SEED_HEADER, sh.rcSeed(), uid, gid);
+    seedHomeFile(home, ".gitconfig", HOME_SEED_HEADER, GITCONFIG_SEED, uid, gid);
+    seedHomeFile(home, ".vimrc", HOME_SEED_HEADER_VIM, VIMRC_SEED, uid, gid);
+}
+
+fn seedHomeFile(home: []const u8, rel: []const u8, header: []const u8, text: []const u8, uid: u32, gid: u32) void {
+    var path_buf: [128]u8 = undefined;
+    const path = std.fmt.bufPrintSentinel(&path_buf, "{s}/{s}", .{ home, rel }, 0) catch return;
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true }, 0o644);
+    if (failed(rc)) |e| {
+        if (e == .EXIST) return;
+        log("could not seed {s} (errno {d})", .{ path, @backingInt(e) });
+        return;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    // 주인을 먼저 바꾼다. 쓰다가 실패해도 사용자가 그 파일을 지우고 고칠 수 있다.
+    if (failed(linux.fchown(fd, uid, gid))) |e| log("could not give {s} to uid {d} (errno {d})", .{ path, uid, @backingInt(e) });
+    writeAll(fd, header, path) catch return;
+    writeAll(fd, text, path) catch return;
     log("seeded {s}", .{path});
 }
 

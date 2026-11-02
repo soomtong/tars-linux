@@ -21,14 +21,19 @@ pub const Group = enum {
     next_spawn,
     /// terminal의 argv. 화면을 다시 띄워야 바뀐다 — 대기다.
     terminal,
+    /// 다음 부팅부터(HP-M1). `user`는 passwd · group · shadow와 홈을 init이 부팅에 한 번
+    /// 짓는 키라서 reload로도 `reload terminal`로도 안 바뀐다 — 준비 안 된 이름으로 셸을
+    /// 띄우지 않는다. 화면 대기(`onScreen`)에도 안 든다.
+    boot,
 };
 
-/// 열세 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
+/// 열네 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
 /// `groupOf`가 컴파일 에러를 낸다.
 pub fn groupOf(comptime key: []const u8) Group {
     const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth" };
     const next = [_][]const u8{ "shell", "shell_config", "timezone" };
     const term = [_][]const u8{ "keyboard", "hangul_layout", "latin_layout", "hangul_toggle", "esc_latin", "clipboard" };
+    if (comptime std.mem.eql(u8, key, "user")) return .boot;
     inline for (now) |k| if (comptime std.mem.eql(u8, k, key)) return .now;
     inline for (next) |k| if (comptime std.mem.eql(u8, k, key)) return .next_spawn;
     inline for (term) |k| if (comptime std.mem.eql(u8, k, key)) return .terminal;
@@ -38,7 +43,10 @@ pub fn groupOf(comptime key: []const u8) Group {
 /// 화면이 쓰는 키 — terminal의 argv에 드는 것. `next_spawn`의 셋도 화면의 패널에는 argv
 /// (1 · 2번 셸과 rc 플래그)와 env(`TZ`)로 들어가서 화면에서는 대기다.
 pub fn onScreen(comptime key: []const u8) bool {
-    return groupOf(key) != .now;
+    return switch (comptime groupOf(key)) {
+        .now, .boot => false,
+        .next_spawn, .terminal => true,
+    };
 }
 
 /// 두 값이 같은가. 필드 타입마다 비교가 다르다 — enum은 `==`, `Ntp` · `Timezone`은 `eql`,
@@ -46,6 +54,7 @@ pub fn onScreen(comptime key: []const u8) bool {
 fn same(comptime T: type, a: T, b: T) bool {
     if (T == config.Toggles) return std.meta.eql(a, b);
     if (T == config.Ntp or T == config.Timezone) return a.eql(b);
+    if (T == ?config.User) return config.User.eql(a, b);
     if (@typeInfo(T) == .@"enum") return a == b;
     @compileError("reload.same cannot compare a " ++ @typeName(T));
 }
@@ -113,6 +122,11 @@ fn text(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
     if (T == config.Ntp) return v.arg(buf);
     if (T == config.Timezone) {
         const s = v.slice();
+        @memcpy(buf[0..s.len], s);
+        return buf[0..s.len];
+    }
+    if (T == ?config.User) {
+        const s = if (v) |u| u.slice() else "";
         @memcpy(buf[0..s.len], s);
         return buf[0..s.len];
     }
@@ -249,6 +263,7 @@ pub fn note(comptime key: []const u8) []const u8 {
         .now => "now",
         .next_spawn => "the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal",
         .terminal => "the screen keeps the old value until tars-config reload terminal",
+        .boot => "the next boot; init makes the account only at boot",
     };
 }
 

@@ -233,6 +233,9 @@ pub const Slot = enum(u8) {
     /// `Toggles.arg`의 글자 — 파일의 `hangul_toggle`에 `esc_latin`을 합친 것.
     toggles = 7,
     clipboard = 8,
+    /// 화면 셸을 띄울 사용자 이름, 또는 root로 띄운다는 뜻의 `NO_USER`(HP design 결정 3 · 8).
+    /// init이 `/home`이 붙고 `tars.conf`에 `user=`가 있을 때만 이름을 넣는다.
+    user = 9,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -244,7 +247,7 @@ pub const Slot = enum(u8) {
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
 /// 타입이다.
-pub const ARGC = 9;
+pub const ARGC = 10;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -283,6 +286,24 @@ pub const default_toggles: Toggles = .{
     .esc_latin = true,
 };
 pub const default_clipboard: ClipboardScope = .shared;
+/// `user` 칸의 "사용자 없음" — 화면 셸이 root로 뜬다. init 없이 띄운 terminal도 이 값이다.
+pub const NO_USER: [:0]const u8 = "none";
+pub const default_user: [*:0]const u8 = NO_USER.ptr;
+
+// ── 계정의 번호(HP design 결정 5 · 8) ──────────────────────────────────
+//
+// TARS의 사용자는 하나이고 번호가 고정이다. 세 프로그램이 이 상수 하나를 본다 —
+// 설치기(홈 디렉터리의 chown), init(passwd · group 줄), terminal(셸 자식의 setuid · pty
+// chown). 어긋나면 증상은 "홈이 남의 것"이거나 "셸이 자기 tty를 못 연다"이고 원인에서 멀다.
+
+/// 사용자의 uid, 그리고 같은 이름의 그룹 gid.
+pub const USER_UID: u32 = 1000;
+pub const USER_GID: u32 = 1000;
+/// devpts의 그룹. init이 `gid=5`로 devpts를 붙이고 terminal이 셸의 pty를 이 그룹으로 준다.
+/// 5는 Debian의 번호다.
+pub const TTY_GID: u32 = 5;
+/// 사용자의 보조 그룹 하나. alsa-lib의 dmix가 이 그룹을 찾는다(`make_initrd.sh`의 AU-M0 주석).
+pub const AUDIO_GID: u32 = 29;
 
 /// terminal argv의 값 전체(SA design 결정 7). init이 채우고 terminal이 읽는 것은 이
 /// 구조체 하나이고, 칸 번호와 글자는 아래 `encode` · `decode` 안에만 있다.
@@ -304,6 +325,8 @@ pub const Args = struct {
     latin: LatinLayout,
     toggles: Toggles,
     clipboard: ClipboardScope,
+    /// 사용자 이름이거나 `NO_USER`. init에서는 `Config.user`의 버퍼를 가리킨다.
+    user: [*:0]const u8,
 };
 
 /// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
@@ -322,6 +345,7 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     v[Slot.latin.index()] = a.latin.arg().ptr;
     v[Slot.toggles.index()] = a.toggles.arg(toggle_buf).ptr;
     v[Slot.clipboard.index()] = a.clipboard.arg().ptr;
+    v[Slot.user.index()] = a.user;
     return v;
 }
 
@@ -348,6 +372,7 @@ pub fn decode(v: Argv) Args {
         else
             default_toggles,
         .clipboard = enumAt(ClipboardScope, v, .clipboard, default_clipboard),
+        .user = v[Slot.user.index()] orelse default_user,
     };
 }
 
@@ -358,7 +383,7 @@ fn enumAt(comptime T: type, v: Argv, s: Slot, default: T) T {
 }
 
 /// 커널이 준 argv(`std.process.Init.minimal.args.vector`, 길이가 가변인 슬라이스)를
-/// `decode`가 받는 아홉 칸으로 옮긴다. 앞 `ARGC`칸까지만 보고 남는 칸은 null이다 —
+/// `decode`가 받는 열 칸으로 옮긴다. 앞 `ARGC`칸까지만 보고 남는 칸은 null이다 —
 /// 손으로 띄우면 인자가 없거나 적고, 더 많은 인자는 뜻이 없다(plan 확정 3).
 pub fn argvOf(args: []const [*:0]const u8) Argv {
     var v: Argv = @splat(null);

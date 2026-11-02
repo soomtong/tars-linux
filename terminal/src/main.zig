@@ -1613,6 +1613,48 @@ fn paneClip(rect: layout.Rect) image.Clip {
     };
 }
 
+/// HP-M1. 사용자 셸이 받는 것(design 결정 8 · 12). 시작 때 한 번 짓는다 — fork 뒤의 자식에서
+/// `setenv`(malloc)를 부르지 않으려는 것이다. 글자는 프로세스 수명 내내 산다.
+///
+/// 지금의 env(`std.c.environ`, init이 준 것 + 위 setenv 셋)를 옮기되 여섯을 뺀다. `HOME` ·
+/// `USER` · `LOGNAME` · `SHELL`은 사용자의 것으로 다시 넣는다. `XDG_DATA_HOME=/config/xdg`는
+/// root의 자리라 빼고(fish · zoxide는 기본값 `~/.local/share`로 간다), `HISTFILE=/config/…`은
+/// 같은 이름을 홈의 점 파일로 옮긴다(`/config/zsh_history` → `~/.zsh_history`).
+fn buildAccount(alloc: std.mem.Allocator, name: []const u8, shell_path: [*:0]const u8) !pty.Account {
+    const home = try std.fmt.allocPrintSentinel(alloc, "/home/{s}", .{name}, 0);
+    var list: std.ArrayList(?[*:0]const u8) = .empty;
+    var i: usize = 0;
+    while (std.c.environ[i]) |e| : (i += 1) {
+        const entry = std.mem.span(e);
+        const eq = std.mem.indexOfScalar(u8, entry, '=') orelse continue;
+        const key = entry[0..eq];
+        if (std.mem.eql(u8, key, "HISTFILE")) {
+            const value = entry[eq + 1 ..];
+            const base = value[(std.mem.lastIndexOfScalar(u8, value, '/') orelse return error.HistfileWithoutDir) + 1 ..];
+            try list.append(alloc, try std.fmt.allocPrintSentinel(alloc, "HISTFILE={s}/.{s}", .{ home, base }, 0));
+            continue;
+        }
+        const dropped = [_][]const u8{ "HOME", "USER", "LOGNAME", "SHELL", "XDG_DATA_HOME" };
+        var drop = false;
+        for (dropped) |d| drop = drop or std.mem.eql(u8, key, d);
+        if (!drop) try list.append(alloc, e);
+    }
+    try list.append(alloc, try std.fmt.allocPrintSentinel(alloc, "HOME={s}", .{home}, 0));
+    try list.append(alloc, try std.fmt.allocPrintSentinel(alloc, "USER={s}", .{name}, 0));
+    try list.append(alloc, try std.fmt.allocPrintSentinel(alloc, "LOGNAME={s}", .{name}, 0));
+    try list.append(alloc, try std.fmt.allocPrintSentinel(alloc, "SHELL={s}", .{shell_path}, 0));
+    try list.append(alloc, null);
+    const items = list.items;
+    return .{
+        .uid = screen_args.USER_UID,
+        .gid = screen_args.USER_GID,
+        .tty_gid = screen_args.TTY_GID,
+        .groups = .{screen_args.AUDIO_GID},
+        .home = home.ptr,
+        .envp = items[0 .. items.len - 1 :null].ptr,
+    };
+}
+
 /// 패널 하나를 띄운다 — PTY와 그 위의 셸, 그리고 그 출력을 해석할
 /// `vt.Screen`. 둘의 크기가 `rect`에서 함께 나오므로 셸이 아는 폭과 우리가
 /// 그리는 폭이 어긋날 수 없다.
@@ -1624,8 +1666,9 @@ fn spawnPane(
     path: [*:0]const u8,
     argv: [*:null]const ?[*:0]const u8,
     rect: layout.Rect,
+    account: ?*const pty.Account,
 ) !Pane {
-    const session = try pty.spawn(path, argv, rect.cols, rect.rows, CELL_W, ROW_HEIGHT);
+    const session = try pty.spawn(path, argv, rect.cols, rect.rows, CELL_W, ROW_HEIGHT, account);
     const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
     var pane: Pane = .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc), .cells_buf = undefined, .starts_buf = undefined };
     try allocPaneBuffers(alloc, &pane, rect);
@@ -3257,6 +3300,11 @@ const App = struct {
     shell_path: [*:0]const u8,
     /// 셸에 넘기는 argv. SC-M0 결정 3 — init이 `"none"`을 넘기면 둘째 칸이 null이다.
     argv: [2:null]?[*:0]const u8,
+    /// HP-M1. 셸을 띄울 사용자. init이 argv `user` 칸에 이름을 넣었으면 시작 때 한 번 짓고
+    /// 패널마다 같은 것을 쓴다. null이면 셸은 root다(홈 없는 부팅 · 손으로 띄운 terminal).
+    account: ?pty.Account = null,
+    /// 위 `account`의 이름. 로그 줄에만 쓴다.
+    user_name: []const u8 = "",
     /// 키보드 종류(IP-M2, design doc 결정 9)가 하는 일은 이것 하나다.
     swap_alt_meta: bool,
 
@@ -3479,6 +3527,10 @@ const App = struct {
 
     /// 준비 3. 셸의 환경과 argv, 클립보드, 첫 워크스페이스의 첫 패널, 설정이 여기까지
     /// 왔다는 로그 셋, 프레임 버퍼 둘, 키 상태.
+    fn accountPtr(self: *const App) ?*const pty.Account {
+        return if (self.account) |*acct| acct else null;
+    }
+
     fn spawnFirst(self: *App, a: screen_args.Args) !void {
         // 어느 셸을 띄울지는 init이 정해서 argv로 넘겨준다(CP-M2). 설정 파일을
         // 읽는 것은 PID 1의 일이고, terminal은 그 결정을 실행만 한다 — 파서가 두
@@ -3577,6 +3629,14 @@ const App = struct {
         self.argv = .{ self.shell_path, shell_flag };
         if (std.mem.eql(u8, std.mem.span(shell_flag), "none")) self.argv[1] = null;
 
+        // HP-M1(design 결정 8). init이 이름을 주면 셸은 그 사용자로 뜬다. env를 여기서 짓는 것은
+        // 위 setenv 셋(TERM · LANG · fish_greeting)이 끝난 뒤여야 해서다.
+        const user = std.mem.span(a.user);
+        if (!std.mem.eql(u8, user, screen_args.NO_USER)) {
+            self.account = try buildAccount(self.allocator, user, self.shell_path);
+            self.user_name = user;
+        }
+
         self.clips = .{ .scope = clip_scope, .shared = .init(self.allocator) };
 
         // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
@@ -3586,13 +3646,15 @@ const App = struct {
         self.workspaces[self.current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
         var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
         self.workspaces[self.current].?.tree.rects(self.whole, &boot_rects);
-        const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0]);
+        const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0], self.accountPtr());
         self.workspaces[self.current].?.panes[0] = first;
         // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
         // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
         // 개수를 세는 마커라 그대로 둔다.
-        logline.print("terminal: spawned child pid {d} ({s})\n", .{
-            first.session.child_pid, self.shell_path,
+        // HP-M1. 사용자로 띄웠으면 ` as <이름>`이 끝에 붙는다 — 앞부분은 그대로라 세는 체인이 안 흔들린다.
+        logline.print("terminal: spawned child pid {d} ({s}){s}{s}\n", .{
+            first.session.child_pid,                  self.shell_path,
+            if (self.account != null) " as " else "", self.user_name,
         });
         // 게이트가 "설정이 여기까지 왔는가"를 볼 수 있는 유일한 줄이다.
         // 이 값이 실제로 무슨 일을 하는지는 화면으로만 증명되지만(input/check.sh의
@@ -4000,7 +4062,7 @@ const App = struct {
                     // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
                     // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
                     // `pane>` 줄이 대신한다.
-                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf]);
+                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr());
                     ws.focus = leaf;
                 },
                 // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
@@ -4040,7 +4102,7 @@ const App = struct {
                     // 패널 하나짜리 트리의 사각형은 격자 전체다
                     // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
                     self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
-                    self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole);
+                    self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole, self.accountPtr());
                     self.current = n;
                     // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
                     // 워크스페이스에 가도록 여기서 다시 구한다.

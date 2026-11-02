@@ -14,6 +14,7 @@ const clock = @import("clock.zig");
 const firewall = @import("firewall.zig");
 const services = @import("services.zig");
 const login = @import("login.zig");
+const account = @import("account.zig");
 const control = @import("control.zig");
 const audio = @import("audio.zig");
 const reload = @import("reload.zig");
@@ -51,7 +52,18 @@ fn mountFs(
     fstype: [:0]const u8,
     flags: u32,
 ) bool {
-    const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, 0);
+    return mountFsData(source, target, fstype, flags, null);
+}
+
+/// `mountFs`에 옵션 글자(mount(2)의 data)를 준 것. 지금은 devpts 하나가 쓴다(HP-M1).
+fn mountFsData(
+    source: [:0]const u8,
+    target: [:0]const u8,
+    fstype: [:0]const u8,
+    flags: u32,
+    data: ?[*:0]const u8,
+) bool {
+    const rc = linux.mount(source.ptr, target.ptr, fstype.ptr, flags, if (data) |d| @intFromPtr(d) else 0);
     if (failed(rc)) |e| {
         logline.print("tars-init: failed to mount {s} at {s} (errno {d})\n", .{
             fstype, target, @backingInt(e),
@@ -61,6 +73,8 @@ fn mountFs(
     logline.print("tars-init: mounted {s} at {s}\n", .{ fstype, target });
     return true;
 }
+
+const DEVPTS_OPTIONS = std.fmt.comptimePrint("gid={d},mode=620,ptmxmode=666", .{screen_args.TTY_GID});
 
 /// devtmpfs는 드라이버가 등록한 장치 노드만 담기 때문에 /dev/pts 디렉터리를
 /// 만들어주지 않는다. forkpty()는 /dev/ptmx를 연 뒤 커널이 지정한
@@ -75,7 +89,12 @@ fn mountDevpts() void {
             return;
         }
     }
-    _ = mountFs("devpts", "/dev/pts", "devpts", 0);
+    // HP-M1(design 위험 4). 새 pty를 tty 그룹 · 620으로 만든다 — Debian의 devpts 옵션과
+    // 같다. 화면 셸이 사용자(uid 1000)로 뜨면 terminal이 그 셸의 pty를 사용자에게 주고,
+    // 그룹 쓰기는 `write` · `wall` 같은 도구의 자리다. root만 쓰던 부팅에는 차이가 없다 —
+    // 소유자는 연 쪽(root)이다. `ptmxmode`는 /dev/pts/ptmx의 모드이고 /dev/ptmx(devtmpfs)와
+    // 같게 둔다.
+    _ = mountFsData("devpts", "/dev/pts", "devpts", 0, DEVPTS_OPTIONS);
 }
 
 /// `/dev/fd`를 `/proc/self/fd`로 잇는다(BH-M2가 찾았다).
@@ -202,6 +221,25 @@ fn mountConfig() bool {
 ///
 /// SYNCHRONOUS가 없는 것이 이 함수의 핵심이다. `/config`는 설정 몇 줄을
 /// 어쩌다 쓰는 자리라 동기 쓰기와 rename 교체가 일관성을 지키지만, `/home`은
+/// 홈 디렉터리가 없으면 만들고(design 결정 7 — 디스크를 다른 도구로 비운 경우) seed를 깐다.
+/// 보통은 설치기가 이미 만들어 두었다. 실패해도 부팅은 간다 — 셸은 `chdir`에 실패하면 `/`에서
+/// 뜬다(terminal).
+fn prepareHome(name: []const u8) void {
+    var buf: [account.HOME_ROOT.len + account.NAME_MAX + 2]u8 = undefined;
+    const home = account.homePath(&buf, name) orelse return;
+    const rc = linux.mkdir(home.ptr, 0o700);
+    if (failed(rc)) |e| {
+        if (e != .EXIST) {
+            logline.print("tars-init: could not create {s} (errno {d})\n", .{ home, @backingInt(e) });
+            return;
+        }
+    } else {
+        _ = linux.chown(home.ptr, screen_args.USER_UID, screen_args.USER_GID);
+        logline.print("tars-init: created {s}\n", .{home});
+    }
+    config.seedHome(home, screen_args.USER_UID, screen_args.USER_GID);
+}
+
 /// 파일이 많고 쓰기가 잦은 자리(홈 · 패키지 매니저)라 ext4의 저널이 그 몫을
 /// 맡는다. 쓰기 성질이 반대라 수단도 반대다(docs/decisions/project_config_fs_ext2.md).
 ///
@@ -614,6 +652,9 @@ const Live = struct {
     screen: config.Config,
     mounted: bool,
     noconfig: bool,
+    /// HP-M1. 부팅이 정한 사용자(`Boot.user`). reload가 셸을 바꾸면 passwd의 그 줄도 다시 쓴다.
+    /// 사용자 자체는 reload로 안 바뀐다(`reload.Group.boot`).
+    user: ?[]const u8 = null,
     /// 커널이 준 env. 블록을 다시 지을 때의 바탕이다.
     kernel_env: [*:null]const ?[*:0]const u8,
     /// env 블록 두 벌과 TZ 글자 두 벌. reload가 쓰지 않는 쪽에 새 블록을 다 지은 뒤 `envp`
@@ -668,6 +709,8 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     a.latin = new.latin_layout;
     a.toggles = new.screenToggles();
     a.clipboard = new.clipboard;
+    // `user` 칸은 안 바꾼다(HP-M1) — `decode`가 꺼낸 부팅의 값이 그대로 다시 들어간다. 계정은
+    // 부팅에 한 번 지어지므로 `tars.conf`를 고친 이름으로 셸을 띄우면 준비 안 된 이름이다.
     term.argv = screen_args.encode(a, &live.toggle);
     term.rescue = if (live.mounted and new.shell_config == .on)
         .{ .slot = TERMINAL_FLAG_SLOT, .flag = shell.noConfigFlag() }
@@ -724,7 +767,7 @@ fn placeService(children: []Child, live: *Live, i: usize, e: *const services.Ent
         .kind = .service,
         .label = s.label(),
         .path = s.path(),
-        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
+        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null, null },
     };
 }
 
@@ -762,6 +805,8 @@ fn rebuildShellAndEnv(children: []Child, live: *Live, new: config.Config) void {
         n += 1;
     }
     login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, shell.path(), ssh_env[0..n]);
+    // HP-M1. 사용자 줄의 셸 칸도 같은 셸로. 화면의 셸은 `reload terminal`까지 옛 셸이다.
+    if (live.user) |name| login.applyAccount(.{}, name, shell.path());
     logline.print("tars-init: reload: console shell {s}, env {s}\n", .{ shell.path(), tz_entry });
 }
 
@@ -1127,6 +1172,13 @@ const Boot = struct {
     /// 설정 디스크가 `/config`에 붙었는가. seed · 탈출로 1 · 무선 · chronyd의 조건이다.
     mounted: bool = false,
     noconfig: bool = false,
+    /// HP-M1. `/home`(p3 ext4 `tars-home`)이 붙었는가.
+    home: bool = false,
+    /// 화면 셸을 띄울 사용자 — `/home`이 붙고 `tars.conf`에 `user=`가 있을 때만(design 결정 3).
+    /// `cfg.user`의 버퍼를 가리킨다. null이면 화면 셸은 root다.
+    user: ?[]const u8 = null,
+    /// terminal argv의 `user` 칸. `cfg.user`의 NUL로 끝나는 이름이거나 `NO_USER`.
+    user_arg: [*:0]const u8 = screen_args.NO_USER.ptr,
 
     // ── 장치(`probeDevices`) ───────────────────────────────────────────
     /// sysfs를 붙인 뒤여야 한다. terminal의 argv 4번 칸이 이 안을 가리킨다.
@@ -1170,7 +1222,7 @@ const Boot = struct {
         self.mounted = mountConfig();
         // 설정 바로 뒤, 설정을 읽기 전이다. 실패해도 부팅은 간다 — 결과는
         // 로그 한 줄이고 M1이 계정을 만들 때 다시 본다.
-        _ = mountHome();
+        self.home = mountHome();
         self.cfg = loadConfig(self.mounted);
         // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
         //
@@ -1220,6 +1272,11 @@ const Boot = struct {
             // 자체다: 에러가 안 나는 것이 화면 좌표를 지키는 것이다.
             makeXdgDir();
         }
+        // HP-M1. 사용자를 고르고 홈을 준비한다. 위 `/config`의 seed는 root의 것으로 그대로
+        // 깐다 — 시리얼 콘솔 셸과 ssh는 root이고 그 링크(`/.bashrc` → `/config/bashrc`)를
+        // 읽는다. 사용자의 seed는 홈의 진짜 파일이다(design 결정 12).
+        self.pickUser();
+        if (self.user) |name| prepareHome(name);
         // 줄을 새로 만들지 않고 이 줄을 넓힌다(HI-M2). 다른 체인들이
         // `tars-init: config shell=`로 grep하고 있어서 앞부분이 안 바뀌어야 한다.
         //
@@ -1254,6 +1311,23 @@ const Boot = struct {
     }
 
     /// 단계 3. DRM 존재 로그, 키보드 경로, 전원 버튼. sysfs를 붙인 뒤여야 한다.
+    /// HP design 결정 3. 화면 셸의 주인을 정하고 그 이유를 한 줄로 남긴다.
+    fn pickUser(self: *Boot) void {
+        if (!self.home) {
+            logline.print("tars-init: no tars-home disk, shell runs as root\n", .{});
+            return;
+        }
+        const u = if (self.cfg.user) |*u| u else {
+            logline.print("tars-init: no user= in {s}, shell runs as root\n", .{CONFIG_PATH});
+            return;
+        };
+        self.user = u.slice();
+        self.user_arg = u.arg().ptr;
+        logline.print("tars-init: user {s} uid {d} home {s}/{s}\n", .{
+            u.slice(), screen_args.USER_UID, account.HOME_ROOT, u.slice(),
+        });
+    }
+
     fn probeDevices(self: *Boot) void {
         logDrmDevicePresence();
         devices.resolveKeyboard(devices.SYS_INPUT, &self.keyboard_path);
@@ -1335,6 +1409,9 @@ const Boot = struct {
             ssh_env_len += 1;
         }
         login.apply(login.PASSWD_PATH, login.SSH_ENV_PATH, self.shell_path, ssh_env[0..ssh_env_len]);
+        // HP-M1(design 결정 7). passwd · group · shadow에 사용자를 넣는다. 셸 칸이 `shell_path`라
+        // 여기다 — `resolveShell` 뒤여야 한다.
+        if (self.user) |name| login.applyAccount(.{}, name, self.shell_path);
     }
 
     /// 단계 5. 일꾼 둘 — 믹서는 fork만 하고 돌아오고, 방화벽은 여기서 기다린다.
@@ -1434,6 +1511,7 @@ const Boot = struct {
             .latin = self.cfg.latin_layout,
             .toggles = self.cfg.screenToggles(),
             .clipboard = self.cfg.clipboard,
+            .user = self.user_arg,
         }, &self.terminal_toggle_buf);
 
         self.live = Live{
@@ -1441,6 +1519,7 @@ const Boot = struct {
             .screen = self.cfg,
             .mounted = self.mounted,
             .noconfig = self.noconfig,
+            .user = self.user,
             .kernel_env = self.kernel_env,
             .envp = self.envp,
         };
@@ -1475,7 +1554,7 @@ const Boot = struct {
             // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
             // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
             // 설정을 따른다(결정 4).
-            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null },
+            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null, null },
             .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
         };
         // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·
@@ -1528,7 +1607,7 @@ const Boot = struct {
                     .kind = .service,
                     .label = "",
                     .path = "",
-                    .argv = .{ null, null, null, null, null, null, null, null, null },
+                    .argv = @splat(null),
                     .config_off = true,
                 };
             }

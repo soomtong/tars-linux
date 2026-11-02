@@ -364,6 +364,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 커널에 udev가 없고(터미널이 uevent를 직접 듣는다), 사용자 추가는 make_initrd.sh의
 # passwd 블록이 한다. libsystemd0 · libselinux1 · libelf1t64 · zlib1g · libzstd1 · libpcre2-8-0은
 # 위에서 이미 받았다.
+#
+# ── HP-M1: 층 17(계정) ─────────────────────────────────────────────────────
+#
+# whois는 mkpasswd 하나 때문에 받는다(HP design 위험 2, plan 확정 2). tars-install이
+# `mkpasswd -m yescrypt -s`로 비밀번호를 stdin에서 받아 해시를 만든다 — init과 설치기는
+# musl 정적이라 libcrypt를 직접 못 부른다. 의존(libcrypt1 · libidn2-0)은 위에서 이미
+# 받았다. whois 바이너리 자체는 sysroot에만 풀리고 initrd에는 안 간다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -516,7 +523,8 @@ RUN dpkg --add-architecture amd64 \
         libexpat1:amd64 \
         libapparmor1:amd64 \
         libbz2-1.0:amd64 \
-        libatomic1:amd64) \
+        libatomic1:amd64 \
+        whois:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 

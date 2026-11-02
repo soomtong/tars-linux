@@ -6,6 +6,7 @@
 //! 새로 나온다(M2-A). sshd를 안 켠 기계에서도 쓴다.
 const std = @import("std");
 const logline = @import("logline.zig");
+const account = @import("account.zig");
 const linux = std.os.linux;
 
 pub const PASSWD_PATH: [:0]const u8 = "/etc/passwd";
@@ -88,10 +89,17 @@ fn readAll(path: [:0]const u8, buf: []u8) ?[]const u8 {
 }
 
 fn writeAll(path: [:0]const u8, text: []const u8) bool {
-    const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644);
+    return writeMode(path, text, 0o644);
+}
+
+/// `writeAll`에 모드를 준 것. 이미 있던 파일은 `open`의 모드가 안 먹으므로 `fchmod`로 다시
+/// 정한다 — shadow가 한 번이라도 0644로 생겼으면 그대로 남는 길을 막는다.
+fn writeMode(path: [:0]const u8, text: []const u8, mode: u32) bool {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, mode);
     if (failed(rc)) |_| return false;
     const fd: i32 = @intCast(rc);
     defer _ = linux.close(fd);
+    if (failed(linux.fchmod(fd, mode)) != null) return false;
     var done: usize = 0;
     while (done < text.len) {
         const n = linux.write(fd, text[done..].ptr, text.len - done);
@@ -131,6 +139,65 @@ pub fn apply(
             shell_path,
             if (passwd_ok) "set" else "NOT set",
             if (env_ok) "written" else "NOT written",
+        });
+    }
+}
+
+// ── 계정 (HP-M1) ─────────────────────────────────────────────────────
+
+pub const GROUP_PATH: [:0]const u8 = "/etc/group";
+pub const SHADOW_PATH: [:0]const u8 = "/etc/shadow";
+/// 설치기가 p2에 쓴 해시(`<이름>:<해시>`). 영속되는 것은 이것과 `tars.conf`의 `user=`뿐이다
+/// (HP design 결정 7).
+pub const SHADOW_STORE_PATH: [:0]const u8 = "/config/shadow";
+
+/// `applyAccount`가 만지는 네 파일. 경로를 인자로 받는 것은 `apply`와 같은 이유다 —
+/// `login_test`가 개발 기계의 /etc를 안 건드린다.
+pub const AccountPaths = struct {
+    passwd: [:0]const u8 = PASSWD_PATH,
+    group: [:0]const u8 = GROUP_PATH,
+    shadow: [:0]const u8 = SHADOW_PATH,
+    store: [:0]const u8 = SHADOW_STORE_PATH,
+};
+
+/// passwd · group · shadow에 사용자 하나를 넣는다(HP design 결정 7). 부팅과 reload가 부른다 —
+/// 셸이 바뀌면 사용자 줄의 셸 칸도 따라 바뀐다. 같은 사용자를 두 번 넣지 않는다(`account.with*`).
+///
+/// 해시를 못 얻으면 사용자 줄을 잠근다(`!`). 부팅은 간다 — 비밀번호의 쓰임은 sudo(M2)라서
+/// 그때 거절될 뿐이고 화면 셸은 뜬다. 무엇이 실패해도 반환한다(`apply`와 같다).
+pub fn applyAccount(paths: AccountPaths, name: []const u8, shell_path: []const u8) void {
+    var in_buf: [PASSWD_MAX]u8 = undefined;
+    var out_buf: [PASSWD_MAX]u8 = undefined;
+    const passwd_ok = blk: {
+        const in = readAll(paths.passwd, &in_buf) orelse break :blk false;
+        const out = account.withPasswd(in, name, shell_path, &out_buf) orelse break :blk false;
+        break :blk writeAll(paths.passwd, out);
+    };
+    const group_ok = blk: {
+        const in = readAll(paths.group, &in_buf) orelse break :blk false;
+        const out = account.withGroup(in, name, &out_buf) orelse break :blk false;
+        break :blk writeAll(paths.group, out);
+    };
+
+    var store_buf: [512]u8 = undefined;
+    const stored: ?[]const u8 = if (readAll(paths.store, &store_buf)) |t| account.parseStore(t, name) else null;
+    const hash = stored orelse blk: {
+        logline.print("tars-init: no password for {s} in {s}, sudo will refuse it\n", .{ name, paths.store });
+        break :blk account.LOCKED_HASH;
+    };
+    const shadow_ok = blk: {
+        const text = account.shadowFile(&out_buf, name, hash) orelse break :blk false;
+        break :blk writeMode(paths.shadow, text, 0o600);
+    };
+
+    if (passwd_ok and group_ok and shadow_ok) {
+        logline.print("tars-init: {s} is in {s}, {s} and {s}\n", .{ name, paths.passwd, paths.group, paths.shadow });
+    } else {
+        logline.print("tars-init: account {s}: passwd {s}, group {s}, shadow {s}\n", .{
+            name,
+            if (passwd_ok) "written" else "NOT written",
+            if (group_ok) "written" else "NOT written",
+            if (shadow_ok) "written" else "NOT written",
         });
     }
 }

@@ -39,6 +39,7 @@ const OTHER = [_]edit.Pair{
     .{ .key = "bluetooth", .value = "on" },
     .{ .key = "esc_latin", .value = "off" },
     .{ .key = "clipboard", .value = "pane" },
+    .{ .key = "user", .value = "hpuser" },
 };
 
 fn other(key: []const u8) ?[]const u8 {
@@ -139,11 +140,13 @@ pub fn main() !void {
     // 필드를 더하고 parse의 갈래를 빠뜨리면 여기서 "unknown config key"를 듣는다.
     // 기본값을 글자로 바꿨다가 되읽어 같은지도 본다 — valueText와 parse가 같은
     // 글자를 쓴다는 것이 `set`이 쓰는 줄을 init이 읽는다는 뜻이다.
-    if (edit.KEYS.len != 13) return fail("{d} keys, want 13 (the seed has thirteen)", .{edit.KEYS.len});
+    // 열셋은 seed에 있고 열넷째 `user`는 tars-install만 쓴다(HP-M1).
+    if (edit.KEYS.len != 14) return fail("{d} keys, want 14 (thirteen in the seed, and user)", .{edit.KEYS.len});
     const defaults = config.Config{};
     for (edit.KEYS) |key| {
         var buf: [edit.VALUE_MAX]u8 = undefined;
-        try expectOk(key, valueOf(&defaults, key, &buf), valueOf(&defaults, key, &buf));
+        // `user`의 기본값은 없음(null)이라 적을 글자가 없다 — 빈 값은 parse가 거절한다.
+        if (!edit.installOnly(key)) try expectOk(key, valueOf(&defaults, key, &buf), valueOf(&defaults, key, &buf));
         const v = other(key) orelse return fail("OTHER has no row for {s}", .{key});
         try expectOk(key, v, v);
         if (edit.hint(key) == null) return fail("no hint for {s}", .{key});
@@ -151,7 +154,11 @@ pub fn main() !void {
     if (OTHER.len != edit.KEYS.len) return fail("OTHER has {d} rows for {d} keys", .{ OTHER.len, edit.KEYS.len });
     if (edit.isKey("colour") or edit.hint("colour") != null) return fail("colour is a key", .{});
     if (!std.mem.eql(u8, edit.hint("shell").?, "fish | bash | zsh")) return fail("shell hint {s}", .{edit.hint("shell").?});
-    std.debug.print("config_edit_test: thirteen keys, each read back by parse as written\n", .{});
+    // set · reset이 안 받는 키는 user 하나다(HP-M1 plan 확정 5).
+    for (edit.KEYS) |key| {
+        if (edit.installOnly(key) != std.mem.eql(u8, key, "user")) return fail("installOnly({s})", .{key});
+    }
+    std.debug.print("config_edit_test: fourteen keys, each read back by parse as written; only user is install-only\n", .{});
 
     // ── 2. judge — init이 하는 말이 곧 거절의 이유다 ───────────────────
     try expectRefused("shell", "fsh", "unknown shell 'fsh', falling back to fish");
@@ -237,6 +244,8 @@ pub fn main() !void {
     _ = linux.unlink(SEED_PATH);
     if (seed.len < 500) return fail("the seed is only {d} bytes", .{seed.len});
     for (edit.KEYS) |key| {
+        // `user`는 seed에 줄이 없고 `set`이 안 받는다(`installOnly`) — 바꿀 줄이 없다.
+        if (edit.installOnly(key)) continue;
         var out: [config.MAX_FILE * 2]u8 = undefined;
         const v = other(key).?;
         const got = edit.setLine(&out, seed, key, v).?;
@@ -418,7 +427,7 @@ pub fn main() !void {
         const c = config.parse(text);
         const keys_tail = "#keyboard=apple\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
-        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n";
+        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n#user=\n";
         var sbuf: [2048]u8 = undefined;
         var s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, text, &c, null);

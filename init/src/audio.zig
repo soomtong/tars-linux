@@ -2,6 +2,7 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const linux = std.os.linux;
 const power = @import("power.zig");
+const screen_args = @import("screen_args");
 
 // 부팅이 믹서를 켜고, 끌 때 기억한다(AU design 결정 4). 믹서를 실제로 만지는 것은
 // alsa-utils의 alsactl이다 — 이 파일은 그것을 언제 · 어떤 인자로 부르고 그 끝을
@@ -162,6 +163,43 @@ fn exists(path: [:0]const u8) bool {
 }
 
 /// 카드 노드를 기다린다. 기다린 밀리초를 돌려주고, 상한까지 없으면 null이다.
+/// 사운드 노드의 자리. 카드 0의 제어 노드(`CARD_PATH`)가 이 안에 있다.
+const SND_DIR: [:0]const u8 = "/dev/snd";
+
+/// HP-M1(design 위험 10). `/dev/snd`의 노드를 `root:audio 0660`으로. udev가 없어서 devtmpfs가
+/// 만든 노드는 root 0600이고(HP-M1 실측 10), 그대로면 화면 셸(uid 1000)이 소리를 못 낸다.
+/// Debian에서 udev 규칙이 하는 일과 같은 모양이다 — 사용자는 audio(29)의 구성원이다.
+///
+/// 카드가 선 뒤 한 번이다. 부팅 뒤 꽂은 USB 헤드셋의 노드는 안 바뀐다 — init에 uevent가 없다
+/// (`carryover.md`의 HP 절). 실패해도 alsactl은 간다(root는 열 수 있다).
+fn openToAudio() void {
+    const rc = linux.open(SND_DIR.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (failed(rc)) |e| {
+        logline.print("tars-init: audio: cannot open {s} (errno {d}), its nodes stay root 600\n", .{ SND_DIR, @backingInt(e) });
+        return;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var count: usize = 0;
+    var refused: usize = 0;
+    var buf: [2048]u8 align(8) = undefined;
+    while (true) {
+        const n = linux.getdents64(fd, &buf, buf.len);
+        if (failed(n) != null or n == 0) break;
+        var off: usize = 0;
+        while (off < n) {
+            const d: *align(1) const linux.dirent64 = @ptrCast(&buf[off]);
+            off += d.reclen;
+            const name: [*:0]const u8 = @ptrCast(&d.name);
+            if (name[0] == '.') continue;
+            const own = linux.fchownat(fd, name, 0, screen_args.AUDIO_GID, 0);
+            const mode = linux.fchmodat(fd, name, 0o660);
+            if (failed(own) != null or failed(mode) != null) refused += 1 else count += 1;
+        }
+    }
+    logline.print("tars-init: audio: {d} nodes in {s} are root:audio 660 ({d} refused)\n", .{ count, SND_DIR, refused });
+}
+
 fn waitForCard() ?u32 {
     var waited: u32 = 0;
     while (true) {
@@ -192,6 +230,7 @@ pub fn start(storage_mounted: bool, envp: [*:null]const ?[*:0]const u8) void {
         const waited = waitForCard() orelse linux.exit(NO_CARD_EXIT);
         // 기다린 적이 있을 때만 찍는다(mountConfig와 같은 규칙).
         if (waited > 0) logline.print("tars-init: audio: sound card appeared after {d}ms\n", .{waited});
+        openToAudio();
         _ = linux.execve(ALSACTL_PATH.ptr, argvFor(worker_verb), envp);
         logline.print("tars-init: cannot exec {s}\n", .{ALSACTL_PATH});
         linux.exit(127);

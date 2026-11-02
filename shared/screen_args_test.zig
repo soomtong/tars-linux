@@ -105,7 +105,7 @@ pub fn main() !void {
         if (!std.mem.eql(u8, sa.default_toggles_arg, text)) return error.DefaultTogglesDrifted;
     }
 
-    // ── 5. 자리 — 1번부터 8번까지 빈 칸 없이, 0번은 비워 둔다 ──
+    // ── 5. 자리 — 1번부터 9번까지 빈 칸 없이, 0번은 비워 둔다 ──
     {
         var seen: [sa.ARGC]bool = @splat(false);
         for (std.enums.values(sa.Slot)) |s| seen[@backingInt(s)] = true;
@@ -132,6 +132,7 @@ pub fn main() !void {
             .latin = sa.default_latin,
             .toggles = sa.default_toggles,
             .clipboard = sa.default_clipboard,
+            .user = sa.default_user,
         };
         const all_other = sa.Args{
             .shell_path = "/usr/bin/zsh",
@@ -142,11 +143,12 @@ pub fn main() !void {
             .latin = .dvorak,
             .toggles = .{ .shift_space = true },
             .clipboard = .pane,
+            .user = "hpuser",
         };
         var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
         for ([_]sa.Args{ all_default, all_other }) |a| {
             const v = sa.encode(a, &tbuf);
-            // 0번은 terminal 자신이고, 아홉 칸이 전부 차 있다.
+            // 0번은 terminal 자신이고, 열 칸이 전부 차 있다.
             if (!std.mem.eql(u8, std.mem.span(v[0].?), sa.TERMINAL_PATH)) return error.ArgvZeroNotTerminal;
             for (v, 0..) |slot, i| {
                 if (slot == null) {
@@ -168,7 +170,8 @@ pub fn main() !void {
             !std.mem.eql(u8, std.mem.span(d.shell_flag), std.mem.span(sa.default_shell_flag)) or
             !std.mem.eql(u8, std.mem.span(d.device_path), std.mem.span(sa.default_device_path)) or
             d.keyboard != sa.default_keyboard or d.hangul != sa.default_hangul or d.latin != sa.default_latin or
-            d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles))
+            d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles) or
+            !std.mem.eql(u8, std.mem.span(d.user), sa.NO_USER))
         {
             return error.EmptyArgvNotDefault;
         }
@@ -183,6 +186,7 @@ pub fn main() !void {
             .latin = .dvorak,
             .toggles = .{ .lctrl_tap = true },
             .clipboard = .pane,
+            .user = "hpuser",
         }, &tbuf);
         v[sa.Slot.hangul.index()] = "bogus";
         const b = sa.decode(v);
@@ -207,9 +211,9 @@ pub fn main() !void {
                 return error.ArgvOfOverfilled;
             }
         }
-        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "extra" };
+        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "extra" };
         const w = sa.argvOf(&long);
-        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "h")) return error.ArgvOfLastSlot;
+        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "i")) return error.ArgvOfLastSlot;
         // 빈 슬라이스(인자가 하나도 없다)는 전부 null이고 decode가 기본값을 준다.
         const none = sa.argvOf(&[_][*:0]const u8{});
         if (sa.decode(none).keyboard != sa.default_keyboard) return error.ArgvOfEmpty;
@@ -218,12 +222,13 @@ pub fn main() !void {
     std.debug.print("screen_args_test: all checks passed\n", .{});
 }
 
-/// `Args` 둘이 같은가. 포인터 셋은 글자로, 나머지는 값으로 본다.
+/// `Args` 둘이 같은가. 포인터 넷은 글자로, 나머지는 값으로 본다.
 fn expectArgsEql(got: sa.Args, want: sa.Args) !void {
     const strs = [_][2][*:0]const u8{
         .{ got.shell_path, want.shell_path },
         .{ got.shell_flag, want.shell_flag },
         .{ got.device_path, want.device_path },
+        .{ got.user, want.user },
     };
     for (strs) |pair| {
         if (!std.mem.eql(u8, std.mem.span(pair[0]), std.mem.span(pair[1]))) {

@@ -499,6 +499,15 @@ pub fn planLines(
     }
 }
 
+/// 새 설치가 만들 계정 한 줄(HP-M1 plan Task 2). 질문 뒤 · YES 앞에, `--yes`면 계획 바로
+/// 뒤에 찍는다 — 질문이 없는 길에서도 무엇이 만들어지는지 보인다. 비밀번호 글자는 어디에도
+/// 안 찍고 기본값인지만 말한다.
+pub fn userLine(sink: anytype, name: []const u8, default_password: bool) void {
+    sink.print("  user  {s}  (home /home/{s}, password {s})\n", .{
+        name, name, if (default_password) "tars-linux, the default" else "as typed",
+    });
+}
+
 // ── 슬롯 회전 (KU-M0) ────────────────────────────────────────────────
 
 /// 새 이미지 두 파일에 더하는 여유. conf · version 몇 바이트와 FAT의 클러스터

@@ -6,16 +6,21 @@ cd "$(dirname "$0")" || exit 1
 # HP-M0: 스물다섯째 체인. 설치기가 셋째 파티션 `tars-home`(ext4, 나머지 전부)을
 # 만들고, 설치된 디스크로 뜬 init이 `/config`(ext2 · sync) 옆에 `/home`(ext4 ·
 # async)을 붙이며, 재부팅을 넘어 홈의 파일이 남고, 남의 ext4는 라벨로 거르는가
-# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7. 판정 4 · 8은 M1 · M2).
+# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을 더했다. 판정 8은 M2).
 #
 # 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
-#   1  ISO + 빈 5GiB NVMe + 3GiB NVMe   3GiB는 거절(판정 7) · 그 위에 ext4 굽기 시간(실측 3) · 설치 · 배치(판정 1)
-#   2  NVMe만                           init이 p2와 p3를 잡는다(판정 2) · 마운트 옵션(판정 3) · 홈에 마커를 쓴다
-#   3  NVMe + 남의 ext4(debian-home)     마커가 남았다(판정 5) · 남의 디스크는 홈이 아니다(판정 6)
+#   1  ISO + 빈 5GiB NVMe + 3GiB NVMe   홈 없는 부팅은 root(결정 3) · 3GiB는 거절(판정 7) · ext4 굽기 시간(실측 3) ·
+#                                       질문 길로 hpuser를 설치(판정 9) · 배치(판정 1)
+#   2  NVMe만                           p2와 p3(판정 2) · 마운트 옵션(판정 3) · 화면 셸이 hpuser다(판정 4) ·
+#                                       계정 파일의 권한(판정 10) · 사용자로 마커를 쓴다 · 사용자로 막히는 것(실측 10)
+#   3  NVMe + 남의 ext4(debian-home)     마커 둘이 남았다(판정 5) · 남의 디스크는 홈이 아니다(판정 6)
 #
 # 모양은 install/check.sh의 것이다 — 시리얼 FIFO로 콘솔 셸에 한 줄씩 넣고 그
-# 출력을 로그에서 읽는다. 키를 안 보내므로 monitor · QMP가 없다. RP-M0의 예약
-# 범위에서 이 체인 몫은 45497(monitor) · 45498(QMP)이고 지금은 둘 다 안 연다.
+# 출력을 로그에서 읽는다. 시리얼 셸은 root로 남는다(HP-M1 plan 확정 1). 화면 셸은 키를
+# 쳐서 보지 않고 그 pid의 /proc을 root가 읽는다 — uid · env · cwd · pty가 거기 다 있다.
+# "사용자로 쓴다"는 setpriv(guest_tools 층 17)로 한다. 그래서 키를 안 보내고 monitor ·
+# QMP가 없다. RP-M0의 예약 범위에서 이 체인 몫은 45497(monitor) · 45498(QMP)이고 지금은
+# 둘 다 안 연다.
 # QEMU는 kill로 끈다 — 전원 버튼이 아니다. 홈의 마커는 그래서 `sync`를 치고
 # 쓴다(ext4는 async라 안 치면 다음 부팅에 없다 — 그것이 design 결정 1의 다른 면이다).
 
@@ -170,6 +175,12 @@ boot_guest 1 -cdrom ../out/tars.iso \
   -drive file="$SMALL",if=none,id=small,format=raw \
   -device nvme,drive=small,serial=tarssmall
 
+# 결정 3. ISO 부팅에는 /home이 없고 화면 셸은 root다.
+if ! grep -aqF "tars-init: no tars-home disk, shell runs as root" "$LOG"; then
+  fail "the ISO boot did not say its shell runs as root" "tars-init: no tars-home" "tars-init: user"
+fi
+echo "the ISO boot has no home and says the shell runs as root"
+
 # 판정 7. 3GiB는 YES 전에 거절된다. formatSize는 10진 버림이라 3,221,225,472는
 # `3 GB`다. 아무것도 안 썼다 — 파티션 테이블 줄이 없다.
 send "tars-install /dev/nvme1n1 --yes; printf 'hp-small-%s\n' done"
@@ -191,18 +202,50 @@ wait_log_re "hp-mkfs-[0-9]+-ms" 120 \
   || fail "mke2fs -t ext4 on the 3 GiB disk never finished" "mke2fs" "hp-mkfs"
 echo "mke2fs -t ext4 on 3 GiB took $(grep -aoE 'hp-mkfs-[0-9]+-ms' "$LOG" | head -1 | tr -dc 0-9) ms"
 
-# 설치. mke2fs가 하나 더 늘었다.
-send "sh -c 'T0=\$(date +%s%N); tars-install /dev/nvme0n1 --yes; T1=\$(date +%s%N); printf \"hp-install-%s-ms\\n\" \$(( (T1-T0)/1000000 ))'"
-if ! wait_log_re "hp-install-[0-9]+-ms" 180; then
-  fail "tars-install /dev/nvme0n1 --yes never came back" "tars-install:" "failed" "never appeared"
-fi
-if ! grep -aqF "tars-install: done. remove the boot medium and reboot." "$LOG"; then
-  fail "tars-install did not say done" "tars-install:"
+# 판정 9(HP-M1). 사람의 길 — --yes 없이 질문 셋에 답한다. 시리얼 콘솔은 tty라 비밀번호의
+# echo 끄기까지 진짜로 지나간다. 기본값 길(--yes)은 install/check.sh가 지킨다.
+#
+# 프롬프트 글자는 타이핑한 줄에 없다(에코에서 돌아오지 않는다). 질문마다 그 프롬프트가
+# 나타난 수를 센다 — 거절 뒤 같은 질문이 다시 나오는 것이 판정이다.
+prompt_count() { grep -aoF -- "$1" "$LOG" | wc -l; }
+wait_prompt() {
+  local want="$1" n="$2"
+  for _ in $(seq 1 600); do
+    if [ "$(prompt_count "$want")" -ge "$n" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+HP_PASSWORD="hp-secret-1"
+send "tars-install /dev/nvme0n1"
+wait_prompt "user name [tars]: " 1 || fail "tars-install never asked for the user name" "tars-install:" "user name"
+send "root"
+wait_log "tars-install: 'root' is not a user name" \
+  || fail "the installer took root as a user name" "tars-install:" "user name"
+wait_prompt "user name [tars]: " 2 || fail "the installer did not ask again after refusing root" "user name"
+send "hpuser"
+wait_prompt "password [tars-linux]: " 1 || fail "tars-install never asked for the password" "password"
+send "$HP_PASSWORD"
+wait_log "  user  hpuser  (home /home/hpuser, password as typed)" \
+  || fail "the plan does not show the account hpuser" "  user  " "tars-install:"
+wait_prompt "type YES to continue: " 1 || fail "tars-install never asked for YES" "type YES"
+send "YES"
+if ! wait_log "tars-install: done. remove the boot medium and reboot." 180; then
+  fail "tars-install did not say done" "tars-install:" "failed" "never appeared"
 fi
 if ! grep -aqF "tars-install: formatting /dev/nvme0n1p3 (ext4, tars-home)" "$LOG"; then
   fail "tars-install did not format p3 as ext4 tars-home" "tars-install: formatting"
 fi
-echo "tars-install wrote the disk in $(grep -aoE 'hp-install-[0-9]+-ms' "$LOG" | head -1 | tr -dc 0-9) ms, p3 formatted as ext4 tars-home"
+for want in "tars-install: wrote tars.conf (user=hpuser) and shadow" "tars-install: made /home/hpuser"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "tars-install:"
+done
+# 비밀번호는 한 글자도 로그에 없다 — echo가 꺼졌고 설치기가 찍지 않는다.
+if grep -aqF "$HP_PASSWORD" "$LOG"; then
+  fail "the typed password shows up in the serial log" "$HP_PASSWORD"
+fi
+echo "tars-install asked three questions, refused root, made hpuser; the password never reached the log"
+# 실측 7. yescrypt 한 번(TCG).
+grep -aoE 'password hashed \(yescrypt\) in [0-9]+ms' "$LOG" | head -1
 
 # 판정 1. 배치. sysfs의 섹터 수가 sfdisk -l의 글자 폭보다 낫다. 1MiB 정렬에서
 # p1은 2048부터 768MiB(1572864섹터), p2는 256MiB(524288섹터), p3는 1025MiB(2099200)부터.
@@ -220,7 +263,9 @@ echo "ext4 errors behavior: $(dumpe2fs -h "$SMALL" 2>/dev/null | grep -aE '^Erro
 
 # ── 부팅 2: NVMe만 ─────────────────────────────────────────────────────
 echo "=== boot 2: the NVMe alone ==="
-boot_guest 2
+# 사운드 카드 하나(AU 체인과 같은 HDA, 소리는 버린다). 실측 10이 /dev/snd의 권한과 사용자의
+# aplay를 본다 — 카드가 없으면 /dev/snd가 없어서 잴 것이 없다.
+boot_guest 2 -audiodev none,id=snd0 -device ich9-intel-hda -device hda-micro,audiodev=snd0
 
 # 판정 2. 설정은 p2, 홈은 p3. 둘 다 라벨로 잡혔고 붙었다.
 for want in \
@@ -255,6 +300,84 @@ wait_log "hp-marker-written" \
   || fail "could not write the marker onto /home" "hp-marker"
 echo "wrote /home/hp-marker"
 
+# 판정 4(HP-M1). 화면 셸이 hpuser다. init의 줄 둘과 terminal의 줄이 있고, 그 셸 pid의
+# /proc이 uid · gid · 보조 그룹 · env · cwd · pty를 말한다.
+for want in \
+  "tars-init: user hpuser uid 1000 home /home/hpuser" \
+  "tars-init: hpuser is in /etc/passwd, /etc/group and /etc/shadow"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "tars-init: user" "tars-init: account" "tars-init: no "
+done
+wait_log_re "terminal: spawned child pid [0-9]+ \(.*\) as hpuser" 60 \
+  || fail "terminal did not spawn its shell as hpuser" "terminal: spawned" "cannot drop"
+SPID="$(grep -aoE 'terminal: spawned child pid [0-9]+ \(.*\) as hpuser' "$LOG" | head -1 | awk '{print $5}')"
+echo "the screen shell is pid ${SPID}, spawned as hpuser"
+
+send "printf 'hp-ids-%s-%s-%s\n' \"\$(awk '/^Uid:/{print \$2\"/\"\$3\"/\"\$4\"/\"\$5}' /proc/${SPID}/status)\" \"\$(awk '/^Gid:/{print \$2\"/\"\$3}' /proc/${SPID}/status)\" \"\$(awk '/^Groups:/{print \$2}' /proc/${SPID}/status)\""
+wait_log "hp-ids-1000/1000/1000/1000-1000/1000-29" \
+  || fail "the screen shell is not uid 1000 / gid 1000 / groups 29" "hp-ids-"
+send "printf 'hp-cwd-%s\n' \"\$(readlink /proc/${SPID}/cwd)\""
+wait_log "hp-cwd-/home/hpuser" || fail "the screen shell did not start in /home/hpuser" "hp-cwd-"
+send "stat -c 'hp-pty-%U-%G-%a' \"\$(readlink /proc/${SPID}/fd/0)\""
+wait_log "hp-pty-hpuser-tty-620" || fail "the screen shell's pty is not hpuser:tty 620" "hp-pty-"
+send "tr '\\0' '\\n' < /proc/${SPID}/environ | grep -E '^(HOME|USER|LOGNAME|SHELL|XDG_DATA_HOME|HISTFILE)=' | sed 's/^/hp-env: /'; printf 'hp-env-%s\n' end"
+wait_log "hp-env-end" || fail "could not read the screen shell's environ" "hp-env"
+for want in "hp-env: HOME=/home/hpuser" "hp-env: USER=hpuser" "hp-env: LOGNAME=hpuser" "hp-env: SHELL=/usr/bin/fish"; do
+  grep -aqF "$want" "$LOG" || fail "the screen shell's env lacks ${want#hp-env: }" "hp-env:"
+done
+if grep -aqF "hp-env: XDG_DATA_HOME=" "$LOG"; then
+  fail "the screen shell still has XDG_DATA_HOME (root's /config/xdg)" "hp-env:"
+fi
+echo "screen shell: uid/gid 1000, groups 29 (audio), cwd /home/hpuser, pty hpuser:tty 620, HOME/USER/LOGNAME/SHELL its own, no XDG_DATA_HOME"
+
+# 판정 10(HP-M1). 계정 파일과 홈의 권한. shadow 둘은 root 600, 홈은 700, seed 다섯은 사용자의 것.
+send "cd /home/hpuser && stat -c 'hp-perm %n %U %G %a' /etc/shadow /config/shadow /home/hpuser .bashrc .zshrc .config/fish/config.fish .gitconfig .vimrc; cd /; printf 'hp-perm-%s\n' end"
+wait_log "hp-perm-end" || fail "stat of the account files never finished" "hp-perm"
+for want in \
+  "hp-perm /etc/shadow root root 600" \
+  "hp-perm /config/shadow root root 600" \
+  "hp-perm /home/hpuser hpuser hpuser 700" \
+  "hp-perm .bashrc hpuser hpuser 644" \
+  "hp-perm .zshrc hpuser hpuser 644" \
+  "hp-perm .config/fish/config.fish hpuser hpuser 644" \
+  "hp-perm .gitconfig hpuser hpuser 644" \
+  "hp-perm .vimrc hpuser hpuser 644"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-perm"
+done
+send "grep -E '^(tty|audio|hpuser):' /etc/group | sed 's/^/hp-group: /'; sed -n 2p /etc/shadow | cut -c1-10 | sed 's/^/hp-shadow: /'; printf 'hp-group-%s\n' end"
+wait_log "hp-group-end" || fail "could not read /etc/group" "hp-group"
+for want in "hp-group: tty:x:5:" "hp-group: audio:x:29:hpuser" "hp-group: hpuser:x:1000:" "hp-shadow: hpuser:\$y\$"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-group:" "hp-shadow:"
+done
+echo "shadow is root 600 in /etc and /config with a yescrypt hash, the home is hpuser 700 with five seeds, audio lists hpuser"
+
+# 사용자로 마커. 판정 5가 다음 부팅에서 주인까지 본다.
+send "setpriv --reuid=1000 --regid=1000 --init-groups sh -c 'echo hp-m1 > /home/hpuser/hp-marker' && sync && stat -c 'hp-owner-%U' /home/hpuser/hp-marker"
+wait_log "hp-owner-hpuser" || fail "hpuser could not write into its own home" "hp-owner" "setpriv"
+echo "hpuser wrote /home/hpuser/hp-marker"
+
+# 실측 10(위험 10). 사용자로 쳐서 무엇이 막히나 — 판정이 아니라 기록이다. 0이 됐다.
+# 콘솔 셸은 fish다 — for · do · done이 없다. 그래서 반복은 여기(bash)서 돌리고 게스트에는
+# 명령마다 한 줄을 보낸다. 사용자 쪽 sh가 결과 줄까지 찍으므로 `$?`는 sh의 것이다.
+# HP-M1 Task 5: init이 /dev/snd를 root:audio 660으로 바꾼다. 그 줄을 먼저 기다린다.
+wait_log_re "tars-init: audio: [0-9]+ nodes in /dev/snd are root:audio 660 \(0 refused\)" 30 \
+  || fail "init did not open /dev/snd to the audio group" "tars-init: audio"
+for c in 'amixer -c 0' 'aplay -l' 'dmesg' 'git config --global hp.try 1' \
+         'tars-config get shell' 'ls /config' 'cat /config/shadow'; do
+  send "setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/hpuser sh -c '${c} >/dev/null 2>&1; echo \"hp-try: ${c} -> \$?\"'"
+done
+send "stat -c 'hp-dev: %n %U %G %a' /dev/snd/*; printf 'hp-sys: dmesg_restrict=%s ping_group_range=%s\n' \"\$(cat /proc/sys/kernel/dmesg_restrict)\" \"\$(tr '\\t' ' ' < /proc/sys/net/ipv4/ping_group_range)\"; printf 'hp-try-%s\n' end"
+wait_log "hp-try-end" 60 || fail "the as-the-user tries never finished" "hp-try"
+echo "--- as hpuser (0 = allowed) ---"
+# 줄 머리에 프롬프트의 escape가 붙으므로 머리에 묶지 않고 그 조각만 뽑는다.
+clean | grep -aoE '(hp-try: [^>]+ -> [0-9]+|hp-dev: .*|hp-sys: dmesg.*)$' | grep -av 'printf' | sed 's/^/  /'
+# 판정(위험 10, HP-M1). 사용자가 카드의 제어 장치를 연다 — 0600 root였으면 1이다. 노드는
+# 그룹 audio의 rw다. 나머지 줄은 기록이고 design 실측 10에 적는다.
+grep -aqE "hp-try: amixer -c 0 -> 0" "$LOG" || fail "hpuser cannot open the sound card" "hp-try: amixer" "hp-dev:"
+# stat인 이유: 게스트의 ls는 eza 별칭이고 eza -l은 그룹 칸을 안 찍는다.
+grep -aqF "hp-dev: /dev/snd/controlC0 root audio 660" "$LOG" \
+  || fail "/dev/snd/controlC0 is not root:audio 660" "hp-dev:"
+echo "the sound nodes are root:audio 660 and hpuser opens the card"
+
 stop_guest
 
 # ── 부팅 3: NVMe + 남의 ext4 ────────────────────────────────────────────
@@ -267,7 +390,10 @@ boot_guest 3 \
 send "printf 'hp-read-%s\n' \"\$(cat /home/hp-marker)\""
 wait_log "hp-read-hp-m0" \
   || fail "the marker on /home did not survive the reboot (or could not be read)" "hp-read-" "hp-marker"
-echo "/home/hp-marker survived the reboot"
+send "stat -c 'hp-kept-%U' /home/hpuser/hp-marker && printf 'hp-kept-text-%s\n' \"\$(cat /home/hpuser/hp-marker)\""
+wait_log "hp-kept-text-hp-m1" || fail "hpuser's marker did not survive the reboot" "hp-kept"
+grep -aqF "hp-kept-hpuser" "$LOG" || fail "hpuser's marker came back with another owner" "hp-kept"
+echo "/home/hp-marker and /home/hpuser/hp-marker (still hpuser's) survived the reboot"
 
 # 판정 6. 남의 ext4는 홈도 설정도 아니다. 후보 순서가 디스크 전체 → 파티션이라
 # nvme1n1이 p3보다 먼저 읽히는데 라벨이 걸렀다(design 위험 5).
