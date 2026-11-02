@@ -545,3 +545,13 @@ pane 0.16(행 비교 0.03 + 행 칠하기 0.135) · cells 0.07. `seq 1 200000`�
 늦게 닿았고(첫 Shift의 뗌 +3초 꼬리 뒤), 그 뒤의 Shift 클릭이 전부 3초 단위의 사슬로 밀렸다 — 누름이 Shift보다 먼저 닿는다.
 `pointer` 체인은 `hold_shift`가 앞 `sendkey`에서 6.1초를 기다린다. 측정은 게스트 `CLOCK_MONOTONIC`과 호스트 `date +%s.%3N`을
 SE 검사 39의 `sendkey` → 누름(호스트 309ms · 게스트 318ms)으로 맞춰 셌다(ER-M0).
+
+100. QEMU HMP `sendkey`는 화면에 안 묶인 키보드 가운데 마지막에 꽂은 것으로 간다. `device_add usb-kbd`가 꽂히는 순간 PS/2를
+제치고, `device_del`하면 앞의 것으로 돌아간다. PS/2가 있는 pc 기계에 usb-kbd를 꽂은 체인은 그 뒤의 `sendkey`가 USB 키보드에서
+온다. usb-kbd 키 하나는 `MSC_SCAN` · `EV_KEY` · `SYN` 셋씩 누름 · 뗌, 144바이트다(KH-M0).
+
+101. QMP `input-send-event`의 `device`는 키보드가 아니라 화면 장치다. 키보드를 그 화면에 묶어야 간다 —
+`-device virtio-gpu-pci,id=gpu` + `device_add usb-kbd,…,display=gpu`(usb-kbd에 `head` 속성은 없다). `device` 없는 QMP와 HMP
+`sendkey`는 안 묶인 키보드로만 간다. `-parallel none` 없이 `device`를 주면 QEMU 10.0.13이 abort로 죽는다
+(`qemu-fixed-text-console.device` not found — 기본 parallel `vc`의 텍스트 콘솔). 키보드 둘에 따로 보내는 모양은 하나는 묶고
+하나는 안 묶는 것이다(KH-M0).
