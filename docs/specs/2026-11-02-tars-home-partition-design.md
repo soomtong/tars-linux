@@ -4,7 +4,7 @@
 
 Status: M1 끝남(2026-11-02) — 설치 때 계정 하나(기본 `tars` · `tars-linux`)를 만들고 화면 셸이 uid 1000으로 홈에서 뜬다.
 `/home`이 없는 부팅은 root 셸. 체인 `home/check.sh`가 판정 1~7 · 9 · 10을 본다(8은 M2). 실측 1~11. 다음은 M2(sudo) —
-plan은 아직 없다.
+plan `docs/plans/2026-11-02-tars-home-partition-hp-m2.md`(실체는 Debian `sudo`, 착수 전 실측이 거기 있다).
 
 관련 문서: `docs/decisions/project_config_fs_ext2.md`(`/config`가 ext2에 머무는 이유와 ext4로 갈 세 신호 — 이 설계가 그
 신호를 `/home`에서 켠다) · `2026-09-23-tars-disk-install-design.md`(DI. `tars-install`과 p1 · p2) ·
