@@ -68,6 +68,7 @@ init · 설정 · 전원
 - [Power management](docs/decisions/project_power_management.md) — ACPI · 종료 경로 셋 · 시그널 핸들러
 - [Device discovery](docs/decisions/project_device_discovery.md) — 입력 장치를 번호가 아니라 성질로 찾는다
 - [Config persistence](docs/decisions/project_config_persistence.md) — 설정은 `/config/tars.conf` 하나, 파서는 PID 1 한 벌
+- [Config fs ext2](docs/decisions/project_config_fs_ext2.md) — `/config`는 ext2, ext4가 아니다 — sync 마운트와 rename 교체가 저널 자리를 지킨다 · ext4로 갈 세 신호(2026-11-02)
 - [Boot shell selection](docs/decisions/project_boot_shell_selection.md) — 부팅 셸 선택 요청(2026-08-11)과 미구현 둘(nushell · 자동 기억)
 - [Screen Args](docs/decisions/project_screen_args.md) — init → terminal argv 계약은 `shared/screen_args.zig` 한 파일(SA-M0~M1, 2026-10-24)
 - [Main Split](docs/decisions/project_main_split.md) — terminal `main`은 `App.open` · `tick` · `close`, init `main`은 `Boot`(MS-M0~M1, 2026-10-25)
