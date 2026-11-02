@@ -213,9 +213,10 @@ tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 ```
 
 `tars-install /dev/nvme0n1`은 계획을 찍고 대문자 `YES`를 기다린다. 새 설치는
-디스크 전체를 지우고 GPT에 둘을 만든다. p1은 1GiB ESP(FAT32 `TARS-BOOT`)이고
-커널·initrd·limine이 들어간다. p2는 1GiB ext2(`tars-config`)이고 설정이 산다.
-나머지는 비워 둔다. 그래서 디스크가 2GiB보다 커야 한다 — 작으면 `YES`를 묻기
+디스크 전체를 지우고 GPT에 셋을 만든다. p1은 768MiB ESP(FAT32 `TARS-BOOT`)이고
+커널·initrd·limine이 들어간다. p2는 256MiB ext2(`tars-config`)이고 설정이 산다.
+p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크가 4GiB보다 커야
+한다 — 작으면 `YES`를 묻기
 전에 거절한다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
 재부팅하지 않는다.
 

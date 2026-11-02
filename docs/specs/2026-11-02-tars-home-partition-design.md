@@ -2,8 +2,8 @@
 
 접두사: HP
 
-Status: 초안(2026-11-02) — 사용자 결정 다섯(파티션 크기 · 최소 디스크 · 계정 이름 시점 · 기본 이름 · 기본 비밀번호)을 담았다.
-M0 착수 전이다. 결정 11 · 위험 9. 실측은 M0부터 쌓는다.
+Status: M0 끝남(2026-11-02) — p3 ext4 `tars-home`이 `/home`에 붙고 재부팅을 넘어 남는다. 체인 스물다섯째 `home/check.sh`(판정 1 · 2 · 3 ·
+5 · 6 · 7). 결정 11 · 위험 9(1 · 6은 M0이 닫았다) · 실측 1~6. 다음은 M1(계정).
 
 관련 문서: `docs/decisions/project_config_fs_ext2.md`(`/config`가 ext2에 머무는 이유와 ext4로 갈 세 신호 — 이 설계가 그
 신호를 `/home`에서 켠다) · `2026-09-23-tars-disk-install-design.md`(DI. `tars-install`과 p1 · p2) ·
@@ -185,6 +185,10 @@ p3가 생기지 않는다. 빈 자리에 p3만 더하는 길은 비목표 5다. 
 빈 자리를 바이트로 적고(KU 실측처럼), KU의 갱신 코드가 "자리가 모자라면 old를 버리고 new만 쓴다"로 되어 있는지 본다 — 아니면
 그 분기를 더한다. 사용자 결정이므로 크기는 바꾸지 않는다.
 
+M0이 닫았다(실측 2). 설치 직후 빈 자리 674,811,904바이트 — 한 벌과 limine이 약 130MB를 쓴다. 둘째 슬롯이 들어가고도 약 545MB가
+남는다. KU의 갱신은 자리가 모자라면 YES 전에 거절한다(`Rotation.no_room`, install 체인 판정 19a) — old를 버리는 분기는 없고, 여유가
+세 배라 더하지 않는다.
+
 ### 위험 2 — 비밀번호 해시를 만드는 도구
 
 게스트에 `mkpasswd`도 `openssl` CLI도 없다(확인 5). 길은 셋 — Debian `whois`의 `mkpasswd`(작다, libcrypt) · `openssl passwd -6`
@@ -212,6 +216,10 @@ devpts가 `gid=5,mode=620`으로 붙어 있는지 `main.zig`의 `/dev/pts` 마�
 
 `-t ext4`는 `/etc/mke2fs.conf`의 `[fs_types] ext4` 절에서 feature 목록을 읽는다. initrd에 그 파일이 없으면 기본값으로 가는데
 그 기본이 has_journal · extent를 켜는지 M0이 `dumpe2fs -h`로 확인한다. 없으면 파일을 굽거나 `-O` 목록을 명시한다.
+
+M0이 닫았다(실측 3). 파일 없이도 e2fsprogs의 내장 기본값이 `has_journal ext_attr resize_inode dir_index orphan_file filetype
+extent 64bit flex_bg metadata_csum_seed sparse_super large_file huge_file dir_nlink extra_isize metadata_csum`을 켠다 — Debian의
+`mke2fs.conf`가 주는 ext4 목록과 같다. `-O`를 명시하지 않는다. `-e remount-ro`는 `Errors behavior: Remount read-only`로 들어갔다.
 
 ### 위험 7 — 홈 없는 부팅의 모양
 
@@ -247,3 +255,53 @@ DC 체인은 `--yes`로 돌므로 질문이 안 나온다. 사람의 길(질문 
   판정 4 · 5가 사용자로 바뀐다.
 - M2 — sudo. 실체 선택(위험 3), `/etc/pam.d`, `sudo tars-config passwd`, `tars-config set`의 `try: sudo` 안내, control 소켓
   권한. 판정 8. 끝나면 PM design을 연다.
+
+## 실측 (M0, 2026-11-02)
+
+### 실측 1 — ext4는 bzImage를 274,432바이트(2.9%) 키우고 부팅 시간은 안 바꾼다(결정 4)
+
+`CONFIG_EXT4_FS=y` 한 줄에 `olddefconfig`가 `CONFIG_JBD2=y` · `CONFIG_FS_MBCACHE=y`를 더했다(`CRC16`은 이미 y). bzImage
+9,335,808 → 9,610,240바이트. 빌드는 증분이라 30초였다. 부팅 시간은 install 체인의 콘솔 셸까지가 전후 모두 7~12초, boot 체인의
+fish 배너까지 약 16초로 차이가 없다. `CONFIG_EXT2_FS`는 그대로 y이고 `/config`는 여전히 ext2 드라이버가 붙인다(`mounted ext2 at
+/config` 그대로). 둘을 합치는 `EXT4_USE_FOR_EXT2`는 열지 않는다 — 2.9%는 투명성의 값으로 싸다.
+
+### 실측 2 — 768MiB ESP의 빈 자리는 674,811,904바이트(위험 1)
+
+설치 직후 `mdir`. 한 벌(bzImage · initrd.cpio · limine · conf · version)과 FAT 구조가 약 130MB. 둘째 슬롯이 들어가고 약 545MB가
+남는다. 위험 1을 닫았다.
+
+### 실측 3 — `mke2fs -t ext4`는 3GiB를 4.2초에 굽고, 설치 전체는 13.8초다(위험 6)
+
+TCG. 설치기와 같은 명령(`-q -t ext4 -e remount-ro -L`)으로 3GiB 디스크를 굽는 데 4,195ms. `tars-install --yes` 전체(sfdisk ·
+FAT32 · ext2 · ext4 · ESP 복사 · sync)는 13,843ms — DI-M0 실측 8의 ext2 4초 · sfdisk 3.5초에 ext4 4초가 더해진 모양이다. feature
+목록은 위험 6 자리에 적었다 — `mke2fs.conf` 없이도 Debian의 ext4 목록 그대로다. lazy_itable_init이 기본이라 inode 표는 마운트
+뒤 커널 스레드(`ext4lazyinit`)가 채운다.
+
+### 실측 4 — `/home`의 마운트 줄(결정 1)
+
+`/proc/mounts`: `/dev/nvme0n1p3 /home ext4 rw,nosuid,nodev,relatime` — `sync`가 없다. `/proc/fs/ext4/nvme0n1p3/options`에
+`errors=remount-ro` · `data=ordered`. superblock에 심은 오류 동작이 마운트 옵션 문자열 없이 커널에 보인다 — `mountFs`에 data 인자를
+더하지 않은 것이 맞았다.
+
+### 실측 5 — 후보는 56이고 ISO 부팅은 한 줄만 는다(결정 3)
+
+설치된 부팅의 후보가 14 + 42 = 56. ISO 부팅(디스크 없음)의 로그는 `no disk labelled tars-* among 14 candidates` 바로 아래
+`no disk labelled tars-home among 14 candidates` 한 줄이 늘었고 기다림은 0이다(`max_ms`가 설치된 부팅에만 5000). 다른 스물넷 체인은
+이 줄을 판정하지 않으므로 한 줄도 안 바뀌었다(install 체인의 `no disk labelled tars-* among 14` grep은 `-F`라 `tars-home` 줄에 안
+걸린다).
+
+### 실측 6 — 라벨 필터가 남의 ext4를 거른다(위험 5, 판정 6)
+
+디스크 전체가 ext4이고 라벨이 `debian-home`인 NVMe를 p3보다 먼저 읽히는 자리(`nvme1n1`, 후보 순서가 디스크 전체 → 파티션)에
+붙여도 `home storage /dev/nvme0n1p3 (label tars-home)` 그대로이고 `config storage /dev/nvme0n1p2` 그대로다. `tars-home`이 설정
+탐색의 접두사 규칙에 걸리지만 `tarsLabel`이 그 이름만 뺀다 — 단위 검사 8a(`tars-home` · `tars-homex` · `debian-home`)가 그 경계를
+본다.
+
+### 게이트가 가르친 것 둘
+
+- 돌고 있는 체인 스크립트를 편집하면 그 체인이 깨진다. bash는 스크립트를 조금씩 읽으며 실행하므로 Task 0의 기준 회차가 Task 5의
+  `install/check.sh` 편집 때문에 부팅 4b 뒤 `syntax error near unexpected token`으로 죽었다. 체인이 끝날 때까지 그 파일은 안
+  건드린다(`docs/guides/lessons.md`에 적었다).
+- 기다리는 글자가 타이핑한 줄에 들어 있으면 에코에서 바로 돌아온다. `hp-mkfs-ms=` · `hp-geo-` · `hp-mounts: `로 기다린 첫 판이
+  출력 전에 돌아와 `did not say done`으로 죽었다(`project_gate_screen_echo`의 또 하나). printf의 `%s`가 숫자로 바뀐 완성형이나
+  정규식(`hp-mkfs-[0-9]+-ms`)으로 기다린다.

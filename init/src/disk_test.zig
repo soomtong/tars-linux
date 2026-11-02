@@ -435,11 +435,12 @@ pub fn main() !void {
         "removable" ++ "  " ++ "TARS installed\n", "a removable installed row");
 
     // ── 16. 계획 (HC-M2, KU-M0) ──────────────────────────────────────
-    const P1 = "  p1    1 GiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n";
+    const P1 = "  p1  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n";
     const UPDATE_HEAD = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.\n" ++
         "  boot/      <- TARS 0.1.4\n";
     const UPDATE_TAIL = "  p2 (tars-config) <- not opened\n" ++
-        "  tars-install /dev/nvme0n1 --wipe erases both instead\n";
+        "  p3 (tars-home) <- not opened\n" ++
+        "  tars-install /dev/nvme0n1 --wipe erases all three instead, your home too\n";
     out = control.Out{ .buf = &out_buf };
     disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true, "0.1.4", "0.1.3", .rotate);
     try expectText(out.bytes(), UPDATE_HEAD ++
@@ -451,8 +452,8 @@ pub fn main() !void {
     disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", false, "0.1.4", null, .rotate);
     const fresh = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank\n" ++
         P1 ++
-        "  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
-        "  rest unallocated\n";
+        "  p2  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
+        "  p3     rest  Linux       ext4   tars-home   <- your home, empty at first\n";
     try expectText(out.bytes(), fresh, "the fresh plan");
     out = control.Out{ .buf = &out_buf };
     disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true, "0.1.4", null, .rotate);

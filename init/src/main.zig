@@ -137,7 +137,7 @@ fn makeXdgDir() void {
 /// 있어서 노트북에서는 저장소를 영영 못 찾았다 — 부팅은 됐고 설정만 매번
 /// 사라졌다. 이제 storage.zig가 후보를 훑어 ext2 라벨이 `tars-`로 시작하는
 /// 첫 것을 고른다. 후보는 디스크 열넷이고, 설치된 디스크로 떴을 때만(cmdline의
-/// `tars.installed`) 각 디스크의 첫 두 파티션까지 마흔둘이다(DI-M2). 이름이
+/// `tars.installed`) 각 디스크의 첫 세 파티션까지 쉰여섯이다(DI-M2, HP-M0). 이름이
 /// 아니라 디스크 안의 표식으로 고르는 것이라, virtio든 NVMe든 SATA든 같은
 /// 코드가 지난다.
 ///
@@ -194,6 +194,41 @@ fn mountConfig() bool {
     // 설정 파일만 두는 자리라 setuid 비트나 장치 노드가 쓰일 일이 없으므로,
     // 남의 디스크에 든 그것들이 힘을 갖지 못하게 한다.
     return mountFs(found.path, "/config", "ext2", linux.MS.SYNCHRONOUS | linux.MS.NOSUID | linux.MS.NODEV);
+}
+
+/// `/home`을 붙인다(HP design 결정 1 · 3). mountConfig와 같은 길이다 — 같은
+/// 후보 목록, 같은 기다림, 같은 모양의 로그 줄. 다른 것은 라벨 판정
+/// (`tars-home` 전체 일치)과 마운트 플래그뿐이다.
+///
+/// SYNCHRONOUS가 없는 것이 이 함수의 핵심이다. `/config`는 설정 몇 줄을
+/// 어쩌다 쓰는 자리라 동기 쓰기와 rename 교체가 일관성을 지키지만, `/home`은
+/// 파일이 많고 쓰기가 잦은 자리(홈 · 패키지 매니저)라 ext4의 저널이 그 몫을
+/// 맡는다. 쓰기 성질이 반대라 수단도 반대다(docs/decisions/project_config_fs_ext2.md).
+///
+/// 못 찾은 부팅은 정상 경로다. ISO 부팅과 HP 전에 설치된 디스크가 그렇다.
+/// 그때 `/home`은 tmpfs의 빈 디렉터리이고 거기 쓴 것은 재부팅하면 사라진다 —
+/// 그래서 M1은 `/home`이 없으면 사용자 계정을 만들지 않는다(design 결정 3).
+fn mountHome() bool {
+    const installed = storage.bootedInstalled(config.CMDLINE_PATH);
+    const list = storage.candidates(installed);
+    const max_ms: u32 = if (installed) storage.CONFIG_WAIT_MS else 0;
+    var found: storage.Found = .{};
+    const waited = storage.findDiskWaiting(&found, list, max_ms, storage.homeLabel) orelse {
+        if (max_ms > 0) {
+            logline.print("tars-init: waited {d}ms for home storage\n", .{max_ms});
+        }
+        logline.print("tars-init: no disk labelled {s} among {d} candidates\n", .{
+            storage.HOME_LABEL, list.len,
+        });
+        return false;
+    };
+    if (waited > 0) {
+        logline.print("tars-init: home storage appeared after {d}ms\n", .{waited});
+    }
+    logline.print("tars-init: home storage {s} (label {s})\n", .{ found.path, found.label() });
+    // NOSUID · NODEV는 /config와 같다. 홈에 setuid 바이너리가 생길 이유가 없고
+    // (Homebrew는 안 쓴다 — PM이 확인한다), 장치 노드도 없다.
+    return mountFs(found.path, "/home", "ext4", linux.MS.NOSUID | linux.MS.NODEV);
 }
 
 /// 설정 파일의 자리. 저장소가 붙은 뒤에만 의미가 있다.
@@ -1133,6 +1168,9 @@ const Boot = struct {
     /// 단계 2. 설정 디스크 → 설정 파일 → cmdline 탈출로 → seed 넷 → `config shell=` 로그 줄.
     fn readConfig(self: *Boot) void {
         self.mounted = mountConfig();
+        // 설정 바로 뒤, 설정을 읽기 전이다. 실패해도 부팅은 간다 — 결과는
+        // 로그 한 줄이고 M1이 계정을 만들 때 다시 본다.
+        _ = mountHome();
         self.cfg = loadConfig(self.mounted);
         // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
         //

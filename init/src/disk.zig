@@ -232,24 +232,28 @@ pub fn confirmed(line: []const u8) bool {
 }
 
 /// sfdisk에 stdin으로 넘기는 배치(DI design 결정 2 · 3). DI-M0 실측 8이 이
-/// 세 줄을 그대로 먹였다. p1은 KU-M0에서 256MiB → 1GiB가 됐다(KU design
-/// 결정 8) — 이미지 슬롯 둘(약 102MB씩)이 들어가고, 한 벌이 약 500MB가 될
-/// 때까지 둘이 들어간다. 그 전에 설치된 256MiB ESP는 갱신이 키우지 않는다.
+/// 모양을 그대로 먹였다. p1은 KU-M0에서 256MiB → 1GiB가 됐다가 HP-M0에서
+/// 768MiB가 됐고(HP design 결정 2, 사용자) 이미지 슬롯 둘(약 125MB씩)이
+/// 들어간다 — 한 벌이 384MB를 넘기 전까지. p2는 설정뿐이라 256MiB면 과분하다.
+/// p3는 size가 없어 나머지 전부이고 `/home`이 된다(ext4). 그 전에 설치된
+/// 옛 배치의 ESP는 갱신이 건드리지 않는다.
 pub const SFDISK_SCRIPT =
     \\label: gpt
-    \\size=1GiB, type=uefi, name=TARS-BOOT
-    \\size=1GiB, type=linux, name=TARS-CONFIG
+    \\size=768MiB, type=uefi, name=TARS-BOOT
+    \\size=256MiB, type=linux, name=TARS-CONFIG
+    \\type=linux, name=TARS-HOME
     \\
 ;
 
-/// 위 배치가 들어가는 가장 작은 디스크(KU-M0 plan 확정 값). p1 · p2에 GPT
-/// 앞의 1MiB 정렬과 뒤의 백업 헤더 몫을 더했다. 이보다 작은 디스크는 YES를
-/// 묻기 전에 거절한다 — 묻고 나서 sfdisk가 실패하면 늦다.
-pub const MIN_DISK_BYTES: u64 = (2 << 30) + (2 << 20);
+/// 설치를 받는 가장 작은 디스크(HP design 결정 2 — 사용자가 "어떤 임베디드에
+/// 들어갈지 모른다"며 4GiB를 보장하라고 정했다). p1 + p2가 1GiB라 p3에 3GiB
+/// 남짓이 남는다. GPT 앞의 1MiB 정렬과 뒤의 백업 헤더 몫을 더했다. 이보다
+/// 작은 디스크는 YES를 묻기 전에 거절한다 — 묻고 나서 sfdisk가 실패하면 늦다.
+pub const MIN_DISK_BYTES: u64 = (4 << 30) + (2 << 20);
 
 /// 거절 줄에 쓰는 최소 크기의 글자. formatSize는 10진 버림이라 최소 크기와
-/// 2GB 스틱이 둘 다 `2 GB`로 찍혀서 "2 GB는 2 GB가 필요하다"가 된다.
-pub const MIN_DISK_WORDS = "more than 2 GiB";
+/// 4GB 스틱이 둘 다 `4 GB`로 찍혀서 "4 GB는 4 GB가 필요하다"가 된다.
+pub const MIN_DISK_WORDS = "more than 4 GiB";
 
 pub fn bigEnough(bytes: u64) bool {
     return bytes >= MIN_DISK_BYTES;
@@ -257,6 +261,9 @@ pub fn bigEnough(bytes: u64) bool {
 
 pub const ESP_LABEL: [:0]const u8 = "TARS-BOOT";
 pub const CONFIG_LABEL: [:0]const u8 = "tars-config";
+/// `/home`의 라벨. 판정은 storage.zig에 있다 — init이 찾는 것과 설치기가
+/// 굽는 것이 한 상수여야 한다(DI design 결정 5와 같은 이유).
+pub const HOME_LABEL: [:0]const u8 = storage.HOME_LABEL;
 
 /// limine의 설정 파일. 매체의 판정(MEDIUM_MARK)이자 ESP로 갈 때 한 줄이
 /// 바뀌는 유일한 파일이다(espConf).
@@ -479,14 +486,15 @@ pub fn planLines(
             sink.print("  boot/old/  <- left as it is\n", .{});
         }
         sink.print("  p2 (tars-config) <- not opened\n", .{});
-        sink.print("  tars-install {s} --wipe erases both instead\n", .{path});
+        sink.print("  p3 (tars-home) <- not opened\n", .{});
+        sink.print("  tars-install {s} --wipe erases all three instead, your home too\n", .{path});
     } else {
         sink.print("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
             path, size, model, state,
         });
-        sink.print("  p1    1 GiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-        sink.print("  p2    1 GiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
-        sink.print("  rest unallocated\n", .{});
+        sink.print("  p1  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
+        sink.print("  p2  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
+        sink.print("  p3     rest  Linux       ext4   tars-home   <- your home, empty at first\n", .{});
         if (p2_settings) sink.print("  the settings now on p2 are erased too\n", .{});
     }
 }

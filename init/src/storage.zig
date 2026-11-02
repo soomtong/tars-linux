@@ -41,6 +41,11 @@ const EXT2_MAGIC: u16 = 0xEF53;
 /// 라벨을 전부 바꿔야 하고, 그것은 체인 넷을 건드리는 일이다.
 pub const LABEL_PREFIX: []const u8 = "tars-";
 
+/// `/home`의 라벨(HP design 결정 3). 접두사가 아니라 전체 일치다 — 설정
+/// 디스크의 접두사 규칙에도 걸리는 이름이라 tarsLabel이 이것을 따로 뺀다
+/// (HP design 위험 5). tars-install이 p3를 이 이름으로 굽는다.
+pub const HOME_LABEL: [:0]const u8 = "tars-home";
+
 /// 디스크 이름들. 파티션이 아니라 장치 전체다.
 ///
 /// 순서가 판정을 바꾸는 상황은 `tars-` 라벨 디스크가 둘 이상일 때뿐이고,
@@ -66,24 +71,32 @@ pub const DISKS = [_][:0]const u8{
     "/dev/mmcblk0", "/dev/mmcblk1",
 };
 
-/// 각 디스크의 첫 두 파티션. DI-M1이 RM 결정 12("파티션은 안 본다")를
+/// 각 디스크의 첫 세 파티션. DI-M1이 RM 결정 12("파티션은 안 본다")를
 /// 바꿨다 — tars-install이 설정을 GPT의 p2에 두기 때문이다(DI design 결정 6).
+/// HP-M0이 p3를 더했다 — `/home`이 거기 산다(HP design 결정 2).
 ///
 /// 손으로 적는다. partitionName으로 comptime에 지을 수도 있지만 그러면
 /// Found.path가 가리키는 문자열의 수명을 따로 따져야 하고, 목록이 눈에
 /// 안 보인다. 둘이 어긋나지 않는 것은 storage_test가 본다.
 ///
-/// 둘씩인 것은 우리가 만드는 배치가 p2까지이기 때문이다. RM 결정 12가 지키던
-/// 안전("남의 root를 잡지 않는다")은 라벨 필터가 계속 지킨다 — 남의 ext2
+/// 셋씩인 것은 우리가 만드는 배치가 p3까지이기 때문이다. RM 결정 12가 지키던
+/// 안전("남의 root를 잡지 않는다")은 라벨 필터가 계속 지킨다 — 남의 ext2/4
 /// root 파티션은 매직이 맞아도 라벨이 `tars-`로 시작하지 않는다.
 const PARTITIONS = [_][:0]const u8{
-    "/dev/vda1",      "/dev/vda2",      "/dev/vdb1",      "/dev/vdb2",
-    "/dev/vdc1",      "/dev/vdc2",      "/dev/vdd1",      "/dev/vdd2",
-    "/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme1n1p1", "/dev/nvme1n1p2",
-    "/dev/nvme2n1p1", "/dev/nvme2n1p2", "/dev/nvme3n1p1", "/dev/nvme3n1p2",
-    "/dev/sda1",      "/dev/sda2",      "/dev/sdb1",      "/dev/sdb2",
-    "/dev/sdc1",      "/dev/sdc2",      "/dev/sdd1",      "/dev/sdd2",
-    "/dev/mmcblk0p1", "/dev/mmcblk0p2", "/dev/mmcblk1p1", "/dev/mmcblk1p2",
+    "/dev/vda1",      "/dev/vda2",      "/dev/vda3",
+    "/dev/vdb1",      "/dev/vdb2",      "/dev/vdb3",
+    "/dev/vdc1",      "/dev/vdc2",      "/dev/vdc3",
+    "/dev/vdd1",      "/dev/vdd2",      "/dev/vdd3",
+    "/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme0n1p3",
+    "/dev/nvme1n1p1", "/dev/nvme1n1p2", "/dev/nvme1n1p3",
+    "/dev/nvme2n1p1", "/dev/nvme2n1p2", "/dev/nvme2n1p3",
+    "/dev/nvme3n1p1", "/dev/nvme3n1p2", "/dev/nvme3n1p3",
+    "/dev/sda1",      "/dev/sda2",      "/dev/sda3",
+    "/dev/sdb1",      "/dev/sdb2",      "/dev/sdb3",
+    "/dev/sdc1",      "/dev/sdc2",      "/dev/sdc3",
+    "/dev/sdd1",      "/dev/sdd2",      "/dev/sdd3",
+    "/dev/mmcblk0p1", "/dev/mmcblk0p2", "/dev/mmcblk0p3",
+    "/dev/mmcblk1p1", "/dev/mmcblk1p2", "/dev/mmcblk1p3",
 };
 
 /// 설치된 디스크로 떴을 때 init이 훑는 순서. 디스크 전체가 먼저다 — 게이트의
@@ -185,12 +198,26 @@ pub fn ext2Label(head: []const u8) ?[]const u8 {
 }
 
 /// head는 디스크 앞 HEAD_BYTES. 라벨이 LABEL_PREFIX로 시작하면 그 라벨을,
-/// 아니면 null. 돌려주는 슬라이스는 head 안을 가리킨다.
+/// 아니면 null. 돌려주는 슬라이스는 head 안을 가리킨다. `tars-home`은
+/// 접두사가 맞아도 null이다 — 그것은 설정이 아니라 `/home`이다(HP-M0).
 pub fn tarsLabel(head: []const u8) ?[]const u8 {
     const name = ext2Label(head) orelse return null;
     if (!std.mem.startsWith(u8, name, LABEL_PREFIX)) return null;
+    if (std.mem.eql(u8, name, HOME_LABEL)) return null;
     return name;
 }
+
+/// 라벨이 정확히 HOME_LABEL이면 그 라벨을, 아니면 null. 접두사가 아닌 것은
+/// `/home`이 될 디스크가 하나뿐이고, 남의 `tars-homeless` 같은 이름이 홈이
+/// 되면 안 되기 때문이다.
+pub fn homeLabel(head: []const u8) ?[]const u8 {
+    const name = ext2Label(head) orelse return null;
+    if (!std.mem.eql(u8, name, HOME_LABEL)) return null;
+    return name;
+}
+
+/// 라벨 판정 하나. tarsLabel · homeLabel이 이 모양이다.
+pub const Matcher = *const fn (head: []const u8) ?[]const u8;
 
 /// 장치 앞머리를 buf에 읽는다. 없는 장치는 ENOENT이고 그것이 정상 경로다 —
 /// 후보(열넷 또는 마흔둘) 중 이 기계에 있는 것은 보통 한둘이다.
@@ -232,10 +259,17 @@ pub fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
 /// 재생 같은 쓰기를 할 수 있다. 읽어서 거르면 남의 디스크를 건드릴
 /// 가능성이 0이다.
 pub fn findConfigDisk(out: *Found, list: []const [:0]const u8) bool {
+    return findDisk(out, list, tarsLabel);
+}
+
+/// list에서 match가 라벨을 돌려주는 첫 후보를 out에 채우고 true. 설정은
+/// tarsLabel, 홈은 homeLabel이다(HP-M0). 읽는 것은 둘이 같다 — 디스크 앞
+/// HEAD_BYTES 하나.
+pub fn findDisk(out: *Found, list: []const [:0]const u8, match: Matcher) bool {
     for (list) |path| {
         var buf: [HEAD_BYTES]u8 = undefined;
         const head = readHead(path, &buf) orelse continue;
-        const name = tarsLabel(head) orelse continue;
+        const name = match(head) orelse continue;
 
         out.* = .{ .path = path, .label_len = name.len };
         @memcpy(out.label_buf[0..name.len], name);
@@ -280,9 +314,15 @@ fn sleepMillis(ms: u32) void {
 /// max_ms를 인자로 받는 것은 두 부르는 쪽 때문이다. 표지 없는 부팅은 0을 넘겨
 /// 지금처럼 한 번만 훑고(DC 결정 1), storage_test는 초 단위로 자지 않는다.
 pub fn findConfigDiskWaiting(out: *Found, list: []const [:0]const u8, max_ms: u32) ?u32 {
+    return findDiskWaiting(out, list, max_ms, tarsLabel);
+}
+
+/// findDisk를 max_ms까지 CONFIG_POLL_MS 간격으로 다시 부른다. 찾으면 기다린
+/// ms, 상한까지 못 찾으면 null. 홈도 같은 시계로 기다린다(HP design 결정 3).
+pub fn findDiskWaiting(out: *Found, list: []const [:0]const u8, max_ms: u32, match: Matcher) ?u32 {
     var waited: u32 = 0;
     while (true) {
-        if (findConfigDisk(out, list)) return waited;
+        if (findDisk(out, list, match)) return waited;
         if (waited >= max_ms) return null;
         sleepMillis(CONFIG_POLL_MS);
         waited += CONFIG_POLL_MS;

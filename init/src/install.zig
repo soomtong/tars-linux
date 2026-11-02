@@ -616,8 +616,10 @@ fn install(
 
     var p1_buf: [32]u8 = undefined;
     var p2_buf: [32]u8 = undefined;
+    var p3_buf: [32]u8 = undefined;
     const p1 = storage.partitionName(&p1_buf, path, 1).?;
     const p2 = storage.partitionName(&p2_buf, path, 2).?;
+    const p3 = storage.partitionName(&p3_buf, path, 3).?;
 
     // ── YES 전의 판단 (KU-M0) ──
     // 디스크를 건드리기 전에 다 정한다. 새 설치는 배치가 들어가는가, 갱신은
@@ -676,8 +678,8 @@ fn install(
     say("tars-install: writing the partition table\n", .{});
     const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--wipe", "always", "--wipe-partitions", "always", path };
     if (!runTool(&sfdisk, disk.SFDISK_SCRIPT, WORK_DIR ++ "/sfdisk.log", envp)) return 1;
-    if (!waitForNode(p1) or !waitForNode(p2)) {
-        complain("{s} and {s} never appeared after 3s", .{ p1, p2 });
+    if (!waitForNode(p1) or !waitForNode(p2) or !waitForNode(p3)) {
+        complain("{s}, {s} and {s} never appeared after 3s", .{ p1, p2, p3 });
         return 1;
     }
 
@@ -689,6 +691,14 @@ fn install(
     say("tars-install: formatting {s} (ext2, {s})\n", .{ p2, disk.CONFIG_LABEL });
     const mke2fs = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext2", "-L", disk.CONFIG_LABEL, p2 };
     if (!runTool(&mke2fs, null, WORK_DIR ++ "/mke2fs.log", envp)) return 1;
+
+    // p3는 ext4다(HP design 결정 1) — 홈과 패키지 매니저의 자리라 파일이 많고
+    // 쓰기가 잦아 저널이 값을 한다. `-e remount-ro`는 superblock의 오류 동작이라
+    // init이 마운트 옵션 문자열을 안 넘겨도 된다. initrd에 /etc/mke2fs.conf가
+    // 없어서 -t ext4의 feature 목록은 e2fsprogs의 내장 기본값이다(HP-M0 실측 3).
+    say("tars-install: formatting {s} (ext4, {s})\n", .{ p3, disk.HOME_LABEL });
+    const mkext4 = [_:null]?[*:0]const u8{ "/usr/bin/mke2fs", "-q", "-t", "ext4", "-e", "remount-ro", "-L", disk.HOME_LABEL, p3 };
+    if (!runTool(&mkext4, null, WORK_DIR ++ "/mke2fs-home.log", envp)) return 1;
 
     if (!fillEsp(p1, esp_conf, new_ver, false)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});

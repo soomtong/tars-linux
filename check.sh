@@ -521,6 +521,7 @@ CHAINS=(
   "BS-M1:./battery/check.sh"
   "BT-M2:./bluetooth/check.sh"
   "KH-M2:./keyboard/check.sh"
+  "HP-M0:./home/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -199,6 +199,42 @@ pub fn main() !void {
         }
     }
 
+    // ── 8a. 홈 라벨은 설정이 아니고, 설정 라벨은 홈이 아니다(HP-M0) ───
+    //
+    // `tars-home`은 접두사 `tars-`에 걸리지만 tarsLabel이 따로 뺀다(HP design
+    // 위험 5). homeLabel은 전체 일치라 `tars-homex`는 홈이 아니고 — 접두사
+    // 규칙 그대로 — 설정 후보로는 남는다. 남의 `debian-home`은 둘 다 아니다.
+    {
+        if (storage.tarsLabel(full(EXT2, "tars-home")) != null) {
+            std.debug.print("FAIL: tarsLabel took tars-home as a config disk\n", .{});
+            return error.HomeTakenAsConfig;
+        }
+        const home = storage.homeLabel(full(EXT2, "tars-home")) orelse {
+            std.debug.print("FAIL: homeLabel rejected tars-home\n", .{});
+            return error.HomeRejected;
+        };
+        if (!std.mem.eql(u8, home, "tars-home")) {
+            std.debug.print("FAIL: homeLabel returned '{s}'\n", .{home});
+            return error.HomeLabelWrong;
+        }
+        if (storage.homeLabel(full(EXT2, "tars-config")) != null) {
+            std.debug.print("FAIL: homeLabel took tars-config as the home disk\n", .{});
+            return error.ConfigTakenAsHome;
+        }
+        if (storage.homeLabel(full(EXT2, "debian-home")) != null or storage.tarsLabel(full(EXT2, "debian-home")) != null) {
+            std.debug.print("FAIL: a foreign debian-home label was taken as ours\n", .{});
+            return error.ForeignHomeTaken;
+        }
+        if (storage.homeLabel(full(EXT2, "tars-homex")) != null) {
+            std.debug.print("FAIL: homeLabel matched tars-homex by prefix\n", .{});
+            return error.HomePrefixMatched;
+        }
+        if (storage.tarsLabel(full(EXT2, "tars-homex")) == null) {
+            std.debug.print("FAIL: tars-homex should still be a config candidate by prefix\n", .{});
+            return error.HomexDroppedFromConfig;
+        }
+    }
+
     // ── 9. 파티션 이름 규칙 ───────────────────────────────────────────
     //
     // 이름이 숫자로 끝나는 디스크만 `p`가 든다. 넷 다 게스트에 실제로 있는
@@ -224,16 +260,16 @@ pub fn main() !void {
         }
     }
 
-    // ── 10. 후보 목록 = 디스크 전부 → 그 다음 파티션 둘씩 ─────────────
+    // ── 10. 후보 목록 = 디스크 전부 → 그 다음 파티션 셋씩 ─────────────
     //
     // 손으로 적은 PARTITIONS가 규칙과 어긋나지 않는지, 그리고 디스크 전체가
     // 전부 파티션보다 앞인지 본다. 뒤의 것이 게이트 열두 체인의 판정을 지킨다
     // — 그 디스크들은 파티션 없는 ext2라 먼저 잡혀야 한다(DI design 결정 6).
     {
         const disks = storage.DISKS.len;
-        if (storage.CANDIDATES.len != disks * 3) {
-            std.debug.print("FAIL: want {d} candidates (disks + two partitions each), got {d}\n", .{
-                disks * 3, storage.CANDIDATES.len,
+        if (storage.CANDIDATES.len != disks * 4) {
+            std.debug.print("FAIL: want {d} candidates (disks + three partitions each), got {d}\n", .{
+                disks * 4, storage.CANDIDATES.len,
             });
             return error.WrongCandidateCount;
         }
@@ -243,12 +279,12 @@ pub fn main() !void {
                 return error.DiskNotFirst;
             }
             var n: u8 = 1;
-            while (n <= 2) : (n += 1) {
+            while (n <= 3) : (n += 1) {
                 var buf: [32]u8 = undefined;
                 const want = storage.partitionName(&buf, disk, n).?;
-                const got = storage.CANDIDATES[disks + i * 2 + (n - 1)];
+                const got = storage.CANDIDATES[disks + i * 3 + (n - 1)];
                 if (!std.mem.eql(u8, got, want)) {
-                    std.debug.print("FAIL: candidate {d} is '{s}', want '{s}'\n", .{ disks + i * 2 + (n - 1), got, want });
+                    std.debug.print("FAIL: candidate {d} is '{s}', want '{s}'\n", .{ disks + i * 3 + (n - 1), got, want });
                     return error.PartitionListDrifted;
                 }
             }

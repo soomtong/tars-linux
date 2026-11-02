@@ -120,8 +120,10 @@ copy_lib_deps() {
 #   /tmp   → git도 편집기도 임시 파일을 여기 만든다. 없으면 조용히 실패한다.
 #   /etc   → passwd·group. whoami가 이름을 내고, git이 커밋 작성자를
 #            유추할 자리다.
+#   /home  → 설치된 디스크의 p3(ext4 tars-home)가 붙는 자리(HP-M0). 안 붙은
+#            부팅에서는 tmpfs의 빈 디렉터리다.
 mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
-         "$WORKDIR/config" "$WORKDIR/bin" "$WORKDIR/tmp" "$WORKDIR/etc"
+         "$WORKDIR/config" "$WORKDIR/home" "$WORKDIR/bin" "$WORKDIR/tmp" "$WORKDIR/etc"
 
 # /tmp는 아무나 쓰고 남의 것은 못 지운다. 게스트가 지금은 root 하나뿐이라
 # 동작 차이가 없지만, 이 비트가 없는 /tmp를 보고 겁내는 프로그램이 있다.

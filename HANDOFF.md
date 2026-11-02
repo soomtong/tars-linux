@@ -1,8 +1,18 @@
-# HANDOFF: Keyboard Hotplug 끝남(2026-11-02) — 다음은 사용자가 고른다
+# HANDOFF: Home Partition HP-M0 끝남(2026-11-02) — 다음은 HP-M1(계정)
 
 ## 지금 상태 (2026-11-02)
 
-- 열린 서브프로젝트가 없다. 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02) — BT 다음 첫 후보를 사용자가 골랐다.
+- 열린 서브프로젝트는 Home Partition(HP, `docs/specs/2026-11-02-tars-home-partition-design.md`). 사용자가 "홈과 패키지 매니저
+  자리는 ext4가 맞지 않나"를 내서 시작했고, 파티션 크기(768 · 256MiB · 나머지) · 최소 4GiB · 계정 이름을 설치 때 묻기 · 기본 `tars` ·
+  기본 비밀번호 `tars-linux`를 사용자가 정했다. 비밀번호의 쓰임은 sudo다(design 결정 6).
+  - M0 끝남: p3 ext4 `tars-home`이 `/home`에 붙는다(async, `errors=remount-ro`). 커널에 ext4(+2.9%). 체인 스물다섯째 `home/check.sh`
+    (판정 1 · 2 · 3 · 5 · 6 · 7). 실측 1~6은 design에. 함정 둘(돌고 있는 체인 편집 · 에코에 걸리는 기다림)도 design 끝에.
+  - 다음은 M1(계정): 설치기의 질문 셋(이름 · 비밀번호 · YES)과 `--yes` 기본값, 해시는 Debian `whois`의 `mkpasswd -m yescrypt -s`를
+    게스트에 더해 stdin으로(위험 2는 이 길로 닫힌다 — init이 musl 정적이라 Zig `crypt_r`은 안 된다), `tars.conf`의 `user=`와
+    `/config/shadow`, init의 passwd · group · shadow 생성, terminal의 setuid · 환경 · chdir · pty chown, 홈 없는 부팅의 root 셸.
+    M2는 sudo(실체는 Debian `sudo` 대 `doas`+`sudo` 이름, PAM 사슬 크기로 정한다) · `tars-config passwd` · `/config` 쓰기 안내.
+    Homebrew 설치 자체는 그 뒤의 PM 서브프로젝트다.
+- 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02) — BT 다음 첫 후보를 사용자가 골랐다.
   - 섰다: terminal이 키보드를 포인터의 길(처음 훑기 + uevent)로 스스로 연다. 부팅 뒤에 꽂은 USB 키보드 · 연결된 BT 키보드가 붙는
     순간부터 친다. 여럿이 함께 열리고 한/영 · 조합 · CapsLock · 수정키는 하나를 같이 쓴다(시나리오 검토 S1~S13은 사용자 요청).
     빠지면 닫고 `releaseHeld`. 키보드 없이도 terminal이 뜬다(`keyboard> none`). 체인 스물넷째 `keyboard/check.sh`(판정 여덟).
@@ -30,8 +40,9 @@
   - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
   - 그 전은 `docs/guides/completed.md`.
 - 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH가 쌓였고 아직 내지 않았다.
-- 체인은 스물넷이다(`check.sh`의 `CHAINS`, 마지막이 `KH-M2:./keyboard/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓴다 — 새
-  체인은 45497부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(KH-M2): 24/24, 11분 18초(prebuild 361 + lanes 316초), verify 8407줄 전부 통과.
+- 체인은 스물다섯이다(`check.sh`의 `CHAINS`, 마지막이 `HP-M0:./home/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP 체인은
+  포트를 안 쓴다(45497 · 45498을 예약으로 적어 뒀다) — 새 체인은 45499부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(HP-M0):
+  25/25, 10분 58초(lanes 335초), cut log lines 전부 0. 진입 검사가 `grep | grep -q`를 한 번 잡았다(GA-M1 절, 고친 뒤 통과).
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.

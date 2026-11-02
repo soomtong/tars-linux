@@ -317,6 +317,7 @@
   받는 길(`hostfwd` 둘), 시계(perl NTP stub), `lo`와 `.localhost`를 본다.
   게이트에서 가장 무거운 축이다.
 - `install/check.sh` — 부팅 일곱(DI · DC). OVMF로 설치하고 USB 없이 다시 뜬다.
+- `home/check.sh` — 부팅 셋(HP). 설치된 디스크의 p3(ext4 `tars-home`)가 `/home`에 붙고 재부팅을 넘어 남는다. 남의 ext4는 라벨로 거른다.
 - `nic/check.sh` — 부팅 둘(WN). `e1000e`와 부팅 뒤 꽂는 `usb-net`. 타이핑이 없다.
 - `firewall/check.sh` — 부팅 둘 · 검사 열일곱(FW). 게스트 쪽 판정 도구는 설정
   디스크의 `fwlisten.sh` 하나이고, 포트의 16진수는 `printf '%04X'`로 바꾼다.
