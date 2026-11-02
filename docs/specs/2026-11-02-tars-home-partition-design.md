@@ -3,7 +3,8 @@
 접두사: HP
 
 Status: M0 끝남(2026-11-02) — p3 ext4 `tars-home`이 `/home`에 붙고 재부팅을 넘어 남는다. 체인 스물다섯째 `home/check.sh`(판정 1 · 2 · 3 ·
-5 · 6 · 7). 결정 11 · 위험 9(1 · 6은 M0이 닫았다) · 실측 1~6. 다음은 M1(계정).
+5 · 6 · 7). 결정 12 · 위험 10(1 · 6은 M0이 닫았다) · 실측 1~6. 다음은 M1(계정) — plan은
+`docs/plans/2026-11-02-tars-home-partition-hp-m1.md`.
 
 관련 문서: `docs/decisions/project_config_fs_ext2.md`(`/config`가 ext2에 머무는 이유와 ext4로 갈 세 신호 — 이 설계가 그
 신호를 `/home`에서 켠다) · `2026-09-23-tars-disk-install-design.md`(DI. `tars-install`과 p1 · p2) ·
@@ -163,6 +164,18 @@ TARS가 있는 디스크의 갱신(DI 결정 8)은 p1만 간다 — p2도 p3도 
 p3가 생기지 않는다. 빈 자리에 p3만 더하는 길은 비목표 5다. 새 배치를 원하면 `--wipe`이고, `--wipe`는 p3(홈 · Homebrew)도
 지운다는 것을 계획 출력에 한 줄 더 적는다: `  p3  rest  Linux  ext4  tars-home  <- your home, erased by --wipe`.
 
+### 결정 12 — 사용자의 dotfile과 히스토리는 홈의 진짜 파일이다 (사용자, 2026-11-02)
+
+M1 plan을 쓰다 찾은 자리다. root의 홈은 `/`(tmpfs)라서 `~/.gitconfig` · `~/.bashrc` · `~/.zshrc` · `~/.config/fish/config.fish` ·
+`~/.vimrc`가 `make_initrd.sh`가 거는 `/config/…` 링크이고, fish 히스토리 · zoxide DB는 `XDG_DATA_HOME=/config/xdg`, bash · zsh
+히스토리는 `HISTFILE=/config/…`에 산다. `/config`가 root 소유로 남으므로(결정 9) 그대로면 uid 1000 셸은 rc를 못 고치고
+`git config --global`도 히스토리도 못 쓴다. 링크의 이유가 "홈이 tmpfs"였고 사용자의 홈은 ext4라 그 이유가 없다.
+
+그래서 사용자가 있는 부팅은 init이 seed 다섯(rc 셋 · gitconfig · vimrc)을 `/home/<이름>`에 1000 소유로 깔고(없을 때만, 같은
+`O_EXCL` 규칙), terminal이 사용자 셸의 환경에서 `XDG_DATA_HOME`을 빼고 `HISTFILE`을 홈으로 옮긴다. `/config`에는 시스템
+설정(`tars.conf` · `shadow` · `ssh/` · `services.d/` · `bluetooth/` · `groq.key`)만 남는다. 홈 없는 부팅의 root 셸은 지금
+그대로 `/config` 링크를 쓴다. 다른 길(링크를 두고 그 파일들을 1000으로 chown)은 `/config` 안의 소유자가 둘로 갈려 버렸다.
+
 ### 결정 11 — 게이트는 스물다섯째 체인 `home/check.sh`다
 
 포트 monitor 45497 · QMP 45498(예약 범위 45455~45599, RP-M0). 설치 체인(`install/check.sh`, DC)이 이미 가상 디스크에
@@ -234,6 +247,13 @@ DC 체인은 `--yes`로 돌므로 질문이 안 나온다. 사람의 길(질문 
 
 콜론 · 개행 · 공백이 passwd 줄을 깨고, `..`가 경로를 깬다. 결정 5의 정규식이 그것을 막는다. `config_edit_test`가 하듯 거절 사례
 (`/etc/passwd` · `a:b` · 빈 줄 · 33자)를 단위 테스트로 둔다.
+
+### 위험 10 — root였던 것이 사용자에게 막힌다
+
+udev가 없어 devtmpfs가 만드는 노드는 드라이버가 정한 모드 그대로다(대개 root 0600). 사용자 셸에서 `aplay` ·
+`speaker-test`(`/dev/snd`), `ping`(raw 소켓 · `ping_group_range`), `dmesg`(`dmesg_restrict`), `bluetoothctl`(D-Bus 정책)이
+막힐 수 있다. 받아쓰기는 terminal(root)이 띄우므로 안 걸린다. M1이 사용자로 하나씩 쳐서 목록을 만들고, 값이 싼 것(그룹 ·
+sysctl 한 줄)은 M1에서, 권한 승격이 맞는 것은 M2(sudo)로, 나머지는 `carryover.md`로 보낸다.
 
 ## 비목표
 
