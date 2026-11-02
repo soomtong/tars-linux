@@ -5,15 +5,15 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-02',
-  latest: 'Bluetooth (BT-M0~M2)',
+  latest: 'Keyboard Hotplug (KH-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1109,      // git rev-list --count main
+    commits: 1113,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 23,         // check.sh의 CHAINS
-    zigKLines: 38,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 24,         // check.sh의 CHAINS
+    zigKLines: 39,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -105,6 +105,7 @@ window.TARS = {
     ['2026-11-01', 'Extend Repeat', 'ER', '[Shift]+더블클릭은 단어, 트리플클릭은 줄 단위로 선택을 늘린다'],
     ['2026-11-01', 'Kernel Upgrade', 'KU', '갱신이 지금 이미지를 old로 남기고 부트 메뉴에서 고를 수 있다 — 새 설치의 ESP는 1GiB, 커널은 6.18.60'],
     ['2026-11-02', 'Bluetooth', 'BT', '커널 BT 스택과 BlueZ · D-Bus — `bluetooth=on`이면 init이 띄우고 bluetoothctl로 페어링, 키는 `/config/bluetooth`에'],
+    ['2026-11-02', 'Keyboard Hotplug', 'KH', '부팅 뒤에 꽂은 USB 키보드와 연결된 Bluetooth 키보드가 곧바로 친다 — 여럿을 함께 써도 한/영과 조합은 하나'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -126,13 +127,14 @@ window.TARS = {
   features: [
     {
       title: '부팅 · 하드웨어',
-      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. GPU 가속 · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth 오디오 · HDMI 오디오 · IPv6는 아직 없다. Bluetooth 키보드는 스택까지만이다(terminal이 부팅 때 고른 키보드 하나만 읽는다).',
+      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. GPU 가속 · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth 오디오 · HDMI 오디오 · IPv6는 아직 없다.',
       items: [
         ['하이브리드 ISO `out/tars.iso`', 'BIOS와 UEFI 항목이 한 ISO에. `dd`로 USB에 그대로 쓴다. 부트로더는 Limine, Secure Boot는 끈다', '2026-09-10'],
         ['화면 — simpledrm · virtio-gpu', '펌웨어가 준 프레임버퍼를 패널 기본 해상도로 쓴다. 격자 크기는 KMS가 준 크기에서 정한다', '2026-09-10'],
         ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · VFAT · ISO9660', '2026-09-10'],
         ['키보드', 'PS/2와 USB HID. 이름이 아니라 capability로 찾고, 늦게 잡히는 USB 키보드는 3초까지 기다린다', '2026-09-10'],
-        ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
+        ['키보드 핫플러그', '부팅 뒤에 꽂거나 연결한 키보드(USB · Bluetooth)가 붙는 순간부터 친다. 여럿을 함께 열고 한/영 · 조합 · 수정키는 하나를 같이 쓴다. 빠지면 눌려 있던 수정키를 푼다. 키보드 없이도 뜬다', '2026-11-02'],
+        ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 키보드 · 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
         ['전원 버튼', '누르면 정상 종료. SIGTERM은 끄기, SIGINT와 [Ctrl+Alt+Del]은 재부팅', '2026-08-22'],
         ['빠른 종료', 'SIGTERM 다음 SIGHUP도 보낸다. 콘솔 셸이 2.9초 끌던 것이 0.13초', '2026-09-13'],
         ['배터리 · AC', 'ACPI 배터리와 어댑터를 읽어 상태 줄에 잔량을 그린다', '2026-10-09'],
