@@ -555,3 +555,8 @@ SE 검사 39의 `sendkey` → 누름(호스트 309ms · 게스트 318ms)으로 �
 `sendkey`는 안 묶인 키보드로만 간다. `-parallel none` 없이 `device`를 주면 QEMU 10.0.13이 abort로 죽는다
 (`qemu-fixed-text-console.device` not found — 기본 parallel `vc`의 텍스트 콘솔). 키보드 둘에 따로 보내는 모양은 하나는 묶고
 하나는 안 묶는 것이다(KH-M0).
+
+102. 입력 장치가 해제될 때 커널이 눌린 키마다 뗌(value 0)을 흉내 내 보낸다(`input_disconnect_device`의
+`input_dev_release_keys`). evdev는 죽은 표시(`evdev_mark_dead`) 전까지 그 뗌을 읽게 하고 그 사이에 `cdev_device_del`이 있어,
+깨어난 reader는 보통 읽는다 — Shift를 쥔 채 `device_del usb-kbd`해도 수정키가 안 남았다. 표시 뒤의 read는 버퍼가 있어도
+`ENODEV`, poll은 `POLLHUP|POLLERR`(+`POLLIN`)이다. 그 틈을 결정적으로 놓치게 하려면 reader를 SIGSTOP한 채 장치를 뺀다(KH-M2).

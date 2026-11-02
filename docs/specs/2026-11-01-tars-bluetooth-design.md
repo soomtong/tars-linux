@@ -128,6 +128,10 @@ evdev까지만 간다. USB 키보드를 부팅 뒤에 꽂아도 지금 같은 �
 비목표 1로 두고 후속 후보 "Keyboard Hotplug"로 적는다. 이 서브프로젝트가 끝나도 BT 키보드는 아직 글자를
 못 친다 — 이것을 숨기지 않는다.
 
+닫힘(2026-11-02). Keyboard Hotplug(KH)가 terminal이 키보드를 포인터와 같은 길로 스스로 열게 했다
+(`docs/specs/2026-11-02-tars-keyboard-hotplug-design.md`). BT 키보드도 evdev 노드가 생기는 순간부터 친다. BLE의 uhid 길은
+여전히 게이트가 못 본다(위험 4).
+
 ### 확인 8 — "블루투스가 없다"에 기대는 문서
 
 소개 페이지(`gh-pages`의 `data.js`) "부팅 · 하드웨어"의 note · AU design 비목표 1 · VD design 63행 · D10b · 비목표
@@ -291,7 +295,7 @@ initramfs 풀기가 늘고(WL 실측 9는 45MB에 0.96초) RAM에 그만큼 남�
 ## 비목표
 
 1. terminal의 키보드 hotplug(여러 키보드 · uevent). 확인 7. 후속 후보 "Keyboard Hotplug"로 HANDOFF에 적는다 —
-   이것 없이 BT 키보드는 글자를 못 친다.
+   이것 없이 BT 키보드는 글자를 못 친다. KH(2026-11-02)가 닫았다.
 2. 오디오 — A2DP · HFP · LE Audio. 코덱과 오디오 서버가 필요하다(사용자가 뺐다).
 3. 시리얼 · 네트워크 프로필 — RFCOMM · BNEP(PAN) · OBEX.
 4. Broadcom firmware(위험 6) · UART · SDIO 전송(`BT_HCIUART` · `BT_HCIBTSDIO`). x86 노트북은 USB · PCIe다.

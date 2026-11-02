@@ -2,7 +2,7 @@
 
 접두사: KH
 
-Status: M1 끝(2026-11-02) — 키보드를 포인터의 길로 연다. 루트 게이트 22/23(BT-M2의 btvirt crash, 재실행 2/2 초록). M2 전.
+Status: 끝났다(2026-11-02) — M0~M2, 결정 9 · 위험 7 · 시나리오 S1~S13 · 실측 1~11. terminal이 키보드를 포인터의 길로 열고, 키보드가 여럿 함께 열리고, 빠진 키보드는 닫히고 손의 상태가 풀린다. 체인 스물넷째 `keyboard/check.sh`(판정 여덟), mutation 셋 잡힘(하나는 7b를 더한 뒤).
 
 관련 문서: `2026-10-05-tars-pointer-devices-design.md`(PD. 장치를 terminal이 스스로 찾고 uevent로 부팅 뒤 장치를 잡는
 길 — 이 설계는 그 길에 키보드를 싣는다) · `2026-11-01-tars-bluetooth-design.md`(BT. 확인 7 · 비목표 1이 이 서브프로젝트를
@@ -119,6 +119,11 @@ evdev는 fd마다 모든 이벤트를 따로 내주므로 둘이 서로를 굶�
 `releaseHeld()`를 부른다 — 수정키 여덟을 거짓으로, `caps_tap` · `lctrl_tap` · `dictate_tap`을 처음으로. Shift를 쥔 채 BT
 키보드가 끊기면 뗌 이벤트가 영영 안 오므로, 이것이 없으면 다른 키보드로 친 글자가 계속 대문자다.
 
+M2에서 고친 것(실측 9). "영영 안 온다"는 반만 맞다. 커널은 장치를 해제할 때 눌린 키마다 뗌을 흉내 내 보내고
+(`input_disconnect_device`), terminal이 그것을 evdev가 죽은 표시를 하기 전에 읽으면 Shift는 거기서 풀린다 — 보통은 그렇다.
+`releaseHeld`가 푸는 것은 terminal이 그 틈을 놓친 경우다(그때 read는 `ENODEV`, poll은 `POLLHUP|POLLERR`라 버퍼의 뗌이
+안 읽힌다). 결정은 그대로이고 이유가 좁아졌다. 커널이 보낸 뗌과 `releaseHeld`가 둘 다 오면 같은 값을 두 번 쓸 뿐이다.
+
 사람 쪽은 안 건드린다. 조합 중인 음절은 남고(다른 키보드의 다음 키가 잇는다), 한/영 · CapsLock · copy mode도 그대로다.
 
 합친 것의 대가가 여기 있다. 키보드 A로 Shift를 쥔 채 키보드 B가 빠지면 A의 Shift도 풀린다. 사람이 그렇게 할 일이 드물고,
@@ -185,8 +190,10 @@ terminal: keyboard> skip /dev/input/event9 full name=…
 5. 한/영을 켠 채 장치를 바꿔도 조합이 이어지는지(시나리오 검토 S3) — k1로 한글을 켜고 자음 하나, k2로 모음 하나.
 6. `device_del k2` → `keyboard> close`. 남은 k1으로 한 줄을 친다. 빠진 뒤 terminal이 바쁜 루프에 안 빠졌는지는 게스트 셸에서
    terminal의 `/proc/<pid>/stat` utime + stime을 1초 간격으로 두 번 읽어 본다(실측 4 — 바쁜 루프면 1초에 약 100 늘어난다).
-7. 빠진 키보드의 Shift(결정 4). k2를 다시 꽂고 QMP로 Shift를 누른 채 뗌 없이 `device_del k2` → k1로 `x`. 화면에 `x`다. `releaseHeld`가
-   없으면 `X`다. KH-M2 plan을 쓰며 더했다.
+7. 빠진 키보드의 Shift(결정 4). k2를 다시 꽂고 QMP로 Shift를 누른 채 뗌 없이 `device_del k2` → k1로 `x`. 화면에 `x`다. KH-M2
+   plan을 쓰며 더했다. 누가 풀었는지는 안 가린다 — 보통은 커널이 푼다(실측 9).
+8. (7b) terminal이 커널의 뗌을 못 읽은 경우. 설정 디스크의 `kh-stop`이 terminal을 SIGSTOP으로 멈춘 동안 Shift를 쥔 k2를 빼고
+   SIGCONT한다. 그 Shift를 푸는 것은 `releaseHeld`뿐이다. KH-M2에서 mutation이 7을 지나친 뒤 더했다.
 
 BT 키보드의 길(bluetoothd → uhid/hidp → evdev)은 게이트가 못 본다(BT 위험 4 그대로). terminal에게는 evdev 노드가 부팅 뒤에
 생긴다는 것만 같으면 되고, 그것을 usb-kbd가 본다. 체인의 monitor 포트는 45495, QMP는 45496이다(RP-M0 예약 범위의 다음 두 자리).
@@ -396,3 +403,29 @@ KH-M0의 부팅 C를 새 terminal로 다시. 빼기 전 5초 39틱, `keyboard> c
 KH-M0의 부팅 A를 새 terminal로 다시. `keyboard> none` → `device_add` 뒤 `keyboard> open /dev/input/event1 name=QEMU QEMU USB
 Keyboard` → 그 키가 `key> 1 byte(s)`. 둘째를 꽂으면 둘째 `open`, 빼면 `keyboard> close /dev/input/event2`이고 남은 키보드의 키가
 계속 간다. `terminal: opened`와 `FATAL`은 없다.
+
+## 실측 (M2, 2026-11-02)
+
+### 실측 9 — 커널이 해제 때 뗌을 흉내 내 보내서, 판정 7은 `releaseHeld`를 못 가린다
+
+체인은 첫 판에 일곱 판정이 초록이었다(판정 6의 틱 차는 0). mutation 셋 가운데 M-a(키보드 칸에 안 넣는다)는 판정 2에서, M-b
+(`POLLERR` · `POLLHUP`을 안 본다)는 판정 6의 `keyboard> close`에서 잡혔다. M-c(`closeKeyboard`가 `releaseHeld`를 안 부른다)는 일곱이
+다 초록이었다.
+
+원인은 커널이다(6.18.60 소스). `input_unregister_device` → `input_disconnect_device`가 "stuck 키를 막으려고" 눌린 키마다
+`EV_KEY … 0`과 `SYN_REPORT`를 흉내 내 보낸다(`drivers/input/input.c` `input_dev_release_keys`). 그다음 `evdev_disconnect`가
+`cdev_device_del`(sysfs · uevent) 뒤에야 `evdev_mark_dead`를 한다. 그 사이에 깨어난 terminal이 뗌을 읽어 Shift가 풀렸다. 죽은
+표시 뒤에는 read가 버퍼가 있어도 `-ENODEV`이고(`evdev.c` `evdev_read`), poll은 `EPOLLHUP | EPOLLERR`(+버퍼가 있으면 `EPOLLIN`)다
+— `readKeyboards`는 그때 읽지 않고 닫으므로 뗌을 잃고, 푸는 것은 `releaseHeld`뿐이다.
+
+그래서 판정 7b를 더했다. 설정 디스크의 `kh-stop`이 terminal을 SIGSTOP으로 멈춘 동안 Shift를 쥔 k2를 빼고(`USB disconnect`를
+기다린다) SIGCONT한다. 그 판에서 M-c는 7b에서 잡혔다. 화면은 `ECHOㅀ/ㅀ$ㄴㅐㅇㅐㄷㄴ`이었다 — Shift가 남아 대문자가 되고, Space가
+Shift+Space(한/영)가 되어 나머지가 한글로 갔다. 같은 판의 판정 7은 초록이었다(`qxq0`). 결정 4의 "뗌이 영영 안 온다"를 고쳤다.
+
+### 실측 10 — 체인 34초
+
+`keyboard/check.sh`는 루트 게이트 안에서 34초다(부팅 하나, init의 3초 포함). 가장 짧은 축이다.
+
+### 실측 11 — 루트 게이트 24/24
+
+11분 18초(prebuild 361 + lanes 316초), verify 8407줄 전부 통과. M1에서 빨갰던 BT-M2(btvirt crash)도 이번 판은 초록이다.

@@ -2626,8 +2626,9 @@ fn takeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, fd: c_int, path: [:0]const u
     return true;
 }
 
-/// 키보드 칸을 비운다(KH design 결정 4). 그 키보드가 쥐고 있던 수정키와 tap은
-/// 뗌 이벤트가 영영 안 오므로 여기서 푼다(`input.State.releaseHeld`).
+/// 키보드 칸을 비운다(KH design 결정 4). 그 키보드가 쥐고 있던 수정키와 tap을 여기서
+/// 푼다(`input.State.releaseHeld`). 커널이 해제 때 보내는 뗌을 terminal이 못 읽은 경우의
+/// 몫이다 — `POLLHUP`이면 읽지 않고 닫고, 죽은 evdev의 read는 `ENODEV`다(KH-M2 실측 9).
 fn closeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, slot: usize, state: *input.State) void {
     const k = &kbds[slot].?;
     logline.print("terminal: keyboard> close {s}\n", .{k.pathSlice()});

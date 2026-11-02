@@ -4,12 +4,18 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+KH(2026-11-02)가 남긴 것.
+
+- [ ] init의 키보드 고르기 · 3초 기다림 · argv의 `device_path` 칸은 이제 terminal이 안 쓴다(KH 비목표 2). 키보드 없이 부팅하면 3초가
+      늦다(KH 실측 3). 걷으려면 PID 1과 `device` · `machine` 체인의 판정 줄(`tars-init: keyboard device`)을 함께 고친다.
+- [ ] 장치별 수정키(KH 비목표 5, 시나리오 S5). 같은 수정키를 두 키보드에서 겹쳐 쥐었다가 한쪽에서 떼면 둘 다 풀리고, 한쪽이
+      빠지면 남은 쪽의 수정키도 풀린다. 실기에서 거슬리면 장치마다 "이 장치가 누른 수정키" 비트 여덟.
+- [ ] 두 키보드의 자동 반복이 섞인다(시나리오 S7) · 한 바퀴 안의 두 키보드는 칸 순서로 읽힌다(위험 7) · 키 하나를 두 노드로
+      내는 키보드는 글자가 두 번이다(위험 6). 셋 다 실기의 근거를 기다린다. 위험 6의 첫 단서는 같은 `name=`의 `keyboard> open` 둘.
+- [ ] 키보드마다 다른 `keyboard=apple|pc`(KH 비목표 1). Mac 키보드와 PC 키보드를 함께 쓰면 한쪽의 Option · Cmd가 어긋난다.
+
 BT(2026-11-02)가 남긴 것.
 
-- [ ] Keyboard Hotplug — terminal은 부팅 때 init이 고른 키보드 하나(`argv[4]`)만 읽는다(BT design 확인 7 · 비목표 1). BT 키보드는
-      bluetoothd → uhid/hidp → evdev까지 가고 거기서 멈춘다. USB 키보드를 부팅 뒤에 꽂아도 같다. 포인터는 PD-M0의 uevent로
-      이미 잡으므로 그 길(`drainUevents` → `tryOpenPointer`)에 키보드를 더하는 서브프로젝트다 — 여러 키보드의 `key_state`를
-      어떻게 나눌지가 설계의 핵심. 게이트는 monitor `device_add usb-kbd` 뒤 `sendkey`가 그 장치로 가는지부터 본다.
 - [ ] 실기에서 처음 볼 것: `bluetoothctl list`에 내장 어댑터가 뜨는지(안 뜨면 `dmesg | grep -i bluetooth` — firmware 이름이
       목록에 없으면 그 이름을 `guest_firmware.sh`에), BLE 마우스를 `pair` · `trust` · `connect`한 뒤 화살표가 움직이는지(uhid →
       evdev → terminal의 pointer hotplug), 재부팅 뒤 마우스가 스스로 다시 붙는지(`/config/bluetooth`의 키). BLE HID의 uhid 길은

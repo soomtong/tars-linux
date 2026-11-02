@@ -97,7 +97,8 @@
   제스처인지, PD-M4) · `wheelRoute` · `classify`(mouse · touchpad · none, capability로) · `Mouse` 디코더
   (`SYN_REPORT`마다 `Frame`) · `Pointer`(clamp · 장치별 버튼 합) · `Sprite`(화살표 save-under, `ink` 118) · `Gesture`
   (idle · pressed · dragging · ignored → `Intent` 여섯) · `ueventAddedNode`. 시스템 콜은 전부 `main.zig`의 포인터 절
-  (`tryOpenPointer` · `drainUevents` · `drainPointer` · `PointerWire.run`)에 있다. `main.zig`의 의도 switch에 `else`가 없다.
+  (`tryOpenInput` · `drainUevents` · `drainPointer` · `PointerWire.run`)에 있다. 키보드의 판정 `looksLikeKeyboard`도 여기다(KH) —
+  키보드 칸 · `takeKeyboard` · `closeKeyboard` · `readKeyboards`는 `main.zig`, 상태는 `input.State` 하나를 모든 키보드가 같이 쓴다. `main.zig`의 의도 switch에 `else`가 없다.
 - `touchpad.zig` — MT 프로토콜 B를 `pointer.Frame`으로(PD-M3). 상수 셋(탭 180ms · 2% · 배율)은 실기 없이 정한 출발값이다 —
   손에 안 맞으면 여기와 `touchpad_test`를 함께 고친다. 게이트는 `pointer/replay/tp-replay`(uinput)로 본다.
 - `layout.zig` — 패널 트리와 사각형 산수(WP-M0). 순수 모듈이고 `layout_test`가

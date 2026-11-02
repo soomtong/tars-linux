@@ -1,28 +1,26 @@
-# HANDOFF: Keyboard Hotplug 진행 중(2026-11-02) — KH-M1 끝, 다음은 KH-M2
+# HANDOFF: Keyboard Hotplug 끝남(2026-11-02) — 다음은 사용자가 고른다
 
 ## 지금 상태 (2026-11-02)
 
-- 열린 서브프로젝트는 Keyboard Hotplug(KH)다. design `docs/specs/2026-11-02-tars-keyboard-hotplug-design.md`(결정 9 · 위험 7 ·
-  여러 키보드 시나리오 검토 S1~S13), M0(실측 1~5) · M1(실측 6~8) 끝 — terminal이 키보드를 포인터의 길(처음 훑기 + uevent)로
-  스스로 열고, `key_state` 하나를 같이 쓰고, 빠지면 `releaseHeld`. M1 루트 게이트 22/23(BT-M2의 btvirt crash, 재실행 2/2 초록,
-  `carryover.md`). 다음은 `docs/plans/2026-11-02-tars-keyboard-hotplug-kh-m2.md` — 체인 `keyboard/check.sh`(일곱 단계), mutation 셋, 닫기. M0이 연 것: 부팅
-  키보드를 빼면 지금 terminal이 CPU 하나를 다 쓴다(실측 4), QMP로 키보드를 골라 치려면 화면에 묶는다(measurements 101).
-- 그 전에 닫은 것: Bluetooth. 2026-11-01 사용자가 외출하며 "이 세션에서 모든 작업을 완료, 모든 결정을 Claude에게 위임"했고, 그
-  위임으로 Bluetooth(BT-M0~M2)를 design부터 닫기까지 한 세션에 했다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4 시점(커널 7.4
-  뒤)만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 돌아와서 뒤집을 것이
-  있으면 그 문서의 결정 번호로 말하면 된다.
-  - 섰다: 커널 BT 스택 · USB/PCIe HCI · HIDP · uhid, firmware 157(initrd 93 → 117MB), Debian BlueZ 5.82 + dbus-daemon을 init이
-    감독(감독 칸 2 · 3번), `tars.conf` 열셋째 키 `bluetooth=off|on`, 페어링은 `bluetoothctl`, 키는 `/config/bluetooth`. 체인 스물셋째
-    `bluetooth/check.sh`가 가상 컨트롤러 둘의 페어링 · 재시작 · 끄기를 본다. 사용 설명은 `docs/guides/running-tars.md`의 "블루투스" 절.
-  - 사용자가 알아야 할 틈 하나: BT 키보드는 아직 글자를 못 친다. terminal이 부팅 때 init이 고른 키보드 하나만 읽는다(BT design 확인 7 ·
-    비목표 1). 마우스는 PD의 uevent 핫플러그로 끝까지 간다. 후속 후보 "Keyboard Hotplug"가 `carryover.md`의 BT 항목에 있다.
-  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer && make container`.
-    main에 push되면 CI가 같은 태그를 ghcr.io에 올린다.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · 1GiB ESP · 6.18.60) + BT. 절차는
+- 열린 서브프로젝트가 없다. 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02) — BT 다음 첫 후보를 사용자가 골랐다.
+  - 섰다: terminal이 키보드를 포인터의 길(처음 훑기 + uevent)로 스스로 연다. 부팅 뒤에 꽂은 USB 키보드 · 연결된 BT 키보드가 붙는
+    순간부터 친다. 여럿이 함께 열리고 한/영 · 조합 · CapsLock · 수정키는 하나를 같이 쓴다(시나리오 검토 S1~S13은 사용자 요청).
+    빠지면 닫고 `releaseHeld`. 키보드 없이도 terminal이 뜬다(`keyboard> none`). 체인 스물넷째 `keyboard/check.sh`(판정 여덟).
+    사용 설명은 `docs/guides/running-tars.md`의 "키보드" 절.
+  - 덤으로 닫힌 버그: 부팅 키보드를 빼면 terminal이 CPU 하나를 다 썼다(KH-M0 실측 4).
+  - 함정 하나가 기억에 갔다: 커널이 해제 때 뗌을 흉내 내 보내서 `releaseHeld`를 빼도 보통은 안 보인다(판정 7b, measurements 102).
+  - 남긴 것은 `carryover.md`의 KH 절(init의 3초 · `device_path`, 장치별 수정키, 반복 섞임 · 두 노드, 키보드마다의 `keyboard=`).
+  - 새 간헐 하나: BT 체인의 `btvirt` crash(KH-M1 루트 게이트, `carryover.md`의 BT 절). M2 판은 초록이었다.
+- 그 전에 닫은 Bluetooth(BT-M0~M2)는 사용자가 외출하며 결정을 Claude에게 맡긴 세션이었다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4
+  시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
+  결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
+  make container`.
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · 1GiB ESP · 6.18.60) + BT + KH. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
-- 마지막으로 닫은 것은 Bluetooth(BT-M0~M2, 2026-11-02). 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
+- 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02). 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
-  - Bluetooth(BT-M0~M2, 11-02) — `docs/decisions/project_bluetooth.md`
+  - Keyboard Hotplug(KH-M0~M2, 11-02) — `docs/decisions/project_keyboard_hotplug.md`
+  - Bluetooth(BT-M0~M2, 11-02) — `project_bluetooth.md`
   - Kernel Upgrade(KU-M0~M1, 11-01) — `project_kernel_upgrade.md`
   - Extend Repeat(ER-M0, 11-01) — `project_extend_repeat.md`
   - Shift Extend(SE-M0~M1, 11-01) — `project_shift_extend.md`
@@ -31,15 +29,18 @@
   - USB Dongles B(UB-M0~M2, 10-31) — `project_usb_dongles_b.md`. 같은 자리에서 IPv6를 결정으로 닫았다(`feedback_ipv4_only.md`)
   - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
   - 그 전은 `docs/guides/completed.md`.
-- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU와 BT가 쌓였고 아직 내지 않았다.
-- 체인은 스물셋이다(`check.sh`의 `CHAINS`, 마지막이 `BT-M2:./bluetooth/check.sh`). BT 체인은 monitor 포트를 안 쓴다 — 새 체인의
-  monitor 포트는 여전히 45495부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(BT-M2): 23/23, 10분 25초(prebuild 약 310 + lanes 315초), verify 8208줄 전부 통과.
+- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH가 쌓였고 아직 내지 않았다.
+- 체인은 스물넷이다(`check.sh`의 `CHAINS`, 마지막이 `KH-M2:./keyboard/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓴다 — 새
+  체인은 45497부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(KH-M2): 24/24, 11분 18초(prebuild 361 + lanes 316초), verify 8407줄 전부 통과.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
+- KH: BT 키보드를 페어링 · 연결한 뒤 곧바로 글자가 쳐지는지(`keyboard> open … name=…`), 노트북 내장 키보드와 함께 쓸 때 한/영 ·
+  조합이 이어지는지. `keyboard> open`이 같은 `name=`으로 둘 뜨고 글자가 두 번 나오면 KH 위험 6이다. 부팅 때 키보드가 하나도 없는
+  기계(BT만)에서 3초 늦게 뜨는 것이 거슬리는지 — 거슬리면 KH 비목표 2.
 - BT: `tars-config set bluetooth=on` · `tars-config reload` 뒤 `bluetoothctl list`에 내장 어댑터가 뜨는지(안 뜨면 `dmesg | grep -i
   bluetooth` — firmware 이름이 안 보이면 그 이름을 `guest_firmware.sh`에). BLE 마우스를 `scan on` · `pair` · `trust` · `connect`한 뒤
   화살표가 움직이는지 — 게이트가 못 보는 uhid → evdev → terminal의 길이다(BT design 위험 4). 재부팅 뒤 마우스가 스스로 다시 붙는지
@@ -74,8 +75,7 @@
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- Keyboard Hotplug — BT 키보드와 부팅 뒤 꽂은 USB 키보드가 글자를 치게. terminal의 키보드 하나(`keyboard_fd`)를 PD의 uevent 길로
-  여러 개로(`carryover.md`의 BT 항목). BT가 끝났으니 이것이 없으면 BT 키보드의 값이 없다 — 첫 후보로 둔다.
+- KH가 남긴 것(`carryover.md`의 KH 절): init의 키보드 고르기 · 3초 · `device_path` 걷기(키보드 없는 부팅이 3초 빨라진다), 장치별 수정키.
 - 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.
