@@ -2,7 +2,7 @@
 
 접두사: KH
 
-Status: M0 끝(2026-11-02) — 위험 1 · 2 닫음, 확인 4 확인, 게이트 6 가능. M1 전.
+Status: M1 끝(2026-11-02) — 키보드를 포인터의 길로 연다. 루트 게이트 22/23(BT-M2의 btvirt crash, 재실행 2/2 초록). M2 전.
 
 관련 문서: `2026-10-05-tars-pointer-devices-design.md`(PD. 장치를 terminal이 스스로 찾고 uevent로 부팅 뒤 장치를 잡는
 길 — 이 설계는 그 길에 키보드를 싣는다) · `2026-11-01-tars-bluetooth-design.md`(BT. 확인 7 · 비목표 1이 이 서브프로젝트를
@@ -185,6 +185,8 @@ terminal: keyboard> skip /dev/input/event9 full name=…
 5. 한/영을 켠 채 장치를 바꿔도 조합이 이어지는지(시나리오 검토 S3) — k1로 한글을 켜고 자음 하나, k2로 모음 하나.
 6. `device_del k2` → `keyboard> close`. 남은 k1으로 한 줄을 친다. 빠진 뒤 terminal이 바쁜 루프에 안 빠졌는지는 게스트 셸에서
    terminal의 `/proc/<pid>/stat` utime + stime을 1초 간격으로 두 번 읽어 본다(실측 4 — 바쁜 루프면 1초에 약 100 늘어난다).
+7. 빠진 키보드의 Shift(결정 4). k2를 다시 꽂고 QMP로 Shift를 누른 채 뗌 없이 `device_del k2` → k1로 `x`. 화면에 `x`다. `releaseHeld`가
+   없으면 `X`다. KH-M2 plan을 쓰며 더했다.
 
 BT 키보드의 길(bluetoothd → uhid/hidp → evdev)은 게이트가 못 본다(BT 위험 4 그대로). terminal에게는 evdev 노드가 부팅 뒤에
 생긴다는 것만 같으면 되고, 그것을 usb-kbd가 본다. 체인의 monitor 포트는 45495, QMP는 45496이다(RP-M0 예약 범위의 다음 두 자리).
@@ -373,3 +375,24 @@ Keyboard`) — 결정 1이 기대는 길이 지금 살아 있다. `device_del`�
 | QEMU QEMU USB Keyboard | 120013 | fffffffffffffffe | 키보드 |
 
 키보드인 둘만 고른다. 결정 2는 그대로다.
+
+## 실측 (M1, 2026-11-02)
+
+### 실측 6 — 루트 게이트 22/23, 빨강 하나는 btvirt의 crash다
+
+23체인 중 BT-M2만 빨강이다. 판정 문구는 `after the restart bluetoothd does not know the pairing … controllers 0`이고, 그 앞에
+`traps: btvirt[107] general protection fault`가 있다 — 페어링 직후 가상 컨트롤러를 만드는 Debian `btvirt`가 죽어 컨트롤러 둘이
+사라졌다. 이 부팅에서 KH가 바꾼 것은 `keyboard> open … AT Translated Set 2 keyboard` 한 줄이다. 같은 산출물로 BT 체인만 두 번
+다시 돌리니 crash 없이 초록이다(`controllers 2 paired yes`). 새 간헐로 `carryover.md`의 BT 절에 적었고 판정은 안 넓혔다.
+`terminal: opened`가 빠진 것 말고 바뀐 로그로 빨개진 체인은 없다.
+
+### 실측 7 — 부팅 키보드를 빼도 CPU가 그대로다(실측 4가 닫혔다)
+
+KH-M0의 부팅 C를 새 terminal로 다시. 빼기 전 5초 39틱, `keyboard> close /dev/input/event1` 뒤 40틱에서 움직이지 않는다. M0은 1초에
+약 101틱이었다.
+
+### 실측 8 — 키보드 없이 부팅하고, 꽂은 키보드가 친다
+
+KH-M0의 부팅 A를 새 terminal로 다시. `keyboard> none` → `device_add` 뒤 `keyboard> open /dev/input/event1 name=QEMU QEMU USB
+Keyboard` → 그 키가 `key> 1 byte(s)`. 둘째를 꽂으면 둘째 `open`, 빼면 `keyboard> close /dev/input/event2`이고 남은 키보드의 키가
+계속 간다. `terminal: opened`와 `FATAL`은 없다.

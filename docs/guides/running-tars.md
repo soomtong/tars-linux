@@ -387,6 +387,17 @@ normal로 나오면서 다음 키가 명령이 된다. 이것은 `hangul_toggle`
 없어도 켜진다. 셸에서 Esc를 다른 뜻으로 쓰다가 한글이 꺼지는 것이 싫으면
 `esc_latin=off`다. copy mode와 검색 프롬프트의 Esc는 한/영을 안 바꾼다.
 
+### 키보드 — 부팅 뒤에 꽂아도, 여럿 꽂아도 된다
+
+terminal이 키보드를 스스로 찾는다(KH). 부팅 때 있던 것도, 부팅 뒤에 꽂은 USB 키보드나 연결된 블루투스 키보드도 붙는 순간부터
+친다. 로그에는 `terminal: keyboard> open /dev/input/eventN name=…`가, 빠지면 `keyboard> close`가 찍힌다. 부팅 때 하나도 없으면
+`keyboard> none`이다 — terminal은 그대로 뜨고 키보드를 기다린다(init은 그 전에 3초를 기다린다).
+
+- 키보드가 여럿이어도 상태는 하나다. 한/영 · 조합 중인 글자 · CapsLock · copy mode는 어느 키보드로 쳐도 이어지고, 한 키보드의
+  Shift · Ctrl · Cmd를 쥔 채 다른 키보드의 글자를 치면 조합이 된다.
+- 쥐고 있던 키보드가 빠지면 수정키가 풀린다. 다른 키보드로 같은 수정키를 함께 쥐고 있었다면 그것도 풀린다 — 다시 누르면 된다.
+- `keyboard=apple|pc`는 기계 하나에 하나다. Mac 키보드와 PC 키보드를 함께 꽂으면 둘 중 하나는 Option · Cmd 자리가 어긋난다.
+
 ### 클립보드 — 패널과 워크스페이스가 하나를 쓴다
 
 copy mode의 `y`(또는 마우스로 끌어 뗌)가 잡은 글자는 terminal 전체에 하나인
@@ -722,8 +733,8 @@ bluetoothd[42]: Bluetooth daemon 5.82
 
 - 보는 창은 `bluetoothctl list`(어댑터) · `show`(켜졌나, `Powered: yes`) · `devices`(아는 장치) · `info <주소>`(Paired · Trusted ·
   Connected)다. 어댑터가 하나도 없으면 커널이 칩을 못 봤거나 firmware가 없는 것이다 — `dmesg | grep -i bluetooth`.
-- 마우스는 붙는 순간부터 쓸 수 있다(terminal이 새 입력 장치를 uevent로 잡는다, PD). 키보드는 아직이다 — terminal은 부팅 때
-  고른 키보드 하나만 읽는다(BT design 비목표 1, 후속 "Keyboard Hotplug"). USB 키보드를 부팅 뒤에 꽂아도 같다.
+- 키보드 · 마우스는 붙는 순간부터 쓸 수 있다(terminal이 새 입력 장치를 uevent로 잡는다, PD · KH). 처음 페어링하려면
+  `bluetoothctl`을 칠 키보드가 한 번은 있어야 한다.
 - `service bluetoothd` · `service dbus`는 `tars-service`로 다룬다. 다시 띄울 일이 있으면 `tars-service restart bluetoothd`다 — `dbus`를
   재시작하면 bluetoothd도 버스를 잃고 따라 죽었다 살아난다.
 - 켜 둔 길: USB HCI(Intel · Realtek · MediaTek · Qualcomm의 내장 BT와 USB 동글) · Intel PCIe HCI(BE200 · BE201). firmware는

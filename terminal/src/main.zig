@@ -2335,8 +2335,26 @@ const PointerDev = struct {
     }
 };
 
+/// 키보드 칸의 수(KH design 결정 5). 노트북 내장 · USB · BT가 흔한 최대이고, 무선
+/// 수신기는 노드를 여럿 낸다. 포인터 칸(`pointer.MAX_DEVICES`)과 같은 수다.
+const MAX_KEYBOARDS = 8;
+
+/// 키보드 칸 하나(KH-M1). 포인터 칸과 같은 이유로 경로를 든다 — 처음 훑기와
+/// uevent가 같은 노드를 두 번 주면 건너뛰려고, 그리고 `close` 줄에 찍으려고.
+/// 디코더가 없는 것이 포인터와 다르다. 키의 상태(`input.State`)는 모든 키보드가
+/// 하나를 같이 쓴다(결정 3).
+const KeyboardDev = struct {
+    fd: c_int,
+    path: [POINTER_PATH_MAX]u8,
+    path_len: usize,
+
+    fn pathSlice(self: *const KeyboardDev) []const u8 {
+        return self.path[0..self.path_len];
+    }
+};
+
 /// 이벤트에 커널이 찍은 시각(µs). 터치패드의 탭 판정과 다시 누름의 간격이 같은
-/// 값을 쓴다 — 장치를 열 때 `CLOCK_MONOTONIC`을 골랐다(`tryOpenPointer`).
+/// 값을 쓴다 — 장치를 열 때 `CLOCK_MONOTONIC`을 골랐다(`takePointer`).
 fn eventUs(ev: *align(1) const pointer.c.struct_input_event) i64 {
     return @as(i64, ev.time.tv_sec) * 1_000_000 + @as(i64, ev.time.tv_usec);
 }
@@ -2467,27 +2485,36 @@ fn readCaps(fd: c_int) ?pointer.Caps {
     return caps;
 }
 
-/// `/dev/input/<name>`을 열어 보고 마우스면 빈 칸에 넣는다(design 결정 1 · 2).
-/// 처음 훑기와 uevent의 `add`가 이 함수 하나를 지난다.
+/// `/dev/input/<name>`을 한 번 열어 성질을 묻고, 포인터면 포인터 칸에, 키보드면
+/// 키보드 칸에 넣는다(PD design 결정 1 · 2, KH design 결정 1 · 2). 처음 훑기와
+/// uevent의 `add`가 이 함수 하나를 지난다.
 ///
-/// `O_NONBLOCK`인 이유. 키보드(`input.openDevice`)는 블로킹이고 poll이 깨운
-/// 뒤 한 번만 읽는다. 포인터는 한 회차에 쌓인 것을 다 읽고 `EAGAIN`에서
-/// 멈춰야 회차마다 `at` 줄이 하나다(design 결정 3). `O_CLOEXEC`는 패널의
-/// 셸이 이 fd를 물려받지 않게 한다.
+/// 두 칸을 따로 본다. 경로가 두 칸에 다 있으면 할 일이 없고, 한 칸에만 있으면 나머지
+/// 칸의 판정만 한다(KH design 위험 5). 포인터 쪽이 먼저다 — 그 줄(`pointer> skip …
+/// kind=none`)이 키보드 노드에서도 지금처럼 먼저 나오고 `keyboard> open`이 뒤따른다
+/// (결정 6, `pointer/check.sh`가 그 줄을 본다).
 ///
-/// 줄의 `name=`은 언제나 맨 끝이다. 이름에 공백이 들어 있어서다.
+/// 포인터가 fd를 가져갔는데 키보드이기도 하면 키보드 쪽은 `open`을 한 번 더 한다.
+/// `dup`은 안 된다 — dup한 fd 둘은 open file description 하나를 나눠서 이벤트 큐
+/// 하나를 서로 빼앗아 읽는다. 아무도 안 가져간 fd는 여기서 닫는다.
 ///
-/// 터치패드면 축 범위를 `EVIOCGABS`로 읽어 디코더를 만들고(PD-M3), `open`
-/// 줄에 칸 수 · 축 · resolution을 함께 찍는다. 실기에서 배율이 손에 안 맞을 때
-/// 그 줄이 첫 단서다(design "실기에서 같은 코드로 가는가").
-fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) void {
+/// `O_NONBLOCK`인 이유. 포인터는 한 회차에 쌓인 것을 다 읽고 `EAGAIN`에서
+/// 멈춰야 회차마다 `at` 줄이 하나다(PD design 결정 3). 키보드는 깨운 fd만 한 번
+/// 읽으므로 블로킹이어도 되지만, 빠지는 순간의 read가 막히지 않는 편이 안전하다
+/// (KH design 결정 1). `O_CLOEXEC`는 패널의 셸이 이 fd를 물려받지 않게 한다.
+fn tryOpenInput(ptrs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, name: []const u8) void {
     var path_buf: [POINTER_PATH_MAX]u8 = undefined;
     const path = std.fmt.bufPrintSentinel(&path_buf, POINTER_DIR ++ "/{s}", .{name}, 0) catch return;
-    for (devs) |slot| {
+    const have_ptr = for (ptrs) |slot| {
         const d = slot orelse continue;
-        if (std.mem.eql(u8, d.pathSlice(), path)) return;
-    }
-    const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true });
+        if (std.mem.eql(u8, d.pathSlice(), path)) break true;
+    } else false;
+    const have_kbd = for (kbds) |slot| {
+        const k = slot orelse continue;
+        if (std.mem.eql(u8, k.pathSlice(), path)) break true;
+    } else false;
+    if (have_ptr and have_kbd) return;
+    const fd = openInputFd(path);
     if (fd < 0) {
         logline.print("terminal: pointer> skip {s} error={s}\n", .{ path, @tagName(std.c.errno(fd)) });
         return;
@@ -2503,26 +2530,50 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     name_buf[name_buf.len - 1] = 0;
     const dev_name = std.mem.sliceTo(&name_buf, 0);
 
-    const kind = pointer.classify(&caps);
+    const took_ptr = !have_ptr and takePointer(ptrs, fd, path, &caps, dev_name);
+    if (!have_kbd and pointer.looksLikeKeyboard(&caps)) {
+        const kfd = if (took_ptr) openInputFd(path) else fd;
+        if (kfd < 0) {
+            logline.print("terminal: keyboard> skip {s} error={s} name={s}\n", .{ path, @tagName(std.c.errno(kfd)), dev_name });
+            return;
+        }
+        if (!takeKeyboard(kbds, kfd, path, dev_name)) _ = std.c.close(kfd);
+        return;
+    }
+    if (!took_ptr) _ = std.c.close(fd);
+}
+
+/// 입력 장치 노드를 연다. 포인터와 키보드가 같은 플래그다(`tryOpenInput`의 주석).
+fn openInputFd(path: [*:0]const u8) c_int {
+    return std.c.open(path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true });
+}
+
+/// 연 fd가 마우스나 터치패드면 빈 포인터 칸에 넣고 참이다. 아니면 거짓이고 fd를
+/// 안 닫는다 — 같은 fd가 키보드 칸으로 갈 수 있다(`tryOpenInput`).
+///
+/// 줄의 `name=`은 언제나 맨 끝이다. 이름에 공백이 들어 있어서다.
+///
+/// 터치패드면 축 범위를 `EVIOCGABS`로 읽어 디코더를 만들고(PD-M3), `open`
+/// 줄에 칸 수 · 축 · resolution을 함께 찍는다. 실기에서 배율이 손에 안 맞을 때
+/// 그 줄이 첫 단서다(design "실기에서 같은 코드로 가는가").
+fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]const u8, caps: *const pointer.Caps, dev_name: []const u8) bool {
+    const kind = pointer.classify(caps);
     if (kind == .none) {
         logline.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
-        _ = std.c.close(fd);
-        return;
+        return false;
     }
     var pad: ?touchpad.Setup = null;
     if (kind == .touchpad) {
-        pad = readPad(fd, &caps) orelse {
+        pad = readPad(fd, caps) orelse {
             logline.print("terminal: pointer> skip {s} kind=touchpad error=axes name={s}\n", .{ path, dev_name });
-            _ = std.c.close(fd);
-            return;
+            return false;
         };
     }
     const free = for (devs, 0..) |slot, i| {
         if (slot == null) break i;
     } else {
         logline.print("terminal: pointer> skip {s} full name={s}\n", .{ path, dev_name });
-        _ = std.c.close(fd);
-        return;
+        return false;
     };
     devs[free] = .{
         .fd = fd,
@@ -2550,6 +2601,48 @@ fn tryOpenPointer(devs: *[pointer.MAX_DEVICES]?PointerDev, name: []const u8) voi
     } else {
         logline.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
     }
+    return true;
+}
+
+/// 연 fd를 빈 키보드 칸에 넣고 참이다(KH design 결정 1 · 5). 칸이 다 찼으면 거짓이고,
+/// 부르는 쪽이 fd를 닫는다.
+///
+/// 이벤트 시각을 단조 시계로 받는다(결정 9). tap 판정과 받아쓰기 더블 탭은 이벤트
+/// 시각끼리 빼는데, 키보드가 여럿이면 누름과 뗌이 서로 다른 fd에서 올 수 있다 — 모든
+/// 키보드가 같은 시계여야 그 뺄셈이 뜻을 가진다. 실패해도 장치는 쓴다.
+fn takeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, fd: c_int, path: [:0]const u8, dev_name: []const u8) bool {
+    const free = for (kbds, 0..) |slot, i| {
+        if (slot == null) break i;
+    } else {
+        logline.print("terminal: keyboard> skip {s} full name={s}\n", .{ path, dev_name });
+        return false;
+    };
+    kbds[free] = .{ .fd = fd, .path = undefined, .path_len = path.len };
+    @memcpy(kbds[free].?.path[0..path.len], path);
+    var mono: c_int = @backingInt(std.posix.CLOCK.MONOTONIC);
+    const clock_rc = ioctl(fd, pointer.c.EVIOCSCLOCKID, &mono);
+    if (clock_rc < 0) logline.print("terminal: keyboard> clock {s} error={s}\n", .{ path, @tagName(std.c.errno(clock_rc)) });
+    logline.print("terminal: keyboard> open {s} name={s}\n", .{ path, dev_name });
+    return true;
+}
+
+/// 키보드 칸을 비운다(KH design 결정 4). 그 키보드가 쥐고 있던 수정키와 tap은
+/// 뗌 이벤트가 영영 안 오므로 여기서 푼다(`input.State.releaseHeld`).
+fn closeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, slot: usize, state: *input.State) void {
+    const k = &kbds[slot].?;
+    logline.print("terminal: keyboard> close {s}\n", .{k.pathSlice()});
+    _ = std.c.close(k.fd);
+    state.releaseHeld();
+    kbds[slot] = null;
+}
+
+/// 열린 키보드의 수.
+fn keyboardCount(kbds: *const [MAX_KEYBOARDS]?KeyboardDev) usize {
+    var n: usize = 0;
+    for (kbds) |slot| {
+        if (slot != null) n += 1;
+    }
+    return n;
 }
 
 /// 터치패드의 축 범위를 읽는다(PD-M3). MT 프로토콜 B면 `ABS_MT_POSITION_X/Y`와
@@ -2590,8 +2683,8 @@ fn readAbs(fd: c_int, comptime code: u16) ?pointer.c.struct_input_absinfo {
 
 /// 부팅 때 이미 있던 장치를 훑는다. uevent 소켓을 연 뒤에 부른다 — 반대면
 /// 훑은 뒤 소켓을 열기 전에 생긴 장치를 놓친다(design 결정 1). 실패해도 terminal은
-/// 산다. 포인터 없이 키보드만으로 지금처럼 쓴다.
-fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
+/// 산다. 그때는 부팅 뒤에 생기는 장치만 uevent로 잡는다. 키보드도 여기서 찾는다(KH-M1).
+fn scanInputs(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev) void {
     var dir = std.Io.Dir.openDirAbsolute(io, POINTER_DIR, .{ .iterate = true }) catch |err| {
         logline.print("terminal: pointer> scan failed error={s}\n", .{@errorName(err)});
         return;
@@ -2601,7 +2694,7 @@ fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
     // `event`로 시작하는 이름만 본다. `mice` · `mouseN`은 evdev 이전의
     // 통로이고 `INPUT_MOUSEDEV`가 꺼져 있어 생기지도 않는다(design 실측 6).
     while (it.next(io) catch null) |entry| {
-        if (std.mem.startsWith(u8, entry.name, "event")) tryOpenPointer(devs, entry.name);
+        if (std.mem.startsWith(u8, entry.name, "event")) tryOpenInput(devs, kbds, entry.name);
     }
 }
 
@@ -2621,7 +2714,7 @@ fn scanPointers(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) void {
 /// `ACTION`도 안 본다 — test_power가 배터리를 켜고 끄는 uevent는 `test_battery`가
 /// 아니라 `test_ac`에서 오고(BS design 확인 4), 배터리를 갈아 끼우면 `add` · `remove`가
 /// 온다. `ENOBUFS`도 참이다. 버려진 메시지에 power_supply가 있었을 수 있다.
-fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) bool {
+fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev) bool {
     // 커널 uevent 하나는 `UEVENT_BUFFER_SIZE`(2048바이트) 안이다.
     var buf: [4096]u8 = undefined;
     var supply = false;
@@ -2629,7 +2722,7 @@ fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) 
         const n = std.c.read(fd, &buf, buf.len);
         if (n < 0) {
             if (std.c.errno(n) != .NOBUFS) return supply; // EAGAIN — 다 읽었다
-            scanPointers(io, devs);
+            scanInputs(io, devs, kbds);
             supply = true;
             continue;
         }
@@ -2637,7 +2730,7 @@ fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev) 
         const msg = buf[0..@intCast(n)];
         if (battery.ueventIsPowerSupply(msg)) supply = true;
         const name = pointer.ueventAddedNode(msg) orelse continue;
-        tryOpenPointer(devs, name);
+        tryOpenInput(devs, kbds, name);
     }
 }
 
@@ -3180,14 +3273,17 @@ const App = struct {
     last_pane: ?PaneSig = null,
 
     // ── 입력 ───────────────────────────────────────────────────────────
-    keyboard_fd: c_int,
+    /// 키보드(KH-M1). 포인터와 같은 길로 terminal이 스스로 찾고, 부팅 뒤에 꽂힌 것도
+    /// 잡는다(KH design 결정 1). 여럿이 동시에 열리고, 키의 상태는 아래 하나를 같이
+    /// 쓴다(결정 3). 0개여도 terminal은 뜬다(결정 7).
+    keyboard_devs: [MAX_KEYBOARDS]?KeyboardDev = @splat(null),
     key_state: input.State,
     key_buf: [64]u8 = undefined,
     pty_buf: [4096]u8 = undefined,
 
     // ── 포인터 ─────────────────────────────────────────────────────────
     /// 포인터 장치(PD-M0). 키보드와 달리 terminal이 스스로 찾고, 부팅 뒤에
-    /// 꽂힌 것도 잡는다(PD design 결정 1). init의 `argv[4]`는 그대로다.
+    /// 꽂힌 것도 잡는다(PD design 결정 1). 키보드도 KH-M1부터 같은 길이다.
     pointer_devs: [pointer.MAX_DEVICES]?PointerDev = @splat(null),
     pointer_state: pointer.Pointer,
     /// 화살표와 그 밑의 픽셀(PD-M1, design 결정 4).
@@ -3248,22 +3344,25 @@ const App = struct {
     last_frame_ms: ?i64 = null,
 
     // ── poll ───────────────────────────────────────────────────────────
-    /// poll이 보는 fd. 키보드 하나, uevent 소켓 하나(PD-M0), 열린 포인터 장치,
+    /// poll이 보는 fd. uevent 소켓 하나(PD-M0), 열린 키보드(KH-M1), 열린 포인터 장치,
     /// 그리고 모든 워크스페이스의 모든 패널이다(WP design 위험 1). 포커스 없는
     /// 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
     /// 멈춘다.
     ///
-    /// 크기는 상한(1 + 1 + 8 + 9 × 8)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
+    /// 크기는 상한(1 + 8 + 8 + 9 × 8 + 2)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
     /// 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
     /// "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
     ///
-    /// 자리는 `[0]` 키보드 · `[1]` uevent 소켓 · `[2..pty_base]` 포인터 장치 ·
-    /// `[pty_base..nfds]` PTY다. PD 전에는 PTY가 `[1..]`이었다 — 그 오프셋이
-    /// 이제 바퀴마다 다르므로 `pty_base`로 든다.
+    /// 자리는 `[0]` uevent 소켓 · `[1..kbd_end]` 키보드 · `[kbd_end..pty_base]` 포인터
+    /// 장치 · `[pty_base..pty_end]` PTY다. PD 전에는 PTY가 `[1..]`이었고, KH 전에는
+    /// `[0]`이 키보드 · `[1]`이 uevent였다 — 자리가 바퀴마다 다르므로 경계를 이름으로
+    /// 든다(KH design 위험 4). 숫자로 쓰는 자리는 `fds[0]`(uevent)과 키보드 구간의 머리 `1`뿐이다.
     ///
     /// 맨 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
-    fds: [2 + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined,
-    /// `fds[2 + k]`가 어느 장치 칸의 것인지.
+    fds: [1 + MAX_KEYBOARDS + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined,
+    /// `fds[1 + k]`가 어느 키보드 칸의 것인지.
+    fd_kbds: [MAX_KEYBOARDS]usize = undefined,
+    /// `fds[kbd_end + k]`가 어느 포인터 칸의 것인지.
     fd_devs: [pointer.MAX_DEVICES]usize = undefined,
     /// `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
     /// 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
@@ -3273,11 +3372,14 @@ const App = struct {
     fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]PaneRef = undefined,
     /// 이 바퀴에 `fds`에서 쓴 길이와 PTY 구간. 바퀴마다 `tick`의 머리가 다시 정한다.
     nfds: usize = 0,
+    kbd_end: usize = 0,
     pty_base: usize = 0,
     pty_end: usize = 0,
 
-    /// 준비 전부. 순서가 로그의 순서다 — `grid` → `font cache ready` → `opened` →
-    /// `spawned child pid` → `keyboard=` → `hangul layout=` → `clipboard scope=`.
+    /// 준비 전부. 순서가 로그의 순서다 — `grid` → `font cache ready` →
+    /// `spawned child pid` → `keyboard=` → `hangul layout=` → `clipboard scope=` →
+    /// `pointer>` · `keyboard>`(처음 훑기). KH 전에는 `font cache ready` 뒤에
+    /// `opened /dev/input/eventN`이 있었다.
     /// `config/check.sh`가 `keyboard` 줄 다음에 `clipboard` 줄이 온다는 것을 쓴다.
     ///
     /// 중간에 실패하면 에러를 돌려주고 프로세스가 끝난다 — init이 되살린다. 그때까지
@@ -3299,7 +3401,6 @@ const App = struct {
             .argv = undefined,
             .swap_alt_meta = undefined,
             .clips = undefined,
-            .keyboard_fd = undefined,
             .key_state = undefined,
             .pointer_state = undefined,
             .sprite = undefined,
@@ -3308,9 +3409,9 @@ const App = struct {
         };
         try self.openScreen();
         try self.openVerify();
-        const a = try self.openKeyboard(init);
+        const a = readArgs(init);
         try self.spawnFirst(a);
-        self.openPointers();
+        self.openInputs();
         self.openBattery();
         return self;
     }
@@ -3358,28 +3459,21 @@ const App = struct {
         logline.print("terminal: verify> on bytes={d}\n", .{pixels.len});
     }
 
-    /// 준비 2. init이 argv에 실어 보낸 값 전체를 읽고(SA-M1) 키보드 장치를 연다.
-    /// 읽은 값은 돌려준다 — 준비 3이 셸 · 자판 · 클립보드를 거기서 꺼낸다.
+    /// 준비 2. init이 argv에 실어 보낸 값 전체를 읽는다(SA-M1). 준비 3이 셸 · 자판 ·
+    /// 클립보드를 거기서 꺼낸다.
     ///
     /// init이 같은 파일의 `encode`로 지은 아홉 칸을 `decode`가 되돌린다 — 칸 번호와
     /// 글자는 그 파일 안에만 있고 여기는 필드다. 없는 칸(init 없이 손으로 띄웠다)과
     /// 못 읽는 글자는 `screen_args`의 기본값이고, 그 기본값은 설정 파일의 기본값과
     /// 같아야 한다는 것을 그 파일이 적어 둔다.
     ///
-    /// 장치 경로(HD-M0)의 번호를 여기서 고르지 않는 이유는 CP가 세운 규칙 그대로다 —
-    /// 하드웨어를 살펴 고르는 일은 PID 1이 하고 terminal은 그 결정을 실행만 한다.
-    /// 셸 인자를 꺼내는 자리보다 위에서 읽는 이유는 장치를 여는 일이 그보다 먼저
-    /// 오기 때문이다(로그 순서를 지킨다).
-    fn openKeyboard(self: *App, init: std.process.Init) !screen_args.Args {
-        const a = screen_args.decode(screen_args.argvOf(init.minimal.args.vector));
-        const input_device = a.device_path;
-
-        self.keyboard_fd = input.openDevice(input_device) catch |err| {
-            logline.print("terminal: FATAL cannot open {s}: {any}\n", .{ input_device, err });
-            return err;
-        };
-        logline.print("terminal: opened {s}\n", .{input_device});
-        return a;
+    /// 장치 경로 칸(`device_path`, HD-M0)은 읽기만 하고 안 연다(KH design 결정 1).
+    /// KH 전에는 여기서 그 경로 하나를 열었고 못 열면 `FATAL`로 끝났다. 이제 키보드는
+    /// 준비 4가 포인터와 같은 길로 찾는다 — 핫플러그를 하려면 장치를 계속 지켜보는
+    /// 프로세스가 장치를 골라야 하고, 그것은 terminal이다. 칸은 init의 고르기와 함께
+    /// 남는다(KH 비목표 2).
+    fn readArgs(init: std.process.Init) screen_args.Args {
+        return screen_args.decode(screen_args.argvOf(init.minimal.args.vector));
     }
 
     /// 준비 3. 셸의 환경과 argv, 클립보드, 첫 워크스페이스의 첫 패널, 설정이 여기까지
@@ -3534,8 +3628,10 @@ const App = struct {
         };
     }
 
-    /// 준비 4. uevent 소켓을 먼저 열고 그다음에 포인터 장치를 훑는다(PD-M0).
-    fn openPointers(self: *App) void {
+    /// 준비 4. uevent 소켓을 먼저 열고 그다음에 입력 장치를 훑는다(PD-M0). 키보드도
+    /// 여기서 열린다(KH-M1). 하나도 없으면 `keyboard> none` 한 줄을 찍는다(KH design
+    /// 결정 7) — "왜 안 쳐지나"에서 로그를 읽는 사람이 처음 볼 자리다.
+    fn openInputs(self: *App) void {
         self.pointer_state = pointer.Pointer.init(self.fb.width, self.fb.height);
         self.sprite = pointer.Sprite.init(self.fb.width, self.fb.height);
         self.uevent_fd = uevent: {
@@ -3560,7 +3656,8 @@ const App = struct {
         // 두 손가락이 휠 한 눈금의 줄 수만큼 움직이면 한 눈금이다 — 손가락과 글자가
         // 같은 거리를 간다. 처음 훑기보다 먼저 정해야 부팅 때 있던 패드도 이 값을 쓴다.
         touchpad_screen = .{ .w = self.fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
-        scanPointers(self.io, &self.pointer_devs);
+        scanInputs(self.io, &self.pointer_devs, &self.keyboard_devs);
+        if (keyboardCount(&self.keyboard_devs) == 0) logline.print("terminal: keyboard> none\n", .{});
     }
 
     /// 준비 5. 배터리(BS-M1, design 결정 8). 포인터와 같은 이유로 uevent 소켓을 연 뒤에
@@ -3602,16 +3699,22 @@ const App = struct {
         self.cache.deinit();
     }
 
-    /// 바퀴 1. poll에 넘길 fd를 다시 짓는다. 자리는 `fds`의 문서 주석에 있다 — 키보드 ·
-    /// uevent 소켓 · 포인터 장치 · 모든 워크스페이스의 모든 패널 · 받아쓰기 파이프 둘.
+    /// 바퀴 1. poll에 넘길 fd를 다시 짓는다. 자리는 `fds`의 문서 주석에 있다 — uevent
+    /// 소켓 · 키보드 · 포인터 장치 · 모든 워크스페이스의 모든 패널 · 받아쓰기 파이프 둘.
     fn arm(self: *App) void {
-        self.fds[0] = .{ .fd = self.keyboard_fd, .events = c.POLLIN, .revents = 0 };
-        self.fds[1] = .{ .fd = self.uevent_fd, .events = c.POLLIN, .revents = 0 };
-        self.nfds = 2;
+        self.fds[0] = .{ .fd = self.uevent_fd, .events = c.POLLIN, .revents = 0 };
+        self.nfds = 1;
+        for (&self.keyboard_devs, 0..) |*slot, ki| {
+            const k = if (slot.*) |*k| k else continue;
+            self.fds[self.nfds] = .{ .fd = k.fd, .events = c.POLLIN, .revents = 0 };
+            self.fd_kbds[self.nfds - 1] = ki;
+            self.nfds += 1;
+        }
+        self.kbd_end = self.nfds;
         for (&self.pointer_devs, 0..) |*slot, di| {
             const d = if (slot.*) |*d| d else continue;
             self.fds[self.nfds] = .{ .fd = d.fd, .events = c.POLLIN, .revents = 0 };
-            self.fd_devs[self.nfds - 2] = di;
+            self.fd_devs[self.nfds - self.kbd_end] = di;
             self.nfds += 1;
         }
         self.pty_base = self.nfds;
@@ -3641,7 +3744,12 @@ const App = struct {
     /// `focus`는 이 단계의 머리에서 한 번 잡는다. 패널 명령이 포커스를 옮겨도 이 배치
     /// 안에서는 안 바꾼다(WP-M1) — 받아쓰기 명령이 그래서 `ws.focus`로 다시 구한다.
     /// 그리기 직전의 포커스는 `tick`이 다시 구한다.
-    fn readKeyboard(self: *App) !void {
+    ///
+    /// 키보드 하나의 fd 하나를 읽는다(KH-M1). 키보드가 여럿이면 `readKeyboards`가 칸
+    /// 순서대로 부르고, 머리에서 포커스를 다시 잡으므로 앞 키보드의 키가 바꾼
+    /// 워크스페이스를 뒤 키보드의 키가 본다(KH design 결정 5). 장치가 사라졌으면
+    /// `.gone`이고 아무것도 안 한다 — 닫는 것은 부르는 쪽이다.
+    fn readKeyboard(self: *App, fd: c_int) !enum { open, gone } {
         const ws = &self.workspaces[self.current].?;
         const focus = &ws.panes[ws.focus].?;
 
@@ -3658,7 +3766,8 @@ const App = struct {
             // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
             .dictating = dictation.escCancels(self.dict.phase),
         };
-        const keys = input.readKeys(&self.key_state, self.keyboard_fd, &self.key_buf, ctx);
+        const keys = input.readKeys(&self.key_state, fd, &self.key_buf, ctx);
+        if (keys.gone) return .gone;
         // 받아쓰기의 알림은 다음 키에 사라진다(VD-M1). "키"는 무언가를 한 키다 —
         // 수정키를 누르고 떼기만 한 배치는 안 센다. 그렇지 않으면 더블 탭의 마지막
         // 뗌이 방금 뜬 `PASSWORD`를 바로 지운다.
@@ -3705,6 +3814,26 @@ const App = struct {
         }
         try self.runPanes(keys.panes);
         self.runDictates(keys.dictates);
+        return .open;
+    }
+
+    /// 바퀴 2의 머리. 키보드 칸을 순서대로 본다(KH design 결정 4 · 5).
+    ///
+    /// `POLLERR` · `POLLHUP`이면 읽지 않고 닫는다. 포인터와 같은 함정이다 — 이것을
+    /// 빠뜨리면 poll이 그 fd에 대해 매 바퀴 곧바로 돌아와 terminal이 CPU 하나를 다
+    /// 쓴다. KH 전에는 부팅 키보드를 뽑으면 실제로 그랬다(KH-M0 실측 4, 1초에 약
+    /// 100틱). read가 0이나 `ENODEV`면(`readKeyboard`의 `.gone`) 그때 닫는다.
+    ///
+    /// 닫기가 uevent 읽기(바퀴 3의 `drainUevents`)보다 먼저다. 빠진 번호가 곧바로
+    /// 다시 쓰이면 옛 칸의 경로가 남아 새 장치를 "이미 열었다"로 건너뛰기
+    /// 때문이다(포인터의 `readPointers`와 같은 이유).
+    fn readKeyboards(self: *App) !void {
+        for (self.fds[1..self.kbd_end], self.fd_kbds[0 .. self.kbd_end - 1]) |kfd, ki| {
+            if (kfd.revents == 0) continue;
+            var gone = kfd.revents & (c.POLLERR | c.POLLHUP) != 0;
+            if (!gone and kfd.revents & c.POLLIN != 0) gone = try self.readKeyboard(kfd.fd) == .gone;
+            if (gone) closeKeyboard(&self.keyboard_devs, ki, &self.key_state);
+        }
     }
 
     /// 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
@@ -3995,7 +4124,7 @@ const App = struct {
         var round: PointerRound = .{};
         const before_spot = self.sprite.at;
         pointer_drawn = before_spot != null;
-        for (self.fds[2..self.pty_base], self.fd_devs[0 .. self.pty_base - 2]) |pfd, di| {
+        for (self.fds[self.kbd_end..self.pty_base], self.fd_devs[0 .. self.pty_base - self.kbd_end]) |pfd, di| {
             if (pfd.revents == 0) continue;
             var gone = pfd.revents & (c.POLLERR | c.POLLHUP) != 0;
             if (!gone and pfd.revents & c.POLLIN != 0) {
@@ -4003,7 +4132,7 @@ const App = struct {
             }
             if (gone) closePointer(&self.pointer_devs, di, &self.pointer_state);
         }
-        const supply_seen = self.fds[1].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs);
+        const supply_seen = self.fds[0].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs, &self.keyboard_devs);
         return .{ .round = round, .before_spot = before_spot, .supply_seen = supply_seen };
     }
 
@@ -4663,7 +4792,7 @@ const App = struct {
         if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드가 먼저다. 그 뒤 단계는 키보드가 바꾼 워크스페이스 · 포커스를 본다.
-        if (self.fds[0].revents & c.POLLIN != 0) try self.readKeyboard();
+        try self.readKeyboards();
         // 포인터는 키보드 뒤 · PTY 앞(PD design 결정 3).
         const pointers = self.readPointers();
         // 배터리는 `decideFrame`보다 앞 — 그래야 uevent · timeout만으로 깬 바퀴도 그린다(검사 A3).

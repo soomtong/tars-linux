@@ -14,13 +14,9 @@ const dictation = @import("dictation.zig");
 /// "KEY_LEFT가 ESC [ D가 되는가"다.
 pub const c = @import("c_input");
 
-/// libc의 open을 직접 선언한다. glibc의 `open`은 가변 인자
-/// (`int open(const char *, int, ...)`)라 translate-c가 만든 래퍼를 그대로
-/// 쓰기 번거롭다 — `pty.zig`가 `execv`를 직접 선언한 것과 같은 이유다.
-extern "c" fn open(path: [*:0]const u8, flags: c_int) c_int;
+/// libc의 read를 직접 선언한다. 장치를 여는 것은 KH-M1부터 `main.zig`다(포인터와
+/// 같은 길) — 그 전에는 여기 `openDevice`가 init이 고른 경로 하나를 블로킹으로 열었다.
 extern "c" fn read(fd: c_int, buf: [*]u8, count: usize) isize;
-
-const O_RDONLY: c_int = 0;
 
 /// evdev keycode → (Shift 안 누름, Shift 누름) 문자.
 /// 0은 "이 키는 문자를 만들지 않는다"는 뜻이다(modifier 키 등).
@@ -490,6 +486,10 @@ pub const Keys = struct {
     /// 있을 때, 그리고 키가 `hangul_on`을 바꿨을 때다(EL-M0). 셋째는 바이트를
     /// 함께 내보내는 키(Esc)를 위한 것이다 — `readKeys`의 주석에 있다.
     redraw: bool,
+    /// 장치가 사라졌다(KH design 결정 4). read가 0이거나 `EAGAIN` · `EINTR`
+    /// 아닌 오류(`ENODEV`)를 냈다. 부르는 쪽이 fd를 닫고 `releaseHeld`를 부른다.
+    /// 키보드 fd가 논블로킹이라(결정 1) `EAGAIN`은 사라진 것이 아니라 빈 배치다.
+    gone: bool = false,
 };
 
 /// ESC(0x1b). 아래 escape()가 계산 문맥에서 쓰므로 이름을 붙인다.
@@ -981,6 +981,32 @@ pub const State = struct {
     ///
     /// 돌려주는 슬라이스는 `commit_buf`를 가리킨다. 다음 키가 덮어쓰므로
     /// 호출부가 바로 쓴다 — `takeCommit`과 같은 계약이다.
+    /// 키보드 하나가 빠졌다(KH design 결정 4). 손의 상태를 처음으로 되돌린다 —
+    /// 수정키 여덟, tap 둘, 받아쓰기의 더블 탭.
+    ///
+    /// 뗌 이벤트가 영영 안 오기 때문이다. Shift를 쥔 채 BT 키보드가 끊기면, 이것이
+    /// 없을 때 다른 키보드로 친 글자가 계속 대문자다.
+    ///
+    /// 사람의 상태(`hangul_on` · `hangul_buf` · `commit_*` · `caps_lock` · `mode`)는
+    /// 안 건드린다. 키보드가 여럿이어도 사람은 하나이고, 조합 중인 음절은 다른
+    /// 키보드의 다음 키가 잇는다(design 시나리오 검토 S4).
+    ///
+    /// 키보드들이 수정키를 합쳐 쓰므로(결정 3) 남은 키보드가 쥐고 있던 수정키도
+    /// 풀린다. 그 키를 다시 누르면 돌아온다 — design이 받아들인 대가다.
+    pub fn releaseHeld(self: *State) void {
+        self.shift_left = false;
+        self.shift_right = false;
+        self.ctrl_left = false;
+        self.ctrl_right = false;
+        self.alt_left = false;
+        self.alt_right = false;
+        self.meta_left = false;
+        self.meta_right = false;
+        self.caps_tap = .{};
+        self.lctrl_tap = .{};
+        self.dictate_tap.reset();
+    }
+
     pub fn forceMode(self: *State, to: Mode) []const u8 {
         switch (self.mode) {
             .normal => self.commitHangul(),
@@ -1623,12 +1649,6 @@ pub const State = struct {
     }
 };
 
-pub fn openDevice(path: [*:0]const u8) !c_int {
-    const fd = open(path, O_RDONLY);
-    if (fd < 0) return error.OpenInputDeviceFailed;
-    return fd;
-}
-
 /// evdev 이벤트의 시각을 마이크로초 하나로 합친다(HI design 조사 5).
 ///
 /// 커널이 찍은 시각이라 poll 루프가 늦어져도 안 흔들린다. 한 번의 read가
@@ -1665,6 +1685,10 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .panes = self.panes[0..0],
         .dictates = self.dictates[0..0],
         .redraw = false,
+        .gone = n == 0 or switch (std.c.errno(n)) {
+            .AGAIN, .INTR => false,
+            else => true,
+        },
     };
 
     const count = @as(usize, @intCast(n)) / ev_size;
@@ -1687,6 +1711,12 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
             continue;
         }
         if (ev.type != c.EV_KEY) continue;
+        // 마우스 버튼 · 조이스틱 · 터치 도구(`BTN_MISC` 0x100부터)는 키보드의 것이
+        // 아니다(KH design 결정 2). 키보드이자 포인터인 노드는 키보드 칸과 포인터
+        // 칸에 fd 둘로 열리고, 버튼은 포인터 쪽이 읽는다. 여기서 안 거르면
+        // `handleKey`의 머리가 클릭을 "다른 키의 누름"으로 쳐서 CapsLock tap과
+        // 받아쓰기 더블 탭을 끊는다(`input_test` 검사 87).
+        if (ev.code >= c.BTN_MISC) continue;
         // 이 값은 이미 손에 있었다(HI-M0 실측 3). `readKeys`가
         // `struct_input_event`를 통째로 읽고 있었고 `ev.time`만 버리고 있었다.
         // 모드를 `handleKey` 앞에서 읽는다(SH design 결정 5). `Enter`가

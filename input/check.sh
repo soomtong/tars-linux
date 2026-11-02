@@ -129,7 +129,7 @@ report_failure() {
   local marker
   for marker in \
     "tars-init: started terminal" \
-    "terminal: opened /dev/input/event" \
+    "terminal: keyboard> open /dev/input/event" \
     "terminal: spawned child pid" \
     "terminal: screen>" \
     "terminal: key>" \

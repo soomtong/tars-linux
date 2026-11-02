@@ -70,6 +70,26 @@ pub fn classify(caps: *const Caps) Kind {
     return .none;
 }
 
+/// 이 장치를 키보드로 열 것인가(KH design 결정 2). `EV_KEY`가 있고 `KEY_ESC`(1)부터
+/// `KEY_D`(32)까지 서른두 키가 다 있다.
+///
+/// init의 `devices.looksLikeKeyboard`와 기준이 같다. 같은 기계에서 init이 "키보드"라고
+/// 부르는 것과 terminal이 여는 것이 달라지면 로그를 읽는 사람이 헷갈린다. 함수를 하나로
+/// 합치지 않는 이유는 비트맵의 모양이다 — 그쪽은 sysfs의 "높은 워드가 앞" 문자열이고
+/// 이쪽은 ioctl의 바이트 배열이다(`bitSet`의 주석).
+///
+/// 전원 버튼 · `Video Bus` · 마우스 · 미디어 키 노드(`Consumer Control`)는 글자 키가
+/// 없어 아니다(KH-M0 실측 5). `classify`와 따로 묻는다 — 한 노드가 키보드이자
+/// 포인터일 수 있다(결정 2).
+pub fn looksLikeKeyboard(caps: *const Caps) bool {
+    if (!bitSet(&caps.ev, c.EV_KEY)) return false;
+    var code: usize = c.KEY_ESC;
+    while (code <= c.KEY_D) : (code += 1) {
+        if (!bitSet(&caps.key, code)) return false;
+    }
+    return true;
+}
+
 /// ioctl 요청 번호 넷(PD design 결정 1). 번역이 `linux/input.h`의 매크로를
 /// 함수로 넘겨주므로 그것을 그대로 부른다 — 커널 헤더가 정한 값이 한 벌이다
 /// (PD-M0 plan 확정 4). design은 `drm.zig`의 `drmIowr`처럼 손으로 짓기로

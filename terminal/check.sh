@@ -110,7 +110,7 @@ if [ "$READY" != "1" ]; then
   for marker in \
     "terminal: grid " \
     "terminal: rasterized " \
-    "terminal: opened /dev/input/event" \
+    "terminal: keyboard> open /dev/input/event" \
     "terminal: spawned child pid "; do
     if grep -q "$marker" "$LOG"; then
       echo "  ok      ${marker}"

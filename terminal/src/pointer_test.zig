@@ -902,5 +902,43 @@ pub fn main() !void {
         try expectNum("so it is click 1", g.clicks, 1);
     }
 
+    // ── 검사 41: 키보드의 판정 (KH design 결정 2, KH-M0 실측 5) ──────────
+    //
+    // 2026-11-02 KH-M0의 게스트에서 본 `capabilities/ev` · `capabilities/key` 글자
+    // 그대로다. 키보드인 둘만 참이다. 마지막은 AT 키보드에서 `KEY_D`(32) 하나를
+    // 뺀 것이다 — 서른두 키가 "다" 있어야 한다는 것을 본다.
+    {
+        try expectTrue("AT keyboard looks like a keyboard", pointer.looksLikeKeyboard(&caps(
+            "0",
+            "120013",
+            "402000007 ff803078f800d001 feffffdfffcfffff fffffffffffffffe",
+            "0",
+            "0",
+        )));
+        try expectTrue("USB keyboard looks like a keyboard", pointer.looksLikeKeyboard(&caps(
+            "0",
+            "120013",
+            "1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe",
+            "0",
+            "0",
+        )));
+        try expectTrue("power button is not a keyboard", !pointer.looksLikeKeyboard(&caps("0", "3", "8000 10000000000000 0", "0", "0")));
+        try expectTrue("PS/2 mouse is not a keyboard", !pointer.looksLikeKeyboard(&caps("0", "7", "1f0000 0 0 0 0", "3", "0")));
+        try expectTrue("a keyboard without KEY_D is not a keyboard", !pointer.looksLikeKeyboard(&caps(
+            "0",
+            "120013",
+            "402000007 ff803078f800d001 feffffdfffcfffff fffffffefffffffe",
+            "0",
+            "0",
+        )));
+        try expectTrue("keys without EV_KEY are not a keyboard", !pointer.looksLikeKeyboard(&caps(
+            "0",
+            "0",
+            "402000007 ff803078f800d001 feffffdfffcfffff fffffffffffffffe",
+            "0",
+            "0",
+        )));
+    }
+
     std.debug.print("pointer_test: all checks passed\n", .{});
 }

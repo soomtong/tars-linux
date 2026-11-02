@@ -1,10 +1,11 @@
-# HANDOFF: Keyboard Hotplug 진행 중(2026-11-02) — KH-M0 끝, 다음은 KH-M1
+# HANDOFF: Keyboard Hotplug 진행 중(2026-11-02) — KH-M1 끝, 다음은 KH-M2
 
 ## 지금 상태 (2026-11-02)
 
 - 열린 서브프로젝트는 Keyboard Hotplug(KH)다. design `docs/specs/2026-11-02-tars-keyboard-hotplug-design.md`(결정 9 · 위험 7 ·
-  여러 키보드 시나리오 검토 S1~S13), M0(실측 1~5) 끝. 다음은 `docs/plans/2026-11-02-tars-keyboard-hotplug-kh-m1.md` — 키보드를
-  포인터의 길(처음 훑기 + uevent)로 terminal이 스스로 열고, `key_state` 하나를 같이 쓰고, 빠지면 `releaseHeld`. M0이 연 것: 부팅
+  여러 키보드 시나리오 검토 S1~S13), M0(실측 1~5) · M1(실측 6~8) 끝 — terminal이 키보드를 포인터의 길(처음 훑기 + uevent)로
+  스스로 열고, `key_state` 하나를 같이 쓰고, 빠지면 `releaseHeld`. M1 루트 게이트 22/23(BT-M2의 btvirt crash, 재실행 2/2 초록,
+  `carryover.md`). 다음은 `docs/plans/2026-11-02-tars-keyboard-hotplug-kh-m2.md` — 체인 `keyboard/check.sh`(일곱 단계), mutation 셋, 닫기. M0이 연 것: 부팅
   키보드를 빼면 지금 terminal이 CPU 하나를 다 쓴다(실측 4), QMP로 키보드를 골라 치려면 화면에 묶는다(measurements 101).
 - 그 전에 닫은 것: Bluetooth. 2026-11-01 사용자가 외출하며 "이 세션에서 모든 작업을 완료, 모든 결정을 Claude에게 위임"했고, 그
   위임으로 Bluetooth(BT-M0~M2)를 design부터 닫기까지 한 세션에 했다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4 시점(커널 7.4

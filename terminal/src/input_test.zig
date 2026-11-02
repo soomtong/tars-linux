@@ -328,6 +328,7 @@ fn expectCommit(state: *input.State, code: u16, want: []const u8) !void {
 extern "c" fn pipe(fds: *[2]c_int) c_int;
 extern "c" fn write(fd: c_int, buf: [*]const u8, count: usize) isize;
 extern "c" fn close(fd: c_int) c_int;
+extern "c" fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
 
 /// evdev 이벤트 하나를 만든다(SH-M1). `readKeys`를 직접 돌리는 검사만
 /// 쓴다 — 나머지는 `handleKey`를 부르므로 이벤트가 필요 없다.
@@ -2304,6 +2305,81 @@ pub fn main() !void {
         }
     }
     std.debug.print("input_test: readKeys가 받아쓰기 명령을 모으고 SYN_DROPPED가 판정을 버린다 OK\n", .{});
+
+    // 검사 86. 키보드가 빠지면 손의 상태만 푼다(KH design 결정 4). 셋을 본다 —
+    // 쥐고 있던 Shift가 풀린다, 쥐고 있던 왼쪽 Ctrl의 뗌이 한/영을 안 바꾼다(tap이
+    // 처음으로 돌아갔다), 조합 중인 음절은 남는다(시나리오 검토 S4).
+    {
+        var kh_s: input.State = .{};
+        try expect(&kh_s, K.KEY_LEFTSHIFT, 1, "");
+        try expect(&kh_s, K.KEY_A, 1, "A");
+        kh_s.releaseHeld();
+        try expect(&kh_s, K.KEY_A, 1, "a");
+
+        var kh_c: input.State = .{};
+        try expectAt(&kh_c, K.KEY_LEFTCTRL, 1, 0, "");
+        kh_c.releaseHeld();
+        _ = kh_c.handleKey(K.KEY_LEFTCTRL, 0, 50_000, .{});
+        if (kh_c.hangul_on) {
+            std.debug.print("FAIL: a left Ctrl released after releaseHeld still toggled hangul\n", .{});
+            return error.ReleaseHeldTap;
+        }
+
+        var kh_h: input.State = .{ .hangul_on = true };
+        _ = kh_h.handleKey(K.KEY_R, 1, 0, .{});
+        const before = kh_h.preedit();
+        kh_h.releaseHeld();
+        if (before == null or kh_h.preedit() != before or !kh_h.hangul_on) {
+            std.debug.print("FAIL: releaseHeld touched the person's state (preedit {any} -> {any}, hangul {})\n", .{
+                before, kh_h.preedit(), kh_h.hangul_on,
+            });
+            return error.ReleaseHeldPerson;
+        }
+    }
+    std.debug.print("input_test: releaseHeld가 손의 상태만 푼다 OK\n", .{});
+
+    // 검사 87. `readKeys`가 `BTN_MISC` 이상을 거르고(KH design 결정 2), 장치가
+    // 사라진 것과 빈 배치를 가른다(결정 4).
+    //
+    // 거르기의 증거는 CapsLock tap 사이에 낀 클릭이다. 거르면 클릭은 없던 것이고
+    // 짧은 뗌이 tap이라 한글이 켜진다. 안 거르면 `markTapConsumed`가 클릭을 "다른
+    // 키"로 쳐서 tap이 소비되고 한글이 안 켜진다 — 키보드이자 포인터인 노드에서
+    // 클릭이 한/영을 막는 증상이다.
+    {
+        var kh_b: input.State = .{};
+        const kh_bevs = [_]input.c.struct_input_event{
+            keyEventAt(K.KEY_CAPSLOCK, 1, 0),  keyEventAt(K.BTN_LEFT, 1, 20_000),
+            keyEventAt(K.BTN_LEFT, 0, 40_000), keyEventAt(K.KEY_CAPSLOCK, 0, 80_000),
+        };
+        const kh_bfds = try feedEvents(&kh_bevs);
+        defer _ = close(kh_bfds[0]);
+        var kh_out: [64]u8 = undefined;
+        const kh_bkeys = input.readKeys(&kh_b, kh_bfds[0], &kh_out, .{});
+        if (!kh_b.hangul_on or kh_bkeys.gone) {
+            std.debug.print("FAIL: a click inside a CapsLock tap: hangul {} gone {}; want true false\n", .{ kh_b.hangul_on, kh_bkeys.gone });
+            return error.ButtonNotFiltered;
+        }
+
+        // 쓰는 쪽이 닫힌 빈 파이프 — read가 0이다. 장치가 빠진 evdev fd와 같은 답이다.
+        var kh_g: input.State = .{};
+        const kh_gfds = try feedEvents(&.{});
+        defer _ = close(kh_gfds[0]);
+        if (!input.readKeys(&kh_g, kh_gfds[0], &kh_out, .{}).gone) {
+            std.debug.print("FAIL: read returning 0 was not reported as gone\n", .{});
+            return error.GoneMissed;
+        }
+
+        // 쓰는 쪽이 열린 빈 논블로킹 파이프 — `EAGAIN`이다. 사라진 것이 아니다.
+        var kh_e: [2]c_int = undefined;
+        if (pipe2(&kh_e, 0o4000) != 0) return error.PipeFailed; // O_NONBLOCK
+        defer _ = close(kh_e[0]);
+        defer _ = close(kh_e[1]);
+        if (input.readKeys(&kh_g, kh_e[0], &kh_out, .{}).gone) {
+            std.debug.print("FAIL: EAGAIN was reported as gone\n", .{});
+            return error.EagainGone;
+        }
+    }
+    std.debug.print("input_test: readKeys가 버튼을 거르고 사라진 장치와 빈 배치를 가른다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
