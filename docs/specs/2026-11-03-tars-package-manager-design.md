@@ -2,7 +2,8 @@
 
 접두사: PM
 
-Status: 진행 중 — M0 끝남(2026-11-03, 공식 install.sh가 TARS에서 끝까지 가고 brew config가 portable-ruby로 답한다). 다음은 PM-M1 plan.
+Status: 끝남(2026-11-03, PM-M0~M1). 공식 install.sh가 TARS에서 끝까지 가고, `brew install hello`가 bottle 하나로 서며,
+재부팅 뒤 망 없이 뜬 화면 셸에서 `hello`가 이름만으로 불린다.
 
 관련 문서: `2026-11-02-tars-home-partition-design.md`(HP. `/home` ext4 · uid 1000 사용자 · Debian `sudo`, 비목표 1이 이 설계로
 넘긴 자리) · `docs/decisions/project_home_partition.md` · `docs/guides/carryover.md`의 이미지 뷰어 항목(기본 이미지에 뷰어를
@@ -100,6 +101,8 @@ M0가 덧붙인 것(체인 셋째 · 다섯째 판): `flock`(brew가 `vendor-ins
 charmap`을 본다). 셋 다 sysroot에 이미 있었고 새 라이브러리는 0이다. `file`은 M0의 경로(`install.sh` · `brew update` ·
 `brew config`)가 한 번도 부르지 않아 넣지 않았다(실측 7) — M1의 bottle 경로가 다시 본다.
 
+M1이 닫았다: `brew install hello`(bottle 경로)도 `file`을 부르지 않았다(M1 실측 2). `file`은 넣지 않는다.
+
 ### 결정 4 — 컴파일러는 넣지 않는다. bottle만 보증한다
 
 gcc · `build-essential`은 수백 MB이고, 빌드는 RAM 위 initrd가 감당할 몫이 아니다. bottle이 없는 formula나 `--build-from-source`는
@@ -112,6 +115,18 @@ TARS는 initrd의 시스템 rc(bash · zsh · fish 셋)에 "`brew`가 있으면 
 않아도 설치 직후 새 패널부터 `brew`가 PATH에 있다. HP 결정 12의 홈 dotfile이 아니라 시스템 rc인 이유는 두 가지다. 이미 설치된
 홈에도 갱신만으로 닿고, dotfile은 사용자의 것으로 남는다. 안내를 따라 사용자 rc에도 넣으면 두 번 eval되지만, 요즘의 shellenv는
 PATH에 prefix가 이미 있으면 건너뛰는 것으로 안다 — 해가 없는지 M1이 확인한다.
+
+M1이 확인하고 정한 것:
+
+- 자리는 셋이 컴파일 때 정해 둔 것 — `/etc/bash.bashrc`(Debian 패치) · `/etc/zsh/zshrc` · `/etc/fish/conf.d/homebrew.fish`.
+  fish의 `vendor_conf.d`는 패키지의 자리라 쓰지 않는다. `shell_config=off`면 셸이 이 파일까지 건너뛴다 — 사용자가 고른 것.
+- 셸 이름을 인자로 준다(`brew shellenv bash`). 안 주면 shellenv가 `ps -p $PPID` → `$SHELL`로 짐작한다.
+- 두 번 eval은 해가 없다. shellenv는 `HOMEBREW_PATH`가 `prefix/bin:prefix/sbin:`로 시작하면 아무것도 안 낸다
+  (`cmd/shellenv.sh` 머리) — 체인 P9가 PATH의 prefix를 세어 1이다.
+- uid를 보지 않는다(M1 plan "정할 것 하나"). `brew.sh`가 `shellenv`를 root 판정보다 먼저 끝내므로 root 셸에서도 조용하고,
+  root의 `brew install`은 brew 스스로 거절한다.
+- `if`로 쓴다. `[ -x ] && eval` 꼴은 brew가 없을 때(다른 모든 체인) rc의 마지막 상태를 1로 남긴다.
+- 비용은 셸을 열 때마다 0.062초(TCG, M1 실측 3). ruby를 안 띄운다.
 
 ### 결정 6 — 게이트는 스물여섯째 체인 `pm/check.sh`이고 실제 망을 쓴다
 
@@ -162,6 +177,22 @@ terminal의 `setenv("LANG", "C.UTF-8")` 덕에 멀쩡했다(HI-M1). `LC_CTYPE`�
 고쳐졌다(다섯째 판, amd64 chroot에서 재현). `init/src/environ.zig`에 `LANG_ENTRY`를 두어 PATH · XDG · TZ 뒤에 붙이고, ssh
 세션의 env 목록(SV-M2 결정 9)에도 같은 값이 간다. 그 파일의 머리 주석이 이미 "LANG은 갈릴 이유가 없는데 terminal에 있다"고
 적어 둔 자리다. terminal의 setenv는 같은 값을 다시 쓸 뿐이라 남긴다.
+
+### 결정 10 — libstdc++는 버전이 붙은 진짜 파일과 SONAME 링크로 싣는다(M1, 사용자 2026-11-03)
+
+M1 첫 판에서 의존이 0인 `hello`에 gcc 16(463MB) · binutils(135MB)와 그 의존 여섯이 암묵 의존으로 붙었고, gcc의
+post-install이 실패해 `brew install`이 rc 1이었다. Homebrew는 시스템 libstdc++가 CI 기준(`LINUX_LIBSTDCXX_CI_VERSION`
+6.0.33, Ubuntu noble)보다 낮으면 모든 formula에 gcc를 붙이는데(`extend/os/linux/dependency_collector.rb`의
+`gcc_dep_if_needed` ← `needs_compiler_formula?`), 그 버전을 파일의 realpath 이름에서 읽는다(`os/linux/libstdcxx.rb`).
+`copy_lib_deps`는 SONAME 링크를 따라가 내용을 `libstdc++.so.6`이라는 이름으로 복사해 왔으므로 버전이 `6`으로 읽혔다.
+sysroot의 실체는 `libstdc++.so.6.0.33`이라 이름만 맞으면 기준과 같다.
+
+후보는 둘이었다. libstdc++ 하나만, 또는 모든 `.so`를 Debian 모양(실체 + SONAME 링크)으로. 사용자가 앞을 골랐다 —
+Homebrew가 이름으로 버전을 읽는 것은 libstdc++뿐이고(glibc는 `ldd --version`), 뒤는 initrd의 라이브러리 약 200개의 모양을
+바꿔 체인 전부를 영향 범위에 넣는다. `make_initrd.sh`의 `GLIBC_LIBS` 블록 뒤에서 놓는다. 고친 뒤 `brew config`의
+`Host libstdc++: 6.0.33`이고, 체인 P7이 hello에 의존이 붙으면 빨갛다.
+
+결정 4(컴파일러 없음)와는 다른 축이다 — gcc가 붙은 이유는 컴파일러가 없어서가 아니라 런타임 libstdc++가 낡아 보여서였다.
 
 ## 위험
 
@@ -272,3 +303,50 @@ lines 전부 0. 체인 하나가 1GiB QEMU라 JOBS 계산(줄 하나 1GiB)에 �
 4. fish는 로케일 변수가 없으면 `LC_CTYPE=en_US.UTF-8`을 스스로 export한다. 이 값이 LANG보다 앞서서 아래 프로세스 모두의 로케일을
    깨뜨렸다(결정 9). amd64 컨테이너(OrbStack Rosetta)에 initrd 트리를 풀고 `chroot`하면 QEMU 없이 몇 초에 재현된다.
 5. 게이트의 진입 검사가 둘을 잡았다 — `| grep -q`(SIGPIPE와 pipefail), NIC를 `"$@"`로만 넘긴 QEMU 호출(검사기가 못 본다).
+
+## 실측 (M1, 2026-11-03)
+
+값은 체인 둘째 판(첫 초록)의 것이다. `install.sh` sha256은 M0와 같고(`5f333bbe…08ccb148`), brew는 `Homebrew 7.0.12`.
+
+### 실측 M1-1 — `brew install hello` 9초, bottle 하나(결정 4 · 10, 위험 2)
+
+`Pouring hello--2.12.3.x86_64_linux.bottle.1.tar.gz` 하나, `Cellar/hello/2.12.3` 58 files 755.1KB. 자동 갱신 0번(`install.sh`가
+막 갱신했다). 결정 10 전의 첫 판은 gcc 16.2.0(2,256 files 463.1MB) · binutils 2.47(135.2MB) · gmp · isl · mpfr · libmpc · lz4 · xz ·
+zlib-ng-compat · zstd를 먼저 붓고 gcc의 post-install에서 실패했다.
+
+### 실측 M1-2 — bottle 경로도 `file`을 부르지 않는다(결정 3)
+
+`brew install`의 출력에 `file`이 없다는 줄 0.
+
+### 실측 M1-3 — `brew shellenv bash` 0.062초(결정 5)
+
+셸을 열 때마다 시스템 rc가 더하는 값이다(TCG).
+
+### 실측 M1-4 — `brew doctor`는 rc 1, 경고 셋(위험 6)
+
+판정하지 않고 적는다.
+
+- `No developer tools installed.` — 결정 4 그대로.
+- `Landlock is not supported by this Linux kernel.` — 커널에 `CONFIG_SECURITY_LANDLOCK`이 없다. Homebrew의 Linux sandbox가
+  꺼지고 `brew install`이 `Sandbox unavailable: processing downloaded files without sandboxing!`를 찍는다. 설치는 막지 않는다
+  (`carryover.md`의 PM 절).
+- `Homebrew's "bin" was not found in your PATH.` — 게이트가 `doctor`를 비대화형 `bash -c`(PATH `/usr/bin:/bin`)로 돌려서다.
+  시스템 rc는 대화형 셸만 읽는다. 화면 셸에서는 P10이 이름으로 `hello`를 부른다.
+
+### 실측 M1-5 — 최소 디스크의 `/home` 10%
+
+디스크 4 GiB + 2 MiB(`MIN_DISK_BYTES`)에서 `/home` 3,021,608kB 중 279,528kB. prefix 224,100kB · `~/.cache/Homebrew` 54,564kB.
+
+### 실측 M1-6 — 체인 226초, 루트 게이트 26/26 13분 24초(위험 2)
+
+M0의 199초에 `brew install` · `doctor` · 부팅 3(망 없음, 화면에 `hello`)이 더해졌다. 메모리 최솟값 MemAvailable 490,788kB, OOM 0.
+루트 게이트에서는 233초로 가장 길다. 게이트 전체는 prebuild 323초(initrd가 바뀌었다) + lanes 481초, cut log lines 전부 0.
+`CHAINS`의 라벨은 `PM-M0` 그대로다 — 접두사 PM은 2026-08-19의 Power Management와 겹쳐서 `PM-M1`은 이미 `power/check.sh`의 라벨이다.
+
+### M1의 판들이 가르친 것
+
+1. Homebrew가 Linux에서 gcc를 끄는 기준은 컴파일러가 아니라 시스템 libstdc++의 버전이고, 그것을 파일 이름에서 읽는다(결정 10).
+   initrd가 라이브러리를 SONAME 이름으로 싣는 것이 바깥 프로그램에게는 "버전 모름"이다.
+2. check.sh의 진입 검사(`| grep -q` 찾기)는 글자로 본다 — 줄 머리의 `|| ! grep -q`도 파이프로 읽는다. M0의 판정 줄을
+   shellcheck SC2015 때문에 `if ! A || ! B`로 고쳤다가 루트 게이트 첫 판이 진입에서 멈췄다. `if ! { A && B; }`로 썼다.
+3. PM-M0의 커밋은 push되지 않아 CI가 그 SC2015(`make quick` 빨강)를 못 봤다. 커밋 전에 `make quick`을 돈다.

@@ -4,6 +4,23 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+PM(2026-11-03)이 남긴 것.
+
+- [ ] 커널에 Landlock(`CONFIG_SECURITY_LANDLOCK`)이 없다 — Homebrew의 Linux sandbox가 꺼지고 `brew install`마다 `Sandbox
+      unavailable … without sandboxing!` 경고, `brew doctor` 경고 하나(PM M1 실측 4). 설치는 막지 않는다. 켜려면 커널 `.config`와
+      `lsm=` 순서를 함께 본다.
+- [ ] TARS 자체 패키지 매니저는 나중에 다시 논의한다 — 당분간 Homebrew를 쓴다(사용자 결정, 2026-11-03). 그날 정리한 것:
+      - 남의 것 중에 완벽히 맞는 것은 없었다. mise · aqua(미리 빌드된 CLI 바이너리, sudo · ruby 없음), micromamba · pixi
+        (conda-forge, `~` 아래), Nix(범위 최대 — `/nix`를 디스크에 · daemon · 평가 메모리), 배포판 매니저(apt · xbps — "루트를
+        디스크로"가 앞선다).
+      - 자체로 만들면 어려운 것은 도구가 아니라 패키지의 출처다. 추천은 Debian trixie `.deb`를 런타임에 받는 것(유저랜드와 같은
+        glibc · libstdc++ ABI, `InRelease` 서명, 빌드 서버 불필요 — 빌드 때 Dockerfile + `make_initrd.sh`가 이미 하는 일).
+      - design에서 정할 것: 설치 자리(overlayfs로 initrd `/usr` 위에 디스크 층 vs `/home` 아래 prefix), initrd에 있는 패키지를
+        "설치됨"으로 보는 목록과 TARS 갱신 때의 어긋남, 설치 권한(root · sudo), `Depends`를 어디까지 따르나, `Packages` 색인의
+        RAM 예산. 접두사 후보 `TP`(TARS Package, 미사용).
+- [ ] 라이브러리는 libstdc++만 Debian 모양(실체 + SONAME 링크)이다(PM 결정 10). 다른 바깥 프로그램이 다른 `.so`의 이름에서
+      버전을 읽으면 그때 같은 판정을 한다.
+
 HP-M1(2026-11-02)이 남긴 것.
 
 - [ ] 부팅 뒤 꽂은 USB 헤드셋 · 사운드 카드의 노드는 root 0600 그대로다 — init의 audio 일꾼이 부팅에 한 번 `/dev/snd/*`를

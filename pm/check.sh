@@ -7,17 +7,22 @@ cd "$(dirname "$0")" || exit 1
 # 가는가(PM design 결정 2 · 3 · 6). 바깥 망에 기대는 첫 체인이다(design 확인 6 · 위험 1) — QEMU를
 # 띄우기 전에 컨테이너에서 github.com과 ghcr.io를 한 번 치고, 안 닿으면 그 이름으로 빨개진다.
 #
-# 부팅 둘이 같은 NVMe 이미지를 잇달아 쓴다.
-#   1  ISO + 빈 8GiB NVMe   tars-install --yes(기본 계정 tars · tars-linux)
+# 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
+#   1  ISO + 빈 최소 NVMe   tars-install --yes(기본 계정 tars · tars-linux)
 #   2  NVMe + SLIRP NIC     net=dhcp · /bin 링크(P1) · 도구와 git https(P2) · 사용자로 install.sh(P3) ·
-#                           prefix와 brew --version(P4) · brew config와 portable-ruby(P5) · 측정 2~7
+#                           prefix와 brew --version(P4) · brew config와 portable-ruby(P5) · 경고 없음(P6) ·
+#                           brew install hello(P7) · 시스템 rc 셋(P8) · 두 번 eval(P9) · 측정
+#   3  NVMe만, 망 없음      화면 셸(fish, tars)에 monitor sendkey로 `hello`를 친다(P10)
+#
+# PM-M1이 더한 것: bottle 하나(design 결정 4), 시스템 rc의 shellenv(결정 5)를 대화형 셸 셋과 진짜
+# 화면 셸에서, 재부팅 뒤 /home만으로 hello가 서는지. 부팅 3만 monitor 포트 45499를 쓴다(RP-M0 예약 범위).
 #
 # 모양은 home/check.sh의 것이다 — 시리얼 FIFO로 root 콘솔 셸에 한 줄씩 넣고 그 출력을 로그에서
 # 읽는다. "사용자로"는 setpriv로 한다. install.sh의 NONINTERACTIVE 길은 `sudo -n -l mkdir`만
 # 보므로 같은 tty(시리얼 콘솔)에서 먼저 `sudo -S -k -v`로 timestamp를 만든다. install.sh가
 # ${USER}로 chown하므로 USER · HOME · LOGNAME을 함께 준다. 사용자의 길과 다른 환경 변수는
 # NONINTERACTIVE와 HOMEBREW_NO_ANALYTICS(게이트가 Homebrew 통계를 더럽히지 않게) 둘이다.
-# monitor · QMP가 없어 포트를 안 쓴다.
+# 부팅 1 · 2는 monitor · QMP가 없어 포트를 안 쓴다.
 
 (cd ../kernel && ./build.sh)
 (cd ../init && zig build)
@@ -53,9 +58,10 @@ curl -fsSL --max-time 30 -o "${WORK}/install.sh" "$INSTALL_URL"
 echo "pm: install.sh sha256 $(sha256sum "${WORK}/install.sh" | cut -c1-64) ($(wc -l < "${WORK}/install.sh") lines)"
 
 DISK="${WORK}/target.img"
-# 8GiB. /home이 약 7GiB라 Homebrew가 차지하는 양(측정 5)이 최소 디스크의 /home(약 3GiB)에
-# 들어가는지와 섞이지 않는다. 측정 5가 3GiB 안이면 M1에서 줄인다.
-truncate -s 8G "$DISK"
+# tars-install의 최소 디스크(init/src/disk.zig의 MIN_DISK_BYTES = 4 GiB + 2 MiB). M0는 8GiB로 Homebrew의
+# 양을 따로 쟀고(실측 5, 약 270MB), M1은 그것과 bottle이 최소 디스크의 /home(약 3GiB)에 들어가는지를 본다.
+MONITOR_PORT=45499
+truncate -s 4098M "$DISK"
 
 QEMU_PID=""
 LOG=""
@@ -67,6 +73,7 @@ cleanup() {
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
+  exec 3>&- 2>/dev/null || true
   exec 4>&- 2>/dev/null || true
   rm -rf "$WORK"
 }
@@ -95,7 +102,9 @@ fail() {
   exit 1
 }
 
-# boot_guest <이름> [qemu 인자...]. 콘솔 셸이 뜰 때까지 기다린다.
+# boot_guest <이름> [qemu 인자...]. 콘솔 셸이 뜰 때까지 기다린다. MONITOR(기본 none)가 -monitor의
+# 값이다 — 부팅 3만 tcp로 연다(화면에 키를 친다).
+MONITOR="none"
 boot_guest() {
   local name="$1"; shift
   LOG="$(mktemp -t "pm-boot-${name}.XXXXXX")"
@@ -124,7 +133,7 @@ boot_guest() {
     -device nvme,drive=target,serial=tarstarget \
     "$@" \
     -serial stdio \
-    -monitor none \
+    -monitor "$MONITOR" \
     -display none \
     -no-reboot \
     < "$FIFO" > "$LOG" 2>&1 &
@@ -148,6 +157,7 @@ stop_guest() {
   kill "$QEMU_PID" 2>/dev/null
   wait "$QEMU_PID" 2>/dev/null
   QEMU_PID=""
+  exec 3>&- 2>/dev/null
   exec 4>&-
   rm -f "$FIFO"
 }
@@ -192,7 +202,7 @@ last_num() { grep -aoE -- "$1" "$LOG" | tail -1 | grep -oE '[0-9]+' | tail -1; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 8GiB NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO and a blank 8 GiB NVMe ==="
+echo "=== boot 1: the ISO and a blank minimum-size NVMe (4 GiB + 2 MiB) ==="
 # -netdev만 있고 NIC 장치가 없다 — QEMU는 이때 기본 NIC를 안 붙인다(nic 체인 실측 5). 설치에 망은 필요 없다.
 boot_guest 1 -cdrom ../out/tars.iso
 send "tars-install /dev/nvme0n1 --yes"
@@ -200,7 +210,7 @@ if ! wait_log "tars-install: done. remove the boot medium and reboot." 240; then
   fail "tars-install did not say done" "tars-install:" "failed"
 fi
 grep -aqF "tars-install: made /home/tars" "$LOG" || fail "tars-install did not make /home/tars" "tars-install:"
-echo "tars-install put TARS and the account tars on the 8 GiB disk"
+echo "tars-install put TARS and the account tars on the minimum-size disk"
 stop_guest
 
 # ── 부팅 2: NVMe + SLIRP NIC ───────────────────────────────────────────
@@ -241,8 +251,11 @@ wait_log_re "pm-p2-git=[0-9a-f]{40}" 60 || fail "git cannot read https://github.
 # 보고, portable-ruby가 libdl.so.2를 부른다(make_initrd.sh의 GLIBC_LIBS).
 send "sh -c '. /etc/os-release; echo pm-p2-os=\$PRETTY_NAME'"
 wait_log_re "pm-p2-os=TARS [0-9]" 10 || fail "/etc/os-release does not name TARS" "pm-p2-os"
-grep -aqF "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=" "$LOG" && grep -aqE "tars-init: env .* LANG=C\.UTF-8" "$LOG" \
-  || fail "init did not put LANG=C.UTF-8 in the env block" "tars-init: env"
+# 두 줄이 모두 있어야 한다. `|| ! grep -q`로 쓰면 check.sh의 진입 검사가 `| grep -q`(SIGPIPE)로 읽는다.
+if ! { grep -aqF "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=" "$LOG" &&
+       grep -aqE "tars-init: env .* LANG=C\.UTF-8" "$LOG"; }; then
+  fail "init did not put LANG=C.UTF-8 in the env block" "tars-init: env"
+fi
 as_tars 'env | grep -E "^(LANG|LC_)" | sed "s/^/pm-p2-locvar=/"; locale charmap 2>&1 | sed "s/^/pm-p2-charmap=/"'
 wait_log "pm-p2-charmap=UTF-8" 10 || fail "locale charmap is not UTF-8 for tars" "pm-p2-charmap" "pm-p2-locvar"
 if grep -aqF "pm-p2-locvar=LC_" "$LOG"; then fail "an LC_ variable leaked into the user's env" "pm-p2-locvar"; fi
@@ -301,6 +314,56 @@ fi
 grep -aqE "pm-cfg: OS: .*TARS" "$LOG" || fail "brew config does not name TARS as the OS" "pm-cfg: OS"
 echo "P6: no locale or os-release warnings; brew config names TARS"
 
+# ── P7: bottle 하나(PM-M1, design 결정 4 · 측정 1 · 2) ──────────────────
+# hello 2.12.3은 의존이 0이고 x86_64_linux bottle이 있다. Pouring 줄이 없으면 소스 빌드로 간 것이고
+# 그것은 결정 4가 보증하지 않는 길이라 빨강이다. HOMEBREW_NO_AUTO_UPDATE는 안 준다 — 사용자의 길과
+# 같게. 자동 갱신이 돌았는지는 측정 1이 적는다.
+T_BI0=$(date +%s)
+as_tars "${PREFIX}/bin/brew install hello 2>&1 | sed \"s/^/pm-inst: /\"; echo \"pm-p7-rc-\${PIPESTATUS[0]}\""
+wait_log_re "pm-p7-rc-[0-9]+" 900 || fail "brew install hello did not finish in 900s" "pm-inst"
+T_BI1=$(date +%s)
+[ "$(last_num 'pm-p7-rc-[0-9]+')" = 0 ] || fail "brew install hello failed" "pm-inst" "pm-p7-rc"
+grep -aqE "pm-inst: .*Pouring hello--" "$LOG" || fail "brew install hello did not pour a bottle" "pm-inst"
+# 첫 판은 hello(의존 0)에 gcc 16 · binutils가 암묵 의존으로 붙었다 — Homebrew가 시스템 libstdc++의
+# 버전을 파일 이름에서 읽는데 initrd의 이름이 `libstdc++.so.6`이었다(make_initrd.sh의 PM-M1 블록).
+if grep -aqE "pm-inst: .*Installing hello dependency" "$LOG"; then
+  fail "brew install hello pulled dependencies (gcc means the system libstdc++ looked too old)" "pm-inst: ==> Installing"
+fi
+as_tars "${PREFIX}/bin/hello 2>&1 | sed \"s/^/pm-p7-hello=/\""
+wait_log "pm-p7-hello=Hello, world!" 30 || fail "hello did not say Hello, world!" "pm-p7-hello"
+echo "P7: brew install hello poured a bottle in $((T_BI1 - T_BI0))s and hello says Hello, world!"
+
+# ── P8: 시스템 rc 셋이 brew를 PATH에 넣는다(결정 5) ────────────────────
+# make_initrd.sh가 짓는 /etc/bash.bashrc · /etc/zsh/zshrc · /etc/fish/conf.d/homebrew.fish. 대화형 셸만
+# 그것을 읽으므로 -i다. as_tars가 주는 PATH는 /usr/bin:/bin뿐이라 brew가 보이면 rc가 넣은 것이다.
+# 작은따옴표로 쓰고 prefix를 글자로 적는다 — 이 줄은 체인 → 콘솔 fish의 작은따옴표 → bash -c →
+# 대화형 셸로 네 번 읽히고, fish의 작은따옴표 안에서 특별한 것은 \\와 \'뿐이라 \"와 \$는 bash까지 간다.
+as_tars 'bash -i -c "command -v brew" 2>&1 | sed "s/^/pm-p8-bash=/"'
+wait_log "pm-p8-bash=${PREFIX}/bin/brew" 60 || fail "bash -i does not find brew through /etc/bash.bashrc" "pm-p8-bash"
+as_tars 'zsh -i -c "command -v brew" 2>&1 | sed "s/^/pm-p8-zsh=/"'
+wait_log "pm-p8-zsh=${PREFIX}/bin/brew" 60 || fail "zsh -i does not find brew through /etc/zsh/zshrc" "pm-p8-zsh"
+as_tars 'fish -i -c "command -v brew" 2>&1 | sed "s/^/pm-p8-fish=/"'
+wait_log "pm-p8-fish=${PREFIX}/bin/brew" 60 || fail "fish -i does not find brew through /etc/fish/conf.d" "pm-p8-fish"
+echo "P8: bash, zsh and fish (interactive, as tars) find brew through the system rc"
+
+# ── P9: 사용자가 안내대로 한 번 더 eval해도 prefix는 PATH에 한 번(결정 5) ──
+# shellenv는 PATH가 이미 prefix/bin:prefix/sbin으로 시작하면 아무것도 안 낸다. 시스템 rc가 먼저 넣은
+# 셸에서 install.sh의 "Next steps" 줄을 치는 것과 같다. wc의 출력에 앞 공백이 없도록 grep -c가 아니라
+# 줄을 세고, 판정은 마지막 수로 한다(접두사 뒤 /가 아닌 수는 에코에 없다).
+# shellcheck disable=SC2016 # $(…)와 $PATH는 게스트의 대화형 bash가 펼친다
+as_tars 'bash -i -c "eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)\"; echo \"\$PATH\" | grep -o linuxbrew/bin | wc -l" 2>&1 | sed "s/^/pm-p9-count=/"'
+wait_log_re "pm-p9-count=[0-9]+" 60 || fail "the second shellenv eval never answered" "pm-p9-count"
+[ "$(last_num 'pm-p9-count=[0-9]+')" = 1 ] || fail "a second shellenv eval put the prefix on PATH twice" "pm-p9-count"
+echo "P9: evaluating brew shellenv again leaves the prefix on PATH once"
+
+# ── 측정 3: 셸을 열 때마다 더해지는 shellenv 한 번 ─────────────────────
+as_tars "bash -c \"TIMEFORMAT=%R; time ${PREFIX}/bin/brew shellenv bash >/dev/null\" 2>&1 | sed \"s/^/pm-m3-shellenv=/\""
+wait_log_re "pm-m3-shellenv=[0-9]+\.[0-9]+" 60
+
+# ── 측정 4(M1): brew doctor — 판정하지 않고 적는다(위험 6) ──────────────
+as_tars "${PREFIX}/bin/brew doctor 2>&1 | sed \"s/^/pm-doc: /\"; echo \"pm-doc-rc-\${PIPESTATUS[0]}\""
+wait_log_re "pm-doc-rc-[0-9]+" 300 || echo "pm: brew doctor did not finish in 300s (not judged)"
+
 # ── 측정 4 · 5 · 6 · 7 ──────────────────────────────────────────────────
 send "dmesg | grep -c 'Out of memory' | sed 's/^/pm-m4-oom=/'"
 wait_log_re "pm-m4-oom=[0-9]+" 10
@@ -316,7 +379,43 @@ clean | grep -aF '(none)' | grep -avE '@\(none\) ' | sort -u | head -10 | sed 's
 # design 실측에 적을 값 — brew config의 전체 출력(게스트 로그는 체인이 끝나면 지워진다).
 clean | grep -a '^pm-cfg: ' | sort -u | sed 's/^pm-cfg: /pm: config: /'
 echo "pm: measure 7: lines about a missing file command: $(clean | grep -acE 'file: (command )?not found|No such file or directory.*\bfile\b')"
+# PM-M1의 측정(M1 plan의 표 번호). design "실측 (M1)"에 적을 값이다.
+echo "pm: m1 measure 1: brew install hello $((T_BI1 - T_BI0))s, poured: $(clean | grep -aE '^pm-inst: .*Pouring' | sed 's/^pm-inst: //' | head -1)"
+echo "pm: m1 measure 1: auto-update lines: $(clean | grep -acE '^pm-inst: .*(Auto-updated|Updating Homebrew)')"
+echo "pm: m1 measure 2: missing file command lines in brew install: $(clean | grep -a '^pm-inst: ' | grep -acE 'file: (command )?not found|No such file or directory.*\bfile\b')"
+echo "pm: m1 measure 3: brew shellenv bash $(grep -aoE 'pm-m3-shellenv=[0-9]+\.[0-9]+' "$LOG" | tail -1 | cut -d= -f2)s"
+echo "pm: m1 measure 4: brew doctor rc $(last_num 'pm-doc-rc-[0-9]+'); its output:"
+clean | grep -a '^pm-doc: ' | head -80 | sed 's/^pm-doc: /pm:   /'
+clean | grep -a '^pm-inst: ' | sed 's/^pm-inst: /pm: install: /'
 
+stop_guest
+
+# ── 부팅 3: NVMe만, 망 없음, 화면 셸에 hello(P10) ──────────────────────
+# 재부팅 뒤 /home(디스크)만으로 hello가 서는지, 그리고 사용자가 rc를 하나도 안 고친 채 새로 뜬 화면 셸
+# (fish, uid 1000)에서 이름만으로 불리는지 — 결정 5의 진짜 자리다. 판정은 출력 글자 `Hello, world!`라
+# 친 글자(`hello`)의 에코와 안 겹친다. rc가 안 돌았으면 화면에 `fish: Unknown command: hello`가 나온다.
+echo "=== boot 3: the NVMe again, no network, typing hello on the screen ==="
+MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
+boot_guest 3
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor on ${MONITOR_PORT}"
+wait_log_re "terminal: spawned child pid [0-9]+ \(.*\) as tars" 60 \
+  || fail "terminal did not spawn its shell as tars" "terminal: spawned" "cannot drop"
+PROMPT_UP=0
+for _ in 1 2 3 4; do
+  if wait_for_screen 'tars@\(none\) ~>'; then PROMPT_UP=1; break; fi
+done
+[ "$PROMPT_UP" = 1 ] || fail "the screen shell never drew the tars prompt" "terminal: screen>"
+type_keys h e l l o ret
+if ! wait_for_screen 'Hello, world!'; then
+  joined_screen_dump | tail -3
+  fail "typing hello on the screen did not say Hello, world!" "Unknown command" "terminal: screen>"
+fi
+echo "P10: after a reboot with no network, the screen shell (fish, tars) runs hello by name"
 stop_guest
 
 echo "pm: measure 8: chain $(( $(date +%s) - CHAIN_T0 ))s after the build"

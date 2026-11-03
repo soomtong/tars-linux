@@ -263,6 +263,24 @@ for soname in "${GLIBC_LIBS[@]}"; do
   cp -L "$src" "${WORKDIR}${LIB_DEST}/${soname}"
 done
 
+# PM-M1: libstdc++는 Debian과 같은 모양으로 싣는다 — 버전이 붙은 진짜 파일과 SONAME 링크.
+# copy_lib_deps는 SONAME 링크를 따라가 내용을 `libstdc++.so.6`이라는 이름으로 복사하는데,
+# Homebrew는 그 파일의 realpath 이름에서 버전을 읽는다(os/linux/libstdcxx.rb — 이름에서
+# `libstdc++.so.`를 떼고 `6`을 붙인다). 이름이 `libstdc++.so.6`이면 버전이 `6`이 되어 CI 기준
+# (LINUX_LIBSTDCXX_CI_VERSION 6.0.33)보다 낮다고 보고, 모든 formula에 gcc를 암묵 의존으로 붙인다 —
+# PM-M1 첫 판에서 `brew install hello`가 gcc 16(463MB) · binutils(135MB)를 끌고 와 gcc의 post-install에서
+# 실패했다. sysroot의 실체는 6.0.33이라 이름만 맞으면 기준과 같다. 이 하나뿐인 이유: Homebrew가
+# 이름으로 버전을 읽는 것은 libstdc++뿐이고 glibc는 `ldd --version`으로 읽는다(사용자 2026-11-03).
+#
+# 여기서 실체와 링크를 놓으면 뒤의 copy_lib_deps는 `[ ! -e ]`가 링크를 "이미 있음"으로 보고 건너뛴다.
+# 앞에서 이미 복사됐어도 같은 결과가 되도록 지우고 다시 놓는다.
+STDCXX_SONAME=libstdc++.so.6
+STDCXX_REAL="$(readlink -f "$(find_in_sysroot "$STDCXX_SONAME")")"
+rm -f "${WORKDIR}${LIB_DEST}/${STDCXX_SONAME}"
+cp "$STDCXX_REAL" "${WORKDIR}${LIB_DEST}/"
+ln -s "$(basename "$STDCXX_REAL")" "${WORKDIR}${LIB_DEST}/${STDCXX_SONAME}"
+copy_lib_deps "$STDCXX_REAL"
+
 # /bin/sh는 언제나 bash다. tars.conf의 shell 설정과 무관하다 —
 # #!/bin/sh 스크립트의 동작이 사용자의 셸 취향에 따라 달라지면 안 된다
 # (design 결정 6). 셋 중 bash만이 POSIX sh 모드를 갖는다.
@@ -836,6 +854,46 @@ VERSION_ID=${TARS_VERSION}
 PRETTY_NAME="TARS ${TARS_VERSION}"
 EOF
 chmod 0644 "$WORKDIR/etc/os-release"
+
+# PM-M1: 시스템 rc 셋 — Homebrew가 설치돼 있으면 셸이 뜰 때 PATH에 넣는다(PM design 결정 5).
+# install.sh의 "Next steps"는 사용자 rc에 shellenv를 넣으라고 하지만, 시스템 rc가 먼저 하면
+# 사용자는 아무것도 안 고쳐도 새 패널부터 brew가 PATH에 있고, 이미 설치된 홈에도 갱신만으로 닿는다.
+#
+# 자리는 세 셸이 컴파일 때 정해 둔 것이다(sysroot에서 확인) — bash는 /etc/bash.bashrc(Debian
+# 패치, 대화형 셸이 ~/.bashrc보다 먼저), zsh는 /etc/zsh/zshrc, fish는 sysconfdir의 conf.d.
+# fish의 /usr/share/fish/vendor_conf.d가 아닌 이유: 그 자리는 패키지(fzf 등)의 것이고 이것은
+# 배포판이 시스템으로서 두는 줄이라 bash · zsh와 같은 /etc 층에 둔다. shell_config=off면
+# 셸이 이 파일까지 건너뛴다 — 사용자가 고른 것이라 그대로다.
+#
+# 셸 이름을 인자로 준다. 안 주면 shellenv가 `ps -p $PPID`로 짐작하고 그다음 $SHELL을 본다.
+# 사용자가 안내대로 자기 rc에도 같은 줄을 넣으면 두 번 eval되는데, shellenv는 PATH가 이미
+# prefix/bin:prefix/sbin으로 시작하면 아무것도 안 낸다(shellenv.sh 머리) — 둘째는 빈 출력이다.
+# uid는 안 본다. root도 부은 도구를 쓸 수 있고, root의 `brew install`은 brew 스스로 거절한다.
+#
+# `[ -x ] && eval` 한 줄이 아니라 if인 이유: brew가 없을 때(모든 다른 체인) && 꼴은 rc의 마지막
+# 상태를 1로 남겨 첫 프롬프트가 실패 표시를 그릴 수 있다. 이 파일은 아무것도 찍지 않는다 —
+# seed rc의 규칙(config.zig rcSeed)과 같은 이유로, 화면 좌표로 판정하는 체인이 있다.
+BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew
+mkdir -p "$WORKDIR/etc/zsh" "$WORKDIR/etc/fish/conf.d"
+cat > "$WORKDIR/etc/bash.bashrc" <<EOF
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew가 있으면 PATH에 넣는다.
+if [ -x ${BREW_BIN} ]; then
+  eval "\$(${BREW_BIN} shellenv bash)"
+fi
+EOF
+cat > "$WORKDIR/etc/zsh/zshrc" <<EOF
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew가 있으면 PATH에 넣는다.
+if [ -x ${BREW_BIN} ]; then
+  eval "\$(${BREW_BIN} shellenv zsh)"
+fi
+EOF
+cat > "$WORKDIR/etc/fish/conf.d/homebrew.fish" <<EOF
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew가 있으면 PATH에 넣는다.
+if test -x ${BREW_BIN}
+    ${BREW_BIN} shellenv fish | source
+end
+EOF
+chmod 0644 "$WORKDIR/etc/bash.bashrc" "$WORKDIR/etc/zsh/zshrc" "$WORKDIR/etc/fish/conf.d/homebrew.fish"
 
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —

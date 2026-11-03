@@ -85,7 +85,7 @@ init · 설정 · 전원
 - [Bluetooth](docs/decisions/project_bluetooth.md) — 커널 BT 스택 + BlueZ · dbus-daemon을 init이 감독, `bluetooth=on`, 키는 `/config/bluetooth`, vhci 게이트(BT-M0~M2, 2026-11-02)
 - [Keyboard Hotplug](docs/decisions/project_keyboard_hotplug.md) — terminal이 키보드를 포인터의 길로 열고 여럿이 상태 하나를 쓴다, 빠지면 `releaseHeld`(KH-M0~M2, 2026-11-02)
 - [Home Partition](docs/decisions/project_home_partition.md) — p3 ext4 `/home`, 설치 때 계정 하나, 화면 셸은 사용자, `/config` 쓰기는 sudo(HP-M0~M2, 2026-11-03)
-- [Package Manager](docs/decisions/project_package_manager.md) — Homebrew 공식 install.sh가 TARS에서 끝까지 가게 한다(PM-M0, 2026-11-03, 진행 중)
+- [Package Manager](docs/decisions/project_package_manager.md) — Homebrew 공식 install.sh가 TARS에서 끝까지 가고 bottle이 선다, 시스템 rc의 shellenv, libstdc++ 이름(PM-M0~M1, 2026-11-03)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)
