@@ -13,6 +13,14 @@ HP-M1(2026-11-02)이 남긴 것.
       init이 쓴다.
 - [ ] 화면 셸의 히스토리 자리(fish `~/.local/share/fish`)와 zoxide DB가 홈에 생기는지 게이트가 못 봤다(HP 실측 11).
 
+HP-M2(2026-11-03)가 남긴 것.
+
+- [ ] hostname이 없다 — 커널 기본값 `(none)`이다. sudo의 `unable to resolve host (none)`은 sudoers `!fqdn`으로 껐지만 git
+      신원은 여전히 `<이름>@(none)`이고 프롬프트도 `(none)`이다. 이름을 `tars.conf`의 키로 둘지(`hostname=`)는 그 쓰임이 생길 때.
+- [ ] sudo의 timestamp가 tty 단위 15분(기본값)이다. 화면의 패널마다 따로 묻는다 — 거슬리면 sudoers `timestamp_type=global`.
+- [ ] 사용자의 `tars-config dictation key`는 키를 다 친 뒤에야 `try: sudo`를 듣는다(쓰기 자리에서 고르므로). 비밀 입력 앞에서 쓰기
+      권한을 먼저 보는 것은 실기에서 거슬리면.
+
 KH(2026-11-02)가 남긴 것.
 
 - [ ] init의 키보드 고르기 · 3초 기다림 · argv의 `device_path` 칸은 이제 terminal이 안 쓴다(KH 비목표 2). 키보드 없이 부팅하면 3초가

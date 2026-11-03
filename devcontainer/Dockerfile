@@ -371,6 +371,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # `mkpasswd -m yescrypt -s`로 비밀번호를 stdin에서 받아 해시를 만든다 — init과 설치기는
 # musl 정적이라 libcrypt를 직접 못 부른다. 의존(libcrypt1 · libidn2-0)은 위에서 이미
 # 받았다. whois 바이너리 자체는 sysroot에만 풀리고 initrd에는 안 간다.
+#
+# ── HP-M2: 층 18(sudo) ─────────────────────────────────────────────────────
+#
+# sudo는 비밀번호의 첫 쓰임이다(HP design 결정 6, plan 확정 1 — doas는 Homebrew가 부르는
+# `sudo -v` · `-l`이 없어 고르지 않았다). libpam-modules는 pam_unix · pam_permit · pam_deny
+# 셋 때문에, libpam-modules-bin은 unix_chkpwd 하나 때문에 받는다(plan 확정 4 — pam_unix 1.7은
+# real uid가 0이 아니면 euid가 0이어도 이 도우미로 비밀번호를 확인한다. 없으면 sudo가 맞는
+# 비밀번호에 "Sorry, try again"이다, HP-M2 실측). 의존(libpam0g · libaudit1 · libselinux1 · libapparmor1 ·
+# libssl3t64 · zlib1g · libcrypt1)은 위에서 이미 받았다. initrd에 싣는 것은 그 일부다 —
+# make_initrd.sh의 sudo 절이 고른다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -524,7 +534,10 @@ RUN dpkg --add-architecture amd64 \
         libapparmor1:amd64 \
         libbz2-1.0:amd64 \
         libatomic1:amd64 \
-        whois:amd64) \
+        whois:amd64 \
+        sudo:amd64 \
+        libpam-modules:amd64 \
+        libpam-modules-bin:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 

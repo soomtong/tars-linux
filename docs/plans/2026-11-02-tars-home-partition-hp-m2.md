@@ -174,3 +174,22 @@ curl · `mkpasswd`가 이미 데려왔다. design 위험 3이 걱정한 "PAM 사
 - Task 1~3: 편집과 단위 검사, 40분 남짓.
 - Task 4: home 체인 첫 판들 — sudo `-S`와 파이프의 상호작용을 재는 자리라 판이 몇 번 돈다.
 - Task 6: 루트 게이트 12분 남짓.
+
+## 구현에서 달라진 것 (2026-11-03, 게이트 뒤)
+
+- 확정 4가 틀렸다. `pam_unix` 1.7은 real uid가 0이 아니면 euid가 0이어도 `unix_chkpwd`를 부른다 — 없으면 맞는 비밀번호에
+  `Sorry, try again`. `libpam-modules-bin:amd64`를 이미지에 더하고 `/usr/sbin/unix_chkpwd`를 0755 root로 싣는다. 이미지가 두 번
+  바뀌었다(`c18f9ebabff2` → `5ffbe7a00fb2`).
+- 확정 2의 sudoers에 `Defaults !fqdn` 한 줄 — hostname `(none)` 때문에 sudo마다 찍히던 `unable to resolve host`를 없앤다.
+- initrd에 정적 `/etc/shadow`(`root:*:::::::`, 0600). 사용자 없는 부팅에서 root의 sudo가 `PAM account management error`였다.
+  판정 8f(ISO의 root)를 더했다.
+- 확정 8의 `secret.zig`는 없다. 설치기와 `tars-config`가 서로를 import하지 않는 규칙(`install.zig` 머리) 때문에 `passwd`는
+  `config_front`에 섰다 — `run` · `replace`와 새 `readSecretLine`(한 바이트씩, 파이프에서도 개행에서 멈춘다). 기존 `readSecret`은
+  echo를 끈 뒤 프롬프트를 찍도록 순서만 고쳤다.
+- 확정 7의 "다르면 2"는 1(`EXIT_REFUSED`, 값을 거절했다)이다. 거절의 종료 코드는 `EXIT_DENIED` = 77(`EX_NOPERM`) —
+  `tars-config` · `tars-service` 둘 다. 안내는 `denied(e)`가 한 번만 찍고 `main`이 끝에서 종료 코드를 바꾼다.
+- `make_initrd.sh`의 `copy_lib_deps`가 절대 경로 하나인 `RUNPATH`를 따른다(`libsudo_util`). sudo는 `guest_tools.sh`에 한 줄로 있다.
+- 게이트: 게스트에 `/usr/bin/true` · `sha256sum`이 없어 `sudo id -u`와 `cp` + `cmp`. 비밀번호를 파이프로 주는 sudo는 늘 `-k` —
+  timestamp가 남으면 파이프의 첫 줄이 명령에게 간다(첫 판들의 passwd "differ"). Task 4의 `cut` 범위는 필요 없었다 — `LOG`가
+  부팅마다 새 파일이라 누출 판정은 부팅 1만 본다. 판정 4의 그룹은 `27,29`.
+- 자세한 것은 design의 "실측 (M2)"와 "M2의 첫 판들이 가르친 것".

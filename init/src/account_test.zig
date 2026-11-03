@@ -29,9 +29,9 @@ pub fn main() !void {
     const too_long_arr: [account.NAME_MAX + 1]u8 = @splat('a');
     const too_long: []const u8 = &too_long_arr;
     for ([_][]const u8{
-        "",       "root", "Tars", "1abc", "-a",  "a:b",   "a b",       "../x",
-        "a/b",    "a.b",  "a\n",  "\n",   "tty", "audio", "linuxbrew", "messagebus",
-        too_long,
+        "",           "root",   "Tars", "1abc", "-a",  "a:b",   "a b",  "../x",
+        "a/b",        "a.b",    "a\n",  "\n",   "tty", "audio", "sudo", "linuxbrew",
+        "messagebus", too_long,
     }) |n| {
         if (account.validName(n)) {
             std.debug.print("FAIL: validName accepted \"{s}\"\n", .{n});
@@ -101,6 +101,7 @@ pub fn main() !void {
     const group =
         \\root:x:0:
         \\tty:x:5:
+        \\sudo:x:27:
         \\audio:x:29:
         \\messagebus:x:101:
         \\nogroup:x:65534:
@@ -109,6 +110,7 @@ pub fn main() !void {
     const group_want =
         \\root:x:0:
         \\tty:x:5:
+        \\sudo:x:27:tars
         \\audio:x:29:tars
         \\messagebus:x:101:
         \\nogroup:x:65534:
@@ -119,6 +121,11 @@ pub fn main() !void {
     try expectText("withGroup", g1, group_want);
     const g2 = account.withGroup(g1, "tars", &out2) orelse return error.GroupNull;
     try expectText("withGroup twice", g2, group_want);
+    // 정적 group에 sudo · audio 줄이 없으면 null(HP-M2) — initrd와 코드가 어긋난 것을 부팅 로그로 드러낸다.
+    // 접두사만 같은 줄(`sudoers:`)은 그 줄로 치지 않는다.
+    if (account.withGroup("root:x:0:\naudio:x:29:\n", "tars", &out) != null) return error.GroupWithoutSudo;
+    if (account.withGroup("root:x:0:\nsudo:x:27:\n", "tars", &out) != null) return error.GroupWithoutAudio;
+    if (account.withGroup("audio:x:29:\nsudoers:x:30:\n", "tars", &out) != null) return error.GroupPrefixTaken;
 
     // 자리가 모자라면 null — 잘린 파일을 쓰지 않는다.
     var tiny: [16]u8 = undefined;

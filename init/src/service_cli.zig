@@ -16,6 +16,8 @@ const EXIT_UNREACHABLE: u8 = 2;
 /// 원하는 상태가 시한 안에 안 됐다.
 const EXIT_TIMEOUT: u8 = 3;
 const EXIT_USAGE: u8 = 64;
+/// HP-M2. 소켓이 root 0600이라 사용자가 닿지 못했다(sysexits의 `EX_NOPERM`, `tars-config`와 같은 값).
+const EXIT_DENIED: u8 = 77;
 
 const REPLY_WAIT_MS: i32 = 2000;
 /// 기다림의 시한(M1-B). SIGTERM을 무시하는 서비스가 최악 5초에 거둬진다.
@@ -123,6 +125,16 @@ pub fn main(init: std.process.Init.Minimal) u8 {
 
     const text = switch (ask(req, &buf)) {
         .down => |e| {
+            // HP-M2 plan 확정 6. 소켓은 root만 연다 — 사용자에게는 다음 걸음을 말한다.
+            if (e == .ACCES or e == .PERM) {
+                writeAll(2, "tars-service: permission denied; try: sudo tars-service");
+                for (argv[1..]) |a| {
+                    writeAll(2, " ");
+                    writeAll(2, std.mem.span(a));
+                }
+                writeAll(2, "\n");
+                return EXIT_DENIED;
+            }
             complain("cannot reach init at {s} (errno {d})", .{ control.PATH, @backingInt(e) });
             return EXIT_UNREACHABLE;
         },

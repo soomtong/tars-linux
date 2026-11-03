@@ -91,12 +91,32 @@ copy_lib_deps() {
     cp "$src" "${WORKDIR}${interp}"
   fi
 
+  # HP-M2. RUNPATH. sudo와 그 plugin `sudoers.so`가 `RUNPATH /usr/libexec/sudo`를 갖고 자기
+  # 라이브러리 `libsudo_util.so.0`을 표준 자리가 아니라 거기 둔다 — find_in_sysroot는 그것을
+  # 못 찾는다. 절대 경로 하나인 RUNPATH이고 sysroot의 그 자리에 SONAME이 있으면 initrd에도
+  # 같은 자리에 둔다(로더가 거기서 찾는다). `$ORIGIN`이나 여러 경로는 다루지 않는다 — 그런
+  # 바이너리가 오면 아래의 표준 탐색으로 떨어지고, 못 찾으면 지금처럼 빌드가 죽는다.
+  # HP-M2 때 initrd의 ELF 240개 중 RUNPATH · RPATH를 가진 것은 0개였다 — 이 분기는 sudo가 처음이다.
+  local runpath
+  runpath="$(readelf -d "$bin" | sed -n 's/.*(RUNPATH).*\[\(.*\)\]/\1/p')"
+  case "$runpath" in *:* | *'$'* | [!/]*) runpath= ;; esac
+
   for soname in $(readelf -d "$bin" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
     # 로더는 위에서 PT_INTERP가 지정한 자리(/lib64)에 이미 넣었다. DT_NEEDED에
     # 로더를 또 적어두는 바이너리가 있는데, 그대로 처리하면 /lib/x86_64-linux-gnu
     # 에 사본이 하나 더 생긴다. ldd는 SONAME을 절대 경로로 해석해 돌려주므로
     # 이 중복이 드러나지 않았다.
     case "$soname" in ld-linux*) continue ;; esac
+
+    if [ -n "$runpath" ] && [ -e "${SYSROOT}${runpath}/${soname}" ]; then
+      dest="${WORKDIR}${runpath}/${soname}"
+      if [ ! -e "$dest" ]; then
+        mkdir -p "${WORKDIR}${runpath}"
+        cp -L "${SYSROOT}${runpath}/${soname}" "$dest"
+        copy_lib_deps "$dest"
+      fi
+      continue
+    fi
 
     dest="${WORKDIR}${LIB_DEST}/${soname}"
     if [ ! -e "$dest" ]; then
@@ -539,12 +559,86 @@ root:x:0:0:root:/:/bin/sh
 sshd:x:100:65534::/run/sshd:/usr/sbin/nologin
 messagebus:x:101:101::/nonexistent:/usr/sbin/nologin
 EOF
+#
+# HP-M2: sudo(27). /etc/sudoers의 `%sudo` 줄이 이 그룹에 root 권한을 준다. 구성원은 audio처럼
+# init이 부팅마다 적는다 — 이 줄이 없으면 init의 account.withGroup이 null을 돌려 사용자 줄을
+# 안 쓴다(조용히 넘어가지 않는다).
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
 tty:x:5:
+sudo:x:27:
 audio:x:29:
 messagebus:x:101:
 nogroup:x:65534:
+EOF
+
+# HP-M2. sudo(HP-M2 plan 확정 1 · 2 · 4). 본체와 libsudo_util은 guest_tools.sh의 루프가 넣었다.
+#
+#   sudoers.so       판단을 하는 plugin. 본체가 dlopen하므로 DT_NEEDED에 없다 — 이름으로
+#                    넣는다. /etc/sudo.conf가 없으면 sudo는 /usr/libexec/sudo/sudoers.so를
+#                    쓴다(libsudo_util의 기본값, HP-M2 Task 0에서 strings로 확인)
+#   PAM 모듈 셋       libpam이 /etc/pam.d/sudo를 읽고 /usr/lib/x86_64-linux-gnu/security/에서
+#                    dlopen한다(libpam의 컴파일 값). initrd의 /lib는 진짜 디렉터리라 그
+#                    경로를 그대로 만든다
+#   unix_chkpwd      pam_unix가 비밀번호를 확인하는 도우미(컴파일된 경로 /usr/sbin/unix_chkpwd).
+#                    pam_unix 1.7은 real uid가 0이 아니면 — 사용자가 setuid sudo를 부른 경우 —
+#                    euid가 0이어도 /etc/shadow를 직접 읽지 않고 이것을 부른다. 없으면 sudo가 맞는
+#                    비밀번호에 "Sorry, try again"이다(HP-M2 첫 판, plan 확정 4가 틀렸던 자리).
+#                    0755 root면 된다 — 부르는 쪽이 euid 0인 sudo뿐이라 Debian의 2755 root:shadow가
+#                    필요 없다(/etc/shadow는 root 600). PATH 밖이지만 사람이 치는 명령이 아니다
+#   4755             install_tool의 0755를 덮는다. cp가 setuid를 남기는지에 기대지 않는다.
+#                    소유는 cpio를 만드는 컨테이너의 root다
+#   /etc/sudoers     0440. sudo는 이 파일이 root 소유가 아니거나 남이 쓸 수 있으면 거절한다
+#
+# sudoers의 값: secure_path는 게스트 PATH(environ.zig의 PATH_ENTRY)와 같다. lecture는 표시
+# 파일이 tmpfs라 부팅마다 다시 뜨므로 끈다. syslog 소켓이 없으므로 !syslog. !fqdn은 hostname이
+# 커널 기본값 `(none)`이라 sudo마다 찍히던 `unable to resolve host (none)`을 없앤다(HP-M2 실측).
+# timestamp는 기본(15분, /run/sudo/ts — 재부팅이 지운다).
+#
+# /etc/shadow는 root 한 줄로 늘 있다. 사용자 있는 부팅은 init이 같은 첫 줄에 사용자를 더해 덮어쓰고
+# (account.shadowFile), 없는 부팅(ISO)은 이것이 그대로다 — 없으면 pam_unix의 account 단계가 root를
+# 못 찾아 root의 sudo가 `PAM account management error`로 실패한다(HP-M2 실측).
+SUDO_LIBEXEC=/usr/libexec/sudo
+PAM_DIR=/usr/lib/x86_64-linux-gnu/security
+mkdir -p "${WORKDIR}${SUDO_LIBEXEC}" "${WORKDIR}${PAM_DIR}" "$WORKDIR/etc/pam.d" "$WORKDIR/usr/sbin"
+for f in "${SUDO_LIBEXEC}/sudoers.so" "${PAM_DIR}/pam_unix.so" "${PAM_DIR}/pam_permit.so" "${PAM_DIR}/pam_deny.so" /usr/sbin/unix_chkpwd; do
+  if [ ! -f "${SYSROOT}${f}" ]; then
+    echo "make_initrd: ${f} not in the sysroot (rebuild the devcontainer)" >&2
+    exit 1
+  fi
+  cp -L "${SYSROOT}${f}" "${WORKDIR}${f}"
+  chmod 0644 "${WORKDIR}${f}"
+  copy_lib_deps "${WORKDIR}${f}"
+done
+chmod 0755 "$WORKDIR/usr/sbin/unix_chkpwd"
+chmod 4755 "$WORKDIR/usr/bin/sudo"
+
+cat > "$WORKDIR/etc/sudoers" <<'EOF'
+# TARS sudoers (HP-M2). Baked into the image; edits do not survive a reboot.
+Defaults secure_path="/usr/bin:/bin"
+Defaults lecture=never
+Defaults !syslog
+Defaults !fqdn
+root  ALL=(ALL:ALL) ALL
+%sudo ALL=(ALL:ALL) ALL
+EOF
+chmod 0440 "$WORKDIR/etc/sudoers"
+
+printf 'root:*:::::::\n' > "$WORKDIR/etc/shadow"
+chmod 0600 "$WORKDIR/etc/shadow"
+
+cat > "$WORKDIR/etc/pam.d/sudo" <<'EOF'
+auth     required pam_unix.so
+account  required pam_unix.so
+session  required pam_permit.so
+password required pam_deny.so
+EOF
+# 모르는 서비스 이름은 열리지 않는다.
+cat > "$WORKDIR/etc/pam.d/other" <<'EOF'
+auth     required pam_deny.so
+account  required pam_deny.so
+session  required pam_deny.so
+password required pam_deny.so
 EOF
 
 # LB-M2. 이름 풀이(LB design 결정 5). 셋이 한 묶음이다.

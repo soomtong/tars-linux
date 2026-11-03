@@ -338,6 +338,9 @@ pub const Command = union(enum) {
     /// `reload` · `reload terminal`. true가 terminal.
     reload: bool,
     check,
+    /// HP-M2. 사용자의 sudo 비밀번호를 바꾼다(`/config/shadow` · `/etc/shadow`). 인자는 없다 —
+    /// 비밀번호는 argv가 아니라 표준 입력으로만 받는다.
+    passwd,
     /// 앞문 다섯(TC-M1). 인자는 각자 가른다.
     wifi: Rest,
     ssh: Rest,
@@ -375,6 +378,7 @@ pub fn parseCommand(args: Rest, pairs: *[PAIRS_MAX]Pair, default_bufs: *[PAIRS_M
         return .usage;
     }
     if (std.mem.eql(u8, verb, "check")) return if (rest.len == 0) .check else .usage;
+    if (std.mem.eql(u8, verb, "passwd")) return if (rest.len == 0) .passwd else .usage;
     if (std.mem.eql(u8, verb, "wifi")) return .{ .wifi = rest };
     if (std.mem.eql(u8, verb, "ssh")) return .{ .ssh = rest };
     if (std.mem.eql(u8, verb, "ssh-key")) return .{ .ssh_key = rest };

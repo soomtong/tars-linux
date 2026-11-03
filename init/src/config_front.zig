@@ -16,6 +16,7 @@ const linux = std.os.linux;
 const config = @import("config.zig");
 const cli = @import("config_cli.zig");
 const fe = @import("config_front_edit.zig");
+const account = @import("account.zig");
 
 const say = cli.say;
 const complain = cli.complain;
@@ -44,6 +45,15 @@ const DICT_TEMP: [:0]const u8 = "/config/.dictation.conf.new";
 const WPA_PASSPHRASE: [:0]const u8 = "/usr/bin/wpa_passphrase";
 const SSH_KEYGEN: [:0]const u8 = "/usr/bin/ssh-keygen";
 const NFT: [:0]const u8 = "/usr/bin/nft";
+const MKPASSWD: [:0]const u8 = "/usr/bin/mkpasswd";
+
+/// HP-M2 `passwd`가 바꾸는 둘. 앞의 것이 영속하는 해시(설치기가 처음 쓴다), 뒤의 것이 init이
+/// 부팅마다 짓는 사본이고 sudo의 `pam_unix`가 읽는다. 경로는 `login.zig`의 `SHADOW_STORE_PATH` ·
+/// `SHADOW_PATH`와 같다 — 이 명령은 init의 파일을 import하지 않는다.
+const SHADOW_STORE: [:0]const u8 = "/config/shadow";
+const SHADOW_STORE_TEMP: [:0]const u8 = "/config/.shadow.new";
+const SHADOW_ETC: [:0]const u8 = "/etc/shadow";
+const SHADOW_ETC_TEMP: [:0]const u8 = "/etc/.shadow.new";
 const FIREWALL_RULES: [:0]const u8 = "/etc/tars/firewall.nft";
 
 const ENVP = [_:null]?[*:0]const u8{"PATH=/usr/bin:/bin"};
@@ -84,6 +94,7 @@ fn readOr(path: [*:0]const u8, buf: []u8) ?[]const u8 {
 fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux.mode_t) bool {
     const rc = linux.open(temp.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, mode);
     if (failed(rc)) |e| {
+        if (cli.denied(e)) return false;
         complain("cannot create {s} (errno {d})", .{ temp, @backingInt(e) });
         return false;
     }
@@ -98,6 +109,7 @@ fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux
         return false;
     }
     if (failed(linux.rename(temp.ptr, path.ptr))) |e| {
+        if (cli.denied(e)) return false;
         complain("cannot rename {s} to {s} (errno {d})", .{ temp, path, @backingInt(e) });
         return false;
     }
@@ -107,6 +119,7 @@ fn replace(path: [:0]const u8, temp: [:0]const u8, text: []const u8, mode: linux
 fn ensureDir(path: [:0]const u8, mode: linux.mode_t) bool {
     if (failed(linux.mkdir(path.ptr, mode))) |e| {
         if (e == .EXIST) return true;
+        if (cli.denied(e)) return false;
         complain("cannot make {s} (errno {d})", .{ path, @backingInt(e) });
         return false;
     }
@@ -162,14 +175,18 @@ fn run(argv: [*:null]const ?[*:0]const u8, input: []const u8, out: []u8) ?Ran {
 /// 비밀 하나를 읽는다 — 비밀번호 · API 키. 표준 입력이 tty면 prompt를 찍고 echo를 끈 채
 /// 한 줄을, 아니면(파이프 · 파일) 끝까지 읽는다. 끝의 개행은 뗀다. 명령줄 인자로 받지 않는
 /// 이유는 `/proc/<pid>/cmdline`과 셸 히스토리다(VD design 결정 4와 같다).
+///
+/// echo를 먼저 끄고 prompt를 찍는다(HP-M2에서 순서를 바꿨다). 거꾸로면 prompt를 보자마자 친
+/// 글자가 echo가 꺼지기 전에 화면에 찍히고 `.FLUSH`가 그것을 버린다 — 설치기의
+/// `readSecretAnswer`가 HP-M1에서 겪은 것과 같다.
 fn readSecret(prompt: []const u8, buf: []u8) ?[]const u8 {
     var old: linux.termios = undefined;
     const tty = failed(linux.tcgetattr(0, &old)) == null;
     if (tty) {
-        _ = cli.writeAll(2, prompt);
         var quiet = old;
         quiet.lflag.ECHO = false;
         _ = linux.tcsetattr(0, .FLUSH, &quiet);
+        _ = cli.writeAll(2, prompt);
     }
     var len: usize = 0;
     while (len < buf.len) {
@@ -313,6 +330,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
             .none => {
                 if (!ensureDir(SERVICES_DIR, 0o755)) return cli.EXIT_IO;
                 if (failed(linux.symlink(SSHD_TEMPLATE.ptr, SSHD_LINK.ptr))) |e| {
+                    if (cli.denied(e)) return cli.EXIT_DENIED;
                     complain("cannot link {s} (errno {d})", .{ SSHD_LINK, @backingInt(e) });
                     return cli.EXIT_IO;
                 }
@@ -334,6 +352,7 @@ pub fn ssh(args: []const [*:0]const u8) u8 {
             },
             .template => {
                 if (failed(linux.unlink(SSHD_LINK.ptr))) |e| {
+                    if (cli.denied(e)) return cli.EXIT_DENIED;
                     complain("cannot remove {s} (errno {d})", .{ SSHD_LINK, @backingInt(e) });
                     return cli.EXIT_IO;
                 }
@@ -586,4 +605,122 @@ pub fn check(c: config.Config) usize {
     const dict = readOr(DICT_PATH, &dbuf) orelse "";
     problems += fe.dictationUnknown(cli.Say{}, dict, DICT_PATH);
     return problems;
+}
+
+// ── passwd ────────────────────────────────────────────────────────────
+
+/// 비밀 한 줄을 읽는다. `readSecret`과 다른 것은 파이프에서도 개행에서 멈춘다는 것 하나다 —
+/// `passwd`는 같은 표준 입력에서 두 줄(새 값 · 다시)을 읽는다. 한 바이트씩 읽어 다음 줄을
+/// 삼키지 않는다. 되돌릴 때는 `.NOW`(둘째 줄을 미리 친 것을 버리지 않는다). 개행 없이 끝나면
+/// 읽은 만큼, 아무것도 없으면 null.
+fn readSecretLine(prompt: []const u8, buf: []u8) ?[]const u8 {
+    var old: linux.termios = undefined;
+    const tty = failed(linux.tcgetattr(0, &old)) == null;
+    if (tty) {
+        var quiet = old;
+        quiet.lflag.ECHO = false;
+        _ = linux.tcsetattr(0, .FLUSH, &quiet);
+        _ = cli.writeAll(2, prompt);
+    }
+    var len: usize = 0;
+    var got_any = false;
+    while (true) {
+        var b: [1]u8 = undefined;
+        const n = linux.read(0, &b, 1);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            break;
+        }
+        if (n == 0) break;
+        got_any = true;
+        if (b[0] == '\n') break;
+        // 버퍼를 넘는 줄은 끝까지 읽어 버리고 길이를 넘긴 것으로 알린다(아래 `validPassword`가 거절한다).
+        if (len < buf.len) buf[len] = b[0];
+        len += 1;
+    }
+    if (tty) {
+        _ = linux.tcsetattr(0, .NOW, &old);
+        _ = cli.writeAll(2, "\n");
+    }
+    if (!got_any) return null;
+    if (len > buf.len) return buf[0..0];
+    return std.mem.trimEnd(u8, buf[0..len], "\r");
+}
+
+/// `tars-config passwd`(HP-M2 plan 확정 7). 사용자의 sudo 비밀번호를 바꾼다. root만 한다 —
+/// 사용자는 `sudo tars-config passwd`로 오고, sudo가 방금 옛 비밀번호를 확인했으므로 다시 묻지
+/// 않는다. 새 값을 두 번 받아 `mkpasswd -m yescrypt -s`(설치기와 같은 도구)로 해시하고,
+/// `/config/shadow`(영속)와 `/etc/shadow`(지금 부팅의 사본)를 함께 바꾼다 — 그래서 재부팅 없이 다음
+/// `sudo`부터 새 값이다. `/etc/shadow`는 init과 같은 `account.shadowFile`로 짓는다.
+pub fn passwd() u8 {
+    if (linux.geteuid() != 0) {
+        _ = cli.denied(.PERM);
+        return cli.EXIT_DENIED;
+    }
+    if (!needDisk()) return cli.EXIT_IO;
+    const c = tarsConf();
+    const user = c.user orelse {
+        complain("no user account on this machine (tars.conf has no user=)", .{});
+        return cli.EXIT_IO;
+    };
+    const name = user.slice();
+
+    var first_buf: [account.PASSWORD_MAX]u8 = undefined;
+    var again_buf: [account.PASSWORD_MAX]u8 = undefined;
+    defer @memset(&first_buf, 0);
+    defer @memset(&again_buf, 0);
+    const first = readSecretLine("new password: ", &first_buf) orelse {
+        complain("no password given; nothing was changed", .{});
+        return cli.EXIT_REFUSED;
+    };
+    if (first.len == 0) {
+        complain("an empty password is not taken; nothing was changed", .{});
+        return cli.EXIT_REFUSED;
+    }
+    if (!account.validPassword(first)) {
+        complain("the password is longer than {d} or has a control character; nothing was changed", .{account.PASSWORD_MAX});
+        return cli.EXIT_REFUSED;
+    }
+    const again = readSecretLine("again: ", &again_buf) orelse {
+        complain("the password was not given twice; nothing was changed", .{});
+        return cli.EXIT_REFUSED;
+    };
+    if (!std.mem.eql(u8, first, again)) {
+        complain("the two passwords differ; nothing was changed", .{});
+        return cli.EXIT_REFUSED;
+    }
+
+    var input: [account.PASSWORD_MAX + 1]u8 = undefined;
+    defer @memset(&input, 0);
+    @memcpy(input[0..first.len], first);
+    input[first.len] = '\n';
+    const argv = [_:null]?[*:0]const u8{ MKPASSWD.ptr, "-m", "yescrypt", "-s" };
+    var out: [512]u8 = undefined;
+    const ran = run(&argv, input[0 .. first.len + 1], &out) orelse {
+        complain("cannot run {s}", .{MKPASSWD});
+        return cli.EXIT_IO;
+    };
+    const hash = (if (ran.code == 0) account.hashFromTool(ran.out) else null) orelse {
+        complain("mkpasswd did not give a yescrypt hash (exit {d}); nothing was changed", .{ran.code});
+        return cli.EXIT_IO;
+    };
+
+    var store_buf: [account.NAME_MAX + account.HASH_MAX + 4]u8 = undefined;
+    const store = account.storeLine(&store_buf, name, hash) orelse {
+        complain("the shadow line for {s} does not fit; nothing was changed", .{name});
+        return cli.EXIT_IO;
+    };
+    var etc_buf: [2 * (account.NAME_MAX + account.HASH_MAX) + 64]u8 = undefined;
+    const etc = account.shadowFile(&etc_buf, name, hash) orelse {
+        complain("the shadow file for {s} does not fit; nothing was changed", .{name});
+        return cli.EXIT_IO;
+    };
+    // 영속하는 쪽을 먼저 바꾼다. 둘째가 실패해도 재부팅이 init의 사본을 맞춘다.
+    if (!replace(SHADOW_STORE, SHADOW_STORE_TEMP, store, 0o600)) return cli.EXIT_IO;
+    if (!replace(SHADOW_ETC, SHADOW_ETC_TEMP, etc, 0o600)) {
+        complain("{s} is changed; sudo takes the new password after the next boot", .{SHADOW_STORE});
+        return cli.EXIT_IO;
+    }
+    say("password changed for {s}; sudo asks for the new one from now on\n", .{name});
+    return cli.EXIT_OK;
 }

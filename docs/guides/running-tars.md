@@ -226,9 +226,19 @@ p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크�
 설치된 디스크로 뜨면 화면의 셸은 그 사용자(uid 1000)로 `/home/<이름>`에서 뜬다. rc 파일
 (`~/.bashrc` · `~/.zshrc` · `~/.config/fish/config.fish`)과 `~/.gitconfig` · `~/.vimrc`는 홈의
 진짜 파일이고 고치면 남는다. 시리얼 콘솔의 셸과 ssh는 root 그대로다. 사용자는 `/config`를
-읽을 수 있지만 쓸 수 없다 — `tars-config set`은 아직 root만 된다(sudo는 다음 단계다).
-`/home`이 없는 부팅(ISO, HP 전에 깐 디스크)은 지금처럼 root 셸이다. 이름을 바꾸는 길은
-`tars-install <disk> --wipe`뿐이다(`tars-config set user=…`은 거절한다).
+읽을 수 있지만 쓰는 것은 `sudo`다. 설치 때 정한 비밀번호를 묻고, 한 번 맞으면 그 터미널에서
+15분 동안 다시 묻지 않는다.
+
+```
+sudo tars-config set net=dhcp     # 사용자로 그냥 치면: permission denied; try: sudo tars-config set net=dhcp
+sudo tars-config reload           # init에게 묻는 명령(reload · tars-service)도 root만이다
+sudo tars-config passwd           # 비밀번호 바꾸기. 새 값을 두 번 묻고, 다음 sudo부터 새 값이다
+```
+
+비밀번호는 sudo에만 쓰인다 — 로그인 화면이 없고 ssh는 키만 받는다. 기본 비밀번호 `tars-linux`가
+알려진 값이라도 원격에서 들어올 길은 안 생긴다. `/home`이 없는 부팅(ISO, HP 전에 깐 디스크)은
+지금처럼 root 셸이다. 이름을 바꾸는 길은 `tars-install <disk> --wipe`뿐이다(`tars-config set user=…`은
+거절한다).
 
 새 ISO가 나오면 그 ISO로 떠서 같은 명령을 친다. 목록이 그 디스크를
 `TARS installed`로 보이고, p2는 열지도 않는다(`updated.`). p1에서는 지금

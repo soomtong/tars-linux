@@ -26,7 +26,7 @@ pub const DEFAULT_PASSWORD = "tars-linux";
 /// 때문이다 — `audio`라는 사용자는 `audio` 그룹을 하나 더 만들려 한다. `linuxbrew`는
 /// Homebrew의 prefix(`/home/linuxbrew`)가 쓸 자리다(PM).
 pub const RESERVED = [_][]const u8{
-    "root", "sshd", "messagebus", "nobody", "nogroup", "audio", "tty", "linuxbrew",
+    "root", "sshd", "messagebus", "nobody", "nogroup", "audio", "tty", "sudo", "linuxbrew",
 };
 
 /// `[a-z_][a-z0-9_-]{0,31}`이고 `RESERVED`가 아니다(design 결정 5).
@@ -120,7 +120,7 @@ pub fn parseStore(text: []const u8, name: []const u8) ?[]const u8 {
 /// passwd와 group에 같은 사용자를 두 번 넣지 않게 한다 — `reload`가 `login.apply`를
 /// 다시 부르는 것처럼 이 함수도 한 부팅에 여러 번 불려도 결과가 같아야 한다.
 ///
-/// `edit`이 null이 아니면 남는 줄마다 한 번 불러 바꿀 기회를 준다(group의 audio 줄).
+/// `edit`이 null이 아니면 남는 줄마다 한 번 불러 바꿀 기회를 준다(group의 audio · sudo 줄).
 fn rebuild(in: []const u8, name: []const u8, add: []const u8, out: []u8, comptime edit: ?fn ([]const u8, []const u8, []u8) ?[]const u8) ?[]const u8 {
     var w: std.Io.Writer = .fixed(out);
     var lines = std.mem.splitScalar(u8, in, '\n');
@@ -142,19 +142,39 @@ pub fn withPasswd(in: []const u8, name: []const u8, shell: []const u8, out: []u8
     return rebuild(in, name, line, out, null);
 }
 
-/// group 전체에 사용자 그룹(`<이름>:x:1000:`)을 넣고, `audio` 줄의 구성원을 그 사용자로
-/// 둔 사본(plan 확정 6 — 보조 그룹은 audio 하나).
+/// 사용자를 구성원으로 넣는 보조 그룹의 이름. terminal의 `setgroups`(`AUDIO_GID` · `SUDO_GID`)와
+/// 짝이다 — 한쪽만 고치면 `id`와 sudo의 판단이 어긋난다.
+const MEMBER_GROUPS = [_][]const u8{ "audio", "sudo" };
+
+/// group 전체에 사용자 그룹(`<이름>:x:1000:`)을 넣고, `audio` · `sudo` 줄의 구성원을 그 사용자로
+/// 둔 사본(HP-M1 plan 확정 6, HP-M2 plan 확정 3).
+///
+/// 정적 group(`make_initrd.sh`)에 그 두 줄 중 하나라도 없으면 null이다. initrd와 이 코드가
+/// 어긋난 것이고, 조용히 넘어가면 "sudo가 안 된다"가 sudoers 탓인지 group 탓인지 갈래가 는다.
 pub fn withGroup(in: []const u8, name: []const u8, out: []u8) ?[]const u8 {
+    for (MEMBER_GROUPS) |g| if (!hasGroup(in, g)) return null;
     var line_buf: [64]u8 = undefined;
     const line = std.fmt.bufPrint(&line_buf, "{s}:x:{d}:", .{ name, screen_args.USER_GID }) catch return null;
-    return rebuild(in, name, line, out, audioMembers);
+    return rebuild(in, name, line, out, members);
 }
 
-/// `audio:x:29:<구성원>`의 구성원 칸을 `name` 하나로. 다른 줄은 그대로.
-fn audioMembers(line: []const u8, name: []const u8, buf: []u8) ?[]const u8 {
-    if (!std.mem.startsWith(u8, line, "audio:")) return line;
-    const colon = std.mem.lastIndexOfScalar(u8, line, ':') orelse return null;
-    return std.fmt.bufPrint(buf, "{s}{s}", .{ line[0 .. colon + 1], name }) catch null;
+fn hasGroup(text: []const u8, group: []const u8) bool {
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        if (line.len > group.len and std.mem.startsWith(u8, line, group) and line[group.len] == ':') return true;
+    }
+    return false;
+}
+
+/// `MEMBER_GROUPS` 줄(`audio:x:29:<구성원>`)의 구성원 칸을 `name` 하나로. 다른 줄은 그대로.
+fn members(line: []const u8, name: []const u8, buf: []u8) ?[]const u8 {
+    for (MEMBER_GROUPS) |g| {
+        if (line.len > g.len and std.mem.startsWith(u8, line, g) and line[g.len] == ':') {
+            const colon = std.mem.lastIndexOfScalar(u8, line, ':') orelse return null;
+            return std.fmt.bufPrint(buf, "{s}{s}", .{ line[0 .. colon + 1], name }) catch null;
+        }
+    }
+    return line;
 }
 
 /// 비밀번호의 최대 길이. 사람이 치는 한 줄이다 — 이보다 길면 설치기가 다시 묻는다.

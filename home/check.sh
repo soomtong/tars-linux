@@ -6,14 +6,16 @@ cd "$(dirname "$0")" || exit 1
 # HP-M0: 스물다섯째 체인. 설치기가 셋째 파티션 `tars-home`(ext4, 나머지 전부)을
 # 만들고, 설치된 디스크로 뜬 init이 `/config`(ext2 · sync) 옆에 `/home`(ext4 ·
 # async)을 붙이며, 재부팅을 넘어 홈의 파일이 남고, 남의 ext4는 라벨로 거르는가
-# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을 더했다. 판정 8은 M2).
+# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을, HP-M2가 8(sudo)을 더했다).
 #
 # 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
 #   1  ISO + 빈 5GiB NVMe + 3GiB NVMe   홈 없는 부팅은 root(결정 3) · 3GiB는 거절(판정 7) · ext4 굽기 시간(실측 3) ·
 #                                       질문 길로 hpuser를 설치(판정 9) · 배치(판정 1)
 #   2  NVMe만                           p2와 p3(판정 2) · 마운트 옵션(판정 3) · 화면 셸이 hpuser다(판정 4) ·
-#                                       계정 파일의 권한(판정 10) · 사용자로 마커를 쓴다 · 사용자로 막히는 것(실측 10)
-#   3  NVMe + 남의 ext4(debian-home)     마커 둘이 남았다(판정 5) · 남의 디스크는 홈이 아니다(판정 6)
+#                                       계정 파일의 권한(판정 10) · 사용자로 마커를 쓴다 · 사용자로 막히는 것(실측 10) ·
+#                                       sudo · try: sudo · passwd(판정 8a~8d)
+#   3  NVMe + 남의 ext4(debian-home)     마커 둘이 남았다(판정 5) · 남의 디스크는 홈이 아니다(판정 6) ·
+#                                       바꾼 비밀번호가 재부팅을 넘었다(판정 8e)
 #
 # 모양은 install/check.sh의 것이다 — 시리얼 FIFO로 콘솔 셸에 한 줄씩 넣고 그
 # 출력을 로그에서 읽는다. 시리얼 셸은 root로 남는다(HP-M1 plan 확정 1). 화면 셸은 키를
@@ -142,6 +144,16 @@ stop_guest() {
 
 send() { printf '%s\n' "$1" >&4; }
 
+# HP-M2. 사용자(uid 1000)로 sh 한 줄을 친다. 인자는 작은따옴표를 안 담는다 — 게스트의 fish가
+# 그 따옴표 안을 그대로 sh에 준다. 결과는 `echo "hp-s8-<이름>-$?"`로 찍고 `s8_code <이름>`이 읽는다.
+as_user() { send "setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/hpuser sh -c '$1'"; }
+# 비밀번호를 파이프로 주는 sudo는 언제나 -k다. sudo는 한 번 확인하면 그 tty(시리얼 콘솔)에 15분짜리
+# timestamp를 남기고 다음 판에서 묻지 않는다 — 그러면 파이프의 첫 줄(비밀번호)이 sudo가 아니라 명령에게 간다.
+# HP-M2 첫 판들에서 passwd가 hp-secret-1과 hp-secret-2를 비교해 "differ"라 했던 이유다.
+# hp-s8-<이름>-<숫자>의 숫자. 타이핑한 줄의 `-$?`는 숫자가 아니라 안 걸린다.
+s8_wait() { wait_log_re "hp-s8-$1-[0-9]+" "${2:-60}" || fail "the step $1 never answered" "hp-s8-$1" "sudo:" "tars-config:"; }
+s8_code() { grep -aoE "hp-s8-$1-[0-9]+" "$LOG" | tail -1 | sed 's/.*-//'; }
+
 # 로그에 고정 문자열이 나타날 때까지 기다린다. 0이면 나왔다.
 #
 # 기다리는 글자는 타이핑한 줄에 없는 모양이어야 한다 — 콘솔 셸이 친 명령을
@@ -180,6 +192,15 @@ if ! grep -aqF "tars-init: no tars-home disk, shell runs as root" "$LOG"; then
   fail "the ISO boot did not say its shell runs as root" "tars-init: no tars-home" "tars-init: user"
 fi
 echo "the ISO boot has no home and says the shell runs as root"
+
+# 판정 8f(HP-M2). 사용자 없는 부팅의 root도 sudo가 된다 — root는 비밀번호를 안 묻고, pam_unix의
+# account 단계가 initrd의 정적 /etc/shadow(root 한 줄)에서 root를 찾는다. hostname 경고도 없다(!fqdn).
+# 실행하는 명령은 true가 아니라 id다 — 게스트에 /usr/bin/true가 없고 fish의 true는 내장이라 sudo가 못 찾는다.
+send "sudo id -u 2>&1 | sed 's/^/hp-s8-isoroot: /'; printf 'hp-s8-isoroot-%s\n' done"
+wait_log "hp-s8-isoroot-done" || fail "root's sudo on the ISO boot never answered" "hp-s8-isoroot" "sudo:"
+grep -aqF "hp-s8-isoroot: 0" "$LOG" || fail "root's sudo fails on a boot without a user" "hp-s8-isoroot" "sudo:"
+if grep -aqF "unable to resolve host" "$LOG"; then fail "sudo warns about the host name on the ISO boot" "unable to resolve host"; fi
+echo "8f: root's sudo works on the ISO boot"
 
 # 판정 7. 3GiB는 YES 전에 거절된다. formatSize는 10진 버림이라 3,221,225,472는
 # `3 GB`다. 아무것도 안 썼다 — 파티션 테이블 줄이 없다.
@@ -312,9 +333,9 @@ wait_log_re "terminal: spawned child pid [0-9]+ \(.*\) as hpuser" 60 \
 SPID="$(grep -aoE 'terminal: spawned child pid [0-9]+ \(.*\) as hpuser' "$LOG" | head -1 | awk '{print $5}')"
 echo "the screen shell is pid ${SPID}, spawned as hpuser"
 
-send "printf 'hp-ids-%s-%s-%s\n' \"\$(awk '/^Uid:/{print \$2\"/\"\$3\"/\"\$4\"/\"\$5}' /proc/${SPID}/status)\" \"\$(awk '/^Gid:/{print \$2\"/\"\$3}' /proc/${SPID}/status)\" \"\$(awk '/^Groups:/{print \$2}' /proc/${SPID}/status)\""
-wait_log "hp-ids-1000/1000/1000/1000-1000/1000-29" \
-  || fail "the screen shell is not uid 1000 / gid 1000 / groups 29" "hp-ids-"
+send "printf 'hp-ids-%s-%s-%s\n' \"\$(awk '/^Uid:/{print \$2\"/\"\$3\"/\"\$4\"/\"\$5}' /proc/${SPID}/status)\" \"\$(awk '/^Gid:/{print \$2\"/\"\$3}' /proc/${SPID}/status)\" \"\$(awk '/^Groups:/{print \$2\",\"\$3}' /proc/${SPID}/status)\""
+wait_log "hp-ids-1000/1000/1000/1000-1000/1000-27,29" \
+  || fail "the screen shell is not uid 1000 / gid 1000 / groups 27,29 (sudo, audio)" "hp-ids-"
 send "printf 'hp-cwd-%s\n' \"\$(readlink /proc/${SPID}/cwd)\""
 wait_log "hp-cwd-/home/hpuser" || fail "the screen shell did not start in /home/hpuser" "hp-cwd-"
 send "stat -c 'hp-pty-%U-%G-%a' \"\$(readlink /proc/${SPID}/fd/0)\""
@@ -327,7 +348,7 @@ done
 if grep -aqF "hp-env: XDG_DATA_HOME=" "$LOG"; then
   fail "the screen shell still has XDG_DATA_HOME (root's /config/xdg)" "hp-env:"
 fi
-echo "screen shell: uid/gid 1000, groups 29 (audio), cwd /home/hpuser, pty hpuser:tty 620, HOME/USER/LOGNAME/SHELL its own, no XDG_DATA_HOME"
+echo "screen shell: uid/gid 1000, groups 27,29 (sudo, audio), cwd /home/hpuser, pty hpuser:tty 620, HOME/USER/LOGNAME/SHELL its own, no XDG_DATA_HOME"
 
 # 판정 10(HP-M1). 계정 파일과 홈의 권한. shadow 둘은 root 600, 홈은 700, seed 다섯은 사용자의 것.
 send "cd /home/hpuser && stat -c 'hp-perm %n %U %G %a' /etc/shadow /config/shadow /home/hpuser .bashrc .zshrc .config/fish/config.fish .gitconfig .vimrc; cd /; printf 'hp-perm-%s\n' end"
@@ -343,12 +364,12 @@ for want in \
   "hp-perm .vimrc hpuser hpuser 644"; do
   grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-perm"
 done
-send "grep -E '^(tty|audio|hpuser):' /etc/group | sed 's/^/hp-group: /'; sed -n 2p /etc/shadow | cut -c1-10 | sed 's/^/hp-shadow: /'; printf 'hp-group-%s\n' end"
+send "grep -E '^(tty|sudo|audio|hpuser):' /etc/group | sed 's/^/hp-group: /'; sed -n 2p /etc/shadow | cut -c1-10 | sed 's/^/hp-shadow: /'; printf 'hp-group-%s\n' end"
 wait_log "hp-group-end" || fail "could not read /etc/group" "hp-group"
-for want in "hp-group: tty:x:5:" "hp-group: audio:x:29:hpuser" "hp-group: hpuser:x:1000:" "hp-shadow: hpuser:\$y\$"; do
+for want in "hp-group: tty:x:5:" "hp-group: sudo:x:27:hpuser" "hp-group: audio:x:29:hpuser" "hp-group: hpuser:x:1000:" "hp-shadow: hpuser:\$y\$"; do
   grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-group:" "hp-shadow:"
 done
-echo "shadow is root 600 in /etc and /config with a yescrypt hash, the home is hpuser 700 with five seeds, audio lists hpuser"
+echo "shadow is root 600 in /etc and /config with a yescrypt hash, the home is hpuser 700 with five seeds, sudo and audio list hpuser"
 
 # 사용자로 마커. 판정 5가 다음 부팅에서 주인까지 본다.
 send "setpriv --reuid=1000 --regid=1000 --init-groups sh -c 'echo hp-m1 > /home/hpuser/hp-marker' && sync && stat -c 'hp-owner-%U' /home/hpuser/hp-marker"
@@ -377,6 +398,110 @@ grep -aqE "hp-try: amixer -c 0 -> 0" "$LOG" || fail "hpuser cannot open the soun
 grep -aqF "hp-dev: /dev/snd/controlC0 root audio 660" "$LOG" \
   || fail "/dev/snd/controlC0 is not root:audio 660" "hp-dev:"
 echo "the sound nodes are root:audio 660 and hpuser opens the card"
+
+# ── 판정 8(HP-M2): sudo ──────────────────────────────────────────────────
+# 8a. 파일. sudo는 setuid root이고 sudoers는 root 440이다 — 아니면 sudo가 스스로 거절한다.
+send "stat -c 'hp-s8a %n %u:%g %a' /usr/bin/sudo /etc/sudoers /etc/pam.d/sudo /usr/libexec/sudo/sudoers.so /usr/libexec/sudo/libsudo_util.so.0; printf 'hp-s8a-%s\n' end"
+wait_log "hp-s8a-end" || fail "stat of the sudo files never finished" "hp-s8a"
+for want in \
+  "hp-s8a /usr/bin/sudo 0:0 4755" \
+  "hp-s8a /etc/sudoers 0:0 440" \
+  "hp-s8a /etc/pam.d/sudo 0:0 644" \
+  "hp-s8a /usr/libexec/sudo/sudoers.so 0:0 644" \
+  "hp-s8a /usr/libexec/sudo/libsudo_util.so.0 0:0"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-s8a"
+done
+echo "8a: sudo is setuid root, sudoers is root 440, the plugin and PAM file are in place"
+
+# 8b. 비밀번호 없이는 안 되고, 틀린 것도 안 되고, 설치 때 정한 것은 된다. 측정 13은 마지막 것의 시간이다.
+# 실패의 이유까지 본다 — 명령을 못 찾아도 0이 아니므로 종료 코드만으로는 "비밀번호가 필요하다"가 아니다.
+as_user 'sudo -n id -u 2>&1 | sed "s/^/hp-s8-nopw: /"; echo "hp-s8-nopw-$?"'
+s8_wait nopw
+grep -aqF "hp-s8-nopw: sudo: a password is required" "$LOG" || fail "sudo -n did not ask for a password" "hp-s8-nopw"
+if grep -aqF "hp-s8-nopw: 0" "$LOG"; then fail "sudo -n id worked without a password" "hp-s8-nopw"; fi
+as_user 'printf "wrong\n" | sudo -S -k id -u >/dev/null 2>&1; echo "hp-s8-wrong-$?"'
+s8_wait wrong
+[ "$(s8_code wrong)" != 0 ] || fail "sudo took a wrong password" "hp-s8-wrong"
+# -p "": -S의 프롬프트는 개행 없이 stderr에 가서 2>&1이면 id의 0과 한 줄이 된다 — 비운다.
+# shellcheck disable=SC2016 # 펼치는 것은 게스트의 sh다
+as_user 't0=$(date +%s%N); printf "hp-secret-1\n" | sudo -S -k -p "" id -u 2>&1 | sed "s/^/hp-s8-uid-/"; echo "hp-s8-ms-$(( ($(date +%s%N) - t0) / 1000000 ))"; echo "hp-s8-right-$?"'
+s8_wait right
+wait_log "hp-s8-uid-0" 5 || fail "sudo with the install-time password did not run as uid 0" "hp-s8-uid-" "sudo:"
+echo "8b: sudo -n refuses, a wrong password is refused, hp-secret-1 runs id -u as 0 in $(s8_code ms)ms (TCG)"
+# 측정 14. sudo가 사용자에게 찍는 줄(경고가 섞이는가).
+as_user 'printf "hp-secret-1\n" | sudo -S -k id -u 2>&1 | sed "s/^/hp-s8-said: /"; echo "hp-s8-said-$?"'
+s8_wait said
+echo "--- what sudo said ---"
+clean | grep -aoE 'hp-s8-said: .*$' | grep -av 'sed ' | sed 's/^/  /'
+# hostname이 `(none)`이라 sudo마다 찍히던 경고. sudoers의 !fqdn이 없앤다(HP-M2 실측).
+if grep -aqF "unable to resolve host" "$LOG"; then
+  fail "sudo still warns about the host name" "unable to resolve host"
+fi
+
+# 8c. 사용자의 쓰기는 try: sudo로 바뀌고 파일은 그대로다. sudo로는 된다. 값은 seed와 다른 것이어야
+# 쓰기까지 간다(seed는 ntp=off — 같으면 안 쓴다).
+# 게스트에 sha256sum이 없다 — root가 사본을 떠 두고 뒤에서 cmp로 본다.
+send "cp /config/tars.conf /tmp/hp-conf.before; printf 'hp-s8-copied-%s\n' conf"
+wait_log "hp-s8-copied-conf" || fail "could not copy tars.conf" "hp-s8-copied"
+as_user 'tars-config set ntp=dhcp; echo "hp-s8-set-$?"'
+s8_wait set
+[ "$(s8_code set)" = 77 ] || fail "tars-config set as the user exited $(s8_code set), want 77" "hp-s8-set" "tars-config:"
+grep -aqF "tars-config: permission denied; try: sudo tars-config set ntp=dhcp" "$LOG" \
+  || fail "tars-config set as the user did not say try: sudo" "tars-config:"
+as_user 'tars-config reload; echo "hp-s8-reload-$?"'
+s8_wait reload
+[ "$(s8_code reload)" = 77 ] || fail "tars-config reload as the user exited $(s8_code reload), want 77" "hp-s8-reload" "tars-config:"
+grep -aqF "tars-config: permission denied; try: sudo tars-config reload" "$LOG" \
+  || fail "tars-config reload as the user did not say try: sudo" "tars-config:"
+as_user 'tars-service status; echo "hp-s8-svc-$?"'
+s8_wait svc
+[ "$(s8_code svc)" = 77 ] || fail "tars-service status as the user exited $(s8_code svc), want 77" "hp-s8-svc" "tars-service:"
+grep -aqF "tars-service: permission denied; try: sudo tars-service status" "$LOG" \
+  || fail "tars-service as the user did not say try: sudo" "tars-service:"
+send "cmp -s /config/tars.conf /tmp/hp-conf.before; printf 'hp-s8-confsame-%s\n' \$status"
+wait_log_re "hp-s8-confsame-[0-9]+" || fail "could not compare tars.conf" "hp-s8-confsame"
+grep -aqF "hp-s8-confsame-0" "$LOG" || fail "tars.conf changed under a refused set" "hp-s8-confsame"
+as_user 'printf "hp-secret-1\n" | sudo -S -k tars-config set ntp=dhcp >/dev/null 2>&1; echo "hp-s8-sudoset-$?"'
+s8_wait sudoset
+[ "$(s8_code sudoset)" = 0 ] || fail "sudo tars-config set exited $(s8_code sudoset)" "hp-s8-sudoset" "tars-config:"
+send "grep -c '^ntp=dhcp' /config/tars.conf | sed 's/^/hp-s8-ntp-/'"
+wait_log "hp-s8-ntp-1" || fail "sudo tars-config set did not write ntp=dhcp" "hp-s8-ntp"
+send "tars-config reset ntp >/dev/null; printf 'hp-s8-reset-%s\n' done"
+wait_log "hp-s8-reset-done" || fail "root could not put ntp back" "hp-s8-reset"
+echo "8c: the user's set · reload · tars-service say try: sudo (77) and leave tars.conf alone; sudo tars-config set writes"
+
+# 8d. passwd. 사용자로는 try: sudo, 두 값이 다르면 아무것도 안 바뀐다, 같으면 새 값이 다음 sudo부터다.
+as_user 'tars-config passwd; echo "hp-s8-pwuser-$?"'
+s8_wait pwuser
+[ "$(s8_code pwuser)" = 77 ] || fail "tars-config passwd as the user exited $(s8_code pwuser), want 77" "hp-s8-pwuser" "tars-config:"
+grep -aqF "tars-config: permission denied; try: sudo tars-config passwd" "$LOG" \
+  || fail "tars-config passwd as the user did not say try: sudo" "tars-config:"
+send "cp /config/shadow /tmp/hp-shadow.before; printf 'hp-s8-copied-%s\n' shadow"
+wait_log "hp-s8-copied-shadow" || fail "could not copy /config/shadow" "hp-s8-copied"
+as_user 'printf "hp-secret-1\nhp-x\nhp-y\n" | sudo -S -k tars-config passwd; echo "hp-s8-pwdiff-$?"'
+s8_wait pwdiff
+grep -aqF "tars-config: the two passwords differ; nothing was changed" "$LOG" \
+  || fail "passwd with two different values did not say they differ" "tars-config:" "hp-s8-pwdiff"
+send "cmp -s /config/shadow /tmp/hp-shadow.before; printf 'hp-s8-shadowsame-%s\n' \$status"
+wait_log_re "hp-s8-shadowsame-[0-9]+" || fail "could not compare /config/shadow" "hp-s8-shadowsame"
+grep -aqF "hp-s8-shadowsame-0" "$LOG" || fail "/config/shadow changed although the two passwords differed" "hp-s8-shadowsame"
+as_user 'printf "hp-secret-1\nhp-secret-2\nhp-secret-2\n" | sudo -S -k tars-config passwd; echo "hp-s8-pwok-$?"'
+s8_wait pwok
+[ "$(s8_code pwok)" = 0 ] || fail "sudo tars-config passwd exited $(s8_code pwok)" "hp-s8-pwok" "tars-config:" "sudo:"
+grep -aqF "password changed for hpuser; sudo asks for the new one from now on" "$LOG" \
+  || fail "passwd did not say it changed the password" "tars-config:" "password changed"
+as_user 'printf "hp-secret-1\n" | sudo -S -k id -u >/dev/null 2>&1; echo "hp-s8-old-$?"'
+s8_wait old
+[ "$(s8_code old)" != 0 ] || fail "the old password still works after passwd" "hp-s8-old"
+as_user 'printf "hp-secret-2\n" | sudo -S -k id -u >/dev/null 2>&1; echo "hp-s8-new-$?"'
+s8_wait new
+[ "$(s8_code new)" = 0 ] || fail "the new password does not work right after passwd" "hp-s8-new"
+send "stat -c 'hp-s8d %n %U %a' /config/shadow /etc/shadow; sync; printf 'hp-s8d-%s\n' end"
+wait_log "hp-s8d-end" || fail "stat of the shadows never finished" "hp-s8d"
+for want in "hp-s8d /config/shadow root 600" "hp-s8d /etc/shadow root 600"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-s8d"
+done
+echo "8d: passwd refuses the user and two different values, takes hp-secret-2 now; both shadows stay root 600"
 
 stop_guest
 
@@ -407,6 +532,12 @@ if ! grep -aqF "tars-init: config storage /dev/nvme0n1p2 (label tars-config)" "$
   fail "with a foreign ext4 present init did not pick p2 as config" "tars-init: config storage"
 fi
 echo "the foreign debian-home ext4 was left alone; home is still p3 and config is still p2"
+
+# 판정 8e(HP-M2). passwd가 바꾼 값이 /config/shadow로 재부팅을 넘었다 — init이 그것으로 /etc/shadow를 지었다.
+as_user 'printf "hp-secret-2\n" | sudo -S -k id -u 2>/dev/null | sed "s/^/hp-s8-boot3-uid-/"; echo "hp-s8-boot3-$?"'
+s8_wait boot3
+wait_log "hp-s8-boot3-uid-0" 5 || fail "after the reboot sudo does not take hp-secret-2" "hp-s8-boot3" "sudo:"
+echo "8e: hp-secret-2 still opens sudo after the reboot"
 
 stop_guest
 

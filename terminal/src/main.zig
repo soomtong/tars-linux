@@ -1649,7 +1649,7 @@ fn buildAccount(alloc: std.mem.Allocator, name: []const u8, shell_path: [*:0]con
         .uid = screen_args.USER_UID,
         .gid = screen_args.USER_GID,
         .tty_gid = screen_args.TTY_GID,
-        .groups = .{screen_args.AUDIO_GID},
+        .groups = .{ screen_args.SUDO_GID, screen_args.AUDIO_GID },
         .home = home.ptr,
         .envp = items[0 .. items.len - 1 :null].ptr,
     };

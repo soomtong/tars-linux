@@ -417,4 +417,11 @@ GUEST_TOOLS=(
   #              권한을 재는 도구다. util-linux는 dmesg 때문에 이미 sysroot에 있다
   usr/bin/mkpasswd:usr/bin/mkpasswd
   usr/bin/setpriv:usr/bin/setpriv
+
+  # ── 층 18 · sudo(HP-M2) ────────────────────────────────────────────────
+  # 비밀번호의 첫 쓰임(HP design 결정 6). Debian sudo — doas는 Homebrew가 부르는 `sudo -v` ·
+  # `-l`이 없다(HP-M2 plan 확정 1). 본체의 RUNPATH(/usr/libexec/sudo)에 사는 libsudo_util은
+  # copy_lib_deps가 따라간다. setuid(4755)와 plugin · PAM 모듈 · sudoers는 make_initrd.sh의
+  # sudo 절이 넣는다 — install_tool은 0755로 두므로 그 절이 이 목록의 루프 뒤에 있다.
+  usr/bin/sudo:usr/bin/sudo
 )

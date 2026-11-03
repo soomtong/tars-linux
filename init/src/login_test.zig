@@ -110,7 +110,7 @@ pub fn main() !void {
         .shadow = ROOT ++ "/shadow",
         .store = ROOT ++ "/store",
     };
-    try writeFile(paths.group, "root:x:0:\ntty:x:5:\naudio:x:29:\n");
+    try writeFile(paths.group, "root:x:0:\ntty:x:5:\nsudo:x:27:\naudio:x:29:\n"); // make_initrd.sh의 모양(HP-M2에 sudo)
     try writeFile(paths.store, "hpuser:$y$j9T$salt$hash\n");
     _ = linux.unlink(paths.shadow);
     login.applyAccount(paths, "hpuser", "/usr/bin/fish");
@@ -120,7 +120,7 @@ pub fn main() !void {
         "sshd:x:100:65534::/run/sshd:/usr/sbin/nologin\n" ++
         "hpuser:x:1000:1000::/home/hpuser:/usr/bin/zsh\n");
     var gb: [512]u8 = undefined;
-    try expectEql("group with the user", try readFile(paths.group, &gb), "root:x:0:\ntty:x:5:\naudio:x:29:hpuser\nhpuser:x:1000:\n");
+    try expectEql("group with the user", try readFile(paths.group, &gb), "root:x:0:\ntty:x:5:\nsudo:x:27:hpuser\naudio:x:29:hpuser\nhpuser:x:1000:\n");
     var sb: [512]u8 = undefined;
     try expectEql("shadow", try readFile(paths.shadow, &sb), "root:*:::::::\nhpuser:$y$j9T$salt$hash:::::::\n");
     var st: linux.Statx = undefined;

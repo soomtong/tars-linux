@@ -304,6 +304,9 @@ pub const USER_GID: u32 = 1000;
 pub const TTY_GID: u32 = 5;
 /// 사용자의 보조 그룹 하나. alsa-lib의 dmix가 이 그룹을 찾는다(`make_initrd.sh`의 AU-M0 주석).
 pub const AUDIO_GID: u32 = 29;
+/// 사용자의 둘째 보조 그룹. `/etc/sudoers`의 `%sudo` 줄이 이 그룹에 root 권한을 준다(HP-M2 plan
+/// 확정 3 — 사용자 이름이 아니라 그룹이라 sudoers가 initrd의 정적 파일로 남는다). 27은 Debian의 번호다.
+pub const SUDO_GID: u32 = 27;
 
 /// terminal argv의 값 전체(SA design 결정 7). init이 채우고 terminal이 읽는 것은 이
 /// 구조체 하나이고, 칸 번호와 글자는 아래 `encode` · `decode` 안에만 있다.

@@ -1,37 +1,28 @@
-# HANDOFF: Home Partition HP-M1 끝남(2026-11-02) — 다음은 HP-M2(sudo)
+# HANDOFF: Home Partition 끝남(HP-M0~M2, 2026-11-03) — 다음은 PM(Package Manager) design
 
-## 지금 상태 (2026-11-02)
+## 지금 상태 (2026-11-03)
 
-- 열린 서브프로젝트는 Home Partition(HP, `docs/specs/2026-11-02-tars-home-partition-design.md`). 사용자가 "홈과 패키지 매니저
-  자리는 ext4가 맞지 않나"를 내서 시작했고, 파티션 크기(768 · 256MiB · 나머지) · 최소 4GiB · 계정 이름을 설치 때 묻기 · 기본 `tars` ·
-  기본 비밀번호 `tars-linux`를 사용자가 정했다. 비밀번호의 쓰임은 sudo다(design 결정 6).
-  - M0 끝남: p3 ext4 `tars-home`이 `/home`에 붙는다(async, `errors=remount-ro`). 커널에 ext4(+2.9%).
-  - M1 끝남: 새 설치가 이름 · 비밀번호를 묻고(`--yes`면 `tars` · `tars-linux`) `mkpasswd -m yescrypt`로 해시해 p2에 `tars.conf`
-    (`user=`) · `shadow`(0600), p3에 `/home/<이름>`을 만든다. 설치된 부팅은 init이 passwd · group · shadow에 사용자를 넣고 홈에
-    dotfile seed 다섯을 깔며(design 결정 12 — 홈의 진짜 파일), terminal의 셸이 uid 1000 · groups 29로 홈에서 뜬다(pty는
-    `<이름>:tty 620`). `/home`이 없는 부팅과 시리얼 · ssh는 root. init이 `/dev/snd`를 `root:audio 660`으로 바꾼다(위험 10).
-    `tars-config set user=`는 거절. 실측 7~11과 첫 판들의 함정 다섯은 design 끝에. `home/check.sh`는 판정 1~7 · 9 · 10.
-  - 다음은 M2(sudo): 실체(Debian `sudo` 대 `doas`+`sudo` 이름, PAM 사슬 크기) · `/etc/pam.d` · `sudo tars-config passwd` ·
-    `tars-config set`의 `try: sudo` 안내 · control 소켓 권한 · 판정 8. plan은 아직 없다 — design부터 다시 읽고 쓴다. Homebrew
-    설치 자체는 그 뒤의 PM 서브프로젝트다.
-  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `80a4c6be0eba`, `whois:amd64`). 다른 기계는 `docker rmi tars-devcontainer && make container`.
-- 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02) — BT 다음 첫 후보를 사용자가 골랐다.
-  - 섰다: terminal이 키보드를 포인터의 길(처음 훑기 + uevent)로 스스로 연다. 부팅 뒤에 꽂은 USB 키보드 · 연결된 BT 키보드가 붙는
-    순간부터 친다. 여럿이 함께 열리고 한/영 · 조합 · CapsLock · 수정키는 하나를 같이 쓴다(시나리오 검토 S1~S13은 사용자 요청).
-    빠지면 닫고 `releaseHeld`. 키보드 없이도 terminal이 뜬다(`keyboard> none`). 체인 스물넷째 `keyboard/check.sh`(판정 여덟).
-    사용 설명은 `docs/guides/running-tars.md`의 "키보드" 절.
-  - 덤으로 닫힌 버그: 부팅 키보드를 빼면 terminal이 CPU 하나를 다 썼다(KH-M0 실측 4).
-  - 함정 하나가 기억에 갔다: 커널이 해제 때 뗌을 흉내 내 보내서 `releaseHeld`를 빼도 보통은 안 보인다(판정 7b, measurements 102).
-  - 남긴 것은 `carryover.md`의 KH 절(init의 3초 · `device_path`, 장치별 수정키, 반복 섞임 · 두 노드, 키보드마다의 `keyboard=`).
-  - 새 간헐 하나: BT 체인의 `btvirt` crash(KH-M1 루트 게이트, `carryover.md`의 BT 절). M2 판은 초록이었다.
+- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
+  기억은 `docs/decisions/project_home_partition.md`).
+  - 섰다: 새 설치가 p3 ext4 `tars-home`을 `/home`에 붙이고 계정 하나(기본 `tars` · `tars-linux`)를 만든다. 화면 셸은 uid 1000 ·
+    groups `27,29`(sudo · audio)로 홈에서 뜬다. `/config`에 쓰는 길은 Debian `sudo`이고, 사용자가 그냥 치면 `try: sudo …`(77)를 듣는다.
+    `sudo tars-config passwd`가 비밀번호를 바꾼다. 시리얼 셸 · ssh는 root, ISO 부팅은 root 셸(그 root도 sudo가 된다).
+  - M2의 함정 셋이 기억에 갔다: `pam_unix` 1.7은 setuid 호출자에게 `unix_chkpwd`를 요구한다, 사용자 없는 부팅에도 `/etc/shadow`가
+    있어야 한다, sudo timestamp가 남으면 파이프의 첫 줄이 명령에게 간다.
+  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `5ffbe7a00fb2`, `sudo` · `libpam-modules` · `libpam-modules-bin`). 다른 기계는
+    `docker rmi tars-devcontainer && make container`.
+  - 남긴 것은 `carryover.md`의 HP 절(hostname `(none)`, sudo timestamp 범위, 부팅 뒤 꽂은 사운드 노드, `ping`, 사용자 셸 히스토리).
+- 다음은 PM design이다(HP design의 "왜 지금인가"가 넘긴 자리 — Homebrew `install.sh`가 막히는 자리: ca-certificates · `file` ·
+  gcc · portable-ruby, `/home/linuxbrew/.linuxbrew`, `/home`의 `nosuid`). 방향은 사용자가 고른다.
 - 그 전에 닫은 Bluetooth(BT-M0~M2)는 사용자가 외출하며 결정을 Claude에게 맡긴 세션이었다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · 1GiB ESP · 6.18.60) + BT + KH. 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10). 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
-- 마지막으로 닫은 것은 Keyboard Hotplug(KH-M0~M2, 2026-11-02). 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
+- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Home Partition(HP-M0~M2, 11-03) — `docs/decisions/project_home_partition.md`
   - Keyboard Hotplug(KH-M0~M2, 11-02) — `docs/decisions/project_keyboard_hotplug.md`
   - Bluetooth(BT-M0~M2, 11-02) — `project_bluetooth.md`
   - Kernel Upgrade(KU-M0~M1, 11-01) — `project_kernel_upgrade.md`
@@ -42,16 +33,19 @@
   - USB Dongles B(UB-M0~M2, 10-31) — `project_usb_dongles_b.md`. 같은 자리에서 IPv6를 결정으로 닫았다(`feedback_ipv4_only.md`)
   - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
   - 그 전은 `docs/guides/completed.md`.
-- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH가 쌓였고 아직 내지 않았다.
-- 체인은 스물다섯이다(`check.sh`의 `CHAINS`, 마지막이 `HP-M1:./home/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP 체인은
-  포트를 안 쓴다(45497 · 45498을 예약으로 적어 뒀다) — 새 체인은 45499부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(HP-M1):
-  25/25, 약 11분 15초(prebuild 336초 — 이미지 · initrd가 바뀌었다 · lanes 339초), cut log lines 전부 0.
+- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH · HP가 쌓였고 아직 내지 않았다.
+- 체인은 스물다섯이다(`check.sh`의 `CHAINS`, 마지막이 `HP-M2:./home/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP 체인은
+  포트를 안 쓴다(45497 · 45498을 예약으로 적어 뒀다) — 새 체인은 45499부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(HP-M2):
+  25/25, 약 10분 50초(prebuild 315초 — 이미지 · initrd가 바뀌었다 · lanes 334초), cut log lines 전부 0, verify 8394줄.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
+- HP: 화면 셸에서 `sudo tars-config set …`이 비밀번호를 한 번 묻고 그 패널에서 15분 동안 다시 안 묻는지, 다른 패널은 따로
+  묻는지(timestamp가 tty 단위 — 거슬리면 `carryover.md`). `sudo tars-config passwd` 뒤 새 비밀번호, 사용자로 `tars-config set`을
+  쳤을 때의 `try: sudo` 줄이 읽히는지.
 - HP: 실제 키보드로 `tars-install`의 질문 셋 — 이름을 틀리게 쳤을 때 다시 묻는 말이 읽히는지, 비밀번호가 화면에 안 찍히는지(확인
   칸이 없어 오타가 그대로 들어간다 — 거슬리면 두 번 묻기). 설치 뒤 화면 셸에서 `id` · `echo $HOME` · `speaker-test`(소리), 명령
   몇 개를 친 뒤 재부팅하고 `history`가 남는지와 `ls ~/.local/share`(HP 실측 11), `bluetooth=on`인 기계에서 사용자의 `bluetoothctl`.
@@ -103,7 +97,7 @@
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
-- 패키지 매니저(`carryover.md`의 "이미지 뷰어 메모" — 기본 이미지에 뷰어를 넣지 않는다, 사용자 결정 2026-10-03). USB 동글은
+- 패키지 매니저 PM(Homebrew, HP가 `/home`과 사용자 · sudo를 세웠다 — 위 "지금 상태"). 이미지 뷰어도 그 위에서(`carryover.md`의 "이미지 뷰어 메모" — 기본 이미지에 뷰어를 넣지 않는다, 사용자 결정 2026-10-03). USB 동글은
   층 A(UW) · 층 B + rtl8xxxu(UB)로 끝났고 남은 것은 실제 동글이 근거를 줄 때.
 - IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다(`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`.

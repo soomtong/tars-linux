@@ -35,6 +35,32 @@ pub const EXIT_REFUSED: u8 = 1;
 /// 설정 디스크가 없다 · 파일을 못 읽거나 못 썼다.
 pub const EXIT_IO: u8 = 2;
 pub const EXIT_USAGE: u8 = 64;
+/// HP-M2. root만 할 수 있는 일을 사용자가 쳤다(sysexits의 `EX_NOPERM`). `denied`가 안내를 찍는다.
+pub const EXIT_DENIED: u8 = 77;
+
+/// `main`이 받은 인자(argv[1..]). `denied`의 안내가 같은 명령을 `sudo` 뒤에 다시 적는 데 쓴다.
+var given: []const [*:0]const u8 = &.{};
+/// 한 번이라도 `denied`가 참이었다. `main`이 끝에서 종료 코드를 `EXIT_DENIED`로 바꾼다 — 쓰기 자리마다
+/// 종료 코드를 따로 끌어올리지 않으려고 모듈 변수에 둔다.
+var was_denied = false;
+
+/// HP-M2(design 결정 9, plan 확정 5). 쓰기 · 소켓의 실패가 권한 때문이면(`EACCES` · `EPERM`) 무엇을
+/// 치면 되는지 한 줄로 말하고 true. 그 자리의 `cannot …` 줄은 찍지 않는다 — 사용자가 읽을 것은
+/// 다음 걸음 하나다. 명령 이름이 아니라 실패한 자리에서 고르는 것은 앞문 명령에 읽기와 쓰기가 섞여
+/// 있어서다(`wifi`는 목록, `wifi SSID`는 쓰기). 안내는 한 번만 찍는다.
+pub fn denied(e: linux.E) bool {
+    if (e != .ACCES and e != .PERM) return false;
+    if (!was_denied) {
+        _ = writeAll(2, "tars-config: permission denied; try: sudo tars-config");
+        for (given) |a| {
+            _ = writeAll(2, " ");
+            _ = writeAll(2, std.mem.span(a));
+        }
+        _ = writeAll(2, "\n");
+    }
+    was_denied = true;
+    return true;
+}
 
 /// 파일을 읽는 버퍼. `config.MAX_FILE`의 두 배라 넘는 파일을 "넘는다"고 말할 수 있다.
 pub const READ_MAX = 2 * config.MAX_FILE;
@@ -87,6 +113,7 @@ const USAGE =
     \\       tars-config reload              init rereads tars.conf and services.d now (TC-M2)
     \\       tars-config reload terminal     restart the screen with what init uses; every pane goes away (TC-M3)
     \\       tars-config version             the TARS version this image was built from
+    \\       tars-config passwd              change the user's sudo password (run it with sudo) (HP-M2)
     \\       tars-config help                this text and the list
     \\
     \\other files under /config (TC-M1):
@@ -212,7 +239,11 @@ fn askInit(verb: control.Verb, name: ?[]const u8, buf: []u8, ms: i32) ?[]const u
     var req_buf: [32]u8 = undefined;
     const req = control.formatRequest(&req_buf, verb, name) orelse return null;
     return switch (control.dial(control.PATH, req)) {
-        .failed => null,
+        // 소켓은 root 0600이다(HP-M2 plan 확정 6). 사용자면 여기서 `EACCES`다.
+        .failed => |e| {
+            _ = denied(e);
+            return null;
+        },
         .fd => |fd| control.awaitReply(fd, buf, ms),
     };
 }
@@ -226,7 +257,7 @@ fn reloadInit(terminal: bool) u8 {
     var buf: [control.REPLY_MAX]u8 = undefined;
     if (terminal) {
         const now = askInit(.config, null, &buf, ASK_MS) orelse {
-            complain("init did not answer at {s}", .{control.PATH});
+            if (!was_denied) complain("init did not answer at {s}", .{control.PATH});
             return EXIT_IO;
         };
         if (edit.screenLine(now) == null) {
@@ -236,7 +267,7 @@ fn reloadInit(terminal: bool) u8 {
         say("the screen restarts now — every pane, its shell and the clipboard go away\n", .{});
     }
     const r = askInit(.reload, if (terminal) "terminal" else null, &buf, RELOAD_MS) orelse {
-        complain("init did not answer at {s}", .{control.PATH});
+        if (!was_denied) complain("init did not answer at {s}", .{control.PATH});
         return EXIT_IO;
     };
     _ = writeAll(1, r);
@@ -408,6 +439,7 @@ fn change(pairs: []const edit.Pair) u8 {
     if (!std.mem.eql(u8, text, before) or !fileExists(CONF_PATH)) {
         if (!writeFile(TEMP_PATH, text)) return EXIT_IO;
         if (failed(linux.rename(TEMP_PATH, CONF_PATH))) |e| {
+            if (denied(e)) return EXIT_DENIED;
             complain("cannot rename {s} to {s} (errno {d})", .{ TEMP_PATH, CONF_PATH, @backingInt(e) });
             return EXIT_IO;
         }
@@ -424,6 +456,7 @@ fn fileExists(path: [:0]const u8) bool {
 fn writeFile(path: [:0]const u8, text: []const u8) bool {
     const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (failed(rc)) |e| {
+        if (denied(e)) return false;
         complain("cannot create {s} (errno {d})", .{ path, @backingInt(e) });
         return false;
     }
@@ -495,9 +528,10 @@ fn check() u8 {
 
 pub fn main(init: std.process.Init.Minimal) u8 {
     const argv = init.args.vector;
+    given = if (argv.len > 1) argv[1..] else argv[0..0];
     var pairs: [edit.PAIRS_MAX]edit.Pair = undefined;
     var default_bufs: [edit.PAIRS_MAX][edit.VALUE_MAX]u8 = undefined;
-    return switch (edit.parseCommand(if (argv.len > 1) argv[1..] else argv[0..0], &pairs, &default_bufs)) {
+    const code = switch (edit.parseCommand(if (argv.len > 1) argv[1..] else argv[0..0], &pairs, &default_bufs)) {
         .show => show(),
         .help => help(),
         .version => blk: {
@@ -511,6 +545,7 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         },
         .reload => |terminal| reloadInit(terminal),
         .check => check(),
+        .passwd => front.passwd(),
         .wifi => |rest| front.wifi(rest),
         .ssh => |rest| front.ssh(rest),
         .ssh_key => |rest| front.sshKey(rest),
@@ -525,4 +560,5 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         },
         .unknown_key => |key| unknownKey(key),
     };
+    return if (was_denied) EXIT_DENIED else code;
 }

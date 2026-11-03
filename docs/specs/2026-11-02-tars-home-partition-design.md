@@ -2,9 +2,9 @@
 
 접두사: HP
 
-Status: M1 끝남(2026-11-02) — 설치 때 계정 하나(기본 `tars` · `tars-linux`)를 만들고 화면 셸이 uid 1000으로 홈에서 뜬다.
-`/home`이 없는 부팅은 root 셸. 체인 `home/check.sh`가 판정 1~7 · 9 · 10을 본다(8은 M2). 실측 1~11. 다음은 M2(sudo) —
-plan `docs/plans/2026-11-02-tars-home-partition-hp-m2.md`(실체는 Debian `sudo`, 착수 전 실측이 거기 있다).
+Status: 끝남(2026-11-03, M0~M2) — 새 설치가 p3 ext4 `tars-home`을 `/home`에 붙이고 계정 하나(기본 `tars` · `tars-linux`)를
+만든다. 화면 셸은 uid 1000으로 홈에서 뜨고 `/config`에 쓰는 길은 Debian `sudo`다(`sudo tars-config passwd`가 비밀번호를
+바꾼다). `/home`이 없는 부팅은 root 셸. 체인 `home/check.sh`가 판정 1~10(8은 8a~8f)을 본다. 실측 1~14. 다음은 PM design.
 
 관련 문서: `docs/decisions/project_config_fs_ext2.md`(`/config`가 ext2에 머무는 이유와 ext4로 갈 세 신호 — 이 설계가 그
 신호를 `/home`에서 켠다) · `2026-09-23-tars-disk-install-design.md`(DI. `tars-install`과 p1 · p2) ·
@@ -161,6 +161,10 @@ Homebrew의 요구가 같은 도구를 가리키고, `/config`의 소유를 바�
 그대로 모두 된다. `tars-config set …`을 사용자로 치면 `EACCES`를 `permission denied, try: sudo tars-config …`로 바꿔 말한다.
 `tars-config reload`는 control 소켓으로 가므로 소켓 권한을 M2가 본다.
 
+M2가 정했다. 소켓은 root 0600 그대로다 — 열면 사용자가 init에게 재시작 · reload를 시킬 수 있는데 그 권한은 sudo가 이미
+준다. 사용자의 `tars-config reload` · `tars-service …`는 `connect`의 `EACCES`를 같은 안내로 바꾸고 77(`EX_NOPERM`)로 끝난다.
+안내는 명령 이름이 아니라 쓰기 · 소켓이 `EACCES` · `EPERM`으로 실패한 자리에서 고른다 — 앞문 명령에 읽기와 쓰기가 섞여 있다.
+
 ### 결정 10 — 갱신은 p3를 건드리지 않고, `--wipe`만 새 배치로 간다
 
 TARS가 있는 디스크의 갱신(DI 결정 8)은 p1만 간다 — p2도 p3도 그대로다. HP 이전 디스크(p1 1GiB · p2 1GiB · p3 없음)는 갱신으로
@@ -223,6 +227,10 @@ M1이 닫았다(실측 7). `mkpasswd -m yescrypt -s`, 비밀번호는 stdin. Zig
 Debian `sudo`는 libpam · libaudit · libselinux 등을 끈다. `doas`는 작지만 역시 libpam이고 Homebrew는 `sudo`라는 이름을
 부른다. PAM은 `/etc/pam.d/sudo`와 `pam_unix.so`가 `/etc/shadow`를 읽는 사슬이다. M2가 둘의 `DT_NEEDED` 합과 initrd 증가를
 재고 고른다. `doas`에 `sudo` 이름의 심볼릭 링크를 주는 길(Alpine 방식)도 후보다.
+
+M2가 닫았다(실측 12). 사슬의 라이브러리는 sshd · curl · `mkpasswd`가 이미 다 데려왔고 차이는 본체 1.1MB였다. doas는
+Homebrew가 부르는 `sudo -v` · `-l`이 없어 Debian `sudo`로 갔다. 사슬은 `pam_unix` 하나(account · auth)에 도우미
+`unix_chkpwd`가 딸린다 — 그 도우미가 빠지면 맞는 비밀번호도 틀린다(M2의 첫 판들).
 
 ### 위험 4 — pty slave의 소유권
 
@@ -393,3 +401,47 @@ ping이 생기면 다시 본다. `aplay -l`은 카드를 못 열어도 0이라 �
 - 기다리는 글자가 타이핑한 줄에 들어 있으면 에코에서 바로 돌아온다. `hp-mkfs-ms=` · `hp-geo-` · `hp-mounts: `로 기다린 첫 판이
   출력 전에 돌아와 `did not say done`으로 죽었다(`project_gate_screen_echo`의 또 하나). printf의 `%s`가 숫자로 바뀐 완성형이나
   정규식(`hp-mkfs-[0-9]+-ms`)으로 기다린다.
+
+## 실측 (M2, 2026-11-03)
+
+### 실측 12 — sudo는 initrd를 558,323바이트(0.47%) 키우고 새 표준 라이브러리는 0개다(위험 3)
+
+착수 전에 trixie 패키지로 쟀다. Debian `sudo` 1.9.16p2의 본체 306,456 · `libsudo_util.so.0` 137,912 · `sudoers.so` 695,872,
+`opendoas` 6.8.2의 `doas` 43,184. 둘 다 새 라이브러리가 0개다 — `libaudit` · `libselinux` · `libapparmor` · `libssl` · `libz` ·
+`libcrypto` · `libpam` · `libcrypt`을 sshd · curl · `mkpasswd`가 이미 데려왔다. 실제 initrd는 118,978,955 → 119,537,278바이트
+(압축), 푼 크기 +1,283,584, `.so`는 137 → 142(`libsudo_util` · `sudoers.so` · `pam_unix` · `pam_permit` · `pam_deny`)이고
+`unix_chkpwd` 43,256이 더해진다. 컨테이너 이미지 태그 `5ffbe7a00fb2`(`sudo` · `libpam-modules` · `libpam-modules-bin`).
+
+`sudo`와 `sudoers.so`는 `RUNPATH /usr/libexec/sudo`로 `libsudo_util`을 찾는다. initrd의 ELF 240개 가운데 RUNPATH를 가진 것은
+그때까지 0개였고, `make_initrd.sh`의 `copy_lib_deps`가 절대 경로 하나인 RUNPATH를 따르도록 넓혔다.
+
+### 실측 13 — 설치 때 비밀번호로 sudo 한 번은 TCG에서 약 420ms다(결정 6)
+
+`printf … | sudo -S -k -p "" id -u`의 벽시계(home 체인 세 판 416 · 418 · 420ms). 설치기의 해시(yescrypt, 2.1초)보다 짧다 —
+같은 yescrypt인데 설치기 쪽은 `mkpasswd` 프로세스 시작과 salt 만들기까지 잰 값이다. 틀린 비밀번호는 PAM의 실패 지연이 더해져
+1.8초 남짓이었다.
+
+### 실측 14 — 사용자가 sudo를 칠 때 나오는 줄(결정 6)
+
+맞는 비밀번호면 프롬프트 말고는 아무 줄도 없다. 고치기 전에는 sudo마다 `sudo: unable to resolve host (none): Name or service
+not known`이 찍혔다 — 게스트의 hostname이 커널 기본값 `(none)`이라서다. sudoers의 `Defaults !fqdn`이 그 줄을 없앤다(ISO의
+root로 전후를 쟀다). hostname 자체를 정하는 것은 이 설계 밖이다(git 신원도 `<이름>@(none)`이다 — `carryover.md`).
+
+sudo는 한 번 맞으면 그 tty에 15분짜리 timestamp를 남긴다(기본값 그대로). 사람에게는 편의이고, 파이프로 비밀번호를 주는
+스크립트에는 함정이다 — 다음 판의 sudo가 묻지 않으므로 파이프의 첫 줄이 명령에게 간다. 게이트는 그래서 늘 `-k`다.
+
+### M2의 첫 판들이 가르친 것
+
+- 맞는 비밀번호에 `Sorry, try again`. plan 확정 4는 "sudo는 setuid라 `pam_unix`가 `/etc/shadow`를 직접 읽으니 `unix_chkpwd`는
+  필요 없다"였는데 틀렸다 — Linux-PAM 1.7의 `pam_unix`는 real uid가 0이 아니면 euid가 0이어도 도우미를 부른다. 증상만으로는
+  안 보였고(셋 다 같은 한 줄이다), 게스트에 strace · syslogd · `getent`가 없었다. 일회용 amd64 Debian 컨테이너에서 같은 설정을
+  재현하고 조건 셋(`unix_chkpwd` · `nsswitch` · `pam.d`)의 조합 여덟을 돌려 가렸다 — 하나씩 되돌리는 시험은 상태가 겹쳐
+  거짓 실패를 냈다. 도우미는 `0755 root`로 충분하다(부르는 쪽이 euid 0인 sudo뿐, `/etc/shadow`는 root 600).
+- ISO 부팅(사용자 없음)에서는 root의 sudo가 `PAM account management error`였다. init은 사용자가 있을 때만 `/etc/shadow`를
+  짓는다. initrd에 `root:*:::::::` 한 줄을 굽는다 — init이 짓는 첫 줄과 같은 바이트다.
+- 게스트에는 `/usr/bin/true`도 `sha256sum`도 없다. fish의 `true`는 내장이라 `sudo true`는 `command not found`이고, 그것도 0이
+  아니라서 "비밀번호가 필요하다" 판정이 거짓으로 초록이 될 뻔했다 — 실패의 이유 줄까지 본다. 파일이 그대로인지는 `cp` + `cmp`.
+- `sudo -S`의 프롬프트는 개행 없이 stderr로 간다. `2>&1`로 받으면 명령의 첫 줄과 붙는다 — `-p ""`.
+- 설치기와 `tars-config`는 서로를 import하지 않는다(`install.zig` 머리, `devices.zig`의 규칙). plan 확정 8의 `secret.zig`는
+  만들지 않고 `passwd`는 `config_front`의 `run`과 `account.hashFromTool`로 섰다. 같은 자리의 `readSecret`은 프롬프트를 echo를 끈
+  뒤에 찍도록 순서를 고쳤다(M1의 설치기 교훈과 같다).

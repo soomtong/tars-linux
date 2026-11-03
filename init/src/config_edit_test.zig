@@ -307,6 +307,7 @@ pub fn main() !void {
     for ([_]A{ "version", "--version", "-V" }) |v| _ = try expectCommand(&[_]A{v}, .version);
     _ = try expectCommand(&[_]A{"list"}, .list);
     _ = try expectCommand(&[_]A{"check"}, .check);
+    _ = try expectCommand(&[_]A{"passwd"}, .passwd);
     _ = try expectCommand(&[_]A{"unset"}, .unset);
     // unset은 뒤에 무엇이 와도 같은 말을 한다.
     _ = try expectCommand(&[_]A{ "unset", "shell" }, .unset);
@@ -338,10 +339,10 @@ pub fn main() !void {
         try expectText(rs[1].value, "off", "reset pair 1 value");
     }
     const usages = [_][]const A{
-        &.{ "help", "x" }, &.{ "-h", "x" },       &.{ "version", "x" }, &.{ "-V", "x" },
-        &.{ "list", "x" }, &.{ "check", "x" },    &.{ "reload", "x" },  &.{ "reload", "terminal", "x" },
-        &.{"get"},         &.{ "get", "a", "b" }, &.{"set"},            &.{"reset"},
-        &.{"frobnicate"},  &.{"Set"},             &.{"--list"},
+        &.{ "help", "x" },               &.{ "-h", "x" },    &.{ "version", "x" },  &.{ "-V", "x" },
+        &.{ "list", "x" },               &.{ "check", "x" }, &.{ "passwd", "x" },   &.{ "reload", "x" },
+        &.{ "reload", "terminal", "x" }, &.{"get"},          &.{ "get", "a", "b" }, &.{"set"},
+        &.{"reset"},                     &.{"frobnicate"},   &.{"Set"},             &.{"--list"},
     };
     for (usages) |args| _ = try expectCommand(args, .usage);
     {
