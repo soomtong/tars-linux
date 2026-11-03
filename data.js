@@ -5,14 +5,14 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-03',
-  latest: 'Home Partition (HP-M0~M2)',
+  latest: 'Package Manager (PM-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1121,      // git rev-list --count main
+    commits: 1126,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 25,         // check.sh의 CHAINS
+    chains: 26,         // check.sh의 CHAINS
     zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
@@ -107,6 +107,7 @@ window.TARS = {
     ['2026-11-02', 'Bluetooth', 'BT', '커널 BT 스택과 BlueZ · D-Bus — `bluetooth=on`이면 init이 띄우고 bluetoothctl로 페어링, 키는 `/config/bluetooth`에'],
     ['2026-11-02', 'Keyboard Hotplug', 'KH', '부팅 뒤에 꽂은 USB 키보드와 연결된 Bluetooth 키보드가 곧바로 친다 — 여럿을 함께 써도 한/영과 조합은 하나'],
     ['2026-11-03', 'Home Partition', 'HP', '설치 때 계정 하나 — 화면 셸은 그 사용자로 ext4 `/home`에서 뜨고, 설정을 바꾸는 것은 `sudo`'],
+    ['2026-11-03', 'Package Manager', 'PM', '공식 Homebrew `install.sh`를 화면 셸에서 그대로 치면 끝까지 간다 — bottle을 붓고, 새 패널부터 `brew`가 PATH에'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -169,6 +170,16 @@ window.TARS = {
         ['홈 파티션 `/home`', '설치기가 굽는 셋째 파티션(ext4 `tars-home`)을 init이 `/home`에 붙인다. 화면 셸의 rc 셋 · `~/.gitconfig` · `~/.vimrc` · 히스토리는 홈의 진짜 파일이라 고치면 남는다', '2026-11-03'],
         ['사용자 계정', '설치 때 이름과 비밀번호를 묻는다(기본 `tars` · `tars-linux`). 화면 셸은 그 사용자(uid 1000)로 `/home/<이름>`에서 뜨고, 시리얼 셸과 ssh는 root다. 비밀번호는 sudo에만 쓰인다', '2026-11-03'],
         ['`sudo`', '설치 때 정한 비밀번호로, 한 번 맞으면 그 터미널에서 15분. `/config` 쓰기와 init에게 묻는 명령은 root만이고, 사용자가 치면 `permission denied; try: sudo …`가 나온다', '2026-11-03'],
+      ],
+    },
+    {
+      title: '패키지 — Homebrew',
+      note: '사용자가 공식 `install.sh`를 직접 친다. TARS는 그 스크립트가 막히지 않게 할 뿐 감싸지 않는다. bottle이 있는 formula만 된다(컴파일러는 없다).',
+      items: [
+        ['공식 `install.sh` 그대로', '`/bin`은 `usr/bin`으로의 링크(usrmerge), `tar` · `gzip` · `install` · git의 https 헬퍼 등 스크립트가 부르는 도구, glibc 전체, `/etc/os-release`. prefix는 기본값 `/home/linuxbrew/.linuxbrew`라 bottle이 그대로 쏟아진다', '2026-11-03'],
+        ['`brew install`', 'bottle을 받아 붓는다 — `hello`가 TCG에서 9초. 재부팅 뒤에도 `/home`에 남는다', '2026-11-03'],
+        ['시스템 rc의 shellenv', 'bash · zsh · fish의 시스템 rc가 `brew`가 있을 때만 PATH에 넣는다. rc를 안 고쳐도 새 패널부터 되고, 안내대로 rc에 넣어도 두 번 붙지 않는다', '2026-11-03'],
+        ['로케일 `C.UTF-8`', 'init이 모든 프로세스에 `LANG=C.UTF-8`을 준다 — 시리얼 셸 · ssh · 서비스도 UTF-8', '2026-11-03'],
       ],
     },
     {
