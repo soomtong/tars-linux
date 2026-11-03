@@ -4,6 +4,12 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+MI-M0(2026-11-03)이 남긴 것.
+
+- [ ] 공식 `mise.run`은 512MB 기계에서 굳는다 — `mktemp -d`(tmpfs `/tmp`)에 tarball 약 60MB와 푼 `mise` 172MB를 함께 두고, RAM에
+      풀린 initrd 약 280MB와 합쳐 넘친다(MI 실측 6). Homebrew도 1GiB를 요구하므로(PM 실측 4) 고치지 않았다. 작은 RAM 기계가
+      요구하면 사용자 환경의 `TMPDIR`을 디스크(`~/.cache/tmp` 등)로 두는 길이 있다 — 모든 프로그램의 임시 자리가 바뀌는 일이다.
+
 PM(2026-11-03)이 남긴 것.
 
 - [ ] 커널에 Landlock(`CONFIG_SECURITY_LANDLOCK`)이 없다 — Homebrew의 Linux sandbox가 꺼지고 `brew install`마다 `Sandbox
@@ -18,13 +24,7 @@ PM(2026-11-03)이 남긴 것.
       - design에서 정할 것: 설치 자리(overlayfs로 initrd `/usr` 위에 디스크 층 vs `/home` 아래 prefix), initrd에 있는 패키지를
         "설치됨"으로 보는 목록과 TARS 갱신 때의 어긋남, 설치 권한(root · sudo), `Depends`를 어디까지 따르나, `Packages` 색인의
         RAM 예산. 접두사 후보 `TP`(TARS Package, 미사용).
-- [ ] mise 지원(검토만, 2026-11-03). initrd에는 안 싣는다(사용자 결정) — v2026.10.25 Linux x64가 176MB(BOLT가 원본
-      `.bolt.org.text` 89MB · `.bolt.org.rodata` 25MB를 품는다, gzip 60MB, musl 판 158MB)이고 initrd는 RAM에 상주한다. NEEDED는
-      libc · libm · libgcc_s · libdl · librt · libpthread, GLIBC 2.18. 길은 사용자가 공식 `curl https://mise.run | sh`(482줄)로
-      `~/.local/bin`에 까는 것 — 부르는 `curl` · `tar` · `sha256sum` · `ldd`는 PM-M0로 다 있고 `zstd`가 없으면 `.tar.gz`로 내려간다.
-      `brew install mise`도 있다. 열면 PM과 같은 모양의 작은 서브프로젝트(접두사 후보 `MI`, 미사용): M0 체인이 실제 망으로
-      mise.run · `mise use -g node@lts`(또는 go)를 돌려 막힘을 풀고 크기 · 시간을 잰다, M1이 `mise activate` 훅을 시스템 rc에 둘지
-      (경로가 사용자별 `~/.local/bin`, 프롬프트마다 176MB 바이너리를 띄우는 비용)를 정한다. 아직 TARS에서 한 번도 안 돌려 봤다.
+- [x] mise 지원 — 서브프로젝트 MI로 열었다(2026-11-03, `docs/specs/2026-11-03-tars-mise-design.md`). initrd에는 안 싣는다(176MB).
 - [ ] 라이브러리는 libstdc++만 Debian 모양(실체 + SONAME 링크)이다(PM 결정 10). 다른 바깥 프로그램이 다른 `.so`의 이름에서
       버전을 읽으면 그때 같은 판정을 한다.
 

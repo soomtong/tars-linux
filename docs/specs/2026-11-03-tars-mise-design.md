@@ -2,7 +2,8 @@
 
 접두사: MI
 
-Status: 착수(2026-11-03). MI-M0의 plan을 쓴다.
+Status: MI-M0 끝남(2026-11-03). 공식 `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지를 하나도 안 고치고 섰다.
+MI-M1(activate)의 plan을 쓴다.
 
 관련 문서: `2026-11-03-tars-package-manager-design.md`(PM. 같은 모양 — 공식 설치 길이 막히지 않게 기본 이미지 쪽을 푼다 · 바깥
 망 체인 · 시스템 rc의 shellenv) · `2026-11-02-tars-home-partition-design.md`(HP. `/home` ext4 · uid 1000 사용자) ·
@@ -21,7 +22,9 @@ PM이 Homebrew의 길을 세우면서 mise가 부르는 도구(`curl` · `tar` �
 
 ## 사용자가 정한 것 (2026-11-03)
 
-1. initrd에는 mise를 싣지 않는다(검토 때 결정). v2026.10.25 Linux x64가 176MB이고 gzip해도 60MB다.
+1. initrd에는 mise를 싣지 않는다(검토 때 결정). v2026.10.25 Linux x64가 176MB이고(BOLT가 원본 `.bolt.org.text` 89MB ·
+   `.bolt.org.rodata` 25MB를 품는다) gzip해도 60MB, musl 판도 158MB다. `NEEDED`는 libc · libm · libgcc_s · libdl · librt ·
+   libpthread, `GLIBC_2.18`.
 2. 설치 길은 공식 `mise.run` 하나만 보증한다. `brew install mise`는 보증하지 않는다(비목표 1).
 3. 게이트가 받아 실행할 런타임은 `node@lts`다.
 4. `mise activate`를 어디에 둘지(시스템 rc · shims · 사용자 rc)는 M0의 실측을 본 뒤 M1에서 정한다.
@@ -46,11 +49,15 @@ PM이 Homebrew의 길을 세우면서 mise가 부르는 도구(`curl` · `tar` �
 `node.gpg_verify`가 `false`가 아니면 `SHASUMS256.txt.sig`로 gpg 검증을 한다(`gpg::verify_node`, `mise_util` 크레이트).
 그 검증이 바깥 `gpg` 명령을 부르는지는 소스만으로 정하지 않았다 — M0가 실제로 돌려서 본다. 게스트에 `gpg`는 없다.
 
+M0가 닫았다: 바깥 `gpg`를 부르지 않는다. 서명 패킷의 덤프(`IssuerFingerprint` · `SignatureCreationTime`)가 찍힌 뒤 `checksum`
+단계로 갔고 `gpg`를 찾는 줄은 0이다(실측 5). 검증은 꺼지지 않은 채로 돈다.
+
 ### 확인 3 — node LTS는 v26이다
 
-nodejs.org `index.json`의 첫 LTS는 v26.13.0(2026-11-03)이고 `linux-x64` 판이 있다. 공식 Linux 판은 오래된 glibc 위에서 빌드되고
-`libstdc++` · `libdl` · `libpthread` · `libm` · `libgcc_s`를 `NEEDED`로 부르는 것으로 안다 — PM 결정 7(glibc 통째로) 뒤라 다 있을
-것이다. 실제 `NEEDED`와 요구하는 `GLIBC_` · `GLIBCXX_` 버전은 M0가 받은 파일에서 읽는다.
+nodejs.org `index.json`의 첫 LTS는 v26.13.0(2026-11-03)이고 `linux-x64` 판이 있다. M0 Task 0이 컨테이너에서 그 tarball(62,893,692
+바이트)을 읽었다. `bin/node` 150,319,296바이트, `NEEDED`는 여덟 — `libatomic.so.1` · `libdl.so.2` · `libm.so.6` · `libstdc++.so.6` ·
+`libgcc_s.so.1` · `libpthread.so.0` · `libc.so.6` · `ld-linux-x86-64.so.2`. 요구는 `GLIBC_2.28` · `GLIBCXX_3.4.21` · `CXXABI_1.3.11`이고
+게스트는 2.41 · 6.0.33이다. `libatomic`은 BT 때 `bluetoothd`가 데려왔고(`guest_tools.sh`의 BT 블록), `libdl`은 PM 결정 7이 실었다.
 
 ### 확인 4 — mise의 파일은 전부 홈에 놓인다
 
@@ -58,12 +65,22 @@ nodejs.org `index.json`의 첫 LTS는 v26.13.0(2026-11-03)이고 `linux-x64` 판
 `~/.config/mise/config.toml`. `/home`은 ext4(HP)라 RAM이 아니다. 받는 중의 임시 자리가 tmpfs `/tmp`인지는 M0가 본다(PM 위험 4와 같은
 자리).
 
+M0가 닫았다: `mise use`(node)는 `~/.cache/mise`에 받고 `/tmp`를 안 쓴다. 그러나 `mise.run`은 `mktemp -d`로 `/tmp`에 tarball과 푼
+바이너리를 함께 둔다 — 약 230MB가 잠깐 RAM에 놓인다(위험 3, 실측 6).
+
+또 하나: 콘솔 셸(init의 환경)에는 `XDG_DATA_HOME=/config/xdg`가 있고 화면 셸에는 없다(terminal의 `buildAccount`가 뺀다, HP). mise는
+이 변수를 따르므로 콘솔에서 `setpriv`로 사용자가 되면 `/config/xdg/mise`에 깔려다 Permission denied로 멈춘다(M0 첫 판). 사용자의
+길(화면 셸)에는 없는 막힘이라 체인의 `as_tars`가 이 변수를 뺀다.
+
 ## 결정
 
 ### 결정 1 — mise도 node도 기본 이미지에 싣지 않는다. TARS의 일은 막히는 자리를 푸는 것이다
 
 PM 결정 3과 같은 기준이다. 막히는 자리가 나오면 기본 이미지에 무엇을 더할지 하나씩 판정하고, initrd 크기와 새 `.so`를 잰다.
 `mise.run`이 이미 다 있다면(확인 1) 이 서브프로젝트의 코드 변경은 게이트와 시스템 rc(M1)뿐일 수 있다 — 그것도 결과다.
+
+M0의 결과가 그랬다. 기본 이미지에 더한 것은 0이다 — PM-M0의 도구 · glibc 통째로 · libstdc++의 이름과 BT의 `libatomic`이 이미
+mise와 node의 길을 덮고 있었다.
 
 ### 결정 2 — 게이트는 스물일곱째 체인 `mise/check.sh`이고 실제 망을 쓴다
 
@@ -81,6 +98,7 @@ PM 결정 3과 같은 기준이다. 막히는 자리가 나오면 기본 이미�
   빨개진다(PM과 같이 초록으로 건너뛰지 않는다).
 - sudo는 쓰지 않는다. mise는 홈에만 쓰므로 PM 체인의 `sudo -k` · `sudo -S -v` 단계가 없다.
 - `-cpu max` · `-m 1024`는 PM 체인에서 그대로 가져온다. 더 작은 값으로 되는지는 M0가 본다(위험 3).
+  M0가 정했다: `-cpu`는 다른 체인과 같은 qemu64다(위험 4). `-m`은 1024 그대로다(위험 3).
 - `CHAINS`에 넣는다. 라벨은 `MI-M0`. M0의 부팅은 포트를 안 쓴다. M1이 화면 부팅을 더하면 monitor는 45500부터(RP-M0 예약 범위,
   PM이 45499까지 썼다).
 
@@ -116,10 +134,16 @@ PM의 portable-ruby가 `libdl`로, brew가 libstdc++의 이름으로 막혔던 �
 mise 바이너리 176MB를 디스크에서 처음 띄우는 시간, node 약 30MB를 받아 약 190MB로 푸는 시간, V8을 TCG에서 띄우는 시간을 M0가
 잰다. node는 V8이 큰 가상 공간을 잡지만 RSS는 작을 것으로 본다. 512MB로 되는지도 한 번 본다 — 되면 체인의 메모리를 줄인다.
 
+M0가 잰 것: 시간은 TCG에서 `mise.run` 19초 · `mise use -g node@lts` 19.5초(tarball 62.9MB, 풀린 자리 234,732kB)로 작다(실측 1 · 3).
+512MB에서는 안 된다 — 막힌 자리는 node가 아니라 `mise.run`의 `/tmp`다(실측 6). 1GiB는 PM과 같은 요구라 고치지 않고 적는다
+(`carryover.md`의 MI 절).
+
 ### 위험 4 — `-cpu`
 
 qemu64에 없는 명령어(SSSE3 · SSE4.x · AVX)를 mise나 node가 요구할 수 있다. PM 결정 6처럼 `-cpu max`로 시작하고, 기본 모델에서
 어떻게 멈추는지는 한 판만 본다(실기에는 해당 없음 — 기록용).
+
+M0가 닫았다: qemu64에서 끝까지 초록이다(실측 7). Homebrew와 달리 이 길에는 CPU 요구가 없다.
 
 ## 비목표
 
@@ -136,3 +160,69 @@ qemu64에 없는 명령어(SSSE3 · SSE4.x · AVX)를 mise나 node가 요구할 
 - MI-M1: 결정 3(activate)을 정해 넣는다. 재부팅 뒤 망 없이 뜬 화면 셸에서 `node`가 이름만으로 불리는지 본다.
 
 M1의 plan은 M0의 실측을 본 뒤에 쓴다.
+
+## 실측 (M0, 2026-11-03)
+
+`mise.run` sha256 `61cb4d61…0d32cd2202a414`(482줄), 설치된 mise는 `2026.10.25 linux-x64 (2026-10-31)`, node v26.13.0 · npm 11.20.0.
+값은 체인 둘째 판(첫 초록, `-cpu max -m 1024`)의 것이고 측정 11의 두 판을 따로 적는다.
+
+### 실측 1 — `mise.run` 18.9초, `.tar.gz`, mise.jdx.dev에서(확인 1)
+
+`mise-v2026.10.25-linux-x64.tar.gz`(`zstd`가 없어 `.tar.zst`가 아니다). GitHub으로 내려간 줄 0. `~/.local/bin/mise` 172,220kB.
+
+### 실측 2 — `mise --version` 처음 1,140ms, 두 번째 48ms(결정 3)
+
+첫 판(1,150 · 50)과 같다. 디스크에서 172MB를 처음 읽는 비용이 약 1.1초이고, 페이지 캐시에 오른 뒤에는 수십 ms다.
+
+### 실측 3 — `mise use -g node@lts` 19.5초, `/home` 17%(위험 3)
+
+`~/.local/share/mise` 234,732kB, `~/.cache/mise` 61,516kB(받은 tarball이 남는다), 최소 디스크의 `/home` 3,021,608kB 가운데 469,368kB.
+mise 스스로 `node -v` · `npm -v`를 돌려 확인한다(`[3/3]`).
+
+### 실측 4 — node의 `ldd`에 `not found` 0, `node -p` 505ms(위험 2)
+
+여덟이 전부 `/lib/x86_64-linux-gnu`에서 풀린다(확인 3). `mise exec -- node -p`가 V8 버전과 `42`를 찍는다.
+
+### 실측 5 — gpg 검증은 mise 안에서 끝난다(확인 2, 위험 2)
+
+`MISE_DEBUG=1`의 `mise use`에 서명 패킷 덤프가 찍히고(측정 11 qemu64 판에서 그 줄 625개) `checksum` 단계로 간다. `gpg`를 찾는 줄 0.
+
+### 실측 6 — 512MB에서 `mise.run`이 기계를 굳힌다, 1GiB의 최소 MemAvailable 391,904kB(위험 3)
+
+`MI_MEM=512` 판은 `validating checksum` 뒤 MemAvailable이 2,236kB에 붙어 600초 상한에 걸렸다. `mise.run`이 `mktemp -d`(tmpfs `/tmp`)에
+tarball 약 60MB와 푼 `mise` 172MB를 함께 두고, RAM에 풀린 initrd 약 280MB(PM 실측 4)와 합쳐 512MB를 넘는다. tmpfs는 swap 없이는
+내쫓을 수 없다. 1GiB의 최솟값 391,904kB도 이 순간이다. 끝난 뒤 `/tmp`는 452kB — 스크립트가 지운다. OOM 0.
+
+### 실측 7 — qemu64에서 끝까지 초록(위험 4)
+
+`MI_CPU=qemu64` 판: `mise.run` 48.7초(받기 시간의 흔들림), `--version` 1,160 · 45ms, `mise use` 23.8초, `node -p` 322ms, 체인 116초.
+체인의 기본값을 qemu64로 바꿨다.
+
+### 실측 8 — activate 후보의 시간(결정 3)
+
+| | max 판 | qemu64 판 |
+|---|---|---|
+| `mise hook-env -s bash`(activate가 프롬프트마다) | 87ms | 71ms |
+| shim으로 `node --version` | 114ms | 81ms |
+| 경로로 `node --version` | 33ms | 27ms |
+
+shim이 더하는 것은 50~80ms다. 모두 페이지 캐시가 따뜻한 뒤의 값이고, 부팅 뒤 처음 한 번은 실측 2의 1.1초가 더해진다.
+
+### 실측 9 — `mise doctor` rc 1, 문제 둘
+
+1. `mise is not activated` — M1의 일이다. mise는 비대화형에는 shims를 권한다고 덧붙인다.
+2. `failed to load settings: No such file or directory (os error 2)` — 어느 파일인지 말하지 않는다. node 설치 · 실행은 막지 않는다. M1이
+   activate와 함께 본다.
+
+### 실측 10 — 체인 88초(빌드 뒤), 루트 게이트 27/27 15분 0초(위험 1)
+
+루트 게이트에서 MI-M0은 86초로 열째다(가장 긴 것은 PM-M0 236초). prebuild 329초 · lanes 569초(PM-M1 회차 481초), cut log lines
+전부 0. 기본 이미지가 안 바뀌어 prebuild는 PM-M1 회차(323초)와 같다.
+
+### M0의 판들이 가르친 것
+
+1. 콘솔 셸과 화면 셸은 환경이 다르다 — `XDG_DATA_HOME`. XDG를 따르는 프로그램을 콘솔에서 `setpriv`로 사용자로 돌리는 체인은
+   이 변수를 빼야 사용자의 길과 같다(첫 판, 확인 4).
+2. 설치 스크립트는 `mktemp`로 tmpfs `/tmp`를 쓴다. TARS에서는 그것이 RAM이라, 큰 바이너리를 받는 스크립트의 메모리 요구는 받는
+   크기 + 푼 크기다(실측 6).
+3. 바깥 바이너리의 `NEEDED`는 컨테이너에서 tarball을 받아 `readelf -d`로 미리 읽으면 체인 한 판을 아낀다(Task 0).

@@ -501,6 +501,11 @@ run_chain() {
 # Installation successful! · brew --version · brew config(portable-ruby)다. 포트를 안 쓴다. 회차당
 # 부팅 2회, 그 가운데 install.sh가 TCG에서 몇 분이다(PM-M0 측정 2).
 #
+# MI 체인은 mise를 본다. PM 다음으로 바깥 망에 기대는 둘째 체인이다(MI design 위험 1) — QEMU 전에
+# 컨테이너가 mise.run · mise.jdx.dev · github.com · nodejs.org를 치고, 안 닿으면 `mise: external network
+# unavailable`로 빨개진다. PM과 같은 두 부팅에서 사용자 tars가 공식 mise.run으로 ~/.local/bin/mise를 깔고
+# `mise use -g node@lts`로 node를 받아 돌린다. sudo가 없고 포트를 안 쓴다. 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -530,6 +535,7 @@ CHAINS=(
   "KH-M2:./keyboard/check.sh"
   "HP-M2:./home/check.sh"
   "PM-M0:./pm/check.sh"
+  "MI-M0:./mise/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
