@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # 이 파일 전체: as_tars '…'의 $(…) · $((…)) · ${PIPESTATUS[0]}은 게스트의 bash가 펼친다
 set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
@@ -8,14 +9,19 @@ cd "$(dirname "$0")" || exit 1
 # 망에 기대는 둘째 체인이다(위험 1) — QEMU를 띄우기 전에 컨테이너에서 mise.run · mise.jdx.dev ·
 # github.com · nodejs.org를 한 번 치고, 안 닿으면 그 이름으로 빨개진다.
 #
-# 부팅 둘이 같은 NVMe 이미지를 잇달아 쓴다.
+# 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
 #   1  ISO + 빈 최소 NVMe   tars-install --yes(기본 계정 tars · tars-linux)
 #   2  NVMe + SLIRP NIC     net=dhcp · 사용자로 mise.run(M1) · mise --version(M2) · mise use -g node@lts(M3) ·
-#                           node의 ldd와 node -p(M4) · activate 후보 셋의 시간(M5) · mise doctor · 측정
+#                           node의 ldd와 node -p(M4) · activate 후보 셋의 시간(M5) · mise doctor ·
+#                           시스템 rc 셋이 mise를 켠다(M6) · 두 번 activate(M7) · 켠 뒤의 doctor · 측정
+#   3  NVMe만, 망 없음      화면 셸(fish, tars)에 monitor sendkey로 `node --version`을 친다(M8)
 #
 # 모양은 pm/check.sh의 것이다 — 시리얼 FIFO로 root 콘솔 셸에 한 줄씩 넣고 그 출력을 로그에서 읽는다.
-# "사용자로"는 setpriv로 한다. PM과 다른 점: sudo가 없다(mise는 홈에만 쓴다), 부팅 3(화면)이 없다
-# (activate와 재부팅 뒤 화면 셸은 MI-M1), 포트를 안 쓴다.
+# "사용자로"는 setpriv로 한다. PM과 다른 점: sudo가 없다(mise는 홈에만 쓴다).
+#
+# MI-M1이 더한 것: 시스템 rc의 `mise activate`(design 결정 3)를 대화형 셸 셋과 진짜 화면 셸에서,
+# 재부팅 뒤 /home만으로 node가 이름으로 서는지. 부팅 3만 monitor 포트 45500을 쓴다(RP-M0 예약 범위,
+# PM 체인이 45499).
 #
 # 시간은 게스트 안에서 `date +%s%N`의 차로 잰다(mi-ms-<이름>=<밀리초>). 시리얼을 오가는 지연이 숫자에
 # 안 섞인다.
@@ -75,6 +81,7 @@ cleanup() {
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
   fi
+  exec 3>&- 2>/dev/null || true
   exec 4>&- 2>/dev/null || true
   rm -rf "$WORK"
 }
@@ -102,7 +109,10 @@ fail() {
   exit 1
 }
 
-# boot_guest <이름> [qemu 인자...]. 콘솔 셸이 뜰 때까지 기다린다.
+# boot_guest <이름> [qemu 인자...]. 콘솔 셸이 뜰 때까지 기다린다. MONITOR(기본 none)가 -monitor의
+# 값이다 — 부팅 3만 tcp로 연다(화면에 키를 친다).
+MONITOR="none"
+MONITOR_PORT=45500
 boot_guest() {
   local name="$1"; shift
   LOG="$(mktemp -t "mise-boot-${name}.XXXXXX")"
@@ -124,7 +134,7 @@ boot_guest() {
     -device nvme,drive=target,serial=tarstarget \
     "$@" \
     -serial stdio \
-    -monitor none \
+    -monitor "$MONITOR" \
     -display none \
     -no-reboot \
     < "$FIFO" > "$LOG" 2>&1 &
@@ -148,6 +158,7 @@ stop_guest() {
   kill "$QEMU_PID" 2>/dev/null
   wait "$QEMU_PID" 2>/dev/null
   QEMU_PID=""
+  exec 3>&- 2>/dev/null
   exec 4>&-
   rm -f "$FIFO"
 }
@@ -221,6 +232,12 @@ echo "net=dhcp: eth0 leased 10.0.2.15"
 # ── 측정 6: MemAvailable 표본(5초마다) ──────────────────────────────────
 send "bash -c 'while :; do grep MemAvailable /proc/meminfo; sleep 5; done' &"
 
+# ── M1 측정 1의 기준: mise가 없는 지금 대화형 fish 하나가 뜨는 시간(MI-M1) ─
+# 화면 셸과 같은 fish다. M6 뒤에 같은 것을 다시 재서 그 차를 시스템 rc의 mise 줄이 더하는 값으로 본다.
+# 세 번 재고 마지막 값을 쓴다(첫 번째는 fish 자체가 차가울 수 있다).
+as_tars 'for i in 1 2 3; do s=$(date +%s%N); fish -i -c true; e=$(date +%s%N); echo "mi-ms-fish0=$(((e-s)/1000000))"; done; printf "mi-%s\n" fish0-done'
+wait_log "mi-fish0-done" 60 || fail "fish -i never started before mise" "mi-ms-fish0"
+
 # ── M1: 사용자로 mise.run(사용자 결정 2, 측정 1) ────────────────────────
 # 사용자는 `curl https://mise.run | sh`를 친다. 체인은 파일에 받아 sh로 돌린다 — 같은 스크립트이고, 위에서
 # sha256을 찍은 것과 같다고 가정한다. MISE_DEBUG=1은 스크립트의 debug 줄(받은 tarball의 이름)을 낸다.
@@ -276,6 +293,55 @@ echo "M5: hook-env $(ms_of hookenv)ms, node through the shim $(ms_of shim)ms, no
 as_tars ''"$MISE"' doctor 2>&1 | sed "s/^/mi-doc: /"; echo "mi-doc-rc-${PIPESTATUS[0]}"'
 wait_log_re "mi-doc-rc-[0-9]+" 120 || echo "mise: mise doctor did not finish in 120s (not judged)"
 
+# ── M6: 시스템 rc 셋이 mise를 켠다(MI-M1, design 결정 3) ──────────────
+# make_initrd.sh가 짓는 /etc/bash.bashrc · /etc/zsh/zshrc · /etc/fish/conf.d/mise.fish. 대화형 셸만 그것을
+# 읽으므로 -i다. as_tars가 주는 PATH는 /usr/bin:/bin뿐이라 mise가 보이면 rc의 activate가 넣은 것이다.
+#
+# 묻는 명령이 셸마다 다르다. activate는 `mise`라는 셸 함수를 정의하므로 bash · zsh의 `command -v mise`는
+# 경로가 아니라 이름 `mise`를 찍는다(MI-M1 첫 판) — 실행 파일의 경로를 묻는 bash `type -P` · zsh
+# `whence -p`를 쓴다. fish의 `command -v`는 함수를 안 본다. node는 프롬프트 없는 `-c`에서도 이미 PATH에
+# 있다 — activate가 켜는 순간 훅을 한 번 부른다(첫 판의 bash, MI-M1 plan "정할 것 하나"의 답).
+for sh in bash zsh fish; do
+  case "$sh" in
+    bash) q="type -P mise; type -P node" ;;
+    zsh) q="whence -p mise; whence -p node" ;;
+    fish) q="command -v mise; command -v node" ;;
+  esac
+  as_tars "${sh} -i -c \"${q}\" 2>&1 | sed \"s/^/mi-m6-${sh}=/\""
+  wait_log "mi-m6-${sh}=${MISE}" 60 || fail "${sh} -i does not find mise through the system rc" "mi-m6-${sh}"
+  wait_log "mi-m6-${sh}=/home/tars/.local/share/mise/installs/node/" 10 \
+    || fail "${sh} -i does not find node through the system rc" "mi-m6-${sh}"
+done
+echo "M6: bash, zsh and fish (interactive, as tars) find mise and node through the system rc"
+
+# ── M1 측정 1: mise가 있는 지금 대화형 fish 하나가 뜨는 시간 ───────────
+as_tars 'for i in 1 2 3; do s=$(date +%s%N); fish -i -c true; e=$(date +%s%N); echo "mi-ms-fish1=$(((e-s)/1000000))"; done; printf "mi-%s\n" fish1-done'
+wait_log "mi-fish1-done" 60 || fail "fish -i never started with mise" "mi-ms-fish1"
+
+# ── M7: 안내대로 사용자 rc에도 넣어 두 번 activate해도 PATH에 한 번(결정 3) ─
+# mise.run의 끝 안내 그대로의 줄을 시스템 rc가 이미 켠 대화형 bash에서 한 번 더 eval하고, 프롬프트를
+# 흉내 내 훅(_mise_hook)을 부른 뒤 PATH를 찍는다. 셈은 체인이 한다. 이 줄은 체인 → 콘솔 fish의
+# 작은따옴표 → bash -c → 대화형 bash로 읽히고, fish의 작은따옴표 안에서 \"와 \$는 그대로 bash까지 간다.
+as_tars 'bash -i -c "eval \"\$(/home/tars/.local/bin/mise activate bash)\"; _mise_hook; echo mi-m7-path=\$PATH" 2>&1 | sed "s/^/mi-m7: /"'
+wait_log "mi-m7-path=/" 60 || fail "the second activate never printed PATH" "mi-m7"
+M7_PATH="$(grep -aoE 'mi-m7-path=/[^ ]*' "$LOG" | tail -1 | tr -d '\r' | cut -d= -f2)"
+M7_BIN="$(printf '%s\n' "$M7_PATH" | tr ':' '\n' | grep -c '^/home/tars/\.local/bin$')"
+M7_NODE="$(printf '%s\n' "$M7_PATH" | tr ':' '\n' | grep -c '/mise/installs/node/')"
+echo "mise: m1 measure 3: PATH after two activations: ${M7_PATH}"
+[ "$M7_NODE" = 1 ] || fail "after two activations and the hook, node is on PATH ${M7_NODE} times (want 1)" "mi-m7"
+[ "$M7_BIN" = 1 ] || fail "after two activations, ~/.local/bin is on PATH ${M7_BIN} times (want 1)" "mi-m7"
+echo "M7: activating twice (system rc + the mise.run line) leaves ~/.local/bin and node on PATH once"
+
+# ── M1 측정 4: 켠 셸의 mise doctor ─────────────────────────────────────
+# M0 실측 9의 `failed to load settings`는 doctor가 자식으로 `mise settings`를 이름으로 부르는데 PATH에
+# mise가 없어서였다. 시스템 rc가 켠 셸에서는 없어야 한다.
+as_tars 'bash -i -c "mise doctor" 2>&1 | sed "s/^/mi-doc2: /"; echo "mi-doc2-rc-${PIPESTATUS[0]}"'
+wait_log_re "mi-doc2-rc-[0-9]+" 120 || fail "mise doctor in an activated bash never finished" "mi-doc2"
+if [ "$(clean | grep -a '^mi-doc2: ' | grep -acF 'failed to load settings')" != 0 ]; then
+  fail "mise doctor still fails to load settings in an activated shell" "mi-doc2"
+fi
+echo "M1 measure 4: mise doctor in an activated bash loads its settings (rc $(last_num 'mi-doc2-rc-[0-9]+'))"
+
 # ── 측정 3 · 6 · 7 ──────────────────────────────────────────────────────
 send "dmesg | grep -c 'Out of memory' | sed 's/^/mi-oom=/'"
 wait_log_re "mi-oom=[0-9]+" 10
@@ -305,7 +371,48 @@ clean | grep -a '^mi-doc: ' | head -30 | sed 's/^mi-doc: /mise:   /'
 clean | grep -a '^mi-doc: ' | sed -n '/problems\{0,1\} found/,$p' | sed 's/^mi-doc: /mise:   /'
 echo "mise: mise use output (no DEBUG lines):"
 clean | grep -a '^mi-use: ' | grep -av 'DEBUG' | head -40 | sed 's/^mi-use: /mise:   /'
+# MI-M1의 측정(M1 plan의 표 번호). design "실측 (M1)"에 적을 값이다.
+echo "mise: m1 measure 1: fish -i -c true before mise $(grep -aoE 'mi-ms-fish0=[0-9]+' "$LOG" | cut -d= -f2 | tr '\n' ' ')ms, with mise $(grep -aoE 'mi-ms-fish1=[0-9]+' "$LOG" | cut -d= -f2 | tr '\n' ' ')ms"
+for sh in bash zsh fish; do
+  echo "mise: m6 ${sh}: $(clean | grep -a "^mi-m6-${sh}=/" | sed "s/^mi-m6-${sh}=//" | tr '\n' ' ')"
+done
+echo "mise: m1 measure 4: mise doctor (activated) rc $(last_num 'mi-doc2-rc-[0-9]+'); first lines and problems:"
+clean | grep -a '^mi-doc2: ' | head -4 | sed 's/^mi-doc2: /mise:   /'
+clean | grep -a '^mi-doc2: ' | sed -n '/problems\{0,1\} found/,$p' | sed 's/^mi-doc2: /mise:   /'
 
+stop_guest
+
+# ── 부팅 3: NVMe만, 망 없음, 화면 셸에 node --version(M8) ──────────────
+# 재부팅 뒤 /home(디스크)만으로 node가 서는지, 그리고 사용자가 rc를 하나도 안 고친 채 새로 뜬 화면 셸
+# (fish, uid 1000)에서 이름만으로 불리는지 — 결정 3의 진짜 자리다. 판정은 출력 글자 `v26.`이라 친
+# 글자(`node --version`)의 에코와 안 겹친다. rc가 안 돌았으면 화면에 `fish: Unknown command: node`가
+# 나온다. 프롬프트 줄에 mise가 무언가 찍었으면 빨강이다 — 시스템 rc는 아무것도 찍지 않는다.
+echo "=== boot 3: the NVMe again, no network, typing node --version on the screen ==="
+MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
+boot_guest 3
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor on ${MONITOR_PORT}"
+wait_log_re "terminal: spawned child pid [0-9]+ \(.*\) as tars" 60 \
+  || fail "terminal did not spawn its shell as tars" "terminal: spawned" "cannot drop"
+PROMPT_UP=0
+for _ in 1 2 3 4; do
+  if wait_for_screen 'tars@\(none\) ~>'; then PROMPT_UP=1; break; fi
+done
+[ "$PROMPT_UP" = 1 ] || fail "the screen shell never drew the tars prompt" "terminal: screen>"
+if [ "$(joined_screen_dump | grep -aci 'mise')" != 0 ]; then
+  joined_screen_dump | tail -5
+  fail "something printed mise on the screen before the first command" "terminal: screen>"
+fi
+type_keys n o d e spc minus minus v e r s i o n ret
+if ! wait_for_screen 'v26\.'; then
+  joined_screen_dump | tail -3
+  fail "typing node --version on the screen did not print v26." "Unknown command" "terminal: screen>"
+fi
+echo "M8: after a reboot with no network, the screen shell (fish, tars) runs node by name"
 stop_guest
 
 echo "mise: measure 10: chain $(( $(date +%s) - CHAIN_T0 ))s after the build"

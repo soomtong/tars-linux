@@ -873,18 +873,31 @@ chmod 0644 "$WORKDIR/etc/os-release"
 # `[ -x ] && eval` 한 줄이 아니라 if인 이유: brew가 없을 때(모든 다른 체인) && 꼴은 rc의 마지막
 # 상태를 1로 남겨 첫 프롬프트가 실패 표시를 그릴 수 있다. 이 파일은 아무것도 찍지 않는다 —
 # seed rc의 규칙(config.zig rcSeed)과 같은 이유로, 화면 좌표로 판정하는 체인이 있다.
+#
+# MI-M1: 같은 파일 셋에 mise 줄을 더한다(MI design 결정 3, 사용자 2026-11-03). 사용자가 공식
+# mise.run으로 깐 ~/.local/bin/mise가 있으면 `mise activate <셸>`을 부른다 — activate는 mise의
+# 디렉터리(~/.local/bin)도 PATH에 넣으므로 이 한 줄이 mise와 node를 함께 세운다. brew 다음에
+# 두는 이유: 둘 다 있으면 mise가 PATH의 앞을 잡아, 프로젝트가 고른 버전이 brew가 부은 같은
+# 이름보다 먼저 불린다. 경로가 사용자마다 달라 $HOME은 셸이 펼친다(brew의 고정 prefix와 다른
+# 점). fish는 conf.d의 새 파일 mise.fish이고, conf.d는 이름 순이라 homebrew.fish 다음이다.
 BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew
 mkdir -p "$WORKDIR/etc/zsh" "$WORKDIR/etc/fish/conf.d"
 cat > "$WORKDIR/etc/bash.bashrc" <<EOF
-# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew가 있으면 PATH에 넣는다.
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew · mise가 있으면 PATH에 넣는다.
 if [ -x ${BREW_BIN} ]; then
   eval "\$(${BREW_BIN} shellenv bash)"
 fi
+if [ -x "\$HOME/.local/bin/mise" ]; then
+  eval "\$("\$HOME/.local/bin/mise" activate bash)"
+fi
 EOF
 cat > "$WORKDIR/etc/zsh/zshrc" <<EOF
-# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew가 있으면 PATH에 넣는다.
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew · mise가 있으면 PATH에 넣는다.
 if [ -x ${BREW_BIN} ]; then
   eval "\$(${BREW_BIN} shellenv zsh)"
+fi
+if [ -x "\$HOME/.local/bin/mise" ]; then
+  eval "\$("\$HOME/.local/bin/mise" activate zsh)"
 fi
 EOF
 cat > "$WORKDIR/etc/fish/conf.d/homebrew.fish" <<EOF
@@ -893,7 +906,14 @@ if test -x ${BREW_BIN}
     ${BREW_BIN} shellenv fish | source
 end
 EOF
-chmod 0644 "$WORKDIR/etc/bash.bashrc" "$WORKDIR/etc/zsh/zshrc" "$WORKDIR/etc/fish/conf.d/homebrew.fish"
+cat > "$WORKDIR/etc/fish/conf.d/mise.fish" <<'EOF'
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). mise가 있으면 켠다.
+if test -x "$HOME/.local/bin/mise"
+    "$HOME/.local/bin/mise" activate fish | source
+end
+EOF
+chmod 0644 "$WORKDIR/etc/bash.bashrc" "$WORKDIR/etc/zsh/zshrc" "$WORKDIR/etc/fish/conf.d/homebrew.fish" \
+  "$WORKDIR/etc/fish/conf.d/mise.fish"
 
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —

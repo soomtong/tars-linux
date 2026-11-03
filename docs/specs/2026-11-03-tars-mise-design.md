@@ -2,8 +2,8 @@
 
 접두사: MI
 
-Status: MI-M0 끝남(2026-11-03). 공식 `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지를 하나도 안 고치고 섰다.
-MI-M1(activate)의 plan을 쓴다.
+Status: 끝남(2026-11-03, MI-M0~M1). 공식 `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지에 도구 하나 안 더하고
+서며, 시스템 rc 셋의 `mise activate`로 재부팅 뒤 망 없이 뜬 화면 셸에서 `node`가 이름만으로 불린다.
 
 관련 문서: `2026-11-03-tars-package-manager-design.md`(PM. 같은 모양 — 공식 설치 길이 막히지 않게 기본 이미지 쪽을 푼다 · 바깥
 망 체인 · 시스템 rc의 shellenv) · `2026-11-02-tars-home-partition-design.md`(HP. `/home` ext4 · uid 1000 사용자) ·
@@ -120,6 +120,17 @@ mise와 node의 길을 덮고 있었다.
 디렉터리(`~/.local/bin`)도 PATH에 넣으므로(`src/cli/activate.rs`) 한 줄이 `mise`와 `node`를 함께 세운다. 실측 9의 `failed to load
 settings`는 `mise doctor`가 자식으로 `mise`를 이름으로 부르는데 PATH에 없어서였다 — 이 결정이 함께 닫는다.
 
+M1이 넣고 확인한 것:
+
+- 자리는 PM 결정 5의 셋 — `/etc/bash.bashrc` · `/etc/zsh/zshrc`에 brew 블록 다음으로 한 블록, fish는 새 파일
+  `/etc/fish/conf.d/mise.fish`(conf.d는 이름 순이라 `homebrew.fish` 다음). brew 다음인 이유는 둘 다 있을 때 mise가 PATH의 앞을
+  잡아 프로젝트가 고른 버전이 brew의 같은 이름보다 먼저 불리게 하려는 것이다. `$HOME`은 셸이 펼친다.
+- activate는 켜는 순간 훅을 한 번 부른다 — 프롬프트 없는 `bash -i -c` · `zsh -i -c` · `fish -i -c`에서도 node가 이미 PATH에 있다
+  (M1 실측 1). activate는 `mise`라는 셸 함수도 정의하므로 bash · zsh의 `command -v mise`는 경로가 아니라 이름을 찍는다.
+- 두 번 activate(시스템 rc + `mise.run`의 안내대로 넣은 사용자 rc)는 해가 없다 — `~/.local/bin`과 node가 PATH에 한 번씩이다(M1 실측 2).
+- 켠 셸의 `mise doctor`는 `activated: yes`, `No problems found`다(M1 실측 3).
+- 비용은 셸 하나가 뜰 때 약 115ms(TCG, M1 실측 4) — 켜는 순간의 activate와 첫 훅이다. 그 뒤 프롬프트마다 hook-env(M0 실측 8).
+
 ## 위험
 
 ### 위험 1 — 루트 게이트가 바깥 망에 하나 더 기댄다
@@ -164,7 +175,7 @@ M0가 닫았다: qemu64에서 끝까지 초록이다(실측 7). Homebrew와 달�
   위험 2 · 3 · 4의 숫자와 결정 3이 쓸 시간 셋을 잰다.
 - MI-M1: 결정 3(activate)을 정해 넣는다. 재부팅 뒤 망 없이 뜬 화면 셸에서 `node`가 이름만으로 불리는지 본다.
 
-M1의 plan은 M0의 실측을 본 뒤에 쓴다.
+M1의 plan은 M0의 실측을 본 뒤에 썼다(`docs/plans/2026-11-03-tars-mise-mi-m1.md`).
 
 ## 실측 (M0, 2026-11-03)
 
@@ -231,3 +242,43 @@ shim이 더하는 것은 50~80ms다. 모두 페이지 캐시가 따뜻한 뒤의
 2. 설치 스크립트는 `mktemp`로 tmpfs `/tmp`를 쓴다. TARS에서는 그것이 RAM이라, 큰 바이너리를 받는 스크립트의 메모리 요구는 받는
    크기 + 푼 크기다(실측 6).
 3. 바깥 바이너리의 `NEEDED`는 컨테이너에서 tarball을 받아 `readelf -d`로 미리 읽으면 체인 한 판을 아낀다(Task 0).
+
+## 실측 (M1, 2026-11-03)
+
+값은 체인 둘째 판(첫 초록, qemu64 · 1GiB)의 것이다. mise `2026.10.25`, node v26.13.0.
+
+### 실측 M1-1 — 대화형 셸 셋이 rc로 mise와 node를 찾는다(결정 3)
+
+bash `type -P` · zsh `whence -p` · fish `command -v`가 셋 다 `/home/tars/.local/bin/mise`와
+`/home/tars/.local/share/mise/installs/node/lts/bin/node`를 찍는다. `installs/node/lts`는 mise가 만든 별칭 링크다.
+
+### 실측 M1-2 — 두 번 activate한 PATH
+
+`/home/tars/.local/bin:/home/tars/.local/share/mise/installs/node/lts/bin:/home/tars/.local/share/mise/shims:/usr/bin:/bin`. 앞의 둘이
+한 번씩이다. shims 디렉터리도 뒤쪽에 들어간다 — 이 판의 mise는 activate 모드에서도 shims를 대비로 둔다(`shims_on_path: yes`).
+이름은 앞의 `installs/node`가 먼저 잡는다.
+
+### 실측 M1-3 — 켠 셸의 `mise doctor` rc 0, `No problems found`
+
+같은 판 앞쪽의 켜지 않은 doctor(M0 실측 9)는 문제 둘 그대로다.
+
+### 실측 M1-4 — 셸 하나가 뜰 때 약 115ms 더해진다(결정 3)
+
+`fish -i -c true` 세 번: mise 전 94 · 83 · 80ms, mise 뒤(시스템 rc가 켬) 202 · 194 · 195ms. 페이지 캐시가 따뜻한 뒤의 값이다.
+
+### 실측 M1-5 — 재부팅 뒤 망 없이 화면 셸에서 `node --version`(M8)
+
+화면 셸(fish, tars)에 친 `node --version`이 `v26.`을 그린다. 첫 명령 전 화면에 `mise` 글자 없음 — 시스템 rc는 아무것도 안 찍는다.
+
+### 실측 M1-6 — 체인 104초(빌드 뒤), 루트 게이트
+
+루트 게이트 27/27, 15분 36초 — prebuild 333초(initrd가 바뀌었다) · lanes 601초, cut log lines 전부 0. MI-M0은 105초로 여덟째(가장
+긴 것은 PM-M0 244초). 시스템 rc의 새 `test -x` 줄은 다른 체인의 화면 판정을 흔들지 않았다. `CHAINS`의 라벨은 `MI-M0` 그대로다
+(PM과 같은 관행 — 라벨은 체인이 처음 선 milestone).
+
+### M1의 판들이 가르친 것
+
+1. activate는 `mise`를 셸 함수로 정의한다. bash · zsh의 `command -v`는 함수 이름을 찍으므로, 실행 파일이 PATH에 있는지는
+   `type -P` · `whence -p`로 묻는다(첫 판).
+2. `make quick`은 git이 추적하는 파일만 본다. 새 체인은 커밋 전에는 shellcheck에서 빠진다 — M0의 `mise/check.sh`가 SC2016
+   열 몇 개를 품은 채 커밋됐고(push 전) M1의 `make quick`이 처음 잡았다. 새 `.sh`는 `git add` 뒤에 `make quick`을 돈다.

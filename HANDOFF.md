@@ -1,17 +1,19 @@
-# HANDOFF: Mise(MI) 진행 중 — MI-M0 끝남(2026-11-03), 다음은 MI-M1(activate)의 plan
+# HANDOFF: 열린 서브프로젝트 없음 — Mise(MI-M0~M1) 끝남(2026-11-03), 다음은 KH가 남긴 init 정리(사용자가 정한 순서)
 
 ## 지금 상태 (2026-11-03)
 
-- 열린 서브프로젝트는 Mise(MI, `docs/specs/2026-11-03-tars-mise-design.md`). 사용자가 정했다: 설치 길은 공식 `mise.run`만,
-  게이트 런타임은 `node@lts`, activate 자리는 M0 실측 뒤 M1에서. 그 다음 순서는 KH가 남긴 init 정리(아래 "다음 후보"의 첫 줄,
-  사용자가 정한 순서).
-  - MI-M0 섰다: `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지를 하나도 안 고치고 돈다. gpg 검증은 mise 안에서
-    끝난다. qemu64에서도 된다. 512MB에서는 `mise.run`의 `/tmp`(tmpfs) 때문에 굳는다(`carryover.md`의 MI 절).
-  - 함정: 콘솔 셸에는 `XDG_DATA_HOME=/config/xdg`가 있고 화면 셸에는 없다 — 체인의 `as_tars`가 뺀다(design 확인 4).
-  - MI-M1에서 정할 것: design 결정 3(시스템 rc의 activate · shims · 사용자 rc). 숫자는 design 실측 2 · 8(hook-env 71~87ms, shim이
-    더하는 50~80ms, 부팅 뒤 첫 실행 1.1초). `mise doctor`의 `failed to load settings`(실측 9)도 함께 본다. 화면 부팅의 monitor는
-    45500부터.
-- 마지막으로 닫은 것은 Package Manager(PM-M0~M1, `docs/specs/2026-11-03-tars-package-manager-design.md`, 기억은
+- 다음 일은 사용자가 정해 두었다(2026-11-03): KH가 남긴 init 정리 — init의 키보드 고르기 · 3초 기다림 · argv의 `device_path`
+  칸을 걷는다(`carryover.md`의 KH 절 첫 항목). 그날 설명한 모양: `devices.zig`의 `resolveKeyboard` · `findKeyboardWaiting` ·
+  `KEYBOARD_WAIT_MS`와 `main.zig`의 `keyboard_path`를 걷고(전원 버튼 찾기는 남긴다), `screen_args`의 칸을 빼거나 비우고, `device` ·
+  `machine` · `terminal` 체인이 보는 `tars-init: keyboard device` 줄의 판정을 terminal의 `keyboard> open … name=…`으로 옮긴다.
+  design에서 정할 것 둘: 칸을 빼서 번호를 당길지 비워 둘지, 세 체인의 판정을 무엇으로 바꿀지. 새 서브프로젝트라 design부터.
+- 마지막으로 닫은 것은 Mise(MI-M0~M1, `docs/specs/2026-11-03-tars-mise-design.md`, 기억은 `docs/decisions/project_mise.md`).
+  사용자가 정했다: initrd에 안 싣는다, 설치 길은 공식 `mise.run`만, 게이트 런타임은 `node@lts`, activate는 시스템 rc.
+  - 섰다: `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지에 도구 하나 안 더하고 돈다(gpg 검증은 mise 안에서).
+    시스템 rc 셋이 `~/.local/bin/mise`가 있을 때만 `mise activate <셸>`을 불러, 재부팅 뒤 망 없이 화면 셸에서 `node`가 이름으로
+    불린다. 셸 하나에 약 115ms(TCG).
+  - 남긴 것은 `carryover.md`의 MI 절(512MB에서 `mise.run`이 tmpfs `/tmp` 때문에 굳는다).
+- 그 전에 닫은 것은 Package Manager(PM-M0~M1, `docs/specs/2026-11-03-tars-package-manager-design.md`, 기억은
   `docs/decisions/project_package_manager.md`). 사용자가 정했다: Homebrew, 공식 `install.sh`를 사용자가 직접 친다, 게이트는
   실제 망으로 끝까지.
   - 섰다: 공식 `install.sh`(HEAD)가 `Installation successful!`까지 가고, `brew install hello`가 bottle 하나로 서며, 재부팅 뒤 망
@@ -23,7 +25,7 @@
   - 접두사 PM은 2026-08-19의 Power Management와 겹친다 — `CHAINS`의 `PM-M1`은 `power/check.sh`, 이 체인은 `PM-M0` 그대로다.
   - 컨테이너 이미지가 M0에서 바뀌었다(Dockerfile 태그 `fb074c15a322`, `tar` · `gzip` · `libcurl3t64-gnutls` · ngtcp2 둘). 다른
     기계는 `docker rmi tars-devcontainer && make container`.
-- 그 전에 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
+- 그보다 전에 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
   기억은 `docs/decisions/project_home_partition.md`).
   - 섰다: 새 설치가 p3 ext4 `tars-home`을 `/home`에 붙이고 계정 하나(기본 `tars` · `tars-linux`)를 만든다. 화면 셸은 uid 1000 ·
     groups `27,29`(sudo · audio)로 홈에서 뜬다. `/config`에 쓰는 길은 Debian `sudo`이고, 사용자가 그냥 치면 `try: sudo …`(77)를 듣는다.
@@ -37,10 +39,11 @@
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM. 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Mise(MI-M0~M1, 11-03) — `docs/decisions/project_mise.md`
   - Package Manager(PM-M0~M1, 11-03) — `docs/decisions/project_package_manager.md`
   - Home Partition(HP-M0~M2, 11-03) — `docs/decisions/project_home_partition.md`
   - Keyboard Hotplug(KH-M0~M2, 11-02) — `docs/decisions/project_keyboard_hotplug.md`
@@ -57,13 +60,18 @@
 - 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
   체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
   바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(MI-M0): 27/27, 15분 0초(prebuild 329초 · lanes 569초), cut log lines 전부 0. PM 체인이 236초로 가장 길다.
-  바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). PM 체인은 부팅 3에서 monitor 45499를 쓴다 — 새 체인은 45500부터.
+  마지막 루트 게이트(MI-M1): 27/27, 15분 36초(prebuild 333초 — initrd가 바뀌었다 · lanes 601초), cut log lines 전부 0. PM 체인이
+  244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
+  45500 — 새 체인은 45501부터.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- MI: 화면 셸에서 `curl https://mise.run | sh` → 새 패널에서 `mise use -g node@lts` → 또 새 패널에서 `node --version`. rc를 안
+  고쳐도 되는지(시스템 rc), 실기에서 패널을 열 때 늦어진 것이 느껴지는지(TCG는 셸 하나에 약 115ms, 부팅 뒤 첫 패널은 mise를
+  디스크에서 처음 읽는다), 프로젝트 디렉터리에 `mise.toml`을 두고 `cd`했을 때 버전이 바뀌는지. 다른 런타임(python · go)은 처음이다.
 
 - PM: 화면 셸에서 공식 안내 그대로 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
   — 게이트는 `NONINTERACTIVE=1`이라 대화형 길(RETURN 누르기 · 비밀번호 묻기)은 처음이다. 실기에서 걸리는 시간(TCG 1GiB는
