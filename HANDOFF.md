@@ -1,8 +1,19 @@
-# HANDOFF: Home Partition 끝남(HP-M0~M2, 2026-11-03) — 다음은 PM(Package Manager) design
+# HANDOFF: Package Manager 진행 중 — PM-M0 끝남(2026-11-03), 다음은 PM-M1 plan
 
 ## 지금 상태 (2026-11-03)
 
-- 열린 서브프로젝트는 없다. 마지막으로 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
+- 열린 서브프로젝트는 Package Manager(PM, `docs/specs/2026-11-03-tars-package-manager-design.md`, 기억은
+  `docs/decisions/project_package_manager.md`). 사용자가 정했다: Homebrew, 공식 `install.sh`를 사용자가 직접 친다, 게이트는
+  실제 망으로 끝까지.
+  - M0 끝남: 공식 `install.sh`(HEAD)가 TARS에서 `Installation successful!`까지 가고 `brew config`가 portable-ruby로 답한다.
+    usrmerge(`/bin -> usr/bin`), 층 19 도구(chgrp · install · mktemp · ldd · tar · gzip · git-remote-http · flock · sha256sum ·
+    locale), glibc 통째로(결정 7), `/etc/os-release`(결정 8), init 환경의 `LANG=C.UTF-8`(결정 9 — 시리얼 · ssh · 서비스가
+    지금까지 ASCII 로케일이던 결함을 같이 고쳤다).
+  - 다음은 PM-M1 plan: `brew install hello`(bottle) · `hello` · 시스템 rc의 shellenv(결정 5) · 재부팅 뒤 남는지 · `brew doctor`
+    기록 · `file`이 bottle 경로에서 불리는지(실측 7). 체인 디스크를 8GiB에서 줄여도 된다(실측 5).
+  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `fb074c15a322`, `tar` · `gzip` · `libcurl3t64-gnutls` · ngtcp2 둘). 다른 기계는
+    `docker rmi tars-devcontainer && make container`.
+- 그 전에 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
   기억은 `docs/decisions/project_home_partition.md`).
   - 섰다: 새 설치가 p3 ext4 `tars-home`을 `/home`에 붙이고 계정 하나(기본 `tars` · `tars-linux`)를 만든다. 화면 셸은 uid 1000 ·
     groups `27,29`(sudo · audio)로 홈에서 뜬다. `/config`에 쓰는 길은 Debian `sudo`이고, 사용자가 그냥 치면 `try: sudo …`(77)를 듣는다.
@@ -12,13 +23,11 @@
   - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `5ffbe7a00fb2`, `sudo` · `libpam-modules` · `libpam-modules-bin`). 다른 기계는
     `docker rmi tars-devcontainer && make container`.
   - 남긴 것은 `carryover.md`의 HP 절(hostname `(none)`, sudo timestamp 범위, 부팅 뒤 꽂은 사운드 노드, `ping`, 사용자 셸 히스토리).
-- 다음은 PM design이다(HP design의 "왜 지금인가"가 넘긴 자리 — Homebrew `install.sh`가 막히는 자리: ca-certificates · `file` ·
-  gcc · portable-ruby, `/home/linuxbrew/.linuxbrew`, `/home`의 `nosuid`). 방향은 사용자가 고른다.
 - 그 전에 닫은 Bluetooth(BT-M0~M2)는 사용자가 외출하며 결정을 Claude에게 맡긴 세션이었다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10). 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
@@ -34,14 +43,19 @@
   - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
   - 그 전은 `docs/guides/completed.md`.
 - 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH · HP가 쌓였고 아직 내지 않았다.
-- 체인은 스물다섯이다(`check.sh`의 `CHAINS`, 마지막이 `HP-M2:./home/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP 체인은
-  포트를 안 쓴다(45497 · 45498을 예약으로 적어 뒀다) — 새 체인은 45499부터, 예약 범위 45455~45599(RP-M0). 마지막 루트 게이트(HP-M2):
-  25/25, 약 10분 50초(prebuild 315초 — 이미지 · initrd가 바뀌었다 · lanes 334초), cut log lines 전부 0, verify 8394줄.
+- 체인은 스물여섯이다(`check.sh`의 `CHAINS`, 마지막이 `PM-M0:./pm/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP · PM
+  체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다) — 새 체인은 45499부터, 예약 범위 45455~45599(RP-M0). PM 체인은
+  바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
+  마지막 루트 게이트(PM-M0): 26/26, 12분 48초(prebuild 320초 — init · initrd가 바뀌었다 · lanes 446초), cut log lines 전부 0.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- PM: 화면 셸에서 공식 안내 그대로 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+  — 게이트는 `NONINTERACTIVE=1`이라 대화형 길(RETURN 누르기 · 비밀번호 묻기)은 처음이다. 실기에서 걸리는 시간(TCG 1GiB는
+  140초), 끝의 "Next steps" 안내가 TARS에서 말이 되는지(M1이 시스템 rc로 shellenv를 넣기 전이라 지금은 손으로 eval해야 한다).
 
 - HP: 화면 셸에서 `sudo tars-config set …`이 비밀번호를 한 번 묻고 그 패널에서 15분 동안 다시 안 묻는지, 다른 패널은 따로
   묻는지(timestamp가 tty 단위 — 거슬리면 `carryover.md`). `sudo tars-config passwd` 뒤 새 비밀번호, 사용자로 `tars-config set`을
@@ -97,7 +111,7 @@
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
-- 패키지 매니저 PM(Homebrew, HP가 `/home`과 사용자 · sudo를 세웠다 — 위 "지금 상태"). 이미지 뷰어도 그 위에서(`carryover.md`의 "이미지 뷰어 메모" — 기본 이미지에 뷰어를 넣지 않는다, 사용자 결정 2026-10-03). USB 동글은
+- 패키지 매니저 PM은 진행 중(위 "지금 상태"). 이미지 뷰어는 그 위에서(`carryover.md`의 "이미지 뷰어 메모" — 기본 이미지에 뷰어를 넣지 않는다, 사용자 결정 2026-10-03). USB 동글은
   층 A(UW) · 층 B + rtl8xxxu(UB)로 끝났고 남은 것은 실제 동글이 근거를 줄 때.
 - IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다(`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`.

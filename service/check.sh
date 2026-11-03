@@ -141,7 +141,7 @@ printf '#!/bin/sh\necho sv-hidden-ran\n' > "$SEED/hidden"
 cat > "$SEED/linked.sh" <<'EOF'
 #!/bin/sh
 # d-link로 불린다. shebang이 /bin/bash면 execve가 ENOENT다 — 게스트의 /bin에는
-# sh 하나만 산다(make_initrd.sh:81, SV-M1 첫 실행이 그렇게 빨갛다).
+# 실체가 sh 하나뿐이었다(SV-M1 첫 실행이 그렇게 빨갛다. PM-M0부터 /bin은 usr/bin 링크라 지금은 된다).
 # $0이 링크의 경로다(SV-M0 실측 3). stdin이 /dev/null이면 read가
 # 곧바로 EOF(rc 1)이고, 콘솔이면 1초를 채우고 142 언저리다. sid가 pid와 같으면
 # setsid가 됐다.

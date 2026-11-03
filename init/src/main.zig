@@ -793,9 +793,9 @@ fn rebuildShellAndEnv(children: []Child, live: *Live, new: config.Config) void {
     live.envp = environ.withTarsEnv(live.kernel_env, &live.env[next], tz_entry, shell.histEntries());
     live.which = next;
 
-    var ssh_env: [3 + 4][]const u8 = undefined;
+    var ssh_env: [4 + 4][]const u8 = undefined;
     var n: usize = 0;
-    for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry }) |e| {
+    for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, tz_entry, environ.LANG_ENTRY }) |e| {
         ssh_env[n] = e;
         n += 1;
     }
@@ -1378,8 +1378,8 @@ const Boot = struct {
         // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
         // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
         if (self.envp != self.kernel_env) {
-            logline.print("tars-init: env {s} {s} {s}\n", .{
-                environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry,
+            logline.print("tars-init: env {s} {s} {s} {s}\n", .{
+                environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry, environ.LANG_ENTRY,
             });
             // 셸마다 갈리는 것은 줄을 따로 낸다. `shell=fish`면 한 줄도 안 나오고,
             // 그 침묵이 결정 3의 절반(fish는 XDG 하나로 끝난다)을 로그에서
@@ -1396,11 +1396,11 @@ const Boot = struct {
         // 이유다. 서비스(sshd)가 뜨기 전이어야 하므로 `supervise`보다 앞이면 되고, env
         // 블록과 나란히 두는 것이 "같은 목록"(M2-B)을 읽기에 맞다.
         //
-        // 크기 `3 + 4` — 앞의 셋에 셸별 히스토리 env(가장 긴 zsh가 셋)가 붙고 한 칸이
-        // 남는다. `config.zig`의 목록을 늘려 넘치면 ReleaseSafe가 여기서 패닉한다.
-        var ssh_env: [3 + 4][]const u8 = undefined;
+        // 크기 `4 + 4` — 앞의 넷(PM-M0이 LANG을 더했다)에 셸별 히스토리 env(가장 긴 zsh가
+        // 셋)가 붙고 한 칸이 남는다. `config.zig`의 목록을 늘려 넘치면 ReleaseSafe가 여기서 패닉한다.
+        var ssh_env: [4 + 4][]const u8 = undefined;
         var ssh_env_len: usize = 0;
-        for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry }) |e| {
+        for ([_][]const u8{ environ.PATH_ENTRY, environ.XDG_ENTRY, self.tz_entry, environ.LANG_ENTRY }) |e| {
             ssh_env[ssh_env_len] = e;
             ssh_env_len += 1;
         }

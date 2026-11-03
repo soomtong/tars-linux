@@ -186,10 +186,13 @@ GUEST_TOOLS=(
   # 데려오고, 둘 다 libc만 부른다. 그래서 위 문단의 "새 라이브러리 0"은
   # UT-M3 때의 기록이고, 지금 이 층의 새 라이브러리는 둘이다.
   #
-  # /usr/lib/git-core는 안 넣는다. init·add·commit·log·diff·branch가
+  # /usr/lib/git-core는 통째로 안 넣는다. init·add·commit·log·diff·branch가
   # 전부 git 바이너리 안의 builtin이라 그 트리 없이 돈다. 거기 있는 실체
-  # 26개 중 큰 것 일곱이 네트워크 헬퍼이고(design 결정 5), 이 기계는
-  # `# CONFIG_NET is not set`이다.
+  # 26개 중 큰 것 일곱이 네트워크 헬퍼이고(design 결정 5), 이 문단을 쓴
+  # UT-M3 때 기계는 `# CONFIG_NET is not set`이었다. NW 뒤로 망이 섰고,
+  # PM-M0이 그 가운데 https 헬퍼(git-remote-http) 하나만 층 19에 싣는다 —
+  # Homebrew가 https://github.com에서 git fetch를 한다. ssh · ftp · 나머지는
+  # 여전히 안 싣는다.
   #
   # 게이트는 git을 친다. vi는 `--version`까지만 친다 — 편집기는 화면을
   # 통째로 가져가는 대화형이라 sendkey로 열면 체인이 매달린다(less·top·
@@ -424,4 +427,34 @@ GUEST_TOOLS=(
   # copy_lib_deps가 따라간다. setuid(4755)와 plugin · PAM 모듈 · sudoers는 make_initrd.sh의
   # sudo 절이 넣는다 — install_tool은 0755로 두므로 그 절이 이 목록의 루프 뒤에 있다.
   usr/bin/sudo:usr/bin/sudo
+
+  # ── 층 19 · Homebrew install.sh가 부르는 것(PM-M0) ─────────────────────
+  # 사용자가 공식 install.sh를 그대로 치면 끝까지 가게 한다(PM design 결정 3). 앞의 넷은
+  # coreutils · libc-bin에 이미 있었고 이 목록에만 없었다. tar · gzip은 Dockerfile 층 19가 받는다.
+  #
+  #   chgrp · install   install.sh가 /bin/chgrp · /usr/bin/install -d로 prefix를 만든다
+  #   mktemp            brew의 셸 쪽이 임시 파일을 만든다
+  #   ldd               install.sh의 outdated_glibc가 `ldd --version`으로 glibc를 읽는다(2.41). bash
+  #                     스크립트라 copy_lib_deps가 건너뛴다. RTLDLIST의 /lib64 로더는 이미 있다
+  #   tar · gzip        bottle과 portable-ruby가 .tar.gz다
+  #   git-remote-http   https:// 저장소를 받는 git의 헬퍼(위 층의 git-core 문단). NEEDED의
+  #                     libcurl-gnutls와 ngtcp2 둘이 새 라이브러리다. git-remote-https 링크는
+  #                     make_initrd.sh가 vi처럼 건다
+  #   flock             brew가 `vendor-install ruby`의 잠금을 ruby · flock · python 셋 중 하나로 건다 —
+  #                     셋 다 없으면 portable-ruby를 받기 전에 멈춘다(PM-M0 셋째 판). util-linux
+  #   sha256sum         받은 portable-ruby의 checksum을 shasum · sha256sum · ruby 셋 중 하나로 본다
+  #                     (PM-M0 셋째 판). coreutils, libcrypto는 이미 있다
+  #   locale            brew의 setup-locale이 `locale charmap`이 UTF-8인지 본다. 명령이 없으면 판마다
+  #                     en_US.UTF-8(데이터 없음 → setlocale 경고)이나 C(UTF-8을 잃는다)로 떨어진다.
+  #                     있으면 화면 셸의 LANG=C.UTF-8(HI-M1의 C.utf8 데이터)을 그대로 둔다. libc-bin
+  usr/bin/chgrp:usr/bin/chgrp
+  usr/bin/install:usr/bin/install
+  usr/bin/mktemp:usr/bin/mktemp
+  usr/bin/ldd:usr/bin/ldd
+  usr/bin/tar:usr/bin/tar
+  usr/bin/gzip:usr/bin/gzip
+  usr/lib/git-core/git-remote-http:usr/lib/git-core/git-remote-http
+  usr/bin/flock:usr/bin/flock
+  usr/bin/sha256sum:usr/bin/sha256sum
+  usr/bin/locale:usr/bin/locale
 )

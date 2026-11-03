@@ -381,6 +381,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 비밀번호에 "Sorry, try again"이다, HP-M2 실측). 의존(libpam0g · libaudit1 · libselinux1 · libapparmor1 ·
 # libssl3t64 · zlib1g · libcrypt1)은 위에서 이미 받았다. initrd에 싣는 것은 그 일부다 —
 # make_initrd.sh의 sudo 절이 고른다.
+#
+# ── PM-M0: 층 19(Homebrew install.sh가 부르는 것) ───────────────────────────
+#
+# 공식 install.sh와 brew가 TARS에서 막히던 자리다(PM design 확인 2 · 3, 결정 3). tar · gzip은
+# bottle과 portable-ruby(.tar.gz)를 푼다 — tar -z가 PATH에서 gzip을 부른다. 나머지 셋은
+# git의 https 헬퍼(usr/lib/git-core/git-remote-http, git 패키지에 이미 있다)의 NEEDED
+# libcurl-gnutls.so.4와 그 의존이다. 게스트의 curl은 OpenSSL 판(libcurl4t64)이고 Debian git은
+# GnuTLS 판을 부른다. gnutls · nettle · hogweed · gmp · p11-kit · tasn1은 librtmp가 이미
+# 끌어와 initrd에 있다(PM-M0 plan 착수 전 확인). chgrp · install · mktemp · ldd는 coreutils ·
+# libc-bin에 이미 있어 받을 것이 없다 — guest_tools.sh의 목록에만 없었다.
 ENV AMD64_SYSROOT=/usr/local/amd64-sysroot
 
 RUN dpkg --add-architecture amd64 \
@@ -537,7 +547,12 @@ RUN dpkg --add-architecture amd64 \
         whois:amd64 \
         sudo:amd64 \
         libpam-modules:amd64 \
-        libpam-modules-bin:amd64) \
+        libpam-modules-bin:amd64 \
+        tar:amd64 \
+        gzip:amd64 \
+        libcurl3t64-gnutls:amd64 \
+        libngtcp2-16:amd64 \
+        libngtcp2-crypto-gnutls8:amd64) \
     && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 

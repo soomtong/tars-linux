@@ -494,6 +494,13 @@ run_chain() {
 # /config/bluetooth에 남은 키 파일이다. 부팅 B는 디스크 없이 떠서 기본값(꺼짐)의 음성을 본다.
 # 게스트에 한 글자도 안 치고 monitor도 없다. 회차당 부팅 2회.
 #
+# PM 체인은 Homebrew를 본다. 바깥 망에 기대는 첫 체인이다(PM design 확인 6 · 위험 1) — QEMU 전에
+# 컨테이너가 github.com · ghcr.io를 치고, 안 닿으면 `pm: external network unavailable`로 빨개진다.
+# ISO로 tars-install --yes를 한 디스크를 SLIRP NIC와 함께 다시 띄우고, 시리얼 root 셸이 setpriv로
+# 사용자 tars가 되어 공식 install.sh(HEAD)를 그대로 돌린다. 판정은 /bin 링크 · 도구 · git https ·
+# Installation successful! · brew --version · brew config(portable-ruby)다. 포트를 안 쓴다. 회차당
+# 부팅 2회, 그 가운데 install.sh가 TCG에서 몇 분이다(PM-M0 측정 2).
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -522,6 +529,7 @@ CHAINS=(
   "BT-M2:./bluetooth/check.sh"
   "KH-M2:./keyboard/check.sh"
   "HP-M2:./home/check.sh"
+  "PM-M0:./pm/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -135,15 +135,19 @@ copy_lib_deps() {
 # UT-M0이 /bin · /tmp · /etc 셋을 더한다. 지금까지 없었고, 그 없음이 git에
 # 그대로 걸린다(design 실측 2).
 #
-#   /bin   → sh 하나만 산다. #!/bin/sh 스크립트와 git의 셸 서브커맨드가
-#            이 경로를 컴파일 타임에 박아 두고 찾는다.
+#   /bin   → #!/bin/sh 스크립트와 git의 셸 서브커맨드가 이 경로를 컴파일
+#            타임에 박아 두고 찾는다. UT-M0부터 sh 하나만 사는 디렉터리였고,
+#            PM-M0부터는 Debian과 같은 usrmerge 링크(/bin → usr/bin)다 —
+#            Homebrew install.sh가 /bin/mkdir · /bin/chown · /bin/chgrp ·
+#            /bin/touch를 절대 경로로 부른다(PM design 확인 1, 결정 2).
 #   /tmp   → git도 편집기도 임시 파일을 여기 만든다. 없으면 조용히 실패한다.
 #   /etc   → passwd·group. whoami가 이름을 내고, git이 커밋 작성자를
 #            유추할 자리다.
 #   /home  → 설치된 디스크의 p3(ext4 tars-home)가 붙는 자리(HP-M0). 안 붙은
 #            부팅에서는 tmpfs의 빈 디렉터리다.
 mkdir -p "$WORKDIR/usr/bin" "$WORKDIR/proc" "$WORKDIR/sys" "$WORKDIR/dev" \
-         "$WORKDIR/config" "$WORKDIR/home" "$WORKDIR/bin" "$WORKDIR/tmp" "$WORKDIR/etc"
+         "$WORKDIR/config" "$WORKDIR/home" "$WORKDIR/tmp" "$WORKDIR/etc"
+ln -s usr/bin "$WORKDIR/bin"
 
 # /tmp는 아무나 쓰고 남의 것은 못 지운다. 게스트가 지금은 root 하나뿐이라
 # 동작 차이가 없지만, 이 비트가 없는 /tmp를 보고 겁내는 프로그램이 있다.
@@ -238,6 +242,27 @@ for entry in "${GUEST_TOOLS[@]}"; do
   install_tool "${entry%%:*}" "${entry#*:}"
 done
 
+# PM-M0: glibc를 통째로. 위 루프까지의 라이브러리는 "우리가 싣는 바이너리가 NEEDED로 부르는
+# 것"뿐이다. Homebrew의 bottle과 portable-ruby는 보통의 glibc 시스템에서 빌드돼 glibc 전체가
+# 있다고 가정한다 — PM-M0 넷째 판에서 portable-ruby가 `libdl.so.2: cannot open shared object
+# file`로 멈췄다. libdl은 2.34부터 libc.so.6에 합쳐진 빈 stub이라 우리 바이너리는 안 부른다.
+# 하나씩 쫓지 않고 libc6가 담는 것 가운데 프로그램이 NEEDED로 부를 수 있는 것을 전부 싣는다.
+# libpthread · librt · libutil · libresolv · libm · libc는 이미 다른 도구가 데려왔고(copy_lib_deps가
+# 있는 것을 건너뛴다), 새로 드는 것은 libdl · libanl · libBrokenLocale · libnsl · libmvec(1MB, 벡터
+# 수학 — -O3 bottle의 libm이 부른다)이다. 디버거 · LD_PRELOAD용(libc_malloc_debug · libthread_db ·
+# libmemusage · libpcprofile)은 NEEDED로 불리지 않아 뺀다.
+GLIBC_LIBS=(libc.so.6 libm.so.6 libmvec.so.1 libdl.so.2 libpthread.so.0 librt.so.1 libutil.so.1
+            libresolv.so.2 libanl.so.1 libnsl.so.1 libBrokenLocale.so.1)
+mkdir -p "${WORKDIR}${LIB_DEST}"
+for soname in "${GLIBC_LIBS[@]}"; do
+  [ -e "${WORKDIR}${LIB_DEST}/${soname}" ] && continue
+  if ! src="$(find_in_sysroot "$soname")"; then
+    echo "make_initrd: glibc library ${soname} not found in ${SYSROOT}" >&2
+    exit 1
+  fi
+  cp -L "$src" "${WORKDIR}${LIB_DEST}/${soname}"
+done
+
 # /bin/sh는 언제나 bash다. tars.conf의 shell 설정과 무관하다 —
 # #!/bin/sh 스크립트의 동작이 사용자의 셸 취향에 따라 달라지면 안 된다
 # (design 결정 6). 셋 중 bash만이 POSIX sh 모드를 갖는다.
@@ -245,13 +270,22 @@ done
 # 상대 경로로 건다. cpio가 링크의 내용을 그대로 담고 게스트의 루트가
 # 곧 이 트리라 절대 경로도 맞지만, 상대로 두면 이 트리를 다른 자리에
 # 풀어 봐도 끊어지지 않는다.
-ln -sf ../usr/bin/bash "$WORKDIR/bin/sh"
+#
+# PM-M0부터 /bin은 usr/bin을 가리키는 링크다(위 mkdir 옆의 주석). 그래서
+# 실체는 usr/bin/sh이고, /bin/sh는 그 링크를 지나 같은 bash에 닿는다.
+ln -sf bash "$WORKDIR/usr/bin/sh"
 
 # UT-M3. vi와 vim은 한 실체다(design 결정 4). guest_tools.sh에 줄을 둘
 # 적으면 install_tool이 cp를 두 번 해서 3.9MB짜리 사본이 두 벌 생긴다 —
 # 같은 파일에 이름이 둘 있는 것을 파일 둘로 만드는 것은 파일 시스템에
 # 대한 거짓말이다. 위 /bin/sh가 이미 그 모양을 세워 뒀다.
 ln -sf vim "$WORKDIR/usr/bin/vi"
+
+# PM-M0. git의 https 헬퍼도 한 실체에 이름이 둘이다 — Debian git 패키지가
+# git-remote-https를 git-remote-http(2.4MB)로의 링크로 담는다. git은 URL의
+# 스킴으로 `git-remote-<scheme>`을 exec-path(/usr/lib/git-core)에서 찾으므로
+# https:// 저장소(Homebrew install.sh의 git fetch)는 이 링크 이름을 부른다.
+ln -sf git-remote-http "$WORKDIR/usr/lib/git-core/git-remote-https"
 
 # UT-M3. Debian git의 기본 페이저는 `less`가 아니라 `pager`다 — alternatives
 # 이름이고 postinst가 만드는 링크라 dpkg -x로 푼 sysroot에 없다. 2026-09-11에
@@ -787,6 +821,21 @@ cp -r "$SYSROOT/usr/share/zoneinfo" "$WORKDIR/usr/share/"
 # `setlocale(LC_ALL, ...)`이 카테고리마다 파일을 찾기 때문이다.
 mkdir -p "$WORKDIR/usr/lib/locale"
 cp -r "$SYSROOT/usr/lib/locale/C.utf8" "$WORKDIR/usr/lib/locale/"
+
+# PM-M0: 이 기계의 이름표. os-release(5)는 프로그램이 "어느 배포판인가"를 묻는 표준 자리이고,
+# Homebrew의 os.sh가 `source /etc/os-release`로 PRETTY_NAME을 읽어 `brew config`의 OS 줄과
+# user agent에 쓴다. 없으면 brew를 칠 때마다 `/etc/os-release: No such file or directory`가 두 번
+# 찍히고 uname -r(커널 버전)로 대신한다(PM-M0 셋째 판). ID_LIKE=debian은 안 적는다 — 유저랜드의
+# .deb를 푼 것은 맞지만 apt도 dpkg 데이터베이스도 없어서, 그 말을 믿고 apt를 부르는 스크립트에게
+# 거짓말이 된다. 버전은 init과 같은 자리(../VERSION, init/build.zig)에서 읽는다.
+TARS_VERSION="$(tr -d ' \t\r\n' < ../VERSION)"
+cat > "$WORKDIR/etc/os-release" <<EOF
+NAME="TARS"
+ID=tars
+VERSION_ID=${TARS_VERSION}
+PRETTY_NAME="TARS ${TARS_VERSION}"
+EOF
+chmod 0644 "$WORKDIR/etc/os-release"
 
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —

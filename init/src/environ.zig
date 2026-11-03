@@ -18,8 +18,9 @@
 
 const std = @import("std");
 
-/// 게스트의 PATH. 자리가 둘인 것에 뜻이 있다 — 도구는 전부 /usr/bin에
-/// 넣고 /bin에는 sh 하나만 둔다(design 결정 6). 이 문자열과
+/// 게스트의 PATH. 도구는 전부 /usr/bin에 있다. UT-M0부터 /bin에는 sh 하나만
+/// 살았고(design 결정 6), PM-M0부터 /bin은 usr/bin으로의 링크다(usrmerge) — 그래도
+/// 두 자리를 다 적는 것은 Debian과 같은 모양이고 해가 없다. 이 문자열과
 /// kernel/make_initrd.sh가 넣는 자리가 어긋나면 증상은 "어떤 명령도 안
 /// 찾아진다"이고 원인에서 멀다.
 pub const PATH_ENTRY: [:0]const u8 = "PATH=/usr/bin:/bin";
@@ -41,6 +42,16 @@ pub const PATH_ENTRY: [:0]const u8 = "PATH=/usr/bin:/bin";
 /// 반대다 — 저쪽은 검사가 tautology가 되므로 일부러 안 이었다).
 pub const XDG_DATA_DIR = "/config/xdg";
 pub const XDG_ENTRY: [:0]const u8 = "XDG_DATA_HOME=" ++ XDG_DATA_DIR;
+
+/// 로케일(PM-M0). 머리 주석이 적은 자기비판 — "LANG은 갈릴 이유가 없는데도 terminal의
+/// setenv에 있다" — 을 마저 고치는 자리다. 그 자리에만 있어서 화면 셸 밖(시리얼 콘솔 셸 ·
+/// ssh 세션 · 서비스)은 로케일 변수 없이 떴다. 그때 fish는 스스로 `LC_CTYPE=en_US.UTF-8`을
+/// export하는데 게스트에는 그 데이터가 없어서, 그 셸에서 띄운 모든 프로그램의 setlocale이
+/// 실패하고 ASCII로 떨어진다(PM-M0 다섯째 판: `locale charmap`이 `ANSI_X3.4-1968`, Homebrew가
+/// 칠 때마다 `setlocale: LC_CTYPE: cannot change locale (en_US.UTF-8)`). 데이터는 HI-M1이 싣는
+/// `/usr/lib/locale/C.utf8` 하나이고 이 값이 그것을 가리킨다. terminal의 setenv는 같은 값을
+/// 다시 쓸 뿐이라 남겨 둔다.
+pub const LANG_ENTRY: [:0]const u8 = "LANG=C.UTF-8";
 
 /// `TZ` 항목의 접두사(TS design 결정 9). 이름은 `config.Timezone`이 갖고
 /// 있는데 이 파일은 그 파일을 모른 채 있어야 하므로, `main.zig`가 이름을
@@ -81,11 +92,12 @@ pub const Block = [MAX_ENTRIES:null]?[*:0]const u8;
 
 /// 커널이 준 블록을 buf에 복사하고 우리 것을 뒤에 붙인 뒤 buf를 돌려준다.
 ///
-/// 붙이는 것이 넷이다.
+/// 붙이는 것이 다섯이다.
 ///
 ///   PATH             자식마다 갈릴 이유가 없다(UT-M0)
 ///   XDG_DATA_HOME    같다. 배운 것 둘이 여기로 간다(SM-M2 결정 2)
 ///   TZ               같다. 시간대는 기계의 것이지 셸의 것이 아니다(TS-M3)
+///   LANG             같다. 로케일도 기계의 것이다(PM-M0)
 ///   hist             셸마다 갈린다 — `config.Shell.histEntries()`가 준다
 ///
 /// 셋째와 넷째가 인자인 것이 이 함수의 전부다. 이 파일은 `config.zig`를
@@ -93,8 +105,8 @@ pub const Block = [MAX_ENTRIES:null]?[*:0]const u8;
 /// "어느 셸인가 · 어느 시간대인가" 대신 "무엇을 붙일까"를 받는다. 부르는
 /// 쪽은 `main.zig` 하나다.
 ///
-/// 순서에 뜻이 있다. 셸과 무관한 셋이 앞이고 셸마다 갈리는 것이 맨 뒤다 —
-/// TS-M3이 TZ를 XDG 뒤에 넣은 이유다.
+/// 순서에 뜻이 있다. 셸과 무관한 넷이 앞이고 셸마다 갈리는 것이 맨 뒤다 —
+/// TS-M3이 TZ를 XDG 뒤에, PM-M0이 LANG을 TZ 뒤에 넣은 이유다.
 ///
 /// 자리가 모자라면 커널 블록을 그대로 돌려준다. PATH가 없는 게스트는
 /// 불편하지만 살아 있고, 버퍼를 넘겨 쓴 PID 1은 기계를 아예 못 켠다.
@@ -108,8 +120,8 @@ pub fn withTarsEnv(
     var n: usize = 0;
     while (kernel[n] != null) n += 1;
 
-    // 우리가 더하는 수. 셸마다 3(fish) · 5(bash) · 6(zsh)다.
-    const added = 3 + hist.len;
+    // 우리가 더하는 수. 셸마다 4(fish) · 6(bash) · 7(zsh)다.
+    const added = 4 + hist.len;
     // 마지막으로 쓰는 자리가 buf[n + added](닫는 null)이고, 그 자리가 배열의
     // sentinel 자리(MAX_ENTRIES)를 넘으면 안 된다.
     if (n + added >= MAX_ENTRIES) return kernel;
@@ -119,7 +131,8 @@ pub fn withTarsEnv(
     buf[n] = PATH_ENTRY.ptr;
     buf[n + 1] = XDG_ENTRY.ptr;
     buf[n + 2] = tz.ptr;
-    for (hist, 0..) |entry, j| buf[n + 3 + j] = entry.ptr;
+    buf[n + 3] = LANG_ENTRY.ptr;
+    for (hist, 0..) |entry, j| buf[n + 4 + j] = entry.ptr;
     buf[n + added] = null;
     return buf;
 }

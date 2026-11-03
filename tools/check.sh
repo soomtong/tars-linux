@@ -147,7 +147,23 @@ fail() {
 
 # 뼈대 넷은 배열에 없다 — 바이너리가 아니라 디렉터리·링크·텍스트 파일이고
 # make_initrd.sh가 손으로 만든다(design 결정 6). 그래서 여기 literal로 둔다.
-WANT=(bin/sh tmp etc/passwd etc/group)
+#
+# PM-M0부터 /bin은 usr/bin으로의 링크라 cpio 목록에 `bin`(링크)과 `usr/bin/sh`(그
+# 안의 sh 링크)가 나온다. `bin/sh`라는 항목은 더는 없다 — 게스트에서 /bin/sh는 두
+# 링크를 지나 bash에 닿고, 그것은 검사 4가 화면으로 본다.
+WANT=(bin usr/bin/sh tmp etc/passwd etc/group)
+
+# PM-M0: git의 https 헬퍼 링크. vi와 같은 자리다 — 배열에는 실체(git-remote-http)만
+# 있고 이 이름은 make_initrd.sh가 손으로 건다. git은 https:// URL에 이 이름을 부른다.
+WANT+=(usr/lib/git-core/git-remote-https)
+
+# PM-M0: 배포판 이름표. passwd · group과 같은 자리다 — make_initrd.sh가 heredoc으로 쓴다.
+WANT+=(etc/os-release)
+
+# PM-M0: glibc 전체(make_initrd.sh의 GLIBC_LIBS). 우리 바이너리 누구도 NEEDED로 안 부르는 것들이라
+# copy_lib_deps가 아니라 그 목록이 싣는다 — 여기 적어야 빠졌을 때 pm 체인(설치에 몇 분)보다 먼저 드러난다.
+WANT+=(lib/x86_64-linux-gnu/libdl.so.2 lib/x86_64-linux-gnu/libanl.so.1 lib/x86_64-linux-gnu/libmvec.so.1
+       lib/x86_64-linux-gnu/libnsl.so.1 lib/x86_64-linux-gnu/libBrokenLocale.so.1)
 for entry in "${GUEST_TOOLS[@]}"; do
   WANT+=("${entry#*:}")
 done
@@ -239,7 +255,7 @@ for want in "${WANT[@]}"; do
       ;;
   esac
 done
-echo "the initrd carries the four bones and all ${#GUEST_TOOLS[@]} tools the list names"
+echo "the initrd carries the bones and all ${#GUEST_TOOLS[@]} tools the list names"
 
 # ── 검사 1b: initrd 꼬리에 무선 · 소리 firmware가 전부 있는가 (WL-M1 · AU-M3) ─
 #
@@ -394,11 +410,16 @@ echo "the shell resolved 'ls' through PATH"
 
 # ── 검사 4: /bin/sh 링크가 살아 있다 ────────────────────────────────────
 #
-# `ls -l /bin`이 한 줄로 둘을 증명한다 — ls가 플래그와 인자를 받아 돌고,
+# `ls -l /bin/sh`가 한 줄로 둘을 증명한다 — ls가 플래그와 인자를 받아 돌고,
 # 링크가 bash를 가리킨다. 링크가 끊겨 있어도 ls -l은 그 사실을 그대로
 # 보여주므로, 여기서 보는 것은 "무엇을 가리키는가"다.
-echo "=== typing 'ls -l /bin' ==="
-type_keys l s spc minus l spc slash b i n ret
+#
+# UT-M0부터 PM-M0 전까지는 `ls -l /bin`이었다 — /bin이 sh 하나만 사는 디렉터리라
+# 그 목록이 곧 `sh -> ../usr/bin/bash`였다. /bin이 usr/bin으로의 링크가 된 뒤로
+# `ls -l /bin`은 `/bin -> usr/bin` 한 줄이라 bash가 안 보인다. /bin/sh를 직접
+# 물으면 /bin 링크를 지나 usr/bin/sh의 `sh -> bash`가 나온다.
+echo "=== typing 'ls -l /bin/sh' ==="
+type_keys l s spc minus l spc slash b i n slash s h ret
 
 if ! wait_for_screen "bash"; then
   fail "/bin/sh does not point at bash" \

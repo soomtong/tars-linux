@@ -2,7 +2,7 @@
 
 접두사: PM
 
-Status: 승인(2026-11-03) — 진행 중. 다음은 PM-M0 plan.
+Status: 진행 중 — M0 끝남(2026-11-03, 공식 install.sh가 TARS에서 끝까지 가고 brew config가 portable-ruby로 답한다). 다음은 PM-M1 plan.
 
 관련 문서: `2026-11-02-tars-home-partition-design.md`(HP. `/home` ext4 · uid 1000 사용자 · Debian `sudo`, 비목표 1이 이 설계로
 넘긴 자리) · `docs/decisions/project_home_partition.md` · `docs/guides/carryover.md`의 이미지 뷰어 항목(기본 이미지에 뷰어를
@@ -95,6 +95,11 @@ Homebrew의 formula와 스크립트는 Debian 계열을 기준으로 `/bin/…`�
 
 목록 밖에서 새로 막히는 자리가 나오면 같은 기준으로 판정해 이 결정에 덧붙인다.
 
+M0가 덧붙인 것(체인 셋째 · 다섯째 판): `flock`(brew가 `vendor-install ruby`의 잠금을 ruby · flock · python 중 하나로 건다),
+`sha256sum`(portable-ruby의 checksum을 shasum · sha256sum · ruby 중 하나로 본다), `locale`(brew의 `setup-locale`이 `locale
+charmap`을 본다). 셋 다 sysroot에 이미 있었고 새 라이브러리는 0이다. `file`은 M0의 경로(`install.sh` · `brew update` ·
+`brew config`)가 한 번도 부르지 않아 넣지 않았다(실측 7) — M1의 bottle 경로가 다시 본다.
+
 ### 결정 4 — 컴파일러는 넣지 않는다. bottle만 보증한다
 
 gcc · `build-essential`은 수백 MB이고, 빌드는 RAM 위 initrd가 감당할 몫이 아니다. bottle이 없는 formula나 `--build-from-source`는
@@ -121,7 +126,42 @@ PATH에 prefix가 이미 있으면 건너뛰는 것으로 안다 — 해가 없�
   `curl -fsS -o /dev/null https://github.com`과 `https://ghcr.io`를 한 번 친다. 실패하면 `pm: external network unavailable`로
   빨개진다(초록으로 건너뛰지 않는다 — 사용자가 고른 것이 "끝까지"다).
 - `CHAINS`에 넣는다. 루트 게이트가 바깥에 기대게 되는 것은 위험 1이다.
-- 포트가 필요하면 45499부터(RP-M0 예약 범위).
+- 포트가 필요하면 45499부터(RP-M0 예약 범위). M0의 체인은 포트를 안 쓴다.
+
+M0가 이 결정에 더한 것:
+
+- 사용자는 화면 셸이 아니라 시리얼 root 셸에서 `setpriv`로 된다(HP 체인과 같은 모양). sudo는 `sudo -k`와 `sudo -S -v` 두 번으로
+  친다 — 한 번에 `sudo -S -k -v`로 치면 비밀번호는 묻되 timestamp를 남기지 않아(sudo(8)), `install.sh`의 `sudo -n -l mkdir`이
+  실패하고 `Insufficient permissions to install Homebrew`로 멈춘다(첫 판).
+- 이 체인만 `-cpu max`다. TCG의 기본 모델 qemu64에는 SSSE3가 없고 Homebrew는 x86_64 Linux에서 SSSE3를 요구한다(둘째 판,
+  `Homebrew's x86_64 support on Linux requires a CPU with SSSE3 support!`). 실기의 x86-64는 Core 2(2006) 이후 전부 갖고 있다.
+- 이 체인만 `-m 1024`다. 512MB에서 `brew update`의 ruby가 OOM으로 죽었다(여섯째 판, 실측 4).
+
+### 결정 7 — glibc는 통째로 싣는다(M0)
+
+initrd의 라이브러리는 지금까지 "우리가 싣는 바이너리가 `NEEDED`로 부르는 것"뿐이었다. Homebrew의 bottle과 portable-ruby는
+보통의 glibc 시스템에서 빌드돼 glibc 전체를 가정한다 — portable-ruby 4.0.9가 `libdl.so.2: cannot open shared object file`로
+멈췄다(넷째 판). libdl은 2.34부터 `libc.so.6`에 합쳐진 빈 stub이라 우리 바이너리는 아무도 안 불렀다. 하나씩 쫓지 않고
+libc6가 담는 것 가운데 프로그램이 `NEEDED`로 부를 수 있는 열하나(`make_initrd.sh`의 `GLIBC_LIBS`)를 싣는다. 새로 든 것은
+libdl · libanl · libBrokenLocale · libnsl · libmvec 다섯이고 나머지는 이미 있었다. 디버거 · `LD_PRELOAD`용
+(libc_malloc_debug · libthread_db · libmemusage · libpcprofile)은 뺀다.
+
+### 결정 8 — `/etc/os-release`(M0, 사용자 2026-11-03)
+
+brew의 `os.sh`가 `source /etc/os-release`로 `PRETTY_NAME`을 읽는다. 없으면 brew를 칠 때마다 경고가 두 줄이고 OS 이름이 커널
+버전이 된다. `NAME="TARS"` · `ID=tars` · `VERSION_ID` · `PRETTY_NAME` 넷을 `make_initrd.sh`가 `../VERSION`(init과 같은 자리)에서
+짓는다. `ID_LIKE=debian`은 안 적는다 — 유저랜드가 `.deb`에서 왔어도 apt도 dpkg 데이터베이스도 없어서, 그 말을 믿고 apt를
+부르는 스크립트에게 거짓말이 된다.
+
+### 결정 9 — `LANG=C.UTF-8`은 init의 환경이 준다(M0, 사용자 2026-11-03)
+
+brew가 칠 때마다 `setlocale: LC_CTYPE: cannot change locale (en_US.UTF-8)`을 냈다. 원인은 brew가 아니라 TARS였다. 로케일
+변수가 하나도 없는 환경에서 뜬 fish는 스스로 `LC_CTYPE=en_US.UTF-8`을 export하는데 게스트에는 그 데이터가 없다 — 그래서
+시리얼 콘솔 셸 · ssh 세션 · 서비스에서 띄운 모든 프로그램이 ASCII(`ANSI_X3.4-1968`)로 떨어지고 있었다. 화면 셸만
+terminal의 `setenv("LANG", "C.UTF-8")` 덕에 멀쩡했다(HI-M1). `LC_CTYPE`가 `LANG`보다 앞서므로 게이트가 `LANG`을 줘도 안
+고쳐졌다(다섯째 판, amd64 chroot에서 재현). `init/src/environ.zig`에 `LANG_ENTRY`를 두어 PATH · XDG · TZ 뒤에 붙이고, ssh
+세션의 env 목록(SV-M2 결정 9)에도 같은 값이 간다. 그 파일의 머리 주석이 이미 "LANG은 갈릴 이유가 없는데 terminal에 있다"고
+적어 둔 자리다. terminal의 setenv는 같은 값을 다시 쓸 뿐이라 남긴다.
 
 ## 위험
 
@@ -174,3 +214,61 @@ carryover의 HP 절에 남은 것이다. Homebrew가 hostname으로 무엇을 �
   `brew doctor`의 출력을 기록한다.
 
 M1의 plan은 M0의 실측을 본 뒤에 쓴다.
+
+## 실측 (M0, 2026-11-03)
+
+`install.sh` sha256 `5f333bbe…08ccb148`(1,243줄), 설치된 brew는 `Homebrew 7.0.12`, portable-ruby 4.0.9. 값은 체인 일곱째 판(첫
+초록)의 것이다.
+
+### 실측 1 — initrd는 2,157,333바이트 → 결정 7 뒤 약 3.3MB 커진다(결정 3 · 7, 위험 3)
+
+usrmerge와 층 19의 첫 일곱(`chgrp` · `install` · `mktemp` · `ldd` · `tar` · `gzip` · `git-remote-http`)만 넣었을 때 gzip initrd
+119,534,779 → 121,692,112(+1.8%), 첫 archive를 푼 크기 271,351,808 → 275,906,048. 새 라이브러리는 셋 — `libcurl-gnutls.so.4`
+963,560 · `libngtcp2.so.16` 301,592 · `libngtcp2_crypto_gnutls.so.8` 43,608. gnutls 사슬(gnutls · nettle · hogweed · gmp ·
+p11-kit · tasn1)은 curl → librtmp가 이미 데려와 있었다. 가장 큰 한 파일은 `git-remote-http` 자체(2,399,952)다. 그 뒤
+`flock` 35,288 · `sha256sum` 55,752 · `locale` 46,656 · `os-release` 한 장, 결정 7의 다섯(libmvec 1,018,072가 대부분, 합 약
+1.16MB)이 더해졌다. 위험 3이 걱정한 "수십 MB"는 아니다.
+
+### 실측 2 — `install.sh`는 TCG 1GiB에서 140초다(위험 2)
+
+`git fetch`(Homebrew/brew 전체 이력) · `brew update` · portable-ruby 받기와 풀기까지 포함한 값이다. 512MB였던 여섯째 판은 커널
+시각 1525초에 OOM으로 끝났다 — 메모리가 모자라면 페이지 캐시를 계속 내쫓아 10배 넘게 느려진다.
+
+### 실측 3 — `brew config` 첫 실행 10초(위험 2)
+
+portable-ruby는 `install.sh`의 `brew update`가 이미 받아 두므로 이 값은 ruby를 띄우는 시간이다.
+
+### 실측 4 — 512MB에서 OOM, 1GiB에서 최소 MemAvailable 496,632kB(위험 4)
+
+512MB OOM 순간: ruby anon-rss 151,664kB, `unevictable` 278,368kB(RAM에 풀린 initrd). initrd가 상주하는 TARS에서 brew를 쓰려면
+initrd 약 280MB + brew의 ruby 약 150MB + 나머지가 든다. 1GiB에서는 OOM 0, 최소 여유 약 485MB.
+
+### 실측 5 — Homebrew 하나가 `/home`에서 약 270MB(디스크)
+
+`/home/linuxbrew/.linuxbrew` 222,332kB, `~/.cache/Homebrew` 52,256kB, `/home` 사용 276,472kB / 7,125,020kB(5%). 최소
+디스크(4GiB)의 `/home` 약 3GiB에 넉넉히 들어간다 — M1에서 체인의 디스크를 줄여도 된다.
+
+### 실측 6 — hostname `(none)`은 brew를 막지 않는다(위험 5)
+
+`(none)`이 나온 27줄은 셸 프롬프트(`root@(none)`)다. brew의 말에는 없었다.
+
+### 실측 7 — `file`은 M0의 경로가 부르지 않는다(결정 3)
+
+`file: command not found`류의 줄 0. M1의 bottle 경로가 다시 본다.
+
+### 실측 8 — 체인 199초, 루트 게이트 26/26 12분 48초(위험 2)
+
+루트 게이트에서 PM-M0은 199초로 TD-M2와 같이 가장 길다. lanes 446초 · prebuild 320초(init과 initrd가 바뀌었다), cut log
+lines 전부 0. 체인 하나가 1GiB QEMU라 JOBS 계산(줄 하나 1GiB)에 들어간다. `brew config`의 줄은 `OS: TARS 0.1.3` · `Host glibc:
+2.41` · `Homebrew Ruby: 4.0.9 => …/vendor/portable-ruby/4.0.9/bin/ruby` · `gcc: N/A`(결정 4) · `CPU: single-core 64-bit amd_k7`
+(TCG가 흉내 내는 이름)이다.
+
+### M0의 판들이 가르친 것
+
+1. `sudo -S -k -v`는 timestamp를 남기지 않는다 — `-k`를 다른 옵션과 함께 쓰면 캐시를 무시하고 갱신도 안 한다. HP-M2의 함정을
+   피하려면 `sudo -k`를 먼저 혼자 친다.
+2. QEMU TCG의 기본 CPU(qemu64)는 SSSE3가 없다. 바깥에서 받은 x86_64 바이너리를 돌리는 체인은 `-cpu max`가 필요할 수 있다.
+3. initrd의 라이브러리 고르기(`copy_lib_deps`)는 "우리가 싣는 것"만 본다. 바깥 바이너리는 glibc 전체를 가정한다(결정 7).
+4. fish는 로케일 변수가 없으면 `LC_CTYPE=en_US.UTF-8`을 스스로 export한다. 이 값이 LANG보다 앞서서 아래 프로세스 모두의 로케일을
+   깨뜨렸다(결정 9). amd64 컨테이너(OrbStack Rosetta)에 initrd 트리를 풀고 `chroot`하면 QEMU 없이 몇 초에 재현된다.
+5. 게이트의 진입 검사가 둘을 잡았다 — `| grep -q`(SIGPIPE와 pipefail), NIC를 `"$@"`로만 넘긴 QEMU 호출(검사기가 못 본다).
