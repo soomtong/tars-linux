@@ -2,7 +2,7 @@
 
 접두사: IK
 
-Status: 착수(2026-11-03). IK-M0의 plan을 쓴다.
+Status: 끝남(2026-11-03). IK-M0 — 루트 게이트 `RUNS=3` 27/27 × 3, 키보드 없는 부팅이 3.33초 빨라졌다(실측 1).
 
 관련 문서: `2026-11-02-tars-keyboard-hotplug-design.md`(KH. terminal이 키보드를 스스로 찾고 꽂고 빼는 것을 따라간다 — 비목표 2가
 이 설계로 넘긴 자리) · `2026-08-20-tars-hardware-discovery-design.md`(HD. init의 키보드 탐색과 argv의 장치 칸이 생긴 곳) ·
@@ -142,3 +142,32 @@ milestone은 하나다. 걷는 일이라 나눌 단계가 없다.
 
 A의 3.4초 가운데 3.0초가 기다림이다. B는 세 번 모두 init의 첫 훑기에서 찾았다 — 이 기계에서 USB 키보드는 PID 1보다 먼저 잡힌다
 (위험 1이 게이트에서 드물 것이라는 근거). 커널의 `Run /init`은 두 부팅 모두 4.0초 언저리.
+
+### 실측 1 — 바꾼 뒤, 같은 측정(Task 4)
+
+IK-M0의 작업 트리(커밋 전), 같은 스크립트 · 같은 기계.
+
+| 부팅 | 세 번 | init의 키보드 줄 | terminal |
+|---|---|---|---|
+| A 키보드 없음 | 0.05 · 0.06 · 0.06초 | 없음 | `keyboard> none` |
+| B USB 키보드 | 0.06 · 0.05 · 0.06초 | 없음 | `keyboard> open` |
+
+키보드 없는 부팅이 약 3.33초 줄었다 — 기다림 3.0초에 sysfs 훑기 120번(25ms 간격의 잠과 훑기)을 더한 것이다. B는 그대로다. 예전에도
+첫 훑기에서 찾아 기다림이 없었으므로, 지운 코드가 키보드 있는 부팅에 주던 비용은 훑기 한 번(측정 해상도 0.05초 아래)뿐이었다.
+커널의 `Run /init`은 3.96~4.12초로 실측 0과 같다 — 줄어든 것은 PID 1 안의 시간이다.
+
+### 실측 2 — 체인 넷(Task 4)
+
+한 번씩, 컨테이너에서: device 159초 · terminal 162초 · machine 150초 · keyboard 169초, 넷 다 초록. machine의 판정 6은
+`terminal: keyboard> open /dev/input/event1 name=QEMU QEMU USB Keyboard`(event0은 전원 버튼)로 섰고, 그 뒤의 타이핑까지 갔다 —
+terminal이 init보다 먼저 떠도 fish 배너를 기다리는 동안 USB 키보드는 이미 열려 있었다(위험 1이 이 회차에는 안 나왔다).
+
+컴파일러가 plan에 없던 `ARGC` 길이 배열 리터럴 둘을 짚었다 — `main.zig`의 서비스 하나의 argv(`placeService` 근처)와 콘솔 셸의
+argv. plan 확인의 "서비스 argv 상수 다섯"은 이름 붙은 상수만 센 것이었다.
+
+### 실측 3 — 루트 게이트 `RUNS=3`(Task 5, 위험 1)
+
+27 체인 × 3 = 81번 전부 초록, cut log lines 전부 0. prebuild 355초 + lanes 1821초(약 36분). 판정을 바꾼 넷(`HD-M2` device ·
+`CM-M2` terminal · `RM-M1` machine · `KH-M2` keyboard)도 3/3. 위험 1(terminal이 키보드보다 먼저 떠 프롬프트 직후 친 글자를 잃는다)은
+81번 중 한 번도 안 나왔다 — 실측 0의 B대로 QEMU의 USB 키보드는 PID 1보다 먼저 열거되므로, 체인을 `keyboard> open` 대기로 고칠
+일이 없었다. 로그는 `out/gate-logs/20261103-141238`.

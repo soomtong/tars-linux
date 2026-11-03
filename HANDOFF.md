@@ -1,73 +1,28 @@
-# HANDOFF: Init Keyboard(IK) 진행 중 — design · plan 커밋됨, 다음은 IK-M0 Task 1(init 지우기)
+# HANDOFF: Init Keyboard(IK-M0) 끝남 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 목표
 
-KH(Keyboard Hotplug) 뒤로 아무도 안 쓰는 PID 1의 키보드 고르기 · 3초 기다림과 terminal argv의 `device_path` 칸을 걷는다. 키보드
-없는 부팅이 약 3초 빨라지고 "입력 장치는 terminal이 고른다"가 코드에 그대로 남는다. 접두사 `IK`, milestone은 IK-M0 하나.
-design `docs/specs/2026-11-03-tars-init-keyboard-design.md`, plan `docs/plans/2026-11-03-tars-init-keyboard-ik-m0.md`.
-
-사용자가 정한 것(2026-11-03): (1) argv의 `Slot.device` 칸은 빼고 `ARGC` 10→9(자리표 글자 안 씀 — argv는 첫 null에서 끝나 null로
-비울 수 없다). (2) 체인 넷의 판정은 terminal의 `keyboard> open /dev/input/eventN name=…`으로 옮기고, init 키보드 줄의 부재를 음성
-검사로 더한다.
+IK는 닫혔다(코드 · 체인 · 게이트 · 문서 · 커밋 · 소개 페이지). 다음은 아래 "다음 후보"에서 사용자가 고른다.
 
 ## 현재 브랜치
 
-`main` — origin보다 앞서 있다(push 안 함, 사용자가 push를 시킨 적 없음). `gh-pages`는 MI까지 push됨(`e4331c3`).
-
-## 완료된 작업
-
-- [x] 범위 조사 — 걷을 것 · 남길 것 · 판정 줄을 보는 체인 넷(design 확인 1~4)
-- [x] design · plan 작성, 사용자 결정 둘
-- [x] Task 0 — 바꾸기 전 측정. 키보드 없음 `Run /init` → `started terminal` 3.39 · 3.40 · 3.37초, USB 키보드 0.06 · 0.00 · 0.06초
-  (design "실측 0")
-
-## 시도했으나 실패한 접근
-
-- 결정 4의 첫 안 "체인에 terminal 시작 시각 측정 줄(`/proc/<pid>/stat` 22번째 칸)": `device` · `keyboard` 체인은 `-serial file:`이라
-  콘솔에 명령을 못 넣고 init 줄에는 시각이 없다. 그래서 일회용 측정(`.ik-measure.sh`, 호스트가 로그를 0.05초마다 관찰)으로 바꿨다.
-- argv 칸을 null로 "비워 두기": execve의 argv는 첫 null에서 끝나 뒤 칸(자판 · 클립보드 · 사용자)이 잘린다 — 그래서 빼기다.
-
-## 남은 작업 (plan의 Task 번호)
-
-- [ ] Task 1 init: `init/src/devices.zig:214-329`(findKeyboard ~ resolveKeyboardWaiting, KEYBOARD_WAIT_MS · POLL_MS · sleepMillis)
-  지우기. `looksLikeKeyboard`(:115) · `bitSet` · `Path`(:147) · `devicePath`(:167) · `readAttr` · `findPowerButtons` ·
-  `openPowerButtons`(:381)는 남긴다(전원 버튼이 쓴다). `:409` 주석 고쳐 쓰기. `init/src/main.zig:1185`(keyboard_path) · `:1161`(필드
-  나열 주석) · `:1333`(호출) · `:1509`(`.device_path`) · `:462-471`(Child.argv 칸 이력) · `:698-700`(reload 주석).
-  `init/src/devices_test.zig:195-290`의 키보드 탐색 검사들. 주석 인용: `init/src/storage.zig:178` · `:311`, `environ.zig:90`,
-  `services.zig:60`.
-- [ ] Task 2 계약: `shared/screen_args.zig:225-380`(Slot.device 삭제 · 번호 당김 · `ARGC = 9` · `Args.device_path` ·
-  `default_device_path` · encode/decode 한 줄씩 · 주석), `shared/screen_args_test.zig:130 · 141 · 171 · 184 · 195 · 230`.
-  null 하나씩 줄일 상수: `init/src/clock.zig:86` · `net.zig:125` · `wifi.zig:26` · `bluetooth.zig:18-19`.
-  `terminal/src/main.zig:3519` readArgs 주석.
-- [ ] Task 3 체인: `device/check.sh:89`(진입 목록) · `:146-152`, `terminal/check.sh:313-333`, `machine/check.sh:258-265`
-  (`name=…USB Keyboard`), `keyboard/check.sh:268-277`(`no keyboard found`가 이제 없어야 한다), `docs/guides/lessons.md:278`.
-- [ ] Task 4 검사: `make quick` → 컨테이너 `zig build test`(init · terminal) → 체인 넷 하나씩 → `.ik-measure.sh` 다시(A · B 각 3) →
-  design 실측에 적고 `.ik-measure.sh` 지우기.
-- [ ] Task 5 루트 게이트 `RUNS=3`(약 45분, 돌리기 전에 사용자에게 알린다). 빨개지면 "키보드가 열리기 전에 친 글자"인지 본다(위험 1).
-- [ ] Task 6 문서 · 닫는 묶음: design 실측 · Status, `carryover.md` KH 절 첫 항목 `[x]`, `completed.md` 한 행,
-  `docs/decisions/project_init_keyboard.md` + `MEMORY.md` 한 줄, 이 HANDOFF, 소개 페이지(`../tars-linux-pages`의 `data.js`, 순서는
-  `site/README.md` — gh-pages push는 사용자에게 묻는다). 커밋은 사용자 승인 뒤.
-
-## 핵심 파일
-
-- `docs/plans/2026-11-03-tars-init-keyboard-ik-m0.md` — 할 일의 정본
-- `docs/specs/2026-11-03-tars-init-keyboard-design.md` — 결정 1~4 · 위험 · 실측 0
-- `shared/screen_args.zig:219-250` — Slot · ARGC. `Args`에 기본값이 없어 init이 필드를 남기면 컴파일이 막힌다(지우기를 컴파일러가 따라온다)
-- `.ik-measure.sh`(저장소 뿌리, 추적 안 함) — 결정 4 측정. 실행:
-  `docker run --rm -v "$PWD":/workspace -w /workspace tars-devcontainer bash -c 'bash .ik-measure.sh A 3; bash .ik-measure.sh B 3'`
-  (이미 빌드된 bzImage · initrd.cpio를 쓴다 — 바꾼 뒤엔 체인 하나를 먼저 돌려 빌드를 새로 한다). `git add`에 섞이지 않게 조심.
+`main` — origin보다 앞서 있다(push 안 함, 사용자가 push를 시킨 적 없음). `gh-pages`는 IK까지 push됨(`a7d4845`).
 
 ## 다음 에이전트에게
 
-plan을 읽고 Task 1부터. 이 저장소의 규칙(CLAUDE.md): 큰 편집은 무엇이 어떤 모양으로 들어가는지 먼저 설명, 매 편집 뒤
-`git diff --stat`과 `git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명, 커밋은 사용자 승인 뒤.
+이 저장소의 규칙(CLAUDE.md): 큰 편집은 무엇이 어떤 모양으로 들어가는지 먼저 설명, 매 편집 뒤 `git diff --stat`과
+`git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명, 커밋은 사용자 승인 뒤.
 init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서. 체인 하나 돌리기:
 `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./device/check.sh`.
-IK가 끝난 뒤의 다음 일은 정해져 있지 않다 — 아래 "다음 후보"에서 사용자가 고른다.
 
 ## 지금 상태 (2026-11-03)
 
-- 마지막으로 닫은 것은 Mise(MI-M0~M1, `docs/specs/2026-11-03-tars-mise-design.md`, 기억은 `docs/decisions/project_mise.md`).
+- 마지막으로 닫은 것은 Init Keyboard(IK-M0, `docs/specs/2026-11-03-tars-init-keyboard-design.md`, 기억은
+  `docs/decisions/project_init_keyboard.md`). KH 뒤로 아무도 안 쓰던 PID 1의 키보드 고르기 · 3초 기다림 · terminal argv의
+  장치 칸을 걷었다. 사용자가 정했다: `Slot.device`를 빼고 `ARGC` 9, 체인 넷은 terminal의 `keyboard> open`과 init 줄의 부재로 판정.
+  - 섰다: 키보드 없는 부팅의 `Run /init` → `started terminal` 3.39초 → 0.06초. 루트 게이트 `RUNS=3` 81/81.
+  - init의 `devices.zig`에 남은 것은 전원 버튼의 길뿐이다(`looksLikeKeyboard`는 그 판정이 쓴다).
+- 그 전에 닫은 것은 Mise(MI-M0~M1, `docs/specs/2026-11-03-tars-mise-design.md`, 기억은 `docs/decisions/project_mise.md`).
   사용자가 정했다: initrd에 안 싣는다, 설치 길은 공식 `mise.run`만, 게이트 런타임은 `node@lts`, activate는 시스템 rc.
   - 섰다: `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지에 도구 하나 안 더하고 돈다(gpg 검증은 mise 안에서).
     시스템 rc 셋이 `~/.local/bin/mise`가 있을 때만 `mise activate <셸>`을 불러, 재부팅 뒤 망 없이 화면 셸에서 `node`가 이름으로
@@ -99,10 +54,11 @@ IK가 끝난 뒤의 다음 일은 정해져 있지 않다 — 아래 "다음 후
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI. 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Init Keyboard(IK-M0, 11-03) — `docs/decisions/project_init_keyboard.md`
   - Mise(MI-M0~M1, 11-03) — `docs/decisions/project_mise.md`
   - Package Manager(PM-M0~M1, 11-03) — `docs/decisions/project_package_manager.md`
   - Home Partition(HP-M0~M2, 11-03) — `docs/decisions/project_home_partition.md`
@@ -120,8 +76,8 @@ IK가 끝난 뒤의 다음 일은 정해져 있지 않다 — 아래 "다음 후
 - 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
   체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
   바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(MI-M1): 27/27, 15분 36초(prebuild 333초 — initrd가 바뀌었다 · lanes 601초), cut log lines 전부 0. PM 체인이
-  244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
+  마지막 루트 게이트(IK-M0, `RUNS=3`): 81/81, 약 36분(prebuild 355초 · lanes 1821초), cut log lines 전부 0. 1회 게이트의
+  마지막 값은 MI-M1의 15분 36초(prebuild 333 · lanes 601초). PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
   45500 — 새 체인은 45501부터.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
@@ -147,7 +103,7 @@ IK가 끝난 뒤의 다음 일은 정해져 있지 않다 — 아래 "다음 후
 
 - KH: BT 키보드를 페어링 · 연결한 뒤 곧바로 글자가 쳐지는지(`keyboard> open … name=…`), 노트북 내장 키보드와 함께 쓸 때 한/영 ·
   조합이 이어지는지. `keyboard> open`이 같은 `name=`으로 둘 뜨고 글자가 두 번 나오면 KH 위험 6이다. 부팅 때 키보드가 하나도 없는
-  기계(BT만)에서 3초 늦게 뜨는 것이 거슬리는지 — 거슬리면 KH 비목표 2.
+  기계(BT만)의 3초는 IK-M0이 걷었다 — 그런 기계에서 화면이 곧바로 뜨는지.
 - BT: `tars-config set bluetooth=on` · `tars-config reload` 뒤 `bluetoothctl list`에 내장 어댑터가 뜨는지(안 뜨면 `dmesg | grep -i
   bluetooth` — firmware 이름이 안 보이면 그 이름을 `guest_firmware.sh`에). BLE 마우스를 `scan on` · `pair` · `trust` · `connect`한 뒤
   화살표가 움직이는지 — 게이트가 못 보는 uhid → evdev → terminal의 길이다(BT design 위험 4). 재부팅 뒤 마우스가 스스로 다시 붙는지
@@ -182,7 +138,7 @@ IK가 끝난 뒤의 다음 일은 정해져 있지 않다 — 아래 "다음 후
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- KH가 남긴 것(`carryover.md`의 KH 절): 장치별 수정키 · 키보드마다 다른 `keyboard=`. init 정리는 IK로 진행 중(위).
+- KH가 남긴 것(`carryover.md`의 KH 절): 장치별 수정키 · 키보드마다 다른 `keyboard=`. init 정리는 IK-M0으로 닫았다.
 - 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.

@@ -57,7 +57,7 @@ fn failed(rc: usize) ?linux.E {
 
 /// 고른 서비스 하나. 경로와 로그 이름을 제 버퍼에 든다 — `List`가 `main()`의
 /// 스택에 살고 `supervise()`가 영영 반환하지 않으므로 여기서 꺼낸 포인터가
-/// argv로 가도 뜨지 않는다(`keyboard_path`와 같은 근거).
+/// argv로 가도 뜨지 않는다(`Boot`의 `tz_buf` · `user_arg`와 같은 근거).
 pub const Entry = struct {
     path_buf: [PATH_MAX]u8 = undefined,
     path_len: usize = 0,

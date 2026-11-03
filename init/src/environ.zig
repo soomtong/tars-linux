@@ -87,7 +87,7 @@ pub const MAX_ENTRIES: usize = 16;
 
 /// 부르는 쪽이 스택에 잡아 주는 자리. main()의 지역 변수여야 한다 —
 /// supervise()가 영영 반환하지 않으므로 프로세스 수명 내내 유효하다
-/// (main.zig의 keyboard_path·argv와 같은 근거다).
+/// (main.zig의 `Boot` 버퍼들 · argv와 같은 근거다).
 pub const Block = [MAX_ENTRIES:null]?[*:0]const u8;
 
 /// 커널이 준 블록을 buf에 복사하고 우리 것을 뒤에 붙인 뒤 buf를 돌려준다.

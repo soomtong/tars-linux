@@ -72,6 +72,7 @@ report_failure() {
   echo "--- markers ---"
   local marker
   for marker in \
+    "tars-init: keyboard device" \
     "tars-init: no keyboard found" \
     "terminal: screen>" \
     "terminal: keyboard> none" \
@@ -267,12 +268,16 @@ qmp '{"execute":"qmp_capabilities"}'
 
 # ── 판정 1: 키보드 없이 뜬다 ──────────────────────────────────────────
 #
-# init은 3초를 기다린 뒤 event0(전원 버튼)으로 떨어지고(KH-M0 실측 3), terminal은
-# 그 경로를 안 연다(결정 1 · 7). KH 전에는 여기서 `terminal: opened /dev/input/event0`이
-# 찍히고 전원 버튼이 키보드 자리에 있었다.
+# init은 키보드를 보지 않는다(IK-M0) — 그래서 init의 키보드 줄은 둘 다 없어야 한다.
+# KH-M0부터 IK 전까지는 init이 3초를 기다린 뒤 event0(전원 버튼)으로 떨어졌고
+# (KH-M0 실측 3, `no keyboard found`), terminal은 그 경로를 안 열었다(결정 1 · 7).
+# KH 전에는 여기서 `terminal: opened /dev/input/event0`이 찍히고 전원 버튼이 키보드
+# 자리에 있었다. "부팅 때 키보드가 없다"는 이제 아래 `keyboard> none`이 혼자 진다
+# (i8042가 켜져 있으면 terminal이 AT 키보드를 연다).
 echo "=== 1. no keyboard at boot ==="
-grep -aq "tars-init: no keyboard found" "$LOG" ||
-  report_failure "init found a keyboard — is i8042 still on?"
+if grep -aqE "tars-init: (keyboard device|no keyboard found)" "$LOG"; then
+  report_failure "init still looks for a keyboard (IK-M0 took that out)"
+fi
 grep -aq "terminal: keyboard> none" "$LOG" ||
   report_failure "terminal did not say keyboard> none with no keyboard in the machine"
 if grep -aq "terminal: opened" "$LOG"; then

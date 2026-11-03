@@ -127,7 +127,6 @@ pub fn main() !void {
             .shell_path = sa.default_shell_path,
             .shell_flag = sa.default_shell_flag,
             .keyboard = sa.default_keyboard,
-            .device_path = sa.default_device_path,
             .hangul = sa.default_hangul,
             .latin = sa.default_latin,
             .toggles = sa.default_toggles,
@@ -138,7 +137,6 @@ pub fn main() !void {
             .shell_path = "/usr/bin/zsh",
             .shell_flag = "none",
             .keyboard = .pc,
-            .device_path = "/dev/input/event3",
             .hangul = .dubeol,
             .latin = .dvorak,
             .toggles = .{ .shift_space = true },
@@ -148,7 +146,7 @@ pub fn main() !void {
         var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
         for ([_]sa.Args{ all_default, all_other }) |a| {
             const v = sa.encode(a, &tbuf);
-            // 0번은 terminal 자신이고, 열 칸이 전부 차 있다.
+            // 0번은 terminal 자신이고, 아홉 칸이 전부 차 있다.
             if (!std.mem.eql(u8, std.mem.span(v[0].?), sa.TERMINAL_PATH)) return error.ArgvZeroNotTerminal;
             for (v, 0..) |slot, i| {
                 if (slot == null) {
@@ -168,7 +166,6 @@ pub fn main() !void {
         const d = sa.decode(empty);
         if (!std.mem.eql(u8, std.mem.span(d.shell_path), std.mem.span(sa.default_shell_path)) or
             !std.mem.eql(u8, std.mem.span(d.shell_flag), std.mem.span(sa.default_shell_flag)) or
-            !std.mem.eql(u8, std.mem.span(d.device_path), std.mem.span(sa.default_device_path)) or
             d.keyboard != sa.default_keyboard or d.hangul != sa.default_hangul or d.latin != sa.default_latin or
             d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles) or
             !std.mem.eql(u8, std.mem.span(d.user), sa.NO_USER))
@@ -181,7 +178,6 @@ pub fn main() !void {
             .shell_path = "/usr/bin/zsh",
             .shell_flag = "none",
             .keyboard = .pc,
-            .device_path = "/dev/input/event3",
             .hangul = .dubeol,
             .latin = .dvorak,
             .toggles = .{ .lctrl_tap = true },
@@ -192,7 +188,7 @@ pub fn main() !void {
         const b = sa.decode(v);
         if (b.hangul != sa.default_hangul) return error.BogusEnumNotDefault;
         if (b.keyboard != .pc or b.latin != .dvorak or b.clipboard != .pane or !b.toggles.lctrl_tap or b.toggles.hangul_key or
-            !std.mem.eql(u8, std.mem.span(b.device_path), "/dev/input/event3"))
+            !std.mem.eql(u8, std.mem.span(b.user), "hpuser"))
         {
             std.debug.print("FAIL: a bogus hangul slot disturbed another field\n", .{});
             return error.BogusEnumSpread;
@@ -211,9 +207,9 @@ pub fn main() !void {
                 return error.ArgvOfOverfilled;
             }
         }
-        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "extra" };
+        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "extra" };
         const w = sa.argvOf(&long);
-        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "i")) return error.ArgvOfLastSlot;
+        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "h")) return error.ArgvOfLastSlot;
         // 빈 슬라이스(인자가 하나도 없다)는 전부 null이고 decode가 기본값을 준다.
         const none = sa.argvOf(&[_][*:0]const u8{});
         if (sa.decode(none).keyboard != sa.default_keyboard) return error.ArgvOfEmpty;
@@ -222,12 +218,11 @@ pub fn main() !void {
     std.debug.print("screen_args_test: all checks passed\n", .{});
 }
 
-/// `Args` 둘이 같은가. 포인터 넷은 글자로, 나머지는 값으로 본다.
+/// `Args` 둘이 같은가. 포인터 셋은 글자로, 나머지는 값으로 본다.
 fn expectArgsEql(got: sa.Args, want: sa.Args) !void {
     const strs = [_][2][*:0]const u8{
         .{ got.shell_path, want.shell_path },
         .{ got.shell_flag, want.shell_flag },
-        .{ got.device_path, want.device_path },
         .{ got.user, want.user },
     };
     for (strs) |pair| {

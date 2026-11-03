@@ -175,8 +175,8 @@ pub const Found = struct {
 /// "ext2가 아니다"를 tars-install의 목록이 가른다(DI-M1).
 ///
 /// 순수 함수인 것에 뜻이 있다 — 시스템 콜이 없으므로 호스트 검사가 규칙을
-/// 그대로 본다. devices.zig가 bitSet/looksLikeKeyboard(순수)와 findKeyboard
-/// (콜)를 가른 것과 같은 선이다.
+/// 그대로 본다. devices.zig가 bitSet/looksLikePowerButton(순수)과
+/// findPowerButtons(콜)를 가른 것과 같은 선이다.
 pub fn ext2Label(head: []const u8) ?[]const u8 {
     // 라벨의 끝이 매직보다 뒤라서 이 하나로 둘을 다 덮는다. 짧은 읽기(장치가
     // HEAD_BYTES보다 작은 경우)에서 죽지 않는 자리다.
@@ -308,7 +308,7 @@ fn sleepMillis(ms: u32) void {
 /// 뜨는 부팅이 생긴다(DC-M0 실측 1).
 ///
 /// 먼저 훑고 나서 잔다. 거꾸로면 모든 설치 부팅이 CONFIG_POLL_MS만큼 늦는다
-/// (devices.findKeyboardWaiting의 검사 7a와 같은 함정). 매번 목록 전체를 처음부터
+/// (IK-M0에 걷은 devices.findKeyboardWaiting이 검사 7a로 막던 함정). 매번 목록 전체를 처음부터
 /// 다시 훑으므로 "먼저 찾은 것이 이긴다"는 규칙이 그대로다.
 ///
 /// max_ms를 인자로 받는 것은 두 부르는 쪽 때문이다. 표지 없는 부팅은 0을 넘겨

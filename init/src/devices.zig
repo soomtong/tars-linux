@@ -112,6 +112,10 @@ pub fn bitSet(bitmap: []const u8, code: u16) bool {
 
 /// 이 장치가 "완전한 키보드"인가. 이름은 보지 않는다(design 결정 2) —
 /// 실제 기계에서 USB 키보드는 제조사마다 다른 이름을 달고 나온다.
+///
+/// IK-M0부터 이 함수를 부르는 것은 looksLikePowerButton뿐이다 — 키보드를
+/// 고르고 여는 일은 terminal이 한다(KH design 결정 1). PID 1에게 남은 쓰임은
+/// "이것은 키보드라서 전원 버튼 후보가 아니다"를 가르는 것이다.
 pub fn looksLikeKeyboard(ev: []const u8, key: []const u8) bool {
     if (!bitSet(ev, EV_KEY)) return false;
 
@@ -141,9 +145,9 @@ pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
 }
 
 /// 널 종료 경로를 담는 고정 버퍼. init에는 힙이 없으므로 호출자가 이 값을
-/// 스택에 두고 포인터만 argv로 넘긴다. main()의 스택은 supervise()가 영영
-/// 반환하지 않으므로 프로세스 수명 내내 살아 있다 — 지금 argv에 들어가는
-/// 문자열 리터럴과 수명이 같아진다.
+/// 스택에 둔다. 지금은 openPowerButtons가 open(2)에 넘길 경로를 잠깐 담을
+/// 때만 쓴다. IK-M0 전에는 키보드 경로가 이 값으로 terminal argv에 들어갔다
+/// (그래서 main()의 스택에 살며 수명이 프로세스와 같아야 했다).
 pub const Path = struct {
     buf: [MAX_PATH]u8 = @splat(0),
     len: usize = 0,
@@ -207,29 +211,10 @@ fn readAttr(sys_root: []const u8, n: u8, attr: []const u8, buf: []u8) ?[]const u
     return readFile(path[0..text.len :0].ptr, buf);
 }
 
-/// 키보드처럼 생긴 첫 evdev 번호. 없으면 null.
-///
-/// 번호가 작은 것부터 보므로 여럿이면 첫 번째를 쓴다(design 결정 4). 화면
-/// 하나에 셸 하나인 구조라 키보드가 여럿일 이유가 없다.
-pub fn findKeyboard(sys_root: []const u8) ?u8 {
-    var n: u8 = 0;
-    while (n < MAX_EVENT) : (n += 1) {
-        var ev_buf: [MAX_BITMAP]u8 = undefined;
-        const ev = readAttr(sys_root, n, "capabilities/ev", &ev_buf) orelse continue;
-
-        var key_buf: [MAX_BITMAP]u8 = undefined;
-        const key = readAttr(sys_root, n, "capabilities/key", &key_buf) orelse continue;
-
-        if (looksLikeKeyboard(ev, key)) return n;
-    }
-    return null;
-}
-
 /// 전원 버튼처럼 생긴 evdev 번호를 out에 채우고 그 개수를 돌려준다.
 ///
-/// 키보드와 달리 첫 번째 것만 쓰지 않고 전부 모은다(design 결정 4).
-/// 키보드가 여럿일 이유는 없지만 전원 버튼은 둘일 수 있고, 그중 어느 것이
-/// 실제로 우는지는 밖에서 알 수 없기 때문이다.
+/// 첫 번째 것만 쓰지 않고 전부 모은다(design 결정 4). 전원 버튼은 둘일 수
+/// 있고, 그중 어느 것이 실제로 우는지는 밖에서 알 수 없기 때문이다.
 pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
     var found: usize = 0;
     var n: u8 = 0;
@@ -245,86 +230,6 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
         found += 1;
     }
     return found;
-}
-
-/// 키보드가 나타나기를 기다리는 상한. USB 키보드는 비동기로 열거된다 —
-/// PID 1이 뜨는 시점에 아직 `/sys/class/input`에 없을 수 있고, 그러면 한 번만
-/// 훑는 탐색기는 "키보드가 없다"고 답한다.
-///
-/// RM-M3이 이것을 실측으로 잡았다. QEMU에서 USB 키보드가 0.88~0.93초에
-/// 열거되고 PID 1의 훑기가 그 언저리라, 회차에 따라 `init`이 전원 버튼을
-/// 키보드로 골랐다(`keyboard device /dev/input/event0 (Power Button)`).
-/// 게이트에서는 스무 번에 한 번쯤이지만 실기에서는 이쪽이 정상이다 —
-/// 허브를 거치거나 느린 키보드면 열거가 몇 초씩 걸린다.
-///
-/// 결정 6("못 찾아도 부팅을 막지 않는다")을 어기지 않는다. 기다림이
-/// 유한하고, 끝나면 예전과 똑같이 event0으로 떨어진다. 무한히 기다리는 것과
-/// 한정해서 기다리는 것은 다른 일이다.
-pub const KEYBOARD_WAIT_MS: isize = 3000;
-
-/// 다시 묻는 간격. 짧을수록 늦게 뜬 키보드를 빨리 잡지만 그만큼 sysfs를 더
-/// 훑는다. 25ms면 상한까지 120번이고, 한 번이 open 서른두 번이라 부팅에서
-/// 보이지 않는 비용이다.
-const KEYBOARD_POLL_MS: isize = 25;
-
-/// power.zig에도 같은 함수가 있다. `failed`와 같은 이유로 공용 모듈을 만들지
-/// 않는다 — 세 줄짜리 헬퍼다.
-fn sleepMillis(ms: isize) void {
-    const req = linux.timespec{
-        .sec = @divTrunc(ms, 1000),
-        .nsec = @rem(ms, 1000) * 1_000_000,
-    };
-    _ = linux.nanosleep(&req, null);
-}
-
-/// 키보드처럼 생긴 evdev 번호를 max_ms까지 기다리며 찾는다.
-///
-/// max_ms를 인자로 받는 것은 검사 때문이다. `devices_test`의 "키보드가
-/// 없으면 event0으로 떨어진다"는 검사가 기본값을 쓰면 3초를 잔다 — 호스트
-/// 검사가 초 단위로 도는 값을 잃는다.
-pub fn findKeyboardWaiting(sys_root: []const u8, max_ms: isize) ?u8 {
-    var waited: isize = 0;
-    while (true) {
-        if (findKeyboard(sys_root)) |n| {
-            // 기다린 적이 있을 때만 찍는다. 늘 찍으면 정상 부팅의 로그가
-            // 한 줄 늘고, 그 줄은 아무것도 안 가른다.
-            if (waited > 0) {
-                logline.print("tars-init: keyboard showed up after {d}ms\n", .{waited});
-            }
-            return n;
-        }
-        if (waited >= max_ms) return null;
-        sleepMillis(KEYBOARD_POLL_MS);
-        waited += KEYBOARD_POLL_MS;
-    }
-}
-
-/// 키보드 장치 경로를 정하고 로그로 남긴다. 못 찾아도 부팅을 막지 않는다
-/// (design 결정 6) — 탐색기의 버그가 기계를 못 켜게 만드는 것이 가장 나쁜
-/// 결말이다. 그때는 예전 상수와 같은 event0으로 떨어진다.
-pub fn resolveKeyboard(sys_root: []const u8, out: *Path) void {
-    resolveKeyboardWaiting(sys_root, out, KEYBOARD_WAIT_MS);
-}
-
-pub fn resolveKeyboardWaiting(sys_root: []const u8, out: *Path, max_ms: isize) void {
-    const n = findKeyboardWaiting(sys_root, max_ms) orelse blk: {
-        logline.print("tars-init: no keyboard found under {s} in {d}ms, falling back to event0\n", .{
-            sys_root, max_ms,
-        });
-        break :blk 0;
-    };
-
-    devicePath(n, out);
-
-    // 이름은 판정에 쓰지 않고 로그에만 쓴다. 사람이 로그를 읽을 때 "왜
-    // 이것을 골랐나"를 알 수 있어야 하기 때문이다.
-    var name_buf: [MAX_NAME]u8 = undefined;
-    const raw = readAttr(sys_root, n, "name", &name_buf) orelse "";
-    const name = std.mem.trim(u8, raw, " \t\r\n");
-
-    // terminal/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
-    // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
-    logline.print("tars-init: keyboard device {s} ({s})\n", .{ out.slice(), name });
 }
 
 /// 버튼 fd에 쌓인 것을 전부 읽어 비우고, 그 안에 전원 버튼 누름이
@@ -406,9 +311,9 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
         out[opened] = @intCast(rc);
         opened += 1;
 
-        // 이름은 판정에 쓰지 않고 로그에만 쓴다. resolveKeyboard와 같은
-        // 이유다 — 사람이 로그를 읽을 때 "왜 이것을 열었나"를 알 수 있어야
-        // 한다.
+        // 이름은 판정에 쓰지 않고 로그에만 쓴다. 판정은 성질로 하지만(design
+        // 결정 2), 사람이 로그를 읽을 때는 "왜 이것을 열었나"를 이름으로
+        // 알 수 있어야 한다.
         var name_buf: [MAX_NAME]u8 = undefined;
         const raw = readAttr(sys_root, candidates[i], "name", &name_buf) orelse "";
         const name = std.mem.trim(u8, raw, " \t\r\n");

@@ -87,6 +87,7 @@ init · 설정 · 전원
 - [Home Partition](docs/decisions/project_home_partition.md) — p3 ext4 `/home`, 설치 때 계정 하나, 화면 셸은 사용자, `/config` 쓰기는 sudo(HP-M0~M2, 2026-11-03)
 - [Package Manager](docs/decisions/project_package_manager.md) — Homebrew 공식 install.sh가 TARS에서 끝까지 가고 bottle이 선다, 시스템 rc의 shellenv, libstdc++ 이름(PM-M0~M1, 2026-11-03)
 - [Mise](docs/decisions/project_mise.md) — 공식 mise.run과 mise use -g node@lts가 이미지 변경 0으로 선다, 시스템 rc의 mise activate(MI-M0~M1, 2026-11-03)
+- [Init Keyboard](docs/decisions/project_init_keyboard.md) — PID 1의 키보드 고르기 · 3초 · argv 장치 칸을 걷었다, ARGC 9, 체인은 terminal의 keyboard> open으로(IK-M0, 2026-11-03)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)

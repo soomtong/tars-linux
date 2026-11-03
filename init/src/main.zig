@@ -464,7 +464,8 @@ const Child = struct {
     /// 쓸 수 있다. 힙이 없어서 길이를 컴파일 타임에 고정한다.
     /// IP-M2에서 셋에서 넷으로, HD-M0에서 넷에서 다섯으로, HI-M2에서
     /// 다섯에서 일곱으로, HI-M3에서 일곱에서 여덟으로, CB-M0에서 여덟에서
-    /// 아홉으로 늘었다. 길이와 칸의 뜻은 SA-M0부터 `shared/screen_args.zig`의
+    /// 아홉으로, HP-M1에서 아홉에서 열로 늘었다가 IK-M0에서 키보드 장치 칸이
+    /// 빠져 아홉이 됐다. 길이와 칸의 뜻은 SA-M0부터 `shared/screen_args.zig`의
     /// `ARGC` · `Slot`에 있고 terminal이 같은 것을 읽는다. 콘솔 셸은 1번 뒤를
     /// 전부 null로 둔다. 같은 타입을 쓰는 상수가 다섯 더 있다(`clock.CHRONYD_ARGV` ·
     /// `net.DHCPCD_ARGV` · `wifi.WIFI_ARGV` · `bluetooth.DBUS_ARGV` · `BLUETOOTHD_ARGV`) — `ARGC`를 올리면 함께 늘어난다.
@@ -695,9 +696,9 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     const new = live.cfg;
     const shell = resolveShell(new.shell);
     const term = &children[0];
-    // SA-M1. 떠 있는 argv를 되돌려 설정에서 온 필드만 바꾸고 다시 짓는다. `device_path`
-    // (키보드 장치 경로)는 설정이 아니라 안 건드린다 — `decode`가 꺼낸 값이 그대로 다시
-    // 들어간다. SA-M0까지는 "그 칸을 대입하지 않는다"는 부재로만 표현됐다.
+    // SA-M1. 떠 있는 argv를 되돌려 설정에서 온 필드만 바꾸고 다시 짓는다. `user`는 부팅 때
+    // 정해져 안 건드린다 — `decode`가 꺼낸 값이 그대로 다시 들어간다. IK-M0 전에는 키보드
+    // 장치 경로(`device_path`)도 같은 처지였다.
     //
     // `decode`가 전환 키 글자를 집합으로 읽은 뒤에 `encode`가 `live.toggle`에 새 글자를
     // 쓰므로, 옛 argv가 그 버퍼를 가리키고 있어도(두 번째 reload부터) 겹쳐 쓰는 문제가 없다.
@@ -767,7 +768,7 @@ fn placeService(children: []Child, live: *Live, i: usize, e: *const services.Ent
         .kind = .service,
         .label = s.label(),
         .path = s.path(),
-        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null, null },
+        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
     };
 }
 
@@ -1158,7 +1159,7 @@ fn supervise(
 ///
 /// 수명 규칙은 하나다 — 이 struct는 `main()`의 스택에 살고 `supervise()`가 영영 반환하지
 /// 않으므로 프로세스 수명 내내 유효하다. 자식의 argv와 env 블록이 이 안의 버퍼
-/// (`keyboard_path` · `tz_buf` · `env_buf` · `terminal_toggle_buf` · `service_list` · `live` ·
+/// (`tz_buf` · `env_buf` · `terminal_toggle_buf` · `service_list` · `live` ·
 /// `children`)를 가리키고, 자식은 fork 뒤 execve로 그 포인터를 읽는다. MS 전에는 이 문장이
 /// 버퍼마다 한 번씩 여섯 자리에 있었다.
 ///
@@ -1181,8 +1182,6 @@ const Boot = struct {
     user_arg: [*:0]const u8 = screen_args.NO_USER.ptr,
 
     // ── 장치(`probeDevices`) ───────────────────────────────────────────
-    /// sysfs를 붙인 뒤여야 한다. terminal의 argv 4번 칸이 이 안을 가리킨다.
-    keyboard_path: devices.Path = .{},
     /// 전원 버튼은 PID 1이 직접 연다(design 결정 7). terminal이 읽는 안은
     /// 물렸다 — 자식이 전부 포기 상태여도 버튼은 살아 있어야 하고, 하필 다
     /// 망가졌을 때 눌러야 하는 것이 전원 버튼이기 때문이다. BF 체인처럼
@@ -1206,7 +1205,7 @@ const Boot = struct {
     kernel_env: [*:null]const ?[*:0]const u8 = undefined,
 
     // ── 자식(`placeChildren`) ──────────────────────────────────────────
-    /// 전환 키의 글자 — `screen_args.encode`가 여기에 쓰고 terminal argv의 7번 칸이 이것을
+    /// 전환 키의 글자 — `screen_args.encode`가 여기에 쓰고 terminal argv의 6번 칸이 이것을
     /// 가리킨다. `reload terminal`이 다시 지은 것은 `Live.toggle`에 있다(TC-M3).
     terminal_toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined,
     /// `/config/services.d`의 목록. 서비스 칸의 argv가 이 안의 경로를 가리킨다.
@@ -1330,7 +1329,6 @@ const Boot = struct {
 
     fn probeDevices(self: *Boot) void {
         logDrmDevicePresence();
-        devices.resolveKeyboard(devices.SYS_INPUT, &self.keyboard_path);
         self.button_count = devices.openPowerButtons(devices.SYS_INPUT, &self.button_fds);
     }
 
@@ -1499,14 +1497,13 @@ const Boot = struct {
         // 화이트리스트다(HI design 결정 7 · CB-M0). 런타임 전환이 없으므로 여기서 한 번
         // 정해진다.
         //
-        // SA-M1. 아홉 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
+        // SA-M1. 여덟 칸을 `screen_args.encode`가 짓는다 — 값을 그대로 주고 글자는 그 안에서
         // 생긴다. 필드 하나를 빠뜨리면 컴파일이 막힌다(`Args`에 기본값이 없다). 0번 칸의
         // `/terminal`도 `encode`가 넣는다(`TERMINAL_PATH`).
         const term_argv = screen_args.encode(.{
             .shell_path = self.shell_path.ptr,
             .shell_flag = shell_flag.ptr,
             .keyboard = self.cfg.keyboard,
-            .device_path = self.keyboard_path.cstr(),
             .hangul = self.cfg.hangul_layout,
             .latin = self.cfg.latin_layout,
             .toggles = self.cfg.screenToggles(),
@@ -1554,7 +1551,7 @@ const Boot = struct {
             // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
             // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
             // 설정을 따른다(결정 4).
-            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null, null },
+            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null },
             .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
         };
         // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·

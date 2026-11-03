@@ -319,19 +319,23 @@ echo "init mounted all four filesystems"
 # event1로 밀렸는데도 아래 화면 검사들이 통과한다. 아래 HD-M1 검사가 그
 # 전제가 사라지지 않게 붙박는다.
 #
+# 그 증명을 지금은 terminal의 줄이 진다. KH부터 키보드를 고르고 여는 것은
+# terminal이고(KH design 결정 1), IK-M0이 init의 탐색기를 걷었다 — init의 키보드
+# 줄은 이제 없어야 한다. terminal 줄은 커널 printk에 잘릴 수 있어 `tlog`를 거친다.
+#
 # 장치 이름은 요구하지 않는다. 실 하드웨어에서 달라지는 것이 정상이고,
 # 판정에도 쓰지 않는 값이다(design 결정 2).
-if ! grep -q "tars-init: keyboard device /dev/input/event" "$LOG"; then
-  echo "FAIL: init did not discover a keyboard device"
-  grep 'tars-init:' "$LOG" | tail -n 20
+if ! tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* name=" >/dev/null; then
+  echo "FAIL: terminal did not open a keyboard device"
+  tlog | grep -a 'terminal: keyboard>' | tail -n 20 || true
   exit 1
 fi
-if grep -q "tars-init: no keyboard found" "$LOG"; then
-  echo "FAIL: init fell back to event0 instead of discovering a keyboard"
-  grep 'tars-init:' "$LOG" | tail -n 20
+if grep -aqE "tars-init: (keyboard device|no keyboard found)" "$LOG"; then
+  echo "FAIL: init still looks for a keyboard (IK-M0 took that out)"
+  grep -a 'tars-init:' "$LOG" | tail -n 20
   exit 1
 fi
-echo "init discovered the keyboard by capability"
+echo "terminal discovered the keyboard by capability"
 
 # HD-M1: ACPI가 입력 장치를 하나 더 등록했는가.
 #

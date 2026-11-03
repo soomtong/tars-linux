@@ -86,7 +86,7 @@ report_failure() {
   local marker
   for marker in \
     "ACPI: button: Power Button" \
-    "tars-init: keyboard device /dev/input/event" \
+    "terminal: keyboard> open /dev/input/event" \
     "tars-init: power button /dev/input/event" \
     "tars-init: watching 1 power button" \
     "terminal: screen>" \
@@ -144,11 +144,13 @@ grep -q "ACPI: button: Power Button" "$LOG" \
   || report_failure "the kernel did not register an ACPI power button"
 
 # 키보드는 여전히 성질로 찾아야 한다. 번호를 요구하지 않는 이유는 탐색기를
-# 만든 이유와 같다(design 결정 2).
-grep -q "tars-init: keyboard device /dev/input/event" "$LOG" \
-  || report_failure "init did not discover a keyboard device"
-if grep -q "tars-init: no keyboard found" "$LOG"; then
-  report_failure "init fell back to event0 instead of discovering a keyboard"
+# 만든 이유와 같다(design 결정 2). IK-M0부터 키보드를 고르는 것은 terminal이고
+# (KH design 결정 1), init은 키보드를 보지 않으므로 init의 키보드 줄은 없어야 한다.
+# terminal 줄은 커널 printk에 잘릴 수 있어 `tlog`를 거친다(GF-M2).
+tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* name=" >/dev/null \
+  || report_failure "terminal did not open a keyboard device"
+if grep -aqE "tars-init: (keyboard device|no keyboard found)" "$LOG"; then
+  report_failure "init still looks for a keyboard (IK-M0 took that out)"
 fi
 
 # 전원 버튼도 마찬가지다. 이 음성 검사가 없으면 탐색이 조용히 실패해도

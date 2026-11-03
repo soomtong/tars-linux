@@ -3511,16 +3511,15 @@ const App = struct {
     /// 준비 2. init이 argv에 실어 보낸 값 전체를 읽는다(SA-M1). 준비 3이 셸 · 자판 ·
     /// 클립보드를 거기서 꺼낸다.
     ///
-    /// init이 같은 파일의 `encode`로 지은 아홉 칸을 `decode`가 되돌린다 — 칸 번호와
+    /// init이 같은 파일의 `encode`로 지은 여덟 칸을 `decode`가 되돌린다 — 칸 번호와
     /// 글자는 그 파일 안에만 있고 여기는 필드다. 없는 칸(init 없이 손으로 띄웠다)과
     /// 못 읽는 글자는 `screen_args`의 기본값이고, 그 기본값은 설정 파일의 기본값과
     /// 같아야 한다는 것을 그 파일이 적어 둔다.
     ///
-    /// 장치 경로 칸(`device_path`, HD-M0)은 읽기만 하고 안 연다(KH design 결정 1).
-    /// KH 전에는 여기서 그 경로 하나를 열었고 못 열면 `FATAL`로 끝났다. 이제 키보드는
+    /// 키보드 장치 경로 칸은 없다 — IK-M0에서 init의 고르기와 함께 빠졌다. KH 전에는
+    /// 여기서 그 경로 하나를 열었고 못 열면 `FATAL`로 끝났다(HD-M0). 이제 키보드는
     /// 준비 4가 포인터와 같은 길로 찾는다 — 핫플러그를 하려면 장치를 계속 지켜보는
-    /// 프로세스가 장치를 골라야 하고, 그것은 terminal이다. 칸은 init의 고르기와 함께
-    /// 남는다(KH 비목표 2).
+    /// 프로세스가 장치를 골라야 하고, 그것은 terminal이다(KH design 결정 1).
     fn readArgs(init: std.process.Init) screen_args.Args {
         return screen_args.decode(screen_args.argvOf(init.minimal.args.vector));
     }

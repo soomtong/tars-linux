@@ -218,6 +218,10 @@ pub const ignore_unknown = struct {
 /// `args[n]` 여덟이 주석으로만 묶여 있었고, 어긋나면 탈출로가 키보드 종류 자리를
 /// 덮어썼다. 칸을 더할 때는 여기에 이름을 더하고 `ARGC`를 올린다 — 콘솔 셸과
 /// 서비스 셋의 argv도 같은 길이라 그쪽은 null이 하나 늘 뿐이다.
+///
+/// IK-M0에서 4번 칸(키보드 장치 경로, HD-M0)이 빠지고 뒤 다섯이 하나씩 당겨졌다.
+/// KH부터 terminal이 키보드를 스스로 고르고 열어 그 칸을 읽기만 했다. 비워 두지
+/// 않고 뺀 것은 execve의 argv가 첫 null에서 끝나서다 — null로 비우면 뒤 칸이 잘린다.
 pub const Slot = enum(u8) {
     /// 셸 경로. init이 `resolveShell`로 정한다.
     shell = 1,
@@ -225,17 +229,14 @@ pub const Slot = enum(u8) {
     /// `none`(SC design 결정 3). 탈출로가 덮는 자리다(결정 8).
     flag = 2,
     keyboard = 3,
-    /// 키보드 장치 경로. init이 하드웨어를 살펴 고른다(HD-M0). `reload terminal`은
-    /// 설정이 아니라 안 건드린다.
-    device = 4,
-    hangul = 5,
-    latin = 6,
+    hangul = 4,
+    latin = 5,
     /// `Toggles.arg`의 글자 — 파일의 `hangul_toggle`에 `esc_latin`을 합친 것.
-    toggles = 7,
-    clipboard = 8,
+    toggles = 6,
+    clipboard = 7,
     /// 화면 셸을 띄울 사용자 이름, 또는 root로 띄운다는 뜻의 `NO_USER`(HP design 결정 3 · 8).
     /// init이 `/home`이 붙고 `tars.conf`에 `user=`가 있을 때만 이름을 넣는다.
-    user = 9,
+    user = 8,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -247,7 +248,7 @@ pub const Slot = enum(u8) {
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
 /// 타입이다.
-pub const ARGC = 10;
+pub const ARGC = 9;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -272,7 +273,6 @@ comptime {
 pub const default_shell_path: [*:0]const u8 = "/usr/bin/fish";
 /// init이 없어서 `none`을 넘겨줄 사람이 없으므로 `--no-config`다.
 pub const default_shell_flag: [*:0]const u8 = "--no-config";
-pub const default_device_path: [*:0]const u8 = "/dev/input/event0";
 pub const default_keyboard: Keyboard = .apple;
 pub const default_hangul: HangulLayout = .shin_pcs;
 pub const default_latin: LatinLayout = .qwerty;
@@ -316,14 +316,13 @@ pub const SUDO_GID: u32 = 27;
 /// 빠뜨리면 컴파일이 막혀야 한다. SA-M0까지는 `Slot`에 이름을 더하고 그 칸을 안 채워도
 /// 통과했다(null일 뿐이다). 없는 칸의 기본값은 `decode`의 일이다.
 ///
-/// 포인터 셋(`shell_path` · `shell_flag` · `device_path`)은 소유하지 않는다. init에서는
+/// 포인터 셋(`shell_path` · `shell_flag` · `user`)은 소유하지 않는다. init에서는
 /// `main()`의 스택과 `Live`를 가리키고 프로세스 수명 내내 유효하다 — terminal에서는
 /// 커널이 준 argv다.
 pub const Args = struct {
     shell_path: [*:0]const u8,
     shell_flag: [*:0]const u8,
     keyboard: Keyboard,
-    device_path: [*:0]const u8,
     hangul: HangulLayout,
     latin: LatinLayout,
     toggles: Toggles,
@@ -336,14 +335,13 @@ pub const Args = struct {
 ///
 /// `toggle_buf`는 호출자가 들고 argv가 살아 있는 동안 유지한다 — init에는 힙이 없다.
 /// 부팅은 `main()`의 `terminal_toggle_buf`, `reload terminal`은 `Live.toggle`이다
-/// (SA-M1 plan 확정 2). `Toggles.arg`가 그 버퍼에 글자를 쓰고 그 포인터가 7번 칸이다.
+/// (SA-M1 plan 확정 2). `Toggles.arg`가 그 버퍼에 글자를 쓰고 그 포인터가 6번 칸이다.
 pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     var v: Argv = @splat(null);
     v[0] = TERMINAL_PATH.ptr;
     v[Slot.shell.index()] = a.shell_path;
     v[Slot.flag.index()] = a.shell_flag;
     v[Slot.keyboard.index()] = a.keyboard.arg().ptr;
-    v[Slot.device.index()] = a.device_path;
     v[Slot.hangul.index()] = a.hangul.arg().ptr;
     v[Slot.latin.index()] = a.latin.arg().ptr;
     v[Slot.toggles.index()] = a.toggles.arg(toggle_buf).ptr;
@@ -360,14 +358,13 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
 /// 모르는 이름은 버린다 — init이 이미 한 번 경고를 찍었다.
 ///
 /// init의 `reload terminal`도 이것을 쓴다 — 떠 있는 argv를 되돌려 설정에서 온 필드만
-/// 바꾸고 다시 `encode`한다. 장치 경로가 그대로 되돌아가는 것이 "설정이 아니라 안
-/// 건드린다"를 코드로 세우는 자리다(plan 확정 4).
+/// 바꾸고 다시 `encode`한다. `user`가 그대로 되돌아가는 것이 "부팅 때 정해져 안
+/// 건드린다"를 코드로 세우는 자리다(SA-M1 plan 확정 4는 IK-M0에 빠진 장치 경로로 이것을 세웠다).
 pub fn decode(v: Argv) Args {
     return .{
         .shell_path = v[Slot.shell.index()] orelse default_shell_path,
         .shell_flag = v[Slot.flag.index()] orelse default_shell_flag,
         .keyboard = enumAt(Keyboard, v, .keyboard, default_keyboard),
-        .device_path = v[Slot.device.index()] orelse default_device_path,
         .hangul = enumAt(HangulLayout, v, .hangul, default_hangul),
         .latin = enumAt(LatinLayout, v, .latin, default_latin),
         .toggles = if (v[Slot.toggles.index()]) |t|

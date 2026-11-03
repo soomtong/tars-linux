@@ -88,7 +88,7 @@ trap cleanup EXIT
 # 받고, 커널이 그것을 협상한 증거가 _OSC 줄에 남는다.
 #
 # i8042=off가 이 체인의 핵심이다(RM-M1, design 결정 7). PS/2 컨트롤러를
-# 남겨 두면 init이 capability로 첫 키보드를 고를 때 그쪽을 잡아서, usb-kbd가
+# 남겨 두면 terminal이 capability로 키보드를 고를 때 그쪽을 잡아서, usb-kbd가
 # 있으나 없으나 게이트가 초록이다 — USB 경로가 아예 안 밟힌다. 끄고 나면
 # 이 게스트에 키보드가 USB 하나뿐이라 판정이 진짜가 된다.
 # IS-M1 실측 4와 같은 종류다: 같은 것을 두 층이 지킬 때 위층을 확인하려면
@@ -255,15 +255,20 @@ if ! grep -aq "xHCI Host Controller" "$LOG"; then
   fail "the xHCI controller never came up" "xhci" "usb"
 fi
 
-# 판정 6. 이 milestone의 심장이다. HID가 evdev까지 왔고, init이 고른
+# 판정 6. 이 milestone의 심장이다. HID가 evdev까지 왔고, terminal이 연
 # 키보드가 USB다. i8042=off이므로 PS/2가 없고, 그래서 이 줄이 "USB 경로가
-# 통째로 서 있다"를 말한다 — 커널의 HID 층 · evdev · init의 capability 탐색이
-# 한 줄에 다 걸려 있다.
-if ! grep -a "tars-init: keyboard device" "$LOG" | grep -a "USB Keyboard" >/dev/null; then
-  fail "init did not pick the USB keyboard (is i8042 still on? did USB_HID build?)" \
-    "tars-init: keyboard device" "input: " "hid-generic"
+# 통째로 서 있다"를 말한다 — 커널의 HID 층 · evdev · terminal의 capability
+# 탐색이 한 줄에 다 걸려 있다. RM-M1에서는 init의 탐색이 이 줄을 냈고, KH부터
+# 키보드를 고르는 것이 terminal이라 IK-M0이 init의 줄을 걷었다 — 그 줄은 이제
+# 없어야 한다. terminal 줄은 커널 printk에 잘릴 수 있어 `tlog`를 거친다(GF-M2).
+if ! tlog | grep -a "terminal: keyboard> open /dev/input/event" | grep -a "name=.*USB Keyboard" >/dev/null; then
+  fail "terminal did not open the USB keyboard (is i8042 still on? did USB_HID build?)" \
+    "terminal: keyboard>" "input: " "hid-generic"
 fi
-echo "init picked the USB keyboard with no PS/2 in the machine"
+if grep -aqE "tars-init: (keyboard device|no keyboard found)" "$LOG"; then
+  fail "init still looks for a keyboard (IK-M0 took that out)" "tars-init: "
+fi
+echo "terminal opened the USB keyboard with no PS/2 in the machine"
 
 # 판정 7. NVMe 컨트롤러를 잡았다. 이 아래 넷이 그 위에 서 있으므로 이것을
 # 먼저 본다 — 컨트롤러가 안 붙었으면 나머지 넷의 실패는 증상일 뿐이다.
@@ -382,7 +387,7 @@ echo "limine's initcall_blacklist kept test_power from registering (battery> sca
 # ── 그리고 실제로 친다 ─────────────────────────────────────────────────
 #
 # "장치가 보인다"와 "키가 화면에 닿는다"는 다른 일이다. 앞의 판정 여섯은
-# 전부 커널이 만든 줄이거나 init이 연 결과이고, 여기부터가 USB 키보드로
+# 전부 커널이 만든 줄이거나 init · terminal이 연 결과이고, 여기부터가 USB 키보드로
 # 친 글자가 PTY를 지나 격자에 그려지는가다. CM·HI·SH의 체인이 전부
 # 이렇게 판정한다.
 CONNECTED=0

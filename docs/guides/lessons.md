@@ -275,7 +275,8 @@ grep이 함께 깨진다) · `net=off, leaving the network alone`(NW-M2. 꺼진
 `filesystems synced` · `calling reboot(POWER_OFF)` · `calling reboot(RESTART)` ·
 `giving up on terminal` · `started terminal`(개수 3) ·
 `started console shell`(개수 1) · `restarting {s} in 1s` ·
-`keyboard device /dev/input/event` · `no keyboard found`(없어야 한다) ·
+`keyboard device` · `no keyboard found`(IK-M0부터 둘 다 없어야 한다 — 키보드는 terminal의
+`terminal: keyboard> open /dev/input/event`로 본다) ·
 `power button /dev/input/event` · `watching N power button(s)`(개수 1) ·
 `no power button found`(없어야 한다) · `power button pressed` ·
 `ACPI: button: Power Button`(커널) · `reboot: Power down`(커널) ·
