@@ -5,14 +5,14 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-03',
-  latest: 'Package Manager (PM-M0~M1)',
+  latest: 'Mise (MI-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1126,      // git rev-list --count main
+    commits: 1131,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 26,         // check.sh의 CHAINS
+    chains: 27,         // check.sh의 CHAINS
     zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
@@ -108,6 +108,7 @@ window.TARS = {
     ['2026-11-02', 'Keyboard Hotplug', 'KH', '부팅 뒤에 꽂은 USB 키보드와 연결된 Bluetooth 키보드가 곧바로 친다 — 여럿을 함께 써도 한/영과 조합은 하나'],
     ['2026-11-03', 'Home Partition', 'HP', '설치 때 계정 하나 — 화면 셸은 그 사용자로 ext4 `/home`에서 뜨고, 설정을 바꾸는 것은 `sudo`'],
     ['2026-11-03', 'Package Manager', 'PM', '공식 Homebrew `install.sh`를 화면 셸에서 그대로 치면 끝까지 간다 — bottle을 붓고, 새 패널부터 `brew`가 PATH에'],
+    ['2026-11-03', 'Mise', 'MI', '공식 `mise.run`으로 홈에 깐 mise가 node를 받고, 시스템 rc가 켜서 새 패널부터 `node`가 이름으로 — 이미지에 더한 것 없음'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -180,6 +181,15 @@ window.TARS = {
         ['`brew install`', 'bottle을 받아 붓는다 — `hello`가 TCG에서 9초. 재부팅 뒤에도 `/home`에 남는다', '2026-11-03'],
         ['시스템 rc의 shellenv', 'bash · zsh · fish의 시스템 rc가 `brew`가 있을 때만 PATH에 넣는다. rc를 안 고쳐도 새 패널부터 되고, 안내대로 rc에 넣어도 두 번 붙지 않는다', '2026-11-03'],
         ['로케일 `C.UTF-8`', 'init이 모든 프로세스에 `LANG=C.UTF-8`을 준다 — 시리얼 셸 · ssh · 서비스도 UTF-8', '2026-11-03'],
+      ],
+    },
+    {
+      title: '런타임 — mise',
+      note: '사용자가 공식 `curl https://mise.run | sh`를 직접 친다. mise(176MB)는 이미지에 없고 `~/.local/bin`에 깔린다. sudo가 필요 없다.',
+      items: [
+        ['공식 `mise.run` 그대로', '스크립트가 부르는 도구와 node가 부르는 라이브러리가 이미 이미지에 있다 — 받는 것 말고 막히는 자리가 없다. node의 서명 검증도 켜진 채로', '2026-11-03'],
+        ['`mise use -g node@lts`', 'node를 받아 `~/.local/share/mise`에 둔다 — TCG에서 20초 남짓. 재부팅 뒤에도 `/home`에 남는다', '2026-11-03'],
+        ['시스템 rc의 `mise activate`', 'bash · zsh · fish의 시스템 rc가 mise가 있을 때만 켠다. rc를 안 고쳐도 새 패널부터 `mise` · `node`가 이름으로 되고, 안내대로 rc에 넣어도 두 번 붙지 않는다', '2026-11-03'],
       ],
     },
     {
