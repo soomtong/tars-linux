@@ -115,6 +115,11 @@ mise와 node의 길을 덮고 있었다.
 시스템 rc가 다루는 경로는 사용자마다 다르다(`$HOME/.local/bin/mise`) — brew의 고정 prefix와 다른 점이다. M0는 판정에 쓸 숫자 —
 `mise hook-env`의 시간, shim으로 부른 `node --version`의 시간, 직접 부른 시간 — 를 잰다.
 
+사용자가 골랐다(2026-11-03, M0 실측 8을 보고): 첫째 후보 — 시스템 rc가 `$HOME/.local/bin/mise`가 있을 때만 `mise activate <셸>`을
+부른다. PM 결정 5와 같은 원칙(설치 직후 새 패널부터)이고, 프로젝트별 `mise.toml`이 `[env]`까지 온전히 된다. activate는 mise의
+디렉터리(`~/.local/bin`)도 PATH에 넣으므로(`src/cli/activate.rs`) 한 줄이 `mise`와 `node`를 함께 세운다. 실측 9의 `failed to load
+settings`는 `mise doctor`가 자식으로 `mise`를 이름으로 부르는데 PATH에 없어서였다 — 이 결정이 함께 닫는다.
+
 ## 위험
 
 ### 위험 1 — 루트 게이트가 바깥 망에 하나 더 기댄다
