@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-02',
-  latest: 'Keyboard Hotplug (KH-M0~M2)',
+  asOf: '2026-11-03',
+  latest: 'Home Partition (HP-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1113,      // git rev-list --count main
+    commits: 1121,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 24,         // check.sh의 CHAINS
-    zigKLines: 39,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 25,         // check.sh의 CHAINS
+    zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -106,6 +106,7 @@ window.TARS = {
     ['2026-11-01', 'Kernel Upgrade', 'KU', '갱신이 지금 이미지를 old로 남기고 부트 메뉴에서 고를 수 있다 — 새 설치의 ESP는 1GiB, 커널은 6.18.60'],
     ['2026-11-02', 'Bluetooth', 'BT', '커널 BT 스택과 BlueZ · D-Bus — `bluetooth=on`이면 init이 띄우고 bluetoothctl로 페어링, 키는 `/config/bluetooth`에'],
     ['2026-11-02', 'Keyboard Hotplug', 'KH', '부팅 뒤에 꽂은 USB 키보드와 연결된 Bluetooth 키보드가 곧바로 친다 — 여럿을 함께 써도 한/영과 조합은 하나'],
+    ['2026-11-03', 'Home Partition', 'HP', '설치 때 계정 하나 — 화면 셸은 그 사용자로 ext4 `/home`에서 뜨고, 설정을 바꾸는 것은 `sudo`'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -131,7 +132,7 @@ window.TARS = {
       items: [
         ['하이브리드 ISO `out/tars.iso`', 'BIOS와 UEFI 항목이 한 ISO에. `dd`로 USB에 그대로 쓴다. 부트로더는 Limine, Secure Boot는 끈다', '2026-09-10'],
         ['화면 — simpledrm · virtio-gpu', '펌웨어가 준 프레임버퍼를 패널 기본 해상도로 쓴다. 격자 크기는 KMS가 준 크기에서 정한다', '2026-09-10'],
-        ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · VFAT · ISO9660', '2026-09-10'],
+        ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · ext4 · VFAT · ISO9660', '2026-09-10'],
         ['키보드', 'PS/2와 USB HID. 이름이 아니라 capability로 찾고, 늦게 잡히는 USB 키보드는 3초까지 기다린다', '2026-09-10'],
         ['키보드 핫플러그', '부팅 뒤에 꽂거나 연결한 키보드(USB · Bluetooth)가 붙는 순간부터 친다. 여럿을 함께 열고 한/영 · 조합 · 수정키는 하나를 같이 쓴다. 빠지면 눌려 있던 수정키를 푼다. 키보드 없이도 뜬다', '2026-11-02'],
         ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 키보드 · 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
@@ -156,13 +157,22 @@ window.TARS = {
         ['부팅 서비스 `/config/services.d/`', '실행 파일을 이름순으로 여덟까지 띄우고 감독한다. `.`으로 시작하는 이름은 건너뛴다', '2026-09-27'],
         ['sshd', '`services.d/sshd` 링크 하나와 `ssh/authorized_keys`로 켜진다. 키로만 root 로그인, 세션은 콘솔과 같은 셸 · env', '2026-09-27'],
         ['loopback', '설정보다 먼저 `lo`를 올린다. `localhost`와 `아무거나.localhost`가 127.0.0.1', '2026-09-26'],
-        ['셸 환경', '`PATH` · `TZ` · `XDG_DATA_HOME=/config/xdg` · 히스토리 파일이 `/config`에', '2026-09-12'],
+        ['셸 환경', '`PATH` · `TZ`. root 셸은 `XDG_DATA_HOME=/config/xdg` · 히스토리 파일이 `/config`에, 사용자 셸은 홈에', '2026-09-12'],
         ['오디오 담당', '부팅에 믹서를 켜고 끌 때 `/config/asound.state`에 저장. 1초마다 기본 카드를 고른다 — 재생은 가장 큰 번호, 녹음은 USB 마이크 → 내장 DMIC → 장치 0', '2026-10-06'],
         ['원자적 로그 줄', 'init과 terminal의 시리얼 로그 한 줄이 write 한 번이라 서로 끼어들지 않는다', '2026-10-07'],
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 열셋',
+      title: '계정 · 홈',
+      note: '설치된 디스크로 뜰 때의 이야기다. 홈이 없는 부팅(ISO, HP 전에 깐 디스크)은 지금처럼 root 셸이다.',
+      items: [
+        ['홈 파티션 `/home`', '설치기가 굽는 셋째 파티션(ext4 `tars-home`)을 init이 `/home`에 붙인다. 화면 셸의 rc 셋 · `~/.gitconfig` · `~/.vimrc` · 히스토리는 홈의 진짜 파일이라 고치면 남는다', '2026-11-03'],
+        ['사용자 계정', '설치 때 이름과 비밀번호를 묻는다(기본 `tars` · `tars-linux`). 화면 셸은 그 사용자(uid 1000)로 `/home/<이름>`에서 뜨고, 시리얼 셸과 ssh는 root다. 비밀번호는 sudo에만 쓰인다', '2026-11-03'],
+        ['`sudo`', '설치 때 정한 비밀번호로, 한 번 맞으면 그 터미널에서 15분. `/config` 쓰기와 init에게 묻는 명령은 root만이고, 사용자가 치면 `permission denied; try: sudo …`가 나온다', '2026-11-03'],
+      ],
+    },
+    {
+      title: '설정 — `tars.conf` 키 열넷',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -178,11 +188,12 @@ window.TARS = {
         ['`firewall`', '`off` | `on` — 기본 `off`', '2026-09-27'],
         ['`bluetooth`', '`off` | `on` — 기본 `off`. `on`이면 dbus · bluetoothd가 뜬다', '2026-11-02'],
         ['`clipboard`', '`shared` | `pane` — 기본 `shared`', '2026-10-05'],
+        ['`user`', '화면 셸의 사용자 이름. 설치기가 쓰고 `tars-config set`으로는 못 바꾼다', '2026-11-03'],
       ],
     },
     {
       title: '`/config`에 사람이 두는 파일',
-      note: '홈(`/`)은 tmpfs라 부팅을 넘는 자리는 설정 디스크뿐이다.',
+      note: 'root 소유라 사용자가 고치려면 `sudo`다. rc · 히스토리 파일은 홈이 없는 부팅의 root 셸 몫이고, 사용자 셸의 것은 `/home/<이름>`에 있다.',
       items: [
         ['`wpa_supplicant.conf`', '있으면 init이 `tars-wifi`(→ wpa_supplicant)를 감독한다', '2026-09-28'],
         ['`services.d/*`', '부팅 서비스. sshd는 `/etc/tars/services/sshd`로 가는 링크', '2026-09-27'],
@@ -193,6 +204,7 @@ window.TARS = {
         ['`bashrc` · `zshrc` · `fish.config`', '셸 rc. eza 별칭 넷(`ls` `ll` `la` `lt`)과 zoxide · fzf 훅이 seed에', '2026-09-19'],
         ['`bash_history` · `zsh_history` · `xdg/`', '히스토리와 zoxide · fish 데이터. 전원 버튼에도 명령마다 남는다', '2026-09-12'],
         ['`asound.state`', '볼륨이 부팅을 넘는다', '2026-10-06'],
+        ['`shadow`', '사용자 비밀번호의 yescrypt 해시. `sudo tars-config passwd`가 바꾼다', '2026-11-03'],
         ['`dictation.conf` · `groq.key`', '받아쓰기 설정 키 여덟과 Groq API 키. 기록은 `dictation.jsonl`', '2026-10-06'],
       ],
     },
@@ -205,9 +217,10 @@ window.TARS = {
         ['`tars-config reload`', '재부팅 없이 적용 — net · ntp · firewall · services.d · 무선은 곧바로, 셸 키는 다음 셸부터', '2026-10-07'],
         ['`tars-config reload terminal`', '화면을 새 값으로 다시 띄운다(패널과 클립보드는 사라진다)', '2026-10-07'],
         ['`tars-config wifi` · `ssh` · `ssh-key` · `firewall` · `dictation`', '무선 접속 · sshd 켜고 끄기 · 공개 키 추가 · 포트 열고 닫기 · 받아쓰기 키와 설정', '2026-10-07'],
+        ['`sudo tars-config passwd`', '비밀번호를 바꾼다. 새 값을 두 번 묻고, 다르면 아무것도 안 바꾼다. 다음 sudo부터 새 값', '2026-11-03'],
         ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
-        ['`tars-install <디스크>`', 'GPT에 1GiB ESP와 1GiB 설정 파티션. 이미 깔린 디스크는 부트 파일만 갱신하고 설정은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-01'],
-        ['`tars-install --wipe` · `--yes`', '설정까지 통째로 지운다 · 확인 `YES`를 건너뛴다', '2026-09-23'],
+        ['`tars-install <디스크>`', 'GPT에 768MiB ESP · 256MiB 설정 · 나머지 ext4 홈(4GiB 이상). 새 설치는 사용자 이름과 비밀번호를 묻는다. 이미 깔린 디스크는 부트 파일만 갱신하고 설정과 홈은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-03'],
+        ['`tars-install --wipe` · `--yes`', '설정과 홈까지 통째로 지운다 · 확인 `YES`와 계정 질문을 건너뛴다(기본값)', '2026-09-23'],
         ['`tars-dictate`', '말하고 [Ctrl+C]. 셸에서 직접 받아쓰기', '2026-10-06'],
       ],
     },
