@@ -18,6 +18,13 @@ PM(2026-11-03)이 남긴 것.
       - design에서 정할 것: 설치 자리(overlayfs로 initrd `/usr` 위에 디스크 층 vs `/home` 아래 prefix), initrd에 있는 패키지를
         "설치됨"으로 보는 목록과 TARS 갱신 때의 어긋남, 설치 권한(root · sudo), `Depends`를 어디까지 따르나, `Packages` 색인의
         RAM 예산. 접두사 후보 `TP`(TARS Package, 미사용).
+- [ ] mise 지원(검토만, 2026-11-03). initrd에는 안 싣는다(사용자 결정) — v2026.10.25 Linux x64가 176MB(BOLT가 원본
+      `.bolt.org.text` 89MB · `.bolt.org.rodata` 25MB를 품는다, gzip 60MB, musl 판 158MB)이고 initrd는 RAM에 상주한다. NEEDED는
+      libc · libm · libgcc_s · libdl · librt · libpthread, GLIBC 2.18. 길은 사용자가 공식 `curl https://mise.run | sh`(482줄)로
+      `~/.local/bin`에 까는 것 — 부르는 `curl` · `tar` · `sha256sum` · `ldd`는 PM-M0로 다 있고 `zstd`가 없으면 `.tar.gz`로 내려간다.
+      `brew install mise`도 있다. 열면 PM과 같은 모양의 작은 서브프로젝트(접두사 후보 `MI`, 미사용): M0 체인이 실제 망으로
+      mise.run · `mise use -g node@lts`(또는 go)를 돌려 막힘을 풀고 크기 · 시간을 잰다, M1이 `mise activate` 훅을 시스템 rc에 둘지
+      (경로가 사용자별 `~/.local/bin`, 프롬프트마다 176MB 바이너리를 띄우는 비용)를 정한다. 아직 TARS에서 한 번도 안 돌려 봤다.
 - [ ] 라이브러리는 libstdc++만 Debian 모양(실체 + SONAME 링크)이다(PM 결정 10). 다른 바깥 프로그램이 다른 `.so`의 이름에서
       버전을 읽으면 그때 같은 판정을 한다.
 
