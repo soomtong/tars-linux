@@ -182,6 +182,26 @@ pub fn main() !void {
         if (disk.parseArgs(&wipe_only) != .usage) return error.WipeTakenAsDisk;
         const four = [_][*:0]const u8{ "/dev/nvme0n1", "--yes", "--wipe", "x" };
         if (disk.parseArgs(&four) != .usage) return error.FourAccepted;
+
+        // DB-M0: --beside는 셋째 플래그다. 셋 다 어느 순서로도, 한 번씩만.
+        const beside = [_][*:0]const u8{ "/dev/sda", "--beside" };
+        switch (disk.parseArgs(&beside)) {
+            .install => |i| if (!i.beside or i.yes or i.wipe) return error.BesideWrong,
+            else => return error.BesideNotInstall,
+        }
+        const all = [_][*:0]const u8{ "/dev/sda", "--wipe", "--yes", "--beside" };
+        switch (disk.parseArgs(&all)) {
+            .install => |i| if (!i.beside or !i.yes or !i.wipe) return error.AllThreeWrong,
+            else => return error.AllThreeNotInstall,
+        }
+        switch (disk.parseArgs(&two)) {
+            .install => |i| if (i.beside) return error.BesideByDefault,
+            else => return error.TwoArgsNotInstall,
+        }
+        const beside_twice = [_][*:0]const u8{ "/dev/sda", "--beside", "--yes", "--beside" };
+        if (disk.parseArgs(&beside_twice) != .usage) return error.BesideTwiceAccepted;
+        const five = [_][*:0]const u8{ "/dev/sda", "--beside", "--yes", "--wipe", "x" };
+        if (disk.parseArgs(&five) != .usage) return error.FiveAccepted;
     }
 
     // ── 5. knownDisk — 파티션과 부팅 매체는 대상이 아니다 ─────────────
@@ -442,21 +462,21 @@ pub fn main() !void {
         "  p3 (tars-home) <- not opened\n" ++
         "  tars-install /dev/nvme0n1 --wipe erases all three instead, your home too\n";
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true, "0.1.4", "0.1.3", .rotate);
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", "0.1.3", .rotate);
     try expectText(out.bytes(), UPDATE_HEAD ++
         "  boot/old/  <- TARS 0.1.3, for the boot menu if the new one fails\n" ++ UPDATE_TAIL, "the rotating update plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", true, "0.1.4", null, .overwrite);
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", null, .overwrite);
     try expectText(out.bytes(), UPDATE_HEAD ++ "  boot/old/  <- left as it is\n" ++ UPDATE_TAIL, "the overwriting update plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", false, "0.1.4", null, .rotate);
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", null, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate);
     const fresh = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank\n" ++
         P1 ++
         "  p2  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
         "  p3     rest  Linux       ext4   tars-home   <- your home, empty at first\n";
     try expectText(out.bytes(), fresh, "the fresh plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", true, "0.1.4", null, .rotate);
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", 2, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate);
     try expectText(out.bytes(), fresh ++ "  the settings now on p2 are erased too\n", "the fresh plan over old settings");
     // HP-M1: 계정 한 줄. 비밀번호의 글자는 안 찍는다.
     out = control.Out{ .buf = &out_buf };
@@ -490,6 +510,7 @@ pub fn main() !void {
     disk.usageLines(&out);
     try expectText(out.bytes(), "tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n" ++
         "tars-install <disk> --yes   same, without asking\n" ++
+        "tars-install <disk> --beside  keep what <disk> has; install into its largest free space\n" ++
         "tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", "usage");
     var check_buf: [65536]u8 = undefined;
     const check = try readAll(INSTALL_CHECK, &check_buf);
@@ -529,11 +550,11 @@ pub fn main() !void {
             }
         }
         out = control.Out{ .buf = &out_buf };
-        disk.roomLines(&out, 50, 0, 103, .no_room);
+        disk.roomLines(&out, 1, 50, 0, 103, .no_room);
         try expectText(out.bytes(), "tars-install: p1 has 50 bytes free and 0 bytes in boot/old; the new image needs 103\n" ++
             "tars-install: p1 has no room for two images; nothing was changed.\n", "the no-room lines");
         out = control.Out{ .buf = &out_buf };
-        disk.roomLines(&out, 900, 0, 103, .rotate);
+        disk.roomLines(&out, 1, 900, 0, 103, .rotate);
         try expectText(out.bytes(), "tars-install: p1 has 900 bytes free and 0 bytes in boot/old; the new image needs 103\n", "the room line");
     }
 
@@ -573,9 +594,197 @@ pub fn main() !void {
         }
     }
 
+    // ── 22. GPT 엔트리 — 진짜 sfdisk가 쓴 바이트로 (DB-M0) ─────────────
+    //
+    // REAL_HEADER · REAL_ENTRIES는 util-linux 2.41.5의 sfdisk(게스트 initrd와 같은 판)가 쓴 7GiB "맥 디스크"의
+    // LBA 1 앞 92바이트와 LBA 2의 엔트리 다섯이다. p1 · p2는 dualboot/mac_gpt.pl이, p3~p5는 sfdisk가
+    // `--append`로 붙였다(DB-M0 plan 착수 전 3). 헤더의 CRC가 엔트리 128개(다섯 뒤는 0)의 CRC를 담고 있어서,
+    // 이 바이트가 그대로 통과하면 CRC 계산과 GUID의 바이트 순서가 둘 다 sfdisk와 같다는 뜻이다 — 검사와
+    // 구현이 같은 수를 두 번 적은 것이 아니다.
+    {
+        var g = realGpt(512) orelse {
+            std.debug.print("FAIL: the GPT sfdisk wrote did not parse\n", .{});
+            return error.RealGptRejected;
+        };
+        if (g.count != 5) return error.WrongPartCount;
+        const Want = struct { n: u8, kind: disk.PartKind, role: disk.Role, first: u64, last: u64 };
+        const want = [_]Want{
+            .{ .n = 1, .kind = .efi, .role = .none, .first = 2048, .last = 411647 },
+            .{ .n = 2, .kind = .apfs, .role = .none, .first = 411648, .last = 2508799 },
+            .{ .n = 3, .kind = .efi, .role = .boot, .first = 2508800, .last = 4081663 },
+            .{ .n = 4, .kind = .other, .role = .config, .first = 4081664, .last = 4605951 },
+            .{ .n = 5, .kind = .other, .role = .home, .first = 4605952, .last = 14678015 },
+        };
+        for (g.slice(), want) |p, w| {
+            if (p.number != w.n or p.kind != w.kind or p.role != w.role or p.first != w.first or p.last != w.last) {
+                std.debug.print("FAIL: entry {d}: got p{d} {s} {s} {d}-{d}\n", .{ w.n, p.number, @tagName(p.kind), @tagName(p.role), p.first, p.last });
+                return error.WrongEntry;
+            }
+        }
+        if (g.first_usable != 34 or g.last_usable != 14680030) return error.WrongUsable;
+        if ((g.find(.boot) orelse return error.NoBoot).number != 3) return error.BootNotP3;
+        if ((g.find(.config) orelse return error.NoConfig).number != 4) return error.ConfigNotP4;
+        if (!g.hasTars() or !g.hasOthers()) return error.WrongMix;
+
+        // 빈 자리. sfdisk의 셋이 디스크를 끝까지 채웠다 — 앞(34~2047)과 뒤(14678016~14680030)는 1MiB가 안 된다.
+        if (disk.largestGap(&g, false) != null) return error.GapOnAFullDisk;
+        try expectText(disk.gptText(&buf, &g), "GPT: EFI, macOS (APFS), TARS; no free space", "the state of a disk with TARS beside macOS");
+        // TARS 셋을 없는 것으로 치면(`--beside --wipe`) 구간이 그 셋의 자리 그대로다. 그 배치가 sfdisk가 받아 준
+        // 그 수다 — appendScript의 세 줄이 착수 전 3에서 먹인 것과 같다.
+        const gap = disk.largestGap(&g, true) orelse return error.NoGapWithoutTars;
+        if (gap.start != 2508800 or gap.end != 14678016) {
+            std.debug.print("FAIL: gap without TARS is {d}-{d}\n", .{ gap.start, gap.end });
+            return error.WrongGap;
+        }
+        const l = disk.besideLayout(gap, 512) orelse return error.LayoutRefused;
+        var script_buf: [512]u8 = undefined;
+        try expectText(disk.appendScript(&script_buf, l) orelse return error.NoScript,
+            "start=2508800, size=1572864, type=uefi, name=TARS-BOOT\n" ++
+            "start=4081664, size=524288, type=linux, name=TARS-CONFIG\n" ++
+            "start=4605952, size=10072064, type=linux, name=TARS-HOME\n", "the append script");
+        const fresh_nums = disk.freeNumbers(&g, true) orelse return error.NoNumbers;
+        const next_nums = disk.freeNumbers(&g, false) orelse return error.NoNumbers;
+        if (!std.mem.eql(u8, &fresh_nums, &.{ 3, 4, 5 }) or !std.mem.eql(u8, &next_nums, &.{ 6, 7, 8 })) return error.WrongNumbers;
+        // TARS-HOME의 타입은 Linux filesystem이다. 그 GUID도 sfdisk가 쓴 바이트와 맞아야 한다.
+        if (!std.mem.eql(u8, head[1024 + 3 * 128 ..][0..16], &disk.guidBytes("0FC63DAF-8483-4772-8E79-3D69D8477DE4"))) {
+            return error.LinuxGuidOrder;
+        }
+
+        // 바이트 하나가 틀리면 통째로 안 읽는다. 엔트리의 CRC, 헤더의 CRC.
+        _ = realGpt(512);
+        head[1024 + 2 * 128 + 33] ^= 1;
+        if (disk.parseGpt(&head, 512) != null) return error.EntryCrcIgnored;
+        _ = realGpt(512);
+        head[512 + 48] ^= 1;
+        if (disk.parseGpt(&head, 512) != null) return error.HeaderCrcIgnored;
+
+        // 4Kn. 같은 헤더와 엔트리를 4096 · 8192에 놓는다. 512로 읽으면 없다.
+        g = realGpt(4096) orelse return error.FourKnRejected;
+        if (g.count != 5 or g.sector != 4096) return error.FourKnWrong;
+        if (disk.parseGpt(&head, 512) != null) return error.FourKnReadAs512;
+        if (disk.parseGpt(&head, 1024) != null) return error.OddSectorAccepted;
+
+        // 맥 디스크(TARS 전). sfdisk 엔트리 셋을 지우고 CRC를 다시 맞춘다 — CRC가 맞다는 것은 위에서 봤으니
+        // 여기서 쓰는 seal은 같은 셈을 하는 도우미다.
+        _ = realGpt(512);
+        @memset(head[1024 + 2 * 128 ..][0 .. 3 * 128], 0);
+        seal(512);
+        g = disk.parseGpt(&head, 512) orelse return error.MacRejected;
+        try expectText(disk.gptText(&buf, &g), "GPT: EFI, macOS (APFS); 6 GB free", "the state of a Mac disk");
+        if (g.hasTars() or g.find(.boot) != null) return error.MacHasTars;
+        const mac_nums = disk.freeNumbers(&g, false) orelse return error.NoNumbers;
+        if (!std.mem.eql(u8, &mac_nums, &.{ 3, 4, 5 })) return error.WrongMacNumbers;
+        const mac_gap = disk.largestGap(&g, false) orelse return error.NoMacGap;
+        if (mac_gap.start != 2508800 or mac_gap.end != 14678016) return error.WrongMacGap;
+
+        // 가운데에 남의 파티션 하나(8000000~8999999). 뒤쪽 구간이 더 크다 — 시작은 1MiB 위로 맞춘 9000960이다.
+        // 이름 `TARS-BOOTX`는 TARS가 아니다(전체 일치).
+        {
+            const e = head[1024 + 2 * 128 ..][0..128];
+            @memcpy(e[0..16], &disk.guidBytes("0FC63DAF-8483-4772-8E79-3D69D8477DE4"));
+            e[16] = 1;
+            std.mem.writeInt(u64, e[32..40], 8000000, .little);
+            std.mem.writeInt(u64, e[40..48], 8999999, .little);
+            for ("TARS-BOOTX", 0..) |c, i| e[56 + i * 2] = c;
+            seal(512);
+        }
+        g = disk.parseGpt(&head, 512) orelse return error.MiddleRejected;
+        if (g.hasTars()) return error.PrefixTakenAsName;
+        const mid = disk.largestGap(&g, false) orelse return error.NoMiddleGap;
+        if (mid.start != 9000960 or mid.end != 14678016) {
+            std.debug.print("FAIL: with a partition in the middle the gap is {d}-{d}\n", .{ mid.start, mid.end });
+            return error.WrongMiddleGap;
+        }
+        try expectText(disk.gptText(&buf, &g), "GPT: EFI, macOS (APFS), 1 other; 2 GB free", "a Mac disk with another partition");
+
+        // 쓸 수 있는 구간 밖의 엔트리는 GPT를 통째로 거절한다.
+        std.mem.writeInt(u64, head[1024 + 2 * 128 + 40 ..][0..8], 14680031, .little);
+        seal(512);
+        if (disk.parseGpt(&head, 512) != null) return error.OutOfRangeAccepted;
+
+        // 같은 이름 둘 — 어느 것이 우리 것인지 모르면 find는 null이다.
+        _ = realGpt(512);
+        @memcpy(head[1024 + 5 * 128 ..][0..128], head[1024 + 2 * 128 ..][0..128]);
+        seal(512);
+        g = disk.parseGpt(&head, 512) orelse return error.TwinRejected;
+        if (g.find(.boot) != null or !g.hasTars()) return error.TwinFound;
+    }
+
+    // ── 23. 자리의 경계와 거절 줄 (DB-M0) ───────────────────────────
+    {
+        const need: u64 = disk.MIN_DISK_BYTES / 512;
+        if (disk.besideLayout(.{ .start = 2048, .end = 2048 + need }, 512) == null) return error.MinGapRefused;
+        if (disk.besideLayout(.{ .start = 2048, .end = 2048 + need - 1 }, 512) != null) return error.SmallGapAccepted;
+        const l4k = disk.besideLayout(.{ .start = 256, .end = 256 + disk.MIN_DISK_BYTES / 4096 }, 4096) orelse return error.FourKnLayout;
+        if (l4k.boot.size != 196608 or l4k.config.start != 256 + 196608) return error.FourKnSectors;
+
+        _ = realGpt(512);
+        const g = disk.parseGpt(&head, 512) orelse return error.RealGptRejected;
+        out = control.Out{ .buf = &out_buf };
+        disk.roomRefusal(&out, "/dev/sda", &g, 1_900_000_000);
+        try expectText(out.bytes(), "the largest free space on /dev/sda is 1 GB; TARS needs more than 4 GiB; nothing was changed." ++
+            "make room in macOS first: diskutil apfs resizeContainer disk0s2 <smaller size> (see diskutil list)", "the room refusal");
+
+        out = control.Out{ .buf = &out_buf };
+        disk.besideLines(&out, "/dev/sda", "7 GB", "Mac SSD", "GPT: EFI, macOS (APFS); 6 GB free", .{ .start = 2508800, .end = 14678016 }, 512, .{ 3, 4, 5 }, &.{});
+        try expectText(out.bytes(), "tars-install: /dev/sda (7 GB, Mac SSD) keeps its partitions. it now holds: GPT: EFI, macOS (APFS); 6 GB free\n" ++
+            "  TARS goes into the free space from MiB 1225 to MiB 7167; no other partition is touched\n" ++
+            "  p3  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n" ++
+            "  p4  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
+            "  p5     rest  Linux       ext4   tars-home   <- your home, empty at first\n" ++
+            "  the Mac still starts macOS; hold Option at power-on and pick EFI Boot for TARS\n", "the beside plan");
+        out = control.Out{ .buf = &out_buf };
+        disk.planLines(&out, true, "/dev/sda", "7 GB", "Mac SSD", "TARS installed", null, .{ 3, 4, 5 }, true, "0.1.4", null, .overwrite);
+        if (std.mem.indexOf(u8, out.bytes(), "already has TARS. p3 will be updated, p4 (your settings) is kept.") == null or
+            std.mem.indexOf(u8, out.bytes(), "--beside --wipe erases the TARS partitions instead") == null)
+        {
+            std.debug.print("FAIL: the update plan of a disk beside macOS:\n{s}", .{out.bytes()});
+            return error.WrongBesideUpdate;
+        }
+        // 통째 설치의 배치와 GPT 이름이 같은 글자다 — init과 설치기가 이 이름으로 찾는다.
+        for ([_][]const u8{ disk.NAME_BOOT, disk.NAME_CONFIG, disk.NAME_HOME }) |n| {
+            var name_buf: [32]u8 = undefined;
+            const want = std.fmt.bufPrint(&name_buf, "name={s}\n", .{n}) catch unreachable;
+            if (std.mem.indexOf(u8, disk.SFDISK_SCRIPT, want) == null) return error.ScriptNameDrifted;
+        }
+    }
+
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
     std.debug.print("disk_test: the state column, a list row, both plans, a tool's end and the usage lines are the installer's words\n", .{});
     std.debug.print("disk_test: the minimum disk, the rotation rule and its order (something boots after every step) hold\n", .{});
+    std.debug.print("disk_test: GPT entries as sfdisk writes them (512 and 4Kn), names, the largest free space and the beside plan hold\n", .{});
+}
+
+/// 검사 22의 진짜 바이트(dualboot 체인과 같은 7GiB 맥 디스크 + sfdisk --append, util-linux 2.41.5).
+const REAL_HEADER =
+    "4546492050415254000001005c000000d0716df2000000000100000000000000ffffdf0000000000220000000000" ++
+    "0000deffdf0000000000dbb00ddb00000040800000000000db000200000000000000800000008000000043937bdf";
+const REAL_ENTRIES =
+    "28732ac11ff8d211ba4b00a0c93ec93b010000db0000004080000000000000010008000000000000ff4706000000000000000000000000004500460049002000" ++
+    "530079007300740065006d00200050006100720074006900740069006f006e000000000000000000000000000000000000000000000000000000000000000000" ++
+    "ef57347c0000aa11aa1100306543ecac020000db0000004080000000000000020048060000000000ff4726000000000000000000000000000000000000000000" ++
+    "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ++
+    "28732ac11ff8d211ba4b00a0c93ec93b3f057184bbacd243ba998cd6de70ec0e0048260000000000ff473e000000000000000000000000005400410052005300" ++
+    "2d0042004f004f005400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ++
+    "af3dc60f838472478e793d69d8477de4cac1efb75a326642b8db5848c582413200483e0000000000ff4746000000000000000000000000005400410052005300" ++
+    "2d0043004f004e004600490047000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ++
+    "af3dc60f838472478e793d69d8477de464b2ab67903bad44aa95c1791703f9e40048460000000000fff7df000000000000000000000000005400410052005300" ++
+    "2d0048004f004d004500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+/// head를 비우고 REAL_HEADER를 LBA 1(sector)에, REAL_ENTRIES를 LBA 2에 놓은 뒤 읽는다.
+fn realGpt(sector: usize) ?disk.Gpt {
+    _ = clear();
+    _ = std.fmt.hexToBytes(head[sector..][0..92], REAL_HEADER) catch unreachable;
+    _ = std.fmt.hexToBytes(head[2 * sector ..][0 .. REAL_ENTRIES.len / 2], REAL_ENTRIES) catch unreachable;
+    return disk.parseGpt(&head, sector);
+}
+
+/// 엔트리를 고친 뒤 두 CRC를 다시 맞춘다. 엔트리 128개 · 헤더 92바이트(REAL_HEADER의 모양)다.
+fn seal(sector: usize) void {
+    const h = head[sector..][0..92];
+    std.mem.writeInt(u32, h[88..92], std.hash.Crc32.hash(head[2 * sector ..][0 .. 128 * 128]), .little);
+    std.mem.writeInt(u32, h[16..20], 0, .little);
+    std.mem.writeInt(u32, h[16..20], std.hash.Crc32.hash(h), .little);
 }
 
 /// 검사 21의 모형. 디렉터리가 담은 것은 이렇다.

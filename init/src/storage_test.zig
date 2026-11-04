@@ -260,16 +260,16 @@ pub fn main() !void {
         }
     }
 
-    // ── 10. 후보 목록 = 디스크 전부 → 그 다음 파티션 셋씩 ─────────────
+    // ── 10. 후보 목록 = 디스크 전부 → 그 다음 파티션 여덟씩 (DB-M0) ─────────────
     //
     // 손으로 적은 PARTITIONS가 규칙과 어긋나지 않는지, 그리고 디스크 전체가
     // 전부 파티션보다 앞인지 본다. 뒤의 것이 게이트 열두 체인의 판정을 지킨다
     // — 그 디스크들은 파티션 없는 ext2라 먼저 잡혀야 한다(DI design 결정 6).
     {
         const disks = storage.DISKS.len;
-        if (storage.CANDIDATES.len != disks * 4) {
-            std.debug.print("FAIL: want {d} candidates (disks + three partitions each), got {d}\n", .{
-                disks * 4, storage.CANDIDATES.len,
+        if (storage.CANDIDATES.len != disks * 9) {
+            std.debug.print("FAIL: want {d} candidates (disks + eight partitions each), got {d}\n", .{
+                disks * 9, storage.CANDIDATES.len,
             });
             return error.WrongCandidateCount;
         }
@@ -279,12 +279,12 @@ pub fn main() !void {
                 return error.DiskNotFirst;
             }
             var n: u8 = 1;
-            while (n <= 3) : (n += 1) {
+            while (n <= 8) : (n += 1) {
                 var buf: [32]u8 = undefined;
                 const want = storage.partitionName(&buf, disk, n).?;
-                const got = storage.CANDIDATES[disks + i * 3 + (n - 1)];
+                const got = storage.CANDIDATES[disks + i * 8 + (n - 1)];
                 if (!std.mem.eql(u8, got, want)) {
-                    std.debug.print("FAIL: candidate {d} is '{s}', want '{s}'\n", .{ disks + i * 3 + (n - 1), got, want });
+                    std.debug.print("FAIL: candidate {d} is '{s}', want '{s}'\n", .{ disks + i * 8 + (n - 1), got, want });
                     return error.PartitionListDrifted;
                 }
             }

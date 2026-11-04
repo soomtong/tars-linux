@@ -543,6 +543,7 @@ CHAINS=(
   "PM-M0:./pm/check.sh"
   "MI-M0:./mise/check.sh"
   "HS-M0:./hidpi/check.sh"
+  "DB-M0:./dualboot/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

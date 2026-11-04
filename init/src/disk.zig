@@ -180,8 +180,8 @@ pub fn sectorsToBytes(text: []const u8) ?u64 {
 pub const Command = union(enum) {
     /// 인자 없음. 목록만 찍는다.
     list,
-    /// `<disk>` 뒤에 `--yes` · `--wipe`가 각각 많아야 한 번, 순서는 상관없다.
-    install: struct { disk: [:0]const u8, yes: bool, wipe: bool },
+    /// `<disk>` 뒤에 `--yes` · `--wipe` · `--beside`가 각각 많아야 한 번, 순서는 상관없다.
+    install: struct { disk: [:0]const u8, yes: bool, wipe: bool, beside: bool = false },
     /// 그 밖의 전부. 쓰는 법을 찍고 2로 끝난다.
     usage,
 };
@@ -192,21 +192,24 @@ pub const Command = union(enum) {
 /// 쓰는 법이다 — 오타를 조용히 삼키지 않는다.
 pub fn parseArgs(args: []const [*:0]const u8) Command {
     if (args.len == 0) return .list;
-    if (args.len > 3) return .usage;
+    if (args.len > 4) return .usage;
     const disk = std.mem.span(args[0]);
     if (std.mem.startsWith(u8, disk, "-")) return .usage;
 
     var yes = false;
     var wipe = false;
+    var beside = false;
     for (args[1..]) |arg| {
         const flag = std.mem.span(arg);
         if (!yes and std.mem.eql(u8, flag, "--yes")) {
             yes = true;
         } else if (!wipe and std.mem.eql(u8, flag, "--wipe")) {
             wipe = true;
+        } else if (!beside and std.mem.eql(u8, flag, "--beside")) {
+            beside = true;
         } else return .usage;
     }
-    return .{ .install = .{ .disk = disk, .yes = yes, .wipe = wipe } };
+    return .{ .install = .{ .disk = disk, .yes = yes, .wipe = wipe, .beside = beside } };
 }
 
 /// 사용자가 친 이름이 storage.DISKS의 것이면 그 원소를(수명이 무한한
@@ -441,6 +444,7 @@ const Fill = struct {
 pub fn usageLines(sink: anytype) void {
     sink.print("tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n", .{});
     sink.print("tars-install <disk> --yes   same, without asking\n", .{});
+    sink.print("tars-install <disk> --beside  keep what <disk> has; install into its largest free space\n", .{});
     sink.print("tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", .{});
 }
 
@@ -455,8 +459,13 @@ pub fn listRow(sink: anytype, path: []const u8, size: []const u8, model: []const
     });
 }
 
-/// 설치의 계획. 갱신은 p1만 갈고 p2를 남긴다(DI design 결정 8). 새 설치는 지울 디스크가 지금 무엇을
-/// 들고 있는지 보인다. p2_settings는 p2에 `tars-` 라벨이 있는가이고 새 설치일 때만 뜻이 있다.
+/// 설치의 계획. 갱신은 TARS-BOOT만 갈고 TARS-CONFIG를 남긴다(DI design 결정 8). 새 설치는 지울 디스크가
+/// 지금 무엇을 들고 있는지 보인다. settings_on은 `tars-` 라벨이 든 TARS-CONFIG의 번호이고 새 설치일 때만
+/// 뜻이 있다.
+///
+/// DB-M0부터 갱신은 번호를 받는다 — nums는 이름으로 찾은 TARS-BOOT · TARS-CONFIG · TARS-HOME(없으면 0)이다.
+/// 통째 설치는 {1, 2, 3}이라 글자가 전과 같다. beside는 디스크에 TARS 아닌 파티션이 있다는 뜻이고, 그때
+/// `--wipe` 혼자는 macOS까지 지우므로 다시 까는 길로 `--beside --wipe`를 말한다.
 ///
 /// 갱신은 KU-M0부터 슬롯을 말한다. 크기 칸은 뺐다 — 256MiB ESP로 깔린 디스크도
 /// 갱신되고, 갱신은 ESP 크기를 안 바꾼다(KU design 결정 8). `rot`가 rotate면
@@ -470,14 +479,16 @@ pub fn planLines(
     size: []const u8,
     model: []const u8,
     state: []const u8,
-    p2_settings: bool,
+    settings_on: ?u8,
+    nums: [3]u8,
+    beside: bool,
     new_ver: []const u8,
     cur_ver: ?[]const u8,
     rot: Rotation,
 ) void {
     if (update) {
-        sink.print("tars-install: {s} ({s}, {s}) already has TARS. p1 will be updated, p2 (your settings) is kept.\n", .{
-            path, size, model,
+        sink.print("tars-install: {s} ({s}, {s}) already has TARS. p{d} will be updated, p{d} (your settings) is kept.\n", .{
+            path, size, model, nums[0], nums[1],
         });
         sink.print("  boot/      <- TARS {s}\n", .{new_ver});
         if (rot == .rotate) {
@@ -485,17 +496,19 @@ pub fn planLines(
         } else {
             sink.print("  boot/old/  <- left as it is\n", .{});
         }
-        sink.print("  p2 (tars-config) <- not opened\n", .{});
-        sink.print("  p3 (tars-home) <- not opened\n", .{});
-        sink.print("  tars-install {s} --wipe erases all three instead, your home too\n", .{path});
+        sink.print("  p{d} (tars-config) <- not opened\n", .{nums[1]});
+        if (nums[2] != 0) sink.print("  p{d} (tars-home) <- not opened\n", .{nums[2]});
+        if (beside) {
+            sink.print("  tars-install {s} --beside --wipe erases the TARS partitions instead, your home too; --wipe alone erases the whole disk\n", .{path});
+        } else {
+            sink.print("  tars-install {s} --wipe erases all three instead, your home too\n", .{path});
+        }
     } else {
         sink.print("tars-install: {s} ({s}, {s}) will be erased. it now holds: {s}\n", .{
             path, size, model, state,
         });
-        sink.print("  p1  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{});
-        sink.print("  p2  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{});
-        sink.print("  p3     rest  Linux       ext4   tars-home   <- your home, empty at first\n", .{});
-        if (p2_settings) sink.print("  the settings now on p2 are erased too\n", .{});
+        layoutRows(sink, .{ 1, 2, 3 });
+        if (settings_on) |n| sink.print("  the settings now on p{d} are erased too\n", .{n});
     }
 }
 
@@ -532,13 +545,13 @@ pub fn rotation(has_version: bool, free: u64, old_slot: u64, cur_slot: u64, need
     return if (free +| cur_slot >= need) .overwrite else .no_room;
 }
 
-/// 빈 자리 줄. no_room이면 거절 줄이 뒤따른다 — 그 뒤에는 아무것도 안 바뀐다.
+/// 빈 자리 줄. esp는 TARS-BOOT의 번호다(통째 설치는 1). no_room이면 거절 줄이 뒤따른다 — 그 뒤에는 아무것도 안 바뀐다.
 /// 둘 다 YES를 묻기 전에 찍힌다.
-pub fn roomLines(sink: anytype, free: u64, old_slot: u64, need: u64, rot: Rotation) void {
-    sink.print("tars-install: p1 has {d} bytes free and {d} bytes in boot/old; the new image needs {d}\n", .{
-        free, old_slot, need,
+pub fn roomLines(sink: anytype, esp: u8, free: u64, old_slot: u64, need: u64, rot: Rotation) void {
+    sink.print("tars-install: p{d} has {d} bytes free and {d} bytes in boot/old; the new image needs {d}\n", .{
+        esp, free, old_slot, need,
     });
-    if (rot == .no_room) sink.print("tars-install: p1 has no room for two images; nothing was changed.\n", .{});
+    if (rot == .no_room) sink.print("tars-install: p{d} has no room for two images; nothing was changed.\n", .{esp});
 }
 
 pub const Op = enum { clear_old, write_conf, move_to_old, copy_new, write_version };
@@ -566,4 +579,373 @@ pub fn toolOk(sink: anytype, tool: []const u8, status: u32) bool {
         sink.print("{s} was killed (signal {d}); what it said:", .{ tool, @backingInt(linux.W.TERMSIG(status)) });
     }
     return false;
+}
+
+// ── GPT 엔트리 (DB-M0) ───────────────────────────────────────────────
+//
+// `--beside`가 남의 파티션 옆에 깔려면 GPT의 엔트리를 읽어야 한다. 그리고 설치기와 init이 TARS 파티션을
+// 번호가 아니라 이름(`TARS-BOOT` · `TARS-CONFIG` · `TARS-HOME`)으로 찾는다(DB design 결정 5). 여기의 함수는
+// 디스크 앞머리(HEAD_BYTES) 하나만 받는다 — 엔트리 128개는 LBA 2부터 16KiB라 512바이트 섹터면 17408,
+// 4Kn이면 24576에서 끝나서 둘 다 HEAD_BYTES 안이다. 그 밖에 엔트리를 둔 GPT는 null이다(읽을 수 없는
+// 것은 거절한다).
+
+/// GUID 글자(`C12A7328-F81F-11D2-...`)를 디스크 위 16바이트로. 앞의 세 칸은 리틀엔디안, 뒤의 두 칸은
+/// 적힌 순서다(UEFI 규격 부록 A). 이것을 틀리면 타입이 하나도 안 맞는다 — disk_test 검사 22가 진짜
+/// sfdisk가 쓴 바이트로 본다.
+pub fn guidBytes(comptime text: []const u8) [16]u8 {
+    return comptime blk: {
+        if (text.len != 36) @compileError("a GUID is 36 characters");
+        var hex: [32]u8 = undefined;
+        var n: usize = 0;
+        for (text) |c| {
+            if (c == '-') continue;
+            hex[n] = c;
+            n += 1;
+        }
+        var raw: [16]u8 = undefined;
+        _ = std.fmt.hexToBytes(&raw, &hex) catch @compileError("not a GUID");
+        var out = raw;
+        std.mem.reverse(u8, out[0..4]);
+        std.mem.reverse(u8, out[4..6]);
+        std.mem.reverse(u8, out[6..8]);
+        break :blk out;
+    };
+}
+
+/// 목록이 이름으로 말하는 타입 셋(DB design 결정 9). 나머지는 `other`다.
+pub const GUID_EFI = guidBytes("C12A7328-F81F-11D2-BA4B-00A0C93EC93B");
+pub const GUID_APFS = guidBytes("7C3457EF-0000-11AA-AA11-00306543ECAC");
+pub const GUID_HFS = guidBytes("48465300-0000-11AA-AA11-00306543ECAC");
+
+/// GPT 파티션 이름. 통째 설치의 SFDISK_SCRIPT와 `--beside`의 appendScript가 같은 이름을 쓴다.
+/// ESP는 FAT 라벨과 GPT 이름이 같은 글자다(ESP_LABEL).
+pub const NAME_BOOT: []const u8 = ESP_LABEL;
+pub const NAME_CONFIG: []const u8 = "TARS-CONFIG";
+pub const NAME_HOME: []const u8 = "TARS-HOME";
+
+pub const PartKind = enum { efi, apfs, hfs, other };
+pub const Role = enum { none, boot, config, home };
+
+pub const Part = struct {
+    /// 엔트리 자리 + 1. 커널이 매기는 파티션 번호(`nvme0n1p<N>`)와 같다.
+    number: u8,
+    kind: PartKind,
+    role: Role,
+    first: u64,
+    last: u64,
+};
+
+pub const MAX_PARTS = 128;
+
+pub const Gpt = struct {
+    sector: u64,
+    first_usable: u64,
+    last_usable: u64,
+    /// 헤더가 말하는 엔트리 수. 빈 엔트리 번호를 셀 때의 끝이다.
+    entries: u32,
+    parts: [MAX_PARTS]Part = undefined,
+    count: usize = 0,
+
+    pub fn slice(self: *const Gpt) []const Part {
+        return self.parts[0..self.count];
+    }
+
+    /// 그 이름의 파티션이 정확히 하나면 그것, 없거나 둘 이상이면 null. 둘이면 어느 쪽이 우리 것인지
+    /// 모른다 — 설치되지 않은 디스크로 보고 `--beside --wipe`만 받는다(TARS 이름 전부를 지운다).
+    pub fn find(self: *const Gpt, role: Role) ?Part {
+        var got: ?Part = null;
+        for (self.slice()) |p| {
+            if (p.role != role) continue;
+            if (got != null) return null;
+            got = p;
+        }
+        return got;
+    }
+
+    /// TARS 이름의 파티션이 하나라도 있는가.
+    pub fn hasTars(self: *const Gpt) bool {
+        for (self.slice()) |p| {
+            if (p.role != .none) return true;
+        }
+        return false;
+    }
+
+    /// TARS 이름이 아닌 파티션이 있는가. 있으면 `--beside`로 깔린 디스크다 — `--wipe` 혼자는 그
+    /// 파티션까지 지운다는 것을 계획이 말해야 한다.
+    pub fn hasOthers(self: *const Gpt) bool {
+        for (self.slice()) |p| {
+            if (p.role == .none) return true;
+        }
+        return false;
+    }
+};
+
+/// 엔트리 이름(UTF-16LE 36글자, 72바이트)이 ASCII 글자 name과 같은가. 남는 자리는 0이어야 한다.
+fn nameIs(raw: []const u8, name: []const u8) bool {
+    if (name.len * 2 > raw.len) return false;
+    for (name, 0..) |c, i| {
+        if (raw[i * 2] != c or raw[i * 2 + 1] != 0) return false;
+    }
+    for (raw[name.len * 2 ..]) |b| {
+        if (b != 0) return false;
+    }
+    return true;
+}
+
+fn roleOf(raw_name: []const u8) Role {
+    if (nameIs(raw_name, NAME_BOOT)) return .boot;
+    if (nameIs(raw_name, NAME_CONFIG)) return .config;
+    if (nameIs(raw_name, NAME_HOME)) return .home;
+    return .none;
+}
+
+fn kindOf(guid: *const [16]u8) PartKind {
+    if (std.mem.eql(u8, guid, &GUID_EFI)) return .efi;
+    if (std.mem.eql(u8, guid, &GUID_APFS)) return .apfs;
+    if (std.mem.eql(u8, guid, &GUID_HFS)) return .hfs;
+    return .other;
+}
+
+/// head에서 GPT를 읽는다. sector는 장치의 논리 섹터 크기(512 · 4096)이고 헤더는 LBA 1(오프셋 sector)에
+/// 있다. 하나라도 이상하면 null이다 — 헤더나 엔트리의 CRC가 안 맞으면 커널과 sfdisk는 백업 GPT를 믿고,
+/// 우리가 본 엔트리와 그들이 쓰는 엔트리가 갈린다. 남의 디스크에 쓸 자리를 이것으로 고르므로 의심스러운
+/// 것은 읽지 않는다.
+pub fn parseGpt(head: []const u8, sector: u64) ?Gpt {
+    if (sector != 512 and sector != 4096) return null;
+    const h_off: usize = @intCast(sector);
+    if (!hasGptAt(head, h_off) or head.len < h_off + 92) return null;
+    const h = head[h_off..];
+
+    // 헤더 CRC는 헤더 크기만큼, CRC 칸(16)을 0으로 두고 센다.
+    const h_size = std.mem.readInt(u32, h[12..16], .little);
+    if (h_size < 92 or h_size > sector or h_off + h_size > head.len) return null;
+    var crc = std.hash.Crc32.init();
+    crc.update(h[0..16]);
+    crc.update(&[_]u8{ 0, 0, 0, 0 });
+    crc.update(h[20..h_size]);
+    if (crc.final() != std.mem.readInt(u32, h[16..20], .little)) return null;
+
+    const first_usable = std.mem.readInt(u64, h[40..48], .little);
+    const last_usable = std.mem.readInt(u64, h[48..56], .little);
+    const entries_lba = std.mem.readInt(u64, h[72..80], .little);
+    const entries = std.mem.readInt(u32, h[80..84], .little);
+    const e_size = std.mem.readInt(u32, h[84..88], .little);
+    if (first_usable > last_usable or e_size != 128 or entries == 0 or entries > MAX_PARTS) return null;
+    if (entries_lba < 2 or entries_lba > head.len / sector) return null;
+    const e_off: usize = @intCast(entries_lba * sector);
+    const e_len: usize = @as(usize, entries) * 128;
+    if (e_off + e_len > head.len) return null;
+    const table = head[e_off..][0..e_len];
+    if (std.hash.Crc32.hash(table) != std.mem.readInt(u32, h[88..92], .little)) return null;
+
+    var g = Gpt{ .sector = sector, .first_usable = first_usable, .last_usable = last_usable, .entries = entries };
+    var i: usize = 0;
+    while (i < entries) : (i += 1) {
+        const e = table[i * 128 ..][0..128];
+        if (std.mem.allEqual(u8, e[0..16], 0)) continue;
+        const first = std.mem.readInt(u64, e[32..40], .little);
+        const last = std.mem.readInt(u64, e[40..48], .little);
+        // 쓸 수 있는 구간 밖의 엔트리는 규격 위반이다. 빈 자리를 셀 수 없으니 통째로 안 읽는다.
+        if (first > last or first < first_usable or last > last_usable) return null;
+        g.parts[g.count] = .{
+            .number = @intCast(i + 1),
+            .kind = kindOf(e[0..16]),
+            .role = roleOf(e[56..128]),
+            .first = first,
+            .last = last,
+        };
+        g.count += 1;
+    }
+    return g;
+}
+
+/// 빈 구간. 섹터 단위이고 end는 안 든다. 두 끝 다 1MiB에 맞췄다.
+pub const Gap = struct {
+    start: u64,
+    end: u64,
+
+    pub fn bytes(self: Gap, sector: u64) u64 {
+        return (self.end - self.start) * sector;
+    }
+};
+
+/// 파티션 사이(와 앞뒤)의 빈 구간 중 가장 큰 것. 시작은 1MiB 위로, 끝은 1MiB 아래로 맞춘다 — sfdisk와
+/// macOS의 정렬이 1MiB이고, 맞추고 나서 남는 것이 진짜 쓸 자리다. without_tars면 TARS 이름의 파티션을
+/// 없는 것으로 친다(`--beside --wipe`가 그 셋을 지운 뒤의 자리). 빈 구간이 없으면 null.
+pub fn largestGap(g: *const Gpt, without_tars: bool) ?Gap {
+    const step: u64 = (1 << 20) / g.sector;
+    var used: [MAX_PARTS][2]u64 = undefined;
+    var n: usize = 0;
+    for (g.slice()) |p| {
+        if (without_tars and p.role != .none) continue;
+        // 시작 순으로 끼워 넣는다. 많아야 128개다.
+        var j = n;
+        while (j > 0 and used[j - 1][0] > p.first) : (j -= 1) used[j] = used[j - 1];
+        used[j] = .{ p.first, p.last };
+        n += 1;
+    }
+
+    var best: ?Gap = null;
+    var cursor = g.first_usable;
+    var k: usize = 0;
+    while (k <= n) : (k += 1) {
+        // 마지막 바퀴는 끝(last_usable 다음)까지의 꼬리다.
+        const stop = if (k < n) used[k][0] else g.last_usable + 1;
+        if (stop > cursor) {
+            const s = std.mem.alignForward(u64, cursor, step);
+            const e = std.mem.alignBackward(u64, stop, step);
+            if (e > s and (best == null or e - s > best.?.end - best.?.start)) best = .{ .start = s, .end = e };
+        }
+        if (k < n) cursor = @max(cursor, used[k][1] + 1);
+    }
+    return best;
+}
+
+/// sfdisk가 매길 번호 셋. sfdisk는 `--append`의 새 파티션에 비어 있는 첫 엔트리를 준다(DB-M0 plan
+/// 착수 전 3에서 2.41.5로 확인). without_tars는 largestGap과 같다. 빈 엔트리가 셋이 안 되면 null.
+pub fn freeNumbers(g: *const Gpt, without_tars: bool) ?[3]u8 {
+    var out: [3]u8 = undefined;
+    var got: usize = 0;
+    var n: u32 = 1;
+    outer: while (n <= g.entries and got < 3) : (n += 1) {
+        for (g.slice()) |p| {
+            if (p.number == n and !(without_tars and p.role != .none)) continue :outer;
+        }
+        out[got] = @intCast(n);
+        got += 1;
+    }
+    return if (got == 3) out else null;
+}
+
+/// 섹터 단위의 한 파티션 자리.
+pub const Range = struct { start: u64, size: u64 };
+
+/// `--beside`의 배치. 크기는 통째 설치와 같다 — 768MiB · 256MiB · 구간의 나머지(DB design 결정 4).
+pub const Layout = struct { boot: Range, config: Range, home: Range };
+
+pub const BOOT_BYTES: u64 = 768 << 20;
+pub const CONFIG_BYTES: u64 = 256 << 20;
+
+/// 구간이 MIN_DISK_BYTES보다 작으면 null(통째 설치와 같은 최소다 — HP design 결정 2).
+pub fn besideLayout(gap: Gap, sector: u64) ?Layout {
+    if (gap.bytes(sector) < MIN_DISK_BYTES) return null;
+    const b = BOOT_BYTES / sector;
+    const c = CONFIG_BYTES / sector;
+    return .{
+        .boot = .{ .start = gap.start, .size = b },
+        .config = .{ .start = gap.start + b, .size = c },
+        .home = .{ .start = gap.start + b + c, .size = gap.end - (gap.start + b + c) },
+    };
+}
+
+/// `sfdisk --append`에 먹이는 세 줄. 셋 다 start와 size를 섹터로 적는다 — 생략하면 sfdisk가 첫 빈 자리를
+/// 고를 수 있어 우리가 고른 구간과 갈린다(DB design 결정 4). `label:` 줄이 없다 — 있는 표를 그대로 두고
+/// 덧붙인다. buf가 모자라면 null.
+pub fn appendScript(buf: []u8, l: Layout) ?[]const u8 {
+    return std.fmt.bufPrint(buf,
+        \\start={d}, size={d}, type=uefi, name={s}
+        \\start={d}, size={d}, type=linux, name={s}
+        \\start={d}, size={d}, type=linux, name={s}
+        \\
+    , .{
+        l.boot.start,   l.boot.size,   NAME_BOOT,
+        l.config.start, l.config.size, NAME_CONFIG,
+        l.home.start,   l.home.size,   NAME_HOME,
+    }) catch null;
+}
+
+/// 목록의 상태 칸과 계획이 말하는 GPT 디스크(DB design 결정 9). 예: `GPT: EFI, macOS (APFS); 6 GB free`.
+/// 파티션을 번호 순으로 이름 짓고 TARS 셋은 `TARS` 하나로, 나머지는 `N other`로 센다. 빈 자리는
+/// largestGap(`--beside`가 쓸 자리)이다. buf가 모자라면 `GPT`.
+pub fn gptText(buf: []u8, g: *const Gpt) []const u8 {
+    var w = Fill{ .out = buf };
+    w.put("GPT: ");
+    var said = false;
+    var tars = false;
+    var others: usize = 0;
+    for (g.slice()) |p| {
+        const word: []const u8 = if (p.role != .none) blk: {
+            if (tars) continue;
+            tars = true;
+            break :blk "TARS";
+        } else switch (p.kind) {
+            .efi => "EFI",
+            .apfs => "macOS (APFS)",
+            .hfs => "macOS (HFS+)",
+            .other => {
+                others += 1;
+                continue;
+            },
+        };
+        if (said) w.put(", ");
+        w.put(word);
+        said = true;
+    }
+    if (others > 0) {
+        var num: [24]u8 = undefined;
+        if (said) w.put(", ");
+        w.put(std.fmt.bufPrint(&num, "{d} other", .{others}) catch "other");
+        said = true;
+    }
+    if (!said) w.put("no partitions");
+    if (largestGap(g, false)) |gap| {
+        var size: [16]u8 = undefined;
+        w.put("; ");
+        w.put(formatSize(&size, gap.bytes(g.sector)));
+        w.put(" free");
+    } else {
+        w.put("; no free space");
+    }
+    if (w.full) return "GPT";
+    return buf[0..w.n];
+}
+
+/// 자리가 모자란 `--beside`의 거절 줄(DB design 결정 3). macOS에서 자리를 내는 명령을 함께 말한다 —
+/// HFS+ 맥이면 `resizeVolume`, 아니면 APFS의 `resizeContainer`다. `disk0s2`는 맥의 보통 모양이고
+/// 사람이 `diskutil list`로 확인한다(running-tars.md). 줄은 `Complain`으로 간다.
+pub fn roomRefusal(sink: anytype, path: []const u8, g: *const Gpt, gap_bytes: u64) void {
+    var size: [16]u8 = undefined;
+    var hfs = false;
+    for (g.slice()) |p| {
+        if (p.kind == .hfs) hfs = true;
+    }
+    sink.print("the largest free space on {s} is {s}; TARS needs " ++ MIN_DISK_WORDS ++ "; nothing was changed.", .{
+        path, formatSize(&size, gap_bytes),
+    });
+    sink.print("make room in macOS first: diskutil {s} disk0s2 <smaller size> (see diskutil list)", .{
+        if (hfs) "resizeVolume" else "apfs resizeContainer",
+    });
+}
+
+/// `--beside`의 계획. 디스크에 있는 것을 그대로 둔다는 것과, 어느 구간에 무엇이 몇 번으로 들어가는지를
+/// 말한다. wipe_nums는 `--beside --wipe`가 먼저 지울 TARS 파티션 번호다(없으면 빈 슬라이스).
+pub fn besideLines(
+    sink: anytype,
+    path: []const u8,
+    size: []const u8,
+    model: []const u8,
+    holds: []const u8,
+    gap: Gap,
+    sector: u64,
+    nums: [3]u8,
+    wipe_nums: []const u8,
+) void {
+    sink.print("tars-install: {s} ({s}, {s}) keeps its partitions. it now holds: {s}\n", .{ path, size, model, holds });
+    if (wipe_nums.len > 0) {
+        sink.print("  the TARS partitions are erased first, your settings and home too:", .{});
+        for (wipe_nums) |n| sink.print(" p{d}", .{n});
+        sink.print("\n", .{});
+    }
+    sink.print("  TARS goes into the free space from MiB {d} to MiB {d}; no other partition is touched\n", .{
+        gap.start * sector >> 20, gap.end * sector >> 20,
+    });
+    layoutRows(sink, nums);
+    sink.print("  the Mac still starts macOS; hold Option at power-on and pick EFI Boot for TARS\n", .{});
+}
+
+/// 새 설치가 만드는 세 줄. 통째 설치는 {1, 2, 3}이다.
+pub fn layoutRows(sink: anytype, nums: [3]u8) void {
+    sink.print("  p{d}  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{nums[0]});
+    sink.print("  p{d}  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{nums[1]});
+    sink.print("  p{d}     rest  Linux       ext4   tars-home   <- your home, empty at first\n", .{nums[2]});
 }
