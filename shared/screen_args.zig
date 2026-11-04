@@ -75,6 +75,60 @@ pub const ClipboardScope = enum {
     }
 };
 
+/// 휠 방향(PS design 결정 1 · 2). 마우스와 터치패드가 따로 하나씩 든다 — terminal이
+/// 장치를 열 때 그 장치의 종류로 둘 중 하나를 고른다(`pointer.wheelSign`).
+///
+/// `normal`은 "휠을 앞으로 밀거나 손가락을 위로 밀면 위의 글이 보인다"(리눅스 · 윈도우의
+/// 마우스), `natural`은 "내용이 휠 · 손가락을 따라간다"(macOS)이다. 이름은 macOS의
+/// "자연스러운 스크롤"에서 왔다. `pointer.zig`의 `Scroll`(끄는 중의 휠)과 겹치지 않게
+/// 이름이 `WheelDirection`이다(PS-M0 plan 확정 1).
+pub const WheelDirection = enum {
+    normal,
+    natural,
+
+    pub fn arg(self: WheelDirection) [:0]const u8 {
+        return @tagName(self);
+    }
+};
+
+/// 포인터 가속의 단계(PS design 결정 3). 0은 가속 없음이고 지금 동작과 같다. 10이 가장
+/// 세다. 범위가 0~10인 것은 사용자가 정했다(2026-11-04) — 실기 근거 없이 그보다 잘게
+/// 가를 수 없다.
+///
+/// 맨 `u4`가 아니라 구조체인 것은 init의 `reload.same` · `reload.text` ·
+/// `config_edit.fieldText` · `hintFor`가 `Ntp` · `Timezone`처럼 타입으로 갈래를 고르기
+/// 때문이다(PS-M0 plan 확정 2). `u4`면 다른 정수 필드와 구분이 안 된다.
+pub const Accel = struct {
+    level: u4 = 0,
+
+    pub const MAX = 10;
+
+    /// 10진 정수 하나. 부호 · 공백 · 다른 글자가 붙으면 거절한다 — 설정 파일의 값은
+    /// 이미 앞뒤 공백이 벗겨져 온다. 범위 밖은 잘라 쓰지 않고 거절한다(PS design 결정 6):
+    /// `11`을 10으로 올리면 사람이 적은 것과 다른 값이 조용히 쓰인다.
+    pub fn parse(text: []const u8) ?Accel {
+        if (text.len == 0 or text.len > 2) return null;
+        var n: u8 = 0;
+        for (text) |ch| {
+            if (ch < '0' or ch > '9') return null;
+            n = n * 10 + (ch - '0');
+        }
+        if (n > MAX) return null;
+        return .{ .level = @intCast(n) };
+    }
+
+    /// argv에 넣고 로그에 찍을 글자. 표에서 고르므로 버퍼가 필요 없다 — `@tagName`처럼
+    /// sentinel이 있는 상수 글자다.
+    pub fn arg(self: Accel) [:0]const u8 {
+        const names = [_][:0]const u8{ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
+        return names[@min(self.level, MAX)];
+    }
+
+    pub fn eql(a: Accel, b: Accel) bool {
+        return a.level == b.level;
+    }
+};
+
 /// 한/영 전환 키의 이름(HI design 결정 7).
 ///
 /// 자판 · 키보드와 모양이 다른 유일한 설정이다. 그것들은 하나를 고르는 것이지만
@@ -221,7 +275,7 @@ pub const ignore_unknown = struct {
 /// 탈출로) terminal은 같은 자리를 읽는다. SA 전에는 init의 상수 일곱과 terminal의
 /// `args[n]` 여덟이 주석으로만 묶여 있었고, 어긋나면 탈출로가 키보드 종류 자리를
 /// 덮어썼다. 칸을 더할 때는 여기에 이름을 더하고 `ARGC`를 올린다 — 콘솔 셸과
-/// 서비스 셋의 argv도 같은 길이라 그쪽은 null이 하나 늘 뿐이다.
+/// 서비스 셋의 argv도 같은 길이라 그쪽은 null이 하나 늘 뿐이다. PS-M0이 포인터 칸 넷을 더해 열셋이다.
 ///
 /// IK-M0에서 4번 칸(키보드 장치 경로, HD-M0)이 빠지고 뒤 다섯이 하나씩 당겨졌다.
 /// KH부터 terminal이 키보드를 스스로 고르고 열어 그 칸을 읽기만 했다. 비워 두지
@@ -241,6 +295,11 @@ pub const Slot = enum(u8) {
     /// 화면 셸을 띄울 사용자 이름, 또는 root로 띄운다는 뜻의 `NO_USER`(HP design 결정 3 · 8).
     /// init이 `/home`이 붙고 `tars.conf`에 `user=`가 있을 때만 이름을 넣는다.
     user = 8,
+    /// 포인터 설정 넷(PS design 결정 5). 방향 둘은 `WheelDirection`, 가속 둘은 `Accel`의 글자다.
+    mouse_scroll = 9,
+    touchpad_scroll = 10,
+    mouse_accel = 11,
+    touchpad_accel = 12,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -252,7 +311,7 @@ pub const Slot = enum(u8) {
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
 /// 타입이다.
-pub const ARGC = 9;
+pub const ARGC = 13;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -293,6 +352,11 @@ pub const default_clipboard: ClipboardScope = .shared;
 /// `user` 칸의 "사용자 없음" — 화면 셸이 root로 뜬다. init 없이 띄운 terminal도 이 값이다.
 pub const NO_USER: [:0]const u8 = "none";
 pub const default_user: [*:0]const u8 = NO_USER.ptr;
+/// 포인터 넷(PS design 결정 2 · 3). 방향은 지금 동작 그대로, 가속은 끔.
+pub const default_mouse_scroll: WheelDirection = .normal;
+pub const default_touchpad_scroll: WheelDirection = .natural;
+pub const default_mouse_accel: Accel = .{};
+pub const default_touchpad_accel: Accel = .{};
 
 // ── 계정의 번호(HP design 결정 5 · 8) ──────────────────────────────────
 //
@@ -333,6 +397,10 @@ pub const Args = struct {
     clipboard: ClipboardScope,
     /// 사용자 이름이거나 `NO_USER`. init에서는 `Config.user`의 버퍼를 가리킨다.
     user: [*:0]const u8,
+    mouse_scroll: WheelDirection,
+    touchpad_scroll: WheelDirection,
+    mouse_accel: Accel,
+    touchpad_accel: Accel,
 };
 
 /// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
@@ -351,6 +419,10 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     v[Slot.toggles.index()] = a.toggles.arg(toggle_buf).ptr;
     v[Slot.clipboard.index()] = a.clipboard.arg().ptr;
     v[Slot.user.index()] = a.user;
+    v[Slot.mouse_scroll.index()] = a.mouse_scroll.arg().ptr;
+    v[Slot.touchpad_scroll.index()] = a.touchpad_scroll.arg().ptr;
+    v[Slot.mouse_accel.index()] = a.mouse_accel.arg().ptr;
+    v[Slot.touchpad_accel.index()] = a.touchpad_accel.arg().ptr;
     return v;
 }
 
@@ -377,7 +449,17 @@ pub fn decode(v: Argv) Args {
             default_toggles,
         .clipboard = enumAt(ClipboardScope, v, .clipboard, default_clipboard),
         .user = v[Slot.user.index()] orelse default_user,
+        .mouse_scroll = enumAt(WheelDirection, v, .mouse_scroll, default_mouse_scroll),
+        .touchpad_scroll = enumAt(WheelDirection, v, .touchpad_scroll, default_touchpad_scroll),
+        .mouse_accel = accelAt(v, .mouse_accel, default_mouse_accel),
+        .touchpad_accel = accelAt(v, .touchpad_accel, default_touchpad_accel),
     };
+}
+
+/// `decode`의 가속 칸 하나. 0~10 밖이거나 숫자가 아니면 기본값이다.
+fn accelAt(v: Argv, s: Slot, default: Accel) Accel {
+    const raw = v[s.index()] orelse return default;
+    return Accel.parse(std.mem.span(raw)) orelse default;
 }
 
 /// `decode`의 enum 칸 하나.

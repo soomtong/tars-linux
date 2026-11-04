@@ -2,7 +2,7 @@
 
 접두사: PS
 
-Status: design(2026-11-04). 착수 전.
+Status: M0 끝(2026-11-04) — 설정 넷의 길 · 칸마다 휠 부호, `pointer` 체인 부팅 C 판정 가~마, mutation 둘 잡힘. M1(가속) 남음.
 
 사용자의 요청(2026-11-04)에서 시작한다.
 
@@ -200,10 +200,11 @@ boot C는 boot B처럼 PS/2 마우스와 `tp-replay` 터치패드를 함께 열�
 | 나 | 두 `open` 줄이 각자 `scroll=natural` · `scroll=normal`(한 부팅에서 다른 값) | M0 |
 | 다 | `seq 200` 뒤 마우스 휠 위로 한 눈금 → `scroll>`의 `offset`이 PD 검사 11의 반대로 움직인다 | M0 |
 | 라 | 같은 패널에서 `tp-replay`의 `scroll` → PD 검사 24의 반대로 움직인다 | M0 |
-| 마 | 두 `open` 줄이 `accel=10`, 그리고 같은 `tp-replay move`가 boot B(accel 0)보다 멀리 간다 | M1 |
+| 마 | `tars-config set touchpad_scroll=natural` → `reload` → `reload terminal` 뒤, 마우스 natural(−1) · 터치패드 natural(+1)로 두 칸의 부호가 다를 때 두 손가락 아래 → 위의 글(PS-M0이 더했다, 실측 3) | M0 |
+| 바 | 두 `open` 줄이 `accel=10`, 그리고 같은 `tp-replay move`가 boot B(accel 0)보다 멀리 간다 | M1 |
 
 boot B를 고치지 않고 새 부팅을 두는 것은, 기본값의 판정(PD 검사 11 · 24)이 그대로 남아야 "기본값은 지금 동작"이 계속 서기
-때문이다. 판정 마의 "멀리"는 `tp-replay move`의 속도가 `V_LOW`를 넘어야 선다 — 넘는지는 plan이 패드 축 범위와 화면 폭으로
+때문이다. 판정 바의 "멀리"는 `tp-replay move`의 속도가 `V_LOW`를 넘어야 선다 — 넘는지는 plan이 패드 축 범위와 화면 폭으로
 셈한다. 모자라면 `tp-replay`에 빠른 이동 명령을 더한다(PD 결정 10의 도구를 넓히는 일).
 
 마우스의 가속은 체인에서 안 본다. HMP `mouse_move` 하나가 보고 하나라 `dt`를 모르고(배율 1), 명령 사이의 간격은 모니터 왕복이
@@ -259,8 +260,64 @@ boot C가 `pointer` 체인을 수십 초 늘린다. 루트 게이트의 lane 배
 
 | M | 무엇 | 게이트 |
 |---|---|---|
-| M0 | `Scroll` · argv 칸 넷 · `config.zig`의 네 키(가속 칸은 읽어 나르기만) · `wheel_sign` · `open` 줄 · matcher 고치기 · boot C의 판정 가~라 | `pointer` 체인 + 루트 게이트 |
-| M1 | `pointer.Accel`(순수) · `pointer_test`의 곡선 검사 · 칸에 붙이기 · boot C의 판정 마 · mutation(가속을 안 곱하면 마가 빨강) | `pointer` 체인 + 루트 게이트 |
+| M0 | `WheelDirection` · argv 칸 넷 · `config.zig`의 네 키(가속 칸은 읽어 나르기만) · `wheel_sign` · `open` 줄 · matcher 고치기 · boot C의 판정 가~마 | `pointer` 체인 + 루트 게이트 |
+| M1 | 가속 상태 기계(순수, 이름은 M1 plan — `pointer.Accel`은 M0에서 단계 값의 이름이 됐다) · `pointer_test`의 곡선 검사 · 칸에 붙이기 · boot C의 판정 바 · mutation(가속을 안 곱하면 바가 빨강) | `pointer` 체인 + 루트 게이트 |
 
 닫을 때: 이 문서의 `Status:`와 실측 절, PD design 비목표 6 · 7에 "PS로 갔다" 한 줄, `completed.md`, `docs/decisions/project_pointer_settings.md`
 + `MEMORY.md`, 소개 페이지 `data.js`, HANDOFF.
+
+## 실측 (M0, 2026-11-04)
+
+### 실측 1 — init이 막힌 자리 셋
+
+plan 확인 1 · 2가 짚은 둘(`reload.Keys`의 `u16`, 타입으로 갈래를 고르는 네 함수)은 그대로였다. `Keys.Bits = u32`로 넓히고 상한을
+`@bitSizeOf(Bits)`로 묶었다. 셋째는 plan이 못 본 것이다 — `config_test`의 실패 줄 하나가 값 열일곱의 got · want와 입력을 한
+`print`에 넣어 인자가 35개가 되고, Zig의 format이 32개까지라 컴파일이 막혔다. got · want를 따로 찍는 `printConfig`로 나눴다.
+`ARGC`가 13이 되며 서비스 argv 리터럴 넷(dbus · bluetoothd · wifi · chronyd · dhcpcd)과 init `main.zig`의 둘(콘솔 셸 · 서비스 자식)이
+길이 불일치로 막혔다 — null을 넷씩 더했다.
+
+seed `tars.conf`는 3376바이트, `user` 꼬리를 붙이면 3616바이트다(`MAX_FILE` 4096 안, `config_test`).
+
+### 실측 2 — 부팅 C (판정 가~라)
+
+| 판정 | 값 |
+|---|---|
+| 다 | natural 마우스의 휠을 뒤로 한 눈금 → offset 155 → 152, 앞으로 → 155. `at` 줄은 `wheel=1`(부호를 곱한 뒤) |
+| 라 | normal 터치패드에서 두 손가락 위로 90단위 → 바닥에서 6줄 위, `at` 줄의 wheel 합 2 |
+
+라는 첫 판에서 "읽어 둔 offset − 6"을 봤다가 빨갰다. 기준을 읽은 뒤 도구를 띄운 명령의 줄바꿈이 늦게 와 total이 204 → 205로
+늘고, 패널이 그 바닥(158)으로 내려간 다음 152로 올라갔다(157 → 152, 5줄). 검사 24처럼 바닥에서의 거리(total − len − offset)로
+판정해 섰다.
+
+### 실측 3 — mutation 둘, 그리고 판정 마
+
+| | 망가뜨린 것 | 잡은 판정 |
+|---|---|---|
+| a | `drainPointer`가 부호를 안 곱한다 | 다(offset 155 그대로, 기대 152) |
+| b | `takePointer`가 종류를 안 보고 마우스의 값으로 부호를 고른다 | 처음엔 아무것도 못 잡았다(초록) → 판정 마 |
+
+b가 빠져나간 이유: 부팅 C의 설정(마우스 natural · 터치패드 normal)은 두 칸의 부호가 둘 다 −1이고, 부팅 B의 기본값은 둘 다 +1이다.
+"두 칸의 값이 다르다"를 보이려고 고른 조합이 "부호는 같다"였다. plan이 적은 "부팅 B 검사 24도 잡는다"도 같은 이유로 틀렸다.
+그래서 판정 마를 더했다 — `tars-config set touchpad_scroll=natural` → `reload` → `reload terminal`로 다시 띄워 마우스 −1 · 터치패드
++1을 만들고, 두 손가락 아래가 위의 글을 보이는지 본다. b에서 offset이 158(바닥) 그대로라 빨갰다. 이 판정이 design 시나리오 S8
+(`reload terminal`로 바뀐 값이 장치 칸까지 간다)도 함께 본다.
+
+### 실측 4 — `pointer` 체인의 간헐: `screen_row`가 쓰는 중인 줄을 읽는다
+
+PS-M0의 체인 회차 넷 가운데 둘이 부팅 A에서 빨갰다 — MC의 `mc-one mc-two:three is not a row of its own`과 `the 77-column row is not
+on the last screen`. 둘 다 `screen_row`가 마지막 `screen>` 줄 하나에서 행을 찾는 판정이고, 바로 앞의 `wait_for_screen`은 같은 글자를
+이미 봤으며, 실패 순간 시리얼 꼬리의 덤프에는 그 행이 있었다(저장한 꼬리로 다시 셈하면 행 44). `screen>` 한 줄은 수 KB라 시리얼
+로그에 차례로 쓰이고, 쓰는 도중의 줄을 읽으면 뒤쪽(아래 행)이 아직 없다. 이번 변경은 프레임마다 찍는 줄을 늘리지 않았다 — 원래
+있던 경합이다. `screen_row`가 못 찾으면 0.1초씩 3초까지 다시 읽게 했다. 그 뒤 체인 회차 셋(본 회차 둘 · mutation b)이 부팅 A를
+다 통과했다.
+
+### 실측 5 — 체인 시간
+
+`pointer` 체인 259~274초(부팅 C 포함, 단독). `config` 330초 · `pane` 190초는 글자만 고친 체인이다.
+
+### 실측 6 — 루트 게이트
+
+`RUNS=1`: 26/27, 약 16분 50초(prebuild 375초 · lanes 635초), 잘린 로그 줄 0. 빨간 하나는 `BT-M2`의 `btvirt` GPF 간헐(세 번째,
+`carryover.md`의 BT 항목)이고 체인만 다시 돌린 판은 초록이다. `pointer`(PD-M4) 회차는 146초로 가장 긴 레인(PM 246초) 안이다 —
+위험 4는 일어나지 않았다. 부팅 C의 판정 가~마가 게이트 안에서도 섰다.
+

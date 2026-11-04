@@ -27,12 +27,15 @@ pub const Group = enum {
     boot,
 };
 
-/// 열네 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
+/// 열여덟 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
 /// `groupOf`가 컴파일 에러를 낸다.
 pub fn groupOf(comptime key: []const u8) Group {
     const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth" };
     const next = [_][]const u8{ "shell", "shell_config", "timezone" };
-    const term = [_][]const u8{ "keyboard", "hangul_layout", "latin_layout", "hangul_toggle", "esc_latin", "clipboard" };
+    const term = [_][]const u8{
+        "keyboard",  "hangul_layout", "latin_layout",    "hangul_toggle", "esc_latin",
+        "clipboard", "mouse_scroll",  "touchpad_scroll", "mouse_accel",   "touchpad_accel",
+    };
     if (comptime std.mem.eql(u8, key, "user")) return .boot;
     inline for (now) |k| if (comptime std.mem.eql(u8, k, key)) return .now;
     inline for (next) |k| if (comptime std.mem.eql(u8, k, key)) return .next_spawn;
@@ -53,7 +56,7 @@ pub fn onScreen(comptime key: []const u8) bool {
 /// `Toggles`는 칸 다섯.
 fn same(comptime T: type, a: T, b: T) bool {
     if (T == config.Toggles) return std.meta.eql(a, b);
-    if (T == config.Ntp or T == config.Timezone) return a.eql(b);
+    if (T == config.Ntp or T == config.Timezone or T == config.Accel) return a.eql(b);
     if (T == ?config.User) return config.User.eql(a, b);
     if (@typeInfo(T) == .@"enum") return a == b;
     @compileError("reload.same cannot compare a " ++ @typeName(T));
@@ -61,12 +64,15 @@ fn same(comptime T: type, a: T, b: T) bool {
 
 /// 키의 집합. `Config`의 필드 순서대로 한 비트씩.
 pub const Keys = struct {
-    bits: u16 = 0,
+    /// 필드 하나에 한 비트. PS-M0에서 키가 열여덟이 되어 `u16`에서 넓혔다.
+    pub const Bits = u32;
+
+    bits: Bits = 0,
 
     pub const count = @typeInfo(config.Config).@"struct".field_names.len;
 
     comptime {
-        if (count > 16) @compileError("reload.Keys holds 16 keys");
+        if (count > @bitSizeOf(Bits)) @compileError("reload.Keys holds too few bits for the Config keys");
     }
 
     pub fn has(self: Keys, comptime key: []const u8) bool {
@@ -77,9 +83,9 @@ pub const Keys = struct {
         return self.bits == 0;
     }
 
-    fn bit(comptime key: []const u8) u16 {
+    fn bit(comptime key: []const u8) Bits {
         inline for (@typeInfo(config.Config).@"struct".field_names, 0..) |f_name, i| {
-            if (comptime std.mem.eql(u8, f_name, key)) return @as(u16, 1) << i;
+            if (comptime std.mem.eql(u8, f_name, key)) return @as(Keys.Bits, 1) << i;
         }
         @compileError("no key " ++ key);
     }
@@ -89,7 +95,7 @@ pub const Keys = struct {
 pub fn changed(old: config.Config, new: config.Config) Keys {
     var k = Keys{};
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
-        if (!same(f_type, @field(old, f_name), @field(new, f_name))) k.bits |= @as(u16, 1) << i;
+        if (!same(f_type, @field(old, f_name), @field(new, f_name))) k.bits |= @as(Keys.Bits, 1) << i;
     }
     return k;
 }
@@ -100,7 +106,7 @@ pub fn pending(live: config.Config, screen: config.Config) Keys {
     var k = Keys{};
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
         if (comptime onScreen(f_name)) {
-            if (!same(f_type, @field(live, f_name), @field(screen, f_name))) k.bits |= @as(u16, 1) << i;
+            if (!same(f_type, @field(live, f_name), @field(screen, f_name))) k.bits |= @as(Keys.Bits, 1) << i;
         }
     }
     return k;
@@ -120,6 +126,7 @@ comptime {
 fn text(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
     if (T == config.Toggles) return v.arg(buf);
     if (T == config.Ntp) return v.arg(buf);
+    if (T == config.Accel) return v.arg();
     if (T == config.Timezone) {
         const s = v.slice();
         @memcpy(buf[0..s.len], s);
@@ -140,7 +147,7 @@ fn text(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
 /// 않는다(`control.Out`의 주석).
 pub const Out = control.Out;
 
-/// `config` 동사의 답(design 결정 1). 열세 줄 `key=value`(init이 지금 쓰는 값), 그리고 화면이
+/// `config` 동사의 답(design 결정 1). 키마다 한 줄 `key=value`(init이 지금 쓰는 값), 그리고 화면이
 /// 대기 중이면 `screen key=value …` 한 줄(terminal이 지금 쓰는 값).
 pub fn configReply(out: *Out, live: config.Config, screen: config.Config) void {
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {
@@ -151,7 +158,7 @@ pub fn configReply(out: *Out, live: config.Config, screen: config.Config) void {
     if (p.empty()) return;
     out.print("screen", .{});
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
-        if (p.bits & (@as(u16, 1) << i) != 0) {
+        if (p.bits & (@as(Keys.Bits, 1) << i) != 0) {
             var buf: [VALUE_MAX]u8 = undefined;
             out.print(" {s}={s}", .{ f_name, text(f_type, @field(screen, f_name), &buf) });
         }
@@ -272,7 +279,7 @@ pub fn note(comptime key: []const u8) []const u8 {
 pub fn screenLines(out: *Out, screen: config.Config, live: config.Config) void {
     const p = pending(live, screen);
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
-        if (p.bits & (@as(u16, 1) << i) != 0) {
+        if (p.bits & (@as(Keys.Bits, 1) << i) != 0) {
             var a: [VALUE_MAX]u8 = undefined;
             var b: [VALUE_MAX]u8 = undefined;
             out.print("{s}: {s} -> {s}\n", .{ f_name, text(f_type, @field(screen, f_name), &a), text(f_type, @field(live, f_name), &b) });
@@ -284,7 +291,7 @@ pub fn screenLines(out: *Out, screen: config.Config, live: config.Config) void {
 pub fn keyLines(out: *Out, old: config.Config, new: config.Config) void {
     const k = changed(old, new);
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types, 0..) |f_name, f_type, i| {
-        if (k.bits & (@as(u16, 1) << i) != 0) {
+        if (k.bits & (@as(Keys.Bits, 1) << i) != 0) {
             var a: [VALUE_MAX]u8 = undefined;
             var b: [VALUE_MAX]u8 = undefined;
             out.print("{s}: {s} -> {s} ({s})\n", .{

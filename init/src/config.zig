@@ -795,6 +795,9 @@ pub const LatinLayout = screen_args.LatinLayout;
 pub const ToggleKey = screen_args.ToggleKey;
 pub const Toggles = screen_args.Toggles;
 pub const TOGGLE_ARG_MAX = screen_args.TOGGLE_ARG_MAX;
+/// 포인터 설정의 값 둘(PS design 결정 1 · 3). 이름과 글자는 `screen_args`에 있다.
+pub const WheelDirection = screen_args.WheelDirection;
+pub const Accel = screen_args.Accel;
 
 /// `Toggles.parse`에 주는 sink. 모르는 이름을 이 파일의 `log`로 찍는다 — 글자는 SA 전과
 /// 같다. 설정 파일은 사람이 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이고,
@@ -859,6 +862,14 @@ pub const Config = struct {
     esc_latin: EscLatin = .on,
     /// 근거는 위 `ClipboardScope`의 문서 주석에 있다(CB-M0).
     clipboard: ClipboardScope = .shared,
+    /// 포인터 넷(PS design 결정 1 ~ 3, 2026-11-04 사용자 결정). 방향의 기본값은 PS 전의
+    /// 동작 그대로다 — 마우스는 휠을 앞으로 밀면 위의 글이 보이고(리눅스 기본), 터치패드는
+    /// 내용이 두 손가락을 따라간다(macOS 기본). 가속의 기본값 0은 가속 없음이다.
+    /// terminal이 장치를 열 때 그 장치의 종류로 둘 중 하나를 고른다.
+    mouse_scroll: WheelDirection = .normal,
+    touchpad_scroll: WheelDirection = .natural,
+    mouse_accel: Accel = .{},
+    touchpad_accel: Accel = .{},
     /// 기본값이 없음(null)인 유일한 키다. 이 줄은 사람이 아니라 `tars-install`이 쓴다(HP
     /// design 결정 5) — 설치 때 물은 이름이다. 없으면 화면 셸은 root로 뜬다. 있어도
     /// `/home`이 안 붙은 부팅이면 root다(결정 3). `tars-config set`은 이 키를 거절한다
@@ -1079,6 +1090,37 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "mouse_scroll")) {
+            // clipboard와 완전히 같은 모양이다(PS-M0).
+            c.mouse_scroll = std.meta.stringToEnum(WheelDirection, value) orelse {
+                log("unknown mouse_scroll '{s}', falling back to {s}", .{
+                    value, @tagName(c.mouse_scroll),
+                });
+                continue;
+            };
+        } else if (std.mem.eql(u8, key, "touchpad_scroll")) {
+            c.touchpad_scroll = std.meta.stringToEnum(WheelDirection, value) orelse {
+                log("unknown touchpad_scroll '{s}', falling back to {s}", .{
+                    value, @tagName(c.touchpad_scroll),
+                });
+                continue;
+            };
+        } else if (std.mem.eql(u8, key, "mouse_accel")) {
+            // 첫 숫자 키다(PS design 결정 6). 이름 키와 같은 실패 규칙 — 0~10 밖이거나 숫자가
+            // 아니면 한 줄을 찍고 앞의 값에 머문다. 잘라 쓰지 않는다(11을 10으로 올리지 않는다).
+            c.mouse_accel = Accel.parse(value) orelse {
+                log("unknown mouse_accel '{s}', falling back to {s}", .{
+                    value, c.mouse_accel.arg(),
+                });
+                continue;
+            };
+        } else if (std.mem.eql(u8, key, "touchpad_accel")) {
+            c.touchpad_accel = Accel.parse(value) orelse {
+                log("unknown touchpad_accel '{s}', falling back to {s}", .{
+                    value, c.touchpad_accel.arg(),
+                });
+                continue;
+            };
         } else if (std.mem.eql(u8, key, "user")) {
             // timezone과 같은 모양이다(HP-M1). 다른 키와 달리 떨어지는 자리가 기본값이
             // 아니라 "사용자 없음"이고, 그 뜻을 로그에 적는다 — 화면 셸이 root로 뜬다.
@@ -1174,6 +1216,17 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   shared면 모든 패널과 워크스페이스가 클립보드 하나를 쓰고,
         \\#   pane이면 패널마다 따로다
         \\clipboard={s}
+        \\# mouse_scroll: normal | natural
+        \\#   normal = wheel forward shows what is above, natural = content follows the wheel
+        \\mouse_scroll={s}
+        \\# touchpad_scroll: natural | normal
+        \\#   natural = content follows two fingers (macOS), normal = the reverse
+        \\touchpad_scroll={s}
+        \\# mouse_accel: 0..10
+        \\#   0 = off. Higher goes farther on a fast flick; slow moves stay one to one
+        \\mouse_accel={s}
+        \\# touchpad_accel: 0..10, same as mouse_accel
+        \\touchpad_accel={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1189,6 +1242,10 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.firewall),
         @tagName(c.bluetooth),
         @tagName(c.clipboard),
+        @tagName(c.mouse_scroll),
+        @tagName(c.touchpad_scroll),
+        c.mouse_accel.arg(),
+        c.touchpad_accel.arg(),
     }) catch return error.FormatFailed;
     // `user`는 있을 때만 적는다(HP-M1 plan Task 1). 없는 기계(ISO 부팅의 seed)의 파일은
     // 이 키가 생기기 전과 바이트 하나 다르지 않다 — 그 파일을 판정하는 체인들이 그대로다.

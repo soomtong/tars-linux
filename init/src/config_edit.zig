@@ -19,8 +19,8 @@ comptime {
         @compileError("VALUE_MAX is smaller than a value config.zig can hold");
 }
 
-/// `key=value` 한 줄을 지을 버퍼의 크기. 키는 가장 긴 것이 `hangul_layout`
-/// 열세 글자이고, 사람이 준 값은 `judge`가 이 안에 들어갈 때만 받는다.
+/// `key=value` 한 줄을 지을 버퍼의 크기. 키는 가장 긴 것이 `touchpad_scroll`
+/// 열다섯 글자이고, 사람이 준 값은 `judge`가 이 안에 들어갈 때만 받는다.
 pub const LINE_MAX = 256;
 
 // ── 키 ────────────────────────────────────────────────────────────────
@@ -59,6 +59,7 @@ pub fn valueText(c: *const config.Config, key: []const u8, buf: *[VALUE_MAX]u8) 
 fn fieldText(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
     if (T == config.Toggles) return v.arg(buf);
     if (T == config.Ntp) return v.arg(buf);
+    if (T == config.Accel) return v.arg();
     if (T == config.Timezone) {
         const s = v.slice();
         @memcpy(buf[0..s.len], s);
@@ -77,7 +78,7 @@ fn fieldText(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
 /// 그 키에 적을 수 있는 것. `help`와 거절의 둘째 줄이 쓴다. 모르는 키면 null.
 ///
 /// enum은 이름을 컴파일 타임에 모으므로 config.zig에 이름을 하나 더하면 여기도
-/// 따라온다. enum이 아닌 셋만 글로 적는다.
+/// 따라온다. enum이 아닌 넷만 글로 적는다(`Accel`은 PS-M0).
 pub fn hint(key: []const u8) ?[]const u8 {
     inline for (@typeInfo(config.Config).@"struct".field_names, @typeInfo(config.Config).@"struct".field_types) |f_name, f_type| {
         if (std.mem.eql(u8, key, f_name)) return comptime hintFor(f_type);
@@ -89,6 +90,7 @@ fn hintFor(comptime T: type) []const u8 {
     if (T == config.Toggles)
         return "a comma list of " ++ join(config.ToggleKey, ", ") ++ "; empty turns them all off";
     if (T == config.Ntp) return "off | dhcp | <IPv4 address>";
+    if (T == config.Accel) return "0..10 (0 = off)";
     if (T == config.Timezone) return "UTC | <a name under /usr/share/zoneinfo, e.g. Asia/Seoul>";
     if (T == ?config.User) return "the user name tars-install made; it is not changed here";
     if (@typeInfo(T) == .@"enum") return join(T, " | ");

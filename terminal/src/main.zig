@@ -2362,6 +2362,13 @@ const PointerDev = struct {
         touchpad: touchpad.Touchpad,
         none: void,
     },
+    /// 이 장치의 휠에 곱할 부호(PS design 결정 2). 열 때 종류와 설정으로
+    /// `pointer.wheelSign`이 정하고, 칸이 비면 함께 사라진다 — KK의
+    /// `KeyboardDev.swap_alt_meta`와 같은 모양이다.
+    wheel_sign: i32,
+    /// 이 장치의 가속 단계(PS design 결정 3 · 4). M0은 들고 `open` 줄에 찍기만
+    /// 한다 — 이동에 곱하는 것은 PS-M1이다.
+    accel: pointer.Accel,
 
     fn pathSlice(self: *const PointerDev) []const u8 {
         return self.path[0..self.path_len];
@@ -2549,7 +2556,7 @@ fn readCaps(fd: c_int) ?pointer.Caps {
 /// 멈춰야 회차마다 `at` 줄이 하나다(PD design 결정 3). 키보드는 깨운 fd만 한 번
 /// 읽으므로 블로킹이어도 되지만, 빠지는 순간의 read가 막히지 않는 편이 안전하다
 /// (KH design 결정 1). `O_CLOEXEC`는 패널의 셸이 이 fd를 물려받지 않게 한다.
-fn tryOpenInput(ptrs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, name: []const u8, setting: input.Keyboard) void {
+fn tryOpenInput(ptrs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, name: []const u8, setting: input.Keyboard, prefs: pointer.Prefs) void {
     var path_buf: [POINTER_PATH_MAX]u8 = undefined;
     const path = std.fmt.bufPrintSentinel(&path_buf, POINTER_DIR ++ "/{s}", .{name}, 0) catch return;
     const have_ptr = for (ptrs) |slot| {
@@ -2577,7 +2584,7 @@ fn tryOpenInput(ptrs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?
     name_buf[name_buf.len - 1] = 0;
     const dev_name = std.mem.sliceTo(&name_buf, 0);
 
-    const took_ptr = !have_ptr and takePointer(ptrs, fd, path, &caps, dev_name);
+    const took_ptr = !have_ptr and takePointer(ptrs, fd, path, &caps, dev_name, prefs);
     if (!have_kbd and pointer.looksLikeKeyboard(&caps)) {
         const kfd = if (took_ptr) openInputFd(path) else fd;
         if (kfd < 0) {
@@ -2603,7 +2610,7 @@ fn openInputFd(path: [*:0]const u8) c_int {
 /// 터치패드면 축 범위를 `EVIOCGABS`로 읽어 디코더를 만들고(PD-M3), `open`
 /// 줄에 칸 수 · 축 · resolution을 함께 찍는다. 실기에서 배율이 손에 안 맞을 때
 /// 그 줄이 첫 단서다(design "실기에서 같은 코드로 가는가").
-fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]const u8, caps: *const pointer.Caps, dev_name: []const u8) bool {
+fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]const u8, caps: *const pointer.Caps, dev_name: []const u8, prefs: pointer.Prefs) bool {
     const kind = pointer.classify(caps);
     if (kind == .none) {
         logline.print("terminal: pointer> skip {s} kind={s} name={s}\n", .{ path, @tagName(kind), dev_name });
@@ -2627,6 +2634,8 @@ fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]con
         .path = undefined,
         .path_len = path.len,
         .decoder = if (pad) |setup| .{ .touchpad = touchpad.Touchpad.init(setup, touchpad_screen) } else .{ .mouse = .{} },
+        .wheel_sign = pointer.wheelSign(kind, prefs.mouse_scroll, prefs.touchpad_scroll),
+        .accel = prefs.accelFor(kind),
     };
     @memcpy(devs[free].?.path[0..path.len], path);
     // 이벤트 시각을 단조 시계로 받는다(MC design 결정 2). evdev의 기본은
@@ -2641,12 +2650,14 @@ fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]con
     // 장치면 0이다 — 열린 뒤 움직여야 보인다(design 결정 4의 보이는 조건 2).
     // 화살표가 보이는 동안 둘째 장치를 꽂으면 1이다.
     if (pad) |setup| {
-        logline.print("terminal: pointer> open {s} kind=touchpad slots={d} x={d}..{d} y={d}..{d} res={d},{d} shown={d} name={s}\n", .{
-            path,        setup.slots, setup.x.min,                 setup.x.max, setup.y.min, setup.y.max,
-            setup.x.res, setup.y.res, @intFromBool(pointer_drawn), dev_name,
+        logline.print("terminal: pointer> open {s} kind=touchpad scroll={s} accel={s} slots={d} x={d}..{d} y={d}..{d} res={d},{d} shown={d} name={s}\n", .{
+            path,        @tagName(prefs.scrollFor(kind)), prefs.accelFor(kind).arg(), setup.slots, setup.x.min,                 setup.x.max,
+            setup.y.min, setup.y.max,                     setup.x.res,                setup.y.res, @intFromBool(pointer_drawn), dev_name,
         });
     } else {
-        logline.print("terminal: pointer> open {s} kind=mouse shown={d} name={s}\n", .{ path, @intFromBool(pointer_drawn), dev_name });
+        logline.print("terminal: pointer> open {s} kind=mouse scroll={s} accel={s} shown={d} name={s}\n", .{
+            path, @tagName(prefs.scrollFor(kind)), prefs.accelFor(kind).arg(), @intFromBool(pointer_drawn), dev_name,
+        });
     }
     return true;
 }
@@ -2746,7 +2757,7 @@ fn readAbs(fd: c_int, comptime code: u16) ?pointer.c.struct_input_absinfo {
 /// 부팅 때 이미 있던 장치를 훑는다. uevent 소켓을 연 뒤에 부른다 — 반대면
 /// 훑은 뒤 소켓을 열기 전에 생긴 장치를 놓친다(design 결정 1). 실패해도 terminal은
 /// 산다. 그때는 부팅 뒤에 생기는 장치만 uevent로 잡는다. 키보드도 여기서 찾는다(KH-M1).
-fn scanInputs(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, setting: input.Keyboard) void {
+fn scanInputs(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, setting: input.Keyboard, prefs: pointer.Prefs) void {
     var dir = std.Io.Dir.openDirAbsolute(io, POINTER_DIR, .{ .iterate = true }) catch |err| {
         logline.print("terminal: pointer> scan failed error={s}\n", .{@errorName(err)});
         return;
@@ -2756,7 +2767,7 @@ fn scanInputs(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_K
     // `event`로 시작하는 이름만 본다. `mice` · `mouseN`은 evdev 이전의
     // 통로이고 `INPUT_MOUSEDEV`가 꺼져 있어 생기지도 않는다(design 실측 6).
     while (it.next(io) catch null) |entry| {
-        if (std.mem.startsWith(u8, entry.name, "event")) tryOpenInput(devs, kbds, entry.name, setting);
+        if (std.mem.startsWith(u8, entry.name, "event")) tryOpenInput(devs, kbds, entry.name, setting, prefs);
     }
 }
 
@@ -2776,7 +2787,7 @@ fn scanInputs(io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_K
 /// `ACTION`도 안 본다 — test_power가 배터리를 켜고 끄는 uevent는 `test_battery`가
 /// 아니라 `test_ac`에서 오고(BS design 확인 4), 배터리를 갈아 끼우면 `add` · `remove`가
 /// 온다. `ENOBUFS`도 참이다. 버려진 메시지에 power_supply가 있었을 수 있다.
-fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, setting: input.Keyboard) bool {
+fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, kbds: *[MAX_KEYBOARDS]?KeyboardDev, setting: input.Keyboard, prefs: pointer.Prefs) bool {
     // 커널 uevent 하나는 `UEVENT_BUFFER_SIZE`(2048바이트) 안이다.
     var buf: [4096]u8 = undefined;
     var supply = false;
@@ -2784,7 +2795,7 @@ fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, 
         const n = std.c.read(fd, &buf, buf.len);
         if (n < 0) {
             if (std.c.errno(n) != .NOBUFS) return supply; // EAGAIN — 다 읽었다
-            scanInputs(io, devs, kbds, setting);
+            scanInputs(io, devs, kbds, setting, prefs);
             supply = true;
             continue;
         }
@@ -2792,7 +2803,7 @@ fn drainUevents(fd: c_int, io: std.Io, devs: *[pointer.MAX_DEVICES]?PointerDev, 
         const msg = buf[0..@intCast(n)];
         if (battery.ueventIsPowerSupply(msg)) supply = true;
         const name = pointer.ueventAddedNode(msg) orelse continue;
-        tryOpenInput(devs, kbds, name, setting);
+        tryOpenInput(devs, kbds, name, setting, prefs);
     }
 }
 
@@ -2814,7 +2825,11 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
             // 터치패드의 탭은 한 이벤트에 `Frame` 둘(누름 · 뗌)이다(PD-M3).
             // 둘 다 아래를 차례로 지나므로 전이 칸에 누름과 뗌이 함께 담긴다.
             const frames = dev.feed(ev);
-            for (frames.slice()) |frame| {
+            for (frames.slice()) |raw_frame| {
+                // 칸의 부호를 합치기 전에 곱한다(PS design 결정 2). 이 아래(`Pointer` ·
+                // 회차의 `wheel` · 제스처 · 자식에게 가는 보고)는 어느 장치였는지 모른다.
+                var frame = raw_frame;
+                frame.wheel *= dev.wheel_sign;
                 const e = state.apply(slot, frame);
                 round.frames += 1;
                 round.wheel +|= e.wheel;
@@ -3326,6 +3341,9 @@ const App = struct {
     /// 키보드 종류의 설정(IP-M2 결정 9, KK). argv의 값 그대로이고, 키보드를 열 때마다
     /// `input.kindOf`에 넘겨 그 칸의 `swap_alt_meta`를 정한다(KK design 결정 3).
     keyboard: input.Keyboard,
+    /// 포인터 설정 넷(PS-M0). argv의 값 그대로이고, 포인터를 열 때마다 `takePointer`에
+    /// 넘겨 그 칸의 부호와 가속을 정한다(PS design 결정 2 · 4).
+    pointer_prefs: pointer.Prefs = .{},
 
     // ── 패널 ───────────────────────────────────────────────────────────
     /// 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0).
@@ -3574,6 +3592,13 @@ const App = struct {
         // KK부터 그 값은 키보드 칸마다 따로 정한다(`takeKeyboard`).
         const keyboard = a.keyboard;
         self.keyboard = keyboard;
+        // 포인터 설정 넷(PS-M0). 장치를 여는 자리가 칸마다 종류로 반쪽을 고른다.
+        self.pointer_prefs = .{
+            .mouse_scroll = a.mouse_scroll,
+            .touchpad_scroll = a.touchpad_scroll,
+            .mouse_accel = a.mouse_accel,
+            .touchpad_accel = a.touchpad_accel,
+        };
 
         // 자판 둘(HI-M2, design 결정 7).
         const hangul_layout: hangul.Layout = a.hangul;
@@ -3689,6 +3714,12 @@ const App = struct {
             }),
             .auto => logline.print("terminal: keyboard=auto (swap_alt_meta=per keyboard)\n", .{}),
         }
+        // PS-M0. 같은 이유의 줄 — argv가 여기 닿았는가를 장치 없이 본다. 칸마다 실제로 고른
+        // 값은 `pointer> open … scroll= accel=`이 말한다(PS design 결정 7).
+        logline.print("terminal: pointer prefs mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s}\n", .{
+            @tagName(self.pointer_prefs.mouse_scroll), @tagName(self.pointer_prefs.touchpad_scroll),
+            self.pointer_prefs.mouse_accel.arg(),      self.pointer_prefs.touchpad_accel.arg(),
+        });
         // 같은 이유의 줄이 자판에도 하나 필요하다(HI-M2). `tars-init:`의 줄과
         // 짝이다 — 그쪽은 "init이 파일에서 읽었다"를, 이쪽은 "그 값이 argv를
         // 건너 여기 닿았다"를 말한다. 앞만 보면 argv 배선이 끊겨도 초록이고,
@@ -3745,7 +3776,7 @@ const App = struct {
         // 두 손가락이 휠 한 눈금의 줄 수만큼 움직이면 한 눈금이다 — 손가락과 글자가
         // 같은 거리를 간다. 처음 훑기보다 먼저 정해야 부팅 때 있던 패드도 이 값을 쓴다.
         touchpad_screen = .{ .w = self.fb.width, .notch_px = ROW_HEIGHT * @as(u32, @intCast(WHEEL_ROWS)) };
-        scanInputs(self.io, &self.pointer_devs, &self.keyboard_devs, self.keyboard);
+        scanInputs(self.io, &self.pointer_devs, &self.keyboard_devs, self.keyboard, self.pointer_prefs);
         if (keyboardCount(&self.keyboard_devs) == 0) logline.print("terminal: keyboard> none\n", .{});
     }
 
@@ -4224,7 +4255,7 @@ const App = struct {
             }
             if (gone) closePointer(&self.pointer_devs, di, &self.pointer_state);
         }
-        const supply_seen = self.fds[0].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs, &self.keyboard_devs, self.keyboard);
+        const supply_seen = self.fds[0].revents & c.POLLIN != 0 and drainUevents(self.uevent_fd, self.io, &self.pointer_devs, &self.keyboard_devs, self.keyboard, self.pointer_prefs);
         return .{ .round = round, .before_spot = before_spot, .supply_seen = supply_seen };
     }
 

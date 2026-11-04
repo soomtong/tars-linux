@@ -942,5 +942,34 @@ pub fn main() !void {
         )));
     }
 
+    // ── PS-M0: 휠 부호와 설정 넷(PS design 결정 2 · 5) ───────────────
+    //
+    // +1이 PS 전의 동작이다. 마우스는 natural에서, 터치패드는 normal에서 뒤집는다. 한
+    // 장치의 부호는 다른 종류의 설정에 안 흔들린다 — 마우스와 터치패드가 함께 붙은 기계에서
+    // 각자 자기 값을 쓴다.
+    {
+        const S = struct {
+            fn sign(kind: pointer.Kind, m: pointer.WheelDirection, t: pointer.WheelDirection) i32 {
+                return pointer.wheelSign(kind, m, t);
+            }
+        };
+        try expectTrue("mouse normal is +1", S.sign(.mouse, .normal, .normal) == 1 and S.sign(.mouse, .normal, .natural) == 1);
+        try expectTrue("mouse natural is -1", S.sign(.mouse, .natural, .natural) == -1 and S.sign(.mouse, .natural, .normal) == -1);
+        try expectTrue("touchpad natural is +1", S.sign(.touchpad, .normal, .natural) == 1 and S.sign(.touchpad, .natural, .natural) == 1);
+        try expectTrue("touchpad normal is -1", S.sign(.touchpad, .natural, .normal) == -1 and S.sign(.touchpad, .normal, .normal) == -1);
+        try expectTrue("none is +1", S.sign(.none, .natural, .normal) == 1);
+
+        // 기본값은 PS 전의 동작이다 — 두 종류 다 +1, 가속 0.
+        const d: pointer.Prefs = .{};
+        try expectTrue("default prefs keep the old wheel", pointer.wheelSign(.mouse, d.mouse_scroll, d.touchpad_scroll) == 1 and
+            pointer.wheelSign(.touchpad, d.mouse_scroll, d.touchpad_scroll) == 1);
+        try expectTrue("default prefs have no acceleration", d.accelFor(.mouse).level == 0 and d.accelFor(.touchpad).level == 0);
+        // 종류마다 자기 반쪽을 고른다.
+        const p: pointer.Prefs = .{ .mouse_scroll = .natural, .touchpad_scroll = .normal, .mouse_accel = .{ .level = 7 }, .touchpad_accel = .{ .level = 2 } };
+        try expectTrue("accelFor picks the kind's level", p.accelFor(.mouse).level == 7 and p.accelFor(.touchpad).level == 2 and p.accelFor(.none).level == 0);
+        try expectTrue("scrollFor picks the kind's direction", p.scrollFor(.mouse) == .natural and p.scrollFor(.touchpad) == .normal);
+        std.debug.print("pointer_test: wheel sign per kind, prefs pick the kind's half OK\n", .{});
+    }
+
     std.debug.print("pointer_test: all checks passed\n", .{});
 }

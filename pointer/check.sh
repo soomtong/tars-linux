@@ -108,6 +108,8 @@ fi
 # 열여덟 체인이 45455~45487을 쓴다. 45489는 부팅 B의 몫이다(design 결정 10).
 MONITOR_PORT=45488
 MONITOR_PORT_B=45489
+# 부팅 C(PS-M0)의 몫. 예약 범위(RP-M0)에서 PM · MI 다음 빈 자리다.
+MONITOR_PORT_C=45501
 
 REPO_ROOT="$(cd .. && pwd)"
 
@@ -376,9 +378,19 @@ inverted_cells() {
 # 번호다. 행은 패널 안의 상대 행이다 — 세로 분할의 두 패널은 격자의 0행에서
 # 시작하므로 격자의 행과 같다.
 screen_row() {
-  tlog | grep -a 'terminal: screen>' | tail -n 1 | tr -d '\r' |
-    WANT="$1" perl -ne 's/^.*?terminal: screen> //; chomp; my @r = split / \| /, $_, -1;
-      my $i = -1; for my $k (0 .. $#r) { $i = $k if $r[$k] eq $ENV{WANT} } print "$i\n";'
+  # 못 찾으면 0.1초씩 3초까지 다시 읽는다(PS-M0). screen> 한 줄은 수 KB라 시리얼 로그에
+  # 차례로 쓰인다 — 쓰는 도중의 마지막 줄을 읽으면 뒤쪽(아래 행)이 아직 없다. PS-M0의 첫
+  # 회차들에서 MC의 mc-one 줄과 77열 줄이 그렇게 빨갰고, 그 순간 시리얼 꼬리의 덤프에는
+  # 행이 있었다. 행이 정말 없으면 3초 뒤 -1이다.
+  local i row
+  for i in $(seq 1 30); do
+    row="$(tlog | grep -a 'terminal: screen>' | tail -n 1 | tr -d '\r' |
+      WANT="$1" perl -ne 's/^.*?terminal: screen> //; chomp; my @r = split / \| /, $_, -1;
+        my $i = -1; for my $k (0 .. $#r) { $i = $k if $r[$k] eq $ENV{WANT} } print "$i\n";')"
+    [ "$row" -ge 0 ] && break
+    sleep 0.1
+  done
+  echo "$row"
 }
 
 # 포인터를 (X, Y)로 옮긴다. 마지막 at 줄의 자리에서 상대 이동을 100 이하씩
@@ -563,8 +575,8 @@ grep -aE 'tars-init: config shell=[^ ]+ keyboard=apple' "$LOG" >/dev/null ||
 # "정확히 하나"가 이 검사의 본체다. classify가 EV_KEY만 보면 전원 버튼과
 # 키보드도 열려 셋이 된다(mutation 1).
 echo "=== boot: the USB mouse is open, the keyboard and the power button are not ==="
-wait_for_log 'terminal: pointer> open /dev/input/event[0-9]+ kind=mouse shown=0 name=QEMU QEMU USB Mouse' ||
-  report_failure "terminal never opened the USB mouse (no 'pointer> open … kind=mouse shown=0 name=QEMU QEMU USB Mouse')"
+wait_for_log 'terminal: pointer> open /dev/input/event[0-9]+ kind=mouse scroll=normal accel=0 shown=0 name=QEMU QEMU USB Mouse' ||
+  report_failure "terminal never opened the USB mouse (no 'pointer> open … kind=mouse scroll=normal accel=0 shown=0 name=QEMU QEMU USB Mouse')"
 OPENS="$(pointer_count 'open ')"
 [ "$OPENS" -eq 1 ] ||
   report_failure "expected exactly one 'pointer> open' at boot, got ${OPENS}"
@@ -690,8 +702,8 @@ fi
 NEW_LINE="$(tlog | grep -a 'terminal: pointer> open ' | tail -n 1 | tr -d '\r')"
 NEW_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$NEW_LINE")"
 case "$NEW_LINE" in
-  *" kind=mouse shown=1 name=QEMU QEMU USB Mouse") ;;
-  *) report_failure "the hotplugged device opened as '${NEW_LINE}', expected kind=mouse shown=1 (the arrow is on the screen)" ;;
+  *" kind=mouse scroll=normal accel=0 shown=1 name=QEMU QEMU USB Mouse") ;;
+  *) report_failure "the hotplugged device opened as '${NEW_LINE}', expected kind=mouse scroll=normal accel=0 shown=1 (the arrow is on the screen)" ;;
 esac
 [ "$NEW_PATH" != "$MOUSE_PATH" ] ||
   report_failure "the hotplugged mouse reused the open path ${MOUSE_PATH}"
@@ -1576,7 +1588,7 @@ echo "=== boot B: psmouse registers the PS/2 mouse and terminal opens it ==="
 PS2_NAME='ImExPS/2 Generic Explorer Mouse'
 wait_for_log "input: ${PS2_NAME} as /devices/platform/i8042/serio1/input/input[0-9]+" ||
   report_failure "psmouse never registered the PS/2 mouse (no 'input: ${PS2_NAME} as …/i8042/serio1/…')"
-wait_for_log "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse shown=0 name=${PS2_NAME}" ||
+wait_for_log "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse scroll=normal accel=0 shown=0 name=${PS2_NAME}" ||
   report_failure "the kernel registered the PS/2 mouse but terminal never opened it as kind=mouse"
 PS2_PATH="$(grep -a "terminal: pointer> open .* name=${PS2_NAME}" "$LOG" | tail -n 1 | tr -d '\r' | sed -E 's/.*open ([^ ]+) .*/\1/')"
 echo "ps/2 mouse: ${PS2_PATH}"
@@ -1609,8 +1621,8 @@ wait_for_log 'terminal: pointer> (open|skip) /dev/input/event[0-9]+ kind=touchpa
   report_failure "terminal never saw the replay touchpad (no 'pointer> open … kind=touchpad … name=TARS Replay Touchpad')"
 TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> ' | tail -n 1 | tr -d '\r')"
 case "$TP_LINE" in
-  *"> open /dev/input/event"*" kind=touchpad slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad") ;;
-  *) report_failure "the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad'" ;;
+  *"> open /dev/input/event"*" kind=touchpad scroll=natural accel=0 slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad") ;;
+  *) report_failure "the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad scroll=natural accel=0 slots=2 x=0..1000 y=0..600 res=10,12 shown=0 name=TARS Replay Touchpad'" ;;
 esac
 TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
 echo "touchpad: ${TP_LINE}"
@@ -2008,3 +2020,246 @@ fi
 echo "boot B pointer> lines:"
 tlog | grep -a 'terminal: pointer>' | tr -d '\r'
 echo "PD-M4 check PASS"
+
+# ══ 부팅 C: 설정이 고른 휠 방향 (PS-M0) ═════════════════════════════════
+#
+# PS design 결정 8. 부팅 B와 같은 두 장치(PS/2 마우스 · tp-replay 터치패드)를 열고,
+# 디스크의 tars.conf에 기본값의 반대를 적는다 — mouse_scroll=natural ·
+# touchpad_scroll=normal. 한 부팅에서 두 칸이 서로 다른 값을 고르는지(판정 나), 그리고
+# 각자 검사 11 · 24의 반대 손으로 같은 결과를 내는지(판정 다 · 라) 본다. 부팅 A · B는
+# 그대로 두어 "기본값은 PS 전의 동작"이 계속 선다.
+exec 3<&- 2>/dev/null
+exec 3>&- 2>/dev/null
+kill "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
+QEMU_PID=""
+
+SEED="$(mktemp -d)"
+mkdir -p "$SEED/pd"
+printf 'shell=fish\nmouse_scroll=natural\ntouchpad_scroll=normal\n' > "$SEED/tars.conf"
+cp "$REPLAY" "$SEED/pd/tp-replay"
+chmod 0755 "$SEED/pd/tp-replay"
+DISK_C="${REPO_ROOT}/out/pd-settings.img"
+rm -f "$DISK_C"
+truncate -s 16M "$DISK_C"
+mkfs.ext2 -F -q -m 0 -L tars-pd -d "$SEED" "$DISK_C"
+rm -rf "$SEED"
+
+LOG="$(mktemp)"
+echo "=== boot C: mouse_scroll=natural and touchpad_scroll=normal ==="
+qemu-system-x86_64 \
+  -nic none \
+  -m "$GUEST_MEM" \
+  -kernel ../kernel/build/arch/x86/boot/bzImage \
+  -initrd ../kernel/initrd.cpio \
+  -append "console=ttyS0" \
+  -vga none \
+  -device virtio-gpu-pci \
+  -display none \
+  -drive file="$DISK_C",if=virtio,format=raw \
+  -serial file:"$LOG" \
+  -monitor tcp:127.0.0.1:${MONITOR_PORT_C},server,nowait \
+  -no-reboot &
+QEMU_PID=$!
+
+READY=0
+for _ in $(seq 1 120); do
+  if grep -aq "terminal: screen>" "$LOG"; then READY=1; break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "$READY" = "1" ] || report_failure "boot C: terminal never rendered a prompt"
+wait_for_screen 'root@\(none\) ~#' ||
+  report_failure "boot C: the shell prompt never showed up"
+sleep 1
+
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT_C}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure "boot C: could not connect to the QEMU monitor"
+
+# ── 판정 가: 디스크가 읽혔고 init이 두 값을 들었다 ───────────────────────
+#
+# loaded 줄을 함께 본다. config 줄만 보면 기본값이 우연히 맞을 때 디스크 없이도
+# 초록이다(KK-M0의 실패한 접근 둘째). 여기서는 두 값이 다 기본값의 반대라 config 줄만으로도
+# 가를 수 있지만, 디스크가 안 붙은 것과 값을 못 읽은 것을 실패 글자에서 가르려고 둘 다 본다.
+echo "=== boot C (가): init read mouse_scroll=natural touchpad_scroll=normal ==="
+grep -a 'tars-init: loaded /config/tars.conf' "$LOG" >/dev/null ||
+  report_failure "boot C: the settings disk was not loaded (no 'tars-init: loaded /config/tars.conf')"
+grep -aE 'tars-init: config shell=.* mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
+  report_failure "boot C: the tars-init: config line does not carry mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0"
+grep -a 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
+  report_failure "boot C: terminal never said the prefs reached it (no 'terminal: pointer prefs mouse_scroll=natural …')"
+
+# ── 판정 나 (앞): PS/2 마우스의 칸은 mouse_scroll을 고른다 ──────────────
+echo "=== boot C (나): the PS/2 mouse opens with scroll=natural ==="
+wait_for_log "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse scroll=natural accel=0 shown=0 name=${PS2_NAME}" ||
+  report_failure "boot C: the PS/2 mouse did not open with 'kind=mouse scroll=natural accel=0'"
+
+# ── 판정 다: 마우스 휠을 뒤로 굴리면 위의 글이 보인다 ─────────────────────
+#
+# seq 200으로 스크롤백을 만든다. 바닥에 있으므로 offset은 total - len이다. natural은
+# 내용이 휠을 따라가므로, 휠을 뒤로(HMP dz=-1, REL_WHEEL -1) 굴리면 내용이 아래로 내려가
+# 위의 글이 보인다 — offset이 3 준다. 검사 11의 반대 손으로 같은 결과다. at 줄의
+# wheel=은 칸의 부호를 곱한 뒤의 값이라 손은 -1인데 줄은 wheel=1이다(PS design 결정 2).
+# 부호를 안 곱하면(mutation a) 바닥에서 아래로 가려 하므로 offset이 그대로다.
+echo "=== boot C (다): a natural mouse wheel pulled back shows what is above ==="
+type_keys s e q spc 2 0 0 ret
+wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+  report_failure "boot C: seq 200 did not finish"
+sleep 1
+OFF0="$(scroll_field offset)"
+[ "$OFF0" -ge 9 ] ||
+  report_failure "boot C: seq 200 left no scrollback to wheel through (scroll> offset=${OFF0})"
+ATS="$(pointer_count 'at ')"
+hmp "mouse_move 0 0 -1"
+wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
+  report_failure "boot C: a wheel notch back printed no at line (last at: '$(last_at)')"
+OFF1="$(scroll_field offset)"
+[ "$OFF1" -eq "$((OFF0 - 3))" ] ||
+  report_failure "boot C: one natural wheel notch back moved the viewport from offset ${OFF0} to ${OFF1}, expected $((OFF0 - 3))"
+grep -aqE ' buttons=0 wheel=1 ' <<<"$(last_at)" ||
+  report_failure "boot C: after a natural wheel notch back the at line is '$(last_at)', expected wheel=1 (the slot's sign applied)"
+ATS="$(pointer_count 'at ')"
+hmp "mouse_move 0 0 1"
+wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
+  report_failure "boot C: a wheel notch forward printed no at line (last at: '$(last_at)')"
+OFF2="$(scroll_field offset)"
+[ "$OFF2" -eq "$OFF0" ] ||
+  report_failure "boot C: one natural wheel notch forward moved the viewport from offset ${OFF1} to ${OFF2}, expected back to ${OFF0}"
+echo "natural mouse: offset ${OFF0} -> ${OFF1} -> ${OFF2}"
+
+# ── 판정 나 (뒤): 터치패드의 칸은 touchpad_scroll을 고른다 ───────────────
+#
+# 같은 부팅에서 마우스 칸은 natural, 터치패드 칸은 normal이다 — 종류가 칸의 값을 고른다.
+echo "=== boot C (나): the replay touchpad opens with scroll=normal ==="
+type_keys slash c o n f i g slash p d slash t p minus r e p l a y ret
+wait_for_log 'terminal: pointer> (open|skip) /dev/input/event[0-9]+ kind=touchpad.* name=TARS Replay Touchpad' ||
+  report_failure "boot C: terminal never saw the replay touchpad"
+TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> ' | tail -n 1 | tr -d '\r')"
+case "$TP_LINE" in
+  *"> open /dev/input/event"*" kind=touchpad scroll=normal accel=0 slots=2 "*" name=TARS Replay Touchpad") ;;
+  *) report_failure "boot C: the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad scroll=normal accel=0 slots=2 …'" ;;
+esac
+TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
+
+# ── 판정 라: 두 손가락을 위로 밀면 위의 글이 보인다 ──────────────────────
+#
+# normal은 휠과 같은 쪽이다 — 손가락을 위로 미는 것이 휠을 앞으로 미는 것이다. 90단위가
+# 두 눈금(검사 24)이므로 offset이 6 준다. 검사 24는 손가락을 아래로 밀어 같은 결과를 냈다.
+# 부호를 안 곱하거나(mutation a) 터치패드가 마우스의 값을 고르면(mutation b) 바닥에서
+# 아래로 가려 하므로 바닥에 그대로다. 판정은 검사 24처럼 바닥에서의 거리(total - len -
+# offset)다 — 읽어 둔 offset에서 빼면 틀린다. 도구를 띄운 명령의 줄바꿈이 늦게 와 total이
+# 한 줄 늘면 패널이 그 바닥으로 내려간 뒤에 움직인다(PS-M0 첫 회차: 157 → 158 → 152).
+echo "=== boot C (라): two fingers up on a normal touchpad show what is above ==="
+sleep 1
+ATS="$(pointer_count 'at ')"
+replay "scroll -90"
+SCROLLED=0
+for _ in $(seq 1 150); do
+  LINE="$(tlog | grep -a 'terminal: scroll>' | tail -n 1 | tr -d '\r')"
+  T="$(sed -E 's/.*total=([0-9]+).*/\1/' <<<"$LINE")"
+  O="$(sed -E 's/.*offset=([0-9]+).*/\1/' <<<"$LINE")"
+  L="$(sed -E 's/.*len=([0-9]+).*/\1/' <<<"$LINE")"
+  if [ "$((T - L - O))" -eq 6 ]; then SCROLLED=1; break; fi
+  sleep 0.1
+done
+[ "$SCROLLED" = "1" ] ||
+  report_failure "boot C: two fingers 90 units up on a normal touchpad left the viewport at '${LINE}', expected six rows above the bottom"
+NEW_ATS="$(tlog | grep -a 'terminal: pointer> at ' | tail -n "+$((ATS + 1))" | tr -d '\r')"
+WHEEL=0
+while read -r w; do WHEEL=$((WHEEL + w)); done < <(sed -nE 's/.* wheel=(-?[0-9]+) .*/\1/p' <<<"$NEW_ATS")
+[ "$WHEEL" = "2" ] ||
+  report_failure "boot C: two fingers 90 units up added up to wheel=${WHEEL} on the at lines, expected 2"
+echo "normal touchpad: ${LINE}, wheel ${WHEEL}"
+
+replay "quit"
+wait_for_log "terminal: pointer> close ${TP_PATH}" ||
+  report_failure "boot C: the replay touchpad was never closed (no 'pointer> close ${TP_PATH}')"
+
+# ── 판정 마: 두 칸의 부호가 다를 때 각자 자기 것을 쓴다 (reload terminal 뒤) ──
+#
+# 위 설정(마우스 natural · 터치패드 normal)은 두 칸의 부호가 둘 다 -1이다. 터치패드 칸이
+# 종류를 안 보고 마우스의 값을 골라도(mutation b) 같은 -1이라 다 · 라가 못 잡는다 — PS-M0의
+# mutation 회차에서 실제로 초록이었다. 그래서 touchpad_scroll만 natural로 되돌려 다시 띄운다:
+# 마우스 -1, 터치패드 +1. 터치패드를 손가락 아래로 밀면 위의 글이 보여야 한다(검사 24와
+# 같은 손 · 같은 결과). 마우스의 값을 고르면 -1이라 바닥에 머문다. 길은 tars-config set →
+# reload(init이 파일을 다시 읽는다) → reload terminal(새 argv로 terminal을 다시 띄운다)이다 —
+# design 시나리오 S8. 패널과 도구는 terminal과 함께 사라지므로 스크롤백과 도구를 다시 만든다.
+echo "=== boot C (마): reload terminal with touchpad_scroll=natural, the two slots differ in sign ==="
+type_text() {
+  local text="$1" keys=() ch i
+  for ((i = 0; i < ${#text}; i++)); do
+    ch="${text:i:1}"
+    case "$ch" in
+      ' ') keys+=(spc) ;;
+      '_') keys+=(shift-minus) ;;
+      '=') keys+=(equal) ;;
+      '-') keys+=(minus) ;;
+      '/') keys+=(slash) ;;
+      *) keys+=("$ch") ;;
+    esac
+  done
+  type_keys "${keys[@]}" ret
+}
+type_text "tars-config set touchpad_scroll=natural"
+wait_for_screen 'touchpad_scroll: normal -> natural' ||
+  report_failure "boot C: tars-config set touchpad_scroll=natural did not report normal -> natural"
+type_text "tars-config reload"
+# 화면 글자가 아니라 init의 줄을 기다린다 — set의 답과 reload의 답이 같은 글자로 시작해서
+# 화면만 보면 reload가 끝나기 전에 넘어갈 수 있다. 이 부팅의 첫 reload다.
+wait_for_log 'tars-init: reload of /config/tars.conf' ||
+  report_failure "boot C: tars-config reload never reached init (no 'tars-init: reload of /config/tars.conf')"
+OPENS_BEFORE="$(pointer_count 'open ')"
+type_text "tars-config reload terminal"
+wait_for_log 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=0' ||
+  report_failure "boot C: no terminal came up with touchpad_scroll=natural after reload terminal"
+grep -aE 'tars-init: reload terminal: pid [0-9]+, .* mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
+  report_failure "boot C: init did not log the new argv's pointer values on reload terminal"
+wait_for_screen 'root@\(none\) ~#' ||
+  report_failure "boot C: the new terminal's shell prompt never showed up"
+wait_for_count pointer_count 'open ' "$((OPENS_BEFORE + 1))" ||
+  report_failure "boot C: the new terminal never opened the PS/2 mouse again"
+PS2_OPENS="$(grep -acE "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse scroll=natural accel=0 shown=0 name=${PS2_NAME}" "$LOG" || true)"
+[ "$PS2_OPENS" -ge 2 ] ||
+  report_failure "boot C: the new terminal did not open the PS/2 mouse with scroll=natural"
+
+type_keys s e q spc 2 0 0 ret
+wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+  report_failure "boot C: seq 200 did not finish in the new terminal"
+type_keys slash c o n f i g slash p d slash t p minus r e p l a y ret
+wait_for_count pointer_count 'open ' "$((OPENS_BEFORE + 2))" ||
+  report_failure "boot C: the new terminal never opened the replay touchpad"
+TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> open ' | tail -n 1 | tr -d '\r')"
+case "$TP_LINE" in
+  *" kind=touchpad scroll=natural accel=0 slots=2 "*) ;;
+  *) report_failure "boot C: after reload terminal the replay touchpad came out as '${TP_LINE}', expected kind=touchpad scroll=natural" ;;
+esac
+TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
+sleep 1
+replay "scroll 90"
+SCROLLED=0
+for _ in $(seq 1 150); do
+  LINE="$(tlog | grep -a 'terminal: scroll>' | tail -n 1 | tr -d '\r')"
+  T="$(sed -E 's/.*total=([0-9]+).*/\1/' <<<"$LINE")"
+  O="$(sed -E 's/.*offset=([0-9]+).*/\1/' <<<"$LINE")"
+  L="$(sed -E 's/.*len=([0-9]+).*/\1/' <<<"$LINE")"
+  if [ "$((T - L - O))" -eq 6 ]; then SCROLLED=1; break; fi
+  sleep 0.1
+done
+[ "$SCROLLED" = "1" ] ||
+  report_failure "boot C: with a natural mouse beside it, two fingers 90 units down on a natural touchpad left the viewport at '${LINE}', expected six rows above the bottom (the touchpad took the mouse's sign?)"
+echo "slots differ: ${LINE}"
+replay "quit"
+wait_for_log "terminal: pointer> close ${TP_PATH}" ||
+  report_failure "boot C: the second replay touchpad was never closed"
+
+if [ "$(tr -cd '\0' < "$LOG" | wc -c)" -ne 0 ]; then
+  report_failure "the boot C serial log contains NUL bytes"
+fi
+
+echo "boot C pointer> lines:"
+tlog | grep -a 'terminal: pointer>' | tr -d '\r'
+echo "PS-M0 check PASS"

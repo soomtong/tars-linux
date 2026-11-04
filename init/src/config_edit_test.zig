@@ -39,6 +39,10 @@ const OTHER = [_]edit.Pair{
     .{ .key = "bluetooth", .value = "on" },
     .{ .key = "esc_latin", .value = "off" },
     .{ .key = "clipboard", .value = "pane" },
+    .{ .key = "mouse_scroll", .value = "natural" },
+    .{ .key = "touchpad_scroll", .value = "normal" },
+    .{ .key = "mouse_accel", .value = "5" },
+    .{ .key = "touchpad_accel", .value = "5" },
     .{ .key = "user", .value = "hpuser" },
 };
 
@@ -140,8 +144,8 @@ pub fn main() !void {
     // 필드를 더하고 parse의 갈래를 빠뜨리면 여기서 "unknown config key"를 듣는다.
     // 기본값을 글자로 바꿨다가 되읽어 같은지도 본다 — valueText와 parse가 같은
     // 글자를 쓴다는 것이 `set`이 쓰는 줄을 init이 읽는다는 뜻이다.
-    // 열셋은 seed에 있고 열넷째 `user`는 tars-install만 쓴다(HP-M1).
-    if (edit.KEYS.len != 14) return fail("{d} keys, want 14 (thirteen in the seed, and user)", .{edit.KEYS.len});
+    // 열일곱은 seed에 있고 `user`는 tars-install만 쓴다(HP-M1). PS-M0이 포인터 넷을 더했다.
+    if (edit.KEYS.len != 18) return fail("{d} keys, want 18 (seventeen in the seed, and user)", .{edit.KEYS.len});
     const defaults = config.Config{};
     for (edit.KEYS) |key| {
         var buf: [edit.VALUE_MAX]u8 = undefined;
@@ -154,11 +158,20 @@ pub fn main() !void {
     if (OTHER.len != edit.KEYS.len) return fail("OTHER has {d} rows for {d} keys", .{ OTHER.len, edit.KEYS.len });
     if (edit.isKey("colour") or edit.hint("colour") != null) return fail("colour is a key", .{});
     if (!std.mem.eql(u8, edit.hint("shell").?, "fish | bash | zsh")) return fail("shell hint {s}", .{edit.hint("shell").?});
+    if (!std.mem.eql(u8, edit.hint("mouse_accel").?, "0..10 (0 = off)")) return fail("mouse_accel hint {s}", .{edit.hint("mouse_accel").?});
+    // 숫자 키의 거절은 parse의 말이다(PS design 결정 6) — `set`이 init이 버릴 값을 쓰지 않는다.
+    {
+        var lb: [edit.LINE_MAX]u8 = undefined;
+        switch (edit.judge(&lb, "mouse_accel", "11")) {
+            .refused => {},
+            else => return fail("set mouse_accel=11 was not refused", .{}),
+        }
+    }
     // set · reset이 안 받는 키는 user 하나다(HP-M1 plan 확정 5).
     for (edit.KEYS) |key| {
         if (edit.installOnly(key) != std.mem.eql(u8, key, "user")) return fail("installOnly({s})", .{key});
     }
-    std.debug.print("config_edit_test: fourteen keys, each read back by parse as written; only user is install-only\n", .{});
+    std.debug.print("config_edit_test: eighteen keys, each read back by parse as written; only user is install-only\n", .{});
 
     // ── 2. judge — init이 하는 말이 곧 거절의 이유다 ───────────────────
     try expectRefused("shell", "fsh", "unknown shell 'fsh', falling back to fish");
@@ -428,7 +441,8 @@ pub fn main() !void {
         const c = config.parse(text);
         const keys_tail = "#keyboard=auto\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
-        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n#user=\n";
+        const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n" ++
+            "#mouse_scroll=normal\n#touchpad_scroll=natural\n#mouse_accel=0\n#touchpad_accel=0\n#user=\n";
         var sbuf: [2048]u8 = undefined;
         var s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, text, &c, null);

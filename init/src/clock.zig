@@ -84,7 +84,7 @@ pub const CHRONYD_PATH: [:0]const u8 = "/usr/bin/chronyd";
 ///   -f        설정을 /run에서 읽는다
 ///   (-F 없음) 커널에 seccomp가 없다
 pub const CHRONYD_ARGV = [screen_args.ARGC:null]?[*:0]const u8{
-    CHRONYD_PATH.ptr, "-d", "-u", "root", "-f", CONF_PATH.ptr, null, null, null,
+    CHRONYD_PATH.ptr, "-d", "-u", "root", "-f", CONF_PATH.ptr, null, null, null, null, null, null, null,
 };
 
 /// 설정 파일을 쓴다. 부팅 때 PID 1이 한 번 부른다.

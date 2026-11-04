@@ -710,6 +710,10 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     a.latin = new.latin_layout;
     a.toggles = new.screenToggles();
     a.clipboard = new.clipboard;
+    a.mouse_scroll = new.mouse_scroll;
+    a.touchpad_scroll = new.touchpad_scroll;
+    a.mouse_accel = new.mouse_accel;
+    a.touchpad_accel = new.touchpad_accel;
     // `user` 칸은 안 바꾼다(HP-M1) — `decode`가 꺼낸 부팅의 값이 그대로 다시 들어간다. 계정은
     // 부팅에 한 번 지어지므로 `tars.conf`를 고친 이름으로 셸을 띄우면 준비 안 된 이름이다.
     term.argv = screen_args.encode(a, &live.toggle);
@@ -724,9 +728,10 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
     if (done.signal) _ = linux.kill(pid, .TERM);
     out.print("terminal: restarts; every pane, its shell and the clipboard are gone\n", .{});
     var toggle_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
-    logline.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s}\n", .{
-        pid,                        shell.path(),                     @tagName(new.keyboard),  @tagName(new.hangul_layout),
-        @tagName(new.latin_layout), new.terminalToggles(&toggle_buf), @tagName(new.clipboard),
+    logline.print("tars-init: reload terminal: pid {d}, shell {s} keyboard={s} hangul={s} latin={s} toggles={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s}\n", .{
+        pid,                           shell.path(),                     @tagName(new.keyboard),   @tagName(new.hangul_layout),
+        @tagName(new.latin_layout),    new.terminalToggles(&toggle_buf), @tagName(new.clipboard),  @tagName(new.mouse_scroll),
+        @tagName(new.touchpad_scroll), new.mouse_accel.arg(),            new.touchpad_accel.arg(),
     });
 }
 
@@ -768,7 +773,7 @@ fn placeService(children: []Child, live: *Live, i: usize, e: *const services.Ent
         .kind = .service,
         .label = s.label(),
         .path = s.path(),
-        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null },
+        .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null, null, null, null, null },
     };
 }
 
@@ -1288,10 +1293,11 @@ const Boot = struct {
         // `net/check.sh`가 `config shell=.* net=dhcp` 꼴로 이 줄을 보고 있어서
         // 앞쪽을 건드리면 아홉 자리가 함께 흔들린다.
         // FW-M1도 같은 이유로 `firewall=`을 맨 뒤에 붙였고, EL-M0이 `esc_latin=`을
-        // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다.
+        // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다. PS-M0의 포인터 넷은 또 그 뒤다
+        // (`pane/check.sh`가 `config shell=.* clipboard=…`를 끝을 못 박지 않고 본다).
         var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
         logline.print(
-            "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s}\n",
+            "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s}\n",
             .{
                 @tagName(self.cfg.shell),
                 @tagName(self.cfg.keyboard),
@@ -1305,6 +1311,10 @@ const Boot = struct {
                 @tagName(self.cfg.firewall),
                 @tagName(self.cfg.esc_latin),
                 @tagName(self.cfg.clipboard),
+                @tagName(self.cfg.mouse_scroll),
+                @tagName(self.cfg.touchpad_scroll),
+                self.cfg.mouse_accel.arg(),
+                self.cfg.touchpad_accel.arg(),
             },
         );
     }
@@ -1509,6 +1519,10 @@ const Boot = struct {
             .toggles = self.cfg.screenToggles(),
             .clipboard = self.cfg.clipboard,
             .user = self.user_arg,
+            .mouse_scroll = self.cfg.mouse_scroll,
+            .touchpad_scroll = self.cfg.touchpad_scroll,
+            .mouse_accel = self.cfg.mouse_accel,
+            .touchpad_accel = self.cfg.touchpad_accel,
         }, &self.terminal_toggle_buf);
 
         self.live = Live{
@@ -1551,7 +1565,7 @@ const Boot = struct {
             // 였고, 이제 설정 파일이 생겼다. `on`이면 이 슬롯이 null이라
             // 지금까지와 같고, `off`면 플래그가 들어간다 — 두 셸이 같은
             // 설정을 따른다(결정 4).
-            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null },
+            .argv = .{ self.shell_path.ptr, console_flag, null, null, null, null, null, null, null, null, null, null, null },
             .rescue = if (rescue_flag) |f| .{ .slot = CONSOLE_FLAG_SLOT, .flag = f } else null,
         };
         // DS-M1. 서비스와 같은 Kind라 CT의 규칙(그룹 시그널 · 요청한 죽음은 안 셈 ·

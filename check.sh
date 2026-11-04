@@ -626,7 +626,7 @@ require_cut_lines_found() {
   dir="$(mktemp -d)"
   printf 'terminal: pointer> at x=1279 y=799 buttons=0 wheel=0 shown=1 ink=tars-init: audio: no sound card within 5000ms, the mixer is left alone\n' > "$dir/a"
   printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
-  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane\n' > "$dir/legit"
+  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0\n' > "$dir/legit"
   printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'tars-init: config line without = ignored: xxxxxxxx [cut]\n' > "$dir/c"
   got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"

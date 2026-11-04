@@ -9,6 +9,7 @@
 //! `Gesture`(누름 · 끎 · 뗌 · 휠을 의도로, PD-M2). 자식이 마우스를 원하면
 //! `Grab`이 그 누름을 자식의 것으로 정하고 `Gesture`를 건너뛴다(PD-M4).
 const std = @import("std");
+const screen_args = @import("screen_args");
 
 /// `input.zig`의 `c`와 같은 번역(`linux/input.h`)이다. `pub`인 이유도 같다 —
 /// `pointer_test`가 커널이 정한 이름(`c.BTN_LEFT`)으로 검사를 쓴다.
@@ -68,6 +69,53 @@ pub fn classify(caps: *const Caps) Kind {
     if (bitSet(&caps.ev, c.EV_REL) and bitSet(&caps.rel, c.REL_X) and bitSet(&caps.rel, c.REL_Y) and
         has_key and bitSet(&caps.key, c.BTN_LEFT)) return .mouse;
     return .none;
+}
+
+/// 포인터 설정의 값 둘(PS design 결정 1 · 3). 이름과 글자는 init과 함께 컴파일하는
+/// `shared/screen_args.zig`에 있다.
+pub const WheelDirection = screen_args.WheelDirection;
+pub const Accel = screen_args.Accel;
+
+/// argv로 온 포인터 설정 넷(PS-M0 plan 확정 6). 장치를 여는 자리(`takePointer`)까지 이
+/// 구조체 하나로 나른다. 장치를 열 때 그 장치의 종류로 반쪽을 고른다.
+pub const Prefs = struct {
+    mouse_scroll: WheelDirection = screen_args.default_mouse_scroll,
+    touchpad_scroll: WheelDirection = screen_args.default_touchpad_scroll,
+    mouse_accel: Accel = screen_args.default_mouse_accel,
+    touchpad_accel: Accel = screen_args.default_touchpad_accel,
+
+    /// 그 종류의 가속 단계. `none`은 열리지 않으므로 0이다.
+    pub fn accelFor(self: Prefs, kind: Kind) Accel {
+        return switch (kind) {
+            .mouse => self.mouse_accel,
+            .touchpad => self.touchpad_accel,
+            .none => .{},
+        };
+    }
+
+    /// 그 종류의 휠 방향 — `open` 줄에 찍는다(PS design 결정 7). `none`은 열리지 않는다.
+    pub fn scrollFor(self: Prefs, kind: Kind) WheelDirection {
+        return switch (kind) {
+            .mouse => self.mouse_scroll,
+            .touchpad => self.touchpad_scroll,
+            .none => .normal,
+        };
+    }
+};
+
+/// 이 장치의 `Frame.wheel`에 곱할 부호(PS design 결정 2).
+///
+/// 두 디코더의 휠은 같은 부호 규약으로 나온다 — 양수가 "위의 글을 보이게 한다"이다.
+/// 마우스는 `REL_WHEEL` 양수(휠을 앞으로 밂)가 그렇고(PD 결정 7), 터치패드는 두 손가락을
+/// 아래로 밀면 그렇다(PD 결정 8, 내용이 손가락을 따라간다). 그래서 +1이 PS 전의 동작이고,
+/// 마우스는 `natural`일 때, 터치패드는 `normal`일 때 뒤집는다. 디코더는 안 바뀐다.
+/// `none`은 열리지 않는 장치라 쓰이지 않는다 — 1을 준다.
+pub fn wheelSign(kind: Kind, mouse: WheelDirection, touchpad: WheelDirection) i32 {
+    return switch (kind) {
+        .mouse => if (mouse == .natural) -1 else 1,
+        .touchpad => if (touchpad == .normal) -1 else 1,
+        .none => 1,
+    };
 }
 
 /// 이 장치를 키보드로 열 것인가(KH design 결정 2). `EV_KEY`가 있고 `KEY_ESC`(1)부터

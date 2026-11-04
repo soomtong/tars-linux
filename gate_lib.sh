@@ -306,7 +306,7 @@ cut_log_lines() {
     if (/^(terminal|kms|font|tars-init): .* \[cut\]\r?\n?\z/) { print "C $ARGV: $_" }
     if (/^terminal: .*tars-init: /) { print "A $ARGV: $_" }
     elsif (/^tars-init: .*terminal: / &&
-           !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+\r?\n?\z/) {
+           !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+ mouse_scroll=\S+ touchpad_scroll=\S+ mouse_accel=\S+ touchpad_accel=\S+\r?\n?\z/) {
       print "B $ARGV: $_";
     }
   ' $files

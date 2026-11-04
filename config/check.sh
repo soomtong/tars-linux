@@ -109,9 +109,9 @@ TC_READBACK_KEYS=(e c h o spc t c shift-4 shift-9 t a r s minus c o n f i g spc
 # 없는가(TC design 결정 6).
 #
 # 줄 하나만 바꿨는지(더하지 않았는지)는 여기서 안 본다. 호스트의 config_edit_test가
-# 진짜 seed에서 열세 키를 하나씩 바꿔 "한 줄만 다르다"를 본다.
+# 진짜 seed에서 열일곱 키를 하나씩 바꿔 "한 줄만 다르다"를 본다.
 TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
-# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열세 키가 `key=기본값`과
+# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열일곱 키가 `key=기본값`과
 # 받는 값으로 한 줄씩 나온다. 기대하는 열셋은 아래 TC_LIST_WANT에 글자로 있다 —
 # config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
 # 여기서 멈춘다.
@@ -136,7 +136,7 @@ TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
 TC_LIST_WANT=(shell=fish keyboard=auto hangul_layout=shin_pcs latin_layout=qwerty
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off bluetooth=off esc_latin=on
-              clipboard=shared)
+              clipboard=shared mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
 # fzf 위젯에 대해 같은 구분을 했다).
 #
@@ -555,12 +555,12 @@ edit_config_in_guest() {
   echo "boot 1: tars-config check found nothing init would complain about (the refused shell=fsh never landed), and no rc aliases tars-config"
 
   # list의 줄은 들여쓰기 뒤의 `key=기본값`, 공백, 받는 값이다. 행 머리가 공백이고 뒤에
-  # 글자가 이어지는 것을 본다 — 인자 없는 tars-config의 `clipboard=shared`는 행 머리에
+  # 글자가 이어지는 것을 본다(가속 둘의 받는 값 `0..10 …`은 숫자로 시작한다, PS-M0) — 인자 없는 tars-config의 `clipboard=shared`는 행 머리에
   # 공백이 없고 뒤가 줄 끝이라 이 모양에 안 걸린다.
   type_keys "${TC_LIST_KEYS[@]}"
   local want
   for want in "${TC_LIST_WANT[@]}"; do
-    if ! wait_for_screen "\\| +${want} +[A-Za-z<]"; then
+    if ! wait_for_screen "\\| +${want} +[A-Za-z<0-9]"; then
       echo "FAIL(boot 1): 'tars-config list' did not print ${want} with the values it takes"
       grep -a "terminal: screen>" "$log" | tail -1
       return 1

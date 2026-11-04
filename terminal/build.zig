@@ -340,6 +340,8 @@ pub fn build(b: *std.Build) void {
     });
     pointer_test_mod.link_libc = true;
     pointer_test_mod.addImport("c_input", c_input_host.mod);
+    // PS-M0: `pointer.zig`가 포인터 설정의 이름(`WheelDirection` · `Accel`)을 여기서 받는다.
+    pointer_test_mod.addImport("screen_args", screen_args);
     const pointer_test = b.addExecutable(.{
         .name = "pointer_test",
         .root_module = pointer_test_mod,
@@ -356,6 +358,8 @@ pub fn build(b: *std.Build) void {
     });
     touchpad_test_mod.link_libc = true;
     touchpad_test_mod.addImport("c_input", c_input_host.mod);
+    // PS-M0: `pointer.zig`가 포인터 설정의 이름(`WheelDirection` · `Accel`)을 여기서 받는다.
+    touchpad_test_mod.addImport("screen_args", screen_args);
     const touchpad_test = b.addExecutable(.{
         .name = "touchpad_test",
         .root_module = touchpad_test_mod,

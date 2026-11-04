@@ -16,10 +16,11 @@ fn expectText(got: []const u8, want: []const u8, what: []const u8) !void {
 
 /// 키마다 기본값이 아닌 값 하나. `config.parse`로 짓는다 — init이 읽는 그 길이다.
 const OTHER = [_][]const u8{
-    "shell=zsh",                 "keyboard=pc",      "hangul_layout=dubeol", "latin_layout=dvorak",
-    "hangul_toggle=shift_space", "shell_config=off", "net=dhcp",             "ntp=10.0.2.2",
-    "timezone=Asia/Seoul",       "firewall=on",      "bluetooth=on",         "esc_latin=off",
-    "clipboard=pane",            "user=hpuser",
+    "shell=zsh",                 "keyboard=pc",          "hangul_layout=dubeol",   "latin_layout=dvorak",
+    "hangul_toggle=shift_space", "shell_config=off",     "net=dhcp",               "ntp=10.0.2.2",
+    "timezone=Asia/Seoul",       "firewall=on",          "bluetooth=on",           "esc_latin=off",
+    "clipboard=pane",            "mouse_scroll=natural", "touchpad_scroll=normal", "mouse_accel=5",
+    "touchpad_accel=5",          "user=hpuser",
 };
 
 const S = reload.Slot;
@@ -34,17 +35,17 @@ fn expectActions(slots: []const S, names: []const []const u8, want: []const relo
 }
 
 pub fn main() !void {
-    // ── 1. 열네 키가 다 한 갈래에 든다 ──────────────────────────────────
+    // ── 1. 열여덟 키가 다 한 갈래에 든다 ──────────────────────────────────
     //
     // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열셋 다 들었다. 갈래의 수를 세서
-    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 여섯)와 견준다.
+    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 열 — PS-M0의 포인터 넷이 더해졌다)와 견준다.
     var counts = [_]usize{ 0, 0, 0, 0 };
     inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@backingInt(comptime reload.groupOf(f_name))] += 1;
-    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 6 or counts[3] != 1)
-        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 4/3/6/1", .{ counts[0], counts[1], counts[2], counts[3] });
+    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 10 or counts[3] != 1)
+        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 4/3/10/1", .{ counts[0], counts[1], counts[2], counts[3] });
     // `user`는 화면 대기에 안 든다 — reload terminal이 그 이름으로 셸을 띄우면 안 된다(HP-M1).
     if (comptime reload.onScreen("user")) return fail("user waits for the screen", .{});
-    std.debug.print("reload_test: fourteen keys in four groups — four now, three at the next spawn, six on the screen, one at the next boot\n", .{});
+    std.debug.print("reload_test: eighteen keys in four groups — four now, three at the next spawn, ten on the screen, one at the next boot\n", .{});
 
     // ── 2. diff — 키 하나를 바꾸면 그 비트 하나 ────────────────────────
     const def = config.Config{};
@@ -52,7 +53,7 @@ pub fn main() !void {
     for (OTHER, 0..) |line, i| {
         const c = config.parse(line);
         const k = reload.changed(def, c);
-        if (k.bits != (@as(u16, 1) << @intCast(i))) return fail("{s}: changed bits {b}, want bit {d}", .{ line, k.bits, i });
+        if (k.bits != (@as(reload.Keys.Bits, 1) << @intCast(i))) return fail("{s}: changed bits {b}, want bit {d}", .{ line, k.bits, i });
     }
     // 정규형이 같으면 같은 값이다 — 순서가 다른 전환 키 목록 · 0으로 시작하는 주소.
     if (!reload.changed(config.parse("hangul_toggle=lctrl_tap,shift_space"), config.parse("hangul_toggle=shift_space,lctrl_tap")).empty())
@@ -72,7 +73,8 @@ pub fn main() !void {
     reload.configReply(&out, live, def);
     try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
-        "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\nuser=\n" ++
+        "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\n" ++
+        "mouse_scroll=normal\ntouchpad_scroll=natural\nmouse_accel=0\ntouchpad_accel=0\nuser=\n" ++
         "screen keyboard=auto timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
@@ -85,6 +87,13 @@ pub fn main() !void {
     var so = reload.Out{ .buf = &sb };
     reload.screenLines(&so, def, live);
     try expectText(so.bytes(), "keyboard: auto -> pc\ntimezone: UTC -> Asia/Seoul\n", "screenLines");
+    // PS-M0. 숫자 키도 화면 쪽 키다 — 글자는 `Accel.arg`의 것이다.
+    {
+        var pb: [256]u8 = undefined;
+        var po = reload.Out{ .buf = &pb };
+        reload.screenLines(&po, def, config.parse("mouse_accel=5\ntouchpad_scroll=normal\n"));
+        try expectText(po.bytes(), "touchpad_scroll: natural -> normal\nmouse_accel: 0 -> 5\n", "screenLines pointer");
+    }
     var none_buf: [64]u8 = undefined;
     var no = reload.Out{ .buf = &none_buf };
     reload.screenLines(&no, live, live);
@@ -94,7 +103,7 @@ pub fn main() !void {
     var to = reload.Out{ .buf = &tiny };
     reload.configReply(&to, live, def);
     if (!to.full or to.len > tiny.len) return fail("a 10-byte reply buffer did not stop cleanly", .{});
-    std.debug.print("reload_test: config answers fourteen key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
+    std.debug.print("reload_test: config answers eighteen key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
 
     // ── 5. 데몬 · 방화벽 ────────────────────────────────────────────────
     const table = [_]struct { bool, bool, bool, reload.Step }{

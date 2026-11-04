@@ -112,6 +112,11 @@ fn expect(text: []const u8, want: config.Config) !void {
         // CB-M0: 열두째 필드. 이 줄이 없으면 아래 clipboard 검사가 아무것도
         // 안 보고 초록이다.
         got.clipboard == want.clipboard and
+        // PS-M0: 열다섯째 ~ 열여덟째 필드. 이 넷이 없으면 아래 포인터 검사가 아무것도 안 보고 초록이다.
+        got.mouse_scroll == want.mouse_scroll and
+        got.touchpad_scroll == want.touchpad_scroll and
+        got.mouse_accel.eql(want.mouse_accel) and
+        got.touchpad_accel.eql(want.touchpad_accel) and
         // HP-M1: 열넷째 필드. 이 줄이 없으면 아래 user 검사가 아무것도 안 보고 초록이다.
         config.User.eql(got.user, want.user) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
@@ -121,40 +126,38 @@ fn expect(text: []const u8, want: config.Config) !void {
     var want_buf: [config.TOGGLE_ARG_MAX]u8 = undefined;
     var got_ntp: [config.NTP_ARG_MAX]u8 = undefined;
     var want_ntp: [config.NTP_ARG_MAX]u8 = undefined;
+    // got · want를 따로 찍는다 — 한 줄에 넣으면 format의 인자가 서른둘을 넘는다(PS-M0).
+    std.debug.print("FAIL: input={s}\n", .{text});
+    printConfig("got ", got, &got_buf, &got_ntp);
+    printConfig("want", want, &want_buf, &want_ntp);
+    return error.UnexpectedConfig;
+}
+
+/// `expect`의 실패 줄 하나 — 필드를 순서대로.
+fn printConfig(label: []const u8, c: config.Config, toggle_buf: *[config.TOGGLE_ARG_MAX]u8, ntp_buf: *[config.NTP_ARG_MAX]u8) void {
     std.debug.print(
-        "FAIL: input={s}\n  got  shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s}\n" ++
-            "  want shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s}\n",
+        "  {s} shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s}\n",
         .{
-            text,
-            @tagName(got.shell),
-            @tagName(got.keyboard),
-            @tagName(got.hangul_layout),
-            @tagName(got.latin_layout),
-            got.hangul_toggle.arg(&got_buf),
-            @tagName(got.shell_config),
-            @tagName(got.net),
-            got.ntp.arg(&got_ntp),
-            got.timezone.slice(),
-            @tagName(got.firewall),
-            @tagName(got.bluetooth),
-            @tagName(got.esc_latin),
-            @tagName(got.clipboard),
-            @tagName(want.shell),
-            @tagName(want.keyboard),
-            @tagName(want.hangul_layout),
-            @tagName(want.latin_layout),
-            want.hangul_toggle.arg(&want_buf),
-            @tagName(want.shell_config),
-            @tagName(want.net),
-            want.ntp.arg(&want_ntp),
-            want.timezone.slice(),
-            @tagName(want.firewall),
-            @tagName(want.bluetooth),
-            @tagName(want.esc_latin),
-            @tagName(want.clipboard),
+            label,
+            @tagName(c.shell),
+            @tagName(c.keyboard),
+            @tagName(c.hangul_layout),
+            @tagName(c.latin_layout),
+            c.hangul_toggle.arg(toggle_buf),
+            @tagName(c.shell_config),
+            @tagName(c.net),
+            c.ntp.arg(ntp_buf),
+            c.timezone.slice(),
+            @tagName(c.firewall),
+            @tagName(c.bluetooth),
+            @tagName(c.esc_latin),
+            @tagName(c.clipboard),
+            @tagName(c.mouse_scroll),
+            @tagName(c.touchpad_scroll),
+            c.mouse_accel.arg(),
+            c.touchpad_accel.arg(),
         },
     );
-    return error.UnexpectedConfig;
 }
 
 /// `arg()`가 만든 글자를 `parse()`가 도로 읽는가. seed 파일(`save`)이
@@ -1097,6 +1100,26 @@ pub fn main() !void {
     // 왕복은 `shared/screen_args_test.zig`가 본다.
     // pane 체인의 부팅 B가 쓰는 줄이다.
     try expect("shell=fish\nclipboard=pane\n", .{ .clipboard = .pane });
+
+    // ── PS-M0: 포인터 넷 ────────────────────────────────────────────────
+    //
+    // 방향 둘은 clipboard와 같은 모양의 enum 키다. 가속 둘은 첫 숫자 키이고 0~10만 받는다 —
+    // 범위 밖은 잘라 쓰지 않고 앞의 값에 머문다(PS design 결정 6).
+    try expect("mouse_scroll=natural\n", .{ .mouse_scroll = .natural });
+    try expect("touchpad_scroll=normal\n", .{ .touchpad_scroll = .normal });
+    try expect("mouse_scroll=up\n", .{}); // enum에 없는 값
+    try expect("touchpad_scroll=\n", .{});
+    try expect("mouse_accel=0\n", .{});
+    try expect("mouse_accel=10\n", .{ .mouse_accel = .{ .level = 10 } });
+    try expect("touchpad_accel=7\n", .{ .touchpad_accel = .{ .level = 7 } });
+    try expect("mouse_accel=11\n", .{}); // 범위 밖 — 10으로 올리지 않는다
+    try expect("mouse_accel=-1\n", .{});
+    try expect("touchpad_accel=fast\n", .{});
+    try expect("touchpad_accel=\n", .{});
+    // 틀린 줄은 앞의 값을 지우지 않는다.
+    try expect("mouse_accel=4\nmouse_accel=40\n", .{ .mouse_accel = .{ .level = 4 } });
+    // pointer 체인의 부팅 C가 쓰는 줄이다.
+    try expect("shell=fish\nmouse_scroll=natural\ntouchpad_scroll=normal\n", .{ .mouse_scroll = .natural, .touchpad_scroll = .normal });
 
     // ── EL-M0: esc_latin ────────────────────────────────────────────────
     //
