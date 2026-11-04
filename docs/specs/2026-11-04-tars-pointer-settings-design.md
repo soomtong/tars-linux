@@ -157,8 +157,12 @@ gain = 1 + (level / 10) × (GAIN_MAX − 1) × t
 
 | 칸 | 타입 | 글자 |
 |---|---|---|
-| `mouse_scroll` · `touchpad_scroll` | `Scroll = enum { normal, natural }` | `@tagName` |
-| `mouse_accel` · `touchpad_accel` | `Accel = u4`, 0~10 | `"0"`~`"10"` — comptime 표 열하나에서 고른다(버퍼가 필요 없다) |
+| `mouse_scroll` · `touchpad_scroll` | `WheelDirection = enum { normal, natural }` | `@tagName` |
+| `mouse_accel` · `touchpad_accel` | `Accel = struct { level: u4 }`, 0~10 | `"0"`~`"10"` — comptime 표 열하나에서 고른다(버퍼가 필요 없다) |
+
+이름 `Scroll`은 `pointer.zig`의 끄는 중 휠 구조체와 겹쳐 `WheelDirection`이다. `Accel`이 맨 `u4`가 아니라 구조체인 것은 init의
+`config_edit.fieldText` · `hintFor` · `reload.same` · `reload.text`가 `Ntp` · `Timezone`처럼 타입으로 갈래를 고르기 때문이다(PS-M0 plan
+확정 2).
 
 `decode`의 기본값은 결정 2 · 3의 값이고, 숫자 칸의 글자가 0~10 밖이면 기본값이다. 콘솔 셸과 서비스 셋의 argv는 null이 넷 늘
 뿐이다(SA의 규칙).
