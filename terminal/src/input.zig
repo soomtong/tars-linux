@@ -232,6 +232,12 @@ pub const Context = struct {
     /// read 안에서 더블 탭과 Esc가 함께 와도 Esc는 그 앞의 단계로 읽힌다 — 띄운 직후
     /// 같은 read의 Esc는 PTY로 간다. 사람의 손으로는 생기지 않는 순서다.
     dictating: bool = false,
+
+    /// 이 배치가 어느 키보드 칸에서 왔는가(DM design 결정 5). `readKeys` 한 번은 fd
+    /// 하나를 읽으므로 배치의 모든 이벤트가 같은 칸이다. `main.zig`의 키보드 칸
+    /// 번호(`readKeyboards`의 `ki`)를 그대로 싣는다. 기본값 0이라 칸을 모르는 단위
+    /// 검사는 키보드 하나로 돈다.
+    device: u8 = 0,
 };
 
 /// 스크롤백을 움직이는 동작(design 결정 12).
@@ -487,7 +493,7 @@ pub const Keys = struct {
     /// 함께 내보내는 키(Esc)를 위한 것이다 — `readKeys`의 주석에 있다.
     redraw: bool,
     /// 장치가 사라졌다(KH design 결정 4). read가 0이거나 `EAGAIN` · `EINTR`
-    /// 아닌 오류(`ENODEV`)를 냈다. 부르는 쪽이 fd를 닫고 `releaseHeld`를 부른다.
+    /// 아닌 오류(`ENODEV`)를 냈다. 부르는 쪽이 fd를 닫고 `releaseDevice`를 부른다.
     /// 키보드 fd가 논블로킹이라(결정 1) `EAGAIN`은 사라진 것이 아니라 빈 배치다.
     gone: bool = false,
 };
@@ -610,30 +616,49 @@ const Tap = struct {
     }
 };
 
-/// modifier 상태를 들고 있는 작은 상태 머신.
-/// design doc 결정 2의 세 단계 중 1번(modifier 갱신)과 3번(기본 번역)에
-/// 해당한다. 2번(조합 dispatch)은 IP-M2에서 들어온다.
-pub const State = struct {
+/// 키보드 칸의 수(KH design 결정 5). 노트북 내장 · USB · BT가 흔한 최대이고, 무선
+/// 수신기는 노드를 여럿 낸다. 포인터 칸(`pointer.MAX_DEVICES`)과 같은 수다.
+///
+/// 수정키와 tap을 칸마다 드는 이 파일이 수를 정한다(DM design 결정 5). `main.zig`의
+/// 키보드 칸 배열은 이 값의 별칭을 쓰고, 두 쪽이 같은 칸 번호를 쓴다(DM 위험 3).
+pub const MAX_KEYBOARDS = 8;
+
+/// 키보드 하나가 쥔 수정키 여덟(DM design 결정 1).
+///
+/// 이름은 물리 키를 따른다. 어느 것이 Option이고 어느 것이 Cmd인지는 `handleKey`
+/// 맨 앞의 맞바꿈(IP design 결정 9)이 이미 정했다.
+pub const Mods = packed struct(u8) {
     shift_left: bool = false,
     shift_right: bool = false,
-    // Ctrl 둘을 좌우로 나눠 두는 이유는 Shift와 같다 — 하나를 누른 채
-    // 다른 하나를 눌렀다 떼도 풀리면 안 된다.
     ctrl_left: bool = false,
     ctrl_right: bool = false,
-
-    // Alt(Option)와 Meta(Cmd). design doc 결정 4의 여덟 중 나머지 넷이고,
-    // IP-M0가 "관측 가능해지는 시점에 넣는다"며 미뤄둔 것이다. 그 시점이
-    // 아래 chord()가 생기는 지금이다 — 비트만 있으면 반환값이 안 바뀌어서
-    // 검사할 수가 없었다.
-    //
-    // 이름을 alt/meta로 붙이는 것은 물리 키 이름을 따른 것이다.
-    // 어느 것이 Option이고 어느 것이 Cmd인지는 키보드 종류가 정하며,
-    // 그 보정은 handleKey 맨 앞에서 코드를 맞바꾸는 것으로 끝난다(결정 9).
-    // 여기까지 내려오면 "왼쪽 Alt 키가 눌려 있다"는 사실만 남는다.
     alt_left: bool = false,
     alt_right: bool = false,
     meta_left: bool = false,
     meta_right: bool = false,
+};
+
+/// 키보드 하나의 tap 둘(DM design 결정 2). 누름과 뗌의 짝은 같은 칸 안에서만 짓는다.
+const Taps = struct {
+    caps: Tap = .{},
+    lctrl: Tap = .{},
+};
+
+/// modifier 상태를 들고 있는 작은 상태 머신.
+/// design doc 결정 2의 세 단계 중 1번(modifier 갱신)과 3번(기본 번역)에
+/// 해당한다. 2번(조합 dispatch)은 IP-M2에서 들어온다.
+pub const State = struct {
+    /// 칸마다 그 키보드가 쥔 수정키(DM design 결정 1). 칸 번호는 `Context.device`다.
+    ///
+    /// "지금 Shift가 눌려 있는가"는 칸들의 OR이다(`anyMods`). 그래서 한 키보드의
+    /// Shift와 다른 키보드의 글자는 조합이고(KH 결정 3), 한 키보드의 뗌은 그 칸의
+    /// 비트만 지운다 — 같은 수정키를 두 키보드에서 겹쳐 쥐었다가 한쪽에서 떼도 다른
+    /// 쪽이 쥔 것은 남는다(KH 시나리오 S5).
+    ///
+    /// Shift · Ctrl을 좌우로 나눠 두는 이유는 같다 — 하나를 누른 채 다른 하나를
+    /// 눌렀다 떼도 풀리면 안 된다. 커널의 자동 반복(value=2)도 비트를 다시 쓰지만
+    /// 자기 칸의 것뿐이다(DM-M0 실측 1).
+    mods: [MAX_KEYBOARDS]Mods = @splat(.{}),
 
     /// 반환 슬라이스의 저장소. 힙을 쓰지 않는다.
     ///
@@ -725,8 +750,10 @@ pub const State = struct {
     /// 설정이 꺼져 있어도 기록은 한다. 갈래를 하나로 두면 "켜져 있을 때만
     /// 기록한다"가 만드는 어긋남이 아예 없다 — 기록을 건너뛰면 `held`가 참으로
     /// 남거나 거짓으로 남는 경계가 생기고, 그 경계는 게이트가 못 본다.
-    caps_tap: Tap = .{},
-    lctrl_tap: Tap = .{},
+    ///
+    /// 칸마다 든다(DM design 결정 2). 누름과 뗌의 짝은 같은 칸 안에서만 짓고, 소비는
+    /// 칸을 건넌다(`markTapConsumed`).
+    taps: [MAX_KEYBOARDS]Taps = @splat(.{}),
 
     /// 오른쪽 Cmd 자리의 더블 탭(VD design 결정 10). `Tap`과 다른 판정이다 —
     /// 그쪽은 한 번 누른 길이를, 이쪽은 두 누름 사이를 잰다(`dictation.DoubleTap`).
@@ -771,15 +798,44 @@ pub const State = struct {
     ///
     /// 자기 자신은 뺀다. 자동 반복(value=2)이 오면 자기가 자기를 소비한
     /// 것이 된다.
-    fn markTapConsumed(self: *State, code: u16) void {
-        if (self.caps_tap.held and code != c.KEY_CAPSLOCK)
-            self.caps_tap.consumed = true;
-        if (self.lctrl_tap.held and code != c.KEY_LEFTCTRL)
-            self.lctrl_tap.consumed = true;
+    ///
+    /// 칸을 건넌다(DM design 결정 2). 어느 키보드의 누름이든 모든 칸의 쥔 tap을
+    /// 소비로 만든다 — A의 Ctrl을 쥔 채 B의 글자를 쳐도 A의 Ctrl은 tap이 아니다.
+    /// 빼는 것은 같은 칸의 같은 키뿐이다. 다른 칸의 같은 키는 소비다.
+    fn markTapConsumed(self: *State, code: u16, dev: usize) void {
+        for (&self.taps, 0..) |*t, i| {
+            if (t.caps.held and !(i == dev and code == c.KEY_CAPSLOCK))
+                t.caps.consumed = true;
+            if (t.lctrl.held and !(i == dev and code == c.KEY_LEFTCTRL))
+                t.lctrl.consumed = true;
+        }
+    }
+
+    /// 다른 칸이 그 tap 키를 쥐고 있는가(DM design 결정 2). 그때의 누름은 쥔 키와
+    /// 겹친 조합이라 처음부터 소비된 것으로 시작한다. 한 키보드에는 같은 키가 둘
+    /// 없으므로 키보드가 하나일 때는 언제나 거짓이다.
+    fn otherHolds(self: State, dev: usize, comptime which: enum { caps, lctrl }) bool {
+        for (self.taps, 0..) |t, i| {
+            if (i == dev) continue;
+            const held = switch (which) {
+                .caps => t.caps.held,
+                .lctrl => t.lctrl.held,
+            };
+            if (held) return true;
+        }
+        return false;
+    }
+
+    /// 칸들의 OR(DM design 결정 1). 수정키를 읽는 자리는 모두 이것을 거친다.
+    fn anyMods(self: State) Mods {
+        var acc: u8 = 0;
+        for (self.mods) |m| acc |= @bitCast(m);
+        return @bitCast(acc);
     }
 
     fn shifted(self: State) bool {
-        return self.shift_left or self.shift_right;
+        const m = self.anyMods();
+        return m.shift_left or m.shift_right;
     }
 
     /// 지금 눌린 수정키 셋(PD-M4). 포인터 경로가 읽는다 — Shift는 자식이
@@ -792,8 +848,8 @@ pub const State = struct {
     pub fn modifiers(self: State) Modifiers {
         return .{
             .shift = self.shifted(),
-            .ctrl = self.ctrl_left or self.ctrl_right,
-            .alt = self.alt_left or self.alt_right,
+            .ctrl = self.ctrled(),
+            .alt = self.alted(),
         };
     }
 
@@ -829,15 +885,18 @@ pub const State = struct {
     }
 
     fn ctrled(self: State) bool {
-        return self.ctrl_left or self.ctrl_right;
+        const m = self.anyMods();
+        return m.ctrl_left or m.ctrl_right;
     }
 
     fn alted(self: State) bool {
-        return self.alt_left or self.alt_right;
+        const m = self.anyMods();
+        return m.alt_left or m.alt_right;
     }
 
     fn metaed(self: State) bool {
-        return self.meta_left or self.meta_right;
+        const m = self.anyMods();
+        return m.meta_left or m.meta_right;
     }
 
     /// Ctrl과 조합됐을 때 보낼 제어 문자. 대상이 아니면 null.
@@ -981,8 +1040,8 @@ pub const State = struct {
     ///
     /// 돌려주는 슬라이스는 `commit_buf`를 가리킨다. 다음 키가 덮어쓰므로
     /// 호출부가 바로 쓴다 — `takeCommit`과 같은 계약이다.
-    /// 키보드 하나가 빠졌다(KH design 결정 4). 손의 상태를 처음으로 되돌린다 —
-    /// 수정키 여덟, tap 둘, 받아쓰기의 더블 탭.
+    /// 키보드 하나가 빠졌다(KH design 결정 4). 그 칸의 손의 상태만 처음으로 되돌린다 —
+    /// 수정키 여덟과 tap 둘(DM design 결정 4).
     ///
     /// 커널은 장치를 해제할 때 눌린 키마다 뗌을 흉내 내 보내고(`input_disconnect_device`),
     /// 보통은 그것을 읽어 여기 오기 전에 풀린다. 이 함수가 푸는 것은 terminal이 그 틈을
@@ -990,24 +1049,21 @@ pub const State = struct {
     /// 읽힌다(KH-M2, `keyboard` 체인 판정 7b). 그때 이것이 없으면 Shift를 쥔 채 끊긴
     /// 키보드 때문에 다른 키보드로 친 글자가 계속 대문자다.
     ///
+    /// 다른 칸은 안 건드린다. KH-M1~DM 전에는 수정키가 하나로 합쳐져 있어서 남은
+    /// 키보드가 쥔 Shift까지 풀렸다(`keyboard` 체인 판정 9). 칸이 비면 다음 키보드가 그
+    /// 칸을 쓰므로, 처음으로 돌려 두어야 옛 비트를 물려받지 않는다.
+    ///
+    /// 받아쓰기의 더블 탭은 하나다(DM design 결정 3). 빠지는 칸이 트리거(오른쪽 Meta
+    /// 자리)를 쥐고 있었을 때만 버린다 — 그 뗌이 영영 안 와 판정이 "첫 누름"에 멈출 수
+    /// 있다. 안 쥐었으면 그 키보드가 판정에 걸린 몫이 없다.
+    ///
     /// 사람의 상태(`hangul_on` · `hangul_buf` · `commit_*` · `caps_lock` · `mode`)는
     /// 안 건드린다. 키보드가 여럿이어도 사람은 하나이고, 조합 중인 음절은 다른
-    /// 키보드의 다음 키가 잇는다(design 시나리오 검토 S4).
-    ///
-    /// 키보드들이 수정키를 합쳐 쓰므로(결정 3) 남은 키보드가 쥐고 있던 수정키도
-    /// 풀린다. 그 키를 다시 누르면 돌아온다 — design이 받아들인 대가다.
-    pub fn releaseHeld(self: *State) void {
-        self.shift_left = false;
-        self.shift_right = false;
-        self.ctrl_left = false;
-        self.ctrl_right = false;
-        self.alt_left = false;
-        self.alt_right = false;
-        self.meta_left = false;
-        self.meta_right = false;
-        self.caps_tap = .{};
-        self.lctrl_tap = .{};
-        self.dictate_tap.reset();
+    /// 키보드의 다음 키가 잇는다(KH design 시나리오 검토 S4).
+    pub fn releaseDevice(self: *State, slot: usize) void {
+        if (self.mods[slot].meta_right) self.dictate_tap.reset();
+        self.mods[slot] = .{};
+        self.taps[slot] = .{};
     }
 
     pub fn forceMode(self: *State, to: Mode) []const u8 {
@@ -1302,12 +1358,17 @@ pub const State = struct {
         // 실수로 raw_code를 다시 쓰면 보정이 빠진 코드가 흘러가는데, 이름이
         // 다르면 그 실수가 눈에 띈다.
         const code = if (ctx.swap_alt_meta) swapAltMeta(raw_code) else raw_code;
+        // 이 배치의 키보드 칸(DM design 결정 5). 수정키와 tap은 이 칸에 쓴다.
+        const dev: usize = ctx.device;
+        std.debug.assert(dev < MAX_KEYBOARDS);
+        const mods = &self.mods[dev];
+        const taps = &self.taps[dev];
         // 0.5번 단계 — tap 소비 표시(결정 8의 2번). 아래 switch보다 앞이어야
         // 하는 이유는 markTapConsumed의 주석에 있다.
         //
         // 뗌(0)은 소비가 아니다. Ctrl을 누르기 전부터 눌려 있던 키를 떼는 것일
         // 수 있고, 그것은 이 Ctrl을 조합 키로 쓴 것이 아니다.
-        if (value != 0) self.markTapConsumed(code);
+        if (value != 0) self.markTapConsumed(code, dev);
         // 0.6번 단계 — 받아쓰기의 더블 탭(VD design 결정 10). 다른 키가 눌리면
         // 진행 중이던 판정을 버린다(Voxio D6 — 중간에 다른 키가 끼면 리셋). 다른
         // 수정키의 누름도 여기서 버린다: Shift를 잡은 채 한 번, 놓고 한 번이 더블
@@ -1317,15 +1378,15 @@ pub const State = struct {
 
         switch (code) {
             c.KEY_LEFTSHIFT => {
-                self.shift_left = value != 0;
+                mods.shift_left = value != 0;
                 return nothing;
             },
             c.KEY_RIGHTSHIFT => {
-                self.shift_right = value != 0;
+                mods.shift_right = value != 0;
                 return nothing;
             },
             c.KEY_LEFTCTRL => {
-                self.ctrl_left = value != 0;
+                mods.ctrl_left = value != 0;
                 // 짧게 눌렀다 떼면 한/영이다(결정 8). modifier 상태를 갱신한
                 // 뒤에 판단한다 — 순서가 뒤집히면 `ctrl_left`가 참인 채로
                 // `toggleHangul`이 불려서 `hangulLayer`의 Ctrl 갈래와 뜻이
@@ -1337,31 +1398,34 @@ pub const State = struct {
                 // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다 — 그
                 // 함수가 상태를 지운다.
                 if (value == 0) {
-                    const tapped = self.lctrl_tap.up(time_us);
+                    const tapped = taps.lctrl.up(time_us);
                     if (tapped and self.toggles.lctrl_tap) return self.toggleHangul();
                 } else {
-                    self.lctrl_tap.down(time_us);
+                    taps.lctrl.down(time_us);
+                    // 다른 키보드가 왼쪽 Ctrl을 쥐고 있으면 이 누름은 조합이다(DM design
+                    // 결정 2, KH 시나리오 S5).
+                    if (self.otherHolds(dev, .lctrl)) taps.lctrl.consumed = true;
                 }
                 return nothing;
             },
             c.KEY_RIGHTCTRL => {
-                self.ctrl_right = value != 0;
+                mods.ctrl_right = value != 0;
                 return nothing;
             },
             c.KEY_LEFTALT => {
-                self.alt_left = value != 0;
+                mods.alt_left = value != 0;
                 return nothing;
             },
             c.KEY_RIGHTALT => {
-                self.alt_right = value != 0;
+                mods.alt_right = value != 0;
                 return nothing;
             },
             c.KEY_LEFTMETA => {
-                self.meta_left = value != 0;
+                mods.meta_left = value != 0;
                 return nothing;
             },
             c.KEY_RIGHTMETA => {
-                self.meta_right = value != 0;
+                mods.meta_right = value != 0;
                 // 받아쓰기의 트리거(VD design 결정 10). 맞바꿈 뒤의 코드라 Apple
                 // 자판은 오른쪽 Cmd, `keyboard=pc`는 오른쪽 Alt다 — 둘 다 스페이스
                 // 오른쪽의 Cmd 자리다.
@@ -1377,7 +1441,7 @@ pub const State = struct {
                 // 발동은 둘째 누름에서다. Meta를 누른 채라 아래 1.35번 이후의 갈래는
                 // 이 키에 안 닿는다 — 여기서 바로 돌려준다.
                 if (value == 1) {
-                    const combined = self.shifted() or self.ctrled() or self.alted() or self.meta_left;
+                    const combined = self.shifted() or self.ctrled() or self.alted() or self.anyMods().meta_left;
                     if (self.dictate_tap.down(time_us, combined)) return .{ .dictate = .toggle };
                 } else if (value == 0) {
                     self.dictate_tap.up();
@@ -1391,7 +1455,7 @@ pub const State = struct {
                 if (value == 0) {
                     // `up()`을 설정과 무관하게 먼저 부르는 것이 계약이다 —
                     // 그 함수가 상태를 지운다.
-                    const tapped = self.caps_tap.up(time_us);
+                    const tapped = taps.caps.up(time_us);
                     if (tapped and self.toggles.capslock_tap)
                         return self.toggleHangul();
                     // 짧은 tap이 아니면 원래 뜻이다(결정 9).
@@ -1416,7 +1480,9 @@ pub const State = struct {
                     // 버그가 됐다.
                     return .redraw;
                 } else {
-                    self.caps_tap.down(time_us);
+                    taps.caps.down(time_us);
+                    // 왼쪽 Ctrl과 같다(DM design 결정 2).
+                    if (self.otherHolds(dev, .caps)) taps.caps.consumed = true;
                 }
                 return nothing;
             },

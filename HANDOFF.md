@@ -1,40 +1,43 @@
-# HANDOFF: Device Modifiers(DM) M0 끝남 — 다음은 DM-M1
+# HANDOFF: Device Modifiers(DM-M0~M1) 끝남 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 목표
 
-진행 중인 서브프로젝트는 Device Modifiers(DM)다. 수정키 여덟과 tap 둘을 키보드 칸마다 따로 들어, 같은 수정키를 두 키보드에서
-겹쳐 쥐거나 한쪽 키보드가 빠져도 남은 쪽의 수정키가 안 풀리게 한다(KH 비목표 5 · 시나리오 S5, `carryover.md` KH 둘째 항목).
-design은 `docs/specs/2026-11-04-tars-device-modifiers-design.md` — 사용자가 결정 1~7을 추천안 그대로 승인했다(2026-11-04).
+진행 중인 서브프로젝트는 없다. DM(Device Modifiers)은 코드 · 체인 · 루트 게이트 · 문서 · 커밋까지 닫혔다. 소개 페이지는
+`gh-pages`에 로컬 커밋만 했다(아래 "현재 브랜치"). 다음 일은 "다음 후보"에서 사용자가 고르고, 새 서브프로젝트는 design부터.
 
 ## 현재 브랜치
 
-`main`. design 커밋이 origin보다 하나 앞서 있다(push는 사용자가 한다). `gh-pages`는 IK까지(`a7d4845`).
+`main` — origin보다 앞서 있다(DM design · M0 · M1 커밋, push는 사용자가 한다). `gh-pages`도 DM 커밋이 로컬에만 있다 — push는
+사용자에게 남겼다(사용자가 외출하며 마무리를 맡긴 세션, 2026-11-04).
 
-## 완료된 작업
+## 완료된 작업 (2026-11-04, 사용자 외출 중 위임)
 
-- [x] IK-M0 전부 — `8b8209d`(2026-11-03, 닫는 묶음 · 소개 페이지까지)
-- [x] DM design 작성 · 승인(2026-11-04) — `65b6f30`
-- [x] DM-M0(2026-11-04) — `keyboard/check.sh`에 판정 8 · 9 · 10. 지금 코드에서 셋 다 기대한 이유로 빨갛다(design 실측 2).
-  커널 자동 반복이 쥔 수정키 비트를 다시 켜서 첫 판에 8 · 9가 초록이었다 → `stop_repeat`(그 장치의 오른쪽 Ctrl 탭)으로 반복을
-  멈춘 뒤 판정한다(design 실측 1).
+- [x] DM design(`65b6f30`) — 사용자가 결정 1~7을 추천안 그대로 승인
+- [x] DM-M0(`056d010`) — `keyboard` 체인 판정 8 · 9 · 10, 고치기 전 코드에서 기대한 이유로 빨강. 커널 자동 반복이 결함을 가려
+  첫 판에 8 · 9가 초록이었다 → `stop_repeat`(design 실측 1)
+- [x] DM-M1 — `input.zig`(`mods` · `taps` 칸 배열, `anyMods`, `otherHolds`, `releaseDevice`, `Context.device`), `main.zig`(칸 번호를
+  넘긴다, `MAX_KEYBOARDS` 별칭), `input_test` 검사 88, 체인 11/11, mutation 셋 잡힘, 루트 게이트 27/27(15분 20초)
+- [x] 닫는 묶음 — design Status · 실측 1~5, KH design 결정 4 · 비목표 5 포인터, `carryover.md` KH 둘째 항목 `[x]`, `completed.md` 행,
+  `project_device_modifiers.md` + `MEMORY.md`, 소개 페이지 `data.js`(gh-pages 로컬 커밋)
 
-## 지금 빨간 것 (의도함)
+## 시도했으나 실패한 접근
 
-`keyboard` 체인은 DM-M1 커밋까지 판정 8에서 빨갛다. 이 사이에 루트 게이트를 돌리면 26/27이다.
+- 판정 8 · 9를 Shift만 쥔 채 보는 것: 커널 자동 반복이 지워진 비트를 다시 켜서 고치기 전 코드에서도 초록이었다 → 쥔 장치의
+  오른쪽 Ctrl을 눌렀다 떼 반복을 멈춘 뒤 본다.
+- 새 판정에 `joined_screen_dump | grep -aq`: 루트 게이트 진입 검사가 0.5초 만에 막았다(GA-M0) → `grep -a … >/dev/null`.
 
 ## 남은 작업
 
-- [ ] DM-M1 — `input.zig`(`held: [MAX_KEYBOARDS]Mods` · 칸별 `taps` · `releaseDevice` · `Context.device`), `main.zig`(`ki` 넘기기 ·
-  `MAX_KEYBOARDS`를 `input.zig`로), 단위 검사, 체인 초록, mutation 셋, 루트 게이트, 닫는 묶음
+- [ ] 사용자: `main`과 `gh-pages` push
+- [ ] 다음 서브프로젝트 고르기(사용자) → design → plan
 
 ## 핵심 파일
 
-- `docs/specs/2026-11-04-tars-device-modifiers-design.md` — DM 결정
-- `terminal/src/input.zig` — `State`(수정키 bool 여덟 · `caps_tap` · `lctrl_tap` · `dictate_tap`), `handleKey`, `markTapConsumed`,
-  `releaseHeld`, `Context`
-- `terminal/src/main.zig` — `MAX_KEYBOARDS`, `readKeyboards`(칸 번호 `ki`), `readKeyboard`(`Context` 조립), `closeKeyboard`
-- `keyboard/check.sh` — KH 판정 1~7b, `qmp_key gpu`(k2) · `qmp_key -`(k1)
-- `check.sh`의 `CHAINS` — 체인 27(DM은 체인을 안 더한다)
+- `docs/specs/2026-11-04-tars-device-modifiers-design.md` — DM 결정 · 실측(방금 닫은 것)
+- `terminal/src/input.zig` — `MAX_KEYBOARDS` · `Mods` · `Taps`, `State.mods` · `taps`, `anyMods` · `markTapConsumed` · `otherHolds` ·
+  `releaseDevice`, `Context.device`
+- `keyboard/check.sh` — KH 판정 1~7b + DM 판정 8~10, `stop_repeat`
+- `check.sh`의 `CHAINS` — 체인 27(DM은 체인을 안 더했다)
 
 ## 다음 에이전트에게
 
@@ -44,9 +47,13 @@ init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서. 체인
 `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./device/check.sh`.
 terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다(커널 printk가 줄을 자른다, `gate_lib.sh`).
 
-## 지금 상태 (2026-11-03)
+## 지금 상태 (2026-11-04)
 
-- 마지막으로 닫은 것은 Init Keyboard(IK-M0, `docs/specs/2026-11-03-tars-init-keyboard-design.md`, 기억은
+- 마지막으로 닫은 것은 Device Modifiers(DM-M0~M1, `docs/specs/2026-11-04-tars-device-modifiers-design.md`, 기억은
+  `docs/decisions/project_device_modifiers.md`). 수정키 여덟과 tap 둘을 키보드 칸마다 들고(읽기는 OR), 빠진 키보드는 그 칸만
+  푼다. 겹친 tap 키의 누름은 소비로 시작한다. 사용자가 결정을 추천안 그대로 정하고 마무리까지 맡겼다.
+
+- 그 전에 닫은 것은 Init Keyboard(IK-M0, `docs/specs/2026-11-03-tars-init-keyboard-design.md`, 기억은
   `docs/decisions/project_init_keyboard.md`). KH 뒤로 아무도 안 쓰던 PID 1의 키보드 고르기 · 3초 기다림 · terminal argv의
   장치 칸을 걷었다. 사용자가 정했다: `Slot.device`를 빼고 `ARGC` 9, 체인 넷은 terminal의 `keyboard> open`과 init 줄의 부재로 판정.
   - 섰다: 키보드 없는 부팅의 `Run /init` → `started terminal` 3.39초 → 0.06초. 루트 게이트 `RUNS=3` 81/81.
@@ -83,10 +90,11 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK. 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK + DM. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Device Modifiers(DM-M0~M1, 11-04) — `docs/decisions/project_device_modifiers.md`
   - Init Keyboard(IK-M0, 11-03) — `docs/decisions/project_init_keyboard.md`
   - Mise(MI-M0~M1, 11-03) — `docs/decisions/project_mise.md`
   - Package Manager(PM-M0~M1, 11-03) — `docs/decisions/project_package_manager.md`
@@ -105,14 +113,18 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
 - 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
   체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
   바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(IK-M0, `RUNS=3`): 81/81, 약 36분(prebuild 355초 · lanes 1821초), cut log lines 전부 0. 1회 게이트의
-  마지막 값은 MI-M1의 15분 36초(prebuild 333 · lanes 601초). PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
+  마지막 루트 게이트(DM-M1, 1회): 27/27, 15분 20초(prebuild 332초 · lanes 586초), cut log lines 전부 0. `RUNS=3`의
+  마지막 값은 IK-M0의 81/81, 약 36분. PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
   45500 — 새 체인은 45501부터.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
   `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- DM: 키보드 둘(노트북 내장 + USB/BT)로 — A의 Shift를 쥐고 A로 글자 하나를 친 뒤(커널 반복을 멈춘다, DM 실측 1) B의 Shift를
+  눌렀다 떼고 B로 글자 → 대문자가 그대로인지. A의 Shift를 쥔 채 B를 뽑아도 A로 친 글자가 대문자인지. 두 키보드의 왼쪽 Ctrl을
+  겹쳐 눌렀을 때 한/영이 안 바뀌는지.
 
 - MI: 화면 셸에서 `curl https://mise.run | sh` → 새 패널에서 `mise use -g node@lts` → 또 새 패널에서 `node --version`. rc를 안
   고쳐도 되는지(시스템 rc), 실기에서 패널을 열 때 늦어진 것이 느껴지는지(TCG는 셸 하나에 약 115ms, 부팅 뒤 첫 패널은 mise를
@@ -167,7 +179,8 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- KH가 남긴 것(`carryover.md`의 KH 절): 장치별 수정키 · 키보드마다 다른 `keyboard=`. init 정리는 IK-M0으로 닫았다.
+- KH가 남긴 것(`carryover.md`의 KH 절): 키보드마다 다른 `keyboard=`(DM이 칸 번호를 `Context.device`로 실어 자리를 만들었다 —
+  `swap_alt_meta`를 칸마다 고르면 된다). init 정리는 IK-M0, 장치별 수정키는 DM이 닫았다.
 - 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.

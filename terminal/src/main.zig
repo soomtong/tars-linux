@@ -2378,14 +2378,15 @@ const PointerDev = struct {
     }
 };
 
-/// 키보드 칸의 수(KH design 결정 5). 노트북 내장 · USB · BT가 흔한 최대이고, 무선
-/// 수신기는 노드를 여럿 낸다. 포인터 칸(`pointer.MAX_DEVICES`)과 같은 수다.
-const MAX_KEYBOARDS = 8;
+/// 키보드 칸의 수(KH design 결정 5). 수와 그 이유는 `input.zig`에 있다 — 수정키와
+/// tap을 칸마다 드는 쪽이 정한다(DM design 결정 5). 이 배열의 칸 번호가 곧
+/// `input.Context.device`다.
+const MAX_KEYBOARDS = input.MAX_KEYBOARDS;
 
 /// 키보드 칸 하나(KH-M1). 포인터 칸과 같은 이유로 경로를 든다 — 처음 훑기와
 /// uevent가 같은 노드를 두 번 주면 건너뛰려고, 그리고 `close` 줄에 찍으려고.
 /// 디코더가 없는 것이 포인터와 다르다. 키의 상태(`input.State`)는 모든 키보드가
-/// 하나를 같이 쓴다(결정 3).
+/// 하나를 같이 쓴다(결정 3). 그 안의 수정키와 tap만 이 칸 번호로 나뉜다(DM).
 const KeyboardDev = struct {
     fd: c_int,
     path: [POINTER_PATH_MAX]u8,
@@ -2670,13 +2671,13 @@ fn takeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, fd: c_int, path: [:0]const u
 }
 
 /// 키보드 칸을 비운다(KH design 결정 4). 그 키보드가 쥐고 있던 수정키와 tap을 여기서
-/// 푼다(`input.State.releaseHeld`). 커널이 해제 때 보내는 뗌을 terminal이 못 읽은 경우의
+/// 푼다(`input.State.releaseDevice`) — 그 칸의 것만이다(DM design 결정 4). 커널이 해제 때 보내는 뗌을 terminal이 못 읽은 경우의
 /// 몫이다 — `POLLHUP`이면 읽지 않고 닫고, 죽은 evdev의 read는 `ENODEV`다(KH-M2 실측 9).
 fn closeKeyboard(kbds: *[MAX_KEYBOARDS]?KeyboardDev, slot: usize, state: *input.State) void {
     const k = &kbds[slot].?;
     logline.print("terminal: keyboard> close {s}\n", .{k.pathSlice()});
     _ = std.c.close(k.fd);
-    state.releaseHeld();
+    state.releaseDevice(slot);
     kbds[slot] = null;
 }
 
@@ -3811,7 +3812,7 @@ const App = struct {
     /// 순서대로 부르고, 머리에서 포커스를 다시 잡으므로 앞 키보드의 키가 바꾼
     /// 워크스페이스를 뒤 키보드의 키가 본다(KH design 결정 5). 장치가 사라졌으면
     /// `.gone`이고 아무것도 안 한다 — 닫는 것은 부르는 쪽이다.
-    fn readKeyboard(self: *App, fd: c_int) !enum { open, gone } {
+    fn readKeyboard(self: *App, fd: c_int, slot: usize) !enum { open, gone } {
         const ws = &self.workspaces[self.current].?;
         const focus = &ws.panes[ws.focus].?;
 
@@ -3827,6 +3828,8 @@ const App = struct {
             .swap_alt_meta = self.swap_alt_meta,
             // 받아쓰기가 Esc를 가져가는가(VD-M1). 이 바퀴의 단계로 읽는다.
             .dictating = dictation.escCancels(self.dict.phase),
+            // 키보드 칸(DM design 결정 5). 수정키와 tap이 이 칸에 쓰인다.
+            .device = @intCast(slot),
         };
         const keys = input.readKeys(&self.key_state, fd, &self.key_buf, ctx);
         if (keys.gone) return .gone;
@@ -3893,7 +3896,7 @@ const App = struct {
         for (self.fds[1..self.kbd_end], self.fd_kbds[0 .. self.kbd_end - 1]) |kfd, ki| {
             if (kfd.revents == 0) continue;
             var gone = kfd.revents & (c.POLLERR | c.POLLHUP) != 0;
-            if (!gone and kfd.revents & c.POLLIN != 0) gone = try self.readKeyboard(kfd.fd) == .gone;
+            if (!gone and kfd.revents & c.POLLIN != 0) gone = try self.readKeyboard(kfd.fd, ki) == .gone;
             if (gone) closeKeyboard(&self.keyboard_devs, ki, &self.key_state);
         }
     }

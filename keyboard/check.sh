@@ -24,7 +24,7 @@ cd "$(dirname "$0")" || exit 1
 #   5. 장치를 건너는 한글 — k1의 ㄱ + k2의 ㅏ = 가.
 #   6. k2를 빼면 닫히고, terminal이 바쁜 루프에 안 빠진다(KH-M0 실측 4).
 #   7. Shift를 쥔 채 빠진 키보드의 Shift가 풀린다(결정 4) — 보통은 커널이 푼다.
-#   7b. terminal이 그 뗌을 못 읽은 경우에도 풀린다 — 그때 푸는 것이 releaseHeld다.
+#   7b. terminal이 그 뗌을 못 읽은 경우에도 풀린다 — 그때 푸는 것이 releaseDevice다(KH 때는 releaseHeld).
 #
 # DM-M0이 더한 셋(DM design 결정 7, 수정키를 키보드 칸마다 든다):
 #   8. k2가 쥔 Shift는 k1의 Shift 뗌에 안 풀린다.
@@ -417,8 +417,8 @@ echo "k2 closed, and terminal used ${DELTA} tick(s) in the next second"
 #
 # 이 판정은 누가 풀었는지를 안 가린다. 커널이 장치를 해제할 때 눌린 키마다 뗌을 흉내 내
 # 보내고(`input_disconnect_device`), evdev가 죽은 표시를 하기 전(`cdev_device_del`이 그
-# 사이다)에 terminal이 깨어 그 뗌을 읽는다 — closeKeyboard의 releaseHeld를 빼도 이 판정은
-# 초록이었다(KH-M2 실측, mutation M-c). releaseHeld만을 보는 것은 아래 7b다.
+# 사이다)에 terminal이 깨어 그 뗌을 읽는다 — closeKeyboard의 releaseHeld(DM 뒤 releaseDevice)를
+# 빼도 이 판정은 초록이었다(KH-M2 실측, mutation M-c). 그것만을 보는 것은 아래 7b다.
 echo "=== 7. Shift held on a keyboard that goes away is released ==="
 echo "device_add usb-kbd,bus=xhci.0,id=k2,display=gpu" >&3
 wait_for_keyboard_count open 3 ||
@@ -440,7 +440,7 @@ echo "k2 left with Shift down, and k1 types lower case: qxq0"
 #
 # terminal이 바빠(큰 프레임을 그리는 중) 그 틈을 놓치면 evdev는 죽은 표시가 된 뒤라 read가
 # `ENODEV`이고, poll은 `POLLHUP|POLLERR`를 준다 — 버퍼의 뗌은 읽히지 않는다. 그때 Shift를
-# 푸는 것은 closeKeyboard의 releaseHeld뿐이다(결정 4). 그 틈을 결정적으로 만든다:
+# 푸는 것은 closeKeyboard의 releaseDevice뿐이다(결정 4). 그 틈을 결정적으로 만든다:
 # `kh-stop`이 2초 뒤 terminal을 SIGSTOP으로 멈추고, 그 사이에 Shift를 쥔 k2를 빼고, 4초 뒤
 # SIGCONT한다. Shift는 kh-stop을 친 뒤에 누른다 — 먼저 누르면 명령줄이 대문자가 된다.
 echo "=== 7b. Shift is released even when terminal missed the kernel's key-up ==="
@@ -469,7 +469,7 @@ wait_for_log "terminal: keyboard> close ${K2C_PATH}" ||
 sleep 1
 type_keys e c h o spc q y q shift-4 s t a t u s ret
 wait_for_screen 'qyq0' ||
-  report_failure "k2 left holding Shift while terminal was stopped, and k1 types upper case (no qyq0) — releaseHeld did not run"
+  report_failure "k2 left holding Shift while terminal was stopped, and k1 types upper case (no qyq0) — releaseDevice did not run"
 echo "terminal was stopped through the unplug, and k1 still types lower case: qyq0"
 
 # ── 판정 8: 겹쳐 쥔 Shift의 한쪽 뗌 ───────────────────────────────────
@@ -502,7 +502,7 @@ sleep 0.3
 type_keys w shift-4 s t a t u s ret
 wait_for_screen 'w[zZ]w0' ||
   report_failure "keys for check 8 never reached the shell (neither wZw0 nor wzw0)"
-if ! joined_screen_dump | grep -aq 'wZw0'; then
+if ! joined_screen_dump | grep -a 'wZw0' >/dev/null; then
   report_failure "k1's Shift key-up released the Shift k2 still holds (wzw0)"
 fi
 echo "k2 held Shift through k1's Shift tap, and k1's z made Z: wZw0"
@@ -512,7 +512,7 @@ echo "k2 held Shift through k1's Shift tap, and k1's z made Z: wZw0"
 # k1이 Shift를 쥔 채 k2를 뺀다. k2는 아무 키도 안 쥐었으므로 커널이 해제 때 흉내 내는 뗌
 # (KH 실측 9)이 없다 — 이 Shift를 지울 수 있는 것은 closeKeyboard뿐이다. 그 칸만 풀면
 # (DM design 결정 4) k1의 z가 Z다. 출력 `vZv0`은 명령줄에 없다. k1의 Shift 반복을 먼저
-# 멈춘다 — 살아 있으면 releaseHeld가 지운 비트를 k1 자신의 반복이 다시 켠다(DM-M0 실측 1).
+# 멈춘다 — 살아 있으면 DM 전의 releaseHeld가 지운 비트를 k1 자신의 반복이 다시 켠다(DM-M0 실측 1).
 echo "=== 9. a keyboard that goes away leaves the other keyboard's Shift alone ==="
 type_keys e c h o spc v
 sleep 0.3
@@ -530,7 +530,7 @@ sleep 0.3
 type_keys v shift-4 s t a t u s ret
 wait_for_screen 'v[zZ]v0' ||
   report_failure "keys for check 9 never reached the shell (neither vZv0 nor vzv0)"
-if ! joined_screen_dump | grep -aq 'vZv0'; then
+if ! joined_screen_dump | grep -a 'vZv0' >/dev/null; then
   report_failure "k2 left and took k1's held Shift with it (vzv0)"
 fi
 echo "k2 left while k1 held Shift, and k1's z made Z: vZv0"

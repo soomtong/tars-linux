@@ -2210,7 +2210,8 @@ pub fn main() !void {
         try expectAt(&vd_m, K.KEY_LEFTSHIFT, 1, 100_000, "");
         try expectAt(&vd_m, K.KEY_LEFTSHIFT, 0, 120_000, "");
         try expectDictate(&vd_m, .{}, K.KEY_RIGHTMETA, 1, 200_000, null);
-        var vd_r: input.State = .{ .shift_left = true };
+        var vd_r: input.State = .{};
+        vd_r.mods[0].shift_left = true;
         try expectAt(&vd_r, K.KEY_LEFTSHIFT, 0, 0, "");
         try tap(&vd_r, .{}, K.KEY_RIGHTMETA, 40, 100);
         try expectDictate(&vd_r, .{}, K.KEY_RIGHTMETA, 1, 200_000, .toggle);
@@ -2306,37 +2307,38 @@ pub fn main() !void {
     }
     std.debug.print("input_test: readKeys가 받아쓰기 명령을 모으고 SYN_DROPPED가 판정을 버린다 OK\n", .{});
 
-    // 검사 86. 키보드가 빠지면 손의 상태만 푼다(KH design 결정 4). 셋을 본다 —
+    // 검사 86. 키보드가 빠지면 손의 상태만 푼다(KH design 결정 4). 칸 하나일 때의
+    // `releaseDevice(0)`은 KH의 `releaseHeld`와 같다(칸이 여럿일 때는 검사 88). 셋을 본다 —
     // 쥐고 있던 Shift가 풀린다, 쥐고 있던 왼쪽 Ctrl의 뗌이 한/영을 안 바꾼다(tap이
     // 처음으로 돌아갔다), 조합 중인 음절은 남는다(시나리오 검토 S4).
     {
         var kh_s: input.State = .{};
         try expect(&kh_s, K.KEY_LEFTSHIFT, 1, "");
         try expect(&kh_s, K.KEY_A, 1, "A");
-        kh_s.releaseHeld();
+        kh_s.releaseDevice(0);
         try expect(&kh_s, K.KEY_A, 1, "a");
 
         var kh_c: input.State = .{};
         try expectAt(&kh_c, K.KEY_LEFTCTRL, 1, 0, "");
-        kh_c.releaseHeld();
+        kh_c.releaseDevice(0);
         _ = kh_c.handleKey(K.KEY_LEFTCTRL, 0, 50_000, .{});
         if (kh_c.hangul_on) {
-            std.debug.print("FAIL: a left Ctrl released after releaseHeld still toggled hangul\n", .{});
+            std.debug.print("FAIL: a left Ctrl released after releaseDevice still toggled hangul\n", .{});
             return error.ReleaseHeldTap;
         }
 
         var kh_h: input.State = .{ .hangul_on = true };
         _ = kh_h.handleKey(K.KEY_R, 1, 0, .{});
         const before = kh_h.preedit();
-        kh_h.releaseHeld();
+        kh_h.releaseDevice(0);
         if (before == null or kh_h.preedit() != before or !kh_h.hangul_on) {
-            std.debug.print("FAIL: releaseHeld touched the person's state (preedit {any} -> {any}, hangul {})\n", .{
+            std.debug.print("FAIL: releaseDevice touched the person's state (preedit {any} -> {any}, hangul {})\n", .{
                 before, kh_h.preedit(), kh_h.hangul_on,
             });
             return error.ReleaseHeldPerson;
         }
     }
-    std.debug.print("input_test: releaseHeld가 손의 상태만 푼다 OK\n", .{});
+    std.debug.print("input_test: releaseDevice가 손의 상태만 푼다 OK\n", .{});
 
     // 검사 87. `readKeys`가 `BTN_MISC` 이상을 거르고(KH design 결정 2), 장치가
     // 사라진 것과 빈 배치를 가른다(결정 4).
@@ -2380,6 +2382,77 @@ pub fn main() !void {
         }
     }
     std.debug.print("input_test: readKeys가 버튼을 거르고 사라진 장치와 빈 배치를 가른다 OK\n", .{});
+
+    // 검사 88. 수정키와 tap을 키보드 칸마다 든다(DM design 결정 1~4). `keyboard` 체인의
+    // 판정 4 · 8 · 9 · 10의 단위판이고, 칸 0과 칸 1을 함께 쓴다(DM 위험 2 — 칸을 고정해
+    // 쓰는 실수는 키보드 하나로는 안 보인다).
+    {
+        const d0: input.Context = .{ .device = 0 };
+        const d1: input.Context = .{ .device = 1 };
+
+        // 1. 겹쳐 쥔 Shift의 한쪽 뗌(판정 8). 칸 1이 쥔 Shift가 남는다.
+        var dm_s: input.State = .{};
+        try expectCtx(&dm_s, d1, K.KEY_LEFTSHIFT, 1, "");
+        try expectCtx(&dm_s, d0, K.KEY_LEFTSHIFT, 1, "");
+        try expectCtx(&dm_s, d0, K.KEY_LEFTSHIFT, 0, "");
+        try expectCtx(&dm_s, d0, K.KEY_A, 1, "A");
+        try expectCtx(&dm_s, d1, K.KEY_LEFTSHIFT, 0, "");
+        try expectCtx(&dm_s, d0, K.KEY_A, 1, "a");
+
+        // 2. 빠진 칸은 남은 칸의 Shift를 안 가져간다(판정 9).
+        var dm_r: input.State = .{};
+        try expectCtx(&dm_r, d0, K.KEY_LEFTSHIFT, 1, "");
+        dm_r.releaseDevice(1);
+        try expectCtx(&dm_r, d0, K.KEY_A, 1, "A");
+        dm_r.releaseDevice(0);
+        try expectCtx(&dm_r, d0, K.KEY_A, 1, "a");
+
+        // 3. 겹친 왼쪽 Ctrl은 tap이 아니다(판정 10). 대조로 칸 0 혼자의 tap은 한/영이다.
+        var dm_c: input.State = .{};
+        try expectFull(&dm_c, d1, K.KEY_LEFTCTRL, 1, 0, "");
+        try expectFull(&dm_c, d0, K.KEY_LEFTCTRL, 1, 50_000, "");
+        _ = dm_c.handleKey(K.KEY_LEFTCTRL, 0, 100_000, d0);
+        _ = dm_c.handleKey(K.KEY_LEFTCTRL, 0, 150_000, d1);
+        if (dm_c.hangul_on) {
+            std.debug.print("FAIL: overlapping left Ctrl on two keyboards toggled hangul\n", .{});
+            return error.OverlapCtrlTap;
+        }
+        try expectFull(&dm_c, d0, K.KEY_LEFTCTRL, 1, 1_000_000, "");
+        _ = dm_c.handleKey(K.KEY_LEFTCTRL, 0, 1_050_000, d0);
+        if (!dm_c.hangul_on) {
+            std.debug.print("FAIL: a lone left Ctrl tap on slot 0 did not toggle hangul\n", .{});
+            return error.LoneCtrlTap;
+        }
+
+        // 같은 규칙의 CapsLock. 겹친 tap은 한/영이 아니고 원래 뜻(대문자 잠금)이다.
+        var dm_k: input.State = .{};
+        try expectFull(&dm_k, d1, K.KEY_CAPSLOCK, 1, 0, "");
+        try expectFull(&dm_k, d0, K.KEY_CAPSLOCK, 1, 50_000, "");
+        _ = dm_k.handleKey(K.KEY_CAPSLOCK, 0, 100_000, d0);
+        _ = dm_k.handleKey(K.KEY_CAPSLOCK, 0, 150_000, d1);
+        if (dm_k.hangul_on) {
+            std.debug.print("FAIL: overlapping CapsLock on two keyboards toggled hangul\n", .{});
+            return error.OverlapCapsTap;
+        }
+
+        // 4. 칸을 건너는 조합은 그대로다(OR, KH 판정 4).
+        var dm_o: input.State = .{};
+        try expectCtx(&dm_o, d1, K.KEY_LEFTSHIFT, 1, "");
+        try expectCtx(&dm_o, d0, K.KEY_Z, 1, "Z");
+
+        // 5. 받아쓰기의 더블 탭(결정 4). 트리거를 쥔 채 빠진 칸은 판정을 버리고, 아무것도 안
+        // 쥔 칸이 빠지면 진행 중인 판정이 남는다.
+        var dm_d: input.State = .{};
+        try expectDictate(&dm_d, d1, K.KEY_RIGHTMETA, 1, 0, null);
+        dm_d.releaseDevice(1);
+        try expectDictate(&dm_d, d0, K.KEY_RIGHTMETA, 0, 80_000, null);
+        try expectDictate(&dm_d, d0, K.KEY_RIGHTMETA, 1, 200_000, null);
+        var dm_k2: input.State = .{};
+        try tap(&dm_k2, d0, K.KEY_RIGHTMETA, 0, 80);
+        dm_k2.releaseDevice(1);
+        try expectDictate(&dm_k2, d0, K.KEY_RIGHTMETA, 1, 200_000, .toggle);
+    }
+    std.debug.print("input_test: 수정키와 tap을 키보드 칸마다 든다 OK\n", .{});
 
     std.debug.print("PASS\n", .{});
 }
