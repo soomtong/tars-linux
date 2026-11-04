@@ -5,12 +5,12 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-04',
-  latest: 'Device Modifiers (DM-M0~M1)',
+  latest: 'Keyboard Kind (KK-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1136,      // git rev-list --count main
+    commits: 1141,      // git rev-list --count main
     since: '2026-08-01',
     chains: 27,         // check.sh의 CHAINS
     zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -26,7 +26,7 @@ window.TARS = {
     [3, 'tars-init:', 'starting as PID 1'],
     [3, 'tars-init:', 'mounted devtmpfs at /dev'],
     [3, 'tars-init:', 'lo up'],
-    [3, 'tars-init:', 'config shell=fish keyboard=apple hangul=shin_pcs latin=qwerty'],
+    [3, 'tars-init:', 'config shell=fish keyboard=auto hangul=shin_pcs latin=qwerty'],
     [4, 'terminal:', 'grid 123x37 (fb 1024x640)'],
     [4, 'terminal:', 'hangul layout=shin_pcs latin=qwerty'],
     [5, 'terminal:', 'spawned child pid 40 (/usr/bin/fish)'],
@@ -111,6 +111,7 @@ window.TARS = {
     ['2026-11-03', 'Mise', 'MI', '공식 `mise.run`으로 홈에 깐 mise가 node를 받고, 시스템 rc가 켜서 새 패널부터 `node`가 이름으로 — 이미지에 더한 것 없음'],
     ['2026-11-03', 'Init Keyboard', 'IK', '키보드 없이 켜도 3초를 안 기다린다 — 키보드는 terminal이 고르므로 PID 1의 옛 탐색을 걷었다'],
     ['2026-11-04', 'Device Modifiers', 'DM', '키보드마다 수정키를 따로 든다 — 한쪽에서 Shift를 떼거나 한쪽이 빠져도 다른 키보드가 쥔 Shift는 남는다'],
+    ['2026-11-04', 'Keyboard Kind', 'KK', '노트북 내장 키보드와 Apple 키보드를 함께 써도 Option · Cmd가 각자 맞다 — 기본값 `keyboard=auto`가 키보드마다 vendor로 고른다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -139,6 +140,7 @@ window.TARS = {
         ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · ext4 · VFAT · ISO9660', '2026-09-10'],
         ['키보드', 'PS/2와 USB HID. 이름이 아니라 capability로 찾고, 늦게 잡히는 USB 키보드는 3초까지 기다린다', '2026-09-10'],
         ['키보드 핫플러그', '부팅 뒤에 꽂거나 연결한 키보드(USB · Bluetooth)가 붙는 순간부터 친다. 여럿을 함께 열고 한/영 · 조합 · 수정키는 하나를 같이 쓴다. 빠지면 눌려 있던 수정키를 푼다. 키보드 없이도 뜬다', '2026-11-02'],
+        ['키보드마다 종류', '노트북 내장 키보드(PC 배열)와 Apple 키보드를 함께 꽂아도 Option · Cmd가 각자 맞다 — 키보드를 열 때 vendor를 읽어 Apple(USB 0x05ac · Bluetooth 0x004c)이면 Mac 배열, 나머지는 PC 배열로 본다. `keyboard=apple` · `pc`를 적으면 모든 키보드에 그 값', '2026-11-04'],
         ['키보드마다 수정키', '두 키보드로 칠 때 Shift · Ctrl · Alt · Cmd를 키보드마다 따로 든다. 한쪽의 Shift + 다른 쪽의 글자는 여전히 대문자이고, 같은 Shift를 두 키보드에서 쥐었다가 한쪽에서 떼거나 한쪽 키보드가 빠져도 남은 쪽이 쥔 것은 풀리지 않는다. 겹쳐 누른 왼쪽 Ctrl · CapsLock은 한/영 tap이 아니다', '2026-11-04'],
         ['키보드 없는 부팅', '키보드가 하나도 없이 켜도(Bluetooth 키보드만 쓰는 기계) 화면이 곧바로 뜬다 — 전에는 PID 1이 3초를 기다렸다', '2026-11-03'],
         ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 키보드 · 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
@@ -201,7 +203,7 @@ window.TARS = {
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
-        ['`keyboard`', '`apple` | `pc` — `pc`는 Alt와 Win을 맞바꿔 Cmd 자리를 맞춘다. 기본 `apple`', '2026-08-19'],
+        ['`keyboard`', '`auto` | `apple` | `pc` — `pc`는 Alt와 Win을 맞바꿔 Cmd 자리를 맞춘다. 기본 `auto`는 키보드마다 고른다(Apple 키보드는 `apple`, 나머지는 `pc`)', '2026-11-04'],
         ['`hangul_layout`', '`dubeol` | `sebeol_3p3` | `shin_p2` | `shin_pcs` — 기본 `shin_pcs`', '2026-09-01'],
         ['`latin_layout`', '`qwerty` | `dvorak` — 기본 `qwerty`', '2026-09-01'],
         ['`hangul_toggle`', '`hangul_key` · `shift_space` · `capslock_tap` · `lctrl_tap`의 콤마 목록, `none`이면 끔. 기본 넷 다', '2026-09-01'],
@@ -280,7 +282,7 @@ window.TARS = {
     },
     {
       title: '단축키',
-      note: 'Cmd는 Apple 키보드의 Cmd, `keyboard=pc`면 Alt 자리다. copy mode 안에서는 패널 키가 안 먹는다.',
+      note: 'Cmd는 Apple 키보드의 Cmd, PC 키보드면 Alt 자리다(기본 `keyboard=auto`가 키보드마다 고른다). copy mode 안에서는 패널 키가 안 먹는다.',
       items: [
         ['[⌘D] · [⌘⇧D]', '오른쪽 · 아래에 새 패널', '2026-10-04'],
         ['[⌘W]', '포커스 패널을 닫는다(셸에 SIGHUP)', '2026-10-04'],
