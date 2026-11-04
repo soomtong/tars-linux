@@ -1,126 +1,79 @@
-# HANDOFF: Pointer Settings(PS-M0~M1) 닫힘 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: 맥북 지원(MB · HS · DB) 닫힘 · 0.1.4 배포됨 — 다음은 맥 실기 확인과 사용자의 다음 선택
 
 ## 목표
 
-다음 서브프로젝트를 고른다(아래 "다음 후보"). 새 서브프로젝트는 design부터, 방향은 사용자가 정한다.
+사용자 요청(2026-11-04 밤): MacBook Air 11" 2011 · MacBook Pro 15" 2013(Retina)에 설치, 설치기가 macOS 옆을 고르는 듀얼 부팅, 그 뒤 패치
+버전 배포. 사용자가 잠들며 남은 결정을 전부 Claude에게 맡겼고, 끝까지 갔다. 다음은 실기에서 아래 "사용자가 확인할 것"의 맨 앞 절.
 
 ## 현재 브랜치
 
-`main` — origin보다 앞서 있다(PS design · M0 · M1, push는 사용자가 한다). `gh-pages`도 PS 줄을 더한 커밋이 앞서 있다
-(worktree `../tars-linux-pages`).
+`main` = origin/main(push됨), tag `v0.1.4` = `d2f3af0` push됨. `gh-pages`도 push됨(`fcd0365`, worktree `../tars-linux-pages`).
+작업용 worktree `../tars-linux-hs` · `../tars-linux-db`와 브랜치 `hs` · `db`는 합친 뒤 지웠다.
 
-## 완료된 작업 (2026-11-04, 사용자가 M0 · M1을 끝까지 맡겼다)
+## 완료된 작업 (2026-11-04~05)
 
-- [x] PS-M0 — 설정 넷의 길 · 칸마다 휠 부호, `pointer` 체인 부팅 C 판정 가~마
-- [x] PS-M1 — `pointer.Ballistics`(가속 곡선, 칸마다 하나), `drainPointer`에서 부호 옆에 곱한다, `pointer_test` 곡선 검사 열넷,
-  부팅 C 판정 바(`touchpad_accel=10`의 `tp-replay move 100 0`이 128 → 247~252픽셀), mutation 둘 잡힘, 루트 게이트 27/27
-- [x] 닫는 묶음 — PS design `Status:` · 실측 7~10, PD design 비목표 6 · 7, `completed.md`, `docs/decisions/project_pointer_settings.md` +
-  `MEMORY.md`, `gh-pages` `data.js`
+- [x] MB-M0 — `MOUSE_BCM5974` · `ACPI_SBS`, machine 체인의 커널 장치 표 검사와 bcm5974 등록 줄. pointer 체인 금지 목록에서 bcm5974를 뺐다
+  (PD 비목표 10의 한 갈래). 되접기 정규화는 따로 커밋(HP 때 빠진 ext4 줄 여섯). lead 직접.
+- [x] HS-M0 — 논리 그림자 + 늘리는 present(`terminal/src/scale.zig`), `display_scale=auto|1|2|3`(`ARGC` 14), 체인 `hidpi`(monitor 45502). 서브에이전트.
+- [x] DB-M0 — `tars-install <disk> --beside`, TARS 파티션을 GPT 이름으로, 포맷 전 대조 둘, init 후보 126, 체인 `dualboot`(포트 없음),
+  `docs/guides/running-tars.md`의 macOS 절. 서브에이전트.
+- [x] 루트 게이트 29/29, 16분 30초(prebuild 포함, lanes 667초), 잘린 줄 0(`667240c`).
+- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,208,384 B, sha256 `b0e9d944…811c`) · 내려받아 `OK` ·
+  `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
+- [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_macbook_hardware` · `project_hidpi_scale` · `project_dual_boot`) + `MEMORY.md`.
+
+## Claude가 맡아 정한 것 (뒤집을 것이 있으면 design의 결정 번호로)
+
+- "15 2013"은 두 세대(MacBookPro10,1 · 11,2/11,3) 다 대상(MB 결정 1). `HID_APPLE`은 끈 채 — Fn 조합(PageUp 등)이 없다(MB 위험 3).
+- 무선(Broadcom) · 밝기 · 키보드 백라이트 · 절전은 범위 밖(MB 비목표).
+- Retina는 present에서 정수배로 늘리기, auto는 논리 1280×800 이상의 가장 큰 정수(HS 결정 1 · 3).
+- 듀얼 부팅은 빈 공간에만 깐다. APFS 줄이기는 macOS의 `diskutil`(DB 비목표 1). 기본 부팅은 macOS, 매번 Option 키(DB 결정 11).
+- 0.1.4를 커널 7.4 전에 냈다 — 11-01 결정을 이번 요청이 대신한 것으로 읽었다.
 
 ## 시도했으나 실패한 접근
 
-- 없음(M1). M0의 둘은 `docs/decisions/project_pointer_settings.md`의 함정 1 · 3.
+- 없음. 첫 판 실수 셋은 기억에: machine 체인의 `grep -x`(별칭 줄 꼬리), pointer 체인의 bcm5974 금지(다른 체인의 음성 검사),
+  컨테이너 여럿이 같은 `.zig-cache`로 terminal을 동시에 빌드하면 깨진다(`project_hidpi_scale` 4).
 
 ## 남은 작업
 
-- [ ] 사용자: `main` · `gh-pages` push
-- [ ] 다음 서브프로젝트 고르기
+- [ ] 사용자: 맥 두 대에서 실기 확인(아래 첫 절)
+- [ ] 다음 서브프로젝트 고르기(아래 "다음 후보")
 
 ## 다음 에이전트에게
 
 이 저장소의 규칙(CLAUDE.md): 큰 편집은 먼저 설명, 매 편집 뒤 `git diff --stat` · `git diff | rg '^-'`, 명령은 Claude가 실행, 커밋은
 사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는 컨테이너에서(macOS에 Linux 헤더가 없다, 컨테이너에는 `rg`가 없다 —
 `grep`). 체인 하나 돌리기: `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace
-tars-devcontainer ./pointer/check.sh`. terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다. 게이트의 QEMU
-키보드는 `keyboard=auto`에서 `pc`다 — Cmd · Option을 치는 체인은 디스크에 `keyboard=apple`(KK design 결정 8). 게이트 설정으로
-"칸마다 다른 값"을 보일 때는 결과(부호 · 배율)가 칸마다 실제로 다른 조합을 고른다(PS 함정 1).
+tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨테이너 안에서(같은 트리의 `.zig-cache` 경합). 커널 심볼을 켜기 전에
+`rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾는다. 새 체인의 monitor 포트는 45503부터(45502는 HS).
 
-## 지금 상태 (2026-11-04)
+## 지금 상태 (2026-11-05)
 
-- 마지막으로 닫은 것은 Pointer Settings(PS-M0~M1, `docs/specs/2026-11-04-tars-pointer-settings-design.md`, 기억은
-  `docs/decisions/project_pointer_settings.md`). `tars.conf`의 `mouse_scroll` · `touchpad_scroll` · `mouse_accel` · `touchpad_accel`(0~10)을
-  terminal이 장치를 열 때 종류로 골라 칸에 든다 — 휠은 부호, 이동은 `pointer.Ballistics`. 사용자가 키 · 기본값 · 범위를 정하고 끝까지
-  맡겼다. 곡선의 출발값 넷은 재지 않았다(design 위험 2). 부팅 C의 monitor 포트 45501 — 새 체인은 45502부터.
-  - 마지막 루트 게이트(PS-M1, 1회): 27/27, 15분 28초(prebuild 337초 · lanes 591초), 잘린 로그 줄 0.
-
-- 그 전에 닫은 것은 Keyboard Kind(KK-M0~M1, `docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 기억은
-  `docs/decisions/project_keyboard_kind.md`). `keyboard=auto`(새 기본값)가 키보드를 열 때 vendor로 Alt · Meta 맞바꿈을 칸마다 고른다.
-  사용자가 방식 · 기본값 · 게이트 모양을 정하고 M0부터 주요 결정을 맡겼다.
-
-- 그 전에 닫은 것은 Device Modifiers(DM-M0~M1, `docs/specs/2026-11-04-tars-device-modifiers-design.md`, 기억은
-  `docs/decisions/project_device_modifiers.md`). 수정키 여덟과 tap 둘을 키보드 칸마다 들고(읽기는 OR), 빠진 키보드는 그 칸만
-  푼다. 겹친 tap 키의 누름은 소비로 시작한다. 사용자가 결정을 추천안 그대로 정하고 마무리까지 맡겼다.
-
-- 그 전에 닫은 것은 Init Keyboard(IK-M0, `docs/specs/2026-11-03-tars-init-keyboard-design.md`, 기억은
-  `docs/decisions/project_init_keyboard.md`). KH 뒤로 아무도 안 쓰던 PID 1의 키보드 고르기 · 3초 기다림 · terminal argv의
-  장치 칸을 걷었다. 사용자가 정했다: `Slot.device`를 빼고 `ARGC` 9, 체인 넷은 terminal의 `keyboard> open`과 init 줄의 부재로 판정.
-  - 섰다: 키보드 없는 부팅의 `Run /init` → `started terminal` 3.39초 → 0.06초. 루트 게이트 `RUNS=3` 81/81.
-  - init의 `devices.zig`에 남은 것은 전원 버튼의 길뿐이다(`looksLikeKeyboard`는 그 판정이 쓴다).
-- 그 전에 닫은 것은 Mise(MI-M0~M1, `docs/specs/2026-11-03-tars-mise-design.md`, 기억은 `docs/decisions/project_mise.md`).
-  사용자가 정했다: initrd에 안 싣는다, 설치 길은 공식 `mise.run`만, 게이트 런타임은 `node@lts`, activate는 시스템 rc.
-  - 섰다: `mise.run` → `mise use -g node@lts` → node 26이 기본 이미지에 도구 하나 안 더하고 돈다(gpg 검증은 mise 안에서).
-    시스템 rc 셋이 `~/.local/bin/mise`가 있을 때만 `mise activate <셸>`을 불러, 재부팅 뒤 망 없이 화면 셸에서 `node`가 이름으로
-    불린다. 셸 하나에 약 115ms(TCG).
-  - 남긴 것은 `carryover.md`의 MI 절(512MB에서 `mise.run`이 tmpfs `/tmp` 때문에 굳는다).
-- 그 전에 닫은 것은 Package Manager(PM-M0~M1, `docs/specs/2026-11-03-tars-package-manager-design.md`, 기억은
-  `docs/decisions/project_package_manager.md`). 사용자가 정했다: Homebrew, 공식 `install.sh`를 사용자가 직접 친다, 게이트는
-  실제 망으로 끝까지.
-  - 섰다: 공식 `install.sh`(HEAD)가 `Installation successful!`까지 가고, `brew install hello`가 bottle 하나로 서며, 재부팅 뒤 망
-    없이 뜬 화면 셸에서 `hello`가 이름만으로 불린다. M0는 usrmerge · 층 19 도구 · glibc 통째로 · `/etc/os-release` · init의
-    `LANG=C.UTF-8`, M1은 시스템 rc 셋의 shellenv(결정 5)와 libstdc++의 이름(결정 10 — Homebrew가 파일 이름에서 버전을 읽어
-    gcc 463MB를 붙였다).
-  - 남긴 것은 `carryover.md`의 PM 절 — Landlock(커널에 없어 brew sandbox가 꺼진다), 그리고 TARS 자체 패키지 매니저는 나중에
-    다시 논의한다(사용자 결정 2026-11-03, 당분간 Homebrew. 그날 정리한 후보 · 출처 · design 질문이 그 항목에 있다).
-  - 접두사 PM은 2026-08-19의 Power Management와 겹친다 — `CHAINS`의 `PM-M1`은 `power/check.sh`, 이 체인은 `PM-M0` 그대로다.
-  - 컨테이너 이미지가 M0에서 바뀌었다(Dockerfile 태그 `fb074c15a322`, `tar` · `gzip` · `libcurl3t64-gnutls` · ngtcp2 둘). 다른
-    기계는 `docker rmi tars-devcontainer && make container`.
-- 그보다 전에 닫은 것은 Home Partition(HP-M0~M2, `docs/specs/2026-11-02-tars-home-partition-design.md`,
-  기억은 `docs/decisions/project_home_partition.md`).
-  - 섰다: 새 설치가 p3 ext4 `tars-home`을 `/home`에 붙이고 계정 하나(기본 `tars` · `tars-linux`)를 만든다. 화면 셸은 uid 1000 ·
-    groups `27,29`(sudo · audio)로 홈에서 뜬다. `/config`에 쓰는 길은 Debian `sudo`이고, 사용자가 그냥 치면 `try: sudo …`(77)를 듣는다.
-    `sudo tars-config passwd`가 비밀번호를 바꾼다. 시리얼 셸 · ssh는 root, ISO 부팅은 root 셸(그 root도 sudo가 된다).
-  - M2의 함정 셋이 기억에 갔다: `pam_unix` 1.7은 setuid 호출자에게 `unix_chkpwd`를 요구한다, 사용자 없는 부팅에도 `/etc/shadow`가
-    있어야 한다, sudo timestamp가 남으면 파이프의 첫 줄이 명령에게 간다.
-  - 컨테이너 이미지가 바뀌었다(Dockerfile 태그 `5ffbe7a00fb2`, `sudo` · `libpam-modules` · `libpam-modules-bin`). 다른 기계는
-    `docker rmi tars-devcontainer && make container`.
-  - 남긴 것은 `carryover.md`의 HP 절(hostname `(none)`, sudo timestamp 범위, 부팅 뒤 꽂은 사운드 노드, `ping`, 사용자 셸 히스토리).
-- 그 전에 닫은 Bluetooth(BT-M0~M2)는 사용자가 외출하며 결정을 Claude에게 맡긴 세션이었다. 범위(클래식 + BLE HID, 오디오 제외)와 0.1.4
-  시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
-  결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
-  make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK + DM + KK. 절차는
-  `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
-- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
-  `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
-  - Pointer Settings(PS-M0~M1, 11-04) — `docs/decisions/project_pointer_settings.md`
-  - Keyboard Kind(KK-M0~M1, 11-04) — `docs/decisions/project_keyboard_kind.md`
-  - Device Modifiers(DM-M0~M1, 11-04) — `docs/decisions/project_device_modifiers.md`
-  - Init Keyboard(IK-M0, 11-03) — `docs/decisions/project_init_keyboard.md`
-  - Mise(MI-M0~M1, 11-03) — `docs/decisions/project_mise.md`
-  - Package Manager(PM-M0~M1, 11-03) — `docs/decisions/project_package_manager.md`
-  - Home Partition(HP-M0~M2, 11-03) — `docs/decisions/project_home_partition.md`
-  - Keyboard Hotplug(KH-M0~M2, 11-02) — `docs/decisions/project_keyboard_hotplug.md`
-  - Bluetooth(BT-M0~M2, 11-02) — `project_bluetooth.md`
-  - Kernel Upgrade(KU-M0~M1, 11-01) — `project_kernel_upgrade.md`
-  - Extend Repeat(ER-M0, 11-01) — `project_extend_repeat.md`
-  - Shift Extend(SE-M0~M1, 11-01) — `project_shift_extend.md`
-  - Multi Click(MC-M0~M2, 11-01) — `project_multi_click.md`
-  - Reserved Ports(RP-M0, 11-01) — `project_reserved_ports.md`
-  - USB Dongles B(UB-M0~M2, 10-31) — `project_usb_dongles_b.md`. 같은 자리에서 IPv6를 결정으로 닫았다(`feedback_ipv4_only.md`)
-  - Ghcr Image(GI) · Vendor Sha256(VS) · Shellcheck Notes(SN) · GitHub Actions(GH-M0~M1, 10-30~31) — `project_github_actions.md`
-  - 그 전은 `docs/guides/completed.md`.
-- 최신 공개 버전 0.1.3(2026-11-01, tag `v0.1.3` = `055228d`). 0.1.3 뒤로 KU · BT · KH · HP가 쌓였고 아직 내지 않았다.
-- 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
-  체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
-  바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(PS-M1, 1회): 27/27, 15분 28초(prebuild 337초 · lanes 591초), cut log lines 전부 0. `RUNS=3`의
-  마지막 값은 IK-M0의 81/81, 약 36분. PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
-  45500, PS-M0의 `pointer` 부팅 C가 45501 — 새 체인은 45502부터.
-  게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
-  `clean()`이 `out/`을 지우므로 그 자리에는 마지막 회차만 남는다 — 회차 사이 비교가 필요하면 게이트 전에 옮겨 둔다.
+- 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
+  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `d2f3af0`).
+- 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 30초.
+  바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
+- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은
+  `docs/decisions/`의 기억 파일이다. 최근 것부터 MB · HS · DB(11-05) → PS · KK · DM(11-04) → IK · MI · PM · HP(11-03) → KH · BT(11-02) → KU(11-01).
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- MB · HS · DB — 맥 두 대(이번 판의 본론, 게이트는 드라이버 등록까지만 봤다).
+  - 준비: macOS에서 Time Machine 백업 → `diskutil list` → `diskutil apfs resizeContainer disk0s2 <크기>`(HFS+면 `diskutil resizeVolume`)로
+    4GiB 넘는 빈 공간 → 0.1.4 ISO를 USB에 `dd`(`docs/guides/running-tars.md`의 macOS 절).
+  - 전원을 켤 때 Option → "EFI Boot"로 USB가 보이는지(ISO의 EFI 파티션). 안 보이면 그것이 새 사실이다.
+  - `tars-install` 목록에 내장 디스크가 `GPT: EFI, macOS (APFS); N GB free`로 보이는지 → `tars-install /dev/sda --beside` → 재부팅하며
+    Option → TARS-BOOT가 "EFI Boot"로 보이는지(DB 위험 3 — 두 번째 EFI System 파티션). macOS가 그대로 뜨는지도.
+  - 트랙패드: 한 손가락 이동 · 탭 · 두 손가락 스크롤, 로그 `pointer> open … kind=touchpad`. 손에 안 맞으면 `touchpad_accel`부터(MB 위험 2).
+  - 키보드: `keyboard> open … kind=apple`, Cmd · Option 자리. Fn 조합이 없는 것이 거슬리는지(MB 위험 3).
+  - 소리: `speaker-test`. Air4,1이 안 울리면 MB 위험 1(`snd_hda_intel.model=mba42`).
+  - 배터리 칸이 뜨는지, 어느 길인지(`ls /sys/class/power_supply`).
+  - Retina: 로그 `kms: scale 2 (2880x1800 -> 1440x900)`. 펌웨어가 낮은 모드를 주면 `scale 1`로 나온다(HS 위험 2). 출력이 쏟아질 때 늦지
+    않은지, `sudo tars-config set display_scale=1` · `tars-config reload` · `tars-config reload terminal`로 1배와 비교.
+  - 외장 USB 마우스 · 키보드를 함께.
+- 무선이 없다 — 유선 USB 어댑터나 USB 무선 동글(UW · UB 계열)로 망을 쓴다.
 
 - PS: 노트북 터치패드 + USB 마우스를 함께 쓰며 — 기본값에서 마우스 휠은 앞으로 = 위의 글, 두 손가락은 내용이 손가락을
   따라가는지. `sudo tars-config set mouse_scroll=natural` · `tars-config reload` · `tars-config reload terminal` 뒤 마우스만 뒤집히는지.
@@ -193,7 +146,7 @@ tars-devcontainer ./pointer/check.sh`. terminal 줄의 내용을 보는 체인 �
 
 - KH가 남긴 것(`carryover.md`의 KH 절)은 셋 다 닫혔다 — init 정리는 IK, 장치별 수정키는 DM, 키보드마다 종류는 KK. 남은 KH 항목은
   실기의 근거를 기다리는 자동 반복 · 칸 순서 · 두 노드 키보드다. KK가 남긴 것은 vendor가 배열을 말하지 않는 키보드(`carryover.md`의 KK 절).
-- 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
+- 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 0.1.4는 그 전에 냈다 — 7.4는 0.1.5의 후보.
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.
 - 렌더: 부분 갱신은 DR + SB로 닫았다. 남은 축은 GPU 가속뿐이다(키 하나 0.42ms 가운데 present 0.27이 커널 쪽, DR design "안 하는 것").

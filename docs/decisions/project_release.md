@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d2f3af0, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -62,6 +62,19 @@ smoke 로그 첫 줄이 `tars-init: starting as PID 1 (TARS 0.1.1)`로 꼬리표
 0.1.2의 틀에 "0.1.2에서 달라진 것" 절을 새로 썼다. 사용자 요청은 "release 0.1.3"(2026-11-01).
 첫 `make iso`의 smoke가 `TARS 0.1.3+055228d-dirty`였다 — 아래 "재사용할 사실"의 줄끝 함정. 디스크의 파일만 다시 써서(커밋 0)
 tag는 그대로 두고 ISO를 다시 만들었다.
+
+## 0.1.4 (2026-11-05)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.1.4` (annotated) → `d2f3af0` (`Release 0.1.4`). 루트 게이트 29/29(16분 30초, lanes 667초)는 바로 앞 코드 커밋 `667240c`에서 돌았고, 그 뒤는 문서와 `VERSION`뿐 |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.4 (Latest) |
+| ISO | `tars-0.1.4-x86_64.iso`, 136,208,384 B (0.1.3보다 약 30MB 큼 — BT firmware 157개 · ext4 · PM의 도구 층과 glibc 통째로) |
+| sha256 | `b0e9d944d3637f2b5ca7abfe43c6776d69719c639b2d5b82ef64b4aeee97811c` |
+
+0.1.3 뒤의 KU · BT · KH · HP · PM · MI · IK · DM · KK · PS와 같은 날 밤의 MB · HS · DB를 담았다. 2026-11-01의 "0.1.4는 커널 7.4 뒤" 결정은
+사용자 요청(2026-11-04, "여기까지 완료 후 다음 패치 버전 찍기: tag, release & distribute!")이 대신했다 — 7.4 이동은 다음 판의 일이다. 사용자가
+잠들며 결정을 맡겨 1~7을 Claude가 그대로 밟았다. smoke 첫 줄 `TARS 0.1.4`(꼬리표 없음), `kms: scale 1 (1280x800 -> 1280x800)`.
 
 ## 배포 절차 (다음 버전도 이대로)
 
