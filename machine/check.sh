@@ -22,6 +22,30 @@ cd "$(dirname "$0")" || exit 1
 (cd ../boot && ./build.sh)
 (cd ../boot && ./make_iso.sh)
 
+# ── MB-M0: 맥북 두 기종의 내장 장치가 커널에 있다 (부팅 없음) ───────────
+#
+# QEMU에는 맥 트랙패드도 SMBus 배터리도 없어서 이 둘은 부팅으로 못 본다. 대신 커널이
+# 장치 ID를 드라이버에 잇는 표(modules.builtin.modinfo)를 본다 — wifi 체인 검사 1과
+# 같은 자리다. 표에 줄이 있어야 실기에서 그 장치가 잡힌다.
+#
+# 트랙패드가 가장 중요하다. HID 코어는 WELLSPRING 트랙패드의 마우스 인터페이스를
+# 무조건 버린다(hid-quirks.c의 hid_mouse_ignore_list). 그래서 bcm5974가 없으면
+# 트랙패드가 평범한 마우스로도 안 잡히고 아예 움직이지 않는다(MB design 확인 1).
+#   0249  MacBookAir4,1 (11", 2011)        WELLSPRING6A
+#   0262  MacBookPro10,1 (15" Retina, 2012~early 2013)  WELLSPRING7
+#   0290  MacBookPro11,2/11,3 (15" Retina, late 2013)    WELLSPRING8
+# ACPI0002는 Smart Battery System이다. 옛 맥북 배터리가 이 길로 보일 수 있어 일반
+# 배터리(PNP0C0A)와 함께 넓게 켰다(MB design 결정 2).
+MB_MODINFO=../kernel/build/modules.builtin.modinfo
+for alias in bcm5974.alias=usb:v05ACp0249d bcm5974.alias=usb:v05ACp0262d \
+  bcm5974.alias=usb:v05ACp0290d 'sbs.alias=acpi*:ACPI0002:'; do
+  if ! tr '\0' '\n' < "$MB_MODINFO" | grep -F "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*alias=}" >&2
+    exit 1
+  fi
+done
+echo "the kernel ties the three MacBook trackpads to bcm5974 and ACPI0002 to sbs"
+
 # OVMF는 ovmf 패키지가 깔아 두는 미리 빌드된 EDK II다(devcontainer/Dockerfile).
 # CODE는 읽기 전용으로 물려도 되지만 VARS는 쓰기가 되어야 한다 — 펌웨어가
 # NVRAM 변수에 부트 항목을 쓰는 자리라 읽기 전용이면 부팅할 것을 못 고른다.
@@ -355,6 +379,14 @@ if ! grep -aq "cpuidle: using governor" "$LOG"; then
     "cpuidle" "ACPI: Added _OSI(Processor"
 fi
 echo "the thermal core and cpuidle both came up"
+
+# 판정 MB. bcm5974가 USB 코어에 드라이버로 등록됐다. 위의 정적 검사가 "표에 있다"를,
+# 이 줄이 "부팅에서 등록까지 갔다"를 본다. 맥 트랙패드에 붙었다는 것은 아니다 — QEMU에
+# 그 장치가 없다. 붙는 것은 실기에서 사용자가 본다(HANDOFF "사용자가 확인할 것").
+if ! grep -aq "usbcore: registered new interface driver bcm5974" "$LOG"; then
+  fail "bcm5974 never registered with the USB core" "registered new interface driver" "usbcore"
+fi
+echo "bcm5974 registered with the USB core"
 
 # ── BS-M1: limine으로 뜬 기계에는 가짜 배터리가 없다 ───────────────────
 #
