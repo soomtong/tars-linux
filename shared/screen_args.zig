@@ -129,6 +129,34 @@ pub const Accel = struct {
     }
 };
 
+/// 화면 배율(HS design 결정 3). `auto`는 terminal이 화면을 연 뒤 물리 해상도로 고른다 —
+/// 논리 화면이 1280×800보다 작아지지 않는 가장 큰 정수, 1~3(`drm.pickScale`). 숫자 셋은 그
+/// 배율을 강제한다. 이름이 숫자인 enum이라 `@tagName`이 곧 설정 파일과 argv의 글자이고,
+/// init의 `parse` · `hint` · `reload.same`이 다른 enum 키와 같은 길로 다룬다.
+///
+/// 소수 배율(1.5)은 이름이 없다(HS design 비목표 1) — 비트맵 폰트를 늘리는 이 방식은
+/// 정수배만 선명하다.
+pub const DisplayScale = enum {
+    auto,
+    @"1",
+    @"2",
+    @"3",
+
+    pub fn arg(self: DisplayScale) [:0]const u8 {
+        return @tagName(self);
+    }
+
+    /// 강제한 배율. `auto`면 null이고 고르는 것은 화면을 연 쪽이다.
+    pub fn fixed(self: DisplayScale) ?u32 {
+        return switch (self) {
+            .auto => null,
+            .@"1" => 1,
+            .@"2" => 2,
+            .@"3" => 3,
+        };
+    }
+};
+
 /// 한/영 전환 키의 이름(HI design 결정 7).
 ///
 /// 자판 · 키보드와 모양이 다른 유일한 설정이다. 그것들은 하나를 고르는 것이지만
@@ -275,7 +303,8 @@ pub const ignore_unknown = struct {
 /// 탈출로) terminal은 같은 자리를 읽는다. SA 전에는 init의 상수 일곱과 terminal의
 /// `args[n]` 여덟이 주석으로만 묶여 있었고, 어긋나면 탈출로가 키보드 종류 자리를
 /// 덮어썼다. 칸을 더할 때는 여기에 이름을 더하고 `ARGC`를 올린다 — 콘솔 셸과
-/// 서비스 셋의 argv도 같은 길이라 그쪽은 null이 하나 늘 뿐이다. PS-M0이 포인터 칸 넷을 더해 열셋이다.
+/// 서비스 셋의 argv도 같은 길이라 그쪽은 null이 하나 늘 뿐이다. PS-M0이 포인터 칸 넷을 더해 열셋이고,
+/// HS-M0이 배율 칸 하나를 더해 열넷이다.
 ///
 /// IK-M0에서 4번 칸(키보드 장치 경로, HD-M0)이 빠지고 뒤 다섯이 하나씩 당겨졌다.
 /// KH부터 terminal이 키보드를 스스로 고르고 열어 그 칸을 읽기만 했다. 비워 두지
@@ -300,6 +329,8 @@ pub const Slot = enum(u8) {
     touchpad_scroll = 10,
     mouse_accel = 11,
     touchpad_accel = 12,
+    /// 화면 배율(HS design 결정 4). `DisplayScale`의 글자다.
+    display_scale = 13,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -311,7 +342,7 @@ pub const Slot = enum(u8) {
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
 /// 타입이다.
-pub const ARGC = 13;
+pub const ARGC = 14;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -357,6 +388,8 @@ pub const default_mouse_scroll: WheelDirection = .normal;
 pub const default_touchpad_scroll: WheelDirection = .natural;
 pub const default_mouse_accel: Accel = .{};
 pub const default_touchpad_accel: Accel = .{};
+/// 화면 배율(HS design 결정 3). 1280×800 이하의 화면에서는 1이라 HS 전과 같다.
+pub const default_display_scale: DisplayScale = .auto;
 
 // ── 계정의 번호(HP design 결정 5 · 8) ──────────────────────────────────
 //
@@ -401,6 +434,7 @@ pub const Args = struct {
     touchpad_scroll: WheelDirection,
     mouse_accel: Accel,
     touchpad_accel: Accel,
+    display_scale: DisplayScale,
 };
 
 /// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
@@ -423,6 +457,7 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     v[Slot.touchpad_scroll.index()] = a.touchpad_scroll.arg().ptr;
     v[Slot.mouse_accel.index()] = a.mouse_accel.arg().ptr;
     v[Slot.touchpad_accel.index()] = a.touchpad_accel.arg().ptr;
+    v[Slot.display_scale.index()] = a.display_scale.arg().ptr;
     return v;
 }
 
@@ -453,6 +488,7 @@ pub fn decode(v: Argv) Args {
         .touchpad_scroll = enumAt(WheelDirection, v, .touchpad_scroll, default_touchpad_scroll),
         .mouse_accel = accelAt(v, .mouse_accel, default_mouse_accel),
         .touchpad_accel = accelAt(v, .touchpad_accel, default_touchpad_accel),
+        .display_scale = enumAt(DisplayScale, v, .display_scale, default_display_scale),
     };
 }
 

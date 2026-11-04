@@ -51,6 +51,12 @@ pub fn main() !void {
     try expectEnumRoundTrip(sa.LatinLayout);
     try expectEnumRoundTrip(sa.ClipboardScope);
     try expectEnumRoundTrip(sa.WheelDirection);
+    try expectEnumRoundTrip(sa.DisplayScale);
+    // 배율의 숫자 이름이 그 수다(HS design 결정 3). `auto`만 수가 없다.
+    if (sa.DisplayScale.auto.fixed() != null or sa.DisplayScale.@"1".fixed().? != 1 or
+        sa.DisplayScale.@"2".fixed().? != 2 or sa.DisplayScale.@"3".fixed().? != 3) return error.DisplayScaleFixed;
+    if (std.meta.stringToEnum(sa.DisplayScale, "4") != null or std.meta.stringToEnum(sa.DisplayScale, "1.5") != null)
+        return error.DisplayScaleTookBad;
 
     // ── 1의 둘째. Accel — 0~10 왕복, 그 밖과 숫자 아닌 글자는 거절(PS design 결정 6) ──
     {
@@ -123,7 +129,7 @@ pub fn main() !void {
         if (!std.mem.eql(u8, sa.default_toggles_arg, text)) return error.DefaultTogglesDrifted;
     }
 
-    // ── 5. 자리 — 1번부터 12번까지 빈 칸 없이, 0번은 비워 둔다 ──
+    // ── 5. 자리 — 1번부터 13번까지 빈 칸 없이, 0번은 비워 둔다 ──
     {
         var seen: [sa.ARGC]bool = @splat(false);
         for (std.enums.values(sa.Slot)) |s| seen[@backingInt(s)] = true;
@@ -154,6 +160,7 @@ pub fn main() !void {
             .touchpad_scroll = sa.default_touchpad_scroll,
             .mouse_accel = sa.default_mouse_accel,
             .touchpad_accel = sa.default_touchpad_accel,
+            .display_scale = sa.default_display_scale,
         };
         const all_other = sa.Args{
             .shell_path = "/usr/bin/zsh",
@@ -168,11 +175,12 @@ pub fn main() !void {
             .touchpad_scroll = .normal,
             .mouse_accel = .{ .level = 10 },
             .touchpad_accel = .{ .level = 3 },
+            .display_scale = .@"2",
         };
         var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
         for ([_]sa.Args{ all_default, all_other }) |a| {
             const v = sa.encode(a, &tbuf);
-            // 0번은 terminal 자신이고, 열세 칸이 전부 차 있다.
+            // 0번은 terminal 자신이고, 열네 칸이 전부 차 있다.
             if (!std.mem.eql(u8, std.mem.span(v[0].?), sa.TERMINAL_PATH)) return error.ArgvZeroNotTerminal;
             for (v, 0..) |slot, i| {
                 if (slot == null) {
@@ -195,7 +203,8 @@ pub fn main() !void {
             d.keyboard != sa.default_keyboard or d.hangul != sa.default_hangul or d.latin != sa.default_latin or
             d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles) or
             !std.mem.eql(u8, std.mem.span(d.user), sa.NO_USER) or
-            d.mouse_scroll != .normal or d.touchpad_scroll != .natural or d.mouse_accel.level != 0 or d.touchpad_accel.level != 0)
+            d.mouse_scroll != .normal or d.touchpad_scroll != .natural or d.mouse_accel.level != 0 or d.touchpad_accel.level != 0 or
+            d.display_scale != .auto)
         {
             return error.EmptyArgvNotDefault;
         }
@@ -214,6 +223,7 @@ pub fn main() !void {
             .touchpad_scroll = .normal,
             .mouse_accel = .{ .level = 4 },
             .touchpad_accel = .{ .level = 5 },
+            .display_scale = .@"3",
         }, &tbuf);
         v[sa.Slot.hangul.index()] = "bogus";
         // 가속 칸의 범위 밖 글자도 그 칸만 기본값이다(PS design 결정 5).
@@ -222,6 +232,10 @@ pub fn main() !void {
         if (b.hangul != sa.default_hangul) return error.BogusEnumNotDefault;
         if (!b.mouse_accel.eql(sa.default_mouse_accel)) return error.BogusAccelNotDefault;
         if (b.mouse_scroll != .natural or b.touchpad_scroll != .normal or b.touchpad_accel.level != 5) return error.BogusAccelSpread;
+        if (b.display_scale != .@"3") return error.BogusAccelSpread;
+        // 배율 칸의 모르는 글자(`4`)도 그 칸만 기본값이다(HS-M0).
+        v[sa.Slot.display_scale.index()] = "4";
+        if (sa.decode(v).display_scale != sa.default_display_scale) return error.BogusScaleNotDefault;
         if (b.keyboard != .pc or b.latin != .dvorak or b.clipboard != .pane or !b.toggles.lctrl_tap or b.toggles.hangul_key or
             !std.mem.eql(u8, std.mem.span(b.user), "hpuser"))
         {
@@ -242,9 +256,9 @@ pub fn main() !void {
                 return error.ArgvOfOverfilled;
             }
         }
-        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "extra" };
+        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "extra" };
         const w = sa.argvOf(&long);
-        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "l")) return error.ArgvOfLastSlot;
+        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "m")) return error.ArgvOfLastSlot;
         // 빈 슬라이스(인자가 하나도 없다)는 전부 null이고 decode가 기본값을 준다.
         const none = sa.argvOf(&[_][*:0]const u8{});
         if (sa.decode(none).keyboard != sa.default_keyboard) return error.ArgvOfEmpty;
@@ -269,7 +283,8 @@ fn expectArgsEql(got: sa.Args, want: sa.Args) !void {
     if (got.keyboard != want.keyboard or got.hangul != want.hangul or got.latin != want.latin or
         got.clipboard != want.clipboard or !std.meta.eql(got.toggles, want.toggles) or
         got.mouse_scroll != want.mouse_scroll or got.touchpad_scroll != want.touchpad_scroll or
-        !got.mouse_accel.eql(want.mouse_accel) or !got.touchpad_accel.eql(want.touchpad_accel))
+        !got.mouse_accel.eql(want.mouse_accel) or !got.touchpad_accel.eql(want.touchpad_accel) or
+        got.display_scale != want.display_scale)
     {
         std.debug.print("FAIL: Args enum/toggle field did not round-trip\n", .{});
         return error.ArgsValueChanged;

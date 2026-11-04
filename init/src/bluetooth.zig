@@ -15,8 +15,8 @@ const config = @import("config.zig");
 pub const DBUS_PATH: [:0]const u8 = "/usr/lib/tars/tars-dbus";
 pub const BLUETOOTHD_PATH: [:0]const u8 = "/usr/lib/tars/tars-bluetoothd";
 
-pub const DBUS_ARGV = [screen_args.ARGC:null]?[*:0]const u8{ DBUS_PATH.ptr, null, null, null, null, null, null, null, null, null, null, null, null };
-pub const BLUETOOTHD_ARGV = [screen_args.ARGC:null]?[*:0]const u8{ BLUETOOTHD_PATH.ptr, null, null, null, null, null, null, null, null, null, null, null, null };
+pub const DBUS_ARGV = [screen_args.ARGC:null]?[*:0]const u8{ DBUS_PATH.ptr, null, null, null, null, null, null, null, null, null, null, null, null, null };
+pub const BLUETOOTHD_ARGV = [screen_args.ARGC:null]?[*:0]const u8{ BLUETOOTHD_PATH.ptr, null, null, null, null, null, null, null, null, null, null, null, null, null };
 
 /// 둘을 감독 목록에 넣을지 답한다. 넣지 않을 때도 이유를 한 줄 남긴다 — 침묵은
 /// "안 켰다"와 "켜려다 실패했다"를 못 가른다(DS 결정 1).

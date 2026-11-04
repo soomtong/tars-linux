@@ -506,6 +506,12 @@ run_chain() {
 # unavailable`로 빨개진다. PM과 같은 두 부팅에서 사용자 tars가 공식 mise.run으로 ~/.local/bin/mise를 깔고
 # `mise use -g node@lts`로 node를 받아 돌린다. sudo가 없고 포트를 안 쓴다. 회차당 부팅 2회.
 #
+# HS 체인은 HiDPI 배율을 본다. virtio-gpu를 2880 × 1800(xres · yres)으로 물려, display_scale=auto가
+# 배율 2를 고르고 격자가 논리 1440 × 900의 것인지, screendump가 전부 2 × 2 블록이고 키를 친 뒤의 부분
+# 프레임도 물리 화면에 닿는지(한글 한 글자의 잉크가 terminal의 `ink>`의 네 배) 본다. 부팅 B는 설정
+# 디스크의 display_scale=1이 auto를 이기는 것과 tars-config set · reload terminal이 배율을 바꾸는 것을
+# 본다. monitor 45502를 두 부팅이 차례로 쓴다. 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -536,6 +542,7 @@ CHAINS=(
   "HP-M2:./home/check.sh"
   "PM-M0:./pm/check.sh"
   "MI-M0:./mise/check.sh"
+  "HS-M0:./hidpi/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -626,7 +633,7 @@ require_cut_lines_found() {
   dir="$(mktemp -d)"
   printf 'terminal: pointer> at x=1279 y=799 buttons=0 wheel=0 shown=1 ink=tars-init: audio: no sound card within 5000ms, the mixer is left alone\n' > "$dir/a"
   printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
-  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0\n' > "$dir/legit"
+  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0 display_scale=auto\n' > "$dir/legit"
   printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'tars-init: config line without = ignored: xxxxxxxx [cut]\n' > "$dir/c"
   got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"

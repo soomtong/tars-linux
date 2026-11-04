@@ -3497,9 +3497,11 @@ const App = struct {
             .uevent_fd = undefined,
             .battery_clock = undefined,
         };
-        try self.openScreen();
-        try self.openVerify();
+        // argv를 화면보다 먼저 읽는다(HS-M0). 배율(`display_scale`)이 화면을 여는 자리에서
+        // 쓰이기 때문이다. `readArgs`는 글자를 되돌릴 뿐이라 순서가 바뀌어도 로그는 그대로다.
         const a = readArgs(init);
+        try self.openScreen(a.display_scale);
+        try self.openVerify();
         try self.spawnFirst(a);
         self.openInputs();
         self.openBattery();
@@ -3507,8 +3509,12 @@ const App = struct {
     }
 
     /// 준비 1. DRM을 열고 모드셋 한 번, 격자 크기, 폰트 캐시.
-    fn openScreen(self: *App) !void {
-        self.fb = try drm.open(self.allocator, "/dev/dri/card0");
+    ///
+    /// 배율이 1보다 크면(HS-M0) `self.fb`는 논리 크기의 그림자이고, 아래 격자 · 포인터 ·
+    /// 상태 줄은 전부 그 크기로 정해진다. `CELL_W` · `ROW_HEIGHT`는 그대로다 — 큰 글자는
+    /// `present`가 늘려서 만든다(design 결정 1).
+    fn openScreen(self: *App, display_scale: screen_args.DisplayScale) !void {
+        self.fb = try drm.open(self.allocator, "/dev/dri/card0", display_scale.fixed());
         self.fb.fill(MARGIN_COLOR);
         // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
         try self.fb.modeset();
