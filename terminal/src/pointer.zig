@@ -118,6 +118,70 @@ pub fn wheelSign(kind: Kind, mouse: WheelDirection, touchpad: WheelDirection) i3
     };
 }
 
+/// 가속 곡선의 출발값 넷(PS design 결정 3). 재지 않은 제안이다 — 실기에서 사람이 손으로
+/// 본 뒤 고친다(design 위험 2). 고치면 `pointer_test`의 곡선 검사도 함께 고친다.
+/// 속도의 단위 `MPX`는 1/1000 픽셀 / ms다.
+pub const ACCEL_V_LOW_MPX: i64 = 300; // 0.3 px/ms — 이보다 느리면 배율 1
+pub const ACCEL_V_HIGH_MPX: i64 = 3000; // 3.0 px/ms — 이보다 빠르면 배율 상한
+pub const ACCEL_GAIN_MAX: i64 = 4; // 단계 10의 상한. 단계 5면 2.5
+pub const ACCEL_IDLE_US: i64 = 100_000; // 직전 이동과 이보다 멀면 간격을 모르는 것으로 한다
+
+/// 장치 하나의 가속 상태(PS design 결정 3 · 4, PS-M1 plan 확정 1~6). 칸마다 하나라 두 장치를
+/// 함께 움직여도 서로의 속도가 섞이지 않는다.
+///
+/// 입력은 `Frame`의 이동과 그 `SYN_REPORT`의 시각, 출력은 배율을 곱한 이동이다. 배율은
+/// 직전 이동 보고와의 간격으로 잰 속도에서 나온다.
+///
+///   t    = clamp((v − V_LOW) / (V_HIGH − V_LOW), 0, 1)
+///   gain = 1 + (level / 10) × (GAIN_MAX − 1) × t
+///
+/// 셈은 1/1000 고정소수점이고 곱하고 남은 끝수는 축마다 다음 보고에 넘긴다(`touchpad.scale`과
+/// 같은 이유 — 느린 이동이 반올림으로 사라지지 않게). 휠은 이 구조체를 안 지난다(결정 4).
+pub const Ballistics = struct {
+    /// 0~10. 0이면 `apply`가 입력을 그대로 돌려준다.
+    level: u4,
+    /// 직전 이동 보고(dx나 dy가 0이 아닌)의 시각(µs). 아직 없으면 null.
+    last_us: ?i64 = null,
+    /// 배율을 곱하고 남은 1/1000 픽셀.
+    rem_x: i64 = 0,
+    rem_y: i64 = 0,
+
+    pub fn init(a: Accel) Ballistics {
+        return .{ .level = a.level };
+    }
+
+    pub fn apply(self: *Ballistics, dx: i32, dy: i32, t_us: i64) [2]i32 {
+        // 단계 0은 PS 전의 동작과 비트 단위로 같다(결정 3) — 셈의 우연이 아니라 갈래로 지킨다.
+        if (self.level == 0) return .{ dx, dy };
+        // 이동 없는 보고(버튼 · 휠 · 터치패드의 닿음과 뗌)는 속도의 기준을 안 바꾼다.
+        if (dx == 0 and dy == 0) return .{ dx, dy };
+
+        var gain_m: i64 = 1000;
+        if (self.last_us) |last| {
+            const dt = t_us - last;
+            if (dt > 0 and dt <= ACCEL_IDLE_US) {
+                // 속도만 재는 값은 ±2^15에서 자른다 — 제곱의 합 × 10^6이 u64 안에 든다.
+                const sx: u64 = @abs(std.math.clamp(dx, -32768, 32768));
+                const sy: u64 = @abs(std.math.clamp(dy, -32768, 32768));
+                const dist_m: i64 = @intCast(std.math.sqrt((sx * sx + sy * sy) * 1_000_000));
+                const v_m = @divTrunc(dist_m * 1000, dt);
+                const t_m = std.math.clamp(@divTrunc((v_m - ACCEL_V_LOW_MPX) * 1000, ACCEL_V_HIGH_MPX - ACCEL_V_LOW_MPX), 0, 1000);
+                gain_m = 1000 + @divTrunc(@as(i64, self.level) * (ACCEL_GAIN_MAX - 1) * t_m, 10);
+            }
+        }
+        self.last_us = t_us;
+        return .{ mulGain(dx, gain_m, &self.rem_x), mulGain(dy, gain_m, &self.rem_y) };
+    }
+};
+
+/// `d`에 `gain_m / 1000`을 곱한다. 나머지는 `rem`에 남겨 다음에 더한다.
+fn mulGain(d: i32, gain_m: i64, rem: *i64) i32 {
+    const t = @as(i64, d) * gain_m + rem.*;
+    const q = @divTrunc(t, 1000);
+    rem.* = t - q * 1000;
+    return @intCast(std.math.clamp(q, std.math.minInt(i32), std.math.maxInt(i32)));
+}
+
 /// 이 장치를 키보드로 열 것인가(KH design 결정 2). `EV_KEY`가 있고 `KEY_ESC`(1)부터
 /// `KEY_D`(32)까지 서른두 키가 다 있다.
 ///

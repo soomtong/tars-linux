@@ -2028,6 +2028,9 @@ echo "PD-M4 check PASS"
 # touchpad_scroll=normal. 한 부팅에서 두 칸이 서로 다른 값을 고르는지(판정 나), 그리고
 # 각자 검사 11 · 24의 반대 손으로 같은 결과를 내는지(판정 다 · 라) 본다. 부팅 A · B는
 # 그대로 두어 "기본값은 PS 전의 동작"이 계속 선다.
+#
+# PS-M1이 touchpad_accel=10을 더했다(판정 바). mouse_accel은 기본 0으로 둔다 — 두 칸이 같은
+# 값이면 "터치패드가 마우스의 값을 쓴다"를 못 잡는다(PS-M0 실측 3, PS-M1 plan 확정 8).
 exec 3<&- 2>/dev/null
 exec 3>&- 2>/dev/null
 kill "$QEMU_PID" 2>/dev/null || true
@@ -2036,7 +2039,7 @@ QEMU_PID=""
 
 SEED="$(mktemp -d)"
 mkdir -p "$SEED/pd"
-printf 'shell=fish\nmouse_scroll=natural\ntouchpad_scroll=normal\n' > "$SEED/tars.conf"
+printf 'shell=fish\nmouse_scroll=natural\ntouchpad_scroll=normal\ntouchpad_accel=10\n' > "$SEED/tars.conf"
 cp "$REPLAY" "$SEED/pd/tp-replay"
 chmod 0755 "$SEED/pd/tp-replay"
 DISK_C="${REPO_ROOT}/out/pd-settings.img"
@@ -2088,9 +2091,9 @@ done
 echo "=== boot C (가): init read mouse_scroll=natural touchpad_scroll=normal ==="
 grep -a 'tars-init: loaded /config/tars.conf' "$LOG" >/dev/null ||
   report_failure "boot C: the settings disk was not loaded (no 'tars-init: loaded /config/tars.conf')"
-grep -aE 'tars-init: config shell=.* mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
-  report_failure "boot C: the tars-init: config line does not carry mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0"
-grep -a 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
+grep -aE 'tars-init: config shell=.* mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=10' "$LOG" >/dev/null ||
+  report_failure "boot C: the tars-init: config line does not carry mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=10"
+grep -a 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=normal mouse_accel=0 touchpad_accel=10' "$LOG" >/dev/null ||
   report_failure "boot C: terminal never said the prefs reached it (no 'terminal: pointer prefs mouse_scroll=natural …')"
 
 # ── 판정 나 (앞): PS/2 마우스의 칸은 mouse_scroll을 고른다 ──────────────
@@ -2140,8 +2143,8 @@ wait_for_log 'terminal: pointer> (open|skip) /dev/input/event[0-9]+ kind=touchpa
   report_failure "boot C: terminal never saw the replay touchpad"
 TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> ' | tail -n 1 | tr -d '\r')"
 case "$TP_LINE" in
-  *"> open /dev/input/event"*" kind=touchpad scroll=normal accel=0 slots=2 "*" name=TARS Replay Touchpad") ;;
-  *) report_failure "boot C: the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad scroll=normal accel=0 slots=2 …'" ;;
+  *"> open /dev/input/event"*" kind=touchpad scroll=normal accel=10 slots=2 "*" name=TARS Replay Touchpad") ;;
+  *) report_failure "boot C: the replay touchpad came out as '${TP_LINE}', expected 'open … kind=touchpad scroll=normal accel=10 slots=2 …'" ;;
 esac
 TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
 
@@ -2174,6 +2177,42 @@ while read -r w; do WHEEL=$((WHEEL + w)); done < <(sed -nE 's/.* wheel=(-?[0-9]+
 [ "$WHEEL" = "2" ] ||
   report_failure "boot C: two fingers 90 units up added up to wheel=${WHEEL} on the at lines, expected 2"
 echo "normal touchpad: ${LINE}, wheel ${WHEEL}"
+
+# ── 판정 바: touchpad_accel=10의 한 손가락이 부팅 B보다 멀리 간다 (PS-M1) ──
+#
+# 같은 손(move 100 0)이 부팅 B 검사 22에서는 128픽셀이다 — 단계 0. 걸음 하나가 12.8픽셀 / 8ms
+# ≈ 1.6 px/ms라 V_LOW(0.3)를 넘고, 첫 보고(앞선 이동 없음)를 뺀 아홉 걸음에 배율이 붙는다.
+# 셈으로는 약 294픽셀이지만 TCG의 sleep이 걸음 간격을 늘리면 줄어든다 — 그래서 값이 아니라
+# 범위다. 128 이하면 가속이 안 붙었고(mutation a · b), 512(배율 상한 4 × 128)를 넘으면 셈이
+# 틀렸다. 손짓은 at 줄을 여럿 낸다(회차마다) — x가 1초 동안 그대로일 때 끝난 것으로 읽는다.
+# 라의 두 손가락은 포인터를 안 옮겼으므로(검사 24) 출발은 지금 자리다.
+echo "=== boot C (바): touchpad_accel=10 carries one finger farther than boot B ==="
+BEFORE="$(last_at)"
+BX="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$BEFORE")"
+BY="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$BEFORE")"
+ATS="$(pointer_count 'at ')"
+replay "move 100 0"
+wait_for_count pointer_count 'at ' "$((ATS + 1))" ||
+  report_failure "boot C: 'move 100 0' printed no at line (last at: '$(last_at)')"
+AX=""
+STILL=0
+for _ in $(seq 1 150); do
+  X="$(last_at | sed -E 's/.* x=([0-9]+) .*/\1/')"
+  if [ "$X" = "$AX" ] && [ "$X" != "$BX" ]; then STILL=$((STILL + 1)); else STILL=0; fi
+  AX="$X"
+  [ "$STILL" -ge 10 ] && break
+  sleep 0.1
+done
+AFTER="$(last_at)"
+AY="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$AFTER")"
+MOVED=$((AX - BX))
+echo "accelerated: move 100 0 went ${MOVED} px (boot B: 128), ${BEFORE} -> ${AFTER}"
+[ "$MOVED" -gt 128 ] ||
+  report_failure "boot C: with touchpad_accel=10 'move 100 0' went ${MOVED} px, expected more than boot B's 128 (${BEFORE} -> ${AFTER})"
+[ "$MOVED" -le 512 ] ||
+  report_failure "boot C: with touchpad_accel=10 'move 100 0' went ${MOVED} px, past the gain cap 4 x 128 = 512"
+[ "$AY" = "$BY" ] ||
+  report_failure "boot C: a sideways move changed y from ${BY} to ${AY}"
 
 replay "quit"
 wait_for_log "terminal: pointer> close ${TP_PATH}" ||
@@ -2214,9 +2253,9 @@ wait_for_log 'tars-init: reload of /config/tars.conf' ||
   report_failure "boot C: tars-config reload never reached init (no 'tars-init: reload of /config/tars.conf')"
 OPENS_BEFORE="$(pointer_count 'open ')"
 type_text "tars-config reload terminal"
-wait_for_log 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=0' ||
+wait_for_log 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=10' ||
   report_failure "boot C: no terminal came up with touchpad_scroll=natural after reload terminal"
-grep -aE 'tars-init: reload terminal: pid [0-9]+, .* mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=0' "$LOG" >/dev/null ||
+grep -aE 'tars-init: reload terminal: pid [0-9]+, .* mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=10' "$LOG" >/dev/null ||
   report_failure "boot C: init did not log the new argv's pointer values on reload terminal"
 wait_for_screen 'root@\(none\) ~#' ||
   report_failure "boot C: the new terminal's shell prompt never showed up"
@@ -2234,8 +2273,8 @@ wait_for_count pointer_count 'open ' "$((OPENS_BEFORE + 2))" ||
   report_failure "boot C: the new terminal never opened the replay touchpad"
 TP_LINE="$(grep -a 'name=TARS Replay Touchpad' "$LOG" | grep -a 'terminal: pointer> open ' | tail -n 1 | tr -d '\r')"
 case "$TP_LINE" in
-  *" kind=touchpad scroll=natural accel=0 slots=2 "*) ;;
-  *) report_failure "boot C: after reload terminal the replay touchpad came out as '${TP_LINE}', expected kind=touchpad scroll=natural" ;;
+  *" kind=touchpad scroll=natural accel=10 slots=2 "*) ;;
+  *) report_failure "boot C: after reload terminal the replay touchpad came out as '${TP_LINE}', expected kind=touchpad scroll=natural accel=10" ;;
 esac
 TP_PATH="$(sed -E 's/.*open ([^ ]+) .*/\1/' <<<"$TP_LINE")"
 sleep 1
@@ -2263,3 +2302,4 @@ fi
 echo "boot C pointer> lines:"
 tlog | grep -a 'terminal: pointer>' | tr -d '\r'
 echo "PS-M0 check PASS"
+echo "PS-M1 check PASS"

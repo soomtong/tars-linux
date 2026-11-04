@@ -971,5 +971,96 @@ pub fn main() !void {
         std.debug.print("pointer_test: wheel sign per kind, prefs pick the kind's half OK\n", .{});
     }
 
+    // ── PS-M1: 가속 곡선(PS design 결정 3 · 4, PS-M1 plan Task 2) ─────
+    //
+    // 시각은 µs. 각 행의 기대값은 plan의 표에서 손으로 셈한 값이다 — 1/1000 고정소수점,
+    // 끝수는 축마다 다음 보고로 넘긴다.
+    {
+        const S = struct {
+            fn at(level: u4) pointer.Ballistics {
+                return pointer.Ballistics.init(.{ .level = level });
+            }
+            fn eq(got: [2]i32, x: i32, y: i32) bool {
+                if (got[0] != x or got[1] != y) {
+                    std.debug.print("  got ({d}, {d}), want ({d}, {d})\n", .{ got[0], got[1], x, y });
+                    return false;
+                }
+                return true;
+            }
+        };
+        // 1: 단계 0은 빨라도 그대로다.
+        {
+            var b = S.at(0);
+            const ok = S.eq(b.apply(40, 0, 1_000_000), 40, 0) and S.eq(b.apply(40, 0, 1_008_000), 40, 0) and
+                S.eq(b.apply(40, 0, 1_016_000), 40, 0);
+            try expectTrue("level 0 leaves a fast move as it is", ok and b.last_us == null);
+        }
+        // 2: 앞선 이동이 없으면 배율 1.
+        {
+            var b = S.at(10);
+            try expectTrue("the first move is one to one", S.eq(b.apply(13, 0, 1_000_000), 13, 0));
+        }
+        // 3: 0.25 px/ms는 V_LOW 아래.
+        {
+            var b = S.at(10);
+            _ = b.apply(2, 0, 1_000_000);
+            try expectTrue("a slow move is one to one", S.eq(b.apply(2, 0, 1_008_000), 2, 0));
+        }
+        // 4 · 5: 5 px/ms는 V_HIGH 위 — 단계 10은 4배, 단계 5는 2.5배.
+        {
+            var b = S.at(10);
+            _ = b.apply(40, 0, 1_000_000);
+            try expectTrue("level 10 caps at four times", S.eq(b.apply(40, 0, 1_008_000), 160, 0));
+            var h = S.at(5);
+            _ = h.apply(40, 0, 1_000_000);
+            try expectTrue("level 5 caps at two and a half", S.eq(h.apply(40, 0, 1_008_000), 100, 0));
+        }
+        // 6: 13px / 8ms = v 1625, t 490, gain 2470 → 32.110.
+        {
+            var b = S.at(10);
+            _ = b.apply(13, 0, 1_000_000);
+            try expectTrue("between V_LOW and V_HIGH the gain is linear", S.eq(b.apply(13, 0, 1_008_000), 32, 0) and b.rem_x == 110);
+        }
+        // 7: 150ms 쉬면 간격을 모르는 것으로 한다.
+        {
+            var b = S.at(10);
+            _ = b.apply(40, 0, 1_000_000);
+            try expectTrue("after IDLE_US the move is one to one", S.eq(b.apply(40, 0, 1_150_000), 40, 0));
+        }
+        // 8 · 9: 부호와 세로.
+        {
+            var b = S.at(10);
+            _ = b.apply(-40, 0, 1_000_000);
+            try expectTrue("a fast move left is scaled the same", S.eq(b.apply(-40, 0, 1_008_000), -160, 0));
+            var v = S.at(10);
+            _ = v.apply(0, 40, 1_000_000);
+            try expectTrue("a fast move down is scaled the same", S.eq(v.apply(0, 40, 1_008_000), 0, 160));
+        }
+        // 10: 이동 없는 보고는 기준 시각을 안 바꾼다 — 셋째의 간격은 첫째와의 58ms.
+        //     v 689, t 144, gain 1432 → 57.280.
+        {
+            var b = S.at(10);
+            _ = b.apply(40, 0, 1_000_000);
+            const zero = b.apply(0, 0, 1_050_000);
+            try expectTrue("a frame without motion keeps the clock", S.eq(zero, 0, 0) and b.last_us.? == 1_000_000);
+            try expectTrue("the gap runs from the last move", S.eq(b.apply(40, 0, 1_058_000), 57, 0));
+        }
+        // 11: 속도는 빗변으로 잰다. (3, 4) / 2ms = v 2500, t 814, gain 3442.
+        {
+            var b = S.at(10);
+            _ = b.apply(3, 4, 1_000_000);
+            try expectTrue("speed is the length of the move", S.eq(b.apply(3, 4, 1_002_000), 10, 13) and b.rem_x == 326 and b.rem_y == 768);
+        }
+        // 끝수가 사라지지 않는다 — 같은 속도의 보고 열 개의 합은 한 번에 셈한 값과 같다.
+        {
+            var b = S.at(10);
+            _ = b.apply(13, 0, 1_000_000);
+            var sum: i32 = 0;
+            for (1..11) |i| sum += b.apply(13, 0, 1_000_000 + @as(i64, @intCast(i)) * 8000)[0];
+            try expectTrue("remainders carry over", sum == 13 * 2470 * 10 / 1000);
+        }
+        std.debug.print("pointer_test: ballistics curve OK\n", .{});
+    }
+
     std.debug.print("pointer_test: all checks passed\n", .{});
 }

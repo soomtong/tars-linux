@@ -2,7 +2,7 @@
 
 접두사: PS
 
-Status: M0 끝(2026-11-04) — 설정 넷의 길 · 칸마다 휠 부호, `pointer` 체인 부팅 C 판정 가~마, mutation 둘 잡힘. M1(가속) 남음.
+Status: 닫힘(2026-11-04) — M0 설정 넷의 길 · 칸마다 휠 부호(판정 가~마), M1 가속 곡선 `pointer.Ballistics`(판정 바). mutation 넷 잡힘.
 
 사용자의 요청(2026-11-04)에서 시작한다.
 
@@ -192,7 +192,9 @@ terminal: pointer> open /dev/input/event5 kind=touchpad scroll=natural accel=0 s
 ### 결정 8 — 게이트: `pointer` 체인에 설정 디스크를 문 부팅 C를 더한다
 
 boot C는 boot B처럼 PS/2 마우스와 `tp-replay` 터치패드를 함께 열고, 디스크의 `tars.conf`에 기본값의 반대를 적는다 —
-`mouse_scroll=natural` · `touchpad_scroll=normal`(M0), 그리고 `mouse_accel=10` · `touchpad_accel=10`(M1).
+`mouse_scroll=natural` · `touchpad_scroll=normal`(M0), 그리고 `touchpad_accel=10`(M1). `mouse_accel`은 기본 0으로 둔다 — 두 칸이 같은
+값이면 "터치패드가 마우스의 값을 쓴다"를 못 잡고(M0 실측 3), 마우스의 가속은 체인이 안 본다(아래 끝 단락). 이 문서가 처음
+적은 "둘 다 10"을 PS-M1 plan 확정 8이 바꿨다.
 
 | 판정 | 무엇 | M |
 |---|---|---|
@@ -201,7 +203,7 @@ boot C는 boot B처럼 PS/2 마우스와 `tp-replay` 터치패드를 함께 열�
 | 다 | `seq 200` 뒤 마우스 휠 위로 한 눈금 → `scroll>`의 `offset`이 PD 검사 11의 반대로 움직인다 | M0 |
 | 라 | 같은 패널에서 `tp-replay`의 `scroll` → PD 검사 24의 반대로 움직인다 | M0 |
 | 마 | `tars-config set touchpad_scroll=natural` → `reload` → `reload terminal` 뒤, 마우스 natural(−1) · 터치패드 natural(+1)로 두 칸의 부호가 다를 때 두 손가락 아래 → 위의 글(PS-M0이 더했다, 실측 3) | M0 |
-| 바 | 두 `open` 줄이 `accel=10`, 그리고 같은 `tp-replay move`가 boot B(accel 0)보다 멀리 간다 | M1 |
+| 바 | 터치패드 `open` 줄이 `accel=10`(마우스는 `accel=0`), 그리고 같은 `tp-replay move 100 0`이 boot B(accel 0)의 128픽셀보다 멀리, 배율 상한 4 × 128 안 | M1 |
 
 boot B를 고치지 않고 새 부팅을 두는 것은, 기본값의 판정(PD 검사 11 · 24)이 그대로 남아야 "기본값은 지금 동작"이 계속 서기
 때문이다. 판정 바의 "멀리"는 `tp-replay move`의 속도가 `V_LOW`를 넘어야 선다 — 넘는지는 plan이 패드 축 범위와 화면 폭으로
@@ -321,3 +323,37 @@ on the last screen`. 둘 다 `screen_row`가 마지막 `screen>` 줄 하나에�
 `carryover.md`의 BT 항목)이고 체인만 다시 돌린 판은 초록이다. `pointer`(PD-M4) 회차는 146초로 가장 긴 레인(PM 246초) 안이다 —
 위험 4는 일어나지 않았다. 부팅 C의 판정 가~마가 게이트 안에서도 섰다.
 
+
+## 실측 (M1, 2026-11-04)
+
+### 실측 7 — 곡선 검사
+
+`pointer_test`에 `Ballistics` 검사 열넷(plan Task 2의 열한 행과 끝수 합). 손으로 셈한 기대값이 처음 판에 다 맞았다 — 단 plan 초안의
+11행(빗변 (3, 4))은 t를 815로 반올림해 적었다가 셈 단계에서 814(`divTrunc`)로 고쳤다. 고정소수점의 기대값은 반올림이 아니라
+버림으로 셈한다.
+
+### 실측 8 — 판정 바
+
+| 회차 | `move 100 0` | 비고 |
+|---|---|---|
+| 셈(8ms 간격) | 약 294픽셀 | 첫 보고 1:1, 나머지 아홉 걸음 배율 약 2.44 |
+| 체인 단독 | 247픽셀(x 640 → 887) | |
+| 루트 게이트 | 252픽셀 | |
+| mutation a · b | 128픽셀 | 부팅 B와 같다 |
+
+셈보다 짧은 것은 TCG에서 `tp-replay`의 8ms 걸음이 늘어난 만큼이다(걸음 간격 약 10ms면 맞는다). 판정이 범위(128 초과 · 512 이하)인
+이유다. 부팅 B 검사 22(768 · 464)가 그대로라 단계 0은 PS 전과 같다.
+
+### 실측 9 — mutation 둘
+
+| | 망가뜨린 것 | 잡은 판정 |
+|---|---|---|
+| a | `drainPointer`가 `ballistics.apply`의 결과를 버린다 | 바(128) |
+| b | `takePointer`가 종류를 안 보고 `prefs.mouse_accel`로 칸을 연다 | 바(128). `open` 줄은 `prefs`를 찍으므로 나는 초록 — plan의 예상대로 |
+
+b는 디스크를 `mouse_accel=0` · `touchpad_accel=10`으로 가른 덕에 잡혔다(PS-M1 plan 확정 8, M0 실측 3의 교훈).
+
+### 실측 10 — 루트 게이트
+
+`RUNS=1`: 27/27, 15분 28초(prebuild 337초 · lanes 591초), 잘린 로그 줄 0. `pointer`(PD-M4) 회차 146초로 M0과 같다 — 판정 바가 더한
+시간은 1~2초다. 가장 긴 레인은 PM 237초.

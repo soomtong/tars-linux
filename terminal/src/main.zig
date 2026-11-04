@@ -2366,9 +2366,9 @@ const PointerDev = struct {
     /// `pointer.wheelSign`이 정하고, 칸이 비면 함께 사라진다 — KK의
     /// `KeyboardDev.swap_alt_meta`와 같은 모양이다.
     wheel_sign: i32,
-    /// 이 장치의 가속 단계(PS design 결정 3 · 4). M0은 들고 `open` 줄에 찍기만
-    /// 한다 — 이동에 곱하는 것은 PS-M1이다.
-    accel: pointer.Accel,
+    /// 이 장치의 가속 상태(PS design 결정 3 · 4). 열 때 그 종류의 단계로 만들고
+    /// `drainPointer`가 이동에 곱한다. 칸마다 하나라 두 장치의 속도가 안 섞인다.
+    ballistics: pointer.Ballistics,
 
     fn pathSlice(self: *const PointerDev) []const u8 {
         return self.path[0..self.path_len];
@@ -2635,7 +2635,7 @@ fn takePointer(devs: *[pointer.MAX_DEVICES]?PointerDev, fd: c_int, path: [:0]con
         .path_len = path.len,
         .decoder = if (pad) |setup| .{ .touchpad = touchpad.Touchpad.init(setup, touchpad_screen) } else .{ .mouse = .{} },
         .wheel_sign = pointer.wheelSign(kind, prefs.mouse_scroll, prefs.touchpad_scroll),
-        .accel = prefs.accelFor(kind),
+        .ballistics = pointer.Ballistics.init(prefs.accelFor(kind)),
     };
     @memcpy(devs[free].?.path[0..path.len], path);
     // 이벤트 시각을 단조 시계로 받는다(MC design 결정 2). evdev의 기본은
@@ -2826,10 +2826,14 @@ fn drainPointer(dev: *PointerDev, slot: u3, state: *pointer.Pointer, round: *Poi
             // 둘 다 아래를 차례로 지나므로 전이 칸에 누름과 뗌이 함께 담긴다.
             const frames = dev.feed(ev);
             for (frames.slice()) |raw_frame| {
-                // 칸의 부호를 합치기 전에 곱한다(PS design 결정 2). 이 아래(`Pointer` ·
-                // 회차의 `wheel` · 제스처 · 자식에게 가는 보고)는 어느 장치였는지 모른다.
+                // 칸의 부호와 가속을 합치기 전에 곱한다(PS design 결정 2 · 4). 이 아래
+                // (`Pointer` · 회차의 `wheel` · 제스처 · 자식에게 가는 보고)는 어느 장치였는지
+                // 모른다. 가속은 이동에만 — 휠 한 눈금 = 세 줄은 그대로다.
                 var frame = raw_frame;
                 frame.wheel *= dev.wheel_sign;
+                const d = dev.ballistics.apply(frame.dx, frame.dy, eventUs(ev));
+                frame.dx = d[0];
+                frame.dy = d[1];
                 const e = state.apply(slot, frame);
                 round.frames += 1;
                 round.wheel +|= e.wheel;
