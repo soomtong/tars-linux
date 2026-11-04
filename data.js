@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-04',
-  latest: 'Pointer Settings (PS-M0~M1)',
+  asOf: '2026-11-05',
+  latest: 'Dual Boot (DB-M0)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1147,      // git rev-list --count main
+    commits: 1157,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 27,         // check.sh의 CHAINS
-    zigKLines: 41,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 29,         // check.sh의 CHAINS
+    zigKLines: 42,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -113,6 +113,9 @@ window.TARS = {
     ['2026-11-04', 'Device Modifiers', 'DM', '키보드마다 수정키를 따로 든다 — 한쪽에서 Shift를 떼거나 한쪽이 빠져도 다른 키보드가 쥔 Shift는 남는다'],
     ['2026-11-04', 'Keyboard Kind', 'KK', '노트북 내장 키보드와 Apple 키보드를 함께 써도 Option · Cmd가 각자 맞다 — 기본값 `keyboard=auto`가 키보드마다 vendor로 고른다'],
     ['2026-11-04', 'Pointer Settings', 'PS', '마우스와 터치패드의 휠 방향과 포인터 가속(0~10)을 `tars.conf`에서 종류마다 따로 고른다 — 함께 붙어 있어도 각자 자기 값'],
+    ['2026-11-05', 'MacBook Hardware', 'MB', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 내장 트랙패드(bcm5974)와 SBS 배터리 — 그 전에는 트랙패드가 아예 안 움직였다'],
+    ['2026-11-05', 'HiDPI Scale', 'HS', 'Retina 화면에서 글자를 정수배로 키운다 — 논리 화면에 그리고 바뀐 사각형만 늘려 옮긴다, `display_scale`'],
+    ['2026-11-05', 'Dual Boot', 'DB', '`tars-install --beside`가 macOS 파티션을 한 바이트도 안 건드리고 빈 공간에 TARS를 깐다 — 맥은 Option 키로 고른다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -128,6 +131,8 @@ window.TARS = {
       'de72b22e63d942f3bcde81f8c1ab63b3ff1ea211d64d19bdd667fd21009e2a8d'],
     ['2026-11-01', '0.1.3', '마우스 선택 — 더블 · 트리플클릭, 남는 선택과 [Shift]+클릭 늘리기, USB 무선 동글 여섯', 'tars-0.1.3-x86_64.iso',
       'b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7'],
+    ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
+      'b0e9d944d3637f2b5ca7abfe43c6776d69719c639b2d5b82ef64b4aeee97811c'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -151,6 +156,8 @@ window.TARS = {
         ['터치패드 · 마우스 커널', 'PS/2(Synaptics · Elantech · ALPS 등) · SMBus · I2C-HID · Intel THC · HID multitouch', '2026-10-05'],
         ['오디오 커널', 'HDA 코덱 여덟 · Intel SOF(CNL~PTL) · AMD ACP · USB Audio, firmware 42개', '2026-10-06'],
         ['부트 메뉴 — new · old', '설치된 디스크로 뜨면 Limine 메뉴가 3초. 기본은 새 이미지, 이상하면 화살표로 `(old)`를 골라 갱신 전 이미지로 뜬다', '2026-11-01'],
+        ['MacBook 내장 장치', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 트랙패드(bcm5974, 두 손가락 스크롤 · 탭) · 내장 키보드 · Cirrus 스피커 · SBS 배터리. 무선(Broadcom) · Fn 조합 · 밝기는 아직 없다', '2026-11-05'],
+        ['HiDPI 배율', 'Retina처럼 큰 화면은 논리 화면(예: 2880×1800 → 1440×900)에 그리고 정수배로 늘려 보인다. 비트맵 폰트라 2배도 선명하다', '2026-11-05'],
         ['커널 6.18.60', '6.18 longterm의 최신 패치(6.18.42에서)', '2026-11-01'],
       ],
     },
@@ -200,7 +207,7 @@ window.TARS = {
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 열여덟',
+      title: '설정 — `tars.conf` 키 열아홉',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -220,6 +227,7 @@ window.TARS = {
         ['`touchpad_scroll`', '`natural` | `normal` — 기본 `natural`(내용이 두 손가락을 따라간다, macOS)', '2026-11-04'],
         ['`mouse_accel`', '`0`~`10` — 기본 `0`(끔). 빠르게 밀 때의 배율, 10이면 최대 4배', '2026-11-04'],
         ['`touchpad_accel`', '`0`~`10` — 기본 `0`. `mouse_accel`과 같은 곡선', '2026-11-04'],
+        ['`display_scale`', '`auto` | `1` | `2` | `3` — 기본 `auto`(논리 화면이 1280×800보다 작아지지 않는 가장 큰 정수배, Retina 15"는 2)', '2026-11-05'],
         ['`user`', '화면 셸의 사용자 이름. 설치기가 쓰고 `tars-config set`으로는 못 바꾼다', '2026-11-03'],
       ],
     },
@@ -252,6 +260,7 @@ window.TARS = {
         ['`sudo tars-config passwd`', '비밀번호를 바꾼다. 새 값을 두 번 묻고, 다르면 아무것도 안 바꾼다. 다음 sudo부터 새 값', '2026-11-03'],
         ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
         ['`tars-install <디스크>`', 'GPT에 768MiB ESP · 256MiB 설정 · 나머지 ext4 홈(4GiB 이상). 새 설치는 사용자 이름과 비밀번호를 묻는다. 이미 깔린 디스크는 부트 파일만 갱신하고 설정과 홈은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-03'],
+        ['`tars-install <디스크> --beside`', 'macOS 등 기존 파티션을 안 건드리고 가장 큰 빈 공간(4GiB 이상)에 TARS 셋을 덧붙인다. 맥은 전원을 켤 때 Option → "EFI Boot", 기본 부팅은 macOS 그대로. `--beside --wipe`는 TARS 파티션만 다시 만든다', '2026-11-05'],
         ['`tars-install --wipe` · `--yes`', '설정과 홈까지 통째로 지운다 · 확인 `YES`와 계정 질문을 건너뛴다(기본값)', '2026-09-23'],
         ['`tars-dictate`', '말하고 [Ctrl+C]. 셸에서 직접 받아쓰기', '2026-10-06'],
       ],
