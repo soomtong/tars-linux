@@ -253,11 +253,11 @@ wait_log "dc-4kn-labelled" \
   || fail "sfdisk could not label the 4Kn scratch disk" "sfdisk" "dc-4kn"
 send "tars-install"
 for _ in $(seq 1 300); do
-  clean | grep -aE '^  /dev/nvme1n1 .* foreign \(gpt\)$' >/dev/null && break
+  clean | grep -aE '^  /dev/nvme1n1 .* GPT: no partitions; [0-9]+ MB free$' >/dev/null && break
   sleep 0.1
 done
-if ! clean | grep -aE '^  /dev/nvme1n1 .* foreign \(gpt\)$' >/dev/null; then
-  fail "a GPT on a 4Kn disk was not listed as foreign (gpt)" "/dev/nvme1n1"
+if ! clean | grep -aE '^  /dev/nvme1n1 .* GPT: no partitions; [0-9]+ MB free$' >/dev/null; then
+  fail "a GPT on a 4Kn disk was not listed as GPT with no partitions" "/dev/nvme1n1"
 fi
 echo "a GPT on a 4096-byte-sector disk reads as gpt"
 
@@ -308,11 +308,11 @@ if grep -aqF "tars-install: writing the partition table" "$LOG"; then
 fi
 send "tars-install"
 for _ in $(seq 1 300); do
-  [ "$(clean | grep -acE '^  /dev/nvme1n1 .* foreign \(gpt\)$')" -ge 2 ] && break
+  [ "$(clean | grep -acE '^  /dev/nvme1n1 .* GPT: no partitions; [0-9]+ MB free$')" -ge 2 ] && break
   sleep 0.1
 done
-if [ "$(clean | grep -acE '^  /dev/nvme1n1 .* foreign \(gpt\)$')" -lt 2 ]; then
-  fail "after the size refusal the scratch disk was no longer foreign (gpt)" "/dev/nvme1n1"
+if [ "$(clean | grep -acE '^  /dev/nvme1n1 .* GPT: no partitions; [0-9]+ MB free$')" -lt 2 ]; then
+  fail "after the size refusal the scratch disk was no longer an empty GPT" "/dev/nvme1n1"
 fi
 echo "a disk smaller than the layout is refused before YES and left alone"
 

@@ -204,11 +204,12 @@ USB로 뜬 기계에서 인자 없이 치면 목록이 나온다. 무엇을 지�
 $ tars-install
 tars-install: boot medium /dev/sda (iso9660 TARS, 51 MB)
 
-  /dev/nvme0n1    512 GB  Samsung SSD 980        internal   foreign (gpt)
+  /dev/nvme0n1    512 GB  Samsung SSD 980        internal   GPT: EFI, 3 other; no free space
   /dev/sda         32 GB  SanDisk Ultra          removable  boot medium
 
 tars-install <disk>         install onto <disk>; a disk that has TARS is only updated
 tars-install <disk> --yes   same, without asking
+tars-install <disk> --beside  keep what <disk> has; install into its largest free space
 tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 ```
 
@@ -267,9 +268,51 @@ ISO로 뜬 동안에는 설치된 디스크의 설정이 안 붙는다(`among 14
 그 표지가 있을 때만 파티션을 보기 때문이다. 설치기로 뜬 세션이 그 디스크를
 붙잡고 있으면 `--wipe`가 다시 파티션할 수 없다.
 
-안 되는 것: legacy BIOS 부팅, 다른 OS 옆에 나란히 설치(새 설치는 늘 디스크
-전체를 지운다), 펌웨어의 부트 항목 등록. 펌웨어는 항목 없이도
-`\EFI\BOOT\BOOTX64.EFI`를 찾는다.
+안 되는 것: legacy BIOS 부팅, 펌웨어의 부트 항목 등록. 펌웨어는 항목 없이도
+`\EFI\BOOT\BOOTX64.EFI`를 찾는다. 다른 OS 옆에 나란히 까는 것은 `--beside`가 한다(아래
+"macOS 옆에 설치하기") — 게이트가 보는 것은 macOS 옆이다.
+
+### macOS 옆에 설치하기 — 맥에서 듀얼 부팅
+
+`tars-install <disk> --beside`는 디스크에 있는 파티션을 한 바이트도 건드리지 않고, 가장 큰 빈 자리에
+TARS의 셋(`TARS-BOOT` 768MiB · `TARS-CONFIG` 256MiB · `TARS-HOME` 나머지)을 덧붙인다. 맥 디스크라면
+p1(EFI)과 p2(APFS, 또는 HFS+와 Recovery HD) 뒤의 p3~p5쯤에 놓인다. 설치기와 `init`은 TARS 파티션을
+번호가 아니라 GPT 이름으로 찾으므로 몇 번에 놓이든 같다. 빈 자리는 macOS에서 미리 만들어 둔다 —
+TARS는 APFS · HFS+의 크기를 줄이지 않는다.
+
+1. 백업. Time Machine으로 한 번 받아 둔다. `--beside`는 남의 바이트를 안 쓰도록 만들었고 게이트가
+   그것을 바이트로 보지만, 파티션 표를 고치는 일이다.
+2. macOS에서 자리를 낸다. 터미널에서 디스크 모양을 보고, macOS가 든 파티션(보통 `disk0s2`)을 줄인다.
+   TARS는 4GiB보다 큰 빈 자리가 필요하다.
+
+   ```bash
+   diskutil list                                   # disk0의 모양. APFS면 Apple_APFS, HFS+면 Apple_HFS
+   diskutil apfs resizeContainer disk0s2 200g      # APFS(10.13 이후): 컨테이너를 200GB로 — 뒤가 빈 자리가 된다
+   diskutil resizeVolume disk0s2 200g              # HFS+(MacBookAir4,1의 10.7~10.12)
+   ```
+
+   `200g`는 macOS에 남길 크기다. 디스크 크기에서 TARS에 줄 만큼을 뺀 값을 넣는다.
+3. ISO를 USB에 쓴다(위 "실기 노트북에 꽂아 보기"의 `dd`).
+4. 전원을 켤 때 Option(⌥) 키를 누르고 있다가, 부팅 선택 화면에서 "EFI Boot"(USB)를 고른다.
+   이 맥들에는 Secure Boot가 없어서 위의 "펌웨어에서 할 일"은 해당하지 않는다.
+5. 뜨면 `tars-install`로 목록을 본다. 내장 디스크는 보통 `/dev/sda`이고, 상태 칸이 무엇이 있는지와
+   빈 자리를 말한다.
+
+   ```
+   /dev/sda        251 GB  APPLE SSD SM256E         internal   GPT: EFI, macOS (APFS); 50 GB free
+   ```
+
+   빈 자리가 4GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다.
+6. `tars-install /dev/sda --beside`. 계획이 `keeps its partitions`로 시작하고 어느 구간에 몇 번으로
+   들어가는지 말한다. 이름과 비밀번호를 묻고 `YES`를 받는다. `done.`이 나오면 USB를 뽑고 끈다.
+7. TARS로 뜰 때마다 Option을 누르고 "EFI Boot"를 고른다. 아무것도 안 누르면 macOS가 뜬다 — 기본 부팅은
+   macOS 그대로이고, TARS는 NVRAM의 부팅 순서를 건드리지 않는다. TARS를 기본으로 바꾸는 일(macOS의
+   `bless` 등)은 이 설치기가 하지 않는다.
+
+갱신은 통째 설치와 같다. 새 ISO로 떠서 `tars-install /dev/sda`(또는 `--beside`를 붙여도 같다)를 치면
+`TARS-BOOT`만 쓰고 설정과 홈은 열지 않는다. 처음부터 다시 깔려면 `tars-install /dev/sda --beside --wipe`
+— TARS 이름의 셋만 지우고 그 자리에 새로 놓는다. `--beside` 없이 `--wipe`만 주면 macOS까지 디스크
+전체를 지운다. 계획 줄이 `will be erased. it now holds: GPT: EFI, macOS (APFS), TARS`로 그것을 말한다.
 
 ### 설정을 부팅 사이에 남기려면
 

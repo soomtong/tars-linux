@@ -10,7 +10,9 @@ const build_info = @import("build_info");
 /// tars-install — 부팅 매체의 부트 파일 넷을 내장 디스크에 옮겨 USB 없이
 /// 뜨게 한다(DI design). 인자 없이 치면 목록, 디스크를 주면 계획을 보이고
 /// YES를 받는다. `--yes`가 그 질문을 건너뛴다. 이미 TARS가 있는 디스크는
-/// p1만 갈고 p2(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).
+/// TARS-BOOT만 갈고 TARS-CONFIG(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).
+/// `--beside`는 남의 파티션을 그대로 두고 가장 큰 빈 자리에 셋을 덧붙인다(DB-M0). TARS 파티션은
+/// 번호가 아니라 GPT 이름으로 찾는다.
 ///
 /// init 옆의 별도 실행 파일인 이유는 DI design 결정 5다 — 부팅 경로에 안
 /// 들어가야 게이트의 다른 체인들에 닿지 않고, storage.zig를 같이 써야 목록에
@@ -209,25 +211,44 @@ fn printUsage() void {
     disk.usageLines(Say{});
 }
 
+/// 장치의 논리 섹터 크기(512 · 4096). GPT 헤더가 LBA 1에 있으므로 이것이 곧 헤더의 오프셋이다(DB design
+/// 위험 2). sfdisk의 start= · size=도 이 단위다.
+fn sectorSize(name: []const u8) ?u64 {
+    var buf: [16]u8 = undefined;
+    const text = sysAttr(name, "queue/logical_block_size", &buf) orelse return null;
+    return std.fmt.parseInt(u64, text, 10) catch null;
+}
+
+/// 디스크의 GPT 엔트리(disk.parseGpt). GPT가 아니거나 CRC가 안 맞거나 섹터 크기를 모르면 null.
+fn readGpt(path: [:0]const u8) ?disk.Gpt {
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
+    const head = storage.readHead(path, &head_buf) orelse return null;
+    if (disk.describe(head).kind != .gpt) return null;
+    const sector = sectorSize(disk.sysName(path)) orelse return null;
+    return disk.parseGpt(head, sector);
+}
+
 /// 디스크에 TARS가 설치돼 있는가(DI design 결정 7). 셋을 다 본다.
 ///
-///   디스크 앞머리가 GPT
-///   p1이 FAT32이고, 붙여 보면 boot/bzImage나 boot/old/bzImage가 있다
-///   p2가 `tars-` 라벨의 ext2
+///   GPT에 `TARS-BOOT` · `TARS-CONFIG` 이름이 하나씩 있다(DB-M0 — 번호가 아니라 이름이다)
+///   TARS-BOOT가 FAT32이고, 붙여 보면 boot/bzImage나 boot/old/bzImage가 있다
+///   TARS-CONFIG가 `tars-` 라벨의 ext2
 ///
 /// bzImage를 보는 것이 design 위험 4의 처방이다. sfdisk와 mkfs까지 되고
 /// 복사 전에 죽은 디스크는 installed가 아니라 새 설치로 가야 한다. 그래서
-/// 이 판정만은 앞머리가 아니라 p1을 읽기 전용으로 붙여 본다.
+/// 이 판정만은 앞머리가 아니라 TARS-BOOT를 읽기 전용으로 붙여 본다.
+///
+/// 통째 설치 디스크는 이름이 p1~p3에 있을 뿐 같은 길로 읽힌다(DI-M1부터 이름이 있다).
 fn isInstalled(path: [:0]const u8) bool {
-    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
-    const head = storage.readHead(path, &head_buf) orelse return false;
-    if (disk.describe(head).kind != .gpt) return false;
+    const g = readGpt(path) orelse return false;
+    const boot = g.find(.boot) orelse return false;
+    const conf = g.find(.config) orelse return false;
 
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
     var p1_buf: [32]u8 = undefined;
     var p2_buf: [32]u8 = undefined;
-    const p1 = storage.partitionName(&p1_buf, path, 1) orelse return false;
-    const p2 = storage.partitionName(&p2_buf, path, 2) orelse return false;
-    // head_buf를 다시 쓴다. 앞의 판정이 끝났으니 앞머리는 더 필요 없다.
+    const p1 = storage.partitionName(&p1_buf, path, boot.number) orelse return false;
+    const p2 = storage.partitionName(&p2_buf, path, conf.number) orelse return false;
     const h1 = storage.readHead(p1, &head_buf) orelse return false;
     if (!disk.isFat32(h1)) return false;
     const h2 = storage.readHead(p2, &head_buf) orelse return false;
@@ -318,17 +339,19 @@ fn mediumBytes() ?u64 {
     return total;
 }
 
-/// p2에 `tars-` 라벨이 있는가. 새 설치가 "설정도 지워진다"고 경고할 조건이다.
-/// isInstalled보다 넓게 본다 — 갱신 도중 전원이 나가 p1이 망가졌거나 bzImage가
-/// 없어진 디스크는 installed로 안 보이지만, p2의 설정은 살아 있을 수 있다.
-/// 그 디스크도 목록에는 `foreign (gpt)`로만 보이므로 이 한 줄이 "알고
+/// TARS-CONFIG에 `tars-` 라벨이 있으면 그 번호. 새 설치가 "설정도 지워진다"고 경고할 조건이다.
+/// isInstalled보다 넓게 본다 — 갱신 도중 전원이 나가 TARS-BOOT가 망가졌거나 bzImage가
+/// 없어진 디스크는 installed로 안 보이지만, 설정은 살아 있을 수 있다.
+/// 그 디스크도 목록에는 GPT로만 보이므로 이 한 줄이 "알고
 /// 설치한다"(design 결정 7)를 지킨다.
-fn p2HasSettings(path: [:0]const u8) bool {
+fn settingsOn(path: [:0]const u8, gpt: ?disk.Gpt) ?u8 {
+    const g = gpt orelse return null;
+    const conf = g.find(.config) orelse return null;
     var p2_buf: [32]u8 = undefined;
-    const p2 = storage.partitionName(&p2_buf, path, 2) orelse return false;
+    const p2 = storage.partitionName(&p2_buf, path, conf.number) orelse return null;
     var head_buf: [disk.HEAD_BYTES]u8 = undefined;
-    const head = storage.readHead(p2, &head_buf) orelse return false;
-    return storage.tarsLabel(head) != null;
+    const head = storage.readHead(p2, &head_buf) orelse return null;
+    return if (storage.tarsLabel(head) != null) conf.number else null;
 }
 
 /// 한 디스크의 상태 칸. 매체 · 설치됨 · 앞머리에 보이는 것 순이다.
@@ -340,9 +363,21 @@ fn stateOf(path: [:0]const u8, medium: ?[:0]const u8, buf: []u8) disk.State {
         if (std.mem.eql(u8, m, path)) return .medium;
     }
     if (isInstalled(path)) return .installed;
+    return headText(path, buf);
+}
+
+/// 앞머리에 보이는 것. 읽히는 GPT면 파티션과 빈 자리를 말한다(DB design 결정 9) — `GPT: EFI, macOS
+/// (APFS); 6 GB free`. 통째 설치의 계획도 이 글자로 무엇을 지우는지 말한다(설치된 디스크여도).
+fn headText(path: [:0]const u8, buf: []u8) disk.State {
     var head_buf: [disk.HEAD_BYTES]u8 = undefined;
-    const head = storage.readHead(path, &head_buf);
-    return disk.headState(buf, if (head) |h| disk.describe(h) else null);
+    const head = storage.readHead(path, &head_buf) orelse return disk.headState(buf, null);
+    const seen = disk.describe(head);
+    if (seen.kind == .gpt) {
+        if (sectorSize(disk.sysName(path))) |sector| {
+            if (disk.parseGpt(head, sector)) |g| return .{ .other = disk.gptText(buf, &g) };
+        }
+    }
+    return disk.headState(buf, seen);
 }
 
 fn list(medium: ?[:0]const u8) void {
@@ -368,7 +403,7 @@ fn list(medium: ?[:0]const u8) void {
         var size_buf: [16]u8 = undefined;
         var model_buf: [64]u8 = undefined;
         var rem_buf: [8]u8 = undefined;
-        var state_buf: [64]u8 = undefined;
+        var state_buf: [128]u8 = undefined;
         const model = sysAttr(name, "device/model", &model_buf) orelse "-";
         const removable = sysAttr(name, "removable", &rem_buf) orelse "0";
         const state = disk.stateWord(stateOf(path, medium, &state_buf));
@@ -841,6 +876,7 @@ fn install(
     target: [:0]const u8,
     yes: bool,
     wipe: bool,
+    beside: bool,
     medium: ?[:0]const u8,
     envp: [*:null]const ?[*:0]const u8,
 ) u8 {
@@ -860,7 +896,7 @@ fn install(
 
     var size_buf: [16]u8 = undefined;
     var model_buf: [64]u8 = undefined;
-    var state_buf: [64]u8 = undefined;
+    var state_buf: [128]u8 = undefined;
     const model = sysAttr(name, "device/model", &model_buf) orelse "-";
     const state = stateOf(path, medium, &state_buf);
     if (state == .medium) {
@@ -868,36 +904,96 @@ fn install(
         return 1;
     }
     const installed = state == .installed;
-    // 설치된 디스크에 --wipe가 없으면 갱신이다(design 결정 8). 설치 안 된
-    // 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
+    // 설치된 디스크에 --wipe가 없으면 갱신이다(design 결정 8). `--beside`가 있어도 같다(DB design
+    // 결정 6). 설치 안 된 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
     const update = installed and !wipe;
+    // 남의 파티션 옆에 새로 깐다(DB-M0). `--beside --wipe`는 TARS 이름의 셋만 지우고 그 자리에 다시 깐다.
+    const beside_new = beside and !update;
 
-    var p1_buf: [32]u8 = undefined;
-    var p2_buf: [32]u8 = undefined;
-    var p3_buf: [32]u8 = undefined;
-    const p1 = storage.partitionName(&p1_buf, path, 1).?;
-    const p2 = storage.partitionName(&p2_buf, path, 2).?;
-    const p3 = storage.partitionName(&p3_buf, path, 3).?;
+    // 지금 디스크의 GPT. 갱신은 여기서 번호를 찾고, `--beside`는 빈 자리를 고른다. 통째 설치의 계획은
+    // holds로 무엇을 지우는지 말한다 — 설치된 디스크여도 `TARS installed`가 아니라 그 안의 파티션이다
+    // (DB design 결정 7 · 9). macOS 옆에 깔린 디스크를 `--wipe`로 통째 지우면 macOS가 사라진다.
+    const gpt = readGpt(path);
+    var holds_buf: [128]u8 = undefined;
+    const holds = disk.stateWord(headText(path, &holds_buf));
+    const size_text = disk.formatSize(&size_buf, bytes);
 
-    // ── YES 전의 판단 (KU-M0) ──
+    // ── YES 전의 판단 (KU-M0, DB-M0) ──
     // 디스크를 건드리기 전에 다 정한다. 새 설치는 배치가 들어가는가, 갱신은
-    // p1에 새 이미지가 들어갈 자리가 있는가와 old로 무엇이 남는가.
+    // TARS-BOOT에 새 이미지가 들어갈 자리가 있는가와 old로 무엇이 남는가.
     const new_ver: []const u8 = build_info.version;
-    if (!update and !disk.bigEnough(bytes)) {
-        complain("{s} is {s}; TARS needs " ++ disk.MIN_DISK_WORDS, .{ path, disk.formatSize(&size_buf, bytes) });
+    var layout: disk.Layout = undefined;
+    var gap: disk.Gap = undefined;
+    // sfdisk가 매길 번호. 통째 설치는 늘 1 · 2 · 3이다.
+    var nums: [3]u8 = .{ 1, 2, 3 };
+    // `--beside --wipe`가 먼저 지울 TARS 파티션. 이름이 같은 것이 셋보다 많으면 거절한다(아래).
+    var wipe_buf: [3]u8 = undefined;
+    var wipe_nums: []const u8 = &.{};
+    if (beside_new) {
+        const g = gpt orelse {
+            if (std.mem.startsWith(u8, holds, "foreign (gpt")) {
+                complain("cannot read the GPT partition entries of {s}; nothing was changed", .{path});
+            } else {
+                complain("--beside needs a GPT disk; {s} holds {s}. leave out --beside to give TARS the whole disk", .{ path, holds });
+            }
+            return 1;
+        };
+        // 이름은 있는데 설치가 아닌 디스크 — sfdisk 뒤에 mkfs나 복사가 끊겼다. 그 위에 셋을 더 붙이면 이름이
+        // 둘씩 되어 어느 것이 우리 것인지 모른다(disk.Gpt.find).
+        if (!wipe and g.hasTars()) {
+            complain("{s} has TARS partitions that are not a whole install; tars-install {s} --beside --wipe replaces them", .{ path, path });
+            return 1;
+        }
+        if (wipe) {
+            var n: usize = 0;
+            for (g.slice()) |p| {
+                if (p.role == .none) continue;
+                if (n == wipe_buf.len) {
+                    complain("{s} has more than three TARS partitions; nothing was changed", .{path});
+                    return 1;
+                }
+                wipe_buf[n] = p.number;
+                n += 1;
+            }
+            wipe_nums = wipe_buf[0..n];
+        }
+        gap = disk.largestGap(&g, wipe) orelse .{ .start = 0, .end = 0 };
+        layout = disk.besideLayout(gap, g.sector) orelse {
+            disk.roomRefusal(Complain{}, path, &g, gap.bytes(g.sector));
+            return 1;
+        };
+        nums = disk.freeNumbers(&g, wipe) orelse {
+            complain("{s} has no three free GPT entries; nothing was changed", .{path});
+            return 1;
+        };
+    } else if (!update and !disk.bigEnough(bytes)) {
+        complain("{s} is {s}; TARS needs " ++ disk.MIN_DISK_WORDS, .{ path, size_text });
         return 1;
     }
+
     var cur_buf: [72]u8 = undefined;
     var old_buf: [72]u8 = undefined;
     var rot: disk.Rotation = .rotate;
     var cur_ver: ?[]const u8 = null;
     // 쓰기가 끝난 뒤 boot/old/에 있을 이미지의 버전. 이것이 있어야 old 엔트리가 생긴다.
     var old_after: ?[]const u8 = null;
+    var esp_buf: [32]u8 = undefined;
+    var on_beside = false;
     if (update) {
-        const slots = readSlots(p1, &cur_buf, &old_buf) orelse return 1;
+        // isInstalled가 방금 이 이름으로 판정했다. 그 사이 디스크가 바뀌었으면 여기서 멈춘다.
+        const g = gpt orelse {
+            complain("cannot read the GPT of {s} again; nothing was changed", .{path});
+            return 1;
+        };
+        const boot = g.find(.boot) orelse return 1;
+        const conf = g.find(.config) orelse return 1;
+        nums = .{ boot.number, conf.number, if (g.find(.home)) |h| h.number else 0 };
+        on_beside = g.hasOthers();
+        const esp = storage.partitionName(&esp_buf, path, boot.number) orelse return 1;
+        const slots = readSlots(esp, &cur_buf, &old_buf) orelse return 1;
         const need = (mediumBytes() orelse return 1) + disk.NEED_SLACK;
         rot = disk.rotation(slots.cur_ver != null, slots.free, slots.old_bytes, slots.cur_bytes, need);
-        disk.roomLines(Say{}, slots.free, slots.old_bytes, need, rot);
+        disk.roomLines(Say{}, boot.number, slots.free, slots.old_bytes, need, rot);
         if (rot == .no_room) return 1;
         cur_ver = slots.cur_ver;
         old_after = if (rot == .rotate) slots.cur_ver else slots.old_ver;
@@ -909,12 +1005,16 @@ fn install(
     const esp_conf = prepareConf(&conf_in, &conf_out, new_ver, old_after) orelse return 1;
 
     // ── 계획 ──
-    // p2는 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
-    const settings = !update and p2HasSettings(path);
-    disk.planLines(Say{}, update, path, disk.formatSize(&size_buf, bytes), model, disk.stateWord(state), settings, new_ver, cur_ver, rot);
+    if (beside_new) {
+        disk.besideLines(Say{}, path, size_text, model, holds, gap, gpt.?.sector, nums, wipe_nums);
+    } else {
+        // 설정 파티션은 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
+        const settings = if (update) null else settingsOn(path, gpt);
+        disk.planLines(Say{}, update, path, size_text, model, if (update) disk.stateWord(state) else holds, settings, nums, on_beside, new_ver, cur_ver, rot);
+    }
 
     // ── 계정 (HP-M1) ──
-    // 새 설치만 묻는다. 갱신은 p2 · p3를 안 열므로(design 결정 10) 물을 것이 없다.
+    // 새 설치만 묻는다. 갱신은 설정 · 홈을 안 열므로(design 결정 10) 물을 것이 없다.
     var acct = Account.defaults();
     if (!update) {
         if (!yes) acct = askAccount() orelse {
@@ -935,7 +1035,8 @@ fn install(
     }
 
     if (update) {
-        if (!fillEsp(p1, esp_conf, new_ver, rot == .rotate)) return 1;
+        const esp = storage.partitionName(&esp_buf, path, nums[0]) orelse return 1;
+        if (!fillEsp(esp, esp_conf, new_ver, rot == .rotate)) return 1;
         say("tars-install: updated. remove the boot medium and reboot.\n", .{});
         return 0;
     }
@@ -946,15 +1047,57 @@ fn install(
     acct.forgetPassword();
 
     // ── 파티션 ──
-    // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
-    // TARS가 있던 디스크에 다시 설치하면 p2 자리에 옛 ext2가 그대로 있고,
-    // mke2fs가 그것을 보고 머뭇거린다.
-    say("tars-install: writing the partition table\n", .{});
-    const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--wipe", "always", "--wipe-partitions", "always", path };
-    if (!runTool(&sfdisk, disk.SFDISK_SCRIPT, WORK_DIR ++ "/sfdisk.log", envp)) return 1;
+    if (beside_new) {
+        if (!besidePartitions(path, layout, wipe_nums, envp)) return 1;
+    } else {
+        // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
+        // TARS가 있던 디스크에 다시 설치하면 p2 자리에 옛 ext2가 그대로 있고,
+        // mke2fs가 그것을 보고 머뭇거린다.
+        say("tars-install: writing the partition table\n", .{});
+        const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--wipe", "always", "--wipe-partitions", "always", path };
+        if (!runTool(&sfdisk, disk.SFDISK_SCRIPT, WORK_DIR ++ "/sfdisk.log", envp)) return 1;
+    }
+
+    // sfdisk가 쓴 표를 다시 읽어 이름으로 번호를 찾는다(DB design 결정 4). 통째 설치는 1 · 2 · 3이고
+    // `--beside`는 sfdisk가 매긴 빈 엔트리다. 여기서부터는 포맷이라, 찾은 자리가 계획과 다르면 멈춘다.
+    const after = readGpt(path) orelse {
+        complain("cannot read the GPT of {s} back after sfdisk; nothing was formatted", .{path});
+        return 1;
+    };
+    const roles = [3]disk.Role{ .boot, .config, .home };
+    var parts: [3]disk.Part = undefined;
+    for (roles, 0..) |role, i| {
+        parts[i] = after.find(role) orelse {
+            complain("sfdisk left no single {s} partition on {s}; nothing was formatted", .{ @tagName(role), path });
+            return 1;
+        };
+    }
+    if (beside_new) {
+        const want = [3]disk.Range{ layout.boot, layout.config, layout.home };
+        for (parts, want) |p, w| {
+            if (p.first != w.start or p.last + 1 != w.start + w.size) {
+                complain("sfdisk put p{d} at sectors {d}-{d}, not {d}-{d} as planned; nothing was formatted", .{
+                    p.number, p.first, p.last, w.start, w.start + w.size - 1,
+                });
+                return 1;
+            }
+        }
+    }
+
+    var p1_buf: [32]u8 = undefined;
+    var p2_buf: [32]u8 = undefined;
+    var p3_buf: [32]u8 = undefined;
+    const p1 = storage.partitionName(&p1_buf, path, parts[0].number) orelse return 1;
+    const p2 = storage.partitionName(&p2_buf, path, parts[1].number) orelse return 1;
+    const p3 = storage.partitionName(&p3_buf, path, parts[2].number) orelse return 1;
     if (!waitForNode(p1) or !waitForNode(p2) or !waitForNode(p3)) {
         complain("{s}, {s} and {s} never appeared after 3s", .{ p1, p2, p3 });
         return 1;
+    }
+    // 노드가 GPT의 그 자리를 가리키는가. 커널이 표를 다시 못 읽었으면 노드는 옛 표의 것이다 — 그 노드에
+    // mkfs를 하면 남의 파티션을 지운다.
+    for (parts, [3][:0]const u8{ p1, p2, p3 }) |p, node| {
+        if (!nodeAt(name, node, p.first * after.sector)) return 1;
     }
 
     // ── 포맷 ──
@@ -975,15 +1118,59 @@ fn install(
     if (!runTool(&mkext4, null, WORK_DIR ++ "/mke2fs-home.log", envp)) return 1;
 
     // 계정. 여기서 실패한 디스크는 파티션만 있고 ESP가 비어 TARS로 안 보인다 — 다시 치면
-    // 새 설치로 처음부터 간다.
+    // 새 설치로 처음부터 간다(`--beside`는 TARS 이름이 남아 있어 `--beside --wipe`로).
     if (!writeAccount(p2, p3, acct.name(), hash)) {
-        complain("the account was not written; run tars-install {s} again", .{path});
+        complain("the account was not written; run tars-install {s}{s} again", .{ path, if (beside_new) " --beside --wipe" else "" });
         return 1;
     }
 
     if (!fillEsp(p1, esp_conf, new_ver, false)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});
     return 0;
+}
+
+/// `--beside`의 파티션(DB design 결정 4 · 7). `--beside --wipe`면 먼저 TARS 파티션만 `sfdisk --delete`로
+/// 지우고, 세 줄을 `--append`로 덧붙인다.
+///
+/// `--wipe always`는 안 쓴다 — 디스크 머리의 서명(보호 MBR · GPT)을 지우는 옵션이라 남의 표를 다시 쓰게
+/// 된다. `--wipe never`로 그 기본값(auto)도 막는다. `--wipe-partitions always`는 새 파티션 자리의 옛
+/// 서명만 지운다(`--beside --wipe`가 지운 옛 tars-config가 거기 있다). sfdisk는 남의 파티션과 겹치는
+/// start=를 `Sector N already used`로 거절한다(DB-M0 plan 착수 전 3) — 우리 계산이 틀려도 마지막 문이다.
+fn besidePartitions(path: [:0]const u8, layout: disk.Layout, wipe_nums: []const u8, envp: [*:null]const ?[*:0]const u8) bool {
+    if (wipe_nums.len > 0) {
+        say("tars-install: deleting the TARS partitions", .{});
+        for (wipe_nums) |n| say(" p{d}", .{n});
+        say("\n", .{});
+        var num_text: [3][4]u8 = undefined;
+        var argv = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--delete", path, null, null, null };
+        for (wipe_nums, 0..) |n, i| {
+            argv[3 + i] = (std.fmt.bufPrintSentinel(&num_text[i], "{d}", .{n}, 0) catch unreachable).ptr;
+        }
+        if (!runTool(&argv, null, WORK_DIR ++ "/sfdisk-delete.log", envp)) return false;
+    }
+    var script_buf: [512]u8 = undefined;
+    const script = disk.appendScript(&script_buf, layout) orelse return false;
+    say("tars-install: adding the TARS partitions to the partition table\n", .{});
+    const sfdisk = [_:null]?[*:0]const u8{ "/usr/bin/sfdisk", "--append", "--wipe", "never", "--wipe-partitions", "always", path };
+    return runTool(&sfdisk, script, WORK_DIR ++ "/sfdisk.log", envp);
+}
+
+/// 커널의 파티션 노드가 디스크의 byte_off에서 시작하는가. /sys/block/<disk>/<part>/start는 512바이트
+/// 단위다(섹터 크기와 무관 — sectorsToBytes와 같은 규칙).
+fn nodeAt(disk_name: []const u8, node: [:0]const u8, byte_off: u64) bool {
+    var attr_buf: [64]u8 = undefined;
+    const attr = std.fmt.bufPrint(&attr_buf, "{s}/start", .{disk.sysName(node)}) catch return false;
+    var buf: [32]u8 = undefined;
+    const text = sysAttr(disk_name, attr, &buf) orelse {
+        complain("cannot read where the kernel put {s}; nothing was formatted", .{node});
+        return false;
+    };
+    const start = disk.sectorsToBytes(text) orelse 0;
+    if (start != byte_off) {
+        complain("the kernel has {s} at byte {d}, the GPT says {d}; nothing was formatted", .{ node, start, byte_off });
+        return false;
+    }
+    return true;
 }
 
 /// p1을 붙이고 쓰고 sync하고 뗀다. 새 설치와 갱신이 같은 입구다 — 갱신은
@@ -1189,7 +1376,7 @@ pub fn main(init: std.process.Init.Minimal) u8 {
             list(medium);
             break :blk 0;
         },
-        .install => |i| install(i.disk, i.yes, i.wipe, medium, envp),
+        .install => |i| install(i.disk, i.yes, i.wipe, i.beside, medium, envp),
         .usage => unreachable,
     };
 }

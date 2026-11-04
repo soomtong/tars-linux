@@ -71,32 +71,48 @@ pub const DISKS = [_][:0]const u8{
     "/dev/mmcblk0", "/dev/mmcblk1",
 };
 
-/// 각 디스크의 첫 세 파티션. DI-M1이 RM 결정 12("파티션은 안 본다")를
+/// 각 디스크의 첫 여덟 파티션. DI-M1이 RM 결정 12("파티션은 안 본다")를
 /// 바꿨다 — tars-install이 설정을 GPT의 p2에 두기 때문이다(DI design 결정 6).
-/// HP-M0이 p3를 더했다 — `/home`이 거기 산다(HP design 결정 2).
+/// HP-M0이 p3를 더했다 — `/home`이 거기 산다(HP design 결정 2). DB-M0이 여덟으로 넓혔다 — macOS
+/// 옆에 깐 TARS는 p3~p5(APFS 맥) · p4~p6(HFS+ 맥, Recovery HD가 p3) · p5~p7(그 위에 Boot Camp)에 놓인다
+/// (DB design 결정 8). 하나 여유를 둔다.
 ///
 /// 손으로 적는다. partitionName으로 comptime에 지을 수도 있지만 그러면
 /// Found.path가 가리키는 문자열의 수명을 따로 따져야 하고, 목록이 눈에
 /// 안 보인다. 둘이 어긋나지 않는 것은 storage_test가 본다.
 ///
-/// 셋씩인 것은 우리가 만드는 배치가 p3까지이기 때문이다. RM 결정 12가 지키던
+/// 번호가 커져도 고르는 것은 여전히 라벨이다. RM 결정 12가 지키던
 /// 안전("남의 root를 잡지 않는다")은 라벨 필터가 계속 지킨다 — 남의 ext2/4
 /// root 파티션은 매직이 맞아도 라벨이 `tars-`로 시작하지 않는다.
 const PARTITIONS = [_][:0]const u8{
-    "/dev/vda1",      "/dev/vda2",      "/dev/vda3",
-    "/dev/vdb1",      "/dev/vdb2",      "/dev/vdb3",
-    "/dev/vdc1",      "/dev/vdc2",      "/dev/vdc3",
-    "/dev/vdd1",      "/dev/vdd2",      "/dev/vdd3",
-    "/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme0n1p3",
-    "/dev/nvme1n1p1", "/dev/nvme1n1p2", "/dev/nvme1n1p3",
-    "/dev/nvme2n1p1", "/dev/nvme2n1p2", "/dev/nvme2n1p3",
-    "/dev/nvme3n1p1", "/dev/nvme3n1p2", "/dev/nvme3n1p3",
-    "/dev/sda1",      "/dev/sda2",      "/dev/sda3",
-    "/dev/sdb1",      "/dev/sdb2",      "/dev/sdb3",
-    "/dev/sdc1",      "/dev/sdc2",      "/dev/sdc3",
-    "/dev/sdd1",      "/dev/sdd2",      "/dev/sdd3",
-    "/dev/mmcblk0p1", "/dev/mmcblk0p2", "/dev/mmcblk0p3",
-    "/dev/mmcblk1p1", "/dev/mmcblk1p2", "/dev/mmcblk1p3",
+    "/dev/vda1",      "/dev/vda2",      "/dev/vda3",      "/dev/vda4",
+    "/dev/vda5",      "/dev/vda6",      "/dev/vda7",      "/dev/vda8",
+    "/dev/vdb1",      "/dev/vdb2",      "/dev/vdb3",      "/dev/vdb4",
+    "/dev/vdb5",      "/dev/vdb6",      "/dev/vdb7",      "/dev/vdb8",
+    "/dev/vdc1",      "/dev/vdc2",      "/dev/vdc3",      "/dev/vdc4",
+    "/dev/vdc5",      "/dev/vdc6",      "/dev/vdc7",      "/dev/vdc8",
+    "/dev/vdd1",      "/dev/vdd2",      "/dev/vdd3",      "/dev/vdd4",
+    "/dev/vdd5",      "/dev/vdd6",      "/dev/vdd7",      "/dev/vdd8",
+    "/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme0n1p3", "/dev/nvme0n1p4",
+    "/dev/nvme0n1p5", "/dev/nvme0n1p6", "/dev/nvme0n1p7", "/dev/nvme0n1p8",
+    "/dev/nvme1n1p1", "/dev/nvme1n1p2", "/dev/nvme1n1p3", "/dev/nvme1n1p4",
+    "/dev/nvme1n1p5", "/dev/nvme1n1p6", "/dev/nvme1n1p7", "/dev/nvme1n1p8",
+    "/dev/nvme2n1p1", "/dev/nvme2n1p2", "/dev/nvme2n1p3", "/dev/nvme2n1p4",
+    "/dev/nvme2n1p5", "/dev/nvme2n1p6", "/dev/nvme2n1p7", "/dev/nvme2n1p8",
+    "/dev/nvme3n1p1", "/dev/nvme3n1p2", "/dev/nvme3n1p3", "/dev/nvme3n1p4",
+    "/dev/nvme3n1p5", "/dev/nvme3n1p6", "/dev/nvme3n1p7", "/dev/nvme3n1p8",
+    "/dev/sda1",      "/dev/sda2",      "/dev/sda3",      "/dev/sda4",
+    "/dev/sda5",      "/dev/sda6",      "/dev/sda7",      "/dev/sda8",
+    "/dev/sdb1",      "/dev/sdb2",      "/dev/sdb3",      "/dev/sdb4",
+    "/dev/sdb5",      "/dev/sdb6",      "/dev/sdb7",      "/dev/sdb8",
+    "/dev/sdc1",      "/dev/sdc2",      "/dev/sdc3",      "/dev/sdc4",
+    "/dev/sdc5",      "/dev/sdc6",      "/dev/sdc7",      "/dev/sdc8",
+    "/dev/sdd1",      "/dev/sdd2",      "/dev/sdd3",      "/dev/sdd4",
+    "/dev/sdd5",      "/dev/sdd6",      "/dev/sdd7",      "/dev/sdd8",
+    "/dev/mmcblk0p1", "/dev/mmcblk0p2", "/dev/mmcblk0p3", "/dev/mmcblk0p4",
+    "/dev/mmcblk0p5", "/dev/mmcblk0p6", "/dev/mmcblk0p7", "/dev/mmcblk0p8",
+    "/dev/mmcblk1p1", "/dev/mmcblk1p2", "/dev/mmcblk1p3", "/dev/mmcblk1p4",
+    "/dev/mmcblk1p5", "/dev/mmcblk1p6", "/dev/mmcblk1p7", "/dev/mmcblk1p8",
 };
 
 /// 설치된 디스크로 떴을 때 init이 훑는 순서. 디스크 전체가 먼저다 — 게이트의
@@ -124,7 +140,7 @@ pub fn cmdlineInstalled(text: []const u8) bool {
     return false;
 }
 
-/// 이번 부팅이 훑을 후보. 설치된 디스크로 떴으면 파티션까지 마흔둘,
+/// 이번 부팅이 훑을 후보. 설치된 디스크로 떴으면 파티션까지 백스물여섯,
 /// 아니면 디스크 전체 열넷이다.
 pub fn candidates(installed: bool) []const [:0]const u8 {
     return if (installed) &CANDIDATES else &DISKS;
@@ -220,7 +236,7 @@ pub fn homeLabel(head: []const u8) ?[]const u8 {
 pub const Matcher = *const fn (head: []const u8) ?[]const u8;
 
 /// 장치 앞머리를 buf에 읽는다. 없는 장치는 ENOENT이고 그것이 정상 경로다 —
-/// 후보(열넷 또는 마흔둘) 중 이 기계에 있는 것은 보통 한둘이다.
+/// 후보(열넷 또는 백스물여섯) 중 이 기계에 있는 것은 보통 한둘이다.
 ///
 /// O_NONBLOCK으로 여는 이유가 devices.zig의 버튼 fd와 다르다. 여기서는
 /// 매체가 없는 광학 드라이브나 빈 카드 리더에서 open(2)이 매달리는 것을
@@ -254,8 +270,8 @@ pub fn readHead(path: [:0]const u8, buf: []u8) ?[]const u8 {
 /// list에서 `tars-` 라벨을 가진 첫 후보를 out에 채우고 true. 하나도 없으면
 /// false. list는 candidates()가 준다.
 ///
-/// 마운트로 시험하지 않는다(design 결정 11). 마흔둘을 mount로 두드리면 실패
-/// 줄이 마흔하나 찍히고, mount(2)는 파일시스템을 ext3/4로 잘못 잡았을 때 저널
+/// 마운트로 시험하지 않는다(design 결정 11). 백스물여섯을 mount로 두드리면 실패
+/// 줄이 백스물다섯 찍히고, mount(2)는 파일시스템을 ext3/4로 잘못 잡았을 때 저널
 /// 재생 같은 쓰기를 할 수 있다. 읽어서 거르면 남의 디스크를 건드릴
 /// 가능성이 0이다.
 pub fn findConfigDisk(out: *Found, list: []const [:0]const u8) bool {
@@ -284,7 +300,7 @@ pub fn findDisk(out: *Found, list: []const [:0]const u8, match: Matcher) bool {
 /// 수다(실측 3).
 pub const CONFIG_WAIT_MS: u32 = 5000;
 
-/// 다시 훑는 간격. 한 번이 open 마흔둘이고 없는 노드는 ENOENT로 바로
+/// 다시 훑는 간격. 한 번이 open 백스물여섯이고 없는 노드는 ENOENT로 바로
 /// 돌아오므로, 상한까지 쉰 번이어도 부팅에서 안 보이는 비용이다.
 /// tars-install의 waitForNode와 같은 수다.
 const CONFIG_POLL_MS: u32 = 100;
