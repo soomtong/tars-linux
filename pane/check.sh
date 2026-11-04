@@ -242,6 +242,11 @@ wait_for_more() {
   return 1
 }
 
+# KK design 결정 8. 기본값 auto에서 QEMU 키보드는 pc로 읽힌다 — 이 부팅은 Cmd를 치므로
+# keyboard=apple 한 줄짜리 디스크를 물어 지금 뜻(meta_l = Cmd)을 지킨다(gate_lib.sh의 apple_disk).
+mkdir -p "${REPO_ROOT}/out"
+APPLE_DISK="${REPO_ROOT}/out/pane-a-apple.img"
+apple_disk "$APPLE_DISK" tars-pane-a
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
@@ -253,6 +258,7 @@ qemu-system-x86_64 \
   -display none \
   -serial file:"$LOG" \
   -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
+  -drive file="$APPLE_DISK",if=virtio,format=raw \
   -no-reboot &
 QEMU_PID=$!
 
@@ -271,6 +277,13 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 [ "$CONNECTED" = "1" ] || report_failure "could not connect to the QEMU monitor"
+
+# 디스크가 붙어 파일을 읽었고(loaded), 그 값이 apple이다(KK-M0). 기본값이 apple인 동안은
+# config 줄만으로는 디스크가 안 붙어도 초록이라, loaded 줄이 디스크가 섰다는 증거다.
+grep -a 'tars-init: loaded /config/tars.conf' "$LOG" >/dev/null ||
+  report_failure "boot A: the keyboard=apple disk was not loaded (no 'tars-init: loaded /config/tars.conf')"
+grep -aE 'tars-init: config shell=[^ ]+ keyboard=apple' "$LOG" >/dev/null ||
+  report_failure "boot A: the config disk did not make the keyboard apple (no 'tars-init: config … keyboard=apple')"
 
 # ── 검사 1: 부팅은 패널 하나짜리 워크스페이스 하나 ─────────────────────
 #
@@ -742,7 +755,8 @@ wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
 
 SEED="$(mktemp -d)"
-printf 'shell=fish\nclipboard=pane\n' > "$SEED/tars.conf"
+# KK: keyboard=apple은 QEMU 키보드를 Apple로 읽게 한다 — 이 체인은 Cmd를 친다(KK design 결정 8).
+printf 'shell=fish\nclipboard=pane\nkeyboard=apple\n' > "$SEED/tars.conf"
 mkdir -p "${REPO_ROOT}/out"
 DISK_B="${REPO_ROOT}/out/cb-pane.img"
 rm -f "$DISK_B"

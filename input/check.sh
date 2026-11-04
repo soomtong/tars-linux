@@ -5,18 +5,20 @@ cd "$(dirname "$0")" || exit 1
 
 # IP 체인 — 키보드 입력 정책.
 #
-# IP-M2부터 부팅이 두 번이다.
+# IP-M2부터 부팅이 두 번이었고, KK-M0부터 셋이다(KK design 결정 7).
 #
-#   1차 — 디스크 없이. /config mount가 실패하면 init이 기본값(fish, apple)로
-#         폴백하므로 이 체인은 그 폴백 경로를 덤으로 밟는다. Ctrl+C · TERM ·
-#         방향키 · Option/Cmd를 여기서 본다.
-#   2차 — keyboard=pc가 이미 적힌 디스크를 물고. 같은 물리 키가 1차와
-#         반대로 동작하는 것을 본다.
+#   1차 — keyboard= 줄이 없는 디스크(기본값이 고른다). Ctrl+C · TERM ·
+#         방향키를 보고, 판정 12 · 13에서 같은 물리 키(왼쪽 Alt + ←)가
+#         PS/2 키보드(pc)와 Apple 대역 키보드(input/kk의 kk-apple)에서
+#         반대 뜻인 것을 본다 — 키보드마다 따로 고른다는 증거다.
+#   2차 — keyboard=pc. 모든 키보드가 pc다.
+#   3차 — keyboard=apple. 모든 키보드가 apple이다. 2차와 정확히 반대
+#         모양의 판정(8 · 9 ↔ 10 · 11)이 "정말 교환인가"를 본다.
 #
-# 2차를 붙인 이유는 디스크가 없으면 설정이 영원히 apple이라 pc 경로를
-# 구조적으로 밟을 방법이 없기 때문이다 — 게이트가 못 보는 것은 게이트가
-# 통과시킨다(docs/decisions/project_gate_chain_composition.md). DECCKM과
-# 달리 이건 우리가 파일 한 줄로 켤 수 있으므로 켠다.
+# IP-M2의 1차는 디스크 없이 떠서 "mount 실패 → 기본값"의 길을 덤으로
+# 밟았다. KK-M0이 그 부팅에 도구를 실을 디스크를 물렸다 — 그 길은 디스크
+# 없는 다른 체인들(terminal 등)이 그대로 밟는다. 게이트가 못 보는 것은
+# 게이트가 통과시킨다(docs/decisions/project_gate_chain_composition.md).
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   sendkey ctrl-c → QEMU 스캔코드 → 커널 atkbd → evdev(KEY_LEFTCTRL, KEY_C)
@@ -95,12 +97,29 @@ done
 # 체인마다 포트를 나눈다.
 MONITOR_PORT=45457
 
-# 2차 부팅이 -drive에 넘길 이미지의 절대 경로를 만들 때 쓴다
+# 부팅마다 -drive에 넘길 이미지의 절대 경로를 만들 때 쓴다
 # (config/check.sh와 같은 자리, 같은 이유).
 REPO_ROOT="$(cd .. && pwd)"
 
+# Apple 대역 키보드(KK-M0, KK design 확인 3). tp-replay와 같이 out/ 아래에
+# 빌드해 소스 디렉터리에 산출물이 안 남는다.
+KK_OUT="${REPO_ROOT}/out/kk"
+if ! (cd kk && zig build --prefix "$KK_OUT" --cache-dir "${KK_OUT}/cache"); then
+  echo "FAIL: kk-apple build failed"
+  exit 1
+fi
+
+# 부팅 셋의 디스크를 한 번에 굽는다(make_disk.sh의 머리 주석).
+for kind in auto pc apple; do
+  if ! ./make_disk.sh "$kind" "${KK_OUT}/bin/kk-apple"; then
+    echo "FAIL: input disk image build failed (${kind})"
+    exit 1
+  fi
+done
+
 LOG1="$(mktemp)"
 LOG2="$(mktemp)"
+LOG3="$(mktemp)"
 # 아래 검사들은 전부 $LOG를 본다. 부팅이 둘이 되면서 이 변수가 "지금 보고
 # 있는 로그"를 가리키게 했다 — 2차 부팅 앞에서 LOG="$LOG2" 한 줄만 놓으면
 # 되고, report_failure는 언제나 현재 부팅의 로그를 보여준다.
@@ -203,8 +222,8 @@ stop_guest() {
   QEMU_PID=""
 }
 
-echo "=== boot 1/2: no disk, so the config falls back to its defaults ==="
-start_guest "$LOG"
+echo "=== boot 1/3: a disk without a keyboard= line, so the default picks per keyboard ==="
+start_guest "$LOG" -drive file="${REPO_ROOT}/out/input-auto.img",if=virtio,format=raw
 
 # ── 1) 죽일 자식을 하나 띄운다 ─────────────────────────────────────────
 # `sleep 100 &`가 아니라 foreground로 띄운다. SIGINT는 foreground process
@@ -353,6 +372,254 @@ if [ "$BASH_OK" != "1" ]; then
 fi
 echo "the pty shell is now bash (readline territory)"
 
+# ── 12) 기본값의 PS/2 키보드는 pc다 (KK design 결정 4 · 7의 가) ─────────
+# 이 부팅의 키보드는 기본 pc 기계의 i8042 AT 키보드다(bus 0x11 · vendor
+# 0x0001 — 일반 노트북 내장 키보드와 같은 모양). keyboard= 줄이 없으니
+# 기본값(auto)이 고르고, Apple vendor가 아니므로 pc다. 그러면 왼쪽 Alt는
+# Cmd 자리라 alt-left가 줄 처음이다 — 판정 10(keyboard=pc)과 같은 모양.
+#
+#   pc로 읽혔다    → echo kk ll → 출력 행 "kk ll"
+#   apple로 읽혔다 → kk echo ll → bash: kk: command not found
+#
+# 셋째 갈래는 판정 10과 같은 이유로 없다 — 줄 처음에 끼운 echo 없이는
+# "kk ll" 출력 행이 나올 수 없다.
+echo "=== 12. typing 'kk ll', then alt-left 'echo ' on the PS/2 keyboard ==="
+type_keys k k spc l l
+type_keys alt-left
+type_keys e c h o spc
+type_keys ret
+
+AUTO_PC_OK=0
+AUTO_PC_FAILED=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| kk ll" "$LOG"; then AUTO_PC_OK=1; break; fi
+  if grep -q "terminal: screen>.*kk: command not found" "$LOG"; then AUTO_PC_FAILED=1; break; fi
+  sleep 1
+done
+if [ "$AUTO_PC_FAILED" = "1" ]; then
+  report_failure "with the default keyboard setting the PS/2 keyboard's alt-left still moved by a word; it was not read as a pc keyboard"
+fi
+if [ "$AUTO_PC_OK" != "1" ]; then
+  report_failure "'kk ll' never appeared as an output row after alt-left on the PS/2 keyboard"
+fi
+echo "with the default setting, the PS/2 keyboard is a pc keyboard"
+
+# ── 13) 기본값의 Apple 키보드는 apple이다 (KK design 결정 2 · 7의 나) ────
+# input/kk의 kk-apple이 uinput으로 vendor 0x05ac인 USB 키보드를 만들고,
+# 1초 뒤 `echo mm nn`, 왼쪽 Alt + ←, Shift + x, Enter를 스스로 친다. 같은
+# 부팅의 판정 12와 같은 물리 키인데, 이 키보드는 apple이라 Option+←(단어
+# 이동)여야 한다. 두 판정이 함께 초록이면 키보드마다 따로 골랐다는 것이다.
+#
+#   apple로 읽혔다 → echo mm Xnn → 출력 행 "mm Xnn"
+#   pc로 읽혔다    → Xecho mm nn → bash: Xecho: command not found
+#   맨 ←가 샜다    → echo mm nXn → 출력 행 "mm nXn"
+#
+# `&`로 띄우는 이유는 도구의 머리 주석에 있다 — 도구가 친 키는 패널의 전경
+# 프로세스에 가므로, 셸이 전경이어야 그 키를 읽는다.
+echo "=== 13. kk-apple types 'echo mm nn', alt-left X on an Apple-vendor keyboard ==="
+type_keys slash c o n f i g slash k k slash k k minus a p p l e spc shift-7 ret
+
+KK_OPEN=0
+for _ in $(seq 1 30); do
+  if grep -aqE 'terminal: keyboard> open /dev/input/event[0-9]+ .*name=TARS KK Keyboard' "$LOG"; then KK_OPEN=1; break; fi
+  sleep 1
+done
+if [ "$KK_OPEN" != "1" ]; then
+  report_failure "terminal never opened the kk-apple keyboard (no 'keyboard> open … name=TARS KK Keyboard')"
+fi
+
+AUTO_APPLE_OK=0
+AUTO_APPLE_FAILED=0
+AUTO_APPLE_PLAIN=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| mm Xnn" "$LOG"; then AUTO_APPLE_OK=1; break; fi
+  if grep -q "terminal: screen>.*Xecho: command not found" "$LOG"; then AUTO_APPLE_FAILED=1; break; fi
+  if grep -q "terminal: screen>.*| mm nXn" "$LOG"; then AUTO_APPLE_PLAIN=1; break; fi
+  sleep 1
+done
+if [ "$AUTO_APPLE_FAILED" = "1" ]; then
+  report_failure "the Apple-vendor keyboard's alt-left went to the start of the line; it was read as a pc keyboard"
+fi
+if [ "$AUTO_APPLE_PLAIN" = "1" ]; then
+  report_failure "the Apple-vendor keyboard's alt-left leaked a bare arrow key: the line ran as 'echo mm nXn'"
+fi
+if [ "$AUTO_APPLE_OK" != "1" ]; then
+  report_failure "'mm Xnn' never appeared as an output row after kk-apple typed"
+fi
+
+# 도구가 장치를 없앴다 — 빠진 키보드를 닫는 길(KH)도 같은 부팅에서 지난다.
+KK_CLOSED=0
+for _ in $(seq 1 15); do
+  if grep -aqE 'terminal: keyboard> close /dev/input/event[0-9]+' "$LOG"; then KK_CLOSED=1; break; fi
+  sleep 1
+done
+if [ "$KK_CLOSED" != "1" ]; then
+  report_failure "the kk-apple keyboard never closed after the tool exited"
+fi
+echo "with the default setting, the Apple-vendor keyboard is an apple keyboard"
+
+stop_guest
+
+# design doc 위험 4의 관측. --no-config로 뜬 셸이 smkx를 보내지 않으면
+# DECCKM은 계속 꺼져 있고 `ESC O` 경로는 게이트가 한 번도 밟지 않는다.
+# 실패가 아니라 어느 쪽이었는지 기록이다 — 안 밟은 경로는 input_test가
+# 덮는다(main.zig가 매 키마다 decckm=을 찍는다).
+if grep -q "decckm=true" "$LOG"; then
+  echo "DECCKM was on: this run exercised the ESC O form"
+else
+  echo "DECCKM stayed off: this run only exercised the ESC [ form (input_test covers the other)"
+fi
+
+# 디스크의 tars.conf에 keyboard= 줄이 없으므로 키보드 종류는 기본값이다.
+# 세 줄이 그것을 못 박는다 — 파일을 읽었고, 기본값이 auto이고, 그 값이
+# argv를 건너 terminal에 닿았다(KK design 결정 4 · 5). 2차 · 3차의 강제한
+# 값과 대조군이 된다.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG"; then
+  report_failure "the first boot did not load /config/tars.conf (did the disk attach?)"
+fi
+if ! grep -q "tars-init: config shell=fish keyboard=auto" "$LOG"; then
+  report_failure "the default keyboard setting is not auto"
+fi
+if ! grep -q "terminal: keyboard=auto (swap_alt_meta=per keyboard)" "$LOG"; then
+  report_failure "the terminal did not receive keyboard=auto on its argv"
+fi
+
+# 키가 아예 도달하지 않은 경우와 도달했지만 뜻이 틀린 경우를 구분한다.
+# main.zig가 키를 PTY로 보낼 때마다 이 줄을 찍는다.
+if ! grep -q "terminal: key>" "$LOG"; then
+  report_failure "the terminal never forwarded a key to the PTY"
+fi
+
+if grep -q "Attempted to kill init" "$LOG"; then
+  report_failure "kernel panicked because PID 1 exited"
+fi
+
+echo "--- init log (boot 1) ---"
+grep 'tars-init:' "$LOG" || true
+
+# ══════════════════════════════════════════════════════ 2차 부팅 (keyboard=pc)
+#
+# 여기서 증명하는 것은 design doc 목표 5다 — /config/tars.conf의 한 줄이
+# Alt와 Meta의 의미를 맞바꾼다. IP-M2 때 1차 부팅은 디스크가 없어 설정이
+# 언제나 기본값(apple)이라, 이 경로를 밟을 방법이 구조적으로 없었다
+# (docs/decisions/project_gate_chain_composition.md의 "게이트가 구조적으로
+# 밟을 수 없는 경로"). DECCKM과 달리 이건 우리가 켤 수 있는 것이므로
+# 부팅을 하나 더 붙였다.
+#
+# 두 검사는 3차 부팅(keyboard=apple)과 정확히 반대 모양이다.
+#     alt-left     : 3차 = 단어 이동 → 2차 = 줄 처음
+#     meta_l-left  : 3차 = 줄 처음   → 2차 = 단어 이동
+# 둘 다 보는 이유는 "정말 교환인가"를 보기 위해서다. 한쪽만 보면 "Alt를
+# Cmd로 바꿨을 뿐 Meta는 그대로"인 구현도 통과한다.
+echo "=== boot 2/3: same kernel, a disk that says keyboard=pc ==="
+
+LOG="$LOG2"
+start_guest "$LOG" -drive file="${REPO_ROOT}/out/input-pc.img",if=virtio,format=raw
+
+# 설정이 파일 → PID 1 → argv → terminal로 흘렀는지를 로그 네 줄로 본다.
+# 화면 검사가 실패했을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이 틀렸다"를
+# 가르는 것이 이 넷이다.
+if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG"; then
+  report_failure "the second boot did not load /config/tars.conf (did the disk attach?)"
+fi
+if ! grep -q "tars-init: config shell=bash keyboard=pc" "$LOG"; then
+  report_failure "the second boot did not parse both keys out of the config file"
+fi
+if ! grep -q "terminal: keyboard=pc (swap_alt_meta=true)" "$LOG"; then
+  report_failure "the terminal did not receive keyboard=pc on its argv"
+fi
+if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
+  report_failure "the pty shell is not bash on the second boot"
+fi
+echo "boot 2: the config on disk selected bash and a pc keyboard"
+
+# ── 10) pc에서 alt-left는 Cmd 의미(줄 처음)다 ─────────────────────────
+# 3차 부팅(apple)에서 이 키는 단어 이동이다. 같은 물리 키가 반대로 동작하는
+# 것이 곧 교환의 증거다.
+#
+#   swap 동작   → echo gg hh → 출력 행 "gg hh"
+#   swap 안 됨  → gg echo hh → bash: gg: command not found
+echo "=== typing 'gg hh', then alt-left 'echo ' ==="
+type_keys g g spc h h
+type_keys alt-left
+type_keys e c h o spc
+type_keys ret
+
+PC_CMD_OK=0
+PC_CMD_FAILED=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| gg hh" "$LOG"; then PC_CMD_OK=1; break; fi
+  if grep -q "terminal: screen>.*command not found" "$LOG"; then PC_CMD_FAILED=1; break; fi
+  sleep 1
+done
+if [ "$PC_CMD_FAILED" = "1" ]; then
+  report_failure "alt-left still moved by a word on a pc keyboard; the swap did not happen"
+fi
+if [ "$PC_CMD_OK" != "1" ]; then
+  report_failure "'gg hh' never appeared as an output row after alt-left"
+fi
+echo "on a pc keyboard, alt+left means beginning-of-line"
+
+# ── 11) pc에서 meta_l-left는 Option 의미(단어 이동)다 ─────────────────
+#   swap 동작   → echo ii Xjj → 출력 행 "ii Xjj"
+#   swap 안 됨  → Xecho ii jj → bash: Xecho: command not found
+#   맨 ←가 샜다 → echo ii jXj → 출력 행 "ii jXj"
+echo "=== typing 'echo ii jj', then meta_l-left X ==="
+type_keys e c h o spc i i spc j j
+type_keys meta_l-left
+type_keys shift-x
+type_keys ret
+
+PC_OPT_OK=0
+PC_OPT_PLAIN=0
+for _ in $(seq 1 30); do
+  if grep -q "terminal: screen>.*| ii Xjj" "$LOG"; then PC_OPT_OK=1; break; fi
+  if grep -q "terminal: screen>.*| ii jXj" "$LOG"; then PC_OPT_PLAIN=1; break; fi
+  sleep 1
+done
+
+stop_guest
+
+if [ "$PC_OPT_PLAIN" = "1" ]; then
+  report_failure "meta_l-left leaked a bare arrow key on the second boot"
+fi
+if [ "$PC_OPT_OK" != "1" ]; then
+  report_failure "meta_l-left did not move by a word on a pc keyboard; the swap is one-way, not a swap"
+fi
+echo "on a pc keyboard, meta+left means backward-word"
+
+if grep -q "Attempted to kill init" "$LOG"; then
+  report_failure "kernel panicked because PID 1 exited on the second boot"
+fi
+
+echo "--- init log (boot 2) ---"
+grep 'tars-init:' "$LOG" || true
+
+# ══════════════════════════════════════════════════ 3차 부팅 (keyboard=apple)
+#
+# KK-M0. 판정 8 · 9는 IP-M2부터 디스크 없는 1차에서 기본값(apple)으로 봤다.
+# 기본값이 auto가 되면서(KK design 결정 4) 그 자리의 PS/2 키보드는 pc다 —
+# 그래서 두 판정이 값을 적은 이 부팅으로 왔다. 값을 적었으므로 기본값이
+# 무엇이든 모든 키보드가 apple이고, 판정은 IP-M2 때 글자 그대로다.
+echo "=== boot 3/3: same kernel, a disk that says keyboard=apple ==="
+
+LOG="$LOG3"
+start_guest "$LOG" -drive file="${REPO_ROOT}/out/input-apple.img",if=virtio,format=raw
+
+if ! grep -q "tars-init: config shell=bash keyboard=apple" "$LOG"; then
+  report_failure "the third boot did not parse both keys out of the config file"
+fi
+if ! grep -q "terminal: keyboard=apple (swap_alt_meta=false)" "$LOG"; then
+  report_failure "the terminal did not receive keyboard=apple on its argv"
+fi
+
+# 셸이 처음부터 bash라 판정 7의 `bash --norc`가 없다. 2차와 같이 spawn 줄로
+# 셸을 본다 — 프롬프트 모양은 설정에 따라 달라 글자로 안 본다.
+if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
+  report_failure "the pty shell is not bash on the third boot"
+fi
+echo "boot 3: the config on disk selected bash and an apple keyboard"
+
 # ── 8) Option+← = 단어 단위 왼쪽 이동 (design doc 결정 8) ──────────────
 # `echo aa bb`를 친 뒤 Option+←로 단어 하나를 건너뛰고 X를 끼운다.
 #
@@ -427,139 +694,11 @@ echo "cmd+left jumped to the beginning of the line"
 
 stop_guest
 
-# design doc 위험 4의 관측. --no-config로 뜬 셸이 smkx를 보내지 않으면
-# DECCKM은 계속 꺼져 있고 `ESC O` 경로는 게이트가 한 번도 밟지 않는다.
-# 실패가 아니라 어느 쪽이었는지 기록이다 — 안 밟은 경로는 input_test가
-# 덮는다(main.zig가 매 키마다 decckm=을 찍는다).
-if grep -q "decckm=true" "$LOG"; then
-  echo "DECCKM was on: this run exercised the ESC O form"
-else
-  echo "DECCKM stayed off: this run only exercised the ESC [ form (input_test covers the other)"
-fi
-
-# 디스크를 안 물었으므로 /config mount가 실패하고 설정은 전부 기본값이다.
-# 이 줄이 그것을 못 박는다 — 2차 부팅의 keyboard=pc와 대조군이 된다.
-if ! grep -q "tars-init: config shell=fish keyboard=apple" "$LOG"; then
-  report_failure "the diskless boot did not fall back to the default config"
-fi
-if ! grep -q "terminal: keyboard=apple (swap_alt_meta=false)" "$LOG"; then
-  report_failure "the terminal did not receive keyboard=apple on its argv"
-fi
-
-# 키가 아예 도달하지 않은 경우와 도달했지만 뜻이 틀린 경우를 구분한다.
-# main.zig가 키를 PTY로 보낼 때마다 이 줄을 찍는다.
-if ! grep -q "terminal: key>" "$LOG"; then
-  report_failure "the terminal never forwarded a key to the PTY"
-fi
-
 if grep -q "Attempted to kill init" "$LOG"; then
-  report_failure "kernel panicked because PID 1 exited"
+  report_failure "kernel panicked because PID 1 exited on the third boot"
 fi
 
-echo "--- init log (boot 1) ---"
-grep 'tars-init:' "$LOG" || true
-
-# ══════════════════════════════════════════════════════ 2차 부팅 (keyboard=pc)
-#
-# 여기서 증명하는 것은 design doc 목표 5다 — /config/tars.conf의 한 줄이
-# Alt와 Meta의 의미를 맞바꾼다. 1차 부팅은 디스크가 없어 설정이 언제나
-# 기본값(apple)이라, 이 경로를 밟을 방법이 구조적으로 없었다
-# (docs/decisions/project_gate_chain_composition.md의 "게이트가 구조적으로
-# 밟을 수 없는 경로"). DECCKM과 달리 이건 우리가 켤 수 있는 것이므로
-# 부팅을 하나 더 붙였다.
-#
-# 두 검사는 1차 부팅과 정확히 반대 모양이다.
-#     alt-left     : 1차 = 단어 이동 → 2차 = 줄 처음
-#     meta_l-left  : 1차 = 줄 처음   → 2차 = 단어 이동
-# 둘 다 보는 이유는 "정말 교환인가"를 보기 위해서다. 한쪽만 보면 "Alt를
-# Cmd로 바꿨을 뿐 Meta는 그대로"인 구현도 통과한다.
-echo "=== boot 2/2: same kernel, a disk that says keyboard=pc ==="
-
-if ! ./make_disk.sh; then
-  echo "FAIL: input disk image build failed"
-  exit 1
-fi
-
-LOG="$LOG2"
-start_guest "$LOG" -drive file="${REPO_ROOT}/out/input.img",if=virtio,format=raw
-
-# 설정이 파일 → PID 1 → argv → terminal로 흘렀는지를 로그 네 줄로 본다.
-# 화면 검사가 실패했을 때 "설정이 안 왔다"와 "설정은 왔는데 뜻이 틀렸다"를
-# 가르는 것이 이 넷이다.
-if ! grep -q "tars-init: loaded /config/tars.conf" "$LOG"; then
-  report_failure "the second boot did not load /config/tars.conf (did the disk attach?)"
-fi
-if ! grep -q "tars-init: config shell=bash keyboard=pc" "$LOG"; then
-  report_failure "the second boot did not parse both keys out of the config file"
-fi
-if ! grep -q "terminal: keyboard=pc (swap_alt_meta=true)" "$LOG"; then
-  report_failure "the terminal did not receive keyboard=pc on its argv"
-fi
-if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
-  report_failure "the pty shell is not bash on the second boot"
-fi
-echo "boot 2: the config on disk selected bash and a pc keyboard"
-
-# ── 10) pc에서 alt-left는 Cmd 의미(줄 처음)다 ─────────────────────────
-# 1차 부팅에서 이 키는 단어 이동이었다. 같은 물리 키가 반대로 동작하는
-# 것이 곧 교환의 증거다.
-#
-#   swap 동작   → echo gg hh → 출력 행 "gg hh"
-#   swap 안 됨  → gg echo hh → bash: gg: command not found
-echo "=== typing 'gg hh', then alt-left 'echo ' ==="
-type_keys g g spc h h
-type_keys alt-left
-type_keys e c h o spc
-type_keys ret
-
-PC_CMD_OK=0
-PC_CMD_FAILED=0
-for _ in $(seq 1 30); do
-  if grep -q "terminal: screen>.*| gg hh" "$LOG"; then PC_CMD_OK=1; break; fi
-  if grep -q "terminal: screen>.*command not found" "$LOG"; then PC_CMD_FAILED=1; break; fi
-  sleep 1
-done
-if [ "$PC_CMD_FAILED" = "1" ]; then
-  report_failure "alt-left still moved by a word on a pc keyboard; the swap did not happen"
-fi
-if [ "$PC_CMD_OK" != "1" ]; then
-  report_failure "'gg hh' never appeared as an output row after alt-left"
-fi
-echo "on a pc keyboard, alt+left means beginning-of-line"
-
-# ── 11) pc에서 meta_l-left는 Option 의미(단어 이동)다 ─────────────────
-#   swap 동작   → echo ii Xjj → 출력 행 "ii Xjj"
-#   swap 안 됨  → Xecho ii jj → bash: Xecho: command not found
-#   맨 ←가 샜다 → echo ii jXj → 출력 행 "ii jXj"
-echo "=== typing 'echo ii jj', then meta_l-left X ==="
-type_keys e c h o spc i i spc j j
-type_keys meta_l-left
-type_keys shift-x
-type_keys ret
-
-PC_OPT_OK=0
-PC_OPT_PLAIN=0
-for _ in $(seq 1 30); do
-  if grep -q "terminal: screen>.*| ii Xjj" "$LOG"; then PC_OPT_OK=1; break; fi
-  if grep -q "terminal: screen>.*| ii jXj" "$LOG"; then PC_OPT_PLAIN=1; break; fi
-  sleep 1
-done
-
-stop_guest
-
-if [ "$PC_OPT_PLAIN" = "1" ]; then
-  report_failure "meta_l-left leaked a bare arrow key on the second boot"
-fi
-if [ "$PC_OPT_OK" != "1" ]; then
-  report_failure "meta_l-left did not move by a word on a pc keyboard; the swap is one-way, not a swap"
-fi
-echo "on a pc keyboard, meta+left means backward-word"
-
-if grep -q "Attempted to kill init" "$LOG"; then
-  report_failure "kernel panicked because PID 1 exited on the second boot"
-fi
-
-echo "--- init log (boot 2) ---"
+echo "--- init log (boot 3) ---"
 grep 'tars-init:' "$LOG" || true
 
 echo "PASS"

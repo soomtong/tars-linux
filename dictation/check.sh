@@ -207,7 +207,8 @@ mkdir -p ../out "$WORK/seed/services.d"
 cp probe.sh "$WORK/seed/services.d/probe"
 chmod 0755 "$WORK/seed/services.d/probe"
 cp "$WORK/tls.pem" "$WORK/seed/vd0-tls.pem"
-printf 'net=dhcp\n' > "$WORK/seed/tars.conf"
+# KK: keyboard=apple은 QEMU 키보드를 Apple로 읽게 한다 — 이 체인은 오른쪽 Cmd를 친다(KK design 결정 8).
+printf 'net=dhcp\nkeyboard=apple\n' > "$WORK/seed/tars.conf"
 printf 'vd0-test-key\n' > "$WORK/seed/groq.key"
 rm -f "$DISK"
 truncate -s 16M "$DISK"
@@ -540,7 +541,8 @@ STUBLOG_B="$WORK/stub_b.log"
 LOG="$(mktemp)"
 
 mkdir -p "$WORK/seed_b/services.d"
-printf 'net=dhcp\n' > "$WORK/seed_b/tars.conf"
+# KK: 부팅 A와 같은 이유의 keyboard=apple(KK design 결정 8).
+printf 'net=dhcp\nkeyboard=apple\n' > "$WORK/seed_b/tars.conf"
 printf 'vd1-test-key\n' > "$WORK/seed_b/groq.key"
 printf '%s\n' '# written by the VD chain, boot B' 'transcribe_url = http://10.0.2.100:8080/ok/b' \
   'cleanup_url = http://10.0.2.100:8080/chat/ok/b' > "$WORK/seed_b/dictation.conf"

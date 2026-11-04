@@ -70,6 +70,8 @@ BT(2026-11-02)가 남긴 것.
       protection fault`로 죽어 가상 컨트롤러 둘이 사라졌고, 재시작한 bluetoothd가 `controllers 0`을 봤다(`after the restart
       bluetoothd does not know the pairing`). 같은 산출물로 체인만 다시 돌린 두 판은 crash 없이 초록이다. Debian `bluez-test-tools`의
       바이너리이고 게이트 전용이다(initrd에 없다). 다시 나면 `/tmp/btvirt.log`를 콘솔로 꺼내는 것부터.
+      두 번째(KK-M0 루트 게이트, 2026-11-04): `btvirt[105]`, 같은 서명. 체인만 다시 돌린 판은 초록이다. 둘 다 루트 게이트의
+      동시 레인 안에서만 났다 — 부하와 상관이 있는지가 다음 단서다.
 - [ ] Intel BT firmware 28MB를 전부 싣는다(BT design 결정 2). 실기가 쓰는 칩이 몇 개로 정해지면 그 `ibt-<hw>` 계열만 남겨
       initrd를 20MB 줄일 수 있다 — 지금은 근거가 없어 전부다.
 

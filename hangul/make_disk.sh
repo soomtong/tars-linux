@@ -51,6 +51,9 @@ hangul_layout=sebeol_3p3
 # hangul_toggle — `hangul_key`가 빠진 것이 요점이다. 기본값은 넷이고,
 #                 설정을 통째로 무시하는 코드는 그 넷을 로그에 찍는다.
 hangul_toggle=shift_space,capslock_tap,lctrl_tap
+# keyboard=apple — QEMU 키보드를 Apple로 읽게 한다. 이 체인은 Cmd를 친다
+#                  (KK design 결정 8 — 기본값 auto에서 QEMU 키보드는 pc다).
+keyboard=apple
 EOF
 
 truncate -s "$SIZE" "$IMG"

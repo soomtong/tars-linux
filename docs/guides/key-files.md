@@ -101,6 +101,8 @@
   키보드 칸 · `takeKeyboard` · `closeKeyboard` · `readKeyboards`는 `main.zig`, 상태는 `input.State` 하나를 모든 키보드가 같이 쓴다. `main.zig`의 의도 switch에 `else`가 없다.
 - `touchpad.zig` — MT 프로토콜 B를 `pointer.Frame`으로(PD-M3). 상수 셋(탭 180ms · 2% · 배율)은 실기 없이 정한 출발값이다 —
   손에 안 맞으면 여기와 `touchpad_test`를 함께 고친다. 게이트는 `pointer/replay/tp-replay`(uinput)로 본다.
+- `input/kk/kk-apple` — 게이트 전용 Apple 대역 키보드(KK-M0). uinput으로 vendor 0x05ac인 USB 키보드를 만들고 정해진 키를
+  스스로 친 뒤 없앤다. 친 키가 전경 프로세스에 가므로 셸에서 `&`로 띄운다. `input` 체인 1차 부팅의 디스크에 실린다.
 - `layout.zig` — 패널 트리와 사각형 산수(WP-M0). 순수 모듈이고 `layout_test`가
   호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
   `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가

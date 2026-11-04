@@ -2,7 +2,7 @@
 
 접두사: KK
 
-Status: 설계(2026-11-04) — 결정 8 · 위험 4. M0부터.
+Status: KK-M0 끝남(2026-11-04) — 다음 KK-M1. 결정 8 · 위험 4 · 실측 1~3.
 
 사용자가 정했다(2026-11-04). 방식은 `auto` 값 + vendor 판정이다(결정 1 · 2). 기본값은 `auto`로 바꾼다(결정 4 — 초안의 추천은
 `apple` 유지였다). 게이트는 `input` 체인의 부팅으로 보고(결정 7), Cmd · Option을 보내는 체인은 디스크에 `keyboard=apple`을
@@ -165,12 +165,13 @@ init의 파싱은 enum 화이트리스트라 `auto`가 저절로 통과한다. �
 새 판정(번호는 M0 plan이 매긴다):
 
 - (가) 기본값의 QEMU 키보드는 `pc`다. 1차에서 `terminal: keyboard=auto` 줄, `keyboard> open … kind=pc … vendor=0627`, 그리고
-  `alt-left`가 줄 처음으로 간다(지금 판정 10과 같은 모양).
+  `alt-left`가 줄 처음으로 간다(지금 판정 10과 같은 모양). M0 정정: `input` 체인의 키보드는 PS/2라 찍힐 id는
+  `bus=0011 vendor=0001`이다(실측 1).
 - (나) 기본값의 Apple 키보드는 `apple`이다. 1차에서 셸로 도구를 띄우면 vendor 0x05ac인 키보드가 생기고(`keyboard> open … kind=apple
   … vendor=05ac`), 도구가 스스로 `echo aa bb` · Alt+← · `X` · Enter를 친다. 줄이 `echo aa Xbb`로 실행된다(지금 판정 8과 같은 모양).
   같은 부팅의 (가)와 뜻이 반대이므로, 칸마다 다르게 골랐다는 증거다.
 - (다) 섞인 조합 — QEMU 키보드(pc)의 물리 Alt(= Cmd)를 쥔 채 Apple 대역으로 `←`를 친다. 줄 처음으로 가야 한다. 도구가 바깥 키를
-  기다리는 모양이 까다로우면(위험 2) 뺀다. (가) · (나)로 결정 3이 선다.
+  기다리는 모양이 까다로우면(위험 2) 뺀다. (가) · (나)로 결정 3이 선다. → M0에서 뺐다(실측 2).
 
 지금 코드에서 1차는 init이 `keyboard=` 줄 없이 `apple`을 쓰므로 (가)가 빨갛고, (나)는 우연히 초록이다. M0의 빨강은 (가)이고,
 (나)는 M1 뒤 mutation이 붙박는다.
@@ -250,3 +251,45 @@ M0이 세 부팅을 돌려 초록을 확인한다. 흔들리는 판정이 있으
 - KK-M1 — `screen_args`(`auto`), init(기본값 · 견본 주석 · 단위 검사의 글자), terminal(`EVIOCGID` · 결정 2의 함수 · 칸별 값 · 로그
   줄), 단위 검사, `config` 체인과 `open` 줄 판정의 글자, 체인 초록, mutation 셋, 루트 게이트, 문서 닫기(KH design 비목표 1 · DM
   비목표 1, `carryover.md` KH 넷째 항목, completed · 소개 페이지 · decisions · HANDOFF).
+
+## 실측 (M0, 2026-11-04)
+
+### 실측 1 — `input` 체인의 키보드는 PS/2다
+
+`start_guest`에 `-machine`이 없어 기본 `pc` 기계의 i8042 AT 키보드(`AT Translated Set 2 keyboard`, bus 0x11 · vendor 0x0001)가
+붙는다. 결정 7 (가)의 예시 줄(`vendor=0627`)은 `keyboard` 체인의 QEMU `usb-kbd` 것이었다. M1 뒤 `input` 체인에 찍힐 줄은 `kind=pc
+bus=0011 vendor=0001`이고, 일반 노트북 내장 키보드와 같은 모양이라 판정의 뜻은 그대로다.
+
+### 실측 2 — 판정 12(가)가 기대한 이유로 빨갛고, 13(나)는 도구로 선다
+
+`input` 체인의 일회용 사본(판정 12와 1차 끝 로그 판정의 `report_failure`를 `echo "RED: …"`로 바꾼 것, 지웠다)을 `aab1d97`의
+terminal · init로 한 판 돌렸다.
+
+- 1차: `config storage /dev/vda (label tars-input-auto)` → `loaded /config/tars.conf` → `config shell=fish keyboard=apple …`. 디스크를
+  물려도 판정 1 ~ 7은 초록이다.
+- 판정 12: `RED` — 화면에 `kk: command not found`. 지금 코드는 PS/2 키보드를 apple로 읽어 Alt+←가 단어 이동이 됐다.
+- 판정 13: 초록 — terminal이 `TARS KK Keyboard`를 열었고(uevent), 도구가 친 키가 bash에 닿아 `mm Xnn`, 도구가 끝나며 `close`.
+  design 위험 2가 닫혔다. 지금 코드는 맞바꿈이 전역 거짓이라 어느 키보드든 apple로 읽으므로 이 초록은 우연이다 — M1의 mutation
+  (a) · (b)가 값을 붙박는다.
+- 1차 끝 로그 판정 둘(`keyboard=auto` · `swap_alt_meta=per keyboard`): `RED`, M1의 값이다.
+- 2차(`tars-input-pc`) · 3차(`tars-input-apple`): 초록. 옮긴 판정 8 · 9가 IP-M2 때 글자 그대로 3차에서 선다.
+
+판정 (다)(섞인 조합)는 넣지 않았다. HMP `sendkey`는 키를 쥔 채 둘 수 없고, 도구가 바깥 키를 기다리는 모양은 위험 2를 키운다. 칸을
+건너는 조합은 DM이 Shift로 체인에서 이미 보고, M1의 `input_test`가 Alt · Meta로 본다.
+
+결정 8의 디스크 없던 부팅 셋에 붙인 판정은 plan과 하나 다르다. 기본값이 아직 `apple`인 동안은 `config … keyboard=apple` 줄만으로는
+디스크가 안 붙어도 초록이라, `tars-init: loaded /config/tars.conf` 줄을 함께 본다.
+
+### 실측 3 — 루트 게이트
+
+25/27, prebuild 332초 · lanes 587초, 잘린 로그 줄은 모든 체인에서 0이다.
+
+- `IP-M2`(`input`): 판정 12에서 빨강 — 실측 2와 같은 이유(`… the PS/2 keyboard's alt-left still moved by a word`). M1 커밋까지
+  기대값이다.
+- 결정 8의 다섯 체인은 초록이다 — `CM-M2`(`copy`, 173초) · `CB-M0`(`pane`, 56초) · `PD-M4`(`pointer`, 122초) · `VD-M0`
+  (`dictation`, 92초) · `HI-M3`(`hangul`, 78초). 새로 물린 디스크와 `loaded` · `keyboard=apple` 판정이 다 섰다. 위험 4는 나타나지
+  않았다.
+- `BT-M2`(`bluetooth`): 빨강. `traps: btvirt[105] general protection fault` → 재시작한 bluetoothd가 `controllers 0` —
+  `carryover.md`의 btvirt 간헐과 같은 서명이다. 이 milestone은 그 체인을 안 건드렸고, 같은 산출물로 체인만 다시 돌린 판은 crash
+  없이 초록이다. 두 번째 기록이라 carryover 항목에 적었다.
+

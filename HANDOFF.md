@@ -1,46 +1,50 @@
-# HANDOFF: Device Modifiers(DM-M0~M1) 끝남 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Keyboard Kind(KK) 진행 중 — M0 끝 · 커밋됨, 다음은 KK-M1
 
 ## 목표
 
-진행 중인 서브프로젝트는 없다. DM(Device Modifiers)은 코드 · 체인 · 루트 게이트 · 문서 · 커밋까지 닫혔다. 소개 페이지는
-`gh-pages`에 로컬 커밋만 했다(아래 "현재 브랜치"). 다음 일은 "다음 후보"에서 사용자가 고르고, 새 서브프로젝트는 design부터.
+키보드마다 Alt · Meta 맞바꿈을 따로 고른다(KH 비목표 1). `keyboard=auto`를 더하고 기본값으로 삼는다 — terminal이 키보드를 열 때
+`EVIOCGID`의 vendor가 Apple(0x05ac, BT면 0x004c)이면 `apple`, 아니면 `pc`. design은
+`docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 사용자 결정은 그 머리(방식 auto + vendor, 기본값 auto, 게이트는 `input` 체인
+부팅 셋, Cmd · Option을 치는 체인은 `keyboard=apple`을 적는다 — A안). 사용자가 KK-M0부터 주요 결정을 위임했다(2026-11-04).
 
 ## 현재 브랜치
 
-`main` — origin보다 앞서 있다(DM design · M0 · M1 커밋, push는 사용자가 한다). `gh-pages`도 DM 커밋이 로컬에만 있다 — push는
-사용자에게 남겼다(사용자가 외출하며 마무리를 맡긴 세션, 2026-11-04).
+`main`. design(`424155d`) · M0 plan(`aab1d97`) · M0 커밋이 origin보다 앞서 있다 — push는 사용자가 한다.
 
-## 완료된 작업 (2026-11-04, 사용자 외출 중 위임)
+## 완료된 작업 (2026-11-04)
 
-- [x] DM design(`65b6f30`) — 사용자가 결정 1~7을 추천안 그대로 승인
-- [x] DM-M0(`056d010`) — `keyboard` 체인 판정 8 · 9 · 10, 고치기 전 코드에서 기대한 이유로 빨강. 커널 자동 반복이 결함을 가려
-  첫 판에 8 · 9가 초록이었다 → `stop_repeat`(design 실측 1)
-- [x] DM-M1 — `input.zig`(`mods` · `taps` 칸 배열, `anyMods`, `otherHolds`, `releaseDevice`, `Context.device`), `main.zig`(칸 번호를
-  넘긴다, `MAX_KEYBOARDS` 별칭), `input_test` 검사 88, 체인 11/11, mutation 셋 잡힘, 루트 게이트 27/27(15분 20초)
-- [x] 닫는 묶음 — design Status · 실측 1~5, KH design 결정 4 · 비목표 5 포인터, `carryover.md` KH 둘째 항목 `[x]`, `completed.md` 행,
-  `project_device_modifiers.md` + `MEMORY.md`, 소개 페이지 `data.js`(gh-pages 로컬 커밋)
+- [x] KK design · KK-M0 plan
+- [x] KK-M0 — `input/kk/kk-apple`(uinput, vendor 0x05ac, 이름 `TARS KK Keyboard`, 정해진 키를 스스로 치고 끝남 — `&`로 띄운다),
+  `input` 체인 부팅 셋(1차 `keyboard=` 줄 없음 + 도구 · 2차 pc · 3차 apple, 새 판정 12 · 13), `make_disk.sh auto|pc|apple`,
+  `gate_lib.sh`의 `apple_disk`, `copy` · `pane` A · `pointer` A에 디스크, `pane` B · `pointer` B · `dictation` A · B · `hangul`에
+  `keyboard=apple` 줄. 사본에서 판정 12만 기대한 이유로 빨강, 13은 초록(위험 2 닫힘). 루트 게이트 25/27 — `IP-M2`(기대) ·
+  `BT-M2`(btvirt 간헐, 다시 돌리면 초록). design 실측 1~3.
 
 ## 시도했으나 실패한 접근
 
-- 판정 8 · 9를 Shift만 쥔 채 보는 것: 커널 자동 반복이 지워진 비트를 다시 켜서 고치기 전 코드에서도 초록이었다 → 쥔 장치의
-  오른쪽 Ctrl을 눌렀다 떼 반복을 멈춘 뒤 본다.
-- 새 판정에 `joined_screen_dump | grep -aq`: 루트 게이트 진입 검사가 0.5초 만에 막았다(GA-M0) → `grep -a … >/dev/null`.
+- 1차 부팅 디스크 없던 체인에 `config … keyboard=apple` 판정만 두는 것: 지금 기본값이 apple이라 디스크가 안 붙어도 초록이다 →
+  `tars-init: loaded /config/tars.conf`를 함께 본다.
+- 3차 부팅에서 bash 프롬프트 글자(`bash-`)를 기다리는 것: `shell=bash`로 뜬 셸의 프롬프트는 설정에 따라 다르다 → 2차처럼 spawn 줄.
 
 ## 남은 작업
 
-- [ ] 사용자: `main`과 `gh-pages` push
-- [ ] 다음 서브프로젝트 고르기(사용자) → design → plan
+- [ ] KK-M1 plan → 구현: `screen_args`(`auto`), init(기본값 `auto` · 견본 주석 `# keyboard: apple | pc` · 기본값 글자를 보는 단위
+  검사 `reload_test` · `config_edit_test` · `config_test`), terminal(`EVIOCGID` · `input.kindOf` · `KeyboardDev.swap_alt_meta` ·
+  `open` 줄의 `kind= bus= vendor=` · 시작 줄 `swap_alt_meta=per keyboard`), `input_test`(칸 0 · 1이 다른 맞바꿈), `config` 체인의
+  기본값 글자(`TC_LIST_WANT` · `keyboard: apple -> pc` · `keeps keyboard=apple`), `open … name=` 판정의 글자(`keyboard` · `device` ·
+  `terminal` 체인), `site/capture.sh`의 Cmd(호스트에 `mkfs.ext2`가 있는지부터), mutation 셋(design 결정 7), 루트 게이트, 문서 닫기.
+- [ ] 사용자: push
 
 ## 핵심 파일
 
-- `docs/specs/2026-11-04-tars-device-modifiers-design.md` — DM 결정 · 실측(방금 닫은 것)
-- `terminal/src/input.zig` — `MAX_KEYBOARDS` · `Mods` · `Taps`, `State.mods` · `taps`, `anyMods` · `markTapConsumed` · `otherHolds` ·
-  `releaseDevice`, `Context.device`
-- `keyboard/check.sh` — KH 판정 1~7b + DM 판정 8~10, `stop_repeat`
-- `check.sh`의 `CHAINS` — 체인 27(DM은 체인을 안 더했다)
+- `docs/specs/2026-11-04-tars-keyboard-kind-design.md` — KK 결정 · 실측
+- `input/kk/main.zig` — Apple 대역 키보드, `input/check.sh` — 판정 12(가) · 13(나), 3차의 8 · 9
+- `gate_lib.sh`의 `apple_disk`
+- `terminal/src/main.zig`의 `takeKeyboard` · `readKeyboard`(`Context.swap_alt_meta`), `shared/screen_args.zig`의 `Keyboard`
 
 ## 다음 에이전트에게
 
+`input` 체인은 KK-M1 커밋까지 판정 12에서 빨강이 정상이다 — 이 사이 루트 게이트는 26/27(btvirt 간헐이 겹치면 25/27)이다.
 이 저장소의 규칙(CLAUDE.md): 큰 편집은 무엇이 어떤 모양으로 들어가는지 먼저 설명, 매 편집 뒤 `git diff --stat`과
 `git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명, 커밋은 사용자 승인 뒤.
 init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서. 체인 하나 돌리기:

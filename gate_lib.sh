@@ -311,3 +311,21 @@ cut_log_lines() {
     }
   ' $files
 }
+
+# ── Apple 키보드로 읽게 하는 설정 디스크 (KK-M0) ──────────────────────
+#
+# KK design 결정 8. 기본값이 auto라(결정 4) QEMU 키보드(vendor 0x0627 · PS/2 0x0001)는
+# pc로 읽힌다. Cmd · Option을 치는 체인 가운데 설정 디스크가 없던 부팅이 이 디스크를
+# 물어 지금 뜻(meta_l = Cmd)을 지킨다. 디스크가 있는 부팅은 자기 tars.conf에 같은 줄을
+# 적는다. 키보드 종류 자체는 input 체인이 본다.
+#
+# $1 = 이미지 경로, $2 = 라벨(init이 고르도록 `tars-`로 시작, ext2 라벨은 16자까지).
+apple_disk() {
+  local seed
+  seed="$(mktemp -d)"
+  printf 'keyboard=apple\n' > "$seed/tars.conf"
+  rm -f "$1"
+  truncate -s 16M "$1"
+  mkfs.ext2 -F -q -m 0 -L "$2" -d "$seed" "$1"
+  rm -rf "$seed"
+}

@@ -509,6 +509,11 @@ echo "the kernel carries the PS/2, SMBus and I2C-HID touchpad paths and uinput, 
 # 부팅 A — USB 마우스 하나(PD-M0~M2). i8042.noaux가 PS/2 마우스 포트를 끈다 —
 # 위의 머리 주석과 PD-M3 plan 확정 9. 검사 1의 "정확히 하나"가 그것이 먹혔다는 것도
 # 함께 본다(PS/2 마우스가 생기면 open이 둘이다).
+# KK design 결정 8. 기본값 auto에서 QEMU 키보드는 pc로 읽힌다 — 이 부팅은 Cmd를 치므로
+# keyboard=apple 한 줄짜리 디스크를 물어 지금 뜻(meta_l = Cmd)을 지킨다(gate_lib.sh의 apple_disk).
+mkdir -p "${REPO_ROOT}/out"
+APPLE_DISK="${REPO_ROOT}/out/pd-a-apple.img"
+apple_disk "$APPLE_DISK" tars-pd-a
 qemu-system-x86_64 \
   -nic none \
   -m "$GUEST_MEM" \
@@ -521,6 +526,7 @@ qemu-system-x86_64 \
   -usb -device usb-mouse,id=pdboot \
   -serial file:"$LOG" \
   -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
+  -drive file="$APPLE_DISK",if=virtio,format=raw \
   -no-reboot &
 QEMU_PID=$!
 
@@ -541,6 +547,13 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 [ "$CONNECTED" = "1" ] || report_failure "could not connect to the QEMU monitor"
+
+# 디스크가 붙어 파일을 읽었고(loaded), 그 값이 apple이다(KK-M0). 기본값이 apple인 동안은
+# config 줄만으로는 디스크가 안 붙어도 초록이라, loaded 줄이 디스크가 섰다는 증거다.
+grep -a 'tars-init: loaded /config/tars.conf' "$LOG" >/dev/null ||
+  report_failure "boot A: the keyboard=apple disk was not loaded (no 'tars-init: loaded /config/tars.conf')"
+grep -aE 'tars-init: config shell=[^ ]+ keyboard=apple' "$LOG" >/dev/null ||
+  report_failure "boot A: the config disk did not make the keyboard apple (no 'tars-init: config … keyboard=apple')"
 
 # ── 검사 1: 부팅 때의 USB 마우스를 열고, 키보드와 전원 버튼은 건너뛴다 ──
 #
@@ -1461,7 +1474,8 @@ QEMU_PID=""
 # 있는 것은 안 찍는다. 이름은 PD-M3 plan 확정 4가 커널 소스에서 뽑았다.
 SEED="$(mktemp -d)"
 mkdir -p "$SEED/pd"
-printf 'shell=fish\n' > "$SEED/tars.conf"
+# KK: keyboard=apple은 QEMU 키보드를 Apple로 읽게 한다 — 이 체인은 Cmd를 친다(KK design 결정 8).
+printf 'shell=fish\nkeyboard=apple\n' > "$SEED/tars.conf"
 cp "$REPLAY" "$SEED/pd/tp-replay"
 chmod 0755 "$SEED/pd/tp-replay"
 cat > "$SEED/pd/drivers" <<'DRIVERS'
