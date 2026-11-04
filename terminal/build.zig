@@ -435,6 +435,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(pacing_test);
 
+    // scale_test도 호스트에서 돈다(HS-M0). 배율 고르기와 사각형 늘리기는 순수 산수라
+    // pacing_test와 같은 모양이다. 물리 dumb 버퍼에 쓰고 DIRTYFB하는 것은 `drm.zig`다.
+    const scale_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/scale_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const scale_test = b.addExecutable(.{
+        .name = "scale_test",
+        .root_module = scale_test_mod,
+    });
+    b.installArtifact(scale_test);
+
     // pty_size_test도 호스트에서 돈다(LE-M0). `pty_test`와 달리 아무것도 exec하지 않고
     // `openpty`의 쌍에서 창 크기만 되읽으므로 컨테이너의 아키텍처로 돈다.
     const pty_size_test_mod = b.createModule(.{
@@ -472,6 +485,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(logline_test).step);
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
+    test_step.dependOn(&b.addRunArtifact(scale_test).step);
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
     test_step.dependOn(&b.addRunArtifact(verify_test).step);
     test_step.dependOn(&b.addRunArtifact(dirty_test).step);

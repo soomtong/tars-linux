@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const scale = @import("scale.zig");
 
 // C 헤더는 build.zig가 번역해 `c_drm`으로 넘긴다(ZU-M1). GL-M3이 `@cImport`
 // 시절에 여기서 끄던 fortify는 패키지 번역에서는 끌 필요가 없어 켜져 있다.
@@ -214,6 +215,13 @@ pub const Framebuffer = struct {
     /// 드라이버가 DIRTYFB를 받는가(RS-M3). `open`이 한 번 물어 정한다. false면
     /// `present`가 RS-M2까지처럼 SETCRTC를 한다.
     dirty: bool,
+    /// 화면 배율(HS-M0, design 결정 1). 1이면 위 `pixels`가 곧 dumb 버퍼이고 아래 둘은 그것과
+    /// 같다 — HS 전과 같은 길이다. 1보다 크면 `width` · `height` · `pitch` · `pixels`는 논리
+    /// 크기의 heap 버퍼(그림자)이고, 화면에 걸린 dumb 버퍼는 `out` · `out_pitch`다. 그리는
+    /// 함수는 전부 논리 쪽만 보고, `present`가 바뀐 사각형을 `scale`배로 늘려 `out`에 옮긴다.
+    scale: u32 = 1,
+    out: [*]u8,
+    out_pitch: u32,
 
     pub fn setPixel(self: Framebuffer, x: u32, y: u32, color: u32) void {
         const offset = y * self.pitch + x * 4;
@@ -224,7 +232,8 @@ pub const Framebuffer = struct {
     /// 우리가 쓴 픽셀을 그대로 되읽는다. dumb buffer를 MAP_SHARED로 잡았고
     /// (`:262`) 단일 버퍼라(present가 setcrtc 한 번) 렌더 직후에 읽으면
     /// 그것이 곧 화면이다. 게이트가 "렌더러가 색을 진짜로 칠했는가"를 보는
-    /// 유일한 창구다(design 결정 7).
+    /// 유일한 창구다(design 결정 7). 배율이 1보다 크면(HS-M0) 읽는 것은 논리 그림자다 —
+    /// 늘려서 화면에 옮기기 전의 그림이고, 덤프의 좌표도 논리 좌표다.
     pub fn getPixel(self: Framebuffer, x: u32, y: u32) u32 {
         const offset = y * self.pitch + x * 4;
         const ptr: *u32 = @ptrCast(@alignCast(self.pixels + offset));
@@ -274,7 +283,11 @@ pub const Framebuffer = struct {
     /// plane의 damage가 되고, virtio-gpu는 경계 상자 하나로 합친다(`ClipList` 주석).
     ///
     /// DIRTYFB를 안 받는 드라이버(`dirty` false)는 clip을 무시하고 SETCRTC다.
+    ///
+    /// 배율이 1보다 크면 `presentScaled`다(HS-M0). 배율 1은 아래 그대로다 — 기존 체인이
+    /// 그 길을 비트 단위로 밟는다(design 결정 2).
     pub fn present(self: Framebuffer, clips: []const Clip) !void {
+        if (self.scale != 1) return self.presentScaled(clips);
         if (!self.dirty) return self.modeset();
         var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
         if (clips.len > 0) {
@@ -282,6 +295,39 @@ pub const Framebuffer = struct {
             cmd.clips_ptr = @intFromPtr(clips.ptr);
         }
         try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
+    }
+
+    /// 배율이 있는 `present`(HS design 결정 1). 논리 clip마다 그 사각형을 `scale × scale`
+    /// 블록으로 dumb 버퍼에 옮기고, `scale`을 곱한 clip으로 DIRTYFB한다. clip이 없으면(통째
+    /// 프레임) 논리 화면 전체를 옮기고 DIRTYFB도 clip 없이 보낸다 — 배율 1의 규칙과 같다.
+    ///
+    /// 논리 × `scale`이 물리보다 작으면(나누어떨어지지 않는 화면) 남는 오른쪽 · 아래 띠는
+    /// 아무도 안 쓴다. `open`이 처음에 검게 칠해 두었으므로 검은 채로 남는다.
+    fn presentScaled(self: Framebuffer, clips: []const Clip) !void {
+        const s = self.scale;
+        var big: [MAX_CLIPS]Clip = undefined;
+        if (clips.len == 0) {
+            self.upscale(.{ .x1 = 0, .y1 = 0, .x2 = self.width, .y2 = self.height });
+        } else for (clips, big[0..clips.len]) |r, *b| {
+            self.upscale(.{ .x1 = r.x1, .y1 = r.y1, .x2 = r.x2, .y2 = r.y2 });
+            b.* = .{
+                .x1 = @intCast(@as(u32, r.x1) * s),
+                .y1 = @intCast(@as(u32, r.y1) * s),
+                .x2 = @intCast(@as(u32, r.x2) * s),
+                .y2 = @intCast(@as(u32, r.y2) * s),
+            };
+        }
+        if (!self.dirty) return self.modeset();
+        var cmd: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
+        if (clips.len > 0) {
+            cmd.num_clips = @intCast(clips.len);
+            cmd.clips_ptr = @intFromPtr(&big);
+        }
+        try drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&cmd));
+    }
+
+    fn upscale(self: Framebuffer, r: scale.Rect) void {
+        scale.upscale(self.pixels, self.pitch, self.out, self.out_pitch, r, self.scale);
     }
 
     /// 같은 치수의 그림자 버퍼(DR-M1). 모든 그리기 함수가 `Framebuffer`를 값으로 받으므로,
@@ -302,6 +348,8 @@ pub const Framebuffer = struct {
             .connector_id = 0,
             .mode = self.mode,
             .dirty = false,
+            .out = pixels,
+            .out_pitch = self.pitch,
         };
     }
 };
@@ -376,7 +424,8 @@ fn findCrtc(fd: c_int, encoder_id: u32, crtc_ids: []const u32) !u32 {
     return error.NoUsableCrtc;
 }
 
-pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
+/// `want`는 설정이 강제한 배율이고 null이면 `auto`다(`scale.pick`, HS design 결정 3).
+pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8, want: ?u32) !Framebuffer {
     const fd = c.open(path, c.O_RDWR);
     if (fd < 0) return error.OpenFailed;
 
@@ -435,7 +484,7 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
     const dirty = if (drmIoctl(fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&probe))) |_| true else |_| false;
     logline.print("kms: present by {s}\n", .{if (dirty) "dirtyfb" else "setcrtc"});
 
-    return Framebuffer{
+    var fb = Framebuffer{
         .fd = fd,
         .width = dumb.width,
         .height = dumb.height,
@@ -446,5 +495,25 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8) !Framebuffer {
         .connector_id = found.connector.connector_id,
         .mode = found.mode,
         .dirty = dirty,
+        .out = @ptrCast(map_ptr),
+        .out_pitch = dumb.pitch,
     };
+
+    // 배율(HS-M0, design 결정 1 · 5). 1이면 위 값 그대로다. 1보다 크면 논리 크기를 내림으로
+    // 정하고 그 크기의 그림자를 잡아 `pixels`를 그리로 돌린다. 줄은 배율 1이어도 찍는다 —
+    // 실기에서 무엇이 골라졌는지 사람이 이 줄로 본다(design 위험 2).
+    const s = scale.pick(want, dumb.width, dumb.height);
+    if (s > 1) {
+        fb.scale = s;
+        fb.width = dumb.width / s;
+        fb.height = dumb.height / s;
+        fb.pitch = fb.width * 4;
+        const shadow_px = try allocator.alloc(u8, @as(usize, fb.pitch) * fb.height);
+        fb.pixels = shadow_px.ptr;
+        // 나머지 띠가 검게 남도록 물리 버퍼를 한 번 지운다. 드라이버가 dumb 버퍼를 0으로 주지만
+        // 그것은 계약이 아니라 구현이다.
+        @memset(fb.out[0 .. @as(usize, dumb.pitch) * dumb.height], 0);
+    }
+    logline.print("kms: scale {d} ({d}x{d} -> {d}x{d})\n", .{ s, dumb.width, dumb.height, fb.width, fb.height });
+    return fb;
 }

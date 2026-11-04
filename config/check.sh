@@ -109,9 +109,9 @@ TC_READBACK_KEYS=(e c h o spc t c shift-4 shift-9 t a r s minus c o n f i g spc
 # 없는가(TC design 결정 6).
 #
 # 줄 하나만 바꿨는지(더하지 않았는지)는 여기서 안 본다. 호스트의 config_edit_test가
-# 진짜 seed에서 열일곱 키를 하나씩 바꿔 "한 줄만 다르다"를 본다.
+# 진짜 seed에서 열여덟 키를 하나씩 바꿔 "한 줄만 다르다"를 본다.
 TC_CHECK_KEYS=(t a r s minus c o n f i g spc c h e c k ret)
-# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열일곱 키가 `key=기본값`과
+# tars-config list — 무엇을 적을 수 있는가(TC-M0 수정 1). 열여덟 키가 `key=기본값`과
 # 받는 값으로 한 줄씩 나온다. 기대하는 열셋은 아래 TC_LIST_WANT에 글자로 있다 —
 # config.zig의 기본값에서 짓지 않는 셋째 벌이라 키 하나가 빠지거나 기본값이 바뀌면
 # 여기서 멈춘다.
@@ -136,7 +136,8 @@ TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
 TC_LIST_WANT=(shell=fish keyboard=auto hangul_layout=shin_pcs latin_layout=qwerty
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off bluetooth=off esc_latin=on
-              clipboard=shared mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0)
+              clipboard=shared mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0
+              display_scale=auto)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
 # fzf 위젯에 대해 같은 구분을 했다).
 #

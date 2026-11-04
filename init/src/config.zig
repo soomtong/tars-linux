@@ -798,6 +798,8 @@ pub const TOGGLE_ARG_MAX = screen_args.TOGGLE_ARG_MAX;
 /// 포인터 설정의 값 둘(PS design 결정 1 · 3). 이름과 글자는 `screen_args`에 있다.
 pub const WheelDirection = screen_args.WheelDirection;
 pub const Accel = screen_args.Accel;
+/// 화면 배율(HS design 결정 3). 이름과 글자는 `screen_args`에 있다.
+pub const DisplayScale = screen_args.DisplayScale;
 
 /// `Toggles.parse`에 주는 sink. 모르는 이름을 이 파일의 `log`로 찍는다 — 글자는 SA 전과
 /// 같다. 설정 파일은 사람이 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이고,
@@ -870,6 +872,9 @@ pub const Config = struct {
     touchpad_scroll: WheelDirection = .natural,
     mouse_accel: Accel = .{},
     touchpad_accel: Accel = .{},
+    /// 화면 배율(HS design 결정 3). `auto`는 terminal이 물리 해상도로 고른다 — 1280×800 ·
+    /// 1920×1080은 1이고 Retina 15"(2880×1800)는 2다. 숫자는 그 배율을 강제한다.
+    display_scale: DisplayScale = .auto,
     /// 기본값이 없음(null)인 유일한 키다. 이 줄은 사람이 아니라 `tars-install`이 쓴다(HP
     /// design 결정 5) — 설치 때 물은 이름이다. 없으면 화면 셸은 root로 뜬다. 있어도
     /// `/home`이 안 붙은 부팅이면 root다(결정 3). `tars-config set`은 이 키를 거절한다
@@ -1121,6 +1126,15 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "display_scale")) {
+            // clipboard와 같은 모양의 enum 키다(HS-M0). 이름이 숫자일 뿐이다 — `4` · `1.5`는
+            // enum에 없으므로 앞의 값에 머문다.
+            c.display_scale = std.meta.stringToEnum(DisplayScale, value) orelse {
+                log("unknown display_scale '{s}', falling back to {s}", .{
+                    value, @tagName(c.display_scale),
+                });
+                continue;
+            };
         } else if (std.mem.eql(u8, key, "user")) {
             // timezone과 같은 모양이다(HP-M1). 다른 키와 달리 떨어지는 자리가 기본값이
             // 아니라 "사용자 없음"이고, 그 뜻을 로그에 적는다 — 화면 셸이 root로 뜬다.
@@ -1227,6 +1241,10 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\mouse_accel={s}
         \\# touchpad_accel: 0..10, same as mouse_accel
         \\touchpad_accel={s}
+        \\# display_scale: auto | 1 | 2 | 3
+        \\#   auto = the largest whole scale that keeps the screen at least 1280x800
+        \\#   (2 on a 2880x1800 Retina panel). Text is drawn small and enlarged
+        \\display_scale={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1246,6 +1264,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.touchpad_scroll),
         c.mouse_accel.arg(),
         c.touchpad_accel.arg(),
+        @tagName(c.display_scale),
     }) catch return error.FormatFailed;
     // `user`는 있을 때만 적는다(HP-M1 plan Task 1). 없는 기계(ISO 부팅의 seed)의 파일은
     // 이 키가 생기기 전과 바이트 하나 다르지 않다 — 그 파일을 판정하는 체인들이 그대로다.

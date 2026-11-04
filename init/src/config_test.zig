@@ -117,6 +117,8 @@ fn expect(text: []const u8, want: config.Config) !void {
         got.touchpad_scroll == want.touchpad_scroll and
         got.mouse_accel.eql(want.mouse_accel) and
         got.touchpad_accel.eql(want.touchpad_accel) and
+        // HS-M0: 열아홉째 필드(touchpad_accel 다음). 이 줄이 없으면 아래 배율 검사가 아무것도 안 보고 초록이다.
+        got.display_scale == want.display_scale and
         // HP-M1: 열넷째 필드. 이 줄이 없으면 아래 user 검사가 아무것도 안 보고 초록이다.
         config.User.eql(got.user, want.user) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
@@ -136,7 +138,7 @@ fn expect(text: []const u8, want: config.Config) !void {
 /// `expect`의 실패 줄 하나 — 필드를 순서대로.
 fn printConfig(label: []const u8, c: config.Config, toggle_buf: *[config.TOGGLE_ARG_MAX]u8, ntp_buf: *[config.NTP_ARG_MAX]u8) void {
     std.debug.print(
-        "  {s} shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s}\n",
+        "  {s} shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} bluetooth={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s} display_scale={s}\n",
         .{
             label,
             @tagName(c.shell),
@@ -156,6 +158,7 @@ fn printConfig(label: []const u8, c: config.Config, toggle_buf: *[config.TOGGLE_
             @tagName(c.touchpad_scroll),
             c.mouse_accel.arg(),
             c.touchpad_accel.arg(),
+            @tagName(c.display_scale),
         },
     );
 }
@@ -1120,6 +1123,21 @@ pub fn main() !void {
     try expect("mouse_accel=4\nmouse_accel=40\n", .{ .mouse_accel = .{ .level = 4 } });
     // pointer 체인의 부팅 C가 쓰는 줄이다.
     try expect("shell=fish\nmouse_scroll=natural\ntouchpad_scroll=normal\n", .{ .mouse_scroll = .natural, .touchpad_scroll = .normal });
+
+    // ── HS-M0: display_scale ────────────────────────────────────────────
+    //
+    // clipboard와 같은 모양의 enum 키이고 이름이 숫자다. 소수 배율은 이름이 없다(HS design
+    // 비목표 1) — `1.5` · `4`는 앞의 값에 머문다.
+    try expect("display_scale=2\n", .{ .display_scale = .@"2" });
+    try expect("display_scale=1\n", .{ .display_scale = .@"1" });
+    try expect("display_scale=3\n", .{ .display_scale = .@"3" });
+    try expect("display_scale=auto\n", .{});
+    try expect("display_scale=4\n", .{});
+    try expect("display_scale=1.5\n", .{});
+    try expect("display_scale=\n", .{});
+    try expect("display_scale=2\ndisplay_scale=x2\n", .{ .display_scale = .@"2" });
+    // hidpi 체인의 부팅 B가 쓰는 줄이다.
+    try expect("shell=fish\ndisplay_scale=1\n", .{ .display_scale = .@"1" });
 
     // ── EL-M0: esc_latin ────────────────────────────────────────────────
     //
