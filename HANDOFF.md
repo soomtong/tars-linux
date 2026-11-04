@@ -1,12 +1,35 @@
-# HANDOFF: Init Keyboard(IK-M0) 끝남 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
+# HANDOFF: Device Modifiers(DM) design 승인 — 다음은 DM-M0 plan
 
 ## 목표
 
-IK는 닫혔다(코드 · 체인 · 게이트 · 문서 · 커밋 · 소개 페이지). 다음은 아래 "다음 후보"에서 사용자가 고른다.
+진행 중인 서브프로젝트는 Device Modifiers(DM)다. 수정키 여덟과 tap 둘을 키보드 칸마다 따로 들어, 같은 수정키를 두 키보드에서
+겹쳐 쥐거나 한쪽 키보드가 빠져도 남은 쪽의 수정키가 안 풀리게 한다(KH 비목표 5 · 시나리오 S5, `carryover.md` KH 둘째 항목).
+design은 `docs/specs/2026-11-04-tars-device-modifiers-design.md` — 사용자가 결정 1~7을 추천안 그대로 승인했다(2026-11-04).
 
 ## 현재 브랜치
 
-`main` — origin보다 앞서 있다(push 안 함, 사용자가 push를 시킨 적 없음). `gh-pages`는 IK까지 push됨(`a7d4845`).
+`main`. design 커밋이 origin보다 하나 앞서 있다(push는 사용자가 한다). `gh-pages`는 IK까지(`a7d4845`).
+
+## 완료된 작업
+
+- [x] IK-M0 전부 — `8b8209d`(2026-11-03, 닫는 묶음 · 소개 페이지까지)
+- [x] DM design 작성 · 승인(2026-11-04) — 결정 7 · 위험 3 · 비목표 4, milestone 둘(M0 판정 먼저 빨강, M1 코드 · 게이트 · 닫기)
+
+## 남은 작업
+
+- [ ] DM-M0 plan — `keyboard/check.sh`에 판정 8 · 9 · 10(design 결정 7)을 넣고 지금 코드에서 셋 다 빨간지, 빨강의 이유가 design의
+  "지금 코드는" 문장과 같은지 로그로 본다. terminal 코드 0줄. 위험 1(QEMU가 두 장치의 같은 qcode 둘째 누름을 보내는가)이 여기서 열린다.
+- [ ] DM-M1 — `input.zig`(`held: [MAX_KEYBOARDS]Mods` · 칸별 `taps` · `releaseDevice` · `Context.device`), `main.zig`(`ki` 넘기기 ·
+  `MAX_KEYBOARDS`를 `input.zig`로), 단위 검사, mutation 셋, 루트 게이트, 닫는 묶음
+
+## 핵심 파일
+
+- `docs/specs/2026-11-04-tars-device-modifiers-design.md` — DM 결정
+- `terminal/src/input.zig` — `State`(수정키 bool 여덟 · `caps_tap` · `lctrl_tap` · `dictate_tap`), `handleKey`, `markTapConsumed`,
+  `releaseHeld`, `Context`
+- `terminal/src/main.zig` — `MAX_KEYBOARDS`, `readKeyboards`(칸 번호 `ki`), `readKeyboard`(`Context` 조립), `closeKeyboard`
+- `keyboard/check.sh` — KH 판정 1~7b, `qmp_key gpu`(k2) · `qmp_key -`(k1)
+- `check.sh`의 `CHAINS` — 체인 27(DM은 체인을 안 더한다)
 
 ## 다음 에이전트에게
 
@@ -14,6 +37,7 @@ IK는 닫혔다(코드 · 체인 · 게이트 · 문서 · 커밋 · 소개 페�
 `git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명, 커밋은 사용자 승인 뒤.
 init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서. 체인 하나 돌리기:
 `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./device/check.sh`.
+terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다(커널 printk가 줄을 자른다, `gate_lib.sh`).
 
 ## 지금 상태 (2026-11-03)
 
