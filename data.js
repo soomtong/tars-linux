@@ -5,15 +5,15 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-04',
-  latest: 'Keyboard Kind (KK-M0~M1)',
+  latest: 'Pointer Settings (PS-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1141,      // git rev-list --count main
+    commits: 1147,      // git rev-list --count main
     since: '2026-08-01',
     chains: 27,         // check.sh의 CHAINS
-    zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 41,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -112,6 +112,7 @@ window.TARS = {
     ['2026-11-03', 'Init Keyboard', 'IK', '키보드 없이 켜도 3초를 안 기다린다 — 키보드는 terminal이 고르므로 PID 1의 옛 탐색을 걷었다'],
     ['2026-11-04', 'Device Modifiers', 'DM', '키보드마다 수정키를 따로 든다 — 한쪽에서 Shift를 떼거나 한쪽이 빠져도 다른 키보드가 쥔 Shift는 남는다'],
     ['2026-11-04', 'Keyboard Kind', 'KK', '노트북 내장 키보드와 Apple 키보드를 함께 써도 Option · Cmd가 각자 맞다 — 기본값 `keyboard=auto`가 키보드마다 vendor로 고른다'],
+    ['2026-11-04', 'Pointer Settings', 'PS', '마우스와 터치패드의 휠 방향과 포인터 가속(0~10)을 `tars.conf`에서 종류마다 따로 고른다 — 함께 붙어 있어도 각자 자기 값'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -199,7 +200,7 @@ window.TARS = {
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 열넷',
+      title: '설정 — `tars.conf` 키 열여덟',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -215,6 +216,10 @@ window.TARS = {
         ['`firewall`', '`off` | `on` — 기본 `off`', '2026-09-27'],
         ['`bluetooth`', '`off` | `on` — 기본 `off`. `on`이면 dbus · bluetoothd가 뜬다', '2026-11-02'],
         ['`clipboard`', '`shared` | `pane` — 기본 `shared`', '2026-10-05'],
+        ['`mouse_scroll`', '`normal` | `natural` — 기본 `normal`(휠을 앞으로 밀면 위의 글). `natural`은 내용이 휠을 따라간다', '2026-11-04'],
+        ['`touchpad_scroll`', '`natural` | `normal` — 기본 `natural`(내용이 두 손가락을 따라간다, macOS)', '2026-11-04'],
+        ['`mouse_accel`', '`0`~`10` — 기본 `0`(끔). 빠르게 밀 때의 배율, 10이면 최대 4배', '2026-11-04'],
+        ['`touchpad_accel`', '`0`~`10` — 기본 `0`. `mouse_accel`과 같은 곡선', '2026-11-04'],
         ['`user`', '화면 셸의 사용자 이름. 설치기가 쓰고 `tars-config set`으로는 못 바꾼다', '2026-11-03'],
       ],
     },
@@ -332,7 +337,8 @@ window.TARS = {
         ['[Shift]+더블 · 트리플클릭', '남은 선택 위에서 [Shift]를 누른 채 두 번 누르면 단어, 세 번이면 줄 단위로 늘린다. 양 끝이 다 넓어진다', '2026-11-01'],
         ['휠', '포인터 아래 패널의 스크롤백', '2026-10-05'],
         ['마우스 보고', '자식이 켰으면 누름과 움직임을 자식에게. 우리 선택은 [Shift]+끌기', '2026-10-05'],
-        ['터치패드', '한 손가락 이동 · 탭 클릭 · 두 손가락 스크롤 · 물리 버튼. 가속과 손바닥 거부는 없다', '2026-10-05'],
+        ['터치패드', '한 손가락 이동 · 탭 클릭 · 두 손가락 스크롤 · 물리 버튼. 손바닥 거부는 없다', '2026-10-05'],
+        ['휠 방향 · 가속', '마우스와 터치패드가 각자 자기 설정을 쓴다 — 기본은 마우스 휠 앞으로 = 위의 글, 두 손가락은 내용이 손가락을 따라간다(macOS). 가속은 빠르게 밀 때만 더 멀리 가고(단계 10이면 최대 4배) 천천히 고르는 손은 1:1이다', '2026-11-04'],
       ],
     },
     {
