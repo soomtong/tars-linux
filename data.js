@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-03',
-  latest: 'Init Keyboard (IK-M0)',
+  asOf: '2026-11-04',
+  latest: 'Device Modifiers (DM-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1133,      // git rev-list --count main
+    commits: 1136,      // git rev-list --count main
     since: '2026-08-01',
     chains: 27,         // check.sh의 CHAINS
     zigKLines: 40,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -110,6 +110,7 @@ window.TARS = {
     ['2026-11-03', 'Package Manager', 'PM', '공식 Homebrew `install.sh`를 화면 셸에서 그대로 치면 끝까지 간다 — bottle을 붓고, 새 패널부터 `brew`가 PATH에'],
     ['2026-11-03', 'Mise', 'MI', '공식 `mise.run`으로 홈에 깐 mise가 node를 받고, 시스템 rc가 켜서 새 패널부터 `node`가 이름으로 — 이미지에 더한 것 없음'],
     ['2026-11-03', 'Init Keyboard', 'IK', '키보드 없이 켜도 3초를 안 기다린다 — 키보드는 terminal이 고르므로 PID 1의 옛 탐색을 걷었다'],
+    ['2026-11-04', 'Device Modifiers', 'DM', '키보드마다 수정키를 따로 든다 — 한쪽에서 Shift를 떼거나 한쪽이 빠져도 다른 키보드가 쥔 Shift는 남는다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -138,6 +139,7 @@ window.TARS = {
         ['저장장치', 'NVMe · SATA AHCI · USB storage · virtio-blk. 파일시스템은 ext2 · ext4 · VFAT · ISO9660', '2026-09-10'],
         ['키보드', 'PS/2와 USB HID. 이름이 아니라 capability로 찾고, 늦게 잡히는 USB 키보드는 3초까지 기다린다', '2026-09-10'],
         ['키보드 핫플러그', '부팅 뒤에 꽂거나 연결한 키보드(USB · Bluetooth)가 붙는 순간부터 친다. 여럿을 함께 열고 한/영 · 조합 · 수정키는 하나를 같이 쓴다. 빠지면 눌려 있던 수정키를 푼다. 키보드 없이도 뜬다', '2026-11-02'],
+        ['키보드마다 수정키', '두 키보드로 칠 때 Shift · Ctrl · Alt · Cmd를 키보드마다 따로 든다. 한쪽의 Shift + 다른 쪽의 글자는 여전히 대문자이고, 같은 Shift를 두 키보드에서 쥐었다가 한쪽에서 떼거나 한쪽 키보드가 빠져도 남은 쪽이 쥔 것은 풀리지 않는다. 겹쳐 누른 왼쪽 Ctrl · CapsLock은 한/영 tap이 아니다', '2026-11-04'],
         ['키보드 없는 부팅', '키보드가 하나도 없이 켜도(Bluetooth 키보드만 쓰는 기계) 화면이 곧바로 뜬다 — 전에는 PID 1이 3초를 기다렸다', '2026-11-03'],
         ['Bluetooth', 'USB · Intel PCIe HCI와 BlueZ 5.82. `bluetooth=on`이면 dbus · bluetoothd가 서비스로 뜨고 `bluetoothctl`로 페어링한다. 키보드 · 마우스는 붙는 즉시, 키는 `/config/bluetooth`에. firmware는 Intel · Realtek · MediaTek · Qualcomm', '2026-11-02'],
         ['전원 버튼', '누르면 정상 종료. SIGTERM은 끄기, SIGINT와 [Ctrl+Alt+Del]은 재부팅', '2026-08-22'],
