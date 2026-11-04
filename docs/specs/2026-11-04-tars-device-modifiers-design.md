@@ -2,7 +2,7 @@
 
 접두사: DM
 
-Status: design 승인(2026-11-04). 다음은 DM-M0 plan.
+Status: DM-M0 끝남(2026-11-04) — 판정 8 · 9 · 10이 지금 코드에서 기대한 이유로 빨갛다(실측 1 · 2). 다음은 DM-M1.
 
 사용자가 정했다(2026-11-04): 결정 1~7을 추천안 그대로 받는다. 결정 2의 "다른 칸이 같은 tap 키를 쥐고 있으면 처음부터 소비"와
 판정 10을 둔다. 키보드별 `keyboard=apple|pc`는 이번 범위가 아니다(비목표 1).
@@ -207,3 +207,39 @@ mutation 셋(M1에서 돌린다). (a) 읽기의 OR를 `held[ctx.device]` 하나�
 - DM-M1 — `input.zig`(결정 1 · 2 · 3 · 4 · 5, 단위 검사), `main.zig`(`ki`를 넘기기 · `MAX_KEYBOARDS` 옮기기 · `releaseDevice`).
   체인 초록, mutation 셋, 루트 게이트, 문서 닫기(KH design 결정 4의 대가 문단 · 비목표 5, `carryover.md` KH 둘째 항목, completed ·
   소개 페이지 · decisions · HANDOFF).
+
+## 실측 (M0, 2026-11-04)
+
+판정 셋을 넣은 체인의 일회용 사본(셋의 `report_failure`를 `echo "RED: …"`로 바꾼 것, 지웠다)을 `65b6f30`의 terminal로 두 판
+돌렸다.
+
+### 실측 1 — 커널 자동 반복이 수정키 결함을 가린다
+
+첫 판에서 판정 10만 빨갛고 8 · 9는 초록이었다(`wZw0` · `vZv0`). 원인은 커널 input core의 자동 반복이다(`input_pass_values`).
+장치마다 마지막에 누른 키를 250ms 뒤부터 33ms마다 value=2로 반복하고, 수정키도 반복한다. `handleKey`는 `shift_left = value != 0`이라
+반복 이벤트가 비트를 다시 켠다.
+
+- 판정 8: k2가 쥔 Shift의 반복이 k1의 뗌이 지운 비트를 곧 다시 켰다.
+- 판정 9: `releaseHeld`가 지운 k1의 Shift를 k1 자신의 반복이 다시 켰다.
+
+반복은 같은 장치에서 아무 키나 떼면 멈춘다(`input_stop_autorepeat`). 그래서 체인에 `stop_repeat`(그 장치의 오른쪽 Ctrl을 눌렀다
+뗀다 — 화면에 아무것도 안 낸다)를 두고, 판정 8 · 9는 Shift를 쥔 뒤 그것을 부른다.
+
+사람의 손에서 결함 둘이 드러나는 모양은 "Shift를 쥔 채 그 키보드로 글자를 하나 친 뒤"다. Shift만 쥐고 있는 동안은 반복이 비트를
+지켜서 결함이 안 보인다. 실기에서 이 결함을 덜 겪은 이유가 이것일 수 있다. 판정 10(약 150ms)은 반복 지연 250ms보다 짧아 이
+영향이 없었다.
+
+결정은 그대로다. M1의 칸별 비트에서 반복은 자기 칸의 비트를 다시 켤 뿐이고, 그것이 맞는 동작이다.
+
+### 실측 2 — 셋 다 빨갛고, 이유가 결정 7의 문장과 같다
+
+`stop_repeat`을 넣은 둘째 판:
+
+```
+RED: k1's Shift key-up released the Shift k2 still holds (wzw0)
+RED: k2 left and took k1's held Shift with it (vzv0)
+RED: overlapping left Ctrl on two keyboards toggled hangul (hangul> on=true 3 -> 4)
+```
+
+판정 10의 양성 대조(k1 혼자의 왼쪽 Ctrl tap 둘이 한/영을 켜고 끈다)는 초록이었다 — QMP의 키가 tap 문턱 안에 온다. 판정 1~7b는
+두 판 다 초록이다. 위험 1은 닫혔다. QEMU는 두 usb-kbd의 같은 qcode를 따로 보낸다. 사본 한 판은 컨테이너 빌드를 포함해 약 3분이다.

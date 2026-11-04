@@ -1,4 +1,4 @@
-# HANDOFF: Device Modifiers(DM) design 승인 — 다음은 DM-M0 plan
+# HANDOFF: Device Modifiers(DM) M0 끝남 — 다음은 DM-M1
 
 ## 목표
 
@@ -13,14 +13,19 @@ design은 `docs/specs/2026-11-04-tars-device-modifiers-design.md` — 사용자�
 ## 완료된 작업
 
 - [x] IK-M0 전부 — `8b8209d`(2026-11-03, 닫는 묶음 · 소개 페이지까지)
-- [x] DM design 작성 · 승인(2026-11-04) — 결정 7 · 위험 3 · 비목표 4, milestone 둘(M0 판정 먼저 빨강, M1 코드 · 게이트 · 닫기)
+- [x] DM design 작성 · 승인(2026-11-04) — `65b6f30`
+- [x] DM-M0(2026-11-04) — `keyboard/check.sh`에 판정 8 · 9 · 10. 지금 코드에서 셋 다 기대한 이유로 빨갛다(design 실측 2).
+  커널 자동 반복이 쥔 수정키 비트를 다시 켜서 첫 판에 8 · 9가 초록이었다 → `stop_repeat`(그 장치의 오른쪽 Ctrl 탭)으로 반복을
+  멈춘 뒤 판정한다(design 실측 1).
+
+## 지금 빨간 것 (의도함)
+
+`keyboard` 체인은 DM-M1 커밋까지 판정 8에서 빨갛다. 이 사이에 루트 게이트를 돌리면 26/27이다.
 
 ## 남은 작업
 
-- [ ] DM-M0 plan — `keyboard/check.sh`에 판정 8 · 9 · 10(design 결정 7)을 넣고 지금 코드에서 셋 다 빨간지, 빨강의 이유가 design의
-  "지금 코드는" 문장과 같은지 로그로 본다. terminal 코드 0줄. 위험 1(QEMU가 두 장치의 같은 qcode 둘째 누름을 보내는가)이 여기서 열린다.
 - [ ] DM-M1 — `input.zig`(`held: [MAX_KEYBOARDS]Mods` · 칸별 `taps` · `releaseDevice` · `Context.device`), `main.zig`(`ki` 넘기기 ·
-  `MAX_KEYBOARDS`를 `input.zig`로), 단위 검사, mutation 셋, 루트 게이트, 닫는 묶음
+  `MAX_KEYBOARDS`를 `input.zig`로), 단위 검사, 체인 초록, mutation 셋, 루트 게이트, 닫는 묶음
 
 ## 핵심 파일
 

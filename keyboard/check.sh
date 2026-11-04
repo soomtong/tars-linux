@@ -26,6 +26,11 @@ cd "$(dirname "$0")" || exit 1
 #   7. Shift를 쥔 채 빠진 키보드의 Shift가 풀린다(결정 4) — 보통은 커널이 푼다.
 #   7b. terminal이 그 뗌을 못 읽은 경우에도 풀린다 — 그때 푸는 것이 releaseHeld다.
 #
+# DM-M0이 더한 셋(DM design 결정 7, 수정키를 키보드 칸마다 든다):
+#   8. k2가 쥔 Shift는 k1의 Shift 뗌에 안 풀린다.
+#   9. k2가 빠져도 k1이 쥔 Shift는 남는다.
+#   10. 두 키보드의 왼쪽 Ctrl을 겹쳐 누르면 한/영 tap이 아니다(양성 대조 — k1 혼자의 tap은 한/영이다).
+#
 # BT 키보드의 길(bluetoothd → uhid/hidp → evdev)은 여기 없다. terminal에게는 evdev
 # 노드가 부팅 뒤에 생긴다는 것만 같고, 그것을 usb-kbd가 본다(BT design 위험 4).
 
@@ -115,6 +120,22 @@ keyboard_count() {
   grep -ac "terminal: keyboard> $1" "$LOG" || true
 }
 
+# `terminal: hangul> on=<bool>` 줄의 수(판정 10). 인자가 비면 둘 다 센다. 한/영이 바뀐 키가 `redraw`를 켜고
+# `readKeyboard`가 이 줄을 찍는다(`dumpHangul`). 앞 판정이 이미 찍은 줄이 있으므로 있기만을
+# 보는 `wait_for_log`로는 못 가르고, 수가 늘었는지를 본다.
+hangul_count() {
+  grep -ac "terminal: hangul> on=$1" "$LOG" || true
+}
+
+wait_for_hangul_count() {
+  local on="$1" want="$2" i
+  for i in $(seq 1 150); do
+    if [ "$(hangul_count "$on")" -ge "$want" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
 wait_for_keyboard_count() {
   local verb="$1" want="$2" i
   for i in $(seq 1 150); do
@@ -175,6 +196,17 @@ qmp_type() {
     esac
     sleep 0.05
   done
+}
+
+# 그 키보드의 커널 자동 반복을 멈춘다(DM-M0 실측 1). 커널 input core는 장치마다 마지막에
+# 누른 키를 250ms 뒤부터 33ms마다 value=2로 반복하고, Shift 같은 수정키도 반복한다. 그 반복이
+# terminal의 수정키 비트를 매번 다시 켜서, 쥔 Shift가 풀렸는지를 판정이 못 본다. 같은 장치에서
+# 아무 키나 떼면 반복이 멈추므로(`input_stop_autorepeat`), 화면에 아무것도 안 내는 오른쪽 Ctrl을
+# 눌렀다 뗀다. 사람의 손에서는 "Shift를 쥔 채 그 키보드로 글자를 하나 친 뒤"가 이 모양이다.
+stop_repeat() {
+  qmp_key "$1" ctrl_r true
+  qmp_key "$1" ctrl_r false
+  sleep 0.1
 }
 
 # 설정 디스크. 한글 판정이 hangul 체인과 같은 자판(3-P3, `k`=ㄱ · `f`=ㅏ)을 쓰도록 한
@@ -440,4 +472,108 @@ wait_for_screen 'qyq0' ||
   report_failure "k2 left holding Shift while terminal was stopped, and k1 types upper case (no qyq0) — releaseHeld did not run"
 echo "terminal was stopped through the unplug, and k1 still types lower case: qyq0"
 
-echo "=== KH-M2: all eight checks passed ==="
+# ── 판정 8: 겹쳐 쥔 Shift의 한쪽 뗌 ───────────────────────────────────
+#
+# k2가 Shift를 쥔 채 k1도 Shift를 눌렀다 뗀다. 수정키를 키보드 칸마다 들면 k1의 뗌은 k1의
+# 비트만 지우고 k2의 Shift가 남아 z가 Z다(DM design 결정 1, KH 시나리오 S5). 하나로 합쳐
+# 들면 k1의 뗌이 비트를 지워 z다. 둘 중 어느 쪽인지를 기다려 가른다 — 빨강의 이유를 문구가
+# 바로 말하고, 15초를 기다리지 않는다. 출력 `wZw0`은 명령줄(`echo wZw$status`)에 없다.
+# k2의 Shift 반복을 멈추는 것(`stop_repeat`)이 판정의 전제다 — 반복이 살아 있으면 하나로
+# 합쳐 든 코드에서도 k2의 반복이 지운 비트를 곧 다시 켜서 Z가 나온다(DM-M0 실측 1).
+echo "=== 8. a Shift key-up on one keyboard keeps the Shift held on the other ==="
+echo "device_add usb-kbd,bus=xhci.0,id=k2,display=gpu" >&3
+wait_for_keyboard_count open 5 ||
+  report_failure "k2 plugged in a fourth time was never opened"
+K2D_PATH="$(open_path 5)"
+sleep 0.5
+type_keys e c h o spc w
+sleep 0.3
+qmp_key gpu shift true
+stop_repeat gpu
+qmp_key - shift true
+sleep 0.1
+qmp_key - shift false
+sleep 0.1
+qmp_key - z true
+qmp_key - z false
+sleep 0.1
+qmp_key gpu shift false
+sleep 0.3
+type_keys w shift-4 s t a t u s ret
+wait_for_screen 'w[zZ]w0' ||
+  report_failure "keys for check 8 never reached the shell (neither wZw0 nor wzw0)"
+if ! joined_screen_dump | grep -aq 'wZw0'; then
+  report_failure "k1's Shift key-up released the Shift k2 still holds (wzw0)"
+fi
+echo "k2 held Shift through k1's Shift tap, and k1's z made Z: wZw0"
+
+# ── 판정 9: 빠진 키보드는 남은 키보드의 Shift를 안 가져간다 ───────────
+#
+# k1이 Shift를 쥔 채 k2를 뺀다. k2는 아무 키도 안 쥐었으므로 커널이 해제 때 흉내 내는 뗌
+# (KH 실측 9)이 없다 — 이 Shift를 지울 수 있는 것은 closeKeyboard뿐이다. 그 칸만 풀면
+# (DM design 결정 4) k1의 z가 Z다. 출력 `vZv0`은 명령줄에 없다. k1의 Shift 반복을 먼저
+# 멈춘다 — 살아 있으면 releaseHeld가 지운 비트를 k1 자신의 반복이 다시 켠다(DM-M0 실측 1).
+echo "=== 9. a keyboard that goes away leaves the other keyboard's Shift alone ==="
+type_keys e c h o spc v
+sleep 0.3
+qmp_key - shift true
+stop_repeat -
+echo "device_del k2" >&3
+wait_for_log "terminal: keyboard> close ${K2D_PATH}" ||
+  report_failure "k2 was unplugged but terminal never closed ${K2D_PATH}"
+sleep 0.5
+qmp_key - z true
+qmp_key - z false
+sleep 0.1
+qmp_key - shift false
+sleep 0.3
+type_keys v shift-4 s t a t u s ret
+wait_for_screen 'v[zZ]v0' ||
+  report_failure "keys for check 9 never reached the shell (neither vZv0 nor vzv0)"
+if ! joined_screen_dump | grep -aq 'vZv0'; then
+  report_failure "k2 left and took k1's held Shift with it (vzv0)"
+fi
+echo "k2 left while k1 held Shift, and k1's z made Z: vZv0"
+
+# ── 판정 10: 겹친 왼쪽 Ctrl은 한/영 tap이 아니다 ──────────────────────
+#
+# k2가 왼쪽 Ctrl을 쥔 동안 k1의 왼쪽 Ctrl을 짧게 누른다. 다른 칸이 같은 tap 키를 쥐고
+# 있을 때의 누름은 조합이라 tap이 아니고, 그 누름이 k2의 tap도 소비한다(DM design
+# 결정 2). 하나로 합쳐 들면 k1의 뗌이 k2의 누름에 짝지어져 한/영이 켜진다(KH 시나리오
+# S5). 누름부터 마지막 뗌까지 약 150ms라 TAP_MAX_US(300ms) 안이다.
+#
+# 음성 판정만 있으면 tap 길이 통째로 죽어 있어도(QMP의 키가 늦어 300ms를 넘겨도) 초록이다.
+# 그래서 k1 혼자의 tap이 한/영을 켜고 끄는 것을 양성 대조로 함께 본다.
+echo "=== 10. overlapping left Ctrl on two keyboards is not a hangul tap ==="
+echo "device_add usb-kbd,bus=xhci.0,id=k2,display=gpu" >&3
+wait_for_keyboard_count open 6 ||
+  report_failure "k2 plugged in a fifth time was never opened"
+sleep 0.5
+ON0="$(hangul_count true)"
+qmp_key gpu ctrl true
+sleep 0.05
+qmp_key - ctrl true
+sleep 0.05
+qmp_key - ctrl false
+sleep 0.05
+qmp_key gpu ctrl false
+sleep 1
+ON1="$(hangul_count true)"
+[ "$ON1" -le "$ON0" ] ||
+  report_failure "overlapping left Ctrl on two keyboards toggled hangul (hangul> on=true ${ON0} -> ${ON1})"
+# 대조는 켜짐 · 꺼짐을 안 가리고 `on=` 줄 전체가 탭마다 하나씩 느는지 본다. 탭 둘이면 한/영이
+# 처음 상태로 돌아온다.
+ALL1="$(hangul_count '')"
+qmp_key - ctrl true
+sleep 0.05
+qmp_key - ctrl false
+wait_for_hangul_count '' $((ALL1 + 1)) ||
+  report_failure "a lone left Ctrl tap on k1 did not toggle hangul — check 10 proves nothing"
+qmp_key - ctrl true
+sleep 0.05
+qmp_key - ctrl false
+wait_for_hangul_count '' $((ALL1 + 2)) ||
+  report_failure "a second lone left Ctrl tap on k1 did not toggle hangul back"
+echo "overlapping Ctrl did not toggle hangul, and k1's lone Ctrl taps turned it on and off"
+
+echo "=== KH-M2 · DM-M0: all eleven checks passed ==="
