@@ -151,7 +151,7 @@ TCG에서 배율 2의 present 하나(통째 · 키 하나)가 얼마인지. 측�
 
 `pointer`의 빨강은 HS와 무관하다. MB-M0(`dad558c`)이 `CONFIG_MOUSE_BCM5974=y`를 켰는데 `pointer/check.sh`의 부팅 전 검사
 (`for sym in HID_APPLE HID_MAGICMOUSE MOUSE_BCM5974 …`, PD design 결정 9)가 그 심볼을 아직 금지한다 —
-`FAIL: CONFIG_MOUSE_BCM5974 is =y in kernel/.config, PD design 결정 9 leaves it off`. 이 plan에서는 고치지 않았다(lead의 몫).
+`FAIL: CONFIG_MOUSE_BCM5974 is =y in kernel/.config, PD design 결정 9 leaves it off`. 이 plan에서는 고치지 않았다(lead의 몫). lead가 `c152f5d`에서 그 심볼을 금지 목록에서 뺐다(PD 비목표 10의 bcm5974 갈래를 MB가 열었다).
 
 `hidpi` 한 판의 판정 줄:
 

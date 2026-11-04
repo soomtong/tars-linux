@@ -2,7 +2,7 @@
 
 접두사: MB
 
-Status: 진행 중
+Status: 닫힘(2026-11-05) — MB-M0 `MOUSE_BCM5974` · `ACPI_SBS`, machine 체인의 정적 검사와 등록 줄. pointer 체인의 금지 목록에서 bcm5974를 뺐다(`c152f5d`).
 
 사용자의 요청(2026-11-04)에서 시작한다.
 

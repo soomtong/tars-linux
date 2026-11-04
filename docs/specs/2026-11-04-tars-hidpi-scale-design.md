@@ -2,7 +2,7 @@
 
 접두사: HS
 
-Status: 진행 중
+Status: 닫힘(2026-11-05) — HS-M0 그림자 + 늘리는 present(`scale.zig`), `display_scale`(`ARGC` 14), `hidpi` 체인(monitor 45502). 결정 4의 "바로 적용"은 `tars-config reload` 뒤 `reload terminal`이다(plan 확정 10).
 
 사용자의 요청(2026-11-04, MB design 머리의 인용)에서 "macbookpro 15 2013 … 레티나 디스플레이가 추가됨"을 받는다. MB가 장치를,
 DB가 설치기를 맡는다.

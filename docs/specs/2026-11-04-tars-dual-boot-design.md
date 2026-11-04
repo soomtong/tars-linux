@@ -2,7 +2,7 @@
 
 접두사: DB
 
-Status: 진행 중
+Status: 닫힘(2026-11-05) — DB-M0 GPT 엔트리를 이름으로 읽기 · `--beside` · `--beside --wipe` · init 후보 126, `dualboot` 체인(포트 없음).
 
 사용자의 요청(2026-11-04, MB design 머리의 인용)에서 "인스톨러 개선: 대상 디스크 고르기 beside macOS partition (or volume), dual
 booting 가능해야 해"를 받는다.
