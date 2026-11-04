@@ -110,6 +110,12 @@ pub fn eviocgname(comptime len: usize) c_ulong {
     return @intCast(c.EVIOCGNAME(len));
 }
 
+/// 장치의 bus · vendor · product · version(`struct input_id`). 키보드의 종류를 고를 때
+/// 쓴다(KK design 결정 2). 길이가 고정이라 인자가 없다.
+pub fn eviocgid() c_ulong {
+    return @intCast(c.EVIOCGID);
+}
+
 /// 터치패드의 축 범위를 읽는다. PD-M0은 부르지 않는다 — PD-M3의 터치패드
 /// 디코더가 쓴다. 번호만 여기 두고 `pointer_test`가 본다.
 pub fn eviocgabs(comptime abs: u16) c_ulong {

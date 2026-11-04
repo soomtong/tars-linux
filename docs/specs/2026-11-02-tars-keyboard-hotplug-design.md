@@ -294,7 +294,8 @@ M0 실측 3: 3.07초다. 체인이 `screen>`을 기다리는 상한은 120초라
 ## 비목표
 
 1. 장치마다 다른 `keyboard=apple|pc`. Alt · Cmd 맞바꿈은 지금처럼 기계 하나에 하나다 — MacBook 내장 키보드에 PC USB 키보드를
-   꽂으면 둘 중 하나는 어긋난다. 장치 이름이나 vendor id로 고르려면 키가 늘어난다.
+   꽂으면 둘 중 하나는 어긋난다. 장치 이름이나 vendor id로 고르려면 키가 늘어난다. → KK(2026-11-04)가 했다. 키를 늘리지 않고
+   `keyboard=auto`(기본값)가 키보드마다 vendor로 고른다(`2026-11-04-tars-keyboard-kind-design.md`).
 2. init의 키보드 고르기 · 3초 기다림 · argv의 `device_path` 걷기. 셋 다 이제 terminal에게 쓸모가 없지만, init의 줄을 두 체인이
    판정으로 보고 PID 1을 고치는 일이라 따로 한다(위험 2의 3초를 없애는 것이 그 일의 값이다).
 3. `SYN_DROPPED` 뒤에 `EVIOCGKEY`로 눌린 키를 다시 맞추기. `readKeys`의 주석이 적어 둔 오래된 구멍이고 핫플러그와 상관없다.

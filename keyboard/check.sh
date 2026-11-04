@@ -327,7 +327,8 @@ echo "device_add usb-kbd,bus=xhci.0,id=k1" >&3
 wait_for_keyboard_count open 1 ||
   report_failure "the USB keyboard plugged in after boot was never opened"
 K1_PATH="$(open_path 1)"
-tlog | grep -a "terminal: keyboard> open ${K1_PATH} name=QEMU QEMU USB Keyboard" >/dev/null ||
+# KK-M1: 디스크에 keyboard= 줄이 없으므로 기본값(auto)이 QEMU usb-kbd(vendor 0x0627)를 pc로 고른다.
+tlog | grep -a "terminal: keyboard> open ${K1_PATH} kind=pc bus=0003 vendor=0627 name=QEMU QEMU USB Keyboard" >/dev/null ||
   report_failure "the first keyboard> open line is not the QEMU USB keyboard"
 sleep 0.5
 type_keys e c h o spc k h 1 shift-4 s t a t u s ret

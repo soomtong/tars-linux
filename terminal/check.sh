@@ -325,7 +325,7 @@ echo "init mounted all four filesystems"
 #
 # 장치 이름은 요구하지 않는다. 실 하드웨어에서 달라지는 것이 정상이고,
 # 판정에도 쓰지 않는 값이다(design 결정 2).
-if ! tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* name=" >/dev/null; then
+if ! tlog | grep -aE "terminal: keyboard> open /dev/input/event[0-9]+ kind=(apple|pc) bus=[0-9a-f]{4} vendor=[0-9a-f]{4} name=" >/dev/null; then
   echo "FAIL: terminal did not open a keyboard device"
   tlog | grep -a 'terminal: keyboard>' | tail -n 20 || true
   exit 1

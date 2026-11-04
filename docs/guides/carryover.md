@@ -58,7 +58,15 @@ KH(2026-11-02)가 남긴 것.
       (`docs/specs/2026-11-04-tars-device-modifiers-design.md` 실측 1).
 - [ ] 두 키보드의 자동 반복이 섞인다(시나리오 S7) · 한 바퀴 안의 두 키보드는 칸 순서로 읽힌다(위험 7) · 키 하나를 두 노드로
       내는 키보드는 글자가 두 번이다(위험 6). 셋 다 실기의 근거를 기다린다. 위험 6의 첫 단서는 같은 `name=`의 `keyboard> open` 둘.
-- [ ] 키보드마다 다른 `keyboard=apple|pc`(KH 비목표 1). Mac 키보드와 PC 키보드를 함께 쓰면 한쪽의 Option · Cmd가 어긋난다.
+- [x] 키보드마다 다른 `keyboard=apple|pc`(KH 비목표 1). Mac 키보드와 PC 키보드를 함께 쓰면 한쪽의 Option · Cmd가 어긋난다.
+      → KK(2026-11-04)가 닫았다. `keyboard=auto`(새 기본값)가 키보드를 열 때 vendor로 고른다(Apple 0x05ac · BT 0x004c면 apple).
+      남은 것은 vendor가 배열을 말하지 않는 서드파티 Mac 배열 키보드 — 아래 KK 절.
+
+KK(2026-11-04)가 남긴 것.
+
+- [ ] vendor가 배열을 말하지 않는 키보드(KK design 위험 1 · 비목표 1). Mac 배열인데 Apple vendor가 아닌 서드파티 키보드는 `auto`에서
+      `pc`로 읽힌다 — 그 키보드 하나만 쓰면 `keyboard=apple`을 적으면 되지만, PC 키보드와 함께 쓰면 고칠 길이 없다. 실기에서 그런
+      키보드가 생기면 이름이나 vendor를 설정에 적는 키. 판단의 근거는 `keyboard> open … kind= bus= vendor=` 줄이다.
 
 BT(2026-11-02)가 남긴 것.
 

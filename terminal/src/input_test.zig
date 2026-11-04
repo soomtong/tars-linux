@@ -2454,5 +2454,55 @@ pub fn main() !void {
     }
     std.debug.print("input_test: 수정키와 tap을 키보드 칸마다 든다 OK\n", .{});
 
+    // 검사 89. 키보드마다 종류를 고른다(KK design 결정 1 · 2 · 3). `input` 체인의 판정 12 · 13이
+    // 화면으로 보는 것을 순수 함수와 칸 둘로 본다.
+    {
+        const Row = struct { name: []const u8, setting: input.Keyboard, bus: u16, vendor: u16, want: input.Kind };
+        const rows = [_]Row{
+            // auto — design 확인 2의 표.
+            .{ .name = "Apple USB", .setting = .auto, .bus = K.BUS_USB, .vendor = 0x05ac, .want = .apple },
+            .{ .name = "Magic Keyboard BT", .setting = .auto, .bus = K.BUS_BLUETOOTH, .vendor = 0x004c, .want = .apple },
+            .{ .name = "old Apple BT", .setting = .auto, .bus = K.BUS_BLUETOOTH, .vendor = 0x05ac, .want = .apple },
+            .{ .name = "i8042 laptop", .setting = .auto, .bus = K.BUS_I8042, .vendor = 0x0001, .want = .pc },
+            .{ .name = "QEMU usb-kbd", .setting = .auto, .bus = K.BUS_USB, .vendor = 0x0627, .want = .pc },
+            // 0x004c는 BT SIG의 회사 번호다 — USB에서는 Apple이 아니다.
+            .{ .name = "0x004c on USB", .setting = .auto, .bus = K.BUS_USB, .vendor = 0x004c, .want = .pc },
+            // EVIOCGID가 실패한 키보드(main.zig가 0으로 본다).
+            .{ .name = "unknown id", .setting = .auto, .bus = 0, .vendor = 0, .want = .pc },
+            // 강제한 값은 vendor를 안 본다.
+            .{ .name = "apple forced, PC vendor", .setting = .apple, .bus = K.BUS_I8042, .vendor = 0x0001, .want = .apple },
+            .{ .name = "pc forced, Apple vendor", .setting = .pc, .bus = K.BUS_USB, .vendor = 0x05ac, .want = .pc },
+        };
+        for (rows) |r| {
+            const got = input.kindOf(r.setting, r.bus, r.vendor);
+            if (got != r.want) {
+                std.debug.print("FAIL: kindOf({s}) = {s}, want {s}\n", .{ r.name, @tagName(got), @tagName(r.want) });
+                return error.KindOf;
+            }
+        }
+
+        // 칸을 건너는 맞바꿈(결정 3). 칸 0은 pc(맞바꾼다), 칸 1은 apple(안 맞바꾼다). 같은
+        // 물리 키(왼쪽 Alt)가 칸 0에서는 Meta(Cmd)로, 칸 1에서는 Alt(Option)로 기록된다.
+        const pc0: input.Context = .{ .swap_alt_meta = true, .device = 0 };
+        const ap1: input.Context = .{ .swap_alt_meta = false, .device = 1 };
+        var kk: input.State = .{};
+        _ = kk.handleKey(K.KEY_LEFTALT, 1, 0, pc0);
+        _ = kk.handleKey(K.KEY_LEFTALT, 1, 10_000, ap1);
+        if (!kk.mods[0].meta_left or kk.mods[0].alt_left or !kk.mods[1].alt_left or kk.mods[1].meta_left) {
+            std.debug.print("FAIL: left Alt on a pc slot and an apple slot: slot0 alt={} meta={}, slot1 alt={} meta={}\n", .{
+                kk.mods[0].alt_left, kk.mods[0].meta_left, kk.mods[1].alt_left, kk.mods[1].meta_left,
+            });
+            return error.KindSwapPerSlot;
+        }
+        // 떼면 각 칸이 자기 맞바꿈으로 같은 비트를 지운다 — 쥔 채 남는 것이 없다.
+        _ = kk.handleKey(K.KEY_LEFTALT, 0, 20_000, pc0);
+        _ = kk.handleKey(K.KEY_LEFTALT, 0, 30_000, ap1);
+        if (kk.mods[0].meta_left or kk.mods[1].alt_left) {
+            std.debug.print("FAIL: releasing left Alt left a modifier held on a pc or apple slot\n", .{});
+            return error.KindSwapRelease;
+        }
+    }
+    std.debug.print("input_test: 키보드마다 종류를 고른다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

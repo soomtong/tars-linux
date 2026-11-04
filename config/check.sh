@@ -133,7 +133,7 @@ TC_SET_ZSH_KEYS=(t a r s minus c o n f i g spc s e t spc s h e l l equal z s h r
 TC_BAD_LINE_KEYS=(e c h o spc s h e l l equal f s h spc shift-dot shift-dot spc
                   slash c o n f i g slash t a r s dot c o n f ret)
 # shellcheck disable=SC2054
-TC_LIST_WANT=(shell=fish keyboard=apple hangul_layout=shin_pcs latin_layout=qwerty
+TC_LIST_WANT=(shell=fish keyboard=auto hangul_layout=shin_pcs latin_layout=qwerty
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off bluetooth=off esc_latin=on
               clipboard=shared)
@@ -590,19 +590,19 @@ edit_config_in_guest() {
 
   # ── TC-M2: reload의 대기 · 두 칸 · 거절 ─────────────────────────────────
   #
-  # keyboard는 화면의 키다(위 TC-M0이 바꾼 clipboard=pane도 그렇다 — 둘 다 대기다). reload가 init의 값을 바꾸지만 화면(terminal)은 다음 부팅까지 apple이다 —
+  # keyboard는 화면의 키다(위 TC-M0이 바꾼 clipboard=pane도 그렇다 — 둘 다 대기다). reload가 init의 값을 바꾸지만 화면(terminal)은 다음 부팅까지 기본값 auto다 —
   # 그래서 이 부팅의 타이핑이 그대로 된다. 이 체인은 net=off라 reload가 dhcpcd를 건드리면 안 된다.
   # 끝으로 init이 거절할 줄을 심은 파일의 reload가 아무것도 안 바꾸는지 본다. 아래 EDIT_KEYS가 이
   # 파일을 한 줄로 덮어쓰므로 2차로 넘어가는 것은 없다.
   type_keys "${TC_SET_KB_KEYS[@]}"
   # set의 답을 본 뒤에 reload를 친다(TC-M2 Task 5b — net 검사 31의 간헐과 같은 모양을 막는다).
-  if ! wait_for_screen '\| keyboard: apple -> pc$|\| keyboard: apple -> pc \|'; then
-    echo "FAIL(boot 1): tars-config set keyboard=pc never answered 'keyboard: apple -> pc'"
+  if ! wait_for_screen '\| keyboard: auto -> pc$|\| keyboard: auto -> pc \|'; then
+    echo "FAIL(boot 1): tars-config set keyboard=pc never answered 'keyboard: auto -> pc'"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
   type_keys "${TC_RELOAD_KEYS[@]}"
-  if ! wait_for_screen '\| keyboard: apple -> pc \(the screen keeps the old value until tars-config reload terminal\)'; then
+  if ! wait_for_screen '\| keyboard: auto -> pc \(the screen keeps the old value until tars-config reload terminal\)'; then
     echo "FAIL(boot 1): reload did not report keyboard as waiting for the screen"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
@@ -612,8 +612,8 @@ edit_config_in_guest() {
     return 1
   fi
   type_keys "${ALIAS_KEYS[@]}"
-  if ! wait_for_screen '\| # the screen keeps keyboard=apple clipboard=shared until tars-config reload terminal'; then
-    echo "FAIL(boot 1): tars-config did not show that the screen still uses keyboard=apple"
+  if ! wait_for_screen '\| # the screen keeps keyboard=auto clipboard=shared until tars-config reload terminal'; then
+    echo "FAIL(boot 1): tars-config did not show that the screen still uses keyboard=auto"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi

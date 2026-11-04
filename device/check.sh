@@ -147,7 +147,7 @@ grep -q "ACPI: button: Power Button" "$LOG" \
 # 만든 이유와 같다(design 결정 2). IK-M0부터 키보드를 고르는 것은 terminal이고
 # (KH design 결정 1), init은 키보드를 보지 않으므로 init의 키보드 줄은 없어야 한다.
 # terminal 줄은 커널 printk에 잘릴 수 있어 `tlog`를 거친다(GF-M2).
-tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* name=" >/dev/null \
+tlog | grep -aE "terminal: keyboard> open /dev/input/event[0-9]+ kind=(apple|pc) bus=[0-9a-f]{4} vendor=[0-9a-f]{4} name=" >/dev/null \
   || report_failure "terminal did not open a keyboard device"
 if grep -aqE "tars-init: (keyboard device|no keyboard found)" "$LOG"; then
   report_failure "init still looks for a keyboard (IK-M0 took that out)"

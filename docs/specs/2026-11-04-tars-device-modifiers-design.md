@@ -190,7 +190,7 @@ mutation 셋(M1에서 돌린다). (a) 읽기의 OR를 `held[ctx.device]` 하나�
 
 1. 키보드마다 다른 `keyboard=apple|pc`(KH 비목표 1, `carryover.md` KH 절 셋째 항목). 장치를 고르는 키(이름 · vendor id)가
    설정에 생기는 일이라 따로 한다. 이 설계가 칸 번호를 `Context`에 싣는 것이 그 일의 자리가 된다 — `swap_alt_meta`를 칸마다 고르면
-   된다.
+   된다. → KK(2026-11-04)가 했다. 설정 키는 늘지 않았다 — `keyboard=auto`가 vendor로 고르고, 값은 칸(`KeyboardDev`)이 든다.
 2. 두 키보드의 자동 반복이 섞이는 것(S7) · 한 바퀴 안의 칸 순서(KH 위험 7) · 키 하나를 두 노드로 내는 키보드(KH 위험 6). 셋 다
    실기의 근거를 기다린다.
 3. `SYN_DROPPED` 뒤에 `EVIOCGKEY`로 그 칸의 수정키를 다시 맞추기(KH 비목표 3). 칸마다 들게 되면서 할 자리는 생겼지만 핫플러그와

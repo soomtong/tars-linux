@@ -808,13 +808,15 @@ const LogUnknownToggle = struct {
 
 /// 설정 전체. 필드의 기본값이 곧 "설정 파일이 없을 때의 TARS"다.
 ///
-/// keyboard의 기본값이 apple인 이유는 이 기계를 쓰는 사람이 Apple 키보드를
-/// 먼저 꽂기 때문이다. pc는 보정을 켜는 쪽이라 명시적으로 적어야 한다.
+/// keyboard의 기본값이 auto인 이유(KK design 결정 4, 2026-11-04 사용자 결정).
+/// 일반 노트북의 내장 키보드는 PC 배열이고, 이 기계를 쓰는 사람은 거기에 Apple
+/// 키보드를 꽂는다. auto는 키보드마다 vendor로 골라 둘을 다 맞춘다. 그 전(IP-M2 ~
+/// KK)의 기본값은 apple이었다 — Apple 키보드를 먼저 꽂는다는 근거였다.
 pub const Config = struct {
     shell: Shell = .fish,
-    keyboard: Keyboard = .apple,
-    /// 기본값이 `shin_pcs`인 것은 `keyboard`가 `apple`인 것과 같은
-    /// 근거다 — 이 기계를 쓰는 사람이 쓰는 것이 기본값이다. 두벌식이 더
+    keyboard: Keyboard = .auto,
+    /// 기본값이 `shin_pcs`인 것은 이 기계를 쓰는 사람이 쓰는 것이 기본값이라는
+    /// 근거다. 두벌식이 더
     /// 흔하다는 것은 이 기계의 사실이 아니다.
     hangul_layout: HangulLayout = .shin_pcs,
     latin_layout: LatinLayout = .qwerty,
@@ -834,7 +836,7 @@ pub const Config = struct {
     /// 명시적으로 적는다(design 비목표 4).
     shell_config: ShellConfig = .on,
     /// 기본값이 `off`인 유일한 키다. 다른 여섯은 "이 기계를 쓰는 사람이
-    /// 쓰는 것"이 기본값인데(keyboard=apple · hangul_layout=shin_pcs),
+    /// 쓰는 것"이 기본값인데(keyboard=auto · hangul_layout=shin_pcs),
     /// 이 키는 근거가 다르다 — 켜는 비용이 부팅마다 붙기 때문이다.
     net: Net = .off,
     /// 기본값이 `off`인 둘째 키다. 근거는 바로 위 `net`과 같고 하나가 더
@@ -1118,8 +1120,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\# TARS configuration. Edit and reboot to apply.
         \\# shell: fish | bash | zsh
         \\shell={s}
-        \\# keyboard: apple | pc
+        \\# keyboard: auto | apple | pc
         \\#   apple = [Ctrl][Option][Cmd], pc = [Ctrl][Win][Alt]
+        \\#   auto = each keyboard by its vendor (Apple -> apple, others -> pc)
         \\keyboard={s}
         \\# hangul_layout: dubeol | sebeol_3p3 | shin_p2 | shin_pcs
         \\hangul_layout={s}

@@ -165,6 +165,32 @@ const dvorak_keymap = [_][2]u8{
 pub const LatinLayout = screen_args.LatinLayout;
 pub const Toggles = screen_args.Toggles;
 pub const TOGGLE_ARG_MAX = screen_args.TOGGLE_ARG_MAX;
+/// 설정의 키보드 종류(`apple` · `pc` · `auto`). 같은 이유로 이름만 다시 내보낸다.
+pub const Keyboard = screen_args.Keyboard;
+
+/// 키보드 하나가 실제로 쓰는 종류. 설정의 `auto`는 여기 없다 — 키보드를 열 때 둘 중
+/// 하나로 정해진다(`kindOf`).
+pub const Kind = enum { apple, pc };
+
+/// Apple의 USB vendor. USB 키보드 · 유선 Magic Keyboard · 2015년 전 MacBook 내장 ·
+/// 옛 Apple Wireless Keyboard(BT)가 이 번호다(KK design 확인 2).
+pub const VENDOR_APPLE_USB: u16 = 0x05ac;
+/// BT SIG가 Apple에 준 회사 번호. 2015년 뒤의 Magic Keyboard(BT)가 이 번호다. USB
+/// vendor가 아니므로 bus가 Bluetooth일 때만 Apple로 본다.
+pub const VENDOR_APPLE_BT: u16 = 0x004c;
+
+/// 키보드 하나의 종류를 고른다(KK design 결정 1 · 2). `apple` · `pc`는 설정 그대로 —
+/// 모든 키보드에 강제한다. `auto`면 `EVIOCGID`의 bus · vendor로 고르고, 이름은 안
+/// 본다(서드파티 키보드의 이름에 `Apple`이 들기도 하고, BT 이름은 사용자가 바꾼다).
+/// 순수 함수라 `input_test`가 표로 본다.
+pub fn kindOf(setting: Keyboard, bus: u16, vendor: u16) Kind {
+    return switch (setting) {
+        .apple => .apple,
+        .pc => .pc,
+        .auto => if (vendor == VENDOR_APPLE_USB or
+            (vendor == VENDOR_APPLE_BT and bus == c.BUS_BLUETOOTH)) .apple else .pc,
+    };
+}
 
 // 두 표가 같은 길이여야 한다 — 아니면 한쪽에서만 배열 밖을 읽는다.
 // `qwerty_keymap.len`이 여러 곳에서 상한으로 쓰이기 때문이다.
@@ -218,10 +244,11 @@ pub const Context = struct {
     /// IP-M2가 읽기 시작했다. handleKey 맨 앞에서 56↔125, 100↔126을
     /// 맞바꾸는 데 쓰인다(swapAltMeta).
     ///
-    /// DECCKM과 달리 이 값은 부팅 내내 상수다. PID 1이 설정 파일을
-    /// 읽어 argv로 넘긴 것을 main.zig가 그대로 채우므로, 프로세스가 사는
-    /// 동안 바뀌지 않는다 — 누를 때와 뗄 때 값이 달라져 modifier가 눌린
-    /// 채로 남는 일이 구조적으로 없다는 뜻이다.
+    /// DECCKM과 달리 이 값은 키보드 칸이 열려 있는 동안 상수다. KK부터 칸마다
+    /// 따로다 — 키보드를 열 때 `kindOf`로 정해 칸에 들고(`main.zig`의
+    /// `KeyboardDev`), 그 칸의 배치마다 그대로 싣는다. 같은 키보드의 누름과 뗌은
+    /// 같은 칸에서 오므로 값이 달라져 modifier가 눌린 채로 남는 일이 구조적으로
+    /// 없다는 뜻이다(IP-M2 때는 "부팅 내내 상수"가 그 근거였다).
     swap_alt_meta: bool = false,
 
     /// 받아쓰기가 마이크를 열었거나 여는 중인가(VD-M1). 참이면 수정키 없는 Esc가
@@ -1344,7 +1371,7 @@ pub const State = struct {
     ///
     /// 값은 `ev.time`이 준 마이크로초다. `Context`에 안 넣은 이유는 그것이
     /// `readKeys` 호출 하나에 한 번 조립되는 값인데 시각은 이벤트마다 다르기
-    /// 때문이다 — `swap_alt_meta`처럼 "부팅 내내 상수"인 값과 같은 자리에
+    /// 때문이다 — `swap_alt_meta`처럼 "칸이 열려 있는 동안 상수"인 값과 같은 자리에
     /// 두면 읽는 사람이 속는다.
     pub fn handleKey(
         self: *State,

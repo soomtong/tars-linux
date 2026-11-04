@@ -1,57 +1,59 @@
-# HANDOFF: Keyboard Kind(KK) 진행 중 — M0 끝 · 커밋됨, 다음은 KK-M1
+# HANDOFF: Keyboard Kind(KK-M0~M1) 끝남 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 목표
 
-키보드마다 Alt · Meta 맞바꿈을 따로 고른다(KH 비목표 1). `keyboard=auto`를 더하고 기본값으로 삼는다 — terminal이 키보드를 열 때
-`EVIOCGID`의 vendor가 Apple(0x05ac, BT면 0x004c)이면 `apple`, 아니면 `pc`. design은
-`docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 사용자 결정은 그 머리(방식 auto + vendor, 기본값 auto, 게이트는 `input` 체인
-부팅 셋, Cmd · Option을 치는 체인은 `keyboard=apple`을 적는다 — A안). 사용자가 KK-M0부터 주요 결정을 위임했다(2026-11-04).
+진행 중인 서브프로젝트는 없다. KK(Keyboard Kind)는 코드 · 체인 · 루트 게이트 · 문서 · 커밋까지 닫혔다. 다음 일은 "다음 후보"에서
+사용자가 고르고, 새 서브프로젝트는 design부터.
 
 ## 현재 브랜치
 
-`main`. design(`424155d`) · M0 plan(`aab1d97`) · M0 커밋이 origin보다 앞서 있다 — push는 사용자가 한다.
+`main` — origin보다 앞서 있다(KK design · M0 plan · M0 · M1 plan · M1 커밋, push는 사용자가 한다). `gh-pages`도 KK 커밋이 로컬에만
+있다(worktree `../tars-linux-pages`) — push는 사용자에게 남겼다.
 
-## 완료된 작업 (2026-11-04)
+## 완료된 작업 (2026-11-04, KK-M0부터 사용자가 주요 결정을 위임)
 
-- [x] KK design · KK-M0 plan
-- [x] KK-M0 — `input/kk/kk-apple`(uinput, vendor 0x05ac, 이름 `TARS KK Keyboard`, 정해진 키를 스스로 치고 끝남 — `&`로 띄운다),
-  `input` 체인 부팅 셋(1차 `keyboard=` 줄 없음 + 도구 · 2차 pc · 3차 apple, 새 판정 12 · 13), `make_disk.sh auto|pc|apple`,
-  `gate_lib.sh`의 `apple_disk`, `copy` · `pane` A · `pointer` A에 디스크, `pane` B · `pointer` B · `dictation` A · B · `hangul`에
-  `keyboard=apple` 줄. 사본에서 판정 12만 기대한 이유로 빨강, 13은 초록(위험 2 닫힘). 루트 게이트 25/27 — `IP-M2`(기대) ·
-  `BT-M2`(btvirt 간헐, 다시 돌리면 초록). design 실측 1~3.
+- [x] KK design — 사용자가 정했다: `auto` + vendor, 기본값 `auto`, `input` 체인 부팅 셋, Cmd 체인은 `keyboard=apple`(A안)
+- [x] KK-M0 — `input/kk/kk-apple`(uinput, vendor 0x05ac), `input` 체인 부팅 셋 · 판정 12 · 13(12가 고치기 전 코드에서 빨강),
+  다섯 체인의 `keyboard=apple`(디스크 없던 셋은 `gate_lib.sh`의 `apple_disk`), 루트 게이트 25/27(`input` 기대 + btvirt 간헐)
+- [x] KK-M1 — `screen_args`의 `auto` · 기본값, init 기본값 · 견본, terminal `input.kindOf` · `KeyboardDev.swap_alt_meta` ·
+  `EVIOCGID` · `open` 줄의 `kind= bus= vendor=`, `input_test` 검사 89, 체인 글자 다섯 · `site/capture.sh`(`alt-`), mutation 셋 잡힘,
+  루트 게이트(아래 "지금 상태"), 닫는 묶음(design Status · 실측, KH · DM 비목표 1, `carryover.md` KH 넷째 `[x]` · KK 절, completed,
+  `project_keyboard_kind.md` + `MEMORY.md`, 소개 페이지 `data.js`)
 
 ## 시도했으나 실패한 접근
 
-- 1차 부팅 디스크 없던 체인에 `config … keyboard=apple` 판정만 두는 것: 지금 기본값이 apple이라 디스크가 안 붙어도 초록이다 →
+- mutation (a)를 `kindOf` 안에서: 검사 89의 표가 먼저 잡아 체인 판정이 안 보인다 → `main.zig`가 설정 대신 `.pc`를 넘긴다. 그때
+  `setting`이 안 쓰이는 인자가 되어 컴파일이 막힌다 → `_ = setting;`.
+- 디스크 없던 부팅에 `config … keyboard=apple` 판정만 두는 것: 기본값이 apple이던 M0 동안 디스크가 안 붙어도 초록이었다 →
   `tars-init: loaded /config/tars.conf`를 함께 본다.
-- 3차 부팅에서 bash 프롬프트 글자(`bash-`)를 기다리는 것: `shell=bash`로 뜬 셸의 프롬프트는 설정에 따라 다르다 → 2차처럼 spawn 줄.
 
 ## 남은 작업
 
-- [ ] KK-M1 plan → 구현: `screen_args`(`auto`), init(기본값 `auto` · 견본 주석 `# keyboard: apple | pc` · 기본값 글자를 보는 단위
-  검사 `reload_test` · `config_edit_test` · `config_test`), terminal(`EVIOCGID` · `input.kindOf` · `KeyboardDev.swap_alt_meta` ·
-  `open` 줄의 `kind= bus= vendor=` · 시작 줄 `swap_alt_meta=per keyboard`), `input_test`(칸 0 · 1이 다른 맞바꿈), `config` 체인의
-  기본값 글자(`TC_LIST_WANT` · `keyboard: apple -> pc` · `keeps keyboard=apple`), `open … name=` 판정의 글자(`keyboard` · `device` ·
-  `terminal` 체인), `site/capture.sh`의 Cmd(호스트에 `mkfs.ext2`가 있는지부터), mutation 셋(design 결정 7), 루트 게이트, 문서 닫기.
-- [ ] 사용자: push
+- [ ] 사용자: `main`과 `gh-pages` push
+- [ ] 다음 서브프로젝트 고르기(사용자) → design → plan
 
 ## 핵심 파일
 
-- `docs/specs/2026-11-04-tars-keyboard-kind-design.md` — KK 결정 · 실측
-- `input/kk/main.zig` — Apple 대역 키보드, `input/check.sh` — 판정 12(가) · 13(나), 3차의 8 · 9
-- `gate_lib.sh`의 `apple_disk`
-- `terminal/src/main.zig`의 `takeKeyboard` · `readKeyboard`(`Context.swap_alt_meta`), `shared/screen_args.zig`의 `Keyboard`
+- `docs/specs/2026-11-04-tars-keyboard-kind-design.md` — KK 결정 · 실측(방금 닫은 것)
+- `terminal/src/input.zig`의 `kindOf` · `Kind`, `terminal/src/main.zig`의 `takeKeyboard` · `KeyboardDev.swap_alt_meta` · `readKeyboard`
+- `input/check.sh` — 부팅 셋, 판정 12 · 13 · 3차의 8 · 9, `input/kk/main.zig`
+- `gate_lib.sh`의 `apple_disk` — Cmd를 치는 새 체인은 이것을 물거나 `tars.conf`에 `keyboard=apple`을 적는다
 
 ## 다음 에이전트에게
 
-`input` 체인은 KK-M1 커밋까지 판정 12에서 빨강이 정상이다 — 이 사이 루트 게이트는 26/27(btvirt 간헐이 겹치면 25/27)이다.
-이 저장소의 규칙(CLAUDE.md): 큰 편집은 무엇이 어떤 모양으로 들어가는지 먼저 설명, 매 편집 뒤 `git diff --stat`과
-`git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명, 커밋은 사용자 승인 뒤.
-init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서. 체인 하나 돌리기:
-`docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./device/check.sh`.
+기본값이 `keyboard=auto`다 — 게이트의 QEMU 키보드(usb-kbd 0x0627 · PS/2 0x0001)는 `pc`로 읽힌다. Cmd · Option을 치는 체인을 새로
+쓰면 디스크에 `keyboard=apple`을 적는다(KK design 결정 8). 이 저장소의 규칙(CLAUDE.md): 큰 편집은 무엇이 어떤 모양으로 들어가는지
+먼저 설명, 매 편집 뒤 `git diff --stat`과 `git diff | rg '^-'`로 지운 줄 확인, 명령은 Claude가 실행하고 결과를 줄 단위로 설명,
+커밋은 사용자 승인 뒤. init의 `zig build test`는 macOS에서 안 끝나니 컨테이너에서(컨테이너에는 `rg`가 없다 — `grep`). 체인 하나
+돌리기: `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./device/check.sh`.
 terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다(커널 printk가 줄을 자른다, `gate_lib.sh`).
 
 ## 지금 상태 (2026-11-04)
+
+- 마지막으로 닫은 것은 Keyboard Kind(KK-M0~M1, `docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 기억은
+  `docs/decisions/project_keyboard_kind.md`). `keyboard=auto`(새 기본값)가 키보드를 열 때 vendor로 Alt · Meta 맞바꿈을 칸마다 고른다.
+  사용자가 방식 · 기본값 · 게이트 모양을 정하고 M0부터 주요 결정을 맡겼다.
+  - 마지막 루트 게이트(KK-M1, 1회): 27/27, 15분 37초(prebuild 342초 · lanes 595초), 잘린 로그 줄 0.
 
 - 마지막으로 닫은 것은 Device Modifiers(DM-M0~M1, `docs/specs/2026-11-04-tars-device-modifiers-design.md`, 기억은
   `docs/decisions/project_device_modifiers.md`). 수정키 여덟과 tap 둘을 키보드 칸마다 들고(읽기는 OR), 빠진 키보드는 그 칸만
@@ -94,10 +96,11 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
   시점만 사용자가 정했고 나머지 결정은 `docs/specs/2026-11-01-tars-bluetooth-design.md`의 추천안이다 — 뒤집을 것이 있으면 그 문서의
   결정 번호로. 컨테이너 이미지가 그때 바뀌었다(Dockerfile 태그 `ee4aa97122b5`). 다른 기계는 `docker rmi tars-devcontainer &&
   make container`.
-- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK + DM. 절차는
+- 0.1.4는 커널 7.4 longterm 뒤에 낸다(사용자 결정, 2026-11-01). 그때 담길 것은 KU(슬롯 · ESP · 6.18.60) + BT + KH + HP(새 배치는 `--wipe`로만, HP design 결정 10) + PM + MI + IK + DM + KK. 절차는
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Keyboard Kind(KK-M0~M1, 11-04) — `docs/decisions/project_keyboard_kind.md`
   - Device Modifiers(DM-M0~M1, 11-04) — `docs/decisions/project_device_modifiers.md`
   - Init Keyboard(IK-M0, 11-03) — `docs/decisions/project_init_keyboard.md`
   - Mise(MI-M0~M1, 11-03) — `docs/decisions/project_mise.md`
@@ -117,7 +120,7 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
 - 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
   체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
   바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(DM-M1, 1회): 27/27, 15분 20초(prebuild 332초 · lanes 586초), cut log lines 전부 0. `RUNS=3`의
+  마지막 루트 게이트(KK-M1, 1회): 27/27, 15분 37초(prebuild 342초 · lanes 595초), cut log lines 전부 0. `RUNS=3`의
   마지막 값은 IK-M0의 81/81, 약 36분. PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
   45500 — 새 체인은 45501부터.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
@@ -125,6 +128,11 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- KK: 일반 노트북 내장 키보드 + Apple 키보드(USB 또는 BT)를 함께 꽂고 — 두 키보드에서 Option+← · Cmd+←(PC 키보드는 Alt 자리가
+  Cmd)가 각자 맞는지, 로그 `terminal: keyboard> open … kind= bus= vendor=`가 둘에 맞게 찍히는지(BT Magic Keyboard가 bus `0005` ·
+  vendor `004c`인지). Mac 배열 서드파티 키보드가 있으면 그 vendor(design 위험 1 — `pc`로 읽히면 `carryover.md`의 KK 절). MacBook 내장
+  (2015년 전)은 `kind=apple`이어야 한다.
 
 - DM: 키보드 둘(노트북 내장 + USB/BT)로 — A의 Shift를 쥐고 A로 글자 하나를 친 뒤(커널 반복을 멈춘다, DM 실측 1) B의 Shift를
   눌렀다 떼고 B로 글자 → 대문자가 그대로인지. A의 Shift를 쥔 채 B를 뽑아도 A로 친 글자가 대문자인지. 두 키보드의 왼쪽 Ctrl을
@@ -183,8 +191,8 @@ terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`�
 
 ## 다음 후보 (새 서브프로젝트는 design부터, 방향은 사용자가 고른다)
 
-- KH가 남긴 것(`carryover.md`의 KH 절): 키보드마다 다른 `keyboard=`(DM이 칸 번호를 `Context.device`로 실어 자리를 만들었다 —
-  `swap_alt_meta`를 칸마다 고르면 된다). init 정리는 IK-M0, 장치별 수정키는 DM이 닫았다.
+- KH가 남긴 것(`carryover.md`의 KH 절)은 셋 다 닫혔다 — init 정리는 IK, 장치별 수정키는 DM, 키보드마다 종류는 KK. 남은 KH 항목은
+  실기의 근거를 기다리는 자동 반복 · 칸 순서 · 두 노드 키보드다. KK가 남긴 것은 vendor가 배열을 말하지 않는 키보드(`carryover.md`의 KK 절).
 - 커널 7.4 longterm 이동(12월 중순 예상, `carryover.md`의 KU 항목). 그 뒤 0.1.4(KU + BT).
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.

@@ -23,9 +23,13 @@ const std = @import("std");
 /// `config.Shell`과 같은 화이트리스트 구조다. enum에 없는 이름은 파싱을
 /// 통과할 수 없으므로 검사 목록을 따로 유지할 필요가 없다. terminal은 이
 /// 값으로 `swap_alt_meta`를 정한다(`pc`면 켠다).
+///
+/// `apple` · `pc`는 모든 키보드에 같은 값을 강제한다. `auto`는 terminal이 키보드를
+/// 열 때마다 vendor로 고른다 — Apple이면 `apple`, 아니면 `pc`(KK design 결정 1 · 2).
 pub const Keyboard = enum {
     apple,
     pc,
+    auto,
 
     /// argv에 넣고 로그에 찍을 글자. `@tagName`은 sentinel이 있는 문자열을
     /// 주므로(0.17) execve의 argv에 `.ptr`로 바로 들어간다 — SA 전의 switch는
@@ -273,7 +277,7 @@ comptime {
 pub const default_shell_path: [*:0]const u8 = "/usr/bin/fish";
 /// init이 없어서 `none`을 넘겨줄 사람이 없으므로 `--no-config`다.
 pub const default_shell_flag: [*:0]const u8 = "--no-config";
-pub const default_keyboard: Keyboard = .apple;
+pub const default_keyboard: Keyboard = .auto;
 pub const default_hangul: HangulLayout = .shin_pcs;
 pub const default_latin: LatinLayout = .qwerty;
 pub const default_toggles_arg: []const u8 = LONGEST_TOGGLES;

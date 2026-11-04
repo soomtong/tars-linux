@@ -383,7 +383,7 @@ pub fn main() !void {
         var sbuf: [control.REPLY_MAX]u8 = undefined;
         var so = reload.Out{ .buf = &sbuf };
         reload.configReply(&so, config.parse("keyboard=pc\nnet=dhcp\ntimezone=Asia/Seoul\n"), defaults);
-        try expectText(edit.screenLine(so.bytes()) orelse "", " keyboard=apple timezone=UTC", "screenLine");
+        try expectText(edit.screenLine(so.bytes()) orelse "", " keyboard=auto timezone=UTC", "screenLine");
         try expectText(edit.nowValue(so.bytes(), "keyboard") orelse "", "pc", "nowValue keyboard with a screen line");
     }
     std.debug.print("config_edit_test: nowValue and screenLine read what reload.configReply writes\n", .{});
@@ -426,7 +426,7 @@ pub fn main() !void {
         const text = "shell=zsh\nnet=bogus\n";
         edit.heard = .{};
         const c = config.parse(text);
-        const keys_tail = "#keyboard=apple\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
+        const keys_tail = "#keyboard=auto\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
         const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n#user=\n";
         var sbuf: [2048]u8 = undefined;
@@ -456,7 +456,7 @@ pub fn main() !void {
         const lc = config.parse(long_text[0..config.MAX_FILE]);
         s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, long_text, &lc, null);
-        if (!std.mem.startsWith(u8, s.bytes(), "#shell=fish\n#keyboard=apple\n")) return fail("showKeyLines read past MAX_FILE:\n{s}", .{s.bytes()});
+        if (!std.mem.startsWith(u8, s.bytes(), "#shell=fish\n#keyboard=auto\n")) return fail("showKeyLines read past MAX_FILE:\n{s}", .{s.bytes()});
     }
     std.debug.print("config_edit_test: keyTable rows and show's key lines, with init's value under the line it differs from\n", .{});
 

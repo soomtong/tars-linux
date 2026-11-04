@@ -73,18 +73,18 @@ pub fn main() !void {
     try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
         "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\nuser=\n" ++
-        "screen keyboard=apple timezone=UTC\n", "configReply");
+        "screen keyboard=auto timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
     reload.keyLines(&ko, def, live);
-    try expectText(ko.bytes(), "keyboard: apple -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
+    try expectText(ko.bytes(), "keyboard: auto -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
         "net: off -> dhcp (now)\n" ++
         "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal)\n", "keyLines");
     // TC-M3. reload terminal의 답 — 화면 쪽 키만, 화면의 값에서 init의 값으로.
     var sb: [512]u8 = undefined;
     var so = reload.Out{ .buf = &sb };
     reload.screenLines(&so, def, live);
-    try expectText(so.bytes(), "keyboard: apple -> pc\ntimezone: UTC -> Asia/Seoul\n", "screenLines");
+    try expectText(so.bytes(), "keyboard: auto -> pc\ntimezone: UTC -> Asia/Seoul\n", "screenLines");
     var none_buf: [64]u8 = undefined;
     var no = reload.Out{ .buf = &none_buf };
     reload.screenLines(&no, live, live);

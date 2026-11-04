@@ -229,6 +229,8 @@ pub fn main() !void {
         try expectNum("EVIOCGBIT(EV_ABS, 8)", pointer.eviocgbit(c.EV_ABS, z.abs.len), 0x80084523);
         try expectNum("EVIOCGPROP(4)", pointer.eviocgprop(z.prop.len), 0x80044509);
         try expectNum("EVIOCGNAME(64)", pointer.eviocgname(64), 0x80404506);
+        // KK-M1. `_IOR('E', 0x02, struct input_id)` — 8바이트(u16 넷).
+        try expectNum("EVIOCGID", pointer.eviocgid(), 0x80084502);
         try expectNum("EVIOCGABS(ABS_MT_POSITION_X)", pointer.eviocgabs(c.ABS_MT_POSITION_X), 0x80184575);
     }
 

@@ -106,6 +106,10 @@ wait_screen() {
   echo "screen never showed '$1'" >&2; exit 1
 }
 
+# Cmd 조합은 `alt-…`로 보낸다(KK-M1). 기본값 keyboard=auto에서 이 기계의 PS/2 키보드
+# (vendor 0x0001)는 pc라, Cmd 자리가 물리 Alt다. 게이트 체인은 디스크에 keyboard=apple을
+# 적어 meta_l을 그대로 쓰지만(KK design 결정 8), 이 스크립트는 호스트에 mkfs.ext2가 없어
+# 디스크 없이 뜬다.
 key() {
   local k
   for k in "$@"; do echo "sendkey $k" >&3; sleep 0.09; done
@@ -197,14 +201,14 @@ scene_panes() {
   pause 0.8
   line "eza -l --group-directories-first /"
   wait_screen "vendor"; pause 1
-  key meta_l-d; pause 1.5
+  key alt-d; pause 1.5
   line "htop"
   pause 4
-  key meta_l-shift-d; pause 1.5
+  key alt-shift-d; pause 1.5
   line "tree -L 1 /etc | head -20"
   wait_screen "directories"; pause 1.5
-  key meta_l-bracket_left; pause 1
-  key meta_l-bracket_left; pause 1
+  key alt-bracket_left; pause 1
+  key alt-bracket_left; pause 1
   line "uname -sr"
   wait_screen "Linux "; pause 3
 }
@@ -216,7 +220,7 @@ scene_copy() {
   pause 0.8
   line "dmesg | tail -40"
   wait_screen "TERM=linux"; pause 1.2
-  key meta_l-shift-c; pause 1
+  key alt-shift-c; pause 1
   key slash; pause 0.3
   typ "Freeing"; key ret; pause 1.2
   key n; pause 0.8
@@ -224,7 +228,7 @@ scene_copy() {
   key shift-n; pause 0.8
   key shift-v; pause 0.6
   key y; pause 1
-  typ "echo '"; key meta_l-v; typ "'"; key ret
+  typ "echo '"; key alt-v; typ "'"; key ret
   wait_screen "Freeing.*Freeing.*Freeing.*Freeing.*Freeing"; pause 3
 }
 

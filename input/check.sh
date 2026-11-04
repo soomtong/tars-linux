@@ -384,6 +384,11 @@ echo "the pty shell is now bash (readline territory)"
 # 셋째 갈래는 판정 10과 같은 이유로 없다 — 줄 처음에 끼운 echo 없이는
 # "kk ll" 출력 행이 나올 수 없다.
 echo "=== 12. typing 'kk ll', then alt-left 'echo ' on the PS/2 keyboard ==="
+# 먼저 terminal이 그렇게 골랐다고 말하는지(KK design 결정 5). 화면이 틀렸을 때 "고르기가
+# 틀렸다"와 "골랐는데 실리지 않았다"를 가르는 줄이다. bus 0x11 · vendor 0x0001(실측 1).
+if ! tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* kind=pc bus=0011 vendor=0001 name=AT Translated Set 2 keyboard" >/dev/null; then
+  report_failure "the PS/2 keyboard was not opened as 'kind=pc bus=0011 vendor=0001'"
+fi
 type_keys k k spc l l
 type_keys alt-left
 type_keys e c h o spc
@@ -426,6 +431,10 @@ for _ in $(seq 1 30); do
 done
 if [ "$KK_OPEN" != "1" ]; then
   report_failure "terminal never opened the kk-apple keyboard (no 'keyboard> open … name=TARS KK Keyboard')"
+fi
+# 열린 줄의 종류와 id(KK-M1). vendor 0x05ac(Apple USB)라 auto가 apple을 골랐다.
+if ! tlog | grep -aE "terminal: keyboard> open /dev/input/event[0-9]+ kind=apple bus=0003 vendor=05ac name=TARS KK Keyboard" >/dev/null; then
+  report_failure "the kk-apple keyboard was not opened as 'kind=apple bus=0003 vendor=05ac'"
 fi
 
 AUTO_APPLE_OK=0
@@ -531,6 +540,10 @@ fi
 if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
   report_failure "the pty shell is not bash on the second boot"
 fi
+# 강제한 값도 칸마다 `kind=`를 찍는다(KK design 결정 5).
+if ! tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* kind=pc " >/dev/null; then
+  report_failure "with keyboard=pc the keyboard was not opened as kind=pc"
+fi
 echo "boot 2: the config on disk selected bash and a pc keyboard"
 
 # ── 10) pc에서 alt-left는 Cmd 의미(줄 처음)다 ─────────────────────────
@@ -617,6 +630,10 @@ fi
 # 셸을 본다 — 프롬프트 모양은 설정에 따라 달라 글자로 안 본다.
 if ! grep -q "terminal: spawned child pid .*(/usr/bin/bash)" "$LOG"; then
   report_failure "the pty shell is not bash on the third boot"
+fi
+# 강제한 apple은 PS/2(vendor 0x0001)도 apple로 연다 — vendor를 안 본다(KK design 결정 1).
+if ! tlog | grep -a "terminal: keyboard> open /dev/input/event[0-9]* kind=apple bus=0011 vendor=0001 " >/dev/null; then
+  report_failure "with keyboard=apple the PS/2 keyboard was not opened as kind=apple"
 fi
 echo "boot 3: the config on disk selected bash and an apple keyboard"
 

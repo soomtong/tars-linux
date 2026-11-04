@@ -2,7 +2,7 @@
 
 접두사: KK
 
-Status: KK-M0 끝남(2026-11-04) — 다음 KK-M1. 결정 8 · 위험 4 · 실측 1~3.
+Status: 끝났다(2026-11-04) — M0~M1, 결정 8 · 위험 4 · 실측 1~6. `keyboard=auto`(새 기본값)가 키보드를 열 때 vendor로 Alt · Meta 맞바꿈을 칸마다 고른다. `input` 체인 부팅 셋 · 판정 12 · 13(M0에서 12가 빨강 → M1에서 초록), mutation 셋 잡힘, 루트 게이트 27/27.
 
 사용자가 정했다(2026-11-04). 방식은 `auto` 값 + vendor 판정이다(결정 1 · 2). 기본값은 `auto`로 바꾼다(결정 4 — 초안의 추천은
 `apple` 유지였다). 게이트는 `input` 체인의 부팅으로 보고(결정 7), Cmd · Option을 보내는 체인은 디스크에 `keyboard=apple`을
@@ -293,3 +293,37 @@ terminal · init로 한 판 돌렸다.
   `carryover.md`의 btvirt 간헐과 같은 서명이다. 이 milestone은 그 체인을 안 건드렸고, 같은 산출물로 체인만 다시 돌린 판은 crash
   없이 초록이다. 두 번째 기록이라 carryover 항목에 적었다.
 
+
+## 실측 (M1, 2026-11-04)
+
+### 실측 4 — 단위 검사와 `input` 체인
+
+`input_test` 검사 89(`kindOf` 표 아홉 줄 — design 확인 2의 다섯 · USB의 `0x004c` · id를 못 읽은 키보드 · 강제 둘, 그리고 칸 0(pc)과
+칸 1(apple)의 왼쪽 Alt가 각자 Meta · Alt로 기록되고 뗌이 둘 다 푼다)가 초록이다. `pointer_test`의 `EVIOCGID` = `0x80084502`도
+초록이다 — cImport가 매크로를 바로 풀어 위험 3은 손으로 만든 상수 없이 닫혔다. init 단위 검사는 기본값 글자 다섯을 `auto`로 고쳐
+초록이다.
+
+`input` 체인은 셋 다 초록이다. 1차의 줄:
+
+- `tars-init: config shell=fish keyboard=auto …` · `terminal: keyboard=auto (swap_alt_meta=per keyboard)`
+- `keyboard> open … kind=pc bus=0011 vendor=0001 name=AT Translated Set 2 keyboard` → 판정 12 `kk ll`(M0의 빨강이 뒤집혔다)
+- `keyboard> open … kind=apple bus=0003 vendor=05ac name=TARS KK Keyboard` → 판정 13 `mm Xnn`
+
+3차(`keyboard=apple`)의 PS/2는 `kind=apple bus=0011 vendor=0001`로 열린다 — 강제값은 vendor를 안 본다(결정 1).
+
+### 실측 5 — mutation 셋이 다 잡혔다
+
+| | 망가뜨린 것 | 잡은 것 |
+|---|---|---|
+| a | `takeKeyboard`가 설정 대신 `.pc`를 넘긴다(`kindOf` 표는 그대로) | 판정 13의 `open` 줄(`kind=apple … vendor=05ac`가 아니다) |
+| b | `readKeyboard`가 칸 대신 칸 0의 `swap_alt_meta`를 싣는다 | 판정 13의 화면(`Xecho: command not found`) |
+| c | `Config.keyboard`를 `.apple`로 되돌린다 | init 단위 검사(`configReply` · `screenLine`) — 체인 부팅 전 |
+
+(a)는 design의 "`kindOf`가 vendor를 무시한다"를 `main.zig` 쪽으로 옮긴 것이다. `kindOf` 안을 망가뜨리면 검사 89의 표가 먼저 잡아
+체인 판정이 보이지 않는다. 첫 시도는 `setting`이 쓰이지 않는 인자가 되어 컴파일이 막혔다(Zig는 안 쓰는 인자를 에러로 본다) —
+`_ = setting;`을 함께 넣었다. (c)는 기본값의 글자를 붙박은 단위 검사가 체인보다 앞에서 잡았다.
+
+### 실측 6 — 루트 게이트
+
+27/27, 15분 37초(prebuild 342 + lanes 595초), 잘린 로그 줄 0. `input` 체인은 부팅 셋으로 62초다. 글자를 고친 `keyboard` ·
+`device` · `terminal` · `config`와 `keyboard=apple`을 문 다섯 체인이 다 초록이고, 이번 판에는 btvirt 간헐이 안 났다.
