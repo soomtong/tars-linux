@@ -364,7 +364,8 @@ root는 이미 무엇이든 할 수 있다.
 
 - `HID_APPLE` · `HID_MAGICMOUSE` · `MOUSE_BCM5974` · `KEYBOARD_APPLESPI`. lessons 이월 숙제가 적은 대로 `HID_APPLE`은
   Apple 키보드의 fn 키를 커널에서 바꿔 `keyboard=apple`과 부딪칠 수 있다. Intel MacBook의 트랙패드(bcm5974 ·
-  applespi)는 "일반 x86_64 노트북"(RM)의 범위 밖이다(비목표 10).
+  applespi)는 "일반 x86_64 노트북"(RM)의 범위 밖이다(비목표 10). `MOUSE_BCM5974`는 MB-M0(2026-11-04)이 켰다 — MacBookAir4,1 ·
+  Retina 15"의 USB 트랙패드다. HID 코어가 그 장치의 마우스 인터페이스를 버리므로 없으면 아예 안 움직인다(MB design 확인 1).
 - `INPUT_MOUSEDEV`. `/dev/input/mice`는 evdev 이전의 통로이고 우리는 evdev만 읽는다.
 - Intel THC(최신 세대의 터치 컨트롤러). 6.18에 있는지, 어느 기계가 쓰는지 재지 않았다 — plan이 커널 소스에서
   본다.
@@ -831,7 +832,8 @@ save-under 그리기 · 전용 색 둘 · 보이는 조건 셋 · 휠(`WHEEL_ROW
 9. 키보드 핫플러그. 결정 1의 inotify 기계가 재료다. 부팅 뒤에 USB 키보드를 바꿔 꽂을 일이 생기면 연다. 그때는 init의
    `argv[4]`와의 관계(HD 결정 3)를 함께 정한다.
 10. Apple 트랙패드(`bcm5974` · `applespi` · Magic Trackpad)와 `HID_APPLE`. Intel MacBook에서 띄울 일이 생기면 연다 —
-    `keyboard=apple`과의 충돌(lessons 이월 숙제)을 먼저 정한다.
+    `keyboard=apple`과의 충돌(lessons 이월 숙제)을 먼저 정한다. `bcm5974`는 MB-M0(2026-11-04)이 열었다 — 트랙패드 드라이버라 fn 키와
+    상관이 없다. `applespi`(2015년 뒤 SPI 키보드 · 트랙패드) · Magic Trackpad · `HID_APPLE`은 그대로 닫혀 있다.
 11. 패널 경계를 끌어 비율 바꾸기. 비율이 늘 1/2인 것은 WP 결정 2다. `layout.Tree`에 비율 필드가 생겨야 한다.
 12. 포커스가 포인터를 따라가기 · 상태 줄 클릭(IS 비목표의 "마우스로 눌러 자판 바꾸기") · URL 열기.
 13. 시간이 지나면 화살표 숨기기. 타이머가 필요하다. 키를 치면 숨는 것(결정 4)으로 부족하면 연다.

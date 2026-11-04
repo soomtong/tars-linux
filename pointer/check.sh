@@ -498,7 +498,8 @@ for sym in INPUT_MOUSE MOUSE_PS2 MOUSE_PS2_SYNAPTICS MOUSE_PS2_SYNAPTICS_SMBUS M
     exit 1
   fi
 done
-for sym in HID_APPLE HID_MAGICMOUSE MOUSE_BCM5974 KEYBOARD_APPLESPI INPUT_MOUSEDEV; do
+# MOUSE_BCM5974는 MB-M0이 켰다(맥 USB 트랙패드, PD 비목표 10의 한 갈래). HID_APPLE의 fn 키 충돌과는 상관없다.
+for sym in HID_APPLE HID_MAGICMOUSE KEYBOARD_APPLESPI INPUT_MOUSEDEV; do
   if grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
     echo "FAIL: CONFIG_${sym} is =y in kernel/.config, PD design 결정 9 leaves it off"
     exit 1
