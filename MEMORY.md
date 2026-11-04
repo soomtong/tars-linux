@@ -90,6 +90,7 @@ init · 설정 · 전원
 - [Init Keyboard](docs/decisions/project_init_keyboard.md) — PID 1의 키보드 고르기 · 3초 · argv 장치 칸을 걷었다, ARGC 9, 체인은 terminal의 keyboard> open으로(IK-M0, 2026-11-03)
 - [Device Modifiers](docs/decisions/project_device_modifiers.md) — 수정키 · tap을 키보드 칸마다, 빠진 칸만 푼다, 커널 자동 반복이 결함을 가린다(DM-M0~M1, 2026-11-04)
 - [Keyboard Kind](docs/decisions/project_keyboard_kind.md) — keyboard=auto 기본값, 키보드마다 vendor로 Alt · Meta 맞바꿈, Cmd 체인은 keyboard=apple 디스크(KK-M0~M1, 2026-11-04)
+- [Pointer Settings](docs/decisions/project_pointer_settings.md) — 휠 방향 · 가속 0~10을 종류마다 칸에, `Ballistics`, 같은 값 조합은 '종류를 안 본다'를 못 잡는다(PS-M0~M1, 2026-11-04)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)

@@ -1,65 +1,53 @@
-# HANDOFF: Pointer Settings(PS) M0 끝 · 커밋됨 — 다음은 PS-M1(가속) plan
+# HANDOFF: Pointer Settings(PS-M0~M1) 닫힘 · 커밋됨 — 다음 서브프로젝트는 사용자가 고른다
 
 ## 목표
 
-PS(Pointer Settings)를 닫는다. `tars.conf`의 `mouse_scroll` · `touchpad_scroll`(휠 방향)과 `mouse_accel` · `touchpad_accel`(0~10)을
-장치 종류마다 칸에 들고 적용한다. M0(설정 넷의 길 · 휠 부호)이 끝났고, 남은 것은 M1 — 가속 곡선을 이동에 곱한다.
+다음 서브프로젝트를 고른다(아래 "다음 후보"). 새 서브프로젝트는 design부터, 방향은 사용자가 정한다.
 
 ## 현재 브랜치
 
-`main` — origin보다 앞서 있다(PS design · M0 plan · M0 커밋, push는 사용자가 한다).
+`main` — origin보다 앞서 있다(PS design · M0 · M1, push는 사용자가 한다). `gh-pages`도 PS 줄을 더한 커밋이 앞서 있다
+(worktree `../tars-linux-pages`).
 
-## 완료된 작업 (2026-11-04, 사용자가 M0을 끝까지 맡겼다)
+## 완료된 작업 (2026-11-04, 사용자가 M0 · M1을 끝까지 맡겼다)
 
-- [x] PS design — 사용자가 정했다: 종류별 키 넷, 방향 기본값은 지금 그대로(마우스 normal · 터치패드 natural), 가속 0~10 기본 0,
-  기본 속도 설정은 비목표
-- [x] PS-M0 — `shared/screen_args.zig`의 `WheelDirection` · `Accel` · argv 칸 넷(`ARGC` 13), init `Config` 넷 · 견본 · 로그 줄 둘 ·
-  `reload.Keys.Bits = u32`, terminal `pointer.Prefs` · `wheelSign` · `PointerDev.wheel_sign`/`accel` · `open` 줄 `scroll= accel=` ·
-  `terminal: pointer prefs` 줄, `pointer` 체인 부팅 C(판정 가~마, 포트 45501), mutation 둘 잡힘, 루트 게이트 26/27(+BT-M2 재실행 초록)
+- [x] PS-M0 — 설정 넷의 길 · 칸마다 휠 부호, `pointer` 체인 부팅 C 판정 가~마
+- [x] PS-M1 — `pointer.Ballistics`(가속 곡선, 칸마다 하나), `drainPointer`에서 부호 옆에 곱한다, `pointer_test` 곡선 검사 열넷,
+  부팅 C 판정 바(`touchpad_accel=10`의 `tp-replay move 100 0`이 128 → 247~252픽셀), mutation 둘 잡힘, 루트 게이트 27/27
+- [x] 닫는 묶음 — PS design `Status:` · 실측 7~10, PD design 비목표 6 · 7, `completed.md`, `docs/decisions/project_pointer_settings.md` +
+  `MEMORY.md`, `gh-pages` `data.js`
 
 ## 시도했으나 실패한 접근
 
-- 부팅 C를 마우스 natural · 터치패드 normal 하나로만 판정: 두 칸의 부호가 둘 다 −1이라 "터치패드가 마우스 값을 쓴다"(mutation b)가
-  초록이었다 → 판정 마(`tars-config set` → `reload` → `reload terminal`로 터치패드만 natural, 부호가 다른 칸)를 더했다.
-- 판정 라를 "읽어 둔 offset − 6"으로: 기준을 읽은 뒤 total이 한 줄 늘어 5줄로 보였다 → 바닥에서의 거리(total − len − offset).
+- 없음(M1). M0의 둘은 `docs/decisions/project_pointer_settings.md`의 함정 1 · 3.
 
 ## 남은 작업
 
-- [ ] PS-M1 plan → 구현: 가속 상태 기계(순수, `pointer.Accel`은 이미 단계 값의 이름이라 다른 이름), `pointer_test` 곡선 검사,
-  `drainPointer`의 부호 곱하기 옆에 붙이기, 부팅 C 판정 바(`accel=10`과 `tp-replay move`가 부팅 B보다 멀리), mutation
-- [ ] 닫는 묶음(design 끝의 "닫을 때" 목록) — PD design 비목표 6 · 7, `completed.md`, `project_pointer_settings.md` + `MEMORY.md`, `data.js`
-- [ ] 사용자: `main` push
-
-## 핵심 파일
-
-- `docs/specs/2026-11-04-tars-pointer-settings-design.md` — 결정 1~8, 실측 1~6(M0)
-- `docs/plans/2026-11-04-tars-pointer-settings-ps-m0.md`
-- `shared/screen_args.zig`의 `WheelDirection` · `Accel`, `terminal/src/pointer.zig`의 `Prefs` · `wheelSign`
-- `terminal/src/main.zig`의 `takePointer` · `drainPointer`(M1의 가속이 부호 곱하기 바로 옆에 붙는다)
-- `pointer/check.sh`의 부팅 C(파일 끝), `screen_row`(PS-M0이 3초 재시도를 넣었다)
+- [ ] 사용자: `main` · `gh-pages` push
+- [ ] 다음 서브프로젝트 고르기
 
 ## 다음 에이전트에게
 
-M1의 곡선 출발값은 design 결정 3(`V_LOW` 0.3 · `V_HIGH` 3.0 px/ms · `GAIN_MAX` 4 · `IDLE_US` 100ms). 판정 바가 서려면 `tp-replay move`
-(10단위씩 8ms)의 속도가 `V_LOW`를 넘어야 한다 — 패드 가로 1000 = 화면 1280이라 10단위/8ms ≈ 1.6px/ms로 넘는다(plan에서 다시 셈).
-부팅 C는 이미 디스크와 도구를 쓰므로 `mouse_accel=10 touchpad_accel=10`을 디스크에 더하면 된다 — 판정 다 · 라 · 마는 휠이라 가속과
-상관없지만 마의 `reload terminal` 줄 글자(`mouse_accel=0`)가 바뀐다. 이 저장소의 규칙(CLAUDE.md): 큰 편집은 먼저 설명, 매 편집 뒤
-`git diff --stat` · `git diff | rg '^-'`, 명령은 Claude가 실행, 커밋은 사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는
-컨테이너에서(macOS에 Linux 헤더가 없다, 컨테이너에는 `rg`가 없다 — `grep`). 체인 하나 돌리기: `docker run --rm --sysctl
-net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./pointer/check.sh`. terminal 줄의
-내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다(커널 printk가 줄을 자른다, `gate_lib.sh`). 게이트의 QEMU 키보드는
-`keyboard=auto`에서 `pc`다 — Cmd · Option을 치는 체인은 디스크에 `keyboard=apple`(KK design 결정 8).
+이 저장소의 규칙(CLAUDE.md): 큰 편집은 먼저 설명, 매 편집 뒤 `git diff --stat` · `git diff | rg '^-'`, 명령은 Claude가 실행, 커밋은
+사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는 컨테이너에서(macOS에 Linux 헤더가 없다, 컨테이너에는 `rg`가 없다 —
+`grep`). 체인 하나 돌리기: `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace
+tars-devcontainer ./pointer/check.sh`. terminal 줄의 내용을 보는 체인 판정은 `$LOG`가 아니라 `tlog |`를 거친다. 게이트의 QEMU
+키보드는 `keyboard=auto`에서 `pc`다 — Cmd · Option을 치는 체인은 디스크에 `keyboard=apple`(KK design 결정 8). 게이트 설정으로
+"칸마다 다른 값"을 보일 때는 결과(부호 · 배율)가 칸마다 실제로 다른 조합을 고른다(PS 함정 1).
 
 ## 지금 상태 (2026-11-04)
 
-- 진행 중은 Pointer Settings(PS, M0 끝). 부팅 C의 monitor 포트 45501을 썼다 — 새 체인은 45502부터.
+- 마지막으로 닫은 것은 Pointer Settings(PS-M0~M1, `docs/specs/2026-11-04-tars-pointer-settings-design.md`, 기억은
+  `docs/decisions/project_pointer_settings.md`). `tars.conf`의 `mouse_scroll` · `touchpad_scroll` · `mouse_accel` · `touchpad_accel`(0~10)을
+  terminal이 장치를 열 때 종류로 골라 칸에 든다 — 휠은 부호, 이동은 `pointer.Ballistics`. 사용자가 키 · 기본값 · 범위를 정하고 끝까지
+  맡겼다. 곡선의 출발값 넷은 재지 않았다(design 위험 2). 부팅 C의 monitor 포트 45501 — 새 체인은 45502부터.
+  - 마지막 루트 게이트(PS-M1, 1회): 27/27, 15분 28초(prebuild 337초 · lanes 591초), 잘린 로그 줄 0.
 
-- 마지막으로 닫은 것은 Keyboard Kind(KK-M0~M1, `docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 기억은
+- 그 전에 닫은 것은 Keyboard Kind(KK-M0~M1, `docs/specs/2026-11-04-tars-keyboard-kind-design.md`, 기억은
   `docs/decisions/project_keyboard_kind.md`). `keyboard=auto`(새 기본값)가 키보드를 열 때 vendor로 Alt · Meta 맞바꿈을 칸마다 고른다.
   사용자가 방식 · 기본값 · 게이트 모양을 정하고 M0부터 주요 결정을 맡겼다.
-  - 마지막 루트 게이트(KK-M1, 1회): 27/27, 15분 37초(prebuild 342초 · lanes 595초), 잘린 로그 줄 0.
 
-- 마지막으로 닫은 것은 Device Modifiers(DM-M0~M1, `docs/specs/2026-11-04-tars-device-modifiers-design.md`, 기억은
+- 그 전에 닫은 것은 Device Modifiers(DM-M0~M1, `docs/specs/2026-11-04-tars-device-modifiers-design.md`, 기억은
   `docs/decisions/project_device_modifiers.md`). 수정키 여덟과 tap 둘을 키보드 칸마다 들고(읽기는 OR), 빠진 키보드는 그 칸만
   푼다. 겹친 tap 키의 누름은 소비로 시작한다. 사용자가 결정을 추천안 그대로 정하고 마무리까지 맡겼다.
 
@@ -104,6 +92,7 @@ net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace 
   `docs/decisions/project_release.md`의 일곱 단계 — `VERSION` 커밋 → tag → `make iso`. ISO가 약 23MB 커진다(Intel BT firmware).
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은
   `docs/guides/completed.md`의 표, 결정과 함정은 `docs/decisions/`의 기억 파일, 값은 design의 실측 절이다. 최근 것부터:
+  - Pointer Settings(PS-M0~M1, 11-04) — `docs/decisions/project_pointer_settings.md`
   - Keyboard Kind(KK-M0~M1, 11-04) — `docs/decisions/project_keyboard_kind.md`
   - Device Modifiers(DM-M0~M1, 11-04) — `docs/decisions/project_device_modifiers.md`
   - Init Keyboard(IK-M0, 11-03) — `docs/decisions/project_init_keyboard.md`
@@ -124,7 +113,7 @@ net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace 
 - 체인은 스물일곱이다(`check.sh`의 `CHAINS`, 마지막이 `MI-M0:./mise/check.sh`). KH 체인이 monitor 45495 · QMP 45496을 쓰고 HP
   체인은 포트를 안 쓴다(45497 · 45498을 HP 예약으로 적어 뒀다), 예약 범위 45455~45599(RP-M0). PM 체인은
   바깥 망(github.com · ghcr.io)에 기대는 첫 체인이다 — 빨개지면 `pm: external network unavailable` 줄이 있는지부터 본다(PM 위험 1).
-  마지막 루트 게이트(KK-M1, 1회): 27/27, 15분 37초(prebuild 342초 · lanes 595초), cut log lines 전부 0. `RUNS=3`의
+  마지막 루트 게이트(PS-M1, 1회): 27/27, 15분 28초(prebuild 337초 · lanes 591초), cut log lines 전부 0. `RUNS=3`의
   마지막 값은 IK-M0의 81/81, 약 36분. PM 체인이 244초로 가장 길다. 바깥 망 체인은 PM · MI 둘이다(MI는 `mise: external network unavailable`). 부팅 3의 monitor는 PM 45499 · MI
   45500, PS-M0의 `pointer` 부팅 C가 45501 — 새 체인은 45502부터.
   게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`. 다음에 어느 체인이 빨개지면 그 회차 로그부터 본다.
@@ -136,6 +125,9 @@ net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace 
 - PS: 노트북 터치패드 + USB 마우스를 함께 쓰며 — 기본값에서 마우스 휠은 앞으로 = 위의 글, 두 손가락은 내용이 손가락을
   따라가는지. `sudo tars-config set mouse_scroll=natural` · `tars-config reload` · `tars-config reload terminal` 뒤 마우스만 뒤집히는지.
   로그 `pointer> open … kind= scroll= accel=`가 장치마다 맞는지 — 터치패드가 `kind=mouse`로 열리면 design 위험 1(`carryover.md`에).
+  가속: `touchpad_accel=5` · `mouse_accel=5`로 — 천천히 칸 하나를 고르는 손이 그대로인지(배율 1), 빠르게 밀 때 화면 끝까지 한두 번에
+  가는지, 10이 너무 세거나 1이 이미 거슬리는지. 맞지 않으면 값은 `pointer.ACCEL_V_LOW_MPX` · `ACCEL_V_HIGH_MPX` · `ACCEL_GAIN_MAX` ·
+  `ACCEL_IDLE_US` 넷이다(design 위험 2). 손가락을 뗐다 다시 댄 첫 이동이 튀지 않는지(위험 3).
 
 - KK: 일반 노트북 내장 키보드 + Apple 키보드(USB 또는 BT)를 함께 꽂고 — 두 키보드에서 Option+← · Cmd+←(PC 키보드는 Alt 자리가
   Cmd)가 각자 맞는지, 로그 `terminal: keyboard> open … kind= bus= vendor=`가 둘에 맞게 찍히는지(BT Magic Keyboard가 bus `0005` ·
@@ -206,7 +198,7 @@ net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace 
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.
 - 렌더: 부분 갱신은 DR + SB로 닫았다. 남은 축은 GPU 가속뿐이다(키 하나 0.42ms 가운데 present 0.27이 커널 쪽, DR design "안 하는 것").
   실기 없이 할 수 있는 작은 것은 큰 kitty 이미지의 그리기 비용 하나(`carryover.md`).
-- PD 비목표: `tars.conf`의 휠 방향, 포인터 가속. SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기.
+- PS 비목표: 기본 속도(`*_speed`), 장치 이름별 설정, 스크롤 가속. SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
 - VD 비목표: 상주 프로세스로 연결 재사용(첫 연결 지연이 크면), 알림음, hold 모드.
 - AU 비목표 10: SoundWire 코덱 노트북(`sof_sdw`), side-codec 스피커 앰프(실기가 요구하면).
