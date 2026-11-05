@@ -13,7 +13,7 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 완료된 작업 (2026-11-06, TP-M2 세션 — 사용자가 남은 결정을 위임하고 잤다)
 
-- [x] TP-M2 plan `c169817`, 구현(이 커밋). 사용자 결정: LLVM 툴체인 · odin · tcc를 뺀다("GCC가 포함되니까 C나 Assembly 계열은
+- [x] TP-M2 plan `c169817`, 구현 `e030523`, HP-M2 견고화 `86b34c5`. 사용자 결정: LLVM 툴체인 · odin · tcc를 뺀다("GCC가 포함되니까 C나 Assembly 계열은
   문제없고, 디버거가 필요하면 직접 LLVM 툴체인을 설치"). base에 g++(81MiB), `lang-native`에 zig 0.17.1 · rust 1.99.1(+ rust-src,
   설치기는 `devlayer/hooks/rust-installer.sh`) · go 1.27.3(402MiB, 풀면 2,018MiB). 매니페스트 파서 `devlayer/manifest.sh`(열이 맞지 않으면
   줄 번호로 멈춘다, 일곱째 열 `exe=` · `hook=` · `into=`), 묶음끼리 같은 경로의 다른 내용 검사(`devlayer/build/<묶음>.paths`).
