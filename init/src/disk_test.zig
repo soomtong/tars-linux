@@ -462,22 +462,60 @@ pub fn main() !void {
         "  p3 (tars-home) <- not opened\n" ++
         "  tars-install /dev/nvme0n1 --wipe erases all three instead, your home too\n";
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", "0.1.3", .rotate);
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", "0.1.3", .rotate, null);
     try expectText(out.bytes(), UPDATE_HEAD ++
         "  boot/old/  <- TARS 0.1.3, for the boot menu if the new one fails\n" ++ UPDATE_TAIL, "the rotating update plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", null, .overwrite);
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.4", null, .overwrite, null);
     try expectText(out.bytes(), UPDATE_HEAD ++ "  boot/old/  <- left as it is\n" ++ UPDATE_TAIL, "the overwriting update plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", null, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate);
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", null, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate, null);
     const fresh = "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) will be erased. it now holds: blank\n" ++
         P1 ++
         "  p2  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
         "  p3     rest  Linux       ext4   tars-home   <- your home, empty at first\n";
     try expectText(out.bytes(), fresh, "the fresh plan");
     out = control.Out{ .buf = &out_buf };
-    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", 2, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate);
+    disk.planLines(&out, false, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "blank", 2, .{ 1, 2, 3 }, false, "0.1.4", null, .rotate, null);
     try expectText(out.bytes(), fresh ++ "  the settings now on p2 are erased too\n", "the fresh plan over old settings");
+    // TP-M1: 매체가 묶음을 실으면 갱신이 p3를 연다. 없으면(null) 위의 UPDATE_TAIL 그대로다.
+    const lp: disk.LayerPlan = .{ .names = "base lang-jvm", .bytes = 200_884_224, .old = "0.1.4" };
+    const UPDATE_LAYERS_TAIL = "  p2 (tars-config) <- not opened\n" ++
+        "  p3 (tars-home) <- layers 0.1.4 -> 0.1.5 (192 MiB), your files are not touched\n" ++
+        "  tars-install /dev/nvme0n1 --wipe erases all three instead, your home too\n";
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.5", null, .overwrite, lp);
+    try expectText(out.bytes(), "tars-install: /dev/nvme0n1 (1 GB, QEMU NVMe Ctrl) already has TARS. p1 will be updated, p2 (your settings) is kept.\n" ++
+        "  boot/      <- TARS 0.1.5\n" ++ "  boot/old/  <- left as it is\n" ++ UPDATE_LAYERS_TAIL, "the update plan with layers");
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 0 }, false, "0.1.5", null, .overwrite, .{ .names = "base", .bytes = 1 });
+    if (std.mem.indexOf(u8, out.bytes(), "  layers  skipped, this disk has no tars-home partition\n") == null or
+        std.mem.indexOf(u8, out.bytes(), "(tars-home) <-") != null)
+    {
+        std.debug.print("FAIL: an update without p3 said:\n{s}", .{out.bytes()});
+        return error.LayersNoHome;
+    }
+    out = control.Out{ .buf = &out_buf };
+    disk.planLines(&out, true, "/dev/nvme0n1", "1 GB", "QEMU NVMe Ctrl", "TARS installed", null, .{ 1, 2, 3 }, false, "0.1.5", null, .overwrite, .{ .names = "base", .bytes = 1 << 20 });
+    if (std.mem.indexOf(u8, out.bytes(), "  p3 (tars-home) <- layers none -> 0.1.5 (1 MiB), your files are not touched\n") == null) {
+        std.debug.print("FAIL: the first update with layers said:\n{s}", .{out.bytes()});
+        return error.LayersNone;
+    }
+    out = control.Out{ .buf = &out_buf };
+    disk.layerNewLine(&out, 5, lp);
+    try expectText(out.bytes(), "  layers  base lang-jvm (192 MiB) -> p5 /.tars/layers\n", "the new install's layers line");
+    if (disk.mib(0) != 0 or disk.mib(1) != 1 or disk.mib(1 << 20) != 1 or disk.mib((1 << 20) + 1) != 2) {
+        std.debug.print("FAIL: mib does not round up\n", .{});
+        return error.Mib;
+    }
+    // 자리: 빈 자리 + 지금 묶음 ≥ 새 묶음 + 1MiB(옛 묶음을 먼저 지운다).
+    const M: u64 = 1 << 20;
+    if (!disk.layersFit(100 * M, 0, 99 * M) or disk.layersFit(100 * M, 0, 99 * M + 1) or
+        !disk.layersFit(10 * M, 190 * M, 199 * M) or disk.layersFit(10 * M, 190 * M, 200 * M))
+    {
+        std.debug.print("FAIL: layersFit is off by the slack\n", .{});
+        return error.LayersFit;
+    }
     // HP-M1: 계정 한 줄. 비밀번호의 글자는 안 찍는다.
     out = control.Out{ .buf = &out_buf };
     disk.userLine(&out, "tars", true);
@@ -738,7 +776,7 @@ pub fn main() !void {
             "  p5     rest  Linux       ext4   tars-home   <- your home, empty at first\n" ++
             "  the Mac still starts macOS; hold Option at power-on and pick EFI Boot for TARS\n", "the beside plan");
         out = control.Out{ .buf = &out_buf };
-        disk.planLines(&out, true, "/dev/sda", "7 GB", "Mac SSD", "TARS installed", null, .{ 3, 4, 5 }, true, "0.1.4", null, .overwrite);
+        disk.planLines(&out, true, "/dev/sda", "7 GB", "Mac SSD", "TARS installed", null, .{ 3, 4, 5 }, true, "0.1.4", null, .overwrite, null);
         if (std.mem.indexOf(u8, out.bytes(), "already has TARS. p3 will be updated, p4 (your settings) is kept.") == null or
             std.mem.indexOf(u8, out.bytes(), "--beside --wipe erases the TARS partitions instead") == null)
         {

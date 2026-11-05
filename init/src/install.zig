@@ -7,6 +7,7 @@ const account = @import("account.zig");
 const secret = @import("secret.zig");
 const screen_args = @import("screen_args");
 const build_info = @import("build_info");
+const layers = @import("layers.zig");
 
 /// tars-install — 부팅 매체의 부트 파일(disk.BOOT_FILES)을 내장 디스크에 옮겨 USB 없이
 /// 뜨게 한다(DI design). 인자 없이 치면 목록, 디스크를 주면 계획을 보이고
@@ -1107,6 +1108,26 @@ fn install(
     var conf_out: [2 * 8192]u8 = undefined;
     const esp_conf = prepareConf(&conf_in, &conf_out, new_ver, old_after) orelse return 1;
 
+    // ── 개발 도구 층 (TP-M1) ──
+    // 매체에 묶음이 없으면 lp가 null이고 계획 · 쓰기 모두 TP 전과 같다(plan 결정 D.1).
+    var ml: MediumLayers = .{};
+    if (!readMediumLayers(&ml)) return 1;
+    var lp: ?disk.LayerPlan = null;
+    var hl: HomeLayers = .{};
+    if (ml.list.len > 0) {
+        lp = .{ .names = ml.names(), .bytes = ml.bytes };
+        if (update and nums[2] != 0) {
+            var hp_buf: [32]u8 = undefined;
+            const hp = storage.partitionName(&hp_buf, path, nums[2]) orelse return 1;
+            if (!readHomeLayers(hp, &hl)) return 1;
+            lp.?.old = hl.ver;
+            if (!disk.layersFit(hl.free, hl.current, ml.bytes)) {
+                disk.layersRoomRefusal(Complain{}, nums[2], hl.free, hl.current, ml.bytes);
+                return 1;
+            }
+        }
+    }
+
     // ── 계획 ──
     if (take != null) {
         disk.takeLines(Say{}, take_node, what, part_size, path, size_text, model, holds, gap, gpt.?.sector, nums);
@@ -1115,7 +1136,10 @@ fn install(
     } else {
         // 설정 파티션은 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
         const settings = if (update) null else settingsOn(path, gpt);
-        disk.planLines(Say{}, update, path, size_text, model, if (update) disk.stateWord(state) else holds, settings, nums, on_beside, new_ver, cur_ver, rot);
+        disk.planLines(Say{}, update, path, size_text, model, if (update) disk.stateWord(state) else holds, settings, nums, on_beside, new_ver, cur_ver, rot, lp);
+    }
+    if (!update) {
+        if (lp) |l| disk.layerNewLine(Say{}, nums[2], l);
     }
 
     // ── 계정 (HP-M1) ──
@@ -1142,6 +1166,15 @@ fn install(
     if (update) {
         const esp = storage.partitionName(&esp_buf, path, nums[0]) orelse return 1;
         if (!fillEsp(esp, esp_conf, new_ver, rot == .rotate)) return 1;
+        // ESP 다음이다. 여기서 끊기면 새 이미지가 `version` 없는(또는 옛) 묶음을 보고 안 얹는다 — 다시 치면 된다.
+        if (lp != null and nums[2] != 0) {
+            var hp_buf: [32]u8 = undefined;
+            const hp = storage.partitionName(&hp_buf, path, nums[2]) orelse return 1;
+            if (!copyLayers(hp, &ml, new_ver)) {
+                complain("the layers were not copied; run tars-install {s} again", .{path});
+                return 1;
+            }
+        }
         say("tars-install: updated. remove the boot medium and reboot.\n", .{});
         return 0;
     }
@@ -1227,6 +1260,12 @@ fn install(
     // 새 설치로 처음부터 간다(`--beside`는 TARS 이름이 남아 있어 `--beside --wipe`로).
     if (!writeAccount(p2, p3, acct.name(), hash)) {
         complain("the account was not written; run tars-install {s}{s} again", .{ path, if (add_new) " --beside --wipe" else "" });
+        return 1;
+    }
+
+    // ESP보다 앞이다 — 여기서 실패한 디스크는 ESP가 비어 TARS로 안 보이고, 다시 치면 새 설치로 처음부터 간다.
+    if (ml.list.len > 0 and !copyLayers(p3, &ml, new_ver)) {
+        complain("the layers were not copied; run tars-install {s}{s} again", .{ path, if (add_new) " --beside --wipe" else "" });
         return 1;
     }
 
@@ -1375,6 +1414,173 @@ fn writeVersion(ver: []const u8) bool {
     var path_buf: [128]u8 = undefined;
     const n = writeConf(slotPath(&path_buf, disk.NEW_DIR, "version"), text) orelse return false;
     say("  {s}/version {d} bytes\n", .{ disk.NEW_DIR, n });
+    return true;
+}
+
+// ── 개발 도구 층 (TP-M1) ────────────────────────────────────────────────
+
+/// 매체의 `boot/layers/*.sqfs`(TP design 결정 12). 없으면 len이 0이고 설치는 TP 전과 글자 하나 다르지 않다.
+const MediumLayers = struct {
+    list: layers.List = .{},
+    bytes: u64 = 0,
+    names_buf: [layers.MAX * (layers.NAME_MAX + 1)]u8 = undefined,
+    names_len: usize = 0,
+
+    fn names(self: *const MediumLayers) []const u8 {
+        return self.names_buf[0..self.names_len];
+    }
+};
+
+const MEDIUM_LAYERS: [:0]const u8 = MEDIUM_DIR ++ "/" ++ disk.MEDIUM_LAYERS_DIR;
+const HOME_TARS: [:0]const u8 = HOME_DIR ++ "/" ++ disk.HOME_TARS_DIR;
+const HOME_LAYERS: [:0]const u8 = HOME_DIR ++ "/" ++ disk.HOME_LAYERS_DIR;
+
+fn layerPath(buf: []u8, dir: []const u8, name: []const u8, tail: []const u8) [:0]const u8 {
+    return std.fmt.bufPrintSentinel(buf, "{s}/{s}{s}{s}", .{ dir, name, layers.SUFFIX, tail }, 0) catch unreachable;
+}
+
+fn readMediumLayers(out: *MediumLayers) bool {
+    switch (layers.scan(Complain{}, MEDIUM_LAYERS, &out.list)) {
+        .no_dir => return true,
+        .unreadable => return false,
+        .ok => {},
+    }
+    for (0..out.list.len) |i| {
+        const name = out.list.name(i);
+        var buf: [128]u8 = undefined;
+        const p = layerPath(&buf, MEDIUM_LAYERS, name, "");
+        out.bytes += fileSize(p.ptr) orelse {
+            complain("cannot read the size of {s}", .{p});
+            return false;
+        };
+        if (out.names_len > 0) {
+            out.names_buf[out.names_len] = ' ';
+            out.names_len += 1;
+        }
+        @memcpy(out.names_buf[out.names_len..][0..name.len], name);
+        out.names_len += name.len;
+    }
+    return true;
+}
+
+/// 갱신이 YES 전에 p3에서 읽는 것. 읽기 전용으로 붙였다 뗀다.
+const HomeLayers = struct {
+    ver_buf: [72]u8 = undefined,
+    ver: ?[]const u8 = null,
+    free: u64 = 0,
+    current: u64 = 0,
+};
+
+fn readHomeLayers(p3: [:0]const u8, out: *HomeLayers) bool {
+    if (!mkdirOk(HOME_DIR.ptr)) {
+        complain("cannot create {s}", .{HOME_DIR});
+        return false;
+    }
+    if (failed(linux.mount(p3.ptr, HOME_DIR.ptr, "ext4", linux.MS.RDONLY, 0))) |e| {
+        complain("cannot mount {s} as ext4 (errno {d}); nothing was changed", .{ p3, @backingInt(e) });
+        return false;
+    }
+    defer _ = linux.umount(HOME_DIR.ptr);
+    out.free = freeBytes(HOME_DIR.ptr) orelse {
+        complain("cannot read the free space of {s}; nothing was changed", .{p3});
+        return false;
+    };
+    var vb: [128]u8 = undefined;
+    if (layers.readVersion(HOME_LAYERS, &vb)) |raw| {
+        const v = std.mem.trim(u8, raw, " \t\r\n");
+        if (v.len > 0) {
+            const n = @min(v.len, out.ver_buf.len);
+            @memcpy(out.ver_buf[0..n], v[0..n]);
+            out.ver = out.ver_buf[0..n];
+        }
+    }
+    var have: layers.List = .{};
+    if (layers.scan(Complain{}, HOME_LAYERS, &have) == .ok) {
+        for (0..have.len) |i| {
+            var buf: [128]u8 = undefined;
+            out.current += fileSize(layerPath(&buf, HOME_LAYERS, have.name(i), "").ptr) orelse 0;
+        }
+    }
+    return true;
+}
+
+/// p3에 묶음을 놓는다(plan 결정 D.4, TP-M1 확인한 것). 순서가 이 함수의 뜻이다 —
+///   1. `version`을 지운다. 이 순간부터 끝날 때까지 init은 아무것도 안 얹는다(layers.mountAll)
+///   2. 옛 `*.sqfs`를 모두 지운다. 자리 셈(disk.layersFit)이 이것을 전제한다
+///   3. 매체의 묶음마다 `.new`에 쓰고 rename
+///   4. sync 뒤 `version`을 `.new`에서 rename
+/// 어디서 끊겨도 `version`이 없거나 옛 것이라 init은 반쪽 묶음을 얹지 않는다.
+fn copyLayers(p3: [:0]const u8, ml: *const MediumLayers, ver: []const u8) bool {
+    if (!mkdirOk(HOME_DIR.ptr)) {
+        complain("cannot create {s}", .{HOME_DIR});
+        return false;
+    }
+    if (failed(linux.mount(p3.ptr, HOME_DIR.ptr, "ext4", 0, 0))) |e| {
+        complain("cannot mount {s} as ext4 (errno {d})", .{ p3, @backingInt(e) });
+        return false;
+    }
+    const ok = copyLayersMounted(ml, ver);
+    linux.sync();
+    if (failed(linux.umount(HOME_DIR.ptr))) |e| {
+        complain("cannot unmount {s} (errno {d})", .{ HOME_DIR, @backingInt(e) });
+        return false;
+    }
+    return ok;
+}
+
+fn copyLayersMounted(ml: *const MediumLayers, ver: []const u8) bool {
+    const t0 = monotonicMs();
+    if (!mkdirOk(HOME_TARS.ptr) or !mkdirOk(HOME_LAYERS.ptr)) {
+        complain("cannot create {s}", .{HOME_LAYERS});
+        return false;
+    }
+    const version = HOME_LAYERS ++ "/" ++ layers.VERSION_FILE;
+    if (failed(linux.unlink(version.ptr))) |e| {
+        if (e != .NOENT) {
+            complain("cannot remove {s} (errno {d})", .{ version, @backingInt(e) });
+            return false;
+        }
+    }
+    var old: layers.List = .{};
+    if (layers.scan(Complain{}, HOME_LAYERS, &old) == .ok) {
+        for (0..old.len) |i| {
+            var buf: [128]u8 = undefined;
+            const p = layerPath(&buf, HOME_LAYERS, old.name(i), "");
+            if (failed(linux.unlink(p.ptr))) |e| {
+                complain("cannot remove {s} (errno {d})", .{ p, @backingInt(e) });
+                return false;
+            }
+        }
+        if (old.len > 0) say("  {s}: {d} old layers removed\n", .{ disk.HOME_LAYERS_DIR, old.len });
+    }
+    say("tars-install: copying the layers\n", .{});
+    for (0..ml.list.len) |i| {
+        const name = ml.list.name(i);
+        var from_buf: [128]u8 = undefined;
+        var tmp_buf: [128]u8 = undefined;
+        var to_buf: [128]u8 = undefined;
+        const from = layerPath(&from_buf, MEDIUM_LAYERS, name, "");
+        const tmp = layerPath(&tmp_buf, HOME_LAYERS, name, ".new");
+        const to = layerPath(&to_buf, HOME_LAYERS, name, "");
+        const n = copyFile(from, tmp) orelse return false;
+        if (failed(linux.rename(tmp.ptr, to.ptr))) |e| {
+            complain("cannot rename {s} (errno {d})", .{ tmp, @backingInt(e) });
+            return false;
+        }
+        say("  {s}/{s}{s} {d} bytes\n", .{ disk.HOME_LAYERS_DIR, name, layers.SUFFIX, n });
+    }
+    // 묶음이 디스크에 닿은 뒤에 version이다 — 캐시가 순서를 뒤섞지 않게.
+    linux.sync();
+    var text_buf: [80]u8 = undefined;
+    const text = std.fmt.bufPrint(&text_buf, "{s}\n", .{ver}) catch unreachable;
+    const tmp = version ++ ".new";
+    _ = writeConf(tmp, text) orelse return false;
+    if (failed(linux.rename(tmp.ptr, version.ptr))) |e| {
+        complain("cannot rename {s} (errno {d})", .{ tmp, @backingInt(e) });
+        return false;
+    }
+    say("  {s}/{s} {s}\n", .{ disk.HOME_LAYERS_DIR, layers.VERSION_FILE, ver });
+    say("tars-install: copied {d} layers ({d} MiB) in {d}ms\n", .{ ml.list.len, disk.mib(ml.bytes), monotonicMs() - t0 });
     return true;
 }
 

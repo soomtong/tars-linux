@@ -121,7 +121,8 @@ if grep -q $'\tdebian\t' <<<"${lines}"; then
   cat "${build}/${bundle}.pkgs" >>"${info}"
 fi
 
-# 결정 13의 버전 줄. M0은 git describe다 — 버전을 낼 때의 모양은 M1이 정한다.
+# 출처 기록 한 줄(git describe). 결정 13의 비교에는 안 쓴다 — 묶음은 stamp로 커밋을 넘어 캐시되므로 이 줄은 ISO의 init
+# 버전과 거의 늘 다르다. 비교 대상은 tars-install이 p3에 묶음과 함께 쓰는 `version`이다(TP-M1 plan 결정 E).
 git -c safe.directory=/workspace -c safe.directory="${PWD}" describe --always --dirty >"${root}/usr/share/tars/layers/${bundle}"
 
 # ── 검사 ────────────────────────────────────────────────────────────────

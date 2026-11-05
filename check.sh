@@ -517,6 +517,11 @@ run_chain() {
 # 2초 잔 것을 BOOTTIME으로 보이고, 셸이 다시 답하고 terminal이 살아 있는지 본다. 뚜껑은 QEMU에 없어
 # devices_test가 본다. QMP 45503. 회차당 부팅 1회.
 #
+# TP 체인은 개발 도구 층을 본다. 묶음 둘(base · lang-jvm)을 실은 ISO(out/tars-dev.iso)로 설치하고, 디스크로 다시
+# 떠 init이 loop · squashfs · overlay로 /usr에 얹은 위에서 사용자로 gcc · make · javac · java · jwebserver를 망 없이
+# (-nic none) 돌린다. 갱신과 깨진 묶음 하나도 본다. 묶음은 make gate가 먼저 부르는 make dev-layers가 굽는다 — 이
+# 체인은 devlayer/build.sh로 새 initrd와 다시 대조만 한다. monitor 45504(부팅 2의 화면). 회차당 부팅 4회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -550,6 +555,7 @@ CHAINS=(
   "HS-M0:./hidpi/check.sh"
   "DB-M0:./dualboot/check.sh"
   "LP-M1:./sleep/check.sh"
+  "TP-M1:./devtools/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

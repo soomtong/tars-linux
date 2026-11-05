@@ -260,6 +260,19 @@ pub fn build(b: *std.Build) void {
         .root_module = services_test_mod,
     });
 
+    // TP-M1: 개발 도구 층의 이름 · 버전 판단과 디렉터리 읽기. services_test와 같은 이유로
+    // host_target이다 — scan이 경로를 인자로 받는다. loop · mount는 devtools 체인이 본다.
+    const layers_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/layers_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const layers_test = b.addExecutable(.{
+        .name = "layers_test",
+        .root_module = layers_test_mod,
+    });
+
     // SV-M2: 로그인 셸과 sshd의 SetEnv를 쓰는 것의 검사. apply가 경로를 인자로
     // 받으므로 /tmp의 파일에 쓴다 — 개발 기계의 /etc/passwd를 안 건드린다.
     const login_test_mod = b.createModule(.{
@@ -428,6 +441,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(clock_test).step);
     test_step.dependOn(&b.addRunArtifact(disk_test).step);
     test_step.dependOn(&b.addRunArtifact(services_test).step);
+    test_step.dependOn(&b.addRunArtifact(layers_test).step);
     test_step.dependOn(&b.addRunArtifact(login_test).step);
     test_step.dependOn(&b.addRunArtifact(account_test).step);
     test_step.dependOn(&b.addRunArtifact(control_test).step);

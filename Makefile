@@ -104,12 +104,14 @@ help:
 	@echo "  make iso"
 	@echo "      initrd 뒤에 boot/build.sh(limine을 -B로 다시 빌드한다 — 배포 tarball의 실행"
 	@echo "      파일은 호스트 아키텍처 것이라 컨테이너가 바뀌면 못 쓴다)와 boot/make_iso.sh"
-	@echo "      (xorriso). ISO 하나가 BIOS와 UEFI를 둘 다 태운다. 증분이면 13초"
+	@echo "      (xorriso). ISO 하나가 BIOS와 UEFI를 둘 다 태운다. 증분이면 13초."
+	@echo "      ISO_LAYERS=\"base lang-jvm\"이면 devlayer/build/의 묶음을 boot/layers/에 싣는다(TP-M1) —"
+	@echo "      tars-install이 p3로 옮기고 init이 /usr에 얹는다. 기본은 싣지 않는다(게이트 체인의 ISO)"
 	@echo
 	@echo "  make dev-layers"
 	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base lang-jvm)을 devlayer/build/<묶음>.sqfs로 굽는다."
 	@echo "      devlayer/manifest.tsv가 출처다. 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
-	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. 부팅에는 아직 안 얹는다(TP-M1)"
+	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools가 먼저 부른다(캐시면 수십 초)"
 	@echo
 	@echo "설정 디스크 ($(CONFIG_DISK)) — 게스트가 기억하는 자리"
 	@echo
@@ -226,8 +228,10 @@ initrd: kernel init terminal
 # limine을 소스에서 다시 빌드한다(-B). boot/build.sh의 주석이 그 이유를 적고
 # 있다 — 배포 tarball의 실행 파일은 호스트 아키텍처의 것이라 컨테이너가
 # 바뀌면 못 쓴다.
+# ISO_LAYERS(TP-M1 plan 결정 F): 실을 묶음 이름. 비면 TP 전과 같은 ISO다.
+ISO_LAYERS ?=
 iso: initrd
-	$(IN_CONTAINER) 'cd boot && ./build.sh && ./make_iso.sh'
+	$(IN_CONTAINER) 'cd boot && ./build.sh && ISO_LAYERS="$(ISO_LAYERS)" ./make_iso.sh'
 
 # 개발 도구 층(TP-M0). 묶음마다 둘을 차례로 부른다 — debian 줄의 거두기는 amd64 컨테이너(개발 컨테이너는 arm64라
 # amd64 postinst를 못 돌린다), 받기 · 검사 · 굽기는 개발 컨테이너. 둘 다 자기 캐시를 본다(harvest.lines · stamp).
@@ -288,12 +292,14 @@ quick:
 # RUNS · JOBS를 주면 컨테이너 환경으로 넘긴다(check.sh가 읽는 이름 그대로).
 # 안 주면 넘기지 않아 check.sh의 기본값(1회 · 메모리로 정한 JOBS)이 산다.
 GATE_ENV = $(if $(RUNS),-e RUNS=$(RUNS)) $(if $(JOBS),-e JOBS=$(JOBS))
-gate: container
+# dev-layers가 먼저다(TP-M1 plan 결정 G). 게이트는 개발 컨테이너 안이라 amd64 거두기를 못 한다 —
+# devtools 체인은 여기서 거둔 tar 위에서 devlayer/build.sh(검사)만 다시 돈다.
+gate: container dev-layers
 	$(DOCKER) run --rm $(RESERVED_PORTS) $(GATE_ENV) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c './check.sh'
 
 # 체인 하나. CHAIN을 안 주면 무엇을 줄지 알려주고 멈춘다 — 조용히 루트
 # 게이트를 돌리면 10분을 기다린 뒤에야 잘못 친 것을 알게 된다.
-check: container
+check: container $(if $(filter devtools,$(CHAIN)),dev-layers)
 	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
 	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TARS_RENDER_VERIFY=1 TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'

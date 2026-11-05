@@ -491,6 +491,7 @@ pub fn planLines(
     new_ver: []const u8,
     cur_ver: ?[]const u8,
     rot: Rotation,
+    layer_plan: ?LayerPlan,
 ) void {
     if (update) {
         sink.print("tars-install: {s} ({s}, {s}) already has TARS. p{d} will be updated, p{d} (your settings) is kept.\n", .{
@@ -503,7 +504,16 @@ pub fn planLines(
             sink.print("  boot/old/  <- left as it is\n", .{});
         }
         sink.print("  p{d} (tars-config) <- not opened\n", .{nums[1]});
-        if (nums[2] != 0) sink.print("  p{d} (tars-home) <- not opened\n", .{nums[2]});
+        if (layer_plan) |lp| {
+            // TP-M1 plan 결정 D.3. 매체가 묶음을 실을 때만 p3를 연다 — 없으면 아래의 글자 그대로다.
+            if (nums[2] != 0) {
+                sink.print("  p{d} (tars-home) <- layers {s} -> {s} ({d} MiB), your files are not touched\n", .{
+                    nums[2], lp.old orelse "none", new_ver, mib(lp.bytes),
+                });
+            } else {
+                sink.print("  layers  skipped, this disk has no tars-home partition\n", .{});
+            }
+        } else if (nums[2] != 0) sink.print("  p{d} (tars-home) <- not opened\n", .{nums[2]});
         if (beside) {
             sink.print("  tars-install {s} --beside --wipe erases the TARS partitions instead, your home too; --wipe alone erases the whole disk\n", .{path});
         } else {
@@ -516,6 +526,47 @@ pub fn planLines(
         layoutRows(sink, .{ 1, 2, 3 });
         if (settings_on) |n| sink.print("  the settings now on p{d} are erased too\n", .{n});
     }
+}
+
+// ── 개발 도구 층 (TP-M1) ──────────────────────────────────────────────
+
+/// 매체의 묶음이 놓일 자리(ISO 안). make_iso.sh의 `ISO_LAYERS`가 여기에 싣는다.
+pub const MEDIUM_LAYERS_DIR = "boot/layers";
+/// p3 안의 자리. 게스트에서는 `/home/.tars/layers`(layers.DIR)다.
+pub const HOME_TARS_DIR = ".tars";
+pub const HOME_LAYERS_DIR = HOME_TARS_DIR ++ "/layers";
+/// 묶음 복사에 더하는 여유(`version` 한 줄과 ext4의 블록 반올림).
+pub const LAYERS_SLACK: u64 = 1 << 20;
+
+/// 계획 줄에 필요한 것. names는 공백으로 이은 묶음 이름, bytes는 매체의 묶음 크기의 합, old는 p3의 `version`.
+pub const LayerPlan = struct {
+    names: []const u8,
+    bytes: u64,
+    old: ?[]const u8 = null,
+};
+
+/// 올림한 MiB. 0이 아닌 묶음이 `0 MiB`로 안 보이게.
+pub fn mib(bytes: u64) u64 {
+    return (bytes + (1 << 20) - 1) >> 20;
+}
+
+/// 새 설치의 한 줄(통째 · `--beside` · 지정 설치가 같다). home은 p3의 번호다.
+pub fn layerNewLine(sink: anytype, home: u8, lp: LayerPlan) void {
+    sink.print("  layers  {s} ({d} MiB) -> p{d} /{s}\n", .{ lp.names, mib(lp.bytes), home, HOME_LAYERS_DIR });
+}
+
+/// 갱신이 묶음을 바꿀 자리가 있는가. 설치기는 `version`을 지운 뒤 옛 묶음을 모두 지우고 새 것을 쓴다(TP-M1
+/// 확인한 것) — 그래서 지금 묶음의 자리는 통째로 돌아온다. 묶음이 열린 채인 기계(설치된 디스크로 뜬 채 USB로
+/// 갱신, plan 위험 3)는 재부팅 전까지 그 자리가 안 풀려 이 셈이 넉넉하게 틀린다.
+pub fn layersFit(free: u64, current: u64, need: u64) bool {
+    return free +| current >= need +| LAYERS_SLACK;
+}
+
+/// 자리가 모자랄 때의 거절 줄. 이 뒤에는 아무것도 안 바뀐다.
+pub fn layersRoomRefusal(sink: anytype, home: u8, free: u64, current: u64, need: u64) void {
+    sink.print("p{d} has {d} bytes free and {d} bytes in /{s}; the layers need {d}; nothing was changed", .{
+        home, free, current, HOME_LAYERS_DIR, need,
+    });
 }
 
 /// 새 설치가 만들 계정 한 줄(HP-M1 plan Task 2). 질문 뒤 · YES 앞에, `--yes`면 계획 바로

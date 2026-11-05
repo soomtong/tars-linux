@@ -86,11 +86,12 @@ G. 체인 `devtools/check.sh`(`TP-M1:./devtools/check.sh`, `CHAINS` 끝, monitor
      2. NVMe만: `tars-init: overlay /usr from 2 layers in Nms`, `/proc/mounts`의 overlay 줄. root의 `touch /usr/tp-probe`가
         `Read-only file system`. `/etc/gprofng.rc`가 있다. 사용자로 `gcc hello.c && ./a.out`(`-lm -lresolv`), `Makefile` 하나로
         `make`, `javac Hello.java && java Hello`, `jwebserver -b 127.0.0.1 -p 8000 -d <dir>` 뒤 `curl`이 파일을 받는다.
-        시간(`date +%s%N` 차): 얹기, gcc, javac, java, jwebserver 첫 응답.
-     3. ISO + 같은 NVMe: `tars-install --yes /dev/nvme0n1`(갱신) — `p3 (tars-home) <- layers <ver> -> <ver>`. 그 뒤 같은 셸에서 p3를
-        붙여 `lang-jvm.sqfs`의 앞 4KiB를 0으로 덮는다.
-     4. NVMe만: `tars-init: layer lang-jvm: mount failed (errno N)`와 `overlay /usr from 1 layers`. `gcc`는 돌고 `java`는 `not
-        found`, 셸 · `config shell=` 줄은 그대로다(결정 11).
+        시간(`date +%s%N` 차): 얹기, gcc, javac, java, jwebserver 첫 응답. 끝에 root가 `/home/.tars/layers/lang-jvm.sqfs`를
+        4KiB의 0으로 바꾼다(확인한 것 9 — 게스트에 `mount`가 없어 첫 판의 "부팅 3에서 p3를 붙여 덮기"가 빨갰다).
+     3. NVMe만: `tars-init: layer lang-jvm: mount failed (errno N)`와 `overlay /usr from 1 layers`. `gcc`는 돌고 `java`는 없다,
+        `config shell=` 줄은 그대로다(결정 11).
+     4. ISO + 같은 NVMe: `tars-install --yes /dev/nvme0n1`(갱신) — `p3 (tars-home) <- layers <ver> -> <ver>`, 옛 묶음 둘을 지우고
+        새로 — 깨진 `lang-jvm.sqfs`가 바이트 그대로 돌아온다.
    - 결정 E의 다른 판(버전이 다름 · 없음)과 이름 거르기는 `layers_test.zig`가 본다. 부팅 하나에 40초가 넘게 들어 체인에 넣지 않는다.
 H. 위험 1(읽기 전용 `/usr`)의 범위를 글자로 둔다. 게이트에서 `/usr`가 읽기 전용이 되는 것은 이 체인뿐이다. 다른 체인의 ISO와
    디스크에는 묶음이 없어서 overlay가 안 선다. 그래서 이 체인의 부팅 2가 terminal · 서비스 · 사용자 셸이 읽기 전용 `/usr`
@@ -132,8 +133,50 @@ H. 위험 1(읽기 전용 `/usr`)의 범위를 글자로 둔다. 게이트에서
 
 ## 확인한 것
 
-(구현 뒤 채운다)
+1. 커널(할 일 1): 증분 빌드 31초, bzImage 11,355,136 → 11,437,056바이트(+80KiB, 모두 `=y`라 모든 체인의 부팅에 붙는다).
+   빌드가 도는 `olddefconfig`가 커밋한 `.config`를 한 줄도 안 바꾼다(`build/.config`와 같은 바이트).
+2. `LOOP_CLR_FD`는 필요 없다(결정 C.4를 고친다). `drivers/block/loop.c`의 `lo_release`가 마지막 fd가 닫힐 때 `AUTOCLEAR`면
+   장치를 스스로 푼다 — mount가 실패하면 init의 fd를 닫는 것으로, overlay가 실패해 umount하면 그것으로 풀린다.
+3. 갱신의 복사 순서를 고쳤다(결정 D.4). 묶음마다 `.new` → rename이면 옛 묶음과 새 묶음이 잠깐 함께 자리를 차지해 자리 셈이
+   묶음별 크기 대조를 요구한다. `version`을 먼저 지우면 init은 어차피 아무것도 안 얹으므로 옛 `*.sqfs`를 모두 먼저 지운다 —
+   자리 판정이 `빈 자리 + 지금 묶음 ≥ 새 묶음 + 1MiB` 하나로 정확해진다(`disk.layersFit`). 예외는 위험 3의 길(열린 묶음의
+   자리는 재부팅 전까지 안 풀린다).
+4. `layers.scan`은 줄을 내보낼 곳(sink)을 받는다. `logline`은 init의 `tars-init:` 줄이라 설치기가 매체의 `boot/layers`를 같은
+   함수로 읽으면 그 머리말이 섞인다 — init은 `layers.InitLog`, 설치기는 `Complain`을 준다.
+5. 갱신 계획의 `p3 (tars-home) <- not opened`는 매체에 묶음이 없을 때 그대로다 — `planLines`의 새 인자에 `null`을 준 기존
+   다섯 검사가 `UPDATE_TAIL`을 바이트 그대로 본다(`disk_test` 16).
+6. Zig 0.17에는 배열 곱 `**`가 없다(`binary operator '*' has whitespace on one side`). 반복 글자는 `@as([N]u8, @splat('a'))`.
+7. initrd에 `base64` · `dd`가 없다. 체인의 소스는 `printf` 한 겹으로 짓고(콘솔 fish의 작은따옴표는 `\n` · `\t`를 bash에 그대로
+   넘긴다, C의 줄바꿈은 `%c`에 10), 묶음 망가뜨리기는 `head -c 4096 /dev/zero >`다.
+8. `devlayer/build.sh`의 버전 줄 주석을 결정 E로 고쳤다. 스크립트가 stamp에 들어 두 묶음이 한 번 다시 구워진다.
+9. 게스트에 `mount` · `free`가 없다(util-linux의 `mount`, procps의 `free`). init과 설치기는 mount(2)를 직접 부르므로 필요한 적이
+   없었다. 체인 첫 판의 부팅 3(ISO로 떠 p3를 손으로 붙여 묶음 덮기)이 `mount: command not found`로 빨갰다 — 망가뜨리기를
+   설치된 디스크로 뜬 부팅 2의 `/home`으로 옮겼다. 메모리는 `/proc/meminfo`로 본다.
+10. 깨진 묶음의 실제 모양: 커널이 `Can't find a SQUASHFS superblock on loop1`, mount(2)가 EINVAL(22), init이 `layer lang-jvm:
+    mount failed (errno 22)` 뒤 base 하나로 `overlay /usr from 1 layers in 26ms`. 그 loop가 실제로 풀렸는지는 체인이 안 본다.
 
 ## 결과
 
-(구현 뒤 채운다)
+1. 체인 `devtools`가 초록이다(혼자 4분 20초 — 빌드 뒤 92초, 게이트 안에서 101초). 부팅 넷의 판정 B1~B4가 모두 섰다.
+2. 할 일 5의 빨강 셋은 plan이 적은 자리보다 앞에서 잡혔다 — (a) overlay 호출을 빼면 부팅 2의 `init did not lay two layers
+   over /usr`(gcc보다 먼저 보는 init 줄), (b) 새 설치의 복사를 빼면 부팅 1의 `tars-install did not copy base.sqfs byte for
+   byte`, (c) 망가뜨리기를 빼면 부팅 3의 `init did not name the broken layer`. 셋 다 되돌린 뒤 원본과 같은 바이트(`cmp`).
+3. 루트 게이트 31/31, 20분 14초(앞 판 18분 14초), 잘린 줄 0. 다른 서른 체인은 커널 +80KiB · init의 새 줄(`layers: none` 등)
+   위에서 그대로다.
+4. 숫자(게이트 안, TCG `-cpu qemu64 -m 1024`):
+
+   | 항목 | 값 |
+   |---|---|
+   | 묶음 둘(base 64MiB + lang-jvm 126MiB) | 200,884,224바이트(192MiB) |
+   | ISO | `tars.iso` 143,589,376 · `tars-dev.iso` 344,477,696바이트 |
+   | 설치기의 복사(CD → p3) | 1,017ms |
+   | init의 얹기(loop 둘 · squashfs 둘 · overlay) | 32ms(묶음 하나일 때 26ms) |
+   | 사용자 gcc(`-lm -lresolv`) · make | 1,835ms · 444ms |
+   | javac · `java Hello` | 10,508ms · 568ms |
+   | jwebserver 시작부터 curl 첫 응답 | 3,402ms |
+   | JVM 뒤 MemAvailable | 604,088kB |
+
+5. 위험 1(ld.so가 묶음의 `usr/lib/x86_64-linux-gnu`를 찾는가)은 일어나지 않았다 — `-lresolv`로 링크한 프로그램과 java가 initrd의
+   ld.so.cache 위에서 돈다. 위험 2(TCG의 JVM)도 qemu64 · 1GiB에서 상한 안이다. 위험 5(`/usr`를 맨 위에 둔 순서)는 `/proc/mounts`의
+   `lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-jvm/usr`와 `/usr/local/bin/java` · `/usr/bin/gcc`가 함께 선 것으로
+   지났다.

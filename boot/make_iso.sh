@@ -39,7 +39,24 @@ cp disk_label_2x "$STAGE/EFI/BOOT/.disk_label_2x"
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$STAGE/boot/limine/limine-uefi-cd.bin" disk_label ::/EFI/BOOT/.disk_label
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$STAGE/boot/limine/limine-uefi-cd.bin" disk_label_2x ::/EFI/BOOT/.disk_label_2x
 
-mkdir -p ../out
+# TP-M1(plan 결정 F). ISO_LAYERS의 묶음을 boot/layers/에 싣는다 — tars-install이 p3의 /.tars/layers로 옮기고
+# init이 /usr에 얹는다(TP design 결정 12). 비면 TP 전과 같은 ISO다. 다른 체인은 그 ISO로 돈다(게이트 시간 보존).
+# limine은 bzImage · initrd만 읽으므로 묶음은 부팅 때 RAM에 안 오른다. 파일 하나가 4GiB 아래라 -iso-level 3은 아직 없다.
+ISO_LAYERS="${ISO_LAYERS:-}"
+ISO_OUT="${ISO_OUT:-../out/tars.iso}"
+if [ -n "$ISO_LAYERS" ]; then
+  mkdir -p "$STAGE/boot/layers"
+  for b in $ISO_LAYERS; do
+    f="../devlayer/build/${b}.sqfs"
+    if [ ! -f "$f" ]; then
+      echo "make_iso: ${f} is missing; run make dev-layers first" >&2
+      exit 1
+    fi
+    cp "$f" "$STAGE/boot/layers/${b}.sqfs"
+  done
+fi
+
+mkdir -p "$(dirname "$ISO_OUT")"
 # --protective-msdos-label은 대시 둘이다. 하나로 쓰면 xorriso가
 # `Unrecognized option`으로 죽는다 — 스파이크에서 한 번 밟았다. 이 옵션이
 # 붙어야 펌웨어가 하이브리드 이미지를 MBR/GPT 혼동 없이 읽는다.
@@ -53,8 +70,8 @@ xorriso -as mkisofs -R -r -J -V TARS \
         --efi-boot boot/limine/limine-uefi-cd.bin \
         -efi-boot-part --efi-boot-image \
         --protective-msdos-label \
-        "$STAGE" -o ../out/tars.iso
+        "$STAGE" -o "$ISO_OUT"
 
 # UEFI를 더하는 것이 BIOS 경로를 빼앗지 않는다. limine의 stage 2가 여전히
 # MBR에 들어가야 SeaBIOS가 부팅한다.
-"$LIMINE_BIN/limine" bios-install ../out/tars.iso
+"$LIMINE_BIN/limine" bios-install "$ISO_OUT"

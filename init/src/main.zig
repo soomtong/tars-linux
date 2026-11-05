@@ -18,6 +18,7 @@ const account = @import("account.zig");
 const control = @import("control.zig");
 const audio = @import("audio.zig");
 const reload = @import("reload.zig");
+const layers = @import("layers.zig");
 const build_info = @import("build_info");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
@@ -1237,6 +1238,9 @@ const Boot = struct {
         // 설정 바로 뒤, 설정을 읽기 전이다. 실패해도 부팅은 간다 — 결과는
         // 로그 한 줄이고 M1이 계정을 만들 때 다시 본다.
         self.home = mountHome();
+        // TP-M1. `/home`을 붙인 직후, 셸과 서비스를 띄우기 전이다(TP design 결정 9). 이 뒤에 뜨는 자식은
+        // 모두 개발 도구 층이 얹힌 `/usr`를 본다. 묶음이 없거나 깨져도 부팅은 간다(결정 11).
+        if (self.home) layers.mountAll(layers.DIR, build_info.version);
         self.cfg = loadConfig(self.mounted);
         // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
         //
