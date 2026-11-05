@@ -1,4 +1,4 @@
-# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · DB-M1(파티션 지정) 닫힘 · 0.1.4 배포됨 — 다음은 맥 실기 확인
+# HANDOFF: 맥북 지원 · DB-M1 · 실기 수정 닫힘, 0.1.4 배포됨 — 다음 세션은 비밀번호 칸의 `*` 표시와 reboot · poweroff 명령
 
 ## 목표
 
@@ -46,8 +46,30 @@
 
 ## 남은 작업
 
-- [ ] 사용자: 맥 두 대에서 실기 확인(아래 첫 절)
-- [ ] 다음 서브프로젝트 고르기(아래 "다음 후보")
+다음 세션에서 할 둘(사용자 요청, 2026-11-05). 둘 다 새 서브프로젝트로 design부터 — 작으니 한 design에 milestone 하나씩도 된다.
+
+- [ ] 1. 비밀번호를 칠 때 `*`가 찍히게(사용자: "wifi 패스워드 입력할 때 ****** 이런 표시 나오게").
+  - 지금은 세 칸 모두 termios의 `ECHO`만 끄고 줄 단위(canonical)로 읽는다 — 아무것도 안 찍혀서 쳤는지 모른다. Air 실기에서 사람이 Wi-Fi
+    비밀번호와 sudo 비밀번호를 헷갈렸던 배경이다(`needRoot`로 순서는 고쳤다).
+  - 자리: `init/src/config_front.zig`의 `readSecret`(wifi passphrase · ssh 공개 키 · Groq 키)과 `readSecretLine`(`tars-config passwd`),
+    `init/src/install.zig`의 `readSecretAnswer`(설치 때 계정 비밀번호). 셋을 한 helper로 모으는 것부터 볼 일이다.
+  - 할 일: `ICANON`도 끄고(raw, `VMIN=1`) 한 바이트씩 읽어 글자마다 `*`를 stderr에, Backspace(`0x7f` · `0x08`)는 한 글자 지우고 `\b \b`,
+    Enter에서 끝, Ctrl+C · Ctrl+D는 취소. UTF-8 한 글자가 여러 바이트라 `*`도 바이트가 아니라 글자마다(앞 바이트가 `10xxxxxx`가 아닐 때만)
+    찍는다. 끝나면 termios를 되돌린다(시그널로 끊겨도 — 지금 코드의 복원 자리를 그대로).
+  - 정할 것: ssh 공개 키 · Groq 키처럼 붙여 넣는 긴 값도 `*`를 찍을지(수백 개). sudo의 칸은 sudo 몫이라 `Defaults pwfeedback`(sudoers 한 줄)로
+    따로 맞출 수 있다 — 함께 할지.
+  - 판정: 게이트의 tty 입력은 시리얼이다. home 체인(`as_user`)이나 install 체인이 비밀번호를 넣는 자리에서 `*` 개수를 센다 — 게스트의 tty가
+    시리얼이면 termios가 같은 길이라 볼 수 있다. 붙여 넣는 경로(stdin이 tty가 아닐 때)는 지금처럼 줄 하나를 그대로 읽어야 한다.
+- [ ] 2. `reboot` · `poweroff`(또는 `shutdown`) 명령(사용자 요청).
+  - PID 1은 이미 갈래를 갖고 있다 — `SIGTERM` → 전원 끄기, `SIGINT` → 재부팅(`init/src/power.zig`의 `.TERM => .power_off` · `.INT =>
+    .restart`, Ctrl+Alt+Del도 SIGINT). 지금 사람의 길은 `sudo kill -INT 1`뿐이고 가이드도 그렇게 적었다(`running-tars.md`의 "kill -INT 1").
+  - 할 일: `/usr/bin/reboot` · `/usr/bin/poweroff`(`shutdown`은 `poweroff`의 별명이나 `-r`를 받는 얇은 것)를 둔다. 셸 스크립트 한 줄
+    (`kill -INT 1` · `kill -TERM 1`)이면 되지만 사용자 권한이면 `permission denied; try: sudo reboot`를 tars-config과 같은 말로 해야 한다 —
+    Zig 작은 실행 파일로 할지, `tars-config`처럼 init 소켓으로 물을지 design에서 정한다. Debian의 진짜 `reboot`(systemd)는 없다.
+  - 판정: 이미 종료를 보는 체인(SL 계열, `tars-init: calling reboot`)이 있다 — 그 자리에서 `reboot`과 `poweroff`를 치게 바꾸거나 하나를 더한다.
+    사용자로 쳤을 때 77과 `try: sudo`는 home 체인 8c의 꼴로.
+- [ ] 사용자: 새 0.1.4(`d93a8aa`)로 Option 화면의 "TARS Linux"(USB와 갱신한 디스크), Pro 2013의 소리(`speaker-test -c 2 -t wav -l 1`).
+- [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
 ## 다음 에이전트에게
 
