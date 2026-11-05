@@ -7,7 +7,7 @@ const account = @import("account.zig");
 const screen_args = @import("screen_args");
 const build_info = @import("build_info");
 
-/// tars-install — 부팅 매체의 부트 파일 넷을 내장 디스크에 옮겨 USB 없이
+/// tars-install — 부팅 매체의 부트 파일(disk.BOOT_FILES)을 내장 디스크에 옮겨 USB 없이
 /// 뜨게 한다(DI design). 인자 없이 치면 목록, 디스크를 주면 계획을 보이고
 /// YES를 받는다. `--yes`가 그 질문을 건너뛴다. 이미 TARS가 있는 디스크는
 /// TARS-BOOT만 갈고 TARS-CONFIG(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).

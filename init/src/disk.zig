@@ -272,12 +272,15 @@ pub const HOME_LABEL: [:0]const u8 = storage.HOME_LABEL;
 /// 바뀌는 유일한 파일이다(espConf).
 pub const LIMINE_CONF: [:0]const u8 = "boot/limine/limine.conf";
 
-/// 부팅 매체에서 ESP로 가는 넷(DI design 확인 1). 경로가 양쪽에서 같다.
+/// 부팅 매체에서 ESP로 가는 여섯(DI design 확인 1). 경로가 양쪽에서 같다. 끝의 둘은 Apple 부팅 선택 화면이 "EFI
+/// Boot" 대신 보이는 이름 그림이다(2026-11-05 사용자 요청, boot/make_disk_label.sh). 로더처럼 슬롯이 아니라 한 벌이다.
 pub const BOOT_FILES = [_][:0]const u8{
     "boot/bzImage",
     "boot/initrd.cpio",
     LIMINE_CONF,
     "EFI/BOOT/BOOTX64.EFI",
+    "EFI/BOOT/.disk_label",
+    "EFI/BOOT/.disk_label_2x",
 };
 
 /// BOOT_FILES를 놓기 전에 ESP에 만들 디렉터리. 부모가 먼저다. `boot/old`는

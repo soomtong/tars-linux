@@ -29,6 +29,16 @@ cp "$LIMINE_BIN/limine-bios-cd.bin" "$STAGE/boot/limine/limine-bios-cd.bin"
 cp "$LIMINE_BIN/limine-uefi-cd.bin" "$STAGE/boot/limine/limine-uefi-cd.bin"
 cp "$LIMINE_BIN/BOOTX64.EFI" "$STAGE/EFI/BOOT/BOOTX64.EFI"
 
+# 2026-11-05(사용자 요청). Apple 부팅 선택 화면(Option)이 "EFI Boot" 대신 "TARS Linux"로 보이게 하는 그림 둘
+# (boot/make_disk_label.sh가 macOS의 bless로 만든다). 펌웨어는 BOOTX64.EFI 옆의 `.disk_label` · `.disk_label_2x`를 읽고
+# FAT 볼륨 라벨은 안 본다. 두 자리에 넣는다.
+#   EFI/BOOT/                  tars-install이 TARS-BOOT로 옮기는 원본(disk.BOOT_FILES)
+#   limine-uefi-cd.bin 안      USB에 dd한 ISO를 펌웨어가 여는 FAT 이미지(El Torito). 1.4MB가 비어 있다
+cp disk_label "$STAGE/EFI/BOOT/.disk_label"
+cp disk_label_2x "$STAGE/EFI/BOOT/.disk_label_2x"
+MTOOLS_SKIP_CHECK=1 mcopy -o -i "$STAGE/boot/limine/limine-uefi-cd.bin" disk_label ::/EFI/BOOT/.disk_label
+MTOOLS_SKIP_CHECK=1 mcopy -o -i "$STAGE/boot/limine/limine-uefi-cd.bin" disk_label_2x ::/EFI/BOOT/.disk_label_2x
+
 mkdir -p ../out
 # --protective-msdos-label은 대시 둘이다. 하나로 쓰면 xorriso가
 # `Unrecognized option`으로 죽는다 — 스파이크에서 한 번 밟았다. 이 옵션이

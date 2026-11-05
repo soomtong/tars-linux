@@ -325,12 +325,12 @@ if ! wait_log "tars-install: done. remove the boot medium and reboot." 120; then
     "tars-install:" "failed" "never appeared"
 fi
 # 넷이 다 갔다. 크기까지는 안 본다 — 부팅 2가 커널과 initrd를 실제로 읽는다.
-for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI boot/version; do
+for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI EFI/BOOT/.disk_label EFI/BOOT/.disk_label_2x boot/version; do
   if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then
     fail "tars-install did not report copying ${f}" "tars-install: copying"
   fi
 done
-echo "tars-install wrote the disk, copied the four boot files and wrote boot/version"
+echo "tars-install wrote the disk, copied the boot files (the Mac boot picker label too) and wrote boot/version"
 # HP-M1. --yes는 질문 없이 기본 계정이다 — 계획에 그 줄이 있고, p2에 tars.conf와 shadow를,
 # p3에 홈을 썼다. 사람의 길(질문 셋)은 home/check.sh가 본다.
 for want in \
@@ -501,7 +501,7 @@ fi
 # 넷을 다 다시 썼다. 이것이 없으면 아무것도 안 쓰는 갱신도 부팅 4를 지난다 —
 # 부팅 1이 쓴 ESP가 그대로 뜨기 때문이다. 로그가 부팅 3의 것이라 부팅 1의
 # 복사 줄은 안 섞인다.
-for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI boot/version; do
+for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI EFI/BOOT/.disk_label EFI/BOOT/.disk_label_2x boot/version; do
   if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then
     fail "the update did not copy ${f}" "tars-install: copying"
   fi

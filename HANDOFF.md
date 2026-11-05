@@ -84,6 +84,9 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
     게스트에 `ping`이 없다 — 다음 판의 작은 숙제(`iputils-ping`). 실기가 드러낸 거친 곳 셋(`tars-config help`에서 bluetooth를 못
     찾음, `tars-config bluetooth=on`이 쓰는 법만 찍음, 꺼진 버스에서 `bluetoothctl`이 SIGABRT)은 고쳤다 — help의 "turning things on" 절,
     `missing_set`, `/usr/bin/bluetoothctl` 감싸개(bluetooth 체인 검사 8).
+  - Option 화면의 이름(2026-11-05, 사용자 요청): TARS-BOOT와 USB가 "EFI Boot" 대신 "TARS Linux"로 보이게 `EFI/BOOT/.disk_label(_2x)`
+    (macOS `bless --label`이 그린 그림, `boot/make_disk_label.sh`)를 ISO의 EFI/BOOT와 El Torito FAT 이미지에 넣고 `disk.BOOT_FILES`로
+    복사한다. QEMU는 이 그림을 안 읽어 실기 확인이 남았다.
   - Pro 2013 실기(2026-11-05): Limine 메뉴가 GOP 화면에 보인다(KU의 이월 확인 하나가 풀렸다). Retina 2배가 잘 보이고(HS 결정 3),
     트랙패드 · 키보드 · 배터리 · Bluetooth 정상. 기종은 MacBookPro11,x(코덱 SSID `106b:5e00`, CS4208). 소리가 안 났던 원인은 init의
     오디오 일꾼이 카드 0만 기다린 것 — 카드 0(HDMI 쪽 HDA)이 i915 없이 안 서서 노드 권한 · 믹서가 그대로였다. 아무 카드나 기다리게 고쳤다

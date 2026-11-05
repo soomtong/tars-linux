@@ -303,7 +303,8 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
    diskutil eraseVolume free free disk0s3          # disk0s3을 지워 빈 자리로 — 안의 파일도 사라진다
    ```
 3. ISO를 USB에 쓴다(위 "실기 노트북에 꽂아 보기"의 `dd`).
-4. 전원을 켤 때 Option(⌥) 키를 누르고 있다가, 부팅 선택 화면에서 "EFI Boot"(USB)를 고른다.
+4. 전원을 켤 때 Option(⌥) 키를 누르고 있다가, 부팅 선택 화면에서 "TARS Linux"(USB)를 고른다. 이름 그림
+   (`EFI/BOOT/.disk_label`)이 없는 USB는 "EFI Boot"로 보인다.
    이 맥들에는 Secure Boot가 없어서 위의 "펌웨어에서 할 일"은 해당하지 않는다.
 5. 뜨면 `tars-install`로 목록을 본다. 내장 디스크는 보통 `/dev/sda`이고, 상태 칸이 무엇이 있는지와
    빈 자리를 말한다.
@@ -331,7 +332,8 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
    들어간다는 것을 말한다. 받는 것은 FAT · exFAT 파티션과 빈 파티션뿐이다. EFI · macOS(APFS · HFS+) ·
    Recovery · NTFS(Boot Camp)는 `YES` 전에 거절한다. 어느 쪽이든 이름과 비밀번호를 묻고 `YES`를 받는다.
    `done.`이 나오면 USB를 뽑고 끈다.
-7. TARS로 뜰 때마다 Option을 누르고 "EFI Boot"를 고른다. 아무것도 안 누르면 macOS가 뜬다 — 기본 부팅은
+7. TARS로 뜰 때마다 Option을 누르고 "TARS Linux"를 고른다. 이름은 TARS-BOOT의 `EFI/BOOT/.disk_label`(그림)이 정한다 —
+   그 전에 깐 디스크는 새 ISO로 갱신(`tars-install /dev/sda`)하면 이름이 바뀐다. 아무것도 안 누르면 macOS가 뜬다 — 기본 부팅은
    macOS 그대로이고, TARS는 NVRAM의 부팅 순서를 건드리지 않는다. TARS를 기본으로 바꾸는 일(macOS의
    `bless` 등)은 이 설치기가 하지 않는다.
 
