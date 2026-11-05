@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = da909bb, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = 82c0bb2, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -67,12 +67,12 @@ tag는 그대로 두고 ISO를 다시 만들었다.
 
 | 항목 | 값 |
 |---|---|
-| tag | `v0.1.4` (annotated) → `da909bb`. 루트 게이트 29/29(16분 57초)는 코드의 마지막 커밋 `f9e2c44`(DB-M1)에서 돌았고, 그 뒤는 HANDOFF뿐 |
+| tag | `v0.1.4` (annotated) → `82c0bb2`. 루트 게이트 29/29는 코드의 마지막 커밋 `89356bd`(오디오 일꾼)에서 돌았고, 그 뒤는 문서뿐 |
 | release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.4 (Latest) |
-| ISO | `tars-0.1.4-x86_64.iso`, 136,466,432 B (0.1.3보다 약 30MB 큼 — BT firmware 157개 · ext4 · PM의 도구 층과 glibc 통째로) |
-| sha256 | `11add999635b0598ffaad428a31173b6074e3e244c36f071a41772c0965d01ce` |
+| ISO | `tars-0.1.4-x86_64.iso`, 136,470,528 B (0.1.3보다 약 30MB 큼 — BT firmware 157개 · ext4 · PM의 도구 층과 glibc 통째로) |
+| sha256 | `43ac606c673a3ca84e305968c02c37cda8eed2713b0a22ad697eb2b5775f65ac` |
 
-0.1.3 뒤의 KU · BT · KH · HP · PM · MI · IK · DM · KK · PS와 MB · HS · DB(M0 · M1) · BW를 담았다. 2026-11-01의 "0.1.4는 커널 7.4 뒤" 결정은
+0.1.3 뒤의 KU · BT · KH · HP · PM · MI · IK · DM · KK · PS와 MB · HS · DB(M0 · M1) · BW와 Air · Pro 실기가 드러낸 수정(오디오 일꾼 · bluetoothctl 감싸개 · tars-config 안내)을 담았다. 2026-11-01의 "0.1.4는 커널 7.4 뒤" 결정은
 사용자 요청(2026-11-04, "여기까지 완료 후 다음 패치 버전 찍기: tag, release & distribute!")이 대신했다 — 7.4 이동은 다음 판의 일이다.
 smoke 첫 줄 `TARS 0.1.4`(꼬리표 없음), `kms: scale 1 (1280x800 -> 1280x800)`. 맥 실기 확인이 끝날 때까지 0.1.4는 같은 번호로 거듭 낸다 — 그 방식은 [[feedback_release_iteration]].
 
