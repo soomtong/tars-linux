@@ -7,7 +7,7 @@
 
 ## 현재 브랜치
 
-`main` = origin/main(push됨), tag `v0.1.4` = `82c0bb2` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
+`main` = origin/main(push됨), tag `v0.1.4` = `d93a8aa` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
 작업용 worktree `../tars-linux-hs` · `../tars-linux-db`와 브랜치 `hs` · `db`는 합친 뒤 지웠다.
 
 ## 완료된 작업 (2026-11-04~05)
@@ -20,7 +20,7 @@
 - [x] BW-M0(2026-11-05, 사용자 요청) — MacBookAir4,1 내장 BCM43224를 `brcmsmac`으로, firmware 둘. Pro의 BCM4331 · BCM4360은 못 연다
   (BW 비목표). 루트 게이트 29/29, 16분 48초.
 - [x] 루트 게이트 29/29, 16분 30초(prebuild 포함, lanes 667초), 잘린 줄 0(`667240c`).
-- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,470,528 B, sha256 `43ac606c…65ac`) · 내려받아 `OK` ·
+- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,474,624 B, sha256 `00598c66…97ab`) · 내려받아 `OK` ·
   `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
 - [x] 맥 디스크의 빈 자리 검토(2026-11-05, 사용자 요청) — `diskutil apfs resizeContainer`는 크기만 주면 빈 자리를 남긴다. 포맷되는 것은
   triple을 붙이거나 디스크 유틸리티의 "파티션"을 쓴 경우이고, `diskutil eraseVolume free free <id>`로 되돌린다(`running-tars.md` macOS 절
@@ -60,7 +60,7 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 ## 지금 상태 (2026-11-05)
 
 - 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
-  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `82c0bb2`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
+  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `d93a8aa`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
 - 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 57초(`f9e2c44`, DB-M1).
   바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은
