@@ -88,6 +88,7 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
     트랙패드 · 키보드 · 배터리 · Bluetooth 정상. 소리만 안 난다 — CS420X · CS8409는 켜져 있고 fixup(10,1 `CS420X_MBP101` · 11,x
     `CS4208_MBP11`)도 커널에 있다. 의심 셋: 기본 카드가 HDMI 쪽(AU의 "가장 높은 카드"), 믹서 mute, fixup 불일치. 사용자에게
     `product_name` · `/proc/asound/cards` · `/etc/asound.conf` · `dmesg`를 받는 중.
+    내장 Wi-Fi(10,1 BCM4331 · 11,x BCM4360)는 사용자 결정으로 대기 — 조사는 `carryover.md`의 "맥 실기" 절.
   - 트랙패드: 한 손가락 이동 · 탭 · 두 손가락 스크롤, 로그 `pointer> open … kind=touchpad`. 손에 안 맞으면 `touchpad_accel`부터(MB 위험 2).
   - 키보드: `keyboard> open … kind=apple`, Cmd · Option 자리. Fn 조합이 없는 것이 거슬리는지(MB 위험 3).
   - 소리: `speaker-test`. Air4,1이 안 울리면 MB 위험 1(`snd_hda_intel.model=mba42`).

@@ -4,6 +4,18 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+맥 실기(2026-11-05)가 남긴 것.
+
+- [ ] MacBook Pro 2013 내장 Wi-Fi — 사용자 결정으로 대기(2026-11-05). 기종이 갈린다(`/sys/class/dmi/id/product_name`).
+      - MacBookPro10,1 · BCM4331: 커널 `b43`(지금 `# CONFIG_B43 is not set`). firmware는 Broadcom 독점 드라이버에서 `b43-fwcutter`로
+        잘라야 하고 재배포가 분명하지 않다. b43는 인터페이스를 올릴 때 firmware를 읽으므로 `/config`에 둬도 된다. 추천은 ISO에
+        `b43-fwcutter`만 싣고 사용자가 드라이버 tarball을 USB로 옮겨 `tars-config wifi-firmware <파일>`로 한 번 자르는 길.
+      - MacBookPro11,2 · 11,3 · BCM4360(`14e4:43a0`): 커널의 AC-PHY는 `BROKEN`, 독점 `wl`은 외부 모듈 — `CONFIG_MODULES`가 없는 TARS에
+        모듈 적재(init) · 6.18용 패치 · 독점 바이너리 배포를 함께 들여야 하는 새 서브프로젝트 크기다. USB 무선 동글이 싼 대안.
+- [ ] MacBook Pro 2013 소리가 안 난다(Air는 난다). 진단 출력 대기 — `product_name` · `/proc/asound/cards` · `/etc/asound.conf` ·
+      `dmesg | grep -iE 'cs42|hda|snd'`. 의심은 기본 카드(HDMI 쪽) · 믹서 mute · fixup.
+- [ ] 게스트에 `ping`이 없다(Debian `iputils-ping`). 실기에서 연결 확인을 `curl`로 했다.
+
 MI-M0(2026-11-03)이 남긴 것.
 
 - [ ] 공식 `mise.run`은 512MB 기계에서 굳는다 — `mktemp -d`(tmpfs `/tmp`)에 tarball 약 60MB와 푼 `mise` 172MB를 함께 두고, RAM에
