@@ -291,7 +291,15 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
    diskutil resizeVolume disk0s2 200g              # HFS+(MacBookAir4,1의 10.7~10.12)
    ```
 
-   `200g`는 macOS에 남길 크기다. 디스크 크기에서 TARS에 줄 만큼을 뺀 값을 넣는다.
+   `200g`는 macOS에 남길 크기다. 디스크 크기에서 TARS에 줄 만큼을 뺀 값을 넣는다. 크기 뒤에 아무것도
+   붙이지 않아야 빈 자리가 남는다 — `ms-dos TARS 0` 같은 셋을 붙이거나 디스크 유틸리티의 "파티션" 버튼을
+   쓰면 그 자리가 포맷된 파티션이 되어 `tars-install`에 빈 자리로 보이지 않는다. 이미 그렇게 만들었다면
+   그 파티션을 빈 자리로 되돌린다(번호는 `diskutil list`로 확인한다. macOS가 든 파티션을 고르지 않도록
+   이름과 크기를 함께 본다).
+
+   ```bash
+   diskutil eraseVolume free free disk0s3          # disk0s3을 지워 빈 자리로 — 안의 파일도 사라진다
+   ```
 3. ISO를 USB에 쓴다(위 "실기 노트북에 꽂아 보기"의 `dd`).
 4. 전원을 켤 때 Option(⌥) 키를 누르고 있다가, 부팅 선택 화면에서 "EFI Boot"(USB)를 고른다.
    이 맥들에는 Secure Boot가 없어서 위의 "펌웨어에서 할 일"은 해당하지 않는다.
@@ -303,6 +311,8 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
    ```
 
    빈 자리가 4GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다.
+   빈 자리가 거의 없고 상태 칸에 `1 other`가 붙었거나 `macOS (APFS)`가 두 번 보이면, 2번에서 포맷된
+   파티션이 생긴 것이다 — macOS로 돌아가 `eraseVolume free`로 되돌린다.
 6. `tars-install /dev/sda --beside`. 계획이 `keeps its partitions`로 시작하고 어느 구간에 몇 번으로
    들어가는지 말한다. 이름과 비밀번호를 묻고 `YES`를 받는다. `done.`이 나오면 USB를 뽑고 끈다.
 7. TARS로 뜰 때마다 Option을 누르고 "EFI Boot"를 고른다. 아무것도 안 누르면 macOS가 뜬다 — 기본 부팅은

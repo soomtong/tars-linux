@@ -67,22 +67,14 @@ tag는 그대로 두고 ISO를 다시 만들었다.
 
 | 항목 | 값 |
 |---|---|
-| tag | `v0.1.4` (annotated) → `d2f3af0` (`Release 0.1.4`). 루트 게이트 29/29(16분 30초, lanes 667초)는 바로 앞 코드 커밋 `667240c`에서 돌았고, 그 뒤는 문서와 `VERSION`뿐 |
+| tag | `v0.1.4` (annotated) → (빌드 뒤 기록) |
 | release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.4 (Latest) |
-| ISO | `tars-0.1.4-x86_64.iso`, 136,208,384 B (0.1.3보다 약 30MB 큼 — BT firmware 157개 · ext4 · PM의 도구 층과 glibc 통째로) |
-| sha256 | `b0e9d944d3637f2b5ca7abfe43c6776d69719c639b2d5b82ef64b4aeee97811c` |
+| ISO | (빌드 뒤 기록) |
+| sha256 | (빌드 뒤 기록) |
 
-0.1.3 뒤의 KU · BT · KH · HP · PM · MI · IK · DM · KK · PS와 같은 날 밤의 MB · HS · DB를 담았다. 2026-11-01의 "0.1.4는 커널 7.4 뒤" 결정은
-사용자 요청(2026-11-04, "여기까지 완료 후 다음 패치 버전 찍기: tag, release & distribute!")이 대신했다 — 7.4 이동은 다음 판의 일이다. 사용자가
-잠들며 결정을 맡겨 1~7을 Claude가 그대로 밟았다. smoke 첫 줄 `TARS 0.1.4`(꼬리표 없음), `kms: scale 1 (1280x800 -> 1280x800)`.
-
-같은 날 다시 냈다(사용자 요청 "켜주세요 그리고 0.1.4 버전을 다시 릴리즈/배포 해줘") — BW-M0(Air 내장 무선)을 담으려고. 버전 번호는 그대로 두고
-release와 원격 tag를 지운 뒤 tag를 새 커밋에 다시 붙여 1~7을 다시 밟았다. 위 표의 tag · ISO · sha256은 첫 판의 것이고 다시 낸 판의 값은 아래
-"0.1.4 다시 냄" 줄이다. 첫 판을 받은 사람의 ISO는 sha256이 다르다 — 노트에 적었다.
-
-0.1.4 다시 냄: tag `v0.1.4` → `5e7934f`(BW-M0 · 문서 뒤, 루트 게이트 29/29 16분 48초는 `d1fa10a`의 코드에서), ISO 136,454,144 B,
-sha256 `55bc31034005621883208641299770751eb871549cb13fba22a37651b1af514c`. 순서 — 로컬 tag를 옮기고 `make iso` · smoke를 먼저 통과시킨 뒤에야
-`gh release delete` · 원격 tag 삭제 · push · `gh release create`(실패해도 바깥의 첫 판이 남도록). 소개 페이지의 `releases` 줄은 sha만 바꿨다.
+0.1.3 뒤의 KU · BT · KH · HP · PM · MI · IK · DM · KK · PS와 MB · HS · DB · BW를 담았다. 2026-11-01의 "0.1.4는 커널 7.4 뒤" 결정은
+사용자 요청(2026-11-04, "여기까지 완료 후 다음 패치 버전 찍기: tag, release & distribute!")이 대신했다 — 7.4 이동은 다음 판의 일이다.
+맥 실기 확인이 끝날 때까지 0.1.4는 같은 번호로 거듭 낸다 — 그 방식은 [[feedback_release_iteration]].
 
 ## 배포 절차 (다음 버전도 이대로)
 

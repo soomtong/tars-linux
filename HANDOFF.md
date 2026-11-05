@@ -1,4 +1,4 @@
-# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · 0.1.4 배포됨(BW를 담아 다시 냄) — 다음은 맥 실기 확인과 사용자의 다음 선택
+# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · 0.1.4 배포됨 · DB-M1 계획 — 다음은 맥 실기 확인과 DB-M1
 
 ## 목표
 
@@ -7,7 +7,7 @@
 
 ## 현재 브랜치
 
-`main` = origin/main(push됨), tag `v0.1.4` = `d2f3af0` push됨. `gh-pages`도 push됨(`fcd0365`, worktree `../tars-linux-pages`).
+`main` = origin/main(push됨), tag `v0.1.4` = `@TAG@` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
 작업용 worktree `../tars-linux-hs` · `../tars-linux-db`와 브랜치 `hs` · `db`는 합친 뒤 지웠다.
 
 ## 완료된 작업 (2026-11-04~05)
@@ -18,10 +18,13 @@
 - [x] DB-M0 — `tars-install <disk> --beside`, TARS 파티션을 GPT 이름으로, 포맷 전 대조 둘, init 후보 126, 체인 `dualboot`(포트 없음),
   `docs/guides/running-tars.md`의 macOS 절. 서브에이전트.
 - [x] BW-M0(2026-11-05, 사용자 요청) — MacBookAir4,1 내장 BCM43224를 `brcmsmac`으로, firmware 둘. Pro의 BCM4331 · BCM4360은 못 연다
-  (BW 비목표). 루트 게이트 29/29, 16분 48초. 0.1.4의 tag와 release를 이 커밋 뒤로 옮겨 다시 냈다(사용자 요청).
+  (BW 비목표). 루트 게이트 29/29, 16분 48초.
 - [x] 루트 게이트 29/29, 16분 30초(prebuild 포함, lanes 667초), 잘린 줄 0(`667240c`).
-- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,208,384 B, sha256 `b0e9d944…811c`) · 내려받아 `OK` ·
+- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO @SIZE@ B, sha256 `@SHA@`) · 내려받아 `OK` ·
   `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
+- [x] 맥 디스크의 빈 자리 검토(2026-11-05, 사용자 요청) — `diskutil apfs resizeContainer`는 크기만 주면 빈 자리를 남긴다. 포맷되는 것은
+  triple을 붙이거나 디스크 유틸리티의 "파티션"을 쓴 경우이고, `diskutil eraseVolume free free <id>`로 되돌린다(`running-tars.md` macOS 절
+  2번). 파티션을 지정해 까는 기능은 DB-M1 plan(`docs/plans/2026-11-05-tars-dual-boot-db-m1.md`)으로 계획만 했다.
 - [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_macbook_hardware` · `project_hidpi_scale` · `project_dual_boot`) + `MEMORY.md`.
 
 ## Claude가 맡아 정한 것 (뒤집을 것이 있으면 design의 결정 번호로)
@@ -40,6 +43,7 @@
 ## 남은 작업
 
 - [ ] 사용자: 맥 두 대에서 실기 확인(아래 첫 절)
+- [ ] DB-M1 — 기존 파티션 지정(`tars-install /dev/sda3`), 목록의 파티션 줄. plan은 있고 구현 전이다
 - [ ] 다음 서브프로젝트 고르기(아래 "다음 후보")
 
 ## 다음 에이전트에게
@@ -53,7 +57,7 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 ## 지금 상태 (2026-11-05)
 
 - 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
-  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `d2f3af0`).
+  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `@TAG@`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
 - 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 30초.
   바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은
@@ -64,7 +68,8 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 
 - MB · HS · DB — 맥 두 대(이번 판의 본론, 게이트는 드라이버 등록까지만 봤다).
   - 준비: macOS에서 Time Machine 백업 → `diskutil list` → `diskutil apfs resizeContainer disk0s2 <크기>`(HFS+면 `diskutil resizeVolume`)로
-    4GiB 넘는 빈 공간 → 0.1.4 ISO를 USB에 `dd`(`docs/guides/running-tars.md`의 macOS 절).
+    4GiB 넘는 빈 공간 → 0.1.4 ISO를 USB에 `dd`(`docs/guides/running-tars.md`의 macOS 절). 크기 뒤에 triple을 붙이거나 디스크
+    유틸리티의 "파티션"으로 나눴다면 그 파티션은 `diskutil eraseVolume free free disk0sN`으로 빈 자리로 되돌린다(DB-M1 전의 길).
   - 전원을 켤 때 Option → "EFI Boot"로 USB가 보이는지(ISO의 EFI 파티션). 안 보이면 그것이 새 사실이다.
   - `tars-install` 목록에 내장 디스크가 `GPT: EFI, macOS (APFS); N GB free`로 보이는지 → `tars-install /dev/sda --beside` → 재부팅하며
     Option → TARS-BOOT가 "EFI Boot"로 보이는지(DB 위험 3 — 두 번째 EFI System 파티션). macOS가 그대로 뜨는지도.

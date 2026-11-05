@@ -3,6 +3,7 @@
 접두사: DB
 
 Status: 닫힘(2026-11-05) — DB-M0 GPT 엔트리를 이름으로 읽기 · `--beside` · `--beside --wipe` · init 후보 126, `dualboot` 체인(포트 없음).
+DB-M1(기존 파티션 지정, 비목표 2를 푼다)은 계획만 있다 — `docs/plans/2026-11-05-tars-dual-boot-db-m1.md`.
 
 사용자의 요청(2026-11-04, MB design 머리의 인용)에서 "인스톨러 개선: 대상 디스크 고르기 beside macOS partition (or volume), dual
 booting 가능해야 해"를 받는다.
@@ -85,6 +86,7 @@ p2 APFS 타입 GUID에 정해진 무늬를 채운 1GiB, 나머지 빈 공간. OV
 
 1. APFS · HFS+ 크기 줄이기. macOS의 `diskutil`이 한다.
 2. Disk Utility가 만든 파티션(예: MS-DOS "TARS")을 골라 그 자리에 깔기. 지금은 빈 자리만 받는다 — 그 파티션을 지우면 빈 자리가 된다.
+   DB-M1이 이것을 푼다(2026-11-05 사용자 요청, 계획만). 그 전의 우회는 macOS의 `diskutil eraseVolume free free <id>`다.
 3. 부팅 관리자(rEFInd 등) · 기본 부팅 바꾸기.
 4. Windows(Boot Camp) 옆, 다른 Linux 옆 — 같은 길로 될 것이지만 판정은 macOS 모양 하나다.
 
