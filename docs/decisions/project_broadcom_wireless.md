@@ -15,3 +15,6 @@ design은 `docs/specs/2026-11-05-tars-broadcom-wireless-design.md`. MB 비목표
 3. 맥 내장 BT는 USB Broadcom이라 BT-M0의 `BT_HCIBTUSB_BCM`이 받는다. `.hcd` 보정 펌웨어 없이 돈다.
 
 관련: [[project_macbook_hardware]] · [[project_wireless]] · [[project_usb_dongles_b]] · [[project_bluetooth]]
+
+실기(2026-11-05, MacBook Air 11" 2011): `sudo tars-config wifi <SSID>` · `set net=dhcp ntp=dhcp` · `reload`로 5GHz 망에 붙었다(DHCP 주소,
+`curl http://example.com` 200). design 위험 1의 붙는가는 풀렸고 절전은 남았다. 게스트에 `ping`이 없어 확인은 `curl`로 했다.

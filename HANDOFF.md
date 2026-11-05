@@ -79,8 +79,12 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
     Option → TARS-BOOT가 "EFI Boot"로 보이는지(DB 위험 3 — Air 2011은 확인됨, 2026-11-05: `/dev/sda3` 지정 설치 → EFI Boot → TARS
     터미널). Pro 2013은 아직. macOS가 그대로 뜨는지도(Air는 사용자가 준비 중 macOS를 지워 볼 수 없다).
   - Air 2011 실기 결과(2026-11-05, 사용자): 트랙패드 · 속도 좋음, Cmd · Option과 Cmd+Option+화살표 패널 이동 정상, 소리 정상(speaker-test의
-    핑크 노이즈 — MB 위험 1은 안 일어났다), 배터리 칸 정상. 무선 · Bluetooth는 확인 중. `tars-config help`의 명령 목록에 bluetooth가 없어
-    찾지 못했다(키 표 33번째 줄에 있다 — 키와 명령이 갈려 있는 것이 헷갈린다는 신호).
+    핑크 노이즈 — MB 위험 1은 안 일어났다), 배터리 칸 정상. Bluetooth 어댑터가 `Controller … BlueZ 5.82 [default]`로 잡혔다(보정
+    펌웨어 없이 — BT 위험 6은 안 일어났다). 내장 무선이 5GHz 망에 붙어 주소를 받고 `curl`이 바깥까지 간다(BW 위험 1 풀림). BT 장치 페어링은 아직.
+    게스트에 `ping`이 없다 — 다음 판의 작은 숙제(`iputils-ping`). 실기가 드러낸 거친 곳 셋(`tars-config help`에서 bluetooth를 못
+    찾음, `tars-config bluetooth=on`이 쓰는 법만 찍음, 꺼진 버스에서 `bluetoothctl`이 SIGABRT)은 고쳤다 — help의 "turning things on" 절,
+    `missing_set`, `/usr/bin/bluetoothctl` 감싸개(bluetooth 체인 검사 8).
+  - Pro 2013 실기(2026-11-05): Limine 메뉴가 GOP 화면에 보인다(KU의 이월 확인 하나가 풀렸다). 나머지는 확인 중.
   - 트랙패드: 한 손가락 이동 · 탭 · 두 손가락 스크롤, 로그 `pointer> open … kind=touchpad`. 손에 안 맞으면 `touchpad_accel`부터(MB 위험 2).
   - 키보드: `keyboard> open … kind=apple`, Cmd · Option 자리. Fn 조합이 없는 것이 거슬리는지(MB 위험 3).
   - 소리: `speaker-test`. Air4,1이 안 울리면 MB 위험 1(`snd_hda_intel.model=mba42`).

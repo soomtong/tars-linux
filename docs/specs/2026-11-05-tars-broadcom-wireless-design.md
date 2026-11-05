@@ -41,6 +41,7 @@ MacBookAir4,1의 내장 BCM43224를 `brcmsmac`으로 받는다. `.config` 한 �
 ## 위험
 
 1. brcmsmac은 오래된 드라이버이고 BCM43224의 실기 동작(특히 5GHz · 절전)은 실기가 말한다. 안 붙으면 `dmesg | grep -iE 'bcma|brcm'`.
+   — 2026-11-05 실기(MacBook Air 11" 2011): 5GHz SSID에 `--country KR` 없이 붙어 DHCP 주소를 받고 `curl`이 바깥까지 간다. 절전은 아직 모른다.
 2. 실기에서 firmware를 못 찾으면 이름을 `guest_firmware.sh`와 대조한다.
 
 ## Milestone
