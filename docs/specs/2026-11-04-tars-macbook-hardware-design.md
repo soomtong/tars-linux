@@ -92,7 +92,7 @@ Option이 제자리다. 윗줄은 하드웨어가 F1~F12 usage를 그대로 보�
 
 ## 비목표
 
-1. 무선. MacBookAir4,1은 BCM43224(`brcmsmac`), 10,1은 BCM4331(`b43`, firmware를 사용자가 잘라 내야 한다), 11,x는 BCM4360(열린 드라이버가
+1. 무선. (MacBookAir4,1의 BCM43224는 BW-M0이 2026-11-05에 켰다 — `2026-11-05-tars-broadcom-wireless-design.md`.) MacBookAir4,1은 BCM43224(`brcmsmac`), 10,1은 BCM4331(`b43`, firmware를 사용자가 잘라 내야 한다), 11,x는 BCM4360(열린 드라이버가
    없다). 요청에 없고, 셋째는 길이 없다.
 2. 화면 밝기 · 키보드 백라이트(`apple_bl` · `applesmc`), 절전, GPU 전환(`apple-gmux`). simpledrm은 펌웨어가 켜 둔 GPU를 그대로 쓴다.
 3. 내장 BT의 Broadcom firmware(BT 위험 6).

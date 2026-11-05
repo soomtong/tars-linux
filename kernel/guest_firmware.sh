@@ -22,6 +22,7 @@
 # kernel/.config가 켠 PCIe 무선 드라이버(WL design 결정 1)와 USB 동글(UW design
 # 결정 1)이 찾는 것. USB 동글이 새로 찾는 것은 rtw88의 `…a_fw.bin` 셋뿐이다.
 # UB(층 B 다섯 + rtl8xxxu, UB design 결정 1)가 21개를 더했다 — UB 실측 2.
+# BW(BW design 결정 2)가 Broadcom brcmsmac의 둘을 더했다.
 # BT(BT design 결정 2)가 Bluetooth 157개를 더했다 — Intel 84 · Realtek 31 · MediaTek 4 ·
 # Qualcomm 38, 합 약 32MB(gzip 뒤 약 23MB, BT-M0 실측 3). 규칙은 배열 끝 Bluetooth 블록의 주석에 있다.
 # 드라이버가 찾는 이름은 빌드 산출물 kernel/build/modules.builtin.modinfo의
@@ -128,6 +129,12 @@ GUEST_FIRMWARE=(
   linux-firmware/rtlwifi/rtl8723aufw_B.bin:lib/firmware/rtlwifi/rtl8723aufw_B.bin
   linux-firmware/rtlwifi/rtl8723aufw_B_NoBT.bin:lib/firmware/rtlwifi/rtl8723aufw_B_NoBT.bin
   linux-firmware/rtlwifi/rtl8723bu_nic.bin:lib/firmware/rtlwifi/rtl8723bu_nic.bin
+
+  # Broadcom — brcmsmac(BW). MacBookAir4,1 내장 BCM43224(PCI 14e4:4353)가 bcma 버스의 802.11 코어 rev 17로
+  # 보이고 brcmsmac이 이 둘을 찾는다. 같은 맥 계열의 BCM4331(b43) · BCM4360은 열린 드라이버가 없거나 firmware를
+  # 재배포할 수 없어 싣지 않는다(BW design 비목표).
+  linux-firmware/brcm/bcm43xx-0.fw:lib/firmware/brcm/bcm43xx-0.fw
+  linux-firmware/brcm/bcm43xx_hdr-0.fw:lib/firmware/brcm/bcm43xx_hdr-0.fw
 
   # MediaTek — mt7921e(MT7921 · MT7922) · mt7925e · mt7601u · mt76x0u · mt76x2u(UB)
   # 맨 위 이름 셋(mt7601u.bin · mt7662.bin · mt7662_rom_patch.bin)은 WHENCE의 Link:라

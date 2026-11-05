@@ -94,6 +94,7 @@ init · 설정 · 전원
 - [MacBook Hardware](docs/decisions/project_macbook_hardware.md) — 맥 트랙패드는 bcm5974 없이 아예 안 움직인다, ACPI_SBS, HID_APPLE은 끈 채(MB-M0, 2026-11-05)
 - [HiDPI Scale](docs/decisions/project_hidpi_scale.md) — 논리 그림자 + 늘리는 present, display_scale(HS-M0, 2026-11-05)
 - [Dual Boot](docs/decisions/project_dual_boot.md) — tars-install --beside, TARS 파티션은 GPT 이름으로, 포맷 전 대조 둘(DB-M0, 2026-11-05)
+- [Broadcom Wireless](docs/decisions/project_broadcom_wireless.md) — Air4,1 내장 BCM43224를 brcmsmac으로, Pro의 둘은 못 연다(BW-M0, 2026-11-05)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)

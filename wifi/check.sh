@@ -136,7 +136,7 @@ for sym in CFG80211 MAC80211 RFKILL MAC80211_HWSIM IWLWIFI IWLMVM IWLMLD \
   MT7921E MT7925E ATH11K_PCI ATH12K CMDLINE_BOOL \
   RTW88_8822BU RTW88_8822CU RTW88_8723DU RTW88_8821CU RTW88_8821AU RTW88_8812AU RTW88_8814AU \
   RTW89_8851BU RTW89_8852BU MT7921U MT7925U \
-  MT7601U MT76x0U MT76x2U RT2X00 RT2800USB RT2800USB_RT53XX ATH9K_HTC RTL8XXXU; do
+  MT7601U MT76x0U MT76x2U RT2X00 RT2800USB RT2800USB_RT53XX ATH9K_HTC RTL8XXXU BCMA BRCMSMAC; do
   if ! grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
     echo "FAIL: CONFIG_${sym} is not =y in kernel/.config"
     exit 1
@@ -159,6 +159,14 @@ for alias in rtw88_8822bu.alias=usb:v2357p012Dd rtw89_8852bu.alias=usb:v0BDApB83
     exit 1
   fi
 done
+# BW-M0: MacBookAir4,1의 내장 BCM43224는 PCI에서 bcma 버스로, bcma의 802.11 코어(rev 17)에서 brcmsmac으로
+# 두 단을 거친다. 두 단의 표가 다 있어야 칩이 잡힌다. QEMU에 그 칩이 없어 부팅으로는 못 본다(BW design 결정 3).
+for alias in 'bcma.alias=pci:v000014E4d00004353' 'brcmsmac.alias=bcma:m04BFid0812rev17cl'; do
+  if ! tr '\0' '\n' < "$MODINFO" | grep -F "$alias" >/dev/null; then
+    echo "FAIL: the kernel has no ${alias%%.*} entry for ${alias#*alias=}"
+    exit 1
+  fi
+done
 # rtl8xxxu가 기대는 LEDS_CLASS는 HID_APPLE · INPUT_LEDS의 조건이기도 하다. 둘이 켜지면 커널 HID
 # 층이 Apple 키보드의 fn 키를 먼저 바꿔 keyboard=apple과 부딪친다(UW 비목표 1의 이유). 지금은
 # .config에 "not set"으로 적혀 있어 olddefconfig가 안 뒤집지만, 커널을 올리는 날 새로 물을 수
@@ -169,7 +177,7 @@ for sym in HID_APPLE INPUT_LEDS; do
     exit 1
   fi
 done
-echo "the kernel carries the wireless stack, sixteen laptop chips, seventeen USB dongles and hwsim with no radios"
+echo "the kernel carries the wireless stack, seventeen laptop chips (MacBookAir4,1 brcmsmac too), seventeen USB dongles and hwsim with no radios"
 
 # 설정 디스크 셋. 게이트 전용 둘(hostapd · busybox)은 sysroot에서 온다 — initrd에는
 # 없다(Dockerfile 층 12). 라이브러리는 wpa_supplicant가 initrd에 이미 데려왔다.
