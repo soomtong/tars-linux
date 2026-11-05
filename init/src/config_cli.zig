@@ -123,6 +123,10 @@ const USAGE =
     \\       tars-config firewall [allow|deny PORT[/udp]] ports tars-config opens, applied now if firewall=on
     \\       tars-config dictation [key [KEY] | set KEY=VALUE...]   /config/groq.key and dictation.conf
     \\
+    \\turning things on (keys from the list below; reload applies them now):
+    \\       wi-fi       sudo tars-config set net=dhcp; sudo tars-config wifi SSID; sudo tars-config reload
+    \\       bluetooth   sudo tars-config set bluetooth=on; sudo tars-config reload; then bluetoothctl
+    \\
 ;
 
 pub fn usage() u8 {
@@ -559,6 +563,10 @@ pub fn main(init: std.process.Init.Minimal) u8 {
             break :blk EXIT_USAGE;
         },
         .unknown_key => |key| unknownKey(key),
+        .missing_set => |arg| blk: {
+            complain("'{s}' needs set in front: tars-config set {s}", .{ arg, arg });
+            break :blk EXIT_USAGE;
+        },
     };
     return if (was_denied) EXIT_DENIED else code;
 }

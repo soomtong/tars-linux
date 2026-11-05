@@ -62,6 +62,16 @@ const BUF = 16384;
 
 // ── 바탕 ──────────────────────────────────────────────────────────────
 
+/// 비밀을 묻기 전에 쓸 권한부터 본다(2026-11-05 Air 실기). 전에는 사용자가 `tars-config wifi SSID`를 치면
+/// Wi-Fi 비밀번호를 다 받은 뒤 파일을 쓸 때에야 `permission denied`가 나왔고, 이어서 친 `sudo`의
+/// `[sudo] password for tars:`에 Wi-Fi 비밀번호를 넣어 세 번 틀렸다. `/config`는 root만 쓴다(HP-M2) —
+/// `passwd`와 같이 euid로 먼저 거른다.
+fn needRoot() bool {
+    if (linux.geteuid() == 0) return true;
+    _ = cli.denied(.PERM);
+    return false;
+}
+
 fn needDisk() bool {
     var mounts: [8192]u8 = undefined;
     if (cli.configDisk(&mounts) != null) return true;
@@ -226,6 +236,7 @@ pub fn wifi(args: []const [*:0]const u8) u8 {
     };
     const ssid = add.ssid;
     const country = add.country;
+    if (!needRoot()) return cli.EXIT_DENIED;
     if (!needDisk()) return cli.EXIT_IO;
 
     var pass_buf: [256]u8 = undefined;
@@ -389,6 +400,7 @@ pub fn sshKey(args: []const [*:0]const u8) u8 {
         },
         .add => |k| k,
     };
+    if (!needRoot()) return cli.EXIT_DENIED;
     if (!needDisk()) return cli.EXIT_IO;
 
     // 키 한 줄 — 인자 하나(따옴표로 싼 줄)이거나 표준 입력(`< id_ed25519.pub`).
@@ -514,6 +526,7 @@ pub fn dictation(args: []const [*:0]const u8) u8 {
             return cli.EXIT_OK;
         },
         .key => |given| {
+            if (!needRoot()) return cli.EXIT_DENIED;
             if (!needDisk()) return cli.EXIT_IO;
             var in_buf: [512]u8 = undefined;
             const raw: []const u8 = given orelse (readSecret("Groq API key: ", &in_buf) orelse {
@@ -653,10 +666,7 @@ fn readSecretLine(prompt: []const u8, buf: []u8) ?[]const u8 {
 /// `/config/shadow`(영속)와 `/etc/shadow`(지금 부팅의 사본)를 함께 바꾼다 — 그래서 재부팅 없이 다음
 /// `sudo`부터 새 값이다. `/etc/shadow`는 init과 같은 `account.shadowFile`로 짓는다.
 pub fn passwd() u8 {
-    if (linux.geteuid() != 0) {
-        _ = cli.denied(.PERM);
-        return cli.EXIT_DENIED;
-    }
+    if (!needRoot()) return cli.EXIT_DENIED;
     if (!needDisk()) return cli.EXIT_IO;
     const c = tarsConf();
     const user = c.user orelse {

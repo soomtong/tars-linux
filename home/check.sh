@@ -453,6 +453,16 @@ s8_wait reload
 [ "$(s8_code reload)" = 77 ] || fail "tars-config reload as the user exited $(s8_code reload), want 77" "hp-s8-reload" "tars-config:"
 grep -aqF "tars-config: permission denied; try: sudo tars-config reload" "$LOG" \
   || fail "tars-config reload as the user did not say try: sudo" "tars-config:"
+# 비밀을 묻는 앞문은 묻기 전에 거절한다(2026-11-05 Air 실기 — Wi-Fi 비밀번호를 받은 뒤에야 거절해서, 사람이 이어지는
+# sudo의 비밀번호 칸에 Wi-Fi 비밀번호를 넣었다). stdin을 닫아 두므로, 묻는다면 `passphrase for` 줄이 찍힌다.
+as_user 'tars-config wifi hp-net < /dev/null; echo "hp-s8-wifi-$?"'
+s8_wait wifi
+[ "$(s8_code wifi)" = 77 ] || fail "tars-config wifi as the user exited $(s8_code wifi), want 77" "hp-s8-wifi" "tars-config:"
+grep -aqF "tars-config: permission denied; try: sudo tars-config wifi hp-net" "$LOG" \
+  || fail "tars-config wifi as the user did not say try: sudo" "tars-config:"
+if grep -aqF "passphrase for hp-net" "$LOG"; then
+  fail "tars-config wifi asked for the passphrase before refusing the user" "passphrase for"
+fi
 as_user 'tars-service status; echo "hp-s8-svc-$?"'
 s8_wait svc
 [ "$(s8_code svc)" = 77 ] || fail "tars-service status as the user exited $(s8_code svc), want 77" "hp-s8-svc" "tars-service:"
@@ -468,7 +478,7 @@ send "grep -c '^ntp=dhcp' /config/tars.conf | sed 's/^/hp-s8-ntp-/'"
 wait_log "hp-s8-ntp-1" || fail "sudo tars-config set did not write ntp=dhcp" "hp-s8-ntp"
 send "tars-config reset ntp >/dev/null; printf 'hp-s8-reset-%s\n' done"
 wait_log "hp-s8-reset-done" || fail "root could not put ntp back" "hp-s8-reset"
-echo "8c: the user's set · reload · tars-service say try: sudo (77) and leave tars.conf alone; sudo tars-config set writes"
+echo "8c: the user's set · reload · wifi (before asking) · tars-service say try: sudo (77) and leave tars.conf alone; sudo tars-config set writes"
 
 # 8d. passwd. 사용자로는 try: sudo, 두 값이 다르면 아무것도 안 바뀐다, 같으면 새 값이 다음 sudo부터다.
 as_user 'tars-config passwd; echo "hp-s8-pwuser-$?"'

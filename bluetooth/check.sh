@@ -57,7 +57,7 @@ done
 # initrd의 파일. 첫 archive만 본다(firmware는 뒤의 archive라 안 나온다 — measurements 62).
 LIST="$(mktemp)"
 gzip -dc ../kernel/initrd.cpio 2>/dev/null | cpio -it 2>/dev/null > "$LIST"
-for f in usr/libexec/bluetooth/bluetoothd usr/bin/bluetoothctl usr/bin/btmgmt usr/bin/dbus-daemon usr/bin/dbus-send \
+for f in usr/libexec/bluetooth/bluetoothd usr/libexec/bluetooth/bluetoothctl usr/bin/bluetoothctl usr/bin/btmgmt usr/bin/dbus-daemon usr/bin/dbus-send \
          etc/bluetooth/main.conf etc/bluetooth/input.conf usr/share/dbus-1/system.conf usr/share/dbus-1/system.d/bluetooth.conf \
          usr/lib/tars/tars-dbus usr/lib/tars/tars-bluetoothd var/lib/bluetooth lib/x86_64-linux-gnu/libglib-2.0.so.0; do
   if ! grep -x "$f" "$LIST" >/dev/null; then
@@ -312,6 +312,11 @@ grep -a 'tars-init: reload: service dbus stop' "$LOG" >/dev/null || report_failu
 grep -a 'tars-init: reload: service bluetoothd stop' "$LOG" >/dev/null || report_failure "init did not stop service bluetoothd on reload"
 [ "$(probe 'after off ')" = "dbus=[] bluetoothd=[]" ] || report_failure "a daemon survived bluetooth=off: $(probe 'after off ')"
 echo "tars-config set bluetooth=off + reload stopped dbus and bluetoothd; nothing is left running"
+# 꺼진 뒤의 bluetoothctl. 진짜 bluetoothctl은 여기서 SIGABRT(rc 134)로 죽는다 — 감싸개가 말하고 1로 끝나야 한다.
+CTL_OFF="$(probe 'ctl off ')"
+[ "$CTL_OFF" = "rc=1 bluetoothctl: bluetooth is off (no system bus); turn it on: sudo tars-config set bluetooth=on; sudo tars-config reload" ] \
+  || report_failure "bluetoothctl with no bus did not say how to turn bluetooth on: ${CTL_OFF}"
+echo "with bluetooth off, bluetoothctl says how to turn it on and exits 1"
 stop_guest
 
 # ══ 부팅 B: 디스크 없음 — 기본값은 꺼짐 ═════════════════════════════════════

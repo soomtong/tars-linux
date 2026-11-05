@@ -1,0 +1,15 @@
+#!/bin/sh
+# /usr/bin/bluetoothctl — 사람이 치는 이름. 진짜는 /usr/libexec/bluetooth/bluetoothctl이다.
+#
+# bluetooth=off면 시스템 버스(dbus-daemon)가 없다(BT design 결정 4). 그때 BlueZ의 bluetoothctl은
+# libdbus가 준 NULL 연결을 그대로 써서 "connection != NULL" assertion과 SIGABRT로 죽는다 — 무엇을
+# 해야 하는지 말이 없다(2026-11-05 MacBook Air 실기). 그래서 버스에 한 번 물어보고, 없으면 켜는 법을
+# 말하고 끝난다.
+#
+# 소켓 파일(-S)이 아니라 dbus-send로 묻는다. 데몬이 내려간 뒤 소켓 파일이 남아 있어도 틀리지 않는다.
+# dbus-send는 버스가 없으면 죽지 않고 오류로 끝난다. bluetooth 체인의 검사 8이 이 줄을 본다.
+if ! /usr/bin/dbus-send --system --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.GetId >/dev/null 2>&1; then
+  echo "bluetoothctl: bluetooth is off (no system bus); turn it on: sudo tars-config set bluetooth=on; sudo tars-config reload" >&2
+  exit 1
+fi
+exec /usr/libexec/bluetooth/bluetoothctl "$@"

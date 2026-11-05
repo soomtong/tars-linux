@@ -483,6 +483,10 @@ cp "$SYSROOT/usr/share/dbus-1/system.d/bluetooth.conf" "$WORKDIR/usr/share/dbus-
 ln -s /config/bluetooth "$WORKDIR/var/lib/bluetooth"
 cp bluetooth/tars-dbus bluetooth/tars-bluetoothd "$WORKDIR/usr/lib/tars/"
 chmod 0755 "$WORKDIR/usr/lib/tars/tars-dbus" "$WORKDIR/usr/lib/tars/tars-bluetoothd"
+# 사람이 치는 bluetoothctl은 감싸개다 — 버스가 없으면(bluetooth=off) SIGABRT 대신 켜는 법을 말한다.
+# 진짜는 guest_tools.sh가 /usr/libexec/bluetooth/에 둔다(2026-11-05 Air 실기).
+cp bluetooth/bluetoothctl "$WORKDIR/usr/bin/bluetoothctl"
+chmod 0755 "$WORKDIR/usr/bin/bluetoothctl"
 
 # TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
 #

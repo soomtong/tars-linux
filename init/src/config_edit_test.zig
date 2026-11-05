@@ -374,6 +374,9 @@ pub fn main() !void {
     // 거절은 처음 걸린 인자에서 멈춘다.
     try expectText((try expectCommand(&[_]A{ "set", "net=dhcp", "shell", "x" }, .no_equals)).no_equals, "shell", "set with a bare second arg");
     try expectText((try expectCommand(&[_]A{ "reset", "shell", " nope " }, .unknown_key)).unknown_key, "nope", "reset nope");
+    // `set`을 빠뜨린 KEY=VALUE(2026-11-05 Air 실기). 뒤에 무엇이 와도 첫 인자를 말한다.
+    try expectText((try expectCommand(&[_]A{"bluetooth=on"}, .missing_set)).missing_set, "bluetooth=on", "bluetooth=on without set");
+    _ = try expectCommand(&[_]A{ "net=dhcp", "ntp=dhcp" }, .missing_set);
     std.debug.print("config_edit_test: parseCommand sorts the verbs the way main did, refusals included\n", .{});
 
     // ── 8. init의 답을 읽는다 — reload가 지은 그대로 ────────────────────

@@ -1137,9 +1137,9 @@ pub fn takeLines(
     sector: u64,
     nums: [3]u8,
 ) void {
-    sink.print("tars-install: {s} ({s}, {s}) will be erased, the files on it too. the other partitions of {s} ({s}, {s}) are kept. it now holds: {s}\n", .{
-        node, what, part_size, path, size, model, holds,
-    });
+    // 두 줄이다 — 한 줄이면 11인치 화면(1366 폭)에서 꺾였다(2026-11-05 Air 실기).
+    sink.print("tars-install: {s} ({s}, {s}) will be erased, the files on it too.\n", .{ node, what, part_size });
+    sink.print("  the other partitions of {s} ({s}, {s}) are kept. it now holds: {s}\n", .{ path, size, model, holds });
     sink.print("  TARS goes into {s} and the free space next to it, from MiB {d} to MiB {d}; no other partition is touched\n", .{
         node, gap.start * sector >> 20, gap.end * sector >> 20,
     });

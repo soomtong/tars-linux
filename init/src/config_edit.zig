@@ -358,6 +358,9 @@ pub const Command = union(enum) {
     no_equals: []const u8,
     /// `reset`의 모르는 키.
     unknown_key: []const u8,
+    /// 첫 인자가 `KEY=VALUE`다 — `set`을 빠뜨렸다(2026-11-05 Air 실기, `tars-config bluetooth=on`이 쓰는 법만
+    /// 찍고 끝났다). 그 인자다. 고쳐 칠 명령을 말해 준다.
+    missing_set: []const u8,
 };
 
 /// argv[1..]을 가른다. `set`의 쌍은 pairs에, `reset`의 기본값 글자는 default_bufs에 짓는다 — 둘 다 호출자의 스택이다.
@@ -391,7 +394,10 @@ pub fn parseCommand(args: Rest, pairs: *[PAIRS_MAX]Pair, default_bufs: *[PAIRS_M
         return .{ .get = std.mem.trim(u8, std.mem.span(rest[0]), " \t") };
     }
     const is_set = std.mem.eql(u8, verb, "set");
-    if (!is_set and !std.mem.eql(u8, verb, "reset")) return .usage;
+    if (!is_set and !std.mem.eql(u8, verb, "reset")) {
+        if (std.mem.indexOfScalar(u8, verb, '=') != null) return .{ .missing_set = verb };
+        return .usage;
+    }
     if (rest.len == 0 or rest.len > PAIRS_MAX) return .usage;
 
     const defaults = config.Config{};

@@ -873,7 +873,8 @@ pub fn main() !void {
             "    /dev/nvme3n1p4  268 MB  NTFS\n", "partition rows");
         out = control.Out{ .buf = &out_buf };
         disk.takeLines(&out, "/dev/sda3", "FAT32 \"TARS\"", "6 GB", "/dev/sda", "8 GB", "Mac SSD", "GPT: EFI, macOS (APFS), 2 other; 134 MB free", ga, 512, nums);
-        try expectText(out.bytes(), "tars-install: /dev/sda3 (FAT32 \"TARS\", 6 GB) will be erased, the files on it too. the other partitions of /dev/sda (8 GB, Mac SSD) are kept. it now holds: GPT: EFI, macOS (APFS), 2 other; 134 MB free\n" ++
+        try expectText(out.bytes(), "tars-install: /dev/sda3 (FAT32 \"TARS\", 6 GB) will be erased, the files on it too.\n" ++
+            "  the other partitions of /dev/sda (8 GB, Mac SSD) are kept. it now holds: GPT: EFI, macOS (APFS), 2 other; 134 MB free\n" ++
             "  TARS goes into /dev/sda3 and the free space next to it, from MiB 1225 to MiB 7936; no other partition is touched\n" ++
             "  p3  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n" ++
             "  p5  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++

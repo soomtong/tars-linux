@@ -81,5 +81,8 @@ for _ in $(seq 1 40); do
   sleep 0.5
 done
 say "after off dbus=[$(pgrep -x dbus-daemon | tr '\n' ' ')] bluetoothd=[$(pgrep -x bluetoothd | tr '\n' ' ')]"
+# 버스가 없을 때 사람이 bluetoothctl을 치면 — 감싸개가 켜는 법을 말하고 1로 끝난다(SIGABRT가 아니다).
+CTL="$(bluetoothctl list 2>&1)"; CTL_RC=$?
+say "ctl off rc=${CTL_RC} ${CTL}"
 say "done"
 exec sleep 100000

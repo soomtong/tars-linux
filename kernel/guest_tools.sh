@@ -395,7 +395,8 @@ GUEST_TOOLS=(
   #                  Debian의 dbus-broker는 systemd 런처가 필요해 못 쓴다
   #   bluetoothd     BlueZ 데몬. 페어링 · 연결 · 클래식 HID(커널 hidp에 넘긴다) · BLE HID
   #                  (GATT로 읽어 /dev/uhid로 넣는다). 자리는 패키지 그대로 /usr/libexec
-  #   bluetoothctl   사람의 페어링 도구 — scan on · pair · trust · connect
+  #   bluetoothctl   사람의 페어링 도구 — scan on · pair · trust · connect. 자리는 bluetoothd 옆이고
+  #                  /usr/bin/bluetoothctl은 버스가 없을 때 켜는 법을 말하는 감싸개다(make_initrd.sh)
   #   btmgmt         커널 mgmt 소켓을 직접 두드리는 진단 도구(D-Bus 없이 어댑터를 본다)
   #   dbus-send      버스가 살아 있는지 보는 진단 도구(GetId 한 줄)
   #
@@ -405,7 +406,7 @@ GUEST_TOOLS=(
   # 있고 bluetooth/check.sh의 설정 디스크가 가져간다(WL의 hostapd와 같다).
   usr/bin/dbus-daemon:usr/bin/dbus-daemon
   usr/libexec/bluetooth/bluetoothd:usr/libexec/bluetooth/bluetoothd
-  usr/bin/bluetoothctl:usr/bin/bluetoothctl
+  usr/bin/bluetoothctl:usr/libexec/bluetooth/bluetoothctl
   usr/bin/btmgmt:usr/bin/btmgmt
   usr/bin/dbus-send:usr/bin/dbus-send
 
