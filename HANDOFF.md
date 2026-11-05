@@ -7,7 +7,7 @@
 
 ## 현재 브랜치
 
-`main` = origin/main(push됨), tag `v0.1.4` = `044789e` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
+`main` = origin/main(push됨), tag `v0.1.4` = `0a53580` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
 작업용 worktree `../tars-linux-hs` · `../tars-linux-db`와 브랜치 `hs` · `db`는 합친 뒤 지웠다.
 
 ## 완료된 작업 (2026-11-04~05)
@@ -57,7 +57,7 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 ## 지금 상태 (2026-11-05)
 
 - 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
-  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `044789e`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
+  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `0a53580`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
 - 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 30초.
   바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은

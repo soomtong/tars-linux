@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = 044789e, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = 0a53580, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -67,7 +67,7 @@ tag는 그대로 두고 ISO를 다시 만들었다.
 
 | 항목 | 값 |
 |---|---|
-| tag | `v0.1.4` (annotated) → `044789e`. 루트 게이트 29/29(16분 48초)는 코드의 마지막 커밋 `d1fa10a`(BW-M0)에서 돌았고, 그 뒤는 문서뿐 |
+| tag | `v0.1.4` (annotated) → `0a53580`. 루트 게이트 29/29(16분 48초)는 코드의 마지막 커밋 `d1fa10a`(BW-M0)에서 돌았고, 그 뒤는 문서뿐 |
 | release | https://github.com/soomtong/tars-linux/releases/tag/v0.1.4 (Latest) |
 | ISO | `tars-0.1.4-x86_64.iso`, 136,456,192 B (0.1.3보다 약 30MB 큼 — BT firmware 157개 · ext4 · PM의 도구 층과 glibc 통째로) |
 | sha256 | `3ee58edaf6034bd6e8658e98b8fbd951a246fe223d85b8168ea305b77de0f675` |

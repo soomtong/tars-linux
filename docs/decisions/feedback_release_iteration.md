@@ -21,6 +21,6 @@ How to apply:
   smoke가 실패하면 바깥의 판이 그대로 남는다.
 - release 노트 · `project_release.md`의 0.1.4 절 · `HANDOFF.md` · 소개 페이지(`data.js`)에는 지금 판의 값만 둔다. "다시 냄", "첫 판",
   이전 sha256을 쓰지 않는다. 커밋 메시지도 `re-release`를 쓰지 않는다(예: `Release record: 0.1.4 values`).
-- 이미 push된 커밋 메시지(`5e7934f` · `8dbba42`, gh-pages `65fb235`)는 히스토리를 고쳐 쓰지 않는 한 남는다. 2026-11-05에는 force push를
-  안 했다 — 사용자가 원하면 그때.
+- 이미 push된 커밋 메시지에 그런 말이 남았으면 메시지만 고쳐 force push한다(사용자 승인, 2026-11-05). tree가 같으므로 tag를 새 hash로
+  옮겨도 올린 ISO는 그대로 맞다 — `git rev-parse v0.1.4^{tree}`로 본다.
 - 실기 확인이 성공해 0.1.4를 굳히면 이 기억은 닫는다(다음 번호부터는 평소 절차).
