@@ -221,16 +221,22 @@ done
 # 꺼져 있어야 하는 것. SOF_PCI를 켜면 세대마다의 심볼이 기본값으로 따라 켜지는데, 아래
 # 넷(SKL · KBL · APL · GLK)과 Merrifield는 노트북에서 SOF로 안 가거나(SKL · KBL은 DSP
 # 표가 HDA로 묶는다) Chromebook · UP 보드 · 태블릿의 것이고 firmware도 싣지 않는다.
-# Atom의 SST는 ACPI면 기본으로 켜진다. SND_HDA_I915는 GPU 드라이버(i915 · xe)가 켤 때만
-# 선다 — 서 있으면 SOF가 i915의 오디오 컴포넌트를 기다리느라 카드를 안 만들 수 있다
-# (sound/soc/sof/intel/hda.c의 hda_codec_i915_init). 지금은 그 자리가 -ENODEV stub이다.
+# Atom의 SST는 ACPI면 기본으로 켜진다.
 for sym in SND_SOC_SOF_SKYLAKE SND_SOC_SOF_KABYLAKE SND_SOC_SOF_APOLLOLAKE SND_SOC_SOF_GEMINILAKE \
-  SND_SOC_SOF_MERRIFIELD SND_SST_ATOM_HIFI2_PLATFORM_ACPI SND_HDA_I915; do
+  SND_SOC_SOF_MERRIFIELD SND_SST_ATOM_HIFI2_PLATFORM_ACPI; do
   if grep -x "CONFIG_${sym}=y" "$CONFIG" >/dev/null; then
     echo "FAIL: CONFIG_${sym} is on; AU-M3 keeps it off"
     exit 1
   fi
 done
+# SND_HDA_I915는 LP-M0부터 서 있다 — i915가 select한다(끌 수 없다). 서 있으면 HDA · SOF가 GPU의 오디오
+# 컴포넌트가 묶이기를 -EPROBE_DEFER로 기다린다(sound/hda/core/i915.c의 snd_hdac_i915_init). i915가 맡지
+# 않는 Intel GPU(Lunar · Panther Lake는 xe 몫)에서는 영영 안 묶여 소리가 사라진다. 그래서 내장 cmdline의
+# snd_hda_core.gpu_bind=0이 GPU 쪽을 안 보게 한다 — 지금까지의 -ENODEV 길 그대로다(LP design 결정 1의 덧붙임).
+if ! grep -E '^CONFIG_CMDLINE="([^"]* )?snd_hda_core\.gpu_bind=0( [^"]*)?"$' "$CONFIG" >/dev/null; then
+  echo "FAIL: the built-in cmdline no longer keeps the HDA off the GPU's audio component (snd_hda_core.gpu_bind=0)"
+  exit 1
+fi
 for alias in snd_sof_pci_intel_cnl.alias=pci:v00008086d000002C8 snd_sof_pci_intel_icl.alias=pci:v00008086d000034C8 \
   snd_sof_pci_intel_tgl.alias=pci:v00008086d0000A0C8 snd_sof_pci_intel_tgl.alias=pci:v00008086d000051C8 \
   snd_sof_pci_intel_mtl.alias=pci:v00008086d00007E28 snd_sof_pci_intel_lnl.alias=pci:v00008086d0000A828 \

@@ -46,6 +46,31 @@ for alias in bcm5974.alias=usb:v05ACp0249d bcm5974.alias=usb:v05ACp0262d \
 done
 echo "the kernel ties the three MacBook trackpads to bcm5974 and ACPI0002 to sbs"
 
+# LP-M0: 밝기와 절전(LP design 결정 1). 맥 두 기종의 GPU를 i915가 받아야 intel_backlight가 서고 S3에서
+# 깨어난 화면이 다시 선다. QEMU에 Intel GPU가 없어 부팅으로는 못 보고, 위와 같이 표를 본다.
+#   0116  MacBookAir4,1 HD 3000   0166  MacBookPro10,1 HD 4000
+#   0a2e  MacBookPro11,1 Iris     0d26  MacBookPro11,2/11,3 Iris Pro
+for sym in DRM_I915 PM SUSPEND ACPI_SLEEP BACKLIGHT_CLASS_DEVICE; do
+  if ! grep -x "CONFIG_${sym}=y" ../kernel/.config >/dev/null; then
+    echo "FAIL: CONFIG_${sym} is not =y in kernel/.config" >&2
+    exit 1
+  fi
+done
+for id in 0116 0166 0A2E 0D26; do
+  if ! tr '\0' '\n' < "$MB_MODINFO" | grep -F "i915.alias=pci:v00008086d0000${id}" >/dev/null; then
+    echo "FAIL: the kernel has no i915 entry for the MacBook GPU 8086:${id}" >&2
+    exit 1
+  fi
+done
+# i915가 TMPFS를 select한다. TMPFS가 서면 initramfs의 rootfs가 ramfs에서 tmpfs(상한 = RAM의 절반)로 바뀌고
+# 512MB 게스트의 rootfs가 256MB에서 찬다 — LP-M0 첫 게이트에서 열여덟 체인이 `No space left on device`로
+# 제각각 빨갰다. rootfstype=ramfs가 rootfs를 전처럼 ramfs로 둔다(init/do_mounts.c의 init_rootfs).
+if ! grep -E '^CONFIG_CMDLINE="([^"]* )?rootfstype=ramfs( [^"]*)?"$' ../kernel/.config >/dev/null; then
+  echo "FAIL: the built-in cmdline no longer keeps the rootfs on ramfs (rootfstype=ramfs)" >&2
+  exit 1
+fi
+echo "i915, suspend and the backlight class are in the kernel, i915 takes the four MacBook GPUs, and the rootfs stays ramfs"
+
 # OVMF는 ovmf 패키지가 깔아 두는 미리 빌드된 EDK II다(devcontainer/Dockerfile).
 # CODE는 읽기 전용으로 물려도 되지만 VARS는 쓰기가 되어야 한다 — 펌웨어가
 # NVRAM 변수에 부트 항목을 쓰는 자리라 읽기 전용이면 부팅할 것을 못 고른다.
