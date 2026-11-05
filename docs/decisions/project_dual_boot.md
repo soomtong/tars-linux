@@ -30,5 +30,8 @@ design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/
    triple을 붙였거나 디스크 유틸리티의 "파티션"이다. `diskutil eraseVolume free free <id>`가 파티션을 빈 자리로 되돌린다(DB-M1 착수 전).
 6. 한 부팅에서 설치를 두 번 하는 체인은 끝 줄(`done.`)을 기다리면 안 된다 — 첫 설치가 이미 찍었다. 명령 뒤에 고유 표지를 찍어 기다린다
    (DB-M1 첫 판, 둘째 설치 도중에 QEMU를 꺼 ESP가 비었다).
+7. 첫 실기(2026-11-05, APPLE SSD SM256C, HFS+): `EFI · macOS (HFS+) · exFAT 125GB`, p2와 p3 사이 134MB(128MiB) 틈 — 디스크 유틸리티가
+   파티션 사이에 128MiB를 둔다는 DB-M1 위험 2가 맞았다. Recovery HD는 없었다(사용자가 준비 중 지웠다). 확인 칸은 대문자 `YES`만 받는다 —
+   실기에서 `yes`를 쳤다.
 
 관련: [[project_disk_install]] · [[project_kernel_upgrade]] · [[project_home_partition]] · [[project_macbook_hardware]]

@@ -31,6 +31,7 @@ Boot"를 고른다 — 기본 부팅은 macOS 그대로다.
    |---|---|
    | APFS(10.13+) | p1 EFI 200MiB · p2 APFS 컨테이너 |
    | HFS+(MacBookAir4,1의 10.7~10.12) | p1 EFI · p2 HFS+ · p3 Recovery HD |
+   | 위에서 Recovery HD를 잃은 맥(2026-11-05 실기, 사용자가 파티션을 준비하다 지웠다) | p1 EFI · p2 HFS+ — Recovery 없이도 같은 길이다 |
    | 위 + Boot Camp | 그 뒤에 BOOTCAMP(NTFS) 하나 |
    TARS는 p3~p5, p4~p6, p5~p7 중 하나에 놓인다.
 6. Apple 펌웨어의 부팅 선택 화면(Option)은 FAT 볼륨의 `\EFI\BOOT\BOOTX64.EFI`를 "EFI Boot"로 보인다. TARS-BOOT가 그 파일을 갖고
