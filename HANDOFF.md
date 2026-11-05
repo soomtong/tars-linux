@@ -1,4 +1,4 @@
-# HANDOFF: 맥북 지원(MB · HS · DB) 닫힘 · 0.1.4 배포됨 — 다음은 맥 실기 확인과 사용자의 다음 선택
+# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · 0.1.4 배포됨(BW를 담아 다시 냄) — 다음은 맥 실기 확인과 사용자의 다음 선택
 
 ## 목표
 
@@ -17,6 +17,8 @@
 - [x] HS-M0 — 논리 그림자 + 늘리는 present(`terminal/src/scale.zig`), `display_scale=auto|1|2|3`(`ARGC` 14), 체인 `hidpi`(monitor 45502). 서브에이전트.
 - [x] DB-M0 — `tars-install <disk> --beside`, TARS 파티션을 GPT 이름으로, 포맷 전 대조 둘, init 후보 126, 체인 `dualboot`(포트 없음),
   `docs/guides/running-tars.md`의 macOS 절. 서브에이전트.
+- [x] BW-M0(2026-11-05, 사용자 요청) — MacBookAir4,1 내장 BCM43224를 `brcmsmac`으로, firmware 둘. Pro의 BCM4331 · BCM4360은 못 연다
+  (BW 비목표). 루트 게이트 29/29, 16분 48초. 0.1.4의 tag와 release를 이 커밋 뒤로 옮겨 다시 냈다(사용자 요청).
 - [x] 루트 게이트 29/29, 16분 30초(prebuild 포함, lanes 667초), 잘린 줄 0(`667240c`).
 - [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,208,384 B, sha256 `b0e9d944…811c`) · 내려받아 `OK` ·
   `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
@@ -73,7 +75,8 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
   - Retina: 로그 `kms: scale 2 (2880x1800 -> 1440x900)`. 펌웨어가 낮은 모드를 주면 `scale 1`로 나온다(HS 위험 2). 출력이 쏟아질 때 늦지
     않은지, `sudo tars-config set display_scale=1` · `tars-config reload` · `tars-config reload terminal`로 1배와 비교.
   - 외장 USB 마우스 · 키보드를 함께.
-- 무선이 없다 — 유선 USB 어댑터나 USB 무선 동글(UW · UB 계열)로 망을 쓴다.
+- 무선: Air 2011은 내장(`tars-config wifi …`, 로그 `bcma` · `brcmsmac`, 안 되면 BW 위험 1). Pro 2013은 내장이 없다 — 유선 USB 어댑터나
+  USB 무선 동글(UW · UB 계열). 내장 Bluetooth는 세 기종 다 `bluetooth=on` · `bluetoothctl`(보정 펌웨어 없이 돈다 — 안 되면 BT 위험 6).
 
 - PS: 노트북 터치패드 + USB 마우스를 함께 쓰며 — 기본값에서 마우스 휠은 앞으로 = 위의 글, 두 손가락은 내용이 손가락을
   따라가는지. `sudo tars-config set mouse_scroll=natural` · `tars-config reload` · `tars-config reload terminal` 뒤 마우스만 뒤집히는지.
