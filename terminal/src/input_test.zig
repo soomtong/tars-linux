@@ -93,6 +93,10 @@ fn expectFull(
             std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedDictate;
         },
+        .brightness => |dir| {
+            std.debug.print("FAIL: code={d} -> got brightness .{s}\n", .{ code, @tagName(dir) });
+            return error.UnexpectedBrightness;
+        },
     }
 }
 
@@ -140,6 +144,10 @@ fn expectCopy(state: *input.State, code: u16, want: input.Copy) !void {
             std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedDictate;
         },
+        .brightness => |dir| {
+            std.debug.print("FAIL: code={d} -> got brightness .{s}\n", .{ code, @tagName(dir) });
+            return error.UnexpectedBrightness;
+        },
     }
 }
 
@@ -177,6 +185,10 @@ fn expectPane(state: *input.State, code: u16, want: input.Pane) !void {
         .dictate => |cmd| {
             std.debug.print("FAIL: code={d} -> got dictate .{s}, want pane .{s}\n", .{ code, @tagName(cmd), @tagName(want) });
             return error.UnexpectedDictate;
+        },
+        .brightness => |dir| {
+            std.debug.print("FAIL: code={d} -> got brightness .{s}\n", .{ code, @tagName(dir) });
+            return error.UnexpectedBrightness;
         },
     }
 }
@@ -227,6 +239,10 @@ fn expectScroll(
         .dictate => |cmd| {
             std.debug.print("FAIL: code={d} -> got dictate .{s}\n", .{ code, @tagName(cmd) });
             return error.UnexpectedDictate;
+        },
+        .brightness => |dir| {
+            std.debug.print("FAIL: code={d} -> got brightness .{s}\n", .{ code, @tagName(dir) });
+            return error.UnexpectedBrightness;
         },
     }
 }
@@ -288,6 +304,10 @@ fn expectHangulAt(
         .dictate => |cmd| {
             std.debug.print("FAIL: code={d} -> got dictate .{s}, want hangul\n", .{ code, @tagName(cmd) });
             return error.UnexpectedDictate;
+        },
+        .brightness => |dir| {
+            std.debug.print("FAIL: code={d} -> got brightness .{s}\n", .{ code, @tagName(dir) });
+            return error.UnexpectedBrightness;
         },
     }
     try expectCommit(state, code, want_commit);
@@ -762,8 +782,39 @@ pub fn main() !void {
     try expect(&state, K.KEY_LEFT, 1, "\x1b[D"); // Shift+← → 아직도 그냥 ←
     try expect(&state, K.KEY_LEFTSHIFT, 0, "");
 
-    // 특수키 사이의 빈 코드(F1 등)는 여전히 조용히 무시된다.
-    try expect(&state, K.KEY_F1, 1, "");
+    // 특수키 사이의 빈 코드(F1 등)는 여전히 조용히 무시된다. LP-M2부터 Apple 칸(기본 Context)의 F1 · F2는
+    // 밝기라 PC 칸으로 본다 — 이 줄이 지키는 뜻은 "PC 키보드의 F1은 조용하다"이다.
+    try expectCtx(&state, .{ .swap_alt_meta = true }, K.KEY_F1, 1, "");
+
+    // LP-M2. 밝기 키(LP design 결정 6). Apple 칸(swap_alt_meta 거짓)의 F1 · F2와 어느 칸이든 밝기 키가 한 단계다.
+    // 누름과 자동 반복(2)이 단계이고 뗌은 아무것도 아니다. PC 칸의 F2도 조용하다.
+    {
+        var bs: input.State = .{};
+        const apple: input.Context = .{};
+        const pc_kb: input.Context = .{ .swap_alt_meta = true };
+        const cases = [_]struct { ctx: input.Context, code: u16, value: i32, want: ?input.Brightness }{
+            .{ .ctx = apple, .code = K.KEY_F1, .value = 1, .want = .down },
+            .{ .ctx = apple, .code = K.KEY_F1, .value = 2, .want = .down },
+            .{ .ctx = apple, .code = K.KEY_F1, .value = 0, .want = null },
+            .{ .ctx = apple, .code = K.KEY_F2, .value = 1, .want = .up },
+            .{ .ctx = pc_kb, .code = K.KEY_F2, .value = 1, .want = null },
+            .{ .ctx = pc_kb, .code = K.KEY_BRIGHTNESSUP, .value = 1, .want = .up },
+            .{ .ctx = pc_kb, .code = K.KEY_BRIGHTNESSDOWN, .value = 1, .want = .down },
+            .{ .ctx = apple, .code = K.KEY_F3, .value = 1, .want = null },
+        };
+        for (cases) |cs| {
+            const got: ?input.Brightness = switch (bs.handleKey(cs.code, cs.value, 0, cs.ctx)) {
+                .brightness => |d| d,
+                else => null,
+            };
+            if (got != cs.want) {
+                std.debug.print("FAIL: brightness code={d} value={d} swap={} -> {any}, want {any}\n", .{
+                    cs.code, cs.value, cs.ctx.swap_alt_meta, got, cs.want,
+                });
+                return error.WrongBrightness;
+            }
+        }
+    }
     try expect(&state, K.KEY_INSERT, 1, "");
 
     // ── CM-M0: copy mode ────────────────────────────────────────────────

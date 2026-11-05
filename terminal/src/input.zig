@@ -329,7 +329,25 @@ pub const Action = union(enum) {
     /// 받아쓰기 명령(VD-M1). PTY로 보내지 않는다. 자식을 띄우고 시그널을 보내는
     /// 것은 `main.zig`다.
     dictate: Dictate,
+    /// 화면 밝기 한 단계(LP-M2). PTY로 보내지 않는다 — sysfs에 쓰는 것은 `main.zig`다.
+    brightness: Brightness,
 };
+
+/// 밝기 키의 방향(LP design 결정 6).
+pub const Brightness = enum { down, up };
+
+/// 이 키가 밝기 키인가. 어느 키보드든 `KEY_BRIGHTNESSDOWN` · `KEY_BRIGHTNESSUP`, 그리고 Apple 칸의 F1 · F2다
+/// (macOS의 기본 자리, 사용자 결정 2026-11-05). Apple 칸은 `swap_alt_meta`가 거짓인 칸이다 — 그 값은 칸을 열 때
+/// `kind == .pc`로 정해지므로(`main.zig`의 `KeyboardDev`) 종류와 같은 뜻이다. PC 칸의 F1 · F2는 지금처럼 조용하다.
+fn brightnessKey(code: u16, ctx: Context) ?Brightness {
+    return switch (code) {
+        c.KEY_BRIGHTNESSDOWN => .down,
+        c.KEY_BRIGHTNESSUP => .up,
+        c.KEY_F1 => if (ctx.swap_alt_meta) null else .down,
+        c.KEY_F2 => if (ctx.swap_alt_meta) null else .up,
+        else => null,
+    };
+}
 
 /// 받아쓰기의 키 명령(VD design 결정 10 · 11). 둘이다.
 ///
@@ -508,6 +526,8 @@ pub const Keys = struct {
     panes: []const Pane,
     /// 받아쓰기 명령도 같은 모양으로 순서대로 모은다(VD-M1).
     dictates: []const Dictate,
+    /// 밝기의 순증감(LP-M2). 위 +1 · 아래 −1의 합이다 — 순서가 뜻이 없어서 목록이 아니다.
+    brightness: i32 = 0,
     /// 이 배치가 화면을 바꿨는가(HI-M1 · IS-M1에서 이름이 넓어졌다).
     ///
     /// 값이 아니라 사실만 나른다. 무엇이 바뀌었는지는 상태를 읽어
@@ -1403,6 +1423,10 @@ pub const State = struct {
         // 뗌은 안 버린다 — 누르기 전부터 눌려 있던 키를 떼는 것은 조합이 아니다.
         if (value != 0 and code != c.KEY_RIGHTMETA) self.dictate_tap.reset();
 
+        // LP-M2. 밝기 키는 모드(copy · find)와 수정키보다 앞이다 — 어디서 누르든 밝기다. 누름(1)과 자동
+        // 반복(2)이 한 단계씩, 뗌(0)은 아무것도 아니다.
+        if (brightnessKey(code, ctx)) |dir| return if (value != 0) .{ .brightness = dir } else nothing;
+
         switch (code) {
             c.KEY_LEFTSHIFT => {
                 mods.shift_left = value != 0;
@@ -1793,6 +1817,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
     var copied: usize = 0;
     var paned: usize = 0;
     var dictated: usize = 0;
+    var bright: i32 = 0;
     var redraw = false;
     var i: usize = 0;
     while (i < count) : (i += 1) {
@@ -1893,6 +1918,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
                 self.dictates[dictated] = cmd;
                 dictated += 1;
             },
+            .brightness => |dir| bright += if (dir == .up) 1 else -1,
         }
     }
     return .{
@@ -1901,6 +1927,7 @@ pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
         .copies = self.copies[0..copied],
         .panes = self.panes[0..paned],
         .dictates = self.dictates[0..dictated],
+        .brightness = bright,
         .redraw = redraw,
     };
 }

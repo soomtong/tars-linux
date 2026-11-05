@@ -422,6 +422,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(battery_test);
 
+    // backlight_test도 호스트에서 돈다(LP-M2). battery_test와 같은 모양이다 — 고르는 순서와 단계의
+    // 순수 산수다. sysfs를 훑고 쓰는 것은 `main.zig`이고, 패널은 실기가 본다(QEMU에 백라이트가 없다).
+    const backlight_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/backlight_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const backlight_test = b.addExecutable(.{
+        .name = "backlight_test",
+        .root_module = backlight_test_mod,
+    });
+    b.installArtifact(backlight_test);
+
     // pacing_test도 호스트에서 돈다(RS-M2). 그리는 간격의 하한과 poll timeout을 고르는
     // 순수 산수라 battery_test와 같은 모양이다. 시계를 읽는 것은 `main.zig`다.
     const pacing_test_mod = b.createModule(.{
@@ -484,6 +497,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(dictation_test).step);
     test_step.dependOn(&b.addRunArtifact(logline_test).step);
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
+    test_step.dependOn(&b.addRunArtifact(backlight_test).step);
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
     test_step.dependOn(&b.addRunArtifact(scale_test).step);
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);

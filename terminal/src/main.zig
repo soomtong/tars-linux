@@ -1,6 +1,7 @@
 const std = @import("std");
 const logline = @import("logline.zig");
 const battery = @import("battery.zig");
+const backlight = @import("backlight.zig");
 const clipboard = @import("clipboard.zig");
 const pacing = @import("pacing.zig");
 const dictation = @import("dictation.zig");
@@ -2315,6 +2316,110 @@ fn tickBattery(io: std.Io, bat: *BatteryState, now_ms: i64) bool {
     return !std.meta.eql(old_cell, bat.cell);
 }
 
+// ── 밝기(LP-M2) ───────────────────────────────────────────────────────
+
+/// 백라이트 장치가 모이는 디렉터리(LP design 결정 5). 항목은 장치 디렉터리로 가는 심볼릭 링크다
+/// (`intel_backlight` · `acpi_video0`).
+const BACKLIGHT_DIR = "/sys/class/backlight";
+const BACKLIGHT_NAME_MAX = 64;
+/// `BACKLIGHT_DIR/<이름>/<파일>`과 NUL. 20 + 1 + 64 + 1 + 14(`max_brightness`) + 1.
+const BACKLIGHT_PATH_MAX = 128;
+const BACKLIGHT_FILE_MAX = 32;
+const BACKLIGHT_MAX = 8;
+
+const BacklightState = struct {
+    name: [BACKLIGHT_NAME_MAX]u8 = undefined,
+    len: usize = 0,
+    /// 훑었는가. 쓰기가 실패하면 거짓으로 돌려 다음 키에서 다시 훑는다.
+    scanned: bool = false,
+
+    fn pickName(self: *const BacklightState) ?[]const u8 {
+        if (self.len == 0) return null;
+        return self.name[0..self.len];
+    }
+};
+
+fn backlightPath(buf: *[BACKLIGHT_PATH_MAX]u8, name: []const u8, file: []const u8) ?[*:0]const u8 {
+    const path = std.fmt.bufPrintSentinel(buf, BACKLIGHT_DIR ++ "/{s}/{s}", .{ name, file }, 0) catch return null;
+    return path.ptr;
+}
+
+fn readBacklight(name: []const u8, file: []const u8, buf: *[BACKLIGHT_FILE_MAX]u8) ?[]const u8 {
+    var path_buf: [BACKLIGHT_PATH_MAX]u8 = undefined;
+    const path = backlightPath(&path_buf, name, file) orelse return null;
+    const fd = std.c.open(path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true });
+    if (fd < 0) return null;
+    defer _ = std.c.close(fd);
+    const n = std.c.read(fd, buf, buf.len);
+    if (n < 0) return null;
+    return buf[0..@intCast(n)];
+}
+
+/// 디렉터리를 훑어 `type`의 순위로 하나를 고른다(결정 5). 결과를 한 줄 찍는다 — 실기에서 어느 것이 골라졌는지가
+/// 첫 진단이다(`intel_backlight`가 아니면 i915가 패널을 못 잡은 것이다, design 확인 4).
+fn scanBacklight(io: std.Io, bl: *BacklightState) void {
+    bl.* = .{ .scanned = true };
+    var dir = std.Io.Dir.openDirAbsolute(io, BACKLIGHT_DIR, .{ .iterate = true }) catch |err| {
+        logline.print("terminal: backlight> scan failed error={s}\n", .{@errorName(err)});
+        return;
+    };
+    defer dir.close(io);
+    var name_bufs: [BACKLIGHT_MAX][BACKLIGHT_NAME_MAX]u8 = undefined;
+    var names: [BACKLIGHT_MAX][]const u8 = undefined;
+    var ranks: [BACKLIGHT_MAX]u8 = undefined;
+    var n: usize = 0;
+    var it = dir.iterate();
+    while (it.next(io) catch null) |entry| {
+        if (n == BACKLIGHT_MAX or entry.name.len > BACKLIGHT_NAME_MAX) continue;
+        var kind_buf: [BACKLIGHT_FILE_MAX]u8 = undefined;
+        const kind = readBacklight(entry.name, "type", &kind_buf) orelse continue;
+        const r = backlight.rank(kind) orelse continue;
+        @memcpy(name_bufs[n][0..entry.name.len], entry.name);
+        names[n] = name_bufs[n][0..entry.name.len];
+        ranks[n] = r;
+        n += 1;
+    }
+    const i = backlight.pick(names[0..n], ranks[0..n]) orelse {
+        logline.print("terminal: backlight> pick=none of {d}\n", .{n});
+        return;
+    };
+    @memcpy(bl.name[0..names[i].len], names[i]);
+    bl.len = names[i].len;
+    logline.print("terminal: backlight> pick={s} of {d}\n", .{ names[i], n });
+}
+
+/// 밝기를 `delta` 단계 움직인다(결정 5 · 6). 실패해도 terminal은 산다 — 한 줄을 찍고 다음 키에서 다시 훑는다.
+fn stepBacklight(io: std.Io, bl: *BacklightState, delta: i32) void {
+    if (!bl.scanned) scanBacklight(io, bl);
+    const name = bl.pickName() orelse return;
+    var cur_buf: [BACKLIGHT_FILE_MAX]u8 = undefined;
+    var max_buf: [BACKLIGHT_FILE_MAX]u8 = undefined;
+    const cur = backlight.parseLevel(readBacklight(name, "brightness", &cur_buf) orelse "") orelse {
+        logline.print("terminal: backlight> {s} unreadable\n", .{name});
+        bl.scanned = false;
+        return;
+    };
+    const max = backlight.parseLevel(readBacklight(name, "max_brightness", &max_buf) orelse "") orelse 0;
+    const next = backlight.step(cur, max, delta);
+    if (next == cur) {
+        logline.print("terminal: backlight> {s} stays {d} of {d}\n", .{ name, cur, max });
+        return;
+    }
+    var path_buf: [BACKLIGHT_PATH_MAX]u8 = undefined;
+    var text_buf: [16]u8 = undefined;
+    const text = std.fmt.bufPrint(&text_buf, "{d}", .{next}) catch return;
+    const path = backlightPath(&path_buf, name, "brightness") orelse return;
+    const fd = std.c.open(path, .{ .ACCMODE = .WRONLY, .CLOEXEC = true });
+    const ok = fd >= 0 and std.c.write(fd, text.ptr, text.len) == @as(isize, @intCast(text.len));
+    if (fd >= 0) _ = std.c.close(fd);
+    if (!ok) {
+        logline.print("terminal: backlight> {s} write failed\n", .{name});
+        bl.scanned = false;
+        return;
+    }
+    logline.print("terminal: backlight> {s} {d} -> {d} of {d}\n", .{ name, cur, next, max });
+}
+
 /// 갈래 → 색(BS design 결정 5).
 fn batteryColor(cls: battery.Class) u32 {
     return switch (cls) {
@@ -3401,10 +3506,16 @@ const App = struct {
 
     // ── 배터리 ─────────────────────────────────────────────────────────
     /// 시계의 원점(BS-M1). 주기의 기한은 이 시각부터의 밀리초다. 렌더 시간을 재는
-    /// 것과 같은 단조 시계(`.awake`)이고, 커널에 `SUSPEND`가 없어서 잠든 시간은 따질 일이 없다.
+    /// 것과 같은 단조 시계(`.awake`)다. LP-M0부터 커널이 잔다 — `.awake`는 자는 동안 멈추므로 깨어난 뒤 남은
+    /// 주기(최대 60초)만큼 칸이 옛 값일 수 있다. 깨어날 때 ACPI 배터리가 보통 uevent를 내서 그 자리에서 다시
+    /// 훑는다(LP design 위험 6).
     /// 루프의 밀리초 시계가 이것 하나다 — 프레임 하한(RS-M2)도 이 원점을 쓴다.
     battery_clock: std.Io.Timestamp,
     battery_state: BatteryState = .{},
+
+    // ── 밝기 ───────────────────────────────────────────────────────────
+    /// 고른 백라이트(LP-M2). 첫 밝기 키에서 훑는다.
+    backlight_state: BacklightState = .{},
 
     // ── 받아쓰기 ───────────────────────────────────────────────────────
     /// 받아쓰기(VD-M1). 자식이 없으면 `phase`가 null이다.
@@ -3947,6 +4058,8 @@ const App = struct {
         }
         try self.runPanes(keys.panes);
         self.runDictates(keys.dictates);
+        // LP-M2. 밝기 키의 순증감. 화면을 다시 그릴 일이 없다 — 패널이 바뀐다.
+        if (keys.brightness != 0) stepBacklight(self.io, &self.backlight_state, keys.brightness);
         return .open;
     }
 
