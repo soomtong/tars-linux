@@ -31,10 +31,8 @@ const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 /// `ls`가 지금 유일한 셰도다(design 결정 2 — 걸리는 자리 셋을 부팅으로 재서
 /// 통과시켰다).
 ///
-/// SC-M1의 `tars-config`·`tars-rc`는 TC-M0이 지웠다(TC design 결정 6). 앞의
-/// 것은 이제 `/usr/bin/tars-config`라는 실행 파일의 이름이고, 같은 이름의 별칭은
-/// 대화형 셸에서 그 명령을 가린다 — 이 목록에 다시 넣으면 seed가 우리 명령을
-/// 가리는 줄을 깐다. 뒤의 것은 사용자가 쓸모없다고 했다(2026-10-06).
+/// `tars-config`는 `/usr/bin/tars-config`라는 실행 파일의 이름이다. 같은 이름의
+/// 별칭은 대화형 셸에서 그 명령을 가리므로 이 목록에 넣지 않는다.
 const ALLOWED_ALIAS_NAMES = [_][]const u8{
     "ls", "ll",
     "la", "lt",
@@ -317,8 +315,7 @@ fn expectQuietSeed(sh: config.Shell) !void {
         return error.BadSeed;
     }
     // seed는 자기 파일의 이름을 자기 안에 적는다(머리 주석의 "실체는 …").
-    // 그 이름이 틀리면 파일을 연 사람이 엉뚱한 자리를 고친다. SC-M1에는
-    // `tars-rc` 별칭이 그 이름을 실행했는데 TC-M0이 지웠고, 이제 주석만 남았다.
+    // 그 이름이 틀리면 파일을 연 사람이 엉뚱한 자리를 고친다.
     if (std.mem.indexOf(u8, text, sh.rcPath()) == null) {
         std.debug.print("FAIL: the {s} seed never names its own path {s}\n", .{
             @tagName(sh), sh.rcPath(),

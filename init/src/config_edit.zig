@@ -297,27 +297,6 @@ pub fn mountSource(mounts: []const u8, mountpoint: []const u8) ?[]const u8 {
     return found;
 }
 
-/// 옛 seed가 rc에 남긴 `alias tars-config=…`의 줄 번호(결정 6). 없으면 null.
-///
-/// 그 별칭은 대화형 셸에서 `/usr/bin/tars-config`를 가린다 — 친 것이 이 명령이
-/// 아니라 `cat /config/tars.conf`가 된다. seed는 "없으면 만든다"라서 TC 전에
-/// 만든 디스크의 rc에는 그 줄이 그대로 있다. 이 명령은 그 줄을 지우지 않는다.
-/// rc는 사람의 파일이다(SC design 결정 7). 알리기만 한다.
-pub fn staleAlias(rc: []const u8) ?usize {
-    const name = "alias tars-config";
-    var it = Lines{ .text = rc };
-    while (it.next()) |span| {
-        const line = std.mem.trim(u8, rc[span.start..span.end], " \t\r");
-        if (!std.mem.startsWith(u8, line, name)) continue;
-        if (line.len == name.len) continue;
-        switch (line[name.len]) {
-            '=', ' ', '\t' => return span.number,
-            else => {},
-        }
-    }
-    return null;
-}
-
 // ── 명령 ──────────────────────────────────────────────────────────────
 
 /// 한 번의 `set` · `reset`이 받는 쌍의 상한.

@@ -305,14 +305,6 @@ pub fn main() !void {
     if (edit.mountSource(mounts, "/conf") != null) return fail("mountSource matched a prefix", .{});
     if (edit.mountSource("rootfs / rootfs rw 0 0\n", "/config") != null) return fail("mountSource without /config", .{});
 
-    if (edit.staleAlias("# x\nalias tars-config='cat /config/tars.conf'\n") != 2) return fail("staleAlias missed the old seed line", .{});
-    if (edit.staleAlias("alias tars-config 'cat /config/tars.conf'\n") != 1) return fail("staleAlias missed the fish form", .{});
-    if (edit.staleAlias("alias tars-configs='x'\n# alias tars-config='x'\nalias tars-rc='x'\n") != null)
-        return fail("staleAlias matched something else", .{});
-    // 지금의 seed 셋에는 그 줄이 없다 — 이 명령을 가리는 별칭을 우리가 다시 깔지 않는다.
-    for (std.enums.values(config.Shell)) |sh| {
-        if (edit.staleAlias(sh.rcSeed())) |n| return fail("the {s} seed line {d} aliases tars-config", .{ @tagName(sh), n });
-    }
     std.debug.print("config_edit_test: /config's device is read from the mount table; no seed aliases tars-config\n", .{});
 
     // HC-M0. 아래 7 ~ 11의 기대 글자는 옮기기 전 config_cli.zig의 서식 문자열에서 베꼈다 — 옮긴 함수의

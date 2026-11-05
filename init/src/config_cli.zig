@@ -508,18 +508,6 @@ fn check() u8 {
     // 앞문 넷의 파일(TC-M1 결정 16). 남의 문법은 안 읽고 있는지 · 모드 · tars.conf와 맞는지만.
     problems += front.check(c);
 
-    // 옛 seed의 별칭(결정 6). 이 명령을 가리므로 문제로 센다. 지우지는 않는다.
-    var rc_buf: [65536]u8 = undefined;
-    for (std.enums.values(config.Shell)) |sh| {
-        const rc = switch (readFile(sh.rcPath(), &rc_buf)) {
-            .bytes => |b| b,
-            else => continue,
-        };
-        const number = edit.staleAlias(rc) orelse continue;
-        say("{s} line {d}: alias tars-config hides this command in {s}; delete that line\n", .{ sh.rcPath(), number, @tagName(sh) });
-        problems += 1;
-    }
-
     if (problems == 0) {
         say("{s}: init reads every line without a complaint\n", .{CONF_PATH});
         return EXIT_OK;
