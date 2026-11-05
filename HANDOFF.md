@@ -1,4 +1,4 @@
-# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · 0.1.4 배포됨 · DB-M1 계획 — 다음은 맥 실기 확인과 DB-M1
+# HANDOFF: 맥북 지원(MB · HS · DB · BW) 닫힘 · DB-M1(파티션 지정) 닫힘 · 0.1.4 배포됨 — 다음은 맥 실기 확인
 
 ## 목표
 
@@ -24,7 +24,11 @@
   `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
 - [x] 맥 디스크의 빈 자리 검토(2026-11-05, 사용자 요청) — `diskutil apfs resizeContainer`는 크기만 주면 빈 자리를 남긴다. 포맷되는 것은
   triple을 붙이거나 디스크 유틸리티의 "파티션"을 쓴 경우이고, `diskutil eraseVolume free free <id>`로 되돌린다(`running-tars.md` macOS 절
-  2번). 파티션을 지정해 까는 기능은 DB-M1 plan(`docs/plans/2026-11-05-tars-dual-boot-db-m1.md`)으로 계획만 했다.
+  2번).
+- [x] DB-M1(2026-11-05, 사용자 "continue") — `tars-install /dev/sda3`이 디스크 유틸리티가 만든 FAT · exFAT 파티션(또는 빈 파티션)과
+  앞뒤의 빈 구간에 TARS 셋을 놓는다. EFI · APFS · HFS+ · Recovery · NTFS는 YES 전에 거절. 목록이 GPT 디스크 밑에 파티션 줄을 단다.
+  `dualboot` 체인에 GUI 맥과 부팅 5. lead 직접. 첫 판 빨강은 체인의 대기(둘째 설치의 `done.`) — plan "결과" 절. 루트 게이트 29/29,
+  16분 57초, 잘린 줄 0(`f9e2c44`).
 - [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_macbook_hardware` · `project_hidpi_scale` · `project_dual_boot`) + `MEMORY.md`.
 
 ## Claude가 맡아 정한 것 (뒤집을 것이 있으면 design의 결정 번호로)
@@ -43,7 +47,6 @@
 ## 남은 작업
 
 - [ ] 사용자: 맥 두 대에서 실기 확인(아래 첫 절)
-- [ ] DB-M1 — 기존 파티션 지정(`tars-install /dev/sda3`), 목록의 파티션 줄. plan은 있고 구현 전이다
 - [ ] 다음 서브프로젝트 고르기(아래 "다음 후보")
 
 ## 다음 에이전트에게
@@ -58,7 +61,7 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 
 - 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
   최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `0a53580`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
-- 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 30초.
+- 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 57초(`f9e2c44`, DB-M1).
   바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은
   `docs/decisions/`의 기억 파일이다. 최근 것부터 MB · HS · DB(11-05) → PS · KK · DM(11-04) → IK · MI · PM · HP(11-03) → KH · BT(11-02) → KU(11-01).
@@ -68,10 +71,11 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
 
 - MB · HS · DB — 맥 두 대(이번 판의 본론, 게이트는 드라이버 등록까지만 봤다).
   - 준비: macOS에서 Time Machine 백업 → `diskutil list` → `diskutil apfs resizeContainer disk0s2 <크기>`(HFS+면 `diskutil resizeVolume`)로
-    4GiB 넘는 빈 공간 → 0.1.4 ISO를 USB에 `dd`(`docs/guides/running-tars.md`의 macOS 절). 크기 뒤에 triple을 붙이거나 디스크
-    유틸리티의 "파티션"으로 나눴다면 그 파티션은 `diskutil eraseVolume free free disk0sN`으로 빈 자리로 되돌린다(DB-M1 전의 길).
+    4GiB 넘는 빈 공간 → 0.1.4 ISO를 USB에 `dd`(`docs/guides/running-tars.md`의 macOS 절). 디스크 유틸리티의 "파티션"으로
+    MS-DOS(FAT) · ExFAT 파티션을 만들어도 된다(DB-M1). APFS로 만들었다면 `diskutil eraseVolume free free disk0sN`으로 빈 자리로.
   - 전원을 켤 때 Option → "EFI Boot"로 USB가 보이는지(ISO의 EFI 파티션). 안 보이면 그것이 새 사실이다.
-  - `tars-install` 목록에 내장 디스크가 `GPT: EFI, macOS (APFS); N GB free`로 보이는지 → `tars-install /dev/sda --beside` → 재부팅하며
+  - `tars-install` 목록에 내장 디스크가 `GPT: EFI, macOS (APFS); N GB free`로, 그 밑에 파티션 줄이 보이는지(FAT 파티션을 만들었으면
+    `<- tars-install /dev/sda3 installs here`) → `tars-install /dev/sda --beside` 또는 `tars-install /dev/sda3` → 재부팅하며
     Option → TARS-BOOT가 "EFI Boot"로 보이는지(DB 위험 3 — 두 번째 EFI System 파티션). macOS가 그대로 뜨는지도.
   - 트랙패드: 한 손가락 이동 · 탭 · 두 손가락 스크롤, 로그 `pointer> open … kind=touchpad`. 손에 안 맞으면 `touchpad_accel`부터(MB 위험 2).
   - 키보드: `keyboard> open … kind=apple`, Cmd · Option 자리. Fn 조합이 없는 것이 거슬리는지(MB 위험 3).
