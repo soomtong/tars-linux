@@ -1,4 +1,4 @@
-# HANDOFF: TP-M1(개발 도구 층을 /usr에 얹기) 끝 — 다음은 TP-M2 plan(`lang-native` 묶음)
+# HANDOFF: TP-M2(`lang-native` 묶음 · base의 g++) 끝 — 다음은 TP-M3 plan(`lang-script` 묶음)
 
 ## 목표
 
@@ -10,6 +10,16 @@
 
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 맥북 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-06, TP-M2 세션 — 사용자가 남은 결정을 위임하고 잤다)
+
+- [x] TP-M2 plan `c169817`, 구현(이 커밋). 사용자 결정: LLVM 툴체인 · odin · tcc를 뺀다("GCC가 포함되니까 C나 Assembly 계열은
+  문제없고, 디버거가 필요하면 직접 LLVM 툴체인을 설치"). base에 g++(81MiB), `lang-native`에 zig 0.17.1 · rust 1.99.1(+ rust-src,
+  설치기는 `devlayer/hooks/rust-installer.sh`) · go 1.27.3(402MiB, 풀면 2,018MiB). 매니페스트 파서 `devlayer/manifest.sh`(열이 맞지 않으면
+  줄 번호로 멈춘다, 일곱째 열 `exe=` · `hook=` · `into=`), 묶음끼리 같은 경로의 다른 내용 검사(`devlayer/build/<묶음>.paths`).
+- [x] devtools 체인이 묶음 셋, 부팅 2에 g++ · zig · rustc · cargo · go run · go build의 hello(망 없이, TCG zig 53초 · go 첫 빌드 94초).
+- [x] 루트 게이트 세 판: HP-M2(끼어든 init 줄 — `home/check.sh`를 고쳤다, lessons 덧붙임), PD-M4(말없는 끝 — `carryover.md`), 셋째 31/31
+  24분 3초, 잘린 줄 0. 숫자 · 확인한 것 일곱은 plan.
 
 ## 완료된 작업 (2026-11-05, TP-M1 세션)
 
@@ -49,6 +59,9 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 - 출처 종류의 이름과 순서(TP 결정 1), 묶음 나누기(결정 7 — 파일 하나 4GiB 아래), 개발 도구 층은 따로 빌드 · 캐시하고 다른 체인은
   층 없는 ISO로(결정 6, 게이트 시간 보존).
 - dasht의 docset 추천 묶음(결정 19) — 사용자가 "추천대로".
+- TP-M2(위임): g++를 base에(결정 A), rust 컴포넌트 고르기(rust-docs · rust-analyzer · rust-src는 싣고 llvm-tools · docs-json은 뺀다),
+  형식별 훅(묶음별이 아니라), `rust-objcopy`에 libLLVM 상대 링크(예외 대신), go testdata의 예외 이유 `testdata`, 캐시 빠른 길은 안
+  넣었다(lang-native 51초 < 60초), hello 상한은 잰 값의 세 배(60초 아래로는 안 내린다), HP-M2의 별표 검사를 init 줄에 견디게.
 - `disk_test`는 실제 sfdisk가 쓴 7GiB 맥 GPT 고정 데이터를 그대로 두고 "그 5.8GiB는 이제 거절"로 바꿨다. dualboot의 가짜 맥은 19 · 20GiB.
 - pm · mise 체인이 주는 최소 PATH(`/usr/bin:/bin`)는 그대로 — "brew · mise가 보이면 rc가 넣은 것"이라는 판정의 전제다.
 
@@ -59,15 +72,12 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 남은 작업
 
-- [ ] 미룬 것(사용자, 2026-11-05 "do it later"): `devlayer/*.sh`의 매니페스트 파서가 열 수가 모자란 줄을 말없이 건너뛴다
-  (`awk … NF >= 6` — 편집기가 탭을 공백으로 바꾸면 그 도구가 조용히 빠지고 초록). 주석 · 빈 줄이 아닌데 열이 맞지 않으면 줄 번호를
-  찍고 실패하게. 형식은 TSV 유지, 아카이브 모양 · 실행 파일 자리 · vendor-repo 저장소는 선택 일곱째 열(`format=zip strip=0
-  bin=go/bin`), npm · pip · jar 미리 받기 · 자동 갱신 끄기 같은 절차는 묶음별 훅(`devlayer/hooks/<묶음>.sh` 가칭) — 필요해지는
-  milestone(`lang-native` 이후)이 더하고 design 결정 1에 한 줄. 옮길 신호는 선택 키가 너덧을 넘거나 값에 공백이 필요할 때.
-- [ ] TP-M2 plan — design "Milestone"의 순서대로 `lang-native`(gcc · g++ · LLVM · clang · lld · zig · rust · odin · go). base와의
-  겹침(g++-14가 끄는 gcc-14, TP-M0 결정 K), LLVM tarball의 크기(design 확인 10), 판정은 각 언어의 hello가 devtools 체인에서
-  망 없이 돈다. 매니페스트 파서의 엄격화(아래 미룬 것)를 이때 함께. 새 체인의 포트는 45505부터.
-- [ ] 사용자: 실기에서 개발 도구 층 — `make iso ISO_LAYERS="base lang-jvm"`으로 구운 ISO로 설치 · 갱신하고 `gcc` · `java`가 망 없이
+- [ ] TP-M3 plan — design "Milestone"의 순서대로 `lang-script`(python3 · ruby · lua · node · bun · janet · php). python은
+  `prebuilt`(python-build-standalone), ruby는 ruby/ruby-builder, php는 static-php-cli, lua는 `debian`(design 확인 8 — 받으면서 다시 본다).
+  판정은 devtools 체인의 hello. 체인 시간이 이미 257초다 — 묶음이 늘수록 체인을 묶음별로 가를지 정한다(포트는 45505부터).
+  매니페스트의 선택 키는 지금 셋 — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다(TP-M2 결정 C). 미뤄 둔 lldb는 사용자 결정으로
+  LLVM과 함께 빠졌다(python이 들어와도 다시 열지 않는다).
+- [ ] 사용자: 실기에서 개발 도구 층 — `make dev-layers` 뒤 `make iso ISO_LAYERS="base lang-jvm lang-native"`(약 780MB)로 설치 · 갱신하고 `gcc` · `g++` · `zig` · `rustc` · `cargo` · `go` · `java`가 망 없이
   도는지, 맥북 에어 2011에서 javac의 시간(TCG 10.5초).
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
@@ -85,9 +95,9 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 지금 상태 (2026-11-05)
 
-- 진행 중인 것은 TP(design 7판, M0 · M1 끝 — 다음은 M2 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 20분 14초.
-  `make gate`는 먼저 `make dev-layers`(amd64 거두기, 캐시면 수십 초)를 부른다 — devtools 체인은 그 tar 위에서 검사만 다시 돈다.
+- 진행 중인 것은 TP(design 8판, M0 · M1 · M2 끝 — 다음은 M3 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 24분 3초(TP-M2 셋째 판).
+  `make gate`는 먼저 `make dev-layers`(묶음 셋, 캐시면 약 1분 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
