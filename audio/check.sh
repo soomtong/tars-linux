@@ -367,11 +367,14 @@ EOF
 # usb-audio는 48kHz 스테레오 16비트 재생 하나뿐인 장치라 백엔드를 HDA 쪽과 같은
 # 모양으로 박는다.
 start_guest() {
-  local drive=() usb=()
+  local drive=() usb=() append="console=ttyS0"
   # QEMU 인자 안의 콤마다 — 배열 원소를 나누는 것이 아니다.
   # shellcheck disable=SC2054
   case "$1" in
     with-disk) drive=(-drive file="$DISK",if=virtio,format=raw) ;;
+    # 카드 0이 비고 HDA가 카드 1에 서는 기계(2026-11-05 MacBookPro11,x 실기 — 카드 0의 HDMI 쪽 HDA가 i915 없이
+    # 실패했다). QEMU에서 코덱 없는 컨트롤러는 실패하면서도 카드 0을 남기므로 그 모양을 index로 만든다.
+    no-disk-card1) append="console=ttyS0 snd_hda_intel.index=1" ;;
     usb)
       drive=(-drive file="$DISK_USB",if=virtio,format=raw)
       usb=(-audiodev alsa,id=snd1,out.dev=tarsusb,in.dev=tarsfeed,out.frequency=48000,in.frequency=48000,out.channels=2,in.channels=2,out.format=s16,in.format=s16,out.try-poll=off,in.try-poll=off
@@ -388,7 +391,7 @@ start_guest() {
     -m "$GUEST_MEM" \
     -kernel ../kernel/build/arch/x86/boot/bzImage \
     -initrd ../kernel/initrd.cpio \
-    -append "console=ttyS0" \
+    -append "$append" \
     -vga none \
     -device virtio-gpu-pci \
     -display none \
@@ -601,20 +604,27 @@ if [ "$(field "$TAP_B" tone)" -lt 40000 ] || [ "$(field "$TAP_B" other)" -ne 0 ]
 fi
 echo "with no amixer, aplay's square wave reached the speaker sample for sample"
 
-# ══ 부팅 C: 설정 디스크 없이 ═══════════════════════════════════════════
+# ══ 부팅 C: 설정 디스크 없이, 카드 0 없이 ═══════════════════════════════
 # ISO만 꽂은 노트북과 같은 모양이다. 기억할 자리가 없으니 init만 한다. 프로브도 없으므로
-# init의 줄 하나를 기다리고 끈다.
-echo "=== boot C: no config disk ==="
-start_guest no-disk
+# init의 줄 하나를 기다리고 끈다. HDA는 카드 1에 선다(snd_hda_intel.index=1) — 카드 0만 기다리던 일꾼은
+# 여기서 "no sound card within 5000ms"로 끝나 노드가 root 600 · 믹서가 꺼진 채였다(MacBookPro11,x 실기).
+echo "=== boot C: no config disk, the HDA card on index 1 ==="
+start_guest no-disk-card1
 
-# ── 검사 11: 디스크가 없어도 소리가 켜진다 ─────────────────────────────
+# ── 검사 11: 디스크가 없어도, 카드 0이 없어도 소리가 켜진다 ─────────────
 wait_for_log 'tars-init: audio: alsactl init turned the mixer on' 60 \
-  || report_failure "without a config disk init did not turn the mixer on"
+  || report_failure "with the card on index 1 and no config disk init did not turn the mixer on"
+grep -aF 'tars-init: audio: no sound card within' "$LOG" >/dev/null \
+  && report_failure "the worker gave up waiting although card 1 was there"
+grep -aE 'tars-init: audio: [0-9]+ nodes in /dev/snd are root:audio 660 \(0 refused\)' "$LOG" >/dev/null \
+  || report_failure "the nodes of card 1 were not given to the audio group"
+grep -aF 'tars-init: audio: default card is 1 for playback, 1 for capture' "$LOG" >/dev/null \
+  || report_failure "the default card is not 1 with only card 1 present"
 stop_guest
 if ! grep -aF 'tars-init: no disk labelled tars-* among' "$LOG" >/dev/null; then
   report_failure "boot C found a config disk; it must boot without one"
 fi
-echo "without a config disk the boot still turned the mixer on with alsactl init"
+echo "without a config disk and with the HDA card on index 1, the worker opened card 1 to audio and turned its mixer on"
 
 # ══ 부팅 D: 부팅 뒤에 꽂는 USB 스피커 (AU-M2) ═══════════════════════════
 # HDA(카드 0)로 떠서 USB 스피커를 꽂으면 카드 1이 생긴다. init은 /dev/snd를 1초마다

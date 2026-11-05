@@ -75,6 +75,17 @@ pub fn main() !void {
     try expectOutcome(15, .{ .killed = 15 });
     std.debug.print("audio_test: a wait status reads as done, generic (99), no card, an exit code or a signal\n", .{});
 
+    // ── 어느 카드든 (2026-11-05 MacBookPro11,x 실기) ────────────────────
+    //
+    // 카드 0(HDMI 쪽 HDA)이 서지 않고 내장 오디오가 카드 1에 선 기계가 있다. 일꾼은 아무 제어 노드나 기다린다.
+    for ([_][]const u8{ "controlC0", "controlC1", "controlC12" }) |n| {
+        if (!audio.isControlNode(n)) return fail("{s} is a control node", .{n});
+    }
+    for ([_][]const u8{ "controlC", "pcmC1D0p", "hwC1D0", "controlCx", "controlC1D0", "timer", "seq" }) |n| {
+        if (audio.isControlNode(n)) return fail("{s} is not a control node", .{n});
+    }
+    std.debug.print("audio_test: any card's control node counts, not only card 0's\n", .{});
+
     // ── 끌 때 적나 ─────────────────────────────────────────────────────
     //
     // 이 부팅에 믹서를 못 세웠으면 안 적는다. 적으면 커널의 꺼진 기본값이 사람이

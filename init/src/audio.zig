@@ -28,8 +28,13 @@ pub const ALSACTL_PATH: [:0]const u8 = "/usr/bin/alsactl";
 /// 고칠 일이 없다.
 pub const STATE_PATH: [:0]const u8 = "/config/asound.state";
 
-/// 카드 0의 제어 노드. 이것이 서면 alsactl이 그 카드를 연다.
-const CARD_PATH: [:0]const u8 = "/dev/snd/controlC0";
+/// 카드의 제어 노드 이름 앞머리(`controlC<N>`). 하나라도 서면 카드가 선 것이다.
+///
+/// 전에는 카드 0(`controlC0`)만 기다렸다. MacBookPro11,x(2026-11-05 실기)는 카드 0이 HDMI 쪽 HDA이고
+/// `CONFIG_SND_HDA_I915`가 없어 "Cannot probe codecs, giving up"으로 서지 않는다 — 내장 오디오는 카드 1에
+/// 섰는데 일꾼이 5초 뒤 "카드 없음"으로 끝나, 노드는 root 600(사용자의 amixer가 "Invalid card number")이고
+/// 믹서는 커널 기본값(꺼짐)이라 소리가 안 났다. AU design 위험 14가 실기에서 겪은 모양이다.
+const CONTROL_PREFIX = "controlC";
 
 /// 일꾼이 카드를 기다리는 상한. HDA는 코덱 탐색을 커널의 일 큐에서 하므로 카드가
 /// PID 1보다 늦게 설 수 있다. 소리 장치가 없는 기계(게이트의 체인 대부분)에서는
@@ -163,7 +168,7 @@ fn exists(path: [:0]const u8) bool {
 }
 
 /// 카드 노드를 기다린다. 기다린 밀리초를 돌려주고, 상한까지 없으면 null이다.
-/// 사운드 노드의 자리. 카드 0의 제어 노드(`CARD_PATH`)가 이 안에 있다.
+/// 사운드 노드의 자리. 카드들의 제어 노드(`controlC<N>`)가 이 안에 있다.
 const SND_DIR: [:0]const u8 = "/dev/snd";
 
 /// HP-M1(design 위험 10). `/dev/snd`의 노드를 `root:audio 0660`으로. udev가 없어서 devtmpfs가
@@ -200,14 +205,51 @@ fn openToAudio() void {
     logline.print("tars-init: audio: {d} nodes in {s} are root:audio 660 ({d} refused)\n", .{ count, SND_DIR, refused });
 }
 
+/// `/dev/snd`의 한 이름이 카드의 제어 노드(`controlC` 뒤에 숫자만)인가. audio_test가 본다.
+pub fn isControlNode(name: []const u8) bool {
+    if (!std.mem.startsWith(u8, name, CONTROL_PREFIX) or name.len == CONTROL_PREFIX.len) return false;
+    for (name[CONTROL_PREFIX.len..]) |c| {
+        if (!std.ascii.isDigit(c)) return false;
+    }
+    return true;
+}
+
+/// 지금 선 카드의 수(`/dev/snd`의 제어 노드 수). 디렉터리가 아직 없으면 0이다.
+fn controlCount() usize {
+    const rc = linux.open(SND_DIR.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (failed(rc) != null) return 0;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var count: usize = 0;
+    var buf: [2048]u8 align(8) = undefined;
+    while (true) {
+        const n = linux.getdents64(fd, &buf, buf.len);
+        if (failed(n) != null or n == 0) break;
+        var off: usize = 0;
+        while (off < n) {
+            const d: *align(1) const linux.dirent64 = @ptrCast(&buf[off]);
+            off += d.reclen;
+            const name: [*:0]const u8 = @ptrCast(&d.name);
+            if (isControlNode(std.mem.span(name))) count += 1;
+        }
+    }
+    return count;
+}
+
+/// 아무 카드나 하나 서기를 기다린다(상한 CARD_WAIT_MS). 기다린 밀리초, 없으면 null.
+///
+/// 첫 카드에서 곧장 간다 — 늦게 서는 둘째 카드는 여전히 꺼진 채 남는다(AU design 위험 14, `carryover.md`). 첫
+/// 카드 뒤에 잠잠해지기를 1초 기다리는 판을 시험했더니, 그 1초 동안 alsactl이 없고 Master 스위치는 커널
+/// 기본값으로 켜져 있어 audio 체인의 프로브가 믹서 설정 전에 재생을 시작했다(설정 도중 샘플 하나가 어긋남,
+/// 2026-11-05). alsactl이 도는 때를 전과 같게 둔다.
 fn waitForCard() ?u32 {
     var waited: u32 = 0;
-    while (true) {
-        if (exists(CARD_PATH)) return waited;
+    while (controlCount() == 0) {
         if (waited >= CARD_WAIT_MS) return null;
         sleepMillis(CARD_POLL_MS);
         waited += CARD_POLL_MS;
     }
+    return waited;
 }
 
 /// 부팅에 한 번 부른다. 일꾼을 fork하고 곧장 돌아온다(feedback_boot_never_blocks).
