@@ -133,7 +133,7 @@ window.TARS = {
     ['2026-11-01', '0.1.3', '마우스 선택 — 더블 · 트리플클릭, 남는 선택과 [Shift]+클릭 늘리기, USB 무선 동글 여섯', 'tars-0.1.3-x86_64.iso',
       'b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7'],
     ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Air 내장 무선 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
-      '43ac606c673a3ca84e305968c02c37cda8eed2713b0a22ad697eb2b5775f65ac'],
+      '00598c665bb71de99db3b54c4ae21abb789d1bc869bc23f62e2e687d63c597ab'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
