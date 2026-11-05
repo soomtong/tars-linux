@@ -74,7 +74,7 @@ RESERVED_PORTS = --sysctl net.ipv4.ip_local_reserved_ports=45455-45599
 IN_CONTAINER = $(DOCKER) run --rm $(RESERVED_PORTS) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c
 
 .DEFAULT_GOAL := help
-.PHONY: help container kernel init terminal initrd iso disk disk-fresh boot-qemu run-qemu quick gate check shell clean
+.PHONY: help container kernel init terminal initrd iso dev-layers disk disk-fresh boot-qemu run-qemu quick gate check shell clean
 
 # 도움말의 백틱은 이스케이프한다. recipe는 셸이 읽으므로 안 하면 그 자리가
 # 명령 치환이 되고, `make`가 조용히 /bin/sh를 부른다(help에서 실제로 그랬다).
@@ -105,6 +105,11 @@ help:
 	@echo "      initrd 뒤에 boot/build.sh(limine을 -B로 다시 빌드한다 — 배포 tarball의 실행"
 	@echo "      파일은 호스트 아키텍처 것이라 컨테이너가 바뀌면 못 쓴다)와 boot/make_iso.sh"
 	@echo "      (xorriso). ISO 하나가 BIOS와 UEFI를 둘 다 태운다. 증분이면 13초"
+	@echo
+	@echo "  make dev-layers"
+	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base lang-jvm)을 devlayer/build/<묶음>.sqfs로 굽는다."
+	@echo "      devlayer/manifest.tsv가 출처다. 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
+	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. 부팅에는 아직 안 얹는다(TP-M1)"
 	@echo
 	@echo "설정 디스크 ($(CONFIG_DISK)) — 게스트가 기억하는 자리"
 	@echo
@@ -223,6 +228,20 @@ initrd: kernel init terminal
 # 바뀌면 못 쓴다.
 iso: initrd
 	$(IN_CONTAINER) 'cd boot && ./build.sh && ./make_iso.sh'
+
+# 개발 도구 층(TP-M0). 묶음마다 둘을 차례로 부른다 — debian 줄의 거두기는 amd64 컨테이너(개발 컨테이너는 arm64라
+# amd64 postinst를 못 돌린다), 받기 · 검사 · 굽기는 개발 컨테이너. 둘 다 자기 캐시를 본다(harvest.lines · stamp).
+# 검사가 initrd와 대조하므로 initrd가 먼저 있어야 한다. 의존으로 걸지 않은 것은 initrd가 이미 있을 때 다시 짓지
+# 않으려는 것이다 — 없으면 build.sh가 "run make initrd first"를 찍는다.
+DEV_LAYERS        ?= base lang-jvm
+DEV_HARVEST_IMAGE ?= debian:trixie-slim
+DEV_MEASURE       ?=
+DEV_COMP          ?=
+dev-layers: container
+	@for b in $(DEV_LAYERS); do \
+	  $(DOCKER) run --rm --platform=linux/amd64 -v "$(CURDIR)":/workspace -w /workspace $(DEV_HARVEST_IMAGE) devlayer/harvest.sh $$b || exit 1; \
+	  $(IN_CONTAINER) "DEV_MEASURE=$(DEV_MEASURE) $(if $(DEV_COMP),DEV_COMP=$(DEV_COMP)) devlayer/build.sh $$b" || exit 1; \
+	done
 
 $(CONFIG_DISK):
 	$(IN_CONTAINER) 'mkdir -p out && truncate -s 16M $(CONFIG_DISK) && mkfs.ext2 -F -q -m 0 -L tars-config $(CONFIG_DISK)'

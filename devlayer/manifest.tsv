@@ -1,0 +1,20 @@
+# 개발 도구 층의 출처 — 이것이 사는 유일한 자리다(TP design 결정 1). 열은 탭으로 가른다.
+#
+#   도구  묶음  버전  종류  URL  sha256
+#
+# 종류는 넷이다. 앞의 것이 있으면 앞의 것을 쓴다: upstream → vendor-repo → prebuilt → debian.
+#   upstream  도구가 직접 내는 linux-amd64 tarball. URL · sha256 그대로. 받은 것은 devlayer/cache/<sha256>
+#   debian    URL 자리에 패키지 이름, sha256 자리에 `apt`(서명된 Release가 검증한다). 버전은 `=`로 고정한다.
+#             의존은 apt가 풀고, 실제로 깔린 목록은 묶음 안 usr/share/tars/layers/<묶음>.pkgs에 남는다.
+#
+# 버전을 바꾸는 것은 TARS 버전을 낼 때 한 단계로 한다(결정 3). libc6-dev는 initrd의 glibc와 같은 판이어야 한다 —
+# devlayer/harvest.sh가 다르면 두 판을 찍고 실패한다(TP-M0 plan 결정 B). 줄을 바꾸면 그 묶음만 다시 굽는다(결정 6).
+
+# ── base · C 빌드의 바닥(TP-M0) ──────────────────────────────────────────
+libc6-dev	base	2.41-12+deb13u4	debian	libc6-dev	apt
+gcc	base	4:14.2.0-1	debian	gcc	apt
+make	base	4.4.1-2	debian	make	apt
+
+# ── lang-jvm(TP-M0은 JDK 하나) ──────────────────────────────────────────
+# Temurin 최신 LTS GA. api.adoptium.net/v3/assets/latest/25/hotspot?os=linux&architecture=x64&image_type=jdk가 준 값.
+jdk	lang-jvm	25.0.5+8	upstream	https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz	68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb

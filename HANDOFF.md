@@ -1,4 +1,4 @@
-# HANDOFF: TP(개발 도구 층) design 초안 · 최소 디스크 16GiB · initrd의 lsoff · doge · PATH — 다음은 TP-M0 plan
+# HANDOFF: TP-M0(매니페스트 · base · JDK를 squashfs로) 구현 — 다음은 TP-M1 plan(커널 · init · ISO · 설치기)
 
 ## 목표
 
@@ -11,7 +11,17 @@
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 맥북 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
 
-## 완료된 작업 (2026-11-05, 이 세션)
+## 완료된 작업 (2026-11-05, TP-M0 세션)
+
+- [x] TP-M0 plan `a98564f`, 구현. `make dev-layers`가 `devlayer/manifest.tsv`대로
+  `base.sqfs`(gcc 14.2 · `libc6-dev` · make, 64MiB)와 `lang-jvm.sqfs`(Temurin 25.0.5+8, 126MiB)를 zstd15로 굽는다. 거두기는
+  amd64 컨테이너(`devlayer/harvest.sh`), 받기 · 검사 · 굽기는 개발 컨테이너(`devlayer/build.sh` · `verify.sh`). 숫자 · 빨강 셋 ·
+  chroot의 `cc` · `make` · `java Hello`는 plan의 "결과", 구현이 드러낸 사실 아홉은 "확인한 것"(merged-usr 아닌 initrd, slim 기준의 틈,
+  APFS 대소문자, SIGPIPE).
+- [x] Dockerfile 끝에 `squashfs-tools` 층(이미지 태그가 바뀐다 — push 뒤 CI가 다시 굽는다). 기억 `feedback_devcontainer_additions`
+  (사용자: 개발 컨테이너에 필요한 것은 언제든 더한다).
+
+## 완료된 작업 (2026-11-05, 앞 세션)
 
 - [x] 검토: 지금 initrd에는 C 빌드에 필요한 것(헤더 · crt · `cc` · `ld` · `make`)이 하나도 없다 — PM design 결정 4의 "`brew install gcc`가
   열 수 있다"는 낙관이었다(TP design 확인 2 · 3).
@@ -39,8 +49,13 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 남은 작업
 
-- [ ] TP-M0 plan(`docs/plans/2026-11-05-tars-dev-layer-tp-m0.md` 가칭) — design의 판정 TP-M0: `base` 묶음(Debian gcc · `libc6-dev` · make)과
-  JDK(Temurin LTS, `upstream`) 둘을 squashfs로 굽고 결정 4 · 5의 검사(겹친 경로, `NEEDED`)를 지난다. 부팅은 안 바꾼다.
+- [ ] 미룬 것(사용자, 2026-11-05 "do it later"): `devlayer/*.sh`의 매니페스트 파서가 열 수가 모자란 줄을 말없이 건너뛴다
+  (`awk … NF >= 6` — 편집기가 탭을 공백으로 바꾸면 그 도구가 조용히 빠지고 초록). 주석 · 빈 줄이 아닌데 열이 맞지 않으면 줄 번호를
+  찍고 실패하게. 형식은 TSV 유지, 아카이브 모양 · 실행 파일 자리 · vendor-repo 저장소는 선택 일곱째 열(`format=zip strip=0
+  bin=go/bin`), npm · pip · jar 미리 받기 · 자동 갱신 끄기 같은 절차는 묶음별 훅(`devlayer/hooks/<묶음>.sh` 가칭) — 필요해지는
+  milestone(`lang-native` 이후)이 더하고 design 결정 1에 한 줄. 옮길 신호는 선택 키가 너덧을 넘거나 값에 공백이 필요할 때.
+- [ ] TP-M1 plan — design 결정 8~13과 판정 TP-M1(체인 `devtools`, monitor 45504, `-nic none`). 입력은 TP-M0 plan의 "M1에 넘길 것"
+  (커널 심볼 넷, 게이트 ISO에 묶음을 싣지 않기, 버전 줄, `etc/gprofng.rc`). 루트 게이트를 도는 milestone이다.
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
@@ -57,7 +72,7 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 지금 상태 (2026-11-05)
 
-- 진행 중인 것은 TP(design 초안, 구현 전). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 진행 중인 것은 TP(design 7판, M0 끝 — 다음은 M1 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
 - 체인은 서른이다(`check.sh`의 `CHAINS`, 끝이 `DB-M0:./dualboot/check.sh` · `LP-M1:./sleep/check.sh`). 마지막 루트 게이트 30/30, 18분 14초.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.

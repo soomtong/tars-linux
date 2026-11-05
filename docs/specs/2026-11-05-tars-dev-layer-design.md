@@ -128,7 +128,7 @@ trixie 판이 돈다.
 ### 디스크와 부팅
 
 7. 개발 도구 층은 묶음마다 squashfs 하나다(`base.sqfs` · `lang-native.sqfs` · `lang-script.sqfs` · `lang-jvm.sqfs` · `lang-beam.sqfs` · `editor.sqfs` · `util.sqfs` ·
-   `docs.sqfs` · `server.sqfs` · `ai.sqfs`). 하나가 4GiB를 넘지 않게 나눈다(확인 9). 압축은 M0이 xz와 zstd를 재서 고른다.
+   `docs.sqfs` · `server.sqfs` · `ai.sqfs`). 하나가 4GiB를 넘지 않게 나눈다(확인 9). 압축은 M0이 xz와 zstd를 재서 고른다 — zstd 레벨 15(TP-M0 결과 2: xz보다 7~14% 크고 한 코어로 읽기가 9~17배 빠르다).
 8. 커널에 `OVERLAY_FS` · `SQUASHFS`(고른 압축) · `BLK_DEV_LOOP`를 켠다. 켜기 전에 `rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾고,
    select로 따라오는 것을 본다(LP 배운 것 1).
 9. 놓는 자리: p3의 `/home/.tars/layers/*.sqfs`(root 소유, 0644). init은 `/home`을 붙인 직후, 셸과 서비스를 띄우기 전에 각각을 loop로

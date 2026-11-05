@@ -596,6 +596,12 @@ RUN mkdir -p /tmp/upstream "$AMD64_SYSROOT/usr/local/upstream/bin" \
     && install -m 0755 /tmp/upstream/doge/doge-v0.2.9-x86_64-unknown-linux-musl "$AMD64_SYSROOT/usr/local/upstream/bin/doge" \
     && rm -rf /tmp/upstream
 
+# TP-M0 · 개발 도구 층을 굽는 도구(컨테이너 자신이 쓴다 — 게스트에는 안 들어간다). mksquashfs가 묶음을 굽고
+# unsquashfs가 압축별 읽는 시간을 잰다(devlayer/build.sh). squashfs 이미지는 아키텍처를 타지 않아 arm64 판이 x86_64
+# 게스트의 묶음을 그대로 굽는다. 앞 층의 캐시를 깨지 않으려고 맨 앞의 apt 줄이 아니라 여기 둔다.
+RUN apt-get update && apt-get install -y --no-install-recommends squashfs-tools \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 # ghcr.io 패키지를 이 저장소에 연결한다(GI design 확인 6 — 저장소 페이지에 보이고 Actions 토큰이 올릴 수

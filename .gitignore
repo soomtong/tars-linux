@@ -15,6 +15,10 @@ boot/limine-binary/
 
 out/
 
+# 개발 도구 층(TP-M0). cache/는 받은 tarball(망이 있어야 되살아난다), build/는 구운 묶음.
+devlayer/cache/
+devlayer/build/
+
 terminal/ghostty-src/
 # vendor/는 받는 것(stb 헤더 둘)이고 fonts/만 커밋한다(FR-M0). 디렉터리째 무시하면 `!`로 못 되살린다.
 terminal/vendor/*

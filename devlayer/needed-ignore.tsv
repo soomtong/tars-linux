@@ -1,0 +1,15 @@
+# 결정 5(NEEDED) 검사의 예외 — 여기에 없는 못 찾은 soname은 빌드를 멈춘다. 열은 탭으로 가른다.
+#
+#   경로 패턴(묶음 뿌리 기준, bash glob)  soname glob  이유
+#
+# 예외의 이유는 둘뿐이다. 그 밖에 못 찾은 것은 manifest.tsv에 debian 줄을 더해 푼다. 줄을 지우면 verify.sh가 그 ELF를
+# 다시 빨갛게 찍는다(TP-M0 할 일 4c — 이 파일이 비었을 때 JDK에서 20줄이 빨갰다).
+#
+#   GUI         TP design 비목표 5. TARS에는 X가 없다. AWT · Swing · 스플래시는 headless가 아니면 안 돈다.
+#   jvm-loaded  JDK의 lib/*.so는 libjvm.so를 NEEDED로 부르지만 RUNPATH가 없어 경로로는 안 풀린다(libjava.so는 RPATH도
+#               없다). 실제로는 java launcher(bin/java → libjli.so)가 lib/server/libjvm.so를 먼저 dlopen하고, ld.so가
+#               이미 올라온 라이브러리를 soname으로 맞춘다. 이 길이 실제로 도는지는 TP-M1의 `java Hello`가 본다.
+
+usr/local/lib/jdk-*/lib/libawt_xawt.so	libX*	GUI
+usr/local/lib/jdk-*/lib/libsplashscreen.so	libX*	GUI
+usr/local/lib/jdk-*/lib/*.so	libjvm.so	jvm-loaded
