@@ -25,7 +25,8 @@ design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/
 1. `sfdisk --wipe always`는 표의 서명만 지우고 sfdisk가 곧 다시 쓴다 — 남의 파티션 바이트는 안 바뀐다(mutation a1이 초록). 그래도 `--wipe never`.
 2. 남의 디스크를 쓰는 판정은 "바이트가 같다"를 부팅마다 본다. 실패 줄에 "맥 파티션이 바뀌었는가"를 늘 붙인다(어느 판정에서 멈췄든).
 3. 컨테이너에 sfdisk가 없다 — 가짜 맥 GPT는 `dualboot/mac_gpt.pl`(perl)이 쓴다.
-4. 실기만 아는 것: Apple 펌웨어가 두 번째 EFI System 파티션을 "EFI Boot"로 보이는지(design 위험 3). 안 보이면 타입을 Basic data로.
+4. Apple 펌웨어는 두 번째 EFI System 파티션(TARS-BOOT)을 Option 화면에 "EFI Boot"로 보인다 — 2026-11-05 MacBook Air 11" 2011 실기에서
+   `tars-install /dev/sda3`으로 깔고 그것으로 TARS 터미널까지 떴다(design 위험 3이 풀렸다, 타입은 EFI System 그대로).
 5. `diskutil apfs resizeContainer <disk> <size>`는 triple 없이 쓰면 빈 자리를 남긴다(usage 글이 "free space gap"이라 말한다). 포맷되는 것은
    triple을 붙였거나 디스크 유틸리티의 "파티션"이다. `diskutil eraseVolume free free <id>`가 파티션을 빈 자리로 되돌린다(DB-M1 착수 전).
 6. 한 부팅에서 설치를 두 번 하는 체인은 끝 줄(`done.`)을 기다리면 안 된다 — 첫 설치가 이미 찍었다. 명령 뒤에 고유 표지를 찍어 기다린다
