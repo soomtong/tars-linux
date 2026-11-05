@@ -1,63 +1,66 @@
-# HANDOFF: PW · RB · LP 닫힘(비밀번호 `*` · reboot/poweroff/suspend · i915 밝기와 절전) — 다음은 맥북 실기 사용기
+# HANDOFF: TP(개발 도구 층) design 초안 · 최소 디스크 16GiB · initrd의 lsoff · doge · PATH — 다음은 TP-M0 plan
 
 ## 목표
 
-사용자 요청(2026-11-05): 비밀번호 칸의 `*`, `reboot` · `poweroff` 명령, 옛 `tars-config` 별칭 흔적 지우기, 그리고 "맥북 에어에서 본격적인
-사용기를 시작하기 전에" 뚜껑 닫기 절전과 내장 화면 밝기 조절, "안 된다"고 적은 문서 갱신. 사용자가 외출하며 남은 결정을 위임했고 끝까지
-갔다. 다음은 실기에서 아래 "사용자가 확인할 것"의 맨 앞 절.
+사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
+담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 7판, 열린 질문 없음).
 
 ## 현재 브랜치
 
-`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
-`gh-pages`의 `data.js`도 갱신 · push(worktree `../tars-linux-pages`). 작업용 worktree `lp`는 지웠다.
+`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 맥북 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
+Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
 
-## 완료된 작업 (2026-11-05)
+## 완료된 작업 (2026-11-05, 이 세션)
 
-- [x] PW-M0 — `init/src/secret.zig`(공용 helper, 사용자 결정으로 "공용 모듈 없음"의 예외). wifi · ssh · Groq 키 · `passwd` · 설치 계정 칸이 tty에서
-  글자마다 `*`, Backspace · Ctrl+U · Ctrl+C/D. sudoers `pwfeedback`. home 체인이 `*` 열둘과 `\b \b`를 센다. `1c62755`.
-- [x] RB-M0 — `/usr/bin/shutdown` 스크립트 + 링크 `reboot` · `poweroff`(LP-M1이 `suspend`를 더함). 인자 검사(64)가 권한(77, `try: sudo`)보다 먼저.
-  power 체인이 `poweroff` · `reboot`(셋째 부팅), home 체인이 77. `3ff2055`.
-- [x] 옛 `tars-config` 별칭 정리 — `staleAlias`와 `tars-config check`의 경고, 가이드의 별칭 절. 날짜가 붙은 specs · plans · decisions의 기록은
-  역사라 남겼다(사용자가 원하면 지운다). `b13a0be`.
-- [x] LP-M0 — `DRM_I915` · `PM` · `SUSPEND`(RM 결정 3을 뒤집음, +1.5MB). 내장 cmdline에 `snd_hda_core.gpu_bind=0` · `rootfstype=ramfs`. `3ea4fa2`.
-- [x] LP-M1 — PID 1이 뚜껑 닫힘 · SIGUSR1에 deep S3, `resumed after Nms`. `sudo suspend`. 새 체인 `sleep`(LP-M1, QMP 45503). `58ae293`.
-- [x] LP-M2 — terminal이 Apple 칸의 F1 · F2와 밝기 키로 `intel_backlight` 16단계(`backlight.zig`). `4cdf100`.
-- [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_password_feedback` · `project_power_commands` · `project_laptop_power`),
-  "안 되는 것" 표 · RM 결정 3 · MB 비목표 2 · carryover HDMI 줄, `running-tars.md`의 "밝기와 절전" 절. `2080d01`.
-- [x] 루트 게이트 30/30, 17분 28초, 잘린 줄 0(LP 전체).
+- [x] 검토: 지금 initrd에는 C 빌드에 필요한 것(헤더 · crt · `cc` · `ld` · `make`)이 하나도 없다 — PM design 결정 4의 "`brew install gcc`가
+  열 수 있다"는 낙관이었다(TP design 확인 2 · 3).
+- [x] TP design 초안 — 디스크(p3)의 squashfs 묶음을 init이 `/usr` 위에 읽기 전용 overlay로 얹는다. 출처는 매니페스트(`upstream` →
+  `vendor-repo` → `prebuilt` → `debian`), 소스 빌드 없음, `tars-install <disk>`가 새 설치 · 갱신 때 함께 옮긴다(하위 명령 없음). `98b3c93`.
+- [x] 최소 설치 디스크 16GiB + 2MiB(`disk.MIN_DISK_BYTES`, TP 결정 18). 체인 install · home · pm · mise · dualboot의 디스크 크기. `4e5d2f1`.
+- [x] initrd 기준 `docs/guides/initrd-criteria.md`(A · B · C, 크기 기준 없음). 그 기준 B로 lsoff · doge를 공식 정적 바이너리(sha256 고정,
+  Dockerfile 층 20)로 initrd에 — UT design 결정 3 취소(사용자 확정). tools 체인 검사 10b. `d8a899b`.
+- [x] `PATH=/usr/local/bin:/usr/bin:/bin`(TP 결정 20) — environ · config_front · sudoers, 체인 tools · config · pm · net · service. `c6e2831`.
+- [x] 기억 `feedback_tool_sourcing`(출처 · 기준 · 용어 · PATH).
+- [x] 루트 게이트 셋: 16GiB 17분 58초, +lsoff · doge 18분 04초, +PATH 18분 14초. 모두 30/30, 잘린 줄 0.
 
-## Claude가 맡아 정한 것 (사용자 위임 — 뒤집을 것이 있으면 design의 번호로)
+## Claude가 맡아 정한 것 (뒤집을 것이 있으면 design의 번호로)
 
-- `tars.conf`의 `brightness=`는 안 했다(LP 비목표 4) — 설정 키 하나가 10곳 넘게 지나는 데 비해 얻는 것이 시작 밝기 하나. 부팅마다 펌웨어 값.
-- 명령 이름은 승인받은 `suspend` 그대로 — bash · zsh · fish의 내장 `suspend`가 먼저 잡히므로 가이드에 "언제나 `sudo suspend`". 거슬리면 `zzz`.
-- `gpu_bind=0`으로 HDMI 오디오는 계속 없다(xe 몫인 Lunar · Panther Lake에서 소리가 사라지지 않게, LP 결정 1a).
-- 뚜껑은 어댑터가 꽂혀 있어도 잔다(사용자 결정). 깨어난 뒤 뚜껑이 닫혀 있으면 다시 자지 않는다(LP 위험 5).
+- 출처 종류의 이름과 순서(TP 결정 1), 묶음 나누기(결정 7 — 파일 하나 4GiB 아래), 개발 도구 층은 따로 빌드 · 캐시하고 다른 체인은
+  층 없는 ISO로(결정 6, 게이트 시간 보존).
+- dasht의 docset 추천 묶음(결정 19) — 사용자가 "추천대로".
+- `disk_test`는 실제 sfdisk가 쓴 7GiB 맥 GPT 고정 데이터를 그대로 두고 "그 5.8GiB는 이제 거절"로 바꿨다. dualboot의 가짜 맥은 19 · 20GiB.
+- pm · mise 체인이 주는 최소 PATH(`/usr/bin:/bin`)는 그대로 — "brew · mise가 보이면 rc가 넣은 것"이라는 판정의 전제다.
 
 ## 시도했으나 실패한 접근
 
-- LP-M0 첫 루트 게이트 — i915가 `TMPFS`를 select해 rootfs가 tmpfs(RAM 절반)로 바뀌고 열여덟 체인이 `No space left on device`로 제각각 빨갰다.
-  `rootfstype=ramfs`로 풀었다(`project_laptop_power` 배운 것 1). 편집 사고 하나(파일을 쓰기용으로 연 뒤 읽어 비움)는 `git diff --stat`이 잡았다.
+- 컨테이너에서 Temurin JDK tarball을 받아 `NEEDED`를 재려 했다 — GitHub 다운로드가 504를 다섯 번 냈다. JDK 쪽 실측은 TP-M0의 몫.
+- GitHub release API로 hexyl 자산을 찾을 때 grep 필터가 linux 자산을 걸러 "없다"고 잘못 말했다(실제로는 musl tarball과 `.deb`가 있다).
 
 ## 남은 작업
 
-- [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다.
+- [ ] TP-M0 plan(`docs/plans/2026-11-05-tars-dev-layer-tp-m0.md` 가칭) — design의 판정 TP-M0: `base` 묶음(Debian gcc · `libc6-dev` · make)과
+  JDK(Temurin LTS, `upstream`) 둘을 squashfs로 굽고 결정 4 · 5의 검사(겹친 경로, `NEEDED`)를 지난다. 부팅은 안 바꾼다.
+- [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
 ## 다음 에이전트에게
 
 이 저장소의 규칙(CLAUDE.md): 큰 편집은 먼저 설명, 매 편집 뒤 `git diff --stat` · `git diff | rg '^-'`, 명령은 Claude가 실행, 커밋은
-사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는 컨테이너에서. 체인 하나: `docker run --rm --sysctl
-net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./sleep/check.sh`. 루트 게이트는
-시작하며 `out/gate-logs/`와 `out/` 아래 로그를 비운다 — `time make gate`의 출력은 scratchpad에 둔다. 커널 심볼을 켜기 전에
-`rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾고, select로 따라오는 것(`TMPFS` 같은)이 사용자 공간의 바닥을 바꾸는지 본다.
-새 체인의 monitor · QMP 포트는 45504부터(45503은 LP).
+사용자 승인 뒤, push는 묻지 않는다(`feedback_push_policy`). init의 `zig build test`와 terminal 빌드는 컨테이너에서. 체인 하나: `docker run
+--rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./tools/check.sh`. 루트
+게이트는 시작하며 `out/gate-logs/`와 `out/` 아래 로그를 비운다 — `time make gate`의 출력은 scratchpad에 둔다. 게이트가 도는 동안
+`*/check.sh`를 작업 트리에서 고치지 않는다(bash가 실행 중에 스크립트를 읽는다). 한 파일에 두 커밋 몫이 섞이면 `git add -p` 대신
+작업 파일을 고쳐 `git hash-object -w` → `git update-index --cacheinfo <모드>`로 덩어리만 올린다(모드는 `git ls-files -s`).
+용어: "개발 도구 층"(전체), "묶음"(squashfs 하나), `guest_tools.sh`의 "층 N"은 UT 때부터의 목록 번호. 도구를 더할 때는
+`initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45504부터.
 
 ## 지금 상태 (2026-11-05)
 
-- 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`) — 그 뒤 커밋은 아직 릴리스에 없다.
-- 체인은 서른이다(`check.sh`의 `CHAINS`, 끝이 `DB-M0:./dualboot/check.sh` · `LP-M1:./sleep/check.sh`). 마지막 루트 게이트 30/30, 17분 28초.
-- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다. 최근 것부터 PW · RB · LP(11-05)
-  → MB · HS · DB · BW(11-05) → PS · KK · DM(11-04) → …
+- 진행 중인 것은 TP(design 초안, 구현 전). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른이다(`check.sh`의 `CHAINS`, 끝이 `DB-M0:./dualboot/check.sh` · `LP-M1:./sleep/check.sh`). 마지막 루트 게이트 30/30, 18분 14초.
+- initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
+- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
