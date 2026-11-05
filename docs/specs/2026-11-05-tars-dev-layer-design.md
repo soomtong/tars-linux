@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 7판(2026-11-05) — 열린 질문 없음. 구현 전(TP-M0 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m0.md`가 결정 2 · 6을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 7판(2026-11-05) — 열린 질문 없음. TP-M0 · TP-M1 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:

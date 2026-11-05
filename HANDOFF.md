@@ -1,4 +1,4 @@
-# HANDOFF: TP-M0(매니페스트 · base · JDK를 squashfs로) 구현 — 다음은 TP-M1 plan(커널 · init · ISO · 설치기)
+# HANDOFF: TP-M1(개발 도구 층을 /usr에 얹기) 끝 — 다음은 TP-M2 plan(`lang-native` 묶음)
 
 ## 목표
 
@@ -10,6 +10,16 @@
 
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 맥북 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-05, TP-M1 세션)
+
+- [x] TP-M1 plan `0b66cb8`, 구현 `36677c3`. 커널에 `BLK_DEV_LOOP` · `OVERLAY_FS` · `MISC_FILESYSTEMS` · `SQUASHFS` ·
+  `SQUASHFS_ZSTD`(+80KiB). init `layers.zig`가 `/home`을 붙인 직후 `/home/.tars/layers/*.sqfs`를 loop · squashfs로 열어
+  `lowerdir=/usr:<묶음들>`(initrd가 맨 위)로 `/usr`에 읽기 전용 overlay, 묶음의 `etc/`를 `/etc`로. 비교 대상은 설치기가 묶음 옆에
+  쓰는 `version`(= 이미지 버전, 매 부팅). 설치기는 매체에 `boot/layers`가 있을 때만 p3를 연다(새 설치 · 갱신, 계획 줄 · 자리 판정).
+  `make iso ISO_LAYERS="base lang-jvm"`이 묶음을 싣는다(기본은 안 싣는다). 새 체인 `devtools`(TP-M1, 45504, `-nic none`, 부팅 넷).
+- [x] 숫자 · 빨강 셋 · 바꾼 것 넷(`LOOP_CLR_FD` 불필요, 갱신은 옛 묶음을 먼저 지움, 게스트에 `mount` · `free` 없음)은 plan의
+  "확인한 것" · "결과". 루트 게이트 31/31, 20분 14초, 잘린 줄 0.
 
 ## 완료된 작업 (2026-11-05, TP-M0 세션)
 
@@ -54,8 +64,11 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
   찍고 실패하게. 형식은 TSV 유지, 아카이브 모양 · 실행 파일 자리 · vendor-repo 저장소는 선택 일곱째 열(`format=zip strip=0
   bin=go/bin`), npm · pip · jar 미리 받기 · 자동 갱신 끄기 같은 절차는 묶음별 훅(`devlayer/hooks/<묶음>.sh` 가칭) — 필요해지는
   milestone(`lang-native` 이후)이 더하고 design 결정 1에 한 줄. 옮길 신호는 선택 키가 너덧을 넘거나 값에 공백이 필요할 때.
-- [ ] TP-M1 plan — design 결정 8~13과 판정 TP-M1(체인 `devtools`, monitor 45504, `-nic none`). 입력은 TP-M0 plan의 "M1에 넘길 것"
-  (커널 심볼 넷, 게이트 ISO에 묶음을 싣지 않기, 버전 줄, `etc/gprofng.rc`). 루트 게이트를 도는 milestone이다.
+- [ ] TP-M2 plan — design "Milestone"의 순서대로 `lang-native`(gcc · g++ · LLVM · clang · lld · zig · rust · odin · go). base와의
+  겹침(g++-14가 끄는 gcc-14, TP-M0 결정 K), LLVM tarball의 크기(design 확인 10), 판정은 각 언어의 hello가 devtools 체인에서
+  망 없이 돈다. 매니페스트 파서의 엄격화(아래 미룬 것)를 이때 함께. 새 체인의 포트는 45505부터.
+- [ ] 사용자: 실기에서 개발 도구 층 — `make iso ISO_LAYERS="base lang-jvm"`으로 구운 ISO로 설치 · 갱신하고 `gcc` · `java`가 망 없이
+  도는지, 맥북 에어 2011에서 javac의 시간(TCG 10.5초).
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
@@ -68,12 +81,13 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 `*/check.sh`를 작업 트리에서 고치지 않는다(bash가 실행 중에 스크립트를 읽는다). 한 파일에 두 커밋 몫이 섞이면 `git add -p` 대신
 작업 파일을 고쳐 `git hash-object -w` → `git update-index --cacheinfo <모드>`로 덩어리만 올린다(모드는 `git ls-files -s`).
 용어: "개발 도구 층"(전체), "묶음"(squashfs 하나), `guest_tools.sh`의 "층 N"은 UT 때부터의 목록 번호. 도구를 더할 때는
-`initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45504부터.
+`initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45505부터. 게스트에는 `mount` · `free` · `base64` · `dd`가 없다(체인은 mount(2)를 부르는 init · 설치기에 기댄다).
 
 ## 지금 상태 (2026-11-05)
 
-- 진행 중인 것은 TP(design 7판, M0 끝 — 다음은 M1 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른이다(`check.sh`의 `CHAINS`, 끝이 `DB-M0:./dualboot/check.sh` · `LP-M1:./sleep/check.sh`). 마지막 루트 게이트 30/30, 18분 14초.
+- 진행 중인 것은 TP(design 7판, M0 · M1 끝 — 다음은 M2 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 20분 14초.
+  `make gate`는 먼저 `make dev-layers`(amd64 거두기, 캐시면 수십 초)를 부른다 — devtools 체인은 그 tar 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
