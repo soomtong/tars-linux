@@ -246,7 +246,9 @@ wait_log "tars-install: 'root' is not a user name" \
 wait_prompt "user name [tars]: " 2 || fail "the installer did not ask again after refusing root" "user name"
 send "hpuser"
 wait_prompt "password [tars-linux]: " 1 || fail "tars-install never asked for the password" "password"
-send "$HP_PASSWORD"
+# PW-M0. 한 글자 더 치고 Backspace(0x7f)로 지운다. 칸은 글자마다 `*`, Backspace에 `\b \b`를 찍는다(PW design 결정 5).
+# 버퍼에서도 빠졌다는 증거는 8b다 — 그 sudo가 $HP_PASSWORD로 통한다.
+send "${HP_PASSWORD}X"$'\x7f'
 wait_log "  user  hpuser  (home /home/hpuser, password as typed)" \
   || fail "the plan does not show the account hpuser" "  user  " "tars-install:"
 wait_prompt "type YES to continue: " 1 || fail "tars-install never asked for YES" "type YES"
@@ -264,7 +266,11 @@ done
 if grep -aqF "$HP_PASSWORD" "$LOG"; then
   fail "the typed password shows up in the serial log" "$HP_PASSWORD"
 fi
+# PW-M0. 열두 글자(hp-secret-1X)에 `*` 열둘, Backspace에 `\b \b` 하나.
+grep -aqF "password [tars-linux]: ************"$'\b \b' "$LOG" \
+  || fail "the password prompt did not show a star per character and erase one on backspace" "password [tars-linux]"
 echo "tars-install asked three questions, refused root, made hpuser; the password never reached the log"
+echo "PW: the password prompt showed 12 stars and took one back on backspace"
 # 실측 7. yescrypt 한 번(TCG).
 grep -aoE 'password hashed \(yescrypt\) in [0-9]+ms' "$LOG" | head -1
 
@@ -412,6 +418,10 @@ for want in \
   grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-s8a"
 done
 echo "8a: sudo is setuid root, sudoers is root 440, the plugin and PAM file are in place"
+# PW-M0 결정 9. sudo의 비밀번호 칸도 `*`를 찍는다. 게이트는 sudo에 파이프(-S)로만 주므로 모양은 실기가 본다.
+send "grep -c '^Defaults pwfeedback\$' /etc/sudoers | sed 's/^/hp-s8a-pwfeedback-/'"
+wait_log "hp-s8a-pwfeedback-1" || fail "/etc/sudoers has no Defaults pwfeedback line" "hp-s8a-pwfeedback"
+echo "8a: sudoers has Defaults pwfeedback"
 
 # 8b. 비밀번호 없이는 안 되고, 틀린 것도 안 되고, 설치 때 정한 것은 된다. 측정 13은 마지막 것의 시간이다.
 # 실패의 이유까지 본다 — 명령을 못 찾아도 0이 아니므로 종료 코드만으로는 "비밀번호가 필요하다"가 아니다.

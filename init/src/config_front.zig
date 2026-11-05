@@ -15,6 +15,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const config = @import("config.zig");
 const cli = @import("config_cli.zig");
+const secret = @import("secret.zig");
 const fe = @import("config_front_edit.zig");
 const account = @import("account.zig");
 
@@ -182,22 +183,11 @@ fn run(argv: [*:null]const ?[*:0]const u8, input: []const u8, out: []u8) ?Ran {
     return .{ .code = code, .out = out[0..len] };
 }
 
-/// 비밀 하나를 읽는다 — 비밀번호 · API 키. 표준 입력이 tty면 prompt를 찍고 echo를 끈 채
-/// 한 줄을, 아니면(파이프 · 파일) 끝까지 읽는다. 끝의 개행은 뗀다. 명령줄 인자로 받지 않는
-/// 이유는 `/proc/<pid>/cmdline`과 셸 히스토리다(VD design 결정 4와 같다).
-///
-/// echo를 먼저 끄고 prompt를 찍는다(HP-M2에서 순서를 바꿨다). 거꾸로면 prompt를 보자마자 친
-/// 글자가 echo가 꺼지기 전에 화면에 찍히고 `.FLUSH`가 그것을 버린다 — 설치기의
-/// `readSecretAnswer`가 HP-M1에서 겪은 것과 같다.
+/// 비밀 하나를 읽는다 — 비밀번호 · API 키. 표준 입력이 tty면 `secret.readMasked`가 prompt를 찍고 글자마다
+/// `*`를 찍으며 한 줄을(PW design), 아니면(파이프 · 파일) 끝까지 읽는다. 끝의 개행은 뗀다. 명령줄 인자로 받지
+/// 않는 이유는 `/proc/<pid>/cmdline`과 셸 히스토리다(VD design 결정 4와 같다). null은 너무 길다는 뜻이다.
 fn readSecret(prompt: []const u8, buf: []u8) ?[]const u8 {
-    var old: linux.termios = undefined;
-    const tty = failed(linux.tcgetattr(0, &old)) == null;
-    if (tty) {
-        var quiet = old;
-        quiet.lflag.ECHO = false;
-        _ = linux.tcsetattr(0, .FLUSH, &quiet);
-        _ = cli.writeAll(2, prompt);
-    }
+    if (secret.readMasked(2, prompt, buf)) |r| return ttySecret(r);
     var len: usize = 0;
     while (len < buf.len) {
         const n = linux.read(0, buf[len..].ptr, buf.len - len);
@@ -207,14 +197,23 @@ fn readSecret(prompt: []const u8, buf: []u8) ?[]const u8 {
         }
         if (n == 0) break;
         len += n;
-        if (tty and buf[len - 1] == '\n') break;
-    }
-    if (tty) {
-        _ = linux.tcsetattr(0, .FLUSH, &old);
-        _ = cli.writeAll(2, "\n");
     }
     if (len == buf.len) return null;
     return std.mem.trimEnd(u8, buf[0..len], "\r\n");
+}
+
+/// tty에서 읽은 답. 사람이 Ctrl+C · 빈 칸의 Ctrl+D로 그만두면 여기서 끝낸다 — 부르는 쪽의 null은 "너무
+/// 길다"이고, 빈 값을 넘기면 빈 passphrase가 된다. 비밀을 묻는 자리는 모두 무엇을 쓰기 전이라 끝내도 남는
+/// 것이 없다. 130은 셸이 Ctrl+C에 주는 값(128 + SIGINT)이다.
+fn ttySecret(r: secret.Result) ?[]const u8 {
+    switch (r) {
+        .line => |l| return l,
+        .too_long => return null,
+        .eof, .cancel => {
+            complain("cancelled; nothing was changed", .{});
+            linux.exit_group(130);
+        },
+    }
 }
 
 // ── wifi ──────────────────────────────────────────────────────────────
@@ -624,17 +623,10 @@ pub fn check(c: config.Config) usize {
 
 /// 비밀 한 줄을 읽는다. `readSecret`과 다른 것은 파이프에서도 개행에서 멈춘다는 것 하나다 —
 /// `passwd`는 같은 표준 입력에서 두 줄(새 값 · 다시)을 읽는다. 한 바이트씩 읽어 다음 줄을
-/// 삼키지 않는다. 되돌릴 때는 `.NOW`(둘째 줄을 미리 친 것을 버리지 않는다). 개행 없이 끝나면
-/// 읽은 만큼, 아무것도 없으면 null.
+/// 삼키지 않는다(tty 길의 `readMasked`도 그렇다). 개행 없이 끝나면 읽은 만큼, 아무것도 없으면 null.
+/// 버퍼보다 긴 줄은 빈 값으로 돌려준다(아래의 빈 값 검사가 거절한다).
 fn readSecretLine(prompt: []const u8, buf: []u8) ?[]const u8 {
-    var old: linux.termios = undefined;
-    const tty = failed(linux.tcgetattr(0, &old)) == null;
-    if (tty) {
-        var quiet = old;
-        quiet.lflag.ECHO = false;
-        _ = linux.tcsetattr(0, .FLUSH, &quiet);
-        _ = cli.writeAll(2, prompt);
-    }
+    if (secret.readMasked(2, prompt, buf)) |r| return ttySecret(r) orelse buf[0..0];
     var len: usize = 0;
     var got_any = false;
     while (true) {
@@ -647,13 +639,9 @@ fn readSecretLine(prompt: []const u8, buf: []u8) ?[]const u8 {
         if (n == 0) break;
         got_any = true;
         if (b[0] == '\n') break;
-        // 버퍼를 넘는 줄은 끝까지 읽어 버리고 길이를 넘긴 것으로 알린다(아래 `validPassword`가 거절한다).
+        // 버퍼를 넘는 줄은 끝까지 읽어 버리고 길이를 넘긴 것으로 알린다.
         if (len < buf.len) buf[len] = b[0];
         len += 1;
-    }
-    if (tty) {
-        _ = linux.tcsetattr(0, .NOW, &old);
-        _ = cli.writeAll(2, "\n");
     }
     if (!got_any) return null;
     if (len > buf.len) return buf[0..0];

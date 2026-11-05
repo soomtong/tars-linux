@@ -186,6 +186,19 @@ pub fn build(b: *std.Build) void {
         .root_module = storage_test_mod,
     });
 
+    // PW-M0: 비밀번호 칸의 줄 편집기(`secret.Editor`) 검사. 순수한 상태 기계라
+    // storage_test와 같은 이유로 host_target이다. 실제 tty는 home 체인이 본다.
+    const secret_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/secret_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const secret_test = b.addExecutable(.{
+        .name = "secret_test",
+        .root_module = secret_test_mod,
+    });
+
     // UT-M0: 커널 envp 블록에 PATH를 더하는 함수의 검사. storage_test와 같은
     // 이유로 host_target이다 — environ.zig는 시스템 콜을 하나도 안 하는 순수
     // 계산이라 게스트가 필요 없다. main.zig에 두면 이 검사가 원리적으로
@@ -410,6 +423,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(power_test).step);
     test_step.dependOn(&b.addRunArtifact(devices_test).step);
     test_step.dependOn(&b.addRunArtifact(storage_test).step);
+    test_step.dependOn(&b.addRunArtifact(secret_test).step);
     test_step.dependOn(&b.addRunArtifact(environ_test).step);
     test_step.dependOn(&b.addRunArtifact(clock_test).step);
     test_step.dependOn(&b.addRunArtifact(disk_test).step);

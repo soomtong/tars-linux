@@ -649,7 +649,8 @@ EOF
 # sudoers의 값: secure_path는 게스트 PATH(environ.zig의 PATH_ENTRY)와 같다. lecture는 표시
 # 파일이 tmpfs라 부팅마다 다시 뜨므로 끈다. syslog 소켓이 없으므로 !syslog. !fqdn은 hostname이
 # 커널 기본값 `(none)`이라 sudo마다 찍히던 `unable to resolve host (none)`을 없앤다(HP-M2 실측).
-# timestamp는 기본(15분, /run/sudo/ts — 재부팅이 지운다).
+# timestamp는 기본(15분, /run/sudo/ts — 재부팅이 지운다). pwfeedback은 비밀번호 칸에 글자마다 `*`를
+# 찍는다 — tars-config · tars-install의 칸과 같은 모양이다(PW design 결정 9).
 #
 # /etc/shadow는 root 한 줄로 늘 있다. 사용자 있는 부팅은 init이 같은 첫 줄에 사용자를 더해 덮어쓰고
 # (account.shadowFile), 없는 부팅(ISO)은 이것이 그대로다 — 없으면 pam_unix의 account 단계가 root를
@@ -675,6 +676,7 @@ Defaults secure_path="/usr/bin:/bin"
 Defaults lecture=never
 Defaults !syslog
 Defaults !fqdn
+Defaults pwfeedback
 root  ALL=(ALL:ALL) ALL
 %sudo ALL=(ALL:ALL) ALL
 EOF

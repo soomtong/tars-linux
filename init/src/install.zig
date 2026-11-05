@@ -4,6 +4,7 @@ const storage = @import("storage.zig");
 const disk = @import("disk.zig");
 const config = @import("config.zig");
 const account = @import("account.zig");
+const secret = @import("secret.zig");
 const screen_args = @import("screen_args");
 const build_info = @import("build_info");
 
@@ -739,29 +740,16 @@ fn readAnswer(buf: []u8) Answer {
     return .{ .line = std.mem.trimEnd(u8, got, "\r\n") };
 }
 
-/// echo를 끄고 prompt를 찍은 뒤 한 줄을 읽는다. 표준 입력이 tty가 아니면(파이프) 그대로 읽는다.
-/// `config_front.readSecret`과 같은 몇 줄이다 — 설치기는 그 파일을 import하지 않는다
-/// (공용 모듈을 안 만드는 이 파일 머리의 규칙).
-///
-/// 순서가 뜻이다. echo를 먼저 끄고 prompt를 찍는다 — 거꾸로면 prompt를 보고 곧바로 친
-/// 글자가 echo가 꺼지기 전에 도착해 화면에 찍힌다. 끌 때는 `.FLUSH`(prompt 전에 미리 친
-/// 것은 버린다), 되돌릴 때는 `.NOW`(그 사이 친 다음 답 — YES — 를 버리지 않는다).
+/// 비밀번호 한 줄을 읽는다. 표준 입력이 tty면 `secret.readMasked`가 prompt를 찍고 글자마다 `*`를 찍는다
+/// (PW design). Ctrl+C도 `.eof`다 — 아무것도 안 바꾸고 끝난다. tty가 아니면(파이프) prompt를 찍고 그대로 읽는다.
 fn readSecretAnswer(prompt: []const u8, buf: []u8) Answer {
-    var old: linux.termios = undefined;
-    const tty = failed(linux.tcgetattr(0, &old)) == null;
-    if (tty) {
-        var quiet = old;
-        quiet.lflag.ECHO = false;
-        _ = linux.tcsetattr(0, .FLUSH, &quiet);
-    }
+    if (secret.readMasked(1, prompt, buf)) |r| return switch (r) {
+        .line => |l| .{ .line = l },
+        .too_long => .too_long,
+        .eof, .cancel => .eof,
+    };
     say("{s}", .{prompt});
-    const a = readAnswer(buf);
-    if (tty) {
-        _ = linux.tcsetattr(0, .NOW, &old);
-        // echo가 꺼져 있어 사람이 친 Enter가 화면에 안 나왔다. 다음 줄을 위해 대신 넘긴다.
-        say("\n", .{});
-    }
-    return a;
+    return readAnswer(buf);
 }
 
 /// 이름과 비밀번호를 묻는다(HP design 결정 5). Enter만 치면 괄호 안의 기본값이다. 규칙 밖이면
