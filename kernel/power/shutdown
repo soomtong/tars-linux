@@ -1,5 +1,5 @@
 #!/bin/sh
-# /usr/bin/shutdown — /usr/bin/reboot · /usr/bin/poweroff는 이 파일을 가리키는 링크다(RB design 결정 1).
+# /usr/bin/shutdown — /usr/bin/reboot · /usr/bin/poweroff · /usr/bin/suspend는 이 파일을 가리키는 링크다(RB design 결정 1, LP-M1).
 #
 # 재부팅과 전원 끄기는 PID 1이 이미 한다. SIGINT면 재부팅, SIGTERM이면 전원 끄기이고(init/src/power.zig), 자식 정리 ·
 # sync · reboot(2)도 거기서 한다. 이 명령이 하는 일은 이름을 보고 시그널 하나를 보내는 것뿐이다.
@@ -20,6 +20,7 @@ usage() {
 case "$name" in
   reboot) sig=INT ;;
   poweroff) sig=TERM ;;
+  suspend) sig=USR1 ;; # LP-M1. PID 1이 S3로 잔다 — 뚜껑을 닫은 것과 같은 길이다.
   *)
     name=shutdown
     sig=TERM
@@ -42,9 +43,9 @@ if [ "$(id -u)" != 0 ]; then
   exit 77
 fi
 
-if [ "$sig" = INT ]; then
-  echo "$name: restarting"
-else
-  echo "$name: switching off"
-fi
+case "$sig" in
+  INT) echo "$name: restarting" ;;
+  USR1) echo "$name: going to sleep" ;;
+  *) echo "$name: switching off" ;;
+esac
 exec kill -s "$sig" 1

@@ -188,6 +188,9 @@ pub fn main() !void {
     try makeDevice(FULL, 1, "AT Translated Set 2 keyboard\n", "120013\n", "402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe\n");
     // BTN_LEFT(0x110 = 272)만 가진 장치. EV_KEY는 있지만 키보드는 아니다.
     try makeDevice(FULL, 2, "TARS fake mouse\n", "3\n", "10000 0 0 0 0\n");
+    // LP-M1. 진짜 ACPI 뚜껑 스위치의 모양 — ev 21(EV_SYN · EV_SW), key 0, sw 1(SW_LID).
+    try makeDevice(FULL, 3, "Lid Switch\n", "21\n", "0\n");
+    try writeFile(join("{s}/event{d}/device/capabilities/sw", .{ FULL, 3 }), "1\n");
 
     // 전원 버튼만 있는 트리. 9번 절이 "키보드가 없어도 버튼은 찾는다"를 본다.
     try makeDevice(BUTTON, 0, "Power Button\n", "3\n", "10000000000000 0\n");
@@ -250,6 +253,23 @@ pub fn main() !void {
 
     std.debug.print("devices_test: picked the power button and left the keyboard alone\n", .{});
 
+    // ── 9a. 뚜껑 스위치 (LP-M1) ───────────────────────────────────────
+    //
+    // 뚜껑은 SW_LID 비트로만 고른다. 태블릿 모드 스위치(SW_TABLET_MODE, sw 2)는 뚜껑이 아니다. FULL의
+    // event3이 하나뿐인 답이고, sw 파일이 없는 트리(BUTTON)는 뚜껑이 없다. 위의 전원 버튼 수가 그대로 1인
+    // 것은 뚜껑이 버튼으로 잘못 세어지지 않는다는 증거다(event3은 KEY_POWER가 없다).
+    if (!devices.looksLikeLid("21\n", "1\n")) return error.LidNotSeen;
+    if (devices.looksLikeLid("21\n", "2\n")) return error.TabletModeTakenForLid;
+    if (devices.looksLikeLid("3\n", "1\n")) return error.LidWithoutEvSw;
+    var lids: [devices.MAX_LIDS]u8 = undefined;
+    const lid_count = devices.findLids(FULL, &lids);
+    if (lid_count != 1 or lids[0] != 3) {
+        std.debug.print("FAIL: found {d} lids in the fake tree, want event3 alone\n", .{lid_count});
+        return error.WrongLid;
+    }
+    if (devices.findLids(BUTTON, &lids) != 0) return error.LidInATreeWithoutSwitches;
+    std.debug.print("devices_test: the lid switch is picked by SW_LID, not taken for a button or a tablet switch\n", .{});
+
     // ── 10. 이벤트 바이트 (HD-M2) ─────────────────────────────────────
     //
     // 진짜 evdev를 열 수는 없으므로 pipe로 fd를 만들어 같은 바이트를
@@ -275,7 +295,7 @@ pub fn main() !void {
 
     // 비어 있는 fd는 "안 눌렸다"다. EAGAIN이 예외가 아니라 정상 경로라는
     // 것을 이 한 줄이 붙박는다.
-    if (devices.drainButton(rd)) {
+    if (devices.drainButton(rd).power) {
         std.debug.print("FAIL: an empty fd reported a press\n", .{});
         return error.EmptyFdReportedPress;
     }
@@ -289,13 +309,13 @@ pub fn main() !void {
         .{ .sec = 0, .usec = 0, .type = 0, .code = 0, .value = 0 },
     };
     try writeEvents(wr, &press);
-    if (!devices.drainButton(rd)) {
+    if (!devices.drainButton(rd).power) {
         std.debug.print("FAIL: a power press was not reported\n", .{});
         return error.PressNotSeen;
     }
     // 앞의 호출이 비웠어야 한다. 안 비우면 poll이 곧바로 다시 깨어나서
     // PID 1이 CPU를 태우는 바쁜 루프가 된다.
-    if (devices.drainButton(rd)) {
+    if (devices.drainButton(rd).power) {
         std.debug.print("FAIL: the fd still had events after draining\n", .{});
         return error.FdNotDrained;
     }
@@ -305,7 +325,7 @@ pub fn main() !void {
         .{ .sec = 0, .usec = 0, .type = 1, .code = 116, .value = 0 },
     };
     try writeEvents(wr, &release_only);
-    if (devices.drainButton(rd)) {
+    if (devices.drainButton(rd).power) {
         std.debug.print("FAIL: a key release was reported as a press\n", .{});
         return error.ReleaseReportedAsPress;
     }
@@ -316,13 +336,30 @@ pub fn main() !void {
         .{ .sec = 0, .usec = 0, .type = 1, .code = 30, .value = 1 },
     };
     try writeEvents(wr, &other_key);
-    if (devices.drainButton(rd)) {
+    if (devices.drainButton(rd).power) {
         std.debug.print("FAIL: KEY_A was reported as a power press\n", .{});
         return error.WrongKeyReported;
     }
 
+    // LP-M1. 뚜껑: 닫힘(1)만 센다. 열림(0)은 아무것도 아니다 — 깨우는 것은 펌웨어다.
+    const lid_close = [_]devices.Event{
+        .{ .sec = 0, .usec = 0, .type = 5, .code = 0, .value = 1 },
+        .{ .sec = 0, .usec = 0, .type = 0, .code = 0, .value = 0 },
+    };
+    try writeEvents(wr, &lid_close);
+    const closed = devices.drainButton(rd);
+    if (!closed.lid_closed or closed.power) {
+        std.debug.print("FAIL: a lid close read as lid {} power {}\n", .{ closed.lid_closed, closed.power });
+        return error.LidCloseNotSeen;
+    }
+    const lid_open = [_]devices.Event{
+        .{ .sec = 0, .usec = 0, .type = 5, .code = 0, .value = 0 },
+    };
+    try writeEvents(wr, &lid_open);
+    if (devices.drainButton(rd).lid_closed) return error.LidOpenTakenForClose;
+
     _ = linux.close(wr);
     _ = linux.close(rd);
 
-    std.debug.print("devices_test: only a KEY_POWER press counts, and the fd is drained\n", .{});
+    std.debug.print("devices_test: only a KEY_POWER press counts, a lid counts on close, and the fd is drained\n", .{});
 }

@@ -51,11 +51,22 @@ const KEY_D: u16 = 32;
 /// 둔 그 자리다.
 const KEY_POWER: u16 = 116;
 
+/// 스위치 이벤트와 뚜껑 스위치(LP design 확인 8). ACPI의 "Lid Switch"가 EV_SW의 SW_LID를 내고,
+/// 값 1이 닫힘 · 0이 열림이다.
+const EV_SW: u16 = 5;
+const SW_LID: u16 = 0;
+
 /// 열어 둘 전원 버튼의 상한(design 결정 4). ACPI는 FADT의 고정 하드웨어
 /// 버튼과 DSDT가 선언한 장치를 각각 등록할 수 있어서, 하나만 골랐다가 틀리면
 /// 버튼이 조용히 죽는다. HD-M1의 실측으로는 QEMU에 하나뿐이지만, 그
 /// 침묵보다는 넉넉한 상한으로 전부 여는 편이 낫다.
 pub const MAX_BUTTONS: usize = 4;
+
+/// 열어 둘 뚜껑 스위치의 상한. 노트북에 하나지만 전원 버튼과 같은 까닭(결정 4)으로 넉넉히 둔다.
+pub const MAX_LIDS: usize = 2;
+
+/// PID 1이 poll하는 fd의 상한 — 전원 버튼과 뚜껑 스위치를 한 배열에 둔다(LP-M1).
+pub const MAX_WATCHED: usize = MAX_BUTTONS + MAX_LIDS;
 
 /// evdev가 내놓는 이벤트 하나. include/uapi/linux/input.h:28의
 /// struct input_event와 같은 모양이어야 한다. 64비트에서는 timeval이
@@ -142,6 +153,11 @@ pub fn looksLikePowerButton(ev: []const u8, key: []const u8) bool {
     if (!bitSet(ev, EV_KEY)) return false;
     if (!bitSet(key, KEY_POWER)) return false;
     return !looksLikeKeyboard(ev, key);
+}
+
+/// 이 장치가 노트북 뚜껑 스위치인가(LP-M1). 이름("Lid Switch")이 아니라 성질로 본다 — 버튼과 같은 규칙이다.
+pub fn looksLikeLid(ev: []const u8, sw: []const u8) bool {
+    return bitSet(ev, EV_SW) and bitSet(sw, SW_LID);
 }
 
 /// 널 종료 경로를 담는 고정 버퍼. init에는 힙이 없으므로 호출자가 이 값을
@@ -232,6 +248,31 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
     return found;
 }
 
+/// 뚜껑 스위치처럼 생긴 evdev 번호를 out에 채우고 그 개수를 돌려준다. `capabilities/sw`가 없으면(가짜
+/// sysfs 트리 · 스위치가 없는 장치) 스위치가 없는 것으로 본다.
+pub fn findLids(sys_root: []const u8, out: []u8) usize {
+    var found: usize = 0;
+    var n: u8 = 0;
+    while (n < MAX_EVENT and found < out.len) : (n += 1) {
+        var ev_buf: [MAX_BITMAP]u8 = undefined;
+        const ev = readAttr(sys_root, n, "capabilities/ev", &ev_buf) orelse continue;
+        var sw_buf: [MAX_BITMAP]u8 = undefined;
+        const sw = readAttr(sys_root, n, "capabilities/sw", &sw_buf) orelse "0";
+        if (!looksLikeLid(ev, sw)) continue;
+        out[found] = n;
+        found += 1;
+    }
+    return found;
+}
+
+/// `drainButton`이 본 것. 한 fd는 한 장치지만 둘을 함께 돌려주면 부르는 쪽이 갈래 하나로 끝난다.
+pub const Seen = struct {
+    /// 전원 버튼이 눌렸다.
+    power: bool = false,
+    /// 뚜껑이 닫혔다(SW_LID 1). 열림(0)은 아무것도 안 한다 — 깨우는 것은 펌웨어다(LP-M1).
+    lid_closed: bool = false,
+};
+
 /// 버튼 fd에 쌓인 것을 전부 읽어 비우고, 그 안에 전원 버튼 누름이
 /// 있었는지 돌려준다. poll이 "읽을 것이 있다"고 알려 준 뒤에만 부른다.
 ///
@@ -242,8 +283,8 @@ pub fn findPowerButtons(sys_root: []const u8, out: []u8) usize {
 ///
 /// fd는 O_NONBLOCK으로 열려 있다. 그래서 마지막 read가 EAGAIN으로 돌아오는
 /// 것이 예외가 아니라 이 루프의 정상 종료 경로다.
-pub fn drainButton(fd: i32) bool {
-    var pressed = false;
+pub fn drainButton(fd: i32) Seen {
+    var pressed: Seen = .{};
     var raw: [@sizeOf(Event) * 16]u8 = undefined;
 
     while (true) {
@@ -260,9 +301,10 @@ pub fn drainButton(fd: i32) bool {
         var off: usize = 0;
         while (off + @sizeOf(Event) <= rc) : (off += @sizeOf(Event)) {
             const ev: *align(1) const Event = @ptrCast(&raw[off]);
+            if (ev.type == EV_SW and ev.code == SW_LID and ev.value == 1) pressed.lid_closed = true;
             if (ev.type != EV_KEY) continue;
             if (ev.code != KEY_POWER) continue;
-            if (ev.value == VALUE_PRESS) pressed = true;
+            if (ev.value == VALUE_PRESS) pressed.power = true;
         }
 
         // 버퍼를 꽉 채워 왔으면 더 남아 있을 수 있다. 덜 채웠으면 그것이 곧
@@ -286,16 +328,29 @@ pub fn drainButton(fd: i32) bool {
 pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
     var candidates: [MAX_BUTTONS]u8 = undefined;
     const n = findPowerButtons(sys_root, &candidates);
+    var opened: usize = 0;
     if (n == 0) {
         // device/check.sh가 이 줄이 없음을 요구한다. 탐색기가 조용히
         // 실패하면 버튼은 안 먹는데 부팅은 멀쩡해 보이기 때문이다.
         logline.print("tars-init: no power button found under {s}\n", .{sys_root});
-        return 0;
+    } else {
+        opened = openEach(sys_root, candidates[0..n], out, "power button");
+        logline.print("tars-init: watching {d} power button(s)\n", .{opened});
     }
 
+    // LP-M1. 뚜껑 스위치를 같은 배열의 뒤에 연다. 없는 기계(데스크톱 · QEMU)는 아무 줄도 안 찍는다.
+    var lids: [MAX_LIDS]u8 = undefined;
+    const l = findLids(sys_root, &lids);
+    if (l > 0) opened += openEach(sys_root, lids[0..l], out[opened..], "lid switch");
+    return opened;
+}
+
+/// 번호들을 O_NONBLOCK으로 열어 out에 채우고 연 개수를 돌려준다. 하나마다 `tars-init: <what> <path> (<name>)` —
+/// device/check.sh가 "power button"의 그 줄 앞부분을 grep한다. 고치면 게이트도 함께 고쳐야 한다.
+fn openEach(sys_root: []const u8, candidates: []const u8, out: []i32, what: []const u8) usize {
     var opened: usize = 0;
     var i: usize = 0;
-    while (i < n and opened < out.len) : (i += 1) {
+    while (i < candidates.len and opened < out.len) : (i += 1) {
         var path = Path{};
         devicePath(candidates[i], &path);
 
@@ -320,9 +375,7 @@ pub fn openPowerButtons(sys_root: []const u8, out: []i32) usize {
 
         // device/check.sh가 이 줄의 앞부분을 grep한다. 고치면 게이트도 함께
         // 고쳐야 한다(HANDOFF의 "로그 문구는 두 곳에 중복된다").
-        logline.print("tars-init: power button {s} ({s})\n", .{ path.slice(), name });
+        logline.print("tars-init: {s} {s} ({s})\n", .{ what, path.slice(), name });
     }
-
-    logline.print("tars-init: watching {d} power button(s)\n", .{opened});
     return opened;
 }

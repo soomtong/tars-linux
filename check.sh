@@ -512,6 +512,11 @@ run_chain() {
 # 디스크의 display_scale=1이 auto를 이기는 것과 tars-config set · reload terminal이 배율을 바꾸는 것을
 # 본다. monitor 45502를 두 부팅이 차례로 쓴다. 회차당 부팅 2회.
 #
+# LP 체인은 절전을 본다. q35에 S3를 켜고(ICH9-LPC.disable_s3=0) 시리얼 셸에서 /usr/bin/suspend를 친다.
+# PID 1이 SIGUSR1을 받아 deep으로 자고, QMP query-status가 suspended, system_wakeup 뒤 `resumed after Nms`가
+# 2초 잔 것을 BOOTTIME으로 보이고, 셸이 다시 답하고 terminal이 살아 있는지 본다. 뚜껑은 QEMU에 없어
+# devices_test가 본다. QMP 45503. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -544,6 +549,7 @@ CHAINS=(
   "MI-M0:./mise/check.sh"
   "HS-M0:./hidpi/check.sh"
   "DB-M0:./dualboot/check.sh"
+  "LP-M1:./sleep/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -494,6 +494,7 @@ cp power/shutdown "$WORKDIR/usr/bin/shutdown"
 chmod 0755 "$WORKDIR/usr/bin/shutdown"
 ln -sf shutdown "$WORKDIR/usr/bin/reboot"
 ln -sf shutdown "$WORKDIR/usr/bin/poweroff"
+ln -sf shutdown "$WORKDIR/usr/bin/suspend" # LP-M1. bash · zsh의 내장 `suspend`가 먼저 잡히므로 사람은 언제나 `sudo suspend`다.
 
 # TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
 #

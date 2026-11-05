@@ -950,7 +950,7 @@ fn supervise(
     // poll에 넘길 배열. 버튼 fd는 부팅 때 한 번 정해지고 변하지 않으므로
     // 루프 밖에서 한 번만 채운다. revents만 커널이 매 호출 덮어쓴다.
     // 버튼 fd들 뒤에 CT-M1의 listen fd가 한 칸 붙는다.
-    var fds: [devices.MAX_BUTTONS + 1]linux.pollfd = undefined;
+    var fds: [devices.MAX_WATCHED + 1]linux.pollfd = undefined;
     for (buttons, 0..) |fd, i| {
         fds[i] = .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 };
     }
@@ -965,7 +965,11 @@ fn supervise(
         // 자식을 다시 띄우기 전에 본다. 순서가 뒤집히면 방금 SIGTERM으로
         // 죽인 셸을 이 루프가 되살린다. 시그널로 왔든 버튼으로 왔든 종료가
         // 시작되는 자리는 여기 하나다(design 결정 9).
-        if (power.take()) |action| power.shutdown(action);
+        // LP-M1. 잠은 종료가 아니다 — 깨어나면 이 루프가 그대로 이어진다.
+        if (power.take()) |action| switch (action) {
+            .sleep => power.sleep(),
+            .power_off, .restart => power.shutdown(action),
+        };
 
         // AU-M2. 사운드 카드가 오거나 갔으면 /etc/asound.conf의 기본 카드를 다시
         // 쓴다. 이 루프가 1초마다 깨는 것에 얹혀 있다 — 부팅 뒤에 꽂은 USB 헤드셋도
@@ -1124,10 +1128,15 @@ fn supervise(
             // POLLIN이 아니라 POLLERR/POLLHUP으로 깨어났어도 일단 읽어 본다.
             // 읽지 않고 넘어가면 그 revents가 매 poll마다 다시 서서 PID 1이
             // CPU를 태우는 바쁜 루프가 되기 때문이다.
-            if (devices.drainButton(p.fd)) {
+            const seen = devices.drainButton(p.fd);
+            if (seen.power) {
                 // device/check.sh가 이 줄을 grep한다.
                 logline.print("tars-init: power button pressed\n", .{});
                 power.request(.power_off);
+            } else if (seen.lid_closed) {
+                // LP-M1. 전원 버튼이 함께 눌렸으면 끄는 쪽이 이긴다.
+                logline.print("tars-init: lid closed\n", .{});
+                power.request(.sleep);
             }
 
             // 읽어도 해결되지 않는 종류로 깨어났으면 이 fd를 목록에서 뺀다.
@@ -1193,7 +1202,7 @@ const Boot = struct {
     /// 망가졌을 때 눌러야 하는 것이 전원 버튼이기 때문이다. BF 체인처럼
     /// /dev/dri/card0이 없어 감독자가 terminal을 포기한 상태가 정확히 그
     /// 경우다.
-    button_fds: [devices.MAX_BUTTONS]i32 = undefined,
+    button_fds: [devices.MAX_WATCHED]i32 = undefined,
     button_count: usize = 0,
 
     // ── 셸 · env(`buildEnv`) ───────────────────────────────────────────

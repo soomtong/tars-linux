@@ -69,6 +69,18 @@ pub fn main() !void {
 
     std.debug.print("power_test: SIGINT becomes a pending restart action\n", .{});
 
+    // LP-M1. SIGUSR1(`sudo suspend`)은 sleep 요청이다 — 끄는 갈래와 같은 자리(take)로 온다.
+    _ = linux.kill(linux.getpid(), .USR1);
+    const got_usr1 = power.take() orelse {
+        std.debug.print("FAIL: SIGUSR1 was delivered but no action was recorded\n", .{});
+        return error.SignalNotObserved;
+    };
+    if (got_usr1 != .sleep) {
+        std.debug.print("FAIL: SIGUSR1 recorded {s}, want sleep\n", .{@tagName(got_usr1)});
+        return error.WrongAction;
+    }
+    std.debug.print("power_test: SIGUSR1 becomes a pending sleep action\n", .{});
+
     // 6. 시그널을 거치지 않고도 같은 자리에 요청이 선다.
     //
     //    전원 버튼이 쓰는 경로다(design 결정 9). 버튼을 보고 곧바로

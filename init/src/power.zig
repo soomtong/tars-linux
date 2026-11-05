@@ -16,6 +16,8 @@ fn failed(rc: usize) ?linux.E {
 pub const Action = enum(u8) {
     power_off = 1,
     restart = 2,
+    /// S3로 잔다(LP design 결정 3). 끄는 것이 아니라 `shutdown` 대신 `sleep`이 받는다.
+    sleep = 3,
 };
 
 /// 시그널 핸들러가 만질 수 있는 유일한 상태. 0은 "요청 없음"이다.
@@ -29,6 +31,7 @@ fn onSignal(sig: linux.SIG) callconv(.c) void {
     const action: Action = switch (sig) {
         .TERM => .power_off,
         .INT => .restart,
+        .USR1 => .sleep,
         else => return,
     };
     request(action);
@@ -75,7 +78,13 @@ pub fn install() void {
         });
         return;
     }
+    // power · device 체인이 위의 줄을 글자 그대로 grep한다. USR1(LP-M1, `sudo suspend`)은 따로 찍는다.
     logline.print("tars-init: signal handlers installed (TERM, INT)\n", .{});
+    if (failed(linux.sigaction(.USR1, &act, null))) |e| {
+        logline.print("tars-init: failed to install SIGUSR1 handler (errno {d})\n", .{@backingInt(e)});
+        return;
+    }
+    logline.print("tars-init: SIGUSR1 suspends\n", .{});
 }
 
 /// `fork`한 자식이 PID 1의 시그널 정책을 물려받지 않게 되돌린다.
@@ -105,6 +114,7 @@ pub fn resetToDefault() void {
     // 섞여서 읽는 사람을 헷갈리게 한다.
     _ = linux.sigaction(.TERM, &act, null);
     _ = linux.sigaction(.INT, &act, null);
+    _ = linux.sigaction(.USR1, &act, null);
 }
 
 /// 밀린 요청을 꺼내면서 지운다. 감독 루프가 매 바퀴 부른다.
@@ -269,6 +279,7 @@ pub fn shutdown(action: Action) noreturn {
     const cmd: linux.LINUX_REBOOT.CMD = switch (action) {
         .power_off => .POWER_OFF,
         .restart => .RESTART,
+        .sleep => unreachable, // main이 `sleep`으로 보낸다.
     };
     logline.print("tars-init: calling reboot({s})\n", .{@tagName(cmd)});
     _ = linux.reboot(.MAGIC1, .MAGIC2, cmd, null);
@@ -277,4 +288,54 @@ pub fn shutdown(action: Action) noreturn {
     // 곧 커널 패닉이므로 돌아가지 않고 여기서 쉰다.
     logline.print("tars-init: reboot syscall returned; PID 1 stays alive\n", .{});
     while (true) sleepMillis(1000);
+}
+
+/// S3로 자고, 깨어나면 돌아온다(LP design 결정 3). 뚜껑 닫힘과 `SIGUSR1`(`sudo suspend`)이 감독 루프의
+/// `take()`를 거쳐 여기로 온다 — 종료와 같은 한 자리다.
+///
+/// `/sys/power/state`에 `mem`을 쓰면 그 write가 기계가 깨어날 때까지 돌아오지 않는다. 그 사이 PID 1도 얼어
+/// 있으므로 감독 루프가 멈추는 것은 문제가 아니다. `mem`이 무엇을 뜻하는지는 `/sys/power/mem_sleep`이
+/// 정한다 — `deep`(S3)이 있으면 고르고, 없으면 커널의 기본(`s2idle`, 얕다 — design 위험 4)이다.
+///
+/// 시간은 BOOTTIME으로 잰다. MONOTONIC은 자는 동안 멈춰서 "얼마나 잤나"가 0에 가깝게 나온다.
+pub fn sleep() void {
+    // 자다가 배터리가 다 되면 그것이 곧 전원 끊김이다. 쓴 것을 먼저 디스크에.
+    linux.sync();
+    const mode = chooseDeep();
+    logline.print("tars-init: suspend ({s})\n", .{mode});
+    const started = bootMillis();
+    if (writeSys("/sys/power/state", "mem")) |e| {
+        logline.print("tars-init: suspend failed (errno {d})\n", .{@backingInt(e)});
+        return;
+    }
+    logline.print("tars-init: resumed after {d}ms\n", .{bootMillis() - started});
+}
+
+/// `/sys/power/mem_sleep`(예: `s2idle [deep]`)에 `deep`이 있으면 그것을 고르고 그 이름을 돌려준다.
+fn chooseDeep() []const u8 {
+    var buf: [64]u8 = undefined;
+    const rc = linux.open("/sys/power/mem_sleep", .{ .ACCMODE = .RDONLY }, 0);
+    if (failed(rc)) |_| return "no mem_sleep";
+    const fd: i32 = @intCast(rc);
+    const n = linux.read(fd, &buf, buf.len);
+    _ = linux.close(fd);
+    if (failed(n)) |_| return "no mem_sleep";
+    if (std.mem.indexOf(u8, buf[0..n], "deep") == null) return "s2idle";
+    if (writeSys("/sys/power/mem_sleep", "deep")) |_| return "s2idle";
+    return "deep";
+}
+
+fn writeSys(path: [*:0]const u8, value: []const u8) ?linux.E {
+    const rc = linux.open(path, .{ .ACCMODE = .WRONLY }, 0);
+    if (failed(rc)) |e| return e;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    const n = linux.write(fd, value.ptr, value.len);
+    return failed(n);
+}
+
+fn bootMillis() i64 {
+    var ts: linux.timespec = undefined;
+    if (failed(linux.clock_gettime(.BOOTTIME, &ts))) |_| return 0;
+    return @as(i64, ts.sec) * 1000 + @divTrunc(@as(i64, ts.nsec), 1_000_000);
 }
