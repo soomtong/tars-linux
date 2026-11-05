@@ -221,14 +221,16 @@ tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 커널·initrd·limine이 들어간다. p2는 256MiB ext2(`tars-config`)이고 설정이 산다.
 p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크가 4GiB보다 커야
 한다 — 작으면 `YES`를 묻기
-전에 거절한다. `done.`이 나오면 USB를 뽑고 전원 버튼을 누른다. 설치기는
-재부팅하지 않는다.
+전에 거절한다. `done.`이 나오면 USB를 뽑고 `reboot`를 친다(끄려면 `poweroff`). 설치기는
+스스로 재부팅하지 않는다. 비밀번호 칸은 글자마다 `*`를 찍는다(PW) — `tars-config wifi`의 passphrase,
+`passwd`, sudo의 칸도 같다.
 
 설치된 디스크로 뜨면 화면의 셸은 그 사용자(uid 1000)로 `/home/<이름>`에서 뜬다. rc 파일
 (`~/.bashrc` · `~/.zshrc` · `~/.config/fish/config.fish`)과 `~/.gitconfig` · `~/.vimrc`는 홈의
 진짜 파일이고 고치면 남는다. 시리얼 콘솔의 셸과 ssh는 root 그대로다. 사용자는 `/config`를
 읽을 수 있지만 쓰는 것은 `sudo`다. 설치 때 정한 비밀번호를 묻고, 한 번 맞으면 그 터미널에서
-15분 동안 다시 묻지 않는다.
+15분 동안 다시 묻지 않는다. 끄고 켜기도 `sudo`다 — `sudo reboot` · `sudo poweroff`(`shutdown -r` ·
+`shutdown -h`도 된다, RB). PID 1에 Ctrl+Alt+Del과 같은 시그널을 보낼 뿐이라 셸 히스토리 · sync는 PID 1이 한다.
 
 ```
 sudo tars-config set net=dhcp     # 사용자로 그냥 치면: permission denied; try: sudo tars-config set net=dhcp
@@ -570,16 +572,6 @@ terminal의 로그 `terminal: battery> scan seen=… present=… pick=…`도 �
 재부팅한다(`/config/bashrc` · `/config/zshrc` · `/config/fish.config`).
 지운 자리에 새 seed가 깔린다. 그 경로는 `config/check.sh`의 6·7차 부팅이
 매번 밟는다. 그때 그 파일에 직접 더해 둔 줄은 함께 사라진다.
-
-TC(2026-10-07) 전에 만든 설정 디스크의 rc에는 `alias tars-config='cat /config/tars.conf'`가 남아 있다. 그 셸에서는 별칭이
-`/usr/bin/tars-config`를 가려 `tars-config set …`이 `cat`으로 풀린다(`cat: set: No such file or directory`). `tars-config check`가
-그 줄을 문제로 알린다. 처방은 셋 중 하나이고 새 셸부터 듣는다.
-
-```sh
-sd 'alias tars-(config|rc)=.*' '' /config/fish.config /config/bashrc /config/zshrc   # 그 두 줄을 비운다
-command tars-config check                                                              # 별칭을 건너뛰고 한 번
-rm /config/zshrc && kill -INT 1                                                        # 또는 새 seed(그 파일에 더한 줄도 사라진다)
-```
 
 ### 셸 설정을 고쳤는데 셸이 안 뜨면
 

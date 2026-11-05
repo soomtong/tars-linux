@@ -8,8 +8,9 @@ REPO_ROOT="$(cd .. && pwd)"
 # PM 체인 — 전원 관리.
 #
 # 이 게이트가 증명하는 사슬 전체:
-#   sendkey k,i,l,l,... → 커널 atkbd → evdev → terminal/src/input.zig가
-#   바이트를 만든다 → pty write → bash가 kill 빌트인을 실행한다
+#   sendkey p,o,w,e,r,... → 커널 atkbd → evdev → terminal/src/input.zig가
+#   바이트를 만든다 → pty write → bash가 /usr/bin/poweroff를 실행한다(RB-M0 전에는
+#   kill -TERM 1을 쳤다 — 스크립트가 같은 kill을 한다)
 #   → 커널이 PID 1에게 SIGTERM을 배달한다(핸들러가 있을 때만!)
 #   → init/src/power.zig가 자식을 정리하고 reboot(2)를 부른다
 #   → 커널이 시스템을 멈춘다
@@ -108,8 +109,9 @@ report_failure() {
 # 것은 문자가 아니라 키이므로, 대문자는 shift-를 붙여야 한다.
 source ../gate_lib.sh
 
-# kill -TERM 1
-KILL_KEYS=(k i l l spc minus shift-t shift-e shift-r shift-m spc 1 ret)
+# poweroff — RB-M0부터. /usr/bin/poweroff가 PID 1에 SIGTERM을 보낸다(kill -TERM 1과 같은 시그널이라
+# 아래의 검사는 그대로다). 콘솔 셸은 root다(이 디스크에는 user=가 없다).
+POWEROFF_KEYS=(p o w e r o f f ret)
 
 qemu-system-x86_64 \
   -nic none \
@@ -159,8 +161,8 @@ for _ in $(seq 1 20); do
 done
 [ "$CONNECTED" = "1" ] || report_failure "could not connect to the QEMU monitor"
 
-echo "=== typing 'kill -TERM 1' into the guest ==="
-type_keys "${KILL_KEYS[@]}"
+echo "=== typing 'poweroff' into the guest ==="
+type_keys "${POWEROFF_KEYS[@]}"
 
 # 종료 순서가 도는 데 걸리는 시간은 유예 3초가 지배한다. 대화형 셸은
 # SIGTERM을 무시하므로(POSIX), 셸 둘은 그 3초가 지난 뒤 SIGKILL로 죽는다.
@@ -177,7 +179,7 @@ exec 3<&-
 exec 3>&-
 
 [ "$GONE" = "1" ] \
-  || report_failure "the machine never switched itself off after kill -TERM 1"
+  || report_failure "the machine never switched itself off after poweroff"
 
 # 여기서 거둬야 좀비가 남지 않고, EXIT trap의 cleanup이 이미 없는 PID를
 # 건드리지 않는다. 아래 검사들은 QEMU가 끝난 뒤의 완성된 로그를 읽는다.
@@ -266,7 +268,7 @@ echo "boot 1/2 PASS: the guest shut itself down from a shell command"
 # PM을 기존 체인에 얹지 않고 새 체인으로 만든 이유였다(design 결정 8).
 #
 # 디스크는 방금 부팅 1이 쓰던 것을 그대로 재사용한다. 부팅 1은 설정을 고치지
-# 않으므로(친 것은 kill -TERM 1 하나다) 여기 들어올 때 디스크는 여전히
+# 않으므로(친 것은 poweroff 하나다) 여기 들어올 때 디스크는 여전히
 # shell=bash이고, 그것이 이 부팅의 전제다. make_disk.sh를 다시 부르지 않는다.
 #
 # 이 부팅 하나가 증명하는 것:
@@ -310,7 +312,7 @@ report_failure_a() {
       echo "  MISSING ${marker}"
     fi
   done
-  echo "--- boots seen: $(count_boots) (want exactly 2) ---"
+  echo "--- boots seen: $(count_boots) (want 2 after ctrl-alt-delete, 3 after reboot) ---"
   echo "--- last 80 lines ---"
   tail -n 80 "$LOG_A"
   exit 1
@@ -432,6 +434,47 @@ if [ "${FINAL:-0}" -gt 2 ]; then
   report_failure_a "the guest booted ${FINAL} times; it is stuck in a reboot loop"
 fi
 
+# RB-M0. 둘째 부팅의 zsh(root)에 `reboot`를 친다. /usr/bin/reboot가 PID 1에 SIGINT를 보내면 Ctrl+Alt+Del과
+# 같은 종료 순서가 한 번 더 돌고 셋째 부팅이 온다. 셋째 부팅과 둘째 `action restart`가 그 증거다 —
+# Ctrl+Alt+Del의 것은 위에서 이미 하나다.
+REBOOT_KEYS=(r e b o o t ret)
+CONNECTED=0
+for _ in $(seq 1 20); do
+  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then CONNECTED=1; break; fi
+  sleep 0.5
+done
+[ "$CONNECTED" = "1" ] || report_failure_a "could not reconnect to the QEMU monitor for reboot"
+SCREEN_OK=0
+for _ in $(seq 1 60); do
+  slice_second_boot
+  if grep -q "terminal: screen>" "$SECOND"; then SCREEN_OK=1; break; fi
+  sleep 1
+done
+[ "$SCREEN_OK" = "1" ] || report_failure_a "the second boot never rendered a screen to type reboot into"
+sleep 1
+echo "=== typing 'reboot' into the second boot ==="
+type_keys "${REBOOT_KEYS[@]}"
+exec 3<&-
+exec 3>&-
+BOOTS=0
+for _ in $(seq 1 90); do
+  BOOTS="$(count_boots)"
+  if [ "${BOOTS:-0}" -ge 3 ]; then break; fi
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+[ "${BOOTS:-0}" -ge 3 ] || report_failure_a "the guest never came back up after typing reboot"
+for marker in "tars-init: shutdown requested (action restart)" "tars-init: calling reboot(RESTART)"; do
+  [ "$(grep -c "$marker" "$LOG_A")" = 2 ] \
+    || report_failure_a "want '${marker}' twice (ctrl-alt-delete, then reboot), got $(grep -c "$marker" "$LOG_A")"
+done
+sleep 3
+FINAL="$(count_boots)"
+if [ "${FINAL:-0}" -gt 3 ]; then
+  report_failure_a "the guest booted ${FINAL} times after reboot; it is stuck in a reboot loop"
+fi
+echo "RB: typing reboot went through PID 1 the same way as ctrl-alt-delete (boot 3)"
+
 # 음성 검사 — 부팅 1과 같은 이유다. PID 1이 죽어서 커널이 패닉해도 시스템은
 # 어차피 멈추고 QEMU는 -no-reboot 없이 다시 뜰 수 있다.
 if grep -q "Attempted to kill init" "$LOG_A"; then
@@ -442,7 +485,7 @@ kill "$QEMU_PID" 2>/dev/null
 wait "$QEMU_PID" 2>/dev/null
 QEMU_PID=""
 
-echo "boot 2/2 PASS: ctrl-alt-delete went through PID 1 and the new config took effect"
+echo "boot 2/2 PASS: ctrl-alt-delete went through PID 1, the new config took effect, and reboot did it again"
 
 echo "--- init log (boot 2) ---"
 grep 'tars-init:' "$LOG_A" || true

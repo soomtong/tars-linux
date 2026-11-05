@@ -1,0 +1,50 @@
+#!/bin/sh
+# /usr/bin/shutdown — /usr/bin/reboot · /usr/bin/poweroff는 이 파일을 가리키는 링크다(RB design 결정 1).
+#
+# 재부팅과 전원 끄기는 PID 1이 이미 한다. SIGINT면 재부팅, SIGTERM이면 전원 끄기이고(init/src/power.zig), 자식 정리 ·
+# sync · reboot(2)도 거기서 한다. 이 명령이 하는 일은 이름을 보고 시그널 하나를 보내는 것뿐이다.
+#
+# 인자 검사가 권한 검사보다 먼저다(RB 판정) — 틀린 명령에 `try: sudo`를 말하면 sudo로 다시 쳐도 틀린다. 모르는 인자를
+# 무시하지 않는 까닭은 `poweroff --help`가 기계를 끄면 안 되어서다(결정 3).
+name=${0##*/}
+given="$*"
+
+usage() {
+  case "$name" in
+    shutdown) echo "usage: shutdown [-r | -h | -P] [now]" >&2 ;;
+    *) echo "usage: $name (takes no arguments)" >&2 ;;
+  esac
+  exit 64
+}
+
+case "$name" in
+  reboot) sig=INT ;;
+  poweroff) sig=TERM ;;
+  *)
+    name=shutdown
+    sig=TERM
+    for a in "$@"; do
+      case "$a" in
+        -r) sig=INT ;;
+        -h | -P) sig=TERM ;;
+        now) ;;
+        *) usage ;;
+      esac
+    done
+    set --
+    ;;
+esac
+[ "$#" -eq 0 ] || usage
+
+if [ "$(id -u)" != 0 ]; then
+  # tars-config와 같은 말 · 같은 값(config_cli.denied, EXIT_DENIED).
+  echo "$name: permission denied; try: sudo $name${given:+ $given}" >&2
+  exit 77
+fi
+
+if [ "$sig" = INT ]; then
+  echo "$name: restarting"
+else
+  echo "$name: switching off"
+fi
+exec kill -s "$sig" 1

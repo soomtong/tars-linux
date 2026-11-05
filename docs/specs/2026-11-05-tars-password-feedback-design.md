@@ -2,7 +2,7 @@
 
 접두사: PW
 
-Status: 진행 중(2026-11-05) — PW-M0.
+Status: 닫힘(2026-11-05) — PW-M0 `secret.zig`(공용 helper) · 세 칸 · sudoers `pwfeedback`, home 체인의 `*` 열둘과 Backspace.
 
 사용자의 요청(2026-11-05): "wifi 패스워드 입력할 때 ****** 이런 표시 나오게". 배경은 MacBook Air 실기 — 아무것도 안 찍히는 칸에서
 Wi-Fi 비밀번호와 sudo 비밀번호를 헷갈렸다(`needRoot`로 순서는 HP 때 고쳤다).

@@ -523,6 +523,22 @@ for want in "hp-s8d /config/shadow root 600" "hp-s8d /etc/shadow root 600"; do
 done
 echo "8d: passwd refuses the user and two different values, takes hp-secret-2 now; both shadows stay root 600"
 
+# RB-M0. 사용자로 치면 기계는 안 꺼지고 77과 try: sudo — tars-config의 8c와 같은 꼴이다. 인자가 틀리면 권한보다
+# 먼저 64다(RB 판정). 이어지는 stop_guest가 기계가 살아 있다는 증거다.
+as_user 'reboot; echo "hp-rb-reboot-$?"; poweroff; echo "hp-rb-poweroff-$?"; shutdown -r now; echo "hp-rb-shutdown-$?"; shutdown +5; echo "hp-rb-usage-$?"'
+wait_log_re "hp-rb-usage-[0-9]+" 30 || fail "the power commands as the user never answered" "hp-rb-" "reboot:" "shutdown:"
+for want in "hp-rb-reboot-77" "hp-rb-poweroff-77" "hp-rb-shutdown-77" "hp-rb-usage-64" \
+  "reboot: permission denied; try: sudo reboot" \
+  "poweroff: permission denied; try: sudo poweroff" \
+  "shutdown: permission denied; try: sudo shutdown -r now" \
+  "usage: shutdown [-r | -h | -P] [now]"; do
+  grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-rb-" "reboot:" "poweroff:" "shutdown:"
+done
+if grep -aqF "tars-init: shutdown requested" "$LOG"; then
+  fail "a power command as the user reached PID 1" "tars-init: shutdown"
+fi
+echo "RB: reboot, poweroff and shutdown -r as the user say try: sudo and exit 77; shutdown +5 is a usage error"
+
 stop_guest
 
 # ── 부팅 3: NVMe + 남의 ext4 ────────────────────────────────────────────

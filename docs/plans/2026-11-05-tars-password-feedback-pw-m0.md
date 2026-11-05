@@ -23,4 +23,9 @@ Goal: PW design 결정 1~9. 비밀을 묻는 세 칸이 tty에서 글자마다 `
 
 ## 결과
 
-(게이트 뒤에 채운다)
+- 첫 판 빨강 하나: `make quick`의 ast-check가 secret_test의 `"*" ** 17`을 거절했다 — Zig 0.17에 배열 반복 연산자가 없다. comptime
+  `rep`로 바꿨다.
+- home · install 체인 PASS. home의 `PW:` 줄 — 로그에 `password [tars-linux]: ` 뒤 `*` 열둘과 `\b \b`, 그 뒤 8b가 `hp-secret-1`로 통했다
+  (Backspace가 버퍼에서도 뺐다). 8d(passwd의 파이프 길)와 install의 기본값 Enter 길은 그대로.
+- sudo의 칸에 `*`가 실제로 찍히는지는 게이트가 파이프(`-S`)로만 주므로 실기 몫이다.
+- 루트 게이트 29/29(RB-M0과 같은 판, `1c62755` + RB 작업 트리, 잘린 줄 0 — 시간은 로그를 게이트가 비운 탓에 못 남겼다).

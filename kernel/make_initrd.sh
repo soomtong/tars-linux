@@ -168,7 +168,7 @@ cp ../init/zig-out/bin/tars-service "$WORKDIR/usr/bin/tars-service"
 chmod 0755 "$WORKDIR/usr/bin/tars-service"
 
 # TC-M0: /config/tars.conf를 보고 고치는 명령. tars-service와 같은 까닭으로 정적이고
-# /usr/bin이다. 옛 seed rc의 alias tars-config가 이 이름을 가리던 자리다(TC design 결정 6).
+# /usr/bin이다.
 cp ../init/zig-out/bin/tars-config "$WORKDIR/usr/bin/tars-config"
 chmod 0755 "$WORKDIR/usr/bin/tars-config"
 
@@ -487,6 +487,13 @@ chmod 0755 "$WORKDIR/usr/lib/tars/tars-dbus" "$WORKDIR/usr/lib/tars/tars-bluetoo
 # 진짜는 guest_tools.sh가 /usr/libexec/bluetooth/에 둔다(2026-11-05 Air 실기).
 cp bluetooth/bluetoothctl "$WORKDIR/usr/bin/bluetoothctl"
 chmod 0755 "$WORKDIR/usr/bin/bluetoothctl"
+
+# RB-M0. reboot · poweroff · shutdown. 셸 스크립트 하나가 이름을 보고 PID 1에 SIGINT(재부팅) · SIGTERM(전원
+# 끄기)을 보낸다 — 종료 순서 자체는 PID 1의 일이다(RB design 결정 1). 링크는 상대 경로라 어디에 풀어도 맞다.
+cp power/shutdown "$WORKDIR/usr/bin/shutdown"
+chmod 0755 "$WORKDIR/usr/bin/shutdown"
+ln -sf shutdown "$WORKDIR/usr/bin/reboot"
+ln -sf shutdown "$WORKDIR/usr/bin/poweroff"
 
 # TQ-M1. 터미널이 자식의 질의에 답하는지 재는 프로브. 게이트가 이름으로 친다.
 #
