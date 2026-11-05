@@ -50,7 +50,7 @@ pub fn main() !void {
         }
         // 셸과 무관한 넷이 먼저다. TS-M3이 TZ를 XDG 뒤 · 히스토리 앞에, PM-M0이
         // LANG을 TZ 뒤에 넣었다 — "셸마다 갈리는 것"은 맨 뒤라는 규칙을 지키기 위해서다.
-        if (!entryIs(got, 2, "PATH=/usr/bin:/bin") or
+        if (!entryIs(got, 2, "PATH=/usr/local/bin:/usr/bin:/bin") or
             !entryIs(got, 3, "XDG_DATA_HOME=/config/xdg") or
             !entryIs(got, 4, "TZ=Asia/Seoul") or
             !entryIs(got, 5, "LANG=C.UTF-8"))
@@ -90,7 +90,7 @@ pub fn main() !void {
     {
         const kernel = kernelBlock(&.{});
         const got = environ.withTarsEnv(kernel, &buf, tz, config.Shell.fish.histEntries());
-        if (count(got) != 4 or !entryIs(got, 0, "PATH=/usr/bin:/bin")) {
+        if (count(got) != 4 or !entryIs(got, 0, "PATH=/usr/local/bin:/usr/bin:/bin")) {
             std.debug.print("FAIL: an empty kernel block did not yield exactly our four\n", .{});
             return error.EmptyBlockWrong;
         }
@@ -128,10 +128,11 @@ pub fn main() !void {
 
     // ── 5. PATH 값이 design 결정 1과 같다 ──────────────────────────────
     //
-    // 도구는 전부 /usr/bin에 있다. /bin은 UT-M0부터 sh 하나만 사는 자리였고
+    // initrd의 도구는 전부 /usr/bin에 있고 /usr/local/bin은 개발 도구 층의 자리다(TP design
+    // 결정 20 — 그쪽이 앞선다). /bin은 UT-M0부터 sh 하나만 사는 자리였고
     // PM-M0부터 usr/bin으로의 링크다. 이 문자열이 바뀌면 make_initrd.sh가
     // 넣는 자리와 어긋나고, 증상은 "어떤 명령도 안 찾아진다"다.
-    if (!std.mem.eql(u8, environ.PATH_ENTRY, "PATH=/usr/bin:/bin")) {
+    if (!std.mem.eql(u8, environ.PATH_ENTRY, "PATH=/usr/local/bin:/usr/bin:/bin")) {
         std.debug.print("FAIL: PATH_ENTRY is '{s}'\n", .{environ.PATH_ENTRY});
         return error.WrongPathValue;
     }

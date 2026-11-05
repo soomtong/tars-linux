@@ -159,7 +159,7 @@ chmod 0755 "$WORKDIR/init"
 # DI-M1: 설치기. init과 같은 zig build가 만들고 같은 이유로 정적이라
 # copy_lib_deps가 필요 없다. 부르는 도구 셋(sfdisk · mkfs.vfat · mke2fs)은
 # guest_tools.sh의 층 7이 싣는다. /usr/bin인 이유는 tq-probe와 같다 — 게스트의
-# PATH가 /usr/bin:/bin이다.
+# PATH가 /usr/local/bin:/usr/bin:/bin이다.
 cp ../init/zig-out/bin/tars-install "$WORKDIR/usr/bin/tars-install"
 chmod 0755 "$WORKDIR/usr/bin/tars-install"
 
@@ -502,7 +502,7 @@ ln -sf shutdown "$WORKDIR/usr/bin/suspend" # LP-M1. bash · zsh의 내장 `suspe
 # 여기밖에 없다. dhcpcd hook과 같은 자리이고, 다른 점은 이것을 게스트가
 # 직접 실행한다는 것이다(저쪽은 source된다). 그래서 0755다.
 #
-# /usr/bin에 두는 이유는 게스트의 PATH가 /usr/bin:/bin이라 거기서만 이름으로
+# /usr/bin에 두는 이유는 게스트의 PATH가 /usr/local/bin:/usr/bin:/bin이라 거기서만 이름으로
 # 닿기 때문이다(NW-M0 실측 3 — /usr/sbin/dhcpcd를 못 찾은 그 자리다).
 cp tq-probe.sh "$WORKDIR/usr/bin/tq-probe"
 chmod 0755 "$WORKDIR/usr/bin/tq-probe"
@@ -680,7 +680,7 @@ chmod 4755 "$WORKDIR/usr/bin/sudo"
 
 cat > "$WORKDIR/etc/sudoers" <<'EOF'
 # TARS sudoers (HP-M2). Baked into the image; edits do not survive a reboot.
-Defaults secure_path="/usr/bin:/bin"
+Defaults secure_path="/usr/local/bin:/usr/bin:/bin"
 Defaults lecture=never
 Defaults !syslog
 Defaults !fqdn

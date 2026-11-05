@@ -373,7 +373,7 @@ sleep 1
 #
 # 이 줄이 없으면 withPath가 자리 부족으로 폴백했거나 main.zig가 아직 옛
 # 포인터를 쓰고 있다. 아래 타이핑 검사가 실패하기 전에 원인을 가른다.
-if ! grep -aq "tars-init: env PATH=/usr/bin:/bin" "$LOG"; then
+if ! grep -aq "tars-init: env PATH=/usr/local/bin:/usr/bin:/bin" "$LOG"; then
   fail "init never reported building an environment block with PATH" \
     "tars-init: env" "tars-init: starting as PID 1"
 fi

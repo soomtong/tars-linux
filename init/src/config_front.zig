@@ -57,7 +57,7 @@ const SHADOW_ETC: [:0]const u8 = "/etc/shadow";
 const SHADOW_ETC_TEMP: [:0]const u8 = "/etc/.shadow.new";
 const FIREWALL_RULES: [:0]const u8 = "/etc/tars/firewall.nft";
 
-const ENVP = [_:null]?[*:0]const u8{"PATH=/usr/bin:/bin"};
+const ENVP = [_:null]?[*:0]const u8{"PATH=/usr/local/bin:/usr/bin:/bin"}; // environ.PATH_ENTRY와 같다(TP design 결정 20)
 
 const BUF = 16384;
 

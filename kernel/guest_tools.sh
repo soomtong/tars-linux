@@ -241,7 +241,7 @@ GUEST_TOOLS=(
   #
   # dhcpcd의 자리가 왼쪽과 오른쪽이 다른 넷째 자리다(mawk→awk · fdfind→fd ·
   # vim.basic→vim에 이어). 이유는 앞의 셋과 다르다 — 이름 충돌도 alternatives도
-  # 아니고 PATH다. environ.zig의 PATH_ENTRY가 /usr/bin:/bin이라
+  # 아니고 PATH다. environ.zig의 PATH_ENTRY가 /usr/local/bin:/usr/bin:/bin이라
   # /usr/sbin에 둔 것은 이름으로 안 불린다. NW-M0의 첫 회차가 여기서 통째로
   # 죽었다(`fish: Unknown command: dhcpcd`).
   #
@@ -270,7 +270,7 @@ GUEST_TOOLS=(
 
   # ── 층 7 · 디스크를 만드는 도구 3 ─────────────────────────────────────
   # DI-M0. tars-install이 fork+execve로 부르는 셋이다(DI design 결정 3).
-  # PATH가 /usr/bin:/bin이라(environ.zig) 셋 다 오른쪽을 /usr/bin에 둔다 —
+  # PATH가 /usr/local/bin:/usr/bin:/bin이라(environ.zig) 셋 다 오른쪽을 /usr/bin에 둔다 —
   # dhcpcd가 층 5에서 같은 이유로 자리를 옮겼다.
   #
   # mkfs.vfat은 sysroot에서 mkfs.fat을 가리키는 링크다. install_tool의 cp가
@@ -295,7 +295,7 @@ GUEST_TOOLS=(
 
   # ── 층 8 · 시계 2 ──────────────────────────────────────────────────────
   # TD-M1. init의 clock.zig가 fork한 자식이 /usr/bin/chronyd로 execve한다.
-  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/bin:/bin). 그 상수와
+  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/local/bin:/usr/bin:/bin). 그 상수와
   # 여기의 오른쪽이 어긋나면 증상이 `cannot exec /usr/bin/chronyd` 하나다.
   #
   # 새 라이브러리(TD-M0 실측 1. 푼 것 기준):
@@ -306,14 +306,14 @@ GUEST_TOOLS=(
 
   # ── 층 10 · 방화벽 ──────────────────────────────────────────────────────
   # FW-M1. init의 firewall.zig가 /usr/bin/nft로 execve한다. 오른쪽이 /usr/bin인
-  # 이유는 dhcpcd · chronyd와 같다(PATH가 /usr/bin:/bin). 사람도 셸에서
+  # 이유는 dhcpcd · chronyd와 같다(PATH가 /usr/local/bin:/usr/bin:/bin). 사람도 셸에서
   # `nft list ruleset`으로 지금 선 규칙을 본다.
   #
   # 새 라이브러리(FW-M0 실측 2): libnftables · libnftnl · libxtables · libjansson
   usr/sbin/nft:usr/bin/nft
 
   # ── 층 11 · sshd(SV-M2) ─────────────────────────────────────────────
-  # sshd는 dhcpcd처럼 /usr/sbin에 살아서 /usr/bin으로 옮긴다(PATH가 /usr/bin:/bin).
+  # sshd는 dhcpcd처럼 /usr/sbin에 살아서 /usr/bin으로 옮긴다(PATH가 /usr/local/bin:/usr/bin:/bin).
   # sshd-session · sshd-auth는 sshd에 컴파일된 경로(/usr/lib/openssh/) 그대로여야
   # 한다 — 옮기면 연결마다 exec가 실패한다(SV-M0 실측 1). 사람이 부르는 이름이
   # 아니지만 install_tool이 라이브러리까지 따라가 주므로 이 목록에 둔다.
@@ -324,7 +324,7 @@ GUEST_TOOLS=(
 
   # ── 층 12 · 무선(WL-M2) ─────────────────────────────────────────────
   # init이 감독하는 kernel/wifi/tars-wifi가 /usr/bin/wpa_supplicant를 exec한다.
-  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/bin:/bin). dhcpcd의 hook
+  # 오른쪽이 /usr/bin인 이유는 dhcpcd와 같다(PATH가 /usr/local/bin:/usr/bin:/bin). dhcpcd의 hook
   # 10-tars-wifi가 wpa_cli를 이름으로 부른다. 사람은 wpa_passphrase로 첫 설정
   # 파일을 만들고(WL design 결정 5) iw로 라디오와 규제 도메인을 본다.
   #
@@ -382,7 +382,7 @@ GUEST_TOOLS=(
   # (init/src/audio.zig, AU design 결정 4). 사람이 직접 칠 일은 드물다.
   #
   # dhcpcd · chronyd와 같은 이유로 왼쪽과 오른쪽이 다르다 — 패키지는 /usr/sbin에
-  # 두는데 게스트의 PATH는 /usr/bin:/bin이다. 오른쪽이 audio.zig의 ALSACTL_PATH와
+  # 두는데 게스트의 PATH는 /usr/local/bin:/usr/bin:/bin이다. 오른쪽이 audio.zig의 ALSACTL_PATH와
   # 같은 글자여야 한다. 130,584바이트, 새 라이브러리 0개(libasound는 위 넷이
   # 이미 데려왔다).
   usr/sbin/alsactl:usr/bin/alsactl

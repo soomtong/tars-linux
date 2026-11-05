@@ -1395,7 +1395,7 @@ const Boot = struct {
         // withTarsEnv가 자리 부족으로 폴백했으면 이 줄들이 안 나온다. 그 침묵이
         // 곧 판정이다.
         //
-        // `tools/check.sh:233`이 `tars-init: env PATH=/usr/bin:/bin`을 그대로
+        // tools/check.sh가 `tars-init: env PATH=/usr/local/bin:/usr/bin:/bin`을 그대로
         // grep한다 — 그래서 PATH가 이 줄의 맨 앞에 남아 있어야 한다.
         if (self.envp != self.kernel_env) {
             logline.print("tars-init: env {s} {s} {s} {s}\n", .{

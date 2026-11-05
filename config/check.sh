@@ -1760,7 +1760,7 @@ echo "boot 1: /dev/fd is linked, so process substitution works in the shells we 
 # XDG_DATA_HOME 아래로 통째로 따라오므로(실측 11·40) HISTFILE이 한 줄도
 # 안 나와야 한다 — 그 침묵이 결정 3의 절반이고, 값이 폴백 뒤의 셸을
 # 따른다는 증거이기도 하다.
-if ! grep -q "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg" "$LOG1"; then
+if ! grep -q "tars-init: env PATH=/usr/local/bin:/usr/bin:/bin XDG_DATA_HOME=/config/xdg" "$LOG1"; then
   report_failure "$LOG1" "first boot did not put XDG_DATA_HOME in the env block"
 fi
 if grep -q "tars-init: env HISTFILE" "$LOG1"; then

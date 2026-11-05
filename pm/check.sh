@@ -252,7 +252,7 @@ wait_log_re "pm-p2-git=[0-9a-f]{40}" 60 || fail "git cannot read https://github.
 send "sh -c '. /etc/os-release; echo pm-p2-os=\$PRETTY_NAME'"
 wait_log_re "pm-p2-os=TARS [0-9]" 10 || fail "/etc/os-release does not name TARS" "pm-p2-os"
 # 두 줄이 모두 있어야 한다. `|| ! grep -q`로 쓰면 check.sh의 진입 검사가 `| grep -q`(SIGPIPE)로 읽는다.
-if ! { grep -aqF "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=" "$LOG" &&
+if ! { grep -aqF "tars-init: env PATH=/usr/local/bin:/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=" "$LOG" &&
        grep -aqE "tars-init: env .* LANG=C\.UTF-8" "$LOG"; }; then
   fail "init did not put LANG=C.UTF-8 in the env block" "tars-init: env"
 fi

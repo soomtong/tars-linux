@@ -1208,7 +1208,7 @@ echo "the guest shows ${STUB_YEAR} — the render survived the jump too"
 # 24가 빨강이면 원인이 우리 코드 밖(zoneinfo 파일 · glibc)이고, 이것부터
 # 빨강이면 resolveTimezone이 UTC로 떨어진 것이다 — 그때 로그에
 # `tars-init: timezone ... has no zoneinfo file` 한 줄이 있다.
-if ! grep -a "tars-init: env PATH=/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=${TZ_NAME}" "$LOGA" >/dev/null; then
+if ! grep -a "tars-init: env PATH=/usr/local/bin:/usr/bin:/bin XDG_DATA_HOME=/config/xdg TZ=${TZ_NAME}" "$LOGA" >/dev/null; then
   fail "init did not put TZ=${TZ_NAME} in the env block" \
     "tars-init: env" "tars-init: timezone"
 fi

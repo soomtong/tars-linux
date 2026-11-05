@@ -18,12 +18,17 @@
 
 const std = @import("std");
 
-/// 게스트의 PATH. 도구는 전부 /usr/bin에 있다. UT-M0부터 /bin에는 sh 하나만
+/// 게스트의 PATH. initrd의 도구는 전부 /usr/bin에 있다. UT-M0부터 /bin에는 sh 하나만
 /// 살았고(design 결정 6), PM-M0부터 /bin은 usr/bin으로의 링크다(usrmerge) — 그래도
 /// 두 자리를 다 적는 것은 Debian과 같은 모양이고 해가 없다. 이 문자열과
 /// kernel/make_initrd.sh가 넣는 자리가 어긋나면 증상은 "어떤 명령도 안
 /// 찾아진다"이고 원인에서 멀다.
-pub const PATH_ENTRY: [:0]const u8 = "PATH=/usr/bin:/bin";
+///
+/// /usr/local/bin이 맨 앞이다(TP design 결정 20, 사용자 2026-11-05). 개발 도구 층이
+/// 그 자리에 최신판의 링크를 두고, initrd의 trixie 판(/usr/bin)보다 앞선다. 개발 도구
+/// 층이 없는 부팅(라이브 USB)에서는 없는 디렉터리라 셸이 건너뛴다. 짝이 둘이다 —
+/// config_front.zig의 ENVP, make_initrd.sh의 sudoers secure_path.
+pub const PATH_ENTRY: [:0]const u8 = "PATH=/usr/local/bin:/usr/bin:/bin";
 
 /// `XDG_DATA_HOME`이 가리키는 자리(SM design 결정 2). 이 한 경로가 둘을
 /// 옮긴다 — `zoxide`의 `db.zo`와 fish의 `fish_history`(실측 3·11·38·40).

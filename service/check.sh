@@ -244,7 +244,7 @@ RC="$(sed -E 's/.* stdin-rc=([0-9]+)$/\1/' <<<"$LINKED")"
 echo "d-link ran through its link, leads its own session and reads EOF on stdin"
 
 # ── 검사 7: 서비스가 init의 env를 받고 바깥에서 닿는다 ─────────────────────
-# PATH가 init의 것(/usr/bin:/bin)이면 envp가 서비스까지 왔다.
+# PATH가 init의 것(/usr/local/bin:/usr/bin:/bin)이면 envp가 서비스까지 왔다.
 wait_for_log "eth0: leased 10\.0\.2\.15 " 60 \
   || fail "dhcpcd never leased an address" ": leased" "dhcpcd"
 GOT=""
@@ -257,7 +257,7 @@ for _ in $(seq 1 20); do
   [ -n "$GOT" ] && break
   sleep 0.5
 done
-[ "$GOT" = "sv-greet /config/services.d/a-greet /usr/bin:/bin" ] \
+[ "$GOT" = "sv-greet /config/services.d/a-greet /usr/local/bin:/usr/bin:/bin" ] \
   || fail "a-greet did not answer as expected (got: [${GOT}])" "a-greet"
 echo "a-greet answered from outside with init's PATH"
 
@@ -392,7 +392,7 @@ echo "the host key survived the reboot and is what the client sees"
 # ── 검사 13: 등록한 키로 로그인되고 세션이 콘솔과 같다 ──────────────────────
 GOT="$(ssh "${SSHO[@]}" -i "$KEYS/good" root@127.0.0.1 \
   'printf "sv-ssh %s|%s|%s|%s\n" "$0" "$SHELL" "$PATH" "$HISTFILE"' 2>/dev/null)"
-[ "$GOT" = "sv-ssh zsh|/usr/bin/zsh|/usr/bin:/bin|/config/zsh_history" ] \
+[ "$GOT" = "sv-ssh zsh|/usr/bin/zsh|/usr/local/bin:/usr/bin:/bin|/config/zsh_history" ] \
   || fail "the ssh session does not match the console (got: [${GOT}])" "sshd" "Accepted"
 echo "a registered key logged in to zsh with init's PATH and history"
 
