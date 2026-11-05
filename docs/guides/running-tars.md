@@ -795,8 +795,10 @@ wlan0: leased 192.168.0.23 for 86400 seconds
 - 켜 둔 칩: Intel(AX200 · AX201 · AX210 · AX211 · BE200 등 iwlwifi) · Realtek(rtw88의
   8822BE · 8822CE · 8723DE · 8821CE, rtw89의 8851BE · 8852AE · 8852BE · 8852BTE · 8852CE ·
   8922AE) · MediaTek(MT7921 · MT7922 · MT7925) · Qualcomm(QCA6390 · WCN6855 · WCN7850).
-  USB 무선 동글과 Broadcom은 없다. Intel BE201은 커널 6.18이 받는 번호의 firmware가
-  없어 안 뜬다.
+  Broadcom은 MacBook Air 2011의 BCM43224 하나(`brcmsmac`, BW-M0)뿐이다 — Pro 2013의 BCM4331 · BCM4360은
+  안 된다. USB 무선 동글은 없다. Intel BE201은 커널 6.18이 받는 번호의 firmware가 없어 안 뜬다.
+- 무선은 `net=dhcp`일 때만 붙는다(기본값은 `net=off`). 설치된 시스템의 사용자는 셋 다 `sudo`로 친다 —
+  `sudo tars-config set net=dhcp ntp=dhcp` · `sudo tars-config wifi '<SSID>' --country KR` · `sudo tars-config reload`.
 
 ### 블루투스 — 키보드 · 마우스까지, 오디오는 없다
 
