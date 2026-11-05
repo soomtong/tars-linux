@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 # 게스트에 들어가는 유저랜드 바이너리 목록 — 이것이 사는 유일한 자리다.
+# 무엇을 여기(initrd)에 넣고 무엇을 개발 도구 층에 두는가: docs/guides/initrd-criteria.md.
 #
 # UT-M1 결정 7. 예전에는 바이너리 하나마다 세 줄(`cp` · `chmod` ·
 # `copy_lib_deps`)을 make_initrd.sh에 손으로 썼다. 여덟 개일 때는 읽혔지만
@@ -458,4 +459,14 @@ GUEST_TOOLS=(
   usr/bin/flock:usr/bin/flock
   usr/bin/sha256sum:usr/bin/sha256sum
   usr/bin/locale:usr/bin/locale
+
+  # ── 층 20 · 공식 바이너리(TP, 2026-11-05) ─────────────────────────────
+  # Debian .deb가 아닌 첫 둘이다. Dockerfile 층 20이 sha256으로 고정해 sysroot의 usr/local/upstream에 받는다.
+  # 고른 근거는 docs/guides/initrd-criteria.md의 기준 B(층 없이 망을 진단) — initrd에 같은 일을 하는 도구가 없다.
+  # 둘 다 정적 링크라 copy_lib_deps가 데려올 라이브러리가 없다. tools/check.sh 검사 10b가 게스트에서 친다.
+  #
+  #   lsoff   듣는 TCP/UDP 포트 목록(ss · netstat · lsof가 없다)
+  #   doge    DNS 질의(dig · nslookup · host가 없다)
+  usr/local/upstream/bin/lsoff:usr/bin/lsoff
+  usr/local/upstream/bin/doge:usr/bin/doge
 )

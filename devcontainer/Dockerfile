@@ -571,6 +571,31 @@ RUN curl -sSL -o /tmp/zig.tar.xz \
     && tar -xJf /tmp/zig.tar.xz -C /usr/local/zig --strip-components=1 \
     && rm /tmp/zig.tar.xz
 
+# 층 20 · 공식 바이너리(TP, 2026-11-05). initrd에 Debian이 아닌 바이너리가 처음 들어온다 — 사용자가 "커널과 그 바닥은
+# 보안 · 안정성 때문에 Debian에 기대되, 개별 유틸리티는 Debian에 기대지 않아도 된다"고 정했고, 그래서 UT design
+# 결정 3(조달은 Debian .deb 하나)은 취소됐다. 고르는 기준은 docs/guides/initrd-criteria.md(기준 B — 개발 도구 층 없이 망을 진단).
+#
+#   lsoff   yutat23/lsoff. 듣는 TCP/UDP 포트 목록. initrd에 ss · netstat · lsof가 없다. Go 정적 바이너리, 7.2MB
+#   doge    Dj-Codeman/doge(dog의 이어받은 판). DNS 질의. initrd에 dig · nslookup · host가 없다. musl static-pie, 7.1MB
+#
+# 둘 다 NEEDED가 없다 — make_initrd.sh의 copy_lib_deps가 따라갈 것이 없다. strip하지 않는다: 받은 바이트가 sha256 그대로
+# 들어가야 무엇이 들어갔는지 이 줄로 말할 수 있다(doge는 strip하면 6.4MB, lsoff는 이미 벗겨져 있다). 버전을 올릴 때 URL과
+# sha256을 함께 고친다. amd64 sysroot 안의 usr/local/upstream은 Debian 패키지가 쓰지 않는 자리라 dpkg -x와 겹치지 않는다.
+ARG LSOFF_URL=https://github.com/yutat23/lsoff/releases/download/v0.1.5/lsoff-linux-amd64
+ARG LSOFF_SHA256=f1fc6300703fdd08be355b9fc957ed6867827678abe6ebec9746be612cdb1e14
+ARG DOGE_URL=https://github.com/Dj-Codeman/dog_community/releases/download/v0.2.9/doge-v0.2.9-x86_64-unknown-linux-musl.zip
+ARG DOGE_SHA256=8ab388cf908c4be31d8f85bfa598d46e8a279103d0fc0ea029edab7712cd8fc1
+
+RUN mkdir -p /tmp/upstream "$AMD64_SYSROOT/usr/local/upstream/bin" \
+    && curl -fsSL --retry 4 --retry-all-errors -o /tmp/upstream/lsoff "$LSOFF_URL" \
+    && echo "${LSOFF_SHA256}  /tmp/upstream/lsoff" | sha256sum -c - \
+    && install -m 0755 /tmp/upstream/lsoff "$AMD64_SYSROOT/usr/local/upstream/bin/lsoff" \
+    && curl -fsSL --retry 4 --retry-all-errors -o /tmp/upstream/doge.zip "$DOGE_URL" \
+    && echo "${DOGE_SHA256}  /tmp/upstream/doge.zip" | sha256sum -c - \
+    && unzip -q /tmp/upstream/doge.zip -d /tmp/upstream/doge \
+    && install -m 0755 /tmp/upstream/doge/doge-v0.2.9-x86_64-unknown-linux-musl "$AMD64_SYSROOT/usr/local/upstream/bin/doge" \
+    && rm -rf /tmp/upstream
+
 WORKDIR /workspace
 
 # ghcr.io 패키지를 이 저장소에 연결한다(GI design 확인 6 — 저장소 페이지에 보이고 Actions 토큰이 올릴 수

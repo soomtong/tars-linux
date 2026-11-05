@@ -586,6 +586,25 @@ if ! wait_for_screen "jq-[0-9]"; then
 fi
 echo "jq loaded libjq and libonig"
 
+# ── 검사 10b: 공식 바이너리 둘이 돈다 — doge · lsoff (TP) ─────────────────
+#
+# initrd에 처음 들어온 Debian 아닌 바이너리다(guest_tools.sh 층 20). 둘 다 정적
+# 링크라 jq처럼 로더를 볼 것은 없다. 보는 것은 다른 배포판 밖에서 지어진
+# 바이너리가 TARS 커널 위에서 exec되고 글자를 찍는가다 — 이것이 UT design 결정
+# 3을 취소한 근거다(2026-11-05, 루트 게이트 30/30). 둘 다 망 없이 끝나는 명령을 친다. 정규식은 바이너리가
+# 찍는 설명 글자이고, 타이핑한 명령줄(`doge --version`)과 겹치지 않는다.
+echo "=== typing 'doge --version' ==="
+type_keys d o g e spc minus minus v e r s i o n ret
+if ! wait_for_screen "command-line DNS client"; then
+  fail "doge did not print its version" "terminal: screen>" "doge"
+fi
+echo "=== typing 'lsoff --help' ==="
+type_keys l s o f f spc minus minus h e l p ret
+if ! wait_for_screen "list listening TCP/UDP ports"; then
+  fail "lsoff did not print its usage" "terminal: screen>" "lsoff"
+fi
+echo "doge and lsoff, the first upstream binaries in the initrd, ran"
+
 # bat은 일부러 안 친다. 매달리지는 않지만(-P로 페이저를 끌 수 있다)
 # 화면에 내는 글자가 문제다 — /etc/passwd도 /etc/group도 검사 6·7이 이미
 # 본 글자이고, 헤더의 `File: ` 문자열은 바이너리 안에서 확인되지 않았다

@@ -357,6 +357,9 @@ for Linux로 관리된다. 지금은 건너뛴다"고 정했다. 이 방향이 U
 
 ### 결정 3 — 조달은 Debian `.deb` 하나로 통일한다. `libgit2` 11.4MB를 감수한다
 
+> 취소됨(2026-11-05, TP, 사용자 확정). 사용자가 "개별 유틸리티는 Debian에 기대지 않아도 된다"고 정했고, 공식 바이너리 둘
+> (lsoff · doge)이 initrd에 들어와 루트 게이트 30/30으로 돌았다. 커널과 그 바닥(glibc · 공용 라이브러리)은 그대로 Debian이다. 기준과 출처는 `docs/guides/initrd-criteria.md`.
+
 사용자가 골랐다. `eza`·`bat`을 upstream musl 정적 빌드로 받으면 의존이 0이
 되어 11.4MB가 통째로 사라지지만(`eza` 1.3MB · `bat` 3.4MB 압축), 조달 경로가
 둘로 갈린다.
