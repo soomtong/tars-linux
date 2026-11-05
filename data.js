@@ -5,12 +5,12 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-05',
-  latest: 'Dual Boot (DB-M0)',
+  latest: 'Broadcom Wireless (BW-M0)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1157,      // git rev-list --count main
+    commits: 1160,      // git rev-list --count main
     since: '2026-08-01',
     chains: 29,         // check.sh의 CHAINS
     zigKLines: 42,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -115,6 +115,7 @@ window.TARS = {
     ['2026-11-04', 'Pointer Settings', 'PS', '마우스와 터치패드의 휠 방향과 포인터 가속(0~10)을 `tars.conf`에서 종류마다 따로 고른다 — 함께 붙어 있어도 각자 자기 값'],
     ['2026-11-05', 'MacBook Hardware', 'MB', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 내장 트랙패드(bcm5974)와 SBS 배터리 — 그 전에는 트랙패드가 아예 안 움직였다'],
     ['2026-11-05', 'HiDPI Scale', 'HS', 'Retina 화면에서 글자를 정수배로 키운다 — 논리 화면에 그리고 바뀐 사각형만 늘려 옮긴다, `display_scale`'],
+    ['2026-11-05', 'Broadcom Wireless', 'BW', 'MacBook Air 2011의 내장 무선(BCM43224)을 `brcmsmac`으로 — 같은 시기 MacBook Pro의 둘은 열린 길이 없다'],
     ['2026-11-05', 'Dual Boot', 'DB', '`tars-install --beside`가 macOS 파티션을 한 바이트도 안 건드리고 빈 공간에 TARS를 깐다 — 맥은 Option 키로 고른다'],
   ],
 
@@ -131,8 +132,8 @@ window.TARS = {
       'de72b22e63d942f3bcde81f8c1ab63b3ff1ea211d64d19bdd667fd21009e2a8d'],
     ['2026-11-01', '0.1.3', '마우스 선택 — 더블 · 트리플클릭, 남는 선택과 [Shift]+클릭 늘리기, USB 무선 동글 여섯', 'tars-0.1.3-x86_64.iso',
       'b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7'],
-    ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
-      'b0e9d944d3637f2b5ca7abfe43c6776d69719c639b2d5b82ef64b4aeee97811c'],
+    ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Air 내장 무선 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
+      '55bc31034005621883208641299770751eb871549cb13fba22a37651b1af514c'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -156,7 +157,7 @@ window.TARS = {
         ['터치패드 · 마우스 커널', 'PS/2(Synaptics · Elantech · ALPS 등) · SMBus · I2C-HID · Intel THC · HID multitouch', '2026-10-05'],
         ['오디오 커널', 'HDA 코덱 여덟 · Intel SOF(CNL~PTL) · AMD ACP · USB Audio, firmware 42개', '2026-10-06'],
         ['부트 메뉴 — new · old', '설치된 디스크로 뜨면 Limine 메뉴가 3초. 기본은 새 이미지, 이상하면 화살표로 `(old)`를 골라 갱신 전 이미지로 뜬다', '2026-11-01'],
-        ['MacBook 내장 장치', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 트랙패드(bcm5974, 두 손가락 스크롤 · 탭) · 내장 키보드 · Cirrus 스피커 · SBS 배터리. 무선(Broadcom) · Fn 조합 · 밝기는 아직 없다', '2026-11-05'],
+        ['MacBook 내장 장치', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 트랙패드(bcm5974, 두 손가락 스크롤 · 탭) · 내장 키보드 · Cirrus 스피커 · SBS 배터리 · Air의 내장 무선(BCM43224) · 내장 Bluetooth. Pro 2013의 내장 무선 · Fn 조합 · 밝기는 아직 없다', '2026-11-05'],
         ['HiDPI 배율', 'Retina처럼 큰 화면은 논리 화면(예: 2880×1800 → 1440×900)에 그리고 정수배로 늘려 보인다. 비트맵 폰트라 2배도 선명하다', '2026-11-05'],
         ['커널 6.18.60', '6.18 longterm의 최신 패치(6.18.42에서)', '2026-11-01'],
       ],
