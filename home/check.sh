@@ -267,7 +267,11 @@ if grep -aqF "$HP_PASSWORD" "$LOG"; then
   fail "the typed password shows up in the serial log" "$HP_PASSWORD"
 fi
 # PW-M0. 열두 글자(hp-secret-1X)에 `*` 열둘, Backspace에 `\b \b` 하나.
-grep -aqF "password [tars-linux]: ************"$'\b \b' "$LOG" \
+# init의 줄은 같은 UART에 쓴다 — TP-M2 루트 게이트에서 5초 뒤의 `tars-init: audio: no sound card …` 한 줄이 프롬프트와 별표
+# 사이에 끼어 빨갰다(lessons의 TC-M3 덧붙임과 같은 모양). 끼어든 tars-init 온줄을 떼고 본다. 접두사는 그 하나로 좁다.
+# 파일로 받는다 — `perl | grep -q`는 grep이 먼저 닫을 때 SIGPIPE가 pipefail로 올라온다.
+perl -0pe 's/tars-init: [^\n]*\n//g' "$LOG" >"${LOG}.noinit"
+grep -aqF "password [tars-linux]: ************"$'\b \b' "${LOG}.noinit" \
   || fail "the password prompt did not show a star per character and erase one on backspace" "password [tars-linux]"
 echo "tars-install asked three questions, refused root, made hpuser; the password never reached the log"
 echo "PW: the password prompt showed 12 stars and took one back on backspace"

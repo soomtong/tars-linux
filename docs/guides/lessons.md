@@ -357,6 +357,10 @@ AU-M2 루트 게이트에서 `pointer` 체인 부팅 B의 `seq 200`이 그렇게
 `require_screen_dump_joins`가 잘린 조각 넷(안 잘림 · printk · init · init 조각과 온전한 tars-init 줄)을 QEMU 없이 0.1초에 보므로, 다른
 쓰기(dhcpcd `[pid]:` · sshd · 서비스)의 접두사를 더할 때 그 함수에 조각 하나를 함께 더한다.
 
+덧붙임(TP-M2, 2026-11-06). 화면 dump가 아니라 시리얼의 대화형 칸에서도 같다 — 루트 게이트의 HP-M2가 `password [tars-linux]: `와 별표
+열둘 사이에 끼어든 `tars-init: audio: no sound card …` 한 줄 때문에 빨갰다(칸은 맞게 동작했다). `home/check.sh`가 이제 `tars-init: ` 온줄을
+떼고 본다. 시리얼 로그에서 한 덩어리의 글자(프롬프트 + 입력의 메아리)를 `grep -F`로 찾는 검사는 같은 처방이 필요하다.
+
 덧붙임(GF-M2, 2026-10-24). 자르는 것은 `screen>` 줄만이 아니다. GF-M1 루트 게이트의 pointer가 `terminal: pointer> at … ink=118[   12.315317]
 random: crng init done`으로 빨갰고(`wait_for_at`의 `ink=118$`), 같은 판의 로그 57개에서 terminal 줄 안에 커널 시각 표식이 든 체인이
 여섯이었다(style> · pixel> · scroll> · pointer>). `gate_lib.sh`의 `tlog`가 이제 모든 `terminal:` · `kms:` 줄을 같은 규칙으로 잇고(뗀 커널
