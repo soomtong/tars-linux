@@ -26,7 +26,9 @@ mkdir -p "${build}" "${cache}"
 
 die() { echo "build> ${bundle}: $*" >&2; exit 1; }
 
-lines="$(awk -F'\t' -v b="${bundle}" '!/^#/ && NF >= 6 && $2 == b' devlayer/manifest.tsv)"
+# shellcheck source=devlayer/manifest.sh
+source devlayer/manifest.sh
+lines="$(manifest_lines "${bundle}")" || die "${DEVLAYER_MANIFEST} has errors (above)"
 [[ -n "${lines}" ]] || die "no manifest lines"
 [[ -f "${initrd}" ]] || die "${initrd} is missing — run make initrd first"
 
@@ -63,7 +65,7 @@ harvest_lines=""
 info="${root}/usr/share/tars/layers/${bundle}.pkgs"
 : >"${info}"
 
-while IFS=$'\t' read -r tool _b version kind url sha; do
+while IFS=$'\t' read -r tool _b version kind url sha opts; do
   case "${kind}" in
     debian)
       # libc6-dev는 initrd의 glibc와 같은 판이어야 한다(plan 결정 B). 헤더 · crt가 다른 판이면 빌드가 되어도 링크된
@@ -86,24 +88,50 @@ while IFS=$'\t' read -r tool _b version kind url sha; do
       got="$(sha256sum "${f}" | cut -c1-64)"
       [[ "${got}" == "${sha}" ]] || die "${tool}: cached ${f} has sha256 ${got}, manifest says ${sha}"
       # 결정 2: /usr/local/lib/<도구>-<버전>/에 그대로, /usr/local/bin/에 실행 파일 링크. tarball의 맨 위 디렉터리
-      # 하나(jdk-25.0.5+8/)는 벗긴다.
-      dest="usr/local/lib/${tool}-${version}"
+      # 하나(jdk-25.0.5+8/)는 벗긴다. into=T면 자리가 T-<버전>이다 — 그 줄이 앞에서 이미 만들었어야 한다(TP-M2 결정 C).
+      into="$(manifest_opt "${opts}" into)"
+      hook="$(manifest_opt "${opts}" hook)"
+      exes="$(manifest_opt "${opts}" exe)"
+      dir="${into:-${tool}}-${version}"
+      dest="usr/local/lib/${dir}"
+      if [[ -n "${into}" ]]; then
+        [[ -d "${root}/${dest}" ]] || die "${tool}: into=${into} but there is no /${dest} yet (put this line after ${into})"
+      fi
       mkdir -p "${root}/${dest}" "${root}/usr/local/bin"
-      # 목록은 파일로 받는다 — `tar -tf | head -n1`은 head가 닫을 때 tar가 SIGPIPE(141)로 죽고 pipefail이 set -e로
-      # 이 스크립트를 말없이 끝낸다(첫 판이 그랬다).
-      tar -tf "${f}" >"${work}/tar.list"
-      top="$(sed -n '1{s#/.*##;p;q}' "${work}/tar.list")"
-      grep -qv "^${top}/" "${work}/tar.list" && die "${tool}: tarball has more than one top directory"
-      [[ -n "${top}" ]] || die "${tool}: empty tarball"
-      tar -xf "${f}" -C "${root}/${dest}" --strip-components=1 --no-same-owner
-      for exe in "${root}/${dest}/bin/"*; do
-        [[ -f "${exe}" && -x "${exe}" ]] || continue
-        name="$(basename "${exe}")"
+      if [[ -n "${hook}" ]]; then
+        [[ -x "devlayer/hooks/${hook}.sh" ]] || die "${tool}: no devlayer/hooks/${hook}.sh"
+        "devlayer/hooks/${hook}.sh" "${f}" "${root}" "${dest}" </dev/null | sed "s/^/build> ${bundle}: ${tool}: /"
+      else
+        # 목록은 파일로 받는다 — `tar -tf | head -n1`은 head가 닫을 때 tar가 SIGPIPE(141)로 죽고 pipefail이 set -e로
+        # 이 스크립트를 말없이 끝낸다(첫 판이 그랬다).
+        tar -tf "${f}" >"${work}/tar.list"
+        top="$(sed -n '1{s#/.*##;p;q}' "${work}/tar.list")"
+        grep -qv "^${top}/" "${work}/tar.list" && die "${tool}: tarball has more than one top directory"
+        [[ -n "${top}" ]] || die "${tool}: empty tarball"
+        tar -xf "${f}" -C "${root}/${dest}" --strip-components=1 --no-same-owner
+      fi
+      # 링크할 것: exe=가 있으면 그 목록, 없으면 bin/의 실행 파일 전부. into 줄은 exe=가 없으면 링크하지 않는다 —
+      # 그 bin/은 앞 줄이 이미 링크했다.
+      if [[ -n "${exes}" ]]; then
+        IFS=, read -r -a want <<<"${exes}"
+        for rel in "${want[@]}"; do
+          [[ -f "${root}/${dest}/${rel}" && -x "${root}/${dest}/${rel}" ]] || die "${tool}: exe=${rel} is not an executable in /${dest}"
+        done
+      elif [[ -z "${into}" ]]; then
+        want=()
+        for exe in "${root}/${dest}/bin/"*; do
+          [[ -f "${exe}" && -x "${exe}" ]] && want+=("bin/$(basename "${exe}")")
+        done
+      else
+        want=()
+      fi
+      for rel in "${want[@]}"; do
+        name="$(basename "${rel}")"
         link="${root}/usr/local/bin/${name}"
         exists=0
         [[ -e "${link}" || -L "${link}" ]] && exists=1
         ((exists == 0)) || die "${tool}: /usr/local/bin/${name} is taken"
-        ln -s "../lib/${tool}-${version}/bin/${name}" "${link}"
+        ln -s "../lib/${dir}/${rel}" "${link}"
       done
       printf '%s\t%s\tupstream\t%s\n' "${tool}" "${version}" "${url}" >>"${info}"
       ;;
@@ -131,11 +159,38 @@ devlayer/verify.sh "${root}" "${ir}" devlayer/needed-ignore.tsv | sed "s/^verify
 files="$(find "${root}" -type f | wc -l)"
 bytes="$(du -sb "${root}" | cut -f1)"
 
+# ── 묶음끼리의 대조(TP-M2 plan 결정 E) ──────────────────────────────────
+# verify.sh는 initrd와만 대조한다. 묶음이 여럿이면 둘이 같은 경로에 다른 내용을 둘 수 있고, overlay는 lowerdir 앞의 것을
+# 말없이 보인다. 경로마다 내용(파일은 sha256, 링크는 대상)을 적어 두고, 매니페스트의 다른 묶음이 남긴 목록과 맞춘다.
+# 먼저 구운 쪽은 나중 쪽이 대조하므로 한 방향이면 덮인다. 같은 내용은 센다(shared) — overlay가 하나만 보일 뿐 틀리지 않다.
+(
+  cd "${root}"
+  {
+    find . -type l -printf '%P\tL:%l\n'
+    find . -type f -print0 | xargs -0 -r sha256sum | sed -E 's#^([0-9a-f]{64})  \./(.*)$#\2\tF:\1#'
+  } | LC_ALL=C sort
+) >"${work}/${bundle}.paths"
+shared=0
+for other in $(manifest_bundles); do
+  [[ "${other}" != "${bundle}" && -f "${build}/${other}.paths" ]] || continue
+  LC_ALL=C join -t $'\t' "${work}/${bundle}.paths" "${build}/${other}.paths" >"${work}/joined"
+  n="$(wc -l <"${work}/joined")"
+  # 파일을 거친다 — `awk | grep -q`는 grep이 먼저 닫으면 awk가 SIGPIPE로 죽고 pipefail이 조건을 거짓으로 만든다.
+  awk -F'\t' -v a="${bundle}" -v b="${other}" '$2 != $3 { printf "build> %s and %s both carry /%s with different contents\n", a, b, $1 }' \
+    "${work}/joined" >"${work}/disagree"
+  if [[ -s "${work}/disagree" ]]; then
+    sed -n '1,20p' "${work}/disagree" >&2
+    die "the bundles ${bundle} and ${other} disagree on $(wc -l <"${work}/disagree") paths (above)"
+  fi
+  shared=$((shared + n))
+done
+cp "${work}/${bundle}.paths" "${build}/${bundle}.paths"
+
 # ── 굽기 ────────────────────────────────────────────────────────────────
 stamp="$(
   {
     printf '%s\n' "${lines}" "${harvest_lines}" "${comp}"
-    sha256sum devlayer/build.sh devlayer/verify.sh devlayer/needed-ignore.tsv
+    sha256sum devlayer/build.sh devlayer/verify.sh devlayer/needed-ignore.tsv devlayer/manifest.sh devlayer/hooks/*.sh
     cat "${work}/${bundle}.dropped"
   } | sha256sum | cut -c1-64
 )"
@@ -156,7 +211,7 @@ else
   state=baked
 fi
 
-echo "build> ${bundle}: ${state} files=${files} unpacked=$((bytes / 1048576))MiB ${comp}=$(($(stat -c %s "${sqfs}") / 1048576))MiB dropped=$(grep -cv '^relink ' "${work}/${bundle}.dropped" || true)"
+echo "build> ${bundle}: ${state} files=${files} unpacked=$((bytes / 1048576))MiB ${comp}=$(($(stat -c %s "${sqfs}") / 1048576))MiB dropped=$(grep -cv '^relink ' "${work}/${bundle}.dropped" || true) shared=${shared}"
 
 # ── 압축 넷 재기(plan 결정 J) ───────────────────────────────────────────
 if [[ -n "${DEV_MEASURE:-}" ]]; then

@@ -109,7 +109,7 @@ help:
 	@echo "      tars-install이 p3로 옮기고 init이 /usr에 얹는다. 기본은 싣지 않는다(게이트 체인의 ISO)"
 	@echo
 	@echo "  make dev-layers"
-	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base lang-jvm)을 devlayer/build/<묶음>.sqfs로 굽는다."
+	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base lang-jvm lang-native)을 devlayer/build/<묶음>.sqfs로 굽는다."
 	@echo "      devlayer/manifest.tsv가 출처다. 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
 	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools가 먼저 부른다(캐시면 수십 초)"
 	@echo
@@ -237,7 +237,7 @@ iso: initrd
 # amd64 postinst를 못 돌린다), 받기 · 검사 · 굽기는 개발 컨테이너. 둘 다 자기 캐시를 본다(harvest.lines · stamp).
 # 검사가 initrd와 대조하므로 initrd가 먼저 있어야 한다. 의존으로 걸지 않은 것은 initrd가 이미 있을 때 다시 짓지
 # 않으려는 것이다 — 없으면 build.sh가 "run make initrd first"를 찍는다.
-DEV_LAYERS        ?= base lang-jvm
+DEV_LAYERS        ?= base lang-jvm lang-native
 DEV_HARVEST_IMAGE ?= debian:trixie-slim
 DEV_MEASURE       ?=
 DEV_COMP          ?=

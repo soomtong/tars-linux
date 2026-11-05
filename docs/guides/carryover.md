@@ -94,6 +94,12 @@ BT(2026-11-02)가 남긴 것.
       바이너리이고 게이트 전용이다(initrd에 없다). 다시 나면 `/tmp/btvirt.log`를 콘솔로 꺼내는 것부터.
       두 번째(KK-M0 루트 게이트, 2026-11-04): `btvirt[105]`, 같은 서명. 체인만 다시 돌린 판은 초록이다. 둘 다 루트 게이트의
       동시 레인 안에서만 났다 — 부하와 상관이 있는지가 다음 단서다.
+- [ ] `pointer`(PD-M4) 부팅 C의 말없는 끝(TP-M2 루트 게이트 2회차, 2026-11-06, lane 16). `(라)`의 `=== … ===` 줄 바로 뒤에
+      `report_failure` 없이 체인이 끝났다. 시리얼 로그는 `(나)`가 친 `/config/pd/tp-replay`의 메아리와 그 뒤 몇 줄에서 멎었고 패닉
+      줄은 없다. lane 출력에도 셸 오류가 없다. `set -e`가 꺼진 체인이 말없이 끝나는 길은 SIGPIPE다 — QEMU(`-no-reboot`)가 사라진 뒤
+      `replay`의 `type_keys`가 monitor 소켓에 쓴 것으로 본다(추정). OrbStack VM의 dmesg에 OOM은 없다. 같은 게이트의 1회차와 3회차는
+      초록이고, TP-M2는 커널 · init · terminal을 안 바꿨다. 이 게이트부터 devtools 체인이 TCG에서 zig · go 첫 빌드(수십 초씩)로 CPU를
+      더 쓴다 — 다시 나면 QEMU의 종료 코드를 체인이 찍게 하는 것부터(`wait "$QEMU_PID"; echo $?`).
       세 번째(PS-M0 루트 게이트, 2026-11-04): `btvirt[104]`, 같은 서명(`ip:f3b9349de916e1ad`, `services.d/bt` 53행 `Segmentation
       fault`). 체인만 다시 돌린 판은 초록이다(214초). 셋 다 루트 게이트의 동시 레인 안이다.
 - [ ] Intel BT firmware 28MB를 전부 싣는다(BT design 결정 2). 실기가 쓰는 칩이 몇 개로 정해지면 그 `ibt-<hw>` 계열만 남겨

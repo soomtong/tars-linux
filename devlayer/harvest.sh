@@ -21,7 +21,9 @@ build=devlayer/build
 mkdir -p "$build"
 
 # 매니페스트에서 이 묶음의 debian 줄. 없으면 할 일이 없다(lang-jvm처럼 upstream만인 묶음).
-lines="$(awk -F'\t' -v b="$bundle" '!/^#/ && NF >= 6 && $2 == b && $4 == "debian"' devlayer/manifest.tsv)"
+# shellcheck source=devlayer/manifest.sh
+source devlayer/manifest.sh
+lines="$(manifest_lines "$bundle" debian)" || { echo "harvest> ${DEVLAYER_MANIFEST} has errors (above)" >&2; exit 1; }
 if [ -z "$lines" ]; then
   rm -f "$build/$bundle.harvest."* "$build/$bundle.pkgs"
   echo "harvest> $bundle: no debian lines"
@@ -37,7 +39,7 @@ fi
 [ "$(dpkg --print-architecture)" = amd64 ] || { echo "harvest> not an amd64 container" >&2; exit 1; }
 
 pkgs=()
-while IFS=$'\t' read -r _tool _b version _kind name _sha; do
+while IFS=$'\t' read -r _tool _b version _kind name _sha _opts; do
   pkgs+=("$name=$version")
 done <<<"$lines"
 

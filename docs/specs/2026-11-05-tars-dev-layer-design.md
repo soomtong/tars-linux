@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 7판(2026-11-05) — 열린 질문 없음. TP-M0 · TP-M1 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 8판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -39,7 +39,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 
 | 묶음 | 도구 |
 |---|---|
-| 네이티브 언어 | gcc · g++(C/C++), LLVM · clang · lld, zig, rust, odin, go |
+| 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2) |
 | 스크립트 언어 | python3, ruby, lua, node, bun, janet, php |
 | JVM | JDK, kotlin, scala3, clojure |
 | BEAM | erlang, elixir, gleam |
@@ -50,6 +50,9 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정).
+LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
+디버거가 필요하면 직접 LLVM 툴체인을 설치한다"). LLVM 공식 tarball은 풀면 11.8GB였고 odin은 링크에 clang을 부른다. tcc는 리눅스
+바이너리가 없어 Debian의 2020년 스냅숏뿐이었다(TP-M2 plan 확인 4 · 7).
 
 ### 터미널 유틸리티 (사용자, 2026-11-05)
 
@@ -97,8 +100,8 @@ trixie 판이 돈다.
    odin · gleam · janet · JDK · kotlin · scala3 · mysql은 공식 tarball이 있다(M0이 하나씩 확인한다).
 9. ISO는 `boot/make_iso.sh`가 `xorriso`로 짓고 지금 138MB다. ISO9660은 파일 하나가 4GiB를 넘으면 `-iso-level 3`이 필요하다.
    부팅 매체는 iso9660 `TARS`로 판정되고(`disk.zig`), `tars-install`이 그 안의 `BOOT_FILES` 여섯을 ESP로 옮긴다.
-10. 크기 어림(실측 아님): 설치 7~10GB, squashfs로 2.5~4GB. LLVM 공식 tarball 하나가 풀면 수 GB다. 정확한 숫자는 묶음마다 그 milestone이
-    잰다.
+10. 크기 어림(실측 아님): 설치 7~10GB, squashfs로 2.5~4GB. 정확한 숫자는 묶음마다 그 milestone이 잰다. 잰 것: base 251MiB → 81MiB,
+    lang-jvm 301 → 126, lang-native 2,018 → 402(TP-M2). LLVM 공식 tarball은 풀면 11,853MiB였다 — 뺐다(도구 목록의 "뺀 것").
 
 ## 결정
 
@@ -111,6 +114,8 @@ trixie 판이 돈다.
    - `prebuilt` — 표준이 된 제3자 빌드(python-build-standalone, ruby/ruby-builder, static-php-cli, builds.hex.pm의 erlang).
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
      binutils, `lua5.4`, `emacs-nox`, 공용 라이브러리.
+   매니페스트의 일곱째 열은 선택이다 — 공백으로 가른 `exe=` · `hook=` · `into=`(TP-M2 plan 결정 C). 배포 형식이 절차를 요구하면
+   (rust의 설치기) `devlayer/hooks/<형식>.sh`가 푼다. 열이 맞지 않는 줄은 줄 번호와 함께 빌드를 멈춘다(`devlayer/manifest.sh`).
 2. `upstream` · `prebuilt` tarball은 `/usr/local/lib/<도구>-<버전>/`에 그대로 풀고 `/usr/local/bin/`에 실행 파일 링크를 둔다. Debian식 alternatives는 없다.
    `debian`과 `vendor-repo`는 버리는 amd64 컨테이너(`--platform=linux/amd64 debian:trixie-slim`)에서 진짜로 `apt-get install`하고
    (postinst까지), 새로 생긴 파일만 가져온다. 개발 컨테이너는 arm64라 amd64 postinst를 못 돌린다(TP-M0 plan 확인 1). alternatives

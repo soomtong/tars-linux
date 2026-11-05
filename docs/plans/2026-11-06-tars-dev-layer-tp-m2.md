@@ -130,8 +130,52 @@ H. design을 고칠 자리: 도구 목록 표의 "네이티브 언어"를 "gcc �
 
 ## 확인한 것
 
-(구현 뒤 채운다)
+1. 첫 `make dev-layers`에서 verify의 NEEDED가 둘을 잡았다. 하나는 rust의 `lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-objcopy`다.
+   RUNPATH가 `$ORIGIN/../lib:$ORIGIN/../lib/x86_64-unknown-linux-gnu`뿐이라 두 층 위 `lib/`의 `libLLVM.so.23.1-rust-1.99.1-stable`을 못 찾는다.
+   rustup은 `LD_LIBRARY_PATH`로 덮지만 TARS에는 rustup이 없다. 같은 디렉터리의 `rust-lld`는 RUNPATH에 `$ORIGIN/../../../`가 있어 풀린다.
+   예외로 덮지 않고 훅이 그 자리에 `../../../libLLVM…` 상대 링크 하나를 둔다 — 실제로 풀린다.
+2. 다른 하나는 go의 `src/debug/elf/testdata/libtiffxx.so_`(`libtiff.so.6`)다. `debug/elf` 시험이 바이트로 읽는 입력이고 적재되지 않는다.
+   `needed-ignore.tsv`에 셋째 이유 `testdata`를 두고 경로를 `go-*/src/*/testdata/*`로 좁혔다.
+3. rust 설치기의 `lib/rustlib/manifest-<컴포넌트>`는 `--destdir`를 붙인 절대 경로(`file:/tmp/tmp.XXXX/lang-native/usr/…`)다. destdir는
+   `build.sh`의 mktemp라 매번 달라 같은 입력이 다른 묶음이 된다. 훅이 게스트 경로로 고치고 `install.log`를 지운다. 남으면 훅이 멈춘다.
+4. `build.sh`는 매니페스트 줄을 here-string으로 읽는 루프 안에서 훅을 부른다. 훅이 표준 입력을 읽으면 남은 줄을 먹는다 — 훅의 입력을
+   `/dev/null`로 막았다. 묶음 사이 대조의 첫 판은 `awk … | grep -q .`였다. TP-M0 확인한 것 5와 같은 SIGPIPE 함정이라(grep이 먼저 닫으면
+   pipefail이 조건을 거짓으로) 파일을 거치게 고쳤다.
+5. 결정 F: 캐시 실행(뿌리 만들기 + verify + 대조)은 base 5.8초 · lang-jvm 7.3초 · lang-native 51.0초다. 60초 아래라 빠른 길을 넣지 않았다.
+6. 할 일 4의 chroot(Rosetta 위 amd64, 사용자가 아니라 root): g++ 3.2초, `zig build-exe` 27.1초, rustc 1.7초, cargo 3.8초, `go run` 29.2초,
+   `go build` 1.8초. 넷 다 돌았다. 위험 2(rust가 base의 gcc로 `-fuse-ld=lld`)는 여기서 지났다.
+7. 체인 첫 판이 `go build in a module did not make a running program`으로 빨갰다. go가 아니라 체인의 경쟁이다 — `tp-ms-gobuild=` 줄을 본
+   즉시 grep했는데 `./tp`의 출력은 그 줄 뒤에 온다. zig의 판정도 같은 꼴이라 둘 다 결과 줄을 30초 기다리게 고쳤다.
 
 ## 결과
 
-(구현 뒤 채운다)
+1. `make dev-layers`가 세 묶음을 굽고 초록이다(첫 실행은 base 다시 거두기 포함 2분 24초, 고친 뒤 다시 1분 35초).
+
+   | 묶음 | 줄 | 파일 | 풀린 크기 | zstd15 | 뺀 경로 | ELF | 예외 | 묶음 사이 |
+   |---|---|---|---|---|---|---|---|---|
+   | base | debian 넷(g++가 더해졌다) · 패키지 42 | 3,568 | 251MiB(194에서) | 81MiB(64에서) | 21 | 361 | 0 | 0 |
+   | lang-jvm | JDK | 196 | 301MiB | 126MiB | 0 | 72 | 20 | 0 |
+   | lang-native | zig · rust · rust-src · go | 104,976 | 2,018MiB | 402MiB | 0 | 88 | 1(testdata) | 0 |
+
+   rust 설치기가 깐 컴포넌트는 rustc · rust-std · rust-docs · cargo · rustfmt · rust-analyzer · clippy · rust-src다. 펴진 alternatives는 base에서
+   다섯(`c++ -> x86_64-linux-gnu-g++-14`가 더해졌다), relinked는 여섯.
+2. 빨강: (a) go 줄 탭 하나를 공백으로 → `manifest.tsv:34: expected 6 or 7 tab-separated columns, got 5`(옛 awk는 같은 사본에서 lang-native를
+   3줄로 셌다 — go가 말없이 빠졌다). (b) `bin=go/bin` → `unknown option bin=go/bin`. (c) base의 `.paths`에 `/usr/local/bin/go`를 다른 링크로
+   → `lang-native and base both carry /usr/local/bin/go with different contents`. 체인: `exe=zig`를 지우면 부팅 2가 `the zig program did not
+   print 0.17.1`(로그에 `bash: line 1: zig: command not found`). 모두 되돌린 뒤 초록.
+3. 체인 `devtools`가 초록이다. 게이트 안에서 빌드 뒤 257초(TP-M1은 101초). 숫자(TCG qemu64 · 1GiB, 게이트 안):
+
+   | 항목 | 값 |
+   |---|---|
+   | 묶음 셋 | 640,729,088바이트(612MiB) |
+   | `tars-dev.iso` | 784,324,608바이트(TP-M1 344,477,696) |
+   | 설치기의 복사 | 3,118ms |
+   | init의 얹기(묶음 셋) | 37ms |
+   | g++ · zig · rustc · cargo | 5,153 · 52,618 · 4,695 · 1,506ms |
+   | `go run`(첫 빌드) · `go build`(모듈) | 93,694 · 1,548ms |
+   | JVM 뒤 MemAvailable | 592,784kB |
+
+4. 루트 게이트는 세 판이다. 1회차 23분 45초 30/31 — HP-M2가 비밀번호 칸과 별표 사이에 끼어든 `tars-init: audio: …` 한 줄로 빨갰다(칸은
+   맞게 동작했다, 실패한 로그에 새 검사를 대면 1건). `home/check.sh`가 끼어든 init 온줄을 떼고 보게 고쳤다(lessons의 TC-M3 덧붙임). 2회차
+   24분 7초 30/31 — PD-M4 부팅 C가 메시지 없이 끝났다(`carryover.md`, 추정 QEMU 종료 뒤 SIGPIPE). 3회차 24분 3초 31/31, 잘린 줄 0.
+5. 위험 1(TCG의 첫 빌드)은 상한 안이다 — zig 53초 · go 94초. 위험 2(rust의 `-fuse-ld=lld`)는 chroot와 체인 둘 다 지났다.
