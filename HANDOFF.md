@@ -1,95 +1,78 @@
-# HANDOFF: 맥북 지원 · DB-M1 · 실기 수정 닫힘, 0.1.4 배포됨 — 다음 세션은 비밀번호 칸의 `*` 표시와 reboot · poweroff 명령
+# HANDOFF: PW · RB · LP 닫힘(비밀번호 `*` · reboot/poweroff/suspend · i915 밝기와 절전) — 다음은 맥북 실기 사용기
 
 ## 목표
 
-사용자 요청(2026-11-04 밤): MacBook Air 11" 2011 · MacBook Pro 15" 2013(Retina)에 설치, 설치기가 macOS 옆을 고르는 듀얼 부팅, 그 뒤 패치
-버전 배포. 사용자가 잠들며 남은 결정을 전부 Claude에게 맡겼고, 끝까지 갔다. 다음은 실기에서 아래 "사용자가 확인할 것"의 맨 앞 절.
+사용자 요청(2026-11-05): 비밀번호 칸의 `*`, `reboot` · `poweroff` 명령, 옛 `tars-config` 별칭 흔적 지우기, 그리고 "맥북 에어에서 본격적인
+사용기를 시작하기 전에" 뚜껑 닫기 절전과 내장 화면 밝기 조절, "안 된다"고 적은 문서 갱신. 사용자가 외출하며 남은 결정을 위임했고 끝까지
+갔다. 다음은 실기에서 아래 "사용자가 확인할 것"의 맨 앞 절.
 
 ## 현재 브랜치
 
-`main` = origin/main(push됨), tag `v0.1.4` = `d93a8aa` push됨. `gh-pages`도 push됨(worktree `../tars-linux-pages`).
-작업용 worktree `../tars-linux-hs` · `../tars-linux-db`와 브랜치 `hs` · `db`는 합친 뒤 지웠다.
+`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
+`gh-pages`의 `data.js`도 갱신 · push(worktree `../tars-linux-pages`). 작업용 worktree `lp`는 지웠다.
 
-## 완료된 작업 (2026-11-04~05)
+## 완료된 작업 (2026-11-05)
 
-- [x] MB-M0 — `MOUSE_BCM5974` · `ACPI_SBS`, machine 체인의 커널 장치 표 검사와 bcm5974 등록 줄. pointer 체인 금지 목록에서 bcm5974를 뺐다
-  (PD 비목표 10의 한 갈래). 되접기 정규화는 따로 커밋(HP 때 빠진 ext4 줄 여섯). lead 직접.
-- [x] HS-M0 — 논리 그림자 + 늘리는 present(`terminal/src/scale.zig`), `display_scale=auto|1|2|3`(`ARGC` 14), 체인 `hidpi`(monitor 45502). 서브에이전트.
-- [x] DB-M0 — `tars-install <disk> --beside`, TARS 파티션을 GPT 이름으로, 포맷 전 대조 둘, init 후보 126, 체인 `dualboot`(포트 없음),
-  `docs/guides/running-tars.md`의 macOS 절. 서브에이전트.
-- [x] BW-M0(2026-11-05, 사용자 요청) — MacBookAir4,1 내장 BCM43224를 `brcmsmac`으로, firmware 둘. Pro의 BCM4331 · BCM4360은 못 연다
-  (BW 비목표). 루트 게이트 29/29, 16분 48초.
-- [x] 루트 게이트 29/29, 16분 30초(prebuild 포함, lanes 667초), 잘린 줄 0(`667240c`).
-- [x] 0.1.4 — `VERSION` 커밋 · tag · `make iso` · smoke(`TARS 0.1.4`) · release(ISO 136,474,624 B, sha256 `00598c66…97ab`) · 내려받아 `OK` ·
-  `data.js` releases와 timeline 셋. 기록은 `docs/decisions/project_release.md`.
-- [x] 맥 디스크의 빈 자리 검토(2026-11-05, 사용자 요청) — `diskutil apfs resizeContainer`는 크기만 주면 빈 자리를 남긴다. 포맷되는 것은
-  triple을 붙이거나 디스크 유틸리티의 "파티션"을 쓴 경우이고, `diskutil eraseVolume free free <id>`로 되돌린다(`running-tars.md` macOS 절
-  2번).
-- [x] DB-M1(2026-11-05, 사용자 "continue") — `tars-install /dev/sda3`이 디스크 유틸리티가 만든 FAT · exFAT 파티션(또는 빈 파티션)과
-  앞뒤의 빈 구간에 TARS 셋을 놓는다. EFI · APFS · HFS+ · Recovery · NTFS는 YES 전에 거절. 목록이 GPT 디스크 밑에 파티션 줄을 단다.
-  `dualboot` 체인에 GUI 맥과 부팅 5. lead 직접. 첫 판 빨강은 체인의 대기(둘째 설치의 `done.`) — plan "결과" 절. 루트 게이트 29/29,
-  16분 57초, 잘린 줄 0(`f9e2c44`).
-- [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_macbook_hardware` · `project_hidpi_scale` · `project_dual_boot`) + `MEMORY.md`.
+- [x] PW-M0 — `init/src/secret.zig`(공용 helper, 사용자 결정으로 "공용 모듈 없음"의 예외). wifi · ssh · Groq 키 · `passwd` · 설치 계정 칸이 tty에서
+  글자마다 `*`, Backspace · Ctrl+U · Ctrl+C/D. sudoers `pwfeedback`. home 체인이 `*` 열둘과 `\b \b`를 센다. `1c62755`.
+- [x] RB-M0 — `/usr/bin/shutdown` 스크립트 + 링크 `reboot` · `poweroff`(LP-M1이 `suspend`를 더함). 인자 검사(64)가 권한(77, `try: sudo`)보다 먼저.
+  power 체인이 `poweroff` · `reboot`(셋째 부팅), home 체인이 77. `3ff2055`.
+- [x] 옛 `tars-config` 별칭 정리 — `staleAlias`와 `tars-config check`의 경고, 가이드의 별칭 절. 날짜가 붙은 specs · plans · decisions의 기록은
+  역사라 남겼다(사용자가 원하면 지운다). `b13a0be`.
+- [x] LP-M0 — `DRM_I915` · `PM` · `SUSPEND`(RM 결정 3을 뒤집음, +1.5MB). 내장 cmdline에 `snd_hda_core.gpu_bind=0` · `rootfstype=ramfs`. `3ea4fa2`.
+- [x] LP-M1 — PID 1이 뚜껑 닫힘 · SIGUSR1에 deep S3, `resumed after Nms`. `sudo suspend`. 새 체인 `sleep`(LP-M1, QMP 45503). `58ae293`.
+- [x] LP-M2 — terminal이 Apple 칸의 F1 · F2와 밝기 키로 `intel_backlight` 16단계(`backlight.zig`). `4cdf100`.
+- [x] 닫는 묶음 — design 셋 `Status:`, `completed.md` 세 행, 기억 셋(`project_password_feedback` · `project_power_commands` · `project_laptop_power`),
+  "안 되는 것" 표 · RM 결정 3 · MB 비목표 2 · carryover HDMI 줄, `running-tars.md`의 "밝기와 절전" 절. `2080d01`.
+- [x] 루트 게이트 30/30, 17분 28초, 잘린 줄 0(LP 전체).
 
-## Claude가 맡아 정한 것 (뒤집을 것이 있으면 design의 결정 번호로)
+## Claude가 맡아 정한 것 (사용자 위임 — 뒤집을 것이 있으면 design의 번호로)
 
-- "15 2013"은 두 세대(MacBookPro10,1 · 11,2/11,3) 다 대상(MB 결정 1). `HID_APPLE`은 끈 채 — Fn 조합(PageUp 등)이 없다(MB 위험 3).
-- 무선(Broadcom) · 밝기 · 키보드 백라이트 · 절전은 범위 밖(MB 비목표).
-- Retina는 present에서 정수배로 늘리기, auto는 논리 1280×800 이상의 가장 큰 정수(HS 결정 1 · 3).
-- 듀얼 부팅은 빈 공간에만 깐다. APFS 줄이기는 macOS의 `diskutil`(DB 비목표 1). 기본 부팅은 macOS, 매번 Option 키(DB 결정 11).
-- 0.1.4를 커널 7.4 전에 냈다 — 11-01 결정을 이번 요청이 대신한 것으로 읽었다.
+- `tars.conf`의 `brightness=`는 안 했다(LP 비목표 4) — 설정 키 하나가 10곳 넘게 지나는 데 비해 얻는 것이 시작 밝기 하나. 부팅마다 펌웨어 값.
+- 명령 이름은 승인받은 `suspend` 그대로 — bash · zsh · fish의 내장 `suspend`가 먼저 잡히므로 가이드에 "언제나 `sudo suspend`". 거슬리면 `zzz`.
+- `gpu_bind=0`으로 HDMI 오디오는 계속 없다(xe 몫인 Lunar · Panther Lake에서 소리가 사라지지 않게, LP 결정 1a).
+- 뚜껑은 어댑터가 꽂혀 있어도 잔다(사용자 결정). 깨어난 뒤 뚜껑이 닫혀 있으면 다시 자지 않는다(LP 위험 5).
 
 ## 시도했으나 실패한 접근
 
-- 없음. 첫 판 실수 셋은 기억에: machine 체인의 `grep -x`(별칭 줄 꼬리), pointer 체인의 bcm5974 금지(다른 체인의 음성 검사),
-  컨테이너 여럿이 같은 `.zig-cache`로 terminal을 동시에 빌드하면 깨진다(`project_hidpi_scale` 4).
+- LP-M0 첫 루트 게이트 — i915가 `TMPFS`를 select해 rootfs가 tmpfs(RAM 절반)로 바뀌고 열여덟 체인이 `No space left on device`로 제각각 빨갰다.
+  `rootfstype=ramfs`로 풀었다(`project_laptop_power` 배운 것 1). 편집 사고 하나(파일을 쓰기용으로 연 뒤 읽어 비움)는 `git diff --stat`이 잡았다.
 
 ## 남은 작업
 
-다음 세션에서 할 둘(사용자 요청, 2026-11-05). 둘 다 새 서브프로젝트로 design부터 — 작으니 한 design에 milestone 하나씩도 된다.
-
-- [ ] 1. 비밀번호를 칠 때 `*`가 찍히게(사용자: "wifi 패스워드 입력할 때 ****** 이런 표시 나오게").
-  - 지금은 세 칸 모두 termios의 `ECHO`만 끄고 줄 단위(canonical)로 읽는다 — 아무것도 안 찍혀서 쳤는지 모른다. Air 실기에서 사람이 Wi-Fi
-    비밀번호와 sudo 비밀번호를 헷갈렸던 배경이다(`needRoot`로 순서는 고쳤다).
-  - 자리: `init/src/config_front.zig`의 `readSecret`(wifi passphrase · ssh 공개 키 · Groq 키)과 `readSecretLine`(`tars-config passwd`),
-    `init/src/install.zig`의 `readSecretAnswer`(설치 때 계정 비밀번호). 셋을 한 helper로 모으는 것부터 볼 일이다.
-  - 할 일: `ICANON`도 끄고(raw, `VMIN=1`) 한 바이트씩 읽어 글자마다 `*`를 stderr에, Backspace(`0x7f` · `0x08`)는 한 글자 지우고 `\b \b`,
-    Enter에서 끝, Ctrl+C · Ctrl+D는 취소. UTF-8 한 글자가 여러 바이트라 `*`도 바이트가 아니라 글자마다(앞 바이트가 `10xxxxxx`가 아닐 때만)
-    찍는다. 끝나면 termios를 되돌린다(시그널로 끊겨도 — 지금 코드의 복원 자리를 그대로).
-  - 정할 것: ssh 공개 키 · Groq 키처럼 붙여 넣는 긴 값도 `*`를 찍을지(수백 개). sudo의 칸은 sudo 몫이라 `Defaults pwfeedback`(sudoers 한 줄)로
-    따로 맞출 수 있다 — 함께 할지.
-  - 판정: 게이트의 tty 입력은 시리얼이다. home 체인(`as_user`)이나 install 체인이 비밀번호를 넣는 자리에서 `*` 개수를 센다 — 게스트의 tty가
-    시리얼이면 termios가 같은 길이라 볼 수 있다. 붙여 넣는 경로(stdin이 tty가 아닐 때)는 지금처럼 줄 하나를 그대로 읽어야 한다.
-- [ ] 2. `reboot` · `poweroff`(또는 `shutdown`) 명령(사용자 요청).
-  - PID 1은 이미 갈래를 갖고 있다 — `SIGTERM` → 전원 끄기, `SIGINT` → 재부팅(`init/src/power.zig`의 `.TERM => .power_off` · `.INT =>
-    .restart`, Ctrl+Alt+Del도 SIGINT). 지금 사람의 길은 `sudo kill -INT 1`뿐이고 가이드도 그렇게 적었다(`running-tars.md`의 "kill -INT 1").
-  - 할 일: `/usr/bin/reboot` · `/usr/bin/poweroff`(`shutdown`은 `poweroff`의 별명이나 `-r`를 받는 얇은 것)를 둔다. 셸 스크립트 한 줄
-    (`kill -INT 1` · `kill -TERM 1`)이면 되지만 사용자 권한이면 `permission denied; try: sudo reboot`를 tars-config과 같은 말로 해야 한다 —
-    Zig 작은 실행 파일로 할지, `tars-config`처럼 init 소켓으로 물을지 design에서 정한다. Debian의 진짜 `reboot`(systemd)는 없다.
-  - 판정: 이미 종료를 보는 체인(SL 계열, `tars-init: calling reboot`)이 있다 — 그 자리에서 `reboot`과 `poweroff`를 치게 바꾸거나 하나를 더한다.
-    사용자로 쳤을 때 77과 `try: sudo`는 home 체인 8c의 꼴로.
-- [ ] 사용자: 새 0.1.4(`d93a8aa`)로 Option 화면의 "TARS Linux"(USB와 갱신한 디스크), Pro 2013의 소리(`speaker-test -c 2 -t wav -l 1`).
+- [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
 ## 다음 에이전트에게
 
 이 저장소의 규칙(CLAUDE.md): 큰 편집은 먼저 설명, 매 편집 뒤 `git diff --stat` · `git diff | rg '^-'`, 명령은 Claude가 실행, 커밋은
-사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는 컨테이너에서(macOS에 Linux 헤더가 없다, 컨테이너에는 `rg`가 없다 —
-`grep`). 체인 하나 돌리기: `docker run --rm --sysctl net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace
-tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨테이너 안에서(같은 트리의 `.zig-cache` 경합). 커널 심볼을 켜기 전에
-`rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾는다. 새 체인의 monitor 포트는 45503부터(45502는 HS).
+사용자 승인 뒤. init의 `zig build test`와 terminal 빌드는 컨테이너에서. 체인 하나: `docker run --rm --sysctl
+net.ipv4.ip_local_reserved_ports=45455-45599 -v "$PWD":/workspace -w /workspace tars-devcontainer ./sleep/check.sh`. 루트 게이트는
+시작하며 `out/gate-logs/`와 `out/` 아래 로그를 비운다 — `time make gate`의 출력은 scratchpad에 둔다. 커널 심볼을 켜기 전에
+`rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾고, select로 따라오는 것(`TMPFS` 같은)이 사용자 공간의 바닥을 바꾸는지 본다.
+새 체인의 monitor · QMP 포트는 45504부터(45503은 LP).
 
 ## 지금 상태 (2026-11-05)
 
-- 마지막으로 닫은 것은 MB · HS · DB(같은 요청 하나, design `docs/specs/2026-11-04-tars-{macbook-hardware,hidpi-scale,dual-boot}-design.md`).
-  최신 공개 버전 0.1.4(2026-11-05, tag `v0.1.4` = `d93a8aa`). 맥 실기 확인까지 같은 번호로 거듭 낸다(`feedback_release_iteration`).
-- 체인은 스물아홉이다(`check.sh`의 `CHAINS`, 끝이 `HS-M0:./hidpi/check.sh` · `DB-M0:./dualboot/check.sh`). 마지막 루트 게이트 29/29, 16분 57초(`f9e2c44`, DB-M1).
-  바깥 망 체인은 PM · MI 둘이다. 게이트를 돌리고 읽는 법 · 로그 위치(`out/gate-logs/`)는 `docs/guides/lessons.md`.
-- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 여기 두지 않는다 — 한 줄 요약은 `docs/guides/completed.md`의 표, 결정과 함정은
-  `docs/decisions/`의 기억 파일이다. 최근 것부터 MB · HS · DB(11-05) → PS · KK · DM(11-04) → IK · MI · PM · HP(11-03) → KH · BT(11-02) → KU(11-01).
+- 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`) — 그 뒤 커밋은 아직 릴리스에 없다.
+- 체인은 서른이다(`check.sh`의 `CHAINS`, 끝이 `DB-M0:./dualboot/check.sh` · `LP-M1:./sleep/check.sh`). 마지막 루트 게이트 30/30, 17분 28초.
+- 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다. 최근 것부터 PW · RB · LP(11-05)
+  → MB · HS · DB · BW(11-05) → PS · KK · DM(11-04) → …
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
+
+- LP · PW · RB — MacBook Air 2011 · Pro 2013(이번 판의 본론). main을 `make iso`로 굽거나 0.1.5를 낸 뒤 USB로 갱신한다(0.1.4에는 없다).
+  - 첫 부팅이 화면까지 뜨는지 — i915가 simpledrm을 넘겨받는다. 검은 화면이면 i915가 `card0`이 아닌 번호를 받은 것(LP 위험 1):
+    Limine 메뉴(3초)에서 아래 화살표로 `(old)`를 골라 갱신 전 이미지로 뜨고 알려 준다.
+  - 밝기: Air 내장 키보드의 F1 · F2. 로그 `terminal: backlight> pick=intel_backlight of N` · `backlight> intel_backlight A -> B of MAX`.
+    `pick=none`이면 `ls /sys/class/backlight`. 16단계가 손에 맞는지, 가장 낮은 단계가 너무 어두운지.
+  - 절전: 뚜껑을 닫았다 연다. 로그 `tars-init: lid closed` · `suspend (deep)` · `resumed after Nms`. 깨어난 화면이 다시 그려지는지(키 하나),
+    무선이 다시 붙는지(`tars-config wifi`, brcmsmac — LP 위험 2), USB · 내장 키보드의 첫 키(위험 3), 배터리 칸이 곧 따라오는지(위험 6).
+    `suspend (s2idle)`이면 펌웨어가 S3를 안 내놓은 것(위험 4). `sudo suspend`도 한 번.
+  - 비밀번호 칸: `tars-config wifi …`의 passphrase와 `sudo`의 칸에 `*`가 찍히는지, Backspace가 하나씩 지우는지.
+  - `sudo reboot` · `sudo poweroff`.
+  - 소리가 여전히 나는지(i915를 켜도 `gpu_bind=0`이라 그대로여야 한다) — `speaker-test -c 2 -t wav -l 1`.
 
 - MB · HS · DB — 맥 두 대(이번 판의 본론, 게이트는 드라이버 등록까지만 봤다).
   - 준비: macOS에서 Time Machine 백업 → `diskutil list` → `diskutil apfs resizeContainer disk0s2 <크기>`(HFS+면 `diskutil resizeVolume`)로
