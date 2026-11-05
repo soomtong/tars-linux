@@ -85,9 +85,9 @@ tars-devcontainer ./pointer/check.sh`. 체인을 동시에 돌릴 때는 한 컨
     찾음, `tars-config bluetooth=on`이 쓰는 법만 찍음, 꺼진 버스에서 `bluetoothctl`이 SIGABRT)은 고쳤다 — help의 "turning things on" 절,
     `missing_set`, `/usr/bin/bluetoothctl` 감싸개(bluetooth 체인 검사 8).
   - Pro 2013 실기(2026-11-05): Limine 메뉴가 GOP 화면에 보인다(KU의 이월 확인 하나가 풀렸다). Retina 2배가 잘 보이고(HS 결정 3),
-    트랙패드 · 키보드 · 배터리 · Bluetooth 정상. 소리만 안 난다 — CS420X · CS8409는 켜져 있고 fixup(10,1 `CS420X_MBP101` · 11,x
-    `CS4208_MBP11`)도 커널에 있다. 의심 셋: 기본 카드가 HDMI 쪽(AU의 "가장 높은 카드"), 믹서 mute, fixup 불일치. 사용자에게
-    `product_name` · `/proc/asound/cards` · `/etc/asound.conf` · `dmesg`를 받는 중.
+    트랙패드 · 키보드 · 배터리 · Bluetooth 정상. 기종은 MacBookPro11,x(코덱 SSID `106b:5e00`, CS4208). 소리가 안 났던 원인은 init의
+    오디오 일꾼이 카드 0만 기다린 것 — 카드 0(HDMI 쪽 HDA)이 i915 없이 안 서서 노드 권한 · 믹서가 그대로였다. 아무 카드나 기다리게 고쳤다
+    (audio 체인 부팅 C가 `snd_hda_intel.index=1`로 보고, 되돌리면 빨개지는 것도 봤다). 실기 확인은 다음 0.1.4에서.
     내장 Wi-Fi(10,1 BCM4331 · 11,x BCM4360)는 사용자 결정으로 대기 — 조사는 `carryover.md`의 "맥 실기" 절.
   - 트랙패드: 한 손가락 이동 · 탭 · 두 손가락 스크롤, 로그 `pointer> open … kind=touchpad`. 손에 안 맞으면 `touchpad_accel`부터(MB 위험 2).
   - 키보드: `keyboard> open … kind=apple`, Cmd · Option 자리. Fn 조합이 없는 것이 거슬리는지(MB 위험 3).

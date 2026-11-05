@@ -12,8 +12,9 @@
         `b43-fwcutter`만 싣고 사용자가 드라이버 tarball을 USB로 옮겨 `tars-config wifi-firmware <파일>`로 한 번 자르는 길.
       - MacBookPro11,2 · 11,3 · BCM4360(`14e4:43a0`): 커널의 AC-PHY는 `BROKEN`, 독점 `wl`은 외부 모듈 — `CONFIG_MODULES`가 없는 TARS에
         모듈 적재(init) · 6.18용 패치 · 독점 바이너리 배포를 함께 들여야 하는 새 서브프로젝트 크기다. USB 무선 동글이 싼 대안.
-- [ ] MacBook Pro 2013 소리가 안 난다(Air는 난다). 진단 출력 대기 — `product_name` · `/proc/asound/cards` · `/etc/asound.conf` ·
-      `dmesg | grep -iE 'cs42|hda|snd'`. 의심은 기본 카드(HDMI 쪽) · 믹서 mute · fixup.
+- [x] MacBook Pro 2013 소리가 안 났다 — 카드 0(HDMI 쪽 HDA)이 안 서서 init의 오디오 일꾼이 포기했다. 일꾼이 아무 카드나 기다리게 고쳤다
+      (AU design 위험 14의 덧붙임). HDMI 오디오 자체는 `CONFIG_SND_HDA_I915`가 없어 여전히 없다 — 외장 모니터로 소리를 낼 일이 생기면 그때.
+- [ ] `/sys/class/dmi`가 없다(`DMIID` 꺼짐) — 기종 이름을 사람이 확인할 길이 없었다. 진단 때 쓸모가 있다.
 - [ ] 게스트에 `ping`이 없다(Debian `iputils-ping`). 실기에서 연결 확인을 `curl`로 했다.
 
 MI-M0(2026-11-03)이 남긴 것.
@@ -127,7 +128,8 @@ VD(2026-10-06)가 남긴 것.
 
 AU(2026-10-06)가 남긴 것.
 
-- [ ] 늦은 내장 카드(AU design 위험 14). M1의 일꾼은 `controlC0`이 서는 순간 있는 카드만 `alsactl init`한다. 카드가 여럿인 AMD
+- [ ] 늦은 내장 카드(AU design 위험 14). 일꾼은 첫 `controlC<N>`이 서는 순간 있는 카드만 `alsactl init`한다(2026-11-05부터 카드 0이 아니어도 된다 —
+      MacBookPro11,x 실기). 카드가 여럿인 AMD
       노트북이나 SOF가 firmware를 늦게 올리는 Intel 노트북에서 늦은 카드가 꺼진 채 남으면 — 일꾼이 `/dev/snd`가 잠잠해질 때까지
       기다리거나 `follow`가 새 카드에 `alsactl -U init N`을 부른다. 실기에서 겪은 뒤 정한다.
 - [ ] firmware가 게스트 RAM에 늘 있다(WL 위험 5 · AU 위험 16). 무선 77 + 소리 42 = 119개일 때 512MB 게스트의 `MemAvailable`이

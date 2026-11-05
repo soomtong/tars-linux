@@ -446,6 +446,11 @@ firmware · topology가 수십 MB 붙고 QEMU에 길이 없다. lead의 틀대�
     firmware를 늦게 올려 5초를 넘긴 Intel 노트북에서는 늦은 카드가 커널의 기본값(HDA는 꺼짐, DMIC 스위치 꺼짐)으로 남는다. 고치는 자리는
     둘 — 일꾼이 `/dev/snd`가 잠잠해질 때까지 기다리는 것, 또는 `follow`가 새 카드를 볼 때 `alsactl -U init N`. 실기에서 겪은 뒤 정한다(lessons
     이월 숙제).
+    — 2026-11-05 MacBookPro11,x 실기에서 다른 모양으로 겪었다: 카드 0(Haswell HDMI 쪽 HDA)이 `CONFIG_SND_HDA_I915` 없이 "Cannot probe codecs,
+    giving up"으로 아예 서지 않고 내장 오디오가 카드 1에 섰다. 일꾼은 `controlC0`만 5초 기다리다 끝나 노드가 root 600(사용자의 amixer가
+    "Invalid card number '1'"), 믹서가 꺼진 채였다. 고침: 일꾼이 아무 `controlC<N>`이나 기다린다(`audio.isControlNode`). audio 체인 부팅 C가
+    `snd_hda_intel.index=1`로 그 모양을 만든다(QEMU의 코덱 없는 컨트롤러는 실패하면서도 카드 0을 남겨 재현이 안 된다). 잠잠해지기를 1초
+    기다리는 판은 audio 체인의 프로브가 믹서 설정 전에 재생해 샘플 하나가 어긋나 뺐다 — 늦은 둘째 카드는 여전히 이월이다.
 15. (M3) DMIC를 PCM 이름(`DMIC`)으로 알아본다. 이름을 그렇게 안 짓는 machine(이 milestone이 안 켠 I2S 기계 등)은 장치 0 단으로 떨어진다.
 16. (M3) 게스트 RAM. firmware 원본 13.7MB가 initramfs에 늘 있고 512MB 게스트의 `MemAvailable`이 8MB 남짓 줄었다(약 191 → 183MB). 다음에
     firmware를 더하는 일은 lessons 이월 숙제("firmware가 게스트 RAM에 늘 있다")를 함께 본다.
