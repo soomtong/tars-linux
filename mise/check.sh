@@ -59,9 +59,9 @@ curl -fsSL --max-time 30 -o "${WORK}/install.sh" "$INSTALL_URL"
 echo "mise: mise.run sha256 $(sha256sum "${WORK}/install.sh" | cut -c1-64) ($(wc -l < "${WORK}/install.sh") lines)"
 
 DISK="${WORK}/target.img"
-# tars-install의 최소 디스크(init/src/disk.zig의 MIN_DISK_BYTES = 4 GiB + 2 MiB). mise와 node가 /home
-# (약 3GiB)에 들어가는지를 측정 3이 본다.
-truncate -s 4098M "$DISK"
+# tars-install의 최소 디스크(init/src/disk.zig의 MIN_DISK_BYTES = 16 GiB + 2 MiB, TP부터). mise와 node가 /home
+# (약 15GiB)에 들어가는지를 측정 3이 본다.
+truncate -s 16386M "$DISK"
 
 # -cpu는 다른 체인과 같은 TCG 기본 모델 qemu64다. PM 체인은 Homebrew의 SSSE3 요구 때문에 max지만,
 # mise.run · mise · node 26은 qemu64에서 끝까지 돌았다(MI-M0 측정 11). -m은 1024다 — 512에서는 mise.run이
@@ -209,7 +209,7 @@ ms_of() { last_num "mi-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO and a blank minimum-size NVMe (4 GiB + 2 MiB) ==="
+echo "=== boot 1: the ISO and a blank minimum-size NVMe (16 GiB + 2 MiB) ==="
 # -netdev만 있고 NIC 장치가 없다 — QEMU는 이때 기본 NIC를 안 붙인다(nic 체인 실측 5).
 boot_guest 1 -cdrom ../out/tars.iso
 send "tars-install /dev/nvme0n1 --yes"

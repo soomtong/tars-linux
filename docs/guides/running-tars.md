@@ -219,8 +219,8 @@ tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too
 `--yes`는 질문 없이 기본값이다. 그다음 대문자 `YES`를 기다린다. 새 설치는
 디스크 전체를 지우고 GPT에 셋을 만든다. p1은 768MiB ESP(FAT32 `TARS-BOOT`)이고
 커널·initrd·limine이 들어간다. p2는 256MiB ext2(`tars-config`)이고 설정이 산다.
-p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크가 4GiB보다 커야
-한다 — 작으면 `YES`를 묻기
+p3는 나머지 전부의 ext4(`tars-home`)이고 `/home`이 된다. 디스크가 16GiB보다 커야
+한다(0.1.4까지는 4GiB — 개발 도구 층이 p3에 놓이면서 올렸다) — 작으면 `YES`를 묻기
 전에 거절한다. `done.`이 나오면 USB를 뽑고 `reboot`를 친다(끄려면 `poweroff`). 설치기는
 스스로 재부팅하지 않는다. 비밀번호 칸은 글자마다 `*`를 찍는다(PW) — `tars-config wifi`의 passphrase,
 `passwd`, sudo의 칸도 같다.
@@ -285,7 +285,7 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
 1. 백업. Time Machine으로 한 번 받아 둔다. `--beside`는 남의 바이트를 안 쓰도록 만들었고 게이트가
    그것을 바이트로 보지만, 파티션 표를 고치는 일이다.
 2. macOS에서 자리를 낸다. 터미널에서 디스크 모양을 보고, macOS가 든 파티션(보통 `disk0s2`)을 줄인다.
-   TARS는 4GiB보다 큰 빈 자리가 필요하다.
+   TARS는 16GiB보다 큰 빈 자리가 필요하다(0.1.4까지는 4GiB).
 
    ```bash
    diskutil list                                   # disk0의 모양. APFS면 Apple_APFS, HFS+면 Apple_HFS
@@ -326,7 +326,7 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
      /dev/sda3       50 GB  FAT32 "TARS"  <- tars-install /dev/sda3 installs here
    ```
 
-   빈 자리가 4GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다. 받을
+   빈 자리가 16GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다. 받을
    수 있는 파티션이 있으면 그 명령도 함께 말한다.
 6. 빈 자리에 깔 때는 `tars-install /dev/sda --beside`. 계획이 `keeps its partitions`로 시작하고 어느
    구간에 몇 번으로 들어가는지 말한다. 파티션을 지정할 때는 `tars-install /dev/sda3` — 계획이 그

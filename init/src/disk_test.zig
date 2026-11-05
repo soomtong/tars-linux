@@ -637,11 +637,15 @@ pub fn main() !void {
             std.debug.print("FAIL: gap without TARS is {d}-{d}\n", .{ gap.start, gap.end });
             return error.WrongGap;
         }
-        const l = disk.besideLayout(gap, 512) orelse return error.LayoutRefused;
+        // 7GiB 디스크의 5.8GiB는 TP(2026-11-05)의 최소 16GiB에 못 미친다 — 이제 거절이 맞다. 배치는 dualboot 체인의
+        // 19GiB 맥과 같은 구간(2508800~39843840, 1MiB 정렬)으로 본다. TARS-BOOT · TARS-CONFIG의 줄은 sfdisk가 7GiB
+        // 디스크에서 받아 준 그 수 그대로이고 TARS-HOME의 크기만 구간을 따라 길어진다.
+        if (disk.besideLayout(gap, 512) != null) return error.SevenGibAccepted;
+        const l = disk.besideLayout(.{ .start = 2508800, .end = 39843840 }, 512) orelse return error.LayoutRefused;
         var script_buf: [512]u8 = undefined;
         try expectText(disk.appendScript(&script_buf, l) orelse return error.NoScript, "start=2508800, size=1572864, type=uefi, name=TARS-BOOT\n" ++
             "start=4081664, size=524288, type=linux, name=TARS-CONFIG\n" ++
-            "start=4605952, size=10072064, type=linux, name=TARS-HOME\n", "the append script");
+            "start=4605952, size=35237888, type=linux, name=TARS-HOME\n", "the append script");
         const fresh_nums = disk.freeNumbers(&g, true) orelse return error.NoNumbers;
         const next_nums = disk.freeNumbers(&g, false) orelse return error.NoNumbers;
         if (!std.mem.eql(u8, &fresh_nums, &.{ 3, 4, 5 }) or !std.mem.eql(u8, &next_nums, &.{ 6, 7, 8 })) return error.WrongNumbers;
@@ -722,13 +726,13 @@ pub fn main() !void {
         const g = disk.parseGpt(&head, 512) orelse return error.RealGptRejected;
         out = control.Out{ .buf = &out_buf };
         disk.roomRefusal(&out, "/dev/sda", &g, 1_900_000_000);
-        try expectText(out.bytes(), "the largest free space on /dev/sda is 1 GB; TARS needs more than 4 GiB; nothing was changed." ++
+        try expectText(out.bytes(), "the largest free space on /dev/sda is 1 GB; TARS needs more than 16 GiB; nothing was changed." ++
             "make room in macOS first: diskutil apfs resizeContainer disk0s2 <smaller size> (see diskutil list)", "the room refusal");
 
         out = control.Out{ .buf = &out_buf };
-        disk.besideLines(&out, "/dev/sda", "7 GB", "Mac SSD", "GPT: EFI, macOS (APFS); 6 GB free", .{ .start = 2508800, .end = 14678016 }, 512, .{ 3, 4, 5 }, &.{});
-        try expectText(out.bytes(), "tars-install: /dev/sda (7 GB, Mac SSD) keeps its partitions. it now holds: GPT: EFI, macOS (APFS); 6 GB free\n" ++
-            "  TARS goes into the free space from MiB 1225 to MiB 7167; no other partition is touched\n" ++
+        disk.besideLines(&out, "/dev/sda", "20 GB", "Mac SSD", "GPT: EFI, macOS (APFS); 19 GB free", .{ .start = 2508800, .end = 39843840 }, 512, .{ 3, 4, 5 }, &.{});
+        try expectText(out.bytes(), "tars-install: /dev/sda (20 GB, Mac SSD) keeps its partitions. it now holds: GPT: EFI, macOS (APFS); 19 GB free\n" ++
+            "  TARS goes into the free space from MiB 1225 to MiB 19455; no other partition is touched\n" ++
             "  p3  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n" ++
             "  p4  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
             "  p5     rest  Linux       ext4   tars-home   <- your home, empty at first\n" ++
@@ -822,13 +826,14 @@ pub fn main() !void {
         p.role = .home;
         if (disk.takeable(p, .ext) != .tars) return error.TarsTaken;
 
-        // dualboot 체인의 "디스크 유틸리티로 나눈 맥"(8GiB): p1 EFI · p2 APFS · 128MiB 틈 · p3 FAT · p4 NTFS(끝 256MiB).
-        var g = disk.Gpt{ .sector = 512, .first_usable = 34, .last_usable = 16777182, .entries = 128 };
+        // dualboot 체인의 "디스크 유틸리티로 나눈 맥"(20GiB, TP 전에는 8GiB): p1 EFI · p2 APFS · 128MiB 틈 · p3 FAT ·
+        // p4 NTFS(끝 256MiB).
+        var g = disk.Gpt{ .sector = 512, .first_usable = 34, .last_usable = 41943006, .entries = 128 };
         const rows = [_]disk.Part{
             .{ .number = 1, .kind = .efi, .role = .none, .first = 2048, .last = 411647 },
             .{ .number = 2, .kind = .apfs, .role = .none, .first = 411648, .last = 2508799 },
-            .{ .number = 3, .kind = .basic, .role = .none, .first = 2770944, .last = 16252927 },
-            .{ .number = 4, .kind = .basic, .role = .none, .first = 16252928, .last = 16777182 },
+            .{ .number = 3, .kind = .basic, .role = .none, .first = 2770944, .last = 41418751 },
+            .{ .number = 4, .kind = .basic, .role = .none, .first = 41418752, .last = 41943006 },
         };
         for (rows) |r| {
             g.parts[g.count] = r;
@@ -841,7 +846,7 @@ pub fn main() !void {
             return error.GuiMacGap;
         }
         const ga = disk.gapAround(&g, 3) orelse return error.NoGapAround;
-        if (ga.start * 512 >> 20 != 1225 or ga.end * 512 >> 20 != 7936) {
+        if (ga.start * 512 >> 20 != 1225 or ga.end * 512 >> 20 != 20224) {
             std.debug.print("FAIL: gapAround p3 is MiB {d}-{d}\n", .{ ga.start * 512 >> 20, ga.end * 512 >> 20 });
             return error.WrongGapAround;
         }
@@ -867,15 +872,15 @@ pub fn main() !void {
         try expectText(disk.partWhat(&what_buf, rows[3], .{ .fs = .ntfs }), "NTFS", "an NTFS row");
         try expectText(disk.partWhat(&what_buf, rows[2], .{ .fs = .fat32, .label = "A\x1bB" }), "FAT32 \"A?B\"", "a label with ESC");
         out = control.Out{ .buf = &out_buf };
-        disk.partRow(&out, "/dev/nvme3n1p3", "6 GB", "FAT32 \"TARS\"", true);
+        disk.partRow(&out, "/dev/nvme3n1p3", "19 GB", "FAT32 \"TARS\"", true);
         disk.partRow(&out, "/dev/nvme3n1p4", "268 MB", "NTFS", false);
-        try expectText(out.bytes(), "    /dev/nvme3n1p3    6 GB  FAT32 \"TARS\"  <- tars-install /dev/nvme3n1p3 installs here\n" ++
+        try expectText(out.bytes(), "    /dev/nvme3n1p3   19 GB  FAT32 \"TARS\"  <- tars-install /dev/nvme3n1p3 installs here\n" ++
             "    /dev/nvme3n1p4  268 MB  NTFS\n", "partition rows");
         out = control.Out{ .buf = &out_buf };
-        disk.takeLines(&out, "/dev/sda3", "FAT32 \"TARS\"", "6 GB", "/dev/sda", "8 GB", "Mac SSD", "GPT: EFI, macOS (APFS), 2 other; 134 MB free", ga, 512, nums);
-        try expectText(out.bytes(), "tars-install: /dev/sda3 (FAT32 \"TARS\", 6 GB) will be erased, the files on it too.\n" ++
-            "  the other partitions of /dev/sda (8 GB, Mac SSD) are kept. it now holds: GPT: EFI, macOS (APFS), 2 other; 134 MB free\n" ++
-            "  TARS goes into /dev/sda3 and the free space next to it, from MiB 1225 to MiB 7936; no other partition is touched\n" ++
+        disk.takeLines(&out, "/dev/sda3", "FAT32 \"TARS\"", "19 GB", "/dev/sda", "21 GB", "Mac SSD", "GPT: EFI, macOS (APFS), 2 other; 134 MB free", ga, 512, nums);
+        try expectText(out.bytes(), "tars-install: /dev/sda3 (FAT32 \"TARS\", 19 GB) will be erased, the files on it too.\n" ++
+            "  the other partitions of /dev/sda (21 GB, Mac SSD) are kept. it now holds: GPT: EFI, macOS (APFS), 2 other; 134 MB free\n" ++
+            "  TARS goes into /dev/sda3 and the free space next to it, from MiB 1225 to MiB 20224; no other partition is touched\n" ++
             "  p3  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n" ++
             "  p5  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
             "  p6     rest  Linux       ext4   tars-home   <- your home, empty at first\n" ++

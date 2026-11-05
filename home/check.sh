@@ -9,7 +9,7 @@ cd "$(dirname "$0")" || exit 1
 # (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을, HP-M2가 8(sudo)을 더했다).
 #
 # 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
-#   1  ISO + 빈 5GiB NVMe + 3GiB NVMe   홈 없는 부팅은 root(결정 3) · 3GiB는 거절(판정 7) · ext4 굽기 시간(실측 3) ·
+#   1  ISO + 빈 17GiB NVMe + 3GiB NVMe  홈 없는 부팅은 root(결정 3) · 3GiB는 거절(판정 7) · ext4 굽기 시간(실측 3) ·
 #                                       질문 길로 hpuser를 설치(판정 9) · 배치(판정 1)
 #   2  NVMe만                           p2와 p3(판정 2) · 마운트 옵션(판정 3) · 화면 셸이 hpuser다(판정 4) ·
 #                                       계정 파일의 권한(판정 10) · 사용자로 마커를 쓴다 · 사용자로 막히는 것(실측 10) ·
@@ -43,8 +43,8 @@ fi
 
 WORK="$(mktemp -d)"
 DISK="${WORK}/target.img"
-# 5GiB. 최소 4GiB + 2MiB(disk.MIN_DISK_BYTES)가 들어가는 가장 작은 정수다.
-truncate -s 5G "$DISK"
+# 17GiB. 최소 16GiB + 2MiB(disk.MIN_DISK_BYTES, TP부터)가 들어가는 가장 작은 정수다.
+truncate -s 17G "$DISK"
 # 3GiB. HP 전에는 설치가 되던 크기라 이것의 거절이 새 최소값을 증명한다(판정 7).
 SMALL="${WORK}/small.img"
 truncate -s 3G "$SMALL"
@@ -182,7 +182,7 @@ wait_log_re() {
 }
 
 # ── 부팅 1: ISO + 빈 NVMe + 3GiB NVMe ──────────────────────────────────
-echo "=== boot 1: the ISO, a blank 5 GiB NVMe and a 3 GiB NVMe ==="
+echo "=== boot 1: the ISO, a blank 17 GiB NVMe and a 3 GiB NVMe ==="
 boot_guest 1 -cdrom ../out/tars.iso \
   -drive file="$SMALL",if=none,id=small,format=raw \
   -device nvme,drive=small,serial=tarssmall
@@ -207,7 +207,7 @@ echo "8f: root's sudo works on the ISO boot"
 send "tars-install /dev/nvme1n1 --yes; printf 'hp-small-%s\n' done"
 wait_log "hp-small-done" \
   || fail "tars-install on the 3 GiB disk never came back to the shell" "tars-install:" "hp-small"
-if ! grep -aqF "tars-install: /dev/nvme1n1 is 3 GB; TARS needs more than 4 GiB" "$LOG"; then
+if ! grep -aqF "tars-install: /dev/nvme1n1 is 3 GB; TARS needs more than 16 GiB" "$LOG"; then
   fail "a 3 GiB disk was not refused by the new minimum" "tars-install:"
 fi
 if grep -aqF "tars-install: writing the partition table" "$LOG"; then

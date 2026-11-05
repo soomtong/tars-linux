@@ -384,7 +384,7 @@ fn headText(path: [:0]const u8, buf: []u8) disk.State {
 }
 
 /// GPT 디스크의 한 파티션이 무엇이고 지정 설치로 받을 수 있는가(DB-M1). seen.label은 head_buf 안을
-/// 가리킨다. here는 받을 수 있고(takeable) 자리도 되는(그 구간이 4GiB를 넘는) 것이다 — TARS가 이미 있는
+/// 가리킨다. here는 받을 수 있고(takeable) 자리도 되는(그 구간이 disk.MIN_DISK_BYTES를 넘는) 것이다 — TARS가 이미 있는
 /// 디스크는 늘 false다(지정 설치가 거절한다).
 const PartLook = struct { node: [:0]const u8, seen: disk.FsSeen, here: bool };
 

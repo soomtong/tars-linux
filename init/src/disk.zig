@@ -248,15 +248,17 @@ pub const SFDISK_SCRIPT =
     \\
 ;
 
-/// 설치를 받는 가장 작은 디스크(HP design 결정 2 — 사용자가 "어떤 임베디드에
-/// 들어갈지 모른다"며 4GiB를 보장하라고 정했다). p1 + p2가 1GiB라 p3에 3GiB
+/// 설치를 받는 가장 작은 디스크. HP design 결정 2의 4GiB를 TP(2026-11-05,
+/// 사용자)가 16GiB로 올렸다 — "요즘 작은 임베디드 장비도 디스크가 8GB 이상"이고
+/// p3에 개발 도구 층(TP design, 수 GB)이 놓인다. p1 + p2가 1GiB라 p3에 15GiB
 /// 남짓이 남는다. GPT 앞의 1MiB 정렬과 뒤의 백업 헤더 몫을 더했다. 이보다
 /// 작은 디스크는 YES를 묻기 전에 거절한다 — 묻고 나서 sfdisk가 실패하면 늦다.
-pub const MIN_DISK_BYTES: u64 = (4 << 30) + (2 << 20);
+pub const MIN_DISK_BYTES: u64 = (16 << 30) + (2 << 20);
 
-/// 거절 줄에 쓰는 최소 크기의 글자. formatSize는 10진 버림이라 최소 크기와
-/// 4GB 스틱이 둘 다 `4 GB`로 찍혀서 "4 GB는 4 GB가 필요하다"가 된다.
-pub const MIN_DISK_WORDS = "more than 4 GiB";
+/// 거절 줄에 쓰는 최소 크기의 글자. formatSize는 10진 버림이라 최소 크기가
+/// `17 GB`로 찍히고, 16GB라고 팔리는 장치(`16 GB`)가 왜 모자란지 안 보인다 —
+/// 그래서 GiB 글자로 적는다.
+pub const MIN_DISK_WORDS = "more than 16 GiB";
 
 pub fn bigEnough(bytes: u64) bool {
     return bytes >= MIN_DISK_BYTES;

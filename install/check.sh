@@ -45,11 +45,11 @@ fi
 
 WORK="$(mktemp -d)"
 DISK="${WORK}/target.img"
-# 5GiB. 최소 4GiB + 2MiB(disk.MIN_DISK_BYTES, HP design 결정 2)가 들어가는 가장
-# 작은 정수다 — 4GiB에는 안 들어간다. 배치는 768 + 256MiB와 나머지 전부의
+# 17GiB. 최소 16GiB + 2MiB(disk.MIN_DISK_BYTES, TP가 HP design 결정 2의 4GiB를 올렸다)가
+# 들어가는 가장 작은 정수다 — 16GiB에는 안 들어간다. 배치는 768 + 256MiB와 나머지 전부의
 # p3(HP-M0). truncate라 호스트 디스크를 실제로는 거의 안 쓴다(부팅 3a의
 # mcopy가 ESP의 빈 자리 700MB쯤을 실제로 쓴다).
-truncate -s 5G "$DISK"
+truncate -s 17G "$DISK"
 
 # KU-M0: mtools가 QEMU가 꺼진 사이 p1(FAT32)을 직접 연다. sfdisk의 기본 정렬로
 # p1은 2048섹터(1MiB)에서 시작한다. SKIP_CHECK는 mtools가 FAT의 기하 값을
@@ -293,14 +293,14 @@ if ! clean | grep -aE '^tars-install: /dev/x+\.\.\.$' >/dev/null; then
 fi
 echo "an error line longer than its buffer is printed clipped, not dropped"
 
-# 판정 4d (KU-M0). 최소 크기(4GiB, HP-M0부터)에 못 미치는 디스크는 YES 전에
+# 판정 4d (KU-M0). 최소 크기(16GiB, TP부터. HP-M0~는 4GiB)에 못 미치는 디스크는 YES 전에
 # 거절하고 아무것도 안 쓴다. 64MiB scratch가 그 디스크다. 크기 글자는 formatSize의
 # 10진 버림(67,108,864 → 67 MB)이고 최소는 글자로 적는다(disk.MIN_DISK_WORDS).
 # 3GiB(HP 전에는 들어가던 크기)의 거절은 home/check.sh 판정 7이 본다.
 send "tars-install /dev/nvme1n1 --yes; printf 'ku-small-%s\n' done"
 wait_log "ku-small-done" \
   || fail "tars-install on the 64 MiB disk never came back to the shell" "tars-install:" "ku-small"
-if ! grep -aqF "tars-install: /dev/nvme1n1 is 67 MB; TARS needs more than 4 GiB" "$LOG"; then
+if ! grep -aqF "tars-install: /dev/nvme1n1 is 67 MB; TARS needs more than 16 GiB" "$LOG"; then
   fail "a disk too small for the layout was not refused by size" "tars-install:"
 fi
 if grep -aqF "tars-install: writing the partition table" "$LOG"; then

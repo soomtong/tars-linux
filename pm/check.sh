@@ -58,10 +58,10 @@ curl -fsSL --max-time 30 -o "${WORK}/install.sh" "$INSTALL_URL"
 echo "pm: install.sh sha256 $(sha256sum "${WORK}/install.sh" | cut -c1-64) ($(wc -l < "${WORK}/install.sh") lines)"
 
 DISK="${WORK}/target.img"
-# tars-install의 최소 디스크(init/src/disk.zig의 MIN_DISK_BYTES = 4 GiB + 2 MiB). M0는 8GiB로 Homebrew의
-# 양을 따로 쟀고(실측 5, 약 270MB), M1은 그것과 bottle이 최소 디스크의 /home(약 3GiB)에 들어가는지를 본다.
+# tars-install의 최소 디스크(init/src/disk.zig의 MIN_DISK_BYTES = 16 GiB + 2 MiB, TP부터). M0는 8GiB로 Homebrew의
+# 양을 따로 쟀고(실측 5, 약 270MB), M1은 그것과 bottle이 최소 디스크의 /home(약 15GiB)에 들어가는지를 본다.
 MONITOR_PORT=45499
-truncate -s 4098M "$DISK"
+truncate -s 16386M "$DISK"
 
 QEMU_PID=""
 LOG=""
@@ -202,7 +202,7 @@ last_num() { grep -aoE -- "$1" "$LOG" | tail -1 | grep -oE '[0-9]+' | tail -1; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 8GiB NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO and a blank minimum-size NVMe (4 GiB + 2 MiB) ==="
+echo "=== boot 1: the ISO and a blank minimum-size NVMe (16 GiB + 2 MiB) ==="
 # -netdev만 있고 NIC 장치가 없다 — QEMU는 이때 기본 NIC를 안 붙인다(nic 체인 실측 5). 설치에 망은 필요 없다.
 boot_guest 1 -cdrom ../out/tars.iso
 send "tars-install /dev/nvme0n1 --yes"

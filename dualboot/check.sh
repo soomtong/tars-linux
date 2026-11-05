@@ -90,31 +90,31 @@ make_mac() {
   (set +o pipefail; yes tars-db-apfs-pattern | head -c 1G | dd of="$img" bs=1M seek=201 conv=notrunc status=none)
 }
 
-# 7GiB. p1 + p2 뒤의 빈 자리가 약 5.8GiB라 최소(4GiB + 2MiB, disk.MIN_DISK_BYTES)를 넘는다.
-make_mac "$MAC" 7G
+# 19GiB. p1 + p2 뒤의 빈 자리가 약 17.8GiB라 최소(16GiB + 2MiB, disk.MIN_DISK_BYTES, TP부터)를 넘는다.
+make_mac "$MAC" 19G
 # 3GiB. 빈 자리가 약 1.8GiB — `--beside`가 거절해야 하는 맥이다(판정 5).
 make_mac "$SMALL" 3G
 truncate -s 64M "$BLANK"
-echo "built a 7 GiB and a 3 GiB Mac disk (EFI 200 MiB, APFS 1 GiB) and a blank 64 MiB disk"
+echo "built a 19 GiB and a 3 GiB Mac disk (EFI 200 MiB, APFS 1 GiB) and a blank 64 MiB disk"
 
-# DB-M1. 8GiB "GUI 맥" — make_mac의 p1 · p2에, 디스크 유틸리티가 남기는 모양을 더한다. p2 뒤 128MiB 틈,
-# p3 Basic Data FAT32 `TARS`(MiB 1353~7936), p4 Basic Data NTFS(MiB 7936~끝, 256MiB에 조금 모자란다). 표는
+# DB-M1. 20GiB(TP 전에는 8GiB) "GUI 맥" — make_mac의 p1 · p2에, 디스크 유틸리티가 남기는 모양을 더한다. p2 뒤 128MiB 틈,
+# p3 Basic Data FAT32 `TARS`(MiB 1353~20224), p4 Basic Data NTFS(MiB 20224~끝, 256MiB에 조금 모자란다). 표는
 # mac_gpt.pl이 넷으로 다시 쓴다 — 엔트리 1 · 2의 바이트는 make_mac 때와 같다(고유 GUID가 자리에서 나온다).
 # p4는 NTFS 부트 섹터의 앞(OEM 이름)과 55 AA, 그 뒤 무늬 — 설치가 p4를 건드리면 해시가 바뀐다.
 make_gui_mac() {
   local img="$1"
-  make_mac "$img" 8G
+  make_mac "$img" 20G
   perl ./mac_gpt.pl "$img" "efi:2048:411647:EFI System Partition" "apfs:411648:2508799:" \
-    "basic:2770944:16252927:TARS" "basic:16252928:16777182:BOOTCAMP" \
+    "basic:2770944:41418751:TARS" "basic:41418752:41943006:BOOTCAMP" \
     || { echo "FAIL: mac_gpt.pl could not write the GPT of ${img}"; exit 1; }
-  mformat -i "${img}@@1353M" -F -T 13481984 -v TARS :: \
+  mformat -i "${img}@@1353M" -F -T 38647808 -v TARS :: \
     || { echo "FAIL: mtools could not make the FAT32 TARS partition on ${img}"; exit 1; }
-  (set +o pipefail; yes tars-db-ntfs-pattern | head -c 255M | dd of="$img" bs=1M seek=7936 conv=notrunc status=none)
-  printf '\353\122\220NTFS    ' | dd of="$img" bs=1 seek=$((7936 * 1048576)) conv=notrunc status=none
-  printf '\125\252' | dd of="$img" bs=1 seek=$((7936 * 1048576 + 510)) conv=notrunc status=none
+  (set +o pipefail; yes tars-db-ntfs-pattern | head -c 255M | dd of="$img" bs=1M seek=20224 conv=notrunc status=none)
+  printf '\353\122\220NTFS    ' | dd of="$img" bs=1 seek=$((20224 * 1048576)) conv=notrunc status=none
+  printf '\125\252' | dd of="$img" bs=1 seek=$((20224 * 1048576 + 510)) conv=notrunc status=none
 }
 make_gui_mac "$GUI"
-echo "built an 8 GiB Mac disk partitioned as Disk Utility does (EFI, APFS, 128 MiB gap, FAT32 TARS, NTFS)"
+echo "built a 20 GiB Mac disk partitioned as Disk Utility does (EFI, APFS, 128 MiB gap, FAT32 TARS, NTFS)"
 
 # p1 · p2의 바이트와 GPT 엔트리 1 · 2(LBA 2의 앞 256바이트). sfdisk는 엔트리 3부터 덧붙이므로 LBA 2의
 # 나머지와 헤더(LBA 1)는 바뀌는 것이 정상이다 — 그래서 엔트리 둘만 자른다.
@@ -131,7 +131,7 @@ whole_hash() { sha256sum "$1" | cut -c1-64; }
 gui_hashes() {
   local img="$1"
   mac_hashes "$img"
-  printf 'p4 %s\n' "$(dd if="$img" bs=1M skip=7936 count=255 status=none | sha256sum | cut -c1-64)"
+  printf 'p4 %s\n' "$(dd if="$img" bs=1M skip=20224 count=255 status=none | sha256sum | cut -c1-64)"
   printf 'entry4 %s\n' "$(dd if="$img" bs=128 skip=11 count=1 status=none | sha256sum | cut -c1-64)"
 }
 
@@ -299,11 +299,11 @@ boot_guest 1 -cdrom ../out/tars.iso \
   -device nvme,drive=gui,serial=tarsguimac
 
 # 판정 1a. 목록이 GPT를 읽어 macOS와 빈 자리를 말한다(design 결정 9). 크기는 10진 버림이다 —
-# 7GiB 디스크의 빈 자리 5.8GiB는 6,230,638,592바이트라 `6 GB`, 3GiB 디스크의 1.8GiB는 `1 GB`.
+# 19GiB 디스크(20,401,094,656바이트, `20 GB`)의 빈 자리 17.8GiB는 19,115,540,480바이트라 `19 GB`, 3GiB 디스크의 1.8GiB는 `1 GB`.
 send "tars-install"
 wait_log "$LIST_END" || fail "tars-install with no arguments never finished its list" "tars-install"
-if ! clean | grep -aE '^  /dev/nvme0n1 +7 GB .* internal +GPT: EFI, macOS \(APFS\); 6 GB free$' >/dev/null; then
-  fail "the Mac disk was not listed with its EFI and APFS partitions and 6 GB free" "/dev/nvme0n1"
+if ! clean | grep -aE '^  /dev/nvme0n1 +20 GB .* internal +GPT: EFI, macOS \(APFS\); 19 GB free$' >/dev/null; then
+  fail "the Mac disk was not listed with its EFI and APFS partitions and 19 GB free" "/dev/nvme0n1"
 fi
 if ! clean | grep -aE '^  /dev/nvme1n1 +3 GB .* internal +GPT: EFI, macOS \(APFS\); 1 GB free$' >/dev/null; then
   fail "the small Mac disk was not listed with 1 GB free" "/dev/nvme1n1"
@@ -320,8 +320,8 @@ send ""
 wait_log "type YES to continue: " || fail "the whole-disk install never asked for YES" "tars-install:"
 send "no"
 wait_log "tars-install: not confirmed; nothing was changed." || fail "'no' did not stop the whole-disk install" "tars-install:"
-if ! grep -aqF "tars-install: /dev/nvme0n1 (7 GB, " "$LOG" \
-  || ! clean | grep -aE 'will be erased\. it now holds: GPT: EFI, macOS \(APFS\); 6 GB free$' >/dev/null; then
+if ! grep -aqF "tars-install: /dev/nvme0n1 (20 GB, " "$LOG" \
+  || ! clean | grep -aE 'will be erased\. it now holds: GPT: EFI, macOS \(APFS\); 19 GB free$' >/dev/null; then
   fail "the whole-disk plan did not say it erases macOS" "will be erased"
 fi
 echo "the whole-disk plan says it erases a disk holding macOS (APFS); answered no"
@@ -329,7 +329,7 @@ echo "the whole-disk plan says it erases a disk holding macOS (APFS); answered n
 # 판정 5a. 자리가 모자란 맥 — YES를 묻기 전에 거절하고, macOS에서 자리를 내는 명령을 말한다(design 결정 3).
 send "tars-install /dev/nvme1n1 --beside --yes; printf 'db-small-%s\n' done"
 wait_log "db-small-done" 60 || fail "--beside on the small Mac disk never came back" "tars-install:" "db-small"
-grep -aqF "tars-install: the largest free space on /dev/nvme1n1 is 1 GB; TARS needs more than 4 GiB; nothing was changed." "$LOG" \
+grep -aqF "tars-install: the largest free space on /dev/nvme1n1 is 1 GB; TARS needs more than 16 GiB; nothing was changed." "$LOG" \
   || fail "--beside on a Mac disk with 1 GB free was not refused by size" "tars-install:"
 grep -aqF "tars-install: make room in macOS first: diskutil apfs resizeContainer disk0s2 <smaller size>" "$LOG" \
   || fail "the size refusal did not name the diskutil command" "tars-install:"
@@ -350,7 +350,7 @@ echo "--beside on a blank disk is refused before YES"
 send "tars-install /dev/nvme0n1 --beside --yes"
 echo "install --beside, step by step:"
 time_steps 120 \
-  "keeps its partitions. it now holds: GPT: EFI, macOS (APFS); 6 GB free" \
+  "keeps its partitions. it now holds: GPT: EFI, macOS (APFS); 19 GB free" \
   "tars-install: adding the TARS partitions to the partition table" \
   "tars-install: formatting /dev/nvme0n1p3 (FAT32, TARS-BOOT)" \
   "tars-install: formatting /dev/nvme0n1p4 (ext2, tars-config)" \
@@ -360,7 +360,7 @@ time_steps 120 \
   || fail "tars-install /dev/nvme0n1 --beside --yes did not go through its steps" \
        "tars-install:" "failed" "never appeared" "nothing was formatted"
 for want in \
-  "  TARS goes into the free space from MiB 1225 to MiB 7167; no other partition is touched" \
+  "  TARS goes into the free space from MiB 1225 to MiB 19455; no other partition is touched" \
   "  p3  768 MiB  EFI System  FAT32  TARS-BOOT" \
   "  p4  256 MiB  Linux       ext2   tars-config" \
   "  p5     rest  Linux       ext4   tars-home"; do
@@ -382,10 +382,10 @@ for _ in $(seq 1 600); do
 done
 [ "$(grep -acF -- "$LIST_END" "$LOG")" -ge 2 ] || fail "the second list never finished" "tars-install"
 for re in \
-  '^  /dev/nvme3n1 +8 GB .* internal +GPT: EFI, macOS \(APFS\), 2 other; 134 MB free$' \
+  '^  /dev/nvme3n1 +21 GB .* internal +GPT: EFI, macOS \(APFS\), 2 other; 134 MB free$' \
   '^    /dev/nvme3n1p1 +209 MB  EFI$' \
   '^    /dev/nvme3n1p2 +1 GB  macOS \(APFS\)$' \
-  '^    /dev/nvme3n1p3 +6 GB  FAT32 "TARS"  <- tars-install /dev/nvme3n1p3 installs here$' \
+  '^    /dev/nvme3n1p3 +19 GB  FAT32 "TARS"  <- tars-install /dev/nvme3n1p3 installs here$' \
   '^    /dev/nvme3n1p4 +268 MB  NTFS$' \
   '^    /dev/nvme0n1p2 +1 GB  macOS \(APFS\)$'; do
   clean | grep -aE -- "$re" >/dev/null || fail "the list is missing a line like: ${re}" "/dev/nvme3n1" "/dev/nvme0n1p"
@@ -398,7 +398,7 @@ echo "the list shows the GUI Mac's four partitions and offers p3: $(clean | grep
 # 판정 8. 128MiB 틈뿐인 디스크의 --beside는 자리로 거절하고, 받을 수 있는 파티션을 말한다.
 send "tars-install /dev/nvme3n1 --beside --yes; printf 'db-gui-beside-%s\n' done"
 wait_log "db-gui-beside-done" 60 || fail "--beside on the GUI Mac never came back" "tars-install:" "db-gui-beside"
-grep -aqF "tars-install: the largest free space on /dev/nvme3n1 is 134 MB; TARS needs more than 4 GiB; nothing was changed." "$LOG" \
+grep -aqF "tars-install: the largest free space on /dev/nvme3n1 is 134 MB; TARS needs more than 16 GiB; nothing was changed." "$LOG" \
   || fail "--beside on the GUI Mac was not refused by size" "tars-install:"
 grep -aqF "tars-install: or install into the partition made for it: tars-install /dev/nvme3n1p3" "$LOG" \
   || fail "the size refusal did not point at /dev/nvme3n1p3" "tars-install:"
@@ -421,14 +421,14 @@ if grep -aqF "tars-install: deleting the partition" "$LOG"; then
   fail "a refused partition install deleted a partition" "tars-install: deleting"
 fi
 
-# 판정 9. 지정 설치. p3을 지우고, p2 뒤의 틈까지 붙인 MiB 1225~7936에 셋을 놓는다. sfdisk는 지운 3과 빈 5 · 6을
+# 판정 9. 지정 설치. p3을 지우고, p2 뒤의 틈까지 붙인 MiB 1225~20224에 셋을 놓는다. sfdisk는 지운 3과 빈 5 · 6을
 # 매긴다 — 번호가 띄어 있어도 이름으로 찾는다.
 # 이 부팅의 둘째 설치라 `done.`은 1c가 이미 찍었다 — 그 줄을 기다리면 설치 도중에 끝난 것으로 읽혀 stop_guest가
 # ESP 복사 중의 QEMU를 끈다(DB-M1 첫 판, 부팅 5가 UEFI Shell로 떨어졌다). 명령 뒤의 표지를 마지막으로 기다린다.
 send "tars-install /dev/nvme3n1p3 --yes; printf 'db-take-%s\n' finished"
 echo "install into /dev/nvme3n1p3, step by step:"
 time_steps 120 \
-  "tars-install: /dev/nvme3n1p3 (FAT32 \"TARS\", 6 GB) will be erased, the files on it too." \
+  "tars-install: /dev/nvme3n1p3 (FAT32 \"TARS\", 19 GB) will be erased, the files on it too." \
   "tars-install: deleting the partition p3" \
   "tars-install: adding the TARS partitions to the partition table" \
   "tars-install: formatting /dev/nvme3n1p3 (FAT32, TARS-BOOT)" \
@@ -440,13 +440,13 @@ time_steps 120 \
 [ "$(grep -acF "tars-install: done. remove the boot medium and reboot." "$LOG")" -eq 2 ] \
   || fail "tars-install /dev/nvme3n1p3 --yes did not say done" "tars-install:" "failed"
 for want in \
-  "  TARS goes into /dev/nvme3n1p3 and the free space next to it, from MiB 1225 to MiB 7936; no other partition is touched" \
+  "  TARS goes into /dev/nvme3n1p3 and the free space next to it, from MiB 1225 to MiB 20224; no other partition is touched" \
   "  p3  768 MiB  EFI System  FAT32  TARS-BOOT" \
   "  p5  256 MiB  Linux       ext2   tars-config" \
   "  p6     rest  Linux       ext4   tars-home"; do
   grep -aqF -- "$want" "$LOG" || fail "the partition install plan is missing: ${want}" "tars-install:"
 done
-echo "tars-install /dev/nvme3n1p3 put TARS on p3, p5 and p6 in MiB 1225-7936"
+echo "tars-install /dev/nvme3n1p3 put TARS on p3, p5 and p6 in MiB 1225-20224"
 
 stop_guest
 
@@ -494,7 +494,7 @@ boot_guest 3 -cdrom ../out/tars.iso
 # p1 · p2는 부팅 끝에 호스트가 본다.
 send "tars-install"
 wait_log "$LIST_END" || fail "tars-install never finished its list" "tars-install"
-clean | grep -aE '^  /dev/nvme0n1 +7 GB .* internal +TARS installed$' >/dev/null \
+clean | grep -aE '^  /dev/nvme0n1 +20 GB .* internal +TARS installed$' >/dev/null \
   || fail "the installed Mac disk was not listed as TARS installed" "/dev/nvme0n1"
 send "sha256sum /dev/nvme0n1p4 | sed 's/^/db-p4-before /'"
 wait_re '^db-p4-before [0-9a-f]{64}' 120 || fail "could not hash p4 before the update" "db-p4"
