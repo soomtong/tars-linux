@@ -133,7 +133,7 @@ window.TARS = {
     ['2026-11-01', '0.1.3', '마우스 선택 — 더블 · 트리플클릭, 남는 선택과 [Shift]+클릭 늘리기, USB 무선 동글 여섯', 'tars-0.1.3-x86_64.iso',
       'b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7'],
     ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Air 내장 무선 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
-      '3ee58edaf6034bd6e8658e98b8fbd951a246fe223d85b8168ea305b77de0f675'],
+      '11add999635b0598ffaad428a31173b6074e3e244c36f071a41772c0965d01ce'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -262,6 +262,7 @@ window.TARS = {
         ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
         ['`tars-install <디스크>`', 'GPT에 768MiB ESP · 256MiB 설정 · 나머지 ext4 홈(4GiB 이상). 새 설치는 사용자 이름과 비밀번호를 묻는다. 이미 깔린 디스크는 부트 파일만 갱신하고 설정과 홈은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-03'],
         ['`tars-install <디스크> --beside`', 'macOS 등 기존 파티션을 안 건드리고 가장 큰 빈 공간(4GiB 이상)에 TARS 셋을 덧붙인다. 맥은 전원을 켤 때 Option → "EFI Boot", 기본 부팅은 macOS 그대로. `--beside --wipe`는 TARS 파티션만 다시 만든다', '2026-11-05'],
+        ['`tars-install <파티션>`', '디스크 유틸리티가 만든 FAT · exFAT 파티션(예: `/dev/sda3`)을 지우고 그 자리와 붙은 빈 공간에 TARS 셋을 놓는다. 다른 파티션은 그대로, EFI · APFS · HFS+ · Recovery · NTFS는 거절. 목록이 파티션을 한 줄씩 보인다', '2026-11-05'],
         ['`tars-install --wipe` · `--yes`', '설정과 홈까지 통째로 지운다 · 확인 `YES`와 계정 질문을 건너뛴다(기본값)', '2026-09-23'],
         ['`tars-dictate`', '말하고 [Ctrl+C]. 셸에서 직접 받아쓰기', '2026-10-06'],
       ],
