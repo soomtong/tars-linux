@@ -5,15 +5,15 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-05',
-  latest: 'Broadcom Wireless (BW-M0)',
+  latest: 'Laptop Power (LP-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1160,      // git rev-list --count main
+    commits: 1188,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 29,         // check.sh의 CHAINS
-    zigKLines: 42,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 30,         // check.sh의 CHAINS
+    zigKLines: 43,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -117,6 +117,9 @@ window.TARS = {
     ['2026-11-05', 'HiDPI Scale', 'HS', 'Retina 화면에서 글자를 정수배로 키운다 — 논리 화면에 그리고 바뀐 사각형만 늘려 옮긴다, `display_scale`'],
     ['2026-11-05', 'Broadcom Wireless', 'BW', 'MacBook Air 2011의 내장 무선(BCM43224)을 `brcmsmac`으로 — 같은 시기 MacBook Pro의 둘은 열린 길이 없다'],
     ['2026-11-05', 'Dual Boot', 'DB', '`tars-install --beside`가 macOS 파티션을 한 바이트도 안 건드리고 빈 공간에 TARS를 깐다 — 맥은 Option 키로 고른다'],
+    ['2026-11-05', 'Password Feedback', 'PW', '비밀번호 칸이 글자마다 `*`를 찍는다 — Wi-Fi · 설치 계정 · passwd, sudo의 칸도'],
+    ['2026-11-05', 'Power Commands', 'RB', '`sudo reboot` · `sudo poweroff` · `shutdown -r` — PID 1에 시그널 하나, 사용자로 치면 `try: sudo`'],
+    ['2026-11-05', 'Laptop Power', 'LP', 'Intel GPU 드라이버(i915)를 켜 뚜껑을 닫으면 S3로 자고, Apple 키보드의 F1 · F2가 화면 밝기 16단계'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -157,7 +160,8 @@ window.TARS = {
         ['터치패드 · 마우스 커널', 'PS/2(Synaptics · Elantech · ALPS 등) · SMBus · I2C-HID · Intel THC · HID multitouch', '2026-10-05'],
         ['오디오 커널', 'HDA 코덱 여덟 · Intel SOF(CNL~PTL) · AMD ACP · USB Audio, firmware 42개', '2026-10-06'],
         ['부트 메뉴 — new · old', '설치된 디스크로 뜨면 Limine 메뉴가 3초. 기본은 새 이미지, 이상하면 화살표로 `(old)`를 골라 갱신 전 이미지로 뜬다', '2026-11-01'],
-        ['MacBook 내장 장치', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 트랙패드(bcm5974, 두 손가락 스크롤 · 탭) · 내장 키보드 · Cirrus 스피커 · SBS 배터리 · Air의 내장 무선(BCM43224) · 내장 Bluetooth. Pro 2013의 내장 무선 · Fn 조합 · 밝기는 아직 없다', '2026-11-05'],
+        ['MacBook 내장 장치', 'MacBook Air 11" 2011 · MacBook Pro 15" Retina 2013의 트랙패드(bcm5974, 두 손가락 스크롤 · 탭) · 내장 키보드 · Cirrus 스피커 · SBS 배터리 · Air의 내장 무선(BCM43224) · 내장 Bluetooth. Pro 2013의 내장 무선 · Fn 조합 · 키보드 백라이트는 아직 없다', '2026-11-05'],
+        ['Intel GPU · 밝기 · 절전', 'i915가 Intel GPU를 받는다(맥북 둘 포함). 뚜껑을 닫으면 S3(deep)로 자고 열면 깨어난다. 화면 밝기는 `intel_backlight`를 16단계로', '2026-11-05'],
         ['HiDPI 배율', 'Retina처럼 큰 화면은 논리 화면(예: 2880×1800 → 1440×900)에 그리고 정수배로 늘려 보인다. 비트맵 폰트라 2배도 선명하다', '2026-11-05'],
         ['커널 6.18.60', '6.18 longterm의 최신 패치(6.18.42에서)', '2026-11-01'],
       ],
@@ -259,6 +263,8 @@ window.TARS = {
         ['`tars-config reload terminal`', '화면을 새 값으로 다시 띄운다(패널과 클립보드는 사라진다)', '2026-10-07'],
         ['`tars-config wifi` · `ssh` · `ssh-key` · `firewall` · `dictation`', '무선 접속 · sshd 켜고 끄기 · 공개 키 추가 · 포트 열고 닫기 · 받아쓰기 키와 설정', '2026-10-07'],
         ['`sudo tars-config passwd`', '비밀번호를 바꾼다. 새 값을 두 번 묻고, 다르면 아무것도 안 바꾼다. 다음 sudo부터 새 값', '2026-11-03'],
+        ['`sudo reboot` · `sudo poweroff` · `sudo shutdown -r`', '재부팅 · 전원 끄기. 정리는 PID 1이 한다(Ctrl+Alt+Del과 같은 길). 사용자로 치면 `try: sudo …`', '2026-11-05'],
+        ['`sudo suspend`', 'S3로 잔다(뚜껑을 닫은 것과 같다). sudo 없이 치면 셸의 내장 명령이 잡히니 언제나 sudo로', '2026-11-05'],
         ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
         ['`tars-install <디스크>`', 'GPT에 768MiB ESP · 256MiB 설정 · 나머지 ext4 홈(4GiB 이상). 새 설치는 사용자 이름과 비밀번호를 묻는다. 이미 깔린 디스크는 부트 파일만 갱신하고 설정과 홈은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-03'],
         ['`tars-install <디스크> --beside`', 'macOS 등 기존 파티션을 안 건드리고 가장 큰 빈 공간(4GiB 이상)에 TARS 셋을 덧붙인다. 맥은 전원을 켤 때 Option → "EFI Boot", 기본 부팅은 macOS 그대로. `--beside --wipe`는 TARS 파티션만 다시 만든다', '2026-11-05'],
@@ -311,6 +317,7 @@ window.TARS = {
         ['[⌥←] · [⌥→] · [⌥⌫] · [⌥Del]', '단어 이동 · 단어 지우기', '2026-08-19'],
         ['[⇧PgUp] · [⇧PgDn] · [⇧Home] · [⇧End]', '스크롤백 한 페이지 · 맨 위 · 맨 아래', '2026-08-24'],
         ['오른쪽 [⌘] 두 번', '받아쓰기 시작 · 끝(300ms 안). 녹음 중 Esc는 취소', '2026-10-06'],
+        ['[F1] · [F2] (Apple 키보드) · 밝기 키', '화면 밝기 한 단계 어둡게 · 밝게(16단계, 꺼지지는 않는다). PC 키보드의 F1 · F2는 그대로', '2026-11-05'],
       ],
     },
     {
