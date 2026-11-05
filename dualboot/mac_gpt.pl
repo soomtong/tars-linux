@@ -20,6 +20,8 @@ my %TYPES = (
   efi  => 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B',
   apfs => '7C3457EF-0000-11AA-AA11-00306543ECAC',
   hfs  => '48465300-0000-11AA-AA11-00306543ECAC',
+  # DB-M1: 디스크 유틸리티의 MS-DOS(FAT) · ExFAT 파티션과 Boot Camp의 NTFS가 이 타입이다.
+  basic => 'EBD0A0A2-B9E5-4433-87C0-68B6B72699C7',
 );
 
 # GUID의 디스크 위 모양. 앞의 세 칸은 리틀엔디안, 뒤의 두 칸은 적힌 순서 그대로다.

@@ -511,6 +511,7 @@ pub fn main() !void {
     try expectText(out.bytes(), "tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n" ++
         "tars-install <disk> --yes   same, without asking\n" ++
         "tars-install <disk> --beside  keep what <disk> has; install into its largest free space\n" ++
+        "tars-install <partition>    erase that one partition (say /dev/sda3) and install there\n" ++
         "tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", "usage");
     var check_buf: [65536]u8 = undefined;
     const check = try readAll(INSTALL_CHECK, &check_buf);
@@ -638,8 +639,7 @@ pub fn main() !void {
         }
         const l = disk.besideLayout(gap, 512) orelse return error.LayoutRefused;
         var script_buf: [512]u8 = undefined;
-        try expectText(disk.appendScript(&script_buf, l) orelse return error.NoScript,
-            "start=2508800, size=1572864, type=uefi, name=TARS-BOOT\n" ++
+        try expectText(disk.appendScript(&script_buf, l) orelse return error.NoScript, "start=2508800, size=1572864, type=uefi, name=TARS-BOOT\n" ++
             "start=4081664, size=524288, type=linux, name=TARS-CONFIG\n" ++
             "start=4605952, size=10072064, type=linux, name=TARS-HOME\n", "the append script");
         const fresh_nums = disk.freeNumbers(&g, true) orelse return error.NoNumbers;
@@ -749,10 +749,150 @@ pub fn main() !void {
         }
     }
 
+    // ── 24. 기존 파티션 지정 (DB-M1) ─────────────────────────────────
+    {
+        // 노드 이름. 디스크 이름이 숫자로 끝나면 p가 든다(storage.partitionName).
+        const sda3 = disk.splitPartition("/dev/sda3") orelse return error.SdaPartRejected;
+        if (!std.mem.eql(u8, sda3.disk, "/dev/sda") or sda3.number != 3) return error.SdaPartWrong;
+        const nv = disk.splitPartition("/dev/nvme3n1p12") orelse return error.NvmePartRejected;
+        if (!std.mem.eql(u8, nv.disk, "/dev/nvme3n1") or nv.number != 12) return error.NvmePartWrong;
+        const mmc = disk.splitPartition("/dev/mmcblk0p3") orelse return error.MmcPartRejected;
+        if (!std.mem.eql(u8, mmc.disk, "/dev/mmcblk0") or mmc.number != 3) return error.MmcPartWrong;
+        for ([_][]const u8{ "/dev/nvme0n1", "/dev/sda", "/dev/nvme0n13", "/dev/sda0", "/dev/sdz1", "/dev/sda129", "sda3" }) |bad| {
+            if (disk.splitPartition(bad) != null) {
+                std.debug.print("FAIL: splitPartition accepted {s}\n", .{bad});
+                return error.NotAPartitionAccepted;
+            }
+        }
+
+        // 서명. NTFS · exFAT은 55 AA가 있어도 FAT보다 먼저다.
+        var h = clear();
+        if (disk.fsOf(h).fs != .none) return error.ZeroNotEmpty;
+        h[510] = 0x55;
+        h[511] = 0xAA;
+        @memcpy(h[82..90], "FAT32   ");
+        @memcpy(h[71..82], "TARS       ");
+        const seen = disk.fsOf(h);
+        if (seen.fs != .fat32) return error.Fat32Missed;
+        try expectText(seen.label, "TARS", "the FAT32 label");
+        @memcpy(h[71..82], "NO NAME    ");
+        try expectText(disk.fsOf(h).label, "", "NO NAME is no label");
+        @memcpy(h[3..11], "NTFS    ");
+        if (disk.fsOf(h).fs != .ntfs) return error.NtfsMissed;
+        @memcpy(h[3..11], "EXFAT   ");
+        if (disk.fsOf(h).fs != .exfat) return error.ExfatMissed;
+        h = clear();
+        h[510] = 0x55;
+        h[511] = 0xAA;
+        @memcpy(h[54..62], "FAT16   ");
+        if (disk.fsOf(h).fs != .fat16) return error.Fat16Missed;
+        h = clear();
+        @memcpy(h[32..36], "NXSB");
+        if (disk.fsOf(h).fs != .apfs) return error.ApfsMissed;
+        h = clear();
+        @memcpy(h[1024..1026], "H+");
+        if (disk.fsOf(h).fs != .hfs) return error.HfsMissed;
+        h = clear();
+        h[1080] = 0x53;
+        h[1081] = 0xEF;
+        if (disk.fsOf(h).fs != .ext) return error.ExtMissed;
+        h = clear();
+        h[20000] = 1;
+        if (disk.fsOf(h).fs != .other) return error.OtherMissed;
+
+        // 받는 표(plan 결정 13).
+        const basic = disk.Part{ .number = 3, .kind = .basic, .role = .none, .first = 0, .last = 0 };
+        var other = basic;
+        other.kind = .other;
+        if (disk.takeable(basic, .fat32) != null or disk.takeable(basic, .exfat) != null or disk.takeable(basic, .none) != null or
+            disk.takeable(other, .none) != null) return error.TakeableRefused;
+        if (disk.takeable(basic, .ntfs) != .ntfs) return error.NtfsTaken;
+        if (disk.takeable(other, .fat32) != .filesystem) return error.LinuxFatTaken;
+        if (disk.takeable(basic, .ext) != .filesystem) return error.ExtTaken;
+        var p = basic;
+        p.kind = .efi;
+        if (disk.takeable(p, .fat32) != .efi) return error.EfiTaken;
+        p.kind = .apfs;
+        if (disk.takeable(p, .none) != .macos) return error.ApfsTaken;
+        p.kind = .hfs;
+        if (disk.takeable(p, .hfs) != .macos) return error.HfsTaken;
+        p.kind = .apple_boot;
+        if (disk.takeable(p, .hfs) != .recovery) return error.RecoveryTaken;
+        p = basic;
+        p.role = .home;
+        if (disk.takeable(p, .ext) != .tars) return error.TarsTaken;
+
+        // dualboot 체인의 "디스크 유틸리티로 나눈 맥"(8GiB): p1 EFI · p2 APFS · 128MiB 틈 · p3 FAT · p4 NTFS(끝 256MiB).
+        var g = disk.Gpt{ .sector = 512, .first_usable = 34, .last_usable = 16777182, .entries = 128 };
+        const rows = [_]disk.Part{
+            .{ .number = 1, .kind = .efi, .role = .none, .first = 2048, .last = 411647 },
+            .{ .number = 2, .kind = .apfs, .role = .none, .first = 411648, .last = 2508799 },
+            .{ .number = 3, .kind = .basic, .role = .none, .first = 2770944, .last = 16252927 },
+            .{ .number = 4, .kind = .basic, .role = .none, .first = 16252928, .last = 16777182 },
+        };
+        for (rows) |r| {
+            g.parts[g.count] = r;
+            g.count += 1;
+        }
+        // 빈 자리는 p2와 p3 사이의 128MiB 틈뿐이다 — `--beside`가 거절하고 지정 설치를 말하는 디스크다.
+        const lg = disk.largestGap(&g, false) orelse return error.GuiMacNoGap;
+        if (lg.start * 512 >> 20 != 1225 or lg.end * 512 >> 20 != 1353) {
+            std.debug.print("FAIL: the GUI Mac disk's largest gap is MiB {d}-{d}\n", .{ lg.start * 512 >> 20, lg.end * 512 >> 20 });
+            return error.GuiMacGap;
+        }
+        const ga = disk.gapAround(&g, 3) orelse return error.NoGapAround;
+        if (ga.start * 512 >> 20 != 1225 or ga.end * 512 >> 20 != 7936) {
+            std.debug.print("FAIL: gapAround p3 is MiB {d}-{d}\n", .{ ga.start * 512 >> 20, ga.end * 512 >> 20 });
+            return error.WrongGapAround;
+        }
+        if (disk.besideLayout(ga, 512) == null) return error.GapAroundTooSmall;
+        // p4 뒤(끝)는 1MiB 아래로 맞추면 남는 것이 p4 그 자체다 — 256MiB라 자리가 안 된다.
+        const g4 = disk.gapAround(&g, 4) orelse return error.NoGapAroundP4;
+        if (disk.besideLayout(g4, 512) != null) return error.P4BigEnough;
+        const rest = g.without(3);
+        if (rest.count != 3 or rest.byNumber(3) != null) return error.WithoutKeptP3;
+        const nums = disk.freeNumbers(&rest, false) orelse return error.NoNumbers;
+        if (nums[0] != 3 or nums[1] != 5 or nums[2] != 6) {
+            std.debug.print("FAIL: sfdisk numbers after deleting p3: {any}\n", .{nums});
+            return error.WrongNumbers;
+        }
+        // gptText의 글자는 DB-M0 그대로 — 새 타입은 other로 센다.
+        var text_buf: [128]u8 = undefined;
+        try expectText(disk.gptText(&text_buf, &g), "GPT: EFI, macOS (APFS), 2 other; 134 MB free", "the GUI Mac disk's state");
+
+        // 문장.
+        var what_buf: [48]u8 = undefined;
+        try expectText(disk.partWhat(&what_buf, rows[2], .{ .fs = .fat32, .label = "TARS" }), "FAT32 \"TARS\"", "a FAT row");
+        try expectText(disk.partWhat(&what_buf, rows[1], .{ .fs = .other }), "macOS (APFS)", "an APFS row");
+        try expectText(disk.partWhat(&what_buf, rows[3], .{ .fs = .ntfs }), "NTFS", "an NTFS row");
+        try expectText(disk.partWhat(&what_buf, rows[2], .{ .fs = .fat32, .label = "A\x1bB" }), "FAT32 \"A?B\"", "a label with ESC");
+        out = control.Out{ .buf = &out_buf };
+        disk.partRow(&out, "/dev/nvme3n1p3", "6 GB", "FAT32 \"TARS\"", true);
+        disk.partRow(&out, "/dev/nvme3n1p4", "268 MB", "NTFS", false);
+        try expectText(out.bytes(), "    /dev/nvme3n1p3    6 GB  FAT32 \"TARS\"  <- tars-install /dev/nvme3n1p3 installs here\n" ++
+            "    /dev/nvme3n1p4  268 MB  NTFS\n", "partition rows");
+        out = control.Out{ .buf = &out_buf };
+        disk.takeLines(&out, "/dev/sda3", "FAT32 \"TARS\"", "6 GB", "/dev/sda", "8 GB", "Mac SSD", "GPT: EFI, macOS (APFS), 2 other; 134 MB free", ga, 512, nums);
+        try expectText(out.bytes(), "tars-install: /dev/sda3 (FAT32 \"TARS\", 6 GB) will be erased, the files on it too. the other partitions of /dev/sda (8 GB, Mac SSD) are kept. it now holds: GPT: EFI, macOS (APFS), 2 other; 134 MB free\n" ++
+            "  TARS goes into /dev/sda3 and the free space next to it, from MiB 1225 to MiB 7936; no other partition is touched\n" ++
+            "  p3  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n" ++
+            "  p5  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n" ++
+            "  p6     rest  Linux       ext4   tars-home   <- your home, empty at first\n" ++
+            "  the Mac still starts macOS; hold Option at power-on and pick EFI Boot for TARS\n", "the take plan");
+        out = control.Out{ .buf = &out_buf };
+        disk.takeRefusal(&out, "/dev/sda2", "/dev/sda", .macos, .{ .fs = .apfs });
+        try expectText(out.bytes(), "/dev/sda2 is an APFS or HFS+ partition and may hold macOS; nothing was changed." ++
+            "if you made it for TARS, turn it into free space in macOS (diskutil eraseVolume free free diskXsN) and use tars-install /dev/sda --beside", "the macOS refusal");
+        out = control.Out{ .buf = &out_buf };
+        disk.takeRefusal(&out, "/dev/sda4", "/dev/sda", .ntfs, .{ .fs = .ntfs });
+        try expectText(out.bytes(), "/dev/sda4 holds NTFS (Windows or Boot Camp); tars-install takes only an empty, FAT or exFAT partition. nothing was changed", "the NTFS refusal");
+    }
+
     std.debug.print("disk_test: signatures, sizes, arguments, labels, the YES gate and the ESP conf hold\n", .{});
     std.debug.print("disk_test: the state column, a list row, both plans, a tool's end and the usage lines are the installer's words\n", .{});
     std.debug.print("disk_test: the minimum disk, the rotation rule and its order (something boots after every step) hold\n", .{});
     std.debug.print("disk_test: GPT entries as sfdisk writes them (512 and 4Kn), names, the largest free space and the beside plan hold\n", .{});
+    std.debug.print("disk_test: partition nodes, file system signatures, what a named partition install takes and where it goes hold\n", .{});
 }
 
 /// 검사 22의 진짜 바이트(dualboot 체인과 같은 7GiB 맥 디스크 + sfdisk --append, util-linux 2.41.5).

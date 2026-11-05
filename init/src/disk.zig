@@ -445,6 +445,7 @@ pub fn usageLines(sink: anytype) void {
     sink.print("tars-install <disk>         install onto <disk>; a disk that has TARS is only updated\n", .{});
     sink.print("tars-install <disk> --yes   same, without asking\n", .{});
     sink.print("tars-install <disk> --beside  keep what <disk> has; install into its largest free space\n", .{});
+    sink.print("tars-install <partition>    erase that one partition (say /dev/sda3) and install there\n", .{});
     sink.print("tars-install <disk> --wipe  erase <disk> even if it has TARS, settings too\n", .{});
 }
 
@@ -616,6 +617,11 @@ pub fn guidBytes(comptime text: []const u8) [16]u8 {
 pub const GUID_EFI = guidBytes("C12A7328-F81F-11D2-BA4B-00A0C93EC93B");
 pub const GUID_APFS = guidBytes("7C3457EF-0000-11AA-AA11-00306543ECAC");
 pub const GUID_HFS = guidBytes("48465300-0000-11AA-AA11-00306543ECAC");
+/// 지정 설치(DB-M1)가 가리는 타입 둘. 디스크 유틸리티의 MS-DOS(FAT) · ExFAT 파티션은 Microsoft Basic Data다 —
+/// Boot Camp의 NTFS도 같은 타입이라 타입만으로는 못 받는다(파일시스템을 함께 본다, takeable). Apple Boot는
+/// HFS+ 맥의 Recovery HD다.
+pub const GUID_BASIC = guidBytes("EBD0A0A2-B9E5-4433-87C0-68B6B72699C7");
+pub const GUID_APPLE_BOOT = guidBytes("426F6F74-0000-11AA-AA11-00306543ECAC");
 
 /// GPT 파티션 이름. 통째 설치의 SFDISK_SCRIPT와 `--beside`의 appendScript가 같은 이름을 쓴다.
 /// ESP는 FAT 라벨과 GPT 이름이 같은 글자다(ESP_LABEL).
@@ -623,7 +629,7 @@ pub const NAME_BOOT: []const u8 = ESP_LABEL;
 pub const NAME_CONFIG: []const u8 = "TARS-CONFIG";
 pub const NAME_HOME: []const u8 = "TARS-HOME";
 
-pub const PartKind = enum { efi, apfs, hfs, other };
+pub const PartKind = enum { efi, apfs, hfs, basic, apple_boot, other };
 pub const Role = enum { none, boot, config, home };
 
 pub const Part = struct {
@@ -678,6 +684,27 @@ pub const Gpt = struct {
         }
         return false;
     }
+
+    /// 그 번호의 파티션. 없으면 null.
+    pub fn byNumber(self: *const Gpt, number: u8) ?Part {
+        for (self.slice()) |p| {
+            if (p.number == number) return p;
+        }
+        return null;
+    }
+
+    /// 그 번호의 파티션을 뺀 사본(DB-M1). 지정 설치가 `sfdisk --delete` 뒤의 표를 미리 본다 — freeNumbers가
+    /// 이 사본에서 sfdisk가 매길 번호를 센다.
+    pub fn without(self: *const Gpt, number: u8) Gpt {
+        var g = self.*;
+        g.count = 0;
+        for (self.slice()) |p| {
+            if (p.number == number) continue;
+            g.parts[g.count] = p;
+            g.count += 1;
+        }
+        return g;
+    }
 };
 
 /// 엔트리 이름(UTF-16LE 36글자, 72바이트)이 ASCII 글자 name과 같은가. 남는 자리는 0이어야 한다.
@@ -703,6 +730,8 @@ fn kindOf(guid: *const [16]u8) PartKind {
     if (std.mem.eql(u8, guid, &GUID_EFI)) return .efi;
     if (std.mem.eql(u8, guid, &GUID_APFS)) return .apfs;
     if (std.mem.eql(u8, guid, &GUID_HFS)) return .hfs;
+    if (std.mem.eql(u8, guid, &GUID_BASIC)) return .basic;
+    if (std.mem.eql(u8, guid, &GUID_APPLE_BOOT)) return .apple_boot;
     return .other;
 }
 
@@ -872,7 +901,8 @@ pub fn gptText(buf: []u8, g: *const Gpt) []const u8 {
             .efi => "EFI",
             .apfs => "macOS (APFS)",
             .hfs => "macOS (HFS+)",
-            .other => {
+            // 목록 줄의 글자는 DB-M0 그대로 둔다(체인들이 읽는다). 이름은 파티션 줄(DB-M1)이 말한다.
+            .basic, .apple_boot, .other => {
                 others += 1;
                 continue;
             },
@@ -948,4 +978,186 @@ pub fn layoutRows(sink: anytype, nums: [3]u8) void {
     sink.print("  p{d}  768 MiB  EFI System  FAT32  TARS-BOOT   <- bzImage, initrd.cpio, limine\n", .{nums[0]});
     sink.print("  p{d}  256 MiB  Linux       ext2   tars-config <- your settings, empty at first\n", .{nums[1]});
     sink.print("  p{d}     rest  Linux       ext4   tars-home   <- your home, empty at first\n", .{nums[2]});
+}
+
+// ── 기존 파티션 지정 (DB-M1) ──────────────────────────────────────────
+//
+// macOS의 디스크 유틸리티로 나누면 새 자리가 늘 포맷된 파티션이 된다(크기만 주는 `diskutil apfs
+// resizeContainer`만 빈 자리를 남긴다). `tars-install /dev/sda3`이 그 파티션을 지우고 그 자리(와 바로 붙은
+// 빈 자리)에 셋을 놓는다. 쓰기는 `--beside --wipe`의 길 그대로다 — 지울 번호가 TARS 셋이 아니라 사람이
+// 고른 하나일 뿐이다. 남의 파티션을 지우는 일이라 받는 것을 좁게 정한다(takeable).
+
+/// 파티션 노드(`/dev/sda3` · `/dev/nvme0n1p3` · `/dev/mmcblk0p3`)의 디스크와 번호. 디스크는 storage.DISKS의
+/// 원소이고(수명이 무한한 리터럴), 이름은 storage.partitionName과 같은 규칙으로 지어 맞춘다 — 부팅 때 init이
+/// 찾는 이름과 갈리지 않게. 번호는 GPT 엔트리 수(MAX_PARTS)까지다.
+pub const PartArg = struct { disk: [:0]const u8, number: u8 };
+
+pub fn splitPartition(path: []const u8) ?PartArg {
+    for (storage.DISKS) |d| {
+        if (!std.mem.startsWith(u8, path, d)) continue;
+        var n: u8 = 1;
+        while (n <= MAX_PARTS) : (n += 1) {
+            var buf: [32]u8 = undefined;
+            const name = storage.partitionName(&buf, d, n) orelse continue;
+            if (std.mem.eql(u8, name, path)) return .{ .disk = d, .number = n };
+        }
+    }
+    return null;
+}
+
+/// 파티션 머리에 보이는 파일시스템. 머리는 HEAD_BYTES(34KiB) — 아래의 서명은 전부 그 안이다.
+pub const Fs = enum { none, fat12, fat16, fat32, exfat, ntfs, hfs, apfs, ext, other };
+
+pub const FsSeen = struct {
+    fs: Fs,
+    /// FAT의 부트 섹터 라벨(공백을 벗긴 것, `NO NAME`은 빈 문자열). head 안을 가리킨다.
+    label: []const u8 = "",
+};
+
+/// 순서가 뜻이 있다. NTFS · exFAT은 부트 섹터 끝에 55 AA를 가져서 FAT보다 먼저 OEM 이름(오프셋 3)으로
+/// 가린다. FAT은 FAT32의 BS_FilSysType(82)과 FAT12/16의 것(54)을 본다. HFS+는 1024의 `H+`·`HX`, APFS는
+/// 컨테이너 superblock의 `NXSB`(32), ext는 superblock의 매직(1080의 53 EF)이다. 다 0이면 none이다.
+pub fn fsOf(head: []const u8) FsSeen {
+    if (head.len >= 11 and std.mem.eql(u8, head[3..11], "NTFS    ")) return .{ .fs = .ntfs };
+    if (head.len >= 11 and std.mem.eql(u8, head[3..11], "EXFAT   ")) return .{ .fs = .exfat };
+    if (head.len >= 512 and head[510] == 0x55 and head[511] == 0xAA) {
+        if (std.mem.eql(u8, head[82..90], "FAT32   ")) return .{ .fs = .fat32, .label = fatLabel(head[71..82]) };
+        if (std.mem.eql(u8, head[54..62], "FAT16   ")) return .{ .fs = .fat16, .label = fatLabel(head[43..54]) };
+        if (std.mem.eql(u8, head[54..62], "FAT12   ")) return .{ .fs = .fat12, .label = fatLabel(head[43..54]) };
+    }
+    if (head.len >= 36 and std.mem.eql(u8, head[32..36], "NXSB")) return .{ .fs = .apfs };
+    if (head.len >= 1026 and (std.mem.eql(u8, head[1024..1026], "H+") or std.mem.eql(u8, head[1024..1026], "HX"))) return .{ .fs = .hfs };
+    if (head.len >= 1082 and head[1080] == 0x53 and head[1081] == 0xEF) return .{ .fs = .ext };
+    for (head) |b| {
+        if (b != 0) return .{ .fs = .other };
+    }
+    return .{ .fs = .none };
+}
+
+fn fatLabel(raw: []const u8) []const u8 {
+    const t = std.mem.trimEnd(u8, raw, " ");
+    return if (std.mem.eql(u8, t, "NO NAME")) "" else t;
+}
+
+pub fn fsWord(fs: Fs) []const u8 {
+    return switch (fs) {
+        .none => "empty",
+        .fat12 => "FAT12",
+        .fat16 => "FAT16",
+        .fat32 => "FAT32",
+        .exfat => "exFAT",
+        .ntfs => "NTFS",
+        .hfs => "HFS+",
+        .apfs => "APFS",
+        .ext => "ext",
+        .other => "unknown data",
+    };
+}
+
+/// 지정 설치가 거절하는 까닭(DB-M1 plan 결정 13).
+pub const Refusal = enum { tars, efi, macos, recovery, ntfs, filesystem };
+
+/// 받는 것은 둘이다 — Basic Data 타입의 FAT · exFAT(디스크 유틸리티의 MS-DOS(FAT) · ExFAT), 그리고 머리가
+/// 비어 있는 파티션(타입이 macOS 쪽이 아닐 때). 나머지는 null이 아니라 까닭이다. APFS · HFS+ 타입은 머리와
+/// 상관없이 거절한다 — 빈 APFS 컨테이너인지 macOS인지 가리려면 APFS를 읽어야 하는데 그것을 안 한다.
+pub fn takeable(p: Part, fs: Fs) ?Refusal {
+    if (p.role != .none) return .tars;
+    switch (p.kind) {
+        .efi => return .efi,
+        .apfs, .hfs => return .macos,
+        .apple_boot => return .recovery,
+        .basic, .other => {},
+    }
+    if (fs == .none) return null;
+    if (fs == .ntfs) return .ntfs;
+    if (p.kind == .basic and (fs == .fat12 or fs == .fat16 or fs == .fat32 or fs == .exfat)) return null;
+    return .filesystem;
+}
+
+/// 그 파티션의 구간에 바로 앞뒤의 빈 구간을 붙인 것(DB-M1 plan 결정 14). 디스크 유틸리티는 파티션 사이에
+/// 여유를 두기도 한다 — 그 자리까지 쓴다. 다른 곳의 빈 자리는 안 쓴다(사람이 고른 곳에 깐다). 두 끝은
+/// largestGap과 같이 1MiB에 맞춘다. 맞춘 뒤 비면 null.
+pub fn gapAround(g: *const Gpt, number: u8) ?Gap {
+    const me = g.byNumber(number) orelse return null;
+    var lo = g.first_usable;
+    var hi = g.last_usable + 1;
+    for (g.slice()) |p| {
+        if (p.number == number) continue;
+        if (p.last < me.first) lo = @max(lo, p.last + 1);
+        if (p.first > me.last) hi = @min(hi, p.first);
+    }
+    const step: u64 = (1 << 20) / g.sector;
+    const s = std.mem.alignForward(u64, lo, step);
+    const e = std.mem.alignBackward(u64, hi, step);
+    if (e <= s) return null;
+    return .{ .start = s, .end = e };
+}
+
+/// 파티션 줄의 이름 칸. TARS는 GPT 이름, macOS 쪽은 타입, 나머지는 파일시스템과 라벨이다.
+pub fn partWhat(buf: []u8, p: Part, seen: FsSeen) []const u8 {
+    switch (p.role) {
+        .boot => return NAME_BOOT,
+        .config => return NAME_CONFIG,
+        .home => return NAME_HOME,
+        .none => {},
+    }
+    switch (p.kind) {
+        .efi => return "EFI",
+        .apfs => return "macOS (APFS)",
+        .hfs => return "macOS (HFS+)",
+        .apple_boot => return "macOS Recovery",
+        .basic, .other => {},
+    }
+    if (seen.label.len == 0) return fsWord(seen.fs);
+    var label_buf: [16]u8 = undefined;
+    return std.fmt.bufPrint(buf, "{s} \"{s}\"", .{ fsWord(seen.fs), printable(&label_buf, seen.label) }) catch fsWord(seen.fs);
+}
+
+/// 목록에서 GPT 디스크 줄 밑의 파티션 한 줄(DB-M1 plan 결정 16). 디스크 줄보다 두 칸 더 들인다 — 체인들은
+/// `^  /dev/<disk> +`로 디스크 줄을 고르므로 이 줄에 안 걸린다. here면 지정 설치의 명령을 붙인다.
+pub fn partRow(sink: anytype, node: []const u8, size: []const u8, what: []const u8, here: bool) void {
+    if (here) {
+        sink.print("    {s:<14} {s:>7}  {s}  <- tars-install {s} installs here\n", .{ node, size, what, node });
+    } else {
+        sink.print("    {s:<14} {s:>7}  {s}\n", .{ node, size, what });
+    }
+}
+
+/// 지정 설치의 계획. besideLines와 같은 모양이고, 첫 줄이 지울 파티션을 말한다.
+pub fn takeLines(
+    sink: anytype,
+    node: []const u8,
+    what: []const u8,
+    part_size: []const u8,
+    path: []const u8,
+    size: []const u8,
+    model: []const u8,
+    holds: []const u8,
+    gap: Gap,
+    sector: u64,
+    nums: [3]u8,
+) void {
+    sink.print("tars-install: {s} ({s}, {s}) will be erased, the files on it too. the other partitions of {s} ({s}, {s}) are kept. it now holds: {s}\n", .{
+        node, what, part_size, path, size, model, holds,
+    });
+    sink.print("  TARS goes into {s} and the free space next to it, from MiB {d} to MiB {d}; no other partition is touched\n", .{
+        node, gap.start * sector >> 20, gap.end * sector >> 20,
+    });
+    layoutRows(sink, nums);
+    sink.print("  the Mac still starts macOS; hold Option at power-on and pick EFI Boot for TARS\n", .{});
+}
+
+/// 지정 설치의 거절 줄(DB-M1 plan 결정 13). 줄은 `Complain`으로 간다. path는 그 파티션의 디스크다.
+pub fn takeRefusal(sink: anytype, node: []const u8, path: []const u8, why: Refusal, seen: FsSeen) void {
+    switch (why) {
+        .tars => sink.print("{s} is a TARS partition; tars-install {s} updates TARS and tars-install {s} --beside --wipe lays it down again", .{ node, path, path }),
+        .efi => sink.print("{s} is an EFI System partition the firmware boots from; nothing was changed", .{node}),
+        .macos => {
+            sink.print("{s} is an APFS or HFS+ partition and may hold macOS; nothing was changed.", .{node});
+            sink.print("if you made it for TARS, turn it into free space in macOS (diskutil eraseVolume free free diskXsN) and use tars-install {s} --beside", .{path});
+        },
+        .recovery => sink.print("{s} is the macOS Recovery partition; nothing was changed", .{node}),
+        .ntfs => sink.print("{s} holds NTFS (Windows or Boot Camp); tars-install takes only an empty, FAT or exFAT partition. nothing was changed", .{node}),
+        .filesystem => sink.print("{s} holds {s}; tars-install takes only an empty, FAT or exFAT partition. nothing was changed", .{ node, fsWord(seen.fs) }),
+    }
 }

@@ -292,10 +292,12 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
    ```
 
    `200g`는 macOS에 남길 크기다. 디스크 크기에서 TARS에 줄 만큼을 뺀 값을 넣는다. 크기 뒤에 아무것도
-   붙이지 않아야 빈 자리가 남는다 — `ms-dos TARS 0` 같은 셋을 붙이거나 디스크 유틸리티의 "파티션" 버튼을
-   쓰면 그 자리가 포맷된 파티션이 되어 `tars-install`에 빈 자리로 보이지 않는다. 이미 그렇게 만들었다면
-   그 파티션을 빈 자리로 되돌린다(번호는 `diskutil list`로 확인한다. macOS가 든 파티션을 고르지 않도록
-   이름과 크기를 함께 본다).
+   붙이지 않아야 빈 자리가 남는다.
+
+   디스크 유틸리티의 "파티션" 버튼으로 나눠도 된다 — 포맷을 "MS-DOS(FAT)"나 "ExFAT"로 고르면 그 파티션을
+   6번에서 지정해 그 자리에 깐다. 포맷을 APFS로 골랐다면 그 파티션은 `tars-install`이 받지 않는다(macOS와
+   가릴 수 없어서다). 그때는 빈 자리로 되돌린다(번호는 `diskutil list`로 확인한다. macOS가 든 파티션을
+   고르지 않도록 이름과 크기를 함께 본다).
 
    ```bash
    diskutil eraseVolume free free disk0s3          # disk0s3을 지워 빈 자리로 — 안의 파일도 사라진다
@@ -308,13 +310,27 @@ TARS는 APFS · HFS+의 크기를 줄이지 않는다.
 
    ```
    /dev/sda        251 GB  APPLE SSD SM256E         internal   GPT: EFI, macOS (APFS); 50 GB free
+     /dev/sda1      209 MB  EFI
+     /dev/sda2      200 GB  macOS (APFS)
    ```
 
-   빈 자리가 4GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다.
-   빈 자리가 거의 없고 상태 칸에 `1 other`가 붙었거나 `macOS (APFS)`가 두 번 보이면, 2번에서 포맷된
-   파티션이 생긴 것이다 — macOS로 돌아가 `eraseVolume free`로 되돌린다.
-6. `tars-install /dev/sda --beside`. 계획이 `keeps its partitions`로 시작하고 어느 구간에 몇 번으로
-   들어가는지 말한다. 이름과 비밀번호를 묻고 `YES`를 받는다. `done.`이 나오면 USB를 뽑고 끈다.
+   디스크 줄 밑의 줄들이 파티션이다. 디스크 유틸리티로 FAT 파티션을 만들었다면 그 줄 끝에 명령이 붙는다.
+
+   ```
+   /dev/sda        251 GB  APPLE SSD SM256E         internal   GPT: EFI, macOS (APFS), 1 other; 134 MB free
+     /dev/sda1      209 MB  EFI
+     /dev/sda2      200 GB  macOS (APFS)
+     /dev/sda3       50 GB  FAT32 "TARS"  <- tars-install /dev/sda3 installs here
+   ```
+
+   빈 자리가 4GiB보다 작으면 `--beside`는 `YES`를 묻기 전에 거절하고 2번의 명령을 다시 알려 준다. 받을
+   수 있는 파티션이 있으면 그 명령도 함께 말한다.
+6. 빈 자리에 깔 때는 `tars-install /dev/sda --beside`. 계획이 `keeps its partitions`로 시작하고 어느
+   구간에 몇 번으로 들어가는지 말한다. 파티션을 지정할 때는 `tars-install /dev/sda3` — 계획이 그
+   파티션이 지워진다(`will be erased, the files on it too`)는 것과, 그 파티션과 바로 붙은 빈 자리에 셋이
+   들어간다는 것을 말한다. 받는 것은 FAT · exFAT 파티션과 빈 파티션뿐이다. EFI · macOS(APFS · HFS+) ·
+   Recovery · NTFS(Boot Camp)는 `YES` 전에 거절한다. 어느 쪽이든 이름과 비밀번호를 묻고 `YES`를 받는다.
+   `done.`이 나오면 USB를 뽑고 끈다.
 7. TARS로 뜰 때마다 Option을 누르고 "EFI Boot"를 고른다. 아무것도 안 누르면 macOS가 뜬다 — 기본 부팅은
    macOS 그대로이고, TARS는 NVRAM의 부팅 순서를 건드리지 않는다. TARS를 기본으로 바꾸는 일(macOS의
    `bless` 등)은 이 설치기가 하지 않는다.

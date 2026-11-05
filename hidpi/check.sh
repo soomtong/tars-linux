@@ -184,6 +184,8 @@ ppm_ink() {
 boot() {
   local disk="${1:-}"
   local drive=()
+  # 콤마는 QEMU -drive 값의 구분자다 — 배열 원소 둘이 아니라 하나다.
+  # shellcheck disable=SC2054
   [ -n "$disk" ] && drive=(-drive file="$disk",if=virtio,format=raw)
   LOG="$(mktemp)"
   qemu-system-x86_64 \

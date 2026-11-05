@@ -1,7 +1,7 @@
 # DB-M1 — macOS가 만든 파티션을 골라 그 자리에 깔기
 
-> 계획만 있다(2026-11-05). 구현은 사용자가 맥 실기에서 0.1.4를 본 뒤에 순서를 정한다. 줄 번호는 `d1fa10a` 기준이라 낡을 수 있다 —
-> 고치기 전에 `rg`로 다시 찾는다.
+> 구현은 lead가 직접 넣었다(2026-11-05, 사용자 "continue"). 줄 번호는 `d1fa10a` 기준이라 낡을 수 있다 — 고치기 전에 `rg`로
+> 다시 찾는다. 결과는 끝의 "결과" 절.
 
 Goal: DB design 비목표 2(Disk Utility가 만든 파티션을 골라 그 자리에 깔기)를 푼다. `tars-install`의 목록이 GPT 디스크의 파티션을 한
 줄씩 보이고, `tars-install /dev/sda3`처럼 파티션을 지정하면 그 파티션(과 바로 붙은 빈 자리)을 지우고 TARS 셋을 놓는다. 다른 파티션은
@@ -86,3 +86,18 @@ DB-M0과 같이 한 바이트도 안 건드린다.
 ## 비목표
 
 - APFS 컨테이너 안의 빈 볼륨을 알아보기, 파티션 크기 줄이기, MBR 디스크의 파티션 지정.
+
+## 결과 (2026-11-05)
+
+- `zig build test`(컨테이너) 초록 — `disk_test` 검사 24(노드 이름 · 서명 아홉 · 받는 표 · GUI 맥의 구간 1225~7936MiB와 번호
+  3 · 5 · 6 · 문장 셋). `make quick` 초록.
+- 계획에서 바뀐 것
+  - 노드 → 디스크 · 번호는 sysfs가 아니라 순수 함수 `disk.splitPartition`이다. `storage.partitionName`으로 이름을 지어 맞추므로
+    init이 찾는 이름과 같은 규칙이고 `disk_test`가 본다.
+  - GUI 맥의 빈 자리는 "없음"이 아니라 p2 뒤의 128MiB 틈(`134 MB free`)이다. `--beside`는 그 크기로 거절하고 p3을 말한다.
+  - 판정 10의 작은 FAT(4GiB 미만) 거절은 체인이 아니라 `disk_test`가 본다(GUI 맥의 p4 구간이 256MiB라 `besideLayout`이 null).
+- 지나가며 고친 것: `make quick`의 shellcheck 경고 둘(DB-M0의 `make_mac` SC2015, HS의 `hidpi` SC2054)은 이번 변경 전부터 있었다.
+- 첫 판의 빨강 — 부팅 5가 UEFI Shell로 떨어졌다. GUI 맥의 p3은 `TARS-BOOT`로 포맷만 되고 비어 있었다. 체인의 `time_steps`가
+  마지막 줄 `tars-install: done.`을 로그 전체에서 찾는데, 같은 부팅의 1c 설치가 이미 그 줄을 찍어 두어 p6 포맷 직후 끝난 것으로 읽혔고,
+  `stop_guest`가 ESP 복사 중의 QEMU를 껐다. 명령 뒤의 표지 `db-take-finished`를 마지막으로 기다리고 `done.`이 두 번인지 본다.
+  설치기의 결함은 아니다 — 같은 부팅에서 설치를 두 번 하는 체인이 처음이었다.

@@ -13,6 +13,8 @@ const build_info = @import("build_info");
 /// TARS-BOOT만 갈고 TARS-CONFIG(설정)를 남긴다. `--wipe`가 그것 대신 통째로 지운다(DI-M2).
 /// `--beside`는 남의 파티션을 그대로 두고 가장 큰 빈 자리에 셋을 덧붙인다(DB-M0). TARS 파티션은
 /// 번호가 아니라 GPT 이름으로 찾는다.
+/// 디스크 대신 파티션 노드(`/dev/sda3`)를 주면 그 파티션 하나를 지우고 그 자리에 셋을 놓는다(DB-M1) — macOS의
+/// 디스크 유틸리티가 나누며 포맷한 자리를 받는 길이다.
 ///
 /// init 옆의 별도 실행 파일인 이유는 DI design 결정 5다 — 부팅 경로에 안
 /// 들어가야 게이트의 다른 체인들에 닿지 않고, storage.zig를 같이 써야 목록에
@@ -380,6 +382,51 @@ fn headText(path: [:0]const u8, buf: []u8) disk.State {
     return disk.headState(buf, seen);
 }
 
+/// GPT 디스크의 한 파티션이 무엇이고 지정 설치로 받을 수 있는가(DB-M1). seen.label은 head_buf 안을
+/// 가리킨다. here는 받을 수 있고(takeable) 자리도 되는(그 구간이 4GiB를 넘는) 것이다 — TARS가 이미 있는
+/// 디스크는 늘 false다(지정 설치가 거절한다).
+const PartLook = struct { node: [:0]const u8, seen: disk.FsSeen, here: bool };
+
+fn lookPart(path: [:0]const u8, g: *const disk.Gpt, p: disk.Part, node_buf: []u8, head_buf: []u8) ?PartLook {
+    const node = storage.partitionName(node_buf, path, p.number) orelse return null;
+    const head = storage.readHead(node, head_buf) orelse return .{ .node = node, .seen = .{ .fs = .other }, .here = false };
+    const seen = disk.fsOf(head);
+    var here = false;
+    if (!g.hasTars() and disk.takeable(p, seen.fs) == null) {
+        if (disk.gapAround(g, p.number)) |gap| here = disk.besideLayout(gap, g.sector) != null;
+    }
+    return .{ .node = node, .seen = seen, .here = here };
+}
+
+/// 지정 설치로 받을 수 있는 첫 파티션의 노드(node_buf 안). `--beside`의 자리 거절이 이 길을 말한다.
+fn takeableNode(path: [:0]const u8, g: *const disk.Gpt, node_buf: []u8) ?[:0]const u8 {
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
+    for (g.slice()) |p| {
+        const look = lookPart(path, g, p, node_buf, &head_buf) orelse continue;
+        if (look.here) return look.node;
+    }
+    return null;
+}
+
+/// 목록에서 GPT 디스크 줄 밑의 파티션 줄들(DB-M1 plan 결정 16).
+fn listParts(path: [:0]const u8) void {
+    const g = readGpt(path) orelse return;
+    var head_buf: [disk.HEAD_BYTES]u8 = undefined;
+    for (g.slice()) |p| {
+        var node_buf: [32]u8 = undefined;
+        const look = lookPart(path, &g, p, &node_buf, &head_buf) orelse continue;
+        var what_buf: [48]u8 = undefined;
+        var size_buf: [16]u8 = undefined;
+        disk.partRow(
+            Say{},
+            look.node,
+            disk.formatSize(&size_buf, (p.last - p.first + 1) * g.sector),
+            disk.partWhat(&what_buf, p, look.seen),
+            look.here,
+        );
+    }
+}
+
 fn list(medium: ?[:0]const u8) void {
     if (medium) |m| {
         var head_buf: [disk.HEAD_BYTES]u8 = undefined;
@@ -406,8 +453,9 @@ fn list(medium: ?[:0]const u8) void {
         var state_buf: [128]u8 = undefined;
         const model = sysAttr(name, "device/model", &model_buf) orelse "-";
         const removable = sysAttr(name, "removable", &rem_buf) orelse "0";
-        const state = disk.stateWord(stateOf(path, medium, &state_buf));
-        disk.listRow(Say{}, path, disk.formatSize(&size_buf, bytes), model, removable, state);
+        const st = stateOf(path, medium, &state_buf);
+        disk.listRow(Say{}, path, disk.formatSize(&size_buf, bytes), model, removable, disk.stateWord(st));
+        if (st != .medium) listParts(path);
     }
     if (shown == 0) say("  (no disks)\n", .{});
     say("\n", .{});
@@ -880,10 +928,20 @@ fn install(
     medium: ?[:0]const u8,
     envp: [*:null]const ?[*:0]const u8,
 ) u8 {
-    const path = disk.knownDisk(target) orelse {
+    // 파티션 노드면 지정 설치다(DB-M1) — 그 파티션을 지우고 그 자리에 깐다.
+    var take: ?u8 = null;
+    const path = disk.knownDisk(target) orelse blk: {
+        if (disk.splitPartition(target)) |pa| {
+            take = pa.number;
+            break :blk pa.disk;
+        }
         complain("{s} is not a disk tars-install knows; run tars-install alone for the list", .{target});
         return 2;
     };
+    if (take != null and (beside or wipe)) {
+        complain("{s} is a partition; tars-install {s} installs into it, without --beside or --wipe", .{ target, target });
+        return 2;
+    }
     const name = disk.sysName(path);
     const bytes = sizeBytes(name) orelse {
         complain("{s} is not present on this machine", .{path});
@@ -906,9 +964,12 @@ fn install(
     const installed = state == .installed;
     // 설치된 디스크에 --wipe가 없으면 갱신이다(design 결정 8). `--beside`가 있어도 같다(DB design
     // 결정 6). 설치 안 된 디스크의 --wipe는 뜻이 없다 — 어차피 통째로 지운다.
-    const update = installed and !wipe;
+    // 지정 설치는 갱신이 아니다 — 설치된 디스크의 파티션을 고르면 아래에서 거절한다(DB-M1).
+    const update = installed and !wipe and take == null;
     // 남의 파티션 옆에 새로 깐다(DB-M0). `--beside --wipe`는 TARS 이름의 셋만 지우고 그 자리에 다시 깐다.
     const beside_new = beside and !update;
+    // 남의 표에 셋을 덧붙이는 두 길(`--beside`와 지정 설치). 쓰기 · 대조는 같다.
+    const add_new = beside_new or take != null;
 
     // 지금 디스크의 GPT. 갱신은 여기서 번호를 찾고, `--beside`는 빈 자리를 고른다. 통째 설치의 계획은
     // holds로 무엇을 지우는지 말한다 — 설치된 디스크여도 `TARS installed`가 아니라 그 안의 파티션이다
@@ -929,7 +990,56 @@ fn install(
     // `--beside --wipe`가 먼저 지울 TARS 파티션. 이름이 같은 것이 셋보다 많으면 거절한다(아래).
     var wipe_buf: [3]u8 = undefined;
     var wipe_nums: []const u8 = &.{};
-    if (beside_new) {
+    // 지정 설치의 노드와 그 파티션이 무엇인지(계획 줄).
+    var node_buf: [32]u8 = undefined;
+    var take_node: [:0]const u8 = "";
+    var what_buf: [48]u8 = undefined;
+    var what: []const u8 = "";
+    var part_size_buf: [16]u8 = undefined;
+    var part_size: []const u8 = "";
+    if (take) |n| {
+        const g = gpt orelse {
+            complain("{s} has no GPT partition table tars-install can read; nothing was changed", .{path});
+            return 1;
+        };
+        if (g.hasTars()) {
+            complain("{s} already has TARS partitions; tars-install {s} updates them and tars-install {s} --beside --wipe lays them down again", .{ path, path, path });
+            return 1;
+        }
+        const part = g.byNumber(n) orelse {
+            complain("{s} has no partition {d}; run tars-install alone for the list", .{ path, n });
+            return 1;
+        };
+        take_node = storage.partitionName(&node_buf, path, n) orelse return 1;
+        var phead_buf: [disk.HEAD_BYTES]u8 = undefined;
+        const phead = storage.readHead(take_node, &phead_buf) orelse {
+            complain("cannot read {s}; nothing was changed", .{take_node});
+            return 1;
+        };
+        const seen = disk.fsOf(phead);
+        if (disk.takeable(part, seen.fs)) |why| {
+            disk.takeRefusal(Complain{}, take_node, path, why, seen);
+            return 1;
+        }
+        what = disk.partWhat(&what_buf, part, seen);
+        part_size = disk.formatSize(&part_size_buf, (part.last - part.first + 1) * g.sector);
+        gap = disk.gapAround(&g, n) orelse .{ .start = 0, .end = 0 };
+        layout = disk.besideLayout(gap, g.sector) orelse {
+            var room: [16]u8 = undefined;
+            complain("{s} and the free space next to it come to {s}; TARS needs " ++ disk.MIN_DISK_WORDS ++ "; nothing was changed", .{
+                take_node, disk.formatSize(&room, gap.bytes(g.sector)),
+            });
+            return 1;
+        };
+        // sfdisk가 매길 번호는 그 파티션을 지운 뒤의 표에서 센다 — 지운 번호가 첫 빈 엔트리일 수 있다.
+        const rest = g.without(n);
+        nums = disk.freeNumbers(&rest, false) orelse {
+            complain("{s} has no three free GPT entries; nothing was changed", .{path});
+            return 1;
+        };
+        wipe_buf[0] = n;
+        wipe_nums = wipe_buf[0..1];
+    } else if (beside_new) {
         const g = gpt orelse {
             if (std.mem.startsWith(u8, holds, "foreign (gpt")) {
                 complain("cannot read the GPT partition entries of {s}; nothing was changed", .{path});
@@ -960,6 +1070,11 @@ fn install(
         gap = disk.largestGap(&g, wipe) orelse .{ .start = 0, .end = 0 };
         layout = disk.besideLayout(gap, g.sector) orelse {
             disk.roomRefusal(Complain{}, path, &g, gap.bytes(g.sector));
+            // 디스크 유틸리티로 나눈 파티션이 있으면 그 길을 말한다(DB-M1).
+            var hint_buf: [32]u8 = undefined;
+            if (takeableNode(path, &g, &hint_buf)) |hint| {
+                complain("or install into the partition made for it: tars-install {s}", .{hint});
+            }
             return 1;
         };
         nums = disk.freeNumbers(&g, wipe) orelse {
@@ -1005,7 +1120,9 @@ fn install(
     const esp_conf = prepareConf(&conf_in, &conf_out, new_ver, old_after) orelse return 1;
 
     // ── 계획 ──
-    if (beside_new) {
+    if (take != null) {
+        disk.takeLines(Say{}, take_node, what, part_size, path, size_text, model, holds, gap, gpt.?.sector, nums);
+    } else if (beside_new) {
         disk.besideLines(Say{}, path, size_text, model, holds, gap, gpt.?.sector, nums, wipe_nums);
     } else {
         // 설정 파티션은 새 설치일 때만 읽는다(HC-M2 plan 확정 3).
@@ -1047,8 +1164,9 @@ fn install(
     acct.forgetPassword();
 
     // ── 파티션 ──
-    if (beside_new) {
-        if (!besidePartitions(path, layout, wipe_nums, envp)) return 1;
+    if (add_new) {
+        const deleting: []const u8 = if (take != null) "deleting the partition" else "deleting the TARS partitions";
+        if (!besidePartitions(path, layout, wipe_nums, deleting, envp)) return 1;
     } else {
         // --wipe-partitions always: 새 파티션 자리에 남은 옛 서명을 지운다. 이미
         // TARS가 있던 디스크에 다시 설치하면 p2 자리에 옛 ext2가 그대로 있고,
@@ -1072,7 +1190,7 @@ fn install(
             return 1;
         };
     }
-    if (beside_new) {
+    if (add_new) {
         const want = [3]disk.Range{ layout.boot, layout.config, layout.home };
         for (parts, want) |p, w| {
             if (p.first != w.start or p.last + 1 != w.start + w.size) {
@@ -1120,7 +1238,7 @@ fn install(
     // 계정. 여기서 실패한 디스크는 파티션만 있고 ESP가 비어 TARS로 안 보인다 — 다시 치면
     // 새 설치로 처음부터 간다(`--beside`는 TARS 이름이 남아 있어 `--beside --wipe`로).
     if (!writeAccount(p2, p3, acct.name(), hash)) {
-        complain("the account was not written; run tars-install {s}{s} again", .{ path, if (beside_new) " --beside --wipe" else "" });
+        complain("the account was not written; run tars-install {s}{s} again", .{ path, if (add_new) " --beside --wipe" else "" });
         return 1;
     }
 
@@ -1130,15 +1248,16 @@ fn install(
 }
 
 /// `--beside`의 파티션(DB design 결정 4 · 7). `--beside --wipe`면 먼저 TARS 파티션만 `sfdisk --delete`로
-/// 지우고, 세 줄을 `--append`로 덧붙인다.
+/// 지우고, 세 줄을 `--append`로 덧붙인다. 지정 설치(DB-M1)는 wipe_nums가 사람이 고른 하나다. deleting은
+/// 지우기 전의 단계 줄이다(dualboot 체인이 `--beside --wipe`의 글자를 기다린다).
 ///
 /// `--wipe always`는 안 쓴다 — 디스크 머리의 서명(보호 MBR · GPT)을 지우는 옵션이라 남의 표를 다시 쓰게
 /// 된다. `--wipe never`로 그 기본값(auto)도 막는다. `--wipe-partitions always`는 새 파티션 자리의 옛
 /// 서명만 지운다(`--beside --wipe`가 지운 옛 tars-config가 거기 있다). sfdisk는 남의 파티션과 겹치는
 /// start=를 `Sector N already used`로 거절한다(DB-M0 plan 착수 전 3) — 우리 계산이 틀려도 마지막 문이다.
-fn besidePartitions(path: [:0]const u8, layout: disk.Layout, wipe_nums: []const u8, envp: [*:null]const ?[*:0]const u8) bool {
+fn besidePartitions(path: [:0]const u8, layout: disk.Layout, wipe_nums: []const u8, deleting: []const u8, envp: [*:null]const ?[*:0]const u8) bool {
     if (wipe_nums.len > 0) {
-        say("tars-install: deleting the TARS partitions", .{});
+        say("tars-install: {s}", .{deleting});
         for (wipe_nums) |n| say(" p{d}", .{n});
         say("\n", .{});
         var num_text: [3][4]u8 = undefined;

@@ -3,7 +3,7 @@
 접두사: DB
 
 Status: 닫힘(2026-11-05) — DB-M0 GPT 엔트리를 이름으로 읽기 · `--beside` · `--beside --wipe` · init 후보 126, `dualboot` 체인(포트 없음).
-DB-M1(기존 파티션 지정, 비목표 2를 푼다)은 계획만 있다 — `docs/plans/2026-11-05-tars-dual-boot-db-m1.md`.
+DB-M1(2026-11-05) 기존 파티션 지정 `tars-install /dev/sda3`과 목록의 파티션 줄, `dualboot` 체인의 GUI 맥 · 부팅 5 — 비목표 2를 풀었다.
 
 사용자의 요청(2026-11-04, MB design 머리의 인용)에서 "인스톨러 개선: 대상 디스크 고르기 beside macOS partition (or volume), dual
 booting 가능해야 해"를 받는다.
@@ -62,6 +62,15 @@ Boot"를 고른다 — 기본 부팅은 macOS 그대로다.
 11. 부팅 기본값은 건드리지 않는다. NVRAM(`BootOrder`)도 `bless`도 안 쓴다. 매번 Option으로 고른다. TARS를 기본으로 하고 싶은 사람을 위한
     macOS 쪽 명령은 문서(`docs/guides/running-tars.md`)에 적는다.
 
+12. (DB-M1) 파티션 노드를 주면 지정 설치다 — `tars-install /dev/sda3 [--yes]`. `--beside` · `--wipe`와 함께면 거절한다.
+13. (DB-M1) 받는 것은 Basic Data 타입의 FAT12/16/32 · exFAT과 머리가 빈 파티션(macOS 쪽 타입이 아닐 때)뿐이다. TARS ·
+    EFI · APFS · HFS+ · Apple Boot · NTFS · 그 밖의 파일시스템은 YES 전에 거절한다. TARS가 있는 디스크의 지정도 거절한다.
+14. (DB-M1) 자리는 그 파티션과 바로 앞뒤의 빈 구간(1MiB 정렬)이다. 다른 곳의 빈 자리는 안 쓴다.
+15. (DB-M1) 쓰기는 `--beside --wipe`와 같다 — `sfdisk --delete <disk> N` 뒤 `--append`. 번호는 그 파티션을 뺀 표의 빈
+    엔트리다(지운 N이 첫째가 되기 쉽다).
+16. (DB-M1) 목록은 GPT 디스크 줄 밑에 파티션 줄을 네 칸 들여 단다. 디스크 줄의 글자는 그대로다. `--beside`의 자리
+    거절은 받을 수 있는 파티션을 함께 말한다.
+
 ## 게이트
 
 새 체인 `dualboot/check.sh`(DB-M0). 호스트가 "맥 디스크"를 굽는다 — GPT, p1 FAT32 `EFI`(이름 `EFI System Partition`, `EFI/APPLE` 디렉터리만),
@@ -85,11 +94,12 @@ p2 APFS 타입 GUID에 정해진 무늬를 채운 1GiB, 나머지 빈 공간. OV
 ## 비목표
 
 1. APFS · HFS+ 크기 줄이기. macOS의 `diskutil`이 한다.
-2. Disk Utility가 만든 파티션(예: MS-DOS "TARS")을 골라 그 자리에 깔기. 지금은 빈 자리만 받는다 — 그 파티션을 지우면 빈 자리가 된다.
-   DB-M1이 이것을 푼다(2026-11-05 사용자 요청, 계획만). 그 전의 우회는 macOS의 `diskutil eraseVolume free free <id>`다.
+2. (DB-M1이 풀었다 — 아래 결정 12~16) Disk Utility가 만든 파티션(예: MS-DOS "TARS")을 골라 그 자리에 깔기. APFS로 만든
+   파티션은 여전히 안 받는다 — macOS의 `diskutil eraseVolume free free <id>`로 빈 자리로 돌린다.
 3. 부팅 관리자(rEFInd 등) · 기본 부팅 바꾸기.
 4. Windows(Boot Camp) 옆, 다른 Linux 옆 — 같은 길로 될 것이지만 판정은 macOS 모양 하나다.
 
 ## Milestone
 
 - DB-M0 — GPT 엔트리 읽기 · 이름으로 찾기 · `--beside` · `--beside --wipe` · init 후보 여덟, `dualboot` 체인.
+- DB-M1 — 기존 파티션 지정 · 목록의 파티션 줄, `dualboot` 체인에 GUI 맥(판정 7~10)과 부팅 5.

@@ -1,11 +1,11 @@
 ---
 name: project_dual_boot
-description: "macOS 옆 설치(DB-M0, 2026-11-05) — tars-install --beside가 가장 큰 빈 공간에 TARS 셋을 덧붙인다, TARS 파티션은 GPT 이름으로, 쓰기 뒤 GPT 재확인 · 커널 노드 위치 대조가 포맷 전 문, init 후보 126. 맥은 Option 키로 고른다"
+description: "macOS 옆 설치(DB-M0 · M1, 2026-11-05) — tars-install --beside가 가장 큰 빈 공간에, tars-install /dev/sda3이 디스크 유틸리티가 만든 FAT · exFAT 파티션 자리에 TARS 셋을 놓는다, TARS 파티션은 GPT 이름으로, 쓰기 뒤 GPT 재확인 · 커널 노드 위치 대조가 포맷 전 문, init 후보 126. 맥은 Option 키로 고른다"
 metadata:
   type: project
 ---
 
-design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/2026-11-04-tars-dual-boot-db-m0.md`, 사용자 절차는
+design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/2026-11-04-tars-dual-boot-db-m0.md` · `…-db-m1.md`, 사용자 절차는
 `docs/guides/running-tars.md`의 macOS 절.
 
 ## 무엇이 섰나
@@ -16,6 +16,9 @@ design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/
   빈 구간이 4GiB보다 작으면 · TARS가 이미 반쯤 있으면 YES 전에 거절한다. 쓴 뒤 GPT를 다시 읽어 계획과 대조하고, 커널의
   `/sys/block/<disk>/<part>/start`가 GPT와 같아야 포맷한다.
 - init `storage.PARTITIONS`가 디스크마다 여덟 → 후보 126(Boot Camp가 있는 HFS+ 맥이 p7까지 쓴다).
+- DB-M1(사용자 요청 — 디스크 유틸리티로 나누면 새 자리가 포맷된 파티션이 된다): `tars-install /dev/sda3`이 그 파티션과 앞뒤의 빈 구간에
+  셋을 놓는다(`sfdisk --delete` 뒤 `--append`, `--beside --wipe`의 길). 받는 것은 Basic Data의 FAT · exFAT과 빈 파티션뿐, EFI · APFS ·
+  HFS+ · Recovery · NTFS는 YES 전에 거절. 목록이 GPT 디스크 밑에 파티션 줄을 단다. 체인 `dualboot`의 GUI 맥(부팅 1 · 5).
 
 ## 배운 것
 
@@ -23,5 +26,9 @@ design은 `docs/specs/2026-11-04-tars-dual-boot-design.md`, plan은 `docs/plans/
 2. 남의 디스크를 쓰는 판정은 "바이트가 같다"를 부팅마다 본다. 실패 줄에 "맥 파티션이 바뀌었는가"를 늘 붙인다(어느 판정에서 멈췄든).
 3. 컨테이너에 sfdisk가 없다 — 가짜 맥 GPT는 `dualboot/mac_gpt.pl`(perl)이 쓴다.
 4. 실기만 아는 것: Apple 펌웨어가 두 번째 EFI System 파티션을 "EFI Boot"로 보이는지(design 위험 3). 안 보이면 타입을 Basic data로.
+5. `diskutil apfs resizeContainer <disk> <size>`는 triple 없이 쓰면 빈 자리를 남긴다(usage 글이 "free space gap"이라 말한다). 포맷되는 것은
+   triple을 붙였거나 디스크 유틸리티의 "파티션"이다. `diskutil eraseVolume free free <id>`가 파티션을 빈 자리로 되돌린다(DB-M1 착수 전).
+6. 한 부팅에서 설치를 두 번 하는 체인은 끝 줄(`done.`)을 기다리면 안 된다 — 첫 설치가 이미 찍었다. 명령 뒤에 고유 표지를 찍어 기다린다
+   (DB-M1 첫 판, 둘째 설치 도중에 QEMU를 꺼 ESP가 비었다).
 
 관련: [[project_disk_install]] · [[project_kernel_upgrade]] · [[project_home_partition]] · [[project_macbook_hardware]]
