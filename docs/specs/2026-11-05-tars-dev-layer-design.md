@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 6판(2026-11-05) — 열린 질문 없음. 구현 전(TP-M0 plan 다음). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 7판(2026-11-05) — 열린 질문 없음. 구현 전(TP-M0 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m0.md`가 결정 2 · 6을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -112,7 +112,8 @@ trixie 판이 돈다.
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
      binutils, `lua5.4`, `emacs-nox`, 공용 라이브러리.
 2. `upstream` · `prebuilt` tarball은 `/usr/local/lib/<도구>-<버전>/`에 그대로 풀고 `/usr/local/bin/`에 실행 파일 링크를 둔다. Debian식 alternatives는 없다.
-   `debian`과 `vendor-repo`는 빌드 컨테이너에서 진짜로 `apt-get install`하고(postinst까지), 새로 생긴 파일만 가져온다. alternatives
+   `debian`과 `vendor-repo`는 버리는 amd64 컨테이너(`--platform=linux/amd64 debian:trixie-slim`)에서 진짜로 `apt-get install`하고
+   (postinst까지), 새로 생긴 파일만 가져온다. 개발 컨테이너는 arm64라 amd64 postinst를 못 돌린다(TP-M0 plan 확인 1). alternatives
    링크는 빌드 때 펴서 직접 링크로 놓는다.
 3. 버전은 "최신, LTS가 있으면 최신 LTS"를 매니페스트에 고정한다. 바꾸는 것은 TARS 버전을 낼 때 한 단계로 한다
    (`project_release.md`의 절차에 한 줄 — 닫을 때 더한다). sha256이 다르면 빌드가 이름을 대고 실패한다.
@@ -121,7 +122,7 @@ trixie 판이 돈다.
 5. 개발 도구 층의 모든 ELF의 `NEEDED`가 initrd + 개발 도구 층 안에서 풀리는지 빌드 때 검사한다. 공식 바이너리가 끄는 공용 라이브러리(libssl · libicu ·
    libncurses · libaio 등)는 `debian` 줄로 개발 도구 층에 더한다.
 6. 개발 도구 층은 따로 빌드하고 캐시한다(`make dev-layers` 가칭). 매니페스트 줄이 안 바뀐 묶음은 다시 굽지 않는다. 받은 파일은 sha256 이름으로
-   `out/dev-cache/`에 둔다. `make iso`는 구워진 개발 도구 층이 있으면 싣는다 — 다른 체인은 개발 도구 층 없는 ISO로 돌아 게이트 시간이 지금과 같다.
+   `devlayer/cache/`에 둔다 — 루트 게이트의 `clean()`이 `out`을 통째로 지우므로 `out/` 밖이다(TP-M0 plan 확인 4). `make iso`는 구워진 개발 도구 층이 있으면 싣는다 — 다른 체인은 개발 도구 층 없는 ISO로 돌아 게이트 시간이 지금과 같다.
    릴리스 ISO는 개발 도구 층을 싣는다.
 
 ### 디스크와 부팅

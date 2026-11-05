@@ -19,6 +19,7 @@
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복은 1회, 가끔 `-e RUNS=N`으로 늘린다
 - [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 스크립팅 런타임은 한 묶음으로만 들이고, 지금은 perl로 간다
 - [Release iteration](docs/decisions/feedback_release_iteration.md) — 맥 실기 확인까지 0.1.4를 같은 번호로 거듭 내고, 이전 판의 흔적은 안 남긴다(2026-11-05)
+- [Devcontainer additions](docs/decisions/feedback_devcontainer_additions.md) — 개발 컨테이너에 필요한 도구는 묻지 않고 더한다(2026-11-05)
 - [Tool sourcing](docs/decisions/feedback_tool_sourcing.md) — 도구의 출처(바닥은 Debian, 유틸리티는 공식 바이너리, 소스 빌드 없음)와 initrd · 개발 도구 층의 기준(2026-11-05)
 - [IPv4 only](docs/decisions/feedback_ipv4_only.md) — IPv6는 후보에서 뺐다(2026-10-31). 다시 여는 조건은 IPv6 망의 제품 탑재
 - [net · ntp 기본값은 off](docs/decisions/feedback_network_default_stays_off.md) — seed의 `net` · `ntp`는 `off`, 켜는 법은 문서로
