@@ -972,12 +972,24 @@ Groq 무료 티어(2026년 9월, [rate limits](https://console.groq.com/docs/rat
 모드가 패널의 네이티브 해상도다. USB 키보드도 된다 — 허브를 거쳐 늦게
 열거돼도 `init`이 최대 3초까지 기다린다.
 
+### 밝기와 절전
+
+Intel GPU 노트북(MacBook Air 2011 · Pro 2013 포함)은 i915가 GPU를 받는다(LP-M0). 밝기는 Apple 키보드의 F1(어둡게) ·
+F2(밝게), PC 키보드의 밝기 키(Fn 조합)로 16단계다. 가장 어두운 단계도 꺼지지는 않는다. 로그
+`terminal: backlight> pick=intel_backlight of 2`가 첫 키에 한 번, 그 뒤로 `backlight> intel_backlight 750 -> 844 of 1500` 꼴이다.
+`pick=none`이면 i915가 패널을 못 잡은 것이다(`ls /sys/class/backlight`).
+
+뚜껑을 닫으면 S3로 잔다(어댑터가 꽂혀 있어도). 여는 것이 깨운다. 셸에서는 `sudo suspend` — sudo 없이 `suspend`만 치면
+bash · zsh · fish의 내장 명령이 먼저 잡혀 셸 자신이 멈춘다. 로그는 `tars-init: lid closed` · `tars-init: suspend (deep)` ·
+`tars-init: resumed after Nms`. `suspend (s2idle)`이면 펌웨어가 S3를 안 내놓은 것이라 얕게 잔다(LP design 위험 4).
+
 안 되는 것을 미리 적어 둔다.
 
 | 안 되는 것 | 왜 |
 |---|---|
-| 밝기 조절 · 외부 모니터 · GPU 가속 | `DRM_I915`·`DRM_AMDGPU`를 안 켰다(RM design 결정 3) |
-| 절전(뚜껑 닫기) | `SUSPEND`(S3)가 비목표다. lid 이벤트는 이미 온다 |
+| 외부 모니터 · GPU 가속 · AMD GPU의 밝기 | terminal은 card0의 첫 출력 하나에 그린다(LP design 비목표 5). `DRM_AMDGPU`는 안 켰다(RM design 결정 3) |
+| 밝기 조절 | LP(2026-11-05)가 켰다 — Intel GPU 기계(`DRM_I915`)에서 Apple 키보드의 F1(어둡게) · F2(밝게)와 어느 키보드든 밝기 키, 16단계(아래 "밝기와 절전" 절). 값은 저장하지 않는다 — 부팅마다 펌웨어가 둔 값이다 |
+| 절전(뚜껑 닫기) | LP(2026-11-05)가 켰다 — 뚜껑을 닫거나 `sudo suspend`면 S3로 자고, 열면 깨어난다(아래 "밝기와 절전" 절). 게이트는 QEMU의 S3로 재고, 뚜껑과 깨어난 화면은 실기가 본다 |
 | USB 무선 동글 · Broadcom · Intel BE201 · WPA-Enterprise | 무선은 PCIe 네 계열만 켰다(WL design 비목표). 게이트가 무선을 부팅으로 재는 것은 mac80211_hwsim뿐이고 실칩의 firmware 로딩은 재지 않는다. 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있고 Realtek 유선 firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
 | 터치패드 · 마우스 | PD(2026-10-05)가 켰다 — 한 손가락 이동 · 탭 · 두 손가락 스크롤 · 클릭 포커스 · 드래그 선택. 실기에서 볼 것 넷: 로그 `pointer> open … kind=`(mouse 또는 touchpad) · 탭 180ms · 2% · 배율의 출발값이 손에 맞는지 · 두 손가락 스크롤 방향 · vim(`mouse=a`)에서 클릭이 커서를 옮기고 Shift 끌기가 우리 클립보드로 가는지(M4). 2026-10-05 전에는 커널에 터치패드 드라이버조차 없었다(`I2C_HID_ACPI` · `HID_MULTITOUCH` · `MOUSE_PS2` 꺼짐) |
 | 배터리 잔량 표시 | BS(2026-10-09)가 상태 줄 오른쪽 끝에 칸을 띄웠다(위 "배터리 잔량" 절). 게이트는 커널 내장 test_power의 가짜 배터리로 보고, ACPI 배터리의 값은 실기에서만 보인다. 실기에서 볼 것: 칸이 뜨는지 · `capacity`가 없는 배터리의 `  ?%` · 어댑터를 꽂았다 뺄 때의 색 |

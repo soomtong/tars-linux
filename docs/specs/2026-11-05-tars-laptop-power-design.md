@@ -2,7 +2,7 @@
 
 접두사: LP
 
-Status: 진행 중(2026-11-05) — LP-M0.
+Status: 닫힘(2026-11-05) — LP-M0 i915 · PM · SUSPEND(+`gpu_bind=0` · `rootfstype=ramfs`), LP-M1 뚜껑 · `sudo suspend` · 체인 `sleep`, LP-M2 Apple F1 · F2 밝기. 실기 확인이 남았다.
 
 사용자의 요청(2026-11-05): "맥북 에어에서 본격적인 사용기를 시작하려 한다. 그 전에 맥북의 절전(뚜껑 닫기) 기능을 활성화해주세요.
 맥북의 내장 모니터 밝기 조절 기능을 활성화 해주세요. 추가로 안되는 것이라고 적은 문서 갱신까지 완료해주세요."
@@ -53,8 +53,8 @@ RB design(`shutdown` 스크립트), KK design(keyboard 종류), HD design(전원
    `KEY_BRIGHTNESSDOWN` · `KEY_BRIGHTNESSUP`도 같다. PC 키보드의 F1 · F2는 그대로다. 앱이 잃는 것은 없다 — terminal은 지금 F1~F12를
    아예 내보내지 않는다(`input_test`의 "특수키 사이의 빈 코드(F1 등)는 조용히 무시된다", 2026-11-05 확인). 누른 채 두면 자동 반복으로
    계속 움직인다.
-7. `tars.conf`의 `brightness=`(1~100, %) — 부팅과 `tars-config reload`가 그 값을 쓴다. 비면 펌웨어가 둔 값 그대로. F1 · F2로 바꾼 값은
-   이번 부팅만이다(저장하지 않는다).
+7. ~~`tars.conf`의 `brightness=`~~ — LP-M2에서 비목표 4로 옮겼다(Claude 결정, 사용자 위임). 부팅 때의 밝기는 펌웨어가 둔 값이고 F1 · F2로
+   바꾼 값은 이번 부팅만이다.
 
 ## 판정
 
@@ -62,15 +62,16 @@ RB design(`shutdown` 스크립트), KK design(keyboard 종류), HD design(전원
   `PM`의 런타임 PM이 QEMU의 USB 키보드 · 마우스 체인을 흔들지 않는지가 이 milestone의 본론이다.
 - LP-M1: 새 체인 `sleep`(monitor 45503) — `sudo suspend` → 커널 `PM: suspend entry (deep)` · QEMU `info status`가 suspended → `system_wakeup` →
   `tars-init: resumed after` → 셸이 다시 답한다. `devices_test`가 `SW_LID` 비트맵으로 뚜껑 장치를 고른다(키보드 · 전원 버튼과 갈린다).
-- LP-M2: terminal 단위 검사 — 가짜 sysfs 뿌리에서 고르는 순서, 단계 계산(최솟값 1단계), 키 갈래(apple의 F1 · F2, 밝기 키, PC의 F1은 그대로).
-  `config_test`가 `brightness=`의 범위. 실제 패널은 실기.
+- LP-M2: terminal 단위 검사 — 고르는 순서, 단계 계산(최솟값 1단계, 값이 늘 바뀐다), 키 갈래(apple의 F1 · F2, 밝기 키, PC의 F1 · F2는
+  그대로). 실제 패널은 실기.
 
 ## 비목표
 
 1. 하이버네이트(디스크로). 스왑이 없다.
 2. 키보드 백라이트(`applesmc`), 주변광 센서.
 3. 유휴 시간 뒤 자동 절전 · 화면 끄기.
-4. 밝기 값 저장(F1 · F2로 바꾼 값을 다음 부팅에). 결정 7.
+4. 밝기 값 저장(F1 · F2로 바꾼 값을 다음 부팅에)과 `tars.conf`의 시작 밝기. 설정 키 하나가 config · reload · screen_args · 테스트 넷을 지나는
+   데 비해 얻는 것이 시작 밝기 하나다(LP-M2 plan 확인 2).
 5. 외부 모니터 · 모드 바꾸기. i915가 길은 열지만 terminal은 지금처럼 card0의 첫 출력 하나다.
 6. GPU 전환(`apple-gmux`, MacBookPro11,3의 NVIDIA).
 
@@ -81,10 +82,13 @@ RB design(`shutdown` 스크립트), KK design(keyboard 종류), HD design(전원
 3. `CONFIG_PM`으로 USB 장치의 자동 절전이 켜진다 — 키보드 첫 키가 깨우기에 먹히는지 실기에서 본다. 게이트는 QEMU의 USB 장치를 본다.
 4. 맥의 ACPI가 `deep`을 안 내놓으면(`mem_sleep`에 `s2idle`뿐) 절전이 얕다. 로그 `tars-init: suspend (s2idle)`로 드러난다.
 5. 뚜껑을 닫은 채 깨어나면(USB 장치가 깨움) 다시 자지 않는다. 거슬리면 깨어난 뒤 뚜껑 상태를 읽는다.
+6. terminal의 배터리 주기는 `.awake` 시계라 자는 동안 멈춘다 — 깨어난 뒤 최대 60초 칸이 옛 값일 수 있다. 깨어날 때 ACPI 배터리의 uevent가
+   보통 다시 훑게 한다. 실기에서 칸이 오래 옛 값이면 깨어난 뒤 한 번 훑는 것이 다음 일이다.
+7. bash · zsh · fish에 내장 `suspend`가 있다 — sudo 없이 치면 셸이 멈춘다. 가이드가 "언제나 `sudo suspend`"라 적는다(LP-M1 plan 확인 1).
 
 ## Milestone
 
-- LP-M0 — 결정 1 · 2. 커널만. lead 직접.
+- LP-M0 — 결정 1 · 1a · 2. 커널만. lead 직접.
 - LP-M1 — 결정 3 · 4. PID 1 · 스크립트 · 체인 `sleep`. lead 직접.
-- LP-M2 — 결정 5 · 6 · 7. terminal · tars-config. lead 직접.
+- LP-M2 — 결정 5 · 6. terminal. lead 직접.
 - 닫을 때: `running-tars.md` "안 되는 것" 표의 두 줄, MB design 비목표 2, RM design 결정 3, `carryover.md`의 HDMI 오디오 줄, `project_macbook_hardware`.

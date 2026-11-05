@@ -13,7 +13,8 @@
       - MacBookPro11,2 · 11,3 · BCM4360(`14e4:43a0`): 커널의 AC-PHY는 `BROKEN`, 독점 `wl`은 외부 모듈 — `CONFIG_MODULES`가 없는 TARS에
         모듈 적재(init) · 6.18용 패치 · 독점 바이너리 배포를 함께 들여야 하는 새 서브프로젝트 크기다. USB 무선 동글이 싼 대안.
 - [x] MacBook Pro 2013 소리가 안 났다 — 카드 0(HDMI 쪽 HDA)이 안 서서 init의 오디오 일꾼이 포기했다. 일꾼이 아무 카드나 기다리게 고쳤다
-      (AU design 위험 14의 덧붙임). HDMI 오디오 자체는 `CONFIG_SND_HDA_I915`가 없어 여전히 없다 — 외장 모니터로 소리를 낼 일이 생기면 그때.
+      (AU design 위험 14의 덧붙임). HDMI 오디오 자체는 여전히 없다 — LP-M0부터 `SND_HDA_I915`는 서 있지만 내장 cmdline의 `snd_hda_core.gpu_bind=0`이
+      GPU 쪽을 안 본다(xe 몫인 Intel GPU에서 소리가 사라지지 않게, LP design 결정 1a). 외장 모니터로 소리를 낼 일이 생기면 그때.
 - [ ] `/sys/class/dmi`가 없다(`DMIID` 꺼짐) — 기종 이름을 사람이 확인할 길이 없었다. 진단 때 쓸모가 있다.
 - [ ] 게스트에 `ping`이 없다(Debian `iputils-ping`). 실기에서 연결 확인을 `curl`로 했다.
 
