@@ -1,16 +1,28 @@
-# HANDOFF: TP-M3(`lang-script` 묶음 — 스크립트 언어 아홉) 끝 — 다음은 TP-M4 plan(JVM 언어)
+# HANDOFF: TP-M4(base 보강 · 쓰기 가능한 `/usr/local`) 끝 — 다음은 TP-M5 plan(JVM 언어)
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
 담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 9판, 열린 질문 없음).
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 10판, 열린 질문 없음).
 
 ## 현재 브랜치
 
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-06, TP-M4 — 같은 세션)
+
+- [x] 프리릴리스 `dev-20261106`(`181271e`, 묶음 넷 — 실기 확인용, Latest는 0.1.4 그대로). 0.2.0은 TP 전체 뒤(`docs/decisions/project_release_0_2.md`).
+- [x] TP-M4 plan `ea92b03` · `f35a176`, 구현 `657e0a3`. base에 Debian 서른 줄과 upstream 넷(cmake 4.4.5 · ninja 1.13.2 · shellcheck 0.11.0 ·
+  ctags 2026.10.08): perl(+ doc) · 빌드 도구 · coreutils 전부(configure가 `expr` 없이 안 돌았다) · 압축 · ssh · rsync · gpg · man(3,669) ·
+  gdb · strace · ltrace · valgrind. base 238MiB(풀면 738).
+- [x] 쓰기 가능한 `/usr/local`(사용자 결정 — p3에, root만, 전역 설치 통일): init `layers.mountLocal`, npm builtin npmrc · gem
+  `operating_system.rb` · python `sitecustomize.py`(Debian의 posix_local 꼴 — `--user` · venv는 그대로). `devlayer/files/<묶음>/`(새 자리),
+  시스템 rc의 `/etc/tars/rc.d/*.sh`, fish `10-<묶음>.fish`.
+- [x] TP-M1부터의 결함 하나: init의 `/etc` 복사가 링크를 건너뛰어 php 확장 열아홉이 안 켜졌다 — 고쳤다(체인이 `ctype_digit`을 본다).
+- [x] 체인 380초 남짓, 루트 게이트 31/31 32분 47초, 잘린 줄 0. 확인한 것 열하나는 plan.
 
 ## 완료된 작업 (2026-11-06, TP-M3 세션)
 
@@ -86,8 +98,8 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 남은 작업
 
-- [ ] TP-M4 plan — design "Milestone"의 순서대로 JVM(kotlin · scala3 · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
-  jar를 받는지, 오프라인 한 번이 판정). 체인 시간 305초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 매니페스트의 선택 키는
+- [ ] TP-M5 plan — design "Milestone"의 순서대로 JVM(kotlin · scala3 · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
+  jar를 받는지, 오프라인 한 번이 판정). 체인 시간 377초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
   넷(`exe` · `hook` · `into` · `strip`) — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
 - [ ] 사용자: 실기에서 개발 도구 층 — `make dev-layers` 뒤 `make iso ISO_LAYERS="base lang-jvm lang-native lang-script"`(약 980MB)로 설치 · 갱신하고 `gcc` · `g++` · `zig` · `rustc` · `cargo` · `go` · `java` · `python3` · `ruby` · `node` · `bun`이 망 없이
@@ -108,8 +120,8 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 지금 상태 (2026-11-06)
 
-- 진행 중인 것은 TP(design 9판, M0 · M1 · M2 · M3 끝 — 다음은 M4 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 25분 23초(TP-M3).
+- 진행 중인 것은 TP(design 10판, M0~M4 끝 — 다음은 M5 plan, JVM 언어). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 32분 47초(TP-M4, base 다시 거두기 포함).
   `make gate`는 먼저 `make dev-layers`(묶음 넷, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
