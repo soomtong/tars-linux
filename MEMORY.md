@@ -18,6 +18,7 @@
 - [Jargon translation](docs/decisions/feedback_jargon_translation.md) — 정착한 영어 jargon(seed · mutation)은 번역하지 않고 조사를 붙인다
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복은 1회, 가끔 `-e RUNS=N`으로 늘린다
 - [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 스크립팅 런타임은 한 묶음으로만 들이고, 지금은 perl로 간다
+- [Release 0.2](docs/decisions/project_release_0_2.md) — 0.2.0은 TP 전체를 끝낸 뒤, 그 사이 실기 확인은 `dev-<날짜>` 프리릴리스(2026-11-06)
 - [Release iteration](docs/decisions/feedback_release_iteration.md) — 맥 실기 확인까지 0.1.4를 같은 번호로 거듭 내고, 이전 판의 흔적은 안 남긴다(2026-11-05)
 - [Devcontainer additions](docs/decisions/feedback_devcontainer_additions.md) — 개발 컨테이너에 필요한 도구는 묻지 않고 더한다(2026-11-05)
 - [Tool sourcing](docs/decisions/feedback_tool_sourcing.md) — 도구의 출처(바닥은 Debian, 유틸리티는 공식 바이너리, 소스 빌드 없음)와 initrd · 개발 도구 층의 기준(2026-11-05)

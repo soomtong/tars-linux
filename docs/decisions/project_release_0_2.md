@@ -1,0 +1,27 @@
+---
+name: project_release_0_2
+description: "0.2.0은 개발 도구 층(TP) 전체를 끝낸 뒤 내는 첫 '쓸 만한' 판이다(사용자 2026-11-06). 0.1.5는 내지 않는다. 그 사이의 실기 확인은 dev-<날짜> 프리릴리스로 한다"
+metadata:
+  type: project
+---
+
+# 0.2.0 = TP 전체
+
+사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈 하겠습니다." 이어서 확인: "TP 전체를 뜻합니다. 즉 이 모두 선행되어야
+하겠구나. 0.2는 풍부한 패키지를 포함한 첫 사용 가능한 버전이 될것이다. 신중하게 검토하고 릴리즈 할게."
+
+Why: 0.2는 "설치하면 망 없이 바로 개발할 수 있다"는 TP design의 목표를 처음으로 다 채운 판이어야 한다. 묶음 몇 개만 실린 판을 0.2라고
+부르면 그 약속이 흐려진다.
+
+How to apply:
+
+- 0.1.4 다음 번호는 0.2.0이다. TP design의 Milestone 절이 남긴 묶음(JVM 언어 · BEAM · 편집기 · 터미널 유틸리티 · 문서 · 서버 실행 파일 ·
+  서버 서비스 · AI)과 base 보강(TP-M4)이 모두 끝나고 design의 "닫을 때" 목록까지 한 뒤에 낸다. 절차는 [[project_release]].
+- 그 사이 실기 확인은 프리릴리스로 낸다 — 태그 `dev-<YYYYMMDD>`(annotated), `gh release create … --prerelease --latest=false`,
+  파일 `tars-dev-<YYYYMMDD>-x86_64.iso` + `SHA256SUMS`. `VERSION`은 올리지 않으므로 시스템은 `<VERSION>+<sha>`라고 말한다 — 깨끗한
+  트리에서 짓는다. 첫 판: `dev-20261106` → `181271e`(묶음 넷, 983,654,400 B,
+  sha256 `43abf8f861c75a59a8cdca6cfd44482663fe95efe7b791c25cfeec0442d98a9b`).
+- 프리릴리스 · 0.2 모두 `make iso ISO_LAYERS="<묶음들>"`이다(기본값은 묶음을 안 싣는다). 굽기 전에 `devlayer/build/*.stamp`를 지운다 —
+  묶음 안의 출처 기록(`usr/share/tars/layers/<묶음>`의 `git describe --dirty`)은 stamp에 안 들어가서, dirty일 때 구운 묶음이 그대로 남는다.
+- 0.2 전에 풀 것: GitHub release는 파일 하나가 2GiB까지다. 묶음 전체의 어림(TP design 확인 10, squashfs 2.5~4GB)이면 ISO 하나로는 못
+  올린다(사용자와 아직 안 정했다).
