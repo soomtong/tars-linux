@@ -79,6 +79,7 @@ mkdir -p "${root}/usr/share/tars/layers"
 harvest_lines=""
 info="${root}/usr/share/tars/layers/${bundle}.pkgs"
 : >"${info}"
+hex_seeds=() # "<도구 디렉터리>|<sha256>" — files 얹은 뒤 seed/manifest.toml과 대조한다(TP-M6 plan 결정 D)
 
 while IFS=$'\t' read -r tool _b version kind url sha opts; do
   case "${kind}" in
@@ -161,19 +162,34 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         ((exists == 0)) || die "${tool}: /usr/local/bin/${name} is taken"
         ln -s "../lib/${dir}/${rel}" "${link}"
       done
+      # man1=D(TP-M6 plan 결정 F): 도구 디렉터리의 D/*.1을 /usr/local/share/man/man1/에 링크한다 — man-db가 /usr/local/bin의 짝으로 본다.
+      man1="$(manifest_opt "${opts}" man1)"
+      if [[ -n "${man1}" ]]; then
+        pages=("${root}/${dest}/${man1}"/*.1)
+        [[ -f "${pages[0]}" ]] || die "${tool}: man1=${man1} but /${dest}/${man1} has no *.1"
+        mkdir -p "${root}/usr/local/share/man/man1"
+        for page in "${pages[@]}"; do
+          name="$(basename "${page}")"
+          link="${root}/usr/local/share/man/man1/${name}"
+          [[ ! -e "${link}" && ! -L "${link}" ]] || die "${tool}: /usr/local/share/man/man1/${name} is taken"
+          ln -s "../../../lib/${dir}/${man1}/${name}" "${link}"
+        done
+      fi
       printf '%s\t%s\t%s\t%s\n' "${tool}" "${version}" "${kind}" "${url}" >>"${info}"
       ;;
-    maven)
-      # TP-M5 plan 결정 B: URL 자리는 잠금 파일(devlayer/maven/<이름>.lock), sha256 자리는 그 파일의 sha256. 잠금 파일의 줄마다
-      # Maven Central에서 받아 into=가 가리키는 도구 디렉터리의 seed/m2/<경로>에 Maven 로컬 저장소 모양으로 둔다. 링크는 없다 —
-      # 그 도구의 런처가 첫 실행에 사용자 캐시로 복사한다(결정 D).
+    maven | hex)
+      # TP-M5 plan 결정 B(maven) · TP-M6 plan 결정 B(hex): URL 자리는 잠금 파일(devlayer/<종류>/<이름>.lock), sha256 자리는 그 파일의
+      # sha256. 잠금 파일의 줄마다 받아 into=가 가리키는 도구 디렉터리의 seed/에 둔다. 링크는 없다 — 그 도구의 런처가 첫 실행에
+      # 사용자 캐시로 복사한다. 두 종류가 다른 것은 받는 곳과 놓는 이름뿐이다:
+      #   maven  repo1.maven.org/maven2/<경로>  → seed/m2/<경로>(Maven 로컬 저장소 모양)
+      #   hex    repo.hex.pm/tarballs/<파일>     → seed/packages/<sha256 대문자>.tar(gleam 캐시의 이름 — Hex의 outer_checksum)
       [[ -f "${url}" ]] || die "${tool}: no lock file ${url}"
       got="$(sha256sum "${url}" | cut -c1-64)"
       [[ "${got}" == "${sha}" ]] || die "${tool}: ${url} has sha256 ${got}, manifest says ${sha}"
       into="$(manifest_opt "${opts}" into)"
       [[ -n "${into}" ]] || die "${tool}: a maven line needs into= (the tool whose seed it is)"
-      for key in exe hook strip; do
-        [[ -z "$(manifest_opt "${opts}" "${key}")" ]] || die "${tool}: ${key}= means nothing on a maven line"
+      for key in exe hook strip man1; do
+        [[ -z "$(manifest_opt "${opts}" "${key}")" ]] || die "${tool}: ${key}= means nothing on a ${kind} line"
       done
       dest="usr/local/lib/${into}-${version}"
       [[ -d "${root}/${dest}" ]] || die "${tool}: into=${into} but there is no /${dest} yet (put this line after ${into})"
@@ -182,9 +198,17 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         [[ -z "${path}" || "${path}" == \#* ]] && continue
         [[ -n "${fsha}" && -z "${extra}" && "${fsha}" =~ ^[0-9a-f]{64}$ ]] || die "${tool}: ${url}: bad line: ${path} ${fsha} ${extra}"
         [[ "${path}" != /* && "/${path}/" != */../* ]] || die "${tool}: ${url}: path ${path} leaves the repository"
-        fetch_checked "https://repo1.maven.org/maven2/${path}" "${fsha}" "${tool}: ${path##*/}"
-        mkdir -p "$(dirname "${root}/${dest}/seed/m2/${path}")"
-        cp "${cache}/${fsha}" "${root}/${dest}/seed/m2/${path}"
+        if [[ "${kind}" == maven ]]; then
+          fetch_checked "https://repo1.maven.org/maven2/${path}" "${fsha}" "${tool}: ${path##*/}"
+          place="seed/m2/${path}"
+        else
+          [[ "${path}" != */* && "${path}" == *.tar ]] || die "${tool}: ${url}: ${path} is not a <name>-<version>.tar"
+          fetch_checked "https://repo.hex.pm/tarballs/${path}" "${fsha}" "${tool}: ${path}"
+          place="seed/packages/$(tr a-f A-F <<<"${fsha}").tar"
+          hex_seeds+=("${dest}|${fsha}")
+        fi
+        mkdir -p "$(dirname "${root}/${dest}/${place}")"
+        cp "${cache}/${fsha}" "${root}/${dest}/${place}"
         n=$((n + 1))
       done <"${url}"
       ((n > 0)) || die "${tool}: ${url} has no files"
@@ -217,6 +241,16 @@ if [[ -d "${files_dir}" ]]; then
   done
   cp -a "${files_dir}/." "${root}/"
 fi
+
+# hex 시드와 seed/manifest.toml(TP-M6 plan 결정 D): 그 manifest가 고정한 outer_checksum이 잠금 파일이 받은 것과 같아야 한다. 하나라도
+# 어긋나면 런처가 넣은 manifest로 만든 프로젝트가 캐시에 없는 tarball을 찾아 망으로 간다.
+for d in $(printf '%s\n' "${hex_seeds[@]+"${hex_seeds[@]}"}" | cut -d'|' -f1 | sort -u); do
+  m="${root}/${d}/seed/manifest.toml"
+  [[ -f "${m}" ]] || continue
+  locked="$(printf '%s\n' "${hex_seeds[@]}" | awk -F'|' -v d="${d}" '$1 == d { print toupper($2) }' | sort)"
+  pinned="$(grep -oE 'outer_checksum = "[0-9A-F]{64}"' "${m}" | grep -oE '[0-9A-F]{64}' | sort)"
+  [[ "${locked}" == "${pinned}" ]] || die "/${d}/seed/manifest.toml pins other tarballs than the hex lock file (pinned: ${pinned//$'\n'/ }; locked: ${locked//$'\n'/ })"
+done
 
 # 출처 기록 한 줄(git describe). 결정 13의 비교에는 안 쓴다 — 묶음은 stamp로 커밋을 넘어 캐시되므로 이 줄은 ISO의 init
 # 버전과 거의 늘 다르다. 비교 대상은 tars-install이 p3에 묶음과 함께 쓰는 `version`이다(TP-M1 plan 결정 E).

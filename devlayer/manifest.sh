@@ -6,13 +6,15 @@
 # 실패한다. 첫 판의 `awk … NF >= 6`은 탭이 공백으로 바뀐 줄을 말없이 건너뛰어, 그 도구가 묶음에서 빠진 채 초록이었다.
 #
 #   열     도구 · 묶음 · 버전 · 종류 · URL · sha256 [· 선택]
-#   종류   upstream · vendor-repo · prebuilt · debian(TP design 결정 1의 넷)과 maven(TP-M5 plan 결정 B — URL 자리가
-#          devlayer/maven/의 잠금 파일, sha256 자리가 그 파일의 sha256)
-#   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 넷이다(TP-M2 plan 결정 C, strip은 TP-M3 plan 결정 C):
+#   종류   upstream · vendor-repo · prebuilt · debian(TP design 결정 1의 넷)과 maven(TP-M5 plan 결정 B) · hex(TP-M6 plan
+#          결정 B) — 뒤의 둘은 URL 자리가 devlayer/<종류>/의 잠금 파일, sha256 자리가 그 파일의 sha256
+#   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 다섯이다(TP-M2 plan 결정 C, strip은 TP-M3 plan 결정 C, man1은
+#          TP-M6 plan 결정 F). 다섯을 넘으면 TSV를 옮긴다(HANDOFF):
 #          exe=a,b   링크할 실행 파일(도구 디렉터리 기준). 없으면 bin/의 실행 파일 전부
 #          hook=X    풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
 #          into=T    도구 디렉터리를 T-<버전>으로(rust-src가 rust의 자리로)
 #          strip=N   풀고 나서 벗길 맨 위 디렉터리의 단 수(숫자, 기본 1). 0이면 맨 위의 파일을 그대로
+#          man1=D    도구 디렉터리의 D/*.1을 /usr/local/share/man/man1/에 링크한다
 
 DEVLAYER_MANIFEST="${DEVLAYER_MANIFEST:-devlayer/manifest.tsv}"
 
@@ -24,10 +26,10 @@ manifest_check() {
     {
       if (NF < 6 || NF > 7) { bad("expected 6 or 7 tab-separated columns, got " NF); next }
       for (i = 1; i <= 6; i++) if ($i == "") { bad("column " i " is empty"); next }
-      if ($4 != "upstream" && $4 != "vendor-repo" && $4 != "prebuilt" && $4 != "debian" && $4 != "maven") bad("unknown kind " $4)
+      if ($4 != "upstream" && $4 != "vendor-repo" && $4 != "prebuilt" && $4 != "debian" && $4 != "maven" && $4 != "hex") bad("unknown kind " $4)
       if (NF == 7) {
         n = split($7, o, " ")
-        for (i = 1; i <= n; i++) if (o[i] !~ /^(exe|hook|into)=[^=]+$/ && o[i] !~ /^strip=[0-9]+$/) bad("unknown option " o[i])
+        for (i = 1; i <= n; i++) if (o[i] !~ /^(exe|hook|into|man1)=[^=]+$/ && o[i] !~ /^strip=[0-9]+$/) bad("unknown option " o[i])
       }
       if ($1 in seen) bad("tool " $1 " again (first on line " seen[$1] ")")
       else seen[$1] = NR

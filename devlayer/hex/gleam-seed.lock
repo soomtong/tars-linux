@@ -1,0 +1,9 @@
+# gleam new가 만든 프로젝트의 첫 빌드가 Hex에서 받는 것(TP-M6 plan 확인 4 · 결정 B · D). 한 줄에 `<이름>-<판>.tar <sha256>`.
+#
+# 출처는 https://repo.hex.pm/tarballs/. sha256은 Hex 레지스트리의 outer_checksum이다 — 같은 디렉터리의 시드
+# devlayer/files/lang-beam/usr/local/lib/gleam-<판>/seed/manifest.toml이 그 값을 고정하고, build.sh가 둘을 대조한다.
+#
+# 만든 방법(2026-11-06): 망이 있는 amd64 trixie 컨테이너에서 gleam 1.19.2로 `gleam new` · `gleam run`을 한 번 돌리고 생긴 manifest.toml의
+# 두 줄을 적었다. 두 tarball을 따로 받아 sha256이 outer_checksum과 같은지 봤다. gleam을 올리면 이 파일과 시드 manifest.toml을 함께 다시 만든다.
+gleam_stdlib-1.0.5.tar cee5b6c076a85b45f60c585f4316c63ec8b7127c119d5738c3958a9c4d50404e
+gleeunit-1.11.0.tar ec31aba74256aea531edf8169931d775bbb384fed0a8a1bdc4dd9354e3e21826

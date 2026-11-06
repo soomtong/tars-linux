@@ -10,16 +10,17 @@ cd "$(dirname "$0")" || exit 1
 # TP-M4: base 보강(빌드 · 디버깅 · 원격 · man)의 hello와 쓰기 가능한 /usr/local(root가 전역으로 깐 셋이 재부팅 뒤에도 선다, plan 결정 F · H).
 # TP-M3: 넷째 묶음 lang-script. 부팅 2가 python(+ venv) · ruby · lua · luau · cyber · node(+ npm) · bun · janet · php를 본다(plan 결정 F).
 # TP-M5: 다섯째 묶음 util(cci · glc). 부팅 2가 kotlin · clojure(첫 실행 시드) · clj(rlwrap) · cci · glc · man clojure를 본다(plan 결정 F).
+# TP-M6: 여섯째 묶음 lang-beam. 부팅 2가 erl · erlc · escript · elixir · iex · mix test 세 번 · gleam(시드와 manifest.toml) · erl -man을 본다(plan 결정 G).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 다섯) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 5, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 여섯) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 6, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
-#                                      clojure · clj · cci · glc · man clojure, 화면 셸에서
+#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 화면 셸에서
 #                                      java --version(monitor 45504). 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 4, gcc · go · node · cci는 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 다섯을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 5, gcc · go · node · cci · erl은 돌고 java는 없다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 여섯을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -37,11 +38,12 @@ cd "$(dirname "$0")" || exit 1
 (cd ../kernel && ./make_initrd.sh)
 (cd ../boot && ./build.sh)
 ../devlayer/build.sh base
+../devlayer/build.sh lang-beam
 ../devlayer/build.sh lang-jvm
 ../devlayer/build.sh lang-native
 ../devlayer/build.sh lang-script
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base lang-jvm lang-native lang-script util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base lang-beam lang-jvm lang-native lang-script util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -52,7 +54,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base lang-jvm lang-native lang-script util"
+LAYERS="base lang-beam lang-jvm lang-native lang-script util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -191,7 +193,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with five layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with six layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -207,8 +209,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 5 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 5 layers" "copied"
+COPY_MS="$(last_num 'copied 6 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 6 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -217,16 +219,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 5 layers in [0-9]+ms" 5 || fail "init did not lay five layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 5 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 6 layers in [0-9]+ms" 5 || fail "init did not lay six layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 6 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, lang-jvm, lang-native, lang-script, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, lang-beam, lang-jvm, lang-native, lang-script, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -438,6 +440,45 @@ grep -aqF "tp-m5-glc: glc 0.19.3" "$LOG" || fail "glc --version did not say 0.19
 echo "B2: as tars, util's cci and glc run and man clojure reads offline"
 M5_NUMBERS="kotlinc $(ms_of kotlinc)ms, clojure $(ms_of clojure)ms"
 
+# TP-M6(plan 결정 G): BEAM 셋. 작업 자리는 ~/tp/m6(앞 덩이의 h.* 파일과 섞이지 않게). 기다리는 글자는 계산된 값이다.
+as_tars 'mkdir -p ~/tp/m6 && cd ~/tp/m6 && s=$(date +%s%N) && erl -noshell -eval "io:format(\"tp-m6-otp=~s-~s-~p~n\", [erlang:system_info(otp_release), erlang:system_info(emu_flavor), byte_size(crypto:hash(sha256, <<\"tp\">>))]), halt()." 2>&1 | sed "s/^/tp-m6-erl: /"; e=$(date +%s%N); echo "tp-ms-erl=$(((e-s)/1000000))"; printf "%s\n" "-module(h)." "-export([main/0])." "main() -> io:format(\"tp-m6-erlc=~p~n\", [lists:sum([40, 2])])." > h.erl && erlc h.erl 2>&1 | sed "s/^/tp-m6-erlc: /"; erl -noshell -s h main -s init stop; printf "%s\n" "#!/usr/bin/env escript" "main(_) -> io:format(\"tp-m6-escript=~p~n\", [ssl:start()])." > h.escript && escript h.escript'
+wait_log_re "tp-ms-erl=[0-9]+" 60 || fail "erl did not finish in 60s" "tp-m6-erl"
+grep -aqF "tp-m6-erl: tp-m6-otp=29-jit-32" "$LOG" || fail "erl did not run OTP 29 with the JIT and crypto" "tp-m6-erl"
+wait_log "tp-m6-erlc=42" 60 || fail "erlc did not compile a module that runs" "tp-m6-erlc"
+wait_log "tp-m6-escript=ok" 60 || fail "escript did not start ssl" "tp-m6-escript"
+echo "B2: as tars, erl ran OTP 29 with the JIT and crypto ($(ms_of erl)ms), erlc built a module and escript started ssl"
+
+as_tars 'cd ~/tp/m6 && s=$(date +%s%N) && elixir -e "IO.puts(\"tp-m6-ex=#{System.version()}-#{Enum.sum([40, 2])}\")" 2>&1 | sed "s/^/tp-m6-elixir: /"; e=$(date +%s%N); echo "tp-ms-elixir=$(((e-s)/1000000))"; echo "40 + 2" | iex 2>&1 | sed "s/^/tp-m6-iex: /"'
+wait_log_re "tp-ms-elixir=[0-9]+" 60 || fail "elixir did not finish in 60s" "tp-m6-elixir"
+grep -aqF "tp-m6-elixir: tp-m6-ex=1.20.5-42" "$LOG" || fail "elixir -e did not print 1.20.5 and 42" "tp-m6-elixir"
+wait_log "tp-m6-iex: iex(1)> 42" 60 || fail "iex did not answer 40 + 2" "tp-m6-iex"
+grep -aq "latin1" "$LOG" && fail "elixir warned about latin1 — LANG=C.UTF-8 did not reach it" "latin1"
+echo "B2: as tars, elixir -e ($(ms_of elixir)ms) and iex ran without the latin1 warning"
+
+# mix test 세 번(plan 위험 1): OrbStack의 qemu-user에서는 새 프로젝트의 첫 판이 JIT의 Illegal instruction으로 죽었다(확인한 것 4).
+as_tars 'cd ~/tp/m6 && mix new tpx > /dev/null 2>&1; cd tpx && for i in 1 2 3; do s=$(date +%s%N); mix test 2>&1 | grep -E "passed|failure|Illegal|signal|rror" | sed "s/^/tp-m6-mix$i: /"; e=$(date +%s%N); echo "tp-ms-mix$i=$(((e-s)/1000000))"; done'
+wait_log_re "tp-ms-mix3=[0-9]+" 90 || fail "mix new and three mix test runs did not finish in 90s" "tp-m6-mix"
+for i in 1 2 3; do
+  grep -aqF "tp-m6-mix${i}: Result: 2 passed" "$LOG" || fail "mix test run ${i} did not pass (plan risk 1: the BEAM JIT)" "tp-m6-mix" "Illegal" "invalid opcode"
+done
+grep -aqE "Illegal instruction|invalid opcode" "$LOG" && fail "something hit an illegal instruction (plan risk 1)" "Illegal" "invalid opcode"
+echo "B2: as tars, mix new and mix test three times passed ($(ms_of mix1)ms with the first compile, then $(ms_of mix2)ms and $(ms_of mix3)ms)"
+
+as_tars 'cd ~/tp/m6 && find ~/.cache/gleam -name "*.tar" 2>/dev/null | wc -l | sed "s/^/tp-m6-gcache0=/"; gleam new tpg > /dev/null 2>&1; cd tpg && test -f manifest.toml && printf "tp-m6-%s\n" manifest-ok; s=$(date +%s%N); gleam run 2>&1 | tail -1 | sed "s/^/tp-m6-grun: /"; e=$(date +%s%N); echo "tp-ms-gleam=$(((e-s)/1000000))"; gleam test 2>&1 | tail -1 | sed "s/^/tp-m6-gtest: /"; find ~/.cache/gleam -name "*.tar" | wc -l | sed "s/^/tp-m6-gcache1=/"'
+wait_log_re "tp-m6-gcache1=[0-9]+" 90 || fail "gleam new, run and test did not finish in 90s" "tp-m6-grun" "tp-m6-gtest"
+grep -aqF "tp-m6-gcache0=0" "$LOG" || fail "the gleam cache was not empty before the first gleam run" "tp-m6-gcache0"
+grep -aqF "tp-m6-manifest-ok" "$LOG" || fail "the gleam launcher did not put manifest.toml into the new project" "tp-m6"
+grep -aqF "tp-m6-grun: Hello from tpg!" "$LOG" || fail "gleam run did not run offline (seed and manifest.toml)" "tp-m6-grun" "repo.hex.pm"
+grep -aqF "tp-m6-gtest: 1 passed, no failures" "$LOG" || fail "gleam test did not pass offline" "tp-m6-gtest"
+grep -aqF "tp-m6-gcache1=2" "$LOG" || fail "the gleam launcher did not seed the two tarballs into the cache" "tp-m6-gcache1"
+echo "B2: as tars, gleam new got manifest.toml, gleam run ($(ms_of gleam)ms) and gleam test passed offline from the seeded cache"
+
+as_tars 'MANPAGER=cat erl -man lists 2>&1 | grep -m1 "List processing" | sed "s/^ */tp-m6-erlman=/"; MANPAGER=cat man mix 2>&1 | grep -m1 "project management" | sed "s/^ */tp-m6-mixman=/"'
+wait_log "tp-m6-mixman=mix" 60 || fail "man mix did not show the page (man1=man)" "tp-m6-mixman"
+grep -aqF "tp-m6-erlman=lists - List processing" "$LOG" || fail "erl -man lists did not read <ROOT>/man" "tp-m6-erlman"
+echo "B2: as tars, erl -man lists and man mix read offline"
+M6_NUMBERS="erl $(ms_of erl)ms, elixir $(ms_of elixir)ms, mix test $(ms_of mix1)/$(ms_of mix2)/$(ms_of mix3)ms, gleam run $(ms_of gleam)ms"
+
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0
 for _ in $(seq 1 20); do
@@ -465,7 +506,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -476,18 +517,19 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 4 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, lang-native, lang-script and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 5 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, lang-beam, lang-native, lang-script and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
-as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; command -v java || printf "tp-%s\n" no-java'
+as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-cci=cci 0.6.1" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-erl=29" 60 || fail "lang-beam's erl no longer works without lang-jvm" "tp-b3"
 grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" || fail "boot 3 did not make /usr/local writable" "tars-init: /usr/local"
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, lang-native, lang-script and util still run C, Go, node and cci, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, lang-beam, lang-native, lang-script and util still run C, Go, node, cci and erl, what root put in /usr/local is still there, and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -497,10 +539,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 5 old layers removed" "$LOG" || fail "the update did not remove the five old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 6 old layers removed" "$LOG" || fail "the update did not remove the six old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the five old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the six old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"

@@ -61,6 +61,18 @@ shellcheck	base	0.11.0	upstream	https://github.com/koalaman/shellcheck/releases/
 # ctags: 안정판 바이너리는 없고 universal-ctags 조직이 날마다 굽는 판이 그 upstream이다(plan 확인 4).
 ctags	base	2026.10.08	upstream	https://github.com/universal-ctags/ctags-nightly-build/releases/download/2026.10.08%2B82494361bb3e7d4f7cf1d2bdc0d0e9001c926e45/uctags-2026.10.08-linux-x86_64.release.tar.xz	e149d4f774cca9d6b657453f22fce97b94a5b691afaaa50f56f8564794839f87
 
+# ── lang-beam(TP-M6) — erlang · elixir · gleam ─────────────────────────────────────────
+# erlang: builds.hex.pm의 OTP 빌드(design 결정 1의 prebuilt — erlang/otp의 release에는 linux 바이너리가 없다). ubuntu-24.04판(GLIBC 2.38까지).
+# sha256은 builds/otp/amd64/ubuntu-24.04/builds.txt의 넷째 열. 훅이 Install -cross -minimal로 경로를 박는다(plan 결정 C).
+erlang	lang-beam	29.1.2	prebuilt	https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/OTP-29.1.2.tar.gz	2cfca446976fc61962585a1c77e5d11ddb6f5fed83e84668a2c4acfaad60d22e	hook=otp-install exe=bin/erl,bin/erlc,bin/escript,bin/dialyzer,bin/typer,bin/ct_run
+# erlang의 man(erl -man이 <ROOT>/man을 읽는다). man1만 /usr/local/share/man에 링크한다 — man3의 string.3 등은 C의 페이지와 이름이 겹친다(결정 F).
+erlang-man	lang-beam	29.1.2	upstream	https://github.com/erlang/otp/releases/download/OTP-29.1.2/otp_doc_man_29.1.2.tar.gz	9e1adc780cafdd90aa28e864a5843d7108864c133581c539eec7a5ea34baff01	into=erlang strip=0 man1=man/man1
+# elixir: OTP 29용 미리 빌드(BEAM 바이트코드와 셸 스크립트). zip에 맨 위 디렉터리가 없다.
+elixir	lang-beam	1.20.5	upstream	https://github.com/elixir-lang/elixir/releases/download/v1.20.5/elixir-otp-29.zip	f424d6f0bb710a1d4898f2645d8ad6cab3f5eab8d71848c0dda2579d3a8e8a06	strip=0 exe=bin/elixir,bin/elixirc,bin/iex,bin/mix man1=man
+# gleam: musl 정적. bin/gleam은 런처(훅) — 캐시 시드와 gleam new 뒤의 manifest.toml(사용자 결정, plan 결정 D). gleam-seed는 그 시드다.
+gleam	lang-beam	1.19.2	upstream	https://github.com/gleam-lang/gleam/releases/download/v1.19.2/gleam-v1.19.2-x86_64-unknown-linux-musl.tar.gz	2ba2afb66ca9f6dcc01a4a6e9169b6942963bad6483bec9571ddc078cfe6f41f	hook=gleam exe=bin/gleam
+gleam-seed	lang-beam	1.19.2	hex	devlayer/hex/gleam-seed.lock	42c13b407bdbae25c0ece9a059b00bcdf21bb76414ee145568d5fe25f4f951bd	into=gleam
+
 # ── lang-jvm(TP-M0은 JDK 하나) ──────────────────────────────────────────
 # Temurin 최신 LTS GA. api.adoptium.net/v3/assets/latest/25/hotspot?os=linux&architecture=x64&image_type=jdk가 준 값.
 jdk	lang-jvm	25.0.5+8	upstream	https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz	68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb

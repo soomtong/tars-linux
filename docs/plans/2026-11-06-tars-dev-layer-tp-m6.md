@@ -117,8 +117,33 @@ G. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로). 기다리�
 
 ## 확인한 것
 
-(구현 중 채운다)
+1. Hex의 tarball을 따로 받은 sha256(`cee5b6c0…` · `ec31aba7…`)이 `manifest.toml`의 `outer_checksum`과 같다 — 결정 B의 전제. elixir의 `man/`에서 `*.1`은
+   넷(`elixir` · `elixirc` · `iex` · `mix`)이고 틀 파일 `*.1.in` · `common`은 걸리지 않는다.
+2. `make dev-layers`(lang-beam): 파일 4,961 · 풀면 218MiB · zstd15 84MiB(어림 70). verify `unresolved=0` — libtinfo · libz · libstdc++ · `libcrypto.so.3`가
+   initrd에서 풀렸다(위험 2는 안 일어났다). `links=32` — 실행 파일 11(erlang 6 · elixir 4 · gleam 1)과 man1 21(erlang 17 · elixir 4), `dangling=0`. 시드
+   `manifest.toml`과 잠금 파일의 대조를 지났다.
+3. chroot(OrbStack, 망 없음, 사용자 1000, `LANG=C.UTF-8`): G1 `tp-m6-otp=29-jit-32` · `tp-m6-erlc=42` · `tp-m6-escript=ok`, G2 `tp-m6-ex=1.20.5-42` · `iex`의
+   42(latin1 경고 없음), G4 캐시 0 → 2 · `manifest.toml` 넣음 · `Hello from tpg!` · `1 passed`, G5 `erl -man lists` · `man mix` · `man erl`.
+4. G3: 새 프로젝트의 첫 `mix test`만 Illegal instruction으로 죽고 2 · 3회차는 지났다 — 조사(확인 3) 때와 같은 자리다. 첫 회차만 프로젝트를 컴파일한다. 해석:
+   BEAM JIT은 CPUID로 기능(BMI2 · LZCNT 등)을 묻고 그 명령을 쓴다. OrbStack의 qemu-user가 흉내 내지 못하는 기능을 CPUID에 내놓으면 JIT이 그 명령에서
+   SIGILL을 맞는다. 진짜 CPU와 체인의 `-cpu SandyBridge`는 CPUID가 정직하다 — 판정은 체인(위험 1). 체인에서도 첫 회차가 죽으면 진짜 문제로 본다.
+5. 빨강(할 일 7): (a) 런처의 `manifest.toml` 넣기를 막으면 `manifest: no`, 망 없는 `gleam run`이 `repo.hex.pm/packages/gleam_stdlib`에서 멈춘다. (b) 훅의
+   `Install`을 빼면 체인까지 가지 않고 훅의 검사가 `Install left no bin/erl`로 굽기를 멈춘다(할 일 7(b)의 "G-1이 멈춘다"보다 앞에서 잡힌다). 되돌리자
+   stamp가 같아 `cached`.
+6. 체인(SandyBridge · 1GiB, 혼자 한 판, 빌드 뒤 625초 — 488초에서): 위험 1은 일어나지 않았다. 새 프로젝트의 첫 `mix test`(컴파일 포함) 7.9초 · 이어서
+   6.2 · 6.3초, 셋 다 `2 passed`, 로그에 `Illegal instruction` · `invalid opcode` 없음 — 확인한 것 4의 해석(OrbStack qemu-user의 CPUID)이 맞았다.
+   erl 2.9초, elixir 2.9초, gleam run 13.9초. 상한은 그 세 배(60초 아래로는 안 내린다) — 하나짜리는 60초, `mix` 세 판과 gleam 덩이는 90초. 늘어난 137초
+   가운데 BEAM 덩이는 50초 남짓이고 나머지는 이 판 전체가 느렸던 몫이다(kotlinc 55 → 69초, go run 98 → 113초).
 
 ## 결과
 
-(구현 뒤 채운다)
+1. `make dev-layers`가 초록(확인한 것 2). lang-beam 84MiB, 묶음 여섯 1,161MiB, `tars-dev.iso` 1,360,758,784바이트 — GitHub release의 파일당 2GiB까지 약 0.7GB.
+2. 체인 `devtools`가 초록(확인한 것 6). 부팅 1이 묶음 여섯을 6.4초에 복사, 부팅 2의 lowerdir가 `base lang-beam lang-jvm …`, 결정 G의 다섯 덩이가 망 없이
+   사용자로 돈다. 부팅 3(lang-jvm이 깨짐)에서 lang-beam의 erl이 선다. 부팅 4가 옛 묶음 여섯을 지우고 새로.
+3. 빨강 둘(확인한 것 5). 위험 1(JIT)은 체인에서 일어나지 않았다(확인한 것 6).
+4. `make quick` PASS(72파일).
+5. 루트 게이트 두 판. 1회차 32분 15초 30/31 — BT-M2가 `btvirt` general protection fault로 빨갰다. `carryover.md`의 간헐과 같은 서명이고 세 번째다(이번 변경과
+   닿지 않는다 — BT-M2는 묶음을 얹지 않는다). 체인만 다시 돌린 판은 초록(3분 38초). 2회차 33분 38초 31/31(prebuild 442초 · lanes 1,472초 — lane-0의
+   devtools가 729초), 31회차 모두 `cut log lines A=0 B=0 C=0`. 게이트 안의 BEAM: erl 3.1초, `mix test` 8.0 · 6.5 · 6.3초, gleam run 13.9초.
+6. 위험 2(initrd의 libtinfo · libcrypto)는 안 일어났다. 위험 4: ISO 1.27 → 1.36GB. 위험 5: lanes 1,284 → 1,472초(devtools 567 → 729초 — TP-M5보다 이 판의
+   기계가 전체로 느렸던 몫이 섞였다, 확인한 것 6).
