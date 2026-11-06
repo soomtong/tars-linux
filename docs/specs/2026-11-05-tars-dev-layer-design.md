@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 10판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 끝(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 11판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 끝, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정)(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -42,7 +42,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 바닥 | `base` 묶음(TP-M0 · M2 · M4): gcc · g++ · make, perl(+ perl-doc), pkgconf · cmake · ninja · autoconf · automake · libtool · m4 · bison · flex · gettext, coreutils 전부 · patch · file · xz · zstd · bzip2 · zip · unzip, openssh-client · rsync · gnupg, man-db · manpages · manpages-dev, gdb · strace · ltrace · valgrind, xxd · shellcheck · universal-ctags (사용자 2026-11-06 — "추천해 준 것 모두") |
 | 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2) |
 | 스크립트 언어 | python3, ruby, lua, luau, cyber, node, bun, janet, php(`lang-script` 묶음, TP-M3 — luau · cyber는 사용자가 2026-11-06에 더했다) |
-| JVM | JDK, kotlin, scala3, clojure |
+| JVM | JDK, kotlin, clojure(`lang-jvm` 묶음, TP-M5) |
 | BEAM | erlang, elixir, gleam |
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs, ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인) |
 | 문서 | `dasht` + `w3m` + Dash/Zeal docset(결정 19) |
@@ -52,7 +52,9 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정).
 LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
-디버거가 필요하면 직접 LLVM 툴체인을 설치한다"). LLVM 공식 tarball은 풀면 11.8GB였고 odin은 링크에 clang을 부른다. tcc는 리눅스
+디버거가 필요하면 직접 LLVM 툴체인을 설치한다"). scala3(사용자 결정 2026-11-06 — 아직 본격적으로 쓰지 않는다. 망 없이 `scala run`을 세우려면
+컴파일 서버 Bloop(Scala 2.12로 쓰인 jar 134개, 111MiB, 상주 메모리 585MiB)까지 실어야 했다 — TP-M5 plan 확인 3). 필요해지면 Homebrew로 깐다.
+LLVM 공식 tarball은 풀면 11.8GB였고 odin은 링크에 clang을 부른다. tcc는 리눅스
 바이너리가 없어 Debian의 2020년 스냅숏뿐이었다(TP-M2 plan 확인 4 · 7).
 
 ### 터미널 유틸리티 (사용자, 2026-11-05)
@@ -70,7 +72,8 @@ LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 
 | `debian` | ipcalc, wget |
 | 합친 것 | tree-sitter(Homebrew의 `tree-sitter`는 라이브러리, CLI는 `tree-sitter-cli` 하나로 본다) |
 
-뺀 것: `soomtong/tap`의 cci · glc · tsl, fakesteak(미리 빌드된 바이너리가 없다) — 사용자 결정. hexyl은 initrd 후보(기준 B)였지만
+뺀 것: `soomtong/tap`의 tsl, fakesteak(미리 빌드된 바이너리가 없다) — 사용자 결정. 같은 tap의 cci · glc는 사용자가 linux 빌드를 내어
+(2026-11-06) TP-M5가 `util` 묶음의 첫 두 줄로 싣는다(출처는 각 저장소의 GitHub release — tap formula는 아직 macOS만 적는다). hexyl은 initrd 후보(기준 B)였지만
 사용자가 개발 도구 층에 두기로 했다.
 
 initrd에 있는 열은 Debian trixie 판이라 최신이 아닐 수 있다. 그래서 `util` 묶음이 최신판을 `/usr/local/bin`에 따로 싣고, `PATH`가
@@ -100,7 +103,7 @@ trixie 판이 돈다.
    미리 빌드는 2026-07의 8.5.8에서 멈췄다, 사용자 결정 2026-11-06, TP-M3 plan 확인 4),
    erlang(→ builds.hex.pm의 OTP 빌드), redis(→ packages.redis.io), postgresql(→ PGDG), nginx(→ nginx.org), lua · emacs(→ Debian
    `lua5.4` · `emacs-nox`). 각 출처가 지금도 이 모양인지는 그 묶음의 milestone이 받으면서 확인한다. mitos는 glibc tarball · `.deb`, ttt · neovim · caddy · bun · go · zig · node ·
-   odin · gleam · janet · JDK · kotlin · scala3 · mysql은 공식 tarball이 있다(M0이 하나씩 확인한다).
+   odin · gleam · janet · JDK · kotlin · mysql은 공식 tarball이 있다(M0이 하나씩 확인한다).
 9. ISO는 `boot/make_iso.sh`가 `xorriso`로 짓고 지금 138MB다. ISO9660은 파일 하나가 4GiB를 넘으면 `-iso-level 3`이 필요하다.
    부팅 매체는 iso9660 `TARS`로 판정되고(`disk.zig`), `tars-install`이 그 안의 `BOOT_FILES` 여섯을 ESP로 옮긴다.
 10. 크기 어림(실측 아님): 설치 7~10GB, squashfs로 2.5~4GB. 정확한 숫자는 묶음마다 그 milestone이 잰다. 잰 것: base 251MiB → 81MiB,
@@ -159,7 +162,7 @@ trixie 판이 돈다.
 
 14. 읽기 전용 `/usr`와 자동 갱신: claude code · opencode · omp 등 스스로 갱신하는 도구는 개발 도구 층의 사본에서 갱신을 끈다(도구마다 환경
     변수나 설정 — 해당 milestone이 정한다). 사용자가 최신을 원하면 홈에 따로 깐다.
-15. JVM 계열(kotlin · scala3 · clojure)은 첫 실행 때 컴파일러 jar를 망에서 받는 경우가 있다. 개발 도구 층에 그 jar를 미리 넣고 오프라인으로
+15. JVM 계열(kotlin · clojure — scala3는 TP-M5에서 뺐다)은 첫 실행 때 컴파일러 jar를 망에서 받는 경우가 있다. 개발 도구 층에 그 jar를 미리 넣고 오프라인으로
     한 번 돌아가는지를 그 milestone의 판정으로 삼는다.
 16. 서버는 실행 파일까지가 개발 도구 층의 몫이다. 데이터는 `/home` 아래(`/usr`는 읽기 전용, `/var`는 RAM). 서비스로 띄우기(`tars-service`
     연결, `initdb` 등)는 서버 묶음 다음의 milestone이다.
@@ -170,7 +173,7 @@ trixie 판이 돈다.
 19. 문서는 `dasht`(Dash/Zeal docset을 터미널에서 찾는 셸 스크립트)와 `w3m`(HTML을 터미널에서 읽는다)이다. `dasht`가 부르는
     `sqlite3` · `w3m`은 `debian` 줄, docset은 `docs.sqfs`의 `/usr/share/dasht/docsets/`에 미리 풀어 둔다(`DASHT_DOCSETS_DIR`을 시스템
     rc가 그 자리로). docset은 Kapeli의 공식 피드에서 받는 미리 빌드된 tarball이다. 추천 묶음(사용자가 "추천대로"):
-    - 언어: C, C++, Rust, Go, Python 3, Ruby, Lua, NodeJS, PHP, Java SE(개발 도구 층의 JDK와 같은 판), Erlang, Elixir, Clojure, Scala
+    - 언어: C, C++, Rust, Go, Python 3, Ruby, Lua, NodeJS, PHP, Java SE(개발 도구 층의 JDK와 같은 판), Erlang, Elixir, Clojure
     - 서버: PostgreSQL, MySQL, Redis, Nginx
     - 셸과 도구: Bash, CMake, Git(피드에 있으면), Vim(neovim 몫)
     공식 피드에 없는 언어(zig · odin · gleam · janet · kotlin · bun 후보)는 그 언어가 내는 오프라인 문서를 쓴다 — `zig std`(HTML),

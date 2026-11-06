@@ -113,7 +113,7 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] TP-M5 plan — design "Milestone"의 순서대로 JVM(kotlin · scala3 · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
+- [ ] TP-M5 구현 — plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`(scala3는 사용자 결정으로 뺐고 cci · glc로 util 묶음을 연다). JVM(kotlin · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
   jar를 받는지, 오프라인 한 번이 판정). 체인 시간 377초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
   넷(`exe` · `hook` · `into` · `strip`) — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
