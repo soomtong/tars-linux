@@ -1,15 +1,29 @@
-# HANDOFF: TP-M2(`lang-native` 묶음 · base의 g++) 끝 — 다음은 TP-M3 plan(`lang-script` 묶음)
+# HANDOFF: TP-M3(`lang-script` 묶음 — 스크립트 언어 아홉) 끝 — 다음은 TP-M4 plan(JVM 언어)
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
 담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 7판, 열린 질문 없음).
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 9판, 열린 질문 없음).
 
 ## 현재 브랜치
 
-`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다 — 맥북 실기 확인 뒤 0.1.5 후보(`docs/decisions/project_release.md`).
+`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
+마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-06, TP-M3 세션)
+
+- [x] TP-M3 plan `16a189d`, 구현 `5871158`. `lang-script`(190MiB, 풀면 651MiB): python 3.15.2(python-build-standalone, stripped) ·
+  ruby 4.0.9(spinel-coop/rv-ruby — ruby/ruby-builder는 `/opt/hostedtoolcache`에 굳어 옮길 수 없다) · lua 5.4.7(Debian) · luau 0.745(사용자가
+  더함, Roblox) · cyber 0.4.2(soomtong/cyber, 사용자가 더함) · node 26.13.0 LTS · bun 1.4.4(baseline — AVX2 없음) · janet 1.42.1 · php 8.4.27
+  (Debian trixie-security — 사용자 결정, static-php는 8.5.8에서 멈췄다).
+- [x] build.sh 풀기 일원화: 통째로 풀고(zip이면 unzip) `strip=N`(새 키, 기본 1)단 벗기고 옮긴다. `prebuilt`도 받는다. 링크 0개면 멈춘다.
+  리팩터링이 기존 셋의 `.paths`를 바꾸지 않았다. harvest: `devlayer/harvest-skip.tsv`(initrd가 가진 패키지 — tzdata, 거두는 이미지 2026e와
+  initrd 2026f가 어긋났다), `/etc/systemd/` · `/etc/cron.d/`는 싣지 않는다. verify: RUNPATH 빈 항목 건너뛰기, `/`가 든 NEEDED(`$ORIGIN/…`).
+- [x] devtools 체인: 묶음 넷, hello 아홉(+ venv · npm · luau-analyze), 빌드 뒤 305초. 체인 CPU는 `-cpu SandyBridge`(사용자 결정) — qemu64에서
+  rv-ruby가 SSSE3 `palignr`로 죽었다. QEMU TCG는 CPUID에 없는 AVX2도 실행해서 "일반 bun이면 빨강"은 체인으로 못 봤다(plan 확인한 것 8).
+- [x] 루트 게이트 31/31, 25분 23초, 잘린 줄 0.
 
 ## 완료된 작업 (2026-11-06, TP-M2 세션 — 사용자가 남은 결정을 위임하고 잤다)
 
@@ -72,12 +86,11 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 남은 작업
 
-- [ ] TP-M3 plan — design "Milestone"의 순서대로 `lang-script`(python3 · ruby · lua · node · bun · janet · php). python은
-  `prebuilt`(python-build-standalone), ruby는 ruby/ruby-builder, php는 static-php-cli, lua는 `debian`(design 확인 8 — 받으면서 다시 본다).
-  판정은 devtools 체인의 hello. 체인 시간이 이미 257초다 — 묶음이 늘수록 체인을 묶음별로 가를지 정한다(포트는 45505부터).
-  매니페스트의 선택 키는 지금 셋 — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다(TP-M2 결정 C). 미뤄 둔 lldb는 사용자 결정으로
-  LLVM과 함께 빠졌다(python이 들어와도 다시 열지 않는다).
-- [ ] 사용자: 실기에서 개발 도구 층 — `make dev-layers` 뒤 `make iso ISO_LAYERS="base lang-jvm lang-native"`(약 780MB)로 설치 · 갱신하고 `gcc` · `g++` · `zig` · `rustc` · `cargo` · `go` · `java`가 망 없이
+- [ ] TP-M4 plan — design "Milestone"의 순서대로 JVM(kotlin · scala3 · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
+  jar를 받는지, 오프라인 한 번이 판정). 체인 시간 305초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 매니페스트의 선택 키는
+  넷(`exe` · `hook` · `into` · `strip`) — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
+  CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
+- [ ] 사용자: 실기에서 개발 도구 층 — `make dev-layers` 뒤 `make iso ISO_LAYERS="base lang-jvm lang-native lang-script"`(약 980MB)로 설치 · 갱신하고 `gcc` · `g++` · `zig` · `rustc` · `cargo` · `go` · `java` · `python3` · `ruby` · `node` · `bun`이 망 없이
   도는지, 맥북 에어 2011에서 javac의 시간(TCG 10.5초).
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
@@ -93,11 +106,11 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 용어: "개발 도구 층"(전체), "묶음"(squashfs 하나), `guest_tools.sh`의 "층 N"은 UT 때부터의 목록 번호. 도구를 더할 때는
 `initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45505부터. 게스트에는 `mount` · `free` · `base64` · `dd`가 없다(체인은 mount(2)를 부르는 init · 설치기에 기댄다).
 
-## 지금 상태 (2026-11-05)
+## 지금 상태 (2026-11-06)
 
-- 진행 중인 것은 TP(design 8판, M0 · M1 · M2 끝 — 다음은 M3 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 24분 3초(TP-M2 셋째 판).
-  `make gate`는 먼저 `make dev-layers`(묶음 셋, 캐시면 약 1분 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
+- 진행 중인 것은 TP(design 9판, M0 · M1 · M2 · M3 끝 — 다음은 M4 plan). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 25분 23초(TP-M3).
+  `make gate`는 먼저 `make dev-layers`(묶음 넷, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
