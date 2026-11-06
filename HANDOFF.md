@@ -1,10 +1,10 @@
-# HANDOFF: TP-M4(base 보강 · 쓰기 가능한 `/usr/local`) 끝 — 다음은 TP-M5 plan(JVM 언어)
+# HANDOFF: TP-M5(JVM 언어 kotlin · clojure, util 묶음의 cci · glc) 끝 — 다음은 TP-M6 plan(BEAM)
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
 담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 10판, 열린 질문 없음).
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 11판, 열린 질문 없음).
 
 ## 현재 브랜치
 
@@ -12,7 +12,18 @@
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
 
-## 완료된 작업 (2026-11-06, TP-M4 — 같은 세션)
+## 완료된 작업 (2026-11-06, TP-M5 세션)
+
+- [x] TP-M5 plan `9a04566`(조사 뒤 사용자 결정 둘: scala3를 뺀다, cci · glc로 util 묶음을 연다). 구현은 이 HANDOFF와 같은 커밋.
+- [x] lang-jvm에 kotlin 2.4.21(jar뿐, 그대로 오프라인) · clojure 1.12.6.1673(훅 `clojure-tools.sh`가 자리표를 바꾸고 `bin/clojure`에 첫 실행 시드 줄).
+  새 출처 종류 `maven`(잠금 파일 `devlayer/maven/clojure-m2.lock`의 jar · pom 일곱 → 도구의 `seed/m2/`, 첫 실행이 `~/.m2`로 복사). lang-jvm 127 → 226MiB.
+- [x] base에 rlwrap(`clj`가 요구한다 — lang-jvm에 두면 perl · python을 한 번 더 싣는다, plan 확인한 것 1). python3 실행 파일 패키지 넷은 `harvest-skip.tsv`.
+- [x] util 묶음(다섯째, 13MiB): cci 0.6.1(Go 정적) · glc 0.19.3(Rust, libstdc++ · libz는 initrd). design의 "뺀 것"에서 되돌렸다.
+- [x] 체인은 가르지 않았다 — 512초로 420초를 넘었지만 devtools는 ISO 줄(lane-0, 직렬)에 있어 새 체인도 같은 줄에 붙는다(plan 확인한 것 6).
+- [x] 루트 게이트 31/31, 29분 26초(lanes 1,284초), 잘린 줄 0. ISO 1.27GB. `make quick`이 TP-M4의 `lang-native.sh` SC2148을 잡아 고쳤다.
+- [x] cyber 0.4.2 → 0.4.3(사용자가 soomtong/cyber에 낸 판, 2026-11-06). 모양 · CPU 수준(`%ymm` 0) 같음, devtools 체인 초록(빌드 뒤 488초). 게이트는 안 돌렸다 — 묶음을 쓰는 체인은 devtools 하나다.
+
+## 완료된 작업 (2026-11-06, TP-M4 — 앞 세션)
 
 - [x] 프리릴리스 `dev-20261106`(`181271e`, 묶음 넷 — 실기 확인용, Latest는 0.1.4 그대로). 0.2.0은 TP 전체 뒤(`docs/decisions/project_release_0_2.md`).
 - [x] TP-M4 plan `ea92b03` · `f35a176`, 구현 `657e0a3`. base에 Debian 서른 줄과 upstream 넷(cmake 4.4.5 · ninja 1.13.2 · shellcheck 0.11.0 ·
@@ -93,6 +104,14 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 시도했으나 실패한 접근
 
+TP-M5(2026-11-06, plan 확인 3 · 4에 자세히):
+
+- scala3의 `scala run`을 오프라인으로: Bloop은 `-r` 동봉 저장소를 안 본다(합쳐도 같은 오류), `COURSIER_REPOSITORIES`는 다른 해석 경로로
+  멈춘다, 런처의 옵션 줄에 `--server=false`를 끼우면 모든 명령이 깨진다. 통한 것은 `~/.cache/coursier` 시드뿐 — 그러나 사용자가 scala를 뺐다.
+- clojure의 오프라인: 설치 디렉터리 `deps.edn`에 `file://` 저장소, 셋을 `:local/root` jar로 — 둘 다 안 된다(tools.deps가 `central`부터 찾고 망 오류를
+  "없음"이 아니라 실패로 다룬다). `~/.m2` 시드만 통한다. Java의 `user.home`은 `$HOME`이 아니라 `/etc/passwd`의 홈이다(root 컨테이너에서 헷갈렸다).
+- 조사용 이미지에 `cpio`가 없어 시드 0개를 복사하고 "jar · pom만으로는 안 된다"고 읽을 뻔했다 — 복사된 파일 수를 먼저 찍는다.
+
 TP-M3 · M4(2026-11-06):
 
 - ruby/ruby-builder(design 확인 8의 출처): `--prefix=/opt/hostedtoolcache/…`로 굳은 빌드(`LIBRUBY_RELATIVE=no`, 절대 RUNPATH) — 옮기면 안 선다.
@@ -113,15 +132,16 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] TP-M5 구현 — plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`(scala3는 사용자 결정으로 뺐고 cci · glc로 util 묶음을 연다). JVM(kotlin · clojure, lang-jvm 묶음에 더한다 — design 결정 15: 첫 실행이 망에서
-  jar를 받는지, 오프라인 한 번이 판정). 체인 시간 377초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
+- [ ] TP-M6 plan — design "Milestone"의 순서대로 BEAM(erlang · elixir · gleam, `lang-beam` 묶음 — erlang은 builds.hex.pm의 OTP 빌드 후보, design 결정 1 확인 8).
+  체인 시간은 빌드 뒤 482~512초다. 체인을 가를지는 420초가 아니라 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6) — 떼어도 같은 줄이다. 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
   넷(`exe` · `hook` · `into` · `strip`) — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
 - [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 1.15GB, 묶음 전체 어림 2.5~4GB) — 묶음을 따로 올리기 등.
   design 결정 12(ISO가 묶음을 싣는다)와 맞물린다. `docs/decisions/project_release_0_2.md`.
 - [ ] 사용자: 실기에서 개발 도구 층 — 프리릴리스 `dev-20261106`(TP-M3까지, base 보강 · `/usr/local` 없음)이 올라가 있다. TP-M4까지 보려면 새 프리릴리스
   (`dev-<날짜>`, 절차는 `project_release_0_2.md`)를 만들어 달라고 할 것이다. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
-  CPU에서 서는지가 남은 확인), `sudo npm i -g` 등이 `/usr/local/bin`에 서는지, javac 시간(TCG 11초).
+  CPU에서 서는지가 남은 확인), `sudo npm i -g` 등이 `/usr/local/bin`에 서는지, javac 시간(TCG 11초). TP-M5 뒤: `cci --version` · `glc --help`가 에어 2011에서
+  서는지(둘 다 x86-64 v1 빌드로 보이지만 `%ymm`이 있다 — TCG는 못 잡는다), 망 없이 `clojure -M -e '(+ 1 2)'` · `clj`(rlwrap의 줄 편집), `kotlinc` 시간.
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절. 다음 번호는 0.2.0(TP 전체 뒤)이다. 최소 디스크는 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
@@ -149,20 +169,21 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
 ## 핵심 파일
 
 - `devlayer/manifest.tsv` — 개발 도구 층의 유일한 출처(도구 · 묶음 · 판 · 종류 · URL · sha256 · 선택 열).
-- `devlayer/build.sh` — 받기 · 풀기(`strip=`) · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기. `devlayer/harvest.sh` — debian 줄 거두기(man 제외 풀기,
+- `devlayer/build.sh` — 받기(`fetch_checked`) · 풀기(`strip=`) · 종류 `maven`(잠금 파일 → `seed/m2/`) · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기.
+  `devlayer/maven/*.lock` — Maven Central의 경로 · sha256. `devlayer/hooks/clojure-tools.sh` — clojure의 자리표와 첫 실행 시드 줄. `devlayer/harvest.sh` — debian 줄 거두기(man 제외 풀기,
   계정 · sysvinit 자리 빼기, `harvest-skip.tsv`). `devlayer/verify.sh` — 결정 4(겹침) · 5(NEEDED). `devlayer/manifest.sh` — 파서.
 - `devlayer/files/lang-script/…` — npmrc · `operating_system.rb` · `sitecustomize.py`. `devlayer/files/lang-native/etc/…` — PATH 조각.
 - `init/src/layers.zig` — `mountAll`(`/usr` overlay) · `mountLocal`(`/usr/local` 쓰기 층) · `copyTree`(`/etc` 복사, 링크 포함). 호스트 검사 `layers_test.zig`.
   부르는 자리 `init/src/main.zig`의 `readConfig`(`mountHome` 바로 뒤).
 - `kernel/make_initrd.sh` — 시스템 rc 셋(`/etc/bash.bashrc` · `/etc/zsh/zshrc` · fish `conf.d`)과 `/etc/tars/rc.d` 읽기.
 - `devtools/check.sh` — 체인(부팅 넷). `TP_CPU=SandyBridge`, 부팅 2의 hello 덩이들, 부팅 3의 `/usr/local` 잔존.
-- `docs/specs/2026-11-05-tars-dev-layer-design.md`(10판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4}.md`.
+- `docs/specs/2026-11-05-tars-dev-layer-design.md`(11판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4,5}.md`.
 
 ## 지금 상태 (2026-11-06)
 
-- 진행 중인 것은 TP(design 10판, M0~M4 끝 — 다음은 M5 plan, JVM 언어). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 32분 47초(TP-M4, base 다시 거두기 포함).
-  `make gate`는 먼저 `make dev-layers`(묶음 넷, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
+- 진행 중인 것은 TP(design 11판, M0~M5 끝 — 다음은 M6 plan, BEAM). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 29분 26초(TP-M5).
+  `make gate`는 먼저 `make dev-layers`(묶음 다섯 — base · lang-jvm · lang-native · lang-script · util, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.
