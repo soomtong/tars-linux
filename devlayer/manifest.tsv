@@ -6,7 +6,7 @@
 # 열이 6 · 7이 아닌 줄은 줄 번호와 함께 빌드를 멈춘다 — 편집기가 탭을 공백으로 바꾸지 않게 한다.
 #
 # 종류는 넷이다. 앞의 것이 있으면 앞의 것을 쓴다: upstream → vendor-repo → prebuilt → debian.
-#   upstream  도구가 직접 내는 linux-amd64 tarball. URL · sha256 그대로. 받은 것은 devlayer/cache/<sha256>
+#   upstream  도구가 직접 내는 linux-amd64 tarball · zip(URL이 압축 확장자가 아니면 실행 파일 하나 — TP-M7). URL · sha256 그대로. 받은 것은 devlayer/cache/<sha256>
 #   debian    URL 자리에 패키지 이름, sha256 자리에 `apt`(서명된 Release가 검증한다). 버전은 `=`로 고정한다.
 #             의존은 apt가 풀고, 실제로 깔린 목록은 묶음 안 usr/share/tars/layers/<묶음>.pkgs에 남는다.
 #
@@ -60,6 +60,15 @@ ninja	base	1.13.2	upstream	https://github.com/ninja-build/ninja/releases/downloa
 shellcheck	base	0.11.0	upstream	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz	8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198	exe=shellcheck
 # ctags: 안정판 바이너리는 없고 universal-ctags 조직이 날마다 굽는 판이 그 upstream이다(plan 확인 4).
 ctags	base	2026.10.08	upstream	https://github.com/universal-ctags/ctags-nightly-build/releases/download/2026.10.08%2B82494361bb3e7d4f7cf1d2bdc0d0e9001c926e45/uctags-2026.10.08-linux-x86_64.release.tar.xz	e149d4f774cca9d6b657453f22fce97b94a5b691afaaa50f56f8564794839f87
+
+# ── editor(TP-M7) — mitos · neovim · ttt · emacs ──────────────────────────────────────
+# mitos: 주 편집기(helix의 갈래). ms가 맨 위에 있고 옆의 runtime/(문법 301개)을 실제 자리에서 찾는다 — 링크로 불러도 선다(plan 확인 2).
+mitos	editor	0.1.3	upstream	https://github.com/mitos-editor/mitos/releases/download/v0.1.3/mitos-v0.1.3-x86_64-linux.tar.xz	dfd0bb60074c3a38e5d1991fa7680f3cb9eec0b7889b5cbc9cc0ead8d8bc995d	exe=ms
+neovim	editor	0.12.6	upstream	https://github.com/neovim/neovim/releases/download/v0.12.6/nvim-linux-x86_64.tar.gz	474430d53e6264f6d6dd18db42d6dc9df3a1b56ca9e88a325bbf860e1a811d87	man1=share/man/man1
+# ttt: 압축 없는 실행 파일 하나(Go 정적, GOAMD64=v1) — build.sh가 bin/ttt에 0755로 놓는다(plan 결정 D).
+ttt	editor	1.11.0	upstream	https://github.com/eugenioenko/ttt/releases/download/v1.11.0/ttt-linux-amd64	c3c4a382c99b8e291d83a1b527db1b40b8607de8d7373d341bd3e0e926258584
+# emacs: 터미널판. Doom Emacs는 사용자가 망이 있을 때 깐다(사용자 결정 — 시드는 홈 경로에 묶여 안 섰다, plan 확인 4).
+emacs-nox	editor	1:30.1+1-6+deb13u1	debian	emacs-nox	apt
 
 # ── lang-beam(TP-M6) — erlang · elixir · gleam ─────────────────────────────────────────
 # erlang: builds.hex.pm의 OTP 빌드(design 결정 1의 prebuilt — erlang/otp의 release에는 linux 바이너리가 없다). ubuntu-24.04판(GLIBC 2.38까지).

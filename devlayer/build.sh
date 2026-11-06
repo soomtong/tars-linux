@@ -109,6 +109,11 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
       if [[ -n "${hook}" ]]; then
         [[ -x "devlayer/hooks/${hook}.sh" ]] || die "${tool}: no devlayer/hooks/${hook}.sh"
         "devlayer/hooks/${hook}.sh" "${f}" "${root}" "${dest}" </dev/null | sed "s/^/build> ${bundle}: ${tool}: /"
+      elif [[ ! "${url##*/}" =~ \.(tar|tar\.[a-z0-9]+|tgz|zip)$ ]]; then
+        # 압축 없는 실행 파일 하나(TP-M7 plan 결정 D — ttt). bin/<도구>에 둔다. GitHub 자산에는 실행 비트가 없다(plan 확인 5).
+        [[ -z "$(manifest_opt "${opts}" strip)" ]] || die "${tool}: strip= means nothing on a single executable (${url##*/})"
+        mkdir -p "${root}/${dest}/bin"
+        install -m 0755 "${f}" "${root}/${dest}/bin/${tool}"
       else
         # 풀기는 한 길이다(TP-M3 plan 결정 C): 통째로 풀고 → strip=N단(기본 1)을 벗기고 → 남은 것을 옮긴다. 배포 모양이
         # 넷이다 — 맨 위 디렉터리 하나(대부분), ./로 시작하는 경로(janet — tar가 ./를 벗긴다), 두 단(rv-ruby), 디렉터리

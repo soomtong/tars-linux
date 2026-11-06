@@ -11,16 +11,17 @@ cd "$(dirname "$0")" || exit 1
 # TP-M3: 넷째 묶음 lang-script. 부팅 2가 python(+ venv) · ruby · lua · luau · cyber · node(+ npm) · bun · janet · php를 본다(plan 결정 F).
 # TP-M5: 다섯째 묶음 util(cci · glc). 부팅 2가 kotlin · clojure(첫 실행 시드) · clj(rlwrap) · cci · glc · man clojure를 본다(plan 결정 F).
 # TP-M6: 여섯째 묶음 lang-beam. 부팅 2가 erl · erlc · escript · elixir · iex · mix test 세 번 · gleam(시드와 manifest.toml) · erl -man을 본다(plan 결정 G).
+# TP-M7: 일곱째 묶음 editor. 부팅 2가 ms(health) · nvim(treesitter, 고쳐 쓰기) · emacs(batch, 고쳐 쓰기) · ttt(--exec) · man nvim · man emacs를 본다(plan 결정 F).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 여섯) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 6, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 일곱) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 7, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
-#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 화면 셸에서
+#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 화면 셸에서
 #                                      java --version(monitor 45504). 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 5, gcc · go · node · cci · erl은 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 여섯을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 6, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 일곱을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -38,12 +39,13 @@ cd "$(dirname "$0")" || exit 1
 (cd ../kernel && ./make_initrd.sh)
 (cd ../boot && ./build.sh)
 ../devlayer/build.sh base
+../devlayer/build.sh editor
 ../devlayer/build.sh lang-beam
 ../devlayer/build.sh lang-jvm
 ../devlayer/build.sh lang-native
 ../devlayer/build.sh lang-script
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base lang-beam lang-jvm lang-native lang-script util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base editor lang-beam lang-jvm lang-native lang-script util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -54,7 +56,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base lang-beam lang-jvm lang-native lang-script util"
+LAYERS="base editor lang-beam lang-jvm lang-native lang-script util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -193,7 +195,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with six layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with seven layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -209,8 +211,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 6 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 6 layers" "copied"
+COPY_MS="$(last_num 'copied 7 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 7 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -219,16 +221,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 6 layers in [0-9]+ms" 5 || fail "init did not lay six layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 6 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 7 layers in [0-9]+ms" 5 || fail "init did not lay seven layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 7 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, lang-beam, lang-jvm, lang-native, lang-script, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, editor, lang-beam, lang-jvm, lang-native, lang-script, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -479,6 +481,43 @@ grep -aqF "tp-m6-erlman=lists - List processing" "$LOG" || fail "erl -man lists 
 echo "B2: as tars, erl -man lists and man mix read offline"
 M6_NUMBERS="erl $(ms_of erl)ms, elixir $(ms_of elixir)ms, mix test $(ms_of mix1)/$(ms_of mix2)/$(ms_of mix3)ms, gleam run $(ms_of gleam)ms"
 
+# TP-M7(plan 결정 F): 편집기 넷. 상한은 60초 — 첫 판(SandyBridge · 1GiB): ms 0.2초, nvim 0.7초, emacs 1.9초, ttt 0.8초. 작업 자리는 ~/tp/m7. 기다리는 글자는 계산된 값이다 — 명령 줄의 표시는 sed 접두나 format의 %s로 쪼갠다.
+# ms: --health c의 parser · 쿼리 줄 가운데 초록(32m)인 수. ✓ 같은 비ASCII 글자는 콘솔로 보내지 않는다. runtime/이 없으면 0이다(plan 할 일 6(b)).
+as_tars 'mkdir -p ~/tp/m7 && cd ~/tp/m7 && s=$(date +%s%N) && ms --version 2>&1 | sed "s/^/tp-m7-ms: /"; e=$(date +%s%N); echo "tp-ms-ms=$(((e-s)/1000000))"; ms --health c 2>&1 | grep -E "(parser|queries):" | grep -c 32m | sed "s/^/tp-m7-msok=/"; ls /usr/local/lib/mitos-0.1.3/runtime/grammars | wc -l | sed "s/^/tp-m7-msgram=/"'
+wait_log_re "tp-ms-ms=[0-9]+" 60 || fail "ms --version did not finish in 60s" "tp-m7-ms"
+grep -aqF "tp-m7-ms: mitos 0.1.3" "$LOG" || fail "ms --version did not print mitos 0.1.3" "tp-m7-ms"
+wait_log "tp-m7-msok=7" 60 || fail "ms --health c did not find the C parser and its six queries in runtime/" "tp-m7-msok"
+wait_log "tp-m7-msgram=301" 30 || fail "mitos runtime/grammars does not have 301 grammars" "tp-m7-msgram"
+echo "B2: as tars, ms ran ($(ms_of ms)ms) and found its runtime beside the real file (C parser and six queries, 301 grammars)"
+
+# nvim: C 파일에서 treesitter를 켜고 3번 줄을 고쳐 저장한다. Lua 문자열은 [[…]] — as_tars 안에 작은따옴표를 둘 수 없다.
+# nvim의 written 메시지가 줄바꿈 없이 앞에 붙으므로 표시 앞에도 줄바꿈을 둔다.
+as_tars 'cd ~/tp/m7 && printf "%s\n" "int main(void)" "{" "  return 0;" "}" > h7.c && s=$(date +%s%N) && nvim --headless h7.c -c "lua vim.treesitter.start(); local t = vim.treesitter.get_parser():parse()[1]:root():type(); vim.fn.setline(3, [[  return 42;]]); vim.cmd.write(); io.stdout:write(string.char(10), string.format([[tp-m7-%s=%s]], [[nvts]], t), string.char(10))" -c "qa!" 2>&1; e=$(date +%s%N); echo "tp-ms-nvim=$(((e-s)/1000000))"; grep -c "return 42" h7.c | sed "s/^/tp-m7-nvsaved=/"'
+wait_log_re "tp-ms-nvim=[0-9]+" 60 || fail "nvim --headless did not finish in 60s" "tp-m7-nvts"
+grep -aqF "tp-m7-nvts=translation_unit" "$LOG" || fail "nvim did not parse C with its bundled treesitter parser" "tp-m7-nvts"
+wait_log "tp-m7-nvsaved=1" 30 || fail "nvim did not write the changed line" "tp-m7-nvsaved"
+echo "B2: as tars, nvim parsed C with treesitter and wrote a changed line ($(ms_of nvim)ms)"
+
+# emacs: 판 · native-comp · treesit을 찍고, 파일 끝에 글자를 넣어 저장한다. site-start의 Loading 줄은 --batch의 정상 메시지다.
+as_tars 'cd ~/tp/m7 && printf "%s\n" a > h7.txt && s=$(date +%s%N) && emacs --batch --eval "(princ (format \"tp-m7-%s=%s-%s-%s\n\" \"emacs\" emacs-version (native-comp-available-p) (treesit-available-p)))" 2>&1; e=$(date +%s%N); echo "tp-ms-emacs=$(((e-s)/1000000))"; emacs --batch h7.txt --eval "(progn (goto-char (point-max)) (insert \"b-from-emacs\") (save-buffer))" > /dev/null 2>&1; grep -c b-from-emacs h7.txt | sed "s/^/tp-m7-emsaved=/"'
+wait_log_re "tp-ms-emacs=[0-9]+" 60 || fail "emacs --batch did not finish in 60s" "tp-m7-emacs"
+grep -aqF "tp-m7-emacs=30.1-t-t" "$LOG" || fail "emacs is not 30.1 with native-comp and tree-sitter" "tp-m7-emacs"
+wait_log "tp-m7-emsaved=1" 60 || fail "emacs --batch did not save the inserted text" "tp-m7-emsaved"
+echo "B2: as tars, emacs 30.1 ran with native-comp and tree-sitter ($(ms_of emacs)ms) and saved an edit"
+
+# ttt: --exec(내장 시험 장치)로 Go 파일을 열어 글자가 뜨기를 기다리고 화면 글자를 남긴다. TUI는 SIGTERM으로 안 끝났다(plan 확인 5) — --exec만 쓴다.
+as_tars 'cd ~/tp/m7 && printf "%s\n" "package main" "" "func main() {}" > h7.go && s=$(date +%s%N) && ttt --size 100x30 --exec "wait-for \"func main\" timeout=60000; screenshot $HOME/tp/m7/shot.txt; quit" h7.go < /dev/null 2>&1 | sed "s/^/tp-m7-ttt: /"; e=$(date +%s%N); echo "tp-ms-ttt=$(((e-s)/1000000))"; grep -c "1  package main" shot.txt | sed "s/^/tp-m7-tttshot=/"'
+wait_log_re "tp-ms-ttt=[0-9]+" 60 || fail "ttt --exec did not finish in 60s" "tp-m7-ttt"
+wait_log "tp-m7-tttshot=1" 30 || fail "ttt did not draw the Go file on its screen" "tp-m7-ttt" "tp-m7-tttshot"
+echo "B2: as tars, ttt opened a Go file and drew it ($(ms_of ttt)ms)"
+
+as_tars 'MANPAGER=cat man nvim 2>&1 | sed -n "/^NAME/{n;p;q}" | sed "s/^ */tp-m7-nvman=/"; MANPAGER=cat man emacs 2>&1 | sed -n "/^NAME/{n;p;q}" | sed "s/^ */tp-m7-emman=/"; command -v ctags | sed "s/^/tp-m7-ctags=/"'
+wait_log "tp-m7-ctags=/usr/local/bin/ctags" 60 || fail "ctags is not base's universal-ctags (emacs-nox's alternative leaked)" "tp-m7-ctags"
+grep -aqF "tp-m7-nvman=nvim" "$LOG" || fail "man nvim did not show the page (man1=share/man/man1)" "tp-m7-nvman"
+grep -aqF "tp-m7-emman=emacs - GNU project Emacs editor" "$LOG" || fail "man emacs did not show the page" "tp-m7-emman"
+echo "B2: as tars, man nvim and man emacs read offline, and ctags is still universal-ctags"
+M7_NUMBERS="ms $(ms_of ms)ms, nvim $(ms_of nvim)ms, emacs $(ms_of emacs)ms, ttt $(ms_of ttt)ms"
+
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0
 for _ in $(seq 1 20); do
@@ -506,7 +545,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -517,19 +556,20 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 5 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, lang-beam, lang-native, lang-script and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 6 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, editor, lang-beam, lang-native, lang-script and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
-as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; command -v java || printf "tp-%s\n" no-java'
+as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-cci=cci 0.6.1" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-erl=29" 60 || fail "lang-beam's erl no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-nvim=NVIM v0.12.6" 30 || fail "editor's nvim no longer works without lang-jvm" "tp-b3"
 grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" || fail "boot 3 did not make /usr/local writable" "tars-init: /usr/local"
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, lang-beam, lang-native, lang-script and util still run C, Go, node, cci and erl, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, editor, lang-beam, lang-native, lang-script and util still run C, Go, node, cci, erl and nvim, what root put in /usr/local is still there, and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -539,10 +579,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 6 old layers removed" "$LOG" || fail "the update did not remove the six old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 7 old layers removed" "$LOG" || fail "the update did not remove the seven old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the six old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the seven old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"

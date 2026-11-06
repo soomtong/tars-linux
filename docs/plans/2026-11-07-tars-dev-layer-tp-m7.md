@@ -72,7 +72,7 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로, 작업 자�
    3. emacs: `--batch`로 판 · `native-comp-available-p` · `treesit-available-p`, 파일을 열어 한 줄을 넣고 저장
    4. ttt: `--exec`로 Go 파일을 열어 `wait-for`, `screenshot`의 글자
    5. man: `man nvim` · `man emacs`
-   상한은 처음 하나에 120초, 잰 뒤 세 배(60초 아래로는 안 내린다). 부팅 3(lang-jvm이 깨진 판)에 `nvim --version` 한 줄 — editor가 lowerdir 둘째 자리라
+   상한은 처음 하나에 120초, 잰 뒤 세 배(60초 아래로는 안 내린다) — 첫 체인에서 넷 다 2초 아래라 60초다. 부팅 3(lang-jvm이 깨진 판)에 `nvim --version` 한 줄 — editor가 lowerdir 둘째 자리라
    깨진 묶음 하나가 그 뒤 자리를 흔들지 않는지 본다.
 
 ## Claude가 맡아 정한 것 (사용자가 위임 — 뒤집을 것이 있으면 글자로)
@@ -119,8 +119,30 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로, 작업 자�
 
 ## 확인한 것
 
-(구현 뒤 채운다)
+1. 첫 `make dev-layers`가 editor의 verify에서 멈췄다(rc=2): `differs from initrd /usr/bin/editor` 하나와 `dangling link: usr/share/emacs/30.1/{etc,lisp}/COPYING
+   -> ../../../common-licenses/GPL-3` 둘. emacs-nox의 postinst가 alternatives 열둘을 만들었고, slim에 없던 `/usr/bin/editor`가 "새 경로"로 잡혀
+   펴졌다(`flat usr/bin/editor -> emacs-nox`). `COPYING`의 대상은 slim에 원래 있는 base-files의 파일이라 목록에 없었다.
+   - 고친 것(harvest.sh 두 곳): 이름을 다른 것에 맡긴 alternatives — `usr/bin/editor` · `usr/bin/ctags`와 그 man1 — 를 싣지 않는다(editor는 initrd의 vim,
+     ctags는 base의 universal-ctags — 남기면 `man ctags`가 emacs판을 연다). 링크의 대상이 `/usr/share/common-licenses/` 아래면 그 본문도 싣는다
+     (`C-h C-c`가 `etc/COPYING`을 읽는다). base는 원래 `common-licenses` 26개를 싣고 있었다 — 새 규칙이 base에 더한 것은 없다(paths 그대로).
+   - harvest.sh가 바뀌어 base · lang-script · editor를 다시 거뒀다(10분 38초). base · lang-script의 verify 숫자는 그대로다.
+2. editor: harvest 패키지 47개, paths 8,495, flattened 8, verify dropped 119 · relinked 5 · ELF 830 · unresolved 0. 풀면 620MiB, zstd15 140MiB. 다른 묶음과
+   같은 경로 · 같은 내용 `shared=4220`(libgccjit의 의존으로 따라온 binutils · libc6-dev 등 — base와 판이 같다, 위험 1은 안 일어났다).
+3. chroot(initrd + base + editor, 사용자 tars, `unshare -n`): ms 81ms · health 초록 7 · 문법 301, nvim `translation_unit` · 저장, emacs `30.1-t-t`(554ms) · 저장,
+   ttt `--exec` 490ms · 화면에 `1  package main`, `man nvim` → `nvim — edit text`, `man emacs` → `emacs - GNU project Emacs editor`,
+   `command -v editor ctags etags` → `/usr/bin/editor`(initrd) · `/usr/local/bin/ctags` · `/usr/bin/etags`. `man ctags`는 아무것도 없다(universal-ctags는
+   man을 안 싣는다 — emacs판을 뺀 결과, 그대로 둔다).
+   - nvim의 `"h7.c" 4L, 32B written`이 줄바꿈 없이 앞에 붙는다 — 체인은 표시 앞에도 줄바꿈을 둔다.
+4. 빨강 (a): `install -m 0755`를 `cp`로 바꾸면 체인까지 가지 않고 굽기에서 멈춘다 — `ttt: nothing to link — no exe= and no executables in
+   /usr/local/lib/ttt-1.11.0/bin (wrong strip=?)`. 캐시 파일이 `rw-r--r--`라 TP-M3의 "링크 0개면 멈춘다"가 잡았다(plan은 체인의 `Permission denied`를
+   예상했다 — 더 이른 자리). 되돌린 뒤 diff가 같은 것을 봤다.
+5. 빨강 (b): chroot에서 `mitos-0.1.3/runtime`을 지우면 `tp-m7-msok=0` — 체인의 `=7` 기다림이 빨강이 된다.
+6. 체인 혼자(SandyBridge · 1GiB, 망 없음): PASS, 빌드 뒤 553초, 전체 13분 11초. ms 185ms, nvim 728ms, emacs 1,885ms, ttt 821ms. 묶음 일곱 1,302MiB 복사 7,165ms,
+   overlay 55ms. ISO 1,508,337,664바이트(앞 판 1.36GB). 상한 넷을 60초로(잰 값의 세 배가 60초 아래).
 
 ## 결과
 
-(구현 뒤 채운다)
+- 판정 셋 모두 초록. `make dev-layers` 초록(editor 140MiB), 체인 부팅 2의 편집기 넷이 망 없이 사용자로 돈다, 빨강 (a) · (b)를 봤다(확인한 것 4 · 5).
+- 루트 게이트 31/31, 30분 11초(lanes 1,356초), 31개 모두 잘린 줄 0. devtools 652초(빌드 뒤 551초). ISO 1.51GB, 묶음 일곱 1,302MiB.
+- 실기로 남긴 것(HANDOFF "남은 작업"): `ms` · `ttt`가 에어 2011에서 서는지(AVX2 — TCG는 못 잡는다), emacs의 첫 native-comp가 견딜 만한지,
+  망이 있을 때 TARS 위에서 `doom install`이 되는지(git의 https 헬퍼 · ripgrep · fd · gcc는 있다 — 체인으로 안 봤다).

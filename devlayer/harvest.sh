@@ -113,6 +113,12 @@ mv "${work}/new.kept" "${work}/new.all"
 grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/)' "$work/new.all" | sed 's|^/||' >"$work/list"
 grep '^etc/' "$work/list" >"$work/etc" || true
 
+# 이름을 다른 것에 맡긴 alternatives(TP-M7): emacs-nox의 postinst가 /usr/bin/editor와 /usr/bin/ctags를 자기로 돌린다. editor는 initrd의
+# vim이 맡고(TP-M7 plan 맡아 정한 것 1 — 묶음이 덮으면 verify의 결정 4에 걸린다), ctags는 base의 universal-ctags가 맡는다(TP-M4).
+# man 페이지의 짝도 뺀다 — 남기면 man ctags가 emacs판을 연다.
+grep -Ev '^usr/(bin/(editor|ctags)|share/man/man1/(editor|ctags)\.1\.gz)$' "$work/list" >"$work/list.kept" || true
+mv "$work/list.kept" "$work/list"
+
 # alternatives 펴기(결정 2): 새 경로 가운데 /etc/alternatives를 지나는 링크는 최종 대상으로의 상대 링크로 바꾼다. 묶음에는
 # /etc/alternatives가 없고, TARS의 /etc는 부팅마다 만드는 tmpfs다. 새 경로만 편다 — slim에 원래 있던 링크(awk · pager ·
 # which)까지 펴면 "바뀐 파일"이 되어 묶음에 실린다(첫 판이 그랬다).
@@ -149,6 +155,14 @@ while IFS= read -r rel; do
   if [[ -L "/${rel}" && -d "/${rel}" ]]; then
     t="$(realpath "/${rel}")"
     [[ "${t}" == /usr/* ]] && echo "${t#/}" >>"${work}/linkdirs"
+  fi
+done <"${work}/list"
+# 라이선스 본문으로의 링크는 그 본문도 싣는다(TP-M7). emacs의 etc/COPYING -> ../../../common-licenses/GPL-3의 대상은 slim에 원래 있는
+# base-files의 것이라 목록에 없고, initrd에도 없어 verify가 끊긴 링크로 멈췄다. C-h C-c가 etc/COPYING을 읽는다.
+while IFS= read -r rel; do
+  if [[ -L "/${rel}" && -f "/${rel}" ]]; then
+    t="$(realpath "/${rel}")"
+    [[ "${t}" == /usr/share/common-licenses/* ]] && echo "${t#/}" >>"${work}/linkdirs"
   fi
 done <"${work}/list"
 if [[ -s "${work}/linkdirs" ]]; then

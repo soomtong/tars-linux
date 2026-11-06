@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 11판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 끝, TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 12판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 끝, TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -44,13 +44,13 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 스크립트 언어 | python3, ruby, lua, luau, cyber, node, bun, janet, php(`lang-script` 묶음, TP-M3 — luau · cyber는 사용자가 2026-11-06에 더했다) |
 | JVM | JDK, kotlin, clojure(`lang-jvm` 묶음, TP-M5) |
 | BEAM | erlang, elixir, gleam(`lang-beam` 묶음, TP-M6 — gleam은 첫 프로젝트용 Hex 시드와 함께) |
-| 편집기 | mitos `ms`(주 편집기), neovim, emacs, ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인) |
+| 편집기 | mitos `ms`(주 편집기), neovim, emacs(`emacs-nox` — Doom Emacs는 사용자가 망이 있을 때 깐다), ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인)(`editor` 묶음, TP-M7) |
 | 문서 | `dasht` + `w3m` + Dash/Zeal docset(결정 19) |
 | 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것) |
 | 서버 | nginx, caddy, postgresql 18, mysql 9.7(LTS), redis |
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
 
-뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정).
+뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정). mg(사용자가 물었다 — emacs-nox를 싣는다, 2026-11-06). Doom Emacs의 시드(straight.el이 홈 경로로의 절대 링크 3,957개를 만들어 다른 홈으로 옮기면 안 선다 — TP-M7 plan 확인 4, 사용자 결정).
 LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
 디버거가 필요하면 직접 LLVM 툴체인을 설치한다"). scala3(사용자 결정 2026-11-06 — 아직 본격적으로 쓰지 않는다. 망 없이 `scala run`을 세우려면
 컴파일 서버 Bloop(Scala 2.12로 쓰인 jar 134개, 111MiB, 상주 메모리 585MiB)까지 실어야 했다 — TP-M5 plan 확인 3). 필요해지면 Homebrew로 깐다.
@@ -115,7 +115,7 @@ trixie 판이 돈다.
 
 1. 출처는 매니페스트 한 파일이다(`devlayer/manifest.tsv` 가칭). 한 줄에 도구 · 묶음 · 버전 · 종류 · URL · sha256. 소스 빌드는
    없다(사용자 결정) — 종류는 모두 미리 빌드된 바이너리이고 여섯이다(`maven`은 TP-M5, `hex`는 TP-M6). 앞의 것이 있으면 앞의 것을 쓴다.
-   - `upstream` — 도구가 직접 내는 linux-amd64 바이너리 tarball. 기본값이다.
+   - `upstream` — 도구가 직접 내는 linux-amd64 바이너리 tarball. URL이 압축 확장자로 끝나지 않으면 실행 파일 하나다(TP-M7 — `bin/<도구>`에 0755로). 기본값이다.
    - `vendor-repo` — 도구 쪽이 운영하는 Debian 저장소(PGDG의 postgresql, nginx.org의 nginx, packages.redis.io의 redis).
    - `prebuilt` — 표준이 된 제3자 빌드(python-build-standalone, ruby/ruby-builder, static-php-cli, builds.hex.pm의 erlang).
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
@@ -233,7 +233,7 @@ helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 �
 
 - TP-M0 — 결정 1~7(빌드 쪽). `base`와 JDK 둘. 부팅 무변경.
 - TP-M1 — 결정 8~13. 커널 · ISO · `tars-install` · init · 체인 `devtools`.
-- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브(M2) → 스크립트(M3) → 바닥 보강과 쓰기 가능한 `/usr/local`(M4, TP-M3 뒤 검토에서) → JVM → BEAM → 편집기 · 터미널 유틸리티 · 문서 → 서버(실행 파일) → 서버(서비스) → AI. 각 plan은
+- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브(M2) → 스크립트(M3) → 바닥 보강과 쓰기 가능한 `/usr/local`(M4, TP-M3 뒤 검토에서) → JVM → BEAM → 편집기(M7) → 터미널 유틸리티(M8) → 문서(M9, 사용자 결정 2026-11-06 — 셋으로 나눈다) → 서버(실행 파일) → 서버(서비스) → AI. 각 plan은
   앞 milestone의 숫자를 본 뒤 쓴다.
 - 닫을 때: PM design 결정 4에 이 design으로의 한 줄, `carryover.md` 패키지 매니저 항목, `running-tars.md`의 "안 되는 것" 표,
   `project_release.md`의 버전 올리기 단계, `completed.md`, 기억 한 파일.
