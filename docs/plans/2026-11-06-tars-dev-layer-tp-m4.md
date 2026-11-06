@@ -5,6 +5,10 @@
 Goal: TP-M3을 끝낸 뒤 검토에서 나온 빈자리를 메운다. 사용자(2026-11-06): "추천해 준 것 모두 마음에 든다. 모두 설치해줘." design의
 Milestone 순서에서 JVM 언어보다 앞에 끼운다. 그래서 JVM 언어 이후는 번호가 하나씩 밀린다(TP-M5가 JVM).
 
+사용자 결정(2026-11-06, plan을 쓰는 중): "보통 /usr 은 읽기 전용이어도 /usr/local 은 쓰기 가능이니까 우리도 그 관행을 따르자." 이어서 고른
+것: 쓰기 층은 디스크 p3에(재부팅에도 남는다), 쓰는 것은 root만(sudo), 패키지 관리자의 전역 설치는 `/usr/local`로 통일. TP design 결정 9
+("`/usr`는 읽기 전용")와 비목표 3("사용자가 개발 도구 층을 고치는 것")을 `/usr/local`에 한해 뒤집는다 — 결정 H.
+
 0.2와의 관계: 0.2.0은 TP 전체를 끝낸 뒤에 낸다(`docs/decisions/project_release_0_2.md`). 이 milestone도 그 선행 조건의 하나다.
 
 ## 착수 전 확인 (2026-11-06)
@@ -51,15 +55,22 @@ B. 거두기는 man 페이지를 싣는다. harvest가 `apt-get install` 전에 
 C. Debconf는 싣지 않는다. `harvest-skip.tsv`에 `debconf`(거두는 컨테이너의 postinst만 쓴다)를 더한다. perl-base는 perl이 끌고 오므로 그대로
    싣는다 — base와 lang-script가 같은 판을 실어 `shared`로 센다.
 D. 묶음이 직접 싣는 파일: `devlayer/files/<묶음>/`의 트리를 build.sh가 뿌리에 그대로 얹는다(upstream · debian 다음, verify 전). 업스트림에
-   없는 파일을 묶음에 넣는 첫 자리다. 그래서 디렉터리 하나로 모으고 stamp에 넣는다. TP-M3 결정 E가 미룬 `EXTERNALLY-MANAGED`가 여기 든다.
-E. 홈에 까는 길(TP-M3 결정 E의 후속, 사용자가 이 검토의 추천을 받았다):
-   - initrd의 bash · zsh rc가 맨 앞에서 `/etc/tars/rc.d/*.sh`를 읽는다(없으면 아무 일도 없다). 그다음이 지금의 Homebrew · mise 줄이다. 그래서
-     PATH의 앞은 mise → Homebrew → 묶음 조각이 넣은 홈 디렉터리 → `/usr/local/bin` 순서가 된다. fish는 `/etc/fish/conf.d/`를 이름 순으로
-     읽으므로 조각 이름을 `10-<묶음>.fish`로 해서 homebrew.fish보다 앞에 둔다.
-   - lang-script의 조각: `NPM_CONFIG_PREFIX=$HOME/.npm-global`과 그 `bin`, `GEM_HOME=$HOME/.local/share/gem`과 그 `bin`. python에는
-     `EXTERNALLY-MANAGED`(venv · `pip install --user`를 안내하는 글)를 `lib/python3.15/`에 둔다.
-   - lang-native의 조각: `$HOME/.cargo/bin`, `$HOME/go/bin`(`cargo install` · `go install`이 쓰는 자리 — 이미 홈이라 PATH만).
-   - 조각은 홈 디렉터리가 아직 없어도 PATH에 넣는다. 그래야 처음 `npm -g`로 깐 명령이 셸을 다시 열지 않아도 이름으로 선다.
+   없는 파일을 묶음에 넣는 첫 자리다. 그래서 디렉터리 하나로 모으고 stamp에 넣는다. 결정 E의 설정 파일과 rc 조각이 여기 든다.
+E. 전역 설치는 `/usr/local`로(사용자 결정, 결정 H 위에서). root가 `sudo`로 깐 것은 실행 파일이 `/usr/local/bin`에 서고, 라이브러리는
+   묶음의 도구 디렉터리가 아니라 `/usr/local` 아래 판에 묶이지 않는 자리에 놓인다 — 그래야 묶음이 새 판(예: python 3.15.3)으로 바뀌어도
+   깐 것이 남는다. 설정은 각 도구가 스스로 읽는 자리에 두고 환경 변수로 하지 않는다(`sudo`가 환경을 지운다).
+   - npm: 묶음 안 npm의 builtin 설정(`lib/node_modules/npm/npmrc`)에 `prefix=/usr/local`. `npm i -g`가 `/usr/local/lib/node_modules`와
+     `/usr/local/bin`에 쓴다(Debian · Homebrew의 node와 같은 모양).
+   - gem: ruby의 시스템 gemrc(rv-ruby의 sysconfdir — 구현 때 `ruby -e 'p Gem::ConfigFile::SYSTEM_WIDE_CONFIG_FILE'`로 자리를 본다)에
+     `gem: --bindir /usr/local/bin`과 `GEM_HOME` 대신 `install: --install-dir /usr/local/lib/ruby/gems/4.0.0`, 그 자리를 `GEM_PATH`에 넣는
+     방법은 구현 때 고른다(`Gem.default_dir`을 바꾸는 `operating_system.rb`가 후보).
+   - pip: python의 site 설정(`<sys.prefix>/pip.conf`)에 `[install] prefix = /usr/local`. 그리고 묶음의 site-packages에 `tars-local.pth`
+     한 줄(`/usr/local/lib/python3.15/site-packages`)을 둬서 그 자리가 `sys.path`에 든다. venv는 자기 `sys.prefix`를 보므로 이 설정을 안 탄다.
+   - 셋 다 `sudo` 없이 사용자가 부르면 `/usr/local`에 못 써서 실패한다 — 관행대로다. 사용자 자리는 각 도구의 `--user` · venv · `npm prefix`다.
+   - initrd의 bash · zsh rc가 맨 앞에서 `/etc/tars/rc.d/*.sh`를 읽는다(없으면 아무 일도 없다). fish는 `/etc/fish/conf.d/`를 이름 순으로 읽으므로
+     조각 이름을 `10-<묶음>.fish`로 해서 homebrew.fish보다 앞에 둔다. 조각은 lang-native의 `$HOME/.cargo/bin` · `$HOME/go/bin`뿐이다
+     (`cargo install` · `go install`은 원래 홈에 쓴다). 홈 디렉터리가 아직 없어도 넣는다 — 처음 깐 명령이 셸을 다시 열지 않아도 선다.
+   - TP-M3 결정 E의 `EXTERNALLY-MANAGED`는 넣지 않는다.
 F. 체인: devtools의 부팅 2에 base 보강의 hello를 더한다(망 없이, 사용자로).
    1. `cmake -G Ninja` + `ninja`로 h.c를 짓고 실행
    2. autotools: `configure.ac` · `Makefile.am` 두 줄짜리로 `autoreconf -i && ./configure && make`
@@ -71,20 +82,32 @@ F. 체인: devtools의 부팅 2에 base 보강의 hello를 더한다(망 없이,
    7. `ssh -V` · `ssh-keygen -t ed25519 -N "" -f …`, `rsync -a` 로컬 복사, `gpg --batch --quick-gen-key`(망 없이)
    8. `man 3 printf`가 `MANPAGER=cat`으로 `printf, fprintf`를 찍는다. `man gcc`도
    9. `shellcheck`가 일부러 틀린 스크립트에서 SC2086, `ctags -x`가 h.c의 `main`
-   10. 홈에 까는 길(결정 E): fish로 `echo $NPM_CONFIG_PREFIX` · `gem env gemdir`, 시스템 python으로 `pip install x`가 `externally-managed`로 거절
+   10. `/usr/local`(결정 E · H): root가 망 없이 로컬 패키지 하나씩을 전역으로 깐다 — `npm pack`한 tarball을 `npm i -g`, `gem build`한 .gem을
+       `gem install --local`, 손으로 지은 wheel을 `pip install --no-index`. 셋의 명령이 `/usr/local/bin`에 서고 사용자로 돈다. 사용자 tars의
+       `touch /usr/local/x`는 `Permission denied`, `/usr/bin`은 여전히 `Read-only file system`. fish의 PATH에 `~/.cargo/bin`.
+       부팅 3(lang-jvm이 깨진 부팅)에서도 셋이 그대로 있다 — 디스크에 남는다.
    시간 상한은 처음에는 하나에 300초, 잰 뒤 세 배(60초 아래로는 안 내린다). valgrind는 TCG에서 느릴 것이다(위험 1).
    체인이 420초를 넘으면(TP-M3 결정 F) lang-script · base 보강의 hello를 새 체인(monitor 45505)으로 뗀다.
+H. `/usr/local`의 쓰기 층(사용자 결정). init의 `layers.mountAll`이 `/usr` overlay 뒤에(묶음이 없어서 `/usr` overlay가 없을 때도, p3가
+   붙은 부팅이면) `/usr/local`에 overlay를 하나 더 건다: `lowerdir=/usr/local,upperdir=/home/.tars/local/upper,workdir=/home/.tars/local/work`.
+   upper · work는 없으면 init이 root 0755로 만든다. 묶음이 없는 부팅에서 `/usr/local`이 없으면 만든다(그때 `/usr`는 initrd의 RAM이다).
+   - overlay를 overlay 위에 쌓는 것은 커널의 쌓기 한도(2) 안이다. mount 자리와 lowerdir이 같은 경로여도 lower는 mount 전에 풀린다.
+   - p3는 `nosuid,nodev`로 붙어 있다 — `/usr/local`의 setuid는 서지 않는다. 그대로 둔다(개발 도구에 setuid가 필요한 일은 드물다).
+   - 실패하면 `/usr/local`은 지금처럼 읽기 전용이고 `tars-init: /usr/local: <이유>` 한 줄. 부팅은 간다(design 결정 11의 결).
+   - 묶음 갱신(`tars-install`)은 upper를 건드리지 않는다. 같은 경로면 upper(사용자가 깐 것)가 묶음의 것을 가린다 — 관행의 `/usr/local`과
+     같다. 비우는 길은 `sudo rm -rf /home/.tars/local`(다음 부팅에 빈 upper)이다. 이 한 줄을 `running-tars.md`에 둔다.
+   - 로그: `tars-init: /usr/local writable (upper on /home/.tars/local)`.
 G. 릴리스 절차(`project_release.md`)에 두 줄: `make iso ISO_LAYERS=…`, 굽기 전 `devlayer/build/*.stamp` 지우기(dev-20261106에서 겪었다).
 
 ## 할 일
 
 1. 매니페스트: base에 debian 스물둘 · upstream 넷(결정 A). `harvest-skip.tsv`에 debconf(결정 C).
 2. `harvest.sh`: man 제외 풀기(결정 B). `build.sh`: `devlayer/files/<묶음>/` 얹기와 stamp(결정 D).
-3. `kernel/make_initrd.sh`: bash · zsh rc의 rc.d 줄(결정 E). 바꾸기 전에 `rg -n 'bash.bashrc|zshrc' */check.sh`로 rc 내용을 보는 체인을 찾는다.
-4. `devlayer/files/lang-script/`와 `devlayer/files/lang-native/`의 조각, `EXTERNALLY-MANAGED`.
+3. init `layers.zig`: `/usr/local` overlay(결정 H)와 순수한 판단의 호스트 검사. `kernel/make_initrd.sh`: bash · zsh rc의 rc.d 줄(결정 E). 바꾸기 전에 `rg -n 'bash.bashrc|zshrc' */check.sh`로 rc 내용을 보는 체인을 찾는다.
+4. `devlayer/files/lang-script/`(npmrc · gemrc 또는 operating_system.rb · pip.conf · tars-local.pth)와 `devlayer/files/lang-native/`의 조각.
 5. `make dev-layers` — 숫자: base의 증가분(도구별), man 페이지 수, 받기 · 거두기 · 굽기 시간.
 6. chroot로 결정 F의 hello를 먼저 돌린다(TP-M3 할 일 4의 모양 — `/dev/null`을 만들어 둔다, TP-M3에서 perl이 그것으로 넘어졌다).
-7. 빨강: (a) harvest의 man 제외를 그대로 두면 체인의 `man 3 printf`가 멈춘다. (b) rc.d 줄을 빼면 결정 F-10이 멈춘다.
+7. 빨강: (a) harvest의 man 제외를 그대로 두면 체인의 `man 3 printf`가 멈춘다. (b) init의 `/usr/local` overlay를 끄면 결정 F-10의 `npm i -g`가 멈춘다.
 8. 체인 혼자 한 번, 숫자로 상한을 고친다. 420초를 넘으면 가른다.
 9. `make quick`, 루트 게이트. design 고치기(도구 목록에 base 보강 줄, 결정 1에 `devlayer/files/`, Milestone의 순서), project_release.md, HANDOFF.
 
@@ -103,6 +126,9 @@ G. 릴리스 절차(`project_release.md`)에 두 줄: `make iso ISO_LAYERS=…`,
 3. base가 크게 는다(어림 풀면 +250MiB, gdb · valgrind · perl · man). ISO가 1GB를 넘는다. GitHub release의 2GiB 한도는 아직 멀다.
 4. 시스템 rc를 바꾸면 pm · mise 체인의 PATH 판정이 흔들릴 수 있다 — 그 체인에는 묶음이 없어 rc.d가 비지만, 줄 하나가 늘어난 것을 보는
    검사가 있으면 걸린다(할 일 3).
+5. `/usr/local` upper가 디스크에 남으므로, 체인의 부팅 4(갱신) 뒤에도 남는다. 갱신 판정이 upper를 안 지우는지(사용자 파일이다) 본다.
+6. TP design 위험 1("`/usr`에 쓰는 TARS 코드")은 `/usr/local`에 대해서는 풀린다. 다른 체인은 묶음이 없고 p3가 있는 경우(home · pm · mise ·
+   dualboot 등)에 `/usr/local` overlay가 새로 생긴다 — 루트 게이트가 그것을 본다.
 
 ## 확인한 것
 
