@@ -69,7 +69,7 @@ C. clojure는 `upstream` 한 줄과 `maven` 한 줄(`clojure-m2`, `into=clojure`
    `install.sh`가 하는 일(`deps.edn` · `example-deps.edn` · `tools.edn`을 뿌리에, jar를 `libexec/`, `PREFIX` · `BINDIR`을 `sed`로, man 둘을
    `share/man/man1`)을 `/usr/local/lib/clojure-1.12.6.1673`에 한다. `exe=bin/clojure bin/clj`.
    man은 `/usr/local/share/man/man1`에 링크해 `man clojure`가 서게 한다(man-db가 그 자리를 보는지 구현 때 확인).
-   - `rlwrap`은 `debian` 줄로 lang-jvm에 싣는다. 의존의 python3는 `harvest-skip.tsv`에 더해 뺀다(lang-script의 python과 이름을 다투지 않게,
+   - `rlwrap`은 `debian` 줄로 lang-jvm에 싣는다 → 구현에서 base로 옮겼다(확인한 것 1). 의존의 python3는 `harvest-skip.tsv`에 더해 뺀다(lang-script의 python과 이름을 다투지 않게,
      TP-M4 위험 2와 같은 결). perl은 base와 같은 판이라 묶음 사이 대조가 `shared`로 센다. python3가 빠져 `rlwrap -z`(필터)는 안 된다 —
      `clj`는 필터를 안 쓴다.
 D. 첫 실행 시드. 훅이 `bin/clojure`의 맨 앞(셸 코드)에 몇 줄을 넣는다 — `${HOME}/.m2/repository/org/clojure/clojure/1.12.6/clojure-1.12.6.jar`가
@@ -127,8 +127,40 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로).
 
 ## 확인한 것
 
-(구현 중 채운다)
+1. `rlwrap`은 base에 뒀다(결정 C를 고친다). trixie의 `rlwrap`은 의존 폐포로 python3.13 전체(`python3.13` · `libpython3.13-stdlib` 등)와 perl 전체
+   (`perl-modules-5.40` · `libperl5.40`)를 끌고 온다(`apt-get install -s`). rlwrap 자신이 실행에 쓰는 것은 libreadline · libncurses뿐이다.
+   base는 같은 판의 perl과 gdb가 끌고 온 python 3.13 라이브러리를 이미 싣는다 — base에 두면 늘어난 것이 readline 등 12MiB, lang-jvm에 두면
+   그 둘을 한 번 더 싣는다. rlwrap은 REPL이면 무엇에든 쓰이는 줄 편집이라 base의 뜻("어느 언어를 쓰든 필요한 바닥")에도 맞는다.
+   `harvest-skip.tsv`의 python3 넷(`python3` · `python3-minimal` · `python3.13` · `python3.13-minimal`)이 `/usr/bin/python3*`를 막는다 —
+   다른 묶음의 debian 줄은 그 넷에 기대지 않는다. 남는 것은 라이브러리 패키지의 `/etc/python3.13/sitecustomize.py` · `/etc/python3/debian_config`.
+2. 시드는 jar · pom 일곱이면 된다. Maven이 받으면서 적는 부속 파일(`_remote.repositories` · `.sha1`)은 없어도 tools.deps가 로컬 저장소의 것을
+   쓴다. 잠금 파일의 일곱 줄은 Central의 `.sha1`과 모두 맞았다.
+3. `make dev-layers`: base 패키지 159 · 750MiB · zstd15 242MiB(`skipped=6` — tzdata · debconf · python3 넷), lang-jvm 파일 339 · 412MiB ·
+   zstd15 226MiB(127에서, `elf=72`는 JDK — kotlin은 jar뿐), util 파일 5 · 71MiB · zstd15 13MiB. 셋 다 `unresolved=0` — glc의 libstdc++ ·
+   libz · libgcc_s는 initrd에서 풀렸다. 묶음 다섯 합 1,073MiB(958에서). `harvest-skip.tsv`의 해시가 거두기 캐시 열쇠라 lang-script도 다시 거뒀다
+   (내용은 그대로).
+4. chroot(Rosetta, 망 없음, 사용자 1000): `kotlinc` + `java -jar`가 `tp-m5-kt=42-2.4.21`(23초). clojure 첫 실행 전 `~/.m2` 0개, 뒤 7개,
+   `tp-m5-clj=42-1.12.6`(21초). `echo "(+ 40 2)" | clj`가 rlwrap을 거쳐 `user=> 42` — stdin이 tty가 아니면 rlwrap이 그대로 넘긴다.
+   `man clojure`는 `/usr/local/share/man/man1`의 링크로 선다. `cci 0.6.1` · `glc 0.19.3`.
+5. 빨강(할 일 7): 훅의 시드 조건을 `if false &&`로 막고 lang-jvm을 다시 구우면, chroot의 `clojure -M -e`가 `repo1.maven.org: Temporary failure
+   in name resolution`로 멈추고 `~/.m2`는 0개다. 되돌려 다시 구웠다.
+6. 체인은 가르지 않는다(결정 F의 "420초를 넘으면 뗀다"를 고친다). 혼자 돈 체인이 빌드 뒤 512초로 넘었지만, 루트 게이트는 `make_iso.sh`를
+   부르는 체인을 모두 한 줄(lane)에 묶어 차례로 돌린다(`check.sh`의 `calls_make_iso`). devtools는 그 줄에 있고(지난 게이트의 lane-0: BF · RM ·
+   DC · HP · PM · MI · DB · TP, 약 1,193초), JVM을 뗀 새 체인도 묶음 ISO로 설치해야 하므로 같은 줄에 붙는다. 가르면 설치와 부팅이 한 번 더
+   늘 뿐 게이트는 짧아지지 않는다. TP-M3 결정 F의 420초는 이 줄 구조를 보지 않은 기준이었다. 다음에 체인을 가를지는 lane-0의 합으로 본다.
+7. TCG 숫자(SandyBridge · 1GiB): kotlinc + 런타임을 넣은 jar 60.0초, clojure 첫 실행(시드 복사 포함) 31.9초. 상한은 그 세 배 — kotlinc 180초,
+   clojure 100초. `clj`(120초)는 따로 재지 않아 처음 상한 그대로다.
 
 ## 결과
 
-(구현 뒤 채운다)
+1. `make dev-layers`가 초록(확인한 것 3). 묶음 다섯 1,076MiB, `tars-dev.iso` 1,271,642,112바이트 — GitHub release의 파일당 2GiB까지 약 0.8GB.
+2. 체인 `devtools`(SandyBridge · 1GiB)가 초록, 혼자 돈 판 빌드 뒤 512초. 부팅 1이 묶음 다섯을 5.96초에 복사, 부팅 2의 lowerdir 끝이 util, 결정 F의
+   네 덩이가 망 없이 사용자로 돈다 — kotlinc 60.0초, clojure 31.9초(`~/.m2` 0 → 7), `clj`가 rlwrap으로 `user=> 42`, `cci 0.6.1` · `glc 0.19.3`,
+   `man clojure`. 부팅 3(lang-jvm이 깨짐)에서 util의 cci가 선다. 부팅 4가 옛 묶음 다섯을 지우고 새로.
+3. 빨강 하나(확인한 것 5).
+4. `make quick`: 처음 판이 shellcheck 둘로 멈췄다 — 이 plan의 메시지 글자(`~/.m2`, SC2088)와 TP-M4의 `devlayer/files/lang-native/etc/tars/rc.d/lang-native.sh`
+   (shebang 없는 조각, SC2148 — TP-M4가 quick을 거치지 않고 들어갔다). 둘 다 고쳐 PASS(71파일).
+5. 루트 게이트 한 판: 31/31, 29분 26초(prebuild 364초 · lanes 1,284초 — 지난번 1,193초에서 devtools 몫 91초), 31회차 모두 `cut log lines A=0 B=0 C=0`.
+   게이트 안의 devtools는 빌드 뒤 482초, kotlinc 55.2초, clojure 30.2초.
+6. 위험 1(TCG 속도)은 상한 안, 체인은 가르지 않았다(확인한 것 6). 위험 2: lang-jvm 127 → 226MiB, util 13MiB, ISO 1.15 → 1.27GB. 위험 4(glc의
+   CPU 수준)는 실기 확인으로 남는다(HANDOFF).

@@ -59,6 +59,21 @@ libc="${ir}/lib/x86_64-linux-gnu/libc.so.6"
 [[ -e "${libc}" ]] || die "initrd has no lib/x86_64-linux-gnu/libc.so.6 — extraction failed"
 rm -f "${work}/initrd.cpio"
 
+# fetch_checked <URL> <sha256> <이름> — devlayer/cache/<sha256>에 받아 둔다(upstream · prebuilt · maven이 같이 쓴다).
+fetch_checked() {
+  local f="${cache}/$2" got
+  if [[ ! -f "${f}" ]]; then
+    echo "build> ${bundle}: fetch $3"
+    curl -fL --retry 4 --retry-all-errors -o "${f}.part" "$1"
+    # 옮기기 전에 본다 — 틀린 바이트가 캐시 이름을 얻으면 다음 실행이 그것을 믿는다.
+    got="$(sha256sum "${f}.part" | cut -c1-64)"
+    [[ "${got}" == "$2" ]] || die "$3: downloaded sha256 ${got}, manifest says $2 (kept ${f}.part)"
+    mv "${f}.part" "${f}"
+  fi
+  got="$(sha256sum "${f}" | cut -c1-64)"
+  [[ "${got}" == "$2" ]] || die "$3: cached ${f} has sha256 ${got}, manifest says $2"
+}
+
 # ── 뿌리 만들기 ─────────────────────────────────────────────────────────
 mkdir -p "${root}/usr/share/tars/layers"
 harvest_lines=""
@@ -77,17 +92,8 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
       ;;
     upstream | prebuilt)
       # 둘은 받는 자리만 다르고(도구 자신 · 표준이 된 제3자) 받기 · 풀기 · 놓기는 같다(design 결정 2).
+      fetch_checked "${url}" "${sha}" "${tool} ${version}"
       f="${cache}/${sha}"
-      if [[ ! -f "${f}" ]]; then
-        echo "build> ${bundle}: fetch ${tool} ${version}"
-        curl -fL --retry 4 --retry-all-errors -o "${f}.part" "${url}"
-        # 옮기기 전에 본다 — 틀린 바이트가 캐시 이름을 얻으면 다음 실행이 그것을 믿는다.
-        got="$(sha256sum "${f}.part" | cut -c1-64)"
-        [[ "${got}" == "${sha}" ]] || die "${tool}: downloaded sha256 ${got}, manifest says ${sha} (kept ${f}.part)"
-        mv "${f}.part" "${f}"
-      fi
-      got="$(sha256sum "${f}" | cut -c1-64)"
-      [[ "${got}" == "${sha}" ]] || die "${tool}: cached ${f} has sha256 ${got}, manifest says ${sha}"
       # 결정 2: /usr/local/lib/<도구>-<버전>/에 그대로, /usr/local/bin/에 실행 파일 링크. tarball의 맨 위 디렉터리
       # 하나(jdk-25.0.5+8/)는 벗긴다. into=T면 자리가 T-<버전>이다 — 그 줄이 앞에서 이미 만들었어야 한다(TP-M2 결정 C).
       into="$(manifest_opt "${opts}" into)"
@@ -156,6 +162,33 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         ln -s "../lib/${dir}/${rel}" "${link}"
       done
       printf '%s\t%s\t%s\t%s\n' "${tool}" "${version}" "${kind}" "${url}" >>"${info}"
+      ;;
+    maven)
+      # TP-M5 plan 결정 B: URL 자리는 잠금 파일(devlayer/maven/<이름>.lock), sha256 자리는 그 파일의 sha256. 잠금 파일의 줄마다
+      # Maven Central에서 받아 into=가 가리키는 도구 디렉터리의 seed/m2/<경로>에 Maven 로컬 저장소 모양으로 둔다. 링크는 없다 —
+      # 그 도구의 런처가 첫 실행에 사용자 캐시로 복사한다(결정 D).
+      [[ -f "${url}" ]] || die "${tool}: no lock file ${url}"
+      got="$(sha256sum "${url}" | cut -c1-64)"
+      [[ "${got}" == "${sha}" ]] || die "${tool}: ${url} has sha256 ${got}, manifest says ${sha}"
+      into="$(manifest_opt "${opts}" into)"
+      [[ -n "${into}" ]] || die "${tool}: a maven line needs into= (the tool whose seed it is)"
+      for key in exe hook strip; do
+        [[ -z "$(manifest_opt "${opts}" "${key}")" ]] || die "${tool}: ${key}= means nothing on a maven line"
+      done
+      dest="usr/local/lib/${into}-${version}"
+      [[ -d "${root}/${dest}" ]] || die "${tool}: into=${into} but there is no /${dest} yet (put this line after ${into})"
+      n=0
+      while read -r path fsha extra; do
+        [[ -z "${path}" || "${path}" == \#* ]] && continue
+        [[ -n "${fsha}" && -z "${extra}" && "${fsha}" =~ ^[0-9a-f]{64}$ ]] || die "${tool}: ${url}: bad line: ${path} ${fsha} ${extra}"
+        [[ "${path}" != /* && "/${path}/" != */../* ]] || die "${tool}: ${url}: path ${path} leaves the repository"
+        fetch_checked "https://repo1.maven.org/maven2/${path}" "${fsha}" "${tool}: ${path##*/}"
+        mkdir -p "$(dirname "${root}/${dest}/seed/m2/${path}")"
+        cp "${cache}/${fsha}" "${root}/${dest}/seed/m2/${path}"
+        n=$((n + 1))
+      done <"${url}"
+      ((n > 0)) || die "${tool}: ${url} has no files"
+      printf '%s\t%s\t%s\t%s (%d files)\n' "${tool}" "${version}" "${kind}" "${url}" "${n}" >>"${info}"
       ;;
     *) die "${tool}: kind ${kind} is not built yet" ;;
   esac

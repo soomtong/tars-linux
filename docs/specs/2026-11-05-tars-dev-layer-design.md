@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 11판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 끝, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정)(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 11판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 끝, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -114,12 +114,16 @@ trixie 판이 돈다.
 ### 출처와 빌드
 
 1. 출처는 매니페스트 한 파일이다(`devlayer/manifest.tsv` 가칭). 한 줄에 도구 · 묶음 · 버전 · 종류 · URL · sha256. 소스 빌드는
-   없다(사용자 결정) — 종류는 모두 미리 빌드된 바이너리이고 넷이다. 앞의 것이 있으면 앞의 것을 쓴다.
+   없다(사용자 결정) — 종류는 모두 미리 빌드된 바이너리이고 다섯이다(`maven`은 TP-M5). 앞의 것이 있으면 앞의 것을 쓴다.
    - `upstream` — 도구가 직접 내는 linux-amd64 바이너리 tarball. 기본값이다.
    - `vendor-repo` — 도구 쪽이 운영하는 Debian 저장소(PGDG의 postgresql, nginx.org의 nginx, packages.redis.io의 redis).
    - `prebuilt` — 표준이 된 제3자 빌드(python-build-standalone, ruby/ruby-builder, static-php-cli, builds.hex.pm의 erlang).
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
      binutils, `lua5.4`, `emacs-nox`, 공용 라이브러리.
+   - `maven` — Maven Central의 jar · pom 여럿(TP-M5 plan 결정 B). 한 줄의 URL 자리는 잠금 파일(`devlayer/maven/<이름>.lock`, 줄마다 경로 ·
+     sha256 — 처음 받을 때 Central의 `.sha1`과 대조해 적는다)이고, `into=`가 가리키는 도구의 `seed/m2/`에 놓는다. 배포처는 `upstream`과
+     같은 자리다 — 다른 것은 받는 모양뿐이다. 첫 실행에 언어 자신의 jar를 받는 런처(clojure)가 그 시드를 사용자 캐시로 복사한다. 그 언어의
+     실행에 필요한 jar만이다 — 비목표 2의 생태계 미러가 아니다.
    매니페스트의 일곱째 열은 선택이다 — 공백으로 가른 `exe=` · `hook=` · `into=`(TP-M2 plan 결정 C)와 `strip=N`(풀고 벗길 맨 위
    디렉터리의 단 수, TP-M3 plan 결정 C). zip도 받는다. `debian` 줄이 끌고 오는 패키지 가운데 initrd가 가진 것(tzdata)은
    `devlayer/harvest-skip.tsv`가 싣지 않는다(TP-M3). 배포 형식이 절차를 요구하면

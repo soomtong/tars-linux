@@ -1,4 +1,5 @@
-# 개발 도구 층의 거두기(harvest.sh)가 싣지 않는 패키지 — initrd가 같은 것을 갖는다(TP-M3). 열은 탭으로 가른다.
+# 개발 도구 층의 거두기(harvest.sh)가 싣지 않는 패키지 — initrd가 같은 것을 갖거나(TP-M3), 의존으로 딸려 오지만 싣지 않기로
+# 한 것(TP-M5). 열은 탭으로 가른다.
 #
 #   패키지  이유
 #
@@ -7,3 +8,7 @@
 
 tzdata	initrd가 /usr/share/zoneinfo를 통째로 갖는다(kernel/make_initrd.sh). php8.4-common이 기댄다.
 debconf	거두는 컨테이너의 postinst(ucf 등)만 쓴다. TARS에는 dpkg가 없다(TP-M4).
+python3	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
+python3-minimal	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
+python3.13	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
+python3.13-minimal	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).

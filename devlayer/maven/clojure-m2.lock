@@ -1,0 +1,15 @@
+# clojure CLI의 첫 실행이 ~/.m2/repository로 받는 것(TP-M5 plan 확인 4 · 결정 B). 한 줄에 `<maven2 아래 경로> <sha256>`.
+#
+# 출처는 https://repo1.maven.org/maven2/. 판은 clojure-tools tarball의 root deps(`org.clojure/clojure {:mvn/version …}`)와
+# 그 pom이 부르는 의존이다 — clojure를 올리면 이 파일도 다시 만든다(plan 위험 3).
+#
+# 만든 방법(2026-11-06): 망이 있는 amd64 trixie 컨테이너에서 `clojure -M -e …`를 한 번 돌리고 ~/.m2/repository에 생긴 jar · pom을
+# 적었다. 줄마다 Central의 `<경로>.sha1`과 먼저 대조했고(일곱 다 맞음), 그 뒤 sha256을 적었다. 부속 파일(`_remote.repositories`,
+# `.sha1`)은 싣지 않는다 — jar · pom만으로 망 없이 선다(plan 확인한 것).
+org/clojure/clojure/1.12.6/clojure-1.12.6.jar 21b578db389a8e74b286ce79c4a7f86ec641e26d88b12f18d69030916b0e18ca
+org/clojure/clojure/1.12.6/clojure-1.12.6.pom 6b85dea75a09f1eb08c8cc18a1b3120a3fd048a6343757a1b6be979ab6f910cf
+org/clojure/core.specs.alpha/0.4.74/core.specs.alpha-0.4.74.jar eb73ac08cf49ba840c88ba67beef11336ca554333d9408808d78946e0feb9ddb
+org/clojure/core.specs.alpha/0.4.74/core.specs.alpha-0.4.74.pom 33410eb8aa73d52d957b3dc6e0a65f3998ac0623cbd813d90c33e6e689c42429
+org/clojure/pom.contrib/1.2.0/pom.contrib-1.2.0.pom 0916d7a41558b9500a427c886fa29827ace5259206be3ad33e64e296fc1a6111
+org/clojure/spec.alpha/0.5.238/spec.alpha-0.5.238.jar 94cd99b6ea639641f37af4860a643b6ed399ee5a8be5d717cff0b663c8d75077
+org/clojure/spec.alpha/0.5.238/spec.alpha-0.5.238.pom 3cba7e0dcc085c4ce92dddffea226124ffac178be79bd0379b5b2e30a969cbea

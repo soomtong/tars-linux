@@ -51,6 +51,9 @@ bison	base	2:3.8.2+dfsg-1+b2	debian	bison	apt
 flex	base	2.6.4-8.2+b4	debian	flex	apt
 gettext	base	0.23.1-2	debian	gettext	apt
 perl-doc	base	5.40.1-6+deb13u1	debian	perl-doc	apt
+# rlwrap: REPL의 줄 편집(clojure의 clj가 요구한다, TP-M5). Debian의 의존 python3 · perl은 필터 스크립트 몫이다 — perl은 위 줄과
+# 같은 판이고, python3의 실행 파일 패키지는 harvest-skip.tsv가 뺀다(/usr/bin/python3를 만들지 않는다, TP-M4 위험 2).
+rlwrap	base	0.46.1-1+b1	debian	rlwrap	apt
 # upstream 넷(plan 확인 4 — Debian 판보다 앞선다). cmake-gui는 링크하지 않는다(GUI, needed-ignore.tsv).
 cmake	base	4.4.5	upstream	https://github.com/Kitware/CMake/releases/download/v4.4.5/cmake-4.4.5-linux-x86_64.tar.gz	ed85135c5a5135b45e50423cb406dea04ca3338da0b8ef3c9ede963559680be0	exe=bin/cmake,bin/ctest,bin/cpack,bin/ccmake
 ninja	base	1.13.2	upstream	https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip	5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6	strip=0 exe=ninja
@@ -61,6 +64,13 @@ ctags	base	2026.10.08	upstream	https://github.com/universal-ctags/ctags-nightly-
 # ── lang-jvm(TP-M0은 JDK 하나) ──────────────────────────────────────────
 # Temurin 최신 LTS GA. api.adoptium.net/v3/assets/latest/25/hotspot?os=linux&architecture=x64&image_type=jdk가 준 값.
 jdk	lang-jvm	25.0.5+8	upstream	https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz	68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb
+# JVM 언어(TP-M5). scala3는 뺐다(사용자 결정 2026-11-06, plan 확인 3). kotlin은 jar와 셸 스크립트뿐이고 kotlinc가 링크를 따라
+# 자기 자리를 찾는다. kotlinc-js · kotlinc-wasm은 싣되 링크하지 않는다(plan 결정 A).
+kotlin	lang-jvm	2.4.21	upstream	https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip	7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd	exe=bin/kotlinc,bin/kotlin,bin/kotlinc-jvm,bin/kapt
+# clojure: 자리표를 훅이 바꿔 넣고 bin/clojure에 첫 실행 시드 줄을 넣는다(plan 결정 C · D). clojure-m2는 그 시드다 — 첫 실행이
+# ~/.m2로 받을 jar · pom 일곱(devlayer/maven/clojure-m2.lock). 판은 clojure 줄과 같아야 그 자리(into=clojure)에 놓인다.
+clojure	lang-jvm	1.12.6.1673	upstream	https://github.com/clojure/brew-install/releases/download/1.12.6.1673/clojure-tools-1.12.6.1673.tar.gz	fe9194858e75d5af13c2e2aff92d710674d5bc5105f2b42f90a7d94d82ec023c	hook=clojure-tools exe=bin/clojure,bin/clj
+clojure-m2	lang-jvm	1.12.6.1673	maven	devlayer/maven/clojure-m2.lock	584d3045e135ee8b3e5eda8d1e62fe52081da6fd10dd92b131d2d3d032d29f99	into=clojure
 
 # ── lang-native(TP-M2) — LLVM 툴체인 · odin · tcc는 뺐다(사용자 결정 2026-11-06, plan 확인 4 · 7) ─────────
 # zig: ziglang.org/download/index.json. 실행 파일이 맨 위에 있고 bin/이 없다.
@@ -91,3 +101,9 @@ bun	lang-script	1.4.4	upstream	https://github.com/oven-sh/bun/releases/download/
 janet	lang-script	1.42.1	upstream	https://github.com/janet-lang/janet/releases/download/v1.42.1/janet-v1.42.1-linux-x64.tar.gz	5c6cd9862c59b0691e2fd3b2e2327d1459d314a67dd08203fbff372937a20748
 # php: Debian trixie-security(사용자 결정 2026-11-06 — static-php는 8.5.8에서 멈췄다, 확인 4).
 php8.4-cli	lang-script	8.4.27-1~deb13u1	debian	php8.4-cli	apt
+
+# ── util(TP-M5에서 연다 — 나머지 터미널 유틸리티는 util milestone) ─────────────────────
+# soomtong/tap의 둘. 출처는 각 저장소의 GitHub release(tap formula는 아직 macOS만 적는다). cci는 Go 정적(GOAMD64=v1),
+# glc는 Rust(libstdc++ · libz — initrd에 있다). sha256은 GitHub 자산의 digest(plan 확인 1 · 5).
+cci	util	0.6.1	upstream	https://github.com/soomtong/claude-code-history-viewer/releases/download/v0.6.1/cci_0.6.1_linux_amd64.tar.gz	a076dae36ef2bdd6304d52794116c2db2ef7f7b908d1342ef35769f84d3ed1e2	exe=cci
+glc	util	0.19.3	upstream	https://github.com/soomtong/gluck/releases/download/v0.19.3/glc-0.19.3-linux-x86_64.tar.gz	b7c44ff08943ba35f28ff2675393384a474ce5631499219353b54af85428e420	strip=0 exe=glc

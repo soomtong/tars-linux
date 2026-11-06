@@ -6,7 +6,8 @@
 # 실패한다. 첫 판의 `awk … NF >= 6`은 탭이 공백으로 바뀐 줄을 말없이 건너뛰어, 그 도구가 묶음에서 빠진 채 초록이었다.
 #
 #   열     도구 · 묶음 · 버전 · 종류 · URL · sha256 [· 선택]
-#   종류   upstream · vendor-repo · prebuilt · debian(TP design 결정 1의 넷)
+#   종류   upstream · vendor-repo · prebuilt · debian(TP design 결정 1의 넷)과 maven(TP-M5 plan 결정 B — URL 자리가
+#          devlayer/maven/의 잠금 파일, sha256 자리가 그 파일의 sha256)
 #   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 넷이다(TP-M2 plan 결정 C, strip은 TP-M3 plan 결정 C):
 #          exe=a,b   링크할 실행 파일(도구 디렉터리 기준). 없으면 bin/의 실행 파일 전부
 #          hook=X    풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
@@ -23,7 +24,7 @@ manifest_check() {
     {
       if (NF < 6 || NF > 7) { bad("expected 6 or 7 tab-separated columns, got " NF); next }
       for (i = 1; i <= 6; i++) if ($i == "") { bad("column " i " is empty"); next }
-      if ($4 != "upstream" && $4 != "vendor-repo" && $4 != "prebuilt" && $4 != "debian") bad("unknown kind " $4)
+      if ($4 != "upstream" && $4 != "vendor-repo" && $4 != "prebuilt" && $4 != "debian" && $4 != "maven") bad("unknown kind " $4)
       if (NF == 7) {
         n = split($7, o, " ")
         for (i = 1; i <= n; i++) if (o[i] !~ /^(exe|hook|into)=[^=]+$/ && o[i] !~ /^strip=[0-9]+$/) bad("unknown option " o[i])
