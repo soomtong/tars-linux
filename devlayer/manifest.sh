@@ -7,10 +7,11 @@
 #
 #   열     도구 · 묶음 · 버전 · 종류 · URL · sha256 [· 선택]
 #   종류   upstream · vendor-repo · prebuilt · debian(TP design 결정 1의 넷)
-#   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 셋이다(plan 결정 C):
+#   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 넷이다(TP-M2 plan 결정 C, strip은 TP-M3 plan 결정 C):
 #          exe=a,b   링크할 실행 파일(도구 디렉터리 기준). 없으면 bin/의 실행 파일 전부
 #          hook=X    풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
 #          into=T    도구 디렉터리를 T-<버전>으로(rust-src가 rust의 자리로)
+#          strip=N   풀고 나서 벗길 맨 위 디렉터리의 단 수(숫자, 기본 1). 0이면 맨 위의 파일을 그대로
 
 DEVLAYER_MANIFEST="${DEVLAYER_MANIFEST:-devlayer/manifest.tsv}"
 
@@ -25,7 +26,7 @@ manifest_check() {
       if ($4 != "upstream" && $4 != "vendor-repo" && $4 != "prebuilt" && $4 != "debian") bad("unknown kind " $4)
       if (NF == 7) {
         n = split($7, o, " ")
-        for (i = 1; i <= n; i++) if (o[i] !~ /^(exe|hook|into)=[^=]+$/) bad("unknown option " o[i])
+        for (i = 1; i <= n; i++) if (o[i] !~ /^(exe|hook|into)=[^=]+$/ && o[i] !~ /^strip=[0-9]+$/) bad("unknown option " o[i])
       }
       if ($1 in seen) bad("tool " $1 " again (first on line " seen[$1] ")")
       else seen[$1] = NR

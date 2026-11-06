@@ -126,6 +126,8 @@ while IFS= read -r -d '' p; do
     origin="/$(dirname "${p}")"
     IFS=: read -r -a rp <<<"${runpath}"
     for d in "${rp[@]}"; do
+      # 빈 항목은 ld.so가 현재 디렉터리로 읽는다 — 묶음 안의 자리가 아니다(cyber의 RUNPATH가 `:$ORIGIN:…`, TP-M3).
+      [[ -n "${d}" ]] || continue
       d="${d//\$\{ORIGIN\}/${origin}}"
       d="${d//\$ORIGIN/${origin}}"
       dirs+=("$(realpath -m -s "${d}")")
@@ -134,6 +136,15 @@ while IFS= read -r -d '' p; do
   dirs+=("${std_dirs[@]}")
   while IFS= read -r so; do
     found=0
+    # `/`가 든 NEEDED는 ld.so가 검색하지 않고 그 경로를 연다. $ORIGIN도 펼친다(python의 libpython3.so가
+    # `$ORIGIN/../lib/libpython3.15.so.1.0`, TP-M3). 경로 하나만 본다.
+    if [[ "${so}" == */* ]]; then
+      here="/$(dirname "${p}")"
+      at="${so//\$\{ORIGIN\}/${here}}"
+      at="${at//\$ORIGIN/${here}}"
+      at="$(realpath -m -s "${at}")"
+      { exists "${root}${at}" || exists "${ir}${at}"; } && continue
+    fi
     for d in "${dirs[@]}"; do
       if exists "${root}${d}/${so}" || exists "${ir}${d}/${so}"; then
         found=1

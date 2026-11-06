@@ -30,7 +30,8 @@ if [ -z "$lines" ]; then
   exit 0
 fi
 
-want="$(printf '%s\n' "$lines"; sha256sum devlayer/harvest.sh | cut -c1-64)"
+# 끝 줄은 해시 하나여야 한다 — build.sh가 `head -n -1`로 매니페스트 줄만 떼어 대조한다.
+want="$(printf '%s\n' "$lines"; cat devlayer/harvest.sh devlayer/harvest-skip.tsv | sha256sum | cut -c1-64)"
 if [ -f "$build/$bundle.harvest.tar" ] && [ "$(cat "$build/$bundle.harvest.lines" 2>/dev/null)" = "$want" ]; then
   echo "harvest> $bundle: cached"
   exit 0
@@ -86,8 +87,23 @@ done >"${work}/deps.files"
 LC_ALL=C sort -u "${work}/new.all" "${work}/deps.files" >"${work}/new.sorted"
 mv "${work}/new.sorted" "${work}/new.all"
 
-# 싣지 않는 것: alternatives 자리, ldconfig 캐시(TARS는 ld.so의 기본 경로로 찾는다), dpkg · apt 자신의 /etc.
-grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/)' "$work/new.all" | sed 's|^/||' >"$work/list"
+# initrd가 가진 패키지는 싣지 않는다(devlayer/harvest-skip.tsv, TP-M3). 거두는 이미지와 initrd를 지은 개발 컨테이너는
+# apt 스냅숏이 따로 움직여 판이 어긋날 수 있다 — tzdata 2026e(slim) · 2026f(initrd)의 zoneinfo가 결정 4로 멈췄다.
+# 패키지는 깔린 채로 두고(의존이 서야 한다) 그 파일만 목록에서 뺀다. 실행할 때는 initrd의 사본을 쓴다.
+: >"${work}/skip.files"
+skipped=0
+while IFS=$'\t' read -r pkg _why; do
+  [[ -z "${pkg}" || "${pkg}" == \#* ]] && continue
+  dpkg-query -W "${pkg}" >/dev/null 2>&1 || continue
+  dpkg -L "${pkg}" | sed -E 's#^/(lib|lib64|bin|sbin)/#/usr/\1/#' >>"${work}/skip.files"
+  skipped=$((skipped + 1))
+done <devlayer/harvest-skip.tsv
+LC_ALL=C comm -23 "${work}/new.all" <(LC_ALL=C sort -u "${work}/skip.files") >"${work}/new.kept"
+mv "${work}/new.kept" "${work}/new.all"
+
+# 싣지 않는 것: alternatives 자리, ldconfig 캐시(TARS는 ld.so의 기본 경로로 찾는다), dpkg · apt 자신의 /etc, systemd ·
+# cron의 자리(TARS에는 둘 다 없다 — php의 phpsessionclean.timer가 대상 없는 링크로 남았다, TP-M3).
+grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.d/)' "$work/new.all" | sed 's|^/||' >"$work/list"
 grep '^etc/' "$work/list" >"$work/etc" || true
 
 # alternatives 펴기(결정 2): 새 경로 가운데 /etc/alternatives를 지나는 링크는 최종 대상으로의 상대 링크로 바꾼다. 묶음에는
@@ -123,7 +139,7 @@ tar -C / --no-recursion -cpf "$build/$bundle.harvest.tar.tmp" -T "$work/list"
 mv "$build/$bundle.harvest.tar.tmp" "$build/$bundle.harvest.tar"
 cp "$work/pkgs" "$build/$bundle.pkgs"
 {
-  echo "harvest> $bundle: packages=$(wc -l <"$work/pkgs") paths=$(wc -l <"$work/list") changed=$(wc -l <"$work/changed") deps=$(wc -l <"$work/deps")/$(wc -l <"$work/deps.files") flattened=$flattened broken=$(wc -l <"${work}/broken") etc=$(wc -l <"$work/etc")"
+  echo "harvest> $bundle: packages=$(wc -l <"$work/pkgs") paths=$(wc -l <"$work/list") changed=$(wc -l <"$work/changed") deps=$(wc -l <"$work/deps")/$(wc -l <"$work/deps.files") flattened=$flattened broken=$(wc -l <"${work}/broken") skipped=$skipped etc=$(wc -l <"$work/etc")"
   sed 's/^/harvest>   changed /' "$work/changed"
   sed 's/^/harvest>   etc /' "$work/etc"
   sed 's/^/harvest>   dep /' "$work/deps"

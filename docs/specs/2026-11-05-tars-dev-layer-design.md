@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 8판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 9판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -40,7 +40,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 묶음 | 도구 |
 |---|---|
 | 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2) |
-| 스크립트 언어 | python3, ruby, lua, node, bun, janet, php |
+| 스크립트 언어 | python3, ruby, lua, luau, cyber, node, bun, janet, php(`lang-script` 묶음, TP-M3 — luau · cyber는 사용자가 2026-11-06에 더했다) |
 | JVM | JDK, kotlin, scala3, clojure |
 | BEAM | erlang, elixir, gleam |
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs, ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인) |
@@ -94,14 +94,16 @@ trixie 판이 돈다.
 7. JDK의 TLS 인증서: Debian 판은 `/etc/ssl/certs/java/cacerts`로의 링크다. 공식 tarball(Temurin)은 `lib/security/cacerts`를 자기 안에
    갖는다. TARS의 `/etc`는 부팅마다 만드는 tmpfs다.
 8. 공식 바이너리 tarball이 없는 도구도 미리 빌드된 출처는 있다 — gcc(프로젝트가 바이너리를 내지 않는다 → Debian), python
-   (python.org는 리눅스 바이너리를 안 낸다 → python-build-standalone), ruby(→ ruby/ruby-builder), php(→ static-php-cli의 정적 빌드),
+   (python.org는 리눅스 바이너리를 안 낸다 → python-build-standalone), ruby(→ spinel-coop/rv-ruby — ruby/ruby-builder는
+   `/opt/hostedtoolcache`에 굳은 빌드라 옮길 수 없다, TP-M3 plan 확인 2), php(→ Debian trixie의 `php8.4-cli` — static-php-cli의
+   미리 빌드는 2026-07의 8.5.8에서 멈췄다, 사용자 결정 2026-11-06, TP-M3 plan 확인 4),
    erlang(→ builds.hex.pm의 OTP 빌드), redis(→ packages.redis.io), postgresql(→ PGDG), nginx(→ nginx.org), lua · emacs(→ Debian
    `lua5.4` · `emacs-nox`). 각 출처가 지금도 이 모양인지는 그 묶음의 milestone이 받으면서 확인한다. mitos는 glibc tarball · `.deb`, ttt · neovim · caddy · bun · go · zig · node ·
    odin · gleam · janet · JDK · kotlin · scala3 · mysql은 공식 tarball이 있다(M0이 하나씩 확인한다).
 9. ISO는 `boot/make_iso.sh`가 `xorriso`로 짓고 지금 138MB다. ISO9660은 파일 하나가 4GiB를 넘으면 `-iso-level 3`이 필요하다.
    부팅 매체는 iso9660 `TARS`로 판정되고(`disk.zig`), `tars-install`이 그 안의 `BOOT_FILES` 여섯을 ESP로 옮긴다.
 10. 크기 어림(실측 아님): 설치 7~10GB, squashfs로 2.5~4GB. 정확한 숫자는 묶음마다 그 milestone이 잰다. 잰 것: base 251MiB → 81MiB,
-    lang-jvm 301 → 126, lang-native 2,018 → 402(TP-M2). LLVM 공식 tarball은 풀면 11,853MiB였다 — 뺐다(도구 목록의 "뺀 것").
+    lang-jvm 301 → 126, lang-native 2,018 → 402(TP-M2), lang-script 651 → 190(TP-M3). LLVM 공식 tarball은 풀면 11,853MiB였다 — 뺐다(도구 목록의 "뺀 것").
 
 ## 결정
 
@@ -114,7 +116,9 @@ trixie 판이 돈다.
    - `prebuilt` — 표준이 된 제3자 빌드(python-build-standalone, ruby/ruby-builder, static-php-cli, builds.hex.pm의 erlang).
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
      binutils, `lua5.4`, `emacs-nox`, 공용 라이브러리.
-   매니페스트의 일곱째 열은 선택이다 — 공백으로 가른 `exe=` · `hook=` · `into=`(TP-M2 plan 결정 C). 배포 형식이 절차를 요구하면
+   매니페스트의 일곱째 열은 선택이다 — 공백으로 가른 `exe=` · `hook=` · `into=`(TP-M2 plan 결정 C)와 `strip=N`(풀고 벗길 맨 위
+   디렉터리의 단 수, TP-M3 plan 결정 C). zip도 받는다. `debian` 줄이 끌고 오는 패키지 가운데 initrd가 가진 것(tzdata)은
+   `devlayer/harvest-skip.tsv`가 싣지 않는다(TP-M3). 배포 형식이 절차를 요구하면
    (rust의 설치기) `devlayer/hooks/<형식>.sh`가 푼다. 열이 맞지 않는 줄은 줄 번호와 함께 빌드를 멈춘다(`devlayer/manifest.sh`).
 2. `upstream` · `prebuilt` tarball은 `/usr/local/lib/<도구>-<버전>/`에 그대로 풀고 `/usr/local/bin/`에 실행 파일 링크를 둔다. Debian식 alternatives는 없다.
    `debian`과 `vendor-repo`는 버리는 amd64 컨테이너(`--platform=linux/amd64 debian:trixie-slim`)에서 진짜로 `apt-get install`하고
@@ -175,7 +179,7 @@ trixie 판이 돈다.
 ## 열린 질문 (사용자가 정한다)
 
 없다(2026-11-05). 닫은 것: gcc는 Debian trixie의 14.2(소스 빌드 없음, 미리 빌드된 최신 gcc는 trixie의 glibc와 맞는 것이 없다).
-ruby · php는 `prebuilt`. ttt는 eugenioenko/ttt. 문서는 `dasht`(결정 19). 최소 디스크 16GiB(결정 18). fakesteak · `soomtong/tap` ·
+ruby · php는 `prebuilt`(TP-M3가 고쳤다 — ruby는 다른 `prebuilt`, php는 사용자 결정으로 `debian`). ttt는 eugenioenko/ttt. 문서는 `dasht`(결정 19). 최소 디스크 16GiB(결정 18). fakesteak · `soomtong/tap` ·
 helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 싣고 `PATH`로 최신판이 앞선다(결정 20). initrd에 넣는 기준은 `docs/guides/initrd-criteria.md`로 떼어 냈고,
 그 기준으로 lsoff · doge가 initrd에 들어갔다(UT design 결정 3을 취소하는 첫 사례).
 

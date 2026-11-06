@@ -153,8 +153,62 @@ G. design을 고칠 자리: 도구 목록 표의 스크립트 언어 줄에 luau
 
 ## 확인한 것
 
-(구현하며 채운다)
+1. build.sh의 `case`는 `upstream`만 받고 있었다 — `prebuilt`(python · ruby)는 `kind prebuilt is not built yet`으로 멈췄을 것이다. 둘은
+   받는 자리만 다르고 풀기 · 놓기가 같아(design 결정 2) `upstream | prebuilt`로 묶었다. 출처 기록(`<묶음>.pkgs`)의 종류 열도 줄의 값을 쓴다.
+2. 첫 `make dev-layers`가 lang-script에서 셋으로 멈췄다.
+   - tzdata: `/usr/share/zoneinfo/*` 19개가 initrd와 다르다(결정 4). php8.4-common이 tzdata에 기대고, harvest의 "의존 폐포" 단계(TP-M0)가
+     trixie-slim에 원래 깔린 tzdata의 파일을 실었다. 거두는 이미지는 `2026e-0+deb13u1`(이미지 2026-10-27), initrd를 지은 개발 컨테이너는
+     `2026f-0+deb13u1`이다. 두 apt 스냅숏은 따로 움직이므로 판을 맞추지 않고 `devlayer/harvest-skip.tsv`(패키지 · 이유)로 initrd가 가진
+     패키지의 파일을 뺀다. 패키지는 깔린 채로 둔다. harvest의 신선도 열쇠에 이 파일도 들어간다 — 끝 줄은 해시 하나여야 한다(build.sh가
+     `head -n -1`로 뗀다. 두 줄로 했다가 `harvest.tar is stale`로 멈췄다).
+   - systemd: `etc/systemd/system/timers.target.wants/phpsessionclean.timer`가 대상 없는 링크였다. harvest가 `/etc/systemd/` · `/etc/cron.d/`를
+     싣지 않는다(TARS에는 둘 다 없다).
+   - `realpath: ''`: cyber의 RUNPATH가 `:$ORIGIN:/usr/lib/x86_64-linux-gnu`로 빈 항목에서 시작한다. ld.so는 빈 항목을 현재 디렉터리로
+     읽는다 — 묶음 안의 자리가 아니라서 verify가 건너뛴다. (cyber 쪽의 작은 숙제: 빈 항목은 실행하는 곳의 `.so`를 먼저 찾는다.)
+3. 둘째 판이 python의 `lib/libpython3.so`에서 멈췄다. 안정 ABI 껍데기라서 NEEDED가 이름이 아니라 `$ORIGIN/../lib/libpython3.15.so.1.0`이다.
+   glibc ld.so는 `/`가 든 NEEDED를 검색하지 않고 그 경로를 열며 `$ORIGIN`을 펼친다. verify.sh에 같은 규칙을 넣었다.
+4. 리팩터링(결정 C)이 기존 묶음을 바꾸지 않았다: base · lang-jvm · lang-native의 `.paths`가 고치기 전과 `usr/share/tars/layers/<묶음>`
+   한 줄(안에 든 `git describe --dirty`)만 다르다. lang-script는 base와 274 경로를 같은 내용으로 나눈다(`gconv` 256과 libc6 · zlib 등).
+5. 빨강: (a) rv-ruby의 `strip=2`를 지우면 `ruby: nothing to link — no exe= and no executables in /usr/local/lib/ruby-4.0.9/bin (wrong
+   strip=?)`. (b) `strip=x` → `red-b.tsv:40: unknown option strip=x`.
+6. chroot(할 일 4, Rosetta 위 amd64, root, initrd + base + lang-script): python 0.9초, `venv` 13.0초, ruby 0.8초, lua 0.06초, luau 0.09초 ·
+   analyze 0.2초, cyber 0.2초, node 0.6초, npm 1.5초, bun 0.3초, janet 0.07초, php 0.2초. ruby와 node가 같은 sha256 앞자리 `3abd8072`를 냈다.
+   cyber는 큰따옴표 문자열에서도 `%{…}`를 펼친다 — 체인의 printf 한 겹에서 작은따옴표를 피할 수 있다.
+7. 체인 첫 판(qemu64)이 ruby에서 빨갰다: `ruby: [BUG] Illegal instruction`, Ruby 프레임이 서기 전(`DUMMY [FINISH]`). PIE는 페이지 단위로
+   적재되므로 RIP의 끝 세 자리 `5eb`로 후보를 추렸다 — 기본 x86-64 밖의 명령은 `require_internal`의 `palignr`(SSSE3) 하나다. rv-ruby는
+   SSSE3 이상을 가정하고 지었고, qemu64는 x86-64 첫 세대라 SSSE3가 없다. 맥북 에어 2011(Sandy Bridge)에는 있다. 사용자 결정(2026-11-06):
+   devtools 체인만 `-cpu SandyBridge`로 돈다(`TP_CPU`의 기본값). 다른 체인은 qemu64 그대로다. CPU를 바꿔도 앞 hello의 시간은 TP-M2와
+   거의 같다(zig 53.6초 · go 94.6초).
+8. 할 일 6의 빨강은 체인으로 보일 수 없었다. 매니페스트의 bun을 일반 빌드(`bun-linux-x64.zip`, `%ymm` 20,871 · `vpbroadcast` 1,769 ·
+   `shlx/shrx/sarx` 1,269개)로 바꿔도 SandyBridge 체인이 초록이었다(bun 631ms). QEMU 10.0 TCG는 CPUID에 AVX2를 알리지 않으면서 AVX2
+   명령을 실행하는 것으로 보인다(추정 — SSSE3 `palignr`는 qemu64에서 막았다). baseline의 근거는 실기 쪽에 남는다: Sandy Bridge에는
+   AVX2가 없고 bun은 일반 빌드가 AVX2를 요구한다고 밝힌다(확인 3). 맥북 에어 실기에서 `bun --version`이 서는지가 남은 확인이다.
+9. 체인 `devtools`(SandyBridge · 1GiB, 혼자 한 번)가 초록, 빌드 뒤 304초(TP-M2 257초) — 결정 F의 420초 아래라 하나로 둔다. 상한은 잰 값의
+   세 배로 고쳤다: venv 90초, 나머지 여덟은 60초.
 
 ## 결과
 
-(구현 뒤 채운다)
+1. `make dev-layers`가 네 묶음을 굽고 초록이다. 앞의 셋은 숫자가 TP-M2와 같고 `.paths`도 같다(확인한 것 4).
+
+   | 묶음 | 줄 | 파일 | 풀린 크기 | zstd15 | 뺀 경로 | ELF | 묶음 사이 |
+   |---|---|---|---|---|---|---|---|
+   | lang-script | prebuilt 둘 · upstream 다섯 · debian 둘(패키지 22) | 12,602 | 651MiB | 190MiB(199,331,840바이트) | 39 | 506 | shared 274(base) |
+
+   도구별 풀린 크기: node 225 · ruby 165 · python 116(stripped) · bun 103 · luau 22 · janet 11 · cyber 4MiB, Debian 몫(lua · php와 라이브러리)
+   `/usr/lib` 32MiB. harvest: `packages=22 … flattened=5 skipped=1(tzdata) etc=45`. 받기 · 거두기 · 굽기 첫 실행은 약 4분 39초(python 받기 포함).
+2. 빨강: 할 일 5의 둘(확인한 것 5). 할 일 6은 체인으로 보일 수 없었다(확인한 것 8).
+3. 체인 `devtools`가 초록이다(`-cpu SandyBridge`, 확인한 것 7). 게이트 안에서 빌드 뒤 305초. 숫자(TCG SandyBridge · 1GiB, 게이트 안):
+
+   | 항목 | 값 |
+   |---|---|
+   | 묶음 넷 | 840,060,928바이트(802MiB) |
+   | `tars-dev.iso` | 983,654,400바이트(TP-M2 784,324,608) |
+   | 설치기의 복사 | 4,218ms |
+   | init의 얹기(묶음 넷) | 41ms |
+   | python · venv · ruby · lua · luau | 1,446 · 27,329 · 1,429 · 35 · 401ms |
+   | cyber · node · npm · bun · janet · php | 503 · 1,449 · 1,950 · 628 · 69 · 272ms |
+   | JVM 뒤 MemAvailable | 602,940kB |
+
+4. 루트 게이트 한 판: 31/31, 25분 23초, 31회차 모두 `cut log lines A=0 B=0 C=0`. devtools(TP-M1 줄)가 378초로 가장 길다.
+5. 위험 1(Debian `=` 고정)은 그대로 남는다. 위험 2(JIT 시작)는 node 1.4초 · bun 0.6초로 작다. 위험 3(venv)은 27초로 상한 90초 안이다.
+   위험 4(slim에만 있는 라이브러리)는 NEEDED가 아니라 결정 4(tzdata)로 나타났다 — `harvest-skip.tsv`.

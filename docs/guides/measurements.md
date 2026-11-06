@@ -560,3 +560,9 @@ SE 검사 39의 `sendkey` → 누름(호스트 309ms · 게스트 318ms)으로 �
 `input_dev_release_keys`). evdev는 죽은 표시(`evdev_mark_dead`) 전까지 그 뗌을 읽게 하고 그 사이에 `cdev_device_del`이 있어,
 깨어난 reader는 보통 읽는다 — Shift를 쥔 채 `device_del usb-kbd`해도 수정키가 안 남았다. 표시 뒤의 read는 버퍼가 있어도
 `ENODEV`, poll은 `POLLHUP|POLLERR`(+`POLLIN`)이다. 그 틈을 결정적으로 놓치게 하려면 reader를 SIGSTOP한 채 장치를 뺀다(KH-M2).
+
+103. QEMU 10.0의 TCG는 CPU 모델이 CPUID에 알리지 않은 명령을 모두 막지는 않는다(TP-M3). `-cpu qemu64`(x86-64 첫 세대)에서는 SSSE3
+`palignr`가 `Illegal instruction`이었다(rv-ruby). 그런데 `-cpu SandyBridge`(AVX는 있고 AVX2는 없다)에서는 AVX2 · BMI2가 수천 개 든
+bun 일반 빌드가 그대로 돌았다. 그래서 체인으로는 "이 실행 파일이 AVX2를 요구한다"를 잡을 수 없다 — 받을 때 배포처의 설명이나
+`objdump`의 `%ymm` · `shlx`로 본다. 게스트에서 크래시 주소만 있을 때는 PIE가 페이지 단위로 적재되므로 RIP의 끝 세 자리로
+`objdump -d`의 후보를 추린다(`require_internal`의 `palignr` 하나로 좁혀졌다).

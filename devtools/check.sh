@@ -7,15 +7,16 @@ cd "$(dirname "$0")" || exit 1
 # TP-M1: 서른한째 체인. 개발 도구 층(TP design 결정 8~13) — 묶음을 실은 ISO로 설치하고, 디스크로 다시 뜬 게스트가
 # 망 없이 사용자로 C와 Java를 짓고 돌리는가. 체인은 모두 `-nic none`이다(오프라인이 목표).
 # TP-M2: 묶음이 셋이다(base · lang-jvm · lang-native). 부팅 2가 C++ · zig · rust · cargo · go의 hello를 더 본다(plan 결정 G).
+# TP-M3: 넷째 묶음 lang-script. 부팅 2가 python(+ venv) · ruby · lua · luau · cyber · node(+ npm) · bun · janet · php를 본다(plan 결정 F).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 셋) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 3, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
-#                                      rustc · cargo · go run · go build · javac · java · jwebserver + curl, 화면 셸에서
+#   1  ISO(묶음 넷) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 4, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, 화면 셸에서
 #                                      java --version(monitor 45504). 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 2, gcc · go는 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 셋을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 3, gcc · go · node는 돌고 java는 없다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 넷을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -35,7 +36,8 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh base
 ../devlayer/build.sh lang-jvm
 ../devlayer/build.sh lang-native
-(cd ../boot && ISO_LAYERS="base lang-jvm lang-native" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+../devlayer/build.sh lang-script
+(cd ../boot && ISO_LAYERS="base lang-jvm lang-native lang-script" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -46,7 +48,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base lang-jvm lang-native"
+LAYERS="base lang-jvm lang-native lang-script"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -57,8 +59,11 @@ DISK="${WORK}/target.img"
 # tars-install의 최소 디스크(disk.MIN_DISK_BYTES = 16 GiB + 2 MiB).
 truncate -s 16386M "$DISK"
 
-# -cpu는 다른 체인과 같은 TCG 기본 qemu64, -m은 mise와 같은 1024다. JVM이 그 위에서 서는지가 판정의 일부다.
-TP_CPU="${TP_CPU:-qemu64}"
+# -m은 mise와 같은 1024다. JVM이 그 위에서 서는지가 판정의 일부다.
+# -cpu는 SandyBridge다(TP-M3, 사용자 결정 2026-11-06). 다른 체인의 qemu64는 x86-64 첫 세대라 SSSE3가 없다 — rv-ruby가
+# require_internal의 palignr에서 Illegal instruction으로 죽었다. 개발 도구 층의 실제 바닥은 맥북 에어 2011(Sandy Bridge:
+# SSSE3 · SSE4.2 · POPCNT · AVX, AVX2는 없다)이라 그 세대로 돈다. AVX2가 없으므로 bun은 여전히 baseline이어야 한다.
+TP_CPU="${TP_CPU:-SandyBridge}"
 TP_MEM="${TP_MEM:-1024}"
 echo "devtools: qemu -cpu ${TP_CPU} -m ${TP_MEM}"
 
@@ -182,7 +187,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with three layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with four layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -198,8 +203,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 3 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 3 layers" "copied"
+COPY_MS="$(last_num 'copied 4 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 4 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -208,15 +213,15 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 3 layers in [0-9]+ms" 5 || fail "init did not lay three layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 3 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 4 layers in [0-9]+ms" 5 || fail "init did not lay four layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 4 layers in [0-9]+ms')"
 grep -aqF "tars-init: layer base: 1 files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, lang-jvm, lang-native" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, lang-jvm, lang-native, lang-script" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -260,6 +265,66 @@ grep -aqF "tp-gorun=tp-go-go1.27.3" "$LOG" || fail "go run h.go did not print go
 wait_log "tp-gobuilt=tp-go-go1.27.3" 30 || fail "go build in a module did not make a running program" "tp-gobuild" "tp-gomod"
 echo "B2: as tars, go run ($(ms_of gorun)ms, the first build fills ~/.cache/go-build) and go build in a module ($(ms_of gobuild)ms)"
 
+# TP-M3 plan 결정 F의 스크립트 언어 아홉. 소스는 printf "%s\n" "줄" … — 인자 안의 %는 printf가 안 펴므로 안전하다.
+# 피할 것은 $(게스트 bash가 펼친다)와 작은따옴표(as_tars의 겹)다: PHP는 변수 없이, JS는 템플릿 문자열 없이.
+# 출력 줄은 시간 줄보다 먼저 나온다(같은 셸이 차례로 찍는다). 그래도 ms 줄을 먼저 기다린 뒤 결과를 본다.
+# 상한은 처음 잰 숫자의 세 배다(60초 아래로는 안 내린다). 첫 판(SandyBridge · 1GiB): python 1.4초, venv 27.3초, ruby 1.4초,
+# lua 0.04초, luau 0.4초, cyber 0.5초, node 1.4초 · npm 1.9초, bun 0.6초, janet 0.07초, php 0.3초.
+as_tars 'cd ~/tp && printf "%s\n" "import sys, ssl, sqlite3" "db = sqlite3.connect(\":memory:\"); db.execute(\"create table t(x)\"); db.execute(\"insert into t values (41)\")" "print(\"tp-py-\" + sys.version.split()[0] + \"-\" + ssl.OPENSSL_VERSION.split()[1] + \"-\" + str(db.execute(\"select x + 1 from t\").fetchone()[0]))" > h.py && s=$(date +%s%N) && python3 h.py 2>&1 | sed "s/^/tp-py: /"; e=$(date +%s%N); echo "tp-ms-py=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-py=[0-9]+" 60 || fail "python3 did not finish in 60s" "tp-py"
+grep -aqF "tp-py: tp-py-3.15.2-3.5.9-42" "$LOG" || fail "python3 did not print its version, OpenSSL 3.5.9 and the sqlite answer" "tp-py"
+echo "B2: as tars, python3 ran with ssl and sqlite3 ($(ms_of py)ms)"
+
+# venv는 ensurepip가 묶음 안의 pip wheel을 홈에 깐다 — 읽기 전용 /usr에서 패키지를 까는 길(plan 결정 E). 망 없이.
+as_tars 'cd ~/tp && s=$(date +%s%N) && python3 -m venv ~/tp/v 2>&1 | sed "s/^/tp-venv: /"; e=$(date +%s%N); echo "tp-ms-venv=$(((e-s)/1000000))"; ~/tp/v/bin/python h.py | sed "s/^/tp-venv-ran=/"; ~/tp/v/bin/pip --version | sed "s/^/tp-venv-pip=/"'
+wait_log_re "tp-ms-venv=[0-9]+" 90 || fail "python3 -m venv did not finish in 90s" "tp-venv"
+wait_log "tp-venv-ran=tp-py-3.15.2" 30 || fail "the venv python did not run" "tp-venv"
+wait_log "tp-venv-pip=pip " 60 || fail "the venv has no working pip" "tp-venv"
+echo "B2: as tars, python3 -m venv made a venv with pip in the home, offline ($(ms_of venv)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "require \"openssl\"" "require \"json\"" "puts \"tp-rb-#{RUBY_VERSION}-\" + JSON.generate([OpenSSL::Digest::SHA256.hexdigest(\"tp\")[0, 8]])" > h.rb && s=$(date +%s%N) && ruby h.rb 2>&1 | sed "s/^/tp-rb: /"; e=$(date +%s%N); echo "tp-ms-rb=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-rb=[0-9]+" 60 || fail "ruby did not finish in 60s" "tp-rb"
+grep -aqF 'tp-rb: tp-rb-4.0.9-["3abd8072"]' "$LOG" || fail "ruby did not print 4.0.9 and the openssl digest through json" "tp-rb"
+echo "B2: as tars, ruby ran with openssl and json ($(ms_of rb)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "print(\"tp-lua-\" .. _VERSION)" > h.lua && s=$(date +%s%N) && lua h.lua 2>&1 | sed "s/^/tp-lua: /"; e=$(date +%s%N); echo "tp-ms-lua=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-lua=[0-9]+" 60 || fail "lua did not finish in 60s" "tp-lua"
+grep -aqF "tp-lua: tp-lua-Lua 5.4" "$LOG" || fail "lua did not print Lua 5.4" "tp-lua"
+echo "B2: as tars, lua ran ($(ms_of lua)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "local function add(a: number, b: number): number return a + b end" "print(\"tp-luau-\" .. add(40, 2))" > h.luau && s=$(date +%s%N) && luau h.luau 2>&1 | sed "s/^/tp-luau: /"; luau-analyze h.luau 2>&1 | sed "s/^/tp-luau-analyze: /"; echo "tp-luau-analyze-rc=${PIPESTATUS[0]}"; e=$(date +%s%N); echo "tp-ms-luau=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-luau=[0-9]+" 60 || fail "luau did not finish in 60s" "tp-luau"
+grep -aqF "tp-luau: tp-luau-42" "$LOG" || fail "luau did not run a typed function" "tp-luau"
+grep -aqF "tp-luau-analyze-rc=0" "$LOG" || fail "luau-analyze did not pass the typed hello" "tp-luau"
+echo "B2: as tars, luau ran a typed function and luau-analyze passed it ($(ms_of luau)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "use math" "" "fn add(a, b int) -> int:" "    return a + b" "" "n := add(40, 2)" "print(\"tp-cyber-%{n}-%{math.sqrt(16.0)}\")" > h.cy && s=$(date +%s%N) && cyber h.cy 2>&1 | sed "s/^/tp-cy: /"; e=$(date +%s%N); echo "tp-ms-cyber=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-cyber=[0-9]+" 60 || fail "cyber did not finish in 60s" "tp-cy"
+grep -aqF "tp-cy: tp-cyber-42-4" "$LOG" || fail "cyber did not run (it reads src/ beside its real path)" "tp-cy"
+echo "B2: as tars, cyber ran with use math ($(ms_of cyber)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "console.log(\"tp-node-\" + process.version + \"-\" + require(\"crypto\").createHash(\"sha256\").update(\"tp\").digest(\"hex\").slice(0, 8))" > h.js && s=$(date +%s%N) && node h.js 2>&1 | sed "s/^/tp-node: /"; e=$(date +%s%N); echo "tp-ms-node=$(((e-s)/1000000))"; s=$(date +%s%N); npm --version 2>&1 | sed "s/^/tp-npm=/"; e=$(date +%s%N); echo "tp-ms-npm=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-npm=[0-9]+" 60 || fail "node and npm did not finish in 60s" "tp-node" "tp-npm"
+grep -aqF "tp-node: tp-node-v26.13.0-3abd8072" "$LOG" || fail "node did not print v26.13.0 and the crypto digest" "tp-node"
+grep -aqF "tp-npm=11.20.0" "$LOG" || fail "npm --version did not print 11.20.0" "tp-npm"
+echo "B2: as tars, node ran with crypto ($(ms_of node)ms) and npm answered ($(ms_of npm)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "function add(a: number, b: number): number { return a + b }" "console.log(\"tp-bun-\" + Bun.version + \"-\" + add(40, 2))" > h.ts && s=$(date +%s%N) && bun h.ts 2>&1 | sed "s/^/tp-bun: /"; e=$(date +%s%N); echo "tp-ms-bun=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-bun=[0-9]+" 60 || fail "bun did not finish in 60s" "tp-bun"
+grep -aqF "tp-bun: tp-bun-1.4.4-42" "$LOG" || fail "bun did not run TypeScript (the baseline build needs no AVX2)" "tp-bun"
+echo "B2: as tars, bun ran TypeScript ($(ms_of bun)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "(print \"tp-janet-\" janet/version)" > h.janet && s=$(date +%s%N) && janet h.janet 2>&1 | sed "s/^/tp-janet: /"; e=$(date +%s%N); echo "tp-ms-janet=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-janet=[0-9]+" 60 || fail "janet did not finish in 60s" "tp-janet"
+grep -aqF "tp-janet: tp-janet-1.42.1" "$LOG" || fail "janet did not print 1.42.1" "tp-janet"
+echo "B2: as tars, janet ran ($(ms_of janet)ms)"
+
+as_tars 'cd ~/tp && printf "%s\n" "<?php echo \"tp-php-\" . PHP_VERSION . \"-\" . json_encode([1, 2]) . PHP_EOL;" > h.php && s=$(date +%s%N) && php h.php 2>&1 | sed "s/^/tp-php: /"; e=$(date +%s%N); echo "tp-ms-php=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-php=[0-9]+" 60 || fail "php did not finish in 60s" "tp-php"
+grep -aqF "tp-php: tp-php-8.4.27-[1,2]" "$LOG" || fail "php did not print 8.4.27 and json" "tp-php"
+echo "B2: as tars, php ran with json ($(ms_of php)ms)"
+SCRIPT_NUMBERS="python $(ms_of py)ms, venv $(ms_of venv)ms, ruby $(ms_of rb)ms, lua $(ms_of lua)ms, luau $(ms_of luau)ms, cyber $(ms_of cyber)ms, node $(ms_of node)ms, npm $(ms_of npm)ms, bun $(ms_of bun)ms, janet $(ms_of janet)ms, php $(ms_of php)ms"
+
 as_tars 'cd ~/tp && echo "public class Hello { public static void main(String[] a) { System.out.println(\"tp-java-\" + Runtime.version()); } }" > Hello.java && s=$(date +%s%N) && javac Hello.java 2>&1 | sed "s/^/tp-javac: /"; e=$(date +%s%N); echo "tp-ms-javac=$(((e-s)/1000000))"; s=$(date +%s%N); java Hello 2>&1 | sed "s/^/tp-run: /"; e=$(date +%s%N); echo "tp-ms-java=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-java=[0-9]+" 600 || fail "javac and java did not finish in 600s" "tp-javac" "tp-run"
 grep -aqE "tp-run: tp-java-25\.0\.5\+8" "$LOG" || fail "java Hello did not print the JDK version" "tp-javac" "tp-run"
@@ -297,7 +362,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -308,13 +373,14 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 2 layers in [0-9]+ms" "$LOG" || fail "init did not lay base and lang-native over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 3 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, lang-native and lang-script over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
-as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; command -v java || printf "tp-%s\n" no-java'
+as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base and lang-native still build C and Go and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, lang-native and lang-script still run C, Go and node and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -324,10 +390,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 3 old layers removed" "$LOG" || fail "the update did not remove the three old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 4 old layers removed" "$LOG" || fail "the update did not remove the four old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the three old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the four old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"

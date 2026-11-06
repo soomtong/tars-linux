@@ -32,3 +32,23 @@ rust	lang-native	1.99.1	upstream	https://static.rust-lang.org/dist/2026-10-15/ru
 rust-src	lang-native	1.99.1	upstream	https://static.rust-lang.org/dist/2026-10-15/rust-src-1.99.1.tar.xz	e485a88c45db546b73571df7bebfcb4454ba4fb552c492e25fc5b00eeb5bf22d	hook=rust-installer into=rust
 # go: go.dev/dl/?mode=json. go/bin/{go,gofmt}.
 go	lang-native	1.27.3	upstream	https://go.dev/dl/go1.27.3.linux-amd64.tar.gz	65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+
+# ── lang-script(TP-M3) — 출처의 사정은 plan 확인 2~4 · 9 · 10 ───────────────────────────
+# python: python-build-standalone의 install_only_stripped(plan 결정 B). RUNPATH가 $ORIGIN/../lib라 자리를 옮겨도 선다.
+python	lang-script	3.15.2	prebuilt	https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz	7b03163a980c607ba8194709d4a4086735a7a9c488cc475b098157306927b36b
+# ruby: spinel-coop/rv-ruby(--enable-load-relative). ruby/ruby-builder는 /opt/hostedtoolcache에 굳어 있다(확인 2). 맨 위가 두 단.
+ruby	lang-script	4.0.9	prebuilt	https://github.com/spinel-coop/rv-ruby/releases/download/20261023/ruby-4.0.9.x86_64_linux.tar.gz	16b24f5b3aac3925f95cbbdd08e55c2877aec4f2614edf44af236a59a6591aa4	strip=2
+# lua: lua.org는 소스만 낸다. lua 실행 파일 이름은 alternatives가 만들고 harvest가 편다.
+lua5.4	lang-script	5.4.7-1+b2	debian	lua5.4	apt
+# luau: luau-lang/luau(Roblox). zip 맨 위에 실행 파일 넷, bin/이 없다(확인 9).
+luau	lang-script	0.745	upstream	https://github.com/luau-lang/luau/releases/download/0.745/luau-ubuntu.zip	186e5ddaa2b048ebc7390c11ed1b00c04e7d3beaffed429250329e3575d2ece2	strip=0 exe=luau,luau-analyze,luau-compile,luau-ast
+# cyber: soomtong/cyber. latest 태그는 움직이므로 판 이름 태그. 실행 파일이 옆의 src/를 읽는다(확인 10).
+cyber	lang-script	0.4.2	upstream	https://github.com/soomtong/cyber/releases/download/0.4.2/cyber-linux-x64.tar.gz	a8ebd677768c1e16fe9b8b3497e4889576a8b491194ca5b0e1067855fbd10109	strip=0 exe=cyber
+# node: nodejs.org/dist/index.json의 lts 첫 줄, SHASUMS256.txt.
+node	lang-script	26.13.0	upstream	https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz	d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
+# bun: baseline — 일반 빌드는 AVX2를 요구한다. qemu64와 맥북 에어 2011에 없다(확인 3).
+bun	lang-script	1.4.4	upstream	https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64-baseline.zip	e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76	exe=bun
+# janet: tar 안의 경로가 ./janet-v1.42.1-linux/로 시작한다 — tar가 ./를 벗긴다.
+janet	lang-script	1.42.1	upstream	https://github.com/janet-lang/janet/releases/download/v1.42.1/janet-v1.42.1-linux-x64.tar.gz	5c6cd9862c59b0691e2fd3b2e2327d1459d314a67dd08203fbff372937a20748
+# php: Debian trixie-security(사용자 결정 2026-11-06 — static-php는 8.5.8에서 멈췄다, 확인 4).
+php8.4-cli	lang-script	8.4.27-1~deb13u1	debian	php8.4-cli	apt

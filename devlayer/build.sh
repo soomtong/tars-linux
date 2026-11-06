@@ -75,7 +75,8 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         [[ "${have}" == "${version}" ]] || die "libc6-dev ${version} but the initrd glibc is ${have}"
       fi
       ;;
-    upstream)
+    upstream | prebuilt)
+      # 둘은 받는 자리만 다르고(도구 자신 · 표준이 된 제3자) 받기 · 풀기 · 놓기는 같다(design 결정 2).
       f="${cache}/${sha}"
       if [[ ! -f "${f}" ]]; then
         echo "build> ${bundle}: fetch ${tool} ${version}"
@@ -102,13 +103,30 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         [[ -x "devlayer/hooks/${hook}.sh" ]] || die "${tool}: no devlayer/hooks/${hook}.sh"
         "devlayer/hooks/${hook}.sh" "${f}" "${root}" "${dest}" </dev/null | sed "s/^/build> ${bundle}: ${tool}: /"
       else
-        # 목록은 파일로 받는다 — `tar -tf | head -n1`은 head가 닫을 때 tar가 SIGPIPE(141)로 죽고 pipefail이 set -e로
-        # 이 스크립트를 말없이 끝낸다(첫 판이 그랬다).
-        tar -tf "${f}" >"${work}/tar.list"
-        top="$(sed -n '1{s#/.*##;p;q}' "${work}/tar.list")"
-        grep -qv "^${top}/" "${work}/tar.list" && die "${tool}: tarball has more than one top directory"
-        [[ -n "${top}" ]] || die "${tool}: empty tarball"
-        tar -xf "${f}" -C "${root}/${dest}" --strip-components=1 --no-same-owner
+        # 풀기는 한 길이다(TP-M3 plan 결정 C): 통째로 풀고 → strip=N단(기본 1)을 벗기고 → 남은 것을 옮긴다. 배포 모양이
+        # 넷이다 — 맨 위 디렉터리 하나(대부분), ./로 시작하는 경로(janet — tar가 ./를 벗긴다), 두 단(rv-ruby), 디렉터리
+        # 없음(luau · cyber). zip은 URL로 가른다(bun · luau). 캐시 이름이 sha256이라 파일 이름에는 확장자가 없다.
+        strip="$(manifest_opt "${opts}" strip)"
+        strip="${strip:-1}"
+        un="${work}/unpack"
+        rm -rf "${un}"
+        mkdir -p "${un}"
+        case "${url}" in
+          *.zip) unzip -q "${f}" -d "${un}" ;;
+          *) tar -xf "${f}" -C "${un}" --no-same-owner ;;
+        esac
+        top="${un}"
+        for ((level = 1; level <= strip; level++)); do
+          entries=("${top}"/* "${top}"/.[!.]*)
+          have=()
+          for e in "${entries[@]}"; do [[ -e "${e}" || -L "${e}" ]] && have+=("${e}"); done
+          ((${#have[@]} == 1)) && [[ -d "${have[0]}" && ! -L "${have[0]}" ]] \
+            || die "${tool}: strip=${strip} but level ${level} has ${#have[@]} entries (want one directory)"
+          top="${have[0]}"
+        done
+        # cp -a — 뿌리(${work})와 같은 파일 시스템이지만 mv로 옮기면 dest가 이미 있는 디렉터리라 그 안에 들어간다.
+        cp -a "${top}/." "${root}/${dest}/"
+        rm -rf "${un}"
       fi
       # 링크할 것: exe=가 있으면 그 목록, 없으면 bin/의 실행 파일 전부. into 줄은 exe=가 없으면 링크하지 않는다 —
       # 그 bin/은 앞 줄이 이미 링크했다.
@@ -125,6 +143,10 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
       else
         want=()
       fi
+      # 링크할 것이 없으면 멈춘다 — strip이 틀려 bin/이 한 단 아래 묻히면 말없이 링크 0개로 초록이었다(plan 할 일 5(a)).
+      if [[ -z "${into}" && ${#want[@]} -eq 0 ]]; then
+        die "${tool}: nothing to link — no exe= and no executables in /${dest}/bin (wrong strip=?)"
+      fi
       for rel in "${want[@]}"; do
         name="$(basename "${rel}")"
         link="${root}/usr/local/bin/${name}"
@@ -133,7 +155,7 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         ((exists == 0)) || die "${tool}: /usr/local/bin/${name} is taken"
         ln -s "../lib/${dir}/${rel}" "${link}"
       done
-      printf '%s\t%s\tupstream\t%s\n' "${tool}" "${version}" "${url}" >>"${info}"
+      printf '%s\t%s\t%s\t%s\n' "${tool}" "${version}" "${kind}" "${url}" >>"${info}"
       ;;
     *) die "${tool}: kind ${kind} is not built yet" ;;
   esac
