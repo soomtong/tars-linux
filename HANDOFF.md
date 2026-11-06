@@ -93,6 +93,21 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 시도했으나 실패한 접근
 
+TP-M3 · M4(2026-11-06):
+
+- ruby/ruby-builder(design 확인 8의 출처): `--prefix=/opt/hostedtoolcache/…`로 굳은 빌드(`LIBRUBY_RELATIVE=no`, 절대 RUNPATH) — 옮기면 안 선다.
+  rv-ruby로 바꿨다.
+- static-php-cli의 미리 빌드: 2026-07의 8.5.8에서 멈췄다(sha256도 안 낸다). php는 사용자 결정으로 Debian 8.4.
+- python site `pip.conf`의 `prefix=/usr/local`: 사용자의 `pip install --user`가 `Can not combine '--user' and '--prefix'`로 막힌다 → `sitecustomize.py`.
+- "일반(AVX2) bun이면 체인이 빨개진다"는 빨강: QEMU TCG는 CPUID에 없는 AVX2를 그냥 실행한다 — 체인으로 CPU 수준을 못 잡는다(measurements 103).
+- base에 grep 줄: 개발 컨테이너(initrd)의 `3.11-4+b1`과 거두는 이미지의 `3.11-4`가 달라 결정 4에 걸린다 — 넣지 않았다.
+- `man gcc`: Debian은 gcc의 man을 non-free `gcc-doc`으로 뺀다 — 없다. 체인은 `man 1 ssh`.
+- Rosetta(amd64 컨테이너) chroot의 gdb · strace · ltrace: ptrace가 없다(`PTRACE_TRACEME: Function not implemented`) — 판정은 체인만.
+- 체인 로그를 ANSI가 섞인 채 `rg`로 걸러 "출력이 없다"고 읽은 판이 있었다(실제로는 있었다). 그 판독으로 세운 "`bash -i`가 tty를 가져갔다"는 추정은 틀렸다 —
+  로그는 바이트로 읽는다(`python3`로 `133;C` 뒤를 본다).
+
+TP-M0~M2:
+
 - 컨테이너에서 Temurin JDK tarball을 받아 `NEEDED`를 재려 했다 — GitHub 다운로드가 504를 다섯 번 냈다. JDK 쪽 실측은 TP-M0의 몫.
 - GitHub release API로 hexyl 자산을 찾을 때 grep 필터가 linux 자산을 걸러 "없다"고 잘못 말했다(실제로는 musl tarball과 `.deb`가 있다).
 
@@ -102,9 +117,12 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
   jar를 받는지, 오프라인 한 번이 판정). 체인 시간 377초 — 420초를 넘으면 새 체인으로 뗀다(포트 45505, TP-M3 결정 F). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
   넷(`exe` · `hook` · `into` · `strip`) — 다섯을 넘거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
-- [ ] 사용자: 실기에서 개발 도구 층 — `make dev-layers` 뒤 `make iso ISO_LAYERS="base lang-jvm lang-native lang-script"`(약 980MB)로 설치 · 갱신하고 `gcc` · `g++` · `zig` · `rustc` · `cargo` · `go` · `java` · `python3` · `ruby` · `node` · `bun`이 망 없이
-  도는지, 맥북 에어 2011에서 javac의 시간(TCG 10.5초).
-- [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절이 맨 앞이다. 그 결과로 0.1.5를 낼지 정한다. 0.1.5부터 최소 디스크가 16GiB다.
+- [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 1.15GB, 묶음 전체 어림 2.5~4GB) — 묶음을 따로 올리기 등.
+  design 결정 12(ISO가 묶음을 싣는다)와 맞물린다. `docs/decisions/project_release_0_2.md`.
+- [ ] 사용자: 실기에서 개발 도구 층 — 프리릴리스 `dev-20261106`(TP-M3까지, base 보강 · `/usr/local` 없음)이 올라가 있다. TP-M4까지 보려면 새 프리릴리스
+  (`dev-<날짜>`, 절차는 `project_release_0_2.md`)를 만들어 달라고 할 것이다. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
+  CPU에서 서는지가 남은 확인), `sudo npm i -g` 등이 `/usr/local/bin`에 서는지, javac 시간(TCG 11초).
+- [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절. 다음 번호는 0.2.0(TP 전체 뒤)이다. 최소 디스크는 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
 
 ## 다음 에이전트에게
@@ -116,7 +134,29 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 `*/check.sh`를 작업 트리에서 고치지 않는다(bash가 실행 중에 스크립트를 읽는다). 한 파일에 두 커밋 몫이 섞이면 `git add -p` 대신
 작업 파일을 고쳐 `git hash-object -w` → `git update-index --cacheinfo <모드>`로 덩어리만 올린다(모드는 `git ls-files -s`).
 용어: "개발 도구 층"(전체), "묶음"(squashfs 하나), `guest_tools.sh`의 "층 N"은 UT 때부터의 목록 번호. 도구를 더할 때는
-`initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45505부터. 게스트에는 `mount` · `free` · `base64` · `dd`가 없다(체인은 mount(2)를 부르는 init · 설치기에 기댄다).
+`initrd-criteria.md`와 `feedback_tool_sourcing`. 새 체인의 monitor · QMP 포트는 45505부터. initrd에는 `mount` · `free` · `base64` · `dd`가 없다(체인은 mount(2)를
+부르는 init · 설치기에 기댄다). 묶음이 얹힌 부팅에는 coreutils 전부가 있다(TP-M4) — 묶음 없는 체인에서는 여전히 쓰지 않는다.
+
+TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
+- 새 도구는 받기 전에 배포처의 기계용 목록(GitHub `releases` API의 `digest`, nodejs `index.json` 등)으로 판 · sha256을 정하고, amd64 trixie-slim에서
+  한 번 띄워 본다. 옮길 수 있는 빌드인지(절대 prefix · RUNPATH)와 CPU 수준(AVX2 전용인지, `objdump`의 `%ymm`)을 본다.
+- 묶음 안 설정 파일은 `devlayer/files/<묶음>/`. 경로에 `<도구>-<판>`이 들어가면 판을 올릴 때 디렉터리 이름도 고친다(build.sh가 이름을 대고 멈춘다).
+- harvest의 캐시 열쇠는 매니페스트 줄 + `harvest.sh` · `harvest-skip.tsv`의 해시 한 줄이다 — harvest.sh를 고치면 base를 다시 거둔다(3~4분).
+- 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(`printf "tp-m4-%s\n" ok` · `sed` 접두 · 실제 출력만 가질 글자로 기다린다). 콘솔이 명령을 되비춰
+  `wait_log`가 출력 전에 맞는다(TP-M4 plan 확인한 것 9).
+- chroot 시험은 버리는 amd64 컨테이너에서 initrd를 풀고 묶음을 `unsquashfs`로 덮은 뒤 `/dev/null`을 `mknod`해 둔다(perl이 그것으로 넘어졌다).
+
+## 핵심 파일
+
+- `devlayer/manifest.tsv` — 개발 도구 층의 유일한 출처(도구 · 묶음 · 판 · 종류 · URL · sha256 · 선택 열).
+- `devlayer/build.sh` — 받기 · 풀기(`strip=`) · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기. `devlayer/harvest.sh` — debian 줄 거두기(man 제외 풀기,
+  계정 · sysvinit 자리 빼기, `harvest-skip.tsv`). `devlayer/verify.sh` — 결정 4(겹침) · 5(NEEDED). `devlayer/manifest.sh` — 파서.
+- `devlayer/files/lang-script/…` — npmrc · `operating_system.rb` · `sitecustomize.py`. `devlayer/files/lang-native/etc/…` — PATH 조각.
+- `init/src/layers.zig` — `mountAll`(`/usr` overlay) · `mountLocal`(`/usr/local` 쓰기 층) · `copyTree`(`/etc` 복사, 링크 포함). 호스트 검사 `layers_test.zig`.
+  부르는 자리 `init/src/main.zig`의 `readConfig`(`mountHome` 바로 뒤).
+- `kernel/make_initrd.sh` — 시스템 rc 셋(`/etc/bash.bashrc` · `/etc/zsh/zshrc` · fish `conf.d`)과 `/etc/tars/rc.d` 읽기.
+- `devtools/check.sh` — 체인(부팅 넷). `TP_CPU=SandyBridge`, 부팅 2의 hello 덩이들, 부팅 3의 `/usr/local` 잔존.
+- `docs/specs/2026-11-05-tars-dev-layer-design.md`(10판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4}.md`.
 
 ## 지금 상태 (2026-11-06)
 
@@ -129,7 +169,7 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 사용자가 확인할 것 (실기 또는 실제 장치가 있을 때)
 
-- LP · PW · RB — MacBook Air 2011 · Pro 2013(이번 판의 본론). main을 `make iso`로 굽거나 0.1.5를 낸 뒤 USB로 갱신한다(0.1.4에는 없다).
+- LP · PW · RB — MacBook Air 2011 · Pro 2013. 프리릴리스 `dev-20261106`(또는 그 뒤 판)이나 main의 `make iso`로 USB 갱신한다(0.1.4에는 없다).
   - 첫 부팅이 화면까지 뜨는지 — i915가 simpledrm을 넘겨받는다. 검은 화면이면 i915가 `card0`이 아닌 번호를 받은 것(LP 위험 1):
     Limine 메뉴(3초)에서 아래 화살표로 `(old)`를 골라 갱신 전 이미지로 뜨고 알려 준다.
   - 밝기: Air 내장 키보드의 F1 · F2. 로그 `terminal: backlight> pick=intel_backlight of N` · `backlight> intel_backlight A -> B of MAX`.
