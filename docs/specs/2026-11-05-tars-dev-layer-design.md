@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 9판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 끝(M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 10판(2026-11-06) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 끝(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -39,6 +39,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 
 | 묶음 | 도구 |
 |---|---|
+| 바닥 | `base` 묶음(TP-M0 · M2 · M4): gcc · g++ · make, perl(+ perl-doc), pkgconf · cmake · ninja · autoconf · automake · libtool · m4 · bison · flex · gettext, coreutils 전부 · patch · file · xz · zstd · bzip2 · zip · unzip, openssh-client · rsync · gnupg, man-db · manpages · manpages-dev, gdb · strace · ltrace · valgrind, xxd · shellcheck · universal-ctags (사용자 2026-11-06 — "추천해 준 것 모두") |
 | 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2) |
 | 스크립트 언어 | python3, ruby, lua, luau, cyber, node, bun, janet, php(`lang-script` 묶음, TP-M3 — luau · cyber는 사용자가 2026-11-06에 더했다) |
 | JVM | JDK, kotlin, scala3, clojure |
@@ -120,6 +121,8 @@ trixie 판이 돈다.
    디렉터리의 단 수, TP-M3 plan 결정 C). zip도 받는다. `debian` 줄이 끌고 오는 패키지 가운데 initrd가 가진 것(tzdata)은
    `devlayer/harvest-skip.tsv`가 싣지 않는다(TP-M3). 배포 형식이 절차를 요구하면
    (rust의 설치기) `devlayer/hooks/<형식>.sh`가 푼다. 열이 맞지 않는 줄은 줄 번호와 함께 빌드를 멈춘다(`devlayer/manifest.sh`).
+   업스트림에 없는 파일(설정 · rc 조각)은 `devlayer/files/<묶음>/`의 트리가 뿌리에 얹는다(TP-M4 plan 결정 D). bash · zsh의 시스템 rc는
+   `/etc/tars/rc.d/*.sh`를, fish는 `/etc/fish/conf.d/10-<묶음>.fish`를 읽는다.
 2. `upstream` · `prebuilt` tarball은 `/usr/local/lib/<도구>-<버전>/`에 그대로 풀고 `/usr/local/bin/`에 실행 파일 링크를 둔다. Debian식 alternatives는 없다.
    `debian`과 `vendor-repo`는 버리는 amd64 컨테이너(`--platform=linux/amd64 debian:trixie-slim`)에서 진짜로 `apt-get install`하고
    (postinst까지), 새로 생긴 파일만 가져온다. 개발 컨테이너는 arm64라 amd64 postinst를 못 돌린다(TP-M0 plan 확인 1). alternatives
@@ -142,7 +145,9 @@ trixie 판이 돈다.
    select로 따라오는 것을 본다(LP 배운 것 1).
 9. 놓는 자리: p3의 `/home/.tars/layers/*.sqfs`(root 소유, 0644). init은 `/home`을 붙인 직후, 셸과 서비스를 띄우기 전에 각각을 loop로
    열어 `/run/tars-layers/<이름>`에 붙이고 `overlay`를 `lowerdir=<묶음들>/usr:/usr`로 `/usr`에 얹는다. upper가 없으므로 `/usr`는 읽기
-   전용이 된다.
+   전용이 된다. 그 위 `/usr/local`만은 쓰기 가능하다(사용자 결정 2026-11-06, 관행대로 — TP-M4 plan 결정 H): init이 p3의
+   `/home/.tars/local/{upper,work}`를 upper로 하는 overlay를 하나 더 건다(묶음이 없는 부팅에서도). root 0755라 쓰는 것은 root(sudo)뿐이고,
+   재부팅 · 묶음 갱신에도 남는다. 묶음의 npm · gem · pip는 root의 전역 설치를 `/usr/local`로 보낸다(TP-M4 plan 결정 E).
 10. 개발 도구 층의 `/etc` 몫은 이미지 안 `etc/`에 두고 init이 overlay 뒤에 tmpfs `/etc`로 복사한다. `/etc`에는 overlay를 걸지 않는다.
 11. 묶음이 없거나 열리지 않으면 TARS는 지금과 똑같이 뜬다. init이 `tars-init: layer <이름>: <이유>` 한 줄을 남기고 넘어간다.
 12. ISO에 `boot/layers/*.sqfs`로 싣는다(슬롯이 아니라 한 벌). `tars-install <disk>`가 처리한다 — 새 설치는 p3를 만든 뒤 복사, 갱신은
@@ -197,7 +202,7 @@ helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 �
 1. 망에서 패키지를 더 받는 것(`apt install`에 해당). 묶음 밖은 Homebrew · mise.
 2. 언어 생태계의 라이브러리를 오프라인으로 담는 것(crates · npm · PyPI · Maven · Hex의 미러). 오프라인 개발은 각 언어의 표준
    라이브러리 범위다.
-3. 사용자가 개발 도구 층을 고치는 것(upper, `/usr`에 쓰기). `sudo pip install` 같은 사용법은 venv · `~/.local`로.
+3. 사용자가 개발 도구 층을 고치는 것(`/usr`에 쓰기). `/usr/local`은 예외다 — 결정 9의 쓰기 층에 root가 깐다(TP-M4).
 4. 라이브 USB(설치 전)에서의 개발 도구 층.
 5. GUI 도구(rune · Zeal · AWT/Swing).
 6. 묶음을 고르는 설치 옵션.
@@ -218,7 +223,7 @@ helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 �
 
 - TP-M0 — 결정 1~7(빌드 쪽). `base`와 JDK 둘. 부팅 무변경.
 - TP-M1 — 결정 8~13. 커널 · ISO · `tars-install` · init · 체인 `devtools`.
-- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브 → 스크립트 → JVM → BEAM → 편집기 · 터미널 유틸리티 · 문서 → 서버(실행 파일) → 서버(서비스) → AI. 각 plan은
+- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브(M2) → 스크립트(M3) → 바닥 보강과 쓰기 가능한 `/usr/local`(M4, TP-M3 뒤 검토에서) → JVM → BEAM → 편집기 · 터미널 유틸리티 · 문서 → 서버(실행 파일) → 서버(서비스) → AI. 각 plan은
   앞 milestone의 숫자를 본 뒤 쓴다.
 - 닫을 때: PM design 결정 4에 이 design으로의 한 줄, `carryover.md` 패키지 매니저 항목, `running-tars.md`의 "안 되는 것" 표,
   `project_release.md`의 버전 올리기 단계, `completed.md`, 기억 한 파일.

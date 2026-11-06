@@ -1241,6 +1241,8 @@ const Boot = struct {
         // TP-M1. `/home`을 붙인 직후, 셸과 서비스를 띄우기 전이다(TP design 결정 9). 이 뒤에 뜨는 자식은
         // 모두 개발 도구 층이 얹힌 `/usr`를 본다. 묶음이 없거나 깨져도 부팅은 간다(결정 11).
         if (self.home) layers.mountAll(layers.DIR, build_info.version);
+        // TP-M4 plan 결정 H. `/usr` 위에(얹었든 아니든) `/usr/local`의 쓰기 층. p3가 있어야 한다.
+        if (self.home) layers.mountLocal();
         self.cfg = loadConfig(self.mounted);
         // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
         //

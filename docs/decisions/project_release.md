@@ -85,7 +85,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 1. 저장소 뿌리의 `VERSION`을 새 번호로 고쳐 커밋한다. 그 커밋에서 루트 게이트가 PASS인지 본다(게이트 이미지는
    `+<sha>`를 단다). 트리는 clean이어야 한다.
 2. `git tag -a v<ver> <그 커밋> -m …`. push는 아직 안 한다.
-3. `make iso` — 입력 해시가 같으면 kernel · terminal을 건너뛴다. init은 `zig build`가 git을 다시 물어 버전 글자가 바뀌었으면
+3. 개발 도구 층(TP-M0부터)을 싣는다: 먼저 `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에
+   안 들어가 남는다 — dev-20261106에서 겪었다), 그다음 `make iso ISO_LAYERS="<묶음들>"`(기본값은 묶음을 안 싣는다).
+   `make iso` — 입력 해시가 같으면 kernel · terminal을 건너뛴다. init은 `zig build`가 git을 다시 물어 버전 글자가 바뀌었으면
    다시 컴파일한다. `out/tars.iso`가 이미 있어도 어느 트리의 것인지 모르므로 다시 만든다.
 4. 호스트 QEMU smoke — `qemu-system-x86_64 -m 1024 -cdrom out/tars.iso -display none -serial file:<log>`를 90초 띄우고
    `tars-init: starting as PID 1 (TARS <ver>)`(꼬리표 없이) · `terminal: grid` · `spawned child … fish`가 있고

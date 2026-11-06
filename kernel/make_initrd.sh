@@ -888,6 +888,10 @@ chmod 0644 "$WORKDIR/etc/os-release"
 # 상태를 1로 남겨 첫 프롬프트가 실패 표시를 그릴 수 있다. 이 파일은 아무것도 찍지 않는다 —
 # seed rc의 규칙(config.zig rcSeed)과 같은 이유로, 화면 좌표로 판정하는 체인이 있다.
 #
+# TP-M4(plan 결정 E): bash · zsh는 맨 앞에서 /etc/tars/rc.d/*.sh를 읽는다. 개발 도구 층의 묶음이 홈에 까는 길(npm prefix ·
+# GEM_HOME · cargo · go의 bin)을 거기 둔다 — 그 도구를 실은 묶음이 자기 환경도 싣는다. fish는 /etc/fish/conf.d/를 이름 순으로
+# 읽으므로 묶음이 10-<묶음>.fish를 직접 둔다(homebrew.fish보다 앞). 묶음이 없으면 디렉터리가 없고 아무 일도 없다.
+#
 # MI-M1: 같은 파일 셋에 mise 줄을 더한다(MI design 결정 3, 사용자 2026-11-03). 사용자가 공식
 # mise.run으로 깐 ~/.local/bin/mise가 있으면 `mise activate <셸>`을 부른다 — activate는 mise의
 # 디렉터리(~/.local/bin)도 PATH에 넣으므로 이 한 줄이 mise와 node를 함께 세운다. brew 다음에
@@ -898,6 +902,10 @@ BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew
 mkdir -p "$WORKDIR/etc/zsh" "$WORKDIR/etc/fish/conf.d"
 cat > "$WORKDIR/etc/bash.bashrc" <<EOF
 # TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew · mise가 있으면 PATH에 넣는다.
+# 개발 도구 층의 묶음이 둔 조각(/etc/tars/rc.d/*.sh)을 먼저 읽는다 — 그래서 PATH의 앞은 mise → brew → 조각 순이다.
+for f in /etc/tars/rc.d/*.sh; do
+  if [ -r "\$f" ]; then . "\$f"; fi
+done
 if [ -x ${BREW_BIN} ]; then
   eval "\$(${BREW_BIN} shellenv bash)"
 fi
@@ -907,6 +915,10 @@ fi
 EOF
 cat > "$WORKDIR/etc/zsh/zshrc" <<EOF
 # TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew · mise가 있으면 PATH에 넣는다.
+# 묶음의 조각을 먼저 읽는다(bash와 같은 파일). (N)은 맞는 파일이 없을 때 zsh가 오류 없이 빈 목록을 주게 한다.
+for f in /etc/tars/rc.d/*.sh(N); do
+  . "\$f"
+done
 if [ -x ${BREW_BIN} ]; then
   eval "\$(${BREW_BIN} shellenv zsh)"
 fi

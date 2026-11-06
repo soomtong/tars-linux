@@ -171,6 +171,20 @@ if grep -q $'\tdebian\t' <<<"${lines}"; then
   cat "${build}/${bundle}.pkgs" >>"${info}"
 fi
 
+# 묶음이 직접 싣는 파일(TP-M4 plan 결정 D): devlayer/files/<묶음>/의 트리를 뿌리에 그대로 얹는다. 업스트림에 없는 파일
+# (rc 조각 · python의 EXTERNALLY-MANAGED)이 사는 유일한 자리다. 아래 verify가 initrd · NEEDED와 대조하고, stamp에 내용이 들어간다.
+files_dir="devlayer/files/${bundle}"
+if [[ -d "${files_dir}" ]]; then
+  # usr/local/lib/<도구>-<판>/ 아래 파일은 그 도구가 이미 풀린 자리에만 얹는다. 매니페스트의 판을 올리고 이 디렉터리 이름을
+  # 안 고치면, cp가 빈 옛 판 디렉터리를 말없이 만들고 설정은 새 판에 안 닿는다 — 그래서 멈춘다.
+  for d in "${files_dir}"/usr/local/lib/*/; do
+    [[ -d "${d}" ]] || continue
+    rel="usr/local/lib/$(basename "${d}")"
+    [[ -d "${root}/${rel}" ]] || die "${files_dir}/${rel} has no tool at /${rel} (manifest version changed? rename the directory)"
+  done
+  cp -a "${files_dir}/." "${root}/"
+fi
+
 # 출처 기록 한 줄(git describe). 결정 13의 비교에는 안 쓴다 — 묶음은 stamp로 커밋을 넘어 캐시되므로 이 줄은 ISO의 init
 # 버전과 거의 늘 다르다. 비교 대상은 tars-install이 p3에 묶음과 함께 쓰는 `version`이다(TP-M1 plan 결정 E).
 git -c safe.directory=/workspace -c safe.directory="${PWD}" describe --always --dirty >"${root}/usr/share/tars/layers/${bundle}"
@@ -213,6 +227,7 @@ stamp="$(
   {
     printf '%s\n' "${lines}" "${harvest_lines}" "${comp}"
     sha256sum devlayer/build.sh devlayer/verify.sh devlayer/needed-ignore.tsv devlayer/manifest.sh devlayer/hooks/*.sh
+    if [[ -d "${files_dir}" ]]; then (cd "${files_dir}" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum); fi
     cat "${work}/${bundle}.dropped"
   } | sha256sum | cut -c1-64
 )"

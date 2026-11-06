@@ -8,6 +8,9 @@
 //! 순수한 판단(`judgeName` · `judgeVersion` · `lowerdir`)과 디렉터리 읽기(`scan`)는 경로를 인자로 받아
 //! 호스트에서 검사된다(`layers_test.zig`). loop · mount를 하는 `mountAll`은 게스트에서만 돈다 —
 //! devtools 체인이 그것을 본다.
+//!
+//! TP-M4. `/usr/local`만은 쓰기 가능하다 — p3의 `/home/.tars/local`을 upper로 하는 overlay를 하나 더 건다(`mountLocal`,
+//! plan 결정 H). 관행대로 `/usr`는 읽기 전용, `/usr/local`은 그 기계의 관리자(root)가 까는 자리다.
 const std = @import("std");
 const logline = @import("logline.zig");
 const linux = std.os.linux;
@@ -73,6 +76,50 @@ pub fn lowerdir(buf: []u8, root: []const u8, names: []const []const u8) ?[:0]con
     for (names) |n| w.print(":{s}/{s}/usr", .{ root, n }) catch return null;
     w.writeByte(0) catch return null;
     return buf[0 .. w.end - 1 :0];
+}
+
+// ── /usr/local의 쓰기 층(TP-M4 plan 결정 H) ─────────────────────────
+
+/// p3 위의 자리. `upper`는 root가 깐 것이 쌓이는 곳, `work`는 overlay가 쓰는 빈 디렉터리다(같은 파일 시스템이어야 한다).
+pub const LOCAL_DIR: [:0]const u8 = "/home/.tars/local";
+pub const LOCAL_TARGET: [:0]const u8 = "/usr/local";
+
+/// `/usr/local` overlay의 mount 데이터. lower는 mount 자리 자신이다 — 커널은 lowerdir을 mount 전에 풀므로 그 순간
+/// 보이는 `/usr/local`(묶음들의 읽기 전용 `/usr`, 또는 묶음이 없을 때 initrd의 것)이 아래층이 된다. 버퍼가 모자라면 null.
+pub fn localData(buf: []u8, target: []const u8, dir: []const u8) ?[:0]const u8 {
+    return std.fmt.bufPrintSentinel(buf, "lowerdir={s},upperdir={s}/upper,workdir={s}/work", .{ target, dir, dir }, 0) catch null;
+}
+
+fn mkdirOk(path: [:0]const u8) ?linux.E {
+    if (failed(linux.mkdir(path.ptr, 0o755))) |e| {
+        if (e != .EXIST) return e;
+    }
+    return null;
+}
+
+/// 부팅마다 한 번, `mountAll` 바로 뒤에 부른다(p3가 붙었을 때만). 묶음이 없거나 얹지 않은 부팅에서도 건다 — `/usr/local`이
+/// 쓰기 가능하다는 것은 개발 도구 층이 아니라 설치된 TARS의 성질이다(사용자 결정 2026-11-06). 실패하면 `/usr/local`은 그 전
+/// 그대로이고 한 줄을 남긴다. root 0755로 만들므로 쓰는 것은 root(sudo)뿐이다.
+pub fn mountLocal() void {
+    const dirs = [_][:0]const u8{ "/home/.tars", LOCAL_DIR, LOCAL_DIR ++ "/upper", LOCAL_DIR ++ "/work" };
+    for (dirs) |d| {
+        if (mkdirOk(d)) |e| {
+            logline.print("tars-init: /usr/local: cannot create {s} (errno {d})\n", .{ d, @backingInt(e) });
+            return;
+        }
+    }
+    // 묶음이 없는 부팅이면 `/usr`는 initrd(RAM)라 만들 수 있다. 읽기 전용 `/usr`에 없으면 EROFS — 그때는 건너뛴다.
+    if (mkdirOk(LOCAL_TARGET)) |e| {
+        logline.print("tars-init: /usr/local: cannot create it (errno {d})\n", .{@backingInt(e)});
+        return;
+    }
+    var data_buf: [160]u8 = undefined;
+    const data = localData(&data_buf, LOCAL_TARGET, LOCAL_DIR) orelse return;
+    if (failed(linux.mount("overlay", LOCAL_TARGET.ptr, "overlay", 0, @intFromPtr(data.ptr)))) |e| {
+        logline.print("tars-init: /usr/local: overlay failed (errno {d})\n", .{@backingInt(e)});
+        return;
+    }
+    logline.print("tars-init: /usr/local writable (upper on {s})\n", .{LOCAL_DIR});
 }
 
 // ── 디렉터리 읽기 ────────────────────────────────────────────────────
@@ -385,6 +432,20 @@ fn copyTree(name: []const u8, src: [:0]const u8, dst: [:0]const u8, depth: usize
                 },
                 linux.DT.REG => {
                     if (copyFile(s, t)) copied.* += 1;
+                },
+                // TP-M4. 링크는 같은 대상의 링크로 둔다 — php의 conf.d/20-ctype.ini -> ../../mods-available/ctype.ini(phpenmod)가
+                // 확장을 켜는 길이다. 건너뛰던 첫 판(TP-M1~M3)에는 php 확장 열아홉이 하나도 안 켜졌다. 있으면 안 덮는다(initrd가 이긴다).
+                linux.DT.LNK => {
+                    var l_buf: [PATH_MAX]u8 = undefined;
+                    const lrc = linux.readlink(s.ptr, &l_buf, l_buf.len - 1);
+                    if (failed(lrc) != null or lrc >= l_buf.len - 1) continue;
+                    l_buf[lrc] = 0;
+                    const target: [:0]const u8 = l_buf[0..lrc :0];
+                    if (failed(linux.symlink(target.ptr, t.ptr))) |e| {
+                        if (e != .EXIST) logline.print("tars-init: layer {s}: link {s} failed (errno {d})\n", .{ name, t, @backingInt(e) });
+                        continue;
+                    }
+                    copied.* += 1;
                 },
                 else => logline.print("tars-init: layer {s}: {s} is not a file or directory, skipped\n", .{ name, s }),
             }

@@ -132,8 +132,47 @@ G. 릴리스 절차(`project_release.md`)에 두 줄: `make iso ISO_LAYERS=…`,
 
 ## 확인한 것
 
-(구현하며 채운다)
+1. cmake의 `bin/`에는 `cmake-gui`(Qt — `libxcb` · `libfontconfig` · `libfreetype`)가 있다. 링크하지 않고(`exe=` 넷) NEEDED는 GUI 예외 셋으로 둔다.
+2. 거두기 첫 판이 둘로 멈췄다. `/etc/group`이 initrd와 달랐다 — openssh-client의 postinst가 `_ssh` 그룹을 더했다. 계정 파일 넷과 그 백업,
+   그리고 sysvinit · cron · apparmor · logcheck의 자리를 싣지 않게 했다(TARS의 계정은 init이 만들고, 그 자리를 읽는 것이 없다).
+   `usr/share/misc/magic -> ../file/magic`이 대상 없는 링크였다 — 목록이 파일 · 링크뿐이라 빈 디렉터리가 빠졌다. 디렉터리를 가리키는
+   링크는 그 디렉터리도 싣는다.
+3. gdb는 Debian의 `libpython3.13`과 표준 라이브러리 657개를 `/usr/lib/python3.13`에 끌고 왔다. `/usr/bin/python3`는 생기지 않았다(위험 2는
+   안 일어났다). man 페이지는 3,669개.
+4. chroot에서 `./configure`가 `expr: command not found`로 13분 돌다 segfault였다. initrd는 coreutils의 일부만 싣는다 — configure가 부르는
+   `expr` · `od` · `paste` · `join` · `comm` · `nproc` · `md5sum` · `tac` · `fold` · `split` · `dd`와 외부 `test` · `true` · `false` · `printf`, 그리고
+   `bzip2` · `hostname` · `bison` · `flex` · `msgfmt`가 없었다. base에 coreutils · bzip2 · hostname · m4 · bison · flex · gettext를 더했다
+   (coreutils · hostname은 slim에 있어 의존 폐포 단계가 싣고, initrd와 같은 40개는 verify가 뺐다). grep은 판이 initrd(3.11-4+b1)와
+   slim(3.11-4)이 달라 넣지 않았다 — `egrep` · `fgrep`은 `grep -E` · `-F`다. `perldoc`은 Debian이 `perl-doc`으로 나눈다 — 더했다.
+   `man gcc`는 없다: Debian은 gcc의 man 페이지를 GFDL 때문에 non-free의 `gcc-doc`으로 뺀다. 체인은 `man 1 ssh`를 본다.
+5. Rosetta 위 chroot에서는 gdb · strace · ltrace가 ptrace를 못 받는다(`PTRACE_TRACEME: Function not implemented`). 판정은 체인(진짜 커널)이 했다.
+6. pip: site `pip.conf`의 `prefix=/usr/local`은 root 설치는 맞게 보내지만 사용자의 `pip install --user`가 `Can not combine '--user' and
+   '--prefix'`로 막힌다. 그래서 Debian의 `posix_local`과 같은 일을 묶음 python의 `sitecustomize.py`가 한다 — venv가 아닐 때 `prefix` scheme만
+   `/usr/local`로 바꾸고 그 site-packages를 `sys.path`에 넣는다. root · `--user` · 옵션 없는 사용자(`Defaulting to user installation`) · venv
+   넷이 다 맞다. 대가는 python 시작마다 `sysconfig` import(Rosetta 18ms). python 3.15의 `sysconfig.get_paths()` 기본값은
+   `get_preferred_scheme`을 안 거친다 — 판정은 깐 모듈의 자리로 한다.
+7. gem: 시스템 gemrc는 `<ruby>/etc/gemrc`(load-relative)이고, bindir만 바꾸는 길은 RubyGems의 `rubygems/defaults/operating_system.rb`
+   (`Gem.default_bindir`)다. gem 자체는 ruby의 기본 자리(묶음 안, `/usr/local` upper 덕에 root가 쓴다)에 놓인다 — ruby 판이 바뀌면 다시 깐다.
+   npm: builtin `lib/node_modules/npm/npmrc`(원래 없다)에 `prefix=/usr/local`.
+8. init의 `/etc` 복사(`copyTree`)가 링크를 건너뛰고 있었다(TP-M1부터) — php의 `conf.d/*.ini`는 `phpenmod`가 만든 링크라 TP-M3의 php는
+   확장 열아홉(ctype · opcache · pdo 등)이 하나도 안 켜졌다. TP-M3 hello는 core의 `json_encode`만 써서 지나갔다. 링크를 같은 대상의 링크로
+   두게 고쳤고, 체인의 php hello에 `ctype_digit`을, 부팅 2에 "`etc/`에서 건너뛴 것이 없다"를 더했다.
+9. 체인의 함정 둘(그 체인 고유): (a) 기다리는 표시 글자가 명령 줄에 그대로 있으면 콘솔이 되비춘 명령에 `wait_log`가 맞아 출력 전에
+   넘어간다 — `printf "tp-m4-%s\n" xxd-ok` 꼴과 실제 출력만 가질 글자(`=/[a-z]`)로 기다린다. (b) 판독: 출력 줄을 ANSI가 섞인 채로 걸러 "출력이
+   없다"고 잘못 읽은 판이 있었다 — 로그는 바이트로 읽는다(`tp-m4-pk`가 실제로는 디렉터리 이름까지 찍고 있었다).
+10. 빨강 (b): init의 `mountLocal`을 막으면 `FAIL: init did not make /usr/local writable`.
+11. 빨강 (a): harvest의 man 제외 풀기를 막으면 base의 경로가 14,916에서 10,282로 준다(man 4,634개). 체인은 `FAIL: man 3 printf did not show
+    the C library page (manpages-dev)`.
 
 ## 결과
 
-(구현 뒤 채운다)
+1. `make dev-layers`가 초록. base: 패키지 153 · 경로 14,916(man 3,669) · 파일 20,658 · 풀린 크기 738MiB(251에서) · zstd15 238MiB(81에서) ·
+   ELF 1,177 · 예외 3(cmake-gui의 GUI) · initrd와 같아 뺀 것 130. lang-native는 rc 조각 둘, lang-script는 설정 셋이 더해졌다(debconf가 빠졌다).
+2. 체인 `devtools`(SandyBridge · 1GiB)가 초록, 빌드 뒤 377초(TP-M3 305초) — 420초 아래라 하나로 둔다. 묶음 넷 958MiB, `tars-dev.iso`
+   1,148,049,408바이트, 설치기 복사 5.3초. TCG 숫자: cmake+ninja 2.5초, autotools 13.7초, perl 0.6초, gdb 3.6초, valgrind 4.4초, gpg 0.6초,
+   root의 전역 설치 셋 24.3초. 상한은 그 세 배(60초 아래로는 안 내린다): 전역 설치 80초, 나머지 60초.
+3. 빨강 둘(확인한 것 10 · 11).
+4. 루트 게이트 한 판: 31/31, 32분 47초(lanes 1,193초 — base를 다시 거둔 4분 남짓 포함), 31회차 모두 `cut log lines A=0 B=0 C=0`. p3가 있는
+   체인(home · pm · mise · dualboot 등)이 이제 `/usr/local` overlay를 걸고도 초록이다(위험 6).
+5. 위험 1(valgrind · gdb의 TCG 속도)은 4초 안팎으로 작았다. 위험 2(Debian python)는 `/usr/bin/python3` 없이 라이브러리만. 위험 3: ISO가
+   1.15GB가 됐다 — GitHub의 2GiB 한도까지 0.85GB가 남았다(`project_release_0_2.md`).

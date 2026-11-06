@@ -123,11 +123,22 @@ fn checkScan() !void {
     if (layers.readVersion(MISSING, &vbuf) != null) return fail("readVersion of a missing dir is not null", .{});
 }
 
+fn checkLocal() !void {
+    var buf: [160]u8 = undefined;
+    const got = layers.localData(&buf, layers.LOCAL_TARGET, layers.LOCAL_DIR) orelse return fail("localData returned null", .{});
+    const want = "lowerdir=/usr/local,upperdir=/home/.tars/local/upper,workdir=/home/.tars/local/work";
+    if (!std.mem.eql(u8, got, want)) return fail("localData: got {s}, want {s}", .{ got, want });
+    if (got.ptr[got.len] != 0) return fail("localData is not NUL-terminated", .{});
+    var small: [40]u8 = undefined;
+    if (layers.localData(&small, layers.LOCAL_TARGET, layers.LOCAL_DIR) != null) return fail("localData fit in 40 bytes", .{});
+}
+
 pub fn main() !void {
     try scratch.enter();
     try checkNames();
     try checkVersion();
     try checkLowerdir();
     try checkScan();
-    std.debug.print("layers_test: names, version, lowerdir and scan as planned\n", .{});
+    try checkLocal();
+    std.debug.print("layers_test: names, version, lowerdir, scan and the /usr/local data as planned\n", .{});
 }

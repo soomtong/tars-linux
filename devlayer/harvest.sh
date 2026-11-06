@@ -55,6 +55,11 @@ snapshot() {
   } | LC_ALL=C sort
 }
 
+# man 페이지는 싣는다(TP-M4 plan 결정 B). slim의 /etc/dpkg/dpkg.cfg.d/docker가 /usr/share/man/*을 풀지 않으므로 그 한 줄만 지운다.
+# doc · info · locale은 그대로 뺀다. 이 컨테이너는 버린다.
+if [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
+  sed -i '\#^path-exclude /usr/share/man/\*$#d' /etc/dpkg/dpkg.cfg.d/docker
+fi
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.before"
 snapshot >"$work/before"
 
@@ -102,8 +107,10 @@ LC_ALL=C comm -23 "${work}/new.all" <(LC_ALL=C sort -u "${work}/skip.files") >"$
 mv "${work}/new.kept" "${work}/new.all"
 
 # 싣지 않는 것: alternatives 자리, ldconfig 캐시(TARS는 ld.so의 기본 경로로 찾는다), dpkg · apt 자신의 /etc, systemd ·
-# cron의 자리(TARS에는 둘 다 없다 — php의 phpsessionclean.timer가 대상 없는 링크로 남았다, TP-M3).
-grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.d/)' "$work/new.all" | sed 's|^/||' >"$work/list"
+# cron의 자리(TARS에는 둘 다 없다 — php의 phpsessionclean.timer가 대상 없는 링크로 남았다, TP-M3). TP-M4: 계정 파일 넷과 그
+# 백업(openssh-client가 _ssh 그룹을 더해 /etc/group이 initrd와 달라졌다 — TARS의 계정은 init이 만든다)과 sysvinit · cron ·
+# apparmor · logcheck의 자리(man-db · rsync가 끌고 왔다, 읽는 것이 없다).
+grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/)' "$work/new.all" | sed 's|^/||' >"$work/list"
 grep '^etc/' "$work/list" >"$work/etc" || true
 
 # alternatives 펴기(결정 2): 새 경로 가운데 /etc/alternatives를 지나는 링크는 최종 대상으로의 상대 링크로 바꾼다. 묶음에는
@@ -133,6 +140,20 @@ done <"${work}/list"
 if [[ -s "${work}/broken" ]]; then
   LC_ALL=C sort "${work}/list" | LC_ALL=C comm -23 - <(LC_ALL=C sort "${work}/broken") >"${work}/list.kept"
   mv "${work}/list.kept" "${work}/list"
+fi
+
+# 디렉터리를 가리키는 링크는 그 디렉터리도 싣는다. 목록은 파일 · 링크뿐이라(--no-recursion) 빈 디렉터리가 빠진다 —
+# libmagic1의 usr/share/misc/magic -> ../file/magic이 대상 없이 남았다(TP-M4).
+: >"${work}/linkdirs"
+while IFS= read -r rel; do
+  if [[ -L "/${rel}" && -d "/${rel}" ]]; then
+    t="$(realpath "/${rel}")"
+    [[ "${t}" == /usr/* ]] && echo "${t#/}" >>"${work}/linkdirs"
+  fi
+done <"${work}/list"
+if [[ -s "${work}/linkdirs" ]]; then
+  LC_ALL=C sort -u "${work}/list" "${work}/linkdirs" >"${work}/list.dirs"
+  mv "${work}/list.dirs" "${work}/list"
 fi
 
 tar -C / --no-recursion -cpf "$build/$bundle.harvest.tar.tmp" -T "$work/list"

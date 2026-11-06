@@ -16,3 +16,6 @@ usr/local/lib/jdk-*/lib/libawt_xawt.so	libX*	GUI
 usr/local/lib/jdk-*/lib/libsplashscreen.so	libX*	GUI
 usr/local/lib/jdk-*/lib/*.so	libjvm.so	jvm-loaded
 usr/local/lib/go-*/src/*/testdata/*	*	testdata
+usr/local/lib/cmake-*/bin/cmake-gui	libxcb*	GUI
+usr/local/lib/cmake-*/bin/cmake-gui	libfontconfig*	GUI
+usr/local/lib/cmake-*/bin/cmake-gui	libfreetype*	GUI

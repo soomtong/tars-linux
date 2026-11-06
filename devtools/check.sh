@@ -7,6 +7,7 @@ cd "$(dirname "$0")" || exit 1
 # TP-M1: 서른한째 체인. 개발 도구 층(TP design 결정 8~13) — 묶음을 실은 ISO로 설치하고, 디스크로 다시 뜬 게스트가
 # 망 없이 사용자로 C와 Java를 짓고 돌리는가. 체인은 모두 `-nic none`이다(오프라인이 목표).
 # TP-M2: 묶음이 셋이다(base · lang-jvm · lang-native). 부팅 2가 C++ · zig · rust · cargo · go의 hello를 더 본다(plan 결정 G).
+# TP-M4: base 보강(빌드 · 디버깅 · 원격 · man)의 hello와 쓰기 가능한 /usr/local(root가 전역으로 깐 셋이 재부팅 뒤에도 선다, plan 결정 F · H).
 # TP-M3: 넷째 묶음 lang-script. 부팅 2가 python(+ venv) · ruby · lua · luau · cyber · node(+ npm) · bun · janet · php를 본다(plan 결정 F).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
@@ -215,7 +216,8 @@ boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
 wait_log_re "tars-init: overlay /usr from 4 layers in [0-9]+ms" 5 || fail "init did not lay four layers over /usr" "tars-init: layer"
 MOUNT_MS="$(last_num 'overlay /usr from 4 layers in [0-9]+ms')"
-grep -aqF "tars-init: layer base: 1 files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
+grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
+grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
@@ -319,11 +321,86 @@ wait_log_re "tp-ms-janet=[0-9]+" 60 || fail "janet did not finish in 60s" "tp-ja
 grep -aqF "tp-janet: tp-janet-1.42.1" "$LOG" || fail "janet did not print 1.42.1" "tp-janet"
 echo "B2: as tars, janet ran ($(ms_of janet)ms)"
 
-as_tars 'cd ~/tp && printf "%s\n" "<?php echo \"tp-php-\" . PHP_VERSION . \"-\" . json_encode([1, 2]) . PHP_EOL;" > h.php && s=$(date +%s%N) && php h.php 2>&1 | sed "s/^/tp-php: /"; e=$(date +%s%N); echo "tp-ms-php=$(((e-s)/1000000))"'
+as_tars 'cd ~/tp && printf "%s\n" "<?php echo \"tp-php-\" . PHP_VERSION . \"-\" . json_encode([1, 2]) . \"-\" . var_export(ctype_digit(\"42\"), true) . PHP_EOL;" > h.php && s=$(date +%s%N) && php h.php 2>&1 | sed "s/^/tp-php: /"; e=$(date +%s%N); echo "tp-ms-php=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-php=[0-9]+" 60 || fail "php did not finish in 60s" "tp-php"
-grep -aqF "tp-php: tp-php-8.4.27-[1,2]" "$LOG" || fail "php did not print 8.4.27 and json" "tp-php"
+grep -aqF "tp-php: tp-php-8.4.27-[1,2]-true" "$LOG" || fail "php did not print 8.4.27, json and ctype (conf.d links into /etc)" "tp-php"
 echo "B2: as tars, php ran with json ($(ms_of php)ms)"
 SCRIPT_NUMBERS="python $(ms_of py)ms, venv $(ms_of venv)ms, ruby $(ms_of rb)ms, lua $(ms_of lua)ms, luau $(ms_of luau)ms, cyber $(ms_of cyber)ms, node $(ms_of node)ms, npm $(ms_of npm)ms, bun $(ms_of bun)ms, janet $(ms_of janet)ms, php $(ms_of php)ms"
+
+# rc는 bash -i가 아니라 . /etc/bash.bashrc로 읽는다 — 보려는 것은 rc의 내용이고, 대화형 셸이 콘솔 tty를 만질 일을 만들지 않는다.
+# 표시 글자는 명령 줄에 그대로 나오면 안 된다 — 콘솔이 명령을 되비추므로 wait_log가 출력 전에 맞는다(TP-M4 체인 둘째 판의 거짓
+# 통과). 그래서 printf "tp-m4-%s\n" xxd-ok 꼴이나 sed 접두로 짓는다.
+# ── TP-M4: base 보강(plan 결정 F) — 빌드 · 디버깅 · 원격 · 오프라인 man. 망 없이, 사용자로. ────────────────────────
+# 소스는 printf "%s\n" "줄" … 한 겹(TP-M3과 같다). C 문자열의 \n은 %s가 안 펴므로 그대로 C의 이스케이프가 된다.
+# 상한은 처음 잰 숫자의 세 배다(60초 아래로는 안 내린다). 첫 판(SandyBridge · 1GiB): cmake+ninja 2.5초, autotools 13.7초, perl 0.6초,
+# gdb 3.6초, valgrind 4.4초, gpg 0.6초, root의 전역 설치 셋 24.3초.
+as_tars 'mkdir -p ~/tp/m4 && cd ~/tp/m4 && printf "%s\n" "#include <stdio.h>" "#include <stdlib.h>" "void boom(int *p) { *p = 1; }" "int main(int c, char **v) { (void)v; if (c > 1) boom(0); char *m = malloc(64); m[0] = 0; printf(\"tp-m4c\n\"); return m[0]; }" > h.c && printf "%s\n" "cmake_minimum_required(VERSION 3.20)" "project(tp C)" "add_executable(hc h.c)" > CMakeLists.txt && s=$(date +%s%N) && cmake -S . -B b -G Ninja > cm.log 2>&1; ninja -C b 2>&1 | sed "s/^/tp-m4-ninja: /"; e=$(date +%s%N); echo "tp-ms-cmake=$(((e-s)/1000000))"; ./b/hc | sed "s/^/tp-m4-cmake=/"'
+wait_log_re "tp-ms-cmake=[0-9]+" 60 || fail "cmake and ninja did not finish in 60s" "tp-m4-ninja"
+wait_log "tp-m4-cmake=tp-m4c" 30 || fail "cmake -G Ninja and ninja did not build a running program" "tp-m4-ninja"
+echo "B2: as tars, cmake -G Ninja and ninja built and ran a C program ($(ms_of cmake)ms)"
+
+as_tars 'mkdir -p ~/tp/m4/at && cd ~/tp/m4/at && printf "%s\n" "AC_INIT([tpa],[1.0])" "AM_INIT_AUTOMAKE([foreign subdir-objects])" "AC_PROG_CC" "AC_CONFIG_FILES([Makefile])" "AC_OUTPUT" > configure.ac && printf "%s\n" "bin_PROGRAMS = tpa" "tpa_SOURCES = h.c" > Makefile.am && cp ../h.c . && s=$(date +%s%N) && { autoreconf -i && ./configure && make; } > at.log 2>&1; echo "tp-m4-at-rc=$?"; e=$(date +%s%N); echo "tp-ms-autotools=$(((e-s)/1000000))"; ./tpa | sed "s/^/tp-m4-at=/"; tail -3 at.log | sed "s/^/tp-m4-atlog: /"'
+wait_log_re "tp-ms-autotools=[0-9]+" 60 || fail "autoreconf, configure and make did not finish in 60s" "tp-m4-at"
+wait_log "tp-m4-at=tp-m4c" 30 || fail "autoreconf -i, ./configure and make did not build a running program" "tp-m4-at"
+echo "B2: as tars, autoreconf -i, ./configure and make built and ran a program ($(ms_of autotools)ms)"
+
+as_tars 'cd ~/tp/m4 && printf "%s\n" "Name: tp" "Description: tp" "Version: 4.2" "Cflags: -I/tmp" > tp.pc && PKG_CONFIG_PATH=$HOME/tp/m4 pkg-config --modversion tp | sed "s/^/tp-m4-pc=/"; s=$(date +%s%N); perl -MData::Dumper -MJSON::PP -MDigest::SHA=sha256_hex -MTest::More -e "print JSON::PP->new->encode([substr(sha256_hex(q(tp)), 0, 8)])" 2>&1 | sed "s/^/tp-m4-perl=/"; echo; e=$(date +%s%N); echo "tp-ms-perl=$(((e-s)/1000000))"; perldoc -l strict | sed "s/^/tp-m4-perldoc=/"'
+wait_log_re "tp-ms-perl=[0-9]+" 60 || fail "perl did not finish in 60s" "tp-m4-perl"
+wait_log "tp-m4-pc=4.2" 10 || fail "pkg-config did not read a .pc from PKG_CONFIG_PATH" "tp-m4-pc"
+grep -aqF 'tp-m4-perl=["3abd8072"]' "$LOG" || fail "perl did not run Data::Dumper, JSON::PP, Digest::SHA and Test::More" "tp-m4-perl"
+wait_log "tp-m4-perldoc=/usr/share/perl/" 30 || fail "perldoc did not find strict" "tp-m4-perldoc"
+echo "B2: as tars, pkg-config read a .pc, perl ran with four core modules ($(ms_of perl)ms) and perldoc answered"
+
+# 디버거 셋. 일부러 죽는 프로그램(인자 하나면 boom(0))의 백트레이스, 시스템 콜 · 라이브러리 호출의 요약, 일부러 새는 malloc.
+as_tars 'cd ~/tp/m4 && gcc -g -O0 -o hg h.c && s=$(date +%s%N) && gdb -q -batch -ex run -ex bt --args ./hg x 2>&1 | sed "s/^/tp-m4-gdb: /"; e=$(date +%s%N); echo "tp-ms-gdb=$(((e-s)/1000000))"; strace -c ./hg 2>&1 | tail -2 | sed "s/^/tp-m4-strace: /"; ltrace -c ./hg 2>&1 | tail -2 | sed "s/^/tp-m4-ltrace: /"; s=$(date +%s%N); valgrind -q --leak-check=full --errors-for-leak-kinds=definite --error-exitcode=9 ./hg > vg.log 2>&1; echo "tp-m4-vg-rc=$?"; e=$(date +%s%N); echo "tp-ms-valgrind=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-valgrind=[0-9]+" 60 || fail "gdb, strace, ltrace and valgrind did not finish in 60s" "tp-m4-gdb" "tp-m4-strace"
+grep -aqE "tp-m4-gdb: #0 +(0x[0-9a-f]+ in )?boom" "$LOG" || fail "gdb did not show boom at the top of the backtrace" "tp-m4-gdb"
+grep -aqE "tp-m4-strace: .*total" "$LOG" || fail "strace -c did not print its summary" "tp-m4-strace"
+grep -aqE "tp-m4-ltrace: .*total" "$LOG" || fail "ltrace -c did not print its summary" "tp-m4-ltrace"
+grep -aqF "tp-m4-vg-rc=9" "$LOG" || fail "valgrind did not report the definite leak with exit code 9" "tp-m4-vg"
+echo "B2: as tars, gdb ($(ms_of gdb)ms) showed boom in the backtrace, strace and ltrace summed up, valgrind caught the leak ($(ms_of valgrind)ms)"
+
+as_tars 'cd ~/tp/m4 && echo hello > z.txt && xz -k z.txt && zstd -q -k z.txt && zip -q z.zip z.txt && unzip -o -q z.zip -d zz && tar -cJf z.tar.xz z.txt && [ "$(xz -dc z.txt.xz)$(zstd -dcq z.txt.zst)$(cat zz/z.txt)$(tar -xOJf z.tar.xz)$(bzip2 -c z.txt | bzip2 -dc)" = hellohellohellohellohello ] && printf "tp-m4-%s\n" zip-ok; file -b hg | cut -c1-10 | sed "s/^/tp-m4-file=/"; printf "a\nb\n" > p1; printf "a\nc\n" > p2; diff -u p1 p2 > p.diff; patch -s p1 p.diff && cmp p1 p2 && printf "tp-m4-%s\n" patch-ok; xxd hg | xxd -r | cmp - hg && printf "tp-m4-%s\n" xxd-ok'
+wait_log "tp-m4-xxd-ok" 120 || fail "xxd did not round-trip a binary" "tp-m4"
+grep -aqF "tp-m4-zip-ok" "$LOG" || fail "xz, zstd, zip/unzip, tar -J and bzip2 did not all round-trip" "tp-m4"
+grep -aqF "tp-m4-file=ELF 64-bit" "$LOG" || fail "file did not recognise an ELF" "tp-m4-file"
+grep -aqF "tp-m4-patch-ok" "$LOG" || fail "patch did not apply a unified diff" "tp-m4"
+echo "B2: as tars, xz, zstd, zip, unzip, tar -J and bzip2 round-tripped; file, patch and xxd work"
+
+as_tars 'cd ~/tp/m4 && ssh -V 2>&1 | sed "s/^/tp-m4-ssh=/"; ssh-keygen -q -t ed25519 -N "" -f k && test -f k.pub && printf "tp-m4-%s\n" keygen-ok; mkdir -p r1/s && echo x > r1/s/f && rsync -a r1/ r2/ && cmp r1/s/f r2/s/f && printf "tp-m4-%s\n" rsync-ok; s=$(date +%s%N); gpg --batch --passphrase "" --quick-gen-key tp@tars > gpg.log 2>&1; gpg --list-keys tp@tars 2>/dev/null | grep -c tp@tars | sed "s/^/tp-m4-gpg=/"; e=$(date +%s%N); echo "tp-ms-gpg=$(((e-s)/1000000))"; gpgconf --kill gpg-agent'
+wait_log_re "tp-ms-gpg=[0-9]+" 60 || fail "ssh, rsync and gpg did not finish in 60s" "tp-m4-ssh" "tp-m4-gpg"
+grep -aqF "tp-m4-ssh=OpenSSH_10.0" "$LOG" || fail "ssh -V did not print OpenSSH_10.0" "tp-m4-ssh"
+grep -aqF "tp-m4-keygen-ok" "$LOG" || fail "ssh-keygen did not make an ed25519 key" "tp-m4"
+grep -aqF "tp-m4-rsync-ok" "$LOG" || fail "rsync -a did not copy a tree" "tp-m4"
+grep -aqF "tp-m4-gpg=1" "$LOG" || fail "gpg did not make and list a key offline" "tp-m4-gpg"
+echo "B2: as tars, ssh -V, ssh-keygen, rsync -a and gpg --quick-gen-key ($(ms_of gpg)ms) work offline"
+
+as_tars 'cd ~/tp/m4 && MANPAGER=cat man 3 printf 2>&1 | grep -m1 -E "printf, +fprintf" | sed -E "s/^ *([a-z]+), +([a-z]+),.*/tp-m4-man3=\1-\2/"; MANPAGER=cat man 1 ssh 2>&1 | grep -m1 "OpenSSH remote login client" | sed "s/^ */tp-m4-man1=/"; printf "%s\n" "#!/bin/sh" "echo \$1" > bad.sh; shellcheck bad.sh 2>&1 | grep -o "SC2086" | head -1 | sed "s/^/tp-m4-sc=/"; ctags -x h.c | grep -o "^boom" | sed "s/^/tp-m4-ctags=/"; fish -c "string join : \$PATH" | sed "s/^/tp-m4-fishpath=/"; bash -c ". /etc/bash.bashrc; echo \$PATH" 2>/dev/null | sed "s/^/tp-m4-bashpath=/"'
+wait_log_re "tp-m4-bashpath=/[a-z]" 120 || fail "man, shellcheck, ctags and the PATH probes did not finish in 120s" "tp-m4"
+grep -aqF "tp-m4-man3=printf-fprintf" "$LOG" || fail "man 3 printf did not show the C library page (manpages-dev)" "tp-m4-man"
+grep -aqF "tp-m4-man1=ssh" "$LOG" || fail "man 1 ssh did not show the page (man pages harvested)" "tp-m4-man"
+grep -aqF "tp-m4-sc=SC2086" "$LOG" || fail "shellcheck did not flag the unquoted \$1" "tp-m4-sc"
+grep -aqF "tp-m4-ctags=boom" "$LOG" || fail "ctags -x did not list boom" "tp-m4-ctags"
+grep -aqE "tp-m4-fishpath=.*/home/tars/\.cargo/bin" "$LOG" || fail "fish has no ~/.cargo/bin on PATH (10-lang-native.fish)" "tp-m4-fishpath"
+grep -aqE "tp-m4-bashpath=.*/home/tars/go/bin" "$LOG" || fail "bash with /etc/bash.bashrc has no ~/go/bin on PATH (/etc/tars/rc.d)" "tp-m4-bashpath"
+echo "B2: as tars, man 3 printf and man 1 ssh read offline, shellcheck and ctags work, fish and /etc/bash.bashrc put ~/.cargo/bin and ~/go/bin on PATH"
+
+# ── TP-M4: 쓰기 가능한 /usr/local(plan 결정 E · H) ──────────────────────────────────────────
+# 사용자가 망 없이 로컬 패키지 셋을 짓고, root(콘솔 fish)가 전역으로 깐다. 실행 파일은 /usr/local/bin에 서야 한다.
+grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" || fail "init did not make /usr/local writable" "tars-init: /usr/local"
+as_tars 'mkdir -p ~/tp/m4/pk/n ~/tp/m4/pk/g/exe ~/tp/m4/pk/w/tpw && cd ~/tp/m4/pk/n && printf "%s\n" "{\"name\":\"tpn\",\"version\":\"1.0.0\",\"bin\":{\"tpn\":\"cli.js\"}}" > package.json && printf "%s\n" "#!/usr/bin/env node" "console.log(\"tp-npm-ok\")" > cli.js && npm pack --silent --pack-destination .. > /dev/null 2>&1; cd ../g && printf "%s\n" "puts \"tp-gem-ok\"" > exe/tpg && chmod +x exe/tpg && printf "%s\n" "Gem::Specification.new do |s|" "  s.name = \"tpg\"; s.version = \"1.0\"; s.summary = \"tp\"; s.authors = [\"tp\"]" "  s.files = [\"exe/tpg\"]; s.bindir = \"exe\"; s.executables = [\"tpg\"]" "end" > tpg.gemspec && gem build -q tpg.gemspec -o ../tpg-1.0.gem > /dev/null 2>&1; cd ../w && printf "%s\n" "def main():" "    print(\"tp-pip-ok\")" > tpw/__init__.py && printf "%s\n" "import zipfile" "z = zipfile.ZipFile(\"../tpw-1.0-py3-none-any.whl\", \"w\")" "z.write(\"tpw/__init__.py\")" "z.writestr(\"tpw-1.0.dist-info/METADATA\", \"Metadata-Version: 2.1\nName: tpw\nVersion: 1.0\n\")" "z.writestr(\"tpw-1.0.dist-info/WHEEL\", \"Wheel-Version: 1.0\nGenerator: tp\nRoot-Is-Purelib: true\nTag: py3-none-any\n\")" "z.writestr(\"tpw-1.0.dist-info/entry_points.txt\", \"[console_scripts]\ntpw = tpw:main\n\")" "z.writestr(\"tpw-1.0.dist-info/RECORD\", \"\")" "z.close()" > mk.py && python3 mk.py; cd ~/tp/m4/pk && ls *.gem *.tgz *.whl | tr "\n" " " | sed "s/^/tp-m4-pk=/"; echo'
+wait_log "tp-m4-pk=tpg-1.0.gem tpn-1.0.0.tgz tpw-1.0-py3-none-any.whl" 300 || fail "npm pack, gem build and the wheel did not all come out" "tp-m4-pk"
+send "set -l s (date +%s%N); npm i -g --offline /home/tars/tp/m4/pk/tpn-1.0.0.tgz 2>&1 | sed 's/^/tp-m4-npmg: /'; gem install --local /home/tars/tp/m4/pk/tpg-1.0.gem 2>&1 | sed 's/^/tp-m4-gemg: /'; python3 -m pip install --no-index --root-user-action=ignore /home/tars/tp/m4/pk/tpw-1.0-py3-none-any.whl 2>&1 | sed 's/^/tp-m4-pipg: /'; set -l e (date +%s%N); echo tp-ms-globals=(math --scale 0 \"(\$e - \$s) / 1000000\")"
+wait_log_re "tp-ms-globals=[0-9]+" 80 || fail "root's npm -g, gem install and pip install did not finish in 80s" "tp-m4-npmg" "tp-m4-gemg" "tp-m4-pipg"
+as_tars 'for c in tpn tpg tpw; do command -v $c | sed "s/^/tp-m4-where=/"; $c | sed "s/^/tp-m4-ran=/"; done; touch /usr/local/tp-x 2>&1 | sed "s/^/tp-m4-ulocal=/"; touch /usr/bin/tp-x 2>&1 | sed "s/^/tp-m4-ubin=/"; python3 -c "import tpw; print(tpw.__file__)" | sed "s/^/tp-m4-purelib=/"'
+wait_log_re "tp-m4-purelib=/[a-z]" 60 || fail "the global-install probes did not finish" "tp-m4-where"
+for c in tpn tpg tpw; do grep -aqF "tp-m4-where=/usr/local/bin/${c}" "$LOG" || fail "${c} is not in /usr/local/bin" "tp-m4-where" "tp-m4-npmg" "tp-m4-gemg" "tp-m4-pipg"; done
+for w in npm gem pip; do grep -aqF "tp-m4-ran=tp-${w}-ok" "$LOG" || fail "the ${w} package root installed globally did not run as tars" "tp-m4"; done
+grep -aqF "tp-m4-ulocal=touch: cannot touch '/usr/local/tp-x': Permission denied" "$LOG" || fail "tars could write /usr/local (it is root's)" "tp-m4-ulocal"
+grep -aqF "tp-m4-ubin=touch: cannot touch '/usr/bin/tp-x': Read-only file system" "$LOG" || fail "/usr/bin is no longer read-only" "tp-m4-ubin"
+grep -aqF "tp-m4-purelib=/usr/local/lib/python3.15/site-packages/tpw/__init__.py" "$LOG" || fail "root's pip did not put the module in /usr/local/lib/python3.15 (sitecustomize.py)" "tp-m4-purelib"
+echo "B2: root's npm i -g, gem install and pip install (offline, local files, $(ms_of globals)ms) put tpn, tpg and tpw in /usr/local/bin; tars runs them but cannot write /usr/local"
+M4_NUMBERS="cmake+ninja $(ms_of cmake)ms, autotools $(ms_of autotools)ms, perl $(ms_of perl)ms, gdb $(ms_of gdb)ms, valgrind $(ms_of valgrind)ms, gpg $(ms_of gpg)ms, globals $(ms_of globals)ms"
 
 as_tars 'cd ~/tp && echo "public class Hello { public static void main(String[] a) { System.out.println(\"tp-java-\" + Runtime.version()); } }" > Hello.java && s=$(date +%s%N) && javac Hello.java 2>&1 | sed "s/^/tp-javac: /"; e=$(date +%s%N); echo "tp-ms-javac=$(((e-s)/1000000))"; s=$(date +%s%N); java Hello 2>&1 | sed "s/^/tp-run: /"; e=$(date +%s%N); echo "tp-ms-java=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-java=[0-9]+" 600 || fail "javac and java did not finish in 600s" "tp-javac" "tp-run"
@@ -362,7 +439,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -379,8 +456,11 @@ as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
+grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" || fail "boot 3 did not make /usr/local writable" "tars-init: /usr/local"
+as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
+wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, lang-native and lang-script still run C, Go and node and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, lang-native and lang-script still run C, Go and node, what root put in /usr/local is still there, and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
