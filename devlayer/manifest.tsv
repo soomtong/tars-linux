@@ -92,7 +92,7 @@ lua5.4	lang-script	5.4.7-1+b2	debian	lua5.4	apt
 # luau: luau-lang/luau(Roblox). zip 맨 위에 실행 파일 넷, bin/이 없다(확인 9).
 luau	lang-script	0.745	upstream	https://github.com/luau-lang/luau/releases/download/0.745/luau-ubuntu.zip	186e5ddaa2b048ebc7390c11ed1b00c04e7d3beaffed429250329e3575d2ece2	strip=0 exe=luau,luau-analyze,luau-compile,luau-ast
 # cyber: soomtong/cyber. latest 태그는 움직이므로 판 이름 태그. 실행 파일이 옆의 src/를 읽는다(확인 10).
-cyber	lang-script	0.4.2	upstream	https://github.com/soomtong/cyber/releases/download/0.4.2/cyber-linux-x64.tar.gz	a8ebd677768c1e16fe9b8b3497e4889576a8b491194ca5b0e1067855fbd10109	strip=0 exe=cyber
+cyber	lang-script	0.4.3	upstream	https://github.com/soomtong/cyber/releases/download/0.4.3/cyber-linux-x64.tar.gz	ccbb5e1b5ade57d8fd1a9f7dcaad364eebc5334a5b0a5128e229aa8808d302ad	strip=0 exe=cyber
 # node: nodejs.org/dist/index.json의 lts 첫 줄, SHASUMS256.txt.
 node	lang-script	26.13.0	upstream	https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz	d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 # bun: baseline — 일반 빌드는 AVX2를 요구한다. qemu64와 맥북 에어 2011에 없다(확인 3).
