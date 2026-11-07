@@ -7,7 +7,7 @@
 #   tars-docs get [-y] 이름…  고른 것만. 목록에 없는 Kapeli 피드 이름도 받는다(크기는 모른다)
 #
 # dasht-docsets-install과 다른 점: 판 고정 URL(Java SE25 — 묶음의 JDK 25)을 쓰고, GitHub API를 부르지 않고, 다 푼 tgz를 지운다.
-# 크기는 2026-11-07에 잰 tgz(MiB). 서버(PostgreSQL · MySQL · Redis · Nginx)는 서버 묶음(TP-M10)이 더한다.
+# 크기는 2026-11-07에 잰 tgz(MiB). 서버 넷(PostgreSQL · MySQL · Redis · Nginx)은 TP-M10이 더했다 — Caddy는 피드에 없다.
 set -euo pipefail
 
 dir="${DASHT_DOCSETS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dasht/docsets}"
@@ -29,6 +29,10 @@ Clojure  -     4    clojure
 CMake    -     11   cmake
 Vim      -     5    nvim · vim
 SQLite   -     11   sqlite3 · duckdb
+PostgreSQL -   4    postgres · psql
+MySQL    -     40   mysqld · mysql
+Redis    -     213  redis-server (redis.io를 통째로 담아 크다)
+Nginx    -     1    nginx
 Bash     -     1    bash (ISO에 실려 있다)"
 
 die() { echo "tars-docs: $*" >&2; exit 1; }
@@ -42,7 +46,7 @@ list() {
     mark=" "
     have "${name}" && mark="*"
     [ "${ver}" = - ] && ver=""
-    printf '  %s %-8s %5s MiB  %-5s %s\n' "${mark}" "${name}" "${mib}" "${ver}" "${what}"
+    printf '  %s %-10s %5s MiB  %-5s %s\n' "${mark}" "${name}" "${mib}" "${ver}" "${what}"
   done
   echo
   echo "  * 받은 것. 받기: tars-docs get (전부) · tars-docs get Python Go (고른 것). 찾기: dasht <말> [docset]"

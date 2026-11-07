@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 15판(2026-11-07) — 열린 질문 없음(서버 영속성은 서비스 milestone으로 닫았다, 사용자). TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 끝, TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 16판(2026-11-08) — 열린 질문 없음(서버 영속성은 서비스 milestone으로 닫았다, 사용자). TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 · TP-M10 끝, TP-M10 plan `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`가 결정 1의 `vendor-repo`(저장소 목록 · 키 · mysql의 순서 예외)와 서버 줄(판 · 묶음 `server`)을 고쳤다(사용자 결정 셋), TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -47,7 +47,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs(`emacs-nox` — Doom Emacs는 사용자가 망이 있을 때 깐다), ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인)(`editor` 묶음, TP-M7) |
 | 문서 | `dasht` + `w3m` + Bash docset, 나머지 docset은 `tars-docs get`으로 망에서(`docs` 묶음, TP-M9 — 결정 19) |
 | 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것 — `util` 묶음과 `media` 묶음, TP-M8) |
-| 서버 | nginx, caddy, postgresql 18, mysql 9.7(LTS), redis |
+| 서버 | postgresql 18, mysql 9.7(LTS), nginx 1.30(stable), redis 8.10, caddy(`server` 묶음, TP-M10 — 실행 파일까지, 사용자가 홈에서 띄운다. 서비스 · 재부팅을 넘는 데이터는 서버(서비스) milestone) |
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정). mg(사용자가 물었다 — emacs-nox를 싣는다, 2026-11-06). Doom Emacs의 시드(straight.el이 홈 경로로의 절대 링크 3,957개를 만들어 다른 홈으로 옮기면 안 선다 — TP-M7 plan 확인 4, 사용자 결정).
@@ -119,7 +119,10 @@ trixie 판이 돈다.
 1. 출처는 매니페스트 한 파일이다(`devlayer/manifest.tsv` 가칭). 한 줄에 도구 · 묶음 · 버전 · 종류 · URL · sha256. 소스 빌드는
    없다(사용자 결정) — 종류는 모두 미리 빌드된 바이너리이고 여섯이다(`maven`은 TP-M5, `hex`는 TP-M6). 앞의 것이 있으면 앞의 것을 쓴다.
    - `upstream` — 도구가 직접 내는 linux-amd64 바이너리 tarball. URL이 압축 확장자로 끝나지 않으면 실행 파일 하나다(TP-M7 — `bin/<도구>`에 0755로). 기본값이다.
-   - `vendor-repo` — 도구 쪽이 운영하는 Debian 저장소(PGDG의 postgresql, nginx.org의 nginx, packages.redis.io의 redis).
+   - `vendor-repo` — 도구 쪽이 운영하는 Debian 저장소(PGDG의 postgresql, nginx.org의 nginx, packages.redis.io의 redis, repo.mysql.com의 mysql — TP-M10).
+     URL 자리는 `<저장소>/<패키지>`, sha256 자리는 `apt`. 저장소는 `devlayer/repos.tsv`(apt 한 줄 · 키 파일의 sha256 · 지문)이고 키는 `devlayer/keys/<저장소>.asc`로
+     저장소에 넣는다 — harvest가 키의 sha256을 대조한 뒤 `signed-by=`로 그 키만 믿는다(TP-M10 plan 결정 A · 확인한 것 2). mysql은 `upstream`(generic tarball)이
+     trixie에서 서지 않아(`libaio.so.1` — trixie는 `libaio.so.1t64`) 이 종류다 — 순서의 예외 하나(사용자 결정, TP-M10 plan 확인 3).
    - `prebuilt` — 표준이 된 제3자 빌드(python-build-standalone, ruby/ruby-builder, static-php-cli, builds.hex.pm의 erlang).
    - `debian` — glibc에 묶인 것과 위의 셋이 없는 것. gcc · `libc6-dev`(헤더 · crt는 initrd의 glibc와 같은 판이어야 한다) ·
      binutils, `lua5.4`, `emacs-nox`, 공용 라이브러리.

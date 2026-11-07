@@ -14,16 +14,17 @@ cd "$(dirname "$0")" || exit 1
 # TP-M7: 일곱째 묶음 editor. 부팅 2가 ms(health) · nvim(treesitter, 고쳐 쓰기) · emacs(batch, 고쳐 쓰기) · ttt(--exec) · man nvim · man emacs를 본다(plan 결정 F).
 # TP-M8: 여덟째 묶음 media(ffmpeg · ImageMagick · GraphicsMagick)와 util의 터미널 유틸리티(plan 결정 E · F).
 # TP-M9: 아홉째 묶음 docs(dasht · w3m · Bash docset). 부팅 2가 rc 조각의 링크 · 찾기 · w3m -dump · man dasht · fish 조각을 본다(plan 할 일 6).
+# TP-M10: 열째 묶음 server(postgresql · mysql · nginx · redis · caddy). 부팅 2가 다섯을 사용자로 띄워 응답을 받고 끈다(plan 할 일 7).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 아홉) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 9, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 열) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 10, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
-#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 화면 셸에서
+#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 서버 다섯, 화면 셸에서
 #                                      java --version(monitor 45504). 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 8, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 아홉을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 9, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -48,8 +49,9 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh lang-native
 ../devlayer/build.sh lang-script
 ../devlayer/build.sh media
+../devlayer/build.sh server
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media server util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -60,7 +62,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media util"
+LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media server util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -199,7 +201,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with nine layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with ten layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -215,8 +217,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 9 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 9 layers" "copied"
+COPY_MS="$(last_num 'copied 10 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 10 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -225,16 +227,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 9 layers in [0-9]+ms" 5 || fail "init did not lay nine layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 9 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 10 layers in [0-9]+ms" 5 || fail "init did not lay ten layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 10 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, docs, editor, lang-beam, lang-jvm, lang-native, lang-script, media, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/server/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, docs, editor, lang-beam, lang-jvm, lang-native, lang-script, media, server, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -579,6 +581,28 @@ grep -aqF "tp-m9-left=Bash.docset " "$LOG" || fail "tars-docs get without a netw
 echo "B2: as tars, the rc pieces link the Bash docset, dasht finds printf, w3m reads the page, man dasht reads offline and tars-docs lists Bash and fails cleanly without a network"
 M9_NUMBERS="docs $(ms_of m9)ms"
 
+# TP-M10(plan 할 일 7): server. 다섯을 사용자로 하나씩 띄우고 응답을 받고 끈다 — 데이터는 모두 ~/tp/m10 아래(재부팅을 넘는 장치는 서비스
+# milestone). rc 조각(결정 E)이 PGHOST=/tmp를, conf.d/tars.cnf가 mysql의 소켓 · secure-file-priv를 잡는다(빨강 (a)). mysqld · nginx · initdb 등은
+# /usr/local/bin의 링크로 이름이 닿는다(결정 C, 빨강 (b) — /usr/sbin은 PATH에 없다). 기다리는 글자는 서버가 계산하거나 돌려준 값이다(판 · 42 ·
+# PONG) — 명령 줄에 그대로 쓰지 않는다. nginx는 tars-help devtools의 모양 그대로(상대 경로 + -p). 상한 120초 — 첫 판(SandyBridge · 1GiB): postgres 6.6초, mysql 26.5초(초기화 포함), 나머지 3.8초.
+as_tars 'mkdir -p ~/tp/m10 && cd ~/tp/m10 && . /etc/bash.bashrc >/dev/null 2>&1; echo "tp-m10-pghost=$PGHOST"; for c in initdb psql mysqld mysqladmin nginx redis-server caddy; do command -v $c; done | tr "\n" " " | sed "s/^/tp-m10-which=/"; echo; s=$(date +%s%N) && initdb -D ~/tp/m10/pg -A trust > pg-init.log 2>&1 && pg_ctl -D ~/tp/m10/pg -o "-k /tmp" -l pg.log -w start > /dev/null && psql -d postgres -Atc "show server_version" | sed "s/^/tp-m10-pg=/"; psql -d postgres -Atc "select 40+2" | sed "s/^/tp-m10-pgsel=/"; pg_ctl -D ~/tp/m10/pg -w stop > /dev/null; e=$(date +%s%N); echo "tp-ms-m10pg=$(((e-s)/1000000))"; s=$(date +%s%N) && mysqld --initialize-insecure --datadir=$HOME/tp/m10/my > my-init.log 2>&1; mysqld --datadir=$HOME/tp/m10/my > my.log 2>&1 & p=$!; for i in $(seq 240); do mysqladmin -uroot ping > /dev/null 2>&1 && break; sleep 0.5; done; mysql -uroot -N -e "select version()" | sed "s/^/tp-m10-my=/"; mysql -uroot -N -e "select 40+2" | sed "s/^/tp-m10-mysel=/"; mysqladmin -uroot shutdown; wait $p; echo "tp-m10-myrc=$?"; e=$(date +%s%N); echo "tp-ms-m10my=$(((e-s)/1000000))"; s=$(date +%s%N) && mkdir -p ng/logs ng/tmp && printf "%s\n" "pid nginx.pid;" "error_log logs/error.log;" "events {}" "http {" "  access_log logs/access.log;" "  client_body_temp_path tmp; proxy_temp_path tmp; fastcgi_temp_path tmp; uwsgi_temp_path tmp; scgi_temp_path tmp;" "  server { listen 8080; location / { return 200 \$nginx_version; } }" "}" > ng/nginx.conf && nginx -p $HOME/tp/m10/ng -e logs/error.log -c nginx.conf && curl -s 127.0.0.1:8080 | sed "s/^/tp-m10-ng=/"; echo; nginx -p $HOME/tp/m10/ng -e logs/error.log -c nginx.conf -s stop; redis-server --port 6379 --dir $HOME/tp/m10 --daemonize yes > /dev/null && for i in $(seq 40); do redis-cli ping > rd.txt 2>/dev/null && break; sleep 0.25; done; sed "s/^/tp-m10-rd=/" rd.txt; redis-cli info server | sed -n "s/^redis_version:/tp-m10-rdver=/p" | tr -d "\r"; redis-cli shutdown nosave; caddy respond --listen 127.0.0.1:8081 --body "caddy-$((6*7))" > caddy.log 2>&1 & c=$!; for i in $(seq 120); do curl -s 127.0.0.1:8081 > cd.txt 2>/dev/null && break; sleep 0.25; done; sed "s/^/tp-m10-cd=/" cd.txt; echo; kill $c; wait $c; for m in postgres mysqld nginx redis-server; do MANPAGER=cat man $m 2>/dev/null | grep -m1 -oE "^ +$m " | tr -d " "; done | tr "\n" " " | sed "s/^/tp-m10-man=/"; echo; e=$(date +%s%N); echo "tp-ms-m10rest=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-m10rest=[0-9]+" 120 || fail "the server block did not finish in 120s" "tp-m10-" "tp-ms-m10"
+grep -aqF "tp-m10-pghost=/tmp" "$LOG" || fail "the rc piece did not set PGHOST=/tmp" "tp-m10-"
+grep -aqF "tp-m10-which=/usr/local/bin/initdb /usr/local/bin/psql /usr/local/bin/mysqld /usr/bin/mysqladmin /usr/local/bin/nginx /usr/bin/redis-server /usr/local/bin/caddy " "$LOG" \
+  || fail "a server command is not where the bundle puts it (psql must be 18's, mysqld and nginx through /usr/local/bin)" "tp-m10-which"
+grep -aqF "tp-m10-pg=18.6" "$LOG" || fail "postgres 18.6 did not answer on the /tmp socket" "tp-m10-pg" "tp-ms-m10pg"
+grep -aqF "tp-m10-pgsel=42" "$LOG" || fail "postgres did not compute 40+2" "tp-m10-pg"
+grep -aqF "tp-m10-my=9.7.4" "$LOG" || fail "mysqld 9.7.4 did not answer (conf.d/tars.cnf: socket, secure-file-priv)" "tp-m10-my" "tp-ms-m10my"
+grep -aqF "tp-m10-mysel=42" "$LOG" || fail "mysql did not compute 40+2" "tp-m10-my"
+grep -aqF "tp-m10-myrc=0" "$LOG" || fail "mysqld did not shut down cleanly on mysqladmin shutdown" "tp-m10-my"
+grep -aqF "tp-m10-ng=1.30.6" "$LOG" || fail "nginx 1.30.6 did not answer as the user on 8080" "tp-m10-ng"
+grep -aqF "tp-m10-rd=PONG" "$LOG" || fail "redis did not answer ping" "tp-m10-rd"
+grep -aqF "tp-m10-rdver=8.10.3" "$LOG" || fail "redis is not 8.10.3" "tp-m10-rd"
+grep -aqF "tp-m10-cd=caddy-42" "$LOG" || fail "caddy respond did not answer" "tp-m10-cd"
+grep -aqF "tp-m10-man=postgres mysqld nginx redis-server " "$LOG" || fail "a server man page did not read offline" "tp-m10-man"
+echo "B2: as tars, postgres 18.6, mysql 9.7.4, nginx 1.30.6, redis 8.10.3 and caddy each start from the home, answer and stop offline, and their man pages read"
+M10_NUMBERS="postgres $(ms_of m10pg)ms, mysql $(ms_of m10my)ms, nginx+redis+caddy+man $(ms_of m10rest)ms"
+
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0
 for _ in $(seq 1 20); do
@@ -606,7 +630,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -617,7 +641,7 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 8 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, docs, editor, lang-beam, lang-native, lang-script, media and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 9 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, docs, editor, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
 as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
@@ -631,7 +655,7 @@ grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" |
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, docs, editor, lang-beam, lang-native, lang-script, media and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, docs, editor, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -641,10 +665,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 9 old layers removed" "$LOG" || fail "the update did not remove the nine old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 10 old layers removed" "$LOG" || fail "the update did not remove the ten old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the nine old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the ten old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"

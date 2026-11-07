@@ -1,0 +1,17 @@
+# vendor-repo의 저장소 — 도구 쪽이 운영하는 Debian 저장소(TP design 결정 1, TP-M10 plan 결정 A). 열은 탭으로 가른다.
+#
+#   이름  apt 한 줄(URI suite component…)  키 파일의 sha256  지문(사람이 읽는 기록)
+#
+# 키는 devlayer/keys/<이름>.asc다. harvest.sh가 apt-get update 전에 그 파일의 sha256을 셋째 열과 대조하고, 다르면 이름을 대고
+# 멈춘다(gpg는 거두기 컨테이너에도 개발 컨테이너에도 없다 — 거두기 컨테이너는 설치 전에 아무것도 깔지 않는다). 그다음 apt가
+# signed-by=로 그 키만 믿고 Release의 서명을 검증한다. 키는 2026-11-07에 각 저장소의 안내 URL에서 받았다(plan 확인 6).
+# 키를 가는 것은 판을 올리는 것과 같이 TARS 버전을 낼 때 한 단계로 한다(design 결정 3).
+#
+# URI는 http다 — 거두기 컨테이너(slim)에는 ca-certificates가 없고 설치 전에 깔지 않는다. 내용은 서명이 지킨다(debian 줄과 같다).
+#
+# 매니페스트의 vendor-repo 줄은 URL 자리에 <이름>/<패키지>를 쓴다 — pgdg/postgresql-18.
+
+pgdg	http://apt.postgresql.org/pub/repos/apt trixie-pgdg main	0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76	B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+mysql	http://repo.mysql.com/apt/debian trixie mysql-9.7-lts	a4bcd9f16a53cc763f87b9955dbcdced33c7aa90296b157eb6ceef0f156f4327	BCA43417C3B485DD128EC6D4B7B3B788A8D3785C
+nginx	http://nginx.org/packages/debian trixie nginx	55385da31d198fa6a5012d40ae98ecb272a6c4e8fffffba94719ffd3e87de37a	8540A6F18833A80E9C1653A42FD21310B49F6B46
+redis	http://packages.redis.io/deb trixie main	817b5a78358d00ed6b71884d70ad5d2eab9934badca1a34299fdc6a2e4a8ad20	54318FA4052D1E61A6B6F7BB5F4349D6BF53AA0C

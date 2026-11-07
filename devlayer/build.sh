@@ -91,6 +91,7 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         [[ "${have}" == "${version}" ]] || die "libc6-dev ${version} but the initrd glibc is ${have}"
       fi
       ;;
+    vendor-repo) ;; # debian과 같이 harvest tar에서 온다(TP-M10 plan 결정 A) — 아래
     upstream | prebuilt)
       # 둘은 받는 자리만 다르고(도구 자신 · 표준이 된 제3자) 받기 · 풀기 · 놓기는 같다(design 결정 2).
       fetch_checked "${url}" "${sha}" "${tool} ${version}"
@@ -227,11 +228,11 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
   esac
 done <<<"${lines}"
 
-if grep -q $'\tdebian\t' <<<"${lines}"; then
+if grep -qE $'\t(debian|vendor-repo)\t' <<<"${lines}"; then
   tarball="${build}/${bundle}.harvest.tar"
   [[ -f "${tarball}" ]] || die "no ${tarball} — run make dev-layers (harvest.sh)"
   harvest_lines="$(cat "${build}/${bundle}.harvest.lines")"
-  [[ "$(head -n -1 <<<"${harvest_lines}")" == "$(awk -F'\t' '$4 == "debian"' <<<"${lines}")" ]] \
+  [[ "$(head -n -1 <<<"${harvest_lines}")" == "$(awk -F'\t' '$4 == "debian" || $4 == "vendor-repo"' <<<"${lines}")" ]] \
     || die "${tarball} is stale — run make dev-layers"
   tar -xpf "${tarball}" -C "${root}"
   cat "${build}/${bundle}.pkgs" >>"${info}"

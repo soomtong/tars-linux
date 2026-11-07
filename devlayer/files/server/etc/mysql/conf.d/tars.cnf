@@ -1,0 +1,19 @@
+# TARS 개발 도구 층 server(TP-M10 plan 결정 E). 사용자가 홈에서 mysqld를 띄우게 하는 기본값 — 컴파일 기본값이 가리키는 자리
+# (/var/run/mysqld의 소켓, /var/lib/mysql-files의 secure-file-priv)가 TARS에 없다. 데이터는 띄울 때 --datadir=~/mysql로 준다.
+#
+#   mysqld --initialize-insecure --datadir=$HOME/mysql     (처음 한 번, root 비밀번호 없음)
+#   mysqld --datadir=$HOME/mysql &
+#   mysql -uroot
+#
+# /etc/mysql/my.cnf(mysql-common)가 이 디렉터리를 include한다. 이 파일은 묶음의 것이라 부팅마다 이 모양으로 돌아온다.
+# 내 설정은 ~/.my.cnf에 둔다(mysql이 /etc 다음에 읽는다).
+# 재부팅을 넘는 서버 설정의 자리(/config)는 서버(서비스) milestone이 만든다.
+
+[mysqld]
+socket = /tmp/mysql.sock
+# 빈 값은 LOAD DATA · SELECT INTO OUTFILE의 자리를 막지 않는다 — 개발용 기계의 기본값이다.
+secure-file-priv = ""
+mysqlx = OFF
+
+[client]
+socket = /tmp/mysql.sock

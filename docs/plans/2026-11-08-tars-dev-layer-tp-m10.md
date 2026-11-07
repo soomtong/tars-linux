@@ -142,4 +142,45 @@ H. design을 고친다(16판): 결정 1의 `vendor-repo`(결정 A의 모양과 m
 
 ## 확인한 것
 
+구현 중 사용자가 남은 결정을 위임했다(2026-11-08, "수면 모드로 들어갑니다. 남은 결정을 위임합니다"). 아래 2 · 3 · 4 · 5는 Claude가 맡아 정한 것이다.
+
+1. `make dev-layers DEV_LAYERS=server`가 세 판 멈추며 고친 것(모두 harvest):
+   - `ssl-cert`(postgresql-common의 의존)의 postinst가 거두기 컨테이너 안에서 자체 서명 인증서와 그 비밀 키(`/etc/ssl/private/ssl-cert-snakeoil.key`)를
+     만들어 목록에 들었다 — 실으면 모든 TARS가 같은 비밀 키를 갖는다. `etc/ssl/private/` · snakeoil 인증서 · 그 해시 링크(`etc/ssl/certs/<8자리>.<n>`)를 뺀다.
+     해시 링크는 컨테이너에서는 대상이 있어 "끊긴 링크" 거르기에 안 걸린다.
+   - 그 결과 openssl의 `usr/lib/ssl/private -> /etc/ssl/private`가 끊겼다(verify `dangling=1`) — 같은 이유로 뺀다.
+   - 묶음 사이 대조(TP-M2 결정 E): `/usr/bin/perldoc`이 server와 base에서 다르다. perl의 그 파일은 "perl-doc을 깔라"는 자리표이고 base는 perl-doc이
+     divert한 진짜다. perl-doc이 깔리지 않은 거두기에서는 `usr/bin/perldoc`을 싣지 않는다.
+2. 결정 A를 바꿨다 — 지문이 아니라 키 파일의 sha256을 대조한다. gpg가 거두기 컨테이너(설치 전에 아무것도 안 깐다)에도 개발 컨테이너에도 없다.
+   `repos.tsv`의 셋째 열이 sha256, 넷째 열의 지문은 사람이 읽는 기록이다. 한 바이트가 바뀌어도 멈추므로 지킴은 같다. 저장소 URI는 모두 http다 —
+   slim에 ca-certificates가 없다(redis만 https였고 http로도 같은 InRelease를 낸다). 내용은 Release 서명이 지킨다.
+3. mysql 클라이언트: `mysql-community-client-core`에는 `mysql` · `mysqldump` 등만 있고 `mysqladmin` · `mysqlcheck` · `mysqlimport` · `mysqlshow`는
+   `mysql-community-client`다(chroot 첫 판이 `mysqladmin: command not found`로 섰다). 그 줄을 더했다(+11MiB). 그것이 끄는 `mysql-common`이
+   `/etc/mysql/my.cnf`(alternatives → `!includedir /etc/mysql/conf.d/`)를 놓으므로 결정 E의 설정은 `my.cnf`가 아니라 `/etc/mysql/conf.d/tars.cnf`다 —
+   서비스 milestone의 "덧붙이기"(b)와 같은 모양이다.
+4. 크기: server 166MiB(zstd15, 풀면 545MiB, 파일 5,065, 패키지 67) — 조사의 어림 126MiB보다 크다. perl(풀면 약 58MiB)이 base와 겹쳐 두 번 실리고
+   libicu76의 데이터가 31MiB다. 같은 경로 · 같은 내용이라 허용되는 겹침이다. 줄이는 것은 2GiB 한도 결정 때의 후보로 남긴다.
+5. chroot(initrd + 묶음 열을 부팅의 겹침 순서로, `--network none`, 사용자 tars): 다섯이 모두 응답했다 — postgres `select 40+2` 42(띄우고 끄기까지 5.1초),
+   mysql 42, nginx(사용자 설정) 응답, redis `PONG`, caddy `respond` 응답. 이름은 `/usr/local/bin`의 링크로 닿고 `psql`은 18의 실물이다. `PGHOST=/tmp`.
+   mysqld는 SHUTDOWN을 받고 1초에 끝났다(qemu-user의 `Linux Native AIO … not supported`는 동기 IO로 물러난다).
+6. 빨강(할 일 8)은 체인 대신 chroot · harvest에서 봤다: (a) `tars.cnf`를 치우면 mysqld가 rc 1, 로그에 `Failed to access directory for --secure-file-priv`.
+   (b) `/usr/local/bin/nginx`를 치우면 `nginx: command not found` rc 127. (c) `repos.tsv`의 mysql 키 sha256 첫 글자를 바꾸면 harvest가 rc 1로
+   `devlayer/keys/mysql.asc is a4bc…, devlayer/repos.tsv says b4bc…`. 되돌리면 다시 `cached`.
+7. 체인 혼자(SandyBridge · 1GiB, 망 없음): PASS, 빌드 뒤 630초(앞 판 609). 서버 덩이 — postgres 6.6초, mysql 26.5초(초기화 포함), nginx+redis+caddy+man
+   3.8초 → 상한 120초(첫 판 합 약 37초의 세 배 남짓). ISO 2,034,096,128바이트 — 2GiB까지 약 113MB. 묶음 열 1,803MiB, 설치기 복사 9,859ms, overlay 75ms,
+   MemAvailable 592,084kB. `harvest.sh`가 바뀌어 묶음 아홉도 다시 거뒀고 파일 수 · 크기가 모두 앞 판과 같았다(base 21,390 · 243MiB 등).
+8. 안내(결정 F): TARS의 기본 셸은 fish라 heredoc이 없다 — nginx 설정은 내용을 따로 보이고 편집기로 저장하게 했다. 설정의 경로는 모두 상대 경로
+   (`-p ~/nginx`가 기준 — `-e logs/error.log`도 그 자리에서 푼다, chroot로 확인)라 `$HOME`이 필요 없다. 체인의 nginx도 그 모양 그대로다.
+   `tars-docs` 목록의 이름 칸을 8자에서 10자로(`PostgreSQL`). `get` 전부의 합이 약 1,000MiB가 됐다(Redis docset 213MiB).
+
 ## 결과
+
+- 판정 셋 모두 초록. `make dev-layers` 초록(server 166MiB, 네 저장소가 키 sha256 대조 뒤 서명으로 검증), 체인 부팅 2의 덩이가 망 없이 사용자로 돈다 —
+  다섯 서버가 각각 응답하고 끈다, 빨강 (a) · (b) · (c)는 chroot · harvest에서 봤다(확인한 것 6).
+- 루트 게이트 한 판에 31/31, prebuild 354초 + lanes 1,455초, 31개 모두 잘린 줄 0. devtools 753초(빌드 뒤 627초), 서버 덩이 postgres 6,673ms · mysql 23,477ms ·
+  나머지 3,728ms. ISO 2,034,094,080바이트. 로그 `out/gate-logs/20261107-163434`.
+- 계획 밖에서 더한 것: `mysql-community-client`(확인한 것 3), harvest의 snakeoil · perldoc 자리표 제외(확인한 것 1). 결정 A는 지문 대신 키 sha256(확인한 것 2),
+  결정 E의 mysql 설정은 `conf.d/tars.cnf`(확인한 것 3).
+- 실기로 남긴 것: InnoDB의 native AIO가 실기 커널에서 켜지는지(qemu-user에서만 꺼짐을 봤다 — 체인 로그는 확인하지 않았다), 에어 2011(2~4GB)에서 mysqld와
+  다른 서버를 함께 띄울 때의 메모리.
+

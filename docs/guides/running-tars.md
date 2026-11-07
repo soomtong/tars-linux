@@ -599,6 +599,15 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 기본값). 그 한 번의 부팅에서만 rc를 안 읽으므로, 그동안 rc를 고치거나
 `tars.conf`에 `shell_config=off`를 적어 두면 된다.
 
+### 서버 — 홈에서 띄우기
+
+개발 도구 층의 `server` 묶음(TP-M10)에 postgresql 18 · mysql 9.7 · nginx 1.30 · redis 8.10 · caddy가 있다. 서비스로 등록되지 않아
+사용자가 자기 계정으로 띄우고, 데이터는 홈 아래에 둔다 — `/etc` · `/var`는 RAM이라 재부팅에 사라지고 홈(`/home`, ext4)만 남는다.
+명령은 기계 안의 `tars-help devtools` "서버" 절에 있다. 표준 경로가 TARS에 없는 자리를 피하는 기본값 둘을 묶음이 싣는다:
+`/etc/mysql/conf.d/tars.cnf`(소켓 `/tmp/mysql.sock`, `secure-file-priv` 빈 값)와 `PGHOST=/tmp`(rc 조각). `mysqld` · `nginx`는 `/usr/sbin`이라
+`/usr/local/bin`의 링크로 이름이 닿고, `psql`은 Debian의 래퍼가 아니라 18의 실물이다. 부팅 때 저절로 뜨기와 재부팅을 넘는 설정
+(`/config/<서버>.d`)은 다음 milestone이다.
+
 ### 문서 — dasht와 tars-docs
 
 개발 도구 층이 얹힌 기계에는 `dasht`(Dash docset을 터미널에서 찾기)와 `w3m`(터미널 웹 브라우저)이 있다. 설치 이미지에는 Bash docset 하나만

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 개발 도구 층의 `debian` 줄을 거둔다(TP design 결정 2, TP-M0 plan 결정 A · E).
+# 개발 도구 층의 `debian` · `vendor-repo` 줄을 거둔다(TP design 결정 2, TP-M0 plan 결정 A · E, vendor-repo는 TP-M10 plan 결정 A).
 #
 # 버리는 amd64 컨테이너(`--platform=linux/amd64 debian:trixie-slim`) 안에서 돈다 — make dev-layers가 띄운다. 개발
 # 컨테이너는 arm64라 amd64 패키지의 postinst를 못 돌린다(plan 확인 1). 여기서는 진짜로 apt-get install하고(postinst
@@ -20,18 +20,30 @@ bundle="${1:?usage: harvest.sh <bundle>}"
 build=devlayer/build
 mkdir -p "$build"
 
-# 매니페스트에서 이 묶음의 debian 줄. 없으면 할 일이 없다(lang-jvm처럼 upstream만인 묶음).
+# 매니페스트에서 이 묶음의 debian · vendor-repo 줄. 없으면 할 일이 없다(lang-jvm처럼 upstream만인 묶음).
 # shellcheck source=devlayer/manifest.sh
 source devlayer/manifest.sh
-lines="$(manifest_lines "$bundle" debian)" || { echo "harvest> ${DEVLAYER_MANIFEST} has errors (above)" >&2; exit 1; }
+lines="$(manifest_lines "$bundle")" || { echo "harvest> ${DEVLAYER_MANIFEST} has errors (above)" >&2; exit 1; }
+lines="$(awk -F'\t' '$4 == "debian" || $4 == "vendor-repo"' <<<"$lines")"
 if [ -z "$lines" ]; then
   rm -f "$build/$bundle.harvest."* "$build/$bundle.pkgs"
   echo "harvest> $bundle: no debian lines"
   exit 0
 fi
 
+# vendor-repo 줄이 쓰는 저장소 이름(TP-M10 plan 결정 A). 그 저장소의 repos.tsv 줄과 키도 캐시 해시에 든다 — 다른 묶음의 캐시는
+# 이 두 자리가 바뀌어도 그대로다.
+repos="$(awk -F'\t' '$4 == "vendor-repo" { split($5, a, "/"); print a[1] }' <<<"$lines" | LC_ALL=C sort -u)"
+repo_state=""
+for r in $repos; do
+  row="$(awk -F'\t' -v r="$r" '!/^#/ && $1 == r' devlayer/repos.tsv)"
+  [ -n "$row" ] || { echo "harvest> $bundle: repo $r is not in devlayer/repos.tsv" >&2; exit 1; }
+  [ -f "devlayer/keys/$r.asc" ] || { echo "harvest> $bundle: no devlayer/keys/$r.asc" >&2; exit 1; }
+  repo_state+="$row"$'\n'"$(sha256sum <"devlayer/keys/$r.asc")"$'\n'
+done
+
 # 끝 줄은 해시 하나여야 한다 — build.sh가 `head -n -1`로 매니페스트 줄만 떼어 대조한다.
-want="$(printf '%s\n' "$lines"; cat devlayer/harvest.sh devlayer/harvest-skip.tsv | sha256sum | cut -c1-64)"
+want="$(printf '%s\n' "$lines"; { cat devlayer/harvest.sh devlayer/harvest-skip.tsv; printf '%s' "$repo_state"; } | sha256sum | cut -c1-64)"
 if [ -f "$build/$bundle.harvest.tar" ] && [ "$(cat "$build/$bundle.harvest.lines" 2>/dev/null)" = "$want" ]; then
   echo "harvest> $bundle: cached"
   exit 0
@@ -41,7 +53,7 @@ fi
 
 pkgs=()
 while IFS=$'\t' read -r _tool _b version _kind name _sha _opts; do
-  pkgs+=("$name=$version")
+  pkgs+=("${name#*/}=$version") # vendor-repo는 <저장소>/<패키지>
 done <<<"$lines"
 
 work="$(mktemp -d)"
@@ -62,6 +74,15 @@ if [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
 fi
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.before"
 snapshot >"$work/before"
+
+# vendor-repo(TP-M10 plan 결정 A): 키 파일의 sha256을 repos.tsv와 대조한 뒤 그 키만 믿는 저장소로 붙인다. /etc/apt는 거두지 않으므로
+# 이 sources 파일은 묶음에 들지 않는다. 키는 /workspace의 것을 그대로 가리킨다.
+for r in $repos; do
+  IFS=$'\t' read -r _name aptline keysha _fpr < <(awk -F'\t' -v r="$r" '!/^#/ && $1 == r' devlayer/repos.tsv)
+  have="$(sha256sum <"devlayer/keys/$r.asc" | cut -c1-64)"
+  [ "$have" = "$keysha" ] || { echo "harvest> $bundle: devlayer/keys/$r.asc is $have, devlayer/repos.tsv says $keysha" >&2; exit 1; }
+  echo "deb [signed-by=$PWD/devlayer/keys/$r.asc] $aptline" >"/etc/apt/sources.list.d/tars-$r.list"
+done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -110,9 +131,19 @@ mv "${work}/new.kept" "${work}/new.all"
 # 싣지 않는 것: alternatives 자리, ldconfig 캐시(TARS는 ld.so의 기본 경로로 찾는다), dpkg · apt 자신의 /etc, systemd ·
 # cron의 자리(TARS에는 둘 다 없다 — php의 phpsessionclean.timer가 대상 없는 링크로 남았다, TP-M3). TP-M4: 계정 파일 넷과 그
 # 백업(openssh-client가 _ssh 그룹을 더해 /etc/group이 initrd와 달라졌다 — TARS의 계정은 init이 만든다)과 sysvinit · cron ·
-# apparmor · logcheck의 자리(man-db · rsync가 끌고 왔다, 읽는 것이 없다).
-grep -Ev '^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/)' "$work/new.all" | sed 's|^/||' >"$work/list"
+# apparmor · logcheck의 자리(man-db · rsync가 끌고 왔다, 읽는 것이 없다). TP-M10: postgresql-18의 postinst가 만든 클러스터 18/main의
+# 설정(/etc/postgresql/) — 그 클러스터의 데이터는 거두지 않으므로 TARS에 없는 클러스터의 설정이 된다(plan 결정 D). postgresql-common/은 싣는다.
+# 같은 postinst 무리의 ssl-cert가 이 컨테이너에서 만든 자체 서명 인증서와 그 비밀 키(snakeoil)와 해시 링크 — 실으면 모든 TARS가 같은
+# 비밀 키를 갖는다(TP-M10 plan 확인한 것). CA 인증서는 initrd의 것이다. openssl의 usr/lib/ssl/private는 그 빠진 디렉터리로의 링크라 함께 뺀다.
+grep -Ev '^/usr/lib/ssl/private$|^/etc/(alternatives/|ld\.so\.cache$|apt/|dpkg/|systemd/|cron\.[a-z]+/|(passwd|group|shadow|gshadow)-?$|init\.d/|rc[0-6S]\.d/|apparmor\.d/|logcheck/|postgresql/|ssl/private/|ssl/certs/ssl-cert-snakeoil\.pem$|ssl/certs/[0-9a-f]{8}\.[0-9]+$)' "$work/new.all" | sed 's|^/||' >"$work/list"
 grep '^etc/' "$work/list" >"$work/etc" || true
+
+# perl의 /usr/bin/perldoc은 "perl-doc을 깔라"고 찍는 자리표다(perl-doc이 divert해 진짜로 바꾼다). perl-doc 없이 perl을 끌고 온 묶음
+# (server — postgresql-common)이 그 자리표를 실으면 진짜를 실은 base와 같은 경로의 다른 내용이 된다(TP-M10 plan 확인한 것).
+if [[ "$(dpkg-query -W -f='${db:Status-Status}' perl-doc 2>/dev/null)" != installed ]]; then
+  grep -vx 'usr/bin/perldoc' "$work/list" >"$work/list.kept" || true
+  mv "$work/list.kept" "$work/list"
+fi
 
 # 이름을 다른 것에 맡긴 alternatives(TP-M7): emacs-nox의 postinst가 /usr/bin/editor와 /usr/bin/ctags를 자기로 돌린다. editor는 initrd의
 # vim이 맡고(TP-M7 plan 맡아 정한 것 1 — 묶음이 덮으면 verify의 결정 4에 걸린다), ctags는 base의 universal-ctags가 맡는다(TP-M4).
