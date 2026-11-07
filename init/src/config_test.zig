@@ -33,13 +33,17 @@ const HOOKED_TOOLS = [_][]const u8{ "zoxide", "fzf" };
 ///
 /// `tars-config`는 `/usr/bin/tars-config`라는 실행 파일의 이름이다. 같은 이름의
 /// 별칭은 대화형 셸에서 그 명령을 가리므로 이 목록에 넣지 않는다.
+/// `lt` · `ltt`(2026-11-07, 사용자): tree를 개발 도구 층에서 빼며 `lt`를 eza의
+/// 수정 시각순 긴 목록으로, `ltt`를 바뀐 시각순으로. 게이트가 그 이름을 명령으로
+/// 치는 자리는 없다(`*/check.sh`에서 맞는 것은 `[ … -lt … ]`의 비교뿐이다).
 const ALLOWED_ALIAS_NAMES = [_][]const u8{
-    "ls", "ll",
-    "la", "lt",
+    "ls",  "ll",
+    "la",  "lt",
+    "ltt",
 };
 
 /// 별칭이 있어야 하는 도구들(ST-M1). `HOOKED_TOOLS`와 같은 자리이고 같은
-/// 이유다 — 별칭 넷을 다 지우고 이 배열도 함께 지우면 정방향(허용 범주)과
+/// 이유다 — 별칭 다섯을 다 지우고 이 배열도 함께 지우면 정방향(허용 범주)과
 /// 역방향(`expectQuietSeed`의 "별칭이 하나도 없다")이 둘 다 만족된다.
 const ALIASED_TOOLS = [_][]const u8{"eza"};
 
