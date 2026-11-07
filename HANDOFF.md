@@ -1,4 +1,4 @@
-# HANDOFF: FS-M0(첫걸음 안내 `tars-help`) 끝 — 소개 페이지 승인 뒤 TP-M10(서버 실행 파일) plan
+# HANDOFF: TP-M10(서버 실행 파일, 묶음 `server`) 끝 · 커밋함(push 안 함) — 다음은 서버(서비스) milestone(TP-M11)
 
 ## 목표
 
@@ -14,9 +14,27 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 다음 할 것
 
-1. 소개 페이지(`gh-pages` `data.js`)에 FS를 싣기 — 공개라 사용자 승인 뒤 push. 이 세션에서 diff를 보이고 기다리는 중이었다면 그 상태부터.
-2. TP-M10(서버 실행 파일 — nginx · caddy · postgresql 18 · mysql 9.7 · redis) plan. 서버 영속성 질문은 닫혔다(아래) — M10은 부팅 하나 안의 응답까지,
-   데이터 경로는 사용자가 `~` 아래로 준다고 안내에 한 줄. 서버 docset을 `tars-docs` 목록에.
+1. 사용자에게 보고: TP-M10은 사용자가 "남은 결정을 위임"하고 잔 사이에 끝났다(2026-11-08). Claude가 맡아 정한 것은 plan
+   `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`의 "확인한 것" 1~8 — 특히 2(지문 대신 키 sha256), 3(`mysql-community-client`, 설정은 `conf.d/tars.cnf`),
+   4(server 166MiB — ISO가 2GiB까지 약 113MB). 커밋은 했고 push는 안 했다(사용자 확인 뒤).
+2. TP-M11 = 서버(서비스) milestone plan — `docs/decisions/project_server_persistence.md`: (a) `/var/lib/<서버>` → `/home/.tars/var/<서버>` 링크를 init이,
+   (b) `/config/<서버>.d` include(mysql은 이미 `/etc/mysql/conf.d/`가 있다), (c) 로그 stdout, `tars-service` 연결 · 첫 시작 초기화 · 서비스 계정.
+   그 plan에서 물을 것: 링크 장치를 서버 전용으로 할지 범용으로 할지(Claude는 범용을 권할 생각).
+3. 2GiB 한도: AI milestone이 남은 약 113MB에 들어가는지 먼저 재기. 줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+
+## 완료된 작업 (2026-11-08, TP-M10 — 사용자가 조사 결과로 셋을 정하고, 구현 중 남은 결정을 위임하고 잤다)
+
+- [x] 사용자 결정: mysql은 Oracle의 trixie apt(generic tarball은 `libaio.so.1`로 안 선다), nginx stable 1.30, redis.io 8.10. plan `c77eeb4`.
+- [x] 종류 `vendor-repo`를 처음 세웠다: `devlayer/repos.tsv`(apt 한 줄 · 키 sha256 · 지문) · `devlayer/keys/*.asc`, URL 자리 `<저장소>/<패키지>`, harvest가 키 sha256을
+  대조한 뒤 `signed-by=`. URI는 http(slim에 ca-certificates가 없다 — 서명이 지킨다).
+- [x] 열째 묶음 `server`(166MiB, 패키지 67): postgresql-18 18.6(PGDG) · mysql-community-server-core/client-core/client 9.7.4 · nginx 1.30.6 · redis-server/tools 8.10.3 ·
+  caddy 2.11.9(upstream). `devlayer/files/server/`: `/usr/local/bin` 링크 38(`mysqld` · `nginx` — `/usr/sbin`은 PATH 밖, postgres 36), `etc/mysql/conf.d/tars.cnf`,
+  `PGHOST=/tmp` rc 조각 둘.
+- [x] harvest가 새로 빼는 것: `/etc/postgresql/`(TARS에 없는 클러스터의 설정), ssl-cert가 거두기 컨테이너에서 만든 snakeoil 비밀 키 · 인증서 · 해시 링크와
+  `usr/lib/ssl/private`, perl-doc 없는 거두기의 `perldoc` 자리표(base의 진짜와 부딪쳤다).
+- [x] 체인 부팅 2에 서버 덩이(다섯을 사용자로 띄우고 응답 · 끄기 · man), 빨강 셋은 chroot · harvest에서. `tars-help devtools`에 "서버" 절(fish라 heredoc 없이,
+  nginx는 상대 경로 + `-p`), `running-tars.md` 한 절, `tars-docs` 목록에 PostgreSQL · MySQL · Redis · Nginx. design 16판.
+- [x] 루트 게이트 31/31, prebuild 354초 + lanes 1,455초, 잘린 줄 0. ISO 2,034,094,080바이트.
 
 ## 완료된 작업 (2026-11-07, FS-M0 닫기 — 다음 세션)
 
@@ -230,15 +248,15 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] FS 소개 페이지(`gh-pages` `data.js`) — 사용자 승인 뒤 push.
-- [ ] TP-M10 plan — 서버(실행 파일). 서버 영속성은 서비스 milestone으로 닫혔다(`project_server_persistence`). 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
+- [x] FS 소개 페이지(`gh-pages` `data.js`, `495cf9e`) — 사용자 승인 뒤 push했다(2026-11-07).
+- [ ] TP-M11 plan — 서버(서비스). TP-M10(실행 파일)은 끝났다. 그 뒤 AI.
   사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
   체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다). `%ymm` 수가 아니라 ymm이 든 함수의
   비율을 본다(DuckDB 2.0 — TP-M8 plan 확인 11). 자동 검사는 `carryover.md` 후보.
   Debian 줄이 perl에 기대면 base에 둔다(rlwrap · ipcalc · vifm). 의존이 initrd의 것과 부딪치면 `harvest-skip.tsv`(alternatives는 skipalt가 함께 뺀다).
-- [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 1.36GB, 묶음 전체 어림 2.5~4GB) — 묶음을 따로 올리기 등.
+- [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 2.03GB — 2GiB까지 약 113MB, TP-M10 뒤. AI 묶음이 남았다) — 묶음을 따로 올리기 등.
   design 결정 12(ISO가 묶음을 싣는다)와 맞물린다. `docs/decisions/project_release_0_2.md`.
 - [ ] 사용자: 실기에서 개발 도구 층 — 프리릴리스 `dev-20261106`(TP-M3까지)이 올라가 있다. 다음 프리릴리스는 TP의 남은 milestone을 모두 마친 뒤에
   만든다(사용자 2026-11-06 — "남은 작업을 모두 마치고 프리릴리즈를 준비할게"). 절차는 `project_release_0_2.md`. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
