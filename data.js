@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-05',
-  latest: 'Laptop Power (LP-M0~M2)',
+  asOf: '2026-11-07',
+  latest: 'First Steps (FS-M0)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1188,      // git rev-list --count main
+    commits: 1233,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 30,         // check.sh의 CHAINS
-    zigKLines: 43,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 31,         // check.sh의 CHAINS
+    zigKLines: 44,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -120,6 +120,7 @@ window.TARS = {
     ['2026-11-05', 'Password Feedback', 'PW', '비밀번호 칸이 글자마다 `*`를 찍는다 — Wi-Fi · 설치 계정 · passwd, sudo의 칸도'],
     ['2026-11-05', 'Power Commands', 'RB', '`sudo reboot` · `sudo poweroff` · `shutdown -r` — PID 1에 시그널 하나, 사용자로 치면 `try: sudo`'],
     ['2026-11-05', 'Laptop Power', 'LP', 'Intel GPU 드라이버(i915)를 켜 뚜껑을 닫으면 S3로 자고, Apple 키보드의 F1 · F2가 화면 밝기 16단계'],
+    ['2026-11-07', 'First Steps', 'FS', '설치 뒤 "이제 뭘 하지"에 — `tars-help`가 망 · 블루투스 · 설정 · 서비스 · 개발 도구 · 화면의 한국어 안내 일곱 장을 보인다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -271,6 +272,7 @@ window.TARS = {
         ['`tars-install <파티션>`', '디스크 유틸리티가 만든 FAT · exFAT 파티션(예: `/dev/sda3`)을 지우고 그 자리와 붙은 빈 공간에 TARS 셋을 놓는다. 다른 파티션은 그대로, EFI · APFS · HFS+ · Recovery · NTFS는 거절. 목록이 파티션을 한 줄씩 보인다', '2026-11-05'],
         ['`tars-install --wipe` · `--yes`', '설정과 홈까지 통째로 지운다 · 확인 `YES`와 계정 질문을 건너뛴다(기본값)', '2026-09-23'],
         ['`tars-dictate`', '말하고 [Ctrl+C]. 셸에서 직접 받아쓰기', '2026-10-06'],
+        ['`tars-help` · `tars-help <장>` · `--list`', '첫걸음 안내 — 차례와 일곱 장(network · bluetooth · config · services · devtools · desk). 설치기가 끝에 이 명령을 알린다. 망 없이 읽힌다', '2026-11-07'],
       ],
     },
     {
