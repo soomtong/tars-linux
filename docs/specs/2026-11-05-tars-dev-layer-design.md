@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 13판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 끝, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 14판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 끝, TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -45,7 +45,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | JVM | JDK, kotlin, clojure(`lang-jvm` 묶음, TP-M5) |
 | BEAM | erlang, elixir, gleam(`lang-beam` 묶음, TP-M6 — gleam은 첫 프로젝트용 Hex 시드와 함께) |
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs(`emacs-nox` — Doom Emacs는 사용자가 망이 있을 때 깐다), ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인)(`editor` 묶음, TP-M7) |
-| 문서 | `dasht` + `w3m` + Dash/Zeal docset(결정 19) |
+| 문서 | `dasht` + `w3m` + Bash docset, 나머지 docset은 `tars-docs get`으로 망에서(`docs` 묶음, TP-M9 — 결정 19) |
 | 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것 — `util` 묶음과 `media` 묶음, TP-M8) |
 | 서버 | nginx, caddy, postgresql 18, mysql 9.7(LTS), redis |
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
@@ -180,15 +180,14 @@ trixie 판이 돈다.
 18. 최소 디스크는 16GiB + 2MiB다(`disk.MIN_DISK_BYTES`, HP design 결정 2의 4GiB를 사용자가 올렸다 — "요즘 작은 임베디드 장비도 8GB
     이상"). 개발 도구 층의 묶음이 p3에 놓일 자리다. 이 결정만 TP-M0보다 먼저 들어갔다(설치기 · 단위 검사 · 체인 install · home · pm · mise ·
     dualboot의 디스크 크기).
-19. 문서는 `dasht`(Dash/Zeal docset을 터미널에서 찾는 셸 스크립트)와 `w3m`(HTML을 터미널에서 읽는다)이다. `dasht`가 부르는
-    `sqlite3` · `w3m`은 `debian` 줄, docset은 `docs.sqfs`의 `/usr/share/dasht/docsets/`에 미리 풀어 둔다(`DASHT_DOCSETS_DIR`을 시스템
-    rc가 그 자리로). docset은 Kapeli의 공식 피드에서 받는 미리 빌드된 tarball이다. 추천 묶음(사용자가 "추천대로"):
-    - 언어: C, C++, Rust, Go, Python 3, Ruby, Lua, NodeJS, PHP, Java SE(개발 도구 층의 JDK와 같은 판), Erlang, Elixir, Clojure
-    - 서버: PostgreSQL, MySQL, Redis, Nginx
-    - 셸과 도구: Bash, CMake, Git(피드에 있으면), Vim(neovim 몫)
-    공식 피드에 없는 언어(zig · odin · gleam · janet · kotlin · bun 후보)는 그 언어가 내는 오프라인 문서를 쓴다 — `zig std`(HTML),
-    `go doc`, `rustup doc`의 HTML, `erl -man`, `ri`, `pydoc`. HTML은 `w3m`으로 읽는다. 피드의 실제 목록과 크기(Java SE가 수백 MB)는
-    문서 묶음의 milestone이 받으면서 확인하고, 크기가 크면 그때 다시 묻는다.
+19. 문서는 `dasht`(Dash/Zeal docset을 터미널에서 찾는 셸 스크립트)와 `w3m`(HTML을 터미널에서 읽는다)이다(`docs` 묶음, TP-M9). `dasht`가
+    부르는 `sqlite3`는 util의 것, `w3m`은 `debian` 줄이다. 싣는 docset은 Bash 하나다(사용자 결정 2026-11-07 — 추천 목록은 tgz로 약 1,000MiB라
+    ISO의 2GiB 자리에 안 들어간다, TP-M9 plan 확인 1). 나머지는 망이 있을 때 `tars-docs get`(docs 묶음의 명령 — 깔린 언어 · 도구에 맞춘 열일곱,
+    판이 있으면 판 고정 URL, 다 푼 tgz는 지운다)이나 dasht의 `dasht-docsets-install <이름>`으로 홈에 받는다. `DASHT_DOCSETS_DIR`은 기본값
+    (`~/.local/share/dasht/docsets`)이다 — 디렉터리 하나라 읽기 전용 `/usr`로 잡으면 받기가 실패한다. 묶음의 Bash docset은 시스템 rc 조각이 그
+    자리에 링크로 보인다. 서버 docset(PostgreSQL · MySQL · Redis · Nginx)은 서버 묶음이 `tars-docs`의 목록에 더한다. 피드에 없는 언어(zig · odin ·
+    gleam · janet · kotlin · bun)와 망 없는 때는 그 언어가 내는 오프라인 문서를 쓴다 — `zig std`(HTML), `go doc`, rust-docs의 HTML, `erl -man`,
+    `ri`, `pydoc`, `man 3`. HTML은 `w3m`으로 읽는다.
 20. `PATH`는 `/usr/local/bin:/usr/bin:/bin`이다(사용자, 2026-11-05). 개발 도구 층의 실행 파일 링크(결정 2)가 initrd의 같은 이름보다 앞선다.
     출처는 init의 `environ.PATH_ENTRY` 하나이고, 짝인 `config_front`의 `ENVP`와 sudoers의 `secure_path`가 같은 값을 든다. 개발 도구 층이
     없으면 `/usr/local/bin`이 없는 디렉터리라 셸이 건너뛴다. 셸 안의 실제 순서는 mise(`~/.local/bin`) → Homebrew → `/usr/local/bin` →

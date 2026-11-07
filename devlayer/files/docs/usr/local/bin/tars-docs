@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# tars-docs — 개발 도구 층의 언어 · 도구에 맞는 Dash docset을 망으로 한 번에 받는다(TP-M9 plan 결정 E, 사용자 요청 2026-11-07).
+# ISO에는 Bash docset 하나만 싣는다(사용자 결정). 나머지는 이 명령이 Kapeli의 미러에서 받아 dasht가 보는 홈 자리에 푼다.
+#
+#   tars-docs                 목록(받은 것은 *) · 크기 · 쓰는 도구
+#   tars-docs get [-y]        목록에서 아직 안 받은 것 전부 — 합계를 보이고 묻는다(-y면 묻지 않는다)
+#   tars-docs get [-y] 이름…  고른 것만. 목록에 없는 Kapeli 피드 이름도 받는다(크기는 모른다)
+#
+# dasht-docsets-install과 다른 점: 판 고정 URL(Java SE25 — 묶음의 JDK 25)을 쓰고, GitHub API를 부르지 않고, 다 푼 tgz를 지운다.
+# 크기는 2026-11-07에 잰 tgz(MiB). 서버(PostgreSQL · MySQL · Redis · Nginx)는 서버 묶음(TP-M10)이 더한다.
+set -euo pipefail
+
+dir="${DASHT_DOCSETS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dasht/docsets}"
+
+# 이름  판(- 이면 최신)  tgz MiB  쓰는 도구
+LIST="C        -     163  gcc (C 라이브러리는 man 3에도 있다)
+C++      -     165  g++
+Rust     -     141  rustc · cargo (rust-docs HTML도 묶음에 있다)
+Go       -     14   go
+Python   -     28   python3
+Ruby     -     25   ruby
+Lua      -     1    lua
+NodeJS   -     11   node · bun
+PHP      -     73   php
+Java     SE25  64   java · javac (JDK 25)
+Erlang   -     33   erl
+Elixir   -     7    elixir · mix
+Clojure  -     4    clojure
+CMake    -     11   cmake
+Vim      -     5    nvim · vim
+SQLite   -     11   sqlite3 · duckdb
+Bash     -     1    bash (ISO에 실려 있다)"
+
+die() { echo "tars-docs: $*" >&2; exit 1; }
+have() { [ -e "${dir}/$1.docset" ]; }
+field() { printf '%s\n' "${LIST}" | awk -v n="$1" -v k="$2" '$1 == n { print $k; exit }'; }
+
+list() {
+  echo "docset 자리: ${dir}"
+  echo
+  printf '%s\n' "${LIST}" | while read -r name ver mib what; do
+    mark=" "
+    have "${name}" && mark="*"
+    [ "${ver}" = - ] && ver=""
+    printf '  %s %-8s %5s MiB  %-5s %s\n' "${mark}" "${name}" "${mib}" "${ver}" "${what}"
+  done
+  echo
+  echo "  * 받은 것. 받기: tars-docs get (전부) · tars-docs get Python Go (고른 것). 찾기: dasht <말> [docset]"
+}
+
+get_one() {
+  local name="$1" ver url enc tmp progress
+  ver="$(field "${name}" 2)"
+  enc="${name//+/%2B}"
+  if [ -n "${ver}" ] && [ "${ver}" != - ]; then
+    url="https://kapeli.com/feeds/zzz/versions/${enc}/${ver}/${enc}.tgz"
+  else
+    url="https://kapeli.com/feeds/${enc}.tgz"
+  fi
+  tmp="${dir}/${name}.tgz"
+  echo "tars-docs: ${name} <- ${url}"
+  # 진행 막대는 터미널일 때만 — 아니면 --show-progress가 빈 줄을 찍는다.
+  progress=()
+  [ -t 2 ] && progress=(--show-progress)
+  if ! wget -q "${progress[@]}" -T 20 -t 2 -O "${tmp}" "${url}"; then
+    rm -f "${tmp}"
+    echo "tars-docs: ${name}: download failed (no network, or no such docset in the Kapeli feed)" >&2
+    return 1
+  fi
+  if ! gzip -t "${tmp}" 2>/dev/null; then
+    rm -f "${tmp}"
+    echo "tars-docs: ${name}: what came back is not a .tgz (no such docset?)" >&2
+    return 1
+  fi
+  DASHT_DOCSETS_DIR="${dir}" dasht-docsets-extract "${tmp}" >/dev/null
+  rm -f "${tmp}"
+  echo "tars-docs: ${name}: done"
+}
+
+get() {
+  local yes=0 names=() n total=0 unknown=0 failed=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -y | --yes) yes=1 ;;
+      -*) die "unknown option $1" ;;
+      *) names+=("$1") ;;
+    esac
+    shift
+  done
+  if [ ${#names[@]} -eq 0 ]; then
+    while read -r n _; do have "${n}" || names+=("${n}"); done <<<"${LIST}"
+    [ ${#names[@]} -gt 0 ] || { echo "tars-docs: every docset in the list is already here"; return 0; }
+  fi
+  for n in "${names[@]}"; do
+    m="$(field "${n}" 3)"
+    if [ -n "${m}" ]; then total=$((total + m)); else unknown=$((unknown + 1)); fi
+  done
+  echo "tars-docs: ${names[*]}"
+  echo "tars-docs: about ${total} MiB to download$([ "${unknown}" -gt 0 ] && echo " (+${unknown} of unknown size)"), more once unpacked, into ${dir}"
+  if [ "${yes}" = 0 ]; then
+    [ -t 0 ] || die "not a terminal; add -y to go ahead"
+    printf 'go ahead? [y/N] '
+    read -r answer
+    case "${answer}" in y | Y | yes) ;; *) echo "tars-docs: nothing downloaded"; return 0 ;; esac
+  fi
+  mkdir -p "${dir}"
+  for n in "${names[@]}"; do
+    if have "${n}"; then echo "tars-docs: ${n}: already here"; continue; fi
+    get_one "${n}" || failed+=("${n}")
+  done
+  [ ${#failed[@]} -eq 0 ] || die "failed: ${failed[*]}"
+}
+
+case "${1:-list}" in
+  list) list ;;
+  get) shift; get "$@" ;;
+  -h | --help | help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) die "unknown command $1 (list, get)" ;;
+esac

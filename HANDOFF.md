@@ -1,4 +1,4 @@
-# HANDOFF: TP-M8(터미널 유틸리티 util · 여덟째 묶음 media) 끝 — 다음은 TP-M9 plan(문서: dasht · w3m · docset)
+# HANDOFF: TP-M9(문서 — 아홉째 묶음 docs, `tars-docs`) 끝 — 다음은 첫걸음 안내 milestone의 design(사용자 결정), 그 뒤 TP-M10(서버)
 
 ## 목표
 
@@ -11,6 +11,18 @@
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-07, TP-M9 — 조사를 보고하고 사용자가 정했다, 구현 중 `tars-docs`를 사용자가 더했다)
+
+- [x] 사용자 결정: docset은 Bash 하나만 싣는다(추천 목록은 tgz 약 1,000MiB — ISO의 2GiB 자리에 안 들어간다), 나머지는 망으로. 2GiB 한도 결정은 계속 미룸.
+- [x] plan `962d78a`. 새 묶음 `docs`: dasht 2.4.0(GitHub 태그 아카이브, `hook=dasht`, dasht-server는 링크 안 함) · Bash docset(`into=dasht strip=0`) · w3m(debian).
+  `DASHT_DOCSETS_DIR`은 기본값(홈) — 디렉터리 하나라 `/usr`로 잡으면 받기가 실패한다. rc 조각 둘(`devlayer/files/docs/etc/…`)이 홈에 Bash 링크를 둔다.
+- [x] `tars-docs`(사용자 요청 — "설치한 언어 · 서버 · 도구의 문서를 한 방에"): `devlayer/files/docs/usr/local/bin/tars-docs`. 목록 열일곱, `get [-y] [이름…]`,
+  판 고정 URL(Java SE25), tgz를 지운다. 서버 docset은 TP-M10이 목록에 더한다.
+- [x] chroot가 잡은 결함: util의 sqlite 3.54는 `-line`이 `name: x`라 dasht-query-line의 파싱이 빈다 → 훅 `devlayer/hooks/dasht.sh`가 `-separator ' = '` 한 줄.
+- [x] 체인 부팅 2에 M9 덩이(링크 · 찾기 · w3m -dump · man dasht · fish 조각 · tars-docs 목록과 망 없는 실패). 빨강 둘은 chroot로(plan 확인한 것 5).
+- [x] design 14판(결정 19), `running-tars.md`의 "문서 — dasht와 tars-docs" 절. 루트 게이트 31/31, 31분 58초(lanes 1,426초), 잘린 줄 0. ISO 1.86GB, 묶음 아홉 1,637MiB.
+- [x] 사용자 요청을 기억으로(`project_first_steps_guide`): 설치 뒤 "뭘 하지"에 답하는 첫걸음 안내 — 새 milestone(사용자 "새로운 마일스톤으로 하자").
 
 ## 완료된 작업 (2026-11-07, TP-M8 — 조사 · 구현을 단계마다 보고하며 사용자가 정했다)
 
@@ -185,9 +197,11 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] TP-M9 plan — 문서(`dasht` · `w3m` · docset, design 결정 19). 그 뒤 M10부터 서버 · AI. 사용자는 조사 · 구현을 단계별로 보고받기를 원한다.
-  ISO가 1.85GB다 — docset이 크면 GitHub release의 2GiB 한도(아래 사용자 결정 대기)를 넘는다. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
-  체인은 빌드 뒤 639~650초다. 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
+- [ ] 첫걸음 안내 milestone — design부터(`docs/decisions/project_first_steps_guide.md`: 본문은 initrd `/usr/share/doc/tars/`, home에는 링크, 첫 셸 한 줄 안내 또는
+  `tars-help`는 design에서). 사용자 결정 2026-11-07 — TP-M10보다 먼저.
+- [ ] TP-M10 plan — 서버(실행 파일). 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
+  사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
+  체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다). `%ymm` 수가 아니라 ymm이 든 함수의
   비율을 본다(DuckDB 2.0 — TP-M8 plan 확인 11). 자동 검사는 `carryover.md` 후보.
@@ -198,7 +212,7 @@ TP-M0~M2:
   만든다(사용자 2026-11-06 — "남은 작업을 모두 마치고 프리릴리즈를 준비할게"). 절차는 `project_release_0_2.md`. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
   CPU에서 서는지가 남은 확인), `sudo npm i -g` 등이 `/usr/local/bin`에 서는지, javac 시간(TCG 11초). TP-M5 뒤: `cci --version` · `glc --help`가 에어 2011에서
   서는지(둘 다 x86-64 v1 빌드로 보이지만 `%ymm`이 있다 — TCG는 못 잡는다), 망 없이 `clojure -M -e '(+ 1 2)'` · `clj`(rlwrap의 줄 편집), `kotlinc` 시간. TP-M6 뒤: 새 프로젝트의 첫 `mix test`(JIT — 에어 2011의
-  진짜 SandyBridge에서 Illegal instruction이 없는지), `gleam new` → `gleam run`(망 없이), `erl -man lists`. TP-M7 뒤: `ms` · `ttt`가 에어 2011에서 서는지(`%ymm`이 있다 — 실행 중 고르기로 보인다), TP-M8 뒤: util의 60개와 ffmpeg가 에어 2011에서 서는지(`rg --version` ·
+  진짜 SandyBridge에서 Illegal instruction이 없는지), `gleam new` → `gleam run`(망 없이), `erl -man lists`. TP-M7 뒤: `ms` · `ttt`가 에어 2011에서 서는지(`%ymm`이 있다 — 실행 중 고르기로 보인다), TP-M9 뒤: `dasht printf Bash`의 w3m 화면이 TARS 터미널에서 맞게 그려지는지, 망이 있을 때 `tars-docs get`(약 700MiB)과 `dasht <말>`, TP-M8 뒤: util의 60개와 ffmpeg가 에어 2011에서 서는지(`rg --version` ·
   `ffmpeg -version` · `duckdb`의 GROUP BY 하나), TUI 도구(lazygit · yazi · gitui · herdr · vifm · lazysql)의 화면이 TARS 터미널에서 맞게 그려지는지, `emacs`의 첫 native-comp(gcc를 부른다)가
   견딜 만한지, 망이 있을 때 `git clone … ~/.config/emacs && ~/.config/emacs/bin/doom install`이 TARS 위에서 되는지(체인은 안 봤다).
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절. 다음 번호는 0.2.0(TP 전체 뒤)이다. 최소 디스크는 16GiB다.
@@ -236,13 +250,14 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
   부르는 자리 `init/src/main.zig`의 `readConfig`(`mountHome` 바로 뒤).
 - `kernel/make_initrd.sh` — 시스템 rc 셋(`/etc/bash.bashrc` · `/etc/zsh/zshrc` · fish `conf.d`)과 `/etc/tars/rc.d` 읽기.
 - `devtools/check.sh` — 체인(부팅 넷). `TP_CPU=SandyBridge`, 부팅 2의 hello 덩이들, 부팅 3의 `/usr/local` 잔존.
-- `docs/specs/2026-11-05-tars-dev-layer-design.md`(13판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4,5,6}.md` · `2026-11-07-…-tp-m{7,8}.md`.
+- `devlayer/hooks/dasht.sh`(sqlite 3.54 파싱 한 줄), `devlayer/files/docs/usr/local/bin/tars-docs`(docset 한 번에 받기).
+- `docs/specs/2026-11-05-tars-dev-layer-design.md`(14판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4,5,6}.md` · `2026-11-07-…-tp-m{7,8,9}.md`.
 
 ## 지금 상태 (2026-11-07)
 
-- 진행 중인 것은 TP(design 13판, M0~M8 끝 — 다음은 M9 plan, 문서). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 33분 13초(TP-M8 — lanes 1,490초, devtools 759초).
-  `make gate`는 먼저 `make dev-layers`(묶음 여덟 — base · editor · lang-beam · lang-jvm · lang-native · lang-script · media · util, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
+- 진행 중인 것은 TP(design 14판, M0~M9 끝). 다음은 첫걸음 안내(새 milestone, design부터), 그 뒤 TP-M10. 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 31분 58초(TP-M9 — lanes 1,426초, devtools 713초).
+  `make gate`는 먼저 `make dev-layers`(묶음 아홉 — base · docs · editor · lang-beam · lang-jvm · lang-native · lang-script · media · util, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.

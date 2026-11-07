@@ -596,6 +596,23 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 기본값). 그 한 번의 부팅에서만 rc를 안 읽으므로, 그동안 rc를 고치거나
 `tars.conf`에 `shell_config=off`를 적어 두면 된다.
 
+### 문서 — dasht와 tars-docs
+
+개발 도구 층이 얹힌 기계에는 `dasht`(Dash docset을 터미널에서 찾기)와 `w3m`(터미널 웹 브라우저)이 있다. 설치 이미지에는 Bash docset 하나만
+실려 있고(크기 때문 — TP-M9), 나머지는 망이 있을 때 한 번 받는다.
+
+```sh
+tars-docs                 # 깔린 언어 · 도구에 맞춘 docset 목록 — 받은 것은 *, 크기(MiB)
+tars-docs get             # 아직 안 받은 것 전부(약 700MiB) — 합계를 보이고 묻는다. -y면 묻지 않는다
+tars-docs get Python Go   # 고른 것만. Kapeli 피드의 다른 이름도 된다(예: Haskell)
+dasht printf Bash         # 찾아서 w3m으로 연다. docset을 빼면 받은 것 전부에서 찾는다
+dasht-query-line printf   # 결과를 글자로만(이름 · 종류 · URL)
+```
+
+받은 docset은 `~/.local/share/dasht/docsets/`에 풀린다(`/home`이라 재부팅 · 갱신에도 남는다). 지우려면 그 자리의 `<이름>.docset`을 지운다.
+Java는 묶음의 JDK와 같은 SE25를 받는다. 망이 없을 때는 언어가 싣는 문서를 쓴다 — `man 3 printf`(C), `go doc fmt.Println`, `pydoc json`,
+`ri Array`, `erl -man lists`, `perldoc strict`, rust는 `w3m /usr/local/lib/rust-1.99.1/share/doc/rust/html/std/index.html`.
+
 ### 방화벽 — 받을 포트만 연다
 
 `tars.conf`에 `firewall=on`을 적으면 들어오는 연결을 기본으로 버린다. 기본값은

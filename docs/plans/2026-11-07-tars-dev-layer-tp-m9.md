@@ -9,6 +9,7 @@ Goal: design 결정 19의 문서 도구를 싣는다 — `dasht`(Dash/Zeal docse
 - docset은 Bash 하나만 싣는다. 나머지는 사용자가 처음 쓸 때 망으로 받는다("처음에 네트워크를 통해 받으라고 하자"). design 19의 추천 묶음(약 1,000MiB — 확인 1)을
   싣지 않는다.
 - GitHub release의 2GiB 한도는 지금 정하지 않는다(`project_release_0_2.md` — 미룸). 이 milestone은 ISO를 몇 MB만 키운다(확인 7).
+- 구현 중 더함: "설치한 언어 · 서버 · 도구의 문서를 한 방에 받는 스크립트나 내부 명령" — ISO에는 없지만 망이 있을 때 한 번에(결정 E).
 
 ## 착수 전 확인 (2026-11-07)
 
@@ -57,13 +58,22 @@ A. 새 묶음 `docs`에 세 줄:
      docset 자신의 날짜는 줄 위 주석에 둔다. 실행 파일이 없는 줄이라 `into=` 없이는 굽기가 `nothing to link`로 멈춘다.
    - `w3m` 0.5.3+git20230121-2.1 `debian`.
 B. `DASHT_DOCSETS_DIR`은 건드리지 않는다(기본값 — 홈). 시스템 rc 조각이 홈의 그 자리에 Bash docset 링크를 둔다 — 없거나 깨진 링크일 때만
-   `ln -sfn /usr/local/lib/dasht-2.4.0/Bash.docset "$d/Bash.docset"`. 사용자가 진짜 디렉터리로 바꿔 두었으면 손대지 않는다. `XDG_DATA_HOME`을 따른다. 아무것도 찍지
-   않는다. bash · zsh는 `devlayer/files/docs/etc/tars/rc.d/docs.sh`, fish는 `etc/fish/conf.d/10-docs.fish`. 이렇게 하면 망으로 받은 docset(홈)과 묶음의 Bash가 한
+   `ln -sfn /usr/local/lib/dasht-2.4.0/Bash.docset "$d/Bash.docset"`. 사용자가 진짜 디렉터리로 바꿔 두었으면 손대지 않는다. 사용자가 잡은
+   `DASHT_DOCSETS_DIR`, 없으면 `XDG_DATA_HOME`을 따른다. 아무것도 찍지 않는다. bash · zsh는 `devlayer/files/docs/etc/tars/rc.d/docs.sh`, fish는 `etc/fish/conf.d/10-docs.fish`. 이렇게 하면 망으로 받은 docset(홈)과 묶음의 Bash가 한
    디렉터리에서 보이고, 받기에 sudo가 필요 없으며, 받은 것은 `/home`에 남는다(design 결정 16의 "데이터는 `/home`"과 같은 쪽).
-C. 나머지 docset은 사용자가 망이 있을 때 `dasht-docsets-install <이름>`으로 받는다. 이것을 `docs/guides/running-tars.md`에 적는다 — 명령, 받는 자리, 확인 1의
-   크기 표(큰 것을 먼저 알게), 이미 오프라인으로 있는 문서(`rust-docs` HTML · `man 3` · `erl -man` · `go doc` · `pydoc` · `ri` · `perldoc`)를 w3m · man으로 여는 법.
+C. 나머지 docset은 사용자가 망이 있을 때 받는다 — 결정 E의 `tars-docs get`(한 번에) 또는 dasht 자신의 `dasht-docsets-install <이름>`(피드의 아무 이름).
+   이것을 `docs/guides/running-tars.md`에 적는다 — 명령, 받는 자리, 크기, 이미 오프라인으로 있는 문서(`rust-docs` HTML · `man 3` · `erl -man` · `go doc` ·
+   `pydoc` · `ri` · `perldoc`)를 w3m · man으로 여는 법.
 D. design 결정 19를 고친다(14판): `docs` 묶음은 dasht · w3m · Bash docset, `DASHT_DOCSETS_DIR`은 기본값, 추천 목록은 "싣는 것"이 아니라 "망으로 받기를 권하는 것"으로
    크기와 함께. 묶음 표에 `docs`.
+
+E. `tars-docs`(사용자 요청, 구현 중). docs 묶음의 `devlayer/files/docs/usr/local/bin/tars-docs`(bash). 목록은 개발 도구 층에 깔린 언어 · 도구에
+   맞춘 docset 열일곱(C · C++ · Rust · Go · Python · Ruby · Lua · NodeJS · PHP · Java SE25 · Erlang · Elixir · Clojure · CMake · Vim · SQLite · Bash)과 확인 1의 크기다.
+   - `tars-docs`는 목록(받은 것 `*`), `tars-docs get`은 안 받은 것 전부(합 약 691MiB) — 합계를 보이고 묻는다, `-y`면 묻지 않는다, 터미널이 아니면 `-y` 없이 멈춘다.
+     `tars-docs get Python Go`는 고른 것, 목록에 없는 피드 이름도 받는다.
+   - dasht-docsets-install과 다른 점: 판이 있는 줄은 판 고정 URL(Java SE25 — 묶음의 JDK 25, 피드의 최신은 SE27), GitHub API를 부르지 않는다(받기 하나만),
+     다 푼 tgz를 지운다(위험 3이 없어진다), 실패한 것을 이름으로 모아 rc 1.
+   - 서버(PostgreSQL · MySQL · Redis · Nginx)는 서버 묶음(TP-M10)이 깔 때 목록에 더한다 — 깔리지 않은 것의 문서는 목록에 두지 않는다.
 
 ## Claude가 맡아 정한 것 (뒤집을 것이 있으면 글자로)
 
@@ -98,7 +108,7 @@ D. design 결정 19를 고친다(14판): `docs` 묶음은 dasht · w3m · Bash d
 
 ## 비목표
 
-1. 망으로 docset 받기(`dasht-docsets-install`) — 체인은 망이 없다. 확인 5의 컨테이너 시험과 실기로 본다.
+1. 망으로 docset 받기(`tars-docs get` · `dasht-docsets-install`) — 체인은 망이 없다(체인은 망 없는 실패만 본다). 컨테이너 · chroot 시험(확인한 것)과 실기로 본다.
 2. design 19의 추천 docset을 싣기(사용자 결정).
 3. `dasht-server`(맡아 정한 것 2).
 4. 셸 완성(맡아 정한 것 3).
@@ -110,9 +120,32 @@ D. design 결정 19를 고친다(14판): `docs` 묶음은 dasht · w3m · Bash d
 1. Kapeli의 판 없는 URL(맡아 정한 것 4) — 캐시가 없는 기기에서 받을 때 sha256이 어긋날 수 있다. 멈춤은 이름을 대므로 원인은 바로 보인다.
 2. `dasht-docsets-update`가 홈의 Bash 링크를 갱신하려 들면 링크를 진짜 디렉터리로 바꾸며 받을 것이다(GNU tar가 디렉터리 자리의 심볼릭 링크를 지우고 만든다) —
    그 뒤에는 홈의 사본이 쓰이고 rc는 손대지 않는다(결정 B). 실기 확인으로 남긴다.
-3. 받은 tgz가 docset 옆에 남는다(dasht의 동작 — 확인 5). 큰 docset은 홈을 두 배로 쓴다. `running-tars.md`에 적는다.
+3. 받은 tgz가 docset 옆에 남는다(`dasht-docsets-install`의 동작 — 확인 5). `tars-docs`는 지운다(결정 E). `running-tars.md`에 적는다.
 4. 묶음이 아홉이 된다 — init의 상한은 16(`init/src/layers.zig`의 `MAX`). 체인 시간은 거의 같다(묶음 몇 MB).
 
 ## 확인한 것
 
+1. `make dev-layers` 첫 판 초록(2분 40초): docs 거둔 패키지 3(w3m · libgc1 · libgpm2), 파일 488, 풀면 13MiB, zstd15 4MiB, verify unresolved 0 · differs 0 · dangling 0.
+2. 결정 E(`tars-docs`)를 구현 중에 더했다(사용자 요청). 컨테이너(trixie, 망 있음): 목록, `get Lua` · `get Java`(판 고정 URL — 받은 index.html이 "Java SE 25"),
+   없는 이름은 `what came back is not a .tgz`, 터미널 아님 + `-y` 없음은 멈춤, tgz가 남지 않는다. 망 없음(닿지 않는 프록시)은 `download failed` · rc 1 · 남는 것 없음.
+   `--show-progress`가 터미널이 아닐 때 빈 줄을 찍어 stderr가 터미널일 때만 켰다.
+3. chroot(initrd + base · docs · util, 사용자 tars)에서 찾기가 비었다 — util의 sqlite 3.54.1은 `-line` 모드가 `name: printf`를 찍는다(trixie 3.46은 `name = printf`).
+   dasht-query-line의 awk가 공백으로 갈라 `$1 == "url"` · `$3`을 읽으므로 결과가 하나도 file:// URL이 되지 못한다 — 확인 5의 컨테이너 시험은 trixie의 sqlite라
+   못 봤다. 3.54에 옛 모양을 고르는 `.mode` 옵션은 없고 `-separator ' = '`가 두 판 모두 `name = …`을 찍는다. 훅 `devlayer/hooks/dasht.sh`가 그 한 줄만 고친다
+   (줄이 정확히 한 번 있지 않으면 멈춘다 — 판이 바뀌면 알린다). 결정 A의 dasht 줄에 `hook=dasht`.
+4. 훅 뒤 chroot: 링크 · `dasht-docsets` · `name=printf` · `w3m -dump`의 "Bash Builtin Commands" · `man dasht` · fish 조각 · `tars-docs` 목록 · `dasht-server` 없음.
+   DNS를 넣은 chroot에서 TARS의 wget · 인증서로 `tars-docs get -y Lua`가 받았다.
+5. 빨강(할 일 7)은 체인 대신 같은 덩이를 chroot에서 망가뜨려 봤다(체인 두 판 약 35분을 아꼈다): (a) rc 조각 둘의 `ln`을 지우면 docset 디렉터리부터 없다 — 링크 ·
+   목록 · 찾기 · fish가 모두 비고 체인의 첫 기다림(`tp-m9-link=`)이 멈출 모양. (b) `/usr/bin/w3m`을 지우면 다른 줄은 서고 `w3m=`만 빈다. 훅 없는 첫 판(확인한 것 3)이
+   찾기의 빨강을 실제로 보였다.
+6. 체인 혼자(SandyBridge · 1GiB, 망 없음): PASS, 빌드 뒤 592초(앞 판 650), 전체 16분 14초. ISO 1,859,833,856바이트(앞 판보다 약 5MB, 2GiB까지 약 288MB).
+   묶음 아홉 1,637MiB, 설치기 복사 9,142ms, overlay 65ms. M9 덩이 1,175ms — 상한 60초는 그대로 두고 주석에 실측을 적었다. MemAvailable 605,760kB.
+   `make quick` PASS.
+
 ## 결과
+
+- 판정 셋 모두 초록. `make dev-layers` 초록(docs 4MiB — 훅을 더한 셋째 판), 체인 부팅 2의 덩이가 망 없이 사용자로 돈다, 빨강 (a) · (b)는 chroot에서 봤다(확인한 것 5).
+- 루트 게이트 한 판에 31/31, 31분 58초(prebuild 366초, lanes 1,426초), 31개 모두 잘린 줄 0. devtools 713초(빌드 뒤 593초), M9 덩이 1,094ms.
+- 계획 밖에서 더한 것: `tars-docs`(결정 E, 사용자 요청), 훅 `dasht.sh`(확인한 것 3 — sqlite 3.54의 line 모드).
+- 실기로 남긴 것: w3m의 대화형 화면이 TARS 터미널에서 맞게 그려지는지(비목표 6), 망이 있을 때 `tars-docs get`(비목표 1), `dasht-docsets-update`가 홈의 Bash 링크를
+  어떻게 다루는지(위험 2).
