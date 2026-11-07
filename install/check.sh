@@ -324,6 +324,9 @@ if ! wait_log "tars-install: done. remove the boot medium and reboot." 120; then
   fail "tars-install /dev/nvme0n1 --yes never said done" \
     "tars-install:" "failed" "never appeared"
 fi
+# FS-M0: 새 설치의 끝 줄 다음에 첫걸음 안내를 알린다(FS design 결정 3).
+grep -aqF "tars-install: after the reboot, type tars-help for the first steps." "$LOG" \
+  || fail "tars-install did not point at tars-help after done" "tars-install:"
 # 넷이 다 갔다. 크기까지는 안 본다 — 부팅 2가 커널과 initrd를 실제로 읽는다.
 for f in boot/bzImage boot/initrd.cpio boot/limine/limine.conf EFI/BOOT/BOOTX64.EFI EFI/BOOT/.disk_label EFI/BOOT/.disk_label_2x boot/version; do
   if ! clean | grep -aE "^  ${f} [0-9]+ bytes$" >/dev/null; then

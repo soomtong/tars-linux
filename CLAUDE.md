@@ -86,4 +86,6 @@ milestone별 plan을 작성한다 (예:
   - `docs/guides/completed.md` 표 끝에 한 행(이름 · 끝난 날 · 무엇이 섰나)
   - 소개 페이지(`gh-pages` 브랜치의 `data.js`) — 기준일 · 타임라인 · 전체 기능 목록. 순서는 `site/README.md`
   - `docs/decisions/`의 기억 한 파일과 `MEMORY.md` 한 줄, `HANDOFF.md`
+  - 사용자가 치는 것(설정 키 · 명령 · 단축키)이 바뀌었으면 기계 안의 첫걸음 안내 `docs/help/*.md`(`tars-help`가 보이는 것, FS).
+    `make quick`은 하위 명령 이름만 대조한다 — 옵션 · 키 이름 · 순서는 사람이 본다
 - 버전을 낼 때는 `docs/decisions/project_release.md`의 절차 일곱 단계를 따른다.

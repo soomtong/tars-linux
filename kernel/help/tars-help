@@ -1,0 +1,60 @@
+#!/usr/bin/bash
+# tars-help — 설치 뒤 첫걸음 안내(FS design). 본문은 /usr/share/doc/tars/의 Markdown 일곱 장이고(저장소의 docs/help/),
+# 이 스크립트는 고르고 보여 주기만 한다(FS-M0 plan 결정 B).
+#
+#   tars-help            처음 할 일(index.md)
+#   tars-help <주제>     그 장(network · bluetooth · config · services · devtools · desk)
+#   tars-help --list     주제와 각 장의 제목
+#
+# 보여 주기: 터미널이고 glow가 있으면 glow -p(util 묶음), 터미널이고 glow가 없으면 less(initrd), 터미널이 아니면 cat —
+# 파이프와 체인은 글자 그대로 받는다. 문서 자리는 TARS_HELP_DIR(호스트 시험과 docs/help/check.sh가 저장소로 돌린다).
+set -euo pipefail
+
+dir="${TARS_HELP_DIR:-/usr/share/doc/tars}"
+
+# 장의 순서 — index의 "처음 할 일"과 같다.
+TOPICS=(network bluetooth config services devtools desk)
+
+title() { sed -n '1s/^# *//p' "$1"; }
+
+list() {
+  local t
+  for t in "${TOPICS[@]}"; do
+    printf '  %-10s %s\n' "${t}" "$(title "${dir}/${t}.md")"
+  done
+}
+
+show() {
+  local f="$1"
+  if [ -t 1 ]; then
+    if command -v glow >/dev/null 2>&1; then
+      exec glow -p "${f}"
+    fi
+    exec less -R "${f}"
+  fi
+  exec cat "${f}"
+}
+
+case "${1:-}" in
+  "") show "${dir}/index.md" ;;
+  --list) list ;;
+  -h | --help)
+    echo "usage: tars-help              처음 할 일"
+    echo "       tars-help <주제>       그 장 — tars-help --list로 주제를 본다"
+    echo "       tars-help --list       주제와 제목"
+    ;;
+  -*)
+    echo "tars-help: unknown option $1 (tars-help --help)" >&2
+    exit 2
+    ;;
+  *)
+    for t in "${TOPICS[@]}"; do
+      [ "$1" = "${t}" ] && show "${dir}/${t}.md"
+    done
+    {
+      echo "tars-help: no topic $1. topics:"
+      list
+    } >&2
+    exit 1
+    ;;
+esac

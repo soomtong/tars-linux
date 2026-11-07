@@ -882,6 +882,32 @@ if ! wait_for_screen 'ge-rc=1( |$)'; then
 fi
 echo "which found itself on PATH and exited 1 for a name it could not find"
 
+# ── 검사 23: tars-help — 첫걸음 안내(FS-M0) ──────────────────────────
+#
+# 설치 뒤 처음 치는 명령이 initrd에 있고, 본문이 /usr/share/doc/tars에 실렸는가. 판정 글자는 출력에만 생긴다:
+#   tars-help --list                        친 줄에 desk가 없다. 출력의 주제 목록 끝이 desk
+#   tars-help network | grep -om1 net=d.cp  친 줄은 d.cp. 출력은 문서의 net=dhcp — 본문이 실렸고 파이프면 cat이다
+#   tars-help nope; echo fs-rc=$status      없는 주제는 1(목록은 stderr)
+# 한글 본문은 판정에 쓰지 않는다(plan 확인 5). 음성 확인(아래 검사 19)이 tars-help의 Unknown command도 잡는다.
+echo "=== typing 'tars-help --list' ==="
+type_keys t a r s minus h e l p spc minus minus l i s t ret
+if ! wait_for_screen "desk"; then
+  fail "tars-help --list did not list the desk topic" "terminal: screen>" "Unknown command"
+fi
+echo "=== typing 'tars-help network | grep -om1 net=d.cp' ==="
+type_keys t a r s minus h e l p spc n e t w o r k spc shift-backslash spc \
+          g r e p spc minus o m 1 spc n e t equal d dot c p ret
+if ! wait_for_screen "net=dhcp"; then
+  fail "tars-help network did not print the network chapter" "terminal: screen>" "tars-help:"
+fi
+echo "=== typing 'tars-help nope; echo fs-rc=\$status' ==="
+type_keys t a r s minus h e l p spc n o p e semicolon spc \
+          e c h o spc f s minus r c equal shift-4 s t a t u s ret
+if ! wait_for_screen 'fs-rc=1( |$)'; then
+  fail "tars-help did not exit 1 for a topic it does not have" "terminal: screen>" "tars-help:"
+fi
+echo "tars-help listed its topics, printed the network chapter through a pipe and exited 1 for an unknown topic"
+
 # ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
 #
 # fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는

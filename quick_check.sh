@@ -38,7 +38,7 @@ have_zig="$(zig version)"
 #    찍었는데, SN-M0이 그 46을 고치거나 지시자로 표시해 0으로 만들고 판정을 내렸다. 의도한 것은 그 줄
 #    위에 지시자와 이유를 단다 — trap · 콜백 함수의 SC2329는 파일 끝이 exit일 때 shellcheck가 헛짚는 것이다.
 mapfile -t sh_files < <(git ls-files '*.sh')
-sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate kernel/bluetooth/tars-dbus kernel/bluetooth/tars-bluetoothd)
+sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate kernel/bluetooth/tars-dbus kernel/bluetooth/tars-bluetoothd kernel/help/tars-help)
 note "shellcheck ${#sh_files[@]} files"
 if shellcheck -x -P SCRIPTDIR -S style "${sh_files[@]}"; then
   :
@@ -64,6 +64,10 @@ zig run shared/screen_args_test.zig || failed+=(shared-test)
 #    컨테이너의 몫이라 여기 없다(design 확인 5).
 mkdir -p out/quick
 (cd init && zig build --prefix ../out/quick/init --cache-dir ../out/quick/init-cache) || failed+=(init-build)
+
+# 6. 첫걸음 안내(docs/help/*.md)의 tars-config · tars-service 하위 명령과 tars-help 주제가 실제와 맞는가(FS-M0 plan 결정 D).
+#    문서가 기능보다 늦게 고쳐지는 것을 이름만이라도 잡는다 — 옵션 · 키 이름 · 순서는 사람이 본다.
+./docs/help/check.sh || failed+=(help-docs)
 
 if [ "${#failed[@]}" = 0 ]; then
   note PASS

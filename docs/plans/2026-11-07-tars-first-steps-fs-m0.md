@@ -90,4 +90,23 @@ F. 장마다 옮길 것(`running-tars.md`의 절 — design 결정 1의 표):
 
 ## 확인한 것
 
+1. 장을 쓰며 `running-tars.md`가 낡은 자리 넷을 찾았다(위험 1이 실제였다) — 장은 소스를 따랐다:
+   - `tars-config set` · `reload`에 `sudo`가 없다. HP-M2 뒤로 `/config` 쓰기와 init의 제어 소켓(root 0600)은 root만이다 —
+     `tars-service`도 `status`까지 `sudo`(`service_cli.zig`의 `try: sudo tars-service`).
+   - 별칭 `lt`가 "두 단계 트리"라고 한다 — TP-M8(`24b8fc4`)부터 `eza -ls modified`, `ltt`는 `changed`(`config.zig`의 seed).
+   - `tars.conf`의 키가 "열둘"이라고 한다 — 지금 열아홉(`Config`의 필드). 장에는 자주 쓰는 것만 적고 `tars-config list`로 보낸다.
+   - 기본 셸은 fish다(`Config.shell`). `hangul_layout`의 기본 `shin_pcs`를 처음에 "신세벌식 P2"로 잘못 풀어 썼다가 받는 값
+     (`dubeol | sebeol_3p3 | shin_p2 | shin_pcs`)을 보고 고쳤다. `hangul_toggle`의 값은 `hangul_key · shift_space · capslock_tap · lctrl_tap`.
+   - `bluetoothctl`을 사용자로 쳤을 때는 잰 적이 없다(HP 실측 10) — 장은 `sudo bluetoothctl`. `wpa_cli` · `nft list ruleset`도 `sudo`.
+   - ssh는 여전히 root로 붙는다(HP design 비목표 4) — `ssh root@<주소>`.
+   - PC 키보드의 `Alt`가 Mac의 `Cmd` 자리다(`config.zig`: `pc = [Ctrl][Win][Alt]`) — desk 장의 단축키 표 머리에 적었다. 화면 나누기 · 탭 · copy mode 키를
+     desk에 더했다(처음 쓰는 사람이 가장 먼저 모르는 것).
+2. `docs/help/check.sh`의 정답 뽑기가 처음에 `USAGE`의 설명 칸 산문("ports tars-config opens")까지 하위 명령으로 받았다 — 줄 머리 · `sudo ` 뒤만 세게
+   좁혔다. 결과 `tars-config` 14 · `tars-service` 4. 빨강: `tars-config wfi` · `tars-help nope`를 넣으면 `network.md:20` · `:54`를 대고 rc 1.
+3. 호스트에서 `TARS_HELP_DIR=docs/help`: `--list`(여섯 주제와 제목), `network | head`(파이프 → cat), `nope`(stderr에 목록, rc 1).
+4. `make quick` PASS(shellcheck 77, help check 7장).
+5. 사용자가 `/humanize-korean`으로 장 일곱의 윤문을 돌렸다(light, route_hint 위험 3): '-고' 뒤 쉼표 8곳만 뺐고 게이트 수렴(문자율 0.0%,
+   문장 터치 8/334, 서법 소실 0). 이어서 사용자 결정 — 말투를 해라체에서 존댓말(합니다체)로("한다. → 합니다."). 일곱 장을 합니다체로
+   다시 썼다(표 칸 · 코드 블록 주석 포함, 명령 · 백틱 값 · `#` 제목은 그대로). devtools 표의 근거 없던 "git 도구"를 뺐다. help check 그대로 통과.
+
 ## 결과

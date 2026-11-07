@@ -1271,6 +1271,9 @@ fn install(
 
     if (!fillEsp(p1, esp_conf, new_ver, false)) return 1;
     say("tars-install: done. remove the boot medium and reboot.\n", .{});
+    // FS-M0(FS design 결정 3). 새 설치만 — 갱신(`updated.`)은 이미 쓰던 사람이다. `done` 줄은 그대로 두어 그 줄을
+    // 기다리는 체인(install · devtools · dualboot)이 바뀌지 않는다.
+    say("tars-install: after the reboot, type tars-help for the first steps.\n", .{});
     return 0;
 }
 

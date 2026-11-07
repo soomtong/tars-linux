@@ -514,6 +514,14 @@ chmod 0755 "$WORKDIR/usr/bin/tq-probe"
 cp dictation/tars-dictate "$WORKDIR/usr/bin/tars-dictate"
 chmod 0755 "$WORKDIR/usr/bin/tars-dictate"
 
+# FS-M0. 설치 뒤 첫걸음 안내(FS design). tars-help는 tars-dictate와 같은 이유로 저장소에서 와서 /usr/bin에 간다 —
+# bash 스크립트라 따라갈 라이브러리가 없고, 부르는 less · cat은 이미 있다(glow는 util 묶음에만). 본문은 저장소의
+# docs/help/*.md 일곱 장 그대로다 — check.sh(quick_check가 부르는 검사)는 싣지 않는다.
+cp help/tars-help "$WORKDIR/usr/bin/tars-help"
+chmod 0755 "$WORKDIR/usr/bin/tars-help"
+mkdir -p "$WORKDIR/usr/share/doc/tars"
+cp ../docs/help/*.md "$WORKDIR/usr/share/doc/tars/"
+
 # VD-M0. curl이 https에서 믿을 인증 기관 목록. libcurl이 컴파일 타임에 박아 둔 경로가
 # /etc/ssl/certs/ca-certificates.crt이고, 그 파일이 없으면 https는 전부
 # `curl: (77)`로 죽는다(VD design 실측 1). Debian은 이 묶음을 postinst의
