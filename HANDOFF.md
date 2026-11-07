@@ -1,4 +1,4 @@
-# HANDOFF: FS-M0(첫걸음 안내 `tars-help`) 구현 · 커밋 끝 — 루트 게이트 2회차를 다시 보고 닫기. 그 뒤 TP-M10(서버)
+# HANDOFF: FS-M0(첫걸음 안내 `tars-help`) 끝 — 소개 페이지 승인 뒤 TP-M10(서버 실행 파일) plan
 
 ## 목표
 
@@ -12,7 +12,21 @@
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
 
-## 지금 하던 것 (2026-11-07, FS-M0 — 사용자 "commit as you wish"로 게이트 2회차 결과 전에 커밋했다)
+## 다음 할 것
+
+1. 소개 페이지(`gh-pages` `data.js`)에 FS를 싣기 — 공개라 사용자 승인 뒤 push. 이 세션에서 diff를 보이고 기다리는 중이었다면 그 상태부터.
+2. TP-M10(서버 실행 파일 — nginx · caddy · postgresql 18 · mysql 9.7 · redis) plan. 서버 영속성 질문은 닫혔다(아래) — M10은 부팅 하나 안의 응답까지,
+   데이터 경로는 사용자가 `~` 아래로 준다고 안내에 한 줄. 서버 docset을 `tars-docs` 목록에.
+
+## 완료된 작업 (2026-11-07, FS-M0 닫기 — 다음 세션)
+
+- [x] 루트 게이트 2회차 31/31, prebuild 356초 + lanes 1,454초, 잘린 줄 0, 로그 `out/gate-logs/20261107-135753`. PD-M4도 초록(1회차의 말없는 끝은 간헐, carryover 그대로).
+  `tools`(UT-M3)의 `tars-help` 셋과 `install`(DC-M2)의 새 줄이 게이트 안에서 돌았다.
+- [x] FS design `Status:` 끝남, plan "결과" 절, `completed.md` 한 행, 기억 `project_first_steps_guide` 끝 표시.
+- [x] TP design 열린 질문 1 → "닫은 것"(15판): 사용자 "핵심은 이게 영속성을 가지느냐" — 서버(서비스) milestone이 맡고 (a) 링크 (b) `/config/<서버>.d` include
+  (c) 로그 stdout을 채택. 새 기억 `docs/decisions/project_server_persistence.md`(그 plan에서 링크 장치를 범용으로 할지 물을 것).
+
+## 완료된 작업 (2026-11-07, FS-M0 구현 — 사용자 "commit as you wish"로 게이트 2회차 결과 전에 커밋했다)
 
 FS = First Steps. 사용자: "설치를 잘 마치고 나니까 뭘 해야 될지 모르겠어서 당황해." design `docs/specs/2026-11-07-tars-first-steps-design.md`(2판,
 커밋 `b276ba9`), plan `docs/plans/2026-11-07-tars-first-steps-fs-m0.md`(커밋 `9f5bf22`, 확인한 것 1~5는 working tree). 사용자 결정: 찾는 길은
@@ -24,10 +38,10 @@ FS = First Steps. 사용자: "설치를 잘 마치고 나니까 뭘 해야 될�
 - [x] 체인: `tools` 검사 23(`tars-help --list` · `network | grep` · `nope` rc 1), `install`이 새 줄. 둘 다 혼자 PASS. `make quick` PASS.
 - [x] 장을 쓰며 `running-tars.md`가 낡은 자리를 찾았다(plan 확인한 것 1 — `sudo` 빠짐, `lt` 별칭, 키 수, …). 장은 소스를 따랐다. `running-tars.md` 본문은 안 고쳤다(맨 위에 "기계 안은 tars-help" 세 줄만).
 - [x] 사용자가 `/humanize-korean`을 돌렸다(light, 쉼표 8곳) → 이어서 존댓말로 다시 썼다. CLAUDE.md "끝내면 함께 고칠 것"에 `docs/help/` 한 줄.
-- [ ] 루트 게이트: 1회차 30/31 — `pointer`(PD-M4) 부팅 B 두 손가락 스크롤에서 말없는 끝(carryover 넷째로 적었다, 혼자는 초록). 2회차를 이 세션 끝에
+- [x] 루트 게이트: 1회차 30/31 — `pointer`(PD-M4) 부팅 B 두 손가락 스크롤에서 말없는 끝(carryover 넷째로 적었다, 혼자는 초록). 2회차를 이 세션 끝에
   백그라운드로 돌렸으나 결과를 못 봤다(scratchpad 로그는 세션과 함께 사라진다) — 다음 세션은 `make gate`를 다시 돌린다(약 32분).
 - [x] 커밋: FS-M0 구현 한 덩이, TP design 열린 질문 1 · carryover · HANDOFF는 따로.
-- [ ] 게이트가 초록이면 닫기: FS design `Status:`, `completed.md` 한 행, 소개 페이지(`gh-pages` `data.js` — `site/README.md`의 순서, 공개라 승인에 함께), 기억 파일 갱신, HANDOFF.
+- [x] 게이트가 초록이면 닫기(위 절, 소개 페이지는 남음): FS design `Status:`, `completed.md` 한 행, 소개 페이지(`gh-pages` `data.js` — `site/README.md`의 순서, 공개라 승인에 함께), 기억 파일 갱신, HANDOFF.
 - FS와 별개로 커밋한 것: TP design의 "열린 질문 1"(서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길 — `/etc` · `/var`는 RAM, 권한 방향 (a) 링크 (b) `/config/<서버>.d` include (c) 로그는 stdout),
   사용자 "That's a good idea"로 적어 둔 것. TP-M10 plan 전에 사용자와 닫는다.
 
@@ -216,8 +230,8 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] FS-M0 마무리 — 위 "지금 하던 것"의 남은 둘(게이트 다시 · 승인 뒤 커밋과 닫기).
-- [ ] TP-M10 plan — 서버(실행 파일). 먼저 TP design 열린 질문 1(서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길 — `/etc` · `/var`는 RAM)을 사용자와 닫는다. 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
+- [ ] FS 소개 페이지(`gh-pages` `data.js`) — 사용자 승인 뒤 push.
+- [ ] TP-M10 plan — 서버(실행 파일). 서버 영속성은 서비스 milestone으로 닫혔다(`project_server_persistence`). 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
   사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
   체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.

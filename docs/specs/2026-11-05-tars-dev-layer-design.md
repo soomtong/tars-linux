@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 14판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 끝, TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 15판(2026-11-07) — 열린 질문 없음(서버 영속성은 서비스 milestone으로 닫았다, 사용자). TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 끝, TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -195,7 +195,9 @@ trixie 판이 돈다.
 
 ## 열린 질문 (사용자가 정한다)
 
-1. 서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길(사용자 검토 요청 2026-11-07 — "mysql 같은 서버의 파일은 어디에 저장될까? 리부팅 후에도
+없음.
+
+닫은 것(2026-11-07): 서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길(사용자 검토 요청 2026-11-07 — "mysql 같은 서버의 파일은 어디에 저장될까? 리부팅 후에도
    계속 유지되나?"). 서버 milestone(실행 파일 · 서비스)의 design이 정한다. 지금의 사실:
    - `/`(그래서 `/etc` · `/var` · `/tmp`)는 initrd를 푼 RAM(`rootfstype=ramfs`)이라 매 부팅 새로 선다. 묶음의 `etc/`는 init이 부팅마다
      `/etc`로 복사한다(`layers.zig`의 `copyTree`) — 고친 것은 다음 부팅에 원본으로 돌아간다. 남는 자리는 `/config`(p2 ext2, 작다) ·
@@ -212,6 +214,11 @@ trixie 판이 돈다.
    (b) 설정은 `/etc`의 원본을 고치지 않고 `/config/<서버>.d/`를 덧붙여 읽게 한다 — mysql `!includedir`, nginx `include`, redis `include`.
        postgres의 `postgresql.conf`는 데이터 디렉터리 안이라 (a)로 남는다.
    (c) 로그는 RAM의 `/var/log`에 쌓지 않는다 — stdout을 init 콘솔로(다른 서비스와 같다), 남겨야 하면 `/home` 쪽으로.
+
+   닫음(사용자 2026-11-07, "I agree with you" · "핵심은 이게 영속성을 가지느냐"): 이 질문은 서버 설치가 아니라 영속성의 문제라
+   서버(서비스) milestone이 맡는다. 방향은 (a) · (b) · (c)를 채택하고 세부(링크 목록의 모양, 서버 밖의 상태도 받는 범용 장치로 할지)는
+   그 milestone plan이 정한다. 서버(실행 파일) milestone(TP-M10)은 이 장치 없이 부팅 하나 안의 응답까지만 보고, 데이터 경로는 사용자가
+   띄울 때 `~` 아래로 준다(`--datadir` · `-D` · `--dir`) — 안내에 한 줄.
 
 닫은 것(2026-11-05): gcc는 Debian trixie의 14.2(소스 빌드 없음, 미리 빌드된 최신 gcc는 trixie의 glibc와 맞는 것이 없다).
 ruby · php는 `prebuilt`(TP-M3가 고쳤다 — ruby는 다른 `prebuilt`, php는 사용자 결정으로 `debian`). ttt는 eugenioenko/ttt. 문서는 `dasht`(결정 19). 최소 디스크 16GiB(결정 18). fakesteak · `soomtong/tap` ·

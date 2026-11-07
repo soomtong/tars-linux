@@ -110,3 +110,9 @@ F. 장마다 옮길 것(`running-tars.md`의 절 — design 결정 1의 표):
    다시 썼다(표 칸 · 코드 블록 주석 포함, 명령 · 백틱 값 · `#` 제목은 그대로). devtools 표의 근거 없던 "git 도구"를 뺐다. help check 그대로 통과.
 
 ## 결과
+
+- 루트 게이트 두 판. 1회차 30/31 — `pointer`(PD-M4) 부팅 B 두 손가락 스크롤에서 말없는 끝(이 milestone과 무관, `carryover.md` 넷째, 혼자는 초록).
+  2회차(2026-11-07, 다음 세션에서 다시) 31/31, prebuild 356초 + lanes 1,454초, 잘린 줄 0(31줄 모두 `A=0 B=0 C=0`). 로그 `out/gate-logs/20261107-135753`.
+- 새 확인 둘이 게이트 안에서 돌았다: `tools`(UT-M3)가 `tars-help --list` · `network | grep` · `nope` rc 1, `install`(DC-M2)이 `done` 다음의
+  `tars-install: after the reboot, type tars-help for the first steps.`
+- 구현 커밋 `77c226f`.

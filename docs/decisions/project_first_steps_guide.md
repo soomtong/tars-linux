@@ -24,3 +24,5 @@ How to apply (사용자 결정 2026-11-07 — 앞서 Claude가 권한 "home에 �
 - 본문은 OS 쪽(initrd)에 둔다 — 갱신 때 같이 바뀌고 개발 도구 층이 없는 기계에도 있다. 내용은 `running-tars.md`에서 사용자용으로 줄여 옮기고
   체인 · 게이트 같은 개발 사정은 뺀다.
 - 서브프로젝트 접두사 FS(First Steps), design `docs/specs/2026-11-07-tars-first-steps-design.md`.
+
+끝(2026-11-07): FS-M0 — `tars-help`와 일곱 장, 루트 게이트 31/31. 장을 고칠 때는 `docs/help/check.sh`(`make quick`)가 하위 명령 이름만 대조한다 — 옵션 · 키 이름은 사람이 본다.

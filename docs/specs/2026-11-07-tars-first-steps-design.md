@@ -2,7 +2,7 @@
 
 접두사: FS (First Steps)
 
-Status: 초안 2판(2026-11-07) — 열린 질문 없음(셋 다 추천대로, 사용자). 기억: `docs/decisions/project_first_steps_guide.md`.
+Status: 끝났다 — FS-M0(2026-11-07). 루트 게이트 31/31(2회차, 1회차는 PD-M4 간헐), 잘린 줄 0. plan은 `docs/plans/2026-11-07-tars-first-steps-fs-m0.md`. 기억: `docs/decisions/project_first_steps_guide.md`.
 
 ## 배경
 
