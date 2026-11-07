@@ -116,6 +116,9 @@ BT(2026-11-02)가 남긴 것.
       더 쓴다 — 다시 나면 QEMU의 종료 코드를 체인이 찍게 하는 것부터(`wait "$QEMU_PID"; echo $?`).
       세 번째(PS-M0 루트 게이트, 2026-11-04): `btvirt[104]`, 같은 서명(`ip:f3b9349de916e1ad`, `services.d/bt` 53행 `Segmentation
       fault`). 체인만 다시 돌린 판은 초록이다(214초). 셋 다 루트 게이트의 동시 레인 안이다.
+      네 번째(FS-M0 루트 게이트 1회차, 2026-11-07, 다시 lane 16): 부팅 B의 "two fingers scroll" — 시리얼 로그 끝이
+      `scroll> total=212 offset=162 len=47`(6줄 기대에 3줄)이고 lane 출력에 `report_failure`의 `FAIL:` 줄이 없다(말없는 끝, 부팅 B는 처음).
+      체인 혼자는 초록(4분 38초, 같은 검사가 `offset=159` · wheel 2). FS-M0은 pointer · terminal · 커널을 안 바꿨다.
 - [ ] Intel BT firmware 28MB를 전부 싣는다(BT design 결정 2). 실기가 쓰는 칩이 몇 개로 정해지면 그 `ibt-<hw>` 계열만 남겨
       initrd를 20MB 줄일 수 있다 — 지금은 근거가 없어 전부다.
 

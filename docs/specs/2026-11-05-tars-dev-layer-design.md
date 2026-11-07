@@ -195,7 +195,25 @@ trixie 판이 돈다.
 
 ## 열린 질문 (사용자가 정한다)
 
-없다(2026-11-05). 닫은 것: gcc는 Debian trixie의 14.2(소스 빌드 없음, 미리 빌드된 최신 gcc는 trixie의 glibc와 맞는 것이 없다).
+1. 서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길(사용자 검토 요청 2026-11-07 — "mysql 같은 서버의 파일은 어디에 저장될까? 리부팅 후에도
+   계속 유지되나?"). 서버 milestone(실행 파일 · 서비스)의 design이 정한다. 지금의 사실:
+   - `/`(그래서 `/etc` · `/var` · `/tmp`)는 initrd를 푼 RAM(`rootfstype=ramfs`)이라 매 부팅 새로 선다. 묶음의 `etc/`는 init이 부팅마다
+     `/etc`로 복사한다(`layers.zig`의 `copyTree`) — 고친 것은 다음 부팅에 원본으로 돌아간다. 남는 자리는 `/config`(p2 ext2, 작다) ·
+     `/home`(p3 ext4 — 갱신도 넘는다) · `/usr/local`(실체 `/home/.tars/local`)뿐이다.
+   - 그래서 기본값대로 띄운 mysql은 `/var/lib/mysql`이 RAM에 생겨 재부팅에 데이터베이스가 사라지고, 그동안 RAM(에어 2011은 2~4GB)을 먹는다.
+     `/etc/mysql/my.cnf`를 고쳐도 되돌아가고, `/var/log`도 RAM에 쌓인다. postgres · redis · nginx도 같다.
+   - 선례 둘: 블루투스는 `/var/lib/bluetooth` → `/config/bluetooth` 링크(`make_initrd.sh`)로 표준 경로를 지키고 실체만 남는 자리로 보냈다.
+     chrony는 설정 맨 앞의 `confdir /config/chrony.d`로 `/etc`의 원본을 고치지 않고 사용자의 설정을 덧붙인다.
+
+   Claude가 권한 방향(사용자 "That's a good idea" — 이 질문으로 적어 두자는 데 동의, 셋의 확정은 design에서):
+   (a) 데이터는 표준 경로를 그대로 두고 실체만 `/home` 쪽으로 — `/var/lib/<서버>` → `/home/.tars/var/<서버>` 꼴의 링크. 문서 · 튜토리얼이
+       가정하는 경로가 맞고, ext4라 크고, 갱신도 넘는다. `/config`(ext2)는 데이터에 쓰지 않는다. 링크를 누가 만드나: `/var`는 묶음이 못 닿는
+       자리라 init이 부팅 때 묶음이 적은 목록으로 만드는 쪽이 후보(initrd 고정 링크는 묶음 없는 기계에도 생긴다).
+   (b) 설정은 `/etc`의 원본을 고치지 않고 `/config/<서버>.d/`를 덧붙여 읽게 한다 — mysql `!includedir`, nginx `include`, redis `include`.
+       postgres의 `postgresql.conf`는 데이터 디렉터리 안이라 (a)로 남는다.
+   (c) 로그는 RAM의 `/var/log`에 쌓지 않는다 — stdout을 init 콘솔로(다른 서비스와 같다), 남겨야 하면 `/home` 쪽으로.
+
+닫은 것(2026-11-05): gcc는 Debian trixie의 14.2(소스 빌드 없음, 미리 빌드된 최신 gcc는 trixie의 glibc와 맞는 것이 없다).
 ruby · php는 `prebuilt`(TP-M3가 고쳤다 — ruby는 다른 `prebuilt`, php는 사용자 결정으로 `debian`). ttt는 eugenioenko/ttt. 문서는 `dasht`(결정 19). 최소 디스크 16GiB(결정 18). fakesteak · `soomtong/tap` ·
 helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 싣고 `PATH`로 최신판이 앞선다(결정 20). initrd에 넣는 기준은 `docs/guides/initrd-criteria.md`로 떼어 냈고,
 그 기준으로 lsoff · doge가 initrd에 들어갔다(UT design 결정 3을 취소하는 첫 사례).

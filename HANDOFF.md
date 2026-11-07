@@ -1,4 +1,4 @@
-# HANDOFF: TP-M9(문서 — 아홉째 묶음 docs, `tars-docs`) 끝 — 다음은 첫걸음 안내 milestone의 design(사용자 결정), 그 뒤 TP-M10(서버)
+# HANDOFF: FS-M0(첫걸음 안내 `tars-help`) 구현 · 커밋 끝 — 루트 게이트 2회차를 다시 보고 닫기. 그 뒤 TP-M10(서버)
 
 ## 목표
 
@@ -11,6 +11,25 @@
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 지금 하던 것 (2026-11-07, FS-M0 — 사용자 "commit as you wish"로 게이트 2회차 결과 전에 커밋했다)
+
+FS = First Steps. 사용자: "설치를 잘 마치고 나니까 뭘 해야 될지 모르겠어서 당황해." design `docs/specs/2026-11-07-tars-first-steps-design.md`(2판,
+커밋 `b276ba9`), plan `docs/plans/2026-11-07-tars-first-steps-fs-m0.md`(커밋 `9f5bf22`, 확인한 것 1~5는 working tree). 사용자 결정: 찾는 길은
+`tars-help` 명령 하나(motd · home 파일 없음), 한국어 존댓말(합니다체 — 구현 중 사용자 지시), 범위 넷, 일곱 장 · `glow -p` · 한국 기준 예시.
+
+- [x] `kernel/help/tars-help`(bash, initrd `/usr/bin`) · 본문 `docs/help/{index,network,bluetooth,config,services,devtools,desk}.md`(initrd `/usr/share/doc/tars/`) ·
+  `kernel/make_initrd.sh` 복사 · `init/src/install.zig` 새 설치 `done` 다음 줄 `tars-install: after the reboot, type tars-help for the first steps.`
+- [x] `docs/help/check.sh`(quick_check 단계 6): 코드 블록의 `tars-config X` · `tars-service X`를 소스 `USAGE`와, `tars-help Y`를 장 파일과 대조. 빨강 봤다.
+- [x] 체인: `tools` 검사 23(`tars-help --list` · `network | grep` · `nope` rc 1), `install`이 새 줄. 둘 다 혼자 PASS. `make quick` PASS.
+- [x] 장을 쓰며 `running-tars.md`가 낡은 자리를 찾았다(plan 확인한 것 1 — `sudo` 빠짐, `lt` 별칭, 키 수, …). 장은 소스를 따랐다. `running-tars.md` 본문은 안 고쳤다(맨 위에 "기계 안은 tars-help" 세 줄만).
+- [x] 사용자가 `/humanize-korean`을 돌렸다(light, 쉼표 8곳) → 이어서 존댓말로 다시 썼다. CLAUDE.md "끝내면 함께 고칠 것"에 `docs/help/` 한 줄.
+- [ ] 루트 게이트: 1회차 30/31 — `pointer`(PD-M4) 부팅 B 두 손가락 스크롤에서 말없는 끝(carryover 넷째로 적었다, 혼자는 초록). 2회차를 이 세션 끝에
+  백그라운드로 돌렸으나 결과를 못 봤다(scratchpad 로그는 세션과 함께 사라진다) — 다음 세션은 `make gate`를 다시 돌린다(약 32분).
+- [x] 커밋: FS-M0 구현 한 덩이, TP design 열린 질문 1 · carryover · HANDOFF는 따로.
+- [ ] 게이트가 초록이면 닫기: FS design `Status:`, `completed.md` 한 행, 소개 페이지(`gh-pages` `data.js` — `site/README.md`의 순서, 공개라 승인에 함께), 기억 파일 갱신, HANDOFF.
+- FS와 별개로 커밋한 것: TP design의 "열린 질문 1"(서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길 — `/etc` · `/var`는 RAM, 권한 방향 (a) 링크 (b) `/config/<서버>.d` include (c) 로그는 stdout),
+  사용자 "That's a good idea"로 적어 둔 것. TP-M10 plan 전에 사용자와 닫는다.
 
 ## 완료된 작업 (2026-11-07, TP-M9 — 조사를 보고하고 사용자가 정했다, 구현 중 `tars-docs`를 사용자가 더했다)
 
@@ -197,9 +216,8 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] 첫걸음 안내 milestone — design부터(`docs/decisions/project_first_steps_guide.md`: 본문은 initrd `/usr/share/doc/tars/`, home에는 링크, 첫 셸 한 줄 안내 또는
-  `tars-help`는 design에서). 사용자 결정 2026-11-07 — TP-M10보다 먼저.
-- [ ] TP-M10 plan — 서버(실행 파일). 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
+- [ ] FS-M0 마무리 — 위 "지금 하던 것"의 남은 둘(게이트 다시 · 승인 뒤 커밋과 닫기).
+- [ ] TP-M10 plan — 서버(실행 파일). 먼저 TP design 열린 질문 1(서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길 — `/etc` · `/var`는 RAM)을 사용자와 닫는다. 서버를 깔 때 `tars-docs`의 목록에 PostgreSQL · MySQL · Redis · Nginx를 더한다(TP-M9 plan 결정 E). 그 뒤 서버(서비스) · AI.
   사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
   체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
