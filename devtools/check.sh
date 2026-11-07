@@ -12,16 +12,17 @@ cd "$(dirname "$0")" || exit 1
 # TP-M5: 다섯째 묶음 util(cci · glc). 부팅 2가 kotlin · clojure(첫 실행 시드) · clj(rlwrap) · cci · glc · man clojure를 본다(plan 결정 F).
 # TP-M6: 여섯째 묶음 lang-beam. 부팅 2가 erl · erlc · escript · elixir · iex · mix test 세 번 · gleam(시드와 manifest.toml) · erl -man을 본다(plan 결정 G).
 # TP-M7: 일곱째 묶음 editor. 부팅 2가 ms(health) · nvim(treesitter, 고쳐 쓰기) · emacs(batch, 고쳐 쓰기) · ttt(--exec) · man nvim · man emacs를 본다(plan 결정 F).
+# TP-M8: 여덟째 묶음 media(ffmpeg · ImageMagick · GraphicsMagick)와 util의 터미널 유틸리티(plan 결정 E · F).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 일곱) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 7, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 여덟) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 8, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
 #                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 화면 셸에서
 #                                      java --version(monitor 45504). 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 6, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 일곱을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 7, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 여덟을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -44,8 +45,9 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh lang-jvm
 ../devlayer/build.sh lang-native
 ../devlayer/build.sh lang-script
+../devlayer/build.sh media
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base editor lang-beam lang-jvm lang-native lang-script util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base editor lang-beam lang-jvm lang-native lang-script media util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -56,7 +58,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base editor lang-beam lang-jvm lang-native lang-script util"
+LAYERS="base editor lang-beam lang-jvm lang-native lang-script media util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -195,7 +197,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with seven layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with eight layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -211,8 +213,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 7 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 7 layers" "copied"
+COPY_MS="$(last_num 'copied 8 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 8 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -221,16 +223,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 7 layers in [0-9]+ms" 5 || fail "init did not lay seven layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 7 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 8 layers in [0-9]+ms" 5 || fail "init did not lay eight layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 8 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, editor, lang-beam, lang-jvm, lang-native, lang-script, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, editor, lang-beam, lang-jvm, lang-native, lang-script, media, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -518,6 +520,44 @@ grep -aqF "tp-m7-emman=emacs - GNU project Emacs editor" "$LOG" || fail "man ema
 echo "B2: as tars, man nvim and man emacs read offline, and ctags is still universal-ctags"
 M7_NUMBERS="ms $(ms_of ms)ms, nvim $(ms_of nvim)ms, emacs $(ms_of emacs)ms, ttt $(ms_of ttt)ms"
 
+# TP-M8(plan 결정 F): util · media의 터미널 유틸리티. 상한은 60초 — 첫 판(SandyBridge · 1GiB): --version 60개 16.5초, 도구 2.9초,
+# ffmpeg 5.4초, magick · gm 0.4초(세 배가 60초 아래). 작업 자리는 ~/tp/m8. 기다리는 글자는 chroot에서 잰 계산된 값이다(plan 확인한 것).
+# F-1: 링크된 실행 파일 60개가 이름으로 서고 판 옵션이 0으로 끝나는 수. 판 옵션이 다른 다섯 — hugo는 하위 명령, ffmpeg · ffprobe는
+# -version(--version은 판을 찍고도 0이 아니다), sqldiff는 --help뿐, flashfetch는 옵션 없이 돈다. 0이 아닌 것은 tp-m8-bad에 이름이 남는다.
+# 목록은 매니페스트에서 계산하지 않는다 — 도구를 더하거나 빼면 여기도 고친다(plan 맡아 정한 것 5). rg는 initrd의 trixie 판을 이긴다(design 결정 20).
+as_tars 'mkdir -p ~/tp/m8 && cd ~/tp/m8 && s=$(date +%s%N) && n=0 && bad="" && for t in cci glc bat duf eza fd fzf hyperfine jq rg sd asciinema ast-grep bed cidr difft dua dust fastfetch gitui glow task gping herdr hexyl hurl hurlfmt lazygit lazysql leaf mlr peco procs scc starship tspin tree-sitter uv uvx viddy wasmtime xh yazi ya sqlite3 sqlite3_analyzer sqlite3_rsync duckdb wget ipcalc vifm magick convert identify gm; do if $t --version >/dev/null 2>&1 </dev/null; then n=$((n+1)); else bad="$bad $t"; fi; done; hugo version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad hugo"; for t in ffmpeg ffprobe; do $t -version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad $t"; done; sqldiff --help >/dev/null 2>&1 && n=$((n+1)) || bad="$bad sqldiff"; timeout 60 flashfetch >/dev/null 2>&1 </dev/null && n=$((n+1)) || bad="$bad flashfetch"; e=$(date +%s%N); echo "tp-ms-m8ver=$(((e-s)/1000000))"; printf "tp-m8-%s=%s\n" ver $n; echo "tp-m8-bad:$bad"; command -v rg | sed "s/^/tp-m8-rgpath=/"; rg --version | head -1 | sed "s/^/tp-m8-rg=/"'
+wait_log_re "tp-ms-m8ver=[0-9]+" 60 || fail "the util and media --version loop did not finish in 60s" "tp-m8-bad"
+wait_log "tp-m8-ver=60" 10 || fail "not all 60 util and media commands ran by name" "tp-m8-bad" "tp-m8-ver"
+wait_log "tp-m8-rgpath=/usr/local/bin/rg" 10 || fail "rg by name is not util's (/usr/local/bin before /usr/bin)" "tp-m8-rgpath"
+wait_log "tp-m8-rg=ripgrep 15.2.0" 10 || fail "rg is not util's 15.2.0" "tp-m8-rg"
+echo "B2: as tars, all 60 util and media commands run by name offline and util's rg wins over the initrd one"
+# F-2: 일하는 도구. duckdb의 SQL은 printf의 \x27로 작은따옴표를 만든다(as_tars는 작은따옴표를 못 담는다). hurl의 libcurl은 initrd의 것이다.
+as_tars 'cd ~/tp/m8 && s=$(date +%s%N) && printf "{\"a\":[1,2,3]}" | jq ".a|add" | sed "s/^/tp-m8-jq=/"; sqlite3 :memory: "select 6*7" | sed "s/^/tp-m8-sqlite=/"; printf "a,b\n1,x\n2,y\n" | mlr --icsv --ojsonl cat | head -1 | sed "s/^/tp-m8-mlr=/"; printf "fn main() {\n    let x = 1;\n}\n" > a.rs; printf "fn main() {\n    let x = 2;\n}\n" > b.rs; difft --color never --display inline a.rs b.rs | grep -c "x = " | sed "s/^/tp-m8-difft=/"; ast-grep run -p "let \$A = \$B" --lang rust a.rs --json=compact | jq -r ".[0].metaVariables.single.B.text" | sed "s/^/tp-m8-sg=/"; hyperfine -N -r 2 --style none --export-json h.json true >/dev/null 2>&1; jq ".results|length" h.json | sed "s/^/tp-m8-hf=/"; hurl --version | grep -o "libcurl/[0-9.]*" | sed "s/^/tp-m8-hurl=/"; printf "a,b\n1,x\n2,y\n3,z\n" > t.csv; printf "copy (select * from read_csv(\x27t.csv\x27)) to \x27t.parquet\x27;\ncopy (select * from \x27t.parquet\x27) to \x27t.json\x27;\nselect sum(a) from read_json(\x27t.json\x27);\n" > d.sql; duckdb -noheader -list < d.sql | sed "s/^/tp-m8-duck=/"; e=$(date +%s%N); echo "tp-ms-m8work=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-m8work=[0-9]+" 60 || fail "the util tool block did not finish in 60s" "tp-m8-"
+wait_log "tp-m8-jq=6" 10 || fail "jq did not add 1, 2 and 3" "tp-m8-jq"
+wait_log "tp-m8-sqlite=42" 10 || fail "sqlite3 did not compute 6*7" "tp-m8-sqlite"
+wait_log 'tp-m8-mlr={"a": 1, "b": "x"}' 10 || fail "mlr did not turn the CSV into JSON" "tp-m8-mlr"
+wait_log "tp-m8-difft=2" 10 || fail "difftastic did not show the changed line on both sides" "tp-m8-difft"
+wait_log "tp-m8-sg=1" 10 || fail "ast-grep did not match let \$A = \$B in Rust" "tp-m8-sg"
+wait_log "tp-m8-hf=1" 10 || fail "hyperfine did not export one result" "tp-m8-hf"
+wait_log "tp-m8-hurl=libcurl/8.14.1" 10 || fail "hurl is not linked to the initrd's libcurl (libxml2 from util)" "tp-m8-hurl"
+wait_log "tp-m8-duck=6" 10 || fail "duckdb did not round-trip CSV, Parquet and JSON" "tp-m8-duck"
+echo "B2: as tars, jq, sqlite3, mlr, difft, ast-grep, hyperfine, hurl and duckdb work offline"
+# F-3: media. ffmpeg가 libav*를 RUNPATH로 먼저 올린다 — needed-ignore.tsv의 exe-loaded가 기대는 길이다.
+as_tars 'cd ~/tp/m8 && s=$(date +%s%N) && ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=320x240:rate=25:duration=3 -c:v libx264 -pix_fmt yuv420p v.mp4 && ffprobe -v error -show_entries format=duration -of csv=p=0 v.mp4 | sed "s/^/tp-m8-ff=/"; e=$(date +%s%N); echo "tp-ms-ff=$(((e-s)/1000000))"; s=$(date +%s%N); magick -size 64x48 gradient:red-blue g.png && magick g.png -quality 80 g.jpg && magick identify -format "%wx%h %m\n" g.jpg | sed "s/^/tp-m8-im=/"; gm identify -format "%wx%h %m" g.jpg | sed "s/^/tp-m8-gm=/"; e=$(date +%s%N); echo "tp-ms-img=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-img=[0-9]+" 60 || fail "the media block did not finish in 60s" "tp-m8-"
+wait_log "tp-m8-ff=3.000000" 10 || fail "ffmpeg did not make a 3-second H.264 file that ffprobe reads" "tp-m8-ff"
+wait_log "tp-m8-im=64x48 JPEG" 10 || fail "ImageMagick did not make and read a JPEG" "tp-m8-im"
+wait_log "tp-m8-gm=64x48 JPEG" 10 || fail "GraphicsMagick did not read the JPEG" "tp-m8-gm"
+echo "B2: as tars, ffmpeg, ffprobe, magick and gm work offline"
+# F-4: man. rg는 *.1, hurl · glow는 *.1.gz(plan 결정 D).
+as_tars 'MANPAGER=cat man rg 2>&1 | grep -m1 -oE "rg +- recursively search" | sed "s/^/tp-m8-manrg=/"; MANPAGER=cat man hurl 2>&1 | grep -m1 -E "^ +hurl - " | sed "s/^ */tp-m8-manhurl=/"; MANPAGER=cat man glow 2>&1 | grep -m1 -E "^ +glow - " | sed "s/^ */tp-m8-manglow=/"'
+wait_log "tp-m8-manglow=glow - Render markdown" 60 || fail "man glow did not show the page (man1= with .1.gz)" "tp-m8-man"
+grep -aqF "tp-m8-manrg=rg  - recursively search" "$LOG" || fail "man rg did not show the page" "tp-m8-manrg"
+grep -aqF "tp-m8-manhurl=hurl - run and test HTTP requests." "$LOG" || fail "man hurl did not show the page" "tp-m8-manhurl"
+echo "B2: as tars, man rg, man hurl and man glow read offline"
+M8_NUMBERS="60 --version $(ms_of m8ver)ms, tools $(ms_of m8work)ms, ffmpeg $(ms_of ff)ms, magick+gm $(ms_of img)ms"
+
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0
 for _ in $(seq 1 20); do
@@ -545,7 +585,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
@@ -556,20 +596,21 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 6 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, editor, lang-beam, lang-native, lang-script and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 7 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, editor, lang-beam, lang-native, lang-script, media and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
-as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; command -v java || printf "tp-%s\n" no-java'
+as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-cci=cci 0.6.1" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-erl=29" 60 || fail "lang-beam's erl no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-nvim=NVIM v0.12.6" 30 || fail "editor's nvim no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-rg=ripgrep 15.2.0" 30 || fail "util's rg no longer works without lang-jvm" "tp-b3"
 grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" || fail "boot 3 did not make /usr/local writable" "tars-init: /usr/local"
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, editor, lang-beam, lang-native, lang-script and util still run C, Go, node, cci, erl and nvim, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, editor, lang-beam, lang-native, lang-script, media and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -579,10 +620,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 7 old layers removed" "$LOG" || fail "the update did not remove the seven old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 8 old layers removed" "$LOG" || fail "the update did not remove the eight old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the seven old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the eight old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"

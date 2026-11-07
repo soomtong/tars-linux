@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 12판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 끝, TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 13판(2026-11-07) — 열린 질문 없음. TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 끝, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -46,7 +46,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | BEAM | erlang, elixir, gleam(`lang-beam` 묶음, TP-M6 — gleam은 첫 프로젝트용 Hex 시드와 함께) |
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs(`emacs-nox` — Doom Emacs는 사용자가 망이 있을 때 깐다), ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인)(`editor` 묶음, TP-M7) |
 | 문서 | `dasht` + `w3m` + Dash/Zeal docset(결정 19) |
-| 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것) |
+| 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것 — `util` 묶음과 `media` 묶음, TP-M8) |
 | 서버 | nginx, caddy, postgresql 18, mysql 9.7(LTS), redis |
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
 
@@ -60,21 +60,24 @@ LLVM 공식 tarball은 풀면 11.8GB였고 odin은 링크에 clang을 부른다.
 ### 터미널 유틸리티 (사용자, 2026-11-05)
 
 사용자가 Homebrew 이름으로 준 목록이다. 출처는 결정 1의 순서(`upstream` → `vendor-repo` → `prebuilt` → `debian`)로 milestone이 받으면서
-확정한다. 아래 "출처 후보"는 이 design을 쓸 때의 어림이다.
+확정한다.
 
-| 처리 | 도구 |
+TP-M8(2026-11-07)이 받으며 확정한 자리다. 판 · 출처 · 확인은 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`.
+
+| 자리 | 도구 |
 |---|---|
-| initrd에 trixie 판이 있고, `util` 묶음에 최신판도 싣는다(결정 20 — 설치된 기기에서는 최신판이 이긴다) | bat, duf, eza, fd, fzf, hyperfine, jq, ripgrep, sd, tree |
-| initrd에 새로 넣었다(`docs/guides/initrd-criteria.md` 기준 B, 2026-11-05) | lsoff(yutat23/lsoff, `lsoff-linux-amd64` — 듣는 포트 목록), doge(Dj-Codeman/doge, musl 정적 — DNS 질의) |
-| `upstream` 후보(GitHub 릴리스의 linux-amd64 바이너리) | asciinema(3.x), ast-grep, bed(itchyny), cidr, cloudflared, difftastic, dua-cli, dust, fastfetch, gdu, gitui, glow, go-task, gping, gron, herdr, hexyl, hugo(extended), hurl, jless, lazygit, lazysql, leaf-markdown-viewer(`leaf`), miller, pandoc, peco, procs, scc, starship, tailspin, tree-sitter-cli, uv, viddy, wasmtime, xh, yazi, sqlite(sqlite.org의 `sqlite-tools-linux-x64`), lisette(`lis`, cargo-dist의 `lisette-x86_64-unknown-linux-musl.tar.xz` — 정적. 만든 Go 코드를 짓는 데는 개발 도구 층의 go를 쓴다) |
-| `upstream`이지만 다른 묶음에 기댄다 | hunk(npm 패키지, Node.js 18+ — `lang-script`의 node 위에 빌드 때 `npm install -g`), pillow(Python 라이브러리 — 개발 도구 층의 python에 manylinux wheel을 빌드 때 `pip install`) |
-| AppImage를 빌드 때 풀어서(`--appimage-extract`, FUSE 없이) | imagemagick(`magick`), vifm — 안 되면 `debian` |
-| `debian` | ipcalc, wget |
+| `util` — initrd에 trixie 판이 있고 최신판을 `/usr/local/bin`에(결정 20 — 설치된 기기에서는 최신판이 이긴다) | bat, duf, eza, fd, fzf, hyperfine, jq, ripgrep, sd |
+| `util` — `upstream`(GitHub 릴리스의 linux-amd64, gnu와 musl이 둘 다 있으면 gnu) | asciinema(3.x), ast-grep(`sg`는 링크하지 않는다 — shadow의 명령 이름), bed(itchyny), cidr, difftastic, dua-cli, dust, fastfetch, gitui, glow, go-task, gping, herdr, hexyl, hugo(extended), hurl, lazygit, lazysql, leaf-markdown-viewer(`leaf`), miller, peco, procs, scc, starship, tailspin, tree-sitter-cli, uv, viddy, wasmtime, xh, yazi, sqlite(sqlite.org의 `sqlite-tools-linux-x64` — SHA3-256을 대조하고 sha256을 적는다), duckdb 1.5.6(사용자가 더했다 — 2.0의 CLI는 x86-64-v3로 빌드돼 에어 2011에서 서지 않는다) |
+| `util` — `debian` | wget, libxml2(hurl의 NEEDED) |
+| `base` — `debian`(perl에 기대 base에 둔다, rlwrap과 같은 이유) | ipcalc, vifm(AppImage 대신 — 사용자 결정) |
+| `media`(여덟째 묶음, TP-M8 — 사용자 결정) | ffmpeg 9.0(BtbN의 공유 빌드, 월말 태그에 고정 — 사용자가 더했다), ImageMagick · GraphicsMagick(`debian` — imagemagick의 AppImage는 X11 · 글꼴 라이브러리를 시스템에서 찾아 서지 않았다) |
+| initrd에 넣었다(`docs/guides/initrd-criteria.md` 기준 B, 2026-11-05) | lsoff(yutat23/lsoff — 듣는 포트 목록), doge(Dj-Codeman/doge, musl 정적 — DNS 질의) |
 | 합친 것 | tree-sitter(Homebrew의 `tree-sitter`는 라이브러리, CLI는 `tree-sitter-cli` 하나로 본다) |
 
 뺀 것: `soomtong/tap`의 tsl, fakesteak(미리 빌드된 바이너리가 없다) — 사용자 결정. 같은 tap의 cci · glc는 사용자가 linux 빌드를 내어
 (2026-11-06) TP-M5가 `util` 묶음의 첫 두 줄로 싣는다(출처는 각 저장소의 GitHub release — tap formula는 아직 macOS만 적는다). hexyl은 initrd 후보(기준 B)였지만
-사용자가 개발 도구 층에 두기로 했다.
+사용자가 개발 도구 층에 두기로 했다. TP-M8에서 뺀 것(사용자 결정 2026-11-07): cloudflared, pandoc, pillow, tree(upstream 바이너리가 없다 — initrd의
+trixie 판), gron, jless, lisette, gdu(dua · dust · duf가 있다), hunk(bun 런타임을 품어 util의 25% — difftastic과 glc가 diff를 맡는다. npm도 같은 실행 파일을 받는다).
 
 initrd에 있는 열은 Debian trixie 판이라 최신이 아닐 수 있다. 그래서 `util` 묶음이 최신판을 `/usr/local/bin`에 따로 싣고, `PATH`가
 `/usr/local/bin`을 `/usr/bin`보다 앞에 둔다(결정 20, 사용자). 설치된 기기에서는 최신판, 라이브 USB와 개발 도구 층이 없는 부팅에서는
@@ -128,8 +131,8 @@ trixie 판이 돈다.
      Hex 레지스트리의 `outer_checksum`)이고, `into=`의 도구 `seed/packages/<sha256 대문자>.tar`(gleam 캐시의 이름)에 놓는다. 그 도구의 `seed/manifest.toml`이
      있으면 build.sh가 고정된 checksum과 대조한다. gleam의 런처가 첫 실행에 캐시로 복사하고, `gleam new` 뒤 그 `manifest.toml`을 넣는다(사용자 결정).
    매니페스트의 일곱째 열은 선택이다 — 공백으로 가른 `exe=` · `hook=` · `into=`(TP-M2 plan 결정 C)와 `strip=N`(풀고 벗길 맨 위
-   디렉터리의 단 수, TP-M3 plan 결정 C), `man1=D`(D/*.1을 `/usr/local/share/man/man1`에 링크, TP-M6 plan 결정 F) — 다섯이다. zip도 받는다. `debian` 줄이 끌고 오는 패키지 가운데 initrd가 가진 것(tzdata)은
-   `devlayer/harvest-skip.tsv`가 싣지 않는다(TP-M3). 배포 형식이 절차를 요구하면
+   디렉터리의 단 수, TP-M3 plan 결정 C), `man1=D`(D/*.1 · D/*.1.gz를 `/usr/local/share/man/man1`에 링크, TP-M6 plan 결정 F · TP-M8 plan 결정 D) — 다섯이다. zip도 받는다. `debian` 줄이 끌고 오는 패키지 가운데 initrd가 가진 것(tzdata · vim)은
+   `devlayer/harvest-skip.tsv`가 싣지 않는다(TP-M3) — 그 패키지로 펴지는 alternatives 링크도 함께 빠진다(TP-M8 plan 확인한 것 2). 배포 형식이 절차를 요구하면
    (rust의 설치기) `devlayer/hooks/<형식>.sh`가 푼다. 열이 맞지 않는 줄은 줄 번호와 함께 빌드를 멈춘다(`devlayer/manifest.sh`).
    업스트림에 없는 파일(설정 · rc 조각)은 `devlayer/files/<묶음>/`의 트리가 뿌리에 얹는다(TP-M4 plan 결정 D). bash · zsh의 시스템 rc는
    `/etc/tars/rc.d/*.sh`를, fish는 `/etc/fish/conf.d/10-<묶음>.fish`를 읽는다.
@@ -149,7 +152,7 @@ trixie 판이 돈다.
 
 ### 디스크와 부팅
 
-7. 개발 도구 층은 묶음마다 squashfs 하나다(`base.sqfs` · `lang-native.sqfs` · `lang-script.sqfs` · `lang-jvm.sqfs` · `lang-beam.sqfs` · `editor.sqfs` · `util.sqfs` ·
+7. 개발 도구 층은 묶음마다 squashfs 하나다(`base.sqfs` · `lang-native.sqfs` · `lang-script.sqfs` · `lang-jvm.sqfs` · `lang-beam.sqfs` · `editor.sqfs` · `media.sqfs` · `util.sqfs` ·
    `docs.sqfs` · `server.sqfs` · `ai.sqfs`). 하나가 4GiB를 넘지 않게 나눈다(확인 9). 압축은 M0이 xz와 zstd를 재서 고른다 — zstd 레벨 15(TP-M0 결과 2: xz보다 7~14% 크고 한 코어로 읽기가 9~17배 빠르다).
 8. 커널에 `OVERLAY_FS` · `SQUASHFS`(고른 압축) · `BLK_DEV_LOOP`를 켠다. 켜기 전에 `rg -n '<SYMBOL>' */check.sh`로 음성 검사를 찾고,
    select로 따라오는 것을 본다(LP 배운 것 1).

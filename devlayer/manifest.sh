@@ -14,7 +14,7 @@
 #          hook=X    풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
 #          into=T    도구 디렉터리를 T-<버전>으로(rust-src가 rust의 자리로)
 #          strip=N   풀고 나서 벗길 맨 위 디렉터리의 단 수(숫자, 기본 1). 0이면 맨 위의 파일을 그대로
-#          man1=D    도구 디렉터리의 D/*.1을 /usr/local/share/man/man1/에 링크한다
+#          man1=D    도구 디렉터리의 D/*.1 · D/*.1.gz(TP-M8)를 /usr/local/share/man/man1/에 링크한다
 
 DEVLAYER_MANIFEST="${DEVLAYER_MANIFEST:-devlayer/manifest.tsv}"
 

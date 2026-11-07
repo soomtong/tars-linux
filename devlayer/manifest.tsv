@@ -54,6 +54,11 @@ perl-doc	base	5.40.1-6+deb13u1	debian	perl-doc	apt
 # rlwrap: REPL의 줄 편집(clojure의 clj가 요구한다, TP-M5). Debian의 의존 python3 · perl은 필터 스크립트 몫이다 — perl은 위 줄과
 # 같은 판이고, python3의 실행 파일 패키지는 harvest-skip.tsv가 뺀다(/usr/bin/python3를 만들지 않는다, TP-M4 위험 2).
 rlwrap	base	0.46.1-1+b1	debian	rlwrap	apt
+# ipcalc · vifm(TP-M8 — design의 터미널 유틸리티지만 base에 둔다): 둘 다 perl에 기댄다(ipcalc 0.51은 perl 스크립트). util에 두면
+# perl을 한 벌 더 싣고, perl-doc이 없어 안내용 /usr/bin/perldoc이 base의 진짜와 부딪쳤다(rlwrap과 같은 이유 — TP-M5 plan 확인 1).
+# vifm은 AppImage 대신 Debian(사용자 결정). 의존 vim은 harvest-skip.tsv가 빼고 그 alternatives는 harvest.sh의 skipalt가 뺀다.
+ipcalc	base	0.51-1	debian	ipcalc	apt
+vifm	base	0.14-3	debian	vifm	apt
 # upstream 넷(plan 확인 4 — Debian 판보다 앞선다). cmake-gui는 링크하지 않는다(GUI, needed-ignore.tsv).
 cmake	base	4.4.5	upstream	https://github.com/Kitware/CMake/releases/download/v4.4.5/cmake-4.4.5-linux-x86_64.tar.gz	ed85135c5a5135b45e50423cb406dea04ca3338da0b8ef3c9ede963559680be0	exe=bin/cmake,bin/ctest,bin/cpack,bin/ccmake
 ninja	base	1.13.2	upstream	https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip	5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6	strip=0 exe=ninja
@@ -116,15 +121,74 @@ luau	lang-script	0.745	upstream	https://github.com/luau-lang/luau/releases/downl
 cyber	lang-script	0.4.3	upstream	https://github.com/soomtong/cyber/releases/download/0.4.3/cyber-linux-x64.tar.gz	ccbb5e1b5ade57d8fd1a9f7dcaad364eebc5334a5b0a5128e229aa8808d302ad	strip=0 exe=cyber
 # node: nodejs.org/dist/index.json의 lts 첫 줄, SHASUMS256.txt.
 node	lang-script	26.13.0	upstream	https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz	d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
-# bun: baseline — 일반 빌드는 AVX2를 요구한다. qemu64와 맥북 에어 2011에 없다(확인 3).
+# bun: baseline zip — 1.4.4는 일반 zip의 bun과 sha256까지 같다(TP-M8 plan 확인 4, 실행 중에 CPU를 고른다). 옛 판은 일반 빌드가 AVX2를 요구했다(확인 3).
 bun	lang-script	1.4.4	upstream	https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64-baseline.zip	e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76	exe=bun
 # janet: tar 안의 경로가 ./janet-v1.42.1-linux/로 시작한다 — tar가 ./를 벗긴다.
 janet	lang-script	1.42.1	upstream	https://github.com/janet-lang/janet/releases/download/v1.42.1/janet-v1.42.1-linux-x64.tar.gz	5c6cd9862c59b0691e2fd3b2e2327d1459d314a67dd08203fbff372937a20748
 # php: Debian trixie-security(사용자 결정 2026-11-06 — static-php는 8.5.8에서 멈췄다, 확인 4).
 php8.4-cli	lang-script	8.4.27-1~deb13u1	debian	php8.4-cli	apt
 
-# ── util(TP-M5에서 연다 — 나머지 터미널 유틸리티는 util milestone) ─────────────────────
+# ── media(TP-M8) — ffmpeg · ImageMagick · GraphicsMagick(사용자 결정 2026-11-07, plan 확인 6 · 7) ─────────────
+# ffmpeg: FFmpeg는 바이너리를 내지 않는다 — BtbN의 공유 빌드(glibc만, $ORIGIN/../lib). 날마다의 autobuild는 약 2주 뒤 지워지고
+# 월말 것은 남는다 — 월말 태그에 고정한다. ffplay는 화면이 없어 링크하지 않는다.
+ffmpeg	media	9.0.2-39	upstream	https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-shared-9.0.tar.xz	90a42a7d9689c031beacc3d03b139fd8243351d616988e8a74188df949fe5d08	exe=bin/ffmpeg,bin/ffprobe man1=man/man1
+# AppImage(7.1.2)는 X11 · fontconfig 등을 시스템에서 찾아 서지 않았다(확인 5) — Debian. magick · convert와 gm은 이름이 겹치지 않는다.
+imagemagick	media	8:7.1.1.43+dfsg1-1+deb13u14	debian	imagemagick	apt
+graphicsmagick	media	1.4+really1.3.45+hg17696-1	debian	graphicsmagick	apt
+
+# ── util(TP-M5에서 열고 TP-M8이 채운다 — design의 "터미널 유틸리티" 표, 뺀 것은 plan의 사용자 결정) ─────────────
 # soomtong/tap의 둘. 출처는 각 저장소의 GitHub release(tap formula는 아직 macOS만 적는다). cci는 Go 정적(GOAMD64=v1),
 # glc는 Rust(libstdc++ · libz — initrd에 있다). sha256은 GitHub 자산의 digest(plan 확인 1 · 5).
 cci	util	0.6.1	upstream	https://github.com/soomtong/claude-code-history-viewer/releases/download/v0.6.1/cci_0.6.1_linux_amd64.tar.gz	a076dae36ef2bdd6304d52794116c2db2ef7f7b908d1342ef35769f84d3ed1e2	exe=cci
 glc	util	0.19.3	upstream	https://github.com/soomtong/gluck/releases/download/v0.19.3/glc-0.19.3-linux-x86_64.tar.gz	b7c44ff08943ba35f28ff2675393384a474ce5631499219353b54af85428e420	strip=0 exe=glc
+# TP-M8. sha256은 GitHub 자산의 digest(plan 확인 1). gnu와 musl이 둘 다 있으면 gnu(맡아 정한 것 1).
+# initrd에 trixie 판이 있는 아홉 — /usr/local/bin이 앞서 최신판이 돈다(design 결정 20).
+bat	util	0.26.1	upstream	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-unknown-linux-gnu.tar.gz	726f04c8f576a7fd18b7634f1bbf2f915c43494c1c0f013baa3287edb0d5a2a3	exe=bat man1=.
+duf	util	0.9.1	upstream	https://github.com/muesli/duf/releases/download/v0.9.1/duf_0.9.1_linux_x86_64.tar.gz	5add851e7062c5e56939abb664705e4d14fa2d06289490aff31d51f153832de7	strip=0 exe=duf man1=.
+eza	util	0.23.5	upstream	https://github.com/eza-community/eza/releases/download/v0.23.5/eza_x86_64-unknown-linux-gnu.tar.gz	35c70c5c43c29108075e58b893234c67ef585f0b53a7eaf8e9e7d4eec9f339b4	strip=0 exe=eza
+fd	util	10.5.1	upstream	https://github.com/sharkdp/fd/releases/download/v10.5.1/fd-v10.5.1-x86_64-unknown-linux-gnu.tar.gz	d0e2b438c8c4946955f05e4cf51452deada8f7ed509e1ccd60235a468622716f	exe=fd man1=.
+fzf	util	0.74.5	upstream	https://github.com/junegunn/fzf/releases/download/v0.74.5/fzf-0.74.5-linux_amd64.tar.gz	d47d7f882972c7d674dbbba998ffa4116e68379616ffac7695d0671e9a722c5f	strip=0 exe=fzf
+hyperfine	util	2.0.0	upstream	https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-gnu.tar.gz	ae2beda2ac99c098427e4f755244552daf20e514422889cca6d44421e2d93c87	exe=hyperfine man1=.
+jq	util	1.8.2	upstream	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64	b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f
+ripgrep	util	15.2.0	upstream	https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz	33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c	exe=rg man1=doc
+sd	util	1.1.0	upstream	https://github.com/chmln/sd/releases/download/v1.1.0/sd-v1.1.0-x86_64-unknown-linux-gnu.tar.gz	3613eca74cd686739bb5a6d68319aa56c747e7315274d02323a2ca2b1c5d82d2	exe=sd man1=.
+# 나머지. 맨 위 디렉터리가 없는 tarball은 strip=0. ast-grep의 sg는 shadow의 명령 이름이라 링크하지 않는다(확인 1).
+# glow · hurl의 man은 .1.gz(plan 결정 D).
+asciinema	util	3.2.1	upstream	https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-gnu	1b405bbda565b33c3c4718de67fedc3535580603c0694b1ff3fb04f363430a20
+ast-grep	util	0.51.1	upstream	https://github.com/ast-grep/ast-grep/releases/download/0.51.1/app-x86_64-unknown-linux-gnu.zip	42514f77ae0c8a25d7d32154d31d3e7e16f3ab894f8ce76ce417de234ee49157	strip=0 exe=ast-grep
+bed	util	0.2.9	upstream	https://github.com/itchyny/bed/releases/download/v0.2.9/bed_v0.2.9_linux_amd64.tar.gz	d4e0e5265678a23d367a9eb96d9ed10f8517c39c62296d6266601aaa94aea7e3	exe=bed
+cidr	util	2.3.0	upstream	https://github.com/bschaatsbergen/cidr/releases/download/v2.3.0/cidr_2.3.0_linux_amd64.tar.gz	973096662464dac2c1405eda0d74ba606f08c979574067567cd3ce4cb1dccfc1	strip=0 exe=cidr
+difftastic	util	0.72.0	upstream	https://github.com/Wilfred/difftastic/releases/download/0.72.0/difft-0.72.0-x86_64-unknown-linux-gnu.tar.gz	33ea1f003081e9f2422299a434e6040c89085bd9f102b08f3fe30393720d5d4a	strip=0 exe=difft
+dua-cli	util	3.0.0	upstream	https://github.com/Byron/dua-cli/releases/download/v3.0.0/dua-v3.0.0-x86_64-unknown-linux-musl.tar.gz	59438b0934a521dd4cf2896fa42046023df60e1c25812a07cef913dc2b2d103f	exe=dua
+dust	util	1.2.7	upstream	https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-x86_64-unknown-linux-gnu.tar.gz	ec3bf712c660dcaa5578b996741f5cca36b30c021c1e4b49352b11137a95a96e	exe=dust
+fastfetch	util	2.71.0	upstream	https://github.com/fastfetch-cli/fastfetch/releases/download/2.71.0/fastfetch-linux-amd64.tar.gz	abf5c99a3702cce8d3c7fa2cccd3ac205076ae0f2e45bced24a42a68821702d6	exe=usr/bin/fastfetch,usr/bin/flashfetch man1=usr/share/man/man1
+gitui	util	0.28.1	upstream	https://github.com/gitui-org/gitui/releases/download/v0.28.1/gitui-linux-x86_64.tar.gz	f6149b9ae203397158b0c89c13cfde718e7121d3d3cd2ebc597f93d6628d9b5b	strip=0 exe=gitui
+glow	util	3.0.0	upstream	https://github.com/charmbracelet/glow/releases/download/v3.0.0/glow_3.0.0_Linux_x86_64.tar.gz	13e05e4b2acc18d2aee44291aefe6325b077ec321b631a0cfa780e8e3bc33f78	exe=glow man1=manpages
+go-task	util	3.54.0	upstream	https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz	680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb	strip=0 exe=task
+gping	util	1.21.0	upstream	https://github.com/orf/gping/releases/download/gping-v1.21.0/gping-Linux-gnu-x86_64.tar.gz	965d4246cdc6907957199b3f2732e52e36e37a4162a6d15a86f3d26c223a01ef	strip=0 exe=gping man1=.
+herdr	util	0.9.5	upstream	https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-linux-x86_64	14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d
+hexyl	util	0.17.0	upstream	https://github.com/sharkdp/hexyl/releases/download/v0.17.0/hexyl-v0.17.0-x86_64-unknown-linux-gnu.tar.gz	71b7463b8716225b4248525066e24b1874e954e87f397096f53e8804e3360189	exe=hexyl man1=.
+hugo	util	0.169.0	upstream	https://github.com/gohugoio/hugo/releases/download/v0.169.0/hugo_extended_0.169.0_linux-amd64.tar.gz	c41672a0725d307758a132bc94a962e59760eb33f9ba08c991b81f9881d6fa7d	strip=0 exe=hugo
+hurl	util	8.1.0	upstream	https://github.com/Orange-OpenSource/hurl/releases/download/8.1.0/hurl-8.1.0-x86_64-unknown-linux-gnu.tar.gz	b497e7ab328100c507f1f3323ebe7cc5990d831ae4f9473b74d40b02971da4ca	man1=man/man1
+lazygit	util	0.66.2	upstream	https://github.com/jesseduffield/lazygit/releases/download/v0.66.2/lazygit_0.66.2_linux_x86_64.tar.gz	158efc9ddfa1241fab5fb3526bb442c8dc6c4b1904d73213b9e4e93e03c52034	strip=0 exe=lazygit
+lazysql	util	0.7.0	upstream	https://github.com/jorgerojas26/lazysql/releases/download/v0.7.0/lazysql_Linux_x86_64.tar.gz	ebc3edeb848c7e557f88177cf6b2ca7e492ef158e2aa1dce18eb137d1d0726fc	strip=0 exe=lazysql
+leaf	util	1.29.2	upstream	https://github.com/RivoLink/leaf/releases/download/1.29.2/leaf-linux-x86_64	ee31e39a58c848053685f4302a94cf942f8fd36c8d2f5d7d77bdac54417c6da7
+miller	util	6.22.0	upstream	https://github.com/johnkerl/miller/releases/download/v6.22.0/miller-6.22.0-linux-amd64.tar.gz	0551f8696e8f42dae1c67c782bbe04e0589e718268722fa98561e2566e4623b8	exe=mlr
+peco	util	0.6.0	upstream	https://github.com/peco/peco/releases/download/v0.6.0/peco_0.6.0_linux_amd64.tar.gz	93d4418ab1261eb723a1f614c2e652c9e912885cff7d969f913c0686459c62e8	strip=0 exe=peco
+procs	util	0.14.12	upstream	https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.12-x86_64-linux.zip	81964faf9d5cd0e9f399d5d0954fb6fe4d4d9f7d3cbec4507633df5a45b11713	strip=0 exe=procs
+scc	util	4.1.0	upstream	https://github.com/boyter/scc/releases/download/v4.1.0/scc_Linux_x86_64.tar.gz	c7328436d3027f4357d3d7853f7dc3ac2bbcb4ca08f1adad91a27c593884079b	strip=0 exe=scc
+starship	util	1.27.0	upstream	https://github.com/starship/starship/releases/download/v1.27.0/starship-x86_64-unknown-linux-gnu.tar.gz	3b94758850901717eb36aa1b53f8492c1322506ec6d41273bc6151e79ed8e4a1	strip=0 exe=starship
+tailspin	util	7.0.0	upstream	https://github.com/bensadeh/tailspin/releases/download/7.0.0/tailspin-x86_64-unknown-linux-musl.tar.gz	f2de9268dc24811908e63a170507d860ac90c7f6a2f1937f59e5cca78cef21a2	strip=0 exe=tspin
+tree-sitter	util	0.27.1	upstream	https://github.com/tree-sitter/tree-sitter/releases/download/v0.27.1/tree-sitter-cli-linux-x64.zip	c7e686aec16ba17053c2e6fd87600ccb10cf8ba3d055756b17e756d538e11114	strip=0 exe=tree-sitter
+uv	util	0.13.7	upstream	https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz	c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83	exe=uv,uvx
+viddy	util	1.3.1	upstream	https://github.com/sachaos/viddy/releases/download/v1.3.1/viddy-v1.3.1-linux-x86_64.tar.gz	c0406da6c19bbfbf0381a1a54cf7098a97372c15e5d64bed38e4b8be53e8455e	strip=0 exe=viddy
+wasmtime	util	50.0.1	upstream	https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.1/wasmtime-v50.0.1-x86_64-linux.tar.xz	685466455dd42a14774a86c36c8f2e45cbb9bd6d92a850139315df60a75498a5	exe=wasmtime
+xh	util	0.26.3	upstream	https://github.com/ducaale/xh/releases/download/v0.26.3/xh-v0.26.3-x86_64-unknown-linux-musl.tar.gz	cbbf53bd76007d57d95e4bed8ba7fb3b7fcec22af4bdfc1ff119cd5de351e74f	exe=xh man1=doc
+yazi	util	26.9.1	upstream	https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-unknown-linux-gnu.zip	a02fe91d3304294048c681f010f1100856872a4e98ecf6927328e888d40a6ad2	exe=yazi,ya
+# sqlite.org는 SHA3-256을 낸다 — 받은 파일을 SHA3로 대조한 뒤 그 sha256을 적었다(확인 1). duckdb는 1.5.6 — 2.0의 CLI는
+# x86-64-v3(AVX2)로 빌드돼 에어 2011에서 서지 않는다(확인 11, 사용자 결정).
+sqlite	util	3.54.1	upstream	https://sqlite.org/2026/sqlite-tools-linux-x64-3540100.zip	a21062b333c7d66d7d8c42054c0fab1c1899729185289ad14bd4f25f9f576d14	strip=0 exe=sqlite3,sqldiff,sqlite3_analyzer,sqlite3_rsync
+duckdb	util	1.5.6	upstream	https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip	6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f	strip=0 exe=duckdb
+# debian: hurl의 NEEDED libxml2(libcurl.so.4는 initrd에 있다). wget. ipcalc · vifm은 perl에 기대 base에 둔다(위, TP-M8).
+wget	util	1.25.0-2	debian	wget	apt
+libxml2	util	2.12.7+dfsg+really2.9.14-2.1+deb13u3	debian	libxml2	apt

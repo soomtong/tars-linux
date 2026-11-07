@@ -168,10 +168,14 @@ while IFS=$'\t' read -r tool _b version kind url sha opts; do
         ln -s "../lib/${dir}/${rel}" "${link}"
       done
       # man1=D(TP-M6 plan 결정 F): 도구 디렉터리의 D/*.1을 /usr/local/share/man/man1/에 링크한다 — man-db가 /usr/local/bin의 짝으로 본다.
+      # D/*.1.gz도 같다(TP-M8 plan 결정 D — glow · hurl). man-db가 gz를 그대로 읽는다. 맞지 않은 글롭은 글자 그대로 남으므로 파일만 모은다.
       man1="$(manifest_opt "${opts}" man1)"
       if [[ -n "${man1}" ]]; then
-        pages=("${root}/${dest}/${man1}"/*.1)
-        [[ -f "${pages[0]}" ]] || die "${tool}: man1=${man1} but /${dest}/${man1} has no *.1"
+        pages=()
+        for page in "${root}/${dest}/${man1}"/*.1 "${root}/${dest}/${man1}"/*.1.gz; do
+          [[ -f "${page}" ]] && pages+=("${page}")
+        done
+        ((${#pages[@]} > 0)) || die "${tool}: man1=${man1} but /${dest}/${man1} has no *.1 or *.1.gz"
         mkdir -p "${root}/usr/local/share/man/man1"
         for page in "${pages[@]}"; do
           name="$(basename "${page}")"

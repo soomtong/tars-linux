@@ -6,7 +6,7 @@ Goal: design "터미널 유틸리티" 표를 싣는다(사용자 결정 2026-11-
 미디어 셋(ffmpeg · ImageMagick · GraphicsMagick)은 새 묶음 `media`로 가른다. 판정은 묶음마다의 것 — 망 없이 도구가 서고 일을 한다.
 
 사용자 결정(2026-11-07, 조사를 단계별로 보고):
-- 뺀다: cloudflared, pandoc, pillow, tree, gron, jless, lisette. 그리고 hunk(확인 4 · 10 — util의 25%를 혼자 차지한다. difftastic과 util의 glc가 diff를 맡는다.
+- 뺀다: cloudflared, pandoc, pillow, tree, gron, jless, lisette. 그리고 gdu(dua · dust · duf가 있다, 2026-11-07), hunk(확인 4 · 10 — util의 25%를 혼자 차지한다. difftastic과 util의 glc가 diff를 맡는다.
   필요하면 망이 있을 때 `npm i -g hunkdiff`).
 - vifm은 Debian 0.14(AppImage 장치를 만들지 않는다).
 - ffmpeg를 더하고, ImageMagick · GraphicsMagick 둘 다와 함께 새 묶음 `media`에 둔다(확인 6 · 7).
@@ -17,22 +17,22 @@ Goal: design "터미널 유틸리티" 표를 싣는다(사용자 결정 2026-11-
 
 판 · sha256은 GitHub `releases` API, 받기는 호스트, 풀기 · 실행은 amd64 trixie-slim(`--network none`, 사용자 `tars`).
 
-1. 판과 자산(upstream 42개 — sqlite 포함, hunk는 뺐다. DuckDB는 확인 11). gnu와 musl이 둘 다 있으면 gnu(맡아 정한 것 1). 받은 GitHub 자산 44개(AppImage 둘 포함)가 모두 `digest`의 sha256과 맞았다 — util에 남는 것은 그중 41개와 sqlite.
+1. 판과 자산(upstream 41개 — sqlite 포함, hunk · gdu는 뺐다. DuckDB는 확인 11). gnu와 musl이 둘 다 있으면 gnu(맡아 정한 것 1). 받은 GitHub 자산 44개(AppImage 둘 포함)가 모두 `digest`의 sha256과 맞았다 — util에 남는 것은 그중 40개와 sqlite.
 
    | 모양 | 도구 (판 — 자산) |
    |---|---|
    | 맨 위 디렉터리 하나 | bat 0.26.1 · fd 10.5.1 · hyperfine 2.0.0 · sd 1.1.0 · dust 1.2.7(모두 `-x86_64-unknown-linux-gnu.tar.gz`), ripgrep 15.2.0 · dua 3.0.0 · xh 0.26.3(`-musl` — gnu가 없다), bed 0.2.9, glow 3.0.0, hexyl 0.17.0, hurl 8.1.0, miller 6.22.0, uv 0.13.7, wasmtime 50.0.1(`.tar.xz`), yazi 26.9.1(zip), fastfetch 2.71.0(`usr/bin/`) |
-   | 디렉터리 없음(`strip=0`) | duf 0.9.1 · fzf 0.74.5 · cidr 2.3.0 · gdu 5.39.0(`_static`) · gitui 0.28.1 · go-task 3.54.0 · gping 1.21.0 · hugo extended 0.169.0 · lazygit 0.66.2 · lazysql 0.7.0 · peco 0.6.0 · scc 4.1.0 · starship 1.27.0 · viddy 1.3.1 · difftastic 0.72.0 · tailspin 7.0.0(musl) · eza 0.23.5 · procs 0.14.12(zip) · tree-sitter-cli 0.27.1(zip) · ast-grep 0.51.1(zip) · sqlite 3.54.1(zip) |
+   | 디렉터리 없음(`strip=0`) | duf 0.9.1 · fzf 0.74.5 · cidr 2.3.0 · gitui 0.28.1 · go-task 3.54.0 · gping 1.21.0 · hugo extended 0.169.0 · lazygit 0.66.2 · lazysql 0.7.0 · peco 0.6.0 · scc 4.1.0 · starship 1.27.0 · viddy 1.3.1 · difftastic 0.72.0 · tailspin 7.0.0(musl) · eza 0.23.5 · procs 0.14.12(zip) · tree-sitter-cli 0.27.1(zip) · ast-grep 0.51.1(zip) · sqlite 3.54.1(zip) |
    | 압축 없는 실행 파일 하나(TP-M7 결정 D) | jq 1.8.2 · asciinema 3.2.1 · herdr 0.9.5 · leaf 1.29.2 |
 
    - sd의 v1.1.0 자산이 `sd 1.0.0`을 찍는다 — upstream이 판 문자열을 안 올렸다. 파일은 v1.1.0 자산이 맞다.
    - sqlite.org의 해시는 SHA3-256이다. 받은 파일을 SHA3로 대조한 뒤(맞았다) 그 파일의 sha256을 매니페스트에 적는다.
-   - gdu의 실행 파일 이름이 `gdu_linux_amd64_static`이다(결정 C).
    - ast-grep은 `ast-grep`과 `sg`를 싣는다. `sg`는 리눅스에서 shadow의 명령 이름이다 — `ast-grep`만 링크한다.
 2. ELF: 동적인 것의 가장 높은 요구가 GLIBC_2.39(gping · tree-sitter · yazi) — trixie 2.41 아래다. 나머지는 Go · musl 정적. 절대 prefix는 없고, 절대 RUNPATH는
    sqlite3의 `/usr/local/lib` 하나다(그 자리에 없으면 기본 자리의 libz — 해가 없다. 다만 root가 쓰는 층이 그 앞에 온다). `%ymm`은 거의 모두에 있다 — Go · Rust
    런타임과 memchr식 실행 중 고르기(TP-M7 확인 2 · 5와 같은 꼴). 실기 확인으로 남긴다.
-3. 망 없이 `--version`: 41개가 섰다. hurl · hurlfmt만 `libxml2.so.2`(그리고 `libcurl.so.4` — initrd는 `libcurl-gnutls`만)가 없어 멈췄다(결정 B).
+3. 망 없이 `--version`: 41개가 섰다. hurl · hurlfmt만 `libxml2.so.2`가 없어 멈췄다(결정 B). 검사 컨테이너(slim)에는 `libcurl.so.4`도 없었지만 initrd에는 있다(`curl`이 끌고 왔다 —
+   구현 1단계에서 initrd를 열어 봤다).
 4. hunk(뒤에 뺐다 — 사실은 남긴다): npm 패키지 `hunkdiff`의 `optionalDependencies`가 `hunkdiff-linux-x64` — 결국 같은 실행 파일이다. npm 장치는 필요 없다. 실행 파일은 bun 1.4.4 런타임에
    JS를 붙인 것(184MiB). bun 1.4.4의 `bun-linux-x64-baseline.zip`과 `bun-linux-x64.zip`의 `bun`이 sha256까지 같다(`10702245…`) — 이 판에는 baseline 구분이
    없다. 그러니 hunk의 CPU 수준은 lang-script의 bun과 같다(TP-M3 확인 8에 덧붙일 사실).
@@ -64,7 +64,7 @@ Goal: design "터미널 유틸리티" 표를 싣는다(사용자 결정 2026-11-
 9. man: 13개가 싣는다. 대부분 `*.1`, glow(`manpages/glow.1.gz`) · hurl(`man/man1/*.1.gz`)은 gz(결정 D).
 10. 크기(도구마다 `tar | zstd -15`로 잰 값, MiB 아래 버림): upstream 43개가 풀면 919MiB, zstd15 234MiB. hunk 59(bun 런타임을 품었다 — 25%) · hugo 18 · wasmtime 13 ·
     uv 13 · go-task 13 · yazi 11 · herdr 8, 나머지 36개가 105. difftastic(87 → 7) · ast-grep(54 → 6)은 tree-sitter 문법 표라 잘 준다. 처음 어림(풀면 760, zstd 300~350)은
-    양쪽으로 틀렸다. hunk를 빼고 DuckDB(17)를 더하면 util 약 192MiB(+ debian 다섯 줄 몇 MiB), media 90~110MiB — ISO는 1.51GB에서 약 1.8GB.
+    양쪽으로 틀렸다. hunk를 빼고 DuckDB(17)를 더하면 util 약 192MiB(+ debian 네 줄 몇 MiB), media 90~110MiB — ISO는 1.51GB에서 약 1.8GB.
 
 11. DuckDB(사용자가 더했다, "2.0 이상" 검토). 2.0.0(2026-10-21) CLI `duckdb-cli-linux-amd64.tar.gz`(74MiB, glibc 2.25 · libstdc++)는 함수 73,757개 가운데 14,901개(20%)에
     `%ymm`, AVX2 정수 명령 96,765 · FMA 1,025 — `VectorOperations::Hash` 등 모든 GROUP BY가 지나는 길이다. 릴리스 노트의 PR #24391 "Try -march x86-64-v3 for CLI and
@@ -76,11 +76,10 @@ Goal: design "터미널 유틸리티" 표를 싣는다(사용자 결정 2026-11-
 
 ## 결정 (이 plan이 정한다 — 뒤집을 것이 있으면 글자로)
 
-A. util에 upstream 43줄(확인 1의 표, sqlite 포함, DuckDB 1.5.6 — `strip=0`)과 `debian` 다섯 줄 — `wget` 1.25.0-2, `ipcalc` 0.51-1, `vifm` 0.14-3, `libxml2` · `libcurl4t64`(hurl의 NEEDED, 결정 B).
+A. util에 upstream 42줄(확인 1의 표, sqlite 포함, DuckDB 1.5.6 — `strip=0`)과 `debian` 네 줄(구현에서 ipcalc · vifm은 base로 옮겼다 — 확인한 것 1) — `wget` 1.25.0-2, `ipcalc` 0.51-1, `vifm` 0.14-3, `libxml2` 2.12.7+dfsg+really2.9.14-2.1+deb13u3(hurl의 NEEDED, 결정 B).
    initrd에 trixie 판이 있는 아홉(bat · duf · eza · fd · fzf · hyperfine · jq · ripgrep · sd)은 `/usr/local/bin`이 앞서 최신판이 돈다(design 결정 20).
 B. hurl의 라이브러리는 같은 묶음의 `debian` 줄이다 — verify의 NEEDED(결정 5)가 묶음 안 `usr/lib/x86_64-linux-gnu`에서 찾는다.
-C. `exe=`의 항목이 `rel:이름`이면 `/usr/local/bin/이름`으로 링크한다(gdu — `exe=gdu_linux_amd64_static:gdu`). 키는 늘리지 않는다(다섯 — 한도). `:`가 없으면 지금대로
-   `basename`. 이름에 `/`가 있으면 멈춘다.
+C. (쓰지 않는다) `exe=`의 `rel:이름` 꼴 — 이름이 다른 실행 파일은 gdu 하나였고 gdu를 뺐다(사용자 결정).
 D. `man1=D`가 `D/*.1`과 `D/*.1.gz`를 함께 링크한다(glow · hurl). 둘 다 없으면 지금처럼 멈춘다.
 E. 새 묶음 `media`(design 결정 7의 나누기): ffmpeg(upstream, BtbN 공유 빌드, `exe=bin/ffmpeg,bin/ffprobe` — `ffplay`는 화면이 없어 링크하지 않는다, `man1=man/man1`),
    `imagemagick` · `graphicsmagick`(debian). 이름 순이라 lowerdir는 `… lang-script media util`. `DEV_LAYERS` · 체인의 `LAYERS` · `ISO_LAYERS`에 넣는다.
@@ -105,12 +104,13 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로, `~/tp/m8`). 
 
 ## 할 일
 
-1. 매니페스트: util 43 + debian 5, media 3. 지금 `# ── util` 머리 주석을 고친다.
-2. `devlayer/build.sh`: 결정 C(`rel:이름`) · D(`.1.gz`).
+1. 매니페스트: util 42 + debian 4, media 3. 지금 `# ── util` 머리 주석을 고친다.
+2. `devlayer/build.sh`: 결정 D(`.1.gz`)와 manifest.sh 머리의 `man1=` 설명.
 3. media를 잇는 자리: `Makefile`의 `DEV_LAYERS`, `devtools/check.sh`의 빌드 줄 · `LAYERS` · lowerdir · 묶음 수, `rg -n 'lang-script util'`로 한 번 더.
 4. `make dev-layers` — 숫자: util · media의 풀린 크기 · zstd, harvest 패키지 수, NEEDED, 묶음 사이 `shared`.
 5. chroot로 결정 F의 덩이를 먼저.
-6. 빨강: (a) gdu의 `:gdu`를 빼면 `/usr/local/bin/gdu`가 없어 F-1의 수가 하나 모자란다(또는 `gdu --version`이 없다). (b) 결정 D를 되돌리면 glow 줄이 `has no *.1`로 굽기에서 멈춘다.
+6. 빨강: (a) util에서 `libxml2` 줄을 빼면 verify의 NEEDED(결정 5)가 hurl · hurlfmt의 `libxml2.so.2`를 이름으로 대고 멈춘다(결정 B). (b) 결정 D를 되돌리면
+   glow 줄이 `has no *.1`로 굽기에서 멈춘다.
 7. 체인 혼자 한 번, 숫자로 상한을 고친다.
 8. `make quick`, 루트 게이트. design(터미널 유틸리티 표 · 뺀 것 · 묶음 표에 media · 결정 1의 `exe=` · `man1=`), `carryover.md`(셸 완성), HANDOFF.
 
@@ -123,7 +123,7 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로, `~/tp/m8`). 
 ## 비목표
 
 1. 셸 완성(맡아 정한 것 3).
-2. TUI 도구(lazygit · gitui · yazi · lazysql · herdr · bed · vifm · peco · viddy · gdu의 화면)의 상호작용 — 체인은 `--version`까지. 실기에서 본다.
+2. TUI 도구(lazygit · gitui · yazi · lazysql · herdr · bed · vifm · peco · viddy의 화면)의 상호작용 — 체인은 `--version`까지. 실기에서 본다.
 3. 망이 있어야 하는 기능(hurl · xh의 실제 요청, uv의 패키지 받기, hugo의 모듈, asciinema 업로드).
 4. ffmpeg의 하드웨어 가속(VAAPI · Vulkan · CUDA) · `ffplay`(화면 출력).
 5. GitHub release의 2GiB 한도 해결(`project_release_0_2.md`의 사용자 결정 대기 — 위험 1).
@@ -139,8 +139,40 @@ F. 체인: devtools 부팅 2에 더한다(망 없이, 사용자로, `~/tp/m8`). 
 
 ## 확인한 것
 
-(구현 뒤 채운다)
+1. 결정 A를 바꿨다 — ipcalc · vifm은 util이 아니라 base에 있다. 둘 다 perl에 기댄다(ipcalc 0.51은 perl 스크립트). util에 두니 perl을 한 벌 더 싣고, perl-doc이
+   없어 안내용 `/usr/bin/perldoc`이 base의 진짜와 묶음 사이 대조(TP-M2 결정 E)에서 부딪쳤다. rlwrap과 같은 이유다(TP-M5 확인 1). util의 Debian 쪽이 패키지
+   24 → 9, 경로 3,086 → 331로 줄었다. util의 debian 줄은 wget · libxml2 둘이다.
+2. `make dev-layers`는 여섯째 판에서 초록이었다. 멈춘 다섯 판과 고친 것:
+   - media verify unresolved 15 — BtbN 공유 빌드의 `lib/libav*` · `libsw*`는 서로를 NEEDED로 부르지만 RUNPATH가 없다(실행 파일만 `$ORIGIN/../lib`).
+     실제로는 `ffmpeg`가 일곱을 모두 직접 NEEDED해 먼저 올리고 ld.so가 soname으로 맞춘다. `needed-ignore.tsv`에 넷째 이유 `exe-loaded`(JDK의 `jvm-loaded`와
+     같은 꼴)를 두고 경로 · soname을 좁혔다. 체인의 ffmpeg → ffprobe가 그 길을 본다.
+   - util verify가 vim 넷(`/usr/bin/vim` · `vi` · `/etc/vim/vimrc` · `defaults.vim`)을 initrd와 다르다고 했다 — vifm이 `Depends: vim | … | neovim`. `harvest-skip.tsv`에
+     vim · vim-common · vim-runtime(vim 런타임을 싣지 않는 2026-10-27 결정도 지킨다).
+   - base 거두기가 `dpkg -L vim-common`에서 "not installed"로 죽었다 — `dpkg-query -W`는 dpkg가 이름만 아는 패키지(slim의 `not-installed` 기록)에도 0이다. 설치
+     상태(`${db:Status-Status}` = installed)를 묻게 고쳤다. 이제까지 우연히 안 걸렸던 결함이다.
+   - util verify dangling 42 · differs 2 — vim의 postinst가 만든 alternatives(ex · view · rvim · vimdiff · vi · vim과 여러 언어의 editor · vi · view의 man)가 빠진 `vim.basic` ·
+     `vim.1.gz`를 가리켰다. harvest.sh에 규칙: 편 링크의 대상이 harvest-skip 패키지의 파일이면 그 링크도 싣지 않는다(요약 줄 `skipalt=`). 이름을 적는 TP-M7의
+     editor · ctags 규칙은 그대로 둔다 — 그쪽은 대상이 빠진 것이 아니라 이름을 남에게 맡긴 것이다.
+   - 묶음 사이 대조의 `/usr/bin/perldoc` — 확인 1.
+   - `needed-ignore.tsv` · `build.sh`는 굽기 열쇠, `harvest.sh` · `harvest-skip.tsv`는 거두기 열쇠라 판마다 여러 묶음을 다시 거두고 구웠다(판당 8~13분).
+3. 숫자: media 풀면 294MiB, zstd15 106MiB, 파일 1,245, ELF 485, 거둔 패키지 50. util 842MiB · 236MiB, 파일 529, ELF 331. base 754 · 243MiB(+vifm · ipcalc). 묶음 여덟
+   1,632MiB(앞 판 1,302). util이 어림(약 192)보다 큰 것은 어림이 도구마다 tar 전체를 한 흐름으로 잰 값이고 squashfs는 128KiB 블록마다 압축하기 때문이다.
+4. chroot(initrd + 묶음 여덟을 부팅의 겹침 순서로, `--network none`, 사용자 tars): 60개 모두 이름으로 섰다(처음 "61개"라고 한 것은 잘못 센 것). 판 옵션이 다른
+   다섯 — hugo는 `hugo version`, ffmpeg · ffprobe는 `-version`(`--version`은 판을 찍고도 0이 아니다 — 처음 첫 줄만 봐서 놓쳤다), sqldiff는 `--help`, flashfetch는
+   옵션을 무시한다. ipcalc가 /26을 계산하고, `vi` · `vim`은 initrd의 9.1, `ex` · `view` · `vimdiff`는 없다(initrd에도 없다), `perldoc`은 base의 v3.28. hurl의
+   libcurl 8.14.1은 initrd의 것이다(확인 3을 구현 1단계에서 고친 것이 맞다). `/usr/local/share/man/man1`의 링크 51.
+   - 첫 뿌리는 검사 이미지에 cpio가 없어 initrd 없이 섰다 — `|| true`가 덮었다(HANDOFF의 "실패한 접근"에 이미 있는 함정). 항목 수 1,278과 `bash`를 찍게 고쳤다.
+5. 빨강 (a): util에서 libxml2 줄을 빼면 거두기 패키지 8, verify `unresolved: usr/local/lib/hurl-8.1.0/bin/hurl needs libxml2.so.2`(hurlfmt도), rc=2.
+   빨강 (b): `man1=`을 옛 `*.1` 글롭으로 되돌리면 굽기 `glow: man1=manpages but /usr/local/lib/glow-3.0.0/manpages has no *.1`, rc=2. 둘 다 원본으로 되돌리고 util이
+   캐시 그대로(236MiB)인 것을 봤다.
+6. 체인 혼자(SandyBridge · 1GiB, 망 없음): PASS, 빌드 뒤 650초(앞 판 553), 전체 17분 21초. ISO 1,854,840,832바이트(2GiB까지 약 293MB). 설치기 복사 9,507ms,
+   overlay 63ms. --version 60개 16.5초, 도구 2.9초, ffmpeg 5.4초, magick · gm 0.4초 — 상한 넷 다 60초. 부팅 2 뒤 MemAvailable 589,660kB.
 
 ## 결과
 
-(구현 뒤 채운다)
+- 판정 셋 모두 초록. `make dev-layers` 초록(media 106MiB, util 236MiB, 여섯째 판 — 확인한 것 2), 체인 부팅 2의 네 덩이가 망 없이 사용자로 돈다, 빨강 (a) · (b)를 봤다(확인한 것 5).
+- 루트 게이트 두 판. 1회차는 사전 빌드의 init `zig build test`에서 멈췄다 — `24b8fc4`(alias `ltt`, 사용자 지시로 검증 없이 따로 커밋)가 `config_test.zig`의
+  `ALLOWED_ALIAS_NAMES`에 `ltt`를 더하지 않았다. 목록에 이유와 함께 더해 따로 커밋했다(`make quick`은 init 테스트를 돌리지 않는다 — 컨테이너에서 본다).
+  2회차 31/31, 33분 13초(prebuild 379초, lanes 1,490초), 31개 모두 잘린 줄 0. devtools 759초(빌드 뒤 639초). ISO 1.85GB, 묶음 여덟 1,632MiB.
+- 실기로 남긴 것(HANDOFF "남은 작업"): util · media의 `%ymm`이 에어 2011에서 서는지(실행 중 고르기로 보인다 — TCG는 못 잡는다), TUI 도구의 화면(비목표 2),
+  ffmpeg의 실기 속도.

@@ -12,3 +12,6 @@ python3	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는�
 python3-minimal	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
 python3.13	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
 python3.13-minimal	rlwrap의 필터 스크립트 몫. /usr/bin/python3를 만들지 않는다 — python은 lang-script의 것(TP-M5, TP-M4 위험 2).
+vim	vifm의 의존(vim | … | neovim)으로 딸려 온다. initrd가 vim(vim.basic)을 갖는다 — 판이 달라 결정 4에 걸렸다(TP-M8).
+vim-common	vim의 짝. initrd의 vim이 쓰는 것은 initrd가 갖는다(TP-M8).
+vim-runtime	vim의 짝. vim 런타임 싣기는 2026-10-27에 취소했다(user_editor_use) — 의존을 타고 들어오지 않게 한다(TP-M8).

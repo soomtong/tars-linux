@@ -1,4 +1,4 @@
-# HANDOFF: TP-M7(편집기 mitos · neovim · emacs-nox · ttt, editor 묶음) 끝 — 다음은 TP-M8 plan(터미널 유틸리티, util 묶음)
+# HANDOFF: TP-M8(터미널 유틸리티 util · 여덟째 묶음 media) 끝 — 다음은 TP-M9 plan(문서: dasht · w3m · docset)
 
 ## 목표
 
@@ -11,6 +11,18 @@
 `main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
 마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
 Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+
+## 완료된 작업 (2026-11-07, TP-M8 — 조사 · 구현을 단계마다 보고하며 사용자가 정했다)
+
+- [x] 사용자 결정: 뺀다 — cloudflared · pandoc · pillow · tree · gron · jless · lisette · gdu · hunk(bun 런타임을 품어 util의 25%). vifm은 Debian(AppImage 장치 없음).
+  ffmpeg를 더하고 ImageMagick · GraphicsMagick과 새 묶음 `media`로(GM 대 IM을 재 보고 — 둘 다). DuckDB를 더하되 1.5.6(2.0의 CLI는 x86-64-v3, 에어 2011에서 안 선다).
+  alias `lt='eza -ls modified'` · `ltt='eza -ls changed'`(`24b8fc4` · 짝인 허용 목록 `8887989`).
+- [x] plan `a40c0f7`. util에 upstream 42줄(sqlite는 SHA3 대조 뒤 sha256) + debian wget · libxml2(hurl의 NEEDED — libcurl.so.4는 initrd에), base에 ipcalc · vifm
+  (perl에 기댄다 — rlwrap과 같은 이유), media에 ffmpeg 9.0(BtbN 공유 빌드, 월말 태그 고정) · imagemagick · graphicsmagick. `man1=`이 `.1.gz`도 받는다.
+- [x] `make dev-layers`가 다섯 판 멈추며 고친 것(plan 확인한 것 2): `needed-ignore.tsv`의 넷째 이유 `exe-loaded`(ffmpeg의 libav*), `harvest-skip.tsv`에 vim 셋,
+  harvest.sh의 skip 판정을 `${db:Status-Status}`로(잠재 결함), 편 alternatives의 대상이 skip 패키지면 그 링크도 빼기(`skipalt=`).
+- [x] 체인 부팅 2에 60개 `--version` · 일하는 도구 여덟 · ffmpeg → ffprobe · magick · gm · man(`.1` · `.1.gz`), 부팅 3에 rg. 빨강 둘(plan 확인한 것 5).
+- [x] 루트 게이트 31/31, 33분 13초(lanes 1,490초), 잘린 줄 0. ISO 1.85GB(2GiB까지 약 293MB), 묶음 여덟 1,632MiB.
 
 ## 완료된 작업 (2026-11-07, TP-M7 — 사용자가 조사 중 결정 둘을 정하고 남은 결정을 위임한 뒤 잤다)
 
@@ -118,6 +130,8 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 - 출처 종류의 이름과 순서(TP 결정 1), 묶음 나누기(결정 7 — 파일 하나 4GiB 아래), 개발 도구 층은 따로 빌드 · 캐시하고 다른 체인은
   층 없는 ISO로(결정 6, 게이트 시간 보존).
 - dasht의 docset 추천 묶음(결정 19) — 사용자가 "추천대로".
+- TP-M8: gnu와 musl이 둘 다 있으면 gnu, hugo는 extended(`withdeploy` 아님), ffmpeg는 9.0 gpl, 셸 완성은 비목표(`carryover.md`), 체인 F-1의 목록은 체인에 적는다(매니페스트에서
+  계산하지 않는다), 상한은 넷 다 60초, ast-grep의 `sg`는 링크하지 않는다.
 - TP-M7(위임): `EDITOR` · `/usr/bin/editor`는 vim 그대로, mitos는 `.deb`가 아니라 tarball, 셸 완성은 싣기만(M8에서 함께 본다), 실행 파일 하나도
   `/usr/local/lib/<도구>-<판>/bin/`에. 체인 상한은 넷 다 60초(잰 값 2초 아래).
 - TP-M2(위임): g++를 base에(결정 A), rust 컴포넌트 고르기(rust-docs · rust-analyzer · rust-src는 싣고 llvm-tools · docs-json은 뺀다),
@@ -127,6 +141,14 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 - pm · mise 체인이 주는 최소 PATH(`/usr/bin:/bin`)는 그대로 — "brew · mise가 보이면 rc가 넣은 것"이라는 판정의 전제다.
 
 ## 시도했으나 실패한 접근
+
+TP-M8(2026-11-07):
+
+- alias를 시드 rc(`init/src/config.zig`)에서만 고치고 "검증 없이" 커밋 — init의 `config_test.zig`가 `ALLOWED_ALIAS_NAMES`로 묶고 있어 게이트의 사전 빌드에서 멈췄다.
+  `make quick`은 init의 `zig build test`를 돌리지 않는다(macOS에서 안 끝난다) — 시드 rc를 바꾸면 컨테이너에서 `zig build test`.
+- chroot 뿌리를 만들 때 cpio가 없는 이미지 + `|| true` — initrd 없이 섰다(TP-M5의 같은 함정). 풀린 항목 수와 `bash`를 찍는다.
+- 판 옵션 시험을 출력 첫 줄로만 — ffmpeg · ffprobe의 `--version`은 판을 찍고 0이 아닌 값으로 끝난다(`-version`이 맞다). 종료 코드를 센다.
+- 크기 어림을 `tar | zstd -15`로 — squashfs는 128KiB 블록마다 압축해 util이 약 20% 컸다(192 어림 → 236MiB).
 
 TP-M7(2026-11-07, plan 확인 4):
 
@@ -163,20 +185,21 @@ TP-M0~M2:
 
 ## 남은 작업
 
-- [ ] TP-M8 plan — 터미널 유틸리티(`util` 묶음에 더한다 — design의 "터미널 유틸리티" 표, 약 55개). 그 뒤 M9 문서(`dasht` · `w3m` · docset, design 결정 19),
-  M10부터 서버 · AI. 사용자는 조사 · 구현을 단계별로 보고받기를 원한다. 압축 없는 실행 파일 하나는 build.sh가 이미 받는다(TP-M7 결정 D). hunk(npm) ·
-  pillow(pip) · AppImage 둘은 새 장치다. 셸 완성(mitos의 `contrib/completion` 포함)을 시스템 rc에 이을지 함께 본다.
-  체인 시간은 빌드 뒤 551~553초다. 체인을 가를지는 420초가 아니라 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다(TP-M4 plan 확인한 것 9). 매니페스트의 선택 키는
-  다섯(`exe` · `hook` · `into` · `strip` · `man1`) — 한도에 닿았다. 하나 더 필요하거나 값에 공백이 필요하면 TSV를 옮긴다. `vendor-repo`는 서버 묶음이 처음 세운다.
-  CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다).
-  ISO가 1.51GB다 — util이 크면 GitHub release의 2GiB 한도(아래 사용자 결정 대기)에 닿는다.
+- [ ] TP-M9 plan — 문서(`dasht` · `w3m` · docset, design 결정 19). 그 뒤 M10부터 서버 · AI. 사용자는 조사 · 구현을 단계별로 보고받기를 원한다.
+  ISO가 1.85GB다 — docset이 크면 GitHub release의 2GiB 한도(아래 사용자 결정 대기)를 넘는다. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
+  체인은 빌드 뒤 639~650초다. 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
+  (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
+  CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다). `%ymm` 수가 아니라 ymm이 든 함수의
+  비율을 본다(DuckDB 2.0 — TP-M8 plan 확인 11). 자동 검사는 `carryover.md` 후보.
+  Debian 줄이 perl에 기대면 base에 둔다(rlwrap · ipcalc · vifm). 의존이 initrd의 것과 부딪치면 `harvest-skip.tsv`(alternatives는 skipalt가 함께 뺀다).
 - [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 1.36GB, 묶음 전체 어림 2.5~4GB) — 묶음을 따로 올리기 등.
   design 결정 12(ISO가 묶음을 싣는다)와 맞물린다. `docs/decisions/project_release_0_2.md`.
 - [ ] 사용자: 실기에서 개발 도구 층 — 프리릴리스 `dev-20261106`(TP-M3까지)이 올라가 있다. 다음 프리릴리스는 TP의 남은 milestone을 모두 마친 뒤에
   만든다(사용자 2026-11-06 — "남은 작업을 모두 마치고 프리릴리즈를 준비할게"). 절차는 `project_release_0_2.md`. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
   CPU에서 서는지가 남은 확인), `sudo npm i -g` 등이 `/usr/local/bin`에 서는지, javac 시간(TCG 11초). TP-M5 뒤: `cci --version` · `glc --help`가 에어 2011에서
   서는지(둘 다 x86-64 v1 빌드로 보이지만 `%ymm`이 있다 — TCG는 못 잡는다), 망 없이 `clojure -M -e '(+ 1 2)'` · `clj`(rlwrap의 줄 편집), `kotlinc` 시간. TP-M6 뒤: 새 프로젝트의 첫 `mix test`(JIT — 에어 2011의
-  진짜 SandyBridge에서 Illegal instruction이 없는지), `gleam new` → `gleam run`(망 없이), `erl -man lists`. TP-M7 뒤: `ms` · `ttt`가 에어 2011에서 서는지(`%ymm`이 있다 — 실행 중 고르기로 보인다), `emacs`의 첫 native-comp(gcc를 부른다)가
+  진짜 SandyBridge에서 Illegal instruction이 없는지), `gleam new` → `gleam run`(망 없이), `erl -man lists`. TP-M7 뒤: `ms` · `ttt`가 에어 2011에서 서는지(`%ymm`이 있다 — 실행 중 고르기로 보인다), TP-M8 뒤: util의 60개와 ffmpeg가 에어 2011에서 서는지(`rg --version` ·
+  `ffmpeg -version` · `duckdb`의 GROUP BY 하나), TUI 도구(lazygit · yazi · gitui · herdr · vifm · lazysql)의 화면이 TARS 터미널에서 맞게 그려지는지, `emacs`의 첫 native-comp(gcc를 부른다)가
   견딜 만한지, 망이 있을 때 `git clone … ~/.config/emacs && ~/.config/emacs/bin/doom install`이 TARS 위에서 되는지(체인은 안 봤다).
 - [ ] 사용자: 맥북 실기 — 아래 "사용자가 확인할 것"의 LP 절. 다음 번호는 0.2.0(TP 전체 뒤)이다. 최소 디스크는 16GiB다.
 - [ ] 보류: Pro 2013 내장 Wi-Fi(BCM4360) — `carryover.md`의 "맥 실기" 절.
@@ -207,19 +230,19 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
 - `devlayer/manifest.tsv` — 개발 도구 층의 유일한 출처(도구 · 묶음 · 판 · 종류 · URL · sha256 · 선택 열).
 - `devlayer/build.sh` — 받기(`fetch_checked`) · 풀기(`strip=`, 압축 없는 실행 파일 하나 — TP-M7) · 종류 `maven` · `hex`(잠금 파일 → `seed/`) · `man1=` 링크 · hex 시드와 `seed/manifest.toml` 대조 · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기.
   `devlayer/maven/*.lock` — Maven Central의 경로 · sha256. `devlayer/hex/*.lock` — Hex tarball · sha256. 훅 `clojure-tools.sh`(자리표 · 시드 줄) · `otp-install.sh`(`Install -cross`) · `gleam.sh`(런처). `devlayer/harvest.sh` — debian 줄 거두기(man 제외 풀기,
-  계정 · sysvinit 자리 빼기, `harvest-skip.tsv`, 남의 이름인 alternatives `editor` · `ctags` 빼기, `common-licenses` 본문 싣기 — TP-M7). `devlayer/verify.sh` — 결정 4(겹침) · 5(NEEDED). `devlayer/manifest.sh` — 파서.
+  계정 · sysvinit 자리 빼기, `harvest-skip.tsv`, 남의 이름인 alternatives `editor` · `ctags` 빼기, `common-licenses` 본문 싣기 — TP-M7, skip 패키지로 펴지는 alternatives 빼기 `skipalt` — TP-M8). `devlayer/needed-ignore.tsv` — NEEDED 예외의 이유 넷(GUI · jvm-loaded · exe-loaded · testdata). `devlayer/verify.sh` — 결정 4(겹침) · 5(NEEDED). `devlayer/manifest.sh` — 파서.
 - `devlayer/files/lang-script/…` — npmrc · `operating_system.rb` · `sitecustomize.py`. `devlayer/files/lang-native/etc/…` — PATH 조각.
 - `init/src/layers.zig` — `mountAll`(`/usr` overlay) · `mountLocal`(`/usr/local` 쓰기 층) · `copyTree`(`/etc` 복사, 링크 포함). 호스트 검사 `layers_test.zig`.
   부르는 자리 `init/src/main.zig`의 `readConfig`(`mountHome` 바로 뒤).
 - `kernel/make_initrd.sh` — 시스템 rc 셋(`/etc/bash.bashrc` · `/etc/zsh/zshrc` · fish `conf.d`)과 `/etc/tars/rc.d` 읽기.
 - `devtools/check.sh` — 체인(부팅 넷). `TP_CPU=SandyBridge`, 부팅 2의 hello 덩이들, 부팅 3의 `/usr/local` 잔존.
-- `docs/specs/2026-11-05-tars-dev-layer-design.md`(11판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4,5,6}.md` · `2026-11-07-…-tp-m7.md`.
+- `docs/specs/2026-11-05-tars-dev-layer-design.md`(13판), plan `docs/plans/2026-11-06-tars-dev-layer-tp-m{2,3,4,5,6}.md` · `2026-11-07-…-tp-m{7,8}.md`.
 
 ## 지금 상태 (2026-11-07)
 
-- 진행 중인 것은 TP(design 12판, M0~M7 끝 — 다음은 M8 plan, 터미널 유틸리티). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
-- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 30분 11초(TP-M7 — lanes 1,356초, devtools 652초).
-  `make gate`는 먼저 `make dev-layers`(묶음 일곱 — base · editor · lang-beam · lang-jvm · lang-native · lang-script · util, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
+- 진행 중인 것은 TP(design 13판, M0~M8 끝 — 다음은 M9 plan, 문서). 마지막으로 닫은 것은 PW · RB · LP. 최신 공개 버전 0.1.4(tag `v0.1.4` = `d93a8aa`).
+- 체인은 서른하나다(`check.sh`의 `CHAINS`, 끝이 `LP-M1:./sleep/check.sh` · `TP-M1:./devtools/check.sh`). 마지막 루트 게이트 31/31, 33분 13초(TP-M8 — lanes 1,490초, devtools 759초).
+  `make gate`는 먼저 `make dev-layers`(묶음 여덟 — base · editor · lang-beam · lang-jvm · lang-native · lang-script · media · util, 캐시면 약 1분 반 — lang-native의 다시 풀기가 51초)를 부른다 — devtools 체인은 그 위에서 검사만 다시 돈다.
 - initrd는 도구 112개(lsoff · doge 포함), 풀면 약 141MB.
 - 닫은 서브프로젝트의 경과 · 함정 · 숫자는 `docs/guides/completed.md`의 표와 `docs/decisions/`의 기억 파일이다.
 - 테스트 흐름: 실기는 쓰지 않고 테스트마다 `tars-install <disk> --wipe`로 새로 깐다.

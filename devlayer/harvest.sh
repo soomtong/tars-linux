@@ -99,7 +99,8 @@ mv "${work}/new.sorted" "${work}/new.all"
 skipped=0
 while IFS=$'\t' read -r pkg _why; do
   [[ -z "${pkg}" || "${pkg}" == \#* ]] && continue
-  dpkg-query -W "${pkg}" >/dev/null 2>&1 || continue
+  # -W만으로는 dpkg가 이름만 아는 패키지(설치 안 됨)도 0이다 — base 거두기에서 vim-common이 그랬다(TP-M8). 상태를 묻는다.
+  [[ "$(dpkg-query -W -f='${db:Status-Status}' "${pkg}" 2>/dev/null)" == installed ]] || continue
   dpkg -L "${pkg}" | sed -E 's#^/(lib|lib64|bin|sbin)/#/usr/\1/#' >>"${work}/skip.files"
   skipped=$((skipped + 1))
 done <devlayer/harvest-skip.tsv
@@ -122,7 +123,10 @@ mv "$work/list.kept" "$work/list"
 # alternatives 펴기(결정 2): 새 경로 가운데 /etc/alternatives를 지나는 링크는 최종 대상으로의 상대 링크로 바꾼다. 묶음에는
 # /etc/alternatives가 없고, TARS의 /etc는 부팅마다 만드는 tmpfs다. 새 경로만 편다 — slim에 원래 있던 링크(awk · pager ·
 # which)까지 펴면 "바뀐 파일"이 되어 묶음에 실린다(첫 판이 그랬다).
+# 대상이 harvest-skip의 패키지 파일이면 그 링크도 싣지 않는다(TP-M8): vifm이 끌고 온 vim의 postinst가 vi · vim · ex · view ·
+# vimdiff와 그 man(여러 언어의 editor.1.gz 등)을 vim.basic으로 돌렸다. vim을 빼면 끊기고, vi · vim은 initrd의 것과 부딪친다.
 flattened=0
+: >"$work/skipalt"
 while IFS= read -r rel; do
   link="/$rel"
   [ -L "$link" ] || continue
@@ -131,11 +135,19 @@ while IFS= read -r rel; do
     *) continue ;;
   esac
   final="$(readlink -f "$link")"
+  if grep -qxF "$final" "${work}/skip.files"; then
+    echo "$rel" >>"$work/skipalt"
+    continue
+  fi
   ln -sfn "$(realpath -s --relative-to="$(dirname "$link")" "$final")" "$link"
   echo "$rel -> $(readlink "$link")" >>"$work/flat"
   flattened=$((flattened + 1))
 done <"$work/list"
 touch "$work/flat"
+if [[ -s "$work/skipalt" ]]; then
+  LC_ALL=C sort "$work/list" | LC_ALL=C comm -23 - <(LC_ALL=C sort "$work/skipalt") >"$work/list.kept"
+  mv "$work/list.kept" "$work/list"
+fi
 
 # 이 컨테이너에서 이미 끊긴 링크는 싣지 않는다. slim의 /etc/dpkg/dpkg.cfg.d/docker가 usr/share/doc/*를 풀지 않아서
 # cpp-x86-64-linux-gnu/README.Bugs -> ../gcc-14/README.Bugs 같은 링크가 대상 없이 남는다. TARS가 아니라 거둔 자리의 사정이다.
@@ -174,7 +186,7 @@ tar -C / --no-recursion -cpf "$build/$bundle.harvest.tar.tmp" -T "$work/list"
 mv "$build/$bundle.harvest.tar.tmp" "$build/$bundle.harvest.tar"
 cp "$work/pkgs" "$build/$bundle.pkgs"
 {
-  echo "harvest> $bundle: packages=$(wc -l <"$work/pkgs") paths=$(wc -l <"$work/list") changed=$(wc -l <"$work/changed") deps=$(wc -l <"$work/deps")/$(wc -l <"$work/deps.files") flattened=$flattened broken=$(wc -l <"${work}/broken") skipped=$skipped etc=$(wc -l <"$work/etc")"
+  echo "harvest> $bundle: packages=$(wc -l <"$work/pkgs") paths=$(wc -l <"$work/list") changed=$(wc -l <"$work/changed") deps=$(wc -l <"$work/deps")/$(wc -l <"$work/deps.files") flattened=$flattened skipalt=$(wc -l <"$work/skipalt") broken=$(wc -l <"${work}/broken") skipped=$skipped etc=$(wc -l <"$work/etc")"
   sed 's/^/harvest>   changed /' "$work/changed"
   sed 's/^/harvest>   etc /' "$work/etc"
   sed 's/^/harvest>   dep /' "$work/deps"

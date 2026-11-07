@@ -4,6 +4,18 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+개발 도구 층 TP-M8(2026-11-07, 터미널 유틸리티 · media)이 남긴 것.
+
+- [ ] 셸 완성. util의 12개 도구(bat · fd · hyperfine · rg · glow · hurl · sd · xh · yazi · go-task · fastfetch 등)와 mitos(`contrib/completion`)가 완성
+      파일을 싣지만 잇는 자리가 없다 — initrd의 zsh는 Completion 트리(`/usr/share/zsh`, 17MB)를 싣지 않고 `compinit`도 부르지 않으며(`kernel/make_initrd.sh`의
+      주석), bash에는 `bash-completion`이 없다. 이으려면 그 둘부터(base 묶음의 `debian` 줄이 후보 — 묶음 없는 부팅과 갈린다), TCG에서 `compinit`이 셸
+      시작을 얼마나 늦추는지 재고, 도구마다 다른 자리(`autocomplete/` · `completions/` · `complete/`)를 `/usr/local/share/{zsh/site-functions,bash-completion/completions,
+      fish/vendor_completions.d}`로 링크하는 길(매니페스트 선택 키는 다섯 — 한도)을 정한다. TP-M7 · M8 plan의 맡아 정한 것 3.
+- [ ] 묶음 실행 파일의 CPU 수준을 verify가 보게 하기. 지금은 받을 때 사람이 `objdump`의 `%ymm`을 센다 — DuckDB 2.0은 CLI를 x86-64-v3로 빌드해
+      함수의 20%에 AVX2 · FMA가 퍼져 있었고(TP-M8 plan 확인 11, 1.5.6을 실었다), 실행 중 고르기(ripgrep · uv · ffmpeg)는 몇 함수에 모인다. QEMU TCG는 CPUID에
+      없는 AVX2도 실행해 체인으로는 못 잡는다(TP-M3 확인 8). 후보: 심볼이 있는 ELF에서 ymm 정수 · FMA 명령이 든 함수의 비율이 문턱을 넘으면 멈추기
+      (벗겨진 ELF는 따로). upstream이 판을 올릴 때 같은 일이 또 생긴다.
+
 맥 실기(2026-11-05)가 남긴 것.
 
 - [ ] MacBook Pro 2013 내장 Wi-Fi — 사용자 결정으로 대기(2026-11-05). 기종이 갈린다(`/sys/class/dmi/id/product_name`).
