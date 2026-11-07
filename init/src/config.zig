@@ -644,7 +644,7 @@ pub const Shell = enum {
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
             \\#
-            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 아래 다섯이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
             \\# ls 자리에 앉힌다.
             \\#
@@ -659,7 +659,8 @@ pub const Shell = enum {
             \\alias ls='eza'
             \\alias ll='eza -l --group-directories-first'
             \\alias la='eza -la --group-directories-first'
-            \\alias lt='eza --tree --level=2'
+            \\alias lt='eza -ls modified'
+            \\alias ltt='eza -ls changed'
             \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
@@ -688,7 +689,7 @@ pub const Shell = enum {
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
             \\#
-            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 아래 다섯이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
             \\# ls 자리에 앉힌다.
             \\#
@@ -703,7 +704,8 @@ pub const Shell = enum {
             \\alias ls='eza'
             \\alias ll='eza -l --group-directories-first'
             \\alias la='eza -la --group-directories-first'
-            \\alias lt='eza --tree --level=2'
+            \\alias lt='eza -ls modified'
+            \\alias ltt='eza -ls changed'
             \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — 프롬프트마다 배우고 z <조각>으로 간다
@@ -745,7 +747,7 @@ pub const Shell = enum {
             \\# 밀린다. 늘리는 것도 지우는 것도 마음대로지만, 그 대가는 자기
             \\# 기계에서 치른다.
             \\#
-            \\# 아래 넷이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
+            \\# 아래 다섯이 eza를 습관적인 이름으로 부른다. 이 기계는 도구 예순
             \\# 다섯 개를 싣고 있는데 그중 대부분은 이름으로만 닿는다 — 그 하나를
             \\# ls 자리에 앉힌다.
             \\#
@@ -760,7 +762,8 @@ pub const Shell = enum {
             \\alias ls='eza'
             \\alias ll='eza -l --group-directories-first'
             \\alias la='eza -la --group-directories-first'
-            \\alias lt='eza --tree --level=2'
+            \\alias lt='eza -ls modified'
+            \\alias ltt='eza -ls changed'
             \\#
             \\# 아래 둘이 이 기계가 기억하는 법이다.
             \\#   zoxide  어느 디렉터리에 갔는지 — cd할 때마다 배우고 z <조각>으로 간다
