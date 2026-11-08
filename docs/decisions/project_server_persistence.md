@@ -23,3 +23,6 @@ How to apply:
 - 같은 milestone에 더할 것(사용자 2026-11-08, "ssl-cert 같은 툴도" → "둘 다"): 서비스가 쓸 기계별 자체 서명 인증서(거두기 컨테이너의 snakeoil은 모든
   기계가 같은 비밀 키라 TP-M10에서 뺐다 — 기계마다 한 번 만들어 남는 자리에), 시스템 신뢰(`/usr/local/share/ca-certificates/*.crt`를 부팅 때 CA 묶음에
   덧붙이기 — `mkcert -install`이 이어진다). 사용자용 mkcert는 TP-M10 덧붙임으로 util에 들어갔다.
+- 바뀐 방향(사용자 2026-11-08, TP-M11 조사 뒤 — 셋 다 Claude 추천): (a)의 링크 · 디렉터리 · 첫 초기화는 init이 아니라 서비스 템플릿
+  (`/etc/tars/services/<서버>`, sshd와 같은 모양)이 한다 — init 코드 0줄. 서버는 TARS 사용자(uid 1000)로 돈다(서비스 계정 없음). 켜고 끄기는
+  `tars-service enable|disable <이름>`(services.d 링크 + reload). init을 고치는 곳은 시스템 신뢰 하나다. plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`.

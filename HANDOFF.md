@@ -1,4 +1,4 @@
-# HANDOFF: TP-M10(서버 실행 파일)과 덧붙임(gpg 키 검사 · mkcert) 끝 · 커밋함(push 안 함) — 다음은 서버(서비스) milestone(TP-M11)
+# HANDOFF: TP-M11(서버 서비스) plan 초안이 사용자 검토를 기다린다 — TP-M10과 덧붙임(gpg · mkcert)은 끝나 push했다
 
 ## 목표
 
@@ -14,16 +14,22 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 ## 다음 할 것
 
-1. 사용자에게 보고: TP-M10은 사용자가 "남은 결정을 위임"하고 잔 사이에 끝났다(2026-11-08). Claude가 맡아 정한 것은 plan
-   `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`의 "확인한 것" 1~8 — 특히 2(지문 대신 키 sha256), 3(`mysql-community-client`, 설정은 `conf.d/tars.cnf`),
-   4(server 166MiB — ISO가 2GiB까지 약 110MB). 덧붙임(gpg · mkcert)은 사용자와 함께 정했다. 커밋은 했고 push는 안 했다(사용자 확인 뒤).
-   Dockerfile이 바뀌었다(gpg, 이미지 태그 `76bca5f6adc3`) — push 뒤 CI가 굽는다. 그 전 다른 기기는 `./devcontainer/image.sh build`
-   (`make container`는 로컬 이름 `tars-devcontainer`가 있으면 다시 굽지 않는다 — 이 세션에서 겪었다).
-2. TP-M11 = 서버(서비스) milestone plan — `docs/decisions/project_server_persistence.md`: (a) `/var/lib/<서버>` → `/home/.tars/var/<서버>` 링크를 init이,
-   (b) `/config/<서버>.d` include(mysql은 이미 `/etc/mysql/conf.d/`가 있다), (c) 로그 stdout, `tars-service` 연결 · 첫 시작 초기화 · 서비스 계정.
-   그 plan에서 물을 것: 링크 장치를 서버 전용으로 할지 범용으로 할지(Claude는 범용을 권할 생각). 같은 milestone에 기계별 자체 서명 인증서와
-   시스템 신뢰(`/usr/local/share/ca-certificates` → 부팅 때 CA 묶음) — 사용자 "둘 다"(기억 파일 끝).
-3. 2GiB 한도: AI milestone이 남은 약 113MB에 들어가는지 먼저 재기. 줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+1. 사용자에게 TP-M11 plan(`docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`, 커밋 `Draft plan` — 아래)을 검토받는다. 세션 끝에 요약을 보였고 답은
+   아직 없다. 특히 "Claude가 맡아 정한 것" 1~5(데이터 `/home/.tars/var` · postgres trust · 포트 8080/8081 · 로그 파일 없음 · 기본 꺼짐)와 결정 E(init을 고치는
+   유일한 자리 — 부팅 때 `/usr/local/share/ca-certificates`에 `.crt`가 있으면 `update-ca-certificates` 한 번)를 짚는다.
+2. 승인되면 plan의 "할 일" 순서대로: 템플릿을 trixie 컨테이너(root로 실행 → `setpriv`로 uid 1000)에서 하나씩 세운 뒤 → `tars-service enable|disable` →
+   `update-ca-certificates` · init → 체인(부팅 2에서 켜고 쓰기, 부팅 3에서 재부팅을 넘는지) → 빨강 셋 → 안내 → 게이트. 단계마다 보고(사용자가 원하는 방식).
+3. 2GiB 한도: ISO 2,036,750,336바이트 — 2GiB까지 약 110MB. AI milestone 전에 잰다. 줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+
+## 완료된 작업 (2026-11-08, TP-M11 조사 — 사용자가 셋을 정했다)
+
+- [x] 조사: SV의 서비스 장치(`/config/services.d/<이름>` 실행 파일, root로 띄워 감독, 출력은 콘솔 — 그래서 (c) 로그 stdout은 이미 기본), sshd 선례(템플릿이
+  준비 뒤 `exec`, `tars-config ssh on`이 링크), 부팅 순서(묶음 `etc/` 복사가 `services.d` 읽기보다 먼저), reload 결정 11(새 이름은 띄우고 사라진 이름은 멈춘다).
+- [x] 설정 덧붙이기 실측(trixie 컨테이너): nginx `include *.conf` · redis `include *.conf` · caddy `import *.caddy`는 빈 · 없는 디렉터리 모두 통과,
+  mysql `!includedir`는 없는 디렉터리면 `Fatal error in defaults handling` — 템플릿이 먼저 만든다.
+- [x] 사용자 결정(2026-11-08): 서버는 TARS 사용자(uid 1000)로 돈다(서비스 계정 없음), 링크 · 디렉터리 · 첫 초기화는 서비스 템플릿이 한다(init 코드 0줄 —
+  앞서 권한 "init의 범용 장치"를 뒤집었다, 기억 `project_server_persistence`의 (a) 문구는 plan이 고친다), 켜고 끄기는 `tars-service enable|disable`.
+- [x] push: 사용자가 `gpu`로 `4d213c3`까지 올렸다. CI가 새 개발 컨테이너 이미지(`76bca5f6adc3`, gpg)를 굽는다.
 
 ## 완료된 작업 (2026-11-08, TP-M10 — 사용자가 조사 결과로 셋을 정하고, 구현 중 남은 결정을 위임하고 잤다)
 
@@ -210,6 +216,19 @@ FS = First Steps. 사용자: "설치를 잘 마치고 나니까 뭘 해야 될�
 
 ## 시도했으나 실패한 접근
 
+TP-M10 · M11(2026-11-08):
+
+- zsh에서 `python3 - <<'PYEOF' … PYEOF` 안에 본문의 heredoc(`<<EOF … EOF`)을 담았다 — 안쪽 `EOF` 줄이 바깥 heredoc을 끝내 명령 전체가 해석 오류로 멈췄다
+  (실행된 것은 없었다). 긴 편집은 scratchpad의 `.py` 파일로 쓰고 돌린다.
+- macOS의 BSD `sed`로 `\t`가 든 치환 — 탭으로 안 읽혀 아무것도 안 바뀌었고 빨강 시험이 "cached"로 지나갔다. 탭이 든 파일은 python으로 고치고 바뀐 줄을 찍는다.
+- `make container`로 Dockerfile 변경을 반영하려 했다 — 로컬 이름 `tars-devcontainer`가 있으면 아무것도 안 한다. `./devcontainer/image.sh build`.
+- chroot 시험 스크립트의 `kill %1` · `kill -0 %1`: 거두지 않은 좀비에도 `kill -0`이 성공하고, `%1`이 끝난 작업을 가리켜 다른 백그라운드(caddy)가 남아 `wait`가
+  영원히 기다렸다(컨테이너를 손으로 껐다). 체인은 `$!`로 PID를 잡고 `wait $pid`로 거둔다.
+- chroot 뿌리 펼치기의 `zcat initrd.cpio | cpio -idmu`가 rc 141 — cpio가 TRAILER 뒤를 안 읽어 zcat이 SIGPIPE를 받는다. 내용은 다 들어간다 —
+  `set -e`로 멈추지 말고 `/usr/bin/bash` · `/etc/bash.bashrc`로 확인한다.
+- mysql generic tarball(glibc 2.28): trixie의 libaio는 time64 전환으로 `libaio.so.1t64`라 `mysqld`가 안 선다 — Oracle의 trixie apt(`vendor-repo`)로 갔다.
+
+
 TP-M8(2026-11-07):
 
 - alias를 시드 rc(`init/src/config.zig`)에서만 고치고 "검증 없이" 커밋 — init의 `config_test.zig`가 `ALLOWED_ALIAS_NAMES`로 묶고 있어 게이트의 사전 빌드에서 멈췄다.
@@ -254,7 +273,7 @@ TP-M0~M2:
 ## 남은 작업
 
 - [x] FS 소개 페이지(`gh-pages` `data.js`, `495cf9e`) — 사용자 승인 뒤 push했다(2026-11-07).
-- [ ] TP-M11 plan — 서버(서비스). TP-M10(실행 파일)은 끝났다. 그 뒤 AI.
+- [ ] TP-M11 — plan 초안 검토 → 구현(서버 서비스 · 기계별 인증서 · 시스템 신뢰). 그 뒤 AI.
   사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
   체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
@@ -295,6 +314,14 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
 - chroot 시험은 버리는 amd64 컨테이너에서 initrd를 풀고 묶음을 `unsquashfs`로 덮은 뒤 `/dev/null`을 `mknod`해 둔다(perl이 그것으로 넘어졌다).
 
 ## 핵심 파일
+
+- `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md` — 다음 일(검토 대기). 결정 A~G, 할 일 1~6.
+- `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md` — server 묶음 · `vendor-repo` · 덧붙임(gpg · mkcert)의 확인한 것과 결과.
+- `devlayer/repos.tsv` · `devlayer/keys/*.asc` · `devlayer/keys.sh` — vendor-repo 저장소 넷, 키의 sha256 · 지문 · 만료 검사(`make quick` 단계 7, `make dev-layers` 앞).
+- `devlayer/files/server/` — `/usr/local/bin` 링크 38, `etc/mysql/conf.d/tars.cnf`, `PGHOST` rc 조각. TP-M11의 템플릿도 여기(`etc/tars/services/`)에 든다.
+- `kernel/make_initrd.sh:796-821` — sshd 서비스 템플릿(TP-M11 템플릿의 본보기), `:526-541` — CA 묶음을 굽는 자리(결정 E).
+- `init/src/service_cli.zig` — `tars-service`(TP-M11이 enable · disable을 더한다), `init/src/config_front.zig:28-29` — `tars-config ssh on`의 링크.
+- `init/src/main.zig:1240-1245` · `:1490` — `/home` → 묶음 → `/usr/local` → `services.discover`의 순서.
 
 - `devlayer/manifest.tsv` — 개발 도구 층의 유일한 출처(도구 · 묶음 · 판 · 종류 · URL · sha256 · 선택 열).
 - `devlayer/build.sh` — 받기(`fetch_checked`) · 풀기(`strip=`, 압축 없는 실행 파일 하나 — TP-M7) · 종류 `maven` · `hex`(잠금 파일 → `seed/`) · `man1=` 링크 · hex 시드와 `seed/manifest.toml` 대조 · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기.
