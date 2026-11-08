@@ -19,6 +19,7 @@ const control = @import("control.zig");
 const audio = @import("audio.zig");
 const reload = @import("reload.zig");
 const layers = @import("layers.zig");
+const trust = @import("trust.zig");
 const build_info = @import("build_info");
 
 /// 리눅스는 시스템 콜 실패를 "음수 errno"로 그대로 돌려준다. libc가 그것을
@@ -1243,6 +1244,8 @@ const Boot = struct {
         if (self.home) layers.mountAll(layers.DIR, build_info.version);
         // TP-M4 plan 결정 H. `/usr` 위에(얹었든 아니든) `/usr/local`의 쓰기 층. p3가 있어야 한다.
         if (self.home) layers.mountLocal();
+        // TP-M11 plan 결정 E. 쓰기 층이 열린 뒤라 사람이 넣은 인증서가 보인다. 없으면 아무것도 안 한다.
+        if (self.home) trust.refresh();
         self.cfg = loadConfig(self.mounted);
         // SC-M2 결정 9 — 탈출로 2. cmdline > tars.conf > 기본값.
         //

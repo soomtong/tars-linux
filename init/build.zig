@@ -326,6 +326,18 @@ pub fn build(b: *std.Build) void {
         .root_module = service_link_test_mod,
     });
 
+    // TP-M11: 부팅 때 update-ca-certificates를 부를지. 디렉터리를 읽어 host_target이다(test_scratch 아래).
+    const trust_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/trust_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const trust_test = b.addExecutable(.{
+        .name = "trust_test",
+        .root_module = trust_test_mod,
+    });
+
     // WL-M2: wpa_supplicant를 감독 목록에 넣을지의 검사. login_test와 같은 이유로
     // host_target이다 — `wants`가 설정 파일 경로를 인자로 받아 /tmp를 본다.
     const wifi_test_mod = b.createModule(.{
@@ -458,6 +470,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(account_test).step);
     test_step.dependOn(&b.addRunArtifact(control_test).step);
     test_step.dependOn(&b.addRunArtifact(service_link_test).step);
+    test_step.dependOn(&b.addRunArtifact(trust_test).step);
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
     test_step.dependOn(&b.addRunArtifact(bluetooth_test).step);
     test_step.dependOn(&b.addRunArtifact(audio_test).step);

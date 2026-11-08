@@ -1,0 +1,32 @@
+#!/bin/sh
+# TARS update-ca-certificates (TP-M11 plan decision E). Not Debian's: it does one thing.
+# It rewrites /etc/ssl/certs/ca-certificates.crt as the initrd's bundle (mozilla) plus every
+# *.crt in /usr/local/share/ca-certificates (and one directory below), the place Debian uses.
+# /usr/local survives a reboot and /etc does not, so init runs this once at boot when that
+# directory has a .crt. `sudo mkcert -install` puts its CA there and runs this; removing a
+# file and running this again takes it out. Options are accepted and ignored.
+set -u
+src=/usr/share/tars/ca-certificates.crt
+dst=/etc/ssl/certs/ca-certificates.crt
+dir=/usr/local/share/ca-certificates
+if [ "$(id -u)" != 0 ]; then
+  echo "update-ca-certificates: run it as root (sudo)" >&2
+  exit 1
+fi
+tmp="$dst.new"
+# A half-written bundle never replaces the old one: it is built aside and moved in whole.
+trap 'rm -f "$tmp"' EXIT
+n=0
+{
+  # { } runs in this shell, so n is still set after it.
+  cat "$src" || exit 1
+  for f in "$dir"/*.crt "$dir"/*/*.crt; do
+    [ -f "$f" ] || continue
+    cat "$f" || exit 1
+    # Debian's command adds a newline after a file that does not end with one.
+    [ -n "$(tail -c 1 "$f")" ] && echo
+    n=$((n + 1))
+  done
+} > "$tmp" || exit 1
+chmod 644 "$tmp" && mv "$tmp" "$dst" || exit 1
+echo "update-ca-certificates: $n added from $dir to $dst"

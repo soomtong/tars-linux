@@ -540,6 +540,18 @@ for crt in "$SYSROOT"/usr/share/ca-certificates/mozilla/*.crt; do
 done > "$WORKDIR/etc/ssl/certs/ca-certificates.crt"
 chmod 0644 "$WORKDIR/etc/ssl/certs/ca-certificates.crt"
 
+# TP-M11 plan 결정 E. 사람이 믿기로 한 인증 기관(`sudo mkcert -install` 등)이 재부팅을 넘는 길.
+#   /usr/share/tars/ca-certificates.crt     위 묶음의 원본. /etc의 것은 다시 써지므로 출발점을 따로 둔다
+#   /usr/bin/update-ca-certificates         원본 + /usr/local/share/ca-certificates/*.crt로 /etc의 것을 다시 쓴다
+#   /usr/local/share/ca-certificates/       빈 디렉터리. mkcert는 이것이 있어야 Debian의 길을 고른다.
+#                                           initrd의 /usr가 묶음 overlay의 맨 위라 그대로 보이고, 넣은 파일은
+#                                           /usr/local의 쓰기 층(p3)에 남는다
+# init은 /usr/local을 연 뒤 그 디렉터리에 .crt가 있을 때만 명령을 한 번 부른다(init/src/trust.zig).
+mkdir -p "$WORKDIR/usr/share/tars" "$WORKDIR/usr/local/share/ca-certificates"
+cp "$WORKDIR/etc/ssl/certs/ca-certificates.crt" "$WORKDIR/usr/share/tars/ca-certificates.crt"
+cp trust/update-ca-certificates "$WORKDIR/usr/bin/update-ca-certificates"
+chmod 0755 "$WORKDIR/usr/bin/update-ca-certificates"
+
 # UT-M3 결정 8. git은 전역 설정을 $HOME/.gitconfig에서 읽고 게스트의 HOME은
 # /다. 그런데 /는 tmpfs라 재부팅하면 사라진다 — 영속하는 것은 설정
 # 디스크를 마운트하는 /config 하나뿐이고 그것은 읽기·쓰기다

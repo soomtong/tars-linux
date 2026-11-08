@@ -135,5 +135,12 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
    `service NAME: starts|stops`가 있을 때만 running · stopped까지 기다린다(없는 이름을 8초 기다리지 않는다). init 없는 컨테이너에서: 이름 64, 템플릿 없음 64 +
    목록(실행 파일만), 사용자 77, 남의 파일 1(손대지 않음), already 둘. reload 뒤의 길은 체인이 본다. 템플릿 목록은 `services.discover`를 쓰지 않는다 —
    init의 로그 줄(`tars-init: 5 services from …`)이 명령 출력에 섞였다.
+9. 할 일 3: `kernel/trust/update-ca-certificates`(sh) — 원본 `/usr/share/tars/ca-certificates.crt` + `/usr/local/share/ca-certificates/*.crt`와
+   한 단계 아래를 `.new`에 지어 `mv`로 바꾼다(반쯤 쓴 묶음은 안 들어간다, `trap`이 치운다). 컨테이너에서: 개행 없는 파일 뒤에 개행, `.pem` 제외,
+   지운 파일은 다시 돌리면 빠짐, 옵션(`--fresh`) 무시, 원본이 없으면 rc 1이고 옛 묶음 그대로. initrd에 셋과 빈 `/usr/local/share/ca-certificates`
+   (mkcert는 이 디렉터리가 있어야 Debian의 길을 고른다 — initrd의 `/usr`가 overlay 맨 위라 보인다). init은 `trust.zig`의 `refresh` 하나 —
+   `mountLocal` 바로 뒤, `.crt`가 없으면 fork도 안 한다. 시한 5초(넘으면 SIGKILL · 한 줄). 판정 `hasCrt`는 `trust_test.zig`(호스트), 빨강:
+   한 단계 아래를 안 보면(`DEPTH_MAX = 0`) FAIL. 시한을 넘는 길은 검사가 없다 — 체인 빨강 (b)는 "부르지 않으면"을 본다.
+   initrd에 CA 묶음이 한 벌 더 든다(압축 전 약 220KB).
 
 ## 결과
