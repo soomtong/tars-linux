@@ -4,6 +4,18 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+개발 도구 층 TP-M11 뒤 조사(2026-11-08)가 남긴 것.
+
+- [ ] 묶음 사이 같은 파일 지우기. `devlayer/build.sh`의 묶음끼리 대조(TP-M2 plan 결정 E)는 내용이 다르면 멈추고 같으면 `shared`로 세기만 한다 —
+      같은 파일이 두 sqfs에 다 들어간다. base와 겹친 양(거두기 tar 크기, 풀린 것 → tar째 zstd -15): editor 108 → 28MiB(emacs가 끈 gcc 쪽), server
+      93 → 22MiB(perl 57MiB — postgres · mysql의 의존, base와 같은 판 · 바이트), lang-script 24 → 6, media 20 → 6, util 18 → 5, docs 10 → 2. 합 약
+      270MiB → 69MiB(squashfs는 블록마다라 실제 ISO 감소는 조금 더 클 것). 고치는 길: 나중 묶음에서 앞 묶음과 같은 파일을 지운다(verify.sh가
+      initrd와 겹친 것을 지우는 것과 같은 일). 근거는 묶음을 다 함께 깔고(비목표 6) 판이 다르면 안 얹는 것(결정 13). 정할 것: 지운 묶음이 앞
+      묶음에 기대게 되므로 base가 안 얹힌 부팅에서 나머지를 어떻게 할지. AI 도구를 싣지 않기로 해(사용자 2026-11-08) 지금은 자리가 급하지 않다 —
+      ISO 2GiB에 다시 닿으면 꺼낸다.
+      libicu는 줄일 수 없다: Debian `libicu76`(36MiB, `libicudata` 31MiB)은 postgres · initdb의 NEEDED, mysql의 `/usr/lib/mysql/private` ICU 77
+      (51MiB)은 mysqld의 NEEDED — 둘은 서로 다른 판이고 묶음 사이 중복도 아니다. 데이터를 깎으려면 소스 빌드(비목표 7).
+
 개발 도구 층 TP-M8(2026-11-07, 터미널 유틸리티 · media)이 남긴 것.
 
 - [ ] 셸 완성. util의 12개 도구(bat · fd · hyperfine · rg · glow · hurl · sd · xh · yazi · go-task · fastfetch 등)와 mitos(`contrib/completion`)가 완성
