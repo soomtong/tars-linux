@@ -13,6 +13,8 @@
 
 ## 다음 할 것
 
+0. 프리릴리스 `dev-20261108`(`09ec9ef`, 묶음 열, 2,036,891,648 B)을 draft로 올렸다(사용자 요청) — 태그만 push했다. 공개는 사용자가 GitHub에서 draft를
+   풀거나 `gh release edit dev-20261108 --draft=false`. 내려받아 `shasum -c` OK, 호스트 QEMU smoke `TARS 0.1.4+09ec9ef`.
 1. 사용자가 돌아오면 TP-M11을 보고한다 — plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`의 "확인한 것" 10~16과 "결과"(위임으로 Claude가
    정한 것을 모아 두었다). 뒤집을 것이 있으면 고친다. 그 뒤 push.
 2. 다음 milestone은 AI 도구(TP design의 Milestone 순서 끝). plan 전에 2GiB 한도를 잰다: ISO 2,036,891,648바이트 — 2GiB까지 약 110MB.
