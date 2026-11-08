@@ -918,6 +918,12 @@ chmod 0644 "$WORKDIR/etc/os-release"
 # 두는 이유: 둘 다 있으면 mise가 PATH의 앞을 잡아, 프로젝트가 고른 버전이 brew가 부은 같은
 # 이름보다 먼저 불린다. 경로가 사용자마다 달라 $HOME은 셸이 펼친다(brew의 고정 prefix와 다른
 # 점). fish는 conf.d의 새 파일 mise.fish이고, conf.d는 이름 순이라 homebrew.fish 다음이다.
+#
+# TP-M12: 같은 파일 셋 끝에 ~/.local/bin(XDG의 사용자 실행 파일 자리)을 PATH 맨 앞에 더한다 — 있을 때만, 이미 있으면
+# 그대로. 공식 설치기가 실행 파일을 거기 두는 도구(claude · codex · pipx · uv)가 화면 셸에서 이름으로 서게 한다.
+# mise가 있으면 activate가 이미 넣었으므로 아무 일도 없다. 없는 디렉터리는 안 넣는다 — root의 셸과 다른 체인의
+# PATH는 그대로다(Debian ~/.profile의 같은 줄도 있을 때만 넣는다). 디렉터리를 처음 만든 셸은 새 셸부터 본다.
+# fish는 conf.d의 user-bin.fish이고 이름 순이라 mise.fish 다음이다.
 BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew
 mkdir -p "$WORKDIR/etc/zsh" "$WORKDIR/etc/fish/conf.d"
 cat > "$WORKDIR/etc/bash.bashrc" <<EOF
@@ -932,6 +938,9 @@ fi
 if [ -x "\$HOME/.local/bin/mise" ]; then
   eval "\$("\$HOME/.local/bin/mise" activate bash)"
 fi
+if [ -d "\$HOME/.local/bin" ]; then
+  case ":\$PATH:" in *":\$HOME/.local/bin:"*) ;; *) PATH="\$HOME/.local/bin:\$PATH" ;; esac
+fi
 EOF
 cat > "$WORKDIR/etc/zsh/zshrc" <<EOF
 # TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). Homebrew · mise가 있으면 PATH에 넣는다.
@@ -944,6 +953,9 @@ if [ -x ${BREW_BIN} ]; then
 fi
 if [ -x "\$HOME/.local/bin/mise" ]; then
   eval "\$("\$HOME/.local/bin/mise" activate zsh)"
+fi
+if [ -d "\$HOME/.local/bin" ]; then
+  case ":\$PATH:" in *":\$HOME/.local/bin:"*) ;; *) PATH="\$HOME/.local/bin:\$PATH" ;; esac
 fi
 EOF
 cat > "$WORKDIR/etc/fish/conf.d/homebrew.fish" <<EOF
@@ -958,8 +970,14 @@ if test -x "$HOME/.local/bin/mise"
     "$HOME/.local/bin/mise" activate fish | source
 end
 EOF
+cat > "$WORKDIR/etc/fish/conf.d/user-bin.fish" <<'EOF'
+# TARS 시스템 rc(kernel/make_initrd.sh가 짓는다, 부팅마다 initrd에서 온다). ~/.local/bin이 있으면 PATH 맨 앞에 넣는다(TP-M12).
+if test -d "$HOME/.local/bin"; and not contains -- "$HOME/.local/bin" $PATH
+    set -gx PATH "$HOME/.local/bin" $PATH
+end
+EOF
 chmod 0644 "$WORKDIR/etc/bash.bashrc" "$WORKDIR/etc/zsh/zshrc" "$WORKDIR/etc/fish/conf.d/homebrew.fish" \
-  "$WORKDIR/etc/fish/conf.d/mise.fish"
+  "$WORKDIR/etc/fish/conf.d/mise.fish" "$WORKDIR/etc/fish/conf.d/user-bin.fish"
 
 # IP-M1: terminal이 PTY 셸의 TERM을 바꾸므로(design doc 결정 7) 그 terminfo가
 # 게스트에 있어야 한다. 없으면 부팅은 계속되고 셸이 능력을 덜 쓸 뿐이다 —

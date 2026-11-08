@@ -33,6 +33,19 @@ curl https://mise.run | sh && ~/.local/bin/mise use -g node@lts                 
 
 셸이 둘 다 알아서 PATH에 잇습니다(새 셸부터).
 
+AI 코딩 도구는 싣지 않습니다 — 모델을 망으로 부르므로 망이 있을 때 각자의 공식 설치로 홈에 받습니다. 받은 것은 재부팅 · 갱신에도 남습니다.
+
+```sh
+curl -fsSL https://claude.ai/install.sh | bash          # Claude Code → ~/.local/bin/claude
+curl -fsSL https://chatgpt.com/codex/install.sh | sh    # Codex → ~/.local/bin/codex
+curl -fsSL https://opencode.ai/install | bash           # OpenCode → ~/.opencode/bin/opencode
+curl -fsSL https://omp.sh/install | sh                  # oh-my-pi → bun으로 ~/.bun/bin/omp
+```
+
+`~/.local/bin`과 `~/.bun/bin`은 셸이 PATH에 잇습니다(새 셸부터) — 설치기가 PATH를 고치라고 안내해도 따로 할 일은 없습니다.
+TARS 커널에는 사용자 이름공간이 없어 codex의 샌드박스가 서지 않습니다(`bwrap: Creating new namespace failed`). 명령을 실행시키려면
+`codex --sandbox danger-full-access`로 띄웁니다 — 샌드박스 없이 내 권한으로 돌고, 명령마다 묻는 것은 그대로입니다.
+
 ## 서버
 
 postgres · mysql · redis · nginx · caddy를 서비스로 켜면 부팅할 때마다 저절로 뜹니다. 기본은 모두 꺼져 있습니다.

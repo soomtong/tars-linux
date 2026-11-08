@@ -396,7 +396,7 @@ grep -aqF "tp-m4-rsync-ok" "$LOG" || fail "rsync -a did not copy a tree" "tp-m4"
 grep -aqF "tp-m4-gpg=1" "$LOG" || fail "gpg did not make and list a key offline" "tp-m4-gpg"
 echo "B2: as tars, ssh -V, ssh-keygen, rsync -a and gpg --quick-gen-key ($(ms_of gpg)ms) work offline"
 
-as_tars 'cd ~/tp/m4 && MANPAGER=cat man 3 printf 2>&1 | grep -m1 -E "printf, +fprintf" | sed -E "s/^ *([a-z]+), +([a-z]+),.*/tp-m4-man3=\1-\2/"; MANPAGER=cat man 1 ssh 2>&1 | grep -m1 "OpenSSH remote login client" | sed "s/^ */tp-m4-man1=/"; printf "%s\n" "#!/bin/sh" "echo \$1" > bad.sh; shellcheck bad.sh 2>&1 | grep -o "SC2086" | head -1 | sed "s/^/tp-m4-sc=/"; ctags -x h.c | grep -o "^boom" | sed "s/^/tp-m4-ctags=/"; fish -c "string join : \$PATH" | sed "s/^/tp-m4-fishpath=/"; bash -c ". /etc/bash.bashrc; echo \$PATH" 2>/dev/null | sed "s/^/tp-m4-bashpath=/"'
+as_tars 'cd ~/tp/m4 && MANPAGER=cat man 3 printf 2>&1 | grep -m1 -E "printf, +fprintf" | sed -E "s/^ *([a-z]+), +([a-z]+),.*/tp-m4-man3=\1-\2/"; MANPAGER=cat man 1 ssh 2>&1 | grep -m1 "OpenSSH remote login client" | sed "s/^ */tp-m4-man1=/"; printf "%s\n" "#!/bin/sh" "echo \$1" > bad.sh; shellcheck bad.sh 2>&1 | grep -o "SC2086" | head -1 | sed "s/^/tp-m4-sc=/"; ctags -x h.c | grep -o "^boom" | sed "s/^/tp-m4-ctags=/"; mkdir -p ~/.local/bin; fish -c "string join : \$PATH" | sed "s/^/tp-m4-fishpath=/"; bash -c ". /etc/bash.bashrc; echo \$PATH" 2>/dev/null | sed "s/^/tp-m4-bashpath=/"'
 wait_log_re "tp-m4-bashpath=/[a-z]" 120 || fail "man, shellcheck, ctags and the PATH probes did not finish in 120s" "tp-m4"
 grep -aqF "tp-m4-man3=printf-fprintf" "$LOG" || fail "man 3 printf did not show the C library page (manpages-dev)" "tp-m4-man"
 grep -aqF "tp-m4-man1=ssh" "$LOG" || fail "man 1 ssh did not show the page (man pages harvested)" "tp-m4-man"
@@ -404,7 +404,12 @@ grep -aqF "tp-m4-sc=SC2086" "$LOG" || fail "shellcheck did not flag the unquoted
 grep -aqF "tp-m4-ctags=boom" "$LOG" || fail "ctags -x did not list boom" "tp-m4-ctags"
 grep -aqE "tp-m4-fishpath=.*/home/tars/\.cargo/bin" "$LOG" || fail "fish has no ~/.cargo/bin on PATH (10-lang-native.fish)" "tp-m4-fishpath"
 grep -aqE "tp-m4-bashpath=.*/home/tars/go/bin" "$LOG" || fail "bash with /etc/bash.bashrc has no ~/go/bin on PATH (/etc/tars/rc.d)" "tp-m4-bashpath"
-echo "B2: as tars, man 3 printf and man 1 ssh read offline, shellcheck and ctags work, fish and /etc/bash.bashrc put ~/.cargo/bin and ~/go/bin on PATH"
+# TP-M12: bun의 전역 bin(lang-script의 조각)과, 있을 때만 넣는 ~/.local/bin(시스템 rc — 위에서 만들었다). 공식 설치기가 두는 자리다.
+grep -aqE "tp-m4-fishpath=.*/home/tars/\.bun/bin" "$LOG" || fail "fish has no ~/.bun/bin on PATH (10-lang-script.fish)" "tp-m4-fishpath"
+grep -aqE "tp-m4-bashpath=.*/home/tars/\.bun/bin" "$LOG" || fail "bash with /etc/bash.bashrc has no ~/.bun/bin on PATH (/etc/tars/rc.d)" "tp-m4-bashpath"
+grep -aqE "tp-m4-fishpath=/home/tars/\.local/bin:" "$LOG" || fail "fish does not put an existing ~/.local/bin first on PATH (user-bin.fish)" "tp-m4-fishpath"
+grep -aqE "tp-m4-bashpath=/home/tars/\.local/bin:" "$LOG" || fail "bash with /etc/bash.bashrc does not put an existing ~/.local/bin first on PATH" "tp-m4-bashpath"
+echo "B2: as tars, man 3 printf and man 1 ssh read offline, shellcheck and ctags work, fish and /etc/bash.bashrc put ~/.local/bin first and ~/.cargo/bin, ~/go/bin, ~/.bun/bin on PATH"
 
 # ── TP-M4: 쓰기 가능한 /usr/local(plan 결정 E · H) ──────────────────────────────────────────
 # 사용자가 망 없이 로컬 패키지 셋을 짓고, root(콘솔 fish)가 전역으로 깐다. 실행 파일은 /usr/local/bin에 서야 한다.

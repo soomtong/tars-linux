@@ -637,6 +637,19 @@ dasht-query-line printf   # 결과를 글자로만(이름 · 종류 · URL)
 Java는 묶음의 JDK와 같은 SE25를 받는다. 망이 없을 때는 언어가 싣는 문서를 쓴다 — `man 3 printf`(C), `go doc fmt.Println`, `pydoc json`,
 `ri Array`, `erl -man lists`, `perldoc strict`, rust는 `w3m /usr/local/lib/rust-1.99.1/share/doc/rust/html/std/index.html`.
 
+### AI 코딩 도구 — 망이 있을 때 홈에
+
+개발 도구 층은 AI 도구를 싣지 않는다(TP design 결정 17 — 모델을 망으로 부르므로 오프라인 목표 밖이다). 공식 설치가 그대로 선다(TP-M12에서 확인):
+claude code(`curl -fsSL https://claude.ai/install.sh | bash` → `~/.local/bin`), codex(`https://chatgpt.com/codex/install.sh` → `~/.local/bin`,
+정적 musl), opencode(`https://opencode.ai/install` → `~/.opencode/bin`, AVX2가 없는 CPU면 baseline 판을 스스로 고른다), oh-my-pi(`https://omp.sh/install`
+— 개발 도구 층의 bun으로 `~/.bun/bin`). 모두 `/home`이라 재부팅 · 갱신에 남고, 각자 스스로 갱신한다.
+
+- PATH: 시스템 rc가 `~/.local/bin`(있을 때)을, lang-script 묶음의 조각이 `~/.bun/bin`을 넣는다 — 설치기의 "PATH에 없다"는 안내는 새 셸에서 풀린다.
+  codex 설치기는 fish 사용자에게도 `~/.profile`에 줄을 쓰지만 쓸모는 없다.
+- 커널에 사용자 이름공간(`CONFIG_USER_NS`)이 없어 bwrap 샌드박스가 서지 않는다 — codex는 `codex --sandbox danger-full-access`로 띄운다.
+  컨테이너 실행 환경(Docker · Podman과 함께)은 `carryover.md`의 다음 서브프로젝트 후보다.
+- 설치는 받은 파일을 `/tmp`(RAM)에 잠깐 둔다(codex · opencode). 받은 뒤 홈의 크기는 claude 약 330MB, codex 약 520MB, omp(bun 패키지) 약 480MB.
+
 ### 방화벽 — 받을 포트만 연다
 
 `tars.conf`에 `firewall=on`을 적으면 들어오는 연결을 기본으로 버린다. 기본값은
@@ -1033,6 +1046,7 @@ bash · zsh · fish의 내장 명령이 먼저 잡혀 셸 자신이 멈춘다. �
 | 절전(뚜껑 닫기) | LP(2026-11-05)가 켰다 — 뚜껑을 닫거나 `sudo suspend`면 S3로 자고, 열면 깨어난다(아래 "밝기와 절전" 절). 게이트는 QEMU의 S3로 재고, 뚜껑과 깨어난 화면은 실기가 본다 |
 | USB 무선 동글 · Broadcom · Intel BE201 · WPA-Enterprise | 무선은 PCIe 네 계열만 켰다(WL design 비목표). 게이트가 무선을 부팅으로 재는 것은 mac80211_hwsim뿐이고 실칩의 firmware 로딩은 재지 않는다. 유선은 `e1000e` · `igc` · `r8169`와 USB 동글(`r8152` · `ax88179_178a` · CDC)이 켜져 있고 Realtek 유선 firmware는 안 넣었다. 네트워크가 없어도 부팅은 평소대로 끝난다 |
 | 터치패드 · 마우스 | PD(2026-10-05)가 켰다 — 한 손가락 이동 · 탭 · 두 손가락 스크롤 · 클릭 포커스 · 드래그 선택. 실기에서 볼 것 넷: 로그 `pointer> open … kind=`(mouse 또는 touchpad) · 탭 180ms · 2% · 배율의 출발값이 손에 맞는지 · 두 손가락 스크롤 방향 · vim(`mouse=a`)에서 클릭이 커서를 옮기고 Shift 끌기가 우리 클립보드로 가는지(M4). 2026-10-05 전에는 커널에 터치패드 드라이버조차 없었다(`I2C_HID_ACPI` · `HID_MULTITOUCH` · `MOUSE_PS2` 꺼짐) |
+| Docker · Podman · 샌드박스(bwrap) | 커널에 cgroups · 사용자 이름공간(`CONFIG_USER_NS`) · PID/UTS 이름공간 · veth · bridge · NAT · seccomp가 없다. 그래서 codex의 샌드박스도 안 선다(`--sandbox danger-full-access`로 띄운다, 위 "AI 코딩 도구" 절). 컨테이너 실행 환경은 `carryover.md`의 다음 서브프로젝트 후보다(사용자 2026-11-08) |
 | `/usr`에 쓰기 | 개발 도구 층(TP)이 얹힌 설치된 기계에서 `/usr`는 읽기 전용이다. `/usr/local`은 쓰기 가능하다 — root(`sudo`)가 `make install` · `npm i -g` · `gem install` · `pip install`로 깐 것이 `/usr/local`에 쌓이고 재부팅 · 갱신에도 남는다(p3의 `/home/.tars/local`). 비우려면 `sudo rm -rf /home/.tars/local` 뒤 재부팅. 사용자 계정의 설치는 각 도구의 `--user` · venv · `~/.cargo` · `~/go`다 |
 | 배터리 잔량 표시 | BS(2026-10-09)가 상태 줄 오른쪽 끝에 칸을 띄웠다(위 "배터리 잔량" 절). 게이트는 커널 내장 test_power의 가짜 배터리로 보고, ACPI 배터리의 값은 실기에서만 보인다. 실기에서 볼 것: 칸이 뜨는지 · `capacity`가 없는 배터리의 `  ?%` · 어댑터를 꽂았다 뺄 때의 색 |
 

@@ -4,6 +4,18 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+개발 도구 층 TP-M12(2026-11-08, AI 도구 설치 확인)가 남긴 것.
+
+- [ ] 컨테이너 실행 환경 — 다음 서브프로젝트 후보(사용자 2026-11-08: "컨테이너 환경을 활성화하는 것을 고려해야 됩니다. 개발도구 중에 도커를
+      쓰는 경우가 종종 있죠"). 계기: codex의 `codex sandbox linux`가 `bwrap: Creating new namespace failed, likely because the kernel does not
+      support user namespaces.`로 rc 1(TP-M12 plan 확인 2) — claude code의 샌드박스도 bwrap이다. user namespace 하나만 켜면 AI 샌드박스는 서지만
+      Docker는 여전히 안 서므로 따로 하지 않고 이 서브프로젝트에 묶는다(사용자가 추천에 동의). `kernel/.config`의 그날 상태:
+      꺼짐 — `CONFIG_USER_NS` · `CGROUPS` · `UTS_NS` · `PID_NS` · `TIME_NS` · `VETH` · `BRIDGE` · `NF_NAT` · `IP_NF_IPTABLES` · `BPF_SYSCALL` · `SECCOMP` ·
+      `POSIX_MQUEUE`, 켜짐 — `IPC_NS` · `NET_NS` · `NETFILTER` · `NF_TABLES` · `OVERLAY_FS` · `KEYS`. rootful dockerd는 USER_NS 없이 서고(cgroups ·
+      namespace 전부 · veth/bridge/NAT · seccomp 기본 프로필이 필요), rootless Docker · Podman · bwrap은 USER_NS가 핵심이다. 정할 것: rootful
+      dockerd(init 서비스, root 데몬)인가 rootless Podman인가, 런타임 바이너리를 어디서(개발 도구 층의 묶음 · 사용자 설치), 커널 크기 · 부팅
+      시간 · 공격 면(USER_NS)의 대가, `CONFIG_MODULES`가 없는 TARS라 전부 내장. 방화벽(FW)의 nftables와 Docker의 iptables(nft 백엔드) 공존.
+
 개발 도구 층 TP-M11 뒤 조사(2026-11-08)가 남긴 것.
 
 - [ ] 묶음 사이 같은 파일 지우기. `devlayer/build.sh`의 묶음끼리 대조(TP-M2 plan 결정 E)는 내용이 다르면 멈추고 같으면 `shared`로 세기만 한다 —

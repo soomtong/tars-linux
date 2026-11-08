@@ -87,7 +87,58 @@ F. TP 닫기(CLAUDE.md의 "서브프로젝트를 끝내면"): design `Status:` �
 
 ## 확인한 것
 
-(구현 뒤 채운다)
+1. 할 일 1(2026-11-08, 호스트에서 받아 읽기만 — 실행하지 않았다). codex의 URL은 openai/codex README가 `curl -fsSL https://chatgpt.com/codex/install.sh | sh`로 적는다.
+
+   | 도구 | 스크립트(sha256 앞 16 · 줄) | 두는 곳 | libc 판정 · 판 | 받은 파일 자리 | PATH를 고치는 곳 |
+   |---|---|---|---|---|---|
+   | claude | `3a68d3406cf674e1` · 260 | `claude install`이 `~/.local/bin/claude` | `ldd /bin/ls`에 musl이 없으면 glibc 판 | `~/.claude/downloads`(홈) | 스크립트는 안 고친다 |
+   | codex | `44ac252c1b9a68c0` · 1,500 | `~/.local/bin/codex` → `~/.codex/packages/standalone` | 늘 musl 정적 판, `codex-resources/bwrap`을 함께 싣는다 | `mktemp -d`(`/tmp`) | `$SHELL`이 zsh · bash가 아니면 `~/.profile` — fish는 안 읽는다 |
+   | opencode | `a2dd59522b9a091b` · 484 | 늘 `~/.opencode/bin`(검색 결과의 `XDG_BIN_DIR`은 이 판에 없다) | `/proc/cpuinfo`에 avx2가 없으면 `-baseline` — SandyBridge 맞춤 | `${TMPDIR:-/tmp}` | fish면 `~/.config/fish/config.fish`가 이미 있을 때만 `fish_add_path` |
+   | omp | `cd8f77920da58c6f` · 389 | bun이 있고 아키텍처가 맞으면 `bun install -g` → `~/.bun/bin/omp`, 없으면 `~/.local/bin/omp` | bun 길이면 해당 없음 | bun 길은 bun의 캐시 | 안 고친다(안내 한 줄) |
+
+   예상(할 일 2가 확인한다):
+   - TARS에는 bun 1.4.4(lang-script)가 있고 omp의 `MIN_BUN_VERSION`이 정확히 1.4.4다 — omp는 bun 길로 간다. `~/.bun/bin`은 TARS PATH에 없다.
+     이것은 AI와 상관없이 `bun install -g`가 이름으로 안 서는 빈자리다 — lang-native의 rc 조각이 `~/.cargo/bin` · `~/go/bin`을 넣는 것과 짝이 안 맞는다.
+   - `~/.local/bin`은 mise가 있을 때만 PATH에 든다(착수 전 확인 2) — claude · codex가 화면 셸에서 이름으로 안 설 것이다.
+   - opencode는 seed의 `config.fish`(`/config/fish.config`로의 링크, `init/src/config.zig`)가 있으면 그 파일에 `fish_add_path`를 쓴다 — 서는지는 실제로 본다.
+   - codex의 `bwrap`은 사용자 이름공간이 있어야 돈다 — `CONFIG_USER_NS`가 꺼진 TARS에서 명령 실행이 막힐 것이다(착수 전 확인 3).
+   - 받을 때 `/tmp`(RAM)를 쓰는 것은 codex · opencode. claude는 홈, 설치에 빈 메모리 약 512MB를 요구한다(스크립트의 137 안내).
+2. 할 일 2, 확인 한 판(`out/tp-m12/probe.sh` — 저장소 밖, ISO `09ec9ef`, SandyBridge · 2GiB, 부팅 셋 441초). 첫 판은 codex 설치기가 끝에서
+   "Start Codex now? [y/N]"를 `/dev/tty`(콘솔)로 물어 20분을 기다렸다 — 확인 스크립트의 일이다. 둘째 판은 설치기가 밝힌 `CODEX_NON_INTERACTIVE=1`(N과 같다).
+   - claude: rc 0, 89초. 2.1.319, `~/.local/bin/claude` → `~/.local/share/claude/versions/2.1.319`(340MB, glibc 동적, 빠진 `.so` 0). 설치기가 스스로
+     "~/.local/bin is not in your PATH"라 하고 fish용 한 줄(`config.fish`에 `export PATH=…`)을 안내한다 — 고치지는 않는다.
+   - codex: rc 0, 48초. 0.167.0, `~/.local/bin/codex` → `~/.codex/packages/standalone/releases/0.167.0-x86_64-unknown-linux-musl`(321MB, static-pie).
+     PATH 줄은 `~/.profile`에 썼다(fish · 대화형 bash는 안 읽는다). `codex sandbox linux -- echo …`는 rc 1 —
+     `bwrap: Creating new namespace failed, likely because the kernel does not support user namespaces.` 확인 3의 예상대로다.
+   - opencode: rc 2, 14초. 설치기가 고른 판은 1.19.5다 — npm `opencode-ai`의 latest(OpenCode 1). 설치기 주석: "OpenCode 2 ships as @opencode/cli", GitHub의
+     Latest는 v2.2.6. 실패는 `gzip: stdin: not in gzip format` — 그 시각 GitHub 릴리스 내려받기가 `504 Gateway Time-out`(92바이트 HTML)을 냈다(호스트에서도
+     같은 URL과 codex의 GitHub 자산이 504, 2026-11-08 09:23 UTC). 설치기의 `curl -# -L`에 `-f`가 없어 그 HTML을 tarball로 저장했다. TARS의 일이 아니다 —
+     GitHub가 돌아오면 다시 본다.
+   - omp: rc 0, 24초. bun 길(`bun add` · 63 패키지) → `~/.bun/bin/omp` → `@oh-my-pi/pi-coding-agent@18.18.1/dist/cli.js`(TARS의 bun 1.4.4로 돈다). bun이
+     "add the global bin folder to $PATH: fish_add_path /home/tars/.bun/bin"을 안내한다.
+   - 이름으로: 대화형 bash · zsh · fish 셋 모두 넷 다 못 찾았다. 망 없는 부팅 3의 화면 셸(fish)에서 `claude --version` · `codex --version` ·
+     `omp --version`이 모두 `fish: Unknown command` — 확인 1의 예상대로다. 실행 파일은 재부팅 뒤 홈에 그대로 있다(경로로 부르면 판을 찍는다 — 부팅 2).
+   - 홈 크기: `~/.local` 325M · `~/.codex` 516M · `~/.bun` 477M. OOM 0.
+   - 사용자 tars는 이미 `~/.config/fish/config.fish`(seed)를 가진다 — opencode 설치기는 여기에 `fish_add_path`를 쓸 것이다(다시 볼 때 확인).
+3. 고친 것(결정 D): 시스템 rc 셋(`kernel/make_initrd.sh` — bash.bashrc · zshrc 끝, fish `conf.d/user-bin.fish`)이 `~/.local/bin`이 있으면 PATH 맨 앞에
+   넣는다(없으면 안 넣는다 — root와 다른 체인의 PATH는 그대로, mise가 넣었으면 그대로). lang-script 묶음에 `~/.bun/bin` 조각 둘(`etc/tars/rc.d/lang-script.sh` ·
+   `etc/fish/conf.d/10-lang-script.fish`, lang-native의 cargo · go와 짝 — AI와 상관없이 `bun install -g`의 빈자리였다). devtools 체인 B2에 넷(fish · bash에서
+   `~/.bun/bin`이 있고, 만든 `~/.local/bin`이 맨 앞). `make quick` PASS(shellcheck 87파일).
+4. 고친 ISO로 다시(`out/tars-dev.iso` — devtools 체인이 굽는 쪽. 셋째 판은 옛 `out/tars.iso`를 써서 그대로 `Unknown command`였다, 확인 스크립트의 실수).
+   넷째 판: 망 없는 부팅 3의 화면 셸(fish)에서 `claude --version` → `2.1.319 (Claude Code)`, `codex --version` → `codex-cli 0.167.0`, `omp`는 이름으로
+   불렸으나 bun이 `pi_natives.linux-x64-baseline.node`를 읽다 SIGBUS. 다섯째 판에서 부팅 2 끝에 `sync`를 넣자 `omp/18.18.1` — 넷째 판의 SIGBUS는 확인
+   스크립트가 QEMU를 죽여(전원 끊김) 막 쓴 `.node`가 디스크에 덜 내려간 것이었다(mmap한 파일의 빈 자리). 첫 화면: claude는 로고 뒤 `Unable to connect to
+   Anthropic services … EAI_AGAIN`(망 없음 — 맞다), codex는 점자 로고와 `Sign in with ChatGPT` 고르기, omp는 로고와 `Tip: Please use nerdfont` — TARS
+   터미널에서 셋 다 깨지지 않았다. codex의 우회는 `-s, --sandbox <SANDBOX_MODE>`와 `--dangerously-bypass-approvals-and-sandbox`(`codex --help`).
+   opencode는 다섯째 판에도 게스트가 받은 것이 `HTTP/2 504` HTML 92바이트였다 — 같은 시각 호스트 · 컨테이너에서도 opencode의 다른 자산과
+   `cli/cli`의 릴리스 파일까지 504(2026-11-08 10:10 UTC 무렵, GitHub 릴리스 내려받기 장애). GitHub가 돌아오면 opencode 하나만 다시 본다.
+   곁가지: 화면 셸에 `clear`가 없었다(`fish: Unknown command: clear`) — 사용자 "add clear into base" → initrd 기준 C(셸의 일상 기본, 개발 도구 층
+   없는 부팅에도)로 다시 보고 initrd에 싣기로 했다(사용자 "ok agree with you"): Debian `ncurses-bin`의 clear · tput · tset(→ `reset` 이름),
+   셋 다 libtinfo · libc뿐(이미 initrd에 있다). `devcontainer/Dockerfile` sysroot 목록 한 줄 + `kernel/guest_tools.sh` 층 13에 세 줄 — 이미지를 다시
+   구워야 하는데 층 597(lsoff · doge)이 GitHub에서 받으므로 GitHub 장애가 풀린 뒤.
+5. codex 샌드박스(사용자 2026-11-08): 이번에는 커널을 바꾸지 않는다 — 안내에 "TARS에서는 codex 샌드박스가 서지 않는다". user namespace만 켜면 AI 샌드박스는
+   서지만 Docker는 안 서므로, 컨테이너 실행 환경(cgroups · namespace 전부 · veth/bridge/NAT · seccomp · USER_NS)을 다음 서브프로젝트 후보로
+   `carryover.md`에 옮겼다(그날의 커널 옵션 표와 함께). 사용자: "개발도구 중에 도커를 쓰는 경우가 종종 있죠".
 
 ## 결과
 
