@@ -939,6 +939,99 @@ case "$(last_frame | grep -a 'terminal: screen>' | tail -n 1 || true)" in
   *printf*) report_failure "the 1049 check judged a frame from before the screen was cleared" ;;
 esac
 
+# ── Powerline 기호를 만든다 (NS-M0) ────────────────────────────────────
+#
+# builtin printf '\033[H\033[2J'              (먼저 화면을 지운다)
+# builtin printf '\033[31m\xee\x82\xb0\xee\x82\xb2\033[41m \033[0m\n'
+#
+# 빨강 글자(palette 1 = CC6666)로 U+E0B0(EE 82 B0) · U+E0B2(EE 82 B2), 그 뒤에
+# 빨강 배경 공백. unifont에 없는 둘이라 `sprite.zig`이 8x16을 코드로 그린다
+# (NS design 결정 2). 공백은 검사 6과 같은 일을 한다 — 좌표를 주고, 기호가
+# 한 칸씩인지를 열로 본다.
+#
+# 자리가 체인의 끝, 음성 검사 바로 앞인 이유. 셸은 따옴표 문자열을 노랗게
+# (F0C674) 칠하고, 그 셀이 style 덤프의 상한(96셀)을 먹는다. 처음에는 한글
+# 검사(4~7) 뒤에 두었다가 세 번 걸렸다(NS-M0 plan 결과 절): 앞 printf 줄들에
+# 밀려 기호 줄이 덤프에 안 나왔고, 화면을 지워도 지운 줄이 스크롤백에 남아
+# 검사 12(shift-home)의 프레임이 아래 음성 검사("the style dump hit its
+# limit" — 이미지 구간 앞만 본다)를 빨갛게 했다. 여기는 이미지 구간 안이고 뒤에
+# 스크롤백을 보는 검사가 없다.
+#
+# 그래도 화면부터 지운다 — 짧은 명령으로 따로. 기호 줄이 덤프의 앞쪽(0 · 1행)에
+# 와야 상한에 안 밀린다. `builtin`을 앞에 붙이는 것은 fish의 autosuggestion
+# 때문이다 — `printf '`까지 치면 history의 긴 printf(kitty 이미지 명령 등)가
+# 회색으로 붙어 그 셀까지 덤프에 든다. `b`로 시작하는 history는 없다.
+printf '%s\n' "=== typing builtin printf '\\033[H\\033[2J' ==="
+type_keys b u i l t i n spc p r i n t f spc apostrophe \
+  backslash 0 3 3 bracket_left shift-h \
+  backslash 0 3 3 bracket_left 2 shift-j \
+  apostrophe ret
+sleep 2
+
+# 지운 뒤에는 0행이 기호 printf의 명령 줄, 1행이 기호 줄이다.
+PL_LOG_START="$(wc -c < "$LOG")"
+printf '%s\n' "=== typing builtin printf '\\033[31m\\xee\\x82\\xb0\\xee\\x82\\xb2\\033[41m \\033[0m\\n' ==="
+type_keys b u i l t i n spc p r i n t f spc apostrophe \
+  backslash 0 3 3 bracket_left 3 1 m \
+  backslash x e e backslash x 8 2 backslash x b 0 \
+  backslash x e e backslash x 8 2 backslash x b 2 \
+  backslash 0 3 3 bracket_left 4 1 m \
+  spc \
+  backslash 0 3 3 bracket_left 0 m \
+  backslash n \
+  apostrophe ret
+sleep 3
+
+# 이 printf 뒤의 로그만 본다. 지우기 전 프레임의 같은 좌표에 있던 다른 셀에
+# 끌려가지 않게 한다. `tlog`는 `$LOG`를 읽으므로 잘라 낸
+# 꼬리를 파일로 두고 그것을 `LOG`로 준다. 결과는 변수에 한 번 담는다 —
+# `tlog | grep -q`는 grep이 먼저 끝나 perl이 SIGPIPE로 죽으면 pipefail 아래서
+# 매치가 있어도 실패다(NS-M0 넷째 실행이 그렇게 빨갰다).
+PL_TAIL="$(mktemp)"
+tail -c +"$((PL_LOG_START + 1))" "$LOG" > "$PL_TAIL"
+PL_TLOG="$(LOG="$PL_TAIL" tlog)"
+
+PL_LINE="$(grep -aE 'terminal: style> [0-9]+,[0-9]+ fg=[0-9A-F]{6} bg=CC6666' <<<"$PL_TLOG" | tail -n 1 || true)"
+if [ -z "$PL_LINE" ]; then
+  grep -a 'terminal: screen>' <<<"$PL_TLOG" | tail -n 1
+  report_failure "no red space after the Powerline printf, so the style dump never reached that line"
+fi
+PL_ROW="$(echo "$PL_LINE" | sed -E 's/.*style> ([0-9]+),[0-9]+ .*/\1/')"
+PL_COL="$(echo "$PL_LINE" | sed -E 's/.*style> [0-9]+,([0-9]+) .*/\1/')"
+echo "red space after the symbols: ${PL_LINE}"
+
+# ── 검사 36: 기호가 한 칸씩이고 빨강 글자다 ────────────────────────────
+#
+# 빨강 공백 바로 앞 두 칸이 fg=CC6666이어야 한다. vt가 PUA를 2칸으로 셌다면
+# 공백이 두 칸 더 뒤로 가고 그 앞 칸이 spacer라 비어 있다(NS-M0 plan 확정 1 —
+# PUA의 East Asian Width는 A라 1칸이다).
+for d in 2 1; do
+  c=$((PL_COL - d))
+  if ! grep -aq "terminal: style> ${PL_ROW},${c} fg=CC6666 " <<<"$PL_TLOG"; then
+    echo "--- style lines on that row ---"
+    grep -aE "terminal: style> ${PL_ROW},[0-9]+ " <<<"$PL_TLOG" | tail -n 10
+    report_failure "no red Powerline symbol at ${PL_ROW},${c}, so U+E0B0/E0B2 did not take one cell each"
+  fi
+done
+echo "U+E0B0 and U+E0B2 take one cell each, right before the red space"
+
+# ── 검사 37: 렌더러가 기호의 가운데를 글자색으로 칠했다 ────────────────
+#
+# 셀 가운데 (4, 8)은 두 삼각형이 모두 칠하는 자리다(NS design 결정 5 — 가운데
+# 두 행은 셀 폭을 꽉 채운다). sprite 없이 unifont의 `.notdef`(속이 빈 6x11
+# 상자)가 그려지면 이 자리는 배경(102030)이다. 선 화살표(E0B1 · E0B3)는
+# 가운데가 비어 여기서 못 보고 font_test가 바이트로 본다.
+for d in 2 1; do
+  c=$((PL_COL - d))
+  if ! grep -aq "terminal: pixel> ${PL_ROW},${c} = CC6666" "$PL_TAIL"; then
+    echo "--- what the framebuffer actually held ---"
+    grep -a "terminal: pixel> ${PL_ROW},${c} =" "$PL_TAIL" | tail -n 3
+    report_failure "the Powerline symbol at ${PL_ROW},${c} is not filled at the cell center, so it was not drawn by sprite.zig"
+  fi
+done
+echo "the framebuffer holds CC6666 at the center of both symbols"
+rm -f "$PL_TAIL"
+
 # ── 음성 검사 ──────────────────────────────────────────────────────────
 
 # 화면 덤프에 NUL이 섞이면 안 된다. 빈 셀이 결과에 들어오기 시작했으므로

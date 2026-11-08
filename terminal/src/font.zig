@@ -1,5 +1,6 @@
 const std = @import("std");
 const logline = @import("logline.zig");
+const sprite = @import("sprite.zig");
 
 const stb = @import("c_stb_truetype");
 
@@ -29,7 +30,10 @@ pub const Glyph = struct {
     /// unifont로 바꾼 뒤로 앞쪽 절반은 실제로는 일어나지 않는다. 미할당
     /// 코드포인트에도 글리프가 있고 .notdef조차 모양을 가져서, 화면에
     /// 두부(tofu)가 뜨지 않는 대신 null은 공백에서만 온다.
-    bitmap: ?[*]u8,
+    ///
+    /// const인 것은 `sprite.zig`의 상수 비트맵도 여기 들기 때문이다(NS-M0).
+    /// 읽는 자리(`drawGlyph`)만 있고 쓰는 자리는 없다.
+    bitmap: ?[*]const u8,
 };
 
 /// 처음 쓸 때 구워서 넣어 두는 글리프 캐시.
@@ -100,6 +104,22 @@ pub const Cache = struct {
     pub fn find(self: *Cache, codepoint: u32) !Glyph {
         const gop = try self.glyphs.getOrPut(self.alloc, codepoint);
         if (gop.found_existing) return gop.value_ptr.*;
+
+        // 코드로 그리는 기호는 폰트보다 먼저다(NS design 결정 2 · 4). 셀을
+        // 꽉 채우는 8x16이라 오프셋이 0이다. 바이너리 안의 상수라
+        // `bitmap_bytes`(stb가 잡은 메모리)에는 안 더한다(결정 3).
+        if (sprite.lookup(codepoint)) |bm| {
+            gop.value_ptr.* = .{
+                .codepoint = codepoint,
+                .width = sprite.W,
+                .height = sprite.H,
+                .cell_width = sprite.W,
+                .x_offset = 0,
+                .y_offset = 0,
+                .bitmap = bm.ptr,
+            };
+            return gop.value_ptr.*;
+        }
 
         var w: c_int = 0;
         var h: c_int = 0;

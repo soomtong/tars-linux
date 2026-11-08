@@ -1,6 +1,6 @@
 ---
 name: project_zig_upgrade
-description: "Zig 0.16 → 0.17 전환(ZU, 2026-10-03 ~ 10-24)에서 남은 것. ghostty를 따라가며 SHA로 고정한다 · 두 버전에서 다 컴파일되는 고침은 미리 한다 · 컨테이너 컴파일러가 거부하지 않는 문법은 다시 들어온다 · 0.17이 없앤 std 선언과 대체 · std 안에서 waitpid(*i32)와 W.*(u32)가 어긋난다 · zig fmt는 고침과 따로 commit"
+description: "Zig 0.17 이상만 쓴다 — `**` 배열 반복 대신 @splat(사용자 2026-11-08). Zig 0.16 → 0.17 전환(ZU, 2026-10-03 ~ 10-24)에서 남은 것. ghostty를 따라가며 SHA로 고정한다 · 두 버전에서 다 컴파일되는 고침은 미리 한다 · 컨테이너 컴파일러가 거부하지 않는 문법은 다시 들어온다 · 0.17이 없앤 std 선언과 대체 · std 안에서 waitpid(*i32)와 W.*(u32)가 어긋난다 · zig fmt는 고침과 따로 commit"
 metadata:
   node_type: memory
   type: project
@@ -26,10 +26,16 @@ config_edit). `dupeZ` · `b.build_root` · `indexOfIgnoreCase`도 그 사이에 
 호스트 0.17 `ast-check`는 사람이 돌려야 하는 검사라 막지 못했다. 막는 것은
 컨테이너 컴파일러의 버전 자체다 — 그래서 전환을 미루면 미룬 만큼 다시 지운다.
 
+2026-11-08 NS-M0에서 Claude가 새 파일(`terminal/src/sprite.zig`)에 `**`를 또 썼다 — 이제 컨테이너가
+0.17이라 첫 컴파일에서 막혔다. 사용자 지시(2026-11-08): "우리는 zig 0.17 이상 버전을 사용함. `**`
+배열 반복 연산자를 받지 않습니다. @splat 사용할 것." 새 Zig 코드를 쓸 때 옛 판의 관용구(`**`,
+아래 표의 이름들)를 처음부터 쓰지 않는다.
+
 ## 0.17이 없앤 것과 대체 (우리 코드에서 만난 것만)
 
 | 없어진 것 | 대체 |
 |---|---|
+| `[_]u8{0} ** n` (배열 반복 연산자 `**`) | `var a: [n]u8 = @splat(0);` — 형을 적는 자리에 길이를 둔다. 컴파일러는 `binary operator '*' has whitespace on one side`라고 말해 원인이 안 보인다 |
 | `Allocator.dupeZ(T, s)` | `dupeSentinel(T, s, 0)` — sentinel이 마지막 |
 | `std.fmt.bufPrintZ(buf, fmt, args)` | `bufPrintSentinel(buf, fmt, args, 0)` |
 | `std.ascii.indexOfIgnoreCase` | `findIgnoreCase` |

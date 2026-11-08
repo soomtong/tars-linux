@@ -173,5 +173,76 @@ pub fn main(init: std.process.Init) !void {
         },
     );
 
+    // ── 7. Powerline 넷은 코드로 그린다 (NS-M0) ───────────────────────
+    //
+    // unifont에 없는 넷(gid 0 — 지금까지는 `.notdef`의 6x11 상자)을
+    // `sprite.zig`이 8x16 비트맵으로 준다. 기대값은 식이 아니라 표로 적는다 —
+    // sprite.zig의 식을 여기서 다시 쓰면 식이 틀릴 때 둘이 같이 틀린다.
+    //
+    // 채운 삼각형 E0B0의 행 폭: 픽셀 가운데가 (0,0)·(8,8)·(0,16) 안(design
+    // 결정 5). 선 화살표 E0B1은 그 행의 가장 오른쪽 한 픽셀(결정 6)이라 열이
+    // 폭 - 1이다. E0B2·E0B3은 좌우 뒤집기(결정 7).
+    const fill_rows = [16]u32{ 1, 2, 3, 4, 5, 6, 7, 8, 8, 7, 6, 5, 4, 3, 2, 1 };
+    const line_cols = [16]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 };
+    const bytes_before = cache.bitmap_bytes;
+    const pl = [4]u32{ 0xE0B0, 0xE0B1, 0xE0B2, 0xE0B3 };
+    var pl_glyphs: [4]font.Glyph = undefined;
+    for (pl, 0..) |pcp, k| {
+        const g = try cache.find(pcp);
+        pl_glyphs[k] = g;
+        if (g.width != 8 or g.height != 16 or g.cell_width != 8 or g.x_offset != 0 or g.y_offset != 0) {
+            std.debug.print(
+                "FAIL: U+{X} {d}x{d} cell_width={d} x_offset={d} y_offset={d} (expected 8x16 cell_width=8 x_offset=0 y_offset=0)\n",
+                .{ pcp, g.width, g.height, g.cell_width, g.x_offset, g.y_offset },
+            );
+            return error.WrongSpriteMetrics;
+        }
+        const bm = g.bitmap orelse {
+            std.debug.print("FAIL: U+{X}에 비트맵이 없다\n", .{pcp});
+            return error.NoBitmap;
+        };
+        const mirrored = k >= 2;
+        const filled = k % 2 == 0;
+        var total: u32 = 0;
+        var y: u32 = 0;
+        while (y < 16) : (y += 1) {
+            var x: u32 = 0;
+            while (x < 8) : (x += 1) {
+                const v = bm[y * 8 + x];
+                if (v != 0 and v != 255) {
+                    std.debug.print("FAIL: U+{X} ({d},{d}) = {d}, 0 아니면 255여야 한다\n", .{ pcp, x, y, v });
+                    return error.SpriteNotBinary;
+                }
+                // 뒤집힌 둘은 열을 거꾸로 읽어 원래 모양과 비교한다.
+                const sx = if (mirrored) 7 - x else x;
+                const want: u8 = if (filled)
+                    (if (sx < fill_rows[y]) 255 else 0)
+                else
+                    (if (sx == line_cols[y]) 255 else 0);
+                if (v != want) {
+                    std.debug.print("FAIL: U+{X} ({d},{d}) = {d}, expected {d}\n", .{ pcp, x, y, v, want });
+                    return error.WrongSpriteShape;
+                }
+                if (v == 255) total += 1;
+            }
+        }
+        const want_total: u32 = if (filled) 72 else 16;
+        if (total != want_total) {
+            std.debug.print("FAIL: U+{X}의 잉크 {d}픽셀, expected {d}\n", .{ pcp, total, want_total });
+            return error.WrongSpriteInk;
+        }
+    }
+    if (cache.bitmap_bytes != bytes_before) {
+        std.debug.print("FAIL: 코드로 그린 기호가 bitmap_bytes를 {d} → {d}로 늘렸다\n", .{ bytes_before, cache.bitmap_bytes });
+        return error.SpriteCountedAsStb;
+    }
+    const pl_count = cache.count();
+    for (pl) |pcp| _ = try cache.find(pcp);
+    if (cache.count() != pl_count) {
+        std.debug.print("FAIL: 기호를 다시 찾았더니 캐시가 늘었다\n", .{});
+        return error.CacheMiss;
+    }
+    std.debug.print("font_test: Powerline E0B0~E0B3이 8x16 코드 비트맵이다 (잉크 72 · 16 · 72 · 16) OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

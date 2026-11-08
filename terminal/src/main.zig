@@ -2566,6 +2566,10 @@ const WHEEL_ROWS: isize = 3;
 // 파일을 못 보므로 상수를 따로 두고 여기서 맞춘다.
 comptime {
     std.debug.assert(pointer.MULTI_CLICK_PX == CELL_W);
+    // 코드로 그리는 기호(NS-M0)는 셀 하나를 꽉 채운다 — 셀 크기가 바뀌면 그 비트맵도 바뀌어야 한다.
+    // 파일 머리에서 import하지 않는다 — 이 파일의 `sprite`는 포인터 화살표(`pointer.Sprite`)다.
+    const glyph_sprite = @import("sprite.zig");
+    std.debug.assert(glyph_sprite.W == CELL_W and glyph_sprite.H == ROW_HEIGHT);
 }
 
 /// 선택 단위를 화면의 선택 방식으로 옮긴다(MC design 결정 6). `else`가 없다 —

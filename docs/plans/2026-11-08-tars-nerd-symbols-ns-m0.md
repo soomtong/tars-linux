@@ -85,4 +85,34 @@ design 비목표 1~4 그대로.
 
 ## 결과
 
-(아직)
+### Task 1
+
+- Red 먼저: 7절만 넣고 `zig build test` — `FAIL: U+E0B0 6x11 cell_width=8 x_offset=1 y_offset=3`(`.notdef`). 1~6절은 그대로 초록.
+- `sprite.zig`의 첫 컴파일이 `[_]u8{0} ** (W * H)`에서 막혔다 — 0.17은 `**`를 안 받는다(`binary operator '*' has whitespace on one side`).
+  `@splat(0)`로. 사용자 지시로 기억(`project_zig_upgrade.md`)의 대체 표에 더했다.
+- `main.zig` 머리의 `const sprite = @import(...)`는 포인터 화살표의 매개변수 `sprite: *pointer.Sprite` 둘과 이름이 부딪혀(shadow) 게스트 빌드가
+  막혔다 — 호스트 `zig build test`는 `main.zig`를 안 컴파일해 못 봤다. 단언 안에서 `glyph_sprite`로 import한다.
+- 위험 2(`[*c]u8` → `?[*]const u8`)는 암시적으로 됐다 — 형 변환 줄 없음.
+- 초록: `font_test: Powerline E0B0~E0B3이 8x16 코드 비트맵이다 (잉크 72 · 16 · 72 · 16) OK`, `make check CHAIN=terminal` PASS(3분 2초).
+
+### Task 2
+
+plan과 달라진 것: 검사 번호는 36 · 37(체인에 35까지 있었다), 자리는 한글 검사 뒤가 아니라 체인 끝(검사 32 뒤, 음성 검사 앞), 지우기 명령을
+따로 먼저 친다, 둘 다 `builtin printf`다. 확정 4의 "style>가 96셀 상한에 안 닿는다"가 틀렸다 — 셸(fish)이 따옴표 문자열을 노랗게
+(`F0C674`) 칠하고 그 셀이 상한을 먹는다. 실행마다 배운 것:
+
+1. 한글 검사 뒤, 지우기 없음 — 앞 printf 줄 셋의 노란 셀에 밀려 기호 줄이 덤프에 안 나왔다(`34 more cell(s) not shown`). 검사 36이 3행(한글
+   줄)의 빨강 공백을 잡고 빨갰다.
+2. 같은 줄 맨 앞에 `\033[H\033[2J` — 기호 줄은 0행에 섰고 red(sprite 없이)는 기대대로 검사 37이 `pixel> 0,0 = 102030`. 그런데 sprite를 넣은
+   초록 판에서 음성 검사 "the style dump hit its limit"(이미지 구간 앞만 본다)이 빨갰다 — 긴 printf를 치는 동안의 프레임이다(지우기는 Enter 뒤).
+3. 짧은 지우기 줄을 먼저 — 그 줄을 치는 동안 fish autosuggestion이 history의 긴 한글 printf를 회색으로 붙여 `12 more cell(s)`. `builtin`을
+   앞에 붙였다(`b`로 시작하는 history가 없다).
+4. 검사 36이 줄이 있는데도 빨갰다 — `pl_tlog | grep -q`에서 grep이 먼저 끝나 perl이 SIGPIPE로 죽고 pipefail이 실패로 셌다. `tlog` 결과를
+   변수에 한 번 담는다.
+5. 덤프 상한이 검사 12(shift-home)의 프레임에서 다시 넘쳤다 — `2J`가 지운 줄은 스크롤백에 남고, 맨 위가 노란 명령 줄 다섯이 됐다. 블록을
+   체인 끝으로 옮겼다 — 이미지 구간 안이라 음성 검사가 안 보고, 뒤에 스크롤백을 보는 검사가 없다.
+
+- Red(Task 1 코드를 stash로 뺀 판, 2번 모양): 검사 36 초록(`style> 0,2 … bg=CC6666`, 기호 둘이 0 · 1열) — 확정 1대로 1칸. 검사 37 빨강
+  `pixel> 0,0 = 102030`.
+- 초록(최종 모양): `red space after the symbols: terminal: style> 1,2 fg=CC6666 bg=CC6666`, `pixel> 1,0 = CC6666` · `pixel> 1,1 = CC6666`,
+  체인 PASS. `make quick` PASS.
