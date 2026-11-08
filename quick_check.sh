@@ -39,6 +39,8 @@ have_zig="$(zig version)"
 #    위에 지시자와 이유를 단다 — trap · 콜백 함수의 SC2329는 파일 끝이 exit일 때 shellcheck가 헛짚는 것이다.
 mapfile -t sh_files < <(git ls-files '*.sh')
 sh_files+=(kernel/wifi/tars-wifi kernel/dictation/tars-dictate kernel/bluetooth/tars-dbus kernel/bluetooth/tars-bluetoothd kernel/help/tars-help)
+# TP-M11. 서버 서비스 템플릿 다섯 — 확장자 없이 묶음의 /etc/tars/services/에 들어간다.
+sh_files+=(devlayer/files/server/etc/tars/services/*)
 note "shellcheck ${#sh_files[@]} files"
 if shellcheck -x -P SCRIPTDIR -S style "${sh_files[@]}"; then
   :

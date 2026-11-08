@@ -1,0 +1,8 @@
+#!/bin/sh
+# TARS caddy service (TP-M11). Turn it on with `sudo tars-service enable caddy`; it serves 127.0.0.1:8081.
+# State: /var/lib/caddy -> /home/.tars/var/caddy. Your sites: /config/caddy.d/*.caddy.
+SERVER=caddy
+# shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)
+. /etc/tars/server/common.sh
+tars_prepare /var/lib/caddy
+tars_exec /usr/local/bin/caddy run --adapter caddyfile --config /etc/tars/server/Caddyfile

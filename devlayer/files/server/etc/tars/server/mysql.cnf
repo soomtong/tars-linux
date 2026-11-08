@@ -1,0 +1,9 @@
+# TARS 개발 도구 층 server — mysql 서비스의 설정 원본(TP-M11 plan 결정 B). /etc/tars/services/mysql이
+# `mysqld --defaults-extra-file=`로 준다. 묶음의 것이라 부팅마다 이 모양이다 — 덧붙일 것은 /config/mysql.d/*.cnf에(sudo).
+# 소켓 · secure-file-priv는 /etc/mysql/conf.d/tars.cnf(TP-M10) 그대로다.
+
+[mysqld]
+datadir = /var/lib/mysql
+bind-address = 127.0.0.1
+# 사람의 조각. 디렉터리가 없으면 mysqld가 defaults 오류로 서지 않는다 — 템플릿이 먼저 만든다(plan 확인 4).
+!includedir /config/mysql.d

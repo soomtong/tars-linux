@@ -1,0 +1,8 @@
+#!/bin/sh
+# TARS redis service (TP-M11). Turn it on with `sudo tars-service enable redis`.
+# Data: /var/lib/redis -> /home/.tars/var/redis. Your settings: /config/redis.d/*.conf.
+SERVER=redis
+# shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)
+. /etc/tars/server/common.sh
+tars_prepare /var/lib/redis
+tars_exec /usr/bin/redis-server /etc/tars/server/redis.conf

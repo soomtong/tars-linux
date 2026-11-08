@@ -114,4 +114,18 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
 
 ## 확인한 것
 
+1. 할 일 1(trixie-slim 컨테이너, `server.sqfs`를 풀고 템플릿 다섯을 root로 동시에): 넷이 사용자 tars로 서고 응답했다 — psql(슈퍼유저 tars, 표 쓰기) ·
+   `mysql -uroot`(비밀번호 없음) · redis-cli · curl 8081. nginx는 8080이 200을 주지만 워커가 `io_setup() failed (38)` — 이 컨테이너는 arm64 맥 위의 amd64
+   에뮬레이션이라 AIO 시스템 호출이 없다. TARS 커널은 `CONFIG_AIO=y`(kernel/.config 205) — 체인이 본다.
+   재부팅 흉내(다섯을 SIGTERM, `/var/lib` 링크 · `/tmp` 소켓 지우기, 다시 시작): initdb · initialize가 다시 돌지 않고 표 · 키가 남았다.
+2. 결정 B를 바꿨다: postgres 조각 자리는 `/config/postgres.d`(plan의 `postgresql.d`가 아니다) — 서비스 이름 = `/config/<이름>.d` 한 규칙. 첫 판은 템플릿이
+   `postgres.d`를 만들고 설정은 `postgresql.d`를 읽어 FATAL이었다.
+3. 결정 D를 바꿨다: 자리는 `/config/ssl/tars-selfsigned/{cert.pem,key.pem}`(파일 둘이 아니라 디렉터리 하나). init이 켜진 서비스를 한꺼번에 띄워 템플릿
+   여럿이 동시에 만든다 — 첫 판에서 caddy의 `mv`가 남이 옮긴 파일을 못 찾았고, 파일 둘을 따로 옮기면 key와 cert의 짝이 섞일 수 있다. 각자 임시 디렉터리에
+   둘을 만들고 `mv -T`로 디렉터리째 옮긴다 — 먼저 옮긴 하나만 남는다. 다섯 동시 시작에서 한 쌍 · 찌꺼기 0을 봤다.
+4. nginx · caddy는 `127.0.0.1`에만 묶는다(포트 8080 · 8081) — 맡아 정한 것 3의 "모두 localhost"를 웹 서버에도. 바깥에 보이려면 사람이 조각에서 연다.
+   nginx 접근 로그는 `off`다 — 사용자로 돌아 init 콘솔(`/dev/console`)을 다시 열 수 없다(nginx에는 fd 1에 쓰는 낱말이 없다). 오류 로그는 `stderr`.
+5. redis는 `appendonly yes`(`appendfsync everysec`)다 — SV의 끄기는 SIGTERM 뒤 3초에 SIGKILL이라 스냅숏만으로는 마지막 쓰기를 잃을 수 있다.
+6. 템플릿 다섯은 확장자가 없어 `quick_check.sh`의 shellcheck 목록에 더했다(source 지시자 `../server/common.sh`).
+
 ## 결과

@@ -1,0 +1,8 @@
+#!/bin/sh
+# TARS nginx service (TP-M11). Turn it on with `sudo tars-service enable nginx`; it serves 127.0.0.1:8080.
+# State: /var/lib/nginx -> /home/.tars/var/nginx. Your sites: /config/nginx.d/*.conf (server blocks).
+SERVER=nginx
+# shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)
+. /etc/tars/server/common.sh
+tars_prepare /var/lib/nginx
+tars_exec /usr/sbin/nginx -p /var/lib/nginx -e stderr -c /etc/tars/server/nginx.conf -g 'daemon off;'

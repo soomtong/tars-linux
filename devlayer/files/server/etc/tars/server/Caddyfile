@@ -1,0 +1,19 @@
+# TARS 개발 도구 층 server — caddy 서비스의 설정 원본(TP-M11 plan 결정 B). 덧붙일 것은 /config/caddy.d/*.caddy에(sudo) —
+# 사이트 블록 하나씩. 사용자(uid 1000)로 돌아 1024 아래 포트는 못 연다.
+{
+	# 관리 API와 자동 저장을 끈다 — 설정은 이 파일과 조각이 전부다.
+	admin off
+	persist_config off
+	# 인증서 · 상태의 자리. /var/lib/caddy -> /home/.tars/var/caddy라 재부팅을 넘는다.
+	storage file_system /var/lib/caddy
+	# 내부 CA를 시스템 신뢰에 넣으려 하지 않는다(sudo를 부른다). 넣으려면 tars-help devtools의 mkcert 절.
+	skip_install_trust
+}
+
+:8081 {
+	bind 127.0.0.1
+	respond "TARS caddy. Put your sites in /config/caddy.d/*.caddy
+"
+}
+
+import /config/caddy.d/*.caddy

@@ -1,0 +1,14 @@
+#!/bin/sh
+# TARS mysql service (TP-M11). Turn it on with `sudo tars-service enable mysql`.
+# Data: /var/lib/mysql -> /home/.tars/var/mysql. Your settings: /config/mysql.d/*.cnf.
+# The first start runs --initialize-insecure: `mysql -uroot` has no password.
+SERVER=mysql
+# shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)
+. /etc/tars/server/common.sh
+tars_prepare /var/lib/mysql
+cnf=/etc/tars/server/mysql.cnf
+if [ ! -e /var/lib/mysql/mysql.ibd ]; then
+  echo "mysql: first start, --initialize-insecure in /var/lib/mysql"
+  tars_run /usr/sbin/mysqld --defaults-extra-file="$cnf" --initialize-insecure || exit 1
+fi
+tars_exec /usr/sbin/mysqld --defaults-extra-file="$cnf"

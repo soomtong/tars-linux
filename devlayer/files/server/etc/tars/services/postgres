@@ -1,0 +1,16 @@
+#!/bin/sh
+# TARS postgres service (TP-M11). Turn it on with `sudo tars-service enable postgres`.
+# Data: /var/lib/postgresql -> /home/.tars/var/postgres. Your settings: /config/postgres.d/*.conf.
+# The first start runs initdb: your user is the superuser, local connections are trusted.
+SERVER=postgres
+# shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)
+. /etc/tars/server/common.sh
+tars_prepare /var/lib/postgresql
+data=/var/lib/postgresql/18/main
+if [ ! -s "$data/PG_VERSION" ]; then
+  echo "postgres: first start, initdb in $data"
+  tars_run /usr/lib/postgresql/18/bin/initdb -D "$data" -E UTF8 --no-locale \
+    --auth-local=trust --auth-host=trust || exit 1
+  echo "include_dir '/config/postgres.d'" >> "$data/postgresql.conf" || exit 1
+fi
+tars_exec /usr/lib/postgresql/18/bin/postgres -D "$data" -k /tmp
