@@ -11,6 +11,8 @@ if [ ! -s "$data/PG_VERSION" ]; then
   echo "postgres: first start, initdb in $data"
   tars_run /usr/lib/postgresql/18/bin/initdb -D "$data" -E UTF8 --no-locale \
     --auth-local=trust --auth-host=trust || exit 1
-  echo "include_dir '/config/postgres.d'" >> "$data/postgresql.conf" || exit 1
+  # 사용자로 덧붙인다 — 데이터 디렉터리는 사용자의 것이라 root가 쓰면 사용자가 둔 링크를 따라갈 수 있다.
+  # shellcheck disable=SC2016 # $1은 안쪽 sh가 푼다
+  tars_run sh -c 'echo "include_dir '\''/config/postgres.d'\''" >> "$1"' sh "$data/postgresql.conf" || exit 1
 fi
 tars_exec /usr/lib/postgresql/18/bin/postgres -D "$data" -k /tmp

@@ -314,6 +314,18 @@ pub fn build(b: *std.Build) void {
         .root_module = control_test_mod,
     });
 
+    // TP-M11: `tars-service enable|disable`의 판정. 시스템 콜이 없어 control_test와 같은 자리다.
+    const service_link_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/service_link_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const service_link_test = b.addExecutable(.{
+        .name = "service_link_test",
+        .root_module = service_link_test_mod,
+    });
+
     // WL-M2: wpa_supplicant를 감독 목록에 넣을지의 검사. login_test와 같은 이유로
     // host_target이다 — `wants`가 설정 파일 경로를 인자로 받아 /tmp를 본다.
     const wifi_test_mod = b.createModule(.{
@@ -445,6 +457,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(login_test).step);
     test_step.dependOn(&b.addRunArtifact(account_test).step);
     test_step.dependOn(&b.addRunArtifact(control_test).step);
+    test_step.dependOn(&b.addRunArtifact(service_link_test).step);
     test_step.dependOn(&b.addRunArtifact(wifi_test).step);
     test_step.dependOn(&b.addRunArtifact(bluetooth_test).step);
     test_step.dependOn(&b.addRunArtifact(audio_test).step);

@@ -127,5 +127,13 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
    nginx 접근 로그는 `off`다 — 사용자로 돌아 init 콘솔(`/dev/console`)을 다시 열 수 없다(nginx에는 fd 1에 쓰는 낱말이 없다). 오류 로그는 `stderr`.
 5. redis는 `appendonly yes`(`appendfsync everysec`)다 — SV의 끄기는 SIGTERM 뒤 3초에 SIGKILL이라 스냅숏만으로는 마지막 쓰기를 잃을 수 있다.
 6. 템플릿 다섯은 확장자가 없어 `quick_check.sh`의 shellcheck 목록에 더했다(source 지시자 `../server/common.sh`).
+7. 커밋 뒤 보안 검토의 지적: postgres 템플릿이 initdb 다음 `postgresql.conf`에 root로 덧붙였다 — 데이터 디렉터리는 사용자의 것이라 사용자가 그 자리에
+   링크를 두면 root가 그 대상에 쓴다. 덧붙이기를 `tars_run`(사용자)으로 옮겼다. 템플릿이 root로 쓰는 다른 자리는 사용자 손이 안 닿는다 —
+   `/home/.tars/var`(root)의 자식을 chown, `/var/lib`(RAM, root)의 링크, `/config`(root).
+8. 할 일 2: 판정은 `init/src/service_link.zig`(순수 — 이름 · 링크 가르기 · 할 일 · reload 답 읽기), 검사는 `service_link_test.zig`(호스트, `zig build test`).
+   빨강: `decide`의 `other => foreign`을 `link`로 바꾸면 FAIL. `service_cli.zig`는 링크를 맞추고 `reload`를 보내 답을 그대로 찍고, 답에
+   `service NAME: starts|stops`가 있을 때만 running · stopped까지 기다린다(없는 이름을 8초 기다리지 않는다). init 없는 컨테이너에서: 이름 64, 템플릿 없음 64 +
+   목록(실행 파일만), 사용자 77, 남의 파일 1(손대지 않음), already 둘. reload 뒤의 길은 체인이 본다. 템플릿 목록은 `services.discover`를 쓰지 않는다 —
+   init의 로그 줄(`tars-init: 5 services from …`)이 명령 출력에 섞였다.
 
 ## 결과
