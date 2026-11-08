@@ -2,7 +2,7 @@
 
 접두사: TP (TARS Package — `carryover.md`의 패키지 매니저 항목이 비워 둔 이름)
 
-Status: 초안 17판(2026-11-08) — 열린 질문 없음(서버 영속성은 서비스 milestone으로 닫았다, 사용자). TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 · TP-M10 · TP-M11 끝, TP-M11 plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`가 결정 16(서버의 서비스 · 영속)과 서버 줄을 고쳤다, TP-M10 plan `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`가 결정 1의 `vendor-repo`(저장소 목록 · 키 · mysql의 순서 예외)와 서버 줄(판 · 묶음 `server`)을 고쳤다(사용자 결정 셋), TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
+Status: 초안 18판(2026-11-08) — 열린 질문 없음(서버 영속성은 서비스 milestone으로 닫았다, 사용자). AI 도구는 싣지 않는다(사용자 2026-11-08 — 결정 14 · 17, 마지막 milestone TP-M12는 공식 설치 길 확인). TP-M0 · TP-M1 · TP-M2 · TP-M3 · TP-M4 · TP-M5 · TP-M6 · TP-M7 · TP-M8 · TP-M9 · TP-M10 · TP-M11 끝, TP-M11 plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`가 결정 16(서버의 서비스 · 영속)과 서버 줄을 고쳤다, TP-M10 plan `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`가 결정 1의 `vendor-repo`(저장소 목록 · 키 · mysql의 순서 예외)와 서버 줄(판 · 묶음 `server`)을 고쳤다(사용자 결정 셋), TP-M9 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m9.md`가 결정 19(docset은 Bash 하나, 나머지는 `tars-docs get`으로 망에서 — 사용자 결정, `DASHT_DOCSETS_DIR`은 기본값)와 묶음 `docs`를 고쳤다, TP-M8 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m8.md`가 터미널 유틸리티 표(자리 · 뺀 것 · duckdb · ffmpeg), 묶음 `media`, 결정 1의 `man1=` `.1.gz`를 고쳤다(사용자 결정), TP-M7 plan `docs/plans/2026-11-07-tars-dev-layer-tp-m7.md`가 편집기 줄(emacs는 `emacs-nox`, Doom은 사용자 설치)과 Milestone의 셋 나누기, 결정 1의 실행 파일 하나를 고쳤다(사용자 결정), TP-M6 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m6.md`가 결정 1에 종류 `hex`와 선택 키 `man1=`을 더했다, TP-M5 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m5.md`가 도구 목록에서 scala3를 빼고 cci · glc를 되돌렸다(사용자 결정), 결정 1에 종류 `maven`을 더했다(M4 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m4.md`가 바닥 보강과 쓰기 가능한 `/usr/local` — 결정 9 · 비목표 3을 고쳤다. M0 plan이 결정 2 · 6을, M1 plan `docs/plans/2026-11-05-tars-dev-layer-tp-m1.md`가 결정 9의 lowerdir 순서와 결정 13의 비교 대상을, M2 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m2.md`가 도구 목록의 네이티브 언어와 결정 1의 선택 열을, M3 plan `docs/plans/2026-11-06-tars-dev-layer-tp-m3.md`가 스크립트 언어 줄(luau · cyber)과 확인 8의 ruby · php 출처, 결정 1의 `strip=`을 고쳤다). 결정 18(최소 디스크)과 initrd의 lsoff · doge는 먼저 들어갔다.
 
 사용자의 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크에 담는
 것은 원하지 않는다." 이어서 정한 것:
@@ -48,7 +48,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 문서 | `dasht` + `w3m` + Bash docset, 나머지 docset은 `tars-docs get`으로 망에서(`docs` 묶음, TP-M9 — 결정 19) |
 | 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것 — `util` 묶음과 `media` 묶음, TP-M8) |
 | 서버 | postgresql 18, mysql 9.7(LTS), nginx 1.30(stable), redis 8.10, caddy(`server` 묶음, TP-M10 — 실행 파일까지. TP-M11 — `tars-service enable <서버>`로 서비스, 데이터는 `/home/.tars/var`, 설정 조각은 `/config/<서버>.d`) |
-| AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
+| AI | 싣지 않는다 — claude code, codex, opencode, oh-my-pi(`omp`)는 사용자가 망이 있을 때 공식 설치 길로 홈에 깐다(결정 17, TP-M12가 그 길을 확인) |
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정). mg(사용자가 물었다 — emacs-nox를 싣는다, 2026-11-06). Doom Emacs의 시드(straight.el이 홈 경로로의 절대 링크 3,957개를 만들어 다른 홈으로 옮기면 안 선다 — TP-M7 plan 확인 4, 사용자 결정).
 LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
@@ -173,8 +173,8 @@ trixie 판이 돈다.
 
 ### 도구별
 
-14. 읽기 전용 `/usr`와 자동 갱신: claude code · opencode · omp 등 스스로 갱신하는 도구는 개발 도구 층의 사본에서 갱신을 끈다(도구마다 환경
-    변수나 설정 — 해당 milestone이 정한다). 사용자가 최신을 원하면 홈에 따로 깐다.
+14. (18판에서 닫음) 읽기 전용 `/usr`와 자동 갱신 — 스스로 갱신하는 AI 도구를 개발 도구 층에 실을 때의 결정이었다. 결정 17로 AI 도구를 싣지 않아
+    필요 없어졌다. 홈에 깐 도구는 스스로 갱신한다.
 15. JVM 계열(kotlin · clojure — scala3는 TP-M5에서 뺐다)은 첫 실행 때 컴파일러 jar를 망에서 받는 경우가 있다. 개발 도구 층에 그 jar를 미리 넣고 오프라인으로
     한 번 돌아가는지를 그 milestone의 판정으로 삼는다.
 16. 서버는 실행 파일까지가 개발 도구 층의 몫이다. 데이터는 `/home` 아래(`/usr`는 읽기 전용, `/var`는 RAM). 서비스로 띄우기(`tars-service`
@@ -183,7 +183,11 @@ trixie 판이 돈다.
     (sshd와 같은 모양 — root로 자리를 만들고 uid 1000으로 `exec`, 서비스 계정 없음), 켜고 끄기는 `tars-service enable|disable`(services.d 링크 +
     reload), 데이터 `/var/lib/<서버>` → `/home/.tars/var/<서버>`, 사람의 설정 `/config/<서버>.d/`, 로그는 stdout. init을 고친 곳은 시스템 신뢰
     하나(`/usr/local/share/ca-certificates/*.crt`가 있으면 부팅 때 `update-ca-certificates` 한 번 — `mkcert -install`이 재부팅을 넘는다).
-17. AI 도구는 클라우드 모델을 부르므로 망이 있을 때만 동작한다. 오프라인 목표에 들지 않지만 목록대로 싣는다.
+17. AI 도구는 싣지 않는다(사용자 2026-11-08 — "homebrew, mise와 같은 맥락이다. 사용자가 설치하는 것이지. 어짜피 네트워크 연결이 없으면
+    사용하지 못한다"). 클라우드 모델을 부르므로 망이 있을 때만 동작하고, 망이 있으면 공식 설치 길로 받을 수 있다. TARS의 몫은 PM · MI처럼 그 길이
+    막히지 않게 기본 이미지 쪽을 푸는 것이다. 마지막 milestone(TP-M12)이 넷의 공식 길을 한 번 확인하고 결과를 plan에 남긴다 — 게이트 체인은 두지
+    않는다(사용자 결정 — 남의 설치 스크립트 넷이 자주 바뀐다). 앞서 이 결정이 "목록대로 싣는다"였을 때 ISO 2GiB 한도가 걸렸다 — 묶음 사이 중복
+    지우기(약 70MB)는 `carryover.md`에 이월했다.
 18. 최소 디스크는 16GiB + 2MiB다(`disk.MIN_DISK_BYTES`, HP design 결정 2의 4GiB를 사용자가 올렸다 — "요즘 작은 임베디드 장비도 8GB
     이상"). 개발 도구 층의 묶음이 p3에 놓일 자리다. 이 결정만 TP-M0보다 먼저 들어갔다(설치기 · 단위 검사 · 체인 install · home · pm · mise ·
     dualboot의 디스크 크기).
@@ -267,7 +271,7 @@ helix는 뺀다. initrd에 실린 열 도구는 `util` 묶음에 최신판도 �
 
 - TP-M0 — 결정 1~7(빌드 쪽). `base`와 JDK 둘. 부팅 무변경.
 - TP-M1 — 결정 8~13. 커널 · ISO · `tars-install` · init · 체인 `devtools`.
-- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브(M2) → 스크립트(M3) → 바닥 보강과 쓰기 가능한 `/usr/local`(M4, TP-M3 뒤 검토에서) → JVM → BEAM → 편집기(M7) → 터미널 유틸리티(M8) → 문서(M9, 사용자 결정 2026-11-06 — 셋으로 나눈다) → 서버(실행 파일) → 서버(서비스) → AI. 각 plan은
+- 그 뒤 묶음마다 하나씩 — 순서 후보: 네이티브(M2) → 스크립트(M3) → 바닥 보강과 쓰기 가능한 `/usr/local`(M4, TP-M3 뒤 검토에서) → JVM → BEAM → 편집기(M7) → 터미널 유틸리티(M8) → 문서(M9, 사용자 결정 2026-11-06 — 셋으로 나눈다) → 서버(실행 파일) → 서버(서비스) → AI(TP-M12 — 싣지 않고 공식 설치 길 확인, 결정 17). 각 plan은
   앞 milestone의 숫자를 본 뒤 쓴다.
 - 닫을 때: PM design 결정 4에 이 design으로의 한 줄, `carryover.md` 패키지 매니저 항목, `running-tars.md`의 "안 되는 것" 표,
   `project_release.md`의 버전 올리기 단계, `completed.md`, 기억 한 파일.

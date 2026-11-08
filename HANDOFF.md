@@ -1,24 +1,25 @@
-# HANDOFF: TP-M11(서버 서비스) 끝 — 사용자가 외출하며 결정을 위임했고, 돌아와 확인할 차례다(push 안 함)
+# HANDOFF: TP-M12(AI 도구 — 싣지 않고 공식 설치 길 확인) plan 초안, 사용자 검토 대기
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
 담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 17판, 열린 질문 없음).
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 18판, 열린 질문 없음).
 
 ## 현재 브랜치
 
-`main`. TP-M11 커밋 일곱(`2e4c8a4` Draft plan부터)이 로컬에만 있다 — push는 사용자가 확인한 뒤(`gpu`). 0.1.4 이후 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
+`main`. TP-M11과 carryover 커밋은 push했다(`2a3c883`, 사용자 2026-11-08). 0.1.4 이후 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을 마치면 다음 번호는 0.2.0이다(`docs/decisions/project_release.md`의 절차).
 
 ## 다음 할 것
 
-0. 프리릴리스 `dev-20261108`(`09ec9ef`, 묶음 열, 2,036,891,648 B)을 draft로 올렸다(사용자 요청) — 태그만 push했다. 공개는 사용자가 GitHub에서 draft를
-   풀거나 `gh release edit dev-20261108 --draft=false`. 내려받아 `shasum -c` OK, 호스트 QEMU smoke `TARS 0.1.4+09ec9ef`.
-1. 사용자가 돌아오면 TP-M11을 보고한다 — plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`의 "확인한 것" 10~16과 "결과"(위임으로 Claude가
-   정한 것을 모아 두었다). 뒤집을 것이 있으면 고친다. 그 뒤 push.
-2. 다음 milestone은 AI 도구(TP design의 Milestone 순서 끝). plan 전에 2GiB 한도를 잰다: ISO 2,036,891,648바이트 — 2GiB까지 약 110MB.
-   줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+0. 프리릴리스 `dev-20261108`(`09ec9ef`, 묶음 열, 2,036,891,648 B)은 draft다 — 공개는 사용자가 GitHub에서 draft를 풀거나
+   `gh release edit dev-20261108 --draft=false`.
+1. TP-M12 plan 초안 `docs/plans/2026-11-08-tars-dev-layer-tp-m12.md`를 사용자가 검토한다. 사용자 결정(2026-11-08): AI 도구는 싣지 않고 공식 설치 길만
+   한 번 확인(게이트 체인 없음) — design 18판이 결정 14 · 17 · AI 줄을 고쳤다. 승인되면 할 일 1(설치 스크립트 넷을 받아 읽기)부터.
+   눈여겨볼 것: 시스템 rc는 `~/.local/bin`을 mise가 있을 때만 PATH에 넣는다(claude가 이름으로 안 불릴 것), 커널에 USER_NS · SECCOMP · Landlock이
+   없다(codex의 샌드박스 — 커널은 사용자에게 묻는다).
+2. TP-M12가 끝나면 TP를 닫고(plan 결정 F) 0.2.0 릴리스 — 사용자 확인 뒤.
 3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 
 ## 완료된 작업 (2026-11-08, TP-M11 — 할 일 3까지 단계마다 보고, 할 일 4부터 사용자 위임 "모든 결정을 너에게 위임한다. 설명만 잘 남겨줘")
@@ -289,14 +290,14 @@ TP-M0~M2:
 ## 남은 작업
 
 - [x] FS 소개 페이지(`gh-pages` `data.js`, `495cf9e`) — 사용자 승인 뒤 push했다(2026-11-07).
-- [ ] TP-M11 — plan 초안 검토 → 구현(서버 서비스 · 기계별 인증서 · 시스템 신뢰). 그 뒤 AI.
+- [x] TP-M11 끝 · push. - [ ] TP-M12(AI — 공식 설치 길 확인, plan 초안 검토 대기).
   사용자는 조사 · 구현을 단계별로 보고받기를 원한다. ISO가 1.86GB다 — 2GiB 한도(아래 사용자 결정 대기)까지 약 288MB. 묶음은 squashfs 하나씩이라 떼어 낼 수 있다(media가 첫 후보).
   체인은 빌드 뒤 약 593초다. dasht처럼 셸 스크립트가 부르는 의존은 verify의 NEEDED가 못 잡는다 — 체인이 본다(TP-M9). 체인을 가를지는 게이트 lane-0(ISO 줄, 직렬)의 합으로 본다(TP-M5 plan 확인한 것 6). 체인의 표시 글자는 명령 줄에 그대로 쓰지 않는다
   (TP-M4 plan 확인한 것 9), `as_tars`는 작은따옴표를 못 담는다(SQL의 `'`는 printf `\x27`). 매니페스트의 선택 키는 다섯 — 한도. `vendor-repo`는 서버 묶음이 처음 세운다.
   CPU 수준: 묶음의 실행 파일은 SandyBridge(에어 2011)에서 돌아야 한다 — 받을 때 AVX2 전용 빌드인지 본다(TCG는 못 잡는다). `%ymm` 수가 아니라 ymm이 든 함수의
   비율을 본다(DuckDB 2.0 — TP-M8 plan 확인 11). 자동 검사는 `carryover.md` 후보.
   Debian 줄이 perl에 기대면 base에 둔다(rlwrap · ipcalc · vifm). 의존이 initrd의 것과 부딪치면 `harvest-skip.tsv`(alternatives는 skipalt가 함께 뺀다).
-- [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(지금 ISO 2.03GB — 2GiB까지 약 113MB, TP-M10 뒤. AI 묶음이 남았다) — 묶음을 따로 올리기 등.
+- [ ] 사용자 결정 대기: 0.2 전에 GitHub release의 파일당 2GiB 한도를 어떻게 넘을지(ISO 2,036,891,648 B — 2GiB까지 약 110MB. AI는 싣지 않기로 해 더 늘 묶음이 없다, 묶음 사이 중복 지우기 약 70MB는 carryover) — 묶음을 따로 올리기 등.
   design 결정 12(ISO가 묶음을 싣는다)와 맞물린다. `docs/decisions/project_release_0_2.md`.
 - [ ] 사용자: 실기에서 개발 도구 층 — 프리릴리스 `dev-20261106`(TP-M3까지)이 올라가 있다. 다음 프리릴리스는 TP의 남은 milestone을 모두 마친 뒤에
   만든다(사용자 2026-11-06 — "남은 작업을 모두 마치고 프리릴리즈를 준비할게"). 절차는 `project_release_0_2.md`. 볼 것: 망 없이 언어들의 hello, 특히 `ruby -v` · `bun --version`(에어 2011의
