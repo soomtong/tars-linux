@@ -104,7 +104,9 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
 
 ## 위험
 
-1. 체인 메모리(1GiB): 부팅 3에서 다섯이 함께 뜬다 — mysqld가 가장 크다. 모자라면 체인의 `/config/mysql.d`에 `innodb_buffer_pool_size`를 줄이는 조각(사람이 쓰는 자리 그대로).
+1. 체인 메모리: 부팅 3에서 다섯이 함께 뜬다 — mysqld가 가장 크다. 사용자(2026-11-08): "chain vm ram size can make larger" — devtools 체인의 `TP_MEM`을
+   1024에서 2048로 올린다(에어 2011의 바닥 2GB와 같다). 그 대가: 지금까지 "JVM이 1GiB에서 서는가"를 함께 봤던 판정은 2GiB가 기준이 되고, 루트 게이트의 줄 수 계산
+   (`check.sh` `default_jobs` — 줄 하나 1GiB로 셈)에서 이 줄 하나가 1GiB를 더 쓴다. 메모리 조정 조각은 체인에 넣지 않는다.
 2. 끄기: SV의 stop은 SIGTERM 뒤 3초에 SIGKILL이다. postgres의 SIGTERM은 smart shutdown(접속이 끝나길 기다린다), mysqld는 큰 버퍼면 3초를 넘을 수 있다 —
    SIGKILL이면 다음 시작이 복구를 돈다(데이터는 서지만 느리다). 체인은 부팅 3의 시작 로그에서 복구가 도는지 본다. 3초를 서비스마다 늘리는 것은 다음 일이다.
 3. 서비스 수: 다섯 + sshd = 여섯, 상한 8.

@@ -73,12 +73,13 @@ DISK="${WORK}/target.img"
 # tars-install의 최소 디스크(disk.MIN_DISK_BYTES = 16 GiB + 2 MiB).
 truncate -s 16386M "$DISK"
 
-# -m은 mise와 같은 1024다. JVM이 그 위에서 서는지가 판정의 일부다.
+# -m은 2048이다(TP-M11, 사용자 2026-11-08 — 서버 다섯이 함께 뜬다). 맥북 에어 2011의 바닥 2GB와 같다.
+# TP-M10까지는 mise와 같은 1024였고 JVM이 그 위에서 서는지도 판정의 일부였다.
 # -cpu는 SandyBridge다(TP-M3, 사용자 결정 2026-11-06). 다른 체인의 qemu64는 x86-64 첫 세대라 SSSE3가 없다 — rv-ruby가
 # require_internal의 palignr에서 Illegal instruction으로 죽었다. 개발 도구 층의 실제 바닥은 맥북 에어 2011(Sandy Bridge:
 # SSSE3 · SSE4.2 · POPCNT · AVX, AVX2는 없다)이라 그 세대로 돈다. AVX2가 없으므로 bun은 여전히 baseline이어야 한다.
 TP_CPU="${TP_CPU:-SandyBridge}"
-TP_MEM="${TP_MEM:-1024}"
+TP_MEM="${TP_MEM:-2048}"
 echo "devtools: qemu -cpu ${TP_CPU} -m ${TP_MEM}"
 
 QEMU_PID=""
