@@ -1,4 +1,4 @@
-# HANDOFF: TP-M10(서버 실행 파일, 묶음 `server`) 끝 · 커밋함(push 안 함) — 다음은 서버(서비스) milestone(TP-M11)
+# HANDOFF: TP-M10(서버 실행 파일)과 덧붙임(gpg 키 검사 · mkcert) 끝 · 커밋함(push 안 함) — 다음은 서버(서비스) milestone(TP-M11)
 
 ## 목표
 
@@ -16,10 +16,13 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 
 1. 사용자에게 보고: TP-M10은 사용자가 "남은 결정을 위임"하고 잔 사이에 끝났다(2026-11-08). Claude가 맡아 정한 것은 plan
    `docs/plans/2026-11-08-tars-dev-layer-tp-m10.md`의 "확인한 것" 1~8 — 특히 2(지문 대신 키 sha256), 3(`mysql-community-client`, 설정은 `conf.d/tars.cnf`),
-   4(server 166MiB — ISO가 2GiB까지 약 113MB). 커밋은 했고 push는 안 했다(사용자 확인 뒤).
+   4(server 166MiB — ISO가 2GiB까지 약 110MB). 덧붙임(gpg · mkcert)은 사용자와 함께 정했다. 커밋은 했고 push는 안 했다(사용자 확인 뒤).
+   Dockerfile이 바뀌었다(gpg, 이미지 태그 `76bca5f6adc3`) — push 뒤 CI가 굽는다. 그 전 다른 기기는 `./devcontainer/image.sh build`
+   (`make container`는 로컬 이름 `tars-devcontainer`가 있으면 다시 굽지 않는다 — 이 세션에서 겪었다).
 2. TP-M11 = 서버(서비스) milestone plan — `docs/decisions/project_server_persistence.md`: (a) `/var/lib/<서버>` → `/home/.tars/var/<서버>` 링크를 init이,
    (b) `/config/<서버>.d` include(mysql은 이미 `/etc/mysql/conf.d/`가 있다), (c) 로그 stdout, `tars-service` 연결 · 첫 시작 초기화 · 서비스 계정.
-   그 plan에서 물을 것: 링크 장치를 서버 전용으로 할지 범용으로 할지(Claude는 범용을 권할 생각).
+   그 plan에서 물을 것: 링크 장치를 서버 전용으로 할지 범용으로 할지(Claude는 범용을 권할 생각). 같은 milestone에 기계별 자체 서명 인증서와
+   시스템 신뢰(`/usr/local/share/ca-certificates` → 부팅 때 CA 묶음) — 사용자 "둘 다"(기억 파일 끝).
 3. 2GiB 한도: AI milestone이 남은 약 113MB에 들어가는지 먼저 재기. 줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
 
 ## 완료된 작업 (2026-11-08, TP-M10 — 사용자가 조사 결과로 셋을 정하고, 구현 중 남은 결정을 위임하고 잤다)
@@ -35,6 +38,8 @@ Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr
 - [x] 체인 부팅 2에 서버 덩이(다섯을 사용자로 띄우고 응답 · 끄기 · man), 빨강 셋은 chroot · harvest에서. `tars-help devtools`에 "서버" 절(fish라 heredoc 없이,
   nginx는 상대 경로 + `-p`), `running-tars.md` 한 절, `tars-docs` 목록에 PostgreSQL · MySQL · Redis · Nginx. design 16판.
 - [x] 루트 게이트 31/31, prebuild 354초 + lanes 1,455초, 잘린 줄 0. ISO 2,034,094,080바이트.
+- [x] 덧붙임(사용자 "gpg … 검토하자" · "ssl-cert 같은 툴도" → "둘 다"): 개발 컨테이너에 gpg, `devlayer/keys.sh`(sha256 · 지문 · 만료 — `make quick` 단계 7과
+  `make dev-layers` 앞), util에 mkcert 1.4.4(체인 덩이 — `openssl verify` OK). 게이트 31/31, lanes 1,494초. plan 끝의 "덧붙임" 절.
 
 ## 완료된 작업 (2026-11-07, FS-M0 닫기 — 다음 세션)
 
