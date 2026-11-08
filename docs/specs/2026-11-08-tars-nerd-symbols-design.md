@@ -3,7 +3,7 @@
 접두사: NS
 
 Date: 2026-11-08
-Status: 초안 — NS-M0(Powerline 넷을 코드로 그린다) 설계 중.
+Status: 닫힘(2026-11-08) — NS-M0 `sprite.zig`이 Powerline E0B0~E0B3을 8x16으로, font_test 7절 · render 검사 36 · 37, 루트 게이트 31/31. plan은 `docs/plans/2026-11-08-tars-nerd-symbols-ns-m0.md`. 나머지 Powerline · 아이콘 · 폭 규칙은 carryover "Nerd Font 기호".
 
 계기: TP-M12에서 omp의 첫 화면이 `Tip: Please use nerdfont`를 띄웠다(TP-M12 plan 확인 4). 다른 세션의 조사가 carryover "Nerd Font
 기호" 항목에 남았고, 사용자가 그 가운데 "Powerline을 렌더러가 직접 그리기"부터, 그것도 넷으로 좁게 시작하기로 했다(2026-11-08:

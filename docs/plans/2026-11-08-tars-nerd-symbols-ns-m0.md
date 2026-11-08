@@ -2,7 +2,7 @@
 
 Date: 2026-11-08
 Design: `docs/specs/2026-11-08-tars-nerd-symbols-design.md`
-Status: 초안
+Status: 끝났다(2026-11-08)
 
 ## 착수 전에 확정한 것
 
@@ -116,3 +116,14 @@ plan과 달라진 것: 검사 번호는 36 · 37(체인에 35까지 있었다), 
   `pixel> 0,0 = 102030`.
 - 초록(최종 모양): `red space after the symbols: terminal: style> 1,2 fg=CC6666 bg=CC6666`, `pixel> 1,0 = CC6666` · `pixel> 1,1 = CC6666`,
   체인 PASS. `make quick` PASS.
+
+### Task 3
+
+- 루트 게이트 31/31, 38분 24초(prebuild 480초 + lanes 1,668초), 잘린 줄 0, verify 불일치 0, 로그 `out/gate-logs/20261108-131057`. render(TR-M2)
+  115초 · verify 907줄. 커밋 `97147f6` 위.
+- 닫기: design Status · `completed.md` · 기억 `project_nerd_symbols` · `MEMORY.md` · carryover "Nerd Font 기호"의 (1) · `HANDOFF.md`. `docs/help`는
+  고칠 것이 없다(치는 것이 안 바뀌었다). 소개 페이지 `data.js`는 push가 따르므로 사용자 확인 뒤.
+- 눈으로 본 것(사용자 제안 "eza --icons 옵션으로 볼 수 있어"): `out/tars.iso` 라이브 부팅에서 Powerline 프롬프트 한 줄(파랑 띠 → E0B0 → 초록 띠 →
+  E0B0, `a`E0B1`b`, E0B2, `c`E0B3`d`)은 띠가 틈 없이 이어졌고, `eza --icons`의 아이콘은 1칸 `.notdef` 상자다. 같은 날 omp 18.18.1의
+  `Please use nerdfont` 팁은 글리프를 재지 않는다 — 기호 설정이 `unicode`(기본)이면 실행마다 10% 확률(`welcome.ts`). nerd 설정은 PUA
+  247자(Powerline E0B0~E0B3 · E0B6 · E0BB)를 쓴다. 사용자 결정: 진짜 폰트 체계는 GPU 가속 단계와 함께 — carryover.

@@ -36,6 +36,10 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
       `.otb`는 비트맵 전용 sfnt라 stb가 못 읽으므로 `CozetteVector.ttf`를 픽셀 격자에 맞는 scale로 읽거나 `.bdf`/`.psf` 로더가 필요하고, 8x16
       격자에서는 작게 여백을 두고 앉는다. 그날 GitHub 릴리스가 504라(TP-M12의 opencode와 같은 장애) 재지 못했다 — jsdelivr로는 원본 `.sfd`만
       받을 수 있었다.
+      → NS-M0(2026-11-08)이 (1)의 넷(E0B0~E0B3)을 했다 — `terminal/src/sprite.zig`, [[project_nerd_symbols]]. 남은 Powerline(E0B4~E0BF · E0D2 ·
+      E0D4)은 그 switch에 줄을 더하는 일이고, E0A0(git branch)은 손으로 그린 비트맵이 된다.
+      사용자 결정(2026-11-08, NS-M0 뒤 `eza --icons` 화면을 보고): "real font system should go with gpu accel stage" — 아이콘 fallback 폰트 ·
+      폭 규칙 · 아웃라인 폰트(알파 블렌딩)는 GPU 가속 서브프로젝트와 함께 연다. 그 전에는 sprite에 Powerline 줄을 더하는 것까지만.
       정할 것: (1) Powerline을 렌더러가 직접 그리기(폰트가 필요 없고 문턱값과 충돌하지 않는다 — 프롬프트 체감은 대부분 여기서 난다), (2) 아이콘
       fallback 폰트 — 먼저 `CozetteVector.ttf`에 중간값 0%가 되는 scale이 있는지 잰다, (3) 폭 규칙 — 1칸 고정(8px 아이콘)인가 ghostty처럼 "다음
       칸이 공백이면 2칸"인가(렌더러 계약이 바뀌므로 design 결정감), (4) 폰트를 둘 싣게 되면 [[project_font_selection]]의 "고칠 자리 열"과

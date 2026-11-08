@@ -105,6 +105,7 @@ init · 설정 · 전원
 - [Power Commands](docs/decisions/project_power_commands.md) — reboot · poweroff · shutdown · suspend 스크립트, 인자가 권한보다 먼저(RB-M0, 2026-11-05)
 - [Laptop Power](docs/decisions/project_laptop_power.md) — i915 · S3 · 밝기, rootfs가 tmpfs로 바뀌는 함정(LP-M0~M2, 2026-11-05)
 - [Broadcom Wireless](docs/decisions/project_broadcom_wireless.md) — Air4,1 내장 BCM43224를 brcmsmac으로, Pro의 둘은 못 연다(BW-M0, 2026-11-05)
+- [Nerd Symbols](docs/decisions/project_nerd_symbols.md) — Powerline 넷을 sprite.zig이 코드로, render 체인 색 셀의 함정 넷(NS-M0, 2026-11-08)
 - [Boot services](docs/decisions/project_boot_services.md) — `/config/services.d`를 init이 감독한다, 첫 세입자 sshd(SV-M0~M2, 2026-09-27)
 - [Service control](docs/decisions/project_service_control.md) — `tars-service`가 소켓으로 PID 1에게 명령한다(CT-M0~M2, 2026-09-27)
 - [Daemon supervision](docs/decisions/project_daemon_supervision.md) — dhcpcd와 chronyd를 감독 목록에(DS-M0~M2, 2026-09-27)

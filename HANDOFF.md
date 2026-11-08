@@ -1,4 +1,4 @@
-# HANDOFF: TP-M12(AI 도구 — 싣지 않고 공식 설치 길 확인) plan 초안, 사용자 검토 대기
+# HANDOFF: NS-M0(Powerline 넷) 닫힘, TP-M12(AI 도구 설치 확인) 마무리 남음 — GitHub 복구 뒤 clear 검증 · opencode
 
 ## 목표
 
@@ -15,12 +15,29 @@
 
 0. 프리릴리스 `dev-20261108`(`09ec9ef`, 묶음 열, 2,036,891,648 B)은 draft다 — 공개는 사용자가 GitHub에서 draft를 풀거나
    `gh release edit dev-20261108 --draft=false`.
-1. TP-M12 plan 초안 `docs/plans/2026-11-08-tars-dev-layer-tp-m12.md`를 사용자가 검토한다. 사용자 결정(2026-11-08): AI 도구는 싣지 않고 공식 설치 길만
-   한 번 확인(게이트 체인 없음) — design 18판이 결정 14 · 17 · AI 줄을 고쳤다. 승인되면 할 일 1(설치 스크립트 넷을 받아 읽기)부터.
-   눈여겨볼 것: 시스템 rc는 `~/.local/bin`을 mise가 있을 때만 PATH에 넣는다(claude가 이름으로 안 불릴 것), 커널에 USER_NS · SECCOMP · Landlock이
-   없다(codex의 샌드박스 — 커널은 사용자에게 묻는다).
-2. TP-M12가 끝나면 TP를 닫고(plan 결정 F) 0.2.0 릴리스 — 사용자 확인 뒤.
-3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+1. TP-M12 마무리(plan `docs/plans/2026-11-08-tars-dev-layer-tp-m12.md`, 확인한 것 1~5까지 적혀 있고 "결과" 절이 비었다). 커밋된 것:
+   `f8368c7`(plan · design 18판) · `d2405c6`(시스템 rc의 `~/.local/bin` · lang-script의 `~/.bun/bin` · AI 안내 · carryover 컨테이너 후보).
+   남은 것:
+   - `git stash list`의 "TP-M12 clear into initrd (pending GitHub)" — `devcontainer/Dockerfile`(층 13에 `ncurses-bin:amd64`)과
+     `kernel/guest_tools.sh`(clear · tput · reset을 initrd로, 사용자 동의). `git stash pop` → `docker rmi tars-devcontainer &&
+     ./devcontainer/image.sh build`(층 597이 GitHub에서 lsoff · doge를 받는다) → `make check CHAIN=tools`와 devtools 체인 → 게스트에서
+     `clear` 확인 → 커밋.
+   - opencode: 2026-11-08 밤 다시 — 공식 설치 rc 0(17.8초), 망 없는 화면 셸에서 `opencode --version` = 1.19.5(`out/tp-m12/run-20261108-135054`,
+     probe는 게이트가 `out/tp-m12`를 지운 뒤 대화 기록에서 되살렸다). 남은 것: `~/.config/fish/config.fish`의 `fish_add_path`(boot-2.log의
+     `tp12-rc`), TUI 첫 화면 — probe가 Ctrl+C로 opencode를 못 끝내 뒤의 omp가 그 안으로 들어갔다(`/exit`으로 끝내게 고칠 것).
+   - codex `--sandbox danger-full-access`가 맞는 값인지(`docs/help/devtools.md` · `running-tars.md`가 그 값을 적었다).
+   - 결과 절 · 루트 게이트 · 커밋. probe의 bash/zsh 이름 확인은 따옴표 버그로 "="를 찍었다 — 화면 확인이 판정이다.
+2. TP를 닫고(plan 결정 F — design 닫을 때 항목) 0.2.0 릴리스 — 사용자 확인 뒤.
+3. 소개 페이지 `data.js`(gh-pages)에 NS-M0 — push가 따르므로 사용자 확인 뒤. TP를 닫을 때 함께 해도 된다.
+4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+
+## 완료된 작업 (2026-11-08, NS-M0 — GitHub 장애를 기다리는 동안)
+
+- [x] design `f6b1eb2`(사용자 "넷으로 좁게 시작하자") · plan `f423011` · 구현 `97147f6`: `terminal/src/sprite.zig`이 E0B0~E0B3을 8x16
+  비트맵으로, `font.find()`가 stb보다 먼저 묻는다. font_test 7절, render 검사 36 · 37(체인 끝). red → green 둘 다 봤다.
+- [x] 루트 게이트 31/31, prebuild 480초 + lanes 1,668초, 잘린 줄 0, `out/gate-logs/20261108-131057`. 닫기(design Status · completed ·
+  기억 `project_nerd_symbols` · carryover).
+- [x] 사용자 지시로 기억: Zig 0.17 이상 — `**` 배열 반복 대신 `@splat`(`project_zig_upgrade.md`).
 
 ## 완료된 작업 (2026-11-08, TP-M11 — 할 일 3까지 단계마다 보고, 할 일 4부터 사용자 위임 "모든 결정을 너에게 위임한다. 설명만 잘 남겨줘")
 
@@ -483,6 +500,7 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
 - BT 비목표에서 실기가 요구하면: Broadcom BT firmware(위험 6), `input.conf`의 `UserspaceHID` · `ClassicBondedOnly`, HID 배터리
   (`HID_BATTERY_STRENGTH`, BS design `scope` 행이 대비해 둔 자리). 오디오(A2DP)는 사용자가 뺐다 — 다시 열려면 코덱 + 오디오 서버.
 - 렌더: 부분 갱신은 DR + SB로 닫았다. 남은 축은 GPU 가속뿐이다(키 하나 0.42ms 가운데 present 0.27이 커널 쪽, DR design "안 하는 것").
+  진짜 폰트 체계(아이콘 fallback · 폭 규칙 · 아웃라인 폰트)는 이 단계와 함께다(사용자 2026-11-08 — carryover "Nerd Font 기호").
   실기 없이 할 수 있는 작은 것은 큰 kitty 이미지의 그리기 비용 하나(`carryover.md`).
 - PS 비목표: 기본 속도(`*_speed`), 장치 이름별 설정, 스크롤 가속. SE 비목표: 키 입력이 남은 선택을 지우기(ghostty식) · 키보드 `y` 뒤에도 남기기.
 - CB 범위 `workspace`(`docs/specs/2026-10-05-tars-clipboard-scope-design.md` 비목표 1).
