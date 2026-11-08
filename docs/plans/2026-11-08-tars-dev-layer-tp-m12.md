@@ -140,6 +140,41 @@ F. TP 닫기(CLAUDE.md의 "서브프로젝트를 끝내면"): design `Status:` �
    서지만 Docker는 안 서므로, 컨테이너 실행 환경(cgroups · namespace 전부 · veth/bridge/NAT · seccomp · USER_NS)을 다음 서브프로젝트 후보로
    `carryover.md`에 옮겼다(그날의 커널 옵션 표와 함께). 사용자: "개발도구 중에 도커를 쓰는 경우가 종종 있죠".
 
+6. clear를 initrd에 싣기 위해 개발 컨테이너 이미지를 다시 구웠다(2026-11-08 밤, `3a1634a5a5d6`) — 그 뒤 devtools 체인이 `make dev-layers`에서 멈췄다:
+   `base and docs both carry /usr/lib/x86_64-linux-gnu/libz.so.1.3.1 with different contents`(이에 앞서 verify의 결정 4). 원인은 거두는 이미지
+   `debian:trixie-slim`(스냅숏 2026-10-27)에 처음부터 깔린 zlib1g `-1+b1`이다. 그 이미지의 sources에는 trixie-security가 있지만 `apt-get install`은
+   이미 깔린 의존을 올리지 않고, harvest.sh의 의존 폐포 단계가 그 옛 파일을 싣는다. 새로 구운 개발 컨테이너의 sysroot(= initrd)는 trixie-security의
+   `+deb13u1`을 받았다. 같은 날 `apt list --upgradable`에는 apt · tzdata도 있었다 — TP-M3의 tzdata 어긋남(`harvest-skip.tsv`)도 같은 뿌리였다.
+   고친 것: harvest.sh가 "설치 전" 스냅숏 앞에 `apt-get update` · `apt-get upgrade`(새 패키지를 들이지 않는다). zlib1g 하나를 skip에 넣는 길은 다음
+   security 갱신에서 또 멈춘다. 고친 뒤 첫 `make dev-layers`가 한 번 더 같은 줄로 멈췄다 — base만 새로 굽고 아직 안 구운 묶음의 `.paths`(옛 해시
+   `85590d…`)와 대조해서다. 그 여섯의 `.paths`를 지우자 열 묶음 모두 `differs=0`, libz를 싣는 일곱이 같은 `6c139317…`. devtools 체인 PASS(빌드 뒤 671초).
+   곁가지: `devlayer/manifest.tsv`의 xxd `deb13u1` → `deb13u2`(미러가 옛 판을 내렸다).
+7. 다시 한 판(2026-11-09, 확인 스크립트 셋 sha256 · 줄 수가 11-08과 같다 — codex `44ac252c` · omp `cd8f7792` · opencode `a2dd5952`, ISO는 위 devtools
+   체인이 구운 `out/tars-dev.iso`, 부팅 셋 565초, `out/tp-m12/run-20261108-234431`). claude는 넷째 판에서 끝났으므로 이번 순서는 codex → omp → opencode
+   (opencode를 끝에 두어 TUI가 다른 도구를 삼키지 않게, 끝내기는 `/exit`). 이름 확인의 따옴표 버그(바깥 bash가 `$c`를 빈 값으로 펼쳤다)를 고쳤다.
+   - codex: rc 0, 43.6초, 0.167.0. opencode: rc 0, 16.6초, 1.19.5(`~/.opencode/bin/opencode` 214MB, 빠진 `.so` 0) — GitHub 장애가 풀려 섰다.
+     omp: rc 0, 20.8초, 18.18.2(하루 사이 18.18.1에서 올랐다).
+   - 이름으로: codex · omp는 bash · zsh · fish 셋 다(확인한 것 3의 시스템 rc와 `~/.bun/bin` 조각). opencode는 fish에서만 — 설치기가 `$SHELL`(fish)을 보고
+     `~/.config/fish/config.fish` 끝에 `# opencode` · `fish_add_path /home/tars/.opencode/bin`을 썼다. 화면 셸이 fish라 판정 B는 지난다. bash · zsh에서
+     쓰려면 `~/.opencode/bin`을 PATH에 넣어야 한다(안내 한 줄). codex는 여전히 `~/.profile`에도 PATH 줄을 쓴다(시스템 rc가 이미 넣으므로 무해).
+   - 망 없는 부팅 3의 화면 셸: `codex --version` → `codex-cli 0.167.0`, `omp --version` → `omp/18.18.2`. `opencode --version`은 8초 안에 줄이 비었다 —
+     같은 셸에서 이름으로 띄운 opencode TUI가 30초 화면은 비었고 60 · 120초에 로고 · 입력란 · `1.19.5`를 그렸으므로, 망 없는 첫 실행이 느린 것이지
+     안 서는 것이 아니다. `/exit`로 프롬프트가 돌아왔다.
+   - clear: 친 뒤 화면 맨 위가 프롬프트 한 줄. `tput cols` → 155. initrd(층 13)에서 섰다.
+   - codex `--sandbox`: 틀린 값에 clap이 `[possible values: read-only, workspace-write, danger-full-access]`, `danger-full-access`면 rc 0 — 안내의 값이
+     맞다. `codex sandbox linux`는 여전히 bwrap의 user namespace 실패(rc 1, 확인한 것 5).
+   - omp nerd(`~/nerd/.omp/config.yml`의 `symbolPreset: nerd`): 상태 줄의 Powerline 화살표는 NS-M0의 그림으로 섰고, Nerd Font 아이콘(U+F0000대 등)은
+     자리표 `?` — NS design이 진짜 글꼴 체계를 GPU 단계로 이월한 그대로다.
+   - 홈: `~/.codex` 516M · `~/.opencode` 205M · `~/.bun` 477M. OOM 0.
+
 ## 결과
 
-(구현 뒤 채운다)
+판정을 지났다. AI 도구 넷은 개발 도구 층에 싣지 않고, 공식 설치 길로 홈에 깔려 화면 셸(fish)에서 이름으로 불리며 망 없는 재부팅 뒤에도 돈다
+(claude 2.1.319 · codex 0.167.0 · opencode 1.19.5 · omp 18.18.2, 2026-11-08 · 09). 판정 B를 막은 것은 셋이었고 모두 TARS 쪽에서 고쳤다(결정 D).
+
+- 시스템 rc 셋이 `~/.local/bin`이 있으면 PATH 앞에(claude · codex), lang-script가 `~/.bun/bin`(omp — `bun install -g` 전반의 빈자리).
+- 화면 셸의 `clear`가 없었다 — `clear` · `tput` · `reset`(tset)을 initrd에(사용자 동의).
+- 그 이미지를 다시 굽다 드러난 거두기의 판 어긋남 — harvest.sh가 slim을 먼저 `apt-get upgrade`(확인한 것 6).
+
+남긴 것(우회 길과 함께 안내에 있다): codex 샌드박스는 커널에 user namespace가 없어 서지 않는다 — `--sandbox danger-full-access`(사용자 결정, 컨테이너
+실행 환경은 `carryover.md`). opencode는 fish에만 PATH를 쓴다. omp의 Nerd Font 아이콘은 자리표. 게이트 체인은 두지 않았다(사용자 결정 — `CHAINS` 31 그대로).

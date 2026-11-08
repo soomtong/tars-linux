@@ -646,9 +646,10 @@ claude code(`curl -fsSL https://claude.ai/install.sh | bash` → `~/.local/bin`)
 
 - PATH: 시스템 rc가 `~/.local/bin`(있을 때)을, lang-script 묶음의 조각이 `~/.bun/bin`을 넣는다 — 설치기의 "PATH에 없다"는 안내는 새 셸에서 풀린다.
   codex 설치기는 fish 사용자에게도 `~/.profile`에 줄을 쓰지만 쓸모는 없다.
+  opencode 설치기는 `$SHELL`이 fish면 `~/.config/fish/config.fish`에 `fish_add_path ~/.opencode/bin`을 쓴다 — bash · zsh에서는 직접 PATH에 넣는다.
 - 커널에 사용자 이름공간(`CONFIG_USER_NS`)이 없어 bwrap 샌드박스가 서지 않는다 — codex는 `codex --sandbox danger-full-access`로 띄운다.
   컨테이너 실행 환경(Docker · Podman과 함께)은 `carryover.md`의 다음 서브프로젝트 후보다.
-- 설치는 받은 파일을 `/tmp`(RAM)에 잠깐 둔다(codex · opencode). 받은 뒤 홈의 크기는 claude 약 330MB, codex 약 520MB, omp(bun 패키지) 약 480MB.
+- 설치는 받은 파일을 `/tmp`(RAM)에 잠깐 둔다(codex · opencode). 받은 뒤 홈의 크기는 claude 약 330MB, codex 약 520MB, opencode 약 210MB, omp(bun 패키지) 약 480MB.
 
 ### 방화벽 — 받을 포트만 연다
 

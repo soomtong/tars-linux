@@ -43,6 +43,7 @@ curl -fsSL https://omp.sh/install | sh                  # oh-my-pi → bun으로
 ```
 
 `~/.local/bin`과 `~/.bun/bin`은 셸이 PATH에 잇습니다(새 셸부터) — 설치기가 PATH를 고치라고 안내해도 따로 할 일은 없습니다.
+opencode는 설치기가 fish의 `~/.config/fish/config.fish`에만 PATH를 씁니다 — bash · zsh에서 쓰려면 `~/.opencode/bin`을 PATH에 넣습니다.
 TARS 커널에는 사용자 이름공간이 없어 codex의 샌드박스가 서지 않습니다(`bwrap: Creating new namespace failed`). 명령을 실행시키려면
 `codex --sandbox danger-full-access`로 띄웁니다 — 샌드박스 없이 내 권한으로 돌고, 명령마다 묻는 것은 그대로입니다.
 
