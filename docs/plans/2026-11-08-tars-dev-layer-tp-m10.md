@@ -184,3 +184,26 @@ H. design을 고친다(16판): 결정 1의 `vendor-repo`(결정 A의 모양과 m
 - 실기로 남긴 것: InnoDB의 native AIO가 실기 커널에서 켜지는지(qemu-user에서만 꺼짐을 봤다 — 체인 로그는 확인하지 않았다), 에어 2011(2~4GB)에서 mysqld와
   다른 서버를 함께 띄울 때의 메모리.
 
+
+## 덧붙임 (2026-11-08) — gpg와 mkcert
+
+사용자(TP-M10 보고를 듣고): "gpg 도구가 없어서 불편한 부분이 있었구나. 추가하는 것을 검토하자." 이어서 "ssl-cert 같은 툴도 포함해 보자" — 뜻을 물었고
+"둘 다"(사용자용 mkcert는 지금, 서비스가 쓸 기계별 인증서는 TP-M11)를 골랐다.
+
+1. gpg는 개발 컨테이너에 둔다(`devcontainer/Dockerfile`의 squashfs-tools 줄, 이미지 `76bca5f6adc3`). 거두기 컨테이너에는 둘 수 없다 — 설치 전에 깐 것은
+   "설치 전"에 들어가 묶음에서 빠지므로 base의 gnupg(매니페스트)가 사라진다.
+2. `devlayer/keys.sh`: `repos.tsv`의 줄마다 키 파일의 sha256(셋째 열) · 지문(넷째 열) · 만료(지났으면 멈춤, `KEYS_WARN_DAYS` 기본 180일 안이면 경고).
+   `make dev-layers`가 거두기 전에 개발 컨테이너에서, `make quick`이 단계 7로 호스트에서(gpg가 없으면 한 줄 알리고 건너뛴다)부른다. harvest의 sha256
+   대조는 그대로 — 깨끗한 컨테이너가 스스로 할 수 있는 확인이고 받은 파일이 gpg가 본 그 파일임을 묶는다. 고정한 키 가운데 만료가 있는 것은 mysql
+   (2027-10-23)뿐이다(nginx 파일의 `ABF5…`는 2027-05 만료지만 apt가 요구한 `8540A6…`은 만료 없음).
+   확인: 초록 · 경고(`KEYS_WARN_DAYS=1000` → 349일) · 만료(`KEYS_NOW`=2028-01-01 → rc 1) · 지문 한 글자(rc 1, 저장소 이름과 지문을 댄다).
+3. mkcert 1.4.4(util, `upstream` 실행 파일 하나 — 마지막 릴리스 2022-04, 체크섬을 안 내 받은 파일의 sha256). 사용자로 망 없이 `mkcert localhost 127.0.0.1` →
+   CA `~/.local/share/mkcert`(홈이라 남는다), 인증서는 현재 디렉터리. `mkcert -install`은 TARS에서 안 된다 — `/usr/local/share/ca-certificates`에 쓰고
+   `update-ca-certificates`를 부르는데 TARS에는 그 명령이 없고 CA 묶음은 부팅마다 initrd에서 선다. CA 파일을 직접 준다(`curl --cacert`, node
+   `NODE_EXTRA_CA_CERTS` — python의 `SSL_CERT_FILE`은 저장소를 바꿔치워 안내에 넣지 않았다). util 239MiB(+3).
+4. 체인: M8의 손으로 적은 목록에 mkcert(61개), M10 뒤에 mkcert 덩이 — 발급, CAROOT가 홈, server의 `openssl verify`가 `OK`, SAN에 127.0.0.1.
+   같은 명령을 trixie 컨테이너에서 먼저 돌려 글자를 확인했다. `tars-help devtools` "서버" 절에 https 개발 두 줄.
+5. TP-M11로 넘긴 것: 서비스가 쓸 기계별 자체 서명 인증서(ssl-cert의 snakeoil을 기계마다 한 번 — 남는 자리에), 시스템 신뢰(init이 부팅 때
+   `/usr/local/share/ca-certificates/*.crt`를 CA 묶음에 덧붙이면 `mkcert -install`의 결과도 이어진다 — `/etc`가 RAM인 같은 문제).
+6. 루트 게이트 31/31, prebuild 360초 + lanes 1,494초, 잘린 줄 0(로그 `out/gate-logs/20261108-005313`). 게이트 첫 줄이 `keys>`(개발 컨테이너의 gpg),
+   util · media 61개, mkcert 덩이 9,225ms(TCG의 RSA 키 생성 — 상한 60초 그대로). ISO 2,036,750,336바이트 — 2GiB까지 약 110MB.

@@ -200,6 +200,10 @@ yazi	util	26.9.1	upstream	https://github.com/sxyazi/yazi/releases/download/v26.9
 # x86-64-v3(AVX2)로 빌드돼 에어 2011에서 서지 않는다(확인 11, 사용자 결정).
 sqlite	util	3.54.1	upstream	https://sqlite.org/2026/sqlite-tools-linux-x64-3540100.zip	a21062b333c7d66d7d8c42054c0fab1c1899729185289ad14bd4f25f9f576d14	strip=0 exe=sqlite3,sqldiff,sqlite3_analyzer,sqlite3_rsync
 duckdb	util	1.5.6	upstream	https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip	6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f	strip=0 exe=duckdb
+# mkcert(TP-M10 plan 덧붙임, 사용자 요청 2026-11-08): 개발용 로컬 CA와 인증서를 홈에(~/.local/share/mkcert) — root도 망도 필요 없다. 마지막 릴리스가
+# 1.4.4(2022-04)이고 체크섬을 내지 않아 받은 파일의 sha256을 적었다. 압축 없는 실행 파일 하나(TP-M7의 길). `mkcert -install`은 TARS에서 안 된다
+# (update-ca-certificates가 없고 CA 묶음은 부팅마다 initrd에서 선다) — CA 파일을 --cacert 등으로 직접 준다. 시스템 신뢰는 TP-M11 후보.
+mkcert	util	1.4.4	upstream	https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64	6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 # debian: hurl의 NEEDED libxml2(libcurl.so.4는 initrd에 있다). wget. ipcalc · vifm은 perl에 기대 base에 둔다(위, TP-M8).
 wget	util	1.25.0-2	debian	wget	apt
 libxml2	util	2.12.7+dfsg+really2.9.14-2.1+deb13u3	debian	libxml2	apt

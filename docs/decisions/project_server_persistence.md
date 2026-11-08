@@ -20,3 +20,6 @@ How to apply:
   `/config/<서버>.d/`를 include(postgres는 설정이 데이터 안이라 (a)), (c) 로그는 stdout으로 init 콘솔.
 - 그 plan에서 사용자에게 물을 것: 링크 장치를 서버 다섯 전용으로 할지, 묶음이 목록을 적으면 무엇이든 받는 범용으로 할지(Claude는 범용을 권할 생각).
 - 원문은 TP design `docs/specs/2026-11-05-tars-dev-layer-design.md`의 "닫은 것(2026-11-07)". [[project_release_0_2]]
+- 같은 milestone에 더할 것(사용자 2026-11-08, "ssl-cert 같은 툴도" → "둘 다"): 서비스가 쓸 기계별 자체 서명 인증서(거두기 컨테이너의 snakeoil은 모든
+  기계가 같은 비밀 키라 TP-M10에서 뺐다 — 기계마다 한 번 만들어 남는 자리에), 시스템 신뢰(`/usr/local/share/ca-certificates/*.crt`를 부팅 때 CA 묶음에
+  덧붙이기 — `mkcert -install`이 이어진다). 사용자용 mkcert는 TP-M10 덧붙임으로 util에 들어갔다.

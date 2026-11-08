@@ -6,7 +6,7 @@
 # 손으로 치던 Zig 세 줄이 여기로 왔다.
 #
 # 단계는 다섯이다. 셸 스크립트(shellcheck) · Zig 서식(fmt --check) · Zig 문법(ast-check) ·
-# shared/의 순수 검사(zig run) · init의 크로스 빌드(zig build). 빌드 산출물은 out/quick/
+# shared/의 순수 검사(zig run) · init의 크로스 빌드(zig build). 뒤에 둘이 붙었다 — 6 첫걸음 안내(FS-M0), 7 vendor-repo 키(TP-M10). 빌드 산출물은 out/quick/
 # 아래에만 두어 init/zig-out(initrd가 싣는 원본)을 건드리지 않는다.
 #
 # 도구는 PATH의 shellcheck · zig다. 버전이 아래와 다르면 한 줄 찍고 계속 돈다 — 실패가
@@ -68,6 +68,14 @@ mkdir -p out/quick
 # 6. 첫걸음 안내(docs/help/*.md)의 tars-config · tars-service 하위 명령과 tars-help 주제가 실제와 맞는가(FS-M0 plan 결정 D).
 #    문서가 기능보다 늦게 고쳐지는 것을 이름만이라도 잡는다 — 옵션 · 키 이름 · 순서는 사람이 본다.
 ./docs/help/check.sh || failed+=(help-docs)
+
+# 7. vendor-repo의 키(TP-M10 plan 덧붙임): sha256 · 지문 · 만료. gpg가 없는 호스트는 건너뛴다 — make dev-layers가 개발 컨테이너의
+#    gpg로 같은 검사를 하고 멈추므로 묶음은 빠져나가지 않는다. 여기 있는 이유는 만료 경고를 평소에 먼저 보는 것이다.
+if command -v gpg >/dev/null 2>&1; then
+  devlayer/keys.sh || failed+=(vendor-keys)
+else
+  note "gpg is not on PATH, vendor-repo keys not checked (make dev-layers checks them)"
+fi
 
 if [ "${#failed[@]}" = 0 ]; then
   note PASS

@@ -526,15 +526,15 @@ M7_NUMBERS="ms $(ms_of ms)ms, nvim $(ms_of nvim)ms, emacs $(ms_of emacs)ms, ttt 
 
 # TP-M8(plan 결정 F): util · media의 터미널 유틸리티. 상한은 60초 — 첫 판(SandyBridge · 1GiB): --version 60개 16.5초, 도구 2.9초,
 # ffmpeg 5.4초, magick · gm 0.4초(세 배가 60초 아래). 작업 자리는 ~/tp/m8. 기다리는 글자는 chroot에서 잰 계산된 값이다(plan 확인한 것).
-# F-1: 링크된 실행 파일 60개가 이름으로 서고 판 옵션이 0으로 끝나는 수. 판 옵션이 다른 다섯 — hugo는 하위 명령, ffmpeg · ffprobe는
+# F-1: 링크된 실행 파일 61개가(TP-M10 덧붙임의 mkcert 포함) 이름으로 서고 판 옵션이 0으로 끝나는 수. 판 옵션이 다른 다섯 — hugo는 하위 명령, ffmpeg · ffprobe는
 # -version(--version은 판을 찍고도 0이 아니다), sqldiff는 --help뿐, flashfetch는 옵션 없이 돈다. 0이 아닌 것은 tp-m8-bad에 이름이 남는다.
 # 목록은 매니페스트에서 계산하지 않는다 — 도구를 더하거나 빼면 여기도 고친다(plan 맡아 정한 것 5). rg는 initrd의 trixie 판을 이긴다(design 결정 20).
-as_tars 'mkdir -p ~/tp/m8 && cd ~/tp/m8 && s=$(date +%s%N) && n=0 && bad="" && for t in cci glc bat duf eza fd fzf hyperfine jq rg sd asciinema ast-grep bed cidr difft dua dust fastfetch gitui glow task gping herdr hexyl hurl hurlfmt lazygit lazysql leaf mlr peco procs scc starship tspin tree-sitter uv uvx viddy wasmtime xh yazi ya sqlite3 sqlite3_analyzer sqlite3_rsync duckdb wget ipcalc vifm magick convert identify gm; do if $t --version >/dev/null 2>&1 </dev/null; then n=$((n+1)); else bad="$bad $t"; fi; done; hugo version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad hugo"; for t in ffmpeg ffprobe; do $t -version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad $t"; done; sqldiff --help >/dev/null 2>&1 && n=$((n+1)) || bad="$bad sqldiff"; timeout 60 flashfetch >/dev/null 2>&1 </dev/null && n=$((n+1)) || bad="$bad flashfetch"; e=$(date +%s%N); echo "tp-ms-m8ver=$(((e-s)/1000000))"; printf "tp-m8-%s=%s\n" ver $n; echo "tp-m8-bad:$bad"; command -v rg | sed "s/^/tp-m8-rgpath=/"; rg --version | head -1 | sed "s/^/tp-m8-rg=/"'
+as_tars 'mkdir -p ~/tp/m8 && cd ~/tp/m8 && s=$(date +%s%N) && n=0 && bad="" && for t in cci glc bat duf eza fd fzf hyperfine jq rg sd asciinema ast-grep bed cidr difft dua dust fastfetch gitui glow task gping herdr hexyl hurl hurlfmt lazygit lazysql leaf mlr peco procs scc starship tspin tree-sitter uv uvx viddy wasmtime xh yazi ya sqlite3 sqlite3_analyzer sqlite3_rsync duckdb mkcert wget ipcalc vifm magick convert identify gm; do if $t --version >/dev/null 2>&1 </dev/null; then n=$((n+1)); else bad="$bad $t"; fi; done; hugo version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad hugo"; for t in ffmpeg ffprobe; do $t -version >/dev/null 2>&1 && n=$((n+1)) || bad="$bad $t"; done; sqldiff --help >/dev/null 2>&1 && n=$((n+1)) || bad="$bad sqldiff"; timeout 60 flashfetch >/dev/null 2>&1 </dev/null && n=$((n+1)) || bad="$bad flashfetch"; e=$(date +%s%N); echo "tp-ms-m8ver=$(((e-s)/1000000))"; printf "tp-m8-%s=%s\n" ver $n; echo "tp-m8-bad:$bad"; command -v rg | sed "s/^/tp-m8-rgpath=/"; rg --version | head -1 | sed "s/^/tp-m8-rg=/"'
 wait_log_re "tp-ms-m8ver=[0-9]+" 60 || fail "the util and media --version loop did not finish in 60s" "tp-m8-bad"
-wait_log "tp-m8-ver=60" 10 || fail "not all 60 util and media commands ran by name" "tp-m8-bad" "tp-m8-ver"
+wait_log "tp-m8-ver=61" 10 || fail "not all 61 util and media commands ran by name" "tp-m8-bad" "tp-m8-ver"
 wait_log "tp-m8-rgpath=/usr/local/bin/rg" 10 || fail "rg by name is not util's (/usr/local/bin before /usr/bin)" "tp-m8-rgpath"
 wait_log "tp-m8-rg=ripgrep 15.2.0" 10 || fail "rg is not util's 15.2.0" "tp-m8-rg"
-echo "B2: as tars, all 60 util and media commands run by name offline and util's rg wins over the initrd one"
+echo "B2: as tars, all 61 util and media commands run by name offline and util's rg wins over the initrd one"
 # F-2: 일하는 도구. duckdb의 SQL은 printf의 \x27로 작은따옴표를 만든다(as_tars는 작은따옴표를 못 담는다). hurl의 libcurl은 initrd의 것이다.
 as_tars 'cd ~/tp/m8 && s=$(date +%s%N) && printf "{\"a\":[1,2,3]}" | jq ".a|add" | sed "s/^/tp-m8-jq=/"; sqlite3 :memory: "select 6*7" | sed "s/^/tp-m8-sqlite=/"; printf "a,b\n1,x\n2,y\n" | mlr --icsv --ojsonl cat | head -1 | sed "s/^/tp-m8-mlr=/"; printf "fn main() {\n    let x = 1;\n}\n" > a.rs; printf "fn main() {\n    let x = 2;\n}\n" > b.rs; difft --color never --display inline a.rs b.rs | grep -c "x = " | sed "s/^/tp-m8-difft=/"; ast-grep run -p "let \$A = \$B" --lang rust a.rs --json=compact | jq -r ".[0].metaVariables.single.B.text" | sed "s/^/tp-m8-sg=/"; hyperfine -N -r 2 --style none --export-json h.json true >/dev/null 2>&1; jq ".results|length" h.json | sed "s/^/tp-m8-hf=/"; hurl --version | grep -o "libcurl/[0-9.]*" | sed "s/^/tp-m8-hurl=/"; printf "a,b\n1,x\n2,y\n3,z\n" > t.csv; printf "copy (select * from read_csv(\x27t.csv\x27)) to \x27t.parquet\x27;\ncopy (select * from \x27t.parquet\x27) to \x27t.json\x27;\nselect sum(a) from read_json(\x27t.json\x27);\n" > d.sql; duckdb -noheader -list < d.sql | sed "s/^/tp-m8-duck=/"; e=$(date +%s%N); echo "tp-ms-m8work=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-m8work=[0-9]+" 60 || fail "the util tool block did not finish in 60s" "tp-m8-"
@@ -560,7 +560,7 @@ wait_log "tp-m8-manglow=glow - Render markdown" 60 || fail "man glow did not sho
 grep -aqF "tp-m8-manrg=rg  - recursively search" "$LOG" || fail "man rg did not show the page" "tp-m8-manrg"
 grep -aqF "tp-m8-manhurl=hurl - run and test HTTP requests." "$LOG" || fail "man hurl did not show the page" "tp-m8-manhurl"
 echo "B2: as tars, man rg, man hurl and man glow read offline"
-M8_NUMBERS="60 --version $(ms_of m8ver)ms, tools $(ms_of m8work)ms, ffmpeg $(ms_of ff)ms, magick+gm $(ms_of img)ms"
+M8_NUMBERS="61 --version $(ms_of m8ver)ms, tools $(ms_of m8work)ms, ffmpeg $(ms_of ff)ms, magick+gm $(ms_of img)ms"
 
 # TP-M9(plan 할 일 6): docs. 비대화형 bash는 rc를 안 읽으므로 /etc/bash.bashrc를 직접 source한다 — 맨 앞의 rc.d 조각(결정 B)이 홈의 dasht
 # docset 자리에 묶음의 Bash docset 링크를 둔다. 찾기(sqlite3 — util) → 결과의 file:// URL → w3m -dump(w3m은 initrd에 없다 — 스크립트의 의존이라
@@ -602,6 +602,15 @@ grep -aqF "tp-m10-cd=caddy-42" "$LOG" || fail "caddy respond did not answer" "tp
 grep -aqF "tp-m10-man=postgres mysqld nginx redis-server " "$LOG" || fail "a server man page did not read offline" "tp-m10-man"
 echo "B2: as tars, postgres 18.6, mysql 9.7.4, nginx 1.30.6, redis 8.10.3 and caddy each start from the home, answer and stop offline, and their man pages read"
 M10_NUMBERS="postgres $(ms_of m10pg)ms, mysql $(ms_of m10my)ms, nginx+redis+caddy+man $(ms_of m10rest)ms"
+# TP-M10 덧붙임(사용자 요청 2026-11-08): mkcert가 망 없이 홈에 로컬 CA를 세우고 localhost 인증서를 발급한다. server의 openssl이 그 인증서를
+# CA로 검증한다(OK는 openssl이 찍는다 — 명령 줄에 없다). 이름(SAN)에 127.0.0.1이 들었는지도 본다. 상한 60초.
+as_tars 'mkdir -p ~/tp/m10/tls && cd ~/tp/m10/tls && s=$(date +%s%N) && mkcert localhost 127.0.0.1 > mk.log 2>&1; mkcert -CAROOT | sed "s/^/tp-m10-caroot=/"; openssl verify -CAfile "$(mkcert -CAROOT)/rootCA.pem" localhost+1.pem 2>&1 | sed "s/^/tp-m10-verify=/"; openssl x509 -in localhost+1.pem -noout -ext subjectAltName 2>&1 | grep -oE "IP Address:[0-9.]+" | sed "s/^/tp-m10-san=/"; e=$(date +%s%N); echo "tp-ms-m10tls=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-m10tls=[0-9]+" 60 || fail "the mkcert block did not finish in 60s" "tp-m10-"
+grep -aqF "tp-m10-caroot=/home/tars/.local/share/mkcert" "$LOG" || fail "mkcert did not keep its CA in the home" "tp-m10-caroot"
+grep -aqF "tp-m10-verify=localhost+1.pem: OK" "$LOG" || fail "openssl did not verify the mkcert certificate against its CA" "tp-m10-verify"
+grep -aqF "tp-m10-san=IP Address:127.0.0.1" "$LOG" || fail "the mkcert certificate does not name 127.0.0.1" "tp-m10-san"
+echo "B2: as tars, mkcert made a local CA in the home and a localhost certificate that openssl verifies, offline"
+M10_NUMBERS="${M10_NUMBERS}, mkcert $(ms_of m10tls)ms"
 
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0

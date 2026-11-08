@@ -599,7 +599,9 @@ RUN mkdir -p /tmp/upstream "$AMD64_SYSROOT/usr/local/upstream/bin" \
 # TP-M0 · 개발 도구 층을 굽는 도구(컨테이너 자신이 쓴다 — 게스트에는 안 들어간다). mksquashfs가 묶음을 굽고
 # unsquashfs가 압축별 읽는 시간을 잰다(devlayer/build.sh). squashfs 이미지는 아키텍처를 타지 않아 arm64 판이 x86_64
 # 게스트의 묶음을 그대로 굽는다. 앞 층의 캐시를 깨지 않으려고 맨 앞의 apt 줄이 아니라 여기 둔다.
-RUN apt-get update && apt-get install -y --no-install-recommends squashfs-tools \
+# gpg(TP-M10 plan 덧붙임): devlayer/keys.sh가 vendor-repo 키의 지문 · 만료를 본다. 거두기 컨테이너에는 둘 수 없다 — 설치 전에
+# 깐 것은 "설치 전"에 들어가 묶음에서 빠지므로 base의 gnupg가 사라진다.
+RUN apt-get update && apt-get install -y --no-install-recommends squashfs-tools gpg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

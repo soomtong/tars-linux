@@ -12,7 +12,7 @@
 | lang-jvm | JDK 25(java · javac) · kotlin · clojure |
 | lang-beam | erlang · elixir(mix) · gleam |
 | editor | ms(mitos) · nvim · emacs · ttt |
-| util | rg · fd · bat · fzf · jq · lazygit · yazi · duckdb · sqlite3 · hyperfine · 그 밖의 터미널 도구 |
+| util | rg · fd · bat · fzf · jq · lazygit · yazi · duckdb · sqlite3 · hyperfine · mkcert · 그 밖의 터미널 도구 |
 | media | ffmpeg · ImageMagick(magick) · GraphicsMagick(gm) |
 | docs | dasht · w3m · `tars-docs` |
 | server | postgresql 18 · mysql 9.7 · nginx · redis · caddy |
@@ -78,6 +78,16 @@ http {
 ```
 
 1024 아래 포트(80 · 443)는 root만 열 수 있으니 8080 같은 포트를 씁니다.
+
+https로 개발하려면 mkcert로 이 기계만의 인증서를 만듭니다. CA는 홈(`~/.local/share/mkcert`)에 남습니다.
+
+```sh
+mkcert localhost 127.0.0.1             # localhost+1.pem · localhost+1-key.pem
+curl --cacert "$(mkcert -CAROOT)/rootCA.pem" https://localhost:8443
+```
+
+`mkcert -install`(시스템이 그 CA를 믿게 하기)은 TARS에서 아직 되지 않습니다. 위처럼 CA 파일을 직접 줍니다
+(node는 `NODE_EXTRA_CA_CERTS`로 더할 수 있습니다).
 
 ## 문서
 

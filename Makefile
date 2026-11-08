@@ -237,11 +237,13 @@ iso: initrd
 # amd64 postinst를 못 돌린다), 받기 · 검사 · 굽기는 개발 컨테이너. 둘 다 자기 캐시를 본다(harvest.lines · stamp).
 # 검사가 initrd와 대조하므로 initrd가 먼저 있어야 한다. 의존으로 걸지 않은 것은 initrd가 이미 있을 때 다시 짓지
 # 않으려는 것이다 — 없으면 build.sh가 "run make initrd first"를 찍는다.
+# 거두기 전에 vendor-repo의 키를 개발 컨테이너의 gpg로 본다(devlayer/keys.sh — 지문 · 만료, TP-M10 plan 덧붙임).
 DEV_LAYERS        ?= base docs editor lang-beam lang-jvm lang-native lang-script media server util
 DEV_HARVEST_IMAGE ?= debian:trixie-slim
 DEV_MEASURE       ?=
 DEV_COMP          ?=
 dev-layers: container
+	@$(IN_CONTAINER) devlayer/keys.sh
 	@for b in $(DEV_LAYERS); do \
 	  $(DOCKER) run --rm --platform=linux/amd64 -v "$(CURDIR)":/workspace -w /workspace $(DEV_HARVEST_IMAGE) devlayer/harvest.sh $$b || exit 1; \
 	  $(IN_CONTAINER) "DEV_MEASURE=$(DEV_MEASURE) $(if $(DEV_COMP),DEV_COMP=$(DEV_COMP)) devlayer/build.sh $$b" || exit 1; \
