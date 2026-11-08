@@ -20,7 +20,7 @@
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복은 1회, 가끔 `-e RUNS=N`으로 늘린다
 - [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 스크립팅 런타임은 한 묶음으로만 들이고, 지금은 perl로 간다
 - [Release 0.2](docs/decisions/project_release_0_2.md) — 0.2.0은 TP 전체를 끝낸 뒤, 그 사이 실기 확인은 `dev-<날짜>` 프리릴리스(2026-11-06)
-- [Server persistence](docs/decisions/project_server_persistence.md) — 서버의 데이터 · 설정 · 로그가 재부팅을 넘는 길은 서비스 milestone이 세운다(2026-11-07)
+- [Server persistence](docs/decisions/project_server_persistence.md) — 서버 다섯은 `tars-service enable`로 서비스, 데이터 `/home/.tars/var`, 조각 `/config/<서버>.d`, CA는 부팅 때 다시 믿는다(TP-M11, 2026-11-08)
 - [First steps guide](docs/decisions/project_first_steps_guide.md) — 설치 뒤 '뭘 하지'에 답하는 안내를 기계 안에(Wi-Fi · 블루투스 · config · service · 문서), FS-M0로 끝남(2026-11-07)
 - [Release iteration](docs/decisions/feedback_release_iteration.md) — 맥 실기 확인까지 0.1.4를 같은 번호로 거듭 내고, 이전 판의 흔적은 안 남긴다(2026-11-05)
 - [Devcontainer additions](docs/decisions/feedback_devcontainer_additions.md) — 개발 컨테이너에 필요한 도구는 묻지 않고 더한다(2026-11-05)

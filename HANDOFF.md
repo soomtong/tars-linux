@@ -1,25 +1,39 @@
-# HANDOFF: TP-M11(서버 서비스) plan 초안이 사용자 검토를 기다린다 — TP-M10과 덧붙임(gpg · mkcert)은 끝나 push했다
+# HANDOFF: TP-M11(서버 서비스) 끝 — 사용자가 외출하며 결정을 위임했고, 돌아와 확인할 차례다(push 안 함)
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
 담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 11판, 열린 질문 없음).
+유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 17판, 열린 질문 없음).
 
 ## 현재 브랜치
 
-`main`(push함). 0.1.4 이후 커밋이 쌓였고 버전은 안 냈다. 사용자(2026-11-06): "이 작업을 마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을
-마치면 다음 번호는 0.1.5가 아니라 0.2.0이다(`docs/decisions/project_release.md`의 절차). 실기 확인용 프리릴리스 `dev-20261106`(아래).
-Dockerfile이 바뀌어 이미지 태그가 바뀌었다 — push 뒤 CI가 ghcr.io에 새로 굽는다. 그 전 다른 기기의 `make container`는 로컬 빌드(약 1분).
+`main`. TP-M11 커밋 일곱(`2e4c8a4` Draft plan부터)이 로컬에만 있다 — push는 사용자가 확인한 뒤(`gpu`). 0.1.4 이후 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
+마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을 마치면 다음 번호는 0.2.0이다(`docs/decisions/project_release.md`의 절차).
 
 ## 다음 할 것
 
-1. 사용자에게 TP-M11 plan(`docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`, 커밋 `Draft plan` — 아래)을 검토받는다. 세션 끝에 요약을 보였고 답은
-   아직 없다. 특히 "Claude가 맡아 정한 것" 1~5(데이터 `/home/.tars/var` · postgres trust · 포트 8080/8081 · 로그 파일 없음 · 기본 꺼짐)와 결정 E(init을 고치는
-   유일한 자리 — 부팅 때 `/usr/local/share/ca-certificates`에 `.crt`가 있으면 `update-ca-certificates` 한 번)를 짚는다.
-2. 승인되면 plan의 "할 일" 순서대로: 템플릿을 trixie 컨테이너(root로 실행 → `setpriv`로 uid 1000)에서 하나씩 세운 뒤 → `tars-service enable|disable` →
-   `update-ca-certificates` · init → 체인(부팅 2에서 켜고 쓰기, 부팅 3에서 재부팅을 넘는지) → 빨강 셋 → 안내 → 게이트. 단계마다 보고(사용자가 원하는 방식).
-3. 2GiB 한도: ISO 2,036,750,336바이트 — 2GiB까지 약 110MB. AI milestone 전에 잰다. 줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+1. 사용자가 돌아오면 TP-M11을 보고한다 — plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`의 "확인한 것" 10~16과 "결과"(위임으로 Claude가
+   정한 것을 모아 두었다). 뒤집을 것이 있으면 고친다. 그 뒤 push.
+2. 다음 milestone은 AI 도구(TP design의 Milestone 순서 끝). plan 전에 2GiB 한도를 잰다: ISO 2,036,891,648바이트 — 2GiB까지 약 110MB.
+   줄일 후보는 server의 perl(base와 겹침, 압축 약 15MB)과 libicu 데이터(31MiB).
+3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+
+## 완료된 작업 (2026-11-08, TP-M11 — 할 일 3까지 단계마다 보고, 할 일 4부터 사용자 위임 "모든 결정을 너에게 위임한다. 설명만 잘 남겨줘")
+
+- [x] plan 승인(사용자 "it's ok rest of them") + 체인 RAM 2048(사용자 "chain vm ram size can make larger") — `a548919`.
+- [x] 할 일 1 `b7a72af`: server 묶음의 `etc/tars/services/{postgres,mysql,redis,nginx,caddy}` + `etc/tars/server/common.sh` · 설정 원본 넷. 컨테이너에서
+  동시 시작 · 재부팅 흉내. 바꾼 것: postgres 조각 `/config/postgres.d`, 자체 서명 `/config/ssl/tars-selfsigned/{cert,key}.pem`(동시 시작 경합 →
+  디렉터리째 `mv -T`), nginx · caddy 127.0.0.1, redis appendonly.
+- [x] 할 일 2 `6d4a9e5`: `tars-service enable|disable`(판정 `init/src/service_link.zig` + `service_link_test`). 보안 검토 지적으로 postgres의 conf 덧붙이기를
+  사용자로.
+- [x] 할 일 3 `1fc0aff`: `kernel/trust/update-ca-certificates`(initrd), 원본 `/usr/share/tars/ca-certificates.crt`, 빈 `/usr/local/share/ca-certificates`,
+  init `trust.zig`의 `refresh()`(`mountLocal` 뒤, `.crt` 있을 때만, 시한 5초) + `trust_test`.
+- [x] 할 일 4~6 `148b111`: 체인 devtools 부팅 2 · 3(넷째 판 PASS — 첫 판 · 둘째 판은 체인 판정의 실수, 셋째 판은 `disable`의 진짜 버그: reload가 끈
+  칸은 status에서 사라져 pid가 거둬지는 것을 기다리게 고쳤다). 빨강 (a) 컨테이너, (b) · (c) 체인 한 판. 안내 `tars-help devtools` 서버 절 ·
+  `services` 장 · `running-tars.md` · design 결정 16.
+- [x] 루트 게이트 31/31, prebuild 352초 + lanes 1,483초, 잘린 줄 0, `out/gate-logs/20261108-035525`. 마무리 커밋(plan 결과 · design Status 17판 ·
+  기억 `project_server_persistence` · HANDOFF).
 
 ## 완료된 작업 (2026-11-08, TP-M11 조사 — 사용자가 셋을 정했다)
 

@@ -157,5 +157,26 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
     때까지(`kill(pid, 0)`이 ESRCH — 좀비는 0이라 init이 거둔 뒤다) 기다린 뒤 `service redis  stopped`를 스스로 찍는다.
     같은 판에서 선 것: 부팅 3에서 다섯이 저절로 뜨고(351ms에 모두 답), 42 셋 · nginx 조각 · CA 신뢰가 남았다. 부팅 2의 끝이 QEMU 죽이기(전원 끊김)라
     postgres는 복구를 돌았고(`automatic recovery in progress`) mysql은 안 돌았다. 다섯이 뜬 MemAvailable 1,225,932 kB(2GiB 게스트).
+15. 넷째 판 PASS(`148b111` 커밋 전 트리): 빌드 뒤 체인 654초. 부팅 2: enable 다섯 → 25,962ms에 다섯이 uid 1000으로 답, 42 셋, 조각 8082 · 8443,
+    CA 전 curl 60 · `mkcert -install` 뒤 믿음. 부팅 3: 347ms에 다섯이 답, 데이터 · 조각 · 신뢰가 남음, `disable redis`가 링크를 지우고 stopped까지.
+16. 빨강 (b) · (c)는 한 판에(코드 둘을 잠시 고치고, 체인은 앞을 가리는 판정을 빼고 두 판정을 `RED:` 줄로): (c) postgres 템플릿에서 링크를 빼면
+    부팅 3에 `postgres: first start`가 다시 나오고 `relation "tp11" does not exist` — 링크를 둔 mysql · redis는 42가 남았다. (b) init의
+    `trust.refresh()`를 빼면 `tars-init: trust` 줄이 없고 부팅 3의 https가 비었다(`/etc`가 initrd의 묶음으로 돌아왔다). 세 파일은 `git checkout`으로
+    커밋된 모양으로 되돌렸다.
 
 ## 결과
+
+끝(2026-11-08). 할 일 4부터는 사용자가 결정을 위임했다(확인한 것 10) — 아래 "Claude가 정한 것"이 그 몫이다.
+
+- 판정: 체인 devtools 부팅 2 · 3에서 다섯이 서비스로 뜨고 부팅 3이 데이터 · 조각 · CA 신뢰를 그대로 봤다. 빨강 셋 — (a) 컨테이너, (b) · (c) 체인 한 판.
+  `tars-service enable|disable`이 링크와 reload로 띄우고 멈춘다, 사용자는 77. 루트 게이트 31/31(prebuild 352초 + lanes 1,483초, 잘린 줄 0,
+  로그 `out/gate-logs/20261108-035525`). ISO 2,036,891,648바이트(2GiB까지 약 110MB, TP-M10 덧붙임 뒤보다 약 141KB — CA 원본 · 스크립트).
+- 숫자(SandyBridge · 2GiB): enable 다섯 뒤 다섯이 답하기까지 약 26초(mysql 첫 초기화 포함), 재부팅 뒤 약 0.35초(부팅 동안 이미 떴다), 다섯이 뜬
+  MemAvailable 약 1.2GB. 부팅 2의 끝이 QEMU 죽이기라 postgres는 매번 복구를 돌았고 mysql은 안 돌았다 — 데이터는 둘 다 남았다.
+- Claude가 정한 것(위임): plan과 달라진 자리 셋 — postgres 조각 `/config/postgres.d`(확인한 것 2), 자체 서명 디렉터리
+  `/config/ssl/tars-selfsigned/`(3), nginx · caddy도 127.0.0.1과 nginx 접근 로그 off(4). redis `appendonly yes`(5). 빨강 (a)를 체인 대신
+  컨테이너에서(13). `disable`의 기다림을 pid로(14). 체인 `TP_MEM` 2048(사용자). nginx를 홈에서 `-p`로 띄우는 긴 예시는 `tars-help`에서 뺐다
+  (서비스가 더 짧다, TP-M10 체인 덩이가 그 길을 계속 본다).
+- 남은 것: 부팅 때의 CA 한 번이 5초를 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일은 그대로 다음 일(위험 2) —
+  체인에서는 postgres의 SIGTERM 끄기를 보지 않았다(부팅 2는 전원 끊김으로 끝난다).
+

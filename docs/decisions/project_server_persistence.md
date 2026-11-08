@@ -26,3 +26,8 @@ How to apply:
 - 바뀐 방향(사용자 2026-11-08, TP-M11 조사 뒤 — 셋 다 Claude 추천): (a)의 링크 · 디렉터리 · 첫 초기화는 init이 아니라 서비스 템플릿
   (`/etc/tars/services/<서버>`, sshd와 같은 모양)이 한다 — init 코드 0줄. 서버는 TARS 사용자(uid 1000)로 돈다(서비스 계정 없음). 켜고 끄기는
   `tars-service enable|disable <이름>`(services.d 링크 + reload). init을 고치는 곳은 시스템 신뢰 하나다. plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`.
+- 세웠다(TP-M11, 2026-11-08 — 사용자가 할 일 4부터 결정을 위임하고 외출): 템플릿 다섯 + `etc/tars/server/common.sh`, `tars-service enable|disable`
+  (판정은 `init/src/service_link.zig`), `update-ca-certificates`(initrd)와 init의 `trust.refresh()`. 자리: 데이터 `/home/.tars/var/<서버>`,
+  조각 `/config/<서버>.d`(postgres는 `postgres.d` — 서비스 이름 한 규칙), 자체 서명 `/config/ssl/tars-selfsigned/{cert,key}.pem`. 체인 devtools 부팅 2 · 3.
+- 다음에 알아 둘 것: reload가 끈 칸은 status에서 사라진다(reload design 결정 5) — 그 칸의 멈춤을 기다리려면 pid가 거둬지는 것을 본다.
+  mkcert는 부른 명령의 출력을 삼킨다. 체인의 끝 표시는 `printf`로 쪼갠다(콘솔이 명령 줄을 되찍는다).
