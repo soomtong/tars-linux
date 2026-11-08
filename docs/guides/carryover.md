@@ -16,6 +16,31 @@
       dockerd(init 서비스, root 데몬)인가 rootless Podman인가, 런타임 바이너리를 어디서(개발 도구 층의 묶음 · 사용자 설치), 커널 크기 · 부팅
       시간 · 공격 면(USER_NS)의 대가, `CONFIG_MODULES`가 없는 TARS라 전부 내장. 방화벽(FW)의 nftables와 Docker의 iptables(nft 백엔드) 공존.
 
+TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
+
+- [ ] Nerd Font 기호 — Powerline은 직접 그리고, 아이콘은 비트맵 fallback으로. 계기: omp의 첫 화면 `Tip: Please use nerdfont`(TP-M12 plan
+      확인 4). unifont 17.0.03에서 Nerd 코드포인트 21개(Powerline E0B0 · E0A0, Devicons E725 · E73C, FA F113 · F07B, Octicons F489, MDI F0001 ·
+      F1AB6 등)가 모두 `stbtt_FindGlyphIndex` = 0 — 화면에는 `.notdef`의 6x11 상자가 찍힌다. [[project_font_selection]]의 "폰트에 없는 글자가
+      존재하지 않는다"는 화면에서만 맞고, gid 0으로 없는 글자를 가릴 수 있으므로 `font.zig`의 `find()`가 gid 0일 때 다음 폰트를 보는 자리가 있다.
+      실측(TARS의 `terminal/vendor/stb_truetype.h`, 문턱값 `> 127`): SymbolsNerdFontMono 3.4.0은 중간값 비율 60.0%(16px) · 56.1%(14px),
+      SymbolsNerdFont는 63.9% — Powerline 삼각형 · 폴더처럼 면이 넓은 것만 살고 git branch(E0A0) · Tux(F17C) · 체크(F00C)의 가는 획은 끊기거나
+      뭉친다. 16px 그대로면 높이 17행이라 셀을 1행 넘는다(14px이면 들어간다). 아웃라인 기호 폰트를 그대로 싣는 것은 design 결정 4(알파 블렌딩
+      없음)를 뒤집는 일이라 MonoplexNerd가 탈락한 이유와 같다.
+      ghostty가 하는 것(`_study/ghostty`): 기호 전용 폰트를 내장해 마지막 fallback으로 붙이고(`src/font/embedded.zig` · `SharedGridSet.zig`),
+      Powerline E0B0~E0BF · E0D2 · E0D4는 폰트 없이 코드로 그리며(`src/font/sprite/draw/powerline.zig` — 박스 드로잉 · 점자도 같은 길), PUA는
+      vt에서 폭 1이지만 다음 칸이 비고 앞 글자가 기호가 아니면 2칸까지 넘쳐 그린다(`src/renderer/cell.zig`의 `constraintWidth`, 크기 · 정렬은
+      `src/font/nerd_font_attributes.zig`의 코드포인트별 constraint 표).
+      걸리는 자리: TARS의 `main.zig`는 그리는 폭을 폰트 advance(`glyph.cell_width / CELL_W`)에서 얻는데 Symbols Mono의 advance가 16px에서 16이라
+      2칸으로 그려진다 — vt(libghostty-vt)는 1칸으로 세므로 폭 규칙 없이 얹으면 아이콘이 옆 글자를 덮는다.
+      후보: Cozette 1.30.0(손으로 그린 6x13 비트맵, Nerd 아이콘 다수, MIT — "Nerd Fonts의 비트맵 대안"이 목표라고 README에 적혀 있다).
+      `.otb`는 비트맵 전용 sfnt라 stb가 못 읽으므로 `CozetteVector.ttf`를 픽셀 격자에 맞는 scale로 읽거나 `.bdf`/`.psf` 로더가 필요하고, 8x16
+      격자에서는 작게 여백을 두고 앉는다. 그날 GitHub 릴리스가 504라(TP-M12의 opencode와 같은 장애) 재지 못했다 — jsdelivr로는 원본 `.sfd`만
+      받을 수 있었다.
+      정할 것: (1) Powerline을 렌더러가 직접 그리기(폰트가 필요 없고 문턱값과 충돌하지 않는다 — 프롬프트 체감은 대부분 여기서 난다), (2) 아이콘
+      fallback 폰트 — 먼저 `CozetteVector.ttf`에 중간값 0%가 되는 scale이 있는지 잰다, (3) 폭 규칙 — 1칸 고정(8px 아이콘)인가 ghostty처럼 "다음
+      칸이 공백이면 2칸"인가(렌더러 계약이 바뀌므로 design 결정감), (4) 폰트를 둘 싣게 되면 [[project_font_selection]]의 "고칠 자리 열"과
+      `terminal/vendor/fonts/README` · initrd 크기.
+
 개발 도구 층 TP-M11 뒤 조사(2026-11-08)가 남긴 것.
 
 - [ ] 묶음 사이 같은 파일 지우기. `devlayer/build.sh`의 묶음끼리 대조(TP-M2 plan 결정 E)는 내용이 다르면 멈추고 같으면 `shared`로 세기만 한다 —
