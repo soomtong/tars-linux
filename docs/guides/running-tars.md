@@ -599,14 +599,26 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 기본값). 그 한 번의 부팅에서만 rc를 안 읽으므로, 그동안 rc를 고치거나
 `tars.conf`에 `shell_config=off`를 적어 두면 된다.
 
-### 서버 — 홈에서 띄우기
+### 서버 — 서비스로 켜기
 
-개발 도구 층의 `server` 묶음(TP-M10)에 postgresql 18 · mysql 9.7 · nginx 1.30 · redis 8.10 · caddy가 있다. 서비스로 등록되지 않아
-사용자가 자기 계정으로 띄우고, 데이터는 홈 아래에 둔다 — `/etc` · `/var`는 RAM이라 재부팅에 사라지고 홈(`/home`, ext4)만 남는다.
-명령은 기계 안의 `tars-help devtools` "서버" 절에 있다. 표준 경로가 TARS에 없는 자리를 피하는 기본값 둘을 묶음이 싣는다:
-`/etc/mysql/conf.d/tars.cnf`(소켓 `/tmp/mysql.sock`, `secure-file-priv` 빈 값)와 `PGHOST=/tmp`(rc 조각). `mysqld` · `nginx`는 `/usr/sbin`이라
-`/usr/local/bin`의 링크로 이름이 닿고, `psql`은 Debian의 래퍼가 아니라 18의 실물이다. 부팅 때 저절로 뜨기와 재부팅을 넘는 설정
-(`/config/<서버>.d`)은 다음 milestone이다.
+개발 도구 층의 `server` 묶음(TP-M10)에 postgresql 18 · mysql 9.7 · nginx 1.30 · redis 8.10 · caddy가 있다. TP-M11부터 다섯은
+서비스 템플릿(`/etc/tars/services/<서버>`, 묶음의 `etc/`가 부팅 때 복사한다)이 있어 `sudo tars-service enable <서버>`로 켠다 —
+`/config/services.d/<서버>` 링크를 만들고 `reload`를 보낸다. `disable`은 링크를 지우고 `reload`. 기본은 모두 꺼져 있다.
+
+- 사용자 계정(uid 1000)으로 돈다 — 서비스 계정이 없다. 템플릿은 root로 시작해 자리를 만들고 `setpriv`로 사용자가 되어 `exec`한다.
+  그래서 nginx는 8080, caddy는 8081이고 모두 127.0.0.1에만 묶인다.
+- 데이터: `/var/lib/<서버>` → `/home/.tars/var/<서버>` 링크. `/var`는 RAM이라 템플릿이 부팅마다 다시 건다. postgres(`initdb`,
+  사용자가 슈퍼유저, trust)와 mysql(`--initialize-insecure`)은 처음 한 번 초기화한다. redis는 `appendonly yes`.
+- 설정: 원본은 묶음의 `/etc/tars/server/`, 사람의 조각은 `/config/<서버>.d/`(nginx `*.conf`는 http 안, caddy `*.caddy`,
+  postgres `*.conf`, mysql `*.cnf`, redis `*.conf`). 조각을 고친 뒤 `tars-service restart <서버>`.
+- 로그: stdout · stderr 그대로 init 콘솔(시리얼). 파일은 조각에서 켠다.
+- 처음 켤 때 기계별 자체 서명 인증서 `/config/ssl/tars-selfsigned/{cert,key}.pem`(localhost · 127.0.0.1, key는 root:사용자 0640).
+- 시스템 신뢰: `mkcert -install`(사용자로 — mkcert가 sudo를 부른다)이 CA를 `/usr/local/share/ca-certificates/`에 두고
+  TARS의 `update-ca-certificates`(initrd)를 부른다. 그 명령은 initrd의 원본 묶음 + 그 디렉터리의 `.crt`로
+  `/etc/ssl/certs/ca-certificates.crt`를 다시 쓴다. `/usr/local`은 p3에 남으므로 init이 부팅 때 `.crt`가 있으면 한 번 부른다.
+
+홈에서 손으로 띄우는 길도 그대로다(`tars-help devtools` "서버" 절). 묶음이 싣는 기본값 둘 — `/etc/mysql/conf.d/tars.cnf`(소켓
+`/tmp/mysql.sock`, `secure-file-priv` 빈 값)와 `PGHOST=/tmp`(rc 조각) — 은 서비스에도 그대로 쓰인다.
 
 ### 문서 — dasht와 tars-docs
 

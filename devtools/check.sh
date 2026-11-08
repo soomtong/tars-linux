@@ -15,6 +15,8 @@ cd "$(dirname "$0")" || exit 1
 # TP-M8: 여덟째 묶음 media(ffmpeg · ImageMagick · GraphicsMagick)와 util의 터미널 유틸리티(plan 결정 E · F).
 # TP-M9: 아홉째 묶음 docs(dasht · w3m · Bash docset). 부팅 2가 rc 조각의 링크 · 찾기 · w3m -dump · man dasht · fish 조각을 본다(plan 할 일 6).
 # TP-M10: 열째 묶음 server(postgresql · mysql · nginx · redis · caddy). 부팅 2가 다섯을 사용자로 띄워 응답을 받고 끈다(plan 할 일 7).
+# TP-M11: 서버가 서비스가 된다. 부팅 2가 tars-service enable로 다섯을 켜고 쓰고 CA를 넣고, 부팅 3이 저절로 뜬 다섯과 남은 데이터 · 조각 · 신뢰를
+#        보고 disable redis로 끈다(plan 할 일 4). -m은 2048로 올렸다(아래).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
 #   1  ISO(묶음 열) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
@@ -174,6 +176,11 @@ send() { printf '%s\n' "$1" >&4; }
 # 사용자 tars로 bash 한 줄. 인자는 작은따옴표를 안 담는다(mise/check.sh의 as_tars와 같은 규칙). PATH는 init의 값이다.
 as_tars() {
   send "setpriv --reuid=1000 --regid=1000 --init-groups env -u XDG_DATA_HOME HOME=/home/tars USER=tars LOGNAME=tars PATH=/usr/local/bin:/usr/bin:/bin bash -c '$1'"
+}
+
+# TP-M11. root로 bash 한 줄. 콘솔 셸은 fish라 bash 문법은 이 겹 안에 둔다. 인자의 규칙은 as_tars와 같다.
+as_root() {
+  send "bash -c '$1'"
 }
 
 wait_log() {
@@ -613,6 +620,46 @@ grep -aqF "tp-m10-san=IP Address:127.0.0.1" "$LOG" || fail "the mkcert certifica
 echo "B2: as tars, mkcert made a local CA in the home and a localhost certificate that openssl verifies, offline"
 M10_NUMBERS="${M10_NUMBERS}, mkcert $(ms_of m10tls)ms"
 
+# 끝 표시와 판정 글자는 printf로 쪼갠다 — 콘솔이 보낸 명령 줄을 로그에 되찍으므로 글자 그대로 쓰면 보내자마자 맞는다(TP-M11 첫 판).
+# TP-M11(plan 할 일 4): 서버가 서비스가 된다. root가 tars-service enable로 다섯을 켜고(링크 + reload), 템플릿이 데이터를 /home/.tars/var에
+# 두고 사용자 tars로 exec한다. 위 TP-M10 덩이는 다섯을 이미 껐다(같은 포트). 첫 시작은 initdb · mysqld --initialize를 돈다.
+as_root 'for s in postgres mysql redis nginx caddy; do tars-service enable $s 2>&1 | sed "s/^/tp-m11-en: /"; done; ls /config/services.d | tr "\n" " " | sed "s/^/tp-m11-links=/"; echo; printf "tp-m11-%s\n" en-done'
+wait_log "tp-m11-en-done" 120 || fail "tars-service enable did not finish for the five" "tp-m11-en"
+for s in postgres mysql redis nginx caddy; do
+  grep -aqE "tp-m11-en: ${s}: enabled, /config/services.d/${s} -> /etc/tars/services/${s}" "$LOG" || fail "enable ${s} did not make the link" "tp-m11-en"
+  grep -aqE "tp-m11-en: service ${s}: starts \(new in /config/services.d\)" "$LOG" || fail "reload did not start ${s}" "tp-m11-en"
+  grep -aqE "tp-m11-en: service ${s} +running +pid [0-9]+" "$LOG" || fail "enable ${s} did not wait for running" "tp-m11-en"
+done
+grep -aqF "tp-m11-links=caddy mysql nginx postgres redis " "$LOG" || fail "/config/services.d does not hold the five links" "tp-m11-links"
+echo "B2: root ran tars-service enable for postgres, mysql, redis, nginx and caddy; each is a link in /config/services.d and init started it"
+# 다섯이 답할 때까지(mysql의 첫 초기화가 가장 길다 — TP-M10 첫 판 26.5초). 프로세스의 uid는 /proc의 Uid 줄. 그리고 데이터 하나씩.
+as_tars 'export PGHOST=/tmp; s=$(date +%s%N); for i in $(seq 480); do pg_isready -q && mysqladmin -uroot ping >/dev/null 2>&1 && redis-cli ping >/dev/null 2>&1 && curl -sf 127.0.0.1:8080 >/dev/null && curl -sf 127.0.0.1:8081 >/dev/null && break; sleep 0.5; done; e=$(date +%s%N); echo "tp-ms-m11up=$(((e-s)/1000000))"; for p in /proc/[0-9]*; do c=$(cat $p/comm 2>/dev/null); case $c in postgres|mysqld|redis-server|nginx|caddy) echo "$c:$(awk "/^Uid:/ {print \$2}" $p/status)";; esac; done | sort -u | tr "\n" " " | sed "s/^/tp-m11-uids=/"; echo; psql -d postgres -Atc "select current_user" | sed "s/^/tp-m11-pguser=/"; psql -d postgres -Atc "create table tp11(x int)" >/dev/null && psql -d postgres -Atc "insert into tp11 values (42)" | sed "s/^/tp-m11-pgw=/"; mysql -uroot -e "create database tp11; create table tp11.t(x int); insert into tp11.t values (42)" && printf "tp-m11-myw=%s\n" ok; redis-cli set tp11 42 | sed "s/^/tp-m11-rdw=/"; curl -s 127.0.0.1:8081 | sed "s/^/tp-m11-cd=/"; curl -s 127.0.0.1:8080 | grep -m1 -o "Welcome to nginx" | sed "s/^/tp-m11-ng=/"; stat -c "%U %a" /home/.tars/var/postgres /config/ssl/tars-selfsigned/key.pem /config/ssl/tars-selfsigned/cert.pem | tr "\n" " " | sed "s/^/tp-m11-own=/"; echo; readlink /var/lib/postgresql /var/lib/mysql /var/lib/redis | tr "\n" " " | sed "s/^/tp-m11-var=/"; echo; printf "tp-m11-%s\n" w-done'
+wait_log "tp-m11-w-done" 300 || fail "the five services did not answer and take a write in 300s" "tp-m11-" "tp-ms-m11up"
+grep -aqF "tp-m11-uids=caddy:1000 mysqld:1000 nginx:1000 postgres:1000 redis-server:1000 " "$LOG" || fail "a server does not run as uid 1000 (or one is missing)" "tp-m11-uids"
+grep -aqF "tp-m11-pguser=tars" "$LOG" || fail "postgres did not take tars as its superuser (initdb by the template)" "tp-m11-pguser"
+grep -aqF "tp-m11-pgw=INSERT 0 1" "$LOG" || fail "postgres did not take a row" "tp-m11-pg"
+grep -aqF "tp-m11-myw=ok" "$LOG" || fail "mysql did not take a row as root without a password" "tp-m11-my"
+grep -aqF "tp-m11-rdw=OK" "$LOG" || fail "redis did not take a key" "tp-m11-rd"
+grep -aqF "tp-m11-cd=TARS caddy. Put your sites in /config/caddy.d/*.caddy" "$LOG" || fail "caddy's default site on 8081 did not answer" "tp-m11-cd"
+grep -aqF "tp-m11-ng=Welcome to nginx" "$LOG" || fail "nginx's default site on 8080 did not answer" "tp-m11-ng"
+grep -aqF "tp-m11-own=tars 755 root 640 root 644 " "$LOG" || fail "the data or the self-signed certificate has the wrong owner or mode" "tp-m11-own"
+grep -aqF "tp-m11-var=/home/.tars/var/postgres /home/.tars/var/mysql /home/.tars/var/redis " "$LOG" || fail "/var/lib does not link to /home/.tars/var" "tp-m11-var"
+echo "B2: as tars, the five answered as uid 1000 ($(ms_of m11up)ms, first start included), and postgres, mysql and redis each took a row or key under /home/.tars/var"
+# 사람의 조각(/config/nginx.d)과 신뢰. 조각은 8082와, 위 mkcert 덩이의 인증서로 8443 https. CA를 넣기 전 curl은 그 https를 못 믿어야 한다(60).
+# 사람은 mkcert -install을 자기로 치고 mkcert가 sudo를 부른다 — 체인은 비밀번호를 못 치므로 root가 같은 CAROOT로 친다(같은 결과).
+as_root 'printf "%s\n" "server { listen 127.0.0.1:8082; return 200 tp-m11-frag; }" "server { listen 127.0.0.1:8443 ssl; ssl_certificate /home/tars/tp/m10/tls/localhost+1.pem; ssl_certificate_key /home/tars/tp/m10/tls/localhost+1-key.pem; return 200 tp-m11-tls; }" > /config/nginx.d/tp.conf; tars-service restart nginx 2>&1 | sed "s/^/tp-m11-ngre: /"; for i in $(seq 40); do curl -sk https://localhost:8443 >/dev/null && break; sleep 0.25; done; curl -s https://localhost:8443 >/dev/null 2>&1; echo "tp-m11-before=$?"; env CAROOT=/home/tars/.local/share/mkcert mkcert -install 2>&1 | sed "s/^/tp-m11-mk: /"; ls /usr/local/share/ca-certificates | sed "s/^/tp-m11-ca: /"; update-ca-certificates 2>&1 | sed "s/^/tp-m11-uca: /"; curl -s 127.0.0.1:8082 | sed "s/^/tp-m11-frag=/"; echo; curl -s https://localhost:8443 | sed "s/^/tp-m11-https=/"; echo; printf "tp-m11-%s\n" c-done'
+wait_log "tp-m11-c-done" 120 || fail "the nginx piece and the CA did not finish in 120s" "tp-m11-"
+grep -aqE "tp-m11-ngre: service nginx +running +pid [0-9]+" "$LOG" || fail "tars-service restart nginx did not bring it back" "tp-m11-ngre"
+grep -aqF "tp-m11-frag=tp-m11-frag" "$LOG" || fail "nginx did not read the piece in /config/nginx.d" "tp-m11-frag" "nginx"
+grep -aqF "tp-m11-before=60" "$LOG" || fail "curl trusted the mkcert certificate before the CA was added (want 60)" "tp-m11-before"
+# mkcert는 부른 명령의 출력을 삼킨다(성공이면 안 보인다). 그래서 mkcert 뒤에 한 번 더 손으로 — /etc의 묶음을 고치는 것은 이 명령뿐이라,
+# 아래 https가 믿기면 mkcert가 이것을 불렀다는 뜻이다. 이 줄은 명령이 TARS의 것(원본 + .crt 하나)인지를 본다.
+grep -aqF "tp-m11-uca: update-ca-certificates: 1 added from /usr/local/share/ca-certificates to /etc/ssl/certs/ca-certificates.crt" "$LOG" \
+  || fail "update-ca-certificates is not TARS's, or it did not count the one mkcert CA" "tp-m11-uca" "tp-m11-mk"
+grep -aqE "tp-m11-ca: mkcert_development_CA_[0-9]+\.crt" "$LOG" || fail "mkcert did not put its CA in /usr/local/share/ca-certificates" "tp-m11-ca" "tp-m11-mk"
+grep -aqF "tp-m11-https=tp-m11-tls" "$LOG" || fail "curl did not trust https after mkcert -install" "tp-m11-https" "tp-m11-mk"
+echo "B2: a piece in /config/nginx.d served 8082 and 8443 (https), curl refused that https until mkcert -install put its CA where update-ca-certificates reads"
+
 # 화면 셸(plan 결정 H): terminal과 사용자 셸이 읽기 전용 /usr 위에서 뜨고, /usr/local/bin의 java가 이름으로 선다.
 CONNECTED=0
 for _ in $(seq 1 20); do
@@ -640,6 +687,7 @@ send "grep MemAvailable /proc/meminfo | sed 's/^/tp-mem /'"
 wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
+M11_UP_MS="$(ms_of m11up)"
 NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
@@ -666,6 +714,34 @@ as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
 echo "B3: a broken lang-jvm is named and skipped; base, docs, editor, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
+# TP-M11: 부팅 2가 켠 다섯이 저절로 뜨고, 부팅 2의 데이터 · 조각 · CA 신뢰가 남아 있다. 부팅 2는 QEMU를 죽여 끝났다(그 앞에 sync) —
+# 전원이 끊긴 것과 같다. postgres · mysql의 복구는 판정하지 않고 숫자로 적는다(plan 위험 2).
+grep -aqF "tars-init: trust: /usr/bin/update-ca-certificates added the certificates in /usr/local/share/ca-certificates" "$LOG" \
+  || fail "init did not run update-ca-certificates for the CA in /usr/local" "tars-init: trust" "update-ca-certificates"
+for s in postgres mysql redis nginx caddy; do
+  grep -aqE "tars-init: started service ${s} \(pid [0-9]+" "$LOG" || fail "init did not start service ${s} at boot" "tars-init: started" "service ${s}"
+done
+grep -aqF "tars-init: giving up on service" "$LOG" && fail "init gave up on a service" "tars-init: giving up"
+as_tars 'export PGHOST=/tmp; s=$(date +%s%N); for i in $(seq 480); do pg_isready -q && mysqladmin -uroot ping >/dev/null 2>&1 && redis-cli ping >/dev/null 2>&1 && curl -sf 127.0.0.1:8082 >/dev/null && break; sleep 0.5; done; e=$(date +%s%N); echo "tp-ms-m11b3up=$(((e-s)/1000000))"; psql -d postgres -Atc "select x from tp11" | sed "s/^/tp-m11-b3-pg=/"; mysql -uroot -N -e "select x from tp11.t" | sed "s/^/tp-m11-b3-my=/"; redis-cli get tp11 | sed "s/^/tp-m11-b3-rd=/"; curl -s 127.0.0.1:8082 | sed "s/^/tp-m11-b3-frag=/"; echo; curl -s https://localhost:8443 | sed "s/^/tp-m11-b3-https=/"; echo; grep MemAvailable /proc/meminfo | sed "s/^/tp-m11-mem /"; printf "tp-m11-%s\n" b3-done'
+wait_log "tp-m11-b3-done" 300 || fail "the five services did not answer after the reboot in 300s" "tp-m11-b3" "tp-ms-m11b3up"
+grep -aqF "tp-m11-b3-pg=42" "$LOG" || fail "postgres lost the row after the reboot" "tp-m11-b3-pg" "postgres"
+grep -aqF "tp-m11-b3-my=42" "$LOG" || fail "mysql lost the row after the reboot" "tp-m11-b3-my" "mysqld"
+grep -aqF "tp-m11-b3-rd=42" "$LOG" || fail "redis lost the key after the reboot" "tp-m11-b3-rd" "redis"
+grep -aqF "tp-m11-b3-frag=tp-m11-frag" "$LOG" || fail "the piece in /config/nginx.d did not survive the reboot" "tp-m11-b3-frag"
+grep -aqF "tp-m11-b3-https=tp-m11-tls" "$LOG" || fail "the CA added by mkcert -install is not trusted after the reboot" "tp-m11-b3-https" "tars-init: trust"
+M11_MEM="$(last_num 'tp-m11-mem MemAvailable: +[0-9]+')"
+PG_RECOVERY=no; grep -aqF "database system was not properly shut down; automatic recovery in progress" "$LOG" && PG_RECOVERY=yes
+MY_RECOVERY=no; grep -aqE "\[InnoDB\] (Starting crash recovery|Database was not shutdown normally)" "$LOG" && MY_RECOVERY=yes
+echo "B3: the five came back on their own ($(ms_of m11b3up)ms), postgres, mysql and redis kept boot 2's data, the nginx piece and the CA trust survived (crash recovery: postgres ${PG_RECOVERY}, mysql ${MY_RECOVERY}, MemAvailable ${M11_MEM:-?} kB)"
+as_root 'tars-service disable redis 2>&1 | sed "s/^/tp-m11-dis: /"; ls /config/services.d | tr "\n" " " | sed "s/^/tp-m11-links3=/"; echo; redis-cli ping >/dev/null 2>&1; echo "tp-m11-rdping=$?"; printf "tp-m11-%s\n" dis-done'
+wait_log "tp-m11-dis-done" 60 || fail "tars-service disable redis did not finish" "tp-m11-dis"
+grep -aqF "tp-m11-dis: redis: disabled, removed /config/services.d/redis" "$LOG" || fail "disable redis did not remove the link" "tp-m11-dis"
+grep -aqF "tp-m11-dis: service redis: stops" "$LOG" || fail "reload did not stop redis" "tp-m11-dis"
+grep -aqE "tp-m11-dis: service redis +stopped" "$LOG" || fail "disable redis did not wait for stopped" "tp-m11-dis"
+grep -aqF "tp-m11-links3=caddy mysql nginx postgres " "$LOG" || fail "the other four links are not as they were" "tp-m11-links3"
+grep -aqF "tp-m11-rdping=1" "$LOG" || fail "redis still answers after disable" "tp-m11-rdping"
+echo "B3: tars-service disable redis removed the link, init stopped it and the other four stay"
+M11_NUMBERS="services up ${M11_UP_MS}ms, after the reboot $(ms_of m11b3up)ms, MemAvailable with five ${M11_MEM:-?} kB, recovery pg ${PG_RECOVERY} my ${MY_RECOVERY}"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -681,7 +757,7 @@ grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.
 echo "B4: the update planned the layers on p3, removed the ten old ones and put them back"
 stop_guest
 
-echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}"
+echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}, ${M11_NUMBERS}"
 echo "devtools: chain $(( $(date +%s) - CHAIN_T0 ))s after the build"
 echo "PASS"
 exit 0

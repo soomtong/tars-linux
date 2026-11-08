@@ -35,59 +35,74 @@ curl https://mise.run | sh && ~/.local/bin/mise use -g node@lts                 
 
 ## 서버
 
-서버는 내 계정으로, 데이터를 홈 아래에 두고 띄웁니다. 시스템 서비스로 등록돼 있지 않아서 부팅할 때 저절로 뜨지 않습니다.
-홈은 재부팅해도 남지만 `/etc`와 `/var`는 부팅할 때마다 새로 만들어집니다. 그래서 데이터와 내 설정은 홈에 둡니다.
+postgres · mysql · redis · nginx · caddy를 서비스로 켜면 부팅할 때마다 저절로 뜹니다. 기본은 모두 꺼져 있습니다.
 
 ```sh
-initdb -D ~/pg                         # postgres — 처음 한 번
-pg_ctl -D ~/pg -o "-k /tmp" -l ~/pg.log start
-psql postgres                          # 소켓은 /tmp(PGHOST)
-pg_ctl -D ~/pg stop
-
-mysqld --initialize-insecure --datadir=$HOME/mysql   # mysql — 처음 한 번(root 비밀번호 없음)
-mysqld --datadir=$HOME/mysql &
-mysql -uroot
-mysqladmin -uroot shutdown
-
-redis-server --dir ~ --daemonize yes   # redis
-redis-cli ping
-redis-cli shutdown
-
-caddy file-server --listen :8080       # caddy — 지금 디렉터리를 보입니다
+sudo tars-service enable postgres      # 켭니다 — 지금 뜨고, 다음 부팅에도 뜹니다
+sudo tars-service status postgres
+sudo tars-service disable postgres     # 끕니다 — 지금 멈추고, 다음 부팅에도 안 뜹니다
 ```
 
-nginx는 기본 설정이 시스템 계정과 `/var/log`를 가정합니다. 내 설정을 홈에 두고 `-p`로 띄웁니다. 설정 안의 상대 경로는
-`-p`로 준 자리(`~/nginx`)에서 찾습니다.
+| 서버 | 주소 | 처음 켤 때 |
+|---|---|---|
+| postgres | `/tmp` 소켓 · 127.0.0.1:5432 | 내 계정이 슈퍼유저입니다. 비밀번호 없이 붙습니다(`psql postgres`) |
+| mysql | `/tmp/mysql.sock` · 127.0.0.1:3306 | `mysql -uroot`, 비밀번호 없음 |
+| redis | 127.0.0.1:6379 | `redis-cli ping` |
+| nginx | http://127.0.0.1:8080 | 기본 페이지 |
+| caddy | http://127.0.0.1:8081 | 안내 한 줄 |
+
+- 서버는 내 계정으로 돕니다. 그래서 1024 아래 포트(80 · 443)는 열 수 없고, 모두 이 기계 안(127.0.0.1)에서만 들립니다.
+- 데이터는 `/home/.tars/var/<서버>`에 남습니다. `/var/lib/<서버>`는 그리로 가는 링크입니다(`/var`는 부팅마다 새로 만들어집니다).
+- 내 설정은 `/config/<서버>.d/`에 둡니다. 재부팅과 갱신을 넘어 남고, 다시 띄우면 읽습니다.
 
 ```sh
-mkdir -p ~/nginx/logs ~/nginx/tmp ~/nginx/www
-vim ~/nginx/nginx.conf                  # 아래 내용으로
-nginx -p ~/nginx -e logs/error.log -c nginx.conf           # 띄우기
-nginx -p ~/nginx -e logs/error.log -c nginx.conf -s stop   # 끄기
+sudo vi /config/nginx.d/app.conf       # server { listen 127.0.0.1:8082; root /home/tars/www; }
+sudo tars-service restart nginx
 ```
 
-```nginx
-pid nginx.pid;
-error_log logs/error.log;
-events {}
-http {
-  access_log logs/access.log;
-  client_body_temp_path tmp; proxy_temp_path tmp; fastcgi_temp_path tmp; uwsgi_temp_path tmp; scgi_temp_path tmp;
-  server { listen 8080; root www; }
-}
-```
+| 서버 | 조각 자리 | 모양 |
+|---|---|---|
+| postgres | `/config/postgres.d/*.conf` | `postgresql.conf`의 줄 |
+| mysql | `/config/mysql.d/*.cnf` | `[mysqld]` 절 |
+| redis | `/config/redis.d/*.conf` | `redis.conf`의 줄 |
+| nginx | `/config/nginx.d/*.conf` | `server { … }` 블록(http 안에 읽힙니다) |
+| caddy | `/config/caddy.d/*.caddy` | 사이트 블록 |
 
-1024 아래 포트(80 · 443)는 root만 열 수 있으니 8080 같은 포트를 씁니다.
+서버의 출력은 init의 콘솔로 가고 파일로는 남지 않습니다. 남기려면 조각에 씁니다. 예를 들어 postgres는
+`logging_collector = on`이면 데이터 안의 `log/`에, nginx는 `access_log /home/.tars/var/nginx/access.log;`로 남습니다.
+
+서비스로 켜지 않고 홈에서 직접 띄워도 됩니다. 데이터를 홈 아래에 둡니다.
+
+```sh
+initdb -D ~/pg && pg_ctl -D ~/pg -o "-k /tmp" -l ~/pg.log start     # postgres
+mysqld --initialize-insecure --datadir=$HOME/mysql && mysqld --datadir=$HOME/mysql &
+redis-server --dir ~ --daemonize yes
+caddy file-server --listen :8000       # 지금 디렉터리를 보입니다
+```
 
 https로 개발하려면 mkcert로 이 기계만의 인증서를 만듭니다. CA는 홈(`~/.local/share/mkcert`)에 남습니다.
 
 ```sh
 mkcert localhost 127.0.0.1             # localhost+1.pem · localhost+1-key.pem
-curl --cacert "$(mkcert -CAROOT)/rootCA.pem" https://localhost:8443
+mkcert -install                        # 이 기계가 그 CA를 믿게 합니다(sudo 비밀번호를 묻습니다)
+curl https://localhost:8443            # 이제 --cacert 없이 믿습니다
 ```
 
-`mkcert -install`(시스템이 그 CA를 믿게 하기)은 TARS에서 아직 되지 않습니다. 위처럼 CA 파일을 직접 줍니다
-(node는 `NODE_EXTRA_CA_CERTS`로 더할 수 있습니다).
+`mkcert -install`은 CA를 `/usr/local/share/ca-certificates/`에 두고 `update-ca-certificates`를 부릅니다. 그 자리는 재부팅에도
+남고, 부팅할 때 다시 읽힙니다. 믿지 않게 하려면 `mkcert -uninstall`입니다. node는 시스템 목록을 안 읽으니
+`NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"`으로 더합니다.
+
+서버를 처음 켤 때 이 기계만의 자체 서명 인증서도 하나 만듭니다(`/config/ssl/tars-selfsigned/cert.pem` · `key.pem`, localhost와
+127.0.0.1). 믿을 필요 없이 https를 켜 보는 데 씁니다.
+
+```nginx
+server {
+  listen 127.0.0.1:8443 ssl;
+  ssl_certificate     /config/ssl/tars-selfsigned/cert.pem;
+  ssl_certificate_key /config/ssl/tars-selfsigned/key.pem;
+  root /usr/share/nginx/html;
+}
+```
 
 ## 문서
 

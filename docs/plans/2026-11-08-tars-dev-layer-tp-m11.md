@@ -142,5 +142,20 @@ G. design: 결정 16(서비스는 다음 milestone)을 닫는 글자, 기억 `pr
    `mountLocal` 바로 뒤, `.crt`가 없으면 fork도 안 한다. 시한 5초(넘으면 SIGKILL · 한 줄). 판정 `hasCrt`는 `trust_test.zig`(호스트), 빨강:
    한 단계 아래를 안 보면(`DEPTH_MAX = 0`) FAIL. 시한을 넘는 길은 검사가 없다 — 체인 빨강 (b)는 "부르지 않으면"을 본다.
    initrd에 CA 묶음이 한 벌 더 든다(압축 전 약 220KB).
+10. 사용자 위임(2026-11-08, "잠시 외출하니까 모든 결정을 너에게 위임한다. 설명만 잘 남겨줘") — 할 일 4부터 Claude가 정했다. 정한 것은 이 절과 결과 절에.
+11. 할 일 4 체인 첫 판 FAIL — 체인의 실수: 끝 표시를 `echo tp-m11-en-done`으로 썼더니 콘솔이 보낸 명령 줄을 로그에 되찍어 보내자마자 맞았다(redis
+    enable이 끝나기 전에 판정). 기존 덩이의 관례(`printf 'tp-%s\n' broke-done`)대로 쪼갰다 — 끝 표시 다섯과 `tp-m11-myw=ok`. 서비스 쪽은 정상이었다.
+12. 둘째 판 FAIL — 판정의 실수: mkcert는 부른 `update-ca-certificates`의 출력을 삼킨다(성공이면 아무것도 안 보인다). 기능은 섰다 — CA 전 curl 60,
+    `mkcert -install` "installed in the system trust store", `.crt` 하나, CA 뒤 https 믿음. 그 줄은 mkcert 뒤에 root가 한 번 더 손으로 불러 본다.
+    둘째 판에서 본 숫자: enable 다섯 뒤 다섯이 답하기까지 25,975ms(mysql 첫 초기화 포함).
+13. 빨강 (a)는 체인 대신 컨테이너에서 봤다: 템플릿의 `tars_confdir`를 빼고 `/config/mysql.d`가 없으면 mysqld가 세 번 모두
+    `Fatal error in defaults handling`으로 rc 1 — SV가 "빠르게 셋이면 포기"로 받는 자리다(그 감독 규칙은 service 체인이 본다).
+    체인 한 바퀴(약 30분)를 템플릿의 한 줄에 들이지 않았다.
+14. 셋째 판 FAIL — 진짜 버그: `tars-service disable`이 stopped를 8초 동안 못 봤다. init은 reload로 끈 칸(`config_off`)을 status에서 숨긴다
+    (reload design 결정 5, "설정이 끈 칸은 없는 것처럼") — disable 뒤 `status redis`는 `no service named redis`다. 서비스는 멈췄다
+    (`stopped on request`, ping 실패, 링크 넷). init은 그대로 두고 명령을 고쳤다: reload 전에 status로 pid를 알고, reload 뒤 그 pid가 거둬질
+    때까지(`kill(pid, 0)`이 ESRCH — 좀비는 0이라 init이 거둔 뒤다) 기다린 뒤 `service redis  stopped`를 스스로 찍는다.
+    같은 판에서 선 것: 부팅 3에서 다섯이 저절로 뜨고(351ms에 모두 답), 42 셋 · nginx 조각 · CA 신뢰가 남았다. 부팅 2의 끝이 QEMU 죽이기(전원 끊김)라
+    postgres는 복구를 돌았고(`automatic recovery in progress`) mysql은 안 돌았다. 다섯이 뜬 MemAvailable 1,225,932 kB(2GiB 게스트).
 
 ## 결과

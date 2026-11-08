@@ -47,7 +47,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 편집기 | mitos `ms`(주 편집기), neovim, emacs(`emacs-nox` — Doom Emacs는 사용자가 망이 있을 때 깐다), ttt(eugenioenko/ttt, 터미널 IDE — 사용자 확인)(`editor` 묶음, TP-M7) |
 | 문서 | `dasht` + `w3m` + Bash docset, 나머지 docset은 `tars-docs get`으로 망에서(`docs` 묶음, TP-M9 — 결정 19) |
 | 터미널 유틸리티 | 아래 "터미널 유틸리티" 표(사용자가 Homebrew 이름으로 준 것 — `util` 묶음과 `media` 묶음, TP-M8) |
-| 서버 | postgresql 18, mysql 9.7(LTS), nginx 1.30(stable), redis 8.10, caddy(`server` 묶음, TP-M10 — 실행 파일까지, 사용자가 홈에서 띄운다. 서비스 · 재부팅을 넘는 데이터는 서버(서비스) milestone) |
+| 서버 | postgresql 18, mysql 9.7(LTS), nginx 1.30(stable), redis 8.10, caddy(`server` 묶음, TP-M10 — 실행 파일까지. TP-M11 — `tars-service enable <서버>`로 서비스, 데이터는 `/home/.tars/var`, 설정 조각은 `/config/<서버>.d`) |
 | AI | claude code, codex, opencode v2, oh-my-pi(`omp`) |
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정). mg(사용자가 물었다 — emacs-nox를 싣는다, 2026-11-06). Doom Emacs의 시드(straight.el이 홈 경로로의 절대 링크 3,957개를 만들어 다른 홈으로 옮기면 안 선다 — TP-M7 plan 확인 4, 사용자 결정).
@@ -179,6 +179,10 @@ trixie 판이 돈다.
     한 번 돌아가는지를 그 milestone의 판정으로 삼는다.
 16. 서버는 실행 파일까지가 개발 도구 층의 몫이다. 데이터는 `/home` 아래(`/usr`는 읽기 전용, `/var`는 RAM). 서비스로 띄우기(`tars-service`
     연결, `initdb` 등)는 서버 묶음 다음의 milestone이다.
+    TP-M11(plan `docs/plans/2026-11-08-tars-dev-layer-tp-m11.md`)이 세웠다: server 묶음의 `etc/tars/services/<서버>` 템플릿 다섯
+    (sshd와 같은 모양 — root로 자리를 만들고 uid 1000으로 `exec`, 서비스 계정 없음), 켜고 끄기는 `tars-service enable|disable`(services.d 링크 +
+    reload), 데이터 `/var/lib/<서버>` → `/home/.tars/var/<서버>`, 사람의 설정 `/config/<서버>.d/`, 로그는 stdout. init을 고친 곳은 시스템 신뢰
+    하나(`/usr/local/share/ca-certificates/*.crt`가 있으면 부팅 때 `update-ca-certificates` 한 번 — `mkcert -install`이 재부팅을 넘는다).
 17. AI 도구는 클라우드 모델을 부르므로 망이 있을 때만 동작한다. 오프라인 목표에 들지 않지만 목록대로 싣는다.
 18. 최소 디스크는 16GiB + 2MiB다(`disk.MIN_DISK_BYTES`, HP design 결정 2의 4GiB를 사용자가 올렸다 — "요즘 작은 임베디드 장비도 8GB
     이상"). 개발 도구 층의 묶음이 p3에 놓일 자리다. 이 결정만 TP-M0보다 먼저 들어갔다(설치기 · 단위 검사 · 체인 install · home · pm · mise ·

@@ -13,6 +13,18 @@ sudo tars-service start sshd
 
 `stop`은 이번 부팅까지만입니다. 다음 부팅에는 다시 뜹니다.
 
+## 준비된 서비스 켜기
+
+TARS에 들어 있는 서비스는 이름 하나로 켜고 끕니다. 켠 것은 부팅할 때마다 뜹니다.
+
+```sh
+sudo tars-service enable redis         # 켭니다(지금 띄웁니다)
+sudo tars-service disable redis        # 끕니다(지금 멈춥니다)
+sudo tars-service enable nope          # 없는 이름이면 켤 수 있는 이름을 보입니다
+```
+
+켤 수 있는 것은 sshd와 서버 다섯(postgres · mysql · redis · nginx · caddy)입니다. 서버는 `tars-help devtools`의 "서버"를 봅니다.
+
 ## 내 서비스 두기
 
 `/config/services.d/`에 실행 파일을 두면 부팅 때 뜨고, 죽으면 다시 뜹니다.

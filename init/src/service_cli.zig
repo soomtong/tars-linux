@@ -247,20 +247,45 @@ fn enableDisable(verb: link.Verb, name: []const u8, argv: []const [*:0]const u8)
         },
     }
 
-    // reload의 답은 그대로 찍는다 — tars.conf에 미뤄 둔 변경도 함께 들어간다(같은 동사다).
+    var label_buf: [64]u8 = undefined;
+    const label = std.fmt.bufPrint(&label_buf, services.LABEL_PREFIX ++ "{s}", .{name}) catch return usage();
     var buf: [control.REPLY_MAX]u8 = undefined;
+    // 끄기는 지금의 pid를 먼저 안다. reload가 끈 칸은 status에서 사라진다(reload design 결정 5) — 그래서 stopped를 물을 수 없고,
+    // 그 pid가 거둬질 때까지를 본다(TP-M11 체인 셋째 판).
+    const old_pid: linux.pid_t = if (verb == .disable)
+        (if (look(name, label, &buf)) |seen| seen.pid else -1)
+    else
+        -1;
+
+    // reload의 답은 그대로 찍는다 — tars.conf에 미뤄 둔 변경도 함께 들어간다(같은 동사다).
     const asked = ask("reload", &buf, RELOAD_WAIT_MS);
     if (unreached(asked, argv)) |rc| return rc;
     const text = asked.reply;
     writeAll(1, text);
     if (std.mem.startsWith(u8, text, control.ERROR_PREFIX)) return EXIT_REFUSED;
 
-    var label_buf: [64]u8 = undefined;
-    const label = std.fmt.bufPrint(&label_buf, services.LABEL_PREFIX ++ "{s}", .{name}) catch return EXIT_OK;
     return switch (link.said(text, label) orelse return EXIT_OK) {
         .starts => settle(.start, name, label, -1),
-        .stops => settle(.stop, name, label, -1),
+        .stops => gone(label, old_pid),
     };
+}
+
+/// reload가 끈 서비스가 거둬질 때까지. pid가 없었으면(이미 죽어 있었다) 기다릴 것이 없다. `kill(pid, 0)`은 좀비에도 0이라
+/// ESRCH는 init이 거둔 뒤다. 그 사이에 pid가 다른 프로세스에 다시 쓰일 수는 있지만 8초 안의 일이 아니다.
+fn gone(label: []const u8, pid: linux.pid_t) u8 {
+    var waited: u64 = 0;
+    while (pid > 0 and waited <= SETTLE_MS) : (waited += SETTLE_STEP_MS) {
+        if (linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))) == .SRCH) break;
+        sleepMs(SETTLE_STEP_MS);
+    } else if (pid > 0) {
+        complain("{s} did not stop in {d}s", .{ label, SETTLE_MS / 1000 });
+        return EXIT_TIMEOUT;
+    }
+    var line: [control.REPLY_MAX]u8 = undefined;
+    var out = control.Out{ .buf = &line };
+    control.row(&out, label, .stopped, -1, 0);
+    writeAll(1, out.bytes());
+    return EXIT_OK;
 }
 
 pub fn main(init: std.process.Init.Minimal) u8 {
