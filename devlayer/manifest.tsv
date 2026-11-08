@@ -39,7 +39,7 @@ gdb	base	16.3-1	debian	gdb	apt
 strace	base	6.13+ds-1	debian	strace	apt
 ltrace	base	0.7.91~git20230705.8eabf68-4+b1	debian	ltrace	apt
 valgrind	base	1:3.24.0-3	debian	valgrind	apt
-xxd	base	2:9.1.1230-2+deb13u1	debian	xxd	apt
+xxd	base	2:9.1.1230-2+deb13u2	debian	xxd	apt
 gnupg	base	2.4.7-21+deb13u1	debian	gnupg	apt
 # configure가 부르는 기본 명령(plan 확인한 것 — initrd는 coreutils의 일부만 싣는다, expr이 없어 ./configure가 돌지 않았다).
 # coreutils · hostname은 slim에 이미 있어 의존 폐포 단계가 싣고, initrd와 같은 파일은 verify가 뺀다. grep은 판이 initrd와 달라 넣지 않는다.

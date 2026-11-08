@@ -300,6 +300,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 돈다. 런타임이 없어서 생기는 문제(E1187)와 그것을 막는 stub defaults.vim은
 # kernel/make_initrd.sh의 CU-M1 주석이 설명한다.
 #
+# ── TP-M12: 층 13에 clear · tput · reset(ncurses-bin) ─────────────────
+#
+# 사용자(2026-11-08): 화면 셸에 clear가 없었다. initrd 기준 C(셸의 일상 기본)다. 셋 다 libtinfo.so.6 ·
+# libc.so.6만 부르고 둘 다 이미 initrd에 있다(fish가 데려왔다). /usr/bin/reset은 tset으로 가는
+# 링크라 guest_tools.sh가 tset을 reset 이름으로 싣는다 — tset은 argv[0]이 reset이면 reset으로 돈다.
+# tic · infocmp · toe · tabs는 sysroot에만 풀린다(terminfo를 만드는 도구 — 일상 기본이 아니다).
+#
 # ── GE-M0: 층 13(which) ───────────────────────────────────────────────
 #
 # debianutils는 which를 /usr/bin/which.debianutils라는 1,080바이트짜리 #! /bin/sh
@@ -404,6 +411,7 @@ RUN dpkg --add-architecture amd64 \
         zsh-common \
         ncurses-base \
         libtinfo6:amd64 \
+        ncurses-bin:amd64 \
         libcap2:amd64 \
         coreutils:amd64 \
         debianutils:amd64 \

@@ -72,6 +72,14 @@ snapshot() {
 if [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
   sed -i '\#^path-exclude /usr/share/man/\*$#d' /etc/dpkg/dpkg.cfg.d/docker
 fi
+
+# slim에 이미 깔린 패키지를 먼저 최신 판으로 올린다(TP-M12). apt-get install은 깔린 의존을 올리지 않는데, 아래 의존 폐포 단계가
+# 그 옛 파일을 싣는다 — slim 스냅숏의 zlib1g -1+b1이 initrd(개발 컨테이너가 trixie-security에서 받은 +deb13u1)의 libz와 같은
+# 경로 · 다른 내용이 되어 verify의 결정 4로 멈췄다. upgrade는 새 패키지를 들이지 않으므로 "설치 전" 기준을 흐리지 않는다.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get upgrade -y -qq >/dev/null
+
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.before"
 snapshot >"$work/before"
 
@@ -84,8 +92,7 @@ for r in $repos; do
   echo "deb [signed-by=$PWD/devlayer/keys/$r.asc] $aptline" >"/etc/apt/sources.list.d/tars-$r.list"
 done
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+apt-get update -qq # vendor-repo 목록을 붙인 뒤라 다시
 apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >"$work/apt.log"
 
 dpkg-query -W -f '${Package}\t${Version}\t${Architecture}\n' | LC_ALL=C sort >"$work/pkgs.after"

@@ -352,6 +352,12 @@ GUEST_TOOLS=(
   # tools/check.sh 검사 22가 fish에서 친다.
   usr/bin/which.debianutils:usr/bin/which
 
+  # TP-M12(사용자 2026-11-08 — 화면 셸에 clear가 없었다): ncurses-bin의 셋. 라이브러리는 libtinfo · libc뿐이다(이미 있다).
+  # reset은 Debian에서 tset으로 가는 링크다 — tset을 reset 이름으로 싣는다(argv[0]이 reset이면 reset으로 돈다).
+  usr/bin/clear:usr/bin/clear
+  usr/bin/tput:usr/bin/tput
+  usr/bin/tset:usr/bin/reset
+
   # ── 층 14 · 소리(AU-M0) ────────────────────────────────────────────────
   # 사용자가 2026-10-05에 요청했다("오디오(마이크/이어폰/스피커) 기기 활성화").
   # 커널의 ALSA가 /dev/snd에 내놓은 장치를 사람이 이름으로 부르는 넷이다.
