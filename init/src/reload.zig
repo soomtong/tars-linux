@@ -27,7 +27,7 @@ pub const Group = enum {
     boot,
 };
 
-/// 열아홉 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
+/// 스무 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
 /// `groupOf`가 컴파일 에러를 낸다.
 pub fn groupOf(comptime key: []const u8) Group {
     const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth" };
@@ -37,6 +37,8 @@ pub fn groupOf(comptime key: []const u8) Group {
         "clipboard",     "mouse_scroll",  "touchpad_scroll", "mouse_accel",   "touchpad_accel",
         // HS-M0. terminal이 다시 뜨며 화면을 다시 연다 — 배율은 그때 정해진다.
         "display_scale",
+        // FU-M0. 전체 화면의 시작 상태 — 다시 뜬 terminal이 읽는다.
+        "fullscreen",
     };
     if (comptime std.mem.eql(u8, key, "user")) return .boot;
     inline for (now) |k| if (comptime std.mem.eql(u8, k, key)) return .now;

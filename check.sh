@@ -522,6 +522,11 @@ run_chain() {
 # (-nic none) 돌린다. 갱신과 깨진 묶음 하나도 본다. 묶음은 make gate가 먼저 부르는 make dev-layers가 굽는다 — 이
 # 체인은 devlayer/build.sh로 새 initrd와 다시 대조만 한다. monitor 45504(부팅 2의 화면). 회차당 부팅 4회.
 #
+# FU 체인은 전체 화면을 본다. 설정 디스크의 fullscreen=on으로 띄워 첫 프레임부터 격자가 160 × 50(1280 × 800, 여백 0)이고
+# 상태 줄이 없고 프롬프트가 (0, 0)부터 찍히며 셸의 $LINES $COLUMNS가 50 160인지, 여백으로 시작한 부팅에서 Cmd+Ctrl+F가
+# 같은 셸을 두고 47 × 155 ↔ 50 × 160을 오가는지, tars-config set · reload terminal이 그 값을 싣는지 본다. monitor 45505.
+# 회차당 부팅 2회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -556,6 +561,7 @@ CHAINS=(
   "DB-M0:./dualboot/check.sh"
   "LP-M1:./sleep/check.sh"
   "TP-M1:./devtools/check.sh"
+  "FU-M0:./fullscreen/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -646,7 +652,7 @@ require_cut_lines_found() {
   dir="$(mktemp -d)"
   printf 'terminal: pointer> at x=1279 y=799 buttons=0 wheel=0 shown=1 ink=tars-init: audio: no sound card within 5000ms, the mixer is left alone\n' > "$dir/a"
   printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
-  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0 display_scale=auto\n' > "$dir/legit"
+  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0 display_scale=auto fullscreen=off\n' > "$dir/legit"
   printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'tars-init: config line without = ignored: xxxxxxxx [cut]\n' > "$dir/c"
   got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"

@@ -1,4 +1,4 @@
-# HANDOFF: TP · BB · MF 닫힘, 다음은 전체 화면 모드(FU) — 0.2.0은 그 뒤
+# HANDOFF: TP · BB · MF 닫힘, FU-M0 끝남 — 다음은 FU-M1(CSI 10 t · fakesteak), 0.2.0은 그 뒤
 
 ## 목표
 
@@ -16,14 +16,23 @@
 순서는 사용자가 정했다(2026-11-09): manifest 포맷 → 전체 화면 → 0.2.0.
 
 1. (끝남 — MF-M0, 아래 완료 절) manifest 포맷.
-2. 전체 화면 모드(사용자 2026-11-09, BB 데모를 맥북 에어 실기에서 본 뒤: "Full screen mode 필요하겠다"). 지금은 격자 둘레 여백 20px(`GRID_X` ·
-   `GRID_Y`, comptime 상수 — `terminal/src/main.zig`에서 24곳)과 맨 아래 상태 줄이 늘 있다. 정할 것: 켜는 길(`tars.conf` 키 · 단축키 · 둘 다),
-   감추는 것(여백 · 상태 줄 · 둘 다), 납품 묶음이 켜는 길. render 체인의 `pixel>` 좌표가 여백을 전제한다. 접두사 후보 FU(미사용).
+2. 전체 화면(FU, design `docs/specs/2026-11-09-tars-fullscreen-design.md` 2판). FU-M0 끝남(아래 완료 절). 다음은 FU-M1 —
+   패널 출력의 `CSI 10 ; Ps t`를 lib-vt 앞에서 훑는 `terminal/src/winops.zig`(lib-vt는 10을 버린다, design 확인 7), fakesteak 조각 둘이
+   실행 전 `\033[10;1t` · 끝난 뒤 `\033[10;0t`, QEMU probe(BB-M1의 방식). plan은 아직 없다.
    맥북 에어의 디스크는 지금 데모 판이다 — 개발 도구로 되돌리려면 `dev-20261109`로 갱신.
 3. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
    릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3).
 4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 5. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, FU-M0)
+
+- [x] 사용자가 정한 것: 감추는 것은 여백 + 상태 줄, 켜는 길은 `Cmd+Ctrl+F`(처음 `Cmd+Shift+F`라 했다가 고쳤다)와 `tars.conf`의 `fullscreen=on|off`,
+      납품 묶음은 `CSI 10;1 t`. design "confirmed".
+- [x] FU-M0: `terminal/src/geometry.zig`(격자 자리 셈 · 사각형 자르기, geometry_test), 파일 수준 `grid_origin`, `setFullscreen`(모든 워크스페이스
+      `applyLayout`, 통째 프레임), `fillRect` 자르기, 격자 버퍼 넷을 전체 화면 크기로, `screen_args` 14번 칸(ARGC 15), init 키 · 로그 · reload 갈래,
+      안내(desk.md · config.md), 체인 `fullscreen/check.sh`(FU-M0, monitor 45505). 단독 2회 PASS, 루트 게이트 32/32(33분 18초, 잘린 줄 0).
+      plan과 다른 일곱 자리는 plan 결과 절.
 
 ## 완료된 작업 (2026-11-09, MF-M0 — MF 닫힘)
 

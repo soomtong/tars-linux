@@ -803,6 +803,8 @@ pub const WheelDirection = screen_args.WheelDirection;
 pub const Accel = screen_args.Accel;
 /// 화면 배율(HS design 결정 3). 이름과 글자는 `screen_args`에 있다.
 pub const DisplayScale = screen_args.DisplayScale;
+/// 전체 화면의 시작 상태(FU design 결정 4). 이름과 글자는 `screen_args`에 있다.
+pub const Fullscreen = screen_args.Fullscreen;
 
 /// `Toggles.parse`에 주는 sink. 모르는 이름을 이 파일의 `log`로 찍는다 — 글자는 SA 전과
 /// 같다. 설정 파일은 사람이 손으로 고치는 물건이라 깨진 입력이 예외가 아니라 규칙이고,
@@ -878,6 +880,9 @@ pub const Config = struct {
     /// 화면 배율(HS design 결정 3). `auto`는 terminal이 물리 해상도로 고른다 — 1280×800 ·
     /// 1920×1080은 1이고 Retina 15"(2880×1800)는 2다. 숫자는 그 배율을 강제한다.
     display_scale: DisplayScale = .auto,
+    /// 전체 화면의 시작 상태(FU design 결정 4). 실행 중에는 `Cmd+Ctrl+F`가 바꾸고 그 상태는 여기로
+    /// 돌아오지 않는다 — 이 파일은 사람이 고치는 것이다.
+    fullscreen: Fullscreen = .off,
     /// 기본값이 없음(null)인 유일한 키다. 이 줄은 사람이 아니라 `tars-install`이 쓴다(HP
     /// design 결정 5) — 설치 때 물은 이름이다. 없으면 화면 셸은 root로 뜬다. 있어도
     /// `/home`이 안 붙은 부팅이면 root다(결정 3). `tars-config set`은 이 키를 거절한다
@@ -1138,6 +1143,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "fullscreen")) {
+            // display_scale과 같은 모양의 enum 키다(FU-M0).
+            c.fullscreen = std.meta.stringToEnum(Fullscreen, value) orelse {
+                log("unknown fullscreen '{s}', falling back to {s}", .{
+                    value, @tagName(c.fullscreen),
+                });
+                continue;
+            };
         } else if (std.mem.eql(u8, key, "user")) {
             // timezone과 같은 모양이다(HP-M1). 다른 키와 달리 떨어지는 자리가 기본값이
             // 아니라 "사용자 없음"이고, 그 뜻을 로그에 적는다 — 화면 셸이 root로 뜬다.
@@ -1248,6 +1261,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\#   auto = the largest whole scale that keeps the screen at least 1280x800
         \\#   (2 on a 2880x1800 Retina panel). Text is drawn small and enlarged
         \\display_scale={s}
+        \\# fullscreen: off | on
+        \\#   on = no margin and no status line; Cmd+Ctrl+F switches it while running
+        \\fullscreen={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1268,6 +1284,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         c.mouse_accel.arg(),
         c.touchpad_accel.arg(),
         @tagName(c.display_scale),
+        @tagName(c.fullscreen),
     }) catch return error.FormatFailed;
     // `user`는 있을 때만 적는다(HP-M1 plan Task 1). 없는 기계(ISO 부팅의 seed)의 파일은
     // 이 키가 생기기 전과 바이트 하나 다르지 않다 — 그 파일을 판정하는 체인들이 그대로다.

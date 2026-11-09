@@ -6,6 +6,7 @@ const clipboard = @import("clipboard.zig");
 const pacing = @import("pacing.zig");
 const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
+const geometry = @import("geometry.zig");
 const font = @import("font.zig");
 const hangul = @import("hangul.zig");
 const image = @import("image.zig");
@@ -40,11 +41,15 @@ extern "c" fn socket(domain: c_uint, sock_type: c_uint, protocol: c_uint) c_int;
 // 화면 여백을 칠할 색. 셀의 배경색은 이제 상수가 아니라 vt.zig가 셀마다
 // 확정해서 넘긴다(design 결정 1·5) — 이 상수는 격자 바깥에만 쓴다.
 const MARGIN_COLOR: u32 = 0x00102030;
-const GRID_X: u32 = 20;
-const GRID_Y: u32 = 20;
-const CELL_W: u32 = 8; // unifont의 라틴 advance. 폰트가 준 값과 같아야
+/// 지금 격자의 왼쪽 위 픽셀(FU-M0). `touchpad_screen`과 같은 이유로 파일 하나의 값이다 — 쓰는
+/// 자리(그리기 · 덤프 · 포인터의 셀 찾기)가 대부분 사각형만 받는 자유 함수라 인자로 나르지 않는다.
+/// 바꾸는 것은 `openScreen` · `setFullscreen` 둘뿐이고 terminal에는 스레드가 없다.
+/// 처음 값은 여백이 있는 자리 — `openScreen`이 `geometry.grid`로 정한다.
+var grid_origin: Origin = .{ .x = geometry.MARGIN, .y = geometry.MARGIN };
+/// 셀 크기는 `geometry.zig`의 것이다(FU-M0) — 격자 셈과 그리기가 한 벌의 값을 본다.
+const CELL_W: u32 = geometry.CELL_W; // unifont의 라틴 advance. 폰트가 준 값과 같아야
 // 한다 — font.zig의 Glyph.cell_width가 그 값이다.
-const ROW_HEIGHT: u32 = 16;
+const ROW_HEIGHT: u32 = geometry.ROW_HEIGHT;
 
 /// 상태 줄 앞 세 칸의 글자 색(IS design 결정 7). 여백(`MARGIN_COLOR`) 위에서
 /// 읽히되 눈을 안 끄는 회색이다 — 이것은 터미널의 내용이 아니라 창틀이다.
@@ -259,7 +264,7 @@ fn drawPrompt(
 /// 터미널 줄을 한 줄도 안 뺏는다.
 ///
 /// ```
-/// 격자 아래 끝 = GRID_Y + rows * ROW_HEIGHT = 20 + 47*16 = 772
+/// 격자 아래 끝 = grid_origin.y + rows * ROW_HEIGHT = 20 + 47*16 = 772
 /// 아래 여백    = fb.height - 772            = 28
 /// 글자 줄의 y  = 772 + (28 - 16) / 2        = 778
 /// ```
@@ -285,7 +290,7 @@ fn drawStatus(
     cache: *font.Cache,
     st: Status,
 ) !void {
-    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
     if (fb.height < grid_bottom + ROW_HEIGHT) return;
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
 
@@ -341,7 +346,7 @@ fn drawStatus(
     col = try drawRun(fb, cache, st.text[dict_at..], y, STATUS_DICT, col, fb.width);
 
     // 배터리 칸(BS-M1, design 결정 6). 왼쪽 문자열과 따로 오른쪽 끝에 그린다 — 넉 자의
-    // 오른쪽 끝이 격자의 오른쪽 끝(`GRID_X + cols * CELL_W`)과 같다. 1280 × 800이면 격자가
+    // 오른쪽 끝이 격자의 오른쪽 끝(`grid_origin.x + cols * CELL_W`)과 같다. 1280 × 800이면 격자가
     // 155칸이라 칸은 151 ~ 154번, x는 1228 ~ 1259다.
     //
     // 왼쪽 문자열의 끝 col에서 `STATUS_BAT_GAP`만큼 안 떨어져 있으면 안 그린다. 지금 가장
@@ -390,8 +395,8 @@ fn drawRun(
         // 줄이라 격자 오른쪽 끝이 경계다 — 여백으로 삐져나오면 검색어가
         // 터미널 밖에 그려진다. needle은 128바이트까지 자라는데 격자는
         // 100칸 남짓이라 실제로 닿는 경계다.
-        if (GRID_X + col * CELL_W + glyph.cell_width > max_x) break;
-        drawGlyph(fb, glyph, GRID_X + col * CELL_W, y, fg);
+        if (grid_origin.x + col * CELL_W + glyph.cell_width > max_x) break;
+        drawGlyph(fb, glyph, grid_origin.x + col * CELL_W, y, fg);
         // `@max`로 0을 막는다. 폭 0인 글리프가 오면 col이 안 늘어 다음
         // 글자가 같은 자리에 겹쳐 그려지고, 증상이 "글자 하나가 뭉갠 것처럼
         // 보인다"라 원인에서 멀다.
@@ -526,7 +531,7 @@ fn stripColor(rect: layout.Rect, whole: layout.Rect) u32 {
 ///
 /// 오른쪽 한 칸을 되돌리는 이유: 마지막 열의 preedit(폭 2)은 오른쪽 절반을 격자 밖에 그린다
 /// (`vt.zig`의 "커서가 마지막 열이면" 주석, `drawPrompt`의 조합 글자도 같다). 통째 경로는 다음
-/// 프레임의 `fill`이 지우지만 부분 경로에는 그 `fill`이 없다. 오른쪽 여백은 `GRID_X`라 한 칸이
+/// 프레임의 `fill`이 지우지만 부분 경로에는 그 `fill`이 없다. 오른쪽 여백은 `grid_origin.x`라 한 칸이
 /// 들어가지만 `fillRect`가 경계를 안 보므로 여기서 검사한다.
 fn clearRows(fb: drm.Framebuffer, rect: layout.Rect, first: u16, count: u16, strip: u32) void {
     const o = paneOrigin(rect);
@@ -606,8 +611,9 @@ fn renderOverlay(
 /// 지운다"가 이 자리다 — 부분 경로에는 지난 프레임의 글자를 지워 줄 `fill`이 없다. 통째 경로와
 /// 그림자에서는 이미 그 색이라 픽셀이 안 바뀐다.
 fn renderStatusBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status) !void {
-    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
     if (grid_bottom < fb.height) fb.fillRect(0, grid_bottom, fb.width, fb.height - grid_bottom, MARGIN_COLOR);
+    if (st.hidden) return;
     try drawStatus(fb, cache, st);
 }
 
@@ -622,7 +628,7 @@ fn renderStatusBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status) !void {
 fn paintBand(fb: drm.Framebuffer, cache: *font.Cache, st: Status, want: bool, clips: *drm.ClipList) !void {
     if (!want) return;
     try renderStatusBand(fb, cache, st);
-    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
     if (grid_bottom < fb.height) clips.push(0, grid_bottom, fb.width, fb.height - grid_bottom);
 }
 
@@ -728,6 +734,10 @@ const Status = struct {
     /// `text`에 안 들어 있다. 왼쪽 문자열과 따로 오른쪽 끝에 그리므로 `status.statusText`와
     /// `status> text=`가 BS 전과 같다(design 결정 6).
     battery: ?BatteryCell,
+    /// 전체 화면이라 띠를 그리지 않는다(FU design 결정 1 · 6). 띠를 지우는 것까지는 하고 글자를 안 쓴다 —
+    /// 실제 경로(`paintBand`)와 verify의 그림자(`renderOverlay`)가 함께 지나는 `renderStatusBand` 한 곳에서 본다.
+    /// `status>` 글자 줄은 그대로 찍는다(상태이지 화면이 아니다).
+    hidden: bool,
 };
 
 /// 마지막으로 본 상태 줄의 내용(SB-M0, design 결정 2). 둘이 함께 쓴다 — `App.render`가 띠를 다시
@@ -1307,7 +1317,16 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
     // 띠 안에서 우리 색인 픽셀을 센다. `drawStatus`와 같은 산수로 y를
     // 구해야 한다 — 어긋나면 언제나 0이 나오고, 증상이 "안 그렸다"와 똑같아서
     // 원인을 `drawStatus`에서 찾게 된다.
-    const grid_bottom = GRID_Y + @as(u32, st.rows) * ROW_HEIGHT;
+    // 전체 화면이면 띠를 안 그렸다(FU-M0) — "자리가 없다"와 같은 0이지만 이유를 따로 적는다.
+    if (st.hidden) {
+        logline.print("terminal: status> ink fg=0 (fullscreen)\n", .{});
+        logline.print("terminal: status> caps ink on=0 off=0 (fullscreen)\n", .{});
+        logline.print("terminal: status> copy ink=0 (fullscreen)\n", .{});
+        logline.print("terminal: status> dict ink=0 (fullscreen)\n", .{});
+        dumpBatteryInk(st.battery, 0, 0, 0, " (fullscreen)");
+        return;
+    }
+    const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
     if (fb.height < grid_bottom + ROW_HEIGHT) {
         logline.print("terminal: status> ink fg=0 (no room below the grid)\n", .{});
         logline.print("terminal: status> caps ink on=0 off=0 (no room)\n", .{});
@@ -1592,13 +1611,13 @@ const MAX_WORKSPACES = 9;
 const Origin = struct { x: u32, y: u32 };
 
 /// 셀 좌표를 픽셀로 옮기는 원점(WP design 결정 6). WP 전의
-/// `GRID_X + col * CELL_W`가 `GRID_X + (rect.col + col) * CELL_W`가 되는
+/// `grid_origin.x + col * CELL_W`가 `grid_origin.x + (rect.col + col) * CELL_W`가 되는
 /// 자리다 — 그리는 함수와 프레임버퍼를 되읽는 덤프가 전부 이것을 부르므로
 /// 둘이 다른 원점을 볼 수 없다.
 fn paneOrigin(rect: layout.Rect) Origin {
     return .{
-        .x = GRID_X + @as(u32, rect.col) * CELL_W,
-        .y = GRID_Y + @as(u32, rect.row) * ROW_HEIGHT,
+        .x = grid_origin.x + @as(u32, rect.col) * CELL_W,
+        .y = grid_origin.y + @as(u32, rect.row) * ROW_HEIGHT,
     };
 }
 
@@ -2588,13 +2607,13 @@ const GridCell = struct { col: u16, row: u16 };
 /// 프레임버퍼 픽셀을 격자 칸으로 바꾼다(PD design 결정 5). 여백 · 상태 줄
 /// 위면 null이다.
 ///
-/// `paneOrigin`의 역이고 같은 상수 넷(`GRID_X` · `GRID_Y` · `CELL_W` ·
+/// `paneOrigin`의 역이고 같은 상수 넷(`grid_origin.x` · `grid_origin.y` · `CELL_W` ·
 /// `ROW_HEIGHT`)을 쓴다. 다른 상수를 쓰면 화살표 끝과 고른 칸이 한 칸
 /// 어긋나고, 그 어긋남은 글자만 보는 판정으로는 안 보인다.
 fn gridCell(x: u32, y: u32, cols: u16, rows: u16) ?GridCell {
-    if (x < GRID_X or y < GRID_Y) return null;
-    const col = (x - GRID_X) / CELL_W;
-    const row = (y - GRID_Y) / ROW_HEIGHT;
+    if (x < grid_origin.x or y < grid_origin.y) return null;
+    const col = (x - grid_origin.x) / CELL_W;
+    const row = (y - grid_origin.y) / ROW_HEIGHT;
     if (col >= cols or row >= rows) return null;
     return .{ .col = @intCast(col), .row = @intCast(row) };
 }
@@ -3008,8 +3027,8 @@ fn dumpReport(leaf: u4, n: usize, bytes: []const u8) void {
 /// 한다. `gridCell`과 같은 상수 넷을 쓴다 — 다른 상수를 쓰면 화살표 끝과
 /// 선택 끝이 한 칸 어긋난다(design 결정 5).
 fn gridCellClamped(x: u32, y: u32, cols: u16, rows: u16) GridCell {
-    const col: u32 = if (x < GRID_X) 0 else @min((x - GRID_X) / CELL_W, @as(u32, cols) - 1);
-    const row: u32 = if (y < GRID_Y) 0 else @min((y - GRID_Y) / ROW_HEIGHT, @as(u32, rows) - 1);
+    const col: u32 = if (x < grid_origin.x) 0 else @min((x - grid_origin.x) / CELL_W, @as(u32, cols) - 1);
+    const row: u32 = if (y < grid_origin.y) 0 else @min((y - grid_origin.y) / ROW_HEIGHT, @as(u32, rows) - 1);
     return .{ .col = @intCast(col), .row = @intCast(row) };
 }
 
@@ -3422,6 +3441,12 @@ const App = struct {
     /// 하나면 격자 전체지만, 분할이 생기는 M1에서 이 자리가 따로 산수를 하고
     /// 있으면 둘이 갈린다.
     whole: layout.Rect,
+    /// 격자가 가장 클 때(전체 화면)의 칸 수(FU-M0). 부팅 때 한 번 잡는 격자 크기의 버퍼 넷
+    /// (`screen_line_buf` · `dirty_rows` · verify의 둘)이 이것으로 잡힌다 — 켜고 끌 때 다시 잡지 않는다.
+    /// 전체 화면의 격자는 여백 있는 격자보다 언제나 크거나 같다(`geometry.grid`).
+    cap: geometry.Grid,
+    /// 지금 전체 화면인가(FU-M0). 바꾸는 것은 `setFullscreen` 하나다.
+    fullscreen: bool,
     /// 화면 dump 한 줄의 버퍼(AL-M0). 격자 전체 크기라 어느 패널에도 충분하고, 격자가 큰
     /// 실기계에서는 그만큼 커진다. 셀 목록의 버퍼는 패널마다 있다(`Pane.cells_buf`, DR-M2 —
     /// 그전에는 여기 `cell_buf` 하나를 패널마다 돌려 썼다).
@@ -3600,6 +3625,8 @@ const App = struct {
             .cols = undefined,
             .rows = undefined,
             .whole = undefined,
+            .cap = undefined,
+            .fullscreen = undefined,
             .screen_line_buf = undefined,
             .dirty_rows = undefined,
             .shell_path = undefined,
@@ -3615,7 +3642,7 @@ const App = struct {
         // argv를 화면보다 먼저 읽는다(HS-M0). 배율(`display_scale`)이 화면을 여는 자리에서
         // 쓰이기 때문이다. `readArgs`는 글자를 되돌릴 뿐이라 순서가 바뀌어도 로그는 그대로다.
         const a = readArgs(init);
-        try self.openScreen(a.display_scale);
+        try self.openScreen(a.display_scale, a.fullscreen == .on);
         try self.openVerify();
         try self.spawnFirst(a);
         self.openInputs();
@@ -3628,15 +3655,24 @@ const App = struct {
     /// 배율이 1보다 크면(HS-M0) `self.fb`는 논리 크기의 그림자이고, 아래 격자 · 포인터 ·
     /// 상태 줄은 전부 그 크기로 정해진다. `CELL_W` · `ROW_HEIGHT`는 그대로다 — 큰 글자는
     /// `present`가 늘려서 만든다(design 결정 1).
-    fn openScreen(self: *App, display_scale: screen_args.DisplayScale) !void {
+    ///
+    /// 전체 화면이 켜진 채로 부팅하면(FU-M0, `tars.conf`의 `fullscreen=on`) 첫 프레임부터 전체 화면이다 —
+    /// 여백 있는 프레임을 한 번 그리고 바꾸지 않는다. 그때만 `fullscreen>` 줄을 하나 찍는다(꺼짐이면 FU 전과
+    /// 로그가 같다).
+    fn openScreen(self: *App, display_scale: screen_args.DisplayScale, fullscreen: bool) !void {
         self.fb = try drm.open(self.allocator, "/dev/dri/card0", display_scale.fixed());
         self.fb.fill(MARGIN_COLOR);
         // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
         try self.fb.modeset();
 
-        self.cols = @intCast((self.fb.width - 2 * GRID_X) / CELL_W);
-        self.rows = @intCast((self.fb.height - 2 * GRID_Y) / ROW_HEIGHT);
+        self.cap = geometry.grid(self.fb.width, self.fb.height, true);
+        self.fullscreen = fullscreen;
+        const g = geometry.grid(self.fb.width, self.fb.height, fullscreen);
+        grid_origin = .{ .x = g.x, .y = g.y };
+        self.cols = g.cols;
+        self.rows = g.rows;
         logline.print("terminal: grid {d}x{d} (fb {d}x{d})\n", .{ self.cols, self.rows, self.fb.width, self.fb.height });
+        if (fullscreen) self.logFullscreen();
 
         const font_data = try std.Io.Dir.cwd().readFileAlloc(
             self.io,
@@ -3663,8 +3699,8 @@ const App = struct {
         const screen = try self.allocator.alloc(u8, pixels.len);
         self.verify = .{
             .fb = self.fb.shadow(pixels.ptr),
-            .cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cols) * self.rows),
-            .starts_buf = try self.allocator.alloc(u32, @as(usize, self.rows) + 1),
+            .cell_buf = try self.allocator.alloc(vt.CellGlyph, @as(usize, self.cap.cols) * self.cap.rows),
+            .starts_buf = try self.allocator.alloc(u32, @as(usize, self.cap.rows) + 1),
             .screen = screen.ptr,
         };
         logline.print("terminal: verify> on bytes={d}\n", .{pixels.len});
@@ -3863,8 +3899,9 @@ const App = struct {
         // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
         logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
 
-        self.screen_line_buf = try self.allocator.alloc(u8, screenLineMax(self.cols, self.rows));
-        self.dirty_rows = try self.allocator.alloc(bool, self.rows);
+        // 전체 화면의 크기로 잡는다(FU-M0, `cap`의 주석) — 켜고 끄며 격자가 커져도 다시 잡지 않는다.
+        self.screen_line_buf = try self.allocator.alloc(u8, screenLineMax(self.cap.cols, self.cap.rows));
+        self.dirty_rows = try self.allocator.alloc(bool, self.cap.rows);
 
         self.key_state = .{
             .hangul_layout = hangul_layout,
@@ -4230,6 +4267,39 @@ const App = struct {
     ///
     /// `ws`가 `var`인 이유는 워크스페이스를 바꾸는 명령이 같은 배치의 뒤 명령을 위해
     /// 다시 구하기 때문이다. 이 함수를 나가면 `self.current`가 진실이다.
+    /// 전체 화면을 켜거나 끈다(FU design 결정 3). 길 셋(단축키 · `tars.conf`의 시작 상태 · 패널의
+    /// `CSI 10 ; Ps t`)이 모두 여기 온다. 같은 상태로의 요청은 아무것도 안 한다 — 줄도 안 찍는다.
+    ///
+    /// 격자를 다시 셈하고 모든 워크스페이스에 `applyLayout`을 부른다 — 패널마다 `vt.Screen.resize`와
+    /// `pty.resize`가 짝으로 불려 셸이 새 크기를 SIGWINCH로 안다. 셸은 닫히지 않는다. 지금 안 보는
+    /// 워크스페이스도 지금 바꾼다 — 그것으로 옮겼을 때 크기가 어긋나 있으면 안 된다.
+    ///
+    /// `last_tree`를 버려 다음 프레임을 통째로 그린다(design 위험 2). 부분 갱신은 지난 프레임과의
+    /// 차이만 그리므로, 옛 여백 자리와 옛 상태 띠에 지난 픽셀이 남는다.
+    fn setFullscreen(self: *App, on: bool) !void {
+        if (self.fullscreen == on) return;
+        self.fullscreen = on;
+        const g = geometry.grid(self.fb.width, self.fb.height, on);
+        grid_origin = .{ .x = g.x, .y = g.y };
+        self.cols = g.cols;
+        self.rows = g.rows;
+        self.whole = .{ .col = 0, .row = 0, .cols = self.cols, .rows = self.rows };
+        for (&self.workspaces) |*slot| {
+            const w = if (slot.*) |*w| w else continue;
+            _ = try applyLayout(self.allocator, w, self.whole);
+        }
+        self.last_tree = null;
+        self.needs_redraw = true;
+        self.logFullscreen();
+    }
+
+    /// `terminal: fullscreen> on grid 160x50 origin 0,0` — 바뀐 뒤의 상태 한 줄(design 결정 3).
+    fn logFullscreen(self: *const App) void {
+        logline.print("terminal: fullscreen> {s} grid {d}x{d} origin {d},{d}\n", .{
+            if (self.fullscreen) "on" else "off", self.cols, self.rows, grid_origin.x, grid_origin.y,
+        });
+    }
+
     fn runPanes(self: *App, cmds: []const input.Pane) !void {
         var ws = &self.workspaces[self.current].?;
         for (cmds) |cmd| {
@@ -4304,6 +4374,8 @@ const App = struct {
                     self.current = target;
                     ws = &self.workspaces[self.current].?;
                 },
+                // 전체 화면(FU-M0, `Cmd+Ctrl+F`). 트리는 그대로이고 패널의 사각형만 커지거나 준다.
+                .fullscreen_toggle => try self.setFullscreen(!self.fullscreen),
             }
             self.needs_redraw = true;
         }
@@ -4771,6 +4843,7 @@ const App = struct {
             .cols = self.cols,
             // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
             .battery = self.battery_state.cell,
+            .hidden = self.fullscreen,
         };
         // 상태 줄이 바뀌었는가(SB-M0, design 결정 2). `full`과 무관하게 바뀌었으면 기억한다 — 메모는
         // "마지막으로 본 내용"이지 "마지막으로 그린 때"가 아니다. 띠를 그릴지는 아래 `paintBand`가
@@ -4865,7 +4938,7 @@ const App = struct {
             @as(usize, self.fb.width) * 4,
             self.fb.pitch,
             self.fb.height,
-            .{ .top = GRID_Y, .row_height = ROW_HEIGHT, .rows = self.rows },
+            .{ .top = grid_origin.y, .row_height = ROW_HEIGHT, .rows = self.rows },
         );
         return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000) };
     }
@@ -4955,7 +5028,7 @@ const App = struct {
             @as(usize, self.fb.width) * 4,
             self.fb.pitch,
             self.fb.height,
-            .{ .top = GRID_Y, .row_height = ROW_HEIGHT, .rows = self.rows },
+            .{ .top = grid_origin.y, .row_height = ROW_HEIGHT, .rows = self.rows },
         );
         return .{ .report = report, .us = @divTrunc(start.untilNow(self.io, .awake).nanoseconds, 1000), .cells = cells_report };
     }

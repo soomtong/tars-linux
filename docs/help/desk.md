@@ -12,6 +12,9 @@
 | `Cmd+W` | 지금 패널 닫기 |
 | `Cmd+T` · `Cmd+1`~`9` | 새 탭(워크스페이스) · 그 번호의 탭으로 |
 | `Cmd+Shift+C` | copy mode — `/` 검색, `n` · `N` 다음 · 앞, `y` 복사, `Esc` 나가기 |
+| `Cmd+Ctrl+F` | 전체 화면 — 둘레 여백과 아래 상태 줄을 감춥니다. 다시 누르면 돌아옵니다 |
+
+부팅할 때부터 전체 화면으로 시작하려면 `sudo tars-config set fullscreen=on` 뒤 `sudo tars-config reload terminal`(열린 패널이 닫힙니다).
 
 ## 한/영
 

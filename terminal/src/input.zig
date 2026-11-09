@@ -407,6 +407,9 @@ pub const Pane = enum {
     workspace_7,
     workspace_8,
     workspace_9,
+    /// `Cmd+Ctrl+F` — 전체 화면을 켜거나 끈다(FU-M0, macOS의 전체 화면 키). 맨 끝인 이유는 위
+    /// `workspace_N`의 순서 계약 — 그 사이에 끼우면 번호 셈이 밀린다.
+    fullscreen_toggle,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -1280,6 +1283,10 @@ pub const State = struct {
     /// 임의의 선택이지만 결정적이어야 해서 여기 한 곳에서만 정한다.
     fn chord(self: *State, code: u16) ?Action {
         if (self.metaed()) {
+            // 전체 화면(FU-M0, `Cmd+Ctrl+F`). Shift · Option처럼 갈래 하나를 두지 않고 이 한
+            // 조합만 가로챈다 — 갈래를 두면 표에 없는 `Cmd+Ctrl` 조합이 null이 되어, 지금
+            // Ctrl을 무시하고 Cmd 표로 가는 `Cmd+Ctrl+←`(0x01) 같은 것이 바뀐다. 나머지는 그대로다.
+            if (self.ctrled() and code == c.KEY_F) return .{ .pane = .fullscreen_toggle };
             // Meta 분기 안에서 Shift를 한 번 더 보는 자리는 이 switch
             // 하나뿐이어야 한다(CM design 위험 2 · WP design 결정 4).
             // 예외를 if로 하나씩 늘리지 않고 switch 하나에 나란히 적는다 —

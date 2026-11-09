@@ -157,6 +157,17 @@ pub const DisplayScale = enum {
     }
 };
 
+/// 전체 화면(FU design 결정 4). 부팅 때의 시작 상태다 — 실행 중에는 `Cmd+Ctrl+F`와 패널의
+/// `CSI 10 ; Ps t`가 바꾸고, 그 상태는 설정 파일로 돌아가지 않는다.
+pub const Fullscreen = enum {
+    off,
+    on,
+
+    pub fn arg(self: Fullscreen) [:0]const u8 {
+        return @tagName(self);
+    }
+};
+
 /// 한/영 전환 키의 이름(HI design 결정 7).
 ///
 /// 자판 · 키보드와 모양이 다른 유일한 설정이다. 그것들은 하나를 고르는 것이지만
@@ -331,6 +342,8 @@ pub const Slot = enum(u8) {
     touchpad_accel = 12,
     /// 화면 배율(HS design 결정 4). `DisplayScale`의 글자다.
     display_scale = 13,
+    /// 전체 화면의 시작 상태(FU design 결정 4). `Fullscreen`의 글자다.
+    fullscreen = 14,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -342,7 +355,7 @@ pub const Slot = enum(u8) {
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
 /// 타입이다.
-pub const ARGC = 14;
+pub const ARGC = 15;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -390,6 +403,8 @@ pub const default_mouse_accel: Accel = .{};
 pub const default_touchpad_accel: Accel = .{};
 /// 화면 배율(HS design 결정 3). 1280×800 이하의 화면에서는 1이라 HS 전과 같다.
 pub const default_display_scale: DisplayScale = .auto;
+/// 전체 화면(FU design 결정 4). 꺼짐이라 FU 전과 같다.
+pub const default_fullscreen: Fullscreen = .off;
 
 // ── 계정의 번호(HP design 결정 5 · 8) ──────────────────────────────────
 //
@@ -435,6 +450,7 @@ pub const Args = struct {
     mouse_accel: Accel,
     touchpad_accel: Accel,
     display_scale: DisplayScale,
+    fullscreen: Fullscreen,
 };
 
 /// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
@@ -458,6 +474,7 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     v[Slot.mouse_accel.index()] = a.mouse_accel.arg().ptr;
     v[Slot.touchpad_accel.index()] = a.touchpad_accel.arg().ptr;
     v[Slot.display_scale.index()] = a.display_scale.arg().ptr;
+    v[Slot.fullscreen.index()] = a.fullscreen.arg().ptr;
     return v;
 }
 
@@ -489,6 +506,7 @@ pub fn decode(v: Argv) Args {
         .mouse_accel = accelAt(v, .mouse_accel, default_mouse_accel),
         .touchpad_accel = accelAt(v, .touchpad_accel, default_touchpad_accel),
         .display_scale = enumAt(DisplayScale, v, .display_scale, default_display_scale),
+        .fullscreen = enumAt(Fullscreen, v, .fullscreen, default_fullscreen),
     };
 }
 

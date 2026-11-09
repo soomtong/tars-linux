@@ -44,6 +44,7 @@ const OTHER = [_]edit.Pair{
     .{ .key = "mouse_accel", .value = "5" },
     .{ .key = "touchpad_accel", .value = "5" },
     .{ .key = "display_scale", .value = "2" },
+    .{ .key = "fullscreen", .value = "on" },
     .{ .key = "user", .value = "hpuser" },
 };
 
@@ -146,8 +147,8 @@ pub fn main() !void {
     // 기본값을 글자로 바꿨다가 되읽어 같은지도 본다 — valueText와 parse가 같은
     // 글자를 쓴다는 것이 `set`이 쓰는 줄을 init이 읽는다는 뜻이다.
     // 열여덟은 seed에 있고 `user`는 tars-install만 쓴다(HP-M1). PS-M0이 포인터 넷을, HS-M0이
-    // display_scale을 더했다.
-    if (edit.KEYS.len != 19) return fail("{d} keys, want 19 (eighteen in the seed, and user)", .{edit.KEYS.len});
+    // display_scale을, FU-M0이 fullscreen을 더했다(그래서 열아홉이 seed에 있다).
+    if (edit.KEYS.len != 20) return fail("{d} keys, want 20 (nineteen in the seed, and user)", .{edit.KEYS.len});
     const defaults = config.Config{};
     for (edit.KEYS) |key| {
         var buf: [edit.VALUE_MAX]u8 = undefined;
@@ -173,11 +174,14 @@ pub fn main() !void {
     if (!std.mem.eql(u8, edit.hint("display_scale").?, "auto | 1 | 2 | 3")) return fail("display_scale hint {s}", .{edit.hint("display_scale").?});
     try expectRefused("display_scale", "4", "unknown display_scale '4', falling back to auto");
     try expectRefused("display_scale", "1.5", "unknown display_scale '1.5', falling back to auto");
+    // 전체 화면은 off · on 둘이다(FU-M0). yes · 1은 거절이다.
+    if (!std.mem.eql(u8, edit.hint("fullscreen").?, "off | on")) return fail("fullscreen hint {s}", .{edit.hint("fullscreen").?});
+    try expectRefused("fullscreen", "yes", "unknown fullscreen 'yes', falling back to off");
     // set · reset이 안 받는 키는 user 하나다(HP-M1 plan 확정 5).
     for (edit.KEYS) |key| {
         if (edit.installOnly(key) != std.mem.eql(u8, key, "user")) return fail("installOnly({s})", .{key});
     }
-    std.debug.print("config_edit_test: nineteen keys, each read back by parse as written; only user is install-only\n", .{});
+    std.debug.print("config_edit_test: twenty keys, each read back by parse as written; only user is install-only\n", .{});
 
     // ── 2. judge — init이 하는 말이 곧 거절의 이유다 ───────────────────
     try expectRefused("shell", "fsh", "unknown shell 'fsh', falling back to fish");
@@ -443,7 +447,7 @@ pub fn main() !void {
         const keys_tail = "#keyboard=auto\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
         const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n" ++
-            "#mouse_scroll=normal\n#touchpad_scroll=natural\n#mouse_accel=0\n#touchpad_accel=0\n#display_scale=auto\n#user=\n";
+            "#mouse_scroll=normal\n#touchpad_scroll=natural\n#mouse_accel=0\n#touchpad_accel=0\n#display_scale=auto\n#fullscreen=off\n#user=\n";
         var sbuf: [2048]u8 = undefined;
         var s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, text, &c, null);

@@ -2,7 +2,7 @@
 
 Date: 2026-11-09
 Design: `docs/specs/2026-11-09-tars-fullscreen-design.md`(2판, 결정 1~4의 앞 둘 · 6 · 8)
-Status: 착수 전
+Status: 끝났다(2026-11-09)
 
 ## 착수 전에 확정한 것
 
@@ -23,10 +23,13 @@ plan을 쓰며 읽은 것(HEAD `52ac714`).
 
 ## Task 1 — 여백을 상태로(동작 변화 없음)
 
-- `GRID_X` · `GRID_Y`를 지우고 이미 있는 `Origin`(`main.zig:1592`, `paneOrigin`의 반환형)을 격자 원점으로도 쓴다. App 필드 `origin`,
-  상수 `MARGIN: Origin = .{ .x = 20, .y = 20 }`. 상수를 지웠으므로 컴파일러가 확인 1의 자리를 모두 찾는다.
-- `Status`에 `origin`과 `hidden: bool`을 더한다. `grid_bottom`은 `st.origin.y + rows * ROW_HEIGHT`.
-- `drawRun` · `paneOrigin` · `cellAt` · `gridCellClamped`는 origin을 인자로.
+- `GRID_X` · `GRID_Y`를 지우고 파일 수준 `var grid_origin: Origin = MARGIN`(`MARGIN` = 20,20)으로. `Origin`은 이미 있는 것(`main.zig:1592`).
+  (구현하며 고침) 처음 적은 "`Status` 필드 · 인자로 나르기"는 `paneOrigin`을 부르는 자유 함수 13곳의 서명을 줄줄이 바꾼다. 같은 이유로
+  파일 수준 값인 선례(`touchpad_screen`, "여는 자리가 여럿이라 인자로 나르지 않는다")가 있고 terminal에는 스레드가 없다. 그래서 17곳은
+  이름만 바뀌고 서명은 그대로다. 상수가 사라졌으므로 빠뜨린 자리는 여전히 컴파일러가 찾는다. 상태 띠를 감추는 표시는 `Status.hidden`.
+- (구현하며 찾음) `drm.Framebuffer.fillRect`가 화면 경계에서 자른다. 마지막 열의 폭 2 preedit은 커서 사각형(`main.zig:513` · `:575`)과
+  `drawPrompt`의 조합 글자(`:254`)를 격자 오른쪽으로 반 칸 내미는데, 지금은 20px 여백이 받아 주고 전체 화면(1280이면 오른쪽 0px)에서는
+  다음 픽셀 줄을 덮어쓰거나 맨 아래 줄에서 버퍼 밖에 쓴다. `drawGlyph`는 이미 자른다 — 부르는 쪽마다 검사를 흩지 않고 칠하는 함수 하나에서 자른다.
 - `openScreen`이 `geometry(fb, fullscreen) → { origin, cols, rows }`(순수 함수, 아래 Task 4가 검사)로 정한다. 이 Task에서는 늘 꺼짐.
 - 판정: `zig build` · `zig build test`, 그리고 render · pane · hidpi 체인(픽셀까지 지금과 같아야 한다).
 
@@ -74,4 +77,22 @@ design의 비목표, 그리고 FU-M1의 것(시퀀스 · fakesteak 조각).
 
 ## 결과
 
-(구현 뒤 적는다)
+lead 직접. FU 체인 단독 2회 PASS(2분 49초 · 2분 52초), 루트 게이트 32/32(prebuild 357초 + lanes 1,505초, 33분 18초, 잘린 줄 0,
+`out/gate-logs/20261109-081300`). render · pane · hidpi가 그 안에서 지났다 — Task 1의 "꺼짐이면 픽셀까지 지금과 같다".
+
+plan과 다른 자리(구현하며 정한 것):
+
+1. 원점은 `Status` · 인자가 아니라 파일 수준 `var grid_origin`(Task 1에 고쳐 적었다, 선례 `touchpad_screen`). 17곳은 이름만 바뀌었다.
+2. `drm.Framebuffer.fillRect`가 화면 경계에서 자른다(`geometry.clip`). 마지막 열의 폭 2 커서 · 조합 글자가 격자 오른쪽으로 반 칸 나가는데,
+   전체 화면(1280이면 오른쪽 여백 0)에서는 다음 픽셀 줄이나 버퍼 밖에 쓴다. FU 전에는 20px 여백이 받아 줬다.
+3. 격자 크기로 부팅 때 한 번 잡던 버퍼 넷(`screen_line_buf` · `dirty_rows` · verify의 `cell_buf` · `starts_buf`)을 전체 화면 크기(`App.cap`)로
+   잡는다. 그대로면 켜는 순간 155×47의 버퍼에 160×50을 쓴다. 넷 다 `[0..rows]`로 잘라 쓰거나 용량으로만 써서 크게 잡아도 뜻이 같다.
+4. `Cmd+Ctrl+F`는 Shift · Option 같은 갈래가 아니라 그 한 조합만 가로챈다. 갈래로 두면 지금 Cmd 표로 가는 `Cmd+Ctrl+←`(0x01) 같은
+   조합이 null로 바뀐다 — design 2판 결정 4의 "지금과 같은 바이트"는 갈래를 두면 틀린 말이었다. input_test가 0x01 · Ctrl+F의 0x06을 못 박는다.
+5. ARGC 14 → 15에 손으로 14칸 적은 argv 배열 일곱이 걸렸다(init `main.zig` 둘, `WIFI` · `DBUS` · `BLUETOOTHD` · `DHCPCD` · `CHRONYD`).
+   컨테이너의 `zig build test`는 init 실행 파일을 안 지어 못 봤고 `make quick`의 크로스 빌드가 잡았다.
+6. 셸이 아는 창 크기는 `stty size`가 아니라 fish의 `$LINES` · `$COLUMNS` — initrd에 stty가 없다(체인 1회차가 `Unknown command: stty`로 빨갰다).
+   `tars-config set`의 답은 키가 파일에 없으면 `fullscreen: off (default) -> on`(2회차가 패턴에서 빨갰다).
+7. 상태 띠를 감추는 검사는 `renderStatusBand` 한 곳 — 실제 경로(`paintBand`)와 verify의 그림자(`renderOverlay`)가 함께 지난다.
+
+남는 것: FU-M1(패널의 `CSI 10 ; Ps t` · fakesteak 조각 · probe).

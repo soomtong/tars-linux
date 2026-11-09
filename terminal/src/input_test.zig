@@ -2555,5 +2555,21 @@ pub fn main() !void {
     }
     std.debug.print("input_test: 키보드마다 종류를 고른다 OK\n", .{});
 
+    // ── FU-M0: Cmd+Ctrl+F ──────────────────────────────────────────────────
+    //
+    // `Cmd+Ctrl+F`는 전체 화면이다. 그리고 이 한 조합만 가로챈다(`chord`의 주석) — 그 증거로
+    // `Cmd+Ctrl+←`은 FU 전처럼 Cmd 표의 0x01(줄 처음)이고, Cmd 없는 `Ctrl+F`는 0x06 그대로다.
+    {
+        var fu: input.State = .{};
+        try expect(&fu, K.KEY_LEFTMETA, 1, "");
+        try expect(&fu, K.KEY_LEFTCTRL, 1, "");
+        try expectPane(&fu, K.KEY_F, .fullscreen_toggle);
+        try expect(&fu, K.KEY_LEFT, 1, "\x01");
+        try expect(&fu, K.KEY_LEFTMETA, 0, "");
+        try expect(&fu, K.KEY_F, 1, "\x06");
+        try expect(&fu, K.KEY_LEFTCTRL, 0, "");
+    }
+    std.debug.print("input_test: Cmd+Ctrl+F는 전체 화면, 다른 Cmd+Ctrl · Ctrl 키는 그대로 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }

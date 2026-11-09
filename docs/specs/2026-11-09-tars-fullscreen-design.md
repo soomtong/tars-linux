@@ -3,7 +3,7 @@
 접두사: FU
 
 Date: 2026-11-09
-Status: 2판(단축키를 Cmd+Ctrl+F로 — 사용자 2026-11-09)
+Status: 2판(단축키를 Cmd+Ctrl+F로 — 사용자 2026-11-09). FU-M0 끝남(2026-11-09, 루트 게이트 32/32) — 결정 4의 Ctrl 갈래는 "한 조합만 가로챈다"로 갔다(plan 결과 4). FU-M1이 남았다.
 
 계기: 사용자(2026-11-09, BB 데모 `demo-fakesteak-20261109`를 맥북 에어 실기에서 본 뒤): "Full screen mode 필요하겠다". 이어서 사용자가
 정한 것(2026-11-09): 감추는 것은 여백과 상태 줄 둘 다, 켜는 길은 `Cmd+Ctrl+F`(macOS의 전체 화면 키, 사용자가 `Cmd+Shift+F`에서 고쳤다)와 `tars.conf`의 `fullscreen=on|off`, 납품 묶음은 xterm의

@@ -1,6 +1,7 @@
 const std = @import("std");
 const logline = @import("logline.zig");
 const scale = @import("scale.zig");
+const geometry = @import("geometry.zig");
 
 // C 헤더는 build.zig가 번역해 `c_drm`으로 넘긴다(ZU-M1). GL-M3이 `@cImport`
 // 시절에 여기서 끄던 fortify는 패키지 번역에서는 끌 필요가 없어 켜져 있다.
@@ -245,13 +246,16 @@ pub const Framebuffer = struct {
     /// 검사가 픽셀마다 붙고, 4바이트씩 따로 쓴다. 여기서는 그것이 행마다 한 번이고
     /// 쓰기는 컴파일러가 넓게 묶는다. 찍히는 값은 픽셀마다 쓴 것과 같다.
     ///
-    /// `setPixel`처럼 범위 검사가 없다. 부르는 자리가 화면 안으로 자른 사각형만 넘긴다.
+    /// 화면 경계에서 자른다(FU-M0, `geometry.clip`의 주석). FU 전에는 "부르는 자리가 화면 안으로 자른
+    /// 사각형만 넘긴다"가 약속이었는데, 마지막 열의 폭 2 커서는 그 약속을 20px 여백에 기대어 지켰다 —
+    /// 전체 화면에서 여백이 0이면 깨진다. `setPixel`은 여전히 범위 검사가 없다.
     pub fn fillRect(self: Framebuffer, x: u32, y: u32, w: u32, h: u32, color: u32) void {
+        const r = geometry.clip(.{ .x = x, .y = y, .w = w, .h = h }, self.width, self.height) orelse return;
         var row: u32 = 0;
-        while (row < h) : (row += 1) {
-            const offset = (y + row) * self.pitch + x * 4;
+        while (row < r.h) : (row += 1) {
+            const offset = (r.y + row) * self.pitch + r.x * 4;
             const line: [*]u32 = @ptrCast(@alignCast(self.pixels + offset));
-            @memset(line[0..w], color);
+            @memset(line[0..r.w], color);
         }
     }
 

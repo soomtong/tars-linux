@@ -20,7 +20,7 @@ const OTHER = [_][]const u8{
     "hangul_toggle=shift_space", "shell_config=off",     "net=dhcp",               "ntp=10.0.2.2",
     "timezone=Asia/Seoul",       "firewall=on",          "bluetooth=on",           "esc_latin=off",
     "clipboard=pane",            "mouse_scroll=natural", "touchpad_scroll=normal", "mouse_accel=5",
-    "touchpad_accel=5",          "display_scale=2",      "user=hpuser",
+    "touchpad_accel=5",          "display_scale=2",      "fullscreen=on",          "user=hpuser",
 };
 
 const S = reload.Slot;
@@ -35,17 +35,17 @@ fn expectActions(slots: []const S, names: []const []const u8, want: []const relo
 }
 
 pub fn main() !void {
-    // ── 1. 열아홉 키가 다 한 갈래에 든다 ──────────────────────────────────
+    // ── 1. 스무 키가 다 한 갈래에 든다 ──────────────────────────────────
     //
     // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열셋 다 들었다. 갈래의 수를 세서
-    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 열하나 — PS-M0의 포인터 넷과 HS-M0의 배율이 더해졌다)와 견준다.
+    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 열둘 — PS-M0의 포인터 넷과 HS-M0의 배율, FU-M0의 전체 화면이 더해졌다)와 견준다.
     var counts = [_]usize{ 0, 0, 0, 0 };
     inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@backingInt(comptime reload.groupOf(f_name))] += 1;
-    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 11 or counts[3] != 1)
-        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 4/3/11/1", .{ counts[0], counts[1], counts[2], counts[3] });
+    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 12 or counts[3] != 1)
+        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 4/3/12/1", .{ counts[0], counts[1], counts[2], counts[3] });
     // `user`는 화면 대기에 안 든다 — reload terminal이 그 이름으로 셸을 띄우면 안 된다(HP-M1).
     if (comptime reload.onScreen("user")) return fail("user waits for the screen", .{});
-    std.debug.print("reload_test: nineteen keys in four groups — four now, three at the next spawn, eleven on the screen, one at the next boot\n", .{});
+    std.debug.print("reload_test: twenty keys in four groups — four now, three at the next spawn, twelve on the screen, one at the next boot\n", .{});
 
     // ── 2. diff — 키 하나를 바꾸면 그 비트 하나 ────────────────────────
     const def = config.Config{};
@@ -74,7 +74,7 @@ pub fn main() !void {
     try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
         "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\n" ++
-        "mouse_scroll=normal\ntouchpad_scroll=natural\nmouse_accel=0\ntouchpad_accel=0\ndisplay_scale=auto\nuser=\n" ++
+        "mouse_scroll=normal\ntouchpad_scroll=natural\nmouse_accel=0\ntouchpad_accel=0\ndisplay_scale=auto\nfullscreen=off\nuser=\n" ++
         "screen keyboard=auto timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
