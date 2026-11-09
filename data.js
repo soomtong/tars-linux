@@ -5,12 +5,12 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-09',
-  latest: 'Dev Layer (TP-M0~M12)',
+  latest: 'Barebone (BB-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1259,      // git rev-list --count main
+    commits: 1264,      // git rev-list --count main
     since: '2026-08-01',
     chains: 31,         // check.sh의 CHAINS
     zigKLines: 45,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -123,6 +123,7 @@ window.TARS = {
     ['2026-11-07', 'First Steps', 'FS', '설치 뒤 "이제 뭘 하지"에 — `tars-help`가 망 · 블루투스 · 설정 · 서비스 · 개발 도구 · 화면의 한국어 안내 일곱 장을 보인다'],
     ['2026-11-08', 'Nerd Symbols', 'NS', '프롬프트의 Powerline 삼각형 넷을 폰트 없이 코드로 그린다 — 상자 대신 이어진 띠'],
     ['2026-11-09', 'Dev Layer', 'TP', '설치하면 망 없이 바로 개발 — 언어 스물남짓 · 편집기 · 유틸리티 · 문서 · 서버 다섯을 묶음 열로 디스크에 싣고 `/usr`에 겹친다'],
+    ['2026-11-09', 'Barebone', 'BB', '개발 도구를 뺀 납품용 ISO(약 140MB) — 프로젝트 실행 파일을 묶음 하나로 얹으면 설치 뒤 부팅하자마자 첫 화면에 뜬다(데모: fakesteak)'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -217,6 +218,15 @@ window.TARS = {
         ['서버', 'PostgreSQL · MySQL · Redis · Nginx · Caddy — `sudo tars-service enable <이름>`이면 init이 사용자로 띄우고 재부팅에도 켜진다', '2026-11-09'],
         ['`/usr/local`', '`/usr`는 읽기 전용, `/usr/local`만 쓰기 가능 — root가 `make install` · `npm i -g`로 깐 것이 재부팅 · 갱신에도 남는다', '2026-11-09'],
         ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다', '2026-11-09'],
+      ],
+    },
+    {
+      title: '납품 — barebone',
+      note: '임베디드 기기에 프로젝트의 최종 실행 파일만 싣는 판. 개발 도구 층이 없고 sshd 같은 기본 데몬은 있다.',
+      items: [
+        ['barebone ISO', '`tars-<ver>-barebone-x86_64.iso`(약 140MB) — 버전마다 개발 도구 판과 함께 올린다', '2026-11-09'],
+        ['프로젝트 묶음', '실행 파일을 매니페스트 한 줄로 묶음 하나에 담아 barebone 위에 얹는다 — 설치하면 `/usr/local/bin`에', '2026-11-09'],
+        ['부팅 때 자동 실행', '묶음의 셸 조각이 첫 패널에 한 번 띄운다. [Ctrl]+[C]면 셸, 시리얼 · ssh에서는 안 뜬다 — 데모 릴리스 `demo-fakesteak-20261109`', '2026-11-09'],
       ],
     },
     {
