@@ -108,6 +108,10 @@ M1이 닫았다: `brew install hello`(bottle 경로)도 `file`을 부르지 않�
 gcc · `build-essential`은 수백 MB이고, 빌드는 RAM 위 initrd가 감당할 몫이 아니다. bottle이 없는 formula나 `--build-from-source`는
 비목표 1이다. 그 길은 `brew install gcc`(Homebrew 쪽 컴파일러)가 열 수 있지만, 이 설계는 보증하지 않는다.
 
+덧붙임(2026-11-09): 컴파일러는 TP(`2026-11-05-tars-dev-layer-design.md`, 닫힘)가 다른 자리로 열었다 — initrd가 아니라 설치된 디스크의
+개발 도구 층(`base` 묶음의 gcc · g++ · make 등)이다. 이 결정의 "initrd에 넣지 않는다"는 그대로고, bottle이 없는 formula를 Homebrew가
+소스로 짓는 길은 여전히 보증하지 않는다.
+
 ### 결정 5 — `brew shellenv`는 시스템 rc가 조건부로 부른다
 
 `install.sh`의 "Next steps"는 사용자 rc에 `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"`를 더하라고 안내한다.

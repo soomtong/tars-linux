@@ -87,6 +87,8 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 2. `git tag -a v<ver> <그 커밋> -m …`. push는 아직 안 한다.
 3. 개발 도구 층(TP-M0부터)을 싣는다: 먼저 `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에
    안 들어가 남는다 — dev-20261106에서 겪었다), 그다음 `make iso ISO_LAYERS="<묶음들>"`(기본값은 묶음을 안 싣는다).
+   개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.tsv`의 줄(버전 · URL · sha256)을 1의 커밋에
+   함께 넣고, 바뀐 줄의 묶음만 다시 구워진다. 올리지 않으면 앞 판의 묶음이 그대로 실린다.
    `make iso` — 입력 해시가 같으면 kernel · terminal을 건너뛴다. init은 `zig build`가 git을 다시 물어 버전 글자가 바뀌었으면
    다시 컴파일한다. `out/tars.iso`가 이미 있어도 어느 트리의 것인지 모르므로 다시 만든다.
 4. 호스트 QEMU smoke — `qemu-system-x86_64 -m 1024 -cdrom out/tars.iso -display none -serial file:<log>`를 90초 띄우고
