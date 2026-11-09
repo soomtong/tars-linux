@@ -98,4 +98,7 @@ Task 4가 판정을 지난 뒤, `project_release_0_2`의 프리릴리스 모양 
 - Task 5: 태그 `demo-fakesteak-20261109` → `3151e37`(annotated), 프리릴리스 · Latest 아님,
   https://github.com/soomtong/tars-linux/releases/tag/demo-fakesteak-20261109 — `tars-demo-fakesteak-20261109-x86_64.iso`
   sha256 `370ead60d0e485d385a8e1201e3c95a80eca21d203e312fdc4f9dd63b29c070e`. 새 디렉터리에 받아 `shasum -c` OK.
+- 실기(2026-11-09, 사용자가 골랐다): 맥북 에어 2011에 데모 릴리스를 깔고 부팅 — 첫 패널에 fakesteak이 떴다(사진). 상태 줄(`EN 신세벌 PCS 쿼티 CAPS` ·
+  배터리 `98%`)과 격자 둘레의 여백(`GRID_X` · `GRID_Y` 20px, `MARGIN_COLOR`)이 그대로 보인다. 사용자: "Full screen mode 필요하겠다" — 다음 후보
+  (HANDOFF).
 
