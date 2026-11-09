@@ -106,9 +106,11 @@ wait_for_log() {
 # 패턴에 맞는 로그 줄이 `want`개가 될 때까지 기다린다(FU-M1). 같은 `fullscreen>` 줄이 이 부팅에 여러 번
 # 찍히므로 "있는가"가 아니라 "늘었는가"를 본다.
 wait_for_count() {
-  local pattern="$1" want="$2" i
+  local pattern="$1" want="$2" i n
   for i in $(seq 1 150); do
-    if [ "$(tlog | grep -acE -- "$pattern")" -eq "$want" ]; then return 0; fi
+    # 셈을 먼저 변수로 받는다 — 같은 줄의 `-eq`를 check.sh의 조기 종료 grep 검사(`-…q`)가 `-q`로 읽는다.
+    n="$(tlog | grep -acE -- "$pattern")"
+    if [ "$n" -eq "$want" ]; then return 0; fi
     sleep 0.1
   done
   return 1
@@ -320,8 +322,9 @@ print_csi 1 semicolon 1 0 t
 ask_size w2
 wait_for_screen 'w2-50-160' ||
   report_failure "boot B: LINES COLUMNS is not 50 160 after the look-alike sequences"
-[ "$(tlog | grep -acE -- 'terminal: fullscreen> ')" -eq 3 ] ||
-  report_failure "boot B: a look-alike sequence changed fullscreen ($(tlog | grep -ac 'terminal: fullscreen> ') fullscreen> lines, want 3)"
+FS_LINES="$(tlog | grep -acE -- 'terminal: fullscreen> ')"
+[ "$FS_LINES" -eq 3 ] ||
+  report_failure "boot B: a look-alike sequence changed fullscreen (${FS_LINES} fullscreen> lines, want 3)"
 print_csi 1 0 semicolon 2 t
 wait_for_count "$FS_OFF" 2 ||
   report_failure "boot B: printf CSI 10;2 t did not toggle fullscreen off (want a second '${FS_OFF}')"
