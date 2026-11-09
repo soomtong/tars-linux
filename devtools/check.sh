@@ -456,7 +456,7 @@ echo "B2: as tars, clojure ran offline from the seeded ~/.m2 ($(ms_of clojure)ms
 
 as_tars 'cci --version 2>&1 | sed "s/^/tp-m5-cci: /"; glc --version 2>&1 | sed "s/^/tp-m5-glc: /"; MANPAGER=cat man clojure 2>&1 | grep -m1 "runners to launch" | sed "s/^ */tp-m5-man=/"'
 wait_log "tp-m5-man=clj, clojure" 60 || fail "man clojure did not show the page (/usr/local/share/man)" "tp-m5-man"
-grep -aqF "tp-m5-cci: cci 0.6.1" "$LOG" || fail "cci --version did not say 0.6.1" "tp-m5-cci"
+grep -aqF "tp-m5-cci: cci 0.6.2" "$LOG" || fail "cci --version did not say 0.6.2" "tp-m5-cci"
 grep -aqF "tp-m5-glc: glc 0.19.3" "$LOG" || fail "glc --version did not say 0.19.3" "tp-m5-glc"
 echo "B2: as tars, util's cci and glc run and man clojure reads offline"
 M5_NUMBERS="kotlinc $(ms_of kotlinc)ms, clojure $(ms_of clojure)ms"
@@ -710,7 +710,7 @@ as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
-wait_log "tp-b3-cci=cci 0.6.1" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-cci=cci 0.6.2" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-erl=29" 60 || fail "lang-beam's erl no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-nvim=NVIM v0.12.6" 30 || fail "editor's nvim no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-rg=ripgrep 15.2.0" 30 || fail "util's rg no longer works without lang-jvm" "tp-b3"
