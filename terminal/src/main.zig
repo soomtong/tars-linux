@@ -7,6 +7,7 @@ const pacing = @import("pacing.zig");
 const dictation = @import("dictation.zig");
 const drm = @import("drm.zig");
 const geometry = @import("geometry.zig");
+const winops = @import("winops.zig");
 const font = @import("font.zig");
 const hangul = @import("hangul.zig");
 const image = @import("image.zig");
@@ -1524,6 +1525,9 @@ const Pane = struct {
     had_imgs: bool = false,
     had_prompt: bool = false,
     band_row: ?u16 = null,
+    /// 이 패널 출력의 `CSI 10 ; Ps t` 훑기(FU-M1, design 결정 5). 잘린 시퀀스를 다음 read에서 이어 읽으므로
+    /// 패널마다 하나다.
+    winops: winops.Scanner = .{},
 };
 
 /// `cellsReuse`에 줄 지난 목록(DR-M3, design 결정 10). 화면에 있는 쪽(`shown`)과 그 행 시작
@@ -4549,6 +4553,10 @@ const App = struct {
     /// 패널마다 본다(WP design 위험 1). 포커스 아닌 패널도 읽어서
     /// `feed`까지 하고, 그리는 것은 `render`에서 포커스 패널만 한다.
     fn readPanes(self: *App) !enum { keep, quit } {
+        // 패널이 `CSI 10 ; Ps t`로 바란 전체 화면 상태(FU-M1). 루프 안에서는 접어 두기만 하고 끝난 뒤 한 번
+        // 적용한다 — `setFullscreen`의 `applyLayout`이 모든 패널의 버퍼를 다시 잡으므로 이 루프 도중에 부르지
+        // 않는다(plan 확정 1). 한 바퀴에 켜기와 끄기가 함께 오면 접힌 결과만 남아 화면이 두 번 출렁이지 않는다.
+        var want = self.fullscreen;
         for (self.fds[self.pty_base..self.pty_end], self.fd_panes[0 .. self.pty_end - self.pty_base]) |pfd, ref| {
             if (pfd.revents & (c.POLLIN | c.POLLHUP | c.POLLERR) == 0) continue;
             const pane = ref.pane;
@@ -4607,6 +4615,8 @@ const App = struct {
                 // 가리키므로 이 바퀴에서 더 안 만진다.
                 continue;
             }
+            // 같은 바이트를 lib-vt보다 먼저 한 번 훑는다. 바꾸지도 빼지도 않는다 — lib-vt는 10을 지금처럼 버린다.
+            want = pane.winops.feed(out, want);
             pane.screen.feed(out);
             // 자식이 질의를 보냈으면(`ESC[6n` 커서 위치 등) 답이 여기 쌓여
             // 있다. `feed` 바로 뒤에서 돌려주는 것이 TQ design 결정 3이다 —
@@ -4654,6 +4664,8 @@ const App = struct {
             // `needs_redraw`가 아니다(RS-M2). 그릴지는 `decideFrame`이 하한을 보고 정한다.
             self.output_pending = true;
         }
+        // 루프 중간의 `break`(워크스페이스가 사라짐)도 여기로 온다 — 그때까지 접힌 요청은 적용한다.
+        if (want != self.fullscreen) try self.setFullscreen(want);
         return .keep;
     }
 

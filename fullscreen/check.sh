@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-# FU 체인 — 전체 화면(FU-M0). 서른두번째 체인.
+# FU 체인 — 전체 화면(FU-M0 · FU-M1). 서른두번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체:
 #   설정 디스크의 fullscreen=on → init이 읽어(`tars-init: config … fullscreen=on`) terminal의 argv 14번 칸으로
@@ -11,8 +11,9 @@ cd "$(dirname "$0")" || exit 1
 #   → 상태 띠를 안 그린다(`status> ink fg=0 (fullscreen)`) — 프롬프트가 화면의 (0, 0)부터 찍힌다(screendump)
 #   → 셸이 그 크기를 안다(fish의 $LINES $COLUMNS = 50 160)
 #   그리고 여백 있는 부팅에서 Cmd+Ctrl+F가 실행 중에 켜고 끈다 — 셸이 SIGWINCH로 새 크기를 알고(47 155 → 50 160
-#   → 47 155), 셸은 닫히지 않는다(켜기 전에 세운 변수가 끈 뒤에도 있다). 마지막으로 tars-config set ·
-#   reload terminal이 다시 뜬 terminal을 전체 화면으로 띄운다.
+#   → 47 155), 셸은 닫히지 않는다(켜기 전에 세운 변수가 끈 뒤에도 있다). 같은 셸이 printf로 내보낸 xterm의
+#   `CSI 10;1 t`가 켜고 `CSI 10;2 t`가 끈다 — 비슷한 `CSI 10 t` · `CSI 1;10 t`는 아무것도 안 바꾼다(FU-M1).
+#   마지막으로 tars-config set · reload terminal이 다시 뜬 terminal을 전체 화면으로 띄운다.
 #
 # 화면은 1280 × 800(게이트의 다른 체인과 같다). 여백이 있으면 (1280 - 40) / 8 = 155열, (800 - 40) / 16 = 47행,
 # 전체 화면이면 160 × 50이고 남는 픽셀이 없어 원점이 (0, 0)이다.
@@ -100,6 +101,23 @@ wait_for_log() {
     sleep 0.1
   done
   return 1
+}
+
+# 패턴에 맞는 로그 줄이 `want`개가 될 때까지 기다린다(FU-M1). 같은 `fullscreen>` 줄이 이 부팅에 여러 번
+# 찍히므로 "있는가"가 아니라 "늘었는가"를 본다.
+wait_for_count() {
+  local pattern="$1" want="$2" i
+  for i in $(seq 1 150); do
+    if [ "$(tlog | grep -acE -- "$pattern")" -eq "$want" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# fish에서 `printf '\033[<args>'`를 친다(FU-M1). 화면의 셸이 그 바이트를 패널 출력으로 내보낸다 — 프로그램이
+# 시퀀스를 보내는 것과 같은 길이다. `args`는 키 이름의 목록(`1 0 semicolon 1 t`).
+print_csi() {
+  type_keys p r i n t f spc apostrophe backslash 0 3 3 bracket_left "$@" apostrophe ret
 }
 
 # 화면을 하나 뜬다. QEMU가 파일을 다 쓸 때까지 기다린다(hidpi/check.sh와 같다).
@@ -283,8 +301,37 @@ wait_for_screen 'mark7' ||
   report_failure "boot B: the shell variable set before the key is gone — the shell was replaced"
 echo "boot B: 47x155 -> 50x160 -> 47x155 in one shell"
 
-# ── 판정 7: tars-config set · reload terminal이 전체 화면으로 다시 띄운다 ────
-echo "=== boot B (7): tars-config set fullscreen=on and reload terminal ==="
+# ── 판정 7: 패널의 CSI 10 ; Ps t가 켜고 끄고, 비슷한 시퀀스는 무시한다(FU-M1) ─────
+#
+# 지금까지 on · off 줄이 하나씩이다. 시퀀스가 켜면 on이 둘(줄은 모두 셋), 비슷한 것 둘 뒤에도 셋 그대로, 바꾸기(2)가 끄면 off가 둘.
+echo "=== boot B (7): CSI 10;1 t turns it on, look-alikes do nothing, CSI 10;2 t toggles it off ==="
+FS_ON='terminal: fullscreen> on grid 160x50 origin 0,0'
+FS_OFF='terminal: fullscreen> off grid 155x47 origin 20,20'
+print_csi 1 0 semicolon 1 t
+wait_for_count "$FS_ON" 2 ||
+  report_failure "boot B: printf CSI 10;1 t did not turn fullscreen on (want a second '${FS_ON}')"
+ask_size w1
+wait_for_screen 'w1-50-160' ||
+  report_failure "boot B: LINES COLUMNS is not 50 160 after CSI 10;1 t"
+# `CSI 10 t`(칸 하나) · `CSI 1;10 t`(첫 칸이 1)는 lib-vt만 보고 버린다. 셋째 `ask_size`가 찍힐 때면 앞의 출력은
+# 이미 읽혔다 — 그때 줄 수가 그대로면 무시된 것이다.
+print_csi 1 0 t
+print_csi 1 semicolon 1 0 t
+ask_size w2
+wait_for_screen 'w2-50-160' ||
+  report_failure "boot B: LINES COLUMNS is not 50 160 after the look-alike sequences"
+[ "$(tlog | grep -acE -- 'terminal: fullscreen> ')" -eq 3 ] ||
+  report_failure "boot B: a look-alike sequence changed fullscreen ($(tlog | grep -ac 'terminal: fullscreen> ') fullscreen> lines, want 3)"
+print_csi 1 0 semicolon 2 t
+wait_for_count "$FS_OFF" 2 ||
+  report_failure "boot B: printf CSI 10;2 t did not toggle fullscreen off (want a second '${FS_OFF}')"
+ask_size w3
+wait_for_screen 'w3-47-155' ||
+  report_failure "boot B: LINES COLUMNS is not 47 155 after CSI 10;2 t"
+echo "boot B: CSI 10;1 t on, CSI 10 t and 1;10 t ignored, CSI 10;2 t off"
+
+# ── 판정 8: tars-config set · reload terminal이 전체 화면으로 다시 띄운다 ────
+echo "=== boot B (8): tars-config set fullscreen=on and reload terminal ==="
 type_keys t a r s minus c o n f i g spc s e t spc f u l l s c r e e n equal o n ret
 wait_for_screen 'fullscreen: off .*-> on' ||
   report_failure "boot B: tars-config set fullscreen=on did not answer 'fullscreen: off (default) -> on'"
@@ -301,4 +348,4 @@ wait_for_screen 'root@\(none\) ~#' ||
 echo "boot B: reload terminal brought the screen back fullscreen"
 
 stop_boot
-echo "PASS: FU-M0 — fullscreen=on starts at 160x50 with no margin or status line, Cmd+Ctrl+F switches it live in the same shell, tars-config set and reload terminal carry it"
+echo "PASS: FU-M1 — fullscreen=on starts at 160x50 with no margin or status line, Cmd+Ctrl+F switches it live in the same shell, tars-config set and reload terminal carry it, a pane's CSI 10;Ps t switches it (FU-M1)"

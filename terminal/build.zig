@@ -473,6 +473,18 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(geometry_test);
 
+    // winops_test도 호스트에서 돈다(FU-M1). 패널 출력의 `CSI 10 ; Ps t` 훑기 — geometry_test와 같은 모양이다.
+    const winops_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/winops_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const winops_test = b.addExecutable(.{
+        .name = "winops_test",
+        .root_module = winops_test_mod,
+    });
+    b.installArtifact(winops_test);
+
     // pty_size_test도 호스트에서 돈다(LE-M0). `pty_test`와 달리 아무것도 exec하지 않고
     // `openpty`의 쌍에서 창 크기만 되읽으므로 컨테이너의 아키텍처로 돈다.
     const pty_size_test_mod = b.createModule(.{
@@ -513,6 +525,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
     test_step.dependOn(&b.addRunArtifact(scale_test).step);
     test_step.dependOn(&b.addRunArtifact(geometry_test).step);
+    test_step.dependOn(&b.addRunArtifact(winops_test).step);
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
     test_step.dependOn(&b.addRunArtifact(verify_test).step);
     test_step.dependOn(&b.addRunArtifact(dirty_test).step);

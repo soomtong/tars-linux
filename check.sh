@@ -561,7 +561,7 @@ CHAINS=(
   "DB-M0:./dualboot/check.sh"
   "LP-M1:./sleep/check.sh"
   "TP-M1:./devtools/check.sh"
-  "FU-M0:./fullscreen/check.sh"
+  "FU-M1:./fullscreen/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
