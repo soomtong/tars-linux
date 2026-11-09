@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) — GitHub release에 tars-<ver>-x86_64.iso와 SHA256SUMS. x86_64 ISO 하나만 낸다. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -76,6 +76,21 @@ tag는 그대로 두고 ISO를 다시 만들었다.
 사용자 요청(2026-11-04, "여기까지 완료 후 다음 패치 버전 찍기: tag, release & distribute!")이 대신했다 — 7.4 이동은 다음 판의 일이다.
 smoke 첫 줄 `TARS 0.1.4`(꼬리표 없음), `kms: scale 1 (1280x800 -> 1280x800)`. 맥 실기 확인이 끝날 때까지 0.1.4는 같은 번호로 거듭 낸다 — 그 방식은 [[feedback_release_iteration]].
 
+## 0.2.0 (2026-11-10)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.2.0` (annotated) → `3d84d27` (`Release 0.2.0`). 그 커밋의 루트 게이트 32/32, 2,096초 |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.2.0 (Latest) |
+| ISO | `tars-0.2.0-x86_64.iso` 2,036,928,512 B(개발 도구 묶음 열, 2GiB 한도까지 약 110MB) · `tars-0.2.0-barebone-x86_64.iso` 143,761,408 B · `tars-0.2.0-fakesteak-x86_64.iso` 144,089,088 B |
+| sha256 | `d3fe88ae13c307b58292de4f0ea35824a3e72b02fda0846fdf508e802a2137bf` · `d158b1aeffcc3ecc55eed7e54f2b4a588a6bee42acca8343a3c60893ab68f390` · `d2f115dfcc9b38f7fabdd51e29470d485ca6fcc514b5e26752918da6666dd5c5` |
+
+0.1.4 뒤의 PW · RB · LP · FS · NS · TP · BB · MF · FU를 담았고 본론은 개발 도구 층(TP)이다 — [[project_release_0_2]]. 릴리스 직전 사용자가
+cyber 0.4.4 · cci 0.6.2를 올리라 했다(`0db7fb0`, devtools 체인 PASS 뒤). 사용자: "0.2 build include 2 iso file, barebone, and basic build" →
+이어서 "let's include fakesteak iso file too" — 납품 데모가 셋째 ISO가 됐다(`make dev-layers DEV_LAYERS=fakesteak` — 기본 `DEV_LAYERS`에 없어
+stamp를 지워도 다시 안 구워진다). 같은 날 dev 프리릴리스 셋과 `demo-fakesteak-20261109`의 release를 지웠다(태그는 남김).
+smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 기록도 `v0.2.0`. 노트는 0.1.4의 틀에 "0.1.4에서 달라진 것"과 납품 데모 절.
+
 ## 배포 절차 (다음 버전도 이대로)
 
 BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VERSION>` 태그이고 추적 파일에 고친 데가 없을 때만 맨 `<ver>`를
@@ -88,6 +103,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 3. barebone ISO(BB-M0부터 — 개발 도구 층 없음, [[project_minimal_iso]])를 먼저 짓는다: `make iso`(ISO_LAYERS 비움), 절차 4의 smoke, 저장소 밖
    빈 디렉터리에 `tars-<ver>-barebone-x86_64.iso`로 옮긴다(`make iso`는 `out/tars.iso` 하나에 쓰므로 다음 짓기가 덮는다). 같은 트리라
    버전 글자는 묶음 판과 같다. BB-M0 실측: 143,751,168 B, 196초(initrd · kernel 캐시).
+   납품 데모(0.2.0부터 — fakesteak)는 `make dev-layers DEV_LAYERS=fakesteak` 뒤 `make iso ISO_LAYERS="fakesteak"`, smoke, 같은 디렉터리에
+   `tars-<ver>-fakesteak-x86_64.iso`. fakesteak은 기본 `DEV_LAYERS`에 없어 아래 stamp 지우기로는 다시 안 구워진다 — 따로 굽고
+   출처 기록(`usr/share/tars/layers/fakesteak`)이 `v<ver>`인지 본다.
    그다음 개발 도구 층(TP-M0부터)을 싣는다: 먼저 `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에
    안 들어가 남는다 — dev-20261106에서 겪었다), 그다음 `make iso ISO_LAYERS="<묶음들>"`(기본값은 묶음을 안 싣는다).
    개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.toml`의 표(version · url · sha256)를 1의 커밋에
@@ -98,9 +116,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    `tars-init: starting as PID 1 (TARS <ver>)`(꼬리표 없이) · `terminal: grid` · `spawned child … fish`가 있고
    `Kernel panic`이 0인지 본다. 설정 디스크를 안 붙여 처음 받은 사람과 같은 기본값 경로를 밟는다. 꼬리표가 붙었거나
    smoke가 실패하면 `git tag -d v<ver>`로 지우고 고친다 — push 전이라 바깥에 안 나갔다.
-5. 저장소 밖 빈 디렉터리(3의 barebone이 있는 곳)에 `tars-<ver>-x86_64.iso`로 복사하고 두 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
+5. 저장소 밖 빈 디렉터리(3의 barebone이 있는 곳)에 `tars-<ver>-x86_64.iso`로 복사하고 세 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
 6. `git push origin v<ver>` →
-   `gh release create v<ver> <iso> <barebone iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
+   `gh release create v<ver> <iso> <barebone iso> <fakesteak iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
    새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다.
 7. 소개 페이지 — `gh-pages`의 `data.js` `releases`에 한 줄(`site/README.md`의 "릴리스를 냈을 때").
 

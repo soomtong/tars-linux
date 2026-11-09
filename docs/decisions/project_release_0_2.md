@@ -42,5 +42,6 @@ How to apply:
 - 프리릴리스도 BB-M0부터 barebone ISO를 함께 올린다 — `tars-dev-<YYYYMMDD>-barebone-x86_64.iso`, 절차는 [[project_release]] 3.
 - 프리릴리스 · 0.2 모두 `make iso ISO_LAYERS="<묶음들>"`이다(기본값은 묶음을 안 싣는다). 굽기 전에 `devlayer/build/*.stamp`를 지운다 —
   묶음 안의 출처 기록(`usr/share/tars/layers/<묶음>`의 `git describe --dirty`)은 stamp에 안 들어가서, dirty일 때 구운 묶음이 그대로 남는다.
+- 냈다(2026-11-10): `v0.2.0` → `3d84d27`, ISO 셋(기본 판 2,036,928,512 B · barebone · fakesteak) — [[project_release]]의 0.2.0 절.
 - 0.2 전에 풀 것: GitHub release는 파일 하나가 2GiB까지다. 묶음 전체의 어림(TP design 확인 10, squashfs 2.5~4GB)이면 ISO 하나로는 못
   올린다(사용자와 아직 안 정했다).

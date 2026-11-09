@@ -55,7 +55,7 @@
 - [Write or reuse](docs/decisions/project_write_or_reuse.md) — 직접 짜는 자리는 배울 값이 있거나 원하는 모양이 남의 것과 다른 자리다
 - [Measuring tool cost](docs/decisions/project_measuring_tool_cost.md) — 게스트에 도구를 넣기 전에 재귀 `DT_NEEDED`로 비용을 재는 절차
 - [Measuring shells](docs/decisions/project_measuring_shells.md) — 셸을 재는 환경이 실제 환경과 다르면 값이 조용히 틀린다
-- [Release](docs/decisions/project_release.md) — 0.1.0 · 0.1.1 · 0.1.2 · 0.1.3(2026-11-01) · 0.1.4(2026-11-05)와 배포 절차 일곱 단계(tag가 `make iso`보다 먼저, 줄끝 CRLF가 만드는 `-dirty`)
+- [Release](docs/decisions/project_release.md) — 0.1.0 · 0.1.1 · 0.1.2 · 0.1.3(2026-11-01) · 0.1.4(2026-11-05) · 0.2.0(2026-11-10, ISO 셋)과 배포 절차 일곱 단계(tag가 `make iso`보다 먼저, 줄끝 CRLF가 만드는 `-dirty`)
 - [Build Version](docs/decisions/project_build_version.md) — `VERSION` + git 꼬리표가 `tars-config version`과 부팅 첫 줄에(BV-M0, 2026-10-20)
 - [Zig upgrade](docs/decisions/project_zig_upgrade.md) — Zig 0.17 이상, `**` 대신 `@splat` · ghostty를 따라 SHA로 고정, 없어진 std 선언과 대체 표(ZU, 2026-10-24)
 - [Lessons Split](docs/decisions/project_lessons_split.md) — lessons.md를 허브와 measurements · dead-ends · carryover · key-files로(LS-M0, 2026-10-26)

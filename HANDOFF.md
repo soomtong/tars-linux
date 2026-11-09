@@ -1,29 +1,31 @@
-# HANDOFF: TP · BB · MF · FU 닫힘 — 다음은 0.2.0 릴리스(사용자 확인 뒤)
+# HANDOFF: 0.2.0 냈다(2026-11-10) — 다음 일은 사용자가 정한다
 
 ## 목표
 
 사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
-담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." 언어 21 · 편집기 · 문서(dasht) · 터미널
-유틸리티 · 서버 · AI 도구 목록을 사용자가 줬다. design은 `docs/specs/2026-11-05-tars-dev-layer-design.md`(초안 18판, 열린 질문 없음).
+담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." — TP로 섰고 0.2.0으로 냈다.
 
 ## 현재 브랜치
 
-`main`. origin에는 BB 닫기 커밋까지 올라가 있고, 2026-11-09 세션의 MF · FU 커밋(`96c1d17`부터 FU-M1 닫기와 이 HANDOFF 커밋까지)은 push하지 않았다 —
-push는 사용자가 말할 때. 0.1.4 이후 정식 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
-마무리하면 0.2 버전을 정식으로 릴리즈" — 다음 번호는 0.2.0(`docs/decisions/project_release.md`의 절차).
+`main` = origin(`Release 0.2.0` 뒤 기록 커밋까지 push). 태그 `v0.2.0` → `3d84d27`. `gh-pages`는 FU(`1031df1`)와 0.2.0 줄까지 push.
 
 ## 다음 할 것
 
-순서는 사용자가 정했다(2026-11-09): manifest 포맷 → 전체 화면 → 0.2.0.
+1. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+2. 맥북 에어의 디스크는 BB 데모 판이다 — 개발 도구로 되돌리려면 `tars-0.2.0-x86_64.iso`로 `tars-install /dev/sda` 갱신.
+3. 다음 서브프로젝트는 사용자가 말할 때.
 
-1. (끝남 — MF-M0, 아래 완료 절) manifest 포맷.
-2. (끝남 — FU-M0 · FU-M1, 아래 완료 절) 전체 화면. 데모 릴리스 `demo-fakesteak-20261109`는 FU 전의 조각이다 — 전체 화면 데모를 다시 낼지는
-   사용자가 말하면(BB-M1 plan Task 5의 모양). 맥북 에어의 디스크는 지금 데모 판이다 — 개발 도구로 되돌리려면 `dev-20261109`로 갱신.
-3. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
-   릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3).
-4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
-5. (끝남, 2026-11-09) 사용자 "remove dev release (pre-release) builds in github" — `dev-20261106` · `dev-20261108` · `dev-20261109` release(ISO 포함)를
-   지웠다. 태그 셋은 남겼다(기억이 실기 확인 판의 커밋으로 가리킨다). `demo-fakesteak-20261109`는 dev가 아니라 남았다.
+## 완료된 작업 (2026-11-10, 0.2.0 릴리스)
+
+- [x] 사용자 "soomtong/cci new version. soomtong/cyber lang new version." — cyber 0.4.3 → 0.4.4, cci 0.6.1 → 0.6.2(`0db7fb0`, manifest 표 둘 +
+      게이트의 `cci 0.6.2` 판정 둘). sha256 = GitHub digest, tarball 배치 · NEEDED · `%ymm` 수가 앞 판과 같음. devtools 체인 PASS(1,134초).
+- [x] 사용자 "remove dev release (pre-release) builds in github" · "remove fakesteak of dev version" — `dev-20261106` · `dev-20261108` ·
+      `dev-20261109` · `demo-fakesteak-20261109`의 release를 지웠다. 태그 넷은 남겼다(기억이 가리키는 커밋 기록).
+- [x] 사용자 "release 0.2 build. tag it and publish it", "include 2 iso file, barebone, and basic build", "include fakesteak iso file too".
+      `3d84d27 Release 0.2.0`에서 루트 게이트 32/32(2,096초) → `v0.2.0` → barebone · fakesteak · 기본 판 ISO 셋, smoke 셋 `TARS 0.2.0`(꼬리표 없음),
+      묶음 출처 기록 `v0.2.0`. 크기 · sha256은 기억 `project_release`의 0.2.0 절. fakesteak은 기본 `DEV_LAYERS`에 없어 따로 구웠다(절차 3에 적음).
+- [x] 노트의 체크섬 명령은 `shasum -a 256 -c --ignore-missing SHA256SUMS` — 셋 중 하나만 받으면 맨 `-c`가 `FAILED open or read`로 1을 낸다.
+      소개 페이지(`app.js`)의 다운로드 명령도 같이 고쳤다.
 
 ## 완료된 작업 (2026-11-09, FU-M1 — FU 닫힘)
 
