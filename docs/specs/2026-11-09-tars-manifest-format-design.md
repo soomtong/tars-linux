@@ -3,7 +3,7 @@
 접두사: MF
 
 Date: 2026-11-09
-Status: 초안 1판
+Status: 초안 2판(결정 8의 판정을 sqfs sha256 대조로)
 
 계기: 사용자(2026-11-09, BB를 닫은 뒤): "manifest 파일 포맷 개선 — 단순 tsv 충분한가? toml이나 yaml정도? 더 나은 포맷이 있다면
 추천". 추천(대화): 사람이 고치는 원본은 TOML로 두고, 개발 컨테이너의 변환기가 지금 모양의 TSV를 산출물로 낸다. 이어서 사용자가 정한
@@ -99,8 +99,14 @@ YAML이 아닌 이유: 따옴표 없는 판 번호(`1.20` · `0.10`)를 숫자�
 8. 옮기기는 한 번이다. 지금 TSV를 TOML로 바꾸는 일회성 스크립트는 scratchpad에 두고 커밋하지 않는다. 옮긴 것이 맞다는 판정은
    둘이다.
    - `diff <(rg -v '^#|^\s*$' 옛 manifest.tsv) <(rg -v '^#' devlayer/build/manifest.tsv)`가 비어야 한다.
-   - 그 뒤 `make dev-layers`가 모든 묶음을 `cached`로 찍는다(stamp가 그대로 — 확인 3).
+   - 옮기기 전에 잰 `devlayer/build/*.sqfs` 열한 개(fakesteak 포함)의 sha256이 옮긴 뒤 다시 구운 것과 같다.
    주석이 모두 옮겨졌는지는 사람이 본다(주석 줄 수를 세서 대조).
+
+   (2판 고침, plan을 쓰며 찾은 것) 1판은 "모든 묶음이 `cached`"를 판정으로 삼았다. 그런데 stamp에는 줄만이 아니라
+   `devlayer/manifest.sh`의 sha256도 들어간다(`build.sh:305`). 결정 5가 그 파일을 고치므로 묶음 열한 개가 모두 다시 구워진다
+   (2026-11-09 09:30~09:33의 기록으로 4분 남짓). 그 대신 굽기가 `-mkfs-time 0 -all-time 0`이라 입력이 같으면 바이트가 같아야
+   하므로, sqfs의 sha256 대조가 "cached"보다 강한 판정이다. harvest의 캐시는 `harvest.sh` · `harvest-skip.tsv` · 줄만 보므로
+   (`harvest.sh:46`), `harvest.sh`를 고치지 않으면 망을 타는 거두기는 다시 돌지 않는다.
 
 ## 비목표
 
@@ -118,5 +124,5 @@ YAML이 아닌 이유: 따옴표 없는 판 번호(`1.20` · `0.10`)를 숫자�
 
 ## Milestone
 
-- MF-M0: 변환기 · 단위 검사 · 옮기기 · `manifest.sh` · `Makefile` · `quick_check.sh` · 안내 글자. 게이트는 결정 8의 두 판정과
+- MF-M0: 변환기 · 단위 검사 · 옮기기 · `manifest.sh` · `Makefile` · `quick_check.sh` · 안내 글자. 게이트는 결정 8의 판정 둘과
   `make quick`. QEMU 부팅은 없다(묶음이 바이트까지 같으므로).
