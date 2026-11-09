@@ -1,4 +1,4 @@
-# HANDOFF: NS-M0(Powerline 넷) 닫힘, TP-M12(AI 도구 설치 확인) 마무리 남음 — GitHub 복구 뒤 clear 검증 · opencode
+# HANDOFF: TP-M12(AI 도구 설치 확인) 끝남, 프리릴리스 dev-20261109 — 다음은 TP 닫기와 0.2.0
 
 ## 목표
 
@@ -8,28 +8,27 @@
 
 ## 현재 브랜치
 
-`main`. TP-M11과 carryover 커밋은 push했다(`2a3c883`, 사용자 2026-11-08). 0.1.4 이후 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
-마무리하면 0.2 버전을 정식으로 릴리즈" — 개발 도구 층(TP)을 마치면 다음 번호는 0.2.0이다(`docs/decisions/project_release.md`의 절차).
+`main`, push했다(사용자 2026-11-09 "푸시하고 pre release 해줘"). 0.1.4 이후 정식 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
+마무리하면 0.2 버전을 정식으로 릴리즈" — 다음 번호는 0.2.0(`docs/decisions/project_release.md`의 절차).
 
 ## 다음 할 것
 
-0. 프리릴리스 `dev-20261108`(`09ec9ef`, 묶음 열, 2,036,891,648 B)은 draft다 — 공개는 사용자가 GitHub에서 draft를 풀거나
-   `gh release edit dev-20261108 --draft=false`.
-1. TP-M12 마무리(plan `docs/plans/2026-11-08-tars-dev-layer-tp-m12.md`, 확인한 것 1~5까지 적혀 있고 "결과" 절이 비었다). 커밋된 것:
-   `f8368c7`(plan · design 18판) · `d2405c6`(시스템 rc의 `~/.local/bin` · lang-script의 `~/.bun/bin` · AI 안내 · carryover 컨테이너 후보).
-   남은 것:
-   - `git stash list`의 "TP-M12 clear into initrd (pending GitHub)" — `devcontainer/Dockerfile`(층 13에 `ncurses-bin:amd64`)과
-     `kernel/guest_tools.sh`(clear · tput · reset을 initrd로, 사용자 동의). `git stash pop` → `docker rmi tars-devcontainer &&
-     ./devcontainer/image.sh build`(층 597이 GitHub에서 lsoff · doge를 받는다) → `make check CHAIN=tools`와 devtools 체인 → 게스트에서
-     `clear` 확인 → 커밋.
-   - opencode: 2026-11-08 밤 다시 — 공식 설치 rc 0(17.8초), 망 없는 화면 셸에서 `opencode --version` = 1.19.5(`out/tp-m12/run-20261108-135054`,
-     probe는 게이트가 `out/tp-m12`를 지운 뒤 대화 기록에서 되살렸다). 남은 것: `~/.config/fish/config.fish`의 `fish_add_path`(boot-2.log의
-     `tp12-rc`), TUI 첫 화면 — probe가 Ctrl+C로 opencode를 못 끝내 뒤의 omp가 그 안으로 들어갔다(`/exit`으로 끝내게 고칠 것).
-   - codex `--sandbox danger-full-access`가 맞는 값인지(`docs/help/devtools.md` · `running-tars.md`가 그 값을 적었다).
-   - 결과 절 · 루트 게이트 · 커밋. probe의 bash/zsh 이름 확인은 따옴표 버그로 "="를 찍었다 — 화면 확인이 판정이다.
-2. TP를 닫고(plan 결정 F — design 닫을 때 항목) 0.2.0 릴리스 — 사용자 확인 뒤.
-3. 소개 페이지 `data.js`(gh-pages)에 NS-M0 — push가 따르므로 사용자 확인 뒤. TP를 닫을 때 함께 해도 된다.
-4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+1. TP를 닫는다(TP-M12 plan 결정 F): design `Status:` 끝남과 "닫을 때" 줄(PM design 결정 4로의 한 줄 · `carryover.md` 패키지 매니저 항목 ·
+   `running-tars.md` "안 되는 것" · `project_release.md`), `completed.md` 한 행, 기억 한 파일 · `MEMORY.md`, 소개 페이지 `data.js`(NS-M0도 함께).
+2. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 프리릴리스 `dev-20261109`의 실기 확인 결과를 먼저 듣는다.
+3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+4. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, TP-M12 마무리 · 프리릴리스)
+
+- [x] 멈춘 자리의 원인: 거두는 `debian:trixie-slim`의 sources에는 trixie-security가 있다(짐작이 틀렸다). slim에 처음부터 깔린 zlib1g `-1+b1`을
+  `apt-get install`이 올리지 않고 의존 폐포 단계가 그 옛 파일을 실었다. harvest.sh가 "설치 전" 앞에 `apt-get upgrade`. 아직 안 구운 묶음의
+  낡은 `.paths`와 한 번 더 부딪쳐 그 여섯을 지웠다(빌드 산출물). 열 묶음 `differs=0`.
+- [x] probe 한 판(`out/tp-m12/run-20261108-234431`, 컨테이너 시계 UTC): codex · omp · opencode 설치 rc 0, 화면 셸에서 이름으로, clear · tput, codex
+  `--sandbox danger-full-access`가 맞는 값, opencode는 fish에만 PATH(안내 한 줄 더함). plan 확인한 것 6 · 7과 "결과" 절.
+- [x] 커밋 `d623c89`(clear · tput · reset을 initrd에, harvest upgrade, xxd deb13u2) · `657ad36`(결과 · 안내). 루트 게이트 31/31, 33분 14초
+  (lanes 1,508초), 잘린 줄 0, `out/gate-logs/20261108-235823`.
+- [x] 프리릴리스 `dev-20261109`(공개 프리릴리스 — draft 아님, Latest는 0.1.4 그대로). 숫자는 `docs/decisions/project_release_0_2.md`.
 
 ## 완료된 작업 (2026-11-08, NS-M0 — GitHub 장애를 기다리는 동안)
 
