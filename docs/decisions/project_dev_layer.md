@@ -13,7 +13,7 @@ metadata:
 
 무엇이 섰나:
 
-- 출처는 `devlayer/manifest.tsv` 한 파일 — 도구마다 버전 · URL · sha256 한 줄, 종류 순서 upstream → vendor-repo → prebuilt → debian
+- 출처는 `devlayer/manifest.toml` 한 파일(MF-M0부터 — 그 전은 `manifest.tsv`, 이제 `make dev-layers`가 `devlayer/build/manifest.tsv`로 생성) — 도구마다 `[[tool]]` 하나(버전 · URL · sha256), 종류 순서 upstream → vendor-repo → prebuilt → debian
   (+ maven · hex). 소스 빌드는 없다([[feedback_tool_sourcing]]).
 - 묶음 열: base · docs · editor · lang-beam · lang-jvm · lang-native · lang-script · media · server · util(zstd 15 squashfs, 합 1,806MiB).
   `make dev-layers`로 굽고 `make iso ISO_LAYERS="…"`로 싣는다 — 기본 `make iso`는 안 싣는다(그래서 barebone ISO가 공짜다, [[project_minimal_iso]]).

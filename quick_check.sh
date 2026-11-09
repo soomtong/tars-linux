@@ -6,7 +6,7 @@
 # 손으로 치던 Zig 세 줄이 여기로 왔다.
 #
 # 단계는 다섯이다. 셸 스크립트(shellcheck) · Zig 서식(fmt --check) · Zig 문법(ast-check) ·
-# shared/의 순수 검사(zig run) · init의 크로스 빌드(zig build). 뒤에 둘이 붙었다 — 6 첫걸음 안내(FS-M0), 7 vendor-repo 키(TP-M10). 빌드 산출물은 out/quick/
+# shared/의 순수 검사(zig run) · init의 크로스 빌드(zig build). 뒤에 셋이 붙었다 — 6 첫걸음 안내(FS-M0), 7 vendor-repo 키(TP-M10), 8 매니페스트 변환기(MF-M0). 빌드 산출물은 out/quick/
 # 아래에만 두어 init/zig-out(initrd가 싣는 원본)을 건드리지 않는다.
 #
 # 도구는 PATH의 shellcheck · zig다. 버전이 아래와 다르면 한 줄 찍고 계속 돈다 — 실패가
@@ -49,13 +49,13 @@ else
 fi
 
 # 2. Zig 서식. 디렉터리는 재귀다.
-zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared || failed+=(zig-fmt)
+zig fmt --check init/build.zig terminal/build.zig init/src terminal/src shared devlayer/manifest-gen.zig || failed+=(zig-fmt)
 
 # 3. Zig 문법. 컨테이너 컴파일러가 거부하지 않는 문법이 다시 들어오는 것을 여기서 본다(ZU).
 ast_failed=0
 while IFS= read -r f; do
   zig ast-check "$f" || { echo "ast-check FAIL $f"; ast_failed=1; }
-done < <(find init/src terminal/src shared -name '*.zig' | sort)
+done < <(find init/src terminal/src shared devlayer/manifest-gen.zig -name '*.zig' | sort)
 [ "$ast_failed" = 0 ] || failed+=(zig-ast-check)
 
 # 4. shared/의 순수 검사. libc · 시스템 콜이 없어 어느 호스트에서나 돈다(SA-M1).
@@ -78,6 +78,11 @@ if command -v gpg >/dev/null 2>&1; then
 else
   note "gpg is not on PATH, vendor-repo keys not checked (make dev-layers checks them)"
 fi
+
+# 8. 매니페스트 변환기(MF design 결정 7). 단위 검사와, 실제 devlayer/manifest.toml을 한 번 변환하는 것. 망 없이 1초 안쪽이다 —
+#    toml을 잘못 고친 것이 make dev-layers(수 분)까지 가지 않고 여기서 줄 번호와 함께 걸린다.
+zig test devlayer/manifest-gen.zig || failed+=(manifest-gen-test)
+zig run devlayer/manifest-gen.zig -- devlayer/manifest.toml out/quick/manifest.tsv || failed+=(manifest-toml)
 
 if [ "${#failed[@]}" = 0 ]; then
   note PASS

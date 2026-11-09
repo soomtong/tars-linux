@@ -2,7 +2,11 @@
 # 개발 도구 층 매니페스트의 파서 — build.sh와 harvest.sh가 source한다(TP-M2 plan 결정 D). 거두기 컨테이너
 # (debian:trixie-slim)에도 bash와 mawk가 있으므로 awk는 POSIX 범위만 쓴다.
 #
-# 부를 때마다 manifest.tsv 전체를 검사한다. 주석(#)과 빈 줄이 아닌 줄은 열이 6이나 7이어야 하고, 아니면 줄 번호를 찍고
+# 읽는 것은 생성된 TSV다(MF design 결정 5). 출처는 devlayer/manifest.toml이고, make dev-layers가 개발 컨테이너에서
+# devlayer/manifest-gen.zig로 검사해 devlayer/build/manifest.tsv를 쓴다 — 거두기 컨테이너에는 TOML 파서가 없다.
+# 키 이름 · 종류별 키는 그 변환기가 먼저 보고, 아래 검사는 TSV의 모양을 한 번 더 보는 둘째 방어선이다.
+#
+# 부를 때마다 TSV 전체를 검사한다. 주석(#)과 빈 줄이 아닌 줄은 열이 6이나 7이어야 하고, 아니면 줄 번호를 찍고
 # 실패한다. 첫 판의 `awk … NF >= 6`은 탭이 공백으로 바뀐 줄을 말없이 건너뛰어, 그 도구가 묶음에서 빠진 채 초록이었다.
 #
 #   열     도구 · 묶음 · 버전 · 종류 · URL · sha256 [· 선택]
@@ -10,17 +14,21 @@
 #          결정 B) — 뒤의 둘은 URL 자리가 devlayer/<종류>/의 잠금 파일, sha256 자리가 그 파일의 sha256
 #          vendor-repo는 URL 자리가 <저장소>/<패키지>, sha256 자리가 apt다(TP-M10 plan 결정 A, 저장소는 devlayer/repos.tsv)
 #   선택   공백으로 가른 키=값. 값에는 공백이 없다. 키는 다섯이다(TP-M2 plan 결정 C, strip은 TP-M3 plan 결정 C, man1은
-#          TP-M6 plan 결정 F). 다섯을 넘으면 TSV를 옮긴다(HANDOFF):
+#          TP-M6 plan 결정 F). TOML에서는 따로 된 키다(manifest.toml 머리):
 #          exe=a,b   링크할 실행 파일(도구 디렉터리 기준). 없으면 bin/의 실행 파일 전부
 #          hook=X    풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
 #          into=T    도구 디렉터리를 T-<버전>으로(rust-src가 rust의 자리로)
 #          strip=N   풀고 나서 벗길 맨 위 디렉터리의 단 수(숫자, 기본 1). 0이면 맨 위의 파일을 그대로
 #          man1=D    도구 디렉터리의 D/*.1 · D/*.1.gz(TP-M8)를 /usr/local/share/man/man1/에 링크한다
 
-DEVLAYER_MANIFEST="${DEVLAYER_MANIFEST:-devlayer/manifest.tsv}"
+DEVLAYER_MANIFEST="${DEVLAYER_MANIFEST:-devlayer/build/manifest.tsv}"
 
 # manifest_check — 문제가 있으면 줄마다 한 줄을 stderr에 찍고 1을 돌려준다.
 manifest_check() {
+  if [[ ! -f "${DEVLAYER_MANIFEST}" ]]; then
+    echo "${DEVLAYER_MANIFEST} is missing — run make dev-layers (devlayer/manifest.toml → devlayer/build/manifest.tsv)" >&2
+    return 1
+  fi
   awk -F'\t' -v file="${DEVLAYER_MANIFEST}" '
     function bad(msg) { printf "%s:%d: %s\n", file, NR, msg > "/dev/stderr"; failed = 1 }
     /^#/ || /^[ \t]*$/ { next }

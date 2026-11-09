@@ -2,7 +2,7 @@
 
 Date: 2026-11-09
 Design: `docs/specs/2026-11-09-tars-manifest-format-design.md`(결정 1~8)
-Status: 착수 전
+Status: 끝났다(2026-11-09)
 
 ## 착수 전에 확정한 것
 
@@ -79,4 +79,18 @@ design의 비목표 그대로. 버전 올리기 · 도구 더하기는 이 miles
 
 ## 결과
 
-(구현 뒤 적는다)
+lead 직접. 판정 다섯을 다 지났다 — 3은 plan대로가 아니라 대비책으로(아래 1).
+
+1. 판정 3의 sha256 대조는 처음에 열한 개 모두 FAILED였다. 원인은 manifest가 아니라 묶음마다 들어가는 출처 기록
+   `usr/share/tars/layers/<묶음>` 한 파일(41 B, `git describe --always --dirty`, `build.sh:267`)이다. 기준은 오전의 커밋, 다시 구운 것은
+   `bad1235-dirty`라 이 줄이 늘 다르다 — design 2판이 "입력이 같으면 바이트가 같다"고 적으며 빠뜨린 입력이다. 기준 sqfs를 복사해 두지 않아
+   옛 것을 열 수 없었으므로 대비책을 이렇게 돌렸다(`out/mf-m0/dump.sh`, 저장소 밖):
+   - 새 코드로 구운 열한 개를 풀어 경로 · 종류 · 권한 · 링크 대상 · 파일 sha256의 목록을 뽑는다(출처 기록 한 파일 제외, 23초).
+   - `git stash -u`로 HEAD(옛 manifest.tsv)에 돌아가 다시 굽고(3분 28초) 같은 목록 — 열한 개 모두 SAME(lang-native 110,454항목).
+   - `stash pop` 뒤 새 코드로 또 굽고(3분 28초) 첫 판의 sqfs sha256과 대조 — 열한 개 모두 OK. describe가 같으면 바이트가 같다(굽기가 결정적이다).
+2. 판정 1: 생성 TSV 129줄이 옛 TSV(주석 · 빈 줄 제외)와 같다. 판정 2: 머리 26줄(새로 씀) 뒤의 주석 76줄이 옛 TSV의 머리 뒤 주석과 내용까지 같다.
+   첫 옮기기는 도구 줄 바로 뒤의 주석(`# base 보강…`)을 앞 도구에 붙여 놓아 빈 줄을 하나 넣게 고쳤다. toml 1,199줄.
+3. 판정 4: `make quick` PASS(19초, 단계 8 — 단위 검사 넷과 실제 변환).
+4. 판정 5: debian 도구에 `url`을 넣으니 `devlayer/manifest.toml:39: url does not belong to kind debian`, 0.4초, harvest 컨테이너가 뜨기 전.
+5. plan과 다른 자리: 변환 단계를 `keys.sh` 다음이 아니라 앞(dev-layers의 첫 줄)에 넣었다 — 틀린 toml이 가장 먼저 걸린다.
+6. 남는 것: sqfs의 sha256으로 "같은 묶음"을 말하려면 출처 기록 줄을 빼고 봐야 한다. 다음에 묶음을 대조하는 일(판 올리기 등)은 `dump.sh` 방식을 쓴다.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# clojure CLI(clojure/brew-install의 clojure-tools tarball)를 묶음 뿌리에 깐다 — manifest.tsv의 `hook=clojure-tools`(TP-M5 plan 결정 C · D).
+# clojure CLI(clojure/brew-install의 clojure-tools tarball)를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "clojure-tools"`(TP-M5 plan 결정 C · D).
 #
 #   clojure-tools.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/clojure-1.12.6.1673)>
 #

@@ -110,7 +110,7 @@ help:
 	@echo
 	@echo "  make dev-layers"
 	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base docs editor lang-beam lang-jvm lang-native lang-script media server util)을 devlayer/build/<묶음>.sqfs로 굽는다."
-	@echo "      devlayer/manifest.tsv가 출처다. 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
+	@echo "      devlayer/manifest.toml이 출처다(검사해 devlayer/build/manifest.tsv로). 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
 	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools가 먼저 부른다(캐시면 수십 초)"
 	@echo
 	@echo "설정 디스크 ($(CONFIG_DISK)) — 게스트가 기억하는 자리"
@@ -238,11 +238,14 @@ iso: initrd
 # 검사가 initrd와 대조하므로 initrd가 먼저 있어야 한다. 의존으로 걸지 않은 것은 initrd가 이미 있을 때 다시 짓지
 # 않으려는 것이다 — 없으면 build.sh가 "run make initrd first"를 찍는다.
 # 거두기 전에 vendor-repo의 키를 개발 컨테이너의 gpg로 본다(devlayer/keys.sh — 지문 · 만료, TP-M10 plan 덧붙임).
+# 그보다 먼저 devlayer/manifest.toml을 검사해 devlayer/build/manifest.tsv를 쓴다(MF design 결정 6) — 거두기 컨테이너는
+# TOML을 못 읽고 그 TSV만 읽는다. 컴파일 캐시를 devlayer/build/zig-cache에 두어 두 번째부터는 빠르다.
 DEV_LAYERS        ?= base docs editor lang-beam lang-jvm lang-native lang-script media server util
 DEV_HARVEST_IMAGE ?= debian:trixie-slim
 DEV_MEASURE       ?=
 DEV_COMP          ?=
 dev-layers: container
+	@$(IN_CONTAINER) 'mkdir -p devlayer/build && zig run --cache-dir devlayer/build/zig-cache --global-cache-dir devlayer/build/zig-cache devlayer/manifest-gen.zig -- devlayer/manifest.toml devlayer/build/manifest.tsv'
 	@$(IN_CONTAINER) devlayer/keys.sh
 	@for b in $(DEV_LAYERS); do \
 	  $(DOCKER) run --rm --platform=linux/amd64 -v "$(CURDIR)":/workspace -w /workspace $(DEV_HARVEST_IMAGE) devlayer/harvest.sh $$b || exit 1; \

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gleam(musl 정적 바이너리 하나)를 묶음 뿌리에 깐다 — manifest.tsv의 `hook=gleam`(TP-M6 plan 결정 D, 사용자 결정).
+# gleam(musl 정적 바이너리 하나)를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "gleam"`(TP-M6 plan 결정 D, 사용자 결정).
 #
 #   gleam.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/gleam-1.19.2)>
 #

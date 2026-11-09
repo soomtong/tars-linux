@@ -1,0 +1,1199 @@
+# 개발 도구 층의 출처 — 이것이 사는 유일한 자리다(TP design 결정 1). 도구 하나가 [[tool]] 표 하나다(MF design).
+#
+# make dev-layers가 devlayer/manifest-gen.zig로 이 파일을 검사해 devlayer/build/manifest.tsv(커밋하지 않는다)를 쓰고,
+# harvest.sh · build.sh는 그 TSV를 읽는다. make quick도 같은 변환을 한 번 돌리므로 잘못 고친 것은 거기서 먼저 걸린다.
+# 읽는 문법은 TOML의 일부다: 주석, [[tool]], 키 = "문자열", 키 = 정수, 키 = ["문자열", …](여러 줄 · 끝 쉼표 가능).
+# 작은따옴표 · 이스케이프(\) · 점 키 · 인라인 표는 줄 번호와 함께 거절한다. 값에는 공백이 없다.
+#
+# 공통 키(반드시): name · bundle · version · kind. 판 번호는 늘 따옴표 안이다 — "1:1.17-4" 같은 Debian 판도 글자 그대로다.
+# kind는 여섯이다. 앞의 것이 있으면 앞의 것을 쓴다: upstream → vendor-repo → prebuilt → debian(maven · hex는 잠금 파일).
+#   upstream     url · sha256. 도구가 직접 내는 linux-amd64 tarball · zip(url이 압축 확장자가 아니면 실행 파일 하나 — TP-M7).
+#                받은 것은 devlayer/cache/<sha256>
+#   prebuilt     url · sha256. 표준이 된 제3자 빌드(python-build-standalone · rv-ruby · builds.hex.pm의 erlang)
+#   vendor-repo  repo · package. 도구 쪽이 운영하는 Debian 저장소(devlayer/repos.tsv, TP-M10). 서명된 Release가 검증한다
+#   debian       키 없음(패키지 이름이 name과 다를 때만 package). 판은 version으로 `=` 고정한다. 의존은 apt가 풀고,
+#                실제로 깔린 목록은 묶음 안 usr/share/tars/layers/<묶음>.pkgs에 남는다. 서명된 Release가 검증한다
+#   maven · hex  lock · sha256. devlayer/<종류>/의 잠금 파일과 그 파일의 sha256(TP-M5 · TP-M6)
+# 선택 키(적힌 순서대로 TSV 일곱째 열이 된다 — 순서를 바꾸면 그 묶음을 다시 굽는다, 내용은 같아도):
+#   exe = ["a", "b"]  링크할 실행 파일(도구 디렉터리 기준). 없으면 bin/의 실행 파일 전부
+#   hook = "X"        풀기를 devlayer/hooks/X.sh가 한다(받기 · sha256은 build.sh)
+#   into = "T"        도구 디렉터리를 T-<버전>으로(rust-src가 rust의 자리로)
+#   strip = N         풀고 나서 벗길 맨 위 디렉터리의 단 수(기본 1). 0이면 맨 위의 파일을 그대로
+#   man1 = "D"        도구 디렉터리의 D/*.1 · D/*.1.gz를 /usr/local/share/man/man1/에 링크한다
+#
+# 버전을 바꾸는 것은 TARS 버전을 낼 때 한 단계로 한다(결정 3). libc6-dev는 initrd의 glibc와 같은 판이어야 한다 —
+# devlayer/harvest.sh가 다르면 두 판을 찍고 실패한다(TP-M0 plan 결정 B). 표를 바꾸면 그 묶음만 다시 굽는다(결정 6).
+
+# ── base · C · C++ · 어셈블리의 바닥(TP-M0, g++는 TP-M2 결정 A) ─────────────────────
+[[tool]]
+name = "libc6-dev"
+bundle = "base"
+version = "2.41-12+deb13u4"
+kind = "debian"
+
+[[tool]]
+name = "gcc"
+bundle = "base"
+version = "4:14.2.0-1"
+kind = "debian"
+
+[[tool]]
+name = "make"
+bundle = "base"
+version = "4.4.1-2"
+kind = "debian"
+
+[[tool]]
+name = "g++"
+bundle = "base"
+version = "4:14.2.0-1"
+kind = "debian"
+
+# base 보강(TP-M4) — 어느 언어를 쓰든 필요한 바닥: 빌드 · 압축 · 원격 · 오프라인 man · 디버깅. 판은 plan 확인 3.
+[[tool]]
+name = "perl"
+bundle = "base"
+version = "5.40.1-6+deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "pkgconf"
+bundle = "base"
+version = "1.8.1-4"
+kind = "debian"
+
+[[tool]]
+name = "autoconf"
+bundle = "base"
+version = "2.72-3.1"
+kind = "debian"
+
+[[tool]]
+name = "automake"
+bundle = "base"
+version = "1:1.17-4"
+kind = "debian"
+
+[[tool]]
+name = "libtool"
+bundle = "base"
+version = "2.5.4-4"
+kind = "debian"
+
+[[tool]]
+name = "patch"
+bundle = "base"
+version = "2.8-2"
+kind = "debian"
+
+[[tool]]
+name = "file"
+bundle = "base"
+version = "1:5.46-5"
+kind = "debian"
+
+[[tool]]
+name = "xz-utils"
+bundle = "base"
+version = "5.8.1-1+deb13u2"
+kind = "debian"
+
+[[tool]]
+name = "zstd"
+bundle = "base"
+version = "1.5.7+dfsg-1"
+kind = "debian"
+
+[[tool]]
+name = "zip"
+bundle = "base"
+version = "3.0-15+deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "unzip"
+bundle = "base"
+version = "6.0-29+deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "openssh-client"
+bundle = "base"
+version = "1:10.0p1-7+deb13u4"
+kind = "debian"
+
+[[tool]]
+name = "rsync"
+bundle = "base"
+version = "3.5.0+ds1-0+deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "man-db"
+bundle = "base"
+version = "2.13.1-1"
+kind = "debian"
+
+[[tool]]
+name = "manpages"
+bundle = "base"
+version = "6.9.1-1"
+kind = "debian"
+
+[[tool]]
+name = "manpages-dev"
+bundle = "base"
+version = "6.9.1-1"
+kind = "debian"
+
+[[tool]]
+name = "gdb"
+bundle = "base"
+version = "16.3-1"
+kind = "debian"
+
+[[tool]]
+name = "strace"
+bundle = "base"
+version = "6.13+ds-1"
+kind = "debian"
+
+[[tool]]
+name = "ltrace"
+bundle = "base"
+version = "0.7.91~git20230705.8eabf68-4+b1"
+kind = "debian"
+
+[[tool]]
+name = "valgrind"
+bundle = "base"
+version = "1:3.24.0-3"
+kind = "debian"
+
+[[tool]]
+name = "xxd"
+bundle = "base"
+version = "2:9.1.1230-2+deb13u2"
+kind = "debian"
+
+[[tool]]
+name = "gnupg"
+bundle = "base"
+version = "2.4.7-21+deb13u1"
+kind = "debian"
+
+# configure가 부르는 기본 명령(plan 확인한 것 — initrd는 coreutils의 일부만 싣는다, expr이 없어 ./configure가 돌지 않았다).
+# coreutils · hostname은 slim에 이미 있어 의존 폐포 단계가 싣고, initrd와 같은 파일은 verify가 뺀다. grep은 판이 initrd와 달라 넣지 않는다.
+[[tool]]
+name = "coreutils"
+bundle = "base"
+version = "9.7-3"
+kind = "debian"
+
+[[tool]]
+name = "bzip2"
+bundle = "base"
+version = "1.0.8-6"
+kind = "debian"
+
+[[tool]]
+name = "hostname"
+bundle = "base"
+version = "3.25"
+kind = "debian"
+
+[[tool]]
+name = "m4"
+bundle = "base"
+version = "1.4.19-8"
+kind = "debian"
+
+[[tool]]
+name = "bison"
+bundle = "base"
+version = "2:3.8.2+dfsg-1+b2"
+kind = "debian"
+
+[[tool]]
+name = "flex"
+bundle = "base"
+version = "2.6.4-8.2+b4"
+kind = "debian"
+
+[[tool]]
+name = "gettext"
+bundle = "base"
+version = "0.23.1-2"
+kind = "debian"
+
+[[tool]]
+name = "perl-doc"
+bundle = "base"
+version = "5.40.1-6+deb13u1"
+kind = "debian"
+
+# rlwrap: REPL의 줄 편집(clojure의 clj가 요구한다, TP-M5). Debian의 의존 python3 · perl은 필터 스크립트 몫이다 — perl은 위 줄과
+# 같은 판이고, python3의 실행 파일 패키지는 harvest-skip.tsv가 뺀다(/usr/bin/python3를 만들지 않는다, TP-M4 위험 2).
+[[tool]]
+name = "rlwrap"
+bundle = "base"
+version = "0.46.1-1+b1"
+kind = "debian"
+
+# ipcalc · vifm(TP-M8 — design의 터미널 유틸리티지만 base에 둔다): 둘 다 perl에 기댄다(ipcalc 0.51은 perl 스크립트). util에 두면
+# perl을 한 벌 더 싣고, perl-doc이 없어 안내용 /usr/bin/perldoc이 base의 진짜와 부딪쳤다(rlwrap과 같은 이유 — TP-M5 plan 확인 1).
+# vifm은 AppImage 대신 Debian(사용자 결정). 의존 vim은 harvest-skip.tsv가 빼고 그 alternatives는 harvest.sh의 skipalt가 뺀다.
+[[tool]]
+name = "ipcalc"
+bundle = "base"
+version = "0.51-1"
+kind = "debian"
+
+[[tool]]
+name = "vifm"
+bundle = "base"
+version = "0.14-3"
+kind = "debian"
+
+# upstream 넷(plan 확인 4 — Debian 판보다 앞선다). cmake-gui는 링크하지 않는다(GUI, needed-ignore.tsv).
+[[tool]]
+name = "cmake"
+bundle = "base"
+version = "4.4.5"
+kind = "upstream"
+url = "https://github.com/Kitware/CMake/releases/download/v4.4.5/cmake-4.4.5-linux-x86_64.tar.gz"
+sha256 = "ed85135c5a5135b45e50423cb406dea04ca3338da0b8ef3c9ede963559680be0"
+exe = [
+  "bin/cmake",
+  "bin/ctest",
+  "bin/cpack",
+  "bin/ccmake",
+]
+
+[[tool]]
+name = "ninja"
+bundle = "base"
+version = "1.13.2"
+kind = "upstream"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
+sha256 = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
+strip = 0
+exe = ["ninja"]
+
+[[tool]]
+name = "shellcheck"
+bundle = "base"
+version = "0.11.0"
+kind = "upstream"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz"
+sha256 = "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+exe = ["shellcheck"]
+
+# ctags: 안정판 바이너리는 없고 universal-ctags 조직이 날마다 굽는 판이 그 upstream이다(plan 확인 4).
+[[tool]]
+name = "ctags"
+bundle = "base"
+version = "2026.10.08"
+kind = "upstream"
+url = "https://github.com/universal-ctags/ctags-nightly-build/releases/download/2026.10.08%2B82494361bb3e7d4f7cf1d2bdc0d0e9001c926e45/uctags-2026.10.08-linux-x86_64.release.tar.xz"
+sha256 = "e149d4f774cca9d6b657453f22fce97b94a5b691afaaa50f56f8564794839f87"
+
+# ── docs(TP-M9) — dasht · w3m · Bash docset(design 결정 19, 사용자 결정 2026-11-07) ──────────────────────
+# docset은 Bash 하나만 싣는다. 나머지는 사용자가 망이 있을 때 `tars-docs get`으로 홈에 받는다(plan 결정 C · E — files/docs/usr/local/bin/tars-docs).
+# dasht: 릴리스 자산이 없어 태그 아카이브다. dasht-server · -http는 socat과 그래픽 브라우저를 전제로 해 링크하지 않는다(plan 맡아 정한 것 2).
+# hook=dasht: util의 sqlite 3.54는 -line의 모양이 `name: x`라 dasht-query-line의 파싱이 빈다 — 훅이 -separator 한 줄을 더한다(plan 확인한 것).
+[[tool]]
+name = "dasht"
+bundle = "docs"
+version = "2.4.0"
+kind = "upstream"
+url = "https://github.com/sunaku/dasht/archive/refs/tags/v2.4.0.tar.gz"
+sha256 = "5ea43b0f7461e124d46b991892dedc8dcf506ccd5e9dc94324f7bdf6e580ff73"
+hook = "dasht"
+exe = [
+  "bin/dasht",
+  "bin/dasht-docsets",
+  "bin/dasht-docsets-extract",
+  "bin/dasht-docsets-install",
+  "bin/dasht-docsets-remove",
+  "bin/dasht-docsets-update",
+  "bin/dasht-query-exec",
+  "bin/dasht-query-html",
+  "bin/dasht-query-line",
+]
+man1 = "man/man1"
+
+# Bash docset: Kapeli 피드 판 /9, Last-Modified 2025-10-02. 판 고정 URL이 없다(plan 확인 2 — 갱신되면 sha256이 이름을 대고 멈춘다).
+# 실행 파일이 없는 줄이라 into=dasht로 dasht의 자리에 푼다 — 버전 열은 into의 규칙대로 dasht의 판이다(rust-src와 같다).
+[[tool]]
+name = "bash-docset"
+bundle = "docs"
+version = "2.4.0"
+kind = "upstream"
+url = "https://kapeli.com/feeds/Bash.tgz"
+sha256 = "f46c2566083bb6aa9e1a2a38fda8d97d8adb76851f1254d6d0e5a11b66a71712"
+into = "dasht"
+strip = 0
+
+# w3m: dasht가 결과를 여는 브라우저이고 docset의 HTML · rust-docs를 읽는다. 스크립트가 부르는 의존이라 verify의 NEEDED는 못 잡는다(plan 할 일 7 (b)).
+[[tool]]
+name = "w3m"
+bundle = "docs"
+version = "0.5.3+git20230121-2.1"
+kind = "debian"
+
+# ── editor(TP-M7) — mitos · neovim · ttt · emacs ──────────────────────────────────────
+# mitos: 주 편집기(helix의 갈래). ms가 맨 위에 있고 옆의 runtime/(문법 301개)을 실제 자리에서 찾는다 — 링크로 불러도 선다(plan 확인 2).
+[[tool]]
+name = "mitos"
+bundle = "editor"
+version = "0.1.3"
+kind = "upstream"
+url = "https://github.com/mitos-editor/mitos/releases/download/v0.1.3/mitos-v0.1.3-x86_64-linux.tar.xz"
+sha256 = "dfd0bb60074c3a38e5d1991fa7680f3cb9eec0b7889b5cbc9cc0ead8d8bc995d"
+exe = ["ms"]
+
+[[tool]]
+name = "neovim"
+bundle = "editor"
+version = "0.12.6"
+kind = "upstream"
+url = "https://github.com/neovim/neovim/releases/download/v0.12.6/nvim-linux-x86_64.tar.gz"
+sha256 = "474430d53e6264f6d6dd18db42d6dc9df3a1b56ca9e88a325bbf860e1a811d87"
+man1 = "share/man/man1"
+
+# ttt: 압축 없는 실행 파일 하나(Go 정적, GOAMD64=v1) — build.sh가 bin/ttt에 0755로 놓는다(plan 결정 D).
+[[tool]]
+name = "ttt"
+bundle = "editor"
+version = "1.11.0"
+kind = "upstream"
+url = "https://github.com/eugenioenko/ttt/releases/download/v1.11.0/ttt-linux-amd64"
+sha256 = "c3c4a382c99b8e291d83a1b527db1b40b8607de8d7373d341bd3e0e926258584"
+
+# emacs: 터미널판. Doom Emacs는 사용자가 망이 있을 때 깐다(사용자 결정 — 시드는 홈 경로에 묶여 안 섰다, plan 확인 4).
+[[tool]]
+name = "emacs-nox"
+bundle = "editor"
+version = "1:30.1+1-6+deb13u1"
+kind = "debian"
+
+# ── lang-beam(TP-M6) — erlang · elixir · gleam ─────────────────────────────────────────
+# erlang: builds.hex.pm의 OTP 빌드(design 결정 1의 prebuilt — erlang/otp의 release에는 linux 바이너리가 없다). ubuntu-24.04판(GLIBC 2.38까지).
+# sha256은 builds/otp/amd64/ubuntu-24.04/builds.txt의 넷째 열. 훅이 Install -cross -minimal로 경로를 박는다(plan 결정 C).
+[[tool]]
+name = "erlang"
+bundle = "lang-beam"
+version = "29.1.2"
+kind = "prebuilt"
+url = "https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/OTP-29.1.2.tar.gz"
+sha256 = "2cfca446976fc61962585a1c77e5d11ddb6f5fed83e84668a2c4acfaad60d22e"
+hook = "otp-install"
+exe = [
+  "bin/erl",
+  "bin/erlc",
+  "bin/escript",
+  "bin/dialyzer",
+  "bin/typer",
+  "bin/ct_run",
+]
+
+# erlang의 man(erl -man이 <ROOT>/man을 읽는다). man1만 /usr/local/share/man에 링크한다 — man3의 string.3 등은 C의 페이지와 이름이 겹친다(결정 F).
+[[tool]]
+name = "erlang-man"
+bundle = "lang-beam"
+version = "29.1.2"
+kind = "upstream"
+url = "https://github.com/erlang/otp/releases/download/OTP-29.1.2/otp_doc_man_29.1.2.tar.gz"
+sha256 = "9e1adc780cafdd90aa28e864a5843d7108864c133581c539eec7a5ea34baff01"
+into = "erlang"
+strip = 0
+man1 = "man/man1"
+
+# elixir: OTP 29용 미리 빌드(BEAM 바이트코드와 셸 스크립트). zip에 맨 위 디렉터리가 없다.
+[[tool]]
+name = "elixir"
+bundle = "lang-beam"
+version = "1.20.5"
+kind = "upstream"
+url = "https://github.com/elixir-lang/elixir/releases/download/v1.20.5/elixir-otp-29.zip"
+sha256 = "f424d6f0bb710a1d4898f2645d8ad6cab3f5eab8d71848c0dda2579d3a8e8a06"
+strip = 0
+exe = [
+  "bin/elixir",
+  "bin/elixirc",
+  "bin/iex",
+  "bin/mix",
+]
+man1 = "man"
+
+# gleam: musl 정적. bin/gleam은 런처(훅) — 캐시 시드와 gleam new 뒤의 manifest.toml(사용자 결정, plan 결정 D). gleam-seed는 그 시드다.
+[[tool]]
+name = "gleam"
+bundle = "lang-beam"
+version = "1.19.2"
+kind = "upstream"
+url = "https://github.com/gleam-lang/gleam/releases/download/v1.19.2/gleam-v1.19.2-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "2ba2afb66ca9f6dcc01a4a6e9169b6942963bad6483bec9571ddc078cfe6f41f"
+hook = "gleam"
+exe = ["bin/gleam"]
+
+[[tool]]
+name = "gleam-seed"
+bundle = "lang-beam"
+version = "1.19.2"
+kind = "hex"
+lock = "devlayer/hex/gleam-seed.lock"
+sha256 = "42c13b407bdbae25c0ece9a059b00bcdf21bb76414ee145568d5fe25f4f951bd"
+into = "gleam"
+
+# ── lang-jvm(TP-M0은 JDK 하나) ──────────────────────────────────────────
+# Temurin 최신 LTS GA. api.adoptium.net/v3/assets/latest/25/hotspot?os=linux&architecture=x64&image_type=jdk가 준 값.
+[[tool]]
+name = "jdk"
+bundle = "lang-jvm"
+version = "25.0.5+8"
+kind = "upstream"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz"
+sha256 = "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+
+# JVM 언어(TP-M5). scala3는 뺐다(사용자 결정 2026-11-06, plan 확인 3). kotlin은 jar와 셸 스크립트뿐이고 kotlinc가 링크를 따라
+# 자기 자리를 찾는다. kotlinc-js · kotlinc-wasm은 싣되 링크하지 않는다(plan 결정 A).
+[[tool]]
+name = "kotlin"
+bundle = "lang-jvm"
+version = "2.4.21"
+kind = "upstream"
+url = "https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip"
+sha256 = "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd"
+exe = [
+  "bin/kotlinc",
+  "bin/kotlin",
+  "bin/kotlinc-jvm",
+  "bin/kapt",
+]
+
+# clojure: 자리표를 훅이 바꿔 넣고 bin/clojure에 첫 실행 시드 줄을 넣는다(plan 결정 C · D). clojure-m2는 그 시드다 — 첫 실행이
+# ~/.m2로 받을 jar · pom 일곱(devlayer/maven/clojure-m2.lock). 판은 clojure 줄과 같아야 그 자리(into=clojure)에 놓인다.
+[[tool]]
+name = "clojure"
+bundle = "lang-jvm"
+version = "1.12.6.1673"
+kind = "upstream"
+url = "https://github.com/clojure/brew-install/releases/download/1.12.6.1673/clojure-tools-1.12.6.1673.tar.gz"
+sha256 = "fe9194858e75d5af13c2e2aff92d710674d5bc5105f2b42f90a7d94d82ec023c"
+hook = "clojure-tools"
+exe = ["bin/clojure", "bin/clj"]
+
+[[tool]]
+name = "clojure-m2"
+bundle = "lang-jvm"
+version = "1.12.6.1673"
+kind = "maven"
+lock = "devlayer/maven/clojure-m2.lock"
+sha256 = "584d3045e135ee8b3e5eda8d1e62fe52081da6fd10dd92b131d2d3d032d29f99"
+into = "clojure"
+
+# ── lang-native(TP-M2) — LLVM 툴체인 · odin · tcc는 뺐다(사용자 결정 2026-11-06, plan 확인 4 · 7) ─────────
+# zig: ziglang.org/download/index.json. 실행 파일이 맨 위에 있고 bin/이 없다.
+[[tool]]
+name = "zig"
+bundle = "lang-native"
+version = "0.17.1"
+kind = "upstream"
+url = "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"
+sha256 = "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
+exe = ["zig"]
+
+# rust: static.rust-lang.org/dist/channel-rust-stable.toml의 xz_hash(hash는 .tar.gz의 것). standalone 설치기를 훅이 돌린다.
+# rust-src는 rust-analyzer의 표준 라이브러리 소스 — rust 줄 뒤에 와야 한다(into=rust가 그 디렉터리에 얹는다).
+[[tool]]
+name = "rust"
+bundle = "lang-native"
+version = "1.99.1"
+kind = "upstream"
+url = "https://static.rust-lang.org/dist/2026-10-15/rust-1.99.1-x86_64-unknown-linux-gnu.tar.xz"
+sha256 = "231fcae47ee950621374725b5fc3b5441d2fbda2955ac45dd7dc816d8876cfe7"
+hook = "rust-installer"
+
+[[tool]]
+name = "rust-src"
+bundle = "lang-native"
+version = "1.99.1"
+kind = "upstream"
+url = "https://static.rust-lang.org/dist/2026-10-15/rust-src-1.99.1.tar.xz"
+sha256 = "e485a88c45db546b73571df7bebfcb4454ba4fb552c492e25fc5b00eeb5bf22d"
+hook = "rust-installer"
+into = "rust"
+
+# go: go.dev/dl/?mode=json. go/bin/{go,gofmt}.
+[[tool]]
+name = "go"
+bundle = "lang-native"
+version = "1.27.3"
+kind = "upstream"
+url = "https://go.dev/dl/go1.27.3.linux-amd64.tar.gz"
+sha256 = "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
+
+# ── lang-script(TP-M3) — 출처의 사정은 plan 확인 2~4 · 9 · 10 ───────────────────────────
+# python: python-build-standalone의 install_only_stripped(plan 결정 B). RUNPATH가 $ORIGIN/../lib라 자리를 옮겨도 선다.
+[[tool]]
+name = "python"
+bundle = "lang-script"
+version = "3.15.2"
+kind = "prebuilt"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+sha256 = "7b03163a980c607ba8194709d4a4086735a7a9c488cc475b098157306927b36b"
+
+# ruby: spinel-coop/rv-ruby(--enable-load-relative). ruby/ruby-builder는 /opt/hostedtoolcache에 굳어 있다(확인 2). 맨 위가 두 단.
+[[tool]]
+name = "ruby"
+bundle = "lang-script"
+version = "4.0.9"
+kind = "prebuilt"
+url = "https://github.com/spinel-coop/rv-ruby/releases/download/20261023/ruby-4.0.9.x86_64_linux.tar.gz"
+sha256 = "16b24f5b3aac3925f95cbbdd08e55c2877aec4f2614edf44af236a59a6591aa4"
+strip = 2
+
+# lua: lua.org는 소스만 낸다. lua 실행 파일 이름은 alternatives가 만들고 harvest가 편다.
+[[tool]]
+name = "lua5.4"
+bundle = "lang-script"
+version = "5.4.7-1+b2"
+kind = "debian"
+
+# luau: luau-lang/luau(Roblox). zip 맨 위에 실행 파일 넷, bin/이 없다(확인 9).
+[[tool]]
+name = "luau"
+bundle = "lang-script"
+version = "0.745"
+kind = "upstream"
+url = "https://github.com/luau-lang/luau/releases/download/0.745/luau-ubuntu.zip"
+sha256 = "186e5ddaa2b048ebc7390c11ed1b00c04e7d3beaffed429250329e3575d2ece2"
+strip = 0
+exe = [
+  "luau",
+  "luau-analyze",
+  "luau-compile",
+  "luau-ast",
+]
+
+# cyber: soomtong/cyber. latest 태그는 움직이므로 판 이름 태그. 실행 파일이 옆의 src/를 읽는다(확인 10).
+[[tool]]
+name = "cyber"
+bundle = "lang-script"
+version = "0.4.3"
+kind = "upstream"
+url = "https://github.com/soomtong/cyber/releases/download/0.4.3/cyber-linux-x64.tar.gz"
+sha256 = "ccbb5e1b5ade57d8fd1a9f7dcaad364eebc5334a5b0a5128e229aa8808d302ad"
+strip = 0
+exe = ["cyber"]
+
+# node: nodejs.org/dist/index.json의 lts 첫 줄, SHASUMS256.txt.
+[[tool]]
+name = "node"
+bundle = "lang-script"
+version = "26.13.0"
+kind = "upstream"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz"
+sha256 = "d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997"
+
+# bun: baseline zip — 1.4.4는 일반 zip의 bun과 sha256까지 같다(TP-M8 plan 확인 4, 실행 중에 CPU를 고른다). 옛 판은 일반 빌드가 AVX2를 요구했다(확인 3).
+[[tool]]
+name = "bun"
+bundle = "lang-script"
+version = "1.4.4"
+kind = "upstream"
+url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64-baseline.zip"
+sha256 = "e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76"
+exe = ["bun"]
+
+# janet: tar 안의 경로가 ./janet-v1.42.1-linux/로 시작한다 — tar가 ./를 벗긴다.
+[[tool]]
+name = "janet"
+bundle = "lang-script"
+version = "1.42.1"
+kind = "upstream"
+url = "https://github.com/janet-lang/janet/releases/download/v1.42.1/janet-v1.42.1-linux-x64.tar.gz"
+sha256 = "5c6cd9862c59b0691e2fd3b2e2327d1459d314a67dd08203fbff372937a20748"
+
+# php: Debian trixie-security(사용자 결정 2026-11-06 — static-php는 8.5.8에서 멈췄다, 확인 4).
+[[tool]]
+name = "php8.4-cli"
+bundle = "lang-script"
+version = "8.4.27-1~deb13u1"
+kind = "debian"
+
+# ── media(TP-M8) — ffmpeg · ImageMagick · GraphicsMagick(사용자 결정 2026-11-07, plan 확인 6 · 7) ─────────────
+# ffmpeg: FFmpeg는 바이너리를 내지 않는다 — BtbN의 공유 빌드(glibc만, $ORIGIN/../lib). 날마다의 autobuild는 약 2주 뒤 지워지고
+# 월말 것은 남는다 — 월말 태그에 고정한다. ffplay는 화면이 없어 링크하지 않는다.
+[[tool]]
+name = "ffmpeg"
+bundle = "media"
+version = "9.0.2-39"
+kind = "upstream"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-shared-9.0.tar.xz"
+sha256 = "90a42a7d9689c031beacc3d03b139fd8243351d616988e8a74188df949fe5d08"
+exe = ["bin/ffmpeg", "bin/ffprobe"]
+man1 = "man/man1"
+
+# AppImage(7.1.2)는 X11 · fontconfig 등을 시스템에서 찾아 서지 않았다(확인 5) — Debian. magick · convert와 gm은 이름이 겹치지 않는다.
+[[tool]]
+name = "imagemagick"
+bundle = "media"
+version = "8:7.1.1.43+dfsg1-1+deb13u14"
+kind = "debian"
+
+[[tool]]
+name = "graphicsmagick"
+bundle = "media"
+version = "1.4+really1.3.45+hg17696-1"
+kind = "debian"
+
+# ── util(TP-M5에서 열고 TP-M8이 채운다 — design의 "터미널 유틸리티" 표, 뺀 것은 plan의 사용자 결정) ─────────────
+# soomtong/tap의 둘. 출처는 각 저장소의 GitHub release(tap formula는 아직 macOS만 적는다). cci는 Go 정적(GOAMD64=v1),
+# glc는 Rust(libstdc++ · libz — initrd에 있다). sha256은 GitHub 자산의 digest(plan 확인 1 · 5).
+[[tool]]
+name = "cci"
+bundle = "util"
+version = "0.6.1"
+kind = "upstream"
+url = "https://github.com/soomtong/claude-code-history-viewer/releases/download/v0.6.1/cci_0.6.1_linux_amd64.tar.gz"
+sha256 = "a076dae36ef2bdd6304d52794116c2db2ef7f7b908d1342ef35769f84d3ed1e2"
+exe = ["cci"]
+
+[[tool]]
+name = "glc"
+bundle = "util"
+version = "0.19.3"
+kind = "upstream"
+url = "https://github.com/soomtong/gluck/releases/download/v0.19.3/glc-0.19.3-linux-x86_64.tar.gz"
+sha256 = "b7c44ff08943ba35f28ff2675393384a474ce5631499219353b54af85428e420"
+strip = 0
+exe = ["glc"]
+
+# TP-M8. sha256은 GitHub 자산의 digest(plan 확인 1). gnu와 musl이 둘 다 있으면 gnu(맡아 정한 것 1).
+# initrd에 trixie 판이 있는 아홉 — /usr/local/bin이 앞서 최신판이 돈다(design 결정 20).
+[[tool]]
+name = "bat"
+bundle = "util"
+version = "0.26.1"
+kind = "upstream"
+url = "https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "726f04c8f576a7fd18b7634f1bbf2f915c43494c1c0f013baa3287edb0d5a2a3"
+exe = ["bat"]
+man1 = "."
+
+[[tool]]
+name = "duf"
+bundle = "util"
+version = "0.9.1"
+kind = "upstream"
+url = "https://github.com/muesli/duf/releases/download/v0.9.1/duf_0.9.1_linux_x86_64.tar.gz"
+sha256 = "5add851e7062c5e56939abb664705e4d14fa2d06289490aff31d51f153832de7"
+strip = 0
+exe = ["duf"]
+man1 = "."
+
+[[tool]]
+name = "eza"
+bundle = "util"
+version = "0.23.5"
+kind = "upstream"
+url = "https://github.com/eza-community/eza/releases/download/v0.23.5/eza_x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "35c70c5c43c29108075e58b893234c67ef585f0b53a7eaf8e9e7d4eec9f339b4"
+strip = 0
+exe = ["eza"]
+
+[[tool]]
+name = "fd"
+bundle = "util"
+version = "10.5.1"
+kind = "upstream"
+url = "https://github.com/sharkdp/fd/releases/download/v10.5.1/fd-v10.5.1-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "d0e2b438c8c4946955f05e4cf51452deada8f7ed509e1ccd60235a468622716f"
+exe = ["fd"]
+man1 = "."
+
+[[tool]]
+name = "fzf"
+bundle = "util"
+version = "0.74.5"
+kind = "upstream"
+url = "https://github.com/junegunn/fzf/releases/download/v0.74.5/fzf-0.74.5-linux_amd64.tar.gz"
+sha256 = "d47d7f882972c7d674dbbba998ffa4116e68379616ffac7695d0671e9a722c5f"
+strip = 0
+exe = ["fzf"]
+
+[[tool]]
+name = "hyperfine"
+bundle = "util"
+version = "2.0.0"
+kind = "upstream"
+url = "https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "ae2beda2ac99c098427e4f755244552daf20e514422889cca6d44421e2d93c87"
+exe = ["hyperfine"]
+man1 = "."
+
+[[tool]]
+name = "jq"
+bundle = "util"
+version = "1.8.2"
+kind = "upstream"
+url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64"
+sha256 = "b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
+
+[[tool]]
+name = "ripgrep"
+bundle = "util"
+version = "15.2.0"
+kind = "upstream"
+url = "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c"
+exe = ["rg"]
+man1 = "doc"
+
+[[tool]]
+name = "sd"
+bundle = "util"
+version = "1.1.0"
+kind = "upstream"
+url = "https://github.com/chmln/sd/releases/download/v1.1.0/sd-v1.1.0-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "3613eca74cd686739bb5a6d68319aa56c747e7315274d02323a2ca2b1c5d82d2"
+exe = ["sd"]
+man1 = "."
+
+# 나머지. 맨 위 디렉터리가 없는 tarball은 strip=0. ast-grep의 sg는 shadow의 명령 이름이라 링크하지 않는다(확인 1).
+# glow · hurl의 man은 .1.gz(plan 결정 D).
+[[tool]]
+name = "asciinema"
+bundle = "util"
+version = "3.2.1"
+kind = "upstream"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-gnu"
+sha256 = "1b405bbda565b33c3c4718de67fedc3535580603c0694b1ff3fb04f363430a20"
+
+[[tool]]
+name = "ast-grep"
+bundle = "util"
+version = "0.51.1"
+kind = "upstream"
+url = "https://github.com/ast-grep/ast-grep/releases/download/0.51.1/app-x86_64-unknown-linux-gnu.zip"
+sha256 = "42514f77ae0c8a25d7d32154d31d3e7e16f3ab894f8ce76ce417de234ee49157"
+strip = 0
+exe = ["ast-grep"]
+
+[[tool]]
+name = "bed"
+bundle = "util"
+version = "0.2.9"
+kind = "upstream"
+url = "https://github.com/itchyny/bed/releases/download/v0.2.9/bed_v0.2.9_linux_amd64.tar.gz"
+sha256 = "d4e0e5265678a23d367a9eb96d9ed10f8517c39c62296d6266601aaa94aea7e3"
+exe = ["bed"]
+
+[[tool]]
+name = "cidr"
+bundle = "util"
+version = "2.3.0"
+kind = "upstream"
+url = "https://github.com/bschaatsbergen/cidr/releases/download/v2.3.0/cidr_2.3.0_linux_amd64.tar.gz"
+sha256 = "973096662464dac2c1405eda0d74ba606f08c979574067567cd3ce4cb1dccfc1"
+strip = 0
+exe = ["cidr"]
+
+[[tool]]
+name = "difftastic"
+bundle = "util"
+version = "0.72.0"
+kind = "upstream"
+url = "https://github.com/Wilfred/difftastic/releases/download/0.72.0/difft-0.72.0-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "33ea1f003081e9f2422299a434e6040c89085bd9f102b08f3fe30393720d5d4a"
+strip = 0
+exe = ["difft"]
+
+[[tool]]
+name = "dua-cli"
+bundle = "util"
+version = "3.0.0"
+kind = "upstream"
+url = "https://github.com/Byron/dua-cli/releases/download/v3.0.0/dua-v3.0.0-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "59438b0934a521dd4cf2896fa42046023df60e1c25812a07cef913dc2b2d103f"
+exe = ["dua"]
+
+[[tool]]
+name = "dust"
+bundle = "util"
+version = "1.2.7"
+kind = "upstream"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "ec3bf712c660dcaa5578b996741f5cca36b30c021c1e4b49352b11137a95a96e"
+exe = ["dust"]
+
+[[tool]]
+name = "fastfetch"
+bundle = "util"
+version = "2.71.0"
+kind = "upstream"
+url = "https://github.com/fastfetch-cli/fastfetch/releases/download/2.71.0/fastfetch-linux-amd64.tar.gz"
+sha256 = "abf5c99a3702cce8d3c7fa2cccd3ac205076ae0f2e45bced24a42a68821702d6"
+exe = ["usr/bin/fastfetch", "usr/bin/flashfetch"]
+man1 = "usr/share/man/man1"
+
+[[tool]]
+name = "gitui"
+bundle = "util"
+version = "0.28.1"
+kind = "upstream"
+url = "https://github.com/gitui-org/gitui/releases/download/v0.28.1/gitui-linux-x86_64.tar.gz"
+sha256 = "f6149b9ae203397158b0c89c13cfde718e7121d3d3cd2ebc597f93d6628d9b5b"
+strip = 0
+exe = ["gitui"]
+
+[[tool]]
+name = "glow"
+bundle = "util"
+version = "3.0.0"
+kind = "upstream"
+url = "https://github.com/charmbracelet/glow/releases/download/v3.0.0/glow_3.0.0_Linux_x86_64.tar.gz"
+sha256 = "13e05e4b2acc18d2aee44291aefe6325b077ec321b631a0cfa780e8e3bc33f78"
+exe = ["glow"]
+man1 = "manpages"
+
+[[tool]]
+name = "go-task"
+bundle = "util"
+version = "3.54.0"
+kind = "upstream"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz"
+sha256 = "680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb"
+strip = 0
+exe = ["task"]
+
+[[tool]]
+name = "gping"
+bundle = "util"
+version = "1.21.0"
+kind = "upstream"
+url = "https://github.com/orf/gping/releases/download/gping-v1.21.0/gping-Linux-gnu-x86_64.tar.gz"
+sha256 = "965d4246cdc6907957199b3f2732e52e36e37a4162a6d15a86f3d26c223a01ef"
+strip = 0
+exe = ["gping"]
+man1 = "."
+
+[[tool]]
+name = "herdr"
+bundle = "util"
+version = "0.9.5"
+kind = "upstream"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-linux-x86_64"
+sha256 = "14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d"
+
+[[tool]]
+name = "hexyl"
+bundle = "util"
+version = "0.17.0"
+kind = "upstream"
+url = "https://github.com/sharkdp/hexyl/releases/download/v0.17.0/hexyl-v0.17.0-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "71b7463b8716225b4248525066e24b1874e954e87f397096f53e8804e3360189"
+exe = ["hexyl"]
+man1 = "."
+
+[[tool]]
+name = "hugo"
+bundle = "util"
+version = "0.169.0"
+kind = "upstream"
+url = "https://github.com/gohugoio/hugo/releases/download/v0.169.0/hugo_extended_0.169.0_linux-amd64.tar.gz"
+sha256 = "c41672a0725d307758a132bc94a962e59760eb33f9ba08c991b81f9881d6fa7d"
+strip = 0
+exe = ["hugo"]
+
+[[tool]]
+name = "hurl"
+bundle = "util"
+version = "8.1.0"
+kind = "upstream"
+url = "https://github.com/Orange-OpenSource/hurl/releases/download/8.1.0/hurl-8.1.0-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "b497e7ab328100c507f1f3323ebe7cc5990d831ae4f9473b74d40b02971da4ca"
+man1 = "man/man1"
+
+[[tool]]
+name = "lazygit"
+bundle = "util"
+version = "0.66.2"
+kind = "upstream"
+url = "https://github.com/jesseduffield/lazygit/releases/download/v0.66.2/lazygit_0.66.2_linux_x86_64.tar.gz"
+sha256 = "158efc9ddfa1241fab5fb3526bb442c8dc6c4b1904d73213b9e4e93e03c52034"
+strip = 0
+exe = ["lazygit"]
+
+[[tool]]
+name = "lazysql"
+bundle = "util"
+version = "0.7.0"
+kind = "upstream"
+url = "https://github.com/jorgerojas26/lazysql/releases/download/v0.7.0/lazysql_Linux_x86_64.tar.gz"
+sha256 = "ebc3edeb848c7e557f88177cf6b2ca7e492ef158e2aa1dce18eb137d1d0726fc"
+strip = 0
+exe = ["lazysql"]
+
+[[tool]]
+name = "leaf"
+bundle = "util"
+version = "1.29.2"
+kind = "upstream"
+url = "https://github.com/RivoLink/leaf/releases/download/1.29.2/leaf-linux-x86_64"
+sha256 = "ee31e39a58c848053685f4302a94cf942f8fd36c8d2f5d7d77bdac54417c6da7"
+
+[[tool]]
+name = "miller"
+bundle = "util"
+version = "6.22.0"
+kind = "upstream"
+url = "https://github.com/johnkerl/miller/releases/download/v6.22.0/miller-6.22.0-linux-amd64.tar.gz"
+sha256 = "0551f8696e8f42dae1c67c782bbe04e0589e718268722fa98561e2566e4623b8"
+exe = ["mlr"]
+
+[[tool]]
+name = "peco"
+bundle = "util"
+version = "0.6.0"
+kind = "upstream"
+url = "https://github.com/peco/peco/releases/download/v0.6.0/peco_0.6.0_linux_amd64.tar.gz"
+sha256 = "93d4418ab1261eb723a1f614c2e652c9e912885cff7d969f913c0686459c62e8"
+strip = 0
+exe = ["peco"]
+
+[[tool]]
+name = "procs"
+bundle = "util"
+version = "0.14.12"
+kind = "upstream"
+url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.12-x86_64-linux.zip"
+sha256 = "81964faf9d5cd0e9f399d5d0954fb6fe4d4d9f7d3cbec4507633df5a45b11713"
+strip = 0
+exe = ["procs"]
+
+[[tool]]
+name = "scc"
+bundle = "util"
+version = "4.1.0"
+kind = "upstream"
+url = "https://github.com/boyter/scc/releases/download/v4.1.0/scc_Linux_x86_64.tar.gz"
+sha256 = "c7328436d3027f4357d3d7853f7dc3ac2bbcb4ca08f1adad91a27c593884079b"
+strip = 0
+exe = ["scc"]
+
+[[tool]]
+name = "starship"
+bundle = "util"
+version = "1.27.0"
+kind = "upstream"
+url = "https://github.com/starship/starship/releases/download/v1.27.0/starship-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "3b94758850901717eb36aa1b53f8492c1322506ec6d41273bc6151e79ed8e4a1"
+strip = 0
+exe = ["starship"]
+
+[[tool]]
+name = "tailspin"
+bundle = "util"
+version = "7.0.0"
+kind = "upstream"
+url = "https://github.com/bensadeh/tailspin/releases/download/7.0.0/tailspin-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "f2de9268dc24811908e63a170507d860ac90c7f6a2f1937f59e5cca78cef21a2"
+strip = 0
+exe = ["tspin"]
+
+[[tool]]
+name = "tree-sitter"
+bundle = "util"
+version = "0.27.1"
+kind = "upstream"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.27.1/tree-sitter-cli-linux-x64.zip"
+sha256 = "c7e686aec16ba17053c2e6fd87600ccb10cf8ba3d055756b17e756d538e11114"
+strip = 0
+exe = ["tree-sitter"]
+
+[[tool]]
+name = "uv"
+bundle = "util"
+version = "0.13.7"
+kind = "upstream"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+exe = ["uv", "uvx"]
+
+[[tool]]
+name = "viddy"
+bundle = "util"
+version = "1.3.1"
+kind = "upstream"
+url = "https://github.com/sachaos/viddy/releases/download/v1.3.1/viddy-v1.3.1-linux-x86_64.tar.gz"
+sha256 = "c0406da6c19bbfbf0381a1a54cf7098a97372c15e5d64bed38e4b8be53e8455e"
+strip = 0
+exe = ["viddy"]
+
+[[tool]]
+name = "wasmtime"
+bundle = "util"
+version = "50.0.1"
+kind = "upstream"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.1/wasmtime-v50.0.1-x86_64-linux.tar.xz"
+sha256 = "685466455dd42a14774a86c36c8f2e45cbb9bd6d92a850139315df60a75498a5"
+exe = ["wasmtime"]
+
+[[tool]]
+name = "xh"
+bundle = "util"
+version = "0.26.3"
+kind = "upstream"
+url = "https://github.com/ducaale/xh/releases/download/v0.26.3/xh-v0.26.3-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "cbbf53bd76007d57d95e4bed8ba7fb3b7fcec22af4bdfc1ff119cd5de351e74f"
+exe = ["xh"]
+man1 = "doc"
+
+[[tool]]
+name = "yazi"
+bundle = "util"
+version = "26.9.1"
+kind = "upstream"
+url = "https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-unknown-linux-gnu.zip"
+sha256 = "a02fe91d3304294048c681f010f1100856872a4e98ecf6927328e888d40a6ad2"
+exe = ["yazi", "ya"]
+
+# sqlite.org는 SHA3-256을 낸다 — 받은 파일을 SHA3로 대조한 뒤 그 sha256을 적었다(확인 1). duckdb는 1.5.6 — 2.0의 CLI는
+# x86-64-v3(AVX2)로 빌드돼 에어 2011에서 서지 않는다(확인 11, 사용자 결정).
+[[tool]]
+name = "sqlite"
+bundle = "util"
+version = "3.54.1"
+kind = "upstream"
+url = "https://sqlite.org/2026/sqlite-tools-linux-x64-3540100.zip"
+sha256 = "a21062b333c7d66d7d8c42054c0fab1c1899729185289ad14bd4f25f9f576d14"
+strip = 0
+exe = [
+  "sqlite3",
+  "sqldiff",
+  "sqlite3_analyzer",
+  "sqlite3_rsync",
+]
+
+[[tool]]
+name = "duckdb"
+bundle = "util"
+version = "1.5.6"
+kind = "upstream"
+url = "https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip"
+sha256 = "6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f"
+strip = 0
+exe = ["duckdb"]
+
+# mkcert(TP-M10 plan 덧붙임, 사용자 요청 2026-11-08): 개발용 로컬 CA와 인증서를 홈에(~/.local/share/mkcert) — root도 망도 필요 없다. 마지막 릴리스가
+# 1.4.4(2022-04)이고 체크섬을 내지 않아 받은 파일의 sha256을 적었다. 압축 없는 실행 파일 하나(TP-M7의 길). `mkcert -install`은 TARS에서 안 된다
+# (update-ca-certificates가 없고 CA 묶음은 부팅마다 initrd에서 선다) — CA 파일을 --cacert 등으로 직접 준다. 시스템 신뢰는 TP-M11 후보.
+[[tool]]
+name = "mkcert"
+bundle = "util"
+version = "1.4.4"
+kind = "upstream"
+url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
+sha256 = "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
+
+# debian: hurl의 NEEDED libxml2(libcurl.so.4는 initrd에 있다). wget. ipcalc · vifm은 perl에 기대 base에 둔다(위, TP-M8).
+[[tool]]
+name = "wget"
+bundle = "util"
+version = "1.25.0-2"
+kind = "debian"
+
+[[tool]]
+name = "libxml2"
+bundle = "util"
+version = "2.12.7+dfsg+really2.9.14-2.1+deb13u3"
+kind = "debian"
+
+# ── server(TP-M10) — 실행 파일까지. 서비스 · 재부팅을 넘는 데이터는 서버(서비스) milestone(plan 비목표 1) ─────────────
+# vendor-repo의 저장소와 키는 devlayer/repos.tsv · devlayer/keys/. mysql은 generic tarball이 trixie에서 서지 않아(libaio.so.1 —
+# trixie는 time64 전환으로 libaio.so.1t64) Oracle의 trixie 저장소다 — 결정 1의 순서 예외(사용자 결정, plan 확인 3). nginx는 stable 갈래(사용자 결정).
+# 의존(postgresql-client-18 · redis-tools와 같은 판, libaio1t64 등)은 apt가 푼다. 서비스 계정은 거두지 않는다(harvest의 계정 파일 제외).
+[[tool]]
+name = "postgresql"
+bundle = "server"
+version = "18.6-1.pgdg13+2"
+kind = "vendor-repo"
+repo = "pgdg"
+package = "postgresql-18"
+
+[[tool]]
+name = "mysql-server"
+bundle = "server"
+version = "9.7.4-1debian13"
+kind = "vendor-repo"
+repo = "mysql"
+package = "mysql-community-server-core"
+
+[[tool]]
+name = "mysql-client-core"
+bundle = "server"
+version = "9.7.4-1debian13"
+kind = "vendor-repo"
+repo = "mysql"
+package = "mysql-community-client-core"
+
+# mysql-client: mysqladmin · mysqlcheck · mysqlimport · mysqlshow는 core가 아닌 이 꾸러미다(plan 확인한 것). mysql-common을 끌고 와
+# /etc/mysql/my.cnf가 conf.d를 include한다 — TARS의 기본값은 files/server/etc/mysql/conf.d/tars.cnf.
+[[tool]]
+name = "mysql-client"
+bundle = "server"
+version = "9.7.4-1debian13"
+kind = "vendor-repo"
+repo = "mysql"
+package = "mysql-community-client"
+
+[[tool]]
+name = "nginx"
+bundle = "server"
+version = "1.30.6-1~trixie"
+kind = "vendor-repo"
+repo = "nginx"
+package = "nginx"
+
+[[tool]]
+name = "redis"
+bundle = "server"
+version = "6:8.10.3-1rl1~trixie1"
+kind = "vendor-repo"
+repo = "redis"
+package = "redis-server"
+
+[[tool]]
+name = "redis-tools"
+bundle = "server"
+version = "6:8.10.3-1rl1~trixie1"
+kind = "vendor-repo"
+repo = "redis"
+package = "redis-tools"
+
+# caddy: Go 정적 실행 파일 하나가 tarball 맨 위에 있다. 릴리스의 체크섬은 sha512 — 받은 파일과 같았다(plan 확인 9).
+[[tool]]
+name = "caddy"
+bundle = "server"
+version = "2.11.9"
+kind = "upstream"
+url = "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_amd64.tar.gz"
+sha256 = "5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb"
+strip = 0
+exe = ["caddy"]
+
+# ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. DEV_LAYERS 기본값에 없고 `make dev-layers DEV_LAYERS=fakesteak`로 굽는다 ──
+# fakesteak: 사용자의 fork(soomtong/fakesteak)가 GitHub Actions로 내는 정적 실행 파일(-O3 -static, -march 없음). 원본 domsson/fakesteak은 바이너리가 없다.
+# 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6).
+[[tool]]
+name = "fakesteak"
+bundle = "fakesteak"
+version = "1.0.0"
+kind = "upstream"
+url = "https://github.com/soomtong/fakesteak/releases/download/v1.0.0/fakesteak-linux-x86_64.tar.gz"
+sha256 = "b0abec76012ceddcdad1fd8793cd0de1bd9d805e99332dd97d9415c6190cca82"
+exe = ["fakesteak"]

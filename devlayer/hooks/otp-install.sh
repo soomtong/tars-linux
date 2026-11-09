@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# builds.hex.pm의 Erlang/OTP 빌드를 묶음 뿌리에 깐다 — manifest.tsv의 `hook=otp-install`(TP-M6 plan 결정 C).
+# builds.hex.pm의 Erlang/OTP 빌드를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "otp-install"`(TP-M6 plan 결정 C).
 #
 #   otp-install.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/erlang-29.1.2)>
 #

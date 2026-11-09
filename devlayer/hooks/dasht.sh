@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dasht(셸 스크립트 묶음)를 묶음 뿌리에 깐다 — manifest.tsv의 `hook=dasht`(TP-M9 plan 확인한 것).
+# dasht(셸 스크립트 묶음)를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "dasht"`(TP-M9 plan 확인한 것).
 #
 #   dasht.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/dasht-2.4.0)>
 #

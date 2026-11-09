@@ -1,4 +1,4 @@
-# HANDOFF: TP · BB 닫힘(데모 릴리스 demo-fakesteak-20261109), 다음은 manifest 포맷 개선 — 0.2.0은 그 뒤
+# HANDOFF: TP · BB · MF 닫힘, 다음은 전체 화면 모드(FU) — 0.2.0은 그 뒤
 
 ## 목표
 
@@ -15,9 +15,7 @@
 
 순서는 사용자가 정했다(2026-11-09): manifest 포맷 → 전체 화면 → 0.2.0.
 
-1. manifest 파일 포맷 개선(사용자 2026-11-09, 0.2 전에) — "단순 tsv 충분한가? toml이나 yaml정도? 더 나은 포맷이 있다면 추천". 추천은
-   이미 냈다(대화): 사람이 고치는 원본은 TOML, 개발 컨테이너의 변환기가 스키마를 보고 지금 모양의 TSV를 산출물로 내서 harvest(slim 컨테이너,
-   파서 없음) · build · manifest.sh는 그대로. YAML은 판 번호를 숫자로 읽는 함정, JSON은 주석 없음, ZON은 대안. 변환기 언어는 미정. design부터.
+1. (끝남 — MF-M0, 아래 완료 절) manifest 포맷.
 2. 전체 화면 모드(사용자 2026-11-09, BB 데모를 맥북 에어 실기에서 본 뒤: "Full screen mode 필요하겠다"). 지금은 격자 둘레 여백 20px(`GRID_X` ·
    `GRID_Y`, comptime 상수 — `terminal/src/main.zig`에서 24곳)과 맨 아래 상태 줄이 늘 있다. 정할 것: 켜는 길(`tars.conf` 키 · 단축키 · 둘 다),
    감추는 것(여백 · 상태 줄 · 둘 다), 납품 묶음이 켜는 길. render 체인의 `pixel>` 좌표가 여백을 전제한다. 접두사 후보 FU(미사용).
@@ -26,6 +24,14 @@
    릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3).
 4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 5. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, MF-M0 — MF 닫힘)
+
+- [x] 사용자가 정한 것: 변환기 Zig, 생성 TSV는 산출물(커밋 안 함), 범위는 manifest 하나. design 승인 "confirmed".
+- [x] 출처 `devlayer/manifest.toml`(1,199줄, 도구 129), 변환기 `devlayer/manifest-gen.zig`(단위 검사 넷), `make dev-layers` 첫 단계 ·
+      `make quick` 단계 8, 옛 `devlayer/manifest.tsv` 지움. 묶음 열한 개가 옮기기 전과 내용이 같다 — sqfs sha256은 출처 기록
+      (`git describe --dirty`) 한 줄 때문에 커밋마다 달라서, 그 한 파일을 빼고 풀어 대조했다(plan 결과 1, 기억 `project_manifest_format`).
+- [x] 소개 페이지(`gh-pages`의 `data.js`)에는 안 넣었다 — 빌드 내부라(권한 대로, 사용자 "Commit and go next").
 
 ## 완료된 작업 (2026-11-09, BB-M0 · BB-M1 — BB 닫힘)
 
@@ -383,7 +389,7 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
 - `init/src/service_cli.zig` — `tars-service`(TP-M11이 enable · disable을 더한다), `init/src/config_front.zig:28-29` — `tars-config ssh on`의 링크.
 - `init/src/main.zig:1240-1245` · `:1490` — `/home` → 묶음 → `/usr/local` → `services.discover`의 순서.
 
-- `devlayer/manifest.tsv` — 개발 도구 층의 유일한 출처(도구 · 묶음 · 판 · 종류 · URL · sha256 · 선택 열).
+- `devlayer/manifest.toml` — 개발 도구 층의 유일한 출처(도구마다 `[[tool]]`, MF-M0). `devlayer/manifest-gen.zig`가 `devlayer/build/manifest.tsv`로 바꾼다.
 - `devlayer/build.sh` — 받기(`fetch_checked`) · 풀기(`strip=`, 압축 없는 실행 파일 하나 — TP-M7) · 종류 `maven` · `hex`(잠금 파일 → `seed/`) · `man1=` 링크 · hex 시드와 `seed/manifest.toml` 대조 · `devlayer/files/` 얹기 · verify · 묶음 사이 대조 · 굽기.
   `devlayer/maven/*.lock` — Maven Central의 경로 · sha256. `devlayer/hex/*.lock` — Hex tarball · sha256. 훅 `clojure-tools.sh`(자리표 · 시드 줄) · `otp-install.sh`(`Install -cross`) · `gleam.sh`(런처). `devlayer/harvest.sh` — debian 줄 거두기(man 제외 풀기,
   계정 · sysvinit 자리 빼기, `harvest-skip.tsv`, 남의 이름인 alternatives `editor` · `ctags` 빼기, `common-licenses` 본문 싣기 — TP-M7, skip 패키지로 펴지는 alternatives 빼기 `skipalt` — TP-M8). `devlayer/needed-ignore.tsv` — NEEDED 예외의 이유 넷(GUI · jvm-loaded · exe-loaded · testdata). `devlayer/verify.sh` — 결정 4(겹침) · 5(NEEDED). `devlayer/manifest.sh` — 파서.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rust의 standalone 설치기(rust-installer 형식)를 묶음 뿌리에 깐다 — manifest.tsv의 `hook=rust-installer`(TP-M2 plan 결정 C).
+# rust의 standalone 설치기(rust-installer 형식)를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "rust-installer"`(TP-M2 plan 결정 C).
 #
 #   rust-installer.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/rust-1.99.1)>
 #

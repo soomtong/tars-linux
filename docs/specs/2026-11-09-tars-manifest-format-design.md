@@ -3,7 +3,7 @@
 접두사: MF
 
 Date: 2026-11-09
-Status: 초안 2판(결정 8의 판정을 sqfs sha256 대조로)
+Status: 닫힘(2026-11-09) — MF-M0. 출처 `devlayer/manifest.toml`(1,199줄), 변환기 `devlayer/manifest-gen.zig`, 묶음 열한 개가 옮기기 전과 내용이 같다(결정 8의 판정은 plan 결과 1 — 출처 기록 한 줄을 빼고 대조). plan `docs/plans/2026-11-09-tars-manifest-format-mf-m0.md`.
 
 계기: 사용자(2026-11-09, BB를 닫은 뒤): "manifest 파일 포맷 개선 — 단순 tsv 충분한가? toml이나 yaml정도? 더 나은 포맷이 있다면
 추천". 추천(대화): 사람이 고치는 원본은 TOML로 두고, 개발 컨테이너의 변환기가 지금 모양의 TSV를 산출물로 낸다. 이어서 사용자가 정한
