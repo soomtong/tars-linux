@@ -2,7 +2,7 @@
 
 Date: 2026-11-09
 Design: `docs/specs/2026-11-09-tars-fullscreen-design.md`(2판, 결정 4의 셋째 · 5 · 7)
-Status: 초안
+Status: 끝났다(2026-11-09)
 
 ## 착수 전에 확정한 것
 
@@ -96,4 +96,24 @@ design의 비목표. 데모 릴리스를 다시 내는 것(사용자가 말하�
 
 ## 결과
 
-(구현 뒤)
+lead 직접. 커밋 `d3ea489`(Task 1~5) · `dbb6151`(조각 고침). `zig build test`의 `winops_test: 120 checks, all passed`, 빨강 하나(칸 수 조건을 빼면
+`ESC[10t`가 켜진 화면을 끈다 — 검사가 그 줄을 짚었다). FU 체인 단독 2회 PASS(3분 0초 · 3분 2초). 루트 게이트 32/32(`make gate` 36분 23초 — 개발 도구 묶음 굽기 포함, prebuild 378초 + lanes 1,660초, 잘린 줄 0, `out/gate-logs/20261109-112727`).
+
+판정 7의 로그 순서: `fullscreen> on`(printf `10;1t`) → lib-vt의 `ignoring CSI t with unimplemented parameter: ESC [ {1, 10} t` →
+`fullscreen> off`(printf `10;2t`). lib-vt의 경고는 첫 매개변수 값마다 한 번만 찍혀(`logUnsupportedOnce`) `ESC[10t`의 경고는 안 보인다 —
+바이트를 그대로 넘겼으므로 lib-vt도 같은 시퀀스를 여전히 보고 버린다(design 결정 5).
+
+plan과 다른 자리:
+
+1. 조각의 세 줄(`printf` · `fakesteak -b` · `printf`)이 한 줄 `sh -c 'trap : INT; printf …; fakesteak -b; printf …'`이 됐다. probe 첫 판에서
+   Ctrl+C 뒤 화면이 전체 화면에 갇혔다 — fakesteak은 raw 모드가 아니라 Ctrl+C를 SIGINT로 받고, 대화형 fish는 전경 job이 SIGINT로 죽으면
+   블록의 남은 명령을 취소한다(bash · zsh도 같다). 안쪽 sh는 빈 처리기(`:`, 무시 `''`가 아니다 — 무시는 자식에게 물려져 Ctrl+C가 안 먹는다)로
+   살아남아 끄기를 찍는다. Task 5의 "뒤 printf가 돈다"는 틀린 짐작이었다.
+2. 끄기 뒤에 `ESC[H ESC[2J ESC[3J`(clear가 보내는 것)를 붙였다. 둘째 판에서 160열 → 155열로 줄 때 비 세 줄이 다시 접혀 프롬프트 위에 남았다.
+   같은 read 덩이면 지우기가 크기 바꾸기보다 먼저(Task 2의 접기), 다른 덩이면 나중에 — 어느 쪽이든 깨끗하다. 사용자(2026-11-09): "clean up them all".
+3. probe(`out/fu-m1/probe.sh`, 51초): 설치 `fakesteak.sqfs 323584 bytes`, NVMe 부팅 `grid 155x47` → autorun `fullscreen> on grid 160x50 origin 0,0`,
+   `sendkey ctrl-c` → `fullscreen> off grid 155x47 origin 20,20` · fakesteak 0개, 새 패널(`alt-d`)에 다시 안 뜨고 on · off 1줄씩.
+   화면 `rain.png`(여백 없는 비) · `prompt.png`(프롬프트 하나와 상태 줄) · `split.png`.
+4. 루트 게이트 첫 판이 입구 검사에서 멈췄다(2분 30초, 체인 0). `check.sh`의 조기 종료 grep 검사(`\|[^|]*\b(grep|rg)\b[^|]*-[a-zA-Z]*q`)가
+   `tlog | grep -acE … )" -eq 3`의 `-eq`를 `-q`로 읽었다 — 오탐이지만 셈을 변수로 먼저 받게 고쳤다(`6884678`). `make check CHAIN=`은 이 입구
+   검사를 안 거친다 — 체인 스크립트를 고쳤으면 루트 게이트 전에 그 정규식을 한 번 대 본다.

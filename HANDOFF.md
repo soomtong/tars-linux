@@ -1,4 +1,4 @@
-# HANDOFF: TP · BB · MF 닫힘, FU-M0 끝남 — 다음은 FU-M1(CSI 10 t · fakesteak), 0.2.0은 그 뒤
+# HANDOFF: TP · BB · MF · FU 닫힘 — 다음은 0.2.0 릴리스(사용자 확인 뒤)
 
 ## 목표
 
@@ -8,7 +8,7 @@
 
 ## 현재 브랜치
 
-`main`. origin에는 BB 닫기 커밋까지 올라가 있고, 2026-11-09 세션의 MF · FU 커밋(`96c1d17`부터 FU-M0 `174618e`와 이 HANDOFF 커밋까지)은 push하지 않았다 —
+`main`. origin에는 BB 닫기 커밋까지 올라가 있고, 2026-11-09 세션의 MF · FU 커밋(`96c1d17`부터 FU-M1 닫기와 이 HANDOFF 커밋까지)은 push하지 않았다 —
 push는 사용자가 말할 때. 0.1.4 이후 정식 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
 마무리하면 0.2 버전을 정식으로 릴리즈" — 다음 번호는 0.2.0(`docs/decisions/project_release.md`의 절차).
 
@@ -17,14 +17,22 @@ push는 사용자가 말할 때. 0.1.4 이후 정식 버전은 안 냈다. 사�
 순서는 사용자가 정했다(2026-11-09): manifest 포맷 → 전체 화면 → 0.2.0.
 
 1. (끝남 — MF-M0, 아래 완료 절) manifest 포맷.
-2. 전체 화면(FU, design `docs/specs/2026-11-09-tars-fullscreen-design.md` 2판). FU-M0 끝남(아래 완료 절). 다음은 FU-M1 —
-   패널 출력의 `CSI 10 ; Ps t`를 lib-vt 앞에서 훑는 `terminal/src/winops.zig`(lib-vt는 10을 버린다, design 확인 7), fakesteak 조각 둘이
-   실행 전 `\033[10;1t` · 끝난 뒤 `\033[10;0t`, QEMU probe(BB-M1의 방식). plan은 아직 없다.
-   맥북 에어의 디스크는 지금 데모 판이다 — 개발 도구로 되돌리려면 `dev-20261109`로 갱신.
+2. (끝남 — FU-M0 · FU-M1, 아래 완료 절) 전체 화면. 데모 릴리스 `demo-fakesteak-20261109`는 FU 전의 조각이다 — 전체 화면 데모를 다시 낼지는
+   사용자가 말하면(BB-M1 plan Task 5의 모양). 맥북 에어의 디스크는 지금 데모 판이다 — 개발 도구로 되돌리려면 `dev-20261109`로 갱신.
 3. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
    릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3).
 4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 5. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, FU-M1 — FU 닫힘)
+
+- [x] plan `6dc3d73`(사용자 "Ok"), 구현 `d3ea489`: `terminal/src/winops.zig`(상태 넷의 `Scanner`, 바이트는 그대로 넘긴다) · `winops_test`(120 판정, 빨강 하나 확인),
+      `Pane.winops`, `readPanes`가 요청을 접어 두고 루프 뒤 한 번 `setFullscreen`. 체인 `fullscreen` 부팅 B 판정 7(printf `10;1t` 켜기 · `10 t` · `1;10 t` 무시 ·
+      `10;2t` 끄기), `CHAINS`의 이름 `FU-M1`. 체인 단독 2회 PASS(3분 0초 · 3분 2초).
+- [x] probe(`out/fu-m1/probe.sh`, 데모 ISO 설치 → NVMe 부팅)가 빨강 둘을 찾았다: Ctrl+C 뒤 끄기 printf가 안 돈다(대화형 셸이 SIGINT로 죽은 job 뒤를
+      취소), 160 → 155열 reflow가 비 세 줄을 남긴다. 조각을 `sh -c 'trap : INT; …; printf "\033[10;0t\033[H\033[2J\033[3J"'`로(`dbb6151`). 셋째 판 PASS.
+- [x] 사용자: "welldone. clean up them all." — 잔상 지우기 · 루트 게이트 · 닫기(design Status · plan 결과 · completed · 기억 `project_fullscreen` ·
+      `MEMORY.md` · desk.md 한 줄 · 소개 페이지). 루트 게이트 32/32(`make gate` 36분 23초 — 개발 도구 묶음 굽기 포함, prebuild 378초 + lanes 1,660초, 잘린 줄 0, `out/gate-logs/20261109-112727`) — 첫 판은 입구 검사의 오탐으로 멈췄다(plan 결과 4, `6884678`).
 
 ## 완료된 작업 (2026-11-09, FU-M0)
 
