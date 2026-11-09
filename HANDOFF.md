@@ -13,10 +13,11 @@
 
 ## 다음 할 것
 
-1. BB(Barebone) — design `docs/specs/2026-11-09-tars-barebone-design.md`. BB-M0: barebone ISO(`make iso`, 묶음 없음)를 짓고 QEMU smoke,
-   배포 절차에 "barebone ISO도 올린다". BB-M1: fakesteak 묶음(fork `soomtong/fakesteak` v1.0.0, 정적 바이너리) + 자동 실행 셸 조각 둘.
+1. BB(Barebone) — design `docs/specs/2026-11-09-tars-barebone-design.md`. BB-M0 끝(2026-11-09, 143,751,168 B, smoke 통과, 배포 절차에
+   barebone). 다음 BB-M1: fakesteak 묶음(fork `soomtong/fakesteak` v1.0.0, 정적 바이너리) + 자동 실행 셸 조각 둘.
 2. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
-   BB-M0가 끝나면 릴리스에 barebone ISO가 함께 오른다.
+   릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3). 0.2 전에 할 것(사용자 2026-11-09): manifest 파일 포맷 개선 — 단순
+   tsv로 충분한가, toml · yaml, 더 나은 포맷 추천.
 3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 4. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
 

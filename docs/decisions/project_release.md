@@ -85,7 +85,10 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 1. 저장소 뿌리의 `VERSION`을 새 번호로 고쳐 커밋한다. 그 커밋에서 루트 게이트가 PASS인지 본다(게이트 이미지는
    `+<sha>`를 단다). 트리는 clean이어야 한다.
 2. `git tag -a v<ver> <그 커밋> -m …`. push는 아직 안 한다.
-3. 개발 도구 층(TP-M0부터)을 싣는다: 먼저 `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에
+3. barebone ISO(BB-M0부터 — 개발 도구 층 없음, [[project_minimal_iso]])를 먼저 짓는다: `make iso`(ISO_LAYERS 비움), 절차 4의 smoke, 저장소 밖
+   빈 디렉터리에 `tars-<ver>-barebone-x86_64.iso`로 옮긴다(`make iso`는 `out/tars.iso` 하나에 쓰므로 다음 짓기가 덮는다). 같은 트리라
+   버전 글자는 묶음 판과 같다. BB-M0 실측: 143,751,168 B, 196초(initrd · kernel 캐시).
+   그다음 개발 도구 층(TP-M0부터)을 싣는다: 먼저 `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에
    안 들어가 남는다 — dev-20261106에서 겪었다), 그다음 `make iso ISO_LAYERS="<묶음들>"`(기본값은 묶음을 안 싣는다).
    개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.tsv`의 줄(버전 · URL · sha256)을 1의 커밋에
    함께 넣고, 바뀐 줄의 묶음만 다시 구워진다. 올리지 않으면 앞 판의 묶음이 그대로 실린다.
@@ -95,9 +98,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    `tars-init: starting as PID 1 (TARS <ver>)`(꼬리표 없이) · `terminal: grid` · `spawned child … fish`가 있고
    `Kernel panic`이 0인지 본다. 설정 디스크를 안 붙여 처음 받은 사람과 같은 기본값 경로를 밟는다. 꼬리표가 붙었거나
    smoke가 실패하면 `git tag -d v<ver>`로 지우고 고친다 — push 전이라 바깥에 안 나갔다.
-5. 저장소 밖 빈 디렉터리에 `tars-<ver>-x86_64.iso`로 복사하고 `shasum -a 256 … > SHA256SUMS`.
+5. 저장소 밖 빈 디렉터리(3의 barebone이 있는 곳)에 `tars-<ver>-x86_64.iso`로 복사하고 두 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
 6. `git push origin v<ver>` →
-   `gh release create v<ver> <iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
+   `gh release create v<ver> <iso> <barebone iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
    새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다.
 7. 소개 페이지 — `gh-pages`의 `data.js` `releases`에 한 줄(`site/README.md`의 "릴리스를 냈을 때").
 

@@ -2,7 +2,7 @@
 
 Date: 2026-11-09
 Design: `docs/specs/2026-11-09-tars-barebone-design.md`
-Status: plan — 착수 전
+Status: 끝났다(2026-11-09)
 
 ## 착수 전에 확정한 것
 
@@ -60,3 +60,16 @@ design의 확인 1~6에 더해, plan을 쓰며 읽은 것(HEAD `c2d6af0`).
    도구가 안 붙으니, 해 본다면 그 뒤 묶음 판으로 다시 갱신해 되돌린다.
 2. fakesteak 묶음과 자동 실행(BB-M1).
 3. 소개 페이지의 barebone 표시(Task 3의 끝).
+
+## 결과
+
+판정을 지났다(HEAD `3a0fae1` — plan 커밋이 확정 3의 `c2d6af0` 뒤에 왔다).
+
+- Task 1: `make iso` 196초(initrd · kernel 캐시), `out/tars.iso` 143,751,168 B — 확정 4의 어림(140~150MB) 안. `bsdtar -tf`로 본 `boot/`는
+  `bzImage` · `initrd.cpio` · `limine/`뿐, `boot/layers` 없음. 묶음 판(`dev-20261109`, 2,036,903,936 B)의 7%.
+- Task 2: 호스트 QEMU 90초 — `tars-init: starting as PID 1 (TARS 0.1.4+3a0fae1)`, `terminal: grid 155x47 (fb 1280x800)`,
+  `terminal: spawned child pid 40 (/usr/bin/fish)`, `Kernel panic` 0. 디스크가 없으니 `no disk labelled tars-home` → 묶음을 찾을 자리
+  자체가 없다(묶음은 `/home` 뒤에 붙는다). 사본은 scratchpad의 `tars-0.1.4+3a0fae1-barebone-x86_64.iso`(저장소 밖).
+- Task 3: `project_release` 절차 3(barebone 먼저 · 옮겨 두기) · 5(SHA256SUMS에 둘) · 6(`gh release create`에 둘), `project_release_0_2`에 프리릴리스 이름.
+- Task 4: `running-tars.md` "안 되는 것"에 barebone 한 줄(확정 2).
+
