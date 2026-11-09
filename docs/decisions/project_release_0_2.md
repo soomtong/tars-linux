@@ -36,6 +36,9 @@ How to apply:
     p5의 묶음 8개를 지우고 10개 1,806MiB를 50,110ms에(USB에서 초당 약 36MiB). `updated. remove the boot medium and reboot.`
   - 재부팅 뒤 화면 셸(fish, 사용자 tars): `javac` 25.0.5 · `zig` 0.17.1 · `bun` 1.4.4(baseline — AVX2 없는 CPU) · `cyber` 0.4.3 · `nvim` 0.12.6,
     모두 manifest의 판. `sudo tars-service enable redis` · `mysql` → running, `ps`에서 uid tars · PPID 1, 경로는 묶음의 `/usr/bin` · `/usr/sbin`.
+- 2026-11-09 사용자 "remove dev release (pre-release) builds in github" — 위 세 dev 판의 GitHub release(ISO · SHA256SUMS)를 지웠다.
+  태그 `dev-20261106` · `dev-20261108` · `dev-20261109`는 원격에 남겼다 — 위 sha256 · 크기 · 실기 확인이 가리키는 커밋의 기록이다.
+  데모 `demo-fakesteak-20261109`는 dev 판이 아니라 남았다.
 - 프리릴리스도 BB-M0부터 barebone ISO를 함께 올린다 — `tars-dev-<YYYYMMDD>-barebone-x86_64.iso`, 절차는 [[project_release]] 3.
 - 프리릴리스 · 0.2 모두 `make iso ISO_LAYERS="<묶음들>"`이다(기본값은 묶음을 안 싣는다). 굽기 전에 `devlayer/build/*.stamp`를 지운다 —
   묶음 안의 출처 기록(`usr/share/tars/layers/<묶음>`의 `git describe --dirty`)은 stamp에 안 들어가서, dirty일 때 구운 묶음이 그대로 남는다.
