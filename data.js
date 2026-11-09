@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-07',
-  latest: 'First Steps (FS-M0)',
+  asOf: '2026-11-09',
+  latest: 'Dev Layer (TP-M0~M12)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1233,      // git rev-list --count main
+    commits: 1259,      // git rev-list --count main
     since: '2026-08-01',
     chains: 31,         // check.sh의 CHAINS
-    zigKLines: 44,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 45,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -121,6 +121,8 @@ window.TARS = {
     ['2026-11-05', 'Power Commands', 'RB', '`sudo reboot` · `sudo poweroff` · `shutdown -r` — PID 1에 시그널 하나, 사용자로 치면 `try: sudo`'],
     ['2026-11-05', 'Laptop Power', 'LP', 'Intel GPU 드라이버(i915)를 켜 뚜껑을 닫으면 S3로 자고, Apple 키보드의 F1 · F2가 화면 밝기 16단계'],
     ['2026-11-07', 'First Steps', 'FS', '설치 뒤 "이제 뭘 하지"에 — `tars-help`가 망 · 블루투스 · 설정 · 서비스 · 개발 도구 · 화면의 한국어 안내 일곱 장을 보인다'],
+    ['2026-11-08', 'Nerd Symbols', 'NS', '프롬프트의 Powerline 삼각형 넷을 폰트 없이 코드로 그린다 — 상자 대신 이어진 띠'],
+    ['2026-11-09', 'Dev Layer', 'TP', '설치하면 망 없이 바로 개발 — 언어 스물남짓 · 편집기 · 유틸리티 · 문서 · 서버 다섯을 묶음 열로 디스크에 싣고 `/usr`에 겹친다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -201,6 +203,20 @@ window.TARS = {
         ['`brew install`', 'bottle을 받아 붓는다 — `hello`가 TCG에서 9초. 재부팅 뒤에도 `/home`에 남는다', '2026-11-03'],
         ['시스템 rc의 shellenv', 'bash · zsh · fish의 시스템 rc가 `brew`가 있을 때만 PATH에 넣는다. rc를 안 고쳐도 새 패널부터 되고, 안내대로 rc에 넣어도 두 번 붙지 않는다', '2026-11-03'],
         ['로케일 `C.UTF-8`', 'init이 모든 프로세스에 `LANG=C.UTF-8`을 준다 — 시리얼 셸 · ssh · 서비스도 UTF-8', '2026-11-03'],
+      ],
+    },
+    {
+      title: '개발 도구 층',
+      note: '설치 USB에 싣고 `tars-install`이 디스크로 옮긴다. 부팅마다 init이 묶음(squashfs)을 `/usr`에 읽기 전용으로 겹친다 — RAM에 상주하지 않고, 망이 없어도 된다. USB로 띄운 채로는 붙지 않는다.',
+      items: [
+        ['묶음 열', 'base · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server, 합 1.8GiB. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-09'],
+        ['언어', 'C · C++ · Zig · Rust · Go · Python · Ruby · Lua · Luau · Cyber · Node · Bun · Janet · PHP · Java · Kotlin · Clojure · Erlang · Elixir · Gleam', '2026-11-09'],
+        ['편집기', 'Neovim · emacs(`-nw`) · mitos · ttt, 게스트 vim은 그대로', '2026-11-09'],
+        ['유틸리티', 'lazygit · gitui · yazi · difftastic · starship · duckdb · sqlite · ffmpeg · ImageMagick 등 쉰여 개 — initrd에 있는 것도 최신판이 앞선다', '2026-11-09'],
+        ['문서', '`dasht`로 docset을 터미널에서 찾는다(Bash 하나가 들었고 나머지는 `tars-docs get`), man은 오프라인', '2026-11-09'],
+        ['서버', 'PostgreSQL · MySQL · Redis · Nginx · Caddy — `sudo tars-service enable <이름>`이면 init이 사용자로 띄우고 재부팅에도 켜진다', '2026-11-09'],
+        ['`/usr/local`', '`/usr`는 읽기 전용, `/usr/local`만 쓰기 가능 — root가 `make install` · `npm i -g`로 깐 것이 재부팅 · 갱신에도 남는다', '2026-11-09'],
+        ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다', '2026-11-09'],
       ],
     },
     {
@@ -289,6 +305,7 @@ window.TARS = {
         ['워크스페이스 · 패널', '워크스페이스 아홉 × 패널 여덟. 마지막 패널을 닫으면 terminal이 끝나고 init이 새로 띄운다', '2026-10-04'],
         ['클립보드', 'terminal 전체에 하나 — 한 패널에서 잡은 것을 다른 워크스페이스에 붙인다. `clipboard=pane`이면 패널마다', '2026-10-05'],
         ['그리기 속도', '칠하기는 행마다 한 번에 쓰고, 출력이 쏟아질 때는 초당 60번 안쪽으로 그린다. 화면은 DIRTYFB로 내보낸다', '2026-10-11'],
+        ['Powerline 기호', 'U+E0B0~E0B3(채운 삼각형 둘 · 선 화살표 둘)을 8x16 비트맵으로 직접 그린다 — unifont에 없어 상자가 찍히던 자리', '2026-11-08'],
       ],
     },
     {
