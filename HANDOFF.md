@@ -1,4 +1,4 @@
-# HANDOFF: TP 닫힘(dev-20261109 실기 확인), 다음은 BB(barebone ISO + fakesteak 자동 실행) — 0.2.0은 그 뒤
+# HANDOFF: TP · BB 닫힘(데모 릴리스 demo-fakesteak-20261109), 다음은 manifest 포맷 개선 — 0.2.0은 그 뒤
 
 ## 목표
 
@@ -8,18 +8,28 @@
 
 ## 현재 브랜치
 
-`main`, push했다(사용자 2026-11-09 "푸시하고 pre release 해줘"). 0.1.4 이후 정식 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
+`main`, push했다(BB 데모 릴리스 때 `3151e37`까지, 그 뒤 닫기 커밋도). 0.1.4 이후 정식 버전은 안 냈다. 사용자(2026-11-06): "이 작업을
 마무리하면 0.2 버전을 정식으로 릴리즈" — 다음 번호는 0.2.0(`docs/decisions/project_release.md`의 절차).
 
 ## 다음 할 것
 
-1. BB(Barebone) — design `docs/specs/2026-11-09-tars-barebone-design.md`. BB-M0 끝(2026-11-09, 143,751,168 B, smoke 통과, 배포 절차에
-   barebone). 다음 BB-M1: fakesteak 묶음(fork `soomtong/fakesteak` v1.0.0, 정적 바이너리) + 자동 실행 셸 조각 둘.
+1. manifest 파일 포맷 개선(사용자 2026-11-09, 0.2 전에) — "단순 tsv 충분한가? toml이나 yaml정도? 더 나은 포맷이 있다면 추천". 추천은
+   이미 냈다(대화): 사람이 고치는 원본은 TOML, 개발 컨테이너의 변환기가 스키마를 보고 지금 모양의 TSV를 산출물로 내서 harvest(slim 컨테이너,
+   파서 없음) · build · manifest.sh는 그대로. YAML은 판 번호를 숫자로 읽는 함정, JSON은 주석 없음, ZON은 대안. 변환기 언어는 미정. design부터.
 2. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
-   릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3). 0.2 전에 할 것(사용자 2026-11-09): manifest 파일 포맷 개선 — 단순
-   tsv로 충분한가, toml · yaml, 더 나은 포맷 추천.
-3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
-4. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+   릴리스에 barebone ISO가 함께 오른다(`project_release` 절차 3).
+3. BB 데모의 실기 — 사용자가 고르면. 맥북 에어에 `demo-fakesteak-20261109`를 깔면 개발 도구 묶음이 지워진다(되돌리기는 dev ISO로 갱신).
+4. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+5. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, BB-M0 · BB-M1 — BB 닫힘)
+
+- [x] BB-M0 `b1a13fb`: barebone ISO 143,751,168 B(196초), smoke `0.1.4+3a0fae1`, 배포 절차 3 · 5 · 6이 두 ISO, 안내 한 줄.
+- [x] 사용자: "BB 마일스톤 먼저", "gh pages 검증이 필요한 경우 스스로 push 해도 됩니다" — 소개 페이지 `695fca3` push.
+- [x] BB-M1 `3151e37`: manifest 한 줄 · 조각 둘(`devlayer/files/fakesteak/etc/`), 묶음 323,584 B, 납품 ISO 144,082,944 B, QEMU probe(`out/bb-m1/probe.sh`)
+  — 첫 패널 자동 실행 · Ctrl+C로 셸 · 새 셸에서 다시 안 뜸, 화면 세 장(`out/bb-m1/*.png`).
+- [x] 사용자 요청으로 데모 릴리스 `demo-fakesteak-20261109`(프리릴리스, sha256 `370ead60…c070e`, 받아 `shasum -c` OK).
+- [x] BB 닫기: design Status · `completed.md` · 기억 `project_minimal_iso` · `MEMORY.md` · 소개 페이지.
 
 ## 완료된 작업 (2026-11-09, TP 닫기 · BB design)
 

@@ -2,7 +2,7 @@
 
 Date: 2026-11-09
 Design: `docs/specs/2026-11-09-tars-barebone-design.md`(결정 2 · 3 · 5 · 6)
-Status: plan — 착수 전
+Status: 끝났다(2026-11-09)
 
 ## 착수 전에 확정한 것
 
@@ -82,3 +82,20 @@ Task 4가 판정을 지난 뒤, `project_release_0_2`의 프리릴리스 모양 
 1. 사용자의 맥북 에어 실기 — 확정 6 때문에 사용자가 고른다. 고르면 Task 5의 release 파일을 쓴다.
 2. 셸 없는 키오스크(design 비목표).
 3. 소개 페이지 — BB를 닫을 때.
+
+## 결과
+
+판정을 지났다. init · terminal 코드 변경 0.
+
+- Task 1 `3151e37`: manifest 줄 하나(7열), 조각 둘. `make quick` PASS(shellcheck 89파일 — 조각은 추적되는 `*.sh`라 저절로 들어갔다), `fish -n` OK.
+- Task 2: `make dev-layers DEV_LAYERS=fakesteak` 4초. 거두기 `no debian lines`, verify `elf=1 unresolved=0`, 묶음 323,584 B — `usr/local/bin/fakesteak`
+  → `../lib/fakesteak-1.0.0/fakesteak`, `etc/` 조각 둘, 출처 기록.
+- Task 3: `make iso ISO_LAYERS="fakesteak"` 196초, 144,082,944 B(barebone + 331,776 B), 버전 `0.1.4+3151e37`.
+- Task 4(`out/bb-m1/probe.sh`, 컨테이너 안 QEMU, 부팅 둘 합 60초): 설치 `layers  fakesteak (1 MiB)` · `copied 1 layers (1 MiB) in 19ms`. 다시 뜬 부팅
+  `overlay /usr from 1 layers in 26ms` · `layer fakesteak: 2 files into /etc`, `fakesteak -b`가 uid tars(pid 63), 표시 파일 tars 소유. 화면
+  `rain2.png`에 비, `sendkey ctrl-c` 뒤 프로세스 없음 · 화면은 프롬프트 하나(`cli_reset`), 같은 패널의 새 `fish`가 다시 안 띄운다. 첫 판의
+  FAIL 한 줄은 판정 grep이 콘솔에 되비친 명령 줄(`sed 's/^/bb-pg3: /'`)을 센 것이었다 — `project_gate_screen_echo`의 함정. 출력 줄만 골라 다시 봤다.
+- Task 5: 태그 `demo-fakesteak-20261109` → `3151e37`(annotated), 프리릴리스 · Latest 아님,
+  https://github.com/soomtong/tars-linux/releases/tag/demo-fakesteak-20261109 — `tars-demo-fakesteak-20261109-x86_64.iso`
+  sha256 `370ead60d0e485d385a8e1201e3c95a80eca21d203e312fdc4f9dd63b29c070e`. 새 디렉터리에 받아 `shasum -c` OK.
+

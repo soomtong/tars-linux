@@ -20,7 +20,7 @@
 - [Gate runs](docs/decisions/feedback_gate_runs.md) — 루트 게이트 반복은 1회, 가끔 `-e RUNS=N`으로 늘린다
 - [Scripting runtimes](docs/decisions/feedback_scripting_runtimes.md) — 스크립팅 런타임은 한 묶음으로만 들이고, 지금은 perl로 간다
 - [Release 0.2](docs/decisions/project_release_0_2.md) — 0.2.0은 TP 전체를 끝낸 뒤, 그 사이 실기 확인은 `dev-<날짜>` 프리릴리스(2026-11-06)
-- [Minimal ISO](docs/decisions/project_minimal_iso.md) — 릴리스마다 개발 도구 층을 뺀 임베디드 납품용 minimal ISO도 같이 올린다(2026-11-09)
+- [Minimal ISO](docs/decisions/project_minimal_iso.md) — 릴리스마다 barebone ISO도, 납품 실행 파일은 묶음 하나 + 자동 실행 조각, 데모 fakesteak(BB-M0~M1, 2026-11-09)
 - [Dev Layer](docs/decisions/project_dev_layer.md) — 묶음 열을 squashfs로 실어 `/usr`에 겹치는 개발 도구 층, 망 없이 개발(TP-M0~M12, 2026-11-09)
 - [Server persistence](docs/decisions/project_server_persistence.md) — 서버 다섯은 `tars-service enable`로 서비스, 데이터 `/home/.tars/var`, 조각 `/config/<서버>.d`, CA는 부팅 때 다시 믿는다(TP-M11, 2026-11-08)
 - [First steps guide](docs/decisions/project_first_steps_guide.md) — 설치 뒤 '뭘 하지'에 답하는 안내를 기계 안에(Wi-Fi · 블루투스 · config · service · 문서), FS-M0로 끝남(2026-11-07)
