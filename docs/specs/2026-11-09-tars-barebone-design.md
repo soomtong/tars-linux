@@ -59,7 +59,9 @@ barebone ISO는 개발 도구 층의 묶음을 하나도 싣지 않은 ISO다(`m
 
 - 셸 없는 키오스크 — init이 앱을 감독하고 죽으면 다시 띄우는 것(결정 6의 끝).
 - USB 라이브 부팅에서 묶음을 붙이기(확인 3 — 설치 뒤에만 붙는다).
-- 납품 ISO를 릴리스마다 올리기 — 릴리스에 더하는 것은 barebone ISO 하나다. fakesteak ISO는 데모로 한 번 짓고 확인한다.
+- 납품 ISO를 릴리스마다 올리기 — 릴리스에 더하는 것은 barebone ISO 하나다. fakesteak 데모 ISO는 따로 한 번 올린다(사용자 2026-11-09: "이번
+  작업 대상인 데모 릴리즈도 github releases 페이지에 올려주세요") — 태그 `demo-fakesteak-<YYYYMMDD>`(annotated), 프리릴리스 · Latest 아님,
+  파일 `tars-demo-fakesteak-<YYYYMMDD>-x86_64.iso` + `SHA256SUMS`. 정식 버전의 release에는 섞지 않는다.
 
 ## fakesteak 릴리스 (2026-11-09 확인 — 사용자가 낸 뒤)
 

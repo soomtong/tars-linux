@@ -223,3 +223,8 @@ redis	server	6:8.10.3-1rl1~trixie1	vendor-repo	redis/redis-server	apt
 redis-tools	server	6:8.10.3-1rl1~trixie1	vendor-repo	redis/redis-tools	apt
 # caddy: Go 정적 실행 파일 하나가 tarball 맨 위에 있다. 릴리스의 체크섬은 sha512 — 받은 파일과 같았다(plan 확인 9).
 caddy	server	2.11.9	upstream	https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_amd64.tar.gz	5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb	strip=0 exe=caddy
+
+# ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. DEV_LAYERS 기본값에 없고 `make dev-layers DEV_LAYERS=fakesteak`로 굽는다 ──
+# fakesteak: 사용자의 fork(soomtong/fakesteak)가 GitHub Actions로 내는 정적 실행 파일(-O3 -static, -march 없음). 원본 domsson/fakesteak은 바이너리가 없다.
+# 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6).
+fakesteak	fakesteak	1.0.0	upstream	https://github.com/soomtong/fakesteak/releases/download/v1.0.0/fakesteak-linux-x86_64.tar.gz	b0abec76012ceddcdad1fd8793cd0de1bd9d805e99332dd97d9415c6190cca82	exe=fakesteak

@@ -48,7 +48,8 @@ design의 "BB-M1 plan이 먼저 확인할 것" 셋과, plan을 쓰며 읽은 것
 
 ## Task 3 — 납품 ISO
 
-- `make iso ISO_LAYERS="fakesteak"` → 저장소 밖에 `tars-<ver>-fakesteak-x86_64.iso`(데모 — 릴리스에 안 올린다, design 비목표).
+- `make iso ISO_LAYERS="fakesteak"` → 저장소 밖 빈 디렉터리에 `tars-demo-fakesteak-<YYYYMMDD>-x86_64.iso`(Task 5가 올린다). 트리가 clean이어야
+  버전 글자에 `-dirty`가 없다 — Task 1 · 2를 커밋한 뒤에 짓는다.
 - 크기 기록(barebone 143,751,168 B + 묶음).
 
 ## Task 4 — QEMU probe 한 판(`out/bb-m1/probe.sh`, 저장소 밖 — TP-M12의 방식)
@@ -63,12 +64,21 @@ devtools 체인의 모양(OVMF · NVMe 16GiB · 시리얼 FIFO · `-cpu SandyBri
    - monitor `sendkey ctrl-c` → `pgrep`이 비고, 화면 한 장(프롬프트가 돌아왔는가).
    - 새 패널(키는 WP의 단축키)을 열어도 `pgrep`이 비어 있다(한 번만).
 
+## Task 5 — 데모 릴리스(사용자 2026-11-09 요청)
+
+Task 4가 판정을 지난 뒤, `project_release_0_2`의 프리릴리스 모양 그대로:
+
+- `git tag -a demo-fakesteak-<YYYYMMDD> <ISO를 지은 커밋> -m …` → push → `gh release create … --prerelease --latest=false`, 파일은 ISO와 `SHA256SUMS`.
+- 노트: barebone 위 fakesteak 묶음 하나, 디스크에 설치한 뒤 부팅하면 첫 패널에 자동 실행 · Ctrl+C로 셸, 개발 도구 층이 깔린 디스크를 갱신하면
+  묶음이 fakesteak 하나로 바뀐다는 경고(확정 6), USB 라이브 부팅에는 묶음이 안 붙는다.
+- 새 빈 디렉터리에 `gh release download` 후 `shasum -a 256 -c SHA256SUMS`가 OK.
+
 ## 판정
 
 - Task 4의 다섯이 모두 맞다. init · terminal 코드 변경 0 — 루트 게이트는 안 돌린다(design: smoke만, 체인 없음).
 
 ## 비목표
 
-1. 사용자의 맥북 에어 실기 — 확정 6 때문에 사용자가 고른다. 고르면 Task 3의 파일을 쓴다.
+1. 사용자의 맥북 에어 실기 — 확정 6 때문에 사용자가 고른다. 고르면 Task 5의 release 파일을 쓴다.
 2. 셸 없는 키오스크(design 비목표).
 3. 소개 페이지 — BB를 닫을 때.
