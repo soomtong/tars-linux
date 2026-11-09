@@ -1,4 +1,4 @@
-# HANDOFF: TP-M12(AI 도구 설치 확인) 끝남, 프리릴리스 dev-20261109 — 다음은 TP 닫기와 0.2.0
+# HANDOFF: TP 닫힘(dev-20261109 실기 확인), 다음은 BB(barebone ISO + fakesteak 자동 실행) — 0.2.0은 그 뒤
 
 ## 목표
 
@@ -13,11 +13,22 @@
 
 ## 다음 할 것
 
-1. TP를 닫는다(TP-M12 plan 결정 F): design `Status:` 끝남과 "닫을 때" 줄(PM design 결정 4로의 한 줄 · `carryover.md` 패키지 매니저 항목 ·
-   `running-tars.md` "안 되는 것" · `project_release.md`), `completed.md` 한 행, 기억 한 파일 · `MEMORY.md`, 소개 페이지 `data.js`(NS-M0도 함께).
-2. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 프리릴리스 `dev-20261109`의 실기 확인 결과를 먼저 듣는다.
+1. BB(Barebone) — design `docs/specs/2026-11-09-tars-barebone-design.md`. BB-M0: barebone ISO(`make iso`, 묶음 없음)를 짓고 QEMU smoke,
+   배포 절차에 "barebone ISO도 올린다". BB-M1: fakesteak 묶음(fork `soomtong/fakesteak` v1.0.0, 정적 바이너리) + 자동 실행 셸 조각 둘.
+2. 0.2.0 릴리스 — 사용자 확인 뒤(사용자 "신중하게 검토하고 릴리즈"). 실기 확인은 끝났다(기억 `project_release_0_2`의 "실기 확인").
+   BB-M0가 끝나면 릴리스에 barebone ISO가 함께 오른다.
 3. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 4. `dev-20261108`은 draft로 남아 있다(지울지 사용자에게 — 묻지 않고 지우지 않는다).
+
+## 완료된 작업 (2026-11-09, TP 닫기 · BB design)
+
+- [x] 사용자가 `dev-20261109`를 MacBook Air 2011에 갱신 설치해 확인("대부분 성공 … '완료' 상태로 변경해도 될 수준"). 첫 USB의 Limine PANIC은
+  USB 용량 부족으로 ISO가 덜 써진 것(사용자 확인). 기록은 `project_release_0_2` "실기 확인".
+- [x] TP 닫기(TP-M12 plan 결정 F): design `Status:` 닫힘, PM design 결정 4 덧붙임, `carryover.md` 패키지 매니저 항목(접두사 TP는 쓰였다),
+  `running-tars.md` "안 되는 것"에 USB 라이브 · 작은 USB 한 줄, `project_release.md` 절차 3에 판 올리기, `completed.md` 한 행, 기억 `project_dev_layer`,
+  소개 페이지 `data.js`(NS-M0와 TP).
+- [x] 사용자 결정으로 BB design(초안 → 확정): barebone ISO `tars-<ver>-barebone-x86_64.iso`(sshd 같은 기본 데몬 포함), 납품 실행 파일은 묶음 하나,
+  첫 데모 fakesteak, 게이트는 smoke만, 부팅 때 자동 실행("멋지게 데모~") — 묶음의 셸 조각, init · terminal 코드 0줄. 기억 `project_minimal_iso`.
 
 ## 완료된 작업 (2026-11-09, TP-M12 마무리 · 프리릴리스)
 
