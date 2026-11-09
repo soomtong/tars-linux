@@ -3,10 +3,10 @@
 접두사: FU
 
 Date: 2026-11-09
-Status: 초안 1판
+Status: 2판(단축키를 Cmd+Ctrl+F로 — 사용자 2026-11-09)
 
 계기: 사용자(2026-11-09, BB 데모 `demo-fakesteak-20261109`를 맥북 에어 실기에서 본 뒤): "Full screen mode 필요하겠다". 이어서 사용자가
-정한 것(2026-11-09): 감추는 것은 여백과 상태 줄 둘 다, 켜는 길은 `Cmd+Shift+F`와 `tars.conf`의 `fullscreen=on|off`, 납품 묶음은 xterm의
+정한 것(2026-11-09): 감추는 것은 여백과 상태 줄 둘 다, 켜는 길은 `Cmd+Ctrl+F`(macOS의 전체 화면 키, 사용자가 `Cmd+Shift+F`에서 고쳤다)와 `tars.conf`의 `fullscreen=on|off`, 납품 묶음은 xterm의
 `CSI 10 ; Ps t`를 terminal이 직접 알아듣는 길. 순서는 manifest 포맷(MF, 닫힘) → 전체 화면 → 0.2.0이다.
 
 관련 문서: HS design(`2026-11-04-tars-hidpi-scale-design.md` — 화면 키 하나가 init → argv → terminal로 가는 선례), WP design(패널 ·
@@ -14,7 +14,7 @@ Status: 초안 1판
 
 ## 한 줄 요약
 
-전체 화면은 격자 둘레 여백과 아래 상태 줄을 없애고 격자를 화면 끝까지 넓힌다. `Cmd+Shift+F`가 실행 중에 켜고 끄며(셸은 그대로),
+전체 화면은 격자 둘레 여백과 아래 상태 줄을 없애고 격자를 화면 끝까지 넓힌다. `Cmd+Ctrl+F`가 실행 중에 켜고 끄며(셸은 그대로),
 `tars.conf`의 `fullscreen=`은 부팅 때의 시작 상태다. 패널 안의 프로그램은 xterm의 `CSI 10;1 t`(켜기) · `10;0 t`(끄기) · `10;2 t`(바꾸기)로
 요청할 수 있고, 납품 묶음의 autorun 조각이 그것을 쓴다.
 
@@ -30,8 +30,8 @@ Status: 초안 1판
 4. 좌표를 격자로 바꾸는 쪽도 같은 상수를 쓴다: `paneOrigin`(`:1598`), 포인터의 셀 찾기(`:2591-2597`, `:3011-3012`), 상태 줄 · 띠.
 5. 화면 키의 선례는 `display_scale`(HS-M0). 지나가는 자리: `shared/screen_args.zig`의 `Slot` · `Args` · `encode`, `init/src/config.zig`(파싱 ·
    기본 파일 · 로그), `init/src/reload.zig`의 `term` 갈래(바꾸면 `reload terminal`), `init/src/main.zig`(argv · reload 로그).
-6. `Cmd+Shift` 표에는 C(copy mode) · D(아래로 분할)만 있다(`terminal/src/input.zig:1293-1303`). `Cmd+Shift+F`는 비어 있다. 표에 없는
-   `Cmd+Shift` 조합은 null이고 Shift 없는 표로 떨어지지 않는다.
+6. Cmd 분기(`chord`, `terminal/src/input.zig:1281`)는 Shift · Option 갈래만 따로 본다 — 표에 없는 조합은 null이고 Shift · Option 없는 표로
+   떨어지지 않는다. Ctrl 갈래는 없어서 `Cmd+Ctrl+F`는 지금 Cmd 표(F 없음)에서 null이 되고 평소 번역으로 Ctrl+F(0x06)가 셸에 간다.
 7. ghostty lib-vt의 XTWINOPS(`CSI … t`)는 8 · 14 · 16 · 18 · 19 · 21 · 22 · 23만 handler로 넘긴다(`terminal/ghostty-src/src/terminal/stream.zig`).
    10(전체 화면)은 경고만 찍고 버린다. 그러니 terminal이 lib-vt에 넣기 전에 직접 훑어야 한다. 패널 출력은 `pane.screen.feed(out)`(`main.zig:4538`)
    한 자리로 들어간다.
@@ -50,7 +50,8 @@ Status: 초안 1판
    부르고, 다음 프레임을 통째로 그린다. 같은 상태로의 요청은 아무것도 안 한다. 바뀔 때마다 한 줄을 찍는다:
    `terminal: fullscreen> on grid 160x50 origin 0,0`(게이트와 사람이 같은 줄을 본다).
 4. 길은 셋이고 모두 3의 함수를 부른다.
-   - `Cmd+Shift+F`(PC 키보드는 `Alt+Shift+F`): 바꾸기. input의 `Cmd+Shift` 표에 한 줄(`.pane = .fullscreen_toggle` 꼴).
+   - `Cmd+Ctrl+F`(PC 키보드는 `Alt+Ctrl+F`): 바꾸기. Cmd 분기에 Shift · Option과 같은 규칙의 Ctrl 갈래를 하나 두고 F 한 줄
+     (`.pane = .fullscreen_toggle` 꼴). 표에 없는 `Cmd+Ctrl` 조합은 null — 평소 번역으로 흘러 지금과 같은 바이트가 나간다(input_test가 못 박는다).
    - `tars.conf`의 `fullscreen=on|off`(기본 `off`): 부팅 때의 시작 상태. 화면 키라 `reload terminal` 갈래다(확인 5). argv의 새 칸 하나.
      실행 중에 단축키로 바꾼 상태는 파일에 쓰지 않는다 — 파일은 사람이 고치는 것이다.
    - 패널 출력의 `CSI 10 ; Ps t`: Ps 0 끄기 · 1 켜기 · 2 바꾸기(xterm과 같은 뜻). 그 밖의 Ps와 다른 매개변수 수는 무시한다.
