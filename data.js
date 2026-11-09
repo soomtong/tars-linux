@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-09',
+  asOf: '2026-11-10',
   latest: 'Fullscreen (FU-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1277,      // git rev-list --count main
+    commits: 1281,      // git rev-list --count main
     since: '2026-08-01',
     chains: 32,         // check.sh의 CHAINS
     zigKLines: 45,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -142,6 +142,8 @@ window.TARS = {
       'b7e96c2465f327f426d236f776a9f4de408b3d75ce4060a6b1f74ff6bd1a67b7'],
     ['2026-11-05', '0.1.4', '설치해 쓰는 기계 — 홈 · Homebrew · mise · Bluetooth, 맥북 트랙패드 · Air 내장 무선 · Retina 배율 · macOS 옆 설치', 'tars-0.1.4-x86_64.iso',
       '00598c665bb71de99db3b54c4ae21abb789d1bc869bc23f62e2e687d63c597ab'],
+    ['2026-11-10', '0.2.0', '개발 도구 층 — 설치하면 망 없이 언어 스무 남짓 · 편집기 · 서버 다섯 · 문서, 전체 화면, barebone과 fakesteak 납품 데모 ISO도 함께', 'tars-0.2.0-x86_64.iso',
+      'd3fe88ae13c307b58292de4f0ea35824a3e72b02fda0846fdf508e802a2137bf'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -227,7 +229,7 @@ window.TARS = {
       items: [
         ['barebone ISO', '`tars-<ver>-barebone-x86_64.iso`(약 140MB) — 버전마다 개발 도구 판과 함께 올린다', '2026-11-09'],
         ['프로젝트 묶음', '실행 파일을 매니페스트 한 줄로 묶음 하나에 담아 barebone 위에 얹는다 — 설치하면 `/usr/local/bin`에', '2026-11-09'],
-        ['부팅 때 자동 실행', '묶음의 셸 조각이 첫 패널에 한 번, 전체 화면으로 띄운다. [Ctrl]+[C]면 여백 · 상태 줄과 셸, 시리얼 · ssh에서는 안 뜬다 — 데모 릴리스 `demo-fakesteak-20261109`', '2026-11-09'],
+        ['부팅 때 자동 실행', '묶음의 셸 조각이 첫 패널에 한 번, 전체 화면으로 띄운다. [Ctrl]+[C]면 여백 · 상태 줄과 셸, 시리얼 · ssh에서는 안 뜬다 — 0.2.0의 `tars-0.2.0-fakesteak-x86_64.iso`', '2026-11-09'],
       ],
     },
     {

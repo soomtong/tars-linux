@@ -66,7 +66,7 @@
       ['U=' + base],
       ['curl -LO https://$U/' + iso],
       ['curl -LO https://$U/SHA256SUMS'],
-      ['shasum -a 256 -c SHA256SUMS', 'sha256 ' + sha.slice(0, 12) + '…'],
+      ['shasum -a 256 -c --ignore-missing SHA256SUMS', 'sha256 ' + sha.slice(0, 12) + '…'],
       ['qemu-system-x86_64 -m 1024 -cdrom ' + iso],
     ]);
     pre($('dlUsb'), [
