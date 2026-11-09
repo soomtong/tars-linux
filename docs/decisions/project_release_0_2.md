@@ -23,6 +23,9 @@ How to apply:
   sha256 `43abf8f861c75a59a8cdca6cfd44482663fe95efe7b791c25cfeec0442d98a9b`). 둘째 판: `dev-20261108` → `09ec9ef`(묶음 열 · 서버 서비스,
   2,036,891,648 B — 2GiB 한도 안, sha256 `693d08e574b4627707dc2d6931dbf511aca8e34a1cf9552adfa1040edaa8c065`). 사용자 "upload pre-release iso with
   draft" — `--draft`로 올렸다. 공개(draft 풀기)는 사용자가 한다.
+  셋째 판: `dev-20261109` → `a146857`(TP-M12 마무리 — initrd의 clear · tput · reset, AI 도구 확인, 거두기 전 slim upgrade. 2,036,903,936 B,
+  sha256 `851da397e3c3e8a2871432ae2dd9de3e287e5421499060ef0f8f40cacf3a367c`, smoke `TARS 0.1.4+a146857`). 사용자 "푸시하고 pre release 해줘" —
+  draft 아닌 공개 프리릴리스(`--prerelease --latest=false`), 내려받아 `shasum -c` OK.
 - 프리릴리스 · 0.2 모두 `make iso ISO_LAYERS="<묶음들>"`이다(기본값은 묶음을 안 싣는다). 굽기 전에 `devlayer/build/*.stamp`를 지운다 —
   묶음 안의 출처 기록(`usr/share/tars/layers/<묶음>`의 `git describe --dirty`)은 stamp에 안 들어가서, dirty일 때 구운 묶음이 그대로 남는다.
 - 0.2 전에 풀 것: GitHub release는 파일 하나가 2GiB까지다. 묶음 전체의 어림(TP design 확인 10, squashfs 2.5~4GB)이면 ISO 하나로는 못
