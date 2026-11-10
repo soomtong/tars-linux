@@ -5,7 +5,7 @@
 //! 남는다(TP-M4). `sudo mkcert -install`이 바로 그 자리에 쓰고 `update-ca-certificates`를 부른다. 부팅 때는 init이 그 명령을
 //! 한 번 부른다 — `.crt`가 하나라도 있을 때만. 없으면 fork도 하지 않는다(다른 체인 · 대부분의 부팅은 아무것도 안 바뀐다).
 //!
-//! PID 1이 기다리는 일이라 시한이 있다(`WAIT_MS`). 넘으면 죽이고 한 줄을 남긴 뒤 원본 묶음 그대로 간다.
+//! PID 1이 기다리는 일이라 시한이 있다(`WAIT_MS`). 넘으면 그 명령의 프로세스 그룹째 죽이고(SS-M2) 한 줄을 남긴 뒤 원본 묶음 그대로 간다.
 const std = @import("std");
 const linux = std.os.linux;
 const logline = @import("logline.zig");
@@ -66,45 +66,65 @@ fn sleepMs(ms: u64) void {
     _ = linux.nanosleep(&ts, null);
 }
 
-/// 부팅마다 한 번, `/usr/local`을 연 뒤(`layers.mountLocal`) 부른다. 아무것도 안 하거나, 명령을 한 번 돌리고 한 줄을 남긴다.
-pub fn refresh() void {
-    if (!hasCrt(DIR)) return;
+/// `runWithin`의 결과.
+pub const Run = union(enum) {
+    ok,
+    /// 0이 아닌 종료 · 시그널 — `wait4`의 status 그대로.
+    failed: u32,
+    timed_out,
+    no_fork: linux.E,
+    no_wait: linux.E,
+};
+
+/// SS-M2. 명령 하나를 시한 안에 돌린다. 넘으면 죽이고 거둔 뒤 `timed_out`.
+///
+/// 명령은 제 프로세스 그룹을 갖고, 시한 넘김은 그 그룹째 죽인다. `update-ca-certificates`는 셸 스크립트라 그 아래의
+/// `run-parts` · `openssl`이 일을 한다 — 셸 pid만 죽이면 그들이 남아 묶음 파일을 계속 쓴다(SS design 확인 5).
+/// 그룹은 자식과 부모가 둘 다 세운다 — 어느 쪽이 먼저 돌든 `kill(-pid)` 전에 그룹이 있다.
+pub fn runWithin(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8, wait_ms: u64) Run {
     const pid = linux.fork();
-    if (failed(pid)) |e| {
-        logline.print("tars-init: trust: cannot fork for {s} (errno {d})\n", .{ CMD, @backingInt(e) });
-        return;
-    }
+    if (failed(pid)) |e| return .{ .no_fork = e };
     if (pid == 0) {
-        const argv = [_:null]?[*:0]const u8{ CMD.ptr, null };
-        const envp = [_:null]?[*:0]const u8{ "PATH=/usr/bin:/bin", null };
-        _ = linux.execve(CMD.ptr, &argv, &envp);
-        logline.print("tars-init: trust: cannot exec {s}\n", .{CMD});
+        _ = linux.setpgid(0, 0);
+        _ = linux.execve(path, argv, envp);
+        logline.print("tars-init: trust: cannot exec {s}\n", .{std.mem.sliceTo(path, 0)});
         linux.exit(127);
     }
+    _ = linux.setpgid(@intCast(pid), @intCast(pid));
     var waited: u64 = 0;
     var status: u32 = 0;
     while (true) {
         const rc = linux.wait4(@intCast(pid), @ptrCast(&status), linux.W.NOHANG, null);
         if (failed(rc)) |e| {
             if (e == .INTR) continue;
-            logline.print("tars-init: trust: waiting for {s} failed (errno {d})\n", .{ CMD, @backingInt(e) });
-            return;
+            return .{ .no_wait = e };
         }
         if (rc != 0) break;
-        if (waited >= WAIT_MS) {
-            _ = linux.kill(@intCast(pid), .KILL);
+        if (waited >= wait_ms) {
+            const leader: linux.pid_t = @intCast(pid);
+            _ = linux.kill(-leader, .KILL);
             while (failed(linux.wait4(@intCast(pid), @ptrCast(&status), 0, null))) |e| {
                 if (e != .INTR) break;
             }
-            logline.print("tars-init: trust: {s} took over {d}s, killed; the CA bundle is the initrd's\n", .{ CMD, WAIT_MS / 1000 });
-            return;
+            return .timed_out;
         }
         sleepMs(STEP_MS);
         waited += STEP_MS;
     }
-    if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) {
-        logline.print("tars-init: trust: {s} added the certificates in {s}\n", .{ CMD, DIR });
-    } else {
-        logline.print("tars-init: trust: {s} failed (status {d}); the CA bundle is the initrd's\n", .{ CMD, status });
+    if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) return .ok;
+    return .{ .failed = status };
+}
+
+/// 부팅마다 한 번, `/usr/local`을 연 뒤(`layers.mountLocal`) 부른다. 아무것도 안 하거나, 명령을 한 번 돌리고 한 줄을 남긴다.
+pub fn refresh() void {
+    if (!hasCrt(DIR)) return;
+    const argv = [_:null]?[*:0]const u8{ CMD.ptr, null };
+    const envp = [_:null]?[*:0]const u8{ "PATH=/usr/bin:/bin", null };
+    switch (runWithin(CMD.ptr, &argv, &envp, WAIT_MS)) {
+        .ok => logline.print("tars-init: trust: {s} added the certificates in {s}\n", .{ CMD, DIR }),
+        .failed => |status| logline.print("tars-init: trust: {s} failed (status {d}); the CA bundle is the initrd's\n", .{ CMD, status }),
+        .timed_out => logline.print("tars-init: trust: {s} took over {d}s, killed its process group; the CA bundle is the initrd's\n", .{ CMD, WAIT_MS / 1000 }),
+        .no_fork => |e| logline.print("tars-init: trust: cannot fork for {s} (errno {d})\n", .{ CMD, @backingInt(e) }),
+        .no_wait => |e| logline.print("tars-init: trust: waiting for {s} failed (errno {d})\n", .{ CMD, @backingInt(e) }),
     }
 }
