@@ -25,6 +25,7 @@
 - [Manifest Format](docs/decisions/project_manifest_format.md) — 개발 도구의 출처는 `devlayer/manifest.toml`, Zig 변환기가 TSV를 생성(MF-M0, 2026-11-09)
 - [Fullscreen](docs/decisions/project_fullscreen.md) — 여백 · 상태 줄 없이, Cmd+Ctrl+F · `fullscreen=` · 패널의 `CSI 10;Ps t`, 조각은 sh -c + trap(FU-M0~M1, 2026-11-09)
 - [Cursor Options](docs/decisions/project_cursor_options.md) — `?25l`이면 셸 커서를 안 그린다, `cursor_shape=` 기본 모양, 깜빡임은 안 한다(CO-M0~M1, 2026-11-10)
+- [Service Stop](docs/decisions/project_service_stop.md) — `# tars-stop: SIG SECONDS` 한 줄, 전원 끄기는 서비스 먼저, postgres는 SIGINT · CA 갱신은 그룹째(SS-M0~M2, 2026-11-10)
 - [Server persistence](docs/decisions/project_server_persistence.md) — 서버 다섯은 `tars-service enable`로 서비스, 데이터 `/home/.tars/var`, 조각 `/config/<서버>.d`, CA는 부팅 때 다시 믿는다(TP-M11, 2026-11-08)
 - [First steps guide](docs/decisions/project_first_steps_guide.md) — 설치 뒤 '뭘 하지'에 답하는 안내를 기계 안에(Wi-Fi · 블루투스 · config · service · 문서), FS-M0로 끝남(2026-11-07)
 - [Release iteration](docs/decisions/feedback_release_iteration.md) — 맥 실기 확인까지 0.1.4를 같은 번호로 거듭 내고, 이전 판의 흔적은 안 남긴다(2026-11-05)

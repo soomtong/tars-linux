@@ -1,24 +1,33 @@
-# HANDOFF: GV 닫음 — Zig 0.17.1 · ghostty vt-1.0.0(2026-11-10). fakesteak 데모 draft는 사용자가 맥북 에어에서 확인한다
+# HANDOFF: SS 닫음 — 서비스마다의 멈춤 신호 · 유예, 전원 끄기는 서비스 먼저(2026-11-10). 사용자가 후반 결정을 위임했다
 
 ## 목표
 
-사용자(2026-11-10): "zig 0.17.1 빌드 대응, libghostty 1.0 대응." → Ghostty VT 1.0(GV-M0)으로 섰다. 그 앞 일: CO(커서 숨김 · `cursor_shape=`)를
-닫고 fakesteak 데모 ISO를 draft pre-release로 올렸다 — 사용자가 원격 맥북 에어에서 확인한다.
+사용자(2026-11-10): HANDOFF의 할 일 2(TP-M11의 남은 것 둘)를 "go with 2"로 골랐다 → Service Stop(SS-M0~M2)으로 섰다. 결정 둘은 사용자
+(설정은 스크립트의 주석 줄, 전원 끄기도 범위), 값은 SS-M0 측정 뒤 사용자 "Ok", plan "ok". SS-M1 체인 도중 "잠시 외출합니다. 나머지 결정을
+위임합니다." — 그 뒤(M1 커밋 · M2 · 루트 게이트 · 닫기)는 Claude가 정했고 각 plan 결과 절에 적었다. 그 앞 일: GV(Zig 0.17.1 ·
+ghostty vt-1.0.0), CO 닫기와 fakesteak 데모 draft.
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO를 지은 커밋, GV 전). `gh-pages`는 CO 줄까지
-(GV는 빌드 내부라 소개 페이지에 안 넣었다).
+`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO, GV · SS 전). `gh-pages`는 SS 줄까지 push.
 
 ## 다음 할 것
 
-1. 사용자가 맥북 에어에서 draft 데모를 확인한다 — draft는 아직 비공개(`untagged-…` 주소)라 공개(Publish)는 사용자가 한다. 결과(사진 · 말)를
-   기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에 적는다.
-2. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
-3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 지금은 고치지 않았다 — 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
-4. GV push 뒤 `main`의 CI가 새 Dockerfile 해시(`c7ba57a9ed37`)로 이미지를 구워 ghcr.io에 올린다(GI-M0) — 초록인지 본다.
-   로컬 이미지는 이미 그 태그로 구워 두었다.
-5. 다음 서브프로젝트는 사용자가 말할 때.
+1. 사용자가 돌아오면 SS 결과를 보고한다(아래 완료 절이 요약). 위임 중에 Claude가 정한 것은 SS-M1 · M2 plan 결과 절.
+2. 사용자가 맥북 에어에서 fakesteak draft 데모를 확인한다 — draft는 비공개라 공개는 사용자가 한다. GV · SS 판으로 다시 구울지는 사용자가 정한다.
+   결과는 기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에.
+3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+4. 다음 서브프로젝트는 사용자가 말할 때.
+
+## 완료된 작업 (2026-11-10, SS-M0~M2 — SS 닫힘)
+
+- [x] design `62a2ca8`(사용자 결정 둘), M0 측정 `083f178`: QEMU에서 서버 다섯의 끄기 — 진짜 길은 모두 1.5초 안, postgres의 SIGTERM은 `psql`
+      세션이 열리면 안 끝나고(INT는 0.3초) mysqld는 INT를 무시. 첫 판은 프로브 버그로 버렸다(기억 `project_service_stop`의 함정 셋).
+- [x] M1 `24485da`: `# tars-stop: SIG SECONDS`(services.zig `findStop` · `parseStop`), `Child.stop_sig` · `stop_grace`, `power.shutdown`의 서비스 먼저,
+      `tars-service` 멈춤 기다림 65초, 템플릿 셋, `docs/help/services.md`, devtools 체인(세션 열린 stop 442ms · poweroff 1,335ms · 부팅 3 복구 없음).
+- [x] M2 `ad0cb20`: `trust.runWithin`(그룹 · `kill(-pid)`), `trust_test`가 옛 동작에서 빨강을 본 뒤 초록(손자까지 328ms).
+- [x] 루트 게이트 33/33 첫 판(33분 41초, 잘린 줄 0, `out/gate-logs/20261110-144913`). 닫기: design Status · plan 결과 셋 · completed ·
+      기억 `project_service_stop` · `MEMORY.md` · 소개 페이지.
 
 ## 완료된 작업 (2026-11-10, GV-M0 — GV 닫힘)
 

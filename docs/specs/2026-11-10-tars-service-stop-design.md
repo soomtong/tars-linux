@@ -3,7 +3,7 @@
 접두사: SS
 
 Date: 2026-11-10
-Status: 착수(2026-11-10). M0 plan은 `docs/plans/2026-11-10-tars-service-stop-ss-m0.md`.
+Status: 닫힘(2026-11-10, SS-M0 측정 · SS-M1 `# tars-stop:` 줄과 전원 끄기 · SS-M2 CA 갱신의 그룹 종료, 루트 게이트 33/33). plan은 `docs/plans/2026-11-10-tars-service-stop-ss-m0.md` · `-ss-m1.md` · `-ss-m2.md`.
 
 계기: TP-M11 plan 결과 절의 "남은 것" 둘 — "부팅 때의 CA 한 번이 5초를 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를
 서비스마다 늘리는 일" — 을 사용자가 다음 일로 골랐다(2026-11-10, "go with 2"). 두 가지를 사용자가 정했다(같은 날):

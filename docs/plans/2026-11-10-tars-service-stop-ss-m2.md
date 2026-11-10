@@ -2,7 +2,7 @@
 
 Date: 2026-11-10
 Design: `docs/specs/2026-11-10-tars-service-stop-design.md`(결정 4)
-Status: 착수(2026-11-10). 사용자가 나머지 결정을 위임했다("잠시 외출합니다. 나머지 결정을 위임합니다.", SS-M1 체인 도중).
+Status: 끝났다(2026-11-10). 사용자가 나머지 결정을 위임했다("잠시 외출합니다. 나머지 결정을 위임합니다.", SS-M1 체인 도중).
 
 ## 착수 전에 확정한 것
 
@@ -32,4 +32,11 @@ Status: 착수(2026-11-10). 사용자가 나머지 결정을 위임했다("잠�
 
 ## 결과
 
-(게이트 뒤에 적는다)
+구현 `ad0cb20`. 순서대로: `runWithin`을 옛 동작(그 pid에만 KILL)으로 떼고 새 검사를 돌려 빨강을 봤다 —
+`FAIL: the grandchild sleep 299 outlived the time-out (only the shell was killed)`. 그 뒤 `setpgid` 둘과 `kill(-pid, KILL)`로 초록,
+300ms 시한이 328ms에 끝나고 손자까지 죽었다. 로그 줄은 시한 넘김 하나만 바뀌었다(`killed its process group`) — devtools 체인이 보는
+`added the certificates` 줄은 그대로다. exec 실패 줄(`cannot exec`)은 자식 쪽에 그대로 남겼다.
+
+게이트: 컨테이너 init `zig build test` 47/47, `make quick` PASS, 루트 게이트 33/33(SS-M1 결과 절과 같은 판).
+게스트에서 시한 넘김을 일으키는 체인 판정은 두지 않았다 — 실제 `update-ca-certificates`를 5초 넘게 붙잡을 방법이 체인 안에 없고,
+같은 함수가 호스트 검사에서 그 길을 밟는다(design 결정 4).

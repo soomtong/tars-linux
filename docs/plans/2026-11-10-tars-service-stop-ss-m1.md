@@ -2,7 +2,7 @@
 
 Date: 2026-11-10
 Design: `docs/specs/2026-11-10-tars-service-stop-design.md`(결정 1 · 2)
-Status: 착수(2026-11-10). 값은 사용자 승인("Ok", SS-M0 결과 뒤).
+Status: 끝났다(2026-11-10). 값은 사용자 승인("Ok", SS-M0 결과 뒤), plan 승인 "ok".
 
 ## 착수 전에 확정한 것
 
@@ -70,4 +70,18 @@ plan을 쓰며 읽은 것(HEAD `083f178`).
 
 ## 결과
 
-(게이트 뒤에 적는다)
+구현 `24485da`(12파일, +363 −20). plan과 다른 자리 · Claude가 정한 것(체인 도중 사용자가 "나머지 결정을 위임합니다"):
+
+1. `servicesFirst`는 `config_off`인데 아직 살아 있는 칸도 넣는다 — reload가 끄는 중인 서비스도 전원 끄기가 기다려 준다(plan 확정 5는
+   "살아 있는 것"만 말했다).
+2. 템플릿의 줄 아래에 까닭 한 줄씩(영어, 머리 주석과 같은 말)을 두었다 — SS-M0의 숫자를 함께 적었다.
+3. 체인의 세션 판정은 `pgrep`이 아니라 `ps -u 1000 -o comm=`으로 센다 — 게스트에 pgrep이 있는지 확인하지 않았고, ps는 SS-M0 프로브에서 돌았다.
+4. 검사의 빨강 확인: `findStop`의 잘린 줄 판정을 지우면 `services_test`가 경계 검사에서 빨갛다(되돌림, diff 같음).
+
+게이트:
+- 컨테이너 init `zig build test` 47/47 단계, `make quick` PASS.
+- 체인 devtools 단독 PASS(빌드 포함 18분 5초): 줄 셋을 읽었다, `psql` 세션이 열린 채 `tars-service stop postgres`가 442ms(SIGKILL 없음 —
+  SS-M0에서 같은 조건의 SIGTERM은 60초 넘김), poweroff가 다섯을 먼저 1,335ms에, 부팅 3 복구 postgres no · mysql no.
+- 루트 게이트(SS-M2와 함께) 33/33 첫 판(33분 41초 — prebuild 352초 + lanes 1,537초, 잘린 줄 0, `out/gate-logs/20261110-144913`).
+  서비스가 있는 다른 체인의 첫 단계: CT-M2(1~3개) · VD-M0 · AU-M3(sshd 1개) 모두 0.1초 안팎. CT의 `stubborn`(SIGTERM을 무시하게
+  만든 검사용 서비스)은 기본값 그대로 `outlived SIGTERM by 3s` — 체인의 글자가 안 바뀌었다.
