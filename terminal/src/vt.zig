@@ -1077,6 +1077,7 @@ pub const Screen = struct {
     ///   copy mode인가        → 없다(copy 커서가 대신 반전된다)
     ///   포커스 없는 패널인가 → 없다(WP design 결정 6)
     ///   뷰포트 밖인가        → 없다
+    ///   숨겼는가(조합 없음)  → 없다(CO design 결정 1 · 2)
     ///   조합 중인가          → 두 칸 block. DECSCUSR 모양을 무시한다
     ///   그 밖                → DECSCUSR 모양
     ///
@@ -1087,6 +1088,9 @@ pub const Screen = struct {
         if (self.copy_cursor != null) return null;
         if (!self.focused) return null;
         const vp = self.state.cursor.viewport orelse return null;
+        // 패널의 프로그램이 DECTCEM(`CSI ? 25 l`)으로 커서를 숨겼다(CO design 결정 1).
+        // preedit은 숨김을 무시한다 — 두 칸 반전이 조합 중인 글자의 표시다(결정 2).
+        if (!self.state.cursor.visible and self.preedit == null) return null;
         const asked = self.askedShape();
 
         var shape = asked;

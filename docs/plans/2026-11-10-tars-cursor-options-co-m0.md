@@ -2,7 +2,7 @@
 
 Date: 2026-11-10
 Design: `docs/specs/2026-11-10-tars-cursor-options-design.md`(결정 1~4)
-Status: 초안(2026-11-10)
+Status: 끝났다(2026-11-10). 루트 게이트는 CO-M1 끝에 함께 돈다.
 
 ## 착수 전에 확정한 것
 
@@ -75,4 +75,33 @@ design의 비목표. fakesteak 데모 ISO를 다시 내는 것(사용자가 말�
 
 ## 결과
 
-(작성 전)
+lead 직접. `terminal/src/vt.zig` +4(조건 한 줄 · 주석 셋), `vt_test.zig` +74(검사 130~133), `render/check.sh` +44 −1(판정 38 · 39, PASS 줄).
+
+- 호스트: `zig build test`(macOS 호스트)에서 vt_test · dirty_test PASS. 같은 명령의 실패 셋(`linux/input.h` · `pty.h`가 없는 translate-c 둘,
+  logline_test의 리눅스 시스템 콜)은 편집 전에도 `74/88 steps succeeded (3 failed)`로 똑같다 — 호스트가 macOS라서고 게이트(리눅스 컨테이너)와 무관하다.
+  빨강: 조건을 뺀 판에서 vt_test가 `검사 130 숨김`(`vt_test.zig:3066`)에서 멈췄다.
+- render 체인 단독 2회 PASS(265초 · 264초). 줄: `CSI ? 25 l: vt=block drawn=none, 0 inverted cell(s)` →
+  `fish showed it again: vt=block drawn=block row=0 col=15 cols=1 ink=0 box=0x0, 1 inverted cell(s)`. 뒤의 vim 검사 25~37도 그대로 지났다.
+- probe(`out/co-m0/probe.sh`, ISO 굽기 202초 · 194초): fakesteak이 도는 5초 동안의 `cursor>` 줄.
+
+  | ISO | 프레임 | `drawn=none` | 커서가 그려진 자리 | screendump 5장의 꽉 찬 칸 |
+  |---|---|---|---|---|
+  | 조건을 뺀 판(커서에 관해 0.2.0과 같다) | 70 | 0 | 70곳(`9,157` `7,56` `6,93` …, 겹침 없음) | 4장에 1칸씩, 매번 다른 자리 |
+  | CO-M0 | 69 | 69 | 0 | 0 |
+
+  Ctrl+C 뒤 두 판 모두 `drawn=block row=0 col=15` — fakesteak의 `cli_reset()`이 보낸 `?25h`로 프롬프트에 돌아온다. design 확인 4의 추정이
+  맞았다: 사용자가 본 "빠른 깜빡임"은 깜빡임이 아니라, 한 프레임을 쓰는 도중의 커서 자리에 매 프레임 다른 칸이 반전된 것이었다.
+
+plan과 다른 자리:
+
+1. 판정 38은 `printf '…?25l'` 뒤에 `; sleep 5`를 붙였다. 첫 두 판이 38에서 빨갰다 — `?25l` 뒤 첫 프레임부터 `drawn=block`이었다. 게스트
+   fish 4.0.2 바이너리(`/usr/local/amd64-sysroot/usr/bin/fish`)에 `ESC[?25h`가 문자열 상수로 있고 `?25l`은 없다: fish는 명령이 끝날 때마다
+   커서를 되살리고, printf의 `?25l`과 그 `?25h`가 같은 read 덩이로 와서 숨긴 프레임이 그려질 틈이 없었다. plan이 적어 둔 대안 그대로다.
+   판정 39는 직접 치는 `?25h` 대신 sleep이 끝난 뒤 fish가 되살린 커서를 본다. design 위험 1(숨김이 프롬프트까지 남는다)은 fish에서는 안 생긴다.
+2. probe의 판정은 screendump의 `#F0F0F0` 칸이 아니라 `cursor>` 줄로 했다. `#F0F0F0`은 bar · underline 띠의 색이고 block은 셀 두 색의
+   반전이라, fakesteak 화면에서 block 커서는 흰(빈 칸) 또는 초록(글자 칸) 꽉 찬 칸이다. screendump는 바탕 `#1d1f21`이 아닌 꽉 찬 8×16 칸을
+   세어 보조로 봤다(표의 마지막 열).
+3. 비교군은 GitHub의 0.2.0 ISO가 아니라, 조건 한 줄을 뺀 소스로 지금 구운 ISO다(로컬에 0.2.0 ISO가 없다). 커서에 관해서는 같은 동작이다.
+   굽고 나서 소스를 되돌렸다(diff +4 그대로).
+
+CO-M1 plan과 대조: fish의 `?25h`는 모양(DECSCUSR)을 안 건드린다 — CO-M1의 판정(첫 프롬프트가 사용자 모양)은 그대로다.

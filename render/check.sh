@@ -764,6 +764,49 @@ cursor_shape_check 5 bar "ink=32 box=2x16" 0
 # 사람이 bar를 물려받지 않게 한다.
 cursor_shape_check 0 block "ink=0 box=0x0" 1
 
+# ── 검사 38 · 39: DECTCEM(`CSI ? 25 l` / `h`)이 셸 커서를 숨기고 되살린다 ───
+#
+# CO-M0(CO design 결정 1). 번호가 순서와 다른 것은 25~37을 다시 매기지 않으려는
+# 것이다 — 다른 문서가 "검사 25~32"를 가리킨다. 자리가 여기인 것은 검사 24가
+# 모양을 block으로 되돌려 둔 뒤이고, 뒤의 vim 검사가 보이는 커서를 물려받아야
+# 하기 때문이다.
+#
+# fish는 명령이 끝날 때마다 `CSI ? 25 h`를 보내 커서를 되살린다(CO-M0 plan 결과 —
+# 게스트 fish 4.0.2 바이너리에 그 문자열이 있고 `?25l`은 없다. printf만 친 첫 두
+# 판은 숨긴 프레임을 한 번도 못 봤다: printf의 `?25l`과 fish의 `?25h`가 같은 read
+# 덩이로 왔다). 그래서 숨김은 명령이 도는 동안에만 보인다 — printf 뒤에 sleep 5를
+# 붙이고 그동안의 프레임을 본다. 기다림이 맞은 바로 그 프레임으로 판정하므로
+# settle을 안 한다(settle은 sleep이 끝난 뒤의 프롬프트까지 기다린다).
+printf '%s\n' "=== typing printf '\\033[H\\033[2J\\033[?25l'; sleep 5 ==="
+type_text "printf '\\033[H\\033[2J\\033[?25l'; sleep 5"
+type_keys ret
+if ! wait_for_cursor 'vt=block drawn=none'; then
+  report_failure "while sleep 5 ran after CSI ? 25 l the cursor line never said vt=block drawn=none: $(last_cursor)"
+fi
+CO_HIDDEN="$(last_cursor)"
+if [ "$(truncated_now)" -ne 0 ]; then
+  report_failure "after CSI ? 25 l the style dump was truncated, so inverted cells cannot be counted"
+fi
+if [ "$(inverted_now)" -ne 0 ]; then
+  report_failure "after CSI ? 25 l the last frame has $(inverted_now) inverted cell(s), 0 expected"
+fi
+echo "CSI ? 25 l: ${CO_HIDDEN#*cursor> }, $(inverted_now) inverted cell(s)"
+
+# 검사 39. sleep이 끝나면 fish가 되살린다 — 검사 20과 같은 자리 · 같은 줄이다.
+# 숨김 → 보임의 게스트 쪽 판정이고(보임 → 숨김은 검사 38), 뒤의 vim 검사가 보이는
+# 커서를 물려받는다는 것도 이것으로 선다. 기다림 15초가 sleep 5를 덮는다.
+if ! wait_for_cursor "${CU_WANT}"; then
+  report_failure "after sleep 5 fish did not bring the cursor back to ${CU_WANT}: $(last_cursor)"
+fi
+settle || true
+if [ "$(truncated_now)" -ne 0 ]; then
+  report_failure "after fish showed the cursor the style dump was truncated, so inverted cells cannot be counted"
+fi
+if [ "$(inverted_now)" -ne 1 ]; then
+  report_failure "after fish showed the cursor the last frame has $(inverted_now) inverted cell(s), 1 expected"
+fi
+echo "fish showed it again: $(last_cursor | sed 's/.*cursor> //'), $(inverted_now) inverted cell(s)"
+
 # ── vim — CU-M1 ────────────────────────────────────────────────────────
 #
 # 게스트의 vim은 vim.basic이고, initrd의 시스템 vimrc(/etc/vim/vimrc) 세 줄이
@@ -1065,4 +1108,4 @@ echo "--- ink lines ---"
 tlog | grep -a 'terminal: ink>' | tail -n 10
 echo "--- scroll lines ---"
 tlog | grep -a 'terminal: scroll>' | tail -n 10
-echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for, and vim switches the cursor shape between modes, and the system vimrc turns on line numbers, a status line and showmode"
+echo "TR-M2 PASS: colors reach the framebuffer, Hangul covers both of its cells, the viewport scrolls and comes back, and kitty images reach the framebuffer, and the cursor takes the shape DECSCUSR asks for and hides on DECTCEM, and vim switches the cursor shape between modes, and the system vimrc turns on line numbers, a status line and showmode"

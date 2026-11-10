@@ -3054,6 +3054,80 @@ pub fn main(init: std.process.Init) !void {
     try expectPins(mc, mc_pins, "after a Shift double click with nothing lingering");
     std.debug.print("vt_test: Shift 더블 · 트리플클릭이 단어 · 줄로 늘린다 OK\n", .{});
 
+    // 검사 130~133. DECTCEM(`CSI ? 25 l` / `h`)이 셸 커서를 숨기고 되살린다(CO design
+    // 결정 1 · 2). 숨김은 반전도 띠도 없애고, 조합 중에는 무시된다.
+    const block_at_0 = vt.CursorMark{ .row = 0, .col = 0, .asked = .block, .shape = .block, .cols = 1, .px = null };
+
+    // 검사 130. 숨기면 없고, 되살리면 (0,0)의 block 반전 하나다.
+    const co_hd = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer co_hd.deinit();
+    co_hd.feed("\x1b[?25l");
+    const co_hd0 = try co_hd.cells(&buf);
+    try cuExpectMark("검사 130 숨김", co_hd.cursorMark(), null);
+    if (cuInverted(co_hd0) != 0) {
+        std.debug.print("FAIL: 숨긴 커서인데 반전 셀이 {d}개\n", .{cuInverted(co_hd0)});
+        return error.HiddenCursorInverted;
+    }
+    co_hd.feed("\x1b[?25h");
+    const co_hd1 = try co_hd.cells(&buf);
+    try cuExpectMark("검사 130 되살림", co_hd.cursorMark(), block_at_0);
+    if (cuInverted(co_hd1) != 1) {
+        std.debug.print("FAIL: 되살린 커서의 반전 셀이 {d}개(1이어야 한다)\n", .{cuInverted(co_hd1)});
+        return error.ShownCursorNotInverted;
+    }
+
+    // 검사 131. bar도 숨는다 — 띠(`px`)가 없다. 되살리면 bar로 돌아온다.
+    co_hd.feed("\x1b[6 q\x1b[?25l");
+    _ = try co_hd.cells(&buf);
+    try cuExpectMark("검사 131 bar 숨김", co_hd.cursorMark(), null);
+    co_hd.feed("\x1b[?25h");
+    _ = try co_hd.cells(&buf);
+    try cuExpectMark("검사 131 bar 되살림", co_hd.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 1,
+        .px = .{ .x = 0, .y = 0, .w = 2, .h = 16 },
+    });
+    co_hd.feed("\x1b[0 q");
+
+    // 검사 132. 숨긴 채 조합하면 두 칸 block 반전이 보인다(결정 2). 조합을 끝내면 다시 없다.
+    co_hd.feed("\x1b[?25l");
+    co_hd.setPreedit(0xAC00);
+    const co_pe = try co_hd.cells(&buf);
+    try cuExpectMark("검사 132 숨김 + 조합", co_hd.cursorMark(), .{
+        .row = 0,
+        .col = 0,
+        .asked = .block,
+        .shape = .block,
+        .cols = 2,
+        .px = null,
+    });
+    if (cuInverted(co_pe) != 2) {
+        std.debug.print("FAIL: 숨긴 채 조합 중인 칸의 반전이 {d}개(2여야 한다)\n", .{cuInverted(co_pe)});
+        return error.HiddenPreeditNotInverted;
+    }
+    co_hd.setPreedit(null);
+    _ = try co_hd.cells(&buf);
+    try cuExpectMark("검사 132 조합 끝", co_hd.cursorMark(), null);
+
+    // 검사 133. 숨김은 자리와 상관없다 — 글자를 쓰고 커서를 옮겨도 없고, 되살리면 옮긴 자리다.
+    co_hd.feed("abc\x1b[3;4H");
+    _ = try co_hd.cells(&buf);
+    try cuExpectMark("검사 133 옮긴 뒤 숨김", co_hd.cursorMark(), null);
+    co_hd.feed("\x1b[?25h");
+    _ = try co_hd.cells(&buf);
+    try cuExpectMark("검사 133 옮긴 자리에서 되살림", co_hd.cursorMark(), .{
+        .row = 2,
+        .col = 3,
+        .asked = .block,
+        .shape = .block,
+        .cols = 1,
+        .px = null,
+    });
+    std.debug.print("vt_test: CSI ? 25 l 이 셸 커서를 숨기고 조합 중에는 무시한다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
 
