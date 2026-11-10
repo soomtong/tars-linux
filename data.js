@@ -5,15 +5,15 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-10',
-  latest: 'Cursor Options (CO-M0~M1)',
+  latest: 'Service Stop (SS-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1286,      // git rev-list --count main
+    commits: 1296,      // git rev-list --count main
     since: '2026-08-01',
     chains: 33,         // check.sh의 CHAINS
-    zigKLines: 45,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 46,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -126,6 +126,7 @@ window.TARS = {
     ['2026-11-09', 'Barebone', 'BB', '개발 도구를 뺀 납품용 ISO(약 140MB) — 프로젝트 실행 파일을 묶음 하나로 얹으면 설치 뒤 부팅하자마자 첫 화면에 뜬다(데모: fakesteak)'],
     ['2026-11-09', 'Fullscreen', 'FU', '둘레 여백과 상태 줄을 감추고 격자를 화면 끝까지 — [⌘⌃F], `fullscreen=on`, 패널 안 프로그램의 xterm `CSI 10;1t`'],
     ['2026-11-10', 'Cursor Options', 'CO', '프로그램이 숨긴 커서(`CSI ?25l`)는 그리지 않는다 — 데모의 비 사이를 튀어 다니던 흰 칸이 사라졌다. 커서 기본 모양은 `cursor_shape=`'],
+    ['2026-11-10', 'Service Stop', 'SS', '서비스 스크립트의 `# tars-stop: INT 10` 한 줄이 멈춤 신호와 유예를 고른다. 전원을 끌 때 서버를 먼저 각자의 방식으로 — psql이 열린 postgres도 0.4초에 깨끗이'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -184,6 +185,7 @@ window.TARS = {
         ['rc 탈출로', '콘솔 셸이 빨리 세 번 죽으면 rc 없이 한 번 더 띄운다', '2026-09-11'],
         ['커널 cmdline `tars.noconfig`', '셸 rc를 안 읽는다. `tars.conf`보다 우선', '2026-09-11'],
         ['부팅 서비스 `/config/services.d/`', '실행 파일을 이름순으로 여덟까지 띄우고 감독한다. `.`으로 시작하는 이름은 건너뛴다', '2026-09-27'],
+        ['`# tars-stop: SIG SECONDS`', '서비스 스크립트 머리의 한 줄 — 멈출 때의 신호(TERM · INT · QUIT · HUP)와 SIGKILL까지의 초(1~60). 전원 끄기는 서비스를 이 줄대로 먼저 끈다', '2026-11-10'],
         ['sshd', '`services.d/sshd` 링크 하나와 `ssh/authorized_keys`로 켜진다. 키로만 root 로그인, 세션은 콘솔과 같은 셸 · env', '2026-09-27'],
         ['loopback', '설정보다 먼저 `lo`를 올린다. `localhost`와 `아무거나.localhost`가 127.0.0.1', '2026-09-26'],
         ['셸 환경', '`PATH` · `TZ`. root 셸은 `XDG_DATA_HOME=/config/xdg` · 히스토리 파일이 `/config`에, 사용자 셸은 홈에', '2026-09-12'],
@@ -298,7 +300,7 @@ window.TARS = {
         ['`sudo tars-config passwd`', '비밀번호를 바꾼다. 새 값을 두 번 묻고, 다르면 아무것도 안 바꾼다. 다음 sudo부터 새 값', '2026-11-03'],
         ['`sudo reboot` · `sudo poweroff` · `sudo shutdown -r`', '재부팅 · 전원 끄기. 정리는 PID 1이 한다(Ctrl+Alt+Del과 같은 길). 사용자로 치면 `try: sudo …`', '2026-11-05'],
         ['`sudo suspend`', 'S3로 잔다(뚜껑을 닫은 것과 같다). sudo 없이 치면 셸의 내장 명령이 잡히니 언제나 sudo로', '2026-11-05'],
-        ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL', '2026-09-27'],
+        ['`tars-service status` · `stop` · `start` · `restart`', '`/run/tars/init.sock`으로 PID 1에게. stop은 프로세스 그룹에 서비스의 신호(기본 SIGTERM), 유예(기본 3초) 뒤 SIGKILL', '2026-09-27'],
         ['`tars-install <디스크>`', 'GPT에 768MiB ESP · 256MiB 설정 · 나머지 ext4 홈(4GiB 이상). 새 설치는 사용자 이름과 비밀번호를 묻는다. 이미 깔린 디스크는 부트 파일만 갱신하고 설정과 홈은 남긴다 — 지금 이미지는 `boot/old/`로 옮겨 부트 메뉴에 남긴다. UEFI 전용', '2026-11-03'],
         ['`tars-install <디스크> --beside`', 'macOS 등 기존 파티션을 안 건드리고 가장 큰 빈 공간(4GiB 이상)에 TARS 셋을 덧붙인다. 맥은 전원을 켤 때 Option → "EFI Boot", 기본 부팅은 macOS 그대로. `--beside --wipe`는 TARS 파티션만 다시 만든다', '2026-11-05'],
         ['`tars-install <파티션>`', '디스크 유틸리티가 만든 FAT · exFAT 파티션(예: `/dev/sda3`)을 지우고 그 자리와 붙은 빈 공간에 TARS 셋을 놓는다. 다른 파티션은 그대로, EFI · APFS · HFS+ · Recovery · NTFS는 거절. 목록이 파티션을 한 줄씩 보인다', '2026-11-05'],
