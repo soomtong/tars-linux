@@ -188,7 +188,10 @@ fn onWritePty(h: *Handler, bytes: []const u8) void {
     // `Screen.init`이 `handler.terminal = &self.term`으로 만들었으므로
     // 여기서 Screen을 되찾을 수 있다. 전역 변수를 두지 않는 이유가
     // 이것이다(design 결정 "착수 전에 읽은 것" 4).
-    const self: *Screen = @fieldParentPtr("term", h.terminal);
+    // `@alignCast`는 ghostty 1.0부터다 — `Terminal`의 정렬이 `Screen` 안 `term`
+    // 자리가 보장하는 것보다 커졌다. `Screen`은 `alloc.create`로 힙에 놓이므로
+    // 정렬은 맞고, safe 빌드에서는 실제로 검사된다(GV design 결정 3).
+    const self: *Screen = @alignCast(@fieldParentPtr("term", h.terminal));
     self.pushReply(bytes);
 }
 

@@ -3,14 +3,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-GHOSTTY_SHA="3d07ef9e28c4af05065b9e2e546b8ac8f9b62df0"
+# 태그 vt-1.0.0(libghostty-vt 1.0.0, GV-M0). 태그는 옮겨질 수 있어 SHA로 받는다(GV design 결정 2).
+GHOSTTY_SHA="0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec"
 SRC_DIR="ghostty-src"
 URL="https://github.com/ghostty-org/ghostty/archive/${GHOSTTY_SHA}.tar.gz"
 # tarball의 sha256(VS-M0). GitHub archive에는 공식 해시가 없다 — 두 번 받아 같은 값이고, 푼 것이
 # 그때까지 게이트가 쓰던 트리와 diff 0줄이었다(VS design 확인 2 · 3). FAILED가 나면 재실행으로
 # 안 풀린다 — 새 tarball을 풀어 지난 트리와 diff -rq를 보고 같은 커밋이면 이 값을 고친다.
 # 커밋(GHOSTTY_SHA)을 올릴 때도 함께 고친다.
-GHOSTTY_SHA256="3949e4bf93f345c7729faecac6b9916aeb5a2b745de5671a7fe8d4725040046c"
+GHOSTTY_SHA256="2f38f10edcc7498a91a4b02baf317f408c9808f637b341c22966b2c7522b95ea"
 
 if [ ! -d "$SRC_DIR" ]; then
   echo "Downloading ${URL}..."
