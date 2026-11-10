@@ -3,7 +3,7 @@
 접두사: GV
 
 Date: 2026-11-10
-Status: 착수(2026-11-10). plan은 `docs/plans/2026-11-10-tars-ghostty-vt-gv-m0.md`.
+Status: 닫힘(2026-11-10, GV-M0 — 루트 게이트 33/33). plan은 `docs/plans/2026-11-10-tars-ghostty-vt-gv-m0.md`.
 
 계기: 사용자(2026-11-10): "zig 0.17.1 빌드 대응, libghostty 1.0 대응."
 

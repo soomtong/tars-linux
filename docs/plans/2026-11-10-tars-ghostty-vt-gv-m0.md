@@ -2,7 +2,7 @@
 
 Date: 2026-11-10
 Design: `docs/specs/2026-11-10-tars-ghostty-vt-design.md`
-Status: 착수(2026-11-10).
+Status: 끝났다(2026-11-10).
 
 ## 착수 전에 확정한 것
 
@@ -33,4 +33,13 @@ design의 확인 1~5(HEAD `e4baa09`). 고칠 자리는 기억 `project_zig_upgra
 
 ## 결과
 
-(게이트 뒤에 적는다)
+commit 셋: `695be61`(fmt) · `c759ba7`(Zig 0.17.1) · `7c853e6`(ghostty vt-1.0.0). plan과 다른 자리는 하나다.
+
+1. Task 1: `reload.zig`는 `zig fmt`의 출력을 그대로 받지 않았다. 주석 사이에 홀로 선 원소가 앞 두 줄의 다섯 칸 격자에 맞춰지며
+   `"cursor_shape"`만 세 칸 더 들여쓰였다 — 사람이 맞추면 fmt가 다시 밀어내는 자리라 CO-M1이 빨개진 이유로 읽는다. 주석 셋을 위로
+   모으고 세 키를 격자 셋째 줄로 넣었다(원소 순서 · 값 그대로, fmt를 두 번 돌려도 그대로). 사용자 "can apply zig fmt? any reason?"
+2. Task 2: 새 이미지(태그 `c7ba57a9ed37`)는 층 캐시로 23초에 구워졌다. 컨테이너 `zig version` = `0.17.1`.
+3. Task 3: tarball을 두 번 받아 sha256이 같고, 푼 트리가 `git archive vt-1.0.0`과 `diff -rq` 0이다(VS-M0 규칙). `make terminal` 2분 16초.
+4. Task 4-1: 컨테이너에서 terminal `zig build test` 89/89 단계, init `zig build test` 47/47 단계 성공.
+5. Task 4-2: 루트 게이트 33/33 첫 판 PASS(33분 43초 — prebuild 363초 + lanes 1,513초, 잘린 줄 0, `out/gate-logs/20261110-130631`).
+   devtools 체인(TP-M1)의 게스트 zig hello는 58초(묶음의 zig는 이미 0.17.1이었다).

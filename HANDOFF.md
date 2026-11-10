@@ -1,14 +1,14 @@
-# HANDOFF: CO 닫았고 fakesteak 데모 draft를 올렸다(2026-11-10) — 사용자가 맥북 에어에서 확인한다
+# HANDOFF: GV 닫음 — Zig 0.17.1 · ghostty vt-1.0.0(2026-11-10). fakesteak 데모 draft는 사용자가 맥북 에어에서 확인한다
 
 ## 목표
 
-사용자(2026-11-10, fakesteak 데모 점검): "full screen mode에서 cursor가 계속 빠르게 깜빡이는게 눈에 거슬리는데" → Cursor Options(CO)로
-섰다 — 숨긴 커서를 안 그리고(CO-M0), `tars.conf`의 `cursor_shape=`(CO-M1). 깜빡임은 사용자 결정으로 안 한다(CPU). 이어서 "이 기능이
-구현되면 tars fakesteak 데모 버전만 포함한 iso파일을 draft release (pre-release) 해주세요. 원격에 있는 맥북에어에서 다시 확인해 보겠습니다."
+사용자(2026-11-10): "zig 0.17.1 빌드 대응, libghostty 1.0 대응." → Ghostty VT 1.0(GV-M0)으로 섰다. 그 앞 일: CO(커서 숨김 · `cursor_shape=`)를
+닫고 fakesteak 데모 ISO를 draft pre-release로 올렸다 — 사용자가 원격 맥북 에어에서 확인한다.
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(ISO를 지은 커밋). `gh-pages`는 CO 줄까지 push.
+`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO를 지은 커밋, GV 전). `gh-pages`는 CO 줄까지
+(GV는 빌드 내부라 소개 페이지에 안 넣었다).
 
 ## 다음 할 것
 
@@ -16,7 +16,18 @@
    기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에 적는다.
 2. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
 3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 지금은 고치지 않았다 — 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
-4. 다음 서브프로젝트는 사용자가 말할 때.
+4. GV push 뒤 `main`의 CI가 새 Dockerfile 해시(`c7ba57a9ed37`)로 이미지를 구워 ghcr.io에 올린다(GI-M0) — 초록인지 본다.
+   로컬 이미지는 이미 그 태그로 구워 두었다.
+5. 다음 서브프로젝트는 사용자가 말할 때.
+
+## 완료된 작업 (2026-11-10, GV-M0 — GV 닫힘)
+
+- [x] 조사(호스트 0.17.1, scratchpad 사본): Zig 0.17.1은 우리 코드를 안 깬다. ghostty `vt-1.0.0`(`0fa3d57`)이 깨는 것은 `vt.zig:191`의
+      `@fieldParentPtr` 하나(정렬). CI는 이미 빨갰다 — CO-M1이 `zig fmt` 어긋난 세 파일을 남겼다(0.17.0 CI도 같은 빨강).
+- [x] design · plan `d756b79`(사용자 "ok go"). `695be61` fmt(`reload.zig`는 주석을 모아 격자에 넣었다 — 사용자 "can apply zig fmt? any reason?"),
+      `c759ba7` Dockerfile · `checks.yml` 해시 둘, `7c853e6` vendor SHA · sha256(두 번 받아 같음, `git archive`와 트리 같음) · `@alignCast`.
+- [x] 컨테이너 terminal `zig build test` 89/89 · init 47/47. 루트 게이트 33/33 첫 판(33분 43초, 잘린 줄 0, `out/gate-logs/20261110-130631`).
+      닫기: design Status · plan 결과 · completed · 기억 `project_zig_upgrade`의 GV 절 · `MEMORY.md`.
 
 ## 완료된 작업 (2026-11-10, CO-M0 · CO-M1 — CO 닫힘 · fakesteak 데모 draft)
 
