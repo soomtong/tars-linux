@@ -20,7 +20,8 @@ const OTHER = [_][]const u8{
     "hangul_toggle=shift_space", "shell_config=off",     "net=dhcp",               "ntp=10.0.2.2",
     "timezone=Asia/Seoul",       "firewall=on",          "bluetooth=on",           "esc_latin=off",
     "clipboard=pane",            "mouse_scroll=natural", "touchpad_scroll=normal", "mouse_accel=5",
-    "touchpad_accel=5",          "display_scale=2",      "fullscreen=on",          "cursor_shape=bar",       "user=hpuser",
+    "touchpad_accel=5",          "display_scale=2",      "fullscreen=on",          "cursor_shape=bar",
+    "user=hpuser",
 };
 
 const S = reload.Slot;

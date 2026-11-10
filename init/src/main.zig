@@ -737,7 +737,7 @@ fn doReloadTerminal(children: []Child, live: *Live, out: *control.Out, now: isiz
         pid,                           shell.path(),                     @tagName(new.keyboard),   @tagName(new.hangul_layout),
         @tagName(new.latin_layout),    new.terminalToggles(&toggle_buf), @tagName(new.clipboard),  @tagName(new.mouse_scroll),
         @tagName(new.touchpad_scroll), new.mouse_accel.arg(),            new.touchpad_accel.arg(), @tagName(new.display_scale),
-        @tagName(new.fullscreen),          @tagName(new.cursor_shape),
+        @tagName(new.fullscreen),      @tagName(new.cursor_shape),
     });
 }
 

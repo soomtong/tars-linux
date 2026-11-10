@@ -36,11 +36,9 @@ pub fn groupOf(comptime key: []const u8) Group {
         "keyboard",      "hangul_layout", "latin_layout",    "hangul_toggle", "esc_latin",
         "clipboard",     "mouse_scroll",  "touchpad_scroll", "mouse_accel",   "touchpad_accel",
         // HS-M0. terminal이 다시 뜨며 화면을 다시 연다 — 배율은 그때 정해진다.
-        "display_scale",
         // FU-M0. 전체 화면의 시작 상태 — 다시 뜬 terminal이 읽는다.
-        "fullscreen",
         // CO-M1. 커서 모양의 기본값 — 다시 뜬 terminal이 새 패널에 준다.
-        "cursor_shape",
+        "display_scale", "fullscreen",    "cursor_shape",
     };
     if (comptime std.mem.eql(u8, key, "user")) return .boot;
     inline for (now) |k| if (comptime std.mem.eql(u8, k, key)) return .now;
