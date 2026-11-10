@@ -5,14 +5,14 @@
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
   asOf: '2026-11-10',
-  latest: 'Fullscreen (FU-M0~M1)',
+  latest: 'Cursor Options (CO-M0~M1)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1281,      // git rev-list --count main
+    commits: 1286,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 32,         // check.sh의 CHAINS
+    chains: 33,         // check.sh의 CHAINS
     zigKLines: 45,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
@@ -125,6 +125,7 @@ window.TARS = {
     ['2026-11-09', 'Dev Layer', 'TP', '설치하면 망 없이 바로 개발 — 언어 스물남짓 · 편집기 · 유틸리티 · 문서 · 서버 다섯을 묶음 열로 디스크에 싣고 `/usr`에 겹친다'],
     ['2026-11-09', 'Barebone', 'BB', '개발 도구를 뺀 납품용 ISO(약 140MB) — 프로젝트 실행 파일을 묶음 하나로 얹으면 설치 뒤 부팅하자마자 첫 화면에 뜬다(데모: fakesteak)'],
     ['2026-11-09', 'Fullscreen', 'FU', '둘레 여백과 상태 줄을 감추고 격자를 화면 끝까지 — [⌘⌃F], `fullscreen=on`, 패널 안 프로그램의 xterm `CSI 10;1t`'],
+    ['2026-11-10', 'Cursor Options', 'CO', '프로그램이 숨긴 커서(`CSI ?25l`)는 그리지 않는다 — 데모의 비 사이를 튀어 다니던 흰 칸이 사라졌다. 커서 기본 모양은 `cursor_shape=`'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -242,7 +243,7 @@ window.TARS = {
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 스물',
+      title: '설정 — `tars.conf` 키 스물하나',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -263,6 +264,7 @@ window.TARS = {
         ['`mouse_accel`', '`0`~`10` — 기본 `0`(끔). 빠르게 밀 때의 배율, 10이면 최대 4배', '2026-11-04'],
         ['`touchpad_accel`', '`0`~`10` — 기본 `0`. `mouse_accel`과 같은 곡선', '2026-11-04'],
         ['`fullscreen`', '`on` | `off` — 부팅 때부터 여백 · 상태 줄 없이. 기본 `off`, 실행 중에는 [⌘⌃F]', '2026-11-09'],
+        ['`cursor_shape`', '`block` | `bar` | `underline` — 프로그램이 정하지 않았을 때의 커서 모양. 기본 `block`, vim은 그대로 모드마다 바꾼다', '2026-11-10'],
         ['`display_scale`', '`auto` | `1` | `2` | `3` — 기본 `auto`(논리 화면이 1280×800보다 작아지지 않는 가장 큰 정수배, Retina 15"는 2)', '2026-11-05'],
         ['`user`', '화면 셸의 사용자 이름. 설치기가 쓰고 `tars-config set`으로는 못 바꾼다', '2026-11-03'],
       ],
@@ -313,6 +315,7 @@ window.TARS = {
         ['스크롤백', '1000줄. 뷰포트를 올렸다 내려도 자식 출력은 그대로 이어진다', '2026-08-24'],
         ['kitty graphics', 'RGB · RGBA · PNG(`f=100`, stb_image). 알파 합성과 z 순서', '2026-10-03'],
         ['커서 모양 DECSCUSR', 'block · bar · underline. 게스트 vim은 insert bar, replace underline', '2026-10-04'],
+        ['커서 숨김 DECTCEM', '패널 안 프로그램이 `CSI ?25l`로 숨기면 셸 커서를 그리지 않는다(한글 조합 중에는 보인다). fish는 명령이 끝나면 되살린다', '2026-11-10'],
         ['bracketed paste', '자식이 모드 2004를 켰으면 붙인 글자를 `ESC[200~` · `ESC[201~`로 감싼다', '2026-10-04'],
         ['질의 응답', '커서 위치(`ESC[6n`) · 상태 보고 · 픽셀 크기(`CSI 14t`). 제목 보고는 보안상 끔', '2026-09-19'],
         ['마우스 보고', '모드 9 · 1000 · 1002 · 1003, 1007(대체 화면의 휠 → 화살표)', '2026-10-05'],
