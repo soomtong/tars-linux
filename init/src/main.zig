@@ -490,6 +490,10 @@ const Child = struct {
     /// 서비스 여덟의 칸은 부팅부터 늘 있고, 원하지 않는 칸이 이것으로 꺼져 있다 — 안 뜨고,
     /// `status`에 안 나오고, `tars-service`가 이름으로 못 찾는다.
     config_off: bool = false,
+    /// SS-M1. 멈출 때(stop · restart · reload가 끔) 그룹에 보내는 신호와 SIGKILL까지의 유예. services.d의 서비스는
+    /// 스크립트의 `# tars-stop:` 줄(`services.Entry.stop`)이 `placeService`로 옮겨 오고, 나머지 칸은 이 기본값이다.
+    stop_sig: linux.SIG = .TERM,
+    stop_grace: isize = control.GRACE_SECONDS,
 };
 
 fn monotonicSeconds() isize {
@@ -597,7 +601,7 @@ fn answer(children: []Child, live: *Live, req: control.Request, out: *control.Ou
     };
     const pid = c.pid;
     const done = control.apply(req.verb, c, now);
-    if (done.signal) _ = linux.kill(-pid, .TERM);
+    if (done.signal) _ = linux.kill(-pid, c.stop_sig);
     control.outcome(out, done.outcome, c.label, pid);
     logline.print("tars-init: control: {s} {s} -> {s}\n", .{ @tagName(req.verb), c.label, @tagName(done.outcome) });
 }
@@ -754,11 +758,11 @@ fn steer(c: *Child, s: reload.Step, now: isize, out: *control.Out) void {
         .stop => {
             c.config_off = true;
             const done = control.apply(.stop, c, now);
-            if (done.signal) _ = linux.kill(-pid, .TERM);
+            if (done.signal) _ = linux.kill(-pid, c.stop_sig);
         },
         .restart => {
             const done = control.apply(.restart, c, now);
-            if (done.signal) _ = linux.kill(-pid, .TERM);
+            if (done.signal) _ = linux.kill(-pid, c.stop_sig);
         },
     }
     out.print("{s}: {s}\n", .{ c.label, switch (s) {
@@ -780,6 +784,8 @@ fn placeService(children: []Child, live: *Live, i: usize, e: *const services.Ent
         .label = s.label(),
         .path = s.path(),
         .argv = .{ s.path().ptr, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null },
+        .stop_sig = s.stop.sig,
+        .stop_grace = s.stop.grace,
     };
 }
 
@@ -942,6 +948,18 @@ fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void 
 ///      게이트까지 함께 흔들린다(design 결정 8).
 const POLL_TIMEOUT_MS: i32 = 1000;
 
+/// SS-M1(SS design 결정 2). 전원 끄기가 먼저 끌 것 — services.d 칸 중 살아 있는 것. 내장 데몬 다섯은 넣지 않는다
+/// (design 비목표 2): 그들은 지금처럼 나머지와 함께 TERM · HUP을 받는다.
+fn servicesFirst(children: []Child, buf: *[services.MAX]power.Service) []const power.Service {
+    var n: usize = 0;
+    for (children[SLOT_SERVICES..@min(children.len, SLOTS)]) |*c| {
+        if (c.pid < 0) continue;
+        buf[n] = .{ .pid = c.pid, .sig = c.stop_sig, .grace = c.stop_grace, .label = c.label };
+        n += 1;
+    }
+    return buf[0..n];
+}
+
 /// PID 1의 본체. 절대 반환하지 않는다 — 반환하면 커널이 패닉한다.
 ///
 /// buttons가 비어 있어도 이 구조는 그대로 성립한다. fd 0개에 1초 타임아웃인
@@ -973,7 +991,10 @@ fn supervise(
         // LP-M1. 잠은 종료가 아니다 — 깨어나면 이 루프가 그대로 이어진다.
         if (power.take()) |action| switch (action) {
             .sleep => power.sleep(),
-            .power_off, .restart => power.shutdown(action),
+            .power_off, .restart => {
+                var first: [services.MAX]power.Service = undefined;
+                power.shutdown(action, servicesFirst(children, &first));
+            },
         };
 
         // AU-M2. 사운드 카드가 오거나 갔으면 /etc/asound.conf의 기본 카드를 다시
@@ -995,8 +1016,8 @@ fn supervise(
                 // 서비스는 제 그룹을 가진다(setsid). terminal은 아니다 — TC-M3의 `reload terminal`이 이
                 // 길로 오는 첫 비서비스다. 그룹에 보내면 ESRCH로 아무도 안 죽는다.
                 _ = linux.kill(if (c.kind == .service) -c.pid else c.pid, .KILL);
-                logline.print("tars-init: {s} outlived SIGTERM by {d}s, sent SIGKILL to group {d}\n", .{
-                    c.label, control.GRACE_SECONDS, c.pid,
+                logline.print("tars-init: {s} outlived {s} by {d}s, sent SIGKILL to group {d}\n", .{
+                    c.label, services.sigName(c.stop_sig), c.stop_grace, c.pid,
                 });
             }
         }

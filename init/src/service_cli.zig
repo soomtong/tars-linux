@@ -29,8 +29,12 @@ const EXIT_DENIED: u8 = 77;
 const REPLY_WAIT_MS: i32 = 2000;
 /// `reload`의 답. `tars-config reload`와 같다 — init이 nft 한 번과 services.d를 지나 답한다.
 const RELOAD_WAIT_MS: i32 = 10000;
-/// 기다림의 시한(M1-B). SIGTERM을 무시하는 서비스가 최악 5초에 거둬진다.
+/// 기다림의 시한(M1-B). 띄움 쪽(start)이다.
 const SETTLE_MS: u64 = 8000;
+/// SS-M1. 멈춤 쪽(stop · restart · disable). 서비스의 유예는 스크립트의 `# tars-stop:` 줄이 정하고 상한이 60초다 —
+/// 그 신호를 무시하는 서비스도 상한 뒤 SIGKILL로 거둬지므로, 상한에 거두는 몫 5초를 더한 만큼 기다린다.
+/// 평시에는 1.5초 안이다(SS-M0 결과 1).
+const STOP_SETTLE_MS: u64 = @as(u64, @intCast(services.GRACE_MAX)) * 1000 + 5000;
 const SETTLE_STEP_MS: u64 = 200;
 
 fn writeAll(fd: i32, bytes: []const u8) void {
@@ -91,7 +95,8 @@ fn look(name: []const u8, label: []const u8, buf: []u8) ?control.Seen {
 fn settle(verb: control.Verb, name: []const u8, label: []const u8, old_pid: linux.pid_t) u8 {
     var buf: [control.REPLY_MAX]u8 = undefined;
     var waited: u64 = 0;
-    while (waited <= SETTLE_MS) : (waited += SETTLE_STEP_MS) {
+    const limit: u64 = if (verb == .stop or verb == .restart) STOP_SETTLE_MS else SETTLE_MS;
+    while (waited <= limit) : (waited += SETTLE_STEP_MS) {
         if (look(name, label, &buf)) |seen| {
             if (control.reached(verb, seen, old_pid)) {
                 var line: [control.REPLY_MAX]u8 = undefined;
@@ -105,7 +110,7 @@ fn settle(verb: control.Verb, name: []const u8, label: []const u8, old_pid: linu
         }
         sleepMs(SETTLE_STEP_MS);
     }
-    complain("{s} did not {s} in {d}s", .{ label, @tagName(verb), SETTLE_MS / 1000 });
+    complain("{s} did not {s} in {d}s", .{ label, @tagName(verb), limit / 1000 });
     return EXIT_TIMEOUT;
 }
 
@@ -271,14 +276,14 @@ fn enableDisable(verb: link.Verb, name: []const u8, argv: []const [*:0]const u8)
 }
 
 /// reload가 끈 서비스가 거둬질 때까지. pid가 없었으면(이미 죽어 있었다) 기다릴 것이 없다. `kill(pid, 0)`은 좀비에도 0이라
-/// ESRCH는 init이 거둔 뒤다. 그 사이에 pid가 다른 프로세스에 다시 쓰일 수는 있지만 8초 안의 일이 아니다.
+/// ESRCH는 init이 거둔 뒤다. 그 사이에 pid가 다른 프로세스에 다시 쓰일 수는 있지만 65초 안의 일이 아니다.
 fn gone(label: []const u8, pid: linux.pid_t) u8 {
     var waited: u64 = 0;
-    while (pid > 0 and waited <= SETTLE_MS) : (waited += SETTLE_STEP_MS) {
+    while (pid > 0 and waited <= STOP_SETTLE_MS) : (waited += SETTLE_STEP_MS) {
         if (linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))) == .SRCH) break;
         sleepMs(SETTLE_STEP_MS);
     } else if (pid > 0) {
-        complain("{s} did not stop in {d}s", .{ label, SETTLE_MS / 1000 });
+        complain("{s} did not stop in {d}s", .{ label, STOP_SETTLE_MS / 1000 });
         return EXIT_TIMEOUT;
     }
     var line: [control.REPLY_MAX]u8 = undefined;

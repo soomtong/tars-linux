@@ -1,5 +1,7 @@
 #!/bin/sh
 # TARS redis service (TP-M11). Turn it on with `sudo tars-service enable redis`.
+# tars-stop: TERM 10
+# SIGTERM saves and fsyncs before redis exits; the time grows with the data (SS-M0: 0.15s for 200k keys).
 # Data: /var/lib/redis -> /home/.tars/var/redis. Your settings: /config/redis.d/*.conf.
 SERVER=redis
 # shellcheck source=../server/common.sh # 게스트에서는 /etc/tars/server/common.sh다(묶음의 etc/ 복사)

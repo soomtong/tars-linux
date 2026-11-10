@@ -55,6 +55,87 @@ fn failed(rc: usize) ?linux.E {
     return if (e == .SUCCESS) null else e;
 }
 
+/// SS-M1(SS design 결정 1). 서비스를 멈출 때 보내는 신호와 SIGKILL까지의 유예. 서비스 스크립트의 머리 주석
+/// `# tars-stop: INT 10` 한 줄이 고른다. 줄이 없으면 이 기본값 — SS 전의 동작(`control.GRACE_SECONDS`와 같은 3초)이다.
+/// 신호가 서비스마다 달라야 하는 까닭은 SS-M0 결과 2: postgres는 SIGTERM이면 열린 세션을 기다려 안 끝나고(INT는 0.3초),
+/// mysqld는 SIGINT를 무시한다.
+pub const Stop = struct {
+    sig: linux.SIG = .TERM,
+    grace: isize = 3,
+};
+
+/// 유예의 상한. 전원 끄기가 서비스를 기다리는 시간이 이 값으로 묶인다(SS-M1 plan 확정 1).
+pub const GRACE_MAX: isize = 60;
+/// 줄을 찾는 범위 — 셸 스크립트의 머리 주석 자리다.
+pub const STOP_HEAD: usize = 1024;
+const STOP_PREFIX = "# tars-stop:";
+const STOP_SIGNALS = [_]struct { name: []const u8, sig: linux.SIG }{
+    .{ .name = "TERM", .sig = .TERM },
+    .{ .name = "INT", .sig = .INT },
+    .{ .name = "QUIT", .sig = .QUIT },
+    .{ .name = "HUP", .sig = .HUP },
+};
+
+/// `SIGINT`처럼 로그에 찍는 이름. 넷 밖의 값은 오지 않는다.
+pub fn sigName(sig: linux.SIG) []const u8 {
+    return switch (sig) {
+        .INT => "SIGINT",
+        .QUIT => "SIGQUIT",
+        .HUP => "SIGHUP",
+        else => "SIGTERM",
+    };
+}
+
+/// `# tars-stop:` 뒤의 글자. 낱말 둘(신호 · 초)만 받는다 — 셋째 낱말이나 범위 밖이면 null.
+pub fn parseStop(rest: []const u8) ?Stop {
+    var it = std.mem.tokenizeAny(u8, rest, " \t\r");
+    const sig_word = it.next() orelse return null;
+    const secs_word = it.next() orelse return null;
+    if (it.next() != null) return null;
+    const sig = for (STOP_SIGNALS) |s| {
+        if (std.mem.eql(u8, s.name, sig_word)) break s.sig;
+    } else return null;
+    const secs = std.fmt.parseInt(isize, secs_word, 10) catch return null;
+    if (secs < 1 or secs > GRACE_MAX) return null;
+    return .{ .sig = sig, .grace = secs };
+}
+
+pub const StopLine = union(enum) { none, ok: Stop, bad };
+
+/// 파일 앞부분(`STOP_HEAD`까지)에서 `# tars-stop:`으로 시작하는 첫 줄을 찾는다. 마지막 줄이 잘렸으면(줄 끝이 없고 범위가
+/// 꽉 찼다) 그 줄은 보지 않는다 — 잘린 숫자를 다른 값으로 읽지 않으려는 것이다.
+pub fn findStop(head: []const u8) StopLine {
+    const text = head[0..@min(head.len, STOP_HEAD)];
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |line| {
+        if (!std.mem.startsWith(u8, line, STOP_PREFIX)) continue;
+        const whole = it.index != null or text.len < STOP_HEAD;
+        if (!whole) return .none;
+        return if (parseStop(line[STOP_PREFIX.len..])) |s| .{ .ok = s } else .bad;
+    }
+    return .none;
+}
+
+/// 서비스 파일(링크를 따라)의 앞부분을 읽어 `findStop`. 못 읽으면 기본값 — 실행 여부는 `check`가 이미 봤다.
+fn readStop(path: [:0]const u8) StopLine {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
+    if (failed(rc) != null) return .none;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var buf: [STOP_HEAD]u8 = undefined;
+    var len: usize = 0;
+    while (len < buf.len) {
+        const n = linux.read(fd, buf[len..].ptr, buf.len - len);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            break;
+        }
+        if (n == 0) break;
+        len += n;
+    }
+    return findStop(buf[0..len]);
+}
+
 /// 고른 서비스 하나. 경로와 로그 이름을 제 버퍼에 든다 — `List`가 `main()`의
 /// 스택에 살고 `supervise()`가 영영 반환하지 않으므로 여기서 꺼낸 포인터가
 /// argv로 가도 뜨지 않는다(`Boot`의 `tz_buf` · `user_arg`와 같은 근거).
@@ -63,6 +144,8 @@ pub const Entry = struct {
     path_len: usize = 0,
     label_buf: [LABEL_MAX]u8 = undefined,
     label_len: usize = 0,
+    /// SS-M1. 멈춤 신호와 유예(스크립트의 `# tars-stop:` 줄, 없으면 기본).
+    stop: Stop = .{},
 
     pub fn path(self: *const Entry) [:0]const u8 {
         return self.path_buf[0..self.path_len :0];
@@ -222,6 +305,18 @@ pub fn discover(dir: [:0]const u8, list: *List) void {
         const e = &list.entries[list.len];
         e.path_len = (joinPath(&e.path_buf, dir, name) orelse unreachable).len;
         e.label_len = (std.fmt.bufPrint(&e.label_buf, LABEL_PREFIX ++ "{s}", .{name}) catch unreachable).len;
+        e.stop = switch (readStop(path)) {
+            .none => .{},
+            .ok => |s| blk: {
+                logline.print("tars-init: service {s} stops with {s}, grace {d}s\n", .{ name, sigName(s.sig), s.grace });
+                break :blk s;
+            },
+            .bad => blk: {
+                const d: Stop = .{};
+                logline.print("tars-init: service {s}: bad tars-stop line, using {s} {d}s\n", .{ name, sigName(d.sig), d.grace });
+                break :blk d;
+            },
+        };
         list.len += 1;
     }
 

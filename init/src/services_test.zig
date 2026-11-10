@@ -150,4 +150,95 @@ pub fn main() !void {
         }
     }
     std.debug.print("services_test: eight executables in name order, the rest skipped or ignored\n", .{});
+
+    try stopLines();
+}
+
+fn expectStop(text: []const u8, want: services.StopLine) !void {
+    const got = services.findStop(text);
+    const same = switch (want) {
+        .none => got == .none,
+        .bad => got == .bad,
+        .ok => |w| got == .ok and got.ok.sig == w.sig and got.ok.grace == w.grace,
+    };
+    if (!same) {
+        std.debug.print("FAIL: findStop([{s}]) = {s}, want {s}\n", .{ text, @tagName(got), @tagName(want) });
+        return error.WrongStop;
+    }
+}
+
+fn writeFile(path: [:0]const u8, text: []const u8) !void {
+    const rc = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o755);
+    if (failed(rc)) |e| {
+        std.debug.print("FAIL: create {s} (errno {d})\n", .{ path, @backingInt(e) });
+        return error.OpenFailed;
+    }
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    if (linux.write(fd, text.ptr, text.len) != text.len) return error.WriteFailed;
+    _ = linux.chmod(path.ptr, 0o755);
+}
+
+/// SS-M1. 스크립트 머리의 `# tars-stop:` 줄.
+fn stopLines() !void {
+    const head = "#!/bin/sh\n# TARS postgres service\n";
+    try expectStop(head ++ "# tars-stop: INT 10\nexec x\n", .{ .ok = .{ .sig = .INT, .grace = 10 } });
+    try expectStop(head ++ "# tars-stop: TERM 30\n", .{ .ok = .{ .sig = .TERM, .grace = 30 } });
+    try expectStop("# tars-stop: QUIT 1", .{ .ok = .{ .sig = .QUIT, .grace = 1 } });
+    try expectStop("# tars-stop:\tHUP   60 \r\n", .{ .ok = .{ .sig = .HUP, .grace = 60 } });
+    std.debug.print("services_test: tars-stop takes TERM, INT, QUIT and HUP with 1 to 60 seconds\n", .{});
+
+    const bad = [_][]const u8{
+        "# tars-stop: KILL 10\n", "# tars-stop: SIGINT 10\n", "# tars-stop: int 10\n", "# tars-stop: INT 0\n",
+        "# tars-stop: INT 61\n",  "# tars-stop: INT ten\n",   "# tars-stop: INT\n",    "# tars-stop: INT 10 x\n",
+        "# tars-stop: INT -5\n",  "# tars-stop:\n",
+    };
+    for (bad) |b| try expectStop(b, .bad);
+    try expectStop(head ++ "exec x\n", .none);
+    try expectStop("", .none);
+    // 접두사는 줄 머리에서만 — 들여쓴 줄 · 다른 주석 안의 글자는 아니다.
+    try expectStop("  # tars-stop: INT 10\n# see tars-stop: INT 10\n", .none);
+    // 첫 줄만 쓴다.
+    try expectStop("# tars-stop: INT 10\n# tars-stop: TERM 30\n", .{ .ok = .{ .sig = .INT, .grace = 10 } });
+    std.debug.print("services_test: other signals, out of range, extra words and look-alikes are bad or ignored\n", .{});
+
+    // 1,024바이트 밖의 줄은 못 보고, 경계에서 잘린 줄은 안 읽는다(잘린 "10"을 "1"로 읽지 않는다).
+    var big: [services.STOP_HEAD + 64]u8 = @splat('x');
+    big[0] = '#';
+    const line = "# tars-stop: INT 10\n";
+    big[services.STOP_HEAD - 1] = '\n';
+    @memcpy(big[services.STOP_HEAD .. services.STOP_HEAD + line.len], line);
+    try expectStop(&big, .none);
+    var cut: [services.STOP_HEAD + 8]u8 = @splat('x');
+    const cut_line = "\n# tars-stop: INT 1";
+    @memcpy(cut[services.STOP_HEAD - cut_line.len .. services.STOP_HEAD], cut_line);
+    cut[services.STOP_HEAD] = '0';
+    cut[services.STOP_HEAD + 1] = '\n';
+    try expectStop(&cut, .none);
+    std.debug.print("services_test: only the first {d} bytes count, and a line cut there is not read\n", .{services.STOP_HEAD});
+
+    // discover가 Entry에 담는다 — 링크는 따라간다(tars-service enable의 모양).
+    const dir = ROOT ++ "/stop.d";
+    try mkdirOne(dir);
+    try writeFile(dir ++ "/a-pg", head ++ "# tars-stop: INT 10\nexec sleep 1\n");
+    try writeFile(dir ++ "/b-plain", head ++ "exec sleep 1\n");
+    try writeFile(dir ++ "/c-bad", "# tars-stop: KILL 10\n");
+    _ = linux.unlink(dir ++ "/d-link");
+    if (failed(linux.symlink("a-pg", dir ++ "/d-link")) != null) return error.SymlinkFailed;
+    var list = services.List{};
+    services.discover(dir, &list);
+    const want = [_]services.Stop{ .{ .sig = .INT, .grace = 10 }, .{}, .{}, .{ .sig = .INT, .grace = 10 } };
+    if (list.len != want.len) {
+        std.debug.print("FAIL: stop.d gave {d} services, want {d}\n", .{ list.len, want.len });
+        return error.WrongCount;
+    }
+    for (list.slice(), want) |*e, w| {
+        if (e.stop.sig != w.sig or e.stop.grace != w.grace) {
+            std.debug.print("FAIL: {s} stops with {s} {d}s, want {s} {d}s\n", .{
+                e.label(), services.sigName(e.stop.sig), e.stop.grace, services.sigName(w.sig), w.grace,
+            });
+            return error.WrongStop;
+        }
+    }
+    std.debug.print("services_test: discover keeps the line's signal and grace, through a link, and the default otherwise\n", .{});
 }

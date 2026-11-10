@@ -1,5 +1,7 @@
 #!/bin/sh
 # TARS mysql service (TP-M11). Turn it on with `sudo tars-service enable mysql`.
+# tars-stop: TERM 30
+# mysqld ignores SIGINT. SIGTERM flushes InnoDB, which takes longer as the data grows (SS-M0: 1.4s for 200k rows).
 # Data: /var/lib/mysql -> /home/.tars/var/mysql. Your settings: /config/mysql.d/*.cnf.
 # The first start runs --initialize-insecure: `mysql -uroot` has no password.
 SERVER=mysql

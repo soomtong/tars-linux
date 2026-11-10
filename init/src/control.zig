@@ -5,7 +5,7 @@
 //! `receive` · `reply`)과 `tars-service`가 쓰는 connect 쪽(`dial` · `awaitReply`).
 //!
 //! 감독 규칙(무엇을 띄우고 무엇을 두는가)도 여기 있다. 규칙은 `Child`를 모르고 필드
-//! 이름(`pid` · `given_up` · `fast_restarts` · `hold` · `kill_at`)으로만 만진다 —
+//! 이름(`pid` · `given_up` · `fast_restarts` · `hold` · `kill_at` · `stop_grace`)으로만 만진다 —
 //! `anytype`이라 호스트 검사가 가짜 구조체로 전부 본다(`control_test.zig`). 시그널을
 //! 보내는 것은 규칙이 아니라 `main.zig`다. 규칙은 "보내라"를 돌려줄 뿐이다.
 const std = @import("std");
@@ -24,7 +24,8 @@ pub const REPLY_MAX: usize = 2048;
 /// 붙은 상대가 요청을 보낼 때까지 PID 1이 기다리는 시간. 이것이 PID 1이 한 연결에
 /// 붙잡히는 상한이다(결정 3, 실측 2).
 pub const WAIT_MS: i32 = 200;
-/// SIGTERM 뒤 SIGKILL까지의 유예. `power.zig`의 종료 유예와 같은 값이다.
+/// SIGTERM 뒤 SIGKILL까지의 유예. `power.zig`의 종료 유예와 같은 값이다. SS-M1부터는 기본값이다 — 칸마다의 값은
+/// `stop_grace` 필드이고 services.d의 서비스는 스크립트의 `# tars-stop:` 줄이 고른다(`services.Stop`).
 pub const GRACE_SECONDS: isize = 3;
 
 pub const ERROR_PREFIX = "error: ";
@@ -154,7 +155,7 @@ pub fn apply(verb: Verb, c: anytype, now: isize) Applied {
             }
             const sent = c.hold != .none;
             c.hold = .stop;
-            if (!sent) c.kill_at = now + GRACE_SECONDS;
+            if (!sent) c.kill_at = now + c.stop_grace;
             return .{ .outcome = .stopping, .signal = !sent };
         },
         .start => {
@@ -176,7 +177,7 @@ pub fn apply(verb: Verb, c: anytype, now: isize) Applied {
             const sent = c.hold != .none;
             c.hold = .restart;
             c.fast_restarts = 0;
-            if (!sent) c.kill_at = now + GRACE_SECONDS;
+            if (!sent) c.kill_at = now + c.stop_grace;
             return .{ .outcome = .restarting, .signal = !sent };
         },
     }

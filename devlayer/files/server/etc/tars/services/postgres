@@ -1,5 +1,7 @@
 #!/bin/sh
 # TARS postgres service (TP-M11). Turn it on with `sudo tars-service enable postgres`.
+# tars-stop: INT 10
+# SIGINT is postgres's fast shutdown. SIGTERM waits for every open session to end (SS-M0: never, with psql open).
 # Data: /var/lib/postgresql -> /home/.tars/var/postgres. Your settings: /config/postgres.d/*.conf.
 # The first start runs initdb: your user is the superuser, local connections are trusted.
 SERVER=postgres

@@ -637,6 +637,11 @@ for s in postgres mysql redis nginx caddy; do
 done
 grep -aqF "tp-m11-links=caddy mysql nginx postgres redis " "$LOG" || fail "/config/services.d does not hold the five links" "tp-m11-links"
 echo "B2: root ran tars-service enable for postgres, mysql, redis, nginx and caddy; each is a link in /config/services.d and init started it"
+# SS-M1: 템플릿 머리의 `# tars-stop:` 줄을 init이 읽었다(enable의 reload가 services.discover를 부른다). nginx · caddy는 줄이 없어 로그도 없다.
+for want in "postgres stops with SIGINT, grace 10s" "mysql stops with SIGTERM, grace 30s" "redis stops with SIGTERM, grace 10s"; do
+  grep -aqF "tars-init: service ${want}" "$LOG" || fail "init did not read the tars-stop line: ${want}" "tars-stop" "stops with"
+done
+echo "B2: init read the tars-stop lines (postgres SIGINT 10s, mysql SIGTERM 30s, redis SIGTERM 10s)"
 # 다섯이 답할 때까지(mysql의 첫 초기화가 가장 길다 — TP-M10 첫 판 26.5초). 프로세스의 uid는 /proc의 Uid 줄. 그리고 데이터 하나씩.
 as_tars 'export PGHOST=/tmp; s=$(date +%s%N); for i in $(seq 480); do pg_isready -q && mysqladmin -uroot ping >/dev/null 2>&1 && redis-cli ping >/dev/null 2>&1 && curl -sf 127.0.0.1:8080 >/dev/null && curl -sf 127.0.0.1:8081 >/dev/null && break; sleep 0.5; done; e=$(date +%s%N); echo "tp-ms-m11up=$(((e-s)/1000000))"; for p in /proc/[0-9]*; do c=$(cat $p/comm 2>/dev/null); case $c in postgres|mysqld|redis-server|nginx|caddy) echo "$c:$(awk "/^Uid:/ {print \$2}" $p/status)";; esac; done | sort -u | tr "\n" " " | sed "s/^/tp-m11-uids=/"; echo; psql -d postgres -Atc "select current_user" | sed "s/^/tp-m11-pguser=/"; psql -d postgres -Atc "create table tp11(x int)" >/dev/null && psql -d postgres -Atc "insert into tp11 values (42)" | sed "s/^/tp-m11-pgw=/"; mysql -uroot -e "create database tp11; create table tp11.t(x int); insert into tp11.t values (42)" && printf "tp-m11-myw=%s\n" ok; redis-cli set tp11 42 | sed "s/^/tp-m11-rdw=/"; curl -s 127.0.0.1:8081 | sed "s/^/tp-m11-cd=/"; curl -s 127.0.0.1:8080 | grep -m1 -o "Welcome to nginx" | sed "s/^/tp-m11-ng=/"; stat -c "%U %a" /home/.tars/var/postgres /config/ssl/tars-selfsigned/key.pem /config/ssl/tars-selfsigned/cert.pem | tr "\n" " " | sed "s/^/tp-m11-own=/"; echo; readlink /var/lib/postgresql /var/lib/mysql /var/lib/redis | tr "\n" " " | sed "s/^/tp-m11-var=/"; echo; printf "tp-m11-%s\n" w-done'
 wait_log "tp-m11-w-done" 300 || fail "the five services did not answer and take a write in 300s" "tp-m11-" "tp-ms-m11up"
@@ -650,6 +655,20 @@ grep -aqF "tp-m11-ng=Welcome to nginx" "$LOG" || fail "nginx's default site on 8
 grep -aqF "tp-m11-own=tars 755 root 640 root 644 " "$LOG" || fail "the data or the self-signed certificate has the wrong owner or mode" "tp-m11-own"
 grep -aqF "tp-m11-var=/home/.tars/var/postgres /home/.tars/var/mysql /home/.tars/var/redis " "$LOG" || fail "/var/lib does not link to /home/.tars/var" "tp-m11-var"
 echo "B2: as tars, the five answered as uid 1000 ($(ms_of m11up)ms, first start included), and postgres, mysql and redis each took a row or key under /home/.tars/var"
+
+# SS-M1: psql 세션이 열린 채 postgres를 멈춘다. SIGTERM(smart shutdown)이면 세션을 기다리다 3초 뒤 SIGKILL이었다(SS-M0 결과 2) —
+# 템플릿의 SIGINT로는 세션을 끊고 곧 끝난다. 끝나면 다시 띄운다(뒤의 판정 · 부팅 3이 데이터를 본다).
+as_tars 'export PGHOST=/tmp; psql -d postgres -qc "select pg_sleep(60)" >/dev/null 2>&1 & sleep 1; ps -u 1000 -o comm= | grep -c "^psql$" | sed "s/^/tp-ss-psql=/"'
+wait_log_re "tp-ss-psql=[0-9]+" 30 || fail "the psql session did not start" "tp-ss-psql"
+as_root 's=$(date +%s%N); tars-service stop postgres 2>&1 | sed "s/^/tp-ss-stop: /"; e=$(date +%s%N); echo "tp-ms-ssstop=$(((e-s)/1000000))"; tars-service start postgres 2>&1 | sed "s/^/tp-ss-start: /"; printf "tp-ss-%s\n" done'
+wait_log "tp-ss-done" 120 || fail "stopping and starting postgres with a session open did not finish" "tp-ss-"
+grep -aqF "tp-ss-psql=1" "$LOG" || fail "no psql session was open while postgres stopped" "tp-ss-psql"
+grep -aqE "tp-ss-stop: service postgres +stopped" "$LOG" || fail "tars-service stop postgres did not reach stopped" "tp-ss-stop"
+grep -aqF "service postgres outlived" "$LOG" && fail "postgres outlived its stop signal with a session open" "outlived" "tp-ss-stop"
+SS_STOP_MS="$(ms_of ssstop)"
+[ -n "$SS_STOP_MS" ] && [ "$SS_STOP_MS" -lt 3000 ] || fail "stopping postgres with a session open took ${SS_STOP_MS:-?}ms (want under 3000)" "tp-ms-ssstop" "tp-ss-stop"
+grep -aqE "tp-ss-start: service postgres +running" "$LOG" || fail "tars-service start postgres did not bring it back" "tp-ss-start"
+echo "B2: with a psql session open, tars-service stop postgres sent SIGINT and stopped in ${SS_STOP_MS}ms without SIGKILL, and start brought it back"
 # 사람의 조각(/config/nginx.d)과 신뢰. 조각은 8082와, 위 mkcert 덩이의 인증서로 8443 https. CA를 넣기 전 curl은 그 https를 못 믿어야 한다(60).
 # 사람은 mkcert -install을 자기로 치고 mkcert가 sudo를 부른다 — 체인은 비밀번호를 못 치므로 root가 같은 CAROOT로 친다(같은 결과).
 as_root 'printf "%s\n" "server { listen 127.0.0.1:8082; return 200 tp-m11-frag; }" "server { listen 127.0.0.1:8443 ssl; ssl_certificate /home/tars/tp/m10/tls/localhost+1.pem; ssl_certificate_key /home/tars/tp/m10/tls/localhost+1-key.pem; return 200 tp-m11-tls; }" > /config/nginx.d/tp.conf; tars-service restart nginx 2>&1 | sed "s/^/tp-m11-ngre: /"; for i in $(seq 40); do curl -sk https://localhost:8443 >/dev/null && break; sleep 0.25; done; curl -s https://localhost:8443 >/dev/null 2>&1; echo "tp-m11-before=$?"; env CAROOT=/home/tars/.local/share/mkcert mkcert -install 2>&1 | sed "s/^/tp-m11-mk: /"; ls /usr/local/share/ca-certificates | sed "s/^/tp-m11-ca: /"; update-ca-certificates 2>&1 | sed "s/^/tp-m11-uca: /"; curl -s 127.0.0.1:8082 | sed "s/^/tp-m11-frag=/"; echo; curl -s https://localhost:8443 | sed "s/^/tp-m11-https=/"; echo; printf "tp-m11-%s\n" c-done'
@@ -694,10 +713,29 @@ MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
 M11_UP_MS="$(ms_of m11up)"
 NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
-# 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다. sync 뒤에 QEMU를 죽인다.
+# 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
-stop_guest
+# SS-M1: 끝은 QEMU 죽이기가 아니라 poweroff다(TP-M11까지는 죽이기라 서버의 끄기를 한 번도 안 봤다). 서비스 다섯을 각자의
+# 신호로 먼저 끄고 나머지를 끈다 — SIGKILL 없이. 부팅 3이 두 DB의 복구 없음을 본다.
+send "poweroff"
+GONE=0
+for _ in $(seq 1 1200); do
+  if ! kill -0 "$QEMU_PID" 2>/dev/null; then GONE=1; break; fi
+  sleep 0.1
+done
+[ "$GONE" = 1 ] || fail "the guest did not switch itself off in 120s after poweroff" "tars-init: shutdown" "stopping" "outlived"
+grep -aqF "tars-init: stopping 5 services first (up to 30s)" "$LOG" || fail "power off did not stop the five services first" "tars-init: stopping" "tars-init: shutdown"
+grep -aqE "tars-init: services stopped in [0-9]+ms" "$LOG" || fail "the five services did not all stop on their signals" "outlived" "tars-init: services"
+grep -aqF "outlived" "$LOG" && fail "a service outlived its stop signal at power off" "outlived"
+grep -aqF "tars-init: grace period expired" "$LOG" && fail "something outlived SIGTERM and SIGHUP after the services" "grace period expired"
+SS_OFF_MS="$(last_num 'tars-init: services stopped in [0-9]+ms')"
+echo "B2: poweroff stopped the five services first in ${SS_OFF_MS}ms, each on its own signal, and nothing needed SIGKILL"
+wait "$QEMU_PID" 2>/dev/null
+QEMU_PID=""
+exec 3>&- 2>/dev/null
+exec 4>&-
+rm -f "$FIFO"
 
 # ── 부팅 3: NVMe만 — 깨진 묶음 하나 ────────────────────────────────────
 echo "=== boot 3: the NVMe with lang-jvm broken ==="
@@ -737,6 +775,9 @@ grep -aqF "tp-m11-b3-https=tp-m11-tls" "$LOG" || fail "the CA added by mkcert -i
 M11_MEM="$(last_num 'tp-m11-mem MemAvailable: +[0-9]+')"
 PG_RECOVERY=no; grep -aqF "database system was not properly shut down; automatic recovery in progress" "$LOG" && PG_RECOVERY=yes
 MY_RECOVERY=no; grep -aqE "\[InnoDB\] (Starting crash recovery|Database was not shutdown normally)" "$LOG" && MY_RECOVERY=yes
+# SS-M1: 부팅 2가 poweroff로 끝났으므로 두 DB는 정상 종료였다 — 복구가 돌면 끄기가 서버를 제대로 끝내지 못한 것이다.
+[ "$PG_RECOVERY" = no ] || fail "postgres ran crash recovery after a clean poweroff" "not properly shut down"
+[ "$MY_RECOVERY" = no ] || fail "mysql ran crash recovery after a clean poweroff" "InnoDB"
 echo "B3: the five came back on their own ($(ms_of m11b3up)ms), postgres, mysql and redis kept boot 2's data, the nginx piece and the CA trust survived (crash recovery: postgres ${PG_RECOVERY}, mysql ${MY_RECOVERY}, MemAvailable ${M11_MEM:-?} kB)"
 as_root 'tars-service disable redis 2>&1 | sed "s/^/tp-m11-dis: /"; ls /config/services.d | tr "\n" " " | sed "s/^/tp-m11-links3=/"; echo; redis-cli ping >/dev/null 2>&1; echo "tp-m11-rdping=$?"; printf "tp-m11-%s\n" dis-done'
 wait_log "tp-m11-dis-done" 60 || fail "tars-service disable redis did not finish" "tp-m11-dis"

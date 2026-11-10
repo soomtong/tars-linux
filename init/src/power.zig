@@ -2,6 +2,7 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const linux = std.os.linux;
 const audio = @import("audio.zig");
+const services = @import("services.zig");
 
 /// main.zig와 config.zig에도 같은 함수가 있다. 이것이 세 벌째다.
 /// config.zig:4가 "다섯 개쯤 되면 sys.zig로 모은다"고 적어 뒀고, 아직
@@ -231,12 +232,75 @@ fn reapAll() bool {
     }
 }
 
+/// SS-M1(SS design 결정 2). 전원 끄기가 먼저 끄는 서비스 하나 — services.d의 것 중 살아 있는 것. `main.zig`가 감독 칸에서 짓는다.
+pub const Service = struct {
+    pid: linux.pid_t,
+    sig: linux.SIG,
+    grace: isize,
+    label: []const u8,
+};
+
+fn monotonicMillis() i64 {
+    var ts: linux.timespec = undefined;
+    if (failed(linux.clock_gettime(.MONOTONIC, &ts))) |_| return 0;
+    return @as(i64, ts.sec) * 1000 + @divTrunc(@as(i64, ts.nsec), 1_000_000);
+}
+
+/// 서비스를 각자의 신호로 먼저 끈다. 나머지(셸 · terminal · 내장 데몬)가 TERM · HUP을 받기 전이라, 서버는 클라이언트가
+/// 아직 붙어 있을 때 제 방식으로 끝난다 — postgres의 SIGINT가 열린 세션을 끊고 끝내는 것이 그 경우다(SS-M0 결과 2).
+/// 그리고 서버가 종료 신호 바로 뒤에 SIGHUP("설정 다시 읽기")을 받던 일(SS design 확인 3)이 없어진다.
+///
+/// 기다림은 가장 긴 유예까지이고, 다 거둬지면 그 전에 끝난다. `waitpid(-1)`이라 그 사이 다른 자식이 거둬져도 해가 없다 —
+/// 어차피 다음 단계에서 모두 끝낼 자식들이다.
+fn stopServices(list: []const Service) void {
+    if (list.len == 0) return;
+    var longest: isize = 0;
+    for (list) |s| longest = @max(longest, s.grace);
+    logline.print("tars-init: stopping {d} services first (up to {d}s)\n", .{ list.len, longest });
+
+    var done: [16]bool = @splat(false);
+    const n = @min(list.len, done.len);
+    for (list[0..n]) |s| _ = linux.kill(-s.pid, s.sig);
+
+    const start = monotonicMillis();
+    var left = n;
+    while (left > 0) {
+        var status: u32 = 0;
+        const rc = linux.waitpid(-1, @ptrCast(&status), linux.W.NOHANG);
+        if (linux.errno(rc) == .SUCCESS and rc != 0) {
+            const pid: linux.pid_t = @intCast(rc);
+            for (list[0..n], 0..) |s, i| {
+                if (!done[i] and s.pid == pid) {
+                    done[i] = true;
+                    left -= 1;
+                }
+            }
+            continue;
+        }
+        if (linux.errno(rc) == .CHILD) break;
+        if (monotonicMillis() - start >= longest * 1000) break;
+        sleepMillis(100);
+    }
+    if (left == 0) {
+        logline.print("tars-init: services stopped in {d}ms\n", .{monotonicMillis() - start});
+        return;
+    }
+    for (list[0..n], 0..) |s, i| {
+        if (done[i]) continue;
+        _ = linux.kill(-s.pid, .KILL);
+        logline.print("tars-init: {s} outlived {s} by {d}s, sent SIGKILL to group {d}\n", .{
+            s.label, services.sigName(s.sig), s.grace, s.pid,
+        });
+    }
+}
+
 /// 시스템을 끈다. 절대 반환하지 않는다 — supervise가 noreturn인 것과
 /// 같은 이유이고, 그보다 하나 더 있다. 이 함수가 도는 동안 감독 루프로
 /// 돌아가면 "안 떠 있는 자식을 띄운다"는 규칙이 방금 죽인 셸을 되살린다.
 /// 돌아갈 길 자체를 타입으로 막아둔다.
-pub fn shutdown(action: Action) noreturn {
+pub fn shutdown(action: Action, services_first: []const Service) noreturn {
     logline.print("tars-init: shutdown requested (action {s})\n", .{@tagName(action)});
+    stopServices(services_first);
 
     // -1은 "자기를 제외한 모든 프로세스"다. 감독 대상 둘뿐 아니라 PTY 안에서
     // 도는 셸까지 한 번에 닿으므로 자식 목록을 순회할 필요가 없고, 리눅스가

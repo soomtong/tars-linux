@@ -17,7 +17,7 @@ fn fail(comptime fmt: []const u8, args: anytype) error{Failed} {
     return error.Failed;
 }
 
-/// `Child`에서 규칙이 만지는 다섯 칸만 든 가짜. 필드 이름이 곧 계약이다.
+/// `Child`에서 규칙이 만지는 칸만 든 가짜. 필드 이름이 곧 계약이다.
 const Fake = struct {
     pid: linux.pid_t = -1,
     given_up: bool = false,
@@ -25,6 +25,8 @@ const Fake = struct {
     hold: control.Hold = .none,
     kill_at: isize = 0,
     config_off: bool = false,
+    /// SS-M1. 칸마다의 유예. 기본은 `Child`와 같은 `GRACE_SECONDS`.
+    stop_grace: isize = control.GRACE_SECONDS,
 };
 
 fn expectParse(bytes: []const u8, verb: ?control.Verb, name: ?[]const u8) !void {
@@ -154,6 +156,17 @@ pub fn main() !void {
     if (!control.wantsRunning(&c)) return fail("a restarted service does not want to run", .{});
     try expectState(&c, .starting);
     std.debug.print("control_test: restart is not a fast death and comes back\n", .{});
+
+    // SS-M1. 시한은 칸의 `stop_grace`를 따른다(서비스 스크립트의 `# tars-stop:` 줄).
+    c = Fake{ .pid = 70, .stop_grace = 30 };
+    try expectApplied(control.apply(.stop, &c, now), .stopping, true);
+    if (c.kill_at != now + 30) return fail("stop with stop_grace 30 set kill_at {d}, want {d}", .{ c.kill_at, now + 30 });
+    if (control.overdue(&c, now + control.GRACE_SECONDS)) return fail("overdue at the default grace with stop_grace 30", .{});
+    if (!control.overdue(&c, now + 30)) return fail("not overdue when stop_grace 30 ran out", .{});
+    c = Fake{ .pid = 71, .stop_grace = 10 };
+    try expectApplied(control.apply(.restart, &c, now), .restarting, true);
+    if (c.kill_at != now + 10) return fail("restart with stop_grace 10 set kill_at {d}", .{c.kill_at});
+    std.debug.print("control_test: stop and restart wait the slot's own grace\n", .{});
 
     c = Fake{ .given_up = true, .fast_restarts = 3 };
     try expectState(&c, .given_up);

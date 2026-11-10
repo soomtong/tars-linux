@@ -39,6 +39,12 @@ sudo tars-config reload                # 지금 띄웁니다
 - 첫 줄은 `#!/bin/sh`로 씁니다(`#!/bin/bash`는 뜨지 않습니다).
 - 오래 도는 프로그램 하나를 띄우는 것이면 마지막을 `exec 프로그램`으로 끝냅니다.
 - 영영 끄려면 그 파일을 지우고 `sudo tars-config reload`를 칩니다.
+- 멈출 때 init은 SIGTERM을 보내고 3초 뒤 SIGKILL로 끝냅니다. 다른 신호나 더 긴 시간이 필요하면 파일 머리에 한 줄을 둡니다
+  (신호는 `TERM` · `INT` · `QUIT` · `HUP`, 초는 1~60). 전원을 끌 때도 이 줄대로 먼저 끕니다.
+
+```sh
+# tars-stop: INT 10
+```
 
 ## 방화벽
 
