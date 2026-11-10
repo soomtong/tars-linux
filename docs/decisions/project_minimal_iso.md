@@ -35,6 +35,9 @@ How to apply:
 - 얹는 방법: 납품 프로젝트는 묶음 하나(`make dev-layers DEV_LAYERS=<이름>` → `make iso ISO_LAYERS="<이름>"`). 부팅 때 자동 실행은 그 묶음의
   셸 조각(`etc/tars/rc.d/<이름>.sh` · `etc/fish/conf.d/90-<이름>.fish`) — 본보기는 `devlayer/files/fakesteak/`.
 - 데모 릴리스 `demo-fakesteak-20261109`(프리릴리스, 144,082,944 B). 정식 버전 release에는 섞지 않는다.
+- 둘째 데모 `demo-fakesteak-20261110` → `6625cc2`(CO 닫은 뒤 — 전체 화면 · 커서 숨김, `TARS 0.2.0+6625cc2`), 144,089,088 B, sha256
+  `90b7c270b5ebaae1f897d486c6105f39dd05bd100bcdf338a3d01ca2cbc91036`. 사용자 "draft release (pre-release)" — `--draft --prerelease --latest=false`,
+  공개는 사용자가 한다. 첫 데모의 release는 2026-11-10에 지워졌다(태그는 남음). QEMU 확인: 설치 → NVMe 부팅 → 비 65프레임 모두 커서 없음.
 - 함정 둘: 개발 도구 층이 깔린 디스크를 barebone으로 갱신하면 옛 묶음이 판이 달라 안 붙고(파일은 남는다), 납품 ISO로 갱신하면 옛 묶음이
   지워진다. 셸 없는 키오스크(init이 앱을 감독)는 실제 납품이 요구할 때 연다.
 

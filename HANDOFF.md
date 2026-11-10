@@ -1,19 +1,37 @@
-# HANDOFF: 0.2.0 냈다(2026-11-10) — 다음 일은 사용자가 정한다
+# HANDOFF: CO 닫았고 fakesteak 데모 draft를 올렸다(2026-11-10) — 사용자가 맥북 에어에서 확인한다
 
 ## 목표
 
-사용자 요청(2026-11-05): "타스 리눅스를 설치하고 기본적으로 바로 뭔가를 컴파일하거나 자바 서버를 구동하고 싶다. 부팅 디스크(initrd)에
-담는 것은 원하지 않는다. 네트워크가 없는 곳에서도 코딩 · 개발을 할 수 있는 환경을 만들자." — TP로 섰고 0.2.0으로 냈다.
+사용자(2026-11-10, fakesteak 데모 점검): "full screen mode에서 cursor가 계속 빠르게 깜빡이는게 눈에 거슬리는데" → Cursor Options(CO)로
+섰다 — 숨긴 커서를 안 그리고(CO-M0), `tars.conf`의 `cursor_shape=`(CO-M1). 깜빡임은 사용자 결정으로 안 한다(CPU). 이어서 "이 기능이
+구현되면 tars fakesteak 데모 버전만 포함한 iso파일을 draft release (pre-release) 해주세요. 원격에 있는 맥북에어에서 다시 확인해 보겠습니다."
 
 ## 현재 브랜치
 
-`main` = origin(`Release 0.2.0` 뒤 기록 커밋까지 push). 태그 `v0.2.0` → `3d84d27`. `gh-pages`는 FU(`1031df1`)와 0.2.0 줄까지 push.
+`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(ISO를 지은 커밋). `gh-pages`는 CO 줄까지 push.
 
 ## 다음 할 것
 
-1. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
-2. 맥북 에어의 디스크는 BB 데모 판이다 — 개발 도구로 되돌리려면 `tars-0.2.0-x86_64.iso`로 `tars-install /dev/sda` 갱신.
-3. 다음 서브프로젝트는 사용자가 말할 때.
+1. 사용자가 맥북 에어에서 draft 데모를 확인한다 — draft는 아직 비공개(`untagged-…` 주소)라 공개(Publish)는 사용자가 한다. 결과(사진 · 말)를
+   기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에 적는다.
+2. 남은 숙제(TP-M11 결과 절): 부팅 때 CA 한 번의 5초 시한을 넘는 길은 검사가 없다. SV의 stop 3초(SIGKILL)를 서비스마다 늘리는 일.
+3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 지금은 고치지 않았다 — 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+4. 다음 서브프로젝트는 사용자가 말할 때.
+
+## 완료된 작업 (2026-11-10, CO-M0 · CO-M1 — CO 닫힘 · fakesteak 데모 draft)
+
+- [x] 조사: fakesteak은 `?25l`을 보내는데 렌더러가 안 봤다. "깜빡임"은 한 프레임을 쓰는 도중의 커서 칸이 매 프레임 다른 자리에서 반전된 것(QEMU 5초 70곳).
+      사용자가 "스펙 확인" 쪽을 골랐고(design `970ecbf`), 깜빡임은 빼고 모양 변경을 넣었다.
+- [x] CO-M0 `7684a0d`: `computeShellCursor`가 `state.cursor.visible`을 본다(조합 중 무시). vt_test 130~133, render 검사 38 · 39(fish가 명령마다
+      `?25h`를 보내 `printf …?25l; sleep 5`로 본다). render 단독 2회 PASS, probe 70곳 → 0곳.
+- [x] CO-M1 `c3e52ed`: `cursor_shape=` 키(argv 15번 칸, lib-vt `default_cursor_style`), 시스템 vimrc의 `t_ti` 한 줄, 새 체인 `cursor`(CO-M1, monitor 45506).
+      놓친 짝 셋을 게이트가 찾았다(argv 리터럴 일곱, 키 수 검사 셋, `cut_log_lines`의 B 예외 정규식) — plan 결과 2 · 1 · 6.
+- [x] 루트 게이트: 1판 26/33(잘린 줄 B 여섯 + DC-M2), 2판 31/33(DC-M2 · TP-M1), 3판 33/33(1,926초, `out/gate-logs/20261110-090819`). DC-M2 · TP-M1은
+      호스트 부하였다 — 두 initrd를 같은 조건에서 번갈아 재 차이 0, 이 저장소의 예전 세션이 macOS에서 돌린 init `services_test`가 10일 넘게 CPU 하나를
+      먹고 있었다(사용자 "sure kill it"으로 PID 98337만 멈췄다). 닫기 `6625cc2`(design Status · completed · 기억 `project_cursor_options` · CU 비목표 셋).
+- [x] 데모: `make dev-layers DEV_LAYERS=fakesteak`(stamp 지우고) → `make iso ISO_LAYERS="fakesteak"` 188초 → `tars-demo-fakesteak-20261110-x86_64.iso`
+      144,089,088 B, sha256 `90b7c270…1036`. QEMU(`out/co-release/probe.sh`): `TARS 0.2.0+6625cc2`, 설치 → NVMe 부팅 → 전체 화면 비 65프레임 모두
+      `drawn=none` → Ctrl+C 뒤 프롬프트에 커서. `gh release create … --draft --prerelease --latest=false`, 새 디렉터리에 받아 `shasum -c` OK.
 
 ## 완료된 작업 (2026-11-10, 0.2.0 릴리스)
 
