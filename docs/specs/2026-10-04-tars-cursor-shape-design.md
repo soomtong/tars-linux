@@ -428,11 +428,11 @@ Dockerfile의 sysroot 목록에서 `vim-tiny`를 `vim` · `libsodium23` ·
 
 ## 비목표
 
-1. 깜빡임(결정 2).
+1. 깜빡임(결정 2). CO design(2026-11-10)이 사용자 결정으로 다시 접었다 — CPU 비용(확인 10).
 2. `block_hollow`를 따로 그리기(결정 1).
 3. OSC 12가 정한 커서 색. `state.colors.cursor`가 있지만 `init`이
    `.unset`으로 준다.
-4. DECTCEM(`CSI ?25l`)로 커서 숨기기. 라이브러리가 `state.cursor.visible`로
+4. DECTCEM(`CSI ?25l`)로 커서 숨기기. CO-M0이 닫았다(2026-11-10). 라이브러리가 `state.cursor.visible`로
    주지만 지금 렌더러는 안 보고, 이 서브프로젝트도 안 본다. vim은 다시
    그리는 동안 커서를 숨겼다가 곧 다시 보인다(실측 4의 바이트 순서) — 무시해도
    남는 것은 그 순간의 커서 한 칸이다. 따로 열 일이다.
@@ -442,7 +442,7 @@ Dockerfile의 sysroot 목록에서 `vim-tiny`를 `vim` · `libsodium23` ·
    seed). 지금 `/.vimrc`는 tmpfs의 홈이라 재부팅에 사라진다. gitconfig와 같은
    모양으로 할 수 있지만 커서와는 별개의 일이다.
 8. neovim(결정 7).
-9. 모양 · 두께 · 색을 `tars.conf`로 빼기.
+9. 모양 · 두께 · 색을 `tars.conf`로 빼기. 모양은 CO-M1의 `cursor_shape=`(2026-11-10), 두께 · 색은 그대로 비목표.
 10. `pty.zig`의 `ws_xpixel` · `ws_ypixel`(`docs/guides/lessons.md`의 이월
     숙제). 커서와 무관하다.
 

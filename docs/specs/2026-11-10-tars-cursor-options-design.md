@@ -3,7 +3,7 @@
 접두사: CO
 
 Date: 2026-11-10
-Status: 초안(2026-11-10). plan은 `docs/plans/2026-11-10-tars-cursor-options-co-m0.md` · `docs/plans/2026-11-10-tars-cursor-options-co-m1.md`.
+Status: 닫힘(2026-11-10, CO-M0 · CO-M1). plan은 `docs/plans/2026-11-10-tars-cursor-options-co-m0.md` · `docs/plans/2026-11-10-tars-cursor-options-co-m1.md`.
 
 계기: 사용자(2026-11-10, fakesteak 데모를 점검하다가): "full screen mode에서 cursor가 계속 빠르게 깜빡이는게 눈에 거슬리는데 기술적으로
 쉽게 해결할 수 있는 방법이 있을까? 1. 커서 숨김 모드를 제공 2. 내가 모르는 어떤 스펙이 있는지 확인". 조사 결과 2였다 — 표준 시퀀스
