@@ -162,6 +162,7 @@ pub fn main() !void {
             .touchpad_accel = sa.default_touchpad_accel,
             .display_scale = sa.default_display_scale,
             .fullscreen = sa.default_fullscreen,
+            .cursor_shape = sa.default_cursor_shape,
         };
         const all_other = sa.Args{
             .shell_path = "/usr/bin/zsh",
@@ -178,11 +179,12 @@ pub fn main() !void {
             .touchpad_accel = .{ .level = 3 },
             .display_scale = .@"2",
             .fullscreen = .on,
+            .cursor_shape = .bar,
         };
         var tbuf: [sa.TOGGLE_ARG_MAX]u8 = undefined;
         for ([_]sa.Args{ all_default, all_other }) |a| {
             const v = sa.encode(a, &tbuf);
-            // 0번은 terminal 자신이고, 열다섯 칸이 전부 차 있다(FU-M0이 14번 칸을 더했다).
+            // 0번은 terminal 자신이고, 열여섯 칸이 전부 차 있다(FU-M0이 14번, CO-M1이 15번 칸을 더했다).
             if (!std.mem.eql(u8, std.mem.span(v[0].?), sa.TERMINAL_PATH)) return error.ArgvZeroNotTerminal;
             for (v, 0..) |slot, i| {
                 if (slot == null) {
@@ -206,7 +208,7 @@ pub fn main() !void {
             d.clipboard != sa.default_clipboard or !std.meta.eql(d.toggles, sa.default_toggles) or
             !std.mem.eql(u8, std.mem.span(d.user), sa.NO_USER) or
             d.mouse_scroll != .normal or d.touchpad_scroll != .natural or d.mouse_accel.level != 0 or d.touchpad_accel.level != 0 or
-            d.display_scale != .auto or d.fullscreen != .off)
+            d.display_scale != .auto or d.fullscreen != .off or d.cursor_shape != .block)
         {
             return error.EmptyArgvNotDefault;
         }
@@ -227,6 +229,7 @@ pub fn main() !void {
             .touchpad_accel = .{ .level = 5 },
             .display_scale = .@"3",
             .fullscreen = .on,
+            .cursor_shape = .underline,
         }, &tbuf);
         v[sa.Slot.hangul.index()] = "bogus";
         // 가속 칸의 범위 밖 글자도 그 칸만 기본값이다(PS design 결정 5).
@@ -243,6 +246,10 @@ pub fn main() !void {
         if (b.fullscreen != .on) return error.BogusAccelSpread;
         v[sa.Slot.fullscreen.index()] = "yes";
         if (sa.decode(v).fullscreen != sa.default_fullscreen) return error.BogusFullscreenNotDefault;
+        // 커서 모양 칸의 모르는 글자(`beam`)도 그 칸만 기본값이다(CO-M1).
+        if (b.cursor_shape != .underline) return error.BogusAccelSpread;
+        v[sa.Slot.cursor_shape.index()] = "beam";
+        if (sa.decode(v).cursor_shape != sa.default_cursor_shape) return error.BogusCursorShapeNotDefault;
         if (b.keyboard != .pc or b.latin != .dvorak or b.clipboard != .pane or !b.toggles.lctrl_tap or b.toggles.hangul_key or
             !std.mem.eql(u8, std.mem.span(b.user), "hpuser"))
         {
@@ -263,9 +270,9 @@ pub fn main() !void {
                 return error.ArgvOfOverfilled;
             }
         }
-        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "extra" };
+        const long = [_][*:0]const u8{ "/terminal", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "extra" };
         const w = sa.argvOf(&long);
-        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "n")) return error.ArgvOfLastSlot;
+        if (!std.mem.eql(u8, std.mem.span(w[sa.ARGC - 1].?), "o")) return error.ArgvOfLastSlot;
         // 빈 슬라이스(인자가 하나도 없다)는 전부 null이고 decode가 기본값을 준다.
         const none = sa.argvOf(&[_][*:0]const u8{});
         if (sa.decode(none).keyboard != sa.default_keyboard) return error.ArgvOfEmpty;
@@ -291,7 +298,8 @@ fn expectArgsEql(got: sa.Args, want: sa.Args) !void {
         got.clipboard != want.clipboard or !std.meta.eql(got.toggles, want.toggles) or
         got.mouse_scroll != want.mouse_scroll or got.touchpad_scroll != want.touchpad_scroll or
         !got.mouse_accel.eql(want.mouse_accel) or !got.touchpad_accel.eql(want.touchpad_accel) or
-        got.display_scale != want.display_scale or got.fullscreen != want.fullscreen)
+        got.display_scale != want.display_scale or got.fullscreen != want.fullscreen or
+        got.cursor_shape != want.cursor_shape)
     {
         std.debug.print("FAIL: Args enum/toggle field did not round-trip\n", .{});
         return error.ArgsValueChanged;

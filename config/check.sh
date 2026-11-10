@@ -137,7 +137,7 @@ TC_LIST_WANT=(shell=fish keyboard=auto hangul_layout=shin_pcs latin_layout=qwert
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off bluetooth=off esc_latin=on
               clipboard=shared mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0
-              display_scale=auto)
+              display_scale=auto cursor_shape=block)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
 # fzf 위젯에 대해 같은 구분을 했다).
 #

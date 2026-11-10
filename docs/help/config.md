@@ -32,8 +32,9 @@ sudo tars-config reload                   # 고친 것을 지금 반영
 | `bluetooth` | `off` | `tars-help bluetooth` |
 | `firewall` | `off` | `tars-help services` |
 | `keyboard` · `hangul_layout` · `hangul_toggle` | `auto` · `shin_pcs` · 넷 다 | `tars-help desk` |
+| `cursor_shape` | `block` | 프로그램이 정하지 않았을 때의 커서 모양 — `block` · `bar` · `underline`. vim은 그대로 모드마다 바꿉니다 |
 
-`reload` 뒤 망 · 방화벽 · 서비스는 바로 바뀌고, 셸과 시간대는 다음에 여는 셸부터 바뀝니다. 화면 쪽 키(자판 · 키보드 · 클립보드 · 배율 · 전체 화면)는
+`reload` 뒤 망 · 방화벽 · 서비스는 바로 바뀌고, 셸과 시간대는 다음에 여는 셸부터 바뀝니다. 화면 쪽 키(자판 · 키보드 · 클립보드 · 배율 · 전체 화면 · 커서 모양)는
 `sudo tars-config reload terminal`로 화면을 다시 띄워야 바뀝니다 — 열린 패널이 모두 닫힙니다.
 
 ## sudo 비밀번호

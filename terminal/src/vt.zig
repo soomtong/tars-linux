@@ -1134,6 +1134,18 @@ pub const Screen = struct {
         };
     }
 
+    /// 프로그램이 모양을 정하지 않았을 때의 모양을 바꾼다(CO design 결정 6 — `tars.conf`의
+    /// `cursor_shape`). lib-vt의 기본값(`default_cursor_style`)을 바꾸는 것이라 우리 렌더러는 그대로다 —
+    /// `askedShape`가 lib-vt가 든 모양을 읽는다. 프로그램이 DECSCUSR로 정해 둔 동안에는 덮지 않고,
+    /// 다음 `CSI 0 SP q` · RIS가 이 모양으로 돌아온다. 막 만든 화면은 기본값을 따르는 중이라 곧바로 바뀐다.
+    pub fn setDefaultShape(self: *Screen, shape: CursorShape) void {
+        self.term.setDefaultCursorStyle(switch (shape) {
+            .block => .block,
+            .bar => .bar,
+            .underline => .underline,
+        });
+    }
+
     /// 이 프레임에 그리는 셸 커서. null이면 그릴 셸 커서가 없다.
     ///
     /// `cells()` 뒤에 부를 것. 계산은 `cells()`가 한 번만 한다 — 반전과 띠를

@@ -168,6 +168,19 @@ pub const Fullscreen = enum {
     }
 };
 
+/// 프로그램이 DECSCUSR로 정하지 않았을 때의 커서 모양(CO design 결정 5 · 6). terminal이 lib-vt의
+/// `default_cursor_style`로 준다 — `CSI 0 SP q`와 RIS가 이 모양으로 돌아간다. 이름은 terminal의
+/// `vt.CursorShape`와 같지만 이 파일은 vt를 import하지 않으므로 따로 둔다(`Fullscreen`처럼).
+pub const CursorShape = enum {
+    block,
+    bar,
+    underline,
+
+    pub fn arg(self: CursorShape) [:0]const u8 {
+        return @tagName(self);
+    }
+};
+
 /// 한/영 전환 키의 이름(HI design 결정 7).
 ///
 /// 자판 · 키보드와 모양이 다른 유일한 설정이다. 그것들은 하나를 고르는 것이지만
@@ -344,6 +357,8 @@ pub const Slot = enum(u8) {
     display_scale = 13,
     /// 전체 화면의 시작 상태(FU design 결정 4). `Fullscreen`의 글자다.
     fullscreen = 14,
+    /// 프로그램이 정하지 않았을 때의 커서 모양(CO design 결정 5). `CursorShape`의 글자다.
+    cursor_shape = 15,
 
     /// 배열 인덱스. `encode` · `decode`가 칸을 가리키는 길이고, 밖에서는 init의
     /// 탈출로(`Rescue.slot`) 하나만 쓴다 — 그 자리는 terminal과 콘솔 셸을 같은 코드로
@@ -354,8 +369,8 @@ pub const Slot = enum(u8) {
 };
 
 /// argv 배열의 길이. `Argv`가 init의 `Child.argv`와 서비스 셋의 `*_ARGV` 상수의
-/// 타입이다.
-pub const ARGC = 15;
+/// 타입이다. CO-M1이 커서 모양 칸 하나를 더해 열여섯이다.
+pub const ARGC = 16;
 
 /// execve에 그대로 넘기는 argv. 첫 null에서 멈추므로 인자가 하나인 자식(콘솔 셸 ·
 /// 서비스)도 같은 타입을 쓴다. 힙이 없어서 길이가 컴파일 타임에 고정이다.
@@ -405,6 +420,8 @@ pub const default_touchpad_accel: Accel = .{};
 pub const default_display_scale: DisplayScale = .auto;
 /// 전체 화면(FU design 결정 4). 꺼짐이라 FU 전과 같다.
 pub const default_fullscreen: Fullscreen = .off;
+/// 커서 모양(CO design 결정 5). block이라 CO 전과 같다.
+pub const default_cursor_shape: CursorShape = .block;
 
 // ── 계정의 번호(HP design 결정 5 · 8) ──────────────────────────────────
 //
@@ -451,6 +468,7 @@ pub const Args = struct {
     touchpad_accel: Accel,
     display_scale: DisplayScale,
     fullscreen: Fullscreen,
+    cursor_shape: CursorShape,
 };
 
 /// `Args`에서 argv를 짓는다. 0번은 `TERMINAL_PATH`다.
@@ -475,6 +493,7 @@ pub fn encode(a: Args, toggle_buf: *[TOGGLE_ARG_MAX]u8) Argv {
     v[Slot.touchpad_accel.index()] = a.touchpad_accel.arg().ptr;
     v[Slot.display_scale.index()] = a.display_scale.arg().ptr;
     v[Slot.fullscreen.index()] = a.fullscreen.arg().ptr;
+    v[Slot.cursor_shape.index()] = a.cursor_shape.arg().ptr;
     return v;
 }
 
@@ -507,6 +526,7 @@ pub fn decode(v: Argv) Args {
         .touchpad_accel = accelAt(v, .touchpad_accel, default_touchpad_accel),
         .display_scale = enumAt(DisplayScale, v, .display_scale, default_display_scale),
         .fullscreen = enumAt(Fullscreen, v, .fullscreen, default_fullscreen),
+        .cursor_shape = enumAt(CursorShape, v, .cursor_shape, default_cursor_shape),
     };
 }
 

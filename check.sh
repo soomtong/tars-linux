@@ -527,6 +527,10 @@ run_chain() {
 # 같은 셸을 두고 47 × 155 ↔ 50 × 160을 오가는지, tars-config set · reload terminal이 그 값을 싣는지 본다. monitor 45505.
 # 회차당 부팅 2회.
 #
+# CO 체인은 커서 모양의 기본값을 본다. 설정 디스크의 cursor_shape=bar가 argv 15번 칸으로 terminal에 닿아 첫 프롬프트의
+# 커서가 bar 띠인지, 프로그램의 CSI 2 SP q가 이기고 CSI 0 SP q가 bar로 되돌리는지, vim을 나와도 bar인지, tars-config set ·
+# reload terminal이 underline으로 다시 띄우는지 본다. 숨김(DECTCEM)은 render 체인이 본다. monitor 45506. 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -562,6 +566,7 @@ CHAINS=(
   "LP-M1:./sleep/check.sh"
   "TP-M1:./devtools/check.sh"
   "FU-M1:./fullscreen/check.sh"
+  "CO-M1:./cursor/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면
@@ -652,7 +657,7 @@ require_cut_lines_found() {
   dir="$(mktemp -d)"
   printf 'terminal: pointer> at x=1279 y=799 buttons=0 wheel=0 shown=1 ink=tars-init: audio: no sound card within 5000ms, the mixer is left alone\n' > "$dir/a"
   printf 'tars-init: login shell /usr/bin/bash, ssh env in /etc/ssh/sshd_config.d/tars-env.confterminal: screen> root@(none) ~# \r\n' > "$dir/b"
-  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0 display_scale=auto fullscreen=off\n' > "$dir/legit"
+  printf 'tars-init: reload terminal: pid 39, shell /usr/bin/fish keyboard=pc hangul=shin_pcs latin=qwerty toggles=hangul_key,shift_space,capslock_tap,lctrl_tap,esc_latin clipboard=pane mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0 display_scale=auto fullscreen=off cursor_shape=block\n' > "$dir/legit"
   printf 'terminal: screen> (none)# whence -w fzf-history-widget | fzf-history-widget: function | (none)# \r\n' > "$dir/clean"
   printf 'tars-init: config line without = ignored: xxxxxxxx [cut]\n' > "$dir/c"
   got="$(LOG=/dev/null bash -c 'source ./gate_lib.sh; cut_log_lines "$1"' _ "$dir" | cut -d: -f1 | sort | tr '\n' ' ')"

@@ -1691,9 +1691,12 @@ fn spawnPane(
     argv: [*:null]const ?[*:0]const u8,
     rect: layout.Rect,
     account: ?*const pty.Account,
+    cursor_shape: vt.CursorShape,
 ) !Pane {
     const session = try pty.spawn(path, argv, rect.cols, rect.rows, CELL_W, ROW_HEIGHT, account);
     const screen = try vt.Screen.init(io, alloc, rect.cols, rect.rows, .{ .w = CELL_W, .h = ROW_HEIGHT });
+    // 셸이 첫 바이트를 쓰기 전이라 이 화면은 기본값을 따르는 중이다 — 곧바로 그 모양이 된다(CO-M1).
+    screen.setDefaultShape(cursor_shape);
     var pane: Pane = .{ .screen = screen, .session = session, .rect = rect, .clip = .init(alloc), .cells_buf = undefined, .starts_buf = undefined };
     try allocPaneBuffers(alloc, &pane, rect);
     return pane;
@@ -3486,6 +3489,9 @@ const App = struct {
     /// 포인터 설정 넷(PS-M0). argv의 값 그대로이고, 포인터를 열 때마다 `takePointer`에
     /// 넘겨 그 칸의 부호와 가속을 정한다(PS design 결정 2 · 4).
     pointer_prefs: pointer.Prefs = .{},
+    /// 프로그램이 정하지 않았을 때의 커서 모양(CO-M1, `tars.conf`의 `cursor_shape`). argv의 값이고
+    /// `spawnPane`이 새 패널의 화면마다 준다.
+    cursor_shape: vt.CursorShape = .block,
 
     // ── 패널 ───────────────────────────────────────────────────────────
     /// 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0).
@@ -3779,6 +3785,15 @@ const App = struct {
         // 정했다(2026-10-05).
         const clip_scope: clipboard.Scope = a.clipboard;
 
+        // 커서 모양의 기본값(CO-M1). 첫 패널(아래 `spawnPane`)보다 먼저 정해야 첫 화면부터 그 모양이다.
+        // 이름은 같지만 `screen_args`와 `vt`의 enum은 따로라 여기서 옮긴다 — `else`가 없어 한쪽에
+        // 모양이 늘면 컴파일이 막힌다.
+        self.cursor_shape = switch (a.cursor_shape) {
+            .block => .block,
+            .bar => .bar,
+            .underline => .underline,
+        };
+
         // TERM은 지금까지 거짓말을 하고 있었다. 커널의 envp_init이 준
         // `TERM=linux`가 PID 1을 거쳐 여기까지 상속되는데
         // (docs/decisions/project_guest_environment.md), 이 셸이 말을 거는 상대는
@@ -3855,7 +3870,7 @@ const App = struct {
         self.workspaces[self.current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
         var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
         self.workspaces[self.current].?.tree.rects(self.whole, &boot_rects);
-        const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0], self.accountPtr());
+        const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0], self.accountPtr(), self.cursor_shape);
         self.workspaces[self.current].?.panes[0] = first;
         // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
         // 줄이다. 앞부분("terminal: spawned child pid ")은 terminal/check.sh가
@@ -3902,6 +3917,8 @@ const App = struct {
         // 줄의 `clipboard=`는 "init이 파일에서 읽었다"를, 이 줄은 "argv를 건너
         // 여기 닿았다"를 말한다. 위 `hangul layout=` 줄과 같은 짝이다.
         logline.print("terminal: clipboard scope={s}\n", .{@tagName(clip_scope)});
+        // 같은 짝의 셋째(CO-M1). `clipboard scope=` 뒤라 config 체인이 보는 keyboard → clipboard 순서는 그대로다.
+        logline.print("terminal: cursor_shape={s}\n", .{@tagName(self.cursor_shape)});
 
         // 전체 화면의 크기로 잡는다(FU-M0, `cap`의 주석) — 켜고 끄며 격자가 커져도 다시 잡지 않는다.
         self.screen_line_buf = try self.allocator.alloc(u8, screenLineMax(self.cap.cols, self.cap.rows));
@@ -4323,7 +4340,7 @@ const App = struct {
                     // 그 줄의 개수로 "init이 terminal을 되살렸다"를 판정하므로,
                     // 분할이 그 줄을 찍으면 그 판정이 거짓 초록이 된다.
                     // `pane>` 줄이 대신한다.
-                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr());
+                    ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr(), self.cursor_shape);
                     ws.focus = leaf;
                 },
                 // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
@@ -4363,7 +4380,7 @@ const App = struct {
                     // 패널 하나짜리 트리의 사각형은 격자 전체다
                     // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
                     self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
-                    self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole, self.accountPtr());
+                    self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole, self.accountPtr(), self.cursor_shape);
                     self.current = n;
                     // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
                     // 워크스페이스에 가도록 여기서 다시 구한다.

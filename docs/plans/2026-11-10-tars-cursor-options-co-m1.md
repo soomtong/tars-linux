@@ -2,7 +2,7 @@
 
 Date: 2026-11-10
 Design: `docs/specs/2026-11-10-tars-cursor-options-design.md`(결정 5~7)
-Status: 초안(2026-11-10). CO-M0 게이트가 끝나면 그 결과로 바뀌는 자리가 있는지 대조한 뒤 구현에 넘긴다(CLAUDE.md의 milestone 절).
+Status: 끝났다(2026-11-10).
 
 ## 착수 전에 확정한 것
 
@@ -102,4 +102,39 @@ design의 비목표. 특히 깜빡임(결정 7)과 두께 · 색.
 
 ## 결과
 
-(작성 전)
+lead 직접. 21파일 +194 −39와 새 체인 `cursor/check.sh`. CO-M0 결과와 대조해 고칠 자리는 없었다(fish의 `?25h`는 모양을 안 건드린다).
+
+- 호스트: vt_test 134~136 PASS(macOS). 빨강: `setDefaultShape` 본문을 비우면 `검사 134 기본값 bar`에서 멈춘다. init `zig build test`는 컨테이너에서
+  rc=0 — `reload_test: twenty-one keys … thirteen on the screen`, `config answers twenty key=value lines`, `config_edit_test: twenty-one keys`,
+  `screen_args_test: all checks passed`. (macOS 호스트에서는 trust_test가 CPU 100%로 끝나지 않아 판정에 안 썼다.)
+- cursor 체인 단독 2회 PASS(162초 · 164초). 줄: `(2) vt=bar drawn=bar row=0 col=15 cols=1 ink=32 box=2x16, 0 inverted cell(s)` ·
+  `(3) CSI 2 SP q -> block, CSI 0 SP q -> bar` · `(4) vim normal -> block, after :q -> vt=bar drawn=bar row=1 col=15 …` ·
+  `(5) reload terminal -> vt=underline drawn=underline … ink=16 box=8x2`. (5)의 자리 `0,0`은 다시 뜬 terminal이 프롬프트를 그리기 전 첫
+  프레임이다 — 판정은 모양만 본다.
+- vimrc를 고친 뒤 render 체인 1회 PASS(261초): 검사 25 `vim started: vt=block drawn=block row=0 col=4 …, 1 inverted cell(s)` 그대로.
+- 루트 게이트(CO-M0 · CO-M1 함께): 세 번째 판 33/33 PASS(`make gate` 1,926초 — prebuild 330초 + lanes 1,462초, 잘린 줄 0,
+  `out/gate-logs/20261110-090819`). 첫 판 26/33(3,348초) · 둘째 판 31/33(3,337초)은 아래 6 · 7.
+
+plan과 다른 자리:
+
+1. 키 수를 박아 둔 자리가 확정 3보다 셋 더 있었다 — reload_test의 비트 표 `OTHER`(`user`가 비트 19 → 20), config_edit_test의
+   `showKeyLines` 기대 글자, screen_args_test의 `argvOf` 마지막 칸(15개 → 16개 인자). 컨테이너 첫 판에서 셋 다 빨갰다.
+2. init 본 빌드가 체인 첫 판에서 멈췄다 — null로 채운 길이 `ARGC`의 argv 리터럴 일곱(main의 콘솔 셸 · 커널 자식, bluetooth 둘, wifi ·
+   clock · net)이 15칸이었다. `screen_args.zig` 주석의 "그쪽은 null이 하나 늘 뿐이다"가 이 자리다. 호스트 검사는 이 파일들을 컴파일하지
+   않아 드러나지 않는다 — 칸을 더하는 다음 사람은 `rg '(null, ){8,}null' init/src`로 먼저 센다.
+3. 시스템 vimrc에 `let &t_ti .= "\e[2 q"`를 더했다(design 결정 6의 뜻을 지키려고). 판정 4의 첫 판이 빨갰다 — vim은 기동 때 `t_SI` ·
+   `t_SR` · `t_EI` 어느 것도 안 보내므로 normal이 terminal의 기본값(bar)으로 시작했다. 기본값이 block이던 동안 안 보이던 빈틈이다.
+   `t_ti`는 대체 화면에 들어갈 때(기동 · `:!` 뒤) 보내므로 block은 대체 화면 안에만 남고 프롬프트는 사용자의 모양이다. render 검사 25의
+   주석("셸에서 물려받은 block")과 `make_initrd.sh`의 vimrc 설명을 고쳤다 — 판정 글자는 그대로다.
+4. 판정 5는 `tars-config list` 대신 `set`의 답(`cursor_shape: bar -> underline`)을 봤다. 목록 쪽은 config 체인의 `TC_LIST_WANT`가 본다.
+5. 덧붙임: `config_test`의 `expectConfig` 비교에는 `fullscreen`이 없다(FU 때부터). 이번에 `cursor_shape` 한 줄만 더했고 fullscreen은 손대지 않았다.
+6. 루트 게이트 첫 판의 여섯(CP · CB · PD · HS · CO · FU)이 체인 판정은 지나고 "serial lines were cut" B로 빨갰다. init의 `reload terminal:`
+   줄은 제 글에 `terminal: `을 담아서 `gate_lib.sh` `cut_log_lines`가 그 fmt를 글자 그대로 맞춰 빼는데, 그 정규식이 `fullscreen=\S+`에서 끝났다.
+   init 로그 줄에 `cursor_shape=`을 붙일 때 짝으로 고쳤어야 했다 — 정규식 끝에 ` cursor_shape=\S+`, 루트 `check.sh`의 견본 `legit` 줄에
+   `cursor_shape=block`, 주석 한 줄. 견본 두 줄(온전한 줄 · 뒤에 조각이 붙은 줄)로 예외가 하던 일을 그대로 하는 것을 봤다.
+7. DC-M2 boot 7(설치 디스크를 USB로 4초 늦게)이 첫 판 · 둘째 판 · 단독에서 "init did not have to wait"로 빨갰다 — 커널의 `/init`이
+   USB 디스크보다 늦었다(initramfs 풀기 7 ~ 8.5초). 변경 전 `ae3dca6` 단독은 PASS(풀기 3.75초). 원인은 변경이 아니라 호스트 부하였다:
+   같은 커널 · boot 7과 같은 QEMU 모양으로 두 initrd(변경 전 · 뒤)를 번갈아 세 번씩 재면 둘이 함께 4.06 ~ 7.36초를 오갔다(차이 0.1초 안,
+   풀린 크기도 같은 147,929,600 B). 그 시각 호스트에는 다른 저장소의 퍼저들과, 이 저장소의 예전 세션이 macOS에서 돌린 init `services_test`가
+   10일 넘게 CPU 하나를 먹고 있었다(사용자 허락으로 멈췄다). 셋째 판은 DC-M2 142초에 PASS. 둘째 판의 TP-M1(devtools 서버 블록 120초 시한)도
+   단독 PASS(2,029초) — 같은 부하다. 판정의 4초 여유는 이 기계에서 호스트가 바쁘면 모자란다 — 고치지 않고 기억에 적었다([[project_cursor_options]]).

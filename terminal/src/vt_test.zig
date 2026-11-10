@@ -3128,6 +3128,52 @@ pub fn main(init: std.process.Init) !void {
     });
     std.debug.print("vt_test: CSI ? 25 l 이 셸 커서를 숨기고 조합 중에는 무시한다 OK\n", .{});
 
+    // 검사 134~136. 커서 모양의 기본값(CO design 결정 5 · 6, `tars.conf`의 `cursor_shape`).
+    // `setDefaultShape`는 lib-vt의 기본값을 바꾼다 — 프로그램이 정한 모양이 이기고, `0`이 돌아온다.
+    const bar_at_0 = vt.CursorMark{
+        .row = 0,
+        .col = 0,
+        .asked = .bar,
+        .shape = .bar,
+        .cols = 1,
+        .px = .{ .x = 0, .y = 0, .w = 2, .h = 16 },
+    };
+
+    // 검사 134. 막 만든 화면에 bar를 주면 곧바로 bar 띠이고 반전이 없다.
+    const co_ds = try vt.Screen.init(init.io, init.gpa, 20, 5, CELL);
+    defer co_ds.deinit();
+    co_ds.setDefaultShape(.bar);
+    const co_ds0 = try co_ds.cells(&buf);
+    try cuExpectMark("검사 134 기본값 bar", co_ds.cursorMark(), bar_at_0);
+    if (co_ds.cursorAsked() != .bar or cuInverted(co_ds0) != 0) {
+        std.debug.print("FAIL: 기본값 bar인데 asked={s} 반전 {d}개\n", .{ @tagName(co_ds.cursorAsked()), cuInverted(co_ds0) });
+        return error.DefaultShapeNotApplied;
+    }
+
+    // 검사 135. 프로그램이 정하면 그것이 이기고(`2` → block), `0`과 빈 인자는 기본값 bar로 돌아온다.
+    co_ds.feed("\x1b[2 q");
+    _ = try co_ds.cells(&buf);
+    try cuExpectMark("검사 135 CSI 2 SP q", co_ds.cursorMark(), block_at_0);
+    co_ds.feed("\x1b[0 q");
+    _ = try co_ds.cells(&buf);
+    try cuExpectMark("검사 135 CSI 0 SP q", co_ds.cursorMark(), bar_at_0);
+    co_ds.feed("\x1b[2 q\x1b[ q");
+    _ = try co_ds.cells(&buf);
+    try cuExpectMark("검사 135 CSI SP q(빈 인자)", co_ds.cursorMark(), bar_at_0);
+
+    // 검사 136. 프로그램이 정해 둔 동안 기본값을 바꿔도 덮지 않는다 — 다음 `0`에 새 기본값이다.
+    co_ds.feed("\x1b[4 q");
+    co_ds.setDefaultShape(.block);
+    _ = try co_ds.cells(&buf);
+    if (co_ds.cursorAsked() != .underline) {
+        std.debug.print("FAIL: 정해 둔 underline을 기본값 block이 덮었다(asked={s})\n", .{@tagName(co_ds.cursorAsked())});
+        return error.DefaultShapeOverrodeProgram;
+    }
+    co_ds.feed("\x1b[0 q");
+    _ = try co_ds.cells(&buf);
+    try cuExpectMark("검사 136 CSI 0 SP q 뒤 새 기본값", co_ds.cursorMark(), block_at_0);
+    std.debug.print("vt_test: cursor_shape 기본값은 프로그램이 정하지 않았을 때의 모양이다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
 

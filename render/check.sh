@@ -842,8 +842,11 @@ VIM_COL=4
 # 말한다. 그 판정은 i를 치기 전에 해야 한다 — 다음 키가 프롬프트를 닫고 명령으로도
 # 쓰여서, i를 치면 insert로 들어가 bar가 된다.
 #
-# 기동 직후의 모양은 셸에서 물려받은 block이다. vim은 기동할 때 t_EI를 미리
-# 보내지 않는다(CU design 실측 4). 그래서 이 검사가 26의 bar에 대한 대조군이다.
+# 기동 직후의 모양은 block이다. vim은 기동할 때 t_EI를 미리 보내지 않는다(CU
+# design 실측 4) — CO-M1부터는 시스템 vimrc가 t_ti 끝에 `CSI 2 SP q`를 붙여
+# 요청한다(사용자의 cursor_shape가 bar여도 normal은 block으로 시작하게).
+# 이 부팅의 기본값도 block이라 이 판정의 글자는 CO 전과 같다. 이 검사가 26의
+# bar에 대한 대조군이다.
 VIM_LOG_START="$(wc -c < "$LOG")"
 printf '%s\n' "=== typing printf '\\033[H\\033[2J'; vim /tmp/cu.txt ==="
 type_text "printf '\\033[H\\033[2J'; vim /tmp/cu.txt"

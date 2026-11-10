@@ -121,6 +121,8 @@ fn expect(text: []const u8, want: config.Config) !void {
         got.touchpad_accel.eql(want.touchpad_accel) and
         // HS-M0: 열아홉째 필드(touchpad_accel 다음). 이 줄이 없으면 아래 배율 검사가 아무것도 안 보고 초록이다.
         got.display_scale == want.display_scale and
+        // CO-M1: 커서 모양. 이 줄이 없으면 아래 cursor_shape 검사가 아무것도 안 보고 초록이다.
+        got.cursor_shape == want.cursor_shape and
         // HP-M1: 열넷째 필드. 이 줄이 없으면 아래 user 검사가 아무것도 안 보고 초록이다.
         config.User.eql(got.user, want.user) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
@@ -1139,6 +1141,16 @@ pub fn main() !void {
     try expect("display_scale=2\ndisplay_scale=x2\n", .{ .display_scale = .@"2" });
     // hidpi 체인의 부팅 B가 쓰는 줄이다.
     try expect("shell=fish\ndisplay_scale=1\n", .{ .display_scale = .@"1" });
+
+    // ── CO-M1: cursor_shape ─────────────────────────────────────────────
+    //
+    // display_scale과 같은 모양의 enum 키다. 다른 터미널의 이름(`beam`)은 앞의 값에 머문다.
+    try expect("cursor_shape=bar\n", .{ .cursor_shape = .bar });
+    try expect("cursor_shape=underline\n", .{ .cursor_shape = .underline });
+    try expect("cursor_shape=block\n", .{});
+    try expect("cursor_shape=beam\n", .{});
+    try expect("cursor_shape=\n", .{});
+    try expect("cursor_shape=bar\ncursor_shape=beam\n", .{ .cursor_shape = .bar });
 
     // ── EL-M0: esc_latin ────────────────────────────────────────────────
     //

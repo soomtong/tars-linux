@@ -26,6 +26,11 @@ set nocompatible
 let &t_SI = "\e[6 q"
 let &t_SR = "\e[4 q"
 let &t_EI = "\e[2 q"
+" vim sends none of the three at start, so normal mode would keep the
+" terminal's default shape (tars.conf cursor_shape, CO-M1) until the first
+" insert. Ask for the block when vim takes the screen (t_ti, also after :!).
+" It stays inside the alternate screen: the prompt keeps cursor_shape.
+let &t_ti .= "\e[2 q"
 
 " ---- Encoding ----------------------------------------------------------------
 " The terminal passes LANG=C.UTF-8, which already means utf-8. Saying it here

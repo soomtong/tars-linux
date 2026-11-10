@@ -287,7 +287,8 @@ type_loopback_roundtrips() {
 # B에서 빼는 것은 init이 제 글로 `terminal: `을 쓰는 단 하나의 줄(`reload terminal:
 # pid …`, init/src/main.zig)이다. 그 fmt를 글자 그대로 맞춰 빼므로, 그 줄 뒤에
 # terminal의 조각이 붙은 줄은 여전히 B다. init의 fmt 가운데 `terminal: `을 담는 것이
-# 늘면 B가 거짓으로 빨갛다 — 그때 여기에 하나 더한다.
+# 늘면 B가 거짓으로 빨갛다 — 그때 여기에 하나 더한다. 그 fmt에 칸이 늘어도
+# 같다(CO-M1의 `cursor_shape=` — 루트 게이트 첫 판의 B 여섯이 이것이었다).
 #
 # 커널 printk(`[  7.35] …`)와 콘솔 셸의 프롬프트가 자르는 것은 세지 않는다. 앞의
 # 것은 tty 잠금 밖에서 쓰이고 뒤의 것은 남의 프로세스라 AL이 고칠 수 없다(AL design
@@ -306,7 +307,7 @@ cut_log_lines() {
     if (/^(terminal|kms|font|tars-init): .* \[cut\]\r?\n?\z/) { print "C $ARGV: $_" }
     if (/^terminal: .*tars-init: /) { print "A $ARGV: $_" }
     elsif (/^tars-init: .*terminal: / &&
-           !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+ mouse_scroll=\S+ touchpad_scroll=\S+ mouse_accel=\S+ touchpad_accel=\S+ display_scale=\S+ fullscreen=\S+\r?\n?\z/) {
+           !/^tars-init: reload terminal: pid \d+, shell \S+ keyboard=\S+ hangul=\S+ latin=\S+ toggles=\S+ clipboard=\S+ mouse_scroll=\S+ touchpad_scroll=\S+ mouse_accel=\S+ touchpad_accel=\S+ display_scale=\S+ fullscreen=\S+ cursor_shape=\S+\r?\n?\z/) {
       print "B $ARGV: $_";
     }
   ' $files
