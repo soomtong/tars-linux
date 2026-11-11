@@ -16,7 +16,7 @@ ghostty vt-1.0.0), CO 닫기와 fakesteak 데모 draft.
 
 ## 다음 할 것
 
-1. SS 위임 결정 넷(SS-M1 plan 결과 1~3, SS-M2의 게스트 시한 넘김 판정 없음)에 사용자가 바꿀 것이 있는지 — 보고는 했고 답을 기다린다.
+1. (닫힘, 2026-11-11) SS 위임 결정 넷(SS-M1 plan 결과 1~3, SS-M2의 게스트 시한 넘김 판정 없음) — 사용자 "그대로".
 2. 사용자가 맥북 에어에서 fakesteak draft 데모를 확인한다 — draft는 비공개라 공개는 사용자가 한다. GV · SS · cyber 0.4.6 판으로 다시 구울지는 사용자가 정한다.
    결과는 기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에. 태그 `demo-fakesteak-20261110`을 그대로 다시 빌드하면 cyber 0.4.4 해시가
    어긋나 dev layer 받기에서 멈춘다(아래 완료 절).
