@@ -1983,7 +1983,7 @@ if ! grep -q "tars-init: started console shell (pid .*, /usr/bin/zsh)" "$LOG3"; 
   report_failure "$LOG3" "third boot did not exec /usr/bin/zsh on the serial console"
 fi
 # LT-M0. 2차가 쓴 hostname=air를 부팅이 읽었다. 화면의 uname · /etc/hosts는 훅이 봤다.
-if ! grep -q "tars-init: config shell=zsh.* hostname=air" "$LOG3" || ! grep -q "tars-init: hostname air" "$LOG3"; then
+if ! grep "tars-init: config shell=zsh.* hostname=air" "$LOG3" >/dev/null || ! grep "tars-init: hostname air" "$LOG3" >/dev/null; then
   report_failure "$LOG3" "third boot did not take hostname=air from the file the second boot wrote"
 fi
 if ! grep -q "terminal: screen>" "$LOG3"; then
