@@ -779,6 +779,13 @@ copy_lib_deps "${WORKDIR}${LIB_DEST}/libnss_myhostname.so.2"
 # 전에는 `flush ruleset`이었는데, 그것은 dockerd가 올린 표(ip docker-bridges)까지 지워 떠 있는 컨테이너의 망을 끊는다
 # (reload로 firewall=on이 될 때 — 부팅 때는 방화벽이 먼저라 드러나지 않는다). 사람이 손수 올린 다른 표도 이제 남는다.
 #
+# forward 체인(CE-M2, 커밋 뒤의 보안 검토가 짚었다): docker 서비스가 ip_forward=1을 쓰면 이 기계는 NIC 사이로 패킷을 넘기는
+# 라우터가 된다 — input만 닫아서는 `firewall=on`이 "들어오는 것은 닫혀 있다"가 아니게 된다. 그래서 넘기는 것도 닫고 셋만 받는다:
+# 이미 맺어진 연결, Docker가 `-p`로 낸 포트(prerouting에서 DNAT된 것 — 사람이 `-p 0.0.0.0:…`이라 적은 것만 밖에서 닿는다),
+# 컨테이너 bridge(docker0 · compose의 br-*)에서 나가는 것. nftables에서 한 base chain의 drop은 다른 표의 accept가 못 되돌리므로
+# 컨테이너 쪽은 여기서 받아야 한다(Docker 문서 "firewall-nftables"). forward가 꺼진 기계(Docker 없음)에서는 이 체인에 올 것이 없다.
+# `firewall=off`인 기계는 이 체인도 없다 — 그 기계에서 Docker를 켜면 넘기는 것도 열려 있다(안내에 적는다).
+#
 # 파일 안의 주석은 ASCII다. nft의 파서가 주석 안의 UTF-8을 어떻게 다루는지 잰
 # 적이 없고, 이 파일이 안 읽히면 갈래 2 · 3으로 떨어진다.
 mkdir -p "$WORKDIR/etc/tars"
@@ -795,6 +802,13 @@ table ip tars {
 		ct state invalid drop
 		include "/config/nftables.d/*.nft"
 	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		ct state established,related accept
+		ct status dnat accept
+		iifname "docker0" accept
+		iifname "br-*" accept
+	}
 }
 EOF
 cat > "$WORKDIR/etc/tars/firewall-base.nft" <<'EOF'
@@ -808,6 +822,13 @@ table ip tars {
 		iif "lo" accept
 		ct state established,related accept
 		ct state invalid drop
+	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		ct state established,related accept
+		ct status dnat accept
+		iifname "docker0" accept
+		iifname "br-*" accept
 	}
 }
 EOF

@@ -764,7 +764,7 @@ echo "B2: as tars, docker import made tars/caddy offline ($(ms_of ceimport)ms) a
 # (e) 방화벽과의 공존. set과 reload를 한 bash가 차례로 돈다 — set의 답이 찍힌 뒤에 reload가 간다(firewall 체인 검사 19와 같은 차례).
 # TARS의 표(ip tars)와 Docker의 표(ip docker-bridges)가 함께 있어야 한다. firewall=on은 그대로 둔다 — 뒤의 판정은 모두 루프백과
 # 유닉스 소켓이고(lo는 input이 받는다), 부팅 3이 방화벽을 먼저 세운 기계에서 dockerd가 뜨는지도 함께 본다.
-as_root 'tars-config set firewall=on 2>&1 | sed "s/^/ce-fw-set: /"; tars-config reload 2>&1 | sed "s/^/ce-fw-reload: /"; nft list tables 2>&1 | sed "s/^/ce-fw-tables: /"; o=$(curl -s -m 5 http://127.0.0.1:8090/); echo "ce-fw-curl=$o"; printf "ce-%s\n" e-done'
+as_root 'tars-config set firewall=on 2>&1 | sed "s/^/ce-fw-set: /"; tars-config reload 2>&1 | sed "s/^/ce-fw-reload: /"; nft list tables 2>&1 | sed "s/^/ce-fw-tables: /"; nft list chain ip tars forward 2>&1 | tr -s "\n\t" "  " | sed "s/^/ce-fw-forward: /"; echo; o=$(curl -s -m 5 http://127.0.0.1:8090/); echo "ce-fw-curl=$o"; printf "ce-%s\n" e-done'
 wait_log "ce-e-done" 60 || fail "the firewall set, reload and probes did not finish in 60s" "ce-fw"
 grep -aqE "ce-fw-set: firewall: off( \(default\))? -> on" "$LOG" || fail "tars-config set firewall=on did not answer off -> on" "ce-fw-set"
 grep -aqF "ce-fw-reload: firewall: up (nft -f /etc/tars/firewall.nft)" "$LOG" || fail "reload did not bring the firewall up" "ce-fw-reload" "tars-init: reload"
@@ -772,7 +772,12 @@ grep -aqF "ce-fw-tables: table ip tars" "$LOG" || fail "nft has no table ip tars
 grep -aqF "ce-fw-tables: table ip docker-bridges" "$LOG" \
   || fail "Docker's table ip docker-bridges is gone after the firewall came up (firewall.nft must only rebuild table ip tars)" "ce-fw-tables"
 grep -aqF "ce-fw-curl=ce-ok" "$LOG" || fail "the container stopped answering on 127.0.0.1:8090 with the firewall on" "ce-fw-curl"
-echo "B2: tars-config set firewall=on and reload put up table ip tars beside Docker's ip docker-bridges, and the container still answers"
+# dockerd가 ip_forward를 켠 기계에서 firewall=on은 넘기는 것도 닫는다(make_initrd.sh의 forward 체인) — 받는 것은 맺어진 연결,
+# Docker가 DNAT한 포트, 컨테이너 bridge에서 나가는 것 셋이다. 망이 없는 체인이라 길 자체는 못 밟고(프로브가 밟았다 — CE-M2 plan)
+# 체인의 모양을 본다. 이 체인이 없으면 Docker를 켠 기계가 NIC 사이의 라우터가 된다.
+grep -aqE 'ce-fw-forward: .*hook forward priority filter; policy drop; ct state established,related accept ct status dnat accept iifname "docker0" accept iifname "br-\*" accept' "$LOG" \
+  || fail "table ip tars has no forward chain with policy drop and the three accepts" "ce-fw-forward"
+echo "B2: tars-config set firewall=on and reload put up table ip tars (input and forward closed) beside Docker's ip docker-bridges, and the container still answers"
 
 # (f) 재부팅을 넘을 컨테이너. unless-stopped라 dockerd가 다시 뜨면 다시 선다(부팅 3). ce는 정책이 없어 Exited로 남는다.
 as_tars 'docker run -d --name keep --restart unless-stopped -p 8091:80 tars/caddy /caddy respond --listen :80 --body keep-ok 2>&1 | sed "s/^/ce-keep: /"; o=""; for i in $(seq 30); do o=$(curl -s -m 2 http://127.0.0.1:8091/) && [ -n "$o" ] && break; sleep 1; done; echo "ce-keep-curl=$o"; printf "ce-%s\n" f-done'

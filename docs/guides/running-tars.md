@@ -633,6 +633,8 @@ dockerd는 서비스다 — `sudo tars-service enable docker`. 기본은 꺼져 
 - 망: Docker는 자기 표 `ip docker-bridges`만 쓴다. TARS의 방화벽 표는 `ip tars`이고 둘은 서로를 건드리지 않는다(CE-M2부터 init의
   `firewall=on` · `off`는 자기 표만 짓고 지운다 — 전에는 `flush ruleset`이라 떠 있는 컨테이너의 망을 끊었다).
   `-p 8080:80`은 127.0.0.1:8080에만 선다. `-p 0.0.0.0:8080:80`이면 `firewall=on`이어도 LAN에 열린다(Docker의 DNAT은 `input` 체인을 안 지난다).
+  dockerd가 `ip_forward`를 켜므로 `firewall=on`의 표에는 `forward` 체인도 있다(`policy drop` — 맺어진 연결 · Docker가 DNAT한 포트 ·
+  `docker0`와 `br-*`에서 나가는 것만 받는다). `firewall=off`인 기계에서 Docker를 켜면 NIC 사이의 전달이 열려 있다.
   컨테이너가 호스트의 포트에 붙는 길은 `firewall=on`이면 막혀 있다 — `/config/nftables.d/docker.nft`에 `iifname "docker0" accept`.
 - 멈춤: `# tars-stop: TERM 20`. 컨테이너 둘이 도는 채 `poweroff`가 1.9초에 끝났다(QEMU). 재부팅 뒤 이미지 · 볼륨이 남고
   `--restart unless-stopped` 컨테이너가 다시 뜬다.

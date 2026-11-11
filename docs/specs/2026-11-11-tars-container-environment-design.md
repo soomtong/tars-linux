@@ -109,6 +109,12 @@ xtables 커널 옵션도 들이지 않는다. Docker는 자기 표(`ip docker-br
 experimental 표시는 받아들인다 — 게이트가 망 길(컨테이너 → 호스트의 포트)을 매번 판정하고, 깨지면 iptables-nft로 물러설 자리가
 커널 옵션 몇 줄이다.
 `net.ipv4.ip_forward=1`은 서비스 템플릿이 dockerd를 띄우기 직전에 쓴다 — Docker를 안 켠 기계는 forward가 꺼진 채다.
+forward를 켠 기계는 NIC 사이로 패킷을 넘긴다. 그래서 `firewall=on`의 표(`ip tars`)에 `forward` 체인을 더한다 — `policy drop`,
+받는 것은 맺어진 연결 · Docker가 DNAT한 포트(`ct status dnat`) · 컨테이너 bridge(`docker0` · `br-*`)에서 나가는 것 셋이다. nftables에서
+한 base chain의 drop은 다른 표의 accept가 되돌리지 못하므로 컨테이너 쪽은 우리 체인이 받아야 한다. `firewall=off`인 기계는 이
+체인이 없다 — 사람이 "거르지 않는다"를 고른 기계이고, 안내가 그 결과를 말한다. (첫 커밋 뒤의 자동 보안 검토가 짚어 더했다.)
+같은 까닭으로 TARS의 방화벽은 자기 표만 다룬다 — `firewall.nft`의 `flush ruleset`과 `firewall=off` reload의 `nft flush ruleset`은
+떠 있는 dockerd의 표를 지웠다. `table ip tars`만 다시 짓고 `nft destroy table ip tars`로 지운다(TC design 위험 3의 판단을 고친다).
 
 ### 결정 6 — `-p`의 기본 주소는 127.0.0.1
 
