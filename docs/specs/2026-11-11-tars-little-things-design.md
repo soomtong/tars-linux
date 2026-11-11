@@ -42,8 +42,9 @@ ICMP를 못 한다). init이 부팅에 `net.ipv4.ping_group_range`를 `0 2147483
 `tars.conf`의 스물둘째 키. 값은 DNS label 하나다 — 영문 소문자 · 숫자 · `-`, 1~63자, `-`로 시작하거나 끝나지 않는다(대문자는
 거절한다 — 받아서 소문자로 바꾸지 않는다). 틀리면 한 줄 로그 뒤 기본값. init이 부팅에 `sethostname`을 부르고 `/etc/hostname`과
 `/etc/hosts`의 `127.0.1.1 <이름>` 줄을 쓴다(Debian의 모양 — sudo · git · 서버가 이름을 풀 때 DNS로 나가지 않는다).
-갈래는 `next_spawn`이다 — `tars-config reload`가 `sethostname`과 두 파일을 곧바로 고치고, 이미 떠 있는 셸의 프롬프트는 그대로다
-(fish는 시작할 때 이름을 읽는다). terminal의 argv에는 안 든다.
+갈래는 `now`다 — `tars-config reload`가 `sethostname`과 두 파일을 곧바로 고친다. terminal의 argv에 안 들어 화면 대기(`reload terminal`)와
+상관이 없고, 새 패널은 새 이름을 본다. 이미 떠 있는 셸의 프롬프트만 그대로다(fish는 시작할 때 이름을 읽는다).
+기본값이 생기면서 게이트 체인이 보는 프롬프트가 `root@(none) ~#`에서 `root@tars ~#`로 두 칸 짧아진다 — 그 글자와 칸 수를 보는 판정을 함께 고친다.
 기본값을 두는 까닭: `(none)`이 좋은 기계는 없다. 기계마다 다른 이름을 자동으로 짓지 않는다 — DMI serial이나 MAC에서 이름을 만들면
 그 값이 프롬프트와 DHCP 요청에 실려 나간다.
 sudoers의 `!fqdn`은 그대로 둔다(이름이 풀리게 됐어도 해가 없다).
