@@ -1683,6 +1683,32 @@ const Boot = struct {
 };
 
 /// 단계 1. 시그널 핸들러와 마운트. 설정을 읽기 전이고 상태가 없다.
+/// CE-M0(design 결정 1). 루트를 자기 자신의 bind mount로 덮는다.
+///
+/// 커널이 initramfs를 푸는 rootfs는 부모가 없는 mount다(`/proc/self/mountinfo`의 `1 1 … / /`). `pivot_root(2)`는 그런
+/// 루트에서 EINVAL이고, 컨테이너 런타임(runc)과 샌드박스(bubblewrap)는 둘 다 `pivot_root`로 새 루트에 들어간다 — 커널
+/// 옵션을 다 켜도 이 자리에서 멈춘다(design 확인 1, 게스트에서 쟀다). 같은 ramfs를 빈 디렉터리에 한 번 더 붙이고 그것을
+/// `/` 위로 옮긴 뒤 그 안으로 들어가면, 우리가 보는 루트는 부모(옛 rootfs)가 있는 보통의 mount가 된다. 파일은 하나도
+/// 옮기지 않고 RAM도 더 쓰지 않는다. switch_root가 하는 일에서 "새 파일시스템으로 옮기기"만 뺀 것이다.
+///
+/// 어느 단계든 실패하면 한 줄을 남기고 그대로 부팅한다 — 그 부팅은 컨테이너만 안 된다. `MS_MOVE` 전의 실패는 아무것도
+/// 바꾸지 않았고, 그 뒤의 `chroot` 실패는 루트가 옛 rootfs에 남을 뿐이다(덮인 것과 같은 내용이다).
+fn rebindRoot() void {
+    const dir: [:0]const u8 = "/run/.root";
+    const step: [:0]const u8 = blk: {
+        const mk = linux.mkdir(dir.ptr, 0o700);
+        if (failed(mk)) |e| if (e != .EXIST) break :blk "mkdir";
+        if (failed(linux.mount("/", dir.ptr, null, linux.MS.BIND, 0)) != null) break :blk "bind";
+        if (failed(linux.chdir(dir.ptr)) != null) break :blk "chdir";
+        if (failed(linux.mount(".", "/", null, linux.MS.MOVE, 0)) != null) break :blk "move";
+        if (failed(linux.chroot(".")) != null) break :blk "chroot";
+        if (failed(linux.chdir("/")) != null) break :blk "chdir /";
+        logline.print("tars-init: root is a bind mount of the initramfs (pivot_root works)\n", .{});
+        return;
+    };
+    logline.print("tars-init: cannot rebind the root ({s} failed), containers will not start\n", .{step});
+}
+
 fn mountEarly() void {
     // mount보다 먼저 켠다. 핸들러가 하는 일은 플래그를 세우는 것뿐이라 이
     // 시점에 달아도 안전하고, "PID 1은 태어날 때부터 시그널을 안다"가 읽기에
@@ -1695,9 +1721,16 @@ fn mountEarly() void {
     // 읽기에 맞다.
     power.disableCtrlAltDel();
 
+    // CE-M0. 어떤 mount보다 먼저다 — 뒤의 mount와 자식이 모두 새 루트 아래에 서야 한다.
+    rebindRoot();
+
     _ = mountFs("proc", "/proc", "proc", 0);
     _ = mountFs("sysfs", "/sys", "sysfs", 0);
     _ = mountFs("devtmpfs", "/dev", "devtmpfs", 0);
+    // CE-M1(design 결정 3). cgroup2를 붙이기만 한다 — init은 cgroup을 만들지도 프로세스를 옮기지도 않는다. 모든 프로세스는
+    // 루트 cgroup에 남고, 그 아래의 경로는 컨테이너 런타임(runc)이 만든다. dockerd는 이 mount를 스스로 하지 않는다.
+    // 커널에 cgroup이 없으면(옛 커널) 실패 한 줄이 남고 부팅은 간다.
+    _ = mountFs("cgroup2", "/sys/fs/cgroup", "cgroup2", linux.MS.NOSUID | linux.MS.NODEV | linux.MS.NOEXEC);
     mountDevpts();
     // /proc과 /dev가 둘 다 선 뒤여야 한다. 링크의 대상이 /proc 안에 있고
     // 링크가 놓일 자리가 /dev다.

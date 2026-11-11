@@ -959,6 +959,56 @@ if ! grep -a "landlock: Up and running" "$LOG" >/dev/null; then
 fi
 echo "the kernel brought Landlock up"
 
+# ── 검사 27: 루트가 pivot_root가 되는 mount다 (CE-M0) ─────────────────────────
+#
+# init이 부팅 첫머리에 루트를 자기 자신의 bind mount로 덮는다(CE design 결정 1). 덮기 전의 루트는 부모가 자기 자신인
+# rootfs라(`/proc/self/mountinfo`의 `1 1 0:2 / / …`) pivot_root(2)가 EINVAL이고, runc도 bubblewrap도 거기서 멈춘다.
+# 판정은 둘이다 — init의 한 줄, 그리고 mountinfo 첫 줄의 mount id가 1이 아니면서 부모가 1이다(옛 rootfs 위에 얹혔다).
+# pivot_root를 실제로 부르는 것은 devtools 체인의 bwrap이다(initrd에는 부를 도구가 없다).
+if ! grep -a "tars-init: root is a bind mount of the initramfs" "$LOG" >/dev/null; then
+  fail "init did not rebind the root (pivot_root will fail)" "tars-init: cannot rebind" "tars-init: root"
+fi
+echo "=== typing 'head -n 1 /proc/self/mountinfo' ==="
+type_keys h e a d spc minus n spc 1 spc slash p r o c slash s e l f slash m o u n t i n f o ret
+if ! wait_for_screen '(^|\| )([2-9]|[1-9][0-9]+) 1 0:[0-9]+ / / rw'; then
+  fail "the first mountinfo line is not a mount on top of the old rootfs (want 'N 1 0:x / / rw', N > 1)" \
+    "terminal: screen>" "tars-init: root" "tars-init: cannot rebind"
+fi
+echo "the root is a bind mount whose parent is the old rootfs"
+
+# ── 검사 28: cgroup2 · user namespace · seccomp가 있다 (CE-M1) ────────────────
+#
+# 커널 옵션(CE design 결정 2)과 init의 cgroup2 mount(결정 3). 컨트롤러 넷은 `CGROUP_SCHED` · `BLK_CGROUP` · `MEMCG` ·
+# `CGROUP_PIDS`가 낸다(`cpuset`은 SMP가 없어 없다). namespace 파일과 Seccomp 줄은 그 옵션이 해소본에서 사라지지
+# 않았다는 표시다 — 하나라도 빠지면 Docker와 AI 도구의 샌드박스가 서지 않는다.
+if ! grep -a "tars-init: mounted cgroup2 at /sys/fs/cgroup" "$LOG" >/dev/null; then
+  fail "init did not mount cgroup2 (CONFIG_CGROUPS?)" "tars-init: failed to mount cgroup2" "cgroup"
+fi
+echo "=== typing 'cat /sys/fs/cgroup/cgroup.controllers' ==="
+type_keys c a t spc slash s y s slash f s slash c g r o u p slash c g r o u p dot c o n t r o l l e r s ret
+if ! wait_for_screen '(^|\| )cpu io memory pids( |$)'; then
+  fail "cgroup.controllers is not 'cpu io memory pids'" "terminal: screen>" "tars-init: mounted cgroup2"
+fi
+echo "=== typing 'test -e /proc/self/ns/user; echo ce-userns=\$status' ==="
+type_keys t e s t spc minus e spc slash p r o c slash s e l f slash n s slash u s e r semicolon spc \
+          e c h o spc c e minus u s e r n s equal shift-4 s t a t u s ret
+if ! wait_for_screen 'ce-userns=0( |$)'; then
+  fail "/proc/self/ns/user is missing (CONFIG_USER_NS)" "terminal: screen>" "ce-userns="
+fi
+echo "=== typing 'echo ce-seccomp=(grep -c Seccomp /proc/self/status)' ==="
+type_keys e c h o spc c e minus s e c c o m p equal shift-9 g r e p spc minus c spc shift-s e c c o m p spc \
+          slash p r o c slash s e l f slash s t a t u s shift-0 ret
+if ! wait_for_screen 'ce-seccomp=2( |$)'; then
+  fail "/proc/self/status has no two Seccomp lines (CONFIG_SECCOMP, CONFIG_SECCOMP_FILTER)" "terminal: screen>" "ce-seccomp="
+fi
+echo "cgroup2 has cpu, io, memory and pids; user namespaces and seccomp are there"
+
+# ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
+#
+# fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
+# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi · fzf ·
+# zoxide 열하나를 다 친 뒤에 한 번 보면 열하나 전부의 음성 확인이 된다.
+# UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
 # 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which, LT-M0의 ping)도 같은 그물에 걸린다.
 #
 # 번호가 11 → 17 → 19로 뛴 것은 앞에 검사가 끼워졌기 때문이다(UT-M3이
