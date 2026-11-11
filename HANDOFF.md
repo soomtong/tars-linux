@@ -1,23 +1,36 @@
-# HANDOFF: SS 닫음 — 서비스마다의 멈춤 신호 · 유예, 전원 끄기는 서비스 먼저(2026-11-10). 사용자가 후반 결정을 위임했다
+# HANDOFF: cyber 0.4.6으로 올림(2026-11-11). 그 앞: SS 닫음 — 서비스마다의 멈춤 신호 · 유예, 전원 끄기는 서비스 먼저(2026-11-10)
 
 ## 목표
 
-사용자(2026-11-10): HANDOFF의 할 일 2(TP-M11의 남은 것 둘)를 "go with 2"로 골랐다 → Service Stop(SS-M0~M2)으로 섰다. 결정 둘은 사용자
+사용자(2026-11-11): "cyber lang 다음 버전으로 업그레이드" → 최신 0.4.6(사이에 0.4.5)으로 올렸다. SS 결과 보고는 이 세션 첫머리에 했다
+(위임 결정 넷에 대한 사용자 답은 아직 없다).
+
+그 앞 — 사용자(2026-11-10): HANDOFF의 할 일 2(TP-M11의 남은 것 둘)를 "go with 2"로 골랐다 → Service Stop(SS-M0~M2)으로 섰다. 결정 둘은 사용자
 (설정은 스크립트의 주석 줄, 전원 끄기도 범위), 값은 SS-M0 측정 뒤 사용자 "Ok", plan "ok". SS-M1 체인 도중 "잠시 외출합니다. 나머지 결정을
 위임합니다." — 그 뒤(M1 커밋 · M2 · 루트 게이트 · 닫기)는 Claude가 정했고 각 plan 결과 절에 적었다. 그 앞 일: GV(Zig 0.17.1 ·
 ghostty vt-1.0.0), CO 닫기와 fakesteak 데모 draft.
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO, GV · SS 전). `gh-pages`는 SS 줄까지 push.
+`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO, GV · SS · cyber 0.4.6 전). `gh-pages`는 SS 줄까지 push.
 
 ## 다음 할 것
 
-1. 사용자가 돌아오면 SS 결과를 보고한다(아래 완료 절이 요약). 위임 중에 Claude가 정한 것은 SS-M1 · M2 plan 결과 절.
-2. 사용자가 맥북 에어에서 fakesteak draft 데모를 확인한다 — draft는 비공개라 공개는 사용자가 한다. GV · SS 판으로 다시 구울지는 사용자가 정한다.
-   결과는 기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에.
+1. SS 위임 결정 넷(SS-M1 plan 결과 1~3, SS-M2의 게스트 시한 넘김 판정 없음)에 사용자가 바꿀 것이 있는지 — 보고는 했고 답을 기다린다.
+2. 사용자가 맥북 에어에서 fakesteak draft 데모를 확인한다 — draft는 비공개라 공개는 사용자가 한다. GV · SS · cyber 0.4.6 판으로 다시 구울지는 사용자가 정한다.
+   결과는 기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에. 태그 `demo-fakesteak-20261110`을 그대로 다시 빌드하면 cyber 0.4.4 해시가
+   어긋나 dev layer 받기에서 멈춘다(아래 완료 절).
 3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
 4. 다음 서브프로젝트는 사용자가 말할 때.
+
+## 완료된 작업 (2026-11-11, cyber 0.4.6)
+
+- [x] `9a37cf0`: `devlayer/manifest.toml`의 cyber 세 줄(version · url · sha256 = GitHub digest `c1250823…9116`). 받은 tarball을 0.4.4와 대조 —
+      배치(`cyber` + `src/` 15) · `NEEDED` 다섯 · `RUNPATH $ORIGIN` 같음, `%ymm` 0(`%xmm` 4만여로 디스어셈블은 됨), `src/`는 `core.cy` 하나만 바뀜.
+      체인 판정은 판 글자를 안 봐 `devtools/check.sh`는 그대로.
+- [x] `make quick` PASS, devtools 체인 PASS(빌드 뒤 635초, `tp-cy: tp-cyber-42-4` 530ms). 루트 게이트는 안 돌렸다 — 묶음을 쓰는 체인은 devtools 하나.
+- 0.4.4 릴리스는 11-10 11:24Z에 다시 올라와 해시가 바뀌었다(`8089e9…` → `8b608d…`) — 그래서 `9a37cf0` 전의 `main`은 캐시 없는 기계에서
+  dev layer 받기가 멈췄다. 사용자: 자기 실수라 기억에는 남기지 않는다.
 
 ## 완료된 작업 (2026-11-10, SS-M0~M2 — SS 닫힘)
 
