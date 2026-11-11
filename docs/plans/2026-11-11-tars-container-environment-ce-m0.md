@@ -2,7 +2,7 @@
 
 Date: 2026-11-11
 Design: `docs/specs/2026-11-11-tars-container-environment-design.md`(결정 1)
-Status: 진행 중. 결정은 사용자 위임(2026-11-11).
+Status: 끝났다(2026-11-12). 결정은 사용자 위임(2026-11-11).
 
 ## 착수 전에 확정한 것
 
@@ -32,4 +32,12 @@ rootfs에서 `/lib/firmware`를 찾는다), 설치(install · dualboot · devtoo
 
 ## 결과
 
-(게이트 뒤 적는다.)
+구현 `c410002`(CE-M1과 한 커밋). plan 그대로다.
+
+- 게스트: `tars-init: root is a bind mount of the initramfs (pivot_root works)`, `/proc/self/mountinfo`의 첫 줄이 `1 1 0:2 / /`에서
+  `18 1 0:2 / / rw - rootfs rootfs rw`로. 같은 프로브의 `pivot_root`가 `Invalid argument` → `OK`.
+- 실제로 `pivot_root`를 부르는 것: devtools 체인의 사용자 `bwrap --unshare-all`과 runc(컨테이너 둘).
+- 다른 체인: firmware를 읽는 wifi · bluetooth · audio, 설치(install · dualboot · devtools · home · mise · pm), 전원(power · sleep) 모두 초록 —
+  루트가 한 겹 얹힌 것을 본 체인이 없었다. tools 검사 27이 줄과 mountinfo를 판정한다.
+
+루트 게이트(2026-11-12, `0e1b888`의 코드): 32/33 — 34분 51초(prebuild 344초 + lanes 1,614초), 잘린 줄 0, `out/gate-logs/20261111-162704`. 빨간 하나는 pm(PM-M0)의 화면 판정이 옛 프롬프트 `tars@(none) ~>`를 기다린 것(LT-M0이 놓친 자리)이고, 그 한 줄을 고친 뒤 pm 단독이 초록이었다. 커널 · init · initrd는 그 사이 바뀌지 않아 게이트를 통째로 다시 돌리지 않았다.

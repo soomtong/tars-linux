@@ -78,8 +78,8 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
 
 LT(2026-11-12)가 남긴 것. 위 다섯(ping · hostname · DMI id · Landlock · sudo timestamp)은 LT-M0이 닫았다.
 
-- [ ] Homebrew 7의 Landlock 샌드박스가 실제로 서는지는 게이트가 안 본다(pm 체인은 망으로 brew를 깔지 않는다). 커널의
-      `landlock: Up and running.`까지만 판정한다. 실기에서 `brew install` 때 `Sandbox unavailable` 경고가 없는지 본다.
+- [ ] Homebrew의 Landlock 샌드박스는 선다(pm 체인의 `brew install hello`가 `Landlock ABI: 7`을 찍었다). 다만 그 경고대로 망 전부를
+      막는 것은 Landlock ABI 10부터다 — 6.18은 7이라 일부만 막는다. 커널을 올리면 풀린다(KU의 7.4 이동).
 - [ ] git의 기본 신원은 여전히 도메인이 없다(`<이름>@tars.(none)`으로 읽었다 — 게스트에서 재지는 않았다). `[user]`를 주면 상관없다.
 - [ ] hostname을 DHCP 요청에 싣기 · mDNS(`<이름>.local`)는 LT 비목표다.
 

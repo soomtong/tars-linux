@@ -2,7 +2,7 @@
 
 Date: 2026-11-11
 Design: `docs/specs/2026-11-11-tars-little-things-design.md`(결정 1~5)
-Status: 진행 중. 결정은 사용자 위임(2026-11-11).
+Status: 끝났다(2026-11-12). 결정은 사용자 위임(2026-11-11).
 
 ## 착수 전에 확정한 것
 
@@ -66,4 +66,27 @@ design Status · 이 plan의 결과 · `completed.md` · `carryover.md`의 다�
 
 ## 결과
 
-(구현 뒤 적는다.)
+구현 `903bd81`(커널) · `3c71b5f`(나머지, 서브에이전트) · `0e1b888` · pm 한 줄. plan과 다른 자리:
+
+1. reload 갈래는 `next_spawn`이 아니라 `now`다 — terminal argv에 안 들고 `sethostname`이 곧바로 먹는다(design 결정 2를 고쳤다).
+2. 기본 이름 `tars`가 프롬프트를 두 칸 줄여(`root@(none) ~#` → `root@tars ~#`) plan에 없던 체인 열하나의 프롬프트 판정과 칸 수 둘
+   (cursor `col=15 → 13`, copy `col 20 → 18`)을 고쳤다. pm 체인 한 자리는 놓쳤고 루트 게이트가 찾았다.
+3. `config.MAX_FILE` 4096 → 8192. seed에 두 줄이 늘자 설치기의 `user=` 꼬리와 합쳐 넘었다(`config.save`가 실패해 설치기가 `tars.conf`를
+   못 쓴다). CO-M1의 seed도 32자 사용자 이름이면 1바이트 넘쳤다 — `config_test`에 그 검사를 더했다.
+4. sudo 판정(home 8g)은 두 tty로 실제 동작을 본다 — 시리얼(ttyS0)에서 `sudo -v` 뒤, `sudo -u hpuser`가 주는 새 pty에서 `sudo -n id -u`가 0.
+5. 체인에 `getent`가 없어 `grep air /etc/hosts`.
+6. 해소본이 따라 켠 것: `SECURITY_NETWORK` · `SECURITY_PATH`(Landlock의 select). `INTEGRITY`는 `default y`라 껐다.
+
+첫 판에 빨갰던 판정 셋 — 모두 게이트 쪽이었다:
+- tools 검사 24와 config의 `/etc/hosts` 판정: 화면 dump는 탭이 건너뛴 칸을 싣지 않아 `0\t2147483647`이 `02147483647`,
+  `127.0.1.1\tair`가 `127.0.1.1air`로 붙는다. `[[:space:]]+`를 `*`로.
+- config 체인의 `if ! grep -q … || ! grep -q …`가 루트 게이트의 입구 검사(일찍 끝나는 grep)에 걸렸다 — 체인 단독 실행은 그 검사를
+  안 지난다. 새 체인 줄은 lessons의 입구 검사 한 줄에 먼저 대 본다.
+
+잰 것: bzImage 11,437,056 → 11,486,208 B(+48KiB). `ping`은 새 라이브러리 0개(libcap · libidn2는 initrd에 있었다).
+게이트가 덤으로 본 것: pm 체인의 `brew install hello`가 `Sandbox unavailable` 대신 `Landlock ABI: 7`과
+`Landlock ABI 10 or later is required to deny all network access; found ABI 7. Applying the network restrictions supported by this kernel.`를
+찍었다 — Homebrew의 샌드박스가 섰다(망 전부를 막는 것은 ABI 10부터라 6.18에서는 일부만).
+
+게이트: 컨테이너 init `zig build test` 47/47, `make quick` PASS, 체인 tools · home · config 단독 PASS.
+루트 게이트(2026-11-12, `0e1b888`의 코드): 32/33 — 34분 51초(prebuild 344초 + lanes 1,614초), 잘린 줄 0, `out/gate-logs/20261111-162704`. 빨간 하나는 pm(PM-M0)의 화면 판정이 옛 프롬프트 `tars@(none) ~>`를 기다린 것(LT-M0이 놓친 자리)이고, 그 한 줄을 고친 뒤 pm 단독이 초록이었다. 커널 · init · initrd는 그 사이 바뀌지 않아 게이트를 통째로 다시 돌리지 않았다.

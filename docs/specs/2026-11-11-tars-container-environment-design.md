@@ -3,7 +3,7 @@
 접두사: CE
 
 Date: 2026-11-11
-Status: 진행 중(2026-11-11 — 사용자 "1번으로 가자. 조사부터. 완성 작업까지 결정을 위임합니다"). plan은 milestone마다
+Status: 닫힘(2026-11-12, CE-M0 루트 bind · CE-M1 커널과 cgroup2 · CE-M2 묶음 `container`와 docker 서비스, 루트 게이트 32/33 + pm 단독). 사용자 "1번으로 가자. 조사부터. 완성 작업까지 결정을 위임합니다"(2026-11-11). plan은 milestone마다
 `docs/plans/2026-11-11-tars-container-environment-ce-m<N>.md`.
 
 계기: TP-M12(2026-11-08)에서 `codex sandbox linux`가 `bwrap: Creating new namespace failed, likely because the kernel does not support

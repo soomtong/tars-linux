@@ -2,7 +2,7 @@
 
 Date: 2026-11-11
 Design: `docs/specs/2026-11-11-tars-container-environment-design.md`(결정 4~8)
-Status: 진행 중. 결정은 사용자 위임(2026-11-11).
+Status: 끝났다(2026-11-12). 결정은 사용자 위임(2026-11-11).
 
 ## 착수 전에 확정한 것
 
@@ -77,4 +77,25 @@ buildx, 망 없는 이미지(`docker import`)의 컨테이너가 `127.0.0.1:8080
 
 ## 결과
 
-(게이트 뒤 적는다.)
+구현 `ec3ea14` · `3be23ba`(forward 체인). devtools 체인의 편집은 서브에이전트, 나머지는 lead. plan과 다른 자리:
+
+1. 체인의 포트는 8090 · 8091이다 — 8080 · 8081은 그 체인에서 서버 묶음의 nginx · caddy가 쓴다(서브에이전트가 찾았다).
+2. 방화벽을 고쳤다(plan에 없던 일, 서브에이전트가 체인을 쓰다 찾았다): `/etc/tars/firewall.nft` · `firewall-base.nft`의 첫 줄
+   `flush ruleset`과 `firewall=off` reload의 `nft flush ruleset`이 dockerd의 표까지 지웠다 — 떠 있는 컨테이너의 망이 끊긴다. 표 하나만
+   다시 짓고(`table ip tars` · `delete table ip tars` · 정의) `nft destroy table ip tars`로 지운다. firewall 체인 검사 19의 글자를 맞췄다.
+3. forward 체인을 더했다(첫 커밋 뒤 자동 보안 검토가 짚었다): docker 템플릿이 `ip_forward=1`을 쓰면 `firewall=on`인 기계도 NIC 사이로
+   패킷을 넘겼다. `table ip tars`에 `forward`(`policy drop` — 맺어진 연결 · `ct status dnat` · `iifname "docker0"` · `"br-*"`).
+   망이 있는 프로브: 방화벽을 켠 채 기본 bridge와 `docker network create`의 bridge에서 밖으로 HTTP · ping, 밖 → `-p 0.0.0.0:8090`
+   응답, 밖 → 루프백 전용 8091은 안 닿는다. 순서 셋(부팅 때 방화벽 먼저 · reload로 나중에 · dockerd 재시작) 모두 같았다.
+   그 프로브의 첫 판에서 밖 → 8090이 한 번 시간 초과였다 — 망이 reload로 막 올라온 직후였고 다시 나지 않았다. 원인은 못 가렸다.
+4. `ctr`을 뺐다(확인 3). 기본 판 ISO는 2,144,516,096 B — 2GiB까지 약 3MB.
+
+devtools 체인(게이트 안, 701초): `dockerd opened its API (6865ms) on a root:tars 660 socket`, `docker import made tars/caddy offline
+(18614ms) and its container answered on 127.0.0.1:8090 (4240ms) with a 64m cgroup limit`, `poweroff stopped the six services (docker
+included) first in 2266ms`, 부팅 3 `dockerd came back on its own with the firewall up (both tables), tars/caddy is still there, keep is Up`.
+단독 첫 판에 PASS였다(19분 8초).
+
+게이트가 안 보는 것: 망이 있어야 하는 길 전부(`docker pull` · 컨테이너의 나가는 길 · 밖에서 들어오는 포트 — 프로브로만 봤다),
+`codex` · `claude`의 샌드박스(codex는 프로브로 봤다).
+
+루트 게이트(2026-11-12, `0e1b888`의 코드): 32/33 — 34분 51초(prebuild 344초 + lanes 1,614초), 잘린 줄 0, `out/gate-logs/20261111-162704`. 빨간 하나는 pm(PM-M0)의 화면 판정이 옛 프롬프트 `tars@(none) ~>`를 기다린 것(LT-M0이 놓친 자리)이고, 그 한 줄을 고친 뒤 pm 단독이 초록이었다. 커널 · init · initrd는 그 사이 바뀌지 않아 게이트를 통째로 다시 돌리지 않았다.
