@@ -33,8 +33,9 @@ sudo tars-config reload                   # 고친 것을 지금 반영
 | `firewall` | `off` | `tars-help services` |
 | `keyboard` · `hangul_layout` · `hangul_toggle` | `auto` · `shin_pcs` · 넷 다 | `tars-help desk` |
 | `cursor_shape` | `block` | 프로그램이 정하지 않았을 때의 커서 모양 — `block` · `bar` · `underline`. vim은 그대로 모드마다 바꿉니다 |
+| `hostname` | `tars` | 이 기계의 이름 — 영문 소문자 · 숫자 · `-`로 63자까지, `-`로 시작하거나 끝나지 않습니다. 프롬프트 · git · sudo가 봅니다 |
 
-`reload` 뒤 망 · 방화벽 · 서비스는 바로 바뀌고, 셸과 시간대는 다음에 여는 셸부터 바뀝니다. 화면 쪽 키(자판 · 키보드 · 클립보드 · 배율 · 전체 화면 · 커서 모양)는
+`reload` 뒤 망 · 방화벽 · 서비스 · 기계 이름은 바로 바뀌고(이미 열린 셸의 프롬프트는 옛 이름 그대로입니다), 셸과 시간대는 다음에 여는 셸부터 바뀝니다. 화면 쪽 키(자판 · 키보드 · 클립보드 · 배율 · 전체 화면 · 커서 모양)는
 `sudo tars-config reload terminal`로 화면을 다시 띄워야 바뀝니다 — 열린 패널이 모두 닫힙니다.
 
 ## sudo 비밀번호

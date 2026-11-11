@@ -123,6 +123,8 @@ fn expect(text: []const u8, want: config.Config) !void {
         got.display_scale == want.display_scale and
         // CO-M1: 커서 모양. 이 줄이 없으면 아래 cursor_shape 검사가 아무것도 안 보고 초록이다.
         got.cursor_shape == want.cursor_shape and
+        // LT-M0: 이 기계의 이름. 이 줄이 없으면 아래 hostname 검사가 아무것도 안 보고 초록이다.
+        got.hostname.eql(want.hostname) and
         // HP-M1: 열넷째 필드. 이 줄이 없으면 아래 user 검사가 아무것도 안 보고 초록이다.
         config.User.eql(got.user, want.user) and
         // `std.meta.eql`인 이유는 `Toggles`가 struct이기 때문이다 —
@@ -1152,6 +1154,50 @@ pub fn main() !void {
     try expect("cursor_shape=\n", .{});
     try expect("cursor_shape=bar\ncursor_shape=beam\n", .{ .cursor_shape = .bar });
 
+    // ── LT-M0: hostname ─────────────────────────────────────────────────
+    //
+    // timezone과 같은 모양의 자유 문자열 키이고 규칙은 DNS label 하나다(LT design 결정 2).
+    const air = config.Hostname.parse("air") orelse return error.HostnameDidNotParse;
+    try expect("hostname=air\n", .{ .hostname = air });
+    try expect("hostname=tars\n", .{});
+    try expect("hostname=mbp-2013\n", .{ .hostname = config.Hostname.parse("mbp-2013") orelse return error.HostnameDidNotParse });
+    try expect("hostname=7\n", .{ .hostname = config.Hostname.parse("7") orelse return error.HostnameDidNotParse });
+    // 길이 경계. 63은 담기고 64는 안 담긴다.
+    try expect("hostname=" ++ &@as([63]u8, @splat('a')) ++ "\n", .{
+        .hostname = config.Hostname.parse(&@as([63]u8, @splat('a'))) orelse return error.HostnameDidNotParse,
+    });
+    // 거르는 것 일곱(plan Task 3). 빈 값 · 64자 · 대문자(소문자로 바꾸지 않는다) · 밑줄 · 앞의 `-` ·
+    // 뒤의 `-` · 점(label이 둘이 된다).
+    try expect("hostname=\n", .{});
+    try expect("hostname=" ++ &@as([64]u8, @splat('a')) ++ "\n", .{});
+    try expect("hostname=Air\n", .{});
+    try expect("hostname=my_mac\n", .{});
+    try expect("hostname=-air\n", .{});
+    try expect("hostname=air-\n", .{});
+    try expect("hostname=air.local\n", .{});
+    // 틀린 줄은 앞의 값을 지우지 않는다.
+    try expect("hostname=air\nhostname=Air\n", .{ .hostname = air });
+    if (!std.mem.eql(u8, config.Hostname.DEFAULT.slice(), "tars")) {
+        std.debug.print("FAIL: the default hostname is '{s}'\n", .{config.Hostname.DEFAULT.slice()});
+        return error.WrongDefaultHostname;
+    }
+    // `/etc/hosts`의 글자. 첫 줄은 make_initrd.sh가 굽는 localhost 줄 그대로다 — init이 이 파일을 덮어쓰므로
+    // 그 줄이 빠지면 loopback의 `localhost`가 myhostname에만 기대게 된다.
+    {
+        var hosts_buf: [config.HOSTS_MAX]u8 = undefined;
+        const hosts = config.hostsText(&hosts_buf, air);
+        if (!std.mem.eql(u8, hosts, "127.0.0.1 localhost\n127.0.1.1\tair\n")) {
+            std.debug.print("FAIL: /etc/hosts for air is:\n{s}\n", .{hosts});
+            return error.WrongHostsText;
+        }
+        // 가장 긴 이름이 버퍼를 꼭 채운다.
+        const longest_name = config.Hostname.parse(&@as([config.HOSTNAME_MAX]u8, @splat('a'))) orelse return error.HostnameDidNotParse;
+        if (config.hostsText(&hosts_buf, longest_name).len != config.HOSTS_MAX) {
+            std.debug.print("FAIL: the longest hostname does not fill HOSTS_MAX\n", .{});
+            return error.WrongHostsText;
+        }
+    }
+
     // ── EL-M0: esc_latin ────────────────────────────────────────────────
     //
     // shell_config와 같은 모양이다. 기본값이 `on`이라 끄는 쪽을 적어야 값이
@@ -1380,6 +1426,14 @@ fn userChecks() !void {
     if (std.mem.indexOf(u8, plain, "user") != null) return error.SeedMentionsUser;
     // 꼬리가 붙어도 load가 읽는 한도 안이다.
     if (with_user.len >= config.MAX_FILE) return error.SavedFileTooBig;
+    // LT-M0. 가장 긴 사용자 이름(32자)의 꼬리도 든다. 4096이던 MAX_FILE은 CO-M1의 seed에서 이 경우에
+    // 한 바이트가 넘쳤고 hostname의 seed 줄이 더해지자 짧은 이름도 넘쳤다 — 설치기가 tars.conf를 못 쓴다.
+    {
+        const longest_user = config.User.parse(&@as([32]u8, @splat('a'))) orelse return error.UserDidNotParse;
+        var long_buf: [config.MAX_FILE]u8 = undefined;
+        const with_long = try saveAndRead("hp-long-user.conf", .{ .user = longest_user }, &long_buf);
+        if (with_long.len >= config.MAX_FILE) return error.SavedFileTooBig;
+    }
     std.debug.print("config_test: user= saved {d} bytes ({d} without it)\n", .{ with_user.len, plain.len });
 }
 

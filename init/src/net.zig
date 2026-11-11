@@ -89,6 +89,80 @@ pub fn loopbackUp() void {
     logline.print("tars-init: lo up\n", .{});
 }
 
+// ── LT-M0. ping과 이 기계의 이름 ─────────────────────────────────────────
+
+/// 사용자가 ICMP datagram 소켓을 여는 그룹의 범위(LT design 결정 1). 커널 기본값 `1 0`은 아무 그룹도
+/// 아니라서, setuid도 file capability도 없는 우리 `ping`(initrd의 cpio는 xattr을 안 싣는다)은 root만 쓴다.
+const PING_GROUP_RANGE_PATH: [*:0]const u8 = "/proc/sys/net/ipv4/ping_group_range";
+
+/// 모든 그룹. systemd가 Debian에 까는 sysctl 기본값(`50-default.conf`)과 같다.
+const PING_GROUP_RANGE_ALL = "0 2147483647";
+
+/// 모든 사용자가 `ping`을 쓰게 한다. `main()`이 `/proc`을 붙이고 `lo`를 올린 바로 뒤에 부른다 —
+/// 설정을 안 보고(키가 없다), 망 데몬보다 앞이다.
+///
+/// 성공은 조용하다. 부팅마다 같은 값이라 줄이 알려 줄 것이 없고, 실패해도 부팅은 간다 — 잃는 것은
+/// root가 아닌 사용자의 `ping`뿐이다.
+pub fn openPingToUsers() void {
+    if (writeFile(PING_GROUP_RANGE_PATH, PING_GROUP_RANGE_ALL)) |e| {
+        logline.print("tars-init: cannot open ping to users (errno {d})\n", .{@backingInt(e)});
+    }
+}
+
+const HOSTNAME_PATH: [*:0]const u8 = "/etc/hostname";
+const HOSTS_PATH: [*:0]const u8 = "/etc/hosts";
+
+/// 이 기계의 이름을 정한다(LT design 결정 2). 부팅에는 `readConfig`가 설정을 읽은 뒤 · 자식을 띄우기
+/// 전에, reload에는 `hostname=`이 바뀌었을 때 부른다. 셋을 한다 — 커널의 이름(`sethostname`),
+/// `/etc/hostname`(이름과 개행), `/etc/hosts`(localhost 줄과 `127.0.1.1 <이름>`).
+///
+/// 파일 둘은 initrd(tmpfs의 루트)에 있어 부팅마다 initrd의 것으로 돌아온다. 그래서 진실은 `tars.conf`
+/// 하나이고 이 함수는 부팅마다 다시 쓴다.
+///
+/// 실패하면 false다. 무엇이 안 됐는지는 줄 하나로 남고 부팅은 간다. 성공하면
+/// `tars-init: hostname NAME` 한 줄이다 — 게이트가 이 줄을 본다.
+pub fn applyHostname(name: config.Hostname) bool {
+    const s = name.slice();
+    if (failed(linux.syscall2(.sethostname, @intFromPtr(s.ptr), s.len))) |e| {
+        logline.print("tars-init: cannot set the hostname to {s} (errno {d})\n", .{ s, @backingInt(e) });
+        return false;
+    }
+    var line: [config.HOSTNAME_MAX + 1]u8 = undefined;
+    @memcpy(line[0..s.len], s);
+    line[s.len] = '\n';
+    if (writeFile(HOSTNAME_PATH, line[0 .. s.len + 1])) |e| {
+        logline.print("tars-init: hostname {s}, but cannot write /etc/hostname (errno {d})\n", .{ s, @backingInt(e) });
+        return false;
+    }
+    var hosts: [config.HOSTS_MAX]u8 = undefined;
+    if (writeFile(HOSTS_PATH, config.hostsText(&hosts, name))) |e| {
+        logline.print("tars-init: hostname {s}, but cannot write /etc/hosts (errno {d})\n", .{ s, @backingInt(e) });
+        return false;
+    }
+    logline.print("tars-init: hostname {s}\n", .{s});
+    return true;
+}
+
+/// 파일 하나를 이 글자로 덮어쓴다. 실패하면 errno다. `/proc/sys`의 파일도 같은 길이다 —
+/// `O_CREAT`는 거기서 무시되고 `O_TRUNC`는 해가 없다.
+fn writeFile(path: [*:0]const u8, text: []const u8) ?linux.E {
+    const rc = linux.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644);
+    if (failed(rc)) |e| return e;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var done: usize = 0;
+    while (done < text.len) {
+        const n = linux.write(fd, text[done..].ptr, text.len - done);
+        if (failed(n)) |e| {
+            if (e == .INTR) continue;
+            return e;
+        }
+        if (n == 0) return .IO;
+        done += n;
+    }
+    return null;
+}
+
 // WN-M2. 여기에 있던 것 — 인터페이스 이름 상수 `eth0`, `/sys/class/net/eth0`을
 // 열어 보는 확인, `SIOCGIFFLAGS` · `SIOCSIFFLAGS`로 `IFF_UP`을 세우는 ioctl과 그
 // `struct ifreq` — 을 전부 뺐다. 인터페이스를 고르고 올리는 일이 dhcpcd에게

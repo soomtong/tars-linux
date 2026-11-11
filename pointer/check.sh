@@ -550,7 +550,7 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 [ "$READY" = "1" ] || report_failure "terminal never rendered a prompt"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "the shell prompt never showed up"
 sleep 1
 
@@ -773,8 +773,8 @@ echo "shown again: $(last_at)"
 # 뒤에 찍히므로, 새 at 줄이 보이면 같은 프레임의 scroll> 줄은 이미 있다.
 echo "=== wheel over the pane ==="
 type_keys s e q spc 2 0 0 ret
-wait_for_screen '\| 200 \| root@\(none\) ~#' ||
-  report_failure "seq 200 did not finish (no '| 200 | root@(none) ~#' on the screen)"
+wait_for_screen '\| 200 \| root@tars ~#' ||
+  report_failure "seq 200 did not finish (no '| 200 | root@tars ~#' on the screen)"
 sleep 1
 hmp "mouse_move -1 -1"
 wait_for_at "^terminal: pointer> at x=679 y=499 buttons=0 wheel=0 shown=1 ink=${ARROW_INK}\$" ||
@@ -1104,8 +1104,8 @@ echo "clamped drag: $(last_clip)"
 # 선택이 된다. 그것은 pointer_test 검사 22가 부팅 전에 잡는다.
 echo "=== a wheel notch while pressed scrolls the pressed pane and moves the end ==="
 type_keys s e q spc 1 2 0 spc 1 6 0 ret
-wait_for_screen '\| 160 \| root@\(none\) ~#' ||
-  report_failure "seq 120 160 did not finish (no '| 160 | root@(none) ~#' on the screen)"
+wait_for_screen '\| 160 \| root@tars ~#' ||
+  report_failure "seq 120 160 did not finish (no '| 160 | root@tars ~#' on the screen)"
 ROW="$(screen_row 150)"
 [ "$ROW" -ge 3 ] || report_failure "150 is not on the last screen with three rows above it (row ${ROW})"
 move_to "$(cell_x 0)" "$(cell_y "$ROW")" ||
@@ -1564,7 +1564,7 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 [ "$READY" = "1" ] || report_failure "boot B: terminal never rendered a prompt"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot B: the shell prompt never showed up"
 grep -a 'tars-init: mounted ext2 at /config' "$LOG" >/dev/null ||
   report_failure "boot B: the config disk was not mounted at /config"
@@ -1608,7 +1608,7 @@ echo "drivers: ${DRV_LINE}"
 # 스크롤백을 만들어 둔다(검사 24). 도구는 패널 안에서 돌고 찍지 않으므로 그동안
 # 이 스크롤백이 그대로다.
 type_keys s e q spc 2 0 0 ret
-wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+wait_for_screen '\| 200 \| root@tars ~#' ||
   report_failure "boot B: seq 200 did not finish"
 
 # ── 검사 21: 도구가 만든 터치패드를 터치패드로 연다 ─────────────────────
@@ -1973,7 +1973,7 @@ wait_for_screen 'unix  5:6 ' || report_failure "vim did not move its cursor to 5
 # 다시 보이면 끝난 것이다 — 그 줄은 vim이 도는 동안(대체 화면)에는 안 보인다.
 SCREENS_N="$(screen_lines)"
 type_keys shift-semicolon q ret
-wait_for_new_screen "$SCREENS_N" '\| root@\(none\) ~# vim /config/pd/lines \|' ||
+wait_for_new_screen "$SCREENS_N" '\| root@tars ~# vim /config/pd/lines \|' ||
   report_failure "vim did not quit back to the shell after :q"
 echo "vim: clicked to 5:6"
 
@@ -1992,7 +1992,7 @@ wait_for_pane '^terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 ' ||
 # 새 셸의 프롬프트가 그 패널의 첫 줄에 보일 때까지. 그 전에 친 글자는 fish가
 # 시작하며 버릴 수 있다. wait_for_screen은 로그 전체를 보므로 옛 프롬프트에
 # 맞는다 — Cmd+D 뒤의 screen> 줄만 본다.
-wait_for_new_screen "$SCREENS_N" 'terminal: screen> root@\(none\) ~#' ||
+wait_for_new_screen "$SCREENS_N" 'terminal: screen> root@tars ~#' ||
   report_failure "the new pane never showed a prompt on its first row"
 probe_start p 18 10 1000 1006 || report_failure "the probe never printed pd-mouse-ready-p in the right pane"
 type_keys meta_l-bracket_left
@@ -2073,7 +2073,7 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 [ "$READY" = "1" ] || report_failure "boot C: terminal never rendered a prompt"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot C: the shell prompt never showed up"
 sleep 1
 
@@ -2111,7 +2111,7 @@ wait_for_log "terminal: pointer> open /dev/input/event[0-9]+ kind=mouse scroll=n
 # 부호를 안 곱하면(mutation a) 바닥에서 아래로 가려 하므로 offset이 그대로다.
 echo "=== boot C (다): a natural mouse wheel pulled back shows what is above ==="
 type_keys s e q spc 2 0 0 ret
-wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+wait_for_screen '\| 200 \| root@tars ~#' ||
   report_failure "boot C: seq 200 did not finish"
 sleep 1
 OFF0="$(scroll_field offset)"
@@ -2258,7 +2258,7 @@ wait_for_log 'terminal: pointer prefs mouse_scroll=natural touchpad_scroll=natur
   report_failure "boot C: no terminal came up with touchpad_scroll=natural after reload terminal"
 grep -aE 'tars-init: reload terminal: pid [0-9]+, .* mouse_scroll=natural touchpad_scroll=natural mouse_accel=0 touchpad_accel=10' "$LOG" >/dev/null ||
   report_failure "boot C: init did not log the new argv's pointer values on reload terminal"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot C: the new terminal's shell prompt never showed up"
 wait_for_count pointer_count 'open ' "$((OPENS_BEFORE + 1))" ||
   report_failure "boot C: the new terminal never opened the PS/2 mouse again"
@@ -2267,7 +2267,7 @@ PS2_OPENS="$(grep -acE "terminal: pointer> open /dev/input/event[0-9]+ kind=mous
   report_failure "boot C: the new terminal did not open the PS/2 mouse with scroll=natural"
 
 type_keys s e q spc 2 0 0 ret
-wait_for_screen '\| 200 \| root@\(none\) ~#' ||
+wait_for_screen '\| 200 \| root@tars ~#' ||
   report_failure "boot C: seq 200 did not finish in the new terminal"
 type_keys slash c o n f i g slash p d slash t p minus r e p l a y ret
 wait_for_count pointer_count 'open ' "$((OPENS_BEFORE + 2))" ||

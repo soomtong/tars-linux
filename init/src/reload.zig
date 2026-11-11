@@ -27,10 +27,14 @@ pub const Group = enum {
     boot,
 };
 
-/// 스물한 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
+/// 스물두 키의 갈래. `Config`의 필드 이름으로 고른다 — 필드를 더하고 여기를 빠뜨리면
 /// `groupOf`가 컴파일 에러를 낸다.
+///
+/// LT-M0의 `hostname`은 `now`다. reload가 `sethostname`과 두 파일을 그 자리에서 고치고, terminal의
+/// argv에 안 들어 화면 대기와 상관이 없다(새 패널은 새 이름을 본다). 이미 떠 있는 셸의 프롬프트가
+/// 옛 이름인 것은 셸이 시작할 때 이름을 읽기 때문이다(LT design 결정 2).
 pub fn groupOf(comptime key: []const u8) Group {
-    const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth" };
+    const now = [_][]const u8{ "net", "ntp", "firewall", "bluetooth", "hostname" };
     const next = [_][]const u8{ "shell", "shell_config", "timezone" };
     const term = [_][]const u8{
         "keyboard",      "hangul_layout", "latin_layout",    "hangul_toggle", "esc_latin",
@@ -56,11 +60,11 @@ pub fn onScreen(comptime key: []const u8) bool {
     };
 }
 
-/// 두 값이 같은가. 필드 타입마다 비교가 다르다 — enum은 `==`, `Ntp` · `Timezone`은 `eql`,
+/// 두 값이 같은가. 필드 타입마다 비교가 다르다 — enum은 `==`, `Ntp` · `Timezone` · `Hostname`은 `eql`,
 /// `Toggles`는 칸 다섯.
 fn same(comptime T: type, a: T, b: T) bool {
     if (T == config.Toggles) return std.meta.eql(a, b);
-    if (T == config.Ntp or T == config.Timezone or T == config.Accel) return a.eql(b);
+    if (T == config.Ntp or T == config.Timezone or T == config.Accel or T == config.Hostname) return a.eql(b);
     if (T == ?config.User) return config.User.eql(a, b);
     if (@typeInfo(T) == .@"enum") return a == b;
     @compileError("reload.same cannot compare a " ++ @typeName(T));
@@ -121,7 +125,8 @@ pub fn pending(live: config.Config, screen: config.Config) Keys {
 pub const VALUE_MAX = 64;
 
 comptime {
-    if (VALUE_MAX < config.TZ_NAME_MAX or VALUE_MAX < config.TOGGLE_ARG_MAX or VALUE_MAX < config.NTP_ARG_MAX)
+    if (VALUE_MAX < config.TZ_NAME_MAX or VALUE_MAX < config.TOGGLE_ARG_MAX or VALUE_MAX < config.NTP_ARG_MAX or
+        VALUE_MAX < config.HOSTNAME_MAX)
         @compileError("reload.VALUE_MAX is smaller than a value config.zig can hold");
 }
 
@@ -131,7 +136,7 @@ fn text(comptime T: type, v: T, buf: *[VALUE_MAX]u8) []const u8 {
     if (T == config.Toggles) return v.arg(buf);
     if (T == config.Ntp) return v.arg(buf);
     if (T == config.Accel) return v.arg();
-    if (T == config.Timezone) {
+    if (T == config.Timezone or T == config.Hostname) {
         const s = v.slice();
         @memcpy(buf[0..s.len], s);
         return buf[0..s.len];

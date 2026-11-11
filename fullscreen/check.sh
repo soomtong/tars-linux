@@ -190,7 +190,7 @@ boot() {
     sleep 1
   done
   [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
-  wait_for_screen 'root@\(none\) ~#' ||
+  wait_for_screen 'root@tars ~#' ||
     report_failure "the shell prompt never showed up"
   sleep 1
 
@@ -243,7 +243,7 @@ tlog | grep -a 'terminal: status> ink fg=0 (fullscreen)' >/dev/null ||
 
 # ── 판정 2: 프롬프트가 화면의 (0, 0)부터 찍혔다 ──────────────────────────
 #
-# 여백이 있으면 (0, 0) ~ (20, 20)은 여백 색 한 가지라 잉크가 0이다. 프롬프트 `root@(none) ~#`(14칸)의
+# 여백이 있으면 (0, 0) ~ (20, 20)은 여백 색 한 가지라 잉크가 0이다. 프롬프트 `root@tars ~#`(12칸, LT-M0 전에는 14칸 — 상자는 그대로 둔다)의
 # 첫 행이 (0, 0)부터 112 × 16이면 여백이 없다는 것이다.
 echo "=== boot A (2): the prompt starts at the top-left pixel ==="
 screendump "$FULL" || report_failure "boot A: screendump did not write ${FULL}"
@@ -346,7 +346,7 @@ wait_for_log 'tars-init: reload terminal: pid [0-9]+, .* fullscreen=on' ||
   report_failure "boot B: init's reload terminal line does not carry fullscreen=on"
 wait_for_log 'terminal: grid 160x50 \(fb 1280x800\)' ||
   report_failure "boot B: the restarted terminal's grid is not 160x50"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot B: the restarted terminal never showed a prompt"
 echo "boot B: reload terminal brought the screen back fullscreen"
 

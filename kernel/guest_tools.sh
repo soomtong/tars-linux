@@ -475,4 +475,11 @@ GUEST_TOOLS=(
   #   doge    DNS 질의(dig · nslookup · host가 없다)
   usr/local/upstream/bin/lsoff:usr/bin/lsoff
   usr/local/upstream/bin/doge:usr/bin/doge
+
+  # ── 층 21 · ping(LT-M0) ──────────────────────────────────────────────
+  # 기준 B — 설치 전 · 묶음 없는 부팅에서 망 연결을 본다(curl은 ICMP를 못 한다). iputils-ping, Dockerfile 층 21.
+  # 새 라이브러리는 0개다(libcap · libidn2는 ps · curl이 이미 데려왔다). Debian이 붙이는 file capability는 cpio에
+  # 실리지 않는다 — root가 아닌 사용자는 init이 부팅에 여는 net.ipv4.ping_group_range로 ICMP datagram 소켓을 쓴다
+  # (init/src/net.zig). tools 체인 검사 24가 root로, home 체인 판정 11이 uid 1000으로 친다.
+  usr/bin/ping:usr/bin/ping
 )

@@ -137,7 +137,19 @@ TC_LIST_WANT=(shell=fish keyboard=auto hangul_layout=shin_pcs latin_layout=qwert
               hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap
               shell_config=on net=off ntp=off timezone=UTC firewall=off bluetooth=off esc_latin=on
               clipboard=shared mouse_scroll=normal touchpad_scroll=natural mouse_accel=0 touchpad_accel=0
-              display_scale=auto cursor_shape=block)
+              display_scale=auto cursor_shape=block hostname=tars)
+
+# ── LT-M0: 이 기계의 이름 ──────────────────────────────────────────────
+# tars-config set hostname=Bad — 대문자는 소문자로 바꿔 받지 않고 거절한다(LT design 결정 2).
+LT_BAD_HOST_KEYS=(t a r s minus c o n f i g spc s e t spc h o s t n a m e equal shift-b a d ret)
+# tars-config set hostname=air — 1차는 reload로 지금 바꾸고, 2차는 3차가 부팅에 읽을 줄로 쓴다.
+LT_AIR_KEYS=(t a r s minus c o n f i g spc s e t spc h o s t n a m e equal a i r ret)
+# echo lt(uname -n) — fish. 판정 글자 `ltair`는 출력에만 생긴다(친 줄은 `lt(uname`).
+LT_UNAME_FISH_KEYS=(e c h o spc l t shift-9 u n a m e spc minus n shift-0 ret)
+# echo lt$(uname -n) — zsh(3차). 판정 글자는 같다.
+LT_UNAME_ZSH_KEYS=(e c h o spc l t shift-4 shift-9 u n a m e spc minus n shift-0 ret)
+# grep air /etc/hosts — init이 쓴 이름 줄. 친 줄에는 127.0.1.1이 없다. getent는 initrd에 없다. 화면 dump는 탭이 건너뛴 칸을 싣지 않아 `127.0.1.1air`로 붙는다 — [[:space:]]*로 본다.
+LT_HOSTS_KEYS=(g r e p spc a i r spc slash e t c slash h o s t s ret)
 # ls -l /config — 별칭이 정의됐다는 것과 도는 것은 다른 일이다(SM-M1이
 # fzf 위젯에 대해 같은 구분을 했다).
 #
@@ -618,6 +630,43 @@ edit_config_in_guest() {
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
+  # ── LT-M0: hostname은 reload가 지금 바꾼다 ──────────────────────────────
+  #
+  # 거절 하나, 바꾸기 하나, reload 하나. hostname은 `now`의 키라 reload의 답이 `(now)`이고, 바로 뒤 uname과
+  # /etc/hosts가 새 이름을 말한다. 화면 대기에 안 드므로 아래 reload terminal 판정들(대기가 빈다)이 그대로다.
+  # 아래 EDIT_KEYS가 이 파일을 덮어쓰므로 air는 2차로 안 넘어간다 — 부팅이 읽는 air는 2차가 써서 3차가 본다.
+  type_keys "${LT_BAD_HOST_KEYS[@]}"
+  if ! wait_for_screen "\\| tars-config: hostname=Bad: init would say \"unknown hostname 'Bad', falling back to tars\""; then
+    echo "FAIL(boot 1): 'tars-config set hostname=Bad' was not refused in init's words"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${LT_AIR_KEYS[@]}"
+  if ! wait_for_screen '\| hostname: tars -> air'; then
+    echo "FAIL(boot 1): 'tars-config set hostname=air' never answered 'hostname: tars -> air'"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${TC_RELOAD_KEYS[@]}"
+  if ! wait_for_screen '\| hostname: tars -> air \(now\)'; then
+    echo "FAIL(boot 1): reload did not change hostname now"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${LT_UNAME_FISH_KEYS[@]}"
+  if ! wait_for_screen '\| ltair( \||$)'; then
+    echo "FAIL(boot 1): uname -n did not say air after the reload"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${LT_HOSTS_KEYS[@]}"
+  if ! wait_for_screen '\| 127\.0\.1\.1[[:space:]]*air( \||$)'; then
+    echo "FAIL(boot 1): /etc/hosts has no 127.0.1.1 air line after the reload"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 1: hostname=Bad was refused; set hostname=air and reload made uname -n say air and /etc/hosts carry 127.0.1.1 air"
+
   type_keys "${TC_BAD_LINE_KEYS[@]}"
   type_keys "${TC_RELOAD_KEYS[@]}"
   if ! wait_for_screen "\\| error: /config/tars\\.conf: unknown shell 'fsh', falling back to fish; nothing changed"; then
@@ -876,8 +925,8 @@ edit_config_in_guest() {
 #      그대로 남아야 한다: 3차의 부정 검사는 "같은 셸이 같은 rc를 안 읽는다"
 #      여야 하고, 셸까지 바뀌면 무엇 때문에 안 읽혔는지 갈리지 않는다.
 #
-# 이 부팅의 셸은 zsh다. 프롬프트가 fish의 `root@(none) ~#`가 아니라
-# `(none)#`이지만(design 실측 14(e)) 타이핑하는 쪽은 그것을 안 봐도 된다 —
+# 이 부팅의 셸은 zsh다. 프롬프트가 fish의 `root@tars ~#`가 아니라
+# `tars#`이지만(design 실측 14(e) — LT-M0 전에는 `(none)#`) 타이핑하는 쪽은 그것을 안 봐도 된다 —
 # 판정은 전부 출력의 행 첫머리로 한다.
 # shellcheck disable=SC2329 # boot_once가 이름으로 부른다
 watch_console_shell() {
@@ -930,20 +979,23 @@ watch_console_shell() {
   echo "boot 2: vim read tabstop=3 from /.vimrc, the line the first boot appended"
 
   type_keys "${OFF_KEYS[@]}"
+  # LT-M0. 3차가 부팅에 읽을 이름. 셸도 shell_config도 아니라 3차의 부정 검사(같은 셸이 rc를 안 읽는다)를 안
+  # 흔든다. 3차의 셸은 다른 이름의 프롬프트로 뜨지만 그 체인의 판정은 전부 출력의 행 첫머리다.
+  type_keys "${LT_AIR_KEYS[@]}"
   type_keys "${READBACK_KEYS[@]}"
 
   local ok=0
-  if wait_for_screen '\| shell_config=off'; then ok=1; fi
+  if wait_for_screen '\| shell_config=off' && wait_for_screen '\| hostname=air'; then ok=1; fi
 
   exec 3<&-
   exec 3>&-
 
   if [ "$ok" != "1" ]; then
-    echo "FAIL(boot 2): 'tars-config set shell_config=off' did not land in /config/tars.conf"
+    echo "FAIL(boot 2): 'tars-config set shell_config=off' or 'hostname=air' did not land in /config/tars.conf"
     grep -a "terminal: screen>" "$log" | tail -1
     return 1
   fi
-  echo "boot 2: tars-config set shell_config=off for the third boot"
+  echo "boot 2: tars-config set shell_config=off and hostname=air for the third boot"
   return 0
 }
 
@@ -1000,6 +1052,25 @@ plant_broken_rc() {
     return 1
   fi
   echo "boot 3: planted a shell-killing 'exit' in /config/zshrc for the fourth boot"
+
+  # LT-M0. 2차가 쓴 hostname=air를 이 부팅의 init이 읽어 커널과 /etc/hosts에 넣었다. 판정 글자에 tars-rc-alive가 없다.
+  type_keys "${LT_UNAME_ZSH_KEYS[@]}"
+  if ! wait_for_screen '\| ltair( \||$)'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 3): uname -n did not say air on a boot whose tars.conf says hostname=air"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  type_keys "${LT_HOSTS_KEYS[@]}"
+  if ! wait_for_screen '\| 127\.0\.1\.1[[:space:]]*air( \||$)'; then
+    exec 3<&-
+    exec 3>&-
+    echo "FAIL(boot 3): /etc/hosts has no 127.0.1.1 air line on a boot with hostname=air"
+    grep -a "terminal: screen>" "$log" | tail -1
+    return 1
+  fi
+  echo "boot 3: the boot read hostname=air — uname -n says air and /etc/hosts carries 127.0.1.1 air"
 
   type_keys "${ON_KEYS[@]}"
   type_keys "${READBACK_KEYS[@]}"
@@ -1720,6 +1791,15 @@ if ! grep -q "tars-init: config shell=fish.*shell_config=on" "$LOG1"; then
 fi
 echo "boot 1: init reported shell_config=on (the sixth key reached the log)"
 
+# LT-M0. 빈 디스크의 seed는 hostname=tars이고 init이 부팅에 그 이름을 넣었다. 새 칸은 config 줄의 맨 끝이다.
+# 훅이 친 reload가 air로 바꾼 것도 같은 모양의 줄로 남는다(`net.applyHostname`).
+for want in "tars-init: config shell=fish.* hostname=tars" "tars-init: hostname tars" "tars-init: hostname air"; do
+  if ! grep -q "$want" "$LOG1"; then
+    report_failure "$LOG1" "first boot is missing: ${want}"
+  fi
+done
+echo "boot 1: init named the machine tars at boot and air on reload"
+
 # SC-M1 결정 7. seed 셋이 로그에 한 줄씩 남는다. 화면으로 보는 것은
 # fish의 것 하나뿐이고(1차 부팅의 셸이 fish다) 나머지 둘은 이 줄이 전부다 —
 # bash·zsh의 seed가 읽히는지는 이 milestone이 zsh에 대해서만 본다.
@@ -1901,6 +1981,10 @@ if ! grep -q "tars-init: config shell=zsh.*shell_config=off" "$LOG3"; then
 fi
 if ! grep -q "tars-init: started console shell (pid .*, /usr/bin/zsh)" "$LOG3"; then
   report_failure "$LOG3" "third boot did not exec /usr/bin/zsh on the serial console"
+fi
+# LT-M0. 2차가 쓴 hostname=air를 부팅이 읽었다. 화면의 uname · /etc/hosts는 훅이 봤다.
+if ! grep -q "tars-init: config shell=zsh.* hostname=air" "$LOG3" || ! grep -q "tars-init: hostname air" "$LOG3"; then
+  report_failure "$LOG3" "third boot did not take hostname=air from the file the second boot wrote"
 fi
 if ! grep -q "terminal: screen>" "$LOG3"; then
   report_failure "$LOG3" "the terminal never rendered on the third boot; the negative check would be vacuous"

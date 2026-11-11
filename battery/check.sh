@@ -199,7 +199,7 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 [ "$READY" = "1" ] || report_failure "boot A: terminal never rendered a prompt"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot A: the shell prompt never showed up"
 sleep 1
 

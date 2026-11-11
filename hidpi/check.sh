@@ -210,7 +210,7 @@ boot() {
     sleep 1
   done
   [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
-  wait_for_screen 'root@\(none\) ~#' ||
+  wait_for_screen 'root@tars ~#' ||
     report_failure "the shell prompt never showed up"
   # 첫 프레임의 present가 끝나도록 한 박자 준다(terminal/check.sh와 같다).
   sleep 1
@@ -254,7 +254,7 @@ tlog | grep -aE 'tars-init: config shell=.* display_scale=auto' >/dev/null ||
 #
 # 블록은 화면 전체를 본다 — 첫 프레임은 clip 없는 present(통째)라 늘리기가 화면 전체를 옮긴
 # 것이다. 늘리기가 빠지면 화면이 검고 블록은 고르다(0) — 그래서 잉크를 함께 본다. 프롬프트
-# `root@(none) ~#`(14칸)는 논리 (20, 20)부터 한 행이고 물리로는 (40, 40)부터 224 × 32다.
+# `root@tars ~#`(12칸, LT-M0 전에는 `root@(none) ~#` 14칸 — 상자는 그대로 둔다)는 논리 (20, 20)부터 한 행이고 물리로는 (40, 40)부터 224 × 32다.
 echo "=== boot A (2): the screendump is ${XRES}x${YRES} in 2x2 blocks with the prompt drawn ==="
 screendump "$BEFORE" || report_failure "boot A: screendump did not write ${BEFORE}"
 SIZE="$(ppm_size "$BEFORE")"
@@ -280,7 +280,7 @@ echo "=== boot A (3): a typed line reaches the physical screen through a partial
 type_keys e c h o spc backslash u d 5 5 c ret
 wait_for_log 'terminal: ink> [0-9]+,[0-9]+ U\+D55C left=[0-9]+ right=[0-9]+' ||
   report_failure "boot A: terminal never drew U+D55C (no ink> line)"
-wait_for_screen '한.*root@\(none\) ~#' ||
+wait_for_screen '한.*root@tars ~#' ||
   report_failure "boot A: the shell did not print U+D55C and come back to the prompt"
 sleep 1
 INK_LINE="$(tlog | grep -a 'terminal: ink> [0-9]*,[0-9]* U+D55C ' | tail -n 1 | tr -d '\r' | from_terminal)"
@@ -357,7 +357,7 @@ wait_for_log 'kms: scale 2 \(2880x1800 -> 1440x900\)' ||
   report_failure "boot B: the restarted terminal did not pick scale 2"
 wait_for_log 'terminal: grid 175x53 \(fb 1440x900\)' ||
   report_failure "boot B: the restarted terminal's grid is not 175x53"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot B: the restarted terminal never showed a prompt"
 echo "boot B: reload terminal brought the screen back at scale 2"
 

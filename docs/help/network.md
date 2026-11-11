@@ -42,6 +42,7 @@ sudo tars-config reload
 ```sh
 ip -4 addr                         # 주소를 받았는지 — lo 말고 한 줄이 더 있어야 합니다
 ip -4 route                        # default via … 한 줄
+ping -c 3 1.1.1.1                  # 밖까지 닿는지 — 이름 풀이 없이 주소로 봅니다
 sudo wpa_cli -i wlan0 status       # Wi-Fi: wpa_state=COMPLETED면 붙었습니다
 sudo iw reg get                    # country KR이 보여야 합니다
 sudo tars-service status dhcpcd    # 주소를 받는 일꾼이 도는지

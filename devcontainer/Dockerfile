@@ -612,6 +612,22 @@ RUN mkdir -p /tmp/upstream "$AMD64_SYSROOT/usr/local/upstream/bin" \
 RUN apt-get update && apt-get install -y --no-install-recommends squashfs-tools gpg \
     && rm -rf /var/lib/apt/lists/*
 
+# 층 21 · ping(LT-M0). iputils-ping 하나다. 고른 근거는 docs/guides/initrd-criteria.md의 기준 B(설치 전 · 묶음 없는 부팅에서
+# 망 연결을 본다) — curl은 ICMP를 못 한다. 맨 앞의 큰 apt 줄이 아니라 여기 둔 것은 위 squashfs-tools 줄과 같은 이유다 — 그 층의
+# 캐시를 안 깬다.
+#
+#   ping   156,136바이트. NEEDED는 libcap.so.2 · libidn2.so.0 · libc.so.6이고 셋 다 이미 initrd에 있다(ps · curl이 데려왔다).
+#          새 라이브러리는 0개다
+#
+# Debian은 ping을 setuid가 아니라 file capability(cap_net_raw)로 깐다. dpkg -x도 initrd(cpio)도 xattr을 안 실으므로 그
+# capability는 게스트에 없다 — root가 아닌 사용자의 ping은 init이 부팅에 여는 net.ipv4.ping_group_range로 ICMP datagram
+# 소켓을 쓴다(init/src/net.zig의 openPingToUsers, LT design 결정 1).
+RUN apt-get update \
+    && mkdir -p /tmp/debs \
+    && (cd /tmp/debs && apt-get download iputils-ping:amd64) \
+    && dpkg -x /tmp/debs/iputils-ping_*.deb "$AMD64_SYSROOT" \
+    && rm -rf /tmp/debs /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 # ghcr.io 패키지를 이 저장소에 연결한다(GI design 확인 6 — 저장소 페이지에 보이고 Actions 토큰이 올릴 수

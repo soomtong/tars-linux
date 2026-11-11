@@ -522,7 +522,7 @@ echo "dictation.jsonl keeps the sixteen successful runs with the raw text, the c
 # 부팅 B — terminal의 트리거 · 상태 · 삽입 (VD-M1)
 # ════════════════════════════════════════════════════════════════════════
 #
-# 사람이 하는 일을 monitor로 한다. 셸은 기본값 fish다(프롬프트 `root@(none) ~#`).
+# 사람이 하는 일을 monitor로 한다. 셸은 기본값 fish다(프롬프트 `root@tars ~#` — LT-M0 전에는 `root@(none) ~#`).
 #
 # 더블 탭은 `sendkey meta_r 80` 둘을 잇달아 보내는 것이다. sendkey는 누르고 hold(80ms) 뒤에
 # 떼고, QEMU는 그 뗌을 입력 큐에 지연과 함께 넣는다 — 둘째 sendkey의 누름은 그 뒤에 줄을
@@ -646,7 +646,7 @@ expect_recording() {
   wait_count 'terminal: dictate> start pid=' "$1" 15 || report_b "$2: the double tap started no dictation (want start #$1)"
   wait_count 'terminal: dictate> phase recording' "$1" 15 || report_b "$2: tars-dictate never said it was recording"
 }
-PROMPT='root@\(none\) ~#'
+PROMPT='root@tars ~#'
 TEXT='안녕하세요 vd2-cleaned'
 
 echo "=== boot B: the terminal triggers, shows and inserts (monitor ${MONITOR_PORT_B}) ==="

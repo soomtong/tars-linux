@@ -1339,10 +1339,11 @@ const Boot = struct {
         // 그 뒤에 붙였다. CB-M0의 `clipboard=`는 다시 그 뒤다. PS-M0의 포인터 넷은 또 그 뒤다
         // (`pane/check.sh`가 `config shell=.* clipboard=…`를 끝을 못 박지 않고 본다). HS-M0의
         // `display_scale=`은 맨 끝이다 — `pointer/check.sh`의 부팅 C도 끝을 못 박지 않는다. FU-M0의
-        // `fullscreen=`은 다시 그 뒤다. CO-M1의 `cursor_shape=`은 또 그 뒤다.
+        // `fullscreen=`은 다시 그 뒤다. CO-M1의 `cursor_shape=`은 또 그 뒤다. LT-M0의 `hostname=`도 같은 이유로
+        // 맨 끝이다 — 이 줄을 보는 체인 판정 가운데 줄 끝(`$`)에 묶인 것이 없는 것을 rg로 셌다.
         var ntp_buf: [config.NTP_ARG_MAX]u8 = undefined;
         logline.print(
-            "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s} display_scale={s} fullscreen={s} cursor_shape={s}\n",
+            "tars-init: config shell={s} keyboard={s} hangul={s} latin={s} toggles={s} shell_config={s} net={s} ntp={s} timezone={s} firewall={s} esc_latin={s} clipboard={s} mouse_scroll={s} touchpad_scroll={s} mouse_accel={s} touchpad_accel={s} display_scale={s} fullscreen={s} cursor_shape={s} hostname={s}\n",
             .{
                 @tagName(self.cfg.shell),
                 @tagName(self.cfg.keyboard),
@@ -1363,8 +1364,12 @@ const Boot = struct {
                 @tagName(self.cfg.display_scale),
                 @tagName(self.cfg.fullscreen),
                 @tagName(self.cfg.cursor_shape),
+                self.cfg.hostname.slice(),
             },
         );
+        // LT-M0(LT design 결정 2). 설정을 읽은 뒤 · 자식을 띄우기 전이다 — 처음 뜨는 셸의 프롬프트와
+        // sshd · 서비스가 이 이름을 본다. 실패해도 부팅은 간다(줄은 `net.applyHostname`이 찍는다).
+        _ = net.applyHostname(self.cfg.hostname);
     }
 
     /// 단계 3. DRM 존재 로그, 키보드 경로, 전원 버튼. sysfs를 붙인 뒤여야 한다.
@@ -1703,6 +1708,10 @@ fn mountEarly() void {
     // `lo`를 만들기만 하고 올리지 않으며(LB-M0 실측 1), 보통 리눅스에서 이
     // 일은 PID 1(systemd)이나 init 스크립트의 몫이다.
     net.loopbackUp();
+
+    // LT-M0(LT design 결정 1). `/proc`이 선 뒤 · 망 데몬보다 앞이다. 설정을 안 보는 것은 `lo`와 같다 —
+    // 사용자의 `ping`은 `net=off`인 기계에서도 `127.0.0.1`을 본다.
+    net.openPingToUsers();
 }
 
 pub fn main(init: std.process.Init.Minimal) void {

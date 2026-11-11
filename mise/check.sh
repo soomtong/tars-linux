@@ -400,7 +400,7 @@ wait_log_re "terminal: spawned child pid [0-9]+ \(.*\) as tars" 60 \
   || fail "terminal did not spawn its shell as tars" "terminal: spawned" "cannot drop"
 PROMPT_UP=0
 for _ in 1 2 3 4; do
-  if wait_for_screen 'tars@\(none\) ~>'; then PROMPT_UP=1; break; fi
+  if wait_for_screen 'tars@tars ~>'; then PROMPT_UP=1; break; fi
 done
 [ "$PROMPT_UP" = 1 ] || fail "the screen shell never drew the tars prompt" "terminal: screen>"
 if [ "$(joined_screen_dump | grep -aci 'mise')" != 0 ]; then

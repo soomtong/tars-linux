@@ -676,8 +676,12 @@ EOF
 #
 # sudoers의 값: secure_path는 게스트 PATH(environ.zig의 PATH_ENTRY)와 같다. lecture는 표시
 # 파일이 tmpfs라 부팅마다 다시 뜨므로 끈다. syslog 소켓이 없으므로 !syslog. !fqdn은 hostname이
-# 커널 기본값 `(none)`이라 sudo마다 찍히던 `unable to resolve host (none)`을 없앤다(HP-M2 실측).
-# timestamp는 기본(15분, /run/sudo/ts — 재부팅이 지운다). pwfeedback은 비밀번호 칸에 글자마다 `*`를
+# 커널 기본값 `(none)`이라 sudo마다 찍히던 `unable to resolve host (none)`을 없앤다(HP-M2 실측). LT-M0부터 init이
+# 이름(`tars.conf`의 hostname=, 기본 tars)과 /etc/hosts의 127.0.1.1 줄을 쓰므로 이름이 풀리지만 이 줄은 그대로 둔다(해가 없다).
+# timestamp는 15분(기본값, /run/sudo/ts — 재부팅이 지운다)이고 LT-M0부터 timestamp_type=global이다 — 기본(tty)은 화면의
+# 패널마다 pty가 달라 패널마다 비밀번호를 다시 물었다. 한 번 확인하면 15분 동안 그 사용자의 모든 패널 · ssh 세션이
+# 묻지 않는다. tty 단위 격리가 막는 것은 다른 tty에 앉은 다른 사람인데, 한 사람이 쓰는 이 기계에는 없다(LT design
+# 결정 5). sudo -k는 모든 tty의 확인을 함께 지운다. pwfeedback은 비밀번호 칸에 글자마다 `*`를
 # 찍는다 — tars-config · tars-install의 칸과 같은 모양이다(PW design 결정 9).
 #
 # /etc/shadow는 root 한 줄로 늘 있다. 사용자 있는 부팅은 init이 같은 첫 줄에 사용자를 더해 덮어쓰고
@@ -705,6 +709,7 @@ Defaults lecture=never
 Defaults !syslog
 Defaults !fqdn
 Defaults pwfeedback
+Defaults timestamp_type=global
 root  ALL=(ALL:ALL) ALL
 %sudo ALL=(ALL:ALL) ALL
 EOF

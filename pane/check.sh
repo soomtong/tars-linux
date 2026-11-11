@@ -788,7 +788,7 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 [ "$READY" = "1" ] || report_failure "boot B: terminal never rendered a prompt"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "boot B: the shell prompt never showed up"
 grep -a 'tars-init: mounted ext2 at /config' "$LOG" >/dev/null ||
   report_failure "boot B: the config disk was not mounted at /config"

@@ -46,6 +46,7 @@ const OTHER = [_]edit.Pair{
     .{ .key = "display_scale", .value = "2" },
     .{ .key = "fullscreen", .value = "on" },
     .{ .key = "cursor_shape", .value = "bar" },
+    .{ .key = "hostname", .value = "air" },
     .{ .key = "user", .value = "hpuser" },
 };
 
@@ -148,8 +149,8 @@ pub fn main() !void {
     // 기본값을 글자로 바꿨다가 되읽어 같은지도 본다 — valueText와 parse가 같은
     // 글자를 쓴다는 것이 `set`이 쓰는 줄을 init이 읽는다는 뜻이다.
     // 열여덟은 seed에 있고 `user`는 tars-install만 쓴다(HP-M1). PS-M0이 포인터 넷을, HS-M0이
-    // display_scale을, FU-M0이 fullscreen을, CO-M1이 cursor_shape을 더했다(그래서 스물이 seed에 있다).
-    if (edit.KEYS.len != 21) return fail("{d} keys, want 21 (twenty in the seed, and user)", .{edit.KEYS.len});
+    // display_scale을, FU-M0이 fullscreen을, CO-M1이 cursor_shape을, LT-M0이 hostname을 더했다(그래서 스물하나가 seed에 있다).
+    if (edit.KEYS.len != 22) return fail("{d} keys, want 22 (twenty-one in the seed, and user)", .{edit.KEYS.len});
     const defaults = config.Config{};
     for (edit.KEYS) |key| {
         var buf: [edit.VALUE_MAX]u8 = undefined;
@@ -181,11 +182,15 @@ pub fn main() !void {
     // 커서 모양은 셋이다(CO-M1). beam(다른 터미널이 쓰는 이름)은 거절이다.
     if (!std.mem.eql(u8, edit.hint("cursor_shape").?, "block | bar | underline")) return fail("cursor_shape hint {s}", .{edit.hint("cursor_shape").?});
     try expectRefused("cursor_shape", "beam", "unknown cursor_shape 'beam', falling back to block");
+    // 이 기계의 이름은 DNS label 하나다(LT-M0). 대문자는 소문자로 바꿔 받지 않고 거절한다.
+    if (!std.mem.eql(u8, edit.hint("hostname").?, "a name: a-z 0-9 -, up to 63")) return fail("hostname hint {s}", .{edit.hint("hostname").?});
+    try expectRefused("hostname", "Bad", "unknown hostname 'Bad', falling back to tars");
+    try expectRefused("hostname", "air.local", "unknown hostname 'air.local', falling back to tars");
     // set · reset이 안 받는 키는 user 하나다(HP-M1 plan 확정 5).
     for (edit.KEYS) |key| {
         if (edit.installOnly(key) != std.mem.eql(u8, key, "user")) return fail("installOnly({s})", .{key});
     }
-    std.debug.print("config_edit_test: twenty-one keys, each read back by parse as written; only user is install-only\n", .{});
+    std.debug.print("config_edit_test: twenty-two keys, each read back by parse as written; only user is install-only\n", .{});
 
     // ── 2. judge — init이 하는 말이 곧 거절의 이유다 ───────────────────
     try expectRefused("shell", "fsh", "unknown shell 'fsh', falling back to fish");
@@ -451,7 +456,7 @@ pub fn main() !void {
         const keys_tail = "#keyboard=auto\n#hangul_layout=shin_pcs\n#latin_layout=qwerty\n" ++
             "#hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\n#shell_config=on\n#net=off\n";
         const keys_end = "#ntp=off\n#timezone=UTC\n#firewall=off\n#bluetooth=off\n#esc_latin=on\n#clipboard=shared\n" ++
-            "#mouse_scroll=normal\n#touchpad_scroll=natural\n#mouse_accel=0\n#touchpad_accel=0\n#display_scale=auto\n#fullscreen=off\n#cursor_shape=block\n#user=\n";
+            "#mouse_scroll=normal\n#touchpad_scroll=natural\n#mouse_accel=0\n#touchpad_accel=0\n#display_scale=auto\n#fullscreen=off\n#cursor_shape=block\n#hostname=tars\n#user=\n";
         var sbuf: [2048]u8 = undefined;
         var s = control.Out{ .buf = &sbuf };
         edit.showKeyLines(&s, text, &c, null);

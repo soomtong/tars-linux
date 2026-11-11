@@ -169,7 +169,7 @@ boot() {
     sleep 1
   done
   [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
-  wait_for_screen 'root@\(none\) ~#' ||
+  wait_for_screen 'root@tars ~#' ||
     report_failure "the shell prompt never showed up"
   sleep 1
 
@@ -208,11 +208,12 @@ echo "(1) tars-init: config … cursor_shape=bar and terminal: cursor_shape=bar"
 #
 # 화면을 지우고 본다 — fish의 인사말은 색을 입혀 style 덤프를 늘린다. 셸은 DECSCUSR을 안 보내므로(CU 실측 8,
 # render 검사 20) 이 bar는 사용자의 기본값이다.
+# 칸 13은 프롬프트 `root@tars ~# `의 폭이다. LT-M0 전에는 이름이 `(none)`이라 15였다 — 이름을 바꾸는 사람은 이 수를 함께 본다.
 echo "=== (2) the prompt cursor is a bar ==="
 type_text "printf '\\033[H\\033[2J'"
 type_keys ret
-wait_for_cursor 'vt=bar drawn=bar row=0 col=15 cols=1 ink=32 box=2x16' ||
-  report_failure "the prompt cursor is not a bar at 0,15: $(last_cursor)"
+wait_for_cursor 'vt=bar drawn=bar row=0 col=13 cols=1 ink=32 box=2x16' ||
+  report_failure "the prompt cursor is not a bar at 0,13: $(last_cursor)"
 settle_cursor="$(last_cursor)"
 if [ "$(truncated_now)" -ne 0 ]; then report_failure "the style dump of the cleared screen was truncated"; fi
 if [ "$(inverted_now)" -ne 0 ]; then report_failure "a bar cursor left $(inverted_now) inverted cell(s), 0 expected"; fi
@@ -224,11 +225,11 @@ echo "(2) ${settle_cursor#*cursor> }, $(inverted_now) inverted cell(s)"
 echo "=== (3) CSI 2 SP q wins, CSI 0 SP q goes back to the bar ==="
 type_text "printf '\\033[H\\033[2J\\033[2 q'"
 type_keys ret
-wait_for_cursor 'vt=block drawn=block row=0 col=15 ' ||
+wait_for_cursor 'vt=block drawn=block row=0 col=13 ' ||
   report_failure "after CSI 2 SP q the cursor is not a block: $(last_cursor)"
 type_text "printf '\\033[H\\033[2J\\033[0 q'"
 type_keys ret
-wait_for_cursor 'vt=bar drawn=bar row=0 col=15 cols=1 ink=32 box=2x16' ||
+wait_for_cursor 'vt=bar drawn=bar row=0 col=13 cols=1 ink=32 box=2x16' ||
   report_failure "after CSI 0 SP q the cursor did not go back to the bar: $(last_cursor)"
 echo "(3) CSI 2 SP q -> block, CSI 0 SP q -> bar"
 
@@ -263,7 +264,7 @@ wait_for_log 'tars-init: reload terminal: pid [0-9]+, .* cursor_shape=underline'
   report_failure "init's reload terminal line does not carry cursor_shape=underline"
 wait_for_log 'terminal: cursor_shape=underline' ||
   report_failure "the restarted terminal did not log cursor_shape=underline"
-wait_for_screen 'root@\(none\) ~#' ||
+wait_for_screen 'root@tars ~#' ||
   report_failure "the restarted terminal never showed a prompt"
 wait_for_cursor 'vt=underline drawn=underline .* ink=16 box=8x2' ||
   report_failure "the restarted terminal's prompt cursor is not an underline: $(last_cursor)"

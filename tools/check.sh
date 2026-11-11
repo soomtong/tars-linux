@@ -676,6 +676,9 @@ echo "the global gitconfig resolved through the link into /config"
 #
 #   fatal: unable to auto-detect email address (got 'root@(none).(none)')
 #
+# LT-M0부터 호스트 이름은 `tars`지만 도메인이 없어서 git이 `.(none)`을 붙이고(`root@tars.(none)`),
+# 그 글자 때문에 여전히 거절한다고 읽었다(git ident.c — 게스트에서 재지는 않았다). 그래서 이 의존은 그대로다.
+#
 # 이름은 안 줘도 된다 — /etc/passwd의 gecos에서 `root`가 온다(UT-M0의 뼈대).
 # 그래서 검사 13이 실패하면 이 검사도 실패하고, 순서가 그 인과를 그대로
 # 보여 준다.
@@ -908,13 +911,55 @@ if ! wait_for_screen 'fs-rc=1( |$)'; then
 fi
 echo "tars-help listed its topics, printed the network chapter through a pipe and exited 1 for an unknown topic"
 
-# ── 검사 19: 음성 확인 — 위의 열하나 전부에 대해 ────────────────────
+# ── 검사 24: ping이 돈다 — 그리고 init이 사용자에게 ICMP를 열었다 (LT-M0) ──
 #
-# fish는 못 찾은 명령에 `Unknown command`를 낸다. 이 검사가 맨 뒤에 있는
-# 이유가 그것이다 — ls · ps · awk · sed · eza · fd · jq · git · vi · fzf ·
-# zoxide 열하나를 다 친 뒤에 한 번 보면 열하나 전부의 음성 확인이 된다.
-# UT-M0 때는 ls 하나뿐이라 바로 뒤에 있었다.
-# 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which)도 같은 그물에 걸린다.
+# 이 체인의 셸은 root라 권한은 여기서 못 본다(root의 ping은 raw 소켓을 쓴다). 보는 것은 둘이다 —
+# initrd의 ping이 라이브러리를 풀고 `lo`의 127.0.0.1에 한 번 갔다 오는가, 그리고 init이 부팅에
+# `ping_group_range`를 모든 그룹으로 썼는가(LT design 결정 1). uid 1000의 ping은 home 체인 판정 11이 친다.
+#
+# 판정 글자는 출력에만 생긴다.
+#   ping -c 1 -W 2 127.0.0.1; echo lt-ping=$status   친 줄은 $status. 출력은 lt-ping=0
+#   cat /proc/sys/net/ipv4/ping_group_range            친 줄에 숫자가 없다. 출력은 `0<TAB>2147483647` —
+#                                                      화면 dump는 탭이 건너뛴 칸을 싣지 않아 `02147483647`로
+#                                                      붙는다(첫 판에서 봤다) — [[:space:]]*로 본다
+echo "=== typing 'ping -c 1 -W 2 127.0.0.1; echo lt-ping=\$status' ==="
+type_keys p i n g spc minus c spc 1 spc minus shift-w spc 2 spc 1 2 7 dot 0 dot 0 dot 1 semicolon spc \
+          e c h o spc l t minus p i n g equal shift-4 s t a t u s ret
+if ! wait_for_screen 'lt-ping=0( |$)'; then
+  fail "ping 127.0.0.1 did not come back with 0" "terminal: screen>" "lt-ping=" "error while loading" "Unknown command"
+fi
+echo "=== typing 'cat /proc/sys/net/ipv4/ping_group_range' ==="
+type_keys c a t spc slash p r o c slash s y s slash n e t slash i p v 4 slash \
+          p i n g shift-minus g r o u p shift-minus r a n g e ret
+if ! wait_for_screen '(^|\| )0[[:space:]]*2147483647( |$)'; then
+  fail "ping_group_range is not 0 2147483647 (init did not open ping to users)" \
+    "terminal: screen>" "tars-init: cannot open ping"
+fi
+echo "ping went to 127.0.0.1 and back, and every group may open an ICMP socket"
+
+# ── 검사 25: 기종 이름을 /sys/class/dmi/id에서 읽는다 (LT-M0) ───────────────
+#
+# CONFIG_DMIID(LT design 결정 3). QEMU의 SMBIOS가 주는 제조사는 `QEMU`다 — 실기에서는 `Apple Inc.` 같은
+# 글자가 같은 자리에 온다. fish의 (…)로 감싸 판정 글자를 만든다. 친 줄은 `lt-dmi=(cat`이고 출력은 `lt-dmi=QEMU`다.
+echo "=== typing 'echo lt-dmi=(cat /sys/class/dmi/id/sys_vendor)' ==="
+type_keys e c h o spc l t minus d m i equal shift-9 c a t spc slash s y s slash c l a s s slash \
+          d m i slash i d slash s y s shift-minus v e n d o r shift-0 ret
+if ! wait_for_screen 'lt-dmi=QEMU'; then
+  fail "/sys/class/dmi/id/sys_vendor did not say QEMU (is CONFIG_DMIID on?)" \
+    "terminal: screen>" "lt-dmi=" "DMI:"
+fi
+echo "/sys/class/dmi/id/sys_vendor says QEMU"
+
+# ── 검사 26: Landlock이 섰다 (LT-M0) ─────────────────────────────────────────
+#
+# CONFIG_SECURITY_LANDLOCK과 CONFIG_LSM의 landlock(LT design 결정 4). 커널이 LSM을 세울 때 찍는 한 줄이 판정이다 —
+# 옵션만 켜고 CONFIG_LSM에 이름을 빠뜨리면 이 줄이 없다. 화면이 아니라 시리얼 로그를 본다.
+if ! grep -a "landlock: Up and running" "$LOG" >/dev/null; then
+  fail "the kernel never said Landlock is up (CONFIG_SECURITY_LANDLOCK, CONFIG_LSM)" "landlock" "LSM:"
+fi
+echo "the kernel brought Landlock up"
+
+# 그 뒤에 더해진 것(LB-M3의 nc, GE-M0의 which, LT-M0의 ping)도 같은 그물에 걸린다.
 #
 # 번호가 11 → 17 → 19로 뛴 것은 앞에 검사가 끼워졌기 때문이다(UT-M3이
 # 다섯, SM-M0이 둘). 음성 확인은 언제나 맨 뒤이고, 앞에 무엇이 늘든 이 검사는

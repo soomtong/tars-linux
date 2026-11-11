@@ -318,6 +318,66 @@ pub const User = struct {
     }
 };
 
+/// `hostname` 값의 최대 길이(LT-M0). DNS label 하나의 상한이고(RFC 1035), 커널이 받는
+/// 길이(`__NEW_UTS_LEN` 64)보다 하나 작다.
+pub const HOSTNAME_MAX = 63;
+
+/// 기계의 이름(LT design 결정 2). 넷째 자유 문자열 키이고 `Timezone`과 같은 모양이다 — 힙이
+/// 없어 이름을 값으로 든다.
+///
+/// 규칙은 DNS label 하나다. 영문 소문자 · 숫자 · `-`, 1~63자, `-`로 시작하거나 끝나지 않는다.
+/// 대문자는 받아서 소문자로 바꾸지 않고 거절한다 — 파일에 적힌 글자와 기계의 이름이 다르면
+/// 사람이 어느 쪽이 맞는지 다시 물어야 한다.
+pub const Hostname = struct {
+    name: [HOSTNAME_MAX]u8,
+    len: usize,
+
+    /// 기본값. 커널의 기본 `(none)`은 프롬프트 · git 신원 · 서버 인증서의 CN에 그대로 보인다.
+    /// 기계마다 다른 이름을 짓지 않는 것은 DMI serial이나 MAC에서 지은 이름이 프롬프트와 DHCP
+    /// 요청에 실려 나가기 때문이다(design 결정 2).
+    pub const DEFAULT: Hostname = Hostname.parse("tars") orelse unreachable;
+
+    /// 규칙 밖이면 null이다. 호출자가 로그를 찍고 앞의 값에 머문다.
+    pub fn parse(value: []const u8) ?Hostname {
+        if (value.len == 0 or value.len > HOSTNAME_MAX) return null;
+        if (value[0] == '-' or value[value.len - 1] == '-') return null;
+        for (value) |b| switch (b) {
+            'a'...'z', '0'...'9', '-' => {},
+            else => return null,
+        };
+        var h = Hostname{ .name = @splat(0), .len = value.len };
+        @memcpy(h.name[0..value.len], value);
+        return h;
+    }
+
+    /// 담긴 이름. 로그 · seed 파일 · `sethostname` · `/etc/hosts`가 전부 이것을 쓴다.
+    pub fn slice(self: *const Hostname) []const u8 {
+        return self.name[0..self.len];
+    }
+
+    /// 두 값이 같은가. `config_test`의 필드 비교와 reload의 diff가 쓴다.
+    pub fn eql(self: Hostname, other: Hostname) bool {
+        return std.mem.eql(u8, self.slice(), other.slice());
+    }
+};
+
+/// `/etc/hosts`의 첫 줄. `kernel/make_initrd.sh`가 굽는 줄과 글자 그대로 같아야 한다 — init이 이
+/// 파일을 다시 쓰므로, 어긋나면 initrd의 것이 아니라 이것이 남는다(LB design 결정 5의 localhost).
+pub const HOSTS_LOCALHOST = "127.0.0.1 localhost\n";
+
+/// `hostsText`가 짓는 글자를 담을 버퍼의 크기. localhost 줄 + 이름 줄의 머리 + 가장 긴 이름 + 개행.
+pub const HOSTS_MAX = HOSTS_LOCALHOST.len + "127.0.1.1\t".len + HOSTNAME_MAX + 1;
+
+/// `/etc/hosts` 전체(LT design 결정 2). 이름 줄 `127.0.1.1 <이름>`은 Debian의 모양이다 — sudo ·
+/// git · 서버가 이 기계의 이름을 풀 때 DNS로 나가지 않는다. 시스템 콜이 없는 순수 함수라
+/// `config_test`가 보고, 쓰는 것은 `net.applyHostname`이다(`zoneinfoPath`와 같은 갈림).
+///
+/// `catch unreachable`인 이유는 `zoneinfoPath`와 같다 — `Hostname.parse`가 `HOSTNAME_MAX`를 넘는
+/// 이름을 안 만들고 버퍼가 그만큼 크다.
+pub fn hostsText(buf: *[HOSTS_MAX]u8, name: Hostname) []const u8 {
+    return std.fmt.bufPrint(buf, HOSTS_LOCALHOST ++ "127.0.1.1\t{s}\n", .{name.slice()}) catch unreachable;
+}
+
 /// `/usr/share/zoneinfo/<이름>`을 NUL로 닫아 buf에 만든다. 시스템 콜이 없는
 /// 순수 함수라 `config_test`가 본다 — 여는 것은 `main.zig`다(TS-M3 plan
 /// 결정 M3-C).
@@ -888,6 +948,9 @@ pub const Config = struct {
     /// 프로그램이 DECSCUSR로 정하지 않았을 때의 커서 모양(CO design 결정 5 · 6). vim처럼 모양을 정하는
     /// 프로그램은 그대로 따르고, `CSI 0 SP q`가 오면 이 모양으로 돌아온다.
     cursor_shape: CursorShape = .block,
+    /// 기계의 이름(LT design 결정 2). init이 부팅과 reload에 `sethostname`을 부르고 `/etc/hostname` ·
+    /// `/etc/hosts`를 쓴다. 기본값의 근거는 위 `Hostname.DEFAULT`의 문서 주석에 있다.
+    hostname: Hostname = Hostname.DEFAULT,
     /// 기본값이 없음(null)인 유일한 키다. 이 줄은 사람이 아니라 `tars-install`이 쓴다(HP
     /// design 결정 5) — 설치 때 물은 이름이다. 없으면 화면 셸은 root로 뜬다. 있어도
     /// `/home`이 안 붙은 부팅이면 root다(결정 3). `tars-config set`은 이 키를 거절한다
@@ -917,14 +980,18 @@ pub const Config = struct {
     }
 };
 
-/// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하고,
-/// 키가 수십 개가 되어도 4KB를 넘길 일은 없다. 넘치면 잘라서 파싱하고
-/// 경고를 찍는다(조용히 무시하지 않는다).
+/// 설정 파일을 통째로 담는 스택 버퍼의 크기. 힙이 없으므로 상한이 필요하다.
+/// 넘치면 잘라서 파싱하고 경고를 찍는다(조용히 무시하지 않는다).
+///
+/// LT-M0에서 4096을 8192로 올렸다. 처음에는 "키가 수십 개가 되어도 4KB를 넘길 일은 없다"였는데,
+/// 키마다 설명 주석을 단 seed가 스물한 키에서 3,982바이트가 됐고 설치기가 붙이는 `user=` 꼬리
+/// (236바이트 + 이름)를 더하면 넘는다 — `save`가 FormatFailed로 실패하고 설치가 tars.conf를 못 쓴다.
+/// CO-M1까지의 seed(3,829바이트)도 가장 긴 사용자 이름(32자)이면 한 바이트가 넘쳤다.
 ///
 /// pub인 이유는 `tars-config`다(TC-M0). 고친 결과가 이 수를 넘으면 쓰지
 /// 않는다 — 넘는 꼬리는 init이 안 읽으므로, 쓰는 순간 사람이 적은 줄이
 /// 조용히 무시되는 파일이 된다.
-pub const MAX_FILE = 4096;
+pub const MAX_FILE = 8192;
 
 /// 설정 파일을 읽어 파싱한다.
 ///
@@ -1164,6 +1231,14 @@ pub fn parse(text: []const u8) Config {
                 });
                 continue;
             };
+        } else if (std.mem.eql(u8, key, "hostname")) {
+            // timezone과 같은 모양의 자유 문자열 키다(LT-M0). 규칙 밖이면 앞의 값에 머문다.
+            c.hostname = Hostname.parse(value) orelse {
+                log("unknown hostname '{s}', falling back to {s}", .{
+                    value, c.hostname.slice(),
+                });
+                continue;
+            };
         } else if (std.mem.eql(u8, key, "user")) {
             // timezone과 같은 모양이다(HP-M1). 다른 키와 달리 떨어지는 자리가 기본값이
             // 아니라 "사용자 없음"이고, 그 뜻을 로그에 적는다 — 화면 셸이 root로 뜬다.
@@ -1280,6 +1355,9 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         \\# cursor_shape: block | bar | underline
         \\#   the shape when a program has not asked for one; vim still switches it by mode
         \\cursor_shape={s}
+        \\# hostname: a-z 0-9 and -, up to 63, not starting or ending with -
+        \\#   the prompt, git and sudo use it; tars-config reload sets it at once
+        \\hostname={s}
         \\
     , .{
         @tagName(c.shell),
@@ -1302,6 +1380,7 @@ pub fn save(path: [:0]const u8, c: Config) SaveError!void {
         @tagName(c.display_scale),
         @tagName(c.fullscreen),
         @tagName(c.cursor_shape),
+        c.hostname.slice(),
     }) catch return error.FormatFailed;
     // `user`는 있을 때만 적는다(HP-M1 plan Task 1). 없는 기계(ISO 부팅의 seed)의 파일은
     // 이 키가 생기기 전과 바이트 하나 다르지 않다 — 그 파일을 판정하는 체인들이 그대로다.

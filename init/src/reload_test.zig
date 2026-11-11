@@ -21,7 +21,7 @@ const OTHER = [_][]const u8{
     "timezone=Asia/Seoul",       "firewall=on",          "bluetooth=on",           "esc_latin=off",
     "clipboard=pane",            "mouse_scroll=natural", "touchpad_scroll=normal", "mouse_accel=5",
     "touchpad_accel=5",          "display_scale=2",      "fullscreen=on",          "cursor_shape=bar",
-    "user=hpuser",
+    "hostname=air",              "user=hpuser",
 };
 
 const S = reload.Slot;
@@ -36,17 +36,19 @@ fn expectActions(slots: []const S, names: []const []const u8, want: []const relo
 }
 
 pub fn main() !void {
-    // ── 1. 스물한 키가 다 한 갈래에 든다 ──────────────────────────────────
+    // ── 1. 스물두 키가 다 한 갈래에 든다 ──────────────────────────────────
     //
     // groupOf가 모르는 키는 컴파일 에러다 — 이 루프가 컴파일되면 열셋 다 들었다. 갈래의 수를 세서
-    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth · 다음에 뜰 때부터 셋 · 화면 열셋 — PS-M0의 포인터 넷과 HS-M0의 배율, FU-M0의 전체 화면, CO-M1의 커서 모양이 더해졌다)와 견준다.
+    // design 결정 2의 표(지금 셋 + BT-M1의 bluetooth + LT-M0의 hostname · 다음에 뜰 때부터 셋 · 화면 열셋 — PS-M0의 포인터 넷과 HS-M0의 배율, FU-M0의 전체 화면, CO-M1의 커서 모양이 더해졌다)와 견준다.
     var counts = [_]usize{ 0, 0, 0, 0 };
     inline for (@typeInfo(config.Config).@"struct".field_names) |f_name| counts[@backingInt(comptime reload.groupOf(f_name))] += 1;
-    if (counts[0] != 4 or counts[1] != 3 or counts[2] != 13 or counts[3] != 1)
-        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 4/3/13/1", .{ counts[0], counts[1], counts[2], counts[3] });
+    if (counts[0] != 5 or counts[1] != 3 or counts[2] != 13 or counts[3] != 1)
+        return fail("groups now/next/terminal/boot = {d}/{d}/{d}/{d}, want 5/3/13/1", .{ counts[0], counts[1], counts[2], counts[3] });
     // `user`는 화면 대기에 안 든다 — reload terminal이 그 이름으로 셸을 띄우면 안 된다(HP-M1).
     if (comptime reload.onScreen("user")) return fail("user waits for the screen", .{});
-    std.debug.print("reload_test: twenty-one keys in four groups — four now, three at the next spawn, thirteen on the screen, one at the next boot\n", .{});
+    // `hostname`도 안 든다 — terminal의 argv에 없어 `reload terminal`이 옮길 것이 없다(LT-M0).
+    if (comptime reload.onScreen("hostname")) return fail("hostname waits for the screen", .{});
+    std.debug.print("reload_test: twenty-two keys in four groups — five now, three at the next spawn, thirteen on the screen, one at the next boot\n", .{});
 
     // ── 2. diff — 키 하나를 바꾸면 그 비트 하나 ────────────────────────
     const def = config.Config{};
@@ -75,7 +77,7 @@ pub fn main() !void {
     try expectText(out.bytes(), "shell=fish\nkeyboard=pc\nhangul_layout=shin_pcs\nlatin_layout=qwerty\n" ++
         "hangul_toggle=hangul_key,shift_space,capslock_tap,lctrl_tap\nshell_config=on\nnet=dhcp\nntp=off\n" ++
         "timezone=Asia/Seoul\nfirewall=off\nbluetooth=off\nesc_latin=on\nclipboard=shared\n" ++
-        "mouse_scroll=normal\ntouchpad_scroll=natural\nmouse_accel=0\ntouchpad_accel=0\ndisplay_scale=auto\nfullscreen=off\ncursor_shape=block\nuser=\n" ++
+        "mouse_scroll=normal\ntouchpad_scroll=natural\nmouse_accel=0\ntouchpad_accel=0\ndisplay_scale=auto\nfullscreen=off\ncursor_shape=block\nhostname=tars\nuser=\n" ++
         "screen keyboard=auto timezone=UTC\n", "configReply");
     var kb: [1024]u8 = undefined;
     var ko = reload.Out{ .buf = &kb };
@@ -83,6 +85,15 @@ pub fn main() !void {
     try expectText(ko.bytes(), "keyboard: auto -> pc (the screen keeps the old value until tars-config reload terminal)\n" ++
         "net: off -> dhcp (now)\n" ++
         "timezone: UTC -> Asia/Seoul (the next console shell, ssh login and service; the screen keeps the old value until tars-config reload terminal)\n", "keyLines");
+    // LT-M0. 이 기계의 이름은 지금 바뀌고 화면 대기에 안 든다.
+    {
+        var hb: [256]u8 = undefined;
+        var ho = reload.Out{ .buf = &hb };
+        const named = config.parse("hostname=air\n");
+        reload.keyLines(&ho, def, named);
+        try expectText(ho.bytes(), "hostname: tars -> air (now)\n", "keyLines hostname");
+        if (!reload.pending(named, def).empty()) return fail("hostname waits for the screen", .{});
+    }
     // TC-M3. reload terminal의 답 — 화면 쪽 키만, 화면의 값에서 init의 값으로.
     var sb: [512]u8 = undefined;
     var so = reload.Out{ .buf = &sb };
@@ -104,7 +115,7 @@ pub fn main() !void {
     var to = reload.Out{ .buf = &tiny };
     reload.configReply(&to, live, def);
     if (!to.full or to.len > tiny.len) return fail("a 10-byte reply buffer did not stop cleanly", .{});
-    std.debug.print("reload_test: config answers twenty key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
+    std.debug.print("reload_test: config answers twenty-two key=value lines and the screen's line; a full buffer stops, it does not panic\n", .{});
 
     // ── 5. 데몬 · 방화벽 ────────────────────────────────────────────────
     const table = [_]struct { bool, bool, bool, reload.Step }{

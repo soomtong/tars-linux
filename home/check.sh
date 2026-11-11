@@ -6,14 +6,16 @@ cd "$(dirname "$0")" || exit 1
 # HP-M0: 스물다섯째 체인. 설치기가 셋째 파티션 `tars-home`(ext4, 나머지 전부)을
 # 만들고, 설치된 디스크로 뜬 init이 `/config`(ext2 · sync) 옆에 `/home`(ext4 ·
 # async)을 붙이며, 재부팅을 넘어 홈의 파일이 남고, 남의 ext4는 라벨로 거르는가
-# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을, HP-M2가 8(sudo)을 더했다).
+# (HP design 결정 11 — 판정 1 · 2 · 3 · 5 · 6 · 7, HP-M1이 4 · 9 · 10을, HP-M2가 8(sudo)을, LT-M0이 8g(sudo의
+# timestamp가 tty를 넘는다)와 11(사용자의 ping)을 더했다).
 #
 # 부팅 셋이 같은 NVMe 이미지를 잇달아 쓴다.
 #   1  ISO + 빈 17GiB NVMe + 3GiB NVMe  홈 없는 부팅은 root(결정 3) · 3GiB는 거절(판정 7) · ext4 굽기 시간(실측 3) ·
 #                                       질문 길로 hpuser를 설치(판정 9) · 배치(판정 1)
 #   2  NVMe만                           p2와 p3(판정 2) · 마운트 옵션(판정 3) · 화면 셸이 hpuser다(판정 4) ·
 #                                       계정 파일의 권한(판정 10) · 사용자로 마커를 쓴다 · 사용자로 막히는 것(실측 10) ·
-#                                       sudo · try: sudo · passwd(판정 8a~8d)
+#                                       sudo · try: sudo · passwd(판정 8a~8d) · 사용자의 ping(판정 11) ·
+#                                       다른 tty의 sudo(판정 8g)
 #   3  NVMe + 남의 ext4(debian-home)     마커 둘이 남았다(판정 5) · 남의 디스크는 홈이 아니다(판정 6) ·
 #                                       바꾼 비밀번호가 재부팅을 넘었다(판정 8e)
 #
@@ -147,9 +149,11 @@ send() { printf '%s\n' "$1" >&4; }
 # HP-M2. 사용자(uid 1000)로 sh 한 줄을 친다. 인자는 작은따옴표를 안 담는다 — 게스트의 fish가
 # 그 따옴표 안을 그대로 sh에 준다. 결과는 `echo "hp-s8-<이름>-$?"`로 찍고 `s8_code <이름>`이 읽는다.
 as_user() { send "setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/hpuser sh -c '$1'"; }
-# 비밀번호를 파이프로 주는 sudo는 언제나 -k다. sudo는 한 번 확인하면 그 tty(시리얼 콘솔)에 15분짜리
-# timestamp를 남기고 다음 판에서 묻지 않는다 — 그러면 파이프의 첫 줄(비밀번호)이 sudo가 아니라 명령에게 간다.
-# HP-M2 첫 판들에서 passwd가 hp-secret-1과 hp-secret-2를 비교해 "differ"라 했던 이유다.
+# 비밀번호를 파이프로 주는 sudo는 언제나 -k다. sudo는 한 번 확인하면 15분짜리 timestamp를 남기고 다음 판에서
+# 묻지 않는다 — 그러면 파이프의 첫 줄(비밀번호)이 sudo가 아니라 명령에게 간다. HP-M2 첫 판들에서 passwd가
+# hp-secret-1과 hp-secret-2를 비교해 "differ"라 했던 이유다. LT-M0부터 그 timestamp는 tty가 아니라 사용자 하나에
+# 묶인다(timestamp_type=global) — 명령과 함께 준 -k는 timestamp를 안 읽고 안 남기므로 이 규칙은 그대로 맞다.
+# timestamp를 일부러 남기는 것은 판정 8g 하나이고, 그래서 그것이 이 부팅의 sudo 가운데 맨 뒤다.
 # hp-s8-<이름>-<숫자>의 숫자. 타이핑한 줄의 `-$?`는 숫자가 아니라 안 걸린다.
 s8_wait() { wait_log_re "hp-s8-$1-[0-9]+" "${2:-60}" || fail "the step $1 never answered" "hp-s8-$1" "sudo:" "tars-config:"; }
 s8_code() { grep -aoE "hp-s8-$1-[0-9]+" "$LOG" | tail -1 | sed 's/.*-//'; }
@@ -409,6 +413,14 @@ grep -aqF "hp-dev: /dev/snd/controlC0 root audio 660" "$LOG" \
   || fail "/dev/snd/controlC0 is not root:audio 660" "hp-dev:"
 echo "the sound nodes are root:audio 660 and hpuser opens the card"
 
+# 판정 11(LT-M0). 사용자가 ping을 친다. initrd의 ping에는 Debian이 붙이는 file capability가 없어(cpio는 xattr을 안
+# 싣는다) raw 소켓을 못 연다 — init이 부팅에 ping_group_range를 모든 그룹으로 열어서 ICMP datagram 소켓으로 간다
+# (LT design 결정 1). 위 실측 10의 hp-sys 줄이 그 값을 기록하고, 여기서는 실제로 한 번 갔다 오는가를 본다.
+as_user 'ping -c 1 -W 2 127.0.0.1 >/dev/null 2>&1; echo "hp-ping-$?"'
+wait_log_re "hp-ping-[0-9]+" 30 || fail "hpuser's ping never answered" "hp-ping" "ping:"
+grep -aqF "hp-ping-0" "$LOG" || fail "hpuser cannot ping 127.0.0.1 (ping_group_range?)" "hp-ping" "hp-sys:" "tars-init: cannot open ping"
+echo "11: hpuser pings 127.0.0.1 without a capability"
+
 # ── 판정 8(HP-M2): sudo ──────────────────────────────────────────────────
 # 8a. 파일. sudo는 setuid root이고 sudoers는 root 440이다 — 아니면 sudo가 스스로 거절한다.
 send "stat -c 'hp-s8a %n %u:%g %a' /usr/bin/sudo /etc/sudoers /etc/pam.d/sudo /usr/libexec/sudo/sudoers.so /usr/libexec/sudo/libsudo_util.so.0; printf 'hp-s8a-%s\n' end"
@@ -542,6 +554,26 @@ if grep -aqF "tars-init: shutdown requested" "$LOG"; then
   fail "a power command as the user reached PID 1" "tars-init: shutdown"
 fi
 echo "RB: reboot, poweroff and shutdown -r as the user say try: sudo and exit 77; shutdown +5 is a usage error"
+
+# 판정 8g(LT-M0). 한 tty에서 확인한 sudo가 다른 tty에서 다시 묻지 않는다(LT design 결정 5, sudoers의
+# timestamp_type=global). 화면의 패널마다 pty가 달라 tty 단위였던 HP-M2까지는 패널마다 비밀번호를 물었다.
+#
+# 두 tty는 이렇게 만든다. 하나는 시리얼 콘솔(ttyS0) — as_user가 거기서 `sudo -v`로 확인만 하고 timestamp를 남긴다.
+# 다른 하나는 sudo가 만드는 pty다 — root가 `sudo -u hpuser`로 부르면 sudo는 명령을 새 pty에서 돌린다(sudo 1.9.14부터
+# use_pty가 기본값이다). 그 안의 `sudo -n`은 비밀번호를 못 받으므로, timestamp가 tty를 넘을 때만 0이다. 기본(tty)이면
+# `sudo: a password is required`다. 그 pty가 정말 ttyS0이 아닌지는 같은 줄에서 `ps -o tty=`로 찍어 본다 — use_pty가
+# 꺼지면 둘 다 ttyS0이 되어 이 판정이 아무것도 안 본 채 초록이 되므로, 그 경우를 따로 빨갛게 한다.
+#
+# 이 부팅의 sudo 가운데 맨 뒤다. 위의 판정들은 -k로 timestamp를 안 읽지만, 8b의 `sudo -n`처럼 -k 없이 묻는 줄이
+# 이 뒤에 오면 이 timestamp가 그 답을 바꾼다. 비밀번호는 8d가 바꾼 hp-secret-2다.
+as_user 'printf "hp-secret-2\n" | sudo -S -v -p ""; echo "hp-s8-validate-$?"'
+s8_wait validate
+[ "$(s8_code validate)" = 0 ] || fail "sudo -v with hp-secret-2 exited $(s8_code validate)" "hp-s8-validate" "sudo:"
+send "sudo -u hpuser sh -c 'printf \"hp-s8g-tty-%s\\n\" \"\$(ps -o tty= -p \$\$)\"; sudo -n id -u 2>&1 | sed \"s/^/hp-s8g: /\"'; printf 'hp-s8g-%s\n' end"
+wait_log "hp-s8g-end" 30 || fail "the sudo from another tty never answered" "hp-s8g" "sudo:"
+wait_log_re "hp-s8g-tty-pts/[0-9]+" 5 || fail "the inner sudo did not run on a pty of its own (use_pty off?)" "hp-s8g-tty"
+grep -aqF "hp-s8g: 0" "$LOG" || fail "sudo on another tty asked again after sudo -v on the console (timestamp_type=global?)" "hp-s8g" "sudo:"
+echo "8g: after sudo -v on ttyS0, sudo -n on $(grep -aoE 'hp-s8g-tty-pts/[0-9]+' "$LOG" | tail -1 | sed 's/hp-s8g-tty-//') ran as uid 0 without asking"
 
 stop_guest
 
