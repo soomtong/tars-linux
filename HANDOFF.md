@@ -1,27 +1,44 @@
-# HANDOFF: cyber 0.4.6으로 올림(2026-11-11). 그 앞: SS 닫음 — 서비스마다의 멈춤 신호 · 유예, 전원 끄기는 서비스 먼저(2026-11-10)
+# HANDOFF: 0.2.1 냄(2026-11-12) — 컨테이너 실행 환경(CE)과 작은 것 다섯(LT)을 닫고 릴리스
 
 ## 목표
 
-사용자(2026-11-11): "cyber lang 다음 버전으로 업그레이드" → 최신 0.4.6(사이에 0.4.5)으로 올렸다. SS 결과 보고는 이 세션 첫머리에 했다
-(위임 결정 넷에 대한 사용자 답은 아직 없다).
-
-그 앞 — 사용자(2026-11-10): HANDOFF의 할 일 2(TP-M11의 남은 것 둘)를 "go with 2"로 골랐다 → Service Stop(SS-M0~M2)으로 섰다. 결정 둘은 사용자
-(설정은 스크립트의 주석 줄, 전원 끄기도 범위), 값은 SS-M0 측정 뒤 사용자 "Ok", plan "ok". SS-M1 체인 도중 "잠시 외출합니다. 나머지 결정을
-위임합니다." — 그 뒤(M1 커밋 · M2 · 루트 게이트 · 닫기)는 Claude가 정했고 각 plan 결과 절에 적었다. 그 앞 일: GV(Zig 0.17.1 ·
-ghostty vt-1.0.0), CO 닫기와 fakesteak 데모 draft.
+사용자(2026-11-11): carryover에서 다음 후보를 추려 달라 → "1번(컨테이너 실행 환경)으로 가자. 조사부터. 완성 작업까지 결정을 위임합니다.",
+작은 것 다섯(ping · hostname · DMI · Landlock · sudo timestamp)도 이어서, 서브에이전트는 셋까지, "이 작업이 완성되면 0.2.1 버전을
+릴리즈/배포 합니다." 셋 다 끝났다 — LT · CE를 닫고 0.2.1을 냈다. 결정은 모두 Claude가 정했고 design · plan 결과 절에 까닭을 적었다.
+SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `demo-fakesteak-20261110` → `6625cc2`(데모 ISO, GV · SS · cyber 0.4.6 전). `gh-pages`는 SS 줄까지 push.
+`main` = origin(이 기록 커밋까지 push). 태그 `v0.2.1` → `e36c8d8`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
+태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
 
 ## 다음 할 것
 
-1. (닫힘, 2026-11-11) SS 위임 결정 넷(SS-M1 plan 결과 1~3, SS-M2의 게스트 시한 넘김 판정 없음) — 사용자 "그대로".
-2. 사용자가 맥북 에어에서 fakesteak draft 데모를 확인한다 — draft는 비공개라 공개는 사용자가 한다. GV · SS · cyber 0.4.6 판으로 다시 구울지는 사용자가 정한다.
-   결과는 기억 `project_minimal_iso`의 둘째 데모 줄과 CO 기억에. 태그 `demo-fakesteak-20261110`을 그대로 다시 빌드하면 cyber 0.4.4 해시가
-   어긋나 dev layer 받기에서 멈춘다(아래 완료 절).
-3. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
-4. 다음 서브프로젝트는 사용자가 말할 때.
+1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
+   7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
+   고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
+2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
+   `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
+3. 다음 서브프로젝트 후보(사용자가 고른다): SMP(커널이 CPU 하나만 쓴다 — CE가 드러냈다, `carryover.md` CE 절), 셸 완성, 묶음
+   실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
+   묶음 사이 같은 파일 지우기(ISO가 2GiB에 닿았다 — 여유 3MB).
+4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+
+## 완료된 작업 (2026-11-11~12, LT-M0 · CE-M0~M2 · 0.2.1)
+
+- [x] 조사: 서브에이전트가 바깥 사실(moby 29.9.3 소스 · check-config · runc · bwrap · Codex · Homebrew · 6.18 Kconfig)을, lead가 게스트
+      실측을. 핵심 — initramfs 루트에서 `pivot_root`는 EINVAL이고 루트를 자기 bind로 덮으면 된다(정적 프로브로 앞뒤를 봤다).
+- [x] LT-M0 `903bd81` · `3c71b5f`: `hostname=`(기본 `tars`, 갈래 now), `ping`과 `ping_group_range`, `DMIID`, Landlock, sudo
+      `timestamp_type=global`, `MAX_FILE` 8192. 프롬프트가 두 칸 줄어 체인 열둘의 판정을 고쳤다. 기억 `project_little_things`.
+- [x] CE-M0 · M1 `c410002`: init `rebindRoot`(mountEarly 맨 앞)와 cgroup2 mount, 커널 옵션(namespace · cgroup v2 · seccomp · BPF ·
+      bridge · NAT · inotify), bzImage 11,486,208 → 12,190,720 B. tools 검사 27 · 28.
+- [x] CE-M2 `ec3ea14` · `3be23ba`: 묶음 `container`(Docker 29.9.3 static에서 `ctr` 뺌 · compose · buildx · bwrap · socat, 101MiB),
+      서비스 템플릿, 방화벽이 자기 표만 짓고 지운다(`flush ruleset`이 Docker의 표를 지웠다 — 서브에이전트가 찾았다), `firewall=on`의
+      forward 체인(커밋 뒤 자동 보안 검토가 짚었다), devtools 체인의 판정, 안내(`tars-help devtools` "컨테이너" 절 · running-tars).
+      프로브(망 있음): hello-world · alpine · nginx `-p` · `--memory` · compose · `codex sandbox`. 기억 `project_container_environment`.
+- [x] 루트 게이트 32/33(34분 51초, 잘린 줄 0, `out/gate-logs/20261111-162704`) — pm의 프롬프트 판정 한 줄(LT가 놓침), 고친 뒤 단독 PASS.
+      그 앞의 두 판은 시작 2분 안에 멈췄다: 하나는 forward 체인을 넣으려고 내가 멈췄고, 하나는 입구 검사가 config 체인의 `grep -q`를 잡았다.
+- [x] 0.2.1: `v0.2.1` → `e36c8d8`, ISO 셋 · SHA256SUMS, smoke 셋, 받아서 대조 OK, 소개 페이지. 숫자는 기억 `project_release`의 0.2.1 절.
 
 ## 완료된 작업 (2026-11-11, cyber 0.4.6)
 

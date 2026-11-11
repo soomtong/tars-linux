@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = e36c8d8, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -90,6 +90,22 @@ cyber 0.4.4 · cci 0.6.2를 올리라 했다(`0db7fb0`, devtools 체인 PASS 뒤
 이어서 "let's include fakesteak iso file too" — 납품 데모가 셋째 ISO가 됐다(`make dev-layers DEV_LAYERS=fakesteak` — 기본 `DEV_LAYERS`에 없어
 stamp를 지워도 다시 안 구워진다). 같은 날 dev 프리릴리스 셋과 `demo-fakesteak-20261109`의 release를 지웠다(태그는 남김).
 smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 기록도 `v0.2.0`. 노트는 0.1.4의 틀에 "0.1.4에서 달라진 것"과 납품 데모 절.
+
+## 0.2.1 (2026-11-12)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.2.1` (annotated) → `e36c8d8` (`Release 0.2.1`). 루트 게이트는 `0e1b888`의 코드에서 32/33(34분 51초) — 빨간 pm은 체인의 기대 글자 한 줄이었고 고친 뒤 단독 초록. 그 뒤의 커밋은 그 한 줄과 문서뿐이다 |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.2.1 (Latest) |
+| ISO | `tars-0.2.1-x86_64.iso` 2,144,509,952 B(묶음 열하나 1,908MiB — 2GiB 한도까지 약 3MB) · `tars-0.2.1-barebone-x86_64.iso` 144,596,992 B · `tars-0.2.1-fakesteak-x86_64.iso` 144,924,672 B |
+| sha256 | `575eebe32c3af39e10326db5fdf06a7862c2bd2c8ee364a6fd02587103cb7de0` · `77eee505bf9021ec96152dd40ae9dcb1529843a5e95022dda8ed98d415ce6f74` · `c30399dee001806a54b7a9d96fb03166fa6603f92881bf15c88a937e4f833600` |
+
+0.2.0 뒤의 CO · GV · SS · LT · CE와 cyber 0.4.6을 담았고 본론은 컨테이너(CE)다 — [[project_container_environment]] · [[project_little_things]].
+사용자: "이 작업이 완성되면 0.2.1 버전을 릴리즈/배포 합니다"(2026-11-11). smoke 세 판 모두 첫 줄 `TARS 0.2.1`(꼬리표 없음),
+`root is a bind mount of the initramfs`, `landlock: Up and running.`, 묶음의 출처 기록 `v0.2.1`. 받아서 `shasum -c` 셋 다 OK.
+노트는 0.2.0의 틀에 "0.2.0에서 달라진 것"(컨테이너 · 작은 것 다섯)과 "알려진 한계"의 두 줄(CPU 하나 · `firewall=off`에서의 forward).
+절차에서 배운 것: `VERSION` 커밋(`1de4899`) 뒤에 수정 커밋이 더 붙어 태그는 닫기 커밋에 달았다 — 다음에는 게이트가 초록인 것을 본 뒤
+`VERSION`을 올린다. 기본 판이 2GiB에 닿았으니 다음 판에서 묶음이 자라면 먼저 `carryover.md`의 "묶음 사이 같은 파일 지우기"를 한다.
 
 ## 배포 절차 (다음 버전도 이대로)
 
