@@ -1186,6 +1186,50 @@ sha256 = "5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb"
 strip = 0
 exe = ["caddy"]
 
+# ── container(CE-M2) — Docker Engine · compose · buildx · bubblewrap · socat ───────────────────────
+# docker: static tarball의 정적 실행 파일 여덟(Go — CPU 수준의 걱정이 없다). 벤더가 낸 체크섬이 없어 두 번 받아 같은 값을 고정했다
+# (plan 확인한 것). apt 판은 libsystemd0 · iptables를 끈다(CE design 결정 4). 훅이 ctr(containerd의 진단 도구, 23MB)을 뺀다.
+[[tool]]
+name = "docker"
+bundle = "container"
+version = "29.9.3"
+kind = "upstream"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz"
+sha256 = "3fb5d1f13014c18cc54945bc177c58a9056a482dada031e17d12cf2e6922c973"
+hook = "docker-static"
+exe = ["docker", "dockerd", "containerd", "containerd-shim-runc-v2", "runc", "docker-init", "docker-proxy"]
+
+# compose · buildx: 릴리스의 실행 파일 하나씩(sha256은 릴리스의 체크섬 파일과 같다). docker의 CLI 플러그인 자리로의 링크는
+# devlayer/files/container/usr/local/libexec/docker/cli-plugins/ — `docker compose` · `docker buildx`. 이름 그대로도 선다.
+[[tool]]
+name = "docker-compose"
+bundle = "container"
+version = "5.7.1"
+kind = "upstream"
+url = "https://github.com/docker/compose/releases/download/v5.7.1/docker-compose-linux-x86_64"
+sha256 = "af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf"
+
+[[tool]]
+name = "docker-buildx"
+bundle = "container"
+version = "0.38.2"
+kind = "upstream"
+url = "https://github.com/docker/buildx/releases/download/v0.38.2/buildx-v0.38.2.linux-amd64"
+sha256 = "7992ec09413b80ff57ba4e081f56fc833d7bac1d5e71143c6c809e7e6065f6d6"
+
+# debian: AI 도구의 샌드박스가 부르는 둘(CE design 확인 5). bwrap은 setuid가 아니다 — user namespace로 선다(결정 2).
+[[tool]]
+name = "bubblewrap"
+bundle = "container"
+version = "0.12.0-1~deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "socat"
+bundle = "container"
+version = "1.8.0.3-1+deb13u1"
+kind = "debian"
+
 # ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. DEV_LAYERS 기본값에 없고 `make dev-layers DEV_LAYERS=fakesteak`로 굽는다 ──
 # fakesteak: 사용자의 fork(soomtong/fakesteak)가 GitHub Actions로 내는 정적 실행 파일(-O3 -static, -march 없음). 원본 domsson/fakesteak은 바이너리가 없다.
 # 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6).

@@ -92,9 +92,12 @@ pub fn up(want: config.Firewall, envp: [*:null]const ?[*:0]const u8) void {
 }
 
 /// TC-M2. 규칙을 내린다 — `firewall=on`에서 `off`로 reload했을 때(reload design 결정 3의 5단계).
-/// 부팅에는 이 길이 없다(`up(.off)`는 아무것도 안 올린다). `nft flush ruleset`은 init이 올린
-/// 것 말고 사람이 손수 올린 규칙도 지운다 — `firewall=off`가 "거르지 않는다"는 뜻이라 맞는
-/// 동작으로 본다(design 위험 3). 기다리는 것은 `up`과 같다(design 결정 4).
+/// 부팅에는 이 길이 없다(`up(.off)`는 아무것도 안 올린다). 기다리는 것은 `up`과 같다(design 결정 4).
+///
+/// CE-M2부터 `nft destroy table ip tars`다 — init이 올린 표 하나만 지운다(`destroy`는 표가 없어도 에러가 아니다).
+/// 전에는 `nft flush ruleset`이었고 그것은 dockerd의 표(`ip docker-bridges`)까지 지워 떠 있는 컨테이너의 망을 끊었다.
+/// 사람이 손수 올린 다른 표도 이제 남는다 — `firewall=off`는 "TARS가 거르지 않는다"이지 "이 기계의 nftables를 비운다"가
+/// 아니다(TC design 위험 3의 판단을 CE가 고쳤다).
 pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
     const pid = linux.fork();
     if (failed(pid)) |e| {
@@ -102,7 +105,7 @@ pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
         return false;
     }
     if (pid == 0) {
-        const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "flush", "ruleset", null };
+        const argv = [_:null]?[*:0]const u8{ NFT_PATH.ptr, "destroy", "table", "ip", "tars", null };
         _ = linux.execve(NFT_PATH.ptr, &argv, envp);
         logline.print("tars-init: cannot exec {s}\n", .{NFT_PATH});
         linux.exit(127);
@@ -118,9 +121,9 @@ pub fn down(envp: [*:null]const ?[*:0]const u8) bool {
         break;
     }
     if (linux.W.IFEXITED(status) and linux.W.EXITSTATUS(status) == 0) {
-        logline.print("tars-init: firewall down (nft flush ruleset), inbound is open\n", .{});
+        logline.print("tars-init: firewall down (nft destroy table ip tars), inbound is open\n", .{});
         return true;
     }
-    logline.print("tars-init: nft flush ruleset failed (status {d})\n", .{status});
+    logline.print("tars-init: nft destroy table ip tars failed (status {d})\n", .{status});
     return false;
 }

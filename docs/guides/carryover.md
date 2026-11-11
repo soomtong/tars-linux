@@ -4,17 +4,24 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
-개발 도구 층 TP-M12(2026-11-08, AI 도구 설치 확인)가 남긴 것.
+컨테이너 실행 환경 CE(2026-11-12)가 남긴 것. TP-M12의 "컨테이너 실행 환경" 항목은 CE가 닫았다
+(`docs/specs/2026-11-11-tars-container-environment-design.md`).
 
-- [ ] 컨테이너 실행 환경 — 다음 서브프로젝트 후보(사용자 2026-11-08: "컨테이너 환경을 활성화하는 것을 고려해야 됩니다. 개발도구 중에 도커를
-      쓰는 경우가 종종 있죠"). 계기: codex의 `codex sandbox linux`가 `bwrap: Creating new namespace failed, likely because the kernel does not
-      support user namespaces.`로 rc 1(TP-M12 plan 확인 2) — claude code의 샌드박스도 bwrap이다. user namespace 하나만 켜면 AI 샌드박스는 서지만
-      Docker는 여전히 안 서므로 따로 하지 않고 이 서브프로젝트에 묶는다(사용자가 추천에 동의). `kernel/.config`의 그날 상태:
-      꺼짐 — `CONFIG_USER_NS` · `CGROUPS` · `UTS_NS` · `PID_NS` · `TIME_NS` · `VETH` · `BRIDGE` · `NF_NAT` · `IP_NF_IPTABLES` · `BPF_SYSCALL` · `SECCOMP` ·
-      `POSIX_MQUEUE`, 켜짐 — `IPC_NS` · `NET_NS` · `NETFILTER` · `NF_TABLES` · `OVERLAY_FS` · `KEYS`. rootful dockerd는 USER_NS 없이 서고(cgroups ·
-      namespace 전부 · veth/bridge/NAT · seccomp 기본 프로필이 필요), rootless Docker · Podman · bwrap은 USER_NS가 핵심이다. 정할 것: rootful
-      dockerd(init 서비스, root 데몬)인가 rootless Podman인가, 런타임 바이너리를 어디서(개발 도구 층의 묶음 · 사용자 설치), 커널 크기 · 부팅
-      시간 · 공격 면(USER_NS)의 대가, `CONFIG_MODULES`가 없는 TARS라 전부 내장. 방화벽(FW)의 nftables와 Docker의 iptables(nft 백엔드) 공존.
+- [ ] SMP. 커널이 CPU 하나만 쓴다(`# CONFIG_SMP is not set`, `NR_CPUS=1` — BF 때부터). 코어가 여럿인 실기에서 컴파일 · 컨테이너가 한
+      코어에 줄을 선다. `docker info`의 `No cpuset support`도 이것이다(`CPUSETS`가 SMP에 기댄다). 켜면 커널 전체가 다시 빌드되고
+      init · terminal의 "CPU 하나" 가정(`key-files.md`의 poll 자리, RS 실측 3)과 게이트의 타이밍을 다시 봐야 한다 — 서브프로젝트 크기다.
+- [ ] ISO가 GitHub release의 2GiB 한도에 닿았다. `container` 묶음 101MiB를 실으며 `ctr`을 뺐다. 다음에 묶음이 자라면 아래 "묶음 사이 같은
+      파일 지우기"(약 200MiB)를 꺼내거나 기본 판 ISO에서 묶음 하나를 뺀다.
+- [ ] `/config`(ext2, 저널 없음)는 전원이 갑자기 끊기면 방금 쓴 것이 깨질 수 있다. CE-M2 프로브를 QEMU 죽이기로 끝냈더니 다음 부팅에서
+      `/config/services.d/docker`가 `ext2_lookup: deleted inode referenced`로 안 읽혔다(QEMU가 쓰기 캐시를 버렸다 — `MS_SYNCHRONOUS`는
+      게스트 쪽 약속이다). 실기에서 배터리가 빠지는 것과 같은 종류다. 고치는 길: p2를 ext4로(설치기 · 갱신 · `mountConfig`), 또는
+      부팅 때 `e2fsck -p`. 실기에서 겪으면 연다.
+- [ ] rootless Docker · Podman(CE 비목표 2). `USER_NS`는 있다. 더 필요한 것은 `newuidmap` setuid · `/etc/subuid` · `TUN`(pasta) ·
+      사용자별 런타임 디렉터리다.
+- [ ] Docker의 nftables 백엔드는 문서 표시가 아직 experimental이다(29.9). Docker 판을 올릴 때 릴리스 노트의 그 절을 본다 — 표 이름
+      (`ip docker-bridges`)이나 `nft` 호출 방식이 바뀌면 devtools 체인의 방화벽 공존 판정이 먼저 빨개진다.
+- [ ] 실기에서 처음 볼 것: Docker가 실제 NIC(유선 · 무선) 위에서 밖으로 나가는지(QEMU는 SLIRP였다), 맥북 에어 2011(Sandy Bridge)에서
+      이미지 받기 · 풀기의 속도, `claude` 샌드박스(`/sandbox`)가 `bwrap` · `socat`으로 서는지(codex는 게스트에서 봤다).
 
 TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
 
@@ -69,6 +76,13 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
       없는 AVX2도 실행해 체인으로는 못 잡는다(TP-M3 확인 8). 후보: 심볼이 있는 ELF에서 ymm 정수 · FMA 명령이 든 함수의 비율이 문턱을 넘으면 멈추기
       (벗겨진 ELF는 따로). upstream이 판을 올릴 때 같은 일이 또 생긴다.
 
+LT(2026-11-12)가 남긴 것. 위 다섯(ping · hostname · DMI id · Landlock · sudo timestamp)은 LT-M0이 닫았다.
+
+- [ ] Homebrew 7의 Landlock 샌드박스가 실제로 서는지는 게이트가 안 본다(pm 체인은 망으로 brew를 깔지 않는다). 커널의
+      `landlock: Up and running.`까지만 판정한다. 실기에서 `brew install` 때 `Sandbox unavailable` 경고가 없는지 본다.
+- [ ] git의 기본 신원은 여전히 도메인이 없다(`<이름>@tars.(none)`으로 읽었다 — 게스트에서 재지는 않았다). `[user]`를 주면 상관없다.
+- [ ] hostname을 DHCP 요청에 싣기 · mDNS(`<이름>.local`)는 LT 비목표다.
+
 맥 실기(2026-11-05)가 남긴 것.
 
 - [ ] MacBook Pro 2013 내장 Wi-Fi — 사용자 결정으로 대기(2026-11-05). 기종이 갈린다(`/sys/class/dmi/id/product_name`).
@@ -80,8 +94,6 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
 - [x] MacBook Pro 2013 소리가 안 났다 — 카드 0(HDMI 쪽 HDA)이 안 서서 init의 오디오 일꾼이 포기했다. 일꾼이 아무 카드나 기다리게 고쳤다
       (AU design 위험 14의 덧붙임). HDMI 오디오 자체는 여전히 없다 — LP-M0부터 `SND_HDA_I915`는 서 있지만 내장 cmdline의 `snd_hda_core.gpu_bind=0`이
       GPU 쪽을 안 본다(xe 몫인 Intel GPU에서 소리가 사라지지 않게, LP design 결정 1a). 외장 모니터로 소리를 낼 일이 생기면 그때.
-- [ ] `/sys/class/dmi`가 없다(`DMIID` 꺼짐) — 기종 이름을 사람이 확인할 길이 없었다. 진단 때 쓸모가 있다.
-- [ ] 게스트에 `ping`이 없다(Debian `iputils-ping`). 실기에서 연결 확인을 `curl`로 했다.
 
 MI-M0(2026-11-03)이 남긴 것.
 
@@ -91,9 +103,6 @@ MI-M0(2026-11-03)이 남긴 것.
 
 PM(2026-11-03)이 남긴 것.
 
-- [ ] 커널에 Landlock(`CONFIG_SECURITY_LANDLOCK`)이 없다 — Homebrew의 Linux sandbox가 꺼지고 `brew install`마다 `Sandbox
-      unavailable … without sandboxing!` 경고, `brew doctor` 경고 하나(PM M1 실측 4). 설치는 막지 않는다. 켜려면 커널 `.config`와
-      `lsm=` 순서를 함께 본다.
 - [ ] TARS 자체 패키지 매니저는 나중에 다시 논의한다 — 당분간 Homebrew를 쓴다(사용자 결정, 2026-11-03). 그날 정리한 것:
       - 남의 것 중에 완벽히 맞는 것은 없었다. mise · aqua(미리 빌드된 CLI 바이너리, sudo · ruby 없음), micromamba · pixi
         (conda-forge, `~` 아래), Nix(범위 최대 — `/nix`를 디스크에 · daemon · 평가 메모리), 배포판 매니저(apt · xbps — "루트를
@@ -115,15 +124,10 @@ HP-M1(2026-11-02)이 남긴 것.
 - [ ] 부팅 뒤 꽂은 USB 헤드셋 · 사운드 카드의 노드는 root 0600 그대로다 — init의 audio 일꾼이 부팅에 한 번 `/dev/snd/*`를
       `root:audio 660`으로 바꿀 뿐이고 init에는 uevent가 없다. 실기에서 거슬리면 terminal의 uevent 길(포인터 · 키보드가 쓰는 것)에
       `SUBSYSTEM=sound`를 얹거나 init에 작은 uevent 듣기를 둔다.
-- [ ] `ping`이 initrd에 없다. 넣으면 사용자는 `ping_group_range`(커널 기본 `1 0`)에 막힌다 — Debian 기본(`0 2147483647`)을
-      init이 쓴다.
 - [ ] 화면 셸의 히스토리 자리(fish `~/.local/share/fish`)와 zoxide DB가 홈에 생기는지 게이트가 못 봤다(HP 실측 11).
 
 HP-M2(2026-11-03)가 남긴 것.
 
-- [ ] hostname이 없다 — 커널 기본값 `(none)`이다. sudo의 `unable to resolve host (none)`은 sudoers `!fqdn`으로 껐지만 git
-      신원은 여전히 `<이름>@(none)`이고 프롬프트도 `(none)`이다. 이름을 `tars.conf`의 키로 둘지(`hostname=`)는 그 쓰임이 생길 때.
-- [ ] sudo의 timestamp가 tty 단위 15분(기본값)이다. 화면의 패널마다 따로 묻는다 — 거슬리면 sudoers `timestamp_type=global`.
 - [ ] 사용자의 `tars-config dictation key`는 키를 다 친 뒤에야 `try: sudo`를 듣는다(쓰기 자리에서 고르므로). 비밀 입력 앞에서 쓰기
       권한을 먼저 보는 것은 실기에서 거슬리면.
 

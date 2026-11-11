@@ -1,0 +1,10 @@
+{
+  "data-root": "/home/.tars/var/docker",
+  "exec-root": "/run/docker",
+  "pidfile": "/run/docker.pid",
+  "firewall-backend": "nftables",
+  "ip6tables": false,
+  "ip": "127.0.0.1",
+  "log-driver": "local",
+  "shutdown-timeout": 15
+}

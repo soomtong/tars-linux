@@ -920,15 +920,21 @@ fn doReload(children: []Child, live: *Live, out: *control.Out, now: isize) void 
         },
     };
 
+    // LT-M0. 이 기계의 이름 — 지금 바꾼다(`groupOf`의 `now`). 답의 키 줄이 이미 `(now)`라고 했으므로
+    // 줄을 더하는 것은 실패했을 때뿐이다.
+    if (keys.has("hostname") and !net.applyHostname(new.hostname)) {
+        out.print("hostname: could not set {s}; the serial log says why\n", .{new.hostname.slice()});
+    }
+
     // 4 · 5. 셸과 env. 다음에 뜨는 콘솔 셸 · 서비스 · ssh 로그인부터다.
     if (keys.has("shell") or keys.has("shell_config") or keys.has("timezone")) rebuildShellAndEnv(children, live, new);
 
     // 6. 푼다.
     if (fw == .down) {
         if (firewall.down(live.envp)) {
-            out.print("firewall: down (nft flush ruleset)\n", .{});
+            out.print("firewall: down (nft destroy table ip tars)\n", .{});
         } else {
-            out.print("firewall: nft flush ruleset failed; the rules stay up\n", .{});
+            out.print("firewall: nft destroy table ip tars failed; the rules stay up\n", .{});
         }
     }
 

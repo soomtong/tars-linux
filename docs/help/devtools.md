@@ -16,6 +16,7 @@
 | media | ffmpeg · ImageMagick(magick) · GraphicsMagick(gm) |
 | docs | dasht · w3m · `tars-docs` |
 | server | postgresql 18 · mysql 9.7 · nginx · redis · caddy |
+| container | docker(compose · buildx) · bwrap · socat |
 
 `ls /usr/local/bin`이 없거나 비어 있으면 이 기계에는 개발 도구 층이 없습니다(층 없이 만든 이미지로 설치한 경우입니다).
 
@@ -116,6 +117,31 @@ server {
   ssl_certificate_key /config/ssl/tars-selfsigned/key.pem;
   root /usr/share/nginx/html;
 }
+```
+
+## 컨테이너
+
+Docker는 서비스로 켭니다. 기본은 꺼져 있습니다.
+
+```sh
+sudo tars-service enable docker        # 켭니다 — 지금 뜨고, 다음 부팅에도 뜹니다
+docker run --rm hello-world            # sudo 없이 씁니다
+docker compose up -d                   # compose.yaml이 있는 디렉터리에서
+sudo tars-service disable docker
+```
+
+- 켜면 내 계정이 `sudo` 없이 `docker`를 씁니다. 이것은 이 기계의 root와 같은 힘입니다(컨테이너에 `/`를 붙일 수 있습니다). 켜는 한 줄이 그 허락입니다.
+- 이미지 · 컨테이너 · 볼륨은 `/home/.tars/var/docker`에 남습니다. 재부팅과 갱신을 넘어 남고, `--restart unless-stopped`로 띄운 컨테이너는 부팅할 때 다시 뜹니다.
+- `-p 8080:80`은 이 기계 안(127.0.0.1:8080)에서만 들립니다. 다른 컴퓨터에 내려면 `-p 0.0.0.0:8080:80`이라고 적습니다. 이때는 `firewall=on`이어도 그 포트가 열립니다 — Docker가 낸 포트는 TARS의 방화벽을 지나지 않습니다.
+- 컨테이너 안에서 이 기계의 포트에 붙으려면(`host.docker.internal` 같은 쓰임) `firewall=on`인 기계는 문을 열어야 합니다. `/config/nftables.d/docker.nft`에 `iifname "docker0" accept` 한 줄을 두고 `sudo tars-config reload`.
+- 설정을 바꾸려면 `/etc/docker/daemon.json`을 `/config/docker.d/daemon.json`으로 복사해 고칩니다. 그 파일이 있으면 그것만 읽습니다(두 파일을 합치지 않습니다). 고친 뒤 `sudo tars-service restart docker`.
+- 이미지는 망에서 받습니다(`docker pull`). 설치 이미지에는 들어 있지 않습니다.
+- CPU는 하나만 씁니다(`--cpuset-cpus`는 안 됩니다). `--memory` · `--cpus` · `--pids-limit`는 됩니다.
+
+AI 도구의 샌드박스(codex · claude code)는 `bwrap`으로 섭니다. 따로 켤 것이 없습니다.
+
+```sh
+bwrap --ro-bind / / --unshare-all --die-with-parent id    # 확인 — 내 uid가 찍히면 됩니다
 ```
 
 ## 문서

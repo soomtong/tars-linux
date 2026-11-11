@@ -1,0 +1,35 @@
+#!/bin/sh
+# TARS docker service (CE-M2). Turn it on with `sudo tars-service enable docker`.
+# tars-stop: TERM 20
+# dockerd stops its containers first (shutdown-timeout 15s in daemon.json), then itself.
+# Data: /home/.tars/var/docker (images, containers, volumes). Settings: /etc/docker/daemon.json is the default;
+# /config/docker.d/daemon.json replaces it when it exists (dockerd reads one file, it does not merge).
+# The socket belongs to the group of the TARS user (uid 1000): that user runs docker without sudo, and that is
+# as good as root on this machine. `-p 8080:80` listens on 127.0.0.1 only; write `-p 0.0.0.0:8080:80` for the LAN.
+
+# uid 1000 줄의 gid. init이 부팅마다 /etc/passwd에 더한다(login.zig). 사용자 없는 부팅(ISO)이면 root의 것이다.
+gid=$(awk -F: '$3 == 1000 { print $4; exit }' /etc/passwd)
+[ -n "$gid" ] || gid=0
+
+# 데이터는 p3(ext4)에 둔다 — overlay의 upper가 되려면 진짜 파일시스템이어야 하고 /var는 RAM이다.
+if [ ! -d /home/.tars ]; then
+  echo "docker: /home/.tars is missing (no installed disk?)"
+  exit 1
+fi
+if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
+  echo "docker: /sys/fs/cgroup is not cgroup2 (this kernel has no cgroups?)"
+  exit 1
+fi
+mkdir -p /home/.tars/var/docker /config/docker.d || exit 1
+chmod 710 /home/.tars/var/docker || exit 1
+chmod 755 /config/docker.d || exit 1
+
+# docker CLI의 기본 소켓은 /var/run/docker.sock이다. /var/run은 /run으로 간다.
+[ -e /var/run ] || ln -s /run /var/run || exit 1
+
+# nftables 백엔드는 forward를 스스로 켜지 않고, 꺼져 있으면 시작이 실패한다(CE design 결정 5).
+echo 1 > /proc/sys/net/ipv4/ip_forward || exit 1
+
+conf=/etc/docker/daemon.json
+[ -f /config/docker.d/daemon.json ] && conf=/config/docker.d/daemon.json
+exec dockerd --config-file "$conf" --group "$gid"

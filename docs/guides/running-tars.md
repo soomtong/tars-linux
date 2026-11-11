@@ -564,8 +564,8 @@ terminal의 로그 `terminal: battery> scan seen=… present=… pick=…`도 �
 `-FRX` 중 `-X`가 요점이다. less가 alternate screen을 안 쓰면 `git log`의
 출력이 화면의 스크롤백에 남고, 그 로그를 copy mode로 훑을 수 있다.
 
-`[user]` 절은 없다 — 작성자를 git이 `/etc/passwd`에서 유도한다
-(`root <root@(none).(none)>`). 바꾸려면 그 절을 더한다. rc 셋과 달리 이
+`[user]` 절은 없다 — 작성자를 git이 `/etc/passwd`와 기계의 이름에서 유도한다
+(`root <root@tars.(none)>` — 이름은 `tars.conf`의 `hostname=`, LT-M0). 바꾸려면 그 절을 더한다. rc 셋과 달리 이
 파일은 재부팅이 필요 없다 — git은 명령마다 읽는다.
 
 ### seed는 한 번만 깔린다
@@ -620,6 +620,28 @@ tars-init: to keep it that way put shell_config=off in /config/tars.conf, or tar
 홈에서 손으로 띄우는 길도 그대로다(`tars-help devtools` "서버" 절). 묶음이 싣는 기본값 둘 — `/etc/mysql/conf.d/tars.cnf`(소켓
 `/tmp/mysql.sock`, `secure-file-priv` 빈 값)와 `PGHOST=/tmp`(rc 조각) — 은 서비스에도 그대로 쓰인다.
 
+### 컨테이너 — Docker를 서비스로
+
+개발 도구 층의 `container` 묶음(CE, 2026-11-12)에 Docker Engine 29.9(정적 실행 파일) · compose 5.7 · buildx 0.38 · bubblewrap · socat이 있다.
+dockerd는 서비스다 — `sudo tars-service enable docker`. 기본은 꺼져 있다.
+
+- 템플릿(`/etc/tars/services/docker`)이 하는 일: 데이터 자리 `/home/.tars/var/docker`(p3 ext4 — overlay의 upper가 될 진짜 파일시스템)를
+  만들고, `/var/run -> /run`을 걸고, `net.ipv4.ip_forward=1`을 쓰고, `dockerd --config-file … --group <사용자의 gid>`가 된다.
+  그래서 Docker를 안 켠 기계는 forward가 꺼진 채이고, 켠 기계의 사용자(uid 1000)는 `sudo` 없이 `docker`를 친다 — root와 같은 힘이다.
+- 설정: 묶음의 `/etc/docker/daemon.json`(`firewall-backend` nftables · `ip` 127.0.0.1 · `log-driver` local · `data-root`). 바꾸려면
+  `/config/docker.d/daemon.json`에 통째로 둔다(있으면 그 파일만 읽는다) → `sudo tars-service restart docker`.
+- 망: Docker는 자기 표 `ip docker-bridges`만 쓴다. TARS의 방화벽 표는 `ip tars`이고 둘은 서로를 건드리지 않는다(CE-M2부터 init의
+  `firewall=on` · `off`는 자기 표만 짓고 지운다 — 전에는 `flush ruleset`이라 떠 있는 컨테이너의 망을 끊었다).
+  `-p 8080:80`은 127.0.0.1:8080에만 선다. `-p 0.0.0.0:8080:80`이면 `firewall=on`이어도 LAN에 열린다(Docker의 DNAT은 `input` 체인을 안 지난다).
+  컨테이너가 호스트의 포트에 붙는 길은 `firewall=on`이면 막혀 있다 — `/config/nftables.d/docker.nft`에 `iifname "docker0" accept`.
+- 멈춤: `# tars-stop: TERM 20`. 컨테이너 둘이 도는 채 `poweroff`가 1.9초에 끝났다(QEMU). 재부팅 뒤 이미지 · 볼륨이 남고
+  `--restart unless-stopped` 컨테이너가 다시 뜬다.
+- 안 되는 것: `--cpuset-cpus`(커널이 CPU 하나만 쓴다 — `docker info`의 `No cpuset support`), swap 한도, swarm · overlay 망 · IPv6, rootless.
+  이미지는 ISO에 없다 — 망에서 받는다.
+- 커널: 루트가 initramfs면 `pivot_root`가 안 된다. init이 부팅 첫머리에 루트를 자기 자신의 bind mount로 덮는다
+  (`tars-init: root is a bind mount of the initramfs (pivot_root works)`) — 이 줄이 없으면 Docker도 bwrap도 서지 않는다.
+  cgroup2는 init이 `/sys/fs/cgroup`에 붙인다(`cpu io memory pids`).
+
 ### 문서 — dasht와 tars-docs
 
 개발 도구 층이 얹힌 기계에는 `dasht`(Dash docset을 터미널에서 찾기)와 `w3m`(터미널 웹 브라우저)이 있다. 설치 이미지에는 Bash docset 하나만
@@ -647,8 +669,9 @@ claude code(`curl -fsSL https://claude.ai/install.sh | bash` → `~/.local/bin`)
 - PATH: 시스템 rc가 `~/.local/bin`(있을 때)을, lang-script 묶음의 조각이 `~/.bun/bin`을 넣는다 — 설치기의 "PATH에 없다"는 안내는 새 셸에서 풀린다.
   codex 설치기는 fish 사용자에게도 `~/.profile`에 줄을 쓰지만 쓸모는 없다.
   opencode 설치기는 `$SHELL`이 fish면 `~/.config/fish/config.fish`에 `fish_add_path ~/.opencode/bin`을 쓴다 — bash · zsh에서는 직접 PATH에 넣는다.
-- 커널에 사용자 이름공간(`CONFIG_USER_NS`)이 없어 bwrap 샌드박스가 서지 않는다 — codex는 `codex --sandbox danger-full-access`로 띄운다.
-  컨테이너 실행 환경(Docker · Podman과 함께)은 `carryover.md`의 다음 서브프로젝트 후보다.
+- 샌드박스: CE(2026-11-12)부터 `bwrap`이 선다 — 커널에 user namespace · seccomp가 있고 `container` 묶음이 `bwrap` · `socat`을 싣는다
+  (claude code의 샌드박스가 부르는 둘. codex는 PATH의 `bwrap`을 쓰고 없으면 자기가 든 것을 쓴다). `codex sandbox -- id`가 uid를 찍고 그
+  안에서 `/usr/local` 쓰기와 망이 막히는 것을 게스트에서 봤다. 그 전의 TARS(0.2.0까지)에서는 `codex --sandbox danger-full-access`였다.
 - 설치는 받은 파일을 `/tmp`(RAM)에 잠깐 둔다(codex · opencode). 받은 뒤 홈의 크기는 claude 약 330MB, codex 약 520MB, opencode 약 210MB, omp(bun 패키지) 약 480MB.
 
 ### 방화벽 — 받을 포트만 연다

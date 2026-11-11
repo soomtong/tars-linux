@@ -17,16 +17,20 @@ cd "$(dirname "$0")" || exit 1
 # TP-M10: 열째 묶음 server(postgresql · mysql · nginx · redis · caddy). 부팅 2가 다섯을 사용자로 띄워 응답을 받고 끈다(plan 할 일 7).
 # TP-M11: 서버가 서비스가 된다. 부팅 2가 tars-service enable로 다섯을 켜고 쓰고 CA를 넣고, 부팅 3이 저절로 뜬 다섯과 남은 데이터 · 조각 · 신뢰를
 #        보고 disable redis로 끈다(plan 할 일 4). -m은 2048로 올렸다(아래).
+# CE-M2: 열하나째 묶음 container(Docker Engine · compose · buildx · bubblewrap · socat). 부팅 2가 사용자의 bwrap, tars-service enable docker,
+#        sudo 없는 docker info, 망 없이 docker import로 만든 이미지의 컨테이너가 -p로 답하는 것, 방화벽과의 공존을 보고, 부팅 3이 저절로
+#        뜬 dockerd와 남은 이미지 · 다시 뜬 컨테이너를 보고 disable docker로 끈다(CE design 결정 4~8).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 열) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 10, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 열하나) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 11, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
 #                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 서버 다섯, 화면 셸에서
-#                                      java --version(monitor 45504). 끝에 root가
+#                                      java --version(monitor 45504), bwrap · docker 서비스 · 컨테이너 둘 · firewall=on. 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 9, gcc · go · node · cci · erl · nvim은 돌고 java는 없다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열을 지우고 새로(깨진 것을 고친다)
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 10, gcc · go · node · cci · erl · nvim은 돌고 java는 없다,
+#                                      dockerd가 저절로 뜨고 keep 컨테이너가 다시 답한다
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열하나를 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -44,6 +48,7 @@ cd "$(dirname "$0")" || exit 1
 (cd ../kernel && ./make_initrd.sh)
 (cd ../boot && ./build.sh)
 ../devlayer/build.sh base
+../devlayer/build.sh container
 ../devlayer/build.sh docs
 ../devlayer/build.sh editor
 ../devlayer/build.sh lang-beam
@@ -53,7 +58,7 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh media
 ../devlayer/build.sh server
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media server util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -64,7 +69,7 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base docs editor lang-beam lang-jvm lang-native lang-script media server util"
+LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -209,7 +214,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with ten layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with eleven layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -225,8 +230,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 10 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 10 layers" "copied"
+COPY_MS="$(last_num 'copied 11 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 11 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -235,16 +240,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 10 layers in [0-9]+ms" 5 || fail "init did not lay ten layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 10 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 11 layers in [0-9]+ms" 5 || fail "init did not lay eleven layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 11 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/server/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, docs, editor, lang-beam, lang-jvm, lang-native, lang-script, media, server, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/container/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/server/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, container, docs, editor, lang-beam, lang-jvm, lang-native, lang-script, media, server, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -693,7 +698,7 @@ done
 [ "$CONNECTED" = "1" ] || fail "could not connect to the QEMU monitor on ${MONITOR_PORT}"
 PROMPT_UP=0
 for _ in 1 2 3 4; do
-  if wait_for_screen 'tars@\(none\) ~>'; then PROMPT_UP=1; break; fi
+  if wait_for_screen 'tars@tars ~>'; then PROMPT_UP=1; break; fi
 done
 [ "$PROMPT_UP" = 1 ] || fail "the screen shell never drew the tars prompt" "terminal: screen>"
 type_keys j a v a spc minus minus v e r s i o n ret
@@ -713,11 +718,76 @@ MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
 M11_UP_MS="$(ms_of m11up)"
 NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+
+# ── CE-M2: 컨테이너(CE design 결정 4~8) ─────────────────────────────────────────────
+# 자리가 화면 셸 · 남은 메모리 뒤인 것은 그 둘의 뜻(JVM 서버 뒤)을 안 바꾸려는 것이고, poweroff 앞인 것은 dockerd도 끄기가 먼저
+# 멈추는 서비스 가운데 하나여야 하기 때문이다. 포트는 8090 · 8091이다 — 8080 · 8081은 위 TP-M11의 nginx · caddy가 127.0.0.1에서
+# 쥐고 있어 docker-proxy가 그 자리에 못 선다(부팅 3에서도 둘이 저절로 뜬다). 기다리는 글자는 계산된 값이나 sed 접두로 짓는다.
+# (a) 사용자의 bwrap. --unshare-all이 user namespace를 열고 bwrap이 pivot_root를 돈다 — CE 결정 1(루트 덮기)과 결정 2(USER_NS)의 증거.
+as_tars 'bwrap --ro-bind / / --unshare-all --die-with-parent id -u 2>&1 | sed "s/^/ce-bwrap=/"; command -v socat | sed "s/^/ce-socat=/"; printf "ce-%s\n" a-done'
+wait_log "ce-a-done" 60 || fail "the bwrap probe did not finish in 60s" "ce-bwrap" "bwrap:"
+grep -aqF "ce-bwrap=1000" "$LOG" || fail "bwrap --unshare-all did not run id as the user (user namespace or pivot_root)" "ce-bwrap" "bwrap:" "pivot_root"
+grep -aqE "ce-socat=/[a-z]" "$LOG" || fail "socat is not on PATH" "ce-socat"
+echo "B2: as tars, bwrap --unshare-all ran id in a new user namespace (pivot_root works) and socat is on PATH"
+
+# (b) 서비스. enable은 running까지 기다린다 — dockerd가 API를 열 때까지는 더 걸린다(TCG). 소켓의 그룹은 uid 1000의 gid다(결정 7).
+as_root 's=$(date +%s%N); tars-service enable docker 2>&1 | sed "s/^/ce-en: /"; for i in $(seq 240); do docker version >/dev/null 2>&1 && break; sleep 0.5; done; e=$(date +%s%N); echo "tp-ms-ceup=$(((e-s)/1000000))"; stat -c "%U:%G %a" /run/docker.sock | sed "s/^/ce-sock=/"; printf "ce-%s\n" en-done'
+wait_log "ce-en-done" 180 || fail "tars-service enable docker did not finish in 180s" "ce-en" "dockerd" "level=error"
+grep -aqF "ce-en: docker: enabled, /config/services.d/docker -> /etc/tars/services/docker" "$LOG" || fail "enable docker did not make the link" "ce-en"
+grep -aqF "ce-en: service docker: starts (new in /config/services.d)" "$LOG" || fail "reload did not start docker" "ce-en"
+grep -aqE "ce-en: service docker +running +pid [0-9]+" "$LOG" || fail "enable docker did not wait for running" "ce-en"
+wait_log "tars-init: service docker stops with SIGTERM, grace 20s" 10 || fail "init did not read docker's tars-stop line" "tars-stop" "stops with"
+wait_log "API listen on /var/run/docker.sock" 120 || fail "dockerd did not open its API in 120s" "dockerd" "level=error" "level=fatal" "failed to start daemon"
+grep -aqF "ce-sock=root:tars 660" "$LOG" || fail "/run/docker.sock is not root:tars 660 (--group of uid 1000)" "ce-sock"
+echo "B2: root ran tars-service enable docker; init read SIGTERM 20s, dockerd opened its API ($(ms_of ceup)ms) on a root:tars 660 socket"
+
+# (c) 사용자가 sudo 없이. 플러그인 둘은 /usr/local/libexec/docker/cli-plugins에서 찾는다.
+as_tars 'docker info 2>&1 | grep -E "Cgroup Version|Storage Driver|Firewall Backend|Docker Root Dir" | sed "s/^ */ce-info: /"; docker compose version 2>&1 | sed "s/^/ce-compose: /"; docker buildx version 2>&1 | sed "s/^/ce-buildx: /"; printf "ce-%s\n" c-done'
+wait_log "ce-c-done" 60 || fail "docker info, compose and buildx did not finish in 60s" "ce-info" "ce-compose" "ce-buildx"
+for want in "Cgroup Version: 2" "Storage Driver: overlayfs" "Firewall Backend: nftables" "Docker Root Dir: /home/.tars/var/docker"; do
+  grep -aqF "ce-info: ${want}" "$LOG" || fail "docker info as tars does not say ${want}" "ce-info" "permission denied"
+done
+grep -aqE "ce-compose: .*v5\.7\.1" "$LOG" || fail "docker compose version did not answer 5.7.1 (cli-plugins)" "ce-compose"
+grep -aqE "ce-buildx: .*v0\.38\.2" "$LOG" || fail "docker buildx version did not answer 0.38.2 (cli-plugins)" "ce-buildx"
+echo "B2: as tars without sudo, docker info says cgroup v2, overlayfs, nftables and /home/.tars/var/docker; compose 5.7.1 and buildx 0.38.2 answer"
+
+# (d) 망 없이 이미지 하나 — server의 caddy(정적 Go)를 import한다. 첫 답까지 다시 묻는다(TCG에서 ~6초를 쟀다). 64m 제한은
+# runc가 만든 cgroup의 memory.max로 본다.
+as_tars 'mkdir -p ~/tp/ce/r && cp -L /usr/local/bin/caddy ~/tp/ce/r/caddy && s=$(date +%s%N) && tar -C ~/tp/ce/r -c . | docker import - tars/caddy 2>&1 | sed "s/^/ce-import: /"; e=$(date +%s%N); echo "tp-ms-ceimport=$(((e-s)/1000000))"; s=$(date +%s%N); docker run -d --name ce --memory 64m -p 8090:80 tars/caddy /caddy respond --listen :80 --body ce-ok 2>&1 | sed "s/^/ce-run: /"; o=""; for i in $(seq 30); do o=$(curl -s -m 2 http://127.0.0.1:8090/) && [ -n "$o" ] && break; sleep 1; done; e=$(date +%s%N); echo "tp-ms-cerun=$(((e-s)/1000000))"; echo "ce-curl=$o"; docker port ce 2>&1 | sed "s/^/ce-port: /"; cat /sys/fs/cgroup/docker/$(docker inspect -f "{{.Id}}" ce)/memory.max 2>&1 | sed "s/^/ce-memmax=/"; printf "ce-%s\n" d-done'
+wait_log "ce-d-done" 180 || fail "docker import, run and curl did not finish in 180s" "ce-import" "ce-run" "dockerd"
+grep -aqE "ce-import: sha256:[0-9a-f]+" "$LOG" || fail "docker import did not make an image" "ce-import"
+grep -aqF "ce-curl=ce-ok" "$LOG" || fail "the container did not answer on 127.0.0.1:8090 (-p, bridge, nftables)" "ce-run" "ce-curl" "level=error"
+grep -aqF "ce-port: 80/tcp -> 127.0.0.1:8090" "$LOG" || fail "docker port ce is not 127.0.0.1:8090 (daemon.json ip)" "ce-port"
+grep -aqF "ce-memmax=67108864" "$LOG" || fail "the container's cgroup has no 64m memory.max" "ce-memmax"
+echo "B2: as tars, docker import made tars/caddy offline ($(ms_of ceimport)ms) and its container answered on 127.0.0.1:8090 ($(ms_of cerun)ms) with a 64m cgroup limit"
+
+# (e) 방화벽과의 공존. set과 reload를 한 bash가 차례로 돈다 — set의 답이 찍힌 뒤에 reload가 간다(firewall 체인 검사 19와 같은 차례).
+# TARS의 표(ip tars)와 Docker의 표(ip docker-bridges)가 함께 있어야 한다. firewall=on은 그대로 둔다 — 뒤의 판정은 모두 루프백과
+# 유닉스 소켓이고(lo는 input이 받는다), 부팅 3이 방화벽을 먼저 세운 기계에서 dockerd가 뜨는지도 함께 본다.
+as_root 'tars-config set firewall=on 2>&1 | sed "s/^/ce-fw-set: /"; tars-config reload 2>&1 | sed "s/^/ce-fw-reload: /"; nft list tables 2>&1 | sed "s/^/ce-fw-tables: /"; o=$(curl -s -m 5 http://127.0.0.1:8090/); echo "ce-fw-curl=$o"; printf "ce-%s\n" e-done'
+wait_log "ce-e-done" 60 || fail "the firewall set, reload and probes did not finish in 60s" "ce-fw"
+grep -aqE "ce-fw-set: firewall: off( \(default\))? -> on" "$LOG" || fail "tars-config set firewall=on did not answer off -> on" "ce-fw-set"
+grep -aqF "ce-fw-reload: firewall: up (nft -f /etc/tars/firewall.nft)" "$LOG" || fail "reload did not bring the firewall up" "ce-fw-reload" "tars-init: reload"
+grep -aqF "ce-fw-tables: table ip tars" "$LOG" || fail "nft has no table ip tars after reload" "ce-fw-tables"
+grep -aqF "ce-fw-tables: table ip docker-bridges" "$LOG" \
+  || fail "Docker's table ip docker-bridges is gone after the firewall came up (firewall.nft must only rebuild table ip tars)" "ce-fw-tables"
+grep -aqF "ce-fw-curl=ce-ok" "$LOG" || fail "the container stopped answering on 127.0.0.1:8090 with the firewall on" "ce-fw-curl"
+echo "B2: tars-config set firewall=on and reload put up table ip tars beside Docker's ip docker-bridges, and the container still answers"
+
+# (f) 재부팅을 넘을 컨테이너. unless-stopped라 dockerd가 다시 뜨면 다시 선다(부팅 3). ce는 정책이 없어 Exited로 남는다.
+as_tars 'docker run -d --name keep --restart unless-stopped -p 8091:80 tars/caddy /caddy respond --listen :80 --body keep-ok 2>&1 | sed "s/^/ce-keep: /"; o=""; for i in $(seq 30); do o=$(curl -s -m 2 http://127.0.0.1:8091/) && [ -n "$o" ] && break; sleep 1; done; echo "ce-keep-curl=$o"; printf "ce-%s\n" f-done'
+wait_log "ce-f-done" 90 || fail "docker run keep did not finish in 90s" "ce-keep"
+grep -aqF "ce-keep-curl=keep-ok" "$LOG" || fail "the keep container did not answer on 127.0.0.1:8091" "ce-keep"
+echo "B2: as tars, a container with --restart unless-stopped answered on 127.0.0.1:8091"
+CE_NUMBERS="dockerd up $(ms_of ceup)ms, import $(ms_of ceimport)ms, first answer $(ms_of cerun)ms"
+
 # 부팅 3의 재료. 묶음이 loop로 열린 채 그 뒤 파일을 0으로 바꾼다 — java는 이미 끝났다.
 send "head -c 4096 /dev/zero > /home/.tars/layers/lang-jvm.sqfs; and sync; and printf 'tp-%s\n' broke-done"
 wait_log "tp-broke-done" 30 || fail "root could not overwrite /home/.tars/layers/lang-jvm.sqfs"
 # SS-M1: 끝은 QEMU 죽이기가 아니라 poweroff다(TP-M11까지는 죽이기라 서버의 끄기를 한 번도 안 봤다). 서비스 다섯을 각자의
 # 신호로 먼저 끄고 나머지를 끈다 — SIGKILL 없이. 부팅 3이 두 DB의 복구 없음을 본다.
+# CE-M2: 서비스는 docker까지 여섯이다. dockerd는 SIGTERM에 컨테이너 둘을 먼저 멈추고(shutdown-timeout 15초) 20초 안에 끝나야 한다.
+# 가장 긴 유예는 여전히 mysql의 30초다.
 send "poweroff"
 GONE=0
 for _ in $(seq 1 1200); do
@@ -725,12 +795,13 @@ for _ in $(seq 1 1200); do
   sleep 0.1
 done
 [ "$GONE" = 1 ] || fail "the guest did not switch itself off in 120s after poweroff" "tars-init: shutdown" "stopping" "outlived"
-grep -aqF "tars-init: stopping 5 services first (up to 30s)" "$LOG" || fail "power off did not stop the five services first" "tars-init: stopping" "tars-init: shutdown"
-grep -aqE "tars-init: services stopped in [0-9]+ms" "$LOG" || fail "the five services did not all stop on their signals" "outlived" "tars-init: services"
+grep -aqF "tars-init: stopping 6 services first (up to 30s)" "$LOG" || fail "power off did not stop the six services first" "tars-init: stopping" "tars-init: shutdown"
+grep -aqE "tars-init: services stopped in [0-9]+ms" "$LOG" || fail "the six services did not all stop on their signals" "outlived" "tars-init: services"
+grep -aqF "service docker outlived" "$LOG" && fail "dockerd outlived SIGTERM and its 20s grace at power off" "outlived" "dockerd"
 grep -aqF "outlived" "$LOG" && fail "a service outlived its stop signal at power off" "outlived"
 grep -aqF "tars-init: grace period expired" "$LOG" && fail "something outlived SIGTERM and SIGHUP after the services" "grace period expired"
 SS_OFF_MS="$(last_num 'tars-init: services stopped in [0-9]+ms')"
-echo "B2: poweroff stopped the five services first in ${SS_OFF_MS}ms, each on its own signal, and nothing needed SIGKILL"
+echo "B2: poweroff stopped the six services (docker included) first in ${SS_OFF_MS}ms, each on its own signal, and nothing needed SIGKILL"
 wait "$QEMU_PID" 2>/dev/null
 QEMU_PID=""
 exec 3>&- 2>/dev/null
@@ -742,7 +813,7 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 9 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, docs, editor, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 10 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, container, docs, editor, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
 as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
@@ -756,7 +827,7 @@ grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" |
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, docs, editor, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, container, docs, editor, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
 # TP-M11: 부팅 2가 켠 다섯이 저절로 뜨고, 부팅 2의 데이터 · 조각 · CA 신뢰가 남아 있다. 부팅 2는 QEMU를 죽여 끝났다(그 앞에 sync) —
 # 전원이 끊긴 것과 같다. postgres · mysql의 복구는 판정하지 않고 숫자로 적는다(plan 위험 2).
 grep -aqF "tars-init: trust: /usr/bin/update-ca-certificates added the certificates in /usr/local/share/ca-certificates" "$LOG" \
@@ -784,10 +855,36 @@ wait_log "tp-m11-dis-done" 60 || fail "tars-service disable redis did not finish
 grep -aqF "tp-m11-dis: redis: disabled, removed /config/services.d/redis" "$LOG" || fail "disable redis did not remove the link" "tp-m11-dis"
 grep -aqF "tp-m11-dis: service redis: stops" "$LOG" || fail "reload did not stop redis" "tp-m11-dis"
 grep -aqE "tp-m11-dis: service redis +stopped" "$LOG" || fail "disable redis did not wait for stopped" "tp-m11-dis"
-grep -aqF "tp-m11-links3=caddy mysql nginx postgres " "$LOG" || fail "the other four links are not as they were" "tp-m11-links3"
+grep -aqF "tp-m11-links3=caddy docker mysql nginx postgres " "$LOG" || fail "the other five links (docker included) are not as they were" "tp-m11-links3"
 grep -aqF "tp-m11-rdping=1" "$LOG" || fail "redis still answers after disable" "tp-m11-rdping"
-echo "B3: tars-service disable redis removed the link, init stopped it and the other four stay"
-M11_NUMBERS="services up ${M11_UP_MS}ms, after the reboot $(ms_of m11b3up)ms, MemAvailable with five ${M11_MEM:-?} kB, recovery pg ${PG_RECOVERY} my ${MY_RECOVERY}"
+echo "B3: tars-service disable redis removed the link, init stopped it and the other five stay"
+M11_NUMBERS="services up ${M11_UP_MS}ms, after the reboot $(ms_of m11b3up)ms, MemAvailable with six ${M11_MEM:-?} kB, recovery pg ${PG_RECOVERY} my ${MY_RECOVERY}"
+
+# CE-M2: 부팅 2가 켠 docker가 저절로 뜬다 — 이번에는 방화벽(firewall=on)이 먼저 선 기계다. 이미지는 p3에 남고, unless-stopped인
+# keep은 다시 서서 답하고, 정책이 없는 ce는 Exited로 남는다. 끝에 disable docker(redis와 같은 길).
+grep -aqE "tars-init: started service docker \(pid [0-9]+" "$LOG" || fail "init did not start service docker at boot" "tars-init: started" "service docker"
+wait_log "API listen on /var/run/docker.sock" 120 || fail "dockerd did not open its API after the reboot in 120s" "dockerd" "level=error" "level=fatal" "failed to start daemon"
+as_tars 'o=""; for i in $(seq 60); do o=$(curl -s -m 2 http://127.0.0.1:8091/) && [ -n "$o" ] && break; sleep 1; done; echo "ce-b3-curl=$o"; docker images --format "{{.Repository}}" 2>&1 | sed "s/^/ce-b3-img=/"; docker ps -a --format "{{.Names}} {{.Status}}" 2>&1 | sed "s/^/ce-b3-ps: /"; printf "ce-%s\n" b3-done'
+wait_log "ce-b3-done" 120 || fail "the docker probes after the reboot did not finish in 120s" "ce-b3" "dockerd"
+# nft는 CAP_NET_ADMIN이 있어야 표를 읽는다 — root로.
+as_root 'nft list tables 2>&1 | sed "s/^/ce-b3-tables: /"; printf "ce-%s\n" b3t-done'
+wait_log "ce-b3t-done" 30 || fail "nft list tables did not finish" "ce-b3-tables"
+grep -aqF "ce-b3-img=tars/caddy" "$LOG" || fail "the imported image did not survive the reboot (data-root on p3)" "ce-b3-img"
+grep -aqE "ce-b3-ps: keep Up" "$LOG" || fail "the keep container (unless-stopped) is not up after the reboot" "ce-b3-ps"
+grep -aqE "ce-b3-ps: ce Exited" "$LOG" || fail "the ce container (no restart policy) is not Exited after the reboot" "ce-b3-ps"
+grep -aqF "ce-b3-curl=keep-ok" "$LOG" || fail "the keep container did not answer on 127.0.0.1:8091 after the reboot" "ce-b3-curl" "level=error"
+grep -aqF "ce-b3-tables: table ip tars" "$LOG" || fail "firewall=on from boot 2 did not put up table ip tars at boot" "ce-b3-tables" "tars-init: firewall"
+grep -aqF "ce-b3-tables: table ip docker-bridges" "$LOG" || fail "dockerd did not put up table ip docker-bridges after the boot's firewall" "ce-b3-tables"
+echo "B3: dockerd came back on its own with the firewall up (both tables), tars/caddy is still there, keep is Up and answers, ce stayed Exited"
+as_root 'tars-service disable docker 2>&1 | sed "s/^/ce-dis: /"; ls /config/services.d | tr "\n" " " | sed "s/^/ce-links=/"; echo; docker version >/dev/null 2>&1; echo "ce-dping=$?"; printf "ce-%s\n" dis-done'
+wait_log "ce-dis-done" 60 || fail "tars-service disable docker did not finish in 60s" "ce-dis"
+grep -aqF "ce-dis: docker: disabled, removed /config/services.d/docker" "$LOG" || fail "disable docker did not remove the link" "ce-dis"
+grep -aqF "ce-dis: service docker: stops" "$LOG" || fail "reload did not stop docker" "ce-dis"
+grep -aqE "ce-dis: service docker +stopped" "$LOG" || fail "disable docker did not wait for stopped" "ce-dis"
+grep -aqF "service docker outlived" "$LOG" && fail "dockerd outlived SIGTERM and its 20s grace on disable" "outlived" "dockerd"
+grep -aqF "ce-links=caddy mysql nginx postgres " "$LOG" || fail "the other four links are not as they were after disable docker" "ce-links"
+grep -aqF "ce-dping=1" "$LOG" || fail "dockerd still answers after disable" "ce-dping"
+echo "B3: tars-service disable docker removed the link, init stopped dockerd on SIGTERM and the other four stay"
 stop_guest
 
 # ── 부팅 4: ISO + 같은 NVMe — 갱신 ─────────────────────────────────────
@@ -797,13 +894,13 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 10 old layers removed" "$LOG" || fail "the update did not remove the ten old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 11 old layers removed" "$LOG" || fail "the update did not remove the eleven old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the ten old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the eleven old ones and put them back"
 stop_guest
 
-echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}, ${M11_NUMBERS}"
+echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}, ${M11_NUMBERS}, ${CE_NUMBERS}"
 echo "devtools: chain $(( $(date +%s) - CHAIN_T0 ))s after the build"
 echo "PASS"
 exit 0
