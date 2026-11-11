@@ -4,13 +4,13 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-10',
-  latest: 'Service Stop (SS-M0~M2)',
+  asOf: '2026-11-12',
+  latest: 'Container Environment (CE-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1296,      // git rev-list --count main
+    commits: 1310,      // git rev-list --count main
     since: '2026-08-01',
     chains: 33,         // check.sh의 CHAINS
     zigKLines: 46,      // init · terminal · tars-config의 .zig 줄 수 / 1000
@@ -127,6 +127,8 @@ window.TARS = {
     ['2026-11-09', 'Fullscreen', 'FU', '둘레 여백과 상태 줄을 감추고 격자를 화면 끝까지 — [⌘⌃F], `fullscreen=on`, 패널 안 프로그램의 xterm `CSI 10;1t`'],
     ['2026-11-10', 'Cursor Options', 'CO', '프로그램이 숨긴 커서(`CSI ?25l`)는 그리지 않는다 — 데모의 비 사이를 튀어 다니던 흰 칸이 사라졌다. 커서 기본 모양은 `cursor_shape=`'],
     ['2026-11-10', 'Service Stop', 'SS', '서비스 스크립트의 `# tars-stop: INT 10` 한 줄이 멈춤 신호와 유예를 고른다. 전원을 끌 때 서버를 먼저 각자의 방식으로 — psql이 열린 postgres도 0.4초에 깨끗이'],
+    ['2026-11-12', 'Little Things', 'LT', '기계에 이름이 생기고(`hostname=`, 기본 `tars`), 사용자가 `ping`을 치고, 기종 이름을 `/sys/class/dmi/id`에서 읽고, Homebrew가 Landlock을 쓰고, `sudo`가 패널마다 다시 묻지 않는다'],
+    ['2026-11-12', 'Container Environment', 'CE', 'Docker가 서비스로 서고 AI 도구의 샌드박스(bwrap)가 선다 — init이 루트를 `pivot_root`가 되는 모양으로 덮고, 커널에 namespace · cgroup v2 · seccomp, 새 묶음 `container`'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -146,6 +148,8 @@ window.TARS = {
       '00598c665bb71de99db3b54c4ae21abb789d1bc869bc23f62e2e687d63c597ab'],
     ['2026-11-10', '0.2.0', '개발 도구 층 — 설치하면 망 없이 언어 스무 남짓 · 편집기 · 서버 다섯 · 문서, 전체 화면, barebone과 fakesteak 납품 데모 ISO도 함께', 'tars-0.2.0-x86_64.iso',
       'd3fe88ae13c307b58292de4f0ea35824a3e72b02fda0846fdf508e802a2137bf'],
+    ['2026-11-12', '0.2.1', '컨테이너 — Docker가 서비스로 서고 AI 도구의 샌드박스(bwrap)가 선다, 기계의 이름 · ping · Landlock', 'tars-0.2.1-x86_64.iso',
+      '575eebe32c3af39e10326db5fdf06a7862c2bd2c8ee364a6fd02587103cb7de0'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
@@ -216,14 +220,15 @@ window.TARS = {
       title: '개발 도구 층',
       note: '설치 USB에 싣고 `tars-install`이 디스크로 옮긴다. 부팅마다 init이 묶음(squashfs)을 `/usr`에 읽기 전용으로 겹친다 — RAM에 상주하지 않고, 망이 없어도 된다. USB로 띄운 채로는 붙지 않는다.',
       items: [
-        ['묶음 열', 'base · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server, 합 1.8GiB. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-09'],
+        ['묶음 열하나', 'base · container · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server, 합 1.9GiB. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-12'],
         ['언어', 'C · C++ · Zig · Rust · Go · Python · Ruby · Lua · Luau · Cyber · Node · Bun · Janet · PHP · Java · Kotlin · Clojure · Erlang · Elixir · Gleam', '2026-11-09'],
         ['편집기', 'Neovim · emacs(`-nw`) · mitos · ttt, 게스트 vim은 그대로', '2026-11-09'],
         ['유틸리티', 'lazygit · gitui · yazi · difftastic · starship · duckdb · sqlite · ffmpeg · ImageMagick 등 쉰여 개 — initrd에 있는 것도 최신판이 앞선다', '2026-11-09'],
         ['문서', '`dasht`로 docset을 터미널에서 찾는다(Bash 하나가 들었고 나머지는 `tars-docs get`), man은 오프라인', '2026-11-09'],
         ['서버', 'PostgreSQL · MySQL · Redis · Nginx · Caddy — `sudo tars-service enable <이름>`이면 init이 사용자로 띄우고 재부팅에도 켜진다', '2026-11-09'],
         ['`/usr/local`', '`/usr`는 읽기 전용, `/usr/local`만 쓰기 가능 — root가 `make install` · `npm i -g`로 깐 것이 재부팅 · 갱신에도 남는다', '2026-11-09'],
-        ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다', '2026-11-09'],
+        ['컨테이너', 'Docker Engine · compose · buildx — `sudo tars-service enable docker`면 부팅마다 뜨고 내 계정이 `sudo` 없이 쓴다. 이미지는 `/home`에 남고 `-p`는 127.0.0.1에만 선다', '2026-11-12'],
+        ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다. 샌드박스가 쓰는 `bwrap` · `socat`은 실려 있다', '2026-11-12'],
       ],
     },
     {
@@ -245,7 +250,7 @@ window.TARS = {
       ],
     },
     {
-      title: '설정 — `tars.conf` 키 스물하나',
+      title: '설정 — `tars.conf` 키 스물둘',
       note: '`/config/tars.conf`의 `key=value`. 모르는 키나 값은 로그만 남기고 기본값을 쓴다. 우선순위는 cmdline > `tars.conf` > 기본값.',
       items: [
         ['`shell`', '`fish` | `bash` | `zsh` — 기본 `fish`', '2026-09-12'],
@@ -268,6 +273,7 @@ window.TARS = {
         ['`fullscreen`', '`on` | `off` — 부팅 때부터 여백 · 상태 줄 없이. 기본 `off`, 실행 중에는 [⌘⌃F]', '2026-11-09'],
         ['`cursor_shape`', '`block` | `bar` | `underline` — 프로그램이 정하지 않았을 때의 커서 모양. 기본 `block`, vim은 그대로 모드마다 바꾼다', '2026-11-10'],
         ['`display_scale`', '`auto` | `1` | `2` | `3` — 기본 `auto`(논리 화면이 1280×800보다 작아지지 않는 가장 큰 정수배, Retina 15"는 2)', '2026-11-05'],
+        ['`hostname`', '이 기계의 이름 — 영문 소문자 · 숫자 · `-`, 63자까지. 기본 `tars`. 프롬프트 · git · sudo가 본다', '2026-11-12'],
         ['`user`', '화면 셸의 사용자 이름. 설치기가 쓰고 `tars-config set`으로는 못 바꾼다', '2026-11-03'],
       ],
     },
@@ -407,7 +413,7 @@ window.TARS = {
         ['노트북 내장 무선', 'Intel iwlwifi · Realtek rtw88/rtw89 · MediaTek MT7921/7922/7925 · Qualcomm ath11k/ath12k', '2026-09-28'],
         ['USB 무선 동글', 'rtw88 일곱 · rtw89 둘 · MT7921U · MT7925U', '2026-09-28'],
         ['시각', 'chronyd. 서버는 설정의 주소든 DHCP가 알려 준 것이든', '2026-09-26'],
-        ['방화벽', '`firewall=on`이면 들어오는 것을 버린다. 받는 것은 lo · 먼저 건 연결의 답 · 사람이 연 포트', '2026-09-27'],
+        ['방화벽', '`firewall=on`이면 들어오는 것을 버린다. 받는 것은 lo · 먼저 건 연결의 답 · 사람이 연 포트. Docker를 켠 기계에서는 넘기는 것도 닫고 컨테이너의 것만 받는다', '2026-11-12'],
         ['들어오는 연결', '게스트가 연 포트에 바깥에서 붙는다', '2026-09-14'],
       ],
     },
