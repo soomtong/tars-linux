@@ -11,7 +11,7 @@ cd "$(dirname "$0")" || exit 1
 # TP-M3: 넷째 묶음 lang-script. 부팅 2가 python(+ venv) · ruby · lua · luau · cyber · node(+ npm) · bun · janet · php를 본다(plan 결정 F).
 # TP-M5: 다섯째 묶음 util(cci · glc). 부팅 2가 kotlin · clojure(첫 실행 시드) · clj(rlwrap) · cci · glc · man clojure를 본다(plan 결정 F).
 # TP-M6: 여섯째 묶음 lang-beam. 부팅 2가 erl · erlc · escript · elixir · iex · mix test 세 번 · gleam(시드와 manifest.toml) · erl -man을 본다(plan 결정 G).
-# TP-M7: 일곱째 묶음 editor. 부팅 2가 ms(health) · nvim(treesitter, 고쳐 쓰기) · emacs(batch, 고쳐 쓰기) · ttt(--exec) · man nvim · man emacs를 본다(plan 결정 F).
+# TP-M7: 일곱째 묶음 editor. 부팅 2가 ms(health) · nvim(treesitter, 고쳐 쓰기) · ttt(--exec) · man nvim을 본다(plan 결정 F). LD-M0: emacs는 없다.
 # TP-M8: 여덟째 묶음 media(ffmpeg · ImageMagick · GraphicsMagick)와 util의 터미널 유틸리티(plan 결정 E · F).
 # TP-M9: 아홉째 묶음 docs(dasht · w3m · Bash docset). 부팅 2가 rc 조각의 링크 · 찾기 · w3m -dump · man dasht · fish 조각을 본다(plan 할 일 6).
 # TP-M10: 열째 묶음 server(postgresql · mysql · nginx · redis · caddy). 부팅 2가 다섯을 사용자로 띄워 응답을 받고 끈다(plan 할 일 7).
@@ -505,7 +505,7 @@ grep -aqF "tp-m6-erlman=lists - List processing" "$LOG" || fail "erl -man lists 
 echo "B2: as tars, erl -man lists and man mix read offline"
 M6_NUMBERS="erl $(ms_of erl)ms, elixir $(ms_of elixir)ms, mix test $(ms_of mix1)/$(ms_of mix2)/$(ms_of mix3)ms, gleam run $(ms_of gleam)ms"
 
-# TP-M7(plan 결정 F): 편집기 넷. 상한은 60초 — 첫 판(SandyBridge · 1GiB): ms 0.2초, nvim 0.7초, emacs 1.9초, ttt 0.8초. 작업 자리는 ~/tp/m7. 기다리는 글자는 계산된 값이다 — 명령 줄의 표시는 sed 접두나 format의 %s로 쪼갠다.
+# TP-M7(plan 결정 F): 편집기 셋(LD-M0이 emacs를 뺐다). 상한은 60초 — 첫 판(SandyBridge · 1GiB): ms 0.2초, nvim 0.7초, ttt 0.8초. 작업 자리는 ~/tp/m7. 기다리는 글자는 계산된 값이다 — 명령 줄의 표시는 sed 접두나 format의 %s로 쪼갠다.
 # ms: --health c의 parser · 쿼리 줄 가운데 초록(32m)인 수. ✓ 같은 비ASCII 글자는 콘솔로 보내지 않는다. runtime/이 없으면 0이다(plan 할 일 6(b)).
 as_tars 'mkdir -p ~/tp/m7 && cd ~/tp/m7 && s=$(date +%s%N) && ms --version 2>&1 | sed "s/^/tp-m7-ms: /"; e=$(date +%s%N); echo "tp-ms-ms=$(((e-s)/1000000))"; ms --health c 2>&1 | grep -E "(parser|queries):" | grep -c 32m | sed "s/^/tp-m7-msok=/"; ls /usr/local/lib/mitos-0.1.3/runtime/grammars | wc -l | sed "s/^/tp-m7-msgram=/"'
 wait_log_re "tp-ms-ms=[0-9]+" 60 || fail "ms --version did not finish in 60s" "tp-m7-ms"
@@ -522,12 +522,10 @@ grep -aqF "tp-m7-nvts=translation_unit" "$LOG" || fail "nvim did not parse C wit
 wait_log "tp-m7-nvsaved=1" 30 || fail "nvim did not write the changed line" "tp-m7-nvsaved"
 echo "B2: as tars, nvim parsed C with treesitter and wrote a changed line ($(ms_of nvim)ms)"
 
-# emacs: 판 · native-comp · treesit을 찍고, 파일 끝에 글자를 넣어 저장한다. site-start의 Loading 줄은 --batch의 정상 메시지다.
-as_tars 'cd ~/tp/m7 && printf "%s\n" a > h7.txt && s=$(date +%s%N) && emacs --batch --eval "(princ (format \"tp-m7-%s=%s-%s-%s\n\" \"emacs\" emacs-version (native-comp-available-p) (treesit-available-p)))" 2>&1; e=$(date +%s%N); echo "tp-ms-emacs=$(((e-s)/1000000))"; emacs --batch h7.txt --eval "(progn (goto-char (point-max)) (insert \"b-from-emacs\") (save-buffer))" > /dev/null 2>&1; grep -c b-from-emacs h7.txt | sed "s/^/tp-m7-emsaved=/"'
-wait_log_re "tp-ms-emacs=[0-9]+" 60 || fail "emacs --batch did not finish in 60s" "tp-m7-emacs"
-grep -aqF "tp-m7-emacs=30.1-t-t" "$LOG" || fail "emacs is not 30.1 with native-comp and tree-sitter" "tp-m7-emacs"
-wait_log "tp-m7-emsaved=1" 60 || fail "emacs --batch did not save the inserted text" "tp-m7-emsaved"
-echo "B2: as tars, emacs 30.1 ran with native-comp and tree-sitter ($(ms_of emacs)ms) and saved an edit"
+# LD-M0(LD design 결정 4): emacs-nox를 뺐다 — 명령이 없어야 한다. 표시 글자는 계산된 값이다(명령 줄의 되비침에 안 맞게).
+as_tars 'command -v emacs | wc -l | sed "s/^/tp-m7-no%s=/;s/%s/emacs/"'
+wait_log "tp-m7-noemacs=0" 60 || fail "emacs is still on the PATH (LD-M0 took emacs-nox out of editor)" "tp-m7-noemacs"
+echo "B2: as tars, emacs is gone from editor"
 
 # ttt: --exec(내장 시험 장치)로 Go 파일을 열어 글자가 뜨기를 기다리고 화면 글자를 남긴다. TUI는 SIGTERM으로 안 끝났다(plan 확인 5) — --exec만 쓴다.
 as_tars 'cd ~/tp/m7 && printf "%s\n" "package main" "" "func main() {}" > h7.go && s=$(date +%s%N) && ttt --size 100x30 --exec "wait-for \"func main\" timeout=60000; screenshot $HOME/tp/m7/shot.txt; quit" h7.go < /dev/null 2>&1 | sed "s/^/tp-m7-ttt: /"; e=$(date +%s%N); echo "tp-ms-ttt=$(((e-s)/1000000))"; grep -c "1  package main" shot.txt | sed "s/^/tp-m7-tttshot=/"'
@@ -535,12 +533,11 @@ wait_log_re "tp-ms-ttt=[0-9]+" 60 || fail "ttt --exec did not finish in 60s" "tp
 wait_log "tp-m7-tttshot=1" 30 || fail "ttt did not draw the Go file on its screen" "tp-m7-ttt" "tp-m7-tttshot"
 echo "B2: as tars, ttt opened a Go file and drew it ($(ms_of ttt)ms)"
 
-as_tars 'MANPAGER=cat man nvim 2>&1 | sed -n "/^NAME/{n;p;q}" | sed "s/^ */tp-m7-nvman=/"; MANPAGER=cat man emacs 2>&1 | sed -n "/^NAME/{n;p;q}" | sed "s/^ */tp-m7-emman=/"; command -v ctags | sed "s/^/tp-m7-ctags=/"'
+as_tars 'MANPAGER=cat man nvim 2>&1 | sed -n "/^NAME/{n;p;q}" | sed "s/^ */tp-m7-nvman=/"; command -v ctags | sed "s/^/tp-m7-ctags=/"'
 wait_log "tp-m7-ctags=/usr/local/bin/ctags" 60 || fail "ctags is not base's universal-ctags (emacs-nox's alternative leaked)" "tp-m7-ctags"
 grep -aqF "tp-m7-nvman=nvim" "$LOG" || fail "man nvim did not show the page (man1=share/man/man1)" "tp-m7-nvman"
-grep -aqF "tp-m7-emman=emacs - GNU project Emacs editor" "$LOG" || fail "man emacs did not show the page" "tp-m7-emman"
-echo "B2: as tars, man nvim and man emacs read offline, and ctags is still universal-ctags"
-M7_NUMBERS="ms $(ms_of ms)ms, nvim $(ms_of nvim)ms, emacs $(ms_of emacs)ms, ttt $(ms_of ttt)ms"
+echo "B2: as tars, man nvim read offline, and ctags is still universal-ctags"
+M7_NUMBERS="ms $(ms_of ms)ms, nvim $(ms_of nvim)ms, ttt $(ms_of ttt)ms"
 
 # TP-M8(plan 결정 F): util · media의 터미널 유틸리티. 상한은 60초 — 첫 판(SandyBridge · 1GiB): --version 60개 16.5초, 도구 2.9초,
 # ffmpeg 5.4초, magick · gm 0.4초(세 배가 60초 아래). 작업 자리는 ~/tp/m8. 기다리는 글자는 chroot에서 잰 계산된 값이다(plan 확인한 것).

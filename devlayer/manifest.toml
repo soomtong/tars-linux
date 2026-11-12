@@ -342,7 +342,7 @@ bundle = "docs"
 version = "0.5.3+git20230121-2.1"
 kind = "debian"
 
-# ── editor(TP-M7) — mitos · neovim · ttt · emacs ──────────────────────────────────────
+# ── editor(TP-M7) — mitos · neovim · ttt (emacs-nox는 LD-M0에서 뺐다 — LD design 결정 4) ─────────────
 # mitos: 주 편집기(helix의 갈래). ms가 맨 위에 있고 옆의 runtime/(문법 301개)을 실제 자리에서 찾는다 — 링크로 불러도 선다(plan 확인 2).
 [[tool]]
 name = "mitos"
@@ -370,13 +370,6 @@ version = "1.11.0"
 kind = "upstream"
 url = "https://github.com/eugenioenko/ttt/releases/download/v1.11.0/ttt-linux-amd64"
 sha256 = "c3c4a382c99b8e291d83a1b527db1b40b8607de8d7373d341bd3e0e926258584"
-
-# emacs: 터미널판. Doom Emacs는 사용자가 망이 있을 때 깐다(사용자 결정 — 시드는 홈 경로에 묶여 안 섰다, plan 확인 4).
-[[tool]]
-name = "emacs-nox"
-bundle = "editor"
-version = "1:30.1+1-6+deb13u1"
-kind = "debian"
 
 # ── lang-beam(TP-M6) — erlang · elixir · gleam ─────────────────────────────────────────
 # erlang: builds.hex.pm의 OTP 빌드(design 결정 1의 prebuilt — erlang/otp의 release에는 linux 바이너리가 없다). ubuntu-24.04판(GLIBC 2.38까지).

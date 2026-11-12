@@ -11,7 +11,7 @@
 | lang-script | python3(pip · venv) · ruby · node(npm) · bun · lua · luau · janet · php |
 | lang-jvm | JDK 25(java · javac) · kotlin · clojure |
 | lang-beam | erlang · elixir(mix) · gleam |
-| editor | ms(mitos) · nvim · emacs · ttt |
+| editor | ms(mitos) · nvim · ttt |
 | util | rg · fd · bat · fzf · jq · lazygit · yazi · duckdb · sqlite3 · hyperfine · mkcert · 그 밖의 터미널 도구 |
 | media | ffmpeg · ImageMagick(magick) · GraphicsMagick(gm) |
 | docs | dasht · w3m · `tars-docs` |
