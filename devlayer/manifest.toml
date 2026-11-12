@@ -575,10 +575,10 @@ exe = [
 [[tool]]
 name = "cyber"
 bundle = "lang-script"
-version = "0.4.7"
+version = "0.4.9"
 kind = "upstream"
-url = "https://github.com/soomtong/cyber/releases/download/0.4.7/cyber-linux-x64.tar.gz"
-sha256 = "585aa652e857453aa88f677c7e4b3fd98d6a2e46116796a6c770b73230322f2e"
+url = "https://github.com/soomtong/cyber/releases/download/0.4.9/cyber-linux-x64.tar.gz"
+sha256 = "892ad8b24d953bb3828bad319276eb130542a02104195375755f86f2b2a8e5df"
 strip = 0
 exe = ["cyber"]
 
@@ -649,10 +649,10 @@ kind = "debian"
 [[tool]]
 name = "cci"
 bundle = "util"
-version = "0.6.2"
+version = "0.7.2"
 kind = "upstream"
-url = "https://github.com/soomtong/claude-code-history-viewer/releases/download/v0.6.2/cci_0.6.2_linux_amd64.tar.gz"
-sha256 = "2c50507638abd4145fc3cab06a71bcc8b7b4e56303c4a073b079cea64a463da7"
+url = "https://github.com/soomtong/claude-code-history-viewer/releases/download/v0.7.2/cci_0.7.2_linux_amd64.tar.gz"
+sha256 = "5259735dfab13cb4bddb54744b4a64534929fa333e9f7694a858b04b7f0bc3b8"
 exe = ["cci"]
 
 [[tool]]
