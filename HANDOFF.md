@@ -20,6 +20,10 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 다음 할 것
 
+0. 열린 서브프로젝트 DY(화면 양보, 사용자 2026-11-12 "SDL 3 갑시다. 나머지는 모두 당신의 추천대로"): design
+   `docs/specs/2026-11-12-tars-display-yield-design.md` · DY-M0 plan `docs/plans/2026-11-12-tars-display-yield-dy-m0.md` · 기억
+   `project_display_yield`. 클라우드 세션에서 design · plan · 커널 프로브(`display/probe/`)까지 썼고 구현은 없다 — devcontainer가 있는
+   세션이 plan의 Task 1부터 잇는다. 브랜치 `claude/gifted-thompson-v5diyz`(main에 아직 안 들어갔다).
 1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
    7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).

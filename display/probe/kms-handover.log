@@ -1,0 +1,63 @@
+T0 terminal(A) sets up
+    resources: crtcs=1 connectors=1
+    A: mkfb ok
+    A: SETCRTC ok
+    A: DIRTYFB ok
+    [A master] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+T1 app opens card0 while A is still master
+    app(uid 0): open ok
+    resources: crtcs=1 connectors=1
+    app: mkfb ok
+    app: SETCRTC errno 13 (Permission denied) (fb=43)
+    [after app tried] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+    [after that app exited] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+T2 A drops master
+    A: DROP_MASTER ok
+    A: DIRTYFB errno 13 (Permission denied)
+    A: SETCRTC errno 13 (Permission denied)
+    [A dropped, nobody master] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+T3 app (root) opens card0 after the drop
+    app(uid 0): open ok
+    resources: crtcs=1 connectors=1
+    app: mkfb ok
+    app: SETCRTC ok (fb=43)
+    [app running] GETCRTC ok: fb_id=43 mode_valid=1 (A's fb=41)
+    A: SET_MASTER while app holds it: errno 16 (Device or resource busy)
+    A: DIRTYFB errno 13 (Permission denied)
+T4 app is SIGKILLed
+    [app dead, before reclaim] GETCRTC ok: fb_id=0 mode_valid=1 (A's fb=41)
+    A: DIRTYFB before SET_MASTER errno 13 (Permission denied)
+    A: SET_MASTER ok
+    [A master again, before modeset] GETCRTC ok: fb_id=0 mode_valid=1 (A's fb=41)
+    A: DIRTYFB before modeset ok
+    A: SETCRTC ok
+    A: DIRTYFB ok
+    [A restored] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+T5 non-root app (uid 1000) after a drop
+    A: DROP_MASTER ok
+    app(uid 1000): open ok
+    resources: crtcs=1 connectors=1
+    app: mkfb ok
+    app: SETCRTC ok (fb=43)
+    [uid-1000 app running] GETCRTC ok: fb_id=43 mode_valid=1 (A's fb=41)
+    [uid-1000 app exited cleanly] GETCRTC ok: fb_id=0 mode_valid=1 (A's fb=41)
+    A: SET_MASTER ok
+    A: SETCRTC ok
+T6 lease
+    A: CREATE_LEASE ok (lessee_id=1 fd=4)
+    resources: crtcs=1 connectors=1
+    lessee: mkfb ok
+    lessee: SETCRTC ok (fb=43)
+    [leased, lessee scanning out] GETCRTC ok: fb_id=43 mode_valid=1 (A's fb=41)
+    A: DIRTYFB while leased ok
+    A: SETCRTC while leased ok
+    [after A's SETCRTC while leased] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+    lessee: SETCRTC again ok
+    A: REVOKE_LEASE ok
+    [revoked, before A redraws] GETCRTC ok: fb_id=43 mode_valid=1 (A's fb=41)
+    lessee: SETCRTC after revoke errno 2 (No such file or directory)
+    resources: crtcs=0 connectors=0
+    lessee: find after revoke errno 2 (No such file or directory)
+    A: SETCRTC ok
+    [lessee fd closed] GETCRTC ok: fb_id=41 mode_valid=1 (A's fb=41)
+PROBE DONE
