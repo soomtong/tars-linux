@@ -2,7 +2,7 @@
 
 Date: 2026-11-12
 Design: `docs/specs/2026-11-12-tars-ghostty-vt-1-0-1-design.md`
-Status: 쓰는 중(2026-11-12). 구현 전.
+Status: 끝났다(2026-11-12).
 
 ## 착수 전에 확정한 것
 
@@ -51,4 +51,13 @@ design의 확인 1~8(HEAD `2b484ea`)과 결정 1~3. 우리 코드는 안 바뀐�
 
 ## 결과
 
-(구현 뒤에 적는다.)
+commit 하나: `44a986e`(ghostty vt-1.0.1). plan과 다른 자리는 없다.
+
+1. Task 1: tarball을 두 번 받아 sha256이 같고(`2c276d3e…7cad7159`), 태그를 얕게 fetch한 `FETCH_HEAD`가 `108cacb`(design 뒤로 안 옮겨졌다),
+   푼 트리와 `git archive`가 `diff -rq` 0. 지우기 전 `lib_version` `1.0.0-dev` → 받은 뒤 `1.0.1-dev`, 스크립트의 `sha256sum -c` OK,
+   저장소에 풀린 `ghostty-src`도 태그 트리와 `diff -rq` 0. `make terminal` 121초.
+2. Task 2: 컨테이너 terminal `zig build test` 89/89 단계, `make quick` PASS. 게스트 `terminal`은 dynamically linked · `NEEDED` 여섯 ·
+   `nm`의 `t memset` · `t memcpy`(`memcpyFast`) · `t memmove` 그대로(design 확인 7을 바이너리로 봤다). 크기 15,316,112 → 15,631,576 B
+   (+315,464 B, +2.1%) — 앞 값은 기록에 없어 scratchpad 사본에 vt-1.0.0을 끼워 같은 맨 `zig build`(`guest-optimize` 기본 ReleaseSafe)로 쟀다.
+3. Task 3: 루트 게이트 33/33 첫 판 PASS(35분 33초 — prebuild 374초 + lanes 1,618초, 회차 33개 모두 `cut log lines A=0 B=0 C=0`,
+   `out/gate-logs/20261112-073112`). devtools 체인(TP-M1) 875초, DC-M2 147초. 판정 글자를 바꾼 체인은 없다.

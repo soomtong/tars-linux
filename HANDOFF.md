@@ -1,6 +1,9 @@
-# HANDOFF: 0.2.1 냄(2026-11-12) — 컨테이너 실행 환경(CE)과 작은 것 다섯(LT)을 닫고 릴리스
+# HANDOFF: GU-M0 닫힘(2026-11-12) — ghostty vt-1.0.1을 다음 판에 싣는다 · 0.2.1 기본 판은 cyber 0.4.7
 
 ## 목표
+
+사용자(2026-11-12): cyber 0.4.7을 받아 0.2.1 기본 판을 지금 빌드로 바꾸라("교체한 흔적을 내지 마", cyber 판이 또 나오면 되풀이) →
+"libghostty 1.0.1 … 반영 검토" → "다음 판에 싣는 걸로". 둘 다 끝났다. 아래 옛 목표(0.2.1)도 끝난 것이다.
 
 사용자(2026-11-11): carryover에서 다음 후보를 추려 달라 → "1번(컨테이너 실행 환경)으로 가자. 조사부터. 완성 작업까지 결정을 위임합니다.",
 작은 것 다섯(ping · hostname · DMI · Landlock · sudo timestamp)도 이어서, 서브에이전트는 셋까지, "이 작업이 완성되면 0.2.1 버전을
@@ -19,6 +22,9 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
 2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
    `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
+2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1). 판을 낼 때 소개 페이지도 — `project_release`의 절차 1~7.
+2-2. 실기 측정 후보(사용자): memcpy · memset을 glibc로 돌릴지 — 기억 `project_ghostty_glibc_mem`(GU design 결정 2). 켜기 전후의
+     `seq 1 200000` · 키 하나의 frame. lead는 켜는 asm과 프로브를 준비할 수 있다.
 3. 다음 서브프로젝트 후보(사용자가 고른다): SMP(커널이 CPU 하나만 쓴다 — CE가 드러냈다, `carryover.md` CE 절), 셸 완성, 묶음
    실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
    묶음 사이 같은 파일 지우기(ISO가 2GiB에 닿았다 — 여유 3MB).
@@ -39,6 +45,15 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 - [x] 루트 게이트 32/33(34분 51초, 잘린 줄 0, `out/gate-logs/20261111-162704`) — pm의 프롬프트 판정 한 줄(LT가 놓침), 고친 뒤 단독 PASS.
       그 앞의 두 판은 시작 2분 안에 멈췄다: 하나는 forward 체인을 넣으려고 내가 멈췄고, 하나는 입구 검사가 config 체인의 `grep -q`를 잡았다.
 - [x] 0.2.1: `v0.2.1` → `4a26f01`, ISO 셋 · SHA256SUMS, smoke 셋, 받아서 대조 OK, 소개 페이지. 숫자는 기억 `project_release`의 0.2.1 절.
+
+## 완료된 작업 (2026-11-12, GU-M0 — ghostty vt-1.0.1)
+
+- [x] design `3519394` · plan `515d36c` · 구현 `44a986e`: `GHOSTTY_SHA` → `108cacb`(태그 `vt-1.0.1`), `GHOSTTY_SHA256` `2c276d3e…`. 우리 코드 0줄.
+      tarball 두 번 같은 해시 · `git archive`와 `diff -rq` 0. `zig build test` 89/89, `make quick` PASS, `terminal` +308KB(15,631,576 B).
+- [x] 루트 게이트 33/33 첫 판(35분 33초, 잘린 줄 0, `out/gate-logs/20261112-073112`).
+- [x] 검토: 처리량 +4.6~8.6%(aarch64 벤치)지만 화면 시간에서 vt 몫이 작다 — 얻는 것은 resize · scrollback 수정. 첫 답에서 "memset/memcpy
+      변경은 무관"이라 했다가 사용자가 물어 확인하니 틀렸다 — 그 glibc 돌리기는 Zig 모듈로 안 오지만 우리 terminal은 대상이다.
+      기억 `project_ghostty_glibc_mem`. 닫기: design Status · plan 결과 · completed · `reference_ghostty_source` · `project_zig_upgrade` · MEMORY.
 
 ## 완료된 작업 (2026-11-12, cyber 0.4.7)
 

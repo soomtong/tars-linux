@@ -45,6 +45,7 @@
 ## 참고 (reference)
 
 - [ghostty source](docs/decisions/reference_ghostty_source.md) — 참고는 `_study/ghostty`(최신), `terminal/ghostty-src`는 빌드 입력(2026-10-28)
+- [ghostty glibc mem](docs/decisions/project_ghostty_glibc_mem.md) — 1.0.1의 memcpy를 glibc로 돌리기는 Zig 모듈로 안 온다, 우리 terminal은 대상이다 — 켜려면 root에서, 실기 측정 뒤(GU, 2026-11-12)
 
 ## 프로젝트 (project)
 
@@ -61,7 +62,7 @@
 - [Measuring shells](docs/decisions/project_measuring_shells.md) — 셸을 재는 환경이 실제 환경과 다르면 값이 조용히 틀린다
 - [Release](docs/decisions/project_release.md) — 0.1.0 · 0.1.1 · 0.1.2 · 0.1.3(2026-11-01) · 0.1.4(2026-11-05) · 0.2.0(2026-11-10, ISO 셋)과 배포 절차 일곱 단계(tag가 `make iso`보다 먼저, 줄끝 CRLF가 만드는 `-dirty`)
 - [Build Version](docs/decisions/project_build_version.md) — `VERSION` + git 꼬리표가 `tars-config version`과 부팅 첫 줄에(BV-M0, 2026-10-20)
-- [Zig upgrade](docs/decisions/project_zig_upgrade.md) — Zig 0.17 이상, `**` 대신 `@splat` · ghostty를 따라 SHA로 고정, 없어진 std 선언과 대체 표(ZU, 2026-10-24) · 지금 0.17.1 + ghostty vt-1.0.0(GV, 2026-11-10)
+- [Zig upgrade](docs/decisions/project_zig_upgrade.md) — Zig 0.17 이상, `**` 대신 `@splat` · ghostty를 따라 SHA로 고정, 없어진 std 선언과 대체 표(ZU, 2026-10-24) · 지금 0.17.1 + ghostty vt-1.0.1(GU, 2026-11-12)
 - [Lessons Split](docs/decisions/project_lessons_split.md) — lessons.md를 허브와 measurements · dead-ends · carryover · key-files로(LS-M0, 2026-10-26)
 
 게이트

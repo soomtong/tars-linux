@@ -1,6 +1,6 @@
 ---
 name: project_zig_upgrade
-description: "Zig 0.17 이상만 쓴다 — `**` 배열 반복 대신 @splat(사용자 2026-11-08). Zig 0.16 → 0.17 전환(ZU, 2026-10-03 ~ 10-24)에서 남은 것. ghostty를 따라가며 SHA로 고정한다 · 두 버전에서 다 컴파일되는 고침은 미리 한다 · 컨테이너 컴파일러가 거부하지 않는 문법은 다시 들어온다 · 0.17이 없앤 std 선언과 대체 · std 안에서 waitpid(*i32)와 W.*(u32)가 어긋난다 · zig fmt는 고침과 따로 commit · 지금 판은 0.17.1 + ghostty vt-1.0.0(GV, 2026-11-10)"
+description: "Zig 0.17 이상만 쓴다 — `**` 배열 반복 대신 @splat(사용자 2026-11-08). Zig 0.16 → 0.17 전환(ZU, 2026-10-03 ~ 10-24)에서 남은 것. ghostty를 따라가며 SHA로 고정한다 · 두 버전에서 다 컴파일되는 고침은 미리 한다 · 컨테이너 컴파일러가 거부하지 않는 문법은 다시 들어온다 · 0.17이 없앤 std 선언과 대체 · std 안에서 waitpid(*i32)와 W.*(u32)가 어긋난다 · zig fmt는 고침과 따로 commit · 지금 판은 0.17.1 + ghostty vt-1.0.1(GU, 2026-11-12)"
 metadata:
   node_type: memory
   type: project
@@ -75,12 +75,17 @@ Dockerfile의 `ENV ZIG_VERSION`이 정본이고 `quick_check.sh` · `checks.yml`
 
 ## 0.17.1 · ghostty vt-1.0.0 (GV-M0, 2026-11-10)
 
-지금 판은 컨테이너 · CI Zig 0.17.1, ghostty 태그 `vt-1.0.0`(`0fa3d57`, libghostty-vt 1.0.0)이다. patch 판 Zig는
+이때 판은 컨테이너 · CI Zig 0.17.1, ghostty 태그 `vt-1.0.0`(`0fa3d57`, libghostty-vt 1.0.0)이다. patch 판 Zig는
 우리 코드를 깨지 않았다. ghostty 381커밋 가운데 깨진 것은 `vt.zig`의 `@fieldParentPtr("term", …)` 하나 — `Terminal`의
 정렬이 커져 "increases pointer alignment"가 났고 `@alignCast`로 감쌌다(ghostty도 같은 꼴). 태그가 있어도 SHA로 받는다.
 같이 본 것: 0.17 `zig fmt`의 열 맞춤은 주석 사이에 홀로 선 배열 원소를 앞줄 격자에 맞춰 이상하게 들여쓴다 — 손으로
 맞추면 fmt가 다시 밀어내므로, 그런 배열은 주석을 위로 모으고 원소를 격자 줄에 넣는다(CO-M1이 그렇게 CI를 빨갛게 했다).
 호스트 0.17.1로 사본을 빌드해 깨진 자리를 미리 다 찾는 방법(아래 절)이 이번에도 그대로 통했다.
+
+## ghostty vt-1.0.1 (GU-M0, 2026-11-12)
+
+지금 판은 ghostty 태그 `vt-1.0.1`(`108cacb`)이다. Zig는 그대로 0.17.1. 우리 코드는 한 줄도 안 바뀌었다 — `GHOSTTY_SHA` · `GHOSTTY_SHA256`
+두 줄과 주석. 1.0.1이 더한 glibc mem 함수 돌리기는 Zig 모듈로는 안 온다 — [[project_ghostty_glibc_mem]].
 
 ## 호스트 0.17로 미리 잴 수 있는 것과 없는 것
 
