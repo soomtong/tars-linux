@@ -835,7 +835,7 @@ grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" |
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, container, docs, editor, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, container, docs, editor, fakesteak, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
 # TP-M11: 부팅 2가 켠 다섯이 저절로 뜨고, 부팅 2의 데이터 · 조각 · CA 신뢰가 남아 있다. 부팅 2는 QEMU를 죽여 끝났다(그 앞에 sync) —
 # 전원이 끊긴 것과 같다. postgres · mysql의 복구는 판정하지 않고 숫자로 적는다(plan 위험 2).
 grep -aqF "tars-init: trust: /usr/bin/update-ca-certificates added the certificates in /usr/local/share/ca-certificates" "$LOG" \
