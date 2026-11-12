@@ -25,10 +25,10 @@ cd "$(dirname "$0")" || exit 1
 #   1  ISO(묶음 열둘) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
 #   2  NVMe만                          overlay /usr from 12, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
-#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 서버 다섯, 화면 셸에서
+#                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 셋(LD-M0이 emacs를 뺐다), fakesteak, 서버 다섯, 화면 셸에서
 #                                      java --version(monitor 45504), bwrap · docker 서비스 · 컨테이너 둘 · firewall=on. 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
-#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 10, gcc · go · node · cci · erl · nvim은 돌고 java는 없다,
+#   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 11, gcc · go · node · cci · erl · nvim은 돌고 java는 없다,
 #                                      dockerd가 저절로 뜨고 keep 컨테이너가 다시 답한다
 #   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열둘을 지우고 새로(깨진 것을 고친다)
 #
@@ -821,7 +821,7 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 10 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, container, docs, editor, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 11 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, container, docs, editor, fakesteak, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
 as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
