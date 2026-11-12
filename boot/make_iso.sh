@@ -45,6 +45,20 @@ MTOOLS_SKIP_CHECK=1 mcopy -o -i "$STAGE/boot/limine/limine-uefi-cd.bin" disk_lab
 ISO_LAYERS="${ISO_LAYERS:-}"
 ISO_OUT="${ISO_OUT:-../out/tars.iso}"
 if [ -n "$ISO_LAYERS" ]; then
+  # LD-M0(LD design 결정 3): base도 독립 묶음도 아닌 묶음은 base와 겹친 파일이 지워져 있다 — base 없이 실으면 그 묶음의 실행
+  # 파일이 라이브러리를 못 찾는다. 목록은 build.sh와 같은 파일이다. 변수로 먼저 읽는다(`grep | grep -q`의 SIGPIPE).
+  standalone="$(grep -vE '^[[:space:]]*(#|$)' ../devlayer/standalone-bundles)"
+  case " $ISO_LAYERS " in
+    *" base "*) ;;
+    *)
+      for b in $ISO_LAYERS; do
+        if ! grep -qxF "$b" <<<"$standalone"; then
+          echo "make_iso: ${b} leans on base; add base to ISO_LAYERS" >&2
+          exit 1
+        fi
+      done
+      ;;
+  esac
   mkdir -p "$STAGE/boot/layers"
   for b in $ISO_LAYERS; do
     f="../devlayer/build/${b}.sqfs"

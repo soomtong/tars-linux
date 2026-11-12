@@ -9,6 +9,9 @@
 //! 호스트에서 검사된다(`layers_test.zig`). loop · mount를 하는 `mountAll`은 게스트에서만 돈다 —
 //! devtools 체인이 그것을 본다.
 //!
+//! LD-M0(LD design 결정 2). base 아닌 묶음은 base와 겹친 파일을 지운 채 구워진다 — base가 못 서면 아무 묶음도 안 얹는다
+//! (`baseIndex`로 base를 먼저 붙인다).
+//!
 //! TP-M4. `/usr/local`만은 쓰기 가능하다 — p3의 `/home/.tars/local`을 upper로 하는 overlay를 하나 더 건다(`mountLocal`,
 //! plan 결정 H). 관행대로 `/usr`는 읽기 전용, `/usr/local`은 그 기계의 관리자(root)가 까는 자리다.
 const std = @import("std");
@@ -147,6 +150,14 @@ pub const List = struct {
         self.len += 1;
     }
 };
+
+/// 목록에서 이름이 정확히 `base`인 칸(LD design 결정 2). 없으면 null — 납품 데모 판처럼 독립 묶음만 있는 경우다.
+pub fn baseIndex(list: *const List) ?usize {
+    for (0..list.len) |i| {
+        if (std.mem.eql(u8, list.name(i), "base")) return i;
+    }
+    return null;
+}
 
 pub const ScanResult = enum { ok, no_dir, unreadable };
 
@@ -353,11 +364,22 @@ pub fn mountAll(dir: [:0]const u8, own: []const u8) void {
         }
     }
 
+    // LD design 결정 2. 다른 묶음은 base와 겹친 파일을 지운 채 구워졌다 — base가 못 서면 반쪽 `/usr`로 실행 파일이 이상하게 깨지느니
+    // 하나도 안 얹는다(버전이 다를 때와 같은 모양). base를 먼저 붙이고, 아래 루프는 그 칸에 결과만 넣어 lowerdir의 이름 순을 지킨다.
+    const base_at = baseIndex(&list);
+    if (base_at) |b| {
+        if (!mountOne(dir, list.name(b))) {
+            logline.print("tars-init: layers: base failed, none mounted (the others lean on it)\n", .{});
+            return;
+        }
+    }
+
     var up: [MAX][]const u8 = undefined;
     var n_up: usize = 0;
     for (0..list.len) |i| {
         const name = list.name(i);
-        if (mountOne(dir, name)) {
+        const ok = if (base_at != null and i == base_at.?) true else mountOne(dir, name);
+        if (ok) {
             up[n_up] = name;
             n_up += 1;
         }

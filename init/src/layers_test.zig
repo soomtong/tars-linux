@@ -121,6 +121,21 @@ fn checkScan() !void {
     const v = layers.readVersion(DIR, &vbuf) orelse return fail("readVersion found nothing", .{});
     if (layers.judgeVersion(v, "0.1.5") != .same) return fail("readVersion gave {s}", .{v});
     if (layers.readVersion(MISSING, &vbuf) != null) return fail("readVersion of a missing dir is not null", .{});
+
+    // LD-M0(LD design 결정 2): base의 칸. 비슷한 이름(base-x)과 앞에 오는 이름(aaa)에 안 속고, base가 없으면 null이다.
+    const empty: layers.List = .{};
+    if (layers.baseIndex(&empty) != null) return fail("baseIndex of an empty list is not null", .{});
+    if (layers.baseIndex(&list) != 0) return fail("baseIndex is not 0 in base, lang-jvm, util", .{});
+    try touch("aaa.sqfs", "");
+    try touch("base-x.sqfs", "");
+    if (layers.scan(Quiet{}, DIR, &list) != .ok) return fail("scan is not ok", .{});
+    const at = layers.baseIndex(&list) orelse return fail("baseIndex lost base among aaa, base-x", .{});
+    if (!std.mem.eql(u8, list.name(at), "base") or at != 1) return fail("baseIndex is {d} ({s}), want 1 (base)", .{ at, list.name(at) });
+    var del_buf: [64]u8 = undefined;
+    const del = std.fmt.bufPrintSentinel(&del_buf, "{s}/base.sqfs", .{DIR}, 0) catch unreachable;
+    if (failed(linux.unlink(del.ptr))) |e| return fail("unlink {s} (errno {d})", .{ del, @backingInt(e) });
+    if (layers.scan(Quiet{}, DIR, &list) != .ok) return fail("scan is not ok", .{});
+    if (layers.baseIndex(&list) != null) return fail("baseIndex found base after base.sqfs was removed", .{});
 }
 
 fn checkLocal() !void {

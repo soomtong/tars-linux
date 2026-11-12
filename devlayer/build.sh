@@ -11,7 +11,7 @@
 # linux-libc-dev의 xt_MARK.h · xt_mark.h 같은 쌍이 한쪽으로 덮인다. 그 자리에는 파일 하나짜리(tar · sqfs)만 둔다.
 #
 # 굽기는 stamp가 같으면 건너뛴다(결정 6). stamp는 매니페스트 줄 · harvest 결과 · 이 디렉터리의 스크립트 · 압축 ·
-# verify가 지운 경로 목록의 sha256이다. 뒤의 것이 들어가는 이유: initrd가 바뀌어 겹치는 경로가 달라지면 같은 입력이라도
+# verify가 지운 경로 목록 · base와 겹쳐 지운 경로 목록(LD-M0)의 sha256이다. verify 목록이 들어가는 이유: initrd가 바뀌어 겹치는 경로가 달라지면 같은 입력이라도
 # 다른 묶음이어야 한다. 그래서 뿌리 만들기와 verify는 매번 돈다(base 기준 수십 초).
 set -euo pipefail
 
@@ -299,6 +299,24 @@ for other in $(manifest_bundles); do
 done
 cp "${work}/${bundle}.paths" "${build}/${bundle}.paths"
 
+# ── base와 같은 것 지우기(LD design 결정 1 · 3) ──────────────────────────
+# base도 독립 묶음(devlayer/standalone-bundles)도 아닌 묶음은 base와 경로 · 내용(파일 sha256, 링크 대상)이 같은 것을 지운다 — 묶음은
+# 늘 base와 함께 얹히고(TP 비목표 6, init은 base가 못 서면 아무것도 안 얹는다 — LD 결정 2) 같은 경로에 다른 내용은 위 대조가 막으므로
+# overlay가 보이는 것은 같다. 이 자리인 까닭: verify(NEEDED 대조)는 온전한 뿌리를 봐야 하고, 위의 .paths도 지우기 전의 온전한 표라야
+# 다른 묶음의 대조가 그대로 돈다. 지운 목록은 stamp에 든다 — base가 바뀌면 이 묶음도 다시 구워진다. 빈 디렉터리는 둔다(해가 없다).
+# 목록은 변수로 먼저 읽는다 — `grep | grep -q`는 뒤가 먼저 닫으면 앞이 SIGPIPE로 죽고 pipefail이 판정을 뒤집는다(위 절의 주석).
+standalone="$(grep -vE '^[[:space:]]*(#|$)' devlayer/standalone-bundles)"
+: >"${work}/${bundle}.dedup"
+if [[ "${bundle}" != base ]] && ! grep -qxF "${bundle}" <<<"${standalone}"; then
+  [[ -f "${build}/base.paths" ]] || die "${build}/base.paths is missing — build base first (make dev-layers builds it first)"
+  LC_ALL=C join -t $'\t' "${work}/${bundle}.paths" "${build}/base.paths" >"${work}/joined"
+  awk -F'\t' '$2 == $3 { print $1 }' "${work}/joined" >"${work}/${bundle}.dedup"
+  (cd "${root}" && tr '\n' '\0' <"${work}/${bundle}.dedup" | xargs -0 -r rm -f --)
+  files="$(find "${root}" -type f | wc -l)"
+  bytes="$(du -sb "${root}" | cut -f1)"
+fi
+deduped="$(wc -l <"${work}/${bundle}.dedup")"
+
 # ── 굽기 ────────────────────────────────────────────────────────────────
 stamp="$(
   {
@@ -306,6 +324,7 @@ stamp="$(
     sha256sum devlayer/build.sh devlayer/verify.sh devlayer/needed-ignore.tsv devlayer/manifest.sh devlayer/hooks/*.sh
     if [[ -d "${files_dir}" ]]; then (cd "${files_dir}" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum); fi
     cat "${work}/${bundle}.dropped"
+    cat "${work}/${bundle}.dedup"
   } | sha256sum | cut -c1-64
 )"
 
@@ -325,7 +344,7 @@ else
   state=baked
 fi
 
-echo "build> ${bundle}: ${state} files=${files} unpacked=$((bytes / 1048576))MiB ${comp}=$(($(stat -c %s "${sqfs}") / 1048576))MiB dropped=$(grep -cv '^relink ' "${work}/${bundle}.dropped" || true) shared=${shared}"
+echo "build> ${bundle}: ${state} files=${files} unpacked=$((bytes / 1048576))MiB ${comp}=$(($(stat -c %s "${sqfs}") / 1048576))MiB dropped=$(grep -cv '^relink ' "${work}/${bundle}.dropped" || true) shared=${shared} deduped=${deduped}"
 
 # ── 압축 넷 재기(plan 결정 J) ───────────────────────────────────────────
 if [[ -n "${DEV_MEASURE:-}" ]]; then
