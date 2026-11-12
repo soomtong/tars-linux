@@ -578,14 +578,14 @@ exe = [
   "luau-ast",
 ]
 
-# cyber: soomtong/cyber. latest 태그는 움직이므로 판 이름 태그. 실행 파일이 옆의 src/를 읽는다(확인 10).
+# cyber: soomtong/cyber. latest 태그는 움직이므로 판 이름 태그. 0.4.7부터 표준 모듈이 실행 파일 안에 있다(전에는 옆의 src/, 확인 10).
 [[tool]]
 name = "cyber"
 bundle = "lang-script"
-version = "0.4.6"
+version = "0.4.7"
 kind = "upstream"
-url = "https://github.com/soomtong/cyber/releases/download/0.4.6/cyber-linux-x64.tar.gz"
-sha256 = "c1250823d6b111b9e2f0fbe3a8d277e4f745cbc019e5690babb81821025b9116"
+url = "https://github.com/soomtong/cyber/releases/download/0.4.7/cyber-linux-x64.tar.gz"
+sha256 = "585aa652e857453aa88f677c7e4b3fd98d6a2e46116796a6c770b73230322f2e"
 strip = 0
 exe = ["cyber"]
 

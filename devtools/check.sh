@@ -328,7 +328,7 @@ echo "B2: as tars, luau ran a typed function and luau-analyze passed it ($(ms_of
 
 as_tars 'cd ~/tp && printf "%s\n" "use math" "" "fn add(a, b int) -> int:" "    return a + b" "" "n := add(40, 2)" "print(\"tp-cyber-%{n}-%{math.sqrt(16.0)}\")" > h.cy && s=$(date +%s%N) && cyber h.cy 2>&1 | sed "s/^/tp-cy: /"; e=$(date +%s%N); echo "tp-ms-cyber=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-cyber=[0-9]+" 60 || fail "cyber did not finish in 60s" "tp-cy"
-grep -aqF "tp-cy: tp-cyber-42-4" "$LOG" || fail "cyber did not run (it reads src/ beside its real path)" "tp-cy"
+grep -aqF "tp-cy: tp-cyber-42-4" "$LOG" || fail "cyber did not run (its std modules are built in since 0.4.7)" "tp-cy"
 echo "B2: as tars, cyber ran with use math ($(ms_of cyber)ms)"
 
 as_tars 'cd ~/tp && printf "%s\n" "console.log(\"tp-node-\" + process.version + \"-\" + require(\"crypto\").createHash(\"sha256\").update(\"tp\").digest(\"hex\").slice(0, 8))" > h.js && s=$(date +%s%N) && node h.js 2>&1 | sed "s/^/tp-node: /"; e=$(date +%s%N); echo "tp-ms-node=$(((e-s)/1000000))"; s=$(date +%s%N); npm --version 2>&1 | sed "s/^/tp-npm=/"; e=$(date +%s%N); echo "tp-ms-npm=$(((e-s)/1000000))"'
