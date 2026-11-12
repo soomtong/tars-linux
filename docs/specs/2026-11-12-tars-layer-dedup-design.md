@@ -3,7 +3,7 @@
 접두사: LD
 
 Date: 2026-11-12
-Status: 설계(2026-11-12). plan은 `docs/plans/2026-11-12-tars-layer-dedup-ld-m0.md`.
+Status: 닫힘(2026-11-12, LD-M0 — 루트 게이트 33/33). plan은 `docs/plans/2026-11-12-tars-layer-dedup-ld-m0.md`.
 
 계기: 사용자(2026-11-12): "묶음 사이 같은 파일 지우기부터 조사해줘. emacs, doom custom 잘 안쓰는거 같아. 그리고, tars-agent(claude code,
 codex, pi 같은 것)를 만들건데 그렇게 되면 에디터는 더 안쓰게 될거야." 조사 중에 "기본판에 fakesteak 추가하자 심심할 때 켜두면 재밌더라."

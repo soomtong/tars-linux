@@ -2,7 +2,7 @@
 
 Date: 2026-11-12
 Design: `docs/specs/2026-11-12-tars-layer-dedup-design.md`
-Status: 쓰는 중(2026-11-12).
+Status: 끝났다(2026-11-12).
 
 ## 착수 전에 확정한 것
 
@@ -63,4 +63,20 @@ docker volume `tars-dedup-survey`(조사용 풀린 묶음)를 지운다.
 
 ## 결과
 
-(구현 뒤에 적는다.)
+commit: `d6cd805`(지우기 · init) · `46b246d`(emacs) · `a59f39e`(fakesteak) · `7ee5257` · `92394ac` · `a390daa`(체인의 묶음 수 · 목록). plan과 다른 자리는 둘.
+
+1. Task 3: util에 같은 도구 줄을 두는 처음 판이 `make quick`의 `tool fakesteak again`에 막혔다 — design 결정 5를 "fakesteak 묶음을 기본 판에도,
+   자동 실행은 `/usr/share/tars/layers/base`가 없을 때만"으로 고쳤다(design에 경위). 그래서 묶음이 열둘이 되었다.
+2. Task 4: devtools 체인이 두 번 빨갰다 — 둘 다 체인에 박힌 묶음 목록 · 수였다(lowerdir 글자에 fakesteak, 부팅 3의 `from 10` → `from 11`).
+   묶음이나 init의 잘못은 아니었다. 셋째 판 PASS(빌드 뒤 722초).
+3. 굽기(`make dev-layers`, 모두 baked): `deduped=` container 286 · docs 289 · lang-script 1,148 · media 367 · server 3,196 · util 299, base ·
+   lang-beam · lang-jvm · lang-native · fakesteak 0. editor는 emacs가 빠져 `zstd15=47MiB`(design 확인 4의 47.3과 같다). 같은 경로에 다른 내용은
+   여전히 0(대조가 멈추지 않았다). `deduped`는 링크를 함께 세어 design 확인 2의 파일 수와 다르다.
+4. 크기: `tars-install`이 옮긴 묶음 열둘 1,762MiB(앞 판 열하나 1,908MiB, −146 — design 예상 145.7). 묶음 열둘을 실은 `out/tars-dev.iso`
+   1,992,007,680 B — 0.2.1 기본 판 2,144,473,088 B보다 145.4MiB 작고 2GiB까지 148MiB.
+5. 체인이 본 것: server(postgres · mysql — base의 perl과 라이브러리에 기댄다) · container(Docker) · 서비스 끄기가 그대로, `emacs`가 없다,
+   `fakesteak`이 `/usr/local/bin`에 있고 `/tmp/.tars-autorun`이 안 생겼다, 부팅 3(lang-jvm 깨짐)에서 나머지 열하나로 돈다, 갱신이 열둘을 지우고 다시.
+   `make iso ISO_LAYERS="editor"`는 `make_iso: editor leans on base; add base to ISO_LAYERS`로 멈췄다.
+6. 루트 게이트 33/33 첫 판 PASS(36분 13초 — prebuild 376초 + lanes 1,653초, 회차 33개 모두 `cut log lines A=0 B=0 C=0`,
+   `out/gate-logs/20261112-110630`). devtools 905초.
+7. 안 본 것: base가 깨진 부팅(design 결정 2)은 체인에 없다 — `carryover.md`의 LD 절.

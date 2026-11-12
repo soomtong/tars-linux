@@ -40,6 +40,9 @@ How to apply (cyber 판이 또 나오면):
   (`git tag -l --format='%(contents)' v0.2.1`을 파일로 → `git tag -d` → `git tag -a -F`).
 - 체인 빌드는 커밋 전의 dirty 트리에서 구웠으므로 `rm -f devlayer/build/*.stamp && make dev-layers` 뒤에
   `make iso ISO_LAYERS="<묶음 열하나>"`. 2GiB 한도(0.2.1은 여유 몇 MB)를 넘지 않는지 크기를 본다. smoke는 [[project_release]] 절차 4.
+- 주의(2026-11-12): `main`에는 0.2.1 뒤의 일(GU-M0 ghostty vt-1.0.1, LD-M0 묶음 중복 지우기 · emacs 빼기 · fakesteak)이 들어 있다. 이 위에서
+  지으면 cyber만이 아니라 그것들도 0.2.1에 실린다 — cyber 새 판은 다음 판(0.2.2)에 싣거나, 0.2.1로 내려면 태그 커밋에서 가지를 내어 cyber만
+  올린다. 어느 쪽인지 사용자에게 묻는다.
 - 바뀌는 것은 기본 판 하나다(cyber는 `lang-script`). barebone · fakesteak 자산은 그대로 두고 `SHA256SUMS`의 기본 판 줄만 바꾼다.
 - 바깥: 원격 태그를 새 커밋으로 옮기고, 기본 판 ISO와 `SHA256SUMS`를 같은 release에 덮어 올리고(`--clobber`), 노트의 cyber 판 글자를
   고친다. 받아서 `shasum -c`.

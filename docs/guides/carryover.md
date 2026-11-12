@@ -54,7 +54,9 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
 
 개발 도구 층 TP-M11 뒤 조사(2026-11-08)가 남긴 것.
 
-- [ ] 묶음 사이 같은 파일 지우기. `devlayer/build.sh`의 묶음끼리 대조(TP-M2 plan 결정 E)는 내용이 다르면 멈추고 같으면 `shared`로 세기만 한다 —
+- [x] 묶음 사이 같은 파일 지우기 — LD-M0(2026-11-12)이 닫았다: base 아닌 묶음은 굽기 직전에 base와 같은 것을 지우고 init은 base가 못 서면
+      아무것도 안 얹는다, emacs-nox도 뺐다. 묶음 1,908 → 1,762MiB, 기본 판 구성 ISO 1,992,007,680 B(2GiB까지 148MiB). 아래는 그 전의 기록이다.
+      `devlayer/build.sh`의 묶음끼리 대조(TP-M2 plan 결정 E)는 내용이 다르면 멈추고 같으면 `shared`로 세기만 한다 —
       같은 파일이 두 sqfs에 다 들어간다. base와 겹친 양(거두기 tar 크기, 풀린 것 → tar째 zstd -15): editor 108 → 28MiB(emacs가 끈 gcc 쪽), server
       93 → 22MiB(perl 57MiB — postgres · mysql의 의존, base와 같은 판 · 바이트), lang-script 24 → 6, media 20 → 6, util 18 → 5, docs 10 → 2. 합 약
       270MiB → 69MiB(squashfs는 블록마다라 실제 ISO 감소는 조금 더 클 것). 고치는 길: 나중 묶음에서 앞 묶음과 같은 파일을 지운다(verify.sh가
@@ -63,6 +65,13 @@ TP-M12 뒤 조사(2026-11-08, Nerd Font 기호)가 남긴 것.
       ISO 2GiB에 다시 닿으면 꺼낸다.
       libicu는 줄일 수 없다: Debian `libicu76`(36MiB, `libicudata` 31MiB)은 postgres · initdb의 NEEDED, mysql의 `/usr/lib/mysql/private` ICU 77
       (51MiB)은 mysqld의 NEEDED — 둘은 서로 다른 판이고 묶음 사이 중복도 아니다. 데이터를 깎으려면 소스 빌드(비목표 7).
+
+개발 도구 층 LD-M0(2026-11-12, 묶음 사이 중복 · emacs · fakesteak)이 남긴 것.
+
+- [ ] "base가 못 서면 아무 묶음도 안 얹는다"(LD design 결정 2)는 체인의 부팅으로는 안 봤다 — 부팅 3이 깨뜨리는 것은 lang-jvm이다. `baseIndex`는
+      `layers_test`가 본다. 볼 때: devtools 체인에 base를 깨뜨리는 부팅을 하나 더(게이트 시간이 는다) 또는 부팅 3의 대상을 바꾸기.
+- [ ] mitos가 editor의 풀린 285MiB(압축 뒤 editor 47MiB의 대부분)다 — 줄일 길(`runtime/grammars` 301개 중 쓰는 것만 등)을 따로 본다.
+- [ ] 경로가 다르고 내용이 같은 파일 32MiB(묶음 사이) — overlay로는 못 지운다(LD 비목표 1).
 
 개발 도구 층 TP-M8(2026-11-07, 터미널 유틸리티 · media)이 남긴 것.
 

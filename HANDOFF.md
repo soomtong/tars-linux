@@ -1,6 +1,9 @@
-# HANDOFF: GU-M0 닫힘(2026-11-12) — ghostty vt-1.0.1을 다음 판에 싣는다 · 0.2.1 기본 판은 cyber 0.4.7
+# HANDOFF: LD-M0 닫힘(2026-11-12) — 묶음 사이 중복 지우기 · emacs 빼기 · fakesteak 기본 판, 다음 판(0.2.2)을 기다린다
 
 ## 목표
+
+사용자(2026-11-12): "묶음 사이 같은 파일 지우기부터 조사 … emacs, doom 잘 안쓰는거 같아 … tars-agent를 만들면 에디터는 더 안쓰게 될거야" ·
+"기본판에 fakesteak 추가하자" → "emacs 빼고 나머지는 권고대로, design · plan · 임플리멘테이션까지. 나는 운전을 좀 할게." 끝났다(결정은 lead, LD design).
 
 사용자(2026-11-12): cyber 0.4.7을 받아 0.2.1 기본 판을 지금 빌드로 바꾸라("교체한 흔적을 내지 마", cyber 판이 또 나오면 되풀이) →
 "libghostty 1.0.1 … 반영 검토" → "다음 판에 싣는 걸로". 둘 다 끝났다. 아래 옛 목표(0.2.1)도 끝난 것이다.
@@ -22,12 +25,14 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
 2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
    `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
-2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1). 판을 낼 때 소개 페이지도 — `project_release`의 절차 1~7.
+2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(묶음 열둘 — 중복 지우기 · emacs 없음 · fakesteak). 판을 낼 때
+     소개 페이지도(기능 목록에서 emacs를 빼고 fakesteak을) — `project_release`의 절차 1~7(절차 3이 LD로 바뀌었다).
+     cyber 새 판이 오면: `main`에 0.2.1 뒤의 일이 있으니 0.2.2에 실을지 0.2.1 가지에서 cyber만 올릴지 사용자에게 묻는다(`feedback_release_iteration`).
 2-2. 실기 측정 후보(사용자): memcpy · memset을 glibc로 돌릴지 — 기억 `project_ghostty_glibc_mem`(GU design 결정 2). 켜기 전후의
      `seq 1 200000` · 키 하나의 frame. lead는 켜는 asm과 프로브를 준비할 수 있다.
 3. 다음 서브프로젝트 후보(사용자가 고른다): SMP(커널이 CPU 하나만 쓴다 — CE가 드러냈다, `carryover.md` CE 절), 셸 완성, 묶음
    실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
-   묶음 사이 같은 파일 지우기(ISO가 2GiB에 닿았다 — 여유 3MB).
+   tars-agent(사용자가 예고 — claude code · codex · pi 같은 것), mitos 줄이기(풀린 285MiB, `carryover.md` LD 절).
 4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
 
 ## 완료된 작업 (2026-11-11~12, LT-M0 · CE-M0~M2 · 0.2.1)
@@ -45,6 +50,15 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 - [x] 루트 게이트 32/33(34분 51초, 잘린 줄 0, `out/gate-logs/20261111-162704`) — pm의 프롬프트 판정 한 줄(LT가 놓침), 고친 뒤 단독 PASS.
       그 앞의 두 판은 시작 2분 안에 멈췄다: 하나는 forward 체인을 넣으려고 내가 멈췄고, 하나는 입구 검사가 config 체인의 `grep -q`를 잡았다.
 - [x] 0.2.1: `v0.2.1` → `4a26f01`, ISO 셋 · SHA256SUMS, smoke 셋, 받아서 대조 OK, 소개 페이지. 숫자는 기억 `project_release`의 0.2.1 절.
+
+## 완료된 작업 (2026-11-12, LD-M0 — 묶음 사이 중복 · emacs · fakesteak)
+
+- [x] 조사: 열한 묶음을 docker volume에 풀어(macOS 바인드는 대소문자로 부딪힌다) 같은 경로 · 같은 내용 288MiB(전부 base와), 다시 구워 −84.8MiB,
+      emacs를 빼면 −60.9MiB 더. design `165b1b8`(plan 함께).
+- [x] `d6cd805` 지우기 · init base 먼저 · `make_iso` 막음 · `devlayer/standalone-bundles`, `46b246d` emacs-nox 뺌, `a59f39e` fakesteak 기본 판(자동 실행은
+      base가 없을 때만 — util에 같은 줄은 manifest 이름 중복 검사에 막혔다), `7ee5257` · `92394ac` · `a390daa` 체인의 묶음 목록 · 수.
+- [x] devtools 체인 PASS(셋째 판 — 앞의 둘은 체인에 박힌 묶음 목록 · 수), 묶음 1,908 → 1,762MiB, `tars-dev.iso` 1,992,007,680 B(2GiB까지 148MiB).
+      루트 게이트 33/33 첫 판(36분 13초, 잘린 줄 0, `out/gate-logs/20261112-110630`). 기억 `project_layer_dedup`.
 
 ## 완료된 작업 (2026-11-12, GU-M0 — ghostty vt-1.0.1)
 
