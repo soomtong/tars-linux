@@ -30,7 +30,7 @@
 - [Little Things](docs/decisions/project_little_things.md) — `hostname=` · ping · DMI id · Landlock · sudo timestamp(LT-M0, 2026-11-12)
 - [Server persistence](docs/decisions/project_server_persistence.md) — 서버 다섯은 `tars-service enable`로 서비스, 데이터 `/home/.tars/var`, 조각 `/config/<서버>.d`, CA는 부팅 때 다시 믿는다(TP-M11, 2026-11-08)
 - [First steps guide](docs/decisions/project_first_steps_guide.md) — 설치 뒤 '뭘 하지'에 답하는 안내를 기계 안에(Wi-Fi · 블루투스 · config · service · 문서), FS-M0로 끝남(2026-11-07)
-- [Release iteration](docs/decisions/feedback_release_iteration.md) — 맥 실기 확인까지 0.1.4를 같은 번호로 거듭 내고, 이전 판의 흔적은 안 남긴다(2026-11-05)
+- [Release iteration](docs/decisions/feedback_release_iteration.md) — 0.1.4를 맥 실기 확인까지, 0.2.1 기본 판을 cyber 판이 나올 때마다 같은 번호로 거듭 내고 흔적은 안 남긴다(2026-11-05 · 11-12)
 - [Devcontainer additions](docs/decisions/feedback_devcontainer_additions.md) — 개발 컨테이너에 필요한 도구는 묻지 않고 더한다(2026-11-05)
 - [Tool sourcing](docs/decisions/feedback_tool_sourcing.md) — 도구의 출처(바닥은 Debian, 유틸리티는 공식 바이너리, 소스 빌드 없음)와 initrd · 개발 도구 층의 기준(2026-11-05)
 - [IPv4 only](docs/decisions/feedback_ipv4_only.md) — IPv6는 후보에서 뺐다(2026-10-31). 다시 여는 조건은 IPv6 망의 제품 탑재

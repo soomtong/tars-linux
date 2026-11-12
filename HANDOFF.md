@@ -9,7 +9,7 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `v0.2.1` → `e36c8d8`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
+`main` = origin(이 기록 커밋까지 push). 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
 태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
 
 ## 다음 할 것
@@ -38,7 +38,14 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
       프로브(망 있음): hello-world · alpine · nginx `-p` · `--memory` · compose · `codex sandbox`. 기억 `project_container_environment`.
 - [x] 루트 게이트 32/33(34분 51초, 잘린 줄 0, `out/gate-logs/20261111-162704`) — pm의 프롬프트 판정 한 줄(LT가 놓침), 고친 뒤 단독 PASS.
       그 앞의 두 판은 시작 2분 안에 멈췄다: 하나는 forward 체인을 넣으려고 내가 멈췄고, 하나는 입구 검사가 config 체인의 `grep -q`를 잡았다.
-- [x] 0.2.1: `v0.2.1` → `e36c8d8`, ISO 셋 · SHA256SUMS, smoke 셋, 받아서 대조 OK, 소개 페이지. 숫자는 기억 `project_release`의 0.2.1 절.
+- [x] 0.2.1: `v0.2.1` → `4a26f01`, ISO 셋 · SHA256SUMS, smoke 셋, 받아서 대조 OK, 소개 페이지. 숫자는 기억 `project_release`의 0.2.1 절.
+
+## 완료된 작업 (2026-11-12, cyber 0.4.7)
+
+- [x] `4a26f01`: manifest의 cyber 세 줄(GitHub digest `585aa652…2f2e`)과 주석 · `devtools/check.sh`의 실패 글자. 0.4.7부터 표준 모듈이
+      실행 파일 안에 있어 tarball은 `cyber` 하나다(`src/` 없음). `NEEDED` 다섯 · `RUNPATH $ORIGIN` 같음, `%ymm` · `%zmm` 0.
+      호환되지 않는 문법 변경(`#[generator]` · `@name` · `fiber`/`suspend`)은 체인의 예제에 안 걸린다.
+- [x] `make quick` PASS, devtools 체인 PASS(빌드 뒤 719초, cyber 564ms). 0.2.1 기본 판에 실었다 — 기억 `feedback_release_iteration`의 0.2.1 절.
 
 ## 완료된 작업 (2026-11-11, cyber 0.4.6)
 
