@@ -25,7 +25,8 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
 2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
    `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
-2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(묶음 열둘 — 중복 지우기 · emacs 없음 · fakesteak). 판을 낼 때
+2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(묶음 열둘 — 중복 지우기 · emacs 없음 · fakesteak),
+     cyber 0.4.9 · cci 0.7.2(`8756319`, 사용자 "다음 판(0.2.2)에 반영" 2026-11-12, devtools 체인 PASS 빌드 뒤 694초). 판을 낼 때
      소개 페이지도(기능 목록에서 emacs를 빼고 fakesteak을) — `project_release`의 절차 1~7(절차 3이 LD로 바뀌었다).
      cyber 새 판이 오면: `main`에 0.2.1 뒤의 일이 있으니 0.2.2에 실을지 0.2.1 가지에서 cyber만 올릴지 사용자에게 묻는다(`feedback_release_iteration`).
 2-2. 실기 측정 후보(사용자): memcpy · memset을 glibc로 돌릴지 — 기억 `project_ghostty_glibc_mem`(GU design 결정 2). 켜기 전후의
