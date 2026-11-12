@@ -37,12 +37,15 @@ design의 확인 1~8과 결정 1~6. 결정은 lead에게 맡겨졌다(사용자 
 3. `docs/help/devtools.md`의 editor 줄.
 4. 지우는 줄은 `git diff | rg '^-'`로 그 자리만인지 본다.
 
-## Task 3 — fakesteak을 util에 (commit 하나: 결정 5)
+## Task 3 — fakesteak을 기본 판에 (commit 하나: 결정 5)
 
-1. `manifest.toml`의 util 묶음 끝에 fakesteak 줄 — 데모 묶음의 줄을 그대로(이름 · 판 · URL · sha256 · `exe`), 주석에 LD 결정 5.
-2. `devtools/check.sh`: 편집기 · 유틸 확인 근처에 `command -v fakesteak`이 `/usr/local/bin/fakesteak`이고 `/tmp/.tars-autorun`이 없다는 줄.
-3. `docs/help/devtools.md`의 util 줄에 fakesteak.
-4. `make quick`이 이름 중복을 받는지 본다(manifest 생성기 · help 대조). 막히면 util 쪽 이름을 바꾸는 대신 그 검사를 읽고 design에 적는다.
+처음 판(util에 같은 줄)은 `make quick`의 manifest 검사(`tool fakesteak again`)에 막혀 design 결정 5를 고쳤다(구현 중, 2026-11-12).
+
+1. 조각 둘(`devlayer/files/fakesteak/etc/tars/rc.d/fakesteak.sh` · `fish/conf.d/90-fakesteak.fish`)에 `/usr/share/tars/layers/base`가 없을 때만.
+2. `Makefile`의 `DEV_LAYERS` 기본값 · 도움말 글, manifest의 데모 묶음 머리 주석.
+3. `devtools/check.sh`: 짓는 ISO의 `ISO_LAYERS`, `LAYERS`(이름 순 — editor 다음), 묶음 수 11 → 12(설치 · overlay · 갱신 줄과 주석),
+   `command -v fakesteak`이 `/usr/local/bin/fakesteak`이고 `/tmp/.tars-autorun`이 없다는 줄.
+4. `docs/help/devtools.md`의 표에 fakesteak 줄. `layers.MAX`(16)는 넉넉하다.
 
 ## Task 4 — 검사와 게이트
 

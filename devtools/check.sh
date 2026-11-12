@@ -22,15 +22,15 @@ cd "$(dirname "$0")" || exit 1
 #        뜬 dockerd와 남은 이미지 · 다시 뜬 컨테이너를 보고 disable docker로 끈다(CE design 결정 4~8).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 열하나) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 11, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 열둘) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 12, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
 #                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 넷, 서버 다섯, 화면 셸에서
 #                                      java --version(monitor 45504), bwrap · docker 서비스 · 컨테이너 둘 · firewall=on. 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
 #   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 10, gcc · go · node · cci · erl · nvim은 돌고 java는 없다,
 #                                      dockerd가 저절로 뜨고 keep 컨테이너가 다시 답한다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열하나를 지우고 새로(깨진 것을 고친다)
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열둘을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -58,7 +58,7 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh media
 ../devlayer/build.sh server
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -69,7 +69,8 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util"
+# LD-M0: fakesteak이 열둘째다(이름 순 — tars-install의 계획 줄이 이름 순으로 찍는다).
+LAYERS="base container docs editor fakesteak lang-beam lang-jvm lang-native lang-script media server util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -214,7 +215,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with eleven layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with twelve layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -230,8 +231,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 11 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 11 layers" "copied"
+COPY_MS="$(last_num 'copied 12 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 12 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -240,8 +241,8 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 11 layers in [0-9]+ms" 5 || fail "init did not lay eleven layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 11 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 12 layers in [0-9]+ms" 5 || fail "init did not lay twelve layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 12 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
@@ -550,6 +551,11 @@ wait_log "tp-m8-ver=61" 10 || fail "not all 61 util and media commands ran by na
 wait_log "tp-m8-rgpath=/usr/local/bin/rg" 10 || fail "rg by name is not util's (/usr/local/bin before /usr/bin)" "tp-m8-rgpath"
 wait_log "tp-m8-rg=ripgrep 15.2.0" 10 || fail "rg is not util's 15.2.0" "tp-m8-rg"
 echo "B2: as tars, all 61 util and media commands run by name offline and util's rg wins over the initrd one"
+# LD-M0(LD design 결정 5): 기본 판도 fakesteak 묶음을 싣는다 — 칠 수 있고, 첫 패널 자동 실행은 base가 얹힌 판에서 안 돈다(표시 파일이 안 생긴다).
+as_tars 'command -v fakesteak | sed "s/^/tp-ld-fake%s=/;s/%s/path/"; test -e /tmp/.tars-autorun; echo "tp-ld-auto%s=$?" | sed "s/%s/run/"'
+wait_log "tp-ld-fakepath=/usr/local/bin/fakesteak" 30 || fail "fakesteak is not on the PATH (the fakesteak bundle)" "tp-ld-fake"
+wait_log "tp-ld-autorun=1" 10 || fail "the fakesteak autorun marker exists — the demo's rc piece ran with base mounted" "tp-ld-auto"
+echo "B2: as tars, fakesteak is on the PATH and did not start by itself with base mounted"
 # F-2: 일하는 도구. duckdb의 SQL은 printf의 \x27로 작은따옴표를 만든다(as_tars는 작은따옴표를 못 담는다). hurl의 libcurl은 initrd의 것이다.
 as_tars 'cd ~/tp/m8 && s=$(date +%s%N) && printf "{\"a\":[1,2,3]}" | jq ".a|add" | sed "s/^/tp-m8-jq=/"; sqlite3 :memory: "select 6*7" | sed "s/^/tp-m8-sqlite=/"; printf "a,b\n1,x\n2,y\n" | mlr --icsv --ojsonl cat | head -1 | sed "s/^/tp-m8-mlr=/"; printf "fn main() {\n    let x = 1;\n}\n" > a.rs; printf "fn main() {\n    let x = 2;\n}\n" > b.rs; difft --color never --display inline a.rs b.rs | grep -c "x = " | sed "s/^/tp-m8-difft=/"; ast-grep run -p "let \$A = \$B" --lang rust a.rs --json=compact | jq -r ".[0].metaVariables.single.B.text" | sed "s/^/tp-m8-sg=/"; hyperfine -N -r 2 --style none --export-json h.json true >/dev/null 2>&1; jq ".results|length" h.json | sed "s/^/tp-m8-hf=/"; hurl --version | grep -o "libcurl/[0-9.]*" | sed "s/^/tp-m8-hurl=/"; printf "a,b\n1,x\n2,y\n3,z\n" > t.csv; printf "copy (select * from read_csv(\x27t.csv\x27)) to \x27t.parquet\x27;\ncopy (select * from \x27t.parquet\x27) to \x27t.json\x27;\nselect sum(a) from read_json(\x27t.json\x27);\n" > d.sql; duckdb -noheader -list < d.sql | sed "s/^/tp-m8-duck=/"; e=$(date +%s%N); echo "tp-ms-m8work=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-m8work=[0-9]+" 60 || fail "the util tool block did not finish in 60s" "tp-m8-"
@@ -896,10 +902,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 11 old layers removed" "$LOG" || fail "the update did not remove the eleven old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 12 old layers removed" "$LOG" || fail "the update did not remove the twelve old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the eleven old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the twelve old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}, ${M11_NUMBERS}, ${CE_NUMBERS}"

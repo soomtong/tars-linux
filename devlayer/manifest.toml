@@ -1223,9 +1223,10 @@ bundle = "container"
 version = "1.8.0.3-1+deb13u1"
 kind = "debian"
 
-# ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. DEV_LAYERS 기본값에 없고 `make dev-layers DEV_LAYERS=fakesteak`로 굽는다 ──
+# ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. LD-M0부터 DEV_LAYERS 기본값에 있고 기본 판에도 실린다(LD design 결정 5) ──
 # fakesteak: 사용자의 fork(soomtong/fakesteak)가 GitHub Actions로 내는 정적 실행 파일(-O3 -static, -march 없음). 원본 domsson/fakesteak은 바이너리가 없다.
-# 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6).
+# 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6) — base가 없는 납품 데모 판에서만 뜬다(LD-M0).
+# base 없이 혼자 실리므로 devlayer/standalone-bundles에 있다(base와 겹친 파일을 안 지운다).
 [[tool]]
 name = "fakesteak"
 bundle = "fakesteak"

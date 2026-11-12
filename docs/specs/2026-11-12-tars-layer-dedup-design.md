@@ -16,7 +16,7 @@ TP-M2 plan 결정 E(묶음끼리의 대조) · BB design(`2026-11-09-tars-barebo
 ## 한 줄 요약
 
 base 아닌 묶음에서 base와 경로 · 내용이 같은 파일을 굽기 직전에 지우고(약 85MiB), editor에서 emacs-nox를 빼고(약 61MiB 더), init은
-base가 못 서면 아무 묶음도 안 얹는다. fakesteak은 바이너리만 util 묶음에 더해 기본 판에 싣는다 — 첫 패널 자동 실행은 납품 데모 판에만 남는다.
+base가 못 서면 아무 묶음도 안 얹는다. fakesteak 묶음을 기본 판에도 싣고, 첫 패널 자동 실행은 base가 없는 납품 데모 판에서만 돈다.
 
 ## 확인 (2026-11-12, HEAD `d74fd8d`의 `devlayer/build/*.sqfs`)
 
@@ -48,7 +48,8 @@ base가 못 서면 아무 묶음도 안 얹는다. fakesteak은 바이너리만 
    버전 줄도 하나라(결정 13) 이런 부팅은 고장 때뿐이다. 선례: `verify.sh`가 이미 initrd와 겹친 것을 지운다 — 묶음은 initrd에 기댄다.
 6. `devlayer/files/fakesteak/etc/`의 조각 둘(`tars/rc.d/fakesteak.sh` · `fish/conf.d/90-fakesteak.fish`)은 부팅마다 첫 패널에 fakesteak을
    띄운다(BB design 결정 6). fakesteak 묶음을 그대로 기본 판에 넣으면 기본 판도 부팅마다 비가 내린다. 묶음은 0.3MB(323,584 B).
-   `manifest-gen.zig`에는 도구 이름이 겹치는 것을 막는 검사가 없다.
+   `manifest-gen.zig`의 `emit`은 도구 이름이 두 번 나오면 멈춘다(`tool fakesteak again`, 구현 중 `make quick`이 드러냈다 — 조사 때는 못 찾았다).
+   base가 얹힌 기계에는 그 출처 기록 `/usr/share/tars/layers/base`가 있고, 납품 데모 판(fakesteak만 싣는다)에는 없다.
 7. `build.sh`는 묶음마다 경로 표 `devlayer/build/<묶음>.paths`(파일은 sha256, 링크는 대상)를 남기고 굽기 전에 다른 묶음의 표와 맞춘다.
    stamp는 매니페스트 줄 · harvest 결과 · 스크립트 · 압축 · `files/` · verify가 지운 목록이다 — base의 내용은 안 들어간다.
    verify(NEEDED 대조)는 묶음 안의 라이브러리를 보므로 base와 겹친 것을 verify 전에 지우면 빨개진다.
@@ -86,13 +87,15 @@ editor는 mitos · neovim · ttt만 남는다. tars-agent가 오면 편집기는
 `docs/help/devtools.md`의 editor 줄. `harvest.sh:155`의 alternatives 처리(emacs-nox의 `ctags` 등)는 범용이라 둔다 — 체인의 `ctags`가
 universal-ctags인지 보는 줄도 그대로 둔다. Doom 안내는 기계 안 문서에 없다.
 
-### 결정 5 — fakesteak은 바이너리만 util에, 자동 실행은 데모 판에만
+### 결정 5 — fakesteak 묶음을 기본 판에도, 자동 실행은 base가 없을 때만
 
-`manifest.toml`의 util 묶음에 fakesteak 줄(같은 URL · sha256 · `exe`)을 하나 더 둔다. 기본 판은 util을 실으므로 `fakesteak`을 칠 수 있고,
-확인 6의 조각은 fakesteak 묶음에만 있으므로 안 뜬다. 납품 데모 판(`ISO_LAYERS="fakesteak"`)은 그대로다. 두 묶음이 한 ISO에 함께 실려도
-경로 · 내용이 같아 대조를 통과한다. fakesteak 묶음 하나를 기본 판에 그대로 싣는 길은 확인 6 때문에, 조각에 판을 가르는 조건을 넣는 길은
-"어느 판인가"를 실행 중에 알 방법이 없어 고르지 않는다. 체인은 기본 판의 부팅 뒤 `command -v fakesteak`이 있고 `/tmp/.tars-autorun`이 없는지 본다.
-`docs/help/devtools.md`의 util 줄에 fakesteak을 더한다.
+fakesteak 묶음을 `DEV_LAYERS` 기본값과 기본 판의 묶음 목록에 더한다. 확인 6의 조각 둘에 조건 하나 — `/usr/share/tars/layers/base`가 없을
+때만 — 를 더해, 저절로 뜨는 것은 납품 데모 판(`ISO_LAYERS="fakesteak"`)뿐이고 기본 판에서는 `fakesteak`을 손으로 친다. fakesteak은 독립
+묶음이라(결정 3) base와 겹쳐도 안 지운다(0.3MB). 체인은 기본 판의 부팅 뒤 `command -v fakesteak`이 있고 `/tmp/.tars-autorun`이 없는지 보고,
+묶음 수를 세는 자리(설치 · overlay · 갱신 줄)는 열둘로 고친다. `docs/help/devtools.md`의 표에 fakesteak 줄을 더한다.
+
+처음 고른 길(util 묶음에 같은 도구 줄을 하나 더)은 확인 6의 이름 중복 검사에 막혔다. 이름만 바꾸면 설치 자리(`/usr/local/lib/<이름>-<판>`)가
+달라져 두 묶음의 `/usr/local/bin/fakesteak` 링크 대상이 어긋나고, 묶음끼리의 대조가 멈춘다. 생성기의 규칙을 푸는 길은 넓다.
 
 ### 결정 6 — milestone 하나
 

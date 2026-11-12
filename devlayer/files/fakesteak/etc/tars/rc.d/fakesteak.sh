@@ -9,9 +9,12 @@
 # 끄기 뒤의 H · 2J · 3J(clear가 보내는 것)는 비의 잔상을 지운다 — 160열에서 155열로 줄면 남은 비 몇 줄이 다시 접혀 프롬프트 위에
 # 남았다(FU-M1 probe). 지울 스크롤백은 부팅 직후의 비뿐이다.
 # 시스템 rc의 for 루프 안에서 source되므로 return을 쓰지 않는다(return은 바깥 rc를 끝낸다).
+# LD-M0(LD design 결정 5): 기본 판도 이 묶음을 싣는다 — 저절로 뜨는 것은 개발 도구 층이 없는 납품 데모 판뿐이다. base가 얹힌 기계는
+# 그 출처 기록 /usr/share/tars/layers/base가 있다. 기본 판에서는 fakesteak을 손으로 친다.
 case $- in
   *i*)
     if [ "${TERM:-}" = xterm-256color ] && [ -z "${SSH_CONNECTION:-}" ] && [ ! -e /tmp/.tars-autorun ] &&
+      [ ! -e /usr/share/tars/layers/base ] &&
       command -v fakesteak >/dev/null 2>&1; then
       : >/tmp/.tars-autorun
       sh -c 'trap : INT; printf "\033[10;1t"; fakesteak -b; printf "\033[10;0t\033[H\033[2J\033[3J"'

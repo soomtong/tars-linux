@@ -17,6 +17,7 @@
 | docs | dasht · w3m · `tars-docs` |
 | server | postgresql 18 · mysql 9.7 · nginx · redis · caddy |
 | container | docker(compose · buildx) · bwrap · socat |
+| fakesteak | `fakesteak` — 화면에 비가 내린다. Ctrl+C로 끝난다 |
 
 `ls /usr/local/bin`이 없거나 비어 있으면 이 기계에는 개발 도구 층이 없습니다(층 없이 만든 이미지로 설치한 경우입니다).
 
