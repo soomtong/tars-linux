@@ -149,7 +149,7 @@ window.TARS = {
     ['2026-11-10', '0.2.0', '개발 도구 층 — 설치하면 망 없이 언어 스무 남짓 · 편집기 · 서버 다섯 · 문서, 전체 화면, barebone과 fakesteak 납품 데모 ISO도 함께', 'tars-0.2.0-x86_64.iso',
       'd3fe88ae13c307b58292de4f0ea35824a3e72b02fda0846fdf508e802a2137bf'],
     ['2026-11-12', '0.2.1', '컨테이너 — Docker가 서비스로 서고 AI 도구의 샌드박스(bwrap)가 선다, 기계의 이름 · ping · Landlock', 'tars-0.2.1-x86_64.iso',
-      '575eebe32c3af39e10326db5fdf06a7862c2bd2c8ee364a6fd02587103cb7de0'],
+      'ad2f2213ff4941bdebbf0c202e3e40ce5d6ca864ea4766513da303926f5a65bc'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
