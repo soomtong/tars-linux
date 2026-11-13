@@ -116,19 +116,6 @@ wait_for_log() {
   return 1
 }
 
-# 화면을 하나 뜬다. QEMU가 파일을 다 쓸 때까지 기다린다 — 크기가 헤더 + 픽셀이 되면 끝이다.
-screendump() {
-  local file="$1" want i
-  want=$(( 3 * XRES * YRES ))
-  rm -f "$file"
-  echo "screendump ${file}" >&3
-  for i in $(seq 1 100); do
-    if [ -f "$file" ] && [ "$(stat -c %s "$file")" -gt "$want" ]; then return 0; fi
-    sleep 0.1
-  done
-  return 1
-}
-
 # P6 하나의 크기. `WxH`.
 ppm_size() {
   perl -e '
@@ -159,25 +146,6 @@ ppm_blocks() {
       }
     }
     print "$bad\n";' "$@"
-}
-
-# 상자 하나에서 가장 많은 색(바탕)과 그것과 다른 픽셀의 수(잉크). `bg=RRGGBB ink=N`.
-# terminal의 dumpInk가 칸의 바탕색과 다른 픽셀을 세는 것과 같은 셈이다 — 글자가 칸의 반을
-# 넘게 덮지 않는 한 가장 많은 색이 곧 칸의 바탕이다.
-ppm_ink() {
-  perl -e '
-    my ($f, $x0, $y0, $w, $h) = @ARGV;
-    open(my $fh, "<:raw", $f) or die "$f: $!\n";
-    local $/; my $d = <$fh>;
-    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
-    my $row = $1 * 3;
-    my (%n, @px);
-    for my $y ($y0 .. $y0 + $h - 1) {
-      for my $x ($x0 .. $x0 + $w - 1) { my $p = substr($d, $y * $row + $x * 3, 3); $n{$p}++; push @px, $p; }
-    }
-    my ($bg) = sort { $n{$b} <=> $n{$a} } keys %n;
-    my $ink = grep { $_ ne $bg } @px;
-    printf "bg=%s ink=%d\n", unpack("H6", $bg), $ink;' "$@"
 }
 
 # 부팅 하나. 인자가 있으면 그 디스크 이미지를 물린다.

@@ -531,6 +531,12 @@ run_chain() {
 # 커서가 bar 띠인지, 프로그램의 CSI 2 SP q가 이기고 CSI 0 SP q가 bar로 되돌리는지, vim을 나와도 bar인지, tars-config set ·
 # reload terminal이 underline으로 다시 띄우는지 본다. 숨김(DECTCEM)은 render 체인이 본다. monitor 45506. 회차당 부팅 1회.
 #
+# DY 체인은 화면 양보를 본다. 셸이 사용자(설정 디스크의 user= · tars-home 디스크)로 뜬 부팅에서 /dev/dri와
+# /run/tars/display.sock이 root:video 660이고 셸이 video의 구성원이며 card0의 fd가 셸로 새지 않는지, 그리고
+# `tars-fullscreen tars-kms-fill`이 화면 전체를 한 색으로 칠하고(screendump) 끝나면 · SIGKILL로 죽으면 terminal이
+# 되찾는지, 양보 중의 출력이 복귀 뒤 보이는지, 둘째 요청이 busy인지, 그 내내 terminal이 안 죽는지 본다. monitor 45507.
+# 회차당 부팅 1회.
+#
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
 CHAINS=(
@@ -567,6 +573,7 @@ CHAINS=(
   "TP-M1:./devtools/check.sh"
   "FU-M1:./fullscreen/check.sh"
   "CO-M1:./cursor/check.sh"
+  "DY-M0:./display/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

@@ -330,3 +330,44 @@ apple_disk() {
   mkfs.ext2 -F -q -m 0 -L "$2" -d "$seed" "$1"
   rm -rf "$seed"
 }
+
+# ── 화면 덤프와 상자 읽기 (DY-M0이 hidpi · fullscreen에서 올렸다) ───────────
+#
+# 두 체인에 글자 그대로 같은 두 벌이 있었고 display가 셋째였다(DY-M0 plan Task 4 — 셋째가 되면 올린다).
+# pointer의 screendump는 다른 판(해상도를 모르고 "비어 있지 않다"만 본다)이라 그 체인에 그대로 둔다 —
+# 뒤에 정의한 함수가 이긴다.
+#
+# 부르는 쪽이 갖춰야 하는 것: fd 3(QEMU monitor), XRES · YRES(그 부팅의 물리 해상도).
+
+# 화면을 하나 뜬다. QEMU가 파일을 다 쓸 때까지 기다린다 — 크기가 헤더 + 픽셀이 되면 끝이다.
+# 경로는 절대 경로로 넘긴다 — QEMU 프로세스의 작업 디렉터리가 기준이다.
+screendump() {
+  local file="$1" want i
+  want=$(( 3 * XRES * YRES ))
+  rm -f "$file"
+  echo "screendump ${file}" >&3
+  for i in $(seq 1 100); do
+    if [ -f "$file" ] && [ "$(stat -c %s "$file")" -gt "$want" ]; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 상자 하나에서 가장 많은 색(바탕)과 그것과 다른 픽셀의 수(잉크). `bg=RRGGBB ink=N`.
+# terminal의 dumpInk가 칸의 바탕색과 다른 픽셀을 세는 것과 같은 셈이다 — 글자가 칸의 반을
+# 넘게 덮지 않는 한 가장 많은 색이 곧 칸의 바탕이다.
+ppm_ink() {
+  perl -e '
+    my ($f, $x0, $y0, $w, $h) = @ARGV;
+    open(my $fh, "<:raw", $f) or die "$f: $!\n";
+    local $/; my $d = <$fh>;
+    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
+    my $row = $1 * 3;
+    my (%n, @px);
+    for my $y ($y0 .. $y0 + $h - 1) {
+      for my $x ($x0 .. $x0 + $w - 1) { my $p = substr($d, $y * $row + $x * 3, 3); $n{$p}++; push @px, $p; }
+    }
+    my ($bg) = sort { $n{$b} <=> $n{$a} } keys %n;
+    my $ink = grep { $_ ne $bg } @px;
+    printf "bg=%s ink=%d\n", unpack("H6", $bg), $ink;' "$@"
+}

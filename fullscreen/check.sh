@@ -122,36 +122,6 @@ print_csi() {
   type_keys p r i n t f spc apostrophe backslash 0 3 3 bracket_left "$@" apostrophe ret
 }
 
-# 화면을 하나 뜬다. QEMU가 파일을 다 쓸 때까지 기다린다(hidpi/check.sh와 같다).
-screendump() {
-  local file="$1" want i
-  want=$(( 3 * XRES * YRES ))
-  rm -f "$file"
-  echo "screendump ${file}" >&3
-  for i in $(seq 1 100); do
-    if [ -f "$file" ] && [ "$(stat -c %s "$file")" -gt "$want" ]; then return 0; fi
-    sleep 0.1
-  done
-  return 1
-}
-
-# 상자 하나에서 가장 많은 색(바탕)과 그것과 다른 픽셀의 수(잉크). `bg=RRGGBB ink=N`(hidpi/check.sh와 같다).
-ppm_ink() {
-  perl -e '
-    my ($f, $x0, $y0, $w, $h) = @ARGV;
-    open(my $fh, "<:raw", $f) or die "$f: $!\n";
-    local $/; my $d = <$fh>;
-    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
-    my $row = $1 * 3;
-    my (%n, @px);
-    for my $y ($y0 .. $y0 + $h - 1) {
-      for my $x ($x0 .. $x0 + $w - 1) { my $p = substr($d, $y * $row + $x * 3, 3); $n{$p}++; push @px, $p; }
-    }
-    my ($bg) = sort { $n{$b} <=> $n{$a} } keys %n;
-    my $ink = grep { $_ ne $bg } @px;
-    printf "bg=%s ink=%d\n", unpack("H6", $bg), $ink;' "$@"
-}
-
 # 설정 디스크 하나. $1 = 이미지 경로, $2 = 라벨, 나머지 = tars.conf의 줄.
 settings_disk() {
   local img="$1" label="$2" seed
