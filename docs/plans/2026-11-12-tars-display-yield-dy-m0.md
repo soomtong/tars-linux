@@ -2,8 +2,7 @@
 
 Date: 2026-11-12
 Design: `docs/specs/2026-11-12-tars-display-yield-design.md`
-Status: plan만 있다(구현 전). 이 plan은 클라우드 세션에서 썼다 — devcontainer와 게이트가 없어 구현 · 게이트는 사용자의 기계에서 도는
-세션이 잇는다(design 위험 6).
+Status: 끝(2026-11-13). plan은 클라우드 세션에서 썼고(design 위험 6) 구현 · 게이트는 로컬 세션이 했다. 결과는 맨 아래.
 
 ## 착수 전에 확정한 것
 
@@ -85,4 +84,31 @@ $ tars-fullscreen tars-kms-fill CC6666 5      ← 화면이 5초 동안 한 색,
 
 ## 결과
 
-(구현 뒤에 적는다.)
+commit: `e0d5c0c`(Task 1) · `79b8611`(Task 2) · `d06d91c`(Task 3) · `7f35d6f`(Task 4). 구현은 로컬 세션(2026-11-13)이다.
+Task 3과 4는 사용자 지시로 체인이 PASS한 뒤에 함께 commit했다 — commit에는 부팅에서 확인된 것만 담았다. plan과 다른 자리는 넷이다.
+
+1. Task 1: `openNodes`를 `audio.zig`가 아닌 새 파일 `init/src/devnode.zig`에 뒀다(display가 audio 모듈을 부르는 모양을 피했다).
+   `/dev/snd`의 두 줄은 글자가 같다. `account.RESERVED`에 `video`를 더했다(같은 이름의 사용자가 그룹과 부딪친다). `login_test`가
+   HP-M2 때의 group을 손으로 적고 있어 첫 판에서 빨갰다 — 바탕 group에 video 줄을 더했다. `home` 체인이 `video:x:44:hpuser`도 본다.
+2. Task 2: plan에 없던 `drm.open`의 `O_CLOEXEC`. terminal이 card0을 CLOEXEC 없이 열고 `forkpty`의 자식은 fd를 닫지 않아, 화면 셸(uid 1000)과
+   그 자손이 master인 drm_file의 fd를 물려받고 있었다 — 양보 없이도 SETCRTC가 됐다. 빨강 판(CLOEXEC를 뺀 display 체인)이 판정 1에서
+   `d2-1`로 멈춰 수정 전에 정말 샜음을 보였다.
+   "그리는 일까지 건너뛰어도 되는가"의 답: 건너뛴다. 양보 중에는 `tick`이 `decideFrame` · `render`를 통째로 건너뛰어 present 두 자리를 함께
+   막는다. 그때 `output_pending`을 `needs_redraw`로 옮긴다 — 남겨 두면 `pacing.wait`가 0을 돌려 poll이 헛돈다. 체인 로그에서 yield 줄과
+   reclaim 줄이 바로 붙어 있다(양보 중 `screen>` 덤프 0줄). 로그는 결정 9의 넷에 `listening on …` · `refused pid N (까닭)` ·
+   `modeset after reclaim failed`를 더했다. 상태 규칙은 `yield.Machine`이 `ops`(anytype)를 받는 모양이라 `yield_test` 여섯 절이 가짜로 본다.
+3. Task 3: 손님 쪽 경합. terminal은 둘째 손님을 받자마자 `busy`를 보내고 닫는데, 그 사이 `tars-fullscreen`의 `send`가 EPIPE로 실패해
+   이미 와 있던 답을 안 읽고 "연결이 닫혔다"고 찍었다(종료값 1은 맞았다). display 체인 판정 5가 문장을 보다가 잡았다 — send가 실패해도
+   답을 읽는다. 도움말은 `docs/help/desk.md`의 화면 절. Zig 0.17에 `std.fmt.bufPrintZ`가 없다(`bufPrintSentinel`).
+4. Task 4: 노드 수는 2다 — virtio-gpu는 `card0` + `renderD128`. 기본 VGA(bochs-drm, `-vga` 지정 없는 체인 · home)는 `card0` 하나라 1이다.
+   셸은 사용자 dyuser다(설정 디스크의 `user=` + 라벨 `tars-home`의 ext4 디스크 — `pickUser`가 둘 다 본다). 판정 순서는 문(plan의 7)을
+   맨 앞에 두었다. `screendump` · `ppm_ink`는 hidpi · fullscreen에 같은 두 벌이 있어 `gate_lib.sh`로 올렸다(pointer의 `screendump`는 다른
+   판이라 그대로). 두 체인을 다시 돌려 PASS. 체인은 글자를 키로 바꾸는 `type_line`을 갖는다 — 첫 두 판이 그것이 모르는 글자(대문자 · `_`)로
+   멈췄다(체인의 잘못).
+5. display 체인: 부팅 1회, 3분 안팎. 판정 일곱 — 문 · cc6666(가운데와 네 귀퉁이) · 복귀(양보 중 프로그램의 단계 줄 여덟이 화면에) ·
+   `back-42` · busy와 `rc=1` · SIGKILL 뒤 복귀 · 재시작 0과 yield 3 · reclaim 3. 확인 3(uid 1000이 연 것만으로 master)이 TARS 커널 6.18의
+   virtio-gpu에서도 같았다(`setcrtc ok`).
+6. 루트 게이트: 34/34 첫 판 PASS(34분 58초 — prebuild 356초 + lanes 1,597초, 회차 34개 모두 `cut log lines A=0 B=0 C=0`, `out/gate-logs/20261113-103302`).
+   DY-M0 45초, devtools 849초.
+7. 안 본 것: i915 실기(Task 5, 사용자). 양보 중 `reload terminal`(design 위험 2 — DY-M1). 양보 중 키보드는 여전히 terminal의 것이다(체인은
+   그것을 이용해 양보 중에 `kill -9`를 친다).

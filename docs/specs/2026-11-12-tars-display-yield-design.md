@@ -3,7 +3,7 @@
 접두사: DY
 
 Date: 2026-11-12
-Status: 열림. DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`(아직 구현 전).
+Status: 열림. DY-M0 끝(2026-11-13, `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`의 결과 절, 체인 `display`). 다음은 DY-M1.
 
 계기: 사용자(2026-11-12): TARS가 외주 솔루션 · 프로덕트로 납품되는 경우 — 키오스크는 fakesteak으로 1차 확인, 2차 데모는 GPU를 쓰는
 애플리케이션. "예전 DOS 시스템처럼 콘솔 화면이 기본이지만 Full screen graphics 프로그램을 만들어 실행시킬 수 있게 확장; KMS master를

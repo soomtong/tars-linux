@@ -4,6 +4,13 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
+화면 양보 DY-M0(2026-11-13)이 남긴 것. DY-M1 · M2에 들어갈 것은 design의 Milestone에 있고 여기에는 그 밖의 것만 둔다.
+
+- [ ] i915 실기(맥북 에어 2011)에서 양보와 복귀를 아직 안 봤다(DY-M0 plan Task 5): `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`.
+      볼 것 — 색이 뜨는가, 5초 뒤 콘솔이 깨끗이 돌아오는가(design 위험 1 — 앱이 죽은 뒤의 CRTC 상태), simpledrm → i915로 카드가 바뀌는
+      부팅에서 `tars-init: display:` 줄이 무엇을 셌는가(init은 terminal을 띄우기 전에 한 번만 연다).
+- [ ] 부팅 뒤 생긴 DRM 노드(USB 디스플레이 등)는 root 600으로 남는다 — `/dev/snd`와 같은 까닭(init에 uevent가 없다, HP 절).
+
 컨테이너 실행 환경 CE(2026-11-12)가 남긴 것. TP-M12의 "컨테이너 실행 환경" 항목은 CE가 닫았다
 (`docs/specs/2026-11-11-tars-container-environment-design.md`).
 

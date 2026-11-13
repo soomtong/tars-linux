@@ -1,6 +1,9 @@
-# HANDOFF: DY 열림(2026-11-12) — 화면 양보의 design · DY-M0 plan · 커널 프로브까지, 구현은 로컬 세션이 잇는다 · LD-M0 닫힘, 다음 판(0.2.2)을 기다린다
+# HANDOFF: DY-M0 끝(2026-11-13) — 화면 양보가 섰다(체인 `display`), 다음은 DY-M1 · LD-M0 닫힘, 다음 판(0.2.2)을 기다린다
 
 ## 목표
+
+사용자(2026-11-13, 로컬 세션): origin을 받아 DY-M0을 Task 1부터 — Task마다 "커밋하고 진행해". Task 3 · 4는 "2로 가자"(체인이 PASS한 뒤에
+따로 commit). 끝났다 — 결과는 DY-M0 plan의 결과 절.
 
 사용자(2026-11-12): 납품 시나리오(키오스크 다음의 2차 데모 = GPU를 쓰는 프로그램)를 두고 "KMS master를 terminal이 독점하는 구조를
 개선하자" · 메인 터미널을 GPU 기반으로 할지 논의 → "SDL 3 갑시다. 나머지는 모두 당신의 추천대로 진행합니다." → "로컬에 있는
@@ -19,27 +22,19 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 현재 브랜치
 
-`main` = origin(이 기록 커밋까지 push). 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
+`main`은 origin(`a46119c`)보다 DY-M0 commit 다섯(Task 넷 + 닫기)만큼 앞선다 — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
 태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
 
 ## 다음 할 것
 
-0. DY(화면 양보)를 잇는다. 읽는 순서: 기억 `project_display_yield`(실측 여섯과 고른 까닭) → design
-   `docs/specs/2026-11-12-tars-display-yield-design.md` → DY-M0 plan `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`.
-   - 받기: `main`에 들어 있다(문서 커밋 둘 — 문서 · `display/probe/` 둘 · `MEMORY.md` · 이 파일뿐이다). `git pull` 뒤 plan의 Task 1
-     (`video` 그룹과 `/dev/dri`)부터. 클라우드 세션의 브랜치 `claude/gifted-thompson-v5diyz`는 같은 내용이라 지워도 된다.
-   - 시작 전에 대조할 것: design 확인 7~16의 줄 번호는 `547c3fc` 기준이고 서브에이전트(Explore)의 보고에서 왔다. lead가 직접 본 것은
-     `main.zig:3602` · `arm()` 4007-4037 · `:1672-1679` · `pty.zig:37 · 51` · `make_initrd.sh:650-657` · `account.zig:147` · `drm.zig`의
-     `open` · `modeset` · `present`뿐이다. 나머지(`input.zig`의 줄 · `init/build.zig` · `fullscreen/check.sh`의 helper · monitor 포트
-     45507이 비었는지)는 구현 전에 `Read`로 본다.
-   - 여기서 못 한 것: TARS 빌드 · `make quick` · 게이트(클라우드 컨테이너에 zig · docker 데몬 · KVM이 없었다). 커밋한 것은 문서와
-     프로브(`.c` · `.log`)뿐이라 게이트에 닿는 것은 없지만 `make quick`은 한 번 돌려 본다.
-   - 프로브를 TARS 커널에서 다시 돌리면 좋다(design 위험 1): `display/probe/kms-handover.c`를 `gcc -static`으로 묶어 initrd에 넣고
-     `-device virtio-gpu-pci`로 띄운다. 6.17 Ubuntu 커널의 기록이 `display/probe/kms-handover.log`다 — 줄 단위로 같아야 한다.
-   - 사용자에게 물을 것(급하지 않다): DY-M1의 `input` 그룹(그 그룹의 프로세스는 sudo 암호를 포함한 키 입력을 읽는다 — design 위험 4) ·
-     탈출 조합의 키 · DY-M2의 Mesa + SDL3이 ISO 여유(LD-M0이 연 약 146MiB, 사용자 말로는 "200MB 정도") 안에 드는지는 M2 조사가 잰다.
-   - M0의 알려진 구멍: 양보 중의 `reload terminal`은 `given_up`까지 갈 수 있다(design 위험 2, M1이 막는다). 양보 중 키보드는 아직
-     terminal의 것이다.
+0. DY-M1(입력 양보 · 탈출 조합 · master가 아닌 채 뜬 terminal의 기다림). 읽는 순서: 기억 `project_display_yield` → design의 결정 8 ·
+   위험 2 · 4 → DY-M0 plan의 결과 절. M1 plan은 아직 없다.
+   - 사용자에게 물을 것: `input` 그룹(그 그룹의 프로세스는 sudo 암호를 포함한 키 입력을 읽는다 — design 위험 4) · 탈출 조합의 키.
+     DY-M2의 Mesa + SDL3이 ISO 여유(약 146MiB, 사용자 말로는 "200MB 정도") 안에 드는지는 M2 조사가 잰다.
+   - 실기 확인(사용자, DY-M0 plan Task 5): 맥북 에어 2011에서 `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`. 볼 것은
+     `carryover.md`의 DY 절.
+   - 알려진 구멍(M1이 막는다): 양보 중의 `reload terminal`은 `given_up`까지 갈 수 있다. 양보 중 키보드는 아직 terminal의 것이다.
+   - 클라우드 세션의 브랜치 `claude/gifted-thompson-v5diyz`는 `a46119c` 전의 같은 내용이라 지워도 된다.
 1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
    7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
@@ -55,6 +50,17 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
    tars-agent(사용자가 예고 — claude code · codex · pi 같은 것), mitos 줄이기(풀린 285MiB, `carryover.md` LD 절).
 4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+
+## 완료된 작업 (2026-11-13, DY-M0 — 로컬 세션)
+
+- [x] Task 1 `e0d5c0c`: `video`(44) 그룹, init이 `/dev/dri`를 `root:video 660`으로(`init/src/devnode.zig` — `openToAudio`를 일반화),
+      셸의 보조 그룹 셋. home 체인이 `video:x:44:hpuser`도 본다.
+- [x] Task 2 `79b8611`: terminal의 `/run/tars/display.sock`과 `yield.Machine`(ours · yielded · waiting), `dropMaster` · `setMaster`, 양보 중
+      그리기 멈춤. plan 밖의 `drm.open` `O_CLOEXEC` — 화면 셸이 master인 card0 fd를 물려받고 있었다(빨강 판 `d2-1`로 확인).
+- [x] Task 3 `d06d91c`: `tars-fullscreen`(connect → yield → ok면 연결을 쥔 채 exec) · `tars-kms-fill`(dumb buffer 한 색). 체인이 잡은
+      손님 쪽 경합(send EPIPE여도 답을 읽는다)을 고쳤다.
+- [x] Task 4 `7f35d6f`: 체인 `display`(부팅 1회, 판정 일곱, 3분 안팎), `screendump` · `ppm_ink`를 `gate_lib.sh`로. fullscreen · hidpi 다시 PASS.
+- [x] 루트 게이트: 34/34 첫 판 PASS(34분 58초, prebuild 356초 + lanes 1,597초, 잘린 줄 0, `out/gate-logs/20261113-103302`).
 
 ## 완료된 작업 (2026-11-11~12, LT-M0 · CE-M0~M2 · 0.2.1)
 
