@@ -172,6 +172,12 @@ chmod 0755 "$WORKDIR/usr/bin/tars-service"
 cp ../init/zig-out/bin/tars-config "$WORKDIR/usr/bin/tars-config"
 chmod 0755 "$WORKDIR/usr/bin/tars-config"
 
+# DY-M0: 화면 양보의 실행기와 시험 프로그램. tars-service와 같은 까닭으로 정적이고 /usr/bin이다.
+cp ../init/zig-out/bin/tars-fullscreen "$WORKDIR/usr/bin/tars-fullscreen"
+chmod 0755 "$WORKDIR/usr/bin/tars-fullscreen"
+cp ../init/zig-out/bin/tars-kms-fill "$WORKDIR/usr/bin/tars-kms-fill"
+chmod 0755 "$WORKDIR/usr/bin/tars-kms-fill"
+
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
 # 10,988,773바이트다. 모드를 정하는 자리는 terminal/build.zig의
@@ -179,7 +185,7 @@ chmod 0755 "$WORKDIR/usr/bin/tars-config"
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
-# LI-M1. 우리가 빌드한 다섯은 initrd에 놓인 사본만 --strip-debug한다. 다섯의
+# LI-M1. 우리가 빌드한 것(LI-M1 때 다섯, DY-M0에 둘 더)은 initrd에 놓인 사본만 --strip-debug한다. 그때 다섯의
 # `.debug_*`가 RAM에서 24.8MB, 이 initrd(gzip)에서 6.3MB였다(LI-M0 실측 1).
 #
 # TF-M4(2026-08-12)부터 strip을 안 했던 것은 "trace가 디버그 정보를 런타임에
@@ -191,7 +197,7 @@ chmod 0755 "$WORKDIR/terminal"
 # 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
 #
 # 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
-OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config terminal)
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill terminal)
 if ! command -v x86_64-linux-gnu-strip >/dev/null; then
   echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
   echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2

@@ -106,6 +106,35 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(config_cli_exe);
 
+    // DY-M0: 화면 양보의 두 명령. tars-service와 같은 까닭으로 따로 된 exe이고 같은 타깃 · 모드다.
+    // `tars-fullscreen`은 terminal과 같은 약속(`shared/display_proto.zig`)을 컴파일한다 — 경로와
+    // 낱말이 어긋날 수 없다. `tars-kms-fill`은 화면을 한 색으로 칠하는 시험 프로그램이고 실기에서도
+    // 같은 것으로 본다(DY design Milestone). make_initrd.sh가 둘 다 usr/bin에 싣는다.
+    const display_proto = b.createModule(.{
+        .root_source_file = b.path("../shared/display_proto.zig"),
+    });
+    const fullscreen_mod = b.createModule(.{
+        .root_source_file = b.path("src/fullscreen_cli.zig"),
+        .target = target,
+        .optimize = .safe,
+        .single_threaded = true,
+    });
+    fullscreen_mod.addImport("display_proto", display_proto);
+    b.installArtifact(b.addExecutable(.{
+        .name = "tars-fullscreen",
+        .root_module = fullscreen_mod,
+    }));
+    const kms_fill_mod = b.createModule(.{
+        .root_source_file = b.path("src/kms_fill.zig"),
+        .target = target,
+        .optimize = .safe,
+        .single_threaded = true,
+    });
+    b.installArtifact(b.addExecutable(.{
+        .name = "tars-kms-fill",
+        .root_module = kms_fill_mod,
+    }));
+
     // BV-M0: 버전 글자 하나를 PID 1과 tars-config에 같이 붙인다 — 부팅 로그의 첫 줄과
     // `tars-config version`이 한 값에서 나오므로 서로 다를 수 없다(BV design 결정 5).
     // 이 함수는 `zig build`마다 다시 돌므로 git도 매번 다시 묻고, 글자가 바뀐 때만

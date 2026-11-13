@@ -17,6 +17,9 @@
 부팅할 때부터 전체 화면으로 시작하려면 `sudo tars-config set fullscreen=on` 뒤 `sudo tars-config reload terminal`(열린 패널이 닫힙니다).
 패널 안의 프로그램도 켜고 끌 수 있습니다 — `printf '\033[10;1t'`(켜기) · `printf '\033[10;0t'`(끄기) · `printf '\033[10;2t'`(바꾸기), xterm과 같은 시퀀스입니다.
 
+화면을 직접 그리는 프로그램(`/dev/dri/card0`을 여는 것)은 `tars-fullscreen <명령>`으로 띄웁니다. 그 프로그램이 끝나면 셸 화면이
+돌아옵니다. `tars-fullscreen tars-kms-fill CC6666 5`는 화면을 5초 동안 한 색으로 칠하는 시험입니다.
+
 ## 한/영
 
 한/영 키, `Shift+Space`, 짧게 누른 `CapsLock`, 짧게 누른 왼쪽 `Ctrl` — 넷 다 한/영을 바꿉니다. 화면 아래 상태 줄의 첫 칸이 지금
