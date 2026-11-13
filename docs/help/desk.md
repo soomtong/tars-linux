@@ -21,6 +21,8 @@
 돌아옵니다. 그동안 키보드와 마우스는 그 프로그램의 것입니다(셸에는 안 들어갑니다). 프로그램이 멈추면 `Ctrl+Cmd+Backspace`
 (PC 키보드는 `Ctrl+Alt+Backspace` — `Del`이 아닙니다, `Ctrl+Alt+Del`은 재부팅입니다)로 끝내고 셸로 돌아옵니다.
 `tars-fullscreen tars-kms-fill CC6666 5`는 화면을 5초 동안 한 색으로 칠하는 시험이고, `tars-kms-fill CC6666 0 --keys`는 `Esc`를 칠 때까지입니다.
+`tars-fullscreen tars-gpu-demo`는 SDL3 · OpenGL ES로 움직이는 색 띠를 그리고 친 키의 이름을 보여 줍니다(`Esc`로 끝). gpu 묶음(SDL3 · Mesa)이
+있어야 하고, SDL3로 만든 다른 프로그램도 같은 길로 뜹니다. 그린 드라이버는 `tars-gpu-demo 2>/tmp/gpu.log`의 `gl` 줄에 있습니다.
 
 ## 한/영
 
