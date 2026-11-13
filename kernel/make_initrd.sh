@@ -177,6 +177,11 @@ cp ../init/zig-out/bin/tars-fullscreen "$WORKDIR/usr/bin/tars-fullscreen"
 chmod 0755 "$WORKDIR/usr/bin/tars-fullscreen"
 cp ../init/zig-out/bin/tars-kms-fill "$WORKDIR/usr/bin/tars-kms-fill"
 chmod 0755 "$WORKDIR/usr/bin/tars-kms-fill"
+# DY-M2: SDL3으로 그리는 데모. 이것만 glibc 동적이다 — gpu 묶음의 libSDL3.so.0을 dlopen하므로(init/build.zig).
+# NEEDED는 libc · libdl(dlopen — glibc 2.34부터 빈 껍데기)이고 아래 copy_lib_deps가 싣는다. 묶음이 없으면 그 이유를
+# 한 줄 찍고 끝난다.
+cp ../init/zig-out/bin/tars-gpu-demo "$WORKDIR/usr/bin/tars-gpu-demo"
+chmod 0755 "$WORKDIR/usr/bin/tars-gpu-demo"
 
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
@@ -185,7 +190,7 @@ chmod 0755 "$WORKDIR/usr/bin/tars-kms-fill"
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
-# LI-M1. 우리가 빌드한 것(LI-M1 때 다섯, DY-M0에 둘 더)은 initrd에 놓인 사본만 --strip-debug한다. 그때 다섯의
+# LI-M1. 우리가 빌드한 것(LI-M1 때 다섯, DY-M0에 둘, DY-M2에 하나 더)은 initrd에 놓인 사본만 --strip-debug한다. 그때 다섯의
 # `.debug_*`가 RAM에서 24.8MB, 이 initrd(gzip)에서 6.3MB였다(LI-M0 실측 1).
 #
 # TF-M4(2026-08-12)부터 strip을 안 했던 것은 "trace가 디버그 정보를 런타임에
@@ -197,7 +202,7 @@ chmod 0755 "$WORKDIR/terminal"
 # 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
 #
 # 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
-OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill terminal)
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo terminal)
 if ! command -v x86_64-linux-gnu-strip >/dev/null; then
   echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
   echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2
@@ -213,6 +218,7 @@ cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
 # init은 libc를 링크하지 않는 정적 바이너리라 copy_lib_deps가 필요 없다
 # (ZM-M1). terminal은 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
+copy_lib_deps "$WORKDIR/usr/bin/tars-gpu-demo"
 
 # ── 유저랜드 바이너리 ────────────────────────────────────────────────────
 #

@@ -134,6 +134,25 @@ pub fn build(b: *std.Build) void {
         .name = "tars-kms-fill",
         .root_module = kms_fill_mod,
     }));
+    // DY-M2: SDL3으로 그리는 데모. 이것만 glibc 동적이다 — gpu 묶음의 libSDL3.so.0을 dlopen하는데 musl 정적
+    // 실행 파일에는 dlopen이 없다. terminal과 같은 타깃이라 initrd의 ld-linux · libc로 뜬다.
+    const gnu_target = b.resolveTargetQuery(.{
+        .cpu_arch = .x86_64,
+        .os_tag = .linux,
+        .abi = .gnu,
+        .cpu_model = .baseline,
+    });
+    const gpu_demo_mod = b.createModule(.{
+        .root_source_file = b.path("src/gpu_demo.zig"),
+        .target = gnu_target,
+        .optimize = .safe,
+        .single_threaded = true,
+        .link_libc = true,
+    });
+    b.installArtifact(b.addExecutable(.{
+        .name = "tars-gpu-demo",
+        .root_module = gpu_demo_mod,
+    }));
 
     // BV-M0: 버전 글자 하나를 PID 1과 tars-config에 같이 붙인다 — 부팅 로그의 첫 줄과
     // `tars-config version`이 한 값에서 나오므로 서로 다를 수 없다(BV design 결정 5).
@@ -343,6 +362,19 @@ pub fn build(b: *std.Build) void {
         .root_module = control_test_mod,
     });
 
+    // DY-M2: tars-gpu-demo의 순수한 셋(인자 · 판 글자 · 띠 색). SDL을 부르는 부분은 dlopen이라 이 검사는 libc도
+    // SDL도 없이 컴파일된다 — 쓰지 않는 함수는 분석되지 않는다. SDL의 길은 체인 display가 본다.
+    const gpu_demo_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/gpu_demo_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const gpu_demo_test = b.addExecutable(.{
+        .name = "gpu_demo_test",
+        .root_module = gpu_demo_test_mod,
+    });
+
     // TP-M11: `tars-service enable|disable`의 판정. 시스템 콜이 없어 control_test와 같은 자리다.
     const service_link_test_mod = b.createModule(.{
         .root_source_file = b.path("src/service_link_test.zig"),
@@ -508,6 +540,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(reload_test).step);
     test_step.dependOn(&b.addRunArtifact(version_test).step);
     test_step.dependOn(&b.addRunArtifact(screen_args_test).step);
+    test_step.dependOn(&b.addRunArtifact(gpu_demo_test).step);
 }
 
 /// BV-M0: 저장소 뿌리의 `VERSION`과 git의 답 셋으로 버전 글자를 짓는다(BV design 결정 1~3).

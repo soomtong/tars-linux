@@ -19,7 +19,7 @@ $ tars-gpu-demo                        ← gpu 묶음이 없으면 "libSDL3.so.0
 2. 입력에 `SDL_EVDEV_DEVICES` 힌트를 채우지 않는다. Debian의 SDL3은 libudev를 dlopen하는 빌드이고, libudev가 서면 udevd 없이도 `/sys`를
    훑어 능력 비트로 키보드를 짐작한다. 힌트를 읽는 갈래는 libudev 없는 빌드에만 있다(아래 확인 3). `libudev.so.1`은 initrd에 이미 있다.
 3. 데모는 Zig 프로그램 `tars-gpu-demo`이고 initrd에 싣는다(`tars-kms-fill`처럼 — 실기에서도 같은 것으로 본다). `libSDL3.so.0`은 dlopen한다
-   — 빌드 때 .so가 필요 없고, 묶음이 없을 때 이유를 말할 수 있다. 타입과 상수는 SDL 3.2.10 소스 tarball의 헤더를 `@cImport`한다.
+   — 빌드 때 .so가 필요 없고, 묶음이 없을 때 이유를 말할 수 있다. 타입 · 상수는 SDL 3.2.10 헤더에서 쓰는 것만 손으로 옮긴다(Task 2의 정정).
 
 ## 확인 (2026-11-13, 이 plan을 쓰기 전)
 
@@ -53,10 +53,12 @@ $ tars-gpu-demo                        ← gpu 묶음이 없으면 "libSDL3.so.0
 
 ## Task 2 — `tars-gpu-demo` (commit 하나)
 
-1. 자리: `display/demo/`(자기 `build.zig`, target `x86_64-linux-gnu` — terminal과 같은 glibc 동적). `make_initrd.sh`가 initrd의
-   `usr/bin/tars-gpu-demo`로 싣고 `OWN_BINS`에 더한다.
-2. SDL 헤더: Makefile이 확인 5의 tarball을 받아 sha256을 대조하고 `include/SDL3/`만 푼다(ghostty tarball과 같은 모양). `@cImport`는 타입 ·
-   상수만 쓰고, 함수는 `dlopen("libSDL3.so.0")` · `dlsym`의 표(쓰는 것만 — 열다섯 안팎).
+1. 자리: `init/src/gpu_demo.zig`, `init/build.zig`에 이 실행 파일 하나만 target `x86_64-linux-gnu`(terminal과 같은 glibc 동적 — init의
+   나머지는 musl 정적이라 dlopen이 없다). `make_initrd.sh`가 initrd의 `usr/bin/tars-gpu-demo`로 싣고 `OWN_BINS`에 더한다.
+2. SDL 헤더(정정, 구현 중 2026-11-13): 처음에는 tarball의 헤더를 `@cImport`하려 했으나 ZU-M1부터 `@cImport`가 없고 C 헤더는 translate_c
+   패키지로 번역한다 — 함수 스물둘을 위해 16MB tarball과 번역을 끌어올 값어치가 없다. 쓰는 타입(`SDL_Event`의 128바이트 · 키 이벤트 ·
+   `SDL_DisplayMode` · `SDL_FRect`)과 상수만 손으로 옮기고 자리마다 헤더의 줄을 적는다. 함수는 `dlopen("libSDL3.so.0")` · `dlsym`의 표.
+   SDL3은 3.x 안에서 ABI를 지킨다.
 3. 하는 일: `SDL_Init(VIDEO)` → 전체 화면 창 → `SDL_CreateRenderer(NULL)` → 매 frame 색 띠 몇 개가 돌고, 친 키 이름을 화면 아래에
    (SDL의 디버그 글꼴 `SDL_RenderDebugText`). Esc면 끝. 인자 `--seconds N`이면 N초 뒤 스스로 끝(체인용).
 4. 단계 줄(stderr, 체인과 사람이 같은 줄을 본다): `tars-gpu-demo: sdl 3.2.10` · `video kmsdrm` · `renderer opengles2` ·
