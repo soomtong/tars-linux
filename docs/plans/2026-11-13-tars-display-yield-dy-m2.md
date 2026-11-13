@@ -2,7 +2,7 @@
 
 Date: 2026-11-13
 Design: `docs/specs/2026-11-12-tars-display-yield-design.md`
-Status: 열림. 사용자 2026-11-13 — 조사 결과의 추천 방향에 "confirmed".
+Status: 끝(2026-11-14). 사용자 2026-11-13 — 조사 결과의 추천 방향에 "confirmed". 결과는 맨 아래.
 
 ## 착수 전에 확정한 것
 
@@ -93,3 +93,29 @@ $ tars-gpu-demo                        ← gpu 묶음이 없으면 "libSDL3.so.0
 2. `guess_device_class`가 QEMU의 키보드를 키보드로 못 보면 같은 판정이 빨갛다. 그때는 SDL 소스의 판정과 장치의 능력 비트를 대조한다.
 3. llvmpipe는 CPU 하나(커널이 SMP를 안 쓴다 — `carryover.md` CE 절)에서 느리다. 체인은 frame 수가 아니라 "그렸다"만 본다.
 4. 묶음 열셋이 2GiB를 넘으면 사용자에게 묻는다(기본 판에서 뺄지, Mesa를 줄일지).
+
+## 결과
+
+commit: `ec302fc`(plan) · `ec26a23`(Task 1) · `9c90a92`(Task 2) · `e5152a1`(Task 3) · `6ac4591`(Task 4의 안내). 2026-11-13~14 로컬 세션.
+
+1. Task 1: harvest `packages=76 paths=1354`, verify `elf=461 unresolved=0 dropped=108`(base와 같은 파일), 구운 크기 `unpacked=223MiB zstd15=68MiB`
+   (`gpu.sqfs` 72MiB). dlopen으로만 열리는 것(`libEGL_mesa.so.0` · `gbm/dri_gbm.so` · `egl_vendor.d/50_mesa.json` · `libSDL3.so.0`)이
+   묶음 안에 있다. `libudev1`은 harvest의 `dep`(trixie-slim에 있어 묶음에 안 든다)이고 initrd에 있다.
+   devtools 체인 PASS(빌드 뒤 737초): `tars-dev.iso` 2,064,447,488 B — 2GiB까지 약 79MiB. 열셋을 얹는 데 85ms.
+   첫 판은 체인이 도는 동안 내가 Task 2 코드를 넣어 init 빌드에서 멈췄다 — 체인은 작업 트리를 그대로 빌드한다(lead의 잘못).
+2. Task 2: plan의 `@cImport`는 ZU-M1부터 없다 — 헤더 대신 쓰는 타입 · 상수만 손으로 옮겼다(plan Task 2의 정정). 함수 스물둘은 dlsym 표.
+   NEEDED가 `libc.so.6` · `libdl.so.2`라 `make_initrd.sh`가 terminal처럼 `copy_lib_deps`를 부른다(libdl은 terminal이 안 데려온다).
+   Zig 0.17의 `@typeInfo(T).@"struct"`는 `fields`가 아니라 `field_names`다.
+3. Task 3: display 체인 PASS(부팅 셋, 7분 22초). QEMU(TCG · 3D 없는 virtio-gpu)에서 잡힌 것: `video kmsdrm` · `renderer opengles2` ·
+   `gl llvmpipe (LLVM 19.1.7, 128 bits)` · `mode 1280x800`. 약 2fps(`frames 9 in 4101ms`) — 그래도 화면 가운데의 색이 1초 사이에 바뀐다.
+   키 X · Y · Z · Esc가 힌트 없이 왔다 — plan 확인 3(Debian SDL3은 libudev로 `/sys`를 훑고 능력 비트로 짐작한다)이 실행으로 맞았다.
+4. 탈출 조합의 SIGKILL: 첫 둘째 판은 판정 14가 빨갰다(`escape … (SIGKILL)`). 데모에 끝내기의 시간을 찍게 하니 `left the loop 205ms` ·
+   `shut down 493ms after the request` — 데모 자신은 빨랐다. 남은 것은 `main`이 돌아간 뒤 glibc `exit`가 부르는 Mesa · LLVM의 전역
+   소멸자였다. `SDL_Quit` 뒤 `exit_group(0)`으로 끝내게 하니 PASS(`shut down 825ms`). 여유는 크지 않다 — SIGTERM은 그리던 frame이 끝난
+   뒤의 `PollEvent`에서야 QUIT이 되므로 TCG의 frame 하나(최대 1초 남짓)가 더 든다. 게이트에서 빨개지면 이 자리다.
+   SDL로 만든 다른 앱도 같은 소멸자를 탈 수 있다 — 실기(i915 · crocus, LLVM 안 씀)에서는 짧을 것으로 보지만 재지 않았다.
+5. design 위험 3: 복귀 뒤 screendump에서 색 · 글자가 평소와 같다(감마 그대로). 커서 plane은 screendump가 찍는지 확실하지 않아 못 봤다 —
+   데모는 `SDL_HideCursor`를 부른다.
+6. 루트 게이트: 34/34 첫 판 PASS(약 33분 — prebuild 약 7분 + lanes 약 26분, 회차 34개 모두 `cut log lines A=0 B=0 C=0`,
+   `out/gate-logs/20261113-150007`). DY 157초(부팅 셋), 데모의 끝내기 `shut down 686ms`. 체인 이름은 게이트 뒤에 `DY-M1` → `DY-M2`(닫기 commit).
+7. 안 본 것: i915 실기(crocus), 맥북 에어 2011의 frame 수.

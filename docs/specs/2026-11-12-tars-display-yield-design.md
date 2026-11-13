@@ -3,7 +3,7 @@
 접두사: DY
 
 Date: 2026-11-12
-Status: 열림. DY-M0 · DY-M1 끝(2026-11-13, plan 둘의 결과 절, 체인 `display`). DY-M2(Mesa · SDL3, Debian 패키지의 묶음 `gpu`) 진행 중 — plan `docs/plans/2026-11-13-tars-display-yield-dy-m2.md`.
+Status: 끝(2026-11-14). DY-M0 · M1 · M2(plan 셋의 결과 절, 체인 `display`). 실기(i915 · crocus)는 `carryover.md`의 DY 절.
 
 계기: 사용자(2026-11-12): TARS가 외주 솔루션 · 프로덕트로 납품되는 경우 — 키오스크는 fakesteak으로 1차 확인, 2차 데모는 GPU를 쓰는
 애플리케이션. "예전 DOS 시스템처럼 콘솔 화면이 기본이지만 Full screen graphics 프로그램을 만들어 실행시킬 수 있게 확장; KMS master를
@@ -104,6 +104,8 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
     뒤 다시 묻는다. 이 terminal은 손님을 모른다(옛 연결은 옛 terminal과 함께 닫혔다) — 그래서 키는 셸에 그대로 넣고 탈출 조합도 없다.
 10. 2차 데모(DY-M2)는 SDL3 + `SDL_Renderer`(GLES)다. `SDL_GPU`는 쓰지 않는다 — Vulkan이 있어야 하는데 납품 기준 실기(맥북 에어 2011)에는
     없다. Mesa와 SDL3은 개발 도구 층의 새 묶음으로 싣는다. 크기 · 드라이버 · udev 없는 입력은 DY-M2 plan의 조사 몫이다.
+    DY-M2가 정한 것: Debian trixie의 패키지 그대로(묶음 `gpu` — SDL3 3.2.10 · Mesa 25.0.7 · LLVM 19, zstd15로 68MiB), 키는 SDL이 libudev로
+    `/sys`를 훑어 받는다(힌트 없음), 데모 `tars-gpu-demo`는 initrd에 있고 `libSDL3.so.0`을 dlopen한다.
 
 ## 비목표
 

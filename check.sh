@@ -536,7 +536,8 @@ run_chain() {
 # `tars-fullscreen tars-kms-fill`이 화면 전체를 한 색으로 칠하고(screendump) 끝나면 · SIGKILL로 죽으면 terminal이
 # 되찾는지, 양보 중의 출력이 복귀 뒤 보이는지, 둘째 요청이 busy인지, 그 내내 terminal이 안 죽는지 본다. DY-M1: 양보 동안만
 # /dev/input/event*가 손님 uid 것이고 친 키가 셸이 아니라 앱에 가는지, Ctrl+Cmd+Backspace가 SIGTERM · 2초 뒤 SIGKILL로 돌아오는지,
-# 부팅 2(root 셸)에서 양보 중에 다시 뜬 terminal이 죽지 않고 기다렸다 되찾는지. monitor 45507. 회차당 부팅 2회.
+# 부팅 2(root 셸)에서 양보 중에 다시 뜬 terminal이 죽지 않고 기다렸다 되찾는지. DY-M2: 부팅 3(홈 디스크에 base · gpu 묶음)에서
+# `tars-gpu-demo`가 SDL3 KMSDRM · OpenGL ES(llvmpipe)로 그리고 키를 udevd 없이 받는지. monitor 45507. 회차당 부팅 3회.
 #
 # 이름과 경로를 한 곳에 모은다. 진입 검사와 실행이 같은 목록을 쓰므로,
 # 체인을 더하거나 뺄 때 고칠 자리가 하나다.
@@ -574,7 +575,7 @@ CHAINS=(
   "TP-M1:./devtools/check.sh"
   "FU-M1:./fullscreen/check.sh"
   "CO-M1:./cursor/check.sh"
-  "DY-M1:./display/check.sh"
+  "DY-M2:./display/check.sh"
 )
 
 # 진입 검사는 첫 부팅 전에 열 개를 전부 훑는다. 하나라도 빠뜨렸으면

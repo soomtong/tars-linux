@@ -4,7 +4,7 @@
 지운다, 서브프로젝트 하나에만 해당하는 것은 그 design에 — 은 허브의 것을 따른다.
 
 
-화면 양보 DY-M0 · M1(2026-11-13)이 남긴 것. DY-M2에 들어갈 것은 design의 Milestone에 있고 여기에는 그 밖의 것만 둔다.
+화면 양보 DY-M0~M2(2026-11-13~14)가 남긴 것. 서브프로젝트는 닫혔다.
 
 - [ ] i915 실기(맥북 에어 2011)에서 양보와 복귀를 아직 안 봤다(DY-M0 plan Task 5): `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`.
       볼 것 — 색이 뜨는가, 5초 뒤 콘솔이 깨끗이 돌아오는가(design 위험 1 — 앱이 죽은 뒤의 CRTC 상태), simpledrm → i915로 카드가 바뀌는
@@ -13,6 +13,10 @@
       양보 중에 꽂은 키보드도 같다(DY-M1): 손님 uid에게 안 넘어가 그 앱은 그 키보드를 못 연다.
 - [ ] 실기에서 키 · 탈출을 볼 것(DY-M1): `tars-fullscreen tars-kms-fill CC6666 0 --keys`에서 친 키가 셸에 안 들어가고 Esc로 끝나는가,
       `Ctrl+Cmd+Backspace`(Apple 자판)로 `tars-fullscreen tars-kms-fill CC6666 0`이 끝나는가.
+- [ ] 실기에서 GPU 데모를 볼 것(DY-M2, 기본 판 다음 판부터 gpu 묶음이 실린다): `tars-fullscreen tars-gpu-demo 2>/tmp/gpu.log` —
+      `gl` 줄이 crocus(Sandy Bridge HD 3000)인가, `frames N in Mms`(Esc로 끝낸 뒤), 탈출 조합으로 끝날 때 `shut down`이 2초 안인가.
+- [ ] SDL3 앱이 `main`에서 돌아가면 Mesa · LLVM의 전역 소멸자로 끝내기가 느리다(TCG에서 2초를 넘겨 SIGKILL — DY-M2 plan 결과 4).
+      기성 SDL 앱을 탈출 조합으로 끝낼 때 SIGKILL이 자주 가면 terminal의 기한(2초)을 늘릴지 본다.
 
 컨테이너 실행 환경 CE(2026-11-12)가 남긴 것. TP-M12의 "컨테이너 실행 환경" 항목은 CE가 닫았다
 (`docs/specs/2026-11-11-tars-container-environment-design.md`).

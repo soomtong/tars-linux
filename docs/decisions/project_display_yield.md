@@ -1,6 +1,6 @@
 ---
 name: project_display_yield
-description: "화면 양보(DY, 2026-11-12 열림, M0 · M1 2026-11-13 끝) — 키보드는 양보 동안만 손님 uid · 탈출 Ctrl+Cmd+Backspace · master 없이 뜬 terminal은 기다린다 · terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 master만 놓는다 · 연결이 살아 있는 동안이 양보 기간 · 복귀는 SET_MASTER + SETCRTC + 통째 그리기 · lease는 독점이 아니라 안 쓴다 · 2차 데모는 SDL3 + SDL_Renderer · 커널 동작은 프로브로 쟀다 · card0 fd가 셸로 새던 것을 CLOEXEC로 막았다"
+description: "화면 양보(DY, 2026-11-12 열림, M0 · M1 2026-11-13 · M2 2026-11-14 끝 — 서브프로젝트 닫힘) — 키보드는 양보 동안만 손님 uid · 탈출 Ctrl+Cmd+Backspace · master 없이 뜬 terminal은 기다린다 · terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 master만 놓는다 · 연결이 살아 있는 동안이 양보 기간 · 복귀는 SET_MASTER + SETCRTC + 통째 그리기 · lease는 독점이 아니라 안 쓴다 · 2차 데모는 SDL3 + SDL_Renderer · 커널 동작은 프로브로 쟀다 · card0 fd가 셸로 새던 것을 CLOEXEC로 막았다"
 metadata:
   node_type: memory
   type: project
@@ -8,7 +8,7 @@ metadata:
 
 사용자(2026-11-12)가 납품 시나리오(키오스크 다음의 2차 데모 = GPU를 쓰는 프로그램)를 두고 KMS master 독점을 풀자고 했고,
 논의 뒤 "SDL 3 갑시다. 나머지는 모두 당신의 추천대로"로 맡겼다. design은 `docs/specs/2026-11-12-tars-display-yield-design.md`,
-DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0 · M1은 2026-11-13 로컬 세션에서 끝났다(체인 `display`, M1 plan `docs/plans/2026-11-13-tars-display-yield-dy-m1.md`) — 다음은 DY-M2.
+DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0 · M1은 2026-11-13, M2는 2026-11-14에 로컬 세션에서 끝났다(체인 `display`, plan `…-dy-m1.md` · `…-dy-m2.md`) — 서브프로젝트가 닫혔다.
 
 ## 다시 조사하지 말 것 (프로브 `display/probe/kms-handover.c` · `.log`, 6.17 · virtio-gpu · fbdev 에뮬레이션 끔)
 
@@ -38,9 +38,20 @@ DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0 · M1�
 14. master 없이 뜬 terminal: 첫 `modeset`이 `EACCES`면 `waiting`(손님 없음 — 키는 셸로, 탈출 없음). `drm.open`의 DIRTYFB 물음도 master가
     아니면 `EACCES`라 답이 아니다 — 되찾은 뒤 다시 묻는다(`kms: present by ? (not master yet)`).
 15. SDL3(`main`, 2026-11-13): evdev에 `EVIOCGRAB`가 없다 — 탈출 조합이 닿는다. libudev 없이는 `/dev/input`을 안 훑고 `SDL_EVDEV_DEVICES`
-    힌트만 읽는다 — 다만 그것은 libudev 없는 빌드의 갈래다. Debian의 SDL3은 libudev를 dlopen하고 udevd 없이도 `/sys`를 훑는다(DY-M2
-    plan 확인 3 — 실행 확인은 M2 Task 3). 콘솔 음소거(`KDSKBMODE K_OFF`)는 `/dev/tty`가 VT일 때만이라 TARS(pty)에서는 지나간다.
+    힌트만 읽는다 — 다만 그것은 libudev 없는 빌드의 갈래다. Debian의 SDL3은 libudev를 dlopen하고 udevd 없이도 `/sys`를 훑어 능력
+    비트로 키보드를 짐작한다 — DY-M2 체인이 힌트 없이 키를 받았다(정정 2026-11-14). 콘솔 음소거(`KDSKBMODE K_OFF`)는 `/dev/tty`가 VT일 때만이라 TARS(pty)에서는 지나간다.
 16. 체인의 함정: `tars-config reload terminal`은 대기 중인 설정이 없으면 아무것도 안 한다 — 키 하나를 `set` · `reload`한 뒤 친다.
+
+## DY-M2가 정하고 잰 것
+
+17. 묶음 `gpu`: Debian trixie의 `libsdl3-0` · `libegl1` · `libegl-mesa0` · `libgles2`. `libsdl3-0` → `libgbm1` → `mesa-libgallium` →
+    `libllvm19`로 Mesa가 통째로 따라온다(SDL3만 싣는 길은 없다). 223MiB → zstd15 68MiB, 묶음 열셋의 ISO는 2GiB까지 약 79MiB.
+18. QEMU(TCG · 3D 없는 virtio-gpu)는 `gl llvmpipe (LLVM 19.1.7, 128 bits)`, 약 2fps. 실기(Sandy Bridge)는 crocus일 것 — 아직 못 봤다.
+19. `tars-gpu-demo`(initrd, glibc 동적, `libSDL3.so.0` dlopen — SDL 타입은 3.2.10 헤더에서 손으로 옮겼다, ZU-M1부터 `@cImport`가 없다).
+20. 끝내기: `main`에서 돌아가면 glibc `exit`가 Mesa · LLVM의 전역 소멸자를 불러 TCG에서 탈출 조합의 2초를 넘겼다(SIGKILL). `SDL_Quit`
+    뒤 `exit_group(0)`. 남은 여유는 SIGTERM → 그리던 frame의 끝 → QUIT의 시간이다. SDL로 만든 다른 앱도 같은 소멸자를 탈 수 있다.
+21. 체인이 도는 동안 저장소를 건드리지 않는다 — 체인은 작업 트리를 빌드하고(Task 2 코드가 devtools 체인을 멈췄다), 문서만 고쳐도
+    버전 글자가 `-dirty`로 바뀌어 게이트 도중 init이 다시 컴파일된다.
 
 ## 왜 이렇게 골랐나
 

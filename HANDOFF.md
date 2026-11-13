@@ -1,6 +1,9 @@
-# HANDOFF: DY-M1 끝(2026-11-13) — 키는 양보 동안만 앱의 것 · 탈출 조합 · 기다리는 terminal, 다음은 DY-M2(Mesa · SDL3) · 다음 판(0.2.2)을 기다린다
+# HANDOFF: DY 끝(2026-11-14) — 묶음 gpu(SDL3 · Mesa)와 tars-gpu-demo, 화면 양보 서브프로젝트 닫힘 · 다음 판(0.2.2)을 기다린다
 
 ## 목표
+
+사용자(2026-11-13): HANDOFF에서 이어 DY-M2 — 조사 결과(Debian 패키지 그대로 · 힌트 없음 · 데모 dlopen)에 "confirmed continue".
+끝났다 — 결과는 DY-M2 plan의 결과 절. DY 서브프로젝트가 닫혔다.
 
 사용자(2026-11-13): DY-M1 전에 정할 둘(input 그룹 · 탈출 조합)의 설명을 읽고 "두 항목 모두 추천해 준 방향이 가장 리즈너블합니다" →
 plan "confirmed" → Task마다 "continue". 끝났다 — 결과는 DY-M1 plan의 결과 절.
@@ -25,24 +28,20 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 현재 브랜치
 
-`main`은 origin(`a46119c`)보다 DY-M0 · M1의 commit만큼 앞선다(이 기록까지) — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
+`main`은 origin(`a46119c`)보다 DY-M0 · M1 · M2의 commit만큼 앞선다(이 기록까지) — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
 태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
 
 ## 다음 할 것
 
-0. DY-M2(Mesa · SDL3 묶음과 데모 프로그램). 읽는 순서: 기억 `project_display_yield`(15 — SDL3은 libudev 없이 `SDL_EVDEV_DEVICES`
-   힌트가 있어야 키를 받는다) → design 결정 10 · 위험 3 → DY-M1 plan 결과 6. M2 plan은 아직 없다 — 조사부터: KMSDRM 백엔드가
-   `SDL_EVDEV_Init`을 부르는지(`SDL_kmsdrmvideo.c`), Mesa(i915 · virtio-gpu의 GLES) + SDL3의 크기가 ISO 여유(약 146MiB, 사용자 말로는
-   "200MB 정도") 안에 드는지, 힌트를 `tars-fullscreen`이 채울지.
-   - 실기 확인(사용자): 맥북 에어 2011에서 `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`, `… CC6666 0 --keys`(Esc로 끝),
-     `Ctrl+Cmd+Backspace`. 볼 것은 `carryover.md`의 DY 절.
+0. 실기 확인(사용자, 맥북 에어 2011): `carryover.md`의 DY 절 — `tars-kms-fill`(양보 · 키 · 탈출)과 `tars-fullscreen tars-gpu-demo
+   2>/tmp/gpu.log`(`gl` 줄이 crocus인가, frame 수). gpu 묶음은 다음 판(0.2.2)부터 기본 판에 실린다.
    - 클라우드 세션의 브랜치 `claude/gifted-thompson-v5diyz`는 `a46119c` 전의 같은 내용이라 지워도 된다.
 1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
    7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
 2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
    `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
-2-1. 다음 판에 실릴 것(아직 안 냄): GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(묶음 열둘 — 중복 지우기 · emacs 없음 · fakesteak),
+2-1. 다음 판에 실릴 것(아직 안 냄): DY(화면 양보 · 묶음 gpu — 열셋째, 기본 판 ISO 2GiB까지 약 79MiB), GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(중복 지우기 · emacs 없음 · fakesteak),
      cyber 0.4.9 · cci 0.7.2(`8756319`, 사용자 "다음 판(0.2.2)에 반영" 2026-11-12, devtools 체인 PASS 빌드 뒤 694초). 판을 낼 때
      소개 페이지도(기능 목록에서 emacs를 빼고 fakesteak을) — `project_release`의 절차 1~7(절차 3이 LD로 바뀌었다).
      cyber 새 판이 오면: `main`에 0.2.1 뒤의 일이 있으니 0.2.2에 실을지 0.2.1 가지에서 cyber만 올릴지 사용자에게 묻는다(`feedback_release_iteration`).
@@ -52,6 +51,17 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
    tars-agent(사용자가 예고 — claude code · codex · pi 같은 것), mitos 줄이기(풀린 285MiB, `carryover.md` LD 절).
 4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+
+## 완료된 작업 (2026-11-13~14, DY-M2 — 로컬 세션)
+
+- [x] 조사: Debian trixie amd64 컨테이너에 깔아 쟀다 — `libsdl3-0`이 Mesa · LLVM을 통째로 끌어온다(228MiB → zstd15 69MiB). SDL 3.2.10 소스:
+      Debian 빌드는 libudev를 dlopen해 `/sys`를 훑는다(힌트 갈래는 컴파일되지 않는다) — 기억 15를 고쳤다. plan `ec302fc`.
+- [x] Task 1 `ec26a23`: 묶음 `gpu`(68MiB, 열셋째), devtools 체인 PASS — ISO 2,064,447,488 B. 첫 판은 체인 중에 Task 2를 넣어 멈췄다(lead).
+- [x] Task 2 `9c90a92`: `tars-gpu-demo`(init/, glibc 동적, dlopen, SDL 타입은 손으로). `SDL_Quit` 뒤 `exit_group` — `main`에서 돌아가면 Mesa ·
+      LLVM 소멸자로 탈출 조합의 2초를 넘겨 SIGKILL을 받았다.
+- [x] Task 3 `e5152a1`: display 체인 부팅 3(홈 디스크에 base · gpu), 판정 11~15. QEMU는 `kmsdrm` · `opengles2` · `llvmpipe`, 약 2fps, 키는 힌트 없이.
+- [x] Task 4 `6ac4591` · 닫기: `tars-help desk`, plan 결과 · design · 기억 · completed · carryover, 체인 이름 `DY-M2`.
+- [x] 루트 게이트: 34/34 첫 판 PASS(약 33분, 잘린 줄 0, `out/gate-logs/20261113-150007`). DY 157초.
 
 ## 완료된 작업 (2026-11-13, DY-M1 — 로컬 세션)
 
