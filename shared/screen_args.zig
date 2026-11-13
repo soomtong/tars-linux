@@ -440,6 +440,9 @@ pub const AUDIO_GID: u32 = 29;
 /// 사용자의 둘째 보조 그룹. `/etc/sudoers`의 `%sudo` 줄이 이 그룹에 root 권한을 준다(HP-M2 plan
 /// 확정 3 — 사용자 이름이 아니라 그룹이라 sudoers가 initrd의 정적 파일로 남는다). 27은 Debian의 번호다.
 pub const SUDO_GID: u32 = 27;
+/// 사용자의 셋째 보조 그룹. init이 `/dev/dri`의 노드를 `root:video 0660`으로 열어 화면 셸의 프로그램이
+/// terminal이 양보한 화면을 잡는다(DY design 결정 7). 44는 Debian의 번호다.
+pub const VIDEO_GID: u32 = 44;
 
 /// terminal argv의 값 전체(SA design 결정 7). init이 채우고 terminal이 읽는 것은 이
 /// 구조체 하나이고, 칸 번호와 글자는 아래 `encode` · `decode` 안에만 있다.

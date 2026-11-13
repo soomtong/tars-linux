@@ -378,9 +378,9 @@ for want in \
   "hp-perm .vimrc hpuser hpuser 644"; do
   grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-perm"
 done
-send "grep -E '^(tty|sudo|audio|hpuser):' /etc/group | sed 's/^/hp-group: /'; sed -n 2p /etc/shadow | cut -c1-10 | sed 's/^/hp-shadow: /'; printf 'hp-group-%s\n' end"
+send "grep -E '^(tty|sudo|audio|video|hpuser):' /etc/group | sed 's/^/hp-group: /'; sed -n 2p /etc/shadow | cut -c1-10 | sed 's/^/hp-shadow: /'; printf 'hp-group-%s\n' end"
 wait_log "hp-group-end" || fail "could not read /etc/group" "hp-group"
-for want in "hp-group: tty:x:5:" "hp-group: sudo:x:27:hpuser" "hp-group: audio:x:29:hpuser" "hp-group: hpuser:x:1000:" "hp-shadow: hpuser:\$y\$"; do
+for want in "hp-group: tty:x:5:" "hp-group: sudo:x:27:hpuser" "hp-group: audio:x:29:hpuser" "hp-group: video:x:44:hpuser" "hp-group: hpuser:x:1000:" "hp-shadow: hpuser:\$y\$"; do
   grep -aqF "$want" "$LOG" || fail "missing: ${want}" "hp-group:" "hp-shadow:"
 done
 echo "shadow is root 600 in /etc and /config with a yescrypt hash, the home is hpuser 700 with five seeds, sudo and audio list hpuser"

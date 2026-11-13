@@ -26,7 +26,7 @@ pub const DEFAULT_PASSWORD = "tars-linux";
 /// 때문이다 — `audio`라는 사용자는 `audio` 그룹을 하나 더 만들려 한다. `linuxbrew`는
 /// Homebrew의 prefix(`/home/linuxbrew`)가 쓸 자리다(PM).
 pub const RESERVED = [_][]const u8{
-    "root", "sshd", "messagebus", "nobody", "nogroup", "audio", "tty", "sudo", "linuxbrew",
+    "root", "sshd", "messagebus", "nobody", "nogroup", "audio", "tty", "sudo", "video", "linuxbrew",
 };
 
 /// `[a-z_][a-z0-9_-]{0,31}`이고 `RESERVED`가 아니다(design 결정 5).
@@ -142,14 +142,14 @@ pub fn withPasswd(in: []const u8, name: []const u8, shell: []const u8, out: []u8
     return rebuild(in, name, line, out, null);
 }
 
-/// 사용자를 구성원으로 넣는 보조 그룹의 이름. terminal의 `setgroups`(`AUDIO_GID` · `SUDO_GID`)와
+/// 사용자를 구성원으로 넣는 보조 그룹의 이름. terminal의 `setgroups`(`AUDIO_GID` · `SUDO_GID` · `VIDEO_GID`)와
 /// 짝이다 — 한쪽만 고치면 `id`와 sudo의 판단이 어긋난다.
-const MEMBER_GROUPS = [_][]const u8{ "audio", "sudo" };
+const MEMBER_GROUPS = [_][]const u8{ "audio", "sudo", "video" };
 
-/// group 전체에 사용자 그룹(`<이름>:x:1000:`)을 넣고, `audio` · `sudo` 줄의 구성원을 그 사용자로
-/// 둔 사본(HP-M1 plan 확정 6, HP-M2 plan 확정 3).
+/// group 전체에 사용자 그룹(`<이름>:x:1000:`)을 넣고, `audio` · `sudo` · `video` 줄의 구성원을 그 사용자로
+/// 둔 사본(HP-M1 plan 확정 6, HP-M2 plan 확정 3, DY design 결정 7).
 ///
-/// 정적 group(`make_initrd.sh`)에 그 두 줄 중 하나라도 없으면 null이다. initrd와 이 코드가
+/// 정적 group(`make_initrd.sh`)에 그 세 줄 중 하나라도 없으면 null이다. initrd와 이 코드가
 /// 어긋난 것이고, 조용히 넘어가면 "sudo가 안 된다"가 sudoers 탓인지 group 탓인지 갈래가 는다.
 pub fn withGroup(in: []const u8, name: []const u8, out: []u8) ?[]const u8 {
     for (MEMBER_GROUPS) |g| if (!hasGroup(in, g)) return null;

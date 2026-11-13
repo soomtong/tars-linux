@@ -33,8 +33,8 @@ pub const Account = struct {
     gid: c.gid_t,
     /// pty slave의 그룹(tty).
     tty_gid: c.gid_t,
-    /// 보조 그룹(sudo · audio). init이 group 파일에 적는 구성원(`account.MEMBER_GROUPS`)과 짝이다.
-    groups: [2]c.gid_t,
+    /// 보조 그룹(sudo · audio · video). init이 group 파일에 적는 구성원(`account.MEMBER_GROUPS`)과 짝이다.
+    groups: [3]c.gid_t,
     home: [*:0]const u8,
     /// 셸이 받는 env 전체. `HOME` · `USER` · `LOGNAME` · `SHELL`이 사용자의 것이다.
     envp: [*:null]const ?[*:0]const u8,

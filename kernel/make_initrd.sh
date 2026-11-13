@@ -647,11 +647,15 @@ EOF
 # HP-M2: sudo(27). /etc/sudoers의 `%sudo` 줄이 이 그룹에 root 권한을 준다. 구성원은 audio처럼
 # init이 부팅마다 적는다 — 이 줄이 없으면 init의 account.withGroup이 null을 돌려 사용자 줄을
 # 안 쓴다(조용히 넘어가지 않는다).
+#
+# DY-M0: video(44). init이 /dev/dri의 노드를 이 그룹에 연다 — 화면 셸의 프로그램이 terminal이
+# 양보한 화면을 잡는다(DY design 결정 7). 구성원은 audio · sudo와 같이 init이 적는다.
 cat > "$WORKDIR/etc/group" <<'EOF'
 root:x:0:
 tty:x:5:
 sudo:x:27:
 audio:x:29:
+video:x:44:
 messagebus:x:101:
 nogroup:x:65534:
 EOF

@@ -2,6 +2,7 @@ const std = @import("std");
 const logline = @import("logline.zig");
 const linux = std.os.linux;
 const power = @import("power.zig");
+const devnode = @import("devnode.zig");
 const screen_args = @import("screen_args");
 
 // 부팅이 믹서를 켜고, 끌 때 기억한다(AU design 결정 4). 믹서를 실제로 만지는 것은
@@ -176,33 +177,10 @@ const SND_DIR: [:0]const u8 = "/dev/snd";
 /// Debian에서 udev 규칙이 하는 일과 같은 모양이다 — 사용자는 audio(29)의 구성원이다.
 ///
 /// 카드가 선 뒤 한 번이다. 부팅 뒤 꽂은 USB 헤드셋의 노드는 안 바뀐다 — init에 uevent가 없다
-/// (`carryover.md`의 HP 절). 실패해도 alsactl은 간다(root는 열 수 있다).
+/// (`carryover.md`의 HP 절). 실패해도 alsactl은 간다(root는 열 수 있다). 본체는 DY-M0에서
+/// `devnode.openNodes`로 옮겼다 — 찍는 줄은 한 글자도 같다.
 fn openToAudio() void {
-    const rc = linux.open(SND_DIR.ptr, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
-    if (failed(rc)) |e| {
-        logline.print("tars-init: audio: cannot open {s} (errno {d}), its nodes stay root 600\n", .{ SND_DIR, @backingInt(e) });
-        return;
-    }
-    const fd: i32 = @intCast(rc);
-    defer _ = linux.close(fd);
-    var count: usize = 0;
-    var refused: usize = 0;
-    var buf: [2048]u8 align(8) = undefined;
-    while (true) {
-        const n = linux.getdents64(fd, &buf, buf.len);
-        if (failed(n) != null or n == 0) break;
-        var off: usize = 0;
-        while (off < n) {
-            const d: *align(1) const linux.dirent64 = @ptrCast(&buf[off]);
-            off += d.reclen;
-            const name: [*:0]const u8 = @ptrCast(&d.name);
-            if (name[0] == '.') continue;
-            const own = linux.fchownat(fd, name, 0, screen_args.AUDIO_GID, 0);
-            const mode = linux.fchmodat(fd, name, 0o660);
-            if (failed(own) != null or failed(mode) != null) refused += 1 else count += 1;
-        }
-    }
-    logline.print("tars-init: audio: {d} nodes in {s} are root:audio 660 ({d} refused)\n", .{ count, SND_DIR, refused });
+    devnode.openNodes(SND_DIR, screen_args.AUDIO_GID, "audio", "audio");
 }
 
 /// `/dev/snd`의 한 이름이 카드의 제어 노드(`controlC` 뒤에 숫자만)인가. audio_test가 본다.

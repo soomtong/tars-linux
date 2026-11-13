@@ -17,6 +17,7 @@ const login = @import("login.zig");
 const account = @import("account.zig");
 const control = @import("control.zig");
 const audio = @import("audio.zig");
+const devnode = @import("devnode.zig");
 const reload = @import("reload.zig");
 const layers = @import("layers.zig");
 const trust = @import("trust.zig");
@@ -1398,6 +1399,9 @@ const Boot = struct {
 
     fn probeDevices(self: *Boot) void {
         logDrmDevicePresence();
+        // DY-M0(결정 7): 화면 셸의 프로그램이 terminal이 양보한 화면을 잡도록. terminal을 띄우기
+        // 전이다 — 노드를 여는 것은 master를 건드리지 않는다(DY design 확인 1).
+        devnode.openNodes("/dev/dri", screen_args.VIDEO_GID, "video", "display");
         self.button_count = devices.openPowerButtons(devices.SYS_INPUT, &self.button_fds);
     }
 
