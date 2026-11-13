@@ -3,7 +3,7 @@
 접두사: DY
 
 Date: 2026-11-12
-Status: 열림. DY-M0 끝(2026-11-13, `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`의 결과 절, 체인 `display`). 다음은 DY-M1.
+Status: 열림. DY-M0 · DY-M1 끝(2026-11-13, plan 둘의 결과 절, 체인 `display`). 다음은 DY-M2(Mesa · SDL3 — 키는 `SDL_EVDEV_DEVICES`가 있어야 한다, M1 결과 6).
 
 계기: 사용자(2026-11-12): TARS가 외주 솔루션 · 프로덕트로 납품되는 경우 — 키오스크는 fakesteak으로 1차 확인, 2차 데모는 GPU를 쓰는
 애플리케이션. "예전 DOS 시스템처럼 콘솔 화면이 기본이지만 Full screen graphics 프로그램을 만들어 실행시킬 수 있게 확장; KMS master를
@@ -96,7 +96,7 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
    - 탈출(8b): `Ctrl+Cmd+Backspace`(PC 키보드에서 `Ctrl+Alt+Backspace` — X11의 zap과 같은 자리). 양보 중에도 terminal은 키를 읽고 있으므로
      이 조합만 본다: 손님의 프로세스 그룹에 SIGTERM, 2초 안에 연결이 안 닫히면 SIGKILL. 멈춘 앱에서 다른 패널을 살린 채 콘솔로 돌아오는
      유일한 길이다(확인 4 — 강제로 못 되찾는다. 나머지 길은 ssh · `Ctrl+Alt+Del` 재부팅 · 전원 버튼이다). 앱이 키보드를 독점(`EVIOCGRAB`)하면
-     terminal도 이 조합을 못 본다 — SDL3이 그러는지는 DY-M1이 조사한다.
+     terminal도 이 조합을 못 본다 — SDL3의 evdev는 독점하지 않는다(DY-M1 결과 6).
 9. 로그 줄(게이트와 사람이 같은 줄을 본다): `terminal: display> yield pid N` · `terminal: display> busy pid N` ·
    `terminal: display> reclaim` · `terminal: display> waiting for master`.
 11. master가 아닌 채 뜬 terminal(DY-M1, 위험 2): 첫 `modeset`이 `EACCES`면 죽지 않고 `waiting`으로 뜬다 — 그리지 않고 1초마다 `SET_MASTER`를

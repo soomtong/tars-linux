@@ -2,7 +2,7 @@
 
 Date: 2026-11-13
 Design: `docs/specs/2026-11-12-tars-display-yield-design.md`
-Status: plan(구현 전).
+Status: 끝(2026-11-13). 결과는 맨 아래.
 
 ## 착수 전에 확정한 것
 
@@ -94,4 +94,31 @@ SDL3의 evdev 경로(`src/core/linux/SDL_evdev.c`)가 키보드를 독점하는�
 
 ## 결과
 
-(구현 뒤에 적는다.)
+commit: `c712a42`(Task 1) · `72b854f`(Task 2 · 3 · 4 — 같은 파일의 얽힌 자리라 하나로) · `7ca3cbb`(Task 5) · `31b877b`(Task 6). 2026-11-13 로컬 세션.
+Task 2부터는 M0 체인의 판정 5 · 6이 깨지므로(양보 중 키가 셸로 안 간다) M0 때처럼 체인이 PASS한 뒤에 commit했다.
+
+1. Task 1: `watchEscape`는 매 배치 `taps`와 `dictate_tap`을 버린다(들어갈 때만이 아니라 — 양보 중에는 둘이 쓰일 일이 없다). 수정키
+   여덟을 따라가 복귀 뒤 눌린 채로 남지 않는다(`input_test` 두 절).
+2. Task 2: 포인터는 읽되(`readPointers`) `wirePointer`만 건너뛴다 — 좌표는 따라가고 화살표는 복귀 뒤 그 자리에 뜬다. 판정은
+   `ownsScreen`이 아니라 `holdsInput`(Task 4의 손님 없는 기다림이 키를 셸에 넣으므로). `yield_test`의 기한 셈을 처음에 틀리게 적었다
+   (1000 + 2000을 500) — 시험 쪽 잘못.
+3. Task 3: `/dev/input`의 `event*`(체인의 QEMU에서 셋 — 무엇인지는 세지 않았다)를 `ok` 앞에 손님 uid로, 되찾기 앞에 root로.
+   terminal이 뜰 때도 한 번 되돌린다(`inputs 3 back to root`).
+4. Task 4: `drm.zig`의 ioctl이 `EACCES`면 `error.NotMaster`. `drm.open`의 DIRTYFB 물음이 그 답이면 `dirty_known = false`로 두고
+   (`kms: present by ? (not master yet)`) `YieldOps.modeset`이 되찾은 뒤 다시 묻는다. 손님 없는 기다림은 `Machine.blind`.
+5. Task 6: 판정 열, 부팅 둘. `reload terminal`은 init에 대기 중인 설정이 없으면 아무것도 안 한다(`nothing pending`) — 첫 판이 판정 10에서
+   그것으로 멈췄고, `cursor_shape=bar`를 `set` · `reload`한 뒤 치게 고쳤다(fullscreen 체인 판정 8과 같은 길). 둘째 판 PASS(3분 58초).
+   부팅 2의 줄: `yield pid 233` → `reload terminal` → `kms: present by ? (not master yet)` → `display> waiting for master` → 새 셸 →
+   `inputs 3 back to root` → (보이지 않는 셸에 `kill -9`) → `kms: present by dirtyfb` → `reclaim`, `giving up` 없음. 고치기 전 코드로 빨강
+   판은 돌리지 않았다.
+6. Task 7(조사, 출처: libsdl-org/SDL `main`의 `src/core/linux/SDL_evdev.c` · `SDL_evdev_kbd.c`, 2026-11-13에 읽음 — commit은 못 고정했다):
+   - `EVIOCGRAB`가 없다 — SDL3의 evdev 키보드는 장치를 독점하지 않는다. 탈출 조합이 SDL 앱 앞에서도 terminal에 닿는다.
+   - `SDL_EVDEV_kbd_init`이 `/dev/tty`를 열어 VT(`KDGKBTYPE`가 KB_101 · KB_84)일 때만 `KDSKBMODE K_OFF`로 콘솔 키를 끈다
+     (`SDL_HINT_MUTE_CONSOLE_KEYBOARD`, 기본 켬). TARS 앱의 `/dev/tty`는 pty라 지나간다 — 해가 없다.
+   - libudev 없이는 `/dev/input`을 훑지 않는다(`SDL_EVDEV_Init`의 `#else` 갈래 — `// TODO: Scan the devices manually, like a caveman`).
+     `SDL_EVDEV_DEVICES` 힌트(`kbd:/dev/input/eventN,mouse:…`)만 읽는다. TARS에는 udevd가 없으니 DY-M2에서 키를 받으려면 이 힌트가
+     있어야 한다 — `tars-fullscreen`이 exec 앞에 채우는 길이 후보다(M2 plan이 정한다).
+   - 못 본 것: KMSDRM 백엔드(`SDL_kmsdrmvideo.c`)가 `SDL_EVDEV_Init`을 부르는지, `SDL_udev.c`.
+7. 루트 게이트: 34/34 첫 판 PASS(34분 29초 — prebuild 348초 + lanes 1,578초, 회차 34개 모두 `cut log lines A=0 B=0 C=0`, `out/gate-logs/20261113-120251`).
+   DY 98초(부팅 둘), devtools 841초. 체인 이름은 게이트 뒤에 `DY-M0` → `DY-M1`로 바꿨다(닫기 commit).
+8. 안 본 것: i915 실기(M0 Task 5와 함께). 양보 중에 꽂은 키보드는 root 600으로 남는다(init에 uevent가 없다).

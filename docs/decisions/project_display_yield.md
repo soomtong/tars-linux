@@ -1,6 +1,6 @@
 ---
 name: project_display_yield
-description: "화면 양보(DY, 2026-11-12 열림, M0 2026-11-13 끝) — terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 master만 놓는다 · 연결이 살아 있는 동안이 양보 기간 · 복귀는 SET_MASTER + SETCRTC + 통째 그리기 · lease는 독점이 아니라 안 쓴다 · 2차 데모는 SDL3 + SDL_Renderer · 커널 동작은 프로브로 쟀다 · card0 fd가 셸로 새던 것을 CLOEXEC로 막았다"
+description: "화면 양보(DY, 2026-11-12 열림, M0 · M1 2026-11-13 끝) — 키보드는 양보 동안만 손님 uid · 탈출 Ctrl+Cmd+Backspace · master 없이 뜬 terminal은 기다린다 · terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 master만 놓는다 · 연결이 살아 있는 동안이 양보 기간 · 복귀는 SET_MASTER + SETCRTC + 통째 그리기 · lease는 독점이 아니라 안 쓴다 · 2차 데모는 SDL3 + SDL_Renderer · 커널 동작은 프로브로 쟀다 · card0 fd가 셸로 새던 것을 CLOEXEC로 막았다"
 metadata:
   node_type: memory
   type: project
@@ -8,7 +8,7 @@ metadata:
 
 사용자(2026-11-12)가 납품 시나리오(키오스크 다음의 2차 데모 = GPU를 쓰는 프로그램)를 두고 KMS master 독점을 풀자고 했고,
 논의 뒤 "SDL 3 갑시다. 나머지는 모두 당신의 추천대로"로 맡겼다. design은 `docs/specs/2026-11-12-tars-display-yield-design.md`,
-DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0은 2026-11-13 로컬 세션에서 끝났다(체인 `display`) — 다음은 DY-M1.
+DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0 · M1은 2026-11-13 로컬 세션에서 끝났다(체인 `display`, M1 plan `docs/plans/2026-11-13-tars-display-yield-dy-m1.md`) — 다음은 DY-M2.
 
 ## 다시 조사하지 말 것 (프로브 `display/probe/kms-handover.c` · `.log`, 6.17 · virtio-gpu · fbdev 에뮬레이션 끔)
 
@@ -30,6 +30,17 @@ DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0은 2026
     소켓에 와 있다. `tars-fullscreen`은 send가 실패해도 읽는다.
 11. `/dev/dri`의 노드 수: virtio-gpu 2(card0 + renderD128), 기본 VGA(bochs-drm) 1.
 
+## DY-M1이 정하고 잰 것
+
+12. 키보드의 문(사용자 2026-11-13, 추천안): `input` 그룹 없음. 양보를 받는 순간 `/dev/input/event*`의 주인을 손님 uid로(600 그대로),
+    되찾을 때와 terminal이 뜰 때 root로. 평소의 키(sudo 암호)는 사용자 프로세스가 못 읽는다.
+13. 탈출 조합(사용자 2026-11-13, 추천안): `Ctrl+Cmd+Backspace`(PC `Ctrl+Alt+Backspace`) → SIGTERM(손님이 그룹 리더면 그룹) → 2초 → SIGKILL.
+14. master 없이 뜬 terminal: 첫 `modeset`이 `EACCES`면 `waiting`(손님 없음 — 키는 셸로, 탈출 없음). `drm.open`의 DIRTYFB 물음도 master가
+    아니면 `EACCES`라 답이 아니다 — 되찾은 뒤 다시 묻는다(`kms: present by ? (not master yet)`).
+15. SDL3(`main`, 2026-11-13): evdev에 `EVIOCGRAB`가 없다 — 탈출 조합이 닿는다. libudev 없이는 `/dev/input`을 안 훑고 `SDL_EVDEV_DEVICES`
+    힌트만 읽는다 — DY-M2는 그 힌트를 채워야 키가 간다. 콘솔 음소거(`KDSKBMODE K_OFF`)는 `/dev/tty`가 VT일 때만이라 TARS(pty)에서는 지나간다.
+16. 체인의 함정: `tars-config reload terminal`은 대기 중인 설정이 없으면 아무것도 안 한다 — 키 하나를 `set` · `reload`한 뒤 친다.
+
 ## 왜 이렇게 골랐나
 
 - lease가 아니라 DROP_MASTER: 앱 쪽 드라이버가 필요 없고(3), lease의 이점은 출력이 여럿일 때 것이다.
@@ -44,8 +55,8 @@ DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0은 2026
 
 ## 알려진 구멍
 
-양보 중에 terminal이 다시 뜨면(`reload terminal` · 죽음) 새 terminal의 첫 modeset이 `EACCES`로 죽어 `given_up`까지 갈 수 있다.
-DY-M1이 "master가 아니면 기다린다"로 막는다(design 위험 2).
+DY-M1이 위험 2(양보 중에 다시 뜬 terminal의 `given_up`)를 막았다. 남은 것: 양보 중에 꽂은 키보드는 root 600으로 남는다, 앱이 남긴
+자손이 키보드 fd를 쥔 채 그룹을 떠나면 탈출 신호가 안 닿는다(design 위험 4), i915 실기를 아직 안 봤다.
 
 ## 이 세션의 환경
 

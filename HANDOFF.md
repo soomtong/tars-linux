@@ -1,6 +1,9 @@
-# HANDOFF: DY-M0 끝(2026-11-13) — 화면 양보가 섰다(체인 `display`), 다음은 DY-M1 · LD-M0 닫힘, 다음 판(0.2.2)을 기다린다
+# HANDOFF: DY-M1 끝(2026-11-13) — 키는 양보 동안만 앱의 것 · 탈출 조합 · 기다리는 terminal, 다음은 DY-M2(Mesa · SDL3) · 다음 판(0.2.2)을 기다린다
 
 ## 목표
+
+사용자(2026-11-13): DY-M1 전에 정할 둘(input 그룹 · 탈출 조합)의 설명을 읽고 "두 항목 모두 추천해 준 방향이 가장 리즈너블합니다" →
+plan "confirmed" → Task마다 "continue". 끝났다 — 결과는 DY-M1 plan의 결과 절.
 
 사용자(2026-11-13, 로컬 세션): origin을 받아 DY-M0을 Task 1부터 — Task마다 "커밋하고 진행해". Task 3 · 4는 "2로 가자"(체인이 PASS한 뒤에
 따로 commit). 끝났다 — 결과는 DY-M0 plan의 결과 절.
@@ -22,18 +25,17 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 현재 브랜치
 
-`main`은 origin(`a46119c`)보다 DY-M0 commit 다섯(Task 넷 + 닫기)만큼 앞선다 — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
+`main`은 origin(`a46119c`)보다 DY-M0 · M1의 commit만큼 앞선다(이 기록까지) — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
 태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
 
 ## 다음 할 것
 
-0. DY-M1(입력 양보 · 탈출 조합 · master가 아닌 채 뜬 terminal의 기다림). 읽는 순서: 기억 `project_display_yield` → design의 결정 8 ·
-   위험 2 · 4 → DY-M0 plan의 결과 절. M1 plan은 아직 없다.
-   - 사용자에게 물을 것: `input` 그룹(그 그룹의 프로세스는 sudo 암호를 포함한 키 입력을 읽는다 — design 위험 4) · 탈출 조합의 키.
-     DY-M2의 Mesa + SDL3이 ISO 여유(약 146MiB, 사용자 말로는 "200MB 정도") 안에 드는지는 M2 조사가 잰다.
-   - 실기 확인(사용자, DY-M0 plan Task 5): 맥북 에어 2011에서 `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`. 볼 것은
-     `carryover.md`의 DY 절.
-   - 알려진 구멍(M1이 막는다): 양보 중의 `reload terminal`은 `given_up`까지 갈 수 있다. 양보 중 키보드는 아직 terminal의 것이다.
+0. DY-M2(Mesa · SDL3 묶음과 데모 프로그램). 읽는 순서: 기억 `project_display_yield`(15 — SDL3은 libudev 없이 `SDL_EVDEV_DEVICES`
+   힌트가 있어야 키를 받는다) → design 결정 10 · 위험 3 → DY-M1 plan 결과 6. M2 plan은 아직 없다 — 조사부터: KMSDRM 백엔드가
+   `SDL_EVDEV_Init`을 부르는지(`SDL_kmsdrmvideo.c`), Mesa(i915 · virtio-gpu의 GLES) + SDL3의 크기가 ISO 여유(약 146MiB, 사용자 말로는
+   "200MB 정도") 안에 드는지, 힌트를 `tars-fullscreen`이 채울지.
+   - 실기 확인(사용자): 맥북 에어 2011에서 `tars-fullscreen tars-kms-fill CC6666 5 2>/tmp/fill.log`, `… CC6666 0 --keys`(Esc로 끝),
+     `Ctrl+Cmd+Backspace`. 볼 것은 `carryover.md`의 DY 절.
    - 클라우드 세션의 브랜치 `claude/gifted-thompson-v5diyz`는 `a46119c` 전의 같은 내용이라 지워도 된다.
 1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
    7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
@@ -50,6 +52,16 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
    실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
    tars-agent(사용자가 예고 — claude code · codex · pi 같은 것), mitos 줄이기(풀린 285MiB, `carryover.md` LD 절).
 4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+
+## 완료된 작업 (2026-11-13, DY-M1 — 로컬 세션)
+
+- [x] 사용자 결정 둘(추천안): 키보드는 양보 동안만 손님 uid(`input` 그룹 없음), 탈출 `Ctrl+Cmd+Backspace` — design 결정 8a · 8b, 그리고
+      결정 11(master 없이 뜬 terminal은 기다린다). `ab89307`.
+- [x] Task 1 `c712a42`: `input.watchEscape`. Task 2 · 3 · 4 `72b854f`: 양보 중 키 · 누름을 셸에 안 넣음, SIGTERM → 2초 → SIGKILL,
+      `/dev/input/event*`의 주인 넘기기 · 되돌리기, `error.NotMaster` · DIRTYFB 다시 묻기 · 손님 없는 기다림. Task 5 `7ca3cbb`:
+      `tars-kms-fill --keys`, 도움말. Task 6 `31b877b`: 체인 `display` 판정 열 · 부팅 둘(3분 58초).
+- [x] Task 7 조사: SDL3 evdev에 `EVIOCGRAB` 없음, libudev 없이는 `SDL_EVDEV_DEVICES` 힌트만 — M2의 몫.
+- [x] 루트 게이트: 34/34 첫 판 PASS(34분 29초, prebuild 348초 + lanes 1,578초, 잘린 줄 0, `out/gate-logs/20261113-120251`).
 
 ## 완료된 작업 (2026-11-13, DY-M0 — 로컬 세션)
 
