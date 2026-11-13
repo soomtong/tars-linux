@@ -38,7 +38,8 @@ DY-M0 plan은 `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`. DY-M0 · M1�
 14. master 없이 뜬 terminal: 첫 `modeset`이 `EACCES`면 `waiting`(손님 없음 — 키는 셸로, 탈출 없음). `drm.open`의 DIRTYFB 물음도 master가
     아니면 `EACCES`라 답이 아니다 — 되찾은 뒤 다시 묻는다(`kms: present by ? (not master yet)`).
 15. SDL3(`main`, 2026-11-13): evdev에 `EVIOCGRAB`가 없다 — 탈출 조합이 닿는다. libudev 없이는 `/dev/input`을 안 훑고 `SDL_EVDEV_DEVICES`
-    힌트만 읽는다 — DY-M2는 그 힌트를 채워야 키가 간다. 콘솔 음소거(`KDSKBMODE K_OFF`)는 `/dev/tty`가 VT일 때만이라 TARS(pty)에서는 지나간다.
+    힌트만 읽는다 — 다만 그것은 libudev 없는 빌드의 갈래다. Debian의 SDL3은 libudev를 dlopen하고 udevd 없이도 `/sys`를 훑는다(DY-M2
+    plan 확인 3 — 실행 확인은 M2 Task 3). 콘솔 음소거(`KDSKBMODE K_OFF`)는 `/dev/tty`가 VT일 때만이라 TARS(pty)에서는 지나간다.
 16. 체인의 함정: `tars-config reload terminal`은 대기 중인 설정이 없으면 아무것도 안 한다 — 키 하나를 `set` · `reload`한 뒤 친다.
 
 ## 왜 이렇게 골랐나
