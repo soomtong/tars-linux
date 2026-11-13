@@ -1,6 +1,10 @@
-# HANDOFF: LD-M0 닫힘(2026-11-12) — 묶음 사이 중복 지우기 · emacs 빼기 · fakesteak 기본 판, 다음 판(0.2.2)을 기다린다
+# HANDOFF: DY 열림(2026-11-12) — 화면 양보의 design · DY-M0 plan · 커널 프로브까지, 구현은 로컬 세션이 잇는다 · LD-M0 닫힘, 다음 판(0.2.2)을 기다린다
 
 ## 목표
+
+사용자(2026-11-12): 납품 시나리오(키오스크 다음의 2차 데모 = GPU를 쓰는 프로그램)를 두고 "KMS master를 terminal이 독점하는 구조를
+개선하자" · 메인 터미널을 GPU 기반으로 할지 논의 → "SDL 3 갑시다. 나머지는 모두 당신의 추천대로 진행합니다." → "로컬에 있는
+개발환경에서 작업을 이어서 진행할게 이 세션은 handoff로 마감하자." 열려 있다 — design · DY-M0 plan · 프로브만 있고 코드는 없다.
 
 사용자(2026-11-12): "묶음 사이 같은 파일 지우기부터 조사 … emacs, doom 잘 안쓰는거 같아 … tars-agent를 만들면 에디터는 더 안쓰게 될거야" ·
 "기본판에 fakesteak 추가하자" → "emacs 빼고 나머지는 권고대로, design · plan · 임플리멘테이션까지. 나는 운전을 좀 할게." 끝났다(결정은 lead, LD design).
@@ -20,10 +24,22 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 
 ## 다음 할 것
 
-0. 열린 서브프로젝트 DY(화면 양보, 사용자 2026-11-12 "SDL 3 갑시다. 나머지는 모두 당신의 추천대로"): design
-   `docs/specs/2026-11-12-tars-display-yield-design.md` · DY-M0 plan `docs/plans/2026-11-12-tars-display-yield-dy-m0.md` · 기억
-   `project_display_yield`. 클라우드 세션에서 design · plan · 커널 프로브(`display/probe/`)까지 썼고 구현은 없다 — devcontainer가 있는
-   세션이 plan의 Task 1부터 잇는다. 브랜치 `claude/gifted-thompson-v5diyz`(main에 아직 안 들어갔다).
+0. DY(화면 양보)를 잇는다. 읽는 순서: 기억 `project_display_yield`(실측 여섯과 고른 까닭) → design
+   `docs/specs/2026-11-12-tars-display-yield-design.md` → DY-M0 plan `docs/plans/2026-11-12-tars-display-yield-dy-m0.md`.
+   - 받기: 브랜치 `claude/gifted-thompson-v5diyz`에 문서 커밋 + main merge가 있다(main에는 안 들어갔다). 로컬에서 main으로 합치고
+     (문서 · `display/probe/` 둘 · `MEMORY.md` · 이 파일뿐이라 부딪힐 코드가 없다) plan의 Task 1(`video` 그룹과 `/dev/dri`)부터.
+   - 시작 전에 대조할 것: design 확인 7~16의 줄 번호는 `547c3fc` 기준이고 서브에이전트(Explore)의 보고에서 왔다. lead가 직접 본 것은
+     `main.zig:3602` · `arm()` 4007-4037 · `:1672-1679` · `pty.zig:37 · 51` · `make_initrd.sh:650-657` · `account.zig:147` · `drm.zig`의
+     `open` · `modeset` · `present`뿐이다. 나머지(`input.zig`의 줄 · `init/build.zig` · `fullscreen/check.sh`의 helper · monitor 포트
+     45507이 비었는지)는 구현 전에 `Read`로 본다.
+   - 여기서 못 한 것: TARS 빌드 · `make quick` · 게이트(클라우드 컨테이너에 zig · docker 데몬 · KVM이 없었다). 커밋한 것은 문서와
+     프로브(`.c` · `.log`)뿐이라 게이트에 닿는 것은 없지만 `make quick`은 한 번 돌려 본다.
+   - 프로브를 TARS 커널에서 다시 돌리면 좋다(design 위험 1): `display/probe/kms-handover.c`를 `gcc -static`으로 묶어 initrd에 넣고
+     `-device virtio-gpu-pci`로 띄운다. 6.17 Ubuntu 커널의 기록이 `display/probe/kms-handover.log`다 — 줄 단위로 같아야 한다.
+   - 사용자에게 물을 것(급하지 않다): DY-M1의 `input` 그룹(그 그룹의 프로세스는 sudo 암호를 포함한 키 입력을 읽는다 — design 위험 4) ·
+     탈출 조합의 키 · DY-M2의 Mesa + SDL3이 ISO 여유(LD-M0이 연 약 146MiB, 사용자 말로는 "200MB 정도") 안에 드는지는 M2 조사가 잰다.
+   - M0의 알려진 구멍: 양보 중의 `reload terminal`은 `given_up`까지 갈 수 있다(design 위험 2, M1이 막는다). 양보 중 키보드는 아직
+     terminal의 것이다.
 1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
    7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
    고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
