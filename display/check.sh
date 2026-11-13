@@ -16,12 +16,15 @@ cd "$(dirname "$0")" || exit 1
 #   DY-M1: 양보 동안 키는 앱의 것이다 — 평소 root인 /dev/input/event*가 그동안만 손님의 uid 것이 되고(결정 8a) 친 키가
 #   셸에 안 들어가며, Ctrl+Cmd+Backspace가 SIGTERM · 2초 뒤 SIGKILL로 멈춘 앱에서 돌아온다(결정 8b). 부팅 2(root 셸)는
 #   양보 중에 terminal이 다시 떠도 죽지 않고 기다리다가 앱이 죽으면 되찾는 것을 본다(결정 11).
+#   DY-M2: 부팅 3은 홈 디스크의 .tars/layers에 base · gpu 묶음을 얹고 `tars-fullscreen tars-gpu-demo`가 SDL3(KMSDRM) +
+#   OpenGL ES(Mesa)로 화면을 그리며 키를 udevd 없이 받는 것을 본다(결정 10, M2 plan 확인 3). 묶음이 없는 부팅 2에서는
+#   데모가 이유를 말하고 1로 끝난다.
 #
 # 셸은 사용자 dyuser(uid 1000)다 — 설정 디스크의 user=와 tars-home 라벨의 ext4 디스크가 함께 있어야 init이
 # root 대신 사용자로 띄운다(`pickUser`). 양보의 요점이 "사용자의 프로그램이 화면을 잡는다"라서다.
 #
 # 화면은 virtio-gpu 1280 × 800(fullscreen 체인과 같다 — card0 + renderD128이라 노드가 둘). monitor 포트는 45507 —
-# 예약 범위(RP-M0)에서 cursor의 45506 다음 빈 자리다. 회차당 부팅 2회. 설정 디스크에 keyboard=apple — QEMU의 키보드는
+# 예약 범위(RP-M0)에서 cursor의 45506 다음 빈 자리다. 회차당 부팅 3회. 설정 디스크에 keyboard=apple — QEMU의 키보드는
 # PC라 그대로면 Cmd가 Alt 자리다(gate_lib.sh의 apple_disk와 같은 이유). 탈출 조합은 `ctrl-meta_l-backspace`로 보낸다.
 
 if ! (cd ../kernel && ./build.sh); then
@@ -137,6 +140,7 @@ type_line() {
       =) keys+=(equal) ;;
       +) keys+=(shift-equal) ;;
       ';') keys+=(semicolon) ;;
+      ':') keys+=(shift-semicolon) ;;
       '*') keys+=(shift-8) ;;
       '(') keys+=(shift-9) ;;
       ')') keys+=(shift-0) ;;
@@ -414,6 +418,9 @@ fi
 [ "$(count_log "$YIELD")" -eq 6 ] && [ "$(count_log "$RECLAIM")" -eq 6 ] ||
   report_failure "(9) yields $(count_log "$YIELD") and reclaims $(count_log "$RECLAIM"), want 6 and 6"
 echo "(9) six yields, six reclaims, one busy, no restart"
+# 부팅 3의 묶음 옆 version 파일. init은 이미지의 버전과 같을 때만 묶음을 얹는다(layers.zig의 judgeVersion).
+IMAGE_VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
+[ -n "$IMAGE_VER" ] || report_failure "(9) no 'starting as PID 1 (TARS …)' line to read the image version from"
 stop_boot
 
 # ══ 부팅 2 — root 셸: 양보 중에 terminal이 다시 뜬다(결정 11) ════════════
@@ -458,6 +465,124 @@ if tlog | grep -aE 'giving up on terminal' >/dev/null; then
   report_failure "(10) init gave up on terminal"
 fi
 echo "(10) the restarted terminal waited, took the screen back when the program died, init never gave up"
+
+# ── 판정 11: 묶음이 없으면 데모가 이유를 말한다 ──────────────────────────
+echo "=== (11) without the gpu bundle tars-gpu-demo says why and exits 1 ==="
+# shellcheck disable=SC2016 # 게스트의 fish가 펼칠 글자다.
+type_line 'tars-gpu-demo; echo g0-$status'
+wait_for_screen 'tars-gpu-demo: libSDL3.so.0 not found' ||
+  report_failure "(11) tars-gpu-demo did not say libSDL3.so.0 is missing"
+wait_for_screen 'g0-1' ||
+  report_failure "(11) tars-gpu-demo did not exit 1 without the bundle"
+echo "(11) no bundle: 'libSDL3.so.0 not found', exit 1"
 stop_boot
 
-echo "PASS: DY-M1 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying"
+# ══ 부팅 3 — 사용자 dyuser, 홈 디스크에 base · gpu 묶음 ═══════════════════
+#
+# 묶음은 make dev-layers가 구운 것이다(make check CHAIN=display와 make gate가 먼저 부른다). gpu는 base와 겹친 파일이
+# 지워진 채 구워지므로(LD-M0) base가 함께 있어야 한다. init은 /home/.tars/layers의 version이 이미지와 같을 때만 얹는다.
+for b in base gpu; do
+  [ -f "../devlayer/build/${b}.sqfs" ] || report_failure "no devlayer/build/${b}.sqfs — run make dev-layers"
+done
+make_disks 'shell=fish' 'keyboard=apple' "user=${USER_NAME}"
+LAYER_SEED="$(mktemp -d)"
+mkdir -p "$LAYER_SEED/.tars/layers"
+cp ../devlayer/build/base.sqfs ../devlayer/build/gpu.sqfs "$LAYER_SEED/.tars/layers/"
+echo "$IMAGE_VER" > "$LAYER_SEED/.tars/layers/version"
+rm -f "$HOME_IMG"
+truncate -s $(( $(du -sm "$LAYER_SEED" | cut -f1) + 128 ))M "$HOME_IMG"
+mkfs.ext4 -F -q -L tars-home -d "$LAYER_SEED" "$HOME_IMG"
+rm -rf "$LAYER_SEED"
+echo "=== boot 3: ${USER_NAME} with the base and gpu bundles (version ${IMAGE_VER}) ==="
+boot "$USER_NAME" -drive file="$CONFIG_IMG",if=virtio,format=raw -drive file="$HOME_IMG",if=virtio,format=raw
+
+# 화면 가운데(16 × 16)의 색이 1초 사이에 바뀔 때까지 다시 뜬다 — 데모는 매 frame 띠의 색을 돌리므로, 바뀌면 GL이 그리고
+# 있다(terminal의 화면은 그 자리가 멈춰 있다). 30초 — llvmpipe가 CPU 하나에서 처음 뜨는 시간을 넉넉히.
+wait_for_motion() {
+  local i a b
+  for i in $(seq 1 30); do
+    screendump "$SHOT" || return 1
+    a="$(bg_of 632 392 16 16)"
+    sleep 1
+    screendump "$SHOT" || return 1
+    b="$(bg_of 632 392 16 16)"
+    LAST_BGS="$a -> $b"
+    if [ -n "$a" ] && [ "$a" != "$b" ] && [ "$a" != 000000 ]; then return 0; fi
+  done
+  return 1
+}
+
+# ── 판정 12: 묶음 둘이 /usr에 얹힌다 ────────────────────────────────────
+echo "=== (12) the base and gpu bundles are laid over /usr ==="
+wait_for_log 'tars-init: overlay /usr from 2 layers in [0-9]+ms' ||
+  report_failure "(12) init did not lay base and gpu over /usr"
+echo "(12) overlay /usr from 2 layers"
+
+# ── 판정 13: 데모가 GPU로 그리고 키를 받는다 ─────────────────────────────
+echo "=== (13) tars-fullscreen tars-gpu-demo draws with SDL3 + GLES and gets the keys ==="
+type_line 'tars-fullscreen tars-gpu-demo 2> /tmp/g1.log'
+wait_for_count "$YIELD" 1 ||
+  report_failure "(13) no 'display> yield' for tars-gpu-demo"
+wait_for_count "$HANDED" 1 ||
+  report_failure "(13) the inputs were not handed to uid 1000"
+wait_for_motion ||
+  report_failure "(13) the centre of the screen never changed colour — the demo is not drawing (${LAST_BGS:-no shot})"
+type_keys x y z esc
+wait_for_count "$RECLAIM" 1 ||
+  report_failure "(13) Esc did not end the demo (no 'display> reclaim')"
+# 셸이 x y z를 받았으면 이 줄은 `xyzecho …`가 되어 g1-7을 안 찍는다.
+type_line 'echo g1-(math 3+4)'
+wait_for_screen 'g1-7' ||
+  report_failure "(13) the keys typed while yielded leaked into the shell"
+type_line "echo g2-(grep -cE 'video kmsdrm|renderer opengles2|key (X|Y|Z)|: esc' /tmp/g1.log)"
+if ! wait_for_screen 'g2-6'; then
+  type_line 'cat /tmp/g1.log'
+  sleep 2
+  report_failure "(13) the demo's log does not have video kmsdrm, renderer opengles2, keys X Y Z and esc (its log is on the screen)"
+fi
+type_line "grep -E 'sdl|gl |mode|frames' /tmp/g1.log"
+wait_for_screen 'tars-gpu-demo: frames [0-9]+ in [0-9]+ms' ||
+  report_failure "(13) the demo did not count its frames"
+echo "(13) KMSDRM + opengles2 drew moving bands; X Y Z and Esc reached the demo through SDL's own udev scan; the shell got nothing"
+echo "--- the demo's own lines ---"
+joined_screen_dump | grep -aE 'tars-gpu-demo: (sdl|gl|mode|frames) ' | tail -n 4
+
+# ── 판정 14: 탈출 조합 — SDL은 SIGTERM을 QUIT으로 받는다 ─────────────────
+echo "=== (14) Ctrl+Cmd+Backspace ends the demo through SIGTERM, no SIGKILL ==="
+type_line 'tars-fullscreen tars-gpu-demo 2> /tmp/g3.log'
+wait_for_count "$YIELD" 2 ||
+  report_failure "(14) no second 'display> yield'"
+wait_for_motion ||
+  report_failure "(14) the demo is not drawing (${LAST_BGS:-no shot})"
+type_keys ctrl-meta_l-backspace
+wait_for_count "$SIGTERM_LINE" 1 ||
+  report_failure "(14) the chord did not send SIGTERM"
+wait_for_count "$RECLAIM" 2 ||
+  report_failure "(14) no second 'display> reclaim'"
+type_line "echo g3-(grep -c ': quit' /tmp/g3.log)"
+wait_for_screen 'g3-1' ||
+  report_failure "(14) the demo did not turn SIGTERM into a quit"
+# 끝내기에 걸린 시간(데모의 줄) — SIGKILL 판정이 빨갛게 되면 어디가 느린지 여기서 읽는다.
+type_line "grep -E 'frames|after the request' /tmp/g3.log"
+wait_for_screen 'tars-gpu-demo: frames [0-9]+ in [0-9]+ms' ||
+  report_failure "(14) the demo did not leave its loop after the quit"
+sleep 1
+echo "--- the demo's shutdown lines ---"
+joined_screen_dump | tail -n 1 | tr '|' '\n' | grep -aE 'tars-gpu-demo: (frames|left|shut)' | tail -n 3
+[ "$(count_log "$SIGKILL_LINE")" -eq 0 ] ||
+  report_failure "(14) a SIGKILL went to the demo"
+echo "(14) SIGTERM became SDL's quit; reclaimed without SIGKILL"
+
+# ── 판정 15: 복귀 뒤의 화면과 terminal ───────────────────────────────────
+echo "=== (15) the console is drawn again after the GL program and terminal never restarted ==="
+type_line 'echo g4-(math 4+4)'
+wait_for_screen 'g4-8' ||
+  report_failure "(15) the shell does not answer after the demo"
+if tlog | grep -aE 'tars-init: restarting|terminal: display> (waiting for master|refused|no socket|modeset after reclaim failed)' >/dev/null; then
+  report_failure "(15) terminal restarted or printed an unexpected display> line"
+fi
+screendump "$SHOT" || report_failure "(15) screendump did not write ${SHOT}"
+echo "(15) the shell answers on a redrawn console; no restart"
+stop_boot
+
+echo "PASS: DY-M2 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying; with the gpu bundle tars-gpu-demo draws through SDL3 KMSDRM and OpenGL ES and gets the keys without udevd"
