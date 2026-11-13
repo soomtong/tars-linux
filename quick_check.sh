@@ -61,6 +61,7 @@ done < <(find init/src terminal/src shared devlayer/manifest-gen.zig -name '*.zi
 
 # 4. shared/의 순수 검사. libc · 시스템 콜이 없어 어느 호스트에서나 돈다(SA-M1).
 zig run shared/screen_args_test.zig || failed+=(shared-test)
+zig run shared/display_proto_test.zig || failed+=(shared-test)
 
 # 5. init의 크로스 빌드. build.zig가 target을 x86_64-linux로 고정하고 libc를 안 쓰므로
 #    호스트가 무엇이든 같은 산출물 넷이 나온다. `zig build test`(호스트 검사)는 Linux

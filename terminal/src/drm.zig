@@ -194,6 +194,12 @@ fn drmIowr(comptime T: type, nr: u32) u32 {
     return (@as(u32, 3) << 30) | (drm_ioctl_base << 8) | nr | (@as(u32, @sizeOf(T)) << 16);
 }
 
+/// 인자 없는 ioctl의 번호(`_IO('d', nr)` — 방향 0 · 크기 0). DROP_MASTER · SET_MASTER가 그렇다.
+fn drmIo(nr: u32) u32 {
+    const drm_ioctl_base: u32 = 'd';
+    return (drm_ioctl_base << 8) | nr;
+}
+
 fn drmIoctl(fd: c_int, request: u32, arg: *anyopaque) !void {
     const rc = c.ioctl(fd, @as(c_ulong, request), arg);
     if (rc < 0) return error.IoctlFailed;
@@ -278,6 +284,21 @@ pub const Framebuffer = struct {
         // 프레임마다 시리얼에 한 줄을 찍던 자리다. RS-M1이 지웠다 — 그 줄이 그리기
         // 시간(`frame_us`) 안에 있었고 읽는 게이트가 없었다.
         try drmIoctl(self.fd, drmIowr(DrmModeCrtc, 0xA2), @ptrCast(&crtc));
+    }
+
+    /// master 자격을 내려놓는다(DY design 결정 1). fd도 fb도 그대로이고 화면도 안 꺼진다 —
+    /// 그 뒤 이 fd의 DIRTYFB · SETCRTC가 `EACCES`일 뿐이다(확인 2). 그다음 `card0`을 여는
+    /// 프로세스가 저절로 master다(확인 3).
+    pub fn dropMaster(self: Framebuffer) !void {
+        if (c.ioctl(self.fd, @as(c_ulong, drmIo(0x1f)), @as(c_ulong, 0)) < 0) return error.IoctlFailed;
+    }
+
+    /// master를 되찾는다. 남이 아직 master면 `EBUSY`이고 강제로 못 뺏는다(확인 4) — 그 fd가
+    /// 닫혀야 한다. 그 경우를 `error.MasterBusy`로 갈라 부르는 쪽이 기다리게 한다(결정 6).
+    pub fn setMaster(self: Framebuffer) !void {
+        if (c.ioctl(self.fd, @as(c_ulong, drmIo(0x1e)), @as(c_ulong, 0)) < 0) {
+            return if (std.c.errno(-1) == .BUSY) error.MasterBusy else error.IoctlFailed;
+        }
     }
 
     /// 그린 것을 내보낸다. 모드셋이 아니라 "fb가 바뀌었다"를 알리는 DIRTYFB다(RS-M3).
@@ -430,7 +451,9 @@ fn findCrtc(fd: c_int, encoder_id: u32, crtc_ids: []const u32) !u32 {
 
 /// `want`는 설정이 강제한 배율이고 null이면 `auto`다(`scale.pick`, HS design 결정 3).
 pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8, want: ?u32) !Framebuffer {
-    const fd = c.open(path, c.O_RDWR);
+    // CLOEXEC(DY-M0): 없으면 패널의 셸과 그 자손(uid 1000)이 이 fd — master인 drm_file — 를
+    // 물려받아 SETCRTC를 할 수 있다. forkpty의 자식은 fd를 닫지 않는다.
+    const fd = c.open(path, c.O_RDWR | c.O_CLOEXEC);
     if (fd < 0) return error.OpenFailed;
 
     const resources = try getResources(allocator, fd);

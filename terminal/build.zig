@@ -87,6 +87,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("../shared/screen_args.zig"),
     });
 
+    const display_proto = b.createModule(.{
+        .root_source_file = b.path("../shared/display_proto.zig"),
+    });
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -109,6 +112,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("c_stb_truetype", c_stb_truetype.mod);
     exe_mod.addImport("c_input", c_input.mod);
     exe_mod.addImport("screen_args", screen_args);
+    // DY-M0: 화면 양보의 약속(`shared/display_proto.zig`). init의 `tars-fullscreen`과 같은 파일이다.
+    exe_mod.addImport("display_proto", display_proto);
 
     // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
     // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
@@ -507,6 +512,20 @@ pub fn build(b: *std.Build) void {
     // TR-M1에서 font_test가 들어오면서 stb_truetype까지 필요해졌다. 남은
     // 차이는 x86_64 terminal 본체와 pty_test를 안 만든다는 것뿐이다.
     // 두 vendor 트리가 없으면(prepare.sh를 안 돌렸으면) 여기서 막힌다.
+    // yield_test도 호스트에서 돈다(DY-M0). `control_test`(init)와 같은 수법이다 — 양보의 상태
+    // 규칙을 가짜 ops로 보고 fd는 안 연다. socket과 ioctl은 `display/check.sh`가 본다.
+    const yield_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/yield_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    yield_test_mod.addImport("display_proto", display_proto);
+    const yield_test = b.addExecutable(.{
+        .name = "yield_test",
+        .root_module = yield_test_mod,
+    });
+    b.installArtifact(yield_test);
+
     const test_step = b.step("test", "호스트 아키텍처로 도는 검사를 실행한다");
     test_step.dependOn(&b.addRunArtifact(input_test).step);
     test_step.dependOn(&b.addRunArtifact(vt_test).step);
@@ -529,6 +548,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(pty_size_test).step);
     test_step.dependOn(&b.addRunArtifact(verify_test).step);
     test_step.dependOn(&b.addRunArtifact(dirty_test).step);
+    test_step.dependOn(&b.addRunArtifact(yield_test).step);
 
     // pty_test만 x86_64로 남는다. /usr/bin/fish를 exec하는데 그 fish는
     // 게스트용 x86_64라 호스트로 옮길 수 없다 — 빌드만 되고 아무도

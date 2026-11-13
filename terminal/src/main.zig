@@ -20,6 +20,8 @@ const status = @import("status.zig");
 const touchpad = @import("touchpad.zig");
 const verify = @import("verify.zig");
 const vt = @import("vt.zig");
+const yield = @import("yield.zig");
+const display_proto = @import("display_proto");
 
 // C 헤더는 build.zig가 번역해 `c_poll`로 넘긴다(ZU-M1). fortify를 끄는 유일한
 // 번역이다 — 켜지면 `c.poll`이 인라인 래퍼가 되고 그 번역이 c_int 자리에
@@ -3560,6 +3562,12 @@ const App = struct {
     /// 받아쓰기(VD-M1). 자식이 없으면 `phase`가 null이다.
     dict: Dictation = .{},
 
+    // ── 화면 양보 ──────────────────────────────────────────────────────
+    /// `/run/tars/display.sock`의 listen fd(DY-M0). 세우지 못했으면 -1이고 양보만 없다.
+    yield_listen: i32 = -1,
+    /// 손님 하나와 master의 상태(`yield.Machine`). `ours`가 아니면 그리지 않는다.
+    yield_state: yield.Machine = .{},
+
     // ── 프레임 ─────────────────────────────────────────────────────────
     /// 첫 프레임만 잰다. 매 프레임 찍으면 로그가 시끄럽고, 첫 프레임이 가장
     /// 비싼 경우(폰트 캐시도 페이지도 차갑다)라 상한을 본다.
@@ -3589,7 +3597,7 @@ const App = struct {
     /// 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
     /// 멈춘다.
     ///
-    /// 크기는 상한(1 + 8 + 8 + 9 × 8 + 2)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
+    /// 크기는 상한(1 + 8 + 8 + 9 × 8 + 2 + 2)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
     /// 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
     /// "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
     ///
@@ -3598,8 +3606,9 @@ const App = struct {
     /// `[0]`이 키보드 · `[1]`이 uevent였다 — 자리가 바퀴마다 다르므로 경계를 이름으로
     /// 든다(KH design 위험 4). 숫자로 쓰는 자리는 `fds[0]`(uevent)과 키보드 구간의 머리 `1`뿐이다.
     ///
-    /// 맨 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
-    fds: [1 + MAX_KEYBOARDS + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2]c.struct_pollfd = undefined,
+    /// 그 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
+    /// 맨 뒤 두 칸이 화면 양보의 listen socket · 손님이다(DY-M0). 없으면 -1이다.
+    fds: [1 + MAX_KEYBOARDS + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2 + 2]c.struct_pollfd = undefined,
     /// `fds[1 + k]`가 어느 키보드 칸의 것인지.
     fd_kbds: [MAX_KEYBOARDS]usize = undefined,
     /// `fds[kbd_end + k]`가 어느 포인터 칸의 것인지.
@@ -3657,6 +3666,7 @@ const App = struct {
         try self.spawnFirst(a);
         self.openInputs();
         self.openBattery();
+        self.yield_listen = yield.listen(screen_args.VIDEO_GID);
         return self;
     }
 
@@ -4003,7 +4013,8 @@ const App = struct {
     }
 
     /// 바퀴 1. poll에 넘길 fd를 다시 짓는다. 자리는 `fds`의 문서 주석에 있다 — uevent
-    /// 소켓 · 키보드 · 포인터 장치 · 모든 워크스페이스의 모든 패널 · 받아쓰기 파이프 둘.
+    /// 소켓 · 키보드 · 포인터 장치 · 모든 워크스페이스의 모든 패널 · 받아쓰기 파이프 둘 ·
+    /// 화면 양보의 socket 둘.
     fn arm(self: *App) void {
         self.fds[0] = .{ .fd = self.uevent_fd, .events = c.POLLIN, .revents = 0 };
         self.nfds = 1;
@@ -4033,7 +4044,9 @@ const App = struct {
         self.pty_end = self.nfds;
         self.fds[self.nfds] = .{ .fd = self.dict.out_fd, .events = c.POLLIN, .revents = 0 };
         self.fds[self.nfds + 1] = .{ .fd = self.dict.err_fd, .events = c.POLLIN, .revents = 0 };
-        self.nfds += 2;
+        self.fds[self.nfds + 2] = .{ .fd = self.yield_listen, .events = c.POLLIN, .revents = 0 };
+        self.fds[self.nfds + 3] = .{ .fd = self.yield_state.guest_fd, .events = c.POLLIN, .revents = 0 };
+        self.nfds += 4;
     }
 
     /// 바퀴 2. 키보드가 깨웠을 때. 키 → PTY 바이트 · 스크롤 · copy · 조합 글자 · 패널 ·
@@ -4702,6 +4715,31 @@ const App = struct {
         if (!std.meta.eql(shown, self.dict.show())) self.needs_redraw = true;
     }
 
+    /// 바퀴 7b. 화면 양보(DY-M0). 손님 → 새 연결 → 기다림 다시 해 보기의 순서다. 손님을 먼저
+    /// 읽는 것은 같은 바퀴에 들어온 새 연결이 방금 떠난 손님 자리를 받게 하려는 것이다.
+    /// 되찾았으면 통째로 다시 그린다(`setFullscreen`과 같은 관용구, DY design 확인 9).
+    fn readYield(self: *App) void {
+        const at = self.pty_end + 2;
+        var ops: YieldOps = .{ .fb = &self.fb };
+        var back = false;
+        if (self.yield_state.guest_fd >= 0 and self.fds[at + 1].revents != 0) {
+            var buf: [display_proto.MSG_MAX]u8 = undefined;
+            switch (yield.read(self.yield_state.guest_fd, &buf)) {
+                .msg => |m| self.yield_state.said(&ops, m),
+                .gone => back = self.yield_state.gone(&ops),
+                .none => {},
+            }
+        }
+        if (self.yield_listen >= 0 and self.fds[at].revents != 0) {
+            while (yield.accept(self.yield_listen)) |g| self.yield_state.arrive(&ops, g.fd, g.pid);
+        }
+        if (self.yield_state.retry(&ops)) back = true;
+        if (back) {
+            self.last_tree = null;
+            self.needs_redraw = true;
+        }
+    }
+
     /// `decideFrame`의 답. `draw`의 값은 화살표가 있어야 할 자리다.
     const Decision = union(enum) { skip, draw: ?pointer.Spot };
 
@@ -5137,10 +5175,11 @@ const App = struct {
         //
         // 미룬 프레임이 있으면 그 하한까지도 기다린다(RS-M2). 둘 중 먼저 오는 쪽이다.
         // 여기서 막히는 동안 CPU가 출력을 만드는 자식에게 넘어가 PTY 버퍼가 다시 찬다.
-        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(
+        // 양보한 화면을 못 되찾고 기다리는 동안이면 1초마다도 깬다(DY design 결정 6).
+        const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(pacing.soonest(
             battery.pollTimeout(poll_now, self.battery_state.due),
             pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
-        ));
+        ), self.yield_state.timeout()));
         if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드가 먼저다. 그 뒤 단계는 키보드가 바꾼 워크스페이스 · 포커스를 본다.
@@ -5154,6 +5193,19 @@ const App = struct {
         if (try self.readPanes() == .quit) return false;
         // 받아쓰기는 PTY 뒤 · 렌더 앞 — 대상 패널이 방금 닫혔는지를 본 뒤에 넣는다.
         self.readDictation();
+        // 화면 양보는 그리기 앞 — 되찾은 바퀴가 곧바로 통째로 그린다.
+        self.readYield();
+        // 양보 중에는 그리지 않는다(DY design 결정 5). present 두 자리(`decideFrame`의 화살표 ·
+        // `render`)를 여기서 함께 막는다 — 놓은 fd의 present는 `EACCES`이고 `try`라 terminal이 죽는다.
+        // 출력은 vt에 계속 쌓이고, 그릴 일은 `needs_redraw`로 남겨 복귀의 통째 그리기가 담는다.
+        // `output_pending`을 옮기는 까닭: 남겨 두면 `pacing.wait`가 0을 돌려 poll이 헛돈다.
+        if (!self.yield_state.ownsScreen()) {
+            if (self.output_pending) {
+                self.output_pending = false;
+                self.needs_redraw = true;
+            }
+            return true;
+        }
         // 그릴지는 맨 끝에서 하한을 보고 정한다(RS-M2).
         const want = switch (try self.decideFrame(pointers)) {
             .skip => return true,
@@ -5163,6 +5215,28 @@ const App = struct {
         try self.render(&frame, want);
         self.dumpFrame(&frame, pointers);
         return true;
+    }
+};
+
+/// `yield.Machine`이 부르는 것(DY-M0). 상태 규칙은 `yield.zig`에 있고 여기는 실제 ioctl과 socket이다 —
+/// `yield_test.zig`는 같은 자리에 가짜를 넣는다.
+const YieldOps = struct {
+    fb: *const drm.Framebuffer,
+
+    pub fn dropMaster(o: *YieldOps) !void {
+        return o.fb.dropMaster();
+    }
+    pub fn setMaster(o: *YieldOps) !void {
+        return o.fb.setMaster();
+    }
+    pub fn modeset(o: *YieldOps) !void {
+        return o.fb.modeset();
+    }
+    pub fn send(_: *YieldOps, fd: i32, r: display_proto.Reply) void {
+        yield.send(fd, r);
+    }
+    pub fn close(_: *YieldOps, fd: i32) void {
+        yield.close(fd);
     }
 };
 
