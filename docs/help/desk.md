@@ -18,7 +18,9 @@
 패널 안의 프로그램도 켜고 끌 수 있습니다 — `printf '\033[10;1t'`(켜기) · `printf '\033[10;0t'`(끄기) · `printf '\033[10;2t'`(바꾸기), xterm과 같은 시퀀스입니다.
 
 화면을 직접 그리는 프로그램(`/dev/dri/card0`을 여는 것)은 `tars-fullscreen <명령>`으로 띄웁니다. 그 프로그램이 끝나면 셸 화면이
-돌아옵니다. `tars-fullscreen tars-kms-fill CC6666 5`는 화면을 5초 동안 한 색으로 칠하는 시험입니다.
+돌아옵니다. 그동안 키보드와 마우스는 그 프로그램의 것입니다(셸에는 안 들어갑니다). 프로그램이 멈추면 `Ctrl+Cmd+Backspace`
+(PC 키보드는 `Ctrl+Alt+Backspace` — `Del`이 아닙니다, `Ctrl+Alt+Del`은 재부팅입니다)로 끝내고 셸로 돌아옵니다.
+`tars-fullscreen tars-kms-fill CC6666 5`는 화면을 5초 동안 한 색으로 칠하는 시험이고, `tars-kms-fill CC6666 0 --keys`는 `Esc`를 칠 때까지입니다.
 
 ## 한/영
 
