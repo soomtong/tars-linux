@@ -87,11 +87,21 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
 7. 장치 문: `video` 그룹(gid 44 — Debian의 번호)을 만들고 사용자를 넣는다(확인 11의 세 자리). init이 `/dev/dri`의 노드를
    `root:video 0660`으로 연다(확인 12, `openToAudio`의 모양 — `renderD128`도 함께, DY-M2의 GL이 쓴다). master가 있는 동안 남이 여는
    것은 해가 없다(확인 1).
-8. 입력(DY-M1): 양보 중 terminal은 키를 번역하지 않는다 — 앱이 같은 evdev를 직접 읽는다. 단 하나, 탈출 조합은 terminal이 본다: 손님의
-   프로세스 그룹에 SIGTERM, 2초 뒤에도 master를 못 되찾으면 SIGKILL. 멈춘 앱에서 콘솔로 돌아오는 유일한 길이다(확인 4). 조합과 evdev의
-   그룹(`input`)은 DY-M1 plan에서 정한다.
+8. 입력(DY-M1, 사용자 2026-11-13 — 추천안 둘에 동의): 양보 중 terminal은 키를 셸에 넣지 않는다 — 앱이 같은 evdev를 직접 읽는다.
+   - 문(8a): `input` 그룹은 만들지 않는다. terminal이 양보를 받는 순간 `/dev/input/event*`의 주인을 손님의 uid로(`SO_PEERCRED`, 모드 600
+     그대로) 바꾸고, 되찾을 때와 terminal이 뜰 때 root로 되돌린다. 키를 읽을 수 있는 때가 "그 사람이 띄운 전체 화면 프로그램이 도는 동안"
+     뿐이다 — 평소의 sudo 암호는 사용자 프로세스가 못 읽는다(위험 4). 기성 프로그램은 고치지 않고 돈다(그 순간 열려 있을 뿐이다).
+     양보 중에 연 fd는 되돌린 뒤에도 유효하다(권한은 open 때만 본다). 양보가 끝났다는 것이 곧 앱과 자손이 다 죽었다는 뜻이라 보통은
+     남지 않는다. logind처럼 fd를 넘겨주고 `EVIOCREVOKE`로 끊는 길은 앱이 그 fd를 받도록 고쳐져야 해서 고르지 않는다.
+   - 탈출(8b): `Ctrl+Cmd+Backspace`(PC 키보드에서 `Ctrl+Alt+Backspace` — X11의 zap과 같은 자리). 양보 중에도 terminal은 키를 읽고 있으므로
+     이 조합만 본다: 손님의 프로세스 그룹에 SIGTERM, 2초 안에 연결이 안 닫히면 SIGKILL. 멈춘 앱에서 다른 패널을 살린 채 콘솔로 돌아오는
+     유일한 길이다(확인 4 — 강제로 못 되찾는다. 나머지 길은 ssh · `Ctrl+Alt+Del` 재부팅 · 전원 버튼이다). 앱이 키보드를 독점(`EVIOCGRAB`)하면
+     terminal도 이 조합을 못 본다 — SDL3이 그러는지는 DY-M1이 조사한다.
 9. 로그 줄(게이트와 사람이 같은 줄을 본다): `terminal: display> yield pid N` · `terminal: display> busy pid N` ·
    `terminal: display> reclaim` · `terminal: display> waiting for master`.
+11. master가 아닌 채 뜬 terminal(DY-M1, 위험 2): 첫 `modeset`이 `EACCES`면 죽지 않고 `waiting`으로 뜬다 — 그리지 않고 1초마다 `SET_MASTER`를
+    다시 해 본다. 되찾으면 `modeset` · 통째 그리기. DIRTYFB를 받는지 묻는 것(`drm.open`)도 master가 아니면 `EACCES`라 답이 아니다 — 되찾은
+    뒤 다시 묻는다. 이 terminal은 손님을 모른다(옛 연결은 옛 terminal과 함께 닫혔다) — 그래서 키는 셸에 그대로 넣고 탈출 조합도 없다.
 10. 2차 데모(DY-M2)는 SDL3 + `SDL_Renderer`(GLES)다. `SDL_GPU`는 쓰지 않는다 — Vulkan이 있어야 하는데 납품 기준 실기(맥북 에어 2011)에는
     없다. Mesa와 SDL3은 개발 도구 층의 새 묶음으로 싣는다. 크기 · 드라이버 · udev 없는 입력은 DY-M2 plan의 조사 몫이다.
 
@@ -111,8 +121,9 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
    세 번이면 `given_up`이다. DY-M0은 이 길을 막지 않는다 — DY-M1이 "master가 아니면 기다린다"를 넣는다. 그때까지는 알려진 구멍이다.
 3. 앱이 남긴 것: 다른 해상도 · 커서 plane · 감마. `modeset`은 terminal이 기억한 모드를 다시 걸므로 해상도는 돌아온다. 커서 plane과 감마는
    프로브가 보지 않았다 — DY-M2에서 SDL이 남기는지 본다.
-4. `video` 그룹의 사용자는 양보 중이 아닐 때도 `card0`을 열 수 있다. master가 아니라 화면은 못 바꾼다(확인 1). DY-M1의 `input` 그룹은 무게가
-   다르다 — 그 그룹의 프로세스는 키 입력(sudo 암호 포함)을 읽는다. 사용자 하나의 기계라는 전제로 받아들일지 DY-M1에서 따로 적는다.
+4. `video` 그룹의 사용자는 양보 중이 아닐 때도 `card0`을 열 수 있다. master가 아니라 화면은 못 바꾼다(확인 1). 키보드는 무게가 다르다 —
+   읽는 프로세스는 sudo 암호를 포함한 모든 키를 본다. 그래서 늘 열린 `input` 그룹 대신 양보 동안만 손님의 uid에게 연다(결정 8a). 남는 틈:
+   양보 중에 앱이 남긴 자손이 키보드 fd를 쥔 채 프로세스 그룹을 떠나면 탈출 조합의 신호가 닿지 않는다.
 5. 양보 중의 절전(S3) · 덮개. 깨어난 뒤 화면을 다시 거는 것은 master인 앱의 몫이 된다. DY-M0은 보지 않는다.
 6. 이 세션(클라우드 컨테이너)에는 devcontainer와 게이트가 없다. 프로브는 여기서 돌렸지만 TARS 빌드와 게이트는 사용자의 기계에서 돈다.
 
@@ -120,5 +131,5 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
 
 - DY-M0 — 양보와 복귀. `video` 그룹과 `/dev/dri`, socket, `tars-fullscreen`, dumb buffer로 화면을 한 색으로 칠하는 시험 프로그램
   (`tars-kms-fill`, initrd에 싣는다 — 실기에서도 같은 것으로 본다), 새 체인 `display`. Mesa도 SDL도 없다 — 양보의 문제와 GL의 문제를 섞지 않는다.
-- DY-M1 — 입력 양보와 탈출 조합, `input` 그룹, master가 아닌 채 뜬 terminal의 기다림(위험 2).
+- DY-M1 — 입력 양보(결정 8a — 양보 동안만 손님의 uid에게)와 탈출 조합(결정 8b), master가 아닌 채 뜬 terminal의 기다림(결정 11).
 - DY-M2 — Mesa · SDL3 묶음과 데모 프로그램. plan은 M1의 게이트가 도는 동안 조사부터.
