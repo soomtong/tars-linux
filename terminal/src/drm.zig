@@ -200,9 +200,11 @@ fn drmIo(nr: u32) u32 {
     return (drm_ioctl_base << 8) | nr;
 }
 
+/// `EACCES`는 `error.NotMaster`로 가른다(DY-M1) — master가 아닌 fd의 SETCRTC · DIRTYFB가 그 답이다(DY design 확인 1 · 2).
+/// 부르는 쪽 대부분은 그대로 `try`이고, master 없이 뜬 terminal(결정 11)만 이것을 본다.
 fn drmIoctl(fd: c_int, request: u32, arg: *anyopaque) !void {
     const rc = c.ioctl(fd, @as(c_ulong, request), arg);
-    if (rc < 0) return error.IoctlFailed;
+    if (rc < 0) return if (std.c.errno(rc) == .ACCES) error.NotMaster else error.IoctlFailed;
 }
 
 pub const Framebuffer = struct {
@@ -222,6 +224,9 @@ pub const Framebuffer = struct {
     /// 드라이버가 DIRTYFB를 받는가(RS-M3). `open`이 한 번 물어 정한다. false면
     /// `present`가 RS-M2까지처럼 SETCRTC를 한다.
     dirty: bool,
+    /// `dirty`가 답인가(DY-M1). master가 아닌 fd의 DIRTYFB는 드라이버와 상관없이 `EACCES`라 그때 물은 것은 답이
+    /// 아니다 — master를 되찾은 뒤 `probeDirty`가 다시 묻는다(DY design 결정 11).
+    dirty_known: bool = true,
     /// 화면 배율(HS-M0, design 결정 1). 1이면 위 `pixels`가 곧 dumb 버퍼이고 아래 둘은 그것과
     /// 같다 — HS 전과 같은 길이다. 1보다 크면 `width` · `height` · `pitch` · `pixels`는 논리
     /// 크기의 heap 버퍼(그림자)이고, 화면에 걸린 dumb 버퍼는 `out` · `out_pitch`다. 그리는
@@ -289,6 +294,14 @@ pub const Framebuffer = struct {
     /// master 자격을 내려놓는다(DY design 결정 1). fd도 fb도 그대로이고 화면도 안 꺼진다 —
     /// 그 뒤 이 fd의 DIRTYFB · SETCRTC가 `EACCES`일 뿐이다(확인 2). 그다음 `card0`을 여는
     /// 프로세스가 저절로 master다(확인 3).
+    /// DIRTYFB를 받는지 다시 묻는다(DY-M1). master를 되찾은 뒤 `dirty_known`이 false일 때 부른다.
+    pub fn probeDirty(self: *Framebuffer) void {
+        var probe: DrmModeFbDirtyCmd = .{ .fb_id = self.fb_id };
+        self.dirty = if (drmIoctl(self.fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&probe))) |_| true else |_| false;
+        self.dirty_known = true;
+        logline.print("kms: present by {s}\n", .{if (self.dirty) "dirtyfb" else "setcrtc"});
+    }
+
     pub fn dropMaster(self: Framebuffer) !void {
         if (c.ioctl(self.fd, @as(c_ulong, drmIo(0x1f)), @as(c_ulong, 0)) < 0) return error.IoctlFailed;
     }
@@ -507,9 +520,18 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8, want: ?u32) !Fram
     // DIRTYFB를 받는지 묻는다(RS-M3). 드라이버의 fb funcs에 `.dirty`가 없으면 커널이
     // `-ENOSYS`를 낸다 — 그 판정은 plane을 안 보므로 아직 CRTC에 안 건 지금 물어도 답이
     // 같고, 걸리지 않은 fb의 dirty는 아무 일도 안 한다. 실패가 무엇이든 SETCRTC로 남는다.
+    //
+    // master가 아니면(앱이 화면을 쥔 채 terminal이 다시 떴다 — DY design 결정 11) 답이 `EACCES`라 정하지 않는다.
     var probe: DrmModeFbDirtyCmd = .{ .fb_id = fb_cmd.fb_id };
-    const dirty = if (drmIoctl(fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&probe))) |_| true else |_| false;
-    logline.print("kms: present by {s}\n", .{if (dirty) "dirtyfb" else "setcrtc"});
+    var dirty_known = true;
+    const dirty = if (drmIoctl(fd, drmIowr(DrmModeFbDirtyCmd, 0xB1), @ptrCast(&probe))) |_| true else |e| blk: {
+        dirty_known = e != error.NotMaster;
+        break :blk false;
+    };
+    if (dirty_known)
+        logline.print("kms: present by {s}\n", .{if (dirty) "dirtyfb" else "setcrtc"})
+    else
+        logline.print("kms: present by ? (not master yet)\n", .{});
 
     var fb = Framebuffer{
         .fd = fd,
@@ -522,6 +544,7 @@ pub fn open(allocator: std.mem.Allocator, path: [*:0]const u8, want: ?u32) !Fram
         .connector_id = found.connector.connector_id,
         .mode = found.mode,
         .dirty = dirty,
+        .dirty_known = dirty_known,
         .out = @ptrCast(map_ptr),
         .out_pitch = dumb.pitch,
     };

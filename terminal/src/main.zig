@@ -3667,6 +3667,8 @@ const App = struct {
         self.openInputs();
         self.openBattery();
         self.yield_listen = yield.listen(screen_args.VIDEO_GID);
+        // 양보 중에 앞의 terminal이 죽었으면 키보드가 손님 것으로 남아 있다(DY design 결정 8a · 11).
+        yield.takeInputs();
         return self;
     }
 
@@ -3683,7 +3685,13 @@ const App = struct {
         self.fb = try drm.open(self.allocator, "/dev/dri/card0", display_scale.fixed());
         self.fb.fill(MARGIN_COLOR);
         // 모드셋은 여기 한 번이다(RS-M3). 그 뒤의 `present`는 DIRTYFB로 바뀐 것만 알린다.
-        try self.fb.modeset();
+        //
+        // master가 아니면(양보 중에 다시 떴다 — DY design 결정 11) 죽지 않고 기다린다. 죽으면 init이 되살리고 그것이
+        // 10초 안에 셋이면 `given_up`이다(위험 2). 되찾으면 `readYield`가 모드를 걸고 통째로 그린다.
+        self.fb.modeset() catch |e| switch (e) {
+            error.NotMaster => self.yield_state.startWaiting(),
+            else => return e,
+        };
 
         self.cap = geometry.grid(self.fb.width, self.fb.height, true);
         self.fullscreen = fullscreen;
@@ -4148,13 +4156,36 @@ const App = struct {
     /// 닫기가 uevent 읽기(바퀴 3의 `drainUevents`)보다 먼저다. 빠진 번호가 곧바로
     /// 다시 쓰이면 옛 칸의 경로가 남아 새 장치를 "이미 열었다"로 건너뛰기
     /// 때문이다(포인터의 `readPointers`와 같은 이유).
+    ///
+    /// 화면을 양보한 동안은 키가 앱의 것이다(DY design 결정 8) — 셸에 넣지 않고 `watchEscape`로 수정키와
+    /// 탈출 조합만 본다.
     fn readKeyboards(self: *App) !void {
+        const yielded = self.yield_state.holdsInput();
         for (self.fds[1..self.kbd_end], self.fd_kbds[0 .. self.kbd_end - 1]) |kfd, ki| {
             if (kfd.revents == 0) continue;
             var gone = kfd.revents & (c.POLLERR | c.POLLHUP) != 0;
-            if (!gone and kfd.revents & c.POLLIN != 0) gone = try self.readKeyboard(kfd.fd, ki) == .gone;
+            if (!gone and kfd.revents & c.POLLIN != 0) gone = if (yielded) self.watchKeyboard(kfd.fd, ki) else try self.readKeyboard(kfd.fd, ki) == .gone;
             if (gone) closeKeyboard(&self.keyboard_devs, ki, &self.key_state);
         }
+    }
+
+    /// 양보 중의 키보드 하나(DY-M1). 탈출 조합이면 손님에게 SIGTERM을 보내고 기한을 건다(`yield.Machine.escape`).
+    /// true면 장치가 빠졌다.
+    fn watchKeyboard(self: *App, fd: c_int, slot: usize) bool {
+        const w = input.watchEscape(&self.key_state, fd, .{
+            .swap_alt_meta = self.keyboard_devs[slot].?.swap_alt_meta,
+            .device = @intCast(slot),
+        });
+        if (w.escape) {
+            var ops: YieldOps = .{ .fb = &self.fb };
+            self.yield_state.escape(&ops, self.nowMs());
+        }
+        return w.gone;
+    }
+
+    /// 루프의 밀리초 시계(`battery_clock` 기준 — `last_frame_ms`와 같은 원점).
+    fn nowMs(self: *App) i64 {
+        return @intCast(@divTrunc(self.battery_clock.untilNow(self.io, .awake).nanoseconds, 1_000_000));
     }
 
     /// 스크롤은 PTY로 나가지 않는다(design 결정 11). 한 화면이 몇
@@ -4731,9 +4762,9 @@ const App = struct {
             }
         }
         if (self.yield_listen >= 0 and self.fds[at].revents != 0) {
-            while (yield.accept(self.yield_listen)) |g| self.yield_state.arrive(&ops, g.fd, g.pid);
+            while (yield.accept(self.yield_listen)) |g| self.yield_state.arrive(&ops, g.fd, g.pid, g.uid);
         }
-        if (self.yield_state.retry(&ops)) back = true;
+        if (self.yield_state.retry(&ops, self.nowMs())) back = true;
         if (back) {
             self.last_tree = null;
             self.needs_redraw = true;
@@ -5179,7 +5210,7 @@ const App = struct {
         const ready = c.poll(&self.fds, @intCast(self.nfds), pacing.soonest(pacing.soonest(
             battery.pollTimeout(poll_now, self.battery_state.due),
             pacing.wait(poll_now, self.last_frame_ms, self.output_pending),
-        ), self.yield_state.timeout()));
+        ), self.yield_state.timeout(poll_now)));
         if (ready < 0) return true; // EINTR 등은 그냥 다시 기다린다
 
         // 키보드가 먼저다. 그 뒤 단계는 키보드가 바꾼 워크스페이스 · 포커스를 본다.
@@ -5188,7 +5219,9 @@ const App = struct {
         const pointers = self.readPointers();
         // 배터리는 `decideFrame`보다 앞 — 그래야 uevent · timeout만으로 깬 바퀴도 그린다(검사 A3).
         self.pollBattery(pointers.supply_seen);
-        try self.wirePointer(&pointers.round);
+        // 양보 중의 누름 · 끎 · 휠은 앱의 것이다(DY-M1) — 셸의 선택 · 붙여넣기 · 스크롤 · 마우스 보고가 되면 안 된다.
+        // 장치는 위에서 읽었다(안 읽으면 POLLIN이 남아 poll이 헛돈다). 좌표는 따라가고 화살표는 복귀 뒤 그 자리에 뜬다.
+        if (!self.yield_state.holdsInput()) try self.wirePointer(&pointers.round);
         // PTY. 마지막 패널의 EOF면 여기서 끝난다.
         if (try self.readPanes() == .quit) return false;
         // 받아쓰기는 PTY 뒤 · 렌더 앞 — 대상 패널이 방금 닫혔는지를 본 뒤에 넣는다.
@@ -5221,7 +5254,7 @@ const App = struct {
 /// `yield.Machine`이 부르는 것(DY-M0). 상태 규칙은 `yield.zig`에 있고 여기는 실제 ioctl과 socket이다 —
 /// `yield_test.zig`는 같은 자리에 가짜를 넣는다.
 const YieldOps = struct {
-    fb: *const drm.Framebuffer,
+    fb: *drm.Framebuffer,
 
     pub fn dropMaster(o: *YieldOps) !void {
         return o.fb.dropMaster();
@@ -5230,6 +5263,8 @@ const YieldOps = struct {
         return o.fb.setMaster();
     }
     pub fn modeset(o: *YieldOps) !void {
+        // master 없이 떴으면 DIRTYFB의 답을 아직 모른다(DY design 결정 11) — 되찾은 지금 묻는다.
+        if (!o.fb.dirty_known) o.fb.probeDirty();
         return o.fb.modeset();
     }
     pub fn send(_: *YieldOps, fd: i32, r: display_proto.Reply) void {
@@ -5237,6 +5272,23 @@ const YieldOps = struct {
     }
     pub fn close(_: *YieldOps, fd: i32) void {
         yield.close(fd);
+    }
+    pub fn pgid(_: *YieldOps, pid: i32) ?i32 {
+        const rc = std.os.linux.getpgid(pid);
+        if (std.os.linux.errno(rc) != .SUCCESS) return null;
+        return @intCast(rc);
+    }
+    pub fn handInputs(_: *YieldOps, uid: u32) void {
+        yield.handInputs(uid);
+    }
+    pub fn takeInputs(_: *YieldOps) void {
+        yield.takeInputs();
+    }
+    pub fn kill(_: *YieldOps, target: i32, sig: yield.Signal) void {
+        _ = std.os.linux.kill(target, switch (sig) {
+            .term => .TERM,
+            .kill => .KILL,
+        });
     }
 };
 
