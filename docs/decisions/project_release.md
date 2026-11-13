@@ -120,11 +120,11 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    빈 디렉터리에 `tars-<ver>-barebone-x86_64.iso`로 옮긴다(`make iso`는 `out/tars.iso` 하나에 쓰므로 다음 짓기가 덮는다). 같은 트리라
    버전 글자는 묶음 판과 같다. BB-M0 실측: 143,751,168 B, 196초(initrd · kernel 캐시).
    그다음 묶음을 모두 굽는다: `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에 안 들어가 남는다 —
-   dev-20261106에서 겪었다). LD-M0(2026-11-12)부터 기본 `DEV_LAYERS`가 fakesteak까지 열둘이라 따로 굽지 않는다. 굽는 동안 추적 파일을
+   dev-20261106에서 겪었다). LD-M0(2026-11-12)부터 기본 `DEV_LAYERS`가 fakesteak까지 열둘(DY-M2부터 gpu까지 열셋)이라 따로 굽지 않는다. 굽는 동안 추적 파일을
    고치지 않는다(출처 기록이 `-dirty`가 된다 — [[feedback_release_iteration]]의 함정).
    납품 데모(0.2.0부터 — fakesteak)는 `make iso ISO_LAYERS="fakesteak"`, smoke(base가 없으니 첫 패널에 비가 뜬다), 같은 디렉터리에
    `tars-<ver>-fakesteak-x86_64.iso`. fakesteak은 독립 묶음이라 혼자 실린다(`devlayer/standalone-bundles`).
-   기본 판은 `make iso ISO_LAYERS="base container docs editor fakesteak lang-beam lang-jvm lang-native lang-script media server util"`
+   기본 판은 `make iso ISO_LAYERS="base container docs editor fakesteak gpu lang-beam lang-jvm lang-native lang-script media server util"`
    (기본값은 묶음을 안 싣는다). base 없이 다른 묶음을 실으면 `make_iso.sh`가 멈춘다 — base와 겹친 파일이 지워져 있다(LD design 결정 1 · 3).
    개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.toml`의 표(version · url · sha256)를 1의 커밋에
    함께 넣고(`make quick`이 검사한다 — MF-M0), 바뀐 표의 묶음만 다시 구워진다. 올리지 않으면 앞 판의 묶음이 그대로 실린다.

@@ -22,15 +22,15 @@ cd "$(dirname "$0")" || exit 1
 #        뜬 dockerd와 남은 이미지 · 다시 뜬 컨테이너를 보고 disable docker로 끈다(CE design 결정 4~8).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
-#   1  ISO(묶음 열둘) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 12, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   1  ISO(묶음 열셋) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
+#   2  NVMe만                          overlay /usr from 13, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
 #                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 셋(LD-M0이 emacs를 뺐다), fakesteak, 서버 다섯, 화면 셸에서
 #                                      java --version(monitor 45504), bwrap · docker 서비스 · 컨테이너 둘 · firewall=on. 끝에 root가
 #                                      /home/.tars/layers/lang-jvm.sqfs를 4KiB의 0으로 바꾼다
 #   3  NVMe만                          layer lang-jvm: mount failed, overlay /usr from 11, gcc · go · node · cci · erl · nvim은 돌고 java는 없다,
 #                                      dockerd가 저절로 뜨고 keep 컨테이너가 다시 답한다
-#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열둘을 지우고 새로(깨진 것을 고친다)
+#   4  ISO + 같은 NVMe                 갱신 — p3 줄이 layers <ver> -> <ver>, 옛 묶음 열셋을 지우고 새로(깨진 것을 고친다)
 #
 # 망가뜨리기가 부팅 2에 있는 이유: 게스트에 mount 명령이 없다(TP-M1 확인한 것). ISO로 뜬 부팅은 p3를 안 붙이므로
 # p3에 손댈 수 있는 것은 설치된 디스크로 뜬 부팅의 /home뿐이다.
@@ -58,7 +58,7 @@ cd "$(dirname "$0")" || exit 1
 ../devlayer/build.sh media
 ../devlayer/build.sh server
 ../devlayer/build.sh util
-(cd ../boot && ISO_LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
+(cd ../boot && ISO_LAYERS="base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu" ISO_OUT=../out/tars-dev.iso ./make_iso.sh)
 
 source ../gate_lib.sh
 
@@ -69,8 +69,8 @@ if [ ! -f "$OVMF_CODE" ]; then
   exit 1
 fi
 
-# LD-M0: fakesteak이 열둘째다(이름 순 — tars-install의 계획 줄이 이름 순으로 찍는다).
-LAYERS="base container docs editor fakesteak lang-beam lang-jvm lang-native lang-script media server util"
+# LD-M0: fakesteak이 열둘째다(이름 순 — tars-install의 계획 줄이 이름 순으로 찍는다). DY-M2: gpu가 열셋째(fakesteak 다음).
+LAYERS="base container docs editor fakesteak gpu lang-beam lang-jvm lang-native lang-script media server util"
 LAYER_BYTES=0
 for b in $LAYERS; do LAYER_BYTES=$(( LAYER_BYTES + $(stat -c %s "../devlayer/build/${b}.sqfs") )); done
 LAYER_MIB=$(( (LAYER_BYTES + 1048575) / 1048576 ))
@@ -215,7 +215,7 @@ ms_of() { last_num "tp-ms-$1=[0-9]+"; }
 CHAIN_T0=$(date +%s)
 
 # ── 부팅 1: ISO + 빈 최소 NVMe ─────────────────────────────────────────
-echo "=== boot 1: the ISO with twelve layers and a blank minimum-size NVMe ==="
+echo "=== boot 1: the ISO with thirteen layers and a blank minimum-size NVMe ==="
 boot_guest 1 -cdrom "$ISO"
 VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
 [ -n "$VER" ] || fail "the init banner has no version"
@@ -231,8 +231,8 @@ for b in $LAYERS; do
     || fail "tars-install did not copy ${b}.sqfs byte for byte" ".tars/layers"
 done
 grep -aqF "  .tars/layers/version ${VER}" "$LOG" || fail "tars-install did not write the layers version ${VER}" ".tars/layers"
-COPY_MS="$(last_num 'copied 12 layers \([0-9]+ MiB\) in [0-9]+ms')"
-[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 12 layers" "copied"
+COPY_MS="$(last_num 'copied 13 layers \([0-9]+ MiB\) in [0-9]+ms')"
+[ -n "$COPY_MS" ] || fail "tars-install did not say it copied 13 layers" "copied"
 echo "B1: tars-install planned and copied ${LAYERS} (${LAYER_MIB} MiB in ${COPY_MS}ms) and wrote version ${VER}"
 stop_guest
 
@@ -241,16 +241,16 @@ echo "=== boot 2: the NVMe, no network ==="
 MONITOR="tcp:127.0.0.1:${MONITOR_PORT},server,nowait"
 boot_guest 2
 grep -aqF "tars-init: mounted ext4 at /home" "$LOG" || fail "/home is not mounted" "tars-init: home"
-wait_log_re "tars-init: overlay /usr from 12 layers in [0-9]+ms" 5 || fail "init did not lay twelve layers over /usr" "tars-init: layer"
-MOUNT_MS="$(last_num 'overlay /usr from 12 layers in [0-9]+ms')"
+wait_log_re "tars-init: overlay /usr from 13 layers in [0-9]+ms" 5 || fail "init did not lay thirteen layers over /usr" "tars-init: layer"
+MOUNT_MS="$(last_num 'overlay /usr from 13 layers in [0-9]+ms')"
 grep -aqE "tars-init: layer base: [0-9]+ files into /etc" "$LOG" || fail "init did not copy base's etc/ into /etc" "into /etc"
 grep -aqF "is not a file or directory, skipped" "$LOG" && fail "init skipped something in a layer's etc/ (links are copied as links since TP-M4)" "skipped"
 echo "B2: init mounted ${LAYERS} over /usr in ${MOUNT_MS}ms"
 
 send "grep '^overlay /usr overlay ro' /proc/mounts | sed 's/^/tp-mnt=/'"
 wait_log "tp-mnt=overlay /usr overlay ro" 10 || fail "/proc/mounts has no read-only overlay on /usr" "tp-mnt"
-grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/container/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/fakesteak/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/server/usr:/run/tars-layers/util/usr" "$LOG" \
-  || fail "the overlay's lowerdir is not /usr then base, container, docs, editor, fakesteak, lang-beam, lang-jvm, lang-native, lang-script, media, server, util" "tp-mnt"
+grep -aqF "lowerdir=/usr:/run/tars-layers/base/usr:/run/tars-layers/container/usr:/run/tars-layers/docs/usr:/run/tars-layers/editor/usr:/run/tars-layers/fakesteak/usr:/run/tars-layers/gpu/usr:/run/tars-layers/lang-beam/usr:/run/tars-layers/lang-jvm/usr:/run/tars-layers/lang-native/usr:/run/tars-layers/lang-script/usr:/run/tars-layers/media/usr:/run/tars-layers/server/usr:/run/tars-layers/util/usr" "$LOG" \
+  || fail "the overlay's lowerdir is not /usr then base, container, docs, editor, fakesteak, gpu, lang-beam, lang-jvm, lang-native, lang-script, media, server, util" "tp-mnt"
 send "touch /usr/tp-probe 2>&1 | sed 's/^/tp-ro=/'"
 wait_log "Read-only file system" 10 || fail "root could write into /usr" "tp-ro"
 send "test -f /etc/gprofng.rc; and printf 'tp-%s\n' etc-ok"
@@ -821,7 +821,7 @@ echo "=== boot 3: the NVMe with lang-jvm broken ==="
 MONITOR="none"
 boot_guest 3
 grep -aqE "tars-init: layer lang-jvm: mount failed \(errno [0-9]+\)" "$LOG" || fail "init did not name the broken layer" "tars-init: layer"
-grep -aqE "tars-init: overlay /usr from 11 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, container, docs, editor, fakesteak, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
+grep -aqE "tars-init: overlay /usr from 12 layers in [0-9]+ms" "$LOG" || fail "init did not lay base, container, docs, editor, fakesteak, gpu, lang-beam, lang-native, lang-script, media, server and util over /usr" "tars-init: overlay"
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
 as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
@@ -835,7 +835,7 @@ grep -aqF "tars-init: /usr/local writable (upper on /home/.tars/local)" "$LOG" |
 as_tars 'for c in tpn tpg tpw; do $c; done | sed "s/^/tp-b3-global=/"'
 wait_log "tp-b3-global=tp-pip-ok" 60 || fail "what root installed in /usr/local did not survive the reboot" "tp-b3-global"
 wait_log "tp-no-java" 10 || fail "java is still there with lang-jvm broken" "tp-b3"
-echo "B3: a broken lang-jvm is named and skipped; base, container, docs, editor, fakesteak, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
+echo "B3: a broken lang-jvm is named and skipped; base, container, docs, editor, fakesteak, gpu, lang-beam, lang-native, lang-script, media, server and util still run C, Go, node, cci, erl, nvim and rg, what root put in /usr/local is still there, and the boot is otherwise the same"
 # TP-M11: 부팅 2가 켠 다섯이 저절로 뜨고, 부팅 2의 데이터 · 조각 · CA 신뢰가 남아 있다. 부팅 2는 QEMU를 죽여 끝났다(그 앞에 sync) —
 # 전원이 끊긴 것과 같다. postgres · mysql의 복구는 판정하지 않고 숫자로 적는다(plan 위험 2).
 grep -aqF "tars-init: trust: /usr/bin/update-ca-certificates added the certificates in /usr/local/share/ca-certificates" "$LOG" \
@@ -902,10 +902,10 @@ send "tars-install /dev/nvme0n1 --yes"
 wait_log "tars-install: updated. remove the boot medium and reboot." 600 || fail "the update did not say updated" "tars-install:"
 grep -aqF "  p3 (tars-home) <- layers ${VER} -> ${VER} (${LAYER_MIB} MiB), your files are not touched" "$LOG" \
   || fail "the update plan does not say p3 gets the layers" "(tars-home)"
-grep -aqF "  .tars/layers: 12 old layers removed" "$LOG" || fail "the update did not remove the twelve old layers first" ".tars/layers"
+grep -aqF "  .tars/layers: 13 old layers removed" "$LOG" || fail "the update did not remove the thirteen old layers first" ".tars/layers"
 grep -aqF "  .tars/layers/lang-jvm.sqfs $(stat -c %s ../devlayer/build/lang-jvm.sqfs) bytes" "$LOG" \
   || fail "the update did not put lang-jvm.sqfs back byte for byte" ".tars/layers"
-echo "B4: the update planned the layers on p3, removed the twelve old ones and put them back"
+echo "B4: the update planned the layers on p3, removed the thirteen old ones and put them back"
 stop_guest
 
 echo "devtools: numbers: layers ${LAYER_MIB} MiB, copy ${COPY_MS}ms, overlay ${MOUNT_MS}ms, ${NUMBERS}, ${M11_NUMBERS}, ${CE_NUMBERS}"

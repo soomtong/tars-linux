@@ -109,9 +109,9 @@ help:
 	@echo "      tars-install이 p3로 옮기고 init이 /usr에 얹는다. 기본은 싣지 않는다(게이트 체인의 ISO)"
 	@echo
 	@echo "  make dev-layers"
-	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak)을 devlayer/build/<묶음>.sqfs로 굽는다."
+	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu)을 devlayer/build/<묶음>.sqfs로 굽는다."
 	@echo "      devlayer/manifest.toml이 출처다(검사해 devlayer/build/manifest.tsv로). 받은 것은 devlayer/cache/ — 게이트의 clean이 안 지운다."
-	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools가 먼저 부른다(캐시면 수십 초)"
+	@echo "      DEV_MEASURE=1이면 압축 넷을 잰다. make gate와 make check CHAIN=devtools · display가 먼저 부른다(캐시면 수십 초)"
 	@echo
 	@echo "설정 디스크 ($(CONFIG_DISK)) — 게스트가 기억하는 자리"
 	@echo
@@ -240,7 +240,7 @@ iso: initrd
 # 거두기 전에 vendor-repo의 키를 개발 컨테이너의 gpg로 본다(devlayer/keys.sh — 지문 · 만료, TP-M10 plan 덧붙임).
 # 그보다 먼저 devlayer/manifest.toml을 검사해 devlayer/build/manifest.tsv를 쓴다(MF design 결정 6) — 거두기 컨테이너는
 # TOML을 못 읽고 그 TSV만 읽는다. 컴파일 캐시를 devlayer/build/zig-cache에 두어 두 번째부터는 빠르다.
-DEV_LAYERS        ?= base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak
+DEV_LAYERS        ?= base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu
 DEV_HARVEST_IMAGE ?= debian:trixie-slim
 DEV_MEASURE       ?=
 DEV_COMP          ?=
@@ -304,7 +304,7 @@ gate: container dev-layers
 
 # 체인 하나. CHAIN을 안 주면 무엇을 줄지 알려주고 멈춘다 — 조용히 루트
 # 게이트를 돌리면 10분을 기다린 뒤에야 잘못 친 것을 알게 된다.
-check: container $(if $(filter devtools,$(CHAIN)),dev-layers)
+check: container $(if $(filter devtools display,$(CHAIN)),dev-layers)
 	@test -n "$(CHAIN)" || { echo "make check CHAIN=<chain> — $(CHAINS) 중 하나"; exit 1; }
 	@test -x "$(CHAIN)/check.sh" || { echo "$(CHAIN)/check.sh 가 없다"; exit 1; }
 	$(IN_CONTAINER) 'mkdir -p /tmp/gate-logs/$(CHAIN) && (cd $(CHAIN) && TARS_RENDER_VERIFY=1 TMPDIR=/tmp/gate-logs/$(CHAIN) ./check.sh); rc=$$?; mkdir -p out/gate-logs && rm -rf out/gate-logs/$(CHAIN) && mv /tmp/gate-logs/$(CHAIN) out/gate-logs/ && echo "logs moved to out/gate-logs/$(CHAIN)"; exit $$rc'

@@ -1223,6 +1223,35 @@ bundle = "container"
 version = "1.8.0.3-1+deb13u1"
 kind = "debian"
 
+# ── gpu(DY-M2) — SDL3과 Mesa(EGL · GLES · GBM). 화면을 양보받은 프로그램(tars-fullscreen)이 GPU로 그린다(DY design 결정 10) ─────────────
+# 넷만 적고 나머지는 apt가 의존으로 끌어온다: libsdl3-0 → libgbm1 → mesa-libgallium(드라이버 전부 — crocus · iris · virgl · llvmpipe)
+# → libllvm19(llvmpipe가 쓴다 — 3D 없는 QEMU virtio-gpu의 길). 2026-11-13에 새 파일 228MiB(LLVM 124 · z3 26 · gallium 40), zstd15로 69MiB.
+# SDL3은 libudev.so.1을 dlopen해 udevd 없이 /sys를 훑는다 — 그 라이브러리는 initrd에 있다(DY-M2 plan 확인 3). EGL은 glvnd이고
+# Mesa의 몫은 libegl-mesa0이다(Recommends라 --no-install-recommends에서 따로 적는다).
+[[tool]]
+name = "libsdl3-0"
+bundle = "gpu"
+version = "3.2.10+ds-1"
+kind = "debian"
+
+[[tool]]
+name = "libegl1"
+bundle = "gpu"
+version = "1.7.0-1+b2"
+kind = "debian"
+
+[[tool]]
+name = "libegl-mesa0"
+bundle = "gpu"
+version = "25.0.7-2+deb13u1"
+kind = "debian"
+
+[[tool]]
+name = "libgles2"
+bundle = "gpu"
+version = "1.7.0-1+b2"
+kind = "debian"
+
 # ── 납품 프로젝트 묶음(BB-M1) — 개발 도구가 아니다. LD-M0부터 DEV_LAYERS 기본값에 있고 기본 판에도 실린다(LD design 결정 5) ──
 # fakesteak: 사용자의 fork(soomtong/fakesteak)가 GitHub Actions로 내는 정적 실행 파일(-O3 -static, -march 없음). 원본 domsson/fakesteak은 바이너리가 없다.
 # 부팅 때 첫 패널에 띄우는 조각은 devlayer/files/fakesteak/etc/(BB design 결정 6) — base가 없는 납품 데모 판에서만 뜬다(LD-M0).
