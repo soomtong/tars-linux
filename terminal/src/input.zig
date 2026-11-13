@@ -1800,6 +1800,68 @@ fn eventMicros(ev: *align(1) const c.struct_input_event) u64 {
 /// 그전에는 바이트 버퍼가 차면 이벤트 처리 자체가 멈췄는데, 그러면 뒤따라온
 /// 스크롤 키가 통째로 사라진다. 바이트는 여전히 버려지지만(아래 break),
 /// 그것과 "동작을 못 본다"는 다른 종류의 손실이다.
+/// `watchEscape`의 답(DY-M1).
+pub const Watch = struct {
+    /// 이 배치에 탈출 조합(`Ctrl+Cmd+Backspace`)의 누름이 있었다.
+    escape: bool,
+    /// 장치가 빠졌다(`readKeys`의 `gone`과 같은 판정).
+    gone: bool,
+};
+
+/// 화면을 양보한 동안의 읽기(DY design 결정 8 · 8b). 키는 앱이 같은 evdev를 직접 읽으므로 여기서는 아무것도
+/// 번역하지 않는다 — 바이트도 한/영도 tap도 받아쓰기도 밝기도 copy도 없다. 하는 일은 둘이다.
+///
+/// 1. 수정키 비트만 적는다(`handleKey`의 수정키 갈래와 같은 맞바꿈 · 같은 칸). 양보 중에 뗀 수정키가 복귀 뒤
+///    눌린 채로 남지 않게 하려는 것이다 — 이벤트를 안 읽고 버리면 그렇게 된다.
+/// 2. `Backspace`의 누름(1)이 Ctrl과 Cmd를 함께 쥔 채 오면 `escape`. Cmd는 맞바꿈 뒤의 Meta라 Apple 자판은
+///    Cmd, `keyboard=pc`는 Alt 자리다 — `Cmd+Ctrl+F`와 같은 손 위치다. 자동 반복(2)은 안 센다.
+///
+/// tap의 진행 상태와 받아쓰기의 더블 탭은 매번 버린다. 게임 중에 왼쪽 Ctrl을 짧게 눌렀다 뗀 것이 한/영을 바꾸거나,
+/// 양보 직전에 반쯤 누른 것이 복귀 뒤에 판정되면 안 된다.
+pub fn watchEscape(self: *State, fd: c_int, ctx: Context) Watch {
+    const ev_size = @sizeOf(c.struct_input_event);
+    var raw: [ev_size * 64]u8 = undefined;
+
+    const n = read(fd, &raw, raw.len);
+    if (n <= 0) return .{
+        .escape = false,
+        .gone = n == 0 or switch (std.c.errno(n)) {
+            .AGAIN, .INTR => false,
+            else => true,
+        },
+    };
+
+    self.taps = @splat(.{});
+    self.dictate_tap.reset();
+    const dev: usize = ctx.device;
+    std.debug.assert(dev < MAX_KEYBOARDS);
+    const mods = &self.mods[dev];
+    var escape = false;
+    const count = @as(usize, @intCast(n)) / ev_size;
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const ev: *align(1) const c.struct_input_event = @ptrCast(&raw[i * ev_size]);
+        if (ev.type != c.EV_KEY or ev.code >= c.BTN_MISC) continue;
+        const code = if (ctx.swap_alt_meta) swapAltMeta(ev.code) else ev.code;
+        const down = ev.value != 0;
+        switch (code) {
+            c.KEY_LEFTSHIFT => mods.shift_left = down,
+            c.KEY_RIGHTSHIFT => mods.shift_right = down,
+            c.KEY_LEFTCTRL => mods.ctrl_left = down,
+            c.KEY_RIGHTCTRL => mods.ctrl_right = down,
+            c.KEY_LEFTALT => mods.alt_left = down,
+            c.KEY_RIGHTALT => mods.alt_right = down,
+            c.KEY_LEFTMETA => mods.meta_left = down,
+            c.KEY_RIGHTMETA => mods.meta_right = down,
+            c.KEY_BACKSPACE => if (ev.value == 1 and self.ctrled() and self.metaed()) {
+                escape = true;
+            },
+            else => {},
+        }
+    }
+    return .{ .escape = escape, .gone = false };
+}
+
 pub fn readKeys(self: *State, fd: c_int, out: []u8, ctx: Context) Keys {
     const ev_size = @sizeOf(c.struct_input_event);
     var raw: [ev_size * 64]u8 = undefined;

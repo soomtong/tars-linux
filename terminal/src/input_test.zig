@@ -2571,5 +2571,101 @@ pub fn main() !void {
     }
     std.debug.print("input_test: Cmd+Ctrl+F는 전체 화면, 다른 Cmd+Ctrl · Ctrl 키는 그대로 OK\n", .{});
 
+    // ── DY-M1: 양보 중의 읽기(watchEscape) ─────────────────────────────────
+    //
+    // 탈출 조합은 Ctrl+Cmd+Backspace 하나다(DY design 결정 8b). Cmd는 맞바꿈 뒤의 Meta라 Apple 자판은 왼쪽
+    // Meta, `keyboard=pc`(`swap_alt_meta`)는 왼쪽 Alt다. 그 밖의 것은 아무것도 일어나지 않는다.
+    {
+        const Case = struct { name: []const u8, swap: bool, evs: []const input.c.struct_input_event, want: bool };
+        const cases = [_]Case{
+            .{ .name = "apple Ctrl+Cmd+Backspace", .swap = false, .want = true, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTMETA, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            .{ .name = "pc Ctrl+Alt+Backspace", .swap = true, .want = true, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTALT, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            .{ .name = "right Ctrl and right Cmd", .swap = false, .want = true, .evs = &.{
+                keyEvent(K.KEY_RIGHTCTRL, 1), keyEvent(K.KEY_RIGHTMETA, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            .{ .name = "Backspace alone", .swap = false, .want = false, .evs = &.{keyEvent(K.KEY_BACKSPACE, 1)} },
+            .{ .name = "Ctrl+Backspace", .swap = false, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            .{ .name = "Cmd+Backspace", .swap = false, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTMETA, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            // pc 자판의 Win(맞바꿈 뒤 Option)은 Cmd가 아니다.
+            .{ .name = "pc Ctrl+Win+Backspace", .swap = true, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTMETA, 1), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+            .{ .name = "auto-repeat only", .swap = false, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTMETA, 1), keyEvent(K.KEY_BACKSPACE, 2),
+            } },
+            .{ .name = "release only", .swap = false, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTMETA, 1), keyEvent(K.KEY_BACKSPACE, 0),
+            } },
+            .{ .name = "Cmd released before Backspace", .swap = false, .want = false, .evs = &.{
+                keyEvent(K.KEY_LEFTCTRL, 1), keyEvent(K.KEY_LEFTMETA, 1),
+                keyEvent(K.KEY_LEFTMETA, 0), keyEvent(K.KEY_BACKSPACE, 1),
+            } },
+        };
+        for (cases) |cs| {
+            var ws: input.State = .{};
+            const fds = try feedEvents(cs.evs);
+            defer _ = close(fds[0]);
+            const got = input.watchEscape(&ws, fds[0], .{ .swap_alt_meta = cs.swap });
+            if (got.escape != cs.want or got.gone) {
+                std.debug.print("FAIL: watchEscape {s}: escape={} gone={}, want escape={}\n", .{ cs.name, got.escape, got.gone, cs.want });
+                return error.WatchEscape;
+            }
+        }
+    }
+    std.debug.print("input_test: Ctrl+Cmd+Backspace만 탈출이다(apple · pc, 반복 · 뗌은 아니다) OK\n", .{});
+
+    // 양보 중에 뗀 수정키는 복귀 뒤에 눌린 채로 남지 않는다. 양보 전에 Ctrl을 쥐고, 양보 중에 떼고, 복귀 뒤 `a`는
+    // 0x01(Ctrl+A)이 아니라 `a`다. 그리고 양보 중의 왼쪽 Ctrl 짧은 누름은 한/영을 안 바꾸고, 양보 전에 반쯤 누른
+    // tap이 복귀 뒤에 판정되지도 않는다.
+    {
+        var ws: input.State = .{ .toggles = .{ .lctrl_tap = true } };
+        try expect(&ws, K.KEY_LEFTCTRL, 1, "");
+        {
+            const evs = [_]input.c.struct_input_event{
+                keyEventAt(K.KEY_LEFTCTRL, 0, 10_000),
+                keyEventAt(K.KEY_LEFTCTRL, 1, 20_000),
+                keyEventAt(K.KEY_LEFTCTRL, 0, 40_000),
+                keyEventAt(K.KEY_A, 1, 50_000),
+            };
+            const fds = try feedEvents(&evs);
+            defer _ = close(fds[0]);
+            const got = input.watchEscape(&ws, fds[0], .{});
+            if (got.escape) return error.WatchEscapeFalse;
+        }
+        if (ws.hangul_on) {
+            std.debug.print("FAIL: a left Ctrl tap while yielded toggled hangul\n", .{});
+            return error.WatchToggled;
+        }
+        if (ws.mods[0].ctrl_left) {
+            std.debug.print("FAIL: Ctrl released while yielded is still held\n", .{});
+            return error.WatchStuckCtrl;
+        }
+        try expect(&ws, K.KEY_A, 1, "a");
+        // 복귀 뒤의 tap은 다시 한/영이다 — 양보가 tap을 망가뜨리지 않았다.
+        {
+            const evs = [_]input.c.struct_input_event{
+                keyEventAt(K.KEY_LEFTCTRL, 1, 1_000_000),
+                keyEventAt(K.KEY_LEFTCTRL, 0, 1_050_000),
+            };
+            const fds = try feedEvents(&evs);
+            defer _ = close(fds[0]);
+            var out: [16]u8 = undefined;
+            _ = input.readKeys(&ws, fds[0], &out, .{});
+        }
+        if (!ws.hangul_on) {
+            std.debug.print("FAIL: a left Ctrl tap after reclaim did not toggle hangul\n", .{});
+            return error.WatchBrokeTap;
+        }
+    }
+    std.debug.print("input_test: 양보 중의 수정키는 따라가고 tap · 한/영은 안 바뀐다 OK\n", .{});
+
     std.debug.print("PASS\n", .{});
 }
