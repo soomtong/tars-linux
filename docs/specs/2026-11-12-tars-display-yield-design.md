@@ -3,7 +3,7 @@
 접두사: DY
 
 Date: 2026-11-12
-Status: 끝(2026-11-14). DY-M0 · M1 · M2(plan 셋의 결과 절, 체인 `display`). 실기(i915 · crocus)는 `carryover.md`의 DY 절.
+Status: 끝(2026-11-14). DY-M0 · M1 · M2 · M3(plan 넷의 결과 절, 체인 `display`). 실기(i915 · crocus)는 `carryover.md`의 DY 절.
 
 계기: 사용자(2026-11-12): TARS가 외주 솔루션 · 프로덕트로 납품되는 경우 — 키오스크는 fakesteak으로 1차 확인, 2차 데모는 GPU를 쓰는
 애플리케이션. "예전 DOS 시스템처럼 콘솔 화면이 기본이지만 Full screen graphics 프로그램을 만들어 실행시킬 수 있게 확장; KMS master를

@@ -111,7 +111,7 @@ smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 �
 
 | 항목 | 값 |
 |---|---|
-| tag | `v0.2.2` (annotated, 로컬) → `16a1072` (`Release 0.2.2`). 루트 게이트 34/34 첫 판, lanes 1,593초, 잘린 줄 0 |
+| tag | `v0.2.2` (annotated, 2026-11-14 push — `main`도 `4aaeb2d`까지) → `16a1072` (`Release 0.2.2`). 루트 게이트 34/34 첫 판, lanes 1,593초, 잘린 줄 0 |
 | ISO | `tars-0.2.2-x86_64.iso` 1,990,055,936 B(server를 뺀 묶음 열둘) · `tars-0.2.2-nonative-x86_64.iso` 1,645,989,888 B(lang-native를 뺀 열둘) · `tars-0.2.2-fakesteak-x86_64.iso` 145,563,648 B |
 | sha256 | `53b70210…eb04e03c` · `6d7a811d…c06661893` · `a92c8926…8789a706` (SHA256SUMS) |
 | 로컬 | `make iso-full` → `out/tars-full.iso` 2,139,080,704 B(열셋, `TARS 0.2.2`) — GitHub에 안 올린다 |
@@ -121,6 +121,13 @@ smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 �
 push도 함께다([[feedback_push_policy]]). ISO · SHA256SUMS · NOTES.md는 `out/release-0.2.2/`에 있다(git이 무시하는 자리 — `make clean`이 지울 수 있으니
 그때는 tag에서 절차 3부터 다시). smoke 셋 모두 꼬리표 없는 `TARS 0.2.2` · grid · fish, panic 0. 각 ISO의 `/boot/layers`를
 `xorriso -ls`로 대조했다.
+
+### GPU 데모 판 (DY-M3, 2026-11-14)
+
+사용자: "0.2.2 작업의 핵심은 gpu 관련 기능이야. 이 데모를 위해 fakesteak 처럼 하나의 iso 파일을 구워줘." `v0.2.2`와 `main`은 이 앞에 push했다
+(사용자 "릴리즈 태그를 붙이도록 할게"). `make iso ISO_LAYERS="base gpu"` → `tars-0.2.2-gpu-x86_64.iso` 474,527,744 B, sha256 `c4bc97d3…b08ba4ba`,
+버전 글자 `TARS 0.2.2+c30a838`(tag 뒤 commit — 꼬리가 붙는다). 설치하면 첫 패널이 `tars-gpu-demo`를 화면 가득 띄운다(라이브 부팅에서는 안 뜬다 —
+묶음은 설치본의 홈에서 얹힌다). 로컬 `out/release-0.2.2-gpu/`. GitHub에 어떻게 올릴지(0.2.2 release에 더할지, 따로 낼지)는 사용자가 정한다.
 
 ## 0.2.2부터의 배포 모양 (사용자 결정 2026-11-14)
 

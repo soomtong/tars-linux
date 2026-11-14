@@ -2,7 +2,7 @@
 
 Date: 2026-11-14
 Design: `docs/specs/2026-11-12-tars-display-yield-design.md` 결정 12
-Status: 진행 중
+Status: 끝났다(2026-11-14). commit `c30a838`
 
 ## 착수 전에 확정한 것
 
@@ -29,3 +29,18 @@ commit 뒤(출처 기록이 dirty가 아니게) `make iso ISO_LAYERS="base gpu"`
 commit이라 꼬리가 붙는다. QEMU(virtio-gpu)로 부팅해 첫 패널에 데모가 뜨는지 screendump로 본다. 설치 뒤의 부팅은 실기(맥북 에어 2011)의 몫.
 
 ## 결과
+
+1. 첫 display 체인은 부팅 3의 `boot`에서 멈췄다 — `terminal never rendered a prompt`. 조각이 terminal의 첫 `screen>` 찍기보다 먼저
+   양보를 받아(`display> yield pid 50`) 그 줄도 프롬프트도 데모가 끝나기 전에는 안 온다. 조각은 맞게 떴다. `boot --autorun`이
+   yield 줄을 기다리고 프롬프트는 (12a)가 Esc 뒤에 본다. 둘째 판 PASS — `(12a) the first panel ran tars-gpu-demo full screen by itself;
+   Esc gave the shell back`, (13)~(15)도 올린 셈 그대로.
+2. 묶음 `gpu.sqfs` 71,798,784 → 71,802,880 B(파일 768). 체인 뒤 commit에서 stamp를 지우고 base · gpu를 다시 구웠다 — 캐시를 탄 판은
+   출처 기록이 commit 전의 `-dirty`였다.
+3. ISO `tars-0.2.2-gpu-x86_64.iso` 474,527,744 B(base 257,486,848 · gpu 71,802,880), sha256
+   `c4bc97d3010e462a420dd4593a4553375bf17359738c0fbd292d0cc3b08ba4ba`. 버전 글자 `TARS 0.2.2+c30a838`(tag 뒤 commit). 로컬 `out/release-0.2.2-gpu/`.
+4. 라이브 부팅(매체만)에서는 묶음이 안 얹힌다 — init은 홈 디스크가 있을 때만 `.tars/layers`를 얹는다(`init/src/main.zig:1275`). 매체만으로는
+   `tars-home`이 없어 셸이 root이고 `overlay` 줄이 없었다. 데모는 설치본에서 뜬다.
+5. 설치 smoke(`out/gpu-install-smoke.sh` — devtools 체인의 부팅 모양, OVMF · NVMe 16GiB · SandyBridge): `tars-install --yes`가
+   `copied 2 layers (315 MiB) in 1953ms`, 디스크 부팅에서 `overlay /usr from 2 layers in 38ms` → `spawned child … as tars` →
+   `display> yield pid 63`. 45초 뒤 screendump 둘의 가운데 색이 다르다(`64,146,109` → `86,64,169`) — 색 띠가 화면 가득 움직인다.
+6. 안 본 것: 실기(맥북 에어 2011, i915 · crocus)의 설치 부팅.

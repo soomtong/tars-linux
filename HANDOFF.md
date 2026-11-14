@@ -1,6 +1,12 @@
-# HANDOFF: 0.2.2 준비됨(2026-11-14) — tag v0.2.2 로컬 · ISO 셋 · SHA256SUMS · 노트, 공개(push · release · 소개 페이지)는 사용자 확인 대기
+# HANDOFF: 0.2.2 tag · main push됨(2026-11-14), GPU 데모 판 ISO 구움(DY-M3) — GitHub release · 소개 페이지는 사용자 확인 대기
 
 ## 목표
+
+사용자(2026-11-14, 돌아와서): ISO 목록 마지막 점검 → "릴리즈 태그를 붙이도록 할게"(`main` · `v0.2.2` push) → "0.2.2 작업의 핵심은 gpu 관련 기능이야.
+fakesteak 처럼 하나의 iso 파일을 구워줘. 설치하면 fullscreen gpu 구동 화면이 동작해야해." DY-M3 끝(`c30a838` — gpu 묶음의 autorun 조각,
+display 체인 (12a)). `out/release-0.2.2-gpu/tars-0.2.2-gpu-x86_64.iso`(base · gpu, 474,527,744 B, `TARS 0.2.2+c30a838`) — 설치 smoke로 첫 패널의
+데모를 봤다(DY-M3 plan 결과). 남은 것: `gh release create`(ISO 셋 + gpu 판을 어디에 올릴지 사용자가 정한다) · 소개 페이지 `data.js` ·
+실기(i915 · crocus).
 
 사용자(2026-11-14): odin을 다시 넣을 때의 용량 → 묶음 자리 검토("keep them all") → "odin을 native lang에 그대로" · rust 1.100 ·
 `make iso-full` → 배포 모양(GitHub에 `server`를 뺀 판 · `lang-native`를 뺀 판 · fakesteak, 묶음 전부 판은 로컬 dd — 기억 `project_release`)
