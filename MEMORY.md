@@ -64,6 +64,7 @@
 - [Layer dedup](docs/decisions/project_layer_dedup.md) — 묶음은 base와 겹친 것을 지운 채 구워져 base 없이 온전하지 않다(독립은 `devlayer/standalone-bundles`), emacs 뺌 · fakesteak 기본 판(LD, 2026-11-12)
 - [Display yield](docs/decisions/project_display_yield.md) — terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 화면을 놓는다 · 커널 동작 실측 · card0 fd가 셸로 새던 것 · 키보드는 양보 동안만 손님 uid · Ctrl+Cmd+Backspace · 묶음 gpu(SDL3 · Mesa)와 tars-gpu-demo · M0~M2 끝(2026-11-14)
 - [Odin](docs/decisions/project_odin.md) — lang-native에 그대로, 링크는 런처가 ODIN_CLANG_PATH=gcc로 · raylib .so NEEDED 예외 · rust 1.100.0 · make iso-full(OD-M0, 2026-11-14)
+- [Tool upgrade](docs/decisions/project_tool_upgrade.md) — 0.2.2의 도구 판올림 · objdump로 AVX2 · BMI2를 옛 판과 센다(janet 1.43.0 보류) · pgdg의 systemd 요구는 standalone 둘(TU-M0, 2026-11-14)
 - [Build Version](docs/decisions/project_build_version.md) — `VERSION` + git 꼬리표가 `tars-config version`과 부팅 첫 줄에(BV-M0, 2026-10-20)
 - [Zig upgrade](docs/decisions/project_zig_upgrade.md) — Zig 0.17 이상, `**` 대신 `@splat` · ghostty를 따라 SHA로 고정, 없어진 std 선언과 대체 표(ZU, 2026-10-24) · 지금 0.17.1 + ghostty vt-1.0.1(GU, 2026-11-12)
 - [Lessons Split](docs/decisions/project_lessons_split.md) — lessons.md를 허브와 measurements · dead-ends · carryover · key-files로(LS-M0, 2026-10-26)

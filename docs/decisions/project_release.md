@@ -112,7 +112,7 @@ smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 �
 GitHub release(파일 하나당 2GiB)에는 ISO 셋만 올린다: 개발 도구 층에서 `server`만 뺀 판, `lang-native`만 뺀 판, fakesteak 납품 데모.
 barebone과 묶음 전부 판은 올리지 않는다. 묶음 전부 판은 `make iso-full`(`out/tars-full.iso`)로 로컬에 남겨 `dd`로 쓴다 — 다른 길(외부
 호스팅)은 사용자가 정한다. 계기: odin을 더하면 묶음 전부 판이 2GiB까지 약 11.5MiB(OD design "배포"). 아래 절차 3 · 5 · 6은 0.2.2를 낼 때
-이 모양으로 고친다.
+이 모양으로 고쳤다(2026-11-14) — barebone은 "0.2.1까지"로 남긴다.
 
 ## 배포 절차 (다음 버전도 이대로)
 
@@ -123,7 +123,11 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 1. 저장소 뿌리의 `VERSION`을 새 번호로 고쳐 커밋한다. 그 커밋에서 루트 게이트가 PASS인지 본다(게이트 이미지는
    `+<sha>`를 단다). 트리는 clean이어야 한다.
 2. `git tag -a v<ver> <그 커밋> -m …`. push는 아직 안 한다.
-3. barebone ISO(BB-M0부터 — 개발 도구 층 없음, [[project_minimal_iso]])를 먼저 짓는다: `make iso`(ISO_LAYERS 비움), 절차 4의 smoke, 저장소 밖
+3. (0.2.2부터) 먼저 묶음을 모두 굽는다(아래 문단). 그다음 `make iso ISO_LAYERS="<묶음 전부에서 server를 뺀 것>"` → smoke → 저장소 밖 빈
+   디렉터리에 `tars-<ver>-x86_64.iso`(기본 판 — 개발 도구에서 서버만 뺀 것), `make iso ISO_LAYERS="<묶음 전부에서 lang-native를 뺀 것>"` →
+   smoke → `tars-<ver>-nonative-x86_64.iso`, 납품 데모는 아래 그대로 `tars-<ver>-fakesteak-x86_64.iso`. `make iso`는 `out/tars.iso`
+   하나에 쓰므로 짓고 바로 옮긴다. 묶음 전부 판은 `make iso-full`로 로컬에만 둔다.
+   (0.2.1까지) barebone ISO(BB-M0부터 — 개발 도구 층 없음, [[project_minimal_iso]])를 먼저 짓는다: `make iso`(ISO_LAYERS 비움), 절차 4의 smoke, 저장소 밖
    빈 디렉터리에 `tars-<ver>-barebone-x86_64.iso`로 옮긴다(`make iso`는 `out/tars.iso` 하나에 쓰므로 다음 짓기가 덮는다). 같은 트리라
    버전 글자는 묶음 판과 같다. BB-M0 실측: 143,751,168 B, 196초(initrd · kernel 캐시).
    그다음 묶음을 모두 굽는다: `rm -f devlayer/build/*.stamp && make dev-layers`(묶음 안 출처 기록의 `-dirty`가 stamp에 안 들어가 남는다 —
@@ -141,9 +145,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    `tars-init: starting as PID 1 (TARS <ver>)`(꼬리표 없이) · `terminal: grid` · `spawned child … fish`가 있고
    `Kernel panic`이 0인지 본다. 설정 디스크를 안 붙여 처음 받은 사람과 같은 기본값 경로를 밟는다. 꼬리표가 붙었거나
    smoke가 실패하면 `git tag -d v<ver>`로 지우고 고친다 — push 전이라 바깥에 안 나갔다.
-5. 저장소 밖 빈 디렉터리(3의 barebone이 있는 곳)에 `tars-<ver>-x86_64.iso`로 복사하고 세 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
+5. 저장소 밖 빈 디렉터리(3의 ISO가 있는 곳)에서 세 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
 6. `git push origin v<ver>` →
-   `gh release create v<ver> <iso> <barebone iso> <fakesteak iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
+   `gh release create v<ver> <iso> <nonative iso> <fakesteak iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
    새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다.
 7. 소개 페이지 — `gh-pages`의 `data.js` `releases`에 한 줄(`site/README.md`의 "릴리스를 냈을 때").
 

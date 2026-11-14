@@ -583,3 +583,9 @@ cmake `doc`(HTML) 9.2 · erlang `lib/wx-2.7` 5.8(GUI) · ffmpeg `doc` 2.0. 잃�
 `lib/libc/include`의 windows · bsd · darwin 헤더 약 12(어림, 크로스 컴파일) · erlang `megaco` · `snmp` 7.1. 뺄 이득이 없는 것:
 go `test` 0.7 · rust `rustlib/src` 8.0(rust-analyzer). base의 `libc6-dbg` 8.3은 valgrind가 ld.so의 `strlen` 리다이렉트에 쓰는 것으로
 보인다(넣은 까닭의 기록은 없다). 묶음 단위가 이 목록 전부보다 크다 — container 98.4 · server 141.8 · lang-beam 85.0 · lang-jvm 226.5.
+
+106. 판올림 때 같은 이름의 배포 실행 파일이 CPU 수준을 말없이 올린다(TU-M0). janet 1.43.0 linux-x64는 AVX2 · BMI2(`%ymm` 836, `shlx` 288)를
+`cpuid` 분기 없이 인터프리터 곳곳에서 쓴다 — 1.42.1은 둘 다 0. 그래서 판을 올릴 때마다 새 실행 파일과 옛 판의 `objdump -d`를 나란히 센다
+(개발 컨테이너의 `x86_64-linux-gnu-objdump`, 큰 ELF 셋의 합). Go로 지은 도구는 런타임의 AVX 분기 코드 때문에 숫자가 0이 아니지만 옛 판과
+같으면 문제가 없다. 같은 날 pgdg의 `postgresql-common` 294+는 `systemd | systemd-standalone-sysusers`를 요구해, 이름으로 standalone을 주지
+않으면 apt가 systemd 전체를 거둔다(TU design 결정 4).
