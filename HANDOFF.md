@@ -1,4 +1,4 @@
-# HANDOFF: OD · TU 끝(2026-11-14) — odin · rust 1.100.0 · make iso-full · 도구 판올림, 다음은 0.2.2 절차
+# HANDOFF: 0.2.2 준비됨(2026-11-14) — tag v0.2.2 로컬 · ISO 셋 · SHA256SUMS · 노트, 공개(push · release · 소개 페이지)는 사용자 확인 대기
 
 ## 목표
 
@@ -6,7 +6,8 @@
 `make iso-full` → 배포 모양(GitHub에 `server`를 뺀 판 · `lang-native`를 뺀 판 · fakesteak, 묶음 전부 판은 로컬 dd — 기억 `project_release`)
 → "이 정도면 0.2.2?" → "이번 판올림은 각 유틸리티 · 랭귀지 버전 업그레이드로 의미를" → "잠깐 외출 — 모든 결정을 위임합니다."
 OD-M0은 끝났다(`c07e944` · `0a0363e` · `e0cb758`). TU-M0도 끝났다(`bc48393` — janet 1.43.0은 AVX2라 보류, pg의 systemd는 standalone 둘).
-진행: 0.2.2 절차
+0.2.2: 절차 1~5 끝(기억 `project_release`의 0.2.2 절) — 남은 것은 사용자 확인 뒤 6 · 7. 원래 계획은 "release는 draft까지"였으나 draft도 tag · main의
+push가 먼저라 그 앞에서 멈췄다. 옛 계획 줄: 0.2.2 절차
 (VERSION → 루트 게이트 → tag → ISO 셋 → smoke → 해시 → GitHub release는 draft까지 — 공개 · push는 사용자가 돌아와 정한다).
 
 사용자(2026-11-13): HANDOFF에서 이어 DY-M2 — 조사 결과(Debian 패키지 그대로 · 힌트 없음 · 데모 dlopen)에 "confirmed continue".

@@ -107,6 +107,21 @@ smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 �
 절차에서 배운 것: `VERSION` 커밋(`1de4899`) 뒤에 수정 커밋이 더 붙어 태그는 닫기 뒤의 커밋에 달았다 — 다음에는 게이트가 초록인 것을 본 뒤
 `VERSION`을 올린다. 기본 판이 2GiB에 닿았으니 다음 판에서 묶음이 자라면 먼저 `carryover.md`의 "묶음 사이 같은 파일 지우기"를 한다.
 
+## 0.2.2 (2026-11-14, 준비됨 — 공개 전)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.2.2` (annotated, 로컬) → `16a1072` (`Release 0.2.2`). 루트 게이트 34/34 첫 판, lanes 1,593초, 잘린 줄 0 |
+| ISO | `tars-0.2.2-x86_64.iso` 1,990,055,936 B(server를 뺀 묶음 열둘) · `tars-0.2.2-nonative-x86_64.iso` 1,645,989,888 B(lang-native를 뺀 열둘) · `tars-0.2.2-fakesteak-x86_64.iso` 145,563,648 B |
+| sha256 | `53b70210…eb04e03c` · `6d7a811d…c06661893` · `a92c8926…8789a706` (SHA256SUMS) |
+| 로컬 | `make iso-full` → `out/tars-full.iso` 2,139,080,704 B(열셋, `TARS 0.2.2`) — GitHub에 안 올린다 |
+
+0.2.1 뒤의 DY · GU · LD · OD · TU를 담았고 본론은 도구 판올림(TU)이다. 사용자가 외출하며 "모든 결정을 위임"했고(2026-11-14), lead는
+절차 1~5까지 하고 6(push · `gh release create`)과 7(소개 페이지)은 사용자가 돌아와 정하도록 멈췄다 — 바깥으로 나가는 일이고 `main`의
+push도 함께다([[feedback_push_policy]]). ISO · SHA256SUMS · NOTES.md는 `out/release-0.2.2/`에 있다(git이 무시하는 자리 — `make clean`이 지울 수 있으니
+그때는 tag에서 절차 3부터 다시). smoke 셋 모두 꼬리표 없는 `TARS 0.2.2` · grid · fish, panic 0. 각 ISO의 `/boot/layers`를
+`xorriso -ls`로 대조했다.
+
 ## 0.2.2부터의 배포 모양 (사용자 결정 2026-11-14)
 
 GitHub release(파일 하나당 2GiB)에는 ISO 셋만 올린다: 개발 도구 층에서 `server`만 뺀 판, `lang-native`만 뺀 판, fakesteak 납품 데모.
