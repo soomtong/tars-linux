@@ -2,7 +2,7 @@
 #
 #   경로 패턴(묶음 뿌리 기준, bash glob)  soname glob  이유
 #
-# 예외의 이유는 넷뿐이다. 그 밖에 못 찾은 것은 manifest.toml에 debian 도구를 더해 푼다. 줄을 지우면 verify.sh가 그 ELF를
+# 예외의 이유는 다섯뿐이다. 그 밖에 못 찾은 것은 manifest.toml에 debian 도구를 더해 푼다. 줄을 지우면 verify.sh가 그 ELF를
 # 다시 빨갛게 찍는다(TP-M0 할 일 4c — 이 파일이 비었을 때 JDK에서 20줄이 빨갰다).
 #
 #   GUI         TP design 비목표 5. TARS에는 X가 없다. AWT · Swing · 스플래시는 headless가 아니면 안 돈다.
@@ -14,6 +14,8 @@
 #               soname으로 맞춘다. 실제로 도는지는 devtools 체인의 ffmpeg → ffprobe가 본다.
 #   testdata    시험 입력으로 실린 ELF. 적재되지도 실행되지도 않는다 — go의 debug/elf 시험이 바이트로 읽는 libtiffxx.so_
 #               같은 것(TP-M2). 경로를 testdata/ 아래로 좁힌다.
+#   foreign-arch 다른 아키텍처의 ELF. x86_64 기계의 ld.so가 적재하지 않는다 — odin의 vendor/raylib/linux-arm64/(OD-M0, 크로스
+#               컴파일하는 사용자의 것). 경로를 그 아키텍처의 디렉터리로 좁힌다.
 
 usr/local/lib/jdk-*/lib/libawt_xawt.so	libX*	GUI
 usr/local/lib/jdk-*/lib/libsplashscreen.so	libX*	GUI
@@ -24,3 +26,5 @@ usr/local/lib/cmake-*/bin/cmake-gui	libfontconfig*	GUI
 usr/local/lib/cmake-*/bin/cmake-gui	libfreetype*	GUI
 usr/local/lib/ffmpeg-*/lib/*	libav*	exe-loaded
 usr/local/lib/ffmpeg-*/lib/*	libsw*	exe-loaded
+usr/local/lib/odin-*/vendor/raylib/linux/libraylib.so*	libX*	GUI
+usr/local/lib/odin-*/vendor/raylib/linux-arm64/*	*	foreign-arch

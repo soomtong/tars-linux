@@ -487,7 +487,7 @@ lock = "devlayer/maven/clojure-m2.lock"
 sha256 = "584d3045e135ee8b3e5eda8d1e62fe52081da6fd10dd92b131d2d3d032d29f99"
 into = "clojure"
 
-# ── lang-native(TP-M2) — LLVM 툴체인 · odin · tcc는 뺐다(사용자 결정 2026-11-06, plan 확인 4 · 7) ─────────
+# ── lang-native(TP-M2) — LLVM 툴체인 · tcc는 뺐다(사용자 결정 2026-11-06, plan 확인 4 · 7). odin은 OD-M0이 되돌렸다 ─────────
 # zig: ziglang.org/download/index.json. 실행 파일이 맨 위에 있고 bin/이 없다.
 [[tool]]
 name = "zig"
@@ -527,6 +527,17 @@ version = "1.27.3"
 kind = "upstream"
 url = "https://go.dev/dl/go1.27.3.linux-amd64.tar.gz"
 sha256 = "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
+
+# odin: github.com/odin-lang/Odin 릴리스(판 이름이 태그). 링크에 clang을 부르므로 hook이 bin/odin 런처를 써서 ODIN_CLANG_PATH를
+# gcc로 채운다(OD design 결정 1 · 2). 아무것도 빼지 않는다.
+[[tool]]
+name = "odin"
+bundle = "lang-native"
+version = "dev-2026-11a"
+kind = "upstream"
+url = "https://github.com/odin-lang/Odin/releases/download/dev-2026-11a/odin-linux-amd64-dev-2026-11a.tar.gz"
+sha256 = "65c9f6e97d6f8a30930e151f270ce5aeaa98fe8b2ba49fe067394e2af04f7618"
+hook = "odin"
 
 # ── lang-script(TP-M3) — 출처의 사정은 plan 확인 2~4 · 9 · 10 ───────────────────────────
 # python: python-build-standalone의 install_only_stripped(plan 결정 B). RUNPATH가 $ORIGIN/../lib라 자리를 옮겨도 선다.

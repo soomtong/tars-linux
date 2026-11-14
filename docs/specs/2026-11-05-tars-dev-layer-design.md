@@ -40,7 +40,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | 묶음 | 도구 |
 |---|---|
 | 바닥 | `base` 묶음(TP-M0 · M2 · M4): gcc · g++ · make, perl(+ perl-doc), pkgconf · cmake · ninja · autoconf · automake · libtool · m4 · bison · flex · gettext, coreutils 전부 · patch · file · xz · zstd · bzip2 · zip · unzip, openssh-client · rsync · gnupg, man-db · manpages · manpages-dev, gdb · strace · ltrace · valgrind, xxd · shellcheck · universal-ctags (사용자 2026-11-06 — "추천해 준 것 모두") |
-| 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2) |
+| 네이티브 언어 | gcc · g++(C/C++ — `base` 묶음), zig, rust, go(`lang-native` 묶음, TP-M2), odin(OD-M0 — 링크는 gcc, `2026-11-14-tars-odin-design.md`) |
 | 스크립트 언어 | python3, ruby, lua, luau, cyber, node, bun, janet, php(`lang-script` 묶음, TP-M3 — luau · cyber는 사용자가 2026-11-06에 더했다) |
 | JVM | JDK, kotlin, clojure(`lang-jvm` 묶음, TP-M5) |
 | BEAM | erlang, elixir, gleam(`lang-beam` 묶음, TP-M6 — gleam은 첫 프로젝트용 Hex 시드와 함께) |
@@ -51,7 +51,7 @@ overlay로 겹쳐 얹는다. RAM에는 상주하지 않는다.
 | AI | 싣지 않는다 — claude code, codex, opencode, oh-my-pi(`omp`)는 사용자가 망이 있을 때 공식 설치 길로 홈에 깐다(결정 17, TP-M12가 그 길을 확인) |
 
 뺀 것: rune(GUI가 X11 · OpenGL을 요구하고 TARS에는 X가 없다, 사용자 결정). Zeal(Qt GUI, 같은 이유). helix(사용자 결정). mg(사용자가 물었다 — emacs-nox를 싣는다, 2026-11-06). Doom Emacs의 시드(straight.el이 홈 경로로의 절대 링크 3,957개를 만들어 다른 홈으로 옮기면 안 선다 — TP-M7 plan 확인 4, 사용자 결정).
-LLVM 툴체인(LLVM · clang · lld) · odin · tcc(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
+LLVM 툴체인(LLVM · clang · lld) · tcc(odin도 함께 뺐다가 OD-M0이 되돌렸다)(사용자 결정 2026-11-06 — "GCC가 포함되니까 C나 Assembly 계열의 코드 작성은 문제가 없고,
 디버거가 필요하면 직접 LLVM 툴체인을 설치한다"). scala3(사용자 결정 2026-11-06 — 아직 본격적으로 쓰지 않는다. 망 없이 `scala run`을 세우려면
 컴파일 서버 Bloop(Scala 2.12로 쓰인 jar 134개, 111MiB, 상주 메모리 585MiB)까지 실어야 했다 — TP-M5 plan 확인 3). 필요해지면 Homebrew로 깐다.
 LLVM 공식 tarball은 풀면 11.8GB였고 odin은 링크에 clang을 부른다. tcc는 리눅스

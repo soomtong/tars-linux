@@ -20,10 +20,11 @@ cd "$(dirname "$0")" || exit 1
 # CE-M2: 열하나째 묶음 container(Docker Engine · compose · buildx · bubblewrap · socat). 부팅 2가 사용자의 bwrap, tars-service enable docker,
 #        sudo 없는 docker info, 망 없이 docker import로 만든 이미지의 컨테이너가 -p로 답하는 것, 방화벽과의 공존을 보고, 부팅 3이 저절로
 #        뜬 dockerd와 남은 이미지 · 다시 뜬 컨테이너를 보고 disable docker로 끈다(CE design 결정 4~8).
+# OD-M0: lang-native에 odin. 부팅 2가 odin run의 hello를 본다 — clang 없이 런처의 ODIN_CLANG_PATH=gcc로 링크한다(OD design 결정 3).
 #
 # 부팅 넷이 같은 NVMe 이미지를 잇달아 쓴다(plan 결정 G).
 #   1  ISO(묶음 열셋) + 빈 최소 NVMe   tars-install --yes — 계획의 layers 줄, 복사 줄, done
-#   2  NVMe만                          overlay /usr from 13, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig ·
+#   2  NVMe만                          overlay /usr from 13, 읽기 전용, /etc/gprofng.rc, 사용자로 gcc · make · g++ · zig · odin ·
 #                                      rustc · cargo · go run · go build · 스크립트 언어 아홉 · javac · java · jwebserver + curl, kotlinc ·
 #                                      clojure · clj · cci · glc · man clojure, BEAM 셋, 편집기 셋(LD-M0이 emacs를 뺐다), fakesteak, 서버 다섯, 화면 셸에서
 #                                      java --version(monitor 45504), bwrap · docker 서비스 · 컨테이너 둘 · firewall=on. 끝에 root가
@@ -278,6 +279,13 @@ as_tars 'cd ~/tp && printf "const std = @import(\"std\");\nconst builtin = @impo
 wait_log_re "tp-ms-zig=[0-9]+" 180 || fail "zig build-exe did not finish in 180s" "tp-zigc"
 wait_log "tp-zig-0.17.1" 30 || fail "the zig program did not print 0.17.1" "tp-zigc"
 echo "B2: as tars, zig built and ran a program that prints 0.17.1 ($(ms_of zig)ms)"
+
+# OD-M0(design 결정 3): odin run의 hello. clang이 없으므로 링크는 런처가 채운 ODIN_CLANG_PATH=gcc다. 소스에 %를 두지 않는다(printf가
+# 먼저 편다) — 상수 문자열의 결합으로 판을 찍는다. 첫 판(SandyBridge · 2GiB) 11.1초 — 세 배가 60초 아래라 60초다.
+as_tars 'mkdir -p ~/tp/od && cd ~/tp/od && printf "package main\nimport \"core:fmt\"\nmain :: proc() { fmt.println(\"tp-odin-\" + ODIN_VERSION) }\n" > main.odin && s=$(date +%s%N) && odin run . 2>&1 | sed "s/^/tp-odinc: /"; e=$(date +%s%N); echo "tp-ms-odin=$(((e-s)/1000000))"'
+wait_log_re "tp-ms-odin=[0-9]+" 60 || fail "odin run did not finish in 60s" "tp-odinc"
+wait_log "tp-odinc: tp-odin-dev-2026-11" 30 || fail "odin did not build and run a program with gcc as its linker (the odin launcher sets ODIN_CLANG_PATH)" "tp-odinc"
+echo "B2: as tars, odin run built and ran a program through gcc ($(ms_of odin)ms)"
 
 as_tars 'cd ~/tp && printf "fn main() { println!(\"tp-rust-{}\", 6 * 7); }\n" > h.rs && s=$(date +%s%N) && rustc -o hrs h.rs 2>&1 | sed "s/^/tp-rustc: /"; e=$(date +%s%N); echo "tp-ms-rustc=$(((e-s)/1000000))"; ./hrs'
 wait_log "tp-rust-42" 60 || fail "rustc did not build and run a program (it links with base cc and rust-lld)" "tp-rustc" "tp-ms-rustc"
@@ -720,7 +728,7 @@ wait_log_re "tp-mem MemAvailable: +[0-9]+" 10
 MEM_KB="$(last_num 'tp-mem MemAvailable: +[0-9]+')"
 # ms_of는 지금의 LOG를 읽는다 — 부팅 2의 숫자를 여기서 받아 둔다.
 M11_UP_MS="$(ms_of m11up)"
-NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
+NUMBERS="gcc $(ms_of gcc)ms, make $(ms_of make)ms, g++ $(ms_of cpp)ms, zig $(ms_of zig)ms, odin $(ms_of odin)ms, rustc $(ms_of rustc)ms, cargo $(ms_of cargo)ms, go run $(ms_of gorun)ms, go build $(ms_of gobuild)ms, ${SCRIPT_NUMBERS}, ${M4_NUMBERS}, ${M5_NUMBERS}, ${M6_NUMBERS}, ${M7_NUMBERS}, ${M8_NUMBERS}, ${M9_NUMBERS}, ${M10_NUMBERS}, javac $(ms_of javac)ms, java $(ms_of java)ms, jwebserver $(ms_of web)ms, MemAvailable ${MEM_KB:-?} kB"
 
 # ── CE-M2: 컨테이너(CE design 결정 4~8) ─────────────────────────────────────────────
 # 자리가 화면 셸 · 남은 메모리 뒤인 것은 그 둘의 뜻(JVM 서버 뒤)을 안 바꾸려는 것이고, poweroff 앞인 것은 dockerd도 끄기가 먼저

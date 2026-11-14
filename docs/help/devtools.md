@@ -7,7 +7,7 @@
 | 묶음 | 들어 있는 것 |
 |---|---|
 | base | gcc · g++ · make · cmake · ninja · autotools · gdb · valgrind · strace · perl · 압축 · ssh · man |
-| lang-native | rust(cargo) · go · zig |
+| lang-native | rust(cargo) · go · zig · odin |
 | lang-script | python3(pip · venv) · ruby · node(npm) · bun · lua · luau · janet · php |
 | lang-jvm | JDK 25(java · javac) · kotlin · clojure |
 | lang-beam | erlang · elixir(mix) · gleam |

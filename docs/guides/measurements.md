@@ -566,3 +566,20 @@ SE 검사 39의 `sendkey` → 누름(호스트 309ms · 게스트 318ms)으로 �
 bun 일반 빌드가 그대로 돌았다. 그래서 체인으로는 "이 실행 파일이 AVX2를 요구한다"를 잡을 수 없다 — 받을 때 배포처의 설명이나
 `objdump`의 `%ymm` · `shlx`로 본다. 게스트에서 크래시 주소만 있을 때는 PIE가 페이지 단위로 적재되므로 RIP의 끝 세 자리로
 `objdump -d`의 후보를 추린다(`require_internal`의 `palignr` 하나로 좁혀졌다).
+
+104. Odin(`dev-2026-11a`, linux-amd64)은 clang 없이 base의 gcc로 링크된다 — 링크 드라이버를 `ODIN_CLANG_PATH`로 바꾼다.
+`ODIN_CLANG_PATH=gcc odin run .`과 `-debug` 빌드가 amd64 `debian:trixie-slim`(gcc만)에서 섰다(`core:fmt` · `core:strings`까지,
+`vendor`의 C 라이브러리 링크는 안 봤다). 넘기는 clang 전용 플래그 `-Wno-unused-command-line-argument`는 gcc가 말없이 무시한다.
+clang이 없고 변수도 없으면 `Could not spawn subprocess`. `odin`은 LLVM을 품은 `statically linked`(not stripped, 142MB → strip
+118MB)다. tarball 76MB, 풀면 250MiB(`odin` 136 · `vendor` 86 · `core` 35), squashfs zstd15로 약 65MiB(실행 파일 하나만은 43MiB).
+TP-M2 plan 확인 4의 "odin은 링크에 clang을 부른다 — LLVM을 빼면 odin도 빠진다"는 이 변수로 풀리지만, 같은 날 사용자가 다시 싣기로 했다
+(OD-M0 — 런처가 이 변수를 채운다).
+
+105. 개발 도구 층에서 거의 안 쓰면서 자리를 차지하는 것(2026-11-14, 묶음 열셋 합 1,830MiB, 디렉터리별 squashfs zstd15 — 따로
+압축한 값이라 ±1MiB). 사용자는 전부 남기기로 했다. 잃는 것이 없는 쪽: ffmpeg `bin/ffplay` 9.1MiB(링크하지 않아 PATH에 없다) ·
+cmake `doc`(HTML) 9.2 · erlang `lib/wx-2.7` 5.8(GUI) · ffmpeg `doc` 2.0. 잃는 것이 있는 쪽: rust-docs `share/doc/rust` 58.1(풀면
+917MiB, 오프라인 문서) · JDK `lib/src.zip` 약 45~50(이미 zip, 소스로 정의 이동) · ruby `lib/libruby-static.a` 22.4(rv-ruby에
+`libruby.so`가 없어 네이티브 확장 gem이 이것을 쓰는지 안 봤다) · mitos `runtime/grammars` 19.6(풀면 255MiB) · zig
+`lib/libc/include`의 windows · bsd · darwin 헤더 약 12(어림, 크로스 컴파일) · erlang `megaco` · `snmp` 7.1. 뺄 이득이 없는 것:
+go `test` 0.7 · rust `rustlib/src` 8.0(rust-analyzer). base의 `libc6-dbg` 8.3은 valgrind가 ld.so의 `strlen` 리다이렉트에 쓰는 것으로
+보인다(넣은 까닭의 기록은 없다). 묶음 단위가 이 목록 전부보다 크다 — container 98.4 · server 141.8 · lang-beam 85.0 · lang-jvm 226.5.
