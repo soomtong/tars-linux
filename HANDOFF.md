@@ -1,16 +1,16 @@
-# HANDOFF: Link Status 끝(2026-11-15) — 상태 줄의 SSID · LAN 칸, cyber 0.4.11. 로컬 commit만, push 안 함
+# HANDOFF: Link Status 끝(2026-11-15) — 상태 줄의 SSID · LAN 칸, cyber 0.4.11. main · gh-pages push
 
 ## 목표
 
 사용자(2026-11-14): "장비가 Wifi 에 접속되어 있다면 terminal 우측 배터리 영역 좌측에 Network ID 출력; 유선 랜 접속되어 있다면 유선
 네트워크 접속 상태를 표기하는 방법 검토 및 구현 계획" → 검토안의 결정 넷 "agree all. accept suggestion. pick your best." → 중간에
 "Cyber lang new version … 0.4.11 and add it into our script lang layer" → M2 직전 "I'm going to sleep. All decisions are up to you."
-모두 끝났다. 밖으로 나가는 일(push · 소개 페이지 공개)만 사용자가 돌아와서 정하도록 남겼다.
+모두 끝났다. push는 사용자가 돌아와서 했다(main은 사용자의 `gpu`, gh-pages는 "push pages of github").
 
 ## 현재 브랜치
 
-`main` — origin보다 commit 넷이 앞선다(`ca5ef19` LK-M0 · `cd710ff` LK-M1 · `12a99af` Cyber 0.4.11 · LK-M2 닫기). push 안 했다.
-`gh-pages`(worktree `../tars-linux-pages`) — `data.js`에 LK를 더한 commit 하나가 앞선다. push 안 했다(push하면 공개 페이지가 바뀐다).
+`main` — origin과 같다(`9527924` LK-M2 닫기까지 push. `ca5ef19` LK-M0 · `cd710ff` LK-M1 · `12a99af` Cyber 0.4.11).
+`gh-pages`(worktree `../tars-linux-pages`) — `0186f3e`(LK를 타임라인과 상태 줄 목록에) push. 소개 페이지 영상은 다시 안 찍었다.
 
 ## 완료된 작업 (2026-11-14~15, 이 세션)
 
@@ -31,7 +31,6 @@
 
 ## 남은 작업
 
-- [ ] push(사용자가 정한다): `main` 넷 · `gh-pages` 하나
 - [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 — Country 요소를 내는 집 AP면 `link> nl80211 … ssid_len=` 줄(GET_INTERFACE 길), 내장
       BCM43224의 operstate 순서. 유선은 USB 동글로. 결과는 `project_link_status`의 "남은 것"에
 - [ ] 실기: GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절
@@ -52,7 +51,7 @@
 
 ## 다음 에이전트에게
 
-LK는 닫혔다. 사용자가 돌아오면 push 여부부터 묻는다(main 넷 · gh-pages 하나). 실기 결과를 받으면 `link> nl80211` · `link> state`
+LK는 닫혔고 main · gh-pages 모두 push됐다. 실기 결과를 받으면 `link> nl80211` · `link> state`
 줄을 보고 `project_link_status`의 "남은 것"에 적는다. 무선 칸이 `WLAN`이면 `link> nl80211 scan … associated=` 줄이 원인을 말한다.
 
 ## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)
