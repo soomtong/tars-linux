@@ -62,6 +62,19 @@ else
 DISK_GUARD = @test -f $(CONFIG_DISK) || { echo "$(CONFIG_DISK)가 없다 — make disk"; exit 1; }
 endif
 
+# 홈 디스크(ext4, 라벨 tars-home). 주면 init이 /home에 붙이고, 그 안의 .tars/layers/에 판이 맞는
+# 묶음이 있으면 /usr에 얹는다(display 체인 부팅 3과 같은 모양). 기본은 비어 있다 — 홈 없는 부팅
+# (root 셸, 묶음 없음)이 지금까지의 run-qemu이고, 파일이 있다고 저절로 붙이면 그 부팅을 못 본다.
+# init은 라벨로 찾으므로 설정 디스크와의 순서는 상관없다.
+HOME_DISK ?=
+HOME_ARGS = -drive file=$(HOME_DISK),if=virtio,format=raw
+ifeq ($(strip $(HOME_DISK)),)
+HOME_ARGS =
+HOME_GUARD =
+else
+HOME_GUARD = @test -f $(HOME_DISK) || { echo "$(HOME_DISK)가 없다 — 라벨 tars-home의 ext4 이미지를 주거나 HOME_DISK를 비운다"; exit 1; }
+endif
+
 # 게이트 체인의 포트(45455~, probe 45590까지)를 컨테이너의 ephemeral 범위(32768~60999)에서
 # 뺀다. 안 빼면 동시에 도는 다른 lane의 나가는 연결이 그 번호를 출발 포트로 받아 체인의
 # bind()가 Address already in use로 진다(UB-M2 2회차의 VD-M0). 예약은 자동 배정만 막고
@@ -194,6 +207,11 @@ help:
 	@echo "      안 붙인다 — 그 부팅은 seed 없이 뜨고 /config가 빈 채로 남는다."
 	@echo "      이미지를 컨테이너가 굽기 때문에 저장소 안 경로여야 한다(예: out/tars-verify.img)"
 	@echo
+	@echo "  HOME_DISK=$(HOME_DISK)"
+	@echo "      붙일 홈 디스크(ext4, 라벨 tars-home). 기본은 비어 있어 안 붙인다. 주면 /home이 되고"
+	@echo "      .tars/layers/의 묶음(판이 이미지와 같은 것)이 /usr에 얹힌다. 예:"
+	@echo "      make run-qemu HOME_DISK=out/tars-home.img QEMU_EXTRA='-vga none -device virtio-gpu-pci'"
+	@echo
 	@echo "  ISO=$(ISO)"
 	@echo "      부팅할 ISO. boot/check.sh는 ISO 대신 -kernel/-initrd로 직접 띄운다"
 	@echo
@@ -279,9 +297,10 @@ run-qemu:
 	@command -v $(QEMU) >/dev/null 2>&1 || { echo "PATH에 $(QEMU)가 없다 (macOS: brew install qemu)"; exit 1; }
 	@test -f $(ISO) || { echo "$(ISO)가 없다 — make iso 또는 make boot-qemu"; exit 1; }
 	$(DISK_GUARD)
+	$(HOME_GUARD)
 	$(QEMU) -m $(QEMU_MEM) \
 	  -cdrom $(ISO) \
-	  $(DISK_ARGS) \
+	  $(DISK_ARGS) $(HOME_ARGS) \
 	  $(QEMU_DISPLAY) $(QEMU_SERIAL) $(QEMU_EXTRA) -no-reboot
 
 # 빌드가 끝난 뒤에 띄운다. `boot-qemu: iso disk run-qemu`로 적으면 -j에서
