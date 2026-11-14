@@ -53,6 +53,15 @@ const NL80211_CMD_GET_INTERFACE: u8 = 5;
 const NL80211_ATTR_IFINDEX: u16 = 3;
 const NL80211_ATTR_IFTYPE: u16 = 5;
 const NL80211_ATTR_SSID: u16 = 52;
+const NL80211_CMD_GET_SCAN: u8 = 32;
+pub const NL80211_CMD_NEW_SCAN_RESULTS: u8 = 34;
+const NL80211_ATTR_BSS: u16 = 47;
+const NL80211_BSS_INFORMATION_ELEMENTS: u16 = 6;
+const NL80211_BSS_STATUS: u16 = 9;
+const NL80211_BSS_BEACON_IES: u16 = 11;
+const NL80211_BSS_STATUS_ASSOCIATED: u32 = 1;
+/// 802.11 정보 요소의 SSID id.
+const WLAN_EID_SSID: u8 = 0;
 const NL80211_IFTYPE_STATION: u32 = 2;
 const NL80211_IFTYPE_P2P_CLIENT: u32 = 8;
 
@@ -225,6 +234,52 @@ pub fn parseInterface(payload: []const u8) ?WifiMsg {
     return .{ .index = index orelse return null, .iftype = iftype orelse return null, .ssid = ssid };
 }
 
+/// `NL80211_CMD_GET_SCAN` dump의 BSS 하나에서 쓰는 것(LK-M1 결과 3).
+pub const ScanBss = struct {
+    /// `NL80211_BSS_STATUS`가 ASSOCIATED다 — 이 인터페이스가 지금 붙어 있는 BSS.
+    associated: bool,
+    /// 정보 요소의 SSID. probe 응답의 요소를 먼저, 없으면 beacon의 요소를 본다. 길이 0(숨긴 망)이면 null.
+    ssid: ?[]const u8,
+};
+
+/// `NEW_SCAN_RESULTS` 메시지의 payload(genl 머리 포함) → BSS 하나. `NL80211_ATTR_BSS`가 없으면 null이다.
+pub fn parseScanBss(payload: []const u8) ?ScanBss {
+    if (payload.len < GENLMSGHDR_LEN) return null;
+    var it: AttrIter = .{ .buf = payload[GENLMSGHDR_LEN..] };
+    while (it.next()) |a| {
+        if (a.kind != NL80211_ATTR_BSS) continue;
+        var out: ScanBss = .{ .associated = false, .ssid = null };
+        var ies: ?[]const u8 = null;
+        var beacon: ?[]const u8 = null;
+        var inner: AttrIter = .{ .buf = a.data };
+        while (inner.next()) |b| switch (b.kind) {
+            NL80211_BSS_STATUS => out.associated = b.data.len == 4 and readU32(b.data) == NL80211_BSS_STATUS_ASSOCIATED,
+            NL80211_BSS_INFORMATION_ELEMENTS => ies = b.data,
+            NL80211_BSS_BEACON_IES => beacon = b.data,
+            else => {},
+        };
+        out.ssid = if (ies) |x| ieSsid(x) else null;
+        if (out.ssid == null) {
+            if (beacon) |x| out.ssid = ieSsid(x);
+        }
+        return out;
+    }
+    return null;
+}
+
+/// 정보 요소의 나열(id 1바이트 · 길이 1바이트 · 내용)에서 SSID 요소의 내용. 잘린 요소에서 멈춘다.
+pub fn ieSsid(ies: []const u8) ?[]const u8 {
+    var i: usize = 0;
+    while (i + 2 <= ies.len) {
+        const id = ies[i];
+        const len = ies[i + 1];
+        if (i + 2 + len > ies.len) return null;
+        if (id == WLAN_EID_SSID) return if (len == 0) null else ies[i + 2 ..][0..len];
+        i += 2 + len;
+    }
+    return null;
+}
+
 /// ctrl `GETFAMILY` 응답의 family id.
 pub fn parseFamilyId(payload: []const u8) ?u16 {
     if (payload.len < GENLMSGHDR_LEN) return null;
@@ -287,6 +342,15 @@ pub fn buildGetInterface(buf: *[REQUEST_MAX]u8, family: u16, seq: u32, index: u3
     putAttrHeader(buf[20..], 8, NL80211_ATTR_IFINDEX);
     std.mem.writeInt(u32, buf[24..28], index, native);
     return buf[0..len];
+}
+
+/// nl80211 `GET_SCAN` dump, ifindex 하나(LK-M1 결과 3). `GET_INTERFACE`와 같은 28바이트이고 명령과
+/// `NLM_F_DUMP`만 다르다.
+pub fn buildGetScan(buf: *[REQUEST_MAX]u8, family: u16, seq: u32, index: u32) []const u8 {
+    const msg = buildGetInterface(buf, family, seq, index);
+    std.mem.writeInt(u16, buf[6..8], NLM_F_REQUEST | NLM_F_DUMP, native);
+    buf[16] = NL80211_CMD_GET_SCAN;
+    return msg;
 }
 
 // ── SSID ─────────────────────────────────────────────────────────────
@@ -482,6 +546,33 @@ pub const Table = struct {
         }
         return it.kind != old_kind or !std.meta.eql(it.ssid_len, old_len) or !std.mem.eql(u8, &it.ssid, &old_ssid);
     }
+
+    /// station이 올라왔는데 `GET_INTERFACE`가 SSID를 안 줬나 — 그러면 `GET_SCAN`으로 묻는다(LK-M1 결과 3).
+    pub fn needsScan(self: *Table, index: u32) bool {
+        const it = self.find(index) orelse return false;
+        return it.kind == .station and it.up and it.ssid_len == null;
+    }
+
+    /// `GET_SCAN`의 associated BSS에서 읽은 SSID를 넣는다. station만 받는다.
+    pub fn applySsid(self: *Table, index: u32, raw: []const u8) SsidResult {
+        const it = self.find(index) orelse return .ignored;
+        if (it.kind != .station) return .ignored;
+        var buf: [SSID_MAX]u8 = @splat(0);
+        const clean = cleanSsid(raw, &buf);
+        if (it.ssid_len != null and it.ssid_len.? == clean.len and std.mem.eql(u8, &it.ssid, &buf)) return .same;
+        it.ssid = buf;
+        it.ssid_len = @intCast(clean.len);
+        return .changed;
+    }
+};
+
+pub const SsidResult = enum {
+    /// SSID가 바뀌었다.
+    changed,
+    /// 같은 SSID였다.
+    same,
+    /// station이 아니거나 모르는 인터페이스다.
+    ignored,
 };
 
 // ── 칸 ───────────────────────────────────────────────────────────────

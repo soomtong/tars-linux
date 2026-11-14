@@ -1,7 +1,7 @@
 # TARS Link Status — Design
 
 Date: 2026-11-14
-Status: 진행 중 — LK-M0(순수 층) 끝, 다음은 LK-M1.
+Status: 진행 중 — LK-M0 · M1 끝(칸이 뜬다), 다음은 LK-M2(판정과 닫기).
 
 접두사: LK. `NS`는 Nerd Symbols가 쓰고 있다(`docs/guides/completed.md`).
 
@@ -86,6 +86,7 @@ dhcpcd · sysfs에는 묻지 않는다. 이벤트가 없으면 terminal은 지�
 | 링크가 섰나 · 이름 · 장치 종류 · 가상인가 | rtnetlink `RTM_NEWLINK` · `RTM_DELLINK` |
 | IPv4 주소가 있나 | rtnetlink `RTM_NEWADDR` · `RTM_DELADDR`(AF_INET) |
 | 무선인가 · station인가 · SSID | nl80211 `NL80211_CMD_GET_INTERFACE`(ifindex로 하나) |
+| SSID(위가 안 줄 때) | nl80211 `NL80211_CMD_GET_SCAN` dump의 associated BSS — LK-M1 결과 3 |
 
 버린 길 셋.
 
@@ -116,7 +117,8 @@ sysfs의 `device` 링크 · `phy80211` 링크로도 같은 판정을 할 수 있
 - 둘 다 있으면 `LAN  tars-wl`. 사이는 왼쪽 문자열의 칸 사이와 같은 두 칸이다.
 - SSID는 바이트열이다(최대 32바이트). 유효한 UTF-8이고 제어 문자(C0 · DEL · C1)가 아닌 코드포인트는 그대로 두고, 그 밖의
   바이트는 하나마다 `?`로 바꾼다. 한글 SSID는 폭 2로 그려진다(`drawRun`이 이미 한다). 결과는 언제나 32바이트 이하라 자르지 않는다.
-- 붙었는데 SSID attribute가 없으면(확인 3의 `ssid_len` 0 — 드라이버가 모를 때) `WLAN`이다.
+- 붙었는데 SSID를 끝내 모르면 `WLAN`이다. `GET_INTERFACE`의 SSID는 AP가 Country 요소를 안 내면 비므로(LK-M1 결과 3)
+  `GET_SCAN`의 associated BSS에서 다시 찾고, 그래도 없으면(숨긴 망) `WLAN`이다.
 
 ### 결정 5 — 색은 둘이고 전부 새 상수다
 

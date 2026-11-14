@@ -1,6 +1,7 @@
 const std = @import("std");
 const logline = @import("logline.zig");
 const battery = @import("battery.zig");
+const link = @import("link.zig");
 const backlight = @import("backlight.zig");
 const clipboard = @import("clipboard.zig");
 const pacing = @import("pacing.zig");
@@ -118,6 +119,14 @@ const STATUS_BAT_LOW: u32 = 0x00E05040;
 /// 안 고치기로 했으므로 `COPY_TAIL`(= `GAP ++ COPY`)에서 길이를 얻는다 — 2로 다시 적으면
 /// `GAP`을 고친 사람이 이 파일을 안 고쳐도 컴파일이 통과한다.
 const STATUS_BAT_GAP: u32 = status.COPY_TAIL.len - status.COPY.len;
+
+/// 링크 칸의 색 둘(LK design 결정 5). IPv4 주소까지 받았으면 `STATUS_LINK`(하늘색), 링크만 서고 주소를
+/// 기다리면 `STATUS_LINK_WAIT`(흐린 회청색)다. 고르는 것은 `link.cell`이고 토막마다 따로다.
+///
+/// 둘 다 전용 색인 이유는 배터리 칸과 같다 — `dumpStatus`가 띠 전체에서 이 둘의 픽셀을 세어
+/// `status> link` 줄로 찍는다. 어느 기존 색과도 다르다(LK-M1 plan 확정 2).
+const STATUS_LINK: u32 = 0x0070B0E0;
+const STATUS_LINK_WAIT: u32 = 0x00586878;
 
 /// 패널 사이 구분선의 색(WP design 결정 2).
 ///
@@ -356,11 +365,44 @@ fn drawStatus(
     // 긴 왼쪽 줄은 약 50칸이라 닿을 일이 없지만, `setPixel`에 범위 검사가 없는 저장소에서
     // 겹침을 산수로 막는 자리는 있어야 한다. 겹쳐 그리면 두 칸의 픽셀이 섞여 `dumpStatus`의
     // 셈도 틀린다.
-    const cell = st.battery orelse return;
-    if (st.cols < battery.CELL_LEN) return;
-    const bat_col = @as(u32, st.cols) - battery.CELL_LEN;
-    if (col + STATUS_BAT_GAP > bat_col) return;
-    _ = try drawRun(fb, cache, &cell.text, y, batteryColor(cell.class), bat_col, fb.width);
+    //
+    // 링크 칸(LK-M1)의 오른쪽 끝이 여기서 정해진다 — 배터리 칸을 그렸으면 그 왼쪽 `STATUS_BAT_GAP`,
+    // 배터리가 없으면 격자 오른쪽 끝이다. 배터리가 있는데 못 그렸으면 링크 칸도 안 그린다(LK-M1 plan 확정 3).
+    var right_end: u32 = st.cols;
+    if (st.battery) |cell| {
+        if (st.cols < battery.CELL_LEN) return;
+        const bat_col = @as(u32, st.cols) - battery.CELL_LEN;
+        if (col + STATUS_BAT_GAP > bat_col) return;
+        _ = try drawRun(fb, cache, &cell.text, y, batteryColor(cell.class), bat_col, fb.width);
+        right_end = bat_col - STATUS_BAT_GAP;
+    }
+
+    // 링크 칸(LK design 결정 4 · 6). 오른쪽 끝을 맞추므로 폭을 먼저 잰다 — 한글 SSID는 바이트 수와
+    // 칸 수가 다르다. 토막 사이는 `link.GAP`(ASCII 공백)이라 바이트 수가 곧 칸 수다.
+    const lc = st.link orelse return;
+    const width = try runWidth(cache, lc.bytes());
+    if (width > right_end) return;
+    const link_col = right_end - width;
+    if (col + STATUS_BAT_GAP > link_col) return;
+    var at = link_col;
+    for (lc.pieces, 0..) |p, i| {
+        const piece = p orelse continue;
+        if (i > 0) at += link.GAP.len;
+        at = try drawRun(fb, cache, lc.pieceText(piece), y, linkColor(piece.class), at, fb.width);
+    }
+}
+
+/// `drawRun`이 `text`를 그리면 몇 칸을 전진하는가(LK-M1). 같은 글리프 폭 셈이다 — 어긋나면 오른쪽
+/// 끝을 맞춘 칸이 배터리 칸과 겹치거나 떨어진다.
+fn runWidth(cache: *font.Cache, text: []const u8) !u32 {
+    var view = std.unicode.Utf8View.init(text) catch return 0;
+    var it = view.iterator();
+    var cols: u32 = 0;
+    while (it.nextCodepoint()) |cp| {
+        const glyph = try cache.find(cp);
+        cols += @max(1, glyph.cell_width / CELL_W);
+    }
+    return cols;
 }
 
 /// 상태 줄의 한 토막을 `start_col`부터 한 색으로 그리고, 다음 칸의 col을
@@ -737,6 +779,9 @@ const Status = struct {
     /// `text`에 안 들어 있다. 왼쪽 문자열과 따로 오른쪽 끝에 그리므로 `status.statusText`와
     /// `status> text=`가 BS 전과 같다(design 결정 6).
     battery: ?BatteryCell,
+    /// 링크 칸(LK-M1). 붙은 것이 없으면 null이고 아무것도 안 그린다(LK design 결정 1). 배터리 칸과 같이
+    /// `text` 밖이다 — `status> text=`가 LK 전과 같다(LK design 결정 6).
+    link: ?link.Cell,
     /// 전체 화면이라 띠를 그리지 않는다(FU design 결정 1 · 6). 띠를 지우는 것까지는 하고 글자를 안 쓴다 —
     /// 실제 경로(`paintBand`)와 verify의 그림자(`renderOverlay`)가 함께 지나는 `renderStatusBand` 한 곳에서 본다.
     /// `status>` 글자 줄은 그대로 찍는다(상태이지 화면이 아니다).
@@ -747,9 +792,10 @@ const Status = struct {
 /// 그릴지(`paintBand`의 `want`), `dumpStatus`가 `status>` 줄을 찍을지. 그전에는 `dumpStatus`만 네
 /// 필드로 메모했고, 찍는 때와 그리는 때가 같은 조건("지난번과 다르다")이라 하나로 합쳤다.
 ///
-/// 비교하는 것은 셋이다. `text` 바이트(`copy` · `workspace` · `dict`는 이 안에 있다), `caps`(글자가
+/// 비교하는 것은 넷이다. `text` 바이트(`copy` · `workspace` · `dict`는 이 안에 있다), `caps`(글자가
 /// 아니라 `CAPS` 칸의 색 — IS-M1이 `text`만 보다가 겪은 구멍), `battery`(칸 전체 — 잔량이 그대로인
-/// 채 어댑터를 꽂으면 글자는 그대로이고 갈래만 바뀐다, BS-M1). `rows` · `cols`는 부팅 중 안 바뀐다.
+/// 채 어댑터를 꽂으면 글자는 그대로이고 갈래만 바뀐다, BS-M1), `link`(칸 전체 — DHCP가 끝나면 글자는
+/// 그대로이고 색만 바뀐다, LK-M1). `rows` · `cols`는 부팅 중 안 바뀐다.
 ///
 /// `len`이 `?usize`인 것에 뜻이 있다 — 0을 초기값으로 쓰면 "빈 줄을 봤다"와 "아직 아무것도 안
 /// 봤다"가 안 갈린다. 첫 프레임은 반드시 `changed`다 — 기준선이 없으면 게이트가 "부팅 직후의
@@ -759,11 +805,12 @@ const StatusMemo = struct {
     len: ?usize = null,
     caps: bool = false,
     battery: ?BatteryCell = null,
+    link: ?link.Cell = null,
 
     fn changed(self: *const StatusMemo, st: Status) bool {
         const n = self.len orelse return true;
         return !std.mem.eql(u8, self.text[0..n], st.text) or self.caps != st.caps or
-            !std.meta.eql(self.battery, st.battery);
+            !std.meta.eql(self.battery, st.battery) or !std.meta.eql(self.link, st.link);
     }
 
     fn remember(self: *StatusMemo, st: Status) void {
@@ -771,6 +818,7 @@ const StatusMemo = struct {
         self.len = st.text.len;
         self.caps = st.caps;
         self.battery = st.battery;
+        self.link = st.link;
     }
 };
 
@@ -1327,6 +1375,7 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
         logline.print("terminal: status> copy ink=0 (fullscreen)\n", .{});
         logline.print("terminal: status> dict ink=0 (fullscreen)\n", .{});
         dumpBatteryInk(st.battery, 0, 0, 0, " (fullscreen)");
+        dumpLinkInk(st.link, 0, 0, " (fullscreen)");
         return;
     }
     const grid_bottom = grid_origin.y + @as(u32, st.rows) * ROW_HEIGHT;
@@ -1336,6 +1385,7 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
         logline.print("terminal: status> copy ink=0 (no room)\n", .{});
         logline.print("terminal: status> dict ink=0 (no room)\n", .{});
         dumpBatteryInk(st.battery, 0, 0, 0, " (no room)");
+        dumpLinkInk(st.link, 0, 0, " (no room)");
         return;
     }
     const y = grid_bottom + (fb.height - grid_bottom - ROW_HEIGHT) / 2;
@@ -1351,6 +1401,9 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
     var bat_norm: usize = 0;
     var bat_plug: usize = 0;
     var bat_low: usize = 0;
+    // 링크 칸의 색 둘(LK-M1). 배터리 칸과 같은 이유로 띠 전체를 센다.
+    var link_ready: usize = 0;
+    var link_wait: usize = 0;
     var row: u32 = 0;
     while (row < ROW_HEIGHT) : (row += 1) {
         var col: u32 = 0;
@@ -1364,6 +1417,8 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
             if (px == STATUS_BAT) bat_norm += 1;
             if (px == STATUS_BAT_PLUG) bat_plug += 1;
             if (px == STATUS_BAT_LOW) bat_low += 1;
+            if (px == STATUS_LINK) link_ready += 1;
+            if (px == STATUS_LINK_WAIT) link_wait += 1;
         }
     }
     logline.print("terminal: status> ink fg={d}\n", .{fg});
@@ -1382,6 +1437,8 @@ fn dumpStatus(fb: drm.Framebuffer, st: Status, changed: bool) void {
     // 배터리 칸(BS-M1, design 결정 10). 배터리가 없어도 찍는다 — `cell=none`과 세 수 0이
     // "칸이 없다"의 판정이다(battery 체인 검사 A1 · A5).
     dumpBatteryInk(st.battery, bat_norm, bat_plug, bat_low, "");
+    // 링크 칸(LK design 결정 9). 칸이 없어도 찍는다 — `cell=none`과 두 수 0이 "칸이 없다"의 판정이다.
+    dumpLinkInk(st.link, link_ready, link_wait, "");
 }
 
 /// 매치 하이라이트가 이 프레임에 무엇을 칠했는지(design 결정 5).
@@ -2344,6 +2401,300 @@ fn tickBattery(io: std.Io, bat: *BatteryState, now_ms: i64) bool {
     return !std.meta.eql(old_cell, bat.cell);
 }
 
+// ── 링크(LK-M1) ───────────────────────────────────────────────────────
+//
+// 소켓을 열고 보내고 받고 로그를 찍는 쪽이다. 메시지를 읽고 짓는 것과 표 · 칸은 전부 `link.zig`에
+// 있다(LK design 결정 7). 소켓은 셋이다 — 이벤트(poll의 맨 끝 칸), 훑기마다 여닫는 dump, nl80211
+// 질의(LK-M1 plan 확정 4). 앞의 하나만 막지 않고, 뒤의 둘은 1초의 `SO_RCVTIMEO`로 막는다.
+
+const LinkState = struct {
+    table: link.Table = .{},
+    /// 지금 그릴 칸. `link.cell(&table)`을 표가 바뀔 때마다 다시 지은 것이다.
+    cell: ?link.Cell = null,
+    /// `RTMGRP_LINK | RTMGRP_IPV4_IFADDR`에 bind한 소켓. 못 열면 -1이고 칸은 처음 훑기의 값에 머문다.
+    event_fd: c_int = -1,
+    /// nl80211 질의 소켓. 못 열었거나 family가 없으면(무선 스택이 없다) -1이고 모두 유선으로 본다.
+    genl_fd: c_int = -1,
+    family: ?u16 = null,
+    /// 요청마다 하나씩 올린다. 응답을 이것으로 맞춘다(LK-M1 plan 확정 9).
+    seq: u32 = 0,
+};
+
+/// rtnetlink를 받는 버퍼(LK-M1 plan 확정 7). `link.LinkMsg.name`이 이 안을 가리키므로 메시지 하나의
+/// 처리(`handleRoute`)가 끝나기 전에 다시 받지 않는다 — nl80211 질의는 `genl_buf`를 따로 쓴다.
+var link_buf: [32 * 1024]u8 = undefined;
+/// `GET_SCAN` dump는 BSS마다 정보 요소를 담아 실제 공간에서는 수십 KiB가 된다. netlink dump는 받는 쪽이
+/// 마지막에 준 길이(`max_recvmsg_len`)에 맞춰 메시지를 묶으므로 이 크기가 한 번에 받는 양이다.
+var genl_buf: [32 * 1024]u8 = undefined;
+
+/// netlink 소켓 하나. `groups`가 0이 아니면 그 multicast에 bind한다. 막는 소켓은 1초 뒤 `recv`가
+/// 실패한다 — 커널이 바로 답하는 질의라 그보다 오래 걸리면 답이 안 오는 것이다.
+fn openNetlink(proto: u32, groups: u32, nonblock: bool, what: []const u8) c_int {
+    const linux = std.os.linux;
+    const flags: u32 = linux.SOCK.RAW | linux.SOCK.CLOEXEC | (if (nonblock) @as(u32, linux.SOCK.NONBLOCK) else 0);
+    const fd = socket(linux.AF.NETLINK, flags, proto);
+    if (fd < 0) {
+        logline.print("terminal: link> open {s} failed error={s}\n", .{ what, @tagName(std.c.errno(fd)) });
+        return -1;
+    }
+    const addr: linux.sockaddr.nl = .{ .pid = 0, .groups = groups };
+    const rc = std.c.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.nl));
+    if (rc < 0) {
+        logline.print("terminal: link> open {s} failed error={s}\n", .{ what, @tagName(std.c.errno(rc)) });
+        _ = std.c.close(fd);
+        return -1;
+    }
+    if (!nonblock) {
+        const tv: extern struct { sec: c_long, usec: c_long } = .{ .sec = 1, .usec = 0 };
+        _ = std.c.setsockopt(fd, linux.SOL.SOCKET, linux.SO.RCVTIMEO, &tv, @sizeOf(@TypeOf(tv)));
+    }
+    return fd;
+}
+
+fn sendAll(fd: c_int, msg: []const u8) bool {
+    return std.c.send(fd, msg.ptr, msg.len, 0) == @as(isize, @intCast(msg.len));
+}
+
+/// ctrl `GETFAMILY "nl80211"`. 무선 스택이 없는 커널이면 `NLMSG_ERROR`가 와서 null이다.
+fn queryFamily(st: *LinkState) ?u16 {
+    st.seq +%= 1;
+    const seq = st.seq;
+    var req: [link.REQUEST_MAX]u8 = undefined;
+    if (!sendAll(st.genl_fd, link.buildGetFamily(&req, seq))) return null;
+    while (true) {
+        const n = std.c.recv(st.genl_fd, &genl_buf, genl_buf.len, 0);
+        if (n <= 0) return null;
+        var it: link.MsgIter = .{ .buf = genl_buf[0..@intCast(n)] };
+        while (it.next()) |m| {
+            if (m.seq != seq) continue;
+            if (m.kind == link.NLMSG_ERROR) return null;
+            if (m.kind == link.GENL_ID_CTRL) return link.parseFamilyId(m.payload);
+        }
+    }
+}
+
+/// nl80211에 ifindex 하나를 묻고 답을 표에 넣는다(LK design 결정 3의 3). 에러가 오면 무선이 아니다.
+/// 1초 안에 답이 없으면 표를 안 건드린다 — 그 인터페이스는 `unknown`으로 남아 다음 `RTM_NEWLINK`에
+/// 다시 묻는다(LK-M1 plan 확정 9).
+fn askWifi(st: *LinkState, index: u32) void {
+    const family = st.family orelse {
+        _ = st.table.applyWifi(index, null);
+        return;
+    };
+    st.seq +%= 1;
+    const seq = st.seq;
+    var req: [link.REQUEST_MAX]u8 = undefined;
+    if (!sendAll(st.genl_fd, link.buildGetInterface(&req, family, seq, index))) {
+        logline.print("terminal: link> nl80211 send failed index={d}\n", .{index});
+        return;
+    }
+    while (true) {
+        const n = std.c.recv(st.genl_fd, &genl_buf, genl_buf.len, 0);
+        if (n <= 0) {
+            logline.print("terminal: link> nl80211 no answer index={d}\n", .{index});
+            return;
+        }
+        var it: link.MsgIter = .{ .buf = genl_buf[0..@intCast(n)] };
+        while (it.next()) |m| {
+            // 시간을 넘겨 늦게 온 옛 질의의 답은 건너뛴다.
+            if (m.seq != seq) continue;
+            if (m.kind == link.NLMSG_ERROR) {
+                logline.print("terminal: link> nl80211 index={d} error={d}\n", .{ index, link.parseError(m.payload) orelse 0 });
+                _ = st.table.applyWifi(index, null);
+                return;
+            }
+            if (m.kind == family) {
+                // 답 한 줄(LK-M1 결과 2). SSID는 길이만 찍는다 — 글자는 `link> state`가 정리해서 찍는다.
+                const w = link.parseInterface(m.payload);
+                if (w) |a| {
+                    if (a.ssid) |raw| {
+                        logline.print("terminal: link> nl80211 index={d} iftype={d} ssid_len={d}\n", .{ index, a.iftype, raw.len });
+                    } else {
+                        logline.print("terminal: link> nl80211 index={d} iftype={d} ssid=none\n", .{ index, a.iftype });
+                    }
+                } else {
+                    logline.print("terminal: link> nl80211 index={d} unreadable len={d}\n", .{ index, m.payload.len });
+                }
+                _ = st.table.applyWifi(index, w);
+                return;
+            }
+        }
+    }
+}
+
+/// station의 SSID를 `GET_SCAN` dump에서 찾는다(LK-M1 결과 3). `GET_INTERFACE`의 SSID는 커널이 연결 결과를
+/// 처리할 때 채우는데, AP가 Country 요소를 안 내면 그 함수가 SSID를 채우기 전에 돌아간다
+/// (`net/wireless/sme.c`의 `__cfg80211_connect_result`). associated 표시는 그보다 앞에서 선다 — `iw dev … link`가
+/// 같은 길로 SSID를 얻는다. 숨긴 망이면 SSID가 끝내 없고 칸은 `WLAN`이다.
+fn askScan(st: *LinkState, index: u32) void {
+    const family = st.family orelse return;
+    st.seq +%= 1;
+    const seq = st.seq;
+    var req: [link.REQUEST_MAX]u8 = undefined;
+    if (!sendAll(st.genl_fd, link.buildGetScan(&req, family, seq, index))) {
+        logline.print("terminal: link> nl80211 scan send failed index={d}\n", .{index});
+        return;
+    }
+    var bss: usize = 0;
+    var found: ?link.SsidResult = null;
+    while (true) {
+        const n = std.c.recv(st.genl_fd, &genl_buf, genl_buf.len, 0);
+        if (n <= 0) {
+            logline.print("terminal: link> nl80211 scan no answer index={d}\n", .{index});
+            return;
+        }
+        var it: link.MsgIter = .{ .buf = genl_buf[0..@intCast(n)] };
+        while (it.next()) |m| {
+            if (m.seq != seq) continue;
+            switch (m.kind) {
+                link.NLMSG_DONE => {
+                    logline.print("terminal: link> nl80211 scan index={d} bss={d} associated={s}\n", .{
+                        index, bss, if (found) |f| @tagName(f) else "none",
+                    });
+                    return;
+                },
+                link.NLMSG_ERROR => {
+                    logline.print("terminal: link> nl80211 scan index={d} error={d}\n", .{ index, link.parseError(m.payload) orelse 0 });
+                    return;
+                },
+                else => if (m.kind == family) {
+                    const b = link.parseScanBss(m.payload) orelse continue;
+                    bss += 1;
+                    if (!b.associated or found != null) continue;
+                    // 숨긴 망이면 SSID 요소가 비어 있다 — 표를 안 건드린다.
+                    found = if (b.ssid) |raw| st.table.applySsid(index, raw) else .ignored;
+                },
+            }
+        }
+    }
+}
+
+/// `link> state` 줄을 찍을지 가르는 값. 이름 · 주소의 값은 안 본다 — 칸에 보이는 것만이다.
+const LinkSnap = struct {
+    kind: link.Kind,
+    up: bool,
+    v4: u8,
+    ssid_len: ?u8,
+    ssid: [link.SSID_MAX]u8,
+
+    fn of(it: ?*const link.Iface) ?LinkSnap {
+        const i = it orelse return null;
+        return .{ .kind = i.kind, .up = i.up, .v4 = i.n_addrs, .ssid_len = i.ssid_len, .ssid = i.ssid };
+    }
+};
+
+/// 표의 한 인터페이스가 바뀐 뒤의 로그(LK design 결정 9). `before`는 바뀌기 전, 처음 봤으면 null이다.
+/// `link> if`는 판정이 처음 서거나 바뀔 때(`unknown` → `wired`, station → AP), `link> state`는 후보의
+/// (up, 주소 수, SSID)가 바뀔 때만이다 — 가상 · 비ether는 첫 줄 하나로 끝난다.
+fn logLink(before: ?LinkSnap, it: *const link.Iface) void {
+    const now = LinkSnap.of(it).?;
+    if (before == null or before.?.kind != now.kind) {
+        logline.print("terminal: link> if {s} index={d} kind={s}\n", .{ it.nameText(), it.index, link.kindName(it.kind) });
+    }
+    switch (it.kind) {
+        .wired, .station => {},
+        else => return,
+    }
+    if (before) |b| {
+        if (b.up == now.up and b.v4 == now.v4 and std.meta.eql(b.ssid_len, now.ssid_len) and
+            std.mem.eql(u8, &b.ssid, &now.ssid)) return;
+    }
+    logline.print("terminal: link> state {s} up={d} v4={d} ssid={s}\n", .{
+        it.nameText(), @intFromBool(it.up), it.n_addrs, it.ssidText() orelse "-",
+    });
+}
+
+/// rtnetlink 메시지 하나를 표에 넣는다. dump의 답이든 multicast 이벤트든 같은 길이다(LK design 결정 8의 2).
+fn handleRoute(st: *LinkState, m: link.Msg) void {
+    switch (m.kind) {
+        link.RTM_NEWLINK => {
+            const lm = link.parseLink(m.payload) orelse return;
+            const before = LinkSnap.of(st.table.find(lm.index));
+            const r = st.table.applyLink(lm);
+            if (r.full) {
+                logline.print("terminal: link> table full, dropped {s} index={d}\n", .{ lm.name, lm.index });
+                return;
+            }
+            if (r.ask) {
+                askWifi(st, lm.index);
+                if (st.table.needsScan(lm.index)) askScan(st, lm.index);
+            }
+            logLink(before, st.table.find(lm.index) orelse return);
+        },
+        link.RTM_DELLINK => {
+            const lm = link.parseLink(m.payload) orelse return;
+            if (st.table.removeLink(lm.index)) logline.print("terminal: link> gone {s} index={d}\n", .{ lm.name, lm.index });
+        },
+        link.RTM_NEWADDR, link.RTM_DELADDR => {
+            const am = link.parseAddr(m.payload) orelse return;
+            const before = LinkSnap.of(st.table.find(am.index));
+            if (!st.table.applyAddr(am, m.kind == link.RTM_NEWADDR)) return;
+            logLink(before, st.table.find(am.index) orelse return);
+        },
+        else => {},
+    }
+}
+
+/// dump 하나(`RTM_GETLINK` · `RTM_GETADDR`)를 `NLMSG_DONE`까지 받는다. 시간 초과 · 에러면 false다.
+/// 소켓을 그때마다 연다 — 한 소켓에서 dump 둘을 겹치면 `EBUSY`이고(LK design 결정 8의 2), 훑기는
+/// 부팅과 `ENOBUFS` 때뿐이라 열어 둘 이유가 없다.
+fn dumpRoute(st: *LinkState, kind: u16) bool {
+    const fd = openNetlink(std.os.linux.NETLINK.ROUTE, 0, false, "dump");
+    if (fd < 0) return false;
+    defer _ = std.c.close(fd);
+    st.seq +%= 1;
+    const seq = st.seq;
+    var req: [link.REQUEST_MAX]u8 = undefined;
+    if (!sendAll(fd, link.buildDump(&req, kind, seq))) return false;
+    while (true) {
+        const n = std.c.recv(fd, &link_buf, link_buf.len, 0);
+        if (n <= 0) return false;
+        var it: link.MsgIter = .{ .buf = link_buf[0..@intCast(n)] };
+        while (it.next()) |m| {
+            if (m.seq != seq) continue;
+            switch (m.kind) {
+                link.NLMSG_DONE => return true,
+                link.NLMSG_ERROR => return false,
+                else => handleRoute(st, m),
+            }
+        }
+    }
+}
+
+/// 표를 비우고 처음부터 채운다(LK design 결정 8의 2 · 4). 링크가 먼저다 — 주소는 표에 있는 인터페이스에만
+/// 붙는다.
+fn scanLink(st: *LinkState) void {
+    st.table.clear();
+    const ok = dumpRoute(st, link.RTM_GETLINK) and dumpRoute(st, link.RTM_GETADDR);
+    logline.print("terminal: link> scan links={d}{s}\n", .{ st.table.len, if (ok) "" else " (incomplete)" });
+    st.cell = link.cell(&st.table);
+}
+
+/// 이벤트 소켓을 비운다. 칸이 바뀌었으면 true다. read는 열여섯 번까지 — 남은 것은 다음 poll이 다시
+/// 알린다(`drainPointer`와 같은 상한). `ENOBUFS`(커널이 이벤트를 버렸다)면 다 읽은 뒤 다시 훑는다.
+fn drainLink(st: *LinkState) bool {
+    if (st.event_fd < 0) return false;
+    const old = st.cell;
+    var rescan = false;
+    for (0..16) |_| {
+        const n = std.c.read(st.event_fd, &link_buf, link_buf.len);
+        if (n < 0) {
+            if (std.c.errno(n) != .NOBUFS) break; // EAGAIN — 다 읽었다
+            rescan = true;
+            continue;
+        }
+        if (n == 0) break;
+        var it: link.MsgIter = .{ .buf = link_buf[0..@intCast(n)] };
+        while (it.next()) |m| handleRoute(st, m);
+    }
+    if (rescan) {
+        logline.print("terminal: link> events dropped (ENOBUFS), rescanning\n", .{});
+        scanLink(st);
+    }
+    st.cell = link.cell(&st.table);
+    return !std.meta.eql(old, st.cell);
+}
+
 // ── 밝기(LP-M2) ───────────────────────────────────────────────────────
 
 /// 백라이트 장치가 모이는 디렉터리(LP design 결정 5). 항목은 장치 디렉터리로 가는 심볼릭 링크다
@@ -2467,6 +2818,24 @@ fn dumpBatteryInk(cell: ?BatteryCell, norm: usize, plug: usize, low: usize, tail
         logline.print("terminal: status> battery cell=\"{s}\" ink norm={d} plug={d} low={d}{s}\n", .{ &b.text, norm, plug, low, tail });
     } else {
         logline.print("terminal: status> battery cell=none ink norm={d} plug={d} low={d}{s}\n", .{ norm, plug, low, tail });
+    }
+}
+
+/// 토막의 갈래 → 색(LK design 결정 5).
+fn linkColor(cls: link.Class) u32 {
+    return switch (cls) {
+        .ready => STATUS_LINK,
+        .wait => STATUS_LINK_WAIT,
+    };
+}
+
+/// `status> link` 줄(LK design 결정 9). `dumpBatteryInk`와 같은 모양이다 — 색 둘을 한 줄에 함께 찍어
+/// "안 그렸다"와 "다른 색으로 그렸다"를 가른다. SSID에 공백이 있을 수 있어 `cell=`을 따옴표로 감싼다.
+fn dumpLinkInk(cell: ?link.Cell, ready: usize, wait: usize, tail: []const u8) void {
+    if (cell) |l| {
+        logline.print("terminal: status> link cell=\"{s}\" ink ready={d} wait={d}{s}\n", .{ l.bytes(), ready, wait, tail });
+    } else {
+        logline.print("terminal: status> link cell=none ink ready={d} wait={d}{s}\n", .{ ready, wait, tail });
     }
 }
 
@@ -3553,6 +3922,8 @@ const App = struct {
     /// 루프의 밀리초 시계가 이것 하나다 — 프레임 하한(RS-M2)도 이 원점을 쓴다.
     battery_clock: std.Io.Timestamp,
     battery_state: BatteryState = .{},
+    /// 링크 칸(LK-M1). 소켓 셋과 표 · 칸이다.
+    link_state: LinkState = .{},
 
     // ── 밝기 ───────────────────────────────────────────────────────────
     /// 고른 백라이트(LP-M2). 첫 밝기 키에서 훑는다.
@@ -3597,7 +3968,7 @@ const App = struct {
     /// 워크스페이스의 PTY도 읽어야 한다 — 안 읽으면 그 셸이 출력 버퍼에 막혀
     /// 멈춘다.
     ///
-    /// 크기는 상한(1 + 8 + 8 + 9 × 8 + 2 + 2)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
+    /// 크기는 상한(1 + 8 + 8 + 9 × 8 + 2 + 2 + 1)으로 고정하고 쓴 길이만 넘긴다. 패널 수와
     /// 장치 수가 바뀌므로 매 바퀴 다시 짓는다 — 82칸을 채우는 비용은 없고,
     /// "언제 고쳐 쓰는가"를 따로 들 필요가 없어진다.
     ///
@@ -3607,8 +3978,9 @@ const App = struct {
     /// 든다(KH design 위험 4). 숫자로 쓰는 자리는 `fds[0]`(uevent)과 키보드 구간의 머리 `1`뿐이다.
     ///
     /// 그 뒤 두 칸이 받아쓰기의 표준 출력 · 표준 에러다(VD-M1). 자식이 없으면 -1이다.
-    /// 맨 뒤 두 칸이 화면 양보의 listen socket · 손님이다(DY-M0). 없으면 -1이다.
-    fds: [1 + MAX_KEYBOARDS + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2 + 2]c.struct_pollfd = undefined,
+    /// 그 뒤 두 칸이 화면 양보의 listen socket · 손님이다(DY-M0). 없으면 -1이다.
+    /// 맨 뒤 한 칸이 링크의 rtnetlink 이벤트 소켓이다(LK-M1). 없으면 -1이다.
+    fds: [1 + MAX_KEYBOARDS + pointer.MAX_DEVICES + MAX_WORKSPACES * layout.MAX_LEAVES + 2 + 2 + 1]c.struct_pollfd = undefined,
     /// `fds[1 + k]`가 어느 키보드 칸의 것인지.
     fd_kbds: [MAX_KEYBOARDS]usize = undefined,
     /// `fds[kbd_end + k]`가 어느 포인터 칸의 것인지.
@@ -3666,6 +4038,7 @@ const App = struct {
         try self.spawnFirst(a);
         self.openInputs();
         self.openBattery();
+        self.openLink();
         self.yield_listen = yield.listen(screen_args.VIDEO_GID);
         // 양보 중에 앞의 terminal이 죽었으면 키보드가 손님 것으로 남아 있다(DY design 결정 8a · 11).
         yield.takeInputs();
@@ -3992,6 +4365,23 @@ const App = struct {
         _ = scanBattery(self.io, &self.battery_state, 0);
     }
 
+    /// 준비 6. 링크(LK-M1, design 결정 8). 이벤트 소켓을 먼저 열고 그다음 훑는다 — 배터리 · 포인터와 같은
+    /// 순서다. 처음 훑기는 다시 그리기를 안 켠다(`openBattery`와 같은 이유).
+    fn openLink(self: *App) void {
+        const st = &self.link_state;
+        st.event_fd = openNetlink(std.os.linux.NETLINK.ROUTE, link.RTMGRP_LINK | link.RTMGRP_IPV4_IFADDR, true, "events");
+        st.genl_fd = openNetlink(std.os.linux.NETLINK.GENERIC, 0, false, "nl80211");
+        if (st.genl_fd >= 0) st.family = queryFamily(st);
+        if (st.family) |f| {
+            logline.print("terminal: link> nl80211 family={d}\n", .{f});
+        } else {
+            logline.print("terminal: link> nl80211 none, every link counts as wired\n", .{});
+            if (st.genl_fd >= 0) _ = std.c.close(st.genl_fd);
+            st.genl_fd = -1;
+        }
+        scanLink(st);
+    }
+
     /// 정리. MS 전 `main`의 `defer` 여섯을 등록의 역순 그대로 — 받아쓰기 자식 →
     /// 버퍼 둘 → 패널 → 공유 클립보드 → 폰트 캐시.
     fn close(self: *App) void {
@@ -4054,7 +4444,8 @@ const App = struct {
         self.fds[self.nfds + 1] = .{ .fd = self.dict.err_fd, .events = c.POLLIN, .revents = 0 };
         self.fds[self.nfds + 2] = .{ .fd = self.yield_listen, .events = c.POLLIN, .revents = 0 };
         self.fds[self.nfds + 3] = .{ .fd = self.yield_state.guest_fd, .events = c.POLLIN, .revents = 0 };
-        self.nfds += 4;
+        self.fds[self.nfds + 4] = .{ .fd = self.link_state.event_fd, .events = c.POLLIN, .revents = 0 };
+        self.nfds += 5;
     }
 
     /// 바퀴 2. 키보드가 깨웠을 때. 키 → PTY 바이트 · 스크롤 · copy · 조합 글자 · 패널 ·
@@ -4540,6 +4931,15 @@ const App = struct {
         if (changed) self.needs_redraw = true;
     }
 
+    /// 바퀴 4b. 링크(LK-M1, design 결정 8). 이벤트 소켓에 무언가 왔으면 비우고, 칸이 바뀌었으면 다시
+    /// 그린다. `pollBattery`와 같이 `decideFrame`보다 앞이다 — 이벤트만으로 깬 바퀴도 그려야 한다.
+    /// `POLLERR`도 여기로 온다. 커널이 이벤트를 버리면 소켓에 `ENOBUFS`가 서고 poll은 그것을 `POLLERR`로
+    /// 알린다 — `drainLink`의 read가 그 에러를 받아 다시 훑는다.
+    fn readLink(self: *App) void {
+        if (self.fds[self.pty_end + 4].revents == 0) return;
+        if (drainLink(&self.link_state)) self.needs_redraw = true;
+    }
+
     /// 바퀴 5. 누름 · 끎 · 뗌 · 휠(PD-M2). 판단은 `pointer.Gesture`, 실행은
     /// `PointerWire`다(design 결정 3).
     ///
@@ -4941,6 +5341,8 @@ const App = struct {
             .cols = self.cols,
             // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
             .battery = self.battery_state.cell,
+            // 링크 절이 고친 칸(LK-M1).
+            .link = self.link_state.cell,
             .hidden = self.fullscreen,
         };
         // 상태 줄이 바뀌었는가(SB-M0, design 결정 2). `full`과 무관하게 바뀌었으면 기억한다 — 메모는
@@ -5219,6 +5621,7 @@ const App = struct {
         const pointers = self.readPointers();
         // 배터리는 `decideFrame`보다 앞 — 그래야 uevent · timeout만으로 깬 바퀴도 그린다(검사 A3).
         self.pollBattery(pointers.supply_seen);
+        self.readLink();
         // 양보 중의 누름 · 끎 · 휠은 앱의 것이다(DY-M1) — 셸의 선택 · 붙여넣기 · 스크롤 · 마우스 보고가 되면 안 된다.
         // 장치는 위에서 읽었다(안 읽으면 POLLIN이 남아 poll이 헛돈다). 좌표는 따라가고 화살표는 복귀 뒤 그 자리에 뜬다.
         if (!self.yield_state.holdsInput()) try self.wirePointer(&pointers.round);

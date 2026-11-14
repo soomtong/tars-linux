@@ -149,6 +149,20 @@ fn wifi(index: u32, iftype: u32, ssid: ?[]const u8) link.WifiMsg {
     return .{ .index = index, .iftype = iftype, .ssid = ssid };
 }
 
+/// `NEW_SCAN_RESULTS` 하나. `status`가 null이면 BSS_STATUS를 안 넣는다(붙지 않은 BSS).
+fn scanMsg(b: *Builder, status: ?u32, ies: ?[]const u8, beacon: ?[]const u8) void {
+    b.begin(30, 0);
+    b.raw(&.{ link.NL80211_CMD_NEW_SCAN_RESULTS, 1, 0, 0 });
+    b.attr(3, &u32le(3));
+    const at = b.nestBegin(47);
+    b.attr(1, &.{ 2, 0, 0, 0, 0, 1 }); // NL80211_BSS_BSSID — 안 읽는다
+    if (ies) |x| b.attr(6, x);
+    if (beacon) |x| b.attr(11, x);
+    if (status) |st| b.attr(9, &u32le(st));
+    b.nestEnd(at);
+    b.end();
+}
+
 const STATION = 2;
 const AP = 3;
 
@@ -487,9 +501,65 @@ pub fn main() !void {
         check(std.mem.eql(u8, t.find(2).?.nameText(), "averyveryverylo"), "20: name cut at 15 bytes", .{});
     }
 
+    // 21. GET_SCAN 요청의 바이트 — GET_INTERFACE와 명령 · flags만 다르다.
+    {
+        var buf: [link.REQUEST_MAX]u8 = undefined;
+        const gs = link.buildGetScan(&buf, 0x22, 5, 3);
+        const want = [_]u8{ 28, 0, 0, 0, 0x22, 0, 0x01, 0x03, 5, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 8, 0, 3, 0, 3, 0, 0, 0 };
+        check(std.mem.eql(u8, gs, &want), "21: GET_SCAN = {any}", .{gs});
+    }
+
+    // 22. parseScanBss — associated BSS의 probe 요소, beacon 요소만, 붙지 않은 BSS, 숨긴 망, 잘린 요소.
+    {
+        // 요소: SUPP_RATES(1)가 앞, 그 뒤 SSID(0) "tars-wl".
+        const ies = [_]u8{ 1, 2, 0x82, 0x84, 0, 7 } ++ "tars-wl".*;
+        var b: Builder = .{};
+        scanMsg(&b, 1, &ies, null);
+        const a = link.parseScanBss(b.payload());
+        check(a != null and a.?.associated and std.mem.eql(u8, a.?.ssid.?, "tars-wl"), "22: associated bss with ies", .{});
+
+        b = .{};
+        scanMsg(&b, null, null, &([_]u8{ 0, 4 } ++ "home".*));
+        const c = link.parseScanBss(b.payload());
+        check(c != null and !c.?.associated and std.mem.eql(u8, c.?.ssid.?, "home"), "22: beacon ies only, not associated", .{});
+
+        check(link.ieSsid(&.{ 0, 0, 1, 1, 2 }) == null, "22: hidden ssid (length 0) is none", .{});
+        check(link.ieSsid(&.{ 1, 9, 0, 0 }) == null, "22: truncated element stops", .{});
+        check(link.parseScanBss(&.{ 34, 1, 0, 0 }) == null, "22: no NL80211_ATTR_BSS", .{});
+    }
+
+    // 23. GET_INTERFACE에 SSID가 없는 station(Country IE 없는 AP, LK-M1 결과 3) → GET_SCAN으로 채운다.
+    {
+        var t: link.Table = .{};
+        _ = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0" }));
+        _ = t.applyWifi(3, wifi(3, STATION, null));
+        check(t.needsScan(3), "23: station up without ssid needs a scan", .{});
+        check(t.applySsid(3, "tars-wl") == .changed, "23: ssid from the scan", .{});
+        check(t.applySsid(3, "tars-wl") == .same, "23: the same ssid again", .{});
+        check(!t.needsScan(3), "23: no scan once the ssid is known", .{});
+        expectCell(&t, "tars-wl", &.{.wait}, "23");
+        // 내려가면 잊고, 다시 올라오면 또 필요하다.
+        _ = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0", .oper = IF_OPER_DORMANT }));
+        check(!t.needsScan(3), "23: down needs no scan", .{});
+        _ = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0" }));
+        check(t.needsScan(3), "23: up again needs a scan", .{});
+    }
+
+    // 24. applySsid는 station만 받는다.
+    {
+        var t: link.Table = .{};
+        _ = t.applyLink(parsedLink(.{ .index = 2, .name = "eth0" }));
+        _ = t.applyWifi(2, null);
+        _ = t.applyLink(parsedLink(.{ .index = 4, .name = "wlan1" }));
+        _ = t.applyWifi(4, wifi(4, AP, "tars-wl"));
+        check(t.applySsid(2, "x") == .ignored and t.applySsid(4, "x") == .ignored and t.applySsid(9, "x") == .ignored, "24: ignored", .{});
+        check(!t.needsScan(2) and !t.needsScan(4), "24: wired and AP need no scan", .{});
+        expectCell(&t, "LAN", &.{.wait}, "24");
+    }
+
     if (failures > 0) {
         std.debug.print("link_test: {d} FAILED\n", .{failures});
         std.process.exit(1);
     }
-    std.debug.print("link_test: all 20 checks passed\n", .{});
+    std.debug.print("link_test: all 24 checks passed\n", .{});
 }
