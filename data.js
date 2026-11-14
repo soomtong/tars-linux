@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-12',
-  latest: 'Container Environment (CE-M0~M2)',
+  asOf: '2026-11-14',
+  latest: 'Display Yield (DY-M0~M3)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1310,      // git rev-list --count main
+    commits: 1358,      // git rev-list --count main
     since: '2026-08-01',
-    chains: 33,         // check.sh의 CHAINS
-    zigKLines: 46,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    chains: 34,         // check.sh의 CHAINS
+    zigKLines: 48,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -129,6 +129,11 @@ window.TARS = {
     ['2026-11-10', 'Service Stop', 'SS', '서비스 스크립트의 `# tars-stop: INT 10` 한 줄이 멈춤 신호와 유예를 고른다. 전원을 끌 때 서버를 먼저 각자의 방식으로 — psql이 열린 postgres도 0.4초에 깨끗이'],
     ['2026-11-12', 'Little Things', 'LT', '기계에 이름이 생기고(`hostname=`, 기본 `tars`), 사용자가 `ping`을 치고, 기종 이름을 `/sys/class/dmi/id`에서 읽고, Homebrew가 Landlock을 쓰고, `sudo`가 패널마다 다시 묻지 않는다'],
     ['2026-11-12', 'Container Environment', 'CE', 'Docker가 서비스로 서고 AI 도구의 샌드박스(bwrap)가 선다 — init이 루트를 `pivot_root`가 되는 모양으로 덮고, 커널에 namespace · cgroup v2 · seccomp, 새 묶음 `container`'],
+    ['2026-11-12', 'Ghostty VT 1.0.1', 'GU', '터미널이 쓰는 ghostty-vt를 `vt-1.0.1`로 — 크기 바꾸기 · 스크롤백 수정, 우리 코드는 0줄'],
+    ['2026-11-12', 'Layer Dedup', 'LD', '묶음 사이에 같은 파일을 두 번 싣지 않는다 — 묶음 1,908 → 1,762MiB, 편집기 묶음에서 emacs를 빼고 fakesteak을 기본 판에도'],
+    ['2026-11-14', 'Display Yield', 'DY', '터미널이 화면을 잠시 넘긴다 — `tars-fullscreen <명령>`으로 뜬 프로그램이 GPU(SDL3 · OpenGL ES)로 화면 전체를 그리고, 끝나면 셸이 돌아온다. 새 묶음 `gpu`와 설치하면 데모가 뜨는 GPU 데모 ISO'],
+    ['2026-11-14', 'Odin', 'OD', 'odin을 `lang-native`에 — clang 없이 기본 gcc로 링크하고, rust 1.100.0'],
+    ['2026-11-14', 'Tool Upgrade', 'TU', '실린 언어와 유틸리티를 새 판으로 — go 1.27.4 · node 26.13.1 · cyber 0.4.10 · cmake 4.5.0 · PostgreSQL 18.7 · 유틸리티 아홉'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -150,13 +155,15 @@ window.TARS = {
       'd3fe88ae13c307b58292de4f0ea35824a3e72b02fda0846fdf508e802a2137bf'],
     ['2026-11-12', '0.2.1', '컨테이너 — Docker가 서비스로 서고 AI 도구의 샌드박스(bwrap)가 선다, 기계의 이름 · ping · Landlock', 'tars-0.2.1-x86_64.iso',
       'ad2f2213ff4941bdebbf0c202e3e40ce5d6ca864ea4766513da303926f5a65bc'],
+    ['2026-11-14', '0.2.2', '도구 판올림과 GPU — rust 1.100 · go · node · odin, 화면 양보(`tars-fullscreen`)와 SDL3 · Mesa, nonative 판 · fakesteak · GPU 데모 ISO도 함께', 'tars-0.2.2-x86_64.iso',
+      '53b7021047d71440fc4979a63bc09887171e9156687b760c3e01bceaeb04e03c'],
   ],
 
   // 전체 기능: 갈래마다 [이름, 설명, 끝난 날]. 끝난 날은 timeline의 날짜와 같게.
   features: [
     {
       title: '부팅 · 하드웨어',
-      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. GPU 가속 · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth 오디오 · HDMI 오디오 · IPv6는 아직 없다.',
+      note: '노트북에 USB로 꽂아 띄우는 것이 목표다. 터미널 자체의 GPU 가속(GPU는 화면을 넘겨받은 프로그램만 쓴다) · 밝기 · 외부 모니터 · 절전(S3) · Bluetooth 오디오 · HDMI 오디오 · IPv6는 아직 없다.',
       items: [
         ['하이브리드 ISO `out/tars.iso`', 'BIOS와 UEFI 항목이 한 ISO에. `dd`로 USB에 그대로 쓴다. 부트로더는 Limine, Secure Boot는 끈다', '2026-09-10'],
         ['화면 — simpledrm · virtio-gpu', '펌웨어가 준 프레임버퍼를 패널 기본 해상도로 쓴다. 격자 크기는 KMS가 준 크기에서 정한다', '2026-09-10'],
@@ -220,14 +227,15 @@ window.TARS = {
       title: '개발 도구 층',
       note: '설치 USB에 싣고 `tars-install`이 디스크로 옮긴다. 부팅마다 init이 묶음(squashfs)을 `/usr`에 읽기 전용으로 겹친다 — RAM에 상주하지 않고, 망이 없어도 된다. USB로 띄운 채로는 붙지 않는다.',
       items: [
-        ['묶음 열하나', 'base · container · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server, 합 1.9GiB. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-12'],
-        ['언어', 'C · C++ · Zig · Rust · Go · Python · Ruby · Lua · Luau · Cyber · Node · Bun · Janet · PHP · Java · Kotlin · Clojure · Erlang · Elixir · Gleam', '2026-11-09'],
-        ['편집기', 'Neovim · emacs(`-nw`) · mitos · ttt, 게스트 vim은 그대로', '2026-11-09'],
+        ['묶음 열셋', 'base · container · lang-native · lang-script · lang-jvm · lang-beam · editor · util · media · docs · server · gpu · fakesteak, 합 1.9GiB. GitHub에는 server를 뺀 기본 판과 lang-native를 뺀 nonative 판을 올린다. 출처는 매니페스트 한 파일(버전 · URL · sha256), 소스 빌드 없음', '2026-11-12'],
+        ['언어', 'C · C++ · Zig · Rust · Go · Odin · Python · Ruby · Lua · Luau · Cyber · Node · Bun · Janet · PHP · Java · Kotlin · Clojure · Erlang · Elixir · Gleam', '2026-11-09'],
+        ['편집기', 'Neovim · mitos · ttt, 게스트 vim은 그대로(emacs는 0.2.1 뒤에 뺐다)', '2026-11-12'],
         ['유틸리티', 'lazygit · gitui · yazi · difftastic · starship · duckdb · sqlite · ffmpeg · ImageMagick 등 쉰여 개 — initrd에 있는 것도 최신판이 앞선다', '2026-11-09'],
         ['문서', '`dasht`로 docset을 터미널에서 찾는다(Bash 하나가 들었고 나머지는 `tars-docs get`), man은 오프라인', '2026-11-09'],
         ['서버', 'PostgreSQL · MySQL · Redis · Nginx · Caddy — `sudo tars-service enable <이름>`이면 init이 사용자로 띄우고 재부팅에도 켜진다', '2026-11-09'],
         ['`/usr/local`', '`/usr`는 읽기 전용, `/usr/local`만 쓰기 가능 — root가 `make install` · `npm i -g`로 깐 것이 재부팅 · 갱신에도 남는다', '2026-11-09'],
         ['컨테이너', 'Docker Engine · compose · buildx — `sudo tars-service enable docker`면 부팅마다 뜨고 내 계정이 `sudo` 없이 쓴다. 이미지는 `/home`에 남고 `-p`는 127.0.0.1에만 선다', '2026-11-12'],
+        ['GPU — 묶음 `gpu`', 'SDL3 · Mesa(EGL · OpenGL ES · GBM) — SDL3로 만든 프로그램이 `tars-fullscreen`으로 화면을 넘겨받아 GPU로 그린다', '2026-11-14'],
         ['AI 도구', 'claude · codex · opencode · omp는 싣지 않고 공식 설치 길이 그대로 선다. 샌드박스가 쓰는 `bwrap` · `socat`은 실려 있다', '2026-11-12'],
       ],
     },
@@ -238,6 +246,7 @@ window.TARS = {
         ['barebone ISO', '`tars-<ver>-barebone-x86_64.iso`(약 140MB) — 버전마다 개발 도구 판과 함께 올린다', '2026-11-09'],
         ['프로젝트 묶음', '실행 파일을 매니페스트 한 줄로 묶음 하나에 담아 barebone 위에 얹는다 — 설치하면 `/usr/local/bin`에', '2026-11-09'],
         ['부팅 때 자동 실행', '묶음의 셸 조각이 첫 패널에 한 번, 전체 화면으로 띄운다. [Ctrl]+[C]면 여백 · 상태 줄과 셸, 시리얼 · ssh에서는 안 뜬다 — 0.2.0의 `tars-0.2.0-fakesteak-x86_64.iso`', '2026-11-09'],
+        ['GPU 데모 ISO', '`tars-<ver>-gpu-x86_64.iso` — base와 `gpu` 두 묶음만. 설치하면 첫 패널이 SDL3 · OpenGL ES 데모를 화면 가득 띄우고 [Esc]면 셸', '2026-11-14'],
       ],
     },
     {
@@ -297,6 +306,7 @@ window.TARS = {
     {
       title: '명령',
       items: [
+        ['`tars-fullscreen <명령>`', '화면을 직접 그리는 프로그램(`/dev/dri/card0`)에 화면과 키보드를 넘기고, 끝나면 셸 화면이 그대로 돌아온다. 멈추면 [Ctrl]+[⌘]+[Backspace]', '2026-11-14'],
         ['`tars-config`', '인자 없이: 지금 설정을 init이 읽는 모양으로, 실제로 쓰이는 값과 다르면 알린다', '2026-10-07'],
         ['`tars-config version`', '이 이미지의 TARS 버전. 릴리즈가 아닌 빌드는 커밋(`+sha`)과 `-dirty`를 붙인다. 부팅 로그 첫 줄에도 같은 글자', '2026-10-20'],
         ['`tars-config get` · `set KEY=VALUE` · `reset` · `list` · `check`', '`tars.conf`의 줄 하나만 바꾼다. 값의 판정은 init의 파서가', '2026-10-07'],
