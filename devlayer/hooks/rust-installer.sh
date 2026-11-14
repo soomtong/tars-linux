@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # rust의 standalone 설치기(rust-installer 형식)를 묶음 뿌리에 깐다 — manifest.toml의 `hook = "rust-installer"`(TP-M2 plan 결정 C).
 #
-#   rust-installer.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/rust-1.99.1)>
+#   rust-installer.sh <tarball> <묶음 뿌리> <도구 디렉터리(뿌리 기준, 예: usr/local/lib/rust-1.100.0)>
 #
 # tarball은 설치기다. 풀기만 해서는 bin/이 서지 않고 컴포넌트 디렉터리 열하나와 install.sh가 나온다(plan 확인 2).
 # install.sh는 파일을 복사하는 셸 스크립트라 arm64 개발 컨테이너에서도 돈다. 아래 허용 목록 가운데 그 tarball에 있는 것만

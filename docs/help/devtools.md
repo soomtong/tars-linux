@@ -157,7 +157,7 @@ pydoc json
 ri Array
 erl -man lists
 dasht printf Bash            # Bash docset — 찾아서 w3m으로 엽니다
-w3m /usr/local/lib/rust-1.99.1/share/doc/rust/html/std/index.html   # rust 표준 라이브러리
+w3m /usr/local/lib/rust-1.100.0/share/doc/rust/html/std/index.html   # rust 표준 라이브러리
 ```
 
 다른 언어의 docset은 망이 있을 때 한 번 받습니다.

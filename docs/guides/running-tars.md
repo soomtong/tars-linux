@@ -659,7 +659,7 @@ dasht-query-line printf   # 결과를 글자로만(이름 · 종류 · URL)
 
 받은 docset은 `~/.local/share/dasht/docsets/`에 풀린다(`/home`이라 재부팅 · 갱신에도 남는다). 지우려면 그 자리의 `<이름>.docset`을 지운다.
 Java는 묶음의 JDK와 같은 SE25를 받는다. 망이 없을 때는 언어가 싣는 문서를 쓴다 — `man 3 printf`(C), `go doc fmt.Println`, `pydoc json`,
-`ri Array`, `erl -man lists`, `perldoc strict`, rust는 `w3m /usr/local/lib/rust-1.99.1/share/doc/rust/html/std/index.html`.
+`ri Array`, `erl -man lists`, `perldoc strict`, rust는 `w3m /usr/local/lib/rust-1.100.0/share/doc/rust/html/std/index.html`.
 
 ### AI 코딩 도구 — 망이 있을 때 홈에
 

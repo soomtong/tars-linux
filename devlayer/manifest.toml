@@ -503,19 +503,19 @@ exe = ["zig"]
 [[tool]]
 name = "rust"
 bundle = "lang-native"
-version = "1.99.1"
+version = "1.100.0"
 kind = "upstream"
-url = "https://static.rust-lang.org/dist/2026-10-15/rust-1.99.1-x86_64-unknown-linux-gnu.tar.xz"
-sha256 = "231fcae47ee950621374725b5fc3b5441d2fbda2955ac45dd7dc816d8876cfe7"
+url = "https://static.rust-lang.org/dist/2026-11-12/rust-1.100.0-x86_64-unknown-linux-gnu.tar.xz"
+sha256 = "98ee6bec240e1cfe944f17e7092412dc5ef6e008484bb668c6936d35a7d15acd"
 hook = "rust-installer"
 
 [[tool]]
 name = "rust-src"
 bundle = "lang-native"
-version = "1.99.1"
+version = "1.100.0"
 kind = "upstream"
-url = "https://static.rust-lang.org/dist/2026-10-15/rust-src-1.99.1.tar.xz"
-sha256 = "e485a88c45db546b73571df7bebfcb4454ba4fb552c492e25fc5b00eeb5bf22d"
+url = "https://static.rust-lang.org/dist/2026-11-12/rust-src-1.100.0.tar.xz"
+sha256 = "107afa7819b500c573b21a160b08f1a20bc2dfd99550717e1ffbbdb09da7ec6e"
 hook = "rust-installer"
 into = "rust"
 
