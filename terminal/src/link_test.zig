@@ -73,12 +73,18 @@ fn u32le(v: u32) [4]u8 {
 }
 
 /// `ifinfomsg` 16바이트.
-fn ifinfo(arphrd: u16, index: i32) [16]u8 {
+fn ifinfo(arphrd: u16, index: i32, flags: u32) [16]u8 {
     var b: [16]u8 = @splat(0);
     std.mem.writeInt(u16, b[2..4], arphrd, native);
     std.mem.writeInt(i32, b[4..8], index, native);
+    std.mem.writeInt(u32, b[8..12], flags, native);
     return b;
 }
+
+const IFF_UP = 1;
+const IFF_RUNNING = 1 << 6;
+const IFF_LOWER_UP = 1 << 16;
+const IF_OPER_UNKNOWN = 0;
 
 const IF_OPER_UP = 6;
 const IF_OPER_DORMANT = 5;
@@ -90,11 +96,15 @@ const LinkSpec = struct {
     oper: ?u8 = IF_OPER_UP,
     info_kind: ?[]const u8 = null,
     slave_kind: ?[]const u8 = null,
+    /// null이면 커널의 `netif_get_flags`처럼 operstate에서 짓는다 — UP · UNKNOWN이면 `IFF_RUNNING`(LK-M2 plan 확정 1).
+    flags: ?u32 = null,
 };
 
 fn linkMsg(b: *Builder, s: LinkSpec) void {
     b.begin(link.RTM_NEWLINK, 0);
-    b.raw(&ifinfo(s.arphrd, s.index));
+    const running = if (s.oper) |o| o == IF_OPER_UP or o == IF_OPER_UNKNOWN else false;
+    const flags = s.flags orelse (IFF_UP | IFF_LOWER_UP | @as(u32, if (running) IFF_RUNNING else 0));
+    b.raw(&ifinfo(s.arphrd, s.index, flags));
     var name: [32]u8 = @splat(0);
     @memcpy(name[0..s.name.len], s.name);
     b.attr(3, name[0 .. s.name.len + 1]);
@@ -259,7 +269,7 @@ pub fn main() !void {
     // 4. parseLink — 실NIC, operstate UP.
     {
         const m = parsedLink(.{ .index = 2, .name = "eth0" });
-        check(m.index == 2 and std.mem.eql(u8, m.name, "eth0") and m.arphrd == link.ARPHRD_ETHER and m.up and !m.virtual, "4: physical up link = {any}", .{m});
+        check(m.index == 2 and std.mem.eql(u8, m.name, "eth0") and m.arphrd == link.ARPHRD_ETHER and m.running and m.oper_up and !m.virtual, "4: physical up link = {any}", .{m});
     }
 
     // 5. parseLink — veth · slave만 · DORMANT · operstate 없음 · 짧은 payload.
@@ -269,11 +279,11 @@ pub fn main() !void {
         const slave = parsedLink(.{ .index = 6, .name = "eth1", .slave_kind = "bridge\x00" });
         check(!slave.virtual, "5: IFLA_INFO_SLAVE_KIND alone is not virtual", .{});
         const dormant = parsedLink(.{ .index = 3, .name = "wlan0", .oper = IF_OPER_DORMANT });
-        check(!dormant.up, "5: DORMANT is not up", .{});
+        check(!dormant.running and !dormant.oper_up, "5: DORMANT is not up", .{});
         const none = parsedLink(.{ .index = 3, .name = "wlan0", .oper = null });
-        check(!none.up, "5: no operstate is not up", .{});
+        check(!none.running and !none.oper_up, "5: no operstate is not up", .{});
         check(link.parseLink(&.{ 0, 0, 1, 0 }) == null, "5: short payload", .{});
-        check(link.parseLink(&ifinfo(1, 0)) == null, "5: index 0", .{});
+        check(link.parseLink(&ifinfo(1, 0, 0)) == null, "5: index 0", .{});
     }
 
     // 6. parseAddr — IFA_LOCAL · IFA_ADDRESS만 · AF_INET6.
@@ -557,9 +567,42 @@ pub fn main() !void {
         expectCell(&t, "LAN", &.{.wait}, "24");
     }
 
+    // 25. 연결 판정은 `IFF_RUNNING`이다(LK-M2 plan 확정 1). operstate를 안 다루는 드라이버의 UNKNOWN은 붙은 것,
+    // operstate가 UP이어도 RUNNING이 없으면(내려 둔 인터페이스) 붙지 않은 것이다.
+    {
+        const usb = parsedLink(.{ .index = 3, .name = "usb0", .oper = IF_OPER_UNKNOWN });
+        check(usb.running and !usb.oper_up, "25: UNKNOWN with IFF_RUNNING is running (usb-net)", .{});
+        const admin_down = parsedLink(.{ .index = 2, .name = "eth0", .flags = IFF_LOWER_UP });
+        check(!admin_down.running, "25: operstate UP without IFF_RUNNING is not running", .{});
+        var t: link.Table = .{};
+        _ = t.applyLink(usb);
+        _ = t.applyWifi(3, null);
+        _ = t.applyAddr(addr(3, .{ 10, 0, 2, 15 }), true);
+        expectCell(&t, "LAN", &.{.ready}, "25");
+    }
+
+    // 26. 무선은 operstate UP이어야 붙은 것이다(LK-M2 plan 확정 4). 켠 직후의 UNKNOWN 틈(`IFF_RUNNING`만 선다)은
+    // 칸에 안 오르고 nl80211에 다시 묻지도 않는다. UP이 되는 순간이 올라온 것이다.
+    {
+        var t: link.Table = .{};
+        _ = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0", .oper = 2 }));
+        _ = t.applyWifi(3, wifi(3, STATION, null));
+        const r1 = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0", .oper = IF_OPER_UNKNOWN }));
+        check(!r1.ask and !t.find(3).?.isUp(), "26: the UNKNOWN gap of a station is not up = {any}", .{r1});
+        check(!t.needsScan(3), "26: no scan in the gap", .{});
+        expectCell(&t, null, &.{}, "26 gap");
+        const r2 = t.applyLink(parsedLink(.{ .index = 3, .name = "wlan0" }));
+        check(r2.ask and t.find(3).?.isUp(), "26: operstate UP is up and asks", .{});
+        expectCell(&t, "WLAN", &.{.wait}, "26 up");
+        // 같은 틈의 유선은 붙은 것이다 — usb-net과 구별할 길이 없고, 커널도 그렇게 본다.
+        _ = t.applyLink(parsedLink(.{ .index = 2, .name = "eth0", .oper = IF_OPER_UNKNOWN }));
+        _ = t.applyWifi(2, null);
+        check(t.find(2).?.isUp(), "26: a wired UNKNOWN with IFF_RUNNING is up", .{});
+    }
+
     if (failures > 0) {
         std.debug.print("link_test: {d} FAILED\n", .{failures});
         std.process.exit(1);
     }
-    std.debug.print("link_test: all 24 checks passed\n", .{});
+    std.debug.print("link_test: all 26 checks passed\n", .{});
 }

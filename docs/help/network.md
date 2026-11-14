@@ -39,6 +39,9 @@ sudo tars-config reload
 
 ## 잘 안 되면
 
+상태 줄 오른쪽(배터리 칸 왼쪽)에 Wi-Fi 이름이나 `LAN`이 보이면 붙은 것이고, 흐린 색이면 주소를 아직 못 받은 것입니다.
+아무것도 없으면 링크부터 안 섰습니다.
+
 ```sh
 ip -4 addr                         # 주소를 받았는지 — lo 말고 한 줄이 더 있어야 합니다
 ip -4 route                        # default via … 한 줄

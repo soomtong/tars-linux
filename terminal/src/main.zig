@@ -2579,7 +2579,7 @@ const LinkSnap = struct {
 
     fn of(it: ?*const link.Iface) ?LinkSnap {
         const i = it orelse return null;
-        return .{ .kind = i.kind, .up = i.up, .v4 = i.n_addrs, .ssid_len = i.ssid_len, .ssid = i.ssid };
+        return .{ .kind = i.kind, .up = i.isUp(), .v4 = i.n_addrs, .ssid_len = i.ssid_len, .ssid = i.ssid };
     }
 };
 
@@ -2600,7 +2600,7 @@ fn logLink(before: ?LinkSnap, it: *const link.Iface) void {
             std.mem.eql(u8, &b.ssid, &now.ssid)) return;
     }
     logline.print("terminal: link> state {s} up={d} v4={d} ssid={s}\n", .{
-        it.nameText(), @intFromBool(it.up), it.n_addrs, it.ssidText() orelse "-",
+        it.nameText(), @intFromBool(it.isUp()), it.n_addrs, it.ssidText() orelse "-",
     });
 }
 

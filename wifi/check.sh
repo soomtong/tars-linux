@@ -99,6 +99,11 @@ wait_for_log() {
   return 1
 }
 
+# 이 로그의 `status> link` 줄의 칸 값을 차례로(LK-M2). `none`이거나 따옴표로 감싼 글자다.
+link_cells() {
+  grep -a 'terminal: status> link cell=' "$LOG" | tr -d '\r' | sed -E 's/.*cell=(none|"[^"]*") ink.*/\1/'
+}
+
 stop_guest() {
   kill "$QEMU_PID" 2>/dev/null || true
   wait "$QEMU_PID" 2>/dev/null || true
@@ -283,6 +288,30 @@ wait_for_log 'wlan2: leased 192\.168\.77\.[0-9]+ ' 60 \
   || report_failure "dhcpcd never leased an address on the late wlan2"
 echo "the dhcpcd hook handed the late wlan2 over and it got an address"
 
+# ── 검사 13: 링크 칸이 SSID를 보이고, 끊기면 지우고, 다시 붙으면 되살린다 (LK-M2) ──
+# hostapd는 Country 요소를 안 내므로 nl80211 GET_INTERFACE의 SSID가 비고, terminal은 GET_SCAN의 associated
+# BSS에서 찾는다(LK-M1 결과 3) — 그 길이 끊기면 칸은 `WLAN`이다. 하늘색(ready)은 dhcpcd의 주소까지 받은 뒤다.
+# 끊김은 검사 7의 재시작이 만든다.
+wait_for_log 'terminal: status> link cell="tars-wl" ink ready=[1-9][0-9]* wait=0' 30 \
+  || report_failure "the link cell never showed tars-wl in the ready color"
+lk_seq_ok=0
+for _ in $(seq 1 30); do
+  if link_cells | awk '/^"tars-wl"$/ { if (n == 0) n = 1; else if (n == 2) ok = 1 } /^none$/ { if (n == 1) n = 2 } END { exit !ok }'; then
+    lk_seq_ok=1
+    break
+  fi
+  sleep 1
+done
+[ "$lk_seq_ok" = 1 ] || report_failure "the link cell did not go tars-wl -> none -> tars-wl around the restart ($(link_cells | tr '\n' ' '))"
+echo "the link cell showed tars-wl, cleared when wpa_supplicant restarted, and came back"
+
+# ── 검사 14: 칸에는 station의 SSID 하나뿐이다 (LK-M2) ─────────────────
+# AP 쪽 wlan1도 nl80211에 같은 SSID를 낸다(LK design 확인 3). iftype을 안 보면 `tars-wl  tars-wl`이, SSID를 못
+# 찾으면 `WLAN`이 섞인다. wlan2가 같은 AP에 붙어도 칸은 ifindex가 작은 wlan0의 것 하나다.
+lk_bad="$(link_cells | grep -vxE 'none|"tars-wl"' || true)"
+[ -z "$lk_bad" ] || report_failure "the link cell showed something other than tars-wl: $(echo "$lk_bad" | tr '\n' ' ')"
+echo "the link cell never showed anything but tars-wl"
+
 stop_guest
 
 # ══ 부팅 B: 틀린 비밀번호 ══════════════════════════════════════════════
@@ -355,6 +384,13 @@ for bad in 'started service wpa_supplicant' 'tars-wifi:' 'wlan'; do
 done
 echo "no file means no wpa_supplicant, and hwsim makes no radios by default"
 
+# ── 검사 15: 붙은 것이 없으면 칸도 없다 (LK-M2, LK design 결정 1) ─────
+grep -a 'terminal: status> link cell=none ink ready=0 wait=0' "$LOG" >/dev/null \
+  || report_failure "no 'status> link cell=none ink ready=0 wait=0' line in a boot without links"
+lk_bad="$(link_cells | grep -vx 'none' || true)"
+[ -z "$lk_bad" ] || report_failure "a boot without links showed a link cell: $(echo "$lk_bad" | tr '\n' ' ')"
+echo "a boot without links drew no link cell"
+
 # ── 검사 11: usbcore가 USB 동글 드라이버 열일곱을 등록했다 (UW-M1 · UB-M1) ──
 # 검사 1은 "켜기로 했다"까지다. 이 줄은 usb_register_driver가 찍으므로 커널이 드라이버를
 # USB 코어에 실제로 올렸다는 뜻이다(UW design 실측 5). 장치와 무관하게 일어나서 이
@@ -369,4 +405,4 @@ echo "usbcore registered all seventeen USB dongle drivers"
 
 stop_guest
 
-echo "WL-M3 PASS: wifi connects at boot and when late, refuses a wrong key, stays off without a file"
+echo "WL-M3 PASS: wifi connects at boot and when late, refuses a wrong key, stays off without a file, and the link cell shows the SSID"

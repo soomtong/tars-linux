@@ -37,9 +37,11 @@ pub const ARPHRD_ETHER: u16 = 1;
 const IFINFOMSG_LEN = 16;
 const IFADDRMSG_LEN = 8;
 const IFLA_IFNAME: u16 = 3;
-const IFLA_OPERSTATE: u16 = 16;
 const IFLA_LINKINFO: u16 = 18;
 const IFLA_INFO_KIND: u16 = 1;
+/// `ifi_flags`의 `IFF_RUNNING`. 커널이 "켜져 있고 operstate가 UP 또는 UNKNOWN"일 때 세운다(LK-M2 plan 확정 1).
+const IFF_RUNNING: u32 = 1 << 6;
+const IFLA_OPERSTATE: u16 = 16;
 const IF_OPER_UP: u8 = 6;
 const IFA_ADDRESS: u16 = 1;
 const IFA_LOCAL: u16 = 2;
@@ -149,8 +151,14 @@ pub const LinkMsg = struct {
     /// `ifi_type`(ARPHRD_*).
     arphrd: u16,
     name: []const u8,
-    /// `IFLA_OPERSTATE`가 `IF_OPER_UP`이다(design 결정 2). attribute가 없으면 false.
-    up: bool,
+    /// `ifi_flags`에 `IFF_RUNNING`이 섰다(LK-M2 plan 확정 1). 커널의 `netif_get_flags`가
+    /// `netif_running && netif_oper_up`으로 세우는 비트이고, `netif_oper_up`은 operstate UP과 UNKNOWN이다 —
+    /// operstate를 안 다루는 드라이버(QEMU의 usb-net)는 붙어도 UNKNOWN에 머문다. 유선의 판정이다.
+    running: bool,
+    /// `IFLA_OPERSTATE`가 `IF_OPER_UP`이다. 무선의 판정이다 — 켠 직후 linkwatch가 첫 상태를 정하기 전에는
+    /// UNKNOWN이라 `IFF_RUNNING`이 서는 틈이 있다(LK-M2 plan 확정 4). wpa_supplicant는 dormant → UP을
+    /// 스스로 다루므로 UP은 인증까지 끝났다는 뜻이다.
+    oper_up: bool,
     /// `IFLA_LINKINFO` 안에 `IFLA_INFO_KIND`가 있다 — veth · bridge · tun · dummy(design 결정 3의 2).
     /// slave 정보(`IFLA_INFO_SLAVE_KIND`)만 있는 실NIC은 false다(design 확인 4).
     virtual: bool,
@@ -164,14 +172,15 @@ pub fn parseLink(payload: []const u8) ?LinkMsg {
         .index = @intCast(index),
         .arphrd = readU16(payload[2..]),
         .name = "",
-        .up = false,
+        .running = readU32(payload[8..]) & IFF_RUNNING != 0,
+        .oper_up = false,
         .virtual = false,
     };
     var it: AttrIter = .{ .buf = payload[IFINFOMSG_LEN..] };
     while (it.next()) |a| switch (a.kind) {
         // 커널은 NUL을 붙여 보낸다. 첫 NUL 앞까지가 이름이다.
         IFLA_IFNAME => out.name = a.data[0 .. std.mem.indexOfScalar(u8, a.data, 0) orelse a.data.len],
-        IFLA_OPERSTATE => out.up = a.data.len >= 1 and a.data[0] == IF_OPER_UP,
+        IFLA_OPERSTATE => out.oper_up = a.data.len >= 1 and a.data[0] == IF_OPER_UP,
         IFLA_LINKINFO => {
             var inner: AttrIter = .{ .buf = a.data };
             while (inner.next()) |b| {
@@ -414,12 +423,21 @@ pub const Iface = struct {
     name: [NAME_MAX]u8 = @splat(0),
     name_len: u8 = 0,
     kind: Kind,
-    up: bool = false,
+    running: bool = false,
+    oper_up: bool = false,
     addrs: [ADDR_MAX][4]u8 = @splat(@splat(0)),
     n_addrs: u8 = 0,
     /// 정리한 SSID(`cleanSsid`). station이 아니거나 attribute가 없으면 `ssid_len`이 null이다.
     ssid: [SSID_MAX]u8 = @splat(0),
     ssid_len: ?u8 = null,
+
+    /// 붙었나(design 결정 2, LK-M2 plan 확정 1 · 4). 무선은 operstate UP, 그 밖은 `IFF_RUNNING`이다.
+    pub fn isUp(self: *const Iface) bool {
+        return switch (self.kind) {
+            .station, .wifi_other => self.oper_up,
+            else => self.running,
+        };
+    }
 
     pub fn nameText(self: *const Iface) []const u8 {
         return self.name[0..self.name_len];
@@ -480,13 +498,16 @@ pub const Table = struct {
             it.name_len = @intCast(name.len);
             r.changed = true;
         }
-        const rose = m.up and !it.up;
-        if (m.up != it.up) {
-            it.up = m.up;
+        const was_up = it.isUp();
+        if (m.running != it.running or m.oper_up != it.oper_up) {
+            it.running = m.running;
+            it.oper_up = m.oper_up;
             r.changed = true;
-            // 내려가면 SSID를 잊는다. 다시 올라올 때 묻는다.
-            if (!m.up) it.ssid_len = null;
         }
+        const now_up = it.isUp();
+        const rose = now_up and !was_up;
+        // 내려가면 SSID를 잊는다. 다시 올라올 때 묻는다.
+        if (!now_up) it.ssid_len = null;
         r.ask = it.kind == .unknown or (rose and (it.kind == .station or it.kind == .wifi_other));
         return r;
     }
@@ -550,7 +571,7 @@ pub const Table = struct {
     /// station이 올라왔는데 `GET_INTERFACE`가 SSID를 안 줬나 — 그러면 `GET_SCAN`으로 묻는다(LK-M1 결과 3).
     pub fn needsScan(self: *Table, index: u32) bool {
         const it = self.find(index) orelse return false;
-        return it.kind == .station and it.up and it.ssid_len == null;
+        return it.kind == .station and it.isUp() and it.ssid_len == null;
     }
 
     /// `GET_SCAN`의 associated BSS에서 읽은 SSID를 넣는다. station만 받는다.
@@ -630,7 +651,7 @@ pub fn cell(table: *const Table) ?Cell {
     var wired_ready = false;
     var station: ?*const Iface = null;
     for (table.items[0..table.len]) |*it| {
-        if (!it.up) continue;
+        if (!it.isUp()) continue;
         switch (it.kind) {
             .wired => {
                 wired_up = true;

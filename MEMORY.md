@@ -126,6 +126,7 @@ init · 설정 · 전원
 - [Config reload](docs/decisions/project_config_reload.md) — `tars-config reload`가 재부팅 없이 설정을 다시 읽게 한다(TC-M2 · M3, 2026-10-07)
 - [Clock reload](docs/decisions/project_clock_reload.md) — reload의 chronyd restart · stop · start를 net 검사 32가 본다(CR-M0, 2026-10-28)
 - [Battery Status](docs/decisions/project_battery_status.md) — 상태 줄 오른쪽 끝의 잔량 칸과 게이트의 가짜 배터리(BS-M0 · M1, 2026-10-09)
+- [Link Status](docs/decisions/project_link_status.md) — 배터리 칸 왼쪽의 SSID · `LAN` 칸, netlink 둘과 커널 함정 둘(LK-M0~M2, 2026-11-15)
 
 네트워크
 

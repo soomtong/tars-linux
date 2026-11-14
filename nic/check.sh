@@ -190,6 +190,13 @@ wait_for_log 'eth0: leased 10\.0\.2\.15 ' 60 \
   || report_failure "dhcpcd never leased an address on eth0"
 echo "dhcpcd picked eth0 and leased 10.0.2.15"
 
+# ── 검사 9: 링크 칸이 LAN을 하늘색으로 보인다 (LK-M2) ──────────────────
+# e1000e는 실NIC이라 `IFLA_INFO_KIND`가 없고 nl80211은 모른다고 답한다 — 유선이다(LK design 결정 3).
+# 하늘색(ready)은 IPv4 주소까지 받은 뒤다. 칸은 lease 뒤 프레임에 그려지므로 조금 기다린다.
+wait_for_log 'terminal: status> link cell="LAN" ink ready=[1-9][0-9]* wait=0' 30 \
+  || report_failure "the link cell never showed LAN in the ready color for eth0"
+echo "the link cell showed LAN for eth0"
+
 stop_guest
 
 # ══ 부팅 B: NIC 없이 뜬 뒤 USB 동글을 꽂는다 ═══════════════════════════
@@ -227,6 +234,14 @@ if grep -a "usb0" "$LOG" >/dev/null; then
   report_failure "a usb0 showed up before anything was plugged in"
 fi
 echo "the guest booted to a prompt with no network interface"
+
+# ── 검사 10: 붙은 것이 없으면 링크 칸도 없다 (LK-M2) ──────────────────
+grep -a 'terminal: status> link cell=none ink ready=0 wait=0' "$LOG" >/dev/null \
+  || report_failure "no 'status> link cell=none' line in a boot without a NIC"
+if grep -a 'terminal: status> link cell="' "$LOG" >/dev/null; then
+  report_failure "a link cell showed up before anything was plugged in"
+fi
+echo "no NIC, no link cell"
 
 # ── 검사 6: dhcpcd가 살아서 기다리나 ────────────────────────────────────
 # 인터페이스가 없으면 dhcpcd는 이 줄을 찍고 끝나지 않는다(실측 14). -j가
@@ -276,6 +291,15 @@ wait_for_log "\\[${DHCPCD_PID}\\]: usb0: leased 10\\.0\\.2\\.15 " 60 \
   || report_failure "dhcpcd (pid ${DHCPCD_PID}) never leased an address on the plugged usb0"
 echo "the same dhcpcd (pid ${DHCPCD_PID}) caught usb0 and leased 10.0.2.15"
 
+# ── 검사 11: 꽂은 동글도 링크 칸에 LAN으로 오른다 (LK-M2) ──────────────
+# terminal이 rtnetlink 이벤트로 새 인터페이스를 보고 유선으로 판정한다. QEMU의 usb-net은 operstate를 안
+# 다뤄 UNKNOWN에 머문다 — 연결 판정이 `IFF_RUNNING`이 아니라 `IF_OPER_UP`이면 여기가 빨갛다(LK-M2 plan 확정 1).
+wait_for_log 'terminal: link> if usb0 index=[0-9]+ kind=wired' 30 \
+  || report_failure "the terminal never classified the plugged usb0 as wired"
+wait_for_log 'terminal: status> link cell="LAN" ink ready=[1-9][0-9]* wait=0' 30 \
+  || report_failure "the link cell never showed LAN in the ready color for the plugged usb0"
+echo "the plugged usb0 showed up as LAN in the link cell"
+
 stop_guest
 
-echo "WN-M3 PASS: a built-in e1000e and a hot-plugged USB dongle both got an address"
+echo "WN-M3 PASS: a built-in e1000e and a hot-plugged USB dongle both got an address and showed up as LAN"

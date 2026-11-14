@@ -1,7 +1,7 @@
 # TARS Link Status — Design
 
 Date: 2026-11-14
-Status: 진행 중 — LK-M0 · M1 끝(칸이 뜬다), 다음은 LK-M2(판정과 닫기).
+Status: 끝났다(2026-11-15) — LK-M0 · M1 · M2. design과 달라진 자리: SSID는 `GET_SCAN`으로도 찾는다(M1 결과 3), 연결 판정은 유선 `IFF_RUNNING` · 무선 `IF_OPER_UP`(M2 확정 1 · 4). 판정은 wifi 체인 검사 13~15 · nic 체인 검사 9~11. 루트 게이트 34/34. 기억은 `docs/decisions/project_link_status.md`.
 
 접두사: LK. `NS`는 Nerd Symbols가 쓰고 있다(`docs/guides/completed.md`).
 
@@ -97,6 +97,11 @@ dhcpcd · sysfs에는 묻지 않는다. 이벤트가 없으면 terminal은 지�
 
 operstate가 연결의 판정인 이유: 무선은 wpa_supplicant가 linkmode dormant로 인터페이스를 잡고 4-way handshake가 끝나야 `UP`으로
 올린다. 유선은 carrier가 서면 `UP`이다. 그래서 `IF_OPER_UP` 하나가 유선과 무선 모두에서 "붙었다"를 뜻한다.
+
+LK-M2에서 고쳤다: 유선의 판정은 `ifi_flags`의 `IFF_RUNNING`이다. 커널이 "켜져 있고 operstate가 UP 또는 UNKNOWN"일 때 세우는
+비트다(`netif_get_flags` · `netif_oper_up`). operstate를 안 다루는 드라이버(QEMU의 usb-net)는 주소를 받아도 UNKNOWN에 머물러,
+`IF_OPER_UP`만 보면 꽂은 USB NIC가 칸에 안 올랐다(LK-M2 plan 확정 1). 무선은 `IF_OPER_UP` 그대로다 — 켠 직후 linkwatch 전의
+UNKNOWN 틈에 `IFF_RUNNING`이 서서, 그것을 믿으면 붙지 않은 station이 한 프레임 `WLAN`으로 떴다(확정 4).
 
 ### 결정 3 — 셀 인터페이스는 "ARPHRD_ETHER이고 `IFLA_INFO_KIND`가 없는 것"이다. 무선인지는 nl80211이 답한다
 

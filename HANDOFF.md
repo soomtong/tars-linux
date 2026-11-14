@@ -1,21 +1,61 @@
-# HANDOFF: 0.2.2 공개 끝(2026-11-14) — GitHub release ISO 넷, GPU 데모 판(DY-M3), 묶음 전부 판은 로컬
+# HANDOFF: Link Status 끝(2026-11-15) — 상태 줄의 SSID · LAN 칸, cyber 0.4.11. 로컬 commit만, push 안 함
 
 ## 목표
 
-0.2.2를 공개 버전으로 낸다. 본론은 도구 판올림(TU-M0)과 odin(OD-M0), 그리고 사용자가 "0.2.2 작업의 핵심은 gpu 관련 기능"이라 한
-화면 양보(DY)다. 사용자(2026-11-14): "fakesteak 처럼 하나의 iso 파일을 구워줘. 설치하면 fullscreen gpu 구동 화면이 동작해야해" →
-"tag 0.2.2 and release and publish them all of 4 iso. and point standard (server and native lang included) iso in local disk" →
-"초안 demo-fakesteak-20261110 release 지워줘" → "handoff로 마감하자". 모두 끝났다.
+사용자(2026-11-14): "장비가 Wifi 에 접속되어 있다면 terminal 우측 배터리 영역 좌측에 Network ID 출력; 유선 랜 접속되어 있다면 유선
+네트워크 접속 상태를 표기하는 방법 검토 및 구현 계획" → 검토안의 결정 넷 "agree all. accept suggestion. pick your best." → 중간에
+"Cyber lang new version … 0.4.11 and add it into our script lang layer" → M2 직전 "I'm going to sleep. All decisions are up to you."
+모두 끝났다. 밖으로 나가는 일(push · 소개 페이지 공개)만 사용자가 돌아와서 정하도록 남겼다.
 
 ## 현재 브랜치
 
-`main` — origin과 같다(`8eaa090`까지 push). 태그 `v0.2.2` → `16a1072`(`Release 0.2.2`, release Latest). tag는 옮기지 않았다 —
-GPU 데모 판은 tag 뒤 commit `c30a838`에서 구워 부팅 줄이 `TARS 0.2.2+c30a838`이다(노트에 적었다).
-`gh-pages` → `866143a`(0.2.2 · GU · LD · DY · OD · TU) push. 작업 사본 `../tars-linux-pages`(worktree).
-태그 `demo-fakesteak-20261110`의 draft release는 지웠고 태그는 남겼다(20261109 때와 같다).
+`main` — origin보다 commit 넷이 앞선다(`ca5ef19` LK-M0 · `cd710ff` LK-M1 · `12a99af` Cyber 0.4.11 · LK-M2 닫기). push 안 했다.
+`gh-pages`(worktree `../tars-linux-pages`) — `data.js`에 LK를 더한 commit 하나가 앞선다. push 안 했다(push하면 공개 페이지가 바뀐다).
 
-## 완료된 작업 (2026-11-14, 이 세션)
+## 완료된 작업 (2026-11-14~15, 이 세션)
 
+- [x] LK design(`docs/specs/2026-11-14-tars-link-status-design.md`) — 커널 소스로 확인: AP도 SSID를 낸다(station만 센다),
+      bridge에 묶인 실NIC도 `IFLA_LINKINFO`가 있다(`IFLA_INFO_KIND`로 가상을 가른다)
+- [x] LK-M0 `ca5ef19`: 순수 층 `terminal/src/link.zig` · `link_test.zig`
+- [x] LK-M1 `cd710ff`: `main.zig` 배선(rtnetlink 이벤트 소켓 · dump · nl80211), 칸 그리기 · `status> link` 줄. 루트 게이트 34/34
+- [x] Cyber 0.4.11 `12a99af`: manifest 세 줄. sha256 = GitHub digest, 모양 · NEEDED · RUNPATH 같음, `%ymm` · `%zmm` 0. devtools PASS(cyber 345 · 355ms)
+- [x] LK-M2: 판정 wifi 검사 13~15 · nic 검사 9~11, 연결 판정 유선 `IFF_RUNNING` · 무선 `IF_OPER_UP`, 도움말 두 곳, mutation 하나,
+      루트 게이트 34/34(2,076초), 기억 `project_link_status` · completed · design Status
+
+## 시도했으나 실패한 접근
+
+- SSID를 `GET_INTERFACE`에서만 받기: AP가 Country 요소를 안 내면 커널이 SSID를 안 채운다(`__cfg80211_connect_result`) — `GET_SCAN`의 associated BSS를 더했다.
+- 연결 판정을 `IF_OPER_UP` 하나로: QEMU usb-net은 UNKNOWN에 머물러 칸에 안 올랐다. `IFF_RUNNING` 하나로: 무선이 켜진 직후의 UNKNOWN 틈에 `WLAN`이 한 프레임 섰다. 종류마다 나눴다.
+- `rg -c`로 세 값을 한 `printf`에 넣기: 0건이면 아무것도 안 찍어 칸이 밀린다(cyber의 `%ymm` 셈에서 한 번 헷갈렸다).
+- Zig 0.17에는 배열 반복 `**`이 없다 — `@splat`.
+
+## 남은 작업
+
+- [ ] push(사용자가 정한다): `main` 넷 · `gh-pages` 하나
+- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 — Country 요소를 내는 집 AP면 `link> nl80211 … ssid_len=` 줄(GET_INTERFACE 길), 내장
+      BCM43224의 operstate 순서. 유선은 USB 동글로. 결과는 `project_link_status`의 "남은 것"에
+- [ ] 실기: GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절
+- [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
+- [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
+- [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
+- [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순), tars-agent
+- [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
+- [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
+
+## 핵심 파일
+
+- `terminal/src/link.zig` — netlink 읽기 · 짓기, 인터페이스 표(`Iface.isUp`), 칸. `link_test.zig` 검사 26
+- `terminal/src/main.zig`의 "링크(LK-M1)" 절 — `openNetlink` · `askWifi` · `askScan` · `handleRoute` · `drainLink`, `drawStatus`의 오른쪽 칸
+- `wifi/check.sh` 검사 13~15 · `nic/check.sh` 검사 9~11
+- `docs/plans/2026-11-14-tars-link-status-lk-m{0,1}.md` · `docs/plans/2026-11-15-tars-link-status-lk-m2.md`의 결과 절
+- `docs/decisions/project_link_status.md` — 함정 둘
+
+## 다음 에이전트에게
+
+LK는 닫혔다. 사용자가 돌아오면 push 여부부터 묻는다(main 넷 · gh-pages 하나). 실기 결과를 받으면 `link> nl80211` · `link> state`
+줄을 보고 `project_link_status`의 "남은 것"에 적는다. 무선 칸이 `WLAN`이면 `link> nl80211 scan … associated=` 줄이 원인을 말한다.
+
+## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)
 - [x] OD-M0 odin(`c07e944`) · rust 1.100.0(`0a0363e`) · `make iso-full`(`e0cb758`) — 닫기 `c07b325`
 - [x] TU-M0 도구 판올림(`bc48393`) — 닫기 `c1b90ed`
 - [x] 0.2.2 절차 1~5: `VERSION`(`16a1072`), 루트 게이트 34/34, tag, ISO 셋 · smoke · 해시(`4aaeb2d`)
@@ -25,41 +65,6 @@ GPU 데모 판은 tag 뒤 commit `c30a838`에서 구워 부팅 줄이 `TARS 0.2.
 - [x] GitHub release v0.2.2: ISO 넷(기본 · nonative · fakesteak · gpu) + SHA256SUMS, 노트 `out/release-0.2.2/NOTES.md`. 다시 받아 `shasum -c` OK 4/4, 받은 것은 지웠다
 - [x] 소개 페이지 `data.js`(절차 7), 기록 `217d923`(project_release · completed · MEMORY), draft release 삭제 `8eaa090`
 - [x] 겹친 ISO 사본 정리(약 4.8GB) — 남은 것: `out/release-0.2.2/`(올린 넷) · `out/tars-0.2.2-full-x86_64.iso`(= `out/tars-full.iso` 하드 링크, 2.1GB)
-
-## 시도했으나 실패한 접근
-
-- 파일만 싣는 새 묶음(`gpu-demo`): `devlayer/build.sh:32`가 매니페스트 줄이 없는 묶음을 `no manifest lines`로 막는다 — 조각을 gpu 묶음에 두고 "base · gpu 둘뿐"으로 판정했다.
-- display 체인 첫 판: 부팅 3이 `terminal never rendered a prompt` — autorun의 양보가 terminal의 첫 `screen>`보다 빨랐다. `boot --autorun`(yield 줄을 기다림)으로 고쳤다.
-- 라이브 부팅으로 데모 확인: init은 홈 디스크가 있을 때만 묶음을 얹는다(`init/src/main.zig:1275`) — 설치 smoke(`out/gpu-install-smoke.sh`, OVMF · NVMe)로 봤다.
-- 캐시를 탄 묶음은 출처 기록이 commit 전의 `-dirty`로 남는다 — commit 뒤 `rm -f devlayer/build/<묶음>.stamp`로 다시 굽는다.
-- TU의 첫 접두사 TR은 Terminal Rendering과 겹쳤다 — 새 접두사는 `completed.md`에서 먼저 찾는다.
-
-## 남은 작업
-
-- [ ] 실기(사용자, 맥북 에어 2011): GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절(`tars-kms-fill` 양보 · 키 · 탈출)
-- [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
-- [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
-- [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
-- [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사(janet 같은 AVX2를 굽기에서 잡기), 커널 7.4 longterm(12월 중순), tars-agent
-- [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
-- [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
-
-## 핵심 파일
-
-- `docs/decisions/project_release.md` — 배포 절차 일곱 단계와 0.2.2 절(ISO 넷 · 해시 · GPU 데모 판 · 로컬 full)
-- `docs/specs/2026-11-12-tars-display-yield-design.md` — 결정 12(GPU 데모 판), plan `docs/plans/2026-11-14-tars-display-yield-dy-m3.md`의 결과 절
-- `devlayer/files/gpu/etc/tars/rc.d/gpu.sh` · `devlayer/files/gpu/etc/fish/conf.d/90-gpu-demo.fish` — autorun 조각
-- `display/check.sh` — `boot --autorun`과 판정 12a(부팅 3)
-- `devlayer/files/fakesteak/etc/tars/rc.d/fakesteak.sh` — 같은 모양의 앞선 조각(base가 없을 때만)
-- `docs/guides/carryover.md` — DY · TU · LD 절의 이월
-- `../tars-linux-pages/data.js` — 소개 페이지(순서는 `site/README.md`)
-
-## 다음 에이전트에게
-
-0.2.2는 닫혔다 — 새로 할 일은 사용자가 고른다. 실기 결과를 받으면 `carryover.md`의 DY 절과 DY-M3 plan 결과 6에 적는다.
-GPU 데모 판을 다시 구울 때: `rm -f devlayer/build/base.stamp devlayer/build/gpu.stamp` → `make dev-layers DEV_LAYERS="base gpu"` →
-`make iso ISO_LAYERS="base gpu"` → `out/tars.iso`를 `tars-<ver>-gpu-x86_64.iso`로. 다음 판부터 release는 ISO 넷이다(project_release의 배포 모양 ·
-절차 3 · 5 · 6에 반영했다). 디스크 여유가 25GiB(95%)라 큰 빌드 전에 `out/`을 본다.
 
 ## 완료된 작업 (2026-11-13~14, DY-M2 — 로컬 세션)
 
