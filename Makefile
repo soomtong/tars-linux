@@ -87,7 +87,7 @@ RESERVED_PORTS = --sysctl net.ipv4.ip_local_reserved_ports=45455-45599
 IN_CONTAINER = $(DOCKER) run --rm $(RESERVED_PORTS) -v "$(CURDIR)":/workspace -w /workspace $(CONTAINER) bash -c
 
 .DEFAULT_GOAL := help
-.PHONY: help container kernel init terminal initrd iso dev-layers disk disk-fresh boot-qemu run-qemu quick gate check shell clean
+.PHONY: help container kernel init terminal initrd iso iso-full dev-layers disk disk-fresh boot-qemu run-qemu quick gate check shell clean
 
 # 도움말의 백틱은 이스케이프한다. recipe는 셸이 읽으므로 안 하면 그 자리가
 # 명령 치환이 되고, `make`가 조용히 /bin/sh를 부른다(help에서 실제로 그랬다).
@@ -120,6 +120,10 @@ help:
 	@echo "      (xorriso). ISO 하나가 BIOS와 UEFI를 둘 다 태운다. 증분이면 13초."
 	@echo "      ISO_LAYERS=\"base lang-jvm\"이면 devlayer/build/의 묶음을 boot/layers/에 싣는다(TP-M1) —"
 	@echo "      tars-install이 p3로 옮기고 init이 /usr에 얹는다. 기본은 싣지 않는다(게이트 체인의 ISO)"
+	@echo
+	@echo "  make iso-full"
+	@echo "      묶음 전부(DEV_LAYERS)를 실은 ISO 하나 — initrd, dev-layers, make_iso.sh를 차례로. 산출물은"
+	@echo "      FULL_ISO=$(FULL_ISO). GitHub release의 2GiB를 넘을 수 있어 로컬에서 dd로 쓰는 판이다(OD design \"배포\")"
 	@echo
 	@echo "  make dev-layers"
 	@echo "      개발 도구 층의 묶음(DEV_LAYERS, 기본 base container docs editor lang-beam lang-jvm lang-native lang-script media server util fakesteak gpu)을 devlayer/build/<묶음>.sqfs로 굽는다."
@@ -250,6 +254,17 @@ initrd: kernel init terminal
 ISO_LAYERS ?=
 iso: initrd
 	$(IN_CONTAINER) 'cd boot && ./build.sh && ISO_LAYERS="$(ISO_LAYERS)" ./make_iso.sh'
+
+# 묶음 전부를 실은 판(OD design "배포" — 사용자 2026-11-14). GitHub에는 안 올리고 로컬에서 dd로 쓴다. dev-layers를 의존으로
+# 걸지 않고 recipe에서 부르는 것은 -j에서 initrd와 동시에 시작하지 않게 하려는 것이다(dev-layers의 verify가 initrd와 대조한다).
+# 이름을 out/tars-dev.iso(devtools 체인의 것)와 나눈다 — 체인이 덮어쓰지 않는다.
+FULL_ISO ?= out/tars-full.iso
+iso-full: initrd
+	@$(MAKE) --no-print-directory dev-layers DEV_LAYERS="$(DEV_LAYERS)"
+	$(IN_CONTAINER) 'cd boot && ./build.sh && ISO_LAYERS="$(DEV_LAYERS)" ISO_OUT="../$(FULL_ISO)" ./make_iso.sh'
+	@size=$$(wc -c <"$(FULL_ISO)" | tr -d " "); \
+	  echo "$(FULL_ISO): $$size B, 묶음 $(words $(DEV_LAYERS))개"; \
+	  [ "$$size" -le 2147483648 ] || echo "  2GiB(2,147,483,648 B)를 넘는다 — GitHub release에는 못 올린다(로컬 dd용)"
 
 # 개발 도구 층(TP-M0). 묶음마다 둘을 차례로 부른다 — debian 줄의 거두기는 amd64 컨테이너(개발 컨테이너는 arm64라
 # amd64 postinst를 못 돌린다), 받기 · 검사 · 굽기는 개발 컨테이너. 둘 다 자기 캐시를 본다(harvest.lines · stamp).
