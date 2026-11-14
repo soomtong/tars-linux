@@ -60,7 +60,7 @@
 - [Write or reuse](docs/decisions/project_write_or_reuse.md) — 직접 짜는 자리는 배울 값이 있거나 원하는 모양이 남의 것과 다른 자리다
 - [Measuring tool cost](docs/decisions/project_measuring_tool_cost.md) — 게스트에 도구를 넣기 전에 재귀 `DT_NEEDED`로 비용을 재는 절차
 - [Measuring shells](docs/decisions/project_measuring_shells.md) — 셸을 재는 환경이 실제 환경과 다르면 값이 조용히 틀린다
-- [Release](docs/decisions/project_release.md) — 0.1.0 · 0.1.1 · 0.1.2 · 0.1.3(2026-11-01) · 0.1.4(2026-11-05) · 0.2.0(2026-11-10, ISO 셋)과 배포 절차 일곱 단계(tag가 `make iso`보다 먼저, 줄끝 CRLF가 만드는 `-dirty`)
+- [Release](docs/decisions/project_release.md) — 0.1.0 · 0.1.1 · 0.1.2 · 0.1.3(2026-11-01) · 0.1.4(2026-11-05) · 0.2.0(2026-11-10, ISO 셋) · 0.2.1 · 0.2.2(2026-11-14, ISO 넷 — 기본 · nonative · fakesteak · gpu, 묶음 전부 판은 로컬)과 배포 절차 일곱 단계(tag가 `make iso`보다 먼저, 줄끝 CRLF가 만드는 `-dirty`)
 - [Layer dedup](docs/decisions/project_layer_dedup.md) — 묶음은 base와 겹친 것을 지운 채 구워져 base 없이 온전하지 않다(독립은 `devlayer/standalone-bundles`), emacs 뺌 · fakesteak 기본 판(LD, 2026-11-12)
 - [Display yield](docs/decisions/project_display_yield.md) — terminal은 CPU 콘솔 그대로, 프로그램이 socket으로 요청하면 DROP_MASTER로 화면을 놓는다 · 커널 동작 실측 · card0 fd가 셸로 새던 것 · 키보드는 양보 동안만 손님 uid · Ctrl+Cmd+Backspace · 묶음 gpu(SDL3 · Mesa)와 tars-gpu-demo · M0~M2 끝(2026-11-14)
 - [Odin](docs/decisions/project_odin.md) — lang-native에 그대로, 링크는 런처가 ODIN_CLANG_PATH=gcc로 · raylib .so NEEDED 예외 · rust 1.100.0 · make iso-full(OD-M0, 2026-11-14)

@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -107,14 +107,15 @@ smoke 세 판 모두 첫 줄 `TARS 0.2.0`(꼬리표 없음), 묶음 안 출처 �
 절차에서 배운 것: `VERSION` 커밋(`1de4899`) 뒤에 수정 커밋이 더 붙어 태그는 닫기 뒤의 커밋에 달았다 — 다음에는 게이트가 초록인 것을 본 뒤
 `VERSION`을 올린다. 기본 판이 2GiB에 닿았으니 다음 판에서 묶음이 자라면 먼저 `carryover.md`의 "묶음 사이 같은 파일 지우기"를 한다.
 
-## 0.2.2 (2026-11-14, 준비됨 — 공개 전)
+## 0.2.2 (2026-11-14, 공개 — ISO 넷)
 
 | 항목 | 값 |
 |---|---|
 | tag | `v0.2.2` (annotated, 2026-11-14 push — `main`도 `4aaeb2d`까지) → `16a1072` (`Release 0.2.2`). 루트 게이트 34/34 첫 판, lanes 1,593초, 잘린 줄 0 |
-| ISO | `tars-0.2.2-x86_64.iso` 1,990,055,936 B(server를 뺀 묶음 열둘) · `tars-0.2.2-nonative-x86_64.iso` 1,645,989,888 B(lang-native를 뺀 열둘) · `tars-0.2.2-fakesteak-x86_64.iso` 145,563,648 B |
-| sha256 | `53b70210…eb04e03c` · `6d7a811d…c06661893` · `a92c8926…8789a706` (SHA256SUMS) |
-| 로컬 | `make iso-full` → `out/tars-full.iso` 2,139,080,704 B(열셋, `TARS 0.2.2`) — GitHub에 안 올린다 |
+| ISO | `tars-0.2.2-x86_64.iso` 1,990,055,936 B(server를 뺀 묶음 열둘) · `tars-0.2.2-nonative-x86_64.iso` 1,645,989,888 B(lang-native를 뺀 열둘) · `tars-0.2.2-fakesteak-x86_64.iso` 145,563,648 B · `tars-0.2.2-gpu-x86_64.iso` 474,527,744 B(base · gpu, DY-M3) |
+| sha256 | `53b70210…eb04e03c` · `6d7a811d…c06661893` · `a92c8926…8789a706` · `c4bc97d3…b08ba4ba` (SHA256SUMS, 넷) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.2.2 (2026-11-14, Latest) — 사용자: "tag 0.2.2 and release and publish them all of 4 iso" |
+| 로컬 | `make iso-full` → `out/tars-full.iso` 2,139,080,704 B(열셋, `TARS 0.2.2`), 같은 파일의 하드 링크 `out/tars-0.2.2-full-x86_64.iso`, sha256 `6bce5351…aeb334b` — GitHub에 안 올린다(사용자: 로컬 디스크의 것을 쓴다) |
 
 0.2.1 뒤의 DY · GU · LD · OD · TU를 담았고 본론은 도구 판올림(TU)이다. 사용자가 외출하며 "모든 결정을 위임"했고(2026-11-14), lead는
 절차 1~5까지 하고 6(push · `gh release create`)과 7(소개 페이지)은 사용자가 돌아와 정하도록 멈췄다 — 바깥으로 나가는 일이고 `main`의
