@@ -1,71 +1,65 @@
-# HANDOFF: 0.2.2 공개(2026-11-14) — GitHub release ISO 넷 · 소개 페이지 갱신, 묶음 전부 판은 로컬 out/tars-0.2.2-full-x86_64.iso
+# HANDOFF: 0.2.2 공개 끝(2026-11-14) — GitHub release ISO 넷, GPU 데모 판(DY-M3), 묶음 전부 판은 로컬
 
 ## 목표
 
-사용자(2026-11-14, 돌아와서): ISO 목록 마지막 점검 → "릴리즈 태그를 붙이도록 할게"(`main` · `v0.2.2` push) → "0.2.2 작업의 핵심은 gpu 관련 기능이야.
-fakesteak 처럼 하나의 iso 파일을 구워줘. 설치하면 fullscreen gpu 구동 화면이 동작해야해." DY-M3 끝(`c30a838` — gpu 묶음의 autorun 조각,
-display 체인 (12a)). `out/release-0.2.2-gpu/tars-0.2.2-gpu-x86_64.iso`(base · gpu, 474,527,744 B, `TARS 0.2.2+c30a838`) — 설치 smoke로 첫 패널의
-데모를 봤다(DY-M3 plan 결과). 이어 사용자: "tag 0.2.2 and release and publish them all of 4 iso. and point standard (server and native lang included) iso in local disk." —
-tag는 그대로(`v0.2.2` → `16a1072`, 옮기지 않았다), release에 ISO 넷 + SHA256SUMS, 소개 페이지 `data.js`(GU · LD · DY · OD · TU와 0.2.2).
-남은 것: 실기(i915 · crocus), janet · mitos 이월.
-
-사용자(2026-11-14): odin을 다시 넣을 때의 용량 → 묶음 자리 검토("keep them all") → "odin을 native lang에 그대로" · rust 1.100 ·
-`make iso-full` → 배포 모양(GitHub에 `server`를 뺀 판 · `lang-native`를 뺀 판 · fakesteak, 묶음 전부 판은 로컬 dd — 기억 `project_release`)
-→ "이 정도면 0.2.2?" → "이번 판올림은 각 유틸리티 · 랭귀지 버전 업그레이드로 의미를" → "잠깐 외출 — 모든 결정을 위임합니다."
-OD-M0은 끝났다(`c07e944` · `0a0363e` · `e0cb758`). TU-M0도 끝났다(`bc48393` — janet 1.43.0은 AVX2라 보류, pg의 systemd는 standalone 둘).
-0.2.2: 절차 1~5 끝(기억 `project_release`의 0.2.2 절) — 남은 것은 사용자 확인 뒤 6 · 7. 원래 계획은 "release는 draft까지"였으나 draft도 tag · main의
-push가 먼저라 그 앞에서 멈췄다. 옛 계획 줄: 0.2.2 절차
-(VERSION → 루트 게이트 → tag → ISO 셋 → smoke → 해시 → GitHub release는 draft까지 — 공개 · push는 사용자가 돌아와 정한다).
-
-사용자(2026-11-13): HANDOFF에서 이어 DY-M2 — 조사 결과(Debian 패키지 그대로 · 힌트 없음 · 데모 dlopen)에 "confirmed continue".
-끝났다 — 결과는 DY-M2 plan의 결과 절. DY 서브프로젝트가 닫혔다.
-
-사용자(2026-11-13): DY-M1 전에 정할 둘(input 그룹 · 탈출 조합)의 설명을 읽고 "두 항목 모두 추천해 준 방향이 가장 리즈너블합니다" →
-plan "confirmed" → Task마다 "continue". 끝났다 — 결과는 DY-M1 plan의 결과 절.
-
-사용자(2026-11-13, 로컬 세션): origin을 받아 DY-M0을 Task 1부터 — Task마다 "커밋하고 진행해". Task 3 · 4는 "2로 가자"(체인이 PASS한 뒤에
-따로 commit). 끝났다 — 결과는 DY-M0 plan의 결과 절.
-
-사용자(2026-11-12): 납품 시나리오(키오스크 다음의 2차 데모 = GPU를 쓰는 프로그램)를 두고 "KMS master를 terminal이 독점하는 구조를
-개선하자" · 메인 터미널을 GPU 기반으로 할지 논의 → "SDL 3 갑시다. 나머지는 모두 당신의 추천대로 진행합니다." → "로컬에 있는
-개발환경에서 작업을 이어서 진행할게 이 세션은 handoff로 마감하자." 열려 있다 — design · DY-M0 plan · 프로브만 있고 코드는 없다.
-
-사용자(2026-11-12): "묶음 사이 같은 파일 지우기부터 조사 … emacs, doom 잘 안쓰는거 같아 … tars-agent를 만들면 에디터는 더 안쓰게 될거야" ·
-"기본판에 fakesteak 추가하자" → "emacs 빼고 나머지는 권고대로, design · plan · 임플리멘테이션까지. 나는 운전을 좀 할게." 끝났다(결정은 lead, LD design).
-
-사용자(2026-11-12): cyber 0.4.7을 받아 0.2.1 기본 판을 지금 빌드로 바꾸라("교체한 흔적을 내지 마", cyber 판이 또 나오면 되풀이) →
-"libghostty 1.0.1 … 반영 검토" → "다음 판에 싣는 걸로". 둘 다 끝났다. 아래 옛 목표(0.2.1)도 끝난 것이다.
-
-사용자(2026-11-11): carryover에서 다음 후보를 추려 달라 → "1번(컨테이너 실행 환경)으로 가자. 조사부터. 완성 작업까지 결정을 위임합니다.",
-작은 것 다섯(ping · hostname · DMI · Landlock · sudo timestamp)도 이어서, 서브에이전트는 셋까지, "이 작업이 완성되면 0.2.1 버전을
-릴리즈/배포 합니다." 셋 다 끝났다 — LT · CE를 닫고 0.2.1을 냈다. 결정은 모두 Claude가 정했고 design · plan 결과 절에 까닭을 적었다.
-SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
+0.2.2를 공개 버전으로 낸다. 본론은 도구 판올림(TU-M0)과 odin(OD-M0), 그리고 사용자가 "0.2.2 작업의 핵심은 gpu 관련 기능"이라 한
+화면 양보(DY)다. 사용자(2026-11-14): "fakesteak 처럼 하나의 iso 파일을 구워줘. 설치하면 fullscreen gpu 구동 화면이 동작해야해" →
+"tag 0.2.2 and release and publish them all of 4 iso. and point standard (server and native lang included) iso in local disk" →
+"초안 demo-fakesteak-20261110 release 지워줘" → "handoff로 마감하자". 모두 끝났다.
 
 ## 현재 브랜치
 
-`main`은 origin(`a46119c`)보다 DY-M0 · M1 · M2의 commit만큼 앞선다(이 기록까지) — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
-태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 2026-11-14에 지웠다(사용자). 태그는 남겼다(20261109 때와 같다).
+`main` — origin과 같다(`8eaa090`까지 push). 태그 `v0.2.2` → `16a1072`(`Release 0.2.2`, release Latest). tag는 옮기지 않았다 —
+GPU 데모 판은 tag 뒤 commit `c30a838`에서 구워 부팅 줄이 `TARS 0.2.2+c30a838`이다(노트에 적었다).
+`gh-pages` → `866143a`(0.2.2 · GU · LD · DY · OD · TU) push. 작업 사본 `../tars-linux-pages`(worktree).
+태그 `demo-fakesteak-20261110`의 draft release는 지웠고 태그는 남겼다(20261109 때와 같다).
 
-## 다음 할 것
+## 완료된 작업 (2026-11-14, 이 세션)
 
-0. 실기 확인(사용자, 맥북 에어 2011): `carryover.md`의 DY 절 — `tars-kms-fill`(양보 · 키 · 탈출)과 `tars-fullscreen tars-gpu-demo
-   2>/tmp/gpu.log`(`gl` 줄이 crocus인가, frame 수). gpu 묶음은 다음 판(0.2.2)부터 기본 판에 실린다.
-   - 클라우드 세션의 브랜치 `claude/gifted-thompson-v5diyz`는 `a46119c` 전의 같은 내용이라 지워도 된다.
-1. 사용자가 볼 위임 결정(바꿀 것이 있으면): CE design의 결정 4(rootful Docker) · 5(nftables 백엔드) · 6(`-p`는 127.0.0.1) ·
-   7(소켓은 사용자 그룹 — 켜는 한 줄이 root와 같은 힘을 준다), LT design 결정 2(hostname 기본값 `tars`). 그리고 TC 때의 판단 하나를
-   고쳤다 — `firewall=off`는 이제 `ip tars` 표만 지운다(사람이 손수 올린 다른 표는 남는다).
-2. 실기 확인(맥북 에어 2011): 0.2.1 기본 판으로 갱신 설치 → `sudo tars-service enable docker` · `docker run --rm hello-world` ·
-   `claude`의 `/sandbox` · `brew install`의 경고 · `ping` · 프롬프트의 이름. 볼 것은 `carryover.md`의 CE 절 끝 항목.
-2-1. 다음 판에 실릴 것(아직 안 냄): DY(화면 양보 · 묶음 gpu — 열셋째, 기본 판 ISO 2GiB까지 약 79MiB), GU-M0 `44a986e`(ghostty vt-1.0.1), LD-M0(중복 지우기 · emacs 없음 · fakesteak),
-     cyber 0.4.9 · cci 0.7.2(`8756319`, 사용자 "다음 판(0.2.2)에 반영" 2026-11-12, devtools 체인 PASS 빌드 뒤 694초). 판을 낼 때
-     소개 페이지도(기능 목록에서 emacs를 빼고 fakesteak을) — `project_release`의 절차 1~7(절차 3이 LD로 바뀌었다).
-     cyber 새 판이 오면: `main`에 0.2.1 뒤의 일이 있으니 0.2.2에 실을지 0.2.1 가지에서 cyber만 올릴지 사용자에게 묻는다(`feedback_release_iteration`).
-2-2. 실기 측정 후보(사용자): memcpy · memset을 glibc로 돌릴지 — 기억 `project_ghostty_glibc_mem`(GU design 결정 2). 켜기 전후의
-     `seq 1 200000` · 키 하나의 frame. lead는 켜는 asm과 프로브를 준비할 수 있다.
-3. 다음 서브프로젝트 후보(사용자가 고른다): SMP(커널이 CPU 하나만 쓴다 — CE가 드러냈다, `carryover.md` CE 절), 셸 완성, 묶음
-   실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순 — Landlock ABI 10과 `rebindRoot`가 필요 없어지는지도 그때),
-   tars-agent(사용자가 예고 — claude code · codex · pi 같은 것), mitos 줄이기(풀린 285MiB, `carryover.md` LD 절).
-4. DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다(CO-M1 plan 결과 7). 또 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터.
+- [x] OD-M0 odin(`c07e944`) · rust 1.100.0(`0a0363e`) · `make iso-full`(`e0cb758`) — 닫기 `c07b325`
+- [x] TU-M0 도구 판올림(`bc48393`) — 닫기 `c1b90ed`
+- [x] 0.2.2 절차 1~5: `VERSION`(`16a1072`), 루트 게이트 34/34, tag, ISO 셋 · smoke · 해시(`4aaeb2d`)
+- [x] `main` · `v0.2.2` push(사용자 "릴리즈 태그를 붙이도록 할게")
+- [x] DY-M3 GPU 데모 판(`c30a838` · `4a82e6e`): gpu 묶음 안의 autorun 조각(얹힌 묶음이 base · gpu 둘뿐일 때만), display 체인 판정 12a,
+      `tars-0.2.2-gpu-x86_64.iso`(474,527,744 B) — 설치 smoke에서 첫 패널이 데모를 화면 가득 띄웠다(screendump)
+- [x] GitHub release v0.2.2: ISO 넷(기본 · nonative · fakesteak · gpu) + SHA256SUMS, 노트 `out/release-0.2.2/NOTES.md`. 다시 받아 `shasum -c` OK 4/4, 받은 것은 지웠다
+- [x] 소개 페이지 `data.js`(절차 7), 기록 `217d923`(project_release · completed · MEMORY), draft release 삭제 `8eaa090`
+- [x] 겹친 ISO 사본 정리(약 4.8GB) — 남은 것: `out/release-0.2.2/`(올린 넷) · `out/tars-0.2.2-full-x86_64.iso`(= `out/tars-full.iso` 하드 링크, 2.1GB)
+
+## 시도했으나 실패한 접근
+
+- 파일만 싣는 새 묶음(`gpu-demo`): `devlayer/build.sh:32`가 매니페스트 줄이 없는 묶음을 `no manifest lines`로 막는다 — 조각을 gpu 묶음에 두고 "base · gpu 둘뿐"으로 판정했다.
+- display 체인 첫 판: 부팅 3이 `terminal never rendered a prompt` — autorun의 양보가 terminal의 첫 `screen>`보다 빨랐다. `boot --autorun`(yield 줄을 기다림)으로 고쳤다.
+- 라이브 부팅으로 데모 확인: init은 홈 디스크가 있을 때만 묶음을 얹는다(`init/src/main.zig:1275`) — 설치 smoke(`out/gpu-install-smoke.sh`, OVMF · NVMe)로 봤다.
+- 캐시를 탄 묶음은 출처 기록이 commit 전의 `-dirty`로 남는다 — commit 뒤 `rm -f devlayer/build/<묶음>.stamp`로 다시 굽는다.
+- TU의 첫 접두사 TR은 Terminal Rendering과 겹쳤다 — 새 접두사는 `completed.md`에서 먼저 찾는다.
+
+## 남은 작업
+
+- [ ] 실기(사용자, 맥북 에어 2011): GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절(`tars-kms-fill` 양보 · 키 · 탈출)
+- [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
+- [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
+- [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
+- [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사(janet 같은 AVX2를 굽기에서 잡기), 커널 7.4 longterm(12월 중순), tars-agent
+- [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
+- [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
+
+## 핵심 파일
+
+- `docs/decisions/project_release.md` — 배포 절차 일곱 단계와 0.2.2 절(ISO 넷 · 해시 · GPU 데모 판 · 로컬 full)
+- `docs/specs/2026-11-12-tars-display-yield-design.md` — 결정 12(GPU 데모 판), plan `docs/plans/2026-11-14-tars-display-yield-dy-m3.md`의 결과 절
+- `devlayer/files/gpu/etc/tars/rc.d/gpu.sh` · `devlayer/files/gpu/etc/fish/conf.d/90-gpu-demo.fish` — autorun 조각
+- `display/check.sh` — `boot --autorun`과 판정 12a(부팅 3)
+- `devlayer/files/fakesteak/etc/tars/rc.d/fakesteak.sh` — 같은 모양의 앞선 조각(base가 없을 때만)
+- `docs/guides/carryover.md` — DY · TU · LD 절의 이월
+- `../tars-linux-pages/data.js` — 소개 페이지(순서는 `site/README.md`)
+
+## 다음 에이전트에게
+
+0.2.2는 닫혔다 — 새로 할 일은 사용자가 고른다. 실기 결과를 받으면 `carryover.md`의 DY 절과 DY-M3 plan 결과 6에 적는다.
+GPU 데모 판을 다시 구울 때: `rm -f devlayer/build/base.stamp devlayer/build/gpu.stamp` → `make dev-layers DEV_LAYERS="base gpu"` →
+`make iso ISO_LAYERS="base gpu"` → `out/tars.iso`를 `tars-<ver>-gpu-x86_64.iso`로. 다음 판부터 release는 ISO 넷이다(project_release의 배포 모양 ·
+절차 3 · 5 · 6에 반영했다). 디스크 여유가 25GiB(95%)라 큰 빌드 전에 `out/`을 본다.
 
 ## 완료된 작업 (2026-11-13~14, DY-M2 — 로컬 세션)
 

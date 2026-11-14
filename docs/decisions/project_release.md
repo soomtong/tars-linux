@@ -132,7 +132,8 @@ push도 함께다([[feedback_push_policy]]). ISO · SHA256SUMS · NOTES.md는 `o
 
 ## 0.2.2부터의 배포 모양 (사용자 결정 2026-11-14)
 
-GitHub release(파일 하나당 2GiB)에는 ISO 셋만 올린다: 개발 도구 층에서 `server`만 뺀 판, `lang-native`만 뺀 판, fakesteak 납품 데모.
+GitHub release(파일 하나당 2GiB)에는 ISO 넷을 올린다: 개발 도구 층에서 `server`만 뺀 판, `lang-native`만 뺀 판, fakesteak 납품 데모,
+GPU 데모(base · gpu — DY-M3, 0.2.2에 사용자가 더했다).
 barebone과 묶음 전부 판은 올리지 않는다. 묶음 전부 판은 `make iso-full`(`out/tars-full.iso`)로 로컬에 남겨 `dd`로 쓴다 — 다른 길(외부
 호스팅)은 사용자가 정한다. 계기: odin을 더하면 묶음 전부 판이 2GiB까지 약 11.5MiB(OD design "배포"). 아래 절차 3 · 5 · 6은 0.2.2를 낼 때
 이 모양으로 고쳤다(2026-11-14) — barebone은 "0.2.1까지"로 남긴다.
@@ -158,6 +159,8 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    고치지 않는다(출처 기록이 `-dirty`가 된다 — [[feedback_release_iteration]]의 함정).
    납품 데모(0.2.0부터 — fakesteak)는 `make iso ISO_LAYERS="fakesteak"`, smoke(base가 없으니 첫 패널에 비가 뜬다), 같은 디렉터리에
    `tars-<ver>-fakesteak-x86_64.iso`. fakesteak은 독립 묶음이라 혼자 실린다(`devlayer/standalone-bundles`).
+   GPU 데모(0.2.2부터)는 `make iso ISO_LAYERS="base gpu"` → `tars-<ver>-gpu-x86_64.iso`. 라이브 smoke에서는 데모가 안 뜬다(묶음은 설치본의
+   홈에서 얹힌다) — 첫 패널의 데모는 설치 smoke로 본다(DY-M3 plan 결과 5, `out/gpu-install-smoke.sh`의 모양).
    기본 판은 `make iso ISO_LAYERS="base container docs editor fakesteak gpu lang-beam lang-jvm lang-native lang-script media server util"`
    (기본값은 묶음을 안 싣는다). base 없이 다른 묶음을 실으면 `make_iso.sh`가 멈춘다 — base와 겹친 파일이 지워져 있다(LD design 결정 1 · 3).
    개발 도구의 판을 올리는 것은 버전을 낼 때 한 번이다(TP design 결정 3): `devlayer/manifest.toml`의 표(version · url · sha256)를 1의 커밋에
@@ -168,10 +171,10 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
    `tars-init: starting as PID 1 (TARS <ver>)`(꼬리표 없이) · `terminal: grid` · `spawned child … fish`가 있고
    `Kernel panic`이 0인지 본다. 설정 디스크를 안 붙여 처음 받은 사람과 같은 기본값 경로를 밟는다. 꼬리표가 붙었거나
    smoke가 실패하면 `git tag -d v<ver>`로 지우고 고친다 — push 전이라 바깥에 안 나갔다.
-5. 저장소 밖 빈 디렉터리(3의 ISO가 있는 곳)에서 세 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
+5. 저장소 밖 빈 디렉터리(3의 ISO가 있는 곳)에서 네 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
 6. `git push origin v<ver>` →
-   `gh release create v<ver> <iso> <nonative iso> <fakesteak iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
-   새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다.
+   `gh release create v<ver> <iso> <nonative iso> <fakesteak iso> <gpu iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
+   새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다. 본 뒤 받은 것은 지운다(사용자 2026-11-14 — 공간).
 7. 소개 페이지 — `gh-pages`의 `data.js` `releases`에 한 줄(`site/README.md`의 "릴리스를 냈을 때").
 
 ## 재사용할 사실
