@@ -19,6 +19,7 @@ cd "$(dirname "$0")" || exit 1
 #   DY-M2: 부팅 3은 홈 디스크의 .tars/layers에 base · gpu 묶음을 얹고 `tars-fullscreen tars-gpu-demo`가 SDL3(KMSDRM) +
 #   OpenGL ES(Mesa)로 화면을 그리며 키를 udevd 없이 받는 것을 본다(결정 10, M2 plan 확인 3). 묶음이 없는 부팅 2에서는
 #   데모가 이유를 말하고 1로 끝난다.
+#   DY-M3: 부팅 3처럼 얹힌 묶음이 base · gpu 둘뿐이면(GPU 데모 판) 첫 패널이 데모를 스스로 화면 가득 띄우고 Esc로 셸에 돌아온다.
 #
 # 셸은 사용자 dyuser(uid 1000)다 — 설정 디스크의 user=와 tars-home 라벨의 ext4 디스크가 함께 있어야 init이
 # root 대신 사용자로 띄운다(`pickUser`). 양보의 요점이 "사용자의 프로그램이 화면을 잡는다"라서다.
@@ -218,15 +219,22 @@ boot() {
     -no-reboot &
   QEMU_PID=$!
 
-  local ready=0
+  # --autorun(DY-M3): 첫 패널이 데모를 스스로 띄우는 부팅이다. 양보가 terminal의 첫 화면 찍기보다 먼저라 `screen>` 줄도
+  # 프롬프트도 데모가 끝난 뒤에야 온다 — 그래서 yield 줄을 기다리고, 프롬프트는 판정 12a가 Esc 뒤에 본다.
+  local ready=0 want="terminal: screen>"
+  [ "$prompt" = "--autorun" ] && want="terminal: display> yield pid"
   for _ in $(seq 1 120); do
-    if grep -a "terminal: screen>" "$LOG" >/dev/null; then ready=1; break; fi
+    if grep -a "$want" "$LOG" >/dev/null; then ready=1; break; fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
     sleep 1
   done
-  [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
-  wait_for_screen "${prompt}@tars" ||
-    report_failure "the ${prompt} prompt never showed up"
+  if [ "$prompt" = "--autorun" ]; then
+    [ "$ready" = "1" ] || report_failure "the first panel never asked for the screen (no 'display> yield')"
+  else
+    [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
+    wait_for_screen "${prompt}@tars" ||
+      report_failure "the ${prompt} prompt never showed up"
+  fi
   sleep 1
 
   local connected=0
@@ -494,7 +502,7 @@ truncate -s $(( $(du -sm "$LAYER_SEED" | cut -f1) + 128 ))M "$HOME_IMG"
 mkfs.ext4 -F -q -L tars-home -d "$LAYER_SEED" "$HOME_IMG"
 rm -rf "$LAYER_SEED"
 echo "=== boot 3: ${USER_NAME} with the base and gpu bundles (version ${IMAGE_VER}) ==="
-boot "$USER_NAME" -drive file="$CONFIG_IMG",if=virtio,format=raw -drive file="$HOME_IMG",if=virtio,format=raw
+boot --autorun -drive file="$CONFIG_IMG",if=virtio,format=raw -drive file="$HOME_IMG",if=virtio,format=raw
 
 # 화면 가운데(16 × 16)의 색이 1초 사이에 바뀔 때까지 다시 뜬다 — 데모는 매 frame 띠의 색을 돌리므로, 바뀌면 GL이 그리고
 # 있다(terminal의 화면은 그 자리가 멈춰 있다). 30초 — llvmpipe가 CPU 하나에서 처음 뜨는 시간을 넉넉히.
@@ -518,17 +526,33 @@ wait_for_log 'tars-init: overlay /usr from 2 layers in [0-9]+ms' ||
   report_failure "(12) init did not lay base and gpu over /usr"
 echo "(12) overlay /usr from 2 layers"
 
+# ── 판정 12a: base · gpu 둘뿐이라 첫 패널이 데모를 스스로 띄운다(DY-M3) ──────
+echo "=== (12a) with only base and gpu the first panel starts tars-gpu-demo by itself ==="
+wait_for_count "$YIELD" 1 ||
+  report_failure "(12a) the gpu autorun did not ask for the screen (no 'display> yield')"
+wait_for_motion ||
+  report_failure "(12a) the autorun demo is not drawing (${LAST_BGS:-no shot})"
+type_keys esc
+wait_for_count "$RECLAIM" 1 ||
+  report_failure "(12a) Esc did not end the autorun demo (no 'display> reclaim')"
+wait_for_screen "${USER_NAME}@tars" ||
+  report_failure "(12a) the ${USER_NAME} prompt did not show up after the autorun demo"
+type_line "echo a1-(grep -c 'video kmsdrm' /tmp/gpu-demo.log)"
+wait_for_screen 'a1-1' ||
+  report_failure "(12a) the autorun demo left no 'video kmsdrm' in /tmp/gpu-demo.log"
+echo "(12a) the first panel ran tars-gpu-demo full screen by itself; Esc gave the shell back"
+
 # ── 판정 13: 데모가 GPU로 그리고 키를 받는다 ─────────────────────────────
 echo "=== (13) tars-fullscreen tars-gpu-demo draws with SDL3 + GLES and gets the keys ==="
 type_line 'tars-fullscreen tars-gpu-demo 2> /tmp/g1.log'
-wait_for_count "$YIELD" 1 ||
+wait_for_count "$YIELD" 2 ||
   report_failure "(13) no 'display> yield' for tars-gpu-demo"
-wait_for_count "$HANDED" 1 ||
+wait_for_count "$HANDED" 2 ||
   report_failure "(13) the inputs were not handed to uid 1000"
 wait_for_motion ||
   report_failure "(13) the centre of the screen never changed colour — the demo is not drawing (${LAST_BGS:-no shot})"
 type_keys x y z esc
-wait_for_count "$RECLAIM" 1 ||
+wait_for_count "$RECLAIM" 2 ||
   report_failure "(13) Esc did not end the demo (no 'display> reclaim')"
 # 셸이 x y z를 받았으면 이 줄은 `xyzecho …`가 되어 g1-7을 안 찍는다.
 type_line 'echo g1-(math 3+4)'
@@ -550,15 +574,15 @@ joined_screen_dump | grep -aE 'tars-gpu-demo: (sdl|gl|mode|frames) ' | tail -n 4
 # ── 판정 14: 탈출 조합 — SDL은 SIGTERM을 QUIT으로 받는다 ─────────────────
 echo "=== (14) Ctrl+Cmd+Backspace ends the demo through SIGTERM, no SIGKILL ==="
 type_line 'tars-fullscreen tars-gpu-demo 2> /tmp/g3.log'
-wait_for_count "$YIELD" 2 ||
-  report_failure "(14) no second 'display> yield'"
+wait_for_count "$YIELD" 3 ||
+  report_failure "(14) no third 'display> yield'"
 wait_for_motion ||
   report_failure "(14) the demo is not drawing (${LAST_BGS:-no shot})"
 type_keys ctrl-meta_l-backspace
 wait_for_count "$SIGTERM_LINE" 1 ||
   report_failure "(14) the chord did not send SIGTERM"
-wait_for_count "$RECLAIM" 2 ||
-  report_failure "(14) no second 'display> reclaim'"
+wait_for_count "$RECLAIM" 3 ||
+  report_failure "(14) no third 'display> reclaim'"
 type_line "echo g3-(grep -c ': quit' /tmp/g3.log)"
 wait_for_screen 'g3-1' ||
   report_failure "(14) the demo did not turn SIGTERM into a quit"
@@ -585,4 +609,4 @@ screendump "$SHOT" || report_failure "(15) screendump did not write ${SHOT}"
 echo "(15) the shell answers on a redrawn console; no restart"
 stop_boot
 
-echo "PASS: DY-M2 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying; with the gpu bundle tars-gpu-demo draws through SDL3 KMSDRM and OpenGL ES and gets the keys without udevd"
+echo "PASS: DY-M2 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying; with the gpu bundle tars-gpu-demo draws through SDL3 KMSDRM and OpenGL ES and gets the keys without udevd; with only base and gpu the first panel starts it by itself (DY-M3)"

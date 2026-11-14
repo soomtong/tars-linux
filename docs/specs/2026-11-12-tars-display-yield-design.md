@@ -106,6 +106,13 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
     없다. Mesa와 SDL3은 개발 도구 층의 새 묶음으로 싣는다. 크기 · 드라이버 · udev 없는 입력은 DY-M2 plan의 조사 몫이다.
     DY-M2가 정한 것: Debian trixie의 패키지 그대로(묶음 `gpu` — SDL3 3.2.10 · Mesa 25.0.7 · LLVM 19, zstd15로 68MiB), 키는 SDL이 libudev로
     `/sys`를 훑어 받는다(힌트 없음), 데모 `tars-gpu-demo`는 initrd에 있고 `libSDL3.so.0`을 dlopen한다.
+12. GPU 데모 판(DY-M3, 사용자 2026-11-14: "0.2.2 작업의 핵심은 gpu 관련 기능이야. 이 데모를 위해 fakesteak 처럼 하나의 iso 파일을
+    구워줘"). ISO는 base · gpu 두 묶음만 싣는다(gpu는 base에 기대므로 독립 묶음이 될 수 없다 — Mesa · SDL3의 glibc 짝이 base에 있다).
+    부팅 뒤 첫 패널이 `tars-fullscreen tars-gpu-demo`를 스스로 띄운다 — 조각은 gpu 묶음의 `etc/tars/rc.d/gpu.sh` ·
+    `etc/fish/conf.d/90-gpu-demo.fish`이고, 얹힌 묶음이 base와 gpu 둘뿐일 때만 뜬다(출처 기록 `/usr/share/tars/layers/*`로 판정).
+    fakesteak의 조각(BB 결정 6, LD-M0의 "base가 없을 때만")과 같은 넷 — 대화형 · terminal의 패널 · ssh 아님 · 이번 부팅에 처음
+    (`/tmp/.tars-autorun`을 함께 쓴다) — 을 본다. 새 묶음을 만들지 않은 것: 묶음은 매니페스트 줄이 있어야 서고(`build.sh`),
+    파일만 싣는 묶음의 길은 없다. 개발 도구 묶음이 하나라도 함께 얹힌 판(기본 판 · nonative)에서는 뜨지 않는다.
 
 ## 비목표
 
@@ -135,3 +142,4 @@ TARS처럼 껐다(`drm_kms_helper.fbdev_emulation=0`, TARS는 `# CONFIG_DRM_FBDE
   (`tars-kms-fill`, initrd에 싣는다 — 실기에서도 같은 것으로 본다), 새 체인 `display`. Mesa도 SDL도 없다 — 양보의 문제와 GL의 문제를 섞지 않는다.
 - DY-M1 — 입력 양보(결정 8a — 양보 동안만 손님의 uid에게)와 탈출 조합(결정 8b), master가 아닌 채 뜬 terminal의 기다림(결정 11).
 - DY-M2 — Mesa · SDL3 묶음과 데모 프로그램. plan은 M1의 게이트가 도는 동안 조사부터.
+- DY-M3 — GPU 데모 판(결정 12). plan `docs/plans/2026-11-14-tars-display-yield-dy-m3.md`.

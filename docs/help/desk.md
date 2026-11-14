@@ -23,6 +23,7 @@
 `tars-fullscreen tars-kms-fill CC6666 5`는 화면을 5초 동안 한 색으로 칠하는 시험이고, `tars-kms-fill CC6666 0 --keys`는 `Esc`를 칠 때까지입니다.
 `tars-fullscreen tars-gpu-demo`는 SDL3 · OpenGL ES로 움직이는 색 띠를 그리고 친 키의 이름을 보여 줍니다(`Esc`로 끝). gpu 묶음(SDL3 · Mesa)이
 있어야 하고, SDL3로 만든 다른 프로그램도 같은 길로 뜹니다. 그린 드라이버는 `tars-gpu-demo 2>/tmp/gpu.log`의 `gl` 줄에 있습니다.
+GPU 데모 판(묶음이 base와 gpu 둘뿐인 기계)은 부팅하면 첫 패널이 이 데모를 스스로 띄웁니다. `Esc`로 끝내면 셸이 남고, 그때의 줄은 `/tmp/gpu-demo.log`에 있습니다.
 
 ## 한/영
 
