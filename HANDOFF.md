@@ -7,7 +7,7 @@ fakesteak 처럼 하나의 iso 파일을 구워줘. 설치하면 fullscreen gpu 
 display 체인 (12a)). `out/release-0.2.2-gpu/tars-0.2.2-gpu-x86_64.iso`(base · gpu, 474,527,744 B, `TARS 0.2.2+c30a838`) — 설치 smoke로 첫 패널의
 데모를 봤다(DY-M3 plan 결과). 이어 사용자: "tag 0.2.2 and release and publish them all of 4 iso. and point standard (server and native lang included) iso in local disk." —
 tag는 그대로(`v0.2.2` → `16a1072`, 옮기지 않았다), release에 ISO 넷 + SHA256SUMS, 소개 페이지 `data.js`(GU · LD · DY · OD · TU와 0.2.2).
-남은 것: 실기(i915 · crocus), 초안 release `demo-fakesteak-20261110` 정리, janet · mitos 이월.
+남은 것: 실기(i915 · crocus), janet · mitos 이월.
 
 사용자(2026-11-14): odin을 다시 넣을 때의 용량 → 묶음 자리 검토("keep them all") → "odin을 native lang에 그대로" · rust 1.100 ·
 `make iso-full` → 배포 모양(GitHub에 `server`를 뺀 판 · `lang-native`를 뺀 판 · fakesteak, 묶음 전부 판은 로컬 dd — 기억 `project_release`)
@@ -44,7 +44,7 @@ SS 위임 결정 넷은 사용자 "그대로"(2026-11-11).
 ## 현재 브랜치
 
 `main`은 origin(`a46119c`)보다 DY-M0 · M1 · M2의 commit만큼 앞선다(이 기록까지) — push는 사용자가 정한다. 태그 `v0.2.1` → `4a26f01`(release Latest). `gh-pages`는 LT · CE · 0.2.1까지 push.
-태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 그대로 있다(0.2.1에 fakesteak ISO가 들었으니 지울지는 사용자가 정한다).
+태그 `demo-fakesteak-20261110` → `6625cc2`의 draft 릴리스는 2026-11-14에 지웠다(사용자). 태그는 남겼다(20261109 때와 같다).
 
 ## 다음 할 것
 
