@@ -427,6 +427,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(battery_test);
 
+    // link_test도 호스트에서 돈다(LK-M0). battery_test와 같은 모양이다 — netlink 메시지의 바이트를
+    // 읽고 짓는 순수 계산이라 std만 쓴다. 소켓을 여는 것은 `main.zig`이고(LK-M1) 게이트가 본다.
+    const link_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/link_test.zig"),
+        .target = host_target,
+        .optimize = optimize,
+    });
+    const link_test = b.addExecutable(.{
+        .name = "link_test",
+        .root_module = link_test_mod,
+    });
+    b.installArtifact(link_test);
+
     // backlight_test도 호스트에서 돈다(LP-M2). battery_test와 같은 모양이다 — 고르는 순서와 단계의
     // 순수 산수다. sysfs를 훑고 쓰는 것은 `main.zig`이고, 패널은 실기가 본다(QEMU에 백라이트가 없다).
     const backlight_test_mod = b.createModule(.{
@@ -540,6 +553,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(dictation_test).step);
     test_step.dependOn(&b.addRunArtifact(logline_test).step);
     test_step.dependOn(&b.addRunArtifact(battery_test).step);
+    test_step.dependOn(&b.addRunArtifact(link_test).step);
     test_step.dependOn(&b.addRunArtifact(backlight_test).step);
     test_step.dependOn(&b.addRunArtifact(pacing_test).step);
     test_step.dependOn(&b.addRunArtifact(scale_test).step);
