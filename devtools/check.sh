@@ -297,9 +297,9 @@ echo "B2: as tars, cargo new and cargo build --offline made a running program ($
 
 as_tars 'mkdir -p ~/tp/gm && cd ~/tp && printf "package main\n\nimport (\n\t\"fmt\"\n\t\"runtime\"\n)\n\nfunc main() { fmt.Println(\"tp-go-\" + runtime.Version()) }\n" > h.go && s=$(date +%s%N) && go run h.go 2>&1 | sed "s/^/tp-gorun=/"; e=$(date +%s%N); echo "tp-ms-gorun=$(((e-s)/1000000))"; cp h.go gm/ && cd gm && go mod init tp 2>&1 | sed "s/^/tp-gomod: /"; s=$(date +%s%N) && go build 2>&1 | sed "s/^/tp-gobuild: /"; e=$(date +%s%N); echo "tp-ms-gobuild=$(((e-s)/1000000))"; ./tp | sed "s/^/tp-gobuilt=/"'
 wait_log_re "tp-ms-gobuild=[0-9]+" 300 || fail "go run and go build did not finish in 300s" "tp-gorun" "tp-gobuild"
-grep -aqF "tp-gorun=tp-go-go1.27.3" "$LOG" || fail "go run h.go did not print go1.27.3" "tp-gorun" "tp-go"
+grep -aqF "tp-gorun=tp-go-go1.27.4" "$LOG" || fail "go run h.go did not print go1.27.4" "tp-gorun" "tp-go"
 # 실행 결과는 ms 줄 뒤에 나온다 — 바로 grep하면 첫 판처럼 경쟁에 진다.
-wait_log "tp-gobuilt=tp-go-go1.27.3" 30 || fail "go build in a module did not make a running program" "tp-gobuild" "tp-gomod"
+wait_log "tp-gobuilt=tp-go-go1.27.4" 30 || fail "go build in a module did not make a running program" "tp-gobuild" "tp-gomod"
 echo "B2: as tars, go run ($(ms_of gorun)ms, the first build fills ~/.cache/go-build) and go build in a module ($(ms_of gobuild)ms)"
 
 # TP-M3 plan 결정 F의 스크립트 언어 아홉. 소스는 printf "%s\n" "줄" … — 인자 안의 %는 printf가 안 펴므로 안전하다.
@@ -342,7 +342,7 @@ echo "B2: as tars, cyber ran with use math ($(ms_of cyber)ms)"
 
 as_tars 'cd ~/tp && printf "%s\n" "console.log(\"tp-node-\" + process.version + \"-\" + require(\"crypto\").createHash(\"sha256\").update(\"tp\").digest(\"hex\").slice(0, 8))" > h.js && s=$(date +%s%N) && node h.js 2>&1 | sed "s/^/tp-node: /"; e=$(date +%s%N); echo "tp-ms-node=$(((e-s)/1000000))"; s=$(date +%s%N); npm --version 2>&1 | sed "s/^/tp-npm=/"; e=$(date +%s%N); echo "tp-ms-npm=$(((e-s)/1000000))"'
 wait_log_re "tp-ms-npm=[0-9]+" 60 || fail "node and npm did not finish in 60s" "tp-node" "tp-npm"
-grep -aqF "tp-node: tp-node-v26.13.0-3abd8072" "$LOG" || fail "node did not print v26.13.0 and the crypto digest" "tp-node"
+grep -aqF "tp-node: tp-node-v26.13.1-3abd8072" "$LOG" || fail "node did not print v26.13.1 and the crypto digest" "tp-node"
 grep -aqF "tp-npm=11.20.0" "$LOG" || fail "npm --version did not print 11.20.0" "tp-npm"
 echo "B2: as tars, node ran with crypto ($(ms_of node)ms) and npm answered ($(ms_of npm)ms)"
 
@@ -619,7 +619,7 @@ wait_log_re "tp-ms-m10rest=[0-9]+" 120 || fail "the server block did not finish 
 grep -aqF "tp-m10-pghost=/tmp" "$LOG" || fail "the rc piece did not set PGHOST=/tmp" "tp-m10-"
 grep -aqF "tp-m10-which=/usr/local/bin/initdb /usr/local/bin/psql /usr/local/bin/mysqld /usr/bin/mysqladmin /usr/local/bin/nginx /usr/bin/redis-server /usr/local/bin/caddy " "$LOG" \
   || fail "a server command is not where the bundle puts it (psql must be 18's, mysqld and nginx through /usr/local/bin)" "tp-m10-which"
-grep -aqF "tp-m10-pg=18.6" "$LOG" || fail "postgres 18.6 did not answer on the /tmp socket" "tp-m10-pg" "tp-ms-m10pg"
+grep -aqF "tp-m10-pg=18.7" "$LOG" || fail "postgres 18.7 did not answer on the /tmp socket" "tp-m10-pg" "tp-ms-m10pg"
 grep -aqF "tp-m10-pgsel=42" "$LOG" || fail "postgres did not compute 40+2" "tp-m10-pg"
 grep -aqF "tp-m10-my=9.7.4" "$LOG" || fail "mysqld 9.7.4 did not answer (conf.d/tars.cnf: socket, secure-file-priv)" "tp-m10-my" "tp-ms-m10my"
 grep -aqF "tp-m10-mysel=42" "$LOG" || fail "mysql did not compute 40+2" "tp-m10-my"
@@ -629,7 +629,7 @@ grep -aqF "tp-m10-rd=PONG" "$LOG" || fail "redis did not answer ping" "tp-m10-rd
 grep -aqF "tp-m10-rdver=8.10.3" "$LOG" || fail "redis is not 8.10.3" "tp-m10-rd"
 grep -aqF "tp-m10-cd=caddy-42" "$LOG" || fail "caddy respond did not answer" "tp-m10-cd"
 grep -aqF "tp-m10-man=postgres mysqld nginx redis-server " "$LOG" || fail "a server man page did not read offline" "tp-m10-man"
-echo "B2: as tars, postgres 18.6, mysql 9.7.4, nginx 1.30.6, redis 8.10.3 and caddy each start from the home, answer and stop offline, and their man pages read"
+echo "B2: as tars, postgres 18.7, mysql 9.7.4, nginx 1.30.6, redis 8.10.3 and caddy each start from the home, answer and stop offline, and their man pages read"
 M10_NUMBERS="postgres $(ms_of m10pg)ms, mysql $(ms_of m10my)ms, nginx+redis+caddy+man $(ms_of m10rest)ms"
 # TP-M10 덧붙임(사용자 요청 2026-11-08): mkcert가 망 없이 홈에 로컬 CA를 세우고 localhost 인증서를 발급한다. server의 openssl이 그 인증서를
 # CA로 검증한다(OK는 openssl이 찍는다 — 명령 줄에 없다). 이름(SAN)에 127.0.0.1이 들었는지도 본다. 상한 60초.
@@ -759,8 +759,8 @@ for want in "Cgroup Version: 2" "Storage Driver: overlayfs" "Firewall Backend: n
   grep -aqF "ce-info: ${want}" "$LOG" || fail "docker info as tars does not say ${want}" "ce-info" "permission denied"
 done
 grep -aqE "ce-compose: .*v5\.7\.1" "$LOG" || fail "docker compose version did not answer 5.7.1 (cli-plugins)" "ce-compose"
-grep -aqE "ce-buildx: .*v0\.38\.2" "$LOG" || fail "docker buildx version did not answer 0.38.2 (cli-plugins)" "ce-buildx"
-echo "B2: as tars without sudo, docker info says cgroup v2, overlayfs, nftables and /home/.tars/var/docker; compose 5.7.1 and buildx 0.38.2 answer"
+grep -aqE "ce-buildx: .*v0\.39\.0" "$LOG" || fail "docker buildx version did not answer 0.39.0 (cli-plugins)" "ce-buildx"
+echo "B2: as tars without sudo, docker info says cgroup v2, overlayfs, nftables and /home/.tars/var/docker; compose 5.7.1 and buildx 0.39.0 answer"
 
 # (d) 망 없이 이미지 하나 — server의 caddy(정적 Go)를 import한다. 첫 답까지 다시 묻는다(TCG에서 ~6초를 쟀다). 64m 제한은
 # runc가 만든 cgroup의 memory.max로 본다.
@@ -833,8 +833,8 @@ grep -aqE "tars-init: overlay /usr from 12 layers in [0-9]+ms" "$LOG" || fail "i
 grep -aqF "tars-init: config shell=" "$LOG" || fail "the boot did not go on to the config line"
 as_tars 'cd ~/tp && gcc -O2 -o h2 h.c -lm -lresolv && ./h2 | sed "s/^/tp-b3-c=/"; go run h.go | sed "s/^/tp-b3-go=/"; node h.js | sed "s/^/tp-b3-node=/"; cci --version | sed "s/^/tp-b3-cci=/"; erl -noshell -eval "io:format(\"tp-b3-erl=~s~n\", [erlang:system_info(otp_release)]), halt()."; nvim --version | head -1 | sed "s/^/tp-b3-nvim=/"; rg --version | head -1 | sed "s/^/tp-b3-rg=/"; command -v java || printf "tp-%s\n" no-java'
 wait_log "tp-b3-c=tp-c-1.414-0" 180 || fail "gcc no longer works without lang-jvm" "tp-b3"
-wait_log "tp-b3-go=tp-go-go1.27.3" 60 || fail "go no longer works without lang-jvm" "tp-b3"
-wait_log "tp-b3-node=tp-node-v26.13.0-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-go=tp-go-go1.27.4" 60 || fail "go no longer works without lang-jvm" "tp-b3"
+wait_log "tp-b3-node=tp-node-v26.13.1-3abd8072" 60 || fail "node no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-cci=cci 0.7.2" 30 || fail "util's cci no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-erl=29" 60 || fail "lang-beam's erl no longer works without lang-jvm" "tp-b3"
 wait_log "tp-b3-nvim=NVIM v0.12.6" 30 || fail "editor's nvim no longer works without lang-jvm" "tp-b3"
