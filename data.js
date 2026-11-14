@@ -4,16 +4,16 @@
 // 표기: 문자열 안의 `x`는 <code>, [x]는 <kbd>로 그려진다(app.js의 rich).
 window.TARS = {
   // 기준일. 페이지의 "기준" 글자와 NEW 판정이 이 날을 본다.
-  asOf: '2026-11-14',
-  latest: 'Display Yield (DY-M0~M3)',
+  asOf: '2026-11-15',
+  latest: 'Link Status (LK-M0~M2)',
   // 기준일에서 이 날수 안에 끝난 기능과 서브프로젝트에 NEW가 붙는다.
   newWithinDays: 2,
 
   stats: {
-    commits: 1358,      // git rev-list --count main
+    commits: 1364,      // git rev-list --count main
     since: '2026-08-01',
     chains: 34,         // check.sh의 CHAINS
-    zigKLines: 48,      // init · terminal · tars-config의 .zig 줄 수 / 1000
+    zigKLines: 50,      // init · terminal · tars-config의 .zig 줄 수 / 1000
   },
 
   // 부팅 사슬 애니메이션: [켜질 칸(0 ISO … 5 셸), 머리, 본문].
@@ -134,6 +134,7 @@ window.TARS = {
     ['2026-11-14', 'Display Yield', 'DY', '터미널이 화면을 잠시 넘긴다 — `tars-fullscreen <명령>`으로 뜬 프로그램이 GPU(SDL3 · OpenGL ES)로 화면 전체를 그리고, 끝나면 셸이 돌아온다. 새 묶음 `gpu`와 설치하면 데모가 뜨는 GPU 데모 ISO'],
     ['2026-11-14', 'Odin', 'OD', 'odin을 `lang-native`에 — clang 없이 기본 gcc로 링크하고, rust 1.100.0'],
     ['2026-11-14', 'Tool Upgrade', 'TU', '실린 언어와 유틸리티를 새 판으로 — go 1.27.4 · node 26.13.1 · cyber 0.4.10 · cmake 4.5.0 · PostgreSQL 18.7 · 유틸리티 아홉'],
+    ['2026-11-15', 'Link Status', 'LK', '상태 줄의 배터리 칸 왼쪽에 붙은 Wi-Fi의 이름이나 `LAN` — 주소를 받으면 하늘색, 기다리는 동안 흐리게. 커널 netlink만 읽는다'],
   ],
 
   // 공개한 버전: [날짜, 버전, 한 줄, ISO 파일명, sha256]. 맨 끝이 최신이다.
@@ -355,6 +356,7 @@ window.TARS = {
         ['`COPY`', 'copy mode에 있는 동안. 전용 색', '2026-10-03'],
         ['받아쓰기 낱말', '`REC` · `WAIT` · `NO MIC` · `NO KEY` · `FAILED` · `PASSWORD` · `NO PANE`', '2026-10-06'],
         ['배터리 칸', '오른쪽 끝 폭 4(`100%` · ` 50%` · `  ?%`). 방전 중 회색, 어댑터 초록, 15% 이하 빨강. 배터리가 없으면 칸도 없다', '2026-10-09'],
+        ['링크 칸', '배터리 칸 왼쪽. 무선이면 SSID, 유선이면 `LAN`, 둘 다면 `LAN  SSID`. IPv4 주소를 받으면 하늘색, 링크만이면 흐린 색. 붙은 것이 없으면 칸도 없다', '2026-11-15'],
       ],
     },
     {
