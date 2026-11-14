@@ -2,7 +2,7 @@
 
 Date: 2026-11-14
 Design: `docs/specs/2026-11-14-tars-odin-design.md`
-Status: 진행 중.
+Status: 끝났다(2026-11-14). commit `c07e944`(odin) · `0a0363e`(rust 1.100.0) · `e0cb758`(`make iso-full`).
 
 ## 착수 전에 확정한 것
 
@@ -49,4 +49,15 @@ design의 확인 1~4와 결정 1~3. 사용자: "이제 odin을 native lang에 �
 
 ## 결과
 
-(구현 뒤에 적는다.)
+1. 첫 `make dev-layers DEV_LAYERS=lang-native`가 verify에서 멈췄다 — odin `vendor/raylib`의 미리 빌드된 `.so` 둘:
+   `linux/libraylib.so.620 needs libX11.so.6`, `linux-arm64/libraylib.so.620 needs ld-linux-aarch64.so.1 · libX11.so.6`. 빼지 않고
+   `needed-ignore.tsv`에 두 줄 — 앞의 것은 이유 `GUI`(TP 비목표 5), 뒤의 것은 다섯째 이유 `foreign-arch`(x86_64의 ld.so가 적재하지
+   않는 다른 아키텍처의 ELF)를 새로 만들었다. 다시 구운 판 `unresolved=0 ignored=4`.
+2. 묶음 `lang-native.sqfs`: 422,088,704 → 490,737,664 B(odin, +65.5MiB — `measurements.md` 104의 어림 그대로) → 493,031,424 B(rust 1.100.0,
+   +2.2MiB). 파일 108,071, 풀린 2,277MiB, zstd15 470MiB. 묶음 안 `/usr/local/bin/odin -> ../lib/odin-dev-2026-11a/bin/odin`, 런처 240 B.
+3. rust 1.100.0: 설치기 컴포넌트가 1.99.1과 같은 일곱, `libLLVM.so.23.1-rust-1.100.0-stable` 상대 링크도 같은 자리 — hook은 그대로.
+4. 체인 `devtools` PASS(빌드 뒤 754초 — 첫 판은 사용자가 백그라운드를 실수로 멈춰 굽기에서 끊겼고 둘째 판이 rust까지 담았다).
+   `B2: as tars, odin run built and ran a program through gcc (11094ms)`, rustc 5,099 · cargo 1,664ms(1.99.1 때 4.8 · 1.5초), 묶음 열셋
+   1,898MiB. odin의 상한은 첫 숫자로 60초(세 배가 60초 아래). 체인 ISO 2,135,390,208 B — 2GiB까지 약 11.5MiB.
+5. `make iso-full`: 5분 47초(묶음 캐시), `out/tars-full.iso` 2,135,388,160 B, 묶음 13개 — 2GiB 아래라 경고 줄은 안 나왔다.
+6. 루트 게이트는 이 milestone에서 따로 돌리지 않았다 — 0.2.2의 `VERSION` commit에서 돈다(기억 `project_release` 절차 1).

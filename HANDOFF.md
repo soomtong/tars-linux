@@ -1,6 +1,12 @@
-# HANDOFF: DY 끝(2026-11-14) — 묶음 gpu(SDL3 · Mesa)와 tars-gpu-demo, 화면 양보 서브프로젝트 닫힘 · 다음 판(0.2.2)을 기다린다
+# HANDOFF: OD 끝(2026-11-14) — odin · rust 1.100.0 · make iso-full, 다음은 TR-M0(도구 판올림) → 0.2.2
 
 ## 목표
+
+사용자(2026-11-14): odin을 다시 넣을 때의 용량 → 묶음 자리 검토("keep them all") → "odin을 native lang에 그대로" · rust 1.100 ·
+`make iso-full` → 배포 모양(GitHub에 `server`를 뺀 판 · `lang-native`를 뺀 판 · fakesteak, 묶음 전부 판은 로컬 dd — 기억 `project_release`)
+→ "이 정도면 0.2.2?" → "이번 판올림은 각 유틸리티 · 랭귀지 버전 업그레이드로 의미를" → "잠깐 외출 — 모든 결정을 위임합니다."
+OD-M0은 끝났다(`c07e944` · `0a0363e` · `e0cb758`). 진행 중: TR-M0(design · plan `2026-11-14-tars-tool-refresh-*`) → 0.2.2 절차
+(VERSION → 루트 게이트 → tag → ISO 셋 → smoke → 해시 → GitHub release는 draft까지 — 공개 · push는 사용자가 돌아와 정한다).
 
 사용자(2026-11-13): HANDOFF에서 이어 DY-M2 — 조사 결과(Debian 패키지 그대로 · 힌트 없음 · 데모 dlopen)에 "confirmed continue".
 끝났다 — 결과는 DY-M2 plan의 결과 절. DY 서브프로젝트가 닫혔다.

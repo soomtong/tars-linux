@@ -3,7 +3,7 @@
 접두사: OD
 
 Date: 2026-11-14
-Status: 진행 중(OD-M0).
+Status: 닫힘(2026-11-14, OD-M0 — 체인 `devtools` PASS). plan은 `docs/plans/2026-11-14-tars-odin-od-m0.md`. rust 1.100.0과 `make iso-full`도 같은 milestone에서 넣었다(사용자).
 
 계기: TP-M2(2026-11-06)가 LLVM 툴체인을 빼면서 odin도 함께 뺐다 — "odin은 링크에 `clang`을 부른다"(TP-M2 plan 확인 4). 2026-11-14에
 사용자가 다시 넣을 때의 용량을 물었고, 조사에서 `ODIN_CLANG_PATH`로 base의 gcc가 링크를 맡는 것이 섰다(`measurements.md` 104).
