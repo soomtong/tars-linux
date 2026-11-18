@@ -324,13 +324,18 @@ fn drawStatus(
     // VD-M1부터 맨 끝에 받아쓰기 칸이 하나 더 있다 — `… CAPS[  W2][  COPY][  REC]`.
     // 같은 이유로 `st.dict`를 보고 그 길이부터 물러난다. 이 칸만 글자마다 길이가
     // 다르므로(`REC` · `PASSWORD`) 길이를 `status.dictTailLen`에서 받는다.
+    //
+    // SW-M2부터 워크스페이스 칸 뒤에 column 칸이 있다 — `… CAPS[  W2][  2/3][  COPY][  REC]`.
+    // 같은 이유로 `st.columns`를 보고 `status.COLS_TAIL_LEN`만큼 물러난다.
     const dict_len: usize = if (st.dict) |s| status.dictTailLen(s) else 0;
     const copy_len = if (st.copy) status.COPY_TAIL.len else 0;
+    const cols_len: usize = if (st.columns != null) status.COLS_TAIL_LEN else 0;
     const ws_len: usize = if (st.workspace != null) status.WS_TAIL_LEN else 0;
-    if (st.text.len < status.CAPS.len + ws_len + copy_len + dict_len) return;
+    if (st.text.len < status.CAPS.len + ws_len + cols_len + copy_len + dict_len) return;
     const dict_at = st.text.len - dict_len;
     const copy_at = dict_at - copy_len;
-    const ws_at = copy_at - ws_len;
+    const cols_at = copy_at - cols_len;
+    const ws_at = cols_at - ws_len;
     const caps_at = ws_at - status.CAPS.len;
 
     // 네 번 나눠 그린다(WP-M2 전에는 셋). 색이 칸마다 다르다고 해서 인덱스를 세며 한 번에
@@ -351,7 +356,10 @@ fn drawStatus(
     // 워크스페이스 칸은 앞 세 칸과 같은 색이다(WP design 결정 8). 켜고
     // 꺼지는 것이 아니라 자리를 말하는 칸이라 모드의 색(`STATUS_COPY`)이나
     // 잠금의 색(`STATUS_ON`)을 안 쓴다. 하나뿐이면 빈 슬라이스다.
-    col = try drawRun(fb, cache, st.text[ws_at..copy_at], y, STATUS_FG, col, fb.width);
+    col = try drawRun(fb, cache, st.text[ws_at..cols_at], y, STATUS_FG, col, fb.width);
+    // column 칸(SW-M2, design 결정 16)도 자리를 말하는 칸이라 워크스페이스 칸과 같은 색이다.
+    // 화면 밖 column이 없으면 빈 슬라이스다.
+    col = try drawRun(fb, cache, st.text[cols_at..copy_at], y, STATUS_FG, col, fb.width);
     // copy mode가 아니면 빈 슬라이스라 아무것도 안 그리고 col만 돌려준다.
     col = try drawRun(fb, cache, st.text[copy_at..dict_at], y, STATUS_COPY, col, fb.width);
     // 받아쓰기 칸(VD-M1). 받아쓰기가 없으면 빈 슬라이스다.
@@ -768,6 +776,9 @@ const Status = struct {
     /// `copy`와 같은 이유로 따로 나른다 — `text`에 이미 들어 있지만
     /// `drawStatus`가 꼬리에서 `CAPS`를 셀 때 이 칸의 길이를 알아야 한다.
     workspace: ?u8,
+    /// column 칸(SW-M2, `3/7`). 화면 밖 column이 없으면(둘 이하) null이다. `workspace`와
+    /// 같은 이유로 따로 나른다.
+    columns: ?status.Columns,
     /// 받아쓰기 칸(VD-M1). 없으면 null이다. `workspace`와 같은 이유로 따로 나른다.
     dict: ?dictation.Show,
     /// 격자 전체의 칸 수(BS-M1). 배터리 칸의 자리가 격자의 오른쪽 끝이라 `drawStatus`가
@@ -1797,6 +1808,11 @@ fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
 /// `vt.Screen.resize`와 `pty.resize`가 짝이다. 한쪽만 바꾸면 셸이 아는 폭과
 /// 우리가 그리는 폭이 어긋나 줄바꿈이 엉킨다(`spawnPane`의 주석과 같은 병).
 ///
+/// 크기(`cols` · `rows`)가 같고 위치만 다르면 `rect`만 고친다(SW-M2 plan 확정 7).
+/// viewport가 옮기면(`reveal`) 보이는 column의 위치가 바뀌지만 크기는 그대로다
+/// (SW design 결정 15) — 그때 셸에 SIGWINCH를 보내면 화면 밖을 오갈 때마다 셸이
+/// 프롬프트를 다시 그린다. 버퍼도 크기로 잡으므로 그대로 둔다.
+///
 /// 새 slot의 칸은 아직 null이라 건너뛴다. 부르는 쪽이 돌려받은 사각형으로
 /// 그 칸에 `spawnPane`한다.
 fn applyLayout(alloc: std.mem.Allocator, ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Rect {
@@ -1806,6 +1822,10 @@ fn applyLayout(alloc: std.mem.Allocator, ws: *Workspace, whole: layout.Rect) ![l
         const p = if (slot.*) |*p| p else continue;
         const r = rs[leaf];
         if (std.meta.eql(p.rect, r)) continue;
+        if (p.rect.cols == r.cols and p.rect.rows == r.rows) {
+            p.rect = r;
+            continue;
+        }
         try p.screen.resize(r.cols, r.rows);
         pty.resize(p.session.master_fd, r.cols, r.rows, CELL_W, ROW_HEIGHT);
         // 셀 목록 두 벌도 새 크기다(DR-M2). 지난 목록은 옛 사각형의 것이라 쓸모가 없고,
@@ -1892,16 +1912,20 @@ const StripSig = struct {
     cols: usize,
     focus_col: usize,
     heights: [layout.MAX_LEAVES]u4,
+    /// 보이는 column의 처음 · 끝(0부터, SW-M2). scroll만 한 프레임도 줄이 찍힌다.
+    view_first: usize,
+    view_last: usize,
 };
 
 /// 지금 워크스페이스의 column 모양을 한 줄로 찍는다(SW-M1).
 ///
-///   terminal: strip> cols=2 focus_col=2 heights=1,3
+///   terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2
 ///
 /// `focus_col`은 포커스 pane이 든 column의 번호(1부터, `ws=`와 같은 셈)이고,
-/// `heights`는 왼쪽 column부터 column마다 pane 수다. `pane>` 줄을 고치지 않고
-/// 새 줄로 낸 이유는 `pane>` 줄을 글자 그대로 견주는 체인이 있어서다
-/// (`pointer/check.sh`, SW-M1 plan 확정 1).
+/// `heights`는 왼쪽 column부터 column마다 pane 수다. `view`는 화면에 보이는
+/// column의 처음과 끝 번호(1부터, SW-M2 · design 결정 18)다. column이 하나면
+/// `1-1`이다. `pane>` 줄을 고치지 않고 새 줄로 낸 이유는 `pane>` 줄을 글자
+/// 그대로 견주는 체인이 있어서다(`pointer/check.sh`, SW-M1 plan 확정 1).
 ///
 /// 첫 프레임에는 반드시 찍힌다(`last`가 null). 문구가 이 파일과
 /// `pane/check.sh` 양쪽에 있다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
@@ -1910,7 +1934,14 @@ fn dumpStrip(workspaces: *const [MAX_WORKSPACES]?Workspace, current: usize, last
     const at = ws.strip.columnOf(ws.focus) orelse return;
     var buf: [layout.MAX_LEAVES]u4 = undefined;
     const hs = ws.strip.heights(&buf);
-    var sig: StripSig = .{ .cols = at.cols, .focus_col = at.col + 1, .heights = @splat(0) };
+    const v = ws.strip.view();
+    var sig: StripSig = .{
+        .cols = at.cols,
+        .focus_col = at.col + 1,
+        .heights = @splat(0),
+        .view_first = v.first,
+        .view_last = v.last,
+    };
     @memcpy(sig.heights[0..hs.len], hs);
     if (last.*) |l| {
         if (std.meta.eql(l, sig)) return;
@@ -1928,7 +1959,9 @@ fn dumpStrip(workspaces: *const [MAX_WORKSPACES]?Workspace, current: usize, last
         text[n] = '0' + @as(u8, h);
         n += 1;
     }
-    logline.print("terminal: strip> cols={d} focus_col={d} heights={s}\n", .{ sig.cols, sig.focus_col, text[0..n] });
+    logline.print("terminal: strip> cols={d} focus_col={d} heights={s} view={d}-{d}\n", .{
+        sig.cols, sig.focus_col, text[0..n], sig.view_first + 1, sig.view_last + 1,
+    });
 }
 
 // ── 받아쓰기(VD-M1) ───────────────────────────────────────────────────
@@ -4806,6 +4839,14 @@ const App = struct {
         });
     }
 
+    /// 포커스 pane이 보이도록 viewport를 옮긴다(SW-M2, design 결정 14). 옮겼으면
+    /// 보이는 column의 위치가 바뀌었으므로 `applyLayout`으로 `rect`를 고친다 — 크기는
+    /// 그대로라 셸은 resize되지 않는다(`applyLayout`의 주석). 다시 그리기는 부르는
+    /// 쪽이 켠다. 포커스를 바꾸는 모든 자리(분할 · 순환 · 이웃 · 닫기) 뒤에 부른다.
+    fn revealFocus(self: *App, ws: *Workspace) !void {
+        if (ws.strip.reveal(ws.focus)) _ = try applyLayout(self.allocator, ws, self.whole);
+    }
+
     fn runPanes(self: *App, cmds: []const input.Pane) !void {
         var ws = &self.workspaces[self.current].?;
         for (cmds) |cmd| {
@@ -4827,6 +4868,9 @@ const App = struct {
                     // `pane>` 줄이 대신한다.
                     ws.panes[leaf] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, rs[leaf], self.accountPtr(), self.cursor_shape);
                     ws.focus = leaf;
+                    // 셋째 column부터 새 column은 화면 밖에 선다(SW design 결정 13).
+                    // 포커스가 거기 갔으니 viewport를 옮긴다.
+                    try self.revealFocus(ws);
                 },
                 // 보내기만 한다(결정 5). 셸이 끝나면 아래 EOF 경로가
                 // 닫는다 — `exit`를 친 것과 같은 길이다.
@@ -4837,8 +4881,14 @@ const App = struct {
                         ws.focus, fp.session.child_pid,
                     });
                 },
-                .focus_next => ws.focus = ws.strip.next(ws.focus),
-                .focus_prev => ws.focus = ws.strip.prev(ws.focus),
+                .focus_next => {
+                    ws.focus = ws.strip.next(ws.focus);
+                    try self.revealFocus(ws);
+                },
+                .focus_prev => {
+                    ws.focus = ws.strip.prev(ws.focus);
+                    try self.revealFocus(ws);
+                },
                 // 그 방향에 이웃이 없으면(격자 끝) 감기지 않고 아무 일도 안
                 // 한다(WP-M3). 없는 워크스페이스 번호와 같은 길이다 —
                 // `continue`가 `needs_redraw`를 건너뛰고 `pane>` 줄도 안 는다.
@@ -4851,6 +4901,8 @@ const App = struct {
                         else => unreachable,
                     };
                     ws.focus = ws.strip.neighbor(self.whole, ws.focus, side) orelse continue;
+                    // 이웃은 화면 밖 column일 수 있다(SW-M2 plan 확정 4).
+                    try self.revealFocus(ws);
                 },
                 // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
                 // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
@@ -5121,6 +5173,10 @@ const App = struct {
                     // 출력은 다음 `poll`이 다시 알린다.
                     break;
                 }
+                // 넘겨받은 포커스가 화면 밖 column일 수 있다(SW-M2). 이 길은 이미
+                // `applyLayout`으로 가므로 `revealFocus`를 따로 안 부르고 `reveal`만
+                // 먼저 한다 — 옮긴 위치까지 한 번에 고친다.
+                _ = w.strip.reveal(w.focus);
                 _ = try applyLayout(self.allocator, w, self.whole);
                 // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
                 // 가리키므로 이 바퀴에서 더 안 만진다.
@@ -5325,7 +5381,8 @@ const App = struct {
         if (self.sprite.at) |s| clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
         self.sprite.restore(self.fb);
         // 화면 전체를 다시 그릴 프레임인가(DR-M2 plan 확정 3). 첫 프레임, 워크스페이스가 바뀜,
-        // strip이 바뀜(분할 · 닫기 — 구분선과 여백이 바뀐다). strip이 같으면 패널의 사각형도 같다.
+        // strip이 바뀜(분할 · 닫기 · scroll — 구분선과 여백, 보이는 pane이 바뀐다). strip이 같으면 패널의
+        // 사각형도 같다(`first`도 비교에 든다, SW-M2).
         const full = self.last_current != self.current or
             if (self.last_strip) |t| !std.meta.eql(t, ws.strip) else true;
         if (full) {
@@ -5335,6 +5392,11 @@ const App = struct {
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             if (leaf == ws.focus) continue;
+            // 화면 밖 column의 pane은 안 그린다(SW-M2, design 결정 15). 그 사각형은
+            // 크기만 뜻이 있고 위치는 격자 왼쪽 끝이라 그리면 보이는 pane을 덮는다.
+            // `cells`를 안 부르므로 dirty 비트가 쌓여 있다가, 다시 보이는 프레임
+            // (`first`가 바뀌어 통째다)에 한 번에 나온다.
+            if (!ws.strip.visible(@intCast(leaf))) continue;
             p.screen.focused = false;
             const p_cells = try p.screen.cellsReuse(p.cells_buf[p.shown ^ 1], prevOf(p));
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
@@ -5379,14 +5441,22 @@ const App = struct {
         // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
         const ws_number: ?u8 = if (workspaceCount(&self.workspaces) > 1) @intCast(self.current + 1) else null;
+        // column 칸은 화면 밖 column이 있을 때만(셋 이상) 단다(SW design 결정 16). 둘 이하인
+        // 화면은 SW-M1과 글자가 같아야 hangul 체인의 `text=`와 pane 검사 7의 `W2`가 그대로 선다.
+        const columns: ?status.Columns = cols: {
+            const at = ws.strip.columnOf(ws.focus) orelse break :cols null;
+            if (at.cols < 3) break :cols null;
+            break :cols .{ .at = @intCast(at.col + 1), .total = @intCast(at.cols) };
+        };
         frame.status_line = .{
-            .text = status.statusText(&self.key_state, copy_active, ws_number, self.dict.show(), &frame.status_buf),
+            .text = status.statusText(&self.key_state, copy_active, ws_number, columns, self.dict.show(), &frame.status_buf),
             .rows = self.rows,
             // `statusText`가 아니라 여기서 읽는다(design 결정 3). 잠금은
             // 글자가 아니라 색을 고르므로 순수 모듈이 알 일이 아니다.
             .caps = self.key_state.caps_lock,
             .copy = copy_active,
             .workspace = ws_number,
+            .columns = columns,
             .dict = self.dict.show(),
             .cols = self.cols,
             // 배터리 절이 고친 칸(BS-M1). 이 프레임을 부른 것이 배터리가 아니어도 지금 값을 그린다.
@@ -5566,6 +5636,9 @@ const App = struct {
         renderBackdrop(v.fb, &ws.strip, self.whole);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
+            // 실제 경로와 같이 화면 밖 pane은 건너뛴다(SW-M2). 그림자가 그리면 실제
+            // 화면과 갈려 `mismatch`가 된다.
+            if (!ws.strip.visible(@intCast(leaf))) continue;
             const fresh = try p.screen.cells(v.cell_buf);
             self.compareLists(p, fresh, &cells_report);
             const imgs = if (leaf == ws.focus) frame.imgs else p.screen.images(&v.img_buf);

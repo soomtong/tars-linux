@@ -72,6 +72,15 @@ pub const WS_PREFIX = "W";
 /// 셀 때 이 길이만큼 더 물러난다. `COPY_TAIL`과 같은 이유다.
 pub const WS_TAIL_LEN = GAP.len + WS_PREFIX.len + 1;
 
+/// column 칸의 값(SW-M2, SW design 결정 16). 포커스 column의 번호(1부터)와 column
+/// 수다. 둘 다 1~8이다 — 워크스페이스 하나의 pane이 많아야 여덟이라서다.
+pub const Columns = struct { at: u8, total: u8 };
+
+/// column 칸이 줄에 더하는 바이트. `GAP` + `3/7`처럼 한 자리 · `/` · 한 자리다.
+/// `main.zig`의 `drawStatus`가 꼬리에서 이만큼 더 물러난다 — `WS_TAIL_LEN`과 같은
+/// 이유로 길이를 저쪽에 다시 적지 않는다.
+pub const COLS_TAIL_LEN = GAP.len + 3;
+
 /// 받아쓰기 칸의 글자(VD-M1, design 결정 11). 꼬리의 맨 끝이고, 받아쓰기가 무엇을
 /// 하고 있거나 방금 무엇으로 끝났을 때만 뜬다 — `COPY`와 같은 규칙이다. 받아쓰기를
 /// 안 쓰는 화면은 한 글자도 안 바뀐다.
@@ -115,8 +124,8 @@ pub fn dictTailLen(s: dictation.Show) usize {
 /// 이라 그대로 더한다.
 ///
 /// IS-M1에서 30이 36이 됐고, CI-M0에서 36이 42가 됐고, WP-M2에서 42가 46이
-/// 됐고, VD-M1에서 46이 56이 됐다(받아쓰기 칸의 가장 긴 글자 `PASSWORD`). 버퍼를
-/// 손으로 늘린 자리는 넷 다 없다.
+/// 됐고, VD-M1에서 46이 56이 됐고, SW-M2에서 56이 61이 됐다(column 칸). 버퍼를
+/// 손으로 늘린 자리는 다섯 다 없다.
 pub const MAX_LEN: usize = blk: {
     var hl: usize = 0;
     for (std.enums.values(hangul.Layout)) |t| {
@@ -130,7 +139,7 @@ pub const MAX_LEN: usize = blk: {
     for (std.enums.values(dictation.Show)) |s| {
         if (dictTailLen(s) > dl) dl = dictTailLen(s);
     }
-    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + WS_TAIL_LEN + COPY_TAIL.len + dl;
+    break :blk 3 + GAP.len + hl + GAP.len + ll + GAP.len + CAPS.len + WS_TAIL_LEN + COLS_TAIL_LEN + COPY_TAIL.len + dl;
 };
 
 /// `buf`의 `at`부터 `s`를 쓰고 쓴 길이를 돌려준다.
@@ -158,11 +167,15 @@ fn put(buf: []u8, at: usize, s: []const u8) usize {
 /// 고르는 것은 부르는 쪽(`main.zig`)이다 — 이 파일은 워크스페이스가 몇인지
 /// 모른다.
 ///
+/// `columns`는 column 칸이다(SW-M2, SW design 결정 16). 화면 밖 column이 있을 때만
+/// (column 셋 이상) 부르는 쪽이 값을 넘긴다 — 둘 이하면 null이라 한 글자도 안
+/// 바뀌어 hangul 체인의 `text=` 비교와 pane 체인 검사 7의 `W2`가 그대로 선다.
+///
 /// `dict`는 받아쓰기 칸이다(VD-M1). null이면 칸이 없다. 무엇을 보일지(단계인지
 /// 알림인지)는 부르는 쪽(`main.zig`)이 고른다 — 이 파일은 자식 프로세스를 모른다.
 ///
 /// `buf`는 최소 `MAX_LEN`바이트여야 한다.
-pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, dict: ?dictation.Show, buf: []u8) []const u8 {
+pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, columns: ?Columns, dict: ?dictation.Show, buf: []u8) []const u8 {
     var len: usize = 0;
     len += put(buf, len, if (state.hangul_on) "한" else "EN");
     len += put(buf, len, GAP);
@@ -185,6 +198,16 @@ pub fn statusText(state: *const input.State, copy: bool, workspace: ?u8, dict: ?
         // 써서 칸의 길이를 지킨다 — 길이가 어긋나면 색이 칸째 밀린다.
         buf[len] = if (n >= 1 and n <= 9) '0' + n else '?';
         len += 1;
+    }
+    // column 칸은 워크스페이스 칸 뒤 · `COPY` 앞이다(SW-M2 plan 확정 8). 큰 자리
+    // (워크스페이스)가 앞, 그 안의 자리(column)가 뒤다. 길이가 늘 3이어야
+    // `COLS_TAIL_LEN`이 맞으므로 범위 밖은 `?`로 쓴다(워크스페이스 칸과 같다).
+    if (columns) |c| {
+        len += put(buf, len, GAP);
+        buf[len] = if (c.at >= 1 and c.at <= 9) '0' + c.at else '?';
+        buf[len + 1] = '/';
+        buf[len + 2] = if (c.total >= 1 and c.total <= 9) '0' + c.total else '?';
+        len += 3;
     }
     if (copy) len += put(buf, len, COPY_TAIL);
     // 받아쓰기 칸이 맨 끝이다(VD-M1). 모드(`COPY`)보다도 뒤인 것은 이 칸만 글자의

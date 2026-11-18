@@ -52,6 +52,15 @@ fn expectCount(t: *const layout.Strip, want: usize) !void {
     return error.WrongCount;
 }
 
+/// 사각형이 덮는 칸마다 1을 더한다(검사 10).
+fn paint(cover: *[47][155]u8, r: Rect) void {
+    var y = r.row;
+    while (y < r.row + r.rows) : (y += 1) {
+        var x = r.col;
+        while (x < r.col + r.cols) : (x += 1) cover[y][x] += 1;
+    }
+}
+
 /// strip 산수의 검사. 부팅도 PTY도 프레임버퍼도 안 쓴다 — strip을 만들고
 /// 사각형을 받는 순수 계산이다(WP design 결정 2, SW design 결정 1).
 ///
@@ -128,11 +137,13 @@ pub fn main() !void {
         try expectLeaf("reuse freed leaf", t.split(0, .below, WHOLE), 1);
     }
 
-    // ── 검사 5: 여덟 뒤 아홉째는 null, 사각형이 안 겹치고 격자 안이다 ──
+    // ── 검사 5: 여덟 뒤 아홉째는 null, 보이는 사각형이 안 겹치고 격자 안이다 ──
     //
     // 방향을 번갈아 가르며 늘 가장 최근 pane을 가른다 — 크기 제한(검사 6)에
     // 안 걸리고 여덟까지 간다. strip에서는 column 다섯(`0` · `1/2` · `3/4` ·
-    // `5/6` · `7`)이 되고 가장 작은 것이 30x23이다.
+    // `5/6` · `7`)이 된다. SW-M2부터 화면에는 column 둘만 보이므로(design 결정
+    // 13 · 14) "격자 안 · 안 겹침"은 보이는 slot만 본다. `first`를 0부터 끝까지
+    // 옮기며 본다. 화면 밖 slot은 크기만 뜻이 있다 — 반 폭 77, 높이가 0보다 크다.
     {
         var t = layout.Strip.init();
         var last: u4 = 0;
@@ -149,32 +160,43 @@ pub fn main() !void {
         try expectLeaf("ninth split of leaf 0", t.split(0, .below, WHOLE), null);
         try expectCount(&t, 8);
 
-        // 칸마다 몇 개의 사각형이 덮는지 센다. 2 이상이면 겹친 것이고,
-        // 격자 밖이면 인덱스가 넘친다.
-        t.rects(WHOLE, &rs);
-        var cover: [47][155]u8 = @splat(@splat(0));
-        var area: usize = 0;
-        for (rs) |r| {
-            if (r.col + r.cols > WHOLE.cols or r.row + r.rows > WHOLE.rows or r.cols == 0 or r.rows == 0) {
-                std.debug.print("FAIL: rect {d},{d} {d}x{d} out of the grid\n", .{ r.col, r.row, r.cols, r.rows });
-                return error.RectOutside;
-            }
-            var y = r.row;
-            while (y < r.row + r.rows) : (y += 1) {
-                var x = r.col;
-                while (x < r.col + r.cols) : (x += 1) {
-                    cover[y][x] += 1;
-                    if (cover[y][x] > 1) return error.RectOverlap;
+        var views: usize = 0;
+        var first: u4 = 0;
+        while (first + 1 < t.len) : (first += 1) {
+            t.first = first;
+            views += 1;
+            // 칸마다 몇 개의 사각형이 덮는지 센다. 2 이상이면 겹친 것이고,
+            // 격자 밖이면 인덱스가 넘친다.
+            t.rects(WHOLE, &rs);
+            var cover: [47][155]u8 = @splat(@splat(0));
+            var area: usize = 0;
+            for (rs, 0..) |r, li| {
+                if (!t.visible(@intCast(li))) {
+                    if (r.cols != 77 or r.rows == 0) {
+                        std.debug.print("FAIL: off-screen slot {d} is {d}x{d}, want 77 wide\n", .{ li, r.cols, r.rows });
+                        return error.OffscreenSize;
+                    }
+                    continue;
                 }
+                if (r.col + r.cols > WHOLE.cols or r.row + r.rows > WHOLE.rows or r.cols == 0 or r.rows == 0) {
+                    std.debug.print("FAIL: rect {d},{d} {d}x{d} out of the grid\n", .{ r.col, r.row, r.cols, r.rows });
+                    return error.RectOutside;
+                }
+                var y = r.row;
+                while (y < r.row + r.rows) : (y += 1) {
+                    var x = r.col;
+                    while (x < r.col + r.cols) : (x += 1) {
+                        cover[y][x] += 1;
+                        if (cover[y][x] > 1) return error.RectOverlap;
+                    }
+                }
+                area += @as(usize, r.cols) * r.rows;
             }
-            area += @as(usize, r.cols) * r.rows;
+            // 구분선이 있으니 보이는 pane 넓이는 0보다 크고 격자보다 작다.
+            if (area == 0 or area >= @as(usize, WHOLE.cols) * WHOLE.rows) return error.AreaSum;
         }
-        // 구분선은 분할마다 한 줄(한 칸 폭)이다. 남은 칸 = 격자 - pane 넓이가
-        // 0보다 커야 하고(구분선이 있다) 격자보다 작아야 한다.
-        if (area == 0 or area >= @as(usize, WHOLE.cols) * WHOLE.rows) return error.AreaSum;
-        std.debug.print("layout_test: 8 leaves, no overlap, area {d} of {d} OK\n", .{
-            area, @as(usize, WHOLE.cols) * WHOLE.rows,
-        });
+        if (views != 4) return error.WrongViewCount;
+        std.debug.print("layout_test: 8 leaves in 5 columns, 4 views, visible ones inside and apart OK\n", .{});
     }
 
     // ── 검사 6: 가를 수 없을 만큼 작으면 null ────────────────────────
@@ -253,12 +275,13 @@ pub fn main() !void {
         try expectRect("separator 2", s2[1], .{ .col = 78, .row = 23, .cols = 77, .rows = 1 });
     }
 
-    // ── 검사 10: 패널 넓이 + 구분선 넓이 = 격자 넓이 ──────────────────────
+    // ── 검사 10: 보이는 패널 넓이 + 구분선 넓이 = 격자 넓이 ──────────────
     //
     // 검사 5는 "안 겹친다"만 봤다. 여기서 빈 칸이 없다는 것까지 본다 —
     // 구분선을 한 칸 어긋나게 그리면 패널과 겹치거나 틈이 생기고, 둘 다
-    // 이 합이 어긋난다. pane 여덟 strip과 구분선 일곱을 칸 단위로 칠해
-    // 모든 칸이 정확히 한 번 덮이는지 본다.
+    // 이 합이 어긋난다. pane 여덟 strip에서 `first`를 0부터 끝까지 옮기며, 보이는
+    // pane과 구분선(보이는 pane 수 − 1, SW-M2 plan 확정 4)을 칸 단위로 칠해 모든
+    // 칸이 정확히 한 번 덮이는지 본다.
     {
         var t = layout.Strip.init();
         var last: u4 = 0;
@@ -267,26 +290,32 @@ pub fn main() !void {
             const dir: layout.Dir = if (i % 2 == 1) .right else .below;
             last = t.split(last, dir, WHOLE) orelse return error.SplitFailed;
         }
-        t.rects(WHOLE, &rs);
-        var seps: [layout.MAX_LEAVES - 1]Rect = undefined;
-        const ss = t.separators(WHOLE, &seps);
-        if (ss.len != 7) return error.WrongSeparatorCount;
-
-        var cover: [47][155]u8 = @splat(@splat(0));
-        for (rs ++ seps) |r| {
-            var y = r.row;
-            while (y < r.row + r.rows) : (y += 1) {
-                var x = r.col;
-                while (x < r.col + r.cols) : (x += 1) cover[y][x] += 1;
+        var first: u4 = 0;
+        while (first + 1 < t.len) : (first += 1) {
+            t.first = first;
+            t.rects(WHOLE, &rs);
+            var seps: [layout.MAX_LEAVES - 1]Rect = undefined;
+            const ss = t.separators(WHOLE, &seps);
+            var cover: [47][155]u8 = @splat(@splat(0));
+            var shown: usize = 0;
+            for (rs, 0..) |r, li| {
+                if (!t.visible(@intCast(li))) continue;
+                shown += 1;
+                paint(&cover, r);
             }
+            for (ss) |r| paint(&cover, r);
+            if (ss.len != shown - 1) {
+                std.debug.print("FAIL: first={d}: {d} separators for {d} visible panes\n", .{ first, ss.len, shown });
+                return error.WrongSeparatorCount;
+            }
+            for (cover) |row| for (row) |n| {
+                if (n != 1) {
+                    std.debug.print("FAIL: first={d}: a cell is covered {d} time(s)\n", .{ first, n });
+                    return error.CoverNotExact;
+                }
+            };
         }
-        for (cover) |row| for (row) |n| {
-            if (n != 1) {
-                std.debug.print("FAIL: a cell is covered {d} time(s)\n", .{n});
-                return error.CoverNotExact;
-            }
-        };
-        std.debug.print("layout_test: 8 panes + 7 separators cover the grid exactly once OK\n", .{});
+        std.debug.print("layout_test: every view of 8 panes covers the grid exactly once OK\n", .{});
     }
 
     // ── 검사 11: 지운 pane의 포커스를 넘겨받는 pane (WP-M2) ───────────────
@@ -406,15 +435,18 @@ pub fn main() !void {
     // WP 트리의 `neighbor`는 구분선 한 칸을 건너뛴 칸을 `hit`에 물었고, 이
     // 검사는 그 칸이 구분선에 안 떨어지는 것을 봤다(WP-M3 plan 확정 2). strip은
     // 목록으로 고르지만 성질은 같아야 한다. 47줄 · 46줄 격자에서 옆 column의
-    // 구분선 줄에 시작 줄이 떨어지는 조합은 모두 pane이 아홉 이상이라(한도
-    // 여덟) 여기서는 늘 마주 보는 pane이 맨 위 줄을 덮는다(SW-M0 plan). 떨어지는
-    // 경우는 검사 18이 따로 본다. 분할 모양 256가지 × 격자 둘(홀수 · 짝수)을
-    // pane 여덟까지 쌓으며 매 단계 모든 pane · 모든 방향에서 둘을 본다. column당
-    // 셋(SW-M1)에 걸린 `.below`는 `_ =`로 넘어가므로 여덟에 못 미치는 모양도
-    // 있다 — 판정은 같고 물은 수만 준다(SW-M1 plan 확정 4).
-    //   1. null이면 그 변이 격자 끝이고, 끝이면 null이다.
-    //   2. null이 아니면 그 pane이 구분선 한 칸 건너편에서 시작하고, 변의
-    //      시작점과 마주 본다.
+    // 구분선 줄에 시작 줄이 떨어지는 조합은 column당 셋에서 나오지 않아 여기서는
+    // 늘 마주 보는 pane이 맨 위 줄을 덮는다. 떨어지는 경우는 검사 18이 따로 본다.
+    // 분할 모양 256가지 × 격자 둘(홀수 · 짝수)을 pane 여덟까지 쌓으며 매 단계
+    // 모든 pane · 모든 방향에서 둘을 본다. column당 셋(SW-M1)에 걸린 `.below`는
+    // `_ =`로 넘어가므로 여덟에 못 미치는 모양도 있다(SW-M1 plan 확정 4).
+    //
+    // SW-M2부터 화면 밖 column이 있어 끝과 옆을 사각형이 아니라 순번으로 본다
+    // (SW-M2 plan). 분할마다 새 pane을 `reveal`해 `main.zig`처럼 viewport를 옮긴다.
+    //   1. null이면 그 변이 끝이고, 끝이면 null이다. ←는 첫 column, →는 끝
+    //      column, ↑ ↓는 column 안의 처음 · 끝이다.
+    //   2. null이 아니면 ← →는 순번 ±1인 column의 pane이고 포커스의 맨 위 줄을
+    //      덮는다. ↑ ↓는 같은 column에서 구분선 한 칸 건너편에서 시작한다.
     {
         const grids = [_]Rect{ WHOLE, .{ .col = 0, .row = 0, .cols = 154, .rows = 46 } };
         var asked: usize = 0;
@@ -425,17 +457,18 @@ pub fn main() !void {
                     const dir: layout.Dir = if ((p >> @intCast(k)) & 1 == 1) .right else .below;
                     // 지운 적이 없으니 slot 번호는 0..count-1로 빈틈이 없다.
                     const target: u4 = @intCast((p * 7 + k * 3) % t.count());
-                    _ = t.split(target, dir, whole);
+                    if (t.split(target, dir, whole)) |new| _ = t.reveal(new);
                     var at: [layout.MAX_LEAVES]Rect = undefined;
                     t.rects(whole, &at);
                     for (0..t.count()) |li| {
                         const leaf: u4 = @intCast(li);
                         const f = at[leaf];
+                        const fc = t.columnOf(leaf).?;
                         inline for (SIDES) |side| {
                             asked += 1;
                             const edge = switch (side) {
-                                .left => f.col == whole.col,
-                                .right => f.col + f.cols == whole.col + whole.cols,
+                                .left => fc.col == 0,
+                                .right => fc.col + 1 == fc.cols,
                                 .up => f.row == whole.row,
                                 .down => f.row + f.rows == whole.row + whole.rows,
                             };
@@ -448,11 +481,12 @@ pub fn main() !void {
                             }
                             if (got) |n| {
                                 const r = at[n];
+                                const nc = t.columnOf(n).?.col;
                                 const ok = switch (side) {
-                                    .left => r.col + r.cols + 1 == f.col and r.row <= f.row and f.row < r.row + r.rows,
-                                    .right => r.col == f.col + f.cols + 1 and r.row <= f.row and f.row < r.row + r.rows,
-                                    .up => r.row + r.rows + 1 == f.row and r.col <= f.col and f.col < r.col + r.cols,
-                                    .down => r.row == f.row + f.rows + 1 and r.col <= f.col and f.col < r.col + r.cols,
+                                    .left => nc + 1 == fc.col and r.row <= f.row and f.row < r.row + r.rows,
+                                    .right => nc == fc.col + 1 and r.row <= f.row and f.row < r.row + r.rows,
+                                    .up => nc == fc.col and r.row + r.rows + 1 == f.row,
+                                    .down => nc == fc.col and r.row == f.row + f.rows + 1,
                                 };
                                 if (!ok) {
                                     std.debug.print("FAIL: grid {d}x{d} shape {d} step {d} leaf {d} {s} -> {d} does not face the edge's start\n", .{
@@ -469,25 +503,33 @@ pub fn main() !void {
         std.debug.print("layout_test: {d} neighbor answers are the edge or the leaf facing its start OK\n", .{asked});
     }
 
-    // ── 검사 16: 셋부터도 고르게 나눈다 (SW design 결정 4 · 10) ────────────
+    // ── 검사 16: column 셋부터는 반 폭이고, 줄은 고르게 나눈다 (SW design 결정 4 · 13) ──
     //
-    // 둘에서는 트리의 반 가르기와 같은 숫자였다(검사 2 · 3). 셋에서 갈린다 —
-    // 트리는 77 · 38 · 38이었고 strip은 51 · 51 · 51이다. 155에서 구분선 둘을
-    // 빼면 153, 셋으로 51씩. 47에서 둘을 빼면 45, 셋으로 15씩. 154 · 46은
-    // 나머지가 2라 뒤의 둘이 한 칸씩 더 받는다 — 50 · 51 · 51, 14 · 15 · 15.
+    // M0 · M1은 column 셋을 51 · 51 · 51로 고르게 나눴다. SW-M2부터 column이 둘이면
+    // 반씩(155에서 77 · 77, 154에서 76 · 77), 셋 이상이면 모두 왼쪽 반의 폭이고(155에서
+    // 77, 154에서 76 — 오른쪽 끝 한 칸은 빈다) 화면에는 둘이 보인다. 셋째는 화면 밖에
+    // 서고, `reveal`하면 viewport가 한 column 옮겨 둘째 · 셋째가 보인다. 줄 쪽은 그대로다 — 47에서 둘을 빼면 45, 셋으로 15씩,
+    // 46은 나머지가 2라 뒤의 둘이 한 칸씩 더 받는다(14 · 15 · 15).
     {
         var t = layout.Strip.init();
         try expectLeaf("second column", t.split(0, .right, WHOLE), 1);
         try expectLeaf("third column", t.split(1, .right, WHOLE), 2);
         t.rects(WHOLE, &rs);
-        try expectRect("even column 0", rs[0], .{ .col = 0, .row = 0, .cols = 51, .rows = 47 });
-        try expectRect("even column 1", rs[1], .{ .col = 52, .row = 0, .cols = 51, .rows = 47 });
-        try expectRect("even column 2", rs[2], .{ .col = 104, .row = 0, .cols = 51, .rows = 47 });
+        try expectRect("half column 0", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("half column 1", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("off-screen column 2", rs[2], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        if (t.visible(2) or !t.visible(0) or !t.visible(1)) return error.WrongVisible;
+        if (!t.reveal(2)) return error.RevealDidNotMove;
+        t.rects(WHOLE, &rs);
+        try expectRect("revealed: column 1 on the left", rs[1], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("revealed: column 2 on the right", rs[2], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("revealed: column 0 off-screen", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        if (t.visible(0) or !t.visible(1) or !t.visible(2)) return error.WrongVisible;
         const narrow: Rect = .{ .col = 0, .row = 0, .cols = 154, .rows = 46 };
         t.rects(narrow, &rs);
-        try expectRect("154 column 0", rs[0], .{ .col = 0, .row = 0, .cols = 50, .rows = 46 });
-        try expectRect("154 column 1", rs[1], .{ .col = 51, .row = 0, .cols = 51, .rows = 46 });
-        try expectRect("154 column 2", rs[2], .{ .col = 103, .row = 0, .cols = 51, .rows = 46 });
+        try expectRect("154 column 1 on the left", rs[1], .{ .col = 0, .row = 0, .cols = 76, .rows = 46 });
+        try expectRect("154 column 2 on the right", rs[2], .{ .col = 77, .row = 0, .cols = 76, .rows = 46 });
+        try expectRect("154 column 0 off-screen on the left", rs[0], .{ .col = 0, .row = 0, .cols = 76, .rows = 46 });
 
         var s = layout.Strip.init();
         try expectLeaf("second in the column", s.split(0, .below, WHOLE), 1);
@@ -501,13 +543,18 @@ pub fn main() !void {
         try expectRect("46 pane 1", rs[1], .{ .col = 0, .row = 15, .cols = 154, .rows = 15 });
         try expectRect("46 pane 2", rs[2], .{ .col = 0, .row = 31, .cols = 154, .rows = 15 });
 
-        // 셋째가 서려면 길이가 2·3-1 = 5 이상이어야 한다. 4에서는 null이다.
+        // `.right`는 보이는 column 수(많아야 둘)로 판정한다(SW-M2 plan 확정 5).
+        // 4칸이면 둘째가 서고(3 이상) 셋째도 선다 — 화면 밖에 서므로 폭이 안 준다.
+        // 2칸이면 둘째부터 null이다. 줄 쪽은 셋째가 5줄을 바란다.
         const four: Rect = .{ .col = 0, .row = 0, .cols = 4, .rows = 4 };
         var u = layout.Strip.init();
         try expectLeaf("second column at 4 cols", u.split(0, .right, four), 1);
-        try expectLeaf("third column at 4 cols", u.split(1, .right, four), null);
-        try expectLeaf("second pane at 4 rows", u.split(1, .below, four), 2);
-        try expectLeaf("third pane at 4 rows", u.split(2, .below, four), null);
+        try expectLeaf("third column at 4 cols", u.split(1, .right, four), 2);
+        try expectLeaf("second pane at 4 rows", u.split(1, .below, four), 3);
+        try expectLeaf("third pane at 4 rows", u.split(3, .below, four), null);
+        const two: Rect = .{ .col = 0, .row = 0, .cols = 2, .rows = 2 };
+        var v = layout.Strip.init();
+        try expectLeaf("second column at 2 cols", v.split(0, .right, two), null);
     }
 
     // ── 검사 17: slot 번호는 안 바뀌고, 같은 배치는 같은 값이다 (R-SW-7) ──
@@ -633,6 +680,143 @@ pub fn main() !void {
         try expectLeaf("third in the other column", t.split(4, .below, WHOLE), 5);
         try expectLeaf("fourth in the other column", t.split(3, .below, WHOLE), null);
         try expectCount(&t, 6);
+    }
+
+    // ── 검사 21: reveal은 가장 적게 옮기고 포커스를 보이게 한다 (SW design 결정 14) ──
+    //
+    // column 넷 `[0] [1] [2] [3]`에서 `first`가 될 수 있는 값은 0 · 1 · 2다. 모든
+    // 시작 `first`와 모든 대상 column에서, `reveal` 뒤 대상이 보이고, 새 `first`는
+    // 대상을 보이게 하는 값들 가운데 옛 값에 가장 가깝고, 옮겼을 때만 true다.
+    // 기대값은 `layout.zig`의 산수가 아니라 후보를 모두 훑어 고른다.
+    {
+        var pairs: usize = 0;
+        for (0..3) |start| {
+            for (0..4) |target| {
+                var t = layout.Strip.init();
+                _ = t.split(0, .right, WHOLE);
+                _ = t.split(1, .right, WHOLE);
+                _ = t.split(2, .right, WHOLE);
+                t.first = @intCast(start);
+                var want: usize = start;
+                var best: usize = 99;
+                for (0..3) |f| {
+                    if (target < f or target > f + 1) continue;
+                    const d = if (f > start) f - start else start - f;
+                    if (d < best) {
+                        best = d;
+                        want = f;
+                    }
+                }
+                const moved = t.reveal(@intCast(target));
+                if (t.first != want or moved != (want != start) or !t.visible(@intCast(target))) {
+                    std.debug.print("FAIL: reveal({d}) from first={d}: first={d} moved={}, want first={d}\n", .{ target, start, t.first, moved, want });
+                    return error.RevealNotMinimal;
+                }
+                pairs += 1;
+            }
+        }
+        // 한 걸음씩 오른쪽 끝까지, 그리고 왼쪽 끝까지 — 포커스를 옆으로 옮길 때의 모양.
+        var t = layout.Strip.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .right, WHOLE);
+        _ = t.split(2, .right, WHOLE);
+        const walk = [_]struct { leaf: u4, moved: bool, first: u4 }{
+            .{ .leaf = 1, .moved = false, .first = 0 }, .{ .leaf = 2, .moved = true, .first = 1 },
+            .{ .leaf = 3, .moved = true, .first = 2 },  .{ .leaf = 2, .moved = false, .first = 2 },
+            .{ .leaf = 1, .moved = true, .first = 1 },  .{ .leaf = 0, .moved = true, .first = 0 },
+        };
+        for (walk) |w| {
+            if (t.reveal(w.leaf) != w.moved or t.first != w.first) return error.RevealWalk;
+        }
+        if (t.reveal(9)) return error.RevealMissingSlot;
+        const v = t.view();
+        if (v.first != 0 or v.last != 1) return error.WrongView;
+        std.debug.print("layout_test: reveal moves the least in all {d} cases and on a walk OK\n", .{pairs});
+    }
+
+    // ── 검사 22: remove는 first를 범위 안으로 당긴다 (SW-M2 plan 확정 2) ────
+    //
+    // column 넷에서 `first = 2`(셋째 · 넷째가 보인다). 끝 column을 지우면 셋이
+    // 남고 `first`는 1이 된다 — 1보다 크면 오른쪽에 빈 반이 생긴다. 둘이 남으면
+    // 0, 하나면 그 column이 격자 전체 폭이다(pane 체인 검사 9a의 `155x47`).
+    {
+        var t = layout.Strip.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .right, WHOLE);
+        _ = t.split(2, .right, WHOLE);
+        _ = t.reveal(3);
+        if (t.first != 2) return error.RevealFailed;
+        t.remove(3);
+        if (t.first != 1) return error.FirstNotPulled;
+        const v = t.view();
+        if (v.first != 1 or v.last != 2) return error.WrongView;
+        t.remove(2);
+        if (t.first != 0) return error.FirstNotPulled;
+        t.remove(1);
+        if (t.first != 0) return error.FirstNotPulled;
+        t.rects(WHOLE, &rs);
+        try expectRect("one column left is the whole grid", rs[0], WHOLE);
+        const one = t.view();
+        if (one.first != 0 or one.last != 0) return error.WrongView;
+        if (!std.meta.eql(t, layout.Strip.init())) return error.ShrunkStripDiffers;
+        std.debug.print("layout_test: remove pulls first back in range OK\n", .{});
+    }
+
+    // ── 검사 23: scroll은 크기를 안 바꾼다 (SW design 결정 15) ─────────────
+    //
+    // `[0] [1 / 4] [2] [3]`에서 `reveal(3)`으로 viewport를 오른쪽 끝까지 옮긴다.
+    // 모든 slot의 `cols` · `rows`가 그대로다 — `main.zig`의 `applyLayout`이 크기가
+    // 다를 때만 셸을 resize하므로, 화면 밖 셸은 scroll로 SIGWINCH를 안 받는다.
+    // 바뀌는 것은 보이는 slot의 위치다. column 셋 이상은 보이든 안 보이든 모두
+    // 왼쪽 반의 폭이라(`colSpan`) 홀수 155 · 짝수 154 어느 격자에서도 그렇다 — 두
+    // 격자에서 `first`를 0 → 1 → 2 → 1 → 0으로 옮기며 매번 견준다. 154에서는 오른쪽
+    // 보이는 column이 77에서 76칸에 서고 오른쪽 끝 한 칸(153열)이 빈다.
+    {
+        const narrow: Rect = .{ .col = 0, .row = 0, .cols = 154, .rows = 46 };
+        for ([_]Rect{ WHOLE, narrow }) |whole| {
+            var g = layout.Strip.init();
+            _ = g.split(0, .right, whole);
+            _ = g.split(1, .right, whole);
+            _ = g.split(2, .right, whole);
+            _ = g.split(1, .below, whole);
+            var base: [layout.MAX_LEAVES]Rect = undefined;
+            g.rects(whole, &base);
+            for ([_]u4{ 2, 3, 2, 1, 0 }) |target| {
+                _ = g.reveal(target);
+                var now: [layout.MAX_LEAVES]Rect = undefined;
+                g.rects(whole, &now);
+                for (0..5) |li| {
+                    if (base[li].cols != now[li].cols or base[li].rows != now[li].rows) {
+                        std.debug.print("FAIL: grid {d}x{d}: slot {d} changed size on reveal({d})\n", .{ whole.cols, whole.rows, li, target });
+                        return error.ScrollResized;
+                    }
+                }
+            }
+        }
+        var n = layout.Strip.init();
+        _ = n.split(0, .right, narrow);
+        _ = n.split(1, .right, narrow);
+        _ = n.reveal(2);
+        n.rects(narrow, &rs);
+        try expectRect("154: left visible column", rs[1], .{ .col = 0, .row = 0, .cols = 76, .rows = 46 });
+        try expectRect("154: right visible column leaves the last cell empty", rs[2], .{ .col = 77, .row = 0, .cols = 76, .rows = 46 });
+
+        var t = layout.Strip.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .right, WHOLE);
+        _ = t.split(2, .right, WHOLE);
+        try expectLeaf("pane below 1", t.split(1, .below, WHOLE), 4);
+        var before: [layout.MAX_LEAVES]Rect = undefined;
+        t.rects(WHOLE, &before);
+        if (!t.reveal(3)) return error.RevealDidNotMove;
+        var after: [layout.MAX_LEAVES]Rect = undefined;
+        t.rects(WHOLE, &after);
+        try expectRect("slot 1 was on the right", before[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 23 });
+        try expectRect("slot 2 now on the left", after[2], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("slot 3 now on the right", after[3], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
+        if (t.visible(0) or t.visible(1) or t.visible(4) or !t.visible(2) or !t.visible(3)) return error.WrongVisible;
+        try expectHit("an off-screen slot is never hit", t.hit(WHOLE, 10, 30), .{ .leaf = 2, .col = 10, .row = 30 });
+        std.debug.print("layout_test: scrolling keeps every size, only the visible ones move OK\n", .{});
     }
 
     std.debug.print("layout_test: all checks passed\n", .{});

@@ -187,6 +187,23 @@ wait_for_strip() {
   return 1
 }
 
+# 마지막 `status> text=` 줄의 글자. 상태 줄이 바뀐 프레임에만 찍힌다.
+status_text() {
+  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' |
+    sed -E 's/.*text=//'
+}
+
+# 상태 줄 글자가 패턴에 맞을 때까지 기다린다(SW-M2, column 칸). 있으면 0,
+# 15초가 지나면 1.
+wait_for_status() {
+  local pattern="$1"
+  for _ in $(seq 1 150); do
+    if grep -aqE -- "$pattern" <<<"$(status_text)"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
 # split refused 줄의 개수(SW-M1). 한도에 걸린 분할이 찍는 유일한 줄이다.
 refused_lines() {
   grep -ac 'terminal: pane> split refused' "$LOG" || true
@@ -528,8 +545,8 @@ echo "=== a column holds three panes, the fourth Cmd+Shift+D is refused ==="
 type_keys meta_l-shift-d
 wait_for_pane 'panes=4 focus=3 rect=78,32 77x15 ' ||
   report_failure "Cmd+Shift+D from leaf 2 did not give 'panes=4 focus=3 rect=78,32 77x15'"
-wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,3$' ||
-  report_failure "the strip> line is not 'cols=2 focus_col=2 heights=1,3' (got '$(last_strip_line)')"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2$' ||
+  report_failure "the strip> line is not 'cols=2 focus_col=2 heights=1,3 view=1-2' (got '$(last_strip_line)')"
 echo "three in the right column: $(last_pane_line)"
 
 PANE_LINE_BEFORE="$(last_pane_line)"
@@ -562,9 +579,113 @@ tlog | grep -aE 'terminal: pane> closed leaf=3' >/dev/null ||
   report_failure "no 'pane> closed leaf=3' line, the pane was never closed"
 wait_for_more exit_lines "$EXITS_BEFORE_LIMIT" ||
   report_failure "leaf 3's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_LIMIT} -> $(exit_lines))"
-wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2$' ||
-  report_failure "after closing leaf 3 the strip> line is not 'cols=2 focus_col=2 heights=1,2' (got '$(last_strip_line)')"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2$' ||
+  report_failure "after closing leaf 3 the strip> line is not 'cols=2 focus_col=2 heights=1,2 view=1-2' (got '$(last_strip_line)')"
 echo "leaf 3 closed, back to 0 | (1 / 2): $(last_pane_line)"
+
+# ── 검사 16e: column이 셋 이상이면 화면에 둘이 보이고 viewport가 따라간다(SW-M2) ──
+#
+# 검사 16d가 끝난 0 | (1 / 2), 포커스 2에서 돈다. Cmd+D는 오른쪽 column 뒤에 반 폭
+# column을 더한다(SW design 결정 13) — 셋째부터는 화면 밖에 서고 viewport가 새
+# column으로 한 칸 옮긴다(reveal). 그래서 새 pane은 언제나 오른쪽 반(78,0 77x47)이고
+# strip> 줄의 view=가 옮긴 것을 말한다. 상태 줄 꼬리의 `  3/3`은 화면 밖 column이
+# 있을 때만 뜬다(결정 16). Cmd+Option+←로 돌아오면 화면 안의 column은 scroll 없이,
+# 화면 밖이면 한 column씩 옮긴다. 둘째 column으로 갈 때는 맨 위 줄 규칙으로 1이다.
+#
+# 화면 밖 셸의 크기는 그대로다 — scroll은 셸을 resize하지 않는다(결정 15). 그래서
+# 이 동안 spawned 줄 수가 그대로이고, 새 slot 4의 셸이 `$COLUMNS` 77을 안다.
+#
+# 끝에서 Cmd+]로 4로 가서 둘을 닫는다. 4의 자리는 왼쪽 column의 3이, 3의 자리는
+# 왼쪽 column의 맨 위 1이 받는다(결정 9). Cmd+Option+↓로 2에 가면 검사 6이 전제하는
+# 0 | (1 / 2) · 포커스 2이고, column이 둘이라 상태 줄의 칸이 없다.
+echo "=== three columns or more: two on screen, the viewport follows the focus ==="
+SPAWNS_BEFORE_VIEW="$(spawn_lines)"
+type_keys meta_l-d
+wait_for_pane 'panes=4 focus=3 rect=78,0 77x47 ' ||
+  report_failure "Cmd+D from leaf 2 did not give 'panes=4 focus=3 rect=78,0 77x47' (a third column should stand on the right half)"
+wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3$' ||
+  report_failure "after the third column the strip> line is not 'cols=3 focus_col=3 heights=1,2,1 view=2-3' (got '$(last_strip_line)')"
+wait_for_status '  3/3$' ||
+  report_failure "with three columns the status line reads \"$(status_text)\", expected it to end with \"  3/3\""
+echo "third column, the viewport moved: $(last_strip_line)"
+
+type_keys meta_l-d
+wait_for_pane 'panes=5 focus=4 rect=78,0 77x47 ' ||
+  report_failure "the second Cmd+D did not give 'panes=5 focus=4 rect=78,0 77x47'"
+wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4$' ||
+  report_failure "after the fourth column the strip> line is not 'cols=4 focus_col=4 heights=1,2,1,1 view=3-4' (got '$(last_strip_line)')"
+wait_for_status '  4/4$' ||
+  report_failure "with four columns the status line reads \"$(status_text)\", expected it to end with \"  4/4\""
+# 새 slot 4의 셸이 아는 폭. 검사 3과 같은 방법이다 — 셸에 직접 묻는다.
+type_keys e c h o spc s l o t minus f o u r spc shift-4 \
+  shift-c shift-o shift-l shift-u shift-m shift-n shift-s ret
+wait_for_screen '\| slot-four 77 \|' ||
+  report_failure "slot 4's shell did not answer 'slot-four 77' (a column off the half width, or the shell was never resized to it)"
+echo "fourth column, its shell knows 77 columns: $(last_strip_line)"
+
+type_keys meta_l-alt-left
+wait_for_pane 'panes=5 focus=3 rect=0,0 77x47 ' ||
+  report_failure "Cmd+Option+Left from leaf 4 did not give 'focus=3 rect=0,0 77x47' (leaf 3 is on screen, no scroll)"
+wait_for_strip 'terminal: strip> cols=4 focus_col=3 heights=1,2,1,1 view=3-4$' ||
+  report_failure "Cmd+Option+Left to an on-screen column moved the viewport (got '$(last_strip_line)')"
+wait_for_status '  3/4$' ||
+  report_failure "after moving to the third column the status line reads \"$(status_text)\", expected \"  3/4\" at the end"
+
+type_keys meta_l-alt-left
+wait_for_pane 'panes=5 focus=1 rect=0,0 77x23 ' ||
+  report_failure "Cmd+Option+Left from leaf 3 did not give 'focus=1 rect=0,0 77x23' (the top pane of the second column, scrolled in)"
+wait_for_strip 'terminal: strip> cols=4 focus_col=2 heights=1,2,1,1 view=2-3$' ||
+  report_failure "Cmd+Option+Left to an off-screen column did not scroll one column (got '$(last_strip_line)')"
+wait_for_status '  2/4$' ||
+  report_failure "after moving to the second column the status line reads \"$(status_text)\", expected \"  2/4\" at the end"
+
+type_keys meta_l-alt-left
+wait_for_pane 'panes=5 focus=0 rect=0,0 77x47 ' ||
+  report_failure "Cmd+Option+Left from leaf 1 did not give 'focus=0 rect=0,0 77x47'"
+wait_for_strip 'terminal: strip> cols=4 focus_col=1 heights=1,2,1,1 view=1-2$' ||
+  report_failure "Cmd+Option+Left to the first column did not scroll back (got '$(last_strip_line)')"
+wait_for_status '  1/4$' ||
+  report_failure "after moving to the first column the status line reads \"$(status_text)\", expected \"  1/4\" at the end"
+[ "$(spawn_lines)" -eq "$SPAWNS_BEFORE_VIEW" ] ||
+  report_failure "scrolling restarted the terminal (spawned child pid ${SPAWNS_BEFORE_VIEW} -> $(spawn_lines))"
+echo "back to the first column, nothing respawned: $(last_strip_line)"
+
+# 되돌리기. 순서는 0 · 1 · 2 · 3 · 4라 Cmd+] 네 번이 4다.
+type_keys meta_l-bracket_right
+type_keys meta_l-bracket_right
+type_keys meta_l-bracket_right
+type_keys meta_l-bracket_right
+wait_for_pane 'panes=5 focus=4 rect=78,0 77x47 ' ||
+  report_failure "four Cmd+] from leaf 0 did not reach leaf 4 on the right half"
+wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4$' ||
+  report_failure "Cmd+] to leaf 4 did not scroll to the last two columns (got '$(last_strip_line)')"
+
+EXITS_BEFORE_VIEW="$(exit_lines)"
+type_keys meta_l-w
+wait_for_pane 'panes=4 focus=3 rect=78,0 77x47 ' ||
+  report_failure "Cmd+W on leaf 4 did not leave 'panes=4 focus=3 rect=78,0 77x47' (the left column's leaf 3 should take the focus)"
+wait_for_more exit_lines "$EXITS_BEFORE_VIEW" ||
+  report_failure "leaf 4's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_VIEW} -> $(exit_lines))"
+wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3$' ||
+  report_failure "after closing leaf 4 the strip> line is not 'cols=3 focus_col=3 heights=1,2,1 view=2-3' (got '$(last_strip_line)')"
+
+EXITS_BEFORE_VIEW="$(exit_lines)"
+type_keys meta_l-w
+wait_for_pane 'panes=3 focus=1 rect=78,0 77x23 ' ||
+  report_failure "Cmd+W on leaf 3 did not leave 'panes=3 focus=1 rect=78,0 77x23' (the top of the left column should take the focus)"
+wait_for_more exit_lines "$EXITS_BEFORE_VIEW" ||
+  report_failure "leaf 3's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_VIEW} -> $(exit_lines))"
+
+type_keys meta_l-alt-down
+wait_for_pane 'panes=3 focus=2 rect=78,24 77x23 ' ||
+  report_failure "Cmd+Option+Down from leaf 1 did not give 'panes=3 focus=2 rect=78,24 77x23'"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2$' ||
+  report_failure "back at two columns the strip> line is not 'cols=2 focus_col=2 heights=1,2 view=1-2' (got '$(last_strip_line)')"
+sleep 1
+if grep -aqE '  [0-9]/[0-9]' <<<"$(status_text)"; then
+  report_failure "with two columns the status line still has a column field: \"$(status_text)\""
+fi
+echo "back to 0 | (1 / 2), no column field: $(last_pane_line)"
 
 # ── 검사 6: Cmd+W가 그 패널만 닫고 terminal은 산다 ────────────────────
 #
@@ -654,11 +775,8 @@ echo "init restarted the terminal: spawned child pid ${BOOT_SPAWNS} -> $(spawn_l
 # 검사 번호는 design 결정 9의 표를 따른다(7 · 8이 워크스페이스).
 #
 # 상태 줄의 `W` 칸은 워크스페이스가 둘 이상일 때만 뜬다(결정 8). 그 판정은
-# 마지막 `status> text=` 줄로 본다.
-status_text() {
-  tlog | grep -a 'terminal: status> text=' | tail -n 1 | tr -d '\r' |
-    sed -E 's/.*text=//'
-}
+# 마지막 `status> text=` 줄로 본다(`status_text`, 위 도우미 절 — 검사 16e가
+# 먼저 써서 SW-M2에서 위로 옮겼다).
 
 # 마지막 `status> caps ink` 줄의 `off=` 값. `CAPS` 칸이 꺼진 색으로 그려진
 # 픽셀 수다(IS-M1). hangul 체인의 같은 헬퍼와 같은 모양이다.

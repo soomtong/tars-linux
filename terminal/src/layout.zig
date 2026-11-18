@@ -9,6 +9,11 @@
 //! 초 단위로 돌고, 분할 여덟 · 닫기 · 순환을 부팅 없이 본다.
 //!
 //! 좌표는 전부 셀 단위다(SW design 결정 3). 픽셀로 옮기는 것은 `main.zig`의 몫이다.
+//!
+//! 화면(viewport)에는 column이 많아야 둘 보인다(SW-M2, design 결정 13 · 14). column이
+//! 하나면 격자 전체 폭, 둘이면 반씩(155에서 77 · 77, 154에서 76 · 77), 셋 이상이면
+//! 모두 왼쪽 반의 폭이다. 보이는 것은 `first`와 그 오른쪽 하나다. 화면 밖 column도
+//! 크기는 있다 — 그 셸의 PTY는 화면 밖에서도 그 크기다.
 
 /// 격자 안의 사각형. 셀 단위이고 `col` · `row`가 왼쪽 위다.
 pub const Rect = struct { col: u16, row: u16, cols: u16, rows: u16 };
@@ -53,10 +58,15 @@ pub const Strip = struct {
     cols: [MAX_LEAVES]Column,
     /// 쓰는 column의 수. 마지막 pane을 지우면 0이다.
     len: u4,
+    /// 화면에 보이는 첫 column의 순번(SW-M2, design 결정 14). 0 ≤ `first` ≤
+    /// max(0, `len` − 2)이고, 보이는 column은 `first`와 (있으면) `first + 1`이다.
+    /// 옮기는 것은 `reveal`과 `remove`(범위 안으로 당긴다)뿐이다. `std.meta.eql`
+    /// 비교에 들어가므로 scroll된 프레임은 `main.zig`가 통째로 다시 그린다.
+    first: u4,
 
     /// column 하나에 slot 0 하나. 부팅의 모양이다.
     pub fn init() Strip {
-        var s: Strip = .{ .cols = @splat(.{}), .len = 1 };
+        var s: Strip = .{ .cols = @splat(.{}), .len = 1, .first = 0 };
         s.cols[0].len = 1;
         return s;
     }
@@ -71,8 +81,13 @@ pub const Strip = struct {
     /// `L`에 `n`개를 놓으려면 구분선 `n-1`과 한 칸씩 `n`이 들어야 해서
     /// `L ≥ 2n-1`이다. 둘째 pane에서는 WP
     /// 트리의 "길이 3 미만"과 같다. 판정 길이는 `.right`가 격자 폭, `.below`가
-    /// 격자 높이다 — column 폭과 pane 높이는 그 길이를 고르게 나눈 것이라
-    /// 크기를 보려면 격자 전체가 있어야 해서 `whole`을 받는다.
+    /// 격자 높이다 — column 폭과 pane 높이는 그 길이를 나눈 것이라 크기를 보려면
+    /// 격자 전체가 있어야 해서 `whole`을 받는다. `.right`의 `n`은 끼운 뒤 화면에
+    /// 보이는 column 수 `min(len + 1, 2)`다 — 셋째부터는 반 폭을 물려받아 화면 밖에
+    /// 서므로 폭이 더 줄지 않는다(SW-M2 plan 확정 5).
+    ///
+    /// `first`는 안 건드린다. 새 pane을 보이게 하는 것은 포커스를 정하는
+    /// `main.zig`가 `reveal`로 한다.
     ///
     /// 새 slot 번호는 비어 있는 가장 작은 번호다. 다른 pane의 번호는 안
     /// 바뀐다(R-SW-7) — `main.zig`의 패널 배열이 이 번호로 인덱싱된다.
@@ -81,7 +96,7 @@ pub const Strip = struct {
         const at = self.find(leaf) orelse return null;
         if (dir == .below and self.cols[at.c].len >= MAX_PER_COLUMN) return null;
         const len: usize, const n: usize = switch (dir) {
-            .right => .{ whole.cols, @as(usize, self.len) + 1 },
+            .right => .{ whole.cols, @min(@as(usize, self.len) + 1, 2) },
             .below => .{ whole.rows, @as(usize, self.cols[at.c].len) + 1 },
         };
         if (len < 2 * n - 1) return null;
@@ -113,7 +128,8 @@ pub const Strip = struct {
     /// 0으로 되돌린다(`Column`의 주석). 다른 pane의 slot 번호는 안 바뀐다.
     ///
     /// 마지막 pane이면 strip이 빈다(`count() == 0`). 없는 slot이면 아무 일도
-    /// 안 한다.
+    /// 안 한다. column이 줄면 끝에서 `first`를 범위 안으로 당긴다(SW-M2) — 포커스가
+    /// 보이게 하는 것은 그 뒤 `main.zig`의 `reveal`이다.
     pub fn remove(self: *Strip, leaf: u4) void {
         const at = self.find(leaf) orelse return;
         const col = &self.cols[at.c];
@@ -127,22 +143,57 @@ pub const Strip = struct {
         while (k + 1 < self.len) : (k += 1) self.cols[k] = self.cols[k + 1];
         self.len -= 1;
         self.cols[self.len] = .{};
+        self.first = @min(self.first, self.len -| 2);
     }
 
     /// slot마다 사각형을 `out[slot 번호]`에 쓴다. 없는 slot의 칸은 안 건드린다 —
     /// 부르는 쪽은 패널 배열의 null로 그것을 안다.
     ///
-    /// column 폭은 격자 폭을, column 안 pane 높이는 격자 높이를 고르게 나눈다
-    /// (`share`, SW design 결정 4). 비율이 없다 — 드래그가 없는 시스템에서
+    /// 화면 밖 slot에도 쓴다(SW-M2, design 결정 15). 크기는 화면 안에 있을 때와
+    /// 같고 — 그 셸의 PTY가 그 크기다 — 위치는 `col = whole.col`로 둔다. 그려지지
+    /// 않으므로 위치는 뜻이 없다. 가르는 것은 `visible`이다.
+    ///
+    /// column 폭은 `colSpan`, column 안 pane 높이는 격자 높이를 고르게 나눈
+    /// 것이다(`share`, SW design 결정 4). 비율이 없다 — 드래그가 없는 시스템에서
     /// 비율을 들 일이 없다.
     pub fn rects(self: *const Strip, whole: Rect, out: []Rect) void {
         for (self.cols[0..self.len], 0..) |col, c| {
-            const x = share(whole.cols, self.len, c);
+            const x = self.colSpan(whole.cols, c);
+            const left = if (x.visible) whole.col + x.start else whole.col;
             for (col.slots[0..col.len], 0..) |leaf, i| {
                 const y = share(whole.rows, col.len, i);
-                out[leaf] = .{ .col = whole.col + x.start, .row = whole.row + y.start, .cols = x.len, .rows = y.len };
+                out[leaf] = .{ .col = left, .row = whole.row + y.start, .cols = x.len, .rows = y.len };
             }
         }
+    }
+
+    /// slot `leaf`가 화면에 보이는가(SW-M2). 그 column이 `first`이거나 `first + 1`
+    /// 이면 보인다. 없는 slot이면 false다. 그리기 · verify가 이것으로 건너뛴다.
+    pub fn visible(self: *const Strip, leaf: u4) bool {
+        const at = self.find(leaf) orelse return false;
+        return self.colVisible(at.c);
+    }
+
+    /// slot `leaf`의 column이 보이도록 `first`를 가장 적게 옮긴다(SW-M2, design
+    /// 결정 14 · R-SW-5). 왼쪽 밖이면 그 column이 첫째가, 오른쪽 밖이면 둘째가
+    /// 된다. 옮겼으면 true다 — 부르는 쪽은 `applyLayout`으로 위치를 다시 잡는다.
+    /// 없는 slot이면 false다.
+    pub fn reveal(self: *Strip, leaf: u4) bool {
+        const at = self.find(leaf) orelse return false;
+        const old = self.first;
+        if (at.c < self.first) {
+            self.first = @intCast(at.c);
+        } else if (at.c > @as(usize, self.first) + 1) {
+            self.first = @intCast(at.c - 1);
+        }
+        return self.first != old;
+    }
+
+    /// 보이는 column의 처음과 끝 순번(0부터, SW-M2). column이 하나면 둘이 같다.
+    /// `strip>` 줄의 `view=`와 상태 줄의 칸이 쓴다.
+    pub fn view(self: *const Strip) struct { first: usize, last: usize } {
+        if (self.len <= 1) return .{ .first = 0, .last = 0 };
+        return .{ .first = self.first, .last = @as(usize, self.first) + 1 };
     }
 
     /// 구분선 사각형을 `out`에 담고 그 앞부분을 돌려준다. 수는 pane 수 − 1이다 —
@@ -157,12 +208,17 @@ pub const Strip = struct {
     /// 칠하고 패널이 덮게 두면 패널 안의 빈 칸이 구분선 색으로 남는다.
     ///
     /// 세로선은 column 바로 왼쪽 한 칸 폭에 격자 높이 전체, 가로선은 pane 바로
-    /// 위 한 줄에 그 column 폭이다. 위치는 `rects`와 같은 `share`에서 나온다.
+    /// 위 한 줄에 그 column 폭이다. 위치는 `rects`와 같은 `colSpan` · `share`에서
+    /// 나온다.
+    ///
+    /// 보이는 column의 것만 낸다(SW-M2 plan 확정 4) — 보이는 column이 둘이면
+    /// 세로선 하나와 두 column의 가로선이다. 그래서 수는 보이는 pane 수 − 1이다.
     pub fn separators(self: *const Strip, whole: Rect, out: []Rect) []Rect {
         var n: usize = 0;
         for (self.cols[0..self.len], 0..) |col, c| {
-            const x = share(whole.cols, self.len, c);
-            if (c > 0) {
+            const x = self.colSpan(whole.cols, c);
+            if (!x.visible) continue;
+            if (c > self.first) {
                 out[n] = .{ .col = whole.col + x.start - 1, .row = whole.row, .cols = 1, .rows = whole.rows };
                 n += 1;
             }
@@ -222,12 +278,13 @@ pub const Strip = struct {
     ///
     /// 사각형은 `rects`로 얻는다. 같은 산수를 여기서 다시 하면 언젠가 한 칸
     /// 어긋나고, 그 어긋남은 "구분선 위를 가리켰는데 왼쪽 패널이 움직인다"로
-    /// 나타난다.
+    /// 나타난다. 화면 밖 slot은 건너뛴다(SW-M2) — 그 사각형은 위치가 뜻이 없다.
     pub fn hit(self: *const Strip, whole: Rect, col: u16, row: u16) ?Hit {
         var rs: [MAX_LEAVES]Rect = undefined;
         self.rects(whole, &rs);
         var buf: [MAX_LEAVES]u4 = undefined;
         for (self.leaves(&buf)) |leaf| {
+            if (!self.visible(leaf)) continue;
             const r = rs[leaf];
             if (col < r.col or col >= r.col + r.cols) continue;
             if (row < r.row or row >= r.row + r.rows) continue;
@@ -250,6 +307,9 @@ pub const Strip = struct {
     /// 높이를 따로 나누므로 그 칸이 옆 column의 구분선에 떨어질 수 있어서
     /// (`layout_test` 검사 18) 목록으로 직접 고른다. 시작 줄은 `rects`와 같은
     /// `share`에서 나온다.
+    ///
+    /// 화면 밖 column으로도 간다(SW-M2 plan 확정 4). 그다음 `main.zig`의 `reveal`이
+    /// viewport를 옮긴다.
     pub fn neighbor(self: *const Strip, whole: Rect, leaf: u4, side: Side) ?u4 {
         const at = self.find(leaf) orelse return null;
         const col = self.cols[at.c];
@@ -278,6 +338,38 @@ pub const Strip = struct {
     pub fn heights(self: *const Strip, buf: *[MAX_LEAVES]u4) []u4 {
         for (self.cols[0..self.len], 0..) |col, c| buf[c] = col.len;
         return buf[0..self.len];
+    }
+
+    /// column `c`의 시작(격자 왼쪽에서의 상대 위치) · 폭과 화면에 보이는가(SW-M2,
+    /// design 결정 13). 갈래가 셋이다.
+    ///
+    /// - column 하나: 격자 전체 폭.
+    /// - column 둘: 왼쪽은 `share(l, 2, 0)`, 오른쪽은 `share(l, 2, 1)`의 위치 · 폭.
+    ///   155에서 77 · 77, 154에서 76 · 77이다(`layout_test` 검사 2). 둘이면 scroll이
+    ///   없으므로 두 폭이 달라도 크기가 오가지 않는다.
+    /// - column 셋 이상: 보이든 안 보이든 모든 column이 왼쪽 반의 폭
+    ///   `w = share(l, 2, 0).len = (l-1)/2`다. 보이는 왼쪽은 0, 오른쪽은 `w + 1`에
+    ///   선다. 짝수 폭이면 오른쪽 끝 한 칸이 비고 여백 색으로 남는다. 폭이 하나뿐이라
+    ///   scroll이 어느 격자에서도 셸을 resize하지 않는다(검사 23). column이 둘에서
+    ///   셋으로 늘 때(154이면 오른쪽 77 → 76)는 크기가 바뀌는 것이 맞다 — 분할이다.
+    ///
+    /// 시작은 화면 밖 column에서 뜻이 없다.
+    fn colSpan(self: *const Strip, l: u16, c: usize) struct { start: u16, len: u16, visible: bool } {
+        if (self.len <= 1) {
+            const x = share(l, 1, 0);
+            return .{ .start = x.start, .len = x.len, .visible = true };
+        }
+        const right = c > self.first;
+        if (self.len == 2) {
+            const x = share(l, 2, @intFromBool(right));
+            return .{ .start = x.start, .len = x.len, .visible = true };
+        }
+        const w = share(l, 2, 0).len;
+        return .{ .start = if (right) w + 1 else 0, .len = w, .visible = self.colVisible(c) };
+    }
+
+    fn colVisible(self: *const Strip, c: usize) bool {
+        return c >= self.first and c <= @as(usize, self.first) + 1;
     }
 
     /// pane의 수.

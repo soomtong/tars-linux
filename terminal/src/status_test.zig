@@ -14,7 +14,7 @@ const dictation = @import("dictation.zig");
 /// 상태이고 `input.State`는 그것을 모른다. 검사 1~12는 전부 `false`다.
 fn expectText(state: input.State, copy: bool, want: []const u8) !void {
     var buf: [status.MAX_LEN]u8 = undefined;
-    const got = status.statusText(&state, copy, null, null, &buf);
+    const got = status.statusText(&state, copy, null, null, null, &buf);
     if (std.mem.eql(u8, got, want)) {
         std.debug.print("status_test: \"{s}\" OK\n", .{got});
         return;
@@ -54,7 +54,7 @@ pub fn main() !void {
     // 게이트도 매번 다른 자리를 봐야 한다. 두 칸 공백으로 갈라 센다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{ .hangul_on = true }, false, null, null, &buf);
+        const line = status.statusText(&input.State{ .hangul_on = true }, false, null, null, null, &buf);
         var it = std.mem.splitSequence(u8, line, "  ");
         var fields: usize = 0;
         while (it.next()) |f| {
@@ -92,13 +92,15 @@ pub fn main() !void {
     // 검사는 42 ≠ 46으로 빨갰다.
     // VD-M1이 받아쓰기 칸으로 한 번 더 했다 — 가장 긴 글자 `PASSWORD`까지 붙은
     // 56이고, 이 호출에 칸을 넣기 전까지 46 ≠ 56으로 빨갰다.
+    // SW-M2가 column 칸(`  8/8`, 다섯)으로 한 번 더 했다 — 61이고, 이 호출에 칸을
+    // 넣기 전까지 56 ≠ 61로 빨갰다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
         const line = status.statusText(&input.State{
             .hangul_on = true,
             .hangul_layout = .sebeol_3p3,
             .latin_layout = .dvorak,
-        }, true, 9, .password, &buf);
+        }, true, 9, .{ .at = 8, .total = 8 }, .password, &buf);
         if (line.len != status.MAX_LEN) {
             std.debug.print("FAIL: longest line is {d} byte(s), MAX_LEN is {d}\n", .{
                 line.len, status.MAX_LEN,
@@ -152,7 +154,7 @@ pub fn main() !void {
     // 쪽(검사 13)만 보면 "영영 붙어 있는" 코드도 통과한다(IS-M1 plan 확정 7).
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{}, false, null, null, &buf);
+        const line = status.statusText(&input.State{}, false, null, null, null, &buf);
         if (std.mem.indexOf(u8, line, status.COPY) != null) {
             std.debug.print("FAIL: \"{s}\" has COPY outside copy mode\n", .{line});
             return error.CopyFieldLeaked;
@@ -168,12 +170,12 @@ pub fn main() !void {
     {
         var buf: [status.MAX_LEN]u8 = undefined;
         const want = "EN  신세벌 PCS  쿼티  CAPS  W2  COPY";
-        const got = status.statusText(&input.State{}, true, 2, null, &buf);
+        const got = status.statusText(&input.State{}, true, 2, null, null, &buf);
         if (!std.mem.eql(u8, got, want)) {
             std.debug.print("FAIL: got \"{s}\", want \"{s}\"\n", .{ got, want });
             return error.WrongWorkspaceOrder;
         }
-        const plain = status.statusText(&input.State{}, false, 2, null, &buf);
+        const plain = status.statusText(&input.State{}, false, 2, null, null, &buf);
         if (!std.mem.eql(u8, plain, "EN  신세벌 PCS  쿼티  CAPS  W2")) {
             std.debug.print("FAIL: got \"{s}\"\n", .{plain});
             return error.WrongWorkspaceField;
@@ -188,7 +190,7 @@ pub fn main() !void {
     // 보면 "영영 붙어 있는" 코드도 통과한다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{}, true, null, null, &buf);
+        const line = status.statusText(&input.State{}, true, null, null, null, &buf);
         if (std.mem.indexOf(u8, line, "  " ++ status.WS_PREFIX) != null) {
             std.debug.print("FAIL: \"{s}\" has a workspace field with one workspace\n", .{line});
             return error.WorkspaceFieldLeaked;
@@ -212,7 +214,7 @@ pub fn main() !void {
         };
         for (cases) |cs| {
             var buf: [status.MAX_LEN]u8 = undefined;
-            const got = status.statusText(&input.State{}, false, null, cs.s, &buf);
+            const got = status.statusText(&input.State{}, false, null, null, cs.s, &buf);
             if (!std.mem.eql(u8, got, cs.want)) {
                 std.debug.print("FAIL: got \"{s}\", want \"{s}\"\n", .{ got, cs.want });
                 return error.WrongDictWord;
@@ -238,7 +240,7 @@ pub fn main() !void {
     {
         var buf: [status.MAX_LEN]u8 = undefined;
         const want = "한  신세벌 PCS  쿼티  CAPS  W2  COPY  REC";
-        const got = status.statusText(&input.State{ .hangul_on = true }, true, 2, .rec, &buf);
+        const got = status.statusText(&input.State{ .hangul_on = true }, true, 2, null, .rec, &buf);
         if (!std.mem.eql(u8, got, want)) {
             std.debug.print("FAIL: got \"{s}\", want \"{s}\"\n", .{ got, want });
             return error.WrongDictOrder;
@@ -252,7 +254,7 @@ pub fn main() !void {
     // 통과한다. `REC`만 보면 다른 여섯이 새는 것을 못 잡는다.
     {
         var buf: [status.MAX_LEN]u8 = undefined;
-        const line = status.statusText(&input.State{}, true, 2, null, &buf);
+        const line = status.statusText(&input.State{}, true, 2, null, null, &buf);
         for ([_][]const u8{ "REC", "WAIT", "NO MIC", "NO KEY", "FAILED", "PASSWORD", "NO PANE" }) |w| {
             if (std.mem.indexOf(u8, line, w) != null) {
                 std.debug.print("FAIL: \"{s}\" has {s} without a dictation\n", .{ line, w });
@@ -260,6 +262,37 @@ pub fn main() !void {
             }
         }
         std.debug.print("status_test: no dictation field without a dictation OK\n", .{});
+    }
+
+    // ── 검사 20: column 칸은 워크스페이스 칸 뒤 · `COPY` 앞이다 (SW-M2) ─────
+    //
+    // SW design 결정 16. 화면 밖 column이 있을 때만 뜬다 — null이면 한 글자도 안
+    // 바뀐다(검사 1~19가 전부 null로 통과한 것이 그 증명이다). 칸만 있는 줄, `W2` ·
+    // `COPY`와 함께인 줄, 받아쓰기까지 붙은 줄을 본다. `drawStatus`가 꼬리에서
+    // `COLS_TAIL_LEN`만큼 물러나므로 그 길이가 실제로 쓴 꼬리와 같은지도 본다.
+    {
+        var buf: [status.MAX_LEN]u8 = undefined;
+        const cases = [_]struct { copy: bool, ws: ?u8, dict: ?dictation.Show, want: []const u8 }{
+            .{ .copy = false, .ws = null, .dict = null, .want = "EN  신세벌 PCS  쿼티  CAPS  2/3" },
+            .{ .copy = true, .ws = 2, .dict = null, .want = "EN  신세벌 PCS  쿼티  CAPS  W2  2/3  COPY" },
+            .{ .copy = true, .ws = 2, .dict = .rec, .want = "EN  신세벌 PCS  쿼티  CAPS  W2  2/3  COPY  REC" },
+        };
+        for (cases) |cs| {
+            const got = status.statusText(&input.State{}, cs.copy, cs.ws, .{ .at = 2, .total = 3 }, cs.dict, &buf);
+            if (!std.mem.eql(u8, got, cs.want)) {
+                std.debug.print("FAIL: got \"{s}\", want \"{s}\"\n", .{ got, cs.want });
+                return error.WrongColumnsField;
+            }
+            std.debug.print("status_test: \"{s}\" OK\n", .{got});
+        }
+        const plain = status.statusText(&input.State{}, false, null, .{ .at = 4, .total = 4 }, null, &buf);
+        if (plain.len - status.COLS_TAIL_LEN != "EN  신세벌 PCS  쿼티  CAPS".len) return error.WrongColsTailLen;
+        const none = status.statusText(&input.State{}, true, 2, null, null, &buf);
+        if (std.mem.indexOfScalar(u8, none, '/') != null) {
+            std.debug.print("FAIL: \"{s}\" has a column field without columns\n", .{none});
+            return error.ColumnsFieldLeaked;
+        }
+        std.debug.print("status_test: the column field and its tail length OK\n", .{});
     }
 
     std.debug.print("status_test: all checks passed\n", .{});

@@ -14,6 +14,8 @@
 | `Cmd+Shift+C` | copy mode — `/` 검색, `n` · `N` 다음 · 앞, `y` 복사, `Esc` 나가기 |
 | `Cmd+Ctrl+F` | 전체 화면 — 둘레 여백과 아래 상태 줄을 감춥니다. 다시 누르면 돌아옵니다 |
 
+열(column)이 셋 이상이면 화면에는 둘이 보이고, `Cmd+Option+←` · `→`로 옮겨 다니면 화면이 따라갑니다. 상태 줄의 `2/3`이 지금 열과 전체 열 수입니다.
+
 부팅할 때부터 전체 화면으로 시작하려면 `sudo tars-config set fullscreen=on` 뒤 `sudo tars-config reload terminal`(열린 패널이 닫힙니다).
 패널 안의 프로그램도 켜고 끌 수 있습니다 — `printf '\033[10;1t'`(켜기) · `printf '\033[10;0t'`(끄기) · `printf '\033[10;2t'`(바꾸기), xterm과 같은 시퀀스입니다.
 

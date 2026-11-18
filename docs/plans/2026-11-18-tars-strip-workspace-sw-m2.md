@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 Design: `docs/specs/2026-11-18-tars-strip-workspace-design.md`(확인 9~12, 결정 13~18)
-Status: plan. 브랜치 `app-layer-0-3`.
+Status: 끝났다(2026-11-19). 결과는 맨 아래. 다음은 SW-M3. 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -96,6 +96,21 @@ Status: plan. 브랜치 `app-layer-0-3`.
 
 - `layout_test` · `status_test` 통과. 체인 `pane`(16e 포함) · `pointer` · `dictation` · `hangul` PASS. 루트 게이트 34/34.
 
-## 결과
+## 결과 (2026-11-19)
 
-(구현 뒤에 쓴다.)
+1. 구현은 Herdr 서브에이전트(`sw-impl`, Opus) 8분 39초 + 고침 1분 38초. lead가 `layout.zig`의 코드 줄 전부와 `main.zig`의
+   지운 줄 · 더한 줄을 대조했다. 닫기 경로는 `reveal` 다음 줄이 이미 `applyLayout`이다.
+2. 고침 하나(design 결정 13에 적음): 첫 판은 셋 이상에서도 자리의 폭(`share(cols, 2, k)`)을 써서 짝수 격자(154)에서 column이
+   오른쪽 자리(77) → 왼쪽 자리(76)로 넘어가면 resize가 일어났다(서브에이전트가 스스로 보고). 셋 이상은 모든 column이 왼쪽 반
+   폭이고 짝수 격자의 끝 한 칸은 빈다. 검사 23이 155 · 154x46 두 격자에서 "reveal이 어느 slot의 크기도 안 바꾼다"를 보고, 옛
+   규칙에서 실제로 실패한다(`slot 1 changed size on reveal(2)`).
+3. `layout_test` · `status_test` 통과. `status_test`는 `zig run`으로 안 돈다(`c_input` 모듈) — 서브에이전트가 `translate-c`로
+   묶어 호스트에서 돌렸고, 컨테이너 빌드는 체인이 했다. 검사 15의 물음은 66,384(M1과 같다, 끝 판정만 순번으로).
+4. 체인: `pane` 200초 · `pointer` 273초 · `dictation` 228초 · `hangul` 214초 PASS. 16e의 줄: `view=2-3` → `view=3-4`(넷째
+   셸 `$COLUMNS` 77) → `Cmd+Opt+←` 셋으로 `view=1-2`, 셸이 다시 뜨지 않음, 둘을 닫아 `0 | (1 / 2)`로 돌아오면 상태 칸이 없다.
+   `hangul`이 그대로라 column 둘 이하의 상태 줄은 한 글자도 안 바뀌었다.
+5. `status_text` 도우미가 검사 7 앞에 정의돼 있어 16e에서 못 썼다 — 도우미 절로 옮겼다.
+6. 루트 게이트 34/34 첫 판 PASS(2,170초, `out/gate-logs/20261118-143052`).
+7. 남은 것(게이트 밖): 끄는 선택 중에 키로 viewport가 옮겨 누른 pane이 화면 밖이 되면 `clampInto`가 의미 없는 위치(`col =
+   whole.col`)의 사각형을 쓴다. 다시 보이는 pane은 그동안 `cellsReuse`를 안 불렀다가 통째 프레임에 한 번에 그린다 — verify
+   모드(`TARS_RENDER_VERIFY=1`)의 pane 체인이 16e에서 잔상을 못 찾았다.
