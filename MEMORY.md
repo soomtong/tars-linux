@@ -189,3 +189,4 @@ copy mode · 클립보드
 
 - [latticedb survey](docs/decisions/project_latticedb_survey.md) — Zig 임베디드 그래프 DB, 한글 FTS가 안 돼 안 쓴다(2026-10-01)
 - [termium survey](docs/decisions/project_termium_survey.md) — 터미널 안의 Chromium, 게스트 권한에서 막힌다(2026-10-01)
+- [Motion graphics survey](docs/decisions/project_motion_graphics_survey.md) — Codrops식 효과를 CSS처럼 짓는 층, 향후 계획(2026-11-18)

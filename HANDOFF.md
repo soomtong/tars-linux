@@ -729,6 +729,8 @@ TP 묶음 작업 요령(TP-M3 · M4에서 배운 것):
   층 A(UW) · 층 B + rtl8xxxu(UB)로 끝났고 남은 것은 실제 동글이 근거를 줄 때.
 - IPv6는 후보가 아니다 — IPv4만 지원한다(사용자 결정, 2026-10-31, `docs/decisions/feedback_ipv4_only.md`). 다시 여는 조건은 IPv6 망의 제품 탑재.
 - vim 런타임 싣기는 2026-10-27에 착수 전 취소했다(`docs/decisions/user_editor_use.md`). 실측은 `docs/specs/2026-10-27-tars-vim-runtime-design.md`.
+- 모션 그래픽 층(Codrops식 효과를 CSS처럼, 2026-11-18 검토만 — 사용자 "향후 계획, 구현은 다음에"): 길 셋과 추천(고유 선언형 층),
+  다시 열 때의 첫걸음(실기 crocus 측정 · 기준 예제 고르기)은 `docs/decisions/project_motion_graphics_survey.md`.
 - 그보다 작은 것과 간헐은 `docs/guides/carryover.md`. 대부분 실기나 간헐의 다음 근거를 기다린다.
 
 ## 이어받는 사람이 볼 것
