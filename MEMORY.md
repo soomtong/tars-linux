@@ -9,6 +9,7 @@
 ## 협업 방식 (feedback)
 
 - [Commit delegation](docs/decisions/feedback_commit_delegation.md) — 승인된 뒤의 git commit은 Claude가 만든다, 서브에이전트는 안 한다
+- [Herdr subagents](docs/decisions/feedback_herdr_subagents.md) — `app-layer-0-3`에서 서브에이전트는 Herdr로 운용한다, 문법은 `herdr --skill`(2026-11-18)
 - [Execution scope](docs/decisions/feedback_execution_scope.md) — 명령 실행과 구현 파일은 Claude(또는 서브에이전트)가, 사용자의 검토는 읽기다
 - [Design question load](docs/decisions/feedback_design_question_load.md) — 설계 중 기술 선택지를 계속 묻지 말고 추천안으로 정해 진행한다
 - [Stepwise report](docs/decisions/feedback_stepwise_report.md) — 조사 · 구현을 단계로 나눠 단계마다 결과를 보고하고 확인받은 뒤 넘어간다(2026-11-06)
