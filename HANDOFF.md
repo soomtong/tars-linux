@@ -1,11 +1,11 @@
-# HANDOFF: App Layer(0.3) 1단 SW — design doc 확인 절까지, 결정 가~라는 받아들여졌다(2026-11-18). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) 1단 SW — M0 · M1 · M2 끝, M3 구현 중(2026-11-19). 브랜치 `app-layer-0-3`
 
 ## 목표
 
 App Layer(0.3) — strip 워크스페이스 · Wayland 서버 · TARS 툴킷(첫 앱 `tars-files`) · Chromium. 하나의 milestone이 아니라 녹화 넷(A 둠 ·
 B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝을 재는 비전이다. 사용자(2026-11-18): "커다란 비전으로 목표를 잡고
 진행해보자. 주요 결정은 너의 의견에 따를 테니까." 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(결정 열셋), 순서
-`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 지금은 1단 SW(strip)의 design doc을 쓰는 중이다.
+`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 지금은 1단 SW(strip)의 마지막 milestone M3.
 
 ## 현재 브랜치
 
@@ -21,7 +21,15 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 `herdr agent read <이름> --source recent-unwrapped`. 내가 만들지 않은 pane은 닫지 않는다. 서브에이전트는 commit하지 않고, lead가 diff를
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
-## 완료된 작업 (2026-11-18, 이 세션)
+## 완료된 작업 (2026-11-18~19, SW — 이 세션)
+
+- [x] SW design 결정 1~12 · milestone, 로드맵 · 요구사항 고침: `cac1858`. M2를 열며 결정 13~18(`bc939d2`), M3를 열며 결정 19~26
+- [x] SW-M0 `8620c93`: `layout.Tree` → `layout.Strip`(column 목록, `share`로 고르게). 체인 셋 판정 diff 0, 루트 게이트 34/34
+- [x] SW-M1 `ea861b1`: column당 3 한도, `strip>` 줄, pane 체인 16d. 루트 게이트 33/34 — 빨강은 bluetooth의 `btvirt` 간헐(carryover 다섯 번째), 체인만 다시 초록
+- [x] SW-M2 `4d491ab`: viewport(column 셋 이상이면 반 폭 둘이 보임) · `reveal` · `3/7` 칸 · pane 체인 16e. 루트 게이트 34/34
+- [x] 구현은 전부 Herdr 서브에이전트 `sw-impl`(Opus, pane `w3J:p8`)가 했고 lead가 diff를 대조 · 게이트 · commit
+
+## 완료된 작업 (2026-11-18, 앞 세션)
 
 - [x] 요구사항 초안 둘(strip · Wayland, UI 툴킷 — 저장소 밖) 검토 → 사용자 위임으로 합쳐 다시 씀: `33fd094`
       (`docs/specs/2026-11-18-tars-app-layer-requirements.md` · `docs/plans/2026-11-18-tars-app-layer-roadmap.md` · 기억 `project_app_layer_vision`)
@@ -45,6 +53,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 시도했으나 실패한 접근
 
+- 게이트 출력을 `out/` 안의 파일로 리다이렉트: 게이트가 `out/`을 지워 파일이 사라진다(fd에는 계속 쓴다). scratchpad에 둔다.
+- SW-M2 첫 판의 "셋 이상이면 자리의 폭": 짝수 격자에서 scroll이 resize를 불렀다 — 셋 이상은 모든 column이 왼쪽 반 폭(design 결정 13).
 - 초안의 전제를 저장소와 대조하지 않고 믿기: 10월 말 초안은 3주 사이에 다섯이 틀렸다(`Cmd+Ctrl+F`는 FU의 키 · DY로 SDL3는 이미 돈다 ·
   글리프는 FreeType이 아니라 stb_truetype · HS의 `display_scale` · 접두사 `WL`은 wifi). 요구사항도 design도 그날의 코드로 쓴다.
 - 내가 쓴 요구사항도 확인 절에서 둘이 틀렸다: R-SW-3(폭 물려받기)을 글자 그대로 하면 첫 `Cmd+D`가 화면을 넘긴다, 로드맵의
@@ -57,21 +67,16 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] SW design doc에 결정 · milestone 절을 쓴다(받아들여진 가~라 그대로 — 아래 "다음 에이전트에게")
-- [ ] 로드맵 고치기: SW-M0/M1의 경계(결정 다), WY-M0의 "픽셀 폭이 먼저 서야 한다" 문장(결정 가 — 픽셀은 WY-M0에서 더한다).
-      요구사항 R-SW-2 · R-SW-3에 "(고침, SW design 결정 가 · 나)"를 단다
-- [ ] SW-M0 plan(`docs/plans/<날짜>-tars-strip-workspace-sw-m0.md`) → 구현 → 루트 게이트(35분쯤) → commit
+- [ ] SW-M3(`docs/plans/2026-11-19-tars-strip-workspace-sw-m3.md`) — `sw-impl`에 맡겼다. 끝나면 diff 대조 → 체인 `pane` · `pointer` ·
+      `dictation` · `hangul` → 루트 게이트 → 결과 절 → commit
+- [ ] SW 서브프로젝트 닫기(CLAUDE.md "끝내면 함께 고칠 것"): design `Status:`, `completed.md` 한 행, 기억 `docs/decisions/` 한 파일 +
+      `MEMORY.md` 한 줄, 로드맵 표에 끝난 날, `docs/help/desk.md` 대조, 소개 페이지 `data.js`
+- [ ] 다음은 WY-M0(로드맵 권장 순서). design doc `tars-wayland-server-design.md`의 확인 절부터
+- [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(SW-M2 결과 7)
 - [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
 - [ ] `main`의 것을 0.3 줄로 가져오는 방법(merge · rebase)은 미정 — 처음 필요해질 때 사용자에게 묻는다
-- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 — Country 요소를 내는 집 AP면 `link> nl80211 … ssid_len=` 줄(GET_INTERFACE 길), 내장
-      BCM43224의 operstate 순서. 유선은 USB 동글로. 결과는 `project_link_status`의 "남은 것"에
-- [ ] 실기: GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절
-- [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
-- [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
-- [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
-- [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순), tars-agent
-- [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
-- [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
+- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절)
+- [ ] 이월: janet 1.43.0(AVX2), mitos 0.2.1, 위임 결정(CE 4~7, LT 2), memcpy · memset glibc 측정, 클라우드 브랜치 정리, DC-M2 boot 7 여유
 
 ## 핵심 파일
 
@@ -89,20 +94,12 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 다음 에이전트에게
 
-1. `git branch --show-current`가 `app-layer-0-3`인지 본다. 트리는 clean이고 origin과 같다. `herdr --skill`을 읽는다.
-2. SW design doc(`docs/specs/2026-11-18-tars-strip-workspace-design.md`)의 확인 절을 읽고, 그 아래 결정 절을 쓴다. 사용자가 받은 넷:
-   - 가: SW에서는 좌표를 셀 그대로 둔다. 픽셀은 WY-M0에서 `Rect` 옆에 더한다.
-   - 나: `Cmd+D` — column이 viewport 전체 폭이면 반으로 가르고(지금과 같은 77 | 77), 아니면 폭을 물려받아 오른쪽에 더한다.
-   - 다: SW-M0 = 자료구조를 strip으로 바꾸고 지금 게이트의 세 모양(패널 하나 · `0 | 1` · `0 | (1 / 2)`)을 같은 숫자로 낸다(눈에 보이는
-     변화 0). SW-M1 = 새 동작(column당 3까지 고르게 쌓기 · 한도 · 둘째 `Cmd+D`부터의 물려받기). M2 · M3은 로드맵 그대로.
-   - 라: `Cmd+Opt+←→`는 지금 규칙(포커스 pane의 맨 위 줄과 마주 보는 pane). 닫은 뒤 포커스는 같은 column의 위 → 아래 → column이 비면
-     왼쪽 column(없으면 오른쪽)의 같은 높이 pane.
-3. 로드맵과 요구사항을 그 결정에 맞춰 고친다(남은 작업 둘째 줄).
-4. SW-M0 plan을 쓴다. 판정은 "`layout_test`의 그대로 9개 + 다시 쓴 6개가 통과, `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과,
-   루트 게이트 34/34". 구현은 Herdr 서브에이전트에 맡길 수 있다 — lead가 diff를 실제 파일과 대조하고 commit한다.
-5. 진행 방식은 CLAUDE.md의 "설명 → 실행 → 설명". 사용자는 만들어진 코드를 읽으며 따라간다.
-
-앞 세션(LK)의 남은 것: 실기 결과를 받으면 `link> nl80211` · `link> state` 줄을 보고 `project_link_status`의 "남은 것"에 적는다.
+1. `git branch --show-current`가 `app-layer-0-3`인지, `herdr --skill`을 읽고 `herdr agent list`로 `sw-impl`이 살아 있는지 본다.
+2. M3가 끝났는지: `git status`에 layout · input · main · pane/check.sh 변경이 있으면 서브에이전트가 넣은 것이다. `herdr agent read sw-impl`로
+   보고를 읽고 diff를 대조한다(지운 줄은 `git diff | rg '^-'`).
+3. 게이트 로그는 `out/` 밖(scratchpad)에 둔다 — 게이트가 `out/`을 지운다. 결과는 `out/gate-logs/<시각>/failed`가 비었는가.
+4. bluetooth 체인의 `btvirt` 빨강은 알려진 간헐이다. 체인만 다시 돌려 초록이면 `carryover.md`에 한 줄 더하고 넘어간다.
+5. 진행 방식은 CLAUDE.md의 "설명 → 실행 → 설명". 사용자 위임(2026-11-18): 주요 결정은 Claude가 정하고 design에 이유를 적는다.
 
 ## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)
 - [x] OD-M0 odin(`c07e944`) · rust 1.100.0(`0a0363e`) · `make iso-full`(`e0cb758`) — 닫기 `c07b325`
