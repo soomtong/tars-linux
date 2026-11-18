@@ -28,6 +28,10 @@ pub const Side = enum { left, right, up, down };
 /// 패널 배열이 이 번호로 바로 인덱싱된다.
 pub const MAX_LEAVES = 8;
 
+/// column 하나의 pane 수 상한(SW-M1, SW design 결정 12 · 요구사항 결정 7). 47줄
+/// 격자에서 셋이면 15줄씩이다. 넘는 `.below`는 `split`이 null로 거절한다.
+pub const MAX_PER_COLUMN = 3;
+
 /// column 하나. 위에서 아래 순서의 slot 번호와 그 수다.
 ///
 /// 쓰지 않는 칸은 늘 0이다. 빼고 당긴 뒤 비는 끝 칸도 0으로 되돌린다 — 같은
@@ -61,9 +65,11 @@ pub const Strip = struct {
     /// 결정 5). `.right`는 포커스 column 바로 오른쪽에 pane 하나짜리 column을
     /// 끼우고, `.below`는 같은 column에서 포커스 pane 바로 아래에 끼운다.
     ///
-    /// null인 경우가 셋이다. pane이 이미 여덟이거나, 없는 slot이거나, 끼운 뒤
-    /// 고르게 나눈 몫이 한 칸 미만이다 — 길이 `L`에 `n`개를 놓으려면 구분선
-    /// `n-1`과 한 칸씩 `n`이 들어야 해서 `L ≥ 2n-1`이다. 둘째 pane에서는 WP
+    /// null인 경우가 넷이고 이 순서로 본다(SW-M1 plan 확정 2). pane이 이미
+    /// 여덟이거나, 없는 slot이거나, `.below`인데 그 column이 이미 셋이거나
+    /// (`MAX_PER_COLUMN`), 끼운 뒤 고르게 나눈 몫이 한 칸 미만이다 — 길이
+    /// `L`에 `n`개를 놓으려면 구분선 `n-1`과 한 칸씩 `n`이 들어야 해서
+    /// `L ≥ 2n-1`이다. 둘째 pane에서는 WP
     /// 트리의 "길이 3 미만"과 같다. 판정 길이는 `.right`가 격자 폭, `.below`가
     /// 격자 높이다 — column 폭과 pane 높이는 그 길이를 고르게 나눈 것이라
     /// 크기를 보려면 격자 전체가 있어야 해서 `whole`을 받는다.
@@ -73,6 +79,7 @@ pub const Strip = struct {
     pub fn split(self: *Strip, leaf: u4, dir: Dir, whole: Rect) ?u4 {
         if (self.count() >= MAX_LEAVES) return null;
         const at = self.find(leaf) orelse return null;
+        if (dir == .below and self.cols[at.c].len >= MAX_PER_COLUMN) return null;
         const len: usize, const n: usize = switch (dir) {
             .right => .{ whole.cols, @as(usize, self.len) + 1 },
             .below => .{ whole.rows, @as(usize, self.cols[at.c].len) + 1 },
@@ -257,6 +264,20 @@ pub const Strip = struct {
         var j: usize = 0;
         while (j + 1 < other.len and share(whole.rows, other.len, j + 1).start <= top) j += 1;
         return other.slots[j];
+    }
+
+    /// slot `leaf`가 든 column의 순번(0부터)과 column 수(SW-M1). `main.zig`의
+    /// `strip>` 줄이 쓴다. 없는 slot이면 null이다.
+    pub fn columnOf(self: *const Strip, leaf: u4) ?struct { col: usize, cols: usize } {
+        const at = self.find(leaf) orelse return null;
+        return .{ .col = at.c, .cols = self.len };
+    }
+
+    /// column마다 pane 수를 `buf`에 담고 그 앞부분을 돌려준다(SW-M1, `strip>` 줄의
+    /// `heights`).
+    pub fn heights(self: *const Strip, buf: *[MAX_LEAVES]u4) []u4 {
+        for (self.cols[0..self.len], 0..) |col, c| buf[c] = col.len;
+        return buf[0..self.len];
     }
 
     /// pane의 수.

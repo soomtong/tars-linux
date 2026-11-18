@@ -1885,6 +1885,52 @@ fn dumpPane(
     });
 }
 
+/// `strip>` 줄을 찍을지 가르는 값(SW-M1 plan 확정 1). `PaneSig`와 같은 방식이다 —
+/// 지난 값과 같으면 안 찍는다. `heights`의 쓰지 않는 칸은 0이라 `std.meta.eql`로
+/// 견줄 수 있다.
+const StripSig = struct {
+    cols: usize,
+    focus_col: usize,
+    heights: [layout.MAX_LEAVES]u4,
+};
+
+/// 지금 워크스페이스의 column 모양을 한 줄로 찍는다(SW-M1).
+///
+///   terminal: strip> cols=2 focus_col=2 heights=1,3
+///
+/// `focus_col`은 포커스 pane이 든 column의 번호(1부터, `ws=`와 같은 셈)이고,
+/// `heights`는 왼쪽 column부터 column마다 pane 수다. `pane>` 줄을 고치지 않고
+/// 새 줄로 낸 이유는 `pane>` 줄을 글자 그대로 견주는 체인이 있어서다
+/// (`pointer/check.sh`, SW-M1 plan 확정 1).
+///
+/// 첫 프레임에는 반드시 찍힌다(`last`가 null). 문구가 이 파일과
+/// `pane/check.sh` 양쪽에 있다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
+fn dumpStrip(workspaces: *const [MAX_WORKSPACES]?Workspace, current: usize, last: *?StripSig) void {
+    const ws = workspaces[current].?;
+    const at = ws.strip.columnOf(ws.focus) orelse return;
+    var buf: [layout.MAX_LEAVES]u4 = undefined;
+    const hs = ws.strip.heights(&buf);
+    var sig: StripSig = .{ .cols = at.cols, .focus_col = at.col + 1, .heights = @splat(0) };
+    @memcpy(sig.heights[0..hs.len], hs);
+    if (last.*) |l| {
+        if (std.meta.eql(l, sig)) return;
+    }
+    last.* = sig;
+
+    // "1,3,2"처럼 쉼표로 잇는다. 많아야 여덟 칸이라 16바이트면 넉넉하다.
+    var text: [2 * layout.MAX_LEAVES]u8 = undefined;
+    var n: usize = 0;
+    for (hs, 0..) |h, i| {
+        if (i > 0) {
+            text[n] = ',';
+            n += 1;
+        }
+        text[n] = '0' + @as(u8, h);
+        n += 1;
+    }
+    logline.print("terminal: strip> cols={d} focus_col={d} heights={s}\n", .{ sig.cols, sig.focus_col, text[0..n] });
+}
+
 // ── 받아쓰기(VD-M1) ───────────────────────────────────────────────────
 //
 // 게스트의 `tars-dictate`(VD-M0) 하나를 띄우고, 표준 출력과 표준 에러를 poll로 읽고,
@@ -3767,7 +3813,7 @@ const PointerWire = struct {
 /// 프로세스 전체다.
 /// verify 모드의 그림자(DR-M1). `fb`는 `drm.Framebuffer.shadow` — heap 위의 같은 치수
 /// 버퍼다. `cell_buf` · `img_buf`는 포커스 아닌 패널의 `cells()` · `images()`를 다시 받을
-/// 자리다 — `App`의 것을 쓰면 덤프 열둘이 읽는 포커스 패널의 목록을 덮는다.
+/// 자리다 — `App`의 것을 쓰면 덤프 열셋이 읽는 포커스 패널의 목록을 덮는다.
 const Verify = struct {
     fb: drm.Framebuffer,
     cell_buf: []vt.CellGlyph,
@@ -3878,6 +3924,8 @@ const App = struct {
     /// 마지막으로 찍은 `pane>` 줄의 서명(WP design 결정 7). null이면 아직 한
     /// 번도 안 찍었다 — 첫 프레임이 반드시 찍힌다.
     last_pane: ?PaneSig = null,
+    /// 마지막으로 찍은 `strip>` 줄의 서명(SW-M1). null이면 첫 프레임이다.
+    last_strip_sig: ?StripSig = null,
 
     // ── 입력 ───────────────────────────────────────────────────────────
     /// 키보드(KH-M1). 포인터와 같은 길로 terminal이 스스로 찾고, 부팅 뒤에 꽂힌 것도
@@ -5375,7 +5423,7 @@ const App = struct {
             self.first_frame_timed = true;
             logline.print("terminal: render> first frame {d}us\n", .{frame.frame_us});
         }
-        // `frame_us` 뒤에 찍는다 — 줄을 쓰는 시간이 그리기 시간에 안 든다. 덤프 열둘보다 앞이라
+        // `frame_us` 뒤에 찍는다 — 줄을 쓰는 시간이 그리기 시간에 안 든다. 덤프 열셋보다 앞이라
         // 게이트의 `last_frame`(마지막 `screen>`부터) 밖이고, 체인의 덤프 순서 계약에 안 든다.
         if (verified) |v| {
             const cl = clipped.?;
@@ -5505,7 +5553,7 @@ const App = struct {
     /// 행의 픽셀도 낡고, 그림자를 증분 목록으로 그리면 둘이 같아져 못 본다 — 그래서 그림자는
     /// fresh다(DR-M2까지는 포커스 패널에 `frame.cells`를 그대로 썼다). 그리고 fresh 목록을 증분
     /// 목록과 행마다 비교해(`Verified.cells`) `mismatch cells`로 따로 말한다 — 픽셀 비교보다
-    /// 원인에 가깝다. 포커스 패널의 증분 목록은 `frame.cells`이고 덤프 열둘이 그것을 읽는다 —
+    /// 원인에 가깝다. 포커스 패널의 증분 목록은 `frame.cells`이고 덤프 열셋이 그것을 읽는다 —
     /// fresh는 그림자의 `cell_buf`에 받으므로 안 덮는다. 호출 순서가 계약이다: 증분(실제 경로)
     /// 이 먼저, fresh가 뒤 — fresh는 비트를 안 보고 메모를 같은 값으로 다시 적는다.
     ///
@@ -5555,7 +5603,7 @@ const App = struct {
         }
     }
 
-    /// 바퀴 10. 그린 프레임의 덤프 열둘. 순서가 게이트의 계약이다 — `dumpCursor`는
+    /// 바퀴 10. 그린 프레임의 덤프 열셋. 순서가 게이트의 계약이다 — `dumpCursor`는
     /// `dumpInk` 뒤 · `dumpScroll` 앞, `dumpPointerAt`이 맨 뒤.
     fn dumpFrame(self: *App, frame: *const Frame, p: Pointers) void {
         const focus = frame.focus;
@@ -5569,6 +5617,7 @@ const App = struct {
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
         dumpStatus(self.fb, frame.status_line, frame.status_changed);
         dumpPane(self.fb, &self.workspaces, self.current, &self.last_pane);
+        dumpStrip(&self.workspaces, self.current, &self.last_strip_sig);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.

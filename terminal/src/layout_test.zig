@@ -409,7 +409,9 @@ pub fn main() !void {
     // 구분선 줄에 시작 줄이 떨어지는 조합은 모두 pane이 아홉 이상이라(한도
     // 여덟) 여기서는 늘 마주 보는 pane이 맨 위 줄을 덮는다(SW-M0 plan). 떨어지는
     // 경우는 검사 18이 따로 본다. 분할 모양 256가지 × 격자 둘(홀수 · 짝수)을
-    // pane 여덟까지 쌓으며 매 단계 모든 pane · 모든 방향에서 둘을 본다.
+    // pane 여덟까지 쌓으며 매 단계 모든 pane · 모든 방향에서 둘을 본다. column당
+    // 셋(SW-M1)에 걸린 `.below`는 `_ =`로 넘어가므로 여덟에 못 미치는 모양도
+    // 있다 — 판정은 같고 물은 수만 준다(SW-M1 plan 확정 4).
     //   1. null이면 그 변이 격자 끝이고, 끝이면 null이다.
     //   2. null이 아니면 그 pane이 구분선 한 칸 건너편에서 시작하고, 변의
     //      시작점과 마주 본다.
@@ -562,29 +564,28 @@ pub fn main() !void {
     // ── 검사 18: 마주 보는 줄이 옆 column의 구분선일 때 (SW design 결정 8) ──
     //
     // column마다 높이를 따로 나누므로 한쪽의 시작 줄이 옆 column의 가로
-    // 구분선일 수 있다. 45줄 격자에 왼쪽 column pane 둘(0 x22 · 구분선 22 ·
-    // 23 x22)과 오른쪽 column pane 넷(42를 넷으로 10 · 10 · 11 · 11, 시작 0 ·
-    // 11 · 22 · 34)이면 오른쪽 셋째가 22줄에서 시작한다. 그 ←는 구분선 바로 위의
-    // 왼쪽 첫 pane이다. 왼쪽 둘째(시작 23)의 →는 23줄을 덮는 오른쪽 셋째다.
+    // 구분선일 수 있다. column당 셋(SW-M1)이면 그런 격자는 5~9줄뿐이라(SW-M1
+    // plan 확정 3) 8줄 격자로 본다. 왼쪽 column pane 둘(7을 둘로 3 · 4, 시작
+    // 0 · 4, 구분선 3)과 오른쪽 column pane 셋(6을 셋으로 2 · 2 · 2, 시작 0 · 3 ·
+    // 6)이면 오른쪽 둘째가 3줄에서 시작한다. 그 ←는 구분선 바로 위의 왼쪽 첫
+    // pane이다. 왼쪽 둘째(시작 4)의 →는 4줄을 덮는 오른쪽 둘째다.
     {
-        const whole: Rect = .{ .col = 0, .row = 0, .cols = 155, .rows = 45 };
+        const whole: Rect = .{ .col = 0, .row = 0, .cols = 155, .rows = 8 };
         var t = layout.Strip.init();
         try expectLeaf("right column", t.split(0, .right, whole), 1);
         try expectLeaf("left second", t.split(0, .below, whole), 2);
         try expectLeaf("right second", t.split(1, .below, whole), 3);
         try expectLeaf("right third", t.split(3, .below, whole), 4);
-        try expectLeaf("right fourth", t.split(4, .below, whole), 5);
         t.rects(whole, &rs);
-        try expectRect("left first", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 22 });
-        try expectRect("left second", rs[2], .{ .col = 0, .row = 23, .cols = 77, .rows = 22 });
-        try expectRect("right first", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 10 });
-        try expectRect("right second", rs[3], .{ .col = 78, .row = 11, .cols = 77, .rows = 10 });
-        try expectRect("right third", rs[4], .{ .col = 78, .row = 22, .cols = 77, .rows = 11 });
-        try expectRect("right fourth", rs[5], .{ .col = 78, .row = 34, .cols = 77, .rows = 11 });
-        try expectHit("row 22 of the left column is the separator", t.hit(whole, 10, 22), null);
-        try expectLeaf("right third left is above the separator", t.neighbor(whole, 4, .left), 0);
-        try expectLeaf("left second right is the right third", t.neighbor(whole, 2, .right), 4);
-        try expectLeaf("right fourth left is the left second", t.neighbor(whole, 5, .left), 2);
+        try expectRect("left first", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 3 });
+        try expectRect("left second", rs[2], .{ .col = 0, .row = 4, .cols = 77, .rows = 4 });
+        try expectRect("right first", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 2 });
+        try expectRect("right second", rs[3], .{ .col = 78, .row = 3, .cols = 77, .rows = 2 });
+        try expectRect("right third", rs[4], .{ .col = 78, .row = 6, .cols = 77, .rows = 2 });
+        try expectHit("row 3 of the left column is the separator", t.hit(whole, 10, 3), null);
+        try expectLeaf("right second left is above the separator", t.neighbor(whole, 3, .left), 0);
+        try expectLeaf("left second right is the right second", t.neighbor(whole, 2, .right), 3);
+        try expectLeaf("right third left is the left second", t.neighbor(whole, 4, .left), 2);
         try expectLeaf("left first right is the right first", t.neighbor(whole, 0, .right), 1);
     }
 
@@ -605,6 +606,33 @@ pub fn main() !void {
         _ = s.split(0, .right, WHOLE);
         _ = s.split(1, .below, WHOLE);
         try expectLeaf("heir of the leftmost lone pane is in the right column", s.heir(0), 1);
+    }
+
+    // ── 검사 20: column당 셋 (SW-M1, SW design 결정 12) ──────────────────
+    //
+    // 한 column에 셋이면 넷째 `.below`는 null이고 아무것도 안 바뀐다 — pane 수도
+    // 사각형도 그대로다. 한도는 column마다라 다른 column의 `.below`는 되고,
+    // `.right`는 한도와 무관하다(새 column은 pane 하나로 선다).
+    {
+        var t = layout.Strip.init();
+        _ = t.split(0, .below, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        try expectCount(&t, 3);
+        var before: [layout.MAX_LEAVES]Rect = undefined;
+        t.rects(WHOLE, &before);
+        try expectLeaf("fourth below the last of three", t.split(2, .below, WHOLE), null);
+        try expectLeaf("fourth below the first of three", t.split(0, .below, WHOLE), null);
+        try expectCount(&t, 3);
+        t.rects(WHOLE, &rs);
+        for (0..3) |k| {
+            if (!std.meta.eql(rs[k], before[k])) return error.RefusedSplitMoved;
+        }
+        try expectRect("still 15 rows after the refusal", rs[2], .{ .col = 0, .row = 32, .cols = 155, .rows = 15 });
+        try expectLeaf("right is not limited", t.split(1, .right, WHOLE), 3);
+        try expectLeaf("below in the other column", t.split(3, .below, WHOLE), 4);
+        try expectLeaf("third in the other column", t.split(4, .below, WHOLE), 5);
+        try expectLeaf("fourth in the other column", t.split(3, .below, WHOLE), null);
+        try expectCount(&t, 6);
     }
 
     std.debug.print("layout_test: all checks passed\n", .{});

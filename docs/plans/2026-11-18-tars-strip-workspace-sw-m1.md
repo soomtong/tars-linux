@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 Design: `docs/specs/2026-11-18-tars-strip-workspace-design.md`(결정 12, 요구사항 결정 7)
-Status: plan. SW-M0의 루트 게이트가 도는 동안 썼다 — 게이트 결과와 대조한 뒤 구현에 넘긴다. 브랜치 `app-layer-0-3`.
+Status: 끝났다(2026-11-18). 결과는 맨 아래. SW-M0의 게이트가 도는 동안 썼고, 그 결과(34/34, 바뀐 전제 없음)와 대조한 뒤 넘겼다. 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -13,7 +13,7 @@ Status: plan. SW-M0의 루트 게이트가 도는 동안 썼다 — 게이트 �
 - `terminal/src/layout.zig` — `MAX_PER_COLUMN = 3`, `split(.below)`의 거절. `columnOf`(slot → column 순번 · column 수) 하나.
 - `terminal/src/layout_test.zig` — 검사 18을 한도 안의 모양으로 옮기고, 새 검사 20.
 - `terminal/src/main.zig` — `strip>` 줄.
-- `pane/check.sh` — 검사 16c(새).
+- `pane/check.sh` — 검사 16d(새 — 파일에 하위 꼬리표 `16c(음성)`가 이미 있어 d).
 - `docs/help/desk.md` — `Cmd+Shift+D` 줄에 한도.
 
 ## 이 milestone이 끝나면
@@ -34,7 +34,7 @@ Status: plan. SW-M0의 루트 게이트가 도는 동안 썼다 — 게이트 �
    오른쪽 셋(시작 0 · 3 · 6, 높이 2 · 2 · 2)이고, 오른쪽 둘째의 `←`는 구분선 위의 왼쪽 첫 pane이다.
 4. 검사 15의 생성기는 `.below`가 거절되면 `_ =`로 넘어간다. 잎 수가 여덟에 못 미치는 모양이 생기지만 판정은 그대로다.
    물은 수(지금 71,680)가 줄어드는 것은 정상이다 — 새 수를 결과에 적는다.
-5. pane 체인 검사 16c는 검사 16 뒤, 검사 6 앞에 넣는다. 검사 6은 `0 | (1 / 2)`에서 포커스 2를 닫는 것을 전제한다.
+5. pane 체인 검사 16d는 검사 16 뒤, 검사 6 앞에 넣는다. 검사 6은 `0 | (1 / 2)`에서 포커스 2를 닫는 것을 전제한다.
    그래서 16c는 끝에서 그 모양으로 되돌린다.
    - 포커스 2에서 `Cmd+Shift+D` → `panes=4 focus=3 rect=78,32 77x15`, `strip> cols=2 focus_col=2 heights=1,3`
    - 한 번 더 → `pane> split refused` 한 줄 더, 마지막 `pane>` 줄이 그대로, `spawned` 줄 수가 그대로
@@ -60,6 +60,16 @@ Status: plan. SW-M0의 루트 게이트가 도는 동안 썼다 — 게이트 �
 
 - `layout_test` 통과. 체인 `pane` PASS(16c 포함), `pointer` · `dictation` PASS. 루트 게이트 34/34.
 
-## 결과
+## 결과 (2026-11-18)
 
-(구현 뒤에 쓴다.)
+1. 구현은 Herdr 서브에이전트(`sw-impl`, Opus) 3분 31초. lead가 diff를 대조했다 — 지운 줄은 검사 18의 옛 판, `split` 주석,
+   도움말 한 줄, `main.zig`의 "덤프 열둘" 주석 넷(→ 열셋)뿐이다.
+2. lead가 고친 것 둘: 새 검사의 이름을 16c → 16d(검사 16 안에 하위 꼬리표 `16c(음성)`가 이미 있다), 도움말의 "한 줄에" →
+   "한 열(column)에"(가로 줄로 읽힌다).
+3. `layout_test` 통과. 검사 15의 물음은 71,680 → 66,384(거절된 `.below`가 넘어간다, 확정 4).
+4. `strip>` 줄은 `dumpPane` 바로 뒤에 찍힌다. 덤프 순서의 계약(`dumpCursor`는 `dumpInk` 뒤 · `dumpScroll` 앞, `dumpPointerAt`
+   맨 뒤)과 닿지 않고, `pointer` · `dictation` 체인이 그대로 PASS다.
+5. 체인: `pane` 199초(16d 포함) · `pointer` 276초 · `dictation` 237초 PASS. 16d의 줄: 셋째 `rect=78,32 77x15`, 구분선 픽셀
+   15,872 → 25,728(가로선 77칸 × 셀 8×16 = 9,856), 넷째는 `split refused`만, 3을 닫으면 `focus=2 rect=78,24 77x23`.
+6. 루트 게이트: 33/34(2,246초, `out/gate-logs/20261118-131938`). 빨강은 `bluetooth`(BT-M2) 하나 — `btvirt` Segmentation fault의
+   간헐(`carryover.md`, 다섯 번째, lane 20). 같은 산출물로 체인만 다시 돌린 판은 초록(206초). SW-M1은 블루투스와 닿지 않는다.

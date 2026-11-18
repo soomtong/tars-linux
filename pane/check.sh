@@ -168,6 +168,30 @@ pane_origin() {
   last_pane_line | sed -E 's/.*rect=([0-9]+),([0-9]+) .*/\1 \2/'
 }
 
+# 마지막 column 모양 줄(`strip> cols=…`, SW-M1). pane> 줄처럼 바뀐 프레임에만
+# 찍히고 pane> 줄 바로 뒤에 온다(dumpStrip). `tr -d '\r'`은 last_pane_line과 같은 이유다.
+last_strip_line() {
+  tlog | grep -a 'terminal: strip> ' | tail -n 1 | tr -d '\r'
+}
+
+# 마지막 strip> 줄이 패턴에 맞을 때까지 기다린다. 있으면 0, 15초가 지나면 1.
+# pane> 줄과 같은 프레임에 찍히지만 시리얼 파일에 닿는 순간이 다를 수 있어
+# 따로 기다린다.
+wait_for_strip() {
+  local pattern="$1" line
+  for _ in $(seq 1 150); do
+    line="$(last_strip_line)"
+    if grep -aqE -- "$pattern" <<<"$line"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# split refused 줄의 개수(SW-M1). 한도에 걸린 분할이 찍는 유일한 줄이다.
+refused_lines() {
+  grep -ac 'terminal: pane> split refused' "$LOG" || true
+}
+
 # 마지막 프레임의 screen> 줄. 포커스 패널의 것이다(결정 7).
 last_screen() {
   tlog | grep -a 'terminal: screen>' | tail -n 1
@@ -490,6 +514,57 @@ read -r COL ROW <<<"$(pane_origin)"
 [ "$(key_lines)" -eq "$KEYS_BEFORE_SIDE" ] ||
   report_failure "Cmd+Option+arrows leaked bytes to the PTY (key> ${KEYS_BEFORE_SIDE} -> $(key_lines))"
 echo "the focus went up, left, right (to the top), stopped at the edge, then down: $(last_pane_line)"
+
+# ── 검사 16d: column당 셋 — 넷째 Cmd+Shift+D는 거절된다(SW-M1) ─────────
+#
+# 검사 16이 끝난 0 | (1 / 2), 포커스 2에서 돈다. 오른쪽 column에 셋째를 쌓으면
+# 47줄을 셋으로 15 · 15 · 15로 나누고 새 3이 맨 아래(78,32)에 선다. strip> 줄은
+# column 둘, 포커스가 둘째 column, 높이 1 · 3이다. 넷째 Cmd+Shift+D는 split
+# refused 한 줄만 찍고 아무것도 안 바꾼다 — 마지막 pane> 줄 · strip> 줄 ·
+# spawned 줄 수가 그대로다. 끝에서 Cmd+W로 3을 닫아 위의 2가 포커스를 받는다
+# (SW design 결정 9). 그래서 검사 6이 전제하는 0 | (1 / 2) · 포커스 2로 돌아간다.
+# 닫기는 child exited가 하나 는 것까지 기다린다 — 검사 6이 그 수를 다시 센다.
+echo "=== a column holds three panes, the fourth Cmd+Shift+D is refused ==="
+type_keys meta_l-shift-d
+wait_for_pane 'panes=4 focus=3 rect=78,32 77x15 ' ||
+  report_failure "Cmd+Shift+D from leaf 2 did not give 'panes=4 focus=3 rect=78,32 77x15'"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,3$' ||
+  report_failure "the strip> line is not 'cols=2 focus_col=2 heights=1,3' (got '$(last_strip_line)')"
+echo "three in the right column: $(last_pane_line)"
+
+PANE_LINE_BEFORE="$(last_pane_line)"
+STRIP_LINE_BEFORE="$(last_strip_line)"
+PANES_BEFORE_LIMIT="$(pane_lines)"
+REFUSED_BEFORE="$(refused_lines)"
+type_keys meta_l-shift-d
+wait_for_more refused_lines "$REFUSED_BEFORE" ||
+  report_failure "the fourth Cmd+Shift+D in a column printed no 'pane> split refused' line"
+sleep 1
+[ "$(refused_lines)" -eq $((REFUSED_BEFORE + 1)) ] ||
+  report_failure "expected one more 'split refused' line, got ${REFUSED_BEFORE} -> $(refused_lines)"
+[ "$(pane_lines)" -eq $((PANES_BEFORE_LIMIT + 1)) ] ||
+  report_failure "the refused split changed the layout (pane> ${PANES_BEFORE_LIMIT} -> $(pane_lines), only the refused line should be new)"
+[ "$(last_pane_line)" = "$PANE_LINE_BEFORE" ] ||
+  report_failure "the refused split changed the last pane> line ('${PANE_LINE_BEFORE}' -> '$(last_pane_line)')"
+[ "$(last_strip_line)" = "$STRIP_LINE_BEFORE" ] ||
+  report_failure "the refused split changed the strip> line ('${STRIP_LINE_BEFORE}' -> '$(last_strip_line)')"
+[ "$(spawn_lines)" -eq "$BOOT_SPAWNS" ] ||
+  report_failure "the refused split spawned something (spawned child pid ${BOOT_SPAWNS} -> $(spawn_lines))"
+echo "the fourth split was refused, nothing moved: $(last_pane_line)"
+
+EXITS_BEFORE_LIMIT="$(exit_lines)"
+type_keys meta_l-w
+wait_for_pane 'panes=3 focus=2 rect=78,24 77x23 ' ||
+  report_failure "Cmd+W on leaf 3 did not leave 'panes=3 focus=2 rect=78,24 77x23' (the focus should go to the pane above)"
+tlog | grep -aE 'terminal: pane> hangup leaf=3 pid=[0-9]+' >/dev/null ||
+  report_failure "no 'pane> hangup leaf=3' line, Cmd+W never sent SIGHUP"
+tlog | grep -aE 'terminal: pane> closed leaf=3' >/dev/null ||
+  report_failure "no 'pane> closed leaf=3' line, the pane was never closed"
+wait_for_more exit_lines "$EXITS_BEFORE_LIMIT" ||
+  report_failure "leaf 3's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_LIMIT} -> $(exit_lines))"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2$' ||
+  report_failure "after closing leaf 3 the strip> line is not 'cols=2 focus_col=2 heights=1,2' (got '$(last_strip_line)')"
+echo "leaf 3 closed, back to 0 | (1 / 2): $(last_pane_line)"
 
 # ── 검사 6: Cmd+W가 그 패널만 닫고 terminal은 산다 ────────────────────
 #
