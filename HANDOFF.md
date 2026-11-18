@@ -1,11 +1,11 @@
-# HANDOFF: App Layer(0.3) 1단 SW — M0 · M1 · M2 끝, M3 구현 중(2026-11-19). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) 1단 SW 끝(2026-11-19). 다음은 2단 WY-M0. 브랜치 `app-layer-0-3`
 
 ## 목표
 
 App Layer(0.3) — strip 워크스페이스 · Wayland 서버 · TARS 툴킷(첫 앱 `tars-files`) · Chromium. 하나의 milestone이 아니라 녹화 넷(A 둠 ·
 B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝을 재는 비전이다. 사용자(2026-11-18): "커다란 비전으로 목표를 잡고
 진행해보자. 주요 결정은 너의 의견에 따를 테니까." 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(결정 열셋), 순서
-`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 지금은 1단 SW(strip)의 마지막 milestone M3.
+`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 1단 SW(strip)가 끝났다. 다음은 2단 WY(Wayland 서버)의 design doc 확인 절.
 
 ## 현재 브랜치
 
@@ -27,6 +27,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 - [x] SW-M0 `8620c93`: `layout.Tree` → `layout.Strip`(column 목록, `share`로 고르게). 체인 셋 판정 diff 0, 루트 게이트 34/34
 - [x] SW-M1 `ea861b1`: column당 3 한도, `strip>` 줄, pane 체인 16d. 루트 게이트 33/34 — 빨강은 bluetooth의 `btvirt` 간헐(carryover 다섯 번째), 체인만 다시 초록
 - [x] SW-M2 `4d491ab`: viewport(column 셋 이상이면 반 폭 둘이 보임) · `reveal` · `3/7` 칸 · pane 체인 16e. 루트 게이트 34/34
+- [x] SW-M3 `4ae701a`: `Cmd+R` 폭 preset · 빈 칸의 다음 column 이름 · pane 체인 16f · 9r. 첫 게이트 33/34(render verify 잔상 —
+      `separatorRight`로 고침), 둘째 34/34
+- [x] SW 닫기 `2d5f0c2`: design Status · completed · 기억 `project_strip_workspace` · MEMORY · 로드맵 · 도움말
 - [x] 구현은 전부 Herdr 서브에이전트 `sw-impl`(Opus, pane `w3J:p8`)가 했고 lead가 diff를 대조 · 게이트 · commit
 
 ## 완료된 작업 (2026-11-18, 앞 세션)
@@ -67,15 +70,14 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] SW-M3(`docs/plans/2026-11-19-tars-strip-workspace-sw-m3.md`) — `sw-impl`에 맡겼다. 끝나면 diff 대조 → 체인 `pane` · `pointer` ·
-      `dictation` · `hangul` → 루트 게이트 → 결과 절 → commit
-- [ ] SW 서브프로젝트 닫기(CLAUDE.md "끝내면 함께 고칠 것"): design `Status:`, `completed.md` 한 행, 기억 `docs/decisions/` 한 파일 +
-      `MEMORY.md` 한 줄, 로드맵 표에 끝난 날, `docs/help/desk.md` 대조, 소개 페이지 `data.js`
-- [ ] 다음은 WY-M0(로드맵 권장 순서). design doc `tars-wayland-server-design.md`의 확인 절부터
-- [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(SW-M2 결과 7)
+- [ ] WY design(`docs/specs/<날짜>-tars-wayland-server-design.md`, 접두사 WY)의 확인 절 — 로드맵 2단의 "확인 절에 넣을 것" 여덟
+- [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
+      `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
+- [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
+- [ ] 게이트 밖으로 남긴 것: 끄는 선택 중 키로 viewport가 옮기면 누른 pane이 화면 밖일 수 있다(기억 `project_strip_workspace`)
 - [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
 - [ ] `main`의 것을 0.3 줄로 가져오는 방법(merge · rebase)은 미정 — 처음 필요해질 때 사용자에게 묻는다
-- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절)
+- [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 · GPU 데모 판(`project_link_status` · `carryover.md` DY 절), 그리고 SW의 strip(`Cmd+R` 등)
 - [ ] 이월: janet 1.43.0(AVX2), mitos 0.2.1, 위임 결정(CE 4~7, LT 2), memcpy · memset glibc 측정, 클라우드 브랜치 정리, DC-M2 boot 7 여유
 
 ## 핵심 파일
@@ -94,11 +96,13 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 다음 에이전트에게
 
-1. `git branch --show-current`가 `app-layer-0-3`인지, `herdr --skill`을 읽고 `herdr agent list`로 `sw-impl`이 살아 있는지 본다.
-2. M3가 끝났는지: `git status`에 layout · input · main · pane/check.sh 변경이 있으면 서브에이전트가 넣은 것이다. `herdr agent read sw-impl`로
-   보고를 읽고 diff를 대조한다(지운 줄은 `git diff | rg '^-'`).
-3. 게이트 로그는 `out/` 밖(scratchpad)에 둔다 — 게이트가 `out/`을 지운다. 결과는 `out/gate-logs/<시각>/failed`가 비었는가.
-4. bluetooth 체인의 `btvirt` 빨강은 알려진 간헐이다. 체인만 다시 돌려 초록이면 `carryover.md`에 한 줄 더하고 넘어간다.
+1. `git branch --show-current`가 `app-layer-0-3`인지, `herdr --skill`을 읽는다. 서브에이전트 `sw-impl`(pane `w3J:p8`)은 SW 맥락을 든
+   채 살아 있을 수 있다 — WY는 새 맥락이라 새 에이전트를 띄워도 된다(내가 만들지 않은 pane은 닫지 않는다).
+2. WY design의 확인 절은 lead가 직접 읽는다(로드맵 2단의 여덟). zig-wayland · libwayland-server의 크기 같은 조사는 서브에이전트에
+   나눠 맡길 수 있다.
+3. 그리기를 바꾼 milestone은 체인 뒤 `grep -rah 'terminal: verify>' out/gate-logs/<체인> | grep -av ' ok us=' | grep -av ' on bytes='`
+   — `make check`은 verify를 판정하지 않는다(SW-M3이 이것을 건너뛰어 게이트에서 처음 봤다).
+4. 게이트 로그는 `out/` 밖(scratchpad)에 둔다. 결과는 `out/gate-logs/<시각>/failed`가 비었는가. bluetooth `btvirt` 빨강은 알려진 간헐.
 5. 진행 방식은 CLAUDE.md의 "설명 → 실행 → 설명". 사용자 위임(2026-11-18): 주요 결정은 Claude가 정하고 design에 이유를 적는다.
 
 ## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)

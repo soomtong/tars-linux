@@ -3,7 +3,7 @@
 접두사: SW
 
 Date: 2026-11-18
-Status: 끝났다(2026-11-19). SW-M0 `8620c93` · M1 `ea861b1` · M2 `4d491ab` · M3(이 날의 commit).
+Status: 끝났다(2026-11-19). SW-M0 `8620c93` · M1 `ea861b1` · M2 `4d491ab` · M3 `4ae701a`.
 가~라는 사용자가 추천안 그대로 받았고("agree them all"), 나머지는 위임으로 Claude가 정했다(결정
 10 · 11 · 13의 고침, M2 · M3를 열며 더한 확인 9~15 · 결정 13~26). 기억 `project_strip_workspace`.
 브랜치 `app-layer-0-3`.

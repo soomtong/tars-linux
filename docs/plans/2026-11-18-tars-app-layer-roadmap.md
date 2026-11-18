@@ -37,7 +37,7 @@ SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
 design doc: `tars-strip-workspace-design.md`(접두사 SW). 체인은 `pane/check.sh`를
 키운다.
 
-끝났다(2026-11-19). M0 `8620c93` · M1 `ea861b1` · M2 `4d491ab` · M3. 표의 M2 · M3은 design 결정 13~26으로 바뀐 뒤의 것이다.
+끝났다(2026-11-19). M0 `8620c93` · M1 `ea861b1` · M2 `4d491ab` · M3 `4ae701a`. 표의 M2 · M3은 design 결정 13~26으로 바뀐 뒤의 것이다.
 
 확인 절에 넣을 것
 
