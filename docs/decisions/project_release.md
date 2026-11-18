@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "프리릴리스 TARS 0.2.3(2026-11-18, v0.2.3 = 17b3dfa, ISO 넷, 0.3 브랜치로 가기 전의 판) · 공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "프리릴리스 TARS 0.2.3(2026-11-18, v0.2.3 = 17b3dfa, ISO 넷, 0.3 브랜치로 가기 전의 판) · 공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create. 내려받아 대조는 정식 버전부터)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -190,7 +190,9 @@ BV(2026-10-20)부터 시스템 안에 버전이 있다. 빌드는 HEAD가 `v<VER
 5. 저장소 밖 빈 디렉터리(3의 ISO가 있는 곳)에서 네 ISO를 한 번에 `shasum -a 256 … > SHA256SUMS`.
 6. `git push origin v<ver>` →
    `gh release create v<ver> <iso> <nonative iso> <fakesteak iso> <gpu iso> SHA256SUMS --title "TARS <ver>" --notes-file NOTES.md --verify-tag --latest`.
-   새 빈 디렉터리에 `gh release download v<ver>` 후 `shasum -a 256 -c SHA256SUMS`가 `OK`인지 본다. 본 뒤 받은 것은 지운다(사용자 2026-11-14 — 공간).
+   올린 뒤 `gh release view v<ver> --json assets`로 파일 이름과 크기만 로컬과 맞는지 본다.
+   다시 내려받아 `shasum -c`로 대조하는 것은 하지 않는다(사용자 2026-11-18: "여전히 우리는 프로토타이핑이고 사용자는 나밖에 없어. 이 절차는
+   정식 버전 내고 그때 하자") — 정식 버전을 낼 때 이 줄을 되살린다. 0.2.3까지는 대조했다.
 7. 소개 페이지 — `gh-pages`의 `data.js` `releases`에 한 줄(`site/README.md`의 "릴리스를 냈을 때").
 
 ## 재사용할 사실
