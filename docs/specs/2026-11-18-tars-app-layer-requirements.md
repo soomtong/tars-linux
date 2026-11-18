@@ -199,9 +199,12 @@ app pane에서 `Cmd+Shift+C`(copy mode)는 아무 일도 하지 않는다.
 
 - R-SW-1 workspace의 레이아웃은 column 목록이다. column 안은 pane 목록이고 그
   아래 단계는 없다.
-- R-SW-2 column 폭의 단위는 픽셀(논리)이다. 셸 column은 셀 폭의 배수로 맞추고
-  app column은 `xdg_toplevel.configure`로 준 크기를 쓴다.
-- R-SW-3 새 column은 직전 포커스 column의 폭을 물려받는다.
+- R-SW-2 (고침, SW design 결정 가 · 3) column 폭의 단위는 픽셀(논리)이다. 셸
+  column은 셀 폭의 배수로 맞추고 app column은 `xdg_toplevel.configure`로 준 크기를
+  쓴다. SW에서는 셀 그대로 두고 픽셀은 WY-M0에서 더한다.
+- R-SW-3 (고침, SW design 결정 나 · 11) 새 column은 직전 포커스 column의 폭을
+  물려받는다. 단 포커스 column이 viewport 전체 폭이면 반으로 가른다(첫 `Cmd+D`는
+  지금처럼 77 | 77). 물려받기는 viewport와 함께 SW-M2에서 선다.
 - R-SW-4 (고침) 한도는 결정 7.
 - R-SW-5 viewport는 포커스 column이 보이도록 최소한만 움직인다. 가운데 정렬은
   하지 않는다.

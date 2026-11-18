@@ -3,8 +3,9 @@
 접두사: SW
 
 Date: 2026-11-18
-Status: 확인 절까지 썼다. 결정거리 가~라는 사용자가 추천안 그대로 받았다(2026-11-18,
-"agree them all") — 결정 · milestone 절은 다음 세션에 쓴다. 브랜치 `app-layer-0-3`.
+Status: 결정 · milestone 절까지 썼다(2026-11-18). 가~라는 사용자가 추천안 그대로
+받았고("agree them all"), 결정 절을 쓰며 둘을 고쳤다(결정 10 · 11). 다음은 SW-M0
+plan. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 1단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자
 (2026-10-28): "niri 스타일 strip + 1 level 위/아래 분할", "계층은 workspace >
@@ -204,8 +205,65 @@ column당 3은 새 한도다.
 
 ## 결정
 
-아직 쓰지 않았다.
+가~라를 코드의 말로 옮긴 것이다. 10 · 11은 결정 절을 쓰다가 고친 것이고, 고친
+이유를 그 자리에 적는다.
+
+1. 타입. `layout.Tree`를 `layout.Strip`으로 바꾼다. `Strip`은 column 목록이고
+   column은 slot 번호(`u4`) 목록이다. 둘 다 고정 배열과 길이이고 쓰지 않는 칸은
+   늘 0으로 둔다 — `main.zig`가 지난 프레임의 배치와 `std.meta.eql`로 견주기
+   때문이다(`last_tree`, 확인 1). 필드 이름도 `tree` → `strip`, `last_tree` →
+   `last_strip`으로 바꾼다. 읽는 사람이 옛 이름에서 이진 트리를 떠올리지 않게
+   하려는 것이다.
+2. 바깥 면은 그대로다. `Rect` · `Hit` · `Dir` · `Side` · `MAX_LEAVES` ·
+   `clampInto`와 메서드 열(`init` · `split` · `remove` · `rects` · `separators` ·
+   `next` · `prev` · `heir` · `hit` · `neighbor` · `count`)이 이름도 인자도 같다.
+   `main.zig`의 변화는 타입 · 필드 이름과 주석뿐이다(확인 1).
+3. 좌표는 셀이다(가). 픽셀은 WY-M0에서 `Rect` 옆에 더한다.
+4. 산수: column 폭은 viewport 폭을 고르게, column 안 pane 높이는 높이를 고르게
+   나눈다. `n`개를 길이 `L`에 놓으면 구분선 `n-1`을 빼고 `(L-(n-1))/n`씩이고,
+   나머지는 오른쪽(아래) 것부터 한 칸씩 더 받는다. `n = 2`이면 트리의
+   `halves`와 같은 숫자다(155 → 77 · 1 · 77, 154 → 76 · 1 · 77, 47 → 23 · 1 · 23).
+   구분선은 column 사이의 세로선(높이 전체)과 column 안의 가로선(그 column
+   폭)이고, 수는 pane 수 − 1이다(확인 6의 검사 9).
+5. `split`(나 · 다). `.right`는 포커스 column 바로 오른쪽에 새 pane 하나짜리
+   column을 끼운다. `.below`는 같은 column에서 포커스 pane 바로 아래에 끼운다.
+   null은 둘이다 — pane이 여덟이거나, 끼운 뒤 고르게 나눈 몫이 한 칸 미만이다
+   (길이 `L`에 `n`개면 `L ≥ 2n-1`). 둘째 pane에서는 트리의 "길이 3 미만"과 같다.
+   새 slot 번호는 비어 있는 가장 작은 번호다(트리와 같다, R-SW-7).
+6. `remove`. pane을 그 column에서 빼고, column이 비면 column을 빼고 뒤의
+   column을 당긴다. 다른 pane의 slot 번호는 안 바뀐다(R-SW-7). 마지막 pane이면
+   strip이 빈다(`count() == 0`).
+7. 순서 `next` · `prev`: column 순, column 안은 위 → 아래, 끝에서 감긴다.
+8. 이웃(라). `↑` `↓`는 같은 column의 바로 위 · 아래 pane이다. `←` `→`는 옆
+   column에서 포커스 pane의 맨 위 줄을 덮는 pane이다. 그 줄이 옆 column의
+   가로 구분선이면 그 구분선 바로 위 pane이다. 끝에서는 null이다(감기지 않는다).
+   트리는 칸을 건너뛰어 `hit`에 물었다. 그런데 column마다 높이를 따로 나누면
+   옆 column의 구분선에 떨어질 수 있어서, strip은 목록으로 직접 고른다.
+9. 상속(라). 닫힌 pane의 포커스는 같은 column의 위 pane, 없으면 아래 pane이다.
+   column이 비면 왼쪽 column(없으면 오른쪽)에서 결정 8의 규칙으로 고른 pane이다.
+   pane이 하나면 자기 자신이다. `remove` 앞에 부른다(트리와 같다).
+10. 고침 — "고르게 쌓기"를 M1에서 M0으로 당긴다. 결정 다는 고르게 쌓기를
+   M1에 두었다. 그런데 M0에 트리의 반 가르기를 strip 위에 다시 짜면, 그 코드는
+   M1에서 버려진다. 고르게 나누기는 게이트의 세 모양에서 트리와 같은 숫자를
+   낸다(결정 4). 그래서 M0부터 고르게 나눈다. 게이트가 안 쓰는 모양에서는
+   달라진다 — `Cmd+D` 셋째는 트리가 77 · 38 · 38, M0이 51 · 51 · 51이다.
+   트리의 중첩 모양(`(0 / 1) | 2`의 0을 다시 `Cmd+D`)은 strip에서 column
+   하나를 더 끼우는 것으로 바뀐다.
+11. 고침 — 물려받기(나의 뒷부분)를 M1에서 M2로 옮긴다. 물려받으면 column이
+   viewport를 넘는다. viewport가 포커스를 따라가지 않으면(M2) 새 column이 화면
+   밖에 서서 볼 수 없다. 둘은 함께 서야 한다. M1은 한도(결정 7)와 그 판정만
+   맡는다.
+12. 한도. M0은 workspace당 8만 있다(지금과 같다). column당 3은 M1에서 더한다.
+   넘는 키는 `pane> split refused`를 찍고 아무 일도 하지 않는다(확인 8).
 
 ## Milestone
 
-아직 쓰지 않았다.
+| milestone | 서는 것 | 끝나는 조건 |
+|---|---|---|
+| SW-M0 | `Tree` → `Strip`(결정 1~10, 12의 앞부분). 키 · 로그 · 화면이 게이트의 세 모양에서 그대로 | `layout_test`(고친 판) 통과, `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과, 루트 게이트 34/34 |
+| SW-M1 | column당 3 한도(결정 12). `pane>` 줄에 column 정보 | pane 체인: 셋 쌓기의 사각형(15 · 15 · 15), 넷째 `Cmd+Shift+D`가 `split refused`이고 화면이 그대로 |
+| SW-M2 | viewport · scroll(R-SW-5 · 6) · 물려받기(나, 결정 11) · `3/7` 칸 · 오른쪽 빈 공간의 제목 | column 넷 뒤 `Cmd+Opt+→`로 덤프의 원점이 바뀜, `3/7`의 `text=` |
+| SW-M3 | 폭 preset `Cmd+R`. 셸 column의 셀 배수 맞춤 | preset 순환의 `grid` 줄 |
+
+M1부터는 사용자가 치는 동작이 바뀌므로 `docs/help/*.md`를 함께 고친다(로드맵의
+"서브프로젝트를 끝낼 때").

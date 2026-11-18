@@ -1,7 +1,7 @@
 # TARS App Layer — Roadmap
 
 Date: 2026-11-18
-Status: 1판. 근거는 `docs/specs/2026-11-18-tars-app-layer-requirements.md`.
+Status: 2판(SW design 결정에 맞춰 SW 표와 WY-M0의 전제를 고쳤다). 근거는 `docs/specs/2026-11-18-tars-app-layer-requirements.md`.
 
 이 문서는 순서와 끝나는 조건만 적는다. milestone의 상세는 적지 않는다 —
 서브프로젝트를 시작할 때 그 design doc을 쓰고, milestone마다 plan을 쓴다
@@ -47,9 +47,9 @@ design doc: `tars-strip-workspace-design.md`(접두사 SW). 체인은 `pane/chec
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
-| SW-M0 | tree → strip. column마다 pane 하나, viewport 안에 드는 수만 | 지금 `pane/check.sh`가 고치지 않고 통과(트리 전용으로 분류한 검사만 뺀다) |
-| SW-M1 | column 안 세로 쌓기. `Cmd+Shift+D` · `Cmd+Opt+↑↓` · 한도 | 덤프의 사각형 판정, 한도에서 아무 일도 없음 |
-| SW-M2 | viewport 밖 column. scroll · `3/7` · 오른쪽 빈 공간의 제목 | column 넷 뒤 `Cmd+Opt+→`로 덤프의 원점이 바뀜 |
+| SW-M0 | tree → strip. 폭 · 높이를 고르게 나누고, 게이트의 세 모양(패널 하나 · `0 \| 1` · `0 \| (1 / 2)`)을 같은 숫자로 | 지금 `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과, `layout_test`(고친 판) |
+| SW-M1 | column당 3 한도 | 덤프의 사각형 판정, 한도에서 아무 일도 없음 |
+| SW-M2 | viewport 밖 column. scroll · 물려받기 · `3/7` · 오른쪽 빈 공간의 제목 | column 넷 뒤 `Cmd+Opt+→`로 덤프의 원점이 바뀜 |
 | SW-M3 | 폭 preset `Cmd+R`. 셸 column의 셀 배수 맞춤 | preset 순환의 `grid` 줄 |
 
 요구사항: R-SW-1~10, R-KEY-1의 뜻이 바뀐 줄, 결정 7 · 13.
@@ -83,8 +83,9 @@ design doc: `tars-wayland-server-design.md`(접두사 WY). 새 체인
 | WY-M3 | 한글 `text-input-v3` | 테스트 클라이언트에 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
 | WY-M4 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage로 부분 blit · 호환 모드(Cmd → Ctrl) | 테스트 클라이언트의 popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
 
-WY-M0은 SW-M0 뒤다 — 픽셀 폭(R-SW-2)이 먼저 서야 app pane의 크기 타입을 두 번
-고치지 않는다. WY-M1의 "column으로 열기"와 녹화 B는 SW-M2 뒤다.
+WY-M0은 SW-M0 뒤다 — 사각형을 내는 자리(`layout.Strip`)가 먼저 서야 한다. 픽셀
+크기는 WY-M0이 `Rect` 옆에 더한다(SW design 결정 3, 고침: 1판은 "픽셀 폭이 먼저
+서야 한다"였다). WY-M1의 "column으로 열기"와 녹화 B는 SW-M2 뒤다.
 
 요구사항: R-WY-1~14, R-KEY-2~7, R-WIN-1~6, 결정 1 · 2 · 3 · 5 · 6 · 10 · 11.
 
