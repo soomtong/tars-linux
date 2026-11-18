@@ -140,6 +140,37 @@ pub fn hangup(s: Session) void {
     _ = kill(s.child_pid, SIGHUP);
 }
 
+/// PTY master `fd` 너머의 전경 프로세스 이름(SW-M3, design 확인 15 · 결정 25). `TIOCGPGRP`로
+/// slave의 전경 프로세스 그룹을 묻고, 그 리더의 `/proc/<pgid>/comm`을 읽어 `buf`에 담고 길이를
+/// 돌려준다. `comm`은 15바이트까지이고 끝의 줄바꿈은 뺀다. fish가 vim을 띄우면 vim이 그룹을
+/// 앞으로 가져가므로 `vim`이 나온다.
+///
+/// 어느 단계든 실패하면 `?` 한 글자다 — 셸이 막 끝나 그룹이 없거나 /proc이 안 붙은 것이고,
+/// 빈 칸보다 "물었는데 답이 없다"가 낫다.
+pub fn foregroundName(fd: c_int, buf: *[15]u8) usize {
+    var pgid: c.pid_t = 0;
+    if (c.ioctl(fd, c.TIOCGPGRP, &pgid) != 0 or pgid <= 0) return unknownName(buf);
+    var path_buf: [32]u8 = undefined;
+    const path = std.fmt.bufPrintSentinel(&path_buf, "/proc/{d}/comm", .{pgid}, 0) catch return unknownName(buf);
+    const f = std.c.open(path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true });
+    if (f < 0) return unknownName(buf);
+    defer _ = std.c.close(f);
+    var raw: [16]u8 = undefined;
+    const n = std.c.read(f, &raw, raw.len);
+    if (n <= 0) return unknownName(buf);
+    var len: usize = @intCast(n);
+    if (raw[len - 1] == '\n') len -= 1;
+    len = @min(len, buf.len);
+    if (len == 0) return unknownName(buf);
+    @memcpy(buf[0..len], raw[0..len]);
+    return len;
+}
+
+fn unknownName(buf: *[15]u8) usize {
+    buf[0] = '?';
+    return 1;
+}
+
 /// 패널의 PTY를 닫고 자식을 거둔다(WP design 결정 5).
 ///
 /// WP 전에는 셸이 끝나면 terminal도 끝나서 좀비가 문제가 안 됐다. 이제

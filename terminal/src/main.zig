@@ -496,6 +496,33 @@ fn renderBackdrop(fb: drm.Framebuffer, strip: *const layout.Strip, whole: layout
     }
 }
 
+/// 빈 공간에 띄울 이름(SW-M3, design 결정 25). `comm`이 15바이트까지라 고정 배열이다 —
+/// 쓰지 않는 칸은 0이라 `StripSig`가 `std.meta.eql`로 견줄 수 있다.
+const PeekName = struct {
+    bytes: [15]u8 = @splat(0),
+    len: u8 = 0,
+
+    fn text(self: *const PeekName) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
+/// 보이는 column 오른쪽 빈 칸의 첫 줄에 다음 column의 전경 프로세스 이름을 흐리게 그린다
+/// (SW-M3, design 결정 25 · plan 확정 8). `renderBackdrop` 바로 뒤, 통째 프레임에서만 부른다 —
+/// 빈 칸은 어느 패널의 사각형도 아니라 부분 갱신이 안 건드린다. `paintPane`이 지우는 "패널 +
+/// 오른쪽 한 칸"의 한 칸은 구분선 자리라 `peekRect`가 그 칸을 비워 둔다.
+///
+/// 색은 `STATUS_OFF`다. 상태 줄의 꺼진 `CAPS`와 같은 흐린 색이고, 격자 안에서는 이 이름에만
+/// 쓰여 `peek>` 줄이 그 픽셀을 셀 수 있다. 이름이 칸보다 길면 칸 끝에서 자른다(`drawRun`의 경계).
+/// verify의 그림자도 같은 이름으로 이것을 부른다 — 이름은 `App.peek`에 담아 둔 것이고 여기서
+/// 읽지 않는다.
+fn drawPeek(fb: drm.Framebuffer, cache: *font.Cache, strip: *const layout.Strip, whole: layout.Rect, name: ?PeekName) !void {
+    const n = name orelse return;
+    const r = strip.peekRect(whole) orelse return;
+    const o = paneOrigin(r);
+    _ = try drawRun(fb, cache, n.text(), o.y, STATUS_OFF, r.col, o.x + @as(u32, r.cols) * CELL_W);
+}
+
 /// 패널 하나를 그린다. 배경 · 이미지 · 글리프의 층 순서가 여기 있다.
 ///
 /// 두 벌로 나눠 그린다(design 결정 6). 배경을 전부 칠하고 나서 글리프를
@@ -567,12 +594,15 @@ fn renderPane(
     if (cursor) |cm| if (cm.px) |cr| fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
-/// 패널 오른쪽 한 칸의 색(DR-M2 plan 확정 2). strip의 타일링상 패널의 바로 오른쪽 칸은
-/// 언제나 column 사이의 세로 구분선(격자 높이 전체라 이 패널의 모든 행에 걸린다)이거나
-/// 격자 오른쪽 끝의 여백이다. 이 주장이 틀리면 패널을 가른 모든 프레임에서
-/// verify가 `mismatch`를 찍는다.
-fn stripColor(rect: layout.Rect, whole: layout.Rect) u32 {
-    return if (rect.col + rect.cols >= whole.col + whole.cols) MARGIN_COLOR else SEPARATOR;
+/// 패널 오른쪽 한 칸의 색(DR-M2 plan 확정 2). 패널의 바로 오른쪽 칸은 column 사이의 세로
+/// 구분선(격자 높이 전체라 이 패널의 모든 행에 걸린다)이거나 여백이다. 어느 쪽인지는
+/// `layout.Strip.separatorRight`가 정한다.
+///
+/// SW-M2까지는 "격자 오른쪽 끝이면 여백, 아니면 구분선"이었다. SW-M3의 폭 preset으로 보이는
+/// 끝 column이 격자 끝에 안 닿고 오른쪽이 빈 공간(여백 · peek 이름 자리)일 수 있어 그 주장이
+/// 깨졌다 — 80칸 column의 dirty 행마다 80열을 구분선 색으로 칠해 verify가 `mismatch`를 찍었다.
+fn stripColor(separator_right: bool) u32 {
+    return if (separator_right) SEPARATOR else MARGIN_COLOR;
 }
 
 /// 패널의 행 `first`부터 `count`행을 지운다 — 패널 폭을 `MARGIN_COLOR`로, 오른쪽 한 칸을
@@ -776,7 +806,7 @@ const Status = struct {
     /// `copy`와 같은 이유로 따로 나른다 — `text`에 이미 들어 있지만
     /// `drawStatus`가 꼬리에서 `CAPS`를 셀 때 이 칸의 길이를 알아야 한다.
     workspace: ?u8,
-    /// column 칸(SW-M2, `3/7`). 화면 밖 column이 없으면(둘 이하) null이다. `workspace`와
+    /// column 칸(SW-M2, `3/7`). 화면 밖 column이 없으면 null이다(SW-M3부터 `view`로 가른다). `workspace`와
     /// 같은 이유로 따로 나른다.
     columns: ?status.Columns,
     /// 받아쓰기 칸(VD-M1). 없으면 null이다. `workspace`와 같은 이유로 따로 나른다.
@@ -1915,11 +1945,13 @@ const StripSig = struct {
     /// 보이는 column의 처음 · 끝(0부터, SW-M2). scroll만 한 프레임도 줄이 찍힌다.
     view_first: usize,
     view_last: usize,
+    /// 빈 공간의 이름(SW-M3). 없으면 null이다.
+    peek: ?PeekName,
 };
 
 /// 지금 워크스페이스의 column 모양을 한 줄로 찍는다(SW-M1).
 ///
-///   terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2
+///   terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2 peek=-
 ///
 /// `focus_col`은 포커스 pane이 든 column의 번호(1부터, `ws=`와 같은 셈)이고,
 /// `heights`는 왼쪽 column부터 column마다 pane 수다. `view`는 화면에 보이는
@@ -1927,20 +1959,34 @@ const StripSig = struct {
 /// `1-1`이다. `pane>` 줄을 고치지 않고 새 줄로 낸 이유는 `pane>` 줄을 글자
 /// 그대로 견주는 체인이 있어서다(`pointer/check.sh`, SW-M1 plan 확정 1).
 ///
+/// `peek`은 빈 공간에 띄운 이름이고 없으면 `-`다(SW-M3, design 결정 25). 이름이 있는 줄
+/// 뒤에는 그 자리의 `STATUS_OFF` 픽셀 수를 따로 한 줄 찍는다 —
+/// `terminal: peek> ink=<n>`. `sep ink`와 같은 자리다 — 이름을 알아도 안 그리면 0이다.
+/// `strip>` 줄에 붙이지 않은 이유는 체인이 마지막 `strip>` 줄을 `$`까지 견주기 때문이다.
+/// 세는 범위는 `peekRect`의 픽셀 사각형이다(그 밖의 `STATUS_OFF`는 상태 줄의 `CAPS`다).
+///
 /// 첫 프레임에는 반드시 찍힌다(`last`가 null). 문구가 이 파일과
 /// `pane/check.sh` 양쪽에 있다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
-fn dumpStrip(workspaces: *const [MAX_WORKSPACES]?Workspace, current: usize, last: *?StripSig) void {
+fn dumpStrip(
+    fb: drm.Framebuffer,
+    workspaces: *const [MAX_WORKSPACES]?Workspace,
+    current: usize,
+    whole: layout.Rect,
+    peek: ?PeekName,
+    last: *?StripSig,
+) void {
     const ws = workspaces[current].?;
     const at = ws.strip.columnOf(ws.focus) orelse return;
     var buf: [layout.MAX_LEAVES]u4 = undefined;
     const hs = ws.strip.heights(&buf);
-    const v = ws.strip.view();
+    const v = ws.strip.view(whole);
     var sig: StripSig = .{
         .cols = at.cols,
         .focus_col = at.col + 1,
         .heights = @splat(0),
         .view_first = v.first,
         .view_last = v.last,
+        .peek = if (ws.strip.peekRect(whole) != null) peek else null,
     };
     @memcpy(sig.heights[0..hs.len], hs);
     if (last.*) |l| {
@@ -1959,9 +2005,22 @@ fn dumpStrip(workspaces: *const [MAX_WORKSPACES]?Workspace, current: usize, last
         text[n] = '0' + @as(u8, h);
         n += 1;
     }
-    logline.print("terminal: strip> cols={d} focus_col={d} heights={s} view={d}-{d}\n", .{
-        sig.cols, sig.focus_col, text[0..n], sig.view_first + 1, sig.view_last + 1,
+    const peek_text = if (sig.peek) |*p| p.text() else "-";
+    logline.print("terminal: strip> cols={d} focus_col={d} heights={s} view={d}-{d} peek={s}\n", .{
+        sig.cols, sig.focus_col, text[0..n], sig.view_first + 1, sig.view_last + 1, peek_text,
     });
+    const r = ws.strip.peekRect(whole) orelse return;
+    if (sig.peek == null) return;
+    const o = paneOrigin(r);
+    var ink: usize = 0;
+    var y: u32 = o.y;
+    while (y < o.y + ROW_HEIGHT and y < fb.height) : (y += 1) {
+        var x: u32 = o.x;
+        while (x < o.x + @as(u32, r.cols) * CELL_W and x < fb.width) : (x += 1) {
+            if (fb.getPixel(x, y) & 0x00FFFFFF == STATUS_OFF) ink += 1;
+        }
+    }
+    logline.print("terminal: peek> ink={d}\n", .{ink});
 }
 
 // ── 받아쓰기(VD-M1) ───────────────────────────────────────────────────
@@ -3959,6 +4018,9 @@ const App = struct {
     last_pane: ?PaneSig = null,
     /// 마지막으로 찍은 `strip>` 줄의 서명(SW-M1). null이면 첫 프레임이다.
     last_strip_sig: ?StripSig = null,
+    /// 빈 공간에 띄운 이름(SW-M3, design 결정 25). 통째 프레임마다 `peekName`이 다시 읽고,
+    /// 그 사이의 부분 프레임 · verify의 그림자 · `strip>` 줄은 이 값을 쓴다. 빈 칸이 없으면 null이다.
+    peek: ?PeekName = null,
 
     // ── 입력 ───────────────────────────────────────────────────────────
     /// 키보드(KH-M1). 포인터와 같은 길로 terminal이 스스로 찾고, 부팅 뒤에 꽂힌 것도
@@ -4825,6 +4887,9 @@ const App = struct {
         self.whole = .{ .col = 0, .row = 0, .cols = self.cols, .rows = self.rows };
         for (&self.workspaces) |*slot| {
             const w = if (slot.*) |*w| w else continue;
+            // 폭을 쌓아 드는 column 수는 격자 폭에 따라 다르다(SW-M3, design 결정 23). 격자가
+            // 줄면 포커스 column이 밖으로 밀릴 수 있고, 늘면 왼쪽에 채울 자리가 생긴다.
+            _ = w.strip.reveal(w.focus, self.whole);
             _ = try applyLayout(self.allocator, w, self.whole);
         }
         self.last_strip = null;
@@ -4844,7 +4909,17 @@ const App = struct {
     /// 그대로라 셸은 resize되지 않는다(`applyLayout`의 주석). 다시 그리기는 부르는
     /// 쪽이 켠다. 포커스를 바꾸는 모든 자리(분할 · 순환 · 이웃 · 닫기) 뒤에 부른다.
     fn revealFocus(self: *App, ws: *Workspace) !void {
-        if (ws.strip.reveal(ws.focus)) _ = try applyLayout(self.allocator, ws, self.whole);
+        if (ws.strip.reveal(ws.focus, self.whole)) _ = try applyLayout(self.allocator, ws, self.whole);
+    }
+
+    /// 빈 공간에 띄울 이름을 읽는다(SW-M3, plan 확정 8). 빈 칸이 없으면 null이다. 있으면 그
+    /// column 맨 위 pane의 PTY master에 전경 프로세스 그룹을 묻는다(`pty.foregroundName`).
+    fn peekName(self: *const App, ws: *const Workspace) ?PeekName {
+        const leaf = ws.strip.peek(self.whole) orelse return null;
+        const p = ws.panes[leaf] orelse return null;
+        var n: PeekName = .{};
+        n.len = @intCast(pty.foregroundName(p.session.master_fd, &n.bytes));
+        return n;
     }
 
     fn runPanes(self: *App, cmds: []const input.Pane) !void {
@@ -4934,6 +5009,18 @@ const App = struct {
                 },
                 // 전체 화면(FU-M0, `Cmd+Ctrl+F`). strip은 그대로이고 패널의 사각형만 커지거나 준다.
                 .fullscreen_toggle => try self.setFullscreen(!self.fullscreen),
+                // 포커스 column의 폭을 다음 preset으로(SW-M3, design 결정 24). 혼자인 column은
+                // 늘 전체 폭이라(결정 21) 바꿀 것이 없다 — `split refused`와 같은 이유로 찍는다.
+                // 바꿨으면 포커스가 보이게 옮기고 채운 뒤 `applyLayout`이 크기가 바뀐 셸을
+                // resize한다(R-SW-10). `reveal`이 안 옮겨도 폭은 바뀌었으므로 늘 부른다.
+                .width_cycle => {
+                    _ = ws.strip.cycleWidth(ws.focus) orelse {
+                        logline.print("terminal: pane> width refused\n", .{});
+                        continue;
+                    };
+                    _ = ws.strip.reveal(ws.focus, self.whole);
+                    _ = try applyLayout(self.allocator, ws, self.whole);
+                },
             }
             self.needs_redraw = true;
         }
@@ -5147,7 +5234,7 @@ const App = struct {
                 // 닫는다. 넘겨받는 패널은 copy mode가 아니다(LE design 결정 1).
                 if (ref.ws == self.current and w.focus == ref.leaf) self.resetInputMode();
                 if (w.focus == ref.leaf) w.focus = w.strip.heir(ref.leaf);
-                w.strip.remove(ref.leaf);
+                w.strip.remove(ref.leaf, self.whole);
                 self.needs_redraw = true;
                 // 워크스페이스의 마지막 패널이었다(WP-M2). 워크스페이스가
                 // 사라지고 뒤의 것들이 한 자리씩 앞으로 온다 — 번호는 자리다
@@ -5176,7 +5263,7 @@ const App = struct {
                 // 넘겨받은 포커스가 화면 밖 column일 수 있다(SW-M2). 이 길은 이미
                 // `applyLayout`으로 가므로 `revealFocus`를 따로 안 부르고 `reveal`만
                 // 먼저 한다 — 옮긴 위치까지 한 번에 고친다.
-                _ = w.strip.reveal(w.focus);
+                _ = w.strip.reveal(w.focus, self.whole);
                 _ = try applyLayout(self.allocator, w, self.whole);
                 // 이 패널의 슬롯은 비었다. `pane`은 이제 아무것도 안
                 // 가리키므로 이 바퀴에서 더 안 만진다.
@@ -5387,6 +5474,11 @@ const App = struct {
             if (self.last_strip) |t| !std.meta.eql(t, ws.strip) else true;
         if (full) {
             renderBackdrop(self.fb, &ws.strip, self.whole);
+            // 빈 공간의 이름(SW-M3, plan 확정 8). `/proc`은 통째 프레임에서만 읽는다 — strip이
+            // 바뀐 프레임(그래서 `strip>` 줄이 바뀔 수 있는 프레임)은 모두 통째다. 셸 출력
+            // 프레임마다 읽지 않으므로 이름이 바뀌어도 다음 통째 프레임까지 옛 이름이다(결정 25).
+            self.peek = self.peekName(ws);
+            try drawPeek(self.fb, &self.cache, &ws.strip, self.whole, self.peek);
             clips.all();
         }
         for (&ws.panes, 0..) |*slot, leaf| {
@@ -5396,12 +5488,12 @@ const App = struct {
             // 크기만 뜻이 있고 위치는 격자 왼쪽 끝이라 그리면 보이는 pane을 덮는다.
             // `cells`를 안 부르므로 dirty 비트가 쌓여 있다가, 다시 보이는 프레임
             // (`first`가 바뀌어 통째다)에 한 번에 나온다.
-            if (!ws.strip.visible(@intCast(leaf))) continue;
+            if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
             p.screen.focused = false;
             const p_cells = try p.screen.cellsReuse(p.cells_buf[p.shown ^ 1], prevOf(p));
             // 포커스 없는 화면이라 `cursorMark()`는 null이다(결정 5). 그래도
             // 넘기는 이유는 그 판단을 `vt.zig` 한 자리에 두기 위해서다.
-            try self.paintPane(p, full, p_cells, p.screen.images(&self.img_buf), false, &clips);
+            try self.paintPane(p, @intCast(leaf), full, p_cells, p.screen.images(&self.img_buf), false, &clips);
         }
         focus.screen.focused = true;
 
@@ -5441,11 +5533,13 @@ const App = struct {
         // 화면은 M1과 글자도 픽셀도 같아야 한다 — hangul 체인의 `text=`와
         // `ink fg=` 기준값이 그대로 서는 것이 그 판정이다.
         const ws_number: ?u8 = if (workspaceCount(&self.workspaces) > 1) @intCast(self.current + 1) else null;
-        // column 칸은 화면 밖 column이 있을 때만(셋 이상) 단다(SW design 결정 16). 둘 이하인
+        // column 칸은 화면 밖 column이 있을 때만 단다(SW design 결정 16 · 26). SW-M2에서는
+        // "셋 이상"이었고, 폭이 섞이면 둘에서도 화면 밖이 생겨 `view`로 넓혔다(SW-M3). 모두 보이는
         // 화면은 SW-M1과 글자가 같아야 hangul 체인의 `text=`와 pane 검사 7의 `W2`가 그대로 선다.
         const columns: ?status.Columns = cols: {
             const at = ws.strip.columnOf(ws.focus) orelse break :cols null;
-            if (at.cols < 3) break :cols null;
+            const v = ws.strip.view(self.whole);
+            if (v.first == 0 and v.last + 1 == at.cols) break :cols null;
             break :cols .{ .at = @intCast(at.col + 1), .total = @intCast(at.cols) };
         };
         frame.status_line = .{
@@ -5474,7 +5568,7 @@ const App = struct {
         // `images()`의 데이터는 다음 `feed`까지만 유효하다. 이 자리는 feed와
         // render 사이라 안전하다.
         frame.imgs = focus.screen.images(&self.img_buf);
-        try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
+        try self.paintPane(focus, ws.focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
         self.last_current = self.current;
         self.last_strip = ws.strip;
         // 실제 경로는 `renderOverlay`를 안 부르고 둘을 따로 한다(SB-M0, design 결정 3). 프롬프트 행은
@@ -5575,11 +5669,11 @@ const App = struct {
     ///
     /// 다시 칠한 사각형은 `clips`에 더한다(design 결정 6) — 통째 패널은 사각형 하나(+ 오른쪽 한 칸),
     /// 행은 이웃한 dirty 행을 run 하나로. `full`이면 목록이 이미 fb 전체라 더해도 무시된다.
-    fn paintPane(self: *App, p: *Pane, full: bool, cells: []vt.CellGlyph, imgs: []const vt.ImagePlacement, has_prompt: bool, clips: *drm.ClipList) !void {
+    fn paintPane(self: *App, p: *Pane, leaf: u4, full: bool, cells: []vt.CellGlyph, imgs: []const vt.ImagePlacement, has_prompt: bool, clips: *drm.ClipList) !void {
         const next = p.shown ^ 1;
         const sorted = verify.rowStarts(vt.CellGlyph, cells, p.starts_buf[next]);
         const cursor = p.screen.cursorMark();
-        const strip = stripColor(p.rect, self.whole);
+        const strip = stripColor(self.workspaces[self.current].?.strip.separatorRight(leaf, self.whole));
         const o = paneOrigin(p.rect);
         const span_w = (@as(u32, p.rect.cols) + 1) * CELL_W;
         const whole_pane = full or !p.prev_valid or !sorted or imgs.len > 0 or p.had_imgs;
@@ -5634,11 +5728,14 @@ const App = struct {
         const start = std.Io.Clock.now(.awake, self.io);
         var cells_report: verify.Report = .{};
         renderBackdrop(v.fb, &ws.strip, self.whole);
+        // 실제 경로의 통째 프레임이 그린 이름 그대로다. 여기서 `/proc`을 다시 읽지 않는다 — 읽은
+        // 사이에 이름이 바뀌면 그림자만 새 이름이 되어 `mismatch`가 된다.
+        try drawPeek(v.fb, &self.cache, &ws.strip, self.whole, self.peek);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             // 실제 경로와 같이 화면 밖 pane은 건너뛴다(SW-M2). 그림자가 그리면 실제
             // 화면과 갈려 `mismatch`가 된다.
-            if (!ws.strip.visible(@intCast(leaf))) continue;
+            if (!ws.strip.visible(@intCast(leaf), self.whole)) continue;
             const fresh = try p.screen.cells(v.cell_buf);
             self.compareLists(p, fresh, &cells_report);
             const imgs = if (leaf == ws.focus) frame.imgs else p.screen.images(&v.img_buf);
@@ -5690,7 +5787,7 @@ const App = struct {
         dumpPromptInk(self.fb, frame.prompt_ink, frame.prompt);
         dumpStatus(self.fb, frame.status_line, frame.status_changed);
         dumpPane(self.fb, &self.workspaces, self.current, &self.last_pane);
-        dumpStrip(&self.workspaces, self.current, &self.last_strip_sig);
+        dumpStrip(self.fb, &self.workspaces, self.current, self.whole, self.peek, &self.last_strip_sig);
         // render 뒤에 부른다 — 그 전에 부르면 이전 프레임의 픽셀을 읽는다.
         // 기본 색을 여기 상수로 다시 적지 않고 `focus.screen`에서 얻는 이유는
         // vt.zig의 defaultFg 주석에 있다.

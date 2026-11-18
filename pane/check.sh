@@ -209,6 +209,21 @@ refused_lines() {
   grep -ac 'terminal: pane> split refused' "$LOG" || true
 }
 
+# width refused 줄의 개수(SW-M3). 혼자인 column의 Cmd+R이 찍는 유일한 줄이다.
+width_refused_lines() {
+  grep -ac 'terminal: pane> width refused' "$LOG" || true
+}
+
+# peek> 줄의 개수와 마지막 줄의 ink(SW-M3). 빈 공간에 이름이 있는 strip> 줄 바로 뒤에
+# 찍히고, 값은 그 이름 자리(첫 줄 한 줄 · 빈 칸의 폭)의 `STATUS_OFF` 픽셀 수다.
+peek_lines() {
+  grep -ac 'terminal: peek> ink=' "$LOG" || true
+}
+
+last_peek_ink() {
+  tlog | grep -a 'terminal: peek> ink=' | tail -n 1 | tr -d '\r' | sed -E 's/.*ink=([0-9]+).*/\1/'
+}
+
 # 마지막 프레임의 screen> 줄. 포커스 패널의 것이다(결정 7).
 last_screen() {
   tlog | grep -a 'terminal: screen>' | tail -n 1
@@ -545,7 +560,7 @@ echo "=== a column holds three panes, the fourth Cmd+Shift+D is refused ==="
 type_keys meta_l-shift-d
 wait_for_pane 'panes=4 focus=3 rect=78,32 77x15 ' ||
   report_failure "Cmd+Shift+D from leaf 2 did not give 'panes=4 focus=3 rect=78,32 77x15'"
-wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2$' ||
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,3 view=1-2 peek=-$' ||
   report_failure "the strip> line is not 'cols=2 focus_col=2 heights=1,3 view=1-2' (got '$(last_strip_line)')"
 echo "three in the right column: $(last_pane_line)"
 
@@ -579,7 +594,7 @@ tlog | grep -aE 'terminal: pane> closed leaf=3' >/dev/null ||
   report_failure "no 'pane> closed leaf=3' line, the pane was never closed"
 wait_for_more exit_lines "$EXITS_BEFORE_LIMIT" ||
   report_failure "leaf 3's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_LIMIT} -> $(exit_lines))"
-wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2$' ||
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2 peek=-$' ||
   report_failure "after closing leaf 3 the strip> line is not 'cols=2 focus_col=2 heights=1,2 view=1-2' (got '$(last_strip_line)')"
 echo "leaf 3 closed, back to 0 | (1 / 2): $(last_pane_line)"
 
@@ -603,7 +618,7 @@ SPAWNS_BEFORE_VIEW="$(spawn_lines)"
 type_keys meta_l-d
 wait_for_pane 'panes=4 focus=3 rect=78,0 77x47 ' ||
   report_failure "Cmd+D from leaf 2 did not give 'panes=4 focus=3 rect=78,0 77x47' (a third column should stand on the right half)"
-wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3$' ||
+wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3 peek=-$' ||
   report_failure "after the third column the strip> line is not 'cols=3 focus_col=3 heights=1,2,1 view=2-3' (got '$(last_strip_line)')"
 wait_for_status '  3/3$' ||
   report_failure "with three columns the status line reads \"$(status_text)\", expected it to end with \"  3/3\""
@@ -612,7 +627,7 @@ echo "third column, the viewport moved: $(last_strip_line)"
 type_keys meta_l-d
 wait_for_pane 'panes=5 focus=4 rect=78,0 77x47 ' ||
   report_failure "the second Cmd+D did not give 'panes=5 focus=4 rect=78,0 77x47'"
-wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4$' ||
+wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4 peek=-$' ||
   report_failure "after the fourth column the strip> line is not 'cols=4 focus_col=4 heights=1,2,1,1 view=3-4' (got '$(last_strip_line)')"
 wait_for_status '  4/4$' ||
   report_failure "with four columns the status line reads \"$(status_text)\", expected it to end with \"  4/4\""
@@ -626,7 +641,7 @@ echo "fourth column, its shell knows 77 columns: $(last_strip_line)"
 type_keys meta_l-alt-left
 wait_for_pane 'panes=5 focus=3 rect=0,0 77x47 ' ||
   report_failure "Cmd+Option+Left from leaf 4 did not give 'focus=3 rect=0,0 77x47' (leaf 3 is on screen, no scroll)"
-wait_for_strip 'terminal: strip> cols=4 focus_col=3 heights=1,2,1,1 view=3-4$' ||
+wait_for_strip 'terminal: strip> cols=4 focus_col=3 heights=1,2,1,1 view=3-4 peek=-$' ||
   report_failure "Cmd+Option+Left to an on-screen column moved the viewport (got '$(last_strip_line)')"
 wait_for_status '  3/4$' ||
   report_failure "after moving to the third column the status line reads \"$(status_text)\", expected \"  3/4\" at the end"
@@ -634,7 +649,7 @@ wait_for_status '  3/4$' ||
 type_keys meta_l-alt-left
 wait_for_pane 'panes=5 focus=1 rect=0,0 77x23 ' ||
   report_failure "Cmd+Option+Left from leaf 3 did not give 'focus=1 rect=0,0 77x23' (the top pane of the second column, scrolled in)"
-wait_for_strip 'terminal: strip> cols=4 focus_col=2 heights=1,2,1,1 view=2-3$' ||
+wait_for_strip 'terminal: strip> cols=4 focus_col=2 heights=1,2,1,1 view=2-3 peek=-$' ||
   report_failure "Cmd+Option+Left to an off-screen column did not scroll one column (got '$(last_strip_line)')"
 wait_for_status '  2/4$' ||
   report_failure "after moving to the second column the status line reads \"$(status_text)\", expected \"  2/4\" at the end"
@@ -642,7 +657,7 @@ wait_for_status '  2/4$' ||
 type_keys meta_l-alt-left
 wait_for_pane 'panes=5 focus=0 rect=0,0 77x47 ' ||
   report_failure "Cmd+Option+Left from leaf 1 did not give 'focus=0 rect=0,0 77x47'"
-wait_for_strip 'terminal: strip> cols=4 focus_col=1 heights=1,2,1,1 view=1-2$' ||
+wait_for_strip 'terminal: strip> cols=4 focus_col=1 heights=1,2,1,1 view=1-2 peek=-$' ||
   report_failure "Cmd+Option+Left to the first column did not scroll back (got '$(last_strip_line)')"
 wait_for_status '  1/4$' ||
   report_failure "after moving to the first column the status line reads \"$(status_text)\", expected \"  1/4\" at the end"
@@ -657,7 +672,7 @@ type_keys meta_l-bracket_right
 type_keys meta_l-bracket_right
 wait_for_pane 'panes=5 focus=4 rect=78,0 77x47 ' ||
   report_failure "four Cmd+] from leaf 0 did not reach leaf 4 on the right half"
-wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4$' ||
+wait_for_strip 'terminal: strip> cols=4 focus_col=4 heights=1,2,1,1 view=3-4 peek=-$' ||
   report_failure "Cmd+] to leaf 4 did not scroll to the last two columns (got '$(last_strip_line)')"
 
 EXITS_BEFORE_VIEW="$(exit_lines)"
@@ -666,7 +681,7 @@ wait_for_pane 'panes=4 focus=3 rect=78,0 77x47 ' ||
   report_failure "Cmd+W on leaf 4 did not leave 'panes=4 focus=3 rect=78,0 77x47' (the left column's leaf 3 should take the focus)"
 wait_for_more exit_lines "$EXITS_BEFORE_VIEW" ||
   report_failure "leaf 4's shell never exited after Cmd+W (child exited ${EXITS_BEFORE_VIEW} -> $(exit_lines))"
-wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3$' ||
+wait_for_strip 'terminal: strip> cols=3 focus_col=3 heights=1,2,1 view=2-3 peek=-$' ||
   report_failure "after closing leaf 4 the strip> line is not 'cols=3 focus_col=3 heights=1,2,1 view=2-3' (got '$(last_strip_line)')"
 
 EXITS_BEFORE_VIEW="$(exit_lines)"
@@ -679,13 +694,95 @@ wait_for_more exit_lines "$EXITS_BEFORE_VIEW" ||
 type_keys meta_l-alt-down
 wait_for_pane 'panes=3 focus=2 rect=78,24 77x23 ' ||
   report_failure "Cmd+Option+Down from leaf 1 did not give 'panes=3 focus=2 rect=78,24 77x23'"
-wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2$' ||
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2 peek=-$' ||
   report_failure "back at two columns the strip> line is not 'cols=2 focus_col=2 heights=1,2 view=1-2' (got '$(last_strip_line)')"
 sleep 1
 if grep -aqE '  [0-9]/[0-9]' <<<"$(status_text)"; then
   report_failure "with two columns the status line still has a column field: \"$(status_text)\""
 fi
 echo "back to 0 | (1 / 2), no column field: $(last_pane_line)"
+
+# ── 검사 16f: Cmd+R이 column 폭을 돌리고, 빈 공간에 다음 column의 이름이 뜬다(SW-M3) ──
+#
+# 16e가 끝난 0 | (1 / 2), 포커스 2, 둘 다 반 폭(half)에서 돈다. Cmd+R의 순환은
+# 80칸 → 120칸 → 절반 → 전체 → 80칸이다(SW design 결정 24). half에서 시작하니 full이 먼저다.
+#   1. full: 오른쪽 column이 격자 전체(155)라 0과 함께 안 든다 — viewport가 둘째로 옮기고
+#      (view=2-2) 상태 줄에 `  2/2`가 뜬다(결정 26: 셋이 아니어도 화면 밖이 있으면).
+#   2. c80: 77 + 1 + 80 > 155라 채우기가 없다(view=2-2). 셸 2가 `$COLUMNS` 80을 안다 — 폭이
+#      바뀐 셸은 `applyLayout`이 resize한다(R-SW-10).
+#   3. Cmd+Option+← → 0: 0(77칸)만 보이고 오른쪽 78..154열이 빈다. 그 첫 줄에 다음 column
+#      맨 위 pane(1)의 전경 프로세스 이름 `fish`가 흐리게 뜬다(결정 25). strip> 줄의
+#      `peek=fish`와, 그 자리의 `STATUS_OFF` 픽셀 수(`peek> ink=`)가 0보다 큰 것을 본다.
+#   4. Cmd+Option+→ → 1(맨 위 줄 규칙). 1의 column은 c80이라 0,0 80x23이다.
+#   5. c120: 0,0 120x23.
+#   6. half: 둘 다 반 폭이라 `share`로 돌아오고 채우기로 view=1-2, 상태 줄의 칸이 없다.
+#   7. Cmd+Option+↓ → 2: 78,24 77x23. 검사 6의 시작 모양이다.
+# 이 동안 Cmd+R은 PTY로 아무것도 안 보내고(key> 줄이 그대로) 아무것도 다시 안 띄운다.
+echo "=== Cmd+R cycles the column width, the empty space names the next column ==="
+SPAWNS_BEFORE_WIDTH="$(spawn_lines)"
+KEYS_BEFORE_WIDTH="$(key_lines)"
+type_keys meta_l-r
+wait_for_pane 'panes=3 focus=2 rect=0,24 155x23 ' ||
+  report_failure "Cmd+R from half did not give 'focus=2 rect=0,24 155x23' (full width, the right column alone on screen)"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=2-2 peek=-$' ||
+  report_failure "after Cmd+R to full the strip> line is not 'cols=2 focus_col=2 heights=1,2 view=2-2 peek=-' (got '$(last_strip_line)')"
+wait_for_status '  2/2$' ||
+  report_failure "with a full-width column the status line reads \"$(status_text)\", expected it to end with \"  2/2\""
+[ "$(key_lines)" -eq "$KEYS_BEFORE_WIDTH" ] ||
+  report_failure "Cmd+R leaked bytes to the PTY (key> ${KEYS_BEFORE_WIDTH} -> $(key_lines))"
+echo "full: $(last_strip_line)"
+
+type_keys meta_l-r
+wait_for_pane 'panes=3 focus=2 rect=0,24 80x23 ' ||
+  report_failure "the second Cmd+R did not give 'focus=2 rect=0,24 80x23' (80 cells)"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=2-2 peek=-$' ||
+  report_failure "at 80 cells the strip> line is not 'view=2-2 peek=-' (77 + 1 + 80 > 155, no fill) (got '$(last_strip_line)')"
+type_keys e c h o spc w i d t h minus e i g h t y spc shift-4 \
+  shift-c shift-o shift-l shift-u shift-m shift-n shift-s ret
+wait_for_screen '\| width-eighty 80 \|' ||
+  report_failure "leaf 2's shell did not answer 'width-eighty 80' (Cmd+R changed the rect but never resized the shell)"
+echo "80 cells, the shell knows: $(last_pane_line)"
+
+PEEKS_BEFORE="$(peek_lines)"
+type_keys meta_l-alt-left
+wait_for_pane 'panes=3 focus=0 rect=0,0 77x47 ' ||
+  report_failure "Cmd+Option+Left from leaf 2 did not give 'focus=0 rect=0,0 77x47'"
+wait_for_strip 'terminal: strip> cols=2 focus_col=1 heights=1,2 view=1-1 peek=fish$' ||
+  report_failure "with the empty space on the right the strip> line is not 'cols=2 focus_col=1 heights=1,2 view=1-1 peek=fish' (got '$(last_strip_line)')"
+wait_for_status '  1/2$' ||
+  report_failure "on the first column the status line reads \"$(status_text)\", expected it to end with \"  1/2\""
+wait_for_more peek_lines "$PEEKS_BEFORE" ||
+  report_failure "the strip> line says peek=fish but no 'peek> ink=' line followed"
+[ "$(last_peek_ink)" -gt 0 ] ||
+  report_failure "peek=fish but the name's row has no STATUS_OFF pixels (peek> ink=$(last_peek_ink)), the name was never drawn"
+echo "the empty space names the next column: $(last_strip_line), peek> ink=$(last_peek_ink)"
+
+type_keys meta_l-alt-right
+wait_for_pane 'panes=3 focus=1 rect=0,0 80x23 ' ||
+  report_failure "Cmd+Option+Right from leaf 0 did not give 'focus=1 rect=0,0 80x23' (the top pane of the 80-cell column)"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=2-2 peek=-$' ||
+  report_failure "back on the 80-cell column the strip> line is not 'view=2-2 peek=-' (got '$(last_strip_line)')"
+
+type_keys meta_l-r
+wait_for_pane 'panes=3 focus=1 rect=0,0 120x23 ' ||
+  report_failure "Cmd+R from 80 cells did not give 'focus=1 rect=0,0 120x23'"
+
+type_keys meta_l-r
+wait_for_pane 'panes=3 focus=1 rect=78,0 77x23 ' ||
+  report_failure "Cmd+R from 120 cells did not give 'focus=1 rect=78,0 77x23' (both half again, the viewport fills to the left)"
+wait_for_strip 'terminal: strip> cols=2 focus_col=2 heights=1,2 view=1-2 peek=-$' ||
+  report_failure "back at both half the strip> line is not 'view=1-2 peek=-' (got '$(last_strip_line)')"
+
+type_keys meta_l-alt-down
+wait_for_pane 'panes=3 focus=2 rect=78,24 77x23 ' ||
+  report_failure "Cmd+Option+Down from leaf 1 did not give 'panes=3 focus=2 rect=78,24 77x23'"
+sleep 1
+if grep -aqE '  [0-9]/[0-9]' <<<"$(status_text)"; then
+  report_failure "with both columns on screen the status line still has a column field: \"$(status_text)\""
+fi
+[ "$(spawn_lines)" -eq "$SPAWNS_BEFORE_WIDTH" ] ||
+  report_failure "cycling the width restarted the terminal (spawned child pid ${SPAWNS_BEFORE_WIDTH} -> $(spawn_lines))"
+echo "back to 0 | (1 / 2) at half width: $(last_pane_line)"
 
 # ── 검사 6: Cmd+W가 그 패널만 닫고 terminal은 산다 ────────────────────
 #
@@ -749,6 +846,28 @@ type_keys e c h o spc w h o l e spc shift-4 \
 wait_for_screen '\| whole 155 \|' ||
   report_failure "the remaining pane's shell did not answer 'whole 155' — if it says 77, closing never told the shell (TIOCSWINSZ); if nothing, the keys went to the copy table (LE-M0)"
 echo "the remaining pane's shell answered: whole 155"
+
+# ── 검사 9r: 혼자인 column의 Cmd+R은 거절된다(SW-M3) ──────────────────
+#
+# column이 하나면 저장한 폭과 상관없이 격자 전체다(SW design 결정 21). 그래서 Cmd+R은
+# 아무것도 안 바꾸고 `pane> width refused` 한 줄만 찍는다 — `split refused`와 같은 이유로,
+# 조용하면 "키가 안 왔다"와 안 갈린다. 마지막 pane> 줄(155x47)이 그대로다.
+echo "=== Cmd+R on a lone column is refused ==="
+PANE_LINE_BEFORE_WIDTH="$(last_pane_line)"
+WIDTH_REFUSED_BEFORE="$(width_refused_lines)"
+type_keys meta_l-r
+wait_for_more width_refused_lines "$WIDTH_REFUSED_BEFORE" ||
+  report_failure "Cmd+R on a lone column printed no 'pane> width refused' line"
+sleep 1
+[ "$(width_refused_lines)" -eq $((WIDTH_REFUSED_BEFORE + 1)) ] ||
+  report_failure "expected one more 'width refused' line, got ${WIDTH_REFUSED_BEFORE} -> $(width_refused_lines)"
+[ "$(last_pane_line)" = "$PANE_LINE_BEFORE_WIDTH" ] ||
+  report_failure "the refused Cmd+R changed the last pane> line ('${PANE_LINE_BEFORE_WIDTH}' -> '$(last_pane_line)')"
+case "$(last_pane_line)" in
+  *' 155x47 '*) ;;
+  *) report_failure "the lone pane is not 155x47 after the refused Cmd+R: $(last_pane_line)" ;;
+esac
+echo "Cmd+R refused on a lone column: $(last_pane_line)"
 
 # ── 검사 9b: 마지막 패널을 닫으면 terminal이 끝나고 init이 되살린다 ────
 #

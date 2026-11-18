@@ -2,7 +2,7 @@
 
 Date: 2026-11-19
 Design: `docs/specs/2026-11-18-tars-strip-workspace-design.md`(확인 13~15, 결정 19~26)
-Status: plan. 브랜치 `app-layer-0-3`.
+Status: 끝났다(2026-11-19). 결과는 맨 아래. SW 서브프로젝트의 마지막 milestone. 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -82,6 +82,20 @@ Status: plan. 브랜치 `app-layer-0-3`.
 
 - `layout_test` · `input_test` 통과. 체인 넷 PASS(16f · 9r 포함). 루트 게이트 34/34.
 
-## 결과
+## 결과 (2026-11-19)
 
-(구현 뒤에 쓴다.)
+1. 구현은 Herdr 서브에이전트(`sw-impl`, Opus) 13분. lead가 `layout_test`의 지운 줄(호출에 `whole` 인자를 더한 것뿐, 단언 그대로)과
+   `pty.foregroundName`을 대조했다. plan 밖의 것 셋을 받아들였다 — `visible` · `reveal` · `view` · `remove`가 `whole`을 받는다
+   (폭이 섞이면 보이는 수가 격자 폭에 달렸다), `setFullscreen`이 워크스페이스마다 `reveal`한다(격자가 줄면 포커스가 밀린다),
+   이름 픽셀은 새 줄 `peek> ink=`로 센다(체인이 `strip>` 줄을 `$`까지 견준다).
+2. `Cmd+R`은 지금까지 표에 없어 셸에 `r`로 갔다 — 이제 chord로 삼킨다. 기대는 게이트가 없었다(루트 게이트).
+3. 체인: `pane` 200초 · `pointer` 271초 · `dictation` 223초 · `hangul` 212초 PASS. 16f: `full`에 `view=2-2`, `c80`에 `rect=0,24 80x23
+   sep ink=10240`(가로선 80칸 × 128), `←`로 `view=1-1 peek=fish, peek> ink=71`, `half`로 채우기 `view=1-2`. 9r: `pane> width refused`.
+4. 첫 루트 게이트: 33/34(2,061초, `out/gate-logs/20261118-153808`). 빨강은 pane 체인(CB-M0)의 render verify — 체인 판정은 PASS였고
+   `verify> mismatch rows=2 first=4,24`가 35줄. 원인: 부분 갱신(`paintPane` → `clearRows`)이 바뀐 줄의 pane 오른쪽 한 칸을
+   `stripColor`의 "격자 끝이 아니면 구분선" 가정으로 칠했다. 80 · 120셀 column은 격자 끝에 안 닿는 마지막 column이라 그 칸이
+   여백이다. 고침: `Strip.separatorRight(leaf, whole)`이 정하고 `paintPane`이 slot을 받는다. `layout_test` 검사 28이 91가지에서
+   `separators()`와 견준다(옛 규칙이면 실패). pane 체인의 mismatch 34 → 0.
+5. 놓친 절차: `make check`은 verify를 판정하지 않는다(`lessons.md` "범용 명령"에 이미 있다). 그리기를 바꾼 이 milestone은 체인 뒤
+   `grep -rah 'terminal: verify>' out/gate-logs/<체인>`를 돌렸어야 했다 — 그랬으면 게이트 전에 잡았다.
+6. 둘째 루트 게이트: 34/34 첫 판 PASS(2,047초, `out/gate-logs/20261118-162307`), 어느 체인에도 `verify> mismatch` 없음.

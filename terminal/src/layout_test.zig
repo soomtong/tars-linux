@@ -125,7 +125,7 @@ pub fn main() !void {
         try expectRect("right top", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 23 });
         try expectRect("right bottom", rs[2], .{ .col = 78, .row = 24, .cols = 77, .rows = 23 });
 
-        t.remove(1);
+        t.remove(1, WHOLE);
         try expectCount(&t, 2);
         t.rects(WHOLE, &rs);
         try expectRect("left stays", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
@@ -171,7 +171,7 @@ pub fn main() !void {
             var cover: [47][155]u8 = @splat(@splat(0));
             var area: usize = 0;
             for (rs, 0..) |r, li| {
-                if (!t.visible(@intCast(li))) {
+                if (!t.visible(@intCast(li), WHOLE)) {
                     if (r.cols != 77 or r.rows == 0) {
                         std.debug.print("FAIL: off-screen slot {d} is {d}x{d}, want 77 wide\n", .{ li, r.cols, r.rows });
                         return error.OffscreenSize;
@@ -240,7 +240,7 @@ pub fn main() !void {
     // 빈 strip은 `rects`가 아무 칸도 안 쓴다 — 미리 채운 표지가 그대로 남는다.
     {
         var t = layout.Strip.init();
-        t.remove(0);
+        t.remove(0, WHOLE);
         try expectCount(&t, 0);
         const mark: Rect = .{ .col = 999, .row = 999, .cols = 999, .rows = 999 };
         var untouched: [layout.MAX_LEAVES]Rect = @splat(mark);
@@ -299,7 +299,7 @@ pub fn main() !void {
             var cover: [47][155]u8 = @splat(@splat(0));
             var shown: usize = 0;
             for (rs, 0..) |r, li| {
-                if (!t.visible(@intCast(li))) continue;
+                if (!t.visible(@intCast(li), WHOLE)) continue;
                 shown += 1;
                 paint(&cover, r);
             }
@@ -457,7 +457,7 @@ pub fn main() !void {
                     const dir: layout.Dir = if ((p >> @intCast(k)) & 1 == 1) .right else .below;
                     // 지운 적이 없으니 slot 번호는 0..count-1로 빈틈이 없다.
                     const target: u4 = @intCast((p * 7 + k * 3) % t.count());
-                    if (t.split(target, dir, whole)) |new| _ = t.reveal(new);
+                    if (t.split(target, dir, whole)) |new| _ = t.reveal(new, whole);
                     var at: [layout.MAX_LEAVES]Rect = undefined;
                     t.rects(whole, &at);
                     for (0..t.count()) |li| {
@@ -518,13 +518,13 @@ pub fn main() !void {
         try expectRect("half column 0", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("half column 1", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("off-screen column 2", rs[2], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
-        if (t.visible(2) or !t.visible(0) or !t.visible(1)) return error.WrongVisible;
-        if (!t.reveal(2)) return error.RevealDidNotMove;
+        if (t.visible(2, WHOLE) or !t.visible(0, WHOLE) or !t.visible(1, WHOLE)) return error.WrongVisible;
+        if (!t.reveal(2, WHOLE)) return error.RevealDidNotMove;
         t.rects(WHOLE, &rs);
         try expectRect("revealed: column 1 on the left", rs[1], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("revealed: column 2 on the right", rs[2], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("revealed: column 0 off-screen", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
-        if (t.visible(0) or !t.visible(1) or !t.visible(2)) return error.WrongVisible;
+        if (t.visible(0, WHOLE) or !t.visible(1, WHOLE) or !t.visible(2, WHOLE)) return error.WrongVisible;
         const narrow: Rect = .{ .col = 0, .row = 0, .cols = 154, .rows = 46 };
         t.rects(narrow, &rs);
         try expectRect("154 column 1 on the left", rs[1], .{ .col = 0, .row = 0, .cols = 76, .rows = 46 });
@@ -567,7 +567,7 @@ pub fn main() !void {
         var t = layout.Strip.init();
         _ = t.split(0, .right, WHOLE);
         _ = t.split(1, .right, WHOLE);
-        t.remove(1);
+        t.remove(1, WHOLE);
         t.rects(WHOLE, &rs);
         try expectRect("slot 0 after the middle column goes", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("slot 2 after the middle column goes", rs[2], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
@@ -584,26 +584,26 @@ pub fn main() !void {
         var a = layout.Strip.init();
         _ = a.split(0, .right, WHOLE);
         _ = a.split(1, .right, WHOLE);
-        a.remove(1);
+        a.remove(1, WHOLE);
         var b = layout.Strip.init();
         _ = b.split(0, .right, WHOLE);
         try expectLeaf("column after 0", b.split(0, .right, WHOLE), 2);
-        b.remove(1);
+        b.remove(1, WHOLE);
         if (!std.meta.eql(a, b)) return error.PulledColumnNotCleared;
 
         // column 안에서 같은 두 길: [0 / 1 / 2]에서 1을 빼기, [0 / 2 / 1]에서 1을 빼기.
         var c = layout.Strip.init();
         _ = c.split(0, .below, WHOLE);
         _ = c.split(1, .below, WHOLE);
-        c.remove(1);
+        c.remove(1, WHOLE);
         var d = layout.Strip.init();
         _ = d.split(0, .below, WHOLE);
         try expectLeaf("pane below 0", d.split(0, .below, WHOLE), 2);
-        d.remove(1);
+        d.remove(1, WHOLE);
         if (!std.meta.eql(c, d)) return error.PulledSlotNotCleared;
 
         // 모두 지우고 다시 하나로 돌아오면 `init`과 같은 값이다.
-        c.remove(2);
+        c.remove(2, WHOLE);
         if (!std.meta.eql(c, layout.Strip.init())) return error.ShrunkStripDiffers;
         std.debug.print("layout_test: slots keep their numbers, equal layouts are equal values OK\n", .{});
     }
@@ -707,8 +707,8 @@ pub fn main() !void {
                         want = f;
                     }
                 }
-                const moved = t.reveal(@intCast(target));
-                if (t.first != want or moved != (want != start) or !t.visible(@intCast(target))) {
+                const moved = t.reveal(@intCast(target), WHOLE);
+                if (t.first != want or moved != (want != start) or !t.visible(@intCast(target), WHOLE)) {
                     std.debug.print("FAIL: reveal({d}) from first={d}: first={d} moved={}, want first={d}\n", .{ target, start, t.first, moved, want });
                     return error.RevealNotMinimal;
                 }
@@ -726,10 +726,10 @@ pub fn main() !void {
             .{ .leaf = 1, .moved = true, .first = 1 },  .{ .leaf = 0, .moved = true, .first = 0 },
         };
         for (walk) |w| {
-            if (t.reveal(w.leaf) != w.moved or t.first != w.first) return error.RevealWalk;
+            if (t.reveal(w.leaf, WHOLE) != w.moved or t.first != w.first) return error.RevealWalk;
         }
-        if (t.reveal(9)) return error.RevealMissingSlot;
-        const v = t.view();
+        if (t.reveal(9, WHOLE)) return error.RevealMissingSlot;
+        const v = t.view(WHOLE);
         if (v.first != 0 or v.last != 1) return error.WrongView;
         std.debug.print("layout_test: reveal moves the least in all {d} cases and on a walk OK\n", .{pairs});
     }
@@ -744,19 +744,19 @@ pub fn main() !void {
         _ = t.split(0, .right, WHOLE);
         _ = t.split(1, .right, WHOLE);
         _ = t.split(2, .right, WHOLE);
-        _ = t.reveal(3);
+        _ = t.reveal(3, WHOLE);
         if (t.first != 2) return error.RevealFailed;
-        t.remove(3);
+        t.remove(3, WHOLE);
         if (t.first != 1) return error.FirstNotPulled;
-        const v = t.view();
+        const v = t.view(WHOLE);
         if (v.first != 1 or v.last != 2) return error.WrongView;
-        t.remove(2);
+        t.remove(2, WHOLE);
         if (t.first != 0) return error.FirstNotPulled;
-        t.remove(1);
+        t.remove(1, WHOLE);
         if (t.first != 0) return error.FirstNotPulled;
         t.rects(WHOLE, &rs);
         try expectRect("one column left is the whole grid", rs[0], WHOLE);
-        const one = t.view();
+        const one = t.view(WHOLE);
         if (one.first != 0 or one.last != 0) return error.WrongView;
         if (!std.meta.eql(t, layout.Strip.init())) return error.ShrunkStripDiffers;
         std.debug.print("layout_test: remove pulls first back in range OK\n", .{});
@@ -782,7 +782,7 @@ pub fn main() !void {
             var base: [layout.MAX_LEAVES]Rect = undefined;
             g.rects(whole, &base);
             for ([_]u4{ 2, 3, 2, 1, 0 }) |target| {
-                _ = g.reveal(target);
+                _ = g.reveal(target, whole);
                 var now: [layout.MAX_LEAVES]Rect = undefined;
                 g.rects(whole, &now);
                 for (0..5) |li| {
@@ -796,7 +796,7 @@ pub fn main() !void {
         var n = layout.Strip.init();
         _ = n.split(0, .right, narrow);
         _ = n.split(1, .right, narrow);
-        _ = n.reveal(2);
+        _ = n.reveal(2, narrow);
         n.rects(narrow, &rs);
         try expectRect("154: left visible column", rs[1], .{ .col = 0, .row = 0, .cols = 76, .rows = 46 });
         try expectRect("154: right visible column leaves the last cell empty", rs[2], .{ .col = 77, .row = 0, .cols = 76, .rows = 46 });
@@ -808,16 +808,292 @@ pub fn main() !void {
         try expectLeaf("pane below 1", t.split(1, .below, WHOLE), 4);
         var before: [layout.MAX_LEAVES]Rect = undefined;
         t.rects(WHOLE, &before);
-        if (!t.reveal(3)) return error.RevealDidNotMove;
+        if (!t.reveal(3, WHOLE)) return error.RevealDidNotMove;
         var after: [layout.MAX_LEAVES]Rect = undefined;
         t.rects(WHOLE, &after);
         try expectRect("slot 1 was on the right", before[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 23 });
         try expectRect("slot 2 now on the left", after[2], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
         try expectRect("slot 3 now on the right", after[3], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
-        if (t.visible(0) or t.visible(1) or t.visible(4) or !t.visible(2) or !t.visible(3)) return error.WrongVisible;
+        if (t.visible(0, WHOLE) or t.visible(1, WHOLE) or t.visible(4, WHOLE) or !t.visible(2, WHOLE) or !t.visible(3, WHOLE)) return error.WrongVisible;
         try expectHit("an off-screen slot is never hit", t.hit(WHOLE, 10, 30), .{ .leaf = 2, .col = 10, .row = 30 });
         std.debug.print("layout_test: scrolling keeps every size, only the visible ones move OK\n", .{});
     }
 
+    // ── 검사 24: 폭 preset을 셀로 푼다 (SW design 결정 19) ──────────────────
+    //
+    // `half`는 `(cols-1)/2`, `full`은 `cols`, `c80` · `c120`은 그 셀 수이고 어느 것도
+    // 격자 폭을 안 넘는다. 77칸 격자(큰 배율의 실기, 확인 14)에서 `c80` · `c120`이 77이다.
+    {
+        const want = [_]struct { l: u16, w: layout.Width, cells: u16 }{
+            .{ .l = 155, .w = .half, .cells = 77 }, .{ .l = 155, .w = .full, .cells = 155 },
+            .{ .l = 155, .w = .c80, .cells = 80 },  .{ .l = 155, .w = .c120, .cells = 120 },
+            .{ .l = 77, .w = .half, .cells = 38 },  .{ .l = 77, .w = .full, .cells = 77 },
+            .{ .l = 77, .w = .c80, .cells = 77 },   .{ .l = 77, .w = .c120, .cells = 77 },
+        };
+        for (want) |x| {
+            const got = x.w.cells(x.l);
+            if (got != x.cells) {
+                std.debug.print("FAIL: {s} at {d} cols = {d}, want {d}\n", .{ @tagName(x.w), x.l, got, x.cells });
+                return error.WrongCells;
+            }
+        }
+        std.debug.print("layout_test: four widths resolve to cells on 155 and 77 OK\n", .{});
+    }
+
+    // ── 검사 25: 쌓기와 viewport — pane 체인 16f의 순서를 layout만으로 (SW-M3 plan 확정 12) ──
+    //
+    // `0 | (1 / 2)`, 포커스 2에서 시작한다. `main.zig`처럼 폭을 바꾸거나 포커스를 옮긴
+    // 뒤마다 `reveal`한다. 단계마다 `view`(0부터) · 포커스의 사각형 · `peek`를 본다.
+    {
+        const Step = struct {
+            what: []const u8,
+            act: enum { cycle, left, right, down },
+            width: ?layout.Width = null,
+            focus: u4,
+            first: usize,
+            last: usize,
+            rect: Rect,
+            peek: ?u4,
+        };
+        const steps = [_]Step{
+            .{ .what = "Cmd+R -> full", .act = .cycle, .width = .full, .focus = 2, .first = 1, .last = 1, .rect = .{ .col = 0, .row = 24, .cols = 155, .rows = 23 }, .peek = null },
+            .{ .what = "Cmd+R -> c80", .act = .cycle, .width = .c80, .focus = 2, .first = 1, .last = 1, .rect = .{ .col = 0, .row = 24, .cols = 80, .rows = 23 }, .peek = null },
+            .{ .what = "left -> slot 0", .act = .left, .focus = 0, .first = 0, .last = 0, .rect = .{ .col = 0, .row = 0, .cols = 77, .rows = 47 }, .peek = 1 },
+            .{ .what = "right -> slot 1", .act = .right, .focus = 1, .first = 1, .last = 1, .rect = .{ .col = 0, .row = 0, .cols = 80, .rows = 23 }, .peek = null },
+            .{ .what = "Cmd+R -> c120", .act = .cycle, .width = .c120, .focus = 1, .first = 1, .last = 1, .rect = .{ .col = 0, .row = 0, .cols = 120, .rows = 23 }, .peek = null },
+            .{ .what = "Cmd+R -> half", .act = .cycle, .width = .half, .focus = 1, .first = 0, .last = 1, .rect = .{ .col = 78, .row = 0, .cols = 77, .rows = 23 }, .peek = null },
+            .{ .what = "down -> slot 2", .act = .down, .focus = 2, .first = 0, .last = 1, .rect = .{ .col = 78, .row = 24, .cols = 77, .rows = 23 }, .peek = null },
+        };
+        var t = layout.Strip.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        var focus: u4 = 2;
+        _ = t.reveal(focus, WHOLE);
+        for (steps) |s| {
+            switch (s.act) {
+                .cycle => {
+                    const w = t.cycleWidth(focus);
+                    if (w != s.width) {
+                        std.debug.print("FAIL: {s}: cycleWidth = {?}, want {?}\n", .{ s.what, w, s.width });
+                        return error.WrongWidth;
+                    }
+                },
+                .left => focus = t.neighbor(WHOLE, focus, .left) orelse return error.NoNeighbor,
+                .right => focus = t.neighbor(WHOLE, focus, .right) orelse return error.NoNeighbor,
+                .down => focus = t.neighbor(WHOLE, focus, .down) orelse return error.NoNeighbor,
+            }
+            _ = t.reveal(focus, WHOLE);
+            try expectLeaf(s.what, focus, s.focus);
+            const v = t.view(WHOLE);
+            if (v.first != s.first or v.last != s.last) {
+                std.debug.print("FAIL: {s}: view {d}-{d}, want {d}-{d}\n", .{ s.what, v.first, v.last, s.first, s.last });
+                return error.WrongView;
+            }
+            t.rects(WHOLE, &rs);
+            try expectRect(s.what, rs[focus], s.rect);
+            try expectLeaf("  peek", t.peek(WHOLE), s.peek);
+            // 빈 칸이 생긴 단계(포커스 0, `[half] [c80]`)의 이름 자리: 77열은 구분선
+            // 자리로 비워 두고 78..154열의 첫 줄이다. 없는 단계는 사각형도 없다.
+            if (s.peek == null) {
+                if (t.peekRect(WHOLE) != null) return error.PeekRectWithoutPeek;
+            } else {
+                try expectRect("  peek rect", t.peekRect(WHOLE) orelse return error.NoPeekRect, .{ .col = 78, .row = 0, .cols = 77, .rows = 1 });
+            }
+        }
+    }
+
+    // ── 검사 26: reveal은 가장 적게 옮긴 뒤 채운다 (SW design 결정 23) ───────
+    //
+    // 폭이 섞인 strip 여럿 × 격자 셋에서 모든 시작 `first`와 모든 대상 column을 본다.
+    // 기대값은 `layout.zig`의 산수가 아니라 이 검사가 따로 센다. 대상을 보이게 하는
+    // `first` 가운데 옛 값에 가장 가까운 것을 훑어 고르고, 거기서 왼쪽 column이 함께
+    // 들 수 있는 동안 하나씩 줄인다. 그리고 매 단계 보이는 것의 폭 합 + 구분선이 격자
+    // 폭 이하이고, 보이는 사각형이 격자 안에서 안 겹치는지 본다.
+    {
+        const W = layout.Width;
+        const shapes = [_][]const W{
+            &.{ .c80, .c80, .half },
+            &.{ .half, .c80, .c80, .half },
+            &.{ .c120, .half, .half },
+            &.{ .full, .half, .c80 },
+            &.{ .half, .half, .half, .half },
+            &.{ .c80, .half, .c120, .c80, .full },
+            &.{ .half, .c80 },
+        };
+        const grids = [_]u16{ 155, 175, 355 };
+        var cases: usize = 0;
+        for (grids) |l| {
+            const whole: Rect = .{ .col = 0, .row = 0, .cols = l, .rows = 47 };
+            for (shapes) |shape| {
+                for (0..shape.len) |start| {
+                    for (0..shape.len) |target| {
+                        var t = layout.Strip.init();
+                        for (1..shape.len) |k| _ = t.split(@intCast(k - 1), .right, whole);
+                        for (shape, 0..) |w, k| t.cols[k].width = w;
+                        t.first = @intCast(start);
+                        // 따로 센 기대값.
+                        var want: usize = start;
+                        var best: usize = 99;
+                        for (0..shape.len) |f| {
+                            if (target < f or target > lastOf(shape, l, f)) continue;
+                            const d = if (f > start) f - start else start - f;
+                            if (d < best) {
+                                best = d;
+                                want = f;
+                            }
+                        }
+                        const end = lastOf(shape, l, want);
+                        while (want > 0 and spanOf(shape, l, want - 1, end) <= l) want -= 1;
+
+                        const moved = t.reveal(@intCast(target), whole);
+                        if (t.first != want or moved != (want != start) or !t.visible(@intCast(target), whole)) {
+                            std.debug.print("FAIL: grid {d} shape {any} reveal({d}) from first={d}: first={d}, want {d}\n", .{ l, shape, target, start, t.first, want });
+                            return error.RevealNotFilled;
+                        }
+                        const v = t.view(whole);
+                        if (spanOf(shape, l, v.first, v.last) > l) return error.ViewTooWide;
+                        t.rects(whole, &rs);
+                        var right_end: usize = 0;
+                        var prev_end: usize = 0;
+                        for (v.first..v.last + 1) |c| {
+                            const r = rs[c]; // column마다 pane 하나라 slot 번호 = column 순번
+                            if (c > v.first and r.col != prev_end + 1) return error.ColumnsNotStacked;
+                            prev_end = r.col + r.cols;
+                            right_end = prev_end;
+                        }
+                        if (right_end > l) return error.RectOutside;
+                        cases += 1;
+                    }
+                }
+            }
+        }
+        // remove 뒤의 채우기. `[c80] [half] [half]`에서 `first = 1`(77 + 1 + 77)이고 끝을
+        // 지우면 `[c80] [half]`다. 80 + 1 + 77 = 158 > 155라 채우지 않는다. 둘 다 `half`인
+        // `[half] [half] [full]`의 끝을 지우면 0까지 채운다(검사 22의 모양).
+        var a = layout.Strip.init();
+        _ = a.split(0, .right, WHOLE);
+        _ = a.split(1, .right, WHOLE);
+        a.cols[0].width = .c80;
+        _ = a.reveal(2, WHOLE);
+        if (a.first != 1) return error.RevealFailed;
+        a.remove(2, WHOLE);
+        if (a.first != 1) return error.OverFilled;
+        var b = layout.Strip.init();
+        _ = b.split(0, .right, WHOLE);
+        _ = b.split(1, .right, WHOLE);
+        b.cols[2].width = .full;
+        _ = b.reveal(2, WHOLE);
+        if (b.first != 2) return error.RevealFailed;
+        b.remove(2, WHOLE);
+        if (b.first != 0) return error.NotFilled;
+        std.debug.print("layout_test: reveal moves the least then fills in all {d} cases, remove fills OK\n", .{cases});
+    }
+
+    // ── 검사 27: 혼자인 column과 분할의 폭 (SW design 결정 20 · 21) ──────────
+    //
+    // column이 하나면 저장한 폭과 상관없이 격자 전체이고 `cycleWidth`는 null이다.
+    // 혼자에서 `.right`면 둘 다 `half`(77 · 77), 아니면 새 column이 포커스 column의
+    // 폭을 물려받는다.
+    {
+        var t = layout.Strip.init();
+        try expectLeaf("cycleWidth alone is refused", if (t.cycleWidth(0)) |_| 0 else null, null);
+        t.cols[0].width = .c120; // 다른 column을 닫고 남은 column의 저장 값
+        t.rects(WHOLE, &rs);
+        try expectRect("a lone c120 column is the whole grid", rs[0], WHOLE);
+        try expectLeaf("split right from alone", t.split(0, .right, WHOLE), 1);
+        if (t.cols[0].width != .half or t.cols[1].width != .half) return error.NotBothHalf;
+        t.rects(WHOLE, &rs);
+        try expectRect("both half: left", rs[0], .{ .col = 0, .row = 0, .cols = 77, .rows = 47 });
+        try expectRect("both half: right", rs[1], .{ .col = 78, .row = 0, .cols = 77, .rows = 47 });
+        // half → full → c80 → c120.
+        _ = t.cycleWidth(1);
+        _ = t.cycleWidth(1);
+        if (t.cycleWidth(1) != .c120) return error.WrongWidth;
+        try expectLeaf("split right from c120", t.split(1, .right, WHOLE), 2);
+        if (t.cols[2].width != .c120) return error.NotInherited;
+        _ = t.reveal(2, WHOLE);
+        t.rects(WHOLE, &rs);
+        try expectRect("inherited c120 column", rs[2], .{ .col = 0, .row = 0, .cols = 120, .rows = 47 });
+        // 판정은 "새 column이 한 칸 이상" — 2칸 격자의 `half`는 0칸이라 null이다.
+        var n = layout.Strip.init();
+        try expectLeaf("split right at 2 cols is still refused", n.split(0, .right, .{ .col = 0, .row = 0, .cols = 2, .rows = 2 }), null);
+    }
+
+    // ── 검사 28: 패널 바로 오른쪽 칸이 구분선인가 (SW-M3, `main.zig`의 `stripColor`) ──
+    //
+    // 부분 갱신은 패널의 dirty 행을 지울 때 오른쪽 한 칸도 되칠한다. 그 색을 SW-M2까지는
+    // "격자 끝이 아니면 구분선"으로 골랐는데, 폭 preset으로 보이는 끝 column이 격자 끝에 안
+    // 닿으면 그 칸은 여백이다 — pane 체인 16f의 80칸 column에서 verify가 `mismatch rows=2
+    // first=4,24`를 찍었다. `separatorRight`가 `separators`가 실제로 낸 세로선과 같은지를,
+    // 폭 섞인 strip 여럿 × 격자 셋 × 모든 `first` × 보이는 모든 pane에서 본다.
+    {
+        const W = layout.Width;
+        const shapes = [_][]const W{
+            &.{.half},                        &.{ .half, .half },
+            &.{ .half, .c80 },                &.{ .c80, .c80, .half },
+            &.{ .half, .half, .half, .half }, &.{ .c80, .half, .c120, .c80, .full },
+        };
+        var asked: usize = 0;
+        for ([_]u16{ 155, 154, 175 }) |l| {
+            const whole: Rect = .{ .col = 0, .row = 0, .cols = l, .rows = 47 };
+            for (shapes) |shape| {
+                var t = layout.Strip.init();
+                for (1..shape.len) |k| _ = t.split(@intCast(k - 1), .right, whole);
+                for (shape, 0..) |w, k| t.cols[k].width = w;
+                // 둘째 column은 pane 둘이다 — 가로 구분선이 있어도 세로선만 세는지 본다.
+                if (shape.len > 1) _ = t.split(1, .below, whole);
+                for (0..shape.len) |f| {
+                    t.first = @intCast(f);
+                    t.rects(whole, &rs);
+                    var seps: [layout.MAX_LEAVES - 1]Rect = undefined;
+                    const ss = t.separators(whole, &seps);
+                    for (0..t.count()) |li| {
+                        const leaf: u4 = @intCast(li);
+                        if (!t.visible(leaf, whole)) continue;
+                        const r = rs[leaf];
+                        const x = r.col + r.cols;
+                        var want = false;
+                        for (ss) |sp| {
+                            if (sp.cols == 1 and sp.col == x and sp.row <= r.row and r.row < sp.row + sp.rows) want = true;
+                        }
+                        if (t.separatorRight(leaf, whole) != want) {
+                            std.debug.print("FAIL: grid {d} shape {any} first={d} leaf {d} at {d},{d} {d}x{d}: separatorRight={}, separators say {}\n", .{
+                                l, shape, f, leaf, r.col, r.row, r.cols, r.rows, !want, want,
+                            });
+                            return error.WrongRightCell;
+                        }
+                        asked += 1;
+                    }
+                }
+            }
+        }
+        // 16f의 모양 그대로: `[half] [c80 / half]`, 포커스 2에서 `view=2-2`. 80칸 column이
+        // 격자 끝(155)에 안 닿지만 오른쪽은 여백이다.
+        var t = layout.Strip.init();
+        _ = t.split(0, .right, WHOLE);
+        _ = t.split(1, .below, WHOLE);
+        t.cols[1].width = .c80;
+        _ = t.reveal(2, WHOLE);
+        t.rects(WHOLE, &rs);
+        try expectRect("80-cell column, bottom pane", rs[2], .{ .col = 0, .row = 24, .cols = 80, .rows = 23 });
+        if (t.separatorRight(1, WHOLE) or t.separatorRight(2, WHOLE)) return error.SeparatorIntoEmptySpace;
+        std.debug.print("layout_test: the cell right of {d} visible panes is a separator exactly when separators draws one OK\n", .{asked});
+    }
+
     std.debug.print("layout_test: all checks passed\n", .{});
+}
+
+/// 검사 26의 따로 센 산수. `layout.zig`의 `spanCells`와 같은 뜻이지만 여기서 다시 센다 —
+/// 같은 함수를 부르면 같은 실수를 같이 한다.
+fn spanOf(shape: []const layout.Width, l: u16, a: usize, b: usize) usize {
+    var n: usize = b - a;
+    for (a..b + 1) |k| n += if (shape.len == 1) l else shape[k].cells(l);
+    return n;
+}
+
+/// `f`부터 쌓아 드는 마지막 column(검사 26).
+fn lastOf(shape: []const layout.Width, l: u16, f: usize) usize {
+    var k = f;
+    while (k + 1 < shape.len and spanOf(shape, l, f, k + 1) <= l) k += 1;
+    return k;
 }

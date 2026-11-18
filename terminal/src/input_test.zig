@@ -1785,6 +1785,7 @@ pub fn main() !void {
         try expectPane(&wp, K.KEY_W, .close);
         try expectPane(&wp, K.KEY_RIGHTBRACE, .focus_next);
         try expectPane(&wp, K.KEY_LEFTBRACE, .focus_prev);
+        try expectPane(&wp, K.KEY_R, .width_cycle); // SW-M3
         // `Cmd+Shift+D`는 `.split_below`이지 `.split_right`가 아니다. Shift를
         // 보는 switch가 Meta 분기 첫머리에 있는 것이 이 줄의 근거다(결정 4).
         try expect(&wp, K.KEY_LEFTSHIFT, 1, "");
@@ -1815,6 +1816,7 @@ pub fn main() !void {
         try expect(&wc, K.KEY_LEFTMETA, 1, "");
         try expect(&wc, K.KEY_D, 1, "");
         try expect(&wc, K.KEY_RIGHTBRACE, 1, "");
+        try expect(&wc, K.KEY_R, 1, ""); // SW-M3 `Cmd+R`도 `Cmd+D`와 같은 길이다
         try expect(&wc, K.KEY_LEFTSHIFT, 1, "");
         try expect(&wc, K.KEY_D, 1, "");
         try expect(&wc, K.KEY_LEFTSHIFT, 0, "");

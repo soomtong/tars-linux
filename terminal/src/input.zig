@@ -410,6 +410,9 @@ pub const Pane = enum {
     /// `Cmd+Ctrl+F` — 전체 화면을 켜거나 끈다(FU-M0, macOS의 전체 화면 키). 맨 끝인 이유는 위
     /// `workspace_N`의 순서 계약 — 그 사이에 끼우면 번호 셈이 밀린다.
     fullscreen_toggle,
+    /// `Cmd+R` — 포커스 column의 폭을 다음 preset으로(SW-M3, 80칸 → 120칸 → 절반 → 전체).
+    /// 맨 끝인 이유는 `fullscreen_toggle`과 같다.
+    width_cycle,
 };
 
 /// copy mode 안에서 키가 만드는 명령.
@@ -1331,6 +1334,7 @@ pub const State = struct {
                 c.KEY_W => .{ .pane = .close },
                 c.KEY_RIGHTBRACE => .{ .pane = .focus_next },
                 c.KEY_LEFTBRACE => .{ .pane = .focus_prev },
+                c.KEY_R => .{ .pane = .width_cycle },
                 // 워크스페이스(WP-M2). 숫자는 물리 키 자리다 — evdev의
                 // `KEY_1`(2)~`KEY_9`(10)이고 자판(드보락)과 무관하다. `KEY_0`은
                 // 표에 없다: 번호가 1부터 아홉이다.
