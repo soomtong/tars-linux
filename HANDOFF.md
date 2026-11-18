@@ -1,11 +1,11 @@
-# HANDOFF: Partition Tools PT-M0(2026-11-20, 클라우드 세션 · PR) · App Layer 비전 · 0.2.3 프리릴리스(2026-11-18) — 0.3은 `app-layer-0-3`, `main`은 0.2.x 줄
+# HANDOFF: App Layer(0.3) 1단 SW — design doc 확인 절까지, 결정 가~라는 받아들여졌다(2026-11-18). 브랜치 `app-layer-0-3`
 
 ## 목표
 
-사용자(2026-11-14): "장비가 Wifi 에 접속되어 있다면 terminal 우측 배터리 영역 좌측에 Network ID 출력; 유선 랜 접속되어 있다면 유선
-네트워크 접속 상태를 표기하는 방법 검토 및 구현 계획" → 검토안의 결정 넷 "agree all. accept suggestion. pick your best." → 중간에
-"Cyber lang new version … 0.4.11 and add it into our script lang layer" → M2 직전 "I'm going to sleep. All decisions are up to you."
-모두 끝났다. push는 사용자가 돌아와서 했다(main은 사용자의 `gpu`, gh-pages는 "push pages of github").
+App Layer(0.3) — strip 워크스페이스 · Wayland 서버 · TARS 툴킷(첫 앱 `tars-files`) · Chromium. 하나의 milestone이 아니라 녹화 넷(A 둠 ·
+B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝을 재는 비전이다. 사용자(2026-11-18): "커다란 비전으로 목표를 잡고
+진행해보자. 주요 결정은 너의 의견에 따를 테니까." 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(결정 열셋), 순서
+`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 지금은 1단 SW(strip)의 design doc을 쓰는 중이다.
 
 ## 현재 브랜치
 
@@ -13,15 +13,13 @@
 `main` — 0.2.x 줄. 0.2.3 다음의 작업은 언제든 `main`으로 돌아와 잇는다(사용자 2026-11-18, 기억 `project_branch_lines`).
 `gh-pages`(worktree `../tars-linux-pages`) — `0186f3e` 그대로. 0.2.3은 프리릴리스라 `releases`에 안 넣었다.
 
-## 완료된 작업 (2026-11-20, PT-M0 — 클라우드 세션)
+## 서브에이전트는 Herdr로 (이 브랜치)
 
-사용자: "디스크 파티션 프로그램이 탑재되어 있나요?" → "쉽게 쓸 수 있는 파티션 프로그램은?" → "cfdisk와 fdisk 넣는 plan 작성해 주세요.
-이어서 구현을 하시고 PR해주세요." 브랜치 `claude/friendly-goldberg-n6f04k`(`main`의 `8f429eb`에서), PR로 `main`에.
-
-- [x] design `docs/specs/2026-11-20-tars-partition-tools-design.md` · plan `docs/plans/2026-11-20-tars-partition-tools-pt-m0.md`
-- [x] `kernel/guest_tools.sh` 층 7에 `fdisk` · `cfdisk`(Dockerfile 변경 0 — `fdisk:amd64`가 이미 sysroot에), 새 라이브러리 libmount 하나
-- [x] `tools/check.sh` 검사 29(파일 이미지로 sfdisk → `fdisk -l` → cfdisk 화면 · `q`), mutation 하나, `tars-help config` "디스크와 파티션"
-- [x] 체인 tools · install · dualboot · home PASS, `make quick` PASS — amd64 Dockerfile 사본에서(기억 `project_partition_tools` 배운 것 4)
+사용자(2026-11-18): `app-layer-0-3`에서는 서브에이전트를 Herdr로 운용한다. 세션을 시작하면 `herdr --skill`을 읽는다(문법의 기준).
+`test "${HERDR_ENV:-}" = 1`이어야 한다. 순서: `herdr pane split --current --direction right --cwd "$PWD" --no-focus`(응답의
+`.result.pane.pane_id`) → `herdr agent start <이름> --kind claude --pane <id>` → `herdr agent prompt <이름> "<일>" --wait --timeout <ms>` →
+`herdr agent read <이름> --source recent-unwrapped`. 내가 만들지 않은 pane은 닫지 않는다. 서브에이전트는 commit하지 않고, lead가 diff를
+실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
 
 ## 완료된 작업 (2026-11-18, 이 세션)
 
@@ -30,6 +28,10 @@
 - [x] `tars-doom` — https://github.com/soomtong/tars-doom (`ozkl/doomgeneric`의 공개 fork, GPL-2.0), 로컬 `../tars-doom`(remote `origin` · `upstream`). 포트 코드는 WY-M0
 - [x] 0.2.3 프리릴리스: `17b3dfa`(`Release 0.2.3`) 루트 게이트 34/34 → `v0.2.3` → ISO 넷 · smoke → push · `gh release create --prerelease`.
       값은 `project_release`의 0.2.3 절. 로컬 `out/release-0.2.3/`
+- [x] 릴리스 절차 6에서 "다시 내려받아 대조"를 뺐다(`8f429eb`, 정식 버전부터 한다)
+- [x] SW design doc의 확인 절: `docs/specs/2026-11-18-tars-strip-workspace-design.md`. 트리는 `layout.zig` 안에 갇혀 있고, 게이트 셋
+      (pane · pointer · dictation)이 쓰는 모양 셋은 전부 strip의 모양이다. pane 체인에 트리 전용 검사는 없고 `layout_test`는 15개 중 3개만
+      모양을 다시 쓴다. 결정거리 넷(가 좌표 단위 · 나 `Cmd+D`의 폭 · 다 M0의 범위 · 라 이웃과 상속)은 사용자가 추천안 그대로 받았다("agree them all")
 
 ## 완료된 작업 (2026-11-14~15, LK — 앞 세션)
 
@@ -43,40 +45,64 @@
 
 ## 시도했으나 실패한 접근
 
-- SSID를 `GET_INTERFACE`에서만 받기: AP가 Country 요소를 안 내면 커널이 SSID를 안 채운다(`__cfg80211_connect_result`) — `GET_SCAN`의 associated BSS를 더했다.
-- 연결 판정을 `IF_OPER_UP` 하나로: QEMU usb-net은 UNKNOWN에 머물러 칸에 안 올랐다. `IFF_RUNNING` 하나로: 무선이 켜진 직후의 UNKNOWN 틈에 `WLAN`이 한 프레임 섰다. 종류마다 나눴다.
-- `rg -c`로 세 값을 한 `printf`에 넣기: 0건이면 아무것도 안 찍어 칸이 밀린다(cyber의 `%ymm` 셈에서 한 번 헷갈렸다).
-- Zig 0.17에는 배열 반복 `**`이 없다 — `@splat`.
+- 초안의 전제를 저장소와 대조하지 않고 믿기: 10월 말 초안은 3주 사이에 다섯이 틀렸다(`Cmd+Ctrl+F`는 FU의 키 · DY로 SDL3는 이미 돈다 ·
+  글리프는 FreeType이 아니라 stb_truetype · HS의 `display_scale` · 접두사 `WL`은 wifi). 요구사항도 design도 그날의 코드로 쓴다.
+- 내가 쓴 요구사항도 확인 절에서 둘이 틀렸다: R-SW-3(폭 물려받기)을 글자 그대로 하면 첫 `Cmd+D`가 화면을 넘긴다, 로드맵의
+  SW-M0("column마다 pane 하나")은 pane 체인의 `0 | (1 / 2)` 때문에 "고치지 않고 통과"가 안 된다. 결정 나 · 다가 고친다.
+- `out/release-<ver>/`을 게이트 전에 만들기: 게이트를 거치며 없어져 첫 smoke가 로그를 못 열었다. 게이트 뒤에 만든다.
+- `git rev-parse --short A B`: 인자 둘이면 "Needed a single revision"으로 죽고 `&&` 뒤가 전부 안 돈다.
+- 호스트에 xorriso가 없다 — ISO 안은 `bsdtar -tf <iso>`로 본다.
+- LK의 것(앞 세션): SSID는 `GET_SCAN`의 associated BSS까지 봐야 한다, 연결 판정은 유선 `IFF_RUNNING` · 무선 `IF_OPER_UP`, Zig 0.17에는
+  배열 반복 `**`이 없다(`@splat`).
 
 ## 남은 작업
 
-- [ ] PT-M0: 사용자의 맥에서 루트 게이트 한 번(클라우드 세션은 devtools · pm · mise를 못 돌린다) → PR 머지. 소개 페이지(`gh-pages`의
-      `data.js`)의 기능 목록에 "파티션 도구 fdisk · cfdisk" — 별도 브랜치라 PR에 안 들었다
+- [ ] SW design doc에 결정 · milestone 절을 쓴다(받아들여진 가~라 그대로 — 아래 "다음 에이전트에게")
+- [ ] 로드맵 고치기: SW-M0/M1의 경계(결정 다), WY-M0의 "픽셀 폭이 먼저 서야 한다" 문장(결정 가 — 픽셀은 WY-M0에서 더한다).
+      요구사항 R-SW-2 · R-SW-3에 "(고침, SW design 결정 가 · 나)"를 단다
+- [ ] SW-M0 plan(`docs/plans/<날짜>-tars-strip-workspace-sw-m0.md`) → 구현 → 루트 게이트(35분쯤) → commit
+- [ ] 0.2.3은 프리릴리스라 소개 페이지 `releases`에 안 넣었다 — 사용자가 원하면 넣는다
+- [ ] `main`의 것을 0.3 줄로 가져오는 방법(merge · rebase)은 미정 — 처음 필요해질 때 사용자에게 묻는다
 - [ ] 실기(사용자, 맥북 에어 2011): 링크 칸 — Country 요소를 내는 집 AP면 `link> nl80211 … ssid_len=` 줄(GET_INTERFACE 길), 내장
       BCM43224의 operstate 순서. 유선은 USB 동글로. 결과는 `project_link_status`의 "남은 것"에
 - [ ] 실기: GPU 데모 판 설치 → 첫 패널의 데모, `/tmp/gpu-demo.log`의 `gl` 줄이 crocus인가 · frame 수. `carryover.md`의 DY 절
 - [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
 - [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
 - [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
-- [ ] App Layer(2026-11-18, 사용자 — "커다란 비전으로 목표를 잡고 진행해보자. 주요 결정은 너의 의견에 따를 테니까"): 요구사항
-      `docs/specs/2026-11-18-tars-app-layer-requirements.md` · 순서 `docs/plans/2026-11-18-tars-app-layer-roadmap.md`가 섰다. 코드 0줄.
-      첫걸음은 SW design doc의 확인 절 — `pane/check.sh` · `layout_test` 검사를 "strip에서도 같은 뜻 / 트리 전용"으로 분류
 - [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순), tars-agent
 - [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
 - [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
 
 ## 핵심 파일
 
-- `terminal/src/link.zig` — netlink 읽기 · 짓기, 인터페이스 표(`Iface.isUp`), 칸. `link_test.zig` 검사 26
-- `terminal/src/main.zig`의 "링크(LK-M1)" 절 — `openNetlink` · `askWifi` · `askScan` · `handleRoute` · `drainLink`, `drawStatus`의 오른쪽 칸
-- `wifi/check.sh` 검사 13~15 · `nic/check.sh` 검사 9~11
-- `docs/plans/2026-11-14-tars-link-status-lk-m{0,1}.md` · `docs/plans/2026-11-15-tars-link-status-lk-m2.md`의 결과 절
-- `docs/decisions/project_link_status.md` — 함정 둘
+- `docs/specs/2026-11-18-tars-strip-workspace-design.md` — SW design. 확인 절 여덟과 "확인이 남긴 결정거리" 가~라. 결정 · milestone은 비어 있다
+- `docs/specs/2026-11-18-tars-app-layer-requirements.md` — 결정 열셋 · R-SW · R-KEY · R-WIN · R-WY · TK · CR
+- `docs/plans/2026-11-18-tars-app-layer-roadmap.md` — 순서, 서브프로젝트마다 확인 절에 넣을 것
+- `terminal/src/layout.zig`(362줄) — 지금 트리. 바깥이 아는 것은 `Rect` · `Hit` · `Dir` · `Side` · `MAX_LEAVES` · `Tree`의 메서드 열 · `clampInto`
+- `terminal/src/layout_test.zig` — 검사 15. 그대로 9 · 길만 다시 3(9 · 10 · 11) · 모양 다시 3(4 · 5 · 15)
+- `terminal/src/main.zig` — `Workspace` `:1663`, `applyLayout` `:1801`, 분할 · 순환 · 이웃 `:4763-4803`, 닫기 `:5047`, 포인터 `:3457` · `:3528` · `:3554` · `:3590`,
+  `renderBackdrop` `:476`, `dumpPane`의 `pane>` 줄 `:1879`
+- `pane/check.sh`(검사 2 · 5 · 16 · 6이 모양을 본다) · `pointer/check.sh:866-920` · `:1989-2007` · `dictation/check.sh:786-814` — `0 | 1`의 `rect=78,0 77x47`
+- `terminal/src/status.zig`의 `statusText` — `3/7` 칸이 설 자리(`W2` 옆, 꼬리 길이 셈 주의). SW-M2의 일
+- `../tars-doom` — `ozkl/doomgeneric`의 fork(https://github.com/soomtong/tars-doom). WY-M0에서 쓴다
+- `docs/decisions/project_app_layer_vision.md` · `project_branch_lines.md` · `feedback_herdr_subagents.md` · `project_release.md`(0.2.3 절, 절차 6)
 
 ## 다음 에이전트에게
 
-LK는 닫혔고 main · gh-pages 모두 push됐다. 실기 결과를 받으면 `link> nl80211` · `link> state`
-줄을 보고 `project_link_status`의 "남은 것"에 적는다. 무선 칸이 `WLAN`이면 `link> nl80211 scan … associated=` 줄이 원인을 말한다.
+1. `git branch --show-current`가 `app-layer-0-3`인지 본다. 트리는 clean이고 origin과 같다. `herdr --skill`을 읽는다.
+2. SW design doc(`docs/specs/2026-11-18-tars-strip-workspace-design.md`)의 확인 절을 읽고, 그 아래 결정 절을 쓴다. 사용자가 받은 넷:
+   - 가: SW에서는 좌표를 셀 그대로 둔다. 픽셀은 WY-M0에서 `Rect` 옆에 더한다.
+   - 나: `Cmd+D` — column이 viewport 전체 폭이면 반으로 가르고(지금과 같은 77 | 77), 아니면 폭을 물려받아 오른쪽에 더한다.
+   - 다: SW-M0 = 자료구조를 strip으로 바꾸고 지금 게이트의 세 모양(패널 하나 · `0 | 1` · `0 | (1 / 2)`)을 같은 숫자로 낸다(눈에 보이는
+     변화 0). SW-M1 = 새 동작(column당 3까지 고르게 쌓기 · 한도 · 둘째 `Cmd+D`부터의 물려받기). M2 · M3은 로드맵 그대로.
+   - 라: `Cmd+Opt+←→`는 지금 규칙(포커스 pane의 맨 위 줄과 마주 보는 pane). 닫은 뒤 포커스는 같은 column의 위 → 아래 → column이 비면
+     왼쪽 column(없으면 오른쪽)의 같은 높이 pane.
+3. 로드맵과 요구사항을 그 결정에 맞춰 고친다(남은 작업 둘째 줄).
+4. SW-M0 plan을 쓴다. 판정은 "`layout_test`의 그대로 9개 + 다시 쓴 6개가 통과, `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과,
+   루트 게이트 34/34". 구현은 Herdr 서브에이전트에 맡길 수 있다 — lead가 diff를 실제 파일과 대조하고 commit한다.
+5. 진행 방식은 CLAUDE.md의 "설명 → 실행 → 설명". 사용자는 만들어진 코드를 읽으며 따라간다.
+
+앞 세션(LK)의 남은 것: 실기 결과를 받으면 `link> nl80211` · `link> state` 줄을 보고 `project_link_status`의 "남은 것"에 적는다.
 
 ## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)
 - [x] OD-M0 odin(`c07e944`) · rust 1.100.0(`0a0363e`) · `make iso-full`(`e0cb758`) — 닫기 `c07b325`
