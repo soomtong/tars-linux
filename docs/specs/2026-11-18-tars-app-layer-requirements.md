@@ -209,11 +209,13 @@ app pane에서 `Cmd+Shift+C`(copy mode)는 아무 일도 하지 않는다.
 - R-SW-5 viewport는 포커스 column이 보이도록 최소한만 움직인다. 가운데 정렬은
   하지 않는다.
 - R-SW-6 column은 전부 보이거나 전부 안 보인다. scroll은 column 경계에만
-  맞춘다. viewport 오른쪽의 빈 공간에는 다음 column의 제목만 그린다.
+  맞춘다. viewport 오른쪽의 빈 공간에는 다음 column의 제목만 그린다(제목은
+  SW-M3, SW design 결정 17).
 - R-SW-7 pane slot 번호(0..7)는 column을 끼우고 빼도 바뀌지 않는다.
 - R-SW-8 `layout.zig`는 순수 함수로 남는다. 입력 (strip, viewport 크기, scroll),
   출력 pane마다 사각형. 호스트 테스트가 먼저다.
-- R-SW-9 상태 줄에 `3/7`(포커스 column / 전체) 칸. column이 둘 이상일 때만.
+- R-SW-9 (고침, SW design 결정 16) 상태 줄에 `3/7`(포커스 column / 전체) 칸. 화면 밖
+  column이 있을 때만(column 셋 이상).
 - R-SW-10 크기 바꾸기는 `Screen.resize` + `pty.resize` 그대로. 영향받는 셸
   pane의 copy mode는 닫는다.
 

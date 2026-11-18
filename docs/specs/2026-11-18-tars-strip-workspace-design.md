@@ -4,8 +4,8 @@
 
 Date: 2026-11-18
 Status: 결정 · milestone 절까지 썼다(2026-11-18). 가~라는 사용자가 추천안 그대로
-받았고("agree them all"), 결정 절을 쓰며 둘을 고쳤다(결정 10 · 11). 다음은 SW-M0
-plan. 브랜치 `app-layer-0-3`.
+받았고("agree them all"), 결정 절을 쓰며 둘을 고쳤다(결정 10 · 11). M0 · M1 끝
+(`8620c93` · `ea861b1`). M2를 열며 확인 9~12 · 결정 13~18을 더했다. 브랜치 `app-layer-0-3`.
 
 계기: App Layer의 1단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자
 (2026-10-28): "niri 스타일 strip + 1 level 위/아래 분할", "계층은 workspace >
@@ -256,14 +256,60 @@ column당 3은 새 한도다.
 12. 한도. M0은 workspace당 8만 있다(지금과 같다). column당 3은 M1에서 더한다.
    넘는 키는 `pane> split refused`를 찍고 아무 일도 하지 않는다(확인 8).
 
+## M2를 열며 (2026-11-18, HEAD `ea861b1`)
+
+M0 · M1이 선 뒤 viewport를 보기 전에 확인한 것과 그 결정이다. 사용자 위임
+("주요 결정은 너의 의견에 따를 테니까")으로 Claude가 정했다.
+
+### 확인
+
+9. 사각형을 쓰는 자리는 넷이다 — `applyLayout`(크기 → `Screen.resize` ·
+   `pty.resize`), `render`의 pane 루프, `verifyFrame`의 pane 루프, 포인터의
+   `hit` · `rects`. 넷 다 "모든 slot이 화면 안"을 전제한다. `Rect`는 `u16`이라
+   왼쪽 밖을 음수로 적을 수 없다.
+10. 물려받기(나)만 있는 동안 column 폭은 둘뿐이다. column이 하나면 viewport
+    전체, 둘 이상이면 모두 반이다 — 전체에서 `Cmd+D`는 반 · 반, 반에서는 반을
+    물려받고, 닫아서 하나가 남으면 전체로 돌아간다(그래야 pane 체인 검사 9a의
+    `rect=0,0 155x47`이 선다). 그래서 viewport는 언제나 column 하나나 둘로 꽉
+    차고 빈 공간이 없다. 폭이 섞이는 것(1/3 · 2/3)은 M3의 preset부터다.
+11. terminal은 제목을 들고 있지 않다. `vt.zig`가 ghostty의 `title_report`를
+    끌 뿐 OSC 0/2의 제목을 받아 두는 자리가 없다(`rg -i title`).
+12. 지금 게이트의 모양은 전부 column 둘 이하다(확인 4). 상태 줄의 글자를
+    견주는 체인(hangul의 `text=`, pane 검사 7의 `W2`)은 column 둘에서 칸이
+    안 늘어야 그대로 선다.
+
+### 결정
+
+13. 폭 규칙(확인 10). `n`이 1이면 전체, 2 이상이면 각 column이 `share(cols,
+    2, ·)`의 반 폭(155에서 77)이다. 셋 이상이면 보이는 것은 연속한 둘이다.
+    폭을 저장하지 않는다 — 비율 저장은 preset이 생기는 M3에서 한다.
+14. `Strip`에 `first`(보이는 첫 column 순번)를 더한다(R-SW-6, column 경계).
+    `reveal(leaf)`이 포커스 column이 보이도록 `first`를 가장 적게 옮긴다
+    (R-SW-5). `main.zig`는 포커스를 바꾼 모든 자리(분할 · 순환 · 이웃 · 닫기)
+    뒤에 부른다. `remove`는 `first`를 범위 안으로 당긴다.
+15. 화면 밖 pane. `rects`는 모든 slot에 크기를 쓴다(PTY는 화면 밖에서도 그
+    크기다). 위치는 보이는 column만 화면 좌표이고, `visible(leaf)`가 그것을
+    가른다. 그리기 · verify · `hit` · 구분선은 보이는 것만 다룬다.
+    `applyLayout`은 크기가 바뀐 pane만 resize하고 위치만 바뀐 pane은 `rect`만
+    고친다 — scroll이 셸을 resize하지 않는다.
+16. `3/7` 칸은 화면 밖 column이 있을 때만(`n ≥ 3`) 뜬다(고침, R-SW-9는 "둘
+    이상"). 둘이면 둘 다 보여 칸이 알릴 것이 없고, 확인 12의 비교가 그대로
+    선다. 자리는 `W2` 뒤, `COPY` 앞이다. `drawStatus`의 꼬리 셈에 그 길이를
+    더한다(확인 7).
+17. 빈 공간의 제목(R-SW-6 뒷부분)은 M3로 옮긴다(확인 10 · 11). 빈 공간은 폭이
+    섞일 때만 생기고, 제목의 원천(OSC 0/2를 받아 두기, 또는 전경 프로세스의
+    `/proc/<pgid>/comm`)도 그때 정한다.
+18. `strip>` 줄에 `view=<첫>-<끝>`(1부터)을 더한다. pane 체인 16d의 정규식은
+    이 milestone에서 함께 고친다.
+
 ## Milestone
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
 | SW-M0 | `Tree` → `Strip`(결정 1~10, 12의 앞부분). 키 · 로그 · 화면이 게이트의 세 모양에서 그대로 | `layout_test`(고친 판) 통과, `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과, 루트 게이트 34/34 |
 | SW-M1 | column당 3 한도(결정 12). `pane>` 줄에 column 정보 | pane 체인: 셋 쌓기의 사각형(15 · 15 · 15), 넷째 `Cmd+Shift+D`가 `split refused`이고 화면이 그대로 |
-| SW-M2 | viewport · scroll(R-SW-5 · 6) · 물려받기(나, 결정 11) · `3/7` 칸 · 오른쪽 빈 공간의 제목 | column 넷 뒤 `Cmd+Opt+→`로 덤프의 원점이 바뀜, `3/7`의 `text=` |
-| SW-M3 | 폭 preset `Cmd+R`. 셸 column의 셀 배수 맞춤 | preset 순환의 `grid` 줄 |
+| SW-M2 | viewport · scroll(R-SW-5 · 6) · 물려받기(나, 결정 11 · 13~16, 18) · `3/7` 칸 | column 넷 뒤 `Cmd+Opt+←`로 덤프의 원점과 `view=`가 바뀜, `4/4`의 `text=` |
+| SW-M3 | 폭 preset `Cmd+R`(비율 저장). 셸 column의 셀 배수 맞춤. 빈 공간의 제목(결정 17) | preset 순환의 `grid` 줄 |
 
 M1부터는 사용자가 치는 동작이 바뀌므로 `docs/help/*.md`를 함께 고친다(로드맵의
 "서브프로젝트를 끝낼 때").

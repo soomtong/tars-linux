@@ -49,8 +49,8 @@ design doc: `tars-strip-workspace-design.md`(접두사 SW). 체인은 `pane/chec
 |---|---|---|
 | SW-M0 | tree → strip. 폭 · 높이를 고르게 나누고, 게이트의 세 모양(패널 하나 · `0 \| 1` · `0 \| (1 / 2)`)을 같은 숫자로 | 지금 `pane` · `pointer` · `dictation` 체인이 고치지 않고 통과, `layout_test`(고친 판) |
 | SW-M1 | column당 3 한도 | 덤프의 사각형 판정, 한도에서 아무 일도 없음 |
-| SW-M2 | viewport 밖 column. scroll · 물려받기 · `3/7` · 오른쪽 빈 공간의 제목 | column 넷 뒤 `Cmd+Opt+→`로 덤프의 원점이 바뀜 |
-| SW-M3 | 폭 preset `Cmd+R`. 셸 column의 셀 배수 맞춤 | preset 순환의 `grid` 줄 |
+| SW-M2 | viewport 밖 column. scroll · 물려받기 · `3/7` | column 넷 뒤 `Cmd+Opt+←`로 덤프의 원점이 바뀜 |
+| SW-M3 | 폭 preset `Cmd+R`. 셸 column의 셀 배수 맞춤 · 오른쪽 빈 공간의 제목 | preset 순환의 `grid` 줄 |
 
 요구사항: R-SW-1~10, R-KEY-1의 뜻이 바뀐 줄, 결정 7 · 13.
 
