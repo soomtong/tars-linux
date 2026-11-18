@@ -37,6 +37,9 @@
 - [ ] 이월: janet 1.43.0(AVX2 — 업스트림이 고치면), mitos 0.2.1 판올림과 줄이기(`carryover.md` TU · LD 절)
 - [ ] 사용자가 볼 위임 결정: CE design 결정 4~7(rootful Docker · nftables · `-p` 127.0.0.1 · 소켓 그룹), LT 결정 2(hostname `tars`)
 - [ ] 실기 측정 후보: memcpy · memset의 glibc 돌리기(기억 `project_ghostty_glibc_mem`)
+- [ ] App Layer(2026-11-18, 사용자 — "커다란 비전으로 목표를 잡고 진행해보자. 주요 결정은 너의 의견에 따를 테니까"): 요구사항
+      `docs/specs/2026-11-18-tars-app-layer-requirements.md` · 순서 `docs/plans/2026-11-18-tars-app-layer-roadmap.md`가 섰다. 코드 0줄.
+      첫걸음은 SW design doc의 확인 절 — `pane/check.sh` · `layout_test` 검사를 "strip에서도 같은 뜻 / 트리 전용"으로 분류
 - [ ] 다음 서브프로젝트 후보(사용자가 고른다): SMP, 셸 완성, 묶음 실행 파일의 CPU 수준 검사, 커널 7.4 longterm(12월 중순), tars-agent
 - [ ] 클라우드 세션 브랜치 `claude/gifted-thompson-v5diyz`는 지워도 된다
 - [ ] DC-M2 boot 7의 4초 여유는 호스트가 바쁘면 모자란다 — 빨개지면 `ps -Ao pid,pcpu,etime,comm -r`부터
