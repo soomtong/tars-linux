@@ -179,7 +179,8 @@ pane에는 `wl_pointer`의 enter · leave · motion · button · axis가 간다.
 | Chromium | CR | devlayer 묶음 | 새 `browser/check.sh` |
 
 `WL`은 wifi가 쓰므로 Wayland는 `WY`다. 둠 포트는 GPL이라 TARS 저장소 밖의
-별도 저장소 `tars-doom`이고 devlayer 묶음으로 얹는다. 첫 앱의 이름은
+별도 저장소 `tars-doom`(https://github.com/soomtong/tars-doom — `ozkl/doomgeneric`의
+fork, 2026-11-18)이고 devlayer 묶음으로 얹는다. 첫 앱의 이름은
 `tars-files`. 번들 앱은 목록으로 관리하고 사이트에 적는다.
 
 ### 결정 13 — 남은 값

@@ -1,4 +1,4 @@
-# HANDOFF: Link Status 끝(2026-11-15) — 상태 줄의 SSID · LAN 칸, cyber 0.4.11. main · gh-pages push
+# HANDOFF: App Layer 비전 · 0.2.3 프리릴리스(2026-11-18) — 0.3은 `app-layer-0-3`, `main`은 0.2.x 줄
 
 ## 목표
 
@@ -9,10 +9,19 @@
 
 ## 현재 브랜치
 
-`main` — origin과 같다(`9527924` LK-M2 닫기까지 push. `ca5ef19` LK-M0 · `cd710ff` LK-M1 · `12a99af` Cyber 0.4.11).
-`gh-pages`(worktree `../tars-linux-pages`) — `0186f3e`(LK를 타임라인과 상태 줄 목록에) push. 소개 페이지 영상은 다시 안 찍었다.
+`app-layer-0-3` — App Layer(0.3)의 브랜치. `v0.2.3` 뒤의 `main`에서 갈라졌고 origin에 있다. SW · WY · TK · CR은 전부 여기서 한다.
+`main` — 0.2.x 줄. 0.2.3 다음의 작업은 언제든 `main`으로 돌아와 잇는다(사용자 2026-11-18, 기억 `project_branch_lines`).
+`gh-pages`(worktree `../tars-linux-pages`) — `0186f3e` 그대로. 0.2.3은 프리릴리스라 `releases`에 안 넣었다.
 
-## 완료된 작업 (2026-11-14~15, 이 세션)
+## 완료된 작업 (2026-11-18, 이 세션)
+
+- [x] 요구사항 초안 둘(strip · Wayland, UI 툴킷 — 저장소 밖) 검토 → 사용자 위임으로 합쳐 다시 씀: `33fd094`
+      (`docs/specs/2026-11-18-tars-app-layer-requirements.md` · `docs/plans/2026-11-18-tars-app-layer-roadmap.md` · 기억 `project_app_layer_vision`)
+- [x] `tars-doom` — https://github.com/soomtong/tars-doom (`ozkl/doomgeneric`의 공개 fork, GPL-2.0), 로컬 `../tars-doom`(remote `origin` · `upstream`). 포트 코드는 WY-M0
+- [x] 0.2.3 프리릴리스: `17b3dfa`(`Release 0.2.3`) 루트 게이트 34/34 → `v0.2.3` → ISO 넷 · smoke → push · `gh release create --prerelease`.
+      값은 `project_release`의 0.2.3 절. 로컬 `out/release-0.2.3/`
+
+## 완료된 작업 (2026-11-14~15, LK — 앞 세션)
 
 - [x] LK design(`docs/specs/2026-11-14-tars-link-status-design.md`) — 커널 소스로 확인: AP도 SSID를 낸다(station만 센다),
       bridge에 묶인 실NIC도 `IFLA_LINKINFO`가 있다(`IFLA_INFO_KIND`로 가상을 가른다)

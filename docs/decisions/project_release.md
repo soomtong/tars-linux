@@ -1,6 +1,6 @@
 ---
 name: project_release
-description: "공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
+description: "프리릴리스 TARS 0.2.3(2026-11-18, v0.2.3 = 17b3dfa, ISO 넷, 0.3 브랜치로 가기 전의 판) · 공개 버전 TARS 0.2.2(2026-11-14, v0.2.2 = 16a1072, ISO 넷 — 기본 · nonative · fakesteak · gpu 데모) · 0.1.0(2026-10-11, tag v0.1.0 = 0a6d4bc) · 0.1.1(2026-10-24, v0.1.1 = 1f2978f) · 0.1.2(2026-10-30, v0.1.2 = d2f9ef7, 부분 갱신) · 0.1.3(2026-11-01, v0.1.3 = 055228d, 마우스 선택) · 0.1.4(2026-11-05, v0.1.4 = d93a8aa, 설치해 쓰는 기계 · 맥북) · 0.2.0(2026-11-10, v0.2.0 = 3d84d27, 개발 도구 층) · 0.2.1(2026-11-12, v0.2.1 = 4a26f01, 컨테이너) — GitHub release에 x86_64 ISO 셋(기본 판 · barebone · fakesteak 납품 데모)과 SHA256SUMS. 배포 절차(VERSION 커밋 → annotated tag → make iso → QEMU smoke → 해시 → push · gh release create → 내려받아 대조)와 소개 페이지의 releases 배열. tag가 make iso보다 먼저인 이유는 BV의 버전 글자"
 metadata:
   type: project
 ---
@@ -129,6 +129,22 @@ push도 함께다([[feedback_push_policy]]). ISO · SHA256SUMS · NOTES.md는 `o
 (사용자 "릴리즈 태그를 붙이도록 할게"). `make iso ISO_LAYERS="base gpu"` → `tars-0.2.2-gpu-x86_64.iso` 474,527,744 B, sha256 `c4bc97d3…b08ba4ba`,
 버전 글자 `TARS 0.2.2+c30a838`(tag 뒤 commit — 꼬리가 붙는다). 설치하면 첫 패널이 `tars-gpu-demo`를 화면 가득 띄운다(라이브 부팅에서는 안 뜬다 —
 묶음은 설치본의 홈에서 얹힌다). 로컬 `out/release-0.2.2-gpu/`. GitHub에 어떻게 올릴지(0.2.2 release에 더할지, 따로 낼지)는 사용자가 정한다.
+
+## 0.2.3 (2026-11-18, 프리릴리스 — ISO 넷)
+
+| 항목 | 값 |
+|---|---|
+| tag | `v0.2.3` (annotated) → `17b3dfa` (`Release 0.2.3`). 그 커밋의 루트 게이트 34/34, 체인 시간 합 3,791초 |
+| ISO | `tars-0.2.3-x86_64.iso` 1,990,561,792 B · `tars-0.2.3-nonative-x86_64.iso` 1,646,497,792 B · `tars-0.2.3-fakesteak-x86_64.iso` 145,569,792 B · `tars-0.2.3-gpu-x86_64.iso` 474,537,984 B |
+| sha256 | `133cf41b…1b29ac12` · `59b539e7…24c07355` · `92191a7a…e122dad8` · `1e2c024f…08e4f36f` (SHA256SUMS, 넷) |
+| release | https://github.com/soomtong/tars-linux/releases/tag/v0.2.3 (Pre-release — Latest는 0.2.2 그대로) |
+
+사용자(2026-11-18): "after commit, set tag version to 0.2.3 that prereleased. this project (app layer enhanced) go 0.3 branch named
+app-layer-0-3." 0.2.2 뒤의 LK와 cyber 0.4.15 · `cyber-lsp`를 담았다. 0.3 작업(App Layer)이 `app-layer-0-3` 브랜치로 갈라지기 전의
+`main`을 묶어 둔 판이다 — [[project_branch_lines]]. 절차 1~6을 그대로 밟았고 6은 `--latest` 대신 `--prerelease --latest=false`다.
+네 판 모두 tag의 커밋에서 지었다(GPU 판에도 꼬리표가 없다). smoke 넷 모두 `TARS 0.2.3` · grid 155×47 · fish, panic 0. `/boot/layers`는
+호스트에 xorriso가 없어 `bsdtar -tf <iso>`로 대조했다. 받아서 `shasum -c` 넷 다 OK. 7(소개 페이지)은 프리릴리스라 넣지 않았다 — 사용자가 원하면 넣는다.
+절차에서 배운 것: `out/release-<ver>/`을 게이트 전에 만들면 게이트를 거치며 없어진다 — 게이트가 끝난 뒤에 만든다.
 
 ## 0.2.2부터의 배포 모양 (사용자 결정 2026-11-14)
 
