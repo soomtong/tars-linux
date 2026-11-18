@@ -103,10 +103,10 @@
   손에 안 맞으면 여기와 `touchpad_test`를 함께 고친다. 게이트는 `pointer/replay/tp-replay`(uinput)로 본다.
 - `input/kk/kk-apple` — 게이트 전용 Apple 대역 키보드(KK-M0). uinput으로 vendor 0x05ac인 USB 키보드를 만들고 정해진 키를
   스스로 친 뒤 없앤다. 친 키가 전경 프로세스에 가므로 셸에서 `&`로 띄운다. `input` 체인 1차 부팅의 디스크에 실린다.
-- `layout.zig` — 패널 트리와 사각형 산수(WP-M0). 순수 모듈이고 `layout_test`가
-  호스트에서 본다. 노드 풀 15칸 고정이고 잎 번호(0..7)가 노드 번호와 따로다 —
-  `main.zig`의 패널 배열이 잎 번호로 인덱싱되므로, 분할해도 기존 패널의 번호가
-  안 바뀐다. `split`은 크기를 보려고 격자 전체(`whole`)를 받는다.
+- `layout.zig` — 패널 strip과 사각형 산수(WP-M0, SW-M0에서 트리 → strip). 순수 모듈이고 `layout_test`가
+  호스트에서 본다. column 목록이고 column은 slot 번호(0..7) 목록이다. 둘 다 고정 배열이고 쓰지 않는 칸은 늘 0이다 —
+  `main.zig`가 지난 프레임의 배치와 `std.meta.eql`로 견준다. 패널 배열이 slot 번호로 인덱싱되므로, 분할 · 닫기에도 기존
+  패널의 번호가 안 바뀐다. 폭 · 높이는 `share` 하나로 고르게 나누고, `split`은 크기를 보려고 격자 전체(`whole`)를 받는다.
 - `dictation.zig` — 받아쓰기의 순수한 층(VD-M1). `DoubleTap`(누름 → 뗌 → 누름이 300ms 안, 다른 키가 끼면 버림, 다른 수정키가
   눌려 있으면 발동 안 함 — "녹음 중"을 들지 않는다) · `Phase` 넷(`starting` · `recording` · `transcribing` · `cancelling`)과 `onTap` ·
   `escCancels` · `phaseAfter`(자식의 표준 에러 두 줄이 단계를 옮긴다) · `outcome`(종료 코드 → 넣기 · 조용 · 알림) · `isPassword`

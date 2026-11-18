@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 Design: `docs/specs/2026-11-18-tars-strip-workspace-design.md`(결정 1~10, 12)
-Status: plan. 브랜치 `app-layer-0-3`.
+Status: 끝났다(2026-11-18). 결과는 맨 아래. 다음은 SW-M1. 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -86,6 +86,19 @@ Status: plan. 브랜치 `app-layer-0-3`.
 - `pane` · `pointer` · `dictation` 체인 PASS. 판정 줄 diff 0.
 - 루트 게이트 34/34.
 
-## 결과
+## 결과 (2026-11-18)
 
-(구현 뒤에 쓴다.)
+1. 구현은 Herdr 서브에이전트(Opus, pane `sw-impl`)가 5분 51초에 했다. lead가 diff를 대조했다: `main.zig`의 주석 아닌 변경
+   줄은 이름 바꾸기 29쌍뿐이고, `layout_test`에서 지워진 `expect` 줄은 `expectCount`의 시그니처 하나다(검사 1~7 · 9~15의 단언
+   그대로).
+2. `layout_test`(호스트 zig 0.17.1): 모든 검사 통과, OK 139줄. 검사 15는 71,680 물음. 검사 17은 "당긴 칸을 0으로"를 빼면
+   `PulledColumnNotCleared` · `PulledSlotNotCleared`로 실패한다(서브에이전트가 사본으로 확인).
+3. 고르게 나누기는 `share(l, n, i)` 하나다. 빼기는 `-|`로 넘치지 않게 했다 — 선 배치에서 격자가 줄면(전체 화면 끄기) 몫이
+   0이 될 수 있다. 트리의 `halves`도 같은 경우에 0을 냈다.
+4. `heir`는 `whole`이 필요 없다 — 혼자인 pane의 맨 위 줄은 0이고, 그 줄 이하에서 시작하는 pane은 어느 column이든 첫 pane이다.
+5. `key-files.md`는 106~109 네 줄을 고쳤다(뒤 세 줄이 노드 풀을 설명하고 있었다).
+6. 체인: `pane` 192초 · `pointer` 279초 · `dictation` 237초 모두 PASS, 판정 줄 diff 0. pane 체인의 덤프가 트리 때와 같은
+   숫자다 — `rect=78,0 77x47 sep ink=6016`, `rect=78,24 77x23 sep ink=15872`.
+7. 루트 게이트 34/34 첫 판 PASS(2,169초, `out/gate-logs/20261118-122629`).
+8. 다시 밟은 함정: 게이트의 출력을 `out/` 안의 파일로 돌리면 게이트가 `out/`을 지워 파일이 사라진다(fd에는 계속 쓴다).
+   게이트 로그는 scratchpad나 `out/` 밖에 둔다.

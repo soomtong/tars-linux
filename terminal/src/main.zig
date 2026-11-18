@@ -451,7 +451,7 @@ fn drawRun(
 }
 
 /// 화면 전체를 지우고 셀 목록을 다시 그리는 통째 경로의 첫 단계. DR-M2부터 실제 경로는
-/// 첫 프레임 · 워크스페이스 전환 · 트리 변경에만 여기를 지나고, 그 밖의 프레임은 `App.paintPane`이
+/// 첫 프레임 · 워크스페이스 전환 · 배치 변경에만 여기를 지나고, 그 밖의 프레임은 `App.paintPane`이
 /// 패널마다 dirty 행만 다시 칠한다. verify 모드의 그림자(`App.verifyFrame`)는 매 프레임 이
 /// 통째 경로 그대로다 — 그래서 이 함수와 `renderPane` · `renderOverlay`의 모양이 "통째 경로"의
 /// 정의다. `RenderState`가 주는 dirty 비트는 안 쓴다(DR design 결정 2 — dirty의 출처는
@@ -473,10 +473,10 @@ fn drawRun(
 /// 구분선을 따로 긋는 이유는 WP-M1 plan 확정 4다 — `cells()`가 빈 셀을 안
 /// 내보내므로 격자를 통째로 구분선 색으로 칠하면 패널 안 빈 칸이 그 색으로
 /// 남는다.
-fn renderBackdrop(fb: drm.Framebuffer, tree: *const layout.Tree, whole: layout.Rect) void {
+fn renderBackdrop(fb: drm.Framebuffer, strip: *const layout.Strip, whole: layout.Rect) void {
     fb.fill(MARGIN_COLOR);
     var buf: [layout.MAX_LEAVES - 1]layout.Rect = undefined;
-    for (tree.separators(whole, &buf)) |sep| {
+    for (strip.separators(whole, &buf)) |sep| {
         const o = paneOrigin(sep);
         var row: u32 = 0;
         while (row < sep.rows) : (row += 1) {
@@ -559,9 +559,9 @@ fn renderPane(
     if (cursor) |cm| if (cm.px) |cr| fb.fillRect(o.x + cr.x, o.y + cr.y, cr.w, cr.h, vt.CURSOR_COLOR);
 }
 
-/// 패널 오른쪽 한 칸의 색(DR-M2 plan 확정 2). 트리의 타일링상 패널의 바로 오른쪽 칸은
-/// 언제나 구분선(세로 분할의 `first` 쪽 — 구분선이 부모 높이 전체라 이 패널의 모든 행에
-/// 걸린다)이거나 격자 오른쪽 끝의 여백이다. 이 주장이 틀리면 패널을 가른 모든 프레임에서
+/// 패널 오른쪽 한 칸의 색(DR-M2 plan 확정 2). strip의 타일링상 패널의 바로 오른쪽 칸은
+/// 언제나 column 사이의 세로 구분선(격자 높이 전체라 이 패널의 모든 행에 걸린다)이거나
+/// 격자 오른쪽 끝의 여백이다. 이 주장이 틀리면 패널을 가른 모든 프레임에서
 /// verify가 `mismatch`를 찍는다.
 fn stripColor(rect: layout.Rect, whole: layout.Rect) u32 {
     return if (rect.col + rect.cols >= whole.col + whole.cols) MARGIN_COLOR else SEPARATOR;
@@ -1656,14 +1656,15 @@ const Clips = struct {
     }
 };
 
-/// iTerm2의 탭 하나. 패널의 트리와 포커스 하나씩(WP design "모델" 절).
+/// iTerm2의 탭 하나. 패널의 strip과 포커스 하나씩(WP design "모델" 절, SW design 결정 1).
 ///
-/// `panes`는 잎 번호로 바로 인덱싱한다 — `layout.Tree`가 잎 번호를 0..7로
-/// 주는 이유다. null인 칸은 그 번호의 잎이 없다는 뜻이다.
+/// `panes`는 slot 번호로 바로 인덱싱한다 — `layout.Strip`이 slot 번호를 0..7로
+/// 주고 다른 pane을 지워도 안 바꾸는 이유다(R-SW-7). null인 칸은 그 번호의
+/// pane이 없다는 뜻이다.
 const Workspace = struct {
-    tree: layout.Tree,
+    strip: layout.Strip,
     panes: [layout.MAX_LEAVES]?Pane,
-    /// 키보드가 가는 패널의 잎 번호(결정 4).
+    /// 키보드가 가는 패널의 slot 번호(결정 4).
     focus: u4,
 };
 
@@ -1762,7 +1763,7 @@ fn spawnPane(
 }
 
 /// `poll`의 fd 하나가 누구의 것인가(WP-M1). 패널 포인터와, 그 패널을
-/// 트리에서 지울 때 필요한 두 번호.
+/// strip에서 지울 때 필요한 두 번호.
 const PaneRef = struct { pane: *Pane, ws: usize, leaf: u4 };
 
 /// 워크스페이스의 수(WP-M2). 번호가 자리라 배열의 앞에서부터 빈틈없이
@@ -1780,26 +1781,27 @@ fn workspaceCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
 fn paneCount(workspaces: *const [MAX_WORKSPACES]?Workspace) usize {
     var n: usize = 0;
     for (workspaces) |slot| {
-        if (slot) |w| n += w.tree.count();
+        if (slot) |w| n += w.strip.count();
     }
     return n;
 }
 
-/// 트리가 바뀐 뒤 패널들의 크기를 맞춘다(WP design 결정 3). 분할 뒤와
+/// 배치(strip)가 바뀐 뒤 패널들의 크기를 맞춘다(WP design 결정 3). 분할 뒤와
 /// 닫기 뒤 둘 다 이것을 부른다.
 ///
-/// 규칙이 하나다 — `rect`가 바뀐 패널만 다시 잰다. 분할이면 갈린 패널
-/// 하나가 작아지고, 닫기면 올라간 형제(와 그 아래 패널들)가 커진다. 어느
-/// 경우인지를 여기서 가르지 않아도 사각형을 비교하면 저절로 그 패널들만 남는다.
+/// 규칙이 하나다 — `rect`가 바뀐 패널만 다시 잰다. 분할이면 같은 column(또는
+/// 모든 column)의 패널이 작아지고, 닫기면 그 자리를 나눠 가진 패널들이 커진다
+/// (SW design 결정 4 — 고르게 나눈다). 어느 경우인지를 여기서 가르지 않아도
+/// 사각형을 비교하면 저절로 그 패널들만 남는다.
 ///
 /// `vt.Screen.resize`와 `pty.resize`가 짝이다. 한쪽만 바꾸면 셸이 아는 폭과
 /// 우리가 그리는 폭이 어긋나 줄바꿈이 엉킨다(`spawnPane`의 주석과 같은 병).
 ///
-/// 새 잎의 칸은 아직 null이라 건너뛴다. 부르는 쪽이 돌려받은 사각형으로
+/// 새 slot의 칸은 아직 null이라 건너뛴다. 부르는 쪽이 돌려받은 사각형으로
 /// 그 칸에 `spawnPane`한다.
 fn applyLayout(alloc: std.mem.Allocator, ws: *Workspace, whole: layout.Rect) ![layout.MAX_LEAVES]layout.Rect {
     var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
-    ws.tree.rects(whole, &rs);
+    ws.strip.rects(whole, &rs);
     for (&ws.panes, 0..) |*slot, leaf| {
         const p = if (slot.*) |*p| p else continue;
         const r = rs[leaf];
@@ -1807,7 +1809,7 @@ fn applyLayout(alloc: std.mem.Allocator, ws: *Workspace, whole: layout.Rect) ![l
         try p.screen.resize(r.cols, r.rows);
         pty.resize(p.session.master_fd, r.cols, r.rows, CELL_W, ROW_HEIGHT);
         // 셀 목록 두 벌도 새 크기다(DR-M2). 지난 목록은 옛 사각형의 것이라 쓸모가 없고,
-        // `prev_valid`가 꺼져 다음 프레임은 통째다 — 트리가 바뀐 프레임은 어차피 화면 전체다.
+        // `prev_valid`가 꺼져 다음 프레임은 통째다 — 배치가 바뀐 프레임은 어차피 화면 전체다.
         freePaneBuffers(alloc, p);
         try allocPaneBuffers(alloc, p, r);
         p.rect = r;
@@ -1838,7 +1840,7 @@ const PaneSig = struct {
 ///   terminal: pane> ws=1/1 panes=2 focus=1 rect=78,0 77x47 sep ink=752
 ///
 /// `sep ink`는 프레임버퍼 전체에서 `SEPARATOR` 픽셀 수다. CI의 `copy ink`와
-/// 같은 자리다 — 트리가 맞아도 구분선을 안 그리면 0이고, 글자만 보는 판정은
+/// 같은 자리다 — 배치가 맞아도 구분선을 안 그리면 0이고, 글자만 보는 판정은
 /// 그것을 못 잡는다. 전체를 세는 것은 그 색이 구분선에만 쓰이기 때문이다
 /// (`dumpStatus`가 띠 전체에서 `STATUS_COPY`를 세는 것과 같은 논리).
 ///
@@ -1859,7 +1861,7 @@ fn dumpPane(
     const sig: PaneSig = .{
         .ws = current,
         .total = workspaceCount(workspaces),
-        .panes = ws.tree.count(),
+        .panes = ws.strip.count(),
         .focus = ws.focus,
         .rect = ws.panes[ws.focus].?.rect,
     };
@@ -3454,7 +3456,7 @@ const PointerWire = struct {
     /// 포인터 아래 패널과 그 상태(PD-M4). 여백 · 구분선 · 상태 줄이면 null이다.
     fn paneAt(self: *const PointerWire, x: u32, y: u32) ?pointer.Pane {
         const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
-        const h = self.ws.tree.hit(self.whole, gc.col, gc.row) orelse return null;
+        const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
         const p = &self.ws.panes[h.leaf].?;
         return .{
             .leaf = h.leaf,
@@ -3525,7 +3527,7 @@ const PointerWire = struct {
     fn reportTo(self: *PointerWire, leaf: u4, action: vt.Screen.MouseAction, button: ?vt.Screen.MouseButton, x: u32, y: u32) void {
         const p = if (self.ws.panes[leaf]) |*pane| pane else return;
         var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
-        self.ws.tree.rects(self.whole, &rs);
+        self.ws.strip.rects(self.whole, &rs);
         const o = paneOrigin(rs[leaf]);
         var buf: [32]u8 = undefined;
         const bytes = p.screen.mouseEncode(
@@ -3551,7 +3553,7 @@ const PointerWire = struct {
     fn press(self: *PointerWire, x: u32, y: u32, t_us: i64) !void {
         const hit: ?pointer.Cell = cell: {
             const gc = gridCell(x, y, self.cols, self.rows) orelse break :cell null;
-            const h = self.ws.tree.hit(self.whole, gc.col, gc.row) orelse break :cell null;
+            const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse break :cell null;
             break :cell .{ .leaf = h.leaf, .col = h.col, .row = h.row };
         };
         if (hit) |h| {
@@ -3584,10 +3586,10 @@ const PointerWire = struct {
         const leaf = self.gesture.held() orelse return;
         const t = self.target();
         // 누른 패널이 포커스를 잃었으면 칸을 셀 사각형이 없을 수 있다(지금
-        // 트리에 그 잎이 없다). `Gesture`는 `gone`이면 칸을 안 본다.
+        // strip에 그 slot이 없다). `Gesture`는 `gone`이면 칸을 안 본다.
         if (t == .gone) return self.run(self.gesture.motion(self.gesture.start, t));
         var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
-        self.ws.tree.rects(self.whole, &rs);
+        self.ws.strip.rects(self.whole, &rs);
         const gc = gridCellClamped(x, y, self.cols, self.rows);
         const h = layout.clampInto(rs[leaf], leaf, gc.col, gc.row);
         try self.run(self.gesture.motion(.{ .leaf = h.leaf, .col = h.col, .row = h.row }, t));
@@ -3815,7 +3817,7 @@ const App = struct {
     /// 패널 사각형이다(`spawnPane`). 패널 하나면 둘이 같다.
     cols: u16,
     rows: u16,
-    /// 격자 전체의 사각형. 부팅의 첫 패널도 트리에서 이것을 받는다(WP-M0) —
+    /// 격자 전체의 사각형. 부팅의 첫 패널도 strip에서 이것을 받는다(WP-M0) —
     /// 하나면 격자 전체지만, 분할이 생기는 M1에서 이 자리가 따로 산수를 하고
     /// 있으면 둘이 갈린다.
     whole: layout.Rect,
@@ -3831,11 +3833,11 @@ const App = struct {
     screen_line_buf: []u8,
     /// 한 패널의 dirty 행 비트(DR-M2, `paintPane`). 격자 행 수만큼이라 어느 패널에도 충분하다.
     dirty_rows: []bool,
-    /// 지난 프레임의 워크스페이스 번호와 트리(DR-M2 plan 확정 3). 둘 중 하나라도 다르면 화면
+    /// 지난 프레임의 워크스페이스 번호와 strip(DR-M2 plan 확정 3). 둘 중 하나라도 다르면 화면
     /// 전체를 다시 그린다 — 구분선과 여백이 바뀌었다. null은 첫 프레임이다. 플래그가 아니라
     /// 비교인 이유는 결정 2와 같다 — 바꾸는 자리마다 켜게 하면 하나를 빠뜨린다.
     last_current: ?usize = null,
-    last_tree: ?layout.Tree = null,
+    last_strip: ?layout.Strip = null,
     /// kitty 이미지(TG-M2). 16칸을 넘는 placement가 한 화면에 보이면
     /// `images_dropped`가 덤프에 찍힌다 — 그때 키운다.
     img_buf: [16]vt.ImagePlacement = undefined,
@@ -3988,8 +3990,8 @@ const App = struct {
     /// `fds[pty_base + i]`가 어느 패널의 것인지. 패널은 `workspaces` 배열 안에
     /// 그 자리 그대로 있으므로 포인터가 바퀴 안에서 안 흔들린다.
     ///
-    /// 워크스페이스 번호와 잎 번호를 함께 드는 이유는 EOF다(WP-M1). 그
-    /// 패널을 닫으려면 트리에서 지워야 하고, 트리는 잎 번호만 안다.
+    /// 워크스페이스 번호와 slot 번호를 함께 드는 이유는 EOF다(WP-M1). 그
+    /// 패널을 닫으려면 strip에서 지워야 하고, strip은 slot 번호만 안다.
     fd_panes: [MAX_WORKSPACES * layout.MAX_LEAVES]PaneRef = undefined,
     /// 이 바퀴에 `fds`에서 쓴 길이와 PTY 구간. 바퀴마다 `tick`의 머리가 다시 정한다.
     nfds: usize = 0,
@@ -4255,12 +4257,12 @@ const App = struct {
         self.clips = .{ .scope = clip_scope, .shared = .init(self.allocator) };
 
         // 부팅은 패널 하나짜리 워크스페이스 하나다(WP-M0). 패널의 사각형도
-        // 트리에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
+        // strip에서 받는다 — 하나면 격자 전체지만, 분할이 생기는 M1에서 이
         // 자리가 따로 산수를 하고 있으면 둘이 갈린다.
         self.whole = .{ .col = 0, .row = 0, .cols = self.cols, .rows = self.rows };
-        self.workspaces[self.current] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+        self.workspaces[self.current] = .{ .strip = layout.Strip.init(), .panes = @splat(null), .focus = 0 };
         var boot_rects: [layout.MAX_LEAVES]layout.Rect = undefined;
-        self.workspaces[self.current].?.tree.rects(self.whole, &boot_rects);
+        self.workspaces[self.current].?.strip.rects(self.whole, &boot_rects);
         const first = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, boot_rects[0], self.accountPtr(), self.cursor_shape);
         self.workspaces[self.current].?.panes[0] = first;
         // 경로까지 찍는다. 게이트가 "화면의 셸도 바뀌었는가"를 볼 수 있는 유일한
@@ -4730,7 +4732,7 @@ const App = struct {
     /// `pty.resize`가 짝으로 불려 셸이 새 크기를 SIGWINCH로 안다. 셸은 닫히지 않는다. 지금 안 보는
     /// 워크스페이스도 지금 바꾼다 — 그것으로 옮겼을 때 크기가 어긋나 있으면 안 된다.
     ///
-    /// `last_tree`를 버려 다음 프레임을 통째로 그린다(design 위험 2). 부분 갱신은 지난 프레임과의
+    /// `last_strip`을 버려 다음 프레임을 통째로 그린다(design 위험 2). 부분 갱신은 지난 프레임과의
     /// 차이만 그리므로, 옛 여백 자리와 옛 상태 띠에 지난 픽셀이 남는다.
     fn setFullscreen(self: *App, on: bool) !void {
         if (self.fullscreen == on) return;
@@ -4744,7 +4746,7 @@ const App = struct {
             const w = if (slot.*) |*w| w else continue;
             _ = try applyLayout(self.allocator, w, self.whole);
         }
-        self.last_tree = null;
+        self.last_strip = null;
         self.needs_redraw = true;
         self.logFullscreen();
     }
@@ -4762,10 +4764,10 @@ const App = struct {
             switch (cmd) {
                 .split_right, .split_below => {
                     const dir: layout.Dir = if (cmd == .split_right) .right else .below;
-                    // 꽉 찼거나 가를 수 없을 만큼 작다(`Tree.split`).
+                    // 꽉 찼거나 가를 수 없을 만큼 작다(`Strip.split`).
                     // 조용히 넘어가면 사람도 게이트도 "키가 안 왔다"와
                     // 구별을 못 한다.
-                    const leaf = ws.tree.split(ws.focus, dir, self.whole) orelse {
+                    const leaf = ws.strip.split(ws.focus, dir, self.whole) orelse {
                         logline.print("terminal: pane> split refused\n", .{});
                         continue;
                     };
@@ -4787,8 +4789,8 @@ const App = struct {
                         ws.focus, fp.session.child_pid,
                     });
                 },
-                .focus_next => ws.focus = ws.tree.next(ws.focus),
-                .focus_prev => ws.focus = ws.tree.prev(ws.focus),
+                .focus_next => ws.focus = ws.strip.next(ws.focus),
+                .focus_prev => ws.focus = ws.strip.prev(ws.focus),
                 // 그 방향에 이웃이 없으면(격자 끝) 감기지 않고 아무 일도 안
                 // 한다(WP-M3). 없는 워크스페이스 번호와 같은 길이다 —
                 // `continue`가 `needs_redraw`를 건너뛰고 `pane>` 줄도 안 는다.
@@ -4800,7 +4802,7 @@ const App = struct {
                         .focus_down => .down,
                         else => unreachable,
                     };
-                    ws.focus = ws.tree.neighbor(self.whole, ws.focus, side) orelse continue;
+                    ws.focus = ws.strip.neighbor(self.whole, ws.focus, side) orelse continue;
                 },
                 // 새 워크스페이스는 끝에 선다(WP-M2). 번호가 자리라 빈
                 // 칸은 언제나 맨 뒤 하나다(`workspaceCount`).
@@ -4812,9 +4814,9 @@ const App = struct {
                         logline.print("terminal: pane> workspace refused\n", .{});
                         continue;
                     }
-                    // 패널 하나짜리 트리의 사각형은 격자 전체다
+                    // 패널 하나짜리 strip의 사각형은 격자 전체다
                     // (`layout_test` 검사 1). `rects`를 돌리지 않는다.
-                    self.workspaces[n] = .{ .tree = layout.Tree.init(), .panes = @splat(null), .focus = 0 };
+                    self.workspaces[n] = .{ .strip = layout.Strip.init(), .panes = @splat(null), .focus = 0 };
                     self.workspaces[n].?.panes[0] = try spawnPane(self.io, self.allocator, self.shell_path, &self.argv, self.whole, self.accountPtr(), self.cursor_shape);
                     self.current = n;
                     // 이 배치의 뒤 명령(같은 read에 실려 온 Cmd+D 등)이 새
@@ -4830,7 +4832,7 @@ const App = struct {
                     self.current = target;
                     ws = &self.workspaces[self.current].?;
                 },
-                // 전체 화면(FU-M0, `Cmd+Ctrl+F`). 트리는 그대로이고 패널의 사각형만 커지거나 준다.
+                // 전체 화면(FU-M0, `Cmd+Ctrl+F`). strip은 그대로이고 패널의 사각형만 커지거나 준다.
                 .fullscreen_toggle => try self.setFullscreen(!self.fullscreen),
             }
             self.needs_redraw = true;
@@ -5036,22 +5038,22 @@ const App = struct {
                 pane.clip.deinit();
                 freePaneBuffers(self.allocator, pane);
                 w.panes[ref.leaf] = null;
-                // 포커스를 먼저 옮긴다. 자리를 넘겨받는 형제로 간다(WP-M2,
-                // 사용자가 2026-10-03에 골랐다 — M1은 순회의 다음이었다).
-                // `heir`는 그 잎이 트리에 있어야 형제를 안다 — 지운 뒤에
-                // 물으면 제자리를 돌려준다.
+                // 포커스를 먼저 옮긴다. 같은 column의 위 패널, 없으면 아래 패널, column이
+                // 비면 옆 column의 패널로 간다(WP-M2 · SW design 결정 9, 사용자가
+                // 2026-10-03에 골랐다 — WP-M1은 순회의 다음이었다). `heir`는 그 slot이
+                // strip에 있어야 자리를 안다 — 지운 뒤에 물으면 제자리를 돌려준다.
                 //
                 // 지금 보던 포커스 패널이 copy mode 중에 닫혔으면 입력 모드도
-                // 닫는다. 형제는 copy mode가 아니다(LE design 결정 1).
+                // 닫는다. 넘겨받는 패널은 copy mode가 아니다(LE design 결정 1).
                 if (ref.ws == self.current and w.focus == ref.leaf) self.resetInputMode();
-                if (w.focus == ref.leaf) w.focus = w.tree.heir(ref.leaf);
-                w.tree.remove(ref.leaf);
+                if (w.focus == ref.leaf) w.focus = w.strip.heir(ref.leaf);
+                w.strip.remove(ref.leaf);
                 self.needs_redraw = true;
                 // 워크스페이스의 마지막 패널이었다(WP-M2). 워크스페이스가
                 // 사라지고 뒤의 것들이 한 자리씩 앞으로 온다 — 번호는 자리다
                 // (design "모델" 절). 전체의 마지막 패널이었다면 위에서 이미
                 // 루프를 나갔다.
-                if (w.tree.count() == 0) {
+                if (w.strip.count() == 0) {
                     logline.print("terminal: pane> workspace closed ws={d}\n", .{ref.ws + 1});
                     var i = ref.ws;
                     while (i + 1 < MAX_WORKSPACES) : (i += 1) self.workspaces[i] = self.workspaces[i + 1];
@@ -5166,7 +5168,7 @@ const App = struct {
         }
         if (self.yield_state.retry(&ops, self.nowMs())) back = true;
         if (back) {
-            self.last_tree = null;
+            self.last_strip = null;
             self.needs_redraw = true;
         }
     }
@@ -5275,11 +5277,11 @@ const App = struct {
         if (self.sprite.at) |s| clips.push(s.x, s.y, pointer.ARROW_W, pointer.ARROW_H);
         self.sprite.restore(self.fb);
         // 화면 전체를 다시 그릴 프레임인가(DR-M2 plan 확정 3). 첫 프레임, 워크스페이스가 바뀜,
-        // 트리가 바뀜(분할 · 닫기 — 구분선과 여백이 바뀐다). 트리가 같으면 패널의 사각형도 같다.
+        // strip이 바뀜(분할 · 닫기 — 구분선과 여백이 바뀐다). strip이 같으면 패널의 사각형도 같다.
         const full = self.last_current != self.current or
-            if (self.last_tree) |t| !std.meta.eql(t, ws.tree) else true;
+            if (self.last_strip) |t| !std.meta.eql(t, ws.strip) else true;
         if (full) {
-            renderBackdrop(self.fb, &ws.tree, self.whole);
+            renderBackdrop(self.fb, &ws.strip, self.whole);
             clips.all();
         }
         for (&ws.panes, 0..) |*slot, leaf| {
@@ -5356,7 +5358,7 @@ const App = struct {
         frame.imgs = focus.screen.images(&self.img_buf);
         try self.paintPane(focus, full, frame.cells, frame.imgs, frame.prompt != null, &clips);
         self.last_current = self.current;
-        self.last_tree = ws.tree;
+        self.last_strip = ws.strip;
         // 실제 경로는 `renderOverlay`를 안 부르고 둘을 따로 한다(SB-M0, design 결정 3). 프롬프트 행은
         // 포커스 패널의 dirty 행 안이라 `paintPane`이 방금 지웠고 clip에도 넣었다 — 있으면 매 프레임
         // 다시 쓴다. 띠는 내용이 바뀐 프레임과 통째 프레임(`renderBackdrop`이 띠도 지웠다)에만.
@@ -5513,7 +5515,7 @@ const App = struct {
         const v = if (self.verify) |*v| v else return null;
         const start = std.Io.Clock.now(.awake, self.io);
         var cells_report: verify.Report = .{};
-        renderBackdrop(v.fb, &ws.tree, self.whole);
+        renderBackdrop(v.fb, &ws.strip, self.whole);
         for (&ws.panes, 0..) |*slot, leaf| {
             const p = if (slot.*) |*p| p else continue;
             const fresh = try p.screen.cells(v.cell_buf);
