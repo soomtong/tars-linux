@@ -586,12 +586,12 @@ exe = [
 [[tool]]
 name = "cyber"
 bundle = "lang-script"
-version = "0.4.11"
+version = "0.4.15"
 kind = "upstream"
-url = "https://github.com/soomtong/cyber/releases/download/0.4.11/cyber-linux-x64.tar.gz"
-sha256 = "bc675117399a928df2e0bb4a844381e02ebedadd666909181f1d1bab4a9c241b"
+url = "https://github.com/soomtong/cyber/releases/download/0.4.15/cyber-linux-x64.tar.gz"
+sha256 = "6f062865c21d494a39325c6466d74c3c87efe0d928e213ee404fd3b98284fc2f"
 strip = 0
-exe = ["cyber"]
+exe = ["cyber", "cyber-lsp"]
 
 # node: nodejs.org/dist/index.json의 lts 첫 줄, SHASUMS256.txt.
 [[tool]]
