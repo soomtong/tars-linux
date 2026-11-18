@@ -3,10 +3,10 @@
 접두사: SW
 
 Date: 2026-11-18
-Status: 결정 · milestone 절까지 썼다(2026-11-18). 가~라는 사용자가 추천안 그대로
-받았고("agree them all"), 결정 절을 쓰며 둘을 고쳤다(결정 10 · 11). M0 · M1 끝
-(`8620c93` · `ea861b1`). M2를 열며 확인 9~12 · 결정 13~18을, M3를 열며 확인 13~15 · 결정 19~26을
-더했다. M2 끝(`4d491ab`). 브랜치 `app-layer-0-3`.
+Status: 끝났다(2026-11-19). SW-M0 `8620c93` · M1 `ea861b1` · M2 `4d491ab` · M3(이 날의 commit).
+가~라는 사용자가 추천안 그대로 받았고("agree them all"), 나머지는 위임으로 Claude가 정했다(결정
+10 · 11 · 13의 고침, M2 · M3를 열며 더한 확인 9~15 · 결정 13~26). 기억 `project_strip_workspace`.
+브랜치 `app-layer-0-3`.
 
 계기: App Layer의 1단(`docs/plans/2026-11-18-tars-app-layer-roadmap.md`). 사용자
 (2026-10-28): "niri 스타일 strip + 1 level 위/아래 분할", "계층은 workspace >
