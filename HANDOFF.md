@@ -1,11 +1,11 @@
-# HANDOFF: App Layer(0.3) 1단 SW 끝(2026-11-19). 다음은 2단 WY-M0. 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — SW 끝, 2단 WY-M0 구현 중(단계 B, 2026-11-19). 브랜치 `app-layer-0-3`
 
 ## 목표
 
 App Layer(0.3) — strip 워크스페이스 · Wayland 서버 · TARS 툴킷(첫 앱 `tars-files`) · Chromium. 하나의 milestone이 아니라 녹화 넷(A 둠 ·
 B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝을 재는 비전이다. 사용자(2026-11-18): "커다란 비전으로 목표를 잡고
 진행해보자. 주요 결정은 너의 의견에 따를 테니까." 요구사항 `docs/specs/2026-11-18-tars-app-layer-requirements.md`(결정 열셋), 순서
-`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 1단 SW(strip)가 끝났다. 다음은 2단 WY(Wayland 서버)의 design doc 확인 절.
+`docs/plans/2026-11-18-tars-app-layer-roadmap.md`(SW → WY → TK → CR). 1단 SW(strip)가 끝났다. 2단 WY(Wayland 서버): design `docs/specs/2026-11-19-tars-wayland-server-design.md`(결정 1~17), plan `docs/plans/2026-11-19-tars-wayland-server-wy-m0.md`(단계 A · B · C).
 
 ## 현재 브랜치
 
@@ -23,6 +23,10 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 완료된 작업 (2026-11-18~19, SW — 이 세션)
 
+- [x] WY design 확인 1~8(zig-wayland v0.7.0 · libwayland 93,800 B · 키맵 텍스트 · SDL3의 global과 "software도 EGL") · 결정 1~14 ·
+      milestone(로드맵 3판: 둠이 WY-M1로, 뒤 번호가 밀렸다): `6826566`. 결정 15~17(`Workspace`는 kind union, app은 마지막 셸보다
+      오래 산다, app 프레임은 verify 안 함): `6043b52`
+- [x] WY-M0 단계 A `470cded` · `8147624`: zig-wayland 의존, Dockerfile 층 22(libwayland 셋), `tars-wl-test`, initrd에 실림. terminal 체인 PASS
 - [x] SW design 결정 1~12 · milestone, 로드맵 · 요구사항 고침: `cac1858`. M2를 열며 결정 13~18(`bc939d2`), M3를 열며 결정 19~26
 - [x] SW-M0 `8620c93`: `layout.Tree` → `layout.Strip`(column 목록, `share`로 고르게). 체인 셋 판정 diff 0, 루트 게이트 34/34
 - [x] SW-M1 `ea861b1`: column당 3 한도, `strip>` 줄, pane 체인 16d. 루트 게이트 33/34 — 빨강은 bluetooth의 `btvirt` 간헐(carryover 다섯 번째), 체인만 다시 초록
@@ -56,6 +60,7 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 시도했으나 실패한 접근
 
+- `make quick | tail -1 && git commit`: 파이프의 종료 코드는 `tail`의 것이라 quick이 실패해도 commit된다(`470cded`, 고침 `8147624`). 종료 코드를 따로 받는다.
 - 게이트 출력을 `out/` 안의 파일로 리다이렉트: 게이트가 `out/`을 지워 파일이 사라진다(fd에는 계속 쓴다). scratchpad에 둔다.
 - SW-M2 첫 판의 "셋 이상이면 자리의 폭": 짝수 격자에서 scroll이 resize를 불렀다 — 셋 이상은 모든 column이 왼쪽 반 폭(design 결정 13).
 - 초안의 전제를 저장소와 대조하지 않고 믿기: 10월 말 초안은 3주 사이에 다섯이 틀렸다(`Cmd+Ctrl+F`는 FU의 키 · DY로 SDL3는 이미 돈다 ·
@@ -70,7 +75,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] WY design(`docs/specs/<날짜>-tars-wayland-server-design.md`, 접두사 WY)의 확인 절 — 로드맵 2단의 "확인 절에 넣을 것" 여덟
+- [ ] WY-M0 단계 B(서버 · app workspace · FU를 workspace마다로)는 `wy-research`(pane `w3J:p9`)가 구현 중 — 보고는 scratchpad
+      `wy-research/phase-b.md`. 대조 → 체인 → commit → 단계 C(키 · Cmd 삼킴 · `Cmd+Q` · 체인 `wayland`) → 루트 게이트(35체인)
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
