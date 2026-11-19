@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — SW 끝, 2단 WY-M0 구현 중(단계 B, 2026-11-19). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — SW 끝, WY-M0 단계 B commit, 단계 C 전(2026-11-19). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -28,6 +28,9 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       오래 산다, app 프레임은 verify 안 함): `6043b52`
 - [x] WY-M0 단계 A `470cded` · `8147624`: zig-wayland 의존, Dockerfile 층 22(libwayland 셋), `tars-wl-test`, initrd에 실림. terminal 체인 PASS
 - [x] SW design 결정 1~12 · milestone, 로드맵 · 요구사항 고침: `cac1858`. M2를 열며 결정 13~18(`bc939d2`), M3를 열며 결정 19~26
+- [x] WY-M0 단계 B `22e5d51`: `Workspace`가 `kind` union(결정 15), FU를 workspace마다로(`enterWorkspace`), `terminal/src/wl/server.zig`
+      (소켓 `/run/user/<uid>/wayland-0` · global 다섯 · surface · xdg · commit · `renderApp` · frame), `wl_logic.zig`(순수) + 검사,
+      vendor 키맵. 체인 `pane` · `fullscreen` · `terminal` · `hangul` PASS, verify 잔상 0. 사용자 요청으로 여기서 멈췄다(Claude Code 업데이트)
 - [x] SW-M0 `8620c93`: `layout.Tree` → `layout.Strip`(column 목록, `share`로 고르게). 체인 셋 판정 diff 0, 루트 게이트 34/34
 - [x] SW-M1 `ea861b1`: column당 3 한도, `strip>` 줄, pane 체인 16d. 루트 게이트 33/34 — 빨강은 bluetooth의 `btvirt` 간헐(carryover 다섯 번째), 체인만 다시 초록
 - [x] SW-M2 `4d491ab`: viewport(column 셋 이상이면 반 폭 둘이 보임) · `reveal` · `3/7` 칸 · pane 체인 16e. 루트 게이트 34/34
@@ -75,8 +78,11 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] WY-M0 단계 B(서버 · app workspace · FU를 workspace마다로)는 `wy-research`(pane `w3J:p9`)가 구현 중 — 보고는 scratchpad
-      `wy-research/phase-b.md`. 대조 → 체인 → commit → 단계 C(키 · Cmd 삼킴 · `Cmd+Q` · 체인 `wayland`) → 루트 게이트(35체인)
+- [ ] WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
+      단계 C의 체인 `wayland`가 같은 것을 보므로 거기서 봐도 된다. 보고 파일 `phase-b.md`는 안 쓰였다 — diff는 lead가 대조했다
+      (지운 줄은 리팩터의 옛 판, `fullscreen>` 줄 글자 그대로, 마지막 셸 규칙 `paneCount == 1 and appCount == 0`, 마지막 app이 끝나면 quit)
+- [ ] WY-M0 단계 C(plan 할 일 6~8): 키 갈래 · 키맵 · 셸에서 표에 없는 Cmd 삼키기(`input_test` 단언 셋) · `Cmd+Q` · ping · SIGKILL ·
+      체인 `wayland`(plan의 판정 1~9) · `CHAINS` · 도움말. 그다음 lead: 체인 · verify grep · 루트 게이트(35체인) · 결과 절 · commit
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
 - [ ] `app-layer-0-3`의 이 세션 commit들(`cac1858`부터)은 push하지 않았다 — 사용자가 원하면 push
@@ -102,14 +108,16 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 다음 에이전트에게
 
-1. `git branch --show-current`가 `app-layer-0-3`인지, `herdr --skill`을 읽는다. 서브에이전트 `sw-impl`(pane `w3J:p8`)은 SW 맥락을 든
-   채 살아 있을 수 있다 — WY는 새 맥락이라 새 에이전트를 띄워도 된다(내가 만들지 않은 pane은 닫지 않는다).
-2. WY design의 확인 절은 lead가 직접 읽는다(로드맵 2단의 여덟). zig-wayland · libwayland-server의 크기 같은 조사는 서브에이전트에
-   나눠 맡길 수 있다.
-3. 그리기를 바꾼 milestone은 체인 뒤 `grep -rah 'terminal: verify>' out/gate-logs/<체인> | grep -av ' ok us=' | grep -av ' on bytes='`
-   — `make check`은 verify를 판정하지 않는다(SW-M3이 이것을 건너뛰어 게이트에서 처음 봤다).
-4. 게이트 로그는 `out/` 밖(scratchpad)에 둔다. 결과는 `out/gate-logs/<시각>/failed`가 비었는가. bluetooth `btvirt` 빨강은 알려진 간헐.
+1. `git branch --show-current`가 `app-layer-0-3`, 트리가 clean인지(`22e5d51` 뒤). `herdr --skill`을 다시 읽는다(Claude Code를
+   업데이트했으면 판이 바뀌었을 수 있다). `herdr agent list`로 `sw-impl`(`w3J:p8`) · `wy-research`(`w3J:p9`)가 살아 있는지 —
+   업데이트로 죽었으면 새로 띄운다. WY 맥락은 `wy-research`가 갖고 있었다(쓰던 scratch는 이전 세션 scratchpad의 `wy-research/`,
+   요지는 design 확인 절과 plan 확정 6의 메모에 옮겨 두었다).
+2. 단계 C를 맡긴다 — plan `docs/plans/2026-11-19-tars-wayland-server-wy-m0.md`의 확정 10 · 11과 "새 체인 `wayland`". 긴 보고는 파일로 쓰게
+   한다(Herdr의 `agent read`가 긴 보고의 앞을 못 담는다).
+3. 그리기를 바꾼 단계는 체인 뒤 `grep -rah 'terminal: verify>' out/gate-logs/<체인> | grep -av ' ok us=' | grep -av ' on bytes='`.
+4. 게이트 로그는 `out/` 밖에. 종료 코드는 파이프로 가리지 않는다. bluetooth `btvirt` 빨강은 알려진 간헐.
 5. 진행 방식은 CLAUDE.md의 "설명 → 실행 → 설명". 사용자 위임(2026-11-18): 주요 결정은 Claude가 정하고 design에 이유를 적는다.
+6. 이 브랜치의 이번 세션 commit들(`cac1858`~)은 push하지 않았다.
 
 ## 완료된 작업 (2026-11-14, 0.2.2 공개 — 앞 세션)
 - [x] OD-M0 odin(`c07e944`) · rust 1.100.0(`0a0363e`) · `make iso-full`(`e0cb758`) — 닫기 `c07b325`
