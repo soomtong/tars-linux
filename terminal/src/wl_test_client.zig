@@ -269,7 +269,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, _: *State) void {
             say("keymap size={d}", .{k.size});
             _ = linux.close(k.fd);
         },
-        .key => |k| say("key code={d} state={d}", .{ k.key, @intFromEnum(k.state) }),
+        .key => |k| say("key code={d} state={d}", .{ k.key, @backingInt(k.state) }),
         .modifiers => |m| say("mods depressed=0x{x}", .{m.mods_depressed}),
         else => {},
     }
