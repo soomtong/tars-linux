@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — WY-M2 단계 B 진행 중(A `04c2897`), tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M2 단계 C 진행 중(B `ee8557c`), tars-doom release 대기(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -100,8 +100,8 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
       release 방법 두 갈래: (가) 태그 push → Actions가 빌드 · 업로드(sha256이 바뀌어 manifest를 고치고 wayland 체인 한 번), (나) 로컬 tarball을
       `gh release create`로 올림(sha256 그대로). Actions workflow가 태그에서 함께 돌면 자산이 겹치니 (나)면 workflow를 고르게 손본다
 - [ ] WY-M2(plan `docs/plans/2026-11-20-tars-wayland-server-wy-m2.md`, design 결정 19~26 `94074a9` — WY-M2를 column · 포인터와 배율(WY-M3)로
-      나눴다, 로드맵 3판): 단계 A `04c2897`(slot union, 판정 · `pane>` diff 0). 단계 B를 `wy-impl`이 하는 중(맡김 `wy-m2/task-b.md`,
-      보고 `wy-m2/report-b.md`). 그다음 단계 C(포인터 · `tars-wl-test` 포인터 줄 · `tars-gpu-demo --window` · display 판정 16a~d) → 루트 게이트
+      나눴다, 로드맵 3판): 단계 A `04c2897`(slot union, 판정 · `pane>` diff 0). 단계 B `ee8557c`(column으로 열기 · configure · 합성 · verify 건너뛰기 ·
+      decoration). 단계 C를 `wy-impl`이 하는 중(맡김 `wy-m2/task-c.md`, 보고 `wy-m2/report-c.md`) — 단계 C(포인터 · `tars-wl-test` 포인터 줄 · `tars-gpu-demo --window` · display 판정 16a~d) → 루트 게이트
 
 - [x] (끝) WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
       단계 C의 체인 `wayland`가 같은 것을 보므로 거기서 봐도 된다. 보고 파일 `phase-b.md`는 안 쓰였다 — diff는 lead가 대조했다
