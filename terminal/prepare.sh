@@ -17,5 +17,7 @@ if [ ! -d ghostty-src ]; then
 fi
 ./vendor_stb_truetype.sh
 ./vendor_stb_image.sh
+# WY-M0: Wayland 스캐너가 읽는 프로토콜 xml(build.zig의 `scanner`).
+./vendor_wayland_xml.sh
 
 zig build

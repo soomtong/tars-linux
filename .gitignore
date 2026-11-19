@@ -20,7 +20,7 @@ devlayer/cache/
 devlayer/build/
 
 terminal/ghostty-src/
-# vendor/는 받는 것(stb 헤더 둘)이고 fonts/만 커밋한다(FR-M0). 디렉터리째 무시하면 `!`로 못 되살린다.
+# vendor/는 받는 것(stb 헤더 둘, WY-M0부터 wayland/의 xml 셋)이고 fonts/만 커밋한다(FR-M0). 디렉터리째 무시하면 `!`로 못 되살린다.
 terminal/vendor/*
 !terminal/vendor/fonts/
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Translator = @import("translate_c").Translator;
+const Scanner = @import("wayland").Scanner;
 
 pub fn build(b: *std.Build) void {
     const target = b.resolveTargetQuery(.{
@@ -90,6 +91,33 @@ pub fn build(b: *std.Build) void {
     const display_proto = b.createModule(.{
         .root_source_file = b.path("../shared/display_proto.zig"),
     });
+
+    // WY-M0: Wayland 바인딩(WY design 결정 2 · 5 · 10). zig-wayland의 스캐너가 xml을 읽어 `wayland.zig` 하나를 만들고,
+    // 그 안에 `server`(terminal의 서버)와 `client`(tars-wl-test) 두 이름공간이 함께 있다. xml은 vendor_wayland_xml.sh가
+    // 받는 셋이다(판 · 출처 · sha256은 그 스크립트에) — 경로를 직접 주므로 pkg-config를 부르지 않는다. 스캐너 자체는
+    // 빌드 호스트에서 돈다(zig-wayland가 `b.graph.host`로 만든다).
+    //
+    // generate의 판은 서버가 내는 판이다(결정 5 — 구현한 요청이 다 되는 가장 낮은 판). 그 판보다 새 요청 · 이벤트는
+    // 생성되지 않는다. viewporter.xml은 받아만 두고 M2(SDL3의 2단)에서 여기에 더한다.
+    const scanner = Scanner.create(b, .{
+        .wayland_xml = b.path("vendor/wayland/wayland.xml"),
+        .wayland_protocols = b.path("vendor/wayland"),
+    });
+    scanner.addCustomProtocol(b.path("vendor/wayland/xdg-shell.xml"));
+    scanner.generate("wl_compositor", 4);
+    scanner.generate("wl_shm", 1);
+    scanner.generate("wl_output", 4);
+    scanner.generate("wl_seat", 7);
+    scanner.generate("xdg_wm_base", 5);
+    const wayland_mod = b.createModule(.{ .root_source_file = scanner.result });
+
+    // libwayland는 컨테이너의 x86_64 sysroot에 있다(Dockerfile 층 22 — dpkg -x로 푼 libwayland-dev:amd64의 무버전
+    // `.so` symlink). 대상이 호스트가 아니면 Zig는 시스템 라이브러리 경로를 찾지 않으므로 그 디렉터리를 직접 준다
+    // (WY design 확인 1 — 경로 없이 링크하면 "unable to find dynamic system library … searched paths: none").
+    // 이 디렉터리에는 libc가 없다 — glibc는 Zig가 대상에 맞춰 대므로 섞이지 않는다.
+    const amd64_sysroot = b.graph.environ_map.get("AMD64_SYSROOT") orelse "/usr/local/amd64-sysroot";
+    const amd64_libdir: std.Build.LazyPath = .{ .cwd_relative = b.pathJoin(&.{ amd64_sysroot, "usr/lib/x86_64-linux-gnu" }) };
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -114,6 +142,15 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("screen_args", screen_args);
     // DY-M0: 화면 양보의 약속(`shared/display_proto.zig`). init의 `tars-fullscreen`과 같은 파일이다.
     exe_mod.addImport("display_proto", display_proto);
+    // WY-M0 단계 A: 링크만 한다 — 서버는 아직 안 띄우므로 동작은 그대로다(plan 할 일 1). 단계 B가 `src/wl/`에서
+    // `@import("wayland").server`를 쓴다.
+    //
+    // `needed`: 부르는 심볼이 하나도 없으면 링커가 DT_NEEDED를 버린다(단계 A 실측 — 옵션 없이 빌드한 terminal의
+    // NEEDED에 libwayland-server.so.0이 없었다). 그러면 copy_lib_deps가 그 라이브러리를 initrd에 싣지 않으므로 단계 A의
+    // 판정(initrd 목록)이 서지 않는다. 단계 B가 서버 함수를 부르면 이 옵션 없이도 남는다 — 그때 빼도 된다.
+    exe_mod.addImport("wayland", wayland_mod);
+    exe_mod.addLibraryPath(amd64_libdir);
+    exe_mod.linkSystemLibrary("wayland-server", .{ .use_pkg_config = .no, .needed = true });
 
     // 이 의존도 게스트로 간다. 함께 옮기는 것이 공짜라는 것을 쟀다 —
     // exe_mod만 옮기면 11,218,920바이트에 clean 빌드 71.0초이고, 둘 다
@@ -134,6 +171,23 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     b.installArtifact(exe);
+
+    // WY-M0: 게이트의 Wayland 테스트 클라이언트(WY design 결정 13, plan 확정 3). 서버와 같은 스캐너의 `client`
+    // 이름공간을 쓰려고 terminal의 build에서 나온다. 게스트에서 돌므로 x86_64이고 libwayland-client를 동적으로
+    // 링크한다 — make_initrd.sh가 /usr/bin에 두고 copy_lib_deps가 libwayland-client.so.0을 따라 싣는다.
+    const wl_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/wl_test_client.zig"),
+        .target = target,
+        .optimize = guest_optimize,
+        .link_libc = true,
+    });
+    wl_test_mod.addImport("wayland", wayland_mod);
+    wl_test_mod.addLibraryPath(amd64_libdir);
+    wl_test_mod.linkSystemLibrary("wayland-client", .{ .use_pkg_config = .no });
+    b.installArtifact(b.addExecutable(.{
+        .name = "tars-wl-test",
+        .root_module = wl_test_mod,
+    }));
 
     const pty_test_mod = b.createModule(.{
         .root_source_file = b.path("src/pty_test.zig"),

@@ -12,6 +12,12 @@
             .url = "https://deps.files.ghostty.org/translate_c-02ff0c523fb92a38939b04d0145c4a9602a74d56.tar.gz",
             .hash = "translate_c-2.0.0-Q_BUWltOBwBYABF84EUL208pIFeUIwbBs29FmVBaafN5",
         },
+        // WY-M0: Wayland 바인딩과 스캐너(WY design 결정 2 · 10, 확인 1). 태그 v0.7.0(`fc7672f`,
+        // 2026-10-06)이 Zig 0.17 대응 커밋 뒤의 첫 태그다. hash는 `zig fetch <url>`의 출력이다.
+        .wayland = .{
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/v0.7.0.tar.gz",
+            .hash = "wayland-0.7.0-lQa1kuP8AQD5dW7_o-VKLVD_QbqXe7Zob78r2su7Pyex",
+        },
     },
     .paths = .{
         "build.zig",

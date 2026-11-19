@@ -628,6 +628,22 @@ RUN apt-get update \
     && dpkg -x /tmp/debs/iputils-ping_*.deb "$AMD64_SYSROOT" \
     && rm -rf /tmp/debs /var/lib/apt/lists/*
 
+# 층 22 · libwayland(WY-M0). terminal 안의 Wayland 서버(WY design 결정 1 · 2)와 게이트의 테스트 클라이언트
+# tars-wl-test(결정 13)가 링크한다. 층 21과 같은 까닭으로 끝에 따로 둔다.
+#
+#   libwayland-server0  libwayland-server.so.0  93,800바이트 — terminal의 NEEDED(기준 A)
+#   libwayland-client0  libwayland-client.so.0  77,192바이트 — tars-wl-test의 NEEDED(기준 A, 게이트가 부른다)
+#   libwayland-dev      링크 때 쓰는 무버전 libwayland-{server,client}.so(위 둘을 가리키는 symlink)와 헤더.
+#                       initrd에는 안 간다 — terminal/build.zig가 이 sysroot의 lib 디렉터리를 링크 경로로 준다
+#
+# NEEDED는 둘 다 libffi.so.8 · libc.so.6이고 libffi는 이미 initrd에 있다(위 libffi8, curl · gnutls 사슬) — 새 사슬이
+# 아니다(WY design 확인 2). 판은 trixie의 1.23.1-3.
+RUN apt-get update \
+    && mkdir -p /tmp/debs \
+    && (cd /tmp/debs && apt-get download libwayland-server0:amd64 libwayland-client0:amd64 libwayland-dev:amd64) \
+    && for deb in /tmp/debs/*.deb; do dpkg -x "$deb" "$AMD64_SYSROOT"; done \
+    && rm -rf /tmp/debs /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 # ghcr.io 패키지를 이 저장소에 연결한다(GI design 확인 6 — 저장소 페이지에 보이고 Actions 토큰이 올릴 수

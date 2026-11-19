@@ -182,6 +182,11 @@ chmod 0755 "$WORKDIR/usr/bin/tars-kms-fill"
 # 한 줄 찍고 끝난다.
 cp ../init/zig-out/bin/tars-gpu-demo "$WORKDIR/usr/bin/tars-gpu-demo"
 chmod 0755 "$WORKDIR/usr/bin/tars-gpu-demo"
+# WY-M0: 게이트의 Wayland 테스트 클라이언트(WY design 결정 13). terminal의 build에서 나온다(서버와 같은 스캐너).
+# tars-gpu-demo처럼 glibc 동적이고, NEEDED의 libwayland-client.so.0(과 그 libffi.so.8)은 아래 copy_lib_deps가 싣는다.
+# /usr/bin인 이유는 tars-kms-fill과 같다 — 게이트 판정이 셸에서 부른다(initrd 기준 A).
+cp ../terminal/zig-out/bin/tars-wl-test "$WORKDIR/usr/bin/tars-wl-test"
+chmod 0755 "$WORKDIR/usr/bin/tars-wl-test"
 
 # GL-M3(2026-08-29)에서 terminal이 ReleaseSafe가 됐다. 49,373,565 →
 # 10,577,208바이트이고, 이 파일이 만드는 initrd는 16,199,658 →
@@ -190,7 +195,7 @@ chmod 0755 "$WORKDIR/usr/bin/tars-gpu-demo"
 cp ../terminal/zig-out/bin/terminal "$WORKDIR/terminal"
 chmod 0755 "$WORKDIR/terminal"
 
-# LI-M1. 우리가 빌드한 것(LI-M1 때 다섯, DY-M0에 둘, DY-M2에 하나 더)은 initrd에 놓인 사본만 --strip-debug한다. 그때 다섯의
+# LI-M1. 우리가 빌드한 것(LI-M1 때 다섯, DY-M0에 둘, DY-M2에 하나, WY-M0에 하나 더)은 initrd에 놓인 사본만 --strip-debug한다. 그때 다섯의
 # `.debug_*`가 RAM에서 24.8MB, 이 initrd(gzip)에서 6.3MB였다(LI-M0 실측 1).
 #
 # TF-M4(2026-08-12)부터 strip을 안 했던 것은 "trace가 디버그 정보를 런타임에
@@ -202,7 +207,7 @@ chmod 0755 "$WORKDIR/terminal"
 # 남는다. sysroot의 도구는 이미 strip돼 있다(실측 2).
 #
 # 컨테이너가 arm64라 그냥 strip은 x86_64 ELF를 못 읽는다(실측 4).
-OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo terminal)
+OWN_BINS=(init usr/bin/tars-install usr/bin/tars-service usr/bin/tars-config usr/bin/tars-fullscreen usr/bin/tars-kms-fill usr/bin/tars-gpu-demo usr/bin/tars-wl-test terminal)
 if ! command -v x86_64-linux-gnu-strip >/dev/null; then
   echo "make_initrd: x86_64-linux-gnu-strip not found" >&2
   echo "             devcontainer/Dockerfile installs it with the x86-64 binutils" >&2
@@ -219,6 +224,7 @@ cp ../terminal/vendor/fonts/unifont.otf "$WORKDIR/vendor/fonts/unifont.otf"
 # (ZM-M1). terminal은 glibc 동적 링크다.
 copy_lib_deps "$WORKDIR/terminal"
 copy_lib_deps "$WORKDIR/usr/bin/tars-gpu-demo"
+copy_lib_deps "$WORKDIR/usr/bin/tars-wl-test"
 
 # ── 유저랜드 바이너리 ────────────────────────────────────────────────────
 #
