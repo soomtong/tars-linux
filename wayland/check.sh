@@ -3,7 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-# WY 체인 — terminal 안의 Wayland 서버(WY-M0). 서른다섯번째 체인.
+# WY 체인 — terminal 안의 Wayland 서버(WY-M0)와 그 위의 둠(WY-M1). 서른다섯번째 체인.
 #
 # 이 게이트가 증명하는 사슬 전체(WY-M0 plan "새 체인 `wayland`"의 판정 1~9):
 #   terminal이 `/run/user/<uid>/wayland-0`을 열고 셸에 `WAYLAND_DISPLAY` · `XDG_RUNTIME_DIR`을 준다
@@ -15,7 +15,11 @@ cd "$(dirname "$0")" || exit 1
 #   → Cmd+Q가 close를 보내 클라이언트가 끝나고 workspace가 사라진다. close를 무시하는 클라이언트는 ping에도 답이 없어
 #     2초 뒤 SIGKILL로 끝난다
 #
-# 부팅 하나, NIC 없음, 디스크 없음(plan). 디스크가 없으니 셸은 root(fish)이고 소켓은 `/run/user/0`이다. 키보드는 QEMU의
+# WY-M1: 부팅 2가 홈 디스크에 doom 묶음(tars-doom + Freedoom Phase 1)을 얹고 판정 10~15를 본다 — 셸에서 띄운 tars-doom이
+#   320x200을 4배로 화면 가득(at=0,0) 그리고, 상태 줄의 멈춘 상자가 실측 색이며, Ctrl(evdev 29)이 권총을 쏴 탄약 숫자가 바뀌고,
+#   Cmd+1 뒤의 셸이 답하고 Cmd+2로 돌아오며, Cmd+Q에 둠이 스스로 끝난다(pong · close를 포트가 받는다 — SIGKILL 없음).
+#
+# 부팅 1은 NIC 없음, 디스크 없음(plan). 디스크가 없으니 셸은 root(fish)이고 소켓은 `/run/user/0`이다. 키보드는 QEMU의
 # PS/2라 기본값(auto)이 pc로 읽는다 — Cmd가 Alt 자리다(`keyboard=pc`의 맞바꿈, KK design 결정 3). 그래서 이 체인의
 # Cmd는 `alt-`다(input 체인 판정 10 · 12와 같은 모양). monitor 포트는 45508 — 예약 범위(RP-M0)에서 45507 다음 빈 자리다.
 #
@@ -152,37 +156,54 @@ check_app_screen() {
   echo "${tag}: 3366cc inside the window, the four corners black"
 }
 
-echo "=== boot: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt) ==="
-qemu-system-x86_64 \
-  -nic none \
-  -m "$GUEST_MEM" \
-  -kernel ../kernel/build/arch/x86/boot/bzImage \
-  -initrd ../kernel/initrd.cpio \
-  -append "console=ttyS0" \
-  -vga none \
-  -device virtio-gpu-pci,xres=${XRES},yres=${YRES} \
-  -display none \
-  -serial file:"$LOG" \
-  -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
-  -no-reboot &
-QEMU_PID=$!
+# 부팅 하나. 인자는 QEMU에 더할 것(부팅 2의 홈 디스크). 셸은 두 부팅 다 root다 — 부팅 2도 설정 디스크가 없어 user=가
+# 없다(`no user= …, shell runs as root`). 홈 디스크만으로 init은 /home을 붙이고 묶음을 얹는다.
+boot() {
+  LOG="$(mktemp)"
+  qemu-system-x86_64 \
+    -nic none \
+    -m "$GUEST_MEM" \
+    -kernel ../kernel/build/arch/x86/boot/bzImage \
+    -initrd ../kernel/initrd.cpio \
+    -append "console=ttyS0" \
+    -vga none \
+    -device virtio-gpu-pci,xres=${XRES},yres=${YRES} \
+    -display none \
+    "$@" \
+    -serial file:"$LOG" \
+    -monitor tcp:127.0.0.1:${MONITOR_PORT},server,nowait \
+    -no-reboot &
+  QEMU_PID=$!
 
-ready=0
-for _ in $(seq 1 120); do
-  if grep -a "terminal: screen>" "$LOG" >/dev/null; then ready=1; break; fi
-  if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+  local ready=0
+  for _ in $(seq 1 120); do
+    if grep -a "terminal: screen>" "$LOG" >/dev/null; then ready=1; break; fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  [ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
+  wait_for_screen 'root@tars ~#' || report_failure "the shell prompt never showed up"
   sleep 1
-done
-[ "$ready" = "1" ] || report_failure "terminal never rendered a prompt"
-wait_for_screen 'root@tars ~#' || report_failure "the shell prompt never showed up"
-sleep 1
 
-connected=0
-for _ in $(seq 1 20); do
-  if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
-  sleep 0.5
-done
-[ "$connected" = "1" ] || report_failure "could not connect to the QEMU monitor on port ${MONITOR_PORT}"
+  local connected=0
+  for _ in $(seq 1 20); do
+    if exec 3<>"/dev/tcp/127.0.0.1/${MONITOR_PORT}"; then connected=1; break; fi
+    sleep 0.5
+  done
+  [ "$connected" = "1" ] || report_failure "could not connect to the QEMU monitor on port ${MONITOR_PORT}"
+}
+
+stop_boot() {
+  exec 3<&- 2>/dev/null
+  exec 3>&- 2>/dev/null
+  kill "$QEMU_PID" 2>/dev/null || true
+  wait "$QEMU_PID" 2>/dev/null || true
+  QEMU_PID=""
+}
+
+# ══ 부팅 1 — 디스크 없음, tars-wl-test ═══════════════════════════════════
+echo "=== boot 1: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt) ==="
+boot
 
 tlog | grep -a 'terminal: keyboard> open .* kind=pc' >/dev/null ||
   report_failure "the PS/2 keyboard was not read as pc — this chain's Cmd (alt) would be wrong"
@@ -344,9 +365,145 @@ if tlog | grep -a 'terminal: verify> mismatch' >/dev/null; then
 fi
 echo "(9): verify lines $(count_log 'terminal: verify> '), no mismatch"
 
-exec 3<&- 2>/dev/null
-exec 3>&- 2>/dev/null
-kill "$QEMU_PID" 2>/dev/null || true
-wait "$QEMU_PID" 2>/dev/null || true
-QEMU_PID=""
-echo "PASS: WY-M0 — the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s"
+# 이미지의 판 — 부팅 2의 묶음 version 파일이 이것과 같아야 init이 얹는다(display 체인 판정 9와 같은 줄).
+IMAGE_VER="$(grep -aoE 'tars-init: starting as PID 1 \(TARS [^)]+\)' "$LOG" | head -1 | sed -E 's/.*TARS ([^)]+)\)/\1/')"
+[ -n "$IMAGE_VER" ] || report_failure "no 'starting as PID 1 (TARS …)' line to read the image version from"
+stop_boot
+
+# ══ 부팅 2 — 홈 디스크에 doom 묶음, tars-doom(WY-M1) ═══════════════════════
+#
+# 묶음은 make dev-layers가 구운 것이다(make check CHAIN=wayland와 make gate가 먼저 부른다). doom은 standalone이라
+# base 없이 얹힌다(initrd의 glibc · libwayland-client만 쓴다). init은 /home/.tars/layers의 version이 이미지와 같을 때만 얹는다.
+# 모양은 display 체인의 부팅 3이다. 설정 디스크가 없으니 셸은 root이고 키보드는 부팅 1처럼 pc(Cmd = alt)다.
+#
+# 둠은 `-warp 1 1 -skill 1 -nomonsters`로 띄운다 — 타이틀 4.9초 뒤의 데모 순환을 건너 E1M1에서 바로 선다(결정적인 시작).
+# 엔진은 320x200을 그리고 서버가 4배로 늘려 1280 × 800을 꽉 채운다(at=0,0). 상태 줄은 엔진의 y 168..199, 화면의 y 672..799다.
+[ -f ../devlayer/build/doom.sqfs ] || report_failure "no devlayer/build/doom.sqfs — run make dev-layers"
+HOME_IMG="${REPO_ROOT}/out/wy-home.img"
+LAYER_SEED="$(mktemp -d)"
+mkdir -p "$LAYER_SEED/.tars/layers"
+cp ../devlayer/build/doom.sqfs "$LAYER_SEED/.tars/layers/"
+echo "$IMAGE_VER" > "$LAYER_SEED/.tars/layers/version"
+rm -f "$HOME_IMG"
+truncate -s $(( $(du -sm "$LAYER_SEED" | cut -f1) + 128 ))M "$HOME_IMG"
+mkfs.ext4 -F -q -L tars-home -d "$LAYER_SEED" "$HOME_IMG"
+rm -rf "$LAYER_SEED"
+echo "=== boot 2: root with the doom bundle on the home disk (version ${IMAGE_VER}) ==="
+boot -drive file="$HOME_IMG",if=virtio,format=raw
+
+SHOT="${SCREENS_DIR}/doom.ppm"
+
+# 상자 하나의 픽셀 전부의 sha1(앞 12자). ppm_ink(가장 많은 색 + 다른 픽셀 수)는 숫자 50과 49를 못 가를 수 있어서다.
+box_sum() {
+  perl -MDigest::SHA=sha1_hex -e '
+    my ($f, $x0, $y0, $w, $h) = @ARGV;
+    open(my $fh, "<:raw", $f) or die "$f: $!\n";
+    local $/; my $d = <$fh>;
+    $d =~ s/\AP6\s+(\d+)\s+\d+\s+\d+\s//s or die "$f: not a P6 ppm\n";
+    my $row = $1 * 3; my $s = "";
+    for my $y ($y0 .. $y0 + $h - 1) { $s .= substr($d, $y * $row + $x0 * 3, $w * 3) }
+    print substr(sha1_hex($s), 0, 12), "\n";' "$SHOT" "$@"
+}
+
+# 상태 줄의 멈춘 상자(판정 11) — 글자판 "HEALTH"(엔진 x 54..94 · y 190..197, 4배). 얼굴(x 143..176)과 숫자를 피한 자리라
+# 게임이 돌아도 안 바뀐다. 값은 첫 실측 screendump(2026-11-20, Freedoom 0.13.0의 STBAR)로 정했다 — 다섯 장이 같았다.
+STBAR_BOX="216 760 160 32"
+STBAR_WANT="bg=1c1c1c ink=4336"
+# 탄약 숫자 칸 — 엔진의 ST_AMMOX 44(오른쪽 끝) · ST_AMMOY 171, 큰 숫자 셋(14 × 16)이 x 2..44에 선다. 4배로 x 8..183, y 684..747.
+AMMO_BOX=(8 684 176 64)
+
+check_stbar() {
+  local tag="$1" a b
+  screendump "$SHOT" || report_failure "${tag}: screendump did not write ${SHOT}"
+  cp "$SHOT" "${SCREENS_DIR}/${tag}-1.ppm"
+  # shellcheck disable=SC2086
+  a="$(ppm_ink "$SHOT" $STBAR_BOX)"
+  sleep 1
+  screendump "$SHOT" || report_failure "${tag}: screendump did not write ${SHOT}"
+  cp "$SHOT" "${SCREENS_DIR}/${tag}-2.ppm"
+  # shellcheck disable=SC2086
+  b="$(ppm_ink "$SHOT" $STBAR_BOX)"
+  [ "$a" = "$b" ] || report_failure "${tag}: the status bar box at ${STBAR_BOX} changed in a second (${a} -> ${b})"
+  [ "$a" = "$STBAR_WANT" ] || report_failure "${tag}: the status bar box at ${STBAR_BOX} is ${a}, want ${STBAR_WANT}"
+  echo "${tag}: the status bar box at ${STBAR_BOX} is ${a} in two shots a second apart"
+}
+
+# ── 판정 10: 묶음 · toplevel · 4배 ─────────────────────────────────────
+echo "=== (10) the doom bundle is laid over /usr, tars-doom opens workspace 2 at 320x200 scale 4 ==="
+wait_for_log 'tars-init: overlay /usr from 1 layers in [0-9]+ms' ||
+  report_failure "(10) init did not lay the doom bundle over /usr"
+type_text 'tars-doom -warp 1 1 -skill 1 -nomonsters > /tmp/doom.log &'
+type_keys ret
+wait_for_log 'terminal: wl> client pid=[0-9]+' || report_failure "(10) no 'wl> client' line"
+DOOM_PID="$(tlog | grep -aoE 'terminal: wl> client pid=[0-9]+' | tail -n 1 | sed 's/.*pid=//')"
+wait_for_log 'terminal: wl> toplevel id=1 ws=2' || report_failure "(10) no 'wl> toplevel id=1 ws=2'"
+wait_for_log 'terminal: wl> commit id=1 buf=320x200 scale=4 at=0,0' ||
+  report_failure "(10) no 'wl> commit id=1 buf=320x200 scale=4 at=0,0'"
+wait_for_count 'terminal: pane> ws=2/2 app id=1' 1 || report_failure "(10) doom's workspace never came to the front"
+echo "(10): overlay from 1 layer, doom (pid ${DOOM_PID}) is workspace 2, 320x200 at scale 4 from 0,0"
+
+# ── 판정 11: 상태 줄의 멈춘 상자 ─────────────────────────────────────────
+echo "=== (11) a still box of the status bar ==="
+# E1M1에 들어서는 wipe(약 1초)가 끝나기를 기다린다.
+sleep 3
+check_stbar doom-first
+
+# ── 판정 12: Ctrl이 쏜다 ───────────────────────────────────────────────
+#
+# sendkey의 기본 누름은 짧아 누름과 뗌이 엔진의 한 tic 안에 들 수 있다 — 그러면 G_BuildTiccmd가 쥔 것을 못 본다. 0.3초 쥔다.
+echo "=== (12) Ctrl goes to doom as evdev 29 and the pistol fires (the ammo digits change) ==="
+AMMO_BEFORE="$(box_sum "${AMMO_BOX[@]}")"
+echo "sendkey ctrl 300" >&3
+wait_for_log 'terminal: wl> key code=29 state=1 to=1' || report_failure "(12) no 'wl> key code=29 state=1 to=1'"
+wait_for_log 'terminal: wl> key code=29 state=0 to=1' || report_failure "(12) no 'wl> key code=29 state=0 to=1'"
+AMMO_AFTER=""
+for _ in $(seq 1 20); do
+  sleep 0.5
+  screendump "$SHOT" || report_failure "(12) screendump did not write ${SHOT}"
+  AMMO_AFTER="$(box_sum "${AMMO_BOX[@]}")"
+  [ "$AMMO_AFTER" != "$AMMO_BEFORE" ] && break
+done
+cp "$SHOT" "${SCREENS_DIR}/doom-fired.ppm"
+[ "$AMMO_AFTER" != "$AMMO_BEFORE" ] ||
+  report_failure "(12) the ammo digits at ${AMMO_BOX[*]} did not change after Ctrl (${AMMO_BEFORE})"
+echo "(12): Ctrl reached doom as 29, the ammo digits changed (${AMMO_BEFORE} -> ${AMMO_AFTER})"
+
+# ── 판정 13: Cmd+1 · Cmd+2 ─────────────────────────────────────────────
+echo "=== (13) Cmd+1 shows the shell, it answers, Cmd+2 shows doom again ==="
+SHELL_FRONT="$(count_log 'terminal: pane> ws=1/2 panes=1 ')"
+type_keys alt-1
+wait_for_count 'terminal: pane> ws=1/2 panes=1 ' $((SHELL_FRONT + 1)) || report_failure "(13) Cmd+1 did not bring the shell back"
+# 게스트의 셸이 펼칠 글자다 — 여기서 펼치면 안 된다.
+# shellcheck disable=SC2016
+type_text 'echo alive-$status'
+type_keys ret
+wait_for_screen 'alive-0' || report_failure "(13) the shell did not answer while doom ran behind it"
+type_keys alt-2
+wait_for_count 'terminal: pane> ws=2/2 app id=1' 2 || report_failure "(13) Cmd+2 did not bring doom back"
+sleep 1
+check_stbar doom-again
+echo "(13): the shell answered behind doom, Cmd+2 brought doom back with the same status bar box"
+
+# ── 판정 14: Cmd+Q — 둠이 스스로 끝난다 ─────────────────────────────────
+echo "=== (14) Cmd+Q: doom gets close and exits by itself, no SIGKILL ==="
+SHELL_ALONE="$(count_log 'terminal: pane> ws=1/1 panes=1 ')"
+type_keys alt-q
+wait_for_log 'terminal: wl> close id=1' || report_failure "(14) Cmd+Q sent no 'wl> close id=1'"
+wait_for_log "terminal: wl> gone pid=${DOOM_PID}" || report_failure "(14) doom never went (no 'wl> gone pid=${DOOM_PID}')"
+wait_for_log 'terminal: wl> unmap id=1 ws=2' || report_failure "(14) doom's workspace was not removed"
+wait_for_count 'terminal: pane> ws=1/1 panes=1 ' $((SHELL_ALONE + 1)) || report_failure "(14) the shell is not alone after Cmd+Q"
+sleep 2.5
+if tlog | grep -a 'terminal: wl> kill ' >/dev/null; then
+  report_failure "(14) doom was killed — it should have answered the ping and left on close"
+fi
+echo "(14): doom left on close by itself, its workspace is gone"
+
+# ── 판정 15: 키 줄의 수 · render verify ──────────────────────────────────
+echo "=== (15) wl> key lines, no render verify mismatch ==="
+if tlog | grep -a 'terminal: verify> mismatch' >/dev/null; then
+  report_failure "(15) render verify saw a mismatch"
+fi
+echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
+stop_boot
+
+echo "PASS: WY-M0 · WY-M1 — the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

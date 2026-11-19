@@ -2,7 +2,7 @@
 
 Date: 2026-11-19
 Design: `docs/specs/2026-11-19-tars-wayland-server-design.md`(Milestone 표의 WY-M1, 결정 13)
-Status: plan. 브랜치 `app-layer-0-3`. WY-M0의 루트 게이트를 보며 썼다 — 게이트 결과로 바뀌는 자리가 있으면 구현 전에 고친다.
+Status: 구현 · 게이트 끝(2026-11-20). 남은 것은 tars-doom의 push · release와 manifest sha256 바꾸기(결과 끝). 브랜치 `app-layer-0-3`.
 
 ## 누가 무엇을 하나
 
@@ -77,4 +77,19 @@ Status: plan. 브랜치 `app-layer-0-3`. WY-M0의 루트 게이트를 보며 썼
 
 ## 결과
 
-(구현 뒤에 쓴다.)
+1. 포트(tars-doom 브랜치 `wayland`, 로컬 commit `5179493`, push 안 함): `doomgeneric_wayland.c`(626줄) · `Makefile.wayland` · scanner 산출물 ·
+   release workflow · `scripts/build-local.sh`. 첫 컴파일에 오류 없음, 포트 파일의 경고 0(엔진의 upstream 경고 14는 그대로).
+   NEEDED는 `libwayland-client.so.0` · `libc.so.6`(libm은 as-needed로 빠짐), 요구 glibc 최고 `GLIBC_2.34`, `%ymm` 0, strip한 실행 파일 488,264 B,
+   tarball 약 226 KB. tarball의 mtime이 마지막 commit 시각이라 commit마다 sha256이 바뀐다 — `5179493`의 것이 `0da0b4a7…`.
+2. 묶음 `doom`: zstd15 약 9 MiB(`doom.sqfs` 9,408,512 B, 풀면 27 MiB), 기본 ISO가 그만큼 커진다. devtools 체인의 묶음 수 13 → 14.
+3. 체인 `wayland` 부팅 2는 설정 디스크 없이 홈 디스크만(root 셸) — init은 계정 없이도 홈 디스크의 묶음을 얹는다. 판정 11의 상자는
+   상태 줄 글자판 "HEALTH"(`216 760 160 32`, `bg=1c1c1c ink=4336`) — 처음 고른 자리는 얼굴 테두리와 겹쳐 버렸다. Freedoom 판에 묶인 값이다.
+4. 판정 12의 Ctrl은 `sendkey ctrl 300`(0.3초 쥠) — 기본 누름은 누름 · 뗌이 한 tic에 들어 엔진이 못 볼 수 있다. 탄약 칸은 `ppm_ink`가 50과
+   49를 못 가를 수 있어 상자 sha1로 본다.
+5. `Cmd+Q`에 둠이 스스로 끝났다(`wl> kill` 없음). `wl> key` 줄은 4(Ctrl 누름 · 뗌, Cmd(125) 누름 둘 — app workspace에서 누른 Cmd는
+   클라이언트에 가고 포트가 버린다).
+6. 체인 단독: wayland 339초 · display 451초 · devtools 1,103초 PASS, verify mismatch 0. 루트 게이트 35/35 첫 판 PASS(prebuild 348초 + lanes 1,552초,
+   `out/gate-logs/20261119-155133`, verify 줄 12,858 중 이상 0, 잘린 줄 0). WY-M1 체인 61초. 묶음은 tars-doom `5179493`의 로컬 tarball.
+
+남은 것: tars-doom의 push · `v0.1.0` release(사용자 확인 뒤), 그 뒤 manifest의 sha256을 GitHub 자산의 것으로. 숨은 동안 쥔 키를 떼는
+것(`leave`)은 체인이 직접 보지 않는다 — 녹화 A에서 사람이 본다.

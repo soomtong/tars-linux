@@ -1291,3 +1291,30 @@ kind = "upstream"
 url = "https://github.com/soomtong/fakesteak/releases/download/v1.0.0/fakesteak-linux-x86_64.tar.gz"
 sha256 = "b0abec76012ceddcdad1fd8793cd0de1bd9d805e99332dd97d9415c6190cca82"
 exe = ["fakesteak"]
+
+# ── doom(WY-M1) — 둠이 Wayland 창으로. 터미널이 compositor다(WY design 결정 13) ─────────────
+# tars-doom: 사용자의 fork(soomtong/tars-doom, doomgeneric, GPL-2.0)가 GitHub Actions(debian:trixie x86_64)로 내는 Wayland 포트.
+# glibc · libwayland-client 동적 — 둘 다 initrd에 있어 base 없이 혼자 실린다(standalone-bundles). 320x200을 그리고 서버가 정수 배로 늘린다.
+# 임시: v0.1.0 release 전이라 sha256은 로컬 컨테이너 빌드(tars-doom `5179493`, scripts/build-local.sh)의 것이고 그 tarball을 devlayer/cache/<sha256>에
+# 손으로 둔다. release 뒤 url의 자산을 받아 GitHub digest로 바꾼다.
+[[tool]]
+name = "tars-doom"
+bundle = "doom"
+version = "0.1.0"
+kind = "upstream"
+url = "https://github.com/soomtong/tars-doom/releases/download/v0.1.0/tars-doom-0.1.0-linux-x86_64.tar.gz"
+sha256 = "0da0b4a742ef5cb10324a7dba59200b22f44a7efae1374a415ed81a139e49137"
+exe = ["bin/tars-doom"]
+
+# Freedoom Phase 1 0.13.0(BSD 3조항). sha256은 서명된 freedoom-0.13.0-CHECKSUM의 값과 받은 파일이 같다(GitHub digest는 옛 릴리스라 비었다).
+# hook이 zip에서 freedoom1.wad와 COPYING · CREDITS만 tars-doom의 share/doom/에 푼다 — 포트가 -iwad 없이 찾는 자리(실행 파일의
+# ../share/doom/freedoom1.wad)이고, Phase 2 · PDF 약 33 MB를 버린다. 버전 열은 into의 규칙대로 tars-doom의 판이다(rust-src · bash-docset과 같다).
+[[tool]]
+name = "freedoom"
+bundle = "doom"
+version = "0.1.0"
+kind = "upstream"
+url = "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip"
+sha256 = "3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59"
+into = "tars-doom"
+hook = "freedoom"

@@ -29,6 +29,7 @@ Wayland 앱은 셸에서 그냥 띄웁니다(`WAYLAND_DISPLAY`가 잡혀 있습�
 그 앱으로 갑니다 — 위 표의 키(`Cmd+1`~`9` · `Cmd+Q` …)만 빼고요(`Cmd+W` · `Cmd+T`는 앱의 것입니다). `Cmd+1`로 셸에 돌아오고,
 앱이 끝나면 그 탭이 사라집니다.
 `tars-wl-test --color 3366CC --size 300x200 &`는 한 색 창을 띄우고 받은 키를 찍는 시험입니다.
+`tars-doom &`는 둠(Freedoom Phase 1, doom 묶음)입니다 — 화살표로 걷고 `Ctrl` 쏘기 · `Space` 문 열기 · `Shift` 달리기 · `,` `.` 옆걸음 · `1`~`7` 무기 · `Esc` 메뉴, `Cmd+Q`로 끝냅니다.
 
 화면을 직접 그리는 프로그램(`/dev/dri/card0`을 여는 것)은 `tars-fullscreen <명령>`으로 띄웁니다. 그 프로그램이 끝나면 셸 화면이
 돌아옵니다. 그동안 키보드와 마우스는 그 프로그램의 것입니다(셸에는 안 들어갑니다). 프로그램이 멈추면 `Ctrl+Cmd+Backspace`

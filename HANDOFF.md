@@ -1,4 +1,4 @@
-# HANDOFF: App Layer(0.3) — SW 끝, WY-M0 단계 B commit, 단계 C 전(2026-11-19). 브랜치 `app-layer-0-3`
+# HANDOFF: App Layer(0.3) — WY-M0 끝(`6185c0f`), WY-M1(둠) 진행 중(2026-11-20). 브랜치 `app-layer-0-3`
 
 ## 목표
 
@@ -20,6 +20,18 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 `.result.pane.pane_id`) → `herdr agent start <이름> --kind claude --pane <id>` → `herdr agent prompt <이름> "<일>" --wait --timeout <ms>` →
 `herdr agent read <이름> --source recent-unwrapped`. 내가 만들지 않은 pane은 닫지 않는다. 서브에이전트는 commit하지 않고, lead가 diff를
 실제 파일과 대조한다. 기억 `feedback_herdr_subagents`.
+
+## 완료된 작업 (2026-11-19~20, WY-M0 단계 C · WY-M1 착수 — 이 세션)
+
+- [x] WY-M0 단계 C `6185c0f`(서브에이전트 `wy-impl`, Herdr pane `w3J:pA`, Opus): R-KEY-1 표를 `input.State.tableChord` 하나로 —
+      셸 `chord`와 app `appKey`가 같이 본다. 셸에서 표 밖 Cmd는 삼킨다(`input_test` 단언 여섯). app에는 evdev 코드 + modifiers, `Held`가
+      보낸 적 없는 뗌을 거른다. `Cmd+Q` = close + ping + 2초 → SIGKILL(`poll` 시간 제한). 체인 `wayland`(판정 1~9, 38초) · `CHAINS` 35.
+      lead가 대조에서 고친 것: `Cmd+T`도 `Cmd+W`처럼 app의 것(요구사항 결정 3, plan 확정 10과 어긋났었다).
+- [x] 루트 게이트 첫 판에서 DY 12a 빨강 — SDL3 데모가 셸의 `WAYLAND_DISPLAY`(단계 B)로 우리 서버에 붙었다. design 결정 18:
+      `tars-fullscreen`이 exec 전에 `WAYLAND_DISPLAY` · `XDG_RUNTIME_DIR`을 뺀다(하나만 빼면 libwayland가 기본 `wayland-0`을 찾는다).
+      둘째 판 34/35 — BT `btvirt` 간헐(carryover 여섯 번째), 체인 단독 초록. 결과는 plan 결과 1~11
+- [x] WY-M1 plan `1cd8250`(조사 `wy-impl`: 세션 scratchpad `wy-m1/research.md`). tars-doom 브랜치 `wayland`에 포트 코드
+      (`doomgeneric_wayland.c` · `Makefile.wayland` · release workflow · `scripts/build-local.sh`) — commit · push 안 함
 
 ## 완료된 작업 (2026-11-18~19, SW — 이 세션)
 
@@ -78,10 +90,14 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 남은 작업
 
-- [ ] WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
+- [ ] WY-M1 단계 A 빌드 확인 + 단계 B(묶음 `doom` · 체인 `wayland` 부팅 2 · 도움말)를 `wy-impl`이 하는 중 — 보고는 세션 scratchpad
+      `wy-m1/report-b.md`. 그다음 lead: 대조 · 루트 게이트 · commit. tars-doom의 commit · push · `v0.1.0` release는 사용자에게 묻고 한다
+      (밖으로 나가는 일). release 뒤 manifest의 sha256을 GitHub digest로 바꾼다(로컬 tarball과 다를 수 있다)
+
+- [x] (끝) WY-M0 단계 B의 남은 확인: 수동 부팅으로 `tars-wl-test`가 새 workspace에 창으로 뜨는지(서브에이전트가 하던 중에 멈췄다).
       단계 C의 체인 `wayland`가 같은 것을 보므로 거기서 봐도 된다. 보고 파일 `phase-b.md`는 안 쓰였다 — diff는 lead가 대조했다
       (지운 줄은 리팩터의 옛 판, `fullscreen>` 줄 글자 그대로, 마지막 셸 규칙 `paneCount == 1 and appCount == 0`, 마지막 app이 끝나면 quit)
-- [ ] WY-M0 단계 C(plan 할 일 6~8): 키 갈래 · 키맵 · 셸에서 표에 없는 Cmd 삼키기(`input_test` 단언 셋) · `Cmd+Q` · ping · SIGKILL ·
+- [x] (끝, `6185c0f`) WY-M0 단계 C(plan 할 일 6~8): 키 갈래 · 키맵 · 셸에서 표에 없는 Cmd 삼키기(`input_test` 단언 셋) · `Cmd+Q` · ping · SIGKILL ·
       체인 `wayland`(plan의 판정 1~9) · `CHAINS` · 도움말. 그다음 lead: 체인 · verify grep · 루트 게이트(35체인) · 결과 절 · commit
 - [ ] 소개 페이지(`gh-pages`의 `data.js`)에 SW를 안 올렸다 — 사이트는 `main` 줄 기준(`commits`가 `rev-list --count main`)이고 SW는
       `app-layer-0-3`에만 있다. 0.3 줄이 `main`에 들어갈 때 올린다(사용자가 먼저 원하면 그때)
@@ -108,7 +124,7 @@ B strip과 남의 클라이언트 · C 파일 관리자 · D 서핑)으로 끝�
 
 ## 다음 에이전트에게
 
-1. `git branch --show-current`가 `app-layer-0-3`, 트리가 clean인지(`22e5d51` 뒤). `herdr --skill`을 다시 읽는다(Claude Code를
+1. `git branch --show-current`가 `app-layer-0-3`, 트리가 clean인지(`1cd8250` 뒤, WY-M1 단계 B가 진행 중이면 그 변경). `herdr --skill`을 다시 읽는다(Claude Code를
    업데이트했으면 판이 바뀌었을 수 있다). `herdr agent list`로 `sw-impl`(`w3J:p8`) · `wy-research`(`w3J:p9`)가 살아 있는지 —
    업데이트로 죽었으면 새로 띄운다. WY 맥락은 `wy-research`가 갖고 있었다(쓰던 scratch는 이전 세션 scratchpad의 `wy-research/`,
    요지는 design 확인 절과 plan 확정 6의 메모에 옮겨 두었다).
