@@ -20,6 +20,9 @@ cd "$(dirname "$0")" || exit 1
 #   OpenGL ES(Mesa)로 화면을 그리며 키를 udevd 없이 받는 것을 본다(결정 10, M2 plan 확인 3). 묶음이 없는 부팅 2에서는
 #   데모가 이유를 말하고 1로 끝난다.
 #   DY-M3: 부팅 3처럼 얹힌 묶음이 base · gpu 둘뿐이면(GPU 데모 판) 첫 패널이 데모를 스스로 화면 가득 띄우고 Esc로 셸에 돌아온다.
+#   WY-M2: 부팅 3의 셸에서 `tars-gpu-demo --window 640x400`을 그냥 치면 SDL3가 Wayland를 골라 terminal의 서버에 창이 되고 셸
+#   오른쪽 column에 그린다(Mesa swrast → wl_shm). 클릭이 키보드를 그 창에 주고 셸 클릭이 되찾으며 Cmd+Q에 스스로 끝난다(판정 16a~16d).
+#   이 부팅에는 USB 마우스가 하나 있다.
 #
 # 셸은 사용자 dyuser(uid 1000)다 — 설정 디스크의 user=와 tars-home 라벨의 ext4 디스크가 함께 있어야 init이
 # root 대신 사용자로 띄운다(`pickUser`). 양보의 요점이 "사용자의 프로그램이 화면을 잡는다"라서다.
@@ -502,7 +505,9 @@ truncate -s $(( $(du -sm "$LAYER_SEED" | cut -f1) + 128 ))M "$HOME_IMG"
 mkfs.ext4 -F -q -L tars-home -d "$LAYER_SEED" "$HOME_IMG"
 rm -rf "$LAYER_SEED"
 echo "=== boot 3: ${USER_NAME} with the base and gpu bundles (version ${IMAGE_VER}) ==="
-boot --autorun -drive file="$CONFIG_IMG",if=virtio,format=raw -drive file="$HOME_IMG",if=virtio,format=raw
+# WY-M2: USB 마우스 하나(판정 16b — 클릭으로 창에 포커스). 움직이기 전에는 화살표가 없어 판정 12a~15의 화면은 그대로다.
+boot --autorun -drive file="$CONFIG_IMG",if=virtio,format=raw -drive file="$HOME_IMG",if=virtio,format=raw \
+  -usb -device usb-mouse,id=dymouse
 
 # 화면 가운데(16 × 16)의 색이 1초 사이에 바뀔 때까지 다시 뜬다 — 데모는 매 frame 띠의 색을 돌리므로, 바뀌면 GL이 그리고
 # 있다(terminal의 화면은 그 자리가 멈춰 있다). 30초 — llvmpipe가 CPU 하나에서 처음 뜨는 시간을 넉넉히.
@@ -607,6 +612,126 @@ if tlog | grep -aE 'tars-init: restarting|terminal: display> (waiting for master
 fi
 screendump "$SHOT" || report_failure "(15) screendump did not write ${SHOT}"
 echo "(15) the shell answers on a redrawn console; no restart"
+
+# ── 판정 16a~16d: SDL3 데모가 Wayland 창으로 셸 오른쪽 column에(WY-M2) ────────
+#
+# `tars-gpu-demo --window 640x400`을 셸에서 그냥 친다(tars-fullscreen 없이). 셸에 WAYLAND_DISPLAY가 있어 SDL3가 Wayland를
+# 고르고, Mesa는 dmabuf · wl_drm이 없는 서버라 swrast(llvmpipe)로 wl_shm에 그린다(WY design 결정 26). 창 모드라 서버가 셸
+# 오른쪽 column으로 열고(결정 21), RESIZABLE이라 SDL이 configure 크기(616 × 752 — 여백 20 · 격자 155 × 47의 오른쪽 반)를
+# 따른다. 데모의 단계 줄은 stderr라 `2>`로 받는다. 키보드 포커스는 새 column으로 가므로 셸 글자를 볼 때는 Cmd+[로 셸에 둔다.
+# 이 부팅의 Cmd는 meta_l(keyboard=apple).
+
+hmp() {
+  echo "$1" >&3
+  sleep 0.05
+}
+
+last_at() {
+  tlog | grep -a 'terminal: pointer> at ' | tail -n 1 | tr -d '\r' | from_terminal
+}
+
+wait_for_at() {
+  local pattern="$1" i line
+  for i in $(seq 1 150); do
+    line="$(last_at)"
+    if grep -aqE -- "$pattern" <<<"$line"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 포인터를 (X, Y)로(pointer 체인의 move_to). 첫 움직임 전에는 at 줄이 없으므로 가운데(640, 400)에서 시작한다.
+move_to() {
+  local tx="$1" ty="$2" line cx=640 cy=400 dx dy sx sy
+  line="$(last_at)"
+  if [ -n "$line" ]; then
+    cx="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$line")"
+    cy="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$line")"
+  fi
+  dx=$((tx - cx))
+  dy=$((ty - cy))
+  while [ "$dx" -ne 0 ] || [ "$dy" -ne 0 ]; do
+    sx=$dx; [ "$sx" -gt 100 ] && sx=100; [ "$sx" -lt -100 ] && sx=-100
+    sy=$dy; [ "$sy" -gt 100 ] && sy=100; [ "$sy" -lt -100 ] && sy=-100
+    hmp "mouse_move $sx $sy"
+    dx=$((dx - sx))
+    dy=$((dy - sy))
+  done
+  wait_for_at "^terminal: pointer> at x=${tx} y=${ty} "
+}
+
+# 오른쪽 column의 띠 하나 안(16 × 16)이 1초 사이에 바뀔 때까지 다시 뜬다 — 데모의 띠는 매 프레임 색이 돈다. 띠는 열둘이고
+# 616 폭에서 하나가 약 51픽셀이다 — 넷째 띠(창 안 x 154..201, 화면 798..845)의 가운데를 본다. 두 장 다 검정이 아니어야
+# 한다(창이 아직 버퍼를 안 붙였거나 SDL이 첫 창을 지운 순간은 둘레 검정이다). llvmpipe가 CPU 하나의 TCG에서 창을
+# 처음 그리기까지 넉넉히 60초. 실측은 초당 1.5~4.6 프레임이었다(WY-M2 단계 C — 회차마다 다르다).
+wait_for_column_motion() {
+  local i a b
+  for i in $(seq 1 60); do
+    screendump "$SHOT" || return 1
+    a="$(bg_of 814 300 16 16)"
+    sleep 1
+    screendump "$SHOT" || return 1
+    b="$(bg_of 814 300 16 16)"
+    LAST_BGS="$a -> $b"
+    if [ -n "$a" ] && [ "$a" != "$b" ] && [ "$a" != 000000 ] && [ "$b" != 000000 ]; then return 0; fi
+  done
+  return 1
+}
+
+echo "=== (16a) tars-gpu-demo --window opens as a Wayland column right of the shell and draws ==="
+type_line 'tars-gpu-demo --window 640x400 2> /tmp/w.log &'
+wait_for_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1' || report_failure "(16a) the demo did not open as a column (no 'wl> column … slot=1 ws=1')"
+wait_for_column_motion || report_failure "(16a) the right column never changed colour — the demo is not drawing (${LAST_BGS:-no shot})"
+cp "$SHOT" "${SCREENS_DIR}/sdl-column.ppm"
+# 번호는 그린 뒤에 읽는다 — SDL은 창을 하나 만들었다 지우고(렌더러가 GL 창을 바라 다시 만든다) 둘째 창에 그린다. 첫 창도
+# 첫 commit을 해 column이 잠깐 섰다가 `wl> unmap`으로 사라진다(그 sequence는 report-c에).
+DEMO_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
+wait_for_log "terminal: wl> configure id=${DEMO_ID} w=616 h=752 act=1" || report_failure "(16a) the demo's column got no 616x752 configure"
+wait_for_log "terminal: wl> commit id=${DEMO_ID} buf=616x752 scale=1 at=0,0" ||
+  report_failure "(16a) the demo's buffer is not 616x752 at scale 1 (SDL did not follow the configure)"
+type_keys meta_l-bracket_left
+wait_for_log "terminal: wl> configure id=${DEMO_ID} w=616 h=752 act=0" || report_failure "(16a) Cmd+[ did not take the demo's focus away"
+type_line "echo w1-(grep -c 'video wayland' /tmp/w.log)"
+wait_for_screen 'w1-1' || report_failure "(16a) the demo did not pick the wayland video driver"
+echo "(16a) SDL3 picked wayland, the demo is a column (id ${DEMO_ID}) and its bands move (${LAST_BGS})"
+
+echo "=== (16b) a click focuses the demo's column, its keys go there; a click on the shell takes them back ==="
+move_to 952 396 || report_failure "(16b) the pointer did not reach 952,396 (last at: $(last_at))"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: wl> configure id=${DEMO_ID} w=616 h=752 act=1" 2 || report_failure "(16b) the click did not focus the demo"
+type_keys x
+wait_for_log "terminal: wl> key code=45 state=1 to=${DEMO_ID}" || report_failure "(16b) x did not reach the demo"
+move_to 200 200 || report_failure "(16b) the pointer did not reach 200,200"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: wl> configure id=${DEMO_ID} w=616 h=752 act=0" 2 || report_failure "(16b) the click on the shell did not take the focus back"
+type_line 'echo dy-back'
+wait_for_screen '(^|\| )dy-back( \||$)' || report_failure "(16b) the shell did not answer after the click"
+type_line "echo g5-(grep -c 'key X' /tmp/w.log)"
+wait_for_screen 'g5-1' || report_failure "(16b) the demo did not log key X"
+echo "(16b) the click gave the demo the keyboard (key X) and the click on the shell took it back"
+
+echo "=== (16c) no render verify mismatch with the demo's column on the screen ==="
+if tlog | grep -a 'terminal: verify> mismatch' >/dev/null; then
+  report_failure "(16c) render verify saw a mismatch"
+fi
+echo "(16c) verify lines $(count_log 'terminal: verify> '), no mismatch"
+
+echo "=== (16d) Cmd+Q on the demo's column ends it and the column goes ==="
+type_keys meta_l-bracket_right
+wait_for_count "terminal: wl> configure id=${DEMO_ID} w=616 h=752 act=1" 3 || report_failure "(16d) Cmd+] did not focus the demo"
+type_keys meta_l-q
+wait_for_log "terminal: wl> close id=${DEMO_ID}" || report_failure "(16d) Cmd+Q sent no close"
+wait_for_log "terminal: wl> unmap id=${DEMO_ID} ws=1 slot=1" || report_failure "(16d) the demo's slot did not go"
+wait_for_log 'terminal: pane> ws=1/1 panes=1 focus=0 rect=0,0 155x47 ' || report_failure "(16d) the shell did not take the whole width back"
+type_line "grep -E 'quit|frames' /tmp/w.log"
+wait_for_screen 'tars-gpu-demo: frames [0-9]+ in [0-9]+ms' || report_failure "(16d) the demo did not leave its loop after close"
+FPS_LINE="$(joined_screen_dump | grep -aoE 'tars-gpu-demo: frames [0-9]+ in [0-9]+ms' | tail -n 1)"
+if tlog | grep -aE "terminal: wl> kill pid=" >/dev/null; then
+  report_failure "(16d) the demo was killed instead of leaving on close"
+fi
+echo "(16d) Cmd+Q ended the demo by itself (${FPS_LINE}), the column went"
 stop_boot
 
-echo "PASS: DY-M2 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying; with the gpu bundle tars-gpu-demo draws through SDL3 KMSDRM and OpenGL ES and gets the keys without udevd; with only base and gpu the first panel starts it by itself (DY-M3)"
+echo "PASS: DY-M2 · WY-M2 — init opens /dev/dri to video; terminal yields the screen over /run/tars/display.sock and hands the inputs to the program's uid only while it runs; keys go to the program, not the shell; Ctrl+Cmd+Backspace ends a stuck program (SIGTERM, SIGKILL after 2s); a terminal restarted while yielded waits for master instead of dying; with the gpu bundle tars-gpu-demo draws through SDL3 KMSDRM and OpenGL ES and gets the keys without udevd; with only base and gpu the first panel starts it by itself (DY-M3); typed in the shell with --window it is an SDL3 Wayland window in the column right of the shell, a click gives it the keys and Cmd+Q ends it (WY-M2)"

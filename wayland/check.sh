@@ -19,6 +19,8 @@ cd "$(dirname "$0")" || exit 1
 #   320x200을 4배로 화면 가득(at=0,0) 그리고, 상태 줄의 멈춘 상자가 실측 색이며, Ctrl(evdev 29)이 권총을 쏴 탄약 숫자가 바뀌고,
 #   Cmd+1 뒤의 셸이 답하고 Cmd+2로 돌아오며, Cmd+Q에 둠이 스스로 끝난다(pong · close를 포트가 받는다 — SIGKILL 없음).
 #
+# WY-M2(단계 C): 판정 18~21 — USB 마우스로 창 위 enter · 누름(272)이 창에 가고 클릭이 포커스를 옮기며, 셸을 누르면
+#   pointer leave와 키보드 포커스가 돌아오고, 휠은 axis -10, 커서를 숨긴 창(`--hide-cursor`) 위에는 화살표가 없다.
 # WY-M2(단계 B): 창 모드로 띄운 창은 셸 오른쪽 column이 된다(판정 16 · 17 · 22) — `wl> column`, pane 픽셀 크기의 configure
 #   (activated · tiled), 포커스 slot이 창이면 키가 그 창으로, Cmd+[로 셸에 오면 activated를 잃고 keyboard leave, Cmd+R의 새
 #   configure, Cmd+Q에 slot이 닫히고 셸이 전체 폭을 되찾는다. 자기 workspace를 보는 판정 2~8은 `--fullscreen`으로 띄운다.
@@ -208,8 +210,12 @@ stop_boot() {
 }
 
 # ══ 부팅 1 — 디스크 없음, tars-wl-test ═══════════════════════════════════
-echo "=== boot 1: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt) ==="
-boot
+#
+# WY-M2 단계 C: USB 마우스 하나(판정 18~21). HMP의 mouse_move · mouse_button이 그 장치로 간다(pointer 체인과 같은
+# 모양 — `info mice`의 대상은 마지막에 꽂은 마우스다). 포인터는 화면 가운데(640, 400)에서 시작하고 움직이기 전에는
+# 화살표가 안 보이므로, 판정 2~17의 screendump는 마우스가 없던 때와 같다.
+echo "=== boot 1: ${XRES}x${YRES}, no disk (root shell), PS/2 keyboard read as pc (Cmd = alt), a USB mouse ==="
+boot -usb -device usb-mouse,id=wymouse
 
 tlog | grep -a 'terminal: keyboard> open .* kind=pc' >/dev/null ||
   report_failure "the PS/2 keyboard was not read as pc — this chain's Cmd (alt) would be wrong"
@@ -366,10 +372,11 @@ echo "(8): the client that ignored close was killed ${WAITED_MS} ms after the pi
 #
 # 셸 하나(ws=1/1)에서 `--follow-size`로 띄운다 — configure의 크기를 따라 column을 3366CC로 채운다. 화면은 여백 20 · 격자
 # 155 × 47(셀 8 × 16)이고 두 column이 반씩이다: 셸 0..76열, 구분선 77열, 창 78..154열. 창의 사각형은 x 20 + 78 × 8 = 644,
-# y 20, 77 × 8 = 616 × 47 × 16 = 752다. 포커스는 새 column으로 가고(Cmd+D와 같은 길) 키는 그 창의 것이다. 포인터는
-# 단계 C라 포커스는 키로 옮긴다 — Cmd+[ · Cmd+](이 체인의 Cmd는 alt).
+# y 20, 77 × 8 = 616 × 47 × 16 = 752다. 포커스는 새 column으로 가고(Cmd+D와 같은 길) 키는 그 창의 것이다.
+# 이 판정은 포커스를 키로 옮긴다 — Cmd+[ · Cmd+](이 체인의 Cmd는 alt). 포인터는 판정 18~21.
 echo "=== (16) a windowed tars-wl-test opens as a column right of the shell ==="
-type_text 'tars-wl-test --follow-size --color 3366CC > /tmp/wl3.log &'
+# `--hide-cursor` — 판정 21이 이 창 위에서 화살표가 없는 것을 본다(창이 enter마다 set_cursor(NULL)).
+type_text 'tars-wl-test --follow-size --hide-cursor --color 3366CC > /tmp/wl3.log &'
 type_keys ret
 wait_for_log 'terminal: wl> column id=[0-9]+ slot=1 ws=1' || report_failure "(16) no 'wl> column id=… slot=1 ws=1'"
 COL_ID="$(tlog | grep -aoE 'terminal: wl> column id=[0-9]+' | tail -n 1 | sed 's/.*id=//')"
@@ -411,6 +418,107 @@ type_text 'echo c16-(grep -c enter /tmp/wl3.log)-(grep -c leave /tmp/wl3.log)-(g
 type_keys ret
 wait_for_screen 'c16-1-1-2' || report_failure "(16) the client's log does not have one enter, one leave and a's press and release"
 echo "(16): the window is slot 1 on the right half (616x752, tiled), took a, and left when Cmd+[ focused the shell"
+
+# ── 포인터(WY-M2 단계 C) ────────────────────────────────────────────────
+#
+# 판정 16 끝에 키보드 포커스는 셸(왼쪽)이고 창은 오른쪽 column(x 644..1259, y 20..771)이다. 창 가운데 (952, 396)은
+# surface 좌표 (308, 376)이다(1배로 채웠다). 움직임은 100씩 나눠 보내므로 한 회차에 여럿이 모일 수 있다 — enter의 좌표는
+# 회차마다 다르고, 마지막 자리(308, 376)는 enter나 motion 줄(처음 다섯) 중 하나에 있다.
+
+hmp() {
+  echo "$1" >&3
+  sleep 0.05
+}
+
+last_at() {
+  tlog | grep -a 'terminal: pointer> at ' | tail -n 1 | tr -d '\r' | from_terminal
+}
+
+wait_for_at() {
+  local pattern="$1" i line
+  for i in $(seq 1 150); do
+    line="$(last_at)"
+    if grep -aqE -- "$pattern" <<<"$line"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# 포인터를 (X, Y)로 — pointer 체인의 move_to와 같다. 첫 움직임 전에는 at 줄이 없으므로 가운데(640, 400)에서 시작한다.
+move_to() {
+  local tx="$1" ty="$2" line cx=640 cy=400 dx dy sx sy
+  line="$(last_at)"
+  if [ -n "$line" ]; then
+    cx="$(sed -E 's/.* x=([0-9]+) .*/\1/' <<<"$line")"
+    cy="$(sed -E 's/.* y=([0-9]+) .*/\1/' <<<"$line")"
+  fi
+  dx=$((tx - cx))
+  dy=$((ty - cy))
+  while [ "$dx" -ne 0 ] || [ "$dy" -ne 0 ]; do
+    sx=$dx; [ "$sx" -gt 100 ] && sx=100; [ "$sx" -lt -100 ] && sx=-100
+    sy=$dy; [ "$sy" -gt 100 ] && sy=100; [ "$sy" -lt -100 ] && sy=-100
+    hmp "mouse_move $sx $sy"
+    dx=$((dx - sx))
+    dy=$((dy - sy))
+  done
+  wait_for_at "^terminal: pointer> at x=${tx} y=${ty} "
+}
+
+# ── 판정 18: 창 위의 포인터 · 누름 — enter, button, 그리고 클릭이 포커스를 옮긴다 ─────────
+echo "=== (18) the pointer enters the window, a click focuses it and its keys go there ==="
+tlog | grep -a 'terminal: pointer> open ' >/dev/null || report_failure "(18) terminal did not open the USB mouse"
+move_to 952 396 || report_failure "(18) the pointer did not reach 952,396 (last at: $(last_at))"
+wait_for_log "terminal: wl> pointer enter id=${COL_ID}" || report_failure "(18) no 'wl> pointer enter id=${COL_ID}'"
+hmp "mouse_button 1"
+wait_for_log "terminal: wl> button id=${COL_ID} code=272 state=1" || report_failure "(18) the press did not reach the window"
+wait_for_log "terminal: pane> ws=1/1 panes=2 focus=1 slot=1 app id=${COL_ID} " || report_failure "(18) the click did not focus the window's slot"
+wait_for_count "terminal: wl> configure id=${COL_ID} w=616 h=752 act=1" 2 || report_failure "(18) the click did not give the window activated"
+hmp "mouse_button 0"
+wait_for_log "terminal: wl> button id=${COL_ID} code=272 state=0" || report_failure "(18) the release did not reach the window"
+type_keys b
+wait_for_log "terminal: wl> key code=48 state=1 to=${COL_ID}" || report_failure "(18) after the click b did not go to the window"
+echo "(18): the pointer entered the window, the click reached it as 272 and focused its slot, b went to it"
+
+# ── 판정 19: 셸 pane을 누르면 창은 pointer leave와 키보드 leave, 셸이 다시 받는다 ─────────
+echo "=== (19) a click on the shell takes the pointer and the keyboard back ==="
+move_to 200 200 || report_failure "(19) the pointer did not reach 200,200"
+wait_for_log "terminal: wl> pointer leave id=${COL_ID}" || report_failure "(19) no 'wl> pointer leave id=${COL_ID}'"
+hmp "mouse_button 1"
+hmp "mouse_button 0"
+wait_for_count "terminal: wl> configure id=${COL_ID} w=616 h=752 act=0" 2 || report_failure "(19) the click on the shell did not take activated away"
+wait_for_count 'terminal: pane> ws=1/1 panes=2 focus=0 rect=0,0 77x47 ' 2 || report_failure "(19) the click did not focus the shell"
+# 셸 pane 위의 누름은 창에 안 갔다.
+[ "$(count_log "terminal: wl> button id=${COL_ID} ")" -eq 2 ] || report_failure "(19) a press on the shell reached the window"
+type_text 'echo back'
+type_keys ret
+wait_for_screen '^back$|\| back( \||$)' || report_failure "(19) the shell did not draw 'back' after the click"
+echo "(19): the window got pointer leave, the click focused the shell and it answered"
+
+# ── 판정 20: 창 위의 휠은 axis — 포커스는 안 바뀐다 ───────────────────────
+echo "=== (20) the wheel over the window is an axis event ==="
+move_to 952 396 || report_failure "(20) the pointer did not come back to 952,396"
+wait_for_count "terminal: wl> pointer enter id=${COL_ID}" 2 || report_failure "(20) no second pointer enter"
+hmp "mouse_move 0 0 1"
+wait_for_log "terminal: wl> axis id=${COL_ID} v=-10" || report_failure "(20) the wheel did not reach the window as axis -10"
+echo "(20): one notch up reached the window as axis -10"
+
+# ── 판정 21: 커서를 숨긴 창 위에는 화살표가 없다 ──────────────────────────
+#
+# 창이 enter마다 set_cursor(NULL)을 보냈다(`--hide-cursor`). 포인터는 (952, 396)에 있다 — 화살표(그리면 그 자리에서
+# 오른쪽 아래로)가 있을 상자가 창 색 하나다.
+echo "=== (21) no arrow over a window that hid its cursor ==="
+wait_for_log "terminal: wl> cursor id=${COL_ID} hidden=1" || report_failure "(21) no 'wl> cursor id=${COL_ID} hidden=1'"
+sleep 0.5
+SHOT21="${SCREENS_DIR}/hidden-arrow.ppm"
+screendump "$SHOT21" || report_failure "(21) screendump did not write ${SHOT21}"
+got="$(ppm_ink "$SHOT21" 952 396 16 24)"
+[ "$got" = "bg=3366cc ink=0" ] || report_failure "(21) the box under the pointer is not just the window's colour (${got}) — the arrow is drawn"
+echo "(21): the arrow is not drawn over the window that hid its cursor"
+# 클라이언트가 본 포인터 줄(이 로그의 수를 센다 — 판정 3의 화면 글자와 안 섞이게). 키보드 포커스는 판정 19부터 셸이다
+# (휠은 포커스를 안 옮긴다).
+type_text 'echo c21-(grep -c pointer.enter /tmp/wl3.log)-(grep -c pointer.leave /tmp/wl3.log)-(grep -c code.272 /tmp/wl3.log)-(grep -c axis.v.-10 /tmp/wl3.log)-(grep -c x.308.y.376 /tmp/wl3.log)'
+type_keys ret
+wait_for_screen 'c21-2-1-2-1-[1-9]' || report_failure "(21) the client's log does not have two pointer enters, one leave, a press and release, the axis and 308,376"
 
 # ── 판정 17: Cmd+R로 폭이 바뀌면 configure가 다시 간다 ─────────────────────
 #
@@ -591,4 +699,4 @@ fi
 echo "(15): wl> key lines $(count_log 'terminal: wl> key '), verify lines $(count_log 'terminal: verify> '), no mismatch"
 stop_boot
 
-echo "PASS: WY-M0 · WY-M1 — the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"
+echo "PASS: WY-M0 · WY-M1 · WY-M2 — a window without fullscreen opens as a column right of the shell and follows its size (Cmd+R), a click gives it the keys and the pointer, a hidden cursor is not drawn; the shell has WAYLAND_DISPLAY, tars-wl-test becomes workspace 2 drawn 4x in the middle, its keys go to it as evdev codes, Cmd+1 · Cmd+2 go back and forth, Cmd+C · Cmd+Q type nothing in the shell, a stopped client does not stop the shell, Cmd+Q closes and a client that ignores close is killed after 2 s; with the doom bundle tars-doom fills the screen at 4x, fires on Ctrl, waits behind the shell and leaves by itself on Cmd+Q"

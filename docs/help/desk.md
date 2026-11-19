@@ -25,10 +25,12 @@
 부팅할 때부터 전체 화면으로 시작하려면 `sudo tars-config set fullscreen=on` 뒤 `sudo tars-config reload terminal`(열린 패널이 닫힙니다).
 패널 안의 프로그램도 켜고 끌 수 있습니다 — `printf '\033[10;1t'`(켜기) · `printf '\033[10;0t'`(끄기) · `printf '\033[10;2t'`(바꾸기), xterm과 같은 시퀀스입니다.
 
-Wayland 앱은 셸에서 그냥 띄웁니다(`WAYLAND_DISPLAY`가 잡혀 있습니다). 앱의 창은 끝에 새 탭이 되어 화면 전체에 뜨고, 친 키는
-그 앱으로 갑니다 — 위 표의 키(`Cmd+1`~`9` · `Cmd+Q` …)만 빼고요(`Cmd+W` · `Cmd+T`는 앱의 것입니다). `Cmd+1`로 셸에 돌아오고,
-앱이 끝나면 그 탭이 사라집니다.
-`tars-wl-test --color 3366CC --size 300x200 &`는 한 색 창을 띄우고 받은 키를 찍는 시험입니다.
+Wayland 앱은 셸에서 그냥 띄웁니다(`WAYLAND_DISPLAY`가 잡혀 있습니다). 앱의 창은 셸 오른쪽에 새 열(column)로 열리고 키는 그
+앱으로 갑니다 — 위 표의 키(`Cmd+[` · `Cmd+]` · `Cmd+R` · `Cmd+1`~`9` · `Cmd+Q` …)만 빼고요(`Cmd+W` · `Cmd+T`는 앱의 것입니다).
+창이나 셸을 클릭하면 그쪽이 키를 받고, 휠도 포인터 아래 창으로 갑니다. 전체 화면을 바라는 앱(둠, `--fullscreen`)은 끝에 새
+탭이 되어 화면 전체에 뜹니다 — `Cmd+1`로 셸에 돌아옵니다. 앱이 끝나면 그 열이나 탭이 사라집니다.
+`tars-wl-test --color 3366CC &`는 한 색 창을 띄우고 받은 키 · 포인터를 찍는 시험입니다. gpu 묶음이 있으면
+`tars-gpu-demo --window 640x400 &`가 SDL3 창으로 같은 자리에 뜹니다.
 `tars-doom &`는 둠(Freedoom Phase 1, doom 묶음)입니다 — 화살표로 걷고 `Ctrl` 쏘기 · `Space` 문 열기 · `Shift` 달리기 · `,` `.` 옆걸음 · `1`~`7` 무기 · `Esc` 메뉴, `Cmd+Q`로 끝냅니다.
 
 화면을 직접 그리는 프로그램(`/dev/dri/card0`을 여는 것)은 `tars-fullscreen <명령>`으로 띄웁니다. 그 프로그램이 끝나면 셸 화면이

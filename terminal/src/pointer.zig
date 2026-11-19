@@ -973,6 +973,8 @@ pub const Pane = struct {
     copy: bool,
     /// 휠을 화살표 키로 바꿀 자리다 — 대체 화면이고 모드 1007이 켜져 있다.
     alt_keys: bool,
+    /// Wayland 창의 slot이다(WY-M2 단계 C, plan 확정 8). 누름 · 끎 · 휠이 늘 그 창의 것이다 — 우리 선택이 없다.
+    app: bool = false,
 };
 
 /// 이 패널 위의 누름 · 움직임이 누구의 것인가(design 결정 12).
@@ -984,8 +986,11 @@ pub const Pane = struct {
 /// Shift가 우리에게 돌려준다. xterm 이래의 관례이고 ghostty · kitty · tmux가
 /// 같다. copy mode는 사람이 `Cmd+Shift+C`로 "우리 선택"을 고른 상태라 거기서의
 /// 누름도 우리 것이다.
+///
+/// Wayland 창의 slot(WY-M2)은 Shift와 상관없이 언제나 자식(그 창)의 것이다 — 창 위에는 셸 글자가 없어 우리가 고를 것이 없다.
 pub fn ownerOf(under: ?Pane, shift: bool) Owner {
     const p = under orelse return .ours;
+    if (p.app) return .child;
     return if (p.wants and !p.copy and !shift) .child else .ours;
 }
 

@@ -16,6 +16,20 @@ pub fn main() !void {
         &.{ "--secs", "5" },
         &.{ "--seconds", "5", "6" },
     };
+    // WY-M2: `--window WxH`, `--seconds`와 아무 순서로.
+    const win = demo.parseArgs(&.{ "--window", "640x400" }) orelse return fail("--window 640x400 was refused");
+    if (win.window == null or win.window.?[0] != 640 or win.window.?[1] != 400 or win.seconds != 0)
+        return fail("--window 640x400 did not give a 640x400 window");
+    const both = demo.parseArgs(&.{ "--seconds", "3", "--window", "320x200" }) orelse return fail("--seconds 3 --window 320x200 was refused");
+    if (both.seconds != 3 or both.window.?[0] != 320) return fail("--seconds and --window together lost one");
+    const bad_window = [_][]const []const u8{
+        &.{"--window"},
+        &.{ "--window", "640" },
+        &.{ "--window", "0x400" },
+        &.{ "--window", "640x400", "--window", "320x200" },
+        &.{ "--window", "9000x10" },
+    };
+    for (bad_window) |argv| if (demo.parseArgs(argv) != null) return fail("a bad --window was taken");
     for (bad) |argv| if (demo.parseArgs(argv) != null) return fail("a bad argument list was taken");
 
     // 2. 판 글자: SDL_VERSIONNUM(3, 2, 10).

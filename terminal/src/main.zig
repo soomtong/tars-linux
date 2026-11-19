@@ -3686,6 +3686,10 @@ const PointerWire = struct {
     clips: *Clips,
     /// 의도가 화면을 바꿨다. 부르는 쪽이 `needs_redraw`로 옮긴다.
     redraw: bool = false,
+    /// Wayland 서버(WY-M2 단계 C). 창 slot 위의 움직임 · 누름 · 휠이 그 창의 `wl_pointer`로 간다.
+    srv: ?*wls.Server = null,
+    /// 이 회차의 시각(밀리초, `wl_pointer` 이벤트의 time).
+    t_ms: u32 = 0,
 
     /// 누른 패널이 지금 어떤 상태인가(`pointer.Target`). 누른 뒤 키보드가
     /// 포커스나 워크스페이스를 옮겼거나 그 패널이 닫혔으면 `gone`이다.
@@ -3696,7 +3700,7 @@ const PointerWire = struct {
     fn target(self: *const PointerWire) pointer.Target {
         const leaf = self.gesture.held() orelse return .gone;
         if (self.gesture_ws.* != self.current or self.ws.focus != leaf) return .gone;
-        // app slot: 아무것도 안 한다 — WY-M2 단계 C(누른 칸이 창이면 우리 제스처의 대상이 아니다).
+        // 창 slot은 우리 제스처의 대상이 아니다(WY-M2 — 그 누름은 창의 것이다, `ownerOf`).
         const p = if (self.ws.panes[leaf]) |*sl| sl.asPane() orelse return .gone else return .gone;
         return if (p.screen.copyActive()) .copy else .normal;
     }
@@ -3705,8 +3709,11 @@ const PointerWire = struct {
     fn paneAt(self: *const PointerWire, x: u32, y: u32) ?pointer.Pane {
         const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
         const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
-        // app slot: 아무것도 안 한다 — WY-M2 단계 C(`pointer.Pane`에 app이 더해진다, 확정 8). 지금은 여백처럼 null.
-        const p = self.ws.panes[h.leaf].?.asPane() orelse return null;
+        // 창 slot(WY-M2 확정 8)은 늘 그 창의 것이다(`ownerOf`가 `app`을 본다). 휠도 그 창으로 간다(`wheel`).
+        const p = switch (self.ws.panes[h.leaf].?) {
+            .shell => |*p| p,
+            .app => return .{ .leaf = h.leaf, .wants = true, .copy = false, .alt_keys = false, .app = true },
+        };
         return .{
             .leaf = h.leaf,
             .wants = p.screen.mouseWanted(),
@@ -3746,6 +3753,9 @@ const PointerWire = struct {
     /// 아래 패널의 자식에게 버튼 없는 움직임으로 보고한다. 그것을 실제로
     /// 보내는 것은 모드 1003뿐이다(인코더가 거른다).
     fn moved(self: *PointerWire, x: u32, y: u32) !void {
+        // 서버가 먼저 안다(WY-M2) — 포인터 아래 창이 바뀌면 enter · leave, 아니면 그 창(또는 버튼을 쥔 창)에 motion.
+        // 셸 패널 위면 창이 없다(`null`) — 창을 떠나는 leave가 여기서 나간다.
+        if (self.srv) |srv| srv.pointerMove(self.appUnder(x, y), x, y, self.t_ms);
         if (!self.grab.active()) {
             const p = self.paneAt(x, y) orelse return;
             if (pointer.ownerOf(p, self.mods.shift) == .child) self.reportTo(p.leaf, .motion, null, x, y);
@@ -3755,6 +3765,16 @@ const PointerWire = struct {
             .child => self.report(.motion, self.grab.dragButton(), x, y),
             .ours => try self.motion(x, y),
         }
+    }
+
+    /// 화면 좌표 아래 slot이 창이면 그 창 번호(WY-M2). 여백 · 구분선 · 셸 패널이면 null.
+    fn appUnder(self: *const PointerWire, x: u32, y: u32) ?u32 {
+        const gc = gridCell(x, y, self.cols, self.rows) orelse return null;
+        const h = self.ws.strip.hit(self.whole, gc.col, gc.row) orelse return null;
+        return switch (self.ws.panes[h.leaf].?) {
+            .app => |a| a.toplevel,
+            .shell => null,
+        };
     }
 
     /// 주인을 정한 패널에 보고한다. 그 워크스페이스를 떠났으면 버린다 —
@@ -3774,8 +3794,24 @@ const PointerWire = struct {
     /// 쓰는 상수 넷으로 그 끝을 구한다(design 결정 5와 같은 이유). 인코더가
     /// 보낼 것이 없다고 하면(모드가 그 사건을 원하지 않는다) 아무것도 안 한다.
     fn reportTo(self: *PointerWire, leaf: u4, action: vt.Screen.MouseAction, button: ?vt.Screen.MouseButton, x: u32, y: u32) void {
-        // app slot: 아무것도 안 한다 — WY-M2 단계 C(vt 인코더 대신 서버의 wl_pointer로).
-        const p = if (self.ws.panes[leaf]) |*sl| sl.asPane() orelse return else return;
+        const sl = if (self.ws.panes[leaf]) |*sl| sl else return;
+        const p = sl.asPane() orelse {
+            // 창 slot(WY-M2): vt 인코더 대신 서버의 `wl_pointer`. 움직임은 `moved`가 이미 보냈다 — 누름 · 뗌만 남는다.
+            // 버튼은 evdev 코드 그대로다. 휠 버튼(4 · 5)은 여기 오지 않는다(`wheel`이 axis로 보낸다).
+            const srv = self.srv orelse return;
+            const code: u32 = switch (button orelse return) {
+                .left => wl_logic.BTN_LEFT,
+                .right => wl_logic.BTN_RIGHT,
+                .middle => wl_logic.BTN_MIDDLE,
+                .wheel_up, .wheel_down => return,
+            };
+            switch (action) {
+                .press => srv.pointerButton(code, true, self.t_ms),
+                .release => srv.pointerButton(code, false, self.t_ms),
+                .motion => {},
+            }
+            return;
+        };
         var rs: [layout.MAX_LEAVES]layout.Rect = undefined;
         self.ws.strip.rects(self.whole, &rs);
         const o = paneOrigin(rs[leaf]);
@@ -3814,7 +3850,7 @@ const PointerWire = struct {
         self.gesture_ws.* = self.current;
         // 늘리기(SE design 결정 3) — Shift를 누른 채 남은 선택이 있는 패널을 눌렀다.
         // 두 사실을 여기서 합쳐 넘긴다(`pointer.zig`는 둘 다 못 본다).
-        // app slot에는 남은 선택이 없다(WY-M2 단계 C가 app 칸의 누름을 이 길 앞에서 가른다).
+        // 창 slot에는 남은 선택이 없다(그 누름은 `ownerOf`가 이 길 앞에서 창으로 보낸다).
         const linger = if (hit) |h| if (self.ws.panes[h.leaf].?.asPane()) |p| p.screen.hasLinger() else false else false;
         const intents = self.gesture.press(hit, self.ws.focus, .{
             .t_us = t_us,
@@ -3869,7 +3905,11 @@ const PointerWire = struct {
     fn wheel(self: *PointerWire, notches: i32, x: u32, y: u32) !void {
         if (self.gesture.wheel(notches, self.target())) |its| return self.run(its);
         const pane = self.paneAt(x, y) orelse return;
-        // app slot: 아무것도 안 한다 — WY-M2 단계 C(app 칸은 `paneAt`이 아직 null이다).
+        // 창 slot이면 그 창의 axis(WY-M2 확정 8) — 포커스는 안 바뀐다(셸 패널의 휠과 같다).
+        if (pane.app) {
+            if (self.srv) |srv| srv.pointerAxis(notches, self.t_ms);
+            return;
+        }
         const p = self.ws.panes[pane.leaf].?.asPane() orelse return;
         switch (pointer.wheelRoute(pane, self.mods.shift)) {
             .ignore => {},
@@ -3907,7 +3947,7 @@ const PointerWire = struct {
                 // 먼저 온다 — 확정 → 포커스 이동 → 선택이 design 결정 6의
                 // 순서다.
                 .cancel => {
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C(창에는 조합 · copy mode가 없다).
+                    // 옛 포커스가 창 slot이면 정리할 것이 없다(창에는 조합 · copy mode가 없다).
                     const fp = self.ws.panes[self.ws.focus].?.asPane() orelse continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.normal);
@@ -3934,7 +3974,7 @@ const PointerWire = struct {
                 // 이미 이리로 옮겼다.
                 .select_start => |st| {
                     const at = st.at;
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    // 창 slot이면 건너뛴다 — 선택 의도는 셸 패널에만 나온다(창의 누름은 `.child`라 `Gesture`에 안 온다).
                     const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     const composing = self.key_state.preedit() != null;
                     const bytes = self.key_state.forceMode(.copy);
@@ -3948,14 +3988,14 @@ const PointerWire = struct {
                     self.redraw = true;
                 },
                 .select_to => |at| {
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    // 창 slot이면 건너뛴다 — 선택 의도는 셸 패널에만 나온다(창의 누름은 `.child`라 `Gesture`에 안 온다).
                     const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     try p.screen.copyPointTo(at.col, at.row);
                     dumpCopy(p.screen, "point");
                     self.redraw = true;
                 },
                 .scroll => |s| {
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    // 창 slot이면 건너뛴다 — 선택 의도는 셸 패널에만 나온다(창의 누름은 `.child`라 `Gesture`에 안 온다).
                     const p = self.ws.panes[s.leaf].?.asPane() orelse continue;
                     p.screen.scrollByRows(-WHEEL_ROWS * @as(isize, s.notches));
                     self.redraw = true;
@@ -3966,7 +4006,7 @@ const PointerWire = struct {
                 // 삼켜진다(pointer/check.sh 검사 18). `y`와 다른 것 하나 — 선택은
                 // 화면에 남는다(SE design 결정 1). 다음 누름이 지운다.
                 .copy => |leaf| {
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    // 창 slot이면 건너뛴다 — 선택 의도는 셸 패널에만 나온다(창의 누름은 `.child`라 `Gesture`에 안 온다).
                     const p = self.ws.panes[leaf].?.asPane() orelse continue;
                     try self.clips.release(p);
                     dumpCopy(p.screen, "yank");
@@ -3992,7 +4032,7 @@ const PointerWire = struct {
                 // 앵커를 두고 단어 · 줄로 다시 짓는다(ER design 결정 4).
                 .select_extend => |e| {
                     const at = e.at;
-                    // app slot: 아무것도 안 한다 — WY-M2 단계 C.
+                    // 창 slot이면 건너뛴다 — 선택 의도는 셸 패널에만 나온다(창의 누름은 `.child`라 `Gesture`에 안 온다).
                     const p = self.ws.panes[at.leaf].?.asPane() orelse continue;
                     try p.screen.copyExtendAt(at.col, at.row, if (e.unit) |u| unitKind(u) else null);
                     if (!p.screen.copyActive()) continue;
@@ -4896,6 +4936,21 @@ const App = struct {
         };
         srv.setFocus(want, wlMask(self.key_state.appMods()));
         self.syncColumns(srv);
+        // 포인터가 들어가 있던 창이 이제 앞에 안 보이면(워크스페이스를 옮겼다 · 화면 밖 column) leave를 보낸다(WY-M2).
+        // 다시 보이게 되어도 enter는 포인터가 움직일 때 간다.
+        if (srv.pointerFocus()) |id| if (!self.appInFront(id)) {
+            const t_ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
+            srv.pointerMove(null, self.pointer_state.x, self.pointer_state.y, t_ms);
+        };
+    }
+
+    /// 창 `id`가 앞 워크스페이스에 보이는가 — app 워크스페이스의 그 창이거나, 앞 셸 워크스페이스의 화면 안 slot이다.
+    fn appInFront(self: *const App, id: u32) bool {
+        const at = self.findApp(id) orelse return false;
+        return switch (at) {
+            .workspace => |wi| wi == self.current,
+            .slot => |sl| sl.ws == self.current and self.workspaces[sl.ws].?.shell.strip.visible(sl.leaf, self.whole),
+        };
     }
 
     /// 모든 셸 워크스페이스의 app slot에 그 pane의 픽셀 크기를 알린다(WY-M2 확정 4, design 결정 22). 서버가 지난번 보낸
@@ -5481,10 +5536,16 @@ const App = struct {
     fn wirePointer(self: *App, round: *const PointerRound) !void {
         if (pointerCount(&self.pointer_devs) == 0) self.pointer_shown = false;
         if (round.woke) self.pointer_shown = true;
-        // 키보드 단계가 워크스페이스를 바꿨을 수 있어 그 뒤에 구한다. app 워크스페이스에는 아직 포인터가 안 간다
-        // (`wl_pointer`는 WY의 다음 milestone). 화살표의 자리는 위에서 따라가고 있다.
-        const ws = self.workspaces[self.current].?.asShell() orelse return;
+        // 키보드 단계가 워크스페이스를 바꿨을 수 있어 그 뒤에 구한다. app 워크스페이스는 화면 전체가 그 창이라 PD의
+        // 제스처 없이 서버로 곧장 간다(WY-M2 단계 C).
+        const t_ms: u32 = @truncate(@as(u64, @intCast(self.nowMs())));
+        const ws = switch (self.workspaces[self.current].?) {
+            .shell => |*sh| sh,
+            .app => |a| return self.wireAppPointer(round, a.toplevel, t_ms),
+        };
         var wire: PointerWire = .{
+            .srv = self.wl,
+            .t_ms = t_ms,
             .gesture = &self.gesture,
             .gesture_ws = &self.gesture_ws,
             .ws = ws,
@@ -5506,6 +5567,25 @@ const App = struct {
         if (round.woke) try wire.moved(self.pointer_state.x, self.pointer_state.y);
         if (round.wheel != 0) try wire.wheel(round.wheel, self.pointer_state.x, self.pointer_state.y);
         if (wire.redraw) self.needs_redraw = true;
+    }
+
+    /// 앞이 app 워크스페이스일 때의 포인터(WY-M2 단계 C, lead 답 — 자기 workspace 창에도 같은 길). 움직임 · 누름 · 뗌을
+    /// 회차 안의 순서대로 서버에 주고, 마지막이 휠이다(`wirePointer`와 같은 순서). 창이 화면 전체라 포커스를 옮길 것이 없고,
+    /// 버튼을 쥔 동안의 grab은 서버가 한다(`logic.PointerFocus`). PD의 `Grab`은 회차 끝에 장치 버튼에 맞추기만 한다.
+    fn wireAppPointer(self: *App, round: *const PointerRound, id: u32, t_ms: u32) void {
+        const srv = self.wl orelse return;
+        for (round.edges[0..round.edge_count]) |e| {
+            srv.pointerMove(id, e.x, e.y, t_ms);
+            const code: u32 = switch (e.button) {
+                .left => wl_logic.BTN_LEFT,
+                .right => wl_logic.BTN_RIGHT,
+                .middle => wl_logic.BTN_MIDDLE,
+            };
+            srv.pointerButton(code, e.down, t_ms);
+        }
+        self.grab.settle(self.pointer_state.buttons);
+        if (round.woke) srv.pointerMove(id, self.pointer_state.x, self.pointer_state.y, t_ms);
+        if (round.wheel != 0) srv.pointerAxis(round.wheel, t_ms);
     }
 
     /// 화면 쪽 copy mode가 키 밖의 이유로 닫혔을 때 입력 모드를 맞춘다(LE design
@@ -5712,7 +5792,9 @@ const App = struct {
     fn decideFrame(self: *App, p: Pointers) !Decision {
         // 화살표가 있어야 할 자리(PD design 결정 4). 보이는 조건 셋이 다
         // 맞아야 한다 — 장치가 있고, 움직였고, 그 뒤로 키를 안 쳤다.
-        const want: ?pointer.Spot = if (self.pointer_shown and pointerCount(&self.pointer_devs) > 0)
+        // 포인터 아래 창이 `set_cursor(NULL)`로 커서를 숨겼으면(WY-M2 확정 10 — SDL_HideCursor) 화살표를 안 그린다.
+        const hidden = if (self.wl) |srv| srv.arrowHidden() else false;
+        const want: ?pointer.Spot = if (self.pointer_shown and pointerCount(&self.pointer_devs) > 0 and !hidden)
             .{ .x = self.pointer_state.x, .y = self.pointer_state.y }
         else
             null;

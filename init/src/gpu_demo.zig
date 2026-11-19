@@ -1,8 +1,12 @@
-//! DY-M2. `tars-gpu-demo [--seconds N]` — 화면을 양보받아 GPU(GLES)로 그리는 데모(DY design 결정 10).
+//! DY-M2. `tars-gpu-demo [--seconds N] [--window WxH]` — 화면을 양보받아 GPU(GLES)로 그리는 데모(DY design 결정 10).
 //!
 //! SDL3의 KMSDRM 백엔드와 `SDL_Renderer`(opengles2)로 화면 가득 색 띠가 흐르고, 친 키의 이름이 아래에 찍힌다.
 //! Esc · SIGTERM(SDL이 `SDL_EVENT_QUIT`으로 바꾼다)이면 끝난다. `--seconds N`이면 N초 뒤 스스로 끝난다(체인용).
 //! `tars-fullscreen tars-gpu-demo`로 띄운다 — 양보 없이 띄우면 card0의 master가 terminal이라 화면을 못 건다.
+//! WY-M2: `--window WxH`면 화면 가득 대신 그 크기의 창(`SDL_WINDOW_RESIZABLE`)을 연다. 셸에서 그냥 치면 SDL이 Wayland를
+//! 골라 terminal의 Wayland 서버에 창이 되고, 서버는 셸 오른쪽 column으로 연다(WY design 결정 21). Wayland 전용 줄은
+//! 없다 — 드라이버는 SDL이 고르고 `video <드라이버>` 줄이 말한다. 띠는 매 프레임 그리는 크기(`GetRenderOutputSize`)로
+//! 그린다 — 창은 서버가 configure한 크기로 바뀐다. 창 모드에서는 커서를 숨기지 않는다.
 //!
 //! `libSDL3.so.0`은 gpu 묶음에 있다(Debian 3.2.10). 링크하지 않고 dlopen한다 — 빌드에 .so가 필요 없고, 묶음이
 //! 없을 때 이유를 말할 수 있다. 그래서 이 실행 파일만 glibc 동적이다(init의 나머지는 musl 정적이라 dlopen이 없다).
@@ -19,6 +23,7 @@ const EXIT_USAGE: u8 = 2;
 
 const INIT_VIDEO: u32 = 0x20; // SDL_init.h:81
 const WINDOW_FULLSCREEN: u64 = 0x1; // SDL_video.h:189
+const WINDOW_RESIZABLE: u64 = 0x20; // SDL_video.h:194
 const EVENT_QUIT: u32 = 0x100; // SDL_events.h:89
 const EVENT_KEY_DOWN: u32 = 0x300; // SDL_events.h:168
 const KEY_ESCAPE: u32 = 0x1b; // SDL_keycode.h:62
@@ -80,6 +85,7 @@ const Sdl = struct {
     RenderFillRect: *const fn (*anyopaque, *const FRect) callconv(.c) bool,
     RenderDebugText: *const fn (*anyopaque, f32, f32, [*:0]const u8) callconv(.c) bool,
     RenderPresent: *const fn (*anyopaque) callconv(.c) bool,
+    GetRenderOutputSize: *const fn (*anyopaque, *c_int, *c_int) callconv(.c) bool,
     PollEvent: *const fn (*Event) callconv(.c) bool,
     GetKeyName: *const fn (u32) callconv(.c) [*:0]const u8,
     GetTicks: *const fn () callconv(.c) u64,
@@ -112,14 +118,31 @@ fn say(comptime fmt: []const u8, args: anytype) void {
 pub const Args = struct {
     /// 0이면 Esc · 신호까지.
     seconds: u32 = 0,
+    /// `--window WxH`(WY-M2). null이면 화면 가득.
+    window: ?[2]u32 = null,
 };
 
+/// `--seconds N`(N > 0)과 `--window WxH`(각 변 1..8192)를 아무 순서로, 각각 한 번까지.
 pub fn parseArgs(argv: []const []const u8) ?Args {
     var args: Args = .{};
-    if (argv.len == 0) return args;
-    if (argv.len != 2 or !std.mem.eql(u8, argv[0], "--seconds")) return null;
-    args.seconds = std.fmt.parseInt(u32, argv[1], 10) catch return null;
-    if (args.seconds == 0) return null;
+    var seen_seconds = false;
+    var i: usize = 0;
+    while (i < argv.len) : (i += 2) {
+        if (i + 1 >= argv.len) return null;
+        const flag = argv[i];
+        const value = argv[i + 1];
+        if (std.mem.eql(u8, flag, "--seconds") and !seen_seconds) {
+            args.seconds = std.fmt.parseInt(u32, value, 10) catch return null;
+            if (args.seconds == 0) return null;
+            seen_seconds = true;
+        } else if (std.mem.eql(u8, flag, "--window") and args.window == null) {
+            const x = std.mem.indexOfScalar(u8, value, 'x') orelse return null;
+            const w = std.fmt.parseInt(u32, value[0..x], 10) catch return null;
+            const h = std.fmt.parseInt(u32, value[x + 1 ..], 10) catch return null;
+            if (w == 0 or h == 0 or w > 8192 or h > 8192) return null;
+            args.window = .{ w, h };
+        } else return null;
+    }
     return args;
 }
 
@@ -151,10 +174,11 @@ fn nowMs() u64 {
 
 fn usage() u8 {
     writeAll(
-        \\usage: tars-gpu-demo [--seconds N]
+        \\usage: tars-gpu-demo [--seconds N] [--window WxH]
         \\  draw moving colour bands with SDL3 + OpenGL ES on the whole screen and
         \\  show the name of each key. Esc ends it; --seconds ends it after N
-        \\  seconds. Needs the gpu bundle. Run it under tars-fullscreen.
+        \\  seconds. Needs the gpu bundle. Run it under tars-fullscreen. --window
+        \\  opens a resizable WxH window instead (a Wayland window in a TARS shell).
         \\
     );
     return EXIT_USAGE;
@@ -198,7 +222,12 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         return 1;
     };
     say("mode {d}x{d}", .{ mode.w, mode.h });
-    const window = sdl.CreateWindow("tars-gpu-demo", mode.w, mode.h, WINDOW_FULLSCREEN) orelse {
+    // 창 모드(WY-M2)는 그 크기 · RESIZABLE — RESIZABLE이 아니면 SDL은 서버의 configure 크기를 따르지 않는다(WY-M2 조사 1).
+    const win_w: c_int = if (args.window) |wh| @intCast(wh[0]) else mode.w;
+    const win_h: c_int = if (args.window) |wh| @intCast(wh[1]) else mode.h;
+    const flags: u64 = if (args.window != null) WINDOW_RESIZABLE else WINDOW_FULLSCREEN;
+    if (args.window != null) say("window {d}x{d}", .{ win_w, win_h });
+    const window = sdl.CreateWindow("tars-gpu-demo", win_w, win_h, flags) orelse {
         say("window failed: {s}", .{sdl.GetError()});
         return 1;
     };
@@ -214,10 +243,8 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         say("gl {s}", .{getString(GL_RENDERER) orelse "?"});
     } else say("gl ?", .{});
     _ = sdl.SetRenderVSync(renderer, 1);
-    _ = sdl.HideCursor();
+    if (args.window == null) _ = sdl.HideCursor();
 
-    const w: f32 = @floatFromInt(mode.w);
-    const h: f32 = @floatFromInt(mode.h);
     const bands: u32 = 12;
     const start = sdl.GetTicks();
     var frames: u64 = 0;
@@ -251,6 +278,12 @@ pub fn main(init: std.process.Init.Minimal) u8 {
         const now = sdl.GetTicks();
         if (args.seconds != 0 and now - start >= @as(u64, args.seconds) * 1000) running = false;
 
+        // 그리는 크기는 매 프레임 묻는다 — 창은 서버가 바꾼다(column 폭, `Cmd+R`).
+        var out_w: c_int = win_w;
+        var out_h: c_int = win_h;
+        _ = sdl.GetRenderOutputSize(renderer, &out_w, &out_h);
+        const w: f32 = @floatFromInt(out_w);
+        const h: f32 = @floatFromInt(out_h);
         _ = sdl.SetRenderDrawColor(renderer, 16, 16, 24, 255);
         _ = sdl.RenderClear(renderer);
         const bw = w / @as(f32, @floatFromInt(bands));

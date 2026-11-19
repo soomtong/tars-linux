@@ -93,6 +93,13 @@ pub const Server = struct {
     mods: logic.Mask = .{ .depressed = 0, .locked = 0 },
     sent_mods: ?logic.Mask = null,
     client_created: wl.Listener(*wl.Client) = .init(clientCreated),
+    /// 모든 `wl_pointer`(단계 C). 포인터 이벤트는 포인터 아래 창의 클라이언트 것에만 간다.
+    pointers: wl.list.Head(wl.Pointer, null) = undefined,
+    /// 포인터 포커스와 버튼 grab(`logic.PointerFocus`), 마지막 아래 창(창 안일 때만)과 자리(화면 좌표).
+    ptr: logic.PointerFocus = .{},
+    ptr_under: ?u32 = null,
+    ptr_x: u32 = 0,
+    ptr_y: u32 = 0,
 
     /// 소켓을 연다(design 결정 3, 확정 4). `/run/user/<uid>`(0700, 그 계정의 것)를 만들고 `XDG_RUNTIME_DIR`을 거기로
     /// 둔 뒤 `wayland-0`을 열고, 소켓과 lock의 주인을 계정으로 바꾼다. 성공하면 `WAYLAND_DISPLAY=wayland-0`도 둔다 —
@@ -136,6 +143,7 @@ pub const Server = struct {
             .keymap_size = @intCast(KEYMAP.len + 1),
         };
         self.keyboards.init();
+        self.pointers.init();
         display.addClientCreatedListener(&self.client_created);
         _ = try wl.Global.create(display, wl.Compositor, COMPOSITOR_VERSION, *Server, self, bindCompositor);
         _ = try wl.Global.create(display, wl.Output, OUTPUT_VERSION, *Server, self, bindOutput);
@@ -239,6 +247,106 @@ pub const Server = struct {
         }
     }
 
+    /// 포인터가 화면 좌표 `x` · `y`로 움직였다(WY-M2 확정 8). `cand`는 그 자리의 창(App이 strip이나 앞 workspace로 고른다)이고,
+    /// 서버가 창이 실제로 보이는 사각형(마지막 `fit`) 안인지 다시 본다 — 둘레의 검정은 창이 아니다. enter · leave ·
+    /// motion은 `logic.PointerFocus`가 정한다(버튼을 쥔 동안 leave를 미룬다).
+    pub fn pointerMove(self: *Server, cand: ?u32, x: u32, y: u32, time_ms: u32) void {
+        self.ptr_x = x;
+        self.ptr_y = y;
+        self.ptr_under = under: {
+            const id = cand orelse break :under null;
+            const t = self.find(id) orelse break :under null;
+            const f = t.last_fit orelse break :under null;
+            break :under if (logic.inside(f, x, y)) id else null;
+        };
+        self.applyMove(self.ptr.move(self.ptr_under), time_ms);
+    }
+
+    /// 버튼 하나(evdev `BTN_*`). 포인터 아래 창이 없으면(셸 · 여백) 아무것도 안 간다. 마지막 뗌 뒤에는 미룬 leave를 낸다.
+    pub fn pointerButton(self: *Server, code: u32, pressed: bool, time_ms: u32) void {
+        const target = if (pressed) self.ptr.press() else self.ptr.release();
+        if (target) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
+            const serial = self.display.nextSerial();
+            const state: wl.Pointer.ButtonState = if (pressed) .pressed else .released;
+            var it = self.pointers.iterator(.forward);
+            while (it.next()) |p| if (p.getClient() == sr.getClient()) {
+                p.sendButton(serial, time_ms, code, state);
+                if (p.getVersion() >= 5) p.sendFrame();
+            };
+            logline.print("terminal: wl> button id={d} code={d} state={d}\n", .{ id, code, @intFromBool(pressed) });
+        };
+        if (!pressed and self.ptr.held == 0) self.applyMove(self.ptr.move(self.ptr_under), time_ms);
+    }
+
+    /// 휠 `notches`(양수가 앞으로 — 위). 포인터 아래 창에 axis_source(wheel) · axis · axis_discrete · frame(판 5+).
+    pub fn pointerAxis(self: *Server, notches: i32, time_ms: u32) void {
+        const id = self.ptr.focus orelse return;
+        const t = self.find(id) orelse return;
+        const sr = surfaceOf(t) orelse return;
+        const a = logic.axisFor(notches);
+        var it = self.pointers.iterator(.forward);
+        while (it.next()) |p| if (p.getClient() == sr.getClient()) {
+            if (p.getVersion() >= 5) p.sendAxisSource(.wheel);
+            p.sendAxis(time_ms, .vertical_scroll, @fromBackingInt(@intCast(a.value)));
+            if (p.getVersion() >= 5) {
+                p.sendAxisDiscrete(.vertical_scroll, a.discrete);
+                p.sendFrame();
+            }
+        };
+        logline.print("terminal: wl> axis id={d} v={d}\n", .{ id, @divTrunc(a.value, 256) });
+    }
+
+    /// 포인터가 들어가 있는 창(App이 앞이 바뀌었을 때 그 창이 아직 보이는지 본다).
+    pub fn pointerFocus(self: *const Server) ?u32 {
+        return self.ptr.focus;
+    }
+
+    /// 포인터 아래 창의 클라이언트가 `set_cursor(NULL)`로 커서를 숨겼다(확정 10) — terminal이 화살표를 안 그린다.
+    pub fn arrowHidden(self: *Server) bool {
+        const id = self.ptr.focus orelse return false;
+        const t = self.find(id) orelse return false;
+        return t.cursor_hidden;
+    }
+
+    /// `logic.PointerFocus.move`가 정한 것을 보낸다 — leave, enter(surface 좌표와 함께), motion, 그리고 frame.
+    fn applyMove(self: *Server, m: logic.PointerFocus.Move, time_ms: u32) void {
+        if (m.leave) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
+            const serial = self.display.nextSerial();
+            var it = self.pointers.iterator(.forward);
+            while (it.next()) |p| if (p.getClient() == sr.getClient()) {
+                p.sendLeave(serial, sr);
+                if (p.getVersion() >= 5) p.sendFrame();
+            };
+            logline.print("terminal: wl> pointer leave id={d}\n", .{id});
+        };
+        if (m.enter) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
+            var it = self.pointers.iterator(.forward);
+            while (it.next()) |p| if (p.getClient() == sr.getClient()) self.enterPointer(p, t, sr);
+            logline.print("terminal: wl> pointer enter id={d}\n", .{id});
+        };
+        if (m.motion) |id| if (self.find(id)) |t| if (surfaceOf(t)) |sr| {
+            const at = self.surfaceAt(t);
+            var it = self.pointers.iterator(.forward);
+            while (it.next()) |p| if (p.getClient() == sr.getClient()) {
+                p.sendMotion(time_ms, @fromBackingInt(@intCast(at.x)), @fromBackingInt(@intCast(at.y)));
+                if (p.getVersion() >= 5) p.sendFrame();
+            };
+        };
+    }
+
+    /// 포인터 하나에 `enter`(지금 자리의 surface 좌표)와 frame.
+    fn enterPointer(self: *Server, p: *wl.Pointer, t: *Toplevel, sr: *wl.Surface) void {
+        const at = self.surfaceAt(t);
+        p.sendEnter(self.display.nextSerial(), sr, @fromBackingInt(@intCast(at.x)), @fromBackingInt(@intCast(at.y)));
+        if (p.getVersion() >= 5) p.sendFrame();
+    }
+
+    /// 지금 포인터 자리를 창 `t`의 surface 좌표로(마지막으로 옮긴 자리 기준). 아직 안 옮긴 창은 0, 0이다.
+    fn surfaceAt(self: *const Server, t: *const Toplevel) logic.Point {
+        const f = t.last_fit orelse return .{ .x = 0, .y = 0 };
+        return logic.surfacePoint(f, self.ptr_x, self.ptr_y);
+    }
+
     /// `Cmd+Q`(확정 11, design 결정 12). 창 `id`에 `xdg_toplevel.close`, 그 클라이언트의 `xdg_wm_base`에 `ping`, 그리고
     /// 2초 기한. pong이 오거나 클라이언트가 끝나면 기한이 사라진다(`wmBaseRequest`의 pong · 창의 destroy). 기한이 이미
     /// 걸려 있으면 close만 다시 보낸다 — 거듭 눌러도 기한이 밀리지 않는다.
@@ -329,6 +437,8 @@ pub const Server = struct {
         defer shm.endAccess();
         const data: [*]const u8 = @ptrCast(shm.getData() orelse return null);
         logic.blit(dst, pitch, f, data, @intCast(shm.getStride()));
+        // 포인터 좌표를 거꾸로 셀 자리(단계 C).
+        t.last_fit = f;
         return f;
     }
 
@@ -586,7 +696,7 @@ fn outputRequest(o: *wl.Output, req: wl.Output.Request, _: ?*anyopaque) void {
 fn bindSeat(client: *wl.Client, srv: *Server, version: u32, id: u32) void {
     const seat = wl.Seat.create(client, version, id) catch return client.postNoMemory();
     seat.setHandler(*Server, seatRequest, null, srv);
-    seat.sendCapabilities(.{ .keyboard = true });
+    seat.sendCapabilities(.{ .keyboard = true, .pointer = true });
     if (version >= 2) seat.sendName("seat0");
 }
 
@@ -604,12 +714,15 @@ fn seatRequest(seat: *wl.Seat, req: wl.Seat.Request, srv: *Server) void {
             if (srv.focused) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
                 srv.enterKeyboard(kb, sr);
         },
-        // 포인터 · 터치는 아직 없다(capabilities에 없다). 그래도 묻는 클라이언트에게 아무 일도 안 하는 객체를 준다 —
-        // 오류로 끊는 것보다 너그럽다. `wl_pointer`는 M2다.
+        // WY-M2 단계 C. 포인터 아래 창의 클라이언트가 포인터를 나중에 얻었으면 그 포인터에도 `enter` — 키보드와 같은 까닭.
         .get_pointer => |r| {
             const p = wl.Pointer.create(client, seat.getVersion(), r.id) catch return seat.postNoMemory();
-            p.setHandler(?*anyopaque, pointerRequest, null, null);
+            p.setHandler(*Server, pointerRequest, pointerDestroyed, srv);
+            srv.pointers.append(p);
+            if (srv.ptr.focus) |id| if (srv.find(id)) |t| if (surfaceOf(t)) |sr| if (sr.getClient() == client)
+                srv.enterPointer(p, t, sr);
         },
+        // 터치는 아직 없다(capabilities에 없다). 묻는 클라이언트에게 아무 일도 안 하는 객체를 준다.
         .get_touch => |r| {
             const t = wl.Touch.create(client, seat.getVersion(), r.id) catch return seat.postNoMemory();
             t.setHandler(?*anyopaque, touchRequest, null, null);
@@ -628,11 +741,24 @@ fn keyboardDestroyed(kb: *wl.Keyboard, _: ?*anyopaque) void {
     kb.getLink().remove();
 }
 
-fn pointerRequest(p: *wl.Pointer, req: wl.Pointer.Request, _: ?*anyopaque) void {
+/// 커서 이미지는 합성하지 않는다 — terminal의 화살표를 계속 그린다. `set_cursor(NULL)`만 뜻이 있다: 그 클라이언트의 창
+/// 위에서 화살표를 숨긴다(SDL_HideCursor — 게임 · 데모, 확정 10). 커서 surface의 commit은 역할 없는 surface로 받는다.
+fn pointerRequest(p: *wl.Pointer, req: wl.Pointer.Request, srv: *Server) void {
     switch (req) {
         .release => p.destroy(),
-        .set_cursor => {},
+        .set_cursor => |r| {
+            const hidden = r.surface == null;
+            for (srv.toplevels.items) |t| {
+                if (t.resource.getClient() != p.getClient() or t.cursor_hidden == hidden) continue;
+                t.cursor_hidden = hidden;
+                logline.print("terminal: wl> cursor id={d} hidden={d}\n", .{ t.id, @intFromBool(hidden) });
+            }
+        },
     }
+}
+
+fn pointerDestroyed(p: *wl.Pointer, _: *Server) void {
+    p.getLink().remove();
 }
 
 fn touchRequest(t: *wl.Touch, req: wl.Touch.Request, _: ?*anyopaque) void {
@@ -731,6 +857,10 @@ const Toplevel = struct {
     area_h: u32 = 0,
     /// 마지막으로 보낸 configure(column의 같은 것 거르기).
     sent: ?Sent = null,
+    /// 마지막으로 옮긴 자리(`paint`) — 포인터의 surface 좌표를 거꾸로 셀 때(단계 C).
+    last_fit: ?logic.Fit = null,
+    /// 이 창의 클라이언트가 `set_cursor(NULL)`을 보냈다(확정 10).
+    cursor_hidden: bool = false,
 
     const Sig = struct { w: i32, h: i32, fit: logic.Fit };
     const Sent = struct { w: u32, h: u32, act: bool };
@@ -853,6 +983,9 @@ fn toplevelDestroyed(_: *xdg.Toplevel, t: *Toplevel) void {
         srv.held.clear();
         srv.sent_mods = null;
     }
+    // 포인터도 같다 — leave 없이 포커스와 grab을 버린다.
+    srv.ptr.drop(t.id);
+    if (srv.ptr_under == t.id) srv.ptr_under = null;
     for (srv.toplevels.items, 0..) |x, i| if (x == t) {
         _ = srv.toplevels.swapRemove(i);
         break;

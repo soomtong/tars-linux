@@ -607,6 +607,10 @@ pub fn main() !void {
         quiet.wants = false;
         try expectTrue("a pane that does not want the mouse leaves the press to us", pointer.ownerOf(quiet, false) == .ours);
         try expectTrue("a press on the margin is ours", pointer.ownerOf(null, false) == .ours);
+        // WY-M2: Wayland 창의 slot은 Shift를 눌러도 그 창의 것이다.
+        const app: pointer.Pane = .{ .leaf = 2, .wants = true, .copy = false, .alt_keys = false, .app = true };
+        try expectTrue("a press on a Wayland window's slot is the window's", pointer.ownerOf(app, false) == .child);
+        try expectTrue("Shift does not take a Wayland window's press back", pointer.ownerOf(app, true) == .child);
     }
 
     // ── 검사 24: 주인은 첫 누름이 정하고 마지막 뗌까지 간다 ─────────────

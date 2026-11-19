@@ -163,5 +163,54 @@ pub fn main() !void {
         if (logic.toplevelStates(.column, false, 1, &buf).len != 0) return error.WrongStates;
     }
     std.debug.print("wl_logic_test: states 5 cases\n", .{});
+
+    // WY-M2 단계 C: 화면 → surface 좌표(24.8). 오른쪽 column 616x752를 1배로 채운 창, x 644 · y 20에서 시작.
+    {
+        const f = logic.fitIn(.{ .x = 644, .y = 20, .w = 616, .h = 752 }, 616, 752).?;
+        if (!std.meta.eql(logic.surfacePoint(f, 644, 20), logic.Point{ .x = 0, .y = 0 })) return error.WrongPoint;
+        if (!std.meta.eql(logic.surfacePoint(f, 952, 396), logic.Point{ .x = 308 * 256, .y = 376 * 256 })) return error.WrongPoint;
+        // 창 밖(grab 중의 끎) — 음수.
+        if (!std.meta.eql(logic.surfacePoint(f, 600, 10), logic.Point{ .x = -44 * 256, .y = -10 * 256 })) return error.WrongPoint;
+        if (!logic.inside(f, 644, 20) or logic.inside(f, 643, 20) or logic.inside(f, 1260, 20)) return error.WrongPoint;
+        // 4배로 늘린 둠(320x200 → 1280x800) — 화면 픽셀 넷이 버퍼 픽셀 하나다.
+        const d = logic.fit(1280, 800, 320, 200).?;
+        if (!std.meta.eql(logic.surfacePoint(d, 6, 10), logic.Point{ .x = 384, .y = 640 })) return error.WrongPoint;
+        // 가운데가 잘린 큰 버퍼(1배, ox 60) — 화면 0이 버퍼 60이다.
+        const c = logic.fit(1280, 800, 1400, 900).?;
+        if (!std.meta.eql(logic.surfacePoint(c, 0, 0), logic.Point{ .x = 60 * 256, .y = 50 * 256 })) return error.WrongPoint;
+    }
+    std.debug.print("wl_logic_test: surface points 6 cases\n", .{});
+
+    // 포인터 포커스와 grab.
+    {
+        var p: logic.PointerFocus = .{};
+        // 창 3 위로 — enter.
+        if (!std.meta.eql(p.move(3), logic.PointerFocus.Move{ .enter = 3 })) return error.WrongPointer;
+        if (!std.meta.eql(p.move(3), logic.PointerFocus.Move{ .motion = 3 })) return error.WrongPointer;
+        // 누르고 창 밖(셸 위, under null)으로 끈다 — leave가 미뤄지고 움직임은 3으로.
+        if (p.press() != 3) return error.WrongPointer;
+        if (!std.meta.eql(p.move(null), logic.PointerFocus.Move{ .motion = 3 })) return error.WrongPointer;
+        // 뗌은 3으로 가고, 그다음 move가 미룬 leave를 낸다.
+        if (p.release() != 3) return error.WrongPointer;
+        if (!std.meta.eql(p.move(null), logic.PointerFocus.Move{ .leave = 3 })) return error.WrongPointer;
+        // 셸 위의 누름은 창에 안 간다.
+        if (p.press() != null or p.release() != null) return error.WrongPointer;
+        // 창 3에서 창 5로 곧장 — leave 3, enter 5.
+        _ = p.move(3);
+        if (!std.meta.eql(p.move(5), logic.PointerFocus.Move{ .leave = 3, .enter = 5 })) return error.WrongPointer;
+        // 쥔 채 창이 사라지면 grab도 끝난다.
+        _ = p.press();
+        p.drop(5);
+        if (p.focus != null or p.held != 0 or p.release() != null) return error.WrongPointer;
+        if (!std.meta.eql(p.move(3), logic.PointerFocus.Move{ .enter = 3 })) return error.WrongPointer;
+    }
+    std.debug.print("wl_logic_test: pointer focus 13 cases\n", .{});
+
+    // 휠 — 앞으로 한 눈금(위)은 -10, 아래로 둘은 +20.
+    {
+        if (!std.meta.eql(logic.axisFor(1), logic.Axis{ .value = -2560, .discrete = -1 })) return error.WrongAxis;
+        if (!std.meta.eql(logic.axisFor(-2), logic.Axis{ .value = 5120, .discrete = 2 })) return error.WrongAxis;
+    }
+    std.debug.print("wl_logic_test: axis 2 cases\n", .{});
     std.debug.print("wl_logic_test: all checks passed\n", .{});
 }

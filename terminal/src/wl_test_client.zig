@@ -5,6 +5,8 @@
 //! 끝난다. `--ignore-close`이면 close를 무시하고 `xdg_wm_base.ping`에 답하지 않는다(서버의 SIGKILL 판정용, 확정 11).
 //! WY-M2: 기본은 창 모드라 서버가 셸 오른쪽 column에 연다. `--fullscreen`이면 첫 commit 전에 `set_fullscreen`을 보내
 //! 자기 workspace를 받는다(WY-M0 · 둠의 길). configure 줄에 states를, 키보드의 `enter` · `leave`를 줄로 찍는다.
+//! 포인터(단계 C): `pointer enter x= y=` · `motion x= y=`(처음 다섯) · `button code= state=` · `axis v=` · `pointer leave`.
+//! `--hide-cursor`면 enter마다 `set_cursor(NULL)`을 보낸다(SDL_HideCursor처럼 — 서버가 화살표를 숨기는지 본다).
 //!
 //! 바인딩은 terminal의 서버와 같은 스캐너가 만든 것이다(`build.zig`의 `wayland` 모듈 — 서버는 `server`, 이쪽은
 //! `client` 이름공간). libwayland-client는 동적으로 링크하고 `make_initrd.sh`의 `copy_lib_deps`가 따라 싣는다.
@@ -60,7 +62,12 @@ const Args = struct {
     follow_size: bool = false,
     /// 첫 commit 전에 `set_fullscreen`(WY-M2 확정 12) — 서버가 자기 workspace를 준다.
     fullscreen: bool = false,
+    /// 포인터 enter마다 `set_cursor(NULL)`(WY-M2 확정 12).
+    hide_cursor: bool = false,
 };
+
+/// `motion` 줄은 처음 다섯만 — 포인터가 움직이는 동안 줄이 불어나지 않게.
+const MOTION_LINES: u32 = 5;
 
 fn parseSize(text: []const u8) ?[2]u32 {
     const x = std.mem.indexOfScalar(u8, text, 'x') orelse return null;
@@ -82,6 +89,8 @@ fn parseArgs(argv: []const []const u8) ?Args {
             args.follow_size = true;
         } else if (std.mem.eql(u8, a, "--fullscreen")) {
             args.fullscreen = true;
+        } else if (std.mem.eql(u8, a, "--hide-cursor")) {
+            args.hide_cursor = true;
         } else if (std.mem.eql(u8, a, "--color")) {
             i += 1;
             if (i == argv.len or argv[i].len != 6) return null;
@@ -100,12 +109,14 @@ fn parseArgs(argv: []const []const u8) ?Args {
 fn usage() u8 {
     writeAll(2,
         \\usage: tars-wl-test [--color RRGGBB] [--size WxH] [--ignore-close] [--follow-size] [--fullscreen]
+        \\       [--hide-cursor]
         \\  open one xdg_toplevel filled with one colour (default 3366CC, 320x200) and
         \\  print what the compositor sends, one line each. Ends on close, unless
         \\  --ignore-close (then close and ping are ignored). The buffer keeps its
         \\  own size unless --follow-size (then it takes the configured size).
         \\  --fullscreen asks for fullscreen before the first commit (its own
         \\  workspace); without it the window opens as a column right of the shell.
+        \\  --hide-cursor hides the pointer (set_cursor NULL) over the window.
         \\
     );
     return EXIT_USAGE;
@@ -125,6 +136,8 @@ const State = struct {
     shm: *wl.Shm,
     surface: *wl.Surface,
     keyboard: ?*wl.Keyboard = null,
+    pointer: ?*wl.Pointer = null,
+    motions: u32 = 0,
     buffer: ?*wl.Buffer = null,
     /// 지금 버퍼의 크기. 서버의 configure가 0이 아닌 크기를 주면 그것으로 다시 만든다.
     width: u32,
@@ -283,8 +296,34 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, state: *State) void {
                 state.keyboard.?.release();
                 state.keyboard = null;
             }
+            if (c.capabilities.pointer and state.pointer == null) {
+                const p = seat.getPointer() catch return;
+                p.setListener(*State, pointerListener, state);
+                state.pointer = p;
+            } else if (!c.capabilities.pointer and state.pointer != null) {
+                state.pointer.?.release();
+                state.pointer = null;
+            }
         },
         .name => {},
+    }
+}
+
+/// 포인터 줄(WY-M2 확정 12). 좌표는 surface 좌표의 정수 부분이다.
+fn pointerListener(p: *wl.Pointer, event: wl.Pointer.Event, state: *State) void {
+    switch (event) {
+        .enter => |e| {
+            say("pointer enter x={d} y={d}", .{ e.surface_x.toInt(), e.surface_y.toInt() });
+            if (state.args.hide_cursor) p.setCursor(e.serial, null, 0, 0);
+        },
+        .leave => say("pointer leave", .{}),
+        .motion => |m| {
+            state.motions += 1;
+            if (state.motions <= MOTION_LINES) say("motion x={d} y={d}", .{ m.surface_x.toInt(), m.surface_y.toInt() });
+        },
+        .button => |b| say("button code={d} state={d}", .{ b.button, @backingInt(b.state) }),
+        .axis => |a| say("axis v={d}", .{a.value.toInt()}),
+        else => {},
     }
 }
 

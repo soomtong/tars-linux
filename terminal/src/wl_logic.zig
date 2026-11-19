@@ -4,7 +4,8 @@
 //! 여섯이다. (1) 정수 배율과 가운데 자리(`fit`), (2) 그 자리로 옮기는 가장 가까운 픽셀 늘리기(`blit`),
 //! (3) xdg toplevel의 configure 순서(`onCommit`), (4) `wl_keyboard.modifiers`의 비트(`modifierMask`, 단계 C),
 //! (5) 클라이언트에 누름을 보낸 키의 목록(`Held`, 단계 C), (6) `Cmd+Q`의 2초 기한(`Deadline`, 단계 C).
-//! WY-M2가 둘을 더했다 — pane 사각형 안의 자리(`fitIn`)와 configure의 states(`toplevelStates`).
+//! WY-M2가 다섯을 더했다 — pane 사각형 안의 자리(`fitIn`), configure의 states(`toplevelStates`), 그리고 포인터 셋
+//! (단계 C): 화면 좌표 → surface 좌표(`surfacePoint`), enter · leave와 버튼 grab(`PointerFocus`), 휠의 axis 값(`axisFor`).
 
 const std = @import("std");
 
@@ -167,6 +168,82 @@ pub fn toplevelStates(place: Place, activated: bool, version: u32, out: *[6]u32)
         },
     }
     return out[0..n];
+}
+
+// ── 포인터(WY-M2 단계 C, plan 확정 8, design 결정 24) ─────────────────────
+
+/// evdev의 버튼 코드(linux/input-event-codes.h). `wl_pointer.button`은 이 값 그대로다.
+pub const BTN_LEFT: u32 = 0x110;
+pub const BTN_RIGHT: u32 = 0x111;
+pub const BTN_MIDDLE: u32 = 0x112;
+
+/// surface 좌표(`wl_fixed` — 24.8 고정소수, 날 i32).
+pub const Point = struct { x: i32, y: i32 };
+
+/// 화면(프레임버퍼) 좌표 `x` · `y`를 창이 놓인 자리 `f`(마지막으로 옮긴 `fit`)의 surface 좌표로 거꾸로 옮긴다. 버퍼 픽셀
+/// 하나가 화면 `k × k`이고, 잘려 보이면(`ox` · `oy`) 그만큼 더한다. 창 밖이면 음수나 크기 밖이다 — 버튼을 쥔 채 끄는
+/// 동안(grab)은 그 값을 그대로 보낸다(xdg의 implicit grab).
+pub fn surfacePoint(f: Fit, x: u32, y: u32) Point {
+    const k: i64 = f.k;
+    const sx = (@as(i64, x) - f.x + f.ox) * 256;
+    const sy = (@as(i64, y) - f.y + f.oy) * 256;
+    return .{ .x = @intCast(@divFloor(sx, k)), .y = @intCast(@divFloor(sy, k)) };
+}
+
+/// 화면 좌표가 창이 보이는 사각형 안인가(둘레의 검정은 창이 아니다).
+pub fn inside(f: Fit, x: u32, y: u32) bool {
+    return x >= f.x and x < f.x + f.w and y >= f.y and y < f.y + f.h;
+}
+
+/// 포인터 포커스(어느 창이 enter를 받았나)와 버튼 grab. 버튼을 쥔 동안은 포인터가 창 밖으로 나가도 그 창이 움직임과
+/// 뗌을 받고, leave는 마지막 뗌 뒤로 미룬다(wl_pointer의 implicit grab — weston · wlroots와 같다).
+pub const PointerFocus = struct {
+    /// enter를 받은 창. null이면 포인터가 어느 창 위에도 없다.
+    focus: ?u32 = null,
+    /// 그 창에 누름을 보낸 버튼 수.
+    held: u8 = 0,
+
+    /// 한 움직임에 서버가 보낼 것. `leave`가 `enter`보다 먼저 간다.
+    pub const Move = struct { leave: ?u32 = null, enter: ?u32 = null, motion: ?u32 = null };
+
+    /// 포인터가 움직였고 지금 아래 창이 `under`다.
+    pub fn move(self: *PointerFocus, under: ?u32) Move {
+        // grab — 아래가 바뀌어도 쥔 창이 움직임을 받는다.
+        if (self.held > 0) return .{ .motion = self.focus };
+        if (under == self.focus) return .{ .motion = under };
+        const m: Move = .{ .leave = self.focus, .enter = under };
+        self.focus = under;
+        return m;
+    }
+
+    /// 버튼을 눌렀다. 보낼 창(포인터 아래 창이 없으면 null — 셸이나 여백의 누름이다).
+    pub fn press(self: *PointerFocus) ?u32 {
+        const id = self.focus orelse return null;
+        self.held += 1;
+        return id;
+    }
+
+    /// 버튼을 뗐다. 누름을 보낸 버튼이면 그 창. 마지막 뗌 뒤 부르는 쪽이 `move`를 다시 불러 미룬 leave를 낸다.
+    pub fn release(self: *PointerFocus) ?u32 {
+        if (self.held == 0) return null;
+        self.held -= 1;
+        return self.focus;
+    }
+
+    /// 창이 사라졌다. 그 창이 포커스였으면 grab도 끝난다(보낼 곳이 없다).
+    pub fn drop(self: *PointerFocus, id: u32) void {
+        if (self.focus != id) return;
+        self.focus = null;
+        self.held = 0;
+    }
+};
+
+/// 휠 눈금 `notches`(양수가 앞으로 민 것 — 위로)의 `wl_pointer.axis`(세로). 값은 눈금마다 10(weston · libinput의 관례),
+/// 아래로가 양수라 부호가 뒤집힌다. `discrete`는 판 5~7의 `axis_discrete`다.
+pub const Axis = struct { value: i32, discrete: i32 };
+
+pub fn axisFor(notches: i32) Axis {
+    return .{ .value = -notches * 10 * 256, .discrete = -notches };
 }
 
 // ── 수정키 비트(design 결정 6, 확인 3) ──────────────────────────────────
