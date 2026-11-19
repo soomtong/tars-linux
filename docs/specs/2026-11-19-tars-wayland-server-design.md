@@ -154,6 +154,15 @@ out · err, 양보 listen · guest, 링크 이벤트). LK가 링크 칸을 더�
     자리)로 들어가고 `libwayland-client.so.0`(77KB)이 따라온다. 둠은 별도 저장소의 GPL 바이너리라 devlayer 묶음으로
     싣는다(요구사항 결정 12).
 14. SDL 앱은 Mesa가 있어야 그린다(확인 8). SDL을 보는 milestone(M2)의 게이트는 DY처럼 gpu 묶음을 얹은 부팅을 쓴다.
+15. `Workspace`는 `kind: union(enum) { shell: ShellWs, app: AppWs }`다(WY-M0 단계 B의 읽기 보고, 2026-11-19). `ShellWs`는
+    지금의 `{ strip, panes, focus }`에 FU의 `fullscreen`을 더한 것, `AppWs`는 toplevel id다. 이유: `.?`로 null을 푸는
+    자리 여섯(덤프 · 포인터 cancel · 키 · 닫기 · 받아쓰기 · 그리기)이 app workspace에서 panic할 것을 컴파일 오류로 바꾼다.
+    `layout.Strip`에 pane 0개라는 새 상태가 필요 없고, "app은 늘 chrome 없음"이 타입에 선다. 입구 약 22곳만 고친다.
+16. 마지막 셸 pane이 끝나도 app workspace가 남아 있으면 terminal은 산다. 셸도 app도 없을 때만 지금처럼 끝난다(pane 체인
+    9b는 그대로). 셸을 닫았다고 둠이 함께 죽지 않는다.
+17. app 프레임은 render verify를 하지 않는다 — 그림자는 셸 화면만 흉내 낸다. 셸 프레임의 `verify>` 줄은 그대로라 루트
+    게이트의 "verify 줄이 있다"는 선다. workspace를 옮기는 자리 넷은 `enterWorkspace(i)` 하나를 불러 격자(FU의
+    workspace마다 값)를 다시 세운다.
 
 ## Milestone
 

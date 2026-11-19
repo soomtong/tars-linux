@@ -51,6 +51,9 @@ Status: plan. 브랜치 `app-layer-0-3`.
    (lead가 센 것 약 82곳)를 갈래로 나눠 두 안을 낸다 — (가) `Workspace`에 `app: ?u32`(toplevel id)를 더하고 app workspace는
    pane이 0인 strip을 갖는다, (나) `kind: union(enum) { shell, app }`. 각 안에서 고칠 자리 수와 위험(pane이 0인 strip에
    `panes[focus].?`가 닿는 자리)을 보고하고, lead가 고른다.
+   정했다(2026-11-19): (나). 보고는 세션 scratchpad의 `wy-research/workspace-shape.md`, 이유는 design 결정 15 · 16 · 17.
+   합성 · frame · flush의 자리도 그 보고 5절대로 — `readYield` 뒤 `readWayland()`(dispatch), `render` 머리에서 app이면
+   `renderApp`(검정 · 정수 배율 · `presentFrame` · frame `done` · `release`), `tick` 머리의 `defer flushClients()`.
 7. FU를 workspace마다로(결정 8). `App.fullscreen`을 `Workspace.fullscreen`으로 옮기고, workspace를 옮길 때 격자가 그
    workspace의 값으로 다시 선다. FU 체인의 판정 여덟은 workspace 하나라 그대로다(확인 5). app workspace는 늘 chrome 없음.
 8. 합성(결정 9). app workspace가 앞이면 그 프레임은 검정으로 채우고 toplevel의 버퍼를 `k = min(fbW / w, fbH / h)`(1 이상)
