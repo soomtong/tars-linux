@@ -1,7 +1,7 @@
 # TARS App Layer — Roadmap
 
 Date: 2026-11-18
-Status: 2판(SW design 결정에 맞춰 SW 표와 WY-M0의 전제를 고쳤다). 근거는 `docs/specs/2026-11-18-tars-app-layer-requirements.md`.
+Status: 3판(2판: SW design 결정에 맞춰 SW 표와 WY-M0의 전제. 3판: WY design이 WY-M0을 둘로 나눠 WY 번호가 밀렸다). 근거는 `docs/specs/2026-11-18-tars-app-layer-requirements.md`.
 
 이 문서는 순서와 끝나는 조건만 적는다. milestone의 상세는 적지 않는다 —
 서브프로젝트를 시작할 때 그 design doc을 쓰고, milestone마다 plan을 쓴다
@@ -22,14 +22,14 @@ Status: 2판(SW design 결정에 맞춰 SW 표와 WY-M0의 전제를 고쳤다).
 
 ~~~
 SW-M0 ─ SW-M1 ─ SW-M2 ─ SW-M3
-   └─ WY-M0 ─ WY-M1 ─ WY-M2 ─ WY-M3 ─ WY-M4
-        (녹화 A)  (녹화 B는 SW-M2 · WY-M3 뒤)
+   └─ WY-M0 ─ WY-M1 ─ WY-M2 ─ WY-M3 ─ WY-M4 ─ WY-M5
+               (녹화 A)          (녹화 B는 WY-M4 뒤)
                 └─ TK-M0 ─ TK-M1 ─ TK-M2 ─ TK-M3 ─ TK-M4 ─ TK-M5 (녹화 C)
-                                            WY-M4 ─ CR-M0 ─ CR-M1 ─ CR-M2 (녹화 D)
+                                            WY-M5 ─ CR-M0 ─ CR-M1 ─ CR-M2 (녹화 D)
 ~~~
 
-한 번에 한 줄씩 한다. 권장 순서는 SW-M0 → WY-M0(녹화 A) → SW-M1~M3 → WY-M1~M3
-(녹화 B) → TK-M0~M5(녹화 C) → WY-M4 → CR(녹화 D). TK와 CR은 서로 독립이라
+한 번에 한 줄씩 한다. 권장 순서는 SW-M0~M3(끝, 2026-11-19) → WY-M0 → WY-M1(녹화 A)
+→ WY-M2~M4(녹화 B) → TK-M0~M5(녹화 C) → WY-M5 → CR(녹화 D). TK와 CR은 서로 독립이라
 바꿔도 된다.
 
 ## 1단 — SW: strip 워크스페이스
@@ -79,24 +79,27 @@ design doc: `tars-wayland-server-design.md`(접두사 WY). 새 체인
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
-| WY-M0 | 서버 뼈대 · `wl_shm` · `wl_keyboard`(키맵) · `xdg_toplevel` · 풀스크린 = 자기 workspace · 셸 pane의 Cmd 삼킴 · 셸 경로 보호. `tars-doom`(별도 저장소) | 둠 첫 맵의 좌표 색, `Cmd+1`/`Cmd+2` 왕복, 클라이언트를 SIGSTOP · SIGKILL해도 셸이 삶. 녹화 A |
-| WY-M1 | `wl_pointer` · 클릭 포커스 · column으로 열기 · 배율(결정 5) · 실측한 SDL3의 요구 | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸, `hidpi` 체인에 app pane 검사 |
-| WY-M2 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
-| WY-M3 | 한글 `text-input-v3` | 테스트 클라이언트에 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
-| WY-M4 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage로 부분 blit · 호환 모드(Cmd → Ctrl) | 테스트 클라이언트의 popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
+| WY-M0 | 서버 뼈대 · `wl_shm` · `wl_keyboard`(키맵) · `xdg_toplevel` · 풀스크린 = 자기 workspace · 셸 pane의 Cmd 삼킴 · 셸 경로 보호 · 테스트 클라이언트 | 테스트 클라이언트의 좌표 색, `Cmd+1`/`Cmd+2` 왕복, 클라이언트를 SIGSTOP · SIGKILL해도 셸이 삶 |
+| WY-M1 | `tars-doom`(별도 저장소) · devlayer 묶음 | 둠 첫 맵의 좌표 색. 녹화 A |
+| WY-M2 | `wl_pointer` · 클릭 포커스 · column으로 열기 · 배율(결정 5) · 실측한 SDL3의 요구 | SDL3 프로그램이 수정 없이 셸 오른쪽 column에 뜸, `hidpi` 체인에 app pane 검사 |
+| WY-M3 | 클립보드 `wl_data_device` | 테스트 클라이언트와 셸 사이 양방향 붙여넣기 |
+| WY-M4 | 한글 `text-input-v3` | 테스트 클라이언트에 조합 · 확정, 두 번 찍히지 않음. 녹화 B |
+| WY-M5 | `xdg-decoration` · 서버 쪽 장식 · `xdg_popup` · damage로 부분 blit · 호환 모드(Cmd → Ctrl) | 테스트 클라이언트의 popup 위치, 장식의 좌표 색, 호환 모드의 키 판정 |
+
+2판(2026-11-19): WY design이 1판의 WY-M0을 서버(M0)와 둠(M1)으로 나눴다. 뒤 번호가 하나씩 밀렸다.
 
 WY-M0은 SW-M0 뒤다 — 사각형을 내는 자리(`layout.Strip`)가 먼저 서야 한다. 픽셀
 크기는 WY-M0이 `Rect` 옆에 더한다(SW design 결정 3, 고침: 1판은 "픽셀 폭이 먼저
-서야 한다"였다). WY-M1의 "column으로 열기"와 녹화 B는 SW-M2 뒤다.
+서야 한다"였다). WY-M2의 "column으로 열기"는 SW-M2 뒤다(SW는 끝났다).
 
 요구사항: R-WY-1~14, R-KEY-2~7, R-WIN-1~6, 결정 1 · 2 · 3 · 5 · 6 · 10 · 11.
 
-한글 입력 design doc을 WY-M3에서 다시 열어 "상태는 compositor의 것"으로 넓힌다.
+한글 입력 design doc을 WY-M4에서 다시 열어 "상태는 compositor의 것"으로 넓힌다.
 
 ## 3단 — TK: 툴킷과 `tars-files`
 
 design doc: `tars-ui-toolkit-design.md`(접두사 TK). 새 체인 `toolkit/check.sh`.
-전제는 WY-M1. 텍스트 필드(TK-M4)는 WY-M2 · M3이 있어야 한다.
+전제는 WY-M2. 텍스트 필드(TK-M4)는 WY-M3 · M4가 있어야 한다.
 
 확인 절에 넣을 것
 
@@ -122,7 +125,7 @@ design doc: `tars-ui-toolkit-design.md`(접두사 TK). 새 체인 `toolkit/check
 ## 4단 — CR: Chromium
 
 design doc: `tars-chromium-design.md`(접두사 CR). 새 체인 `browser/check.sh`.
-전제는 WY-M4.
+전제는 WY-M5.
 
 | milestone | 서는 것 | 끝나는 조건 |
 |---|---|---|
@@ -145,7 +148,7 @@ CLAUDE.md의 "서브프로젝트를 끝내면 함께 고칠 것" 그대로다. �
 것은 둘이다.
 
 - 이 문서의 표에 끝난 날을 적는다.
-- 사용자가 치는 키가 바뀌는 단계(SW-M0~M3, WY-M0, WY-M4, TK-M5)는
+- 사용자가 치는 키가 바뀌는 단계(SW-M0~M3, WY-M0, WY-M5, TK-M5)는
   `docs/help/*.md`를 함께 고친다.
 
 ## 첫걸음
